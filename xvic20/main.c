@@ -29,9 +29,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "via65c22.h"
 
 
-// I assume that VIC-20 has exactly 1MHz CPU clock, and we need full tv frame, ie 25FPS,
-// thus 1MHz = 1million cycle / 25 = 40000
-#define CPU_CYCLES_PER_TV_FRAME	40000
+// CPU clock of PAL models (actually 1108404.5Hz ...)
+#define	CPU_CLOCK		1108404
+#define CPU_CYCLES_PER_TV_FRAME	44336
 
 #define SCREEN_WIDTH		176
 #define SCREEN_HEIGHT		184
@@ -290,7 +290,7 @@ static void update_emulator ( void )
 	// OS, which runs our litte emulator!
 	gettimeofday(&tv_new, NULL);
 	t_emu = (tv_new.tv_sec - tv_old.tv_sec) * 1000000 + (tv_new.tv_usec - tv_old.tv_usec);	// microseconds we needed to emulate one frame (SDL etc stuffs included!), it's 40000 on a real VIC-20
-	t_emu = 40000 - t_emu;	// if it's positive, we're faster in emulation than a real VIC-20, if negative, we're slower, and can't keep real-time emulation :(
+	t_emu = CPU_CYCLES_PER_TV_FRAME - t_emu;	// if it's positive, we're faster in emulation than a real VIC-20, if negative, we're slower, and can't keep real-time emulation :(
 	sleep_balancer += t_emu;
 	// chop insane values, ie stopped emulator for a while, other time setting artifacts etc ...
 	if (sleep_balancer < -250000 || sleep_balancer > 250000)
@@ -321,6 +321,7 @@ static void shutdown_emulator ( void )
 // The SDL init stuff. Also it initiailizes the VIC-20 colour palette
 static int xvic20_init_sdl ( void )
 {
+	SDL_PixelFormat *pix_fmt;
 	int a;
 	if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
 		fprintf(stderr, "Cannot initialize SDL: %s\n", SDL_GetError());
@@ -351,9 +352,12 @@ static int xvic20_init_sdl ( void )
 	}
 	sdl_winid = SDL_GetWindowID(sdl_win);
 	// Intitialize VIC palette
-	for (a = 0; a < 16; a++)
+	pix_fmt = SDL_AllocFormat(SCREEN_FORMAT);
+	for (a = 0; a < 16; a++) {
 		// actually this may be bad on other endian computers :-/ I forgot now how to use SDL's mapRGBA for the given pixel format :-]
-		vic_palette[a] = (0xFF << 24) | (vic_palette_rgb[a][0] << 16) | (vic_palette_rgb[a][1] << 8) | (vic_palette_rgb[a][2]);
+		//vic_palette[a] = (0xFF << 24) | (vic_palette_rgb[a][0] << 16) | (vic_palette_rgb[a][1] << 8) | (vic_palette_rgb[a][2]);
+		vic_palette[a] = SDL_MapRGBA(pix_fmt, vic_palette_rgb[a][0], vic_palette_rgb[a][1], vic_palette_rgb[a][2], 0xFF);
+	}
 	return 0;
 }
 
