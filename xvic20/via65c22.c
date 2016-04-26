@@ -98,13 +98,15 @@ void via_init(
 
 void via_write(struct Via65c22 *via, int addr, Uint8 data)
 {
-	printf("%s: write reg %02X with data %02X\n", via->name, addr, data);
+	//printf("%s: write reg %02X with data %02X\n", via->name, addr, data);
 	switch (addr) {
 		case 0x0: // port B data
+			via->ORB = data;	// FIXED BUG
 			OUTB(via, data);
 			ifr_on_pb(via);
 			break;
 		case 0x1: // port A data
+			via->ORA = data;	// FIXED BUG
 			OUTA(via, data);
 			ifr_on_pa(via);
 			break;
