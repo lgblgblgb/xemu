@@ -70,7 +70,6 @@ static SDL_Renderer *sdl_ren;
 static SDL_Texture  *sdl_tex;
 static struct Via65c22 via1, via2;
 static Uint8 kbd_matrix[8];		// keyboard matrix state, 8 * 8 bits
-static int kb_selector = 0;		// keyboard scan selector
 static struct timeval tv_old;		// timing related stuff
 static int sleep_balancer;		// also a timing stuff
 
@@ -79,14 +78,70 @@ struct KeyMapping {
 	Uint8		pos;		// BCD packed, high nibble / low nibble for col/row to map to.  0xFF means end of table!, high bit set on low nibble: press virtual shift as well!
 };
 static const struct KeyMapping key_map[] = {
-	{ SDL_SCANCODE_0, 0x00 },
-	{ SDL_SCANCODE_1, 0x11 },
-	{ SDL_SCANCODE_2, 0x22 },
-	{ SDL_SCANCODE_3, 0x33 },
-	{ SDL_SCANCODE_4, 0x44 },
-	{ SDL_SCANCODE_5, 0x55 },
-	{ SDL_SCANCODE_6, 0x66 },
-	{ SDL_SCANCODE_7, 0x77 },
+	{ SDL_SCANCODE_1,		0x00 }, // 1
+	{ SDL_SCANCODE_3,		0x01 }, // 3
+	{ SDL_SCANCODE_5,		0x02 }, // 5
+	{ SDL_SCANCODE_7,		0x03 }, // 7
+	{ SDL_SCANCODE_9,		0x04 }, // 9
+	//{ SDL_SCANCODE_+		0x05 },	// PLUS
+	//{ SDL_SCANCODE_font		0x06 },	// FONT
+	{ SDL_SCANCODE_BACKSPACE,	0x07 },	// DEL
+	//{ SDL_SCANCODE_// UNKNOWN KEY?			0x10	//
+	{ SDL_SCANCODE_W,		0x11 }, // W
+	{ SDL_SCANCODE_R,		0x12 }, // R
+	{ SDL_SCANCODE_Y,		0x13 }, // Y
+	{ SDL_SCANCODE_I,		0x14 }, // I
+	{ SDL_SCANCODE_P,		0x15 }, // P
+	//{ SDL_SCANCODE_STAR // *
+	{ SDL_SCANCODE_RETURN,		0x17 }, // RETURN
+	{ SDL_SCANCODE_LCTRL, 0x20}, { SDL_SCANCODE_RCTRL, 0x20}, // CTRL, we map both PC keyboard CTRL keys to the same location
+	{ SDL_SCANCODE_A,		0x21 }, // A
+	{ SDL_SCANCODE_D,		0x22 }, // D
+	{ SDL_SCANCODE_G,		0x23 }, // G
+	{ SDL_SCANCODE_J,		0x24 }, // J
+	{ SDL_SCANCODE_L,		0x25 }, // L
+	{ SDL_SCANCODE_SEMICOLON,	0x26 }, // ;
+	{ SDL_SCANCODE_RIGHT, 0x27 }, { SDL_SCANCODE_LEFT, 0x27 | 8 },	// CURSOR RIGHT, _SHIFTED_: CURSOR LEFT!
+	{ SDL_SCANCODE_END,		0x30 }, // RUN/STOP !! we use PC key 'END' for this!
+	{ SDL_SCANCODE_LSHIFT,		0x31 }, // LEFT SHIFT
+	{ SDL_SCANCODE_X,		0x32 }, // X
+	{ SDL_SCANCODE_V,		0x33 }, // V
+	{ SDL_SCANCODE_N,		0x34 }, // N
+	{ SDL_SCANCODE_COMMA,		0x35 }, // ,
+	{ SDL_SCANCODE_SLASH,		0x36 }, // /
+	{ SDL_SCANCODE_DOWN, 0x37 }, { SDL_SCANCODE_UP, 0x37 | 8 }, // CURSOR DOWN, _SHIFTED_: CURSOR UP!
+	{ SDL_SCANCODE_SPACE,		0x40 }, // SPACE
+	{ SDL_SCANCODE_Z,		0x41 }, // Z
+	{ SDL_SCANCODE_C,		0x42 }, // C
+	{ SDL_SCANCODE_B,		0x43 }, // B
+	{ SDL_SCANCODE_M,		0x44 }, // M
+	{ SDL_SCANCODE_PERIOD,		0x45 }, // .
+	{ SDL_SCANCODE_RSHIFT,		0x46 }, // RIGHT SHIFT
+	{ SDL_SCANCODE_F1, 0x47 }, { SDL_SCANCODE_F2, 0x47 | 8 }, // F1, _SHIFTED_: F2!
+	{ SDL_SCANCODE_LALT, 0x50 }, { SDL_SCANCODE_RALT, 0x50 }, // COMMODORE (may fav key!), PC sucks, no C= key :) - we map left and right ALT here ...
+	{ SDL_SCANCODE_S,		0x51 }, // S
+	{ SDL_SCANCODE_F,		0x52 }, // F
+	{ SDL_SCANCODE_H,		0x53 }, // H
+	{ SDL_SCANCODE_K,		0x54 }, // K
+	{ SDL_SCANCODE_APOSTROPHE,	0x55 },	// :    we map apostrophe here
+	{ SDL_SCANCODE_EQUALS,		0x56 }, // =
+	{ SDL_SCANCODE_F3, 0x57 }, { SDL_SCANCODE_F4, 0x57 | 8 }, // F3, _SHIFTED_: F4!
+	{ SDL_SCANCODE_Q,		0x60 }, // Q
+	{ SDL_SCANCODE_E,		0x61 }, // E
+	{ SDL_SCANCODE_T,		0x62 }, // T
+	{ SDL_SCANCODE_U,		0x63 }, // U
+	{ SDL_SCANCODE_O,		0x64 }, // O
+	//{ SDL_SCANCODE_// @
+	// UNKNOWN KEY?!?! 0x66
+	{ SDL_SCANCODE_F5, 0x67 }, { SDL_SCANCODE_F6, 0x67 | 8 }, // F5, _SHIFTED_: F6!
+	{ SDL_SCANCODE_2,		0x70 }, // 2
+	{ SDL_SCANCODE_4,		0x71 }, // 4
+	{ SDL_SCANCODE_6,		0x72 }, // 6
+	{ SDL_SCANCODE_8,		0x73 }, // 8
+	{ SDL_SCANCODE_0,		0x74 }, // 0
+	{ SDL_SCANCODE_MINUS,		0x75 }, // -
+	{ SDL_SCANCODE_HOME,		0x76 }, // HOME
+	{ SDL_SCANCODE_F7, 0x77 }, { SDL_SCANCODE_F8, 0x77 | 8 }, // F7, _SHIFTED_: F8!
 	{ 0,	0xFF	}		// this must be the last line: end of mapping table
 };
 
@@ -141,7 +196,7 @@ static void render_screen ( void )
 {
 	int x, y, sc;
 	Uint32 *pp;
-	Uint8 *vidp, *colp;
+	Uint8 *vidp, *colp, *chrp;
 	Uint32 bg = vic_palette[memory[0x900F] >> 4];	// background colour ...
 	// Render VIC screen to "pixels"
 	// Note: this is VERY incorrect, and only some std screen aware rendering,
@@ -153,12 +208,17 @@ static void render_screen ( void )
 	x = 0;
 	y = 0;
 	sc = 0;
+	vidp = memory + ((((memory[0x9005] & 0xF0) ^ 128) << 6) | ((memory[0x9002] & 128) << 2));
+	colp = memory + (0x9400 | ((memory[0x9002] & 128) << 2));
+	chrp = memory + ((memory[0x9005] & 15) << 10);
+	//printf("SCREEN: vidp = %04Xh\n", vidp - memory);
 	vidp = memory + 0x1E00;
 	colp = memory + 0x9600;
+	chrp = memory + 0x8000;
 	pp = pixels;
 	while (y < 23) {
 		int b;
-		Uint8 shape = memory[0x8000 + ((*vidp) << 3) + sc];	// shape of current scanline of the current character
+		Uint8 shape = chrp[((*vidp) << 3) + sc];	// shape of current scanline of the current character
 		Uint32 fg = vic_palette[*(colp) & 0x7];			// foreground colour
 		//Uint8 shape = memory[0x8000 + sc];
 		if ((*(colp) & 0x8))
@@ -248,12 +308,17 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 		const struct KeyMapping *map = key_map;
 		while (map->pos != 0xFF) {
 			if (map->scan == key) {
-				if (pressed)
-					kbd_matrix[map->pos >> 4] &= 255 - (1 << (map->pos & 0xF));
-				else
-					kbd_matrix[map->pos >> 4] |= 1 << (map->pos & 0xF);
-				fprintf(stderr, "Found key, pos = %02Xh\n", map->pos);
-				debug_show_kbd_matrix();
+				if (pressed) {
+					if (map->pos & 8)	// shifted key emu?
+						kbd_matrix[3] &= 0xFD;	// press shift on VIC20!
+					kbd_matrix[map->pos >> 4] &= 255 - (1 << (map->pos & 0x7));
+				} else {
+					if (map->pos & 8)	// shifted key emu?
+						kbd_matrix[3] |= 2;	// release shift on VIC20!
+					kbd_matrix[map->pos >> 4] |= 1 << (map->pos & 0x7);
+				}
+				//fprintf(stderr, "Found key, pos = %02Xh\n", map->pos);
+				//debug_show_kbd_matrix();
 				break;	// key found, end.
 			}
 			map++;
@@ -379,24 +444,19 @@ static void via2_setint ( int level )
 }
 
 
-static void via2_kbd_set_scan ( Uint8 mask, Uint8 data )
-{
-	printf("SCAN set to %02X with mask %02X\n", data, mask);
-	kb_selector = data;
-}
+
 
 static Uint8 via2_kbd_get_scan ( Uint8 mask )
 {
-	//printf("SCAN get with mask %02X\n", mask);
 	return
-		((kb_selector &   1) ? 0xFF : kbd_matrix[7]) &
-		((kb_selector &   2) ? 0xFF : kbd_matrix[6]) &
-		((kb_selector &   4) ? 0xFF : kbd_matrix[5]) &
-		((kb_selector &   8) ? 0xFF : kbd_matrix[4]) &
-		((kb_selector &  16) ? 0xFF : kbd_matrix[3]) &
-		((kb_selector &  32) ? 0xFF : kbd_matrix[2]) &
-		((kb_selector &  64) ? 0xFF : kbd_matrix[1]) &
-		((kb_selector & 128) ? 0xFF : kbd_matrix[0])
+		((via2.ORB &   1) ? 0xFF : kbd_matrix[0]) &
+		((via2.ORB &   2) ? 0xFF : kbd_matrix[1]) &
+		((via2.ORB &   4) ? 0xFF : kbd_matrix[2]) &
+		((via2.ORB &   8) ? 0xFF : kbd_matrix[3]) &
+		((via2.ORB &  16) ? 0xFF : kbd_matrix[4]) &
+		((via2.ORB &  32) ? 0xFF : kbd_matrix[5]) &
+		((via2.ORB &  64) ? 0xFF : kbd_matrix[6]) &
+		((via2.ORB & 128) ? 0xFF : kbd_matrix[7])
 	;
 }
 
@@ -426,7 +486,7 @@ int main ( void )
 	// Initiailize VIAs.
 	// Note: this is my unfinished VIA emulation skeleton, for my Commodore LCD emulator originally, ported from my JavaScript code :)
 	// it uses call back functions, which must be registered here, NULL values means unused functionality
-	via_init(&via1, "VIA-1",
+	via_init(&via1, "VIA-1",	// from $9110 on VIC-20
 		NULL,	// outa
 		NULL,	// outb
 		NULL,	// outsr
@@ -435,12 +495,12 @@ int main ( void )
 		NULL,	// insr
 		via1_setint	// setint, called by via core, if interrupt level changed for whatever reason (ie: expired timer ...)
 	);
-	via_init(&via2, "VIA-2",
-		NULL,	// outa
-		via2_kbd_set_scan,	// outb, we wire port B as output to set keyboard scan
+	via_init(&via2, "VIA-2",	// from $9120 on VIC-20
+		NULL,			// outa [reg 1]
+		NULL, //via2_kbd_set_scan,	// outb [reg 0], we wire port B as output to set keyboard scan, HOWEVER, we use ORB directly in get scan!
 		NULL,	// outsr
-		via2_kbd_get_scan,	// ina, we wire port A as input to get the scan result, which was selected with port-A
-		NULL,	// inb
+		via2_kbd_get_scan,	// ina  [reg 1], we wire port A as input to get the scan result, which was selected with port-A
+		NULL,			// inb  [reg 0]
 		NULL,	// insr
 		via2_setint	// setint, same for VIA2 as with VIA1. Note: I have no idea if both VIAs can generate IRQ on VIC-20 though, maybe it's overkill to do for both and even cause problems?
 	);
