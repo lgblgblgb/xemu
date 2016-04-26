@@ -22,7 +22,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  * or visit this page: http://www.gnu.org/licenses/gpl-3.0.html
  */
 
-#include "xvic20.h"
+#include <stdio.h>
+#include <SDL_types.h>
 #include "cpu65c02.h"
 
 #ifdef DTV_CPU_HACK

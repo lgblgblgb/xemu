@@ -15,8 +15,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef _LGB_VIA_H
-#define _LGB_VIA_H
+#ifndef __LGB_VIA65C22_H_INCLUDED
+#define __LGB_VIA65C22_H_INCLUDED
 
 struct Via65c22 {
 	void (*outa)(Uint8 mask, Uint8 data);
@@ -32,7 +32,7 @@ struct Via65c22 {
 	int irqLevel, SRcount, SRmode, T1run, T2run;
 };
 
-void via_init(
+extern void via_init(
 	struct Via65c22 *via, const char *name,
 	void (*outa)(Uint8 mask, Uint8 data),
 	void (*outb)(Uint8 mask, Uint8 data),
@@ -42,12 +42,9 @@ void via_init(
 	Uint8 (*insr)(void),
 	void (*setint)(int level)
 );
-void  via_reset(struct Via65c22 *via);
-void  via_write(struct Via65c22 *via, int addr, Uint8 data);
-Uint8 via_read (struct Via65c22 *via, int addr);
-void  via_tick (struct Via65c22 *via, int ticks);
-
-
-
+extern void  via_reset(struct Via65c22 *via);
+extern void  via_write(struct Via65c22 *via, int addr, Uint8 data);
+extern Uint8 via_read (struct Via65c22 *via, int addr);
+extern void  via_tick (struct Via65c22 *via, int ticks);
 
 #endif

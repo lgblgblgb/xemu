@@ -24,6 +24,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <stdlib.h>
 #include <sys/time.h>
 
+#include <SDL.h>
+
 #include "xvic20.h"
 #include "cpu65c02.h"
 #include "via65c22.h"
@@ -170,13 +172,17 @@ static int load_emu_file ( const char *fn, void *buffer, int size )
 // Called by CPU emulation code
 void  cpu_write(Uint16 addr, Uint8 data)
 {
-	if ((addr & 0xFFF0) == 0x9110)
+	if ((addr & 0xFFF0) == 0x9110) {
+		memory[addr] = data;	// also store in "RAM" (well it's actually not that, but anyway ...)
 		via_write(&via1, addr & 0xF, data);
-	else if ((addr & 0xFFF0) == 0x9120)
+	} else if ((addr & 0xFFF0) == 0x9120) {
+		memory[addr] = data;	// also store in "RAM" (well it's actually not that, but anyway ...)
 		via_write(&via2, addr & 0xF, data);
-	// later, this should be done with a look-up table (also for expanded VIC-20 etc) eg, write enable mask for every 256 byte pages
-	if (addr < 0x400 || (addr >= 0x1000 && addr < 0x2000) || (addr >= 0x9000 && addr < 0xA000))
-		memory[addr] = data;
+	} else {
+		// later, this should be done with a look-up table (also for expanded VIC-20 etc) eg, write enable mask for every 256 byte pages
+		if (addr < 0x400 || (addr >= 0x1000 && addr < 0x2000) || (addr >= 0x9000 && addr < 0xA000))
+			memory[addr] = data;
+	}
 }
 
 // Called by CPU emulation code
@@ -279,19 +285,6 @@ static void toggle_full_screen ( void )
 	}
 	SDL_RaiseWindow(sdl_win); // I have some problems with EP128 emulator that window went to the background. Let's handle that with raising it anyway :)
 }
-
-
-
-static void debug_show_kbd_matrix ( void )
-{
-	int a, b;
-	for (a = 0; a < 8; a++) {
-		for (b = 128; b; b >>= 1)
-			putchar(kbd_matrix[a] & b ? '1' : '0');
-		putchar('\n');
-	}
-}
-
 
 
 
