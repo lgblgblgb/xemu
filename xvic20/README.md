@@ -38,7 +38,7 @@ Keyboard is not even emulated yet, just random keys are assigned for
 testing, keys 0 - 9, but it won't produce the right result :) THis
 is by intent, and for testing purpose.
 
-Also, border is not emulated, neither of any VIA registers ... Only
+Also, border is not emulated, neither of any VIC-I registers ... Only
 the hard-wired config for the VIC-20 defaults by the kernal ...
 
 Sound is not emulated.
