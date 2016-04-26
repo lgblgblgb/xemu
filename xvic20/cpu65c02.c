@@ -221,7 +221,7 @@ static inline void _SBC(int data) {
 	}
 }
 static inline void _ROR(int addr) {
-	Uint16 t = addr == -1 ? CPU_A_GET() : cpu_read(addr);
+	Uint16 t = ((addr == -1) ? CPU_A_GET() : cpu_read(addr));
 	if (cpu_pfc) t |= 0x100;
 	cpu_pfc = t & 1;
 	t >>= 1;
@@ -229,7 +229,7 @@ static inline void _ROR(int addr) {
 	if (addr == -1) CPU_A_SET(t); else cpu_write(addr, t);
 }
 static inline void _ROL(int addr) {
-	Uint16 t = addr == -1 ? CPU_A_GET() : cpu_read(addr);
+	Uint16 t = ((addr == -1) ? CPU_A_GET() : cpu_read(addr));
 	t = (t << 1) | (cpu_pfc ? 1 : 0);
 	cpu_pfc = t & 0x100;
 	t &= 0xFF;
