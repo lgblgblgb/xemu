@@ -1,7 +1,11 @@
 # X-VIC20
 
 Just a quick experiment to write a _VERY_ inaccurate and ugly, unfinished
-Commodore VIC-20 emulator using SDL2 library.
+Commodore VIC-20 emulator using SDL2 library. Main purpose: allow to test
+some theories of mine on a more common machine first about writing emulator,
+than about the Commodore LCD ... This emulator can be also treated as test
+bed for Xep128 (also on github, under my name) which is a more serious try
+to emulate a Z80 based computer (Enterprise-128).
 
 Written by (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
