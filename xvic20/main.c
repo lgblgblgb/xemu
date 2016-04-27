@@ -74,6 +74,23 @@ static struct Via65c22 via1, via2;
 static Uint8 kbd_matrix[8];		// keyboard matrix state, 8 * 8 bits
 static struct timeval tv_old;		// timing related stuff
 static int sleep_balancer;		// also a timing stuff
+static int is_kpage_writable[64] = {	// writable flag (for different memory expansions) for every kilobytes of the address space, this shows the default, unexpanded config!
+	1,		// @ 0K     (sum 1K), RAM
+	0,0,0,		// @ 1K -3K (sum 3K), place for 3K expansion
+	1,1,1,1,	// @ 4K- 7K (sum 4K), RAM
+	0,0,0,0,0,0,0,0,// @ 8K-15K (sum 8K), expansion block
+	0,0,0,0,0,0,0,0,// @16K-23K (sum 8K), expansion block
+	0,0,0,0,0,0,0,0,// @24K-31K (sum 8K), expansion block
+	0,0,0,0,	// @32K-35K (sum 4K), character ROM
+	1,		// @36K     (sum 1K), I/O block   (VIAs, VIC-I, ...) [it's not RAM for real, but more-or-less we use that way in the emulator]
+	1,		// @37K     (sum 1K), colour RAM, it seems only 0.5K, but the position depends on the other RAM config ...
+	0,		// @38K     (sum 1K), I/O block 2 (?)
+	0,		// @39K     (sum 1K), I/O block 3 (?)
+	0,0,0,0,0,0,0,0,// @40K-47K (sum 8K), expansion ROM?
+	0,0,0,0,0,0,0,0,// @48K-55K (sum 8K), basic ROM
+	0,0,0,0,0,0,0,0 // @56K-63K (sum 8K), kernal ROM
+};
+
 
 struct KeyMapping {
 	SDL_Scancode	scan;		// SDL scancode for the given key we want to map
@@ -178,10 +195,10 @@ void  cpu_write(Uint16 addr, Uint8 data)
 	} else if ((addr & 0xFFF0) == 0x9120) {
 		memory[addr] = data;	// also store in "RAM" (well it's actually not that, but anyway ...)
 		via_write(&via2, addr & 0xF, data);
-	} else {
-		// later, this should be done with a look-up table (also for expanded VIC-20 etc) eg, write enable mask for every 256 byte pages
-		if (addr < 0x400 || (addr >= 0x1000 && addr < 0x2000) || (addr >= 0x9000 && addr < 0xA000))
-			memory[addr] = data;
+	} else if (is_kpage_writable[addr >> 10]) {
+		if ((addr >> 10) == 37)
+			data |= 0xF0;	// colour RAM has only 4 bits. Emulate this by forcing high 4 bits to '1' on each writes!
+		memory[addr] = data;
 	}
 }
 
@@ -195,6 +212,26 @@ Uint8 cpu_read(Uint16 addr)
 	return memory[addr];
 }
 
+
+
+/* To be honest, I am lame with VIC-I addressing ...
+   I got these five "one-liners" from Sven's shadowVIC emulator, thanks a lot!!! */
+
+static inline Uint16 vic_get_address (Uint8 bits10to12) {
+	return ((bits10to12 & 7) | ((bits10to12 & 8) ? 0 : 32)) << 10;
+}
+static inline Uint16 vic_get_chrgen_address ( void ) {
+	return vic_get_address(memory[0x9005] & 0xF);
+}
+static inline Uint16 vic_get_address_bit9 ( void ) {
+	return (memory[0x9002] & 0x80) << 2;
+}
+static inline Uint16 vic_get_screen_address ( void ) {
+	return vic_get_address(memory[0x9005] >> 4) | vic_get_address_bit9();
+}
+static inline Uint16 vic_get_colour_address ( void ) {
+	return 0x9400 | vic_get_address_bit9();
+}
 
 
 
@@ -214,6 +251,7 @@ static void render_screen ( void )
 	x = 0;
 	y = 0;
 	sc = 0;
+#if 0
 	vidp = memory + ((((memory[0x9005] & 0xF0) ^ 128) << 6) | ((memory[0x9002] & 128) << 2));
 	colp = memory + (0x9400 | ((memory[0x9002] & 128) << 2));
 	chrp = memory + ((memory[0x9005] & 15) << 10);
@@ -221,6 +259,10 @@ static void render_screen ( void )
 	vidp = memory + 0x1E00;
 	colp = memory + 0x9600;
 	chrp = memory + 0x8000;
+#endif
+	vidp = memory + vic_get_screen_address();
+	colp = memory + vic_get_colour_address();
+	chrp = memory + vic_get_chrgen_address();
 	pp = pixels;
 	while (y < 23) {
 		int b;
@@ -455,17 +497,53 @@ static Uint8 via2_kbd_get_scan ( Uint8 mask )
 
 
 
+static inline void __mark_ram ( int start_k, int size_k )
+{
+	while (size_k--)
+		is_kpage_writable[start_k++] = 1;
+}
 
 
-int main ( void )
+static void vic20_configure_ram ( int exp0, int exp1, int exp2, int exp3, int exp4 )
+{
+	if (exp0)
+		__mark_ram( 1, 3);
+	if (exp1)
+		__mark_ram( 8, 8);
+	if (exp2)
+		__mark_ram(16, 8);
+	if (exp3)
+		__mark_ram(24, 8);
+	if (exp4)
+		__mark_ram(40, 8);
+}
+
+
+
+
+
+
+int main ( int argc, char **argv )
 {
 	int cycles;
+	/* Select RAM config based on command line options, quite lame currently :-) */
+	if (argc > 1) {
+		if (strlen(argv[1]) == 5)
+			vic20_configure_ram(
+				argv[1][0] & 1,
+				argv[1][1] & 1,
+				argv[1][2] & 1,
+				argv[1][3] & 1,
+				argv[1][4] & 1
+			);
+	}
+
 	/* Intialize memory and load ROMs */
 	memset(memory, 0xFF, sizeof memory);
 	if (
-		load_emu_file("rom/chargen", memory + 0x8000, 0x1000) ||	// load chargen ROM
-		load_emu_file("rom/basic", memory + 0xC000, 0x2000) ||	// load basic ROM
-		load_emu_file("rom/kernal", memory + 0xE000, 0x2000)	// load kernal ROM
+		load_emu_file("rom/chargen", memory + 0x8000, 0x1000) +	// load chargen ROM
+		load_emu_file("rom/basic",   memory + 0xC000, 0x2000) +	// load basic ROM
+		load_emu_file("rom/kernal",  memory + 0xE000, 0x2000)	// load kernal ROM
 	) {
 		fprintf(stderr, "Cannot load some of the needed ROM images (see message above)!\n");
 		return 1;
