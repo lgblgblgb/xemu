@@ -17,7 +17,10 @@
 
 CC	= gcc
 SDLCFG	= sdl2-config
-CFLAGS	= -flto $(shell $(SDLCFG) --cflags) -I. -falign-functions=16 -falign-loops=16 -Wall -Ofast -ffast-math -pipe
+PREFIX	= /usr/local
+BINDIR	= $(PREFIX)/bin
+DATADIR	= $(PREFIX)/share/xclcd/vic20
+CFLAGS	= -flto $(shell $(SDLCFG) --cflags) -I. -falign-functions=16 -falign-loops=16 -Wall -Ofast -ffast-math -pipe -DDATADIR=\"$(DATADIR)\"
 LDFLAGS	= -flto $(shell $(SDLCFG) --libs)
 PRG	= xvic20
 SRCS	= main.c cpu65c02.c via65c22.c
@@ -36,6 +39,12 @@ $(PRG):	$(OBJS)
 $(DIST): $(PRG)
 	tar cfvz $(DIST) $(FILES)
 
+install: $(PRG) roms
+	$(MAKE) strip
+	mkdir -p $(BINDIR) $(DATADIR)
+	cp $(PRG) $(BINDIR)/
+	cp rom/vic20-*.rom $(DATADIR)/
+
 dist:
 	$(MAKE) $(DIST)
 
@@ -44,7 +53,7 @@ clean:
 
 distclean:
 	$(MAKE) clean
-	rm -f rom/basic rom/kernal rom/chargen
+	rm -f rom/vic20-*.rom
 
 strip: $(PRG)
 	strip $(PRG)
@@ -56,11 +65,11 @@ dep:
 	$(CC) -MM $(CFLAGS) $(SRCS) > .depend
 
 roms:
-	wget -O rom/basic http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/vic20/basic.901486-01.bin
-	wget -O rom/kernal http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/vic20/kernal.901486-07.bin
-	wget -O rom/chargen http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/vic20/characters.901460-03.bin
+	test -s rom/vic20-basic.rom || wget -O rom/vic20-basic.rom http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/vic20/basic.901486-01.bin
+	test -s rom/vic20-kernal.rom || wget -O rom/vic20-kernal.rom http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/vic20/kernal.901486-07.bin
+	test -s rom/vic20-chargen.rom || wget -O rom/vic20-chargen.rom http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/vic20/characters.901460-03.bin
 
-.PHONY: clean all strip dep dist roms distclean
+.PHONY: clean all strip dep dist roms distclean install
 
 ifneq ($(wildcard .depend),)
 include .depend

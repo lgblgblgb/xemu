@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/time.h>
+#include <limits.h>
 
 #include <SDL.h>
 
@@ -66,6 +67,7 @@ static Uint32 pixels[SCREEN_WIDTH * SCREEN_HEIGHT];	// we use "SDL native" 32 bi
 static int running = 1;
 static int is_fullscreen = 0;	// current state of fullscreen (0 = no)
 static int win_xsize, win_ysize;	// we will use this to save window size before enterint into fullscreen mode
+static char *sdl_base_dir, *sdl_pref_dir;
 static SDL_Window *sdl_win = NULL;
 static Uint32 sdl_winid;
 static SDL_Renderer *sdl_ren;
@@ -170,13 +172,33 @@ static const struct KeyMapping key_map[] = {
 
 static int load_emu_file ( const char *fn, void *buffer, int size )
 {
-	int fd = open(fn, O_RDONLY);
+	char *search_paths[] = {
+		".",
+		"." DIRSEP_STR "rom",
+		sdl_pref_dir,
+		sdl_base_dir,
+#ifndef _WIN32
+		DATADIR,
+#endif
+		NULL
+	};
+	int a, fd = -1;
+	while (search_paths[a]) {
+		char fnbuf[PATH_MAX + 1];
+		snprintf(fnbuf, sizeof fnbuf, "%s%c%s", search_paths[a], DIRSEP_CHR, fn);
+		printf("Trying to open file \"%s\" as \"%s\" ...\n", fn, fnbuf);
+		fd = open(fnbuf, O_RDONLY | O_BINARY);	// O_BINARY is Windows stuff, but we define it as zero in case of non-Win32 system, so it won't hurt
+		if (fd > -1)
+			break;
+		a++;
+	}
 	if (fd < 0) {
 		fprintf(stderr, "Cannot open file %s\n", fn);
 		return 1;
 	}
-	if (read(fd, buffer, size) != size) {
-		fprintf(stderr, "Cannot read %d bytes from file %s\n", size, fn);
+	printf("OK, file is open (fd = %d)\n", fd);
+	if (read(fd, buffer, size + 1) != size) {
+		fprintf(stderr, "Cannot read %d bytes (or file is longer) from file %s\n", size, fn);
 		close(fd);
 		return 1;
 	}
@@ -314,7 +336,7 @@ static void toggle_full_screen ( void )
 			fprintf(stderr, "Cannot leave full screen mode: %s\n", SDL_GetError());
 		} else {
 			is_fullscreen = 0;
-			SDL_SetWindowSize(sdl_win, win_xsize, win_ysize); // restore window size saved on entering fullscreen, there can be some bugs ...
+			SDL_SetWindowSize(sdl_win, win_xsize, win_ysize); // restore window size saved on leaving fullscreen, there can be some bugs ...
 		}
 	} else {
 		// it was in window mode before ...
@@ -428,6 +450,8 @@ static int xvic20_init_sdl ( void )
 		return 1;
 	}
 	atexit(shutdown_emulator);
+	sdl_pref_dir = SDL_GetPrefPath("nemesys.lgb", "xclcd-vic20");
+	sdl_base_dir = SDL_GetBasePath();
 	sdl_win = SDL_CreateWindow(
 		"LGB's little XVic20 experiment",
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
@@ -537,23 +561,21 @@ int main ( int argc, char **argv )
 				argv[1][4] & 1
 			);
 	}
-
+	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
+	if (xvic20_init_sdl())
+		return 1;
 	/* Intialize memory and load ROMs */
 	memset(memory, 0xFF, sizeof memory);
 	if (
-		load_emu_file("rom/chargen", memory + 0x8000, 0x1000) +	// load chargen ROM
-		load_emu_file("rom/basic",   memory + 0xC000, 0x2000) +	// load basic ROM
-		load_emu_file("rom/kernal",  memory + 0xE000, 0x2000)	// load kernal ROM
+		load_emu_file("vic20-chargen.rom", memory + 0x8000, 0x1000) +	// load chargen ROM
+		load_emu_file("vic20-basic.rom",   memory + 0xC000, 0x2000) +	// load basic ROM
+		load_emu_file("vic20-kernal.rom",  memory + 0xE000, 0x2000)	// load kernal ROM
 	) {
 		fprintf(stderr, "Cannot load some of the needed ROM images (see message above)!\n");
 		return 1;
 	}
-	/* Initialize SDL */
-	if (xvic20_init_sdl())
-		return 1;
-	/* Start */
 	memset(kbd_matrix, 0xFF, sizeof kbd_matrix);	// initialize keyboard matrix [bit 1 = unpressed, thus 0xFF for a line]
-	cpu_reset();	// reset CPU
+	cpu_reset();	// reset CPU: it must be AFTER kernal is loaded at least, as reset also fetches the reset vector into PC ...
 	// Initiailize VIAs.
 	// Note: this is my unfinished VIA emulation skeleton, for my Commodore LCD emulator originally, ported from my JavaScript code :)
 	// it uses call back functions, which must be registered here, NULL values means unused functionality

@@ -18,4 +18,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __LGB_XVIC20_H_INCLUDED
 #define __LGB_XVIC20_H_INCLUDED
 
+
+#ifndef _WIN32
+#	define O_BINARY		0
+#	define DIRSEP_STR	"/"
+#	define DIRSEP_CHR	'/'
+#else
+#	define DIRSEP_STR	"\\"
+#	define DIRSEP_CHR	'\\'
+#endif
+
+
+
 #endif
