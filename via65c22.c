@@ -1,3 +1,20 @@
+/* Test-case for a very simple and inaccurate Commodore VIC-20 emulator using SDL2 library.
+   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
+
 /* Commodore LCD emulator, C version.
  * (C)2013,2014 LGB Gabor Lenart
  * Visit my site (the better, JavaScript version of the emu is here too): http://commodore-lcd.lgb.hu/
@@ -5,7 +22,8 @@
  * or visit this page: http://www.gnu.org/licenses/gpl-3.0.html
  */
 
-#include "nemesys.h"
+#include <stdio.h>
+#include <SDL_types.h>
 #include "via65c22.h"
 
 #define INA(via) (via->ina)(0xFF)
@@ -28,8 +46,8 @@ static inline void ifr_check(struct Via65c22 *via)
 	}
 }
 
-static inline void ifr_clear (struct Via65c22 *via, ubyte mask) { via->IFR &= 255 - mask; ifr_check(via); }
-static inline void ifr_set   (struct Via65c22 *via, ubyte mask) { via->IFR |=       mask; ifr_check(via); }
+static inline void ifr_clear (struct Via65c22 *via, Uint8 mask) { via->IFR &= 255 - mask; ifr_check(via); }
+static inline void ifr_set   (struct Via65c22 *via, Uint8 mask) { via->IFR |=       mask; ifr_check(via); }
 static inline void ifr_on_pa (struct Via65c22 *via) { ifr_clear(via, ((via->PCR & 0x0E) == 0x02 || (via->PCR & 0x0E) == 0x06) ?    2 :    3); }
 static inline void ifr_on_pb (struct Via65c22 *via) { ifr_clear(via, ((via->PCR & 0xE0) == 0x20 || (via->PCR & 0xE0) == 0x60) ? 0x10 : 0x18); }
 
@@ -48,23 +66,23 @@ void via_reset(struct Via65c22 *via)
 }
 
 
-static void  def_outa  (ubyte mask, ubyte data) {}
-static void  def_outb  (ubyte mask, ubyte data) {}
-static void  def_outsr (ubyte data) {}
-static ubyte def_ina   (ubyte mask) { return 0xFF; }
-static ubyte def_inb   (ubyte mask) { return 0xFF; }
-static ubyte def_insr  (void)       { return 0xFF; }
+static void  def_outa  (Uint8 mask, Uint8 data) {}
+static void  def_outb  (Uint8 mask, Uint8 data) {}
+static void  def_outsr (Uint8 data) {}
+static Uint8 def_ina   (Uint8 mask) { return 0xFF; }
+static Uint8 def_inb   (Uint8 mask) { return 0xFF; }
+static Uint8 def_insr  (void)       { return 0xFF; }
 static void  def_setint(int level)  {}
 
 
 void via_init(
 	struct Via65c22 *via, const char *name,
-	void (*outa)(ubyte mask, ubyte data),
-	void (*outb)(ubyte mask, ubyte data),
-	void (*outsr)(ubyte data),
-	ubyte (*ina)(ubyte mask),
-	ubyte (*inb)(ubyte mask),
-	ubyte (*insr)(void),
+	void (*outa)(Uint8 mask, Uint8 data),
+	void (*outb)(Uint8 mask, Uint8 data),
+	void (*outsr)(Uint8 data),
+	Uint8 (*ina)(Uint8 mask),
+	Uint8 (*inb)(Uint8 mask),
+	Uint8 (*insr)(void),
 	void (*setint)(int level)
 ) {
 	via->name = name;
@@ -79,15 +97,17 @@ void via_init(
 }
 
 
-void via_write(struct Via65c22 *via, int addr, ubyte data)
+void via_write(struct Via65c22 *via, int addr, Uint8 data)
 {
 	//printf("%s: write reg %02X with data %02X\n", via->name, addr, data);
 	switch (addr) {
 		case 0x0: // port B data
+			via->ORB = data;	// FIXED BUG
 			OUTB(via, data);
 			ifr_on_pb(via);
 			break;
 		case 0x1: // port A data
+			via->ORA = data;	// FIXED BUG
 			OUTA(via, data);
 			ifr_on_pa(via);
 			break;
@@ -155,8 +175,9 @@ void via_write(struct Via65c22 *via, int addr, ubyte data)
 	}
 }
 
-ubyte via_read(struct Via65c22 *via, int addr)
+Uint8 via_read(struct Via65c22 *via, int addr)
 {
+	//printf("%s: read reg %02X\n", via->name, addr);
 	switch (addr) {
 		case 0x0: // port B data
 			ifr_on_pb(via);

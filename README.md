@@ -1,2 +1,0 @@
-# xclcd
-Commodore LCD emulator

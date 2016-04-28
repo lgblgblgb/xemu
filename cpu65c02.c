@@ -1,3 +1,20 @@
+/* Test-case for a very simple and inaccurate Commodore VIC-20 emulator using SDL2 library.
+   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
+
 /* Commodore LCD emulator, C version.
  * (C)2013,2014 LGB Gabor Lenart
  * Visit my site (the better, JavaScript version of the emu is here too): http://commodore-lcd.lgb.hu/
@@ -5,15 +22,16 @@
  * or visit this page: http://www.gnu.org/licenses/gpl-3.0.html
  */
 
-#include "nemesys.h"
+#include <stdio.h>
+#include <SDL_types.h>
 #include "cpu65c02.h"
 
 #ifdef DTV_CPU_HACK
-	ubyte cpu_regs[16];
+	Uint8 cpu_regs[16];
 	int cpu_a_sind, cpu_a_tind, cpu_x_ind, cpu_y_ind;
 #	define SP_HI (cpu_regs[11]<<8)
 #	define ZP_HI (cpu_regs[10]<<8)
-#	define CPU_A_INC(n) cpu_regs[cpu_a_tind] = ((ubyte)cpu_regs[cpu_a_sind] + n)
+#	define CPU_A_INC(n) cpu_regs[cpu_a_tind] = ((Uint8)cpu_regs[cpu_a_sind] + n)
 #	define CPU_A_GET() cpu_regs[cpu_a_sind]
 #	define CPU_A_SET(d) cpu_regs[cpu_a_tind]=d
 #	define cpu_x cpu_regs[cpu_x_ind]
@@ -22,10 +40,10 @@
 #	warning "DTV_CPU_HACK is incorrect, still used 65C02 opcodes, only three ops are redefined: SAC, SIR, BRA"
 #	define A_OP(op,dat) cpu_regs[cpu_a_tind] = cpu_regs[cpu_a_sind] op dat
 #else
-	ubyte cpu_a, cpu_x, cpu_y;
+	Uint8 cpu_a, cpu_x, cpu_y;
 #	define SP_HI 0x100
 #	define ZP_HI 0
-#	define CPU_A_INC(n) cpu_a = ((ubyte)cpu_a + n)
+#	define CPU_A_INC(n) cpu_a = ((Uint8)cpu_a + n)
 #	define CPU_A_GET() cpu_a
 #	define CPU_A_SET(d) cpu_a=d
 #	define CPU_TYPE "65C02"
@@ -33,26 +51,26 @@
 #endif
 
 
-ubyte cpu_sp, cpu_op;
-uword cpu_pc, cpu_old_pc;
+Uint8 cpu_sp, cpu_op;
+Uint16 cpu_pc, cpu_old_pc;
 int cpu_pfn,cpu_pfv,cpu_pfb,cpu_pfd,cpu_pfi,cpu_pfz,cpu_pfc;
 int cpu_fatal = 0, cpu_irqLevel = 0, cpu_nmiEdge = 0;
 int cpu_cycles;
 
-static const ubyte opcycles[] = {7,6,2,2,5,3,5,5,3,2,2,2,6,4,6,2,2,5,5,2,5,4,6,5,2,4,2,2,6,4,7,2,6,6,2,2,3,3,5,5,4,2,2,2,4,4,6,2,2,5,5,2,4,4,6,5,2,4,2,2,4,4,7,2,6,6,2,2,3,3,5,5,3,2,2,2,3,4,6,2,2,5,5,2,4,4,6,5,2,4,3,2,2,4,7,2,6,6,2,2,3,3,5,5,4,2,2,2,5,4,6,2,2,5,5,2,4,4,6,5,2,4,4,2,6,4,7,2,3,6,2,2,3,3,3,5,2,2,2,2,4,4,4,2,2,6,5,2,4,4,4,5,2,5,2,2,4,5,5,2,2,6,2,2,3,3,3,5,2,2,2,2,4,4,4,2,2,5,5,2,4,4,4,5,2,4,2,2,4,4,4,2,2,6,2,2,3,3,5,5,2,2,2,2,4,4,6,2,2,5,5,2,4,4,6,5,2,4,3,2,2,4,7,2,2,6,2,2,3,3,5,5,2,2,2,2,4,4,6,2,2,5,5,2,4,4,6,5,2,4,4,2,2,4,7,2};
+static const Uint8 opcycles[] = {7,6,2,2,5,3,5,5,3,2,2,2,6,4,6,2,2,5,5,2,5,4,6,5,2,4,2,2,6,4,7,2,6,6,2,2,3,3,5,5,4,2,2,2,4,4,6,2,2,5,5,2,4,4,6,5,2,4,2,2,4,4,7,2,6,6,2,2,3,3,5,5,3,2,2,2,3,4,6,2,2,5,5,2,4,4,6,5,2,4,3,2,2,4,7,2,6,6,2,2,3,3,5,5,4,2,2,2,5,4,6,2,2,5,5,2,4,4,6,5,2,4,4,2,6,4,7,2,3,6,2,2,3,3,3,5,2,2,2,2,4,4,4,2,2,6,5,2,4,4,4,5,2,5,2,2,4,5,5,2,2,6,2,2,3,3,3,5,2,2,2,2,4,4,4,2,2,5,5,2,4,4,4,5,2,4,2,2,4,4,4,2,2,6,2,2,3,3,5,5,2,2,2,2,4,4,6,2,2,5,5,2,4,4,6,5,2,4,3,2,2,4,7,2,2,6,2,2,3,3,5,5,2,2,2,2,4,4,6,2,2,5,5,2,4,4,6,5,2,4,4,2,2,4,7,2};
 
-static inline uword readWord(uword addr) {
+static inline Uint16 readWord(Uint16 addr) {
 	return cpu_read(addr) | (cpu_read(addr + 1) << 8);
 }
 
-#define push(data) cpu_write(((ubyte)(cpu_sp--)) | SP_HI, data)
-#define pop() cpu_read(((ubyte)(++cpu_sp)) | SP_HI)
+#define push(data) cpu_write(((Uint8)(cpu_sp--)) | SP_HI, data)
+#define pop() cpu_read(((Uint8)(++cpu_sp)) | SP_HI)
 
-static inline void  pushWord(uword data) { push(data >> 8); push(data & 0xFF); }
-static inline uword popWord() { uword temp = pop(); return temp | (pop() << 8); }
+static inline void  pushWord(Uint16 data) { push(data >> 8); push(data & 0xFF); }
+static inline Uint16 popWord() { Uint16 temp = pop(); return temp | (pop() << 8); }
 
 
-static void setP(ubyte st) {
+static void setP(Uint8 st) {
 	cpu_pfn = st & 128;
 	cpu_pfv = st &  64;
 	cpu_pfb = st &  16;
@@ -62,7 +80,7 @@ static void setP(ubyte st) {
 	cpu_pfc = st &   1;
 }
 
-static ubyte getP() {
+static Uint8 getP() {
 	return  (cpu_pfn ? 128 : 0) |
 	(cpu_pfv ?  64 : 0) |
 	/* begin ins block: GETPU for 65C02 */ 32 /* end ins block */ |
@@ -95,30 +113,30 @@ void cpu_reset() {
 }
 
 
-static inline void setNZ(ubyte st) {
+static inline void setNZ(Uint8 st) {
 	cpu_pfn = st & 128;
 	cpu_pfz = !st;
 }
 #define _imm() (cpu_pc++)
-static inline uword _abs() {
-	uword o = cpu_read(cpu_pc++);
+static inline Uint16 _abs() {
+	Uint16 o = cpu_read(cpu_pc++);
 	return o | (cpu_read(cpu_pc++) << 8);
 }
-#define _absx() ((uword)(_abs() + cpu_x))
-#define _absy() ((uword)(_abs() + cpu_y))
+#define _absx() ((Uint16)(_abs() + cpu_x))
+#define _absy() ((Uint16)(_abs() + cpu_y))
 #define _absi() readWord(_abs())
 #define _absxi() readWord(_absx())
 #define _zp() cpu_read(cpu_pc++)
-static inline uword _zpi() {
-	ubyte a = cpu_read(cpu_pc++);
-	return cpu_read(a) | (cpu_read((ubyte)(a + 1)) << 8);
+static inline Uint16 _zpi() {
+	Uint8 a = cpu_read(cpu_pc++);
+	return cpu_read(a) | (cpu_read((Uint8)(a + 1)) << 8);
 }
-#define _zpx() ((ubyte)(cpu_read(cpu_pc++) + cpu_x))
-#define _zpy() ((ubyte)(cpu_read(cpu_pc++) + cpu_y))
-#define _zpiy() ((uword)(_zpi() + cpu_y))
-static inline uword _zpxi() {
-	ubyte a = cpu_read(cpu_pc++) + cpu_x;
-	return cpu_read(a) | (cpu_read((ubyte)(a + 1)) << 8);
+#define _zpx() ((Uint8)(cpu_read(cpu_pc++) + cpu_x))
+#define _zpy() ((Uint8)(cpu_read(cpu_pc++) + cpu_y))
+#define _zpiy() ((Uint16)(_zpi() + cpu_y))
+static inline Uint16 _zpxi() {
+	Uint8 a = cpu_read(cpu_pc++) + cpu_x;
+	return cpu_read(a) | (cpu_read((Uint8)(a + 1)) << 8);
 }
 static inline void _BRA(int cond) {
 	 if (cond) {
@@ -131,23 +149,23 @@ static inline void _BRA(int cond) {
 	} else
 		cpu_pc++;
 }
-static inline void _CMP(ubyte reg, ubyte data) {
-	uword temp = reg - data;
+static inline void _CMP(Uint8 reg, Uint8 data) {
+	Uint16 temp = reg - data;
 	cpu_pfc = temp < 0x100;
 	setNZ(temp);
 }
 static inline void _TSB(int addr) {
-	ubyte m = cpu_read(addr);
+	Uint8 m = cpu_read(addr);
 	cpu_pfz = (!(m & CPU_A_GET()));
 	cpu_write(addr, m | CPU_A_GET());
 }
 static inline void _TRB(int addr) {
-	ubyte m = cpu_read(addr);
+	Uint8 m = cpu_read(addr);
 	cpu_pfz = (!(m & CPU_A_GET()));
 	cpu_write(addr, m & (255 - CPU_A_GET()));
 }
 static inline void _ASL(int addr) {
-	ubyte t = (addr == -1 ? CPU_A_GET() : cpu_read(addr));
+	Uint8 t = (addr == -1 ? CPU_A_GET() : cpu_read(addr));
 	cpu_pfc = t & 128;
 	//t = (t << 1) & 0xFF;
 	t <<= 1;
@@ -155,22 +173,22 @@ static inline void _ASL(int addr) {
 	if (addr == -1) CPU_A_SET(t); else cpu_write(addr, t);
 }
 static inline void _LSR(int addr) {
-	ubyte t = (addr == -1 ? CPU_A_GET() : cpu_read(addr));
+	Uint8 t = (addr == -1 ? CPU_A_GET() : cpu_read(addr));
 	cpu_pfc = t & 1;
 	//t = (t >> 1) & 0xFF;
 	t >>= 1;
 	setNZ(t);
 	if (addr == -1) CPU_A_SET(t); else cpu_write(addr, t);
 }
-static inline void _BIT(ubyte data) {
+static inline void _BIT(Uint8 data) {
 	cpu_pfn = data & 128;
 	cpu_pfv = data & 64;
 	cpu_pfz = (!(CPU_A_GET() & data));
 }
-static inline void _ADC(data) {
+static inline void _ADC(int data) {
 	if (cpu_pfd) {
-		uword temp  = (CPU_A_GET() & 0x0F) + (data & 0x0F) + (cpu_pfc ? 1 : 0);
-		uword temp2 = (CPU_A_GET() & 0xF0) + (data & 0xF0);
+		Uint16 temp  = (CPU_A_GET() & 0x0F) + (data & 0x0F) + (cpu_pfc ? 1 : 0);
+		Uint16 temp2 = (CPU_A_GET() & 0xF0) + (data & 0xF0);
 		if (temp > 9) { temp2 += 0x10; temp += 6; }
 		cpu_pfv = (~(CPU_A_GET() ^ data) & (CPU_A_GET() ^ temp) & 0x80);
 		if (temp2 > 0x90) temp2 += 0x60;
@@ -178,16 +196,16 @@ static inline void _ADC(data) {
 		CPU_A_SET((temp & 0x0F) + (temp2 & 0xF0));
 		setNZ(CPU_A_GET());
 	} else {
-		uword temp = data + CPU_A_GET() + (cpu_pfc ? 1 : 0);
+		Uint16 temp = data + CPU_A_GET() + (cpu_pfc ? 1 : 0);
 		cpu_pfc = temp > 0xFF;
 		cpu_pfv = (!((CPU_A_GET() ^ data) & 0x80) && ((CPU_A_GET() ^ temp) & 0x80));
 		CPU_A_SET(temp & 0xFF);
 		setNZ(CPU_A_GET());
 	}
 }
-static inline void _SBC(data) {
+static inline void _SBC(int data) {
 	if (cpu_pfd) {
-		uword temp = CPU_A_GET() - (data & 0x0F) - (cpu_pfc ? 0 : 1);
+		Uint16 temp = CPU_A_GET() - (data & 0x0F) - (cpu_pfc ? 0 : 1);
 		if ((temp & 0x0F) > (CPU_A_GET() & 0x0F)) temp -= 6;
 		temp -= (data & 0xF0);
 		if ((temp & 0xF0) > (CPU_A_GET() & 0xF0)) temp -= 0x60;
@@ -196,7 +214,7 @@ static inline void _SBC(data) {
 		CPU_A_SET(temp & 0xFF);
 		setNZ(CPU_A_GET());
 	} else {
-		uword temp = CPU_A_GET() - data - (cpu_pfc ? 0 : 1);
+		Uint16 temp = CPU_A_GET() - data - (cpu_pfc ? 0 : 1);
 		cpu_pfc = temp < 0x100;
 		cpu_pfv = ((CPU_A_GET() ^ temp) & 0x80) && ((CPU_A_GET() ^ data) & 0x80);
 		CPU_A_SET(temp & 0xFF);
@@ -204,7 +222,7 @@ static inline void _SBC(data) {
 	}
 }
 static inline void _ROR(int addr) {
-	uword t = addr == -1 ? CPU_A_GET() : cpu_read(addr);
+	Uint16 t = ((addr == -1) ? CPU_A_GET() : cpu_read(addr));
 	if (cpu_pfc) t |= 0x100;
 	cpu_pfc = t & 1;
 	t >>= 1;
@@ -212,7 +230,7 @@ static inline void _ROR(int addr) {
 	if (addr == -1) CPU_A_SET(t); else cpu_write(addr, t);
 }
 static inline void _ROL(int addr) {
-	uword t = addr == -1 ? CPU_A_GET() : cpu_read(addr);
+	Uint16 t = ((addr == -1) ? CPU_A_GET() : cpu_read(addr));
 	t = (t << 1) | (cpu_pfc ? 1 : 0);
 	cpu_pfc = t & 0x100;
 	t &= 0xFF;
@@ -461,7 +479,7 @@ int cpu_step () {
 	case 0xc3:   break; /* 0xc3 NOP (nonstd loc, implied) */
 	case 0xc4:   _CMP(cpu_y, cpu_read(_zp())) ; break; /* 0xc4 CPY Zero_Page */
 	case 0xc5:   _CMP(CPU_A_GET(), cpu_read(_zp())) ; break; /* 0xc5 CMP Zero_Page */
-	case 0xc6:   { int addr = _zp() ; ubyte data = cpu_read(addr) - 1; setNZ(data) ; cpu_write(addr, data); } break; /* 0xc6 DEC Zero_Page */
+	case 0xc6:   { int addr = _zp() ; Uint8 data = cpu_read(addr) - 1; setNZ(data) ; cpu_write(addr, data); } break; /* 0xc6 DEC Zero_Page */
 	case 0xc7:   { int a = _zp() ; cpu_write(a, cpu_read(a) | 16); } break; /* 0xc7 SMB Zero_Page */
 	case 0xc8:   setNZ(++cpu_y); break; /* 0xc8 INY Implied */
 	case 0xc9:   _CMP(CPU_A_GET(), cpu_read(_imm())) ; break; /* 0xc9 CMP Immediate */
@@ -469,7 +487,7 @@ int cpu_step () {
 	case 0xcb:   break; /* 0xcb NOP (nonstd loc, implied) */
 	case 0xcc:   _CMP(cpu_y, cpu_read(_abs())) ; break; /* 0xcc CPY Absolute */
 	case 0xcd:   _CMP(CPU_A_GET(), cpu_read(_abs())) ; break; /* 0xcd CMP Absolute */
-	case 0xce:   { int addr = _abs() ; ubyte data = cpu_read(addr) - 1; setNZ(data) ; cpu_write(addr, data); } break; /* 0xce DEC Absolute */
+	case 0xce:   { int addr = _abs() ; Uint8 data = cpu_read(addr) - 1; setNZ(data) ; cpu_write(addr, data); } break; /* 0xce DEC Absolute */
 	case 0xcf:   _BRA( cpu_read(_zp()) & 16 ) ; break; /* 0xcf BBS Relative */
 	case 0xd0:   _BRA(!cpu_pfz) ; break; /* 0xd0 BNE Relative */
 	case 0xd1:   _CMP(CPU_A_GET(), cpu_read(_zpiy())) ; break; /* 0xd1 CMP (Zero_Page),Y */
@@ -477,7 +495,7 @@ int cpu_step () {
 	case 0xd3:   break; /* 0xd3 NOP (nonstd loc, implied) */
 	case 0xd4:   cpu_pc++ ; break; /* 0xd4 NOP zpx (non-std NOP with addr mode) */
 	case 0xd5:   _CMP(CPU_A_GET(), cpu_read(_zpx())) ; break; /* 0xd5 CMP Zero_Page,X */
-	case 0xd6:   { int addr = _zpx() ; ubyte data = cpu_read(addr) - 1; setNZ(data) ; cpu_write(addr, data); } break; /* 0xd6 DEC Zero_Page,X */
+	case 0xd6:   { int addr = _zpx() ; Uint8 data = cpu_read(addr) - 1; setNZ(data) ; cpu_write(addr, data); } break; /* 0xd6 DEC Zero_Page,X */
 	case 0xd7:   { int a = _zp() ; cpu_write(a, cpu_read(a) | 32); } break; /* 0xd7 SMB Zero_Page */
 	case 0xd8:   cpu_pfd = 0 ; break; /* 0xd8 CLD Implied */
 	case 0xd9:   _CMP(CPU_A_GET(), cpu_read(_absy())) ; break; /* 0xd9 CMP Absolute,Y */
@@ -485,7 +503,7 @@ int cpu_step () {
 	case 0xdb:   break; /* 0xdb NOP (nonstd loc, implied) */
 	case 0xdc:   break; /* 0xdc NOP (nonstd loc, implied) */
 	case 0xdd:   _CMP(CPU_A_GET(), cpu_read(_absx())) ; break; /* 0xdd CMP Absolute,X */
-	case 0xde:   { int addr = _absx() ; ubyte data = cpu_read(addr) - 1; setNZ(data) ; cpu_write(addr, data); } break; /* 0xde DEC Absolute,X */
+	case 0xde:   { int addr = _absx() ; Uint8 data = cpu_read(addr) - 1; setNZ(data) ; cpu_write(addr, data); } break; /* 0xde DEC Absolute,X */
 	case 0xdf:   _BRA( cpu_read(_zp()) & 32 ) ; break; /* 0xdf BBS Relative */
 	case 0xe0:   _CMP(cpu_x, cpu_read(_imm())) ; break; /* 0xe0 CPX Immediate */
 	case 0xe1:   _SBC(cpu_read(_zpxi())) ; break; /* 0xe1 SBC (Zero_Page,X) */
@@ -493,7 +511,7 @@ int cpu_step () {
 	case 0xe3:   break; /* 0xe3 NOP (nonstd loc, implied) */
 	case 0xe4:   _CMP(cpu_x, cpu_read(_zp())) ; break; /* 0xe4 CPX Zero_Page */
 	case 0xe5:   _SBC(cpu_read(_zp())) ; break; /* 0xe5 SBC Zero_Page */
-	case 0xe6:   { int addr = _zp() ; ubyte data = cpu_read(addr) + 1; setNZ(data) ; cpu_write(addr, data); } break; /* 0xe6 INC Zero_Page */
+	case 0xe6:   { int addr = _zp() ; Uint8 data = cpu_read(addr) + 1; setNZ(data) ; cpu_write(addr, data); } break; /* 0xe6 INC Zero_Page */
 	case 0xe7:   { int a = _zp() ; cpu_write(a, cpu_read(a) | 64); } break; /* 0xe7 SMB Zero_Page */
 	case 0xe8:   setNZ(++cpu_x); break; /* 0xe8 INX Implied */
 	case 0xe9:   _SBC(cpu_read(_imm())) ; break; /* 0xe9 SBC Immediate */
@@ -501,7 +519,7 @@ int cpu_step () {
 	case 0xeb:   break; /* 0xeb NOP (nonstd loc, implied) */
 	case 0xec:   _CMP(cpu_x, cpu_read(_abs())) ; break; /* 0xec CPX Absolute */
 	case 0xed:   _SBC(cpu_read(_abs())) ; break; /* 0xed SBC Absolute */
-	case 0xee:   { int addr = _abs(); ubyte data = cpu_read(addr) + 1; setNZ(data) ; cpu_write(addr, data); } break; /* 0xee INC Absolute */
+	case 0xee:   { int addr = _abs(); Uint8 data = cpu_read(addr) + 1; setNZ(data) ; cpu_write(addr, data); } break; /* 0xee INC Absolute */
 	case 0xef:   _BRA( cpu_read(_zp()) & 64 ) ; break; /* 0xef BBS Relative */
 	case 0xf0:   _BRA(cpu_pfz) ; break; /* 0xf0 BEQ Relative */
 	case 0xf1:   _SBC(cpu_read(_zpiy())) ; break; /* 0xf1 SBC (Zero_Page),Y */
@@ -509,7 +527,7 @@ int cpu_step () {
 	case 0xf3:   break; /* 0xf3 NOP (nonstd loc, implied) */
 	case 0xf4:   cpu_pc++ ; break; /* 0xf4 NOP zpx (non-std NOP with addr mode) */
 	case 0xf5:   _SBC(cpu_read(_zpx())) ; break; /* 0xf5 SBC Zero_Page,X */
-	case 0xf6:   { int addr = _zpx() ; ubyte data = cpu_read(addr) + 1; setNZ(data) ; cpu_write(addr, data); } break; /* 0xf6 INC Zero_Page,X */
+	case 0xf6:   { int addr = _zpx() ; Uint8 data = cpu_read(addr) + 1; setNZ(data) ; cpu_write(addr, data); } break; /* 0xf6 INC Zero_Page,X */
 	case 0xf7:   { int a = _zp() ; cpu_write(a, cpu_read(a) | 128); } break; /* 0xf7 SMB Zero_Page */
 	case 0xf8:   cpu_pfd = 1 ; break; /* 0xf8 SED Implied */
 	case 0xf9:   _SBC(cpu_read(_absy())) ; break; /* 0xf9 SBC Absolute,Y */
@@ -517,7 +535,7 @@ int cpu_step () {
 	case 0xfb:   break; /* 0xfb NOP (nonstd loc, implied) */
 	case 0xfc:   break; /* 0xfc NOP (nonstd loc, implied) */
 	case 0xfd:   _SBC(cpu_read(_absx())) ; break; /* 0xfd SBC Absolute,X */
-	case 0xfe:   { int addr = _absx() ; ubyte data = cpu_read(addr) + 1; setNZ(data) ; cpu_write(addr, data); } break; /* 0xfe INC Absolute,X */
+	case 0xfe:   { int addr = _absx() ; Uint8 data = cpu_read(addr) + 1; setNZ(data) ; cpu_write(addr, data); } break; /* 0xfe INC Absolute,X */
 	case 0xff:   _BRA( cpu_read(_zp()) & 128 ) ; break; /* 0xff BBS Relative */
 	}
 	return cpu_cycles;

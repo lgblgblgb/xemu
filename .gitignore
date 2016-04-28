@@ -30,3 +30,8 @@
 
 # Debug files
 *.dSYM/
+
+# My stuffs
+*.rom
+xvic20
+xvic20.exe
