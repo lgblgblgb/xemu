@@ -27,7 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include <SDL.h>
 
-#include "xvic20.h"
+#include "commodore_vic20.h"
 #include "cpu65c02.h"
 #include "via65c22.h"
 
@@ -182,7 +182,7 @@ static int load_emu_file ( const char *fn, void *buffer, int size )
 #endif
 		NULL
 	};
-	int a, fd = -1;
+	int a = 0, fd = -1;
 	while (search_paths[a]) {
 		char fnbuf[PATH_MAX + 1];
 		snprintf(fnbuf, sizeof fnbuf, "%s%c%s", search_paths[a], DIRSEP_CHR, fn);

@@ -1,0 +1,18 @@
+# A Commodore LCD emulator using SDL2 library.
+# Also included a very simple and inaccurate Commodore VIC-20 emulator
+# Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+
+ARCH_DESC	= "Native Unix/Linux like"
+PREFIX		= /usr/local
+BINDIR		= $(PREFIX)/bin
+DATADIR		= $(PREFIX)/lib/xep128
+CC		= gcc
+STRIP		= strip
+SDLCFG		= sdl2-config
+GENOPTS		= -Ofast -fno-common -falign-functions=16 -falign-loops=16 -ffast-math
+CFLAGS_ARCH	= $(GENOPTS) -Wall -pipe -I. $(shell $(SDLCFG) --cflags) -DDATADIR=\"$(DATADIR)\" -DO_BINARY=0
+LDFLAGS_ARCH	= $(GENOPTS) $(shell $(SDLCFG) --libs)
+SRCS_ARCH_V20	=
+SRCS_ARCH_LCD	=
+ZIP_FILES_ARCH	=
+

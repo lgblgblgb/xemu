@@ -32,6 +32,9 @@
 *.dSYM/
 
 # My stuffs
-*.rom
-xvic20
-xvic20.exe
+rom/*.rom
+xvic20.??*
+xclcd.??*
+.arch
+.depend.*
+arch/objs.*
