@@ -23,7 +23,7 @@ DATADIR	= $(PREFIX)/share/xclcd/vic20
 CFLAGS	= -flto $(shell $(SDLCFG) --cflags) -I. -falign-functions=16 -falign-loops=16 -Wall -Ofast -ffast-math -pipe -DDATADIR=\"$(DATADIR)\"
 LDFLAGS	= -flto $(shell $(SDLCFG) --libs)
 PRG	= xvic20
-SRCS	= main.c cpu65c02.c via65c22.c
+SRCS	= commodore_vic20.c cpu65c02.c via65c22.c
 FILES	= LICENSE README.md Makefile $(SRCS) *.h rom/README
 OBJS	= $(SRCS:.c=.o)
 DIST	= xvic20.tgz
