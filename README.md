@@ -19,6 +19,11 @@ and a JavaScript based emulator.
 
 http://commodore-lcd.lgb.hu/
 
+It was some years ago, and though a native emulator is developed (not made as a
+public release) it was buggy, it used quite questionable SDL screen "updating"
+solution etc. Now it's a fresh start, with reusing the CPU and VIA emulation parts
+only.
+
 This piece of code is about writing a native emulator version which can be run
 at least on Windows and Linux (or Unix-like machines, Raspberry PI is included)
 with the help of the SDL2 library. Note, that in theory, it would be easy to
@@ -44,6 +49,39 @@ is not detected, as it's only "pressed" virtually at the same time as the key it
 On Windows, you need SDL2.dll (included in the distributed package). You also need
 the ROM images.
 
+## About SDL rendering - please help me :)
+
+Let me explain one thing: if you're more in SDL2 internals than me, please contact
+me. I feel quite lost (with my "more serious" emulator too, Xep128, also on github)
+about the "ideal" solution to render an average 8 bit computer's screen. That is
+usually we have 256 or less (16 in case of VIC-20, and only two in case of Commodore
+LCD) colours. That is, an indexed method would be ideal. I've tried to use that and
+it seems it's unstable, and even not usable on some platforms. At the end, I've found
+myself in the situation, that I should render RGBA pixels as DWORDs as a streaming
+texture. It seems to be quite OK. However, just a quick peek on other emulatorts
+using ("only" or "also") like FUSE (ZX Spectrum emulator) or Hatari (Atari emulator)
+it seems they use SDL surfaces. Honestly, I can't even see the difference between
+these notions and the precise impact ... Using textures seems to have acceptable
+performance even in full screen/scaled mode, even on a quite "weak" hardware as
+Raspberry Pi model 1 is! So maybe it's not even needed to lamenting a lot on this
+issue, however I'm still curious the scene at the background behind this topic.
+Also, using DWORDs by pixel seems to be overkill, but it's possible that today's
+computer are not so optimized in 8 bit writes anyway during updating the pixel
+buffer / texture, so using DWORDs by pixel cannot be a big problem. Also I am not
+so sure what is the "ideal" format to be used (for best performance, for me it
+seems `SDL_PIXELFORMAT_ARGB8888` is, with constant 0xFF for the alpha channel - but
+do not forget that solution should be platform independent somewhat ...).
+
+What I think: my solution can't be *so* bad, as it works (testes) at least on Linux,
+Windows, and Raspberry Pi, with quite acceptable performace. However being as
+a "maximalist" I always have the thoughts that it can be better, maybe :)
+
+emutools.c is aimed to be a simple "layer" for an average emulator-like project,
+so I've tried to put everything unrelated to the given emulated machine there.
+Including the SDL stuffs, of course.
+
+Please don't hesitate to contact me, if you have an constructive opinion. Thanks!
+
 ## Why the Commodore VIC-20 emulation is included?
 
 Foreword: this VIC-20 emulator is incomplete, unfinished, and very incorrect,
@@ -59,6 +97,13 @@ well, so I can try to hook the IEC part to the Commodore LCD emulation. And so
 on. Also, VIC-20 is a "simple" machine enough to emulate, compared eg to a
 Commodore 64 (which would also need CIAs and not VIAs to be emulated).
 
+Other reason: my "more serious" emulator (Xep128, also on github) is about
+being just too complex to "play" with it for "quick modifications" to try
+things out about the basics of writing emulators (ie using SDL, the timing
+code, in the future: audio sync, etc). It seems it's better to do it here,
+with more simple emulators, and using the results in the Xep128 project as
+well.
+
 About the CPU: since Commodore LCD uses software compatible CPU (exact type is
 not very known) of 65C02, my experimental VIC-20 emulator also uses that!
 That's a direct attack against poor VIC-20 :) as it used 6502! So, of course
@@ -66,13 +111,13 @@ things like illegal opcodes won't work using my emulator!
 
 Full (?) list of stupidities of my VIC-20 emulator:
 
-* 65C02 as the CPU, not 6502 (no illegal opcodes)
+* 65C02 as the CPU, not 6502 (no illegal opcodes), this is by intent!
 * VIC-I is not emulated at register level, only the default mode for KERNAL/BASIC
-* No 16 pixel height character mode, no multicolor, no screen width setting
+* No 16 pixel height character mode, no multicolor, no screen columns setting, etc.
 * Screen is rendered in one step, which is incorrect, of course
+* Screen ratio is very bad now, this is not a bug but lack of decent settings :)
+  I delay this for the time when I have border, etc too, to have some sane value.
 * Border is not emulated
-* Keyboard currently does not work
-* Only the stock machine is emulated without any RAM expansion
 * No sound is emulated
 
 ## Compilation on Linux / UNIX-like machine
@@ -97,11 +142,16 @@ can switch back to native compilation with command:
 
 `make set-arch TO=native`
 
+Resulting binaries will have the "extension" of .native, but you can forgot
+that of course, it's just for the ability to be able to build for multiple
+architectures (ie for Windows it will have .win32).
+
 ## Compilation for Windows
 
 To be able to compile emulators for Windows, you must have a Linux (or probably
 other UNIX-like system) with suitable cross-compiler able to generate Windows
-binaries. You also need the S
+binaries. You also need the SDL2 (at least 2.0.2, 2.0.4 is recommended!) stuffs
+installed, and arch/Makefile.win32 is possible modified for proper settings.
 
 First, you need to select "architecture" to win32 with this command:
 
@@ -115,6 +165,20 @@ You can switch back to native architecture with this command:
 
 `make set-arch TO=native`
 
+## General compilation related notes
+
+Link-time-optimalization (lto, see -flto gcc switch) seems to be kinda picky.
+You may want to give the optimization flags at the linker stage to! Also:
+go *not* mix -g switch (eg you want to debug the program with gdb) with -flto
+according to the gcc manual, it can cause very odd problems! Basically you
+should change DEBUG setting in Makefile from -flto to -g, if you want to debug.
+
+Architecture specific (ie win32 or native) settings are in the arch/ directory!
+Including the used C compiler path, flags, sdl2-config path, etc ...
+
+If you add/remove files, include new header files, etc, you should say `make dep`
+for the given architecture selected.
+
 ## Compilation for Raspberry Pi
 
 You have two choices. You can compile it on the Raspberry Pi itself, then you need
@@ -127,12 +191,18 @@ means lower resource usage, of course. I've not tested the stuff on Raspb.PI on
 X11!
 
 Also, you can use a cross-compiler on your desktop machine, if it's a Linux/UNIX
-kind of machine.
+kind of machine. This option is under development though, and isn't made available!
 
 Some notes:
 
-Aaccording to my experiments -falign-functions=16 -falign-loops=16 really
+According to my experiments -falign-functions=16 -falign-loops=16 really
 helps on Rapsberry-Pi at least.
+
+It's interesting to play with locked texture access compared to the non-locked
+version. On my PC, the difference cannot even be seen too much. However it's
+quite possible that on a lower performance hardware the difference can be seen
+more. Basically, the locked method seems to be the suggested one, however I'm
+still not sure, any feedback is welcome!
 
 For more information from me (it also contains tips for SDL compilation
 on the Raspberry PI itself):
