@@ -86,17 +86,17 @@ int emu_load_file ( const char *fn, void *buffer, int size )
 	while (search_paths[a]) {
 		char fnbuf[PATH_MAX + 1];
 		snprintf(fnbuf, sizeof fnbuf, "%s%c%s", search_paths[a], DIRSEP_CHR, fn);
-		printf("Trying to open file \"%s\" as \"%s\" ...\n", fn, fnbuf);
+		printf("Trying to open file \"%s\" as \"%s\" ..." NL, fn, fnbuf);
 		fd = open(fnbuf, O_RDONLY | O_BINARY);	// O_BINARY is Windows stuff, but we define it as zero in case of non-Win32 system, so it won't hurt
 		if (fd > -1)
 			break;
 		a++;
 	}
 	if (fd < 0) {
-		fprintf(stderr, "Cannot open file %s\n", fn);
+		fprintf(stderr, "Cannot open file %s" NL, fn);
 		return 1;
 	}
-	printf("OK, file is open (fd = %d)\n", fd);
+	printf("OK, file is open (fd = %d)" NL, fd);
 	while (size) {
 		a = read(fd, buffer, size);
 		if (a < 0) {
@@ -131,13 +131,13 @@ void emu_set_full_screen ( int setting )
 		// entering into full screen mode ....
 		SDL_GetWindowSize(sdl_win, &win_xsize, &win_ysize); // save window size, it seems there are some problems with leaving fullscreen then
 		if (SDL_SetWindowFullscreen(sdl_win, SDL_WINDOW_FULLSCREEN_DESKTOP)) {
-			fprintf(stderr, "Cannot enter full screen mode: %s\n", SDL_GetError());
+			fprintf(stderr, "Cannot enter full screen mode: %s" NL, SDL_GetError());
 		} else
 			emu_is_fullscreen = 1;
 	} else {
 		// leaving full screen mode ...
 		if (SDL_SetWindowFullscreen(sdl_win, 0)) {
-			fprintf(stderr, "Cannot leave full screen mode: %s\n", SDL_GetError());
+			fprintf(stderr, "Cannot leave full screen mode: %s" NL, SDL_GetError());
 		} else {
 			emu_is_fullscreen = 0;
 			SDL_SetWindowSize(sdl_win, win_xsize, win_ysize); // restore window size saved on leaving fullscreen, there can be some bugs ...
@@ -157,8 +157,8 @@ void emu_sleep ( int real_usec )
 	struct timeval tv_new;
 	int t_emu, t_slept;
 	gettimeofday(&tv_new, NULL);
-	t_emu = (tv_new.tv_sec - tv_old.tv_sec) * 1000000 + (tv_new.tv_usec - tv_old.tv_usec);	// microseconds we needed to emulate one frame (SDL etc stuffs included!), it's 40000 on a real VIC-20
-	t_emu = real_usec - t_emu;	// if it's positive, we're faster in emulation than a real VIC-20, if negative, we're slower, and can't keep real-time emulation :(
+	t_emu = (tv_new.tv_sec - tv_old.tv_sec) * 1000000 + (tv_new.tv_usec - tv_old.tv_usec);	// microseconds we needed to emulate one frame (SDL etc stuffs included!)
+	t_emu = real_usec - t_emu;	// if it's positive, we're faster in emulation than a real machine, if negative, we're slower, and can't keep real-time emulation :(
 	sleep_balancer += t_emu;
 	// chop insane values, ie stopped emulator for a while, other time setting artifacts etc ...
 	if (sleep_balancer < -250000 || sleep_balancer > 250000)
@@ -210,16 +210,20 @@ int emu_init_sdl (
 	SDL_PixelFormat *pix_fmt;
 	char render_scale_quality_s[2];
 	if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
-		fprintf(stderr, "Cannot initialize SDL: %s\n", SDL_GetError());
+		ERROR_WINDOW("Cannot initialize SDL: %s", SDL_GetError());
 		return 1;
 	}
 	shutdown_user_function = shutdown_callback;
 	atexit(shutdown_emulator);
 	sdl_pref_dir = SDL_GetPrefPath(app_organization, app_name);
 	if (!sdl_pref_dir) {
+		ERROR_WINDOW("Cannot query SDL preferences directory: %s", SDL_GetError());
+		return 1;
 	}
 	sdl_base_dir = SDL_GetBasePath();
 	if (!sdl_base_dir) {
+		ERROR_WINDOW("Cannot query SDL base directory: %s", SDL_GetError());
+		return 1;
 	}
 	sdl_window_title = emu_strdup(window_title);
 	sdl_win = SDL_CreateWindow(
@@ -229,19 +233,19 @@ int emu_init_sdl (
 		SDL_WINDOW_SHOWN | (is_resizable ? SDL_WINDOW_RESIZABLE : 0)
 	);
 	if (!sdl_win) {
-		fprintf(stderr, "Cannot create SDL window: %s\n", SDL_GetError());
+		ERROR_WINDOW("Cannot create SDL window: %s", SDL_GetError());
 		return 1;
 	}
 	//SDL_SetWindowMinimumSize(sdl_win, SCREEN_WIDTH, SCREEN_HEIGHT * 2);
 	sdl_ren = SDL_CreateRenderer(sdl_win, -1, 0);
 	if (!sdl_ren) {
-		fprintf(stderr, "Cannot create SDL renderer: %s\n", SDL_GetError());
+		ERROR_WINDOW("Cannot create SDL renderer: %s", SDL_GetError());
 		return 1;
 	}
 	SDL_RenderSetLogicalSize(sdl_ren, logical_x_size, logical_y_size);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
 	sdl_tex = SDL_CreateTexture(sdl_ren, pixel_format, SDL_TEXTUREACCESS_STREAMING, texture_x_size, texture_y_size);
 	if (!sdl_tex) {
-		fprintf(stderr, "Cannot create SDL texture: %s\n", SDL_GetError());
+		ERROR_WINDOW("Cannot create SDL texture: %s", SDL_GetError());
 		return 1;
 	}
 	texture_x_size_in_bytes = texture_x_size * 4;

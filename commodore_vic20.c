@@ -293,7 +293,7 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 static void update_emulator ( void )
 {
 	SDL_Event e;
-	// First: rendner VIC-20 screen ...
+	// First: render VIC-20 screen ...
 	render_screen();
 	// Second: we must handle SDL events waiting for us in the event queue ...
 	while (SDL_PollEvent(&e) != 0) {
@@ -303,13 +303,13 @@ static void update_emulator ( void )
 				break;
 			case SDL_KEYDOWN:	// key is pressed (down)
 			case SDL_KEYUP:		// key is released (up)
-				// make sure that key event is for our window, also that it's not a releated event by long key presses
+				// make sure that key event is for our window, also that it's not a releated event by long key presses (repeats should be handled by the emulated machine's KERNAL)
 				if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0))
 					emulate_keyboard(e.key.keysym.scancode, e.key.state == SDL_PRESSED);	// the last argument will be zero in case of release, other val in case of pressing
 				break;
 		}
 	}
-	// Sleep ... Please read emutools.c source about this madness ... 40000 is (PAL) microseconds for a full frame to be produced
+	// Third: Sleep ... Please read emutools.c source about this madness ... 40000 is (PAL) microseconds for a full frame to be produced
 	emu_sleep(40000);
 }
 
@@ -391,8 +391,9 @@ int main ( int argc, char **argv )
 	}
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (emu_init_sdl(
-		"VIC-20", "nemesys.lgb", "xclcd-vic20",
-		1,	// resizable window
+		"VIC-20",			// window title
+		"nemesys.lgb", "xclcd-vic20",	// app organization and name, used with SDL pref dir formation
+		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// logical size (same as texture for now ...)
 		SCREEN_WIDTH * SCREEN_DEFAULT_ZOOM, SCREEN_HEIGHT * SCREEN_DEFAULT_ZOOM,	// window size
@@ -400,7 +401,7 @@ int main ( int argc, char **argv )
 		16,			// we have 16 colours
 		init_vic_palette_rgb,	// initialize palette from this constant array
 		vic_palette,		// initialize palette into this stuff
-		1,			// render scaling quality
+		RENDER_SCALE_QUALITY,	// render scaling quality
 		USE_LOCKED_TEXTURE,	// 1 = locked texture access
 		NULL			// no emulator specific shutdown function
 	))
@@ -412,7 +413,7 @@ int main ( int argc, char **argv )
 		emu_load_file("vic20-basic.rom",   memory + 0xC000, 0x2000) +	// load basic ROM
 		emu_load_file("vic20-kernal.rom",  memory + 0xE000, 0x2000)	// load kernal ROM
 	) {
-		fprintf(stderr, "Cannot load some of the needed ROM images (see message above)!\n");
+		ERROR_WINDOW("Cannot load some of the needed ROM images (see console messages)!");
 		return 1;
 	}
 	memset(kbd_matrix, 0xFF, sizeof kbd_matrix);	// initialize keyboard matrix [bit 1 = unpressed, thus 0xFF for a line]
