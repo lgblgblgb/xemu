@@ -260,6 +260,13 @@ int cpu_step () {
 	}
 	cpu_old_pc = cpu_pc;
 	cpu_op = cpu_read(cpu_pc++);
+#ifdef CPU_TRAP
+	if (cpu_op == CPU_TRAP) {
+		int ret = cpu_trap(CPU_TRAP);
+		if (ret > 0)
+			return ret;
+	}
+#endif
 	cpu_cycles = opcycles[cpu_op];
 	switch (cpu_op) {
 	case 0x00:  pushWord(cpu_pc + 1); cpu_pfb = 1 ; push(getP()) ; cpu_pfd = 0 ; cpu_pfi = 1 ; cpu_pc = readWord(0xFFFE) ; break; /* 0x0 BRK Implied */

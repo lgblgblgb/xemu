@@ -30,4 +30,6 @@ extern Uint8 cpu_read(Uint16 addr);
 extern void cpu_reset(void);
 extern int  cpu_step (void);
 
+extern int  cpu_trap (Uint8 opcode);
+
 #endif

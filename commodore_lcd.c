@@ -87,6 +87,10 @@ static const struct KeyMapping key_map[] = {
 
 
 
+int cpu_trap ( Uint8 opcode )
+{
+	return 1;
+}
 
 
 Uint8 cpu_read ( Uint16 addr ) {

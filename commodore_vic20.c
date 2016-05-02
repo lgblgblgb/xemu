@@ -142,6 +142,16 @@ static const struct KeyMapping key_map[] = {
 
 
 
+int cpu_trap ( Uint8 opcode )
+{
+	if (cpu_pc == 0xA001 && opcode == CPU_TRAP) {
+		INFO_WINDOW("Congratulation, CPU trap works :-)");
+		return 1;
+	} else
+		return 0; // ignore trap!
+}
+
+
 
 // Called by CPU emulation code
 void  cpu_write(Uint16 addr, Uint8 data)
@@ -418,6 +428,9 @@ int main ( int argc, char **argv )
 	}
 	memset(kbd_matrix, 0xFF, sizeof kbd_matrix);	// initialize keyboard matrix [bit 1 = unpressed, thus 0xFF for a line]
 	cpu_reset();	// reset CPU: it must be AFTER kernal is loaded at least, as reset also fetches the reset vector into PC ...
+	// our TRAP stuff :)
+	memory[0xA000] = CPU_TRAP;
+	memory[0xA001] = 0x60;	// RTS
 	// Initiailize VIAs.
 	// Note: this is my unfinished VIA emulation skeleton, for my Commodore LCD emulator originally, ported from my JavaScript code :)
 	// it uses call back functions, which must be registered here, NULL values means unused functionality

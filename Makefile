@@ -35,7 +35,7 @@ include arch/Makefile.$(ARCH)
 # If you want to compile with -g option, also *DELETE* the -flto, both of them together known to be problematic!
 DEBUG	= -flto
 
-CFLAGS	= $(DEBUG) $(CFLAGS_ARCH)
+CFLAGS	= $(DEBUG) $(CFLAGS_ARCH) -DCPU_TRAP=0xFC
 LDFLAGS	= $(DEBUG) $(LDFLAGS_ARCH)
 PRG_V20	= xvic20.$(ARCH)
 PRG_LCD = xclcd.$(ARCH)
