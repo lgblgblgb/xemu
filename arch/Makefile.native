@@ -10,7 +10,7 @@ CC		= gcc
 STRIP		= strip
 SDLCFG		= sdl2-config
 GENOPTS		= -Ofast -fno-common -falign-functions=16 -falign-loops=16 -ffast-math
-CFLAGS_ARCH	= $(GENOPTS) -Wall -pipe -I. $(shell $(SDLCFG) --cflags) -DDATADIR=\"$(DATADIR)\" -DO_BINARY=0
+CFLAGS_ARCH	= $(GENOPTS) -Wall -pipe -I. $(shell $(SDLCFG) --cflags) -DDATADIR=\"$(DATADIR)\"
 LDFLAGS_ARCH	= $(GENOPTS) $(shell $(SDLCFG) --libs)
 SRCS_ARCH_V20	=
 SRCS_ARCH_LCD	=

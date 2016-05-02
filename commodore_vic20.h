@@ -18,16 +18,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __LGB_COMMODORE_VIC20_H_INCLUDED
 #define __LGB_COMMODORE_VIC20_H_INCLUDED
 
+// CPU clock of PAL models (actually 1108404.5Hz ...)
+#define CPU_CLOCK               1108404
+#define CPU_CYCLES_PER_TV_FRAME 44336
 
-#ifndef _WIN32
-#	define O_BINARY		0
-#	define DIRSEP_STR	"/"
-#	define DIRSEP_CHR	'/'
-#else
-#	define DIRSEP_STR	"\\"
-#	define DIRSEP_CHR	'\\'
-#endif
+#define SCREEN_WIDTH            176
+#define SCREEN_HEIGHT           184
+#define SCREEN_DEFAULT_ZOOM     4
+#define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888
 
-
+#define USE_LOCKED_TEXTURE	1
 
 #endif

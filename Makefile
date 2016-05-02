@@ -40,8 +40,9 @@ LDFLAGS	= $(DEBUG) $(LDFLAGS_ARCH)
 PRG_V20	= xvic20.$(ARCH)
 PRG_LCD = xclcd.$(ARCH)
 PRG_ALL = $(PRG_V20) $(PRG_LCD)
-SRC_V20	= commodore_vic20.c cpu65c02.c via65c22.c $(SRCS_ARCH_V20)
-SRC_LCD	= commodore_lcd.c cpu65c02.c via65c22.c $(SRCS_ARCH_LCD)
+SRC_ALL = cpu65c02.c via65c22.c emutools.c
+SRC_V20	= commodore_vic20.c $(SRC_ALL) $(SRCS_ARCH_V20)
+SRC_LCD	= commodore_lcd.c $(SRC_ALL) $(SRCS_ARCH_LCD)
 FILES	= LICENSE README.md Makefile $(SRCS) *.h rom/README
 OBJ_V20	= $(SRC_V20:.c=.o)
 OBJ_LCD = $(SRC_LCD:.c=.o)

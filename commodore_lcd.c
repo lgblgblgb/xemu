@@ -1,5 +1,6 @@
 #include <stdio.h>
 #include <SDL.h>
+#include "emutools.h"
 
 
 // Called by CPU emulation code
@@ -19,7 +20,7 @@ Uint8 cpu_read(Uint16 addr)
 
 int main ( int argc, char **argv )
 {
-	fprintf(stderr, "Not imported yet!\n");
+	FATAL("This emulator has to be written :-)");
 	return 1;
 }
 

@@ -2,3 +2,4 @@
 *.h linguist-language=C
 *.asm linguist-language=Assembly
 *.s linguist-language=Assembly
+Makefile.* linguist-language=Makefile

@@ -16,66 +16,40 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include <stdio.h>
-#include <string.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <sys/time.h>
-#include <limits.h>
 
 #include <SDL.h>
 
 #include "commodore_vic20.h"
 #include "cpu65c02.h"
 #include "via65c22.h"
+#include "emutools.h"
 
-
-// CPU clock of PAL models (actually 1108404.5Hz ...)
-#define	CPU_CLOCK		1108404
-#define CPU_CYCLES_PER_TV_FRAME	44336
-
-#define SCREEN_WIDTH		176
-#define SCREEN_HEIGHT		184
-#define SCREEN_DEFAULT_ZOOM	4
-#define SCREEN_FORMAT		SDL_PIXELFORMAT_ARGB8888
 
 
 
 static Uint8 memory[0x10000];	// 64K address space of the 6502 CPU (some of it is ROM, undecoded, whatsoever ...)
-static const Uint8 vic_palette_rgb[16][3] = {	// VIC palette given by RGB components
-	{ 0x00, 0x00, 0x00 },	// black
-	{ 0xFF, 0xFF, 0xFF },	// white
-	{ 0xF0, 0x00, 0x00 },	// red
-	{ 0x00, 0xF0, 0xF0 },	// cyan
-	{ 0x60, 0x00, 0x60 },	// purple
-	{ 0x00, 0xA0, 0x00 },	// green
-	{ 0x00, 0x00, 0xF0 },	// blue
-	{ 0xD0, 0xD0, 0x00 },	// yellow
-	{ 0xC0, 0xA0, 0x00 },	// orange
-	{ 0xFF, 0xA0, 0x00 },	// light orange
-	{ 0xF0, 0x80, 0x80 },	// pink
-	{ 0x00, 0xFF, 0xFF },	// light cyan
-	{ 0xFF, 0x00, 0xFF },	// light purple
-	{ 0x00, 0xFF, 0x00 },	// light green
-	{ 0x00, 0xA0, 0xFF },	// light blue
-	{ 0xFF, 0xFF, 0x00 }	// light yellow
+static const Uint8 init_vic_palette_rgb[16 * 3] = {	// VIC palette given by RGB components
+	0x00, 0x00, 0x00,	// black
+	0xFF, 0xFF, 0xFF,	// white
+	0xF0, 0x00, 0x00,	// red
+	0x00, 0xF0, 0xF0,	// cyan
+	0x60, 0x00, 0x60,	// purple
+	0x00, 0xA0, 0x00,	// green
+	0x00, 0x00, 0xF0,	// blue
+	0xD0, 0xD0, 0x00,	// yellow
+	0xC0, 0xA0, 0x00,	// orange
+	0xFF, 0xA0, 0x00,	// light orange
+	0xF0, 0x80, 0x80,	// pink
+	0x00, 0xFF, 0xFF,	// light cyan
+	0xFF, 0x00, 0xFF,	// light purple
+	0x00, 0xFF, 0x00,	// light green
+	0x00, 0xA0, 0xFF,	// light blue
+	0xFF, 0xFF, 0x00	// light yellow
 };
 static Uint32 vic_palette[16];			// VIC palette with native SCREEN_FORMAT aware way. It will be initialized once only from vic_palette_rgb
-static Uint32 pixels[SCREEN_WIDTH * SCREEN_HEIGHT];	// we use "SDL native" 32 bit per pixel, RGBA format
 static int running = 1;
-static int is_fullscreen = 0;	// current state of fullscreen (0 = no)
-static int win_xsize, win_ysize;	// we will use this to save window size before enterint into fullscreen mode
-static char *sdl_base_dir, *sdl_pref_dir;
-static SDL_Window *sdl_win = NULL;
-static Uint32 sdl_winid;
-static SDL_Renderer *sdl_ren;
-static SDL_Texture  *sdl_tex;
 static struct Via65c22 via1, via2;
 static Uint8 kbd_matrix[8];		// keyboard matrix state, 8 * 8 bits
-static struct timeval tv_old;		// timing related stuff
-static int sleep_balancer;		// also a timing stuff
 static int is_kpage_writable[64] = {	// writable flag (for different memory expansions) for every kilobytes of the address space, this shows the default, unexpanded config!
 	1,		// @ 0K     (sum 1K), RAM
 	0,0,0,		// @ 1K -3K (sum 3K), place for 3K expansion
@@ -169,45 +143,6 @@ static const struct KeyMapping key_map[] = {
 
 
 
-
-static int load_emu_file ( const char *fn, void *buffer, int size )
-{
-	char *search_paths[] = {
-		".",
-		"." DIRSEP_STR "rom",
-		sdl_pref_dir,
-		sdl_base_dir,
-#ifndef _WIN32
-		DATADIR,
-#endif
-		NULL
-	};
-	int a = 0, fd = -1;
-	while (search_paths[a]) {
-		char fnbuf[PATH_MAX + 1];
-		snprintf(fnbuf, sizeof fnbuf, "%s%c%s", search_paths[a], DIRSEP_CHR, fn);
-		printf("Trying to open file \"%s\" as \"%s\" ...\n", fn, fnbuf);
-		fd = open(fnbuf, O_RDONLY | O_BINARY);	// O_BINARY is Windows stuff, but we define it as zero in case of non-Win32 system, so it won't hurt
-		if (fd > -1)
-			break;
-		a++;
-	}
-	if (fd < 0) {
-		fprintf(stderr, "Cannot open file %s\n", fn);
-		return 1;
-	}
-	printf("OK, file is open (fd = %d)\n", fd);
-	if (read(fd, buffer, size + 1) != size) {
-		fprintf(stderr, "Cannot read %d bytes (or file is longer) from file %s\n", size, fn);
-		close(fd);
-		return 1;
-	}
-	close(fd);
-	return 0;
-}
-
-
-
 // Called by CPU emulation code
 void  cpu_write(Uint16 addr, Uint8 data)
 {
@@ -259,7 +194,7 @@ static inline Uint16 vic_get_colour_address ( void ) {
 
 static void render_screen ( void )
 {
-	int x, y, sc;
+	int x, y, sc, tail;
 	Uint32 *pp;
 	Uint8 *vidp, *colp, *chrp;
 	Uint32 bg = vic_palette[memory[0x900F] >> 4];	// background colour ...
@@ -285,7 +220,7 @@ static void render_screen ( void )
 	vidp = memory + vic_get_screen_address();
 	colp = memory + vic_get_colour_address();
 	chrp = memory + vic_get_chrgen_address();
-	pp = pixels;
+	pp = emu_start_pixel_buffer_access(&tail);
 	while (y < 23) {
 		int b;
 		Uint8 shape = chrp[((*vidp) << 3) + sc];	// shape of current scanline of the current character
@@ -301,6 +236,7 @@ static void render_screen ( void )
 			x++;
 		} else {
 			x = 0;
+			pp += tail;		// texture 'tail'
 			if (sc < 7) {
 				vidp -= 21;	// "rewind" video pointer
 				colp -= 21;	// ... and also the colour RAM pointer
@@ -313,42 +249,11 @@ static void render_screen ( void )
 			}
 		}
 	}
-	//printf("WOW %d\n", pp -pixels);
-	// Do the SDL stuff, update window with our "pixels" data ... This is the
-	// actual SDL magic to refresh the "screen" (well, the window)
-	// In theory, you can even render more textures on top of each with
-	// different alpha channel, colour modulation etc, to get a composite result.
-	// I use this feature in my Enterprise-128 emulator to display emulation related
-	// information over the emulated screen, as some kind of "OSD" (On-Screen Display)
-	SDL_UpdateTexture(sdl_tex, NULL, pixels, SCREEN_WIDTH * sizeof (Uint32));
-	SDL_RenderClear(sdl_ren);
-	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);
-	SDL_RenderPresent(sdl_ren);
+	emu_update_screen();
 }
 
 
 
-static void toggle_full_screen ( void )
-{
-	if (is_fullscreen) {
-		// it was in full screen mode before ...
-		if (SDL_SetWindowFullscreen(sdl_win, 0)) {
-			fprintf(stderr, "Cannot leave full screen mode: %s\n", SDL_GetError());
-		} else {
-			is_fullscreen = 0;
-			SDL_SetWindowSize(sdl_win, win_xsize, win_ysize); // restore window size saved on leaving fullscreen, there can be some bugs ...
-		}
-	} else {
-		// it was in window mode before ...
-		SDL_GetWindowSize(sdl_win, &win_xsize, &win_ysize); // save window size, it seems there are some problems with leaving fullscreen then
-		if (SDL_SetWindowFullscreen(sdl_win, SDL_WINDOW_FULLSCREEN_DESKTOP)) {
-			fprintf(stderr, "Cannot enter full screen mode: %s\n", SDL_GetError());
-		} else {
-			is_fullscreen = 1;
-		}
-	}
-	SDL_RaiseWindow(sdl_win); // I have some problems with EP128 emulator that window went to the background. Let's handle that with raising it anyway :)
-}
 
 
 
@@ -357,7 +262,7 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 {
 	if (key == SDL_SCANCODE_F11) {	// toggle full screen mode on/off
 		if (pressed)
-			toggle_full_screen();
+			emu_set_full_screen(-1);
 	} else if (key == SDL_SCANCODE_F9) {	// exit emulator ...
 		if (pressed)
 			running = 0;
@@ -387,8 +292,6 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 
 static void update_emulator ( void )
 {
-	struct timeval tv_new;
-	int t_emu, t_slept;
 	SDL_Event e;
 	// First: rendner VIC-20 screen ...
 	render_screen();
@@ -406,83 +309,8 @@ static void update_emulator ( void )
 				break;
 		}
 	}
-	// Now the timing follows! We now how much time we need for a full TV frame on a real VIC (1/25 sec)
-	// We messure how much time we used on the PC, and if less, we sleep the rest
-	// Note: this is not a precise emulation, as sleep functions would be not perfect in case of a multitask
-	// OS, which runs our litte emulator!
-	gettimeofday(&tv_new, NULL);
-	t_emu = (tv_new.tv_sec - tv_old.tv_sec) * 1000000 + (tv_new.tv_usec - tv_old.tv_usec);	// microseconds we needed to emulate one frame (SDL etc stuffs included!), it's 40000 on a real VIC-20
-	t_emu = CPU_CYCLES_PER_TV_FRAME - t_emu;	// if it's positive, we're faster in emulation than a real VIC-20, if negative, we're slower, and can't keep real-time emulation :(
-	sleep_balancer += t_emu;
-	// chop insane values, ie stopped emulator for a while, other time setting artifacts etc ...
-	if (sleep_balancer < -250000 || sleep_balancer > 250000)
-		sleep_balancer = 0;
-	if (sleep_balancer > 1000)	// usless to sleep too short time (or even negative ...) as the OS scheduler won't sleep smaller time amounts than the sheduling frequency after all
-		usleep(sleep_balancer);
-	// dual purpose: this will be the start time of next frame, also we check the exact time we slept with usleep() as usleep() on a multitask OS cannot be precise ever!!
-	gettimeofday(&tv_old, NULL);
-	t_slept = (tv_old.tv_sec - tv_new.tv_sec) * 1000000 + (tv_old.tv_usec - tv_new.tv_usec);	// real time we slept ... (warning, old/new are exchanged here with valid reason)
-	// correct sleep balancer with the real time slept, again if it's not "insane" value we got ...
-	if (t_slept > -250000 && t_slept < 250000)
-		sleep_balancer -= t_slept;
-}
-
-
-
-static void shutdown_emulator ( void )
-{
-	if (sdl_win)
-		SDL_DestroyWindow(sdl_win);
-	SDL_Quit();
-	puts("Shutdown callback function has been called.");
-}
-
-
-
-
-// The SDL init stuff. Also it initiailizes the VIC-20 colour palette
-static int xvic20_init_sdl ( void )
-{
-	SDL_PixelFormat *pix_fmt;
-	int a;
-	if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
-		fprintf(stderr, "Cannot initialize SDL: %s\n", SDL_GetError());
-		return 1;
-	}
-	atexit(shutdown_emulator);
-	sdl_pref_dir = SDL_GetPrefPath("nemesys.lgb", "xclcd-vic20");
-	sdl_base_dir = SDL_GetBasePath();
-	sdl_win = SDL_CreateWindow(
-		"LGB's little XVic20 experiment",
-		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-		SCREEN_WIDTH * SCREEN_DEFAULT_ZOOM, SCREEN_HEIGHT * SCREEN_DEFAULT_ZOOM,
-		SDL_WINDOW_SHOWN | SDL_WINDOW_RESIZABLE
-	);
-	if (!sdl_win) {
-		fprintf(stderr, "Cannot create SDL window: %s\n", SDL_GetError());
-		return 1;
-	}
-	//SDL_SetWindowMinimumSize(sdl_win, SCREEN_WIDTH, SCREEN_HEIGHT * 2);
-	sdl_ren = SDL_CreateRenderer(sdl_win, -1, 0);
-	if (!sdl_ren) {
-		fprintf(stderr, "Cannot create SDL renderer: %s\n", SDL_GetError());
-		return 1;
-	}
-	SDL_RenderSetLogicalSize(sdl_ren, SCREEN_WIDTH, SCREEN_HEIGHT  );	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
-	sdl_tex = SDL_CreateTexture(sdl_ren, SCREEN_FORMAT, SDL_TEXTUREACCESS_STREAMING, SCREEN_WIDTH, SCREEN_HEIGHT);
-	if (!sdl_tex) {
-		fprintf(stderr, "Cannot create SDL texture: %s\n", SDL_GetError());
-		return 1;
-	}
-	sdl_winid = SDL_GetWindowID(sdl_win);
-	// Intitialize VIC palette
-	pix_fmt = SDL_AllocFormat(SCREEN_FORMAT);
-	for (a = 0; a < 16; a++) {
-		// actually this may be bad on other endian computers :-/ I forgot now how to use SDL's mapRGBA for the given pixel format :-]
-		//vic_palette[a] = (0xFF << 24) | (vic_palette_rgb[a][0] << 16) | (vic_palette_rgb[a][1] << 8) | (vic_palette_rgb[a][2]);
-		vic_palette[a] = SDL_MapRGBA(pix_fmt, vic_palette_rgb[a][0], vic_palette_rgb[a][1], vic_palette_rgb[a][2], 0xFF);
-	}
-	return 0;
+	// Sleep ... Please read emutools.c source about this madness ... 40000 is (PAL) microseconds for a full frame to be produced
+	emu_sleep(40000);
 }
 
 
@@ -562,14 +390,27 @@ int main ( int argc, char **argv )
 			);
 	}
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
-	if (xvic20_init_sdl())
+	if (emu_init_sdl(
+		"VIC-20", "nemesys.lgb", "xclcd-vic20",
+		1,	// resizable window
+		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
+		SCREEN_WIDTH, SCREEN_HEIGHT,	// logical size (same as texture for now ...)
+		SCREEN_WIDTH * SCREEN_DEFAULT_ZOOM, SCREEN_HEIGHT * SCREEN_DEFAULT_ZOOM,	// window size
+		SCREEN_FORMAT,		// pixel format
+		16,			// we have 16 colours
+		init_vic_palette_rgb,	// initialize palette from this constant array
+		vic_palette,		// initialize palette into this stuff
+		1,			// render scaling quality
+		USE_LOCKED_TEXTURE,	// 1 = locked texture access
+		NULL			// no emulator specific shutdown function
+	))
 		return 1;
 	/* Intialize memory and load ROMs */
 	memset(memory, 0xFF, sizeof memory);
 	if (
-		load_emu_file("vic20-chargen.rom", memory + 0x8000, 0x1000) +	// load chargen ROM
-		load_emu_file("vic20-basic.rom",   memory + 0xC000, 0x2000) +	// load basic ROM
-		load_emu_file("vic20-kernal.rom",  memory + 0xE000, 0x2000)	// load kernal ROM
+		emu_load_file("vic20-chargen.rom", memory + 0x8000, 0x1000) +	// load chargen ROM
+		emu_load_file("vic20-basic.rom",   memory + 0xC000, 0x2000) +	// load basic ROM
+		emu_load_file("vic20-kernal.rom",  memory + 0xE000, 0x2000)	// load kernal ROM
 	) {
 		fprintf(stderr, "Cannot load some of the needed ROM images (see message above)!\n");
 		return 1;
@@ -598,8 +439,7 @@ int main ( int argc, char **argv )
 		via2_setint	// setint, same for VIA2 as with VIA1. Note: I have no idea if both VIAs can generate IRQ on VIC-20 though, maybe it's overkill to do for both and even cause problems?
 	);
 	cycles = 0;
-	gettimeofday(&tv_old, NULL);	// update_emulator() needs a starting time for timing purposes ...
-	sleep_balancer = 0;
+	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	while (running) { // our emulation loop ...
 		int opcyc;
 		//printf("%04Xh\n", cpu_pc);	
