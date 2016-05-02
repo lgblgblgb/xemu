@@ -86,11 +86,11 @@ dist:
 	$(MAKE) $(DIST)
 
 clean:
-	rm -f $(PRG_ALL) $(OBJ_V20) $(OBJ_LCD) .depend.$(ARCH) $(DIST) .arch
+	rm -f $(PRG_ALL) $(OBJ_V20) $(OBJ_LCD) .depend.$(ARCH) $(DIST)
 
 distclean:
 	$(MAKE) clean
-	rm -f rom/*.rom
+	rm -f rom/*.rom .arch
 	rm -f arch/objs.*/*.o || true
 	rmdir arch/objs.* 2>/dev/null || true
 
