@@ -2,9 +2,13 @@ You must place ROM images here. For possible copyright reason and violation
 of free licensed software contains closed source binary blobs, you must do
 it yourself. Needed files in this directory (with exactly these names!):
 
-* chargen	4K size character generator ROM image of Commodore VIC-20
-* basic		8K size BASIC ROM image of Commodore VIC-20
-* kernal	8K size KERNAL ROM image of Commodore VIC-20
+* vic20-chargen		4K long character generator ROM image of Commodore VIC-20
+* vic20-basic		8K long BASIC ROM image of Commodore VIC-20
+* vic2-0kernal		8K long KERNAL ROM image of Commodore VIC-20
+* clcd-u102.rom		32K long KERNAL ROM image of Commodore LCD
+* clcd-u103.rom		32K long USER APP / BASIC ROM image of Commodore LCD
+* clcd-u104.rom		32K long USER APP ROM image of Commodore LCD
+* clcd-u105.rom		32K long USER APP ROM image of Commodore LCD
 
 You can also use Makefile to download the needed files from Internet:
 
