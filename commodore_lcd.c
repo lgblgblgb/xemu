@@ -81,6 +81,76 @@ struct KeyMapping {
 	Uint8		pos;	// BCD packed, high nibble / low nibble for col/row to map to.  0xFF means end of table!, high bit set on low nibble: press virtual shift as well!
 };
 static const struct KeyMapping key_map[] = {
+	{ SDL_SCANCODE_BACKSPACE, 0x00 },
+	{ SDL_SCANCODE_3, 0x01 },
+	{ SDL_SCANCODE_5, 0x02 },
+	{ SDL_SCANCODE_7, 0x03 },
+	{ SDL_SCANCODE_9, 0x04 },
+	{ SDL_SCANCODE_DOWN, 0x05 },
+	{ SDL_SCANCODE_LEFT, 0x06 },
+	{ SDL_SCANCODE_1, 0x07 },
+	{ SDL_SCANCODE_RETURN, 0x10 },
+	{ SDL_SCANCODE_W, 0x11 },
+	{ SDL_SCANCODE_R, 0x12 },
+	{ SDL_SCANCODE_Y, 0x13 },
+	{ SDL_SCANCODE_I, 0x14 },
+	{ SDL_SCANCODE_P, 0x15 },
+	{ SDL_SCANCODE_RIGHTBRACKET, 0x16 },	// this would be '*'
+	{ SDL_SCANCODE_HOME, 0x17 },
+	{ SDL_SCANCODE_TAB, 0x20 },
+	{ SDL_SCANCODE_A, 0x21 },
+	{ SDL_SCANCODE_D, 0x22 },
+	{ SDL_SCANCODE_G, 0x23 },
+	{ SDL_SCANCODE_J, 0x24 },
+	{ SDL_SCANCODE_L, 0x25 },
+	{ SDL_SCANCODE_SEMICOLON, 0x26 },
+	{ SDL_SCANCODE_F2, 0x27 },
+	{ SDL_SCANCODE_F7, 0x30 },
+	{ SDL_SCANCODE_4, 0x31 },
+	{ SDL_SCANCODE_6, 0x32 },
+	{ SDL_SCANCODE_8, 0x33 },
+	{ SDL_SCANCODE_0, 0x34 },
+	{ SDL_SCANCODE_UP, 0x35 },
+	{ SDL_SCANCODE_RIGHT, 0x36 },
+	{ SDL_SCANCODE_2, 0x37 },
+	{ SDL_SCANCODE_F1, 0x40 },
+	{ SDL_SCANCODE_Z, 0x41 },
+	{ SDL_SCANCODE_C, 0x42 },
+	{ SDL_SCANCODE_B, 0x43 },
+	{ SDL_SCANCODE_M, 0x44 },
+	{ SDL_SCANCODE_PERIOD, 0x45 },
+	{ SDL_SCANCODE_ESCAPE, 0x46 },
+	{ SDL_SCANCODE_SPACE, 0x47 },
+	{ SDL_SCANCODE_F3, 0x50 },
+	{ SDL_SCANCODE_S, 0x51 },
+	{ SDL_SCANCODE_F, 0x52 },
+	{ SDL_SCANCODE_H, 0x53 },
+	{ SDL_SCANCODE_K, 0x54 },
+	{ SDL_SCANCODE_APOSTROPHE, 0x55 },	// this would be ':'
+	{ SDL_SCANCODE_EQUALS, 0x56 },
+	{ SDL_SCANCODE_F8, 0x57 },
+	{ SDL_SCANCODE_F5, 0x60 },
+	{ SDL_SCANCODE_E, 0x61 },
+	{ SDL_SCANCODE_T, 0x62 },
+	{ SDL_SCANCODE_U, 0x63 },
+	{ SDL_SCANCODE_O, 0x64 },
+	{ SDL_SCANCODE_MINUS, 0x65 },
+	{ SDL_SCANCODE_BACKSLASH, 0x66 }, // this would be '+'
+	{ SDL_SCANCODE_Q, 0x67 },
+	{ SDL_SCANCODE_LEFTBRACKET, 0x70 }, // this would be '@'
+	{ SDL_SCANCODE_F4, 0x71 },
+	{ SDL_SCANCODE_X, 0x72 },
+	{ SDL_SCANCODE_V, 0x73 },
+	{ SDL_SCANCODE_N, 0x74 },
+	{ SDL_SCANCODE_COMMA, 0x75 },
+	{ SDL_SCANCODE_SLASH, 0x76 },
+	{ SDL_SCANCODE_F6, 0x77 },
+	// extra keys, not part of main keyboard map, but separated byte (SR register can provide both in CLCD)
+	{ SDL_SCANCODE_END, 0x80 },	// this would be the 'STOP' key
+	{ SDL_SCANCODE_CAPSLOCK, 0x81},
+	{ SDL_SCANCODE_LSHIFT, 0x82 }, { SDL_SCANCODE_RSHIFT, 0x82 },
+	{ SDL_SCANCODE_LCTRL, 0x83 }, { SDL_SCANCODE_RCTRL, 0x83 },
+	{ SDL_SCANCODE_LALT, 0x84 }, { SDL_SCANCODE_RALT, 0x84 },
 	{ 0,	0xFF	}	// this must be the last line: end of mapping table
 };
 
@@ -251,55 +321,6 @@ static void render_screen ( void )
 
 
 
-
-static const SDL_Scancode keycodes[] = {
-	SDLK_BACKSPACE,   SDLK_3,  SDLK_5, SDLK_7, SDLK_9, SDLK_DOWN,      SDLK_LEFT,         SDLK_1,
-	SDLK_RETURN,      SDLK_w,  SDLK_r, SDLK_y, SDLK_i, SDLK_p,         SDLK_RIGHTBRACKET, SDLK_HOME,
-	SDLK_TAB,         SDLK_a,  SDLK_d, SDLK_g, SDLK_j, SDLK_l,         SDLK_QUOTE,        SDLK_F2,
-	SDLK_F7,	  SDLK_4,  SDLK_6, SDLK_8, SDLK_0, SDLK_UP,        SDLK_RIGHT,        SDLK_2,
-	SDLK_F1,          SDLK_z,  SDLK_c, SDLK_b, SDLK_m, SDLK_PERIOD,    SDLK_ESCAPE,       SDLK_SPACE,
-	SDLK_F3,          SDLK_s,  SDLK_f, SDLK_h, SDLK_k, SDLK_SEMICOLON, SDLK_EQUALS,       SDLK_F8,
-	SDLK_F5,          SDLK_e,  SDLK_t, SDLK_u, SDLK_o, SDLK_MINUS,     SDLK_BACKSLASH,    SDLK_q,
-	SDLK_LEFTBRACKET, SDLK_F4, SDLK_x, SDLK_v, SDLK_n, SDLK_COMMA,     SDLK_SLASH,        SDLK_F6,
-	SDLK_END, SDLK_CAPSLOCK, SDLK_LSHIFT, SDLK_LCTRL, SDLK_LALT,
-	-1
-};
-
-
-#if 0
-void nemesys_emu_keyEvent(SDL_Keysym key, int state)
-{
-	int a;
-	printf("KBD: event: scancode=%s name=%s key\n",
-		SDL_GetScancodeName(key.scancode),
-		SDL_GetKeyName(key.sym)
-      	);
-	if (key.sym <= 0) {
-		printf("KBD: invalid key code %d\n", key.sym);
-		return;
-	}
-	//printf("Key %d\n", key.sym);
-	switch (key.sym) {
-		case SDLK_RSHIFT: key.sym = SDLK_LSHIFT; break;
-		case SDLK_RCTRL:  key.sym = SDLK_LCTRL;  break;
-		case SDLK_RALT:   key.sym = SDLK_LALT;   break;
-	}
-	for (a = 0;; a++)
-		if (keycodes[a] == -1)
-			return;
-		else if (keycodes[a] == key.sym) {
-			//printf("KEY found at row/X=%d col/Y=%d\n", a >> 3, a & 7);
-			if (state)
-				keymatrix[a >> 3] |= 1 << (a & 7);
-			else
-				keymatrix[a >> 3] &= 255 - (1 << (a & 7));
-			return;
-		}
-	printf("KBD: unknown key event for key code %d\n", key.sym);
-}
-#endif
-
-
 // pressed: non zero value = key is pressed, zero value = key is released
 static void emulate_keyboard ( SDL_Scancode key, int pressed )
 {
@@ -313,17 +334,11 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 		const struct KeyMapping *map = key_map;
 		while (map->pos != 0xFF) {
 			if (map->scan == key) {
-				if (pressed) {
-					if (map->pos & 8)       // shifted key emu?
-						kbd_matrix[3] &= 0xFD;  // press shift on VIC20!
+				if (!pressed) {
 					kbd_matrix[map->pos >> 4] &= 255 - (1 << (map->pos & 0x7));
 				} else {
-					if (map->pos & 8)       // shifted key emu?
-						kbd_matrix[3] |= 2;     // release shift on VIC20!
 					kbd_matrix[map->pos >> 4] |= 1 << (map->pos & 0x7);
 				}
-				//fprintf(stderr, "Found key, pos = %02Xh\n", map->pos);
-				//debug_show_kbd_matrix();
 				break;  // key found, end.
 			}
 			map++;
