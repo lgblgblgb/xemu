@@ -205,7 +205,6 @@ static int clcd_run ( int maxcycles )
 	while (maxcycles > 0) {
 		cycles = cpu_step();
 		//printf("OP was: %04X %02X\n", cpu_old_pc, cpu_op);
-		if (cpu_fatal) break;
 		maxcycles -= cycles;
 		via_tick(&via1, cycles);
 		via_tick(&via2, cycles);
@@ -280,7 +279,6 @@ static int clcd_emulator(void)
 	for(;;) {
 		int ticks = SDL_GetTicks();
 		clcd_run(40000);
-		if (cpu_fatal) return 1;
 		refresh_screen();
 		emu_sleep(40000);
 		//nemesys_events(); // poll events

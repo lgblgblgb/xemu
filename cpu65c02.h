@@ -18,7 +18,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __LGB_CPU65C02_H_INCLUDED
 #define __LGB_CPU65C02_H_INCLUDED
 
-extern int cpu_fatal;
 extern int cpu_irqLevel;
 extern int cpu_nmiEdge;
 

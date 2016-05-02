@@ -54,7 +54,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 Uint8 cpu_sp, cpu_op;
 Uint16 cpu_pc, cpu_old_pc;
 int cpu_pfn,cpu_pfv,cpu_pfb,cpu_pfd,cpu_pfi,cpu_pfz,cpu_pfc;
-int cpu_fatal = 0, cpu_irqLevel = 0, cpu_nmiEdge = 0;
+int cpu_irqLevel = 0, cpu_nmiEdge = 0;
 int cpu_cycles;
 
 static const Uint8 opcycles[] = {7,6,2,2,5,3,5,5,3,2,2,2,6,4,6,2,2,5,5,2,5,4,6,5,2,4,2,2,6,4,7,2,6,6,2,2,3,3,5,5,4,2,2,2,4,4,6,2,2,5,5,2,4,4,6,5,2,4,2,2,4,4,7,2,6,6,2,2,3,3,5,5,3,2,2,2,3,4,6,2,2,5,5,2,4,4,6,5,2,4,3,2,2,4,7,2,6,6,2,2,3,3,5,5,4,2,2,2,5,4,6,2,2,5,5,2,4,4,6,5,2,4,4,2,6,4,7,2,3,6,2,2,3,3,3,5,2,2,2,2,4,4,4,2,2,6,5,2,4,4,4,5,2,5,2,2,4,5,5,2,2,6,2,2,3,3,3,5,2,2,2,2,4,4,4,2,2,5,5,2,4,4,4,5,2,4,2,2,4,4,4,2,2,6,2,2,3,3,5,5,2,2,2,2,4,4,6,2,2,5,5,2,4,4,6,5,2,4,3,2,2,4,7,2,2,6,2,2,3,3,5,5,2,2,2,2,4,4,6,2,2,5,5,2,4,4,6,5,2,4,4,2,2,4,7,2};
@@ -95,7 +95,6 @@ void cpu_reset() {
 	setP(20);
 	cpu_sp = 0xFF;
 	cpu_irqLevel = cpu_nmiEdge = 0;
-	cpu_fatal = 0;
 #ifdef DTV_CPU_HACK
 	cpu_a_sind = 0;
 	cpu_a_tind = 0;
@@ -237,11 +236,6 @@ static inline void _ROL(int addr) {
 	setNZ(t);
 	if (addr == -1) CPU_A_SET(t); else cpu_write(addr, t);
 }
-/*	static inline void unknownOpCode() {
-		cpu_fatal = true;
-		alert("Unknown opcode _" + cpu_op.toString(16) + " at " + cpu_old_pc.toString(16));
-	}*/
-
 
 
 
