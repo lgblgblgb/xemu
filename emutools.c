@@ -24,6 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/time.h>
+#include <time.h>
 #include <limits.h>
 
 #include <SDL.h>
@@ -49,6 +50,20 @@ static Uint32 black_colour;
 static void (*shutdown_user_function)(void);
 
 
+
+
+struct tm *emu_get_localtime ( void )
+{
+	struct tm *t;
+	t = localtime(&tv_old.tv_sec);
+	return t;
+}
+
+
+time_t emu_get_unixtime ( void )
+{
+	return tv_old.tv_sec;
+}
 
 
 void *emu_malloc ( size_t size )

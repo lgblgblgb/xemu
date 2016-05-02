@@ -71,7 +71,8 @@ extern SDL_Window   *sdl_win;
 extern Uint32 sdl_winid;
 
 
-
+extern time_t emu_get_unixtime ( void );
+extern struct tm *emu_get_localtime ( void );
 extern void *emu_malloc ( size_t size );
 extern char *emu_strdup ( const char *s );
 extern int emu_load_file ( const char *fn, void *buffer, int size );
