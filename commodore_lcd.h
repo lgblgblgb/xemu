@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define CPU_CLOCK               1000000
 #define CPU_CYCLES_PER_TV_FRAME 40000
 
-#define	RAM_SIZE		0x8000
+#define	RAM_SIZE		0x20000
 
 #define SCREEN_WIDTH            480
 #define SCREEN_HEIGHT           128
