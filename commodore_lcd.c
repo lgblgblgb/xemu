@@ -159,7 +159,7 @@ static const struct KeyMapping key_map[] = {
 
 int cpu_trap ( Uint8 opcode )
 {
-	return 1;
+	return 0;	// not recognized
 }
 
 
