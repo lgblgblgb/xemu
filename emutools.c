@@ -339,7 +339,7 @@ void emu_update_screen ( void )
 		SDL_UpdateTexture(sdl_tex, NULL, sdl_pixel_buffer, texture_x_size_in_bytes);
 	else
 		SDL_UnlockTexture(sdl_tex);
-	//SDL_RenderClear(sdl_ren); // HELP: is this REALLY needed?
+	SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
 	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);
 	SDL_RenderPresent(sdl_ren);
 }
