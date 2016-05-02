@@ -29,6 +29,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #include <stdio.h>
+#include <time.h>
 
 #include <SDL.h>
 
@@ -53,6 +54,8 @@ static struct Via65c22 via1, via2;
 static Uint8 kbd_matrix[9];
 static Uint8 keysel;
 static int running = 1;
+static Uint8 rtc_regs[16];
+static int rtc_sel = 0;
 
 static const Uint8 init_lcd_palette_rgb[6] = {
 	0xC0, 0xC0, 0xC0,
@@ -216,7 +219,7 @@ void cpu_write ( Uint16 addr, Uint8 data ) {
 }
 
 
-static Uint8 portB1 = 0;
+static Uint8 portB1 = 0, portA2 = 0;
 static int keytrans = 0;
 static int powerstatus = 0;
 
@@ -230,10 +233,26 @@ static void  via1_outsr(Uint8 data) {}
 static Uint8 via1_ina(Uint8 mask) { return 0xFF; }
 static Uint8 via1_inb(Uint8 mask) { return 0xFF; }
 static void  via2_setint(int level) {}
-static void  via2_outa(Uint8 mask, Uint8 data) {}
+static void  via2_outa(Uint8 mask, Uint8 data) {
+	portA2 = data;
+	// ugly stuff, but now the needed part is cut here from my other emulator :)
+	if (portB1 & 2) {	// RTC RD
+		if (data & 64) {
+			rtc_sel = data & 15;
+		}
+	}
+}
 static void  via2_outb(Uint8 mask, Uint8 data) {}
 static void  via2_outsr(Uint8 data) {}
-static Uint8 via2_ina(Uint8 mask) { return 0xFF; }
+static Uint8 via2_ina(Uint8 mask) {
+	if (portB1 & 2) {
+		if (portA2 & 16) {
+			return rtc_regs[rtc_sel] | (portA2 & 0x70);
+		}
+		return portA2;
+	}
+	return 0;
+}
 static Uint8 via2_inb(Uint8 mask) { return 0xFF; }
 static Uint8 via2_insr() { return 0xFF; }
 static Uint8 via1_insr()
@@ -348,6 +367,27 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 
 
 
+static void update_rtc ( void )
+{
+	struct tm *t = emu_get_localtime();
+	rtc_regs[ 0] = t->tm_sec % 10;
+	rtc_regs[ 1] = t->tm_sec / 10;
+	rtc_regs[ 2] = t->tm_min % 10;
+	rtc_regs[ 3] = t->tm_min / 10;
+	rtc_regs[ 4] = t->tm_hour % 10;
+	rtc_regs[ 5] = (t->tm_hour / 10) | 8; // TODO: AM/PM, 24h/12h time format
+	rtc_regs[ 6] = t->tm_wday; // day of week
+	rtc_regs[ 9] = t->tm_mday % 10;
+	rtc_regs[10] = t->tm_mday / 10;
+	rtc_regs[ 7] = (t->tm_mon + 1) % 10;
+	rtc_regs[ 8] = (t->tm_mon + 1) / 10;
+	rtc_regs[11] = (t->tm_year - 84) % 10; // beware of 2084, Commodore LCDs will have "Y2K-like" problem ... :)
+	rtc_regs[12] = (t->tm_year - 84) / 10;
+}
+
+
+
+
 static void update_emulator ( void )
 {
 	SDL_Event e;
@@ -365,6 +405,7 @@ static void update_emulator ( void )
 				break;
 		}
 	}
+	update_rtc();	// Note: in theory, this should be done only once a second, but who cares :-P
 	emu_sleep(40000);
 }
 
@@ -421,6 +462,7 @@ int main ( int argc, char **argv )
 	/* --- START EMULATION --- */
 	cycles = 0;
 	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
+	update_rtc();			// this will use time-keeping stuff as well, so initially let's do after the function call above
 	while (running) {
 		int opcyc = cpu_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles
 		via_tick(&via1, opcyc);	// run VIA-1 tasks for the same amount of cycles as the CPU
