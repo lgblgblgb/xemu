@@ -1,9 +1,32 @@
-/* Commodore LCD emulator, C version.
- * (C)2013,2014 LGB Gabor Lenart
- * Visit my site (the better, JavaScript version of the emu is here too): http://commodore-lcd.lgb.hu/
- * Can be distributed/used/modified under the terms of GNU/GPL 2 (or later), please see file COPYING
- * or visit this page: http://www.gnu.org/licenses/gpl-2.0.html
- */
+/* Commodore LCD emulator.
+   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+
+   This is an ongoing work to rewrite my old Commodore LCD emulator:
+
+	* Commodore LCD emulator, C version.
+	* (C)2013,2014 LGB Gabor Lenart
+	* Visit my site (the better, JavaScript version of the emu is here too): http://commodore-lcd.lgb.hu/
+
+   The goal is - of course - writing a primitive but still better than previous Commodore LCD emulator :)
+   Note: I would be interested in VICE adoption, but I am lame with VICE, too complex for me :)
+
+   This emulator based on my previous try (written in C), which is based on my previous JavaScript
+   based emulator, which was the world's first Commodore LCD emulator.
+
+This program is free software; you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation; either version 2 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program; if not, write to the Free Software
+Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
+
 
 #include <stdio.h>
 
@@ -17,20 +40,19 @@
 
 static Uint8 memory[0x40000];
 static Uint8 charrom[2048];
-//extern Uint8 roms[];
 extern unsigned const char roms[];
 static int mmu[3][4] = {
 	{0, 0, 0, 0},
 	{0, 0, 0, 0},
 	{0, 0, 0x30000, 0x30000}
 };
-//static Uint8 col_nor[256], col_inv[256];
 static int *mmu_current = mmu[0];
 static int *mmu_saved = mmu[0];
 static Uint8 lcd_ctrl[4];
 static struct Via65c22 via1, via2;
-static Uint8 keymatrix[9];
+static Uint8 kbd_matrix[9];
 static Uint8 keysel;
+static int running = 1;
 
 static const Uint8 init_lcd_palette_rgb[6] = {
 	0xC0, 0xC0, 0xC0,
@@ -53,6 +75,18 @@ static const Uint8 fontHack[] = {
 	0x00,0x3c,0x60,0x30,0x60,0x3c,	0x00,0x6c,0x10,0x10,0x6c,0x00,
 	0x00,0x9c,0xa0,0x60,0x3c,0x00,	0x00,0x64,0x54,0x54,0x4c,0x00
 };
+
+struct KeyMapping {
+	SDL_Scancode	scan;	// SDL scancode for the given key we want to map
+	Uint8		pos;	// BCD packed, high nibble / low nibble for col/row to map to.  0xFF means end of table!, high bit set on low nibble: press virtual shift as well!
+};
+static const struct KeyMapping key_map[] = {
+	{ 0,	0xFF	}	// this must be the last line: end of mapping table
+};
+
+
+
+
 
 
 Uint8 cpu_read ( Uint16 addr ) {
@@ -127,17 +161,17 @@ static Uint8 via1_insr()
 	if (keytrans) {
 		int data = 0;
 		keytrans = 0;
-		if (!(keysel &   1)) data |= keymatrix[0];
-		if (!(keysel &   2)) data |= keymatrix[1];
-		if (!(keysel &   4)) data |= keymatrix[2];
-		if (!(keysel &   8)) data |= keymatrix[3];
-		if (!(keysel &  16)) data |= keymatrix[4];
-		if (!(keysel &  32)) data |= keymatrix[5];
-		if (!(keysel &  64)) data |= keymatrix[6];
-		if (!(keysel & 128)) data |= keymatrix[7];
+		if (!(keysel &   1)) data |= kbd_matrix[0];
+		if (!(keysel &   2)) data |= kbd_matrix[1];
+		if (!(keysel &   4)) data |= kbd_matrix[2];
+		if (!(keysel &   8)) data |= kbd_matrix[3];
+		if (!(keysel &  16)) data |= kbd_matrix[4];
+		if (!(keysel &  32)) data |= kbd_matrix[5];
+		if (!(keysel &  64)) data |= kbd_matrix[6];
+		if (!(keysel & 128)) data |= kbd_matrix[7];
 		return data;
 	} else
-		return keymatrix[8] | powerstatus;
+		return kbd_matrix[8] | powerstatus;
 }
 static void  via1_setint(int level)
 {
@@ -147,77 +181,10 @@ static void  via1_setint(int level)
 
 
 
-
-static int clcd_init ( void )
-{
-	if (emu_init_sdl(
-		"Commodore LCD",		// window title
-		"nemesys.lgb", "xclcd",		// app organization and name, used with SDL pref dir formation
-		1,				// resizable window
-		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
-		SCREEN_WIDTH, SCREEN_HEIGHT,	// logical size (same as texture for now ...)
-		SCREEN_WIDTH * SCREEN_DEFAULT_ZOOM, SCREEN_HEIGHT * SCREEN_DEFAULT_ZOOM,	// window size
-		SCREEN_FORMAT,		// pixel format
-		2,			// we have 2 colours :)
-		init_lcd_palette_rgb,	// initialize palette from this constant array
-		lcd_palette,		// initialize palette into this stuff
-		RENDER_SCALE_QUALITY,	// render scaling quality
-		USE_LOCKED_TEXTURE,	// 1 = locked texture access
-		NULL			// no emulator specific shutdown function
-	))
-		return 1;
-	memset(memory, 0xFF, sizeof memory);
-	memset(charrom, 0xFF, sizeof charrom);
-	if (
-		emu_load_file("clcd-u102.rom", memory + 0x38000, 0x8000) +
-		emu_load_file("clcd-u103.rom", memory + 0x30000, 0x8000) +
-		emu_load_file("clcd-u104.rom", memory + 0x28000, 0x8000) +
-		emu_load_file("clcd-u105.rom", memory + 0x20000, 0x8000)
-	) {
-		ERROR_WINDOW("Cannot load some of the needed ROM images (see console messages)!");
-		return 1;
-	}
-	// Ugly hack :-(
-	memory[0x385BB] = 0xEA;
-	memory[0x385BC] = 0xEA;
-	/* we would need the chargen ROM of CLCD but we don't have. We have to use
-	 * some charset from the KERNAL and cheat a bit to create the alternate charset */
-	memcpy(charrom, memory + 0x3F700, 1024);
-	memcpy(charrom + 1024, memory + 0x3F700, 1024);
-	memcpy(charrom + 390, charrom + 6, 26 * 6);
-	memcpy(charrom + 6, fontHack, sizeof fontHack);
-	/* init CPU */
-	cpu_reset();
-	/* init VIAs */
-	via_init(&via1, "VIA#1", via1_outa, via1_outb, NULL,       via1_ina, via1_inb, via1_insr, via1_setint);
-	via_init(&via2, "VIA#2", via2_outa, via2_outb, via2_outsr, via2_ina, via2_inb, via2_insr, via2_setint);
-	/* keyboard */
-	memset(keymatrix, 0, sizeof keymatrix);
-	keysel = 0;
-	return 0;
-}
-
-
-
-static int clcd_run ( int maxcycles )
-{
-	int cycles;
-	while (maxcycles > 0) {
-		cycles = cpu_step();
-		//printf("OP was: %04X %02X\n", cpu_old_pc, cpu_op);
-		maxcycles -= cycles;
-		via_tick(&via1, cycles);
-		via_tick(&via2, cycles);
-	}
-	return -maxcycles;
-}
-
-
-
 #define BG lcd_palette[0]
 #define FG lcd_palette[1]
 
-static void refresh_screen ( void )
+static void render_screen ( void )
 {
 	int ps = lcd_ctrl[1] << 7;
 	int pd = 0, x, y, ch;
@@ -273,33 +240,6 @@ static void refresh_screen ( void )
 }
 
 
-static int clcd_emulator(void)
-{
-	emu_timekeeping_start();
-	for(;;) {
-		int ticks = SDL_GetTicks();
-		clcd_run(40000);
-		refresh_screen();
-		emu_sleep(40000);
-		//nemesys_events(); // poll events
-		///* rudimentary timing */
-		//ticks = SDL_GetTicks() - ticks;
-		//if (ticks < 40) SDL_Delay(40 - ticks);
-		//else printf("Your system is too slow [40/%d]!\n", ticks);
-		//printf("TICKS: %d\n", ticks);
-	}
-	return 0;
-}
-
-
-void nemesys_emu_quit ( void )
-{
-	/*int a;
-	for(a=0x800;a<0x1000;a++)
-		printf("%02X ",memory[a]);
-	printf("\n");*/
-	exit(0);
-}
 
 
 static const SDL_Scancode keycodes[] = {
@@ -316,6 +256,7 @@ static const SDL_Scancode keycodes[] = {
 };
 
 
+#if 0
 void nemesys_emu_keyEvent(SDL_Keysym key, int state)
 {
 	int a;
@@ -346,14 +287,126 @@ void nemesys_emu_keyEvent(SDL_Keysym key, int state)
 		}
 	printf("KBD: unknown key event for key code %d\n", key.sym);
 }
+#endif
 
 
-
-int main ( void )
+// pressed: non zero value = key is pressed, zero value = key is released
+static void emulate_keyboard ( SDL_Scancode key, int pressed )
 {
-	printf("Commodore LCD emulator\n(C)2014 Gabor Lenart 'LGB'\nhttp://commodore-lcd.lgb.hu/\n\n");
-	puts("EMU: entering into the init function");
-	if (clcd_init())
+	if (key == SDL_SCANCODE_F11) {  // toggle full screen mode on/off
+		if (pressed)
+			emu_set_full_screen(-1);
+	} else if (key == SDL_SCANCODE_F9) {    // exit emulator ...
+		if (pressed)
+			running = 0;
+	} else {
+		const struct KeyMapping *map = key_map;
+		while (map->pos != 0xFF) {
+			if (map->scan == key) {
+				if (pressed) {
+					if (map->pos & 8)       // shifted key emu?
+						kbd_matrix[3] &= 0xFD;  // press shift on VIC20!
+					kbd_matrix[map->pos >> 4] &= 255 - (1 << (map->pos & 0x7));
+				} else {
+					if (map->pos & 8)       // shifted key emu?
+						kbd_matrix[3] |= 2;     // release shift on VIC20!
+					kbd_matrix[map->pos >> 4] |= 1 << (map->pos & 0x7);
+				}
+				//fprintf(stderr, "Found key, pos = %02Xh\n", map->pos);
+				//debug_show_kbd_matrix();
+				break;  // key found, end.
+			}
+			map++;
+		}
+	}
+}
+
+
+
+static void update_emulator ( void )
+{
+	SDL_Event e;
+	render_screen();
+	while (SDL_PollEvent(&e) != 0) {
+		switch (e.type) {
+			case SDL_QUIT:		// ie: someone closes the SDL window ...
+				running = 0;	// set running to zero, main loop will exit then
+				break;
+			case SDL_KEYDOWN:	// key is pressed (down)
+			case SDL_KEYUP:		// key is released (up)
+				// make sure that key event is for our window, also that it's not a releated event by long key presses (repeats should be handled by the emulated machine's KERNAL)
+				if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0))
+					emulate_keyboard(e.key.keysym.scancode, e.key.state == SDL_PRESSED);	// the last argument will be zero in case of release, other val in case of pressing
+				break;
+		}
+	}
+	emu_sleep(40000);
+}
+
+
+
+
+int main ( int argc, char **argv )
+{
+	int cycles;
+	if (emu_init_sdl(
+		"Commodore LCD",		// window title
+		"nemesys.lgb", "xclcd",		// app organization and name, used with SDL pref dir formation
+		1,				// resizable window
+		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
+		SCREEN_WIDTH, SCREEN_HEIGHT,	// logical size (same as texture for now ...)
+		SCREEN_WIDTH * SCREEN_DEFAULT_ZOOM, SCREEN_HEIGHT * SCREEN_DEFAULT_ZOOM,	// window size
+		SCREEN_FORMAT,		// pixel format
+		2,			// we have 2 colours :)
+		init_lcd_palette_rgb,	// initialize palette from this constant array
+		lcd_palette,		// initialize palette into this stuff
+		RENDER_SCALE_QUALITY,	// render scaling quality
+		USE_LOCKED_TEXTURE,	// 1 = locked texture access
+		NULL			// no emulator specific shutdown function
+	))
 		return 1;
-	return clcd_emulator();
+	memset(memory, 0xFF, sizeof memory);
+	memset(charrom, 0xFF, sizeof charrom);
+	if (
+		emu_load_file("clcd-u102.rom", memory + 0x38000, 0x8000) +
+		emu_load_file("clcd-u103.rom", memory + 0x30000, 0x8000) +
+		emu_load_file("clcd-u104.rom", memory + 0x28000, 0x8000) +
+		emu_load_file("clcd-u105.rom", memory + 0x20000, 0x8000)
+	) {
+		ERROR_WINDOW("Cannot load some of the needed ROM images (see console messages)!");
+		return 1;
+	}
+	// Ugly hack :-( <patching ROM>
+	memory[0x385BB] = 0xEA;
+	memory[0x385BC] = 0xEA;
+	/* we would need the chargen ROM of CLCD but we don't have. We have to use
+	 * some charset from the KERNAL (which is NOT the "hardware" charset!) and cheat a bit to create the alternate charset */
+	memcpy(charrom, memory + 0x3F700, 1024);
+	memcpy(charrom + 1024, memory + 0x3F700, 1024);
+	memcpy(charrom + 390, charrom + 6, 26 * 6);
+	memcpy(charrom + 6, fontHack, sizeof fontHack);
+	/* init CPU */
+	cpu_reset();	// we must do this after loading KERNAL at least, since PC is fetched from reset vector here!
+	/* init VIAs */
+	via_init(&via1, "VIA#1", via1_outa, via1_outb, NULL,       via1_ina, via1_inb, via1_insr, via1_setint);
+	via_init(&via2, "VIA#2", via2_outa, via2_outb, via2_outsr, via2_ina, via2_inb, via2_insr, via2_setint);
+	/* keyboard */
+	memset(kbd_matrix, 0, sizeof kbd_matrix);
+	keysel = 0;
+	/* --- START EMULATION --- */
+	cycles = 0;
+	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
+	while (running) {
+		int opcyc = cpu_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles
+		via_tick(&via1, opcyc);	// run VIA-1 tasks for the same amount of cycles as the CPU
+		via_tick(&via2, opcyc);	// -- "" -- the same for VIA-2
+		cycles += opcyc;
+		/* Note, Commodore LCD is not TV standard based ... Since I have no idea about the update etc, I still assume some kind of TV-related stuff, who cares :) */
+		if (cycles >= CPU_CYCLES_PER_TV_FRAME) {	// if enough cycles elapsed (what would be the amount of CPU cycles for a TV frame), let's call the update function.
+			update_emulator();			// this is the heart of screen update, also to handle SDL events (like key presses ...)
+			cycles -= CPU_CYCLES_PER_TV_FRAME;	// not just cycle = 0, to avoid rounding errors, but it would not matter too much anyway ...
+		}
+	}
+	puts("Goodbye!");
+	return 0;
 }
