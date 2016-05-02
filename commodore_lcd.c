@@ -93,6 +93,12 @@ int cpu_trap ( Uint8 opcode )
 }
 
 
+void clear_emu_events ( void )
+{
+	memset(kbd_matrix, 0, sizeof kbd_matrix);	// resets the keyboard
+}
+
+
 Uint8 cpu_read ( Uint16 addr ) {
 	if (addr <  0x1000) return memory[addr];
 	if (addr <  0xF800) return memory[(mmu_current[addr >> 14] + addr) & 0x3FFFF];
@@ -395,7 +401,7 @@ int main ( int argc, char **argv )
 	via_init(&via1, "VIA#1", via1_outa, via1_outb, NULL,       via1_ina, via1_inb, via1_insr, via1_setint);
 	via_init(&via2, "VIA#2", via2_outa, via2_outb, via2_outsr, via2_ina, via2_inb, via2_insr, via2_setint);
 	/* keyboard */
-	memset(kbd_matrix, 0, sizeof kbd_matrix);
+	clear_emu_events();	// also resets the keyboard
 	keysel = 0;
 	/* --- START EMULATION --- */
 	cycles = 0;

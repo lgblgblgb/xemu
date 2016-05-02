@@ -142,15 +142,21 @@ static const struct KeyMapping key_map[] = {
 
 
 
+// Need to be defined, if CPU_TRAP is defined for the CPU emulator!
 int cpu_trap ( Uint8 opcode )
 {
-	if (cpu_pc == 0xA001 && opcode == CPU_TRAP) {
+	if (cpu_pc == 0xA001 && opcode == CPU_TRAP) {	// cpu_pc always meant to be the position _after_ the trap opcode!
 		INFO_WINDOW("Congratulation, CPU trap works :-)");
-		return 1;
+		return 1; // you must return with the CPU cycles used, but at least with value of 1!
 	} else
-		return 0; // ignore trap!
+		return 0; // ignore trap!! Return with zero means, the CPU emulator should execute the opcode anyway
 }
 
+
+void clear_emu_events ( void )
+{
+	memset(kbd_matrix, 0xFF, sizeof kbd_matrix);	// initialize keyboard matrix [bit 1 = unpressed, thus 0xFF for a line]
+}
 
 
 // Called by CPU emulation code
@@ -426,7 +432,7 @@ int main ( int argc, char **argv )
 		ERROR_WINDOW("Cannot load some of the needed ROM images (see console messages)!");
 		return 1;
 	}
-	memset(kbd_matrix, 0xFF, sizeof kbd_matrix);	// initialize keyboard matrix [bit 1 = unpressed, thus 0xFF for a line]
+	clear_emu_events();	// also resets the keyboard
 	cpu_reset();	// reset CPU: it must be AFTER kernal is loaded at least, as reset also fetches the reset vector into PC ...
 	// our TRAP stuff :)
 	memory[0xA000] = CPU_TRAP;

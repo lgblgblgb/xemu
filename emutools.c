@@ -69,6 +69,15 @@ char *emu_strdup ( const char *s )
 }
 
 
+// Just drop queued SDL events ...
+void emu_drop_events ( void )
+{
+	SDL_Event e;
+	while (SDL_PollEvent(&e) != 0)
+		;
+}
+
+
 
 int emu_load_file ( const char *fn, void *buffer, int size )
 {

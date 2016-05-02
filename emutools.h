@@ -26,6 +26,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #error "At least SDL version 2.0.2 is needed!"
 #endif
 
+// You should define this in your emulator, most probably with resetting the keyboard matrix
+// Purpose: emulator windows my cause the emulator does not get the key event normally, thus some keys "seems to be stucked"
+extern void clear_emu_events ( void );
+
+extern void emu_drop_events ( void );
+
+
 /* Note: O_BINARY is a must for Windows for opening binary files, odd enough, I know ...
          So we always use O_BINARY in the code, and defining O_BINARY as zero for non-Windows systems, so it won't hurt at all.
 	 Surely, SDL has some kind of file abstraction layer, but I seem to get used to some "native" code as well :-) */
@@ -45,6 +52,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 	snprintf(_buf_for_win_msg_, sizeof _buf_for_win_msg_, __VA_ARGS__); \
 	fprintf(stderr, "FATAL ERROR: " str ": %s" NL, _buf_for_win_msg_); \
 	SDL_ShowSimpleMessageBox(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
+	clear_emu_events(); \
+	emu_drop_events(); \
 } while (0)
 
 #define INFO_WINDOW(...)	_REPORT_WINDOW_(SDL_MESSAGEBOX_INFORMATION, "INFO", __VA_ARGS__)
