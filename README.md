@@ -82,6 +82,24 @@ Including the SDL stuffs, of course.
 
 Please don't hesitate to contact me, if you have an constructive opinion. Thanks!
 
+## The missing bits
+
+Still many work is left. Honestly, I feel, it would be better to be included in
+VICE, however I am lame to even understand *some* of the VICE internals ... But
+VICE has already quite exact 65C02 (well, I guess it has that too, not only
+6502, hmm ...), VIA, disk drive ... whatever emulation. Just it would be needed
+to be "wire" things together.
+
+For both emulators, the major problem is the lack of any storage solution, or
+at least the ability to load programs.
+
+Of course audio emulation would be nice as well (LCD had *some* audio, also
+the VIC-20, for sure).
+
+About further problems with VIC-20 (please note: VIC-20 is currently not the
+major character of the show, much better emulators exists for that nice little
+machine!).
+
 ## Why the Commodore VIC-20 emulation is included?
 
 Foreword: this VIC-20 emulator is incomplete, unfinished, and very incorrect,
