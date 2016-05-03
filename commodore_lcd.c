@@ -172,10 +172,30 @@ void clear_emu_events ( void )
 }
 
 
+#define GET_MEMORY(phys_addr) memory[phys_addr]
+
+
+#if 0
+static Uint8 GET_MEMORY(int phys_addr)
+{
+	if (phys_addr == 0x382F7) {
+		printf("Before romchecksum: X=%02Xh A=%02Xh" NL, cpu_x, cpu_a);
+	}
+	if (phys_addr == 0x383A1) {
+		printf("At romchecksum RTS: X=%02Xh A=%02Xh" NL, cpu_x, cpu_a);
+	}
+	if (phys_addr == 0x382FA) {
+		printf("After romchecksum : X=%02Xh A=%02Xh" NL, cpu_x, cpu_a);
+	}
+	return memory[phys_addr];
+}
+#endif
+
+
 Uint8 cpu_read ( Uint16 addr ) {
-	if (addr <  0x1000) return memory[addr];
-	if (addr <  0xF800) return memory[(mmu_current[addr >> 14] + addr) & 0x3FFFF];
-	if (addr >= 0xFA00) return memory[addr | 0x30000];
+	if (addr <  0x1000) return GET_MEMORY(addr);
+	if (addr <  0xF800) return GET_MEMORY((mmu_current[addr >> 14] + addr) & 0x3FFFF);
+	if (addr >= 0xFA00) return GET_MEMORY(addr | 0x30000);
 	if (addr >= 0xF980) return 0; // ACIA
 	if (addr >= 0xF900) return 0xFF; // I/O exp
 	if (addr >= 0xF880) return via_read(&via2, addr & 15);
@@ -442,9 +462,27 @@ int main ( int argc, char **argv )
 		ERROR_WINDOW("Cannot load some of the needed ROM images (see console messages)!");
 		return 1;
 	}
-	// Ugly hack :-( <patching ROM>
+	// Ugly hacks :-( <patching ROM>
+#ifdef ROM_HACK_COLD_START
+	// this ROM patching is needed, as Commodore LCD seems not to work to well with "not intact" SRAM content (ie: it has battery powered SRAM even when "switched off")
+	puts("ROM HACK: cold start condition");
 	memory[0x385BB] = 0xEA;
 	memory[0x385BC] = 0xEA;
+#endif
+#ifdef ROM_HACK_NEW_ROM_SEARCHING
+	// this ROM hack modifies the ROM signature searching bytes so we can squeeze extra menu points of the main screen!
+	// this hack SHOULD NOT be used, if the ROM 32K ROM images from 0x20000 and 0x28000 are not empty after offset 0x6800
+	// WARNING: Commodore LCDs are known to have different ROM versions, be careful with different ROMs, if you find any!
+	// [note: if you find other ROM versions, please tell me!!!! - that's the other message ...]
+	puts("ROM HACK: modifying ROM searching MMU table");
+	// overwrite MMU table positions for ROM scanner in KERNAL
+	memory[0x382CC] = 0x8A;	// offset 0x6800 in the ROM image of clcd-u105.rom [phys memory address: 0x26800]
+	memory[0x382CE] = 0xAA;	// offset 0x6800 in the ROM image of clcd-u104.rom [phys memory address: 0x2E800]
+	// try to load "parasite" ROMs (it's not fatal if we cannot ...)
+	// these loads to an unused part of the original ROM images
+	emu_load_file("clcd-u105-parasite.rom", memory + 0x26800, 0x8000 - 0x6800);
+	emu_load_file("clcd-u104-parasite.rom", memory + 0x2E800, 0x8000 - 0x6800);
+#endif
 	/* we would need the chargen ROM of CLCD but we don't have. We have to use
 	 * some charset from the KERNAL (which is NOT the "hardware" charset!) and cheat a bit to create the alternate charset */
 	memcpy(charrom, memory + 0x3F700, 1024);
