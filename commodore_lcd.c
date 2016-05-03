@@ -425,8 +425,11 @@ static void update_emulator ( void )
 				break;
 		}
 	}
-	update_rtc();	// Note: in theory, this should be done only once a second, but who cares :-P
-	emu_sleep(40000);
+	emu_sleep(40000);	// 40000 microseconds would be the real time for a full TV frame (see main() for more info: CLCD is not TV based for real ...)
+	if (seconds_timer_trigger) {
+		seconds_timer_trigger = 0;
+		update_rtc();
+	}
 }
 
 
