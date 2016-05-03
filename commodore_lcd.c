@@ -403,6 +403,7 @@ static void update_rtc ( void )
 	rtc_regs[ 8] = (t->tm_mon + 1) / 10;
 	rtc_regs[11] = (t->tm_year - 84) % 10; // beware of 2084, Commodore LCDs will have "Y2K-like" problem ... :)
 	rtc_regs[12] = (t->tm_year - 84) / 10;
+	printf("RTC refresh! %d" NL, t->tm_sec);
 }
 
 
@@ -426,10 +427,8 @@ static void update_emulator ( void )
 		}
 	}
 	emu_sleep(40000);	// 40000 microseconds would be the real time for a full TV frame (see main() for more info: CLCD is not TV based for real ...)
-	if (seconds_timer_trigger) {
-		seconds_timer_trigger = 0;
+	if (seconds_timer_trigger)
 		update_rtc();
-	}
 }
 
 
