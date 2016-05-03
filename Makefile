@@ -105,13 +105,7 @@ dep:
 	$(CC) -MM $(CFLAGS) $(SRC_V20) $(SRC_LCD) > .depend.$(ARCH)
 
 roms:
-	test -s rom/vic20-basic.rom || wget -O rom/vic20-basic.rom http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/vic20/basic.901486-01.bin
-	test -s rom/vic20-kernal.rom || wget -O rom/vic20-kernal.rom http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/vic20/kernal.901486-07.bin
-	test -s rom/vic20-chargen.rom || wget -O rom/vic20-chargen.rom http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/vic20/characters.901460-03.bin
-	test -s rom/clcd-u105.rom || wget -O rom/clcd-u105.rom http://commodore-lcd.lgb.hu/files/SS-CALC-13apr-u105.bin
-	test -s rom/clcd-u102.rom || wget -O rom/clcd-u102.rom http://commodore-lcd.lgb.hu/files/kizapr-u102.bin
-	test -s rom/clcd-u104.rom || wget -O rom/clcd-u104.rom http://commodore-lcd.lgb.hu/files/sept-M-13apr-u104.bin
-	test -s rom/clcd-u103.rom || wget -O rom/clcd-u103.rom http://commodore-lcd.lgb.hu/files/sizapr-u103.bin
+	$(MAKE) -C rom
 
 .PHONY: clean all strip dep dist roms distclean install do-all set-arch
 
