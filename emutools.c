@@ -48,7 +48,7 @@ static char *sdl_pref_dir, *sdl_base_dir;
 Uint32 sdl_winid;
 static Uint32 black_colour;
 static void (*shutdown_user_function)(void);
-
+int seconds_timer_trigger;
 
 
 
@@ -181,6 +181,8 @@ void emu_sleep ( int real_usec )
 	struct timeval tv_new;
 	int t_emu, t_slept;
 	gettimeofday(&tv_new, NULL);
+	if (tv_new.tv_sec != tv_old.tv_sec)
+		seconds_timer_trigger = 1;
 	t_emu = (tv_new.tv_sec - tv_old.tv_sec) * 1000000 + (tv_new.tv_usec - tv_old.tv_usec);	// microseconds we needed to emulate one frame (SDL etc stuffs included!)
 	t_emu = real_usec - t_emu;	// if it's positive, we're faster in emulation than a real machine, if negative, we're slower, and can't keep real-time emulation :(
 	sleep_balancer += t_emu;
@@ -192,6 +194,8 @@ void emu_sleep ( int real_usec )
 	// dual purpose: this will be the start time of next frame, also we check the exact time we slept with usleep() as usleep() on a multitask OS cannot be precise ever!!
 	gettimeofday(&tv_old, NULL);
 	t_slept = (tv_old.tv_sec - tv_new.tv_sec) * 1000000 + (tv_old.tv_usec - tv_new.tv_usec);	// real time we slept ... (warning, old/new are exchanged here with valid reason)
+	if (tv_new.tv_sec != tv_old.tv_sec)
+		seconds_timer_trigger = 1;
 	// correct sleep balancer with the real time slept, again if it's not "insane" value we got ...
 	if (t_slept > -250000 && t_slept < 250000)
 		sleep_balancer -= t_slept;
@@ -306,6 +310,7 @@ void emu_timekeeping_start ( void )
 {
 	gettimeofday(&tv_old, NULL);
 	sleep_balancer = 0;
+	seconds_timer_trigger = 1;
 }
 
 
