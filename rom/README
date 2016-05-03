@@ -2,9 +2,9 @@ You must place ROM images here. For possible copyright reason and violation
 of free licensed software contains closed source binary blobs, you must do
 it yourself. Needed files in this directory (with exactly these names!):
 
-* vic20-chargen		4K long character generator ROM image of Commodore VIC-20
-* vic20-basic		8K long BASIC ROM image of Commodore VIC-20
-* vic20-kernal		8K long KERNAL ROM image of Commodore VIC-20
+* vic20-chargen		 4K long character generator ROM image of Commodore VIC-20
+* vic20-basic		 8K long BASIC ROM image of Commodore VIC-20
+* vic20-kernal		 8K long KERNAL ROM image of Commodore VIC-20
 * clcd-u102.rom		32K long KERNAL ROM image of Commodore LCD
 * clcd-u103.rom		32K long USER APP / BASIC ROM image of Commodore LCD
 * clcd-u104.rom		32K long USER APP ROM image of Commodore LCD
@@ -20,3 +20,28 @@ make roms
 
 (issued from the root directory of the project)
 
+
+                   ---- ABOUT COMMODORE LCD ROMs ----
+
+You can select various ROM patches in commodore_lcd.h
+
+ROM_HACK_COLD_START
+
+In the emulator, the original ROM images are patched. Note, that the emulator would
+be able work with the *original* ROM images, as it should be. However these is some
+problem that Commodore LCD seems to try to use SRAM as it would validly contains the
+last power-on state (ie: SRAM is powered from battery even when the machine is
+"switched off"). I am not sure if it's the problem of early, development ROMs, but
+it seems the software fail in interesting ways if this requirement is not met. So the
+two byte patch simply forces the KERNAL to re-initialize the RAM.
+
+ROM_HACK_NEW_ROM_SEARCHING
+
+Commodore LCD tries to find "application ROMs" (by looking for identifier string) at
+every 16K, starting from physical address $20000 to $38000. Since I don't want to
+"waste" the ability to use 128K of RAM, I've decided to use "unused" parts of the ROM
+images. However the problem, that not fully free 16K is available, so with the default
+searching MMU values, I can't put things there (which is shown by the menu system then,
+etc). However, as we can see that we have "unused" MMU values as well (where no ROM
+starts with the default images) I can modify values to point to ROM "window" to the
+unused parts of the ROM images instead ... Ugly enough, I know. ;-)

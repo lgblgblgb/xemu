@@ -105,7 +105,7 @@ dep:
 	$(CC) -MM $(CFLAGS) $(SRC_V20) $(SRC_LCD) > .depend.$(ARCH)
 
 roms:
-	$(MAKE) -C rom
+	$(MAKE) -C rom roms
 
 .PHONY: clean all strip dep dist roms distclean install do-all set-arch
 
