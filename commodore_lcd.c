@@ -492,7 +492,7 @@ int main ( int argc, char **argv )
 	/* init CPU */
 	cpu_reset();	// we must do this after loading KERNAL at least, since PC is fetched from reset vector here!
 	/* init VIAs */
-	via_init(&via1, "VIA#1", via1_outa, via1_outb, NULL,       via1_ina, via1_inb, via1_insr, via1_setint);
+	via_init(&via1, "VIA#1", via1_outa, via1_outb, via1_outsr, via1_ina, via1_inb, via1_insr, via1_setint);
 	via_init(&via2, "VIA#2", via2_outa, via2_outb, via2_outsr, via2_ina, via2_inb, via2_insr, via2_setint);
 	/* keyboard */
 	clear_emu_events();	// also resets the keyboard
