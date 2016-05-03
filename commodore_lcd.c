@@ -403,7 +403,6 @@ static void update_rtc ( void )
 	rtc_regs[ 8] = (t->tm_mon + 1) / 10;
 	rtc_regs[11] = (t->tm_year - 84) % 10; // beware of 2084, Commodore LCDs will have "Y2K-like" problem ... :)
 	rtc_regs[12] = (t->tm_year - 84) / 10;
-	printf("RTC refresh! %d" NL, t->tm_sec);
 }
 
 
