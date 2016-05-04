@@ -46,6 +46,7 @@ static const Uint8 init_vic_palette_rgb[16 * 3] = {	// VIC palette given by RGB 
 	0x00, 0xA0, 0xFF,	// light blue
 	0xFF, 0xFF, 0x00	// light yellow
 };
+static int nmi_level = 0;
 static Uint32 vic_palette[16];			// VIC palette with native SCREEN_FORMAT aware way. It will be initialized once only from vic_palette_rgb
 static int running = 1;
 static struct Via65c22 via1, via2;
@@ -334,17 +335,21 @@ static void update_emulator ( void )
 /* VIA emulation callbacks, called by VIA core. See main() near to via_init() calls for further information */
 
 
+// VIA-1 generates NMI on VIC-20?
 static void via1_setint ( int level )
 {
-	if (level)	cpu_irqLevel |=   1;
-	else		cpu_irqLevel &= 254;
+	if (nmi_level != level) {
+		printf("VIA-1: NMI edge: %d->%d" NL, nmi_level, level);
+		cpu_nmiEdge = 1;
+		nmi_level = level;
+	}
 }
 
 
+// VIA-2 is used to generate IRQ on VIC-20
 static void via2_setint ( int level )
 {
-	if (level)	cpu_irqLevel |=   2;
-	else		cpu_irqLevel &= 253;
+	cpu_irqLevel = level;
 }
 
 
