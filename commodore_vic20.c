@@ -49,7 +49,7 @@ static const Uint8 init_vic_palette_rgb[16 * 3] = {	// VIC palette given by RGB 
 static Uint32 vic_palette[16];			// VIC palette with native SCREEN_FORMAT aware way. It will be initialized once only from vic_palette_rgb
 static int running = 1;
 static struct Via65c22 via1, via2;
-static Uint8 kbd_matrix[8];		// keyboard matrix state, 8 * 8 bits
+static Uint8 kbd_matrix[9];		// keyboard matrix state, 8 * 8 bits (the 8th - counted from zero - line is not "real" and only used to emulate RESTORE!)
 static int is_kpage_writable[64] = {	// writable flag (for different memory expansions) for every kilobytes of the address space, this shows the default, unexpanded config!
 	1,		// @ 0K     (sum 1K), RAM
 	0,0,0,		// @ 1K -3K (sum 3K), place for 3K expansion
@@ -137,6 +137,7 @@ static const struct KeyMapping key_map[] = {
 	{ SDL_SCANCODE_MINUS,		0x75 }, // -
 	{ SDL_SCANCODE_HOME,		0x76 }, // HOME
 	{ SDL_SCANCODE_F7, 0x77 }, { SDL_SCANCODE_F8, 0x77 | 8 }, // F7, _SHIFTED_: F8!
+	{ SDL_SCANCODE_ESCAPE, 0x80 },	// RESTORE = not a real key in VIC-20 kbd matrix, only we emulate this way!
 	{ 0,	0xFF	}		// this must be the last line: end of mapping table
 };
 
