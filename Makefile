@@ -35,13 +35,15 @@ include arch/Makefile.$(ARCH)
 # If you want to compile with -g option, also *DELETE* the -flto, both of them together known to be problematic!
 DEBUG	= -flto
 
-CFLAGS	= $(DEBUG) $(CFLAGS_ARCH) -DCPU_TRAP=0xFC
+CFLAGS_WITHOUT_DEBUG = $(CFLAGS_ARCH) -DCPU_TRAP=0xFC
+
+CFLAGS	= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG)
 LDFLAGS	= $(DEBUG) $(LDFLAGS_ARCH)
 PRG_V20	= xvic20.$(ARCH)
 PRG_LCD = xclcd.$(ARCH)
 PRG_ALL = $(PRG_V20) $(PRG_LCD)
 SRC_ALL = cpu65c02.c via65c22.c emutools.c
-SRC_V20	= commodore_vic20.c $(SRC_ALL) $(SRCS_ARCH_V20)
+SRC_V20	= commodore_vic20.c vic6561.c $(SRC_ALL) $(SRCS_ARCH_V20)
 SRC_LCD	= commodore_lcd.c $(SRC_ALL) $(SRCS_ARCH_LCD)
 FILES	= LICENSE README.md Makefile $(SRCS) *.h rom/README
 OBJ_V20	= $(SRC_V20:.c=.o)
@@ -54,6 +56,9 @@ do-all:
 
 %.o: %.c
 	$(CC) -c $(CFLAGS) $< -o $@
+
+%.s: %.c
+	$(CC) -S $(CFLAGS_WITHOUT_DEBUG) $< -o $@
 
 $(PRG_V20): $(OBJ_V20)
 	$(CC) -o $(PRG_V20) $(OBJ_V20) $(LDFLAGS)

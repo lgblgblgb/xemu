@@ -1,6 +1,9 @@
 /* Test-case for a very simple and inaccurate Commodore VIC-20 emulator using SDL2 library.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
+   This is the VIC-20 emulation. Note: the source is overcrowded with comments by intent :)
+   That it can useful for other people as well, or someone wants to contribute, etc ...
+
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or
@@ -22,12 +25,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "commodore_vic20.h"
 #include "cpu65c02.h"
 #include "via65c22.h"
+#include "vic6561.h"
 #include "emutools.h"
 
 
 
 
-static Uint8 memory[0x10000];	// 64K address space of the 6502 CPU (some of it is ROM, undecoded, whatsoever ...)
+Uint8 memory[0x10000];	// 64K address space of the 6502 CPU (some of it is ROM, undecoded, whatsoever ... it's simply the whole address space, *NOT* only RAM!)
 static const Uint8 init_vic_palette_rgb[16 * 3] = {	// VIC palette given by RGB components
 	0x00, 0x00, 0x00,	// black
 	0xFF, 0xFF, 0xFF,	// white
@@ -46,24 +50,25 @@ static const Uint8 init_vic_palette_rgb[16 * 3] = {	// VIC palette given by RGB 
 	0x00, 0xA0, 0xFF,	// light blue
 	0xFF, 0xFF, 0x00	// light yellow
 };
-static int nmi_level = 0;
-static Uint32 vic_palette[16];			// VIC palette with native SCREEN_FORMAT aware way. It will be initialized once only from vic_palette_rgb
-static int running = 1;
-static struct Via65c22 via1, via2;
-static Uint8 kbd_matrix[9];		// keyboard matrix state, 8 * 8 bits (the 8th - counted from zero - line is not "real" and only used to emulate RESTORE!)
-static Uint8 is_kpage_writable[64] = {	// writable flag (for different memory expansions) for every kilobytes of the address space, this shows the default, unexpanded config!
+static int frameskip = 0;
+static int nmi_level = 0;			// level of NMI (note: 6502 is _edge_ triggered on NMI, this is only used to check edges ...)
+static int running = 1;				// emulator won't exit till this value is non-zero
+static struct Via65c22 via1, via2;		// VIA-1 and VIA-2 emulation structures
+static Uint8 kbd_matrix[9];			// keyboard matrix state, 8 * 8 bits (the 8th - counted from zero - line is not "real" and only used to emulate RESTORE!)
+
+static Uint8 is_kpage_writable[64] = {		// writable flag (for different memory expansions) for every kilobytes of the address space, this shows the default, unexpanded config!
 	1,		// @ 0K     (sum 1K), RAM, built-in (VIC-I can reach it)
-	0,0,0,		// @ 1K -3K (sum 3K), place for 3K expansion
+	0,0,0,		// @ 1K -3K (sum 3K), place for 3K expansion [will be filled with RAM on memcfg request]
 	1,1,1,1,	// @ 4K- 7K (sum 4K), RAM, built-in (VIC-I can reach it)
-	0,0,0,0,0,0,0,0,// @ 8K-15K (sum 8K), expansion block
-	0,0,0,0,0,0,0,0,// @16K-23K (sum 8K), expansion block
-	0,0,0,0,0,0,0,0,// @24K-31K (sum 8K), expansion block
+	0,0,0,0,0,0,0,0,// @ 8K-15K (sum 8K), expansion block [will be filled with RAM on memcfg request]
+	0,0,0,0,0,0,0,0,// @16K-23K (sum 8K), expansion block [will be filled with RAM on memcfg request]
+	0,0,0,0,0,0,0,0,// @24K-31K (sum 8K), expansion block [will be filled with RAM on memcfg request]
 	0,0,0,0,	// @32K-35K (sum 4K), character ROM (VIC-I can reach it)
 	0,		// @36K     (sum 1K), I/O block   (VIAs, VIC-I, ...)
 	1,		// @37K     (sum 1K), colour RAM (VIC-I can reach it directly), only 0.5K, but the position depends on the config ... [handled as a special case on READ - 4 bit wide only!]
 	0,		// @38K     (sum 1K), I/O block 2 (not used now, gives 0xFF on read)
 	0,		// @39K     (sum 1K), I/O block 3 (not used now, gives 0xFF on read)
-	0,0,0,0,0,0,0,0,// @40K-47K (sum 8K), expansion block (not available for BASIC even if it's RAM)
+	0,0,0,0,0,0,0,0,// @40K-47K (sum 8K), expansion block (not available for BASIC even if it's RAM) [will be filled with RAM on memcfg request]
 	0,0,0,0,0,0,0,0,// @48K-55K (sum 8K), basic ROM
 	0,0,0,0,0,0,0,0 // @56K-63K (sum 8K), kernal ROM
 };
@@ -144,6 +149,7 @@ static const struct KeyMapping key_map[] = {
 
 
 
+
 // Need to be defined, if CPU_TRAP is defined for the CPU emulator!
 int cpu_trap ( Uint8 opcode )
 {
@@ -155,35 +161,41 @@ int cpu_trap ( Uint8 opcode )
 }
 
 
+
 void clear_emu_events ( void )
 {
 	memset(kbd_matrix, 0xFF, sizeof kbd_matrix);	// initialize keyboard matrix [bit 1 = unpressed, thus 0xFF for a line]
 }
 
 
+
 // Called by CPU emulation code when any kind of memory byte must be written.
 // Note: optimization is used, to make the *most common* type of write access easy. Even if the whole function is more complex, or longer/slower this way for other accesses!
 void  cpu_write ( Uint16 addr, Uint8 data )
 {
-	// Write optimization, handle the most common case first: memory byte to be written is not special, ie writable, not I/O, etc
-	if (is_kpage_writable[addr >> 10]) {
+	// Write optimization, handle the most common case first: memory byte to be written is not special, ie writable RAM, not I/O, etc
+	if (is_kpage_writable[addr >> 10]) {	// writable flag for every Kbytes of 64K is checked (for different memory configurations, faster "decoding", etc)
 		memory[addr] = data;
 		return;
 	}
-	// Other kind of address space is tried to be written ...
-	if ((addr & 0xFFF0) == 0x9000) {
-		memory[addr] = data; // VIC-I register ...
+	// ELSE: other kind of address space is tried to be written ...
+	// TODO check if I/O devices are fully decoded or there can be multiple mirror ranges
+	if ((addr & 0xFFF0) == 0x9000) {	// VIC-I register is written
+		cpu_vic_reg_write(addr & 0xF, data);
 		return;
 	}
-	if ((addr & 0xFFF0) == 0x9110) {
+	if ((addr & 0xFFF0) == 0x9110) {	// VIA-1 register is written
 		via_write(&via1, addr & 0xF, data);
 		return;
 	}
-	if ((addr & 0xFFF0) == 0x9120) {
+	if ((addr & 0xFFF0) == 0x9120) {	// VIA-2 register is written
 		via_write(&via2, addr & 0xF, data);
 		return;
 	}
+	// if other memory areas tried to be written (hit this point), write will be simply ignored
 }
+
+
 
 // Called by CPU emulation code when any kind of memory byte must be read.
 // Note: optimization is used, to make the *most common* type of read access easy. Even if the whole function is more complex, or longer/slower this way for other accesses!
@@ -194,101 +206,20 @@ Uint8 cpu_read ( Uint16 addr )
 	// (even for undecoded areas, memory[] is intiailized with 0xFF values
 	if ((addr & 0xF800) != 0x9000)
 		return memory[addr];
-	// else: it IS the I/O area or colour SRAM ... Let's see what we want!
-	if ((addr & 0xFFF0) == 0x9110)
+	// ELSE: it IS the I/O area or colour SRAM ... Let's see what we want!
+	// TODO check if I/O devices are fully decoded or there can be multiple mirror ranges
+	if ((addr & 0xFFF0) == 0x9000)		// VIC-I register is read
+		return cpu_vic_reg_read(addr & 0xF);
+	if ((addr & 0xFFF0) == 0x9110)		// VIA-1 register is read
 		return via_read(&via1, addr & 0xF);
-	if ((addr & 0xFFF0) == 0x9120)
+	if ((addr & 0xFFF0) == 0x9120)		// VIA-2 register is read
 		return via_read(&via2, addr & 0xF);
 	if ((addr & 0xFC00) == 0x9400)
-		return memory[addr] | 0xF0;	// colour RAM, always return '1' for upper bits
+		return memory[addr] | 0xF0;	// colour SRAM is read, always return '1' for upper bits (only 4 bits "wide" memory chip!)
+	// if non of the above worked, let's just read our emulated address space
+	// which means some kind of ROM, or undecoded area (64K space is intialized with 0xFF bytes ...)
 	return memory[addr];
 }
-
-
-
-/* To be honest, I am lame with VIC-I addressing ...
-   I got these five "one-liners" from Sven's shadowVIC emulator, thanks a lot!!! */
-
-static inline Uint16 vic_get_address (Uint8 bits10to12) {
-	return ((bits10to12 & 7) | ((bits10to12 & 8) ? 0 : 32)) << 10;
-}
-static inline Uint16 vic_get_chrgen_address ( void ) {
-	return vic_get_address(memory[0x9005] & 0xF);
-}
-static inline Uint16 vic_get_address_bit9 ( void ) {
-	return (memory[0x9002] & 0x80) << 2;
-}
-static inline Uint16 vic_get_screen_address ( void ) {
-	return vic_get_address(memory[0x9005] >> 4) | vic_get_address_bit9();
-}
-static inline Uint16 vic_get_colour_address ( void ) {
-	return 0x9400 | vic_get_address_bit9();
-}
-
-
-
-static void render_screen ( void )
-{
-	int x, y, sc, tail;
-	Uint32 *pp;
-	Uint8 *vidp, *colp, *chrp;
-	Uint32 bg = vic_palette[memory[0x900F] >> 4];	// background colour ...
-	// Render VIC screen to "pixels"
-	// Note: this is VERY incorrect, and only some std screen aware rendering,
-	// with ignoring almost ALL of the VIC's possibilities!!!!!!
-	// This is only a demonstration
-	// Real emulation would use VIC registers, also during the main loop
-	// so raster effects etc would work!!!! But this is only a quick demonstration :)
-	// This should be done in sync with CPU emulation instead in steps, using the VIC-I registers to define parameters, and VIC-20 memory expansion (ie different video RAM location or so?) ...
-	x = 0;
-	y = 0;
-	sc = 0;
-#if 0
-	vidp = memory + ((((memory[0x9005] & 0xF0) ^ 128) << 6) | ((memory[0x9002] & 128) << 2));
-	colp = memory + (0x9400 | ((memory[0x9002] & 128) << 2));
-	chrp = memory + ((memory[0x9005] & 15) << 10);
-	//printf("SCREEN: vidp = %04Xh\n", vidp - memory);
-	vidp = memory + 0x1E00;
-	colp = memory + 0x9600;
-	chrp = memory + 0x8000;
-#endif
-	vidp = memory + vic_get_screen_address();
-	colp = memory + vic_get_colour_address();
-	chrp = memory + vic_get_chrgen_address();
-	pp = emu_start_pixel_buffer_access(&tail);
-	while (y < 23) {
-		int b;
-		Uint8 shape = chrp[((*vidp) << 3) + sc];	// shape of current scanline of the current character
-		Uint32 fg = vic_palette[*(colp) & 0x7];			// foreground colour
-		//Uint8 shape = memory[0x8000 + sc];
-		if ((*(colp) & 0x8))
-			shape = 255 - shape; 	// inverse
-		for (b = 128; b; b >>= 1)
-			*(pp++) = (shape & b) ? fg : bg;
-		if (x < 21) {
-			vidp++;
-			colp++;
-			x++;
-		} else {
-			x = 0;
-			pp += tail;		// texture 'tail'
-			if (sc < 7) {
-				vidp -= 21;	// "rewind" video pointer
-				colp -= 21;	// ... and also the colour RAM pointer
-				sc++;		// next scanline of character
-			} else {
-				y++;
-				sc = 0;
-				vidp++;
-				colp++;
-			}
-		}
-	}
-	emu_update_screen();
-}
-
-
-
 
 
 
@@ -327,25 +258,28 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 
 static void update_emulator ( void )
 {
-	SDL_Event e;
-	// First: render VIC-20 screen ...
-	render_screen();
-	// Second: we must handle SDL events waiting for us in the event queue ...
-	while (SDL_PollEvent(&e) != 0) {
-		switch (e.type) {
-			case SDL_QUIT:		// ie: someone closes the SDL window ...
-				running = 0;	// set running to zero, main loop will exit then
-				break;
-			case SDL_KEYDOWN:	// key is pressed (down)
-			case SDL_KEYUP:		// key is released (up)
-				// make sure that key event is for our window, also that it's not a releated event by long key presses (repeats should be handled by the emulated machine's KERNAL)
-				if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0))
-					emulate_keyboard(e.key.keysym.scancode, e.key.state == SDL_PRESSED);	// the last argument will be zero in case of release, other val in case of pressing
-				break;
+	if (!frameskip) {
+		SDL_Event e;
+		// First: render VIC-20 screen ...
+		emu_update_screen();
+		// Second: we must handle SDL events waiting for us in the event queue ...
+		while (SDL_PollEvent(&e) != 0) {
+			switch (e.type) {
+				case SDL_QUIT:		// ie: someone closes the SDL window ...
+					running = 0;	// set running to zero, main loop will exit then
+					break;
+				case SDL_KEYDOWN:	// key is pressed (down)
+				case SDL_KEYUP:		// key is released (up)
+					// make sure that key event is for our window, also that it's not a releated event by long key presses (repeats should be handled by the emulated machine's KERNAL)
+					if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0))
+						emulate_keyboard(e.key.keysym.scancode, e.key.state == SDL_PRESSED);	// the last argument will be zero in case of release, other val in case of pressing
+					break;
+			}
 		}
+		// Third: Sleep ... Please read emutools.c source about this madness ... 40000 is (PAL) microseconds for a full frame to be produced
+		emu_sleep(40000);
 	}
-	// Third: Sleep ... Please read emutools.c source about this madness ... 40000 is (PAL) microseconds for a full frame to be produced
-	emu_sleep(40000);
+	vic_vsync(!frameskip);	// prepare for the next frame!
 }
 
 
@@ -420,6 +354,13 @@ static void vic20_configure_ram ( int exp0, int exp1, int exp2, int exp3, int ex
 int main ( int argc, char **argv )
 {
 	int cycles;
+	printf("Inaccurate Commodore VIC-20 emulator from LGB" NL
+	"Texture resolution is %dx%d" NL
+	"Defined visible area is (%d,%d)-(%d,%d)" NL,
+		SCREEN_WIDTH, SCREEN_HEIGHT,
+		SCREEN_FIRST_VISIBLE_DOTPOS, SCREEN_FIRST_VISIBLE_SCANLINE,
+		SCREEN_LAST_VISIBLE_DOTPOS,  SCREEN_LAST_VISIBLE_SCANLINE
+	);
 	/* Select RAM config based on command line options, quite lame currently :-) */
 	if (argc > 1) {
 		if (strlen(argv[1]) == 5)
@@ -486,16 +427,25 @@ int main ( int argc, char **argv )
 	);
 	cycles = 0;
 	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
+	vic_init();
 	while (running) { // our emulation loop ...
 		int opcyc;
-		//printf("%04Xh\n", cpu_pc);	
 		opcyc = cpu_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles
 		via_tick(&via1, opcyc);	// run VIA-1 tasks for the same amount of cycles as the CPU
 		via_tick(&via2, opcyc);	// -- "" -- the same for VIA-2
 		cycles += opcyc;
-		if (cycles >= CPU_CYCLES_PER_TV_FRAME) {	// if enough cycles elapsed (what would be the amount of CPU cycles for a TV frame), let's call the update function.
-			update_emulator();	// this is the heart of screen update, also to handle SDL events (like key presses ...)
-			cycles -= CPU_CYCLES_PER_TV_FRAME;	// not just cycle = 0, to avoid rounding errors, but it would not matter too much anyway ...
+		if (cycles >= 71) {	// if [at least!] 71 CPU cycles passed then render a VIC-I scanline, and maintain scanline value + texture/SDL update (at the end of a frame)
+			// render one (scan)line. Note: this is INACCURATE, we should do rendering per dot clock/cycle or something,
+			// but for a simple emulator like this, it's already acceptable solultion, I think!
+			// Note about frameskip: we render only every second (half) frame, no interlace (PAL VIC), not so correct, but we also save some resources this way
+			if (!frameskip)
+				vic_render_line();
+			if (scanline == 311) {
+				update_emulator();
+				frameskip = !frameskip;
+			} else
+				scanline++;
+			cycles -= 71;
 		}
 	}
 	puts("Goodbye!");
