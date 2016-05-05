@@ -51,19 +51,19 @@ static Uint32 vic_palette[16];			// VIC palette with native SCREEN_FORMAT aware 
 static int running = 1;
 static struct Via65c22 via1, via2;
 static Uint8 kbd_matrix[9];		// keyboard matrix state, 8 * 8 bits (the 8th - counted from zero - line is not "real" and only used to emulate RESTORE!)
-static int is_kpage_writable[64] = {	// writable flag (for different memory expansions) for every kilobytes of the address space, this shows the default, unexpanded config!
-	1,		// @ 0K     (sum 1K), RAM
+static Uint8 is_kpage_writable[64] = {	// writable flag (for different memory expansions) for every kilobytes of the address space, this shows the default, unexpanded config!
+	1,		// @ 0K     (sum 1K), RAM, built-in (VIC-I can reach it)
 	0,0,0,		// @ 1K -3K (sum 3K), place for 3K expansion
-	1,1,1,1,	// @ 4K- 7K (sum 4K), RAM
+	1,1,1,1,	// @ 4K- 7K (sum 4K), RAM, built-in (VIC-I can reach it)
 	0,0,0,0,0,0,0,0,// @ 8K-15K (sum 8K), expansion block
 	0,0,0,0,0,0,0,0,// @16K-23K (sum 8K), expansion block
 	0,0,0,0,0,0,0,0,// @24K-31K (sum 8K), expansion block
-	0,0,0,0,	// @32K-35K (sum 4K), character ROM
-	1,		// @36K     (sum 1K), I/O block   (VIAs, VIC-I, ...) [it's not RAM for real, but more-or-less we use that way in the emulator]
-	1,		// @37K     (sum 1K), colour RAM, it seems only 0.5K, but the position depends on the other RAM config ...
-	0,		// @38K     (sum 1K), I/O block 2 (?)
-	0,		// @39K     (sum 1K), I/O block 3 (?)
-	0,0,0,0,0,0,0,0,// @40K-47K (sum 8K), expansion ROM?
+	0,0,0,0,	// @32K-35K (sum 4K), character ROM (VIC-I can reach it)
+	0,		// @36K     (sum 1K), I/O block   (VIAs, VIC-I, ...)
+	1,		// @37K     (sum 1K), colour RAM (VIC-I can reach it directly), only 0.5K, but the position depends on the config ... [handled as a special case on READ - 4 bit wide only!]
+	0,		// @38K     (sum 1K), I/O block 2 (not used now, gives 0xFF on read)
+	0,		// @39K     (sum 1K), I/O block 3 (not used now, gives 0xFF on read)
+	0,0,0,0,0,0,0,0,// @40K-47K (sum 8K), expansion block (not available for BASIC even if it's RAM)
 	0,0,0,0,0,0,0,0,// @48K-55K (sum 8K), basic ROM
 	0,0,0,0,0,0,0,0 // @56K-63K (sum 8K), kernal ROM
 };
@@ -161,29 +161,46 @@ void clear_emu_events ( void )
 }
 
 
-// Called by CPU emulation code
-void  cpu_write(Uint16 addr, Uint8 data)
+// Called by CPU emulation code when any kind of memory byte must be written.
+// Note: optimization is used, to make the *most common* type of write access easy. Even if the whole function is more complex, or longer/slower this way for other accesses!
+void  cpu_write ( Uint16 addr, Uint8 data )
 {
-	if ((addr & 0xFFF0) == 0x9110) {
-		memory[addr] = data;	// also store in "RAM" (well it's actually not that, but anyway ...)
-		via_write(&via1, addr & 0xF, data);
-	} else if ((addr & 0xFFF0) == 0x9120) {
-		memory[addr] = data;	// also store in "RAM" (well it's actually not that, but anyway ...)
-		via_write(&via2, addr & 0xF, data);
-	} else if (is_kpage_writable[addr >> 10]) {
-		if ((addr >> 10) == 37)
-			data |= 0xF0;	// colour RAM has only 4 bits. Emulate this by forcing high 4 bits to '1' on each writes!
+	// Write optimization, handle the most common case first: memory byte to be written is not special, ie writable, not I/O, etc
+	if (is_kpage_writable[addr >> 10]) {
 		memory[addr] = data;
+		return;
+	}
+	// Other kind of address space is tried to be written ...
+	if ((addr & 0xFFF0) == 0x9000) {
+		memory[addr] = data; // VIC-I register ...
+		return;
+	}
+	if ((addr & 0xFFF0) == 0x9110) {
+		via_write(&via1, addr & 0xF, data);
+		return;
+	}
+	if ((addr & 0xFFF0) == 0x9120) {
+		via_write(&via2, addr & 0xF, data);
+		return;
 	}
 }
 
-// Called by CPU emulation code
-Uint8 cpu_read(Uint16 addr)
+// Called by CPU emulation code when any kind of memory byte must be read.
+// Note: optimization is used, to make the *most common* type of read access easy. Even if the whole function is more complex, or longer/slower this way for other accesses!
+Uint8 cpu_read ( Uint16 addr )
 {
+	// Optimization: handle the most common case first!
+	// Check if our read is NOT about the (built-in) I/O area. If it's true, let's just use the memory array
+	// (even for undecoded areas, memory[] is intiailized with 0xFF values
+	if ((addr & 0xF800) != 0x9000)
+		return memory[addr];
+	// else: it IS the I/O area or colour SRAM ... Let's see what we want!
 	if ((addr & 0xFFF0) == 0x9110)
 		return via_read(&via1, addr & 0xF);
 	if ((addr & 0xFFF0) == 0x9120)
 		return via_read(&via2, addr & 0xF);
+	if ((addr & 0xFC00) == 0x9400)
+		return memory[addr] | 0xF0;	// colour RAM, always return '1' for upper bits
 	return memory[addr];
 }
 
@@ -378,6 +395,9 @@ static inline void __mark_ram ( int start_k, int size_k )
 }
 
 
+
+/* Configure VIC-20 RAM expansion, logic values:
+	exp0 = 3K from $400, exp1 ... exp3 = 3 * 8K, exp4 = the 8K from $A000 */
 static void vic20_configure_ram ( int exp0, int exp1, int exp2, int exp3, int exp4 )
 {
 	if (exp0)
@@ -445,7 +465,7 @@ int main ( int argc, char **argv )
 	memory[0xA001] = 0x60;	// RTS
 	// Initiailize VIAs.
 	// Note: this is my unfinished VIA emulation skeleton, for my Commodore LCD emulator originally, ported from my JavaScript code :)
-	// it uses call back functions, which must be registered here, NULL values means unused functionality
+	// it uses callback functions, which must be registered here, NULL values means unused functionality
 	via_init(&via1, "VIA-1",	// from $9110 on VIC-20
 		NULL,	// outa
 		NULL,	// outb
@@ -481,4 +501,3 @@ int main ( int argc, char **argv )
 	puts("Goodbye!");
 	return 0;
 }
-
