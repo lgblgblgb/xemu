@@ -42,7 +42,7 @@ static int char_height_minus_one;		// 7 or 15
 static int char_height_shift;
 static int first_active_dotpos;
 static int text_columns;
-static int reverse_mode;
+static Uint8 reverse_mode;
 static Uint16 vic_p_scr;
 static Uint16 vic_p_col;
 static Uint16 vic_p_chr;
@@ -120,7 +120,7 @@ void cpu_vic_reg_write ( int addr, Uint8 data )
 		case 15:
 			border_colour = vic_palette[data & 7];
 			screen_colour = vic_palette[data >> 4];
-			reverse_mode = data & 8;
+			reverse_mode = (data & 8) ? 0 : 0xFF;
 			break;
 	}
 }
@@ -191,7 +191,7 @@ void vic_render_line ( void )
 					sram_colour = vic_palette[memory[v_col++] & 7];
 				}
 				if (visible_dotpos)
-					*(pixels++) = (chr & bmask) ? sram_colour : screen_colour;
+					*(pixels++) = ((chr ^ reverse_mode) & bmask) ? sram_colour : screen_colour;
 				if (bmask == 1) {
 					v_columns--;
 					bmask = 128;
