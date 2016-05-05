@@ -130,13 +130,12 @@ things like illegal opcodes won't work using my emulator!
 Full (?) list of stupidities of my VIC-20 emulator:
 
 * 65C02 as the CPU, not 6502 (no illegal opcodes), this is by intent!
-* VIC-I is not emulated at register level, only the default mode for KERNAL/BASIC
-* No 16 pixel height character mode, no multicolor, no screen columns setting, etc.
-* Screen is rendered in one step, which is incorrect, of course
-* Screen ratio is very bad now, this is not a bug but lack of decent settings :)
-  I delay this for the time when I have border, etc too, to have some sane value.
-* Border is not emulated
+* VIC-I multicolour mode is not emulated
+* Exact screen origins, timings are not exact
+* Scanline based emulation, parameters can only change after a whole scanline
 * No sound is emulated
+* No tape, or serial IEC bus is emulated (floppy drive)
+* NMI handling, RUN/STOP + RESTORE does not work
 
 ## Compilation on Linux / UNIX-like machine
 

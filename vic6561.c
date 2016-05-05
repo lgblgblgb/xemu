@@ -29,23 +29,23 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 Uint32 vic_palette[16];				// VIC palette with native SCREEN_FORMAT aware way. Must be initialized by the emulator
 int scanline;					// scanline counter, must be maintained by the emulator, as increment, checking for all scanlines done, etc, BUT it is zeroed here in vic_vsync()!
-static int charline;
+static int charline;				// current character line (0-7 for 8 pixels, 0-15 for 16 pixels height characters)
 static Uint32 *pixels;				// pointer to our work-texture (ie: the visible emulated VIC-20 screen, DWORD / pixel)
 static int pixels_tail;				// "tail" (in DWORDs) after each texture line (must be added to pixels pointer after rendering one scanline)
-static int first_active_scanline;
-static int first_bottom_border_scanline;
+static int first_active_scanline;		// first "active" (ie not top border) scanline
+static int first_bottom_border_scanline;	// first scanline of the bottom border (after the one of last actie display scanline)
 static int vic_vertical_area;			// vertical "area" of VIC (1 = upper border, 0 = active display, 2 = bottom border)
-static Uint32 border_colour;
-static Uint32 screen_colour;
-static Uint32 aux_colour;
-static int char_height_minus_one;		// 7 or 15
-static int char_height_shift;
-static int first_active_dotpos;
-static int text_columns;
-static Uint8 reverse_mode;
-static Uint16 vic_p_scr;
-static Uint16 vic_p_col;
-static Uint16 vic_p_chr;
+static Uint32 border_colour;			// SDL pixel format related colour of border
+static Uint32 screen_colour;			// SDL pixel format related screen colour ("background")
+static Uint32 aux_colour;			// SDL pixel format related aux. colour (used in case of multicolour characters only)
+static int char_height_minus_one;		// 7 or 15 (for 8 and 16 pixels height characters)
+static int char_height_shift;			// 3 for 8 pixels height characters, 4 for 16
+static int first_active_dotpos;			// first dot within a scanline which belongs to the "active" (not top and bottom border) area
+static int text_columns;			// screen text columns
+static Uint8 reverse_mode;			// reverse mode: 0xFF in case of reverse, 0 for normal mode
+static Uint16 vic_p_scr;			// memory address of screen
+static Uint16 vic_p_col;			// memory address of colour
+static Uint16 vic_p_chr;			// memory address of characer data
 
 
 
@@ -134,6 +134,7 @@ void vic_vsync ( int relock_texture )
 	scanline = 0;
 	charline = 0;
 	vic_vertical_area = 1;
+	// maybe this is incorrect, and these can change within a frame too by writing the corresponding VIC-I registers
 	vic_p_scr = vic_get_screen_address();
 	vic_p_col = vic_get_colour_address();
 	vic_p_chr = vic_get_chrgen_address();
