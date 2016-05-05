@@ -378,8 +378,8 @@ int main ( int argc, char **argv )
 		"nemesys.lgb", "xclcd-vic20",	// app organization and name, used with SDL pref dir formation
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
-		SCREEN_WIDTH, SCREEN_HEIGHT,	// logical size (same as texture for now ...)
-		SCREEN_WIDTH * SCREEN_DEFAULT_ZOOM, SCREEN_HEIGHT * SCREEN_DEFAULT_ZOOM,	// window size
+		SCREEN_WIDTH * 2, SCREEN_HEIGHT,	// logical size (same as texture for now ...)
+		SCREEN_WIDTH * 2 * 2, SCREEN_HEIGHT * 2,	// window size
 		SCREEN_FORMAT,		// pixel format
 		16,			// we have 16 colours
 		init_vic_palette_rgb,	// initialize palette from this constant array

@@ -30,8 +30,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 /* Defines the X ("dotpos") and Y ("scanline") parameters of the visible (emulated) screen area */
 #define SCREEN_FIRST_VISIBLE_SCANLINE	 28
 #define SCREEN_LAST_VISIBLE_SCANLINE	311
-#define SCREEN_FIRST_VISIBLE_DOTPOS	 12
-#define SCREEN_LAST_VISIBLE_DOTPOS	235
+#define SCREEN_FIRST_VISIBLE_DOTPOS	 38
+#define SCREEN_LAST_VISIBLE_DOTPOS	261
 
 /* Size of texture the emulator will display in pixels, including border, etc, too! */
 #define SCREEN_HEIGHT 		(SCREEN_LAST_VISIBLE_SCANLINE - SCREEN_FIRST_VISIBLE_SCANLINE + 1)
@@ -39,8 +39,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* Usual (X/Y) origin of the screen (left bottom corner) if VIC-I X/Y origin registers are zero */
 // maybe SCANLINE ORIGIN is 38 ... I guess :)
-#define SCREEN_ORIGIN_SCANLINE		38
-#define SCREEN_ORIGIN_DOTPOS		12
+//#define SCREEN_ORIGIN_SCANLINE		38
+//#define SCREEN_ORIGIN_DOTPOS		12
+#define SCREEN_ORIGIN_SCANLINE          0
+#define SCREEN_ORIGIN_DOTPOS            12
+
 
 
 

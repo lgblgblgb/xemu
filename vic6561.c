@@ -97,7 +97,7 @@ void cpu_vic_reg_write ( int addr, Uint8 data )
 			first_active_dotpos = (data & 0x7F) * 4 + SCREEN_ORIGIN_DOTPOS;
 			break;
 		case 1:	// screen Y orgin (in 2 lines units) for all the 8 bits
-			first_active_scanline = (data << 0) + SCREEN_ORIGIN_SCANLINE;
+			first_active_scanline = (data << 1) + SCREEN_ORIGIN_SCANLINE;
 			first_bottom_border_scanline = ((memory[0x9003] >> 1) & 0x3F) * 8 + first_active_scanline;
 			if (first_bottom_border_scanline > 311)
 				first_bottom_border_scanline = 311;
