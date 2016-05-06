@@ -99,7 +99,7 @@ void cpu_vic_reg_write ( int addr, Uint8 data )
 			break;
 		case 1:	// screen Y orgin (in 2 lines units) for all the 8 bits
 			first_active_scanline = (data << 1) + SCREEN_ORIGIN_SCANLINE;
-			first_bottom_border_scanline = ((memory[0x9003] >> 1) & 0x3F) * 8 + first_active_scanline;
+			first_bottom_border_scanline = (((memory[0x9003] >> 1) & 0x3F) << char_height_shift) + first_active_scanline;
 			if (first_bottom_border_scanline > 311)
 				first_bottom_border_scanline = 311;
 			break;
@@ -111,7 +111,7 @@ void cpu_vic_reg_write ( int addr, Uint8 data )
 		case 3: // 
 			char_height_minus_one = (data & 1) ? 15 : 7;
 			char_height_shift = (data & 1) ? 4 : 3;
-			first_bottom_border_scanline = ((data >> 1) & 0x3F) * 8 + first_active_scanline;
+			first_bottom_border_scanline = (((data >> 1) & 0x3F) << char_height_shift) + first_active_scanline;
 			if (first_bottom_border_scanline > 311)
 				first_bottom_border_scanline = 311;
 			break;
@@ -177,7 +177,7 @@ void vic_render_line ( void )
 			v_columns = SCREEN_WIDTH;
 			while (v_columns--)
 				*(pixels++) = BORDER_COLOUR;
-			pixels += pixels_tail;
+			pixels += pixels_tail;		// add texture "tail" (that is, pitch - text_width, in 4 bytes uints, ie Uint32 pointer ...)
 		}
 		return;
 	}
