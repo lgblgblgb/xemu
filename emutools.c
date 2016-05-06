@@ -323,6 +323,7 @@ void emu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_s
 			*(pp++) = colour;
 		pp += tail;
 	}
+	seconds_timer_trigger = 1;
 	emu_update_screen();
 }
 
