@@ -130,7 +130,6 @@ things like illegal opcodes won't work using my emulator!
 Full (?) list of stupidities of my VIC-20 emulator:
 
 * 65C02 as the CPU, not 6502 (no illegal opcodes), this is by intent!
-* VIC-I multicolour mode is not emulated
 * Exact screen origins, timings are not exact
 * Scanline based emulation, parameters can only change after a whole scanline
 * No sound is emulated

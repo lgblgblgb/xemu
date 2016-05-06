@@ -42,6 +42,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_ORIGIN_SCANLINE          0
 #define SCREEN_ORIGIN_DOTPOS            12
 
+
+#if ((SCREEN_ORIGIN_DOTPOS) & 1) != 0
+#error "SCREEN_ORIGIN_DOTPOS must be an even number!"
+#endif
+
+
 #define USE_LOCKED_TEXTURE	1
 #define RENDER_SCALE_QUALITY	2
 
