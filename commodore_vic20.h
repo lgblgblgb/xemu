@@ -31,6 +31,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_HEIGHT 		(SCREEN_LAST_VISIBLE_SCANLINE - SCREEN_FIRST_VISIBLE_SCANLINE + 1)
 #define SCREEN_WIDTH		(SCREEN_LAST_VISIBLE_DOTPOS   - SCREEN_FIRST_VISIBLE_DOTPOS   + 1)
 
+#if ((SCREEN_WIDTH) & 1) != 0
+#error "Screen width must be evaluted to an even number!"
+#endif
+
 /* Usual (X/Y) origin of the screen (left bottom corner) if VIC-I X/Y origin registers are zero */
 // maybe SCANLINE ORIGIN is 38 ... I guess :)
 //#define SCREEN_ORIGIN_SCANLINE		38
