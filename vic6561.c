@@ -201,7 +201,7 @@ void vic_render_line ( void )
 	v_columns = text_columns;
 	v_scr = vic_p_scr;
 	v_col = vic_p_col;
-	for (dotpos = 0; dotpos < 284; dotpos++) {
+	for (dotpos = 0; dotpos < CYCLES_PER_SCANLINE * 4; dotpos++) {
 		int visible_dotpos = (dotpos >= SCREEN_FIRST_VISIBLE_DOTPOS && dotpos <= SCREEN_LAST_VISIBLE_DOTPOS && visible_scanline);
 		if (dotpos < first_active_dotpos) {
 			if (visible_dotpos)

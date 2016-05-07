@@ -486,7 +486,7 @@ int main ( int argc, char **argv )
 		via_tick(&via1, opcyc);	// run VIA-1 tasks for the same amount of cycles as the CPU
 		via_tick(&via2, opcyc);	// -- "" -- the same for VIA-2
 		cycles += opcyc;
-		if (cycles >= 71) {	// if [at least!] 71 CPU cycles passed then render a VIC-I scanline, and maintain scanline value + texture/SDL update (at the end of a frame)
+		if (cycles >= CYCLES_PER_SCANLINE) {	// if [at least!] 71 CPU cycles passed then render a VIC-I scanline, and maintain scanline value + texture/SDL update (at the end of a frame)
 			// render one (scan)line. Note: this is INACCURATE, we should do rendering per dot clock/cycle or something,
 			// but for a simple emulator like this, it's already acceptable solultion, I think!
 			// Note about frameskip: we render only every second (half) frame, no interlace (PAL VIC), not so correct, but we also save some resources this way
@@ -497,7 +497,7 @@ int main ( int argc, char **argv )
 				frameskip = !frameskip;
 			} else
 				scanline++;
-			cycles -= 71;
+			cycles -= CYCLES_PER_SCANLINE;
 		}
 	}
 	puts("Goodbye!");
