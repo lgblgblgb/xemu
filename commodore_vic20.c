@@ -33,7 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_WIDTH		(SCREEN_LAST_VISIBLE_DOTPOS   - SCREEN_FIRST_VISIBLE_DOTPOS   + 1)
 
 
-Uint8 memory[0x10000];	// 64K address space of the 6502 CPU (some of it is ROM, undecoded, whatsoever ... it's simply the whole address space, *NOT* only RAM!)
+static Uint8 memory[0x10000];	// 64K address space of the 6502 CPU (some of it is ROM, undecoded, whatsoever ... it's simply the whole address space, *NOT* only RAM!)
 static const Uint8 init_vic_palette_rgb[16 * 3] = {	// VIC palette given by RGB components
 	0x00, 0x00, 0x00,	// black
 	0xFF, 0xFF, 0xFF,	// white
@@ -52,6 +52,8 @@ static const Uint8 init_vic_palette_rgb[16 * 3] = {	// VIC palette given by RGB 
 	0x00, 0xA0, 0xFF,	// light blue
 	0xFF, 0xFF, 0x00	// light yellow
 };
+static Uint8 dummy_vic_access[1024];			// define 1K of "nothing" for VIC-I memory regions it cannot find memory there
+
 static int frameskip = 0;
 static int nmi_level = 0;			// level of NMI (note: 6502 is _edge_ triggered on NMI, this is only used to check edges ...)
 static int running = 1;				// emulator won't exit till this value is non-zero
@@ -73,6 +75,18 @@ static Uint8 is_kpage_writable[64] = {		// writable flag (for different memory e
 	0,0,0,0,0,0,0,0,// @40K-47K (sum 8K), expansion block (not available for BASIC even if it's RAM) [will be filled with RAM on memcfg request]
 	0,0,0,0,0,0,0,0,// @48K-55K (sum 8K), basic ROM
 	0,0,0,0,0,0,0,0 // @56K-63K (sum 8K), kernal ROM
+};
+static Uint8 *vic_address_space_hi4[16] = {	// configure high 4 bits of VIC-I databus for 1K sized SRAM at $9400 on VIC-20
+	memory + 0x9400, memory + 0x9400, memory + 0x9400, memory + 0x9400,
+	memory + 0x9400, memory + 0x9400, memory + 0x9400, memory + 0x9400,
+	memory + 0x9400, memory + 0x9400, memory + 0x9400, memory + 0x9400,
+	memory + 0x9400, memory + 0x9400, memory + 0x9400, memory + 0x9400
+};
+static Uint8 *vic_address_space_lo8[16] = {	// configure low 8 bits of VIC-I databus access of the VIC-20 memory
+	memory + 0x8000, memory + 0x8400, memory + 0x8800, memory + 0x8C00,	// corresponds to the character ROM, access is OK
+	dummy_vic_access, dummy_vic_access, dummy_vic_access, dummy_vic_access,	// I/O and colour RAM cannot be accessed (colour RAM is only on high4 ...)
+	memory,           dummy_vic_access, dummy_vic_access, dummy_vic_access, // first 1K is OK, the others are not (not even with the +3K expansion)
+	memory + 0x1000, memory + 0x1400, memory + 0x1800, memory + 0x1C00	// 4K of internal RAM, OK
 };
 
 
@@ -402,7 +416,7 @@ static Uint8 via2_inb ( Uint8 mask )
 int main ( int argc, char **argv )
 {
 	int cycles;
-	printf("**** Inaccurate Commodore VIC-20 emulator from LGB" NL
+	printf("**** The Inaccurate Commodore VIC-20 emulator from LGB" NL
 	"INFO: CPU lock frequency %d Hz (wanted: %d Hz)" NL
 	"INFO: Texture resolution is %dx%d" NL
 	"INFO: Defined visible area is (%d,%d)-(%d,%d)" NL "%s" NL,
@@ -443,6 +457,7 @@ int main ( int argc, char **argv )
 		return 1;
 	/* Intialize memory and load ROMs */
 	memset(memory, 0xFF, sizeof memory);
+	memset(dummy_vic_access, 0xFF, sizeof dummy_vic_access);	// define 1K of "nothing" for VIC-I memory regions it cannot find memory
 	if (
 		emu_load_file("vic20-chargen.rom", memory + 0x8000, 0x1000) +	// load chargen ROM
 		emu_load_file("vic20-basic.rom",   memory + 0xC000, 0x2000) +	// load basic ROM
@@ -480,9 +495,9 @@ int main ( int argc, char **argv )
 		NULL,	// insr
 		via2_setint	// setint, same for VIA2 as with VIA1, but this is wired to IRQ on VIC20.
 	);
+	vic_init(vic_address_space_lo8, vic_address_space_hi4);
 	cycles = 0;
 	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
-	vic_init();
 	while (running) { // our emulation loop ...
 		int opcyc;
 		opcyc = cpu_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles

@@ -135,6 +135,7 @@ Full (?) list of stupidities of my VIC-20 emulator:
 * No sound is emulated
 * No tape, or serial IEC bus is emulated (floppy drive)
 * NMI handling, RUN/STOP + RESTORE does not work
+* Only "PAL" system is emulated
 
 Some extra features of Commodore VIC-20 emulator (compared to Commodore LCD):
 

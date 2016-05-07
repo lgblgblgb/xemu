@@ -32,8 +32,25 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SRAM_COLOUR	vic_cpal[2]
 #define AUX_COLOUR	vic_cpal[3]
 
+
+/* Note about VIC-I memory accessing: this part of my emulator tries to emulate VIC-I in a non-VIC20-specific way.
+   That is: VIC-I sees 16K of address space with 12 bit (!) width data bus. Linearly.
+   The high 4 bits of data bus (D8-D11) is connected to a 4 bit wide SRAM in VIC-20 with 1K capacity.
+   However, in theory, you can have 16Kx4bit for colour SRAM ...
+   Also 6502 sees quite different situation for VIC-I addresses as VIC-I itself.
+   To compensate the differences with keeping "some hacked VIC-20" emulations in the future simple, I've decided
+   to use a map to configure the exact mapping. vic_address_space_hi4 and vic_address_space_lo8 are the pointers
+   of the VIC-I memory space, at every Kbytes. Note: the init function expects 16 pointers, but in we use more
+   elements. The trick here: to avoid the need of checking "overflow" of the addressing space ;-)
+*/
+
+
 Uint32 vic_palette[16];				// VIC palette with native SCREEN_FORMAT aware way. Must be initialized by the emulator
 int scanline;					// scanline counter, must be maintained by the emulator, as increment, checking for all scanlines done, etc, BUT it is zeroed here in vic_vsync()!
+
+static Uint8 *vic_address_space_hi4[16 + 3];	// VIC 16K address space pointers, one pointer per Kbytes [for VIC-I D8-D11, 4 higher bits], [+elements for "overflow"]
+static Uint8 *vic_address_space_lo8[16 + 3];	// VIC 16K address space pointers, one pointer per Kbytes [for VIC-I D0-D7, 8 lower bits], [+elements for "overflow"]
+static Uint8 vic_registers[16];			// VIC registers
 static int charline;				// current character line (0-7 for 8 pixels, 0-15 for 16 pixels height characters)
 static Uint32 *pixels;				// pointer to our work-texture (ie: the visible emulated VIC-20 screen, DWORD / pixel)
 static int pixels_tail;				// "tail" (in DWORDs) after each texture line (must be added to pixels pointer after rendering one scanline)
@@ -46,9 +63,8 @@ static int char_height_shift;			// 3 for 8 pixels height characters, 4 for 16
 static int first_active_dotpos;			// first dot within a scanline which belongs to the "active" (not top and bottom border) area
 static int text_columns;			// screen text columns
 static int sram_colour_index;			// index in the "multicolour" table for data read from colour SRAM (depends on reverse mode!)
-static Uint16 vic_p_scr;			// memory address of screen
-static Uint16 vic_p_col;			// memory address of colour
-static Uint16 vic_p_chr;			// memory address of characer data
+static Uint16 vic_p_vid;			// memory address of screen (both of screen and colour SRAM to be precise, on lo8 and hi4 bus bits)
+static Uint16 vic_p_chr;			// memory address of characer data (lo8 but bits only)
 
 
 /* Check constraints of the given parameters from some header file */
@@ -68,45 +84,23 @@ static Uint16 vic_p_chr;			// memory address of characer data
 
 
 
-/* To be honest, I am lame with VIC-I addressing ...
-   I got these five "one-liners" from Sven's shadowVIC emulator (with his permission), thanks a lot!!! */
-static inline Uint16 vic_get_address (Uint8 bits10to12) {
-	return ((bits10to12 & 7) | ((bits10to12 & 8) ? 0 : 32)) << 10;
-}
-static inline Uint16 vic_get_chrgen_address ( void ) {
-	return vic_get_address(memory[0x9005] & 0xF);
-}
-static inline Uint16 vic_get_address_bit9 ( void ) {
-	return (memory[0x9002] & 0x80) << 2;
-}
-static inline Uint16 vic_get_screen_address ( void ) {
-	return vic_get_address(memory[0x9005] >> 4) | vic_get_address_bit9();
-}
-static inline Uint16 vic_get_colour_address ( void ) {
-	return 0x9400 | vic_get_address_bit9();
-}
-
-
-
-// Read VIC-I register, used by cpu_read()
+// Read VIC-I register by the CPU. "addr" must be 0 ... 15!
 Uint8 cpu_vic_reg_read ( int addr )
 {
 	if (addr == 4)
 		return scanline >> 1;	// scanline counter is read (bits 8-1)
 	else if (addr == 3)
-		return (memory[0x9003] & 0x7F) | ((scanline & 1) ? 0x80 : 0);	// high byte of reg 3 is the bit0 of scanline counter!
+		return (vic_registers[3] & 0x7F) | ((scanline & 1) ? 0x80 : 0);	// high byte of reg 3 is the bit0 of scanline counter!
 	else
-		return memory[0x9000 + addr];	// otherwise, just read the "backend" (see cpu_vic_reg_write() for more information)
+		return vic_registers[addr];	// otherwise, just read the "backend" (see cpu_vic_reg_write() for more information)
 }
 
 
 
-// Write VIC-I register, used by cpu_write()
+// Write VIC-I register by the CPU. "addr" must be 0 ... 15!
 void cpu_vic_reg_write ( int addr, Uint8 data )
 {
-	// first, we store value in the "RAM" but it's not a real VIC-20 RAM, only for our emulation purposes ("backend" RAM)
-	// so it's OK to even write the scanline counter, as the vic_read() won't use this backend in this case!
-	memory[0x9000 + addr] = data;
+	vic_registers[addr] = data;
 	// Also update our variables, so access is faster/easier this way in our renderer.
 	switch (addr) {
 		case 0: // screen X origin (in 4 pixel units) on lower 7 bits, bit 7: interlace (only for NTSC, so it does not apply here, we emulate PAL)
@@ -114,7 +108,7 @@ void cpu_vic_reg_write ( int addr, Uint8 data )
 			break;
 		case 1:	// screen Y orgin (in 2 lines units) for all the 8 bits
 			first_active_scanline = (data << 1) + SCREEN_ORIGIN_SCANLINE;
-			first_bottom_border_scanline = (((memory[0x9003] >> 1) & 0x3F) << char_height_shift) + first_active_scanline;
+			first_bottom_border_scanline = (((vic_registers[3] >> 1) & 0x3F) << char_height_shift) + first_active_scanline;
 			if (first_bottom_border_scanline > LAST_SCANLINE)
 				first_bottom_border_scanline = LAST_SCANLINE;
 			break;
@@ -123,7 +117,7 @@ void cpu_vic_reg_write ( int addr, Uint8 data )
 			if (text_columns > 32)
 				text_columns = 32;
 			break;
-		case 3: // 
+		case 3: // Bits6-1: number of rows, bit 7: bit 0 of current scanline, bit 0: 8/16 height char
 			char_height_minus_one = (data & 1) ? 15 : 7;
 			char_height_shift = (data & 1) ? 4 : 3;
 			first_bottom_border_scanline = (((data >> 1) & 0x3F) << char_height_shift) + first_active_scanline;
@@ -156,22 +150,40 @@ void vic_vsync ( int relock_texture )
 	charline = 0;
 	vic_vertical_area = 1;
 	// maybe this is incorrect, and these can change within a frame too by writing the corresponding VIC-I registers
-	vic_p_scr = vic_get_screen_address();
-	vic_p_col = vic_get_colour_address();
-	vic_p_chr = vic_get_chrgen_address();
-	//printf("VIC-I addrs: scr=$%04X col=$%04X chr=$%04X" NL, vic_p_scr, vic_p_col, vic_p_chr);
+	vic_p_vid = ((vic_registers[5] & 0xF0) << 6) | ((vic_registers[2] & 128) ? 0x200 : 0);
+	vic_p_chr =  (vic_registers[5] & 0x0F) << 10;
 }
 
 
 
-void vic_init ( void )
+void vic_init ( Uint8 **lo8_pointers, Uint8 **hi4_pointers )
 {
 	int a;
 	vic_vsync(1);	// we need once, since this is the first time, this will be called in update_emulator() later ....
-	for (a = 0; a < 16; a++)
-		cpu_vic_reg_write(a, 0);	// initialize VIC-I registers
+	// Some words about "overflow" (so the fact that loop is not from 0 to 15 only):
+	// overflow area (to avoid the checks of wrapping around 16K of VIC-I address space all the time)
+	// for screen/colour RAM: 32*32 rows/cols resolution in theory (1K), but start address can be at 0.5K steps, so 1.5K (->2) overflow can occur
+	// for chargen: for 16 pixel height chars, 4K, start can be given in 1K steps, so 3K overflow can occur
+	for (a = 0; a < 16 + 3; a++) {
+		cpu_vic_reg_write(a & 15, 0);	// initialize VIC-I registers for _some_ value (just to avoid the danger of uninitialized emulator variables at startup)
+		// configure address space pointers, in a tricky way: we don't want to use 'and' on accesses, so offsets must be compensated!
+		vic_address_space_lo8[a] = lo8_pointers[a & 15] - (a << 10);
+		vic_address_space_hi4[a] = hi4_pointers[a & 15] - (a << 10);
+	}
 }
 
+
+static inline Uint8 vic_read_mem_lo8 ( Uint16 addr )
+{
+	return vic_address_space_lo8[addr >> 10][addr];
+}
+
+
+
+static inline Uint8 vic_read_mem_hi4 ( Uint16 addr )
+{
+	return vic_address_space_hi4[addr >> 10][addr];
+}
 
 
 // Render a single scanline of VIC-I screen.
@@ -179,7 +191,7 @@ void vic_init ( void )
 void vic_render_line ( void )
 {
 	Uint8 bitp, chr;
-	int v_columns, v_scr, v_col, dotpos, visible_scanline, mcm;
+	int v_columns, v_vid, dotpos, visible_scanline, mcm;
 	// Check for start the active display (end of top border) and end of active display (start of bottom border)
 	if (scanline == first_bottom_border_scanline && vic_vertical_area == 0)
 		vic_vertical_area = 2;	// this will be the first scanline of bottom border
@@ -199,8 +211,7 @@ void vic_render_line ( void )
 	// So, we are at the "active" display area. But still, there are left and right borders ...
 	bitp = 128;
 	v_columns = text_columns;
-	v_scr = vic_p_scr;
-	v_col = vic_p_col;
+	v_vid = vic_p_vid;
 	for (dotpos = 0; dotpos < CYCLES_PER_SCANLINE * 4; dotpos++) {
 		int visible_dotpos = (dotpos >= SCREEN_FIRST_VISIBLE_DOTPOS && dotpos <= SCREEN_LAST_VISIBLE_DOTPOS && visible_scanline);
 		if (dotpos < first_active_dotpos) {
@@ -209,8 +220,9 @@ void vic_render_line ( void )
 		} else {
 			if (v_columns) {
 				if (bitp == 128) {
-					chr = memory[(memory[v_scr++] << char_height_shift) + vic_p_chr + charline];
-					mcm = memory[v_col++];
+					chr = vic_read_mem_lo8((vic_read_mem_lo8(v_vid) << char_height_shift) + vic_p_chr + charline);
+					mcm = vic_read_mem_hi4(v_vid);
+					v_vid++;
 					vic_cpal[sram_colour_index] = vic_palette[mcm & 7];
 					mcm &= 8;	// mcm: multi colour mode flag
 					if (mcm)
@@ -241,8 +253,7 @@ void vic_render_line ( void )
 	}
 	if (charline >= char_height_minus_one) {
 		charline = 0;
-		vic_p_scr += text_columns;
-		vic_p_col += text_columns;
+		vic_p_vid += text_columns;
 	} else {
 		charline++;
 	}
