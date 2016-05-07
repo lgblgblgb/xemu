@@ -144,7 +144,7 @@ void vic_vsync ( int relock_texture )
 	vic_p_scr = vic_get_screen_address();
 	vic_p_col = vic_get_colour_address();
 	vic_p_chr = vic_get_chrgen_address();
-	printf("VIC-I addrs: scr=$%04X col=$%04X chr=$%04X" NL, vic_p_scr, vic_p_col, vic_p_chr);
+	//printf("VIC-I addrs: scr=$%04X col=$%04X chr=$%04X" NL, vic_p_scr, vic_p_col, vic_p_chr);
 }
 
 
