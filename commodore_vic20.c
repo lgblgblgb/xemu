@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "via65c22.h"
 #include "vic6561.h"
 #include "emutools.h"
+#include "vic20_preloaded_program.h"
 
 
 
@@ -143,8 +144,15 @@ static const struct KeyMapping key_map[] = {
 	{ SDL_SCANCODE_MINUS,		0x75 }, // -
 	{ SDL_SCANCODE_HOME,		0x76 }, // HOME
 	{ SDL_SCANCODE_F7, 0x77 }, { SDL_SCANCODE_F8, 0x77 | 8 }, // F7, _SHIFTED_: F8!
-	{ SDL_SCANCODE_ESCAPE, 0x80 },	// RESTORE = not a real key in VIC-20 kbd matrix, only we emulate this way!
-	{ 0,	0xFF	}		// this must be the last line: end of mapping table
+	// -- the following key definitions are not really part of the original VIC20 kbd matrix, we just *emulate* things this way!!
+	{ SDL_SCANCODE_KP_5,		0x85 },	// for joy FIRE  we map PC num keypad 5
+	{ SDL_SCANCODE_KP_8,		0x82 },	// for joy UP    we map PC num keypad 8
+	{ SDL_SCANCODE_KP_2,		0x83 },	// for joy DOWN  we map PC num keypad 2
+	{ SDL_SCANCODE_KP_4,		0x84 },	// for joy LEFT  we map PC num keypad 4
+	{ SDL_SCANCODE_KP_6,		0x87 },	// for joy RIGHT we map PC num keypad 6
+	{ SDL_SCANCODE_ESCAPE,		0x81 },	// RESTORE key
+	// **** this must be the last line: end of mapping table ****
+	{ 0, 0xFF }
 };
 
 
@@ -321,9 +329,22 @@ static Uint8 via2_kbd_get_scan ( Uint8 mask )
 }
 
 
+static Uint8 via1_ina ( Uint8 mask )
+{
+	return kbd_matrix[8] & (4 + 8 + 16 + 32); // joystick state (RIGHT direction is not handled here though)
+}
+
+
+static Uint8 via2_inb ( Uint8 mask )
+{
+	// Port-B in VIA2 is used (temporary with DDR-B set to input) to scan joystick direction 'RIGHT'
+	return (kbd_matrix[8] & 128) | 0x7F;
+}
+
 
 static inline void __mark_ram ( int start_k, int size_k )
 {
+	printf("MEM: adding RAM $%04X-%04X" NL, start_k << 10, ((start_k + size_k) << 10) - 1);
 	while (size_k--)
 		is_kpage_writable[start_k++] = 1;
 }
@@ -345,7 +366,6 @@ static void vic20_configure_ram ( int exp0, int exp1, int exp2, int exp3, int ex
 	if (exp4)
 		__mark_ram(40, 8);
 }
-
 
 
 
@@ -399,6 +419,9 @@ int main ( int argc, char **argv )
 		ERROR_WINDOW("Cannot load some of the needed ROM images (see console messages)!");
 		return 1;
 	}
+	// Trying to load emulator tools "ROM/RAM" image (it's not fatal if we cannot! unlike the std ROM images above ...)
+	emu_load_file("vic20-emulator-tool.rom", memory + 0xA000, 8192);
+	// Continue with initializing ...
 	clear_emu_events();	// also resets the keyboard
 	cpu_reset();	// reset CPU: it must be AFTER kernal is loaded at least, as reset also fetches the reset vector into PC ...
 	// our TRAP stuff :)
@@ -411,20 +434,38 @@ int main ( int argc, char **argv )
 		NULL,	// outa
 		NULL,	// outb
 		NULL,	// outsr
-		NULL,	// ina
+		via1_ina, // ina
 		NULL,	// inb
 		NULL,	// insr
-		via1_setint	// setint, called by via core, if interrupt level changed for whatever reason (ie: expired timer ...)
+		via1_setint	// setint, called by via core, if interrupt level changed for whatever reason (ie: expired timer ...). It is wired to NMI on VIC20.
 	);
 	via_init(&via2, "VIA-2",	// from $9120 on VIC-20
 		NULL,			// outa [reg 1]
 		NULL, //via2_kbd_set_scan,	// outb [reg 0], we wire port B as output to set keyboard scan, HOWEVER, we use ORB directly in get scan!
 		NULL,	// outsr
 		via2_kbd_get_scan,	// ina  [reg 1], we wire port A as input to get the scan result, which was selected with port-A
-		NULL,			// inb  [reg 0]
+		via2_inb,		// inb  [reg 0], used with DDR set to input for joystick direction 'right' in VIC20
 		NULL,	// insr
-		via2_setint	// setint, same for VIA2 as with VIA1. Note: I have no idea if both VIAs can generate IRQ on VIC-20 though, maybe it's overkill to do for both and even cause problems?
+		via2_setint	// setint, same for VIA2 as with VIA1, but this is wired to IRQ on VIC20.
 	);
+#ifdef PRELOAD_PROGRAM
+	if (argc > 1 && !strcmp(argv[1], "load")) {
+		vic20_configure_ram(
+			preload_program_memcfg[0],
+			preload_program_memcfg[1],
+			preload_program_memcfg[2],
+			preload_program_memcfg[3],
+			preload_program_memcfg[4]
+		);
+		memcpy(memory + preload_program_address, preload_program_image, preload_program_size);
+		printf("PRELOAD: \"%s\" installed, %d bytes at memory range $%04X-$%04X" NL,
+			preload_program_name,
+			preload_program_size,
+			preload_program_address,
+			preload_program_address + preload_program_size - 1
+		);
+	}
+#endif
 	cycles = 0;
 	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	vic_init();

@@ -47,6 +47,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #error "SCREEN_ORIGIN_DOTPOS must be an even number!"
 #endif
 
+#define PRELOAD_PROGRAM
 
 #define USE_LOCKED_TEXTURE	1
 #define RENDER_SCALE_QUALITY	2
