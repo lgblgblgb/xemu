@@ -157,6 +157,33 @@ static const struct KeyMapping key_map[] = {
 
 
 
+static inline void __mark_ram ( int start_k, int size_k )
+{
+	printf("MEM: adding RAM $%04X-%04X" NL, start_k << 10, ((start_k + size_k) << 10) - 1);
+	while (size_k--)
+		is_kpage_writable[start_k++] = 1;
+}
+
+
+
+/* Configure VIC-20 RAM expansion, logic values:
+	exp0 = 3K from $400, exp1 ... exp3 = 3 * 8K, exp4 = the 8K from $A000 */
+static void vic20_configure_ram ( int exp0, int exp1, int exp2, int exp3, int exp4 )
+{
+	if (exp0)
+		__mark_ram( 1, 3);
+	if (exp1)
+		__mark_ram( 8, 8);
+	if (exp2)
+		__mark_ram(16, 8);
+	if (exp3)
+		__mark_ram(24, 8);
+	if (exp4)
+		__mark_ram(40, 8);
+}
+
+
+
 
 // Need to be defined, if CPU_TRAP is defined for the CPU emulator!
 int cpu_trap ( Uint8 opcode )
@@ -240,6 +267,33 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 	} else if (key == SDL_SCANCODE_F9) {	// exit emulator ...
 		if (pressed)
 			running = 0;
+	} else if (key == SDL_SCANCODE_F10) {	// load program directly into the memory
+		if (pressed) {
+#ifdef PRELOAD_PROGRAM
+			vic20_configure_ram(
+				preload_program_memcfg[0],
+				preload_program_memcfg[1],
+				preload_program_memcfg[2],
+				preload_program_memcfg[3],
+				preload_program_memcfg[4]
+			);
+			memcpy(memory + preload_program_address, preload_program_image, preload_program_size);
+			printf("PRELOAD: \"%s\" installed, %d bytes at memory range $%04X-$%04X" NL,
+				preload_program_name,
+				preload_program_size,
+				preload_program_address,
+				preload_program_address + preload_program_size - 1
+			);
+			INFO_WINDOW("Program \"%s\" installed $%04X-$%04X\nTry SYS %d to start",
+				preload_program_name,
+				preload_program_address,
+				preload_program_address + preload_program_size - 1,
+				preload_program_address
+			);
+#else
+			ERROR_WINDOW("You must compile emulator with PRELOAD_PROGRAM defined to use this feature!");
+#endif
+		}
 	} else {
 		const struct KeyMapping *map = key_map;
 		while (map->pos != 0xFF) {
@@ -342,33 +396,6 @@ static Uint8 via2_inb ( Uint8 mask )
 }
 
 
-static inline void __mark_ram ( int start_k, int size_k )
-{
-	printf("MEM: adding RAM $%04X-%04X" NL, start_k << 10, ((start_k + size_k) << 10) - 1);
-	while (size_k--)
-		is_kpage_writable[start_k++] = 1;
-}
-
-
-
-/* Configure VIC-20 RAM expansion, logic values:
-	exp0 = 3K from $400, exp1 ... exp3 = 3 * 8K, exp4 = the 8K from $A000 */
-static void vic20_configure_ram ( int exp0, int exp1, int exp2, int exp3, int exp4 )
-{
-	if (exp0)
-		__mark_ram( 1, 3);
-	if (exp1)
-		__mark_ram( 8, 8);
-	if (exp2)
-		__mark_ram(16, 8);
-	if (exp3)
-		__mark_ram(24, 8);
-	if (exp4)
-		__mark_ram(40, 8);
-}
-
-
-
 
 
 int main ( int argc, char **argv )
@@ -448,24 +475,6 @@ int main ( int argc, char **argv )
 		NULL,	// insr
 		via2_setint	// setint, same for VIA2 as with VIA1, but this is wired to IRQ on VIC20.
 	);
-#ifdef PRELOAD_PROGRAM
-	if (argc > 1 && !strcmp(argv[1], "load")) {
-		vic20_configure_ram(
-			preload_program_memcfg[0],
-			preload_program_memcfg[1],
-			preload_program_memcfg[2],
-			preload_program_memcfg[3],
-			preload_program_memcfg[4]
-		);
-		memcpy(memory + preload_program_address, preload_program_image, preload_program_size);
-		printf("PRELOAD: \"%s\" installed, %d bytes at memory range $%04X-$%04X" NL,
-			preload_program_name,
-			preload_program_size,
-			preload_program_address,
-			preload_program_address + preload_program_size - 1
-		);
-	}
-#endif
 	cycles = 0;
 	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	vic_init();
