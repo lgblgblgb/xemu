@@ -30,7 +30,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define LAST_SCANLINE			311
 #define CYCLES_PER_SCANLINE		 71
 
-#define FULL_FRAME_USECS 40000
+#define FULL_FRAME_USECS 39971
+
+#define REAL_CPU_SPEAD	1108404
 
 /* Usual (X/Y) origin of the screen (left bottom corner) if VIC-I X/Y origin registers are zero */
 // maybe SCANLINE ORIGIN is 38 ... I guess :)

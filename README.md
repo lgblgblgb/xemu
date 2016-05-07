@@ -136,6 +136,14 @@ Full (?) list of stupidities of my VIC-20 emulator:
 * No tape, or serial IEC bus is emulated (floppy drive)
 * NMI handling, RUN/STOP + RESTORE does not work
 
+Some extra features of Commodore VIC-20 emulator (compared to Commodore LCD):
+
+Press F10 (after BASIC is READY.) to load game "Pulse" (written by Pixel)
+into the memory directly. You can use SYS 8192 then to run it. I use this to
+test the emulator, currently it does not work to well :-/
+
+You can use numeric key pad arrow keys as the "joystick", "5" is the fire.
+
 ## Compilation on Linux / UNIX-like machine
 
 Note: I tested this on Linux only. You should have sdl2 _development_ libraries

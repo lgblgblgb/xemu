@@ -402,9 +402,12 @@ static Uint8 via2_inb ( Uint8 mask )
 int main ( int argc, char **argv )
 {
 	int cycles;
-	printf("Inaccurate Commodore VIC-20 emulator from LGB" NL
-	"Texture resolution is %dx%d" NL
-	"Defined visible area is (%d,%d)-(%d,%d)" NL "%s" NL,
+	printf("**** Inaccurate Commodore VIC-20 emulator from LGB" NL
+	"INFO: CPU lock frequency %d Hz (wanted: %d Hz)" NL
+	"INFO: Texture resolution is %dx%d" NL
+	"INFO: Defined visible area is (%d,%d)-(%d,%d)" NL "%s" NL,
+		(int)((LAST_SCANLINE + 1) * CYCLES_PER_SCANLINE * (1000000.0 / (double)FULL_FRAME_USECS) * 2),
+		REAL_CPU_SPEAD,
 		SCREEN_WIDTH, SCREEN_HEIGHT,
 		SCREEN_FIRST_VISIBLE_DOTPOS, SCREEN_FIRST_VISIBLE_SCANLINE,
 		SCREEN_LAST_VISIBLE_DOTPOS,  SCREEN_LAST_VISIBLE_SCANLINE,
@@ -427,8 +430,8 @@ int main ( int argc, char **argv )
 		"nemesys.lgb", "xclcd-vic20",	// app organization and name, used with SDL pref dir formation
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
-		SCREEN_WIDTH * 2, SCREEN_HEIGHT,	// logical size (same as texture for now ...)
-		SCREEN_WIDTH * 2 * 2, SCREEN_HEIGHT * 2,	// window size
+		SCREEN_WIDTH * 2, SCREEN_HEIGHT,	// logical size (width is doubled for somewhat correct aspect ratio)
+		SCREEN_WIDTH * 2 * 2, SCREEN_HEIGHT * 2,	// window size (doubled size, original would be too small)
 		SCREEN_FORMAT,		// pixel format
 		16,			// we have 16 colours
 		init_vic_palette_rgb,	// initialize palette from this constant array
@@ -486,7 +489,7 @@ int main ( int argc, char **argv )
 		via_tick(&via1, opcyc);	// run VIA-1 tasks for the same amount of cycles as the CPU
 		via_tick(&via2, opcyc);	// -- "" -- the same for VIA-2
 		cycles += opcyc;
-		if (cycles >= CYCLES_PER_SCANLINE) {	// if [at least!] 71 CPU cycles passed then render a VIC-I scanline, and maintain scanline value + texture/SDL update (at the end of a frame)
+		if (cycles >= CYCLES_PER_SCANLINE) {	// if [at least!] 71 (on PAL) CPU cycles passed then render a VIC-I scanline, and maintain scanline value + texture/SDL update (at the end of a frame)
 			// render one (scan)line. Note: this is INACCURATE, we should do rendering per dot clock/cycle or something,
 			// but for a simple emulator like this, it's already acceptable solultion, I think!
 			// Note about frameskip: we render only every second (half) frame, no interlace (PAL VIC), not so correct, but we also save some resources this way
