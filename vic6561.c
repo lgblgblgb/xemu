@@ -51,6 +51,18 @@ static Uint16 vic_p_col;			// memory address of colour
 static Uint16 vic_p_chr;			// memory address of characer data
 
 
+/* Check constraints of the given parameters from some header file */
+
+#if ((SCREEN_ORIGIN_DOTPOS) & 1) != 0
+#	error "SCREEN_ORIGIN_DOTPOS must be an even number!"
+#endif
+#if (SCREEN_FIRST_VISIBLE_DOTPOS) & 1 != 0
+#	error "SCREEN_FIRST_VISIBLE_DOTPOS must be an even number!"
+#endif
+#if (SCREEN_LAST_VISIBLE_DOTPOS) & 1 != 1
+#	error "SCREEN_LAST_VISIBLE_DOTPOS must be an odd number!"
+#endif
+
 
 
 /* To be honest, I am lame with VIC-I addressing ...
@@ -174,7 +186,7 @@ void vic_render_line ( void )
 	visible_scanline = (scanline >= SCREEN_FIRST_VISIBLE_SCANLINE && scanline <= SCREEN_LAST_VISIBLE_SCANLINE);
 	if (vic_vertical_area) {
 		if (visible_scanline) {
-			v_columns = SCREEN_WIDTH;
+			v_columns = SCREEN_LAST_VISIBLE_DOTPOS - SCREEN_FIRST_VISIBLE_DOTPOS + 1;
 			while (v_columns--)
 				*(pixels++) = BORDER_COLOUR;
 			pixels += pixels_tail;		// add texture "tail" (that is, pitch - text_width, in 4 bytes uints, ie Uint32 pointer ...)
