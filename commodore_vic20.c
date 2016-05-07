@@ -340,7 +340,7 @@ static void update_emulator ( void )
 			}
 		}
 		// Third: Sleep ... Please read emutools.c source about this madness ... 40000 is (PAL) microseconds for a full frame to be produced
-		emu_sleep(40000);
+		emu_sleep(FULL_FRAME_USECS);
 	}
 	vic_vsync(!frameskip);	// prepare for the next frame!
 }
@@ -423,7 +423,7 @@ int main ( int argc, char **argv )
 	}
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (emu_init_sdl(
-		"VIC-20",			// window title
+		"Commodore VIC-20 / LGB",	// window title
 		"nemesys.lgb", "xclcd-vic20",	// app organization and name, used with SDL pref dir formation
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
@@ -492,7 +492,7 @@ int main ( int argc, char **argv )
 			// Note about frameskip: we render only every second (half) frame, no interlace (PAL VIC), not so correct, but we also save some resources this way
 			if (!frameskip)
 				vic_render_line();
-			if (scanline == 311) {
+			if (scanline == LAST_SCANLINE) {
 				update_emulator();
 				frameskip = !frameskip;
 			} else

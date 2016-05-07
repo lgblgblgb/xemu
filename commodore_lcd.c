@@ -441,7 +441,7 @@ int main ( int argc, char **argv )
 	);
 
 	if (emu_init_sdl(
-		"Commodore LCD",		// window title
+		"Commodore LCD / LGB",		// window title
 		"nemesys.lgb", "xclcd",		// app organization and name, used with SDL pref dir formation
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes

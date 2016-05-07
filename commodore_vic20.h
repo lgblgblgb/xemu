@@ -27,6 +27,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_FIRST_VISIBLE_DOTPOS	 38
 #define SCREEN_LAST_VISIBLE_DOTPOS	261
 
+#define LAST_SCANLINE			311
+
+#define FULL_FRAME_USECS 40000
+
 /* Usual (X/Y) origin of the screen (left bottom corner) if VIC-I X/Y origin registers are zero */
 // maybe SCANLINE ORIGIN is 38 ... I guess :)
 //#define SCREEN_ORIGIN_SCANLINE		38

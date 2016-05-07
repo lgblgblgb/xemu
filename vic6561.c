@@ -62,6 +62,9 @@ static Uint16 vic_p_chr;			// memory address of characer data
 #if (SCREEN_LAST_VISIBLE_DOTPOS) & 1 != 1
 #	error "SCREEN_LAST_VISIBLE_DOTPOS must be an odd number!"
 #endif
+#if SCREEN_LAST_VISIBLE_SCANLINE > LAST_SCANLINE
+#	error "SCREEN_LAST_VISIBLE_SCANLINE cannot be greater than LAST_SCANLINE!"
+#endif
 
 
 
@@ -112,8 +115,8 @@ void cpu_vic_reg_write ( int addr, Uint8 data )
 		case 1:	// screen Y orgin (in 2 lines units) for all the 8 bits
 			first_active_scanline = (data << 1) + SCREEN_ORIGIN_SCANLINE;
 			first_bottom_border_scanline = (((memory[0x9003] >> 1) & 0x3F) << char_height_shift) + first_active_scanline;
-			if (first_bottom_border_scanline > 311)
-				first_bottom_border_scanline = 311;
+			if (first_bottom_border_scanline > LAST_SCANLINE)
+				first_bottom_border_scanline = LAST_SCANLINE;
 			break;
 		case 2:	// number of video columns (lower 7 bits), bit 7: bit 9 of screen memory
 			text_columns = data & 0x7F;
@@ -124,8 +127,8 @@ void cpu_vic_reg_write ( int addr, Uint8 data )
 			char_height_minus_one = (data & 1) ? 15 : 7;
 			char_height_shift = (data & 1) ? 4 : 3;
 			first_bottom_border_scanline = (((data >> 1) & 0x3F) << char_height_shift) + first_active_scanline;
-			if (first_bottom_border_scanline > 311)
-				first_bottom_border_scanline = 311;
+			if (first_bottom_border_scanline > LAST_SCANLINE)
+				first_bottom_border_scanline = LAST_SCANLINE;
 			break;
 		case 14:
 			AUX_COLOUR = vic_palette[data >> 4];
