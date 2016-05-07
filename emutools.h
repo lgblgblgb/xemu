@@ -70,6 +70,7 @@ extern char *sdl_window_title;
 extern SDL_Window   *sdl_win;
 extern Uint32 sdl_winid;
 extern int seconds_timer_trigger;
+extern const char emulators_disclaimer[];
 
 
 extern time_t emu_get_unixtime ( void );

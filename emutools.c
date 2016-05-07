@@ -50,6 +50,14 @@ static Uint32 black_colour;
 static void (*shutdown_user_function)(void);
 int seconds_timer_trigger;
 
+const char emulators_disclaimer[] =
+	"LICENSE: Copyright (C)2016 Gábor Lénárt (aka LGB) lgb@lgb.hu http://lgb.hu/" NL
+	"LICENSE: This software is a GNU/GPL version 2 (or later) software." NL
+	"LICENSE: <http://gnu.org/licenses/gpl.html>" NL
+        "LICENSE: This is free software; you are free to change and redistribute it." NL
+        "LICENSE: There is NO WARRANTY, to the extent permitted by law." NL
+;
+
 
 
 struct tm *emu_get_localtime ( void )

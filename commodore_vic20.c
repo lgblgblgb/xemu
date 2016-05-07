@@ -404,10 +404,11 @@ int main ( int argc, char **argv )
 	int cycles;
 	printf("Inaccurate Commodore VIC-20 emulator from LGB" NL
 	"Texture resolution is %dx%d" NL
-	"Defined visible area is (%d,%d)-(%d,%d)" NL,
+	"Defined visible area is (%d,%d)-(%d,%d)" NL "%s" NL,
 		SCREEN_WIDTH, SCREEN_HEIGHT,
 		SCREEN_FIRST_VISIBLE_DOTPOS, SCREEN_FIRST_VISIBLE_SCANLINE,
-		SCREEN_LAST_VISIBLE_DOTPOS,  SCREEN_LAST_VISIBLE_SCANLINE
+		SCREEN_LAST_VISIBLE_DOTPOS,  SCREEN_LAST_VISIBLE_SCANLINE,
+		emulators_disclaimer
 	);
 	/* Select RAM config based on command line options, quite lame currently :-) */
 	if (argc > 1) {

@@ -436,6 +436,10 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles;
+	printf("Commodore LCD emulator from LGB" NL "%s" NL,
+		emulators_disclaimer
+	);
+
 	if (emu_init_sdl(
 		"Commodore LCD",		// window title
 		"nemesys.lgb", "xclcd",		// app organization and name, used with SDL pref dir formation
