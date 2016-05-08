@@ -417,7 +417,7 @@ int main ( int argc, char **argv )
 {
 	int cycles;
 	printf("**** The Inaccurate Commodore VIC-20 emulator from LGB" NL
-	"INFO: CPU lock frequency %d Hz (wanted: %d Hz)" NL
+	"INFO: CPU clock frequency (calculated) %d Hz (wanted: %d Hz)" NL
 	"INFO: Texture resolution is %dx%d" NL
 	"INFO: Defined visible area is (%d,%d)-(%d,%d)" NL "%s" NL,
 		(int)((LAST_SCANLINE + 1) * CYCLES_PER_SCANLINE * (1000000.0 / (double)FULL_FRAME_USECS) * 2),
@@ -459,8 +459,8 @@ int main ( int argc, char **argv )
 	memset(memory, 0xFF, sizeof memory);
 	memset(dummy_vic_access, 0xFF, sizeof dummy_vic_access);	// define 1K of "nothing" for VIC-I memory regions it cannot find memory
 	if (
-		emu_load_file("vic20-chargen.rom", memory + 0x8000, 0x1000) +	// load chargen ROM
-		emu_load_file("vic20-basic.rom",   memory + 0xC000, 0x2000) +	// load basic ROM
+		emu_load_file("vic20-chargen.rom", memory + 0x8000, 0x1000) |	// load chargen ROM
+		emu_load_file("vic20-basic.rom",   memory + 0xC000, 0x2000) |	// load basic ROM
 		emu_load_file("vic20-kernal.rom",  memory + 0xE000, 0x2000)	// load kernal ROM
 	) {
 		ERROR_WINDOW("Cannot load some of the needed ROM images (see console messages)!");
@@ -471,9 +471,6 @@ int main ( int argc, char **argv )
 	// Continue with initializing ...
 	clear_emu_events();	// also resets the keyboard
 	cpu_reset();	// reset CPU: it must be AFTER kernal is loaded at least, as reset also fetches the reset vector into PC ...
-	// our TRAP stuff :)
-	memory[0xA000] = CPU_TRAP;
-	memory[0xA001] = 0x60;	// RTS
 	// Initiailize VIAs.
 	// Note: this is my unfinished VIA emulation skeleton, for my Commodore LCD emulator originally, ported from my JavaScript code :)
 	// it uses callback functions, which must be registered here, NULL values means unused functionality
