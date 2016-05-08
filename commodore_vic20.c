@@ -27,7 +27,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "via65c22.h"
 #include "vic6561.h"
 #include "emutools.h"
-#include "vic20_preloaded_program.h"
 
 #define SCREEN_HEIGHT		(SCREEN_LAST_VISIBLE_SCANLINE - SCREEN_FIRST_VISIBLE_SCANLINE + 1)
 #define SCREEN_WIDTH		(SCREEN_LAST_VISIBLE_DOTPOS   - SCREEN_FIRST_VISIBLE_DOTPOS   + 1)
@@ -199,12 +198,70 @@ static void vic20_configure_ram ( int exp0, int exp1, int exp2, int exp3, int ex
 
 
 
+static inline void emuprint ( const char *str )
+{
+	snprintf(
+		(char*)memory + (memory[0xA017] | (memory[0xA018] << 8)),
+		memory[0xA019] | (memory[0xA01A] << 8),
+		"%s",
+		str
+	);
+}
+
+
+#define EMUPRINTF(...) do { \
+	char __buffer_for_conv__[8192];	\
+	snprintf(__buffer_for_conv__, sizeof __buffer_for_conv__, __VA_ARGS__);	\
+	emuprint(__buffer_for_conv__);	\
+} while(0)
+
+
+
+static void execute_monitor_command ( void )
+{
+	char *p;
+	memory[600] = 0;	// close the input string, just in case (but it should have been anyway)
+	p = (char*)memory + 512;
+	while (*p <= 32)
+		p++;
+	if (p[0] == 'X') {
+		cpu_a = 0;	// do not continue ...
+		EMUPRINTF("[EXIT]\r");
+		return;
+	}
+	// unknown command
+	EMUPRINTF("?\r");
+}
+
+
 
 // Need to be defined, if CPU_TRAP is defined for the CPU emulator!
 int cpu_trap ( Uint8 opcode )
 {
-	if (cpu_pc == 0xA001 && opcode == CPU_TRAP) {	// cpu_pc always meant to be the position _after_ the trap opcode!
-		INFO_WINDOW("Congratulation, CPU trap works :-)");
+	if (cpu_pc >= 0xA000 && opcode == CPU_TRAP) {	// cpu_pc always meant to be the position _after_ the trap opcode!
+		Uint8 trap = memory[cpu_pc];
+		if (memcmp(memory + 0xA00C, "LGBXVIC20", 9))
+			FATAL("Unknown ROM/RAM code at $%04X caused trap!", cpu_pc - 1);
+		switch (trap) {
+			case 0:
+				cpu_a = EMUROM_AUTOSTART;
+				break;
+			case 1:
+				EMUPRINTF("** XVIC20 MONITOR/LGB\rBM=$%04X-%04X S=$%04X\r",
+					memory[0x281] | (memory[0x282] << 8),
+					memory[0x283] | (memory[0x284] << 8),
+					memory[648] << 8
+				);
+				cpu_a = 1;
+				break;
+			case 2:
+				cpu_a = 1;	// by default, set the continue flag ...
+				execute_monitor_command();
+				break;
+			default:
+				FATAL("Unknown CPU trap (%d) at $%04X", trap, cpu_pc - 1);
+		}
+		cpu_pc++;	// jump over the trap number byte ...
 		return 1; // you must return with the CPU cycles used, but at least with value of 1!
 	} else
 		return 0; // ignore trap!! Return with zero means, the CPU emulator should execute the opcode anyway
@@ -284,30 +341,10 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 			running = 0;
 	} else if (key == SDL_SCANCODE_F10) {	// load program directly into the memory
 		if (pressed) {
-#ifdef PRELOAD_PROGRAM
-			vic20_configure_ram(
-				preload_program_memcfg[0],
-				preload_program_memcfg[1],
-				preload_program_memcfg[2],
-				preload_program_memcfg[3],
-				preload_program_memcfg[4]
-			);
-			memcpy(memory + preload_program_address, preload_program_image, preload_program_size);
-			printf("PRELOAD: \"%s\" installed, %d bytes at memory range $%04X-$%04X" NL,
-				preload_program_name,
-				preload_program_size,
-				preload_program_address,
-				preload_program_address + preload_program_size - 1
-			);
-			INFO_WINDOW("Program \"%s\" installed $%04X-$%04X\nTry SYS %d to start",
-				preload_program_name,
-				preload_program_address,
-				preload_program_address + preload_program_size - 1,
-				preload_program_address
-			);
-#else
-			ERROR_WINDOW("You must compile emulator with PRELOAD_PROGRAM defined to use this feature!");
-#endif
+			if (!emu_load_file("pulse.prg", memory + 0x1001 - 2, 3530))
+				INFO_WINDOW("Type SYS4109 to start Pulse/Pixel!");
+			else
+				ERROR_WINDOW("This feature is only available if you\nown pulse.prg, otherwise it won't work!");
 		}
 	} else {
 		const struct KeyMapping *map = key_map;

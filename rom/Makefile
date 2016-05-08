@@ -17,7 +17,8 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-OUR_ROMS	= clcd-u104-parasite.rom
+#OUR_ROMS	= clcd-u104-parasite.rom vic20-emulator-tool.rom
+OUR_ROMS	= vic20-emulator-tool.rom
 
 
 all: roms $(OUR_ROMS)
