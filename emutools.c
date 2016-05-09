@@ -36,6 +36,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 SDL_Window   *sdl_win = NULL;
 SDL_Renderer *sdl_ren = NULL;
 SDL_Texture  *sdl_tex = NULL;
+SDL_PixelFormat *sdl_pix_fmt;
 static const char default_window_title[] = "EMU";
 char *sdl_window_title = (char*)default_window_title;
 static struct timeval tv_old;
@@ -256,7 +257,6 @@ int emu_init_sdl (
 	int locked_texture_update,		// use locked texture method [non zero], or malloc'ed stuff [zero]. NOTE: locked access doesn't allow to _READ_ pixels and you must fill ALL pixels!
 	void (*shutdown_callback)(void)		// callback function called on exit (can be nULL to not have any emulator specific stuff)
 ) {
-	SDL_PixelFormat *pix_fmt;
 	char render_scale_quality_s[2];
 	if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
 		ERROR_WINDOW("Cannot initialize SDL: %s", SDL_GetError());
@@ -300,11 +300,10 @@ int emu_init_sdl (
 	texture_x_size_in_bytes = texture_x_size * 4;
 	sdl_winid = SDL_GetWindowID(sdl_win);
 	/* Intitialize palette from given RGB components */
-	pix_fmt = SDL_AllocFormat(pixel_format);
-	black_colour = SDL_MapRGBA(pix_fmt, 0, 0, 0, 0xFF);	// used to initialize pixel buffer
+	sdl_pix_fmt = SDL_AllocFormat(pixel_format);
+	black_colour = SDL_MapRGBA(sdl_pix_fmt, 0, 0, 0, 0xFF);	// used to initialize pixel buffer
 	while (n_colours--)
-		store_palette[n_colours] = SDL_MapRGBA(pix_fmt, colours[n_colours * 3], colours[n_colours * 3 + 1], colours[n_colours * 3 + 2], 0xFF);
-	SDL_FreeFormat(pix_fmt);
+		store_palette[n_colours] = SDL_MapRGBA(sdl_pix_fmt, colours[n_colours * 3], colours[n_colours * 3 + 1], colours[n_colours * 3 + 2], 0xFF);
 	/* SDL hints */
 	snprintf(render_scale_quality_s, 2, "%d", render_scale_quality);
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, render_scale_quality_s);		// render scale quality 0, 1, 2
