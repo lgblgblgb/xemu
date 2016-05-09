@@ -132,7 +132,7 @@ int emu_load_file ( const char *fn, void *buffer, int maxsize )
 	while (search_paths[a]) {
 		char fnbuf[PATH_MAX + 1];
 		if (search_paths[a][0] == 0)
-			strcpy(fnbuf,  search_paths[a]);
+			strcpy(fnbuf,  fn);
 		else
 			snprintf(fnbuf, sizeof fnbuf, "%s%c%s", search_paths[a], DIRSEP_CHR, fn);
 		printf("Trying to open file \"%s\" as \"%s\" ..." NL, fn, fnbuf);
