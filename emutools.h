@@ -77,7 +77,7 @@ extern time_t emu_get_unixtime ( void );
 extern struct tm *emu_get_localtime ( void );
 extern void *emu_malloc ( size_t size );
 extern char *emu_strdup ( const char *s );
-extern int emu_load_file ( const char *fn, void *buffer, int size );
+extern int emu_load_file ( const char *fn, void *buffer, int maxsize );
 extern void emu_set_full_screen ( int setting );
 extern void emu_sleep ( int real_usec );
 extern int emu_init_sdl (

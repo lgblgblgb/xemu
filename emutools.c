@@ -102,7 +102,7 @@ void emu_drop_events ( void )
 
 
 
-int emu_load_file ( const char *fn, void *buffer, int size )
+int emu_load_file ( const char *fn, void *buffer, int maxsize )
 {
 	char *search_paths[] = {
 		".",
@@ -114,10 +114,27 @@ int emu_load_file ( const char *fn, void *buffer, int size )
 #endif
 		NULL
 	};
-	int a = 0, fd = -1;
+	int a = 0, fd = -1, read_size = 0;
+	if (fn[0] == '!') {
+		fn++;
+		search_paths[0] = "";
+		search_paths[1] = NULL;
+	} else if (
+		fn[0] == DIRSEP_CHR ||
+		(fn[0] == '.' && fn[1] == DIRSEP_CHR)
+#ifdef _WIN32
+		|| fn[1] == ':'
+#endif
+	) {
+		search_paths[0] = "";
+		search_paths[1] = NULL;
+	}
 	while (search_paths[a]) {
 		char fnbuf[PATH_MAX + 1];
-		snprintf(fnbuf, sizeof fnbuf, "%s%c%s", search_paths[a], DIRSEP_CHR, fn);
+		if (search_paths[a][0] == 0)
+			strcpy(fnbuf,  search_paths[a]);
+		else
+			snprintf(fnbuf, sizeof fnbuf, "%s%c%s", search_paths[a], DIRSEP_CHR, fn);
 		printf("Trying to open file \"%s\" as \"%s\" ..." NL, fn, fnbuf);
 		fd = open(fnbuf, O_RDONLY | O_BINARY);	// O_BINARY is Windows stuff, but we define it as zero in case of non-Win32 system, so it won't hurt
 		if (fd > -1)
@@ -126,24 +143,22 @@ int emu_load_file ( const char *fn, void *buffer, int size )
 	}
 	if (fd < 0) {
 		fprintf(stderr, "Cannot open file %s" NL, fn);
-		return 1;
+		return -1;
 	}
 	printf("OK, file is open (fd = %d)" NL, fd);
-	while (size) {
-		a = read(fd, buffer, size);
+	while (read_size < maxsize) {
+		a = read(fd, buffer, maxsize - read_size);
 		if (a < 0) {
 			fprintf(stderr, "Reading error!" NL);
-			return 1;
+			return -1;
 		}
-		if (a == 0) {
-			fprintf(stderr, "Too short file!" NL);
-			return 1;
-		}
+		if (a == 0)
+			break;
 		buffer += a;
-		size -= a;
+		read_size += a;
 	}
 	close(fd);
-	return 0;
+	return read_size;
 }
 
 /* Meaning of "setting":
