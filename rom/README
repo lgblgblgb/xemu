@@ -20,8 +20,31 @@ make roms
 
 (issued from the root directory of the project)
 
+Some of the ROMs though are own ones (written by me) and included in the
+repository by default (even in binary form) with source. If you try to modify
+the source, you need CC65 suite (the CA65 assembler from it) to be able to
+assemble them. These ROMs are currently the following ones:
 
-                   ---- ABOUT COMMODORE LCD ROMs ----
+vic20-emulator-tool.rom
+
+	Commodore VIC-20 autostart capable ROM with the "built in monitor".
+	Currently it's not a real monitor too much, but a place where you
+	can "configure" the emulator from inside :)
+
+clcd-u104-parasite.rom
+
+	Loads on the "top of" the clcd-u104.rom ROM, to an unused place
+	of it. It aims the Commodore LCD, with some KERNAL modification,
+	it will able to locate it, and also includes in the original
+	"menu system" (the SHELL).
+
+The "make roms" command also compile the needed ROMs. Note: these ROMs are
+optional, and emulators can work without them!
+
+
+                       ---- ABOUT COMMODORE LCD ROMs ----
+
+
 
 You can select various ROM patches in commodore_lcd.h
 

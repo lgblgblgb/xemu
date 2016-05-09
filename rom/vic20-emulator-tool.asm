@@ -80,28 +80,44 @@ getline:
 	CMP	#$0D
 	BNE	@loop
 	LDA	#0
-	STA	511, Y
+	STA	511, Y	; close input with '0' byte instead of $0D
 	RTS
 
 
 rom_entry_initial:
 	SEI
-	; Similar to the KERNAL, intiailize the machine first
+	; Similar to the KERNAL, intiailize the machine first (taken from the disassembly of the KERNAL ROM)
 	JSR	$FD8D	; intiailize and test RAM
 	JSR	$FD52	; restore I/O vectors
 	JSR	$FDF9	; initialize I/O registers
 	JSR	$E518	; initialize hardware
+	; It's already the BASIC initialization stuff (taken from the disassembly of BASIC ROM at "cold" entry point)
+	JSR	$E45B	; initialise BASIC vector table
+	JSR	$E3A4	; initialise BASIC RAM locations
+	JSR	$E404	; print start up message and initialise memory pointers
+	LDX	#$FB	; value for start stack
+	TXS		; set stack pointer
+	; Time to return into the emulator code via TRAP and ask for the situation, how to continue ...
+	TRAP	0
 	CLI
-	TRAP	0	; check if autostart functionality is allowed
 	ORA	#0
-	BEQ	@no_autostart
+	BEQ	@no_autostart	; A = 0 --> continue with normal BASIC startup
+	BMI	@start_program	; A = high bit set --> auto load a program, emulator already did the modifications in RAM
 	JSR	rom_entry_sys	; we do this, to allow to return with RTS as done via the "SYS" method of monitor invocation too
 @no_autostart:
-	JMP	($C000)	; execute BASIC ...
+	JSR	prntstr	; print our message still :-P
+	JMP	$C474	; execute BASIC ... (READY. prompt and warm start)
+@start_program:
+	; Thanks to Sven (aka Pixel) for the suggested method to auto-start a BASIC program (or ML, with BASIC stub)
+	JSR	$C659	; reset execution to start, clear variables, flush stack
+	JSR	$C533	; rebuild basic line chaining (?)
+	JSR	$C7AE	; run the loaded BASIC program ... (BASIC interpreter inner loop)
+	JMP	$C474	; just in case ...
 
 rom_entry_sys:
-	CLI		; enable interrupts
+	CLI
 	JSR	$FFE7	; close possible open files, etc
+
 	TRAP	1	; welcome msg
 	JSR	prntstr
 @loop:
@@ -112,6 +128,7 @@ rom_entry_sys:
 	PLA
 	BNE	@loop
 	RTS
+
 
 ; If I unserstand well, it's called on NMI (?)
 ; Dunno about it, better to pass control to the KERNAL instead :-P
