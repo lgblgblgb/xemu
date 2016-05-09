@@ -39,7 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "commodore_lcd.h"
 
 
-static Uint8 memory[0x40000];
+static Uint8 memory[0x40001];	// +1 for checking load ...
 static Uint8 charrom[2048];
 extern unsigned const char roms[];
 static int mmu[3][4] = {
@@ -459,10 +459,10 @@ int main ( int argc, char **argv )
 	memset(memory, 0xFF, sizeof memory);
 	memset(charrom, 0xFF, sizeof charrom);
 	if (
-		emu_load_file("clcd-u102.rom", memory + 0x38000, 0x8000) +
-		emu_load_file("clcd-u103.rom", memory + 0x30000, 0x8000) +
-		emu_load_file("clcd-u104.rom", memory + 0x28000, 0x8000) +
-		emu_load_file("clcd-u105.rom", memory + 0x20000, 0x8000)
+		emu_load_file("clcd-u102.rom", memory + 0x38000, 0x8001) != 0x8000 ||
+		emu_load_file("clcd-u103.rom", memory + 0x30000, 0x8001) != 0x8000 ||
+		emu_load_file("clcd-u104.rom", memory + 0x28000, 0x8001) != 0x8000 ||
+		emu_load_file("clcd-u105.rom", memory + 0x20000, 0x8001) != 0x8000
 	) {
 		ERROR_WINDOW("Cannot load some of the needed ROM images (see console messages)!");
 		return 1;
