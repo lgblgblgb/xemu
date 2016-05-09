@@ -143,7 +143,9 @@ Some extra features of Commodore VIC-20 emulator (compared to Commodore LCD):
 Command line options:
 
 @1 @8 @16 @24 @40
+
 @1 @8 @16 @24 @40 -
+
 @1 @8 @16 @24 @40 something.prg
 
 The '@' options configures the memory expansions at the given kilobyte.
