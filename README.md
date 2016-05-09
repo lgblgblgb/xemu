@@ -136,12 +136,35 @@ Full (?) list of stupidities of my VIC-20 emulator:
 * No tape, or serial IEC bus is emulated (floppy drive)
 * NMI handling, RUN/STOP + RESTORE does not work
 * Only "PAL" system is emulated
+* VIA emulation is unfinished, and maybe quite inaccurate as well
 
 Some extra features of Commodore VIC-20 emulator (compared to Commodore LCD):
 
-Press F10 (after BASIC is READY.) to load game "Pulse" (written by Pixel)
-into the memory directly. You can use SYS 8192 then to run it. I use this to
-test the emulator, currently it does not work to well :-/
+Command line options:
+
+@1 @8 @16 @24 @40
+@1 @8 @16 @24 @40 -
+@1 @8 @16 @24 @40 something.prg
+
+The '@' options configures the memory expansions at the given kilobyte.
+Of course you can specify less (or none) of them.
+
+The '-' option causes to "boot" into monitor mode. The monitor is currently
+unusable, only 'x' (exit) command works :)
+
+If some filename is given (ie not start with '@' or '-') it tried to be
+loaded and auto-started, as a BASIC program (or ML one, with BASIC 'stub').
+
+No filename or '-' causes to boot into BASIC.
+
+NOTE: currently no check about illegal .prg, which would exceed the available
+configured RAM, or even overwriting ROM with bogus start address with the
+two first bytes, etc. Also, it's possible that the program requires other
+memory configuration, so the BASIC start is different, this is not handled
+autmatically either ...
+
+Functionality of auto-load (currently the only way to load a program ...)
+requires the emu ROM to be usable, you can find it in the rom/ directory.
 
 You can use numeric key pad arrow keys as the "joystick", "5" is the fire.
 

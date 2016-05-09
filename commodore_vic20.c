@@ -32,7 +32,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_WIDTH		(SCREEN_LAST_VISIBLE_DOTPOS   - SCREEN_FIRST_VISIBLE_DOTPOS   + 1)
 
 
-static Uint8 memory[0x10000];	// 64K address space of the 6502 CPU (some of it is ROM, undecoded, whatsoever ... it's simply the whole address space, *NOT* only RAM!)
+static Uint8 memory[0x10001];	// 64K (+1 for load check) address space of the 6502 CPU (some of it is ROM, undecoded, whatsoever ... it's simply the whole address space, *NOT* only RAM!)
 static const Uint8 init_vic_palette_rgb[16 * 3] = {	// VIC palette given by RGB components
 	0x00, 0x00, 0x00,	// black
 	0xFF, 0xFF, 0xFF,	// white
@@ -53,6 +53,9 @@ static const Uint8 init_vic_palette_rgb[16 * 3] = {	// VIC palette given by RGB 
 };
 static Uint8 dummy_vic_access[1024];			// define 1K of "nothing" for VIC-I memory regions it cannot find memory there
 
+static int emurom_policy;
+static char *emufile_p;
+static int emufile_size;
 static int frameskip = 0;
 static int nmi_level = 0;			// level of NMI (note: 6502 is _edge_ triggered on NMI, this is only used to check edges ...)
 static int running = 1;				// emulator won't exit till this value is non-zero
@@ -179,26 +182,21 @@ static inline void __mark_ram ( int start_k, int size_k )
 }
 
 
-
-/* Configure VIC-20 RAM expansion, logic values:
-	exp0 = 3K from $400, exp1 ... exp3 = 3 * 8K, exp4 = the 8K from $A000 */
-static void vic20_configure_ram ( int exp0, int exp1, int exp2, int exp3, int exp4 )
+static char *vic20_get_memconfig_string ( void )
 {
-	if (exp0)
-		__mark_ram( 1, 3);
-	if (exp1)
-		__mark_ram( 8, 8);
-	if (exp2)
-		__mark_ram(16, 8);
-	if (exp3)
-		__mark_ram(24, 8);
-	if (exp4)
-		__mark_ram(40, 8);
+	static char result[40];
+	sprintf(result, "%c1 %c8 %c16 %c24 %c40",
+		is_kpage_writable[1] ? '+' : '-',
+		is_kpage_writable[8] ? '+' : '-',
+		is_kpage_writable[16] ? '+' : '-',
+		is_kpage_writable[24] ? '+' : '-',
+		is_kpage_writable[40] ? '+' : '-'
+	);
+	return result;
 }
 
 
-
-static inline void emuprint ( const char *str )
+static void emuprint ( const char *str )
 {
 	snprintf(
 		(char*)memory + (memory[0xA017] | (memory[0xA018] << 8)),
@@ -226,12 +224,33 @@ static void execute_monitor_command ( void )
 		p++;
 	if (p[0] == 'X') {
 		cpu_a = 0;	// do not continue ...
-		EMUPRINTF("[EXIT]\r");
+		emuprint("\r");
 		return;
 	}
 	// unknown command
-	EMUPRINTF("?\r");
+	emuprint("?\r");
 }
+
+
+
+static Uint8 inject_prg ( void )
+{
+	int addr;
+	if (!emufile_p)
+		return emurom_policy;	// No loaded program, use the pre-defined policy instead
+	addr = emufile_p[0] | (emufile_p[1] << 8);
+	printf("LOAD: injecting program into the memory from $%04X" NL, addr);
+	memcpy(memory + addr, emufile_p + 2, emufile_size - 2);
+	memory[addr - 1] = 0;
+	memory[0x2b] = addr & 0xFF;
+	memory[0x2c] = addr >> 8;
+	addr += emufile_size - 2;
+	memory[0x2d] = addr & 0xFF;
+	memory[0x2e] = addr >> 8;
+	return 128;
+}
+
+
 
 
 
@@ -244,13 +263,15 @@ int cpu_trap ( Uint8 opcode )
 			FATAL("Unknown ROM/RAM code at $%04X caused trap!", cpu_pc - 1);
 		switch (trap) {
 			case 0:
-				cpu_a = EMUROM_AUTOSTART;
+				cpu_a = inject_prg();
+				EMUPRINTF("\rMONITOR: SYS %d\r", 0xA009);
 				break;
 			case 1:
-				EMUPRINTF("** XVIC20 MONITOR/LGB\rBM=$%04X-%04X S=$%04X\r",
+				EMUPRINTF("** XVIC20 MONITOR/LGB\rBM=$%04X-%04X S=$%04X\rEXP %s\r",
 					memory[0x281] | (memory[0x282] << 8),
 					memory[0x283] | (memory[0x284] << 8),
-					memory[648] << 8
+					memory[648] << 8,
+					vic20_get_memconfig_string()
 				);
 				cpu_a = 1;
 				break;
@@ -339,13 +360,6 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 	} else if (key == SDL_SCANCODE_F9) {	// exit emulator ...
 		if (pressed)
 			running = 0;
-	} else if (key == SDL_SCANCODE_F10) {	// load program directly into the memory
-		if (pressed) {
-			if (!emu_load_file("pulse.prg", memory + 0x1001 - 2, 3530))
-				INFO_WINDOW("Type SYS4109 to start Pulse/Pixel!");
-			else
-				ERROR_WINDOW("This feature is only available if you\nown pulse.prg, otherwise it won't work!");
-		}
 	} else {
 		const struct KeyMapping *map = key_map;
 		while (map->pos != 0xFF) {
@@ -449,6 +463,64 @@ static Uint8 via2_inb ( Uint8 mask )
 
 
 
+#define LOAD_ERROR(...) do {	\
+	ERROR_WINDOW(__VA_ARGS__);	\
+	free(emufile_p);	\
+	emufile_p = NULL;	\
+	emufile_size = 0;	\
+} while(0)
+
+
+
+
+static void parse_command_line ( int argc, char **argv )
+{
+	int a;
+	emurom_policy = 0;	// normally: "boot" into BASIC
+	emufile_p = NULL;
+	emufile_size = 0;
+	for (a = 1; a < argc; a++) {
+		if (argv[a][0] == '@') {
+			if (!strcmp(argv[a] + 1, "1"))
+				__mark_ram( 1, 3);
+			else if (!strcmp(argv[a] + 1, "8"))
+				__mark_ram( 8, 8);
+			else if (!strcmp(argv[a] + 1, "16"))
+				__mark_ram(16, 8);
+			else if (!strcmp(argv[a] + 1, "24"))
+				__mark_ram(24, 8);
+			else if (!strcmp(argv[a] + 1, "40")) {
+				__mark_ram(40, 8);
+				INFO_WINDOW("Warning, RAM from 40K (at $A000) is defined.\nThis may collide with the loaded EMU ROM there!");
+			} else
+				FATAL("Unknown command line memory ('@') option: %s", argv[a]);
+		} else if (argv[a][0] == '-') {
+			if (argv[a][1] == 0) {	// a single '-' option is interpreted, as monitor should be run
+				emurom_policy = 1;	// will cause to "boot" into monitor
+			} else
+				FATAL("Unknown command line '-' option: %s", argv[a]);
+		} else {
+			int ret;
+			emufile_p = emu_malloc(0x8000);
+			emufile_p[0] = '!';
+			strcpy(emufile_p + 1, argv[a]);
+			ret = emu_load_file(emufile_p, emufile_p, 0x8000);
+			if (ret < 0)
+				LOAD_ERROR("Cannot load file %s", argv[a]);
+			else if (ret < 3)
+				LOAD_ERROR("Abnormally short loaded file");
+			else if (ret == 0x8000)
+				LOAD_ERROR("Too large loaded file");
+			else {
+				emufile_size = ret;
+			}
+		}
+	}
+}
+
+
+
+
 
 int main ( int argc, char **argv )
 {
@@ -464,17 +536,6 @@ int main ( int argc, char **argv )
 		SCREEN_LAST_VISIBLE_DOTPOS,  SCREEN_LAST_VISIBLE_SCANLINE,
 		emulators_disclaimer
 	);
-	/* Select RAM config based on command line options, quite lame currently :-) */
-	if (argc > 1) {
-		if (strlen(argv[1]) == 5)
-			vic20_configure_ram(
-				argv[1][0] & 1,
-				argv[1][1] & 1,
-				argv[1][2] & 1,
-				argv[1][3] & 1,
-				argv[1][4] & 1
-			);
-	}
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (emu_init_sdl(
 		"Commodore VIC-20 / LGB",	// window title
@@ -492,13 +553,15 @@ int main ( int argc, char **argv )
 		NULL			// no emulator specific shutdown function
 	))
 		return 1;
+	/* Parse command line */
+	parse_command_line(argc, argv);
 	/* Intialize memory and load ROMs */
 	memset(memory, 0xFF, sizeof memory);
-	memset(dummy_vic_access, 0xFF, sizeof dummy_vic_access);	// define 1K of "nothing" for VIC-I memory regions it cannot find memory
+	memset(dummy_vic_access, 0xFF, sizeof dummy_vic_access);	// define 1K of "nothing" for VIC-I memory regions what it can't access by hardware constraints
 	if (
-		emu_load_file("vic20-chargen.rom", memory + 0x8000, 0x1000) |	// load chargen ROM
-		emu_load_file("vic20-basic.rom",   memory + 0xC000, 0x2000) |	// load basic ROM
-		emu_load_file("vic20-kernal.rom",  memory + 0xE000, 0x2000)	// load kernal ROM
+		emu_load_file("vic20-chargen.rom", memory + 0x8000, 0x1001) != 0x1000 ||	// load chargen ROM
+		emu_load_file("vic20-basic.rom",   memory + 0xC000, 0x2001) != 0x2000 ||	// load basic ROM
+		emu_load_file("vic20-kernal.rom",  memory + 0xE000, 0x2001) != 0x2000		// load kernal ROM
 	) {
 		ERROR_WINDOW("Cannot load some of the needed ROM images (see console messages)!");
 		return 1;

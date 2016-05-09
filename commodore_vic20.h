@@ -41,9 +41,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_ORIGIN_SCANLINE          0
 #define SCREEN_ORIGIN_DOTPOS            12
 
-// Auto start emulator ROM on startup (non-zero), or normal BASIC operation (zero)
-#define EMUROM_AUTOSTART 0
-
 #define USE_LOCKED_TEXTURE	1
 #define RENDER_SCALE_QUALITY	2
 
