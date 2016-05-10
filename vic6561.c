@@ -4,6 +4,10 @@
    This is the VIC-20 emulation. Note: the source is overcrowded with comments by intent :)
    That it can useful for other people as well, or someone wants to contribute, etc ...
 
+   This emulation of VIC-I chip is based on my own ideas, I can be easily wrong, so please
+   don't take anything here as the absolute truth :) Also, the emulation is scanline based,
+   which is not correct at all, to be precise.
+
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or
@@ -54,17 +58,19 @@ static int charline;				// current character line (0-7 for 8 pixels, 0-15 for 16
 static Uint32 *pixels;				// pointer to our work-texture (ie: the visible emulated VIC-20 screen, DWORD / pixel)
 static int pixels_tail;				// "tail" (in DWORDs) after each texture line (must be added to pixels pointer after rendering one scanline)
 static int first_active_scanline;		// first "active" (ie not top border) scanline
-static int first_bottom_border_scanline;	// first scanline of the bottom border (after the one of last actie display scanline)
 static int vic_vertical_area;			// vertical "area" of VIC (1 = upper border, 0 = active display, 2 = bottom border)
 static Uint32 vic_cpal[4];			// SDL pixel format related colours of multicolour colours, reverse mode swaps the colours here!! Also used to render everything on the screen!
 static int char_height_minus_one;		// 7 or 15 (for 8 and 16 pixels height characters)
 static int char_height_shift;			// 3 for 8 pixels height characters, 4 for 16
 static int first_active_dotpos;			// first dot within a scanline which belongs to the "active" (not top and bottom border) area
-static int text_columns;			// screen text columns
+static int text_columns;			// number of screen text columns
+static int text_rows;				// number of screen text rows
 static int sram_colour_index;			// index in the "multicolour" table for data read from colour SRAM (depends on reverse mode!)
-static Uint16 vic_vid_addr;			// memory address of screen (both of screen and colour SRAM to be precise, on lo8 and hi4 bus bits)
-static Uint16 vic_chr_addr;			// memory address of characer data (lo8 bus bits only)
-static Uint16 vic_vid_p;			// video address counter (from zero) relative to the given video address (vic_vid_addr)
+static int vic_vid_addr;			// memory address of screen (both of screen and colour SRAM to be precise, on lo8 and hi4 bus bits)
+static int vic_vid_addr_bit9;			// bit9 of screen address (not used directly but on address re-calculation only)
+static int vic_chr_addr;			// memory address of characer data (lo8 bus bits only)
+static int vic_vid_counter;			// video address counter (from zero) relative to the given video address (vic_vid_addr)
+static int vic_row_counter;			// counts the displayed (text) rows of VIC-I, if it's equal to text_rows it means end of actual active display, and start of the bottom border
 
 
 /* Check constraints of the given parameters from some header file */
@@ -108,26 +114,24 @@ void cpu_vic_reg_write ( int addr, Uint8 data )
 			break;
 		case 1:	// screen Y orgin (in 2 lines units) for all the 8 bits
 			first_active_scanline = (data << 1) + SCREEN_ORIGIN_SCANLINE;
-			first_bottom_border_scanline = (((vic_registers[3] >> 1) & 0x3F) << char_height_shift) + first_active_scanline;
-			if (first_bottom_border_scanline > LAST_SCANLINE)
-				first_bottom_border_scanline = LAST_SCANLINE;
 			break;
 		case 2:	// number of video columns (lower 7 bits), bit 7: bit 9 of screen memory
 			text_columns = data & 0x7F;
 			if (text_columns > 32)	// FIXME: really 32? Not 31??
 				text_columns = 32;
-			vic_vid_addr = ((vic_registers[5] & 0xF0) << 6) | ((data & 128) ? 0x200 : 0);
+			vic_vid_addr_bit9 = ((data & 128) ? 0x200 : 0);
+			vic_vid_addr = (vic_vid_addr & 0xFDFF) | vic_vid_addr_bit9; // re-calculate the address, only bit9 may changed of the video address
 			break;
 		case 3: // Bits6-1: number of rows, bit 7: bit 0 of current scanline, bit 0: 8/16 height char
 			char_height_minus_one = (data & 1) ? 15 : 7;
 			char_height_shift = (data & 1) ? 4 : 3;
-			first_bottom_border_scanline = (((data >> 1) & 0x3F) << char_height_shift) + first_active_scanline;
-			if (first_bottom_border_scanline > LAST_SCANLINE)
-				first_bottom_border_scanline = LAST_SCANLINE;
+			text_rows = (data >> 1) & 0x3F;
+			if (text_rows > 32)	// FIXME: really 32? Not 31??
+				text_rows = 32;
 			break;
 		case  5:
 			vic_chr_addr = (data & 15) << 10;
-			vic_vid_addr = ((data & 0xF0) << 6) | ((vic_registers[2] & 128) ? 0x200 : 0);
+			vic_vid_addr = ((data & 0xF0) << 6) | vic_vid_addr_bit9;
 			break;
 		case 14:
 			AUX_COLOUR = vic_palette[data >> 4];
@@ -143,6 +147,7 @@ void cpu_vic_reg_write ( int addr, Uint8 data )
 			}
 			break;
 	}
+	//printf("VIC-I: %02X -> [%01X]" NL, data, addr);
 }
 
 
@@ -151,10 +156,11 @@ void vic_vsync ( int relock_texture )
 {
 	if (relock_texture)
 		pixels = emu_start_pixel_buffer_access(&pixels_tail);	// get texture access stuffs for the new frame
-	scanline = 0;
+	scanline = 0;		// current scanline (other than this, incrementation, calling vsync on last scanline etc, the emulator should manage ...)
 	charline = 0;
 	vic_vertical_area = 1;
-	vic_vid_p = 0;
+	vic_vid_counter = 0;
+	vic_row_counter = 0;
 }
 
 
@@ -193,10 +199,9 @@ static inline Uint8 vic_read_mem_hi4 ( Uint16 addr )
 // It's not a correct solution to render a line in once, however it's only a sily emulator try from me, not an accurate one :-D
 void vic_render_line ( void )
 {
-	Uint8 bitp, chr;
-	int v_columns, v_vid, dotpos, visible_scanline, mcm;
+	int v_columns, v_vid, dotpos, visible_scanline, mcm, bitp, chr;
 	// Check for start the active display (end of top border) and end of active display (start of bottom border)
-	if (scanline == first_bottom_border_scanline && vic_vertical_area == 0)
+	if (vic_row_counter >= text_rows && vic_vertical_area == 0)	// FIXME: the exact condition! Maybe not ">" like relation but equality is checked by VIC-I only?
 		vic_vertical_area = 2;	// this will be the first scanline of bottom border
 	else if (scanline == first_active_scanline && vic_vertical_area == 1)
 		vic_vertical_area = 0;	// this scanline will be the first non-border scanline
@@ -214,7 +219,7 @@ void vic_render_line ( void )
 	// So, we are at the "active" display area. But still, there are left and right borders ...
 	bitp = 128;
 	v_columns = text_columns;
-	v_vid = vic_vid_p;
+	v_vid = vic_vid_counter;
 	for (dotpos = 0; dotpos < CYCLES_PER_SCANLINE * 4; dotpos++) {
 		int visible_dotpos = (dotpos >= SCREEN_FIRST_VISIBLE_DOTPOS && dotpos <= SCREEN_LAST_VISIBLE_DOTPOS && visible_scanline);
 		if (dotpos < first_active_dotpos) {
@@ -258,7 +263,8 @@ void vic_render_line ( void )
 	}
 	if (charline >= char_height_minus_one) {
 		charline = 0;
-		vic_vid_p += text_columns;	// FIXME: does VIC-I always use the text columns setting, even if picture wouldn't fit into the TV screen at all?!
+		vic_vid_counter += text_columns;	// FIXME: does VIC-I always use the text columns setting, even if picture wouldn't fit into the TV screen at all?!
+		vic_row_counter++;
 	} else {
 		charline++;
 	}
