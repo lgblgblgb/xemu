@@ -64,7 +64,7 @@ static int first_active_dotpos;			// first dot within a scanline which belongs t
 static int text_columns;			// screen text columns
 static int sram_colour_index;			// index in the "multicolour" table for data read from colour SRAM (depends on reverse mode!)
 static Uint16 vic_vid_addr;			// memory address of screen (both of screen and colour SRAM to be precise, on lo8 and hi4 bus bits)
-static Uint16 vic_chr_addr;			// memory address of characer data (lo8 but bits only)
+static Uint16 vic_chr_addr;			// memory address of characer data (lo8 bus bits only)
 static Uint16 vic_vid_p;			// video address counter (from zero) relative to the given video address (vic_vid_addr)
 
 
@@ -115,7 +115,7 @@ void cpu_vic_reg_write ( int addr, Uint8 data )
 			break;
 		case 2:	// number of video columns (lower 7 bits), bit 7: bit 9 of screen memory
 			text_columns = data & 0x7F;
-			if (text_columns > 32)
+			if (text_columns > 32)	// FIXME: really 32? Not 31??
 				text_columns = 32;
 			vic_vid_addr = ((vic_registers[5] & 0xF0) << 6) | ((data & 128) ? 0x200 : 0);
 			break;
@@ -224,13 +224,15 @@ void vic_render_line ( void )
 		} else {
 			if (v_columns) {
 				if (bitp == 128) {
+					// NOTE! *AFAIK* VIC-I fetches colour info from the *VERY SAME* address as the video data! It's just matter of usage in VIC-20
+					// that only 1K of SRAM is connected for the upper 4 bits of the 12 bit wide data bus of VIC-I, but it can be otherwise too!
 					chr = vic_read_mem_lo8((vic_read_mem_lo8(vic_vid_addr + v_vid) << char_height_shift) + vic_chr_addr + charline);
-					mcm = vic_read_mem_hi4(vic_vid_addr + v_vid);
-					v_vid++;
-					vic_cpal[sram_colour_index] = vic_palette[mcm & 7];
-					mcm &= 8;	// mcm: multi colour mode flag
+					mcm = vic_read_mem_hi4(vic_vid_addr + v_vid);	// mcm here is simply the fetched colour SRAM byte (only lower 4 bits will be used)
+					v_vid++;	// increment video address
+					vic_cpal[sram_colour_index] = vic_palette[mcm & 7];	// set text colour with the lower 3 bits fetched on the right place (depends on reverse mode: sram_colour_index)
+					mcm &= 8;	// mcm: multi colour mode flag, bit 3 - so the true meaning of "mcm" ;-)
 					if (mcm)
-						bitp = 6;	// in case of mcm, bitp is a shift counter needed to move bits to bitpos 1,0
+						bitp = 6;	// in case of mcm, bitp is a shift counter needed to move bits to bitpos 1,0, otherwise bitp is a bit mask in hires mode
 				}
 				if (visible_dotpos) {
 					if (mcm) {
@@ -238,13 +240,13 @@ void vic_render_line ( void )
 						// That is, you MUST define texture dimensions for width of even number!!
 						*pixels = *(pixels + 1) = vic_cpal[(chr >> bitp) & 3]; // "double width" pixel ...
 						pixels += 2;
-						dotpos++; // trick our "for" loop a bit here ...
+						dotpos++;	// trick our "for" loop a bit here ...
 					} else
 						*(pixels++) = (chr & bitp) ? SRAM_COLOUR : SCREEN_COLOUR;
 				}
-				if (bitp <= 1) {
+				if (bitp <= 1) {	// last pixel? handle both situation with "dual" meaning of bitp for multicolour and hires mode
 					v_columns--;
-					bitp = 128;
+					bitp = 128;	// prepare for next byte fetch (video + colour)
 				} else {
 					if (mcm)
 						bitp -= 2;
@@ -257,7 +259,7 @@ void vic_render_line ( void )
 	}
 	if (charline >= char_height_minus_one) {
 		charline = 0;
-		vic_vid_p += text_columns;
+		vic_vid_p += text_columns;	// FIXME: does VIC-I always use the text columns setting, even if picture wouldn't fit into the TV screen at all?!
 	} else {
 		charline++;
 	}
