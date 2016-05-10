@@ -63,8 +63,9 @@ static int char_height_shift;			// 3 for 8 pixels height characters, 4 for 16
 static int first_active_dotpos;			// first dot within a scanline which belongs to the "active" (not top and bottom border) area
 static int text_columns;			// screen text columns
 static int sram_colour_index;			// index in the "multicolour" table for data read from colour SRAM (depends on reverse mode!)
-static Uint16 vic_p_vid;			// memory address of screen (both of screen and colour SRAM to be precise, on lo8 and hi4 bus bits)
-static Uint16 vic_p_chr;			// memory address of characer data (lo8 but bits only)
+static Uint16 vic_vid_addr;			// memory address of screen (both of screen and colour SRAM to be precise, on lo8 and hi4 bus bits)
+static Uint16 vic_chr_addr;			// memory address of characer data (lo8 but bits only)
+static Uint16 vic_vid_p;			// video address counter (from zero) relative to the given video address (vic_vid_addr)
 
 
 /* Check constraints of the given parameters from some header file */
@@ -116,6 +117,7 @@ void cpu_vic_reg_write ( int addr, Uint8 data )
 			text_columns = data & 0x7F;
 			if (text_columns > 32)
 				text_columns = 32;
+			vic_vid_addr = ((vic_registers[5] & 0xF0) << 6) | ((data & 128) ? 0x200 : 0);
 			break;
 		case 3: // Bits6-1: number of rows, bit 7: bit 0 of current scanline, bit 0: 8/16 height char
 			char_height_minus_one = (data & 1) ? 15 : 7;
@@ -123,6 +125,10 @@ void cpu_vic_reg_write ( int addr, Uint8 data )
 			first_bottom_border_scanline = (((data >> 1) & 0x3F) << char_height_shift) + first_active_scanline;
 			if (first_bottom_border_scanline > LAST_SCANLINE)
 				first_bottom_border_scanline = LAST_SCANLINE;
+			break;
+		case  5:
+			vic_chr_addr = (data & 15) << 10;
+			vic_vid_addr = ((data & 0xF0) << 6) | ((vic_registers[2] & 128) ? 0x200 : 0);
 			break;
 		case 14:
 			AUX_COLOUR = vic_palette[data >> 4];
@@ -149,9 +155,7 @@ void vic_vsync ( int relock_texture )
 	scanline = 0;
 	charline = 0;
 	vic_vertical_area = 1;
-	// maybe this is incorrect, and these can change within a frame too by writing the corresponding VIC-I registers
-	vic_p_vid = ((vic_registers[5] & 0xF0) << 6) | ((vic_registers[2] & 128) ? 0x200 : 0);
-	vic_p_chr =  (vic_registers[5] & 0x0F) << 10;
+	vic_vid_p = 0;
 }
 
 
@@ -211,7 +215,7 @@ void vic_render_line ( void )
 	// So, we are at the "active" display area. But still, there are left and right borders ...
 	bitp = 128;
 	v_columns = text_columns;
-	v_vid = vic_p_vid;
+	v_vid = vic_vid_p;
 	for (dotpos = 0; dotpos < CYCLES_PER_SCANLINE * 4; dotpos++) {
 		int visible_dotpos = (dotpos >= SCREEN_FIRST_VISIBLE_DOTPOS && dotpos <= SCREEN_LAST_VISIBLE_DOTPOS && visible_scanline);
 		if (dotpos < first_active_dotpos) {
@@ -220,8 +224,8 @@ void vic_render_line ( void )
 		} else {
 			if (v_columns) {
 				if (bitp == 128) {
-					chr = vic_read_mem_lo8((vic_read_mem_lo8(v_vid) << char_height_shift) + vic_p_chr + charline);
-					mcm = vic_read_mem_hi4(v_vid);
+					chr = vic_read_mem_lo8((vic_read_mem_lo8(vic_vid_addr + v_vid) << char_height_shift) + vic_chr_addr + charline);
+					mcm = vic_read_mem_hi4(vic_vid_addr + v_vid);
 					v_vid++;
 					vic_cpal[sram_colour_index] = vic_palette[mcm & 7];
 					mcm &= 8;	// mcm: multi colour mode flag
@@ -253,7 +257,7 @@ void vic_render_line ( void )
 	}
 	if (charline >= char_height_minus_one) {
 		charline = 0;
-		vic_p_vid += text_columns;
+		vic_vid_p += text_columns;
 	} else {
 		charline++;
 	}
