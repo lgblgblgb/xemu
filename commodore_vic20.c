@@ -113,7 +113,7 @@ static const struct KeyMapping key_map[] = {
 	{ SDL_SCANCODE_P,		0x15 }, // P
 	//{ SDL_SCANCODE_STAR // *
 	{ SDL_SCANCODE_RETURN,		0x17 }, // RETURN
-	{ SDL_SCANCODE_LCTRL, 0x20}, { SDL_SCANCODE_RCTRL, 0x20}, // CTRL, we map both PC keyboard CTRL keys to the same location
+	{ SDL_SCANCODE_LCTRL,		0x20 }, // CTRL, only the left ctrl is mapped as vic-20 ctrl ...
 	{ SDL_SCANCODE_A,		0x21 }, // A
 	{ SDL_SCANCODE_D,		0x22 }, // D
 	{ SDL_SCANCODE_G,		0x23 }, // G
@@ -163,6 +163,8 @@ static const struct KeyMapping key_map[] = {
 	{ SDL_SCANCODE_F7, 0x77 }, { SDL_SCANCODE_F8, 0x77 | 8 }, // F7, _SHIFTED_: F8!
 	// -- the following key definitions are not really part of the original VIC20 kbd matrix, we just *emulate* things this way!!
 	{ SDL_SCANCODE_KP_5,		0x85 },	// for joy FIRE  we map PC num keypad 5
+	{ SDL_SCANCODE_KP_0,		0x85 },	// PC num keypad 0 is also the FIRE ...
+	{ SDL_SCANCODE_RCTRL,		0x85 }, // and RIGHT controll is also the FIRE ... to make Sven happy :)
 	{ SDL_SCANCODE_KP_8,		0x82 },	// for joy UP    we map PC num keypad 8
 	{ SDL_SCANCODE_KP_2,		0x83 },	// for joy DOWN  we map PC num keypad 2
 	{ SDL_SCANCODE_KP_4,		0x84 },	// for joy LEFT  we map PC num keypad 4
@@ -596,7 +598,7 @@ int main ( int argc, char **argv )
 		return 1;
 	}
 	if (is_our_rom() != EMU_ROM_VERSION) {
-		ERROR_WINDOW("Bad emulator ROM " EMU_ROM_NAME " version, we need %d\nPlease upgrade the ROM image!", EMU_ROM_VERSION);
+		ERROR_WINDOW("Bad emulator ROM " EMU_ROM_NAME " version, we need v%d\nPlease upgrade the ROM image!", EMU_ROM_VERSION);
 		return 1;
 	}
 	// Continue with initializing ...
