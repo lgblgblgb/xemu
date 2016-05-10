@@ -530,7 +530,7 @@ int main ( int argc, char **argv )
 	"INFO: Texture resolution is %dx%d" NL
 	"INFO: Defined visible area is (%d,%d)-(%d,%d)" NL "%s" NL,
 		(int)((LAST_SCANLINE + 1) * CYCLES_PER_SCANLINE * (1000000.0 / (double)FULL_FRAME_USECS) * 2),
-		REAL_CPU_SPEAD,
+		REAL_CPU_SPEED,
 		SCREEN_WIDTH, SCREEN_HEIGHT,
 		SCREEN_FIRST_VISIBLE_DOTPOS, SCREEN_FIRST_VISIBLE_SCANLINE,
 		SCREEN_LAST_VISIBLE_DOTPOS,  SCREEN_LAST_VISIBLE_SCANLINE,

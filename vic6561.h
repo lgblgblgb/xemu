@@ -18,6 +18,22 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __LGB_VIC6561_H_INCLUDED
 #define __LGB_VIC6561_H_INCLUDED
 
+/* Defines the X ("dotpos") and Y ("scanline") parameters of the visible (emulated) screen area */
+#define SCREEN_FIRST_VISIBLE_SCANLINE	 28
+#define SCREEN_LAST_VISIBLE_SCANLINE	311
+#define SCREEN_FIRST_VISIBLE_DOTPOS	 38
+#define SCREEN_LAST_VISIBLE_DOTPOS	261
+
+/* Usual (X/Y) origin of the screen (left bottom corner) if VIC-I X/Y origin registers are zero */
+// maybe SCANLINE ORIGIN is 38 ... I guess :)
+//#define SCREEN_ORIGIN_SCANLINE	 38
+//#define SCREEN_ORIGIN_DOTPOS		 12
+#define SCREEN_ORIGIN_SCANLINE		  0
+#define SCREEN_ORIGIN_DOTPOS		 12
+
+#define LAST_SCANLINE			311
+#define CYCLES_PER_SCANLINE		 71
+
 extern Uint32 vic_palette[16];				// VIC palette with native SCREEN_FORMAT aware way. Must be initialized by the emulator
 extern int scanline;					// scanline counter, must be maintained by the emulator, as increment, checking for all scanlines done, etc
 

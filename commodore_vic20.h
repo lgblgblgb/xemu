@@ -21,25 +21,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_DEFAULT_ZOOM     4
 #define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888
 
-/* Defines the X ("dotpos") and Y ("scanline") parameters of the visible (emulated) screen area */
-#define SCREEN_FIRST_VISIBLE_SCANLINE	 28
-#define SCREEN_LAST_VISIBLE_SCANLINE	311
-#define SCREEN_FIRST_VISIBLE_DOTPOS	 38
-#define SCREEN_LAST_VISIBLE_DOTPOS	261
+#define FULL_FRAME_USECS	39971
 
-#define LAST_SCANLINE			311
-#define CYCLES_PER_SCANLINE		 71
-
-#define FULL_FRAME_USECS 39971
-
-#define REAL_CPU_SPEAD	1108404
-
-/* Usual (X/Y) origin of the screen (left bottom corner) if VIC-I X/Y origin registers are zero */
-// maybe SCANLINE ORIGIN is 38 ... I guess :)
-//#define SCREEN_ORIGIN_SCANLINE		38
-//#define SCREEN_ORIGIN_DOTPOS		12
-#define SCREEN_ORIGIN_SCANLINE          0
-#define SCREEN_ORIGIN_DOTPOS            12
+#define REAL_CPU_SPEED		1108404
 
 #define USE_LOCKED_TEXTURE	1
 #define RENDER_SCALE_QUALITY	2
