@@ -24,7 +24,10 @@ OUR_ROMS	= vic20-emulator-tool.rom
 all: roms $(OUR_ROMS)
 
 clean:
-	rm -f $(OUR_ROMS) *.o
+	rm -f *.o
+
+distclean:
+	rm -f *.o vic20-basic.rom vic20-kernal.rom vic20-chargen.rom clcd-u105.rom clcd-u102.rom clcd-u104.rom clcd-u103.rom c65-system.rom
 
 roms:
 	test -s vic20-basic.rom || wget -O vic20-basic.rom http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/vic20/basic.901486-01.bin
@@ -34,6 +37,7 @@ roms:
 	test -s clcd-u102.rom || wget -O clcd-u102.rom http://commodore-lcd.lgb.hu/files/kizapr-u102.bin
 	test -s clcd-u104.rom || wget -O clcd-u104.rom http://commodore-lcd.lgb.hu/files/sept-M-13apr-u104.bin
 	test -s clcd-u103.rom || wget -O clcd-u103.rom http://commodore-lcd.lgb.hu/files/sizapr-u103.bin
+	test -s c65-system.rom || wget -O c65-system.rom http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c65/911001.bin
 
 %.rom: %.asm
 	cl65 -t none --cpu 65c02 -o $@ $<

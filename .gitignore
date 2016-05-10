@@ -39,9 +39,12 @@ rom/clcd-u105.rom
 rom/vic20-basic.rom
 rom/vic20-chargen.rom
 rom/vic20-kernal.rom
+rom/c65-system.rom
 xvic20.??*
 xclcd.??*
+xc65.??*
 .arch
 .depend.*
 arch/objs.*
 *.prg
+*.d64
