@@ -252,6 +252,13 @@ static Uint8 inject_prg ( void )
 
 
 
+static int is_our_rom ( void )
+{
+	if (memcmp(memory + 0xA00C, "LGBXVIC20", 9))
+		return -1;
+	return memory[0xA015] | (memory[0xA016] << 8);
+}
+
 
 
 // Need to be defined, if CPU_TRAP is defined for the CPU emulator!
@@ -259,7 +266,7 @@ int cpu_trap ( Uint8 opcode )
 {
 	if (cpu_pc >= 0xA000 && opcode == CPU_TRAP) {	// cpu_pc always meant to be the position _after_ the trap opcode!
 		Uint8 trap = memory[cpu_pc];
-		if (memcmp(memory + 0xA00C, "LGBXVIC20", 9))
+		if (is_our_rom() < 0)
 			FATAL("Unknown ROM/RAM code at $%04X caused trap!", cpu_pc - 1);
 		switch (trap) {
 			case 0:
@@ -519,6 +526,24 @@ static void parse_command_line ( int argc, char **argv )
 }
 
 
+static int rom_load ( const char *name, void *buffer, int size )
+{
+	void *load_buffer = emu_malloc(size + 1);
+	int ret = emu_load_file(name, load_buffer, size + 1);
+	if (ret < 0) {
+		free(load_buffer);
+		ERROR_WINDOW("Cannot load ROM %s", name);
+		return -1;
+	} else if (ret != size) {
+		free(load_buffer);
+		ERROR_WINDOW("Wrong ROM size %s\nShould be %d bytes long.", name, size);
+		return -1;
+	}
+	memcpy(buffer, load_buffer, size);
+	free(load_buffer);
+	return 0;
+}
+
 
 
 
@@ -559,15 +584,21 @@ int main ( int argc, char **argv )
 	memset(memory, 0xFF, sizeof memory);
 	memset(dummy_vic_access, 0xFF, sizeof dummy_vic_access);	// define 1K of "nothing" for VIC-I memory regions what it can't access by hardware constraints
 	if (
-		emu_load_file("vic20-chargen.rom", memory + 0x8000, 0x1001) != 0x1000 ||	// load chargen ROM
-		emu_load_file("vic20-basic.rom",   memory + 0xC000, 0x2001) != 0x2000 ||	// load basic ROM
-		emu_load_file("vic20-kernal.rom",  memory + 0xE000, 0x2001) != 0x2000		// load kernal ROM
-	) {
-		ERROR_WINDOW("Cannot load some of the needed ROM images (see console messages)!");
+		rom_load(CHR_ROM_NAME,    memory + 0x8000, 0x1000) < 0 ||		// load chargen ROM
+		rom_load(BASIC_ROM_NAME,  memory + 0xC000, 0x2000) < 0 ||		// load basic ROM
+		rom_load(KERNAL_ROM_NAME, memory + 0xE000, 0x2000) < 0 ||		// load kernal ROM
+		rom_load(EMU_ROM_NAME,    memory + 0xA000, 0x2000) < 0			// load our "emulator monitor" ROM
+	)
+		return 1;
+	// Check our "emulator monitor" ROM ...
+	if (is_our_rom() < -1) {
+		ERROR_WINDOW("Unknown emulator ROM " EMU_ROM_NAME);
 		return 1;
 	}
-	// Trying to load emulator tools "ROM/RAM" image (it's not fatal if we cannot! unlike the std ROM images above ...)
-	emu_load_file("vic20-emulator-tool.rom", memory + 0xA000, 8192);
+	if (is_our_rom() != EMU_ROM_VERSION) {
+		ERROR_WINDOW("Bad emulator ROM " EMU_ROM_NAME " version, we need %d\nPlease upgrade the ROM image!", EMU_ROM_VERSION);
+		return 1;
+	}
 	// Continue with initializing ...
 	clear_emu_events();	// also resets the keyboard
 	cpu_reset();	// reset CPU: it must be AFTER kernal is loaded at least, as reset also fetches the reset vector into PC ...
