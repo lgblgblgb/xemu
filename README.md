@@ -169,6 +169,14 @@ Functionality of auto-load (currently the only way to load a program ...)
 requires the emu ROM to be usable, you can find it in the rom/ directory.
 
 You can use numeric key pad arrow keys as the "joystick", "5" is the fire.
+Optionally, you can use the right CTRL of keypad button '0' for fire too.
+
+You can try to use a supported Game Controller / Joystick as well (I've
+tested with XBox-360 controller). Currently, there is no mapping of controls,
+which can be a *big* problem. Only axes 0/1 can be used as the joystick,
+but it's hard to tell, which controls they are on *your* joystick (maybe even
+vertical/horizontal is mixed ...), or the "hats" can be used as well. Every
+buttons are used as the "fire" button.
 
 ## Compilation on Linux / UNIX-like machine
 

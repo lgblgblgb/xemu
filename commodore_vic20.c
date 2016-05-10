@@ -162,6 +162,7 @@ static const struct KeyMapping key_map[] = {
 	{ SDL_SCANCODE_HOME,		0x76 }, // HOME
 	{ SDL_SCANCODE_F7, 0x77 }, { SDL_SCANCODE_F8, 0x77 | 8 }, // F7, _SHIFTED_: F8!
 	// -- the following key definitions are not really part of the original VIC20 kbd matrix, we just *emulate* things this way!!
+	// Note: the exact "virtual" kbd matrix positions are *important* and won't work otherwise (arranged to be used more positions with one bit mask and, etc).
 	{ SDL_SCANCODE_KP_5,		0x85 },	// for joy FIRE  we map PC num keypad 5
 	{ SDL_SCANCODE_KP_0,		0x85 },	// PC num keypad 0 is also the FIRE ...
 	{ SDL_SCANCODE_RCTRL,		0x85 }, // and RIGHT controll is also the FIRE ... to make Sven happy :)
@@ -173,6 +174,9 @@ static const struct KeyMapping key_map[] = {
 	// **** this must be the last line: end of mapping table ****
 	{ 0, 0xFF }
 };
+
+#define MAX_JOYSTICKS	16
+static SDL_Joystick *joysticks[MAX_JOYSTICKS];
 
 
 
@@ -360,6 +364,17 @@ Uint8 cpu_read ( Uint16 addr )
 
 
 
+#define KBD_PRESS_KEY(a)	kbd_matrix[(a) >> 4] &= 255 - (1 << ((a) & 0x7))
+#define KBD_RELEASE_KEY(a)	kbd_matrix[(a) >> 4] |= 1 << ((a) & 0x7)
+#define KBD_SET_KEY(a,state) do {	\
+	if (state)			\
+		KBD_PRESS_KEY(a);	\
+	else				\
+		KBD_RELEASE_KEY(a);	\
+} while (0)
+
+
+
 // pressed: non zero value = key is pressed, zero value = key is released
 static void emulate_keyboard ( SDL_Scancode key, int pressed )
 {
@@ -373,17 +388,9 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 		const struct KeyMapping *map = key_map;
 		while (map->pos != 0xFF) {
 			if (map->scan == key) {
-				if (pressed) {
-					if (map->pos & 8)	// shifted key emu?
-						kbd_matrix[3] &= 0xFD;	// press shift on VIC20!
-					kbd_matrix[map->pos >> 4] &= 255 - (1 << (map->pos & 0x7));
-				} else {
-					if (map->pos & 8)	// shifted key emu?
-						kbd_matrix[3] |= 2;	// release shift on VIC20!
-					kbd_matrix[map->pos >> 4] |= 1 << (map->pos & 0x7);
-				}
-				//fprintf(stderr, "Found key, pos = %02Xh\n", map->pos);
-				//debug_show_kbd_matrix();
+				if (map->pos & 8)		// shifted key emu?
+					KBD_SET_KEY(0x31, pressed);	// maintain the shift key on VIC20!
+				KBD_SET_KEY(map->pos, pressed);
 				break;	// key found, end.
 			}
 			map++;
@@ -405,11 +412,65 @@ static void update_emulator ( void )
 				case SDL_QUIT:		// ie: someone closes the SDL window ...
 					running = 0;	// set running to zero, main loop will exit then
 					break;
+				/* --- keyboard events --- */
 				case SDL_KEYDOWN:	// key is pressed (down)
 				case SDL_KEYUP:		// key is released (up)
 					// make sure that key event is for our window, also that it's not a releated event by long key presses (repeats should be handled by the emulated machine's KERNAL)
 					if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0))
 						emulate_keyboard(e.key.keysym.scancode, e.key.state == SDL_PRESSED);	// the last argument will be zero in case of release, other val in case of pressing
+					break;
+				/* --- joystick device events --- */
+				case SDL_JOYDEVICEADDED:
+				case SDL_JOYDEVICEREMOVED:
+					printf("JOY: joystick/game-controller device #%d has been %s" NL, e.jdevice.which, e.type == SDL_JOYDEVICEADDED ? "attached/detected" : "removed");
+					clear_emu_events();	// to avoid of "stuck" joystick in case of new/removed device ...
+					if (e.type == SDL_JOYDEVICEADDED) {
+						if (e.jdevice.which < MAX_JOYSTICKS) {
+							joysticks[e.jdevice.which] = SDL_JoystickOpen(e.jdevice.which);
+							printf("JOY: device is \"%s\"." NL, SDL_JoystickName(joysticks[e.jdevice.which]));
+							//INFO_WINDOW("Found controller: %s", SDL_JoystickName(joysticks[e.jdevice.which]));
+						}
+					} else {
+						if (e.jdevice.which < MAX_JOYSTICKS && joysticks[e.jdevice.which]) {
+							SDL_JoystickClose(joysticks[e.jdevice.which]);
+							joysticks[e.jdevice.which] = NULL;
+						}
+					}
+					break;
+				/* --- joystick button events --- */
+				case SDL_JOYBUTTONDOWN:
+					KBD_PRESS_KEY(0x85);	// press FIRE
+					break;
+				case SDL_JOYBUTTONUP:
+					KBD_RELEASE_KEY(0x85);	// release FIRE
+					break;
+				/* --- joystick hat events --- */
+				case SDL_JOYHATMOTION:
+					KBD_SET_KEY(0x82, (e.jhat.value & SDL_HAT_UP));
+					KBD_SET_KEY(0x83, (e.jhat.value & SDL_HAT_DOWN));
+					KBD_SET_KEY(0x84, (e.jhat.value & SDL_HAT_LEFT));
+					KBD_SET_KEY(0x87, (e.jhat.value & SDL_HAT_RIGHT));
+					break;
+				/* --- joystick axis events --- */
+				case SDL_JOYAXISMOTION:
+					// printf("JOY: axis event: %d %d %d" NL, e.jaxis.which, e.jaxis.axis, e.jaxis.value);
+					if (e.jaxis.axis < 2) {
+						if ((e.jaxis.axis & 1))	{ // odd/even axis number is used to decide between vertical/horizontal stuff. Scary, and can be different on other controllers!
+							KBD_RELEASE_KEY(0x82);
+							KBD_RELEASE_KEY(0x83);
+							if (e.jaxis.value > 10000)
+								KBD_PRESS_KEY(0x83);
+							else if (e.jaxis.value < -10000)
+								KBD_PRESS_KEY(0x82);
+						} else {
+							KBD_RELEASE_KEY(0x84);
+							KBD_RELEASE_KEY(0x87);
+							if (e.jaxis.value > 10000)
+								KBD_PRESS_KEY(0x87);
+							else if (e.jaxis.value < -10000)
+								KBD_PRESS_KEY(0x84);
+						}
+					}
 					break;
 			}
 		}
@@ -580,6 +641,10 @@ int main ( int argc, char **argv )
 		NULL			// no emulator specific shutdown function
 	))
 		return 1;
+	SDL_GameControllerEventState(SDL_DISABLE);
+	SDL_JoystickEventState(SDL_ENABLE);
+	for (cycles = 0; cycles < MAX_JOYSTICKS; cycles++)
+		joysticks[cycles] = NULL;
 	/* Parse command line */
 	parse_command_line(argc, argv);
 	/* Intialize memory and load ROMs */
