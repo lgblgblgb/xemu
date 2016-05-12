@@ -25,6 +25,10 @@ extern Uint16 cpu_pc, cpu_old_pc;
 extern Uint8  cpu_op;
 
 extern Uint8 cpu_a, cpu_x, cpu_y, cpu_sp;
+#ifdef CPU_65CE02
+extern Uint8 cpu_z;
+extern int cpu_inhibit_interrupts;
+#endif
 
 extern void  cpu_write(Uint16 addr, Uint8 data);
 extern Uint8 cpu_read(Uint16 addr);
@@ -33,5 +37,9 @@ extern void cpu_reset(void);
 extern int  cpu_step (void);
 
 extern int  cpu_trap (Uint8 opcode);
+#ifdef CPU_65CE02
+extern void cpu_do_aug ( void );
+extern void cpu_do_nop ( void );
+#endif
 
 #endif
