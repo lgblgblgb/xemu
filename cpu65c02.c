@@ -105,6 +105,9 @@ static inline Uint16 readWord(Uint16 addr) {
 }
 
 #ifdef CPU_65CE02
+/* The stack pointer is a 16 bit register that has two modes. It can be programmed to be either an 8-bit page Programmable pointer, or a full 16-bit pointer.
+   The processor status E bit selects which mode will be used. When set, the E bit selects the 8-bit mode. When reset, the E bit selects the 16-bit mode. */
+
 static inline void push ( Uint8 data )
 {
 	cpu_write(cpu_sp | cpu_sphi, data);
@@ -438,14 +441,18 @@ int cpu_step () {
 	case 0x21:	setNZ(A_OP(&,cpu_read(_zpxi()))); break; /* 0x21 AND (Zero_Page,X) */
 	case 0x22:
 #ifdef CPU_65CE02
-			UNIMPLEMENTED_65CE02("JSR ($nnnn)");	// 65CE02 JSR ($nnnn)
+			// 65CE02 JSR ($nnnn)
+			pushWord(cpu_pc + 1);	// FIXME: is it so, like with "normal" JSR about the return address? I guess it should ...
+			cpu_pc = _absi();
 #else
 			cpu_pc++;	/* 0x22 NOP imm (non-std NOP with addr mode) */
 #endif
 			break;
 	case 0x23:
 #ifdef CPU_65CE02
-			UNIMPLEMENTED_65CE02("JSR ($nnnn,X)");	// 65CE02 JSR ($nnnn,X)
+			// 65CE02 JSR ($nnnn,X)
+			pushWord(cpu_pc + 1);	// FIXME: is it so, like with "normal" JSR about the return address? I guess it should ...
+			cpu_pc = _absxi();
 #endif
 			break; /* 0x23 NOP (nonstd loc, implied) */
 	case 0x24:	_BIT(cpu_read(_zp())); break; /* 0x24 BIT Zero_Page */
@@ -467,11 +474,13 @@ int cpu_step () {
 	case 0x2f:	_BRA(!(cpu_read(_zp()) & 4)); break; /* 0x2f BBR Relative */
 	case 0x30:	_BRA(cpu_pfn); break; /* 0x30 BMI Relative */
 	case 0x31:	setNZ(A_OP(&,cpu_read(_zpiy()))); break; /* 0x31 AND (Zero_Page),Y */
+	case 0x32:
 #ifdef DTV_CPU_HACK
-	case 0x32:	cpu_a_sind = cpu_a_tind = cpu_read(cpu_pc++); cpu_a_sind &= 15; cpu_a_tind >>= 4; break; /* 0x32: DTV specific: SAC */
+			cpu_a_sind = cpu_a_tind = cpu_read(cpu_pc++); cpu_a_sind &= 15; cpu_a_tind >>= 4; /* 0x32: DTV specific: SAC */
 #else
-	case 0x32:	setNZ(A_OP(&,cpu_read(_zpi()))); break; /* 0x32 AND (Zero_Page) */
+			setNZ(A_OP(&,cpu_read(_zpi()))); /* 0x32 AND (Zero_Page) */
 #endif
+			break;
 	case 0x33:
 #ifdef CPU_65CE02
 			_BRA16(cpu_pfn); // 65CE02 BMI 16 bit relative
@@ -510,7 +519,10 @@ int cpu_step () {
 			break;
 	case 0x43:
 #ifdef CPU_65CE02
-			UNIMPLEMENTED_65CE02("ASR A");	// 65CE02: ASR A
+			// 65CE02: ASR A
+			cpu_pfc = cpu_a & 1;
+			cpu_a = (cpu_a >> 1) | (cpu_a & 0x80);
+			setNZ(cpu_a);
 #endif
 			break; /* 0x43 NOP (nonstd loc, implied) */
 	case 0x44:
@@ -801,7 +813,14 @@ int cpu_step () {
 			break;
 	case 0xe3:
 #ifdef CPU_65CE02
-			UNIMPLEMENTED_65CE02("INW $nnnn");	//  INW $nnnn            E3  Increment Word (maybe an error in 64NET.OPC ...)
+			{	//  INW $nn            E3  Increment Word (maybe an error in 64NET.OPC ...) ANOTHER FIX: this is zero (errr, base ...) page!!!
+			int alo = _zp();
+			int ahi = (alo & 0xFF00) | ((alo + 1) & 0xFF);
+			Uint16 data = (cpu_read(alo) | (cpu_read(ahi) << 8)) + 1;
+			setNZ(data);
+			cpu_write(alo, data & 0xFF);
+			cpu_write(ahi, data >> 8);
+			}
 #endif
 			break; /* 0xe3 NOP (nonstd loc, implied) */
 	case 0xe4:	_CMP(cpu_x, cpu_read(_zp())); break; /* 0xe4 CPX Zero_Page */

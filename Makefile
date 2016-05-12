@@ -33,7 +33,7 @@ include arch/Makefile.$(ARCH)
 
 # Remove -flto (link time optimization) if you have problems
 # If you want to compile with -g option, also *DELETE* the -flto, both of them together known to be problematic!
-DEBUG	= -flto
+DEBUG	= 
 
 CFLAGS_WITHOUT_DEBUG = $(CFLAGS_ARCH) -DCPU_TRAP=0xFC
 
@@ -41,13 +41,15 @@ CFLAGS	= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG)
 LDFLAGS	= $(DEBUG) $(LDFLAGS_ARCH)
 PRG_V20	= xvic20.$(ARCH)
 PRG_LCD = xclcd.$(ARCH)
-PRG_ALL = $(PRG_V20) $(PRG_LCD)
-SRC_ALL = cpu65c02.c via65c22.c emutools.c
-SRC_V20	= commodore_vic20.c vic6561.c $(SRC_ALL) $(SRCS_ARCH_V20)
-SRC_LCD	= commodore_lcd.c $(SRC_ALL) $(SRCS_ARCH_LCD)
+PRG_C65 = xc65.$(ARCH)
+PRG_ALL = $(PRG_V20) $(PRG_LCD) $(PRG_C65)
+SRC_V20	= cpu65c02.c via65c22.c emutools.c commodore_vic20.c vic6561.c $(SRCS_ARCH_V20)
+SRC_LCD	= cpu65c02.c via65c22.c emutools.c commodore_lcd.c $(SRCS_ARCH_LCD)
+SRC_C65 = cpu65ce02.c emutools.c commodore_65.c $(SRCS_ARCH_C65)
 FILES	= LICENSE README.md Makefile $(SRCS) *.h rom/README
 OBJ_V20	= $(SRC_V20:.c=.o)
 OBJ_LCD = $(SRC_LCD:.c=.o)
+OBJ_C65 = $(SRC_C65:.c=.o)
 DIST	= xclcd-emus.tgz
 
 do-all:
@@ -66,13 +68,15 @@ $(PRG_V20): $(OBJ_V20)
 $(PRG_LCD): $(OBJ_LCD)
 	$(CC) -o $(PRG_LCD) $(OBJ_LCD) $(LDFLAGS)
 
+$(PRG_C65): $(OBJ_C65)
+	$(CC) -o $(PRG_C65) $(OBJ_C65) $(LDFLAGS)
 
 set-arch:
 	if [ x$(TO) = x ]; then echo "*** Must specify architecture with TO=..." ; false ; fi
 	if [ x$(TO) = x$(ARCH) ]; then echo "*** Already this ($(ARCH)) architecture is set" ; false ; fi
 	if [ ! -f arch/Makefile.$(TO) ]; then echo "*** This architecture ($(TO)) is not supported" ; false ; fi
 	mkdir -p arch/objs.$(TO) arch/objs.$(ARCH)
-	echo "ARCH = $(TO)" > .arch
+	echo "ARCH=$(TO)" > .arch
 	mv *.o arch/objs.$(ARCH)/ 2>/dev/null || true
 	mv arch/objs.$(TO)/*.o . 2>/dev/null || true
 	@echo "OK, architecture is set to $(TO) (from $(ARCH))."
@@ -86,28 +90,31 @@ install: $(PRG_ALL) roms
 	cp $(PRG_ALL) $(BINDIR)/
 	cp rom/vic20-*.rom $(DATADIR)/
 	cp rom/clcd-*.rom $(DATADIR)/
+	cp rom/c65-*.rom $(DATADIR)/
 
 dist:
 	$(MAKE) $(DIST)
 
 clean:
-	rm -f $(PRG_ALL) $(OBJ_V20) $(OBJ_LCD) .depend.$(ARCH) $(DIST)
+	rm -f $(PRG_ALL) $(OBJ_V20) $(OBJ_LCD) $(OBJ_C65) .depend.$(ARCH) $(DIST)
+	$(MAKE) -C rom clean
 
 distclean:
 	$(MAKE) clean
-	rm -f rom/*.rom .arch
+	$(MAKE) -C rom distclean
+	rm -f .arch
 	rm -f arch/objs.*/*.o || true
 	rmdir arch/objs.* 2>/dev/null || true
 
 strip: $(PRG_ALL)
-	strip $(PRG_V20) $(PRG_LCD)
+	strip $(PRG_V20) $(PRG_LCD) $(PRG_C65)
 
 dep:
 	rm -f .depend.$(ARCH)
 	$(MAKE) .depend.$(ARCH)
 
 .depend.$(ARCH):
-	$(CC) -MM $(CFLAGS) $(SRC_V20) $(SRC_LCD) > .depend.$(ARCH)
+	$(CC) -MM $(CFLAGS) $(SRC_V20) $(SRC_LCD) $(SRC_C65) > .depend.$(ARCH)
 
 roms:
 	$(MAKE) -C rom roms
