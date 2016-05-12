@@ -40,7 +40,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
    That is: VIC-I sees 16K of address space with 12 bit (!) width data bus. Linearly.
    The high 4 bits of data bus (D8-D11) is connected to a 4 bit wide SRAM in VIC-20 with 1K capacity.
    However, in theory, you can have 16Kx4bit for colour SRAM ...
-   Also 6502 sees quite different situation for VIC-I addresses as VIC-I itself.
+   Also 6502 sees quite different situation for VIC-I addresses as VIC-I itself on the VIC-20.
    To compensate the differences with keeping "some hacked VIC-20" emulations in the future simple, I've decided
    to use a map to configure the exact mapping. vic_address_space_hi4 and vic_address_space_lo8 are the pointers
    of the VIC-I memory space, at every Kbytes. Note: the init function expects 16 pointers, but in we use more
