@@ -31,8 +31,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static Uint8 memory[0x110000];		// 65CE02 MAP'able address space (now overflow is not handled, that is the reason of higher than 1MByte, just in case ...)
 static int map_offset[8];		// 8K sized block of 65CE02 64K address space mapping offset
 static int map_mapped[8];		// is a 8K sized block of 65CE02 64K address space is mapped or not
-static Uint32 rgb_palette[4096];	// all the C65 palette, 4096 colours (SDL pixel formated related form)
-static Uint32 vic3_palette[0x100];	// VIC3 palette in SDL pixel format related form (can be written in the texture directly to render)
+static Uint32 rgb_palette[4096];	// all the C65 palette, 4096 colours (SDL pixel format related form)
+static Uint32 vic3_palette[0x100];	// VIC3 palette in SDL pixel format related form (can be written into the texture directly to be rendered)
 static Uint8 vic3_registers[0x40];	// VIC3 registers
 static Uint8 vic3_palette_r[0x100], vic3_palette_g[0x100], vic3_palette_b[0x100];	// RGB nibbles of palette (0-15)
 static int vic_new_mode;		// VIC3 "newVic" IO mode is activated flag
@@ -82,7 +82,7 @@ static void c65_init ( void )
 	cpu_mapping(0, 0, 0);	// C65 boots in C64 mode at power-up
 	cpu_port[0] = 0xFF;	// the "CPU I/O port" on 6510/C64, implemented by VIC3 for real in C65!
 	cpu_port[1] = 0xFF;
-	// *** Init 4096 element palette with RGB components for faster access later on palette register changes
+	// *** Init 4096 element palette with RGB components for faster access later on palette register changes (avoid SDL calls to convert)
 	for (r = 0, i = 0; r < 16; r++)
 		for (g = 0; g < 16; g++)
 			for (b = 0; b < 16; b++)
@@ -347,14 +347,20 @@ static void io_write ( int addr, Uint8 data )
 
 
 
-static inline int is_vic3_reg30_mapped_rom ( int hinib )
+// Checks if given un-'MAP'-ped address is mapped by VIC3 reg $30 "ROM" stuffs, and to what offset (0 = not mapped)
+static inline int check_vic3_reg30_mapped_rom ( int hinib )
 {
-	return  ((vic3_registers[0x30] & 0x80) && (hinib == 0xE || hinib == 0xF)) ||	// ROM at E000 (E000-EFFF? What about F000-FFFF?!)
-		((vic3_registers[0x30] & 0x40) &&  hinib == 0x9                 ) ||	// ROM at 9000
-		((vic3_registers[0x30] & 0x20) &&  hinib == 0xC                 ) ||	// ROM at C000
-		((vic3_registers[0x30] & 0x10) && (hinib == 0xA || hinib == 0xB)) ||	// ROM at A000
-		((vic3_registers[0x30] & 0x08) &&  hinib == 0x8                 )	// ROM at 8000
-	;
+	if (((vic3_registers[0x30] & 0x20) && hinib == 0xC))	// "interface" ROM, 'ROM@C000' bit of VIC3 reg $30 for $C000-$CFFF
+		return 0x20000;
+	if (
+		((vic3_registers[0x30] & 0x80) && (hinib == 0xE || hinib == 0xF)) ||	// ROM@E000
+		((vic3_registers[0x30] & 0x40) &&  hinib == 0x9                 ) ||	// CROM@9000 ???? Dunno!!! FIXME: C65 doc mention it as "CROM" and separated bit?!
+		//((vic3_registers[0x30] & 0x20) &&  hinib == 0xC                 ) ||	// ROM@C000
+		((vic3_registers[0x30] & 0x10) && (hinib == 0xA || hinib == 0xB)) ||	// ROM@A000
+		((vic3_registers[0x30] & 0x08) &&  hinib == 0x8                 )	// ROM@8000
+	)
+		return 0x30000;
+	return 0;
 }
 
 
@@ -366,9 +372,10 @@ Uint8 cpu_read ( Uint16 addr )
 	Uint8 result;
 	if (!map_mapped[blk]) {	// it's only applies if block is marked as "not mapped". Mapped blocks are not checked at all.
 		int hinib = addr >> 12;
+		int reg30_mapping = check_vic3_reg30_mapped_rom(hinib);
 		// check if mapped via VIC3 reg $30
-		if (is_vic3_reg30_mapped_rom(hinib))
-			real_addr += 0x20000;	// then fetch from bank 2 (ROM-LO)
+		if (reg30_mapping)
+			real_addr += reg30_mapping;
 		else if (addr < 2) {
 			printf("PORT0: reading CPU port %d, data is $%02X" NL, addr, cpu_port[addr]);
 			return cpu_port[addr];
@@ -405,14 +412,16 @@ void cpu_write ( Uint16 addr, Uint8 data )
 	int real_addr = map_offset[blk] + addr; // in case of not mapped, offset will be zero, thus real_addr == addr
 	if (!map_mapped[blk]) {
 		int hinib = addr >> 12;
-		if (is_vic3_reg30_mapped_rom(hinib)) {
-			printf("CPU: ignoring write to VIC3 mapped ROM [??] FIXME: should we write RAM then?!" NL); // FIXME: ???????
+		if (check_vic3_reg30_mapped_rom(hinib)) {
+			printf("CPU: ignoring write to VIC3 mapped ROM [??] FIXME: should we write RAM then?!" NL); // FIXME: ??? should we write RAM instead, of it's OK to ignore now?
 			return;
 		}
+		// unmapped write accesses have only one special case, if I/O is targeted, since CPU port mapped ROMs cannot be written and RAM is written instead
 		if ((cpu_port[1] & 7) > 4 && hinib == 0xD) {
 			io_write(addr, data);
 			return;
 		}
+		// if the CPU port (and its DDR) is written ...
 		if (addr < 2) {
 			printf("PORT0: 0/1 port is written! %d data $%02X" NL, addr, data);
 			if (addr) {
@@ -426,6 +435,7 @@ void cpu_write ( Uint16 addr, Uint8 data )
 				cpu_port[0] = data;
 			return;
 		}
+		// otherwise pass through, real_addr will be the input addr in case of not mapped address
 	}
 	if (real_addr < 0x20000)	// do not write ROM ....
 		memory[real_addr] = data;
