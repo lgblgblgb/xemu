@@ -3,6 +3,7 @@
 
    This is the Commodore 65 emulation. Note: the purpose of this emulator is merely to
    test some 65CE02 opcodes, not for being a *usable* Commodore 65 emulator too much!
+   If it ever able to hit the C65 BASIC-10 usage, I'll be happy :)
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -41,6 +42,7 @@ static int scanline;
 
 
 
+
 #define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
 
 
@@ -64,6 +66,7 @@ static void cpu_mapping ( int low_offset, int high_offset, int mapped_mask )
 		mapped_mask & 8 ? 1 : 0, mapped_mask & 4 ? 1 : 0, mapped_mask & 2 ? 1 : 0, mapped_mask & 1
 	);
 }
+
 
 
 
@@ -342,6 +345,16 @@ static void io_write ( int addr, Uint8 data )
 
 
 
+static inline int is_vic3_reg30_mapped_rom ( int hinib )
+{
+	return  ((vic3_registers[0x30] & 0x80) && (hinib == 0xE || hinib == 0xF)) ||	// ROM at E000 (E000-EFFF? What about F000-FFFF?!)
+		((vic3_registers[0x30] & 0x40) &&  hinib == 0x9                 ) ||	// ROM at 9000
+		((vic3_registers[0x30] & 0x20) &&  hinib == 0xC                 ) ||	// ROM at C000
+		((vic3_registers[0x30] & 0x10) && (hinib == 0xA || hinib == 0xB)) ||	// ROM at A000
+		((vic3_registers[0x30] & 0x08) &&  hinib == 0x8                 )	// ROM at 8000
+	;
+}
+
 
 
 Uint8 cpu_read ( Uint16 addr )
@@ -351,16 +364,28 @@ Uint8 cpu_read ( Uint16 addr )
 	Uint8 result;
 	if (!map_mapped[blk]) {	// it's only applies if block is marked as "not mapped"?
 		int hinib = addr >> 12;
-		if (
-			((vic3_registers[0x30] & 0x80) && (hinib == 0xE || hinib == 0xF)) ||		// ROM at E000 (E000-EFFF? What about F000-FFFF?!)
-			((vic3_registers[0x30] & 0x40) && hinib == 0x9)	||	// ROM at 9000
-			((vic3_registers[0x30] & 0x20) && hinib == 0xC)	||	// ROM at C000 
-			((vic3_registers[0x30] & 0x10) && (hinib == 0xA || hinib == 0xB)) || 		// ROM at A000
-			((vic3_registers[0x30] & 0x08) && hinib == 0x8)		// ROM at 8000
-		)
-			real_addr += 0x20000;
-		else if (hinib == 0xD) {	// I/O area
-			return io_read(addr);
+		if (is_vic3_reg30_mapped_rom(hinib))
+			real_addr += 0x20000;	// then fetch from bank 2 (ROM-LO)
+		else if (addr < 2) {
+			printf("PORT0: reading CPU port %d, data is $%02X" NL, addr, cpu_port[addr]);
+			return cpu_port[addr];
+		} else if (hinib >= 0xE) {	// read op at unmapped, not VIC3 reg30 mapped $E000 - $FFFF
+			if (((cpu_port[1] & 3) > 1))	// low two bits of CPU port is '10 or '11
+				real_addr += 0x20000;
+		} else if (hinib == 0xD) {		// read op at unmapped, not VIC3 reg30 mapped $D000 - $DFFF
+			switch (cpu_port[1] & 7) {
+				case 0: case 4:
+					break;		// read RAM!
+				case 5: case 6: case 7:
+					return io_read(addr);
+				default:
+					real_addr += 0x20000; // FIXME: read character ROM!
+					break;
+			}
+		}
+		if (hinib == 0xA || hinib == 0xB0) {	// read op at unmapped, not VIC30 reg30 mapped $A000 - $BFFF
+			if ((cpu_port[1] & 3) == 3)
+				real_addr += 0x20000; // FIXME: read BASIC ROM
 		}
 	}
 	result = memory[real_addr];
@@ -374,13 +399,26 @@ void cpu_write ( Uint16 addr, Uint8 data )
 	int blk = addr >> 13;
 	int real_addr = map_offset[blk] + addr;
 	if (!map_mapped[blk]) {
-		if (addr >= 0xD000 && addr < 0xE000) {
+		int hinib = addr >> 12;
+		if (is_vic3_reg30_mapped_rom(hinib)) {
+			printf("CPU: ignoring write to VIC3 mapped ROM [??] FIXME: should we write RAM then?!" NL); // FIXME: ???????
+			return;
+		}
+		if ((cpu_port[1] & 7) > 4 && hinib == 0xD) {
 			io_write(addr, data);
 			return;
 		}
 		if (addr < 2) {
 			printf("PORT0: 0/1 port is written! %d data $%02X" NL, addr, data);
-			cpu_port[addr] = data;
+			if (addr) {
+				cpu_port[1] = (cpu_port[1] & (255 - cpu_port[0])) | (data & cpu_port[0]);
+				printf("PORT0: current setting is b%d%d%d" NL,
+					cpu_port[1] & 4 ? 1 : 0,
+					cpu_port[1] & 2 ? 1 : 0,
+					cpu_port[1] & 1
+				);
+			} else
+				cpu_port[0] = data;
 			return;
 		}
 	}
@@ -422,7 +460,7 @@ static void dump_on_shutdown ( void )
 int main ( int argc, char **argv )
 {
 	int cycles;
-	int a;
+	//int a;
 	printf("**** The Unusable Commodore 65 emulator from LGB" NL
 	"INFO: Texture resolution is %dx%d" NL "%s" NL,
 		SCREEN_WIDTH, SCREEN_HEIGHT,
@@ -448,20 +486,11 @@ int main ( int argc, char **argv )
 	// Initialize C65 ...
 	c65_init();
 #if 0
-	init_palette();	// get our 4096 colours ...
-	memset(memory, 0xFF, sizeof memory);	// initialize memory
-	memset(memory + 0xD000, 0, 0x1000);
-	memset(vic3_registers, 0xFF, sizeof vic3_registers);
-	// load ROM (128K sized)
-	if (emu_load_file("c65-system.rom", memory + 0x20000, 0x20001) != 0x20000)
-		FATAL("Cannot load C65 system ROM!");
-#if 0
 	for (a = 0; a < 0x10000; a++) {
 		Uint8 exchg = memory[0x20000 | a];
 		memory[0x20000 | a] = memory[0x30000 | a];
 		memory[0x30000 | a] = exchg;
 	}
-#endif
 #endif
 	// Temporary hack! C65 should be started on its own with zero for any MAP related stuff!!!!!
 	cpu_mapping(0x20000, 0x20000, 0xBE); // Set initial internal MMU state of 4510 .. I have no idea what should it be, but probably stack / ZP is needed, and also the I/O area ...
