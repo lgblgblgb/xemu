@@ -371,7 +371,7 @@ Uint8 cpu_read ( Uint16 addr )
 			return cpu_port[addr];
 		} else if (hinib >= 0xE) {	// read op at unmapped, not VIC3 reg30 mapped $E000 - $FFFF
 			if (((cpu_port[1] & 3) > 1))	// low two bits of CPU port is '10 or '11
-				real_addr += 0x20000;
+				real_addr += 0x20000;	// FIXME: read KERNAL ROM?
 		} else if (hinib == 0xD) {		// read op at unmapped, not VIC3 reg30 mapped $D000 - $DFFF
 			switch (cpu_port[1] & 7) {
 				case 0: case 4:
@@ -493,9 +493,9 @@ int main ( int argc, char **argv )
 	}
 #endif
 	// Temporary hack! C65 should be started on its own with zero for any MAP related stuff!!!!!
-	cpu_mapping(0x20000, 0x20000, 0xBE); // Set initial internal MMU state of 4510 .. I have no idea what should it be, but probably stack / ZP is needed, and also the I/O area ...
+	//cpu_mapping(0x20000, 0x20000, 0xBE); // Set initial internal MMU state of 4510 .. I have no idea what should it be, but probably stack / ZP is needed, and also the I/O area ...
 	// Now we have ROM, initial memory mapping up, we can try a CPU reset to fetch the reset vector
-	cpu_reset();
+	//cpu_reset();
 	cycles = 0;
 	for (;;) {
 		cycles += cpu_step();
