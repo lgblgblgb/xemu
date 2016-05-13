@@ -28,16 +28,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "emutools.h"
 
 
-static Uint8 memory[0x110000];
-static int map_offset[8];
-static int map_mapped[8];
-static Uint32 rgb_palette[4096];
-static Uint32 vic3_palette[0x100];
-static Uint8 vic3_registers[0x40];
-static Uint8 vic3_palette_r[0x100], vic3_palette_g[0x100], vic3_palette_b[0x100];
-static int vic_new_mode;
-static Uint8 cpu_port[2];
-static int scanline;
+static Uint8 memory[0x110000];		// 65CE02 MAP'able address space (now overflow is not handled, that is the reason of higher than 1MByte, just in case ...)
+static int map_offset[8];		// 8K sized block of 65CE02 64K address space mapping offset
+static int map_mapped[8];		// is a 8K sized block of 65CE02 64K address space is mapped or not
+static Uint32 rgb_palette[4096];	// all the C65 palette, 4096 colours (SDL pixel formated related form)
+static Uint32 vic3_palette[0x100];	// VIC3 palette in SDL pixel format related form (can be written in the texture directly to render)
+static Uint8 vic3_registers[0x40];	// VIC3 registers
+static Uint8 vic3_palette_r[0x100], vic3_palette_g[0x100], vic3_palette_b[0x100];	// RGB nibbles of palette (0-15)
+static int vic_new_mode;		// VIC3 "newVic" IO mode is activated flag
+static Uint8 cpu_port[2];		// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65)
+static int scanline;			// current scan line number
 
 
 
@@ -113,7 +113,7 @@ int cpu_trap ( Uint8 opcode )
 
 
 
-// *** Implements the MAP opcode of 4510
+// *** Implements the MAP opcode of 4510, called by the 65CE02 emulator
 void cpu_do_aug ( void )
 {
 	cpu_inhibit_interrupts = 1;	// disable interrupts to the next "EOM" (ie: NOP) opcode
@@ -127,7 +127,7 @@ void cpu_do_aug ( void )
 
 
 
-// *** Implements the EOM opcode of 4510
+// *** Implements the EOM opcode of 4510, called by the 65CE02 emulator
 void cpu_do_nop ( void )
 {
 	cpu_inhibit_interrupts = 0;
@@ -253,12 +253,17 @@ static Uint8 io_read ( int addr )
 }
 
 
+
 #define RETURN_ON_IO_WRITE_NOT_IMPLEMENTED(func) \
 	do { printf("IO: NOT IMPLEMENTED write (emulator lacks feature), %s $%04X with data $%02X" NL, func, addr, data); \
 	return; } while(0)
 #define RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE(func) \
 	do { printf("IO: ignored write (not new VIC mode), %s $%04X with data $%02X" NL, func, addr, data); \
 	return; } while(0)
+#define SET_VIC3_PALETTE_ENTRY(num) \
+	do { vic3_palette[num] = RGB(vic3_palette_r[num], vic3_palette_g[num], vic3_palette_b[num]); \
+	printf("VIC3: palette #$%02X is set to RGB nibbles $%X%X%X" NL, num, vic3_palette_r[num], vic3_palette_g[num], vic3_palette_b[num]); \
+	} while (0)
 
 
 
@@ -282,9 +287,8 @@ static void io_write ( int addr, Uint8 data )
 	}
 	if (addr < 0xD200) {	// $D100 - $D100	palette red nibbles (*)
 		if (vic_new_mode) {
-			vic3_palette_r[addr & 0xFF] = data & 15;
-			vic3_palette[addr & 0xFF] = RGB(vic3_palette_r[addr & 0xFF], vic3_palette_g[addr & 0xFF], vic3_palette_b[addr & 0xFF]);
-			printf("VIC3: palette #$%02X is set to RGB nibbles $%X%X%X" NL, addr & 0xFF, vic3_palette_r[addr & 0xFF], vic3_palette_g[addr & 0xFF], vic3_palette_b[addr & 0xFF]);
+			vic3_palette_r[addr & 0xFF] = data & 15;	// FIXME: bg/fg bit: what is that? (bit 4, but I ignore that now)
+			SET_VIC3_PALETTE_ENTRY(addr & 0xFF);
 			return;
 		} else
 			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("palette red nibbles");
@@ -292,8 +296,7 @@ static void io_write ( int addr, Uint8 data )
 	if (addr < 0xD300) {	// $D200 - $D200	palette green nibbles (*)
 		if (vic_new_mode) {
 			vic3_palette_g[addr & 0xFF] = data & 15;
-			vic3_palette[addr & 0xFF] = RGB(vic3_palette_r[addr & 0xFF], vic3_palette_g[addr & 0xFF], vic3_palette_b[addr & 0xFF]);
-			printf("VIC3: palette #$%02X is set to RGB nibbles $%X%X%X" NL, addr & 0xFF, vic3_palette_r[addr & 0xFF], vic3_palette_g[addr & 0xFF], vic3_palette_b[addr & 0xFF]);
+			SET_VIC3_PALETTE_ENTRY(addr & 0xFF);
 			return;
 		} else
 			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("palette green nibbles");
@@ -301,8 +304,7 @@ static void io_write ( int addr, Uint8 data )
 	if (addr < 0xD400) {	// $D300 - $D300	palette blue nibbles (*)
 		if (vic_new_mode) {
 			vic3_palette_b[addr & 0xFF] = data & 15;
-			vic3_palette[addr & 0xFF] = RGB(vic3_palette_r[addr & 0xFF], vic3_palette_g[addr & 0xFF], vic3_palette_b[addr & 0xFF]);
-			printf("VIC3: palette #$%02X is set to RGB nibbles $%X%X%X" NL, addr & 0xFF, vic3_palette_r[addr & 0xFF], vic3_palette_g[addr & 0xFF], vic3_palette_b[addr & 0xFF]);
+			SET_VIC3_PALETTE_ENTRY(addr & 0xFF);
 			return;
 		} else
 			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("palette blue nibbles");
@@ -356,29 +358,30 @@ static inline int is_vic3_reg30_mapped_rom ( int hinib )
 }
 
 
-
+// This function is called by the 65CE02 emulator in case of reading a byte (regardless of data or code)
 Uint8 cpu_read ( Uint16 addr )
 {
 	int blk = addr >> 13;
-	int real_addr = map_offset[blk] + addr;
+	int real_addr = map_offset[blk] + addr;	// in case of not mapped, offset will be zero, thus real_addr == addr
 	Uint8 result;
-	if (!map_mapped[blk]) {	// it's only applies if block is marked as "not mapped"?
+	if (!map_mapped[blk]) {	// it's only applies if block is marked as "not mapped". Mapped blocks are not checked at all.
 		int hinib = addr >> 12;
+		// check if mapped via VIC3 reg $30
 		if (is_vic3_reg30_mapped_rom(hinib))
 			real_addr += 0x20000;	// then fetch from bank 2 (ROM-LO)
 		else if (addr < 2) {
 			printf("PORT0: reading CPU port %d, data is $%02X" NL, addr, cpu_port[addr]);
 			return cpu_port[addr];
 		} else if (hinib >= 0xE) {	// read op at unmapped, not VIC3 reg30 mapped $E000 - $FFFF
-			if (((cpu_port[1] & 3) > 1))	// low two bits of CPU port is '10 or '11
+			if (((cpu_port[1] & 3) > 1))	// low two bits of CPU port is binary '10 or '11
 				real_addr += 0x20000;	// FIXME: read KERNAL ROM?
 		} else if (hinib == 0xD) {		// read op at unmapped, not VIC3 reg30 mapped $D000 - $DFFF
 			switch (cpu_port[1] & 7) {
 				case 0: case 4:
-					break;		// read RAM!
+					break;		// read RAM! (pass-through unmapped address, ie bank zero)
 				case 5: case 6: case 7:
 					return io_read(addr);
-				default:
+				default: // that is: cases 1, 2, 3
 					real_addr += 0x20000; // FIXME: read character ROM!
 					break;
 			}
@@ -394,10 +397,12 @@ Uint8 cpu_read ( Uint16 addr )
 }
 
 
+
+// This function is called by the 65CE02 emulator in case of writing a byte
 void cpu_write ( Uint16 addr, Uint8 data )
 {
 	int blk = addr >> 13;
-	int real_addr = map_offset[blk] + addr;
+	int real_addr = map_offset[blk] + addr; // in case of not mapped, offset will be zero, thus real_addr == addr
 	if (!map_mapped[blk]) {
 		int hinib = addr >> 12;
 		if (is_vic3_reg30_mapped_rom(hinib)) {
@@ -445,7 +450,7 @@ static void dump_on_shutdown ( void )
 	int a;
 	for (a = 0; a < 0x40; a++)
 		printf("VIC-3 register $%02X is %02X" NL, a, vic3_registers[a]);
-
+	// Dump memory, so some can inspect the result (especially only RAM is interesting of course in BANK 0 and 1)
 	f = fopen(MEMDUMP_FILE, "wb");
 	if (f) {
 		fwrite(memory, 1, sizeof memory, f);
@@ -460,7 +465,6 @@ static void dump_on_shutdown ( void )
 int main ( int argc, char **argv )
 {
 	int cycles;
-	//int a;
 	printf("**** The Unusable Commodore 65 emulator from LGB" NL
 	"INFO: Texture resolution is %dx%d" NL "%s" NL,
 		SCREEN_WIDTH, SCREEN_HEIGHT,
@@ -474,28 +478,18 @@ int main ( int argc, char **argv )
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// logical size
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// window size
-		SCREEN_FORMAT,		// pixel format
-		0,			// we have *NO* pre-defined colours (too many we need). we want to do this ourselves!
-		NULL,			// -- "" --
-		NULL,			// -- "" --
-		RENDER_SCALE_QUALITY,	// render scaling quality
-		USE_LOCKED_TEXTURE,	// 1 = locked texture access
-		dump_on_shutdown
+		SCREEN_FORMAT,			// pixel format
+		0,				// we have *NO* pre-defined colours (too many we need). we want to do this ourselves!
+		NULL,				// -- "" --
+		NULL,				// -- "" --
+		RENDER_SCALE_QUALITY,		// render scaling quality
+		USE_LOCKED_TEXTURE,		// 1 = locked texture access
+		dump_on_shutdown		// registered shutdown function
 	))
 		return 1;
 	// Initialize C65 ...
 	c65_init();
-#if 0
-	for (a = 0; a < 0x10000; a++) {
-		Uint8 exchg = memory[0x20000 | a];
-		memory[0x20000 | a] = memory[0x30000 | a];
-		memory[0x30000 | a] = exchg;
-	}
-#endif
-	// Temporary hack! C65 should be started on its own with zero for any MAP related stuff!!!!!
-	//cpu_mapping(0x20000, 0x20000, 0xBE); // Set initial internal MMU state of 4510 .. I have no idea what should it be, but probably stack / ZP is needed, and also the I/O area ...
-	// Now we have ROM, initial memory mapping up, we can try a CPU reset to fetch the reset vector
-	//cpu_reset();
+	// Start!!
 	cycles = 0;
 	for (;;) {
 		cycles += cpu_step();
