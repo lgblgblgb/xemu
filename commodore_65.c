@@ -173,6 +173,79 @@ static Uint8 vic3_read_reg ( int addr )
 }
 
 
+
+
+// IO: redirect to IO space? if 1, and $D000 area (??)
+// DIR: direction if 0 -> increment
+// MOD: UNKNOWN details (modulo)
+// HLD: hold address if 0 -> don't hold (so: inc/dec based on DIR)
+#define DMA_IO(p)  ((p) & 0x800000)
+#define DMA_DIR(p) ((p) & 0x400000)
+#define DMA_MOD(p) ((p) & 0x200000)
+#define DMA_HLD(p) ((p) & 0x100000)
+
+#define DMA_NEXT_BYTE(p,ad) \
+	if (DMA_HLD(p) == 0) { \
+		ad += DMA_DIR(p) ? -1 : 1; \
+	}
+
+
+static void dma_write ( int addr, Uint8 data )
+{
+	// DUNNO about DMAgic too much. It's merely guessing from my own ROM assembly tries, C65gs/Mega65 VHDL, and my ideas :)
+	// Also, it DOES things while everything other (ie CPU) emulation is stopped ...
+	static Uint8 dma_registers[4];
+	Uint8 command; // DMAgic command
+	int dma_list;
+	dma_registers[addr & 3] = data;
+	dma_list = dma_registers[0] | (dma_registers[1] << 8) | (dma_registers[2] << 16);
+	if (addr)
+		return;
+	printf("DMA: list address is $%06X now, just written to register %d value $%02X" NL, dma_list, addr & 3, data);
+	do {
+		int source, target, length, spars, tpars;
+		command = memory[dma_list++]      ;
+		length  = memory[dma_list++]      ;
+		length |= memory[dma_list++] <<  8;
+		source	= memory[dma_list++]      ;
+		source |= memory[dma_list++] <<  8;
+		source |= memory[dma_list++] << 16;
+		target  = memory[dma_list++]      ;
+		target |= memory[dma_list++] <<  8;
+		target |= memory[dma_list++] << 16;
+		spars 	= source;
+		tpars 	= target;
+		source &= 0xFFFFF;
+		target &= 0xFFFFF;
+		printf("DMA: $%05X[%c%c%c%c] -> $%05X[%c%c%c%c] (L=$%04X) CMD=%d (%s)" NL,
+			source, DMA_IO(spars) ? 'I' : 'i', DMA_DIR(spars) ? 'D' : 'd', DMA_MOD(spars) ? 'M' : 'm', DMA_HLD(spars) ? 'H' : 'h',
+			target, DMA_IO(tpars) ? 'I' : 'i', DMA_DIR(tpars) ? 'D' : 'd', DMA_MOD(tpars) ? 'M' : 'm', DMA_HLD(tpars) ? 'H' : 'h',
+			length, command & 3, (command & 4) ? "chain" : "last"
+		);
+		if ((command & 3) == 3) {		// fill command?
+			while (length--) {
+				if (target < 0x20000 && target >= 0)
+					memory[target] = source & 0xFF;
+				//DMA_NEXT_BYTE(spars, source);	// DOES it have any sense? Maybe to write linear pattern of bytes? :-P
+				DMA_NEXT_BYTE(tpars, target);
+			}
+		} else if ((command & 3) == 0) {	// copy command?
+			while (length--) {
+				Uint8 data = ((source < 0x40000 && source >= 0) ? memory[source] : 0xFF);
+				DMA_NEXT_BYTE(spars, source);
+				if (target < 0x20000 && target >= 0)
+					memory[target] = data;
+				DMA_NEXT_BYTE(tpars, target);
+			}
+		} else
+			puts("DMA: unimplemented command!!");
+	} while (command & 4);	// chained? continue if so!
+}
+
+
+
+
+
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
 	do { printf("IO: NOT IMPLEMENTED read (emulator lacks feature), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
 	return fb; } while (0)
@@ -322,9 +395,11 @@ static void io_write ( int addr, Uint8 data )
 			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("UART");
 	}
 	if (addr < 0xD800) {	// $D700 - $D7FF	DMA (*)
-		if (vic_new_mode)
-			RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("DMA controller");
-		else
+		if (vic_new_mode) {
+			// RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("DMA controller");
+			dma_write(addr & 3, data);
+			return;
+		} else
 			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("DMA controller");
 	}
 	if (addr < ((vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00)) {	// $D800-$DC00/$E000	COLOUR NIBBLES, mapped to $1F800 in BANK1
