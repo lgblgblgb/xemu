@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "commodore_65.h"
 #include "cpu65ce02.h"
+#include "cia6526.h"
 #include "emutools.h"
 
 
@@ -38,7 +39,7 @@ static Uint8 vic3_palette_r[0x100], vic3_palette_g[0x100], vic3_palette_b[0x100]
 static int vic_new_mode;		// VIC3 "newVic" IO mode is activated flag
 static Uint8 cpu_port[2];		// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65)
 static int scanline;			// current scan line number
-
+static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
 
 
 
@@ -99,6 +100,25 @@ static void c65_init ( void )
 		vic3_palette_g[i] = 0;
 		vic3_palette_b[i] = 0;
 	}
+	// *** CIAs
+	cia_init(&cia1, "CIA-1",
+		NULL,	// callback: OUTA(mask, data)
+		NULL,	// callback: OUTB(mask, data)
+		NULL,	// callback: OUTSR(mask, data)
+		NULL,	// callback: INA(mask)
+		NULL,	// callback: INB(mask)
+		NULL,	// callback: INSR(mask)
+		NULL	// callback: SETINT(level)
+	);
+	cia_init(&cia2, "CIA-2",
+		NULL,	// callback: OUTA(mask, data)
+		NULL,	// callback: OUTB(mask, data)
+		NULL,	// callback: OUTSR(mask, data)
+		NULL,	// callback: INA(mask)
+		NULL,	// callback: INB(mask)
+		NULL,	// callback: INSR(mask)
+		NULL	// callback: SETINT(level)
+	);
 	// *** RESET CPU, also fetches the RESET vector into PC
 	cpu_reset();
 	puts("INIT: end of initialization!");
@@ -313,10 +333,12 @@ static Uint8 io_read ( int addr )
 		return memory[0x1F800 + addr - 0xD800];
 	}
 	if (addr < 0xDD00) {	// $DC00 - $DCFF	CIA-1
-		RETURN_ON_IO_READ_NOT_IMPLEMENTED("CIA-1", 0xFF);
+		//RETURN_ON_IO_READ_NOT_IMPLEMENTED("CIA-1", 0xFF);
+		return cia_read(&cia1, addr & 0xF);
 	}
 	if (addr < 0xDE00) {	// $DD00 - $DDFF	CIA-2
-		RETURN_ON_IO_READ_NOT_IMPLEMENTED("CIA-2", 0xFF);
+		//RETURN_ON_IO_READ_NOT_IMPLEMENTED("CIA-2", 0xFF);
+		return cia_read(&cia2, addr & 0xF);
 	}
 	if (addr < 0xDF00) {	// $DE00 - $DEFF	IO-1 external
 		RETURN_ON_IO_READ_NOT_IMPLEMENTED("IO-1 external select", 0xFF);
@@ -408,10 +430,14 @@ static void io_write ( int addr, Uint8 data )
 		return;
 	}
 	if (addr < 0xDD00) {	// $DC00 - $DCFF	CIA-1
-		RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("CIA-1");
+		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("CIA-1");
+		cia_write(&cia1, addr & 0xF, data);
+		return;
 	}
 	if (addr < 0xDE00) {	// $DD00 - $DDFF	CIA-2
-		RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("CIA-2");
+		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("CIA-2");
+		cia_write(&cia2, addr & 0xF, data);
+		return;
 	}
 	if (addr < 0xDF00) {	// $DE00 - $DEFF	IO-1 external
 		RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("IO-1 external select");
@@ -426,7 +452,7 @@ static void io_write ( int addr, Uint8 data )
 static inline int check_vic3_reg30_mapped_rom ( int hinib )
 {
 	if (((vic3_registers[0x30] & 0x20) && hinib == 0xC))	// "interface" ROM, 'ROM@C000' bit of VIC3 reg $30 for $C000-$CFFF
-		return 0x20000;
+		return 0x20000; // Interestingly, it seems all VIC ROM mappings stuffs goes for bank3, but ROM@C000 is for bank2 (guessing, as bank3 at $C000 is just $FF bytes ...)
 	if (
 		((vic3_registers[0x30] & 0x80) && (hinib == 0xE || hinib == 0xF)) ||	// ROM@E000
 		((vic3_registers[0x30] & 0x40) &&  hinib == 0x9                 ) ||	// CROM@9000 ???? Dunno!!! FIXME: C65 doc mention it as "CROM" and separated bit?!
@@ -538,7 +564,7 @@ static void dump_on_shutdown ( void )
 	// Dump memory, so some can inspect the result (especially only RAM is interesting of course in BANK 0 and 1)
 	f = fopen(MEMDUMP_FILE, "wb");
 	if (f) {
-		fwrite(memory, 1, sizeof memory, f);
+		fwrite(memory, 1, 0x20000, f);
 		fclose(f);
 		puts("Memory is dumped into " MEMDUMP_FILE);
 	}
@@ -577,7 +603,10 @@ int main ( int argc, char **argv )
 	// Start!!
 	cycles = 0;
 	for (;;) {
-		cycles += cpu_step();
+		int opcyc = cpu_step();
+		cia_tick(&cia1, opcyc);
+		cia_tick(&cia2, opcyc);
+		cycles += opcyc;
 		if (cycles >= 227) {
 			scanline++;
 			printf("VIC3: new scanline (%d)!" NL, scanline);
