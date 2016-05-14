@@ -70,6 +70,13 @@ static void cpu_mapping ( int low_offset, int high_offset, int mapped_mask )
 
 
 
+static void cia_setint_cb ( int level )
+{
+	printf("%s: IRQ level changed to %d" NL, cia1.name, level);
+	cpu_irqLevel = level;
+}
+
+
 
 static void c65_init ( void )
 {
@@ -108,7 +115,7 @@ static void c65_init ( void )
 		NULL,	// callback: INA(mask)
 		NULL,	// callback: INB(mask)
 		NULL,	// callback: INSR(mask)
-		NULL	// callback: SETINT(level)
+		cia_setint_cb	// callback: SETINT(level)
 	);
 	cia_init(&cia2, "CIA-2",
 		NULL,	// callback: OUTA(mask, data)
@@ -117,7 +124,7 @@ static void c65_init ( void )
 		NULL,	// callback: INA(mask)
 		NULL,	// callback: INB(mask)
 		NULL,	// callback: INSR(mask)
-		NULL	// callback: SETINT(level)
+		NULL	// callback: SETINT(level)	that would be NMI in our case
 	);
 	// *** RESET CPU, also fetches the RESET vector into PC
 	cpu_reset();
@@ -318,7 +325,7 @@ static Uint8 io_read ( int addr )
 	}
 	if (addr < 0xD700) {	// $D600 - $D6FF	UART (*)
 		if (vic_new_mode)
-			RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);
+			RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0x00);
 		else
 			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("UART", 0xFF);
 	}
@@ -333,12 +340,16 @@ static Uint8 io_read ( int addr )
 		return memory[0x1F800 + addr - 0xD800];
 	}
 	if (addr < 0xDD00) {	// $DC00 - $DCFF	CIA-1
+		Uint8 result = cia_read(&cia1, addr & 0xF);
 		//RETURN_ON_IO_READ_NOT_IMPLEMENTED("CIA-1", 0xFF);
-		return cia_read(&cia1, addr & 0xF);
+		printf("%s: reading register $%X result is $%02X" NL, cia1.name, addr & 15, result);
+		return result;
 	}
 	if (addr < 0xDE00) {	// $DD00 - $DDFF	CIA-2
+		Uint8 result = cia_read(&cia2, addr & 0xF);
 		//RETURN_ON_IO_READ_NOT_IMPLEMENTED("CIA-2", 0xFF);
-		return cia_read(&cia2, addr & 0xF);
+		printf("%s: reading register $%X result is $%02X" NL, cia2.name, addr & 15, result);
+		return result;
 	}
 	if (addr < 0xDF00) {	// $DE00 - $DEFF	IO-1 external
 		RETURN_ON_IO_READ_NOT_IMPLEMENTED("IO-1 external select", 0xFF);
@@ -431,11 +442,13 @@ static void io_write ( int addr, Uint8 data )
 	}
 	if (addr < 0xDD00) {	// $DC00 - $DCFF	CIA-1
 		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("CIA-1");
+		printf("%s: writing register $%X with data $%02X" NL, cia1.name, addr & 15, data);
 		cia_write(&cia1, addr & 0xF, data);
 		return;
 	}
 	if (addr < 0xDE00) {	// $DD00 - $DDFF	CIA-2
 		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("CIA-2");
+		printf("%s: writing register $%X with data $%02X" NL, cia2.name, addr & 15, data);
 		cia_write(&cia2, addr & 0xF, data);
 		return;
 	}
