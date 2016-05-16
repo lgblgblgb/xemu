@@ -30,16 +30,35 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 static Uint8 memory[0x110000];		// 65CE02 MAP'able address space (now overflow is not handled, that is the reason of higher than 1MByte, just in case ...)
-static int map_offset[8];		// 8K sized block of 65CE02 64K address space mapping offset
-static int map_mapped[8];		// is a 8K sized block of 65CE02 64K address space is mapped or not
+//static int map_offset[8];		// 8K sized block of 65CE02 64K address space mapping offset
+//static int map_mapped[8];		// is a 8K sized block of 65CE02 64K address space is mapped or not
 static Uint32 rgb_palette[4096];	// all the C65 palette, 4096 colours (SDL pixel format related form)
 static Uint32 vic3_palette[0x100];	// VIC3 palette in SDL pixel format related form (can be written into the texture directly to be rendered)
 static Uint8 vic3_registers[0x40];	// VIC3 registers
 static Uint8 vic3_palette_r[0x100], vic3_palette_g[0x100], vic3_palette_b[0x100];	// RGB nibbles of palette (0-15)
 static int vic_new_mode;		// VIC3 "newVic" IO mode is activated flag
-static Uint8 cpu_port[2];		// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65)
+static Uint8 cpu_port[2];		// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
 static int scanline;			// current scan line number
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
+
+
+// We re-maps I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request (with the lower 16 bits as addr from $D000)
+#define IO_REMAP_VIRTUAL 0x110000
+// Other re-mapping addresses
+#define ROM_C000_REMAP		0x20000
+#define ROM_8000_REMAP		0x30000
+#define ROM_A000_REMAP		0x30000
+#define ROM_E000_REMAP		0x30000
+#define ROM_C64_CHR_REMAP	0x20000
+#define ROM_C64_KERNAL_REMAP	0x20000
+#define ROM_C64_BASIC_REMAP	0x20000
+
+
+static int addr_trans_rd[16];		// address translating offsets for READ operation (it can be added to the CPU address simply, selected by the high 4 bits of the CPU address)
+static int addr_trans_wr[16];		// address translating offsets for WRITE operation (it can be added to the CPU address simply, selected by the high 4 bits of the CPU address)
+static int map_mask;
+static int map_offset_low;
+static int map_offset_high;
 
 
 
@@ -47,25 +66,70 @@ static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
 #define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
 
 
-
-static void cpu_mapping ( int low_offset, int high_offset, int mapped_mask )
+/* You *MUST* call this every time, when *any* of these events applies:
+   * MAP 4510 opcode is issued, map_offset_low, map_offset_high, map_mask are modified
+   * "CPU port" data or DDR register has been written, witn cpu_port[0 or 1] modified
+   * VIC3 register $30 is written, with vic3_registers[0x30] modified 
+   The rreason of this madness: do the ugly work here, as memory configuration change is
+   less frequent as memory usage (read/write). Thus do more work here, but simplier
+   work when doing actual memory read/writes, with a simple addition and shift, or such.
+   The tables are 4K in steps, 4510 would require only 8K steps, but there are other
+   reasons (ie, I/O area is only 4K long).
+   More advanced technique can be used not to handle *everything* here, but it's better
+   for the initial steps, to have all address translating logic at once.
+*/
+static void apply_memory_config ( void )
 {
-	int a, mask;
-	for (a = 0, mask = 1; a < 8; a++, mask <<= 1) {
-		if (mapped_mask & mask) {
-			map_offset[a] = (a & 4) ? high_offset : low_offset;
-			map_mapped[a] = 1;
+	// About the produced signals on the "CPU port"
+	int cp = (cpu_port[1] | (~cpu_port[0]));
+	// Simple ones, only CPU MAP may apply not other factors
+	// Also, these are the "lower" blocks, needs the offset for the "lower" area in case of CPU MAP'ed state
+	addr_trans_wr[0] = addr_trans_rd[0] = addr_trans_wr[1] = addr_trans_rd[1] = (map_mask & 1) ? map_offset_low : 0;	// $0XXX + $1XXX, MAP block 0
+	addr_trans_wr[2] = addr_trans_rd[2] = addr_trans_wr[3] = addr_trans_rd[3] = (map_mask & 2) ? map_offset_low : 0;	// $2XXX + $3XXX, MAP block 1
+	addr_trans_wr[4] = addr_trans_rd[4] = addr_trans_wr[5] = addr_trans_rd[5] = (map_mask & 4) ? map_offset_low : 0;	// $4XXX + $5XXX, MAP block 2
+	addr_trans_wr[6] = addr_trans_rd[6] = addr_trans_wr[7] = addr_trans_rd[7] = (map_mask & 8) ? map_offset_low : 0;	// $6XXX + $7XXX, MAP block 3
+	// From this point, we must use the "high" area offset if it's CPU MAP'ed
+	// $8XXX and $9XXX, MAP block 4
+	if (vic3_registers[0x30] & 8)
+		addr_trans_wr[8] = addr_trans_rd[8] = addr_trans_wr[9] = addr_trans_rd[9] = ROM_8000_REMAP;
+	else if ((map_mask & 16))
+		addr_trans_wr[8] = addr_trans_rd[8] = addr_trans_wr[9] = addr_trans_rd[9] = map_offset_high;
+	else
+		addr_trans_wr[8] = addr_trans_rd[8] = addr_trans_wr[9] = addr_trans_rd[9] = 0;
+	// $AXXX and $BXXX, MAP block 5
+	if (vic3_registers[0x30] & 16)
+		addr_trans_wr[0xA] = addr_trans_rd[0xA] = addr_trans_wr[0xB] = addr_trans_rd[0xB] = ROM_A000_REMAP;
+	else if ((map_mask & 32))
+		addr_trans_wr[0xA] = addr_trans_rd[0xA] = addr_trans_wr[0xB] = addr_trans_rd[0xB] = map_offset_high;
+	else {
+		addr_trans_wr[0xA] = addr_trans_wr[0xB] = 0;
+		addr_trans_rd[0xA] = addr_trans_rd[0xB] = ((cp & 3) == 3) ? ROM_C64_BASIC_REMAP : 0;
+	}
+	// $CXXX, MAP block 6
+	if (vic3_registers[0x30] & 32)
+		addr_trans_wr[0xC] = addr_trans_rd[0xC] = ROM_C000_REMAP;
+	else
+		addr_trans_wr[0xC] = addr_trans_rd[0xC] = (map_mask & 64) ? map_offset_high : 0;
+	// $DXXX, *still* MAP block 6
+	if (map_mask & 64)
+		addr_trans_wr[0xD] = addr_trans_rd[0xD] = map_offset_high;
+	else {
+		if ((cp & 7) > 4) {
+			addr_trans_wr[0xD] = addr_trans_rd[0xD] = IO_REMAP_VIRTUAL;
 		} else {
-			map_offset[a] = 0;
-			map_mapped[a] = 0;
+			addr_trans_wr[0xD] = 0;
+			addr_trans_rd[0xD] = (cp & 3) ? ROM_C64_CHR_REMAP : 0;
 		}
 	}
-	printf("MMU: low  offset is $%05X" NL, low_offset );
-	printf("MMU: high offset is $%05X" NL, high_offset);
-	printf("MMU: map mask is    b%d%d%d%d%d%d%d%d" NL,
-		mapped_mask & 128 ? 1 : 0, mapped_mask & 64 ? 1 : 0, mapped_mask & 32 ? 1 : 0, mapped_mask & 16 ? 1 :0,
-		mapped_mask & 8 ? 1 : 0, mapped_mask & 4 ? 1 : 0, mapped_mask & 2 ? 1 : 0, mapped_mask & 1
-	);
+	// $EXXX and $FXXX, MAP block 7
+	if (vic3_registers[0x30] & 128)
+		addr_trans_wr[0xE] = addr_trans_rd[0xE] = addr_trans_wr[0xF] = addr_trans_rd[0xF] = ROM_E000_REMAP;
+	else if ((map_mask & 128))
+		addr_trans_wr[0xE] = addr_trans_rd[0xE] = addr_trans_wr[0xF] = addr_trans_rd[0xF] = map_offset_high;
+	else {
+		addr_trans_wr[0xE] = addr_trans_wr[0xF] = 0;
+		addr_trans_rd[0xE] = addr_trans_rd[0xF] = ((cp & 3) > 1) ? ROM_C64_KERNAL_REMAP : 0;
+	}
 }
 
 
@@ -77,6 +141,11 @@ static void cia_setint_cb ( int level )
 }
 
 
+static Uint8 fake ( Uint8 mask )
+{
+	return 0;
+}
+
 
 static void c65_init ( void )
 {
@@ -86,10 +155,6 @@ static void c65_init ( void )
 	// *** Load ROM image
 	if (emu_load_file("c65-system.rom", memory + 0x20000, 0x20001) != 0x20000)
 		FATAL("Cannot load C65 system ROM!");
-	// *** Init 4510 "MAP-related" MMU ...
-	cpu_mapping(0, 0, 0);	// C65 boots in C64 mode at power-up
-	cpu_port[0] = 0xFF;	// the "CPU I/O port" on 6510/C64, implemented by VIC3 for real in C65!
-	cpu_port[1] = 0xFF;
 	// *** Init 4096 element palette with RGB components for faster access later on palette register changes (avoid SDL calls to convert)
 	for (r = 0, i = 0; r < 16; r++)
 		for (g = 0; g < 16; g++)
@@ -102,11 +167,15 @@ static void c65_init ( void )
 	for (i = 0; i < 0x100; i++) {
 		if (i < sizeof vic3_registers)
 			vic3_registers[i] = 0;
-		vic3_palette[i] = rgb_palette[0];  // black
+		vic3_palette[i] = rgb_palette[0];	// black
 		vic3_palette_r[i] = 0;
 		vic3_palette_g[i] = 0;
 		vic3_palette_b[i] = 0;
 	}
+	// *** Memory configuration
+	cpu_port[0] = cpu_port[1] = 0xFF;	// the "CPU I/O port" on 6510/C64, implemented by VIC3 for real in C65!
+	map_mask = 0;				// as all 8K blocks are unmapped, we don't need to worry about the low/high offset to set here
+	apply_memory_config();			// VIC3 $30 reg is already filled, so it's OK to call this now
 	// *** CIAs
 	cia_init(&cia1, "CIA-1",
 		NULL,	// callback: OUTA(mask, data)
@@ -145,11 +214,11 @@ void cpu_do_aug ( void )
 {
 	cpu_inhibit_interrupts = 1;	// disable interrupts to the next "EOM" (ie: NOP) opcode
 	printf("CPU: MAP opcode, input A=$%02X X=$%02X Y=$%02X Z=$%02X" NL, cpu_a, cpu_x, cpu_y, cpu_z);
-	cpu_mapping(
-		(cpu_a << 8) | ((cpu_x & 15) << 16),	// offset of lower half (blocks 0-3)
-		(cpu_y << 8) | ((cpu_z & 15) << 16),	// offset of higher half (blocks 4-7)
-		(cpu_z & 0xF0) | (cpu_x >> 4)		// "is mapped" mask for blocks
-	);
+	map_offset_low  = (cpu_a << 8) | ((cpu_x & 15) << 16);	// offset of lower half (blocks 0-3)
+	map_offset_high = (cpu_y << 8) | ((cpu_z & 15) << 16);	// offset of higher half (blocks 4-7)
+	map_mask        = (cpu_z & 0xF0) | (cpu_x >> 4);	// "is mapped" mask for blocks (1 bit for each)
+	puts("MEM: applying new memory configuration because of MAP CPU opcode");
+	apply_memory_config();
 }
 
 
@@ -157,7 +226,11 @@ void cpu_do_aug ( void )
 // *** Implements the EOM opcode of 4510, called by the 65CE02 emulator
 void cpu_do_nop ( void )
 {
-	cpu_inhibit_interrupts = 0;
+	if (cpu_inhibit_interrupts) {
+		cpu_inhibit_interrupts = 0;
+		puts("CPU: EOM, interrupts were disabled because of MAP till the EOM");
+	} else
+		puts("CPU: NOP not reated as EOM (no MAP before)");
 }
 
 
@@ -180,6 +253,10 @@ static void vic3_write_reg ( int addr, Uint8 data )
 		return;
 	}
 	vic3_registers[addr] = data;
+	if (addr == 0x30) {
+		puts("MEM: applying new memory configuration because of VIC3 $30 is written");
+		apply_memory_config();
+	}
 }	
 
 
@@ -217,7 +294,7 @@ static Uint8 vic3_read_reg ( int addr )
 	}
 
 
-static void dma_write ( int addr, Uint8 data )
+static void dma_write_reg ( int addr, Uint8 data )
 {
 	// DUNNO about DMAgic too much. It's merely guessing from my own ROM assembly tries, C65gs/Mega65 VHDL, and my ideas :)
 	// Also, it DOES things while everything other (ie CPU) emulation is stopped ...
@@ -288,9 +365,14 @@ static Uint8 io_read ( int addr )
 	if (addr < 0xD080)	// $D000 - $D07F:	VIC3
 		return vic3_read_reg(addr);
 	if (addr < 0xD0A0) {	// $D080 - $D09F	DISK controller (*)
-		if (vic_new_mode)
-			RETURN_ON_IO_READ_NOT_IMPLEMENTED("DISK controller", 0x00);	// emulation stops here with 0xFF
-		else
+		if (vic_new_mode) {
+			/*if (addr == 0xD082 || addr == 0xD089) {
+				puts("WARN: hacking 127 as the answer for reading $D082");
+				return 16; // hack
+			} */
+			//return 0;
+			RETURN_ON_IO_READ_NOT_IMPLEMENTED("DISK controller", 0x7F);	// emulation stops here with 0xFF
+		} else
 			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("DISK controller", 0xFF);
 	}
 	if (addr < 0xD100) {	// $D0A0 - $D0FF	RAM expansion controller (*)
@@ -325,7 +407,7 @@ static Uint8 io_read ( int addr )
 	}
 	if (addr < 0xD700) {	// $D600 - $D6FF	UART (*)
 		if (vic_new_mode)
-			RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0x00);
+			RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);
 		else
 			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("UART", 0xFF);
 	}
@@ -430,13 +512,14 @@ static void io_write ( int addr, Uint8 data )
 	if (addr < 0xD800) {	// $D700 - $D7FF	DMA (*)
 		if (vic_new_mode) {
 			// RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("DMA controller");
-			dma_write(addr & 3, data);
+			dma_write_reg(addr & 3, data);
 			return;
 		} else
 			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("DMA controller");
 	}
 	if (addr < ((vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00)) {	// $D800-$DC00/$E000	COLOUR NIBBLES, mapped to $1F800 in BANK1
 		memory[0x1F800 + addr - 0xD800] = data;
+       //return memory[0x1F800 + addr - 0xD800];
 		printf("IO: writing colour RAM at offset $%04X" NL, addr - 0xD800);
 		return;
 	}
@@ -461,60 +544,21 @@ static void io_write ( int addr, Uint8 data )
 
 
 
-// Checks if given un-'MAP'-ped address is mapped by VIC3 reg $30 "ROM" stuffs, and to what offset (0 = not mapped)
-static inline int check_vic3_reg30_mapped_rom ( int hinib )
-{
-	if (((vic3_registers[0x30] & 0x20) && hinib == 0xC))	// "interface" ROM, 'ROM@C000' bit of VIC3 reg $30 for $C000-$CFFF
-		return 0x20000; // Interestingly, it seems all VIC ROM mappings stuffs goes for bank3, but ROM@C000 is for bank2 (guessing, as bank3 at $C000 is just $FF bytes ...)
-	if (
-		((vic3_registers[0x30] & 0x80) && (hinib == 0xE || hinib == 0xF)) ||	// ROM@E000
-		((vic3_registers[0x30] & 0x40) &&  hinib == 0x9                 ) ||	// CROM@9000 ???? Dunno!!! FIXME: C65 doc mention it as "CROM" and separated bit?!
-		//((vic3_registers[0x30] & 0x20) &&  hinib == 0xC                 ) ||	// ROM@C000
-		((vic3_registers[0x30] & 0x10) && (hinib == 0xA || hinib == 0xB)) ||	// ROM@A000
-		((vic3_registers[0x30] & 0x08) &&  hinib == 0x8                 )	// ROM@8000
-	)
-		return 0x30000;
-	return 0;
-}
-
-
 // This function is called by the 65CE02 emulator in case of reading a byte (regardless of data or code)
 Uint8 cpu_read ( Uint16 addr )
 {
-	int blk = addr >> 13;
-	int real_addr = map_offset[blk] + addr;	// in case of not mapped, offset will be zero, thus real_addr == addr
-	Uint8 result;
-	if (!map_mapped[blk]) {	// it's only applies if block is marked as "not mapped". Mapped blocks are not checked at all.
-		int hinib = addr >> 12;
-		int reg30_mapping = check_vic3_reg30_mapped_rom(hinib);
-		// check if mapped via VIC3 reg $30
-		if (reg30_mapping)
-			real_addr += reg30_mapping;
-		else if (addr < 2) {
-			printf("PORT0: reading CPU port %d, data is $%02X" NL, addr, cpu_port[addr]);
-			return cpu_port[addr];
-		} else if (hinib >= 0xE) {	// read op at unmapped, not VIC3 reg30 mapped $E000 - $FFFF
-			if (((cpu_port[1] & 3) > 1))	// low two bits of CPU port is binary '10 or '11
-				real_addr += 0x20000;	// FIXME: read KERNAL ROM?
-		} else if (hinib == 0xD) {		// read op at unmapped, not VIC3 reg30 mapped $D000 - $DFFF
-			switch (cpu_port[1] & 7) {
-				case 0: case 4:
-					break;		// read RAM! (pass-through unmapped address, ie bank zero)
-				case 5: case 6: case 7:
-					return io_read(addr);
-				default: // that is: cases 1, 2, 3
-					real_addr += 0x20000; // FIXME: read character ROM!
-					break;
-			}
-		}
-		if (hinib == 0xA || hinib == 0xB0) {	// read op at unmapped, not VIC30 reg30 mapped $A000 - $BFFF
-			if ((cpu_port[1] & 3) == 3)
-				real_addr += 0x20000; // FIXME: read BASIC ROM
-		}
+	int phys_addr = addr_trans_rd[addr >> 12] + addr;	// translating address
+	if (phys_addr >= IO_REMAP_VIRTUAL)
+		return io_read(addr);	// addr should be in $DXXX range to hit this, hopefully ...
+	phys_addr &= 0xFFFFF;
+	if (phys_addr < 2)
+		return cpu_port[phys_addr & 1];
+	if (phys_addr < 0x40000) {
+		printf("MEM: read @ $%04X [PC=$%04X] (REAL=$%05X) result is $%02X" NL, addr, cpu_pc, phys_addr, memory[phys_addr]);
+		return memory[phys_addr];
 	}
-	result = memory[real_addr];
-	printf("CPU: read @ $%04X [PC=$%04X] (BLK=%d, REAL=$%05X, mapped=%d) result is $%02X" NL, addr, cpu_pc, blk, real_addr, map_mapped[blk], result);
-	return result;
+	printf("MEM: WARN: reading undecoded memory area @ $%04X [PC=$%04X] (REAL=$%05X) result is $%02X" NL, addr, cpu_pc, phys_addr, 0xFF);
+	return 0xFF;
 }
 
 
@@ -522,40 +566,24 @@ Uint8 cpu_read ( Uint16 addr )
 // This function is called by the 65CE02 emulator in case of writing a byte
 void cpu_write ( Uint16 addr, Uint8 data )
 {
-	int blk = addr >> 13;
-	int real_addr = map_offset[blk] + addr; // in case of not mapped, offset will be zero, thus real_addr == addr
-	if (!map_mapped[blk]) {
-		int hinib = addr >> 12;
-		if (check_vic3_reg30_mapped_rom(hinib)) {
-			printf("CPU: ignoring write to VIC3 mapped ROM [??] FIXME: should we write RAM then?!" NL); // FIXME: ??? should we write RAM instead, of it's OK to ignore now?
-			return;
-		}
-		// unmapped write accesses have only one special case, if I/O is targeted, since CPU port mapped ROMs cannot be written and RAM is written instead
-		if ((cpu_port[1] & 7) > 4 && hinib == 0xD) {
-			io_write(addr, data);
-			return;
-		}
-		// if the CPU port (and its DDR) is written ...
-		if (addr < 2) {
-			printf("PORT0: 0/1 port is written! %d data $%02X" NL, addr, data);
-			if (addr) {
-				cpu_port[1] = (cpu_port[1] & (255 - cpu_port[0])) | (data & cpu_port[0]);
-				printf("PORT0: current setting is b%d%d%d" NL,
-					cpu_port[1] & 4 ? 1 : 0,
-					cpu_port[1] & 2 ? 1 : 0,
-					cpu_port[1] & 1
-				);
-			} else
-				cpu_port[0] = data;
-			return;
-		}
-		// otherwise pass through, real_addr will be the input addr in case of not mapped address
+	int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address
+	if (phys_addr >= IO_REMAP_VIRTUAL) {
+		io_write(addr, data);	// addr should be in $DXXX range to hit this, hopefully ...
+		return;
 	}
-	if (real_addr < 0x20000)	// do not write ROM ....
-		memory[real_addr] = data;
-	printf("CPU write @ $%04X [PC=$%04X] (BLK=%d, REAL=$%05X, mapped=%d) with data $%02X" NL, addr, cpu_pc, blk, real_addr, map_mapped[blk], data);
-	if (real_addr >= 0x20000)
-		printf("CPU warning! writing into ROM?" NL);
+	phys_addr &= 0xFFFFF;
+	if (phys_addr < 2) {
+		cpu_port[phys_addr & 1] = data;
+		puts("MEM: applying new memory configuration because of CPU port writing");
+		apply_memory_config();
+		return;
+	}
+	if (phys_addr < 0x20000) {
+		printf("MEM write @ $%04X [PC=$%04X] (REAL=$%05X) with data $%02X" NL, addr, cpu_pc, phys_addr, data);
+		memory[phys_addr] = data;
+		return;
+	}
+	printf("MEM: WARN: writing undecoded memory area or ROM @ $%04X [PC=$%04X] (REAL=$%05X) with data $%02X" NL, addr, cpu_pc, phys_addr, data);
 }
 
 
@@ -574,7 +602,7 @@ static void dump_on_shutdown ( void )
 	int a;
 	for (a = 0; a < 0x40; a++)
 		printf("VIC-3 register $%02X is %02X" NL, a, vic3_registers[a]);
-	// Dump memory, so some can inspect the result (especially only RAM is interesting of course in BANK 0 and 1)
+	// Dump memory, so some can inspect the result (low 128K, RAM only)
 	f = fopen(MEMDUMP_FILE, "wb");
 	if (f) {
 		fwrite(memory, 1, 0x20000, f);
@@ -582,6 +610,7 @@ static void dump_on_shutdown ( void )
 		puts("Memory is dumped into " MEMDUMP_FILE);
 	}
 }
+
 
 
 
