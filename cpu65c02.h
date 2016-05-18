@@ -36,7 +36,9 @@ extern Uint8 cpu_read(Uint16 addr);
 extern void cpu_reset(void);
 extern int  cpu_step (void);
 
+#ifdef CPU_TRAP
 extern int  cpu_trap (Uint8 opcode);
+#endif
 #ifdef CPU_65CE02
 extern void cpu_do_aug ( void );
 extern void cpu_do_nop ( void );

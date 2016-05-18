@@ -37,6 +37,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <SDL_types.h>
 #include "cpu65c02.h"
 
+#ifdef DEBUG_CPU
+#include "cpu65ce02_disasm_tables.c"
+//#include "cpu65ce02_disasm.c
+#endif
+
 #ifdef DTV_CPU_HACK
 #ifdef CPU_65CE02
 #	error "DTV_CPU_HACK and CPU_65CE02 are both defined. This is illegal currently."
@@ -59,7 +64,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifdef CPU_65CE02
 	//int cpu_last_opcode_cycles;
 	Uint8 cpu_z;
-	Uint16 cpu_bphi;		// NOTE: it must store the value shifted to the high byte!
+	Uint16 cpu_bphi;	// NOTE: it must store the value shifted to the high byte!
 	Uint16 cpu_sphi;	// NOTE: it must store the value shifted to the high byte!
 	int cpu_inhibit_interrupts;
 #define	SP_HI cpu_sphi
@@ -88,6 +93,11 @@ int cpu_irqLevel = 0, cpu_nmiEdge = 0;
 int cpu_cycles;
 
 #ifdef CPU_65CE02
+#ifdef DEBUG_CPU
+#define OPC_65CE02(w) puts("CPU: 65CE02 opcode " w)
+#else
+#define OPC_65CE02(w)
+#endif
 static inline void UNIMPLEMENTED_65CE02 ( const char *msg )
 {
 	fprintf(stderr, "UNIMPLEMENTED 65CE02 opcode $%02X [$%02X $%02X] at $%04X: \"%s\"\n",
@@ -111,13 +121,23 @@ static inline Uint16 readWord(Uint16 addr) {
 static inline void push ( Uint8 data )
 {
 	cpu_write(cpu_sp | cpu_sphi, data);
-	if ((cpu_sp--) == 0 && (!cpu_pfe))
+	cpu_sp--;
+	if (cpu_sp == 0xFF && (!cpu_pfe)) {
 		cpu_sphi -= 0x100;
+#ifdef DEBUG_CPU
+		printf("CPU: 65CE02: SPHI changed to $%04X\n", cpu_sphi);
+#endif
+	}
 }
 static inline Uint8 pop ( void )
 {
-	if ((++cpu_sp) == 0 && (!cpu_pfe))
+	cpu_sp++;
+	if (cpu_sp == 0 && (!cpu_pfe)) {
 		cpu_sphi += 0x100;
+#ifdef DEBUG_CPU
+		printf("CPU: 65CE02: SPHI changed to $%04X\n", cpu_sphi);
+#endif
+	}
 	return cpu_read(cpu_sp | cpu_sphi);
 }
 #else
@@ -133,7 +153,8 @@ static void setP(Uint8 st) {
 	cpu_pfn = st & 128;
 	cpu_pfv = st &  64;
 #ifdef CPU_65CE02
-	cpu_pfe = st &  32;
+	// Note: E bit cannot be changed by PLP/RTI to it's commented out here ...
+	// cpu_pfe = st &  32;
 #endif
 	cpu_pfb = st &  16;
 	cpu_pfd = st &   8;
@@ -174,6 +195,7 @@ void cpu_reset() {
 	cpu_x = 0;
 	cpu_y = 0;
 #ifdef CPU_65CE02
+	cpu_pfe = 1;
 	cpu_z = 0;
 	cpu_bphi = 0x0000;
 	cpu_sphi = 0x0100;
@@ -189,6 +211,13 @@ static inline void setNZ(Uint8 st) {
 	cpu_pfn = st & 128;
 	cpu_pfz = !st;
 }
+#ifdef CPU_65CE02
+static inline void setNZ16(Uint16 st) {
+	cpu_pfn = st & 0x8000;
+	cpu_pfz = !st;
+}
+#endif
+
 #define _imm() (cpu_pc++)
 static inline Uint16 _abs() {
 	Uint16 o = cpu_read(cpu_pc++);
@@ -238,11 +267,17 @@ static inline void _BRA(int cond) {
 static inline void _BRA16(int cond) {
 	if (cond) {
 		// Note: 16 bit PC relative stuffs works a bit differently as 8 bit ones, not the same base of the offsets!
+#if 0
 		int temp = cpu_read(cpu_pc) | (cpu_read(cpu_pc + 1) << 8);
+		//if (temp & 0x8000) temp = 1 + cpu_pc - (temp ^ 0xFFFF);
+		//else temp = cpu_pc + temp + 2;
 		if (temp & 0x8000) temp = 1 + cpu_pc - (temp ^ 0xFFFF);
 		else temp = cpu_pc + temp + 2;
-		if ((temp & 0xFF00) != (cpu_pc & 0xFF00)) cpu_cycles++; // FIXME: sill applies in 16 bit relative mode as well?!
-		cpu_pc = temp;
+#endif
+		cpu_pc += 1 + (Sint16)(cpu_read(cpu_pc) | (cpu_read(cpu_pc + 1) << 8));
+
+		//if ((temp & 0xFF00) != (cpu_pc & 0xFF00)) cpu_cycles++; // FIXME: sill applies in 16 bit relative mode as well?!
+		//cpu_pc = temp;
 		cpu_cycles++;
 	} else
 		cpu_pc += 2;
@@ -345,6 +380,9 @@ int cpu_step () {
 		&& cpu_cycles != 1 && !cpu_inhibit_interrupts
 #endif
 	) {
+#ifdef DEBUG_CPU
+		printf("CPU: serving NMI on NMI edge at PC $%04X\n", cpu_pc);
+#endif
 		cpu_nmiEdge = 0;
 		pushWord(cpu_pc);
 		push(getP());
@@ -358,6 +396,9 @@ int cpu_step () {
 		&& cpu_cycles != 1 && !cpu_inhibit_interrupts
 #endif
 	) {
+#ifdef DEBUG_CPU
+		printf("CPU: servint IRQ on IRQ level at PC $%04X\n", cpu_pc);
+#endif
 		pushWord(cpu_pc);
 		cpu_pfb = 0;
 		push(getP());
@@ -367,7 +408,18 @@ int cpu_step () {
 		return 7;
 	}
 	cpu_old_pc = cpu_pc;
+#ifdef DEBUG_CPU
+	if (cpu_pc == 0)
+		puts("CPU: WARN: PC at zero!");
+#endif
 	cpu_op = cpu_read(cpu_pc++);
+#ifdef DEBUG_CPU
+	printf("CPU: at $%04X opcode = $%02X %s %s A=%02X X=%02X Y=%02X Z=%02X SP=%02X\n", (cpu_pc - 1) & 0xFFFF, cpu_op, opcode_names[cpu_op], opcode_adm_names[opcode_adms[cpu_op]],
+		cpu_a, cpu_x, cpu_y, cpu_z, cpu_sp
+	);
+	if (cpu_op == 0x60)
+		printf("CPU: SP before RTS is (SPHI=$%04X) SP=$%02X\n", cpu_sphi, cpu_sp);
+#endif
 #ifdef CPU_TRAP
 	if (cpu_op == CPU_TRAP) {
 		int ret = cpu_trap(CPU_TRAP);
@@ -377,17 +429,27 @@ int cpu_step () {
 #endif
 	cpu_cycles = opcycles[cpu_op];
 	switch (cpu_op) {
-	case 0x00:	pushWord(cpu_pc + 1); cpu_pfb = 1; push(getP()); cpu_pfd = 0; cpu_pfi = 1; cpu_pc = readWord(0xFFFE); break; /* 0x0 BRK Implied */
+	case 0x00:
+#ifdef DEBUG_CPU
+			printf("CPU: WARN: BRK is about executing at PC=$%04X\n", (cpu_pc - 1) & 0xFFFF);
+#endif
+			pushWord(cpu_pc + 1); cpu_pfb = 1; push(getP()); cpu_pfd = 0; cpu_pfi = 1; cpu_pc = readWord(0xFFFE); /* 0x0 BRK Implied */
+			break;
 	case 0x01:	setNZ(A_OP(|,cpu_read(_zpxi()))); break; /* 0x1 ORA (Zero_Page,X) */
 	case 0x02:
 #ifdef CPU_65CE02
+			OPC_65CE02("CLE");
 			cpu_pfe = 0;	// 65CE02: CLE
+#ifdef DEBUG_CPU
+			puts("CPU: WARN: E flag is cleared!");
+#endif
 #else
 			cpu_pc++; /* 0x2 NOP imm (non-std NOP with addr mode) */
 #endif
 			break;
 	case 0x03:
 #ifdef CPU_65CE02
+			OPC_65CE02("SEE");
 			cpu_pfe = 1;	// 65CE02: SEE
 #endif
 			break; /* 0x3 NOP (nonstd loc, implied) */
@@ -400,6 +462,7 @@ int cpu_step () {
 	case 0x0a:	_ASL(-1); break; /* 0xa ASL Accumulator */
 	case 0x0b:
 #ifdef CPU_65CE02
+			OPC_65CE02("TSY");
 			setNZ(cpu_y = (cpu_sphi >> 8));   // TSY                  0B   65CE02
 #endif
 			break; /* 0xb NOP (nonstd loc, implied) */
@@ -418,6 +481,7 @@ int cpu_step () {
 			break;
 	case 0x13:
 #ifdef CPU_65CE02
+			OPC_65CE02("BPL16");
 			_BRA16(!cpu_pfn);		// 65CE02: BPL 16 bit relative
 #endif
 			break; /* 0x13 NOP (nonstd loc, implied) */
@@ -430,6 +494,7 @@ int cpu_step () {
 	case 0x1a:	setNZ(CPU_A_INC(1)); break; /* 0x1a INA Accumulator */
 	case 0x1b:
 #ifdef CPU_65CE02
+			OPC_65CE02("INZ");
 			setNZ(++cpu_z);	// 65CE02: INZ
 #endif
 			break; /* 0x1b NOP (nonstd loc, implied) */
@@ -441,8 +506,9 @@ int cpu_step () {
 	case 0x21:	setNZ(A_OP(&,cpu_read(_zpxi()))); break; /* 0x21 AND (Zero_Page,X) */
 	case 0x22:
 #ifdef CPU_65CE02
+			OPC_65CE02("JSR (nnnn)");
 			// 65CE02 JSR ($nnnn)
-			pushWord(cpu_pc + 1);	// FIXME: is it so, like with "normal" JSR about the return address? I guess it should ...
+			pushWord(cpu_pc + 1);
 			cpu_pc = _absi();
 #else
 			cpu_pc++;	/* 0x22 NOP imm (non-std NOP with addr mode) */
@@ -450,8 +516,9 @@ int cpu_step () {
 			break;
 	case 0x23:
 #ifdef CPU_65CE02
+			OPC_65CE02("JSR (nnnn,X)");
 			// 65CE02 JSR ($nnnn,X)
-			pushWord(cpu_pc + 1);	// FIXME: is it so, like with "normal" JSR about the return address? I guess it should ...
+			pushWord(cpu_pc + 1);
 			cpu_pc = _absxi();
 #endif
 			break; /* 0x23 NOP (nonstd loc, implied) */
@@ -459,13 +526,19 @@ int cpu_step () {
 	case 0x25:	setNZ(A_OP(&,cpu_read(_zp()))); break; /* 0x25 AND Zero_Page */
 	case 0x26:	_ROL(_zp()); break; /* 0x26 ROL Zero_Page */
 	case 0x27:	{ int a = _zp(); cpu_write(a, cpu_read(a) & 251); } break; /* 0x27 RMB Zero_Page */
-	case 0x28:	setP(pop() | 0x10); break; /* 0x28 PLP Implied */
+	case 0x28:
+			setP(pop() | 0x10);
+			break; /* 0x28 PLP Implied */
 	case 0x29:	setNZ(A_OP(&,cpu_read(_imm()))); break; /* 0x29 AND Immediate */
 	case 0x2a:	_ROL(-1); break; /* 0x2a ROL Accumulator */
 	case 0x2b:
 #ifdef CPU_65CE02
+			OPC_65CE02("TYS");
 			cpu_sphi = cpu_y << 8;	// 65CE02	TYS
-			printf("CPU: stack page is: $%04X\n", cpu_sphi);
+#ifdef DEBUG_CPU
+			if (cpu_sphi != 0x100)
+				printf("CPU: WARN: stack page is set non-0x100: $%04X\n", cpu_sphi);
+#endif
 #endif
 			break; /* 0x2b NOP (nonstd loc, implied) */
 	case 0x2c:	_BIT(cpu_read(_abs())); break; /* 0x2c BIT Absolute */
@@ -483,6 +556,7 @@ int cpu_step () {
 			break;
 	case 0x33:
 #ifdef CPU_65CE02
+			OPC_65CE02("BMI16");
 			_BRA16(cpu_pfn); // 65CE02 BMI 16 bit relative
 #endif
 			break; /* 0x33 NOP (nonstd loc, implied) */
@@ -495,6 +569,7 @@ int cpu_step () {
 	case 0x3a:	setNZ(CPU_A_INC(-1)); break; /* 0x3a DEA Accumulator */
 	case 0x3b:
 #ifdef CPU_65CE02
+			OPC_65CE02("DEZ");
 			setNZ(--cpu_z);		// 65CE02	DEZ
 #endif
 			break; /* 0x3b NOP (nonstd loc, implied) */
@@ -506,6 +581,7 @@ int cpu_step () {
 	case 0x41:	setNZ(A_OP(^,cpu_read(_zpxi()))); break; /* 0x41 EOR (Zero_Page,X) */
 	case 0x42:
 #ifdef CPU_65CE02
+			OPC_65CE02("NEG");
 			setNZ(cpu_a = -cpu_a);	// 65CE02: NEG	FIXME: flags etc are correct?
 #else
 #ifdef DTV_CPU_HACK
@@ -520,6 +596,7 @@ int cpu_step () {
 	case 0x43:
 #ifdef CPU_65CE02
 			// 65CE02: ASR A
+			OPC_65CE02("ASR A");
 			cpu_pfc = cpu_a & 1;
 			cpu_a = (cpu_a >> 1) | (cpu_a & 0x80);
 			setNZ(cpu_a);
@@ -527,6 +604,7 @@ int cpu_step () {
 			break; /* 0x43 NOP (nonstd loc, implied) */
 	case 0x44:
 #ifdef CPU_65CE02
+			OPC_65CE02("ASR nn");
 			UNIMPLEMENTED_65CE02("ASR $nn");	// 65CE02: ASR $nn
 #else
 			cpu_pc++;	// 0x44 NOP zp (non-std NOP with addr mode)
@@ -540,6 +618,7 @@ int cpu_step () {
 	case 0x4a:	_LSR(-1); break; /* 0x4a LSR Accumulator */
 	case 0x4b:
 #ifdef CPU_65CE02
+			OPC_65CE02("TAZ");
 			setNZ(cpu_z = cpu_a);	// 65CE02: TAZ
 #endif
 			break; /* 0x4b NOP (nonstd loc, implied) */
@@ -552,11 +631,13 @@ int cpu_step () {
 	case 0x52:	setNZ(A_OP(^,cpu_read(_zpi()))); break; /* 0x52 EOR (Zero_Page) */
 	case 0x53:
 #ifdef CPU_65CE02
+			OPC_65CE02("BVC16");
 			_BRA16(!cpu_pfv); // 65CE02: BVC 16-bit-relative
 #endif
 			break; /* 0x53 NOP (nonstd loc, implied) */
 	case 0x54:
 #ifdef CPU_65CE02
+			OPC_65CE02("ASR nn,X");
 			UNIMPLEMENTED_65CE02("ASR $nn,X");	// ASR $nn,X
 #else
 			cpu_pc++;	// NOP zpx (non-std NOP with addr mode)
@@ -570,15 +651,22 @@ int cpu_step () {
 	case 0x5a:	push(cpu_y); break; /* 0x5a PHY Implied */
 	case 0x5b:
 #ifdef CPU_65CE02
+			OPC_65CE02("TAB");
 			cpu_bphi = cpu_a << 8; // 65CE02: TAB
-			printf("CPU: base page is $%04X\n", cpu_bphi);
+#ifdef DEBUG_CPU
+			if (cpu_bphi)
+				printf("CPU: WARN base page is non-zero now with value of $%04X\n", cpu_bphi);
+#endif
 #endif
 			break; /* 0x5b NOP (nonstd loc, implied) */
 	case 0x5c:
 #ifdef CPU_65CE02
+			OPC_65CE02("MAP");
 			cpu_do_aug();	/* 0x5c on 65CE02: this is the "AUG" opcode. It must be handled by the emulator, on 4510 (C65) it's redefined as MAP for MMU functionality */
+#else
+			cpu_pc += 2;
 #endif
-			break; /* 0x5c NOP (nonstd loc, implied) */
+			break; /* 0x5c NOP (nonstd loc, implied) */ // FIXME: NOP absolute!
 	case 0x5d:	setNZ(A_OP(^,cpu_read(_absx()))); break; /* 0x5d EOR Absolute,X */
 	case 0x5e:	_LSR(_absx()); break; /* 0x5e LSR Absolute,X */
 	case 0x5f:	_BRA(!(cpu_read(_zp()) & 32)); break; /* 0x5f BBR Relative */
@@ -586,6 +674,7 @@ int cpu_step () {
 	case 0x61:	_ADC(cpu_read(_zpxi())); break; /* 0x61 ADC (Zero_Page,X) */
 	case 0x62:
 #ifdef CPU_65CE02
+			OPC_65CE02("RTS #nn");
 			UNIMPLEMENTED_65CE02("RTS #$nn");	// 65CE02 RTS #$nn TODO: what this opcode does _exactly_? Guess: correcting stack pointer with a given value?
 #else
 			cpu_pc++;	// NOP imm (non-std NOP with addr mode)
@@ -593,7 +682,10 @@ int cpu_step () {
 			break;
 	case 0x63:
 #ifdef CPU_65CE02
-			UNIMPLEMENTED_65CE02("BSR $nnnn");	// 65C02 ?! BSR $nnnn Interesting 65C02-only? FIXME TODO: does this opcode exist before 65CE02 as well?!
+			OPC_65CE02("BSR16");
+			//UNIMPLEMENTED_65CE02("BSR $nnnn");	// 65C02 ?! BSR $nnnn Interesting 65C02-only? FIXME TODO: does this opcode exist before 65CE02 as well?!
+			pushWord(cpu_pc + 1);
+			_BRA16(1);
 #endif
 			break; /* 0x63 NOP (nonstd loc, implied) */
 	case 0x64:	cpu_write(_zp(), ZERO_REG); break; /* 0x64 STZ Zero_Page */
@@ -605,6 +697,7 @@ int cpu_step () {
 	case 0x6a:	_ROR(-1); break; /* 0x6a ROR Accumulator */
 	case 0x6b:
 #ifdef CPU_65CE02
+			OPC_65CE02("TZA");
 			setNZ(cpu_a = cpu_z);	// 65CE02 TZA
 #endif
 			break; /* 0x6b NOP (nonstd loc, implied) */
@@ -617,6 +710,7 @@ int cpu_step () {
 	case 0x72:	_ADC(cpu_read(_zpi())); break; /* 0x72 ADC (Zero_Page) */
 	case 0x73:
 #ifdef CPU_65CE02
+			OPC_65CE02("BVS16");
 			_BRA16(cpu_pfv);	// 65CE02 BVS 16 bit relative
 #endif
 			break; /* 0x73 NOP (nonstd loc, implied) */
@@ -629,6 +723,7 @@ int cpu_step () {
 	case 0x7a:	setNZ(cpu_y = pop()); break; /* 0x7a PLY Implied */
 	case 0x7b:
 #ifdef CPU_65CE02
+			OPC_65CE02("TBA");
 			setNZ(cpu_a = (cpu_bphi >> 8));	// 65C02 TBA
 #endif
 			break; /* 0x7b NOP (nonstd loc, implied) */
@@ -640,6 +735,7 @@ int cpu_step () {
 	case 0x81:	cpu_write(_zpxi(), CPU_A_GET()); break; /* 0x81 STA (Zero_Page,X) */
 	case 0x82:
 #ifdef CPU_65CE02
+			OPC_65CE02("STA (nn,S),Y");
 			UNIMPLEMENTED_65CE02("STA ($nn,SP),Y");	// 65CE02 STA ($nn,SP),Y
 #else
 			cpu_pc++;	// NOP imm (non-std NOP with addr mode)
@@ -647,6 +743,7 @@ int cpu_step () {
 			break;
 	case 0x83:
 #ifdef CPU_65CE02
+			OPC_65CE02("BRA16");
 			_BRA16(1);	// 65CE02 BRA $nnnn 16-bit-pc-rel?
 #endif
 			break; /* 0x83 NOP (nonstd loc, implied) */
@@ -659,6 +756,7 @@ int cpu_step () {
 	case 0x8a:	setNZ(CPU_A_SET(cpu_x)); break; /* 0x8a TXA Implied */
 	case 0x8b:
 #ifdef CPU_65CE02
+			OPC_65CE02("STY nnnn,X");
 			cpu_write(_absx(), cpu_y); // 65CE02 STY $nnnn,X
 #endif
 			break; /* 0x8b NOP (nonstd loc, implied) */
@@ -671,6 +769,7 @@ int cpu_step () {
 	case 0x92:	cpu_write(_zpi(), CPU_A_GET()); break; /* 0x92 STA (Zero_Page) */
 	case 0x93:
 #ifdef CPU_65CE02
+			OPC_65CE02("BCC16");
 			_BRA16(!cpu_pfc);	// 65CE02  BCC $nnnn
 #endif
 			break; /* 0x93 NOP (nonstd loc, implied) */
@@ -683,6 +782,7 @@ int cpu_step () {
 	case 0x9a:	cpu_sp = cpu_x; break; /* 0x9a TXS Implied */
 	case 0x9b:
 #ifdef CPU_65CE02
+			OPC_65CE02("STX nnnn,Y");
 			cpu_write(_absy(), cpu_x);	// 65CE02 STX $nnnn,Y
 #endif
 			break; /* 0x9b NOP (nonstd loc, implied) */
@@ -695,6 +795,7 @@ int cpu_step () {
 	case 0xa2:	setNZ(cpu_x = cpu_read(_imm())); break; /* 0xa2 LDX Immediate */
 	case 0xa3:
 #ifdef CPU_65CE02
+			OPC_65CE02("LDZ #nn");
 			setNZ(cpu_z = cpu_read(_imm())); // LDZ #$nn             A3   65CE02
 #endif
 			break; /* 0xa3 NOP (nonstd loc, implied) */
@@ -707,6 +808,7 @@ int cpu_step () {
 	case 0xaa:	setNZ(cpu_x = CPU_A_GET()); break; /* 0xaa TAX Implied */
 	case 0xab:
 #ifdef CPU_65CE02
+			OPC_65CE02("LDZ nnnn");
 			setNZ(cpu_z = cpu_read(_abs()));	// 65CE02 LDZ $nnnn
 #endif
 			break; /* 0xab NOP (nonstd loc, implied) */
@@ -719,6 +821,7 @@ int cpu_step () {
 	case 0xb2:	setNZ(CPU_A_SET(cpu_read(_zpi()))); break; /* 0xb2 LDA (Zero_Page) */
 	case 0xb3:
 #ifdef CPU_65CE02
+			OPC_65CE02("BCS16");
 			_BRA16(cpu_pfc);	// 65CE02 BCS $nnnn
 #endif
 			break; /* 0xb3 NOP (nonstd loc, implied) */
@@ -731,6 +834,7 @@ int cpu_step () {
 	case 0xba:	setNZ(cpu_x = cpu_sp); break; /* 0xba TSX Implied */
 	case 0xbb:
 #ifdef CPU_65CE02
+			OPC_65CE02("LDZ nnnn,X");
 			setNZ(cpu_z = cpu_read(_absx()));	// 65CE02 LDZ $nnnn,X
 #endif
 			break; /* 0xbb NOP (nonstd loc, implied) */
@@ -742,6 +846,7 @@ int cpu_step () {
 	case 0xc1:	_CMP(CPU_A_GET(), cpu_read(_zpxi())); break; /* 0xc1 CMP (Zero_Page,X) */
 	case 0xc2:
 #ifdef CPU_65CE02
+			OPC_65CE02("CPZ #nn");
 			_CMP(cpu_z, cpu_read(_imm()));	// 65CE02 CPZ #$nn
 #else
 			cpu_pc++; // imm (non-std NOP with addr mode)
@@ -749,7 +854,16 @@ int cpu_step () {
 			break;
 	case 0xc3:
 #ifdef CPU_65CE02
-			UNIMPLEMENTED_65CE02("DEW $nnnn");	// 65CE02 (decrement word) DEW $nnnn (WHAT ABOUT FLAGS?!)
+			OPC_65CE02("DEW nn");
+			//UNIMPLEMENTED_65CE02("DEW $nn");	// 65CE02 (decrement word) DEW $nn (WHAT ABOUT FLAGS?!)
+			{       //  DEW $nn            C3  Decrement Word (maybe an error in 64NET.OPC ...) ANOTHER FIX: this is zero (errr, base ...) page!!!
+                        int alo = _zp();
+                        int ahi = (alo & 0xFF00) | ((alo + 1) & 0xFF);
+                        Uint16 data = (cpu_read(alo) | (cpu_read(ahi) << 8)) - 1;
+                        setNZ16(data);
+                        cpu_write(alo, data & 0xFF);
+                        cpu_write(ahi, data >> 8);
+                        }
 #endif
 			break; /* 0xc3 NOP (nonstd loc, implied) */
 	case 0xc4:	_CMP(cpu_y, cpu_read(_zp())); break; /* 0xc4 CPY Zero_Page */
@@ -761,6 +875,7 @@ int cpu_step () {
 	case 0xca:	setNZ(--cpu_x); break; /* 0xca DEX Implied */
 	case 0xcb:
 #ifdef CPU_65CE02
+			OPC_65CE02("ASW nnnn");
 			UNIMPLEMENTED_65CE02("ASW $nnnn");	// 65CE02 ASW $nnnn            (CB  Arithmetic Shift Left Word)
 #endif
 			break; /* 0xcb NOP (nonstd loc, implied) */
@@ -773,11 +888,13 @@ int cpu_step () {
 	case 0xd2:	_CMP(CPU_A_GET(), cpu_read(_zpi())); break; /* 0xd2 CMP (Zero_Page) */
 	case 0xd3:
 #ifdef CPU_65CE02
+			OPC_65CE02("BNE16");
 			_BRA16(!cpu_pfz);	// 65CE02 BNE $nnnn
 #endif
 			break; /* 0xd3 NOP (nonstd loc, implied) */
 	case 0xd4:
 #ifdef CPU_65CE02
+			OPC_65CE02("CPZ nn");
 			_CMP(cpu_z, cpu_read(_zp()));	// 65CE02 CPZ $nn
 #else
 			cpu_pc++;	// NOP zpx (non-std NOP with addr mode)
@@ -791,14 +908,18 @@ int cpu_step () {
 	case 0xda:	push(cpu_x); break; /* 0xda PHX Implied */
 	case 0xdb:
 #ifdef CPU_65CE02
+			OPC_65CE02("PHZ");
 			push(cpu_z);		// 65CE02: PHZ
 #endif
 			break; /* 0xdb NOP (nonstd loc, implied) */
 	case 0xdc:
 #ifdef CPU_65CE02
+			OPC_65CE02("CPZ nnnn");
 			_CMP(cpu_z, cpu_read(_abs())); // 65CE02 CPZ $nnnn
+#else
+			cpu_pc += 2;
 #endif
-			break; /* 0xdc NOP (nonstd loc, implied) */
+			break; /* 0xdc NOP (nonstd loc, implied) */ // FIXME: bugfix NOP absolute!
 	case 0xdd:	_CMP(CPU_A_GET(), cpu_read(_absx())); break; /* 0xdd CMP Absolute,X */
 	case 0xde:	{ int addr = _absx(); Uint8 data = cpu_read(addr) - 1; setNZ(data); cpu_write(addr, data); } break; /* 0xde DEC Absolute,X */
 	case 0xdf:	_BRA( cpu_read(_zp()) & 32 ); break; /* 0xdf BBS Relative */
@@ -806,6 +927,7 @@ int cpu_step () {
 	case 0xe1:	_SBC(cpu_read(_zpxi())); break; /* 0xe1 SBC (Zero_Page,X) */
 	case 0xe2:
 #ifdef CPU_65CE02
+			OPC_65CE02("LDA (nn,S),Y");
 			UNIMPLEMENTED_65CE02("LDA ($nn,SP),Y");	// 65CE02 LDA ($nn,SP),Y
 #else
 			cpu_pc++; // 0xe2 NOP imm (non-std NOP with addr mode)
@@ -813,11 +935,13 @@ int cpu_step () {
 			break;
 	case 0xe3:
 #ifdef CPU_65CE02
+			OPC_65CE02("INW nn");
 			{	//  INW $nn            E3  Increment Word (maybe an error in 64NET.OPC ...) ANOTHER FIX: this is zero (errr, base ...) page!!!
 			int alo = _zp();
 			int ahi = (alo & 0xFF00) | ((alo + 1) & 0xFF);
 			Uint16 data = (cpu_read(alo) | (cpu_read(ahi) << 8)) + 1;
-			setNZ(data);
+			//setNZ16(data);
+			cpu_pfz = (data == 0);
 			cpu_write(alo, data & 0xFF);
 			cpu_write(ahi, data >> 8);
 			}
@@ -831,12 +955,14 @@ int cpu_step () {
 	case 0xe9:	_SBC(cpu_read(_imm())); break; /* 0xe9 SBC Immediate */
 	case 0xea:
 #ifdef CPU_65CE02
-			// on 65CE02 it's not special, but in C65 (4510) it is. It's up the emulator though ...
+			// on 65CE02 it's not special, but in C65 (4510) it is (EOM). It's up the emulator though ...
+			OPC_65CE02("EOM");
 			cpu_do_nop();
 #endif
 			break;	// 0xea NOP Implied - the "standard" NOP of original 6502 core
 	case 0xeb:
 #ifdef CPU_65CE02
+			OPC_65CE02("ROW nnnn");
 			UNIMPLEMENTED_65CE02("ROW $nnnn");	// ROW $nnnn            EB  Rotate Right Word
 #endif
 			break; /* 0xeb NOP (nonstd loc, implied) */
@@ -849,11 +975,13 @@ int cpu_step () {
 	case 0xf2:	_SBC(cpu_read(_zpi())); break; /* 0xf2 SBC (Zero_Page) */
 	case 0xf3:
 #ifdef CPU_65CE02
+			OPC_65CE02("BEQ16");
 			_BRA16(cpu_pfz);	// 65CE02 BEQ $nnnn
 #endif
 			break; /* 0xf3 NOP (nonstd loc, implied) */
 	case 0xf4:
 #ifdef CPU_65CE02
+			OPC_65CE02("PHW #nnnn");
 			UNIMPLEMENTED_65CE02("PHW #$nnnn");	// 65CE02 PHW #$nnnn (push word)
 #else
 			cpu_pc++; // 0xf4 NOP zpx (non-std NOP with addr mode)
@@ -867,17 +995,27 @@ int cpu_step () {
 	case 0xfa:	setNZ(cpu_x = pop()); break; /* 0xfa PLX Implied */
 	case 0xfb:
 #ifdef CPU_65CE02
+			OPC_65CE02("PLZ");
 			setNZ(cpu_z = pop());	// 65CE02 PLZ
 #endif
 			break; /* 0xfb NOP (nonstd loc, implied) */
 	case 0xfc:
 #ifdef CPU_65CE02
+			OPC_65CE02("PHW nnnn");
 			UNIMPLEMENTED_65CE02("PHW $nnnn");	// PHW $nnnn [? push word from an absolute address, maybe?]
+#else
+			cpu_pc += 2;
 #endif
-			break; /* 0xfc NOP (nonstd loc, implied) */
+			break; /* 0xfc NOP (nonstd loc, implied) */ // FIXME: bugfix NOP absolute?
 	case 0xfd:	_SBC(cpu_read(_absx())); break; /* 0xfd SBC Absolute,X */
 	case 0xfe:	{ int addr = _absx(); Uint8 data = cpu_read(addr) + 1; setNZ(data); cpu_write(addr, data); } break; /* 0xfe INC Absolute,X */
 	case 0xff:	_BRA( cpu_read(_zp()) & 128 ); break; /* 0xff BBS Relative */
+#ifdef DEBUG_CPU
+	default:
+			fprintf(stderr, "FATAL: not handled CPU opcode: $%02X", cpu_op);
+			exit(1);
+			break;
+#endif
 	}
 	return cpu_cycles;
 }
