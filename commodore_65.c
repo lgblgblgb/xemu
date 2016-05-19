@@ -34,10 +34,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 //#define DEBUG_STACK
 
 
-Uint8 memory[0x110000];		// 65CE02 MAP'able address space (now overflow is not handled, that is the reason of higher than 1MByte, just in case ...)
+Uint8 memory[0x110000];			// 65CE02 MAP'able address space (now overflow is not handled, that is the reason of higher than 1MByte, just in case ...)
 static Uint8 cpu_port[2];		// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
-
+static Uint8 kbd_matrix[8];		// keyboard matrix state, 8 * 8 bits
 
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request (with the lower 16 bits as addr from $D000)
 #define IO_REMAP_VIRTUAL 0x110000
@@ -59,6 +59,89 @@ static int map_mask;			// MAP mask, should be filled at the MAP opcode, *before*
 static int map_offset_low;		// MAP low offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 static int map_offset_high;		// MAP high offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 
+
+
+struct KeyMapping {
+	SDL_Scancode	scan;		// SDL scancode for the given key we want to map
+	Uint8		pos;		// BCD packed, high nibble / low nibble for col/row to map to.  0xFF means end of table!, high bit set on low nibble: press shift as well!
+};
+
+// Keyboard position of "shift" which is "virtually pressed" ie for cursor up/left
+#define SHIFTED_CURSOR_SHIFT_POS	0x64
+
+/* Notes:
+	* This is _POSITIONAL_ mapping (not symbolic), assuming US keyboard layout for the host machine (ie: the machine you run this emulator)
+	* Only 8*8 matrix is emulated currently, on C65 there is an "extra" line it seems
+	* I was lazy to map some keys, see in the comments :)
+*/
+static const struct KeyMapping key_map[] = {
+	{ SDL_SCANCODE_BACKSPACE,	0x00 },	// "backspace" for INS/DEL
+	{ SDL_SCANCODE_RETURN,		0x01 }, // RETURN
+	{ SDL_SCANCODE_RIGHT,		0x02 }, { SDL_SCANCODE_LEFT,	0x02 | 8 },	// Cursor Left / Right (Horizontal) [real key on C65 with the "auto-shift trick]
+	{ SDL_SCANCODE_F7,		0x03 }, { SDL_SCANCODE_F8,	0x03 | 8 },	// Real C65 does not have "F8" (but DOES have cursor up...), these are just for fun :)
+	{ SDL_SCANCODE_F1,		0x04 }, { SDL_SCANCODE_F2,	0x04 | 8 },
+	{ SDL_SCANCODE_F3,		0x05 }, { SDL_SCANCODE_F4,	0x05 | 8 },
+	{ SDL_SCANCODE_F5,		0x06 }, { SDL_SCANCODE_F6,	0x06 | 8 },
+	{ SDL_SCANCODE_DOWN,		0x07 }, { SDL_SCANCODE_UP,	0x07 | 8 },	// Cursor Down / Up (Vertical) [real key on C65 with the "auto-shift" trick]
+	{ SDL_SCANCODE_3,		0x10 },
+	{ SDL_SCANCODE_W,		0x11 },
+	{ SDL_SCANCODE_A,		0x12 },
+	{ SDL_SCANCODE_4,		0x13 },
+	{ SDL_SCANCODE_Z,		0x14 },
+	{ SDL_SCANCODE_S,		0x15 },
+	{ SDL_SCANCODE_E,		0x16 },
+	{ SDL_SCANCODE_LSHIFT,		0x17 },
+	{ SDL_SCANCODE_5,		0x20 },
+	{ SDL_SCANCODE_R,		0x21 },
+	{ SDL_SCANCODE_D,		0x22 },
+	{ SDL_SCANCODE_6,		0x23 },
+	{ SDL_SCANCODE_C,		0x24 },
+	{ SDL_SCANCODE_F,		0x25 },
+	{ SDL_SCANCODE_T,		0x26 },
+	{ SDL_SCANCODE_X,		0x27 },
+	{ SDL_SCANCODE_7,		0x30 },
+	{ SDL_SCANCODE_Y,		0x31 },
+	{ SDL_SCANCODE_G,		0x32 },
+	{ SDL_SCANCODE_8,		0x33 },
+	{ SDL_SCANCODE_B,		0x34 },
+	{ SDL_SCANCODE_H,		0x35 },
+	{ SDL_SCANCODE_U,		0x36 },
+	{ SDL_SCANCODE_V,		0x37 },
+	{ SDL_SCANCODE_9,		0x40 },
+	{ SDL_SCANCODE_I,		0x41 },
+	{ SDL_SCANCODE_J,		0x42 },
+	{ SDL_SCANCODE_0,		0x43 },
+	{ SDL_SCANCODE_M,		0x44 },
+	{ SDL_SCANCODE_K,		0x45 },
+	{ SDL_SCANCODE_O,		0x46 },
+	{ SDL_SCANCODE_N,		0x47 },
+	// FIXME: map something as +	0x50
+	{ SDL_SCANCODE_P,		0x51 },
+	{ SDL_SCANCODE_L,		0x52 },
+	{ SDL_SCANCODE_MINUS,		0x53 },
+	{ SDL_SCANCODE_PERIOD,		0x54 },
+	{ SDL_SCANCODE_APOSTROPHE,	0x55 },	// mapped as ":"
+	// FIXME: map something as @	0x56
+	{ SDL_SCANCODE_COMMA,		0x57 },
+	// FIXME: map something as pound0x60
+	// FIXME: map something as *	0x61
+	{ SDL_SCANCODE_SEMICOLON,	0x62 },
+	{ SDL_SCANCODE_HOME,		0x63 },	// CLR/HOME
+	{ SDL_SCANCODE_RSHIFT,		0x64 },
+	{ SDL_SCANCODE_EQUALS,		0x65 },
+	// FIXME: map something as Pi?	0x66
+	{ SDL_SCANCODE_SLASH,		0x67 },
+	{ SDL_SCANCODE_1,		0x70 },
+	// FIXME: map sg. as <--	0x71
+	{ SDL_SCANCODE_LCTRL,		0x72 },
+	{ SDL_SCANCODE_2,		0x73 },
+	{ SDL_SCANCODE_SPACE,		0x74 },
+	{ SDL_SCANCODE_LALT,		0x75 },	// Commodore key, PC kbd sux, does not have C= key ... Mapping left ALT as the C= key
+	{ SDL_SCANCODE_Q,		0x76 },
+	{ SDL_SCANCODE_END,		0x77 },	// RUN STOP key, we map 'END' as this key
+	// **** this must be the last line: end of mapping table ****
+	{ 0, 0xFF }
+};
 
 
 #ifdef DEBUG_STACK
@@ -163,8 +246,34 @@ static void cia_setint_cb ( int level )
 
 
 
+void clear_emu_events ( void )
+{
+	memset(kbd_matrix, 0xFF, sizeof kbd_matrix);	// initialize keyboard matrix [bit 1 = unpressed, thus 0xFF for a line]
+}
+
+
+#define KBSEL cia1.PRA
+
+
+static Uint8 cia_read_keyboard ( Uint8 ddr_mask_unused )
+{
+	return
+		((KBSEL &   1) ? 0xFF : kbd_matrix[0]) &
+		((KBSEL &   2) ? 0xFF : kbd_matrix[1]) &
+		((KBSEL &   4) ? 0xFF : kbd_matrix[2]) &
+		((KBSEL &   8) ? 0xFF : kbd_matrix[3]) &
+		((KBSEL &  16) ? 0xFF : kbd_matrix[4]) &
+		((KBSEL &  32) ? 0xFF : kbd_matrix[5]) &
+		((KBSEL &  64) ? 0xFF : kbd_matrix[6]) &
+		((KBSEL & 128) ? 0xFF : kbd_matrix[7])
+	;
+}
+
+
+
 static void c65_init ( void )
 {
+	clear_emu_events();
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
 	// *** Load ROM image
@@ -182,7 +291,7 @@ static void c65_init ( void )
 		NULL,	// callback: OUTB(mask, data)
 		NULL,	// callback: OUTSR(mask, data)
 		NULL,	// callback: INA(mask)
-		NULL,	// callback: INB(mask)
+		cia_read_keyboard,	// callback: INB(mask)
 		NULL,	// callback: INSR(mask)
 		cia_setint_cb	// callback: SETINT(level)
 	);
@@ -529,11 +638,6 @@ void cpu_write ( Uint16 addr, Uint8 data )
 
 
 
-void clear_emu_events ( void )
-{
-}
-
-
 #define MEMDUMP_FILE	"dump.mem"
 
 
@@ -557,14 +661,36 @@ static void dump_on_shutdown ( void )
 
 
 
+#define KBD_PRESS_KEY(a)        kbd_matrix[(a) >> 4] &= 255 - (1 << ((a) & 0x7))
+#define KBD_RELEASE_KEY(a)      kbd_matrix[(a) >> 4] |= 1 << ((a) & 0x7)
+#define KBD_SET_KEY(a,state) do {	\
+	if (state)			\
+		KBD_PRESS_KEY(a);	\
+	else				\
+		KBD_RELEASE_KEY(a);	\
+} while (0)
+
+
+
 static void emulate_keyboard ( SDL_Scancode key, int pressed )
 {
+	const struct KeyMapping *map;
 	if (pressed) {
 		if (key == SDL_SCANCODE_F11) {
 			emu_set_full_screen(-1);
 			return;
 		} else if (key == SDL_SCANCODE_F9)
 			exit(0);
+	}
+	map = key_map;
+	while (map->pos != 0xFF) {
+		if (map->scan == key) {
+			if (map->pos & 8)			// shifted key emu?
+				KBD_SET_KEY(SHIFTED_CURSOR_SHIFT_POS, pressed);	// maintain the shift key
+			KBD_SET_KEY(map->pos, pressed);
+			break;	// key found, end.
+		}
+		map++;
 	}
 }
 
@@ -620,7 +746,8 @@ int main ( int argc, char **argv )
 		return 1;
 	// Initialize C65 ...
 	c65_init();
-	
+	memory[0x3FB93] = 0xA9;
+	memory[0x3FB94] = 0x00;
 #if 0
 	memory[0x200] = 0x83;
 	memory[0x201] = 0xfd;
