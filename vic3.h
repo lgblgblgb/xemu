@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern int vic_new_mode;
 extern int scanline;
 extern Uint8 vic3_registers[];
+extern int clock_divider7_hack;
 
 extern void  vic3_init ( void );
 extern void  vic3_write_reg ( int addr, Uint8 data );

@@ -679,8 +679,12 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 		if (key == SDL_SCANCODE_F11) {
 			emu_set_full_screen(-1);
 			return;
-		} else if (key == SDL_SCANCODE_F9)
+		} else if (key == SDL_SCANCODE_F9) {
 			exit(0);
+		} else if (key == SDL_SCANCODE_F10) {
+			puts("LOGMARK");
+			return;
+		}
 	}
 	map = key_map;
 	while (map->pos != 0xFF) {
@@ -782,7 +786,10 @@ int main ( int argc, char **argv )
 		cpu_old_pc_my = cpu_pc;
 		stackguard_address = -1;
 #endif
-		opcyc = cpu_step();
+		// Trying to use at least some approx stuff :)
+		// In FAST mode, the divider is 7. (see: vic3.c)
+		// Otherwise it's 2, thus giving about *3.5 slower CPU ... or something :)
+		opcyc = (cpu_step() * 7) / clock_divider7_hack;
 #ifdef DEBUG_STACK
 		if (cpu_sp != cpu_old_sp) {
 			printf("STACK: pointer [OP=$%02X] change $%02X -> %02X [diff=%d]\n", cpu_op, cpu_old_sp, cpu_sp, cpu_old_sp - cpu_sp);

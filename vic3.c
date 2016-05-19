@@ -38,6 +38,7 @@ static Uint8 vic3_palette_nibbles[0x300];
 Uint8 vic3_registers[0x40];
 int vic_new_mode;		// VIC3 "newVic" IO mode is activated flag
 int scanline;			// current scan line number
+int clock_divider7_hack;
 static int compare_raster;	// raster compare (9 bits width) data
 static int interrupt_status;
 
@@ -58,6 +59,7 @@ void vic3_init ( void )
 	interrupt_status = 0;
 	scanline = 0;
 	compare_raster = 0;
+	clock_divider7_hack = 7;
 	for (i = 0; i < 0x100; i++) {
 		if (i < sizeof vic3_registers)
 			vic3_registers[i] = 0;
@@ -148,6 +150,10 @@ void vic3_write_reg ( int addr, Uint8 data )
 			puts("MEM: applying new memory configuration because of VIC3 $30 is written");
 			apply_memory_config();
 			break;
+		case 0x31:
+			clock_divider7_hack = (data & 64) ? 7 : 2;
+			printf("VIC3: clock_divider7_hack = %d" NL, clock_divider7_hack);
+			break;
 	}
 }	
 
@@ -200,9 +206,14 @@ void vic3_write_palette_reg ( int num, Uint8 data )
 
 /* FIXME
 Primitive "full screen at once" renderer! Only knows the "official" text
-mode of C65 native mode and 64 mode, with standard locations etc.
+mode of C65 native mode and 64 "by default" mode, with standard locations etc.
 In C65 mode, not even the hw attributes are supported! Of course, currently
 forget about sprites, graphics, bitplanes, everything :)
+"ROM palette" is also ignored for now (makes C64 mode somewhat odd)
+Memory addresses etc are ignored, and the "default" values are assumed!
+Surely, it's for nothing, just to be able to see something initially before
+further developments :) VIC3 "FAST" bit is ignored, thus C64 mode will drive
+the CPU at C64 speed still, which is also incorrect (C64 mode is too fast).
 */
 void vic3_render_screen ( void )
 {
