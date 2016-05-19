@@ -162,6 +162,7 @@ static void setP(Uint8 st) {
 	cpu_pfv = st &  64;
 #ifdef CPU_65CE02
 	// Note: E bit cannot be changed by PLP/RTI to it's commented out here ...
+	// At least *I* think :) FIXME?
 	// cpu_pfe = st &  32;
 #endif
 	cpu_pfb = st &  16;
@@ -291,9 +292,21 @@ static inline void _BRA16(int cond) {
 		cpu_pc += 2;
 }
 // Used by LDA/STA (nn,SP), Y opcodes
+/* Big fat NOTE/FIXME/TODO:
+   It *seems* (according to the C65 ROM) that this addressing mode is not what you think!
+   Ie not the same as 65C816 (nn,SP),Y!
+   It's more like a plain "nn,SP,Y" instead! I have that suspect, because C65 ROM in the
+   IRQ routine uses this: LDA  ($01,SP),Y
+   And then the result is AND'ed with $10 and conditionally jumps to he BRK vector. So
+   it should have been used to access the PUSH'ed process flag register in the stack.
+*/
 static inline Uint16 _GET_SP_INDIRECT_ADDR ( void )
 {
-	int res = cpu_read(cpu_pc++);
+	Uint16 res = cpu_read(cpu_pc++) + cpu_y + cpu_sp + 1;
+	// Guessing: if stack is in 8 bit mode, it warps around inside the given stack page
+	if (cpu_pfe)
+		res &= 0xFF; 
+	return (Uint16)(res + cpu_sphi);
 }
 #endif
 static inline void _CMP(Uint8 reg, Uint8 data) {
@@ -386,6 +399,8 @@ static inline void _ROL(int addr) {
 }
 
 
+static Uint8 last_p;
+
 
 int cpu_step () {
 	if (cpu_nmiEdge
@@ -398,7 +413,7 @@ int cpu_step () {
 #endif
 		cpu_nmiEdge = 0;
 		pushWord(cpu_pc);
-		push(getP());
+		push(getP());			// FIXME: do we need the same here as at the IRQ?
 		cpu_pfi = 1;
 		cpu_pfd = 0;
 		cpu_pc = readWord(0xFFFA);
@@ -412,9 +427,10 @@ int cpu_step () {
 #ifdef DEBUG_CPU
 		printf("CPU: servint IRQ on IRQ level at PC $%04X\n", cpu_pc);
 #endif
+		last_p = getP();
 		pushWord(cpu_pc);
 		cpu_pfb = 0;
-		push(getP());
+		push(getP() & (255 - 0x10));	// FIXME: masking out of B really needed on any 65xx?
 		cpu_pfi = 1;
 		cpu_pfd = 0;
 		cpu_pc = readWord(0xFFFE);
@@ -941,7 +957,10 @@ int cpu_step () {
 	case 0xe2:
 #ifdef CPU_65CE02
 			OPC_65CE02("LDA (nn,S),Y");
-			UNIMPLEMENTED_65CE02("LDA ($nn,SP),Y");	// 65CE02 LDA ($nn,SP),Y
+			// 65CE02 LDA ($nn,SP),Y
+			// REALLY IMPORTANT: please read the comment at _GET_SP_INDIRECT_ADDR()!
+			setNZ(cpu_a = cpu_read(_GET_SP_INDIRECT_ADDR()));
+			printf("CPU: LDA (nn,S),Y returned: A = $%02X, P before last IRQ was: $%02X\n", cpu_a, last_p);
 #else
 			cpu_pc++; // 0xe2 NOP imm (non-std NOP with addr mode)
 #endif
@@ -953,8 +972,8 @@ int cpu_step () {
 			int alo = _zp();
 			int ahi = (alo & 0xFF00) | ((alo + 1) & 0xFF);
 			Uint16 data = (cpu_read(alo) | (cpu_read(ahi) << 8)) + 1;
-			//setNZ16(data);
-			cpu_pfz = (data == 0);
+			setNZ16(data);
+			//cpu_pfz = (data == 0);
 			cpu_write(alo, data & 0xFF);
 			cpu_write(ahi, data >> 8);
 			}
