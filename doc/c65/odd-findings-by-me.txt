@@ -1,0 +1,152 @@
+Author/home of this file: visit http://c65.lgb.hu/
+
+What was surprising at least for me ... Quite subjective :)
+
+* 65CE02 PHW opcodes does the *opposite* order of lo/hi byte
+  storing as eg JSR would push the PC (well, PC + 1)
+
+  This is though not so surprising, as it would be problemtic
+  implementing PHW #..., where after the opcode, the _low_
+  byte comes, but we would need to push the HI byte first.
+
+  It seems PHW is used somewhere in BASIC. Without PHW
+  implemented, the machine "boots" however after pressing RETURN
+  on a command / program line, you'll get something odd. If
+  you have this problem, maybe it's because of problem with
+  the implementation of PHW opcode!
+
+* C65 in native mode uses VIC3 raster interrupts to produce
+  the "periodic IRQ", rather than CIAs, as with the C64.
+
+* 64tass assembler supports 65CE02, cool. HOWEVER, this drove
+  me on the wrong path for days ... As it seems 64tass has
+  faulty implementation of 16 bit relative mode jump opcodes!
+  I've assumed it's OK, and tested my CPU emulator with
+  things I compiled with 64tass. And I haven't understood why
+  C64 ROM did not work correctly ... Or maybe  - see later,
+  as with (nn,SP), Y addressing mode - it can be some kind
+  of interesting 4502 vs 65CE02 core incompatibility? I have
+  no idea ...
+
+* In addition to the previous entry: be careful with the 16
+  bit relative mode. The offset should be not handled the
+  same way as with 8 bit relative mode jumps! According to
+  some resources at least ... Hmmm. The current implementation
+  I use the solution which seems to work with the existing
+  ROM images at least :)
+
+* Still with the opcodes ... Something is *REALLY* not OK
+  with LDA/STA (nn,SP),Y. There is such an addressing mode
+  on 65C816 well. However according to the C65 ROM code, it
+  is more likely (at least for me) that IT IS NOT that,
+  so we use wrong "name" for the opcode! Just see the IRQ
+  handler code in the C65 KERNAL (911001.bin):
+
+  FB91  A0 06     LDY  #$06
+  FB93  E2 01     LDA  ($01,SP),Y         ; <----- ?????? access the stored CPU status register (in the stack)
+  [...]
+  FB97  29 10     AND  #$10               ; <----- was a BRK?
+  FB99  D0 03     BNE  $FB9E              ; <----- if branch is taken, if it was a BRK!
+  FB9B  6C 14 03  JMP  ($0314)		  ; <----- B bit was not set, it is an IRQ!
+  FB9E  22 F6 FF  JSR  ($FFF6)		  ; BRK vector
+  FBA1  EA        EOM  
+  FBA2  6C 16 03  JMP  ($0316)
+
+  For me, it's more likely, that $E2 opcode is used to access
+  a byte in the stack, nothing "indirect" and the opcode is more
+  likely to be:
+
+  LDA $01,SP,Y
+
+  With the "official" meaning of the (nn,SP),Y addressing mode,
+  I simply cannot find any sense about this method, I've disassembled
+  here. Of course, as ususal, I can be wrong here! I simply
+  emulated $E2 opcode this way:
+
+  address = SP + Y + fetched_byte_of_the_opcode_as_argument() + 1
+
+  Of course the "address" may/may not cross page boundary, and I don't
+  know if E bit has an effect (stack mode 8/16 bit). Also, of course
+  stack page must be added, etc. For 8 bit stack, based on the E bit,
+  I also do "warping around" effect on the address before it's
+  converted to an address with stack page added (beware: it seems
+  - according to some resources ... - that 8 bit mode stack only
+  limits its "size" the stack page still can be set with TYS opcode!)
+
+  I'm not really sure why "+1" is needed, maybe because 0 does not
+  make sense too much, so to have intent of "0" too (or better say:
+  to count relative of the _used_ stack portion), this is handled
+  this way.
+
+  It's also possible that 65CE02 *works* as should by the opcode
+  addressing mode described, just with 4510, it was *modified*
+  since it may better fits to the needs? Who knows.
+
+* DMA is an important part for the system. it's even used
+  to clear/scroll the screen and maybe other memory regions as
+  well. Thus, if you don't implement some kind of C65
+  DMAgic stuff, it can be a problem ...
+
+* Well, quite "well known" but anyway: C65's internal drive
+  is not like C128's. Ie, it is not a drive with its own CPU
+  etc. It's driven by the "main CPU" and FDC registers can be
+  seen in the I/O area. System also contains the "DOS" code
+  in the ROM, and of course the only CPU in the system will
+  execute that too! However, it's said that it's possible
+  to connect seriel IEC drives too, if you want.
+
+* Colour SRAM: there is no such thing in C65. For real, the
+  last 2K (2K, since you need that in 80 columns mode) of
+  128K RAM is used for that purpose. For compatibility, you
+  can see the *very same* memory content as colour SRAM would
+  be in the case of C64! In 80 columns mode you need 2K of
+  colour RAM, thus there is a bit in a VIC3 register to
+  extend colour SRAM to 2K. It means, that colour RAM in
+  the I/O area will *cover and hide* the CIAs and the I/O
+  expansion areas! Note: this is only for accessing the
+  colour RAM, you can still switch off 2K colour mode,
+  as VIC3 seems to be use directly the last 2K of the 128K
+  RAM, it's just about the possibility to be able to see it
+  inside the I/O area by the CPU! Colour SRAM also have
+  the upper 4 bits (unlike C64) and with VIC3 it can be
+  used for hardware attributes, ie blinking, underline,
+  whatsoever.
+
+* About the DOS code: it uses an interesting trick:
+  It switches on the 2K colour SRAM mode, and uses the few
+  last bytes (which would be off the screen anyway) of it to
+  store information for itself! So, if you don't implement
+  this 2K colour SRAM thinggy well enough, the system will
+  be crash even at the time of booting, since DOS is called
+  once at least!
+
+* Kinda complex memory management. In addition of the
+  C64-style "CPU port" (0/1 addresses), the CPU can see
+  1Mbytes of memory, but also VIC3 can have the priority
+  to override those all, and provide some ROM selects
+  based on its register $30. Besides this, CPU can also
+  map an area with an offset, and though zero offset
+  would mean the same, they are not, since the map/not
+  mapped fact is also propogated, it seems ... In addition,
+  the upper 512Kbyte of "CPU address space" may be handled
+  by the RAM expansion controller, to allow (max of?)
+  8Mbytes RAM to be seen there. And not counting the
+  colour SRAM case for example, etc.
+
+* Error messages in colour! :) Well, maybe not so surprising,
+  but since the first time I see "C65" it was for me while
+  testing my emulator. At least in 911001.bin it is colour,
+  Not in 910111.bin version of ROM though ...
+
+* Pressing key F1 does "something" just I don't know what :)
+
+* 911001.bin ROM is kinda odd. It takes much longer to boot,
+  also prints about ROM checksum and drive name ... However it
+  does *NOT* work too much ... Well, it can be my problem,
+  that's true. BASIC commands works (in direct mode)
+  but BASIC program lines (if you try to enter one) are
+  refused with "?PROGRAM MANGLED" error. Also LISTing after
+  this causes total madness, with endless PI signes, etc.
+  910111.bin seems to work, I could type in a simple BASIC
+  program, I could LIST and RUN it too.
+
