@@ -108,9 +108,8 @@ machine!).
 
 Yes. Or short of ... Quite limited currently though. For me, it worked to the
 level for BASIC prompt, and even for typing commands, or switching to C64
-mode (GO64) - that is kinda odd (FAST/SLOW mode is not handled correctly).
-Though, trying to type any BASIC *program* line causes ?PROGRAM MANGLED
-error, LIST commands then only displays endless PI signs :)
+mode (GO64), or you can try write BASIC programs (NOTE: ROM 911001.bin seems
+not to work properly, but 910111.bin does).
 
 What is emulated and what is not:
 
@@ -137,7 +136,7 @@ What is emulated and what is not:
   once per frames!) with fixed memory configuration known to be used by
   C65 (or C64, in C64 mode). Nothing other is emulated, ie graphical
   modes, multicolour, sprites, bitplanes, DAT, hardware character
-  attributes, etc, nothing. Though, VIC3 pallette registers are emulated.
+  attributes, etc, nothing. Though, VIC3 palette registers are emulated.
 
 * No emulation for the SIDs, UART, REC (Ram Expansion Controller)
 
