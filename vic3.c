@@ -34,6 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 static Uint32 rgb_palette[4096];	// all the C65 palette, 4096 colours (SDL pixel format related form)
 static Uint32 vic3_palette[0x100];	// VIC3 palette in SDL pixel format related form (can be written into the texture directly to be rendered)
+static Uint32 vic3_rom_palette[16];	// the "ROM" palette, for C64 colours
 static Uint8 vic3_palette_nibbles[0x300];
 Uint8 vic3_registers[0x40];
 int vic_new_mode;		// VIC3 "newVic" IO mode is activated flag
@@ -68,6 +69,23 @@ void vic3_init ( void )
 		vic3_palette_nibbles[i + 0x100] = 0;
 		vic3_palette_nibbles[i + 0x200] = 0;
 	}
+	// *** the ROM palette
+	vic3_rom_palette[ 0] = RGB( 0,  0,  0);	// black
+	vic3_rom_palette[ 1] = RGB(15, 15, 15);	// white
+	vic3_rom_palette[ 2] = RGB(15,  0,  0);	// red
+	vic3_rom_palette[ 3] = RGB( 0, 15, 15);	// cyan
+	vic3_rom_palette[ 4] = RGB(15,  0, 15);	// magenta
+	vic3_rom_palette[ 5] = RGB( 0, 15,  0);	// green
+	vic3_rom_palette[ 6] = RGB( 0,  0, 15);	// blue
+	vic3_rom_palette[ 7] = RGB(15, 15,  0);	// yellow
+	vic3_rom_palette[ 8] = RGB(15,  6,  0);	// orange
+	vic3_rom_palette[ 9] = RGB(10,  4,  0);	// brown
+	vic3_rom_palette[10] = RGB(15,  7,  7);	// pink
+	vic3_rom_palette[11] = RGB( 5,  5,  5);	// dark grey
+	vic3_rom_palette[12] = RGB( 8,  8,  8);	// medium grey
+	vic3_rom_palette[13] = RGB( 9, 15,  9);	// light green
+	vic3_rom_palette[14] = RGB( 9,  9, 15);	// light blue
+	vic3_rom_palette[15] = RGB(11, 11, 11);	// light grey
 	puts("VIC3: has been initialized.");
 }
 
@@ -217,28 +235,30 @@ the CPU at C64 speed still, which is also incorrect (C64 mode is too fast).
 */
 void vic3_render_screen ( void )
 {
-	int tail;
-	Uint32 *p = emu_start_pixel_buffer_access(&tail);
-	Uint8 *vidp = memory + 0x00800;
-	Uint8 *colp = memory + 0x1F800;
-	Uint8 *chrg = memory + 0x28000 + 0x1000 ;
-	int charline = 0;
-	Uint32 bg = vic3_palette[vic3_registers[0x21]];
+	int tail, charline = 0;
+	Uint32 bg, *palette, *p = emu_start_pixel_buffer_access(&tail);
+	Uint8 *vidp, *chrg, *colp = memory + 0x1F800;
 	int x = 0, y = 0, xlim, ylim;
 	// we use the H640 bit only to decide it is C65 or C64 mode render
 	// Surely is very wrong!
 	if (vic3_registers[0x31] & 128) {
 		xlim = 79;
 		ylim = 24;
+		palette = vic3_palette;
+		chrg = memory + 0x28000 + 0x1000;
+		vidp = memory + 0x00800;
 	} else {
 		xlim = 39;
 		ylim = 24;
-		vidp -= 0x400;
+		palette = vic3_rom_palette;
+		chrg = memory + 0x2D000;
+		vidp = memory + 0x00400;
 	}
+	bg = palette[vic3_registers[0x21]];
 	for (;;) {
 		Uint8 chrdata = chrg[((*(vidp++)) << 3) + charline];
 		Uint8 coldata = *(colp++);
-		Uint32 fg = vic3_palette[coldata];
+		Uint32 fg = palette[coldata];
 		if (xlim == 79) {
 			*(p++) = chrdata & 128 ? fg : bg;
 			*(p++) = chrdata &  64 ? fg : bg;
