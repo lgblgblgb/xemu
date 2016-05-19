@@ -106,7 +106,40 @@ machine!).
 
 ## Commodore 65 emulator??
 
-Yes.
+Yes. Or short of ... Quite limited currently though. For me, it worked to the
+level for BASIC prompt, and even for typing commands, or switching to C64
+mode (GO64) - that is kinda odd (FAST/SLOW mode is not handled correctly).
+Though, trying to type any BASIC *program* line causes ?PROGRAM MANGLED
+error, LIST commands then only displays endless PI signs :)
+
+What is emulated:
+
+* 65CE02 "core" instructions, but only ones, I needed on demand! So still,
+  there are opcodes wouldn't even work and causes the emulator to exit!
+  65CE02 emulation is done by extending/modifying a 65C02 emulator (of mine)
+  since 65CE02 is basically an extended 65C02.
+
+* 4502 "core" extensions over 65CE02, ie MAP opcode, and special meaning
+  of NOP (as EOM)
+
+* Memory management: CPU "MAP"/"EOM" stuff, VIC3 register $30 ROM select
+  and 2K colour SRAM mode, "C64-style" "CPU port".
+
+* Some kind of DMA stuff, only copy/fill not with special bits though
+  (redirect to IO etc)
+
+* 128K ROM / 128K RAM, no RAM expansion
+
+* FDC does not work yet
+
+* VIC3 code is horrible, it merely emulates a *fixed* rendering (all in
+  once per frames!) with fixed memory configuration known to be used by
+  C65 (or C64, in C64 mode). Nothing other is emulated, ie graphical
+  modes, multicolour, sprites, bitplanes, DAT, hardware character
+  attributes, etc, nothing. Though, VIC3 pallette registers are emulated,
+  not the "ROM palette" though.
+
+First "milestone" is already here, it can "boot" to BASIC, though :)
 
 ## Why the Commodore VIC-20 emulation is included?
 
