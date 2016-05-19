@@ -1,9 +1,9 @@
 /* Test-case for a very simple and inaccurate and even not working Commodore 65 emulator.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
-   This is the Commodore 65 emulation. Note: the purpose of this emulator is merely to
-   test some 65CE02 opcodes, not for being a *usable* Commodore 65 emulator too much!
-   If it ever able to hit the C65 BASIC-10 usage, I'll be happy :)
+   This is the VIC3 "emulation". Currently it only does some "fixed" stuff
+   ignoring vast majority of the VIC3 registers and doing its work based
+   on the assumption what VIC3 in C65 should do otherwise :)
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -38,7 +38,7 @@ static Uint8 vic3_palette_nibbles[0x300];
 Uint8 vic3_registers[0x40];
 int vic_new_mode;		// VIC3 "newVic" IO mode is activated flag
 int scanline;			// current scan line number
-static int compare_raster;
+static int compare_raster;	// raster compare (9 bits width) data
 
 
 
@@ -64,6 +64,7 @@ void vic3_init ( void )
 		vic3_palette_nibbles[i + 0x100] = 0;
 		vic3_palette_nibbles[i + 0x200] = 0;
 	}
+	puts("VIC3: has been initialized.");
 }
 
 
@@ -71,7 +72,7 @@ void vic3_init ( void )
 void vic3_write_reg ( int addr, Uint8 data )
 {
 	addr &= 0x3F;
-	printf("VIC3: write reg $%02X with data $%02X\n", addr, data);
+	printf("VIC3: write reg $%02X with data $%02X" NL, addr, data);
 	if (addr == 0x2F) {
 		if (!vic_new_mode && data == 0x96 && vic3_registers[0x2F] == 0xA5) {
 			vic_new_mode = 1;
@@ -89,9 +90,11 @@ void vic3_write_reg ( int addr, Uint8 data )
 	switch (addr) {
 		case 0x11:
 			compare_raster = (compare_raster & 0xFF) | ((data & 1) ? 0x100 : 0);
+			printf("VIC3: compare raster is now %d" NL, compare_raster);
 			break;
 		case 0x12:
 			compare_raster = (compare_raster & 0xFF00) | data;
+			printf("VIC3: compare raster is now %d" NL, compare_raster);
 			break;
 		case 0x30:
 			puts("MEM: applying new memory configuration because of VIC3 $30 is written");
@@ -105,24 +108,32 @@ void vic3_write_reg ( int addr, Uint8 data )
 
 Uint8 vic3_read_reg ( int addr )
 {
+	Uint8 result;
 	addr &= 0x3F;
 	if (!vic_new_mode && addr > 0x2F) {
 		printf("VIC3: ignoring reading register $%02X because of old I/O access mode selected, answer is $FF" NL, addr);
 		return 0xFF;
 	}
-	if (addr == 0x12)
-		vic3_registers[0x12] = scanline & 0xFF;
-	else if (addr == 0x11)
-		vic3_registers[0x11] = (vic3_registers[0x11] & 0x7F) | ((scanline & 256) ? 0x80 : 0);
-	printf("VIC3: read reg $%02X with result $%02X\n", addr, vic3_registers[addr]);
-	return vic3_registers[addr];
+	switch (addr) {
+		case 0x11:
+			result =  (vic3_registers[0x11] & 0x7F) | ((scanline & 256) ? 0x80 : 0);
+			break;
+		case 0x12:
+			result = scanline & 0xFF;
+			break;
+		default:
+			result = vic3_registers[addr];
+			break;
+	}
+	printf("VIC3: read reg $%02X with result $%02X" NL, addr, result);
+	return result;
 }
 
 
 
 
 
-// "num" is 0-$ff for red, $100-$1ff for green and $200-$3ff for blue nibbles
+// "num" is 0-$ff for red, $100-$1ff for green and $200-$2ff for blue nibbles
 void vic3_write_palette_reg ( int num, Uint8 data )
 {
 	vic3_palette_nibbles[num] = data & 15;

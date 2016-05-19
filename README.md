@@ -1,8 +1,12 @@
 # X-cLCD
 
-Commodore LCD (and Commodore VIC-20) emulator
+Commodore LCD, Commodore 65 (and Commodore VIC-20) emulator
 
-(Note: about the Commodore VIC-20, see below)
+(Note: about the Commodore VIC-20 and Commodore 65, see below)
+
+WARNING: there is *nothing* too much common in these machines. The only reason
+that I emulate these within a single project, that I can easily re-use some
+of the components needed, that's all!
 
 Commodore LCD is a highly unknown portable LCD based device with battery power and
 ability to "sleep" with SRAMs still powered. Unfortunately the project was stopped
@@ -99,6 +103,10 @@ the VIC-20, for sure).
 About further problems with VIC-20 (please note: VIC-20 is currently not the
 major character of the show, much better emulators exists for that nice little
 machine!).
+
+## Commodore 65 emulator??
+
+Yes.
 
 ## Why the Commodore VIC-20 emulation is included?
 
