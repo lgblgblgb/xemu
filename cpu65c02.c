@@ -149,6 +149,14 @@ static inline void  pushWord(Uint16 data) { push(data >> 8); push(data & 0xFF); 
 static inline Uint16 popWord() { Uint16 temp = pop(); return temp | (pop() << 8); }
 
 
+#ifdef CPU_65CE02
+// FIXME: remove this, if we don't need!
+// NOTE!! Interesting, it seems PHW opcodes pushes the word the OPPOSITE direction as eg JSR would push the PC ...
+#define PUSH_FOR_PHW pushWord_rev
+static inline void  pushWord_rev(Uint16 data) { push(data & 0xFF); push(data >> 8); }
+#endif
+
+
 static void setP(Uint8 st) {
 	cpu_pfn = st & 128;
 	cpu_pfv = st &  64;
@@ -281,6 +289,11 @@ static inline void _BRA16(int cond) {
 		cpu_cycles++;
 	} else
 		cpu_pc += 2;
+}
+// Used by LDA/STA (nn,SP), Y opcodes
+static inline Uint16 _GET_SP_INDIRECT_ADDR ( void )
+{
+	int res = cpu_read(cpu_pc++);
 }
 #endif
 static inline void _CMP(Uint8 reg, Uint8 data) {
@@ -982,7 +995,9 @@ int cpu_step () {
 	case 0xf4:
 #ifdef CPU_65CE02
 			OPC_65CE02("PHW #nnnn");
-			UNIMPLEMENTED_65CE02("PHW #$nnnn");	// 65CE02 PHW #$nnnn (push word)
+			//UNIMPLEMENTED_65CE02("PHW #$nnnn");	// 65CE02 PHW #$nnnn (push word)
+			PUSH_FOR_PHW(readWord(cpu_pc));
+			cpu_pc += 2;
 #else
 			cpu_pc++; // 0xf4 NOP zpx (non-std NOP with addr mode)
 #endif
@@ -1002,7 +1017,15 @@ int cpu_step () {
 	case 0xfc:
 #ifdef CPU_65CE02
 			OPC_65CE02("PHW nnnn");
-			UNIMPLEMENTED_65CE02("PHW $nnnn");	// PHW $nnnn [? push word from an absolute address, maybe?]
+			PUSH_FOR_PHW(readWord(readWord(cpu_pc)));	// PHW $nnnn [? push word from an absolute address, maybe?] Note: C65 BASIC depends on this opcode to be correct!
+			cpu_pc += 2;
+#if 0
+			{					// PHW $nnnn [? push word from an absolute address, maybe?]
+			Uint16 temp = cpu_read(cpu_pc++);
+			temp |= cpu_read(cpu_pc++) << 8;
+			pushWord(readWord(temp));
+			}
+#endif
 #else
 			cpu_pc += 2;
 #endif
