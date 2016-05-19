@@ -682,6 +682,7 @@ int main ( int argc, char **argv )
 			}
 			//printf("RASTER=%d COMPARE=%d\n",scanline,compare_raster);
 			//vic_interrupt();
+			vic3_check_raster_interrupt();
 		}
 	}
 	puts("Goodbye!");

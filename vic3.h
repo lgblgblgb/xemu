@@ -27,5 +27,7 @@ extern void  vic3_write_reg ( int addr, Uint8 data );
 extern Uint8 vic3_read_reg ( int addr );
 extern void  vic3_write_palette_reg ( int num, Uint8 data );
 extern void  vic3_render_screen ( void );
+extern void  vic3_check_raster_interrupt ( void );
+
 
 #endif

@@ -39,6 +39,7 @@ Uint8 vic3_registers[0x40];
 int vic_new_mode;		// VIC3 "newVic" IO mode is activated flag
 int scanline;			// current scan line number
 static int compare_raster;	// raster compare (9 bits width) data
+static int interrupt_status;
 
 
 
@@ -54,6 +55,7 @@ void vic3_init ( void )
 	SDL_FreeFormat(sdl_pix_fmt);	// thanks, we don't need this anymore.
 	// *** Init VIC3 registers and palette
 	vic_new_mode = 0;
+	interrupt_status = 0;
 	scanline = 0;
 	compare_raster = 0;
 	for (i = 0; i < 0x100; i++) {
@@ -66,6 +68,45 @@ void vic3_init ( void )
 	}
 	puts("VIC3: has been initialized.");
 }
+
+
+
+static void vic3_interrupt_checker ( void )
+{
+	int vic_irq_old = cpu_irqLevel & 2;
+	int vic_irq_new;
+	if (interrupt_status) {
+		interrupt_status |= 128;
+		vic_irq_new = 2;
+	} else {
+		vic_irq_new = 0;
+	}
+	if (vic_irq_old != vic_irq_new) {
+		printf("VIC3: interrupt change %s -> %s" NL, vic_irq_old ? "active" : "inactive", vic_irq_new ? "active" : "inactive");
+		if (vic_irq_new)
+			cpu_irqLevel |= 2;
+		else
+			cpu_irqLevel &= 255 - 2;
+	}
+}
+
+
+
+void vic3_check_raster_interrupt ( void )
+{
+	if (
+		(scanline == compare_raster)
+#if 0
+		|| (compare_raster == 511 && scanline == 0)
+#endif
+	) {
+		interrupt_status |= 1;
+	} else
+		interrupt_status &= 0xFE;
+	interrupt_status &= vic3_registers[0x1A];
+	vic3_interrupt_checker();
+}
+
 
 
 
@@ -96,6 +137,13 @@ void vic3_write_reg ( int addr, Uint8 data )
 			compare_raster = (compare_raster & 0xFF00) | data;
 			printf("VIC3: compare raster is now %d" NL, compare_raster);
 			break;
+		case 0x19:
+			interrupt_status = interrupt_status & data & 15 & vic3_registers[0x1A];
+			vic3_interrupt_checker();
+			break;
+		case 0x1A:
+			vic3_registers[0x1A] &= 15;
+			break;
 		case 0x30:
 			puts("MEM: applying new memory configuration because of VIC3 $30 is written");
 			apply_memory_config();
@@ -121,6 +169,9 @@ Uint8 vic3_read_reg ( int addr )
 		case 0x12:
 			result = scanline & 0xFF;
 			break;
+		case 0x19:
+			result = interrupt_status;
+			break;
 		default:
 			result = vic3_registers[addr];
 			break;
@@ -137,6 +188,7 @@ Uint8 vic3_read_reg ( int addr )
 void vic3_write_palette_reg ( int num, Uint8 data )
 {
 	vic3_palette_nibbles[num] = data & 15;
+	// recalculate the given RGB entry based on the new data as well
 	vic3_palette[num & 0xFF] = RGB(
 		vic3_palette_nibbles[ num & 0xFF],
 		vic3_palette_nibbles[(num & 0xFF) | 0x100],
