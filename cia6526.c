@@ -41,15 +41,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 	do { \
 		if (cia->ICRmask & cia->ICRdata & 31) { \
 			cia->ICRdata |= 128; \
-			if (!cia->intLevel) { cia->intLevel = 1; cia->setint(1); } \
+			if (!cia->intLevel) { cia->intLevel = 1; cia->setint(1); printf("%s IRQ to 1\n", cia->name); } \
 		} else { \
 			cia->ICRdata &= 127; \
-			if ( cia->intLevel) { cia->intLevel = 0; cia->setint(0); } \
+			if ( cia->intLevel) { cia->intLevel = 0; cia->setint(0); printf("%s IRQ to 0\n", cia->name); } \
 		} \
 	} while(0)
 #define ICR_SET(mask) \
 	do { \
 		cia->ICRdata |= (mask) & 31; \
+		printf("%s ICR set to data $%02X, mask is $%02X\n", cia->name, cia->ICRdata, cia->ICRmask); \
 		ICR_CHECK(); \
 	} while(0)
 #define ICR_CLEAR(mask) \
@@ -62,6 +63,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 void cia_reset ( struct Cia6526 *cia )
 {
+	int a;
+	for (a = 0; a < 16; a++)
+		cia->regWritten[a] = -1;
 	cia->PRA = cia->PRB = cia->DDRA = cia->DDRB = 0;
 	cia->TCA = cia->TCB = 0;
 	cia->CRA = cia->CRB = 0;
@@ -154,6 +158,9 @@ Uint8 cia_read ( struct Cia6526 *cia, int addr )
 			return cia->CRA;
 		case 15:	// reg#F: CRB
 			return cia->CRB;
+		default:
+			fprintf(stderr, "ERROR: %s invalud register %d\n", cia->name, addr);
+			exit(1);
 	}
 	return 0;	// to make GCC happy :-/
 }
@@ -188,7 +195,7 @@ void cia_write ( struct Cia6526 *cia, int addr, Uint8 data )
 			break;
 		case 5:		// reg#5: timer A latch high
 			cia->TLAH = data;
-			if (!(cia->CRA & 1))
+			if (!(cia->CRA & 1) || (cia->CRA & 16))
 				cia->TCA = cia->TLAL | (cia->TLAH << 8);
 			break;
 		case 6:		// reg#6: timer B latch low
@@ -196,7 +203,7 @@ void cia_write ( struct Cia6526 *cia, int addr, Uint8 data )
 			break;
 		case 7:		// reg#7: timer B latch high
 			cia->TLBH = data;
-			if (!(cia->CRB & 1))
+			if (!(cia->CRB & 1) || (cia->CRB & 16))
 				cia->TCB = cia->TLBL | (cia->TLBH << 8);
 			break;
 		case 8:		// reg#8: TOD 10ths
@@ -232,7 +239,8 @@ void cia_write ( struct Cia6526 *cia, int addr, Uint8 data )
 			if (data & 128)
 				cia->ICRmask |= data & 31;
 			else
-				cia->ICRmask &= 255 - data;
+				cia->ICRmask &= 255 - (data & 31);
+			printf("%s set ICRmask to %02X with byte of %02X\n", cia->name, cia->ICRmask, data);
 			ICR_CHECK();
 			break;
 		case 14:	// reg#E: CRA
@@ -249,7 +257,11 @@ void cia_write ( struct Cia6526 *cia, int addr, Uint8 data )
 				cia->TCB = cia->TLBL | (cia->TLBH << 8);
 			}
 			break;
+		default:
+			fprintf(stderr, "ERROR: %s invalud register %d\n", cia->name, addr);
+			exit(1);
 	}
+	cia->regWritten[addr] = data;
 }
 
 
@@ -259,6 +271,7 @@ void cia_tick ( struct Cia6526 *cia, int ticks )
 	if (cia->CRA & 1) {
 		cia->TCA -= ticks;
 		if (cia->TCA <= 0) {
+			printf("%s timer-A expired!\n", cia->name);
 			ICR_SET(1);
 			cia->TCA = cia->TLAL | (cia->TLAH << 8);
 			if (cia->CRA & 8)
@@ -269,6 +282,7 @@ void cia_tick ( struct Cia6526 *cia, int ticks )
 	if (cia->CRB & 1) {
 		cia->TCB -= ticks;
 		if (cia->TCB <= 0) {
+			printf("%s timer-B expired!\n", cia->name);
 			ICR_SET(2);
 			cia->TCB = cia->TLBL | (cia->TLBH << 8);
 			if (cia->CRB & 8)
@@ -277,3 +291,20 @@ void cia_tick ( struct Cia6526 *cia, int ticks )
 	}
 	/* TOD stuffs are ignored ;-/ */
 }
+
+
+void cia_dump_state ( struct Cia6526 *cia )
+{
+	int a;
+	printf("%s registers written:", cia->name);
+	for (a = 0; a < 16; a++)
+		if (cia->regWritten[a] >= 0)
+			printf(" %02X", cia->regWritten[a]);
+		else
+			printf(" ??");
+	puts("");
+	printf("%s timer-A=%d time-B=%d\n", cia->name, cia->TCA, cia->TCB);
+}
+
+
+

@@ -49,6 +49,7 @@ struct Cia6526 {
 	Uint8 SDR;
 	int tod[4];
 	int todAlarm[4];
+	int regWritten[16];
 };
 
 
@@ -66,5 +67,7 @@ extern void  cia_reset(struct Cia6526 *cia);
 extern void  cia_write(struct Cia6526 *cia, int addr, Uint8 data);
 extern Uint8 cia_read (struct Cia6526 *cia, int addr);
 extern void  cia_tick (struct Cia6526 *cia, int ticks);
+extern void  cia_dump_state ( struct Cia6526 *cia );
+
 
 #endif
