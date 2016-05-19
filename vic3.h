@@ -15,24 +15,17 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __LGB_COMMODORE_65_H_INCLUDED
-#define __LGB_COMMODORE_65_H_INCLUDED
+#ifndef __LGB_VIC3_H_INCLUDED
+#define __LGB_VIC3_H_INCLUDED
 
-#define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888
-#define USE_LOCKED_TEXTURE	1
-#define RENDER_SCALE_QUALITY	1
-#define SCREEN_WIDTH		640
-#define SCREEN_HEIGHT		200
+extern int vic_new_mode;
+extern int scanline;
+extern Uint8 vic3_registers[];
 
-#define CPU_CLOCK		3546875
-#define FULL_FRAME_CPU_CYCLES	141875
-
-
-
-extern Uint8 memory[];
-
-
-extern void apply_memory_config ( void );
-
+extern void  vic3_init ( void );
+extern void  vic3_write_reg ( int addr, Uint8 data );
+extern Uint8 vic3_read_reg ( int addr );
+extern void  vic3_write_palette_reg ( int num, Uint8 data );
+extern void  vic3_render_screen ( void );
 
 #endif

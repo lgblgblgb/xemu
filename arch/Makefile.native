@@ -5,7 +5,7 @@
 ARCH_DESC	= "Native Unix/Linux like"
 PREFIX		= /usr/local
 BINDIR		= $(PREFIX)/bin
-DATADIR		= $(PREFIX)/lib/xep128
+DATADIR		= $(PREFIX)/lib/xclcd
 CC		= gcc
 STRIP		= strip
 SDLCFG		= sdl2-config

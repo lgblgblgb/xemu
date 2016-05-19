@@ -27,22 +27,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "cpu65ce02.h"
 #include "cia6526.h"
 #include "c65fdc.h"
+#include "vic3.h"
 #include "emutools.h"
 
 //#define DEBUG_MEMORY
 //#define DEBUG_STACK
 
 
-static Uint8 memory[0x110000];		// 65CE02 MAP'able address space (now overflow is not handled, that is the reason of higher than 1MByte, just in case ...)
-//static int map_offset[8];		// 8K sized block of 65CE02 64K address space mapping offset
-//static int map_mapped[8];		// is a 8K sized block of 65CE02 64K address space is mapped or not
-static Uint32 rgb_palette[4096];	// all the C65 palette, 4096 colours (SDL pixel format related form)
-static Uint32 vic3_palette[0x100];	// VIC3 palette in SDL pixel format related form (can be written into the texture directly to be rendered)
-static Uint8 vic3_registers[0x40];	// VIC3 registers
-static Uint8 vic3_palette_r[0x100], vic3_palette_g[0x100], vic3_palette_b[0x100];	// RGB nibbles of palette (0-15)
-static int vic_new_mode;		// VIC3 "newVic" IO mode is activated flag
+Uint8 memory[0x110000];		// 65CE02 MAP'able address space (now overflow is not handled, that is the reason of higher than 1MByte, just in case ...)
 static Uint8 cpu_port[2];		// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
-static int scanline;			// current scan line number
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
 
 
@@ -68,14 +61,11 @@ static int map_offset_high;		// MAP high offset, should be filled at the MAP opc
 
 
 
-
-#define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
-
+#ifdef DEBUG_STACK
 static int stackguard_address = -1;
 static Uint8 stackguard_data = 0;
 static Uint8 cpu_old_sp;
 static Uint16 cpu_old_pc_my;
-
 static void DEBUG_WRITE_ACCESS ( int physaddr, Uint8 data )
 {
 	if (
@@ -86,6 +76,9 @@ static void DEBUG_WRITE_ACCESS ( int physaddr, Uint8 data )
 		stackguard_data = data;
 	}
 }
+#else
+#define DEBUG_WRITE_ACCESS(unused1,unused2)
+#endif
 
 
 
@@ -93,15 +86,15 @@ static void DEBUG_WRITE_ACCESS ( int physaddr, Uint8 data )
    * MAP 4510 opcode is issued, map_offset_low, map_offset_high, map_mask are modified
    * "CPU port" data or DDR register has been written, witn cpu_port[0 or 1] modified
    * VIC3 register $30 is written, with vic3_registers[0x30] modified 
-   The rreason of this madness: do the ugly work here, as memory configuration change is
-   less frequent as memory usage (read/write). Thus do more work here, but simplier
+   The reason of this madness: do the ugly work here, as memory configuration change is
+   less frequent than memory usage (read/write). Thus do more work here, but simplier
    work when doing actual memory read/writes, with a simple addition and shift, or such.
    The tables are 4K in steps, 4510 would require only 8K steps, but there are other
-   reasons (ie, I/O area is only 4K long).
+   reasons (ie, I/O area is only 4K long, mapping is not done by the CPU).
    More advanced technique can be used not to handle *everything* here, but it's better
    for the initial steps, to have all address translating logic at once.
 */
-static void apply_memory_config ( void )
+void apply_memory_config ( void )
 {
 	// FIXME: what happens if VIC-3 reg $30 mapped ROM is tried to be written? Ignored, or RAM is used to write to, as with the CPU port mapping?
 	// About the produced signals on the "CPU port"
@@ -162,43 +155,23 @@ static void apply_memory_config ( void )
 static void cia_setint_cb ( int level )
 {
 	printf("%s: IRQ level changed to %d" NL, cia1.name, level);
-	cpu_irqLevel = level;
+	if (level)
+		cpu_irqLevel |= 1;
+	else
+		cpu_irqLevel &= ~1;
 }
 
-
-#if 0
-static Uint8 fake ( Uint8 mask )
-{
-	return 0;
-}
-#endif
 
 
 static void c65_init ( void )
 {
-	int r, g, b, i;
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
 	// *** Load ROM image
 	if (emu_load_file("c65-system.rom", memory + 0x20000, 0x20001) != 0x20000)
 		FATAL("Cannot load C65 system ROM!");
-	// *** Init 4096 element palette with RGB components for faster access later on palette register changes (avoid SDL calls to convert)
-	for (r = 0, i = 0; r < 16; r++)
-		for (g = 0; g < 16; g++)
-			for (b = 0; b < 16; b++)
-				rgb_palette[i++] = SDL_MapRGBA(sdl_pix_fmt, r * 17, g * 17, b * 17, 0xFF);
-	SDL_FreeFormat(sdl_pix_fmt);	// thanks, we don't need this anymore.
-	// *** Init VIC3 registers and palette
-	vic_new_mode = 0;
-	scanline = 0;
-	for (i = 0; i < 0x100; i++) {
-		if (i < sizeof vic3_registers)
-			vic3_registers[i] = 0;
-		vic3_palette[i] = rgb_palette[0];	// black
-		vic3_palette_r[i] = 0;
-		vic3_palette_g[i] = 0;
-		vic3_palette_b[i] = 0;
-	}
+	// *** Initialize VIC3
+	vic3_init();
 	// *** Memory configuration
 	cpu_port[0] = cpu_port[1] = 0xFF;	// the "CPU I/O port" on 6510/C64, implemented by VIC3 for real in C65!
 	map_mask = 0;				// as all 8K blocks are unmapped, we don't need to worry about the low/high offset to set here
@@ -228,13 +201,6 @@ static void c65_init ( void )
 }
 
 
-#if 0
-int cpu_trap ( Uint8 opcode )
-{
-	return 0;	// not used here
-}
-#endif
-
 
 // *** Implements the MAP opcode of 4510, called by the 65CE02 emulator
 void cpu_do_aug ( void )
@@ -262,50 +228,6 @@ void cpu_do_nop ( void )
 	} else
 		puts("CPU: NOP not reated as EOM (no MAP before)");
 }
-
-
-
-static void vic3_write_reg ( int addr, Uint8 data )
-{
-	addr &= 0x3F;
-	printf("VIC3: write reg $%02X with data $%02X\n", addr, data);
-	if (addr == 0x2F) {
-		if (!vic_new_mode && data == 0x96 && vic3_registers[0x2F] == 0xA5) {
-			vic_new_mode = 1;
-			printf("VIC3: switched into NEW I/O access mode :)" NL);
-		} else if (vic_new_mode) {
-			vic_new_mode = 0;
-			printf("VIC3: switched into OLD I/O access mode :(" NL);
-		}
-	}
-	if (!vic_new_mode && addr > 0x2F) {
-		printf("VIC3: ignoring writing register $%02X (with data $%02X) because of old I/O access mode selected" NL, addr, data);
-		return;
-	}
-	vic3_registers[addr] = data;
-	if (addr == 0x30) {
-		puts("MEM: applying new memory configuration because of VIC3 $30 is written");
-		apply_memory_config();
-	}
-}	
-
-
-
-static Uint8 vic3_read_reg ( int addr )
-{
-	addr &= 0x3F;
-	if (!vic_new_mode && addr > 0x2F) {
-		printf("VIC3: ignoring reading register $%02X because of old I/O access mode selected, answer is $FF" NL, addr);
-		return 0xFF;
-	}
-	if (addr == 0x12)
-		vic3_registers[0x12] = scanline & 0xFF;
-	else if (addr == 0x11)
-		vic3_registers[0x11] = (vic3_registers[0x11] & 0x7F) | ((scanline & 256) ? 0x80 : 0);
-	printf("VIC3: read reg $%02X with result $%02X\n", addr, vic3_registers[addr]);
-	return vic3_registers[addr];
-}
-
 
 
 
@@ -422,23 +344,11 @@ static Uint8 io_read ( int addr )
 		else
 			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("RAM expansion controller", 0xFF);
 	}
-	if (addr < 0xD200) {	// $D100 - $D100	palette red nibbles (*)
+	if (addr < 0xD400) {	// $D100 - $D3FF	palette red/green/blue nibbles (*)
 		if (vic_new_mode)
-			return vic3_palette_r[addr & 0xFF];
+			return 0xFF; // NOT READABLE!
 		else
-			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("palette red nibbles", 0xFF);
-	}
-	if (addr < 0xD300) {	// $D200 - $D200	palette green nibbles (*)
-		if (vic_new_mode)
-			return vic3_palette_g[addr & 0xFF];
-		else
-			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("palette green nibbles", 0xFF);
-	}
-	if (addr < 0xD400) {	// $D300 - $D300	palette blue nibbles (*)
-		if (vic_new_mode)
-			return vic3_palette_b[addr & 0xFF];
-		else
-			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("palette blue nibbles", 0xFF);
+			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("palette reg/green/blue nibbles", 0xFF);
 	}
 	if (addr < 0xD440) {	// $D400 - $D43F	SID, right
 		RETURN_ON_IO_READ_NOT_IMPLEMENTED("right SID", 0xFF);
@@ -482,11 +392,6 @@ static Uint8 io_read ( int addr )
 }
 
 
-#define SET_VIC3_PALETTE_ENTRY(num) \
-	do { vic3_palette[num] = RGB(vic3_palette_r[num], vic3_palette_g[num], vic3_palette_b[num]); \
-	printf("VIC3: palette #$%02X is set to RGB nibbles $%X%X%X" NL, num, vic3_palette_r[num], vic3_palette_g[num], vic3_palette_b[num]); \
-	} while (0)
-
 
 
 // Call this ONLY with addresses between $D000-$DFFF
@@ -508,29 +413,12 @@ static void io_write ( int addr, Uint8 data )
 		else
 			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("RAM expansion controller");
 	}
-	if (addr < 0xD200) {	// $D100 - $D100	palette red nibbles (*)
+	if (addr < 0xD400) {	// $D100 - $D3FF	palette red/green/blue nibbles (*)
 		if (vic_new_mode) {
-			vic3_palette_r[addr & 0xFF] = data & 15;	// FIXME: bg/fg bit: what is that? (bit 4, but I ignore that now)
-			SET_VIC3_PALETTE_ENTRY(addr & 0xFF);
+			vic3_write_palette_reg(addr - 0xD100, data);
 			return;
 		} else
-			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("palette red nibbles");
-	}
-	if (addr < 0xD300) {	// $D200 - $D200	palette green nibbles (*)
-		if (vic_new_mode) {
-			vic3_palette_g[addr & 0xFF] = data & 15;
-			SET_VIC3_PALETTE_ENTRY(addr & 0xFF);
-			return;
-		} else
-			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("palette green nibbles");
-	}
-	if (addr < 0xD400) {	// $D300 - $D300	palette blue nibbles (*)
-		if (vic_new_mode) {
-			vic3_palette_b[addr & 0xFF] = data & 15;
-			SET_VIC3_PALETTE_ENTRY(addr & 0xFF);
-			return;
-		} else
-			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("palette blue nibbles");
+			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("palette red/green/blue nibbles");
 	}
 	if (addr < 0xD440) {	// $D400 - $D43F	SID, right
 		RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("right SID");
@@ -655,6 +543,8 @@ static void dump_on_shutdown ( void )
 	int a;
 	for (a = 0; a < 0x40; a++)
 		printf("VIC-3 register $%02X is %02X" NL, a, vic3_registers[a]);
+	cia_dump_state (&cia1);
+	cia_dump_state (&cia2);
 	// Dump memory, so some can inspect the result (low 128K, RAM only)
 	f = fopen(MEMDUMP_FILE, "wb");
 	if (f) {
@@ -662,61 +552,18 @@ static void dump_on_shutdown ( void )
 		fclose(f);
 		puts("Memory is dumped into " MEMDUMP_FILE);
 	}
+	printf("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
 }
-
-
-
-static void render_screen ( void )
-{
-	int tail;
-	Uint32 *p = emu_start_pixel_buffer_access(&tail);
-	Uint8 *vidp = memory + 0x00800;
-	Uint8 *colp = memory + 0x1F800;
-	Uint8 *chrg = memory + 0x28000 + 0x1000 ;
-	int charline = 0;
-	Uint32 bg = vic3_palette[vic3_registers[0x21]];
-	int x = 0, y = 0;
-
-	for (;;) {
-		Uint8 chrdata = chrg[((*(vidp++)) << 3) + charline];
-		Uint8 coldata = *(colp++);
-		Uint32 fg = vic3_palette[coldata];
-		*(p++) = chrdata & 128 ? fg : bg;
-		*(p++) = chrdata &  64 ? fg : bg;
-		*(p++) = chrdata &  32 ? fg : bg;
-		*(p++) = chrdata &  16 ? fg : bg;
-		*(p++) = chrdata &   8 ? fg : bg;
-		*(p++) = chrdata &   4 ? fg : bg;
-		*(p++) = chrdata &   2 ? fg : bg;
-		*(p++) = chrdata &   1 ? fg : bg;
-		if (x == 79) {
-			p += tail;
-			x = 0;
-			if (charline == 7) {
-				if (y == 24)
-					break;
-				y++;
-				charline = 0;
-			} else {
-				charline++;
-				vidp -= 80;
-				colp -= 80;
-			}
-		} else
-			x++;
-	}
-	emu_update_screen();
-}
-
 
 
 
 static void emulate_keyboard ( SDL_Scancode key, int pressed )
 {
 	if (pressed) {
-		if (key == SDL_SCANCODE_F11)
+		if (key == SDL_SCANCODE_F11) {
 			emu_set_full_screen(-1);
-		else if (key == SDL_SCANCODE_F9)
+			return;
+		} else if (key == SDL_SCANCODE_F9)
 			exit(0);
 	}
 }
@@ -738,7 +585,7 @@ static void update_emulator ( void )
 		}
 	}
 	// Screen rendering: begin
-	render_screen();
+	vic3_render_screen();
 	// Screen rendering: end
 	emu_sleep(40000);
 }
@@ -803,9 +650,11 @@ int main ( int argc, char **argv )
 	emu_timekeeping_start();
 	for (;;) {
 		int opcyc;
+#ifdef DEBUG_STACK
 		cpu_old_sp = cpu_sp;
 		cpu_old_pc_my = cpu_pc;
 		stackguard_address = -1;
+#endif
 		opcyc = cpu_step();
 #ifdef DEBUG_STACK
 		if (cpu_sp != cpu_old_sp) {
@@ -822,15 +671,17 @@ int main ( int argc, char **argv )
 		cycles += opcyc;
 		if (cycles >= 227) {
 			scanline++;
-			printf("VIC3: new scanline (%d)!" NL, scanline);
+			//printf("VIC3: new scanline (%d)!" NL, scanline);
 			cycles -= 227;
 			if (scanline == 312) {
-				puts("VIC3: new frame!");
+				//puts("VIC3: new frame!");
 				frameskip = !frameskip;
 				scanline = 0;
-				if (!frameskip)
+				if (!frameskip)	// well, let's only render every full frames (~ie 25Hz)
 					update_emulator();
 			}
+			//printf("RASTER=%d COMPARE=%d\n",scanline,compare_raster);
+			//vic_interrupt();
 		}
 	}
 	puts("Goodbye!");
