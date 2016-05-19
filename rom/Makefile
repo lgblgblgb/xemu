@@ -37,7 +37,7 @@ roms:
 	test -s clcd-u102.rom || wget -O clcd-u102.rom http://commodore-lcd.lgb.hu/files/kizapr-u102.bin
 	test -s clcd-u104.rom || wget -O clcd-u104.rom http://commodore-lcd.lgb.hu/files/sept-M-13apr-u104.bin
 	test -s clcd-u103.rom || wget -O clcd-u103.rom http://commodore-lcd.lgb.hu/files/sizapr-u103.bin
-	test -s c65-system.rom || wget -O c65-system.rom http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c65/911001.bin
+	test -s c65-system.rom || wget -O c65-system.rom http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c65/910111.bin
 
 %.rom: %.asm
 	cl65 -t none --cpu 65c02 -o $@ $<
