@@ -750,8 +750,8 @@ int main ( int argc, char **argv )
 		return 1;
 	// Initialize C65 ...
 	c65_init();
-	memory[0x3FB93] = 0xA9;
-	memory[0x3FB94] = 0x00;
+	//memory[0x3FB93] = 0xA9;
+	//memory[0x3FB94] = 0x00;
 #if 0
 	memory[0x200] = 0x83;
 	memory[0x201] = 0xfd;
@@ -800,6 +800,8 @@ int main ( int argc, char **argv )
 			}
 		}
 #endif
+		// FIXME: maybe CIAs are not fed with the actual CPU clock and that cause the "too fast" C64 for me?
+		// ... though I tried to correct used CPU cycles with that divider hack at least to approx. the ~1MHz clock in non-FAST mode (see vic3.c)
 		cia_tick(&cia1, opcyc);
 		cia_tick(&cia2, opcyc);
 		cycles += opcyc;
