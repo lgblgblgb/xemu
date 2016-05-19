@@ -198,6 +198,12 @@ void vic3_write_palette_reg ( int num, Uint8 data )
 
 
 
+/* FIXME
+Primitive "full screen at once" renderer! Only knows the "official" text
+mode of C65 native mode and 64 mode, with standard locations etc.
+In C65 mode, not even the hw attributes are supported! Of course, currently
+forget about sprites, graphics, bitplanes, everything :)
+*/
 void vic3_render_screen ( void )
 {
 	int tail;
@@ -207,32 +213,53 @@ void vic3_render_screen ( void )
 	Uint8 *chrg = memory + 0x28000 + 0x1000 ;
 	int charline = 0;
 	Uint32 bg = vic3_palette[vic3_registers[0x21]];
-	int x = 0, y = 0;
-
+	int x = 0, y = 0, xlim, ylim;
+	// we use the H640 bit only to decide it is C65 or C64 mode render
+	// Surely is very wrong!
+	if (vic3_registers[0x31] & 128) {
+		xlim = 79;
+		ylim = 24;
+	} else {
+		xlim = 39;
+		ylim = 24;
+		vidp -= 0x400;
+	}
 	for (;;) {
 		Uint8 chrdata = chrg[((*(vidp++)) << 3) + charline];
 		Uint8 coldata = *(colp++);
 		Uint32 fg = vic3_palette[coldata];
-		*(p++) = chrdata & 128 ? fg : bg;
-		*(p++) = chrdata &  64 ? fg : bg;
-		*(p++) = chrdata &  32 ? fg : bg;
-		*(p++) = chrdata &  16 ? fg : bg;
-		*(p++) = chrdata &   8 ? fg : bg;
-		*(p++) = chrdata &   4 ? fg : bg;
-		*(p++) = chrdata &   2 ? fg : bg;
-		*(p++) = chrdata &   1 ? fg : bg;
-		if (x == 79) {
+		if (xlim == 79) {
+			*(p++) = chrdata & 128 ? fg : bg;
+			*(p++) = chrdata &  64 ? fg : bg;
+			*(p++) = chrdata &  32 ? fg : bg;
+			*(p++) = chrdata &  16 ? fg : bg;
+			*(p++) = chrdata &   8 ? fg : bg;
+			*(p++) = chrdata &   4 ? fg : bg;
+			*(p++) = chrdata &   2 ? fg : bg;
+			*(p++) = chrdata &   1 ? fg : bg;
+		} else {
+			p[ 0] = p[ 1] = chrdata & 128 ? fg : bg;
+			p[ 2] = p[ 3] = chrdata &  64 ? fg : bg;
+			p[ 4] = p[ 5] = chrdata &  32 ? fg : bg;
+			p[ 6] = p[ 7] = chrdata &  16 ? fg : bg;
+			p[ 8] = p[ 9] = chrdata &   8 ? fg : bg;
+			p[10] = p[11] = chrdata &   4 ? fg : bg;
+			p[12] = p[13] = chrdata &   2 ? fg : bg;
+			p[14] = p[15] = chrdata &   1 ? fg : bg;
+			p += 16;
+		}
+		if (x == xlim) {
 			p += tail;
 			x = 0;
 			if (charline == 7) {
-				if (y == 24)
+				if (y == ylim)
 					break;
 				y++;
 				charline = 0;
 			} else {
 				charline++;
-				vidp -= 80;
-				colp -= 80;
+				vidp -= xlim + 1;
+				colp -= xlim + 1;
 			}
 		} else
 			x++;
