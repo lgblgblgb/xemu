@@ -244,16 +244,15 @@ void vic3_render_screen ( void )
 	if (vic3_registers[0x31] & 128) {
 		xlim = 79;
 		ylim = 24;
-		palette = vic3_palette;
 		chrg = memory + 0x28000 + 0x1000;
 		vidp = memory + 0x00800;
 	} else {
 		xlim = 39;
 		ylim = 24;
-		palette = vic3_rom_palette;
 		chrg = memory + 0x2D000;
 		vidp = memory + 0x00400;
 	}
+	palette = (vic3_registers[0x30] & 4) ? vic3_palette : vic3_rom_palette;
 	bg = palette[vic3_registers[0x21]];
 	for (;;) {
 		Uint8 chrdata = chrg[((*(vidp++)) << 3) + charline];

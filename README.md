@@ -112,10 +112,10 @@ mode (GO64) - that is kinda odd (FAST/SLOW mode is not handled correctly).
 Though, trying to type any BASIC *program* line causes ?PROGRAM MANGLED
 error, LIST commands then only displays endless PI signs :)
 
-What is emulated:
+What is emulated and what is not:
 
-* 65CE02 "core" instructions, but only ones, I needed on demand! So still,
-  there are opcodes wouldn't even work and causes the emulator to exit!
+* 65CE02 "core" instructions, but only ones what I needed on demand! So still,
+  there are opcodes wouldn't even work and causes the emulator to exit!!!!!
   65CE02 emulation is done by extending/modifying a 65C02 emulator (of mine)
   since 65CE02 is basically an extended 65C02.
 
@@ -126,18 +126,29 @@ What is emulated:
   and 2K colour SRAM mode, "C64-style" "CPU port".
 
 * Some kind of DMA stuff, only copy/fill not with special bits though
-  (redirect to IO etc)
+  (redirect to IO etc). However DMA works with stopping the CPU, so it's
+  not quite the same as with a real hardware, I guess ...
 
 * 128K ROM / 128K RAM, no RAM expansion
 
-* FDC does not work yet
+* FDC does not work yet (work-in-progress)
 
 * VIC3 code is horrible, it merely emulates a *fixed* rendering (all in
   once per frames!) with fixed memory configuration known to be used by
   C65 (or C64, in C64 mode). Nothing other is emulated, ie graphical
   modes, multicolour, sprites, bitplanes, DAT, hardware character
-  attributes, etc, nothing. Though, VIC3 pallette registers are emulated,
-  not the "ROM palette" though.
+  attributes, etc, nothing. Though, VIC3 pallette registers are emulated.
+
+* No emulation for the SIDs, UART, REC (Ram Expansion Controller)
+
+* CIA emulation (for real, part of 4510 and not even full CIAs from
+  some aspects) is quite lame. Though it seems enough for keyboard and
+  periodic IRQ generating in C64 mode at least
+
+* Keyboard is not fully implemented (not the extra keys like TAB - it seems
+  it's handled by - surprisingly - by the UART part ...), and
+  some mapping problems (ie, position based mapping for US host machine layout,
+  some keys are still missing, I was lazy ...).
 
 First "milestone" is already here, it can "boot" to BASIC, though :)
 
