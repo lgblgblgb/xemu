@@ -96,9 +96,9 @@ void vic3_check_raster_interrupt ( void )
 {
 	if (
 		(scanline == compare_raster)
-#if 0
+//#if 0
 		|| (compare_raster == 511 && scanline == 0)
-#endif
+//#endif
 	) {
 		interrupt_status |= 1;
 	} else
