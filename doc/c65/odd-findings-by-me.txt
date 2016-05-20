@@ -15,6 +15,11 @@ What was surprising at least for me ... Quite subjective :)
   you have this problem, maybe it's because of problem with
   the implementation of PHW opcode!
 
+* Some resources do not agree about the addressing mode of
+  some opcodes, ie INW/DEW, some of them states it's absolute
+  some of them beleives in zero addressing. It seems, the zero
+  addressing can win, though.
+
 * C65 in native mode uses VIC3 raster interrupts to produce
   the "periodic IRQ", rather than CIAs, as with the C64.
 
@@ -35,52 +40,14 @@ What was surprising at least for me ... Quite subjective :)
   I use the solution which seems to work with the existing
   ROM images at least :)
 
-* Still with the opcodes ... Something is *REALLY* not OK
-  with LDA/STA (nn,SP),Y. There is such an addressing mode
-  on 65C816 well. However according to the C65 ROM code, it
-  is more likely (at least for me) that IT IS NOT that,
-  so we use wrong "name" for the opcode! Just see the IRQ
-  handler code in the C65 KERNAL (911001.bin):
-
-  FB91  A0 06     LDY  #$06
-  FB93  E2 01     LDA  ($01,SP),Y         ; <----- ?????? access the stored CPU status register (in the stack)
-  [...]
-  FB97  29 10     AND  #$10               ; <----- was a BRK?
-  FB99  D0 03     BNE  $FB9E              ; <----- if branch is taken, if it was a BRK!
-  FB9B  6C 14 03  JMP  ($0314)		  ; <----- B bit was not set, it is an IRQ!
-  FB9E  22 F6 FF  JSR  ($FFF6)		  ; BRK vector
-  FBA1  EA        EOM  
-  FBA2  6C 16 03  JMP  ($0316)
-
-  For me, it's more likely, that $E2 opcode is used to access
-  a byte in the stack, nothing "indirect" and the opcode is more
-  likely to be:
-
-  LDA $01,SP,Y
-
-  With the "official" meaning of the (nn,SP),Y addressing mode,
-  I simply cannot find any sense about this method, I've disassembled
-  here. Of course, as ususal, I can be wrong here! I simply
-  emulated $E2 opcode this way:
-
-  address = SP + Y + fetched_byte_of_the_opcode_as_argument() + 1
-
-  Of course the "address" may/may not cross page boundary, and I don't
-  know if E bit has an effect (stack mode 8/16 bit). Also, of course
-  stack page must be added, etc. For 8 bit stack, based on the E bit,
-  I also do "warping around" effect on the address before it's
-  converted to an address with stack page added (beware: it seems
-  - according to some resources ... - that 8 bit mode stack only
-  limits its "size" the stack page still can be set with TYS opcode!)
-
-  I'm not really sure why "+1" is needed, maybe because 0 does not
-  make sense too much, so to have intent of "0" too (or better say:
-  to count relative of the _used_ stack portion), this is handled
-  this way.
-
-  It's also possible that 65CE02 *works* as should by the opcode
-  addressing mode described, just with 4510, it was *modified*
-  since it may better fits to the needs? Who knows.
+* Still with the opcodes ... LDA/STA (nn,SP),Y is kinda odd
+  beasts. Maybe I should know 65C816 better, it has these
+  as well (though using different opcode numbers). For
+  example what happens with 8 bit stack, there are even two
+  cases for the possibility to "warping around" then,
+  by adding the "nn", and the fact, that it needs a word,
+  and if you are unlucky, the "warp around" situation is
+  there then ...
 
 * DMA is an important part for the system. it's even used
   to clear/scroll the screen and maybe other memory regions as

@@ -293,20 +293,29 @@ static inline void _BRA16(int cond) {
 }
 // Used by LDA/STA (nn,SP), Y opcodes
 /* Big fat NOTE/FIXME/TODO:
-   It *seems* (according to the C65 ROM) that this addressing mode is not what you think!
-   Ie not the same as 65C816 (nn,SP),Y!
-   It's more like a plain "nn,SP,Y" instead! I have that suspect, because C65 ROM in the
-   IRQ routine uses this: LDA  ($01,SP),Y
-   And then the result is AND'ed with $10 and conditionally jumps to he BRK vector. So
-   it should have been used to access the PUSH'ed process flag register in the stack.
+   See the question #1/2, even two places where stack 'warping around' effect can
+   be an interesting question in 8 bit stack mode.
 */
 static inline Uint16 _GET_SP_INDIRECT_ADDR ( void )
 {
+	int tmp2;
+	int tmp = cpu_sp + cpu_read(cpu_pc++);
+	if (cpu_pfe)		// FIXME: question #1: is E flag affects this addressing mode this way
+		tmp &= 0xFF;
+	tmp2 = cpu_read((cpu_sphi + tmp) & 0xFFFF);
+	tmp++;
+	if (cpu_pfe)		// FIXME: question #2: what happens if lo/hi bytes would be used at exactly at 'wrapping the stack' around case, with 8 bit stack mode?
+		tmp &= 0xFF;
+	tmp2 |= cpu_read((cpu_sphi + tmp) & 0xFFFF) << 8;
+	return (Uint16)(tmp2 + cpu_y);
+#if 0
+	// Older, bad implementation, by misunderstanding the stuff badly:
 	Uint16 res = cpu_read(cpu_pc++) + cpu_y + cpu_sp + 1;
 	// Guessing: if stack is in 8 bit mode, it warps around inside the given stack page
 	if (cpu_pfe)
 		res &= 0xFF; 
 	return (Uint16)(res + cpu_sphi);
+#endif
 }
 #endif
 static inline void _CMP(Uint8 reg, Uint8 data) {
@@ -413,7 +422,7 @@ int cpu_step () {
 #endif
 		cpu_nmiEdge = 0;
 		pushWord(cpu_pc);
-		push(getP());			// FIXME: do we need the same here as at the IRQ?
+		push(getP() & (255 - 0x10));	// FIXME: do we need the same here as at the IRQ?
 		cpu_pfi = 1;
 		cpu_pfd = 0;
 		cpu_pc = readWord(0xFFFA);
@@ -462,6 +471,8 @@ int cpu_step () {
 #ifdef DEBUG_CPU
 			printf("CPU: WARN: BRK is about executing at PC=$%04X\n", (cpu_pc - 1) & 0xFFFF);
 #endif
+			// FIXME: does BRK sets I and D flag? Hmm, I can't even remember now why I wrote these :-D
+			// FIXME-2: does BRK sets B flag, or only in the saved copy on the stack??
 			pushWord(cpu_pc + 1); cpu_pfb = 1; push(getP()); cpu_pfd = 0; cpu_pfi = 1; cpu_pc = readWord(0xFFFE); /* 0x0 BRK Implied */
 			break;
 	case 0x01:	setNZ(A_OP(|,cpu_read(_zpxi()))); break; /* 0x1 ORA (Zero_Page,X) */
@@ -765,7 +776,8 @@ int cpu_step () {
 	case 0x82:
 #ifdef CPU_65CE02
 			OPC_65CE02("STA (nn,S),Y");
-			UNIMPLEMENTED_65CE02("STA ($nn,SP),Y");	// 65CE02 STA ($nn,SP),Y
+			//UNIMPLEMENTED_65CE02("STA ($nn,SP),Y");	// 65CE02 STA ($nn,SP),Y
+			cpu_write(_GET_SP_INDIRECT_ADDR(), cpu_a);
 #else
 			cpu_pc++;	// NOP imm (non-std NOP with addr mode)
 #endif
