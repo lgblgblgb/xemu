@@ -48,5 +48,6 @@ xc65.??*
 arch/objs.*
 *.prg
 *.d64
+*.d81
 dist.zip
 .dist

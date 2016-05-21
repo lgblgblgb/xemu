@@ -26,15 +26,74 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "emutools.h"
 
 
+#define BLOCK_SIZE 512
 
-static Uint8 f011_cmd = 0;
-static Uint8 f011_track = 0, f011_sector = 0, f011_side = 0;
 
-static Uint8 f011_reg0 = 0;
-static Uint8 f011_status_a = 0;
-static Uint8 f011_status_b = 0;
+static Uint8 head_track;		// "physical" track, ie, what is the head is positioned at currently
+static int   head_side;
+static Uint8 track, sector, side;	// parameters given for an operation ("find"), if track is not the same as head_track, you won't find your sector on that track probably ...
+static Uint8 control, status_a, status_b;
+static Uint8 cmd;
+static int   curcmd;
+static Uint8 clock, step;
+static int   emulate_busy;
+static int   drive;
+static Uint8 cache[512];		// 512 bytes cache FDC will use
+static int   cache_p_cpu;
+static int   cache_p_drive;
+static FILE *disk;
 
-static Uint8 emulate_busy = 0;	// must be a BYTE!
+
+
+
+void fdc_init ( void )
+{
+	disk = NULL;
+	head_track = 0;
+	head_side = 0;
+	control = 0;
+	status_a = 1;	// on track-0
+	status_b = 8;	// disk is inserted
+	track = 0;
+	sector = 0;
+	side = 0;
+	cmd = 0;
+	curcmd = -1;
+	clock = 0xFF;
+	step = 0xFF;
+	cache_p_cpu = 0;
+	cache_p_drive = 0;
+	drive = 0;
+	disk = fopen("DosDisk.d81", "rb");
+}
+
+
+
+
+static void read_sector ( void )
+{
+	if (disk) {
+		Uint8 buffer[512];
+		fseek(disk, ((40 * (track - 0)) + (sector - 1)) * 256, SEEK_SET);
+		if (fread(buffer, 512, 1, disk) != 1) {
+			status_a |= 16; // record not found ....
+			printf("FDC: READ: cannot read sector from image file!\n");
+		} else {
+			int a = 0;
+			while (a < 512) {
+				cache[cache_p_drive++] = buffer[a++];
+				cache_p_drive &= 511;
+			}
+			printf("FDC: READ: sector has been read from image file.\n");
+		}
+	} else {
+		status_a |= 16;	// record not found ....
+		status_b &= (255- 4); // no disk inserted ...
+		printf("FDC: READ: no valid image file!\n");
+	}
+}
+
+
 
 
 
@@ -42,91 +101,200 @@ static Uint8 emulate_busy = 0;	// must be a BYTE!
 void fdc_write_reg ( int addr, Uint8 data )
 {
         printf("FDC: writing register %d with data $%02X" NL, addr, data);
-	f011_status_a = 0;
 	switch (addr) {
 		case 0:
-			f011_reg0 = data;
-			f011_side = (data >> 3) & 1;
+#if 0
+			if (status_a & 128) {
+				printf("FDC: WARN: trying to write control register ($%02X) while FDC is busy." NL, data);
+				return;
+			}
+#endif
+			control = data;
+			status_a |= 128;	// writing control register also causes to set the BUSY flag for some time ...
+			if (curcmd == -1)
+				curcmd = 0x100;		// "virtual" command, by writing the control register
+			drive = data & 7;	// drive selection
+			head_side = (data >> 3) & 1;
+			if (drive)
+				printf("FDC: WARN: not drive-0 is selected: %d!" NL, drive);
+			else
+				printf("FDC: great, drive-0 is selected" NL);
+			if (data & 16)
+				INFO_WINDOW("FDC SWAP bit is not implemented yet!");
 			break;
 		case 1:
-			f011_cmd = data;
-			//f011_status_a |= 128; // simulate busy status ...
-			switch (data & 0xF8) {	// high 5 bits
-				case 0x40:	// read sector
-					f011_status_a = 128|16;
-					break;
-				case 0x80:	// write sector
-					f011_status_a = 128|2;
-					break;
-				case 0x10:	// head step out or no step
-					if (!(data & 4))
-						f011_track--;
-					break;	
-				case 0x18:	// head step in
-					f011_track++;
-					break;
-				case 0x20:	// motor spin up
-					f011_reg0 |= 32;
-					f011_status_a = 128;
-					break;
-				case 0x00:	// cancel running command??
-					break;
-				default:
-					printf("FDC: unknown comand: $%02X" NL, data);
-			}	
+			printf("FDC: command=$%02X (lower bits: $%X)" NL, data & 0xF8, data & 7);
+			if ((status_a & 128) && ((data & 0xF8))) {	// if BUSY, and command is not the cancel command ..
+				printf("FDC: WARN: trying to issue another command ($%02X) while the previous ($%02X) is running." NL, data, cmd);
+				return;
+			}
+			cmd = data;
+			curcmd = data;
+			status_a |= 128; 	// simulate busy status ...
+			status_b &= 255 - 2;	// turn IRQ flag OFF
+			status_a &= 255 - (4 + 8 + 16);	// turn RNF/CRC/LOST flags OFF
+			status_b &= 255 - (128 + 64);	// also turn RDREQ and WRREQ OFF [IS THIS REALLY NEEDED?]
+			if ((cmd & 0xF8) == 0x80)
+				status_a |= 2; 		// write protected
+			else
+				status_a &= (255 - 2);
 			break;
 		case 4:
-			f011_track = data;
+			track = data;
 			break;
 		case 5:
-			f011_sector = data;
+			sector = data;
 			break;
 		case 6:
-			f011_side = data;
+			side = data;
+			break;
+		// TODO: write DATA register (7)
+		case 8:
+			clock = data;
+			break;
+		case 9:
+			step = data;
 			break;
 	}
-	if (f011_status_a & 128)
-		emulate_busy = 210;
+	if (status_a & 128)
+		emulate_busy = 10;
 }
+
+
+
+
+
+
+static void execute_command ( void )
+{
+	status_a &= 127;	// turn BUSY flag OFF
+	status_b |= 2;		// turn IRQ flag ON
+	if (control & 128)
+		INFO_WINDOW("Sorry, FDC-IRQ is not supported yet, by FDC emulation!");
+	if (curcmd < 0)
+		return;	// no cmd was given?!
+	if (curcmd > 0xFF)
+		return; // only control register was written, not the command register
+	switch (cmd & 0xF8) {	// high 5 bits of the command ...
+		case 0x40:	// read sector
+			//status_a |= 16;		// record not found for testing ...
+			status_b |= 128;	// RDREQ: if it's not here, you won't get a READY. prompt!
+			//status_b |= 32;		// RUN?!
+			status_a |= 64;		// set DRQ
+			status_a &= (255 - 32); // clear EQ
+			read_sector();
+			//cache_p_drive = (cache_p_drive + BLOCK_SIZE) & 511;
+			printf("FDC: READ: head_track=%d need_track=%d head_side=%d need_side=%d need_sector=%d drive_selected=%d" NL,
+				head_track, track, head_side, side, sector, drive
+			);
+			break;
+		case 0x80:	// write sector
+			status_a |= 2;		// write protected!
+			break;
+		case 0x10:	// head step out or no step
+			if (!(cmd & 4)) {	// if only not TIME operation, which does not step!
+				if (head_track)
+					head_track--;
+				if (!head_track)
+					status_a |= 1;	// track 0 flag
+				printf("FDC: head position = %d" NL, head_track);
+			}
+			break;	
+		case 0x18:	// head step in
+			if (head_track < 128)
+				head_track++;
+			printf("FDC: head position = %d" NL, head_track);
+			status_a &= 0xFE;	// track 0 flag off
+			break;
+		case 0x20:	// motor spin up
+			control |= 32;
+			status_a |= 16; // according to the specification, RNF bit should be set at the end of the operation
+			break;
+		case 0x00:	// cancel running command?? NOTE: also if low bit is 1: clear pointer!
+			if (cmd & 1) {
+				cache_p_cpu = 0;
+				cache_p_drive = 0;
+				printf("FDC: WARN: resetting cache pointers" NL);
+			}
+			break;
+		default:
+			printf("FDC: WARN: unknown comand: $%02X" NL, cmd);
+			//status_a &= 127; // well, not a valid command, revoke busy status ...
+			break;
+	}
+	curcmd = -1;
+}
+
+
+
 
 
 
 Uint8 fdc_read_reg  ( int addr )
 {
 	Uint8 result;
+	/* Emulate BUSY timing, with a very bad manner: ie, decrement a counter on each register read to give some time to wait.
+	   Won't work if DOS is IRQ driven ... */
+	if (status_a & 128) {	// check the BUSY flag
+		if (emulate_busy > 0)
+			emulate_busy--;
+		if (emulate_busy <= 0)
+			execute_command();	// execute the command only now for real ... (it will also turn BUSY flag - bit 7 - OFF in status_a)
+	}
 	switch (addr) {
 		case 0:
-			//result = f011_irqenable | f011_led | (f011_motor << 5) | (f011_swap <<) 4 | ((f011_side & 1) << 3) | f011_ds;
-			//result = ((f011_side & 1) << 3) | 32;
-			result = (f011_reg0 & (0xFF - 8)) | ((f011_side & 1) << 3);
+			result = control;
 			break;
 		case 1:
-			result = f011_cmd;
+			result = cmd;
 			break;
 		case 2:	// STATUS register A
-			//result = f011_busy & f011_drq & f011_flag_eq & f011_rnf & f011_crc & f011_lost & f011_write_protected & f011_track0;
-			if ((f011_status_a & 128)) {
-				emulate_busy++;
-				if (!emulate_busy)
-					f011_status_a &= 127;
-			}
-			result = (f011_status_a & 0xFE) | (f011_track ? 0 : 1);
+			result = drive ? 0 : status_a;
 			break;
 		case 3: // STATUS register B
-			//result = f011_rsector_found & f011_wsector_found & f011_rsector_found & f011_write_gate & f011_disk_present & f011_over_index & f011_irq & f011_disk_changed;
-			result = f011_status_b;
+			result = drive ? 0 : status_b;
 			break;
 		case 4:
-			result = f011_track;
+			result = track;
 			break;
 		case 5:
-			result = f011_sector;
+			result = sector;
 			break;
 		case 6:
-			result = f011_side;
+			result = side;
 			break;
 		case 7:
+			// TODO: if BUSY, do not provide anything!
 			result = 0xFF;	// DATA :-) We fake here something meaingless for now ...
+			status_a &= (255 - 64);	// clear DRQ
+			//if (cmd == 0x40) {
+				status_b &= 127; 	// turn RDREQ off after the first access, this is somewhat incorrect :-P
+				result = cache[cache_p_cpu];
+				cache_p_cpu = (cache_p_cpu + 1) & 511;
+				printf("FDC: read_pointer is now %d, drive pointer %d" NL, cache_p_cpu, cache_p_drive);
+#if 0
+				if (read_pointer == 256) {
+					//status_a &= 255 - 64;	// turn DRQ off
+					//status_b &= 127;	// turn RDREQ off
+					//status_a |= 32;		// turn EQ on (???)
+				} else {
+					//status_a &= (255-32);	// EQ->off
+					//status_b |= 128;	// RDREQ->on
+					//status_a |= 64;		// DRQ->on
+				}
+#endif
+				if (cache_p_cpu == cache_p_drive) status_a |= 32;               // turn EQ on
+				else status_a &= 255 - 32;		// turn EQ off
+			//}
+			break;
+		case 8:
+			result = clock;
+			break;
+		case 9:
+			result = step;
+			break;
+		case 10:
+			result = 0; // No "protection code" ...
 			break;
 		default:
 			result = 0xFF;

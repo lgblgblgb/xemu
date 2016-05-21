@@ -304,6 +304,8 @@ static void c65_init ( void )
 		NULL,	// callback: INSR(mask)
 		NULL	// callback: SETINT(level)	that would be NMI in our case
 	);
+	// *** Init FDC
+	fdc_init();
 	// *** RESET CPU, also fetches the RESET vector into PC
 	cpu_reset();
 	puts("INIT: end of initialization!");
@@ -431,20 +433,17 @@ static void dma_write_reg ( int addr, Uint8 data )
 // Ranges marked with (*) needs "vic_new_mode"
 static Uint8 io_read ( int addr )
 {
+	// Future stuff: instead of slow tons of IFs, use the >> 5 maybe
+	// that can have new device at every 0x20 dividible addresses,
+	// that is: switch ((addr >> 5) & 127)
+	// Other idea: array of function pointers, maybe separated for new/old
+	// VIC modes as well so no need to check each time that either ...
 	if (addr < 0xD080)	// $D000 - $D07F:	VIC3
 		return vic3_read_reg(addr);
 	if (addr < 0xD0A0) {	// $D080 - $D09F	DISK controller (*)
-		if (vic_new_mode) {
-			return fdc_read_reg(addr & 0x1F);
-#if 0
-			/*if (addr == 0xD082 || addr == 0xD089) {
-				puts("WARN: hacking 127 as the answer for reading $D082");
-				return 16; // hack
-			} */
-			//return 0;
-			RETURN_ON_IO_READ_NOT_IMPLEMENTED("DISK controller", 0x7F);	// emulation stops here with 0xFF
-#endif
-		} else
+		if (vic_new_mode)
+			return fdc_read_reg(addr & 0xF);
+		else
 			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("DISK controller", 0xFF);
 	}
 	if (addr < 0xD100) {	// $D0A0 - $D0FF	RAM expansion controller (*)
@@ -511,7 +510,7 @@ static void io_write ( int addr, Uint8 data )
 		return vic3_write_reg(addr, data);
 	if (addr < 0xD0A0) {	// $D080 - $D09F	DISK controller (*)
 		if (vic_new_mode) {
-			fdc_write_reg(addr & 0x1F, data);
+			fdc_write_reg(addr & 0xF, data);
 			return;
 		} else
 			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("DISK controller");
@@ -641,7 +640,7 @@ void cpu_write ( Uint16 addr, Uint8 data )
 #define MEMDUMP_FILE	"dump.mem"
 
 
-static void dump_on_shutdown ( void )
+static void shutdown_callback ( void )
 {
 	FILE *f;
 	int a;
@@ -737,15 +736,15 @@ int main ( int argc, char **argv )
 		"nemesys.lgb", "xclcd-c65",	// app organization and name, used with SDL pref dir formation
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
-		SCREEN_WIDTH, SCREEN_HEIGHT * 2,// logical size
+		SCREEN_WIDTH, SCREEN_HEIGHT * 2,// logical size (used with keeping aspect ratio by the SDL render stuffs)
 		SCREEN_WIDTH, SCREEN_HEIGHT * 2,// window size
 		SCREEN_FORMAT,			// pixel format
-		0,				// we have *NO* pre-defined colours (too many we need). we want to do this ourselves!
+		0,				// we have *NO* pre-defined colours as with more simple machines (too many we need). we want to do this ourselves!
 		NULL,				// -- "" --
 		NULL,				// -- "" --
 		RENDER_SCALE_QUALITY,		// render scaling quality
 		USE_LOCKED_TEXTURE,		// 1 = locked texture access
-		dump_on_shutdown		// registered shutdown function
+		shutdown_callback		// registered shutdown function
 	))
 		return 1;
 	// Initialize C65 ...

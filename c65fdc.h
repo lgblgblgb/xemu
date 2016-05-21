@@ -24,5 +24,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 extern void  fdc_write_reg ( int addr, Uint8 data );
 extern Uint8 fdc_read_reg  ( int addr );
+extern void  fdc_init      ( void );
 
 #endif
