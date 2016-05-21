@@ -433,7 +433,7 @@ int cpu_step () {
 		pushWord(cpu_pc);
 		push(getP() & (255 - 0x10));	// FIXME: do we need the same here as at the IRQ?
 		cpu_pfi = 1;
-		cpu_pfd = 0;
+		cpu_pfd = 0;			// NOTE: D flag clearing was not done on the original 6502 I guess, but indeed on the 65C02 already
 		cpu_pc = readWord(0xFFFA);
 		return 7;
 	}
@@ -482,6 +482,7 @@ int cpu_step () {
 #endif
 			// FIXME: does BRK sets I and D flag? Hmm, I can't even remember now why I wrote these :-D
 			// FIXME-2: does BRK sets B flag, or only in the saved copy on the stack??
+			// NOTE: D flag clearing was not done on the original 6502 I guess, but indeed on the 65C02 already
 			pushWord(cpu_pc + 1); cpu_pfb = 1; push(getP()); cpu_pfd = 0; cpu_pfi = 1; cpu_pc = readWord(0xFFFE); /* 0x0 BRK Implied */
 			break;
 	case 0x01:	setNZ(A_OP(|,cpu_read(_zpxi()))); break; /* 0x1 ORA (Zero_Page,X) */
@@ -935,7 +936,16 @@ int cpu_step () {
 	case 0xcb:
 #ifdef CPU_65CE02
 			OPC_65CE02("ASW nnnn");
-			UNIMPLEMENTED_65CE02("ASW $nnnn");	// 65CE02 ASW $nnnn            (CB  Arithmetic Shift Left Word)
+			{					// 65CE02 ASW $nnnn	(CB  Arithmetic Shift Left Word)
+			int addr = _abs();
+			Uint16 data = cpu_read(addr) | (cpu_read(addr + 1) << 8);
+			cpu_pfc = data & 0x8000;
+			data <<= 1;
+			setNZ16(data);
+			cpu_write(addr, data & 0xFF);
+			cpu_write(addr + 1, data >> 8);
+			}
+			// UNIMPLEMENTED_65CE02("ASW $nnnn");
 #endif
 			break; /* 0xcb NOP (nonstd loc, implied) */
 	case 0xcc:	_CMP(cpu_y, cpu_read(_abs())); break; /* 0xcc CPY Absolute */
@@ -1024,8 +1034,17 @@ int cpu_step () {
 			break;	// 0xea NOP Implied - the "standard" NOP of original 6502 core
 	case 0xeb:
 #ifdef CPU_65CE02
-			OPC_65CE02("ROW nnnn");
-			UNIMPLEMENTED_65CE02("ROW $nnnn");	// ROW $nnnn            EB  Rotate Right Word
+			OPC_65CE02("ROW nnnn");			// ROW $nnnn		EB  Rotate word LEFT?! [other documents says RIGHT!!!]
+			{
+			int addr = _abs();
+			int data = ((cpu_read(addr) | (cpu_read(addr + 1) << 8)) << 1) | (cpu_pfc ? 1 : 0);
+			cpu_pfc = data & 0x10000;
+			data &= 0xFFFF;
+			setNZ16(data);
+			cpu_write(addr, data & 0xFF);
+			cpu_write(addr + 1, data >> 8);
+			}
+			//UNIMPLEMENTED_65CE02("ROW $nnnn");
 #endif
 			break; /* 0xeb NOP (nonstd loc, implied) */
 	case 0xec:	_CMP(cpu_x, cpu_read(_abs())); break; /* 0xec CPX Absolute */
