@@ -349,6 +349,15 @@ static inline void _LSR(int addr) {
 	setNZ(t);
 	if (addr == -1) CPU_A_SET(t); else cpu_write(addr, t);
 }
+#ifdef CPU_65CE02
+static inline void _ASR(int addr) {
+	Uint8 t = (addr == -1 ? CPU_A_GET() : cpu_read(addr));
+	cpu_pfc = t & 1;
+	t = (t >> 1) | (t & 0x80);
+	setNZ(t);
+	if (addr == -1) CPU_A_SET(t); else cpu_write(addr, t);
+}
+#endif
 static inline void _BIT(Uint8 data) {
 	cpu_pfn = data & 128;
 	cpu_pfv = data & 64;
@@ -637,15 +646,17 @@ int cpu_step () {
 #ifdef CPU_65CE02
 			// 65CE02: ASR A
 			OPC_65CE02("ASR A");
-			cpu_pfc = cpu_a & 1;
-			cpu_a = (cpu_a >> 1) | (cpu_a & 0x80);
-			setNZ(cpu_a);
+			_ASR(-1);
+			//cpu_pfc = cpu_a & 1;
+			//cpu_a = (cpu_a >> 1) | (cpu_a & 0x80);
+			//setNZ(cpu_a);
 #endif
 			break; /* 0x43 NOP (nonstd loc, implied) */
 	case 0x44:
 #ifdef CPU_65CE02
 			OPC_65CE02("ASR nn");
-			UNIMPLEMENTED_65CE02("ASR $nn");	// 65CE02: ASR $nn
+			_ASR(_zp());				// 65CE02: ASR $nn
+			//UNIMPLEMENTED_65CE02("ASR $nn");	// 65CE02: ASR $nn
 #else
 			cpu_pc++;	// 0x44 NOP zp (non-std NOP with addr mode)
 #endif
@@ -678,7 +689,8 @@ int cpu_step () {
 	case 0x54:
 #ifdef CPU_65CE02
 			OPC_65CE02("ASR nn,X");
-			UNIMPLEMENTED_65CE02("ASR $nn,X");	// ASR $nn,X
+			_ASR(_zpx());				// ASR $nn,X
+			//UNIMPLEMENTED_65CE02("ASR $nn,X");	// ASR $nn,X
 #else
 			cpu_pc++;	// NOP zpx (non-std NOP with addr mode)
 #endif
@@ -715,7 +727,13 @@ int cpu_step () {
 	case 0x62:
 #ifdef CPU_65CE02
 			OPC_65CE02("RTS #nn");
-			UNIMPLEMENTED_65CE02("RTS #$nn");	// 65CE02 RTS #$nn TODO: what this opcode does _exactly_? Guess: correcting stack pointer with a given value?
+			{	// 65CE02 RTS #$nn TODO: what this opcode does _exactly_? Guess: correcting stack pointer with a given value? Also some docs says it's RTN ...
+			int temp = cpu_read(cpu_pc);
+			cpu_pc = popWord() + 1;
+			if (cpu_sp + temp > 0xFF && (!cpu_pfe))
+				cpu_sphi += 0x100;
+			cpu_sp += temp; // SP was already incremented by two by popWord, we need only the extra stuff here
+			}
 #else
 			cpu_pc++;	// NOP imm (non-std NOP with addr mode)
 #endif
