@@ -98,6 +98,7 @@ int cpu_cycles;
 #else
 #define OPC_65CE02(w)
 #endif
+#if 0
 static inline void UNIMPLEMENTED_65CE02 ( const char *msg )
 {
 	fprintf(stderr, "UNIMPLEMENTED 65CE02 opcode $%02X [$%02X $%02X] at $%04X: \"%s\"\n",
@@ -105,6 +106,7 @@ static inline void UNIMPLEMENTED_65CE02 ( const char *msg )
 	);
 	exit(1);
 }
+#endif
 static const Uint8 opcycles[] = {7,5,2,2,4,3,4,4,3,2,1,1,5,4,5,4,2,5,5,3,4,3,4,4,1,4,1,1,5,4,5,4,5,5,7,7,3,3,4,4,3,2,1,1,4,4,5,4,2,5,5,3,3,3,4,4,1,4,1,1,4,4,5,4,5,5,2,2,4,3,4,4,3,2,1,1,3,4,5,4,2,5,5,3,4,3,4,4,2,4,3,1,4,4,5,4,4,5,7,5,3,3,4,4,3,2,1,1,5,4,5,4,2,5,5,3,3,3,4,4,2,4,3,1,5,4,5,4,2,5,6,3,3,3,3,4,1,2,1,4,4,4,4,4,2,5,5,3,3,3,3,4,1,4,1,4,4,4,4,4,2,5,2,2,3,3,3,4,1,2,1,4,4,4,4,4,2,5,5,3,3,3,3,4,1,4,1,4,4,4,4,4,2,5,2,6,3,3,4,4,1,2,1,7,4,4,5,4,2,5,5,3,3,3,4,4,1,4,3,3,4,4,5,4,2,5,6,6,3,3,4,4,1,2,1,7,4,4,5,4,2,5,5,3,5,3,4,4,1,4,3,3,7,4,5,4};
 #else
 static const Uint8 opcycles[] = {7,6,2,2,5,3,5,5,3,2,2,2,6,4,6,2,2,5,5,2,5,4,6,5,2,4,2,2,6,4,7,2,6,6,2,2,3,3,5,5,4,2,2,2,4,4,6,2,2,5,5,2,4,4,6,5,2,4,2,2,4,4,7,2,6,6,2,2,3,3,5,5,3,2,2,2,3,4,6,2,2,5,5,2,4,4,6,5,2,4,3,2,2,4,7,2,6,6,2,2,3,3,5,5,4,2,2,2,5,4,6,2,2,5,5,2,4,4,6,5,2,4,4,2,6,4,7,2,3,6,2,2,3,3,3,5,2,2,2,2,4,4,4,2,2,6,5,2,4,4,4,5,2,5,2,2,4,5,5,2,2,6,2,2,3,3,3,5,2,2,2,2,4,4,4,2,2,5,5,2,4,4,4,5,2,4,2,2,4,4,4,2,2,6,2,2,3,3,5,5,2,2,2,2,4,4,6,2,2,5,5,2,4,4,6,5,2,4,3,2,2,4,7,2,2,6,2,2,3,3,5,5,2,2,2,2,4,4,6,2,2,5,5,2,4,4,6,5,2,4,4,2,2,4,7,2};
@@ -657,7 +659,6 @@ int cpu_step () {
 #ifdef CPU_65CE02
 			OPC_65CE02("ASR nn");
 			_ASR(_zp());				// 65CE02: ASR $nn
-			//UNIMPLEMENTED_65CE02("ASR $nn");	// 65CE02: ASR $nn
 #else
 			cpu_pc++;	// 0x44 NOP zp (non-std NOP with addr mode)
 #endif
@@ -691,7 +692,6 @@ int cpu_step () {
 #ifdef CPU_65CE02
 			OPC_65CE02("ASR nn,X");
 			_ASR(_zpx());				// ASR $nn,X
-			//UNIMPLEMENTED_65CE02("ASR $nn,X");	// ASR $nn,X
 #else
 			cpu_pc++;	// NOP zpx (non-std NOP with addr mode)
 #endif
@@ -742,7 +742,7 @@ int cpu_step () {
 	case 0x63:
 #ifdef CPU_65CE02
 			OPC_65CE02("BSR16");
-			//UNIMPLEMENTED_65CE02("BSR $nnnn");	// 65C02 ?! BSR $nnnn Interesting 65C02-only? FIXME TODO: does this opcode exist before 65CE02 as well?!
+			// 65C02 ?! BSR $nnnn Interesting 65C02-only? FIXME TODO: does this opcode exist before 65CE02 as well?!
 			pushWord(cpu_pc + 1);
 			_BRA16(1);
 #endif
@@ -795,8 +795,7 @@ int cpu_step () {
 	case 0x82:
 #ifdef CPU_65CE02
 			OPC_65CE02("STA (nn,S),Y");
-			//UNIMPLEMENTED_65CE02("STA ($nn,SP),Y");	// 65CE02 STA ($nn,SP),Y
-			cpu_write(_GET_SP_INDIRECT_ADDR(), cpu_a);
+			cpu_write(_GET_SP_INDIRECT_ADDR(), cpu_a);	// 65CE02 STA ($nn,SP),Y
 #else
 			cpu_pc++;	// NOP imm (non-std NOP with addr mode)
 #endif
@@ -915,8 +914,7 @@ int cpu_step () {
 	case 0xc3:
 #ifdef CPU_65CE02
 			OPC_65CE02("DEW nn");
-			//UNIMPLEMENTED_65CE02("DEW $nn");	// 65CE02 (decrement word) DEW $nn (WHAT ABOUT FLAGS?!)
-			{       //  DEW $nn            C3  Decrement Word (maybe an error in 64NET.OPC ...) ANOTHER FIX: this is zero (errr, base ...) page!!!
+			{       //  DEW $nn 65CE02  C3  Decrement Word (maybe an error in 64NET.OPC ...) ANOTHER FIX: this is zero (errr, base ...) page!!!
                         int alo = _zp();
                         int ahi = (alo & 0xFF00) | ((alo + 1) & 0xFF);
                         Uint16 data = (cpu_read(alo) | (cpu_read(ahi) << 8)) - 1;
@@ -945,7 +943,6 @@ int cpu_step () {
 			cpu_write(addr, data & 0xFF);
 			cpu_write(addr + 1, data >> 8);
 			}
-			// UNIMPLEMENTED_65CE02("ASW $nnnn");
 #endif
 			break; /* 0xcb NOP (nonstd loc, implied) */
 	case 0xcc:	_CMP(cpu_y, cpu_read(_abs())); break; /* 0xcc CPY Absolute */
@@ -1044,7 +1041,6 @@ int cpu_step () {
 			cpu_write(addr, data & 0xFF);
 			cpu_write(addr + 1, data >> 8);
 			}
-			//UNIMPLEMENTED_65CE02("ROW $nnnn");
 #endif
 			break; /* 0xeb NOP (nonstd loc, implied) */
 	case 0xec:	_CMP(cpu_x, cpu_read(_abs())); break; /* 0xec CPX Absolute */
@@ -1063,8 +1059,7 @@ int cpu_step () {
 	case 0xf4:
 #ifdef CPU_65CE02
 			OPC_65CE02("PHW #nnnn");
-			//UNIMPLEMENTED_65CE02("PHW #$nnnn");	// 65CE02 PHW #$nnnn (push word)
-			PUSH_FOR_PHW(readWord(cpu_pc));
+			PUSH_FOR_PHW(readWord(cpu_pc));		// 65CE02 PHW #$nnnn (push word)
 			cpu_pc += 2;
 #else
 			cpu_pc++; // 0xf4 NOP zpx (non-std NOP with addr mode)
