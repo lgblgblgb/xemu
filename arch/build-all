@@ -1,0 +1,50 @@
+#!/bin/bash
+rm -f .arch.backup
+test -s .arch && cp .arch .arch.backup
+for arch in arch/Makefile.* ; do
+	arch=`echo $arch | cut -d. -f2-`
+	make set-arch TO=$arch
+	make clean || exit 1
+	make dep || exit 1
+	echo "*** Dist-compiling for $arch"
+	make DEBUG=-flto || exit 1
+	make strip || exit 1
+	if [ "$arch" = "win32" ]; then
+		echo "*** Downloading DLL"
+		make SDL2.dll
+	fi
+done
+echo "*** Switching to the original architecture"
+test -s .arch.backup && make set-arch TO=`cat .arch.backup | cut -d= -f2`
+rm -f .arch.backup
+echo "*** Downloading ROMs"
+make roms
+echo "*** Creating binary distribution"
+rm -f dist.zip
+mkdir -p .dist
+cat <<EOF >.dist/README.first
+This is the binary build release of the project!
+
+Project page (with source code): https://github.com/lgblgblgb/xclcd
+License: see file LICENSE
+
+About Commodore LCD computer: http://commodore-lcd.lgb.hu/
+
+Win32 binaries have .win32 as extension, rename them to .exe
+Extensions .native are Linux/ELF/x86 binaries (built on `lsb_release -s -d`)
+SDL2.dll is for Windows (dll of the SDL library).
+
+NOTE: I have/had *NO* Windows! I can't test the Windows builds (other than wine ...),
+I merely can use a cross compiler on Linux though to build Windows executables :)
+
+Some "documentation": README.md (markdown format)
+EOF
+cp xclcd.??* xvic20.??* xc65.??* rom/vic20-*.rom rom/clcd-*.rom rom/c65-*.rom SDL2.dll README.md LICENSE .dist/
+cd .dist
+zip ../dist.zip *
+cd ..
+rm -f .dist/*
+rmdir .dist
+ls -l dist.zip
+exit 0
+
