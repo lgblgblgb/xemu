@@ -749,31 +749,6 @@ int main ( int argc, char **argv )
 		return 1;
 	// Initialize C65 ...
 	c65_init();
-	//memory[0x3FB93] = 0xA9;
-	//memory[0x3FB94] = 0x00;
-#if 0
-	memory[0x200] = 0x83;
-	memory[0x201] = 0xfd;
-	memory[0x202] = 0xbd;
-	// 83 fd fd 
-	memory[0x201] = 0xfd;
-	memory[0x202] = 0xfd;
-	cpu_pc = 0x200;
-#endif
-
-	// Hack!
-	//memset(memory + 0x20000 + 0x1D, 0x60, 0x4000 - 0x1D);
-#if 0
-	//memory[0x20000 + 0x1D] = 0x60;
-	printf("%d\n", emu_load_file("/tmp/65C02_extended_opcodes_test.bin", memory + 0xa, 65526 + 1));
-//	if (emu_load_file("/tmp/65C02_extended_opcodes_test.bin", memory + 0xa, 65526 + 1) != 65526);
-//		FATAL("Cannot load test ROM!");
-	cpu_port[1] = 0;
-	apply_memory_config();
-	cpu_pc = 0x400;
-	memcpy(memory + 0x100, hacky, sizeof hacky);
-	cpu_pc = 0x100;
-#endif
 	// Start!!
 	cycles = 0;
 	frameskip = 0;
