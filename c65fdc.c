@@ -1,9 +1,5 @@
-/* Test-case for a very simple and inaccurate and even not working Commodore 65 emulator.
+/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-
-   This is the Commodore 65 emulation. Note: the purpose of this emulator is merely to
-   test some 65CE02 opcodes, not for being a *usable* Commodore 65 emulator too much!
-   If it ever able to hit the C65 BASIC-10 usage, I'll be happy :)
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -21,12 +17,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 /* !!!!!!!!!!!!!!!!!!!
-   Sorry, but it seems FDC is cannot be emulated, as the ROM simply does not
-   behave in a C65 as it should be according to the specification. I guess
-   the C65 ROM is *BAD* or never worked, or the real FDC F011 simply violates
-   the known specification. I've tried about 100 different versions, without
-   any success :( Now this source is a real mess, with trying to reset
-   status after X tried, and similar meaningless stuffs, but still doesn't work ... */
+   FDC F011 emulation is still a big mess, with bugs, and unplemented features.
+   It gives you only read only access currently, and important features like SWAP
+   bit is not handled at all. The first goal is to be usable with "DIR" and "LOAD"
+   commands on the C65, nothing too much more */
 
 
 #include <stdio.h>
@@ -217,7 +211,7 @@ static void execute_command ( void )
 			//status_a |= 32; // set EQ?!
 			read_sector();
 			//cache_p_drive = (cache_p_drive + BLOCK_SIZE) & 511;
-			cache_p_cpu = 0; // yayy ....
+			cache_p_cpu = 0; // yayy .... If it's not here we can't get READY. prompt!!
 			printf("FDC: READ: head_track=%d need_track=%d head_side=%d need_side=%d need_sector=%d drive_selected=%d" NL,
 				head_track, track, head_side, side, sector, drive
 			);

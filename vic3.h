@@ -1,4 +1,4 @@
-/* Test-case for a very simple and inaccurate and not working Commodore 65 emulator using SDL2 library.
+/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify

@@ -1,4 +1,4 @@
-/* Test-case for a very simple and inaccurate and even not working Commodore 65 emulator.
+/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is the VIC3 "emulation". Currently it only does some "fixed" stuff

@@ -1,9 +1,5 @@
-/* Test-case for a very simple and inaccurate and even not working Commodore 65 emulator.
+/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-
-   This is the Commodore 65 emulation. Note: the purpose of this emulator is merely to
-   test some 65CE02 opcodes, not for being a *usable* Commodore 65 emulator too much!
-   If it ever able to hit the C65 BASIC-10 usage, I'll be happy :)
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

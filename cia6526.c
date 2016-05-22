@@ -1,4 +1,4 @@
-/* Test-case for a very simple and inaccurate and even not working Commodore 65 emulator.
+/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is a *VERY* lame CIA 6526 emulation, lacks of TOD, mostly to SDR stuff, timing,

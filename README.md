@@ -113,10 +113,10 @@ not to work properly, but 910111.bin does).
 
 What is emulated and what is not:
 
-* 65CE02 "core" instructions, but only ones what I needed on demand! So still,
-  there are opcodes wouldn't even work and causes the emulator to exit!!!!!
+* 65CE02 "core" instructions, hopefully more-or-less correctly emulated.
   65CE02 emulation is done by extending/modifying a 65C02 emulator (of mine)
-  since 65CE02 is basically an extended 65C02.
+  since 65CE02 is basically an extended 65C02, with only "some" differences
+  (oh, yes, "some" ... well).
 
 * 4502 "core" extensions over 65CE02, ie MAP opcode, and special meaning
   of NOP (as EOM)
@@ -130,7 +130,7 @@ What is emulated and what is not:
 
 * 128K ROM / 128K RAM, no RAM expansion
 
-* FDC does not work yet (work-in-progress)
+* FDC emulation may be used to *read* D81 disk images, but still there are bugs!
 
 * VIC3 code is horrible, it merely emulates a *fixed* rendering (all in
   once per frames!) with fixed memory configuration known to be used by
@@ -149,7 +149,19 @@ What is emulated and what is not:
   some mapping problems (ie, position based mapping for US host machine layout,
   some keys are still missing, I was lazy ...).
 
-First "milestone" is already here, it can "boot" to BASIC, though :)
+First "milestone" is already here, it can "boot" to BASIC, though :) Now, it
+also does its work with "DIR" command, if D81 image is given.
+
+Basic usage of the emulator:
+
+* You need to give the disk image (should be D81 in format!) name as the
+  parameter of the executable, if you want disk access.
+
+* Press F11 to toggle between window/full screen mode
+
+* Press F9 to exit
+
+That's about all - currently :)
 
 ## Why the Commodore VIC-20 emulation is included?
 
