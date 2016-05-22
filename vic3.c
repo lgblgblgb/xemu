@@ -44,6 +44,8 @@ static int compare_raster;	// raster compare (9 bits width) data
 static int interrupt_status;
 
 
+static int warn_sprites = 1, warn_bitplanes = 1;
+
 
 
 void vic3_init ( void )
@@ -114,11 +116,16 @@ static void vic3_interrupt_checker ( void )
 
 void vic3_check_raster_interrupt ( void )
 {
+	// I'm lame even with VIC2 knowledge it seems
+	// C65 seems to use raster interrupt to generate the usual periodic IRQ
+	// (which was done with CIA on C64) in raster line 511. However as
+	// raster line 511 can never be true, I really don't know what to do.
+	// To be able C65 ROM to work, I assume that raster 511 is raster 0.
+	// It's possible that this is an NTSC/PAL issue, as raster can be "negative"
+	// according to the specification in case of NTSC. I really don't know ...
 	if (
 		(scanline == compare_raster)
-//#if 0
 		|| (compare_raster == 511 && scanline == 0)
-//#endif
 	) {
 		interrupt_status |= 1;
 	} else
@@ -132,10 +139,12 @@ void vic3_check_raster_interrupt ( void )
 
 void vic3_write_reg ( int addr, Uint8 data )
 {
+	Uint8 old_data;
 	addr &= 0x3F;
+	old_data = vic3_registers[addr];
 	printf("VIC3: write reg $%02X with data $%02X" NL, addr, data);
 	if (addr == 0x2F) {
-		if (!vic_new_mode && data == 0x96 && vic3_registers[0x2F] == 0xA5) {
+		if (!vic_new_mode && data == 0x96 && old_data == 0xA5) {
 			vic_new_mode = 1;
 			printf("VIC3: switched into NEW I/O access mode :)" NL);
 		} else if (vic_new_mode) {
@@ -165,12 +174,31 @@ void vic3_write_reg ( int addr, Uint8 data )
 			vic3_registers[0x1A] &= 15;
 			break;
 		case 0x30:
-			puts("MEM: applying new memory configuration because of VIC3 $30 is written");
-			apply_memory_config();
+			// Save some un-needed memory translating table rebuilds, if there is no important bits (of us) changed.
+			// CRAM@DC00 is not handled by the translator directly, so bit0 does not apply here!
+			if (
+				(data & 0xF8) != (old_data & 0xF8)
+			) {
+				puts("MEM: applying new memory configuration because of VIC3 $30 is written");
+				apply_memory_config();
+			} else
+				puts("MEM: no need for new memory configuration (because of VIC3 $30 is written): same ROM bit values are set");
 			break;
 		case 0x31:
 			clock_divider7_hack = (data & 64) ? 7 : 2;
 			printf("VIC3: clock_divider7_hack = %d" NL, clock_divider7_hack);
+			break;
+		case 0x32:
+			if (data && warn_bitplanes) {
+				INFO_WINDOW("VIC3 bitplanes are not emulated yet!");
+				warn_bitplanes = 0;
+			}
+			break;
+		case 0x15:
+			if (data && warn_sprites) {
+				INFO_WINDOW("VIC2 sprites are not emulated yet!");
+				warn_sprites = 0;
+			}
 			break;
 	}
 }	
