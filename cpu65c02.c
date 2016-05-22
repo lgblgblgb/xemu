@@ -163,7 +163,7 @@ static void setP(Uint8 st) {
 	cpu_pfn = st & 128;
 	cpu_pfv = st &  64;
 #ifdef CPU_65CE02
-	// Note: E bit cannot be changed by PLP/RTI to it's commented out here ...
+	// Note: E bit cannot be changed by PLP/RTI, so it's commented out here ...
 	// At least *I* think :) FIXME?
 	// cpu_pfe = st &  32;
 #endif
@@ -433,7 +433,7 @@ int cpu_step () {
 #endif
 		cpu_nmiEdge = 0;
 		pushWord(cpu_pc);
-		push(getP() & (255 - 0x10));	// FIXME: do we need the same here as at the IRQ?
+		push(getP() & (255 - 0x10));
 		cpu_pfi = 1;
 		cpu_pfd = 0;			// NOTE: D flag clearing was not done on the original 6502 I guess, but indeed on the 65C02 already
 		cpu_pc = readWord(0xFFFA);
@@ -450,7 +450,7 @@ int cpu_step () {
 		last_p = getP();
 		pushWord(cpu_pc);
 		cpu_pfb = 0;
-		push(getP() & (255 - 0x10));	// FIXME: masking out of B really needed on any 65xx?
+		push(getP() & (255 - 0x10));
 		cpu_pfi = 1;
 		cpu_pfd = 0;
 		cpu_pc = readWord(0xFFFE);
@@ -485,7 +485,7 @@ int cpu_step () {
 			// FIXME: does BRK sets I and D flag? Hmm, I can't even remember now why I wrote these :-D
 			// FIXME-2: does BRK sets B flag, or only in the saved copy on the stack??
 			// NOTE: D flag clearing was not done on the original 6502 I guess, but indeed on the 65C02 already
-			pushWord(cpu_pc + 1); cpu_pfb = 1; push(getP()); cpu_pfd = 0; cpu_pfi = 1; cpu_pc = readWord(0xFFFE); /* 0x0 BRK Implied */
+			pushWord(cpu_pc + 1); push(getP() | 0x10); cpu_pfd = 0; cpu_pfi = 1; cpu_pc = readWord(0xFFFE); /* 0x0 BRK Implied */
 			break;
 	case 0x01:	setNZ(A_OP(|,cpu_read(_zpxi()))); break; /* 0x1 ORA (Zero_Page,X) */
 	case 0x02:
