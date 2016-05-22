@@ -221,11 +221,22 @@ Uint8 vic3_read_reg ( int addr )
 		case 0x12:
 			result = scanline & 0xFF;
 			break;
+		case 0x16:
+			result = vic3_registers[addr] | (128 + 64);	// unused bits [TODO: also on VIC3?]
+			break;
 		case 0x19:
-			result = interrupt_status;
+			result = interrupt_status | (64 + 32 + 16);	// unused bits [TODO: also on VIC3?]
+			break;
+		case 0x1A:
+			result = vic3_registers[addr] | 0xF0;		// unused bits [TODO: also on VIC3?]
+			break;
+		case 0x18:
+			result = vic3_registers[addr] | 1;		// unused bit [TODO: also on VIC3?]
 			break;
 		default:
 			result = vic3_registers[addr];
+			if (addr >= 0x20 && addr < 0x2F)
+				result |= 0xF0;				// unused bits [TODO: also on VIC3?]
 			break;
 	}
 	printf("VIC3: read reg $%02X with result $%02X" NL, addr, result);
@@ -273,13 +284,16 @@ void vic3_render_screen ( void )
 		xlim = 79;
 		ylim = 24;
 		chrg = memory + 0x28000 + 0x1000;
-		vidp = memory + 0x00800;
+		//vidp = memory + 0x00800;
 	} else {
 		xlim = 39;
 		ylim = 24;
 		chrg = memory + 0x2D000;
-		vidp = memory + 0x00400;
+		//vidp = memory + 0x00400;
 	}
+	// screen memory (we ignore VIC(2) 16K selection for now ...
+	vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6);
+	// Palette selection between ROM palette and programmable ones
 	palette = (vic3_registers[0x30] & 4) ? vic3_palette : vic3_rom_palette;
 	bg = palette[vic3_registers[0x21]];
 	for (;;) {
