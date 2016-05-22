@@ -51,3 +51,4 @@ arch/objs.*
 *.d81
 dist.zip
 .dist
+dump.mem

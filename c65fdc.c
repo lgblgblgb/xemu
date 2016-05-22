@@ -19,6 +19,16 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
+
+/* !!!!!!!!!!!!!!!!!!!
+   Sorry, but it seems FDC is cannot be emulated, as the ROM simply does not
+   behave in a C65 as it should be according to the specification. I guess
+   the C65 ROM is *BAD* or never worked, or the real FDC F011 simply violates
+   the known specification. I've tried about 100 different versions, without
+   any success :( Now this source is a real mess, with trying to reset
+   status after X tried, and similar meaningless stuffs, but still doesn't work ... */
+
+
 #include <stdio.h>
 #include <SDL.h>
 
@@ -26,7 +36,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "emutools.h"
 
 
-#define BLOCK_SIZE 512
 
 
 static Uint8 head_track;		// "physical" track, ie, what is the head is positioned at currently
@@ -38,15 +47,18 @@ static int   curcmd;
 static Uint8 clock, step;
 static int   emulate_busy;
 static int   drive;
-static Uint8 cache[512];		// 512 bytes cache FDC will use
+static Uint8 cache[512];		// 512 bytes cache FDC will use. This is a real 512byte RAM attached to the FDC controller for buffered operations on the C65
 static int   cache_p_cpu;
 static int   cache_p_drive;
 static FILE *disk;
 
 
+static int   warn_disk = 1;
 
 
-void fdc_init ( void )
+
+
+void fdc_init ( const char *dfn )
 {
 	disk = NULL;
 	head_track = 0;
@@ -64,7 +76,11 @@ void fdc_init ( void )
 	cache_p_cpu = 0;
 	cache_p_drive = 0;
 	drive = 0;
-	disk = fopen("DosDisk.d81", "rb");
+	if (dfn) {
+		disk = fopen(dfn, "rb");
+		if (!disk)
+			ERROR_WINDOW("Couldn't open disk image %s", dfn);
+	}
 }
 
 
@@ -74,22 +90,38 @@ static void read_sector ( void )
 {
 	if (disk) {
 		Uint8 buffer[512];
-		fseek(disk, ((40 * (track - 0)) + (sector - 1)) * 256, SEEK_SET);
-		if (fread(buffer, 512, 1, disk) != 1) {
+		if (
+			fseek(disk, 40 * (track - 0) * 256 + (sector -1 ) * 512, SEEK_SET) ||
+			fread(buffer, 512, 1, disk) != 1
+		) {
 			status_a |= 16; // record not found ....
 			printf("FDC: READ: cannot read sector from image file!\n");
 		} else {
+			//memcpy(cache, buffer, 256);
+			//memcpy(cache + 256, buffer, 256);
+			//cache_p_drive = 256;
 			int a = 0;
+			// Read block to the cache
+			cache_p_drive=0;
 			while (a < 512) {
-				cache[cache_p_drive++] = buffer[a++];
-				cache_p_drive &= 511;
+				//cache[cache_p_drive+256]=buffer[a];
+				cache[cache_p_drive] = buffer[a++];
+				cache_p_drive = (cache_p_drive + 1) & 511;
 			}
+			/* hacky hack! */
+
+			//memcpy(cache, buffer, 256);
+			//memcpy(cache + 256, buffer, 256);	
 			printf("FDC: READ: sector has been read from image file.\n");
 		}
 	} else {
 		status_a |= 16;	// record not found ....
 		status_b &= (255- 4); // no disk inserted ...
 		printf("FDC: READ: no valid image file!\n");
+		if (warn_disk) {
+			INFO_WINDOW("No disk image was given or can be loaded!\nStart emulator with the disk image as parameter!");
+			warn_disk = 0;
+		}
 	}
 }
 
@@ -148,7 +180,7 @@ void fdc_write_reg ( int addr, Uint8 data )
 		case 6:
 			side = data;
 			break;
-		// TODO: write DATA register (7)
+		// TODO: write DATA register (7) [only for writing it is needed anyway]
 		case 8:
 			clock = data;
 			break;
@@ -182,8 +214,10 @@ static void execute_command ( void )
 			//status_b |= 32;		// RUN?!
 			status_a |= 64;		// set DRQ
 			status_a &= (255 - 32); // clear EQ
+			//status_a |= 32; // set EQ?!
 			read_sector();
 			//cache_p_drive = (cache_p_drive + BLOCK_SIZE) & 511;
+			cache_p_cpu = 0; // yayy ....
 			printf("FDC: READ: head_track=%d need_track=%d head_side=%d need_side=%d need_sector=%d drive_selected=%d" NL,
 				head_track, track, head_side, side, sector, drive
 			);
@@ -211,10 +245,15 @@ static void execute_command ( void )
 			status_a |= 16; // according to the specification, RNF bit should be set at the end of the operation
 			break;
 		case 0x00:	// cancel running command?? NOTE: also if low bit is 1: clear pointer!
+			break;
 			if (cmd & 1) {
 				cache_p_cpu = 0;
 				cache_p_drive = 0;
 				printf("FDC: WARN: resetting cache pointers" NL);
+				status_a |= 32; // turn EQ on
+				status_a &= 255 - 64; // turn DRQ off
+				status_b &= 127;      // turn RDREQ off
+
 			}
 			break;
 		default:
@@ -227,7 +266,8 @@ static void execute_command ( void )
 
 
 
-
+static int last_addr = 0;
+static int mad_hack = 0;
 
 
 Uint8 fdc_read_reg  ( int addr )
@@ -249,10 +289,20 @@ Uint8 fdc_read_reg  ( int addr )
 			result = cmd;
 			break;
 		case 2:	// STATUS register A
+			if (last_addr == addr) {
+				if (mad_hack > 1000) {
+					mad_hack = 0;
+					//status_a &= 255 - 32;
+				} else
+					mad_hack++;
+			} else
+				mad_hack = 0;
 			result = drive ? 0 : status_a;
+			result = status_a;
 			break;
 		case 3: // STATUS register B
 			result = drive ? 0 : status_b;
+			result = status_b;
 			break;
 		case 4:
 			result = track;
@@ -265,12 +315,10 @@ Uint8 fdc_read_reg  ( int addr )
 			break;
 		case 7:
 			// TODO: if BUSY, do not provide anything!
-			result = 0xFF;	// DATA :-) We fake here something meaingless for now ...
 			status_a &= (255 - 64);	// clear DRQ
-			//if (cmd == 0x40) {
-				status_b &= 127; 	// turn RDREQ off after the first access, this is somewhat incorrect :-P
-				result = cache[cache_p_cpu];
-				cache_p_cpu = (cache_p_cpu + 1) & 511;
+			status_b &= 127; 	// turn RDREQ off after the first access, this is somewhat incorrect :-P
+			result = cache[cache_p_cpu];
+			cache_p_cpu = (cache_p_cpu + 1) & 511;
 				printf("FDC: read_pointer is now %d, drive pointer %d" NL, cache_p_cpu, cache_p_drive);
 #if 0
 				if (read_pointer == 256) {
@@ -283,9 +331,17 @@ Uint8 fdc_read_reg  ( int addr )
 					//status_a |= 64;		// DRQ->on
 				}
 #endif
-				if (cache_p_cpu == cache_p_drive) status_a |= 32;               // turn EQ on
-				else status_a &= 255 - 32;		// turn EQ off
-			//}
+#if 0
+			if (cache_p_cpu == cache_p_drive) {
+				//status_a |= 32;               // turn EQ on
+			} else {
+				status_a &= 255 - 32;		// turn EQ off
+			}
+#endif
+			if (!cache_p_cpu)
+				 status_a |= 32;
+			else
+				status_a &= 255 - 32;
 			break;
 		case 8:
 			result = clock;
@@ -300,7 +356,7 @@ Uint8 fdc_read_reg  ( int addr )
 			result = 0xFF;
 			break;
 	}
-
+	last_addr = addr;
         printf("FDC: reading register %d result is $%02X" NL, addr, result);
 	return result;
 }

@@ -304,8 +304,6 @@ static void c65_init ( void )
 		NULL,	// callback: INSR(mask)
 		NULL	// callback: SETINT(level)	that would be NMI in our case
 	);
-	// *** Init FDC
-	fdc_init();
 	// *** RESET CPU, also fetches the RESET vector into PC
 	cpu_reset();
 	puts("INIT: end of initialization!");
@@ -749,6 +747,8 @@ int main ( int argc, char **argv )
 		return 1;
 	// Initialize C65 ...
 	c65_init();
+	// Initialize FDC
+	fdc_init(argc > 1 ? argv[1] : NULL);
 	// Start!!
 	cycles = 0;
 	frameskip = 0;
