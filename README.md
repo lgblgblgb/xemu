@@ -106,7 +106,7 @@ machine!).
 
 ## Commodore 65 emulator??
 
-Yes. Or short of ... Quite limited currently though. For me, it worked to the
+Yes. Or kind of ... Quite limited currently though. For me, it worked to the
 level for BASIC prompt, and even for typing commands, or switching to C64
 mode (GO64), or you can try write BASIC programs (NOTE: ROM 911001.bin seems
 not to work properly, but 910111.bin does).
@@ -158,6 +158,8 @@ Basic usage of the emulator:
   parameter of the executable, if you want disk access.
 
 * Press F11 to toggle between window/full screen mode
+
+* Press F10 to RESET.
 
 * Press F9 to exit
 

@@ -675,7 +675,12 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 		} else if (key == SDL_SCANCODE_F9) {
 			exit(0);
 		} else if (key == SDL_SCANCODE_F10) {
-			puts("LOGMARK");
+			cpu_port[0] = cpu_port[1] = 0xFF;
+			map_mask = 0;
+			vic3_registers[0x30] = 0;
+			apply_memory_config();
+			cpu_reset();
+			puts("RESET!");
 			return;
 		}
 	}
