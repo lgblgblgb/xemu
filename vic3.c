@@ -34,7 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 static Uint32 rgb_palette[4096];	// all the C65 palette, 4096 colours (SDL pixel format related form)
 static Uint32 vic3_palette[0x100];	// VIC3 palette in SDL pixel format related form (can be written into the texture directly to be rendered)
-static Uint32 vic3_rom_palette[16];	// the "ROM" palette, for C64 colours
+static Uint32 vic3_rom_palette[0x100];	// the "ROM" palette, for C64 colours (with some ticks, ie colours above 15 are the same as the "normal" programmable palette)
 static Uint8 vic3_palette_nibbles[0x300];
 Uint8 vic3_registers[0x40];
 int vic_new_mode;		// VIC3 "newVic" IO mode is activated flag
@@ -44,7 +44,7 @@ static int compare_raster;	// raster compare (9 bits width) data
 static int interrupt_status;
 
 
-static int warn_sprites = 1, warn_bitplanes = 1;
+static int warn_sprites = 1, warn_bitplanes = 1, warn_attr = 1, warn_ctrl_b_lo = 1;
 
 
 
@@ -55,23 +55,23 @@ void vic3_init ( void )
 	for (r = 0, i = 0; r < 16; r++)
 		for (g = 0; g < 16; g++)
 			for (b = 0; b < 16; b++)
-				rgb_palette[i++] = SDL_MapRGBA(sdl_pix_fmt, r * 17, g * 17, b * 17, 0xFF);
-	SDL_FreeFormat(sdl_pix_fmt);	// thanks, we don't need this anymore.
+				rgb_palette[i++] = SDL_MapRGBA(sdl_pix_fmt, r * 17, g * 17, b * 17, 0xFF); // 15*17=255, last arg 0xFF: alpha channel for SDL
+	SDL_FreeFormat(sdl_pix_fmt);	// thanks, we don't need this anymore from SDL
 	// *** Init VIC3 registers and palette
 	vic_new_mode = 0;
 	interrupt_status = 0;
 	scanline = 0;
 	compare_raster = 0;
 	clock_divider7_hack = 7;
-	for (i = 0; i < 0x100; i++) {
+	for (i = 0; i < 0x100; i++) {	// Initiailize all palette registers to zero, initially, to have something ...
 		if (i < sizeof vic3_registers)
-			vic3_registers[i] = 0;
-		vic3_palette[i] = rgb_palette[0];	// black
+			vic3_registers[i] = 0;	// Also the VIC3 registers ...
+		vic3_rom_palette[i] = vic3_palette[i] = rgb_palette[0];
 		vic3_palette_nibbles[i] = 0;
 		vic3_palette_nibbles[i + 0x100] = 0;
 		vic3_palette_nibbles[i + 0x200] = 0;
 	}
-	// *** the ROM palette
+	// *** the ROM palette "fixed" colours
 	vic3_rom_palette[ 0] = RGB( 0,  0,  0);	// black
 	vic3_rom_palette[ 1] = RGB(15, 15, 15);	// white
 	vic3_rom_palette[ 2] = RGB(15,  0,  0);	// red
@@ -187,11 +187,17 @@ void vic3_write_reg ( int addr, Uint8 data )
 		case 0x31:
 			clock_divider7_hack = (data & 64) ? 7 : 2;
 			printf("VIC3: clock_divider7_hack = %d" NL, clock_divider7_hack);
-			break;
-		case 0x32:
-			if (data && warn_bitplanes) {
+			if ((data & 32) && warn_attr) {
+				INFO_WINDOW("VIC3 extended attributes are not emulated yet!");
+				warn_attr = 0;
+			}
+			if ((data & 16) && warn_bitplanes) {
 				INFO_WINDOW("VIC3 bitplanes are not emulated yet!");
 				warn_bitplanes = 0;
+			}
+			if ((data & 15) && warn_ctrl_b_lo) {
+				INFO_WINDOW("VIC3 control-B register V400, H1280, MONO and INT features are not emulated yet!");
+				warn_ctrl_b_lo = 0;
 			}
 			break;
 		case 0x15:
@@ -257,6 +263,13 @@ void vic3_write_palette_reg ( int num, Uint8 data )
 		vic3_palette_nibbles[(num & 0xFF) | 0x100],
 		vic3_palette_nibbles[(num & 0xFF) | 0x200]
 	);
+	// Also, update the "ROM based" palette struct, BUT only colours above 15,
+	// since the lower 16 are "ROM based"! This is only a trick to be able
+	// to have full 256 colours for ROMPAL sel and without that too!
+	// The low 16 colours are the one which are ROM based for real, that's why
+	// we don't want to update them here!
+	if ((num & 0xF0))
+		vic3_rom_palette[num & 0xFF] = vic3_palette[num & 0xFF];
 }
 
 
@@ -278,28 +291,39 @@ void vic3_render_screen ( void )
 	Uint32 bg, *palette, *p = emu_start_pixel_buffer_access(&tail);
 	Uint8 *vidp, *chrg, *colp = memory + 0x1F800;
 	int x = 0, y = 0, xlim, ylim;
-	// we use the H640 bit only to decide it is C65 or C64 mode render
-	// Surely is very wrong!
-	if (vic3_registers[0x31] & 128) {
+	// TODO: if BPM bit is set in ctrl reg B then bitplane mode is set,
+	// which ignores ALL the VIC-2 mode settings. This is not emulated
+	// yet though.
+	// ---
+	// Currently, only text (no MCM, ECM) is supported, H640 bit on/off,
+	// and fixed chargen address.
+	if (vic3_registers[0x31] & 128) { // check H640 bit: 80 column mode?
 		xlim = 79;
 		ylim = 24;
+		// Fixed character info, heh ... FIXME
 		chrg = memory + 0x28000 + 0x1000;
-		//vidp = memory + 0x00800;
+		// Note: according to the specification bit 4 has no
+		// effect in 80 columns mode!
+		// Note: VIC-2 16K bank selection is ignored now :-/
+		vidp = memory + ((vic3_registers[0x18] & 0xE0) << 6);
 	} else {
 		xlim = 39;
 		ylim = 24;
+		// Fixed character info, heh ... FIXME
 		chrg = memory + 0x2D000;
-		//vidp = memory + 0x00400;
+		// Note: VIC-2 16K bank selection is ignored now :-/
+		vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6);
 	}
-	// screen memory (we ignore VIC(2) 16K selection for now ...
-	vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6);
-	// Palette selection between ROM palette and programmable ones
+	// Palette selection between ROM palette and programmable one
+	// FIXME: is it allowed VIC2 modes at all?
 	palette = (vic3_registers[0x30] & 4) ? vic3_palette : vic3_rom_palette;
-	bg = palette[vic3_registers[0x21]];
+	// Target SDL pixel related format for the background colour
+	bg = palette[vic3_registers[0x21] & 15];
 	for (;;) {
 		Uint8 chrdata = chrg[((*(vidp++)) << 3) + charline];
 		Uint8 coldata = *(colp++);
-		Uint32 fg = palette[coldata];
+		Uint32 fg = palette[coldata & 15];
+		// FIXME: no ECM, MCM stuff ...
 		if (xlim == 79) {
 			*(p++) = chrdata & 128 ? fg : bg;
 			*(p++) = chrdata &  64 ? fg : bg;
