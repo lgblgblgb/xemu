@@ -47,6 +47,40 @@ int vic2_16k_bank;
 static int warn_sprites = 1, /*warn_bitplanes = 1,*/ warn_attr = 1, warn_ctrl_b_lo = 1;
 
 
+#define CHECK_PIXEL_POINTER
+
+
+
+#ifdef CHECK_PIXEL_POINTER
+static Uint32 *pixel_pointer_check_base;
+static Uint32 *pixel_pointer_check_end;
+static const char *pixel_pointer_check_modn;
+static inline void PIXEL_POINTER_CHECK_INIT( Uint32 *base, int tail, const char *module )
+{
+	pixel_pointer_check_base = base;
+	pixel_pointer_check_end  = base + (640 + tail) * 200;
+	pixel_pointer_check_modn = module;
+}
+static inline void PIXEL_POINTER_CHECK_ASSERT ( Uint32 *p )
+{
+	if (p < pixel_pointer_check_base) {
+		ERROR_WINDOW("FATAL ASSERT: accessing texture (%p) under the base limit (%p).\nIn program module: %s", p, pixel_pointer_check_base, pixel_pointer_check_modn);
+		exit(1);
+	}
+	if (p >= pixel_pointer_check_end) {
+		ERROR_WINDOW("FATAL ASSERT: accessing texture (%p) above the upper limit (%p).\nIn program module: %s", p, pixel_pointer_check_end, pixel_pointer_check_modn);
+		exit(1);
+	}
+}
+#else
+#	define PIXEL_POINTER_CHECK_INIT(base,tail,mod)
+#	define PIXEL_POINTER_CHECK_ASSERT(p)
+#endif
+
+
+
+
+
 
 void vic3_init ( void )
 {
@@ -416,12 +450,16 @@ static void vic2_render_screen_bmm ( void )
 // NOTE: currently H1280 and V400 is NOT implemented
 // Note: I still think that bitplanes are children of evil, my brain simply cannot get them
 // takes hours and many confusions all the time, even if I *know* what they are :)
+// And hey dude, if it's not enough, there is time multiplex of bitplanes (not supported),
+// V400 + interlace odd/even scan addresses, and the original C64-like non-linear build-up
+// of the bitplane structure. Phewwww ....
 static void vic3_render_screen_bpm ( void )
 {
-	int tail, bitpos = 128;
+	int tail, bitpos = 128, charline = 0, offset = 0;
 	Uint32 *palette, *p = emu_start_pixel_buffer_access(&tail);
 	int xlim, x = 0, y = 0, h640 = (vic3_registers[0x31] & 128);
 	Uint8 bpe, *bp[8];
+	PIXEL_POINTER_CHECK_INIT(p, tail, "vic3_render_screen_bpm");
 	bp[0] = memory + ((vic3_registers[0x33] & (h640 ? 12 : 14)) << 12);
 	bp[1] = memory + ((vic3_registers[0x34] & (h640 ? 12 : 14)) << 12) + 0x10000;
 	bp[2] = memory + ((vic3_registers[0x35] & (h640 ? 12 : 14)) << 12);
@@ -442,32 +480,38 @@ static void vic3_render_screen_bpm ( void )
 	);
 	for (;;) {
 		Uint32 col = palette[((				// Do not try this at home ...
-			(((*(bp[0])) & bitpos) ?   1 : 0) |
-			(((*(bp[1])) & bitpos) ?   2 : 0) |
-			(((*(bp[2])) & bitpos) ?   4 : 0) |
-			(((*(bp[3])) & bitpos) ?   8 : 0) |
-			(((*(bp[4])) & bitpos) ?  16 : 0) |
-			(((*(bp[5])) & bitpos) ?  32 : 0) |
-			(((*(bp[6])) & bitpos) ?  64 : 0) |
-			(((*(bp[7])) & bitpos) ? 128 : 0)
+			(((*(bp[0] + offset)) & bitpos) ?   1 : 0) |
+			(((*(bp[1] + offset)) & bitpos) ?   2 : 0) |
+			(((*(bp[2] + offset)) & bitpos) ?   4 : 0) |
+			(((*(bp[3] + offset)) & bitpos) ?   8 : 0) |
+			(((*(bp[4] + offset)) & bitpos) ?  16 : 0) |
+			(((*(bp[5] + offset)) & bitpos) ?  32 : 0) |
+			(((*(bp[6] + offset)) & bitpos) ?  64 : 0) |
+			(((*(bp[7] + offset)) & bitpos) ? 128 : 0)
 			) & bpe) ^ vic3_registers[0x3B]
 		];
+		PIXEL_POINTER_CHECK_ASSERT(p);
 		*(p++) = col;
 		if (!h640)
 			*(p++) = col;
 		if (bitpos == 1) {
 			if (x == xlim) {
-				if (y == 199)
-					break;
-				else
+				if (charline == 7) {
+					if (y == 24)
+						break;
 					y++;
+					charline = 0;
+					offset -= 7;
+				} else {
+					charline++;
+					offset -= h640 ? 639 : 319;
+				}
 				p += tail;
 				x = 0;
 			} else
 				x++;
 			bitpos = 128;
-			bp[0]++; bp[1]++; bp[2]++; bp[3]++;
-			bp[4]++; bp[5]++; bp[6]++; bp[7]++;
+			offset += 8;
 		} else
 			bitpos >>= 1;
 	}
