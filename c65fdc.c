@@ -85,7 +85,7 @@ static void read_sector ( void )
 	if (disk) {
 		Uint8 buffer[512];
 		if (
-			fseek(disk, 40 * (track - 0) * 256 + (sector -1 ) * 512, SEEK_SET) ||
+			fseek(disk, 40 * (track - 0) * 256 + (sector -1 ) * 512 + side * 20 * 256, SEEK_SET) ||
 			fread(buffer, 512, 1, disk) != 1
 		) {
 			status_a |= 16; // record not found ....
