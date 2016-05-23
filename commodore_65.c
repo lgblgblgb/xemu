@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "cpu65ce02.h"
 #include "cia6526.h"
 #include "c65fdc.h"
+#include "c65dma.h"
 #include "vic3.h"
 #include "emutools.h"
 
@@ -54,7 +55,6 @@ static int addr_trans_wr[16];		// address translating offsets for WRITE operatio
 static int map_mask;			// MAP mask, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 static int map_offset_low;		// MAP low offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 static int map_offset_high;		// MAP high offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
-static Uint8 dma_registers[4];
 
 
 struct KeyMapping {
@@ -308,6 +308,8 @@ static void c65_init ( void )
 		NULL,	// callback: INSR(mask)
 		NULL	// callback: SETINT(level)	that would be NMI in our case
 	);
+	// *** Initialize DMA
+	dma_init();
 	// *** RESET CPU, also fetches the RESET vector into PC
 	cpu_reset();
 	puts("INIT: end of initialization!");
@@ -342,82 +344,6 @@ void cpu_do_nop ( void )
 		puts("CPU: NOP not reated as EOM (no MAP before)");
 }
 
-
-
-// IO: redirect to IO space? if 1, and $D000 area (??)
-// DIR: direction if 0 -> increment
-// MOD: UNKNOWN details (modulo)
-// HLD: hold address if 0 -> don't hold (so: inc/dec based on DIR)
-#define DMA_IO(p)  ((p) & 0x800000)
-#define DMA_DIR(p) ((p) & 0x400000)
-#define DMA_MOD(p) ((p) & 0x200000)
-#define DMA_HLD(p) ((p) & 0x100000)
-
-#define DMA_NEXT_BYTE(p,ad) \
-	if (DMA_HLD(p) == 0) { \
-		ad += DMA_DIR(p) ? -1 : 1; \
-	}
-
-
-static void dma_write_reg ( int addr, Uint8 data )
-{
-	// DUNNO about DMAgic too much. It's merely guessing from my own ROM assembly tries, C65gs/Mega65 VHDL, and my ideas :)
-	// Also, it DOES things while everything other (ie CPU) emulation is stopped ...
-	Uint8 command; // DMAgic command
-	int dma_list;
-	dma_registers[addr & 3] = data;
-	if (addr & 3)
-		return;
-	dma_list = dma_registers[0] | (dma_registers[1] << 8) | (dma_registers[2] << 16);
-	printf("DMA: list address is $%06X now, just written to register %d value $%02X" NL, dma_list, addr & 3, data);
-	do {
-		int source, target, length, spars, tpars;
-		command = memory[dma_list++]      ;
-		length  = memory[dma_list++]      ;
-		length |= memory[dma_list++] <<  8;
-		source	= memory[dma_list++]      ;
-		source |= memory[dma_list++] <<  8;
-		source |= memory[dma_list++] << 16;
-		target  = memory[dma_list++]      ;
-		target |= memory[dma_list++] <<  8;
-		target |= memory[dma_list++] << 16;
-		spars 	= source;
-		tpars 	= target;
-		source &= 0xFFFFF;
-		target &= 0xFFFFF;
-		printf("DMA: $%05X[%c%c%c%c] -> $%05X[%c%c%c%c] (L=$%04X) CMD=%d (%s)" NL,
-			source, DMA_IO(spars) ? 'I' : 'i', DMA_DIR(spars) ? 'D' : 'd', DMA_MOD(spars) ? 'M' : 'm', DMA_HLD(spars) ? 'H' : 'h',
-			target, DMA_IO(tpars) ? 'I' : 'i', DMA_DIR(tpars) ? 'D' : 'd', DMA_MOD(tpars) ? 'M' : 'm', DMA_HLD(tpars) ? 'H' : 'h',
-			length, command & 3, (command & 4) ? "chain" : "last"
-		);
-		switch (command & 3) {
-			case 3:			// fill command
-				while (length--) {
-					if (target < 0x20000 && target >= 0) {
-						DEBUG_WRITE_ACCESS(target, data);
-						memory[target] = source & 0xFF;
-					}
-					//DMA_NEXT_BYTE(spars, source);	// DOES it have any sense? Maybe to write linear pattern of bytes? :-P
-					DMA_NEXT_BYTE(tpars, target);
-				}
-				break;
-			case 0:			// copy command
-				while (length--) {
-					Uint8 data = ((source < 0x40000 && source >= 0) ? memory[source] : 0xFF);
-					DMA_NEXT_BYTE(spars, source);
-					if (target < 0x20000 && target >= 0) {
-						DEBUG_WRITE_ACCESS(target, data);
-						memory[target] = data;
-					}
-					DMA_NEXT_BYTE(tpars, target);
-				}
-				break;
-			default:
-				printf("DMA: unimplemented command: %d" NL, command & 3);
-				break;
-		}
-	} while (command & 4);	// chained? continue if so!
-}
 
 
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
@@ -478,7 +404,7 @@ static Uint8 io_read ( int addr )
 	}
 	if (addr < 0xD800) {	// $D700 - $D7FF	DMA (*)
 		if (vic_new_mode)
-			RETURN_ON_IO_READ_NOT_IMPLEMENTED("DMA controller", 0x00);	// FIXME: D703 status read ...
+			return dma_read_reg(addr & 3);
 		else
 			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("DMA controller", 0xFF);
 	}
@@ -548,7 +474,6 @@ static void io_write ( int addr, Uint8 data )
 	}
 	if (addr < 0xD800) {	// $D700 - $D7FF	DMA (*)
 		if (vic_new_mode) {
-			// RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("DMA controller");
 			dma_write_reg(addr & 3, data);
 			return;
 		} else
