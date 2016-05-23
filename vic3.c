@@ -44,7 +44,7 @@ static int compare_raster;	// raster compare (9 bits width) data
 static int interrupt_status;
 int vic2_16k_bank;
 
-static int warn_sprites = 1, warn_bitplanes = 1, warn_attr = 1, warn_ctrl_b_lo = 1;
+static int warn_sprites = 1, /*warn_bitplanes = 1,*/ warn_attr = 1, warn_ctrl_b_lo = 1;
 
 
 
@@ -192,10 +192,10 @@ void vic3_write_reg ( int addr, Uint8 data )
 				INFO_WINDOW("VIC3 extended attributes are not emulated yet!");
 				warn_attr = 0;
 			}
-			if ((data & 16) && warn_bitplanes) {
+			/*if ((data & 16) && warn_bitplanes) {
 				INFO_WINDOW("VIC3 bitplanes are not emulated yet!");
 				warn_bitplanes = 0;
-			}
+			}*/
 			if ((data & 15) && warn_ctrl_b_lo) {
 				INFO_WINDOW("VIC3 control-B register V400, H1280, MONO and INT features are not emulated yet!");
 				warn_ctrl_b_lo = 0;
@@ -203,7 +203,7 @@ void vic3_write_reg ( int addr, Uint8 data )
 			break;
 		case 0x15:
 			if (data && warn_sprites) {
-				INFO_WINDOW("VIC2 sprites are not emulated yet!");
+				INFO_WINDOW("VIC2 sprites are not emulated yet! [enabled: $%02X]", data);
 				warn_sprites = 0;
 			}
 			break;
@@ -411,18 +411,66 @@ static void vic2_render_screen_bmm ( void )
 }
 
 
-// Renderer for bit-planes mode
+
+// Renderer for bit-plane mode
+// NOTE: currently H1280 and V400 is NOT implemented
+// Note: I still think that bitplanes are children of evil, my brain simply cannot get them
+// takes hours and many confusions all the time, even if I *know* what they are :)
 static void vic3_render_screen_bpm ( void )
 {
-	int tail;
-	Uint32 *p = emu_start_pixel_buffer_access(&tail);
-	int y;
-	for (y = 0; y < 199; y++) {
-		int x;
-		for (x = 0; x < 639; x++)
-			*(p++) = RGB(y & 15, x & 15, (x * y) & 15);
-		p += tail;
-	}		
+	int tail, bitpos = 128;
+	Uint32 *palette, *p = emu_start_pixel_buffer_access(&tail);
+	int xlim, x = 0, y = 0, h640 = (vic3_registers[0x31] & 128);
+	Uint8 bpe, *bp[8];
+	bp[0] = memory + ((vic3_registers[0x33] & (h640 ? 12 : 14)) << 12);
+	bp[1] = memory + ((vic3_registers[0x34] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[2] = memory + ((vic3_registers[0x35] & (h640 ? 12 : 14)) << 12);
+	bp[3] = memory + ((vic3_registers[0x36] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[4] = memory + ((vic3_registers[0x37] & (h640 ? 12 : 14)) << 12);
+	bp[5] = memory + ((vic3_registers[0x38] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[6] = memory + ((vic3_registers[0x39] & (h640 ? 12 : 14)) << 12);
+	bp[7] = memory + ((vic3_registers[0x3A] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bpe = vic3_registers[0x32];	// bit planes enabled mask
+	if (h640) {
+		bpe &= 15;		// it seems, with H640, only 4 bitplanes can be used (on lower 4 ones)
+		xlim = 79;
+	} else
+		xlim = 39;
+	palette = (vic3_registers[0x30] & 4) ? vic3_palette : vic3_rom_palette;
+        printf("VIC3: bitplanes: enable_mask=$%02X comp_mask=$%02X H640=%d" NL,
+		bpe, vic3_registers[0x3B], h640 ? 1 : 0
+	);
+	for (;;) {
+		Uint32 col = palette[((				// Do not try this at home ...
+			(((*(bp[0])) & bitpos) ?   1 : 0) |
+			(((*(bp[1])) & bitpos) ?   2 : 0) |
+			(((*(bp[2])) & bitpos) ?   4 : 0) |
+			(((*(bp[3])) & bitpos) ?   8 : 0) |
+			(((*(bp[4])) & bitpos) ?  16 : 0) |
+			(((*(bp[5])) & bitpos) ?  32 : 0) |
+			(((*(bp[6])) & bitpos) ?  64 : 0) |
+			(((*(bp[7])) & bitpos) ? 128 : 0)
+			) & bpe) ^ vic3_registers[0x3B]
+		];
+		*(p++) = col;
+		if (!h640)
+			*(p++) = col;
+		if (bitpos == 1) {
+			if (x == xlim) {
+				if (y == 199)
+					break;
+				else
+					y++;
+				p += tail;
+				x = 0;
+			} else
+				x++;
+			bitpos = 128;
+			bp[0]++; bp[1]++; bp[2]++; bp[3]++;
+			bp[4]++; bp[5]++; bp[6]++; bp[7]++;
+		} else
+			bitpos >>= 1;
+	}
 	emu_update_screen();
 }
 
