@@ -267,6 +267,14 @@ static Uint8 cia_read_keyboard ( Uint8 ddr_mask_unused )
 
 
 
+static void cia2_outa ( Uint8 mask, Uint8 data )
+{
+	vic2_16k_bank = (3 - (data & 3)) * 0x4000;
+	printf("VIC2: 16K BANK is set to $%04X" NL, vic2_16k_bank);
+}
+
+
+
 static void c65_init ( void )
 {
 	clear_emu_events();
@@ -292,7 +300,7 @@ static void c65_init ( void )
 		cia_setint_cb	// callback: SETINT(level)
 	);
 	cia_init(&cia2, "CIA-2",
-		NULL,	// callback: OUTA(mask, data)
+		cia2_outa,	// callback: OUTA(mask, data)
 		NULL,	// callback: OUTB(mask, data)
 		NULL,	// callback: OUTSR(mask, data)
 		NULL,	// callback: INA(mask)

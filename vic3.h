@@ -18,10 +18,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __LGB_VIC3_H_INCLUDED
 #define __LGB_VIC3_H_INCLUDED
 
-extern int vic_new_mode;
-extern int scanline;
+extern int   vic_new_mode;
+extern int   scanline;
 extern Uint8 vic3_registers[];
-extern int clock_divider7_hack;
+extern int   clock_divider7_hack;
+extern int   vic2_16k_bank;
 
 extern void  vic3_init ( void );
 extern void  vic3_write_reg ( int addr, Uint8 data );

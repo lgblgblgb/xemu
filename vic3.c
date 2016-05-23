@@ -42,7 +42,7 @@ int scanline;			// current scan line number
 int clock_divider7_hack;
 static int compare_raster;	// raster compare (9 bits width) data
 static int interrupt_status;
-
+int vic2_16k_bank;
 
 static int warn_sprites = 1, warn_bitplanes = 1, warn_attr = 1, warn_ctrl_b_lo = 1;
 
@@ -58,6 +58,7 @@ void vic3_init ( void )
 				rgb_palette[i++] = SDL_MapRGBA(sdl_pix_fmt, r * 17, g * 17, b * 17, 0xFF); // 15*17=255, last arg 0xFF: alpha channel for SDL
 	SDL_FreeFormat(sdl_pix_fmt);	// thanks, we don't need this anymore from SDL
 	// *** Init VIC3 registers and palette
+	vic2_16k_bank = 0;
 	vic_new_mode = 0;
 	interrupt_status = 0;
 	scanline = 0;
@@ -285,7 +286,7 @@ Surely, it's for nothing, just to be able to see something initially before
 further developments :) VIC3 "FAST" bit is ignored, thus C64 mode will drive
 the CPU at C64 speed still, which is also incorrect (C64 mode is too fast).
 */
-void vic3_render_screen ( void )
+static void vic2_render_screen_text ( void )
 {
 	int tail, charline = 0;
 	Uint32 bg, *palette, *p = emu_start_pixel_buffer_access(&tail);
@@ -302,17 +303,16 @@ void vic3_render_screen ( void )
 		ylim = 24;
 		// Fixed character info, heh ... FIXME
 		chrg = memory + 0x28000 + 0x1000;
-		// Note: according to the specification bit 4 has no
-		// effect in 80 columns mode!
-		// Note: VIC-2 16K bank selection is ignored now :-/
-		vidp = memory + ((vic3_registers[0x18] & 0xE0) << 6);
+		// Note: according to the specification bit 4 has no effect in 80 columns mode!
+		// Note: VIC2 sees ROM at some addresses thing is not emulated yet!
+		vidp = memory + ((vic3_registers[0x18] & 0xE0) << 6) + vic2_16k_bank;
 	} else {
 		xlim = 39;
 		ylim = 24;
 		// Fixed character info, heh ... FIXME
 		chrg = memory + 0x2D000;
-		// Note: VIC-2 16K bank selection is ignored now :-/
-		vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6);
+		// Note: VIC2 sees ROM at some addresses thing is not emulated yet!
+		vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
 	}
 	// Palette selection between ROM palette and programmable one
 	// FIXME: is it allowed VIC2 modes at all?
@@ -362,3 +362,81 @@ void vic3_render_screen ( void )
 	}
 	emu_update_screen();
 }
+
+
+// VIC2 bitmap mode, now only HIRES mode (no MCM yet), without H640 VIC3 feature!!
+// I am not even sure if H640 would work here, as it needs almost all the 16K of area what VIC-II can see.
+// Note: VIC2 sees ROM at some addresses thing is not emulated yet!
+static void vic2_render_screen_bmm ( void )
+{
+	int tail, x = 0, y = 0, charline = 0;
+	Uint32 *palette, *p = emu_start_pixel_buffer_access(&tail);
+	Uint8 *vidp, *chrp;
+	vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
+	chrp = memory + ((vic3_registers[0x18] & 8) ? 8192 : 0) + vic2_16k_bank;
+	palette = (vic3_registers[0x30] & 4) ? vic3_palette : vic3_rom_palette;
+	for (;;) {
+		Uint8  data = *(vidp++);
+		Uint32 fg = palette[data & 15];
+		Uint32 bg = palette[data >> 4];
+		data = *chrp;
+		chrp += 8;
+		p[ 0] = p[ 1] = data & 128 ? fg : bg;
+		p[ 2] = p[ 3] = data &  64 ? fg : bg;
+		p[ 4] = p[ 5] = data &  32 ? fg : bg;
+		p[ 6] = p[ 7] = data &  16 ? fg : bg;
+		p[ 8] = p[ 9] = data &   8 ? fg : bg;
+		p[10] = p[11] = data &   4 ? fg : bg;
+		p[12] = p[13] = data &   2 ? fg : bg;
+		p[14] = p[15] = data &   1 ? fg : bg;
+		p += 16;
+		if (x == 39) {
+			p += tail;
+			x = 0;
+			if (charline == 7) {
+				if (y == 24)
+					break;
+				y++;
+				charline = 0;
+				chrp -= 7;
+			} else {
+				charline++;
+				vidp -= 40;
+				chrp -= 319;
+			}
+		} else
+			x++;
+	}
+	emu_update_screen();
+}
+
+
+// Renderer for bit-planes mode
+static void vic3_render_screen_bpm ( void )
+{
+	int tail;
+	Uint32 *p = emu_start_pixel_buffer_access(&tail);
+	int y;
+	for (y = 0; y < 199; y++) {
+		int x;
+		for (x = 0; x < 639; x++)
+			*(p++) = RGB(y & 15, x & 15, (x * y) & 15);
+		p += tail;
+	}		
+	emu_update_screen();
+}
+
+
+
+void vic3_render_screen ( void )
+{
+	if (vic3_registers[0x31] & 16)
+		vic3_render_screen_bpm();
+	else {
+		if (vic3_registers[0x11] & 32)
+			vic2_render_screen_bmm();
+		else
+			vic2_render_screen_text();
+	}
+}
+
