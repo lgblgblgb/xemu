@@ -54,7 +54,7 @@ static int addr_trans_wr[16];		// address translating offsets for WRITE operatio
 static int map_mask;			// MAP mask, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 static int map_offset_low;		// MAP low offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 static int map_offset_high;		// MAP high offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
-
+static Uint8 dma_registers[4];
 
 
 struct KeyMapping {
@@ -363,13 +363,12 @@ static void dma_write_reg ( int addr, Uint8 data )
 {
 	// DUNNO about DMAgic too much. It's merely guessing from my own ROM assembly tries, C65gs/Mega65 VHDL, and my ideas :)
 	// Also, it DOES things while everything other (ie CPU) emulation is stopped ...
-	static Uint8 dma_registers[4];
 	Uint8 command; // DMAgic command
 	int dma_list;
 	dma_registers[addr & 3] = data;
-	dma_list = dma_registers[0] | (dma_registers[1] << 8) | (dma_registers[2] << 16);
-	if (addr)
+	if (addr & 3)
 		return;
+	dma_list = dma_registers[0] | (dma_registers[1] << 8) | (dma_registers[2] << 16);
 	printf("DMA: list address is $%06X now, just written to register %d value $%02X" NL, dma_list, addr & 3, data);
 	do {
 		int source, target, length, spars, tpars;
@@ -391,27 +390,32 @@ static void dma_write_reg ( int addr, Uint8 data )
 			target, DMA_IO(tpars) ? 'I' : 'i', DMA_DIR(tpars) ? 'D' : 'd', DMA_MOD(tpars) ? 'M' : 'm', DMA_HLD(tpars) ? 'H' : 'h',
 			length, command & 3, (command & 4) ? "chain" : "last"
 		);
-		if ((command & 3) == 3) {		// fill command?
-			while (length--) {
-				if (target < 0x20000 && target >= 0) {
-					DEBUG_WRITE_ACCESS(target, data);
-					memory[target] = source & 0xFF;
+		switch (command & 3) {
+			case 3:			// fill command
+				while (length--) {
+					if (target < 0x20000 && target >= 0) {
+						DEBUG_WRITE_ACCESS(target, data);
+						memory[target] = source & 0xFF;
+					}
+					//DMA_NEXT_BYTE(spars, source);	// DOES it have any sense? Maybe to write linear pattern of bytes? :-P
+					DMA_NEXT_BYTE(tpars, target);
 				}
-				//DMA_NEXT_BYTE(spars, source);	// DOES it have any sense? Maybe to write linear pattern of bytes? :-P
-				DMA_NEXT_BYTE(tpars, target);
-			}
-		} else if ((command & 3) == 0) {	// copy command?
-			while (length--) {
-				Uint8 data = ((source < 0x40000 && source >= 0) ? memory[source] : 0xFF);
-				DMA_NEXT_BYTE(spars, source);
-				if (target < 0x20000 && target >= 0) {
-					DEBUG_WRITE_ACCESS(target, data);
-					memory[target] = data;
+				break;
+			case 0:			// copy command
+				while (length--) {
+					Uint8 data = ((source < 0x40000 && source >= 0) ? memory[source] : 0xFF);
+					DMA_NEXT_BYTE(spars, source);
+					if (target < 0x20000 && target >= 0) {
+						DEBUG_WRITE_ACCESS(target, data);
+						memory[target] = data;
+					}
+					DMA_NEXT_BYTE(tpars, target);
 				}
-				DMA_NEXT_BYTE(tpars, target);
-			}
-		} else
-			puts("DMA: unimplemented command!!");
+				break;
+			default:
+				printf("DMA: unimplemented command: %d" NL, command & 3);
+				break;
+		}
 	} while (command & 4);	// chained? continue if so!
 }
 
@@ -474,7 +478,7 @@ static Uint8 io_read ( int addr )
 	}
 	if (addr < 0xD800) {	// $D700 - $D7FF	DMA (*)
 		if (vic_new_mode)
-			RETURN_ON_IO_READ_NOT_IMPLEMENTED("DMA controller", 0xFF);
+			RETURN_ON_IO_READ_NOT_IMPLEMENTED("DMA controller", 0x00);	// FIXME: D703 status read ...
 		else
 			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("DMA controller", 0xFF);
 	}
