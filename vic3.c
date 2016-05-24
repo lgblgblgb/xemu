@@ -38,7 +38,7 @@ static Uint32 rgb_palette[4096];	// all the C65 palette, 4096 colours (SDL pixel
 static Uint32 vic3_palette[0x100];	// VIC3 palette in SDL pixel format related form (can be written into the texture directly to be rendered)
 static Uint32 vic3_rom_palette[0x100];	// the "ROM" palette, for C64 colours (with some ticks, ie colours above 15 are the same as the "normal" programmable palette)
 static Uint8 vic3_palette_nibbles[0x300];
-Uint8 vic3_registers[0x40];		// VIC-3 registers (TODO: more than this ...)
+Uint8 vic3_registers[0x80];		// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
 int vic_new_mode;		// VIC3 "newVic" IO mode is activated flag
 int scanline;			// current scan line number
 int clock_divider7_hack;
@@ -178,7 +178,7 @@ void vic3_check_raster_interrupt ( void )
 void vic3_write_reg ( int addr, Uint8 data )
 {
 	Uint8 old_data;
-	addr &= 0x3F;
+	addr &= vic_new_mode ? 0x7F : 0x3F;
 	old_data = vic3_registers[addr];
 	printf("VIC3: write reg $%02X with data $%02X" NL, addr, data);
 	if (addr == 0x2F) {
@@ -249,7 +249,7 @@ void vic3_write_reg ( int addr, Uint8 data )
 Uint8 vic3_read_reg ( int addr )
 {
 	Uint8 result;
-	addr &= 0x3F;
+	addr &= vic_new_mode ? 0x7F : 0x3F;
 	if (!vic_new_mode && addr > 0x2F) {
 		printf("VIC3: ignoring reading register $%02X because of old I/O access mode selected, answer is $FF" NL, addr);
 		return 0xFF;

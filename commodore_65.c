@@ -358,7 +358,10 @@ void cpu_do_nop ( void )
 #define RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE(func) \
 	do { printf("IO: ignored write (not new VIC mode), %s $%04X with data $%02X" NL, func, addr, data); \
 	return; } while(0)
-
+#define WARN_IO_MODE_WR(func) \
+	printf("IO: write operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X, d=$%02X)" NL, func, addr, data)
+#define WARN_IO_MODE_RD(func) \
+	printf("IO: read operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X)" NL, func, addr)
 
 
 // Call this ONLY with addresses between $D000-$DFFF
@@ -375,20 +378,26 @@ Uint8 io_read ( int addr )
 	if (addr < 0xD0A0) {	// $D080 - $D09F	DISK controller (*)
 		if (vic_new_mode)
 			return fdc_read_reg(addr & 0xF);
-		else
-			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("DISK controller", 0xFF);
+		else {
+			WARN_IO_MODE_RD("DISK controller");
+			return vic3_read_reg(addr);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
+		}
 	}
 	if (addr < 0xD100) {	// $D0A0 - $D0FF	RAM expansion controller (*)
 		if (vic_new_mode)
 			RETURN_ON_IO_READ_NOT_IMPLEMENTED("RAM expansion controller", 0xFF);
-		else
-			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("RAM expansion controller", 0xFF);
+		else {
+			WARN_IO_MODE_RD("RAM expansion controller");
+			return vic3_read_reg(addr);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
+		}
 	}
 	if (addr < 0xD400) {	// $D100 - $D3FF	palette red/green/blue nibbles (*)
 		if (vic_new_mode)
-			return 0xFF; // NOT READABLE!
-		else
-			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("palette reg/green/blue nibbles", 0xFF);
+			return 0xFF; // NOT READABLE ON VIC3!
+		else {
+			WARN_IO_MODE_RD("palette reg/green/blue nibbles");
+			return vic3_read_reg(addr);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
+		}
 	}
 	if (addr < 0xD440) {	// $D400 - $D43F	SID, right
 		RETURN_ON_IO_READ_NOT_IMPLEMENTED("right SID", 0xFF);
@@ -438,27 +447,36 @@ Uint8 io_read ( int addr )
 // Ranges marked with (*) needs "vic_new_mode"
 void io_write ( int addr, Uint8 data )
 {
-	if (addr < 0xD080)	// $D000 - $D07F:	VIC3
-		return vic3_write_reg(addr, data);
+	if (addr < 0xD080) {	// $D000 - $D07F:	VIC3
+		vic3_write_reg(addr, data);
+		return;
+	}
 	if (addr < 0xD0A0) {	// $D080 - $D09F	DISK controller (*)
-		if (vic_new_mode) {
+		if (vic_new_mode)
 			fdc_write_reg(addr & 0xF, data);
-			return;
-		} else
-			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("DISK controller");
+		else {
+			WARN_IO_MODE_WR("DISK controller");
+			vic3_write_reg(addr, data);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
+		}
+		return;
 	}
 	if (addr < 0xD100) {	// $D0A0 - $D0FF	RAM expansion controller (*)
 		if (vic_new_mode)
 			RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("RAM expansion controller");
-		else
-			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("RAM expansion controller");
+		else {
+			WARN_IO_MODE_WR("RAM expansion controller");
+			vic3_write_reg(addr, data);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
+		}
+		return;
 	}
 	if (addr < 0xD400) {	// $D100 - $D3FF	palette red/green/blue nibbles (*)
-		if (vic_new_mode) {
+		if (vic_new_mode)
 			vic3_write_palette_reg(addr - 0xD100, data);
-			return;
-		} else
-			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("palette red/green/blue nibbles");
+		else {
+			WARN_IO_MODE_WR("palette red/green/blue nibbles");
+			vic3_write_reg(addr, data);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
+		}
+		return;
 	}
 	if (addr < 0xD440) {	// $D400 - $D43F	SID, right
 		RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("right SID");
