@@ -27,12 +27,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define CPU_CLOCK		3546875
 #define FULL_FRAME_CPU_CYCLES	141875
 
-
-
 extern Uint8 memory[];
 
-
-extern void apply_memory_config ( void );
-
+extern void  apply_memory_config ( void );
+extern Uint8 io_read  ( int addr );
+extern void  io_write ( int addr, Uint8 data );
 
 #endif

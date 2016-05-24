@@ -363,7 +363,7 @@ void cpu_do_nop ( void )
 
 // Call this ONLY with addresses between $D000-$DFFF
 // Ranges marked with (*) needs "vic_new_mode"
-static Uint8 io_read ( int addr )
+Uint8 io_read ( int addr )
 {
 	// Future stuff: instead of slow tons of IFs, use the >> 5 maybe
 	// that can have new device at every 0x20 dividible addresses,
@@ -436,7 +436,7 @@ static Uint8 io_read ( int addr )
 
 // Call this ONLY with addresses between $D000-$DFFF
 // Ranges marked with (*) needs "vic_new_mode"
-static void io_write ( int addr, Uint8 data )
+void io_write ( int addr, Uint8 data )
 {
 	if (addr < 0xD080)	// $D000 - $D07F:	VIC3
 		return vic3_write_reg(addr, data);
