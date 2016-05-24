@@ -122,21 +122,28 @@ What is emulated and what is not:
   of NOP (as EOM)
 
 * Memory management: CPU "MAP"/"EOM" stuff, VIC3 register $30 ROM select
-  and 2K colour SRAM mode, "C64-style" "CPU port".
+  and 2K colour SRAM mode, "C64-style" "CPU port". REC is not emulated.
 
-* Some kind of DMA stuff, only copy/fill not with special bits though
-  (redirect to IO etc). However DMA works with stopping the CPU, so it's
-  not quite the same as with a real hardware, I guess ...
+* DMAgic COPY/FILL should work, MIX/SWAP is only guessing. Modulo is not
+  supported (and not so much information is available how it should work
+  anyway, as with case of MIX). However DMA works with stopping the CPU,
+  so it's not quite the same as with a real hardware, I guess ...
 
 * 128K ROM / 128K RAM, no RAM expansion
 
 * FDC emulation may be used to *read* D81 disk images, but still there are bugs!
+  Currently, the FDC part is the most ugly in source. SWAP bit is not emulated,
+  which can cause even data corruptions ("fortunately" since everything is
+  read-only, there is no chance to corrupt the disk image content itself).
 
-* VIC3 code is horrible, it merely emulates a *fixed* rendering (all in
-  once per frames!) with fixed memory configuration known to be used by
-  C65 (or C64, in C64 mode). Nothing other is emulated, ie graphical
-  modes, multicolour, sprites, bitplanes, DAT, hardware character
-  attributes, etc, nothing. Though, VIC3 palette registers are emulated.
+* VIC3 code is horrible, it merely emulates full frames in one rendering
+  step only. Many things are not emulated: MCM/ECM for classic VIC2 modes,
+  no border, no sprites, no DAT, no hardware character attributes, no V400
+  and interlace, and no H1280 mode. No emulation yet for chargen address
+  (fixed), and VIC3 $30 port selection, also no support for the VIC2
+  "some places it will see ROM" behaviour. Though bitplane modes, programmable
+  palette, 40/80 column text mode, and classic VIC2 hires mode should work.
+  K2 demo is able to show the "busty woman" already with my emulator.
 
 * No emulation for the SIDs, UART, REC (Ram Expansion Controller)
 
@@ -149,8 +156,23 @@ What is emulated and what is not:
   some mapping problems (ie, position based mapping for US host machine layout,
   some keys are still missing, I was lazy ...).
 
-First "milestone" is already here, it can "boot" to BASIC, though :) Now, it
-also does its work with "DIR" command, if D81 image is given.
+Compatibility:
+
+* First "milestone" is already here, it can "boot" to BASIC, though :) Now, it
+  also does its work with "DIR" command, if D81 image is given.
+
+* C65 standard boot is OK
+
+* C64 mode can be used ("GO64")
+
+* GEOS kernal can be booted, the "chessboard" background can be seen
+
+* K2 demo is able to show the "busty woman" (320x200 256 colours, 8 bitplanes
+  mode)
+
+* IFF demos has problems currently, I am not sure what is the problem
+  yet (though there is a modified version on an FTP site - saying it should
+  work and fixed - it is able to show at least the "King Tut" picture)
 
 Basic usage of the emulator:
 
