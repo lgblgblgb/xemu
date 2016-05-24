@@ -1,9 +1,11 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
-   This is the VIC3 "emulation". Currently it only does some "fixed" stuff
-   ignoring vast majority of the VIC3 registers and doing its work based
-   on the assumption what VIC3 in C65 should do otherwise :)
+   This is the VIC3 "emulation". Currently it does one-frame-at-once
+   kind of horrible work, and only a subset of VIC2 and VIC3 knowledge
+   is implemented. Some of the missing features: hardware attributes,
+   DAT, sprites, screen positioning, H1280 mode, V400 mode, interlace,
+   chroma killer, VIC2 MCM, ECM, 38/24 columns mode, border.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -36,15 +38,15 @@ static Uint32 rgb_palette[4096];	// all the C65 palette, 4096 colours (SDL pixel
 static Uint32 vic3_palette[0x100];	// VIC3 palette in SDL pixel format related form (can be written into the texture directly to be rendered)
 static Uint32 vic3_rom_palette[0x100];	// the "ROM" palette, for C64 colours (with some ticks, ie colours above 15 are the same as the "normal" programmable palette)
 static Uint8 vic3_palette_nibbles[0x300];
-Uint8 vic3_registers[0x40];
+Uint8 vic3_registers[0x40];		// VIC-3 registers (TODO: more than this ...)
 int vic_new_mode;		// VIC3 "newVic" IO mode is activated flag
 int scanline;			// current scan line number
 int clock_divider7_hack;
 static int compare_raster;	// raster compare (9 bits width) data
-static int interrupt_status;
-int vic2_16k_bank;
+static int interrupt_status;	// Interrupt status of VIC
+int vic2_16k_bank;		// VIC-2 modes' 16K BANK address
 
-static int warn_sprites = 1, /*warn_bitplanes = 1,*/ warn_attr = 1, warn_ctrl_b_lo = 1;
+static int warn_sprites = 1, warn_attr = 1, warn_ctrl_b_lo = 1;
 
 
 #define CHECK_PIXEL_POINTER
@@ -52,6 +54,7 @@ static int warn_sprites = 1, /*warn_bitplanes = 1,*/ warn_attr = 1, warn_ctrl_b_
 
 
 #ifdef CHECK_PIXEL_POINTER
+/* Temporary hack to be used in renders. Asserts out-of-texture accesses */
 static Uint32 *pixel_pointer_check_base;
 static Uint32 *pixel_pointer_check_end;
 static const char *pixel_pointer_check_modn;
@@ -226,10 +229,6 @@ void vic3_write_reg ( int addr, Uint8 data )
 				INFO_WINDOW("VIC3 extended attributes are not emulated yet!");
 				warn_attr = 0;
 			}
-			/*if ((data & 16) && warn_bitplanes) {
-				INFO_WINDOW("VIC3 bitplanes are not emulated yet!");
-				warn_bitplanes = 0;
-			}*/
 			if ((data & 15) && warn_ctrl_b_lo) {
 				INFO_WINDOW("VIC3 control-B register V400, H1280, MONO and INT features are not emulated yet!");
 				warn_ctrl_b_lo = 0;
@@ -309,17 +308,9 @@ void vic3_write_palette_reg ( int num, Uint8 data )
 
 
 
-/* FIXME
-Primitive "full screen at once" renderer! Only knows the "official" text
-mode of C65 native mode and 64 "by default" mode, with standard locations etc.
-In C65 mode, not even the hw attributes are supported! Of course, currently
-forget about sprites, graphics, bitplanes, everything :)
-"ROM palette" is also ignored for now (makes C64 mode somewhat odd)
-Memory addresses etc are ignored, and the "default" values are assumed!
-Surely, it's for nothing, just to be able to see something initially before
-further developments :) VIC3 "FAST" bit is ignored, thus C64 mode will drive
-the CPU at C64 speed still, which is also incorrect (C64 mode is too fast).
-*/
+/* At-frame-at-once (thus incorrect implementation) renderer for H640 (80 column)
+   and "normal" (40 column) text VIC modes. Hardware attributes are not supported!
+   Character map memory if fixed :-/ */
 static void vic2_render_screen_text ( void )
 {
 	int tail, charline = 0;
@@ -353,12 +344,14 @@ static void vic2_render_screen_text ( void )
 	palette = (vic3_registers[0x30] & 4) ? vic3_palette : vic3_rom_palette;
 	// Target SDL pixel related format for the background colour
 	bg = palette[vic3_registers[0x21] & 15];
+	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_text");
 	for (;;) {
 		Uint8 chrdata = chrg[((*(vidp++)) << 3) + charline];
 		Uint8 coldata = *(colp++);
 		Uint32 fg = palette[coldata & 15];
 		// FIXME: no ECM, MCM stuff ...
 		if (xlim == 79) {
+			PIXEL_POINTER_CHECK_ASSERT(p + 7);
 			*(p++) = chrdata & 128 ? fg : bg;
 			*(p++) = chrdata &  64 ? fg : bg;
 			*(p++) = chrdata &  32 ? fg : bg;
@@ -368,6 +361,7 @@ static void vic2_render_screen_text ( void )
 			*(p++) = chrdata &   2 ? fg : bg;
 			*(p++) = chrdata &   1 ? fg : bg;
 		} else {
+			PIXEL_POINTER_CHECK_ASSERT(p + 15);
 			p[ 0] = p[ 1] = chrdata & 128 ? fg : bg;
 			p[ 2] = p[ 3] = chrdata &  64 ? fg : bg;
 			p[ 4] = p[ 5] = chrdata &  32 ? fg : bg;
@@ -409,12 +403,14 @@ static void vic2_render_screen_bmm ( void )
 	vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
 	chrp = memory + ((vic3_registers[0x18] & 8) ? 8192 : 0) + vic2_16k_bank;
 	palette = (vic3_registers[0x30] & 4) ? vic3_palette : vic3_rom_palette;
+	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_bmm");
 	for (;;) {
 		Uint8  data = *(vidp++);
 		Uint32 fg = palette[data & 15];
 		Uint32 bg = palette[data >> 4];
 		data = *chrp;
 		chrp += 8;
+		PIXEL_POINTER_CHECK_ASSERT(p);
 		p[ 0] = p[ 1] = data & 128 ? fg : bg;
 		p[ 2] = p[ 3] = data &  64 ? fg : bg;
 		p[ 4] = p[ 5] = data &  32 ? fg : bg;
@@ -459,7 +455,6 @@ static void vic3_render_screen_bpm ( void )
 	Uint32 *palette, *p = emu_start_pixel_buffer_access(&tail);
 	int xlim, x = 0, y = 0, h640 = (vic3_registers[0x31] & 128);
 	Uint8 bpe, *bp[8];
-	PIXEL_POINTER_CHECK_INIT(p, tail, "vic3_render_screen_bpm");
 	bp[0] = memory + ((vic3_registers[0x33] & (h640 ? 12 : 14)) << 12);
 	bp[1] = memory + ((vic3_registers[0x34] & (h640 ? 12 : 14)) << 12) + 0x10000;
 	bp[2] = memory + ((vic3_registers[0x35] & (h640 ? 12 : 14)) << 12);
@@ -478,6 +473,7 @@ static void vic3_render_screen_bpm ( void )
         printf("VIC3: bitplanes: enable_mask=$%02X comp_mask=$%02X H640=%d" NL,
 		bpe, vic3_registers[0x3B], h640 ? 1 : 0
 	);
+	PIXEL_POINTER_CHECK_INIT(p, tail, "vic3_render_screen_bpm");
 	for (;;) {
 		Uint32 col = palette[((				// Do not try this at home ...
 			(((*(bp[0] + offset)) & bitpos) ?   1 : 0) |
@@ -492,8 +488,10 @@ static void vic3_render_screen_bpm ( void )
 		];
 		PIXEL_POINTER_CHECK_ASSERT(p);
 		*(p++) = col;
-		if (!h640)
+		if (!h640) {
+			PIXEL_POINTER_CHECK_ASSERT(p);
 			*(p++) = col;
+		}
 		if (bitpos == 1) {
 			if (x == xlim) {
 				if (charline == 7) {
@@ -520,6 +518,12 @@ static void vic3_render_screen_bpm ( void )
 
 
 
+/* This is the one-frame-at-once (highly incorrect implementation, that is)
+   renderer. It will call legacy VIC2 text mode render (optionally with
+   80 columns mode, though, ECM, MCM, hardware attributes are not supported),
+   VIC2 legacy HIRES mode (MCM is not supported), or bitplane modes (V400,
+   H1280, odd scanning/interlace is not supported). Sprites, screen positioning,
+   etc is not supported */
 void vic3_render_screen ( void )
 {
 	if (vic3_registers[0x31] & 16)
