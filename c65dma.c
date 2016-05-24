@@ -42,6 +42,7 @@ static Uint16 length;		// DMA operation length
 static int command;		// DMA command
 static int chained;		// 1 = chained (read next DMA operation "descriptor")
 static int dma_list_addr;	// address of the DMA list, controller will read to "execute"
+static Uint8 minterms[4];
 
 
 
@@ -69,6 +70,64 @@ static void write_target_next ( Uint8 data )
 }
 
 
+// TODO: modulo?
+static void swap_next ( void )
+{
+	Uint8 sa, da;
+	if (source_is_io)
+		sa = io_read(0xD000 | (source_addr & 0xFFF));
+	else
+		sa = read_phys_mem(source_addr);
+	if (target_is_io)
+		da = io_read(0xD000 | (target_addr & 0xFFF));
+	else
+		da = read_phys_mem(target_addr);
+	if (source_is_io)
+		io_write(0xD000 | (source_addr & 0xFFF), da);
+	else
+		write_phys_mem(source_addr, da);
+	if (target_is_io)
+		io_write(0xD000 | (target_addr & 0xFFF), sa);
+	else
+		write_phys_mem(target_addr, sa);
+	source_addr += source_step;
+	target_addr += target_step;
+}
+
+
+// TODO: modulo?
+static void mix_next ( void )
+{
+	Uint8 sa, da;
+	if (source_is_io)
+		sa = io_read(0xD000 | (source_addr & 0xFFF));
+	else
+		sa = read_phys_mem(source_addr);
+	if (target_is_io)
+		da = io_read(0xD000 | (target_addr & 0xFFF));
+	else
+		da = read_phys_mem(target_addr);
+	// NOTE: it's not clear from the specification, what MIX
+	// does. I assume, that it does some kind of minterm
+	// with source and target and writes the result to
+	// target. I'm not even sure how the minterms are
+	// interpreted on the bits of two bytes too much. FIXME!!!
+	da =
+		(( sa) & ( da) & minterms[3]) |
+		(( sa) & (~da) & minterms[2]) |
+		((~sa) & ( da) & minterms[1]) |
+		((~sa) & (~da) & minterms[0])
+	;
+	if (target_is_io)
+		io_write(0xD000 | (target_addr & 0xFFF), da);
+	else
+		write_phys_mem(target_addr, da);
+	source_addr += source_step;
+	target_addr += target_step;	
+}
+
+
+
 static inline Uint8 read_dma_list_next ( void )
 {
 	return read_phys_mem(dma_list_addr++);
@@ -79,6 +138,7 @@ void dma_write_reg ( int addr, Uint8 data )
 {
 	// DUNNO about DMAgic too much. It's merely guessing from my own ROM assembly tries, C65gs/Mega65 VHDL, and my ideas :)
 	// Also, it DOES things while everything other (ie CPU) emulation is stopped ...
+	// OF COURSE IT IS HIGHLY INCORRECT!!!! FIXME stuff ...
 	addr &= 3;
 	dma_registers[addr] = data;
 	if (addr)
@@ -117,14 +177,26 @@ void dma_write_reg ( int addr, Uint8 data )
 			target_addr, target_is_io ? "I/O" : "MEM", target_uses_modulo ? " MOD" : "", target_step,
 			length, command, chained ? "chain" : "last"
 		);
+		minterms[0] = (command &  16) ? 0xFF : 0x00;
+		minterms[1] = (command &  32) ? 0xFF : 0x00;
+		minterms[2] = (command &  64) ? 0xFF : 0x00;
+		minterms[3] = (command & 128) ? 0xFF : 0x00;
 		switch (command & 3) {
-			case 3:			// fill command
-				while (length--)
-					write_target_next(source_addr & 0xFF);
-				break;
-			case 0:			// copy command
+			case 0:			// COPY command
 				while (length--)
 					write_target_next(read_source_next());
+				break;
+			case 1:			// MIX command
+				while (length--)
+					mix_next();
+				break;
+			case 2:			// SWAP command
+				while (length--)
+					swap_next();
+				break;
+			case 3:			// FILL command (SRC LO is the filler byte!)
+				while (length--)
+					write_target_next(source_addr & 0xFF);
 				break;
 			default:
 				printf("DMA: unimplemented command: %d" NL, command & 3);
@@ -144,6 +216,6 @@ void dma_init ( void )
 Uint8 dma_read_reg ( int addr )
 {
 	if ((addr & 3) != 3)
-		return 0xFF;
-	return 0;
+		return 0xFF;	// other registers are (??????) writeonly? FIXME?
+	return 0;	// status is always zero (ready) as we emulate DMA with stopping the CPU while it works ... :-/
 }
