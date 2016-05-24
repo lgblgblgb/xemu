@@ -37,6 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static Uint32 rgb_palette[4096];	// all the C65 palette, 4096 colours (SDL pixel format related form)
 static Uint32 vic3_palette[0x100];	// VIC3 palette in SDL pixel format related form (can be written into the texture directly to be rendered)
 static Uint32 vic3_rom_palette[0x100];	// the "ROM" palette, for C64 colours (with some ticks, ie colours above 15 are the same as the "normal" programmable palette)
+static Uint32 *palette;			// the selected palette ...
 static Uint8 vic3_palette_nibbles[0x300];
 Uint8 vic3_registers[0x80];		// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
 int vic_new_mode;		// VIC3 "newVic" IO mode is activated flag
@@ -75,9 +76,17 @@ static inline void PIXEL_POINTER_CHECK_ASSERT ( Uint32 *p )
 		exit(1);
 	}
 }
+static inline void PIXEL_POINTER_FINAL_ASSERT ( Uint32 *p )
+{
+	if (p != pixel_pointer_check_end) {
+		ERROR_WINDOW("FATAL ASSERT: final texture pointer (%p) is not the same as the desired one (%p),\nIn program module %s", p, pixel_pointer_check_end, pixel_pointer_check_modn);
+		exit(1);
+	}
+}
 #else
 #	define PIXEL_POINTER_CHECK_INIT(base,tail,mod)
 #	define PIXEL_POINTER_CHECK_ASSERT(p)
+#	define PIXEL_POINTER_FINAL_ASSERT(p)
 #endif
 
 
@@ -98,6 +107,7 @@ void vic3_init ( void )
 	vic2_16k_bank = 0;
 	vic_new_mode = 0;
 	interrupt_status = 0;
+	palette = vic3_rom_palette;
 	scanline = 0;
 	compare_raster = 0;
 	clock_divider7_hack = 7;
@@ -221,6 +231,7 @@ void vic3_write_reg ( int addr, Uint8 data )
 				apply_memory_config();
 			} else
 				puts("MEM: no need for new memory configuration (because of VIC3 $30 is written): same ROM bit values are set");
+			palette = (data & 4) ? vic3_palette : vic3_rom_palette;
 			break;
 		case 0x31:
 			clock_divider7_hack = (data & 64) ? 7 : 2;
@@ -311,12 +322,11 @@ void vic3_write_palette_reg ( int num, Uint8 data )
 /* At-frame-at-once (thus incorrect implementation) renderer for H640 (80 column)
    and "normal" (40 column) text VIC modes. Hardware attributes are not supported!
    Character map memory if fixed :-/ */
-static void vic2_render_screen_text ( void )
+static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 {
-	int tail, charline = 0;
-	Uint32 bg, *palette, *p = emu_start_pixel_buffer_access(&tail);
+	Uint32 bg;
 	Uint8 *vidp, *chrg, *colp = memory + 0x1F800;
-	int x = 0, y = 0, xlim, ylim;
+	int x = 0, y = 0, xlim, ylim, charline = 0;
 	// TODO: if BPM bit is set in ctrl reg B then bitplane mode is set,
 	// which ignores ALL the VIC-2 mode settings. This is not emulated
 	// yet though.
@@ -339,9 +349,6 @@ static void vic2_render_screen_text ( void )
 		// Note: VIC2 sees ROM at some addresses thing is not emulated yet!
 		vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
 	}
-	// Palette selection between ROM palette and programmable one
-	// FIXME: is it allowed VIC2 modes at all?
-	palette = (vic3_registers[0x30] & 4) ? vic3_palette : vic3_rom_palette;
 	// Target SDL pixel related format for the background colour
 	bg = palette[vic3_registers[0x21] & 15];
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_text");
@@ -388,21 +395,20 @@ static void vic2_render_screen_text ( void )
 		} else
 			x++;
 	}
-	emu_update_screen();
+	PIXEL_POINTER_FINAL_ASSERT(p);
 }
+
 
 
 // VIC2 bitmap mode, now only HIRES mode (no MCM yet), without H640 VIC3 feature!!
 // I am not even sure if H640 would work here, as it needs almost all the 16K of area what VIC-II can see.
 // Note: VIC2 sees ROM at some addresses thing is not emulated yet!
-static void vic2_render_screen_bmm ( void )
+static inline void vic2_render_screen_bmm ( Uint32 *p, int tail )
 {
-	int tail, x = 0, y = 0, charline = 0;
-	Uint32 *palette, *p = emu_start_pixel_buffer_access(&tail);
+	int x = 0, y = 0, charline = 0;
 	Uint8 *vidp, *chrp;
 	vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
 	chrp = memory + ((vic3_registers[0x18] & 8) ? 8192 : 0) + vic2_16k_bank;
-	palette = (vic3_registers[0x30] & 4) ? vic3_palette : vic3_rom_palette;
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_bmm");
 	for (;;) {
 		Uint8  data = *(vidp++);
@@ -437,7 +443,7 @@ static void vic2_render_screen_bmm ( void )
 		} else
 			x++;
 	}
-	emu_update_screen();
+	PIXEL_POINTER_FINAL_ASSERT(p);
 }
 
 
@@ -449,10 +455,9 @@ static void vic2_render_screen_bmm ( void )
 // And hey dude, if it's not enough, there is time multiplex of bitplanes (not supported),
 // V400 + interlace odd/even scan addresses, and the original C64-like non-linear build-up
 // of the bitplane structure. Phewwww ....
-static void vic3_render_screen_bpm ( void )
+static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
 {
-	int tail, bitpos = 128, charline = 0, offset = 0;
-	Uint32 *palette, *p = emu_start_pixel_buffer_access(&tail);
+	int bitpos = 128, charline = 0, offset = 0;
 	int xlim, x = 0, y = 0, h640 = (vic3_registers[0x31] & 128);
 	Uint8 bpe, *bp[8];
 	bp[0] = memory + ((vic3_registers[0x33] & (h640 ? 12 : 14)) << 12);
@@ -469,7 +474,6 @@ static void vic3_render_screen_bpm ( void )
 		xlim = 79;
 	} else
 		xlim = 39;
-	palette = (vic3_registers[0x30] & 4) ? vic3_palette : vic3_rom_palette;
         printf("VIC3: bitplanes: enable_mask=$%02X comp_mask=$%02X H640=%d" NL,
 		bpe, vic3_registers[0x3B], h640 ? 1 : 0
 	);
@@ -513,7 +517,7 @@ static void vic3_render_screen_bpm ( void )
 		} else
 			bitpos >>= 1;
 	}
-	emu_update_screen();
+	PIXEL_POINTER_FINAL_ASSERT(p);
 }
 
 
@@ -526,13 +530,16 @@ static void vic3_render_screen_bpm ( void )
    etc is not supported */
 void vic3_render_screen ( void )
 {
+	int tail;
+	Uint32 *p = emu_start_pixel_buffer_access(&tail);
 	if (vic3_registers[0x31] & 16)
-		vic3_render_screen_bpm();
+		vic3_render_screen_bpm(p, tail);
 	else {
 		if (vic3_registers[0x11] & 32)
-			vic2_render_screen_bmm();
+			vic2_render_screen_bmm(p, tail);
 		else
-			vic2_render_screen_text();
+			vic2_render_screen_text(p, tail);
 	}
+	emu_update_screen();
 }
 
