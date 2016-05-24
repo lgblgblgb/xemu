@@ -27,28 +27,25 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "vic3.h"
 #include "emutools.h"
 
-//#define DEBUG_MEMORY
-//#define DEBUG_STACK
 
 
-Uint8 memory[0x110000];			// 65CE02 MAP'able address space (now overflow is not handled, that is the reason of higher than 1MByte, just in case ...)
+Uint8 memory[0x100000];			// 65CE02 MAP'able address space
 static Uint8 cpu_port[2];		// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
 static Uint8 kbd_matrix[8];		// keyboard matrix state, 8 * 8 bits
 
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request (with the lower 16 bits as addr from $D000)
-#define IO_REMAP_VIRTUAL 0x110000
+#define IO_REMAP_VIRTUAL	0x110000
 // Other re-mapping addresses
 // Re-mapping for VIC3 reg $30
-#define ROM_C000_REMAP		0x20000
-#define ROM_8000_REMAP		0x30000
-#define ROM_A000_REMAP		0x30000
-#define ROM_E000_REMAP		0x30000
+#define ROM_C000_REMAP		 0x20000
+#define ROM_8000_REMAP		 0x30000
+#define ROM_A000_REMAP		 0x30000
+#define ROM_E000_REMAP		 0x30000
 // Re-mapping for "CPU-port" related stuffs
-#define ROM_C64_CHR_REMAP	0x20000
-#define ROM_C64_KERNAL_REMAP	0x20000
-#define ROM_C64_BASIC_REMAP	0x20000
-
+#define ROM_C64_CHR_REMAP	 0x20000
+#define ROM_C64_KERNAL_REMAP	 0x20000
+#define ROM_C64_BASIC_REMAP	 0x20000
 
 static int addr_trans_rd[16];		// address translating offsets for READ operation (it can be added to the CPU address simply, selected by the high 4 bits of the CPU address)
 static int addr_trans_wr[16];		// address translating offsets for WRITE operation (it can be added to the CPU address simply, selected by the high 4 bits of the CPU address)
@@ -524,10 +521,48 @@ void io_write ( int addr, Uint8 data )
 
 
 
+void write_phys_mem ( int addr, Uint8 data )
+{
+	addr &= 0xFFFFF;
+	if (addr < 2) {
+		if ((cpu_port[addr] & 7) != (data & 7)) {
+			cpu_port[addr] = data;
+			puts("MEM: applying new memory configuration because of CPU port writing");
+			apply_memory_config();
+		} else
+			cpu_port[addr] = data;
+	} else if (
+		(addr < 0x20000)
+#if defined(ALLOW_256K_RAMEXP) && defined(ALLOW_512K_RAMEXP)
+		|| (addr >= 0x40000)
+#else
+#	ifdef ALLOW_256K_RAMEXP
+		|| (addr >= 0x40000 && addr < 0x80000)
+#	endif
+#	ifdef ALLOW_512K_RAMEXP
+		|| (addr >= 0x80000)
+#	endif
+#endif
+	)
+		memory[addr] = data;
+}
+
+
+
+Uint8 read_phys_mem ( int addr )
+{
+	addr &= 0xFFFFF;
+	if (addr < 2)
+		return cpu_port[addr];
+	return memory[addr];
+}
+
+
+
 // This function is called by the 65CE02 emulator in case of reading a byte (regardless of data or code)
 Uint8 cpu_read ( Uint16 addr )
 {
-	int phys_addr = addr_trans_rd[addr >> 12] + addr;	// translating address with the table created by apply_memory_config()
+	int phys_addr = addr_trans_rd[addr >> 12] + addr;	// translating address with the READ table created by apply_memory_config()
 	if (phys_addr >= IO_REMAP_VIRTUAL) {
 		if ((addr & 0xF000) != 0xD000) {
 			fprintf(stderr, "Internal error: IO is not on the IO space!\n");
@@ -535,19 +570,7 @@ Uint8 cpu_read ( Uint16 addr )
 		}
 		return io_read(addr);	// addr should be in $DXXX range to hit this, hopefully ...
 	}
-	if (phys_addr >= 0x40000)
-		printf("MEM: WARN: addressing memory over ROM for reading: %X" NL, phys_addr);
-	phys_addr &= 0xFFFFF;
-	if (phys_addr < 2)
-		return cpu_port[phys_addr & 1];
-	if (phys_addr < 0x40000) {
-#ifdef DEBUG_MEMORY
-		printf("MEM: read @ $%04X [PC=$%04X] (REAL=$%05X) result is $%02X" NL, addr, cpu_pc, phys_addr, memory[phys_addr]);
-#endif
-		return memory[phys_addr];
-	}
-	printf("MEM: WARN: reading undecoded memory area @ $%04X [PC=$%04X] (REAL=$%05X) result is $%02X" NL, addr, cpu_pc, phys_addr, 0xFF);
-	return 0xFF;
+	return read_phys_mem(phys_addr);
 }
 
 
@@ -555,7 +578,7 @@ Uint8 cpu_read ( Uint16 addr )
 // This function is called by the 65CE02 emulator in case of writing a byte
 void cpu_write ( Uint16 addr, Uint8 data )
 {
-	int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the table created by apply_memory_config()
+	int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
 	if (phys_addr >= IO_REMAP_VIRTUAL) {
 		if ((addr & 0xF000) != 0xD000) {
 			fprintf(stderr, "Internal error: IO is not on the IO space!\n");
@@ -564,24 +587,7 @@ void cpu_write ( Uint16 addr, Uint8 data )
 		io_write(addr, data);	// addr should be in $DXXX range to hit this, hopefully ...
 		return;
 	}
-	if (phys_addr >= 0x40000)
-		printf("MEM: WARN: addressing memory over ROM for writing: %X" NL, phys_addr);
-	phys_addr &= 0xFFFFF;
-	if (phys_addr < 2) {
-		cpu_port[phys_addr & 1] = data;
-		puts("MEM: applying new memory configuration because of CPU port writing");
-		apply_memory_config();
-		return;
-	}
-	if (phys_addr < 0x20000) {
-#ifdef DEBUG_MEMORY
-		printf("MEM write @ $%04X [PC=$%04X] (REAL=$%05X) with data $%02X" NL, addr, cpu_pc, phys_addr, data);
-#endif
-		DEBUG_WRITE_ACCESS(phys_addr, data);
-		memory[phys_addr] = data;
-		return;
-	}
-	printf("MEM: WARN: writing undecoded memory area or ROM @ $%04X [PC=$%04X] (REAL=$%05X) with data $%02X" NL, addr, cpu_pc, phys_addr, data);
+	write_phys_mem(phys_addr, data);
 }
 
 
