@@ -549,7 +549,7 @@ static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 
 {
 	int sprite_y = vic3_registers[sprite_no * 2 + 1] - SPRITE_Y_START_SCREEN;
 	int sprite_x = ((vic3_registers[sprite_no * 2] | ((vic3_registers[16] & sprite_mask) ? 0x100 : 0)) - SPRITE_X_START_SCREEN) * 2;
-	Uint32 colour = palette[vic3_registers[39] & 15];
+	Uint32 colour = palette[vic3_registers[39 + sprite_no] & 15];
 	int expand_x = vic3_registers[29] & sprite_mask;
 	int expand_y = vic3_registers[23] & sprite_mask;
 	int lim_y = sprite_y + ((expand_y) ? 42 : 21);
