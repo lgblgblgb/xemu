@@ -46,6 +46,8 @@ int clock_divider7_hack;
 static int compare_raster;	// raster compare (9 bits width) data
 static int interrupt_status;	// Interrupt status of VIC
 int vic2_16k_bank;		// VIC-2 modes' 16K BANK address
+static Uint8 *sprite_pointers;
+static Uint8 *sprite_bank;
 
 static int warn_sprites = 1, warn_attr = 1, warn_ctrl_b_lo = 1;
 
@@ -245,12 +247,14 @@ void vic3_write_reg ( int addr, Uint8 data )
 				warn_ctrl_b_lo = 0;
 			}
 			break;
+#if 0
 		case 0x15:
 			if (data && warn_sprites) {
 				INFO_WINDOW("VIC2 sprites are not emulated yet! [enabled: $%02X]", data);
 				warn_sprites = 0;
 			}
 			break;
+#endif
 	}
 }	
 
@@ -341,6 +345,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 		// Note: according to the specification bit 4 has no effect in 80 columns mode!
 		// Note: VIC2 sees ROM at some addresses thing is not emulated yet!
 		vidp = memory + ((vic3_registers[0x18] & 0xE0) << 6) + vic2_16k_bank;
+		sprite_pointers = vidp + 2040;
 	} else {
 		xlim = 39;
 		ylim = 24;
@@ -348,6 +353,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 		chrg = memory + 0x2D000;
 		// Note: VIC2 sees ROM at some addresses thing is not emulated yet!
 		vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
+		sprite_pointers = vidp + 1016;
 	}
 	// Target SDL pixel related format for the background colour
 	bg = palette[vic3_registers[0x21] & 15];
@@ -401,13 +407,15 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 
 
 // VIC2 bitmap mode, now only HIRES mode (no MCM yet), without H640 VIC3 feature!!
-// I am not even sure if H640 would work here, as it needs almost all the 16K of area what VIC-II can see.
+// I am not even sure if H640 would work here, as it needs almost all the 16K of area what VIC-II can see,
+// that is, not so much RAM for the video matrix left would be used for the attribute information.
 // Note: VIC2 sees ROM at some addresses thing is not emulated yet!
 static inline void vic2_render_screen_bmm ( Uint32 *p, int tail )
 {
 	int x = 0, y = 0, charline = 0;
 	Uint8 *vidp, *chrp;
 	vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
+	sprite_pointers = vidp + 1016;
 	chrp = memory + ((vic3_registers[0x18] & 8) ? 8192 : 0) + vic2_16k_bank;
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_bmm");
 	for (;;) {
@@ -472,8 +480,11 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
 	if (h640) {
 		bpe &= 15;		// it seems, with H640, only 4 bitplanes can be used (on lower 4 ones)
 		xlim = 79;
-	} else
+		sprite_pointers = bp[2] + 0x3FF8;	// FIXME: just guessing
+	} else {
 		xlim = 39;
+		sprite_pointers = bp[2] + 0x1FF8;	// FIXME: just guessing
+	}
         printf("VIC3: bitplanes: enable_mask=$%02X comp_mask=$%02X H640=%d" NL,
 		bpe, vic3_registers[0x3B], h640 ? 1 : 0
 	);
@@ -521,6 +532,57 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
 }
 
 
+#define SPRITE_X_START_SCREEN	24
+#define SPRITE_Y_START_SCREEN	30
+
+
+/* Extremely incorrect sprite emulation! BUGS:
+   * Sprites cannot be behind the background (sprite priority)
+   * Multicolour sprites are not supported
+   * No sprite-background collision detection
+   * No sprite-sprite collision detection
+   * This is a simple, after-the-rendered-frame render-sprites one-by-one algorithm
+   * This also requires to give up direct rendering if a sprite is enabled
+   * Very ugly, quick&dirty hack, not so optimal either, even without the other mentioned bugs ...
+*/
+static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 *p, int tail )
+{
+	int sprite_y = vic3_registers[sprite_no * 2 + 1] - SPRITE_Y_START_SCREEN;
+	int sprite_x = ((vic3_registers[sprite_no * 2] | ((vic3_registers[16] & sprite_mask) ? 0x100 : 0)) - SPRITE_X_START_SCREEN) * 2;
+	Uint32 colour = palette[vic3_registers[39] & 15];
+	int expand_x = vic3_registers[29] & sprite_mask;
+	int expand_y = vic3_registers[23] & sprite_mask;
+	int lim_y = sprite_y + ((expand_y) ? 42 : 21);
+	int y;
+	p += (640 + tail) * sprite_y;
+	for (y = sprite_y; y < lim_y; y += (expand_y ? 2 : 1), p += (640 + tail) * (expand_y ? 2 : 1))
+		if (y < 0 || y >= 200)
+			data += 3;	// skip one line (three bytes) of sprite data if outside of screen
+		else {
+			int mask, a, x = sprite_x;
+			for (a = 0; a < 3; a++) {
+				for (mask = 128; mask; mask >>= 1) {
+					if (*data & mask) {
+						if (x >= 0 && x < 640)
+							p[x] = p[x + 1] = colour;
+							if (expand_y && y < 200)
+								p[x + 640 + tail] = p[x + 641 + tail] = colour;
+						x += 2;
+						if (expand_x && x >= 0 && x < 640) {
+							p[x] = p[x + 1] = colour;
+							if (expand_y && y < 200)
+								p[x + 640 + tail] = p[x + 641 + tail] = colour;
+							x += 2;
+						}
+					}
+				}
+				data++;
+			}
+		}
+}
+
+
+
 
 /* This is the one-frame-at-once (highly incorrect implementation, that is)
    renderer. It will call legacy VIC2 text mode render (optionally with
@@ -530,15 +592,30 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
    etc is not supported */
 void vic3_render_screen ( void )
 {
-	int tail;
-	Uint32 *p = emu_start_pixel_buffer_access(&tail);
-	if (vic3_registers[0x31] & 16)
-		vic3_render_screen_bpm(p, tail);
-	else {
+	int tail_sdl;
+	Uint32 *p_sdl = emu_start_pixel_buffer_access(&tail_sdl);
+	int sprites = vic3_registers[0x15];
+	if (vic3_registers[0x31] & 16) {
+	        sprite_bank = memory + ((vic3_registers[0x35] & 12) << 12);	// FIXME: just guessing: sprite bank is bitplane 2 area, always 16K regardless of H640?
+		vic3_render_screen_bpm(p_sdl, tail_sdl);
+	} else {
+		sprite_bank = vic2_16k_bank + memory;				// VIC2 legacy modes uses the VIC2 bank for sure, as the sprite bank too
 		if (vic3_registers[0x11] & 32)
-			vic2_render_screen_bmm(p, tail);
+			vic2_render_screen_bmm(p_sdl, tail_sdl);
 		else
-			vic2_render_screen_text(p, tail);
+			vic2_render_screen_text(p_sdl, tail_sdl);
+	}
+	if (sprites) {	// Render sprites. VERY BAD. We ignore sprite priority as well (cannot be behind the background)
+		int a;
+		if (warn_sprites) {
+			INFO_WINDOW("WARNING: Sprite emulation is really bad! (enabled_mask=$%02X)", sprites);
+			warn_sprites = 0;
+		}
+		for (a = 7; a >= 0; a--) {
+			int mask = 1 << a;
+			if (sprites & (1 << a))
+				render_sprite(a, mask, sprite_bank + (sprite_pointers[a] << 6), p_sdl, tail_sdl);	// sprite_pointers are set by the renderer functions above!
+		}
 	}
 	emu_update_screen();
 }
