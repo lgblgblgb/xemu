@@ -643,17 +643,17 @@ void cpu_write ( Uint16 addr, Uint8 data )
 
 
 
-#define MEMDUMP_FILE	"dump.mem"
-
-
 static void shutdown_callback ( void )
 {
+#ifdef MEMDUMP_FILE
 	FILE *f;
+#endif
 	int a;
 	for (a = 0; a < 0x40; a++)
 		printf("VIC-3 register $%02X is %02X" NL, a, vic3_registers[a]);
 	cia_dump_state (&cia1);
 	cia_dump_state (&cia2);
+#ifdef MEMDUMP_FILE
 	// Dump memory, so some can inspect the result (low 128K, RAM only)
 	f = fopen(MEMDUMP_FILE, "wb");
 	if (f) {
@@ -661,6 +661,7 @@ static void shutdown_callback ( void )
 		fclose(f);
 		puts("Memory is dumped into " MEMDUMP_FILE);
 	}
+#endif
 	printf("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
 }
 
