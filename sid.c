@@ -60,7 +60,7 @@
 #include <stdlib.h>
 
 
-#include "sidengine.h"
+#include "sid.h"
 
 
 /*
@@ -77,9 +77,12 @@
 static unsigned char exponential_delays[256];
 
 
-static unsigned long getCyclesPerSec() {
+#define getFrameCount() (sidemu->sFrameCount)
+
+
+/*static unsigned long getCyclesPerSec() {
         return 982800;
-}
+}*/
 
 
 
@@ -653,12 +656,12 @@ static void resetEngine ( struct SidEmulation *sidemu, unsigned long mixfrq, uns
 
 
 //   initialize SID and frequency dependant values
-void sid_init ( struct SidEmulation *sidemu, unsigned long mixfrq )
+void sid_init ( struct SidEmulation *sidemu, unsigned long cyclesPerSec, unsigned long mixfrq )
 {
+	sidemu->cyclesPerSec = cyclesPerSec;
 	resetEngine(sidemu, mixfrq, SID_DC_LEVEL);
 	//resetPsidDigi();
 	// envelope-generator stuff
-	unsigned long cyclesPerSec= getCyclesPerSec();
 	sidemu->cycleOverflow= 0;
 	sidemu->cyclesPerSample= ((float)cyclesPerSec/mixfrq);
 	// in regular SID, 15-bit LFSR counter counts cpu-clocks, our problem is the lack of cycle by cycle

@@ -18,6 +18,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __LGB_COMMODORE_65_H_INCLUDED
 #define __LGB_COMMODORE_65_H_INCLUDED
 
+/* Do *NOT* modify these, as other parts of the emulator currently depends on these values ...
+   You can try RENDER_SCALE_QUALITY though with values 0, 1, 2 */
 #define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888
 #define USE_LOCKED_TEXTURE	1
 #define RENDER_SCALE_QUALITY	1

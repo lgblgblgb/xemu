@@ -135,6 +135,7 @@ struct SidEmulation {
 	unsigned long  mixing_frequency;
 	unsigned long  freqmul;
 	int  filtmul;
+	unsigned long cyclesPerSec;
 	unsigned long sLastFrameCount;
 	unsigned char bval;
 	unsigned short wval;
@@ -143,7 +144,7 @@ struct SidEmulation {
 
 
 extern void sid_write_reg ( struct SidEmulation *sidemu, int reg, unsigned char val );
-extern void sid_init      ( struct SidEmulation *sidemu, unsigned long mixfrq );
+extern void sid_init      ( struct SidEmulation *sidemu, unsigned long cyclesPerSec, unsigned long mixfrq );
 extern void sid_render    ( struct SidEmulation *sidemu, short *buffer, unsigned long len, int step );
 
 #endif
