@@ -138,14 +138,33 @@ What is emulated and what is not:
 
 * VIC3 code is horrible, it merely emulates full frames in one rendering
   step only. Many things are not emulated: MCM/ECM for classic VIC2 modes,
-  no border, no sprites, no DAT, no hardware character attributes, no V400
+  no border, no DAT, no hardware character attributes, no V400
   and interlace, and no H1280 mode. No emulation yet for chargen address
   (fixed), and VIC3 $30 port selection, also no support for the VIC2
   "some places it will see ROM" behaviour. Though bitplane modes, programmable
   palette, 40/80 column text mode, and classic VIC2 hires mode should work.
   K2 demo is able to show the "busty woman" already with my emulator.
 
-* No emulation for the SIDs, UART, REC (Ram Expansion Controller)
+  Sprites are emulated in a *very* lame and limited way. Multicolour
+  sprites are not supported, and even the "under the screen" priority
+  is not handled. Sprites in bitplane mode are incorrect now. Also, the
+  "render a frame in once" scenario makes sprite multiplexing or any other
+  tricks impossible. Sprite emulation is mainly included only for some
+  simple tasks, ie "mouse pointer" in certain softwares, and for similar
+  usages.
+
+* There is *some* SID emulation, but it's horrible, believe me :)
+  Two SIDs are emulated with the help of SID emulation core from
+  'webSID' (see sid.c for more details). However the major problem is,
+  that SID "audio rendering" is only done currently, if audo buffer
+  is needed to fill. Moreover, the exact timing is nowehere in
+  my implementation - I guess - compared to the original. Forgive me,
+  I'm the lamest in the audio realm ...
+
+* No emulation for the UART, REC (Ram Expansion Controller)
+
+* Optionally (enabled by default) 512K RAM emulated in the upper region,
+  though not in a REC compatible way. This even can cause problems, I guess.
 
 * CIA emulation (for real, part of 4510 and not even full CIAs from
   some aspects) is quite lame. Though it seems enough for keyboard and

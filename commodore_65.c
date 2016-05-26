@@ -30,6 +30,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 
+static SDL_AudioDeviceID audio = 0;
+
 Uint8 memory[0x100000];			// 65CE02 MAP'able address space
 static Uint8 cpu_port[2];		// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
@@ -274,7 +276,7 @@ static void cia2_outa ( Uint8 mask, Uint8 data )
 
 
 
-// Jusr for easier test to have a given port value for CIA input ports
+// Just for easier test to have a given port value for CIA input ports
 static Uint8 cia_port_in_dummy ( Uint8 mask )
 {
 	return 0xFF;
@@ -282,8 +284,20 @@ static Uint8 cia_port_in_dummy ( Uint8 mask )
 
 
 
+static void audio_callback(void *userdata, Uint8 *stream, int len)
+{
+	printf("AUDIO: audio callback, wants %d samples" NL, len);
+	// We use the trick, to render boths SIDs with step of 2, with a byte offset
+	// to get a stereo stream, wanted by SDL.
+	sid_render(&sid1, ((short *)(stream)) + 0, len / 2, 2);
+	sid_render(&sid2, ((short *)(stream)) + 1, len / 2, 2);
+}
+
+
+
 static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int sound_mix_freq )
 {
+	SDL_AudioSpec audio_want, audio_got;
 	clear_emu_events();
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
@@ -319,9 +333,27 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 	dma_init();
 	// Initialize FDC
 	fdc_init(disk_image_name);
-	// SIDs
+	// SIDs, plus SDL audio
 	sid_init(&sid1, sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sid2, sid_cycles_per_sec, sound_mix_freq);
+	SDL_memset(&audio_want, 0, sizeof(audio_want));
+	audio_want.freq = sound_mix_freq;
+	audio_want.format = AUDIO_S16SYS;	// used format by SID emulation (ie: signed short)
+	audio_want.channels = 2;		// that is: stereo, for the two SIDs
+	audio_want.samples = 1024;		// Sample size suggested (?) for the callback to render once
+	audio_want.callback = audio_callback;	// Audio render callback function, called periodically by SDL on demand
+	audio_want.userdata = NULL;		// Not used, "userdata" parameter passed to the callback by SDL
+	audio = SDL_OpenAudioDevice(NULL, 0, &audio_want, &audio_got, 0);
+	if (audio) {
+		// Sanity check that we really got the same audio specification we wanted
+		if (audio_want.freq != audio_got.freq || audio_want.format != audio_got.format || audio_want.channels != audio_got.channels) {
+			SDL_CloseAudioDevice(audio);	// forget audio, if it's not our expected format :(
+			audio = 0;
+			ERROR_WINDOW("Audio parameter mismatches.");
+		}
+		printf("AUDIO: initialized, %d Hz, %d channels, %d buffer size." NL, audio_got.freq, audio_got.channels, audio_got.samples);
+	} else
+		ERROR_WINDOW("Cannot open audio device!");
 	// *** RESET CPU, also fetches the RESET vector into PC
 	cpu_reset();
 	puts("INIT: end of initialization!");
@@ -491,10 +523,14 @@ void io_write ( int addr, Uint8 data )
 		return;
 	}
 	if (addr < 0xD440) {	// $D400 - $D43F	SID, right
-		RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("right SID");
+		sid_write_reg(&sid1, addr & 31, data);
+		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("right SID");
+		return;
 	}
 	if (addr < 0xD600) {	// $D440 - $D5FF	SID, left
-		RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("left SID");
+		sid_write_reg(&sid2, addr & 31, data);
+		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("left SID");
+		return;
 	}
 	if (addr < 0xD700) {	// $D600 - $D6FF	UART (*)
 		if (vic_new_mode)
@@ -725,13 +761,15 @@ int main ( int argc, char **argv )
 	// Initialize C65 ...
 	c65_init(
 		argc > 1 ? argv[1] : NULL,	// disk image name
-		1000000,			// SID cycles per sec
-		44100				// sound mix freq
+		SID_CYCLES_PER_SEC,		// SID cycles per sec
+		AUDIO_SAMPLE_FREQ		// sound mix freq
 	);
 	// Start!!
 	cycles = 0;
 	frameskip = 0;
 	emu_timekeeping_start();
+	if (audio)
+		SDL_PauseAudioDevice(audio, 0);
 	for (;;) {
 		int opcyc;
 #ifdef DEBUG_STACK
@@ -770,6 +808,8 @@ int main ( int argc, char **argv )
 				scanline = 0;
 				if (!frameskip)	// well, let's only render every full frames (~ie 25Hz)
 					update_emulator();
+				sid1.sFrameCount++;
+				sid2.sFrameCount++;
 			}
 			//printf("RASTER=%d COMPARE=%d\n",scanline,compare_raster);
 			//vic_interrupt();
