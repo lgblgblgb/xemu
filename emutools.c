@@ -50,6 +50,8 @@ Uint32 sdl_winid;
 static Uint32 black_colour;
 static void (*shutdown_user_function)(void);
 int seconds_timer_trigger;
+SDL_version sdlver_compiled, sdlver_linked;
+
 
 const char emulators_disclaimer[] =
 	"LICENSE: Copyright (C)2016 Gábor Lénárt (aka LGB) lgb@lgb.hu http://lgb.hu/" NL
@@ -264,6 +266,16 @@ int emu_init_sdl (
 	}
 	shutdown_user_function = shutdown_callback;
 	atexit(shutdown_emulator);
+	SDL_VERSION(&sdlver_compiled);
+        SDL_GetVersion(&sdlver_linked);
+	printf( "SDL version: (%s) compiled with %d.%d.%d, used with %d.%d.%d on platform %s" NL
+		"SDL drivers: video = %s, audio = %s" NL,
+		SDL_GetRevision(),
+		sdlver_compiled.major, sdlver_compiled.minor, sdlver_compiled.patch,
+		sdlver_linked.major, sdlver_linked.minor, sdlver_linked.patch,
+		SDL_GetPlatform(),
+		SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver()
+	);
 	sdl_pref_dir = SDL_GetPrefPath(app_organization, app_name);
 	if (!sdl_pref_dir) {
 		ERROR_WINDOW("Cannot query SDL preferences directory: %s", SDL_GetError());
