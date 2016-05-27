@@ -643,6 +643,33 @@ void cpu_write ( Uint16 addr, Uint8 data )
 
 
 
+// Called in case of an RMW (read-modify-write) opcode write access.
+// Original NMOS 6502 would write the old_data first, then new_data.
+// It has no inpact in case of normal RAM, but it *does* with an I/O register in some cases!
+// CMOS line of 65xx (probably 65CE02 as well?) seems not write twice, but read twice.
+// However this leads to incompatibilities, as some software used the RMW behavour by intent.
+// Thus Mega65 fixed the problem to "restore" the old way of RMW behaviour.
+// I also follow this path here, even if it's *NOT* what 65CE02 would do actually!
+void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
+{
+	int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
+	if (phys_addr >= IO_REMAP_VIRTUAL) {
+		if ((addr & 0xF000) != 0xD000) {
+			fprintf(stderr, "Internal error: IO is not on the IO space!\n");
+			exit(1);
+		}
+		if (addr < 0xD800 || addr >= (vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00) {	// though, for only memory areas other than colour RAM (avoids unneeded warnings as well)
+			printf("CPU: RMW opcode is used on I/O area for $%04X" NL, addr);
+			io_write(addr, old_data);	// first write back the old data ...
+		}
+		io_write(addr, new_data);	// ... then the new
+		return;
+	}
+	write_phys_mem(phys_addr, new_data);	// "normal" memory, just write once, no need to emulate the behaviour
+}
+
+
+
 static void shutdown_callback ( void )
 {
 #ifdef MEMDUMP_FILE
