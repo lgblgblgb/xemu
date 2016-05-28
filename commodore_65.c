@@ -846,6 +846,11 @@ int main ( int argc, char **argv )
 			//vic_interrupt();
 			vic3_check_raster_interrupt();
 		}
+		// Just a wild guess: update DMA state for every CPU cycles
+		// However it does not care about that some DMA commands need more time
+		// (ie COPY vs FILL)
+		while (dma_status && (opcyc--))
+			dma_update();
 	}
 	puts("Goodbye!");
 	return 0;

@@ -18,8 +18,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __LGB_C65_DMA_H_INCLUDED
 #define __LGB_C65_DMA_H_INCLUDED
 
+extern Uint8 dma_status;
+
 extern void  dma_write_reg ( int addr, Uint8 data );
 extern Uint8 dma_read_reg  ( int reg );
 extern void  dma_init      ( void );
+extern void  dma_update    ( void );
 
 #endif

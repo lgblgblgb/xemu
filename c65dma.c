@@ -37,12 +37,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 	* SWAP command is also a guessing, but a better one, as it's kinda logical what it is used for
 	* COPY/FILL should be OK
 	* DMA length of ZERO probably means $10000
-	* Current emulation is "blocky" ie, the whole emulation stops while DMA operation is done. This is of course highly incorrect!
-	* DMA "ready" status thus is just constant "ready", as CPU won't see otherwise because of the "blocky" implementation
+	* Current emulation timing is incorrect
+	* It seems even the ROM issues new DMA command before the last finished. Workaround: in this case we run dma_update() first till it's ready. FIXME!
 	* DMA sees the upper memory regions (ie in BANK 4 and above), which may have "something", though REC (Ram Expansion Controller) is not implemented yet
 	* It's currently unknown that DMA registers are modified as DMA list is read, ie what happens if only reg 0 is re-written
 	* C65 specification tells about "not implemented sub-commands": I am curious what "sub commands" are or planned as, etc ...
-	* Reading status would resume interrupted DMA operation (?) it's not emulated, as interrupt is not emulated either ...
+	* Reading status would resume interrupted DMA operation (?) it's not emulated
 
 */
 
@@ -62,8 +62,7 @@ static int   command;			// DMA command
 static int   chained;			// 1 = chained (read next DMA operation "descriptor")
 static int   dma_list_addr;		// Current address of the DMA list, controller will read to "execute"
 static Uint8 minterms[4];		// Used with MIX DMA command only
-
-
+       Uint8 dma_status;
 
 
 #define IO_ADDR(a)		(0xD000 | ((a) & 0xFFF))
@@ -133,18 +132,41 @@ static inline Uint8 read_dma_list_next ( void )
 }
 
 
+
 void dma_write_reg ( int addr, Uint8 data )
 {
 	// DUNNO about DMAgic too much. It's merely guessing from my own ROM assembly tries, C65gs/Mega65 VHDL, and my ideas :)
-	// Also, it DOES things while everything other (ie CPU) emulation is stopped ...
-	// OF COURSE IT IS HIGHLY INCORRECT!!!! FIXME stuff ...
 	addr &= 3;
 	dma_registers[addr] = data;
 	if (addr)
 		return;	// Only writing register 0 starts the DMA operation
+	if (dma_status) {
+		printf("DMA: WARNING: previous operation is in progress, WORKAROUND: finishing first." NL);
+		// Ugly hack: it seems even the C65 ROM issues new DMA commands while the previous is in-progress
+		// It's possible the fault of timing of my emulation.
+		// The current workaround: in this situation we run the DMA to finish the previous operation first.
+		while (dma_status)
+			dma_update();
+	}
 	dma_list_addr = dma_registers[0] | (dma_registers[1] << 8) | ((dma_registers[2] & 15) << 16);
 	printf("DMA: list address is $%06X now, just written to register %d value $%02X" NL, dma_list_addr, addr, data);
-	do {
+	dma_status = 0x80;	// DMA is busy now, also to signal the emulator core to call dma_update() in its main loop
+	command = -1;		// signal dma_update() that it's needed to fetch the DMA command, no command is fetched yet
+}
+
+
+
+// Main emulation loop should call this function regularly, if dma_status is not zero.
+// This way we have 'real' DMA, ie works while the rest of the machine is emulated too.
+// Please note, that the "exact" timing of DMA and eg the CPU is still incorrect, but it's far
+// better than the previous version where DMA was "blocky", ie the whole machine was "halted" while DMA worked ...
+void dma_update ( void )
+{
+	if (!dma_status)
+		return;
+	if (command == -1) {
+		// command == -1 signals the situation, that the (next) DMA command should be read!
+		// This part is highly incorrect, ie fetching so many bytes in one step only of dma_update()
 		command      = read_dma_list_next()      ;
 		length       = read_dma_list_next()      ;
 		length      |= read_dma_list_next() <<  8;
@@ -165,7 +187,7 @@ void dma_write_reg ( int addr, Uint8 data )
 		source_addr &= 0xFFFFF;
 		target_addr &= 0xFFFFF;
 		chained = (command & 4);
-		printf("DMA: $%05X[%s%s %d] -> $%05X[%s%s %d] (L=$%04X) CMD=%d (%s)" NL,
+		printf("DMA: READ COMMAND: $%05X[%s%s %d] -> $%05X[%s%s %d] (L=$%04X) CMD=%d (%s)" NL,
 			source_addr, source_is_io ? "I/O" : "MEM", source_uses_modulo ? " MOD" : "", source_step,
 			target_addr, target_is_io ? "I/O" : "MEM", target_uses_modulo ? " MOD" : "", target_step,
 			length, command, chained ? "chain" : "last"
@@ -175,42 +197,56 @@ void dma_write_reg ( int addr, Uint8 data )
 		minterms[2] = (command &  64) ? 0xFF : 0x00;
 		minterms[3] = (command & 128) ? 0xFF : 0x00;
 		if (!length)
-			length = 0x10000;
-		switch (command & 3) {
-			case 0:			// COPY command
-				while (length--)
-					write_target_next(read_source_next());
-				break;
-			case 1:			// MIX command
-				while (length--)
-					mix_next();
-				break;
-			case 2:			// SWAP command
-				while (length--)
-					swap_next();
-				break;
-			case 3:			// FILL command (SRC LO is the filler byte!)
-				while (length--)
-					write_target_next(source_addr & 0xFF);
-				break;
-			default:
-				printf("DMA: unimplemented command: %d" NL, command & 3);
-				break;
+			length = 0x10000;			// I *think* length of zero means 64K. Probably it's not true!!
+		return;
+	}
+	// We have valid command to be executed, or continue to execute
+	printf("DMA: EXECUTING: command=%d length=$%04X" NL, command & 3, length);
+	switch (command & 3) {
+		case 0:			// COPY command
+			write_target_next(read_source_next());
+			break;
+		case 1:			// MIX command
+			mix_next();
+			break;
+		case 2:			// SWAP command
+			swap_next();
+			break;
+		case 3:			// FILL command (SRC LO is the filler byte!)
+			write_target_next(source_addr & 0xFF);
+			break;
+	}
+	// Check the situation of end of the operation
+	length--;
+	if (length <= 0) {
+		if (chained) {			// chained?
+			printf("DMA: end of operation, but chained!" NL);
+			dma_status = 0x81;	// still busy then, with also bit0 set (chained)
+			command = -1;		// signal for next DMA command fetch
+		} else {
+			printf("DMA: end of operation, no chained next one." NL);
+			dma_status = 0;		// end of DMA command
+			command = -1;
 		}
-	} while (chained);	// chained? continue if so!
+	}
 }
 
 
 
 void dma_init ( void )
 {
+	command = -1;	// no command is fetched yet
+	dma_status = 0;
 	memset(dma_registers, 0, sizeof dma_registers);
 }
 
 
 Uint8 dma_read_reg ( int addr )
 {
+	printf("DMA: register reading at addr of %d" NL, addr);
+#if 0
 	if ((addr & 3) != 3)
 		return 0xFF;	// other registers are (??????) writeonly? FIXME?
-	return 0;	// status is always zero (ready) as we emulate DMA with stopping the CPU while it works ... :-/
+#endif
+	return dma_status;
 }

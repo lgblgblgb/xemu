@@ -35,7 +35,7 @@ port to other targets because of using SDL.
 
 ## Basic usage of the emulator
 
-Currently no data storage is implemented ... You basically have only two host-keys
+Currently no data storage is implemented ... You basically have only two hot-keys
 defined, press F9 to exit, or F11 to toggle between windowed and full screen mode.
 That's all.
 
@@ -126,10 +126,11 @@ What is emulated and what is not:
 
 * DMAgic COPY/FILL should work, MIX/SWAP is only guessing. Modulo is not
   supported (and not so much information is available how it should work
-  anyway, as with case of MIX). However DMA works with stopping the CPU,
-  so it's not quite the same as with a real hardware, I guess ...
+  anyway, as with case of MIX).
 
-* 128K ROM / 128K RAM, no RAM expansion
+* 128K ROM / 128K RAM. Optionally (enabled by default) 512K RAM emulated in
+  the upper region, hough not in a REC compatible way. This even can cause
+  problems, I guess.
 
 * FDC emulation may be used to *read* D81 disk images, but still there are bugs!
   Currently, the FDC part is the most ugly in source. SWAP bit is not emulated,
@@ -162,9 +163,6 @@ What is emulated and what is not:
   I'm the lamest in the audio realm ...
 
 * No emulation for the UART, REC (Ram Expansion Controller)
-
-* Optionally (enabled by default) 512K RAM emulated in the upper region,
-  though not in a REC compatible way. This even can cause problems, I guess.
 
 * CIA emulation (for real, part of 4510 and not even full CIAs from
   some aspects) is quite lame. Though it seems enough for keyboard and
