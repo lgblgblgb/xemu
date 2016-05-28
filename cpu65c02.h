@@ -30,14 +30,15 @@ extern Uint8 cpu_z;
 extern int cpu_inhibit_interrupts;
 #endif
 
-extern void  cpu_write(Uint16 addr, Uint8 data);
-extern Uint8 cpu_read(Uint16 addr);
+extern void  cpu_write     ( Uint16 addr, Uint8 data );
+extern void  cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data );
+extern Uint8 cpu_read      ( Uint16 addr );
 
-extern void cpu_reset(void);
-extern int  cpu_step (void);
+extern void cpu_reset ( void );
+extern int  cpu_step  ( void );
 
 #ifdef CPU_TRAP
-extern int  cpu_trap (Uint8 opcode);
+extern int  cpu_trap ( Uint8 opcode );
 #endif
 #ifdef CPU_65CE02
 extern void cpu_do_aug ( void );

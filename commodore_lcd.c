@@ -239,6 +239,13 @@ void cpu_write ( Uint16 addr, Uint8 data ) {
 }
 
 
+// I guess Commodore LCD since used CMOS 65C02 already, no need to emulate the RMW behaviour on NMOS 6502 (??)
+void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
+{
+	cpu_write(addr, new_data);
+}
+
+
 static Uint8 portB1 = 0, portA2 = 0;
 static int keytrans = 0;
 static int powerstatus = 0;

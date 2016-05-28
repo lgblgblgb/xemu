@@ -337,27 +337,30 @@ static inline void _TRB(int addr) {
 }
 static inline void _ASL(int addr) {
 	Uint8 t = (addr == -1 ? CPU_A_GET() : cpu_read(addr));
+	Uint8 o = t;
 	cpu_pfc = t & 128;
 	//t = (t << 1) & 0xFF;
 	t <<= 1;
 	setNZ(t);
-	if (addr == -1) CPU_A_SET(t); else cpu_write(addr, t);
+	if (addr == -1) CPU_A_SET(t); else cpu_write_rmw(addr, o, t);
 }
 static inline void _LSR(int addr) {
 	Uint8 t = (addr == -1 ? CPU_A_GET() : cpu_read(addr));
+	Uint8 o = t;
 	cpu_pfc = t & 1;
 	//t = (t >> 1) & 0xFF;
 	t >>= 1;
 	setNZ(t);
-	if (addr == -1) CPU_A_SET(t); else cpu_write(addr, t);
+	if (addr == -1) CPU_A_SET(t); else cpu_write_rmw(addr, o, t);
 }
 #ifdef CPU_65CE02
 static inline void _ASR(int addr) {
 	Uint8 t = (addr == -1 ? CPU_A_GET() : cpu_read(addr));
+	Uint8 o = t;
 	cpu_pfc = t & 1;
 	t = (t >> 1) | (t & 0x80);
 	setNZ(t);
-	if (addr == -1) CPU_A_SET(t); else cpu_write(addr, t);
+	if (addr == -1) CPU_A_SET(t); else cpu_write_rmw(addr, o, t);
 }
 #endif
 static inline void _BIT(Uint8 data) {
@@ -403,19 +406,21 @@ static inline void _SBC(int data) {
 }
 static inline void _ROR(int addr) {
 	Uint16 t = ((addr == -1) ? CPU_A_GET() : cpu_read(addr));
+	Uint8  o = t;
 	if (cpu_pfc) t |= 0x100;
 	cpu_pfc = t & 1;
 	t >>= 1;
 	setNZ(t);
-	if (addr == -1) CPU_A_SET(t); else cpu_write(addr, t);
+	if (addr == -1) CPU_A_SET(t); else cpu_write_rmw(addr, o, t);
 }
 static inline void _ROL(int addr) {
 	Uint16 t = ((addr == -1) ? CPU_A_GET() : cpu_read(addr));
+	Uint8  o = t;
 	t = (t << 1) | (cpu_pfc ? 1 : 0);
 	cpu_pfc = t & 0x100;
 	t &= 0xFF;
 	setNZ(t);
-	if (addr == -1) CPU_A_SET(t); else cpu_write(addr, t);
+	if (addr == -1) CPU_A_SET(t); else cpu_write_rmw(addr, o, t);
 }
 
 

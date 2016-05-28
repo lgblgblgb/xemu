@@ -338,6 +338,13 @@ void  cpu_write ( Uint16 addr, Uint8 data )
 
 
 
+// TODO: Use RMW write function in a proper way!
+void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
+{
+	cpu_write(addr, new_data);
+}
+
+
 // Called by CPU emulation code when any kind of memory byte must be read.
 // Note: optimization is used, to make the *most common* type of read access easy. Even if the whole function is more complex, or longer/slower this way for other accesses!
 Uint8 cpu_read ( Uint16 addr )
