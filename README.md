@@ -129,7 +129,7 @@ What is emulated and what is not:
   anyway, as with case of MIX).
 
 * 128K ROM / 128K RAM. Optionally (enabled by default) 512K RAM emulated in
-  the upper region, hough not in a REC compatible way. This even can cause
+  the upper region, though not in a REC compatible way. This even can cause
   problems, I guess.
 
 * FDC emulation may be used to *read* D81 disk images, but still there are bugs!

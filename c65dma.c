@@ -39,6 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 	* DMA length of ZERO probably means $10000
 	* Current emulation timing is incorrect
 	* It seems even the ROM issues new DMA command before the last finished. Workaround: in this case we run dma_update() first till it's ready. FIXME!
+	* Speed of DMA in a real C65 would be affected by many factors, kind of op, or even VIC-3 fetchings etc ... "Of course" it's not emulated ...
 	* DMA sees the upper memory regions (ie in BANK 4 and above), which may have "something", though REC (Ram Expansion Controller) is not implemented yet
 	* It's currently unknown that DMA registers are modified as DMA list is read, ie what happens if only reg 0 is re-written
 	* C65 specification tells about "not implemented sub-commands": I am curious what "sub commands" are or planned as, etc ...
@@ -145,6 +146,9 @@ void dma_write_reg ( int addr, Uint8 data )
 		// Ugly hack: it seems even the C65 ROM issues new DMA commands while the previous is in-progress
 		// It's possible the fault of timing of my emulation.
 		// The current workaround: in this situation we run the DMA to finish the previous operation first.
+		// Note, that there is a possible two PROBLEMS with this solution:
+		// * Extremly long DMA command (ie chained) blocks the emulator to refresh screen etc for a long time
+		// * I/O redirection as target affecting the DMA registers can create a stack overflow in the emulator code :)
 		while (dma_status)
 			dma_update();
 	}

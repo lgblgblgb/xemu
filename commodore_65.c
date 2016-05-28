@@ -848,9 +848,14 @@ int main ( int argc, char **argv )
 		}
 		// Just a wild guess: update DMA state for every CPU cycles
 		// However it does not care about that some DMA commands need more time
-		// (ie COPY vs FILL)
-		while (dma_status && (opcyc--))
+		// (ie COPY vs FILL).
+		// It seems two DMA updates are needed by CPU clock cycle not to apply the WORKAROUND
+		// situation (see in c65dma.c). Hopefully in this way, this is now closer to the native
+		// speed of DMA compared to the CPU. Or not :-D
+		while (dma_status && (opcyc--)) {
 			dma_update();
+			dma_update();
+		}
 	}
 	puts("Goodbye!");
 	return 0;
