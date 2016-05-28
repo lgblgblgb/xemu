@@ -289,8 +289,8 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 	printf("AUDIO: audio callback, wants %d samples" NL, len);
 	// We use the trick, to render boths SIDs with step of 2, with a byte offset
 	// to get a stereo stream, wanted by SDL.
-	sid_render(&sid1, ((short *)(stream)) + 0, len / 2, 2);
-	sid_render(&sid2, ((short *)(stream)) + 1, len / 2, 2);
+	sid_render(&sid2, ((short *)(stream)) + 0, len / 2, 2);		// SID @ left
+	sid_render(&sid1, ((short *)(stream)) + 1, len / 2, 2);		// SID @ right
 }
 
 
@@ -345,13 +345,16 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 	audio_want.userdata = NULL;		// Not used, "userdata" parameter passed to the callback by SDL
 	audio = SDL_OpenAudioDevice(NULL, 0, &audio_want, &audio_got, 0);
 	if (audio) {
+		int i;
+		for (i = 0; i < SDL_GetNumAudioDevices(0); i++)
+			printf("AUDIO: audio device is #%d: %s" NL, i, SDL_GetAudioDeviceName(i, 0));
 		// Sanity check that we really got the same audio specification we wanted
 		if (audio_want.freq != audio_got.freq || audio_want.format != audio_got.format || audio_want.channels != audio_got.channels) {
 			SDL_CloseAudioDevice(audio);	// forget audio, if it's not our expected format :(
 			audio = 0;
 			ERROR_WINDOW("Audio parameter mismatches.");
 		}
-		printf("AUDIO: initialized, %d Hz, %d channels, %d buffer size." NL, audio_got.freq, audio_got.channels, audio_got.samples);
+		printf("AUDIO: initialized (#%d), %d Hz, %d channels, %d buffer sample size." NL, audio, audio_got.freq, audio_got.channels, audio_got.samples);
 	} else
 		ERROR_WINDOW("Cannot open audio device!");
 	// *** RESET CPU, also fetches the RESET vector into PC

@@ -34,6 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include <stdio.h>
 #include <SDL_types.h>
+#include <stdlib.h>
 #include "cia6526.h"
 
 
@@ -159,8 +160,9 @@ Uint8 cia_read ( struct Cia6526 *cia, int addr )
 		case 15:	// reg#F: CRB
 			return cia->CRB;
 		default:
-			fprintf(stderr, "ERROR: %s invalud register %d\n", cia->name, addr);
+			fprintf(stderr, "FATAL: %s invalid register %d\n", cia->name, addr);
 			exit(1);
+			break;
 	}
 	return 0;	// to make GCC happy :-/
 }
