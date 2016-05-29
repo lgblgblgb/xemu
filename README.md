@@ -121,6 +121,11 @@ What is emulated and what is not:
 * 4502 "core" extensions over 65CE02, ie MAP opcode, and special meaning
   of NOP (as EOM)
 
+* Though in theory 65CE02 does not use the old NMOS behaviour of RMW
+  opcodes (ie, write twice), it introduces incompatibilties with C64 software.
+  As it seems, Mega65 already uses the "old behaviour" for more compatibility,
+  I try to follow this path as well.
+
 * Memory management: CPU "MAP"/"EOM" stuff, VIC3 register $30 ROM select
   and 2K colour SRAM mode, "C64-style" "CPU port". REC is not emulated.
 

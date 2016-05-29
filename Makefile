@@ -45,7 +45,7 @@ PRG_C65 = xc65.$(ARCH)
 PRG_ALL = $(PRG_V20) $(PRG_LCD) $(PRG_C65)
 SRC_V20	= cpu65c02.c  via65c22.c emutools.c commodore_vic20.c vic6561.c $(SRCS_ARCH_V20)
 SRC_LCD	= cpu65c02.c  via65c22.c emutools.c commodore_lcd.c $(SRCS_ARCH_LCD)
-SRC_C65 = cpu65ce02.c cia6526.c  emutools.c commodore_65.c c65fdc.c vic3.c c65dma.c sid.c $(SRCS_ARCH_C65)
+SRC_C65 = cpu65ce02.c cia6526.c  emutools.c commodore_65.c c65fdc.c vic3.c c65dma.c sid.c c65hid.c $(SRCS_ARCH_C65)
 FILES	= LICENSE README.md Makefile $(SRCS) *.h rom/README
 OBJ_V20	= $(SRC_V20:.c=.o)
 OBJ_LCD = $(SRC_LCD:.c=.o)
