@@ -163,7 +163,7 @@ static void cia_setint_cb ( int level )
 
 void clear_emu_events ( void )
 {
-	memset(kbd_matrix, 0xFF, sizeof kbd_matrix);	// initialize keyboard matrix [bit 1 = unpressed, thus 0xFF for a line]
+	hid_reset_events(1);
 }
 
 
@@ -216,7 +216,7 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int sound_mix_freq )
 {
 	SDL_AudioSpec audio_want, audio_got;
-	clear_emu_events();
+	hid_init();
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
 	// *** Load ROM image
@@ -652,6 +652,24 @@ static void update_emulator ( void )
 			case SDL_KEYDOWN:
 				if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0))
 					emulate_keyboard(e.key.keysym.scancode, e.key.state == SDL_PRESSED);
+				break;
+			case SDL_JOYDEVICEADDED:
+			case SDL_JOYDEVICEREMOVED:
+				hid_joystick_device_event(e.jdevice.which, e.type == SDL_JOYDEVICEADDED);
+				break;
+			case SDL_JOYBUTTONDOWN:
+			case SDL_JOYBUTTONUP:
+				hid_joystick_button_event(e.type == SDL_JOYBUTTONDOWN);
+				break;
+			case SDL_JOYHATMOTION:
+				hid_joystick_hat_event(e.jhat.value);
+				break;
+			case SDL_JOYAXISMOTION:
+				if (e.jaxis.axis < 2)
+					hid_joystick_motion_event(e.jaxis.axis, e.jaxis.value);
+				break;
+			case SDL_MOUSEMOTION:
+				hid_mouse_motion_event(e.motion.xrel, e.motion.yrel);
 				break;
 		}
 	}

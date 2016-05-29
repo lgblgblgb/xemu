@@ -25,4 +25,22 @@ extern Uint8 kbd_matrix[8];	// keyboard matrix state, 8 * 8 bits
 
 extern int hid_key_event ( SDL_Scancode key, int pressed ) ;
 
+extern void hid_reset_events ( int burn ) ;
+extern void hid_init ( void ) ;
+extern void hid_mouse_motion_event      ( int xrel, int yrel ) ;
+extern void hid_mouse_button_event      ( int button, int pressed ) ;
+extern void hid_joystick_device_event   ( int which , int is_attach ) ;
+extern void hid_joystick_motion_event   ( int is_vertical, int value ) ;
+extern void hid_joystick_button_event   ( int pressed ) ;
+extern void hid_joystick_hat_event      ( int value ) ;
+extern int  hid_read_joystick_up        ( int on, int off ) ;
+extern int  hid_read_joystick_down      ( int on, int off ) ;
+extern int  hid_read_joystick_left      ( int on, int off ) ;
+extern int  hid_read_joystick_right     ( int on, int off ) ;
+extern int  hid_read_joystick_button    ( int on, int off ) ;
+extern int  hid_read_mouse_button_left  ( int on, int off ) ;
+extern int  hid_read_mouse_button_right ( int on, int off ) ;
+extern int  hid_read_mouse_rel_x        ( int min, int max ) ;
+extern int  hid_read_mouse_rel_y        ( int min, int max ) ;
+
 #endif

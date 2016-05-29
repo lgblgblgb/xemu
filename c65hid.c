@@ -25,10 +25,40 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 /* Note: HID stands for "Human Input Devices" or something like that :)
-   That is: keyboard, joystick, mouse. */
+   That is: keyboard, joystick, mouse.
+
+   TODO: unify this and move to emutools.c, and allow all emulators to share
+   on the common code (with keyboard map set by the emulator though!)
+
+   TODO: also include SDL event loop handling, hot-key "sensing" etc,
+   so if no special requirement from the emulator, then it does not even
+   deal with SDL events at all!
+
+   TODO: also the keyboard matrix default state should be configurable
+   (ie: Commodore LCD uses '0' as unpressed ...)
+
+   TODO: there is no configuration for multiple joysticks, axes, whatever :(
+*/
 
 
 Uint8 kbd_matrix[8];		// keyboard matrix state, 8 * 8 bits
+static int mouse_delta_x;
+static int mouse_delta_y;
+static unsigned int hid_state;
+
+#define MAX_JOYSTICKS			16
+
+static SDL_Joystick *joysticks[MAX_JOYSTICKS];
+
+#define JOYSTATE_UP			 1
+#define JOYSTATE_DOWN			 2
+#define JOYSTATE_LEFT			 4
+#define JOYSTATE_RIGHT			 8
+#define JOYSTATE_BUTTON			16
+#define MOUSESTATE_BUTTON_LEFT		32
+#define MOUSESTATE_BUTTON_RIGHT		64
+
+
 
 struct KeyMapping {
 	SDL_Scancode	scan;		// SDL scancode for the given key we want to map
@@ -136,4 +166,192 @@ int hid_key_event ( SDL_Scancode key, int pressed )
 		map++;
 	}
 	return 1;
+}
+
+
+// Reset all HID events.
+// Ie: it's usefull for initialization, and in the case when the emulator pops a window,
+// in this case SDL may detect the event used to ack the window causing problems. So those
+// functions should call this as well to reset events. It also uses some "burning SDL
+// events" scheme to skip the possible received stuffs.
+void hid_reset_events ( int burn )
+{
+	memset(kbd_matrix, 0xFF, sizeof kbd_matrix);	// set keyboard matrix to default state (unpressed for all positions)
+	mouse_delta_x = 0;
+	mouse_delta_y = 0;
+	hid_state = 0;
+	if (burn) {
+		SDL_Event e;
+		burn = 0;
+		while (SDL_PollEvent(&e) != 0)
+			burn++;
+		printf("HID: %d event(s) ignored." NL, burn);
+	}
+}
+
+
+void hid_init ( void )
+{
+	int a;
+	SDL_GameControllerEventState(SDL_DISABLE);
+	SDL_JoystickEventState(SDL_ENABLE);
+	hid_reset_events(0);
+	for (a = 0; a < MAX_JOYSTICKS; a++)
+		joysticks[a] = NULL;
+}
+
+
+
+void hid_mouse_motion_event ( int xrel, int yrel )
+{
+	mouse_delta_x += xrel;
+	mouse_delta_y += yrel;
+	printf("HID: mouse motion %d:%d, collected data is now %d:%d" NL, xrel, yrel, mouse_delta_x, mouse_delta_y);
+}
+
+
+void hid_mouse_button_event ( int button, int pressed )
+{
+	int mask;
+	if (button == SDL_BUTTON_LEFT)
+		mask = MOUSESTATE_BUTTON_LEFT;
+	else if (button == SDL_BUTTON_RIGHT)
+		mask = MOUSESTATE_BUTTON_RIGHT;
+	else
+		return;
+	if (pressed)
+		hid_state |= mask;
+	else
+		hid_state &= ~mask;
+}
+
+
+void hid_joystick_device_event ( int which , int is_attach )
+{
+	if (which >= MAX_JOYSTICKS)
+		return;
+	if (is_attach) {
+		if (joysticks[which])
+			hid_joystick_device_event(which, 0);
+		joysticks[which] = SDL_JoystickOpen(which);
+		if (joysticks[which])
+			printf("HID: joystick device #%d \"%s\" has been added." NL, which, SDL_JoystickName(joysticks[which]));
+		else
+			printf("HID: joystick device #%d problem, cannot be opened on 'add' event: %s." NL, which, SDL_GetError());
+	} else {
+		if (joysticks[which]) {
+			SDL_JoystickClose(joysticks[which]);
+			joysticks[which] = NULL;
+			printf("HID: joystick device #%d has been removed." NL, which);
+			// This is needed to avoid "stuck" joystick state if removed in that state ...
+			hid_state &= ~(JOYSTATE_UP | JOYSTATE_DOWN | JOYSTATE_LEFT | JOYSTATE_RIGHT | JOYSTATE_BUTTON);
+		}
+	}
+}
+
+
+void hid_joystick_motion_event ( int is_vertical, int value )
+{
+	if (is_vertical) {
+		hid_state &= ~(JOYSTATE_UP | JOYSTATE_DOWN);
+		if (value < -10000)
+			hid_state |= JOYSTATE_UP;
+		else if (value > 10000)
+			hid_state |= JOYSTATE_DOWN;
+	} else {
+		hid_state &= ~(JOYSTATE_LEFT | JOYSTATE_RIGHT);
+		if (value < -10000)
+			hid_state |= JOYSTATE_LEFT;
+		else if (value > 10000)
+			hid_state |= JOYSTATE_RIGHT;
+	}
+}
+
+
+void hid_joystick_button_event ( int pressed )
+{
+	if (pressed)
+		hid_state |=  JOYSTATE_BUTTON;
+	else
+		hid_state &= ~JOYSTATE_BUTTON;
+}
+
+
+void hid_joystick_hat_event ( int value )
+{
+	hid_state &= ~(JOYSTATE_UP | JOYSTATE_DOWN | JOYSTATE_LEFT | JOYSTATE_RIGHT);
+	if (value & SDL_HAT_UP)
+		hid_state |= JOYSTATE_UP;
+	if (value & SDL_HAT_DOWN)
+		hid_state |= JOYSTATE_DOWN;
+	if (value & SDL_HAT_LEFT)
+		hid_state |= JOYSTATE_LEFT;
+	if (value & SDL_HAT_RIGHT)
+		hid_state |= JOYSTATE_RIGHT;
+}
+
+
+int hid_read_joystick_up ( int on, int off )
+{
+	return (hid_state & JOYSTATE_UP) ? on : off;
+}
+
+
+int hid_read_joystick_down ( int on, int off )
+{
+	return (hid_state & JOYSTATE_DOWN) ? on : off;
+}
+
+
+int hid_read_joystick_left ( int on, int off )
+{
+	return (hid_state & JOYSTATE_LEFT) ? on : off;
+}
+
+
+int hid_read_joystick_right ( int on, int off )
+{
+	return (hid_state & JOYSTATE_RIGHT) ? on : off;
+}
+
+
+int hid_read_joystick_button ( int on, int off )
+{
+	return (hid_state & JOYSTATE_BUTTON) ? on : off;
+}
+
+
+int hid_read_mouse_rel_x ( int min, int max )
+{
+	int result = mouse_delta_x;
+	mouse_delta_x = 0;
+	if (result < min)
+		result = min;
+	else if (result > max)
+		result = max;
+	return result;
+}
+
+
+int hid_read_mouse_rel_y ( int min, int max )
+{
+	int result = mouse_delta_y;
+	mouse_delta_y = 0;
+	if (result < min)
+		result = min;
+	else if (result > max)
+		result = max;
+	return result;
+}
+
+
+int hid_read_mouse_button_left ( int on, int off )
+{
+	return (hid_state & MOUSESTATE_BUTTON_LEFT) ? on : off;
+}
+
+
+int hid_read_mouse_button_right ( int on, int off )
+{
+	return (hid_state & MOUSESTATE_BUTTON_RIGHT) ? on : off;
 }
