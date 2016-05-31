@@ -420,8 +420,8 @@ static inline void vic2_render_screen_bmm ( Uint32 *p, int tail )
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_bmm");
 	for (;;) {
 		Uint8  data = *(vidp++);
-		Uint32 fg = palette[data & 15];
-		Uint32 bg = palette[data >> 4];
+		Uint32 bg = palette[data & 15];
+		Uint32 fg = palette[data >> 4];
 		data = *chrp;
 		chrp += 8;
 		PIXEL_POINTER_CHECK_ASSERT(p);
