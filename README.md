@@ -209,6 +209,15 @@ Basic usage of the emulator:
 
 That's about all - currently :)
 
+## What is that "Commodore GEOS" emulator?!
+
+It's a very primitive Commodore 64 emulator without many features and with
+the intent to have special support to run *OWN* GEOS version interacts with
+the emulator in a special way. It's a help/debug tool for some GEOS
+related projects. Probably you don't ever need this emulator currently,
+and only useful for myself :) And no, please don't ask the "special GEOS
+version" ...
+
 ## Why the Commodore VIC-20 emulation is included?
 
 Foreword: this VIC-20 emulator is incomplete, unfinished, and very incorrect,

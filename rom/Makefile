@@ -38,6 +38,9 @@ roms:
 	test -s clcd-u104.rom || wget -O clcd-u104.rom http://commodore-lcd.lgb.hu/files/sept-M-13apr-u104.bin
 	test -s clcd-u103.rom || wget -O clcd-u103.rom http://commodore-lcd.lgb.hu/files/sizapr-u103.bin
 	test -s c65-system.rom || wget -O c65-system.rom http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c65/910111.bin
+	test -s geos-c64-chargen.rom || wget -O geos-c64-chargen.rom http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c64/characters.901225-01.bin
+	test -s geos-c64-kernal.rom || wget -O geos-c64-kernal.rom http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c64/kernal.901227-03.bin
+	test -s geos-c64-basic.rom || wget -O geos-c64-basic.rom http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c64/basic.901226-01.bin
 
 %.rom: %.asm
 	cl65 -t none --cpu 65c02 -o $@ $<
