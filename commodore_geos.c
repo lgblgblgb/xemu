@@ -38,6 +38,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "cpu65c02.h"
 #include "cia6526.h"
 #include "c65hid.h"
+#include "geos.h"
 #include "emutools.h"
 
 
@@ -66,7 +67,7 @@ static Uint8 disk_image[DISK_IMAGE_SIZE + 1];
 #define	CHAR_ROM_OFFSET		0x14000
 #define IO_OFFSET		0x15000
 
-static Uint8 memory[IO_OFFSET + 1];
+Uint8 memory[IO_OFFSET + 1];
 #define IO_VIRT_ADDR  (memory + IO_OFFSET)
 
 #define	MAP_RAM			memory
@@ -119,6 +120,7 @@ static int    compare_raster;		// raster compare (9 bits width) data
 static int    vic2_interrupt_status;	// Interrupt status of VIC
 static Uint8 *vic2_sprite_pointers;
 static int    warp = 1;			// warp speed for initially to faster "boot" for C64
+static int    geos_loaded = 0;
 
 
 static const Uint8 init_vic2_palette_rgb[16 * 3] = {	// VIC2 palette given by RGB components
@@ -652,19 +654,28 @@ static void inject_screencoded_message ( int addr, const char *s )
 
 int cpu_trap ( Uint8 opcode )
 {
-	if (cpu_pc != KERNAL_PATCH_ADDR + 1)
-		FATAL("FATAL: CPU trap at unknown address PC=$%04X OP=$%02X" NL, cpu_pc, opcode);
+	Uint8 *pc_p = GET_READ_P(cpu_pc);
+	if (pc_p != 1 + &PATCH_P) {
+		if (warp)
+			FATAL("FATAL: CPU trap at unknown address in warp mode (pre-GEOS loading) PC=$%04X OP=$%02X" NL, cpu_pc, opcode);
+		if (pc_p >= memory + 0x10000)
+			FATAL("FATAL: unknown CPU trap not in the RAM PC=$%04X OP=$%02X" NL, cpu_pc, opcode);
+		if (!geos_loaded)
+			FATAL("FATAL: unknown CPU without GEOS loaded PC=$%04X OP=$%02X" NL, cpu_pc, opcode);
+		geos_cpu_trap(opcode);
+		return 1;
+	}
 	warp = 0;	// turn warp speed off
 	// Try to load a custom GEOS kernal directly into the RAM
-	if (emu_load_file("geos-kernal.bin", memory + 0x5000 - 2, 0xB000 + 2) > 0x1000) {
-		// Ok, it seems we have loaded something!
-		cpu_pc = 0x5000;	// execute our loaded stuff
-		return 1;	
+	if (!geos_load_kernal()) {
+		geos_loaded = 1;
+		return 1;	// if no error, return with '1' (as not zero) to signal CPU emulator that trap should not be executed
 	}
-	//INFO_WINDOW("CPU trap at PC=$%04X OP=$%02X" NL, cpu_pc, opcode);
+	// In case if we cannot load some GEOS kernal stuff, continue in "C64 mode" ... :-/
+	// Some ugly method to produce custom "startup screen" :)
 	inject_screencoded_message(1024 + 41, "**** Can't load GEOS, boot as C64 ****");
 	cpu_pc = memory[0x300] | (memory[0x301] << 8);
-	return 1;	// do NOT ignore trap (do not execute the trapped opc)
+	return 1;	// do NOT execute the trap op
 }
 
 
