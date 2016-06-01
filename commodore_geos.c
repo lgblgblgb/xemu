@@ -112,7 +112,7 @@ static const char *memconfig_descriptions[8] = {
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
 static int    vic2_16k_bank;
 static int    scanline;
-static Uint8  colour_sram[1024];
+              Uint8  colour_sram[1024];
 static Uint8  vic2_registers[0x40];	// though not all of them really exists
 static int    cpu_port_memconfig = 7;
 static Uint32 palette[16];
@@ -638,20 +638,6 @@ static void io_write ( int addr, Uint8 data )
 
 
 
-static void inject_screencoded_message ( int addr, const char *s )
-{
-	while (*s) {
-		unsigned char c = (unsigned char)(*(s++));
-		if (c >= 65 && c <= 90)
-			c -= 64;
-		else if (c >= 97 && c <= 122)
-			c -= 96;
-		memory[addr++] = c;
-	}
-}
-
-
-
 int cpu_trap ( Uint8 opcode )
 {
 	Uint8 *pc_p = GET_READ_P(cpu_pc);
@@ -673,7 +659,7 @@ int cpu_trap ( Uint8 opcode )
 	}
 	// In case if we cannot load some GEOS kernal stuff, continue in "C64 mode" ... :-/
 	// Some ugly method to produce custom "startup screen" :)
-	inject_screencoded_message(1024 + 41, "**** Can't load GEOS, boot as C64 ****");
+	inject_screencoded_message(41, "**** Can't load GEOS, boot as C64 ****");
 	cpu_pc = memory[0x300] | (memory[0x301] << 8);
 	return 1;	// do NOT execute the trap op
 }

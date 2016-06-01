@@ -22,8 +22,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 extern Uint8 memory[];
+extern Uint8 colour_sram[];
 
 extern int  geos_load_kernal ( void );
 extern void geos_cpu_trap ( Uint8 opcode );
+extern void inject_screencoded_message ( int addr, const char *s );
 
 #endif
