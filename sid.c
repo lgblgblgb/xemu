@@ -415,7 +415,8 @@ void sid_render ( struct SidEmulation *sidemu, short *buffer, unsigned long len,
 			unsigned int cycles= (unsigned int)c;
 			sidemu->cycleOverflow= c-cycles;
 
-			for (int i= 0; i<cycles; i++) {
+			int i;
+			for (i= 0; i<cycles; i++) {
 				simOneEnvelopeCycle(sidemu, v);
 			}
 #endif
@@ -689,7 +690,8 @@ void sid_init ( struct SidEmulation *sidemu, unsigned long cyclesPerSec, unsigne
 	unsigned char val[] = { 1,  2,  4,  8, 16, 30};
 	for (i= 0; i<256; i++) {
 		unsigned char v= 1;
-		for (unsigned char j= 0; j<6; j++) {
+		unsigned char j;
+		for (j= 0; j<6; j++) {
 			if (i>from[j]) {
 				v= val[j];
 				break;
