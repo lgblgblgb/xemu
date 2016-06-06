@@ -40,13 +40,13 @@ static Uint32 vic3_rom_palette[0x100];	// the "ROM" palette, for C64 colours (wi
 static Uint32 *palette;			// the selected palette ...
 static Uint8 vic3_palette_nibbles[0x300];
 Uint8 vic3_registers[0x80];		// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
-int vic_new_mode;		// VIC3 "newVic" IO mode is activated flag
-int scanline;			// current scan line number
+int vic_new_mode;			// VIC3 "newVic" IO mode is activated flag
+int scanline;				// current scan line number
 int clock_divider7_hack;
-static int compare_raster;	// raster compare (9 bits width) data
-static int interrupt_status;	// Interrupt status of VIC
-int vic2_16k_bank;		// VIC-2 modes' 16K BANK address
-static Uint8 *sprite_pointers;
+static int compare_raster;		// raster compare (9 bits width) data
+static int interrupt_status;		// Interrupt status of VIC
+int vic2_16k_bank;			// VIC-2 modes' 16K BANK address within 64K (NOT the traditional naming of banks with 0,1,2,3)
+static Uint8 *sprite_pointers;		// Pointer to sprite pointers :)
 static Uint8 *sprite_bank;
 
 static int warn_sprites = 1, warn_attr = 1, warn_ctrl_b_lo = 1;
@@ -323,35 +323,45 @@ void vic3_write_palette_reg ( int num, Uint8 data )
 
 
 
+static inline Uint8 *vic2_get_chargen_pointer ( void )
+{
+	int offs = (vic3_registers[0x18] & 14) << 10;	// character generator address address within the current VIC2 bank
+	int crom = vic3_registers[0x30] & 64;
+	// printf("VIC2: chargen: BANK=%04X OFS=%04X CROM=%d" NL, vic2_16k_bank, offs, crom);
+	if ((vic2_16k_bank == 0x0000 || vic2_16k_bank == 0x8000) && (offs == 0x1000 || offs == 0x1800)) {  // check if chargen info is in ROM
+		// FIXME: I am really lost with this CROM bit, and the layout of C65 ROM on charsets, sorry. Maybe this is totally wrong!
+		// The problem, for my eye, the two charsets (C64/C65?!) seems to be the very same :-/
+		// BUT, it seems, C65 mode *SETS* CROM bit. While for C64 mode it is CLEARED.
+		if (crom)
+			return memory + 0x29000 + offs - 0x1000;	// ... so this should be the C65 charset ...
+		else
+			return memory + 0x2D000 + offs - 0x1000;	// ... and this should be the C64 charset ...
+	} else
+		return memory + vic2_16k_bank + offs;
+}
+
+
+
 /* At-frame-at-once (thus incorrect implementation) renderer for H640 (80 column)
    and "normal" (40 column) text VIC modes. Hardware attributes are not supported!
-   Character map memory if fixed :-/ */
+   No support for MCM and ECM!  */
 static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 {
 	Uint32 bg;
-	Uint8 *vidp, *chrg, *colp = memory + 0x1F800;
+	Uint8 *vidp, *colp = memory + 0x1F800;
 	int x = 0, y = 0, xlim, ylim, charline = 0;
-	// TODO: if BPM bit is set in ctrl reg B then bitplane mode is set,
-	// which ignores ALL the VIC-2 mode settings. This is not emulated
-	// yet though.
-	// ---
-	// Currently, only text (no MCM, ECM) is supported, H640 bit on/off,
-	// and fixed chargen address.
+	Uint8 *chrg = vic2_get_chargen_pointer();
 	if (vic3_registers[0x31] & 128) { // check H640 bit: 80 column mode?
 		xlim = 79;
 		ylim = 24;
-		// Fixed character info, heh ... FIXME
-		chrg = memory + 0x28000 + 0x1000;
+		// Note: VIC2 sees ROM at some addresses thing is not emulated yet for other thing than chargen memory!
 		// Note: according to the specification bit 4 has no effect in 80 columns mode!
-		// Note: VIC2 sees ROM at some addresses thing is not emulated yet!
 		vidp = memory + ((vic3_registers[0x18] & 0xE0) << 6) + vic2_16k_bank;
 		sprite_pointers = vidp + 2040;
 	} else {
 		xlim = 39;
 		ylim = 24;
-		// Fixed character info, heh ... FIXME
-		chrg = memory + 0x2D000;
-		// Note: VIC2 sees ROM at some addresses thing is not emulated yet!
+		// Note: VIC2 sees ROM at some addresses thing is not emulated yet for other thing than chargen memory!
 		vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
 		sprite_pointers = vidp + 1016;
 	}
