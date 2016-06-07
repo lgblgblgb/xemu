@@ -48,8 +48,9 @@ static int interrupt_status;		// Interrupt status of VIC
 int vic2_16k_bank;			// VIC-2 modes' 16K BANK address within 64K (NOT the traditional naming of banks with 0,1,2,3)
 static Uint8 *sprite_pointers;		// Pointer to sprite pointers :)
 static Uint8 *sprite_bank;
+int vic3_blink_phase;			// blinking attribute helper, state.
 
-static int warn_sprites = 1, warn_attr = 1, warn_ctrl_b_lo = 1;
+static int warn_sprites = 1, warn_ctrl_b_lo = 1;
 
 
 #define CHECK_PIXEL_POINTER
@@ -238,10 +239,6 @@ void vic3_write_reg ( int addr, Uint8 data )
 		case 0x31:
 			clock_divider7_hack = (data & 64) ? 7 : 2;
 			printf("VIC3: clock_divider7_hack = %d" NL, clock_divider7_hack);
-			if ((data & 32) && warn_attr) {
-				INFO_WINDOW("VIC3 extended attributes are not emulated yet!");
-				warn_attr = 0;
-			}
 			if ((data & 15) && warn_ctrl_b_lo) {
 				INFO_WINDOW("VIC3 control-B register V400, H1280, MONO and INT features are not emulated yet!");
 				warn_ctrl_b_lo = 0;
@@ -371,7 +368,26 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 	for (;;) {
 		Uint8 chrdata = chrg[((*(vidp++)) << 3) + charline];
 		Uint8 coldata = *(colp++);
-		Uint32 fg = palette[coldata & 15];
+		Uint32 fg;
+		if (vic3_registers[0x31] & 32) { 	// ATTR bit mode
+			if ((coldata & 0xF0) == 0x10) {	// only the blink bit for the character is set
+				if (vic3_blink_phase)
+					chrdata = 0;	// blinking character, in one phase, the character "disappears", ie blinking
+				coldata &= 15;
+			} else if ((!(coldata & 0x10)) || vic3_blink_phase) {
+				if (coldata & 0x80 && charline == 7)	// underline (must be before reverse, as underline can be reversed as well!)
+					chrdata = 0XFF; // the underline
+				if (coldata & 0x20)	// reverse bit for char
+					chrdata = ~chrdata;
+				if (coldata & 0x40)	// highlight, this must be the LAST, since it sets the low nibble of coldata ...
+					coldata = 0x10 | (coldata & 15);
+				else
+					coldata &= 15;
+			} else
+				coldata &= 15;
+		} else
+			coldata &= 15;
+		fg = palette[coldata];
 		// FIXME: no ECM, MCM stuff ...
 		if (xlim == 79) {
 			PIXEL_POINTER_CHECK_ASSERT(p + 7);

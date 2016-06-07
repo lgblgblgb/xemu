@@ -57,6 +57,8 @@ static int map_mask;			// MAP mask, should be filled at the MAP opcode, *before*
 static int map_offset_low;		// MAP low offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 static int map_offset_high;		// MAP high offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 
+static int frame_counter;
+
 
 
 #ifdef DEBUG_STACK
@@ -496,6 +498,12 @@ void io_write ( int addr, Uint8 data )
 void write_phys_mem ( int addr, Uint8 data )
 {
 	addr &= 0xFFFFF;
+#if 0
+       if (addr > 0x7FFFF)
+                printf("HACKY: Someone writing upper RAM %06X PC=%04X (%06X) data = %02X!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc, data);
+       else if (addr > 0x3FFFF)
+                printf("HACKY: Someone writing upper ROM %06X PC=%04X (%06X) data = %02X!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc, data);
+#endif
 	if (addr < 2) {
 		if ((cpu_port[addr] & 7) != (data & 7)) {
 			cpu_port[addr] = data;
@@ -526,6 +534,22 @@ Uint8 read_phys_mem ( int addr )
 	addr &= 0xFFFFF;
 	if (addr < 2)
 		return cpu_port[addr];
+#if 0
+	if (
+		addr == 18552  + 0x20000 ||
+		addr == 26744  + 0x20000 ||
+		addr == 51330  + 0x20000 ||
+		addr == 116856 + 0x20000
+	) {
+		printf("HACKY: PHYS=%06X PC=%04X PC_PHYS=%06X SPA=%04X" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc,
+			memory[cpu_sp + 0x104] | (memory[cpu_sp + 0x105] << 8)
+		);
+	}
+	if (addr > 0x7FFFF)
+		printf("HACKY: Someone reading upper RAM %06X PC=%04X (%06X)!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
+	else if (addr > 0x3FFFF)
+		printf("HACKY: Someone reading upper ROM %06X PC=%04X (%06X)!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
+#endif
 	return memory[addr];
 }
 
@@ -716,6 +740,8 @@ int main ( int argc, char **argv )
 	// Start!!
 	cycles = 0;
 	frameskip = 0;
+	frame_counter = 0;
+	vic3_blink_phase = 0;
 	emu_timekeeping_start();
 	if (audio)
 		SDL_PauseAudioDevice(audio, 0);
@@ -759,6 +785,11 @@ int main ( int argc, char **argv )
 					update_emulator();
 				sid1.sFrameCount++;
 				sid2.sFrameCount++;
+				frame_counter++;
+				if (frame_counter == 25) {
+					frame_counter = 0;
+					vic3_blink_phase = !vic3_blink_phase;
+				}
 			}
 			//printf("RASTER=%d COMPARE=%d\n",scanline,compare_raster);
 			//vic_interrupt();

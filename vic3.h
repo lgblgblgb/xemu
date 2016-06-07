@@ -23,6 +23,7 @@ extern int   scanline;
 extern Uint8 vic3_registers[];
 extern int   clock_divider7_hack;
 extern int   vic2_16k_bank;
+extern int   vic3_blink_phase;
 
 extern void  vic3_init ( void );
 extern void  vic3_write_reg ( int addr, Uint8 data );
