@@ -1,12 +1,13 @@
-# X-cLCD
+# X-Emulators
 
-Commodore LCD, Commodore 65 (and Commodore VIC-20) emulator
-
-(Note: about the Commodore VIC-20 and Commodore 65, see below)
+Emulations running on Linux/Unix/Windows of various (mainly 8 bit) machines,
+including the Commodore LCD and Commodore 65 as well.
 
 WARNING: there is *nothing* too much common in these machines. The only reason
 that I emulate these within a single project, that I can easily re-use some
 of the components needed, that's all!
+
+For some story line: http://cubed-borka.blogspot.hu/2016/05/my-commodore-65-and-commodore-lcd.html
 
 Commodore LCD is a highly unknown portable LCD based device with battery power and
 ability to "sleep" with SRAMs still powered. Unfortunately the project was stopped
@@ -32,6 +33,9 @@ This piece of code is about writing a native emulator version which can be run
 at least on Windows and Linux (or Unix-like machines, Raspberry PI is included)
 with the help of the SDL2 library. Note, that in theory, it would be easy to
 port to other targets because of using SDL.
+
+As I wanted to emulate other machines as well, I renamed the project from XCLCD
+(CLCD = Commodore LCD) to "X-Emu".
 
 ## Basic usage of the emulator
 
@@ -145,9 +149,7 @@ What is emulated and what is not:
 * VIC3 code is horrible, it merely emulates full frames in one rendering
   step only. Many things are not emulated: MCM/ECM for classic VIC2 modes,
   no border, no DAT, no hardware character attributes, no V400
-  and interlace, and no H1280 mode. No emulation yet for chargen address
-  (fixed), and VIC3 $30 port selection, also no support for the VIC2
-  "some places it will see ROM" behaviour. Though bitplane modes, programmable
+  and interlace, and no H1280 mode. Though bitplane modes, programmable
   palette, 40/80 column text mode, and classic VIC2 hires mode should work.
   K2 demo is able to show the "busty woman" already with my emulator.
 
@@ -373,6 +375,12 @@ Some notes:
 
 According to my experiments -falign-functions=16 -falign-loops=16 really
 helps on Rapsberry-Pi at least.
+
+*Latest test: about 19% CPU usage on a good old Raspberry Pi model 1 for the
+Commodore VIC-20 emulator. Not bad ... For the Commodore 65 emulator, it is not
+fair to do any test yet, since the emulator does literally hundreds of log messages
+by second which slows down the emulation a lot, even if that is redirected into
+/dev/null (involves syscalls, etc).*
 
 It's interesting to play with locked texture access compared to the non-locked
 version. On my PC, the difference cannot even be seen too much. However it's
