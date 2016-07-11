@@ -127,5 +127,7 @@ int geos_load_kernal ( void )
 
 void geos_cpu_trap ( Uint8 opcode )
 {
-	FATAL("FATAL: Maybe GEOS CPU trap, but not supported yet @ PC=$%04X OP=$%02X" NL, cpu_pc, opcode);
+	// Hopefully the trap itself is in RAM ..
+	printf("GEOS: TRAP-SYM: \"%s\"" NL, memory + cpu_pc);
+	cpu_pc += strlen((const char*)memory + cpu_pc) + 1;
 }

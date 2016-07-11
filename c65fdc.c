@@ -28,8 +28,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "c65fdc.h"
 #include "emutools.h"
+#include "commodore_65.h"
 
 
+#define GEOS_FDC_HACK
 
 
 static Uint8 head_track;		// "physical" track, ie, what is the head is positioned at currently
@@ -78,6 +80,33 @@ void fdc_init ( const char *dfn )
 }
 
 
+#ifdef GEOS_FDC_HACK
+// My hack for an easy disk access primarly for my tries on GEOS (later it should work with the original disk access methods!)
+static int geos_hack_read_sector ()
+{
+	int geos_hack_track  = memory[4];
+	int geos_hack_sector = memory[5];
+	Uint8 *geos_hack_buffer = (memory[0xA] | (memory[0xB] << 8)) + memory;
+	printf("GEOS: reading sector %d of track %d to buffer at $%04X" NL,
+		geos_hack_sector, geos_hack_track, geos_hack_buffer - memory
+	);
+	if (!disk) {
+		printf("GEOS: no disk is attached!" NL);
+		return 1;
+	} else {
+		if (
+			fseek(disk, 40 * (geos_hack_track - 0) * 256 + (geos_hack_sector - 1) * 256, SEEK_SET) ||
+			fread(geos_hack_buffer, 256, 1, disk) != 1
+		) {
+			printf("GEOS: OK, block has been read" NL);
+			return 0;
+		} else {
+			printf("GEOS: problem with seek or read" NL);
+			return 1;
+		}
+	}
+}
+#endif
 
 
 static void read_sector ( void )
@@ -149,6 +178,12 @@ void fdc_write_reg ( int addr, Uint8 data )
 				INFO_WINDOW("FDC SWAP bit is not implemented yet!");
 			break;
 		case 1:
+#ifdef GEOS_FDC_HACK
+			if (data == 0xFF && track == 0xFE && sector == 0xFD && side == 0xFC) {
+				side = geos_hack_read_sector() ? 0xFF : 0;
+				return;
+			}
+#endif
 			printf("FDC: command=$%02X (lower bits: $%X)" NL, data & 0xF8, data & 7);
 			if ((status_a & 128) && ((data & 0xF8))) {	// if BUSY, and command is not the cancel command ..
 				printf("FDC: WARN: trying to issue another command ($%02X) while the previous ($%02X) is running." NL, data, cmd);

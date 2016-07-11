@@ -244,7 +244,7 @@ void vic2_write_reg ( int addr, Uint8 data )
 			printf("VIC2: compare raster is now %d" NL, compare_raster);
 			break;
 		case 0x19:
-			vic2_interrupt_status = vic2_interrupt_status & data & 15 & vic2_registers[0x1A];
+			vic2_interrupt_status = vic2_interrupt_status & (~data) & 15 & vic2_registers[0x1A];
 			vic2_interrupt_checker();
 			break;
 		case 0x1A:
@@ -817,6 +817,10 @@ int main ( int argc, char **argv )
 		cia_tick(&cia2, opcyc);
 		cycles += opcyc;
 		if (cycles >= 63) {
+			vic2_registers[0] = 80;
+			vic2_registers[1] = 80;
+			vic2_registers[16] = 0;
+			vic2_registers[21] = 0xFF;
 			scanline++;
 			//printf("VIC3: new scanline (%d)!" NL, scanline);
 			cycles -= 63;
