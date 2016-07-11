@@ -22,8 +22,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __LGB_EMUTOOLS_H_INCLUDED
 #define __LGB_EMUTOOLS_H_INCLUDED
 
-#if !SDL_VERSION_ATLEAST(2, 0, 2)
-#error "At least SDL version 2.0.2 is needed!"
+#if !SDL_VERSION_ATLEAST(2, 0, 4)
+#error "At least SDL version 2.0.4 is needed!"
 #endif
 
 // You should define this in your emulator, most probably with resetting the keyboard matrix

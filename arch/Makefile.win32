@@ -17,7 +17,7 @@ SRCS_ARCH_LCD	=
 ZIP_FILES_ARCH	=
 
 DLL	= SDL2.dll
-DLLURL	= http://xep128.lgb.hu/files/SDL2.dll
+DLLURL	= http://xep128.lgb.hu/files/SDL-2.0.4.dll
 
 $(DLL):
 	@echo "**** Fetching Win32 SDL2 DLL from $(DLLURL) ..."

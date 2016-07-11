@@ -81,7 +81,7 @@ void *emu_malloc ( size_t size )
 {
 	void *p = malloc(size);
 	if (!p)
-		FATAL("Cannot allocate %ld bytes of memory.", size);
+		FATAL("Cannot allocate %d bytes of memory.", (int)size);
 	return p;
 }
 
