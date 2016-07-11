@@ -1,0 +1,119 @@
+!!IMPORTANT!!
+
+!!THIS IS NOT THE ORIGINAL Z80EX!! PLEASE READ FURTHER ...
+
+This is a somewhat modified and stripped down version of Z80Ex
+used for CPU emulation in my GNU/GPL project. Thus, if you want
+Z80Ex for your project, you should use the original version.
+Z80Ex in this form within this project may be not useful for you
+in your oen project.
+
+Modifications compared to the original source distribution:
+
+* no Makefile, etc: my project uses it directly
+
+* no perl code, and data tables to generate the C code,
+  I use and modified the generated code only (I know, ugly solution)
+
+* Z180 emulation: only a rough emulation: timing is still Z80,
+  no on-chip features, no MMU, only about the opcodes which are
+  invalid on Z180 (like IXL/IXH/IYL/IYH related), and some of the
+  new Z180 opcodes, z80/z180 mode can be switched at run-time.
+  Callback for "invalid on Z180" issue when Z180 mode is selected.
+  Invalid instruction trap is emulated (with the callback mentioned).
+  Z180 internal I/O area should be implemented by the user of the
+  modified Z80Ex, it's not handled here.
+
+* CMOS/NMOS Z80 emulation
+
+* ED callback: ED ops opc>0xBB invokes a callback, if it returns
+  with non-zero value, it means the caller want it handle, thus
+  it's not invalid opcode (not even in Z180 mode)
+
+* Pointer passed Z80 context is removed for performance reasons
+
+* No callback set functions, using direct function calls, which
+  should be provided by the application
+
+Important stuffs that can be defined:
+
+Z80EX_TSTATE_CALLBACK
+	Call function on each T-states, can be switched on/off
+	run-time.
+Z80EX_TSTATE_CALLBACK_ALWAYS
+	Always call function on each T-states
+
+Without Z80EX_TSTATE_CALLBACK and Z80EX_TSTATE_CALLBACK_ALWAYS
+there will be no support for T-state callback compiled in!
+
+Z80EX_ED_TRAPPING_SUPPORT
+	Call function on invalid ED opcodes
+Z80EX_Z180_SUPPORT
+	Ability to have run-time switchable Z180 support
+	(very limited, still Z80 timing, just some Z180
+	opcodes and banned "undocumented" Z80 ones removed)
+Z80EX_CALLBACK_PROTOTYPE
+	If not defined, callback prototypes won't be defined
+	in Z80ex. Useful if you plan to use macros. If defined,
+	the value is inserted before the prototypes.
+Z80EX_TYPES_DEFINED
+	If defined, Z80e won't define its byte/etc types, you
+	should do it!
+Z80EX_WORDS_BIG_ENDIAN
+	Define it for big-endian systems, do not define otherwise.
+Z80EX_USER_HEADER
+	If defined, it's used to include by z80ex.h
+	So you can have your own type definitions, static inline
+	or macro representation of callbacks, etc. You can also
+	use the header included to define the other Z80EX_* macros.
+
+---------------------------------------------------------
+
+Now back to the original README, thanks for your patience:
+
+Z80Ex
+
+ZiLOG Z80 CPU emulator
+~~~~~~~~~~~~~~~~~~~~~~
+
+Features:
+---------
+
+- precise opcode emulation (documented & undocumented)
+- exact timings for each opcode (including I/O operations)
+- full support for all interrupt modes
+- any number of virtual CPUs may be created
+- portable: written in pure ANSI C
+- builds as a library with simple callback-based API
+- disassembler included  
+
+
+Building and installing:
+--------------------------------------------------------
+
+to build and install using CMake build system, refer to INSTALL.cmake
+to build and install using GNU Make, refer to INSTALL.gmake
+
+
+Usage intro:
+------------
+
+emulator:
+
+include <z80ex/z80ex.h> in your sources,
+link with "libz80ex" (-lz80ex).
+
+for (rather subtle) API documentation see "z80ex.h".
+
+disassembler:
+
+include <z80ex/z80ex_dasm.h> in your sources,
+link with "libz80ex_dasm" (-lz80ex_dasm).
+
+for API documentation see "z80ex_dasm.h".
+also you may look at "dasm.c" from the "examples" directory
+
+
+_____________________________
+yours, Pigmaker57 aka Boo-boo
+pigmaker57@kahoh57.info
