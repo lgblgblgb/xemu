@@ -42,17 +42,14 @@ LDFLAGS	= $(DEBUG) $(LDFLAGS_ARCH)
 PRG_V20	= xvic20.$(ARCH)
 PRG_LCD = xclcd.$(ARCH)
 PRG_C65 = xc65.$(ARCH)
-PRG_GEO = xgeos.$(ARCH)
-PRG_ALL = $(PRG_V20) $(PRG_LCD) $(PRG_C65) $(PRG_GEO)
+PRG_ALL = $(PRG_V20) $(PRG_LCD) $(PRG_C65)
 SRC_V20	= cpu65c02.c  via65c22.c emutools.c commodore_vic20.c vic6561.c $(SRCS_ARCH_V20)
 SRC_LCD	= cpu65c02.c  via65c22.c emutools.c commodore_lcd.c $(SRCS_ARCH_LCD)
 SRC_C65 = cpu65ce02.c cia6526.c  emutools.c commodore_65.c c65fdc.c vic3.c c65dma.c sid.c c65hid.c $(SRCS_ARCH_C65)
-SRC_GEO = cpu65c02.c cia6526.c emutools.c c65hid.c commodore_geos.c geos.c $(SRCS_ARCH_GEO)
 FILES	= LICENSE README.md Makefile $(SRCS) *.h rom/README
 OBJ_V20	= $(SRC_V20:.c=.o)
 OBJ_LCD = $(SRC_LCD:.c=.o)
 OBJ_C65 = $(SRC_C65:.c=.o)
-OBJ_GEO = $(SRC_GEO:.c=.o)
 DIST	= xclcd-emus.tgz
 
 do-all:
@@ -73,9 +70,6 @@ $(PRG_LCD): $(OBJ_LCD)
 
 $(PRG_C65): $(OBJ_C65)
 	$(CC) -o $(PRG_C65) $(OBJ_C65) $(LDFLAGS)
-
-$(PRG_GEO): $(OBJ_GEO)
-	$(CC) -o $(PRG_GEO) $(OBJ_GEO) $(LDFLAGS)
 
 set-arch:
 	if [ x$(TO) = x ]; then echo "*** Must specify architecture with TO=..." ; false ; fi
@@ -103,7 +97,7 @@ dist:
 	$(MAKE) $(DIST)
 
 clean:
-	rm -f $(PRG_ALL) $(OBJ_V20) $(OBJ_LCD) $(OBJ_C65) $(OBJ_GEO) .depend.$(ARCH) $(DIST)
+	rm -f $(PRG_ALL) $(OBJ_V20) $(OBJ_LCD) $(OBJ_C65) .depend.$(ARCH) $(DIST)
 	$(MAKE) -C rom clean
 
 distclean:
@@ -114,14 +108,14 @@ distclean:
 	rmdir arch/objs.* 2>/dev/null || true
 
 strip: $(PRG_ALL)
-	strip $(PRG_V20) $(PRG_LCD) $(PRG_C65) $(PRG_GEO)
+	strip $(PRG_V20) $(PRG_LCD) $(PRG_C65)
 
 dep:
 	rm -f .depend.$(ARCH)
 	$(MAKE) .depend.$(ARCH)
 
 .depend.$(ARCH):
-	$(CC) -MM $(CFLAGS) $(SRC_V20) $(SRC_LCD) $(SRC_C65) $(SRC_GEO) > .depend.$(ARCH)
+	$(CC) -MM $(CFLAGS) $(SRC_V20) $(SRC_LCD) $(SRC_C65) > .depend.$(ARCH)
 
 roms:
 	$(MAKE) -C rom roms

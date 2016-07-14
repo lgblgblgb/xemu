@@ -1,0 +1,61 @@
+all:
+	$(MAKE) do-all
+
+ifneq ($(wildcard ../../.arch),)
+include ../../.arch
+else
+ARCH    = native
+endif
+
+include ../../arch/Makefile.$(ARCH)
+
+# Remove -flto (link time optimization) if you have problems
+# If you want to compile with -g option, also *DELETE* the -flto, both of them together known to be problematic!
+DEBUG			=
+
+PRG			= $(PRG_TARGET).$(ARCH)
+COMMONDIR		= ../..
+CFLAGS_WITHOUT_DEBUG	= $(CFLAGS_ARCH) $(CFLAGS_TARGET) -I$(COMMONDIR)
+CFLAGS			= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG) -DEMU_ARCH=$(ARCH) -DEMU_TARGET=$(TARGET)
+LDFLAGS			= $(DEBUG) $(LDFLAGS_ARCH)
+OBJPREFIX       	= ../../objs/$(ARCH)-$(TARGET)--
+DEPFILE			= $(OBJPREFIX)make.depend
+DEPALL			= Makefile ../Makefile.common
+SRCS			= $(addprefix $(COMMONDIR)/, $(SRCS_COMMON)) $(SRCS_TARGET)
+OBJS			= $(addprefix $(OBJPREFIX), $(notdir $(SRCS:.c=.o)))
+
+
+do-all:
+	$(MAKE) $(DEPFILE)
+	$(MAKE) $(PRG)
+
+$(OBJPREFIX)%.o: %.c $(DEPALL)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+$(OBJPREFIX)%.o: $(COMMONDIR)/%.c $(DEPALL)
+	$(CC) $(CFLAGS) -c -o $@ $<
+
+
+$(PRG): $(OBJS) $(DEPALL)
+	$(CC) -o $(PRG) $(OBJS) $(LDFLAGS)
+
+strip: $(PRG)
+	$(STRIP) $(PRG)
+
+dep:
+	rm -f $(DEPFILE)
+	$(MAKE) $(DEPFILE)
+
+$(DEPFILE): $(DEPALL) $(SRCS)
+	$(CC) -MM $(CFLAGS) $(SRCS) | awk '/^[^.:\t ]+\.o:/ { print "$(OBJPREFIX)" $$0 ; next } { print }' > $(DEPFILE)
+
+clean:
+	rm -f $(OBJPREFIX)* $(PRG)
+
+
+.PHONY: clean all strip dep do-all set-arch
+
+ifneq ($(wildcard $(DEPFILE)),)
+include $(DEPFILE)
+endif
+

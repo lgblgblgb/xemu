@@ -1,5 +1,7 @@
 # X-Emulators
 
+[![Gitter](https://badges.gitter.im/lgblgblgb/xemu.svg)](https://gitter.im/lgblgblgb/xemu?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
+
 Emulations running on Linux/Unix/Windows of various (mainly 8 bit) machines,
 including the Commodore LCD and Commodore 65 as well.
 
