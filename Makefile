@@ -35,5 +35,8 @@ clean:
 all-clean:
 	for t in $(TARGETS) ; do for a in $(ARCHS) ; do $(MAKE) -C targets/$$t ARCH=$$a clean ; done ; done
 
+roms:
+	$(MAKE) -C rom
 
-.PHONY: all all-arch clean all-clean
+
+.PHONY: all all-arch clean all-clean roms

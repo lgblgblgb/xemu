@@ -23,7 +23,7 @@ all:
 
 ARCH			= native
 
-include ../../arch/Makefile.$(ARCH)
+include ../../build/Makefile.$(ARCH)
 
 # Remove -flto (link time optimization) if you have problems
 # If you want to compile with -g option, also *DELETE* the -flto, both of them together known to be problematic!
@@ -34,9 +34,9 @@ COMMONDIR		= ../../common
 CFLAGS_WITHOUT_DEBUG	= $(CFLAGS_ARCH) $(CFLAGS_TARGET) -I. -I$(COMMONDIR)
 CFLAGS			= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG) -DEMU_ARCH=$(ARCH) -DEMU_TARGET=$(TARGET)
 LDFLAGS			= $(DEBUG) $(LDFLAGS_ARCH)
-OBJPREFIX       	= ../../objs/$(ARCH)-$(TARGET)--
+OBJPREFIX       	= ../../build/objs/$(ARCH)-$(TARGET)--
 DEPFILE			= $(OBJPREFIX)make.depend
-DEPALL			= Makefile ../Makefile.common ../../arch/Makefile.$(ARCH)
+DEPALL			= Makefile ../../build/Makefile.common ../../build/Makefile.$(ARCH)
 SRCS			= $(addprefix $(COMMONDIR)/, $(SRCS_COMMON)) $(SRCS_TARGET)
 OBJS			= $(addprefix $(OBJPREFIX), $(notdir $(SRCS:.c=.o)))
 
@@ -69,7 +69,7 @@ clean:
 	rm -f $(OBJPREFIX)* $(PRG)
 
 
-.PHONY: clean all strip dep do-all set-arch
+.PHONY: clean all strip dep do-all
 
 ifneq ($(wildcard $(DEPFILE)),)
 include $(DEPFILE)

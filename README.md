@@ -2,7 +2,7 @@
 
 [![Gitter](https://badges.gitter.im/lgblgblgb/xemu.svg)](https://gitter.im/lgblgblgb/xemu?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
-Emulations running on Linux/Unix/Windows of various (mainly 8 bit) machines,
+Emulations running on Linux/Unix/Windows/OSX of various (mainly 8 bit) machines,
 including the Commodore LCD and Commodore 65 as well.
 
 WARNING: there is *nothing* too much common in these machines. The only reason
@@ -311,17 +311,6 @@ You also need the ROM images to be able to use the emulator. For that purpose,
 download those yourself, or if it's OK to allow make to do the work, you can say:
 `make roms`. This will download ROM images from the Net.
 
-Finally, you can install emulators (by default in /usr/local/bin for binaries,
-and /usr/local/share/xclcd/ for ROM files) with this command: `make install`.
-You probably need root privileges to do so. Warning: it will also try to download
-ROM images first! If you don't want this, place the proper ROM images into
-directory rom/ before `make install`.
-
-Note, if you switched to another architecture (eg see the Windows chapter) you
-can switch back to native compilation with command:
-
-`make set-arch TO=native`
-
 Resulting binaries will have the "extension" of .native, but you can forgot
 that of course, it's just for the ability to be able to build for multiple
 architectures (ie for Windows it will have .win32).
@@ -332,18 +321,35 @@ To be able to compile emulators for Windows, you must have a Linux (or probably
 other UNIX-like system) with suitable cross-compiler able to generate Windows
 binaries. You also need the SDL2 (at least 2.0.2, 2.0.4 is recommended!) stuffs
 installed, and arch/Makefile.win32 is possible modified for proper settings.
+You can also decide to try to build for win64. About the same applies to that
+architecture, however every mentioned `win32` should be replaced with `win64`.
+Also, you need the SDL2 for win64 in that case, also the development environemnt
+and of course the DLL itself too.
 
-First, you need to select "architecture" to win32 with this command:
-
-`make set-arch TO=win32`
-
-Then you can say: `make`
+Then you can say: `make ARCH=win32`
 
 The result will have the extension .win32, but actually it's an .exe :)
 
-You can switch back to native architecture with this command:
+## Compilation for OSX
 
-`make set-arch TO=native`
+Since OSX is UNIX in its heart, it's about the same theory as `native` architecture
+(that is, "Linux / UNIX-like"). However since it seems (at least on Travis build
+environment) the default gcc (which is langc for real ...) does not know some
+options, I used another architecture option, namely `osx`.
+
+First, you need the usual SDL2. Maybe the most easy way is to use Homebrew.
+To learn mode about this, visit this page: http://brew.sh/
+
+You need to install SDL2:
+
+`brew install sdl2`
+
+Then, you can try to compile the emulators:
+
+`make ARCH=osx`
+
+The result binaries will have the extension `.osx` but it does not mean too much,
+they're just my notion here.
 
 ## General compilation related notes
 

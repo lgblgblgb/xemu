@@ -17,10 +17,13 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-TARGET		= c65
-PRG_TARGET	= xc65
-CFLAGS_TARGET	= -DCPU_65CE02
-SRCS_TARGET	= commodore_65.c c65dma.c c65fdc.c vic3.c
-SRCS_COMMON	= emutools.c cpu65c02.c cia6526.c c65hid.c sid.c
-
-include ../../build/Makefile.common
+ARCH_DESC	= "OSX"
+PREFIX		= /usr/local
+BINDIR		= $(PREFIX)/bin
+DATADIR		= $(PREFIX)/lib/xclcd
+CC		= gcc
+STRIP		= strip
+SDLCFG		= sdl2-config
+GENOPTS		= -Ofast -fno-common -falign-functions=16 -ffast-math
+CFLAGS_ARCH	= $(GENOPTS) -Wall -pipe $(shell $(SDLCFG) --cflags) -DDATADIR=\"$(DATADIR)\"
+LDFLAGS_ARCH	= $(GENOPTS) $(shell $(SDLCFG) --libs)

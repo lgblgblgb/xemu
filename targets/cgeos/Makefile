@@ -23,4 +23,4 @@ CFLAGS_TARGET	= -DCPU_TRAP=0xFC
 SRCS_TARGET	= commodore_geos.c geos.c
 SRCS_COMMON	= emutools.c cpu65c02.c cia6526.c c65hid.c
 
-include ../Makefile.common
+include ../../build/Makefile.common
