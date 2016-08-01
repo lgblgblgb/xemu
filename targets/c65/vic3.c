@@ -26,7 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <SDL.h>
 
 #include "commodore_65.h"
-#include "cpu65ce02.h"
+#include "cpu65c02.h"
 #include "vic3.h"
 #include "emutools.h"
 

@@ -1,5 +1,5 @@
-## A Commodore LCD emulator using SDL2 library.
-## Also included a very simple and inaccurate Commodore VIC-20 emulator
+## Collection of *simple* emulators of some 8 bits machines using SDL2 library,
+## including the Commodore LCD and Commodore 65 too.
 ##
 ## Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
@@ -17,12 +17,10 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-
-
 TARGET		= cgeos
 PRG_TARGET	= xgeos
 CFLAGS_TARGET	= -DCPU_TRAP=0xFC
-SRCS_TARGET	= ../../cpu65c02.c ../../cia6526.c ../../c65hid.c commodore_geos.c geos.c
-SRCS_COMMON	= emutools.c
+SRCS_TARGET	= commodore_geos.c geos.c
+SRCS_COMMON	= emutools.c cpu65c02.c cia6526.c c65hid.c
 
 include ../Makefile.common

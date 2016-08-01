@@ -17,13 +17,10 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-ARCH_DESC	= "Windows WIN32 cross-compilation on UNIX"
-PREFIX		=
-BINDIR		=
-DATADIR		=
-CC		= i686-w64-mingw32-gcc
-STRIP		= i686-w64-mingw32-strip
-SDLCFG		= /usr/local/cross-tools/i686-w64-mingw32/bin/sdl2-config
-GENOPTS		= -Ofast -fno-common -falign-functions=16 -falign-loops=16 -ffast-math
-CFLAGS_ARCH	= $(GENOPTS) -Wall -pipe $(shell $(SDLCFG) --cflags)
-LDFLAGS_ARCH	= $(GENOPTS) $(shell $(SDLCFG) --libs)
+TARGET		= c65
+PRG_TARGET	= xc65
+CFLAGS_TARGET	= -DCPU_65CE02
+SRCS_TARGET	= commodore_65.c c65dma.c c65fdc.c vic3.c
+SRCS_COMMON	= emutools.c cpu65c02.c cia6526.c c65hid.c sid.c
+
+include ../Makefile.common

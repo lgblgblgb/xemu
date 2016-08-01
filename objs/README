@@ -1,0 +1,4 @@
+This directory must exist. It's used for object files "storage" and also for
+the Makefile dependency information. It's architecture (ie, win32, etc) and
+target (ie: C65) prefixed, so even the same source can be compiled for
+different targets and architectures without conflict among object files.

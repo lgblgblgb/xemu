@@ -1,56 +1,8 @@
-# Object files
-*.o
-*.ko
-*.obj
-*.elf
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Libraries
-*.lib
-*.a
-*.la
-*.lo
-
-# Shared objects (inc. Windows DLLs)
 *.dll
-*.so
-*.so.*
-*.dylib
-
-# Executables
-*.exe
-*.out
-*.app
-*.i*86
-*.x86_64
-*.hex
-
-# Debug files
-*.dSYM/
-
-# My stuffs
-rom/clcd-u102.rom
-rom/clcd-u103.rom
-rom/clcd-u104.rom
-rom/clcd-u105.rom
-rom/vic20-basic.rom
-rom/vic20-chargen.rom
-rom/vic20-kernal.rom
-rom/c65-system.rom
-rom/geos-c64-basic.rom
-rom/geos-c64-chargen.rom
-rom/geos-c64-kernal.rom
-rom/geos-kernal.bin
 xvic20.??*
 xclcd.??*
 xc65.??*
 xgeos.??*
-.arch
-.depend.*
-arch/objs.*
 *.prg
 *.d64
 *.d81
