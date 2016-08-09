@@ -303,9 +303,8 @@ buttons are used as the "fire" button.
 ## Compilation on Linux / UNIX-like machine
 
 Note: I tested this on Linux only. You should have sdl2 _development_ libraries
-installed (at least version 2.0.2 is needed, at least 2.0.4 is recommended!),
-along with gcc, GNU make (probably BSD make won't work). Then the only thing you
-need is saying: `make`
+installed (at least version 2.0.4 is needed), along with gcc, GNU make (probably
+BSD make won't work). Then the only thing you need is saying: `make`
 
 You also need the ROM images to be able to use the emulator. For that purpose,
 download those yourself, or if it's OK to allow make to do the work, you can say:
@@ -319,8 +318,8 @@ architectures (ie for Windows it will have .win32).
 
 To be able to compile emulators for Windows, you must have a Linux (or probably
 other UNIX-like system) with suitable cross-compiler able to generate Windows
-binaries. You also need the SDL2 (at least 2.0.2, 2.0.4 is recommended!) stuffs
-installed, and arch/Makefile.win32 is possible modified for proper settings.
+binaries. You also need the SDL2 (at least 2.0.4) stuffs installed, and
+build/Makefile.win32 is possible modified for proper settings.
 You can also decide to try to build for win64. About the same applies to that
 architecture, however every mentioned `win32` should be replaced with `win64`.
 Also, you need the SDL2 for win64 in that case, also the development environemnt
@@ -359,11 +358,16 @@ go *not* mix -g switch (eg you want to debug the program with gdb) with -flto
 according to the gcc manual, it can cause very odd problems! Basically you
 should change DEBUG setting in Makefile from -flto to -g, if you want to debug.
 
-Architecture specific (ie win32 or native) settings are in the arch/ directory!
+Architecture specific (ie win32 or native) settings are in the build/ directory!
 Including the used C compiler path, flags, sdl2-config path, etc ...
 
 If you add/remove files, include new header files, etc, you should say `make dep`
 for the given architecture selected.
+
+If you want to compile a *single* target only (let's say Commodore 65), just
+chdir into the directory of the target, and say `make` there (with the possibility
+of ARCH=... part of course. Still, the executable will be built in the top level
+directory!
 
 ## Compilation for Raspberry Pi
 
