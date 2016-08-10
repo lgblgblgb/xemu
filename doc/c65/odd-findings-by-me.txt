@@ -105,7 +105,8 @@ What was surprising at least for me ... Quite subjective :)
   testing my emulator. At least in 911001.bin it is colour,
   Not in 910111.bin version of ROM though ...
 
-* Pressing key F1 does "something" just I don't know what :)
+* Pressing key F1 is a nice way to toggle between 40 and
+  80 columns mode.
 
 * 911001.bin ROM is kinda odd. It takes much longer to boot,
   also prints about ROM checksum and drive name ... However it
@@ -116,4 +117,31 @@ What was surprising at least for me ... Quite subjective :)
   this causes total madness, with endless PI signes, etc.
   910111.bin seems to work, I could type in a simple BASIC
   program, I could LIST and RUN it too.
+
+* Disk access is still not the fastest :( Though I don't emulate
+  the mechanics, floppy disk access is still not as fast as
+  with other - otherwise much slower - 8 bit machines. It seems
+  it's the sign of Commdodore anyway :-) Indeed, faster than
+  IEC serial by default at least :)
+
+* VIC-3 in its heart is still a VIC-1, as found in the Commodore
+  VIC-20 computer :) Ie, at those times, the 16 pixel height
+  characters were introduced mainly to allow to "simulate" bit map
+  modes (VIC-I does not know "true" bit map mode) with custom
+  "charset" (with 8 pixels height there would be not enough characters
+  to do this). Still VIC-II, though has bitmap mode, the screen
+  organization looks character oriented still. With VIC-III,
+  even the new bitplane modes are still this non-linear fashion.
+  Also, though VIC-3 in sum, can access about 128K of RAM, the
+  "one chunk" is still limited to 16K (ie, one bitplane, whatever)
+  as with the original VIC-I. Text mode with 16 pixels height
+  otherwise can be useful for VIC-3, as the 8x8 characters seem
+  quite ugly even in 80*25 text mode. 16 pixels height ones could
+  be much nicer.
+
+* DMA transfers can be "redirected" to the I/O space. Just thinking
+  about if it's possible to the DMA controller to access its own
+  registers? Maybe creating an endless loop with chained commands,
+  having the last with re-starting the DMA by writing its own
+  registers :)
 
