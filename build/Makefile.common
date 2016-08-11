@@ -32,7 +32,7 @@ DEBUG			=
 PRG			= ../../$(PRG_TARGET).$(ARCH)
 COMMONDIR		= ../../common
 CFLAGS_WITHOUT_DEBUG	= $(CFLAGS_ARCH) $(CFLAGS_TARGET) -I. -I$(COMMONDIR)
-CFLAGS			= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG) -DEMU_ARCH=$(ARCH) -DEMU_TARGET=$(TARGET)
+CFLAGS			= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG) -include arch-sys-$(ARCH).h -include xemu-target.h
 LDFLAGS			= $(DEBUG) $(LDFLAGS_ARCH)
 OBJPREFIX       	= ../../build/objs/$(ARCH)-$(TARGET)--
 DEPFILE			= $(OBJPREFIX)make.depend

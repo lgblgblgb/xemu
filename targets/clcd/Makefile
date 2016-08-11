@@ -19,7 +19,7 @@
 
 TARGET		= clcd
 PRG_TARGET	= xclcd
-CFLAGS_TARGET	= -DCPU_TRAP=0xFC
+CFLAGS_TARGET	=
 SRCS_TARGET	= commodore_lcd.c
 SRCS_COMMON	= emutools.c cpu65c02.c via65c22.c
 

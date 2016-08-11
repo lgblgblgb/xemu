@@ -24,19 +24,30 @@ ARCHS	= native win32 win64
 
 
 all:
-	for t in $(TARGETS) ; do $(MAKE) -C targets/$$t ; done
+	for t in $(TARGETS) ; do $(MAKE) -C targets/$$t || exit 1 ; done
 
 all-arch:
-	for t in $(TARGETS) ; do for a in $(ARCHS) ; do $(MAKE) -C targets/$$t ARCH=$$a ; done ; done
+	for t in $(TARGETS) ; do for a in $(ARCHS) ; do $(MAKE) -C targets/$$t ARCH=$$a || exit 1 ; done ; done
 
 clean:
-	for t in $(TARGETS) ; do $(MAKE) -C targets/$$t clean ; done
+	for t in $(TARGETS) ; do $(MAKE) -C targets/$$t clean || exit 1 ; done
 
 all-clean:
-	for t in $(TARGETS) ; do for a in $(ARCHS) ; do $(MAKE) -C targets/$$t ARCH=$$a clean ; done ; done
+	for t in $(TARGETS) ; do for a in $(ARCHS) ; do $(MAKE) -C targets/$$t ARCH=$$a clean || exit 1 ; done ; done
+	$(MAKE) -C rom clean
+
+distclean:
+	$(MAKE) all-clean
+	$(MAKE) -C rom distclean
+
+dep:
+	for t in $(TARGETS) ; do $(MAKE) -C targets/$$t dep || exit 1 ; done
+
+all-dep:
+	for t in $(TARGETS) ; do for a in $(ARCHS) ; do $(MAKE) -C targets/$$t ARCH=$$a dep || exit 1 ; done ; done
 
 roms:
 	$(MAKE) -C rom
 
 
-.PHONY: all all-arch clean all-clean roms
+.PHONY: all all-arch clean all-clean roms distclean dep all-dep

@@ -19,7 +19,7 @@
 
 TARGET		= c65
 PRG_TARGET	= xc65
-CFLAGS_TARGET	= -DCPU_65CE02
+CFLAGS_TARGET	=
 SRCS_TARGET	= commodore_65.c c65dma.c c65fdc.c vic3.c
 SRCS_COMMON	= emutools.c cpu65c02.c cia6526.c c65hid.c sid.c
 
