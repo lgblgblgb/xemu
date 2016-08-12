@@ -300,15 +300,18 @@ but it's hard to tell, which controls they are on *your* joystick (maybe even
 vertical/horizontal is mixed ...), or the "hats" can be used as well. Every
 buttons are used as the "fire" button.
 
+## Getting the ROMs
+
+For all compilation and usage options needs ROMs to be able to use the
+emulators. For that purpose, download those yourself, or if it's OK to allow
+make to do the work, you can say: `make roms`. This will download ROM images
+from the Net.
+
 ## Compilation on Linux / UNIX-like machine
 
 Note: I tested this on Linux only. You should have sdl2 _development_ libraries
 installed (at least version 2.0.4 is needed), along with gcc, GNU make (probably
 BSD make won't work). Then the only thing you need is saying: `make`
-
-You also need the ROM images to be able to use the emulator. For that purpose,
-download those yourself, or if it's OK to allow make to do the work, you can say:
-`make roms`. This will download ROM images from the Net.
 
 Resulting binaries will have the "extension" of .native, but you can forgot
 that of course, it's just for the ability to be able to build for multiple
@@ -366,8 +369,8 @@ for the given architecture selected.
 
 If you want to compile a *single* target only (let's say Commodore 65), just
 chdir into the directory of the target, and say `make` there (with the possibility
-of ARCH=... part of course. Still, the executable will be built in the top level
-directory!
+of ARCH=... part of course. Still, the executable will be built in the directory
+~/build/bin relative to the top level.
 
 ## Compilation for Raspberry Pi
 

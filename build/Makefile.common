@@ -29,7 +29,7 @@ include ../../build/Makefile.$(ARCH)
 # If you want to compile with -g option, also *DELETE* the -flto, both of them together known to be problematic!
 DEBUG			=
 
-PRG			= ../../$(PRG_TARGET).$(ARCH)
+PRG			= ../../build/bin/$(PRG_TARGET).$(ARCH)
 COMMONDIR		= ../../common
 CFLAGS_WITHOUT_DEBUG	= $(CFLAGS_ARCH) $(CFLAGS_TARGET) -I. -I$(COMMONDIR)
 CFLAGS			= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG) -include arch-sys-$(ARCH).h -include xemu-target.h
