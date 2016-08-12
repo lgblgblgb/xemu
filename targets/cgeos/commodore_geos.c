@@ -157,21 +157,15 @@ static inline void PIXEL_POINTER_CHECK_INIT( Uint32 *base, int tail, const char 
 }
 static inline void PIXEL_POINTER_CHECK_ASSERT ( Uint32 *p )
 {
-	if (p < pixel_pointer_check_base) {
-		ERROR_WINDOW("FATAL ASSERT: accessing texture (%p) under the base limit (%p).\nIn program module: %s", p, pixel_pointer_check_base, pixel_pointer_check_modn);
-		exit(1);
-	}
-	if (p >= pixel_pointer_check_end) {
-		ERROR_WINDOW("FATAL ASSERT: accessing texture (%p) above the upper limit (%p).\nIn program module: %s", p, pixel_pointer_check_end, pixel_pointer_check_modn);
-		exit(1);
-	}
+	if (p < pixel_pointer_check_base)
+		FATAL("FATAL ASSERT: accessing texture (%p) under the base limit (%p).\nIn program module: %s", p, pixel_pointer_check_base, pixel_pointer_check_modn);
+	if (p >= pixel_pointer_check_end)
+		FATAL("FATAL ASSERT: accessing texture (%p) above the upper limit (%p).\nIn program module: %s", p, pixel_pointer_check_end, pixel_pointer_check_modn);
 }
 static inline void PIXEL_POINTER_FINAL_ASSERT ( Uint32 *p )
 {
-	if (p != pixel_pointer_check_end) {
-		ERROR_WINDOW("FATAL ASSERT: final texture pointer (%p) is not the same as the desired one (%p),\nIn program module %s", p, pixel_pointer_check_end, pixel_pointer_check_modn);
-		exit(1);
-	}
+	if (p != pixel_pointer_check_end)
+		FATAL("FATAL ASSERT: final texture pointer (%p) is not the same as the desired one (%p),\nIn program module %s", p, pixel_pointer_check_end, pixel_pointer_check_modn);
 }
 #else
 #	define PIXEL_POINTER_CHECK_INIT(base,tail,mod)
@@ -788,8 +782,8 @@ int main ( int argc, char **argv )
 	);
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
         if (emu_init_sdl(
-		"Commodore GEOS / LGB",		// window title
-		"nemesys.lgb", "xclcd-geos",	// app organization and name, used with SDL pref dir formation
+		TARGET_DESC APP_DESC_APPEND,	// window title
+		APP_ORG, TARGET_NAME,		// app organization and name, used with SDL pref dir formation
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
 		SCREEN_WIDTH * 2, SCREEN_HEIGHT * 2,// logical size (used with keeping aspect ratio by the SDL render stuffs)

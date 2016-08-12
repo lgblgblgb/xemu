@@ -633,8 +633,8 @@ int main ( int argc, char **argv )
 	);
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (emu_init_sdl(
-		"Commodore VIC-20 / LGB",	// window title
-		"nemesys.lgb", "xclcd-vic20",	// app organization and name, used with SDL pref dir formation
+		TARGET_DESC APP_DESC_APPEND,	// window title
+		APP_ORG, TARGET_NAME,		// app organization and name, used with SDL pref dir formation
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
 		SCREEN_WIDTH * 2, SCREEN_HEIGHT,	// logical size (width is doubled for somewhat correct aspect ratio)

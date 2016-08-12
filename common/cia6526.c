@@ -33,9 +33,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #include <stdio.h>
-#include <SDL_types.h>
-#include <stdlib.h>
+#include <SDL.h>
 #include "cia6526.h"
+#include "emutools.h"
 
 
 #define ICR_CHECK() \
@@ -160,8 +160,7 @@ Uint8 cia_read ( struct Cia6526 *cia, int addr )
 		case 15:	// reg#F: CRB
 			return cia->CRB;
 		default:
-			fprintf(stderr, "FATAL: %s invalid register %d\n", cia->name, addr);
-			exit(1);
+			FATAL("FATAL: %s invalid register %d\n", cia->name, addr);
 			break;
 	}
 	return 0;	// to make GCC happy :-/
@@ -260,8 +259,8 @@ void cia_write ( struct Cia6526 *cia, int addr, Uint8 data )
 			}
 			break;
 		default:
-			fprintf(stderr, "ERROR: %s invalud register %d\n", cia->name, addr);
-			exit(1);
+			FATAL("FATAL: %s invalid register %d\n", cia->name, addr);
+			break;
 	}
 	cia->regWritten[addr] = data;
 }

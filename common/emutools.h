@@ -26,6 +26,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #error "At least SDL version 2.0.4 is needed!"
 #endif
 
+#define APP_ORG "xemu-lgb"
+#define APP_DESC_APPEND " / LGB"
+
 // You should define this in your emulator, most probably with resetting the keyboard matrix
 // Purpose: emulator windows my cause the emulator does not get the key event normally, thus some keys "seems to be stucked"
 extern void clear_emu_events ( void );
@@ -54,6 +57,7 @@ extern void emu_drop_events ( void );
 	SDL_ShowSimpleMessageBox(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
 	clear_emu_events(); \
 	emu_drop_events(); \
+	emu_timekeeping_start(); \
 } while (0)
 
 #define INFO_WINDOW(...)	_REPORT_WINDOW_(SDL_MESSAGEBOX_INFORMATION, "INFO", __VA_ARGS__)

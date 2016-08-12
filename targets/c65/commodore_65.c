@@ -560,10 +560,8 @@ Uint8 cpu_read ( Uint16 addr )
 {
 	int phys_addr = addr_trans_rd[addr >> 12] + addr;	// translating address with the READ table created by apply_memory_config()
 	if (phys_addr >= IO_REMAP_VIRTUAL) {
-		if ((addr & 0xF000) != 0xD000) {
-			fprintf(stderr, "Internal error: IO is not on the IO space!\n");
-			exit(1);
-		}
+		if ((addr & 0xF000) != 0xD000)
+			FATAL("Internal error: IO is not on the IO space!");
 		return io_read(addr);	// addr should be in $DXXX range to hit this, hopefully ...
 	}
 	return read_phys_mem(phys_addr);
@@ -576,10 +574,8 @@ void cpu_write ( Uint16 addr, Uint8 data )
 {
 	int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
 	if (phys_addr >= IO_REMAP_VIRTUAL) {
-		if ((addr & 0xF000) != 0xD000) {
-			fprintf(stderr, "Internal error: IO is not on the IO space!\n");
-			exit(1);
-		}
+		if ((addr & 0xF000) != 0xD000)
+			FATAL("Internal error: IO is not on the IO space!");
 		io_write(addr, data);	// addr should be in $DXXX range to hit this, hopefully ...
 		return;
 	}
@@ -599,10 +595,8 @@ void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 {
 	int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
 	if (phys_addr >= IO_REMAP_VIRTUAL) {
-		if ((addr & 0xF000) != 0xD000) {
-			fprintf(stderr, "Internal error: IO is not on the IO space!\n");
-			exit(1);
-		}
+		if ((addr & 0xF000) != 0xD000)
+			FATAL("Internal error: IO is not on the IO space!");
 		if (addr < 0xD800 || addr >= (vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00) {	// though, for only memory areas other than colour RAM (avoids unneeded warnings as well)
 			printf("CPU: RMW opcode is used on I/O area for $%04X" NL, addr);
 			io_write(addr, old_data);	// first write back the old data ...
@@ -716,8 +710,8 @@ int main ( int argc, char **argv )
 	);
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
         if (emu_init_sdl(
-		"Commodore 65 / LGB",		// window title
-		"nemesys.lgb", "xclcd-c65",	// app organization and name, used with SDL pref dir formation
+		TARGET_DESC APP_DESC_APPEND,	// window title
+		APP_ORG, TARGET_NAME,		// app organization and name, used with SDL pref dir formation
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
 		SCREEN_WIDTH, SCREEN_HEIGHT * 2,// logical size (used with keeping aspect ratio by the SDL render stuffs)

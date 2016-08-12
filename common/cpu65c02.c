@@ -1103,8 +1103,7 @@ int cpu_step () {
 	case 0xff:	_BRA( cpu_read(_zp()) & 128 ); break; /* 0xff BBS Relative */
 #ifdef DEBUG_CPU
 	default:
-			fprintf(stderr, "FATAL: not handled CPU opcode: $%02X", cpu_op);
-			exit(1);
+			FATAL("FATAL: not handled CPU opcode: $%02X", cpu_op);
 			break;
 #endif
 	}
