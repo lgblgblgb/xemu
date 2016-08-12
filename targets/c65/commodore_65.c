@@ -700,7 +700,7 @@ static void update_emulator ( void )
 	// Screen rendering: begin
 	vic3_render_screen();
 	// Screen rendering: end
-	emu_sleep(40000);
+	emu_timekeeping_delay(40000);
 }
 
 

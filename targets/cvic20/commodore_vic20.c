@@ -482,7 +482,7 @@ static void update_emulator ( void )
 			}
 		}
 		// Third: Sleep ... Please read emutools.c source about this madness ... 40000 is (PAL) microseconds for a full frame to be produced
-		emu_sleep(FULL_FRAME_USECS);
+		emu_timekeeping_delay(FULL_FRAME_USECS);
 	}
 	vic_vsync(!frameskip);	// prepare for the next frame!
 }

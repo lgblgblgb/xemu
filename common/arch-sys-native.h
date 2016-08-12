@@ -1,1 +1,2 @@
 #define EMU_ARCH_NATIVE
+#define XEMU_SLEEP_IS_NANOSLEEP

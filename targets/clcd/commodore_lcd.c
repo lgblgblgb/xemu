@@ -432,7 +432,7 @@ static void update_emulator ( void )
 				break;
 		}
 	}
-	emu_sleep(40000);	// 40000 microseconds would be the real time for a full TV frame (see main() for more info: CLCD is not TV based for real ...)
+	emu_timekeeping_delay(40000);	// 40000 microseconds would be the real time for a full TV frame (see main() for more info: CLCD is not TV based for real ...)
 	if (seconds_timer_trigger)
 		update_rtc();
 }

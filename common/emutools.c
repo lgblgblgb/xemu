@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <sys/time.h>
 #include <time.h>
 #include <limits.h>
+#include <errno.h>
 
 #include <SDL.h>
 
@@ -39,8 +40,6 @@ SDL_Texture  *sdl_tex = NULL;
 SDL_PixelFormat *sdl_pix_fmt;
 static const char default_window_title[] = "EMU";
 char *sdl_window_title = (char*)default_window_title;
-static struct timeval tv_old;
-static int sleep_balancer;
 Uint32 *sdl_pixel_buffer = NULL;
 int texture_x_size_in_bytes;
 int emu_is_fullscreen = 0;
@@ -51,6 +50,11 @@ static Uint32 black_colour;
 static void (*shutdown_user_function)(void);
 int seconds_timer_trigger;
 SDL_version sdlver_compiled, sdlver_linked;
+static char *window_title_buffer, *window_title_buffer_end;
+static time_t unix_time;
+static Uint64 et_old;
+static int td_balancer, td_em_ALL, td_pc_ALL;
+
 
 
 const char emulators_disclaimer[] =
@@ -63,17 +67,36 @@ const char emulators_disclaimer[] =
 
 
 
+static inline int get_elapsed_time ( Uint64 t_old, Uint64 *t_new, time_t *store_unix_time )
+{
+#ifdef XEMU_OLD_TIMING
+#define __TIMING_METHOD_DESC "gettimeofday"
+	struct timeval tv;
+	gettimeofday(&tv, NULL);
+	if (store_unix_time)
+		*store_unix_time = tv.tv_sec;
+	*t_new = tv.tv_sec * 1000000UL + tv.tv_usec;
+	return *t_new - t_old;
+#else
+#define __TIMING_METHOD_DESC "SDL_GetPerformanceCounter"
+	if (store_unix_time)
+		*store_unix_time = time(NULL);
+	*t_new = SDL_GetPerformanceCounter();
+	return 1000000UL * (*t_new - t_old) / SDL_GetPerformanceFrequency();
+#endif
+}
+
+
+
 struct tm *emu_get_localtime ( void )
 {
-	struct tm *t;
-	t = localtime(&tv_old.tv_sec);
-	return t;
+	return localtime(&unix_time);
 }
 
 
 time_t emu_get_unixtime ( void )
 {
-	return tv_old.tv_sec;
+	return unix_time;
 }
 
 
@@ -198,31 +221,82 @@ void emu_set_full_screen ( int setting )
 
 
 
-/* Should be called regularly (eg on each screen global update), this function tries to keep the emulation speed near to real-time of the emulated machine.
-   It's assumed that this function is called at least at every 0.1 sec or even more frequently ... Ideally it should be used at 25Hz rate (for PAL full TV frame)
-   or 50Hz (for PAL half frame).
-   Input: real_usec: time in microseconds would be need on the REAL (emulated) machine to do the task, since the last call of this function! */
-void emu_sleep ( int real_usec )
+static inline void do_sleep ( int td )
 {
-	struct timeval tv_new;
-	int t_emu, t_slept;
-	gettimeofday(&tv_new, NULL);
-	seconds_timer_trigger = (tv_new.tv_sec != tv_old.tv_sec);
-	t_emu = (tv_new.tv_sec - tv_old.tv_sec) * 1000000 + (tv_new.tv_usec - tv_old.tv_usec);	// microseconds we needed to emulate one frame (SDL etc stuffs included!)
-	t_emu = real_usec - t_emu;	// if it's positive, we're faster in emulation than a real machine, if negative, we're slower, and can't keep real-time emulation :(
-	sleep_balancer += t_emu;
-	// chop insane values, ie stopped emulator for a while, other time setting artifacts etc ...
-	if (sleep_balancer < -250000 || sleep_balancer > 250000)
-		sleep_balancer = 0;
-	if (sleep_balancer > 1000)	// usless to sleep too short time (or even negative ...) as the OS scheduler won't sleep smaller time amounts than the sheduling frequency after all
-		usleep(sleep_balancer);
-	// dual purpose: this will be the start time of next frame, also we check the exact time we slept with usleep() as usleep() on a multitask OS cannot be precise ever!!
-	gettimeofday(&tv_old, NULL);
-	t_slept = (tv_old.tv_sec - tv_new.tv_sec) * 1000000 + (tv_old.tv_usec - tv_new.tv_usec);	// real time we slept ... (warning, old/new are exchanged here with valid reason)
-	seconds_timer_trigger |= (tv_new.tv_sec != tv_old.tv_sec);
-	// correct sleep balancer with the real time slept, again if it's not "insane" value we got ...
-	if (t_slept > -250000 && t_slept < 250000)
-		sleep_balancer -= t_slept;
+#ifdef XEMU_SLEEP_IS_SDL_DELAY
+#define __SLEEP_METHOD_DESC "SDL_Delay"
+	SDL_Delay(td / 1000);
+#elif defined(XEMU_SLEEP_IS_USLEEP)
+#define __SLEEP_METHOD_DESC "usleep"
+	usleep(td);
+#elif defined(XEMU_SLEEP_IS_NANOSLEEP)
+#define __SLEEP_METHOD_DESC "nanosleep"
+	struct timespec req, rem;
+	td *= 1000;
+	req.tv_sec  = td / 1000000000UL;
+	req.tv_nsec = td % 1000000000UL;
+	for (;;) {
+		if (nanosleep(&req, &rem)) {
+			if (errno == EINTR) {
+				req.tv_sec = rem.tv_sec;
+				req.tv_nsec = rem.tv_nsec;
+			} else
+				FATAL("nanosleep() returned with unhandable error");
+		} else
+			return;
+	}
+#else
+#error "No SLEEP method is defined with XEMU_SLEEP_IS_* macros!"
+#endif
+}
+
+
+
+/* Should be called regularly (eg on each screen global update), this function
+   tries to keep the emulation speed near to real-time of the emulated machine.
+   It's assumed that this function is called at least at every 0.1 sec or even
+   more frequently ... Ideally it should be used at 25Hz rate (for PAL full TV
+   frame) or 50Hz (for PAL half frame).
+   Input: td_em: time in microseconds would be need on the REAL (emulated)
+   machine to do the task, since the last call of this function! */
+void emu_timekeeping_delay ( int td_em )
+{
+	int td, td_pc;
+	time_t old_unix_time = unix_time;
+	Uint64 et_new;
+	td_pc = get_elapsed_time(et_old, &et_new, NULL);	// get realtime since last call in microseconds
+	if (td_pc < 0) return; // time goes backwards? maybe time was modified on the host computer. Skip this delay cycle
+	td = td_em - td_pc; // the time difference (+X = PC is faster - real time emulation, -X = hw is faster - real time emulation is not possible)
+	if (td > 0) {
+		td_balancer += td;
+		do_sleep(td_balancer);
+	}
+	/* Purpose:
+	 * get the real time spent sleeping (sleep is not an exact science on a multitask OS)
+	 * also this will get the starter time for the next frame
+	 */
+	// calculate real time slept
+	td = get_elapsed_time(et_new, &et_old, &unix_time);
+	seconds_timer_trigger = (unix_time != old_unix_time);
+	if (seconds_timer_trigger) {
+		if (td_em_ALL) {
+			snprintf(window_title_buffer_end, 32, "  [%d%%]",
+				td_pc_ALL * 100 / td_em_ALL
+			);
+			SDL_SetWindowTitle(sdl_win, window_title_buffer);
+		}
+		td_pc_ALL = td_pc;
+		td_em_ALL = td_em;
+	} else {
+		td_pc_ALL += td_pc;
+		td_em_ALL += td_em;
+	}
+	if (td < 0) return; // invalid, sleep was about for _minus_ time? eh, give me that time machine, dude! :)
+	td_balancer -= td;
+	if (td_balancer >  1000000)
+		td_balancer = 0;
+	else if (td_balancer < -1000000)
+		td_balancer = 0;
 }
 
 
@@ -269,12 +343,14 @@ int emu_init_sdl (
 	SDL_VERSION(&sdlver_compiled);
         SDL_GetVersion(&sdlver_linked);
 	printf( "SDL version: (%s) compiled with %d.%d.%d, used with %d.%d.%d on platform %s" NL
-		"SDL drivers: video = %s, audio = %s" NL,
+		"SDL drivers: video = %s, audio = %s" NL
+		"Timing: sleep = %s, query = %s" NL NL,
 		SDL_GetRevision(),
 		sdlver_compiled.major, sdlver_compiled.minor, sdlver_compiled.patch,
 		sdlver_linked.major, sdlver_linked.minor, sdlver_linked.patch,
 		SDL_GetPlatform(),
-		SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver()
+		SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver(),
+		__SLEEP_METHOD_DESC, __TIMING_METHOD_DESC
 	);
 	sdl_pref_dir = SDL_GetPrefPath(app_organization, app_name);
 	if (!sdl_pref_dir) {
@@ -297,6 +373,9 @@ int emu_init_sdl (
 		ERROR_WINDOW("Cannot create SDL window: %s", SDL_GetError());
 		return 1;
 	}
+	window_title_buffer = emu_malloc(strlen(window_title) + 32);
+	strcpy(window_title_buffer, window_title);
+	window_title_buffer_end = window_title_buffer + strlen(window_title);
 	//SDL_SetWindowMinimumSize(sdl_win, SCREEN_WIDTH, SCREEN_HEIGHT * 2);
 	sdl_ren = SDL_CreateRenderer(sdl_win, -1, 0);
 	if (!sdl_ren) {
@@ -319,11 +398,9 @@ int emu_init_sdl (
 	/* SDL hints */
 	snprintf(render_scale_quality_s, 2, "%d", render_scale_quality);
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, render_scale_quality_s);		// render scale quality 0, 1, 2
-#if SDL_VERSION_ATLEAST(2, 0, 4)
-	SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_PING, "0");				// disable WM ping, SDL dialog boxes makes WMs things Xep128 is dead :-/
-#endif
+	SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_PING, "0");				// disable WM ping, SDL dialog boxes makes WMs things emu is dead (?)
 	SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0");					// disable vsync aligned screen rendering
-#if defined(_WIN32) && SDL_VERSION_ATLEAST(2, 0, 4)
+#ifdef _WIN32
 	SDL_SetHint(SDL_HINT_WINDOWS_NO_CLOSE_ON_ALT_F4, "1");				// 1 = disable ALT-F4 close on Windows
 #endif
 	SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "1");			// 1 = do minimize the SDL_Window if it loses key focus when in fullscreen mode
@@ -340,8 +417,10 @@ int emu_init_sdl (
 // this is just for the time keeping stuff, to avoid very insane values (ie, years since the last update for the first call ...)
 void emu_timekeeping_start ( void )
 {
-	gettimeofday(&tv_old, NULL);
-	sleep_balancer = 0;
+	(void)get_elapsed_time(0, &et_old, &unix_time);
+	td_balancer = 0;
+	td_em_ALL = 0;
+	td_pc_ALL = 0;
 	seconds_timer_trigger = 1;
 }
 
@@ -406,4 +485,3 @@ void emu_update_screen ( void )
 	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);
 	SDL_RenderPresent(sdl_ren);
 }
-

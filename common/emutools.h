@@ -80,7 +80,7 @@ extern void *emu_malloc ( size_t size );
 extern char *emu_strdup ( const char *s );
 extern int emu_load_file ( const char *fn, void *buffer, int maxsize );
 extern void emu_set_full_screen ( int setting );
-extern void emu_sleep ( int real_usec );
+extern void emu_timekeeping_delay ( int td_em );
 extern int emu_init_sdl (
         const char *window_title,               // title of our window
         const char *app_organization,           // organization produced the application, used with SDL_GetPrefPath()
