@@ -10,3 +10,6 @@ geos-c64-basic.rom
 geos-c64-chargen.rom
 geos-c64-kernal.rom
 geos-kernal.bin
+primo-a64.rom
+primo-b64.rom
+*.M65

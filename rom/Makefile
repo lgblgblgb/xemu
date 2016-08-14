@@ -41,6 +41,7 @@ roms:
 	test -s geos-c64-chargen.rom || wget -O geos-c64-chargen.rom http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c64/characters.901225-01.bin
 	test -s geos-c64-kernal.rom || wget -O geos-c64-kernal.rom http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c64/kernal.901227-03.bin
 	test -s geos-c64-basic.rom || wget -O geos-c64-basic.rom http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c64/basic.901226-01.bin
+	test -s primo-b64.rom || wget -O primo-b64.rom http://github.lgb.hu/xemu/files/pr_b64.rom
 
 %.rom: %.asm
 	cl65 -t none --cpu 65c02 -o $@ $<
