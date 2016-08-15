@@ -19,7 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include <SDL.h>
 
-#include "commodore_65.h"
+#include "mega65.h"
 #include "cpu65c02.h"
 #include "cia6526.h"
 #include "c65fdc.h"
@@ -33,7 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 static SDL_AudioDeviceID audio = 0;
 
-Uint8 memory[0x100000];			// 65CE02 MAP'able address space
+Uint8 memory[0x104001];			// 65CE02 MAP'able address space (with the special case of hypervisor memory of Mega65, +0x4001, 1 byte if for check kickstart size)
 static Uint8 cpu_port[2];		// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
 static struct SidEmulation sid1, sid2;	// the two SIDs
@@ -50,6 +50,10 @@ static struct SidEmulation sid1, sid2;	// the two SIDs
 #define ROM_C64_CHR_REMAP	 0x20000
 #define ROM_C64_KERNAL_REMAP	 0x20000
 #define ROM_C64_BASIC_REMAP	 0x20000
+// Mega65, we just maps hypervisor memory above 1Mbyte, which is really not the way of Mega65, but should work here now
+#define HYPERVISOR_MEM_REMAP_VIRTUAL (0x100000 - 0x8000)
+
+#define TRAP_RESET	0x40
 
 static int addr_trans_rd[16];		// address translating offsets for READ operation (it can be added to the CPU address simply, selected by the high 4 bits of the CPU address)
 static int addr_trans_wr[16];		// address translating offsets for WRITE operation (it can be added to the CPU address simply, selected by the high 4 bits of the CPU address)
@@ -59,6 +63,10 @@ static int map_offset_high;		// MAP high offset, should be filled at the MAP opc
 
 static int frame_counter;
 
+static int in_hypervisor;		// mega65 hypervisor mode
+int mega65_capable;			// emulator founds kickstart, sub-set of mega65 features CAN BE usable. It is an ERROR to use any of mega65 specific stuff, it it's zero!
+int mega65_mode;			// I/O is in mega65 mode
+static Uint8 gs_regs[0x1000];		// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
 
 
 #ifdef DEBUG_STACK
@@ -106,21 +114,30 @@ void apply_memory_config ( void )
 	addr_trans_wr[4] = addr_trans_rd[4] = addr_trans_wr[5] = addr_trans_rd[5] = (map_mask & 4) ? map_offset_low : 0;	// $4XXX + $5XXX, MAP block 2 [mask 4]
 	addr_trans_wr[6] = addr_trans_rd[6] = addr_trans_wr[7] = addr_trans_rd[7] = (map_mask & 8) ? map_offset_low : 0;	// $6XXX + $7XXX, MAP block 3 [mask 8]
 	// From this point, we must use the "high" area offset if it's CPU MAP'ed
-	// $8XXX and $9XXX, MAP block 4 [mask 16]
-	if (vic3_registers[0x30] & 8)
-		addr_trans_wr[8] = addr_trans_rd[8] = addr_trans_wr[9] = addr_trans_rd[9] = ROM_8000_REMAP;
-	else if (map_mask & 16)
-		addr_trans_wr[8] = addr_trans_rd[8] = addr_trans_wr[9] = addr_trans_rd[9] = map_offset_high;
-	else
-		addr_trans_wr[8] = addr_trans_rd[8] = addr_trans_wr[9] = addr_trans_rd[9] = 0;
-	// $AXXX and $BXXX, MAP block 5 [mask 32]
-	if (vic3_registers[0x30] & 16)
-		addr_trans_wr[0xA] = addr_trans_rd[0xA] = addr_trans_wr[0xB] = addr_trans_rd[0xB] = ROM_A000_REMAP;
-	else if ((map_mask & 32))
-		addr_trans_wr[0xA] = addr_trans_rd[0xA] = addr_trans_wr[0xB] = addr_trans_rd[0xB] = map_offset_high;
-	else {
-		addr_trans_wr[0xA] = addr_trans_wr[0xB] = 0;
-		addr_trans_rd[0xA] = addr_trans_rd[0xB] = ((cp & 3) == 3) ? ROM_C64_BASIC_REMAP : 0;
+	// $8XXX and $9XXX + $AXXX and $BXXX: in hypervisor mode, it's another Mega65 specific, otherwise, let's see two first 8K MAP blocks 4 and 5
+	if (in_hypervisor) {
+		// NOTE: for real, entering to hypervisor mode would need "normal" MAP (but with extended offset addresses)
+		// since I have just "C65 MAP" implemtnation, do this hack to handle differently ...
+		addr_trans_wr[8] = addr_trans_rd[8] = addr_trans_wr[9] = addr_trans_rd[9] =
+			addr_trans_wr[0xA] = addr_trans_rd[0xA] = addr_trans_wr[0xB] = addr_trans_rd[0xB] =
+			HYPERVISOR_MEM_REMAP_VIRTUAL;
+	} else {
+		// $8XXX and $9XXX, MAP block 4 [mask 16]
+		if (vic3_registers[0x30] & 8)
+			addr_trans_wr[8] = addr_trans_rd[8] = addr_trans_wr[9] = addr_trans_rd[9] = ROM_8000_REMAP;
+		else if (map_mask & 16)
+			addr_trans_wr[8] = addr_trans_rd[8] = addr_trans_wr[9] = addr_trans_rd[9] = map_offset_high;
+		else
+			addr_trans_wr[8] = addr_trans_rd[8] = addr_trans_wr[9] = addr_trans_rd[9] = 0;
+		// $AXXX and $BXXX, MAP block 5 [mask 32]
+		if (vic3_registers[0x30] & 16)
+			addr_trans_wr[0xA] = addr_trans_rd[0xA] = addr_trans_wr[0xB] = addr_trans_rd[0xB] = ROM_A000_REMAP;
+		else if ((map_mask & 32))
+			addr_trans_wr[0xA] = addr_trans_rd[0xA] = addr_trans_wr[0xB] = addr_trans_rd[0xB] = map_offset_high;
+		else {
+			addr_trans_wr[0xA] = addr_trans_wr[0xB] = 0;
+			addr_trans_rd[0xA] = addr_trans_rd[0xB] = ((cp & 3) == 3) ? ROM_C64_BASIC_REMAP : 0;
+		}
 	}
 	// $CXXX, MAP block 6 [mask 64]
 	// Warning: all VIC3 reg $30 related ROM maps are for 8K size, *expect* of '@C000' (interface ROM) which is only 4K! Also this is in another ROM bank than the others
@@ -148,6 +165,70 @@ void apply_memory_config ( void )
 		addr_trans_wr[0xE] = addr_trans_wr[0xF] = 0;
 		addr_trans_rd[0xE] = addr_trans_rd[0xF] = ((cp & 3) > 1) ? ROM_C64_KERNAL_REMAP : 0;
 	}
+}
+
+
+static void hypervisor_enter ( int trapno )
+{
+	// Sanity checks
+	if (!mega65_capable)
+		FATAL("FATAL: hypervisor_enter() called without Mega65 capable mode");
+	if (trapno > 0x7F || trapno < 0)
+		FATAL("FATAL: got invalid trap number %d", trapno);
+	// First, save machine status into hypervisor registers, TODO: incomplete, can be buggy!
+	gs_regs[0x640] = cpu_a;
+	gs_regs[0x641] = cpu_x;
+	gs_regs[0x642] = cpu_y;
+	gs_regs[0x643] = cpu_z;
+	gs_regs[0x644] = cpu_bphi >> 8;	// "B" register
+	gs_regs[0x645] = cpu_sp;
+	gs_regs[0x646] = cpu_sphi >> 8;	// stack page register
+	gs_regs[0x647] = cpu_get_p();
+	gs_regs[0x648] = cpu_pc & 0xFF;
+	gs_regs[0x649] = cpu_pc >> 8;
+	gs_regs[0x64A] =  map_offset_low  >> 16;
+	gs_regs[0x64B] = (map_offset_low  >>  8) & 0xFF;
+	gs_regs[0x64C] =  map_offset_high >> 16;
+	gs_regs[0x64D] = (map_offset_high >>  8) & 0xFF;
+	gs_regs[0x650] = cpu_port[0];
+	gs_regs[0x651] = cpu_port[1];
+	// Now entering into hypervisor mode
+	in_hypervisor = 1;	// this will cause apply_memory_config to map hypervisor RAM, also for checks later to out-of-bound execution of hypervisor RAM, etc ...
+	vic_new_mode = 1;	// Currently, mega65 I/O mode is implemented as a super-set of C65 I/O mode, so I need this too
+	mega65_mode = 1;	// ... but also the Mega65 specific stuff, of course!
+	cpu_port[0] = 0xFF;	// apply_memory_config watch this also ...
+	cpu_port[1] = 5;	// and this too (this sets, all-RAM + I/O config)
+	cpu_pfd = 0;		// clear decimal mode
+	// TODO: what kind of MAP config is done on entering hypervisor, other than the special 8000-BFFF mapping for hypervisor memory?
+	apply_memory_config();	// now the memory mapping is changed
+	cpu_pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
+	printf("MEGA65: entering into hypervisor mode, trap=$%02X PC=$%04X" NL, trapno, cpu_pc);
+}
+
+
+static void hypervisor_leave ( void )
+{
+	if (!mega65_capable)	// sanity check
+		FATAL("FATAL: hypervisor_leave() called without Mega65 capable mode");
+	// First, restore machine status from hypervisor registers
+	cpu_a    = gs_regs[0x640];
+	cpu_x    = gs_regs[0x641];
+	cpu_y    = gs_regs[0x642];
+	cpu_z    = gs_regs[0x643];
+	cpu_bphi = gs_regs[0x644] << 8;	// "B" register
+	cpu_sp   = gs_regs[0x645];
+	cpu_sphi = gs_regs[0x646] << 8;	// stack page register
+	cpu_set_p(gs_regs[0x647]);
+	cpu_pfe = gs_regs[0x647] & 32;	// cpu_set_p() does NOT set 'E' bit by design, so we do at our own
+	cpu_pc   = gs_regs[0x648] | (gs_regs[0x649] << 8);
+	map_offset_low  = (gs_regs[0x64A] << 16) | (gs_regs[0x64B] << 8);
+	map_offset_high = (gs_regs[0x64C] << 16) | (gs_regs[0x64D] << 8);
+	cpu_port[0] = gs_regs[0x650];
+	cpu_port[1] = gs_regs[0x651];
+	// Now leaving hypervisor mode ...
+	in_hypervisor = 0;
+	apply_memory_config();
+	printf("MEGA65: leaving hypervisor mode, (user) PC=$%04X" NL, cpu_pc);
 }
 
 
@@ -221,12 +302,24 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 	hid_init();
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
-	// *** Load ROM image
+	in_hypervisor = 0;
+	memset(gs_regs, 0, sizeof gs_regs);
+	// *** Trying to load kickstart image
+	if (emu_load_file("KICKUP.M65", memory + HYPERVISOR_MEM_REMAP_VIRTUAL + 0x8000, 0x4001) == 0x4000) {
+		// Found kickstart ROM, emulate Mega65 startup somewhat ...
+		mega65_capable = 1;
+		printf("MEGA65: KICKUP.M65 loaded into hypervisor memory, Mega65 capable mode is set" NL);
+	} else {
+		ERROR_WINDOW("Cannot load KICKUP.M65 (not found, or not 16K sized), emulate only C65");
+		printf("MEGA65: KICKUP.M65 cannot be loaded, Mega65 capable mode is disabled" NL);
+		mega65_capable = 0;
+	}
+	// *** Load ROM image (TODO: make it optional when mega65_capable is true, thus KICKUP is loaded)
 	if (emu_load_file("c65-system.rom", memory + 0x20000, 0x20001) != 0x20000)
 		FATAL("Cannot load C65 system ROM!");
 	// *** Initialize VIC3
 	vic3_init();
-	// *** Memory configuration
+	// *** Memory configuration (later override will happen for mega65 mode though, this is only the default)
 	cpu_port[0] = cpu_port[1] = 0xFF;	// the "CPU I/O port" on 6510/C64, implemented by VIC3 for real in C65!
 	map_mask = 0;				// as all 8K blocks are unmapped, we don't need to worry about the low/high offset to set here
 	apply_memory_config();			// VIC3 $30 reg is already filled, so it's OK to call this now
@@ -279,6 +372,9 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 		ERROR_WINDOW("Cannot open audio device!");
 	// *** RESET CPU, also fetches the RESET vector into PC
 	cpu_reset();
+	// *** In case of Mega65 mode, let's override the system configuration a bit ... It will also re-set PC to the trap address
+	if (mega65_capable)
+		hypervisor_enter(TRAP_RESET);
 	puts("INIT: end of initialization!");
 }
 
@@ -373,7 +469,9 @@ Uint8 io_read ( int addr )
 		RETURN_ON_IO_READ_NOT_IMPLEMENTED("left SID", 0xFF);
 	}
 	if (addr < 0xD700) {	// $D600 - $D6FF	UART (*)
-		if (vic_new_mode)
+		if (mega65_mode && addr >= 0xD609)	// D609 - D6FF: Mega65 suffs
+			return gs_regs[addr & 0xFFF];
+		else if (vic_new_mode)
 			RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);
 		else
 			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("UART", 0xFF);
@@ -462,6 +560,7 @@ void io_write ( int addr, Uint8 data )
 			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("UART");
 	}
 	if (addr < 0xD800) {	// $D700 - $D7FF	DMA (*)
+		printf("DMA: writing register $%04X (data = $%02X)" NL, addr, data);
 		if (vic_new_mode) {
 			dma_write_reg(addr & 3, data);
 			return;
@@ -497,7 +596,8 @@ void io_write ( int addr, Uint8 data )
 
 void write_phys_mem ( int addr, Uint8 data )
 {
-	addr &= 0xFFFFF;
+	// !!!! The following line was for C65 to make it secure, only access 1Mbyte of memory ...
+	//addr &= 0xFFFFF;
 #if 0
        if (addr > 0x7FFFF)
                 printf("HACKY: Someone writing upper RAM %06X PC=%04X (%06X) data = %02X!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc, data);
@@ -531,7 +631,8 @@ void write_phys_mem ( int addr, Uint8 data )
 
 Uint8 read_phys_mem ( int addr )
 {
-	addr &= 0xFFFFF;
+	// !!!! The following line was for C65 to make it secure, only access 1Mbyte of memory ...
+	//addr &= 0xFFFFF;
 	if (addr < 2)
 		return cpu_port[addr];
 #if 0
@@ -550,6 +651,8 @@ Uint8 read_phys_mem ( int addr )
 	else if (addr > 0x3FFFF)
 		printf("HACKY: Someone reading upper ROM %06X PC=%04X (%06X)!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
 #endif
+	//if (in_hypervisor)	// DEBUG
+	//	printf("MEGA65: read byte from %X is $%02X" NL, addr, memory[addr]);
 	return memory[addr];
 }
 
@@ -559,6 +662,8 @@ Uint8 read_phys_mem ( int addr )
 Uint8 cpu_read ( Uint16 addr )
 {
 	int phys_addr = addr_trans_rd[addr >> 12] + addr;	// translating address with the READ table created by apply_memory_config()
+	//if (in_hypervisor)	// DEBUG
+	//	printf("MEGA65: cpu_read, addr=%X phys_addr=%X" NL, addr, phys_addr);
 	if (phys_addr >= IO_REMAP_VIRTUAL) {
 		if ((addr & 0xF000) != 0xD000)
 			FATAL("Internal error: IO is not on the IO space!");
@@ -648,6 +753,8 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 			vic3_registers[0x30] = 0;
 			apply_memory_config();
 			cpu_reset();
+			if (mega65_capable)
+				hypervisor_enter(TRAP_RESET);
 			puts("RESET!");
 			return;
 		}
@@ -703,7 +810,7 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles, frameskip;
-	printf("**** The Unusable Commodore 65 emulator from LGB" NL
+	printf("**** The Incomplete Commodore-65/Mega-65 emulator from LGB" NL
 	"INFO: Texture resolution is %dx%d" NL "%s" NL,
 		SCREEN_WIDTH, SCREEN_HEIGHT,
 		emulators_disclaimer
@@ -727,7 +834,7 @@ int main ( int argc, char **argv )
 		return 1;
 	// Initialize C65 ...
 	c65_init(
-		argc > 1 ? argv[1] : NULL,	// disk image name
+		argc > 1 ? argv[1] : NULL,	// FIXME: disk image name (in Mega65 mode, this will be SD-card image rather than a D81 in the future ...)
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
 		AUDIO_SAMPLE_FREQ		// sound mix freq
 	);
@@ -749,6 +856,11 @@ int main ( int argc, char **argv )
 		// Trying to use at least some approx stuff :)
 		// In FAST mode, the divider is 7. (see: vic3.c)
 		// Otherwise it's 2, thus giving about *3.5 slower CPU ... or something :)
+		if (in_hypervisor) {
+			printf("MEGA65: hypervisor mode execution at $%04X" NL, cpu_pc);
+			if(cpu_pc < 0x8000 || cpu_pc > 0xBFFF)
+				ERROR_WINDOW("Executing program in hypervisor mode outside of the hypervisor mem $%04X", cpu_pc);
+		}
 		opcyc = cpu_step();
 #ifdef DEBUG_STACK
 		if (cpu_sp != cpu_old_sp) {

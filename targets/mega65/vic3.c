@@ -25,7 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include <SDL.h>
 
-#include "commodore_65.h"
+#include "mega65.h"
 #include "cpu65c02.h"
 #include "vic3.h"
 #include "emutools.h"
@@ -103,6 +103,7 @@ void vic3_init ( void )
 	// *** Init VIC3 registers and palette
 	vic2_16k_bank = 0;
 	vic_new_mode = 0;
+	mega65_mode = 0;
 	interrupt_status = 0;
 	palette = vic3_rom_palette;
 	scanline = 0;
@@ -189,11 +190,20 @@ void vic3_write_reg ( int addr, Uint8 data )
 	old_data = vic3_registers[addr];
 	printf("VIC3: write reg $%02X with data $%02X" NL, addr, data);
 	if (addr == 0x2F) {
-		if (!vic_new_mode && data == 0x96 && old_data == 0xA5) {
+		if (!vic_new_mode && (
+			(data == 0x96 && old_data == 0xA5) ||		// this is C65 I/O mode
+			(data == 0x53 && old_data == 0x47 && mega65_capable)		// this is Mega65 mode
+		)) {
 			vic_new_mode = 1;
 			printf("VIC3: switched into NEW I/O access mode :)" NL);
+			if (data == 0x53) {
+				mega65_mode = 1;
+				printf("VIC3: MEGA65 mode, I mean ..." NL);
+			} else
+				mega65_mode = 0;
 		} else if (vic_new_mode) {
 			vic_new_mode = 0;
+			mega65_mode =  0;
 			printf("VIC3: switched into OLD I/O access mode :(" NL);
 		}
 	}
@@ -201,6 +211,12 @@ void vic3_write_reg ( int addr, Uint8 data )
 		printf("VIC3: ignoring writing register $%02X (with data $%02X) because of old I/O access mode selected" NL, addr, data);
 		return;
 	}
+	if (!mega65_mode && addr > 0x3D) {
+		printf("VIC4: ignoring writing register $%02X (with data $%02X) because of non-Mega65 I/O access mode selected" NL, addr, data);
+		return;
+	}
+	if (addr > 0x3D)
+		printf("VIC4: writing VIC4 register $%02X in Mega65 I/O mode (data=$%02X)" NL, addr, data);
 	vic3_registers[addr] = data;
 	switch (addr) {
 		case 0x11:

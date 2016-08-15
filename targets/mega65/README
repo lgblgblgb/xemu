@@ -1,0 +1,43 @@
+Mega65 target is a slightly modified Commodore 65 emulation. WARNING: This is
+NOT a full Mega65 emulation but only the minimal feature sub-set of Mega65
+which is enough for some purproses, like Kickstart ROM development and
+debugging. Do NOT expect that it runs Mega65 specific software in general!
+
+Mega65 mode is *only* used if the emulator can load KICKUP.M65 (case sensitive
+name ... at least on UNIX like machines). You should have one, placed into
+the rom/ directory for example (or the current directory, xemu tries different
+places, see emu_load_file() function in common/emutools.c about this). Without
+KICKUP.M65 the machine boots and functions like a C65, even C65GS I/O keying
+won't be supported (however this mode is not tested too much, for this, please
+use the c65 target instead of this one).
+
+== NOTES ==
+
+Basically the same as my Commodore 65 emulator, however:
+
+* $D02F keying support for Mega65 mode
+* Some Mega65 specific I/O support
+* Hypervisor MAP mode, limited load/save machine state (not all stuffs!)
+* NOTE: currently, >1MByte MAP/linear access/etc is *NOT* supported at all
+  (other than the special case of Hypervisor memory mapping $8000-$BFFF)
+* Loading KICKUP.M65 by the emulator (if it does not work, "simple C65 mode"
+  will be used, without any Mega65 feature)
+
+== HIGH PRIORITY TODO ==
+
+* DMAgic does not know about "high addresses" so kickstart freezes the emulator
+  as "garbage" is fed for DMA list leaving virtually never ending DMA ops, not
+  even left DMA emulation to allow the main func to update the screen, etc.
+* Mega65 specific I/O implementation in io_read() and io_write(), without that
+  - I guess - kickstart can't update even the hypervisor registers to leave
+  hypervisor mode?
+* SD card support in the form of SD image file (or symlinked /dev node, if needed)
+* 16 bit text support (VIC4 material)? Also there is *NO* any support for VIC4
+  currently, other than the $D02F mega65 "keying"
+* Maybe move to 28 bit memory model (256Mbytes to allocate) _OR_ just teach
+  c65dma.c stuffs to support at least the kickstart/hypervisor memory area
+  for a quick solution
+* True Mega65 favour of MAP opcode support with offsets up to 28 bits
+* 28 bit load support for ZP Z indexed special opcode
+* 28 bit JMP/etc support?
+* Backtrace support in case of hypervisor out-of-bound code execution?

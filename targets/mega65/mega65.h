@@ -51,7 +51,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define MEMDUMP_FILE		"dump.mem"
 
 
-extern Uint8 memory[0x100000];
+extern Uint8 memory[0x104001];
+extern int   mega65_capable;
+extern int   mega65_mode;
 
 extern void  apply_memory_config ( void );
 extern Uint8 io_read  ( int addr );

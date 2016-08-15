@@ -159,7 +159,7 @@ static inline void  pushWord_rev(Uint16 data) { push(data & 0xFF); push(data >> 
 #endif
 
 
-static void setP(Uint8 st) {
+void cpu_set_p(Uint8 st) {
 	cpu_pfn = st & 128;
 	cpu_pfv = st &  64;
 #ifdef CPU_65CE02
@@ -174,7 +174,7 @@ static void setP(Uint8 st) {
 	cpu_pfc = st &   1;
 }
 
-static Uint8 getP() {
+Uint8 cpu_get_p() {
 	return  (cpu_pfn ? 128 : 0) |
 	(cpu_pfv ?  64 : 0) |
 #ifdef CPU_65CE02
@@ -190,7 +190,7 @@ static Uint8 getP() {
 }
 
 void cpu_reset() {
-	setP(0x34);
+	cpu_set_p(0x34);
 	cpu_sp = 0xFF;
 	cpu_irqLevel = cpu_nmiEdge = 0;
 	cpu_cycles = 0;
@@ -438,7 +438,7 @@ int cpu_step () {
 #endif
 		cpu_nmiEdge = 0;
 		pushWord(cpu_pc);
-		push(getP() & (255 - 0x10));
+		push(cpu_get_p() & (255 - 0x10));
 		cpu_pfi = 1;
 		cpu_pfd = 0;			// NOTE: D flag clearing was not done on the original 6502 I guess, but indeed on the 65C02 already
 		cpu_pc = readWord(0xFFFA);
@@ -452,10 +452,10 @@ int cpu_step () {
 #ifdef DEBUG_CPU
 		printf("CPU: servint IRQ on IRQ level at PC $%04X\n", cpu_pc);
 #endif
-		last_p = getP();
+		last_p = cpu_get_p();
 		pushWord(cpu_pc);
 		cpu_pfb = 0;
-		push(getP() & (255 - 0x10));
+		push(cpu_get_p() & (255 - 0x10));
 		cpu_pfi = 1;
 		cpu_pfd = 0;
 		cpu_pc = readWord(0xFFFE);
@@ -490,7 +490,7 @@ int cpu_step () {
 			// FIXME: does BRK sets I and D flag? Hmm, I can't even remember now why I wrote these :-D
 			// FIXME-2: does BRK sets B flag, or only in the saved copy on the stack??
 			// NOTE: D flag clearing was not done on the original 6502 I guess, but indeed on the 65C02 already
-			pushWord(cpu_pc + 1); push(getP() | 0x10); cpu_pfd = 0; cpu_pfi = 1; cpu_pc = readWord(0xFFFE); /* 0x0 BRK Implied */
+			pushWord(cpu_pc + 1); push(cpu_get_p() | 0x10); cpu_pfd = 0; cpu_pfi = 1; cpu_pc = readWord(0xFFFE); /* 0x0 BRK Implied */
 			break;
 	case 0x01:	setNZ(A_OP(|,cpu_read(_zpxi()))); break; /* 0x1 ORA (Zero_Page,X) */
 	case 0x02:
@@ -514,7 +514,7 @@ int cpu_step () {
 	case 0x05:	setNZ(A_OP(|,cpu_read(_zp()))); break; /* 0x5 ORA Zero_Page */
 	case 0x06:	_ASL(_zp()); break; /* 0x6 ASL Zero_Page */
 	case 0x07:	{ int a = _zp(); cpu_write(a, cpu_read(a) & 254);  } break; /* 0x7 RMB Zero_Page */
-	case 0x08:	push(getP() | 0x10); break; /* 0x8 PHP Implied */
+	case 0x08:	push(cpu_get_p() | 0x10); break; /* 0x8 PHP Implied */
 	case 0x09:	setNZ(A_OP(|,cpu_read(_imm()))); break; /* 0x9 ORA Immediate */
 	case 0x0a:	_ASL(-1); break; /* 0xa ASL Accumulator */
 	case 0x0b:
@@ -584,7 +584,7 @@ int cpu_step () {
 	case 0x26:	_ROL(_zp()); break; /* 0x26 ROL Zero_Page */
 	case 0x27:	{ int a = _zp(); cpu_write(a, cpu_read(a) & 251); } break; /* 0x27 RMB Zero_Page */
 	case 0x28:
-			setP(pop() | 0x10);
+			cpu_set_p(pop() | 0x10);
 			break; /* 0x28 PLP Implied */
 	case 0x29:	setNZ(A_OP(&,cpu_read(_imm()))); break; /* 0x29 AND Immediate */
 	case 0x2a:	_ROL(-1); break; /* 0x2a ROL Accumulator */
@@ -634,7 +634,7 @@ int cpu_step () {
 	case 0x3d:	setNZ(A_OP(&,cpu_read(_absx()))); break; /* 0x3d AND Absolute,X */
 	case 0x3e:	_ROL(_absx()); break; /* 0x3e ROL Absolute,X */
 	case 0x3f:	_BRA(!(cpu_read(_zp()) & 8)); break; /* 0x3f BBR Relative */
-	case 0x40:	setP(pop() | 0x10); cpu_pc = popWord(); break; /* 0x40 RTI Implied */
+	case 0x40:	cpu_set_p(pop() | 0x10); cpu_pc = popWord(); break; /* 0x40 RTI Implied */
 	case 0x41:	setNZ(A_OP(^,cpu_read(_zpxi()))); break; /* 0x41 EOR (Zero_Page,X) */
 	case 0x42:
 #ifdef CPU_65CE02
