@@ -1,4 +1,4 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
+/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -53,7 +53,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 extern Uint8 memory[0x104001];
 extern int   mega65_capable;
-extern int   mega65_mode;
 
 extern void  apply_memory_config ( void );
 extern Uint8 io_read  ( int addr );

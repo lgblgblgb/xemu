@@ -1,4 +1,4 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
+/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify

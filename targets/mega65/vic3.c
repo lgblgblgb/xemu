@@ -1,4 +1,4 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
+/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is the VIC3 "emulation". Currently it does one-frame-at-once
@@ -40,7 +40,7 @@ static Uint32 vic3_rom_palette[0x100];	// the "ROM" palette, for C64 colours (wi
 static Uint32 *palette;			// the selected palette ...
 static Uint8 vic3_palette_nibbles[0x300];
 Uint8 vic3_registers[0x80];		// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
-int vic_new_mode;			// VIC3 "newVic" IO mode is activated flag
+int vic_iomode;				// VIC2/VIC3/VIC4 mode
 int scanline;				// current scan line number
 int clock_divider7_hack;
 static int compare_raster;		// raster compare (9 bits width) data
@@ -102,8 +102,7 @@ void vic3_init ( void )
 	SDL_FreeFormat(sdl_pix_fmt);	// thanks, we don't need this anymore from SDL
 	// *** Init VIC3 registers and palette
 	vic2_16k_bank = 0;
-	vic_new_mode = 0;
-	mega65_mode = 0;
+	vic_iomode = VIC2_IOMODE;
 	interrupt_status = 0;
 	palette = vic3_rom_palette;
 	scanline = 0;
@@ -186,32 +185,27 @@ void vic3_check_raster_interrupt ( void )
 void vic3_write_reg ( int addr, Uint8 data )
 {
 	Uint8 old_data;
-	addr &= vic_new_mode ? 0x7F : 0x3F;
+	addr &= vic_iomode ? 0x7F : 0x3F;
 	old_data = vic3_registers[addr];
 	printf("VIC3: write reg $%02X with data $%02X" NL, addr, data);
 	if (addr == 0x2F) {
-		if (!vic_new_mode && (
-			(data == 0x96 && old_data == 0xA5) ||		// this is C65 I/O mode
-			(data == 0x53 && old_data == 0x47 && mega65_capable)		// this is Mega65 mode
-		)) {
-			vic_new_mode = 1;
-			printf("VIC3: switched into NEW I/O access mode :)" NL);
-			if (data == 0x53) {
-				mega65_mode = 1;
-				printf("VIC3: MEGA65 mode, I mean ..." NL);
-			} else
-				mega65_mode = 0;
-		} else if (vic_new_mode) {
-			vic_new_mode = 0;
-			mega65_mode =  0;
-			printf("VIC3: switched into OLD I/O access mode :(" NL);
+		int vic_new_iomode;
+		if (data == 0x96 && old_data == 0xA5)
+			vic_new_iomode = VIC3_IOMODE;
+		else if (data == 0x53 && old_data == 0x47 && mega65_capable)
+			vic_new_iomode = VIC4_IOMODE;
+		else
+			vic_new_iomode = VIC2_IOMODE;
+		if (vic_new_iomode != vic_iomode) {
+			printf("VIC: changing I/O mode %d -> %d\n", vic_iomode, vic_new_iomode);
+			vic_iomode = vic_new_iomode;
 		}
 	}
-	if (!vic_new_mode && addr > 0x2F) {
+	if (vic_iomode == VIC2_IOMODE && addr > 0x2F) {
 		printf("VIC3: ignoring writing register $%02X (with data $%02X) because of old I/O access mode selected" NL, addr, data);
 		return;
 	}
-	if (!mega65_mode && addr > 0x3D) {
+	if (vic_iomode != VIC4_IOMODE && addr > 0x3D) {
 		printf("VIC4: ignoring writing register $%02X (with data $%02X) because of non-Mega65 I/O access mode selected" NL, addr, data);
 		return;
 	}
@@ -271,8 +265,8 @@ void vic3_write_reg ( int addr, Uint8 data )
 Uint8 vic3_read_reg ( int addr )
 {
 	Uint8 result;
-	addr &= vic_new_mode ? 0x7F : 0x3F;
-	if (!vic_new_mode && addr > 0x2F) {
+	addr &= vic_iomode ? 0x7F : 0x3F;
+	if (vic_iomode == VIC2_IOMODE && addr > 0x2F) {
 		printf("VIC3: ignoring reading register $%02X because of old I/O access mode selected, answer is $FF" NL, addr);
 		return 0xFF;
 	}

@@ -1,4 +1,4 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
+/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "c65dma.h"
 #include "mega65.h"
 #include "emutools.h"
+#include "vic3.h"
 
 
 
@@ -137,11 +138,13 @@ static inline Uint8 read_dma_list_next ( void )
 void dma_write_reg ( int addr, Uint8 data )
 {
 	// DUNNO about DMAgic too much. It's merely guessing from my own ROM assembly tries, C65gs/Mega65 VHDL, and my ideas :)
-	addr &= (mega65_mode ? 7 : 3);
+	if (vic_iomode != VIC4_IOMODE)
+		addr &= 3;
 	dma_registers[addr] = data;
 	if (addr)
 		return;	// Only writing register 0 starts the DMA operation
 	if (dma_status) {
+		int limit = 0;
 		printf("DMA: WARNING: previous operation is in progress, WORKAROUND: finishing first." NL);
 		// Ugly hack: it seems even the C65 ROM issues new DMA commands while the previous is in-progress
 		// It's possible the fault of timing of my emulation.
@@ -149,8 +152,12 @@ void dma_write_reg ( int addr, Uint8 data )
 		// Note, that there is a possible two PROBLEMS with this solution:
 		// * Extremly long DMA command (ie chained) blocks the emulator to refresh screen etc for a long time
 		// * I/O redirection as target affecting the DMA registers can create a stack overflow in the emulator code :)
-		while (dma_status)
+		while (dma_status) {
 			dma_update();
+			limit++;
+			if (limit > 256 * 1024)
+				FATAL("FATAL: Run-away DMA session, blocking the emulator after %d iterations, exiting!", limit);
+		}
 	}
 	dma_list_addr = dma_registers[0] | (dma_registers[1] << 8) | ((dma_registers[2] & 15) << 16);
 	printf("DMA: list address is $%06X now, just written to register %d value $%02X" NL, dma_list_addr, addr, data);
