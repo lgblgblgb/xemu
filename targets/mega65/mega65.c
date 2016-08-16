@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "c65hid.h"
 #include "vic3.h"
 #include "sid.h"
+#include "sdcard.h"
 #include "emutools.h"
 
 
@@ -65,12 +66,10 @@ static int map_offset_high;		// MAP high offset, should be filled at the MAP opc
 
 static int frame_counter;
 
-static int in_hypervisor;		// mega65 hypervisor mode
-int mega65_capable;			// emulator founds kickstart, sub-set of mega65 features CAN BE usable. It is an ERROR to use any of mega65 specific stuff, it it's zero!
+int in_hypervisor;			// mega65 hypervisor mode
+int mega65_capable;			// emulator founds kickstart, sub-set of mega65 features CAN BE usable. It is an ERROR to use any of mega65 specific stuff, if it's zero!
 static Uint8 gs_regs[0x1000];		// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
 static int rom_protect;			// C65 system ROM write protection
-
-
 
 
 /* You *MUST* call this every time, when *any* of these events applies:
@@ -313,6 +312,8 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 		printf("MEGA65: " KICKSTART_NAME " cannot be loaded, Mega65 capable mode is disabled" NL);
 		mega65_capable = 0;
 	}
+	// *** Mega65 specific SDCARD support
+	sdcard_init(SDCARD_NAME);
 	// *** Load ROM image (TODO: make it optional when mega65_capable is true, thus KICKUP is loaded)
 	if (emu_load_file(ROM_NAME, memory + 0x20000, 0x20001) != 0x20000)
 		FATAL("Cannot load C65 system ROM: " ROM_NAME);
@@ -470,9 +471,13 @@ Uint8 io_read ( int addr )
 		RETURN_ON_IO_READ_NOT_IMPLEMENTED("left SID", 0xFF);
 	}
 	if (addr < 0xD700) {	// $D600 - $D6FF	UART (*)
-		if (vic_iomode == VIC4_IOMODE && addr >= 0xD609)	// D609 - D6FF: Mega65 suffs
+		if (vic_iomode == VIC4_IOMODE && addr >= 0xD609) {	// D609 - D6FF: Mega65 suffs
+			if (addr == 0xD680) {
+				return sdcard_read_status();
+			} else
+				printf("MEGA65: reading Mega65 specific I/O @ $%04X result is $%02X" NL, addr, gs_regs[addr & 0xFFF]);
 			return gs_regs[addr & 0xFFF];
-		else if (vic_iomode)
+		} else if (vic_iomode)
 			RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);
 		else
 			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("UART", 0xFF);
@@ -498,6 +503,9 @@ Uint8 io_read ( int addr )
 		//RETURN_ON_IO_READ_NOT_IMPLEMENTED("CIA-2", 0xFF);
 		printf("%s: reading register $%X result is $%02X" NL, cia2.name, addr & 15, result);
 		return result;
+	}
+	if (sd_status & SD_ST_MAPPED) {	// Only IO-1 and IO-2 areas left, if SD-card buffer is mapped for Mega65, this is our only case left!
+		return sd_buffer[addr - 0xDE00];
 	}
 	if (addr < 0xDF00) {	// $DE00 - $DEFF	IO-1 external
 		RETURN_ON_IO_READ_NOT_IMPLEMENTED("IO-1 external select", 0xFF);
@@ -557,6 +565,7 @@ void io_write ( int addr, Uint8 data )
 	if (addr < 0xD700) {	// $D600 - $D6FF	UART (*)
 		if (vic_iomode == VIC4_IOMODE && addr >= 0xD609) {	// D609 - D6FF: Mega65 suffs
 			gs_regs[addr & 0xFFF] = data;
+			printf("MEGA65: writing Mega65 specific I/O range @ $%04X with $%02X" NL, addr, data);
 			switch (addr) {
 				case 0xD67D:
 					rom_protect = data & 4;
@@ -566,6 +575,15 @@ void io_write ( int addr, Uint8 data )
 						hypervisor_leave();
 					else
 						hypervisor_enter(TRAP_TRIGGERED);
+					break;
+				case 0xD680:
+					sdcard_command(data);
+					break;
+				case 0xD681:
+				case 0xD682:
+				case 0xD683:
+				case 0xD684:
+					sdcard_select_sector(addr - 0xD681, data);
 					break;
 			}
                         return;
@@ -598,6 +616,10 @@ void io_write ( int addr, Uint8 data )
 		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("CIA-2");
 		printf("%s: writing register $%X with data $%02X" NL, cia2.name, addr & 15, data);
 		cia_write(&cia2, addr & 0xF, data);
+		return;
+	}
+	if (sd_status & SD_ST_MAPPED) {	// Only IO-1 and IO-2 areas left, if SD-card buffer is mapped for Mega65, this is our only case left!
+		sd_buffer[addr - 0xDE00] = data;
 		return;
 	}
 	if (addr < 0xDF00) {	// $DE00 - $DEFF	IO-1 external
@@ -845,7 +867,7 @@ int main ( int argc, char **argv )
 		// In FAST mode, the divider is 7. (see: vic3.c)
 		// Otherwise it's 2, thus giving about *3.5 slower CPU ... or something :)
 		if (in_hypervisor) {
-			printf("MEGA65: hypervisor mode execution at $%04X" NL, cpu_pc);
+			//printf("MEGA65: hypervisor mode execution at $%04X" NL, cpu_pc);
 			if(cpu_pc < 0x8000 || cpu_pc > 0xBFFF)
 				ERROR_WINDOW("Executing program in hypervisor mode outside of the hypervisor mem $%04X", cpu_pc);
 		}

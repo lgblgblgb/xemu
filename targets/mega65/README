@@ -1,3 +1,5 @@
+This is about Mega65, to learn more, visit this site: http://mega65.org/
+
 Mega65 target is a slightly modified Commodore 65 emulation. WARNING: This is
 NOT a full Mega65 emulation but only the minimal feature sub-set of Mega65
 which is enough for some purproses, like Kickstart ROM development and
@@ -11,7 +13,17 @@ KICKUP.M65 the machine boots and functions like a C65, even C65GS I/O keying
 won't be supported (however this mode is not tested too much, for this, please
 use the c65 target instead of this one).
 
+You must also provide an image file of the SD-card for the Mega65. The file
+name should be mega65.img with the same rules of placement as with KICKUP.M65
+for sure. This is a simple image file, really. On UNIX-like system, you can
+even try to symlink the device node of a real SD-card reader, but be careful
+with the access rights, so Xemu can open it at all. Without this image
+Kickstart won't be able to use the emulated SD-card controller normally,
+of course.
+
+
 == NOTES ==
+
 
 Basically the same as my Commodore 65 emulator, however:
 
@@ -19,24 +31,24 @@ Basically the same as my Commodore 65 emulator, however:
 * Some Mega65 specific I/O support
 * Hypervisor MAP mode, limited load/save machine state (not all stuffs!)
 * NOTE: currently, >1MByte MAP/linear access/etc is *NOT* supported at all
-  (other than the special case of Hypervisor memory mapping $8000-$BFFF)
+  (other than the special case of Hypervisor memory mapping $8000-$BFFF and
+  the DMA hack, so Kickstart can use DMA)
 * Loading KICKUP.M65 by the emulator (if it does not work, "simple C65 mode"
   will be used, without any Mega65 feature)
+* Super-ugly 16 bit text mode support to be able to see "something", currently
+  only with incrementing video/colour pointers by two, but no extra data is
+  interpreted at all.
+* Mega65 SD-card support (still doesn't work) only with the absolute needed
+  features
+
 
 == HIGH PRIORITY TODO ==
 
-* DMAgic does not know about "high addresses" so kickstart freezes the emulator
-  as "garbage" is fed for DMA list leaving virtually never ending DMA ops, not
-  even left DMA emulation to allow the main func to update the screen, etc.
-* Mega65 specific I/O implementation in io_read() and io_write(), without that
-  - I guess - kickstart can't update even the hypervisor registers to leave
-  hypervisor mode?
-* SD card support in the form of SD image file (or symlinked /dev node, if needed)
-* 16 bit text support (VIC4 material)? Also there is *NO* any support for VIC4
-  currently, other than the $D02F mega65 "keying"
-* Maybe move to 28 bit memory model (256Mbytes to allocate) _OR_ just teach
-  c65dma.c stuffs to support at least the kickstart/hypervisor memory area
-  for a quick solution
+
+* SD card controller does not work, kickstart reads sector 0 some times
+  but nothing happens
+* There is no write support for SD-card at all
+* More VIC-IV features, starting with acceptable 16 bit text support
 * True Mega65 favour of MAP opcode support with offsets up to 28 bits
 * 28 bit load support for ZP Z indexed special opcode
 * 28 bit JMP/etc support?

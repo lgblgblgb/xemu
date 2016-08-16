@@ -351,6 +351,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 	Uint8 *vidp, *colp = memory + 0x1F800;
 	int x = 0, y = 0, xlim, ylim, charline = 0;
 	Uint8 *chrg = vic2_get_chargen_pointer();
+	int inc_p = (vic3_registers[0x54] & 1) ? 2 : 1;	// VIC-IV (Mega-65) 16 bit text mode?
 	if (vic3_registers[0x31] & 128) { // check H640 bit: 80 column mode?
 		xlim = 79;
 		ylim = 24;
@@ -369,9 +370,11 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 	bg = palette[vic3_registers[0x21] & 15];
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_text");
 	for (;;) {
-		Uint8 chrdata = chrg[((*(vidp++)) << 3) + charline];
-		Uint8 coldata = *(colp++);
+		Uint8 chrdata = chrg[(*vidp << 3) + charline];
+		Uint8 coldata = *colp;
 		Uint32 fg;
+		colp += inc_p;
+		vidp += inc_p;
 		if (vic3_registers[0x31] & 32) { 	// ATTR bit mode
 			if ((coldata & 0xF0) == 0x10) {	// only the blink bit for the character is set
 				if (vic3_blink_phase)
@@ -424,8 +427,8 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 				charline = 0;
 			} else {
 				charline++;
-				vidp -= xlim + 1;
-				colp -= xlim + 1;
+				vidp -= (xlim + 1) * inc_p;
+				colp -= (xlim + 1) * inc_p;
 			}
 		} else
 			x++;

@@ -172,6 +172,8 @@ int emu_load_file ( const char *fn, void *buffer, int maxsize )
 		return -1;
 	}
 	printf("OK, file is open (fd = %d)" NL, fd);
+	if (maxsize == -1)
+		return fd;	// special mode to get a file descriptor, instead of loading anything ...
 	while (read_size < maxsize) {
 		a = read(fd, buffer, maxsize - read_size);
 		if (a < 0) {

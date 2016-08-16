@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define KICKSTART_NAME		"KICKUP.M65"
 #define ROM_NAME		"c65-system.rom"
+#define SDCARD_NAME		"mega65.img"
 
 /* Do *NOT* modify these, as other parts of the emulator currently depends on these values ...
    You can try RENDER_SCALE_QUALITY though with values 0, 1, 2 */
@@ -57,6 +58,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 extern Uint8 memory[0x104001];
 extern int   mega65_capable;
+extern int   in_hypervisor;
 
 extern void  apply_memory_config ( void );
 extern Uint8 io_read  ( int addr );

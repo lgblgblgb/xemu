@@ -76,23 +76,27 @@ static Uint8 minterms[4];		// Used with MIX DMA command only
 // FIXME: ugly hack: handle the hypervisor memory, using different mapping than the real Mega65!
 static void dma_write_phys_mem ( int addr, Uint8 data )
 {
-	if (addr >= 0xFFF8000 && addr < 0xFFFC000)
+	if (addr >= 0xFFF8000 && addr < 0xFFFC000) {
+		if (!in_hypervisor)
+			FATAL("FATAL: DMA write tries to access hypervisor memory from non-hypervisor mode.");
 		write_phys_mem(addr - 0xFFF8000 + 0x100000, data);
-	else if (addr < 0x100000)
+	} else if (addr < 0x100000)
 		write_phys_mem(addr, data);
 	else
-		FATAL("FATAL: DMA write to an unhandled memory region: $%X", addr);
+		FATAL("FATAL: DMA write to unhandled memory region: $%X", addr);
 }
 
 // FIXME: ugly hack: handle the hypervisor memory, using different mapping than the real Mega65!
 static Uint8 dma_read_phys_mem ( int addr )
 {
-	if (addr >= 0xFFF8000 && addr < 0xFFFC000)
+	if (addr >= 0xFFF8000 && addr < 0xFFFC000) {
+		if (!in_hypervisor)
+			FATAL("FATAL: DMA read tries to access hypervisor memory from non-hypervisor mode.");
 		return read_phys_mem(addr- 0xFFF8000 + 0x100000);
-	else if (addr < 0x100000)
+	} else if (addr < 0x100000)
 		return read_phys_mem(addr);
 	else
-		FATAL("FATAL: DMA read to an unhandled memory region: $%X", addr);
+		FATAL("FATAL: DMA read from unhandled memory region: $%X", addr);
 }
 
 
