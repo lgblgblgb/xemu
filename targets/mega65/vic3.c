@@ -32,7 +32,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
 
-
+static const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
 static Uint32 rgb_palette[4096];	// all the C65 palette, 4096 colours (SDL pixel format related form)
 static Uint32 vic3_palette[0x100];	// VIC3 palette in SDL pixel format related form (can be written into the texture directly to be rendered)
@@ -181,7 +181,6 @@ void vic3_check_raster_interrupt ( void )
 
 
 
-
 void vic3_write_reg ( int addr, Uint8 data )
 {
 	Uint8 old_data;
@@ -197,7 +196,7 @@ void vic3_write_reg ( int addr, Uint8 data )
 		else
 			vic_new_iomode = VIC2_IOMODE;
 		if (vic_new_iomode != vic_iomode) {
-			printf("VIC: changing I/O mode %d -> %d\n", vic_iomode, vic_new_iomode);
+			printf("VIC: changing I/O mode %d(%s) -> %d(%s)\n", vic_iomode, iomode_names[vic_iomode], vic_new_iomode, iomode_names[vic_new_iomode]);
 			vic_iomode = vic_new_iomode;
 		}
 	}

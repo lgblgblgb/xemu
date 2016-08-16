@@ -19,7 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include <SDL.h>
 
-#include "c65dma.h"
+#include "dmagic.h"
 #include "mega65.h"
 #include "emutools.h"
 #include "vic3.h"
@@ -46,10 +46,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 	* C65 specification tells about "not implemented sub-commands": I am curious what "sub commands" are or planned as, etc ...
 	* Reading status would resume interrupted DMA operation (?) it's not emulated
 
+  Mega65 specific NOTES:
+
+	* Only a slight modification (which is not so correct) to be able to use hypervisor memory for DMA list/source/target
+          The real solution will be, to use real 28 bit addressess (as on Mega-65) throughout the whole emulator!
 */
 
 
-static Uint8 dma_registers[8];		// The four DMA registers (with last values written by the CPU)
+static Uint8 dma_registers[16];		// The four DMA registers (with last values written by the CPU)
 static int   source_step;		// [-1, 0, 1] step value for source (0 = hold, constant address)
 static int   target_step;		// [-1, 0, 1] step value for target (0 = hold, constant address)
 static int   source_addr;		// DMA source address (the low byte is also used by COPY command as the "filler byte")
@@ -67,11 +71,36 @@ static Uint8 minterms[4];		// Used with MIX DMA command only
        Uint8 dma_status;
 
 
+
+
+// FIXME: ugly hack: handle the hypervisor memory, using different mapping than the real Mega65!
+static void dma_write_phys_mem ( int addr, Uint8 data )
+{
+	if (addr >= 0xFFF8000 && addr < 0xFFFC000)
+		write_phys_mem(addr - 0xFFF8000 + 0x100000, data);
+	else if (addr < 0x100000)
+		write_phys_mem(addr, data);
+	else
+		FATAL("FATAL: DMA write to an unhandled memory region: $%X", addr);
+}
+
+// FIXME: ugly hack: handle the hypervisor memory, using different mapping than the real Mega65!
+static Uint8 dma_read_phys_mem ( int addr )
+{
+	if (addr >= 0xFFF8000 && addr < 0xFFFC000)
+		return read_phys_mem(addr- 0xFFF8000 + 0x100000);
+	else if (addr < 0x100000)
+		return read_phys_mem(addr);
+	else
+		FATAL("FATAL: DMA read to an unhandled memory region: $%X", addr);
+}
+
+
 #define IO_ADDR(a)		(0xD000 | ((a) & 0xFFF))
 #define IO_READ(a)		io_read(IO_ADDR(a))
 #define IO_WRITE(a, d)		io_write(IO_ADDR(a), d)
-#define MEM_READ(a)		read_phys_mem(a)
-#define MEM_WRITE(a, d)		write_phys_mem(a, d)
+#define MEM_READ(a)		dma_read_phys_mem(a)
+#define MEM_WRITE(a, d)		dma_write_phys_mem(a, d)
 #define DMA_READ(io, a)		((io) ? IO_READ(a) : MEM_READ(a))
 #define DMA_WRITE(io, a, d)	do { if (io) IO_WRITE(a, d); else MEM_WRITE(a, d); } while (0)
 
@@ -130,7 +159,7 @@ static void mix_next ( void )
 
 static inline Uint8 read_dma_list_next ( void )
 {
-	return read_phys_mem(dma_list_addr++);
+	return dma_read_phys_mem(dma_list_addr++);
 }
 
 
@@ -141,8 +170,16 @@ void dma_write_reg ( int addr, Uint8 data )
 	if (vic_iomode != VIC4_IOMODE)
 		addr &= 3;
 	dma_registers[addr] = data;
+	switch (addr) {
+		case 0x2:	// for compatibility with C65, Mega65 here resets the MB part of the DMA list address
+			dma_registers[4] = 0;	// this is the "MB" part of the DMA list address (hopefully ...)
+			break;
+		case 0xE:	// Set low order bits of DMA list address, without starting (Mega65 feature, but without VIC4 new mode, this reg will never addressed here anyway)
+			dma_registers[0] = data;
+			break;
+	}
 	if (addr)
-		return;	// Only writing register 0 starts the DMA operation
+		return;	// Only writing register 0 starts the DMA operation, otherwise just return from this function (reg write already happened)
 	if (dma_status) {
 		int limit = 0;
 		printf("DMA: WARNING: previous operation is in progress, WORKAROUND: finishing first." NL);
@@ -156,10 +193,12 @@ void dma_write_reg ( int addr, Uint8 data )
 			dma_update();
 			limit++;
 			if (limit > 256 * 1024)
-				FATAL("FATAL: Run-away DMA session, blocking the emulator after %d iterations, exiting!", limit);
+				FATAL("FATAL: Run-away DMA session, still blocking the emulator after %d iterations, exiting!", limit);
 		}
 	}
 	dma_list_addr = dma_registers[0] | (dma_registers[1] << 8) | ((dma_registers[2] & 15) << 16);
+	if (mega65_capable)
+		dma_list_addr |= dma_registers[4] << 20;	// add the "MB" part to select MegaByte range for the DMA list reading
 	printf("DMA: list address is $%06X now, just written to register %d value $%02X" NL, dma_list_addr, addr, data);
 	dma_status = 0x80;	// DMA is busy now, also to signal the emulator core to call dma_update() in its main loop
 	command = -1;		// signal dma_update() that it's needed to fetch the DMA command, no command is fetched yet
@@ -195,8 +234,12 @@ void dma_update ( void )
 		target_is_io = (target_addr & 0x800000);
 		source_uses_modulo = (source_addr & 0x200000);
 		target_uses_modulo = (target_addr & 0x200000);
-		source_addr &= 0xFFFFF;
-		target_addr &= 0xFFFFF;
+		source_addr &= 0xFFFFF;	// C65 1-mbyte range, chop bits used for other purposes off
+		target_addr &= 0xFFFFF; // C65 1-mbyte range, chop bits used for other purposes off
+		if (mega65_capable) {	// add "MB" part of the addresses, in case of Mega65, that is, selects MegaByte (MB)
+			source_addr |= dma_registers[5] << 20;
+			target_addr |= dma_registers[6] << 20;
+		}
 		chained = (command & 4);
 		printf("DMA: READ COMMAND: $%05X[%s%s %d] -> $%05X[%s%s %d] (L=$%04X) CMD=%d (%s)" NL,
 			source_addr, source_is_io ? "I/O" : "MEM", source_uses_modulo ? " MOD" : "", source_step,

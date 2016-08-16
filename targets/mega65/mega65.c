@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "cpu65c02.h"
 #include "cia6526.h"
 #include "c65fdc.h"
-#include "c65dma.h"
+#include "dmagic.h"
 #include "c65hid.h"
 #include "vic3.h"
 #include "sid.h"
@@ -54,6 +54,7 @@ static struct SidEmulation sid1, sid2;	// the two SIDs
 #define HYPERVISOR_MEM_REMAP_VIRTUAL (0x100000 - 0x8000)
 
 #define TRAP_RESET	0x40
+#define	TRAP_TRIGGERED	0x00
 
 static int addr_trans_rd[16];		// address translating offsets for READ operation (it can be added to the CPU address simply, selected by the high 4 bits of the CPU address)
 static int addr_trans_wr[16];		// address translating offsets for WRITE operation (it can be added to the CPU address simply, selected by the high 4 bits of the CPU address)
@@ -67,6 +68,7 @@ static int frame_counter;
 static int in_hypervisor;		// mega65 hypervisor mode
 int mega65_capable;			// emulator founds kickstart, sub-set of mega65 features CAN BE usable. It is an ERROR to use any of mega65 specific stuff, it it's zero!
 static Uint8 gs_regs[0x1000];		// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
+static int rom_protect;			// C65 system ROM write protection
 
 
 
@@ -300,19 +302,20 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 	memset(memory, 0xFF, sizeof memory);
 	in_hypervisor = 0;
 	memset(gs_regs, 0, sizeof gs_regs);
+	rom_protect = 1;
 	// *** Trying to load kickstart image
-	if (emu_load_file("KICKUP.M65", memory + HYPERVISOR_MEM_REMAP_VIRTUAL + 0x8000, 0x4001) == 0x4000) {
+	if (emu_load_file(KICKSTART_NAME, memory + HYPERVISOR_MEM_REMAP_VIRTUAL + 0x8000, 0x4001) == 0x4000) {
 		// Found kickstart ROM, emulate Mega65 startup somewhat ...
 		mega65_capable = 1;
-		printf("MEGA65: KICKUP.M65 loaded into hypervisor memory, Mega65 capable mode is set" NL);
+		printf("MEGA65: " KICKSTART_NAME " loaded into hypervisor memory, Mega65 capable mode is set" NL);
 	} else {
-		ERROR_WINDOW("Cannot load KICKUP.M65 (not found, or not 16K sized), emulate only C65");
-		printf("MEGA65: KICKUP.M65 cannot be loaded, Mega65 capable mode is disabled" NL);
+		ERROR_WINDOW("Cannot load " KICKSTART_NAME " (not found, or not 16K sized), emulate only C65");
+		printf("MEGA65: " KICKSTART_NAME " cannot be loaded, Mega65 capable mode is disabled" NL);
 		mega65_capable = 0;
 	}
 	// *** Load ROM image (TODO: make it optional when mega65_capable is true, thus KICKUP is loaded)
-	if (emu_load_file("c65-system.rom", memory + 0x20000, 0x20001) != 0x20000)
-		FATAL("Cannot load C65 system ROM!");
+	if (emu_load_file(ROM_NAME, memory + 0x20000, 0x20001) != 0x20000)
+		FATAL("Cannot load C65 system ROM: " ROM_NAME);
 	// *** Initialize VIC3
 	vic3_init();
 	// *** Memory configuration (later override will happen for mega65 mode though, this is only the default)
@@ -369,8 +372,10 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 	// *** RESET CPU, also fetches the RESET vector into PC
 	cpu_reset();
 	// *** In case of Mega65 mode, let's override the system configuration a bit ... It will also re-set PC to the trap address
-	if (mega65_capable)
+	if (mega65_capable) {
+		rom_protect = 0;
 		hypervisor_enter(TRAP_RESET);
+	}
 	puts("INIT: end of initialization!");
 }
 
@@ -550,7 +555,21 @@ void io_write ( int addr, Uint8 data )
 		return;
 	}
 	if (addr < 0xD700) {	// $D600 - $D6FF	UART (*)
-		if (vic_iomode)
+		if (vic_iomode == VIC4_IOMODE && addr >= 0xD609) {	// D609 - D6FF: Mega65 suffs
+			gs_regs[addr & 0xFFF] = data;
+			switch (addr) {
+				case 0xD67D:
+					rom_protect = data & 4;
+					break;
+				case 0xD67F:
+					if (in_hypervisor)
+						hypervisor_leave();
+					else
+						hypervisor_enter(TRAP_TRIGGERED);
+					break;
+			}
+                        return;
+		} else if (vic_iomode)
 			RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");
 		else
 			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("UART");
@@ -604,10 +623,10 @@ void write_phys_mem ( int addr, Uint8 data )
 	} else if (
 		(addr < 0x20000)
 #if defined(ALLOW_256K_RAMEXP) && defined(ALLOW_512K_RAMEXP)
-		|| (addr >= 0x40000)
+		|| (addr >= (rom_protect ? 0x40000 : 0x20000))
 #else
 #	ifdef ALLOW_256K_RAMEXP
-		|| (addr >= 0x40000 && addr < 0x80000)
+		|| (addr >= (rom_protect ? 0x40000 : 0x20000) && addr < 0x80000)
 #	endif
 #	ifdef ALLOW_512K_RAMEXP
 		|| (addr >= 0x80000)
