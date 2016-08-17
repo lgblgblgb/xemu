@@ -42,6 +42,14 @@ The "make roms" command also compile the needed ROMs. Note: these ROMs are
 optional, and emulators can work without them!
 
 
+                   ---- ABOUT THE MEGA65 RELATED STUFFS ----
+
+
+The Mega65 emulator (well, a sub-set of Mega65 features only!) needs KICKUP.M65 file
+to manually placed into the rom/ directory. Also it needs an SD-Card image, which can
+be generated though with the command of "make mega65.img" in the rom/ directory.
+
+
                        ---- ABOUT COMMODORE LCD ROMs ----
 
 

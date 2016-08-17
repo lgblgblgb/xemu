@@ -544,9 +544,9 @@ static void geosemu_init ( const char *disk_image_name )
 	cpu_port_write(1, CPU_PORT_DEFAULT_VALUE1);
 	// *** Load ROM image
 	if (
-		emu_load_file("geos-c64-basic.rom",   memory + BASIC_ROM_OFFSET,  8193) != 8192 ||
-		emu_load_file("geos-c64-kernal.rom",  memory + KERNAL_ROM_OFFSET, 8193) != 8192 ||
-		emu_load_file("geos-c64-chargen.rom", memory + CHAR_ROM_OFFSET,   4097) != 4096
+		emu_load_file("c64-basic.rom",   memory + BASIC_ROM_OFFSET,  8193) != 8192 ||
+		emu_load_file("c64-kernal.rom",  memory + KERNAL_ROM_OFFSET, 8193) != 8192 ||
+		emu_load_file("c64-chargen.rom", memory + CHAR_ROM_OFFSET,   4097) != 4096
 	)
 		FATAL("Cannot load (one of the) system ROMs!");
 	// *** Patching ROM for custom GEOS loader
