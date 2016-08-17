@@ -70,6 +70,9 @@ int in_hypervisor;			// mega65 hypervisor mode
 int mega65_capable;			// emulator founds kickstart, sub-set of mega65 features CAN BE usable. It is an ERROR to use any of mega65 specific stuff, if it's zero!
 static Uint8 gs_regs[0x1000];		// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
 static int rom_protect;			// C65 system ROM write protection
+static int fpga_switches = 1 << 12;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
+static char  hypervisor_monout[0x10000];
+static char *hypervisor_monout_p = hypervisor_monout;
 
 
 /* You *MUST* call this every time, when *any* of these events applies:
@@ -228,6 +231,14 @@ static void hypervisor_leave ( void )
 	printf("MEGA65: leaving hypervisor mode, (user) PC=$%04X" NL, cpu_pc);
 }
 
+
+
+static void hypervisor_serial_monitor_push_char ( Uint8 chr )
+{
+	if (hypervisor_monout_p >= hypervisor_monout - 1 + sizeof hypervisor_monout)
+		return;
+	*(hypervisor_monout_p++) = (char)chr;
+}
 
 
 static void cia_setint_cb ( int level )
@@ -472,11 +483,17 @@ Uint8 io_read ( int addr )
 	}
 	if (addr < 0xD700) {	// $D600 - $D6FF	UART (*)
 		if (vic_iomode == VIC4_IOMODE && addr >= 0xD609) {	// D609 - D6FF: Mega65 suffs
-			if (addr == 0xD680) {
-				return sdcard_read_status();
-			} else
-				printf("MEGA65: reading Mega65 specific I/O @ $%04X result is $%02X" NL, addr, gs_regs[addr & 0xFFF]);
-			return gs_regs[addr & 0xFFF];
+			switch (addr) {
+				case 0xD680:
+					return sdcard_read_status();
+				case 0xD6F0:
+					return fpga_switches & 0xFF;
+				case 0xD6F1:
+					return (fpga_switches >> 8) & 0xFF;
+				default:
+					printf("MEGA65: reading Mega65 specific I/O @ $%04X result is $%02X" NL, addr, gs_regs[addr & 0xFFF]);
+					return gs_regs[addr & 0xFFF];
+			}
 		} else if (vic_iomode)
 			RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);
 		else
@@ -504,9 +521,12 @@ Uint8 io_read ( int addr )
 		printf("%s: reading register $%X result is $%02X" NL, cia2.name, addr & 15, result);
 		return result;
 	}
-	if (sd_status & SD_ST_MAPPED) {	// Only IO-1 and IO-2 areas left, if SD-card buffer is mapped for Mega65, this is our only case left!
-		return sd_buffer[addr - 0xDE00];
-	}
+	// Only IO-1 and IO-2 areas left, if SD-card buffer is mapped for Mega65, this is our only case left!
+	do {
+		int result = sdcard_read_buffer(addr - 0xDE00);	// try to read SD buffer
+		if (result >= 0)	// if non-negative number got, answer is really the SD card (mapped buffer)
+			return result;
+	} while (0);
 	if (addr < 0xDF00) {	// $DE00 - $DEFF	IO-1 external
 		RETURN_ON_IO_READ_NOT_IMPLEMENTED("IO-1 external select", 0xFF);
 	}
@@ -567,14 +587,17 @@ void io_write ( int addr, Uint8 data )
 			gs_regs[addr & 0xFFF] = data;
 			printf("MEGA65: writing Mega65 specific I/O range @ $%04X with $%02X" NL, addr, data);
 			switch (addr) {
+				case 0xD67C:	// hypervisor serial monitor port
+					hypervisor_serial_monitor_push_char(data);
+					break;
 				case 0xD67D:
 					rom_protect = data & 4;
 					break;
-				case 0xD67F:
+				case 0xD67F:	// hypervisor enter/leave trap
 					if (in_hypervisor)
-						hypervisor_leave();
-					else
-						hypervisor_enter(TRAP_TRIGGERED);
+						hypervisor_leave();	// if in hypevisor mode, any write port causes to leave hypervisor
+					else	// the opposite of above, enter into hypervisor mode
+						hypervisor_enter(TRAP_TRIGGERED);	// FIXME: is it always this one?
 					break;
 				case 0xD680:
 					sdcard_command(data);
@@ -618,10 +641,9 @@ void io_write ( int addr, Uint8 data )
 		cia_write(&cia2, addr & 0xF, data);
 		return;
 	}
-	if (sd_status & SD_ST_MAPPED) {	// Only IO-1 and IO-2 areas left, if SD-card buffer is mapped for Mega65, this is our only case left!
-		sd_buffer[addr - 0xDE00] = data;
-		return;
-	}
+	// Only IO-1 and IO-2 areas left, if SD-card buffer is mapped for Mega65, this is our only case left!
+	if (sdcard_write_buffer(addr - 0xDE00, data) >= 0)
+		return;	// if return value is non-negative, buffer was mapped and written!
 	if (addr < 0xDF00) {	// $DE00 - $DEFF	IO-1 external
 		RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("IO-1 external select");
 	}
@@ -748,6 +770,11 @@ static void shutdown_callback ( void )
 		puts("Memory is dumped into " MEMDUMP_FILE);
 	}
 #endif
+	if (hypervisor_monout != hypervisor_monout_p) {
+		*hypervisor_monout_p = 0;
+		printf("HYPERVISOR_MONITOR_OUT:" NL "%s" NL "HYPERVISOR_MONITOR_OUT: *END-OF-OUTPUT*" NL, hypervisor_monout);
+	} else
+		printf("HYPERVISOR_MONITOR_OUT: *NO-OUTPUT-BUFFER*" NL);
 	printf("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
 }
 

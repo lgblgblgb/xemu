@@ -26,8 +26,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 static int sdfd;		// SD-card controller emulation, UNIX file descriptor of the open image file
-Uint8 sd_buffer[512];		// SD-card controller buffer
-Uint8 sd_status;		// SD-status byte
+static Uint8 sd_buffer[512];	// SD-card controller buffer
+static Uint8 sd_status;		// SD-status byte
 static Uint8 sd_sector_bytes[4];
 
 
@@ -49,6 +49,24 @@ int sdcard_init ( const char *fn )
 	return sdfd;
 }
 
+
+int sdcard_read_buffer ( int addr )
+{
+	if (sd_status & SD_ST_MAPPED)
+		return sd_buffer[addr & 511];
+	else
+		return -1;
+}
+
+
+int sdcard_write_buffer ( int addr, Uint8 data )
+{
+	if (sd_status & SD_ST_MAPPED) {
+		sd_buffer[addr & 511] = data;
+		return (int)data;
+	} else
+		return -1;
+}
 
 
 static int read_sector ( void )
