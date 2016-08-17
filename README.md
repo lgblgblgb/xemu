@@ -3,7 +3,7 @@
 [![Gitter](https://badges.gitter.im/lgblgblgb/xemu.svg)](https://gitter.im/lgblgblgb/xemu?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
 Emulations running on Linux/Unix/Windows/OSX of various (mainly 8 bit) machines,
-including the Commodore LCD and Commodore 65 as well.
+including the Commodore LCD and Commodore 65 (with some Mega65 hacks) as well.
 
 WARNING: there is *nothing* too much common in these machines. The only reason
 that I emulate these within a single project, that I can easily re-use some
@@ -37,7 +37,8 @@ with the help of the SDL2 library. Note, that in theory, it would be easy to
 port to other targets because of using SDL.
 
 As I wanted to emulate other machines as well, I renamed the project from XCLCD
-(CLCD = Commodore LCD) to "X-Emu".
+(CLCD = Commodore LCD) to "X-Emu" or X-Emulators, without too much idea what "X"
+should mean ...
 
 ## Basic usage of the emulator
 
