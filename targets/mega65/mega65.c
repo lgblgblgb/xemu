@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "vic3.h"
 #include "sid.h"
 #include "sdcard.h"
+#include "uart_monitor.h"
 #include "emutools.h"
 
 
@@ -381,6 +382,10 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 		printf("AUDIO: initialized (#%d), %d Hz, %d channels, %d buffer sample size." NL, audio, audio_got.freq, audio_got.channels, audio_got.samples);
 	} else
 		ERROR_WINDOW("Cannot open audio device!");
+	//
+#ifdef UARTMON_SOCKET
+	uartmon_init(UARTMON_SOCKET);
+#endif
 	// *** RESET CPU, also fetches the RESET vector into PC
 	cpu_reset();
 	// *** In case of Mega65 mode, let's override the system configuration a bit ... It will also re-set PC to the trap address
@@ -770,6 +775,9 @@ static void shutdown_callback ( void )
 		puts("Memory is dumped into " MEMDUMP_FILE);
 	}
 #endif
+#ifdef UARTMON_SOCKET
+	uartmon_close();
+#endif
 	if (hypervisor_monout != hypervisor_monout_p) {
 		*hypervisor_monout_p = 0;
 		printf("HYPERVISOR_MONITOR_OUT:" NL "%s" NL "HYPERVISOR_MONITOR_OUT: *END-OF-OUTPUT*" NL, hypervisor_monout);
@@ -840,6 +848,9 @@ static void update_emulator ( void )
 				break;
 		}
 	}
+#ifdef UARTMON_SOCKET
+	uartmon_update();
+#endif
 	// Screen rendering: begin
 	vic3_render_screen();
 	// Screen rendering: end
