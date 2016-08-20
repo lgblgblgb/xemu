@@ -63,4 +63,6 @@ extern void  io_write ( int addr, Uint8 data );
 extern void  write_phys_mem ( int addr, Uint8 data );
 extern Uint8 read_phys_mem  ( int addr );
 
+extern void m65mon_show_regs ( void );
+
 #endif

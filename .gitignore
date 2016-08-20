@@ -1,3 +1,6 @@
+.*.swp
+a.out
+uart.sock
 /disks
 /dist.zip
 /.dist

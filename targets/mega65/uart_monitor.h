@@ -18,7 +18,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __LGB_UART_MONITOR_H_INCLUDED
 #define __LGB_UART_MONITOR_H_INCLUDED
 
-#define UARTMON_SOCKET	"uart.sock"
+#define UARTMON_SOCKET		"uart.sock"
+#define UMON_WRITE_BUFFER_SIZE	0x4000
+#define umon_printf(...)	umon_write_size += sprintf(umon_write_buffer + umon_write_size, __VA_ARGS__)
+
+extern int  umon_write_size;
+extern char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
 extern int  uartmon_init   ( const char *fn );
 extern void uartmon_update ( void );

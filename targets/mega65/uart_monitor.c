@@ -18,6 +18,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "uart_monitor.h"
 
+int  umon_write_size;
+char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
+
+
 #ifdef _WIN32
 // Windows is not supported currently, as it does not have POSIX-standard socket interface (?).
 int  uartmon_init   ( const char *fn ) { return 1; }
@@ -40,6 +44,7 @@ void uartmon_close  ( void ) {}
 #ifdef MEGA65
 #include <SDL.h>
 #include "emutools.h"
+#include "mega65.h"
 #else
 #define ERROR_WINDOW printf
 #define FATAL(...)
@@ -47,18 +52,67 @@ void uartmon_close  ( void ) {}
 #endif
 
 
-static int sock_server, sock_client;
-static int umon_write_pos, umon_read_pos, umon_write_size;
-static int umon_echo;
+static int  sock_server, sock_client;
+static int  umon_write_pos, umon_read_pos;
+static int  umon_echo;
 static char umon_read_buffer [0x1000];
-static char umon_write_buffer[0x4000];
 
 
 // WARNING: This source is pretty ugly, ie not so much check of overflow of the output (write) buffer.
 
 
-#define CRLF	"\r\n"
-#define umon_printf(...) umon_write_size += sprintf(umon_write_buffer + umon_write_size, __VA_ARGS__)
+#ifdef MEGA65
+static void syntax_error ( const char *err )
+{
+	umon_printf("?SYNTAX ERROR %s", err);
+}
+
+
+static char *parse_hex_arg ( char *p, int *val, int min, int max )
+{
+	int r;
+	while (*p == 32 || *p == '\t')
+		p++;
+	*val = -1;
+	if (!*p) {
+		syntax_error("unexpected end of command (no parameter)");
+		return NULL;
+	}
+	for (r = 0;;)
+		if (*p >= 'a' && *p <= 'f')
+			r = (r << 4) | (*p - 'a' + 10);
+		else if (*p >= 'A' && *p <= 'F')
+			r = (r << 4) | (*p - 'A' + 10);
+		else if (*p >= '0' && *p <= '9')
+			r = (r << 4) | (*p - '0');
+		else if (*p == 32 || *p == '\t' || *p == 0)
+			break;
+		else {
+			syntax_error("invalid data as hex value");
+			return NULL;
+		}
+	*val = r;
+	if (r < min || r > max) {
+		syntax_error("command parameter's value is outside of the allowed range for this command");
+		return NULL;
+	}
+	return p;
+}
+
+
+
+static int check_end_of_command ( char *p )
+{
+	while (*p == 32 || *p == '\t')
+		p++;
+	if (*p) {
+		syntax_error("unexpected command parameter");
+		return 0;
+	}
+	return 1;
+}
+#endif
+
 
 
 static void execute_command ( char *cmd )
@@ -79,10 +133,28 @@ static void execute_command ( char *cmd )
 	while (p >= cmd && *p <= 32)
 		*(p--) = 0;
 	printf("UARTMON: command got \"%s\" (%d bytes)." NL, cmd, (int)strlen(cmd));
-	umon_printf("Hello, from Xemu! :-)");
 #ifndef MEGA65
 	umon_printf("This is a demo only in test mode, you've issued command \"%s\" (%d bytes)", cmd, (int)strlen(cmd));
 #else
+	//umon_printf("[%s]\r\n", cmd);
+	switch (*(cmd++)) {
+		case 'h':
+		case 'H':
+		case '?':
+			if (check_end_of_command(cmd))
+				umon_printf("Xemu/Mega65 Serial Monitor\r\nWarning: not 100%% compatible with UART monitor of a *real* Mega65 ...");
+			break;
+		case 'r':
+		case 'R':
+			if (check_end_of_command(cmd))
+				m65mon_show_regs();
+			break;
+		case 0:	// empty line: TODO, in trace mode it does a step (I guess)
+			break;
+		default:
+			syntax_error("unknown command");
+			break;
+	}
 #endif
 }
 
@@ -103,31 +175,29 @@ static int set_nonblock ( int fd )
 
 
 
+#ifndef MEGA65
 static inline void debug_buffer ( const char *p )
 {
-#ifndef MEGA65
 	printf("BUFFER: ");
 	while (*p) {
 		printf((*p >= 32 && *p < 127) ? "%c" : "<%d>", *p);
 		p++;
 	}
 	printf("\n");
-#endif
 }
-
-
-
 static inline void debug_buffer_slice ( const char *p, int n )
 {
-#ifndef MEGA65
 	printf("BUFFER-SLICE: ");
 	while (n--) {
 		printf((*p >= 32 && *p < 127) ? "%c" : "<%d>", *p);
 		p++;
 	}
 	printf("\n");
-#endif
 }
+#else
+#define debug_buffer(a)
+#define debug_buffer_slice(a, b)
+#endif
 
 
 
@@ -192,7 +262,7 @@ void uartmon_update ( void )
 	// Try to accept new connection, if not yet have one (we handle only *ONE* connection!!!!)
 	if (sock_client < 0) {
 		struct sockaddr_un sock_st;
-		socklen_t len;
+		socklen_t len = sizeof(struct sockaddr_un);
 		ret = accept(sock_server, (struct sockaddr *)&sock_st, &len);
 		if (ret >=0 || (errno != EAGAIN && errno != EWOULDBLOCK))
 			printf("UARTMON: accept()=%d error=%s" NL,
@@ -234,10 +304,9 @@ void uartmon_update ( void )
 			umon_write_size -= ret;
 			if (umon_write_size < 0)
 				FATAL("FATAL: negative umon_write_size!");
-			//fsync(sock_client);
 		}
 		if (umon_write_size)
-			return;
+			return;	// if we still have bytes to write, return and leave the work for the next update
 	}
 	umon_write_pos = 0;
 	// Try to read data
@@ -284,12 +353,6 @@ void uartmon_update ( void )
 				umon_read_buffer[sizeof(umon_read_buffer) - 1] = 0;
 			umon_write_buffer[umon_write_size++] = '\r';
 			umon_write_buffer[umon_write_size++] = '\n';
-			//printf("UARTMON: COMMAND: [%s]\n", umon_read_buffer);
-			//execute_command(umon_read_buffer);	// Execute our command!
-			//printf("COMMAND: [%s]\n", umon_read_buffer);
-			//umon_write_size += sprintf(umon_write_buffer + umon_write_size, "\r\n?SYNTAX ERROR\r\nHmmm\r\n.");
-			//umon_write_size += sprintf(umon_write_buffer + umon_write_size, "Hat ez fasza!");
-			//umon_printf("Yo!");
 			execute_command(umon_read_buffer);	// Execute our command!
 			if (umon_write_buffer[umon_write_size - 1] != '\n') {
 				// if generated message wasn't closed with CRLF (well, only LF is checked), we do so here
@@ -315,6 +378,5 @@ int main ( void )
 	return 0;
 }
 #endif
-
 
 #endif

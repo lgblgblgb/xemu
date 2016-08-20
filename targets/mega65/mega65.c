@@ -859,6 +859,21 @@ static void update_emulator ( void )
 
 
 
+static const char registerMessage[]  = "PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO";
+
+
+void m65mon_show_regs ( void )
+{
+	umon_printf("%s\r\n%04X %02X %02X %02X %02X %02X %04X "	// register banned message and things from PC to SP
+		"%04X %04X %02X          %02X",			// from MAPL to P (FIXME: last-op should be disasm? also MAPL/H is only C65 stuff here)
+		registerMessage,
+		cpu_pc, cpu_a, cpu_x, cpu_y, cpu_z, cpu_bphi >> 8, cpu_sphi | cpu_sp,
+		map_offset_low >> 8, map_offset_high >> 8, cpu_op, cpu_get_p()
+	);
+}
+
+
+
 
 int main ( int argc, char **argv )
 {
