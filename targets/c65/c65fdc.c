@@ -50,6 +50,7 @@ static FILE *disk;
 
 
 static int   warn_disk = 1;
+static int   warn_swap_bit = 1;
 
 
 
@@ -174,8 +175,13 @@ void fdc_write_reg ( int addr, Uint8 data )
 				printf("FDC: WARN: not drive-0 is selected: %d!" NL, drive);
 			else
 				printf("FDC: great, drive-0 is selected" NL);
-			if (data & 16)
-				INFO_WINDOW("FDC SWAP bit is not implemented yet!");
+			if (data & 16) {
+				printf("FDC: WARN: SWAP bit is not emulated!" NL);
+				if (warn_swap_bit) {
+					INFO_WINDOW("FDC SWAP bit is not implemented yet! There will be no further warnings on this.");
+					warn_swap_bit = 0;
+				}
+			}
 			break;
 		case 1:
 #ifdef GEOS_FDC_HACK
