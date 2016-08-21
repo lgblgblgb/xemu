@@ -898,21 +898,20 @@ void m65mon_set_trace ( int m )
 	paused = m;
 }
 
-void m65mon_do_trace_callback ( void )
-{
-	m65mon_show_regs();
-	uartmon_finish_command();
-}
-
 void m65mon_do_trace ( void )
 {
 	if (paused) {
 		umon_send_ok = 0; // delay command execution!
-		m65mon_callback = m65mon_do_trace_callback; // register callback
+		m65mon_callback = m65mon_show_regs; // register callback
 		trace_step_trigger = 1;	// trigger one step
 	} else {
-		umon_printf("?SYNTAX ERROR  trace can be used only in trace mode");
+		umon_printf(SYNTAX_ERROR "trace can be used only in trace mode");
 	}
+}
+
+void m65mon_do_trace_c ( void )
+{
+	umon_printf(SYNTAX_ERROR "command 'tc' is not implemented yet");
 }
 
 void m65mon_empty_command ( void )
@@ -968,6 +967,7 @@ int main ( int argc, char **argv )
 			if (m65mon_callback) {	// delayed uart monitor command should be finished ...
 				m65mon_callback();
 				m65mon_callback = NULL;
+				uartmon_finish_command();
 			}
 			// we still need to feed our emulator with update events ... It also slows this pause-busy-loop down to every full frames (~25Hz)
 			// note, that it messes timing up a bit here, as there is update_emulator() calls later in the "normal" code as well

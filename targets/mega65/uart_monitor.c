@@ -55,7 +55,6 @@ static char umon_read_buffer [0x1000];
 
 // WARNING: This source is pretty ugly, ie not so much check of overflow of the output (write) buffer.
 
-#define SYNTAX_ERROR "?SYNTAX ERROR  "
 
 static char *parse_hex_arg ( char *p, int *val, int min, int max )
 {
@@ -146,7 +145,10 @@ static void execute_command ( char *cmd )
 		case 't':
 			if (!*cmd)
 				m65mon_do_trace();
-			else {
+			else if (*cmd == 'c') {
+				if (check_end_of_command(cmd, 1))
+					m65mon_do_trace_c();
+			} else {
 				cmd = parse_hex_arg(cmd, &par1, 0, 1);
 				if (cmd && check_end_of_command(cmd, 1))
 					m65mon_set_trace(par1);

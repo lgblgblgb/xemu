@@ -18,6 +18,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __LGB_UART_MONITOR_H_INCLUDED
 #define __LGB_UART_MONITOR_H_INCLUDED
 
+#define SYNTAX_ERROR "?SYNTAX ERROR  "
+
 #define UARTMON_SOCKET		"uart.sock"
 #define UMON_WRITE_BUFFER_SIZE	0x4000
 #define umon_printf(...)	umon_write_size += sprintf(umon_write_buffer + umon_write_size, __VA_ARGS__)

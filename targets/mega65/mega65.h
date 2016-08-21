@@ -68,5 +68,6 @@ extern void m65mon_dumpmem16 ( Uint16 addr );
 extern void m65mon_set_trace ( int m );
 extern void m65mon_do_trace  ( void );
 extern void m65mon_empty_command ( void );
+extern void m65mon_do_trace_c ( void );
 
 #endif
