@@ -70,7 +70,7 @@ static int frame_counter;
 static int   paused = 0;
 static int   trace_step_trigger = 0;
 static void (*m65mon_callback)(void) = NULL;
-static const char emulator_paused_title[] = "PAUSED";
+static const char emulator_paused_title[] = "TRACE/PAUSE";
 
 int in_hypervisor;			// mega65 hypervisor mode
 int mega65_capable;			// emulator founds kickstart, sub-set of mega65 features CAN BE usable. It is an ERROR to use any of mega65 specific stuff, if it's zero!
@@ -885,13 +885,40 @@ void m65mon_show_regs ( void )
 	);
 }
 
-
-void m65mon_disassembe16 ( Uint16 addr )
+void m65mon_dumpmem16 ( Uint16 addr )
 {
 	int n = 16;
 	umon_printf(":000%04X", addr);
 	while (n--)
 		umon_printf(" %02X", cpu_read(addr++));
+}
+
+void m65mon_set_trace ( int m )
+{
+	paused = m;
+}
+
+void m65mon_do_trace_callback ( void )
+{
+	m65mon_show_regs();
+	uartmon_finish_command();
+}
+
+void m65mon_do_trace ( void )
+{
+	if (paused) {
+		umon_send_ok = 0; // delay command execution!
+		m65mon_callback = m65mon_do_trace_callback; // register callback
+		trace_step_trigger = 1;	// trigger one step
+	} else {
+		umon_printf("?SYNTAX ERROR  trace can be used only in trace mode");
+	}
+}
+
+void m65mon_empty_command ( void )
+{
+	if (paused)
+		m65mon_do_trace();
 }
 
 
@@ -952,6 +979,9 @@ int main ( int argc, char **argv )
 				trace_step_trigger = 0;
 				break;	// break the pause loop now
 			}
+			// Decorate window title about the mode.
+			// If "paused" mode is switched off ie by a monitor command (called from update_emulator() above!)
+			// then it will resets back the the original state, etc
 			window_title_custom_addon = paused ? (char*)emulator_paused_title : NULL;
 		}
 		if (in_hypervisor) {

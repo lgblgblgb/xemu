@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "uart_monitor.h"
 
 int  umon_write_size;
+int  umon_send_ok;
 char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
 
@@ -41,42 +42,29 @@ void uartmon_finish_command ( void ) {}
 #include <unistd.h>
 #include <string.h>
 #include <limits.h>
-
-#ifdef MEGA65
 #include <SDL.h>
 #include "emutools.h"
 #include "mega65.h"
-#else
-#define ERROR_WINDOW printf
-#define FATAL(...)
-#define NL "\n"
-#endif
 
 
 static int  sock_server, sock_client;
 static int  umon_write_pos, umon_read_pos;
-static int  umon_echo, umon_send_ok;
+static int  umon_echo;
 static char umon_read_buffer [0x1000];
 
 
 // WARNING: This source is pretty ugly, ie not so much check of overflow of the output (write) buffer.
 
-
-#ifdef MEGA65
-static void syntax_error ( const char *err )
-{
-	umon_printf("?SYNTAX ERROR %s", err);
-}
-
+#define SYNTAX_ERROR "?SYNTAX ERROR  "
 
 static char *parse_hex_arg ( char *p, int *val, int min, int max )
 {
 	int r;
-	while (*p == 32 || *p == '\t')
+	while (*p == 32)
 		p++;
 	*val = -1;
 	if (!*p) {
-		syntax_error("unexpected end of command (no parameter)");
+		umon_printf(SYNTAX_ERROR "unexpected end of command (no parameter)");
 		return NULL;
 	}
 	for (r = 0;;) {
@@ -86,17 +74,17 @@ static char *parse_hex_arg ( char *p, int *val, int min, int max )
 			r = (r << 4) | (*p - 'A' + 10);
 		else if (*p >= '0' && *p <= '9')
 			r = (r << 4) | (*p - '0');
-		else if (*p == 32 || *p == '\t' || *p == 0)
+		else if (*p == 32 || *p == 0)
 			break;
 		else {
-			syntax_error("invalid data as hex value");
+			umon_printf(SYNTAX_ERROR "invalid data as hex digit '%c'", *p);
 			return NULL;
 		}
 		p++;
 	}
 	*val = r;
 	if (r < min || r > max) {
-		syntax_error("command parameter's value is outside of the allowed range for this command");
+		umon_printf(SYNTAX_ERROR "command parameter's value is outside of the allowed range for this command %X (%X...%X)", r, min, max);
 		return NULL;
 	}
 	return p;
@@ -104,65 +92,73 @@ static char *parse_hex_arg ( char *p, int *val, int min, int max )
 
 
 
-static int check_end_of_command ( char *p )
+static int check_end_of_command ( char *p, int error_out )
 {
-	while (*p == 32 || *p == '\t')
+	while (*p == 32)
 		p++;
 	if (*p) {
-		syntax_error("unexpected command parameter");
+		if (error_out)
+			umon_printf(SYNTAX_ERROR "unexpected command parameter");
 		return 0;
 	}
 	return 1;
 }
-#endif
 
 
 
 static void execute_command ( char *cmd )
 {
 	int par1;
-	char *p;
-	// handle backspace (ie, char code 8)
-	p = cmd;
+	char *p = cmd;
 	while (*p)
-		if (*p == 8 && p > cmd)
+		if (p == cmd && (*cmd == 32 || *cmd == '\t' || *cmd == 8))
+			cmd = ++p;
+		else if (*p == '\t')
+			*(p++) = 32;
+		else if (*p == 8)
 			memmove(p - 1, p + 1, strlen(p + 1) + 1);
-		else
+		else if (*p > 127 || *p < 32) {
+			umon_printf(SYNTAX_ERROR "invalid character in the command (ASCII=%d)", *p);
+			return;
+		} else
 			p++;
-	// chop special characters and spaces off from the beginning
-	while (*cmd && *cmd <= 32)
-		cmd++;
-	// chop special characters and spaces off from the end
-	p = cmd + strlen(cmd) - 1;
+	p--;
 	while (p >= cmd && *p <= 32)
 		*(p--) = 0;
 	printf("UARTMON: command got \"%s\" (%d bytes)." NL, cmd, (int)strlen(cmd));
-#ifndef MEGA65
-	umon_printf("This is a demo only in test mode, you've issued command \"%s\" (%d bytes)", cmd, (int)strlen(cmd));
-#else
 	switch (*(cmd++)) {
 		case 'h':
 		case 'H':
 		case '?':
-			if (check_end_of_command(cmd))
+			if (check_end_of_command(cmd, 1))
 				umon_printf("Xemu/Mega65 Serial Monitor\r\nWarning: not 100%% compatible with UART monitor of a *real* Mega65 ...");
 			break;
 		case 'r':
 		case 'R':
-			if (check_end_of_command(cmd))
+			if (check_end_of_command(cmd, 1))
 				m65mon_show_regs();
 			break;
 		case 'd':
-			if (parse_hex_arg(cmd, &par1, 0, 0xFFFF))
-				m65mon_disassembe16(par1);
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
+			if (cmd && check_end_of_command(cmd, 1))
+				m65mon_dumpmem16(par1);
 			break;
-		case 0:	// empty line: TODO, in trace mode it does a step (I guess)
+		case 't':
+			if (!*cmd)
+				m65mon_do_trace();
+			else {
+				cmd = parse_hex_arg(cmd, &par1, 0, 1);
+				if (cmd && check_end_of_command(cmd, 1))
+					m65mon_set_trace(par1);
+			}
+			break;
+		case 0:
+			m65mon_empty_command(); // emulator can use it, if it wants
 			break;
 		default:
-			syntax_error("unknown command");
+			umon_printf(SYNTAX_ERROR "unknown (or not implemented) command '%c'", cmd[-1]);
 			break;
 	}
-#endif
 }
 
 
@@ -182,7 +178,7 @@ static int set_nonblock ( int fd )
 
 
 
-#ifndef MEGA65
+#if 0
 static inline void debug_buffer ( const char *p )
 {
 	printf("BUFFER: ");
@@ -350,34 +346,25 @@ void uartmon_update ( void )
 		return;
 	}
 	if (ret > 0) {
-		char *p1, *p2;
 		/* ECHO: provide echo for the client */
 		if (umon_echo) {
-			int n = 0;
-			p1 = umon_read_buffer + umon_read_pos;
-			while (n < ret) {
-				if (*p1 != 13 && *p1 != 10) {
-					umon_write_buffer[umon_write_size++] = *(p1++);
+			char*p = umon_read_buffer + umon_read_pos;
+			int n = ret;
+			while (n--)
+				if (*p != 13 && *p != 10) {
+					umon_write_buffer[umon_write_size++] = *(p++);
 				} else {
-					umon_echo = 0;
+					umon_echo = 0; // setting to zero avoids more input to echo, and also signs a complete command
+					*p = 0; // terminate string in read buffer
 					break;
 				}
-				n++;
-			}
 		}
 		/* ECHO: end */
 		umon_read_pos += ret;
 		umon_read_buffer[umon_read_pos] = 0;
 		debug_buffer(umon_read_buffer);
-		p1 = strchr(umon_read_buffer, '\n');
-		p2 = strchr(umon_read_buffer, '\r');
-		if ((!p1 && p2) || (p2 && p2 < p1))
-			p1 = p2;
-		if (p1 || sizeof(umon_read_buffer) - umon_read_pos - 1 == 0) {
-			if (p1)
-				*p1 = 0;
-			else
-				umon_read_buffer[sizeof(umon_read_buffer) - 1] = 0;
+		if (!umon_echo || sizeof(umon_read_buffer) - umon_read_pos - 1 == 0) {
+			umon_read_buffer[sizeof(umon_read_buffer) - 1] = 0; // just in case of a "mega long command" with filled rx buffer ...
 			umon_write_buffer[umon_write_size++] = '\r';
 			umon_write_buffer[umon_write_size++] = '\n';
 			umon_send_ok = 1;	// by default, command is finished after the execute_command()
@@ -391,18 +378,5 @@ void uartmon_update ( void )
 		}
 	}
 }
-
-
-#ifndef MEGA65
-int main ( void )
-{
-	uartmon_init(UARTMON_SOCKET);
-	for (;;) {
-		uartmon_update();
-		usleep(1000);
-	}
-	return 0;
-}
-#endif
 
 #endif

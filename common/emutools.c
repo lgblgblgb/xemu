@@ -379,7 +379,7 @@ int emu_init_sdl (
 		ERROR_WINDOW("Cannot create SDL window: %s", SDL_GetError());
 		return 1;
 	}
-	window_title_buffer = emu_malloc(strlen(window_title) + 32);
+	window_title_buffer = emu_malloc(strlen(window_title) + 128);
 	strcpy(window_title_buffer, window_title);
 	window_title_buffer_end = window_title_buffer + strlen(window_title);
 	//SDL_SetWindowMinimumSize(sdl_win, SCREEN_WIDTH, SCREEN_HEIGHT * 2);

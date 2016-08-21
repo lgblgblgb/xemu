@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define umon_printf(...)	umon_write_size += sprintf(umon_write_buffer + umon_write_size, __VA_ARGS__)
 
 extern int  umon_write_size;
+extern int  umon_send_ok;
 extern char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
 extern int  uartmon_init   ( const char *fn );
