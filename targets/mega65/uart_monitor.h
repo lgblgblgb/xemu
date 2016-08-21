@@ -28,5 +28,6 @@ extern char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 extern int  uartmon_init   ( const char *fn );
 extern void uartmon_update ( void );
 extern void uartmon_close  ( void );
+extern void uartmon_finish_command ( void );
 
 #endif

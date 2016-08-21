@@ -40,6 +40,7 @@ SDL_Texture  *sdl_tex = NULL;
 SDL_PixelFormat *sdl_pix_fmt;
 static const char default_window_title[] = "EMU";
 char *sdl_window_title = (char*)default_window_title;
+char *window_title_custom_addon = NULL;
 Uint32 *sdl_pixel_buffer = NULL;
 int texture_x_size_in_bytes;
 int emu_is_fullscreen = 0;
@@ -282,8 +283,9 @@ void emu_timekeeping_delay ( int td_em )
 	seconds_timer_trigger = (unix_time != old_unix_time);
 	if (seconds_timer_trigger) {
 		if (td_em_ALL) {
-			snprintf(window_title_buffer_end, 32, "  [%d%%]",
-				td_pc_ALL * 100 / td_em_ALL
+			snprintf(window_title_buffer_end, 32, "  [%d%%] %s",
+				td_pc_ALL * 100 / td_em_ALL,
+				window_title_custom_addon ? window_title_custom_addon : "running"
 			);
 			SDL_SetWindowTitle(sdl_win, window_title_buffer);
 		}
@@ -294,6 +296,8 @@ void emu_timekeeping_delay ( int td_em )
 		td_em_ALL += td_em;
 	}
 	if (td < 0) return; // invalid, sleep was about for _minus_ time? eh, give me that time machine, dude! :)
+	// Balancing real and wanted sleep time on long run
+	// Insane big values are forgotten, maybe emulator was stopped, or something like that
 	td_balancer -= td;
 	if (td_balancer >  1000000)
 		td_balancer = 0;

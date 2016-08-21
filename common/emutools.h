@@ -71,6 +71,7 @@ extern void emu_drop_events ( void );
 
 
 extern char *sdl_window_title;
+extern char *window_title_custom_addon;
 extern SDL_Window   *sdl_win;
 extern Uint32 sdl_winid;
 extern SDL_PixelFormat *sdl_pix_fmt;

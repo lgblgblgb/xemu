@@ -27,6 +27,7 @@ char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 int  uartmon_init   ( const char *fn ) { return 1; }
 void uartmon_update ( void ) {}
 void uartmon_close  ( void ) {}
+void uartmon_finish_command ( void ) {}
 #else
 
 
@@ -54,7 +55,7 @@ void uartmon_close  ( void ) {}
 
 static int  sock_server, sock_client;
 static int  umon_write_pos, umon_read_pos;
-static int  umon_echo;
+static int  umon_echo, umon_send_ok;
 static char umon_read_buffer [0x1000];
 
 
@@ -78,7 +79,7 @@ static char *parse_hex_arg ( char *p, int *val, int min, int max )
 		syntax_error("unexpected end of command (no parameter)");
 		return NULL;
 	}
-	for (r = 0;;)
+	for (r = 0;;) {
 		if (*p >= 'a' && *p <= 'f')
 			r = (r << 4) | (*p - 'a' + 10);
 		else if (*p >= 'A' && *p <= 'F')
@@ -91,6 +92,8 @@ static char *parse_hex_arg ( char *p, int *val, int min, int max )
 			syntax_error("invalid data as hex value");
 			return NULL;
 		}
+		p++;
+	}
 	*val = r;
 	if (r < min || r > max) {
 		syntax_error("command parameter's value is outside of the allowed range for this command");
@@ -117,6 +120,7 @@ static int check_end_of_command ( char *p )
 
 static void execute_command ( char *cmd )
 {
+	int par1;
 	char *p;
 	// handle backspace (ie, char code 8)
 	p = cmd;
@@ -136,7 +140,6 @@ static void execute_command ( char *cmd )
 #ifndef MEGA65
 	umon_printf("This is a demo only in test mode, you've issued command \"%s\" (%d bytes)", cmd, (int)strlen(cmd));
 #else
-	//umon_printf("[%s]\r\n", cmd);
 	switch (*(cmd++)) {
 		case 'h':
 		case 'H':
@@ -148,6 +151,10 @@ static void execute_command ( char *cmd )
 		case 'R':
 			if (check_end_of_command(cmd))
 				m65mon_show_regs();
+			break;
+		case 'd':
+			if (parse_hex_arg(cmd, &par1, 0, 0xFFFF))
+				m65mon_disassembe16(par1);
 			break;
 		case 0:	// empty line: TODO, in trace mode it does a step (I guess)
 			break;
@@ -233,6 +240,7 @@ int uartmon_init ( const char *fn )
 	sock_client = -1;	// no client connection yet
 	sock_server = sock;	// now set the socket
 	umon_echo = 1;
+	umon_send_ok = 1;
 	return 0;
 }
 
@@ -246,6 +254,23 @@ void uartmon_close  ( void )
 			close(sock_client);
 	}
 	sock_server = -1;
+}
+
+
+
+
+void uartmon_finish_command ( void )
+{
+	umon_send_ok = 1;
+	if (umon_write_buffer[umon_write_size - 1] != '\n') {
+		// if generated message wasn't closed with CRLF (well, only LF is checked), we do so here
+		umon_write_buffer[umon_write_size++] = '\r';
+		umon_write_buffer[umon_write_size++] = '\n';
+	}
+	// umon_trigger_end_of_answer = 1;
+	umon_write_buffer[umon_write_size++] = '.';	// add the 'dot prompt'! (m65dbg seems to check LF + dot for end of the answer)
+	umon_read_pos = 0;
+	umon_echo = 1;
 }
 
 
@@ -286,6 +311,8 @@ void uartmon_update ( void )
 		return;
 	// If there is data to write, try to write
 	if (umon_write_size) {
+		if (!umon_send_ok)
+			return;
 		ret = write(sock_client, umon_write_buffer + umon_write_pos, umon_write_size);
 		if (ret >=0 || (errno != EAGAIN && errno != EWOULDBLOCK))
 			printf("UARTMON: write(%d,buffer+%d,%d)=%d (%s)" NL,
@@ -353,15 +380,14 @@ void uartmon_update ( void )
 				umon_read_buffer[sizeof(umon_read_buffer) - 1] = 0;
 			umon_write_buffer[umon_write_size++] = '\r';
 			umon_write_buffer[umon_write_size++] = '\n';
+			umon_send_ok = 1;	// by default, command is finished after the execute_command()
 			execute_command(umon_read_buffer);	// Execute our command!
-			if (umon_write_buffer[umon_write_size - 1] != '\n') {
-				// if generated message wasn't closed with CRLF (well, only LF is checked), we do so here
-				umon_write_buffer[umon_write_size++] = '\r';
-				umon_write_buffer[umon_write_size++] = '\n';
-			}
-			umon_write_buffer[umon_write_size++] = '.';	// add the 'dot prompt'! (m65dbg seems to check LF + dot for end of the answer)
-			umon_read_pos = 0;
-			umon_echo = 1;
+			// command may delay (like with trace) the finish of the command with
+			// setting umon_send_ok to zero. In this case, some need to call
+			// uartmon_finish_command() some time otherwise the monitor connection
+			// will just hang!
+			if (umon_send_ok)
+				uartmon_finish_command();
 		}
 	}
 }

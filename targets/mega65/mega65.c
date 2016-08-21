@@ -67,6 +67,11 @@ static int map_offset_high;		// MAP high offset, should be filled at the MAP opc
 
 static int frame_counter;
 
+static int   paused = 0;
+static int   trace_step_trigger = 0;
+static void (*m65mon_callback)(void) = NULL;
+static const char emulator_paused_title[] = "PAUSED";
+
 int in_hypervisor;			// mega65 hypervisor mode
 int mega65_capable;			// emulator founds kickstart, sub-set of mega65 features CAN BE usable. It is an ERROR to use any of mega65 specific stuff, if it's zero!
 static Uint8 gs_regs[0x1000];		// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
@@ -859,19 +864,35 @@ static void update_emulator ( void )
 
 
 
-static const char registerMessage[]  = "PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO";
-
-
 void m65mon_show_regs ( void )
 {
-	umon_printf("%s\r\n%04X %02X %02X %02X %02X %02X %04X "	// register banned message and things from PC to SP
-		"%04X %04X %02X          %02X",			// from MAPL to P (FIXME: last-op should be disasm? also MAPL/H is only C65 stuff here)
-		registerMessage,
+	umon_printf(
+		"PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
+		"%04X %02X %02X %02X %02X %02X %04X "		// register banned message and things from PC to SP
+		"%04X %04X %02X       %02X %02X "		// from MAPL to P
+		"%c%c%c%c%c%c%c%c ",				// P-FLAGS
 		cpu_pc, cpu_a, cpu_x, cpu_y, cpu_z, cpu_bphi >> 8, cpu_sphi | cpu_sp,
-		map_offset_low >> 8, map_offset_high >> 8, cpu_op, cpu_get_p()
+		map_offset_low >> 8, map_offset_high >> 8, cpu_op,
+		cpu_get_p(), 0,	// flags
+		cpu_pfn ? 'N' : '-',
+		cpu_pfv ? 'V' : '-',
+		cpu_pfe ? 'E' : '-',
+		cpu_pfb ? 'B' : '-',
+		cpu_pfd ? 'D' : '-',
+		cpu_pfi ? 'I' : '-',
+		cpu_pfz ? 'Z' : '-',
+		cpu_pfc ? 'C' : '-'
 	);
 }
 
+
+void m65mon_disassembe16 ( Uint16 addr )
+{
+	int n = 16;
+	umon_printf(":000%04X", addr);
+	while (n--)
+		umon_printf(" %02X", cpu_read(addr++));
+}
 
 
 
@@ -916,14 +937,35 @@ int main ( int argc, char **argv )
 		SDL_PauseAudioDevice(audio, 0);
 	for (;;) {
 		int opcyc;
+		while (paused) {	// paused special mode, ie tracing support, or something ...
+			if (m65mon_callback) {	// delayed uart monitor command should be finished ...
+				m65mon_callback();
+				m65mon_callback = NULL;
+			}
+			// we still need to feed our emulator with update events ... It also slows this pause-busy-loop down to every full frames (~25Hz)
+			// note, that it messes timing up a bit here, as there is update_emulator() calls later in the "normal" code as well
+			// this can be a bug, but real-time emulation is not so much an issue if you eg doing trace of your code ...
+			update_emulator();
+			if (trace_step_trigger) {
+				// if monitor trigges a step, break the pause loop, however we will get back the control on the next
+				// iteration of the infinite "for" loop, as "paused" is not altered
+				trace_step_trigger = 0;
+				break;	// break the pause loop now
+			}
+			window_title_custom_addon = paused ? (char*)emulator_paused_title : NULL;
+		}
+		if (in_hypervisor) {
+			//printf("MEGA65: hypervisor mode execution at $%04X" NL, cpu_pc);
+			// This is not a precise check: only the mapped address is checked ... Hypervisor may map out memory from itself, it won't be noticed then here.
+			if (cpu_pc < 0x8000 || cpu_pc > 0xBFFF) {
+				ERROR_WINDOW("Executing program in hypervisor mode outside of the hypervisor mem $%04X. Emulation paused!", cpu_pc);
+				paused = 1;	// go into "paused" mode
+				continue;
+			}
+		}
 		// Trying to use at least some approx stuff :)
 		// In FAST mode, the divider is 7. (see: vic3.c)
 		// Otherwise it's 2, thus giving about *3.5 slower CPU ... or something :)
-		if (in_hypervisor) {
-			//printf("MEGA65: hypervisor mode execution at $%04X" NL, cpu_pc);
-			if(cpu_pc < 0x8000 || cpu_pc > 0xBFFF)
-				ERROR_WINDOW("Executing program in hypervisor mode outside of the hypervisor mem $%04X", cpu_pc);
-		}
 		opcyc = cpu_step();
 		// FIXME: maybe CIAs are not fed with the actual CPU clock and that cause the "too fast" C64 for me?
 		// ... though I tried to correct used CPU cycles with that divider hack at least to approx. the ~1MHz clock in non-FAST mode (see vic3.c)
