@@ -67,7 +67,7 @@ static int map_offset_high;		// MAP high offset, should be filled at the MAP opc
 
 static int frame_counter;
 
-static int   paused = 0;
+static int   paused = 0, paused_old = 0;
 static int   breakpoint_pc = -1;
 static int   trace_step_trigger = 0;
 static void (*m65mon_callback)(void) = NULL;
@@ -203,6 +203,7 @@ static void hypervisor_enter ( int trapno )
 	apply_memory_config();	// now the memory mapping is changed
 	cpu_pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
 	printf("MEGA65: entering into hypervisor mode, trap=$%02X PC=$%04X" NL, trapno, cpu_pc);
+	fprintf(stderr, "HYPERVISOR: entering into hypervisor mode @ $%04X -> $%04X" NL, gs_regs[0x648] | (gs_regs[0x649] << 8), cpu_pc);
 }
 
 
@@ -214,6 +215,7 @@ static void hypervisor_leave ( void )
 	if (!in_hypervisor)
 		FATAL("FATAL: not in hypervisor mode while calling hypervisor_leave()");
 	// First, restore machine status from hypervisor registers
+	fprintf(stderr, "HYPERVISOR: leaving hypervisor mode @ $%04X -> $%04X" NL, cpu_pc, gs_regs[0x648] | (gs_regs[0x649] << 8));
 	cpu_a    = gs_regs[0x640];
 	cpu_x    = gs_regs[0x641];
 	cpu_y    = gs_regs[0x642];
@@ -999,6 +1001,13 @@ int main ( int argc, char **argv )
 			// If "paused" mode is switched off ie by a monitor command (called from update_emulator() above!)
 			// then it will resets back the the original state, etc
 			window_title_custom_addon = paused ? (char*)emulator_paused_title : NULL;
+			if (paused != paused_old) {
+				paused_old = paused;
+				if (paused)
+					fprintf(stderr, "TRACE: entering into trace mode @ $%04X" NL, cpu_pc);
+				else
+					fprintf(stderr, "TRACE: leaving trace mode @ $%04X" NL, cpu_pc);
+			}
 		}
 		if (in_hypervisor) {
 			//printf("MEGA65: hypervisor mode execution at $%04X" NL, cpu_pc);
