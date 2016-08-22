@@ -84,6 +84,7 @@ static int read_sector ( void )
 		printf("SDCARD: read failure ..." NL);
 		return 1;
 	}
+	printf("SDCARD: cool, sector read was OK!" NL);
 	return 0;
 }
 

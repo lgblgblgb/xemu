@@ -507,6 +507,10 @@ Uint8 io_read ( int addr )
 			switch (addr) {
 				case 0xD680:
 					return sdcard_read_status();
+				case 0xD688:
+					return 0;	// SDcard read bytes low byte; FIXME: faking zero here!
+				case 0xD689:
+					return 2;	// SDcard read bytes hi byte; FIXME: faking two here (so 512 with the one above)
 				case 0xD6F0:
 					return fpga_switches & 0xFF;
 				case 0xD6F1:
@@ -628,6 +632,9 @@ void io_write ( int addr, Uint8 data )
 				case 0xD683:
 				case 0xD684:
 					sdcard_select_sector(addr - 0xD681, data);
+					break;
+				default:
+					printf("MEGA65: this I/O port is not emulated in Xemu yet: $%04X" NL, addr);
 					break;
 			}
                         return;
