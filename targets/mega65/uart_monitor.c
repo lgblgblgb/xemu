@@ -154,6 +154,11 @@ static void execute_command ( char *cmd )
 					m65mon_set_trace(par1);
 			}
 			break;
+		case 'b':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
+			if (cmd && check_end_of_command(cmd, 1))
+				m65mon_breakpoint(par1);
+			break;
 		case 0:
 			m65mon_empty_command(); // emulator can use it, if it wants
 			break;

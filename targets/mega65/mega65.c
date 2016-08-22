@@ -68,6 +68,7 @@ static int map_offset_high;		// MAP high offset, should be filled at the MAP opc
 static int frame_counter;
 
 static int   paused = 0;
+static int   breakpoint_pc = -1;
 static int   trace_step_trigger = 0;
 static void (*m65mon_callback)(void) = NULL;
 static const char emulator_paused_title[] = "TRACE/PAUSE";
@@ -243,6 +244,14 @@ static void hypervisor_serial_monitor_push_char ( Uint8 chr )
 {
 	if (hypervisor_monout_p >= hypervisor_monout - 1 + sizeof hypervisor_monout)
 		return;
+	if (hypervisor_monout_p == hypervisor_monout && (chr == 13 || chr == 10))
+		return;
+	if (chr == 13 || chr == 10) {
+		*hypervisor_monout_p = 0;
+		fprintf(stderr, "Hypervisor serial output: \"%s\"." NL, hypervisor_monout);
+		hypervisor_monout_p = hypervisor_monout;
+		return;
+	}
 	*(hypervisor_monout_p++) = (char)chr;
 }
 
@@ -783,11 +792,13 @@ static void shutdown_callback ( void )
 #ifdef UARTMON_SOCKET
 	uartmon_close();
 #endif
+#if 0
 	if (hypervisor_monout != hypervisor_monout_p) {
 		*hypervisor_monout_p = 0;
 		printf("HYPERVISOR_MONITOR_OUT:" NL "%s" NL "HYPERVISOR_MONITOR_OUT: *END-OF-OUTPUT*" NL, hypervisor_monout);
 	} else
 		printf("HYPERVISOR_MONITOR_OUT: *NO-OUTPUT-BUFFER*" NL);
+#endif
 	printf("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
 }
 
@@ -920,6 +931,11 @@ void m65mon_empty_command ( void )
 		m65mon_do_trace();
 }
 
+void m65mon_breakpoint ( int brk )
+{
+	breakpoint_pc = brk;
+}
+
 
 
 int main ( int argc, char **argv )
@@ -988,10 +1004,14 @@ int main ( int argc, char **argv )
 			//printf("MEGA65: hypervisor mode execution at $%04X" NL, cpu_pc);
 			// This is not a precise check: only the mapped address is checked ... Hypervisor may map out memory from itself, it won't be noticed then here.
 			if (cpu_pc < 0x8000 || cpu_pc > 0xBFFF) {
-				ERROR_WINDOW("Executing program in hypervisor mode outside of the hypervisor mem $%04X. Emulation paused!", cpu_pc);
+				fprintf(stderr, "*** Executing program @ $%04X in hypervisor mode outside of the hypervisor memory. Moving into trace mode now!" NL, cpu_pc);
 				paused = 1;	// go into "paused" mode
 				continue;
 			}
+		}
+		if (breakpoint_pc == cpu_pc) {
+			fprintf(stderr, "Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu_pc);
+			paused = 1;
 		}
 		// Trying to use at least some approx stuff :)
 		// In FAST mode, the divider is 7. (see: vic3.c)
