@@ -76,6 +76,10 @@ static int read_sector ( void )
 		return 1;
 	secno = sd_sector_bytes[0] | (sd_sector_bytes[1] << 8) | (sd_sector_bytes[2] << 16) | (sd_sector_bytes[3] << 24);
 	printf("SDCARD: reading sector %d" NL, secno);
+	if (secno < 0 || secno >= 0x400000) {
+		printf("SDCARD: invalid sector number failure ..." NL);
+		return 1;
+	}
 	if (lseek(sdfd, (off_t)secno << 9, SEEK_SET) != (off_t)secno << 9) {
 		printf("SDCARD: lseek failure ..." NL);
 		return 1;
@@ -116,7 +120,7 @@ void sdcard_command ( Uint8 cmd )
 			break;
 		case 0x02:	// read sector
 			if (read_sector()) {
-				sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR | SD_ST_BUSY1 | SD_ST_BUSY0;
+				sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR; // | SD_ST_BUSY1 | SD_ST_BUSY0;
 			} else {
 				sd_status &= ~(SD_ST_ERROR | SD_ST_FSM_ERROR);
 			}
@@ -150,6 +154,6 @@ void sdcard_command ( Uint8 cmd )
 
 void sdcard_select_sector ( int secreg, Uint8 data )
 {
-	sd_sector_bytes[secreg] = 0;
+	sd_sector_bytes[secreg] = data;
 	printf("SDCARD: writing sector number register $%04X with $%02X" NL, secreg + 0xD681, data);
 }
