@@ -508,9 +508,9 @@ Uint8 io_read ( int addr )
 				case 0xD680:
 					return sdcard_read_status();
 				case 0xD688:
-					return 0;	// SDcard read bytes low byte; FIXME: faking zero here!
+					return sdcard_bytes_read & 0xFF;	// SDcard read bytes low byte
 				case 0xD689:
-					return 2;	// SDcard read bytes hi byte; FIXME: faking two here (so 512 with the one above)
+					return sdcard_bytes_read >> 8;		// SDcard read bytes hi byte
 				case 0xD6F0:
 					return fpga_switches & 0xFF;
 				case 0xD6F1:
