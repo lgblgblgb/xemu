@@ -32,6 +32,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "emutools.h"
 
 
+#define ALREADY_KICKED	1
+
 
 static SDL_AudioDeviceID audio = 0;
 
@@ -331,6 +333,9 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 	in_hypervisor = 0;
 	memset(gs_regs, 0, sizeof gs_regs);
 	rom_protect = 1;
+#if ALREADY_KICKED != 0
+	gs_regs[0x67E] = 0xFF;
+#endif
 	// *** Trying to load kickstart image
 	if (emu_load_file(KICKSTART_NAME, memory + HYPERVISOR_MEM_REMAP_VIRTUAL + 0x8000, 0x4001) == 0x4000) {
 		// Found kickstart ROM, emulate Mega65 startup somewhat ...
@@ -621,6 +626,10 @@ void io_write ( int addr, Uint8 data )
 					break;
 				case 0xD67D:
 					rom_protect = data & 4;
+					break;
+				case 0xD67E:	// it seems any write (?) here marks the byte as non-zero?! FIXME TODO
+					gs_regs[addr & 0xFFF] = 0xFF;
+					fprintf(stderr, "Writing already-kicked register $%04X!" NL, addr);
 					break;
 				case 0xD67F:	// hypervisor enter/leave trap
 					if (in_hypervisor)
@@ -1024,9 +1033,9 @@ int main ( int argc, char **argv )
 			//printf("MEGA65: hypervisor mode execution at $%04X" NL, cpu_pc);
 			// This is not a precise check: only the mapped address is checked ... Hypervisor may map out memory from itself, it won't be noticed then here.
 			if (cpu_pc < 0x8000 || cpu_pc > 0xBFFF) {
-				fprintf(stderr, "*** Executing program @ $%04X in hypervisor mode outside of the hypervisor memory. Moving into trace mode now!" NL, cpu_pc);
-				paused = 1;	// go into "paused" mode
-				continue;
+				//fprintf(stderr, "*** Executing program @ $%04X in hypervisor mode outside of the hypervisor memory. Moving into trace mode now!" NL, cpu_pc);
+				//paused = 1;	// go into "paused" mode
+				//continue;
 			}
 		}
 		if (breakpoint_pc == cpu_pc) {

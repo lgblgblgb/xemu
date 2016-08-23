@@ -30,7 +30,7 @@ static int sdfd;		// SD-card controller emulation, UNIX file descriptor of the o
 static Uint8 sd_buffer[512];	// SD-card controller buffer
 static Uint8 sd_status;		// SD-status byte
 static Uint8 sd_sector_bytes[4];
-static int   sd_card_size_in_sectors;
+static off_t sd_card_size;
 int sdcard_bytes_read = 0;
 
 
@@ -46,34 +46,32 @@ int sdcard_init ( const char *fn )
 		} else {
 			// Check size!
 			printf("SDCARD: cool, SD-card image %s is open" NL, fn);
-			off_t s = lseek(sdfd, 0, SEEK_END);
-			if (s == (off_t)-1) {
+			sd_card_size = lseek(sdfd, 0, SEEK_END);
+			if (sd_card_size == (off_t)-1) {
 				ERROR_WINDOW("Cannot query the size of the SD-card image %s, SD-card access won't work! ERROR: %s", fn, strerror(errno));
 				close(sdfd);
 				sdfd = -1;
 				return sdfd;
 			}
-			if (s > 2147483648L) {
+			if (sd_card_size > 2147483648UL) {
 				ERROR_WINDOW("SD-card image is too large! Max allowed size is 2Gbytes!");
 				close(sdfd);
 				sdfd = -1;
 				return sdfd;
 			}
-			if (s < 67108864) {
+			if (sd_card_size < 67108864) {
 				ERROR_WINDOW("SD-card image is too small! Min required size is 64Mbytes!");
 				close(sdfd);
 				sdfd = -1;
 				return sdfd;
 			}
-			printf("SDCARD: detected size in bytes: %ld" NL, (long)s);
-			if (s & 511) {
+			printf("SDCARD: detected size in Mbytes: %d" NL, (int)(sd_card_size >> 20));
+			if (sd_card_size & 511) {
 				ERROR_WINDOW("SD-card image size is not multiple of 512 bytes!!");
 				close(sdfd);
 				sdfd = -1;
 				return sdfd;
 			}
-			sd_card_size_in_sectors = s >> 9;
-			printf("SDCARD: detected size in sectors: %d" NL, sd_card_size_in_sectors);
 		}
 	} else {
 		sdfd = -1;
@@ -102,28 +100,32 @@ int sdcard_write_buffer ( int addr, Uint8 data )
 }
 
 
+#define SEEK_SHIFT 0
+//#define SEEK_SHIFT 9
+
 static int read_sector ( void )
 {
-	int secno;
+	off_t offset;
+	int ret;
 	if (sdfd < 0)
-		return 1;
-	secno = sd_sector_bytes[0] | (sd_sector_bytes[1] << 8) | (sd_sector_bytes[2] << 16) | (sd_sector_bytes[3] << 24);
-	printf("SDCARD: reading sector %d" NL, secno);
-	if (secno < 0 || secno >= sd_card_size_in_sectors) {
-		printf("SDCARD: invalid sector number failure ..." NL);
-		return 1;
+		return -1;
+	offset = sd_sector_bytes[0] | (sd_sector_bytes[1] << 8) | (sd_sector_bytes[2] << 16) | (sd_sector_bytes[3] << 24);
+	printf("SDCARD: reading position %ld" NL, (long)offset);
+	if (offset < 0 || offset >= sd_card_size) {
+		printf("SDCARD: invalid position value failure ..." NL);
+		return -1;
 	}
-	if (lseek(sdfd, (off_t)secno << 9, SEEK_SET) != (off_t)secno << 9) {
+	if (lseek(sdfd, offset, SEEK_SET) != offset) {
 		printf("SDCARD: lseek failure ... ERROR: %s" NL, strerror(errno));
-		return 1;
+		return -1;
 	}
-	secno = read(sdfd, sd_buffer, 512);
-	if (secno != 512) {
-		printf("SDCARD: read failure ... ERROR: %s" NL, secno >=0 ? "not 512 bytes are read" : strerror(errno));
-		return 1;
+	ret = read(sdfd, sd_buffer, 512);
+	if (ret <= 0) {
+		printf("SDCARD: read failure ... ERROR: %s" NL, ret >=0 ? "zero byte read" : strerror(errno));
+		return -1;
 	}
-	printf("SDCARD: cool, sector read was OK!" NL);
-	return 0;
+	printf("SDCARD: cool, sector read was OK (%d bytes read)!" NL, ret);
+	return ret;
 }
 
 
@@ -142,6 +144,7 @@ Uint8 sdcard_read_status ( void )
 
 void sdcard_command ( Uint8 cmd )
 {
+	int ret;
 	printf("SDCARD: writing command register $D680 with $%02X" NL, cmd);
 	sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);	// ugly hack :-@
 	switch (cmd) {
@@ -153,12 +156,13 @@ void sdcard_command ( Uint8 cmd )
 			sd_status &= ~(SD_ST_RESET | SD_ST_ERROR | SD_ST_FSM_ERROR);
 			break;
 		case 0x02:	// read sector
-			if (read_sector()) {
+			ret = read_sector();
+			if (ret < 0) {
 				sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR; // | SD_ST_BUSY1 | SD_ST_BUSY0;
 				sdcard_bytes_read = 0;
 			} else {
 				sd_status &= ~(SD_ST_ERROR | SD_ST_FSM_ERROR);
-				sdcard_bytes_read = 512;
+				sdcard_bytes_read = ret;
 			}
 			break;
 		case 0x40:	// SDHC mode OFF
