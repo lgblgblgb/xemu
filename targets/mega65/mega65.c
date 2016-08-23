@@ -251,6 +251,7 @@ static void hypervisor_serial_monitor_push_char ( Uint8 chr )
 	if (chr == 13 || chr == 10) {
 		*hypervisor_monout_p = 0;
 		fprintf(stderr, "Hypervisor serial output: \"%s\"." NL, hypervisor_monout);
+		printf("MEGA65: Hypervisor serial output: \"%s\"." NL, hypervisor_monout);
 		hypervisor_monout_p = hypervisor_monout;
 		return;
 	}
@@ -549,8 +550,11 @@ Uint8 io_read ( int addr )
 	// Only IO-1 and IO-2 areas left, if SD-card buffer is mapped for Mega65, this is our only case left!
 	do {
 		int result = sdcard_read_buffer(addr - 0xDE00);	// try to read SD buffer
-		if (result >= 0)	// if non-negative number got, answer is really the SD card (mapped buffer)
+		if (result >= 0) {	// if non-negative number got, answer is really the SD card (mapped buffer)
+			printf("SDCARD: BUFFER: reading SD-card buffer at offset $%03X with result $%02X" NL, addr - 0xDE00, result);
 			return result;
+		} else
+			printf("SDCARD: BUFFER: *NOT* mapped SD-card buffer is read, can it be a bug??" NL);
 	} while (0);
 	if (addr < 0xDF00) {	// $DE00 - $DEFF	IO-1 external
 		RETURN_ON_IO_READ_NOT_IMPLEMENTED("IO-1 external select", 0xFF);
