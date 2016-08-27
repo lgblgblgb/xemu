@@ -1,4 +1,6 @@
 #!/bin/bash
+# (C)2016 LGB Gabor Lenart
+# https://github.com/lgblgblgb/xemu
 
 echo "*** System information"
 sudo hostname travis-lgb

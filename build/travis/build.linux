@@ -1,4 +1,6 @@
 #!/bin/bash
+# (C)2016 LGB Gabor Lenart
+# https://github.com/lgblgblgb/xemu
 
 cd /srv/git || exit 1
 source .travis-info
@@ -20,8 +22,12 @@ echo "<<< MARK: BUILD ALL END >>>"
 
 echo "BUILD STATUS: $ret"
 
+cd build/bin || exit 1
+
 if [ "$ret" = "0" ]; then
+	ls -l *.win32 *.win64
 	zip dist.zip *.win32 *.win64
+	ls -l dist.zip
 	if [ -s dist.zip ]; then
 		echo "Uploader ..."
 		#curl -T dist.zip "$uploader/dist-win.zip?$URLPAR" > /dev/null 2> /dev/null

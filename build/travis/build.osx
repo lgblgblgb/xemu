@@ -1,4 +1,6 @@
 #!/bin/bash
+# (C)2016 LGB Gabor Lenart
+# https://github.com/lgblgblgb/xemu
 
 source .travis-info
 source .uploader
@@ -21,22 +23,23 @@ echo "<<< MARK: BUILD ALL END >>>"
 
 echo "BUILD STATUS: osx:     $b"
 
-if [ -s xep128.osx ]; then
-	echo "*** Deployment of binary (original) ..."
-	ls -l xep128.osx
-	otool -L ./xep128.osx
-	#curl -T xep128.osx "$uploader/xep128_original.osx?$URLPAR" > /dev/null 2> /dev/null
+cd build/bin || exit 1
 
-	echo "*** Mangling of binary ..."
-	sdl=`otool -L ./xep128.osx | awk '$1 ~ /lib[sS][dD][lL]2.*dylib$/ { print $1 }'`
-	sdl_local="libSDL2-xep128.dylib"
+for bin in *.osx ; do
+	echo "*** Deployment of binary (original) $bin ..."
+	ls -l $bin
+	otool -L ./$bin
+	#curl -T $bin "$uploader/xep128_original.osx?$URLPAR" > /dev/null 2> /dev/null
+	echo "*** Mangling of binary $bin ..."
+	sdl=`otool -L ./$bin | awk '$1 ~ /lib[sS][dD][lL]2.*dylib$/ { print $1 }'`
+	sdl_local="libSDL2-xemu.dylib"
 	echo "SDL2 library is: $sdl -> $sdl_local"
-	install_name_tool -change $sdl @executable_path/$sdl_local ./xep128.osx
-	ls -l xep128.osx
-	otool -L ./xep128.osx
-	cat $sdl > $sdl_local
-	#curl -T xep128.osx "$uploader/xep128_mangled.osx?$URLPAR" > /dev/null 2> /dev/null
+	install_name_tool -change $sdl @executable_path/$sdl_local ./$bin
+	ls -l $bin
+	otool -L ./$bin
+	#cat $sdl > $sdl_local
+	#curl -T xep128.osx "$uploader/$bin?$URLPAR" > /dev/null 2> /dev/null
 	#curl -T $sdl_local "$uploader/$sdl_local?$URLPAR" > /dev/null 2> /dev/null
-fi
+done
 
 exit $b
