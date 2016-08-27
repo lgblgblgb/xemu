@@ -72,7 +72,7 @@ static int check_basic_stub ( Uint8 *p, int addr )
 		p++;
 	if (!a)
 		return -1;
-	printf("OK! %c%c%c%c\n", p[0], p[1], p[2], p[3]);
+	DEBUG("OK! %c%c%c%c" NL, p[0], p[1], p[2], p[3]);
 	if (
 		!isdigit(p[0]) || !isdigit(p[1]) || !isdigit(p[2]) || !isdigit(p[3]) ||
 		isdigit(p[4])
@@ -81,7 +81,7 @@ static int check_basic_stub ( Uint8 *p, int addr )
 	a = (p[0] - '0') * 1000 + (p[1] - '0') * 100 + (p[2] - '0') * 10 + (p[3] - '0');
 	if (a < addr + 12 || a > addr + 100)
 		return -1;
-	printf("GEOS: basic stub SYS address is %d decimal." NL, a);
+	DEBUG("GEOS: basic stub SYS address is %d decimal." NL, a);
 	return a;
 }
 
@@ -128,6 +128,6 @@ int geos_load_kernal ( void )
 void geos_cpu_trap ( Uint8 opcode )
 {
 	// Hopefully the trap itself is in RAM ..
-	printf("GEOS: TRAP-SYM: \"%s\"" NL, memory + cpu_pc);
+	DEBUG("GEOS: TRAP-SYM: \"%s\"" NL, memory + cpu_pc);
 	cpu_pc += strlen((const char*)memory + cpu_pc) + 1;
 }

@@ -32,7 +32,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "emutools.h"
 
 
-#define ALREADY_KICKED	1
+#define ALREADY_KICKED	0xFF
 
 
 static SDL_AudioDeviceID audio = 0;
@@ -204,7 +204,7 @@ static void hypervisor_enter ( int trapno )
 	// FIXME: as currently I can do only C65-MAP, we cheat a bit, and use a special case in apply_memory_config() instead of a "legal" map-hi offset
 	apply_memory_config();	// now the memory mapping is changed
 	cpu_pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
-	printf("MEGA65: entering into hypervisor mode, trap=$%02X PC=$%04X" NL, trapno, cpu_pc);
+	DEBUG("MEGA65: entering into hypervisor mode, trap=$%02X PC=$%04X" NL, trapno, cpu_pc);
 	fprintf(stderr, "HYPERVISOR: entering into hypervisor mode @ $%04X -> $%04X" NL, gs_regs[0x648] | (gs_regs[0x649] << 8), cpu_pc);
 }
 
@@ -239,7 +239,7 @@ static void hypervisor_leave ( void )
 	// Now leaving hypervisor mode ...
 	in_hypervisor = 0;
 	apply_memory_config();
-	printf("MEGA65: leaving hypervisor mode, (user) PC=$%04X" NL, cpu_pc);
+	DEBUG("MEGA65: leaving hypervisor mode, (user) PC=$%04X" NL, cpu_pc);
 }
 
 
@@ -253,7 +253,7 @@ static void hypervisor_serial_monitor_push_char ( Uint8 chr )
 	if (chr == 13 || chr == 10) {
 		*hypervisor_monout_p = 0;
 		fprintf(stderr, "Hypervisor serial output: \"%s\"." NL, hypervisor_monout);
-		printf("MEGA65: Hypervisor serial output: \"%s\"." NL, hypervisor_monout);
+		DEBUG("MEGA65: Hypervisor serial output: \"%s\"." NL, hypervisor_monout);
 		hypervisor_monout_p = hypervisor_monout;
 		return;
 	}
@@ -263,7 +263,7 @@ static void hypervisor_serial_monitor_push_char ( Uint8 chr )
 
 static void cia_setint_cb ( int level )
 {
-	printf("%s: IRQ level changed to %d" NL, cia1.name, level);
+	DEBUG("%s: IRQ level changed to %d" NL, cia1.name, level);
 	if (level)
 		cpu_irqLevel |= 1;
 	else
@@ -300,7 +300,7 @@ static Uint8 cia_read_keyboard ( Uint8 ddr_mask_unused )
 static void cia2_outa ( Uint8 mask, Uint8 data )
 {
 	vic2_16k_bank = (3 - (data & 3)) * 0x4000;
-	printf("VIC2: 16K BANK is set to $%04X" NL, vic2_16k_bank);
+	DEBUG("VIC2: 16K BANK is set to $%04X" NL, vic2_16k_bank);
 }
 
 
@@ -315,7 +315,7 @@ static Uint8 cia_port_in_dummy ( Uint8 mask )
 
 static void audio_callback(void *userdata, Uint8 *stream, int len)
 {
-	printf("AUDIO: audio callback, wants %d samples" NL, len);
+	DEBUG("AUDIO: audio callback, wants %d samples" NL, len);
 	// We use the trick, to render boths SIDs with step of 2, with a byte offset
 	// to get a stereo stream, wanted by SDL.
 	sid_render(&sid2, ((short *)(stream)) + 0, len / 2, 2);		// SID @ left
@@ -333,17 +333,15 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 	in_hypervisor = 0;
 	memset(gs_regs, 0, sizeof gs_regs);
 	rom_protect = 1;
-#if ALREADY_KICKED != 0
-	gs_regs[0x67E] = 0xFF;
-#endif
+	gs_regs[0x67E] = ALREADY_KICKED;
 	// *** Trying to load kickstart image
 	if (emu_load_file(KICKSTART_NAME, memory + HYPERVISOR_MEM_REMAP_VIRTUAL + 0x8000, 0x4001) == 0x4000) {
 		// Found kickstart ROM, emulate Mega65 startup somewhat ...
 		mega65_capable = 1;
-		printf("MEGA65: " KICKSTART_NAME " loaded into hypervisor memory, Mega65 capable mode is set" NL);
+		DEBUG("MEGA65: " KICKSTART_NAME " loaded into hypervisor memory, Mega65 capable mode is set" NL);
 	} else {
 		ERROR_WINDOW("Cannot load " KICKSTART_NAME " (not found, or not 16K sized), emulate only C65");
-		printf("MEGA65: " KICKSTART_NAME " cannot be loaded, Mega65 capable mode is disabled" NL);
+		DEBUG("MEGA65: " KICKSTART_NAME " cannot be loaded, Mega65 capable mode is disabled" NL);
 		mega65_capable = 0;
 	}
 	// *** Mega65 specific SDCARD support
@@ -394,14 +392,14 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 	if (audio) {
 		int i;
 		for (i = 0; i < SDL_GetNumAudioDevices(0); i++)
-			printf("AUDIO: audio device is #%d: %s" NL, i, SDL_GetAudioDeviceName(i, 0));
+			DEBUG("AUDIO: audio device is #%d: %s" NL, i, SDL_GetAudioDeviceName(i, 0));
 		// Sanity check that we really got the same audio specification we wanted
 		if (audio_want.freq != audio_got.freq || audio_want.format != audio_got.format || audio_want.channels != audio_got.channels) {
 			SDL_CloseAudioDevice(audio);	// forget audio, if it's not our expected format :(
 			audio = 0;
 			ERROR_WINDOW("Audio parameter mismatches.");
 		}
-		printf("AUDIO: initialized (#%d), %d Hz, %d channels, %d buffer sample size." NL, audio, audio_got.freq, audio_got.channels, audio_got.samples);
+		DEBUG("AUDIO: initialized (#%d), %d Hz, %d channels, %d buffer sample size." NL, audio, audio_got.freq, audio_got.channels, audio_got.samples);
 	} else
 		ERROR_WINDOW("Cannot open audio device!");
 	//
@@ -415,7 +413,7 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 		rom_protect = 0;
 		hypervisor_enter(TRAP_RESET);
 	}
-	puts("INIT: end of initialization!");
+	DEBUG("INIT: end of initialization!" NL);
 }
 
 
@@ -424,14 +422,14 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 void cpu_do_aug ( void )
 {
 	cpu_inhibit_interrupts = 1;	// disable interrupts to the next "EOM" (ie: NOP) opcode
-	printf("CPU: MAP opcode, input A=$%02X X=$%02X Y=$%02X Z=$%02X" NL, cpu_a, cpu_x, cpu_y, cpu_z);
+	DEBUG("CPU: MAP opcode, input A=$%02X X=$%02X Y=$%02X Z=$%02X" NL, cpu_a, cpu_x, cpu_y, cpu_z);
 	map_offset_low  = (cpu_a << 8) | ((cpu_x & 15) << 16);	// offset of lower half (blocks 0-3)
 	map_offset_high = (cpu_y << 8) | ((cpu_z & 15) << 16);	// offset of higher half (blocks 4-7)
 	map_mask        = (cpu_z & 0xF0) | (cpu_x >> 4);	// "is mapped" mask for blocks (1 bit for each)
-	puts("MEM: applying new memory configuration because of MAP CPU opcode");
-	printf("LOW -OFFSET = $%X" NL, map_offset_low);
-	printf("HIGH-OFFSET = $%X" NL, map_offset_high);
-	printf("MASK        = $%02X" NL, map_mask);
+	DEBUG("MEM: applying new memory configuration because of MAP CPU opcode" NL);
+	DEBUG("LOW -OFFSET = $%X" NL, map_offset_low);
+	DEBUG("HIGH-OFFSET = $%X" NL, map_offset_high);
+	DEBUG("MASK        = $%02X" NL, map_mask);
 	apply_memory_config();
 }
 
@@ -442,29 +440,29 @@ void cpu_do_nop ( void )
 {
 	if (cpu_inhibit_interrupts) {
 		cpu_inhibit_interrupts = 0;
-		puts("CPU: EOM, interrupts were disabled because of MAP till the EOM");
+		DEBUG("CPU: EOM, interrupts were disabled because of MAP till the EOM" NL);
 	} else
-		puts("CPU: NOP not treated as EOM (no MAP before)");
+		DEBUG("CPU: NOP not treated as EOM (no MAP before)" NL);
 }
 
 
 
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
-	do { printf("IO: NOT IMPLEMENTED read (emulator lacks feature), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
+	do { DEBUG("IO: NOT IMPLEMENTED read (emulator lacks feature), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
 	return fb; } while (0)
 #define RETURN_ON_IO_READ_NO_NEW_VIC_MODE(func, fb) \
-	do { printf("IO: ignored read (not new VIC mode), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
+	do { DEBUG("IO: ignored read (not new VIC mode), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
 	return fb; } while (0)
 #define RETURN_ON_IO_WRITE_NOT_IMPLEMENTED(func) \
-	do { printf("IO: NOT IMPLEMENTED write (emulator lacks feature), %s $%04X with data $%02X" NL, func, addr, data); \
+	do { DEBUG("IO: NOT IMPLEMENTED write (emulator lacks feature), %s $%04X with data $%02X" NL, func, addr, data); \
 	return; } while(0)
 #define RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE(func) \
-	do { printf("IO: ignored write (not new VIC mode), %s $%04X with data $%02X" NL, func, addr, data); \
+	do { DEBUG("IO: ignored write (not new VIC mode), %s $%04X with data $%02X" NL, func, addr, data); \
 	return; } while(0)
 #define WARN_IO_MODE_WR(func) \
-	printf("IO: write operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X, d=$%02X)" NL, func, addr, data)
+	DEBUG("IO: write operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X, d=$%02X)" NL, func, addr, data)
 #define WARN_IO_MODE_RD(func) \
-	printf("IO: read operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X)" NL, func, addr)
+	DEBUG("IO: read operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X)" NL, func, addr)
 
 
 // Call this ONLY with addresses between $D000-$DFFF
@@ -522,7 +520,7 @@ Uint8 io_read ( int addr )
 				case 0xD6F1:
 					return (fpga_switches >> 8) & 0xFF;
 				default:
-					printf("MEGA65: reading Mega65 specific I/O @ $%04X result is $%02X" NL, addr, gs_regs[addr & 0xFFF]);
+					DEBUG("MEGA65: reading Mega65 specific I/O @ $%04X result is $%02X" NL, addr, gs_regs[addr & 0xFFF]);
 					return gs_regs[addr & 0xFFF];
 			}
 		} else if (vic_iomode)
@@ -537,29 +535,29 @@ Uint8 io_read ( int addr )
 			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("DMA controller", 0xFF);
 	}
 	if (addr < ((vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00)) {	// $D800-$DC00/$E000	COLOUR NIBBLES, mapped to $1F800 in BANK1
-		printf("IO: reading colour RAM at offset $%04X" NL, addr - 0xD800);
+		DEBUG("IO: reading colour RAM at offset $%04X" NL, addr - 0xD800);
 		return memory[0x1F800 + addr - 0xD800];
 	}
 	if (addr < 0xDD00) {	// $DC00 - $DCFF	CIA-1
 		Uint8 result = cia_read(&cia1, addr & 0xF);
 		//RETURN_ON_IO_READ_NOT_IMPLEMENTED("CIA-1", 0xFF);
-		printf("%s: reading register $%X result is $%02X" NL, cia1.name, addr & 15, result);
+		DEBUG("%s: reading register $%X result is $%02X" NL, cia1.name, addr & 15, result);
 		return result;
 	}
 	if (addr < 0xDE00) {	// $DD00 - $DDFF	CIA-2
 		Uint8 result = cia_read(&cia2, addr & 0xF);
 		//RETURN_ON_IO_READ_NOT_IMPLEMENTED("CIA-2", 0xFF);
-		printf("%s: reading register $%X result is $%02X" NL, cia2.name, addr & 15, result);
+		DEBUG("%s: reading register $%X result is $%02X" NL, cia2.name, addr & 15, result);
 		return result;
 	}
 	// Only IO-1 and IO-2 areas left, if SD-card buffer is mapped for Mega65, this is our only case left!
 	do {
 		int result = sdcard_read_buffer(addr - 0xDE00);	// try to read SD buffer
 		if (result >= 0) {	// if non-negative number got, answer is really the SD card (mapped buffer)
-			printf("SDCARD: BUFFER: reading SD-card buffer at offset $%03X with result $%02X" NL, addr - 0xDE00, result);
+			DEBUG("SDCARD: BUFFER: reading SD-card buffer at offset $%03X with result $%02X" NL, addr - 0xDE00, result);
 			return result;
 		} else
-			printf("SDCARD: BUFFER: *NOT* mapped SD-card buffer is read, can it be a bug??" NL);
+			DEBUG("SDCARD: BUFFER: *NOT* mapped SD-card buffer is read, can it be a bug??" NL);
 	} while (0);
 	if (addr < 0xDF00) {	// $DE00 - $DEFF	IO-1 external
 		RETURN_ON_IO_READ_NOT_IMPLEMENTED("IO-1 external select", 0xFF);
@@ -619,7 +617,7 @@ void io_write ( int addr, Uint8 data )
 	if (addr < 0xD700) {	// $D600 - $D6FF	UART (*)
 		if (vic_iomode == VIC4_IOMODE && addr >= 0xD609) {	// D609 - D6FF: Mega65 suffs
 			gs_regs[addr & 0xFFF] = data;
-			printf("MEGA65: writing Mega65 specific I/O range @ $%04X with $%02X" NL, addr, data);
+			DEBUG("MEGA65: writing Mega65 specific I/O range @ $%04X with $%02X" NL, addr, data);
 			switch (addr) {
 				case 0xD67C:	// hypervisor serial monitor port
 					hypervisor_serial_monitor_push_char(data);
@@ -647,7 +645,7 @@ void io_write ( int addr, Uint8 data )
 					sdcard_select_sector(addr - 0xD681, data);
 					break;
 				default:
-					printf("MEGA65: this I/O port is not emulated in Xemu yet: $%04X" NL, addr);
+					DEBUG("MEGA65: this I/O port is not emulated in Xemu yet: $%04X" NL, addr);
 					break;
 			}
                         return;
@@ -657,7 +655,7 @@ void io_write ( int addr, Uint8 data )
 			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("UART");
 	}
 	if (addr < 0xD800) {	// $D700 - $D7FF	DMA (*)
-		printf("DMA: writing register $%04X (data = $%02X)" NL, addr, data);
+		DEBUG("DMA: writing register $%04X (data = $%02X)" NL, addr, data);
 		if (vic_iomode) {
 			dma_write_reg(addr & 0xF, data);
 			return;
@@ -667,18 +665,18 @@ void io_write ( int addr, Uint8 data )
 	if (addr < ((vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00)) {	// $D800-$DC00/$E000	COLOUR NIBBLES, mapped to $1F800 in BANK1
 		memory[0x1F800 + addr - 0xD800] = data;
        //return memory[0x1F800 + addr - 0xD800];
-		printf("IO: writing colour RAM at offset $%04X" NL, addr - 0xD800);
+		DEBUG("IO: writing colour RAM at offset $%04X" NL, addr - 0xD800);
 		return;
 	}
 	if (addr < 0xDD00) {	// $DC00 - $DCFF	CIA-1
 		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("CIA-1");
-		printf("%s: writing register $%X with data $%02X" NL, cia1.name, addr & 15, data);
+		DEBUG("%s: writing register $%X with data $%02X" NL, cia1.name, addr & 15, data);
 		cia_write(&cia1, addr & 0xF, data);
 		return;
 	}
 	if (addr < 0xDE00) {	// $DD00 - $DDFF	CIA-2
 		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("CIA-2");
-		printf("%s: writing register $%X with data $%02X" NL, cia2.name, addr & 15, data);
+		DEBUG("%s: writing register $%X with data $%02X" NL, cia2.name, addr & 15, data);
 		cia_write(&cia2, addr & 0xF, data);
 		return;
 	}
@@ -701,7 +699,7 @@ void write_phys_mem ( int addr, Uint8 data )
 	if (addr < 2) {
 		if ((cpu_port[addr] & 7) != (data & 7)) {
 			cpu_port[addr] = data;
-			puts("MEM: applying new memory configuration because of CPU port writing");
+			DEBUG("MEM: applying new memory configuration because of CPU port writing." NL);
 			apply_memory_config();
 		} else
 			cpu_port[addr] = data;
@@ -730,7 +728,7 @@ Uint8 read_phys_mem ( int addr )
 	if (addr < 2)
 		return cpu_port[addr];
 	//if (in_hypervisor)	// DEBUG
-	//	printf("MEGA65: read byte from %X is $%02X" NL, addr, memory[addr]);
+	//	DEBUG("MEGA65: read byte from %X is $%02X" NL, addr, memory[addr]);
 	return memory[addr];
 }
 
@@ -741,7 +739,7 @@ Uint8 cpu_read ( Uint16 addr )
 {
 	int phys_addr = addr_trans_rd[addr >> 12] + addr;	// translating address with the READ table created by apply_memory_config()
 	//if (in_hypervisor)	// DEBUG
-	//	printf("MEGA65: cpu_read, addr=%X phys_addr=%X" NL, addr, phys_addr);
+	//	DEBUG("MEGA65: cpu_read, addr=%X phys_addr=%X" NL, addr, phys_addr);
 	if (phys_addr >= IO_REMAP_VIRTUAL) {
 		if ((addr & 0xF000) != 0xD000)
 			FATAL("Internal error: IO is not on the IO space!");
@@ -781,7 +779,7 @@ void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 		if ((addr & 0xF000) != 0xD000)
 			FATAL("Internal error: IO is not on the IO space!");
 		if (addr < 0xD800 || addr >= (vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00) {	// though, for only memory areas other than colour RAM (avoids unneeded warnings as well)
-			printf("CPU: RMW opcode is used on I/O area for $%04X" NL, addr);
+			DEBUG("CPU: RMW opcode is used on I/O area for $%04X" NL, addr);
 			io_write(addr, old_data);	// first write back the old data ...
 		}
 		io_write(addr, new_data);	// ... then the new
@@ -799,7 +797,7 @@ static void shutdown_callback ( void )
 #endif
 	int a;
 	for (a = 0; a < 0x40; a++)
-		printf("VIC-3 register $%02X is %02X" NL, a, vic3_registers[a]);
+		DEBUG("VIC-3 register $%02X is %02X" NL, a, vic3_registers[a]);
 	cia_dump_state (&cia1);
 	cia_dump_state (&cia2);
 #ifdef MEMDUMP_FILE
@@ -808,7 +806,7 @@ static void shutdown_callback ( void )
 	if (f) {
 		fwrite(memory, 1, 0x20000, f);
 		fclose(f);
-		puts("Memory is dumped into " MEMDUMP_FILE);
+		DEBUG("Memory is dumped into " MEMDUMP_FILE NL);
 	}
 #endif
 #ifdef UARTMON_SOCKET
@@ -817,11 +815,11 @@ static void shutdown_callback ( void )
 #if 0
 	if (hypervisor_monout != hypervisor_monout_p) {
 		*hypervisor_monout_p = 0;
-		printf("HYPERVISOR_MONITOR_OUT:" NL "%s" NL "HYPERVISOR_MONITOR_OUT: *END-OF-OUTPUT*" NL, hypervisor_monout);
+		DEBUG("HYPERVISOR_MONITOR_OUT:" NL "%s" NL "HYPERVISOR_MONITOR_OUT: *END-OF-OUTPUT*" NL, hypervisor_monout);
 	} else
-		printf("HYPERVISOR_MONITOR_OUT: *NO-OUTPUT-BUFFER*" NL);
+		DEBUG("HYPERVISOR_MONITOR_OUT: *NO-OUTPUT-BUFFER*" NL);
 #endif
-	printf("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
+	DEBUG("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
 }
 
 
@@ -839,11 +837,14 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 			cpu_port[0] = cpu_port[1] = 0xFF;
 			map_mask = 0;
 			vic3_registers[0x30] = 0;
+			in_hypervisor = 0;
 			apply_memory_config();
 			cpu_reset();
-			if (mega65_capable)
+			if (mega65_capable) {
+				gs_regs[0x67E] = ALREADY_KICKED;
 				hypervisor_enter(TRAP_RESET);
-			puts("RESET!");
+			}
+			DEBUG("RESET!" NL);
 			return;
 		}
 	}
@@ -1030,10 +1031,11 @@ int main ( int argc, char **argv )
 			}
 		}
 		if (in_hypervisor) {
-			//printf("MEGA65: hypervisor mode execution at $%04X" NL, cpu_pc);
+			// DEBUG("MEGA65: hypervisor mode execution at $%04X" NL, cpu_pc);
 			// This is not a precise check: only the mapped address is checked ... Hypervisor may map out memory from itself, it won't be noticed then here.
-			if (cpu_pc < 0x8000 || cpu_pc > 0xBFFF) {
-				//fprintf(stderr, "*** Executing program @ $%04X in hypervisor mode outside of the hypervisor memory. Moving into trace mode now!" NL, cpu_pc);
+			// Note: do NOT do this check if hypervisor is not kicked (ie upgraded) yet ...
+			if (gs_regs[0x67E] && (cpu_pc < 0x8000 || cpu_pc > 0xBFFF)) {
+				fprintf(stderr, "*** Executing program @ $%04X in hypervisor mode outside of the hypervisor memory. Moving into trace mode now!" NL, cpu_pc);
 				//paused = 1;	// go into "paused" mode
 				//continue;
 			}
@@ -1055,10 +1057,10 @@ int main ( int argc, char **argv )
 		cycles += (opcyc * 7) / clock_divider7_hack;
 		if (cycles >= 227) {
 			scanline++;
-			//printf("VIC3: new scanline (%d)!" NL, scanline);
+			//DEBUG("VIC3: new scanline (%d)!" NL, scanline);
 			cycles -= 227;
 			if (scanline == 312) {
-				//puts("VIC3: new frame!");
+				//DEBUG("VIC3: new frame!" NL);
 				frameskip = !frameskip;
 				scanline = 0;
 				if (!frameskip)	// well, let's only render every full frames (~ie 25Hz)
@@ -1071,7 +1073,7 @@ int main ( int argc, char **argv )
 					vic3_blink_phase = !vic3_blink_phase;
 				}
 			}
-			//printf("RASTER=%d COMPARE=%d\n",scanline,compare_raster);
+			//DEBUG("RASTER=%d COMPARE=%d" NL,scanline,compare_raster);
 			//vic_interrupt();
 			vic3_check_raster_interrupt();
 		}
@@ -1086,6 +1088,5 @@ int main ( int argc, char **argv )
 			dma_update();
 		}
 	}
-	puts("Goodbye!");
 	return 0;
 }

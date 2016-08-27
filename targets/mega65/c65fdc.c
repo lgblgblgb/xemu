@@ -31,7 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 
 
-#define GEOS_FDC_HACK
+//#define GEOS_FDC_HACK
 
 
 static Uint8 head_track;		// "physical" track, ie, what is the head is positioned at currently
@@ -87,21 +87,21 @@ static int geos_hack_read_sector ()
 	int geos_hack_track  = memory[4];
 	int geos_hack_sector = memory[5];
 	Uint8 *geos_hack_buffer = (memory[0xA] | (memory[0xB] << 8)) + memory;
-	printf("GEOS: reading sector %d of track %d to buffer at $%04X" NL,
+	DEBUG("GEOS: reading sector %d of track %d to buffer at $%04X" NL,
 		geos_hack_sector, geos_hack_track, geos_hack_buffer - memory
 	);
 	if (!disk) {
-		printf("GEOS: no disk is attached!" NL);
+		DEBUG("GEOS: no disk is attached!" NL);
 		return 1;
 	} else {
 		if (
 			fseek(disk, 40 * (geos_hack_track - 0) * 256 + (geos_hack_sector - 1) * 256, SEEK_SET) ||
 			fread(geos_hack_buffer, 256, 1, disk) != 1
 		) {
-			printf("GEOS: OK, block has been read" NL);
+			DEBUG("GEOS: OK, block has been read" NL);
 			return 0;
 		} else {
-			printf("GEOS: problem with seek or read" NL);
+			DEBUG("GEOS: problem with seek or read" NL);
 			return 1;
 		}
 	}
@@ -118,7 +118,7 @@ static void read_sector ( void )
 			fread(buffer, 512, 1, disk) != 1
 		) {
 			status_a |= 16; // record not found ....
-			printf("FDC: READ: cannot read sector from image file!\n");
+			DEBUG("FDC: READ: cannot read sector from image file!" NL);
 		} else {
 			//memcpy(cache, buffer, 256);
 			//memcpy(cache + 256, buffer, 256);
@@ -135,12 +135,12 @@ static void read_sector ( void )
 
 			//memcpy(cache, buffer, 256);
 			//memcpy(cache + 256, buffer, 256);	
-			printf("FDC: READ: sector has been read from image file.\n");
+			DEBUG("FDC: READ: sector has been read from image file." NL);
 		}
 	} else {
 		status_a |= 16;	// record not found ....
 		status_b &= (255- 4); // no disk inserted ...
-		printf("FDC: READ: no valid image file!\n");
+		DEBUG("FDC: READ: no valid image file!" NL);
 		if (warn_disk) {
 			INFO_WINDOW("No disk image was given or can be loaded!\nStart emulator with the disk image as parameter!");
 			warn_disk = 0;
@@ -155,12 +155,12 @@ static void read_sector ( void )
 
 void fdc_write_reg ( int addr, Uint8 data )
 {
-        printf("FDC: writing register %d with data $%02X" NL, addr, data);
+        DEBUG("FDC: writing register %d with data $%02X" NL, addr, data);
 	switch (addr) {
 		case 0:
 #if 0
 			if (status_a & 128) {
-				printf("FDC: WARN: trying to write control register ($%02X) while FDC is busy." NL, data);
+				DEBUG("FDC: WARN: trying to write control register ($%02X) while FDC is busy." NL, data);
 				return;
 			}
 #endif
@@ -171,9 +171,9 @@ void fdc_write_reg ( int addr, Uint8 data )
 			drive = data & 7;	// drive selection
 			head_side = (data >> 3) & 1;
 			if (drive)
-				printf("FDC: WARN: not drive-0 is selected: %d!" NL, drive);
+				DEBUG("FDC: WARN: not drive-0 is selected: %d!" NL, drive);
 			else
-				printf("FDC: great, drive-0 is selected" NL);
+				DEBUG("FDC: great, drive-0 is selected" NL);
 			if (data & 16)
 				INFO_WINDOW("FDC SWAP bit is not implemented yet!");
 			break;
@@ -184,9 +184,9 @@ void fdc_write_reg ( int addr, Uint8 data )
 				return;
 			}
 #endif
-			printf("FDC: command=$%02X (lower bits: $%X)" NL, data & 0xF8, data & 7);
+			DEBUG("FDC: command=$%02X (lower bits: $%X)" NL, data & 0xF8, data & 7);
 			if ((status_a & 128) && ((data & 0xF8))) {	// if BUSY, and command is not the cancel command ..
-				printf("FDC: WARN: trying to issue another command ($%02X) while the previous ($%02X) is running." NL, data, cmd);
+				DEBUG("FDC: WARN: trying to issue another command ($%02X) while the previous ($%02X) is running." NL, data, cmd);
 				return;
 			}
 			cmd = data;
@@ -247,7 +247,7 @@ static void execute_command ( void )
 			read_sector();
 			//cache_p_drive = (cache_p_drive + BLOCK_SIZE) & 511;
 			cache_p_cpu = 0; // yayy .... If it's not here we can't get READY. prompt!!
-			printf("FDC: READ: head_track=%d need_track=%d head_side=%d need_side=%d need_sector=%d drive_selected=%d" NL,
+			DEBUG("FDC: READ: head_track=%d need_track=%d head_side=%d need_side=%d need_sector=%d drive_selected=%d" NL,
 				head_track, track, head_side, side, sector, drive
 			);
 			break;
@@ -260,13 +260,13 @@ static void execute_command ( void )
 					head_track--;
 				if (!head_track)
 					status_a |= 1;	// track 0 flag
-				printf("FDC: head position = %d" NL, head_track);
+				DEBUG("FDC: head position = %d" NL, head_track);
 			}
 			break;	
 		case 0x18:	// head step in
 			if (head_track < 128)
 				head_track++;
-			printf("FDC: head position = %d" NL, head_track);
+			DEBUG("FDC: head position = %d" NL, head_track);
 			status_a &= 0xFE;	// track 0 flag off
 			break;
 		case 0x20:	// motor spin up
@@ -278,7 +278,7 @@ static void execute_command ( void )
 			if (cmd & 1) {
 				cache_p_cpu = 0;
 				cache_p_drive = 0;
-				printf("FDC: WARN: resetting cache pointers" NL);
+				DEBUG("FDC: WARN: resetting cache pointers" NL);
 				status_a |= 32; // turn EQ on
 				status_a &= 255 - 64; // turn DRQ off
 				status_b &= 127;      // turn RDREQ off
@@ -286,7 +286,7 @@ static void execute_command ( void )
 			}
 			break;
 		default:
-			printf("FDC: WARN: unknown comand: $%02X" NL, cmd);
+			DEBUG("FDC: WARN: unknown comand: $%02X" NL, cmd);
 			//status_a &= 127; // well, not a valid command, revoke busy status ...
 			break;
 	}
@@ -348,7 +348,7 @@ Uint8 fdc_read_reg  ( int addr )
 			status_b &= 127; 	// turn RDREQ off after the first access, this is somewhat incorrect :-P
 			result = cache[cache_p_cpu];
 			cache_p_cpu = (cache_p_cpu + 1) & 511;
-				printf("FDC: read_pointer is now %d, drive pointer %d" NL, cache_p_cpu, cache_p_drive);
+				DEBUG("FDC: read_pointer is now %d, drive pointer %d" NL, cache_p_cpu, cache_p_drive);
 #if 0
 				if (read_pointer == 256) {
 					//status_a &= 255 - 64;	// turn DRQ off
@@ -386,7 +386,7 @@ Uint8 fdc_read_reg  ( int addr )
 			break;
 	}
 	last_addr = addr;
-        printf("FDC: reading register %d result is $%02X" NL, addr, result);
+        DEBUG("FDC: reading register %d result is $%02X" NL, addr, result);
 	return result;
 }
 

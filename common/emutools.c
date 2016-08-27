@@ -55,7 +55,11 @@ static char *window_title_buffer, *window_title_buffer_end;
 static time_t unix_time;
 static Uint64 et_old;
 static int td_balancer, td_em_ALL, td_pc_ALL;
+FILE *debug_fp = NULL;
 
+#if !SDL_VERSION_ATLEAST(2, 0, 4)
+#error "At least SDL version 2.0.4 is needed!"
+#endif
 
 
 const char emulators_disclaimer[] =
@@ -309,15 +313,36 @@ void emu_timekeeping_delay ( int td_em )
 
 static void shutdown_emulator ( void )
 {
-	puts("EMU: Shutdown callback function has been called.");
+	DEBUG("XEMU: Shutdown callback function has been called." NL);
 	if (shutdown_user_function)
 		shutdown_user_function();
 	if (sdl_win)
 		SDL_DestroyWindow(sdl_win);
 	SDL_Quit();
-	puts("EMU: the end ...");
+	if (debug_fp) {
+		fclose(debug_fp);
+		debug_fp = NULL;
+	}
+	printf("XEMU: shutdown callback says good by(T)e to you!" NL);
 }
 
+
+
+int emu_init_debug ( const char *fn )
+{
+	if (debug_fp) {
+		ERROR_WINDOW("Debug file %s already used, you can't call emu_init_debug() twice!\nUse it before emu_init_sdl() if you need it!", fn);
+		return 1;
+	} else if (fn) {
+		debug_fp = fopen(fn, "wb");
+		if (!debug_fp) {
+			ERROR_WINDOW("Cannot open requested debug file: %s", fn);
+			return 1;
+		} else
+			return 0;
+	}
+	return 0;
+}
 
 
 
@@ -340,6 +365,8 @@ int emu_init_sdl (
 	void (*shutdown_callback)(void)		// callback function called on exit (can be nULL to not have any emulator specific stuff)
 ) {
 	char render_scale_quality_s[2];
+	if (!debug_fp)
+		emu_init_debug(getenv("XEMU_DEBUG_FILE"));
 	if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
 		ERROR_WINDOW("Cannot initialize SDL: %s", SDL_GetError());
 		return 1;

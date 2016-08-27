@@ -124,7 +124,7 @@ static void execute_command ( char *cmd )
 	p--;
 	while (p >= cmd && *p <= 32)
 		*(p--) = 0;
-	printf("UARTMON: command got \"%s\" (%d bytes)." NL, cmd, (int)strlen(cmd));
+	DEBUG("UARTMON: command got \"%s\" (%d bytes)." NL, cmd, (int)strlen(cmd));
 	switch (*(cmd++)) {
 		case 'h':
 		case 'H':
@@ -185,32 +185,6 @@ static int set_nonblock ( int fd )
 
 
 
-#if 0
-static inline void debug_buffer ( const char *p )
-{
-	printf("BUFFER: ");
-	while (*p) {
-		printf((*p >= 32 && *p < 127) ? "%c" : "<%d>", *p);
-		p++;
-	}
-	printf("\n");
-}
-static inline void debug_buffer_slice ( const char *p, int n )
-{
-	printf("BUFFER-SLICE: ");
-	while (n--) {
-		printf((*p >= 32 && *p < 127) ? "%c" : "<%d>", *p);
-		p++;
-	}
-	printf("\n");
-}
-#else
-#define debug_buffer(a)
-#define debug_buffer_slice(a, b)
-#endif
-
-
-
 int uartmon_init ( const char *fn )
 {
 	struct sockaddr_un sock_st;
@@ -239,7 +213,7 @@ int uartmon_init ( const char *fn )
 		close(sock);
 		return 1;
 	}
-	printf("UARTMON: monitor is listening on socket %s" NL, fn);
+	DEBUG("UARTMON: monitor is listening on socket %s" NL, fn);
 	sock_client = -1;	// no client connection yet
 	sock_server = sock;	// now set the socket
 	umon_echo = 1;
@@ -293,7 +267,7 @@ void uartmon_update ( void )
 		socklen_t len = sizeof(struct sockaddr_un);
 		ret = accept(sock_server, (struct sockaddr *)&sock_st, &len);
 		if (ret >=0 || (errno != EAGAIN && errno != EWOULDBLOCK))
-			printf("UARTMON: accept()=%d error=%s" NL,
+			DEBUG("UARTMON: accept()=%d error=%s" NL,
 				ret,
 				ret >= 0 ? "OK" : strerror(errno)
 			);
@@ -318,7 +292,7 @@ void uartmon_update ( void )
 			return;
 		ret = write(sock_client, umon_write_buffer + umon_write_pos, umon_write_size);
 		if (ret >=0 || (errno != EAGAIN && errno != EWOULDBLOCK))
-			printf("UARTMON: write(%d,buffer+%d,%d)=%d (%s)" NL,
+			DEBUG("UARTMON: write(%d,buffer+%d,%d)=%d (%s)" NL,
 				sock_client, umon_write_pos, umon_write_size,
 				ret, ret < 0 ? strerror(errno) : "OK"
 			);
@@ -329,7 +303,7 @@ void uartmon_update ( void )
 			return;
 		}
 		if (ret > 0) {
-			debug_buffer_slice(umon_write_buffer + umon_write_pos, ret);
+			//debug_buffer_slice(umon_write_buffer + umon_write_pos, ret);
 			umon_write_pos += ret;
 			umon_write_size -= ret;
 			if (umon_write_size < 0)
@@ -342,7 +316,7 @@ void uartmon_update ( void )
 	// Try to read data
 	ret = read(sock_client, umon_read_buffer + umon_read_pos, sizeof(umon_read_buffer) - umon_read_pos - 1);
 	if (ret >=0 || (errno != EAGAIN && errno != EWOULDBLOCK))
-		printf("UARTMON: read(%d,buffer+%d,%d)=%d (%s)" NL,
+		DEBUG("UARTMON: read(%d,buffer+%d,%d)=%d (%s)" NL,
 			sock_client, umon_read_pos, (int)sizeof(umon_read_buffer) - umon_read_pos - 1,
 			ret, ret < 0 ? strerror(errno) : "OK"
 		);
@@ -369,7 +343,7 @@ void uartmon_update ( void )
 		/* ECHO: end */
 		umon_read_pos += ret;
 		umon_read_buffer[umon_read_pos] = 0;
-		debug_buffer(umon_read_buffer);
+		//debug_buffer(umon_read_buffer);
 		if (!umon_echo || sizeof(umon_read_buffer) - umon_read_pos - 1 == 0) {
 			umon_read_buffer[sizeof(umon_read_buffer) - 1] = 0; // just in case of a "mega long command" with filled rx buffer ...
 			umon_write_buffer[umon_write_size++] = '\r';
