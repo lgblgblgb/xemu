@@ -58,7 +58,7 @@ $(PRG): $(OBJS) $(DEPALL)
 	$(CC) -o $(PRG) $(OBJS) $(LDFLAGS)
 
 run:	$(PRG)
-	cd $(TOPDIR) && $(PRG_TOP_REL)
+	cd $(TOPDIR) && XEMU_DEBUG_FILE=debug.log $(PRG_TOP_REL)
 
 strip: $(PRG)
 	$(STRIP) $(PRG)

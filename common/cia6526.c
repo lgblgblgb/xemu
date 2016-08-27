@@ -42,16 +42,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 	do { \
 		if (cia->ICRmask & cia->ICRdata & 31) { \
 			cia->ICRdata |= 128; \
-			if (!cia->intLevel) { cia->intLevel = 1; cia->setint(1); printf("%s IRQ to 1\n", cia->name); } \
+			if (!cia->intLevel) { cia->intLevel = 1; cia->setint(1); DEBUG("%s IRQ to 1" NL, cia->name); } \
 		} else { \
 			cia->ICRdata &= 127; \
-			if ( cia->intLevel) { cia->intLevel = 0; cia->setint(0); printf("%s IRQ to 0\n", cia->name); } \
+			if ( cia->intLevel) { cia->intLevel = 0; cia->setint(0); DEBUG("%s IRQ to 0" NL, cia->name); } \
 		} \
 	} while(0)
 #define ICR_SET(mask) \
 	do { \
 		cia->ICRdata |= (mask) & 31; \
-		printf("%s ICR set to data $%02X, mask is $%02X\n", cia->name, cia->ICRdata, cia->ICRmask); \
+		DEBUG("%s ICR set to data $%02X, mask is $%02X" NL, cia->name, cia->ICRdata, cia->ICRmask); \
 		ICR_CHECK(); \
 	} while(0)
 #define ICR_CLEAR(mask) \
@@ -76,7 +76,7 @@ void cia_reset ( struct Cia6526 *cia )
 	cia->tod[0] = cia->tod[1] = cia->tod[2] = cia->tod[3] = 0;
 	cia->intLevel = 0;
 	cia->setint(cia->intLevel);
-	printf("%s: RESET\n", cia->name);
+	DEBUG("%s: RESET" NL, cia->name);
 }
 
 
@@ -160,7 +160,7 @@ Uint8 cia_read ( struct Cia6526 *cia, int addr )
 		case 15:	// reg#F: CRB
 			return cia->CRB;
 		default:
-			FATAL("FATAL: %s invalid register %d\n", cia->name, addr);
+			FATAL("FATAL: %s invalid register %d" NL, cia->name, addr);
 			break;
 	}
 	return 0;	// to make GCC happy :-/
@@ -241,7 +241,7 @@ void cia_write ( struct Cia6526 *cia, int addr, Uint8 data )
 				cia->ICRmask |= data & 31;
 			else
 				cia->ICRmask &= 255 - (data & 31);
-			printf("%s set ICRmask to %02X with byte of %02X\n", cia->name, cia->ICRmask, data);
+			DEBUG("%s set ICRmask to %02X with byte of %02X" NL, cia->name, cia->ICRmask, data);
 			ICR_CHECK();
 			break;
 		case 14:	// reg#E: CRA
@@ -259,7 +259,7 @@ void cia_write ( struct Cia6526 *cia, int addr, Uint8 data )
 			}
 			break;
 		default:
-			FATAL("FATAL: %s invalid register %d\n", cia->name, addr);
+			FATAL("FATAL: %s invalid register %d" NL, cia->name, addr);
 			break;
 	}
 	cia->regWritten[addr] = data;
@@ -272,7 +272,7 @@ void cia_tick ( struct Cia6526 *cia, int ticks )
 	if (cia->CRA & 1) {
 		cia->TCA -= ticks;
 		if (cia->TCA <= 0) {
-			printf("%s timer-A expired!\n", cia->name);
+			DEBUG("%s timer-A expired!" NL, cia->name);
 			ICR_SET(1);
 			cia->TCA = cia->TLAL | (cia->TLAH << 8);
 			if (cia->CRA & 8)
@@ -283,7 +283,7 @@ void cia_tick ( struct Cia6526 *cia, int ticks )
 	if (cia->CRB & 1) {
 		cia->TCB -= ticks;
 		if (cia->TCB <= 0) {
-			printf("%s timer-B expired!\n", cia->name);
+			DEBUG("%s timer-B expired!" NL, cia->name);
 			ICR_SET(2);
 			cia->TCB = cia->TLBL | (cia->TLBH << 8);
 			if (cia->CRB & 8)
@@ -297,14 +297,13 @@ void cia_tick ( struct Cia6526 *cia, int ticks )
 void cia_dump_state ( struct Cia6526 *cia )
 {
 	int a;
-	printf("%s registers written:", cia->name);
+	DEBUG("%s registers written:", cia->name);
 	for (a = 0; a < 16; a++)
 		if (cia->regWritten[a] >= 0)
-			printf(" %02X", cia->regWritten[a]);
+			DEBUG(" %02X", cia->regWritten[a]);
 		else
-			printf(" ??");
-	puts("");
-	printf("%s timer-A=%d time-B=%d\n", cia->name, cia->TCA, cia->TCB);
+			DEBUG(" ??");
+	DEBUG(NL "%s timer-A=%d time-B=%d" NL, cia->name, cia->TCA, cia->TCB);
 }
 
 

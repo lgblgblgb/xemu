@@ -36,6 +36,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <stdio.h>
 #include <SDL_types.h>
 #include "cpu65c02.h"
+#include "emutools.h"
 
 #ifdef DEBUG_CPU
 #include "cpu65ce02_disasm_tables.c"
@@ -94,14 +95,14 @@ int cpu_cycles;
 
 #ifdef CPU_65CE02
 #ifdef DEBUG_CPU
-#define OPC_65CE02(w) puts("CPU: 65CE02 opcode " w)
+#define OPC_65CE02(w) DEBUG("CPU: 65CE02 opcode: %s" NL, w)
 #else
 #define OPC_65CE02(w)
 #endif
 #if 0
 static inline void UNIMPLEMENTED_65CE02 ( const char *msg )
 {
-	fprintf(stderr, "UNIMPLEMENTED 65CE02 opcode $%02X [$%02X $%02X] at $%04X: \"%s\"\n",
+	fprintf(stderr, "UNIMPLEMENTED 65CE02 opcode $%02X [$%02X $%02X] at $%04X: \"%s\"" NL,
 		cpu_op, cpu_read(cpu_pc), cpu_read(cpu_pc + 1), (cpu_pc - 1) & 0xFFFF, msg
 	);
 	exit(1);
@@ -127,7 +128,7 @@ static inline void push ( Uint8 data )
 	if (cpu_sp == 0xFF && (!cpu_pfe)) {
 		cpu_sphi -= 0x100;
 #ifdef DEBUG_CPU
-		printf("CPU: 65CE02: SPHI changed to $%04X\n", cpu_sphi);
+		DEBUG("CPU: 65CE02: SPHI changed to $%04X" NL, cpu_sphi);
 #endif
 	}
 }
@@ -137,7 +138,7 @@ static inline Uint8 pop ( void )
 	if (cpu_sp == 0 && (!cpu_pfe)) {
 		cpu_sphi += 0x100;
 #ifdef DEBUG_CPU
-		printf("CPU: 65CE02: SPHI changed to $%04X\n", cpu_sphi);
+		DEBUG("CPU: 65CE02: SPHI changed to $%04X" NL, cpu_sphi);
 #endif
 	}
 	return cpu_read(cpu_sp | cpu_sphi);
@@ -214,7 +215,7 @@ void cpu_reset() {
 #endif
 #endif
 	cpu_pc = readWord(0xFFFC);
-	printf("CPU[" CPU_TYPE "]: RESET, PC=%04X\n", cpu_pc);
+	DEBUG("CPU[" CPU_TYPE "]: RESET, PC=%04X" NL, cpu_pc);
 }
 
 
@@ -434,7 +435,7 @@ int cpu_step () {
 #endif
 	) {
 #ifdef DEBUG_CPU
-		printf("CPU: serving NMI on NMI edge at PC $%04X\n", cpu_pc);
+		DEBUG("CPU: serving NMI on NMI edge at PC $%04X" NL, cpu_pc);
 #endif
 		cpu_nmiEdge = 0;
 		pushWord(cpu_pc);
@@ -450,7 +451,7 @@ int cpu_step () {
 #endif
 	) {
 #ifdef DEBUG_CPU
-		printf("CPU: servint IRQ on IRQ level at PC $%04X\n", cpu_pc);
+		DEBUG("CPU: servint IRQ on IRQ level at PC $%04X" NL, cpu_pc);
 #endif
 		last_p = cpu_get_p();
 		pushWord(cpu_pc);
@@ -464,15 +465,15 @@ int cpu_step () {
 	cpu_old_pc = cpu_pc;
 #ifdef DEBUG_CPU
 	if (cpu_pc == 0)
-		puts("CPU: WARN: PC at zero!");
+		DEBUG("CPU: WARN: PC at zero!" NL);
 #endif
 	cpu_op = cpu_read(cpu_pc++);
 #ifdef DEBUG_CPU
-	printf("CPU: at $%04X opcode = $%02X %s %s A=%02X X=%02X Y=%02X Z=%02X SP=%02X\n", (cpu_pc - 1) & 0xFFFF, cpu_op, opcode_names[cpu_op], opcode_adm_names[opcode_adms[cpu_op]],
+	DEBUG("CPU: at $%04X opcode = $%02X %s %s A=%02X X=%02X Y=%02X Z=%02X SP=%02X" NL, (cpu_pc - 1) & 0xFFFF, cpu_op, opcode_names[cpu_op], opcode_adm_names[opcode_adms[cpu_op]],
 		cpu_a, cpu_x, cpu_y, cpu_z, cpu_sp
 	);
 	if (cpu_op == 0x60)
-		printf("CPU: SP before RTS is (SPHI=$%04X) SP=$%02X\n", cpu_sphi, cpu_sp);
+		DEBUG("CPU: SP before RTS is (SPHI=$%04X) SP=$%02X" NL, cpu_sphi, cpu_sp);
 #endif
 #ifdef CPU_TRAP
 	if (cpu_op == CPU_TRAP) {
@@ -485,7 +486,7 @@ int cpu_step () {
 	switch (cpu_op) {
 	case 0x00:
 #ifdef DEBUG_CPU
-			printf("CPU: WARN: BRK is about executing at PC=$%04X\n", (cpu_pc - 1) & 0xFFFF);
+			DEBUG("CPU: WARN: BRK is about executing at PC=$%04X" NL, (cpu_pc - 1) & 0xFFFF);
 #endif
 			// FIXME: does BRK sets I and D flag? Hmm, I can't even remember now why I wrote these :-D
 			// FIXME-2: does BRK sets B flag, or only in the saved copy on the stack??
@@ -498,7 +499,7 @@ int cpu_step () {
 			OPC_65CE02("CLE");
 			cpu_pfe = 0;	// 65CE02: CLE
 #ifdef DEBUG_CPU
-			puts("CPU: WARN: E flag is cleared!");
+			DEBUG("CPU: WARN: E flag is cleared!" NL);
 #endif
 #else
 			cpu_pc++; /* 0x2 NOP imm (non-std NOP with addr mode) */
@@ -594,7 +595,7 @@ int cpu_step () {
 			cpu_sphi = cpu_y << 8;	// 65CE02	TYS
 #ifdef DEBUG_CPU
 			if (cpu_sphi != 0x100)
-				printf("CPU: WARN: stack page is set non-0x100: $%04X\n", cpu_sphi);
+				DEBUG("CPU: WARN: stack page is set non-0x100: $%04X" NL, cpu_sphi);
 #endif
 #endif
 			break; /* 0x2b NOP (nonstd loc, implied) */
@@ -713,7 +714,7 @@ int cpu_step () {
 			cpu_bphi = cpu_a << 8; // 65CE02: TAB
 #ifdef DEBUG_CPU
 			if (cpu_bphi)
-				printf("CPU: WARN base page is non-zero now with value of $%04X\n", cpu_bphi);
+				DEBUG("CPU: WARN base page is non-zero now with value of $%04X" NL, cpu_bphi);
 #endif
 #endif
 			break; /* 0x5b NOP (nonstd loc, implied) */
@@ -1002,7 +1003,7 @@ int cpu_step () {
 			// 65CE02 LDA ($nn,SP),Y
 			// REALLY IMPORTANT: please read the comment at _GET_SP_INDIRECT_ADDR()!
 			setNZ(cpu_a = cpu_read(_GET_SP_INDIRECT_ADDR()));
-			printf("CPU: LDA (nn,S),Y returned: A = $%02X, P before last IRQ was: $%02X\n", cpu_a, last_p);
+			DEBUG("CPU: LDA (nn,S),Y returned: A = $%02X, P before last IRQ was: $%02X" NL, cpu_a, last_p);
 #else
 			cpu_pc++; // 0xe2 NOP imm (non-std NOP with addr mode)
 #endif

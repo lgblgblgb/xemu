@@ -42,10 +42,10 @@ int sdcard_init ( const char *fn )
 	sdfd = emu_load_file(fn, NULL, -1);    // get the file descriptor only ...
 		if (sdfd < 0) {
 			ERROR_WINDOW("Cannot open SD-card image %s, SD-card access won't work! ERROR: %s", fn, strerror(errno));
-			printf("SDCARD: cannot open image %s" NL, fn);
+			DEBUG("SDCARD: cannot open image %s" NL, fn);
 		} else {
 			// Check size!
-			printf("SDCARD: cool, SD-card image %s is open" NL, fn);
+			DEBUG("SDCARD: cool, SD-card image %s is open" NL, fn);
 			sd_card_size = lseek(sdfd, 0, SEEK_END);
 			if (sd_card_size == (off_t)-1) {
 				ERROR_WINDOW("Cannot query the size of the SD-card image %s, SD-card access won't work! ERROR: %s", fn, strerror(errno));
@@ -65,7 +65,7 @@ int sdcard_init ( const char *fn )
 				sdfd = -1;
 				return sdfd;
 			}
-			printf("SDCARD: detected size in Mbytes: %d" NL, (int)(sd_card_size >> 20));
+			DEBUG("SDCARD: detected size in Mbytes: %d" NL, (int)(sd_card_size >> 20));
 			if (sd_card_size & 511) {
 				ERROR_WINDOW("SD-card image size is not multiple of 512 bytes!!");
 				close(sdfd);
@@ -75,7 +75,7 @@ int sdcard_init ( const char *fn )
 		}
 	} else {
 		sdfd = -1;
-		printf("SDCARD: not available in case of Commodore 65 startup mode!" NL);
+		DEBUG("SDCARD: not available in case of Commodore 65 startup mode!" NL);
 	}
 	return sdfd;
 }
@@ -110,21 +110,21 @@ static int read_sector ( void )
 	if (sdfd < 0)
 		return -1;
 	offset = sd_sector_bytes[0] | (sd_sector_bytes[1] << 8) | (sd_sector_bytes[2] << 16) | (sd_sector_bytes[3] << 24);
-	printf("SDCARD: reading position %ld" NL, (long)offset);
+	DEBUG("SDCARD: reading position %ld" NL, (long)offset);
 	if (offset < 0 || offset >= sd_card_size) {
-		printf("SDCARD: invalid position value failure ..." NL);
+		DEBUG("SDCARD: invalid position value failure ..." NL);
 		return -1;
 	}
 	if (lseek(sdfd, offset, SEEK_SET) != offset) {
-		printf("SDCARD: lseek failure ... ERROR: %s" NL, strerror(errno));
+		DEBUG("SDCARD: lseek failure ... ERROR: %s" NL, strerror(errno));
 		return -1;
 	}
 	ret = read(sdfd, sd_buffer, 512);
 	if (ret <= 0) {
-		printf("SDCARD: read failure ... ERROR: %s" NL, ret >=0 ? "zero byte read" : strerror(errno));
+		DEBUG("SDCARD: read failure ... ERROR: %s" NL, ret >=0 ? "zero byte read" : strerror(errno));
 		return -1;
 	}
-	printf("SDCARD: cool, sector read was OK (%d bytes read)!" NL, ret);
+	DEBUG("SDCARD: cool, sector read was OK (%d bytes read)!" NL, ret);
 	return ret;
 }
 
@@ -135,7 +135,7 @@ static int read_sector ( void )
 Uint8 sdcard_read_status ( void )
 {
 	Uint8 ret = sd_status;
-	printf("SDCARD: reading SD status $D680 result is $%02X" NL, ret);
+	DEBUG("SDCARD: reading SD status $D680 result is $%02X" NL, ret);
 	sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);
 	return ret;
 }
@@ -145,7 +145,7 @@ Uint8 sdcard_read_status ( void )
 void sdcard_command ( Uint8 cmd )
 {
 	int ret;
-	printf("SDCARD: writing command register $D680 with $%02X" NL, cmd);
+	DEBUG("SDCARD: writing command register $D680 with $%02X" NL, cmd);
 	sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);	// ugly hack :-@
 	switch (cmd) {
 		case 0x00:	// RESET SD-card
@@ -185,7 +185,7 @@ void sdcard_command ( Uint8 cmd )
 			sd_status &= ~(SD_ST_MAPPED | SD_ST_ERROR | SD_ST_FSM_ERROR);
 			break;
 		default:
-			printf("SDCARD: warning, unimplemented SD-card controller command $%02X" NL, cmd);
+			DEBUG("SDCARD: warning, unimplemented SD-card controller command $%02X" NL, cmd);
 			break;
 	}
 }
@@ -195,5 +195,5 @@ void sdcard_command ( Uint8 cmd )
 void sdcard_select_sector ( int secreg, Uint8 data )
 {
 	sd_sector_bytes[secreg] = data;
-	printf("SDCARD: writing sector number register $%04X with $%02X" NL, secreg + 0xD681, data);
+	DEBUG("SDCARD: writing sector number register $%04X with $%02X" NL, secreg + 0xD681, data);
 }

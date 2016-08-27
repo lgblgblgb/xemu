@@ -185,7 +185,7 @@ void hid_reset_events ( int burn )
 		burn = 0;
 		while (SDL_PollEvent(&e) != 0)
 			burn++;
-		printf("HID: %d event(s) ignored." NL, burn);
+		DEBUG("HID: %d event(s) ignored." NL, burn);
 	}
 }
 
@@ -206,7 +206,7 @@ void hid_mouse_motion_event ( int xrel, int yrel )
 {
 	mouse_delta_x += xrel;
 	mouse_delta_y += yrel;
-	printf("HID: mouse motion %d:%d, collected data is now %d:%d" NL, xrel, yrel, mouse_delta_x, mouse_delta_y);
+	DEBUG("HID: mouse motion %d:%d, collected data is now %d:%d" NL, xrel, yrel, mouse_delta_x, mouse_delta_y);
 }
 
 
@@ -235,14 +235,14 @@ void hid_joystick_device_event ( int which , int is_attach )
 			hid_joystick_device_event(which, 0);
 		joysticks[which] = SDL_JoystickOpen(which);
 		if (joysticks[which])
-			printf("HID: joystick device #%d \"%s\" has been added." NL, which, SDL_JoystickName(joysticks[which]));
+			DEBUG("HID: joystick device #%d \"%s\" has been added." NL, which, SDL_JoystickName(joysticks[which]));
 		else
-			printf("HID: joystick device #%d problem, cannot be opened on 'add' event: %s." NL, which, SDL_GetError());
+			DEBUG("HID: joystick device #%d problem, cannot be opened on 'add' event: %s." NL, which, SDL_GetError());
 	} else {
 		if (joysticks[which]) {
 			SDL_JoystickClose(joysticks[which]);
 			joysticks[which] = NULL;
-			printf("HID: joystick device #%d has been removed." NL, which);
+			DEBUG("HID: joystick device #%d has been removed." NL, which);
 			// This is needed to avoid "stuck" joystick state if removed in that state ...
 			hid_state &= ~(JOYSTATE_UP | JOYSTATE_DOWN | JOYSTATE_LEFT | JOYSTATE_RIGHT | JOYSTATE_BUTTON);
 		}

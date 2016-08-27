@@ -147,7 +147,7 @@ void cpu_vic_reg_write ( int addr, Uint8 data )
 			}
 			break;
 	}
-	//printf("VIC-I: %02X -> [%01X]" NL, data, addr);
+	//DEBUG("VIC-I: %02X -> [%01X]" NL, data, addr);
 }
 
 

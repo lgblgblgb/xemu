@@ -154,7 +154,7 @@ void apply_memory_config ( void )
 
 static void cia_setint_cb ( int level )
 {
-	printf("%s: IRQ level changed to %d" NL, cia1.name, level);
+	DEBUG("%s: IRQ level changed to %d" NL, cia1.name, level);
 	if (level)
 		cpu_irqLevel |= 1;
 	else
@@ -191,7 +191,7 @@ static Uint8 cia_read_keyboard ( Uint8 ddr_mask_unused )
 static void cia2_outa ( Uint8 mask, Uint8 data )
 {
 	vic2_16k_bank = (3 - (data & 3)) * 0x4000;
-	printf("VIC2: 16K BANK is set to $%04X" NL, vic2_16k_bank);
+	DEBUG("VIC2: 16K BANK is set to $%04X" NL, vic2_16k_bank);
 }
 
 
@@ -206,7 +206,7 @@ static Uint8 cia_port_in_dummy ( Uint8 mask )
 
 static void audio_callback(void *userdata, Uint8 *stream, int len)
 {
-	printf("AUDIO: audio callback, wants %d samples" NL, len);
+	DEBUG("AUDIO: audio callback, wants %d samples" NL, len);
 	// We use the trick, to render boths SIDs with step of 2, with a byte offset
 	// to get a stereo stream, wanted by SDL.
 	sid_render(&sid2, ((short *)(stream)) + 0, len / 2, 2);		// SID @ left
@@ -267,19 +267,19 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 	if (audio) {
 		int i;
 		for (i = 0; i < SDL_GetNumAudioDevices(0); i++)
-			printf("AUDIO: audio device is #%d: %s" NL, i, SDL_GetAudioDeviceName(i, 0));
+			DEBUG("AUDIO: audio device is #%d: %s" NL, i, SDL_GetAudioDeviceName(i, 0));
 		// Sanity check that we really got the same audio specification we wanted
 		if (audio_want.freq != audio_got.freq || audio_want.format != audio_got.format || audio_want.channels != audio_got.channels) {
 			SDL_CloseAudioDevice(audio);	// forget audio, if it's not our expected format :(
 			audio = 0;
 			ERROR_WINDOW("Audio parameter mismatches.");
 		}
-		printf("AUDIO: initialized (#%d), %d Hz, %d channels, %d buffer sample size." NL, audio, audio_got.freq, audio_got.channels, audio_got.samples);
+		DEBUG("AUDIO: initialized (#%d), %d Hz, %d channels, %d buffer sample size." NL, audio, audio_got.freq, audio_got.channels, audio_got.samples);
 	} else
 		ERROR_WINDOW("Cannot open audio device!");
 	// *** RESET CPU, also fetches the RESET vector into PC
 	cpu_reset();
-	puts("INIT: end of initialization!");
+	DEBUG("INIT: end of initialization!" NL);
 }
 
 
@@ -288,14 +288,14 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 void cpu_do_aug ( void )
 {
 	cpu_inhibit_interrupts = 1;	// disable interrupts to the next "EOM" (ie: NOP) opcode
-	printf("CPU: MAP opcode, input A=$%02X X=$%02X Y=$%02X Z=$%02X" NL, cpu_a, cpu_x, cpu_y, cpu_z);
+	DEBUG("CPU: MAP opcode, input A=$%02X X=$%02X Y=$%02X Z=$%02X" NL, cpu_a, cpu_x, cpu_y, cpu_z);
 	map_offset_low  = (cpu_a << 8) | ((cpu_x & 15) << 16);	// offset of lower half (blocks 0-3)
 	map_offset_high = (cpu_y << 8) | ((cpu_z & 15) << 16);	// offset of higher half (blocks 4-7)
 	map_mask        = (cpu_z & 0xF0) | (cpu_x >> 4);	// "is mapped" mask for blocks (1 bit for each)
-	puts("MEM: applying new memory configuration because of MAP CPU opcode");
-	printf("LOW -OFFSET = $%X" NL, map_offset_low);
-	printf("HIGH-OFFSET = $%X" NL, map_offset_high);
-	printf("MASK        = $%02X" NL, map_mask);
+	DEBUG("MEM: applying new memory configuration because of MAP CPU opcode" NL);
+	DEBUG("LOW -OFFSET = $%X" NL, map_offset_low);
+	DEBUG("HIGH-OFFSET = $%X" NL, map_offset_high);
+	DEBUG("MASK        = $%02X" NL, map_mask);
 	apply_memory_config();
 }
 
@@ -306,29 +306,29 @@ void cpu_do_nop ( void )
 {
 	if (cpu_inhibit_interrupts) {
 		cpu_inhibit_interrupts = 0;
-		puts("CPU: EOM, interrupts were disabled because of MAP till the EOM");
+		DEBUG("CPU: EOM, interrupts were disabled because of MAP till the EOM" NL);
 	} else
-		puts("CPU: NOP not reated as EOM (no MAP before)");
+		DEBUG("CPU: NOP not reated as EOM (no MAP before)" NL);
 }
 
 
 
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
-	do { printf("IO: NOT IMPLEMENTED read (emulator lacks feature), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
+	do { DEBUG("IO: NOT IMPLEMENTED read (emulator lacks feature), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
 	return fb; } while (0)
 #define RETURN_ON_IO_READ_NO_NEW_VIC_MODE(func, fb) \
-	do { printf("IO: ignored read (not new VIC mode), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
+	do { DEBUG("IO: ignored read (not new VIC mode), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
 	return fb; } while (0)
 #define RETURN_ON_IO_WRITE_NOT_IMPLEMENTED(func) \
-	do { printf("IO: NOT IMPLEMENTED write (emulator lacks feature), %s $%04X with data $%02X" NL, func, addr, data); \
+	do { DEBUG("IO: NOT IMPLEMENTED write (emulator lacks feature), %s $%04X with data $%02X" NL, func, addr, data); \
 	return; } while(0)
 #define RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE(func) \
-	do { printf("IO: ignored write (not new VIC mode), %s $%04X with data $%02X" NL, func, addr, data); \
+	do { DEBUG("IO: ignored write (not new VIC mode), %s $%04X with data $%02X" NL, func, addr, data); \
 	return; } while(0)
 #define WARN_IO_MODE_WR(func) \
-	printf("IO: write operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X, d=$%02X)" NL, func, addr, data)
+	DEBUG("IO: write operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X, d=$%02X)" NL, func, addr, data)
 #define WARN_IO_MODE_RD(func) \
-	printf("IO: read operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X)" NL, func, addr)
+	DEBUG("IO: read operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X)" NL, func, addr)
 
 
 // Call this ONLY with addresses between $D000-$DFFF
@@ -385,19 +385,19 @@ Uint8 io_read ( int addr )
 			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("DMA controller", 0xFF);
 	}
 	if (addr < ((vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00)) {	// $D800-$DC00/$E000	COLOUR NIBBLES, mapped to $1F800 in BANK1
-		printf("IO: reading colour RAM at offset $%04X" NL, addr - 0xD800);
+		DEBUG("IO: reading colour RAM at offset $%04X" NL, addr - 0xD800);
 		return memory[0x1F800 + addr - 0xD800];
 	}
 	if (addr < 0xDD00) {	// $DC00 - $DCFF	CIA-1
 		Uint8 result = cia_read(&cia1, addr & 0xF);
 		//RETURN_ON_IO_READ_NOT_IMPLEMENTED("CIA-1", 0xFF);
-		printf("%s: reading register $%X result is $%02X" NL, cia1.name, addr & 15, result);
+		DEBUG("%s: reading register $%X result is $%02X" NL, cia1.name, addr & 15, result);
 		return result;
 	}
 	if (addr < 0xDE00) {	// $DD00 - $DDFF	CIA-2
 		Uint8 result = cia_read(&cia2, addr & 0xF);
 		//RETURN_ON_IO_READ_NOT_IMPLEMENTED("CIA-2", 0xFF);
-		printf("%s: reading register $%X result is $%02X" NL, cia2.name, addr & 15, result);
+		DEBUG("%s: reading register $%X result is $%02X" NL, cia2.name, addr & 15, result);
 		return result;
 	}
 	if (addr < 0xDF00) {	// $DE00 - $DEFF	IO-1 external
@@ -471,18 +471,18 @@ void io_write ( int addr, Uint8 data )
 	if (addr < ((vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00)) {	// $D800-$DC00/$E000	COLOUR NIBBLES, mapped to $1F800 in BANK1
 		memory[0x1F800 + addr - 0xD800] = data;
        //return memory[0x1F800 + addr - 0xD800];
-		printf("IO: writing colour RAM at offset $%04X" NL, addr - 0xD800);
+		DEBUG("IO: writing colour RAM at offset $%04X" NL, addr - 0xD800);
 		return;
 	}
 	if (addr < 0xDD00) {	// $DC00 - $DCFF	CIA-1
 		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("CIA-1");
-		printf("%s: writing register $%X with data $%02X" NL, cia1.name, addr & 15, data);
+		DEBUG("%s: writing register $%X with data $%02X" NL, cia1.name, addr & 15, data);
 		cia_write(&cia1, addr & 0xF, data);
 		return;
 	}
 	if (addr < 0xDE00) {	// $DD00 - $DDFF	CIA-2
 		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("CIA-2");
-		printf("%s: writing register $%X with data $%02X" NL, cia2.name, addr & 15, data);
+		DEBUG("%s: writing register $%X with data $%02X" NL, cia2.name, addr & 15, data);
 		cia_write(&cia2, addr & 0xF, data);
 		return;
 	}
@@ -500,14 +500,14 @@ void write_phys_mem ( int addr, Uint8 data )
 	addr &= 0xFFFFF;
 #if 0
        if (addr > 0x7FFFF)
-                printf("HACKY: Someone writing upper RAM %06X PC=%04X (%06X) data = %02X!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc, data);
+                DEBUG("HACKY: Someone writing upper RAM %06X PC=%04X (%06X) data = %02X!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc, data);
        else if (addr > 0x3FFFF)
-                printf("HACKY: Someone writing upper ROM %06X PC=%04X (%06X) data = %02X!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc, data);
+                DEBUG("HACKY: Someone writing upper ROM %06X PC=%04X (%06X) data = %02X!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc, data);
 #endif
 	if (addr < 2) {
 		if ((cpu_port[addr] & 7) != (data & 7)) {
 			cpu_port[addr] = data;
-			puts("MEM: applying new memory configuration because of CPU port writing");
+			DEBUG("MEM: applying new memory configuration because of CPU port writing" NL);
 			apply_memory_config();
 		} else
 			cpu_port[addr] = data;
@@ -541,14 +541,14 @@ Uint8 read_phys_mem ( int addr )
 		addr == 51330  + 0x20000 ||
 		addr == 116856 + 0x20000
 	) {
-		printf("HACKY: PHYS=%06X PC=%04X PC_PHYS=%06X SPA=%04X" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc,
+		DEBUG("HACKY: PHYS=%06X PC=%04X PC_PHYS=%06X SPA=%04X" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc,
 			memory[cpu_sp + 0x104] | (memory[cpu_sp + 0x105] << 8)
 		);
 	}
 	if (addr > 0x7FFFF)
-		printf("HACKY: Someone reading upper RAM %06X PC=%04X (%06X)!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
+		DEBUG("HACKY: Someone reading upper RAM %06X PC=%04X (%06X)!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
 	else if (addr > 0x3FFFF)
-		printf("HACKY: Someone reading upper ROM %06X PC=%04X (%06X)!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
+		DEBUG("HACKY: Someone reading upper ROM %06X PC=%04X (%06X)!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
 #endif
 	return memory[addr];
 }
@@ -598,7 +598,7 @@ void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 		if ((addr & 0xF000) != 0xD000)
 			FATAL("Internal error: IO is not on the IO space!");
 		if (addr < 0xD800 || addr >= (vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00) {	// though, for only memory areas other than colour RAM (avoids unneeded warnings as well)
-			printf("CPU: RMW opcode is used on I/O area for $%04X" NL, addr);
+			DEBUG("CPU: RMW opcode is used on I/O area for $%04X" NL, addr);
 			io_write(addr, old_data);	// first write back the old data ...
 		}
 		io_write(addr, new_data);	// ... then the new
@@ -616,7 +616,7 @@ static void shutdown_callback ( void )
 #endif
 	int a;
 	for (a = 0; a < 0x40; a++)
-		printf("VIC-3 register $%02X is %02X" NL, a, vic3_registers[a]);
+		DEBUG("VIC-3 register $%02X is %02X" NL, a, vic3_registers[a]);
 	cia_dump_state (&cia1);
 	cia_dump_state (&cia2);
 #ifdef MEMDUMP_FILE
@@ -625,10 +625,10 @@ static void shutdown_callback ( void )
 	if (f) {
 		fwrite(memory, 1, 0x20000, f);
 		fclose(f);
-		puts("Memory is dumped into " MEMDUMP_FILE);
+		DEBUG("Memory is dumped into " MEMDUMP_FILE NL);
 	}
 #endif
-	printf("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
+	DEBUG("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
 }
 
 
@@ -648,7 +648,7 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 			vic3_registers[0x30] = 0;
 			apply_memory_config();
 			cpu_reset();
-			puts("RESET!");
+			DEBUG("RESET!" NL);
 			return;
 		}
 	}
@@ -752,11 +752,11 @@ int main ( int argc, char **argv )
 		opcyc = cpu_step();
 #ifdef DEBUG_STACK
 		if (cpu_sp != cpu_old_sp) {
-			printf("STACK: pointer [OP=$%02X] change $%02X -> %02X [diff=%d]\n", cpu_op, cpu_old_sp, cpu_sp, cpu_old_sp - cpu_sp);
+			DEBUG("STACK: pointer [OP=$%02X] change $%02X -> %02X [diff=%d]" NL, cpu_op, cpu_old_sp, cpu_sp, cpu_old_sp - cpu_sp);
 			cpu_old_sp = cpu_sp;
 		} else {
 			if (stackguard_address > -1) {
-				printf("STACK: WARN: somebody modified stack-like memory at $%X [SP=$%02X] with data $%02X [PC=$%04X]" NL, stackguard_address, cpu_sp, stackguard_data, cpu_old_pc_my);
+				DEBUG("STACK: WARN: somebody modified stack-like memory at $%X [SP=$%02X] with data $%02X [PC=$%04X]" NL, stackguard_address, cpu_sp, stackguard_data, cpu_old_pc_my);
 			}
 		}
 #endif
@@ -769,10 +769,10 @@ int main ( int argc, char **argv )
 		cycles += (opcyc * 7) / clock_divider7_hack;
 		if (cycles >= 227) {
 			scanline++;
-			//printf("VIC3: new scanline (%d)!" NL, scanline);
+			//DEBUG("VIC3: new scanline (%d)!" NL, scanline);
 			cycles -= 227;
 			if (scanline == 312) {
-				//puts("VIC3: new frame!");
+				//DEBUG("VIC3: new frame!" NL);
 				frameskip = !frameskip;
 				scanline = 0;
 				if (!frameskip)	// well, let's only render every full frames (~ie 25Hz)
@@ -785,7 +785,7 @@ int main ( int argc, char **argv )
 					vic3_blink_phase = !vic3_blink_phase;
 				}
 			}
-			//printf("RASTER=%d COMPARE=%d\n",scanline,compare_raster);
+			//DEBUG("RASTER=%d COMPARE=%d" NL,scanline,compare_raster);
 			//vic_interrupt();
 			vic3_check_raster_interrupt();
 		}
@@ -800,6 +800,5 @@ int main ( int argc, char **argv )
 			dma_update();
 		}
 	}
-	puts("Goodbye!");
 	return 0;
 }

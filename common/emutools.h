@@ -22,8 +22,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __LGB_EMUTOOLS_H_INCLUDED
 #define __LGB_EMUTOOLS_H_INCLUDED
 
-#if !SDL_VERSION_ATLEAST(2, 0, 4)
-#error "At least SDL version 2.0.4 is needed!"
+#include <SDL.h>
+
+#ifdef __GNUC__
+#define likely(x)       __builtin_expect(!!(x), 1)
+#define unlikely(x)     __builtin_expect(!!(x), 0)
+#else
+#define likely(x)       (x)
+#define unlikely(x)     (x)
 #endif
 
 #define APP_ORG "xemu-lgb"
@@ -69,6 +75,18 @@ extern void emu_drop_events ( void );
 	exit(1); \
 } while (0)
 
+extern FILE *debug_fp;
+
+#define DEBUG(...) do { \
+	if (unlikely(debug_fp))	\
+		fprintf(debug_fp, __VA_ARGS__);	\
+} while (0)
+
+
+#ifndef __BIGGEST_ALIGNMENT__
+#define __BIGGEST_ALIGNMENT__	16
+#endif
+#define VARALIGN __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)))
 
 extern char *sdl_window_title;
 extern char *window_title_custom_addon;
@@ -78,7 +96,7 @@ extern SDL_PixelFormat *sdl_pix_fmt;
 extern int seconds_timer_trigger;
 extern const char emulators_disclaimer[];
 
-
+extern int emu_init_debug ( const char *fn );
 extern time_t emu_get_unixtime ( void );
 extern struct tm *emu_get_localtime ( void );
 extern void *emu_malloc ( size_t size );
