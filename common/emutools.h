@@ -23,14 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define __LGB_EMUTOOLS_H_INCLUDED
 
 #include <SDL.h>
-
-#ifdef __GNUC__
-#define likely(x)       __builtin_expect(!!(x), 1)
-#define unlikely(x)     __builtin_expect(!!(x), 0)
-#else
-#define likely(x)       (x)
-#define unlikely(x)     (x)
-#endif
+#include "emutools_basicdefs.h"
 
 #define APP_ORG "xemu-lgb"
 #define APP_DESC_APPEND " / LGB"
@@ -40,21 +33,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern void clear_emu_events ( void );
 
 extern void emu_drop_events ( void );
-
-
-/* Note: O_BINARY is a must for Windows for opening binary files, odd enough, I know ...
-         So we always use O_BINARY in the code, and defining O_BINARY as zero for non-Windows systems, so it won't hurt at all.
-	 Surely, SDL has some kind of file abstraction layer, but I seem to get used to some "native" code as well :-) */
-#ifndef _WIN32
-#	define O_BINARY		0
-#	define DIRSEP_STR	"/"
-#	define DIRSEP_CHR	'/'
-#	define NL		"\n"
-#else
-#	define DIRSEP_STR	"\\"
-#	define DIRSEP_CHR	'\\'
-#	define NL		"\r\n"
-#endif
 
 #define _REPORT_WINDOW_(sdlflag, str, ...) do { \
 	char _buf_for_win_msg_[4096]; \
@@ -74,19 +52,6 @@ extern void emu_drop_events ( void );
 	ERROR_WINDOW(__VA_ARGS__); \
 	exit(1); \
 } while (0)
-
-extern FILE *debug_fp;
-
-#define DEBUG(...) do { \
-	if (unlikely(debug_fp))	\
-		fprintf(debug_fp, __VA_ARGS__);	\
-} while (0)
-
-
-#ifndef __BIGGEST_ALIGNMENT__
-#define __BIGGEST_ALIGNMENT__	16
-#endif
-#define VARALIGN __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)))
 
 extern char *sdl_window_title;
 extern char *window_title_custom_addon;
