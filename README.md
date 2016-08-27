@@ -13,3 +13,9 @@ This file is only some place holder here :) For some sane documentation, please
 **visit the wiki section for the project here**:
 
 https://github.com/lgblgblgb/xemu/wiki
+
+If you - for some reason - needs the old, and possible highly outdated old
+README.md, you can find it, by browsing older git revisions, or here, in
+the wiki section:
+
+https://github.com/lgblgblgb/xemu/wiki/Legacy-README.md
