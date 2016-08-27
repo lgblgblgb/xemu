@@ -1,0 +1,42 @@
+#!/bin/bash
+
+source .travis-info
+source .uploader
+rm -f .uploader
+
+echo "*** Running: $0 for $TRAVIS_OS_NAME"
+uname -a
+
+touch .empty
+echo "Uploader ..."
+#curl -T .empty "$uploader/empty?$URLPAR" > /dev/null 2> /dev/null
+rm -f .empty
+
+echo "<<< MARK: BUILD ALL BEGIN >>>"
+echo "<<< MARK: BUILD OSX BEGIN >>>"
+make ARCH=osx
+b="$?"
+echo "<<< MARK: BUILD OSX END >>>"
+echo "<<< MARK: BUILD ALL END >>>"
+
+echo "BUILD STATUS: osx:     $b"
+
+if [ -s xep128.osx ]; then
+	echo "*** Deployment of binary (original) ..."
+	ls -l xep128.osx
+	otool -L ./xep128.osx
+	#curl -T xep128.osx "$uploader/xep128_original.osx?$URLPAR" > /dev/null 2> /dev/null
+
+	echo "*** Mangling of binary ..."
+	sdl=`otool -L ./xep128.osx | awk '$1 ~ /lib[sS][dD][lL]2.*dylib$/ { print $1 }'`
+	sdl_local="libSDL2-xep128.dylib"
+	echo "SDL2 library is: $sdl -> $sdl_local"
+	install_name_tool -change $sdl @executable_path/$sdl_local ./xep128.osx
+	ls -l xep128.osx
+	otool -L ./xep128.osx
+	cat $sdl > $sdl_local
+	#curl -T xep128.osx "$uploader/xep128_mangled.osx?$URLPAR" > /dev/null 2> /dev/null
+	#curl -T $sdl_local "$uploader/$sdl_local?$URLPAR" > /dev/null 2> /dev/null
+fi
+
+exit $b
