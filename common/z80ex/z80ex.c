@@ -16,12 +16,20 @@
 #include "z80ex.h"
 #include "macros.h"
 
+#include "emutools_basicdefs.h"
+
 #define temp_byte z80ex.tmpbyte
 #define temp_byte_s z80ex.tmpbyte_s
 #define temp_addr z80ex.tmpaddr
 #define temp_word z80ex.tmpword
 
 typedef void (*z80ex_opcode_fn) (void);
+
+#ifdef Z80EX_Z180_BY_DEFAULT
+#define Z180_LIKELY likely
+#else
+#define Z180_LIKELY unlikely
+#endif
 
 #include "ptables.c"
 #include "opcodes_base.c"
@@ -69,7 +77,7 @@ int z80ex_step(void)
 						temp_byte_s = (d & 0x80)? -(((~d) & 0x7f)+1): d;
 						opcode = READ_OP();
 #ifdef Z80EX_Z180_SUPPORT
-						if (z80ex.z180) {
+						if (Z180_LIKELY(z80ex.z180)) {
 							if ((opcode & 7) != 6 || opcode == 0x36)
 								ofn = trapping(z80ex.prefix, 0xCB, opcode, ITC_B3);
 							else
@@ -79,12 +87,12 @@ int z80ex_step(void)
 							ofn = (z80ex.prefix == 0xDD) ? opcodes_ddcb[opcode] : opcodes_fdcb[opcode];
 					} else { /* FD/DD prefixed base opcodes */
 #ifdef Z80EX_Z180_SUPPORT
-						if (z80ex.z180 && opcodes_ddfd_bad_for_z180[opcode]) {
+						if (unlikely(z80ex.z180 && opcodes_ddfd_bad_for_z180[opcode])) {
 							ofn = trapping(z80ex.prefix, 0x00, opcode, ITC_B2);
 						} else {
 #endif
 							ofn = (z80ex.prefix == 0xDD) ? opcodes_dd[opcode] : opcodes_fd[opcode];
-							if (ofn == NULL) ofn = opcodes_base[opcode]; /* 'mirrored' instructions NOTE: this should NOT happen with Z180! */
+							if (unlikely(ofn == NULL)) ofn = opcodes_base[opcode]; /* 'mirrored' instructions NOTE: this should NOT happen with Z180! */
 #ifdef Z80EX_Z180_SUPPORT
 						}
 #endif
@@ -93,7 +101,7 @@ int z80ex_step(void)
 								
 				case 0xED: /* ED opcodes */
 #ifdef Z80EX_ED_TRAPPING_SUPPORT
-					if (opcode > 0xBB) {
+					if (unlikely(opcode > 0xBB)) {
 						/* check if ED-trap emu func accepted the opcode as its own "faked" */
 						if (z80ex_ed_cb(opcode)) {
 							ofn = opcodes_base[0x00];
@@ -102,14 +110,14 @@ int z80ex_step(void)
 					}
 #endif
 #ifdef Z80EX_Z180_SUPPORT
-					if (z80ex.z180)
+					if (Z180_LIKELY(z80ex.z180))
 						ofn = opcodes_ed_z180[opcode];
 					else
 #endif
 						ofn = opcodes_ed[opcode];
 					if (ofn == NULL) {
 #ifdef Z80EX_Z180_SUPPORT
-						if (z80ex.z180)
+						if (unlikely(z80ex.z180))
 							ofn = trapping(0x00, 0xED, opcode, ITC_B2);
 						else
 #endif
@@ -119,7 +127,7 @@ int z80ex_step(void)
 				
 				case 0xCB: /* CB opcodes */
 #ifdef Z80EX_Z180_SUPPORT
-					if (z80ex.z180 && (opcode & 0xF8) == 0x30)
+					if (unlikely(z80ex.z180 && (opcode & 0xF8) == 0x30))
 						ofn = trapping(0x00, 0xCB, opcode, ITC_B2);
 					else
 #endif
