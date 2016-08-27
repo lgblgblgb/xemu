@@ -32,10 +32,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  */
 
 
-#include <stdio.h>
-#include <SDL.h>
+#include "emutools_basicdefs.h"
 #include "cia6526.h"
-#include "emutools.h"
 
 
 #define ICR_CHECK() \
@@ -123,7 +121,7 @@ void cia_init (
 Uint8 cia_read ( struct Cia6526 *cia, int addr )
 {
 	Uint8 temp;
-	switch (addr) {
+	switch (addr & 0xF) {
 		case  0:	// reg#0: port A data
 			return (cia->PRA & cia->DDRA) | (cia->ina(255 - cia->DDRA) & (255 - cia->DDRA));
 		case  1:	// reg#1: port B data
@@ -159,9 +157,6 @@ Uint8 cia_read ( struct Cia6526 *cia, int addr )
 			return cia->CRA;
 		case 15:	// reg#F: CRB
 			return cia->CRB;
-		default:
-			FATAL("FATAL: %s invalid register %d" NL, cia->name, addr);
-			break;
 	}
 	return 0;	// to make GCC happy :-/
 }
@@ -170,7 +165,7 @@ Uint8 cia_read ( struct Cia6526 *cia, int addr )
 
 void cia_write ( struct Cia6526 *cia, int addr, Uint8 data )
 {
-	switch (addr) {
+	switch (addr & 0xF) {
 		case 0:		// reg#0: port A
 			cia->PRA = data;
 			cia->outa(cia->DDRA, data);
@@ -257,9 +252,6 @@ void cia_write ( struct Cia6526 *cia, int addr, Uint8 data )
 				cia->CRB &= 255 - 16;	// storbe bit, force to be on zero
 				cia->TCB = cia->TLBL | (cia->TLBH << 8);
 			}
-			break;
-		default:
-			FATAL("FATAL: %s invalid register %d" NL, cia->name, addr);
 			break;
 	}
 	cia->regWritten[addr] = data;
