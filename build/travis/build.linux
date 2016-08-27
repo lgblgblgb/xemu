@@ -1,0 +1,42 @@
+#!/bin/bash
+# (C)2016 LGB Gabor Lenart
+# https://github.com/lgblgblgb/xemu
+
+cd /srv/git || exit 1
+source .travis-info
+source .uploader
+rm -f .uploader
+
+echo "*** Running: $0 for $TRAVIS_OS_NAME"
+uname -a
+
+touch .empty
+echo "Uploader ..."
+#curl -T .empty "$uploader/empty?$URLPAR" > /dev/null 2> /dev/null
+rm -f .empty
+
+echo "<<< MARK: BUILD ALL BEGIN >>>"
+make all-arch
+ret="$?"
+echo "<<< MARK: BUILD ALL END >>>"
+
+echo "BUILD STATUS: $ret"
+
+cd build/bin || exit 1
+
+if [ "$ret" = "0" ]; then
+	ls -l *.win32 *.win64
+	zip dist.zip *.win32 *.win64
+	ls -l dist.zip
+	if [ -s dist.zip ]; then
+		echo "Uploader ..."
+		#curl -T dist.zip "$uploader/dist-win.zip?$URLPAR" > /dev/null 2> /dev/null
+	fi
+fi
+
+#if [ "$b2" = "0" ]; then
+#	deb="`ls *.deb | sort | tail -1`"
+#	curl -T "$deb" "$uploader/xep128.deb?$URLPAR" > /dev/null 2> /dev/null
+#fi
+
+exit $ret

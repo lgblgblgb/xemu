@@ -1,0 +1,32 @@
+sudo: required
+language: c
+git:
+  depth: 4
+os:
+- linux
+- osx
+matrix:
+  allow_failures:
+  - os: osx
+env:
+  linux_dist: ubuntu
+  linux_ver: 16.04
+  linux_init: "/lib/systemd/systemd"
+  linux_opts: "--privileged --volume=/sys/fs/cgroup:/sys/fs/cgroup:ro"
+services:
+- docker
+before_install:
+- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo docker pull ${linux_dist}:${linux_ver}
+  ; fi
+script:
+- build/travis/store-travis-info
+- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then container_id_file=$(mktemp) ; export
+  container_id_file ; fi
+- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo docker run --detach --volume="${PWD}":/srv/git:rw
+  ${linux_opts} ${linux_dist}:${linux_ver} "${linux_init}" > "${container_id_file}"
+  ; fi
+- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo docker exec --tty "$(cat ${container_id_file})"
+  /srv/git/build/travis/install.linux  ; fi
+- if [[ "$TRAVIS_OS_NAME" == "osx" ]];   then build/travis/install.osx ; fi
+- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo docker stop "$(cat ${container_id_file})"
+  ; fi

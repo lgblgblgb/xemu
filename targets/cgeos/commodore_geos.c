@@ -775,7 +775,7 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles, frameskip;
-	DEBUG("**** The Unexplained Commodore GEOS emulator from LGB" NL
+	printf("**** The Unexplained Commodore GEOS emulator from LGB" NL
 	"INFO: Texture resolution is %dx%d" NL "%s" NL,
 		SCREEN_WIDTH, SCREEN_HEIGHT,
 		emulators_disclaimer
