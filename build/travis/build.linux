@@ -10,11 +10,6 @@ rm -f .uploader
 echo "*** Running: $0 for $TRAVIS_OS_NAME"
 uname -a
 
-#touch .empty
-#echo "Uploader ..."
-##curl -T .empty "$uploader/empty?$URLPAR" > /dev/null 2> /dev/null
-#rm -f .empty
-
 echo "<<< MARK: BUILD ALL BEGIN >>>"
 rm -f build/bin/*
 make all-arch
@@ -24,28 +19,26 @@ echo "<<< MARK: BUILD ALL END >>>"
 echo "BUILD STATUS: $ret"
 
 if [ "$ret" = "0" ]; then
-	## Fetch ROMS, also!
-	## We do this only with the native build.
-	#make -C rom roms
-	#echo "NOTE: custom ROM *SHOULD* be built as well"
-	#zip xemu-rom-package.zip rom/*.rom
-	# Do not use OSX "builds", not cross compiled here, it would be conflict with the real stuff built on Darwin!
-	cd build/bin
-	rm -f *.osx
-	cp ../../README.md ../../LICENSE .
-	zip xemu-binaries.zip *.* README.md LICENSE
-	#ls -l *.win32 *.win64
-	#zip dist.zip *.win32 *.win64
-	#ls -l dist.zip
-	#if [ -s dist.zip ]; then
-	#	echo "Uploader ..."
-	#	#curl -T dist.zip "$uploader/dist-win.zip?$URLPAR" > /dev/null 2> /dev/null
-	#fi
-fi
+	cd build/bin || exit 1
 
-#if [ "$b2" = "0" ]; then
-#	deb="`ls *.deb | sort | tail -1`"
-#	curl -T "$deb" "$uploader/xep128.deb?$URLPAR" > /dev/null 2> /dev/null
-#fi
+	cp ../../README.md ../../LICENSE .
+	echo "*** Packing: Win32 build"
+	rm -f *.exe *.dll
+	for a in *.win32 ; do
+		mv $a `basename $a .win32`.exe
+	done
+	cp /usr/local/cross-tools/i686-w64-mingw32.SDL-2.0.4/bin/SDL2.dll .
+	zip xemu-binaries-win64.zip *.exe README.md LICENSE SDL2.dll
+	ls -l xemu-binaries-win64.zip
+
+	echo "*** Packing: Win64 build"
+	rm -f *.exe *.dll
+	for a in *.win64 ; do
+		mv $a `basename $a .win64`.exe
+	done
+	cp /usr/local/cross-tools/x86_64-w64-mingw32/bin/SDL2.dll .
+	zip xemu-binaries-win32.zip *.exe README.md LICENSE SDL2.dll
+	ls -l xemu-binaries-win32.zip
+fi
 
 exit $ret

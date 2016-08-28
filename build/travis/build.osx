@@ -23,8 +23,13 @@ echo "<<< MARK: BUILD ALL END >>>"
 
 echo "BUILD STATUS: osx:     $b"
 
+if [ "$b" != "0" ]; then
+	exit $b
+fi
+
 cd build/bin || exit 1
 
+allbins=""
 for bin in *.osx ; do
 	echo "*** Deployment of binary (original) $bin ..."
 	ls -l $bin
@@ -40,9 +45,12 @@ for bin in *.osx ; do
 	cat $sdl > $sdl_local
 	#curl -T xep128.osx "$uploader/$bin?$URLPAR" > /dev/null 2> /dev/null
 	#curl -T $sdl_local "$uploader/$sdl_local?$URLPAR" > /dev/null 2> /dev/null
+	binshort="`basename $bin .osx`"
+	mv $bin $binshort
+	allbins="$allbins $binshort"
 done
 
 cp ../../README.md ../../LICENSE .
-zip xemu-binaries-osx.zip *.osx *.dylib README.md LICENSE
+zip xemu-binaries-osx.zip $allbins *.dylib README.md LICENSE
 
 exit $b
