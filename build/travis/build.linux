@@ -33,7 +33,7 @@ if [ "$ret" = "0" ]; then
 	cd build/bin
 	rm -f *.osx
 	cp ../../README.md ../../LICENSE .
-	zip ../../xemu-binaries.zip *.* README.md LICENSE
+	zip xemu-binaries.zip *.* README.md LICENSE
 	#ls -l *.win32 *.win64
 	#zip dist.zip *.win32 *.win64
 	#ls -l dist.zip
