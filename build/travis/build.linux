@@ -10,28 +10,37 @@ rm -f .uploader
 echo "*** Running: $0 for $TRAVIS_OS_NAME"
 uname -a
 
-touch .empty
-echo "Uploader ..."
-#curl -T .empty "$uploader/empty?$URLPAR" > /dev/null 2> /dev/null
-rm -f .empty
+#touch .empty
+#echo "Uploader ..."
+##curl -T .empty "$uploader/empty?$URLPAR" > /dev/null 2> /dev/null
+#rm -f .empty
 
 echo "<<< MARK: BUILD ALL BEGIN >>>"
+rm -f build/bin/*
 make all-arch
 ret="$?"
 echo "<<< MARK: BUILD ALL END >>>"
 
 echo "BUILD STATUS: $ret"
 
-cd build/bin || exit 1
-
 if [ "$ret" = "0" ]; then
-	ls -l *.win32 *.win64
-	zip dist.zip *.win32 *.win64
-	ls -l dist.zip
-	if [ -s dist.zip ]; then
-		echo "Uploader ..."
-		#curl -T dist.zip "$uploader/dist-win.zip?$URLPAR" > /dev/null 2> /dev/null
-	fi
+	## Fetch ROMS, also!
+	## We do this only with the native build.
+	#make -C rom roms
+	#echo "NOTE: custom ROM *SHOULD* be built as well"
+	#zip xemu-rom-package.zip rom/*.rom
+	# Do not use OSX "builds", not cross compiled here, it would be conflict with the real stuff built on Darwin!
+	cd build/bin
+	rm -f *.osx
+	cp ../../README.md ../../LICENSE .
+	zip ../../xemu-binaries.zip *.* README.md LICENSE
+	#ls -l *.win32 *.win64
+	#zip dist.zip *.win32 *.win64
+	#ls -l dist.zip
+	#if [ -s dist.zip ]; then
+	#	echo "Uploader ..."
+	#	#curl -T dist.zip "$uploader/dist-win.zip?$URLPAR" > /dev/null 2> /dev/null
+	#fi
 fi
 
 #if [ "$b2" = "0" ]; then

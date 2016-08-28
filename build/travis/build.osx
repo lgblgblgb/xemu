@@ -9,10 +9,10 @@ rm -f .uploader
 echo "*** Running: $0 for $TRAVIS_OS_NAME"
 uname -a
 
-touch .empty
-echo "Uploader ..."
-#curl -T .empty "$uploader/empty?$URLPAR" > /dev/null 2> /dev/null
-rm -f .empty
+#touch .empty
+#echo "Uploader ..."
+##curl -T .empty "$uploader/empty?$URLPAR" > /dev/null 2> /dev/null
+#rm -f .empty
 
 echo "<<< MARK: BUILD ALL BEGIN >>>"
 echo "<<< MARK: BUILD OSX BEGIN >>>"
@@ -37,9 +37,12 @@ for bin in *.osx ; do
 	install_name_tool -change $sdl @executable_path/$sdl_local ./$bin
 	ls -l $bin
 	otool -L ./$bin
-	#cat $sdl > $sdl_local
+	cat $sdl > $sdl_local
 	#curl -T xep128.osx "$uploader/$bin?$URLPAR" > /dev/null 2> /dev/null
 	#curl -T $sdl_local "$uploader/$sdl_local?$URLPAR" > /dev/null 2> /dev/null
 done
+
+cp ../../README.md ../../LICENSE .
+zip ../../xemu-binaries-osx.zip *.osx *.dylib README.md LICENSE
 
 exit $b
