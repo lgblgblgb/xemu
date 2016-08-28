@@ -34,6 +34,6 @@ deploy:
   provider: bintray
   user: "lgblgblgb"
   file: "build/deploy/bintray-description.json"
-  on: test
+  on: deploy
   key:
     secure: h/8a6mRDEkYNV6xUJkPeW2/yrc7Xh0dF6RDU+GLTOtkRHVDKh08G0XIdOO07Brv+hEEpV5vYWoFuet+nirz65XKnW5tzfmvCTcOt7uK+aNpN0vXn2HAy5eeXI+JpfwwLvS0VnabTl4V+sZ2dOfCPNy94gmMVB8DaityG/iVlUIXXPDllQhPlnhDK6OZJ9hVrxJ1IJ7A8yW5eNU18ZFHpjyjbR+eCuuwdy0HAVvk2PwCk1YretnAt0WLACfcjDJp002WKyB6KilzvAloWYNkWXKZz/ZP2RdcH0enKE/cmsI9Fb4S4qQqQQx7h+CaKTlB7mt1u60J92geaFVdCGkPE4vyhckMyGist5Ggej28G+9wQtvd+2W6klb6RbQuKWL08sEFue8xqqYtg9qdkkEEG0DCxi5j7ytFmXSHsaZFwEgVqGMQDocKO4Wk5uCRkPbyfoSXRJOcwUEL90VpOYCSTAZL2XhFY1pA/ZdqO4ENWlhs/80Rpnadr+O/LkoXLtv2NTA7ku9onV1GiccEuHvFKhc3hawm/wdPVVcXO8sgfebxHJ5MrLmhhP0ivxd2RRWS6ZALXdlqWEx0uFVosVsNLVGfkkJZLJRW3ZnF3kheofM2fDqsMUH7QElb+8qfGWSKrpZD3k1QWQP03da1V0mRFNWLxG0MsIPwl1qf0KZPz9oI=
