@@ -9,11 +9,6 @@ rm -f .uploader
 echo "*** Running: $0 for $TRAVIS_OS_NAME"
 uname -a
 
-touch .empty
-echo "Uploader ..."
-#curl -T .empty "$uploader/empty?$URLPAR" > /dev/null 2> /dev/null
-rm -f .empty
-
 echo "<<< MARK: BUILD ALL BEGIN >>>"
 echo "<<< MARK: BUILD OSX BEGIN >>>"
 make ARCH=osx
@@ -23,23 +18,30 @@ echo "<<< MARK: BUILD ALL END >>>"
 
 echo "BUILD STATUS: osx:     $b"
 
+if [ "$b" != "0" ]; then
+	exit $b
+fi
+
 cd build/bin || exit 1
 
+allbins=""
 for bin in *.osx ; do
-	echo "*** Deployment of binary (original) $bin ..."
+	echo "*** Mangling binary $bin ..."
 	ls -l $bin
 	otool -L ./$bin
-	#curl -T $bin "$uploader/xep128_original.osx?$URLPAR" > /dev/null 2> /dev/null
-	echo "*** Mangling of binary $bin ..."
 	sdl=`otool -L ./$bin | awk '$1 ~ /lib[sS][dD][lL]2.*dylib$/ { print $1 }'`
 	sdl_local="libSDL2-xemu.dylib"
 	echo "SDL2 library is: $sdl -> $sdl_local"
 	install_name_tool -change $sdl @executable_path/$sdl_local ./$bin
 	ls -l $bin
 	otool -L ./$bin
-	#cat $sdl > $sdl_local
-	#curl -T xep128.osx "$uploader/$bin?$URLPAR" > /dev/null 2> /dev/null
-	#curl -T $sdl_local "$uploader/$sdl_local?$URLPAR" > /dev/null 2> /dev/null
+	cat $sdl > $sdl_local
+	binshort="`basename $bin .osx`"
+	mv $bin $binshort
+	allbins="$allbins $binshort"
 done
+
+cp ../../README.md ../../LICENSE .
+zip xemu-binaries-osx.zip $allbins *.dylib README.md LICENSE
 
 exit $b

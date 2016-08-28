@@ -2,6 +2,7 @@
 
 [![Build Status](https://api.travis-ci.org/lgblgblgb/xemu.svg?branch=master)](https://travis-ci.org/lgblgblgb/xemu)
 [![Gitter](https://badges.gitter.im/lgblgblgb/xemu.svg)](https://gitter.im/lgblgblgb/xemu)
+[![Download](https://api.bintray.com/packages/lgblgblgb/generic/xemu/images/download.svg)](https://bintray.com/lgblgblgb/generic/xemu/_latestVersion)
 
 Emulations running on Linux/Unix/Windows/OSX of various (mainly 8 bit) machines,
 including the Commodore LCD and Commodore 65 (with some Mega65 hacks) as well.
