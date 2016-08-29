@@ -29,10 +29,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sid.h"
 #include "sdcard.h"
 #include "uart_monitor.h"
+#include "hypervisor_debug.h"
 #include "emutools.h"
-
-
-#define ALREADY_KICKED	0xFF
 
 
 static SDL_AudioDeviceID audio = 0;
@@ -79,7 +77,7 @@ int in_hypervisor;			// mega65 hypervisor mode
 int mega65_capable;			// emulator founds kickstart, sub-set of mega65 features CAN BE usable. It is an ERROR to use any of mega65 specific stuff, if it's zero!
 static Uint8 gs_regs[0x1000];		// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
 static int rom_protect;			// C65 system ROM write protection
-static int fpga_switches = 1 << 12;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
+static int fpga_switches = FPGA_SWITCHES;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
 static char  hypervisor_monout[0x10000];
 static char *hypervisor_monout_p = hypervisor_monout;
 
@@ -315,7 +313,7 @@ static Uint8 cia_port_in_dummy ( Uint8 mask )
 
 static void audio_callback(void *userdata, Uint8 *stream, int len)
 {
-	DEBUG("AUDIO: audio callback, wants %d samples" NL, len);
+	//DEBUG("AUDIO: audio callback, wants %d samples" NL, len);
 	// We use the trick, to render boths SIDs with step of 2, with a byte offset
 	// to get a stereo stream, wanted by SDL.
 	sid_render(&sid2, ((short *)(stream)) + 0, len / 2, 2);		// SID @ left
@@ -328,6 +326,7 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 {
 	SDL_AudioSpec audio_want, audio_got;
 	hid_init();
+	megadebug_init(KICKSTART_LIST_FILE_NAME);
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
 	in_hypervisor = 0;
@@ -381,6 +380,7 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 	// SIDs, plus SDL audio
 	sid_init(&sid1, sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sid2, sid_cycles_per_sec, sound_mix_freq);
+#ifdef AUDIO_EMULATION
 	SDL_memset(&audio_want, 0, sizeof(audio_want));
 	audio_want.freq = sound_mix_freq;
 	audio_want.format = AUDIO_S16SYS;	// used format by SID emulation (ie: signed short)
@@ -402,6 +402,7 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 		DEBUG("AUDIO: initialized (#%d), %d Hz, %d channels, %d buffer sample size." NL, audio, audio_got.freq, audio_got.channels, audio_got.samples);
 	} else
 		ERROR_WINDOW("Cannot open audio device!");
+#endif
 	//
 #ifdef UARTMON_SOCKET
 	uartmon_init(UARTMON_SOCKET);
@@ -554,10 +555,10 @@ Uint8 io_read ( int addr )
 	do {
 		int result = sdcard_read_buffer(addr - 0xDE00);	// try to read SD buffer
 		if (result >= 0) {	// if non-negative number got, answer is really the SD card (mapped buffer)
-			DEBUG("SDCARD: BUFFER: reading SD-card buffer at offset $%03X with result $%02X" NL, addr - 0xDE00, result);
+			DEBUG("SDCARD: BUFFER: reading SD-card buffer at offset $%03X with result $%02X PC=$%04X" NL, addr - 0xDE00, result, cpu_pc);
 			return result;
 		} else
-			DEBUG("SDCARD: BUFFER: *NOT* mapped SD-card buffer is read, can it be a bug??" NL);
+			DEBUG("SDCARD: BUFFER: *NOT* mapped SD-card buffer is read, can it be a bug?? PC=$%04X" NL, cpu_pc);
 	} while (0);
 	if (addr < 0xDF00) {	// $DE00 - $DEFF	IO-1 external
 		RETURN_ON_IO_READ_NOT_IMPLEMENTED("IO-1 external select", 0xFF);
@@ -1034,11 +1035,21 @@ int main ( int argc, char **argv )
 			// DEBUG("MEGA65: hypervisor mode execution at $%04X" NL, cpu_pc);
 			// This is not a precise check: only the mapped address is checked ... Hypervisor may map out memory from itself, it won't be noticed then here.
 			// Note: do NOT do this check if hypervisor is not kicked (ie upgraded) yet ...
+#ifdef HYPERVISOR_DEBUG
+			if (debug_fp) { // purpose of this "if": even not logging file, megadebug_resolve() eats lots of CPU and no output then ...
+				const char *p = megadebug_resolve(cpu_pc);
+				if (!p)
+					FATAL("MEGADEBUG emulation exception in hypervisor mode! Check log for last MEGADEBUG: line!");
+				DEBUG("MEGADEBUG: %s" NL, p);
+			}
+#endif
+#if 0
 			if (gs_regs[0x67E] && (cpu_pc < 0x8000 || cpu_pc > 0xBFFF)) {
 				fprintf(stderr, "*** Executing program @ $%04X in hypervisor mode outside of the hypervisor memory. Moving into trace mode now!" NL, cpu_pc);
 				//paused = 1;	// go into "paused" mode
 				//continue;
 			}
+#endif
 		}
 		if (breakpoint_pc == cpu_pc) {
 			fprintf(stderr, "Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu_pc);
@@ -1083,10 +1094,13 @@ int main ( int argc, char **argv )
 		// It seems two DMA updates are needed by CPU clock cycle not to apply the WORKAROUND
 		// situation (see in c65dma.c). Hopefully in this way, this is now closer to the native
 		// speed of DMA compared to the CPU. Or not :-D
+#ifndef DMA_STOPS_CPU
+#warning "Compile for non-M65 compatbile setting: without DMA_STOPS_CPU defined in mega65.h"
 		while (dma_status && (opcyc--)) {
 			dma_update();
 			dma_update();
 		}
+#endif
 	}
 	return 0;
 }
