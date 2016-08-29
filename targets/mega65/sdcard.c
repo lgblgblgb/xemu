@@ -25,6 +25,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "emutools.h"
 
+#include "cpu65c02.h"
+
 
 static int sdfd;		// SD-card controller emulation, UNIX file descriptor of the open image file
 static Uint8 sd_buffer[512];	// SD-card controller buffer
@@ -110,9 +112,10 @@ static int read_sector ( void )
 	if (sdfd < 0)
 		return -1;
 	offset = sd_sector_bytes[0] | (sd_sector_bytes[1] << 8) | (sd_sector_bytes[2] << 16) | (sd_sector_bytes[3] << 24);
-	DEBUG("SDCARD: reading position %ld" NL, (long)offset);
+	DEBUG("SDCARD: reading position %ld PC=$%04X" NL, (long)offset, cpu_pc);
 	if (offset < 0 || offset >= sd_card_size) {
 		DEBUG("SDCARD: invalid position value failure ..." NL);
+		FATAL("SDCARD: invalid position value failure!! %ld (limit = %ld)", (long)offset, (long)sd_card_size);
 		return -1;
 	}
 	if (lseek(sdfd, offset, SEEK_SET) != offset) {
@@ -135,7 +138,7 @@ static int read_sector ( void )
 Uint8 sdcard_read_status ( void )
 {
 	Uint8 ret = sd_status;
-	DEBUG("SDCARD: reading SD status $D680 result is $%02X" NL, ret);
+	DEBUG("SDCARD: reading SD status $D680 result is $%02X PC=$%04X" NL, ret, cpu_pc);
 	sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);
 	return ret;
 }
@@ -145,7 +148,7 @@ Uint8 sdcard_read_status ( void )
 void sdcard_command ( Uint8 cmd )
 {
 	int ret;
-	DEBUG("SDCARD: writing command register $D680 with $%02X" NL, cmd);
+	DEBUG("SDCARD: writing command register $D680 with $%02X PC=$%04X" NL, cmd, cpu_pc);
 	sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);	// ugly hack :-@
 	switch (cmd) {
 		case 0x00:	// RESET SD-card
@@ -195,5 +198,5 @@ void sdcard_command ( Uint8 cmd )
 void sdcard_select_sector ( int secreg, Uint8 data )
 {
 	sd_sector_bytes[secreg] = data;
-	DEBUG("SDCARD: writing sector number register $%04X with $%02X" NL, secreg + 0xD681, data);
+	DEBUG("SDCARD: writing sector number register $%04X with $%02X PC=$%04X" NL, secreg + 0xD681, data, cpu_pc);
 }
