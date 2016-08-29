@@ -167,6 +167,18 @@ static inline Uint8 read_dma_list_next ( void )
 }
 
 
+static void dma_update_all ( void )
+{
+	int limit = 0;
+	while (dma_status) {
+		dma_update();
+		limit++;
+		if (limit > 256 * 1024)
+			FATAL("FATAL: Run-away DMA session, still blocking the emulator after %d iterations, exiting!", limit);
+	}
+}
+
+
 
 void dma_write_reg ( int addr, Uint8 data )
 {
@@ -185,7 +197,6 @@ void dma_write_reg ( int addr, Uint8 data )
 	if (addr)
 		return;	// Only writing register 0 starts the DMA operation, otherwise just return from this function (reg write already happened)
 	if (dma_status) {
-		int limit = 0;
 		DEBUG("DMA: WARNING: previous operation is in progress, WORKAROUND: finishing first." NL);
 		// Ugly hack: it seems even the C65 ROM issues new DMA commands while the previous is in-progress
 		// It's possible the fault of timing of my emulation.
@@ -193,12 +204,7 @@ void dma_write_reg ( int addr, Uint8 data )
 		// Note, that there is a possible two PROBLEMS with this solution:
 		// * Extremly long DMA command (ie chained) blocks the emulator to refresh screen etc for a long time
 		// * I/O redirection as target affecting the DMA registers can create a stack overflow in the emulator code :)
-		while (dma_status) {
-			dma_update();
-			limit++;
-			if (limit > 256 * 1024)
-				FATAL("FATAL: Run-away DMA session, still blocking the emulator after %d iterations, exiting!", limit);
-		}
+		dma_update_all();
 	}
 	dma_list_addr = dma_registers[0] | (dma_registers[1] << 8) | ((dma_registers[2] & 15) << 16);
 	if (mega65_capable)
@@ -206,6 +212,9 @@ void dma_write_reg ( int addr, Uint8 data )
 	DEBUG("DMA: list address is $%06X now, just written to register %d value $%02X" NL, dma_list_addr, addr, data);
 	dma_status = 0x80;	// DMA is busy now, also to signal the emulator core to call dma_update() in its main loop
 	command = -1;		// signal dma_update() that it's needed to fetch the DMA command, no command is fetched yet
+#ifdef DMA_STOPS_CPU
+	dma_update_all();
+#endif
 }
 
 
