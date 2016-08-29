@@ -273,11 +273,10 @@ void emu_timekeeping_delay ( int td_em )
 	Uint64 et_new;
 	td_pc = get_elapsed_time(et_old, &et_new, NULL);	// get realtime since last call in microseconds
 	if (td_pc < 0) return; // time goes backwards? maybe time was modified on the host computer. Skip this delay cycle
-	td = td_em - td_pc; // the time difference (+X = PC is faster - real time emulation, -X = hw is faster - real time emulation is not possible)
-	if (td > 0) {
-		td_balancer += td;
+	td = td_em - td_pc; // the time difference (+X = emu is faster (than emulated machine) - real time emulation, -X = emu is slower - real time emulation is not possible)
+	td_balancer += td;
+	if (td_balancer > 0)
 		do_sleep(td_balancer);
-	}
 	/* Purpose:
 	 * get the real time spent sleeping (sleep is not an exact science on a multitask OS)
 	 * also this will get the starter time for the next frame
@@ -286,13 +285,11 @@ void emu_timekeeping_delay ( int td_em )
 	td = get_elapsed_time(et_new, &et_old, &unix_time);
 	seconds_timer_trigger = (unix_time != old_unix_time);
 	if (seconds_timer_trigger) {
-		if (td_em_ALL) {
-			snprintf(window_title_buffer_end, 32, "  [%d%%] %s",
-				td_pc_ALL * 100 / td_em_ALL,
-				window_title_custom_addon ? window_title_custom_addon : "running"
-			);
-			SDL_SetWindowTitle(sdl_win, window_title_buffer);
-		}
+		snprintf(window_title_buffer_end, 32, "  [%d%%] %s",
+			td_em_ALL ? (td_pc_ALL * 100 / td_em_ALL) : -1,
+			window_title_custom_addon ? window_title_custom_addon : "running"
+		);
+		SDL_SetWindowTitle(sdl_win, window_title_buffer);
 		td_pc_ALL = td_pc;
 		td_em_ALL = td_em;
 	} else {
@@ -305,8 +302,10 @@ void emu_timekeeping_delay ( int td_em )
 	td_balancer -= td;
 	if (td_balancer >  1000000)
 		td_balancer = 0;
-	else if (td_balancer < -1000000)
+	else if (td_balancer < -1000000) {
+		// reaching this means the anomaly above, OR simply the fact, that emulator is too slow to emulate in real time!
 		td_balancer = 0;
+	}
 }
 
 
@@ -338,8 +337,9 @@ int emu_init_debug ( const char *fn )
 		if (!debug_fp) {
 			ERROR_WINDOW("Cannot open requested debug file: %s", fn);
 			return 1;
-		} else
-			return 0;
+		}
+		printf("Logging into file: %s (fd=%d)." NL, fn, fileno(debug_fp));
+		return 0;
 	}
 	return 0;
 }
@@ -367,6 +367,8 @@ int emu_init_sdl (
 	char render_scale_quality_s[2];
 	if (!debug_fp)
 		emu_init_debug(getenv("XEMU_DEBUG_FILE"));
+	if (!debug_fp)
+		printf("Logging into file: not enabled." NL);
 	if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
 		ERROR_WINDOW("Cannot initialize SDL: %s", SDL_GetError());
 		return 1;
