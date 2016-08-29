@@ -15,13 +15,41 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __LGB_MEGA65_H_INCLUDED
-#define __LGB_MEGA65_H_INCLUDED
+#ifndef __XEMU_MEGA65_MEGA65_H_INCLUDED
+#define __XEMU_MEGA65_MEGA65_H_INCLUDED
 
+// These file names used by the generic Xemu loader. That is, they are searched in
+// different directories, ie, most notably, in rom/
+// Real M65 would not expect to have eg the ROM, as it can be loaded from the SD-card,
+// but it's not the case with Xemu, as you wouldn't have charset either without prior
+// loading it (however kickstart can overwrite "C65 ROM" anyway, later)
+#define KICKSTART_NAME			"KICKUP.M65"
+#define ROM_NAME			"c65-system.rom"
+#define SDCARD_NAME			"mega65.img"
+#define KICKSTART_LIST_FILE_NAME	"kickstart.list"
 
-#define KICKSTART_NAME		"KICKUP.M65"
-#define ROM_NAME		"c65-system.rom"
-#define SDCARD_NAME		"mega65.img"
+// If it's defined, DMA operations will halts the CPU
+// NOTE: it seems this is the de-facto behaviour with M65, you should use it!
+#define DMA_STOPS_CPU
+
+// If you define this, you will got *VERY HUGE* number of messages into the debug log
+// It slows down the emulator *A LOT* as well!
+// With FPGA switch 12 too, it created 20Gbytes(!) log file and it even not booted yet :)
+#define HYPERVISOR_DEBUG
+
+// Hypervisor 'already upgraded' state. By setting this non-zero, kickstart loaded from
+// "KICKSTART_NAME" defined name won't try to upgrade ('already kicked')
+#define ALREADY_KICKED		0
+
+// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
+// 12 is useful, but it also slows things down
+#define FPGA_SWITCHES		1 << 12
+
+// You may want to disable audio emulation since it can disturb non-real-time emulation
+#define AUDIO_EMULATION
+
+#define UARTMON_SOCKET		"uart.sock"
+
 
 /* Do *NOT* modify these, as other parts of the emulator currently depends on these values ...
    You can try RENDER_SCALE_QUALITY though with values 0, 1, 2 */
