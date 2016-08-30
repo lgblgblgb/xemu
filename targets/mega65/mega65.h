@@ -74,13 +74,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 // If defined, a file name string must be used.
 // Then RAM content (low 128K) will be written into this file on exit.
-#define MEMDUMP_FILE		"dump.mem"
+// #define MEMDUMP_FILE		"dump.mem"
 
 
 extern Uint8 memory[0x104001];
 extern int   mega65_capable;
 extern int   in_hypervisor;
 extern Uint8 kicked_hypervisor;
+extern int map_mask;
+extern int map_offset_low;
+extern int map_offset_high;
+extern Uint8 gs_regs[0x1000];
+extern Uint8 cpu_port[2];
 
 extern void  apply_memory_config ( void );
 extern Uint8 io_read  ( int addr );

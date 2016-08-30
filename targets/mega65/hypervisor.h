@@ -15,10 +15,14 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_HYPERVISOR_DEBUG_MEGA65_H_INCLUDED
-#define __XEMU_HYPERVISOR_DEBUG_MEGA65_H_INCLUDED
+#ifndef __XEMU_HYPERVISOR_MEGA65_H_INCLUDED
+#define __XEMU_HYPERVISOR_MEGA65_H_INCLUDED
 
-extern int   megadebug_init ( const char *fn );
-extern const char *megadebug_resolve ( Uint16 addr );
+extern int  hypervisor_debug_init ( const char *fn );
+extern void hypervisor_debug ( void );
+
+extern void hypervisor_enter ( int trapno );
+extern void hypervisor_leave ( void );
+extern void hypervisor_serial_monitor_push_char ( Uint8 chr );
 
 #endif

@@ -29,14 +29,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sid.h"
 #include "sdcard.h"
 #include "uart_monitor.h"
-#include "hypervisor_debug.h"
+#include "hypervisor.h"
 #include "emutools.h"
 
 
 static SDL_AudioDeviceID audio = 0;
 
 Uint8 memory[0x104001];			// 65CE02 MAP'able address space (with the special case of hypervisor memory of Mega65, +0x4001, 1 byte if for check kickstart size)
-static Uint8 cpu_port[2];		// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
+Uint8 cpu_port[2];			// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
 static struct SidEmulation sid1, sid2;	// the two SIDs
 
@@ -60,10 +60,10 @@ static struct SidEmulation sid1, sid2;	// the two SIDs
 
 static int addr_trans_rd[16];		// address translating offsets for READ operation (it can be added to the CPU address simply, selected by the high 4 bits of the CPU address)
 static int addr_trans_wr[16];		// address translating offsets for WRITE operation (it can be added to the CPU address simply, selected by the high 4 bits of the CPU address)
-static int map_mask;			// MAP mask, should be filled at the MAP opcode, *before* calling apply_memory_config() then
+int map_mask;			// MAP mask, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 // WARNING: map_offset_low and map_offset_high must be used FROM bit-8 only, the lower 8 bits must be zero always!
-static int map_offset_low;		// MAP low offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
-static int map_offset_high;		// MAP high offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
+int map_offset_low;		// MAP low offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
+int map_offset_high;		// MAP high offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 
 static int frame_counter;
 
@@ -76,11 +76,9 @@ static const char emulator_paused_title[] = "TRACE/PAUSE";
 int in_hypervisor;			// mega65 hypervisor mode
 Uint8 kicked_hypervisor = 0x80;		// 0x80 signals for XEMU (not for a real M65!) to *ASK* the user. It won't be the final answer!
 int mega65_capable;			// emulator founds kickstart, sub-set of mega65 features CAN BE usable. It is an ERROR to use any of mega65 specific stuff, if it's zero!
-static Uint8 gs_regs[0x1000];		// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
+Uint8 gs_regs[0x1000];			// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
 static int rom_protect;			// C65 system ROM write protection
 static int fpga_switches = FPGA_SWITCHES;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
-static char  hypervisor_monout[0x10000];
-static char *hypervisor_monout_p = hypervisor_monout;
 
 
 /* You *MUST* call this every time, when *any* of these events applies:
@@ -161,104 +159,6 @@ void apply_memory_config ( void )
 }
 
 
-static void hypervisor_enter ( int trapno )
-{
-	// Sanity checks
-	if (!mega65_capable)
-		FATAL("FATAL: hypervisor_enter() called without Mega65 capable mode");
-	if (trapno > 0x7F || trapno < 0)
-		FATAL("FATAL: got invalid trap number %d", trapno);
-	if (in_hypervisor)
-		FATAL("FATAL: already in hypervisor mode while calling hypervisor_enter()");
-	// First, save machine status into hypervisor registers, TODO: incomplete, can be buggy!
-	gs_regs[0x640] = cpu_a;
-	gs_regs[0x641] = cpu_x;
-	gs_regs[0x642] = cpu_y;
-	gs_regs[0x643] = cpu_z;
-	gs_regs[0x644] = cpu_bphi >> 8;	// "B" register
-	gs_regs[0x645] = cpu_sp;
-	gs_regs[0x646] = cpu_sphi >> 8;	// stack page register
-	gs_regs[0x647] = cpu_get_p();
-	gs_regs[0x648] = cpu_pc & 0xFF;
-	gs_regs[0x649] = cpu_pc >> 8;
-	gs_regs[0x64A] = ((map_offset_low  >> 16) & 0x0F) | ((map_mask & 0x0F) << 4);
-	gs_regs[0x64B] = ( map_offset_low  >>  8) & 0xFF  ;
-	gs_regs[0x64C] = ((map_offset_high >> 16) & 0x0F) | ( map_mask & 0xF0);
-	gs_regs[0x64D] = ( map_offset_high >>  8) & 0xFF  ;
-	gs_regs[0x650] = cpu_port[0];
-	gs_regs[0x651] = cpu_port[1];
-	gs_regs[0x652] = vic_iomode;
-	// Now entering into hypervisor mode
-	in_hypervisor = 1;	// this will cause apply_memory_config to map hypervisor RAM, also for checks later to out-of-bound execution of hypervisor RAM, etc ...
-	vic_iomode = VIC4_IOMODE;
-	cpu_port[0] = 0x3F;	// apply_memory_config watch this also ...
-	cpu_port[1] = 0x35;	// and this too (this sets, all-RAM + I/O config)
-	cpu_pfd = 0;		// clear decimal mode ... according to Paul, punnishment will be done, if it's removed :-)
-	cpu_pfi = 1;		// disable IRQ in hypervisor mode
-	cpu_pfe = 1;		// 8 bit stack in hypervisor mode
-	cpu_sphi = 0xBE00;	// set a nice shiny stack page
-	cpu_bphi = 0xBF00;	// ... and base page (aka zeropage)
-	cpu_sp = 0xFF;
-	map_mask = (map_mask & 0xF) | 0x30;	// mapping: 0011XXXX (it seems low region map mask is not changed by hypervisor entry)
-	// FIXME: as currently I can do only C65-MAP, we cheat a bit, and use a special case in apply_memory_config() instead of a "legal" map-hi offset
-	apply_memory_config();	// now the memory mapping is changed
-	cpu_pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
-	DEBUG("MEGA65: entering into hypervisor mode, trap=$%02X PC=$%04X" NL, trapno, cpu_pc);
-	fprintf(stderr, "HYPERVISOR: entering into hypervisor mode @ $%04X -> $%04X" NL, gs_regs[0x648] | (gs_regs[0x649] << 8), cpu_pc);
-}
-
-
-static void hypervisor_leave ( void )
-{
-	// Sanity checks
-	if (!mega65_capable)
-		FATAL("FATAL: hypervisor_leave() called without Mega65 capable mode");
-	if (!in_hypervisor)
-		FATAL("FATAL: not in hypervisor mode while calling hypervisor_leave()");
-	// First, restore machine status from hypervisor registers
-	fprintf(stderr, "HYPERVISOR: leaving hypervisor mode @ $%04X -> $%04X" NL, cpu_pc, gs_regs[0x648] | (gs_regs[0x649] << 8));
-	cpu_a    = gs_regs[0x640];
-	cpu_x    = gs_regs[0x641];
-	cpu_y    = gs_regs[0x642];
-	cpu_z    = gs_regs[0x643];
-	cpu_bphi = gs_regs[0x644] << 8;	// "B" register
-	cpu_sp   = gs_regs[0x645];
-	cpu_sphi = gs_regs[0x646] << 8;	// stack page register
-	cpu_set_p(gs_regs[0x647]);
-	cpu_pfe = gs_regs[0x647] & 32;	// cpu_set_p() does NOT set 'E' bit by design, so we do at our own
-	cpu_pc   = gs_regs[0x648] | (gs_regs[0x649] << 8);
-	map_offset_low  = ((gs_regs[0x64A] & 0xF) << 16) | (gs_regs[0x64B] << 8);
-	map_offset_high = ((gs_regs[0x64C] & 0xF) << 16) | (gs_regs[0x64D] << 8);
-	map_mask = (gs_regs[0x64A] >> 4) | (gs_regs[0x64C] & 0xF0);
-	cpu_port[0] = gs_regs[0x650];
-	cpu_port[1] = gs_regs[0x651];
-	vic_iomode = gs_regs[0x652] & 3;
-	if (vic_iomode == VIC_BAD_IOMODE)
-		vic_iomode = VIC3_IOMODE;	// I/O mode "2" (binary: 10) is not used, I guess
-	// Now leaving hypervisor mode ...
-	in_hypervisor = 0;
-	apply_memory_config();
-	DEBUG("MEGA65: leaving hypervisor mode, (user) PC=$%04X" NL, cpu_pc);
-}
-
-
-
-static void hypervisor_serial_monitor_push_char ( Uint8 chr )
-{
-	if (hypervisor_monout_p >= hypervisor_monout - 1 + sizeof hypervisor_monout)
-		return;
-	if (hypervisor_monout_p == hypervisor_monout && (chr == 13 || chr == 10))
-		return;
-	if (chr == 13 || chr == 10) {
-		*hypervisor_monout_p = 0;
-		fprintf(stderr, "Hypervisor serial output: \"%s\"." NL, hypervisor_monout);
-		DEBUG("MEGA65: Hypervisor serial output: \"%s\"." NL, hypervisor_monout);
-		hypervisor_monout_p = hypervisor_monout;
-		return;
-	}
-	*(hypervisor_monout_p++) = (char)chr;
-}
-
 
 static void cia_setint_cb ( int level )
 {
@@ -326,8 +226,8 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int sound_mix_freq )
 {
 	SDL_AudioSpec audio_want, audio_got;
+	hypervisor_debug_init(KICKSTART_LIST_FILE_NAME);
 	hid_init();
-	megadebug_init(KICKSTART_LIST_FILE_NAME);
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
 	in_hypervisor = 0;
@@ -822,13 +722,6 @@ static void shutdown_callback ( void )
 #ifdef UARTMON_SOCKET
 	uartmon_close();
 #endif
-#if 0
-	if (hypervisor_monout != hypervisor_monout_p) {
-		*hypervisor_monout_p = 0;
-		DEBUG("HYPERVISOR_MONITOR_OUT:" NL "%s" NL "HYPERVISOR_MONITOR_OUT: *END-OF-OUTPUT*" NL, hypervisor_monout);
-	} else
-		DEBUG("HYPERVISOR_MONITOR_OUT: *NO-OUTPUT-BUFFER*" NL);
-#endif
 	DEBUG("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
 }
 
@@ -1041,24 +934,7 @@ int main ( int argc, char **argv )
 			}
 		}
 		if (in_hypervisor) {
-			// DEBUG("MEGA65: hypervisor mode execution at $%04X" NL, cpu_pc);
-			// This is not a precise check: only the mapped address is checked ... Hypervisor may map out memory from itself, it won't be noticed then here.
-			// Note: do NOT do this check if hypervisor is not kicked (ie upgraded) yet ...
-#ifdef HYPERVISOR_DEBUG
-			if (debug_fp) { // purpose of this "if": even not logging file, megadebug_resolve() eats lots of CPU and no output then ...
-				const char *p = megadebug_resolve(cpu_pc);
-				if (!p)
-					FATAL("MEGADEBUG emulation exception in hypervisor mode! Check log for last MEGADEBUG: line!");
-				DEBUG("MEGADEBUG: %s" NL, p);
-			}
-#endif
-#if 0
-			if (gs_regs[0x67E] && (cpu_pc < 0x8000 || cpu_pc > 0xBFFF)) {
-				fprintf(stderr, "*** Executing program @ $%04X in hypervisor mode outside of the hypervisor memory. Moving into trace mode now!" NL, cpu_pc);
-				//paused = 1;	// go into "paused" mode
-				//continue;
-			}
-#endif
+			hypervisor_debug();
 		}
 		if (breakpoint_pc == cpu_pc) {
 			fprintf(stderr, "Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu_pc);
