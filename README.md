@@ -7,7 +7,7 @@
 Emulators running on Linux/Unix/Windows/OSX of various (mainly 8 bit) machines,
 including the Commodore LCD and Commodore 65 (with some Mega65 hacks) as well.
 
-WARNING: there is *nothing* too much common in these machines. The only reason
+Note: there is *nothing* too much common in these machines. The only reason
 that I emulate these within a single project, that I can easily re-use some
 of the components needed, that's all!
 
@@ -16,7 +16,7 @@ the wiki section of the project, here**:
 
 https://github.com/lgblgblgb/xemu/wiki
 
-If you - for some reason - needs the old, and possible highly outdated README.md,
+If you - for some reason - need the old, and possible **highly outdated** README.md,
 you can find it, by browsing older git revisions, or here, in the wiki section:
 
 https://github.com/lgblgblgb/xemu/wiki/Legacy-README.md
