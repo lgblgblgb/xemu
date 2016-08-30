@@ -38,8 +38,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define HYPERVISOR_DEBUG
 
 // State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
-// 12 is useful, but it also slows things down
+// 12 is useful, but it also slows things emulation down maybe (I am not sure, but
+// kickstat may wait after every "Checkpoint" messages ...)
 #define FPGA_SWITCHES		1 << 12
+//#define FPGA_SWITCHES		0
 
 // You may want to disable audio emulation since it can disturb non-real-time emulation
 #define AUDIO_EMULATION

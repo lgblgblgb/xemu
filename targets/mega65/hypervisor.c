@@ -205,6 +205,16 @@ void hypervisor_serial_monitor_push_char ( Uint8 chr )
 
 
 
+void hypervisor_debug_invalidate ( void )
+{
+	if (resolver_ok) {
+		resolver_ok = 0;
+		INFO_WINDOW("Hypervisor debug feature is asked to be disabled (ie: upgraded kickstart?)");
+	}
+}
+
+
+
 void hypervisor_debug ( void )
 {
 	if (!in_hypervisor)
@@ -222,13 +232,12 @@ void hypervisor_debug ( void )
 	if (!resolver_ok) {
 		return;	// no debug info loaded from kickstart.list ...
 	}
-	if (unlikely(!debug_lines[cpu_pc - 0x8000][0])) {
+	if (unlikely(!debug_lines[cpu_pc - 0x8000][0][0])) {
 		DEBUG("HYPERVISOR-DEBUG: execution address not found in list file (out-of-bound code?), PC = $%04X" NL, cpu_pc);
 		FATAL("Hypervisor fatal error: execution address not found in list file (out-of-bound code?), PC = $%04X", cpu_pc);
 		return;
 	}
-	// WARNING: as it turned out, using snprintf() is EXTREMLY slow to call at the frequency of the emulated CPU clock (~3.5MHz)
-	// even on a "modern" PC. TODO: this must be rewritten to use custom "rendering" of debug information, instead of stdio stuffs!
+	// WARNING: as it turned out, using stdio I/O to log every opcodes even "only" at ~3.5MHz rate makes emulation _VERY_ slow ...
 #ifdef HYPERVISOR_DEBUG
 	if (debug_fp)
 		fprintf(

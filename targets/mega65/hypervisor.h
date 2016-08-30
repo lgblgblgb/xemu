@@ -24,5 +24,6 @@ extern void hypervisor_debug ( void );
 extern void hypervisor_enter ( int trapno );
 extern void hypervisor_leave ( void );
 extern void hypervisor_serial_monitor_push_char ( Uint8 chr );
+extern void hypervisor_debug_invalidate ( void );
 
 #endif

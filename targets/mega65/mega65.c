@@ -414,7 +414,7 @@ Uint8 io_read ( int addr )
 				case 0xD67E:				// upgraded hypervisor signal
 					if (kicked_hypervisor == 0x80)	// 0x80 means for Xemu (not for a real M65!): ask the user!
 						kicked_hypervisor = QUESTION_WINDOW(
-							"Not upgraded yet, it can do it|Already upgraded",
+							"Not upgraded yet, it can do it|Already upgraded, I test kicked state",
 							"Kickstart asks hypervisor upgrade state. What do you want Xemu to answer?\n"
 							"(don't worry, it won't be asked again without RESET)"
 						) ? 0xFF : 0;
@@ -538,6 +538,7 @@ void io_write ( int addr, Uint8 data )
 				case 0xD67E:	// it seems any write (?) here marks the byte as non-zero?! FIXME TODO
 					kicked_hypervisor = 0xFF;
 					fprintf(stderr, "Writing already-kicked register $%04X!" NL, addr);
+					hypervisor_debug_invalidate();
 					break;
 				case 0xD67F:	// hypervisor enter/leave trap
 					if (in_hypervisor)
