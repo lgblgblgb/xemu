@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define RENDER_SCALE_QUALITY	1
 #define SCREEN_WIDTH		640
 #define SCREEN_HEIGHT		200
+#define DMA_STOPS_CPU
 
 #define CPU_CLOCK		3546875
 #define FULL_FRAME_CPU_CYCLES	141875
