@@ -1,4 +1,4 @@
-/* X-Emulators
+/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -15,21 +15,25 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_Z80_H_INCLUDED
-#define __XEMU_Z80_H_INCLUDED
+#ifndef __XEMU_SDCARD_MEGA65_H_INCLUDED
+#define __XEMU_SDCARD_MEGA65_H_INCLUDED
 
-#include <SDL_types.h>
+#define SD_ST_HALFSPEED	0x80
+#define SD_ST_ERROR	0x40
+#define SD_ST_FSM_ERROR	0x20
+#define SD_ST_SDHC	0x10
+#define SD_ST_MAPPED	0x08
+#define SD_ST_RESET	0x04
+#define SD_ST_BUSY1	0x02
+#define SD_ST_BUSY0	0x01
 
-#define Z80EX_CALLBACK_PROTOTYPE extern
+extern int   sdcard_bytes_read;
 
-#define Z80EX_TYPES_DEFINED
-#define Z80EX_BYTE              Uint8
-#define Z80EX_SIGNED_BYTE       Sint8
-#define Z80EX_WORD              Uint16
-#define Z80EX_DWORD             Uint32
-
-#include "z80ex/z80ex.h"
-
-extern Z80EX_CONTEXT z80ex;
+extern int   sdcard_init          ( const char *fn );
+extern void  sdcard_command       ( Uint8 cmd );
+extern void  sdcard_select_sector ( int secreg, Uint8 data );
+extern Uint8 sdcard_read_status   ( void );
+extern int   sdcard_read_buffer   ( int addr );
+extern int   sdcard_write_buffer  ( int addr,   Uint8 data );
 
 #endif

@@ -1,4 +1,4 @@
-/* X-Emulators
+/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -15,21 +15,21 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_Z80_H_INCLUDED
-#define __XEMU_Z80_H_INCLUDED
+#ifndef __XEMU_UART_MONITOR_MEGA65_H_INCLUDED
+#define __XEMU_UART_MONITOR_MEGA65_H_INCLUDED
 
-#include <SDL_types.h>
+#define SYNTAX_ERROR "?SYNTAX ERROR  "
 
-#define Z80EX_CALLBACK_PROTOTYPE extern
+#define UMON_WRITE_BUFFER_SIZE	0x4000
+#define umon_printf(...)	umon_write_size += sprintf(umon_write_buffer + umon_write_size, __VA_ARGS__)
 
-#define Z80EX_TYPES_DEFINED
-#define Z80EX_BYTE              Uint8
-#define Z80EX_SIGNED_BYTE       Sint8
-#define Z80EX_WORD              Uint16
-#define Z80EX_DWORD             Uint32
+extern int  umon_write_size;
+extern int  umon_send_ok;
+extern char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
-#include "z80ex/z80ex.h"
-
-extern Z80EX_CONTEXT z80ex;
+extern int  uartmon_init   ( const char *fn );
+extern void uartmon_update ( void );
+extern void uartmon_close  ( void );
+extern void uartmon_finish_command ( void );
 
 #endif

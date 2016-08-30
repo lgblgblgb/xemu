@@ -1,0 +1,57 @@
+#!/bin/bash
+
+set -e
+
+IMG="$1"
+if [ "$IMG" = "" ]; then
+	echo "ERROR: no image name is specified as 1st parameter" >&2
+	exit 1
+fi
+
+shift
+SIZE="$1"
+if [ "$SIZE" = "" ]; then
+	echo "ERROR: no image size is specified as 2nd parameter" >&2
+	exit 1
+fi
+if [ "$SIZE" -lt 64 ]; then
+	echo "ERROR: minimal image size is 64" >&2
+	exit 1;
+fi
+
+dd if=/dev/zero of="$IMG" bs=1M count="$SIZE"
+
+echo
+echo "Xemu image file" | mkfs.fat -F32 -v -I -a -h0 -n XEMU -S512 -s1 -m - "$IMG"
+
+echo
+shift
+while [ "$1" != "" ]; do
+	if [ x`echo "$1" | cut -c1` = x+ ]; then
+		file=`echo "$1" | cut -c2-`
+		opt="y"
+	else
+		file="$1"
+		opt="n"
+	fi
+	file1=`echo "$file" | cut -d: -f1`
+	file2=`echo "$file" | cut -d: -f2`
+	if [ "$file2" = "" ]; then
+		file2=`echo "$file1" | tr 'a-z' 'A-Z'`
+	else
+		file2=`echo "$file2" | tr 'a-z' 'A-Z'`
+	fi
+	file2=`basename "$file2"`
+	echo "Installing file: $file1 -> $file2"
+	if [ ! -f "$file1" -a "$opt" = "y" ]; then
+		echo "... optional file and not found, skipping it"
+	else
+		mcopy -i "$IMG" "$file1" "::$file2" || exit 1
+	fi
+	shift
+done
+
+echo
+mdir -i "$IMG" ::
+
+exit 0

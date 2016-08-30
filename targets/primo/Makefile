@@ -17,13 +17,10 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
-ARCH_DESC	= "Native Unix/Linux like"
-PREFIX		= /usr/local
-BINDIR		= $(PREFIX)/bin
-DATADIR		= $(PREFIX)/lib/xemu
-CC		= gcc
-STRIP		= strip
-SDLCFG		= sdl2-config
-GENOPTS		= -Ofast -fno-common -falign-functions=16 -falign-loops=16 -ffast-math
-CFLAGS_ARCH	= $(GENOPTS) -Wall -pipe $(shell $(SDLCFG) --cflags) -DDATADIR=\"$(DATADIR)\"
-LDFLAGS_ARCH	= $(GENOPTS) $(shell $(SDLCFG) --libs)
+TARGET		= primo
+PRG_TARGET	= xprimo
+CFLAGS_TARGET	=
+SRCS_TARGET	= primo.c
+SRCS_COMMON	= emutools.c z80.c
+
+include ../../build/Makefile.common

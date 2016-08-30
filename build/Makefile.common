@@ -22,21 +22,23 @@ all:
 	$(MAKE) do-all
 
 ARCH			= native
+TOPDIR			= ../..
 
-include ../../build/Makefile.$(ARCH)
+include $(TOPDIR)/build/Makefile.$(ARCH)
 
 # Remove -flto (link time optimization) if you have problems
 # If you want to compile with -g option, also *DELETE* the -flto, both of them together known to be problematic!
 DEBUG			=
 
-PRG			= ../../build/bin/$(PRG_TARGET).$(ARCH)
-COMMONDIR		= ../../common
+PRG_TOP_REL		= build/bin/$(PRG_TARGET).$(ARCH)
+PRG			= $(TOPDIR)/$(PRG_TOP_REL)
+COMMONDIR		= $(TOPDIR)/common
 CFLAGS_WITHOUT_DEBUG	= $(CFLAGS_ARCH) $(CFLAGS_TARGET) -I. -I$(COMMONDIR)
 CFLAGS			= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG) -include arch-sys-$(ARCH).h -include xemu-target.h
 LDFLAGS			= $(DEBUG) $(LDFLAGS_ARCH)
-OBJPREFIX       	= ../../build/objs/$(ARCH)-$(TARGET)--
+OBJPREFIX       	= $(TOPDIR)/build/objs/$(ARCH)-$(TARGET)--
 DEPFILE			= $(OBJPREFIX)make.depend
-DEPALL			= Makefile ../../build/Makefile.common ../../build/Makefile.$(ARCH)
+DEPALL			= Makefile $(TOPDIR)/build/Makefile.common $(TOPDIR)/build/Makefile.$(ARCH)
 SRCS			= $(addprefix $(COMMONDIR)/, $(SRCS_COMMON)) $(SRCS_TARGET)
 OBJS			= $(addprefix $(OBJPREFIX), $(notdir $(SRCS:.c=.o)))
 
@@ -55,6 +57,9 @@ $(OBJPREFIX)%.o: $(COMMONDIR)/%.c $(DEPALL)
 $(PRG): $(OBJS) $(DEPALL)
 	$(CC) -o $(PRG) $(OBJS) $(LDFLAGS)
 
+run:	$(PRG)
+	cd $(TOPDIR) && XEMU_DEBUG_FILE=debug.log $(PRG_TOP_REL)
+
 strip: $(PRG)
 	$(STRIP) $(PRG)
 
@@ -69,7 +74,7 @@ clean:
 	rm -f $(OBJPREFIX)* $(PRG)
 
 
-.PHONY: clean all strip dep do-all
+.PHONY: clean all strip dep do-all run
 
 ifneq ($(wildcard $(DEPFILE)),)
 include $(DEPFILE)

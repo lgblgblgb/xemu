@@ -1,4 +1,9 @@
+.*.swp
+a.out
+uart.sock
+debug.log
 /disks
 /dist.zip
 /.dist
 /dump.mem
+/.pending

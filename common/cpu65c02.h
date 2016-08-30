@@ -25,9 +25,13 @@ extern Uint16 cpu_pc, cpu_old_pc;
 extern Uint8  cpu_op;
 
 extern Uint8 cpu_a, cpu_x, cpu_y, cpu_sp;
+extern int cpu_pfn,cpu_pfv,cpu_pfb,cpu_pfd,cpu_pfi,cpu_pfz,cpu_pfc;
 #ifdef CPU_65CE02
+extern int cpu_pfe;
 extern Uint8 cpu_z;
 extern int cpu_inhibit_interrupts;
+extern Uint16 cpu_bphi;	// NOTE: it must store the value shifted to the high byte!
+extern Uint16 cpu_sphi;	// NOTE: it must store the value shifted to the high byte!
 #endif
 
 extern void  cpu_write     ( Uint16 addr, Uint8 data );
@@ -44,5 +48,8 @@ extern int  cpu_trap ( Uint8 opcode );
 extern void cpu_do_aug ( void );
 extern void cpu_do_nop ( void );
 #endif
+
+extern void  cpu_set_p  ( Uint8 st );
+extern Uint8 cpu_get_p ( void );
 
 #endif

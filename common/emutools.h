@@ -22,9 +22,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __LGB_EMUTOOLS_H_INCLUDED
 #define __LGB_EMUTOOLS_H_INCLUDED
 
-#if !SDL_VERSION_ATLEAST(2, 0, 4)
-#error "At least SDL version 2.0.4 is needed!"
-#endif
+#include <SDL.h>
+#include "emutools_basicdefs.h"
 
 #define APP_ORG "xemu-lgb"
 #define APP_DESC_APPEND " / LGB"
@@ -34,21 +33,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern void clear_emu_events ( void );
 
 extern void emu_drop_events ( void );
-
-
-/* Note: O_BINARY is a must for Windows for opening binary files, odd enough, I know ...
-         So we always use O_BINARY in the code, and defining O_BINARY as zero for non-Windows systems, so it won't hurt at all.
-	 Surely, SDL has some kind of file abstraction layer, but I seem to get used to some "native" code as well :-) */
-#ifndef _WIN32
-#	define O_BINARY		0
-#	define DIRSEP_STR	"/"
-#	define DIRSEP_CHR	'/'
-#	define NL		"\n"
-#else
-#	define DIRSEP_STR	"\\"
-#	define DIRSEP_CHR	'\\'
-#	define NL		"\r\n"
-#endif
 
 #define _REPORT_WINDOW_(sdlflag, str, ...) do { \
 	char _buf_for_win_msg_[4096]; \
@@ -69,15 +53,18 @@ extern void emu_drop_events ( void );
 	exit(1); \
 } while (0)
 
+extern int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg );
+#define QUESTION_WINDOW(items, msg) _sdl_emu_secured_modal_box_(items, msg)
 
 extern char *sdl_window_title;
+extern char *window_title_custom_addon;
 extern SDL_Window   *sdl_win;
 extern Uint32 sdl_winid;
 extern SDL_PixelFormat *sdl_pix_fmt;
 extern int seconds_timer_trigger;
 extern const char emulators_disclaimer[];
 
-
+extern int emu_init_debug ( const char *fn );
 extern time_t emu_get_unixtime ( void );
 extern struct tm *emu_get_localtime ( void );
 extern void *emu_malloc ( size_t size );

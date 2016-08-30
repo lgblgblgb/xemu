@@ -22,8 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  * or visit this page: http://www.gnu.org/licenses/gpl-3.0.html
  */
 
-#include <stdio.h>
-#include <SDL_types.h>
+#include "emutools_basicdefs.h"
 #include "via65c22.h"
 
 #define INA(via) (via->ina)(0xFF)
@@ -31,7 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define OUTA(via, data) (via->outa)(via->DDRA, data)
 #define OUTB(via, data) (via->outb)(via->DDRB, data)
 #define INT(via, level) (via->setint)(via->irqLevel = level)
-#define alert(via, msg) printf("%s: ALERT: %s\n", via->name, msg)
+#define alert(via, msg) DEBUG("%s: ALERT: %s" NL, via->name, msg)
 #define INSR(via) (via->insr)()
 #define OUTSR(via, data) (via->outsr)(data)
 
@@ -62,7 +61,7 @@ void via_reset(struct Via65c22 *via)
 	via->T1C = via->T2C = via->T1LL = via->T1LH = via->T2LL = via->T2LH = 0;
 	via->T1run = via->T2run = 0; // false
 	INT(via, 0);
-	printf("%s: RESET\n", via->name);
+	DEBUG("%s: RESET" NL, via->name);
 }
 
 
@@ -99,7 +98,7 @@ void via_init(
 
 void via_write(struct Via65c22 *via, int addr, Uint8 data)
 {
-	//printf("%s: write reg %02X with data %02X\n", via->name, addr, data);
+	//DEBUG("%s: write reg %02X with data %02X" NL, via->name, addr, data);
 	switch (addr) {
 		case 0x0: // port B data
 			via->ORB = data;	// FIXED BUG
@@ -177,7 +176,7 @@ void via_write(struct Via65c22 *via, int addr, Uint8 data)
 
 Uint8 via_read(struct Via65c22 *via, int addr)
 {
-	//printf("%s: read reg %02X\n", via->name, addr);
+	//DEBUG("%s: read reg %02X" NL, via->name, addr);
 	switch (addr) {
 		case 0x0: // port B data
 			ifr_on_pb(via);

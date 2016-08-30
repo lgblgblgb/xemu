@@ -188,7 +188,7 @@ static void vic2_interrupt_checker ( void )
 		vic_irq_new = 0;
 	}
 	if (vic_irq_old != vic_irq_new) {
-		printf("VIC2: interrupt change %s -> %s" NL, vic_irq_old ? "active" : "inactive", vic_irq_new ? "active" : "inactive");
+		DEBUG("VIC2: interrupt change %s -> %s" NL, vic_irq_old ? "active" : "inactive", vic_irq_new ? "active" : "inactive");
 		if (vic_irq_new)
 			cpu_irqLevel |= 2;
 		else
@@ -224,18 +224,18 @@ void vic2_check_raster_interrupt ( void )
 void vic2_write_reg ( int addr, Uint8 data )
 {
 	addr &= 0x3F;
-	printf("VIC3: write reg $%02X with data $%02X" NL, addr, data);
+	DEBUG("VIC3: write reg $%02X with data $%02X" NL, addr, data);
 	if (addr > 0x2E)
 		return;
 	vic2_registers[addr] = data;
 	switch (addr) {
 		case 0x11:
 			compare_raster = (compare_raster & 0xFF) | ((data & 1) ? 0x100 : 0);
-			printf("VIC2: compare raster is now %d" NL, compare_raster);
+			DEBUG("VIC2: compare raster is now %d" NL, compare_raster);
 			break;
 		case 0x12:
 			compare_raster = (compare_raster & 0xFF00) | data;
-			printf("VIC2: compare raster is now %d" NL, compare_raster);
+			DEBUG("VIC2: compare raster is now %d" NL, compare_raster);
 			break;
 		case 0x19:
 			vic2_interrupt_status = vic2_interrupt_status & (~data) & 15 & vic2_registers[0x1A];
@@ -279,7 +279,7 @@ Uint8 vic2_read_reg ( int addr )
 				result |= 0xF0;				// unused bits
 			break;
 	}
-	printf("VIC2: read reg $%02X with result $%02X" NL, addr, result);
+	DEBUG("VIC2: read reg $%02X with result $%02X" NL, addr, result);
 	return result;
 }
 
@@ -467,7 +467,7 @@ void vic2_render_screen ( void )
 
 static void cia_setint_cb ( int level )
 {
-	printf("%s: IRQ level changed to %d" NL, cia1.name, level);
+	DEBUG("%s: IRQ level changed to %d" NL, cia1.name, level);
 	if (level)
 		cpu_irqLevel |= 1;
 	else
@@ -504,7 +504,7 @@ static Uint8 cia_read_keyboard ( Uint8 ddr_mask_unused )
 static void cia2_outa ( Uint8 mask, Uint8 data )
 {
 	vic2_16k_bank = (3 - (data & 3)) * 0x4000;
-	printf("VIC2: 16K BANK is set to $%04X" NL, vic2_16k_bank);
+	DEBUG("VIC2: 16K BANK is set to $%04X" NL, vic2_16k_bank);
 }
 
 
@@ -522,9 +522,9 @@ static void cpu_port_write ( int addr, Uint8 data )
 	memory[addr] = data;
 	if (addr) {
 		if (cpu_port_memconfig == (data & 7))
-			printf("MEM: memory configuration is the SAME: %d %s @ PC = $%04X" NL, cpu_port_memconfig, memconfig_descriptions[cpu_port_memconfig], cpu_pc);
+			DEBUG("MEM: memory configuration is the SAME: %d %s @ PC = $%04X" NL, cpu_port_memconfig, memconfig_descriptions[cpu_port_memconfig], cpu_pc);
 		else {
-			printf("MEM: memory configuration is CHANGED : %d %s (from %d %s) @ PC = $%02X" NL,
+			DEBUG("MEM: memory configuration is CHANGED : %d %s (from %d %s) @ PC = $%02X" NL,
 				data & 7,           memconfig_descriptions[data & 7],
 				cpu_port_memconfig, memconfig_descriptions[cpu_port_memconfig],
 				cpu_pc
@@ -544,9 +544,9 @@ static void geosemu_init ( const char *disk_image_name )
 	cpu_port_write(1, CPU_PORT_DEFAULT_VALUE1);
 	// *** Load ROM image
 	if (
-		emu_load_file("geos-c64-basic.rom",   memory + BASIC_ROM_OFFSET,  8193) != 8192 ||
-		emu_load_file("geos-c64-kernal.rom",  memory + KERNAL_ROM_OFFSET, 8193) != 8192 ||
-		emu_load_file("geos-c64-chargen.rom", memory + CHAR_ROM_OFFSET,   4097) != 4096
+		emu_load_file("c64-basic.rom",   memory + BASIC_ROM_OFFSET,  8193) != 8192 ||
+		emu_load_file("c64-kernal.rom",  memory + KERNAL_ROM_OFFSET, 8193) != 8192 ||
+		emu_load_file("c64-chargen.rom", memory + CHAR_ROM_OFFSET,   4097) != 4096
 	)
 		FATAL("Cannot load (one of the) system ROMs!");
 	// *** Patching ROM for custom GEOS loader
@@ -583,14 +583,14 @@ static void geosemu_init ( const char *disk_image_name )
 	// TODO
 	// *** RESET CPU, also fetches the RESET vector into PC
 	cpu_reset();
-	puts("INIT: end of initialization!");
+	DEBUG("INIT: end of initialization!" NL);
 }
 
 
 
 static Uint8 io_read ( int addr )
 {
-	printf("IO: reading $%04X @ PC=$%04X" NL, addr, cpu_pc);
+	DEBUG("IO: reading $%04X @ PC=$%04X" NL, addr, cpu_pc);
 	if (addr < 0xD400)		// D000-D3FF  VIC-II
 		return vic2_read_reg(addr);
 	if (addr < 0xD800)		// D400-D7FF  SID   (not emulated here)
@@ -608,7 +608,7 @@ static Uint8 io_read ( int addr )
 
 static void io_write ( int addr, Uint8 data )
 {
-	printf("IO: writing $%04X with $%02X @ PC=$%04X" NL, addr, data, cpu_pc);
+	DEBUG("IO: writing $%04X with $%02X @ PC=$%04X" NL, addr, data, cpu_pc);
 	if (addr < 0xD400) {		// D000-D3FF  VIC-II
 		vic2_write_reg(addr, data);
 		return;
@@ -702,7 +702,7 @@ void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 
 static void shutdown_callback ( void )
 {
-	printf("SHUTDOWN: @ PC=$%04X" NL, cpu_pc);
+	DEBUG("SHUTDOWN: @ PC=$%04X" NL, cpu_pc);
 }
 
 
@@ -720,7 +720,7 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 			cpu_port_write(0, CPU_PORT_DEFAULT_VALUE0);
 			cpu_port_write(1, CPU_PORT_DEFAULT_VALUE1);
 			cpu_reset();
-			puts("RESET!");
+			DEBUG("RESET!" NL);
 			return;
 		}
 	}
@@ -816,20 +816,19 @@ int main ( int argc, char **argv )
 			vic2_registers[16] = 0;
 			vic2_registers[21] = 0xFF;
 			scanline++;
-			//printf("VIC3: new scanline (%d)!" NL, scanline);
+			//DEBUG("VIC3: new scanline (%d)!" NL, scanline);
 			cycles -= 63;
 			if (scanline == 312) {
-				//puts("VIC3: new frame!");
+				//DEBUG("VIC3: new frame!" NL);
 				frameskip = !frameskip;
 				scanline = 0;
 				if (!frameskip && !warp)	// well, let's only render every full frames (~ie 25Hz)
 					update_emulator();
 			}
-			//printf("RASTER=%d COMPARE=%d\n",scanline,compare_raster);
+			//DEBUG("RASTER=%d COMPARE=%d" NL,scanline,compare_raster);
 			//vic_interrupt();
 			vic2_check_raster_interrupt();
 		}
 	}
-	puts("Goodbye!");
 	return 0;
 }

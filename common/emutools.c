@@ -38,8 +38,9 @@ SDL_Window   *sdl_win = NULL;
 SDL_Renderer *sdl_ren = NULL;
 SDL_Texture  *sdl_tex = NULL;
 SDL_PixelFormat *sdl_pix_fmt;
-static const char default_window_title[] = "EMU";
+static const char default_window_title[] = "XEMU";
 char *sdl_window_title = (char*)default_window_title;
+char *window_title_custom_addon = NULL;
 Uint32 *sdl_pixel_buffer = NULL;
 int texture_x_size_in_bytes;
 int emu_is_fullscreen = 0;
@@ -54,7 +55,11 @@ static char *window_title_buffer, *window_title_buffer_end;
 static time_t unix_time;
 static Uint64 et_old;
 static int td_balancer, td_em_ALL, td_pc_ALL;
+FILE *debug_fp = NULL;
 
+#if !SDL_VERSION_ATLEAST(2, 0, 4)
+#error "At least SDL version 2.0.4 is needed!"
+#endif
 
 
 const char emulators_disclaimer[] =
@@ -172,6 +177,8 @@ int emu_load_file ( const char *fn, void *buffer, int maxsize )
 		return -1;
 	}
 	printf("OK, file is open (fd = %d)" NL, fd);
+	if (maxsize == -1)
+		return fd;	// special mode to get a file descriptor, instead of loading anything ...
 	while (read_size < maxsize) {
 		a = read(fd, buffer, maxsize - read_size);
 		if (a < 0) {
@@ -266,11 +273,10 @@ void emu_timekeeping_delay ( int td_em )
 	Uint64 et_new;
 	td_pc = get_elapsed_time(et_old, &et_new, NULL);	// get realtime since last call in microseconds
 	if (td_pc < 0) return; // time goes backwards? maybe time was modified on the host computer. Skip this delay cycle
-	td = td_em - td_pc; // the time difference (+X = PC is faster - real time emulation, -X = hw is faster - real time emulation is not possible)
-	if (td > 0) {
-		td_balancer += td;
+	td = td_em - td_pc; // the time difference (+X = emu is faster (than emulated machine) - real time emulation, -X = emu is slower - real time emulation is not possible)
+	td_balancer += td;
+	if (td_balancer > 0)
 		do_sleep(td_balancer);
-	}
 	/* Purpose:
 	 * get the real time spent sleeping (sleep is not an exact science on a multitask OS)
 	 * also this will get the starter time for the next frame
@@ -279,12 +285,11 @@ void emu_timekeeping_delay ( int td_em )
 	td = get_elapsed_time(et_new, &et_old, &unix_time);
 	seconds_timer_trigger = (unix_time != old_unix_time);
 	if (seconds_timer_trigger) {
-		if (td_em_ALL) {
-			snprintf(window_title_buffer_end, 32, "  [%d%%]",
-				td_pc_ALL * 100 / td_em_ALL
-			);
-			SDL_SetWindowTitle(sdl_win, window_title_buffer);
-		}
+		snprintf(window_title_buffer_end, 32, "  [%d%%] %s",
+			td_em_ALL ? (td_pc_ALL * 100 / td_em_ALL) : -1,
+			window_title_custom_addon ? window_title_custom_addon : "running"
+		);
+		SDL_SetWindowTitle(sdl_win, window_title_buffer);
 		td_pc_ALL = td_pc;
 		td_em_ALL = td_em;
 	} else {
@@ -292,26 +297,52 @@ void emu_timekeeping_delay ( int td_em )
 		td_em_ALL += td_em;
 	}
 	if (td < 0) return; // invalid, sleep was about for _minus_ time? eh, give me that time machine, dude! :)
+	// Balancing real and wanted sleep time on long run
+	// Insane big values are forgotten, maybe emulator was stopped, or something like that
 	td_balancer -= td;
 	if (td_balancer >  1000000)
 		td_balancer = 0;
-	else if (td_balancer < -1000000)
+	else if (td_balancer < -1000000) {
+		// reaching this means the anomaly above, OR simply the fact, that emulator is too slow to emulate in real time!
 		td_balancer = 0;
+	}
 }
 
 
 
 static void shutdown_emulator ( void )
 {
-	puts("EMU: Shutdown callback function has been called.");
+	DEBUG("XEMU: Shutdown callback function has been called." NL);
 	if (shutdown_user_function)
 		shutdown_user_function();
 	if (sdl_win)
 		SDL_DestroyWindow(sdl_win);
 	SDL_Quit();
-	puts("EMU: the end ...");
+	if (debug_fp) {
+		fclose(debug_fp);
+		debug_fp = NULL;
+	}
+	printf("XEMU: shutdown callback says good by(T)e to you!" NL);
 }
 
+
+
+int emu_init_debug ( const char *fn )
+{
+	if (debug_fp) {
+		ERROR_WINDOW("Debug file %s already used, you can't call emu_init_debug() twice!\nUse it before emu_init_sdl() if you need it!", fn);
+		return 1;
+	} else if (fn) {
+		debug_fp = fopen(fn, "wb");
+		if (!debug_fp) {
+			ERROR_WINDOW("Cannot open requested debug file: %s", fn);
+			return 1;
+		}
+		printf("Logging into file: %s (fd=%d)." NL, fn, fileno(debug_fp));
+		return 0;
+	}
+	return 0;
+}
 
 
 
@@ -334,6 +365,10 @@ int emu_init_sdl (
 	void (*shutdown_callback)(void)		// callback function called on exit (can be nULL to not have any emulator specific stuff)
 ) {
 	char render_scale_quality_s[2];
+	if (!debug_fp)
+		emu_init_debug(getenv("XEMU_DEBUG_FILE"));
+	if (!debug_fp)
+		printf("Logging into file: not enabled." NL);
 	if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
 		ERROR_WINDOW("Cannot initialize SDL: %s", SDL_GetError());
 		return 1;
@@ -373,7 +408,7 @@ int emu_init_sdl (
 		ERROR_WINDOW("Cannot create SDL window: %s", SDL_GetError());
 		return 1;
 	}
-	window_title_buffer = emu_malloc(strlen(window_title) + 32);
+	window_title_buffer = emu_malloc(strlen(window_title) + 128);
 	strcpy(window_title_buffer, window_title);
 	window_title_buffer_end = window_title_buffer + strlen(window_title);
 	//SDL_SetWindowMinimumSize(sdl_win, SCREEN_WIDTH, SCREEN_HEIGHT * 2);
@@ -484,4 +519,50 @@ void emu_update_screen ( void )
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
 	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);
 	SDL_RenderPresent(sdl_ren);
+}
+
+
+int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
+{
+	char items_buf[512], *items = items_buf;
+	int buttonid;
+	SDL_MessageBoxButtonData buttons[16];
+	SDL_MessageBoxData messageboxdata = {
+		SDL_MESSAGEBOX_INFORMATION, /* .flags */
+		sdl_win, /* .window */
+		default_window_title, /* .title */
+		msg, /* .message */
+		0,      /* number of buttons, will be updated! */
+		buttons,
+		NULL    // &colorScheme
+	};
+	strcpy(items_buf, items_in);
+	for (;;) {
+		char *p = strchr(items, '|');
+		switch (*items) {
+			case '!':
+				buttons[messageboxdata.numbuttons].flags = SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT;
+				items++;
+				break;
+			case '?':
+				buttons[messageboxdata.numbuttons].flags = SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT;
+				items++;
+				break;
+			default:
+				buttons[messageboxdata.numbuttons].flags = 0;
+				break;
+		}
+		buttons[messageboxdata.numbuttons].text = items;
+		buttons[messageboxdata.numbuttons].buttonid = messageboxdata.numbuttons;
+		messageboxdata.numbuttons++;
+		if (!p)
+			break;
+		*p = 0;
+		items = p + 1;
+	}
+	SDL_ShowMessageBox(&messageboxdata, &buttonid);
+	clear_emu_events();
+	emu_drop_events();
+	emu_timekeeping_start();
+	return buttonid;
 }

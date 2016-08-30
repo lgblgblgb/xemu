@@ -720,6 +720,6 @@ int main ( int argc, char **argv )
 			cycles -= CYCLES_PER_SCANLINE;
 		}
 	}
-	puts("Goodbye!");
+	DEBUG("Goodbye!" NL);
 	return 0;
 }

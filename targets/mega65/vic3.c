@@ -1,4 +1,4 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
+/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is the VIC3 "emulation". Currently it does one-frame-at-once
@@ -25,14 +25,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include <SDL.h>
 
-#include "commodore_65.h"
+#include "mega65.h"
 #include "cpu65c02.h"
 #include "vic3.h"
 #include "emutools.h"
 
 #define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
 
-
+static const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
 static Uint32 rgb_palette[4096];	// all the C65 palette, 4096 colours (SDL pixel format related form)
 static Uint32 vic3_palette[0x100];	// VIC3 palette in SDL pixel format related form (can be written into the texture directly to be rendered)
@@ -40,7 +40,7 @@ static Uint32 vic3_rom_palette[0x100];	// the "ROM" palette, for C64 colours (wi
 static Uint32 *palette;			// the selected palette ...
 static Uint8 vic3_palette_nibbles[0x300];
 Uint8 vic3_registers[0x80];		// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
-int vic_new_mode;			// VIC3 "newVic" IO mode is activated flag
+int vic_iomode;				// VIC2/VIC3/VIC4 mode
 int scanline;				// current scan line number
 int clock_divider7_hack;
 static int compare_raster;		// raster compare (9 bits width) data
@@ -102,7 +102,7 @@ void vic3_init ( void )
 	SDL_FreeFormat(sdl_pix_fmt);	// thanks, we don't need this anymore from SDL
 	// *** Init VIC3 registers and palette
 	vic2_16k_bank = 0;
-	vic_new_mode = 0;
+	vic_iomode = VIC2_IOMODE;
 	interrupt_status = 0;
 	palette = vic3_rom_palette;
 	scanline = 0;
@@ -133,7 +133,7 @@ void vic3_init ( void )
 	vic3_rom_palette[13] = RGB( 9, 15,  9);	// light green
 	vic3_rom_palette[14] = RGB( 9,  9, 15);	// light blue
 	vic3_rom_palette[15] = RGB(11, 11, 11);	// light grey
-	puts("VIC3: has been initialized.");
+	DEBUG("VIC3: has been initialized." NL);
 }
 
 
@@ -149,7 +149,7 @@ static void vic3_interrupt_checker ( void )
 		vic_irq_new = 0;
 	}
 	if (vic_irq_old != vic_irq_new) {
-		printf("VIC3: interrupt change %s -> %s" NL, vic_irq_old ? "active" : "inactive", vic_irq_new ? "active" : "inactive");
+		DEBUG("VIC3: interrupt change %s -> %s" NL, vic_irq_old ? "active" : "inactive", vic_irq_new ? "active" : "inactive");
 		if (vic_irq_new)
 			cpu_irqLevel |= 2;
 		else
@@ -181,35 +181,44 @@ void vic3_check_raster_interrupt ( void )
 
 
 
-
 void vic3_write_reg ( int addr, Uint8 data )
 {
 	Uint8 old_data;
-	addr &= vic_new_mode ? 0x7F : 0x3F;
+	addr &= vic_iomode ? 0x7F : 0x3F;
 	old_data = vic3_registers[addr];
-	printf("VIC3: write reg $%02X with data $%02X" NL, addr, data);
+	DEBUG("VIC3: write reg $%02X with data $%02X" NL, addr, data);
 	if (addr == 0x2F) {
-		if (!vic_new_mode && data == 0x96 && old_data == 0xA5) {
-			vic_new_mode = 1;
-			printf("VIC3: switched into NEW I/O access mode :)" NL);
-		} else if (vic_new_mode) {
-			vic_new_mode = 0;
-			printf("VIC3: switched into OLD I/O access mode :(" NL);
+		int vic_new_iomode;
+		if (data == 0x96 && old_data == 0xA5)
+			vic_new_iomode = VIC3_IOMODE;
+		else if (data == 0x53 && old_data == 0x47 && mega65_capable)
+			vic_new_iomode = VIC4_IOMODE;
+		else
+			vic_new_iomode = VIC2_IOMODE;
+		if (vic_new_iomode != vic_iomode) {
+			DEBUG("VIC: changing I/O mode %d(%s) -> %d(%s)" NL, vic_iomode, iomode_names[vic_iomode], vic_new_iomode, iomode_names[vic_new_iomode]);
+			vic_iomode = vic_new_iomode;
 		}
 	}
-	if (!vic_new_mode && addr > 0x2F) {
-		printf("VIC3: ignoring writing register $%02X (with data $%02X) because of old I/O access mode selected" NL, addr, data);
+	if (vic_iomode == VIC2_IOMODE && addr > 0x2F) {
+		DEBUG("VIC3: ignoring writing register $%02X (with data $%02X) because of old I/O access mode selected" NL, addr, data);
 		return;
 	}
+	if (vic_iomode != VIC4_IOMODE && addr > 0x3D) {
+		DEBUG("VIC4: ignoring writing register $%02X (with data $%02X) because of non-Mega65 I/O access mode selected" NL, addr, data);
+		return;
+	}
+	if (addr > 0x3D)
+		DEBUG("VIC4: writing VIC4 register $%02X in Mega65 I/O mode (data=$%02X)" NL, addr, data);
 	vic3_registers[addr] = data;
 	switch (addr) {
 		case 0x11:
 			compare_raster = (compare_raster & 0xFF) | ((data & 1) ? 0x100 : 0);
-			printf("VIC3: compare raster is now %d" NL, compare_raster);
+			DEBUG("VIC3: compare raster is now %d" NL, compare_raster);
 			break;
 		case 0x12:
 			compare_raster = (compare_raster & 0xFF00) | data;
-			printf("VIC3: compare raster is now %d" NL, compare_raster);
+			DEBUG("VIC3: compare raster is now %d" NL, compare_raster);
 			break;
 		case 0x19:
 			interrupt_status = interrupt_status & data & 15 & vic3_registers[0x1A];
@@ -224,15 +233,15 @@ void vic3_write_reg ( int addr, Uint8 data )
 			if (
 				(data & 0xF8) != (old_data & 0xF8)
 			) {
-				puts("MEM: applying new memory configuration because of VIC3 $30 is written");
+				DEBUG("MEM: applying new memory configuration because of VIC3 $30 is written" NL);
 				apply_memory_config();
 			} else
-				puts("MEM: no need for new memory configuration (because of VIC3 $30 is written): same ROM bit values are set");
+				DEBUG("MEM: no need for new memory configuration (because of VIC3 $30 is written): same ROM bit values are set" NL);
 			palette = (data & 4) ? vic3_palette : vic3_rom_palette;
 			break;
 		case 0x31:
 			clock_divider7_hack = (data & 64) ? 7 : 2;
-			printf("VIC3: clock_divider7_hack = %d" NL, clock_divider7_hack);
+			DEBUG("VIC3: clock_divider7_hack = %d" NL, clock_divider7_hack);
 			if ((data & 15) && warn_ctrl_b_lo) {
 				INFO_WINDOW("VIC3 control-B register V400, H1280, MONO and INT features are not emulated yet!");
 				warn_ctrl_b_lo = 0;
@@ -255,9 +264,9 @@ void vic3_write_reg ( int addr, Uint8 data )
 Uint8 vic3_read_reg ( int addr )
 {
 	Uint8 result;
-	addr &= vic_new_mode ? 0x7F : 0x3F;
-	if (!vic_new_mode && addr > 0x2F) {
-		printf("VIC3: ignoring reading register $%02X because of old I/O access mode selected, answer is $FF" NL, addr);
+	addr &= vic_iomode ? 0x7F : 0x3F;
+	if (vic_iomode == VIC2_IOMODE && addr > 0x2F) {
+		DEBUG("VIC3: ignoring reading register $%02X because of old I/O access mode selected, answer is $FF" NL, addr);
 		return 0xFF;
 	}
 	switch (addr) {
@@ -285,7 +294,7 @@ Uint8 vic3_read_reg ( int addr )
 				result |= 0xF0;				// unused bits [TODO: also on VIC3?]
 			break;
 	}
-	printf("VIC3: read reg $%02X with result $%02X" NL, addr, result);
+	DEBUG("VIC3: read reg $%02X with result $%02X" NL, addr, result);
 	return result;
 }
 
@@ -318,7 +327,7 @@ static inline Uint8 *vic2_get_chargen_pointer ( void )
 {
 	int offs = (vic3_registers[0x18] & 14) << 10;	// character generator address address within the current VIC2 bank
 	int crom = vic3_registers[0x30] & 64;
-	// printf("VIC2: chargen: BANK=%04X OFS=%04X CROM=%d" NL, vic2_16k_bank, offs, crom);
+	// DEBUG("VIC2: chargen: BANK=%04X OFS=%04X CROM=%d" NL, vic2_16k_bank, offs, crom);
 	if ((vic2_16k_bank == 0x0000 || vic2_16k_bank == 0x8000) && (offs == 0x1000 || offs == 0x1800)) {  // check if chargen info is in ROM
 		// FIXME: I am really lost with this CROM bit, and the layout of C65 ROM on charsets, sorry. Maybe this is totally wrong!
 		// The problem, for my eye, the two charsets (C64/C65?!) seems to be the very same :-/
@@ -342,6 +351,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 	Uint8 *vidp, *colp = memory + 0x1F800;
 	int x = 0, y = 0, xlim, ylim, charline = 0;
 	Uint8 *chrg = vic2_get_chargen_pointer();
+	int inc_p = (vic3_registers[0x54] & 1) ? 2 : 1;	// VIC-IV (Mega-65) 16 bit text mode?
 	if (vic3_registers[0x31] & 128) { // check H640 bit: 80 column mode?
 		xlim = 79;
 		ylim = 24;
@@ -360,9 +370,11 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 	bg = palette[vic3_registers[0x21] & 15];
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_text");
 	for (;;) {
-		Uint8 chrdata = chrg[((*(vidp++)) << 3) + charline];
-		Uint8 coldata = *(colp++);
+		Uint8 chrdata = chrg[(*vidp << 3) + charline];
+		Uint8 coldata = *colp;
 		Uint32 fg;
+		colp += inc_p;
+		vidp += inc_p;
 		if (vic3_registers[0x31] & 32) { 	// ATTR bit mode
 			if ((coldata & 0xF0) == 0x10) {	// only the blink bit for the character is set
 				if (vic3_blink_phase)
@@ -415,8 +427,8 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 				charline = 0;
 			} else {
 				charline++;
-				vidp -= xlim + 1;
-				colp -= xlim + 1;
+				vidp -= (xlim + 1) * inc_p;
+				colp -= (xlim + 1) * inc_p;
 			}
 		} else
 			x++;
@@ -505,7 +517,7 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
 		xlim = 39;
 		sprite_pointers = bp[2] + 0x1FF8;	// FIXME: just guessing
 	}
-        printf("VIC3: bitplanes: enable_mask=$%02X comp_mask=$%02X H640=%d" NL,
+        DEBUG("VIC3: bitplanes: enable_mask=$%02X comp_mask=$%02X H640=%d" NL,
 		bpe, vic3_registers[0x3B], h640 ? 1 : 0
 	);
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic3_render_screen_bpm");

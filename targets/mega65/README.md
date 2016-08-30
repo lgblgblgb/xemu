@@ -1,0 +1,3 @@
+About my partial Mega65 emulation in this directory you can find more information here: https://github.com/lgblgblgb/xemu/wiki/targets-mega65
+
+To learn more about Mega65 in general: http://mega65.org/

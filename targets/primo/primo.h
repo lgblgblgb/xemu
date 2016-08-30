@@ -1,5 +1,8 @@
-/* X-Emulators
+/* Test-case for a very simple and inaccurate Primo (a Hungarian U880 - Z80 compatible - based
+   8 bit computer) emulator using SDL2 library.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+
+   This Primo emulator is HIGHTLY inaccurate and unusable.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,21 +18,15 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_Z80_H_INCLUDED
-#define __XEMU_Z80_H_INCLUDED
+#ifndef __XEMU_PRIMO_H_INCLUDED
+#define __XEMU_PRIMO_H_INCLUDED
 
-#include <SDL_types.h>
-
-#define Z80EX_CALLBACK_PROTOTYPE extern
-
-#define Z80EX_TYPES_DEFINED
-#define Z80EX_BYTE              Uint8
-#define Z80EX_SIGNED_BYTE       Sint8
-#define Z80EX_WORD              Uint16
-#define Z80EX_DWORD             Uint32
-
-#include "z80ex/z80ex.h"
-
-extern Z80EX_CONTEXT z80ex;
+#define ROM_NAME		"primo-b64.rom"
+#define SCREEN_FORMAT		SDL_PIXELFORMAT_ARGB8888
+#define USE_LOCKED_TEXTURE	1
+#define RENDER_SCALE_QUALITY	1
+#define SCREEN_WIDTH		256
+#define SCREEN_HEIGHT		192
+#define CPU_CLOCK		2500000
 
 #endif

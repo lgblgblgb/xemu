@@ -179,13 +179,13 @@ void clear_emu_events ( void )
 static Uint8 GET_MEMORY(int phys_addr)
 {
 	if (phys_addr == 0x382F7) {
-		printf("Before romchecksum: X=%02Xh A=%02Xh" NL, cpu_x, cpu_a);
+		DEBUG("Before romchecksum: X=%02Xh A=%02Xh" NL, cpu_x, cpu_a);
 	}
 	if (phys_addr == 0x383A1) {
-		printf("At romchecksum RTS: X=%02Xh A=%02Xh" NL, cpu_x, cpu_a);
+		DEBUG("At romchecksum RTS: X=%02Xh A=%02Xh" NL, cpu_x, cpu_a);
 	}
 	if (phys_addr == 0x382FA) {
-		printf("After romchecksum : X=%02Xh A=%02Xh" NL, cpu_x, cpu_a);
+		DEBUG("After romchecksum : X=%02Xh A=%02Xh" NL, cpu_x, cpu_a);
 	}
 	return memory[phys_addr];
 }
@@ -227,7 +227,7 @@ void cpu_write ( Uint16 addr, Uint8 data ) {
 			case 14: mmu[2][1] = data << 10; return;
 			case 15: lcd_ctrl[addr & 3] = data; return;
 		}
-		printf("ERROR: should be not here!\n");
+		DEBUG("ERROR: should be not here!" NL);
 		return;
 	}
 	maddr = (mmu_current[addr >> 14] + addr) & 0x3FFFF;
@@ -235,7 +235,7 @@ void cpu_write ( Uint16 addr, Uint8 data ) {
 		memory[maddr] = data;
 		return;
 	}
-	printf("MEM: out-of-RAM write addr=$%04X maddr=$%05X\n", addr, maddr);
+	DEBUG("MEM: out-of-RAM write addr=$%04X maddr=$%05X" NL, addr, maddr);
 }
 
 
@@ -301,7 +301,7 @@ static Uint8 via1_insr()
 }
 static void  via1_setint(int level)
 {
-	//printf("IRQ level: %d\n", level);
+	//DEBUG("IRQ level: %d" NL, level);
 	cpu_irqLevel = level;
 }
 
@@ -443,7 +443,7 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles;
-	printf("Commodore LCD emulator from LGB" NL "%s" NL,
+	printf("**** The world's first Commodore LCD emulator from LGB" NL "%s" NL,
 		emulators_disclaimer
 	);
 
@@ -477,7 +477,7 @@ int main ( int argc, char **argv )
 	// Ugly hacks :-( <patching ROM>
 #ifdef ROM_HACK_COLD_START
 	// this ROM patching is needed, as Commodore LCD seems not to work to well with "not intact" SRAM content (ie: it has battery powered SRAM even when "switched off")
-	puts("ROM HACK: cold start condition");
+	DEBUG("ROM HACK: cold start condition" NL);
 	memory[0x385BB] = 0xEA;
 	memory[0x385BC] = 0xEA;
 #endif
@@ -486,7 +486,7 @@ int main ( int argc, char **argv )
 	// this hack SHOULD NOT be used, if the ROM 32K ROM images from 0x20000 and 0x28000 are not empty after offset 0x6800
 	// WARNING: Commodore LCDs are known to have different ROM versions, be careful with different ROMs, if you find any!
 	// [note: if you find other ROM versions, please tell me!!!! - that's the other message ...]
-	puts("ROM HACK: modifying ROM searching MMU table");
+	DEBUG("ROM HACK: modifying ROM searching MMU table" NL);
 	// overwrite MMU table positions for ROM scanner in KERNAL
 	memory[0x382CC] = 0x8A;	// offset 0x6800 in the ROM image of clcd-u105.rom [phys memory address: 0x26800]
 	memory[0x382CE] = 0xAA;	// offset 0x6800 in the ROM image of clcd-u104.rom [phys memory address: 0x2E800]
@@ -524,6 +524,6 @@ int main ( int argc, char **argv )
 			cycles -= CPU_CYCLES_PER_TV_FRAME;	// not just cycle = 0, to avoid rounding errors, but it would not matter too much anyway ...
 		}
 	}
-	puts("Goodbye!");
+	DEBUG("Goodbye!" NL);
 	return 0;
 }

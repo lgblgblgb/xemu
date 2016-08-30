@@ -20,7 +20,7 @@
 ARCH_DESC	= "OSX"
 PREFIX		= /usr/local
 BINDIR		= $(PREFIX)/bin
-DATADIR		= $(PREFIX)/lib/xclcd
+DATADIR		= $(PREFIX)/lib/xemu
 CC		= gcc
 STRIP		= strip
 SDLCFG		= sdl2-config

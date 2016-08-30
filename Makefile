@@ -19,7 +19,7 @@
 
 
 TARGETS = c65 cvic20 clcd cgeos mega65
-ARCHS	= native win32 win64
+ARCHS	= native win32 win64 osx
 
 
 

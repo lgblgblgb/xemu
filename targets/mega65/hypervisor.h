@@ -1,4 +1,4 @@
-/* X-Emulators
+/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -15,21 +15,14 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_Z80_H_INCLUDED
-#define __XEMU_Z80_H_INCLUDED
+#ifndef __XEMU_HYPERVISOR_MEGA65_H_INCLUDED
+#define __XEMU_HYPERVISOR_MEGA65_H_INCLUDED
 
-#include <SDL_types.h>
+extern int  hypervisor_debug_init ( const char *fn );
+extern void hypervisor_debug ( void );
 
-#define Z80EX_CALLBACK_PROTOTYPE extern
-
-#define Z80EX_TYPES_DEFINED
-#define Z80EX_BYTE              Uint8
-#define Z80EX_SIGNED_BYTE       Sint8
-#define Z80EX_WORD              Uint16
-#define Z80EX_DWORD             Uint32
-
-#include "z80ex/z80ex.h"
-
-extern Z80EX_CONTEXT z80ex;
+extern void hypervisor_enter ( int trapno );
+extern void hypervisor_leave ( void );
+extern void hypervisor_serial_monitor_push_char ( Uint8 chr );
 
 #endif
