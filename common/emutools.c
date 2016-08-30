@@ -38,7 +38,7 @@ SDL_Window   *sdl_win = NULL;
 SDL_Renderer *sdl_ren = NULL;
 SDL_Texture  *sdl_tex = NULL;
 SDL_PixelFormat *sdl_pix_fmt;
-static const char default_window_title[] = "EMU";
+static const char default_window_title[] = "XEMU";
 char *sdl_window_title = (char*)default_window_title;
 char *window_title_custom_addon = NULL;
 Uint32 *sdl_pixel_buffer = NULL;
@@ -519,4 +519,50 @@ void emu_update_screen ( void )
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
 	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);
 	SDL_RenderPresent(sdl_ren);
+}
+
+
+int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
+{
+	char items_buf[512], *items = items_buf;
+	int buttonid;
+	SDL_MessageBoxButtonData buttons[16];
+	SDL_MessageBoxData messageboxdata = {
+		SDL_MESSAGEBOX_INFORMATION, /* .flags */
+		sdl_win, /* .window */
+		default_window_title, /* .title */
+		msg, /* .message */
+		0,      /* number of buttons, will be updated! */
+		buttons,
+		NULL    // &colorScheme
+	};
+	strcpy(items_buf, items_in);
+	for (;;) {
+		char *p = strchr(items, '|');
+		switch (*items) {
+			case '!':
+				buttons[messageboxdata.numbuttons].flags = SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT;
+				items++;
+				break;
+			case '?':
+				buttons[messageboxdata.numbuttons].flags = SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT;
+				items++;
+				break;
+			default:
+				buttons[messageboxdata.numbuttons].flags = 0;
+				break;
+		}
+		buttons[messageboxdata.numbuttons].text = items;
+		buttons[messageboxdata.numbuttons].buttonid = messageboxdata.numbuttons;
+		messageboxdata.numbuttons++;
+		if (!p)
+			break;
+		*p = 0;
+		items = p + 1;
+	}
+	SDL_ShowMessageBox(&messageboxdata, &buttonid);
+	clear_emu_events();
+	emu_drop_events();
+	emu_timekeeping_start();
+	return buttonid;
 }

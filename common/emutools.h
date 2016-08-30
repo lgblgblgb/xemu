@@ -53,6 +53,9 @@ extern void emu_drop_events ( void );
 	exit(1); \
 } while (0)
 
+extern int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg );
+#define QUESTION_WINDOW(items, msg) _sdl_emu_secured_modal_box_(items, msg)
+
 extern char *sdl_window_title;
 extern char *window_title_custom_addon;
 extern SDL_Window   *sdl_win;

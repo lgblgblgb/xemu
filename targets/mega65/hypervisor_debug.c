@@ -104,8 +104,8 @@ const char *megadebug_resolve ( Uint16 addr )
 		sprintf(megadebug_buffer, "[not in hypervisor mode]");
 		return megadebug_buffer;
 	}
-	// TODO: check upgraded bit, if not upgraded hypervisor does this, we accept this, as it's needed for the upgrade itself.
-	if (addr < 0x8000 || addr >= 0xC000) {
+	// TODO: better hypervisor upgrade check, maybe with checking the exact range kickstart uses for upgrade outside of the "normal" hypervisor mem range
+	if ((addr < 0x8000 || addr >= 0xC000) && kicked_hypervisor) {
 		DEBUG("MEGADEBUG: code outside of hypervisor memory @ $%04X!" NL, addr);
 		return NULL;
 	}
@@ -119,19 +119,23 @@ const char *megadebug_resolve ( Uint16 addr )
 	}
 	// WARNING: as it turned out, using snprintf() is EXTREMLY slow to call at the frequency of the emulated CPU clock (~3.5MHz)
 	// even on a "modern" PC. TODO: this must be rewritten to use custom "rendering" of debug information, instead of stdio stuffs!
-	snprintf(megadebug_buffer, BUFFER_SIZE, "%-32s PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c @ %s",
-		debug_lines[addr - 0x8000][0],
-		cpu_pc, cpu_sphi | cpu_sp, cpu_bphi >> 8, cpu_a, cpu_x, cpu_y, cpu_z,
-		cpu_pfn ? 'N' : 'n',
-		cpu_pfv ? 'V' : 'v',
-		cpu_pfe ? 'E' : 'e',
-		'-',
-		cpu_pfd ? 'D' : 'd',
-		cpu_pfi ? 'I' : 'i',
-		cpu_pfz ? 'Z' : 'z',
-		cpu_pfc ? 'C' : 'c',
-		debug_lines[addr - 0x8000][1]
-	);
+	if (addr >= 0x8000 && addr < 0xC000) {
+		snprintf(megadebug_buffer, BUFFER_SIZE, "%-32s PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c @ %s",
+			debug_lines[addr - 0x8000][0],
+			cpu_pc, cpu_sphi | cpu_sp, cpu_bphi >> 8, cpu_a, cpu_x, cpu_y, cpu_z,
+			cpu_pfn ? 'N' : 'n',
+			cpu_pfv ? 'V' : 'v',
+			cpu_pfe ? 'E' : 'e',
+			'-',
+			cpu_pfd ? 'D' : 'd',
+			cpu_pfi ? 'I' : 'i',
+			cpu_pfz ? 'Z' : 'z',
+			cpu_pfc ? 'C' : 'c',
+			debug_lines[addr - 0x8000][1]
+		);
+		return megadebug_buffer;
+	}
+	sprintf(megadebug_buffer, "[allowed run outside of hypervisor memory, no debug is allowed]");
 	return megadebug_buffer;
 }
 

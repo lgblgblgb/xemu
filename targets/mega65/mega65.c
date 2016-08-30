@@ -74,6 +74,7 @@ static void (*m65mon_callback)(void) = NULL;
 static const char emulator_paused_title[] = "TRACE/PAUSE";
 
 int in_hypervisor;			// mega65 hypervisor mode
+Uint8 kicked_hypervisor = 0x80;		// 0x80 signals for XEMU (not for a real M65!) to *ASK* the user. It won't be the final answer!
 int mega65_capable;			// emulator founds kickstart, sub-set of mega65 features CAN BE usable. It is an ERROR to use any of mega65 specific stuff, if it's zero!
 static Uint8 gs_regs[0x1000];		// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
 static int rom_protect;			// C65 system ROM write protection
@@ -332,7 +333,7 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 	in_hypervisor = 0;
 	memset(gs_regs, 0, sizeof gs_regs);
 	rom_protect = 1;
-	gs_regs[0x67E] = ALREADY_KICKED;
+	gs_regs[0x67E] = 0x80;	// this will signal Xemu, to ask the user on the first read!
 	// *** Trying to load kickstart image
 	if (emu_load_file(KICKSTART_NAME, memory + HYPERVISOR_MEM_REMAP_VIRTUAL + 0x8000, 0x4001) == 0x4000) {
 		// Found kickstart ROM, emulate Mega65 startup somewhat ...
@@ -510,6 +511,14 @@ Uint8 io_read ( int addr )
 	if (addr < 0xD700) {	// $D600 - $D6FF	UART (*)
 		if (vic_iomode == VIC4_IOMODE && addr >= 0xD609) {	// D609 - D6FF: Mega65 suffs
 			switch (addr) {
+				case 0xD67E:				// upgraded hypervisor signal
+					if (kicked_hypervisor == 0x80)	// 0x80 means for Xemu (not for a real M65!): ask the user!
+						kicked_hypervisor = QUESTION_WINDOW(
+							"Not upgraded yet, it can do it|Already upgraded",
+							"Kickstart asks hypervisor upgrade state. What do you want Xemu to answer?\n"
+							"(don't worry, it won't be asked again without RESET)"
+						) ? 0xFF : 0;
+					return kicked_hypervisor;
 				case 0xD680:
 					return sdcard_read_status();
 				case 0xD688:
@@ -627,7 +636,7 @@ void io_write ( int addr, Uint8 data )
 					rom_protect = data & 4;
 					break;
 				case 0xD67E:	// it seems any write (?) here marks the byte as non-zero?! FIXME TODO
-					gs_regs[addr & 0xFFF] = 0xFF;
+					kicked_hypervisor = 0xFF;
 					fprintf(stderr, "Writing already-kicked register $%04X!" NL, addr);
 					break;
 				case 0xD67F:	// hypervisor enter/leave trap
@@ -842,7 +851,7 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 			apply_memory_config();
 			cpu_reset();
 			if (mega65_capable) {
-				gs_regs[0x67E] = ALREADY_KICKED;
+				kicked_hypervisor = 0x80;	// this will signal Xemu, to ask the user on the first read!
 				hypervisor_enter(TRAP_RESET);
 			}
 			DEBUG("RESET!" NL);

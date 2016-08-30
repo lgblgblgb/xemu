@@ -37,10 +37,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // With FPGA switch 12 too, it created 20Gbytes(!) log file and it even not booted yet :)
 #define HYPERVISOR_DEBUG
 
-// Hypervisor 'already upgraded' state. By setting this non-zero, kickstart loaded from
-// "KICKSTART_NAME" defined name won't try to upgrade ('already kicked')
-#define ALREADY_KICKED		0
-
 // State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
 // 12 is useful, but it also slows things down
 #define FPGA_SWITCHES		1 << 12
@@ -84,6 +80,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern Uint8 memory[0x104001];
 extern int   mega65_capable;
 extern int   in_hypervisor;
+extern Uint8 kicked_hypervisor;
 
 extern void  apply_memory_config ( void );
 extern Uint8 io_read  ( int addr );

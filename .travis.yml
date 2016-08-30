@@ -1,7 +1,7 @@
 sudo: required
 language: c
 git:
-  depth: 4
+  depth: 32
 os:
 - linux
 - osx
