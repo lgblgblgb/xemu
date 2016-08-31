@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "hypervisor.h"
 #include "cpu65c02.h"
 #include "vic3.h"
+#include "dmagic.h"
 
 #define INFO_MAX_SIZE	32
 
@@ -182,6 +183,9 @@ void hypervisor_leave ( void )
 	// Now leaving hypervisor mode ...
 	in_hypervisor = 0;
 	apply_memory_config();
+	// FIXME: ugly hack: C65 ROM goes nuts if "MB" part of DMA source/target is not reset here!
+	dma_registers[5] = 0;
+        dma_registers[6] = 0;
 	DEBUG("MEGA65: leaving hypervisor mode, (user) PC=$%04X" NL, cpu_pc);
 }
 
@@ -205,6 +209,16 @@ void hypervisor_serial_monitor_push_char ( Uint8 chr )
 
 
 
+void hypervisor_debug_invalidate ( void )
+{
+	if (resolver_ok) {
+		resolver_ok = 0;
+		INFO_WINDOW("Hypervisor debug feature is asked to be disabled (ie: upgraded kickstart?)");
+	}
+}
+
+
+
 void hypervisor_debug ( void )
 {
 	if (!in_hypervisor)
@@ -222,18 +236,17 @@ void hypervisor_debug ( void )
 	if (!resolver_ok) {
 		return;	// no debug info loaded from kickstart.list ...
 	}
-	if (unlikely(!debug_lines[cpu_pc - 0x8000][0])) {
+	if (unlikely(!debug_lines[cpu_pc - 0x8000][0][0])) {
 		DEBUG("HYPERVISOR-DEBUG: execution address not found in list file (out-of-bound code?), PC = $%04X" NL, cpu_pc);
 		FATAL("Hypervisor fatal error: execution address not found in list file (out-of-bound code?), PC = $%04X", cpu_pc);
 		return;
 	}
-	// WARNING: as it turned out, using snprintf() is EXTREMLY slow to call at the frequency of the emulated CPU clock (~3.5MHz)
-	// even on a "modern" PC. TODO: this must be rewritten to use custom "rendering" of debug information, instead of stdio stuffs!
+	// WARNING: as it turned out, using stdio I/O to log every opcodes even "only" at ~3.5MHz rate makes emulation _VERY_ slow ...
 #ifdef HYPERVISOR_DEBUG
 	if (debug_fp)
 		fprintf(
 			debug_fp,
-			"HYPERVISOR-DEBUG: %-32s PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c @ %s" NL,
+			"HYPERVISOR-DEBUG: %-32s PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%d @ %s" NL,
 			debug_lines[cpu_pc - 0x8000][0],
 			cpu_pc, cpu_sphi | cpu_sp, cpu_bphi >> 8, cpu_a, cpu_x, cpu_y, cpu_z,
 			cpu_pfn ? 'N' : 'n',
@@ -244,6 +257,7 @@ void hypervisor_debug ( void )
 			cpu_pfi ? 'I' : 'i',
 			cpu_pfz ? 'Z' : 'z',
 			cpu_pfc ? 'C' : 'c',
+			vic_iomode,
 			debug_lines[cpu_pc - 0x8000][1]
 		);
 #endif

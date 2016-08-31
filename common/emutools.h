@@ -38,6 +38,8 @@ extern void emu_drop_events ( void );
 	char _buf_for_win_msg_[4096]; \
 	snprintf(_buf_for_win_msg_, sizeof _buf_for_win_msg_, __VA_ARGS__); \
 	fprintf(stderr, str ": %s" NL, _buf_for_win_msg_); \
+	if (debug_fp)	\
+		fprintf(debug_fp, str ": %s" NL, _buf_for_win_msg_);	\
 	SDL_ShowSimpleMessageBox(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
 	clear_emu_events(); \
 	emu_drop_events(); \

@@ -98,6 +98,9 @@ void apply_memory_config ( void )
 	// FIXME: what happens if VIC-3 reg $30 mapped ROM is tried to be written? Ignored, or RAM is used to write to, as with the CPU port mapping?
 	// About the produced signals on the "CPU port"
 	int cp = (cpu_port[1] | (~cpu_port[0]));
+	DEBUG("MEGA65: MMU: applying new memory config (PC=$%04X,hyper=%d,CP=%d,ML=$%02X,MH=$%02X,MM=$%02X)" NL,
+		cpu_pc, in_hypervisor, cp & 7, map_offset_low >> 8, map_offset_high >> 8, map_mask
+	);
 	// Simple ones, only CPU MAP may apply not other factors
 	// Also, these are the "lower" blocks, needs the offset for the "lower" area in case of CPU MAP'ed state
 	addr_trans_wr[0] = addr_trans_rd[0] = addr_trans_wr[1] = addr_trans_rd[1] = (map_mask & 1) ? map_offset_low : 0;	// $0XXX + $1XXX, MAP block 0 [mask 1]
@@ -414,7 +417,7 @@ Uint8 io_read ( int addr )
 				case 0xD67E:				// upgraded hypervisor signal
 					if (kicked_hypervisor == 0x80)	// 0x80 means for Xemu (not for a real M65!): ask the user!
 						kicked_hypervisor = QUESTION_WINDOW(
-							"Not upgraded yet, it can do it|Already upgraded",
+							"Not upgraded yet, it can do it|Already upgraded, I test kicked state",
 							"Kickstart asks hypervisor upgrade state. What do you want Xemu to answer?\n"
 							"(don't worry, it won't be asked again without RESET)"
 						) ? 0xFF : 0;
@@ -533,11 +536,15 @@ void io_write ( int addr, Uint8 data )
 					hypervisor_serial_monitor_push_char(data);
 					break;
 				case 0xD67D:
-					rom_protect = data & 4;
+					if ((data & 4) != rom_protect) {
+						fprintf(stderr, "MEGA65: ROM protection has been turned %s." NL, data & 4 ? "ON" : "OFF");
+						rom_protect = data & 4;
+					}
 					break;
 				case 0xD67E:	// it seems any write (?) here marks the byte as non-zero?! FIXME TODO
 					kicked_hypervisor = 0xFF;
 					fprintf(stderr, "Writing already-kicked register $%04X!" NL, addr);
+					hypervisor_debug_invalidate();
 					break;
 				case 0xD67F:	// hypervisor enter/leave trap
 					if (in_hypervisor)
@@ -601,6 +608,20 @@ void io_write ( int addr, Uint8 data )
 }
 
 
+void cpu_write_linear_opcode ( Uint8 data )
+{
+	Uint32 addr = cpu_read(cpu_pc++);	// fetch base page address
+	// FIXME: really, BP/ZP is wrapped around in case of linear addressing and eg BP addr of $FF got??????
+	addr = (
+		 cpu_read(cpu_bphi |   addr             )        |
+		(cpu_read(cpu_bphi | ((addr + 1) & 0xFF)) <<  8) |
+		(cpu_read(cpu_bphi | ((addr + 2) & 0xFF)) << 16) |
+		(cpu_read(cpu_bphi | ((addr + 3) & 0xFF)) << 24)
+	) + cpu_z;
+	DEBUG("MEGA65: writing LINEAR memory @ $%X with data $%02X" NL, addr, data);
+	write_phys_mem(addr, data);
+}
+
 
 void write_phys_mem ( int addr, Uint8 data )
 {
@@ -625,8 +646,16 @@ void write_phys_mem ( int addr, Uint8 data )
 		|| (addr >= 0x80000)
 #	endif
 #endif
-	)
+	) {
+		if ((addr & 0xFFFF000) == 0xFF7E000) {	// FIXME: temporary hack to allow non-existing VIC-IV charrom writes :-/
+			DEBUG("LINEAR: VIC-IV charrom writes are ignored for now in Xemu" NL);
+		} else {
+		if (addr > sizeof memory)
+			FATAL("Invalid physical memory write at $%X" NL, addr);
 		memory[addr] = data;
+		}
+	} else
+		DEBUG("MMU: this _physical_ address is not writable: $%X (data=$%02X)" NL, addr, data);
 }
 
 

@@ -68,7 +68,7 @@ int sdcard_init ( const char *fn )
 				return sdfd;
 			}
 			DEBUG("SDCARD: detected size in Mbytes: %d" NL, (int)(sd_card_size >> 20));
-			if (sd_card_size & 511) {
+			if (sd_card_size & (off_t)511) {
 				ERROR_WINDOW("SD-card image size is not multiple of 512 bytes!!");
 				close(sdfd);
 				sdfd = -1;
@@ -111,11 +111,11 @@ static int read_sector ( void )
 	int ret;
 	if (sdfd < 0)
 		return -1;
-	offset = sd_sector_bytes[0] | (sd_sector_bytes[1] << 8) | (sd_sector_bytes[2] << 16) | (sd_sector_bytes[3] << 24);
+	offset = (off_t)sd_sector_bytes[0] | ((off_t)sd_sector_bytes[1] << 8) | ((off_t)sd_sector_bytes[2] << 16) | ((off_t)sd_sector_bytes[3] << 24);
 	DEBUG("SDCARD: reading position %ld PC=$%04X" NL, (long)offset, cpu_pc);
 	if (offset < 0 || offset >= sd_card_size) {
 		DEBUG("SDCARD: invalid position value failure ..." NL);
-		FATAL("SDCARD: invalid position value failure!! %ld (limit = %ld)", (long)offset, (long)sd_card_size);
+		FATAL("SDCARD: invalid position value failure!! %lld (limit = %lld)", (long long int)offset, (long long int)sd_card_size);
 		return -1;
 	}
 	if (lseek(sdfd, offset, SEEK_SET) != offset) {
