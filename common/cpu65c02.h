@@ -37,6 +37,9 @@ extern Uint16 cpu_sphi;	// NOTE: it must store the value shifted to the high byt
 extern void  cpu_write     ( Uint16 addr, Uint8 data );
 extern void  cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data );
 extern Uint8 cpu_read      ( Uint16 addr );
+#ifdef MEGA65
+extern void  cpu_write_linear_opcode ( Uint8 data );
+#endif
 
 extern void cpu_reset ( void );
 extern int  cpu_step  ( void );

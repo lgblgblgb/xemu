@@ -242,7 +242,7 @@ void hypervisor_debug ( void )
 	if (debug_fp)
 		fprintf(
 			debug_fp,
-			"HYPERVISOR-DEBUG: %-32s PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c @ %s" NL,
+			"HYPERVISOR-DEBUG: %-32s PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%d @ %s" NL,
 			debug_lines[cpu_pc - 0x8000][0],
 			cpu_pc, cpu_sphi | cpu_sp, cpu_bphi >> 8, cpu_a, cpu_x, cpu_y, cpu_z,
 			cpu_pfn ? 'N' : 'n',
@@ -253,6 +253,7 @@ void hypervisor_debug ( void )
 			cpu_pfi ? 'I' : 'i',
 			cpu_pfz ? 'Z' : 'z',
 			cpu_pfc ? 'C' : 'c',
+			vic_iomode,
 			debug_lines[cpu_pc - 0x8000][1]
 		);
 #endif

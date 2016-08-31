@@ -35,7 +35,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // If you define this, you will got *VERY HUGE* number of messages into the debug log
 // It slows down the emulator *A LOT* as well!
 // With FPGA switch 12 too, it created 20Gbytes(!) log file and it even not booted yet :)
-#define HYPERVISOR_DEBUG
+// #define HYPERVISOR_DEBUG
 
 // State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
 // 12 is useful, but it also slows things emulation down maybe (I am not sure, but

@@ -86,6 +86,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 Uint8 cpu_sp, cpu_op;
+#ifdef MEGA65
+#warning "Compiling for MEGA65, hacky stuff!"
+Uint8 cpu_previous_op;
+#endif
 Uint16 cpu_pc, cpu_old_pc;
 int cpu_pfn,cpu_pfv,cpu_pfb,cpu_pfd,cpu_pfi,cpu_pfz,cpu_pfc;
 int cpu_irqLevel = 0, cpu_nmiEdge = 0;
@@ -465,6 +469,9 @@ int cpu_step () {
 	if (cpu_pc == 0)
 		DEBUG("CPU: WARN: PC at zero!" NL);
 #endif
+#ifdef MEGA65
+	cpu_previous_op = cpu_op;
+#endif
 	cpu_op = cpu_read(cpu_pc++);
 #ifdef DEBUG_CPU
 	DEBUG("CPU: at $%04X opcode = $%02X %s %s A=%02X X=%02X Y=%02X Z=%02X SP=%02X" NL, (cpu_pc - 1) & 0xFFFF, cpu_op, opcode_names[cpu_op], opcode_adm_names[opcode_adms[cpu_op]],
@@ -829,7 +836,14 @@ int cpu_step () {
 	case 0x8f:	_BRA( cpu_read(_zp()) & 1 ); break; /* 0x8f BBS Relative */
 	case 0x90:	_BRA(!cpu_pfc); break; /* 0x90 BCC Relative */
 	case 0x91:	cpu_write(_zpiy(), CPU_A_GET()); break; /* 0x91 STA (Zero_Page),Y */
-	case 0x92:	cpu_write(_zpi(), CPU_A_GET()); break; /* 0x92 STA (Zero_Page) */
+	case 0x92:	// /* 0x92 STA (Zero_Page) or (ZP),Z on 65CE02 */
+#ifdef MEGA65
+			if (cpu_previous_op == 0xEA) 	// linear addressing trick of M65! FIXME: this is handled for *only* this opcode now!
+				cpu_write_linear_opcode(CPU_A_GET());
+			else
+#endif
+			cpu_write(_zpi(), CPU_A_GET());
+			break;
 	case 0x93:
 #ifdef CPU_65CE02
 			OPC_65CE02("BCC16");

@@ -98,6 +98,9 @@ void apply_memory_config ( void )
 	// FIXME: what happens if VIC-3 reg $30 mapped ROM is tried to be written? Ignored, or RAM is used to write to, as with the CPU port mapping?
 	// About the produced signals on the "CPU port"
 	int cp = (cpu_port[1] | (~cpu_port[0]));
+	DEBUG("MEGA65: MMU: applying new memory config (PC=$%04X,hyper=%d,CP=%d,ML=$%02X,MH=$%02X,MM=$%02X)" NL,
+		cpu_pc, in_hypervisor, cp & 7, map_offset_low >> 8, map_offset_high >> 8, map_mask
+	);
 	// Simple ones, only CPU MAP may apply not other factors
 	// Also, these are the "lower" blocks, needs the offset for the "lower" area in case of CPU MAP'ed state
 	addr_trans_wr[0] = addr_trans_rd[0] = addr_trans_wr[1] = addr_trans_rd[1] = (map_mask & 1) ? map_offset_low : 0;	// $0XXX + $1XXX, MAP block 0 [mask 1]
@@ -602,6 +605,20 @@ void io_write ( int addr, Uint8 data )
 }
 
 
+void cpu_write_linear_opcode ( Uint8 data )
+{
+	Uint32 addr = cpu_read(cpu_pc++);	// fetch base page address
+	// FIXME: really, BP/ZP is wrapped around in case of linear addressing and eg BP addr of $FF got??????
+	addr = (
+		 cpu_read(cpu_bphi |   addr             )        |
+		(cpu_read(cpu_bphi | ((addr + 1) & 0xFF)) <<  8) |
+		(cpu_read(cpu_bphi | ((addr + 2) & 0xFF)) << 16) |
+		(cpu_read(cpu_bphi | ((addr + 3) & 0xFF)) << 24)
+	) + cpu_z;
+	DEBUG("MEGA65: writing LINEAR memory @ $%X with data $%02X" NL, addr, data);
+	write_phys_mem(addr, data);
+}
+
 
 void write_phys_mem ( int addr, Uint8 data )
 {
@@ -626,8 +643,16 @@ void write_phys_mem ( int addr, Uint8 data )
 		|| (addr >= 0x80000)
 #	endif
 #endif
-	)
+	) {
+		if ((addr & 0xFFFF000) == 0xFF7E000) {	// FIXME: temporary hack to allow non-existing VIC-IV charrom writes :-/
+			DEBUG("LINEAR: VIC-IV charrom writes are ignored for now in Xemu" NL);
+		} else {
+		if (addr > sizeof memory)
+			FATAL("Invalid physical memory write at $%X" NL, addr);
 		memory[addr] = data;
+		}
+	} else
+		DEBUG("MMU: this _physical_ address is not writable: $%X (data=$%02X)" NL, addr, data);
 }
 
 
