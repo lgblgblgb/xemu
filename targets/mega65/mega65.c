@@ -536,7 +536,10 @@ void io_write ( int addr, Uint8 data )
 					hypervisor_serial_monitor_push_char(data);
 					break;
 				case 0xD67D:
-					rom_protect = data & 4;
+					if ((data & 4) != rom_protect) {
+						fprintf(stderr, "MEGA65: ROM protection has been turned %s." NL, data & 4 ? "ON" : "OFF");
+						rom_protect = data & 4;
+					}
 					break;
 				case 0xD67E:	// it seems any write (?) here marks the byte as non-zero?! FIXME TODO
 					kicked_hypervisor = 0xFF;

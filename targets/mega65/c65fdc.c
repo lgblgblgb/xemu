@@ -142,7 +142,7 @@ static void read_sector ( void )
 		status_b &= (255- 4); // no disk inserted ...
 		DEBUG("FDC: READ: no valid image file!" NL);
 		if (warn_disk) {
-			INFO_WINDOW("No disk image was given or can be loaded!\nStart emulator with the disk image as parameter!");
+			INFO_WINDOW("No disk image was given or can be loaded!\nStart emulator with the disk image as parameter!\nMEGA65 FDC emulation is not ready yet, this is a C65 emu feature :(");
 			warn_disk = 0;
 		}
 	}

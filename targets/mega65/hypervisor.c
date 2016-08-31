@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "hypervisor.h"
 #include "cpu65c02.h"
 #include "vic3.h"
+#include "dmagic.h"
 
 #define INFO_MAX_SIZE	32
 
@@ -182,6 +183,9 @@ void hypervisor_leave ( void )
 	// Now leaving hypervisor mode ...
 	in_hypervisor = 0;
 	apply_memory_config();
+	// FIXME: ugly hack: C65 ROM goes nuts if "MB" part of DMA source/target is not reset here!
+	dma_registers[5] = 0;
+        dma_registers[6] = 0;
 	DEBUG("MEGA65: leaving hypervisor mode, (user) PC=$%04X" NL, cpu_pc);
 }
 
