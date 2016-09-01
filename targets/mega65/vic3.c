@@ -348,7 +348,7 @@ static inline Uint8 *vic2_get_chargen_pointer ( void )
 static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 {
 	Uint32 bg;
-	Uint8 *vidp, *colp = memory + 0x1F800;
+	Uint8 *vidp, *colp = colour_ram;
 	int x = 0, y = 0, xlim, ylim, charline = 0;
 	Uint8 *chrg = vic2_get_chargen_pointer();
 	int inc_p = (vic3_registers[0x54] & 1) ? 2 : 1;	// VIC-IV (Mega-65) 16 bit text mode?

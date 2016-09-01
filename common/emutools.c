@@ -563,6 +563,7 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 	SDL_ShowMessageBox(&messageboxdata, &buttonid);
 	clear_emu_events();
 	emu_drop_events();
+	SDL_RaiseWindow(sdl_win);
 	emu_timekeeping_start();
 	return buttonid;
 }

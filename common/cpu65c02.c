@@ -1015,7 +1015,7 @@ int cpu_step () {
 			// 65CE02 LDA ($nn,SP),Y
 			// REALLY IMPORTANT: please read the comment at _GET_SP_INDIRECT_ADDR()!
 			setNZ(cpu_a = cpu_read(_GET_SP_INDIRECT_ADDR()));
-			DEBUG("CPU: LDA (nn,S),Y returned: A = $%02X, P before last IRQ was: $%02X" NL, cpu_a, last_p);
+			//DEBUG("CPU: LDA (nn,S),Y returned: A = $%02X, P before last IRQ was: $%02X" NL, cpu_a, last_p);
 #else
 			cpu_pc++; // 0xe2 NOP imm (non-std NOP with addr mode)
 #endif

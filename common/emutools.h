@@ -43,6 +43,7 @@ extern void emu_drop_events ( void );
 	SDL_ShowSimpleMessageBox(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
 	clear_emu_events(); \
 	emu_drop_events(); \
+	SDL_RaiseWindow(sdl_win); \
 	emu_timekeeping_start(); \
 } while (0)
 

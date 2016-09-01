@@ -71,33 +71,8 @@ static Uint8 minterms[4];		// Used with MIX DMA command only
        Uint8 dma_status;
 
 
-
-
-// FIXME: ugly hack: handle the hypervisor memory, using different mapping than the real Mega65!
-static void dma_write_phys_mem ( int addr, Uint8 data )
-{
-	if (addr >= 0xFFF8000 && addr < 0xFFFC000) {
-		if (!in_hypervisor)
-			FATAL("FATAL: DMA write tries to access hypervisor memory from non-hypervisor mode.");
-		write_phys_mem(addr - 0xFFF8000 + 0x100000, data);
-	} else if (addr < 0x100000)
-		write_phys_mem(addr, data);
-	else
-		FATAL("FATAL: DMA write to unhandled memory region: $%X", addr);
-}
-
-// FIXME: ugly hack: handle the hypervisor memory, using different mapping than the real Mega65!
-static Uint8 dma_read_phys_mem ( int addr )
-{
-	if (addr >= 0xFFF8000 && addr < 0xFFFC000) {
-		if (!in_hypervisor)
-			FATAL("FATAL: DMA read tries to access hypervisor memory from non-hypervisor mode.");
-		return read_phys_mem(addr- 0xFFF8000 + 0x100000);
-	} else if (addr < 0x100000)
-		return read_phys_mem(addr);
-	else
-		FATAL("FATAL: DMA read from unhandled memory region: $%X", addr);
-}
+#define dma_write_phys_mem(addr,data)	write_phys_mem(addr,data)
+#define dma_read_phys_mem(addr)		read_phys_mem(addr)
 
 
 #define IO_ADDR(a)		(0xD000 | ((a) & 0xFFF))
@@ -268,7 +243,7 @@ void dma_update ( void )
 		return;
 	}
 	// We have valid command to be executed, or continue to execute
-	DEBUG("DMA: EXECUTING: command=%d length=$%04X" NL, command & 3, length);
+	//DEBUG("DMA: EXECUTING: command=%d length=$%04X" NL, command & 3, length);
 	switch (command & 3) {
 		case 0:			// COPY command
 			write_target_next(read_source_next());

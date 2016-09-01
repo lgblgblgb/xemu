@@ -35,7 +35,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // If you define this, you will got *VERY HUGE* number of messages into the debug log
 // It slows down the emulator *A LOT* as well!
 // With FPGA switch 12 too, it created 20Gbytes(!) log file and it even not booted yet :)
-// #define HYPERVISOR_DEBUG
+//#define HYPERVISOR_DEBUG
 
 // State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
 // 12 is useful, but it also slows things emulation down maybe (I am not sure, but
@@ -75,17 +75,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 // If defined, a file name string must be used.
-// Then RAM content (low 128K) will be written into this file on exit.
-// #define MEMDUMP_FILE		"dump.mem"
+// Then hypervisor memory content will be written into this file on exit.
+#define MEMDUMP_FILE		"dump.mem"
 
 
-extern Uint8 memory[0x104001];
+extern Uint8 memory[0x100000];
+extern Uint8 colour_ram[0x10000];
 extern int   mega65_capable;
-extern int   in_hypervisor;
-extern Uint8 kicked_hypervisor;
 extern int map_mask;
 extern int map_offset_low;
 extern int map_offset_high;
+extern int map_megabyte_low;
+extern int map_megabyte_high;
 extern Uint8 gs_regs[0x1000];
 extern Uint8 cpu_port[2];
 
