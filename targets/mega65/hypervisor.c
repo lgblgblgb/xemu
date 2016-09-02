@@ -162,7 +162,6 @@ void hypervisor_enter ( int trapno )
 	map_mask = (map_mask & 0xF) | 0x30;	// mapping: 0011XXXX (it seems low region map mask is not changed by hypervisor entry)
 	map_megabyte_high = 0xFF << 20;
 	map_offset_high = 0xF0000;
-	// FIXME: as currently I can do only C65-MAP, we cheat a bit, and use a special case in apply_memory_config() instead of a "legal" map-hi offset
 	apply_memory_config();	// now the memory mapping is changed
 	cpu_pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
 	DEBUG("MEGA65: entering into hypervisor mode, trap=$%02X PC=$%04X" NL, trapno, cpu_pc);
@@ -247,7 +246,7 @@ void hypervisor_debug ( void )
 		return;
 	// TODO: better hypervisor upgrade check, maybe with checking the exact range kickstart uses for upgrade outside of the "normal" hypervisor mem range
 	if (unlikely((cpu_pc & 0xFF00) == 0x3000)) {	// this area is used by kickstart upgrade
-		DEBUG("HYPERVISOR-DEBUG: allowed tun outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu_pc);
+		DEBUG("HYPERVISOR-DEBUG: allowed to run outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu_pc);
 		return;
 	}
 	if (unlikely((cpu_pc & 0xC000) != 0x8000)) {

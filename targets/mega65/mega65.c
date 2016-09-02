@@ -37,7 +37,7 @@ static SDL_AudioDeviceID audio = 0;
 
 Uint8 memory[0x100000];			// "Normal" max memory space of C65 (1Mbyte). Special Mega65 cases are handled differently in the current implementation
 Uint8 colour_ram[0x10000];
-Uint8 slow_ram[120 << 20];		// 127Mbytes of slowRAM, heh ...
+Uint8 slow_ram[127 << 20];		// 127Mbytes of slowRAM, heh ...
 Uint8 cpu_port[2];			// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
 static struct SidEmulation sid1, sid2;	// the two SIDs
@@ -45,18 +45,18 @@ static struct SidEmulation sid1, sid2;	// the two SIDs
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request
 // This is *still* not Mega65 compatible at implementation level, but it will work, unless az M65 software accesses the I/O space at the high
 // memory address and not in a compatible way (ie, CPU address $DXXX)
-#define IO_REMAP_ADD		0
-#define IO_REMAP_MEGABYTE	0xFE
+#define IO_REMAP_ADD		(0xD0000 - 0xD000)
+#define IO_REMAP_MEGABYTE	0xFF
 // Other re-mapping addresses
 // Re-mapping for VIC3 reg $30
-#define ROM_C000_REMAP		 0x20000
-#define ROM_8000_REMAP		 0x30000
-#define ROM_A000_REMAP		 0x30000
-#define ROM_E000_REMAP		 0x30000
+#define ROM_C000_REMAP		0x20000
+#define ROM_8000_REMAP		0x30000
+#define ROM_A000_REMAP		0x30000
+#define ROM_E000_REMAP		0x30000
 // Re-mapping for "CPU-port" related stuffs
-#define ROM_C64_CHR_REMAP	 0x20000
-#define ROM_C64_KERNAL_REMAP	 0x20000
-#define ROM_C64_BASIC_REMAP	 0x20000
+#define ROM_C64_CHR_REMAP	0x20000
+#define ROM_C64_KERNAL_REMAP	0x20000
+#define ROM_C64_BASIC_REMAP	0x20000
 
 #define TRAP_RESET	0x40
 #define IO_REMAPPED	(((IO_REMAP_MEGABYTE) << 20) | ((0xD000 + (IO_REMAP_ADD)) & 0xFFFFF))
@@ -88,7 +88,8 @@ static int fpga_switches = FPGA_SWITCHES;		// State of FPGA board switches (bits
 
 /* You *MUST* call this every time, when *any* of these events applies:
    * MAP 4510 opcode is issued, map_offset_low, map_offset_high, map_mask are modified
-   * "CPU port" data or DDR register has been written, witn cpu_port[0 or 1] modified
+   * "CPU port" data or direction (though this one does not have too much meaning for C65/M65, but still must be handled
+     because of the special case if switched as "input") register has been written, witn cpu_port[0 or 1] modified
    * VIC3 register $30 is written, with vic3_registers[0x30] modified 
    The reason of this madness: do the ugly work here, as memory configuration change is
    less frequent than memory usage (read/write). Thus do more work here, but simplier
@@ -270,16 +271,25 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 }
 
 
+#include "initial_charset.c"
 
-static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int sound_mix_freq )
+static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, int sound_mix_freq )
 {
 	SDL_AudioSpec audio_want, audio_got;
 	hypervisor_debug_init(KICKSTART_LIST_FILE_NAME);
 	hid_init();
 	// *** Init memory space
+	memset(memory, 0xFF, sizeof memory);
+	do {	// ugly hack to pre-initialize ROM area with charset :) FIXME: I am not really sure now what memory address is used by VIC, my bad :(
+		int a = 0x20000;
+		while (a < 0x40000) {
+			memcpy(memory + a, initial_charset, sizeof initial_charset);
+			memset(memory + a + sizeof initial_charset, 0, 4096 - sizeof initial_charset);
+			a += 4096;
+		}
+	} while(0);
 	memset(slow_ram, 0xFF, sizeof slow_ram);
 	memset(colour_ram, 0xFF, sizeof colour_ram);
-	memset(memory, 0xFF, sizeof memory);
 	in_hypervisor = 0;
 	memset(gs_regs, 0, sizeof gs_regs);
 	rom_protect = 1;
@@ -289,6 +299,7 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 		// Found kickstart ROM, emulate Mega65 startup somewhat ...
 		mega65_capable = 1;
 		DEBUG("MEGA65: " KICKSTART_NAME " loaded into hypervisor memory, Mega65 capable mode is set" NL);
+		printf("MEGA65: I/O is remapped to $%X" NL, IO_REMAPPED);
 	} else {
 		ERROR_WINDOW("Cannot load " KICKSTART_NAME " (not found, or not 16K sized), emulate only C65");
 		DEBUG("MEGA65: " KICKSTART_NAME " cannot be loaded, Mega65 capable mode is disabled" NL);
@@ -297,8 +308,8 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 	// *** Mega65 specific SDCARD support
 	sdcard_init(SDCARD_NAME);
 	// *** Load ROM image (TODO: make it optional when mega65_capable is true, thus KICKUP is loaded)
-	if (emu_load_file(ROM_NAME, memory + 0x20000, 0x20001) != 0x20000)
-		FATAL("Cannot load C65 system ROM: " ROM_NAME);
+	//if (emu_load_file(ROM_NAME, memory + 0x20000, 0x20001) != 0x20000)
+	//	FATAL("Cannot load C65 system ROM: " ROM_NAME);
 	// *** Initialize VIC3
 	vic3_init();
 	// *** Memory configuration (later override will happen for mega65 mode though, this is only the default)
@@ -407,6 +418,7 @@ void cpu_do_aug ( void )
 	map_offset_low  = (cpu_a << 8) | ((cpu_x & 15) << 16);	// offset of lower half (blocks 0-3)
 	map_offset_high = (cpu_y << 8) | ((cpu_z & 15) << 16);	// offset of higher half (blocks 4-7)
 	map_mask        = (cpu_z & 0xF0) | (cpu_x >> 4);	// "is mapped" mask for blocks (1 bit for each)
+	// M65 specific "MB" (megabyte) selector "mode":
 	if (cpu_x == 0x0F)
 		map_megabyte_low  = (int)cpu_a << 20;
 	if (cpu_z == 0x0F)
@@ -737,7 +749,9 @@ void write_phys_mem ( int addr, Uint8 data )
 		return;
 	// No other memory accessible components/space on C65. The following areas on M65 currently decoded with masks:
 	if (addr >= 0x8000000 && addr < 0x8000000 + sizeof(slow_ram)) {
+		DEBUG("MEGA65: writing slow RAM at $%X with value of $%02X" NL, addr, data);
 		slow_ram[addr - 0x8000000] = data;
+		// FIXME: That would be something I don't understand: shadow of the ROM of C65 or something? Hmmm. But it's the DDR RAM!
 		// $8000000-$FEFFFFF, and also
 		// $0020000-$003FFFF
 		if (addr >= 0x8020000 && addr <= 0x803FFFF)
@@ -746,6 +760,8 @@ void write_phys_mem ( int addr, Uint8 data )
 	}
 	if ((addr & 0xFFFF000) == 0xFF7E000) {  // FIXME: temporary hack to allow non-existing VIC-IV charrom writes :-/
 		DEBUG("LINEAR: VIC-IV charrom writes are ignored for now in Xemu @ $%X PC=$%04X" NL, addr, cpu_pc);
+		memory[0x2D000 + (addr & 0x3FF)] = 255-data;	// C64 charset
+		memory[0x29000 + (addr & 0x3FF)] = 255-data;	// C65 charset
 		return;
 	}
 	if ((addr & 0xFFFF000) == IO_REMAPPED) {		// I/O stuffs (remapped from standard $D000 location as found on C64 or C65 too)
@@ -1086,8 +1102,8 @@ int main ( int argc, char **argv )
 		shutdown_callback		// registered shutdown function
 	))
 		return 1;
-	// Initialize C65 ...
-	c65_init(
+	// Initialize Mega65
+	mega65_init(
 		argc > 1 ? argv[1] : NULL,	// FIXME: disk image name (in Mega65 mode, this will be SD-card image rather than a D81 in the future ...)
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
 		AUDIO_SAMPLE_FREQ		// sound mix freq
