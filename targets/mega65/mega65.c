@@ -41,6 +41,7 @@ Uint8 slow_ram[127 << 20];		// 127Mbytes of slowRAM, heh ...
 Uint8 cpu_port[2];			// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
 static struct SidEmulation sid1, sid2;	// the two SIDs
+int cpu_linear_memory_addressing_is_enabled = 0;
 
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request
 // This is *still* not Mega65 compatible at implementation level, but it will work, unless az M65 software accesses the I/O space at the high
@@ -378,6 +379,7 @@ static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, i
 	// *** In case of Mega65 mode, let's override the system configuration a bit ... It will also re-set PC to the trap address
 	if (mega65_capable) {
 		rom_protect = 0;
+		cpu_linear_memory_addressing_is_enabled = 1;
 		hypervisor_enter(TRAP_RESET);
 	}
 	DEBUG("INIT: end of initialization!" NL);
@@ -634,7 +636,7 @@ void io_write ( int addr, Uint8 data )
 					hypervisor_serial_monitor_push_char(data);
 					break;
 				case 0xD67D:
-					fprintf(stderr, "MEGA65: features set as $%02X" NL, data);
+					DEBUG("MEGA65: features set as $%02X" NL, data);
 					if ((data & 4) != rom_protect) {
 						fprintf(stderr, "MEGA65: ROM protection has been turned %s." NL, data & 4 ? "ON" : "OFF");
 						rom_protect = data & 4;
@@ -705,19 +707,37 @@ void io_write ( int addr, Uint8 data )
 }
 
 
-void cpu_write_linear_opcode ( Uint8 data )
+
+static Uint32 cpu_get_flat_addressing_mode_address ( void )
 {
 	Uint32 addr = cpu_read(cpu_pc++);	// fetch base page address
 	// FIXME: really, BP/ZP is wrapped around in case of linear addressing and eg BP addr of $FF got??????
-	addr = (
+	return (
 		 cpu_read(cpu_bphi |   addr             )        |
 		(cpu_read(cpu_bphi | ((addr + 1) & 0xFF)) <<  8) |
 		(cpu_read(cpu_bphi | ((addr + 2) & 0xFF)) << 16) |
 		(cpu_read(cpu_bphi | ((addr + 3) & 0xFF)) << 24)
 	) + cpu_z;
-	DEBUG("MEGA65: writing LINEAR memory @ $%X with data $%02X" NL, addr, data);
+}
+
+
+Uint8 cpu_read_linear_opcode ( void )
+{
+	Uint32 addr = cpu_get_flat_addressing_mode_address();
+	Uint8  data = read_phys_mem(addr);
+	DEBUG("MEGA65: reading LINEAR memory [PC=$%04X/OPC=$%02X] @ $%X with result $%02X" NL, cpu_old_pc, cpu_op, addr, data);
+	return data;
+}
+
+
+
+void cpu_write_linear_opcode ( Uint8 data )
+{
+	Uint32 addr = cpu_get_flat_addressing_mode_address();
+	DEBUG("MEGA65: writing LINEAR memory [PC=$%04X/OPC=$%02X] @ $%X with data $%02X" NL, cpu_old_pc, cpu_op, addr, data);
 	write_phys_mem(addr, data);
 }
+
 
 
 void write_phys_mem ( int addr, Uint8 data )
