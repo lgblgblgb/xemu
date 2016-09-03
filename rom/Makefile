@@ -33,7 +33,12 @@ distclean:
 	$(MAKE) clean
 	rm -f $(FETCH_ROMS) $(MEGA65IMG)
 
+kickup.cdata:
+	./bin2values.py KICKUP.M65 $@
+
 $(MEGA65IMG): Makefile ../build/create-sdcard-image c64-chargen.rom c65-system.rom
+	@echo "*** SORRY, THIS IS NOT YET SUPPORTED"
+	@false
 	@echo "*** Building $(MEGA65IMG), a faked SD-card image for the Mega65 emulator"
 	@echo "*** For image rebuild: delete $(MEGA65IMG) and re-issue command: make $(MEGA65IMG)"
 	@echo "*** Note: various tools must be installed, watch the output for errors ..."
@@ -71,4 +76,4 @@ primo-b64.rom:
 %.rom: %.asm
 	cl65 -t none --cpu 65c02 -o $@ $<
 
-.PHONY: all clean distclean roms
+.PHONY: all clean distclean roms kickup.cdata

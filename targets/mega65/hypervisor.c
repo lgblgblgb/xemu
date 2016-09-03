@@ -230,11 +230,11 @@ void hypervisor_serial_monitor_push_char ( Uint8 chr )
 
 
 
-void hypervisor_debug_invalidate ( void )
+void hypervisor_debug_invalidate ( const char *reason )
 {
 	if (resolver_ok) {
 		resolver_ok = 0;
-		INFO_WINDOW("Hypervisor debug feature is asked to be disabled (ie: upgraded kickstart?)");
+		INFO_WINDOW("Hypervisor debug feature is asked to be disabled: %s", reason);
 	}
 }
 

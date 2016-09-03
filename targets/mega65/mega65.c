@@ -273,22 +273,27 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 
 
 #include "initial_charset.c"
+static const Uint8 initial_kickup[] = {
+#include "../../rom/kickup.cdata"
+};
 
 static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, int sound_mix_freq )
 {
+	int a;
+#ifdef AUDIO_EMULATION
 	SDL_AudioSpec audio_want, audio_got;
+#endif
 	hypervisor_debug_init(KICKSTART_LIST_FILE_NAME);
 	hid_init();
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
-	do {	// ugly hack to pre-initialize ROM area with charset :) FIXME: I am not really sure now what memory address is used by VIC, my bad :(
-		int a = 0x20000;
-		while (a < 0x40000) {
-			memcpy(memory + a, initial_charset, sizeof initial_charset);
-			memset(memory + a + sizeof initial_charset, 0, 4096 - sizeof initial_charset);
-			a += 4096;
-		}
-	} while(0);
+	// ugly hack to pre-initialize ROM area with charset :) FIXME: I am not really sure now what memory address is used by VIC, my bad :(
+	a = 0x20000;
+	while (a < 0x40000) {
+		memcpy(memory + a, initial_charset, sizeof initial_charset);
+		memset(memory + a + sizeof initial_charset, 0, 4096 - sizeof initial_charset);
+		a += 4096;
+	}
 	memset(slow_ram, 0xFF, sizeof slow_ram);
 	memset(colour_ram, 0xFF, sizeof colour_ram);
 	in_hypervisor = 0;
@@ -296,21 +301,42 @@ static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, i
 	rom_protect = 1;
 	gs_regs[0x67E] = 0x80;	// this will signal Xemu, to ask the user on the first read!
 	// *** Trying to load kickstart image
-	if (emu_load_file(KICKSTART_NAME, hypervisor_memory, 0x4001) == 0x4000) {
-		// Found kickstart ROM, emulate Mega65 startup somewhat ...
-		mega65_capable = 1;
+	mega65_capable = emu_load_file(KICKSTART_NAME, hypervisor_memory, 0x4001) == 0x4000;
+	if (mega65_capable) {
 		DEBUG("MEGA65: " KICKSTART_NAME " loaded into hypervisor memory, Mega65 capable mode is set" NL);
-		printf("MEGA65: I/O is remapped to $%X" NL, IO_REMAPPED);
 	} else {
-		ERROR_WINDOW("Cannot load " KICKSTART_NAME " (not found, or not 16K sized), emulate only C65");
-		DEBUG("MEGA65: " KICKSTART_NAME " cannot be loaded, Mega65 capable mode is disabled" NL);
-		mega65_capable = 0;
+		switch (QUESTION_WINDOW(
+			"Continue with built-in|Try C65 mode (ROM needed)|Exit Xemu/Mega65",
+			"Kickstart " KICKSTART_NAME " couldn't be loaded (not found, or wrong size).\n"
+			"What to do now?"
+		)) {
+			case 0:
+				if (sizeof initial_kickup != 0x4000)
+					FATAL("Internal error: initial kickup is not 16K!");
+				memcpy(hypervisor_memory, initial_kickup, 0x4000);
+				hypervisor_debug_invalidate("no kickup could be loaded, built-in one does not have debug info");
+				mega65_capable = 1;
+				DEBUG("MEGA65: Internal (AND MAY BE OUTDATED) kickstart loaded into hypervisor memory, Mega65 capable mode is set" NL);
+				break;
+			case 1:
+				break;
+			case 2:
+				exit(1);
+				break;
+		}
 	}
+	if (mega65_capable)
+		DEBUG("MEGA65: I/O is remapped to $%X" NL, IO_REMAPPED);
 	// *** Mega65 specific SDCARD support
-	sdcard_init(SDCARD_NAME);
-	// *** Load ROM image (TODO: make it optional when mega65_capable is true, thus KICKUP is loaded)
-	//if (emu_load_file(ROM_NAME, memory + 0x20000, 0x20001) != 0x20000)
-	//	FATAL("Cannot load C65 system ROM: " ROM_NAME);
+	if (mega65_capable) {
+		if (sdcard_init(SDCARD_NAME) < 0)
+			FATAL("Cannot find SD-card image (which is a must for Mega65 emulation): " SDCARD_NAME);
+	}
+	// *** Load ROM image
+	if (!mega65_capable) {
+		if (emu_load_file(ROM_NAME, memory + 0x20000, 0x20001) != 0x20000)
+			FATAL("Cannot load C65 system ROM (which is a must without kickstart): " ROM_NAME);
+	}
 	// *** Initialize VIC3
 	vic3_init();
 	// *** Memory configuration (later override will happen for mega65 mode though, this is only the default)
@@ -645,7 +671,7 @@ void io_write ( int addr, Uint8 data )
 				case 0xD67E:	// it seems any write (?) here marks the byte as non-zero?! FIXME TODO
 					kicked_hypervisor = 0xFF;
 					fprintf(stderr, "Writing already-kicked register $%04X!" NL, addr);
-					hypervisor_debug_invalidate();
+					hypervisor_debug_invalidate("$D67E was written, maybe new kickstart will boot!");
 					break;
 				case 0xD67F:	// hypervisor leave
 					hypervisor_leave();

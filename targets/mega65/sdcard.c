@@ -112,7 +112,7 @@ static int read_sector ( void )
 	if (sdfd < 0)
 		return -1;
 	offset = (off_t)sd_sector_bytes[0] | ((off_t)sd_sector_bytes[1] << 8) | ((off_t)sd_sector_bytes[2] << 16) | ((off_t)sd_sector_bytes[3] << 24);
-	DEBUG("SDCARD: reading position %ld PC=$%04X" NL, (long)offset, cpu_pc);
+	DEBUG("SDCARD: reading card at position %ld PC=$%04X" NL, (long)offset, cpu_pc);
 	if (offset < 0 || offset >= sd_card_size) {
 		DEBUG("SDCARD: invalid position value failure ..." NL);
 		FATAL("SDCARD: invalid position value failure!! %lld (limit = %lld)", (long long int)offset, (long long int)sd_card_size);
