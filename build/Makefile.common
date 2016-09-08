@@ -34,6 +34,9 @@ PRG_TOP_REL		= build/bin/$(PRG_TARGET).$(ARCH)
 PRG			= $(TOPDIR)/$(PRG_TOP_REL)
 COMMONDIR		= $(TOPDIR)/common
 CFLAGS_WITHOUT_DEBUG	= $(CFLAGS_ARCH) $(CFLAGS_TARGET) -I. -I$(COMMONDIR)
+ifeq ($(NATIVE), yes)
+CFLAGS_WITHOUT_DEBUG	+= -mtune=native -march=native
+endif
 CFLAGS			= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG) -include arch-sys-$(ARCH).h -include xemu-target.h
 LDFLAGS			= $(DEBUG) $(LDFLAGS_ARCH)
 OBJPREFIX       	= $(TOPDIR)/build/objs/$(ARCH)-$(TARGET)--
@@ -41,6 +44,7 @@ DEPFILE			= $(OBJPREFIX)make.depend
 DEPALL			= Makefile $(TOPDIR)/build/Makefile.common $(TOPDIR)/build/Makefile.$(ARCH)
 SRCS			= $(addprefix $(COMMONDIR)/, $(SRCS_COMMON)) $(SRCS_TARGET)
 OBJS			= $(addprefix $(OBJPREFIX), $(notdir $(SRCS:.c=.o)))
+ASMOUT			= no
 
 
 do-all:
@@ -48,9 +52,15 @@ do-all:
 	$(MAKE) $(PRG)
 
 $(OBJPREFIX)%.o: %.c $(DEPALL)
+ifeq ($(ASMOUT), yes)
+	$(CC) $(CFLAGS) -Wa,-adhln -g -c -o /dev/null $< > $(@:.o=.s)
+endif
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(OBJPREFIX)%.o: $(COMMONDIR)/%.c $(DEPALL)
+ifeq ($(ASMOUT), yes)
+	$(CC) $(CFLAGS) -Wa,-adhln -g -c -o /dev/null $< > $(@:.o=.s)
+endif
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 
