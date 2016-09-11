@@ -22,7 +22,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "commodore_65.h"
 #include "cpu65c02.h"
 #include "cia6526.h"
-#include "c65fdc.h"
+#include "f011_core.h"
+#include "c65_d81_image.h"
 #include "c65dma.h"
 #include "c65hid.h"
 #include "vic3.h"
@@ -252,7 +253,8 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 	// *** Initialize DMA
 	dma_init();
 	// Initialize FDC
-	fdc_init(disk_image_name);
+	fdc_init();
+	c65_d81_init(disk_image_name);
 	// SIDs, plus SDL audio
 	sid_init(&sid1, sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sid2, sid_cycles_per_sec, sound_mix_freq);

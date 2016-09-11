@@ -1,4 +1,5 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
+/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 / Mega-65 emulator,
+   within the Xemu project. F011 FDC core implementation.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -23,20 +24,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
    commands on the C65, nothing too much more */
 
 
-#include <stdio.h>
-#include <SDL.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <errno.h>
-
-#include "c65fdc.h"
 #include "emutools.h"
-#include "commodore_65.h"
+#include "f011_core.h"
 #include "cpu65c02.h"
 
 
+
+// #define DEBUG_FOR_PAUL
 
 
 static Uint8 head_track;		// "physical" track, ie, what is the head is positioned at currently
@@ -51,20 +45,21 @@ static int   drive;
 static Uint8 cache[512];		// 512 bytes cache FDC will use. This is a real 512byte RAM attached to the FDC controller for buffered operations on the C65
 static int   cache_p_cpu;		// cache pointer if CPU accesses the FDC buffer cache. 0 ... 511!
 static int   cache_p_fdc;		// cache pointer if FDC accesses the FDC buffer cache. 0 ... 511!
-static int   disk_fd;			// disk image file descriptor (if disk_fd < 0 ----> no disk image, ie "no disk inserted" is emulated)
+//static int   disk_fd;			// disk image file descriptor (if disk_fd < 0 ----> no disk image, ie "no disk inserted" is emulated)
+static int   swap_mask = 0;
 
 static int   warn_disk = 1;
 static int   warn_swap_bit = 1;
 
-static void execute_command ( void );
+static void  execute_command ( void );
+
+static int   have_disk, have_write;
 
 
 
-
-
-void fdc_init ( const char *dfn )
+void fdc_init ( void )
 {
-	disk_fd = -1;
+	DEBUG("FDC: init F011 emulation core" NL);
 	head_track = 0;
 	head_side = 0;
 	control = 0;
@@ -80,41 +75,42 @@ void fdc_init ( const char *dfn )
 	cache_p_cpu = 0;
 	cache_p_fdc = 0;
 	drive = 0;
-	if (dfn) {
-		// Note about O_BINARY: it's a windows stuff, it won't work without that.
-		// HOWEVER, O_BINARY defined as zero on non-win archs in one of my include headers, thus it won't bother us with the good OSes :)
-		disk_fd = open(dfn, O_RDWR|O_BINARY);	// First, try to open D81 file in read-write mode
-		if (disk_fd < 0) {
-			disk_fd = open(dfn, O_RDONLY|O_BINARY);	// If R/W was not ok, try read-only!
-			if (disk_fd >= 0) {
-				WARNING_WINDOW("Disk image \"%s\" could be open only in read-only mode", dfn);
-				status_a |= 2;	// write protect flag, read-only mode disk image!
-			} else
-				ERROR_WINDOW("Couldn't open disk image \"%s\": %s", dfn, strerror(errno));
-		}
-	}
-	if (disk_fd >= 0) {
+	fdc_set_disk(0, 0);
+}
+
+
+
+void fdc_set_disk ( int in_have_disk, int in_have_write )
+{
+	have_disk  = in_have_disk;
+	have_write = in_have_write;
+	DEBUG("FDC: init: set have_disk=%d, have_write=%d" NL, have_disk, have_write);
+	if (have_disk) {
 		status_a |= 1;	// on track-0
-		status_b |= 8; 	// disk inserted
+		status_b |= 8;	// disk inserted
+	} else {
+		status_a &= ~1;
+		status_b &= ~8;
+	}
+	if (!have_write) {
+		status_a |= 2;	// write protect flag, read-only mode
+	} else {
+		status_a &= ~2;
 	}
 }
 
 
 
-static int image_seek ( const char *opdesc )
+static int calc_offset ( const char *opdesc )
 {
-	off_t offset;
+	int offset;
 	DEBUG("FDC: %s sector track=%d sector=%d side=%d @ PC=$%04X" NL, opdesc, track, sector, side, cpu_old_pc);
 	// FIXME: no checking of input parameters, can be insane values
 	// FIXME: no check for desired track/side and the currently selected/seeked, what should be!
 	// FIXME: no check if image file by size is really a D81 at least ...
 	// FIXME: whatever :)
 	offset = 40 * (track - 0) * 256 + (sector -1 ) * 512 + side * 20 * 256; // somewhat experimental value, it was after I figured out how that should work :-P
-	if (lseek(disk_fd, offset, SEEK_SET) != offset) {
-		DEBUG("FDC: host OS seek error: %s" NL, strerror(errno));
-		return 1;
-	}
-	return 0;
+	return offset;
 }
 
 
@@ -126,13 +122,14 @@ static int image_seek ( const char *opdesc )
 static void read_sector ( void )
 {
 	int error;
-	if (disk_fd >= 0) {
-		error = image_seek("reading");
+	if (have_disk) {
+		int offset = calc_offset("reading");
+		error = (offset < 0);
 		if (!error) {
 			Uint8 read_buffer[512];
-			error = (read(disk_fd, read_buffer, 512) != 512);
+			error = fdc_cb_rd_sec(read_buffer, offset);
 			if (error)
-				DEBUG("FDC: host OS read error: %s" NL, strerror(errno));
+				DEBUG("FDC: sector read-callback returned with error!" NL);
 			else {
 				int n;
 				DEBUG("FDC: sector has been read." NL);
@@ -167,8 +164,9 @@ static void read_sector ( void )
 static void write_sector ( void )
 {
 	int error;
-	if (disk_fd >= 0) {
-		error = image_seek("writing");
+	if (have_disk && have_write) {
+		int offset = calc_offset("writing");
+		error = (offset < 0);
 		if (!error) {
 			Uint8 write_buffer[512];
 			int n;
@@ -176,18 +174,17 @@ static void write_sector ( void )
 				write_buffer[n] = cache[cache_p_fdc];
 				cache_p_fdc = (cache_p_fdc + 1) & 511;
 			}
-			// Kinda serious problem if host OS could write byte(s) but not 512 exactly ... should not happen
-			error = (write(disk_fd, write_buffer, 512) != 512);
+			error = fdc_cb_wr_sec(write_buffer, offset);
 			if (error)
-				DEBUG("FDC: host OS write error: %s" NL, strerror(errno));
+				DEBUG("FDC: sector write-callback returned with error!" NL);
 			else
 				DEBUG("FDC: sector has been written." NL);
 		}
 	} else {
 		error = 1;
-		DEBUG("FDC: no disk in drive" NL);
+		DEBUG("FDC: no disk in drive or write protected" NL);
 		if (warn_disk) {
-			INFO_WINDOW("No disk image was given or can be loaded!");
+			INFO_WINDOW("No disk image was given or can be loaded or write protected disk!");
 			warn_disk = 0;
 		}
 	}
@@ -206,9 +203,13 @@ static void write_sector ( void )
 
 
 
+
 void fdc_write_reg ( int addr, Uint8 data )
 {
         DEBUG("FDC: writing register %d with data $%02X" NL, addr, data);
+#ifdef DEBUG_FOR_PAUL
+	printf("PAUL: FDC register %d will be written now, data is $%02X buffer pointer is %d now" NL, addr, data, cache_p_cpu);
+#endif
 	switch (addr) {
 		case 0:
 #if 0
@@ -228,12 +229,14 @@ void fdc_write_reg ( int addr, Uint8 data )
 			else
 				DEBUG("FDC: great, drive-0 is selected" NL);
 			if (data & 16) {
-				DEBUG("FDC: WARN: SWAP bit is not emulated!" NL);
+				DEBUG("FDC: WARN: SWAP bit emulation is experimental!" NL);
 				if (warn_swap_bit) {
-					INFO_WINDOW("FDC SWAP bit is not implemented yet! There will be no further warnings on this.");
+					INFO_WINDOW("FDC SWAP bit emulation is experimental! There will be no further warnings on this.");
 					warn_swap_bit = 0;
 				}
-			}
+				swap_mask = 0x100;
+			} else
+				swap_mask = 0;
 			break;
 		case 1:
 			// FIXME: I still don't what happens if a running operation (ie BUSY) is in progress and new command is tried to be given to the F011 FDC
@@ -264,7 +267,7 @@ void fdc_write_reg ( int addr, Uint8 data )
 			//status_b &= 127; 	// turn RDREQ off after the first access, this is somewhat incorrect :-P
 			if (status_a & 32)	// if EQ was already set and another byte passed ---> LOST
 				status_a |= 4;	// LOST!!!! but probably incorrect, since no new read is done by FDC since then just "wrapping" the read data, LOST remains till next command!
-			cache[cache_p_cpu] = data;
+			cache[cache_p_cpu ^ swap_mask] = data;
 			cache_p_cpu = (cache_p_cpu + 1) & 511;
 			// always check EQ-situation _after_ the operation! Since initially they are same and it won't be loved by C65 DOS at all, honoured with a freeze
 			if (cache_p_cpu == cache_p_fdc)
@@ -284,6 +287,9 @@ void fdc_write_reg ( int addr, Uint8 data )
 		emulate_busy = 10;
 		execute_command();	// do it NOW!!!! With this setting now: there is no even BUSY state, everything happens within one OPC... seems to work still. Real F011 won't do this surely
 	}
+#ifdef DEBUG_FOR_PAUL
+	printf("PAUL: FDC register %d has been written, data was $%02X buffer pointer is %d now" NL, addr, data, cache_p_cpu);
+#endif
 }
 
 
@@ -293,6 +299,9 @@ void fdc_write_reg ( int addr, Uint8 data )
 
 static void execute_command ( void )
 {
+#ifdef DEBUG_FOR_PAUL
+	printf("PAUL: issuing FDC command $%02X pointer was %d" NL, cmd, cache_p_cpu);
+#endif
 	status_a &= 127;	// turn BUSY flag OFF
 	status_b |= 2;		// turn IRQ flag ON
 	if (control & 128)
@@ -371,6 +380,9 @@ static void execute_command ( void )
 			break;
 	}
 	curcmd = -1;
+#ifdef DEBUG_FOR_PAUL
+        printf("PAUL: issued FDC command $%02X pointer is %d" NL, cmd, cache_p_cpu);
+#endif
 }
 
 
@@ -380,6 +392,9 @@ static void execute_command ( void )
 Uint8 fdc_read_reg  ( int addr )
 {
 	Uint8 result;
+#ifdef DEBUG_FOR_PAUL
+	printf("PAUL: FDC register %d will be read, buffer pointer is %d now" NL, addr, cache_p_cpu);
+#endif
 	/* Emulate BUSY timing, with a very bad manner: ie, decrement a counter on each register read to give some time to wait.
 	   FIXME: not sure if it's needed and what happen if C65 DOS gots "instant" operations done without BUSY ever set ... Not a real happening, but it can be with my primitive emulation :)
 	   Won't work if DOS is IRQ driven ... */
@@ -406,6 +421,7 @@ Uint8 fdc_read_reg  ( int addr )
 		case 3: // STATUS register B
 			result = drive ? 0 : status_b;	// FIXME: Not sure: if no drive 0 is selected, other status is shown, ie every drives should have their own statuses?
 			//result = status_b;
+			status_b &= ~64;	// turn WTREQ off, as it seems CPU noticed with reading this register, that is was the case for a while. Somewhat incorrect implementation ... :-/
 			break;
 		case 4:
 			result = track;
@@ -422,7 +438,7 @@ Uint8 fdc_read_reg  ( int addr )
 			status_b &= 127; 	// turn RDREQ off after the first access, this is somewhat incorrect :-P
 			if (status_a & 32)	// if EQ was already set and another byte passed ---> LOST
 				status_a |= 4;	// LOST!!!! but probably incorrect, since no new read is done by FDC since then just "wrapping" the read data, LOST remains till next command!
-			result = cache[cache_p_cpu];
+			result = cache[cache_p_cpu ^ swap_mask];
 			cache_p_cpu = (cache_p_cpu + 1) & 511;
 			// always check EQ-situation _after_ the operation! Since initially they are same and it won't be loved by C65 DOS at all, honoured with a freeze
 			if (cache_p_cpu == cache_p_fdc)
@@ -444,6 +460,9 @@ Uint8 fdc_read_reg  ( int addr )
 			break;
 	}
         DEBUG("FDC: reading register %d result is $%02X" NL, addr, result);
+#ifdef DEBUG_FOR_PAUL
+	printf("PAUL: FDC register %d has been read, result was $%02X buffer pointer is %d now" NL, addr, result, cache_p_cpu);
+#endif
 	return result;
 }
 
