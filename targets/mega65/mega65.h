@@ -88,7 +88,8 @@ extern int map_offset_high;
 extern int map_megabyte_low;
 extern int map_megabyte_high;
 extern Uint8 gs_regs[0x1000];
-extern Uint8 cpu_port[2];
+//extern Uint8 cpu_port[2];
+#define CPU_PORT(n)	memory[n]
 
 extern void  apply_memory_config ( void );
 extern Uint8 io_read  ( int addr );

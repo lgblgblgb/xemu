@@ -138,8 +138,8 @@ void hypervisor_enter ( int trapno )
 	gs_regs[0x64D] = ( map_offset_high >>  8) & 0xFF  ;
 	gs_regs[0x64E] = map_megabyte_low  >> 20;
 	gs_regs[0x64F] = map_megabyte_high >> 20;
-	gs_regs[0x650] = cpu_port[0];
-	gs_regs[0x651] = cpu_port[1];
+	gs_regs[0x650] = CPU_PORT(0);
+	gs_regs[0x651] = CPU_PORT(1);
 	gs_regs[0x652] = vic_iomode;
 	gs_regs[0x653] = dma_registers[5];	// GS $D653 - Hypervisor DMAgic source MB
 	gs_regs[0x654] = dma_registers[6];	// GS $D654 - Hypervisor DMAgic destination MB
@@ -150,8 +150,8 @@ void hypervisor_enter ( int trapno )
 	// Now entering into hypervisor mode
 	in_hypervisor = 1;	// this will cause apply_memory_config to map hypervisor RAM, also for checks later to out-of-bound execution of hypervisor RAM, etc ...
 	vic_iomode = VIC4_IOMODE;
-	cpu_port[0] = 0x3F;	// apply_memory_config watch this also ...
-	cpu_port[1] = 0x35;	// and this too (this sets, all-RAM + I/O config)
+	CPU_PORT(0) = 0x3F;	// apply_memory_config watch this also ...
+	CPU_PORT(1) = 0x35;	// and this too (this sets, all-RAM + I/O config)
 	cpu_pfd = 0;		// clear decimal mode ... according to Paul, punnishment will be done, if it's removed :-)
 	cpu_pfi = 1;		// disable IRQ in hypervisor mode
 	cpu_pfe = 1;		// 8 bit stack in hypervisor mode
@@ -193,8 +193,8 @@ void hypervisor_leave ( void )
 	map_mask = (gs_regs[0x64A] >> 4) | (gs_regs[0x64C] & 0xF0);
 	map_megabyte_low =  gs_regs[0x64E] << 20;
 	map_megabyte_high = gs_regs[0x64F] << 20;
-	cpu_port[0] = gs_regs[0x650];
-	cpu_port[1] = gs_regs[0x651];
+	CPU_PORT(0) = gs_regs[0x650];
+	CPU_PORT(1) = gs_regs[0x651];
 	vic_iomode = gs_regs[0x652] & 3;
 	if (vic_iomode == VIC_BAD_IOMODE)
 		vic_iomode = VIC3_IOMODE;	// I/O mode "2" (binary: 10) is not used, I guess

@@ -38,7 +38,7 @@ static SDL_AudioDeviceID audio = 0;
 Uint8 memory[0x100000];			// "Normal" max memory space of C65 (1Mbyte). Special Mega65 cases are handled differently in the current implementation
 Uint8 colour_ram[0x10000];
 Uint8 slow_ram[127 << 20];		// 127Mbytes of slowRAM, heh ...
-Uint8 cpu_port[2];			// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
+//Uint8 cpu_port[2];			// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
 static struct SidEmulation sid1, sid2;	// the two SIDs
 int cpu_linear_memory_addressing_is_enabled = 0;
@@ -103,13 +103,12 @@ static int fpga_switches = FPGA_SWITCHES;		// State of FPGA board switches (bits
    This looks awfully complicated, but in fact:
    * it's only called on mem config change (see above)
    * most of this terrible looking stuff compiles into only some assembly directives to load a register and store at one or more places, etc
-   * yes, I had no problems in my childhood with mother+father+etc :)
 */
 void apply_memory_config ( void )
 {
 	// FIXME: what happens if VIC-3 reg $30 mapped ROM is tried to be written? Ignored, or RAM is used to write to, as with the CPU port mapping?
 	// About the produced signals on the "CPU port"
-	int cp = (cpu_port[1] | (~cpu_port[0]));
+	int cp = (CPU_PORT(1) | (~CPU_PORT(0)));
 	DEBUG("MEGA65: MMU: applying new memory config (PC=$%04X,hyper=%d,CP=%d,ML=$%02X,MH=$%02X,MM=$%02X,MBL=$%02X,MBH=$%02X)" NL,
 		cpu_pc, in_hypervisor, cp & 7, map_offset_low >> 8, map_offset_high >> 8, map_mask, map_megabyte_low >> 20, map_megabyte_high >> 20
 	);
@@ -340,7 +339,7 @@ static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, i
 	// *** Initialize VIC3
 	vic3_init();
 	// *** Memory configuration (later override will happen for mega65 mode though, this is only the default)
-	cpu_port[0] = cpu_port[1] = 0xFF;	// the "CPU I/O port" on 6510/C64, implemented by VIC3 for real in C65!
+	CPU_PORT(0) = CPU_PORT(1) = 0xFF;	// the "CPU I/O port" on 6510/C64, implemented by VIC3 for real in C65!
 	map_mask = 0;				// as all 8K blocks are unmapped, we don't need to worry about the low/high offset to set here
 	map_megabyte_low = 0;
 	map_megabyte_high = 0;
@@ -734,22 +733,22 @@ void io_write ( int addr, Uint8 data )
 
 
 
-static Uint32 cpu_get_flat_addressing_mode_address ( void )
+static inline int cpu_get_flat_addressing_mode_address ( void )
 {
-	Uint32 addr = cpu_read(cpu_pc++);	// fetch base page address
+	register int addr = cpu_read(cpu_pc++);	// fetch base page address
 	// FIXME: really, BP/ZP is wrapped around in case of linear addressing and eg BP addr of $FF got??????
-	return (
+	return ((
 		 cpu_read(cpu_bphi |   addr             )        |
 		(cpu_read(cpu_bphi | ((addr + 1) & 0xFF)) <<  8) |
 		(cpu_read(cpu_bphi | ((addr + 2) & 0xFF)) << 16) |
 		(cpu_read(cpu_bphi | ((addr + 3) & 0xFF)) << 24)
-	) + cpu_z;
+	) + cpu_z) & 0xFFFFFFF;	// FIXME: check if it's really apply here: warps around at 256Mbyte, for address bus of Mega65
 }
 
 
 Uint8 cpu_read_linear_opcode ( void )
 {
-	Uint32 addr = cpu_get_flat_addressing_mode_address();
+	int addr = cpu_get_flat_addressing_mode_address();
 	Uint8  data = read_phys_mem(addr);
 	DEBUG("MEGA65: reading LINEAR memory [PC=$%04X/OPC=$%02X] @ $%X with result $%02X" NL, cpu_old_pc, cpu_op, addr, data);
 	return data;
@@ -759,7 +758,7 @@ Uint8 cpu_read_linear_opcode ( void )
 
 void cpu_write_linear_opcode ( Uint8 data )
 {
-	Uint32 addr = cpu_get_flat_addressing_mode_address();
+	int addr = cpu_get_flat_addressing_mode_address();
 	DEBUG("MEGA65: writing LINEAR memory [PC=$%04X/OPC=$%02X] @ $%X with data $%02X" NL, cpu_old_pc, cpu_op, addr, data);
 	write_phys_mem(addr, data);
 }
@@ -768,14 +767,18 @@ void cpu_write_linear_opcode ( Uint8 data )
 
 void write_phys_mem ( int addr, Uint8 data )
 {
+	// NOTE: this function assumes that address within the valid 256Mbyte addressing range.
+	// Normal MAP stuffs does this, since it wraps within a single 1Mbyte "MB" already
+	// However this can be an issue for other users, ie DMA
+	// FIXME: check that at DMAgic, also the situation that DMAgic can/should/etc wrap at all on MB ranges, and on 256Mbyte too!
 	addr &= 0xFFFFFFF;		// warps around at 256Mbyte, for address bus of Mega65
 	if (addr < 0x000002) {
-		if ((cpu_port[addr] & 7) != (data & 7)) {
-			cpu_port[addr] = data;
+		if ((CPU_PORT(addr) & 7) != (data & 7)) {
+			CPU_PORT(addr) = data;
 			DEBUG("MEM: applying new memory configuration because of CPU port writing." NL);
 			apply_memory_config();
 		} else
-			cpu_port[addr] = data;
+			CPU_PORT(addr) = data;
 		return;
 	}
 	if (addr < 0x01F800) {		// accessing RAM @ 2 ... 128-2K.
@@ -863,8 +866,9 @@ void write_phys_mem ( int addr, Uint8 data )
 Uint8 read_phys_mem ( int addr )
 {
 	addr &= 0xFFFFFFF;		// warps around at 256Mbyte, for address bus of Mega65
-	if (addr < 0x000002)
-		return cpu_port[addr];
+	//Check for < 2 not needed anymore, as CPU port is really the memory, though it can be a problem if DMA sees this issue differently?!
+	//if (addr < 0x000002)
+	//	return CPU_PORT(addr);
 	if (addr < 0x01F800)		// accessing RAM @ 2 ... 128-2K.
 		return memory[addr];
 	if (addr < 0x020000)		// the last 2K of the mentioned 128K is the mega65 mapped colour RAM (126K ... 128K)
@@ -892,8 +896,8 @@ Uint8 read_phys_mem ( int addr )
 // This function is called by the 65CE02 emulator in case of reading a byte (regardless of data or code)
 Uint8 cpu_read ( Uint16 addr )
 {
-	register int range2k = addr >> 12;
-	return read_phys_mem(addr_trans_rd_megabyte[range2k] | ((addr_trans_rd[range2k] + addr) & 0xFFFFF));
+	register int range4k = addr >> 12;
+	return read_phys_mem(addr_trans_rd_megabyte[range4k] | ((addr_trans_rd[range4k] + addr) & 0xFFFFF));
 #if 0
 	int phys_addr = addr_trans_rd[addr >> 12] + addr;	// translating address with the READ table created by apply_memory_config()
 	//if (in_hypervisor)	// DEBUG
@@ -912,8 +916,8 @@ Uint8 cpu_read ( Uint16 addr )
 // This function is called by the 65CE02 emulator in case of writing a byte
 void cpu_write ( Uint16 addr, Uint8 data )
 {
-	register int range2k = addr >> 12;
-	write_phys_mem(addr_trans_wr_megabyte[range2k] | ((addr_trans_wr[range2k] + addr) & 0xFFFFF), data);
+	register int range4k = addr >> 12;
+	write_phys_mem(addr_trans_wr_megabyte[range4k] | ((addr_trans_wr[range4k] + addr) & 0xFFFFF), data);
 #if 0
 	int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
 	if (phys_addr >= IO_REMAP_VIRTUAL) {
@@ -939,7 +943,8 @@ void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 {
 	int phys_addr = addr >> 12;
 	phys_addr = addr_trans_wr_megabyte[phys_addr] | ((addr_trans_wr[phys_addr] + addr) & 0xFFFFF);
-	write_phys_mem(phys_addr, old_data);
+	if (addr >= 0xff00000)	// Note: it's useless to "emulate" RMW opcode if the destination is memory, however the last MB of M65 addr.space is special, carrying I/O as well, etc!
+		write_phys_mem(phys_addr, old_data);
 	write_phys_mem(phys_addr, new_data);
 #if 0
 	int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
@@ -996,7 +1001,7 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 		} else if (key == SDL_SCANCODE_F9) {
 			exit(0);
 		} else if (key == SDL_SCANCODE_F10) {
-			cpu_port[0] = cpu_port[1] = 0xFF;
+			CPU_PORT(0) = CPU_PORT(1) = 0xFF;
 			map_mask = 0;
 			vic3_registers[0x30] = 0;
 			in_hypervisor = 0;
