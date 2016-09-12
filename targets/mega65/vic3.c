@@ -565,7 +565,7 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
 
 
 #define SPRITE_X_START_SCREEN	24
-#define SPRITE_Y_START_SCREEN	30
+#define SPRITE_Y_START_SCREEN	50
 
 
 /* Extremely incorrect sprite emulation! BUGS:
