@@ -107,9 +107,12 @@ static int calc_offset ( const char *opdesc )
 	DEBUG("FDC: %s sector track=%d sector=%d side=%d @ PC=$%04X" NL, opdesc, track, sector, side, cpu_old_pc);
 	// FIXME: no checking of input parameters, can be insane values
 	// FIXME: no check for desired track/side and the currently selected/seeked, what should be!
-	// FIXME: no check if image file by size is really a D81 at least ...
 	// FIXME: whatever :)
-	offset = 40 * (track - 0) * 256 + (sector -1 ) * 512 + side * 20 * 256; // somewhat experimental value, it was after I figured out how that should work :-P
+	offset = 40 * (track - 0) * 256 + (sector - 1) * 512 + side * 20 * 256; // somewhat experimental value, it was after I figured out how that should work :-P
+	if (offset < 0 || offset > D81_SIZE - 512 || (offset & 511)) {
+		DEBUG("FDC: invalid D81 offset %d" NL, offset);
+		return -1;
+	}
 	return offset;
 }
 

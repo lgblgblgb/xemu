@@ -20,7 +20,7 @@
 TARGET		= mega65
 PRG_TARGET	= xmega65
 CFLAGS_TARGET	=
-SRCS_TARGET	= mega65.c dmagic.c c65fdc.c vic3.c sdcard.c uart_monitor.c hypervisor.c
-SRCS_COMMON	= emutools.c cpu65c02.c cia6526.c c65hid.c sid.c
+SRCS_TARGET	= mega65.c dmagic.c vic3.c sdcard.c uart_monitor.c hypervisor.c
+SRCS_COMMON	= emutools.c cpu65c02.c cia6526.c c65hid.c sid.c f011_core.c
 
 include ../../build/Makefile.common

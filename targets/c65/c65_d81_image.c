@@ -31,10 +31,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static int disk_fd = -1, disk_inserted = 0, read_only = 1;
 
 
-#define D81_SIZE	819200
-
-
-
 int fdc_cb_rd_sec ( Uint8 *buffer, int offset )
 {
 	int ret;

@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "cpu65c02.h"
 #include "cia6526.h"
-#include "c65fdc.h"
+#include "f011_core.h"
 #include "dmagic.h"
 #include "c65hid.h"
 #include "vic3.h"
@@ -368,7 +368,7 @@ static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, i
 	// *** Initialize DMA
 	dma_init();
 	// Initialize FDC
-	fdc_init(disk_image_name);
+	fdc_init();
 	// SIDs, plus SDL audio
 	sid_init(&sid1, sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sid2, sid_cycles_per_sec, sound_mix_freq);
@@ -532,6 +532,8 @@ Uint8 io_read ( int addr )
 	}
 	if (addr < 0xD700) {	// $D600 - $D6FF	UART (*)
 		if (vic_iomode == VIC4_IOMODE && addr >= 0xD609) {	// D609 - D6FF: Mega65 suffs
+			if (addr >= 0xD680 && addr <= 0xD693)		// SDcard controller etc of Mega65
+				return sdcard_read_register(addr - 0xD680);
 			switch (addr) {
 				case 0xD67E:				// upgraded hypervisor signal
 					if (kicked_hypervisor == 0x80)	// 0x80 means for Xemu (not for a real M65!): ask the user!
@@ -541,12 +543,6 @@ Uint8 io_read ( int addr )
 							"(don't worry, it won't be asked again without RESET)"
 						) ? 0xFF : 0;
 					return kicked_hypervisor;
-				case 0xD680:
-					return sdcard_read_status();
-				case 0xD688:
-					return sdcard_bytes_read & 0xFF;	// SDcard read bytes low byte
-				case 0xD689:
-					return sdcard_bytes_read >> 8;		// SDcard read bytes hi byte
 				case 0xD6F0:
 					return fpga_switches & 0xFF;
 				case 0xD6F1:
@@ -656,6 +652,10 @@ void io_write ( int addr, Uint8 data )
 				hypervisor_enter(addr & 0x3F);
 				return;
 			}
+			if (addr >= 0xD680 && addr <= 0xD693) {
+				sdcard_write_register(addr - 0xD680, data);
+				return;
+			}
 			switch (addr) {
 				case 0xD67C:	// hypervisor serial monitor port
 					hypervisor_serial_monitor_push_char(data);
@@ -674,15 +674,6 @@ void io_write ( int addr, Uint8 data )
 					break;
 				case 0xD67F:	// hypervisor leave
 					hypervisor_leave();
-					break;
-				case 0xD680:
-					sdcard_command(data);
-					break;
-				case 0xD681:
-				case 0xD682:
-				case 0xD683:
-				case 0xD684:
-					sdcard_select_sector(addr - 0xD681, data);
 					break;
 				default:
 					DEBUG("MEGA65: this I/O port is not emulated in Xemu yet: $%04X" NL, addr);

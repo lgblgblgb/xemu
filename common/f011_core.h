@@ -19,6 +19,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_F011_CORE_H_INCLUDED
 #define __XEMU_F011_CORE_H_INCLUDED
 
+#define D81_SIZE 819200
+
 extern void  fdc_write_reg ( int addr, Uint8 data );
 extern Uint8 fdc_read_reg  ( int addr );
 extern void  fdc_init      ( void );

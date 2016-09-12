@@ -22,24 +22,26 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <errno.h>
 
 #include "sdcard.h"
+#include "f011_core.h"
 #include "mega65.h"
 #include "emutools.h"
-
 #include "cpu65c02.h"
 
 
-static int sdfd;		// SD-card controller emulation, UNIX file descriptor of the open image file
+static int   sdfd;		// SD-card controller emulation, UNIX file descriptor of the open image file
 static Uint8 sd_buffer[512];	// SD-card controller buffer
 static Uint8 sd_status;		// SD-status byte
 static Uint8 sd_sector_bytes[4];
+static Uint8 sd_d81_img1_start[4];
 static off_t sd_card_size;
-int sdcard_bytes_read = 0;
+static int   sdcard_bytes_read = 0;
 
 
 int sdcard_init ( const char *fn )
 {
 	sd_status = 0;
 	memset(sd_sector_bytes, 0, sizeof sd_sector_bytes);
+	memset(sd_d81_img1_start, 0, sizeof sd_d81_img1_start);
 	if (mega65_capable) {
 	sdfd = emu_load_file(fn, NULL, -1);    // get the file descriptor only ...
 		if (sdfd < 0) {
@@ -102,40 +104,53 @@ int sdcard_write_buffer ( int addr, Uint8 data )
 }
 
 
-#define SEEK_SHIFT 0
-//#define SEEK_SHIFT 9
 
-static int read_sector ( void )
+static int host_seek_to ( Uint8 *addr_buffer, int addressing_offset, const char *description, off_t size_limit, int fd )
 {
-	off_t offset;
+	off_t image_offset = (((off_t)addr_buffer[0]) | ((off_t)addr_buffer[1] << 8) | ((off_t)addr_buffer[2] << 16) | ((off_t)addr_buffer[3] << 24)) + (off_t)addressing_offset;
+	DEBUG("SDCARD: %s card at position " PRINTF_LLD " (offset=%d) PC=$%04X" NL, description, (long long)image_offset, addressing_offset, cpu_pc);
+	if (image_offset < 0 || image_offset > size_limit - 512) {
+		FATAL("SDCARD: SEEK: invalid offset requested for %s with offset " PRINTF_LLD " PC=$%04X", description, (long long)image_offset, cpu_pc);
+	}
+	if (lseek(fd, image_offset, SEEK_SET) != image_offset)
+		FATAL("SDCARD: SEEK: image seek host-OS failure: %s", strerror(errno));
+	return 0;
+}
+
+
+
+static int sdimage_read_block ( Uint8 *io_buffer, Uint8 *addr_buffer, int addressing_offset, const char *description, off_t size_limit, int fd )
+{
 	int ret;
 	if (sdfd < 0)
 		return -1;
-	offset = (off_t)sd_sector_bytes[0] | ((off_t)sd_sector_bytes[1] << 8) | ((off_t)sd_sector_bytes[2] << 16) | ((off_t)sd_sector_bytes[3] << 24);
-	DEBUG("SDCARD: reading card at position %ld PC=$%04X" NL, (long)offset, cpu_pc);
-	if (offset < 0 || offset >= sd_card_size) {
-		DEBUG("SDCARD: invalid position value failure ..." NL);
-		FATAL("SDCARD: invalid position value failure!! %lld (limit = %lld)", (long long int)offset, (long long int)sd_card_size);
-		return -1;
-	}
-	if (lseek(sdfd, offset, SEEK_SET) != offset) {
-		DEBUG("SDCARD: lseek failure ... ERROR: %s" NL, strerror(errno));
-		return -1;
-	}
-	ret = read(sdfd, sd_buffer, 512);
-	if (ret <= 0) {
-		DEBUG("SDCARD: read failure ... ERROR: %s" NL, ret >=0 ? "zero byte read" : strerror(errno));
-		return -1;
-	}
+	host_seek_to(addr_buffer, addressing_offset, description, size_limit, fd);
+	ret = read(fd, io_buffer, 512);
+	if (ret != 512)
+		FATAL("SDCARD: read failure ... ERROR: %s" NL, ret >=0 ? "not 512 bytes could be read" : strerror(errno));
 	DEBUG("SDCARD: cool, sector read was OK (%d bytes read)!" NL, ret);
 	return ret;
 }
 
 
 
+int fdc_cb_rd_sec ( Uint8 *buffer, int d81_offset )
+{
+	return (sdimage_read_block(buffer, sd_d81_img1_start, d81_offset, "reading[D81]", sd_card_size, sdfd) != 512);
+}
+
+
+
+int fdc_cb_wr_sec ( Uint8 *buffer, int offset )
+{
+	return 1;
+}
+
+
+
 // This tries to emulate the behaviour, that at least another one status query
-// is needed to BUSY flag to go away instead of with no time. Dunnu if it is needed at all.
-Uint8 sdcard_read_status ( void )
+// is needed to BUSY flag to go away instead of with no time. DUNNO if it is needed at all.
+static Uint8 sdcard_read_status ( void )
 {
 	Uint8 ret = sd_status;
 	DEBUG("SDCARD: reading SD status $D680 result is $%02X PC=$%04X" NL, ret, cpu_pc);
@@ -145,7 +160,7 @@ Uint8 sdcard_read_status ( void )
 
 
 
-void sdcard_command ( Uint8 cmd )
+static void sdcard_command ( Uint8 cmd )
 {
 	int ret;
 	DEBUG("SDCARD: writing command register $D680 with $%02X PC=$%04X" NL, cmd, cpu_pc);
@@ -159,7 +174,7 @@ void sdcard_command ( Uint8 cmd )
 			sd_status &= ~(SD_ST_RESET | SD_ST_ERROR | SD_ST_FSM_ERROR);
 			break;
 		case 0x02:	// read sector
-			ret = read_sector();
+			ret = sdimage_read_block(sd_buffer, sd_sector_bytes, 0, "reading[card]", sd_card_size, sdfd);
 			if (ret < 0) {
 				sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR; // | SD_ST_BUSY1 | SD_ST_BUSY0;
 				sdcard_bytes_read = 0;
@@ -188,15 +203,61 @@ void sdcard_command ( Uint8 cmd )
 			sd_status &= ~(SD_ST_MAPPED | SD_ST_ERROR | SD_ST_FSM_ERROR);
 			break;
 		default:
+			// FIXME: how to signal this to the user/sys app? error flags, etc?
 			DEBUG("SDCARD: warning, unimplemented SD-card controller command $%02X" NL, cmd);
+			printf("MEGA65: SD: unimplemented command $%02X" NL, cmd);
 			break;
 	}
 }
 
 
 
-void sdcard_select_sector ( int secreg, Uint8 data )
+void sdcard_write_register ( int reg, Uint8 data )
 {
-	sd_sector_bytes[secreg] = data;
-	DEBUG("SDCARD: writing sector number register $%04X with $%02X PC=$%04X" NL, secreg + 0xD681, data, cpu_pc);
+	gs_regs[reg + 0x680] = data;
+	switch (reg) {
+		case 0:		// command/status register
+			sdcard_command(data);
+			break;
+		case 1:		// sector address
+		case 2:		// sector address
+		case 3:		// sector address
+		case 4:		// sector address
+			sd_sector_bytes[reg - 1] = data;
+			DEBUG("SDCARD: writing sector number register $%04X with $%02X PC=$%04X" NL, reg + 0xD680, data, cpu_pc);
+			break;
+		case 0xB:
+			printf("SD/FDC mount $D68B $%02X PC=$%04X" NL, data, cpu_pc);
+			fdc_set_disk((data & 3) == 3, !(data & 4));
+			break;
+		case 0xC:
+		case 0xD:
+		case 0xE:
+		case 0xF:
+			sd_d81_img1_start[reg - 0xC] = data;
+			DEBUG("SDCARD: writing D81 #1 sector register $%04X with $%02X PC=$%04X" NL, reg + 0xD680, data, cpu_pc);
+			break;
+	}
+}
+
+
+
+Uint8 sdcard_read_register ( int reg )
+{
+	Uint8 data;
+	switch (reg) {
+		case 0:
+			data = sdcard_read_status();
+			break;
+		case 8:	// SDcard read bytes low byte
+			data = sdcard_bytes_read & 0xFF;
+			break;
+		case 9:	// SDcard read bytes hi byte
+			data = sdcard_bytes_read >> 8;
+			break;
+		default:
+			data = gs_regs[reg + 0x680];
+			break;
+	}
+	return data;
 }
