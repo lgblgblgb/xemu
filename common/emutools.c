@@ -135,6 +135,7 @@ void emu_drop_events ( void )
 
 int emu_load_file ( const char *fn, void *buffer, int maxsize )
 {
+	char fnbuf[PATH_MAX + 1];
 	char *search_paths[] = {
 		".",
 		"." DIRSEP_STR "rom",
@@ -161,7 +162,6 @@ int emu_load_file ( const char *fn, void *buffer, int maxsize )
 		search_paths[1] = NULL;
 	}
 	while (search_paths[a]) {
-		char fnbuf[PATH_MAX + 1];
 		if (search_paths[a][0] == 0)
 			strcpy(fnbuf,  fn);
 		else
@@ -177,8 +177,11 @@ int emu_load_file ( const char *fn, void *buffer, int maxsize )
 		return -1;
 	}
 	printf("OK, file is open (fd = %d)" NL, fd);
-	if (maxsize == -1)
+	if (maxsize < 0) {
+		if (buffer)
+			strcpy(buffer, fnbuf);
 		return fd;	// special mode to get a file descriptor, instead of loading anything ...
+	}
 	while (read_size < maxsize) {
 		a = read(fd, buffer, maxsize - read_size);
 		if (a < 0) {

@@ -20,6 +20,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <sys/types.h>
 #include <unistd.h>
 #include <errno.h>
+#include <fcntl.h>
+#include <limits.h>
 
 #include "sdcard.h"
 #include "f011_core.h"
@@ -29,27 +31,45 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 static int   sdfd;		// SD-card controller emulation, UNIX file descriptor of the open image file
+static int   d81fd = -1;	// special case for F011 access, allow emulator to access D81 image on the host OS, instead of "inside" the SD card image! [NOT SO MUCH USED YET]
+static int   d81_is_read_only;
 static Uint8 sd_buffer[512];	// SD-card controller buffer
 static Uint8 sd_status;		// SD-status byte
 static Uint8 sd_sector_bytes[4];
 static Uint8 sd_d81_img1_start[4];
 static off_t sd_card_size;
 static int   sdcard_bytes_read = 0;
+static int   sd_is_read_only;
+static int   mounted;
 
 
 int sdcard_init ( const char *fn )
 {
+	char fnbuf[PATH_MAX + 1];
 	sd_status = 0;
+	sd_is_read_only = 1;
+	d81_is_read_only = 1;
+	mounted = 0;
 	memset(sd_sector_bytes, 0, sizeof sd_sector_bytes);
 	memset(sd_d81_img1_start, 0, sizeof sd_d81_img1_start);
 	if (mega65_capable) {
-	sdfd = emu_load_file(fn, NULL, -1);    // get the file descriptor only ...
+		sdfd = emu_load_file(fn, fnbuf, -1);    // get the file descriptor only ...
 		if (sdfd < 0) {
 			ERROR_WINDOW("Cannot open SD-card image %s, SD-card access won't work! ERROR: %s", fn, strerror(errno));
 			DEBUG("SDCARD: cannot open image %s" NL, fn);
 		} else {
+			// try to open in R/W mode ...
+			int tryfd = open(fnbuf, O_RDWR | O_BINARY);
+			if (tryfd >= 0) {
+				// use R/W mode descriptor if it was OK!
+				close(sdfd);
+				sdfd = tryfd;
+				DEBUG("SDCARD: image file re-opened in RD/WR mode, good" NL);
+				sd_is_read_only = 0;
+			} else
+				INFO_WINDOW("Image file %s could be open only in R/O mode", fnbuf);
 			// Check size!
-			DEBUG("SDCARD: cool, SD-card image %s is open" NL, fn);
+			DEBUG("SDCARD: cool, SD-card image %s (as %s) is open" NL, fn, fnbuf);
 			sd_card_size = lseek(sdfd, 0, SEEK_END);
 			if (sd_card_size == (off_t)-1) {
 				ERROR_WINDOW("Cannot query the size of the SD-card image %s, SD-card access won't work! ERROR: %s", fn, strerror(errno));
@@ -85,6 +105,7 @@ int sdcard_init ( const char *fn )
 }
 
 
+// Reads a byte from buffer. Return with -1 if buffer is not I/O mapped.
 int sdcard_read_buffer ( int addr )
 {
 	if (sd_status & SD_ST_MAPPED)
@@ -94,6 +115,7 @@ int sdcard_read_buffer ( int addr )
 }
 
 
+// Writes a byte into buffer. Return with -1 if buffer is not I/O mapped.
 int sdcard_write_buffer ( int addr, Uint8 data )
 {
 	if (sd_status & SD_ST_MAPPED) {
@@ -107,7 +129,7 @@ int sdcard_write_buffer ( int addr, Uint8 data )
 
 static int host_seek_to ( Uint8 *addr_buffer, int addressing_offset, const char *description, off_t size_limit, int fd )
 {
-	off_t image_offset = (((off_t)addr_buffer[0]) | ((off_t)addr_buffer[1] << 8) | ((off_t)addr_buffer[2] << 16) | ((off_t)addr_buffer[3] << 24)) + (off_t)addressing_offset;
+	off_t image_offset = (addr_buffer ? (((off_t)addr_buffer[0]) | ((off_t)addr_buffer[1] << 8) | ((off_t)addr_buffer[2] << 16) | ((off_t)addr_buffer[3] << 24)) : 0) + (off_t)addressing_offset;
 	DEBUG("SDCARD: %s card at position " PRINTF_LLD " (offset=%d) PC=$%04X" NL, description, (long long)image_offset, addressing_offset, cpu_pc);
 	if (image_offset < 0 || image_offset > size_limit - 512) {
 		FATAL("SDCARD: SEEK: invalid offset requested for %s with offset " PRINTF_LLD " PC=$%04X", description, (long long)image_offset, cpu_pc);
@@ -119,7 +141,7 @@ static int host_seek_to ( Uint8 *addr_buffer, int addressing_offset, const char 
 
 
 
-static int sdimage_read_block ( Uint8 *io_buffer, Uint8 *addr_buffer, int addressing_offset, const char *description, off_t size_limit, int fd )
+static int diskimage_read_block ( Uint8 *io_buffer, Uint8 *addr_buffer, int addressing_offset, const char *description, off_t size_limit, int fd )
 {
 	int ret;
 	if (sdfd < 0)
@@ -127,8 +149,25 @@ static int sdimage_read_block ( Uint8 *io_buffer, Uint8 *addr_buffer, int addres
 	host_seek_to(addr_buffer, addressing_offset, description, size_limit, fd);
 	ret = read(fd, io_buffer, 512);
 	if (ret != 512)
-		FATAL("SDCARD: read failure ... ERROR: %s" NL, ret >=0 ? "not 512 bytes could be read" : strerror(errno));
-	DEBUG("SDCARD: cool, sector read was OK (%d bytes read)!" NL, ret);
+		FATAL("SDCARD: %s failure ... ERROR: %s", description, ret >=0 ? "not 512 bytes could be read" : strerror(errno));
+	DEBUG("SDCARD: cool, sector %s was OK (%d bytes read)!" NL, description, ret);
+	return ret;
+}
+
+
+
+static int diskimage_write_block ( Uint8 *io_buffer, Uint8 *addr_buffer, int addressing_offset, const char *description, off_t size_limit, int fd )
+{
+	int ret;
+	if (sdfd < 0)
+		return -1;
+	if (sd_is_read_only)
+		return -1;
+	host_seek_to(addr_buffer, addressing_offset, description, size_limit, fd);
+	ret = write(fd, io_buffer, 512);
+	if (ret != 512)
+		FATAL("SDCARD: %s failure ... ERROR: %s", description, ret >=0 ? "not 512 bytes could be written" : strerror(errno));
+	DEBUG("SDCARD: cool, sector %s was OK (%d bytes read)!" NL, description, ret);
 	return ret;
 }
 
@@ -136,14 +175,18 @@ static int sdimage_read_block ( Uint8 *io_buffer, Uint8 *addr_buffer, int addres
 
 int fdc_cb_rd_sec ( Uint8 *buffer, int d81_offset )
 {
-	return (sdimage_read_block(buffer, sd_d81_img1_start, d81_offset, "reading[D81]", sd_card_size, sdfd) != 512);
+	if (d81fd < 0)
+		return (diskimage_read_block(buffer, sd_d81_img1_start, d81_offset, "reading[D81@SD]", sd_card_size, sdfd) != 512);
+	return (diskimage_read_block(buffer, NULL, d81_offset, "reading[D81@HOST]", D81_SIZE, d81fd) != 512);
 }
 
 
 
-int fdc_cb_wr_sec ( Uint8 *buffer, int offset )
+int fdc_cb_wr_sec ( Uint8 *buffer, int d81_offset )
 {
-	return 1;
+	if (d81fd < 0)
+		return (diskimage_write_block(buffer, sd_d81_img1_start, d81_offset, "writing[D81@SD]", sd_card_size, sdfd) != 512);
+	return (diskimage_write_block(buffer, NULL, d81_offset, "writing[D81@HOST]", D81_SIZE, d81fd) != 512);
 }
 
 
@@ -174,7 +217,7 @@ static void sdcard_command ( Uint8 cmd )
 			sd_status &= ~(SD_ST_RESET | SD_ST_ERROR | SD_ST_FSM_ERROR);
 			break;
 		case 0x02:	// read sector
-			ret = sdimage_read_block(sd_buffer, sd_sector_bytes, 0, "reading[card]", sd_card_size, sdfd);
+			ret = diskimage_read_block(sd_buffer, sd_sector_bytes, 0, "reading[SD]", sd_card_size, sdfd);
 			if (ret < 0) {
 				sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR; // | SD_ST_BUSY1 | SD_ST_BUSY0;
 				sdcard_bytes_read = 0;
@@ -211,6 +254,26 @@ static void sdcard_command ( Uint8 cmd )
 }
 
 
+// data = D68B write
+static void sdcard_mount_d81 ( Uint8 data )
+{
+	printf("SD/FDC mount register request @ $D68B val=$%02X at PC=$%04X" NL, data, cpu_pc);
+	if ((data & 3) == 3) {
+		fdc_set_disk(1, sd_is_read_only ? 0 : QUESTION_WINDOW("Use read-only access|Use R/W access (can be dangerous, can corrupt the image!)", "Hypervisor seems to be about mounting a D81 image. You can override the access mode now."));
+		mounted = 1;
+		printf("SD/FDC: (re-?)mounted D81 for starting sector $%02X%02X%02X%02X" NL,
+			sd_d81_img1_start[3], sd_d81_img1_start[2], sd_d81_img1_start[1], sd_d81_img1_start[0]
+		);
+	} else {
+		if (mounted)
+			printf("SD/FDC: unmounted D81" NL);
+		fdc_set_disk(0, 0);
+		mounted = 0;
+	}
+}
+
+
+
 
 void sdcard_write_register ( int reg, Uint8 data )
 {
@@ -227,8 +290,7 @@ void sdcard_write_register ( int reg, Uint8 data )
 			DEBUG("SDCARD: writing sector number register $%04X with $%02X PC=$%04X" NL, reg + 0xD680, data, cpu_pc);
 			break;
 		case 0xB:
-			printf("SD/FDC mount $D68B $%02X PC=$%04X" NL, data, cpu_pc);
-			fdc_set_disk((data & 3) == 3, !(data & 4));
+			sdcard_mount_d81(data);
 			break;
 		case 0xC:
 		case 0xD:
