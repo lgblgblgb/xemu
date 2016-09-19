@@ -251,7 +251,7 @@ void hypervisor_debug ( void )
 	}
 	if (unlikely((cpu_pc & 0xC000) != 0x8000)) {
 		DEBUG("HYPERVISOR-DEBUG: execution outside of the hypervisor memory, PC = $%04X" NL, cpu_pc);
-		FATAL("Hypervisor fatal error: execution outside of the hypervisor memory, PC = $%04X", cpu_pc);
+		FATAL("Hypervisor fatal error: execution outside of the hypervisor memory, PC=$%04X SP=$%04X", cpu_pc, cpu_sphi | cpu_sp);
 		return;
 	}
 	if (!resolver_ok) {

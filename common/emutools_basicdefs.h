@@ -1,5 +1,6 @@
-/* Commodore LCD emulator using SDL2 library. Also includes:
-   Test-case for a very simple and inaccurate Commodore VIC-20 emulator.
+/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
+   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
+   and some Mega-65 features as well.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
@@ -19,11 +20,35 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __LGB_EMUTOOLS_BASICDEFS_H_INCLUDED
-#define __LGB_EMUTOOLS_BASICDEFS_H_INCLUDED
+#ifndef __XEMU_COMMON_EMUTOOLS_BASICDEFS_H_INCLUDED
+#define __XEMU_COMMON_EMUTOOLS_BASICDEFS_H_INCLUDED
 
 #include <stdio.h>
 #include <SDL_types.h>
+#include <SDL_endian.h>
+
+#define USE_REGPARM
+
+#if UINTPTR_MAX == 0xffffffff
+#	define ARCH_32BIT
+#	define ARCH_BITS 32
+#else
+#	define ARCH_64BIT
+#	define ARCH_BITS 64
+#endif
+
+#if defined(__clang__)
+#	define CC_TYPE "clang"
+#elif defined(__MINGW64__)
+#	define CC_TYPE "mingw64"
+#elif defined(__MINGW32__)
+#	define CC_TYPE "mingw32"
+#elif defined(__GNUC__)
+#	define CC_TYPE "gcc"
+#else
+#	define CC_TYPE "Something"
+#	warning "Unrecognizable C compiler"
+#endif
 
 #ifdef __GNUC__
 #define likely(x)       __builtin_expect(!!(x), 1)
@@ -31,6 +56,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #else
 #define likely(x)       (x)
 #define unlikely(x)     (x)
+#endif
+
+#if defined(USE_REGPARM) && defined(__GNUC__)
+#define REGPARM(n)	__attribute__((regparm (n)))
+#else
+#define REGPARM(n)
 #endif
 
 /* Note: O_BINARY is a must for Windows for opening binary files, odd enough, I know ...
@@ -62,6 +93,55 @@ extern FILE *debug_fp;
 #ifndef __BIGGEST_ALIGNMENT__
 #define __BIGGEST_ALIGNMENT__	16
 #endif
-#define VARALIGN __attribute__ ((aligned (__BIGGEST_ALIGNMENT__)))
+#define ALIGNED(n) __attribute__ ((aligned (n)))
+#define MAXALIGNED ALIGNED(__BIGGEST_ALIGNMENT__)
+
+/* ---- BYTE ORDER RELATED STUFFS ---- */
+
+#ifndef SDL_BYTEORDER
+#	error "SDL_BYTEORDER is not defined!"
+#endif
+#if SDL_BYTEORDER == SDL_LIL_ENDIAN
+#	ifdef Z80EX_WORDS_BIG_ENDIAN
+#		undef Z80EX_WORDS_BIG_ENDIAN
+#	endif
+#	define ENDIAN_GOOD
+#	define ENDIAN_CHECKER_BYTE_L	0x01
+#	define ENDIAN_CHECKER_BYTE_H	0x23
+#	define ENDIAN_CHECKER_WORD	0x2301
+#	define ENDIAN_CHECKER_DWORD	0x67452301
+typedef union {
+	Uint8  _raw[4];	// 01 23 45 67
+	struct { Uint8  l,h,_un1,_un2; } b;
+	struct { Uint16 w,_unw; } w;
+	Uint32 d;
+} RegPair;
+#elif SDL_BYTEORDER == SDL_BIG_ENDIAN
+#	ifndef Z80EX_WORDS_BIG_ENDIAN
+#		define Z80EX_WORDS_BIG_ENDIAN
+#	endif
+#	define ENDIAN_UGLY
+#	define ENDIAN_CHECKER_BYTE_L    0x67
+#	define ENDIAN_CHECKER_BYTE_H    0x45
+#	define ENDIAN_CHECKER_WORD      0x4567
+#	define ENDIAN_CHECKER_DWORD     0x01234567
+typedef union {
+	Uint8  _raw[4];
+	struct { Uint8 _un1,_un2,h,l; } b;
+	struct { Uint16 _unw,w; } w;
+	Uint32 d;
+} RegPair;
+#else
+#	error "SDL_BYTEORDER is not SDL_LIL_ENDIAN neither SDL_BIG_ENDIAN"
+#endif
+static inline int xemu_byte_order_test ( void )
+{
+	RegPair r;
+	r._raw[0] = 0x01;
+	r._raw[1] = 0x23;
+	r._raw[2] = 0x45;
+	r._raw[3] = 0x67;
+	return (r.b.l != ENDIAN_CHECKER_BYTE_L || r.b.h != ENDIAN_CHECKER_BYTE_H || r.w.w != ENDIAN_CHECKER_WORD || r.d != ENDIAN_CHECKER_DWORD);
+}
 
 #endif
