@@ -1,4 +1,6 @@
-/* Test-case for a very simple and inaccurate Commodore VIC-20 emulator using SDL2 library.
+/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
+   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
+   and some Mega-65 features as well.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -15,8 +17,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __LGB_CPU65C02_H_INCLUDED
-#define __LGB_CPU65C02_H_INCLUDED
+#ifndef __XEMU_COMMON_CPU65C02_H_INCLUDED
+#define __XEMU_COMMON_CPU65C02_H_INCLUDED
 
 extern int cpu_irqLevel;
 extern int cpu_nmiEdge;

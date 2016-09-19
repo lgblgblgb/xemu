@@ -1,4 +1,6 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
+/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
+   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
+   and some Mega-65 features as well.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -28,8 +30,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  *      http://www.c64-wiki.com/index.php/CIA
  */
 
-#ifndef __LGB_CIA6526_H_INCLUDED
-#define __LGB_CIA6526_H_INCLUDED
+#ifndef __XEMU_COMMON_CIA6526_H_INCLUDED
+#define __XEMU_COMMON_CIA6526_H_INCLUDED
 
 struct Cia6526 {
         void (*outa)(Uint8 mask, Uint8 data);

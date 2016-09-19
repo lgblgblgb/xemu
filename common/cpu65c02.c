@@ -1,6 +1,11 @@
-/* A Commodore LCD emulator using SDL2 library.
-   Also includes a test-case for a very simple and inaccurate Commodore VIC-20 emulator.
+/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
+   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
+   and some Mega-65 features as well.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+
+   THIS IS AN UGLY PIECE OF SOURCE REALLY.
+
+   Quite confusing comment section even at the beginning, from this point ...
 
    | This file tries to implement a 65C02 CPU, also with the ability (unused here) for
    | *some* kind of DTV CPU hacks (though incorrect as other opcodes would be emulated
@@ -34,7 +39,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  */
 
 #include "emutools_basicdefs.h"
+#ifndef CPU_CUSTOM_INCLUDED
 #include "cpu65c02.h"
+#endif
 
 #ifdef DEBUG_CPU
 #include "cpu65ce02_disasm_tables.c"
