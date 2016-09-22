@@ -105,6 +105,7 @@ extern FILE *debug_fp;
 #	ifdef Z80EX_WORDS_BIG_ENDIAN
 #		undef Z80EX_WORDS_BIG_ENDIAN
 #	endif
+#	define ENDIAN_NAME		"LE"
 #	define ENDIAN_GOOD
 #	define ENDIAN_CHECKER_BYTE_L	0x01
 #	define ENDIAN_CHECKER_BYTE_H	0x23
@@ -120,6 +121,7 @@ typedef union {
 #	ifndef Z80EX_WORDS_BIG_ENDIAN
 #		define Z80EX_WORDS_BIG_ENDIAN
 #	endif
+#	define ENDIAN_NAME		"BE"
 #	define ENDIAN_UGLY
 #	define ENDIAN_CHECKER_BYTE_L    0x67
 #	define ENDIAN_CHECKER_BYTE_H    0x45

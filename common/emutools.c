@@ -368,7 +368,9 @@ int emu_init_sdl (
 	int locked_texture_update,		// use locked texture method [non zero], or malloc'ed stuff [zero]. NOTE: locked access doesn't allow to _READ_ pixels and you must fill ALL pixels!
 	void (*shutdown_callback)(void)		// callback function called on exit (can be nULL to not have any emulator specific stuff)
 ) {
+	SDL_RendererInfo ren_info;
 	char render_scale_quality_s[2];
+	int a;
 	if (!debug_fp)
 		emu_init_debug(getenv("XEMU_DEBUG_FILE"));
 	if (!debug_fp)
@@ -382,12 +384,16 @@ int emu_init_sdl (
 	SDL_VERSION(&sdlver_compiled);
         SDL_GetVersion(&sdlver_linked);
 	printf( "SDL version: (%s) compiled with %d.%d.%d, used with %d.%d.%d on platform %s" NL
+		"SDL system info: %d bits %s, %d cores, l1_line=%d, RAM=%dMbytes, CPU features: "
+		"3DNow=%d AVX=%d AVX2=%d AltiVec=%d MMX=%d RDTSC=%d SSE=%d SSE2=%d SSE3=%d SSE41=%d SSE42=%d" NL
 		"SDL drivers: video = %s, audio = %s" NL
-		"Timing: sleep = %s, query = %s" NL NL,
+		"Timing: sleep = %s, query = %s" NL,
 		SDL_GetRevision(),
 		sdlver_compiled.major, sdlver_compiled.minor, sdlver_compiled.patch,
 		sdlver_linked.major, sdlver_linked.minor, sdlver_linked.patch,
 		SDL_GetPlatform(),
+		ARCH_BITS, ENDIAN_NAME, SDL_GetCPUCount(), SDL_GetCPUCacheLineSize(), SDL_GetSystemRAM(),
+		SDL_Has3DNow(),SDL_HasAVX(),SDL_HasAVX2(),SDL_HasAltiVec(),SDL_HasMMX(),SDL_HasRDTSC(),SDL_HasSSE(),SDL_HasSSE2(),SDL_HasSSE3(),SDL_HasSSE41(),SDL_HasSSE42(),
 		SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver(),
 		__SLEEP_METHOD_DESC, __TIMING_METHOD_DESC
 	);
@@ -416,10 +422,29 @@ int emu_init_sdl (
 	strcpy(window_title_buffer, window_title);
 	window_title_buffer_end = window_title_buffer + strlen(window_title);
 	//SDL_SetWindowMinimumSize(sdl_win, SCREEN_WIDTH, SCREEN_HEIGHT * 2);
-	sdl_ren = SDL_CreateRenderer(sdl_win, -1, 0);
+	a = SDL_GetNumRenderDrivers();
+	while (--a >= 0) {
+		if (!SDL_GetRenderDriverInfo(a, &ren_info)) {
+			printf("SDL renderer driver #%d: \"%s\"" NL, a, ren_info.name);	
+		} else
+			printf("SDL renderer driver #%d: FAILURE TO QUERY (%s)" NL, a, SDL_GetError());
+	}
+	sdl_ren = SDL_CreateRenderer(sdl_win, -1, SDL_RENDERER_ACCELERATED);
 	if (!sdl_ren) {
-		ERROR_WINDOW("Cannot create SDL renderer: %s", SDL_GetError());
-		return 1;
+		ERROR_WINDOW("Cannot create accelerated SDL renderer: %s", SDL_GetError());
+		sdl_ren = SDL_CreateRenderer(sdl_win, -1, 0);
+		if (!sdl_ren) {
+			ERROR_WINDOW("... and not even non-accelerated driver could be created, giving up: %s", SDL_GetError());
+			return 1;
+		} else {
+			INFO_WINDOW("Created non-accelerated driver. NOTE: it will severly affect the performance!");
+		}
+	}
+	if (!SDL_GetRendererInfo(sdl_ren, &ren_info)) {
+		printf("SDL renderer used: \"%s\" max_tex=%dx%d tex_formats=%d ", ren_info.name, ren_info.max_texture_width, ren_info.max_texture_height, ren_info.num_texture_formats);
+		for (a = 0; a < ren_info.num_texture_formats; a++)
+			printf("%c%s", a ? ' ' : '(', SDL_GetPixelFormatName(ren_info.texture_formats[a]));
+		printf(")" NL);
 	}
 	SDL_RenderSetLogicalSize(sdl_ren, logical_x_size, logical_y_size);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
 	sdl_tex = SDL_CreateTexture(sdl_ren, pixel_format, SDL_TEXTUREACCESS_STREAMING, texture_x_size, texture_y_size);
@@ -449,6 +474,7 @@ int emu_init_sdl (
 		sdl_pixel_buffer = emu_malloc(texture_x_size_in_bytes * texture_y_size);
 	// play a single frame game, to set a consistent colour (all black ...) for the emulator. Also, it reveals possible errors with rendering
 	emu_render_dummy_frame(black_colour, texture_x_size, texture_y_size);
+	printf(NL);
 	return 0;
 }
 
