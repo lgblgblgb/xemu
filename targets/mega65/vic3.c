@@ -142,10 +142,12 @@ static void vic3_interrupt_checker ( void )
 {
 	int vic_irq_old = cpu_irqLevel & 2;
 	int vic_irq_new;
-	if (interrupt_status) {
+
+	if ((interrupt_status & vic3_registers[0x1A])) {
 		interrupt_status |= 128;
 		vic_irq_new = 2;
 	} else {
+		interrupt_status &= 127;
 		vic_irq_new = 0;
 	}
 	if (vic_irq_old != vic_irq_new) {
@@ -153,7 +155,7 @@ static void vic3_interrupt_checker ( void )
 		if (vic_irq_new)
 			cpu_irqLevel |= 2;
 		else
-			cpu_irqLevel &= 255 - 2;
+			cpu_irqLevel &= ~2;
 	}
 }
 
@@ -175,7 +177,7 @@ void vic3_check_raster_interrupt ( void )
 		interrupt_status |= 1;
 	} else
 		interrupt_status &= 0xFE;
-	interrupt_status &= vic3_registers[0x1A];
+	//interrupt_status &= vic3_registers[0x1A];
 	vic3_interrupt_checker();
 }
 
@@ -221,7 +223,7 @@ void vic3_write_reg ( int addr, Uint8 data )
 			DEBUG("VIC3: compare raster is now %d" NL, compare_raster);
 			break;
 		case 0x19:
-			interrupt_status = interrupt_status & data & 15 & vic3_registers[0x1A];
+			interrupt_status = interrupt_status & (~data) & 15;
 			vic3_interrupt_checker();
 			break;
 		case 0x1A:
@@ -645,7 +647,7 @@ void vic3_render_screen ( void )
 		}
 		for (a = 7; a >= 0; a--) {
 			int mask = 1 << a;
-			if (sprites & (1 << a))
+			if ((sprites & mask))
 				render_sprite(a, mask, sprite_bank + (sprite_pointers[a] << 6), p_sdl, tail_sdl);	// sprite_pointers are set by the renderer functions above!
 		}
 	}
