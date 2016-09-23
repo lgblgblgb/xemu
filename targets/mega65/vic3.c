@@ -172,7 +172,7 @@ void vic3_check_raster_interrupt ( void )
 	// according to the specification in case of NTSC. I really don't know ...
 	if (
 		(scanline == compare_raster)
-		|| (compare_raster == 511 && scanline == 0)
+	//	|| ((compare_raster == 511 || compare_raster == 319) && scanline == 0)
 	) {
 		interrupt_status |= 1;
 	} else
@@ -215,7 +215,7 @@ void vic3_write_reg ( int addr, Uint8 data )
 	vic3_registers[addr] = data;
 	switch (addr) {
 		case 0x11:
-			compare_raster = (compare_raster & 0xFF) | ((data & 1) ? 0x100 : 0);
+			compare_raster = (compare_raster & 0xFF) | ((data & 128) ? 0x100 : 0);
 			DEBUG("VIC3: compare raster is now %d" NL, compare_raster);
 			break;
 		case 0x12:
