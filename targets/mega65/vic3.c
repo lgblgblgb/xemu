@@ -142,7 +142,6 @@ static void vic3_interrupt_checker ( void )
 {
 	int vic_irq_old = cpu_irqLevel & 2;
 	int vic_irq_new;
-
 	if ((interrupt_status & vic3_registers[0x1A])) {
 		interrupt_status |= 128;
 		vic_irq_new = 2;
