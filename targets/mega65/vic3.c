@@ -49,11 +49,12 @@ int vic2_16k_bank;			// VIC-2 modes' 16K BANK address within 64K (NOT the tradit
 static Uint8 *sprite_pointers;		// Pointer to sprite pointers :)
 static Uint8 *sprite_bank;
 int vic3_blink_phase;			// blinking attribute helper, state.
+static Uint8 raster_colours[512];
 
 static int warn_sprites = 1, warn_ctrl_b_lo = 1;
 
 
-#define CHECK_PIXEL_POINTER
+//#define CHECK_PIXEL_POINTER
 
 
 
@@ -162,6 +163,7 @@ static void vic3_interrupt_checker ( void )
 
 void vic3_check_raster_interrupt ( void )
 {
+	raster_colours[scanline] = vic3_registers[0x21];	// ugly hack to make some kind of raster-bars visible :-/
 	// I'm lame even with VIC2 knowledge it seems
 	// C65 seems to use raster interrupt to generate the usual periodic IRQ
 	// (which was done with CIA on C64) in raster line 511. However as
@@ -227,6 +229,10 @@ void vic3_write_reg ( int addr, Uint8 data )
 			break;
 		case 0x1A:
 			vic3_registers[0x1A] &= 15;
+			break;
+		case 0x21:	// TODO: it seems we have to do about the same with various registers later, FIXME not only this one ... FIXME #2: on reading though high bits should be '1' with C64 I/O mode
+			if (!vic_iomode)
+				vic3_registers[0x21] &= 15;
 			break;
 		case 0x30:
 			// Save some un-needed memory translating table rebuilds, if there is no important bits (of us) changed.
@@ -342,6 +348,10 @@ static inline Uint8 *vic2_get_chargen_pointer ( void )
 }
 
 
+//#define BG_FOR_Y(y) vic3_registers[0x21]
+#define BG_FOR_Y(y) raster_colours[(y) + 50]
+
+
 
 /* At-frame-at-once (thus incorrect implementation) renderer for H640 (80 column)
    and "normal" (40 column) text VIC modes. Hardware attributes are not supported!
@@ -353,6 +363,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 	int x = 0, y = 0, xlim, ylim, charline = 0;
 	Uint8 *chrg = vic2_get_chargen_pointer();
 	int inc_p = (vic3_registers[0x54] & 1) ? 2 : 1;	// VIC-IV (Mega-65) 16 bit text mode?
+	int scanline = 0;
 	if (vic3_registers[0x31] & 128) { // check H640 bit: 80 column mode?
 		xlim = 79;
 		ylim = 24;
@@ -368,7 +379,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 		sprite_pointers = vidp + 1016;
 	}
 	// Target SDL pixel related format for the background colour
-	bg = palette[vic3_registers[0x21] & 15];
+	bg = palette[BG_FOR_Y(0)];
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_text");
 	for (;;) {
 		Uint8 chrdata = chrg[(*vidp << 3) + charline];
@@ -431,6 +442,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 				vidp -= (xlim + 1) * inc_p;
 				colp -= (xlim + 1) * inc_p;
 			}
+			bg = palette[BG_FOR_Y(++scanline)];
 		} else
 			x++;
 	}
