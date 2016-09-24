@@ -15,7 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include <SDL.h>
+#include "emutools.h"
 #include "mega65.h"
 #include "uart_monitor.h"
 
@@ -33,7 +33,6 @@ void uartmon_finish_command ( void ) {}
 #else
 
 
-#include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/un.h>
@@ -43,7 +42,6 @@ void uartmon_finish_command ( void ) {}
 #include <unistd.h>
 #include <string.h>
 #include <limits.h>
-#include "emutools.h"
 
 
 static int  sock_server, sock_client;

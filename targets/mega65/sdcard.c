@@ -15,19 +15,19 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include <stdio.h>
-#include <SDL.h>
+
+#include "emutools.h"
+#include "sdcard.h"
+#include "f011_core.h"
+#include "mega65.h"
+#include "cpu65c02.h"
+
 #include <sys/types.h>
 #include <unistd.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <limits.h>
 
-#include "sdcard.h"
-#include "f011_core.h"
-#include "mega65.h"
-#include "emutools.h"
-#include "cpu65c02.h"
 
 
 static int   sdfd;		// SD-card controller emulation, UNIX file descriptor of the open image file
