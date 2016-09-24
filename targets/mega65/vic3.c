@@ -21,10 +21,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include <stdio.h>
 
-#include <SDL.h>
-
+#include "emutools.h"
 #include "mega65.h"
 #include "cpu65c02.h"
 #include "vic3.h"
@@ -334,7 +332,7 @@ static inline Uint8 *vic2_get_chargen_pointer ( void )
 {
 	int offs = (vic3_registers[0x18] & 14) << 10;	// character generator address address within the current VIC2 bank
 	int crom = vic3_registers[0x30] & 64;
-	// DEBUG("VIC2: chargen: BANK=%04X OFS=%04X CROM=%d" NL, vic2_16k_bank, offs, crom);
+	DEBUG("VIC2: chargen: BANK=%04X OFS=%04X CROM=%d" NL, vic2_16k_bank, offs, crom);
 	if ((vic2_16k_bank == 0x0000 || vic2_16k_bank == 0x8000) && (offs == 0x1000 || offs == 0x1800)) {  // check if chargen info is in ROM
 		// FIXME: I am really lost with this CROM bit, and the layout of C65 ROM on charsets, sorry. Maybe this is totally wrong!
 		// The problem, for my eye, the two charsets (C64/C65?!) seems to be the very same :-/
@@ -363,6 +361,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 	int x = 0, y = 0, xlim, ylim, charline = 0;
 	Uint8 *chrg = vic2_get_chargen_pointer();
 	int inc_p = (vic3_registers[0x54] & 1) ? 2 : 1;	// VIC-IV (Mega-65) 16 bit text mode?
+	int fcm = (vic3_registers[0x54] & 4);	// M65 hack: FCM mode for >$FF chars
 	int scanline = 0;
 	if (vic3_registers[0x31] & 128) { // check H640 bit: 80 column mode?
 		xlim = 79;
@@ -382,52 +381,64 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 	bg = palette[BG_FOR_Y(0)];
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_text");
 	for (;;) {
-		Uint8 chrdata = chrg[(*vidp << 3) + charline];
 		Uint8 coldata = *colp;
 		Uint32 fg;
-		colp += inc_p;
-		vidp += inc_p;
-		if (vic3_registers[0x31] & 32) { 	// ATTR bit mode
-			if ((coldata & 0xF0) == 0x10) {	// only the blink bit for the character is set
-				if (vic3_blink_phase)
-					chrdata = 0;	// blinking character, in one phase, the character "disappears", ie blinking
-				coldata &= 15;
-			} else if ((!(coldata & 0x10)) || vic3_blink_phase) {
-				if (coldata & 0x80 && charline == 7)	// underline (must be before reverse, as underline can be reversed as well!)
-					chrdata = 0XFF; // the underline
-				if (coldata & 0x20)	// reverse bit for char
-					chrdata = ~chrdata;
-				if (coldata & 0x40)	// highlight, this must be the LAST, since it sets the low nibble of coldata ...
-					coldata = 0x10 | (coldata & 15);
-				else
+		if (fcm && vidp[1] == 1) {	// ugly hack, special case for boot logo, totally incorrect for the full FCM implementation ...
+			int a;
+			Uint8 *cp = memory + vic2_16k_bank + 64 * vidp[0] + charline * 8 + 0x4000;	// faked for $100-$1FF chars only!
+			for (a = 0; a < 8; a++) {
+				if (xlim != 79)
+					*(p++) = palette[*cp];
+				*(p++) = palette[*(cp++)];
+			}
+			colp += inc_p;
+			vidp += inc_p;
+		} else {
+			Uint8 chrdata = chrg[(*vidp << 3) + charline];
+			colp += inc_p;
+			vidp += inc_p;
+			if (vic3_registers[0x31] & 32) { 	// ATTR bit mode
+				if ((coldata & 0xF0) == 0x10) {	// only the blink bit for the character is set
+					if (vic3_blink_phase)
+						chrdata = 0;	// blinking character, in one phase, the character "disappears", ie blinking
+					coldata &= 15;
+				} else if ((!(coldata & 0x10)) || vic3_blink_phase) {
+					if (coldata & 0x80 && charline == 7)	// underline (must be before reverse, as underline can be reversed as well!)
+						chrdata = 0XFF; // the underline
+					if (coldata & 0x20)	// reverse bit for char
+						chrdata = ~chrdata;
+					if (coldata & 0x40)	// highlight, this must be the LAST, since it sets the low nibble of coldata ...
+						coldata = 0x10 | (coldata & 15);
+					else
+						coldata &= 15;
+				} else
 					coldata &= 15;
 			} else
 				coldata &= 15;
-		} else
-			coldata &= 15;
-		fg = palette[coldata];
-		// FIXME: no ECM, MCM stuff ...
-		if (xlim == 79) {
-			PIXEL_POINTER_CHECK_ASSERT(p + 7);
-			*(p++) = chrdata & 128 ? fg : bg;
-			*(p++) = chrdata &  64 ? fg : bg;
-			*(p++) = chrdata &  32 ? fg : bg;
-			*(p++) = chrdata &  16 ? fg : bg;
-			*(p++) = chrdata &   8 ? fg : bg;
-			*(p++) = chrdata &   4 ? fg : bg;
-			*(p++) = chrdata &   2 ? fg : bg;
-			*(p++) = chrdata &   1 ? fg : bg;
-		} else {
-			PIXEL_POINTER_CHECK_ASSERT(p + 15);
-			p[ 0] = p[ 1] = chrdata & 128 ? fg : bg;
-			p[ 2] = p[ 3] = chrdata &  64 ? fg : bg;
-			p[ 4] = p[ 5] = chrdata &  32 ? fg : bg;
-			p[ 6] = p[ 7] = chrdata &  16 ? fg : bg;
-			p[ 8] = p[ 9] = chrdata &   8 ? fg : bg;
-			p[10] = p[11] = chrdata &   4 ? fg : bg;
-			p[12] = p[13] = chrdata &   2 ? fg : bg;
-			p[14] = p[15] = chrdata &   1 ? fg : bg;
-			p += 16;
+			fg = palette[coldata];
+			// FIXME: no ECM, MCM stuff ...
+			if (xlim == 79) {
+				PIXEL_POINTER_CHECK_ASSERT(p + 7);
+				*(p++) = chrdata & 128 ? fg : bg;
+				*(p++) = chrdata &  64 ? fg : bg;
+				*(p++) = chrdata &  32 ? fg : bg;
+				*(p++) = chrdata &  16 ? fg : bg;
+				*(p++) = chrdata &   8 ? fg : bg;
+				*(p++) = chrdata &   4 ? fg : bg;
+				*(p++) = chrdata &   2 ? fg : bg;
+				*(p++) = chrdata &   1 ? fg : bg;
+			} else {
+				PIXEL_POINTER_CHECK_ASSERT(p + 15);
+				p[ 0] = p[ 1] = chrdata & 128 ? fg : bg;
+				p[ 2] = p[ 3] = chrdata &  64 ? fg : bg;
+				p[ 4] = p[ 5] = chrdata &  32 ? fg : bg;
+				p[ 6] = p[ 7] = chrdata &  16 ? fg : bg;
+				p[ 8] = p[ 9] = chrdata &   8 ? fg : bg;
+				p[10] = p[11] = chrdata &   4 ? fg : bg;
+				p[12] = p[13] = chrdata &   2 ? fg : bg;
+				p[14] = p[15] = chrdata &   1 ? fg : bg;
+				p += 16;
+			}
 		}
 		if (x == xlim) {
 			p += tail;
