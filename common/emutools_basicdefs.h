@@ -51,15 +51,17 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 
 #ifdef __GNUC__
-#define likely(x)       __builtin_expect(!!(x), 1)
-#define unlikely(x)     __builtin_expect(!!(x), 0)
+#define likely(__x__)	__builtin_expect(!!(__x__), 1)
+#define unlikely(__x__)	__builtin_expect(!!(__x__), 0)
+#define INLINE		__attribute__ ((__always_inline__)) inline
 #else
-#define likely(x)       (x)
-#define unlikely(x)     (x)
+#define likely(__x__)	(__x__)
+#define unlikely(__x__)	(__x__)
+#define INLINE		inline
 #endif
 
 #if defined(USE_REGPARM) && defined(__GNUC__)
-#define REGPARM(n)	__attribute__((regparm (n)))
+#define REGPARM(__n__)	__attribute__ ((__regparm__ (__n__)))
 #else
 #define REGPARM(n)
 #endif

@@ -331,16 +331,12 @@ void vic3_write_palette_reg ( int num, Uint8 data )
 static inline Uint8 *vic2_get_chargen_pointer ( void )
 {
 	int offs = (vic3_registers[0x18] & 14) << 10;	// character generator address address within the current VIC2 bank
-	int crom = vic3_registers[0x30] & 64;
-	DEBUG("VIC2: chargen: BANK=%04X OFS=%04X CROM=%d" NL, vic2_16k_bank, offs, crom);
+	//int crom = vic3_registers[0x30] & 64;
+	//DEBUG("VIC2: chargen: BANK=%04X OFS=%04X CROM=%d" NL, vic2_16k_bank, offs, crom);
 	if ((vic2_16k_bank == 0x0000 || vic2_16k_bank == 0x8000) && (offs == 0x1000 || offs == 0x1800)) {  // check if chargen info is in ROM
-		// FIXME: I am really lost with this CROM bit, and the layout of C65 ROM on charsets, sorry. Maybe this is totally wrong!
-		// The problem, for my eye, the two charsets (C64/C65?!) seems to be the very same :-/
-		// BUT, it seems, C65 mode *SETS* CROM bit. While for C64 mode it is CLEARED.
-		if (crom)
-			return memory + 0x29000 + offs - 0x1000;	// ... so this should be the C65 charset ...
-		else
-			return memory + 0x2D000 + offs - 0x1000;	// ... and this should be the C64 charset ...
+		// In case of Mega65, fetching char-info from ROM means to access the "WOM"
+		// FIXME: what should I do with bit 6 of VIC-III register $30 ["CROM"] ?!
+		return character_rom + offs - 0x1000;
 	} else
 		return memory + vic2_16k_bank + offs;
 }
@@ -385,7 +381,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 		Uint32 fg;
 		if (fcm && vidp[1] == 1) {	// ugly hack, special case for boot logo, totally incorrect for the full FCM implementation ...
 			int a;
-			Uint8 *cp = memory + vic2_16k_bank + 64 * vidp[0] + charline * 8 + 0x4000;	// faked for $100-$1FF chars only!
+			Uint8 *cp = memory + (vidp[0] << 6) + (charline << 3) + (vidp[1] << 14);
 			for (a = 0; a < 8; a++) {
 				if (xlim != 79)
 					*(p++) = palette[*cp];

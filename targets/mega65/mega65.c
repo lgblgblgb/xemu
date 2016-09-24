@@ -15,10 +15,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include <stdio.h>
 
-#include <SDL.h>
-
+#include "emutools.h"
 #include "mega65.h"
 #include "cpu65c02.h"
 #include "cia6526.h"
@@ -30,13 +28,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sdcard.h"
 #include "uart_monitor.h"
 #include "hypervisor.h"
-#include "emutools.h"
 
 
 static SDL_AudioDeviceID audio = 0;
 
 Uint8 memory[0x100000];			// "Normal" max memory space of C65 (1Mbyte). Special Mega65 cases are handled differently in the current implementation
 Uint8 colour_ram[0x10000];
+Uint8 character_rom[0x1000];		// the "WOM"-like character ROM of VIC-IV
 Uint8 slow_ram[127 << 20];		// 127Mbytes of slowRAM, heh ...
 //Uint8 cpu_port[2];			// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
@@ -72,6 +70,7 @@ int map_offset_low;		// MAP low offset, should be filled at the MAP opcode, *bef
 int map_offset_high;		// MAP high offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 int map_megabyte_low;		// Mega65 extension: selects the "MegaByte range" (MB) for the mappings on mapped blocks 0...3, NOTE: shifted to Mbyte position!
 int map_megabyte_high;		// Mega65 extension: selects the "MegaByte range" (MB) for the mappings on mapped blocks 4...7, NOTE: shifted to Mbyte position!
+int io_at_d000;
 
 static int frame_counter;
 
@@ -167,7 +166,7 @@ void apply_memory_config ( void )
 		addr_trans_wr_megabyte[0xA] = addr_trans_rd_megabyte[0xA] = addr_trans_wr_megabyte[0xB] = addr_trans_rd_megabyte[0xB] = 0;
 	}
 	// $CXXX, MAP block 6 [mask 64]
-	// Warning: all VIC3 reg $30 related ROM maps are for 8K size, *expect* of '@C000' (interface ROM) which is only 4K! Also this is in another ROM bank than the others
+	// Warning: all VIC3 reg $30 related ROM maps are for 8K size, *except* of '@C000' (interface ROM) which is only 4K! Also this is in another ROM bank than the others
 	if (vic3_registers[0x30] & 32) {
 		addr_trans_wr         [0xC] = addr_trans_rd         [0xC] = ROM_C000_REMAP;
 		addr_trans_wr_megabyte[0xC] = addr_trans_rd_megabyte[0xC] = 0;
@@ -183,14 +182,17 @@ void apply_memory_config ( void )
 	if (map_mask & 64) {
 		addr_trans_wr         [0xD] = addr_trans_rd         [0xD] = map_offset_high;
 		addr_trans_wr_megabyte[0xD] = addr_trans_rd_megabyte[0xD] = map_megabyte_high;
+		io_at_d000 = 0;
 	} else {
 		if ((cp & 7) > 4) {
 			addr_trans_wr         [0xD] = addr_trans_rd         [0xD] = IO_REMAP_ADD;
 			addr_trans_wr_megabyte[0xD] = addr_trans_rd_megabyte[0xD] = IO_REMAP_MEGABYTE << 20;
+			io_at_d000 = 1;
 		} else {
 			addr_trans_wr[0xD] = 0;
 			addr_trans_rd[0xD] = (cp & 3) ? ROM_C64_CHR_REMAP : 0;
 			addr_trans_wr_megabyte[0xD] = addr_trans_rd_megabyte[0xD] = 0;
+			io_at_d000 = 0;
 		}
 	}
 	// $EXXX and $FXXX, MAP block 7 [mask 128]
@@ -278,7 +280,6 @@ static const Uint8 initial_kickup[] = {
 
 static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, int sound_mix_freq )
 {
-	int a;
 #ifdef AUDIO_EMULATION
 	SDL_AudioSpec audio_want, audio_got;
 #endif
@@ -286,13 +287,7 @@ static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, i
 	hid_init();
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
-	// ugly hack to pre-initialize ROM area with charset :) FIXME: I am not really sure now what memory address is used by VIC, my bad :(
-	a = 0x20000;
-	while (a < 0x40000) {
-		memcpy(memory + a, initial_charset, sizeof initial_charset);
-		memset(memory + a + sizeof initial_charset, 0, 4096 - sizeof initial_charset);
-		a += 4096;
-	}
+	memcpy(character_rom, initial_charset, sizeof initial_charset); // pre-initialize charrom "WOM" with an initial charset
 	memset(slow_ram, 0xFF, sizeof slow_ram);
 	memset(colour_ram, 0xFF, sizeof colour_ram);
 	in_hypervisor = 0;
@@ -756,7 +751,7 @@ void cpu_write_linear_opcode ( Uint8 data )
 
 
 
-void write_phys_mem ( int addr, Uint8 data )
+void REGPARM(2) write_phys_mem ( int addr, Uint8 data )
 {
 	// NOTE: this function assumes that address within the valid 256Mbyte addressing range.
 	// Normal MAP stuffs does this, since it wraps within a single 1Mbyte "MB" already
@@ -777,7 +772,8 @@ void write_phys_mem ( int addr, Uint8 data )
 		return;
 	}
 	if (addr < 0x020000) {		// the last 2K of the mentioned 128K is the mega65 mapped colour RAM (126K ... 128K)
-		colour_ram[addr & 0x7FF] = data; 	// FIXME: currently it's not mapped for real at the last Mbyte of 256MBytes, as it should be!
+		memory[addr] = data; 	// also update the "legacy 2K C65 ROM @ 126K" so read func won't have a different case for this!
+		colour_ram[addr & 0x7FF] = data;
 		return;
 	}
 	if (addr < 0x040000) {		// ROM area (128K ... 256K)
@@ -798,10 +794,8 @@ void write_phys_mem ( int addr, Uint8 data )
 			memory[addr - 0x8000000] = data;
 		return;
 	}
-	if ((addr & 0xFFFF000) == 0xFF7E000) {  // FIXME: temporary hack to allow non-existing VIC-IV charrom writes :-/
-		DEBUG("LINEAR: VIC-IV charrom writes are ignored for now in Xemu @ $%X PC=$%04X" NL, addr, cpu_pc);
-		memory[0x2D000 + (addr & 0x3FF)] = 255-data;	// C64 charset
-		memory[0x29000 + (addr & 0x3FF)] = 255-data;	// C65 charset
+	if ((addr & 0xFFFF000) == 0xFF7E000) {
+		character_rom[addr & 0xFFF] = data;
 		return;
 	}
 	if ((addr & 0xFFFF000) == IO_REMAPPED) {		// I/O stuffs (remapped from standard $D000 location as found on C64 or C65 too)
@@ -854,18 +848,18 @@ void write_phys_mem ( int addr, Uint8 data )
 
 
 
-Uint8 read_phys_mem ( int addr )
+Uint8 REGPARM(1) read_phys_mem ( int addr )
 {
 	addr &= 0xFFFFFFF;		// warps around at 256Mbyte, for address bus of Mega65
 	//Check for < 2 not needed anymore, as CPU port is really the memory, though it can be a problem if DMA sees this issue differently?!
 	//if (addr < 0x000002)
 	//	return CPU_PORT(addr);
-	if (addr < 0x01F800)		// accessing RAM @ 2 ... 128-2K.
+	if (addr < 0x040000)		// accessing C65 RAM+ROM @ 0 ... 256K
 		return memory[addr];
-	if (addr < 0x020000)		// the last 2K of the mentioned 128K is the mega65 mapped colour RAM (126K ... 128K)
-		return colour_ram[addr & 0x7FF]; 	// FIXME: currently it's not mapped for real at the last Mbyte of 256MBytes, as it should be!
-	if (addr < 0x040000)		// ROM area (128K ... 256K)
-		return memory[addr];
+//	if (addr < 0x020000)		// the last 2K of the mentioned 128K is the mega65 mapped colour RAM (126K ... 128K)
+//		return colour_ram[addr & 0x7FF]; 	// FIXME: currently it's not mapped for real at the last Mbyte of 256MBytes, as it should be!
+//	if (addr < 0x040000)		// ROM area (128K ... 256K)
+//		return memory[addr];
 	if (addr < 0x100000)		// unused space (256K ... 1M)
 		return 0xFF;
 	// No other memory accessible components/space on C65. The following areas on M65 currently decoded with masks:
