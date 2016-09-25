@@ -50,7 +50,7 @@ static Uint8 *sprite_pointers;		// Pointer to sprite pointers :)
 static Uint8 *sprite_bank;
 int vic3_blink_phase;			// blinking attribute helper, state.
 
-static int warn_sprites = 1, warn_ctrl_b_lo = 1;
+static int warn_sprites = 0, warn_ctrl_b_lo = 1;
 
 
 #define CHECK_PIXEL_POINTER
@@ -334,14 +334,15 @@ static inline Uint8 *vic2_get_chargen_pointer ( void )
 
 
 /* At-frame-at-once (thus incorrect implementation) renderer for H640 (80 column)
-   and "normal" (40 column) text VIC modes. Hardware attributes are not supported!
-   No support for MCM and ECM!  */
+   and "normal" (40 column) text VIC modes. Hardware attributes are supported.
+   No support for ECM!  */
 static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 {
-	Uint32 bg;
 	Uint8 *vidp, *colp = memory + 0x1F800;
 	int x = 0, y = 0, xlim, ylim, charline = 0;
 	Uint8 *chrg = vic2_get_chargen_pointer();
+	Uint32 colours[4];	// only two of them used in non-MCM mode
+	int mcm;
 	if (vic3_registers[0x31] & 128) { // check H640 bit: 80 column mode?
 		xlim = 79;
 		ylim = 24;
@@ -356,13 +357,17 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 		vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
 		sprite_pointers = vidp + 1016;
 	}
-	// Target SDL pixel related format for the background colour
-	bg = palette[vic3_registers[0x21] & 15];
+	colours[0] = palette[vic3_registers[0x21] & 15];
+	if (vic3_registers[0x16] & 16) {
+		mcm = 1;
+		colours[1] = palette[vic3_registers[0x22] & 15];
+		colours[2] = palette[vic3_registers[0x23] & 15];
+	} else
+		mcm = 0;
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_text");
 	for (;;) {
 		Uint8 chrdata = chrg[((*(vidp++)) << 3) + charline];
 		Uint8 coldata = *(colp++);
-		Uint32 fg;
 		if (vic3_registers[0x31] & 32) { 	// ATTR bit mode
 			if ((coldata & 0xF0) == 0x10) {	// only the blink bit for the character is set
 				if (vic3_blink_phase)
@@ -381,28 +386,52 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 				coldata &= 15;
 		} else
 			coldata &= 15;
-		fg = palette[coldata];
-		// FIXME: no ECM, MCM stuff ...
+		if (mcm) {
+			if (coldata & 8) {
+				mcm = 2;
+				colours[3] = palette[coldata & (~8)];
+			} else {
+				mcm = 1;
+				colours[3] = palette[coldata];
+			}
+		}
+			colours[3] = palette[coldata];
+		// FIXME: no ECM  ...
 		if (xlim == 79) {
 			PIXEL_POINTER_CHECK_ASSERT(p + 7);
-			*(p++) = chrdata & 128 ? fg : bg;
-			*(p++) = chrdata &  64 ? fg : bg;
-			*(p++) = chrdata &  32 ? fg : bg;
-			*(p++) = chrdata &  16 ? fg : bg;
-			*(p++) = chrdata &   8 ? fg : bg;
-			*(p++) = chrdata &   4 ? fg : bg;
-			*(p++) = chrdata &   2 ? fg : bg;
-			*(p++) = chrdata &   1 ? fg : bg;
+			if (mcm == 2) {
+				p[0] = p[1] = colours[ chrdata >> 6     ];
+				p[2] = p[3] = colours[(chrdata >> 4) & 3];
+				p[4] = p[5] = colours[(chrdata >> 2) & 3];
+				p[6] = p[7] = colours[ chrdata       & 3];
+				p += 8;
+			} else {
+				*(p++) = chrdata & 128 ? colours[3] : colours[0];
+				*(p++) = chrdata &  64 ? colours[3] : colours[0];
+				*(p++) = chrdata &  32 ? colours[3] : colours[0];
+				*(p++) = chrdata &  16 ? colours[3] : colours[0];
+				*(p++) = chrdata &   8 ? colours[3] : colours[0];
+				*(p++) = chrdata &   4 ? colours[3] : colours[0];
+				*(p++) = chrdata &   2 ? colours[3] : colours[0];
+				*(p++) = chrdata &   1 ? colours[3] : colours[0];
+			}
 		} else {
 			PIXEL_POINTER_CHECK_ASSERT(p + 15);
-			p[ 0] = p[ 1] = chrdata & 128 ? fg : bg;
-			p[ 2] = p[ 3] = chrdata &  64 ? fg : bg;
-			p[ 4] = p[ 5] = chrdata &  32 ? fg : bg;
-			p[ 6] = p[ 7] = chrdata &  16 ? fg : bg;
-			p[ 8] = p[ 9] = chrdata &   8 ? fg : bg;
-			p[10] = p[11] = chrdata &   4 ? fg : bg;
-			p[12] = p[13] = chrdata &   2 ? fg : bg;
-			p[14] = p[15] = chrdata &   1 ? fg : bg;
+			if (mcm == 2) {
+                                p[ 0] = p[ 1] = p[ 2] = p[ 3] = colours[ chrdata >> 6     ];
+                                p[ 4] = p[ 5] = p[ 6] = p[ 7] = colours[(chrdata >> 4) & 3];
+                                p[ 8] = p[ 9] = p[10] = p[11] = colours[(chrdata >> 2) & 3];
+                                p[12] = p[13] = p[14] = p[15] = colours[ chrdata       & 3];
+			} else {
+				p[ 0] = p[ 1] = chrdata & 128 ? colours[3] : colours[0];
+				p[ 2] = p[ 3] = chrdata &  64 ? colours[3] : colours[0];
+				p[ 4] = p[ 5] = chrdata &  32 ? colours[3] : colours[0];
+				p[ 6] = p[ 7] = chrdata &  16 ? colours[3] : colours[0];
+				p[ 8] = p[ 9] = chrdata &   8 ? colours[3] : colours[0];
+				p[10] = p[11] = chrdata &   4 ? colours[3] : colours[0];
+				p[12] = p[13] = chrdata &   2 ? colours[3] : colours[0];
+				p[14] = p[15] = chrdata &   1 ? colours[3] : colours[0];
+			}
 			p += 16;
 		}
 		if (x == xlim) {
@@ -426,33 +455,49 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 
 
 
-// VIC2 bitmap mode, now only HIRES mode (no MCM yet), without H640 VIC3 feature!!
+// VIC2 bitmap mode, now only HIRES/MCM modes, without H640 VIC3 feature!!
 // I am not even sure if H640 would work here, as it needs almost all the 16K of area what VIC-II can see,
 // that is, not so much RAM for the video matrix left would be used for the attribute information.
 // Note: VIC2 sees ROM at some addresses thing is not emulated yet!
 static inline void vic2_render_screen_bmm ( Uint32 *p, int tail )
 {
+	int mcm;
 	int x = 0, y = 0, charline = 0;
-	Uint8 *vidp, *chrp;
+	Uint8 *vidp, *chrp, *colp;
+	Uint32 colours[4];	// colours, only two are used in hi-res mode, all of four in MCM mode
 	vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
 	sprite_pointers = vidp + 1016;
 	chrp = memory + ((vic3_registers[0x18] & 8) ? 8192 : 0) + vic2_16k_bank;
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_bmm");
+	if (vic3_registers[0x16] & 16) {
+		mcm = 1;
+		colours[0] = palette[vic3_registers[0x21] & 15];	// used only in MCM-mode
+		colp = memory + 0x1F800;   // colp is used only in MCM mode
+	} else
+		mcm = 0;
 	for (;;) {
 		Uint8  data = *(vidp++);
-		Uint32 bg = palette[data & 15];
-		Uint32 fg = palette[data >> 4];
+		colours[2] = palette[data & 15];	// pixel "0" in non-MCM mode, pixel "10" in MCM mode (thus index 2)
+		colours[1] = palette[data >> 4];	// pixel "1" in non-MCM mode, pixel "01" in MCM mode (thus index 1)
 		data = *chrp;
 		chrp += 8;
 		PIXEL_POINTER_CHECK_ASSERT(p);
-		p[ 0] = p[ 1] = data & 128 ? fg : bg;
-		p[ 2] = p[ 3] = data &  64 ? fg : bg;
-		p[ 4] = p[ 5] = data &  32 ? fg : bg;
-		p[ 6] = p[ 7] = data &  16 ? fg : bg;
-		p[ 8] = p[ 9] = data &   8 ? fg : bg;
-		p[10] = p[11] = data &   4 ? fg : bg;
-		p[12] = p[13] = data &   2 ? fg : bg;
-		p[14] = p[15] = data &   1 ? fg : bg;
+		if (mcm) {
+			colours[3] = palette[(*(colp++)) & 15];
+			p[ 0] = p[ 1] = p[ 2] = p[ 3] = colours[ data >> 6     ];
+			p[ 4] = p[ 5] = p[ 6] = p[ 7] = colours[(data >> 4) & 3];
+			p[ 8] = p[ 9] = p[10] = p[11] = colours[(data >> 2) & 3];
+			p[12] = p[13] = p[14] = p[15] = colours[ data       & 3];
+		} else {
+			p[ 0] = p[ 1] = data & 128 ? colours[1] : colours[2];
+			p[ 2] = p[ 3] = data &  64 ? colours[1] : colours[2];
+			p[ 4] = p[ 5] = data &  32 ? colours[1] : colours[2];
+			p[ 6] = p[ 7] = data &  16 ? colours[1] : colours[2];
+			p[ 8] = p[ 9] = data &   8 ? colours[1] : colours[2];
+			p[10] = p[11] = data &   4 ? colours[1] : colours[2];
+			p[12] = p[13] = data &   2 ? colours[1] : colours[2];
+			p[14] = p[15] = data &   1 ? colours[1] : colours[2];
+		}
 		p += 16;
 		if (x == 39) {
 			p += tail;
@@ -466,6 +511,7 @@ static inline void vic2_render_screen_bmm ( Uint32 *p, int tail )
 			} else {
 				charline++;
 				vidp -= 40;
+				colp -= 40;	// though used only in MCM mode, who cares :)
 				chrp -= 319;
 			}
 		} else
@@ -558,7 +604,7 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
 
 /* Extremely incorrect sprite emulation! BUGS:
    * Sprites cannot be behind the background (sprite priority)
-   * Multicolour sprites are not supported
+   * MCM sprites are not supported
    * No sprite-background collision detection
    * No sprite-sprite collision detection
    * This is a simple, after-the-rendered-frame render-sprites one-by-one algorithm
