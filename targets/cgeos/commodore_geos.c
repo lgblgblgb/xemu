@@ -427,7 +427,8 @@ static void vic2_render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Ui
 								p[x + 320 + tail] = colour;
 							x++;
 						}
-					}
+					} else
+						x += expand_x ? 2 : 1;
 				}
 				data++;
 			}

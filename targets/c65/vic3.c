@@ -594,7 +594,8 @@ static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 
 								p[x + 640 + tail] = p[x + 641 + tail] = colour;
 							x += 2;
 						}
-					}
+					} else
+						x += expand_x ? 4 : 2;
 				}
 				data++;
 			}
