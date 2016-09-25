@@ -357,7 +357,6 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 	int x = 0, y = 0, xlim, ylim, charline = 0;
 	Uint8 *chrg = vic2_get_chargen_pointer();
 	int inc_p = (vic3_registers[0x54] & 1) ? 2 : 1;	// VIC-IV (Mega-65) 16 bit text mode?
-	int fcm = (vic3_registers[0x54] & 4);	// M65 hack: FCM mode for >$FF chars
 	int scanline = 0;
 	if (vic3_registers[0x31] & 128) { // check H640 bit: 80 column mode?
 		xlim = 79;
@@ -379,20 +378,26 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 	for (;;) {
 		Uint8 coldata = *colp;
 		Uint32 fg;
-		if (fcm && vidp[1] == 1) {	// ugly hack, special case for boot logo, totally incorrect for the full FCM implementation ...
-			int a;
-			Uint8 *cp = memory + (vidp[0] << 6) + (charline << 3) + (vidp[1] << 14);
-			for (a = 0; a < 8; a++) {
-				if (xlim != 79)
-					*(p++) = palette[*cp];
-				*(p++) = palette[*(cp++)];
+		if (
+			inc_p == 2 && (		// D054 bit 0 controlled stuff (16bit mode)
+			(vidp[1] == 0 && (vic3_registers[0x54] & 2)) ||	// enabled for =<$FF chars
+			(vidp[1] && (vic3_registers[0x54] & 4))		// enabled for >$FF chars
+		)) {
+			if (vidp[0] == 0xFF && vidp[1] == 0xFF) {
+				// end of line marker, let's use background to fill the rest of the line ...
+				// FIXME: however in the current situation we can't do that since of the "fixed" line length for 80 or 40 chars ... :(
+				p += xlim == 39 ? 16 : 8;	// so we just ignore ... FIXME !!
+			} else {
+				int a;
+				Uint8 *cp = memory + (((vidp[0] << 6) + (charline << 3) + (vidp[1] << 14)) & 0x1ffff); // and-mask: wrap-around in 128K of chip-RAM
+				for (a = 0; a < 8; a++) {
+					if (xlim != 79)
+						*(p++) = palette[*cp];
+					*(p++) = palette[*(cp++)];
+				}
 			}
-			colp += inc_p;
-			vidp += inc_p;
 		} else {
 			Uint8 chrdata = chrg[(*vidp << 3) + charline];
-			colp += inc_p;
-			vidp += inc_p;
 			if (vic3_registers[0x31] & 32) { 	// ATTR bit mode
 				if ((coldata & 0xF0) == 0x10) {	// only the blink bit for the character is set
 					if (vic3_blink_phase)
@@ -436,6 +441,8 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 				p += 16;
 			}
 		}
+		colp += inc_p;
+		vidp += inc_p;
 		if (x == xlim) {
 			p += tail;
 			x = 0;
