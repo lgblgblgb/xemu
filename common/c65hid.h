@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 /* Note: HID stands for "Human Input Devices" or something like that :)
    That is: keyboard, joystick, mouse. */
 
-extern Uint8 kbd_matrix[8];	// keyboard matrix state, 8 * 8 bits
+extern Uint8 kbd_matrix[16];	// keyboard matrix state, 8 * 8 bits
 
 extern int hid_key_event ( SDL_Scancode key, int pressed ) ;
 

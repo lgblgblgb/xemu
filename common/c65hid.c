@@ -43,7 +43,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 */
 
 
-Uint8 kbd_matrix[8];		// keyboard matrix state, 8 * 8 bits
+Uint8 kbd_matrix[16];		// keyboard matrix state, 8 * 8 bits
 static int mouse_delta_x;
 static int mouse_delta_y;
 static unsigned int hid_state;
@@ -140,13 +140,19 @@ static const struct KeyMapping key_map[] = {
 	{ SDL_SCANCODE_LALT,		0x75 },	// Commodore key, PC kbd sux, does not have C= key ... Mapping left ALT as the C= key
 	{ SDL_SCANCODE_Q,		0x76 },
 	{ SDL_SCANCODE_END,		0x77 },	// RUN STOP key, we map 'END' as this key
+	// **** Emulates joystick with keypad
+	{ SDL_SCANCODE_KP_0,		0xF4 }, // fire
+	{ SDL_SCANCODE_KP_8,		0xF0 }, // up
+	{ SDL_SCANCODE_KP_2,		0xF1 },	// down
+	{ SDL_SCANCODE_KP_4,		0xF2 }, // left
+	{ SDL_SCANCODE_KP_6,		0xF3 }, // right
 	// **** this must be the last line: end of mapping table ****
 	{ 0, 0xFF }
 };
 
 
-#define KBD_PRESS_KEY(a)        kbd_matrix[(a) >> 4] &= 255 - (1 << ((a) & 0x7))
-#define KBD_RELEASE_KEY(a)      kbd_matrix[(a) >> 4] |= 1 << ((a) & 0x7)
+#define KBD_PRESS_KEY(a)        kbd_matrix[(a) >> 4] &= ~(1 << ((a) & 0x7))
+#define KBD_RELEASE_KEY(a)      kbd_matrix[(a) >> 4] |=   1 << ((a) & 0x7)
 #define KBD_SET_KEY(a,state) do {	\
 	if (state)			\
 		KBD_PRESS_KEY(a);	\
