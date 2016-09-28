@@ -33,8 +33,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SID_CYCLES_PER_SEC	1000000
 #define AUDIO_SAMPLE_FREQ	44100
 
-//#define DEBUG_MEMORY
-//#define DEBUG_STACK
 
 // Note: this is a hack, maybe not standard! No REC (Ram Expansion Controller) emulation is involved here ...
 // it's merely just that the upper 512K of the 1Mbyte addressing space is "free" and can be handled (maybe in a non standard way!) as RAM too ...

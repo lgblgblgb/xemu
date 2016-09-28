@@ -15,10 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include <stdio.h>
-
-#include <SDL.h>
-
+#include "emutools.h"
 #include "commodore_65.h"
 #include "cpu65c02.h"
 #include "cia6526.h"
@@ -28,16 +25,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "c65hid.h"
 #include "vic3.h"
 #include "sid.h"
-#include "emutools.h"
 
 
 
 static SDL_AudioDeviceID audio = 0;
 
 Uint8 memory[0x100000];			// 65CE02 MAP'able address space
-static Uint8 cpu_port[2];		// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
 static struct SidEmulation sid1, sid2;	// the two SIDs
+static int joystick_emu;
 
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request (with the lower 16 bits as addr from $D000)
 #define IO_REMAP_VIRTUAL	0x110000
@@ -62,26 +58,6 @@ static int frame_counter;
 
 
 
-#ifdef DEBUG_STACK
-static int stackguard_address = -1;
-static Uint8 stackguard_data = 0;
-static Uint8 cpu_old_sp;
-static Uint16 cpu_old_pc_my;
-static void DEBUG_WRITE_ACCESS ( int physaddr, Uint8 data )
-{
-	if (
-		(physaddr >= 0x100 && physaddr < 0x200) ||
-		(physaddr >= 0x10100 && physaddr < 0x10200)
-	) {
-		stackguard_address = physaddr;
-		stackguard_data = data;
-	}
-}
-#else
-#define DEBUG_WRITE_ACCESS(unused1,unused2)
-#endif
-
-
 
 /* You *MUST* call this every time, when *any* of these events applies:
    * MAP 4510 opcode is issued, map_offset_low, map_offset_high, map_mask are modified
@@ -99,7 +75,7 @@ void apply_memory_config ( void )
 {
 	// FIXME: what happens if VIC-3 reg $30 mapped ROM is tried to be written? Ignored, or RAM is used to write to, as with the CPU port mapping?
 	// About the produced signals on the "CPU port"
-	int cp = (cpu_port[1] | (~cpu_port[0]));
+	int cp = (memory[1] | (~memory[0]));
 	// Simple ones, only CPU MAP may apply not other factors
 	// Also, these are the "lower" blocks, needs the offset for the "lower" area in case of CPU MAP'ed state
 	addr_trans_wr[0] = addr_trans_rd[0] = addr_trans_wr[1] = addr_trans_rd[1] = (map_mask & 1) ? map_offset_low : 0;	// $0XXX + $1XXX, MAP block 0 [mask 1]
@@ -172,9 +148,13 @@ void clear_emu_events ( void )
 
 #define KBSEL cia1.PRA
 
+// we emulate joystick state in this non-existing keyboard matrix line for now
+#define JOYSTICK_STATE kbd_matrix[0xF]
 
-static Uint8 cia_read_keyboard ( Uint8 ddr_mask_unused )
+
+static Uint8 cia_read_keyboard ( Uint8 ddr_mask_unused )	// IN-B
 {
+	DEBUG("JOY: joystick state read for joy1 on part B is $%02X" NL, JOYSTICK_STATE);
 	return
 		((KBSEL &   1) ? 0xFF : kbd_matrix[0]) &
 		((KBSEL &   2) ? 0xFF : kbd_matrix[1]) &
@@ -183,16 +163,25 @@ static Uint8 cia_read_keyboard ( Uint8 ddr_mask_unused )
 		((KBSEL &  16) ? 0xFF : kbd_matrix[4]) &
 		((KBSEL &  32) ? 0xFF : kbd_matrix[5]) &
 		((KBSEL &  64) ? 0xFF : kbd_matrix[6]) &
-		((KBSEL & 128) ? 0xFF : kbd_matrix[7])
+		((KBSEL & 128) ? 0xFF : kbd_matrix[7]) &
+		(joystick_emu == 1 ? JOYSTICK_STATE : 0xFF);
 	;
 }
 
 
+static Uint8 cia_read_joy_2 ( Uint8 ddr_mask_unused )		// IN-A
+{
+	DEBUG("JOY: joystick state read for joy2 on part A is $%02X" NL, JOYSTICK_STATE);
+	DEBUG("CIA1: reading joy2 (CIA mask=$%02X)" NL, ddr_mask_unused);
+	return (joystick_emu == 2 ? JOYSTICK_STATE : 0xFF);
+}
+
 
 static void cia2_outa ( Uint8 mask, Uint8 data )
 {
-	vic2_16k_bank = (3 - (data & 3)) * 0x4000;
-	DEBUG("VIC2: 16K BANK is set to $%04X" NL, vic2_16k_bank);
+	//vic2_16k_bank = (3 - (data & 3)) * 0x4000;
+	vic2_16k_bank = ((~(data | (~mask))) & 3) << 14;
+	DEBUG("VIC2: 16K BANK is set to $%04X (CIA mask=$%02X)" NL, vic2_16k_bank, mask);
 }
 
 
@@ -220,6 +209,7 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 {
 	SDL_AudioSpec audio_want, audio_got;
 	hid_init();
+	joystick_emu = 1;
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
 	// *** Load ROM image
@@ -228,7 +218,7 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 	// *** Initialize VIC3
 	vic3_init();
 	// *** Memory configuration
-	cpu_port[0] = cpu_port[1] = 0xFF;	// the "CPU I/O port" on 6510/C64, implemented by VIC3 for real in C65!
+	memory[0] = memory[1] = 0xFF;		// the "CPU I/O port" on 6510/C64, implemented by VIC3 for real in C65!
 	map_mask = 0;				// as all 8K blocks are unmapped, we don't need to worry about the low/high offset to set here
 	apply_memory_config();			// VIC3 $30 reg is already filled, so it's OK to call this now
 	// *** CIAs
@@ -236,7 +226,7 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 		NULL,	// callback: OUTA(mask, data)
 		NULL,	// callback: OUTB(mask, data)
 		NULL,	// callback: OUTSR(mask, data)
-		NULL,	// callback: INA(mask)
+		cia_read_joy_2,		// callback: INA(mask)
 		cia_read_keyboard,	// callback: INB(mask)
 		NULL,	// callback: INSR(mask)
 		cia_setint_cb	// callback: SETINT(level)
@@ -369,7 +359,12 @@ Uint8 io_read ( int addr )
 		}
 	}
 	if (addr < 0xD440) {	// $D400 - $D43F	SID, right
-		RETURN_ON_IO_READ_NOT_IMPLEMENTED("right SID", 0xFF);
+		if (addr == 0xD419)		// POT-X
+			return 0x83;
+		else if (addr == 0xD41A)	// POT-Y
+			return 0x83;
+		else
+			RETURN_ON_IO_READ_NOT_IMPLEMENTED("right SID", 0xFF);
 	}
 	if (addr < 0xD600) {	// $D440 - $D5FF	SID, left
 		RETURN_ON_IO_READ_NOT_IMPLEMENTED("left SID", 0xFF);
@@ -500,19 +495,13 @@ void io_write ( int addr, Uint8 data )
 void write_phys_mem ( int addr, Uint8 data )
 {
 	addr &= 0xFFFFF;
-#if 0
-       if (addr > 0x7FFFF)
-                DEBUG("HACKY: Someone writing upper RAM %06X PC=%04X (%06X) data = %02X!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc, data);
-       else if (addr > 0x3FFFF)
-                DEBUG("HACKY: Someone writing upper ROM %06X PC=%04X (%06X) data = %02X!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc, data);
-#endif
-	if (addr < 2) {
-		if ((cpu_port[addr] & 7) != (data & 7)) {
-			cpu_port[addr] = data;
+	if (addr < 2) {	// "CPU port" at memory addr 0/1
+		if ((memory[addr] & 7) != (data & 7)) {
+			memory[addr] = data;
 			DEBUG("MEM: applying new memory configuration because of CPU port writing" NL);
 			apply_memory_config();
 		} else
-			cpu_port[addr] = data;
+			memory[addr] = data;
 	} else if (
 		(addr < 0x20000)
 #if defined(ALLOW_256K_RAMEXP) && defined(ALLOW_512K_RAMEXP)
@@ -533,26 +522,7 @@ void write_phys_mem ( int addr, Uint8 data )
 
 Uint8 read_phys_mem ( int addr )
 {
-	addr &= 0xFFFFF;
-	if (addr < 2)
-		return cpu_port[addr];
-#if 0
-	if (
-		addr == 18552  + 0x20000 ||
-		addr == 26744  + 0x20000 ||
-		addr == 51330  + 0x20000 ||
-		addr == 116856 + 0x20000
-	) {
-		DEBUG("HACKY: PHYS=%06X PC=%04X PC_PHYS=%06X SPA=%04X" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc,
-			memory[cpu_sp + 0x104] | (memory[cpu_sp + 0x105] << 8)
-		);
-	}
-	if (addr > 0x7FFFF)
-		DEBUG("HACKY: Someone reading upper RAM %06X PC=%04X (%06X)!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
-	else if (addr > 0x3FFFF)
-		DEBUG("HACKY: Someone reading upper ROM %06X PC=%04X (%06X)!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
-#endif
-	return memory[addr];
+	return memory[addr & 0xFFFFF];
 }
 
 
@@ -566,7 +536,7 @@ Uint8 cpu_read ( Uint16 addr )
 			FATAL("Internal error: IO is not on the IO space!");
 		return io_read(addr);	// addr should be in $DXXX range to hit this, hopefully ...
 	}
-	return read_phys_mem(phys_addr);
+	return memory[phys_addr & 0xFFFFF];	// light optimization, do not call read_phys_mem for this single stuff :)
 }
 
 
@@ -639,19 +609,30 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 {
 	// Check for special, emulator-related hot-keys (not C65 key)
 	if (pressed) {
-		if (key == SDL_SCANCODE_F11) {
-			emu_set_full_screen(-1);
-			return;
-		} else if (key == SDL_SCANCODE_F9) {
-			exit(0);
-		} else if (key == SDL_SCANCODE_F10) {
-			cpu_port[0] = cpu_port[1] = 0xFF;
-			map_mask = 0;
-			vic3_registers[0x30] = 0;
-			apply_memory_config();
-			cpu_reset();
-			DEBUG("RESET!" NL);
-			return;
+		switch (key) {
+			case SDL_SCANCODE_F11:
+				emu_set_full_screen(-1);
+				return;
+			case SDL_SCANCODE_F9:
+				exit(0);
+				return;
+			case SDL_SCANCODE_F10:
+				memory[0] = memory[1] = 0xFF;
+				map_mask = 0;
+				vic3_registers[0x30] = 0;
+				apply_memory_config();
+				cpu_reset();
+				DEBUG("RESET!" NL);
+				return;
+			case SDL_SCANCODE_KP_ENTER:
+				if (joystick_emu == 1)
+					joystick_emu = 2;
+				else if (joystick_emu == 2)
+					joystick_emu = 1;
+				printf("Joystick emulation for Joy#%d" NL, joystick_emu);
+				break;
+			default:
+				break;
 		}
 	}
 	// If not an emulator hot-key, try to handle as a C65 key
@@ -743,25 +724,10 @@ int main ( int argc, char **argv )
 		SDL_PauseAudioDevice(audio, 0);
 	for (;;) {
 		int opcyc;
-#ifdef DEBUG_STACK
-		cpu_old_sp = cpu_sp;
-		cpu_old_pc_my = cpu_pc;
-		stackguard_address = -1;
-#endif
 		// Trying to use at least some approx stuff :)
 		// In FAST mode, the divider is 7. (see: vic3.c)
 		// Otherwise it's 2, thus giving about *3.5 slower CPU ... or something :)
 		opcyc = cpu_step();
-#ifdef DEBUG_STACK
-		if (cpu_sp != cpu_old_sp) {
-			DEBUG("STACK: pointer [OP=$%02X] change $%02X -> %02X [diff=%d]" NL, cpu_op, cpu_old_sp, cpu_sp, cpu_old_sp - cpu_sp);
-			cpu_old_sp = cpu_sp;
-		} else {
-			if (stackguard_address > -1) {
-				DEBUG("STACK: WARN: somebody modified stack-like memory at $%X [SP=$%02X] with data $%02X [PC=$%04X]" NL, stackguard_address, cpu_sp, stackguard_data, cpu_old_pc_my);
-			}
-		}
-#endif
 		// FIXME: maybe CIAs are not fed with the actual CPU clock and that cause the "too fast" C64 for me?
 		// ... though I tried to correct used CPU cycles with that divider hack at least to approx. the ~1MHz clock in non-FAST mode (see vic3.c)
 		// ... Now it seems to be approx. OK :-) Hopefully, but I have no idea what happens in C65 mode, as - it seems - the usual
