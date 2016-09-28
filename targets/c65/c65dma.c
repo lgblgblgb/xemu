@@ -15,10 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include <stdio.h>
-
-#include <SDL.h>
-
+#include "emutools.h"
 #include "c65dma.h"
 #include "commodore_65.h"
 #include "emutools.h"
@@ -66,7 +63,8 @@ static Uint8 minterms[4];		// Used with MIX DMA command only
        Uint8 dma_status;
 
 
-#define IO_ADDR(a)		(0xD000 | ((a) & 0xFFF))
+//#define IO_ADDR(a)		(0xD000 | ((a) & 0xFFF))
+#define IO_ADDR(a)		a
 #define IO_READ(a)		io_read(IO_ADDR(a))
 #define IO_WRITE(a, d)		io_write(IO_ADDR(a), d)
 #define MEM_READ(a)		read_phys_mem(a)

@@ -187,7 +187,7 @@ void vic3_write_reg ( int addr, Uint8 data )
 	DEBUG("VIC3: write reg $%02X with data $%02X" NL, addr, data);
 	if (addr == 0x2F) {
 		if (!vic_new_mode && data == 0x96 && old_data == 0xA5) {
-			vic_new_mode = 1;
+			vic_new_mode = VIC_NEW_MODE;
 			DEBUG("VIC3: switched into NEW I/O access mode :)" NL);
 		} else if (vic_new_mode) {
 			vic_new_mode = 0;
