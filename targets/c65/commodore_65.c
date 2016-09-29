@@ -157,7 +157,6 @@ void clear_emu_events ( void )
 
 static Uint8 cia1_in_b ( void )
 {
-	DEBUG("JOY: joystick state read for joy1 on part B is $%02X" NL, JOYSTICK_STATE);
 	return
 		((KBSEL &   1) ? 0xFF : kbd_matrix[0]) &
 		((KBSEL &   2) ? 0xFF : kbd_matrix[1]) &
@@ -167,14 +166,13 @@ static Uint8 cia1_in_b ( void )
 		((KBSEL &  32) ? 0xFF : kbd_matrix[5]) &
 		((KBSEL &  64) ? 0xFF : kbd_matrix[6]) &
 		((KBSEL & 128) ? 0xFF : kbd_matrix[7]) &
-		(joystick_emu == 1 ? JOYSTICK_STATE : 0xFF);
+		(joystick_emu == 1 ? JOYSTICK_STATE : 0xFF)
 	;
 }
 
 
 static Uint8 cia1_in_a ( void )
 {
-	DEBUG("JOY: joystick state read for joy2 on part A is $%02X" NL, JOYSTICK_STATE);
 	return joystick_emu == 2 ? JOYSTICK_STATE : 0xFF;
 }
 
@@ -200,8 +198,8 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 	DEBUG("AUDIO: audio callback, wants %d samples" NL, len);
 	// We use the trick, to render boths SIDs with step of 2, with a byte offset
 	// to get a stereo stream, wanted by SDL.
-	sid_render(&sids[1], ((short *)(stream)) + 0, len / 2, 2);		// SID @ left
-	sid_render(&sids[0], ((short *)(stream)) + 1, len / 2, 2);		// SID @ right
+	sid_render(&sids[1], ((short *)(stream)) + 0, len >> 1, 2);	// SID @ left
+	sid_render(&sids[0], ((short *)(stream)) + 1, len >> 1, 2);	// SID @ right
 }
 
 

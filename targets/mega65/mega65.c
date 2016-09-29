@@ -39,6 +39,7 @@ Uint8 slow_ram[127 << 20];		// 127Mbytes of slowRAM, heh ...
 //Uint8 cpu_port[2];			// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
 static struct SidEmulation sid1, sid2;	// the two SIDs
+static int joystick_emu;
 int cpu_linear_memory_addressing_is_enabled = 0;
 
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request
@@ -230,6 +231,10 @@ void clear_emu_events ( void )
 
 #define KBSEL cia1.PRA
 
+// we emulate joystick state in this non-existing keyboard matrix line for now
+#define JOYSTICK_STATE kbd_matrix[0xF]
+
+
 
 static Uint8 cia1_in_b ( void )
 {
@@ -241,10 +246,16 @@ static Uint8 cia1_in_b ( void )
 		((KBSEL &  16) ? 0xFF : kbd_matrix[4]) &
 		((KBSEL &  32) ? 0xFF : kbd_matrix[5]) &
 		((KBSEL &  64) ? 0xFF : kbd_matrix[6]) &
-		((KBSEL & 128) ? 0xFF : kbd_matrix[7])
+		((KBSEL & 128) ? 0xFF : kbd_matrix[7]) &
+		(joystick_emu == 1 ? JOYSTICK_STATE : 0xFF)
 	;
 }
 
+
+static Uint8 cia1_in_a ( void )
+{
+	return joystick_emu == 2 ? JOYSTICK_STATE : 0xFF;
+}
 
 
 static void cia2_out_a ( Uint8 data )
@@ -268,8 +279,8 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 	//DEBUG("AUDIO: audio callback, wants %d samples" NL, len);
 	// We use the trick, to render boths SIDs with step of 2, with a byte offset
 	// to get a stereo stream, wanted by SDL.
-	sid_render(&sid2, ((short *)(stream)) + 0, len / 2, 2);		// SID @ left
-	sid_render(&sid1, ((short *)(stream)) + 1, len / 2, 2);		// SID @ right
+	sid_render(&sid2, ((short *)(stream)) + 0, len >> 1, 2);	// SID @ left
+	sid_render(&sid1, ((short *)(stream)) + 1, len >> 1, 2);	// SID @ right
 }
 
 
@@ -285,6 +296,7 @@ static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, i
 #endif
 	hypervisor_debug_init(KICKSTART_LIST_FILE_NAME);
 	hid_init();
+	joystick_emu = 1;
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
 	memcpy(character_rom, initial_charset, sizeof initial_charset); // pre-initialize charrom "WOM" with an initial charset
@@ -343,22 +355,22 @@ static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, i
 	apply_memory_config();			// VIC3 $30 reg is already filled, so it's OK to call this now
 	// *** CIAs
 	cia_init(&cia1, "CIA-1",
-		NULL,	// callback: OUTA(mask, data)
-		NULL,	// callback: OUTB(mask, data)
-		NULL,	// callback: OUTSR(mask, data)
-		NULL,	// callback: INA(mask)
-		cia1_in_b,	// callback: INB(mask)
-		NULL,	// callback: INSR(mask)
-		cia_setint_cb	// callback: SETINT(level)
+		NULL,			// callback: OUTA
+		NULL,			// callback: OUTB
+		NULL,			// callback: OUTSR
+		cia1_in_a,		// callback: INA~ joy#2
+		cia1_in_b,		// callback: INB ~ keyboard
+		NULL,			// callback: INSR
+		cia_setint_cb		// callback: SETINT
 	);
 	cia_init(&cia2, "CIA-2",
-		cia2_out_a,	// callback: OUTA(mask, data)
-		NULL,	// callback: OUTB(mask, data)
-		NULL,	// callback: OUTSR(mask, data)
-		cia_port_in_dummy,	// callback: INA(mask)
-		NULL,	// callback: INB(mask)
-		NULL,	// callback: INSR(mask)
-		NULL	// callback: SETINT(level)	that would be NMI in our case
+		cia2_out_a,		// callback: OUTA
+		NULL,			// callback: OUTB
+		NULL,			// callback: OUTSR
+		cia_port_in_dummy,	// callback: INA
+		NULL,			// callback: INB
+		NULL,			// callback: INSR
+		NULL			// callback: SETINT ~ that would be NMI in our case
 	);
 	// *** Initialize DMA
 	dma_init();
@@ -980,24 +992,35 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 {
 	// Check for special, emulator-related hot-keys (not C65 key)
 	if (pressed) {
-		if (key == SDL_SCANCODE_F11) {
-			emu_set_full_screen(-1);
-			return;
-		} else if (key == SDL_SCANCODE_F9) {
-			exit(0);
-		} else if (key == SDL_SCANCODE_F10) {
-			CPU_PORT(0) = CPU_PORT(1) = 0xFF;
-			map_mask = 0;
-			vic3_registers[0x30] = 0;
-			in_hypervisor = 0;
-			apply_memory_config();
-			cpu_reset();
-			if (mega65_capable) {
-				kicked_hypervisor = 0x80;	// this will signal Xemu, to ask the user on the first read!
-				hypervisor_enter(TRAP_RESET);
-			}
-			DEBUG("RESET!" NL);
-			return;
+		switch (key) {
+			case SDL_SCANCODE_F11:
+				emu_set_full_screen(-1);
+				return;
+			case SDL_SCANCODE_F9:
+				exit(0);
+				return;
+			case SDL_SCANCODE_F10:
+				CPU_PORT(0) = CPU_PORT(1) = 0xFF;
+				map_mask = 0;
+				vic3_registers[0x30] = 0;
+				in_hypervisor = 0;
+				apply_memory_config();
+				cpu_reset();
+				if (mega65_capable) {
+					kicked_hypervisor = 0x80;	// this will signal Xemu, to ask the user on the first read!
+					hypervisor_enter(TRAP_RESET);
+				}
+				DEBUG("RESET!" NL);
+				return;
+			case SDL_SCANCODE_KP_ENTER:
+				if (joystick_emu == 1)
+					joystick_emu = 2;
+				else if (joystick_emu == 2)
+				joystick_emu = 1;
+				printf("Joystick emulation for Joy#%d" NL, joystick_emu);
+				return;
+			default:
+				break;	// make gcc happy with a default case ...
 		}
 	}
 	// If not an emulator hot-key, try to handle as a C65 key
