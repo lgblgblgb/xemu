@@ -49,7 +49,7 @@ static Uint8 *sprite_bank;
 int vic3_blink_phase;			// blinking attribute helper, state.
 static Uint8 raster_colours[512];
 
-static int warn_sprites = 1, warn_ctrl_b_lo = 1;
+static int warn_sprites = 0, warn_ctrl_b_lo = 1;
 
 
 //#define CHECK_PIXEL_POINTER
@@ -622,10 +622,11 @@ static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 
 			for (a = 0; a < 3; a++) {
 				for (mask = 128; mask; mask >>= 1) {
 					if (*data & mask) {
-						if (x >= 0 && x < 640)
+						if (x >= 0 && x < 640) {
 							p[x] = p[x + 1] = colour;
 							if (expand_y && y < 200)
 								p[x + 640 + tail] = p[x + 641 + tail] = colour;
+						}
 						x += 2;
 						if (expand_x && x >= 0 && x < 640) {
 							p[x] = p[x + 1] = colour;
