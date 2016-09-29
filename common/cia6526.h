@@ -34,11 +34,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define __XEMU_COMMON_CIA6526_H_INCLUDED
 
 struct Cia6526 {
-        void (*outa)(Uint8 mask, Uint8 data);
-        void (*outb)(Uint8 mask, Uint8 data);
+        void (*outa)(Uint8 data);
+        void (*outb)(Uint8 data);
         void (*outsr)(Uint8 data);
-        Uint8 (*ina)(Uint8 mask);
-        Uint8 (*inb)(Uint8 mask);
+        Uint8 (*ina)(void);
+        Uint8 (*inb)(void);
         Uint8 (*insr)(void);
         void (*setint)(int level);
         const char *name;
@@ -57,11 +57,11 @@ struct Cia6526 {
 
 extern void cia_init(
         struct Cia6526 *cia, const char *name,
-        void (*outa)(Uint8 mask, Uint8 data),
-        void (*outb)(Uint8 mask, Uint8 data),
+        void (*outa)(Uint8 data),
+        void (*outb)(Uint8 data),
         void (*outsr)(Uint8 data),
-        Uint8 (*ina)(Uint8 mask),
-        Uint8 (*inb)(Uint8 mask),
+        Uint8 (*ina)(void),
+        Uint8 (*inb)(void),
         Uint8 (*insr)(void),
         void (*setint)(int level)
 );

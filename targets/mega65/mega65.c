@@ -231,7 +231,7 @@ void clear_emu_events ( void )
 #define KBSEL cia1.PRA
 
 
-static Uint8 cia_read_keyboard ( Uint8 ddr_mask_unused )
+static Uint8 cia1_in_b ( void )
 {
 	return
 		((KBSEL &   1) ? 0xFF : kbd_matrix[0]) &
@@ -247,16 +247,16 @@ static Uint8 cia_read_keyboard ( Uint8 ddr_mask_unused )
 
 
 
-static void cia2_outa ( Uint8 mask, Uint8 data )
+static void cia2_out_a ( Uint8 data )
 {
-	vic2_16k_bank = (3 - (data & 3)) * 0x4000;
-	DEBUG("VIC2: 16K BANK is set to $%04X" NL, vic2_16k_bank);
+	vic2_16k_bank = ((~(data | (~cia2.DDRA))) & 3) << 14;
+	DEBUG("VIC2: 16K BANK is set to $%04X (CIA mask=$%02X)" NL, vic2_16k_bank, cia2.DDRA);
 }
 
 
 
 // Just for easier test to have a given port value for CIA input ports
-static Uint8 cia_port_in_dummy ( Uint8 mask )
+static Uint8 cia_port_in_dummy ( void )
 {
 	return 0xFF;
 }
@@ -347,12 +347,12 @@ static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, i
 		NULL,	// callback: OUTB(mask, data)
 		NULL,	// callback: OUTSR(mask, data)
 		NULL,	// callback: INA(mask)
-		cia_read_keyboard,	// callback: INB(mask)
+		cia1_in_b,	// callback: INB(mask)
 		NULL,	// callback: INSR(mask)
 		cia_setint_cb	// callback: SETINT(level)
 	);
 	cia_init(&cia2, "CIA-2",
-		cia2_outa,	// callback: OUTA(mask, data)
+		cia2_out_a,	// callback: OUTA(mask, data)
 		NULL,	// callback: OUTB(mask, data)
 		NULL,	// callback: OUTSR(mask, data)
 		cia_port_in_dummy,	// callback: INA(mask)

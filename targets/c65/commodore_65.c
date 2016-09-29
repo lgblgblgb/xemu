@@ -103,7 +103,7 @@ void apply_memory_config ( void )
 		addr_trans_rd[0xA] = addr_trans_rd[0xB] = ((cp & 3) == 3) ? ROM_C64_BASIC_REMAP : 0;
 	}
 	// $CXXX, MAP block 6 [mask 64]
-	// Warning: all VIC3 reg $30 related ROM maps are for 8K size, *expect* of '@C000' (interface ROM) which is only 4K! Also this is in another ROM bank than the others
+	// Warning: all VIC3 reg $30 related ROM maps are for 8K size, *except* of '@C000' (interface ROM) which is only 4K! Also this is in another ROM bank than the others
 	if (vic3_registers[0x30] & 32)
 		addr_trans_wr[0xC] = addr_trans_rd[0xC] = ROM_C000_REMAP;
 	else
@@ -155,7 +155,7 @@ void clear_emu_events ( void )
 #define JOYSTICK_STATE kbd_matrix[0xF]
 
 
-static Uint8 cia1_in_b ( Uint8 ddr_mask_unused )	// IN-B
+static Uint8 cia1_in_b ( void )
 {
 	DEBUG("JOY: joystick state read for joy1 on part B is $%02X" NL, JOYSTICK_STATE);
 	return
@@ -172,25 +172,23 @@ static Uint8 cia1_in_b ( Uint8 ddr_mask_unused )	// IN-B
 }
 
 
-static Uint8 cia1_in_a ( Uint8 ddr_mask_unused )		// IN-A
+static Uint8 cia1_in_a ( void )
 {
 	DEBUG("JOY: joystick state read for joy2 on part A is $%02X" NL, JOYSTICK_STATE);
-	DEBUG("CIA1: reading joy2 (CIA mask=$%02X)" NL, ddr_mask_unused);
-	return (joystick_emu == 2 ? JOYSTICK_STATE : 0xFF);
+	return joystick_emu == 2 ? JOYSTICK_STATE : 0xFF;
 }
 
 
-static void cia2_out_a ( Uint8 mask, Uint8 data )
+static void cia2_out_a ( Uint8 data )
 {
-	//vic2_16k_bank = (3 - (data & 3)) * 0x4000;
-	vic2_16k_bank = ((~(data | (~mask))) & 3) << 14;
-	DEBUG("VIC2: 16K BANK is set to $%04X (CIA mask=$%02X)" NL, vic2_16k_bank, mask);
+	vic2_16k_bank = ((~(data | (~cia2.DDRA))) & 3) << 14;
+	DEBUG("VIC2: 16K BANK is set to $%04X (CIA mask=$%02X)" NL, vic2_16k_bank, cia2.DDRA);
 }
 
 
 
 // Just for easier test to have a given port value for CIA input ports
-static Uint8 cia_port_in_dummy ( Uint8 mask )
+static Uint8 cia_port_in_dummy ( void )
 {
 	return 0xFF;
 }
