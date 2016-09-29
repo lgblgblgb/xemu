@@ -35,7 +35,10 @@ static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
 static struct SidEmulation sids[2];	// the two SIDs
 static int joystick_emu;
 
-// We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request (with the lower 16 bits as addr from $D000)
+// We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request
+// It must be high enough not to collide with the 1Mbyte address space + almost-64K "overflow" area and mapping should not cause to alter lower 12 bits of the addresses,
+// (that is, the constant should have three '0' hex digits at its end)
+// though the exact value does not matter too much over the mentioned requirements above.
 #define IO_REMAP_VIRTUAL	0x110000
 // Other re-mapping addresses
 // Re-mapping for VIC3 reg $30
@@ -152,7 +155,7 @@ void clear_emu_events ( void )
 #define JOYSTICK_STATE kbd_matrix[0xF]
 
 
-static Uint8 cia_read_keyboard ( Uint8 ddr_mask_unused )	// IN-B
+static Uint8 cia1_in_b ( Uint8 ddr_mask_unused )	// IN-B
 {
 	DEBUG("JOY: joystick state read for joy1 on part B is $%02X" NL, JOYSTICK_STATE);
 	return
@@ -169,7 +172,7 @@ static Uint8 cia_read_keyboard ( Uint8 ddr_mask_unused )	// IN-B
 }
 
 
-static Uint8 cia_read_joy_2 ( Uint8 ddr_mask_unused )		// IN-A
+static Uint8 cia1_in_a ( Uint8 ddr_mask_unused )		// IN-A
 {
 	DEBUG("JOY: joystick state read for joy2 on part A is $%02X" NL, JOYSTICK_STATE);
 	DEBUG("CIA1: reading joy2 (CIA mask=$%02X)" NL, ddr_mask_unused);
@@ -177,7 +180,7 @@ static Uint8 cia_read_joy_2 ( Uint8 ddr_mask_unused )		// IN-A
 }
 
 
-static void cia2_outa ( Uint8 mask, Uint8 data )
+static void cia2_out_a ( Uint8 mask, Uint8 data )
 {
 	//vic2_16k_bank = (3 - (data & 3)) * 0x4000;
 	vic2_16k_bank = ((~(data | (~mask))) & 3) << 14;
@@ -226,13 +229,13 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 		NULL,	// callback: OUTA(mask, data)
 		NULL,	// callback: OUTB(mask, data)
 		NULL,	// callback: OUTSR(mask, data)
-		cia_read_joy_2,		// callback: INA(mask)
-		cia_read_keyboard,	// callback: INB(mask)
+		cia1_in_a,	// callback: INA(mask) ~ joy#2
+		cia1_in_b,	// callback: INB(mask) ~ keyboard
 		NULL,	// callback: INSR(mask)
 		cia_setint_cb	// callback: SETINT(level)
 	);
 	cia_init(&cia2, "CIA-2",
-		cia2_outa,	// callback: OUTA(mask, data)
+		cia2_out_a,	// callback: OUTA(mask, data) ~ eg VIC-II bank
 		NULL,	// callback: OUTB(mask, data)
 		NULL,	// callback: OUTSR(mask, data)
 		cia_port_in_dummy,	// callback: INA(mask)
@@ -397,12 +400,14 @@ void io_write ( int addr, Uint8 data )
 		case 0x02:	// $D200-$D2FF, C65 VIC-III palette, green components
 		case 0x03:	// $D300-$D3FF, C65 VIC-III palette, blue components
 			// NOTE: TODO: check this: VIC-III in old I/O mode would refeer for normal registers for the whole $D000-$D3FF range
-			return vic3_write_reg(addr, data);
+			vic3_write_reg(addr, data);
+			return;
 		case 0x04:	// $D400-$D4FF, SID stuffs
 		case 0x05:	// $D500-$D5FF
 		case 0x06:	// $D600-$D6FF, would be C65 UART, in old I/O mode: SID images still
 		case 0x07:	// $D700-$D7FF, would be C65 DMA, in old I/O mode; SID images still
-			return write_some_sid_register(addr, data);
+			write_some_sid_register(addr, data);
+			return;
 		case 0x08:	// $D800-$D8FF, colour SRAM
 		case 0x09:	// $D900-$D9FF, colour SRAM
 		case 0x0A:	// $DA00-$DAFF, colour SRAM
@@ -437,14 +442,17 @@ void io_write ( int addr, Uint8 data )
 		case 0x11:	// $D100-$D1FF, C65 VIC-III palette, red components
 		case 0x12:	// $D200-$D2FF, C65 VIC-III palette, green components
 		case 0x13:	// $D300-$D3FF, C65 VIC-III palette, blue components
-			return vic3_write_palette_reg(addr - 0x100, data);
+			vic3_write_palette_reg(addr - 0x100, data);
+			return;
 		case 0x14:	// $D400-$D4FF, SID stuffs
 		case 0x15:	// $D500-$D5FF
-			return write_some_sid_register(addr, data);
+			write_some_sid_register(addr, data);
+			return;
 		case 0x16:	// $D600-$D6FF, C65 UART
 			return;				// not emulated by Xemu, yet, TODO
 		case 0x17:	// $D700-$D7FF, C65 DMA
-			return dma_write_reg(addr & 3, data);
+			dma_write_reg(addr & 3, data);
+			return;
 		case 0x18:	// $D800-$D8FF, colour SRAM
 		case 0x19:	// $D900-$D9FF, colour SRAM
 		case 0x1A:	// $DA00-$DAFF, colour SRAM
@@ -478,7 +486,7 @@ void io_write ( int addr, Uint8 data )
 void write_phys_mem ( int addr, Uint8 data )
 {
 	addr &= 0xFFFFF;
-	if (addr < 2) {	// "CPU port" at memory addr 0/1
+	if (unlikely(addr < 2)) {	// "CPU port" at memory addr 0/1
 		if ((memory[addr] & 7) != (data & 7)) {
 			memory[addr] = data;
 			DEBUG("MEM: applying new memory configuration because of CPU port writing" NL);
@@ -486,7 +494,7 @@ void write_phys_mem ( int addr, Uint8 data )
 		} else
 			memory[addr] = data;
 	} else if (
-		(addr < 0x20000)
+		(likely(addr < 0x20000))
 #if defined(ALLOW_256K_RAMEXP) && defined(ALLOW_512K_RAMEXP)
 		|| (addr >= 0x40000)
 #else
@@ -513,11 +521,11 @@ Uint8 read_phys_mem ( int addr )
 // This function is called by the 65CE02 emulator in case of reading a byte (regardless of data or code)
 Uint8 cpu_read ( Uint16 addr )
 {
-	int phys_addr = addr_trans_rd[addr >> 12] + addr;	// translating address with the READ table created by apply_memory_config()
-	if (phys_addr >= IO_REMAP_VIRTUAL) {
-		return io_read(addr);	// addr should be in $DXXX range to hit this, hopefully ...
-	}
-	return memory[phys_addr & 0xFFFFF];	// light optimization, do not call read_phys_mem for this single stuff :)
+	register int phys_addr = addr_trans_rd[addr >> 12] + addr;	// translating address with the READ table created by apply_memory_config()
+	if (unlikely(phys_addr >= IO_REMAP_VIRTUAL))
+		return io_read(phys_addr);
+	else
+		return memory[phys_addr & 0xFFFFF];	// light optimization, do not call read_phys_mem for this single stuff :)
 }
 
 
@@ -525,12 +533,11 @@ Uint8 cpu_read ( Uint16 addr )
 // This function is called by the 65CE02 emulator in case of writing a byte
 void cpu_write ( Uint16 addr, Uint8 data )
 {
-	int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
-	if (phys_addr >= IO_REMAP_VIRTUAL) {
-		io_write(addr, data);	// addr should be in $DXXX range to hit this, hopefully ...
-		return;
-	}
-	write_phys_mem(phys_addr, data);
+	register int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
+	if (unlikely(phys_addr >= IO_REMAP_VIRTUAL))
+		io_write(phys_addr, data);
+	else
+		write_phys_mem(phys_addr, data);
 }
 
 
@@ -545,13 +552,12 @@ void cpu_write ( Uint16 addr, Uint8 data )
 void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 {
 	int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
-	if (phys_addr >= IO_REMAP_VIRTUAL) {
+	if (unlikely(phys_addr >= IO_REMAP_VIRTUAL)) {
 		DEBUG("CPU: RMW opcode is used on I/O area for $%04X" NL, addr);
-			io_write(addr, old_data);	// first write back the old data ...
-		io_write(addr, new_data);	// ... then the new
-		return;
-	}
-	write_phys_mem(phys_addr, new_data);	// "normal" memory, just write once, no need to emulate the behaviour
+		io_write(phys_addr, old_data);		// first write back the old data ...
+		io_write(phys_addr, new_data);		// ... then the new
+	} else
+		write_phys_mem(phys_addr, new_data);	// "normal" memory, just write once, no need to emulate the behaviour
 }
 
 
@@ -605,9 +611,9 @@ static void emulate_keyboard ( SDL_Scancode key, int pressed )
 				else if (joystick_emu == 2)
 					joystick_emu = 1;
 				printf("Joystick emulation for Joy#%d" NL, joystick_emu);
-				break;
+				return;
 			default:
-				break;
+				break;	// make gcc happy with a default case ...
 		}
 	}
 	// If not an emulator hot-key, try to handle as a C65 key
