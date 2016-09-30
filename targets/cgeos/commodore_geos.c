@@ -30,16 +30,13 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include <stdio.h>
-
-#include <SDL.h>
-
+#include "emutools.h"
 #include "commodore_geos.h"
 #include "cpu65c02.h"
 #include "cia6526.h"
-#include "c65hid.h"
+#include "emutools_hid.h"
+#include "c64_kbd_mapping.h"
 #include "geos.h"
-#include "emutools.h"
 
 
 #define DISK_IMAGE_SIZE	819200
@@ -536,7 +533,7 @@ static void cpu_port_write ( int addr, Uint8 data )
 
 static void geosemu_init ( const char *disk_image_name )
 {
-	hid_init();
+	hid_init(c64_key_map, SHIFTED_CURSOR_SHIFT_POS);
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
 	cpu_port_write(0, CPU_PORT_DEFAULT_VALUE0);

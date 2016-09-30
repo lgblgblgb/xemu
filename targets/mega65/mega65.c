@@ -22,12 +22,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "cia6526.h"
 #include "f011_core.h"
 #include "dmagic.h"
-#include "c65hid.h"
+#include "emutools_hid.h"
 #include "vic3.h"
 #include "sid.h"
 #include "sdcard.h"
 #include "uart_monitor.h"
 #include "hypervisor.h"
+#include "c64_kbd_mapping.h"
 
 
 static SDL_AudioDeviceID audio = 0;
@@ -295,7 +296,7 @@ static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, i
 	SDL_AudioSpec audio_want, audio_got;
 #endif
 	hypervisor_debug_init(KICKSTART_LIST_FILE_NAME);
-	hid_init();
+	hid_init(c64_key_map, SHIFTED_CURSOR_SHIFT_POS);
 	joystick_emu = 1;
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
@@ -358,7 +359,7 @@ static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, i
 		NULL,			// callback: OUTA
 		NULL,			// callback: OUTB
 		NULL,			// callback: OUTSR
-		cia1_in_a,		// callback: INA~ joy#2
+		cia1_in_a,		// callback: INA ~ joy#2
 		cia1_in_b,		// callback: INB ~ keyboard
 		NULL,			// callback: INSR
 		cia_setint_cb		// callback: SETINT

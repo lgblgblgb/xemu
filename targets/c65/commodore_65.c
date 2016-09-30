@@ -22,9 +22,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "f011_core.h"
 #include "c65_d81_image.h"
 #include "c65dma.h"
-#include "c65hid.h"
+#include "emutools_hid.h"
 #include "vic3.h"
 #include "sid.h"
+#include "c64_kbd_mapping.h"
 
 
 
@@ -207,7 +208,7 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int sound_mix_freq )
 {
 	SDL_AudioSpec audio_want, audio_got;
-	hid_init();
+	hid_init(c64_key_map, SHIFTED_CURSOR_SHIFT_POS);
 	joystick_emu = 1;
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
@@ -222,22 +223,22 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 	apply_memory_config();			// VIC3 $30 reg is already filled, so it's OK to call this now
 	// *** CIAs
 	cia_init(&cia1, "CIA-1",
-		NULL,	// callback: OUTA(mask, data)
-		NULL,	// callback: OUTB(mask, data)
-		NULL,	// callback: OUTSR(mask, data)
-		cia1_in_a,	// callback: INA(mask) ~ joy#2
-		cia1_in_b,	// callback: INB(mask) ~ keyboard
-		NULL,	// callback: INSR(mask)
-		cia_setint_cb	// callback: SETINT(level)
+		NULL,			// callback: OUTA
+		NULL,			// callback: OUTB
+		NULL,			// callback: OUTSR
+		cia1_in_a,		// callback: INA ~ joy#2
+		cia1_in_b,		// callback: INB ~ keyboard
+		NULL,			// callback: INSR
+		cia_setint_cb		// callback: SETINT
 	);
 	cia_init(&cia2, "CIA-2",
-		cia2_out_a,	// callback: OUTA(mask, data) ~ eg VIC-II bank
-		NULL,	// callback: OUTB(mask, data)
-		NULL,	// callback: OUTSR(mask, data)
-		cia_port_in_dummy,	// callback: INA(mask)
-		NULL,	// callback: INB(mask)
-		NULL,	// callback: INSR(mask)
-		NULL	// callback: SETINT(level)	that would be NMI in our case
+		cia2_out_a,		// callback: OUTA ~ eg VIC-II bank
+		NULL,			// callback: OUTB
+		NULL,			// callback: OUTSR
+		cia_port_in_dummy,	// callback: INA
+		NULL,			// callback: INB
+		NULL,			// callback: INSR
+		NULL			// callback: SETINT ~ that would be NMI in our case
 	);
 	// *** Initialize DMA
 	dma_init();

@@ -21,6 +21,6 @@ TARGET		= cgeos
 PRG_TARGET	= xgeos
 CFLAGS_TARGET	=
 SRCS_TARGET	= commodore_geos.c geos.c
-SRCS_COMMON	= emutools.c cpu65c02.c cia6526.c c65hid.c
+SRCS_COMMON	= emutools.c cpu65c02.c cia6526.c emutools_hid.c c64_kbd_mapping.c
 
 include ../../build/Makefile.common

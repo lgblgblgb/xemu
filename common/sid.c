@@ -671,14 +671,14 @@ void sid_init ( struct SidEmulation *sidemu, unsigned long cyclesPerSec, unsigne
 	// 15-bit cycle-counter we may directly use a sample-counter instead (which also reduces rounding issues).
 	int i;
 #ifdef SID_USES_SAMPLE_ENV_COUNTER
-	limit_LFSR= round(((float)0x8000)/sidemu->cyclesPerSample);	// original counter was 15-bit
+	sidemu->limit_LFSR = round(((float)0x8000)/sidemu->cyclesPerSample);	// original counter was 15-bit
 	for (i=0; i<16; i++) {
 		// counter must reach respective threshold before envelope value is incremented/decremented
 		sidemu->envelope_counter_period[i]= (int)round((float)(attackTimes[i]*cyclesPerSec)/1000/256/cyclesPerSample)+1;	// in samples
 		sidemu->envelope_counter_period_clck[i]= (int)round((float)(attackTimes[i]*cyclesPerSec)/1000/256)+1;				// in clocks
 	}
 #else
-	sidemu->limit_LFSR= 0x8000;	// counter 15-bit
+	sidemu->limit_LFSR = 0x8000;	// counter 15-bit
 	for (i=0;i<16;i++) {
 		// counter must reach respective threshold before envelope value is incremented/decremented
 		sidemu->envelope_counter_period[i]=      (int)floor((float)(attackTimes[i]*cyclesPerSec)/1000/256)+1;	// in samples
