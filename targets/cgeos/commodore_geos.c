@@ -108,6 +108,7 @@ static const char *memconfig_descriptions[8] = {
 
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
 static int    vic2_16k_bank;
+static int    joystick_emu;
 static int    scanline;
               Uint8  colour_sram[1024];
 static Uint8  vic2_registers[0x40];	// though not all of them really exists
@@ -491,8 +492,16 @@ static Uint8 cia1_in_b ( void )
 		((KBSEL &  16) ? 0xFF : kbd_matrix[4]) &
 		((KBSEL &  32) ? 0xFF : kbd_matrix[5]) &
 		((KBSEL &  64) ? 0xFF : kbd_matrix[6]) &
-		((KBSEL & 128) ? 0xFF : kbd_matrix[7])
+		((KBSEL & 128) ? 0xFF : kbd_matrix[7]) &
+		(joystick_emu == 1 ? c64_get_joy_state() : 0xFF)
 	;
+}
+
+
+
+static Uint8 cia1_in_a ( void )
+{
+	return joystick_emu == 2 ? c64_get_joy_state() : 0xFF;
 }
 
 
@@ -533,7 +542,12 @@ static void cpu_port_write ( int addr, Uint8 data )
 
 static void geosemu_init ( const char *disk_image_name )
 {
-	hid_init(c64_key_map, SHIFTED_CURSOR_SHIFT_POS);
+	hid_init(
+		c64_key_map,
+		VIRTUAL_SHIFT_POS,
+		SDL_ENABLE		// joy HID events enabled
+	);
+	joystick_emu = 1;
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
 	cpu_port_write(0, CPU_PORT_DEFAULT_VALUE0);
@@ -558,22 +572,22 @@ static void geosemu_init ( const char *disk_image_name )
 	compare_raster = 0; 
 	// *** CIAs
 	cia_init(&cia1, "CIA-1",
-		NULL,	// callback: OUTA(mask, data)
-		NULL,	// callback: OUTB(mask, data)
-		NULL,	// callback: OUTSR(mask, data)
-		NULL,	// callback: INA(mask)
-		cia1_in_b,	// callback: INB(mask)
-		NULL,	// callback: INSR(mask)
-		cia_setint_cb	// callback: SETINT(level)
+		NULL,			// callback: OUTA
+		NULL,			// callback: OUTB
+		NULL,			// callback: OUTSR
+		cia1_in_a,		// callback: INA ~ joy#2
+		cia1_in_b,		// callback: INB ~ keyboard
+		NULL,			// callback: INSR
+		cia_setint_cb		// callback: SETINT
 	);
 	cia_init(&cia2, "CIA-2",
-		cia2_out_a,	// callback: OUTA(mask, data)
-		NULL,	// callback: OUTB(mask, data)
-		NULL,	// callback: OUTSR(mask, data)
-		cia_port_in_dummy,	// callback: INA(mask)
-		NULL,	// callback: INB(mask)
-		NULL,	// callback: INSR(mask)
-		NULL	// callback: SETINT(level)	that would be NMI in our case
+		cia2_out_a,		// callback: OUTA ~ eg VIC-II bank
+		NULL,			// callback: OUTB
+		NULL,			// callback: OUTSR
+		cia_port_in_dummy,	// callback: INA
+		NULL,			// callback: INB
+		NULL,			// callback: INSR
+		NULL			// callback: SETINT ~ that would be NMI in our case
 	);
 	// Initialize Disk Image
 	// TODO
@@ -759,9 +773,9 @@ static void update_emulator ( void )
 				if (e.jaxis.axis < 2)
 					hid_joystick_motion_event(e.jaxis.axis, e.jaxis.value);
 				break;
-			case SDL_MOUSEMOTION:
-				hid_mouse_motion_event(e.motion.xrel, e.motion.yrel);
-				break;
+			// case SDL_MOUSEMOTION:
+			//	hid_mouse_motion_event(e.motion.xrel, e.motion.yrel);
+			//	break;
 		}
 	}
 	// Screen rendering: begin

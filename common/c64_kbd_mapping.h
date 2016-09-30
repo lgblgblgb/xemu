@@ -21,8 +21,19 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define __XEMU_COMMON_C64_KBD_MAPPING
 
 // Keyboard position of "shift" which is "virtually pressed" ie for cursor up/left
-#define SHIFTED_CURSOR_SHIFT_POS	0x64
+#define VIRTUAL_SHIFT_POS	0x64
+
+// Emulate joystick via a "virtual keyboard matrix row"
+#define HID_JOY_EMU_ROW		0xF
+#define HID_JOY_EMU_LEFT_BPOS	2
+#define HID_JOY_EMU_RIGHT_BPOS	3
+#define HID_JOY_EMU_UP_BPOS	0
+#define HID_JOY_EMU_DOWN_BPOS	1
+#define HID_JOY_EMU_FIRE_BPOS	4
+#define HID_JOY_EMU_UNUSED_MASK	0xE0
 
 extern const struct KeyMapping c64_key_map[];
+
+extern Uint8 c64_get_joy_state ( void );
 
 #endif

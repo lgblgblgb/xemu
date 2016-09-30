@@ -127,9 +127,13 @@ char *emu_strdup ( const char *s )
 // Just drop queued SDL events ...
 void emu_drop_events ( void )
 {
-	SDL_Event e;
-	while (SDL_PollEvent(&e) != 0)
-		;
+	SDL_PumpEvents();
+	SDL_FlushEvent(SDL_KEYDOWN);
+	SDL_FlushEvent(SDL_KEYUP);
+	SDL_FlushEvent(SDL_MOUSEMOTION);
+	SDL_FlushEvent(SDL_MOUSEWHEEL);
+	SDL_FlushEvent(SDL_MOUSEBUTTONDOWN);
+	SDL_FlushEvent(SDL_MOUSEBUTTONUP);
 }
 
 

@@ -92,11 +92,27 @@ const struct KeyMapping c64_key_map[] = {
 	{ SDL_SCANCODE_Q,		0x76 },
 	{ SDL_SCANCODE_END,		0x77 },	// RUN STOP key, we map 'END' as this key
 	// **** Emulates joystick with keypad
-	{ SDL_SCANCODE_KP_0,		0xF4 }, // fire
-	{ SDL_SCANCODE_KP_8,		0xF0 }, // up
-	{ SDL_SCANCODE_KP_2,		0xF1 },	// down
-	{ SDL_SCANCODE_KP_4,		0xF2 }, // left
-	{ SDL_SCANCODE_KP_6,		0xF3 }, // right
+	{ SDL_SCANCODE_KP_0,		(HID_JOY_EMU_ROW << 4) | HID_JOY_EMU_FIRE_BPOS  }, // fire
+	{ SDL_SCANCODE_KP_8,		(HID_JOY_EMU_ROW << 4) | HID_JOY_EMU_UP_BPOS    }, // up
+	{ SDL_SCANCODE_KP_2,		(HID_JOY_EMU_ROW << 4) | HID_JOY_EMU_DOWN_BPOS  }, // down
+	{ SDL_SCANCODE_KP_4,		(HID_JOY_EMU_ROW << 4) | HID_JOY_EMU_LEFT_BPOS  }, // left
+	{ SDL_SCANCODE_KP_6,		(HID_JOY_EMU_ROW << 4) | HID_JOY_EMU_RIGHT_BPOS }, // right
 	// **** this must be the last line: end of mapping table ****
 	{ 0, 0xFF }
 };
+
+
+
+Uint8 c64_get_joy_state ( void )
+{
+	return
+		kbd_matrix[HID_JOY_EMU_ROW] & (
+			HID_JOY_EMU_UNUSED_MASK  |
+			hid_read_joystick_up     ( 0, 1 << HID_JOY_EMU_UP_BPOS    ) |
+			hid_read_joystick_down   ( 0, 1 << HID_JOY_EMU_DOWN_BPOS  ) |
+			hid_read_joystick_left   ( 0, 1 << HID_JOY_EMU_LEFT_BPOS  ) |
+			hid_read_joystick_right  ( 0, 1 << HID_JOY_EMU_RIGHT_BPOS ) |
+			hid_read_joystick_button ( 0, 1 << HID_JOY_EMU_FIRE_BPOS  )
+		)
+	;
+}

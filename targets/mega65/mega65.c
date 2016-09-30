@@ -232,10 +232,6 @@ void clear_emu_events ( void )
 
 #define KBSEL cia1.PRA
 
-// we emulate joystick state in this non-existing keyboard matrix line for now
-#define JOYSTICK_STATE kbd_matrix[0xF]
-
-
 
 static Uint8 cia1_in_b ( void )
 {
@@ -248,14 +244,14 @@ static Uint8 cia1_in_b ( void )
 		((KBSEL &  32) ? 0xFF : kbd_matrix[5]) &
 		((KBSEL &  64) ? 0xFF : kbd_matrix[6]) &
 		((KBSEL & 128) ? 0xFF : kbd_matrix[7]) &
-		(joystick_emu == 1 ? JOYSTICK_STATE : 0xFF)
+		(joystick_emu == 1 ? c64_get_joy_state() : 0xFF)
 	;
 }
 
 
 static Uint8 cia1_in_a ( void )
 {
-	return joystick_emu == 2 ? JOYSTICK_STATE : 0xFF;
+	return joystick_emu == 2 ? c64_get_joy_state() : 0xFF;
 }
 
 
@@ -296,7 +292,11 @@ static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, i
 	SDL_AudioSpec audio_want, audio_got;
 #endif
 	hypervisor_debug_init(KICKSTART_LIST_FILE_NAME);
-	hid_init(c64_key_map, SHIFTED_CURSOR_SHIFT_POS);
+	hid_init(
+		c64_key_map,
+		VIRTUAL_SHIFT_POS,
+		SDL_ENABLE		// joy HID events enabled
+	);
 	joystick_emu = 1;
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
@@ -1058,9 +1058,9 @@ static void update_emulator ( void )
 				if (e.jaxis.axis < 2)
 					hid_joystick_motion_event(e.jaxis.axis, e.jaxis.value);
 				break;
-			case SDL_MOUSEMOTION:
-				hid_mouse_motion_event(e.motion.xrel, e.motion.yrel);
-				break;
+			//case SDL_MOUSEMOTION:
+			//	hid_mouse_motion_event(e.motion.xrel, e.motion.yrel);
+			//	break;
 		}
 	}
 #ifdef UARTMON_SOCKET

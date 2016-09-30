@@ -28,12 +28,12 @@ struct KeyMapping {
 	Uint8		pos;	// BCD packed, high nibble / low nibble for col/row to map to.  0xFF means end of table!, high bit set on low nibble: press shift as well!
 };
 
-extern Uint8 kbd_matrix[16];	// keyboard matrix state, 8 * 8 bits
+extern Uint8 kbd_matrix[16];
 
 extern int hid_key_event ( SDL_Scancode key, int pressed ) ;
 
 extern void hid_reset_events ( int burn ) ;
-extern void hid_init ( const struct KeyMapping *key_map_in, Uint8 virtual_shift_pos_in ) ;
+extern void hid_init ( const struct KeyMapping *key_map_in, Uint8 virtual_shift_pos_in, int joy_enable ) ;
 extern void hid_mouse_motion_event      ( int xrel, int yrel ) ;
 extern void hid_mouse_button_event      ( int button, int pressed ) ;
 extern void hid_joystick_device_event   ( int which , int is_attach ) ;

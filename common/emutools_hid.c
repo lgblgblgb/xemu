@@ -38,7 +38,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 */
 
 
-Uint8 kbd_matrix[16];		// keyboard matrix state, 8 * 8 bits
+Uint8 kbd_matrix[16];		// keyboard matrix state, X * 8 bits
 static int mouse_delta_x;
 static int mouse_delta_y;
 static unsigned int hid_state;
@@ -102,23 +102,18 @@ void hid_reset_events ( int burn )
 	mouse_delta_x = 0;
 	mouse_delta_y = 0;
 	hid_state = 0;
-	if (burn) {
-		SDL_Event e;
-		burn = 0;
-		while (SDL_PollEvent(&e) != 0)
-			burn++;
-		DEBUG("HID: %d event(s) ignored." NL, burn);
-	}
+	if (burn)
+		emu_drop_events();
 }
 
 
-void hid_init ( const struct KeyMapping *key_map_in, Uint8 virtual_shift_pos_in )
+void hid_init ( const struct KeyMapping *key_map_in, Uint8 virtual_shift_pos_in, int joy_enable )
 {
 	int a;
 	key_map = key_map_in;
 	virtual_shift_pos = virtual_shift_pos_in;
 	SDL_GameControllerEventState(SDL_DISABLE);
-	SDL_JoystickEventState(SDL_ENABLE);
+	SDL_JoystickEventState(joy_enable);
 	hid_reset_events(0);
 	for (a = 0; a < MAX_JOYSTICKS; a++)
 		joysticks[a] = NULL;
@@ -158,9 +153,9 @@ void hid_joystick_device_event ( int which , int is_attach )
 		if (joysticks[which])
 			hid_joystick_device_event(which, 0);
 		joysticks[which] = SDL_JoystickOpen(which);
-		if (joysticks[which])
-			DEBUG("HID: joystick device #%d \"%s\" has been added." NL, which, SDL_JoystickName(joysticks[which]));
-		else
+		if (joysticks[which]) {
+			INFO_WINDOW("HID: joystick device #%d \"%s\" has been added." NL, which, SDL_JoystickName(joysticks[which]));
+		} else
 			DEBUG("HID: joystick device #%d problem, cannot be opened on 'add' event: %s." NL, which, SDL_GetError());
 	} else {
 		if (joysticks[which]) {
