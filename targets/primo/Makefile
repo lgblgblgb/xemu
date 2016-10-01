@@ -21,6 +21,6 @@ TARGET		= primo
 PRG_TARGET	= xprimo
 CFLAGS_TARGET	=
 SRCS_TARGET	= primo.c
-SRCS_COMMON	= emutools.c z80.c
+SRCS_COMMON	= emutools.c emutools_hid.c z80.c
 
 include ../../build/Makefile.common
