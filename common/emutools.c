@@ -17,7 +17,9 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include <stdio.h>
+
+#include "emutools.h"
+
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -29,10 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <limits.h>
 #include <errno.h>
 
-#include <SDL.h>
-
-#include "emutools.h"
-
+#include "osd_font_16x16.c"
 
 
 SDL_Window   *sdl_win = NULL;
@@ -57,6 +56,13 @@ static time_t unix_time;
 static Uint64 et_old;
 static int td_balancer, td_em_ALL, td_pc_ALL;
 FILE *debug_fp = NULL;
+
+
+static int osd_enabled = 0, osd_status = 0, osd_available = 0, osd_xsize, osd_ysize, osd_fade_dec, osd_fade_end, osd_alpha_last;
+static Uint32 osd_colours[16], *osd_pixels = NULL, osd_colour_fg, osd_colour_bg;
+static SDL_Texture *sdl_osdtex = NULL;
+
+
 
 #if !SDL_VERSION_ATLEAST(2, 0, 4)
 #error "At least SDL version 2.0.4 is needed!"
@@ -552,7 +558,154 @@ void emu_update_screen ( void )
 	if (seconds_timer_trigger)
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
 	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);
+	if (osd_status) {
+		if (osd_status < OSD_STATIC)
+			osd_status -= osd_fade_dec;
+		if (osd_status <= osd_fade_end) {
+			osd_status = 0;
+			osd_alpha_last = 0;
+		} else {
+			int alpha = osd_status > 0xFF ? 0xFF : osd_status;
+			if (alpha != osd_alpha_last) {
+				osd_alpha_last = alpha;
+				SDL_SetTextureAlphaMod(sdl_osdtex, alpha);
+			}
+			SDL_RenderCopy(sdl_ren, sdl_osdtex, NULL, NULL);
+		}
+	}
 	SDL_RenderPresent(sdl_ren);
+}
+
+
+void osd_clear ( void )
+{
+	if (osd_enabled)
+		memset(osd_pixels, 0, osd_xsize * osd_ysize * 4);
+}
+
+
+void osd_update ()
+{
+	if (osd_enabled)
+                SDL_UpdateTexture(sdl_osdtex, NULL, osd_pixels, osd_xsize * sizeof (Uint32));
+}
+
+
+int osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_entries, int fade_dec, int fade_end )
+{
+	int a;
+	// start with disabled state, so we can abort our init process without need to disable this
+	osd_status = 0;
+	osd_enabled = 0;
+	if (sdl_osdtex || osd_pixels)
+		FATAL("Calling osd_init() multiple times?");
+	sdl_osdtex = SDL_CreateTexture(sdl_ren, sdl_pix_fmt->format, SDL_TEXTUREACCESS_STREAMING, xsize, ysize);
+	if (!sdl_osdtex) {
+		ERROR_WINDOW("Error with SDL_CreateTexture(), OSD won't be available: %s", SDL_GetError());
+		return 1;
+	}
+	if (SDL_SetTextureBlendMode(sdl_osdtex, SDL_BLENDMODE_BLEND)) {
+		ERROR_WINDOW("Error with SDL_SetTextureBlendMode(), OSD won't be available: %s", SDL_GetError());
+		SDL_DestroyTexture(sdl_osdtex);
+		sdl_osdtex = NULL;
+		return 1;
+	}
+	osd_pixels = malloc(xsize * ysize * 4);
+	if (!osd_pixels) {
+		ERROR_WINDOW("Not enough memory to allocate texture, OSD won't be available");
+		SDL_DestroyTexture(sdl_osdtex);
+		sdl_osdtex = NULL;
+		return 1;
+	}
+	osd_xsize = xsize;
+	osd_ysize = ysize;
+	osd_fade_dec = fade_dec;
+	osd_fade_end = fade_end;
+	for (a = 0; a < palette_entries; a++)
+		osd_colours[a] = SDL_MapRGBA(sdl_pix_fmt, palette[a << 2], palette[(a << 2) + 1], palette[(a << 2) + 2], palette[(a << 2) + 3]);
+	osd_enabled = 1;	// great, everything is OK, we can set enabled state!
+	osd_available = 1;
+	osd_clear();
+	osd_update();
+	osd_set_colours(1, 0);
+	return 0;
+}
+
+
+
+int osd_init_with_defaults ( void )
+{
+	const Uint8 palette[] = {
+		0, 0, 0, 0x80,		// black with alpha channel 0x80
+		0xFF,0xFF,0xFF,0xFF	// white
+	};
+	return osd_init(
+		400, 20,
+		palette,
+		sizeof(palette) >> 2,
+		2,
+		0x20
+	);
+}
+
+
+void osd_on ( int value )
+{
+	if (osd_enabled) {
+		osd_alpha_last = 0;	// force alphamod to set on next screen update
+		osd_status = value;
+	}
+}
+
+
+void osd_off ( void )
+{
+	osd_status = 0;
+}
+
+
+void osd_global_enable ( int status )
+{
+	osd_enabled = (status && osd_available);
+	osd_alpha_last = -1;
+	osd_status = 0;
+}
+
+
+void osd_set_colours ( int fg_index, int bg_index )
+{
+	osd_colour_fg = osd_colours[fg_index];
+	osd_colour_bg = osd_colours[bg_index];
+}
+
+
+void osd_write_char ( int x, int y, char ch )
+{
+	int row;
+	const Uint16 *s;
+	Uint32 *d = osd_pixels + y * osd_xsize + x;
+	if (ch < 32 || ch > 128)
+		ch = '?';
+	s = font_16x16 + ((ch - 32) << 4);
+	for (row = 0; row < 16; row++) {
+		Uint16 mask = 0x8000;
+		do {
+			*(d++) = *s & mask ? osd_colour_fg : osd_colour_bg;
+			mask >>= 1;
+		} while (mask);
+		s++;
+		d += osd_xsize - 16;
+	}
+}
+
+
+void osd_write_string ( int x, int y, const char *s )
+{
+	while (*s) {
+		osd_write_char(x, y, *s);
+		s++;
+		x += 16;
+	}
 }
 
 
