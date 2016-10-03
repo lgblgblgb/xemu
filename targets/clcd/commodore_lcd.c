@@ -147,7 +147,8 @@ static const struct KeyMapping lcd_key_map[] = {
 	{ SDL_SCANCODE_LSHIFT, 0x82 }, { SDL_SCANCODE_RSHIFT, 0x82 },
 	{ SDL_SCANCODE_LCTRL, 0x83 }, { SDL_SCANCODE_RCTRL, 0x83 },
 	{ SDL_SCANCODE_LALT, 0x84 }, { SDL_SCANCODE_RALT, 0x84 },
-	{ 0,	0xFF	}	// this must be the last line: end of mapping table
+	STD_XEMU_SPECIAL_KEYS,
+	{ 0,	-1	}	// this must be the last line: end of mapping table
 };
 
 
@@ -360,18 +361,10 @@ static void render_screen ( void )
 
 
 
-// pressed: non zero value = key is pressed, zero value = key is released
-static void emulate_keyboard ( SDL_Scancode key, int pressed )
+// HID needs this to be defined, it's up to the emulator if it uses or not ...
+int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
-	if (key == SDL_SCANCODE_F11) {  // toggle full screen mode on/off
-		if (pressed)
-			emu_set_full_screen(-1);
-	} else if (key == SDL_SCANCODE_F9) {    // exit emulator ...
-		if (pressed)
-			exit(0);
-	} else {
-		hid_key_event(key, pressed);
-	}
+        return 0;
 }
 
 
@@ -399,21 +392,8 @@ static void update_rtc ( void )
 
 static void update_emulator ( void )
 {
-	SDL_Event e;
 	render_screen();
-	while (SDL_PollEvent(&e) != 0) {
-		switch (e.type) {
-			case SDL_QUIT:		// ie: someone closes the SDL window ...
-				exit(0);
-				break;
-			case SDL_KEYDOWN:	// key is pressed (down)
-			case SDL_KEYUP:		// key is released (up)
-				// make sure that key event is for our window, also that it's not a releated event by long key presses (repeats should be handled by the emulated machine's KERNAL)
-				if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0))
-					emulate_keyboard(e.key.keysym.scancode, e.key.state == SDL_PRESSED);	// the last argument will be zero in case of release, other val in case of pressing
-				break;
-		}
-	}
+	hid_handle_all_sdl_events();
 	emu_timekeeping_delay(40000);	// 40000 microseconds would be the real time for a full TV frame (see main() for more info: CLCD is not TV based for real ...)
 	if (seconds_timer_trigger)
 		update_rtc();

@@ -21,11 +21,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "emutools_hid.h"
 #include "c64_kbd_mapping.h"
 
-/* Notes:
+/* Definitions for "C64-like" systems (ie: C64, C65, M65). FIXME:
 	* This is _POSITIONAL_ mapping (not symbolic), assuming US keyboard layout for the host machine (ie: the machine you run this emulator)
-	* Only 8*8 matrix is emulated currently, on C65 there is an "extra" line it seems
+	* Only 8*8 matrix is emulated currently, on C65/M65 there is an "extra" line it seems, not handled yet!
 	* I was lazy to map some keys, see in the comments :)
+	* The mapping should be revised at some point, this was only a quick setup without too much work since then ...
 */
+
 const struct KeyMapping c64_key_map[] = {
 	{ SDL_SCANCODE_BACKSPACE,	0x00 },	// "backspace" for INS/DEL
 	{ SDL_SCANCODE_RETURN,		0x01 }, // RETURN
@@ -92,27 +94,33 @@ const struct KeyMapping c64_key_map[] = {
 	{ SDL_SCANCODE_Q,		0x76 },
 	{ SDL_SCANCODE_END,		0x77 },	// RUN STOP key, we map 'END' as this key
 	// **** Emulates joystick with keypad
-	{ SDL_SCANCODE_KP_0,		(HID_JOY_EMU_ROW << 4) | HID_JOY_EMU_FIRE_BPOS  }, // fire
-	{ SDL_SCANCODE_KP_8,		(HID_JOY_EMU_ROW << 4) | HID_JOY_EMU_UP_BPOS    }, // up
-	{ SDL_SCANCODE_KP_2,		(HID_JOY_EMU_ROW << 4) | HID_JOY_EMU_DOWN_BPOS  }, // down
-	{ SDL_SCANCODE_KP_4,		(HID_JOY_EMU_ROW << 4) | HID_JOY_EMU_LEFT_BPOS  }, // left
-	{ SDL_SCANCODE_KP_6,		(HID_JOY_EMU_ROW << 4) | HID_JOY_EMU_RIGHT_BPOS }, // right
+	STD_XEMU_SPECIAL_KEYS,
 	// **** this must be the last line: end of mapping table ****
-	{ 0, 0xFF }
+	{ 0, -1 }
 };
 
+int joystick_emu = 1;
+
+
+void c64_toggle_joy_emu ( void )
+{
+	if (joystick_emu == 1)
+		joystick_emu = 2;
+	else if (joystick_emu == 2)
+		joystick_emu = 1;
+	if (joystick_emu)
+		printf("Joystick emulation for Joy#%d" NL, joystick_emu);
+}
 
 
 Uint8 c64_get_joy_state ( void )
 {
 	return
-		kbd_matrix[HID_JOY_EMU_ROW] & (
-			HID_JOY_EMU_UNUSED_MASK  |
-			hid_read_joystick_up     ( 0, 1 << HID_JOY_EMU_UP_BPOS    ) |
-			hid_read_joystick_down   ( 0, 1 << HID_JOY_EMU_DOWN_BPOS  ) |
-			hid_read_joystick_left   ( 0, 1 << HID_JOY_EMU_LEFT_BPOS  ) |
-			hid_read_joystick_right  ( 0, 1 << HID_JOY_EMU_RIGHT_BPOS ) |
-			hid_read_joystick_button ( 0, 1 << HID_JOY_EMU_FIRE_BPOS  )
-		)
+			0xE0 |
+			hid_read_joystick_up     ( 0,  1 ) |
+			hid_read_joystick_down   ( 0,  2 ) |
+			hid_read_joystick_left   ( 0,  4 ) |
+			hid_read_joystick_right  ( 0,  8 ) |
+			hid_read_joystick_button ( 0, 16 )
 	;
 }

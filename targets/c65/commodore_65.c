@@ -34,7 +34,6 @@ static SDL_AudioDeviceID audio = 0;
 Uint8 memory[0x100000];			// 65CE02 MAP'able address space
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
 static struct SidEmulation sids[2];	// the two SIDs
-static int joystick_emu;
 
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request
 // It must be high enough not to collide with the 1Mbyte address space + almost-64K "overflow" area and mapping should not cause to alter lower 12 bits of the addresses,
@@ -584,79 +583,37 @@ static void shutdown_callback ( void )
 
 
 
-static void emulate_keyboard ( SDL_Scancode key, int pressed )
+// Called by emutools_hid!!! to handle special private keys assigned to this emulator
+int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
-	// Check for special, emulator-related hot-keys (not C65 key)
 	if (pressed) {
-		switch (key) {
-			case SDL_SCANCODE_F11:
-				emu_set_full_screen(-1);
-				return;
-			case SDL_SCANCODE_F9:
-				exit(0);
-				return;
-			case SDL_SCANCODE_F10:
-				memory[0] = memory[1] = 0xFF;
-				map_mask = 0;
-				vic3_registers[0x30] = 0;
-				apply_memory_config();
-				cpu_reset();
-				DEBUG("RESET!" NL);
-				return;
-			case SDL_SCANCODE_KP_ENTER:
-				if (joystick_emu == 1)
-					joystick_emu = 2;
-				else if (joystick_emu == 2)
-					joystick_emu = 1;
-				printf("Joystick emulation for Joy#%d" NL, joystick_emu);
-				return;
-			default:
-				break;	// make gcc happy with a default case ...
-		}
+		if (key == SDL_SCANCODE_F10) {	// reset
+			memory[0] = memory[1] = 0xFF;
+			map_mask = 0;
+			vic3_registers[0x30] = 0;
+			apply_memory_config();
+			cpu_reset();
+			DEBUG("RESET!" NL);
+		} else if (key == SDL_SCANCODE_KP_ENTER)
+			c64_toggle_joy_emu();
 	}
-	// If not an emulator hot-key, try to handle as a C65 key
-	// This function also updates the keyboard matrix in that case
-	hid_key_event(key, pressed);
+	return 0;
 }
-
 
 
 static void update_emulator ( void )
 {
-	SDL_Event e;
-	while (SDL_PollEvent(&e) != 0) {
-		switch (e.type) {
-			case SDL_QUIT:
-				exit(0);
-			case SDL_KEYUP:
-			case SDL_KEYDOWN:
-				if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0))
-					emulate_keyboard(e.key.keysym.scancode, e.key.state == SDL_PRESSED);
-				break;
-			case SDL_JOYDEVICEADDED:
-			case SDL_JOYDEVICEREMOVED:
-				hid_joystick_device_event(e.jdevice.which, e.type == SDL_JOYDEVICEADDED);
-				break;
-			case SDL_JOYBUTTONDOWN:
-			case SDL_JOYBUTTONUP:
-				hid_joystick_button_event(e.type == SDL_JOYBUTTONDOWN);
-				break;
-			case SDL_JOYHATMOTION:
-				hid_joystick_hat_event(e.jhat.value);
-				break;
-			case SDL_JOYAXISMOTION:
-				if (e.jaxis.axis < 2)
-					hid_joystick_motion_event(e.jaxis.axis, e.jaxis.value);
-				break;
-			//case SDL_MOUSEMOTION:
-			//	hid_mouse_motion_event(e.motion.xrel, e.motion.yrel);
-			//	break;
-		}
-	}
+	hid_handle_all_sdl_events();
 	// Screen rendering: begin
 	vic3_render_screen();
 	// Screen rendering: end
 	emu_timekeeping_delay(40000);
+	// Ugly CIA trick to maintain realtime TOD in CIAs :)
+	if (seconds_timer_trigger) {
+		struct tm *t = emu_get_localtime();
+		cia_ugly_tod_updater(&cia1, t);
+		cia_ugly_tod_updater(&cia2, t);
+	}
 }
 
 

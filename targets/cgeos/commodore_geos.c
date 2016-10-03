@@ -108,7 +108,6 @@ static const char *memconfig_descriptions[8] = {
 
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
 static int    vic2_16k_bank;
-static int    joystick_emu;
 static int    scanline;
               Uint8  colour_sram[1024];
 static Uint8  vic2_registers[0x40];	// though not all of them really exists
@@ -721,67 +720,35 @@ static void shutdown_callback ( void )
 }
 
 
-
-static void emulate_keyboard ( SDL_Scancode key, int pressed )
+// HID needs this to be defined, it's up to the emulator if it uses or not ...
+int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
-	// Check for special, emulator-related hot-keys (not C65 key)
-	if (pressed) {
-		if (key == SDL_SCANCODE_F11) {
-			emu_set_full_screen(-1);
-			return;
-		} else if (key == SDL_SCANCODE_F9) {
-			exit(0);
-		} else if (key == SDL_SCANCODE_F10) {
+        if (pressed) {
+		if (key == SDL_SCANCODE_F10) {
 			cpu_port_write(0, CPU_PORT_DEFAULT_VALUE0);
 			cpu_port_write(1, CPU_PORT_DEFAULT_VALUE1);
 			cpu_reset();
 			DEBUG("RESET!" NL);
-			return;
-		}
+		} else if (key == SDL_SCANCODE_KP_ENTER)
+			c64_toggle_joy_emu();
 	}
-	// If not an emulator hot-key, try to handle as a C65 key
-	// This function also updates the keyboard matrix in that case
-	hid_key_event(key, pressed);
+	return 0;
 }
-
 
 
 static void update_emulator ( void )
 {
-	SDL_Event e;
-	while (SDL_PollEvent(&e) != 0) {
-		switch (e.type) {
-			case SDL_QUIT:
-				exit(0);
-			case SDL_KEYUP:
-			case SDL_KEYDOWN:
-				if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0))
-					emulate_keyboard(e.key.keysym.scancode, e.key.state == SDL_PRESSED);
-				break;
-			case SDL_JOYDEVICEADDED:
-			case SDL_JOYDEVICEREMOVED:
-				hid_joystick_device_event(e.jdevice.which, e.type == SDL_JOYDEVICEADDED);
-				break;
-			case SDL_JOYBUTTONDOWN:
-			case SDL_JOYBUTTONUP:
-				hid_joystick_button_event(e.type == SDL_JOYBUTTONDOWN);
-				break;
-			case SDL_JOYHATMOTION:
-				hid_joystick_hat_event(e.jhat.value);
-				break;
-			case SDL_JOYAXISMOTION:
-				if (e.jaxis.axis < 2)
-					hid_joystick_motion_event(e.jaxis.axis, e.jaxis.value);
-				break;
-			// case SDL_MOUSEMOTION:
-			//	hid_mouse_motion_event(e.motion.xrel, e.motion.yrel);
-			//	break;
-		}
-	}
+	hid_handle_all_sdl_events();
 	// Screen rendering: begin
 	vic2_render_screen();
 	// Screen rendering: end
 	emu_timekeeping_delay(40000);
+	// Ugly CIA trick to maintain realtime TOD in CIAs :)
+	if (seconds_timer_trigger) {
+		struct tm *t = emu_get_localtime();
+		cia_ugly_tod_updater(&cia1, t);
+		cia_ugly_tod_updater(&cia2, t);
+	}
 }
 
 

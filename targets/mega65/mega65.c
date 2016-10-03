@@ -40,7 +40,6 @@ Uint8 slow_ram[127 << 20];		// 127Mbytes of slowRAM, heh ...
 //Uint8 cpu_port[2];			// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
 static struct SidEmulation sid1, sid2;	// the two SIDs
-static int joystick_emu;
 int cpu_linear_memory_addressing_is_enabled = 0;
 
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request
@@ -989,80 +988,35 @@ static void shutdown_callback ( void )
 
 
 
-static void emulate_keyboard ( SDL_Scancode key, int pressed )
+// Called by emutools_hid!!! to handle special private keys assigned to this emulator
+int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
 	// Check for special, emulator-related hot-keys (not C65 key)
 	if (pressed) {
-		switch (key) {
-			case SDL_SCANCODE_F11:
-				emu_set_full_screen(-1);
-				return;
-			case SDL_SCANCODE_F9:
-				exit(0);
-				return;
-			case SDL_SCANCODE_F10:
-				CPU_PORT(0) = CPU_PORT(1) = 0xFF;
-				map_mask = 0;
-				vic3_registers[0x30] = 0;
-				in_hypervisor = 0;
-				apply_memory_config();
-				cpu_reset();
-				if (mega65_capable) {
-					kicked_hypervisor = 0x80;	// this will signal Xemu, to ask the user on the first read!
-					hypervisor_enter(TRAP_RESET);
-				}
-				DEBUG("RESET!" NL);
-				return;
-			case SDL_SCANCODE_KP_ENTER:
-				if (joystick_emu == 1)
-					joystick_emu = 2;
-				else if (joystick_emu == 2)
-				joystick_emu = 1;
-				printf("Joystick emulation for Joy#%d" NL, joystick_emu);
-				return;
-			default:
-				break;	// make gcc happy with a default case ...
+		if (key == SDL_SCANCODE_F10) {
+			CPU_PORT(0) = CPU_PORT(1) = 0xFF;
+			map_mask = 0;
+			vic3_registers[0x30] = 0;
+			in_hypervisor = 0;
+			apply_memory_config();
+			cpu_reset();
+			if (mega65_capable) {
+				kicked_hypervisor = 0x80;	// this will signal Xemu, to ask the user on the first read!
+				hypervisor_enter(TRAP_RESET);
+			}
+			DEBUG("RESET!" NL);
+		} else if (key == SDL_SCANCODE_KP_ENTER) {
+			c64_toggle_joy_emu();
 		}
 	}
-	// If not an emulator hot-key, try to handle as a C65 key
-	// This function also updates the keyboard matrix in that case
-	hid_key_event(key, pressed);
+	return 0;
 }
 
 
 
 static void update_emulator ( void )
 {
-	SDL_Event e;
-	while (SDL_PollEvent(&e) != 0) {
-		switch (e.type) {
-			case SDL_QUIT:
-				exit(0);
-			case SDL_KEYUP:
-			case SDL_KEYDOWN:
-				if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0))
-					emulate_keyboard(e.key.keysym.scancode, e.key.state == SDL_PRESSED);
-				break;
-			case SDL_JOYDEVICEADDED:
-			case SDL_JOYDEVICEREMOVED:
-				hid_joystick_device_event(e.jdevice.which, e.type == SDL_JOYDEVICEADDED);
-				break;
-			case SDL_JOYBUTTONDOWN:
-			case SDL_JOYBUTTONUP:
-				hid_joystick_button_event(e.type == SDL_JOYBUTTONDOWN);
-				break;
-			case SDL_JOYHATMOTION:
-				hid_joystick_hat_event(e.jhat.value);
-				break;
-			case SDL_JOYAXISMOTION:
-				if (e.jaxis.axis < 2)
-					hid_joystick_motion_event(e.jaxis.axis, e.jaxis.value);
-				break;
-			//case SDL_MOUSEMOTION:
-			//	hid_mouse_motion_event(e.motion.xrel, e.motion.yrel);
-			//	break;
-		}
-	}
+	hid_handle_all_sdl_events();
 #ifdef UARTMON_SOCKET
 	uartmon_update();
 #endif
@@ -1070,6 +1024,12 @@ static void update_emulator ( void )
 	vic3_render_screen();
 	// Screen rendering: end
 	emu_timekeeping_delay(40000);
+	// Ugly CIA trick to maintain realtime TOD in CIAs :)
+        if (seconds_timer_trigger) {
+		struct tm *t = emu_get_localtime();
+		cia_ugly_tod_updater(&cia1, t);
+		cia_ugly_tod_updater(&cia2, t);
+	}
 }
 
 

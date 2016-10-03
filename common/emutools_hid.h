@@ -25,15 +25,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 struct KeyMapping {
 	SDL_Scancode	scan;	// SDL scancode for the given key we want to map
-	Uint8		pos;	// BCD packed, high nibble / low nibble for col/row to map to.  0xFF means end of table!, high bit set on low nibble: press shift as well!
+	int		pos;	// BCD packed, high nibble / low nibble (x <= 7) for col/row to map to, -1 end of table, > 0xFF is special key event
 };
 
 extern Uint8 kbd_matrix[16];
 
-extern int hid_key_event ( SDL_Scancode key, int pressed ) ;
+// This one must be defined by the emulator!
+extern int  emu_callback_key		( int pos, SDL_Scancode key, int pressed, int handled ) ;
 
-extern void hid_reset_events ( int burn ) ;
-extern void hid_init ( const struct KeyMapping *key_map_in, Uint8 virtual_shift_pos_in, int joy_enable ) ;
+// Provided HID functions:
+extern int  hid_key_event		( SDL_Scancode key, int pressed ) ;
+extern void hid_reset_events		( int burn ) ;
+extern void hid_init			( const struct KeyMapping *key_map_in, Uint8 virtual_shift_pos_in, int joy_enable ) ;
 extern void hid_mouse_motion_event      ( int xrel, int yrel ) ;
 extern void hid_mouse_button_event      ( int button, int pressed ) ;
 extern void hid_joystick_device_event   ( int which , int is_attach ) ;
@@ -49,5 +52,27 @@ extern int  hid_read_mouse_button_left  ( int on, int off ) ;
 extern int  hid_read_mouse_button_right ( int on, int off ) ;
 extern int  hid_read_mouse_rel_x        ( int min, int max ) ;
 extern int  hid_read_mouse_rel_y        ( int min, int max ) ;
+extern int  hid_handle_one_sdl_event    ( SDL_Event *event ) ;
+extern void hid_handle_all_sdl_events   ( void ) ;
+
+#define XEMU_EVENT_EXIT			0x100
+#define XEMU_EVENT_FAKE_JOY_UP		0x101
+#define XEMU_EVENT_FAKE_JOY_DOWN	0x102
+#define XEMU_EVENT_FAKE_JOY_LEFT	0x103
+#define XEMU_EVENT_FAKE_JOY_RIGHT	0x104
+#define XEMU_EVENT_FAKE_JOY_FIRE	0x105
+#define XEMU_EVENT_TOGGLE_FULLSCREEN	0x106
+
+
+#define STD_XEMU_SPECIAL_KEYS	\
+	{ SDL_SCANCODE_F9,	XEMU_EVENT_EXIT }, \
+	{ SDL_SCANCODE_F11,	XEMU_EVENT_TOGGLE_FULLSCREEN }, \
+	{ SDL_SCANCODE_KP_5,	XEMU_EVENT_FAKE_JOY_FIRE },	/* for joy FIRE  we map PC num keypad 5 */ \
+	{ SDL_SCANCODE_KP_0,	XEMU_EVENT_FAKE_JOY_FIRE },	/* PC num keypad 0 is also the FIRE ... */ \
+	{ SDL_SCANCODE_RCTRL,	XEMU_EVENT_FAKE_JOY_FIRE },	/* and RIGHT controll is also the FIRE ... to make Sven happy :) */ \
+	{ SDL_SCANCODE_KP_8,	XEMU_EVENT_FAKE_JOY_UP },	/* for joy UP    we map PC num keypad 8 */ \
+	{ SDL_SCANCODE_KP_2,	XEMU_EVENT_FAKE_JOY_DOWN },	/* for joy DOWN  we map PC num keypad 2 */ \
+	{ SDL_SCANCODE_KP_4,	XEMU_EVENT_FAKE_JOY_LEFT },	/* for joy LEFT  we map PC num keypad 4 */ \
+	{ SDL_SCANCODE_KP_6,	XEMU_EVENT_FAKE_JOY_RIGHT }	/* for joy RIGHT we map PC num keypad 6 */
 
 #endif

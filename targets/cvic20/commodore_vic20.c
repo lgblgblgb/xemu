@@ -156,18 +156,11 @@ static const struct KeyMapping vic20_key_map[] = {
 	{ SDL_SCANCODE_MINUS,		0x75 }, // -
 	{ SDL_SCANCODE_HOME,		0x76 }, // HOME
 	{ SDL_SCANCODE_F7, 0x77 }, { SDL_SCANCODE_F8, 0x77 | 8 }, // F7, _SHIFTED_: F8!
-	// -- the following key definitions are not really part of the original VIC20 kbd matrix, we just *emulate* things this way!!
-	// Note: the exact "virtual" kbd matrix positions are *important* and won't work otherwise (arranged to be used more positions with one bit mask and, etc).
-	{ SDL_SCANCODE_KP_5,		0x85 },	// for joy FIRE  we map PC num keypad 5
-	{ SDL_SCANCODE_KP_0,		0x85 },	// PC num keypad 0 is also the FIRE ...
-	{ SDL_SCANCODE_RCTRL,		0x85 }, // and RIGHT controll is also the FIRE ... to make Sven happy :)
-	{ SDL_SCANCODE_KP_8,		0x82 },	// for joy UP    we map PC num keypad 8
-	{ SDL_SCANCODE_KP_2,		0x83 },	// for joy DOWN  we map PC num keypad 2
-	{ SDL_SCANCODE_KP_4,		0x84 },	// for joy LEFT  we map PC num keypad 4
-	{ SDL_SCANCODE_KP_6,		0x87 },	// for joy RIGHT we map PC num keypad 6
-	{ SDL_SCANCODE_ESCAPE,		0x81 },	// RESTORE key
+	// -- the following definitions are not VIC-20 keys, but emulator related stuffs
+	STD_XEMU_SPECIAL_KEYS,
+	//{ SDL_SCANCODE_ESCAPE,		0x81 },	// RESTORE key
 	// **** this must be the last line: end of mapping table ****
-	{ 0, 0xFF }
+	{ 0, -1 }
 };
 
 
@@ -363,58 +356,20 @@ Uint8 cpu_read ( Uint16 addr )
 }
 
 
-
-// pressed: non zero value = key is pressed, zero value = key is released
-static void emulate_keyboard ( SDL_Scancode key, int pressed )
+// HID needs this to be defined, it's up to the emulator if it uses or not ...
+int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
-	if (key == SDL_SCANCODE_F11) {	// toggle full screen mode on/off
-		if (pressed)
-			emu_set_full_screen(-1);
-	} else if (key == SDL_SCANCODE_F9) {	// exit emulator ...
-		if (pressed)
-			exit(0);
-	} else {
-		hid_key_event(key, pressed);
-	}
+	return 0;
 }
-
 
 
 static void update_emulator ( void )
 {
 	if (!frameskip) {
-		SDL_Event e;
 		// First: render VIC-20 screen ...
 		emu_update_screen();
 		// Second: we must handle SDL events waiting for us in the event queue ...
-		while (SDL_PollEvent(&e) != 0) {
-			switch (e.type) {
-				case SDL_QUIT:		// ie: someone closes the SDL window ...
-					exit(0);
-					break;
-				case SDL_KEYDOWN:	// key is pressed (down)
-				case SDL_KEYUP:		// key is released (up)
-					// make sure that key event is for our window, also that it's not a releated event by long key presses (repeats should be handled by the emulated machine's KERNAL)
-					if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0))
-						emulate_keyboard(e.key.keysym.scancode, e.key.state == SDL_PRESSED);	// the last argument will be zero in case of release, other val in case of pressing
-					break;
-				case SDL_JOYDEVICEADDED:
-				case SDL_JOYDEVICEREMOVED:
-					hid_joystick_device_event(e.jdevice.which, e.type == SDL_JOYDEVICEADDED);
-					break;
-				case SDL_JOYBUTTONDOWN:
-				case SDL_JOYBUTTONUP:
-					hid_joystick_button_event(e.type == SDL_JOYBUTTONDOWN);
-					break;
-				case SDL_JOYHATMOTION:
-					hid_joystick_hat_event(e.jhat.value);
-					break;
-				case SDL_JOYAXISMOTION:
-					if (e.jaxis.axis < 2)
-						hid_joystick_motion_event(e.jaxis.axis, e.jaxis.value);
-					break;
-			}
-		}
+		hid_handle_all_sdl_events();
 		// Third: Sleep ... Please read emutools.c source about this madness ... 40000 is (PAL) microseconds for a full frame to be produced
 		emu_timekeeping_delay(FULL_FRAME_USECS);
 	}
@@ -463,19 +418,19 @@ static Uint8 via2_kbd_get_scan ( Uint8 mask )
 static Uint8 via1_ina ( Uint8 mask )
 {
 	// joystick state (RIGHT direction is not handled here though)
-	return kbd_matrix[8] & (4 + 8 + 16 + 32) & (
+	return
 		hid_read_joystick_left  (0, 1 << 4) |
 		hid_read_joystick_up    (0, 1 << 2) |
 		hid_read_joystick_down  (0, 1 << 3) |
 		hid_read_joystick_button(0, 1 << 5)
-	);
+	;
 }
 
 
 static Uint8 via2_inb ( Uint8 mask )
 {
 	// Port-B in VIA2 is used (temporary with DDR-B set to input) to scan joystick direction 'RIGHT'
-	return ((kbd_matrix[8] & 128) & hid_read_joystick_right(0, 128)) | 0x7F;
+	return hid_read_joystick_right(0x7F, 0xFF);
 }
 
 

@@ -23,22 +23,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* Note: HID stands for "Human Input Devices" or something like that :)
    That is: keyboard, joystick, mouse.
-
-   TODO: unify this and move to emutools.c, and allow all emulators to share
-   on the common code (with keyboard map set by the emulator though!)
-
-   TODO: also include SDL event loop handling, hot-key "sensing" etc,
-   so if no special requirement from the emulator, then it does not even
-   deal with SDL events at all!
-
-   TODO: also the keyboard matrix default state should be configurable
-   (ie: Commodore LCD uses '0' as unpressed ...)
-
-   TODO: there is no configuration for multiple joysticks, axes, whatever :(
+   TODO: positional mapping stuff for keys _ONLY_
+   TODO: no precise joy emu (multiple joys/axes/buttons/whatsoever)
+   TODO: mouse emulation is unfinished
 */
 
 
-Uint8 kbd_matrix[16];		// keyboard matrix state, X * 8 bits
+Uint8 kbd_matrix[16];		// keyboard matrix state, 16 * 8 bits at max currently (not compulsory to use all positions!)
 static int mouse_delta_x;
 static int mouse_delta_y;
 static unsigned int hid_state;
@@ -55,13 +46,6 @@ static SDL_Joystick *joysticks[MAX_JOYSTICKS];
 #define MOUSESTATE_BUTTON_LEFT		32
 #define MOUSESTATE_BUTTON_RIGHT		64
 
-
-
-/* Notes:
-	* This is _POSITIONAL_ mapping (not symbolic), assuming US keyboard layout for the host machine (ie: the machine you run this emulator)
-	* Only 8*8 matrix is emulated currently, on C65 there is an "extra" line it seems
-	* I was lazy to map some keys, see in the comments :)
-*/
 static const struct KeyMapping *key_map = NULL;
 static Uint8 virtual_shift_pos = 0;
 
@@ -78,16 +62,45 @@ static Uint8 virtual_shift_pos = 0;
 int hid_key_event ( SDL_Scancode key, int pressed )
 {
 	const struct KeyMapping *map = key_map;
-	while (map->pos != 0xFF) {
+	while (map->pos >= 0) {
 		if (map->scan == key) {
+			if (map->pos > 0xFF) {	// special emulator key!
+				switch (map->pos) {	// handle "built-in" events, if emulator target uses them at all ...
+					case XEMU_EVENT_EXIT:
+						exit(0);
+						break;
+					case XEMU_EVENT_FAKE_JOY_UP:
+						if (pressed) hid_state |= JOYSTATE_UP;     else hid_state &= ~JOYSTATE_UP;
+						break;
+					case XEMU_EVENT_FAKE_JOY_DOWN:
+						if (pressed) hid_state |= JOYSTATE_DOWN;   else hid_state &= ~JOYSTATE_DOWN;
+						break;
+					case XEMU_EVENT_FAKE_JOY_LEFT:
+						if (pressed) hid_state |= JOYSTATE_LEFT;   else hid_state &= ~JOYSTATE_LEFT;
+						break;
+					case XEMU_EVENT_FAKE_JOY_RIGHT:
+						if (pressed) hid_state |= JOYSTATE_RIGHT;  else hid_state &= ~JOYSTATE_RIGHT;
+						break;
+					case XEMU_EVENT_FAKE_JOY_FIRE:
+						if (pressed) hid_state |= JOYSTATE_BUTTON; else hid_state &= ~JOYSTATE_BUTTON;
+						break;
+					case XEMU_EVENT_TOGGLE_FULLSCREEN:
+						if (pressed)
+							emu_set_full_screen(-1);
+						break;
+					default:
+						return emu_callback_key(map->pos, key, pressed, 0);
+				}
+				return emu_callback_key(map->pos, key, pressed, 1);
+			}
 			if (map->pos & 8)			// shifted key emu?
 				KBD_SET_KEY(virtual_shift_pos, pressed);	// maintain the shift key
 			KBD_SET_KEY(map->pos, pressed);
-			return 0;
+			return emu_callback_key(map->pos, key, pressed, 1);
 		}
 		map++;
 	}
-	return 1;
+	return emu_callback_key(-1, key, pressed, 0);
 }
 
 
@@ -273,4 +286,51 @@ int hid_read_mouse_button_left ( int on, int off )
 int hid_read_mouse_button_right ( int on, int off )
 {
 	return (hid_state & MOUSESTATE_BUTTON_RIGHT) ? on : off;
+}
+
+
+int hid_handle_one_sdl_event ( SDL_Event *event )
+{
+	int handled = 1;
+	switch (event->type) {
+		case SDL_QUIT:
+			exit(0);
+		case SDL_KEYUP:
+		case SDL_KEYDOWN:
+			if (event->key.repeat == 0 && (event->key.windowID == sdl_winid || event->key.windowID == 0))
+				hid_key_event(event->key.keysym.scancode, event->key.state == SDL_PRESSED);
+			break;
+		case SDL_JOYDEVICEADDED:
+		case SDL_JOYDEVICEREMOVED:
+			hid_joystick_device_event(event->jdevice.which, event->type == SDL_JOYDEVICEADDED);
+			break;
+		case SDL_JOYBUTTONDOWN:
+		case SDL_JOYBUTTONUP:
+			hid_joystick_button_event(event->type == SDL_JOYBUTTONDOWN);
+			break;
+		case SDL_JOYHATMOTION:
+			hid_joystick_hat_event(event->jhat.value);
+			break;
+		case SDL_JOYAXISMOTION:
+			if (event->jaxis.axis < 2)
+				hid_joystick_motion_event(event->jaxis.axis, event->jaxis.value);
+			break;
+		//case SDL_MOUSEMOTION:
+		//      hid_mouse_motion_event(e.motion.xrel, e.motion.yrel);
+		//      break;
+		default:
+			handled = 0;
+			break;
+	}
+	return handled;
+}
+
+
+// For simple emulators it's even enough to call regularly this function for all HID stuffs!
+void hid_handle_all_sdl_events ( void )
+{
+	SDL_Event event;
+	while (SDL_PollEvent(&event) != 0)
+		hid_handle_one_sdl_event(&event);
+
 }

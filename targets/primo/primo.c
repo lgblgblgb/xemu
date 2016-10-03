@@ -165,8 +165,9 @@ static const struct KeyMapping primo_key_map[] = {
 	{ SDL_SCANCODE_RIGHT,	0x75 },	// scan 61 RIGHT-ARROW
 	//{ SDL_SCANCODE_O:,	0x76 },	// scan 62 O:
 	{ SDL_SCANCODE_ESCAPE,	0x77 },	// scan 63 BRK
+	STD_XEMU_SPECIAL_KEYS,
 	// **** this must be the last line: end of mapping table ****
-	{ 0, 0xFF }
+	{ 0, -1 }
 };
 
 
@@ -175,23 +176,6 @@ void clear_emu_events ( void )
 {
 	hid_reset_events(1);
 }
-
-
-
-// pressed: non zero value = key is pressed, zero value = key is released
-static void emulate_keyboard ( SDL_Scancode key, int pressed )
-{
-	if (key == SDL_SCANCODE_F11) {	// toggle full screen mode on/off
-		if (pressed)
-			emu_set_full_screen(-1);
-	} else if (key == SDL_SCANCODE_F9) {	// exit emulator ...
-		if (pressed)
-			exit(0);
-	} else {
-		hid_key_event(key, pressed);
-	}
-}
-
 
 
 static inline void render_primo_screen ( void )
@@ -219,24 +203,19 @@ static inline void render_primo_screen ( void )
 
 
 
+// HID needs this to be defined, it's up to the emulator if it uses or not ...
+int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
+{
+        return 0;
+}
+
+
+
 static void update_emulator ( void )
 {
 	if (!frameskip) {
-		SDL_Event e;
 		render_primo_screen();
-		while (SDL_PollEvent(&e) != 0) {
-			switch (e.type) {
-				case SDL_QUIT:		// ie: someone closes the SDL window ...
-					exit(0);
-					break;
-				case SDL_KEYDOWN:	// key is pressed (down)
-				case SDL_KEYUP:		// key is released (up)
-					// make sure that key event is for our window, also that it's not a releated event by long key presses (repeats should be handled by the emulated machine's KERNAL)
-					if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0))
-						emulate_keyboard(e.key.keysym.scancode, e.key.state == SDL_PRESSED);	// the last argument will be zero in case of release, other val in case of pressing
-					break;
-			}
-		}
+		hid_handle_all_sdl_events();
 		emu_timekeeping_delay(40000);
 	}
 }
