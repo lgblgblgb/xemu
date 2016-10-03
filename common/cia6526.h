@@ -33,6 +33,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_COMMON_CIA6526_H_INCLUDED
 #define __XEMU_COMMON_CIA6526_H_INCLUDED
 
+#include <time.h>
+
 struct Cia6526 {
         void (*outa)(Uint8 data);
         void (*outb)(Uint8 data);
@@ -70,6 +72,7 @@ extern void  cia_write(struct Cia6526 *cia, int addr, Uint8 data);
 extern Uint8 cia_read (struct Cia6526 *cia, int addr);
 extern void  cia_tick (struct Cia6526 *cia, int ticks);
 extern void  cia_dump_state ( struct Cia6526 *cia );
+extern void  cia_ugly_tod_updater ( struct Cia6526 *cia, struct tm *t ) ;
 
 
 #endif

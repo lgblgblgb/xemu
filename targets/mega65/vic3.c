@@ -98,7 +98,6 @@ void vic3_init ( void )
 		for (g = 0; g < 16; g++)
 			for (b = 0; b < 16; b++)
 				rgb_palette[i++] = SDL_MapRGBA(sdl_pix_fmt, r * 17, g * 17, b * 17, 0xFF); // 15*17=255, last arg 0xFF: alpha channel for SDL
-	SDL_FreeFormat(sdl_pix_fmt);	// thanks, we don't need this anymore from SDL
 	// *** Init VIC3 registers and palette
 	vic2_16k_bank = 0;
 	vic_iomode = VIC2_IOMODE;

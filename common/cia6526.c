@@ -269,6 +269,17 @@ void cia_write ( struct Cia6526 *cia, int addr, Uint8 data )
 }
 
 
+void cia_ugly_tod_updater ( struct Cia6526 *cia, struct tm *t )
+{
+	// Ugly CIA trick to maintain realtime TOD in CIAs :)
+	// FIXME: of course, that's simple crazy, not in sync with emu, no "stopping" clock on read, no setting etc ...
+	cia->tod[0] = 0;
+	cia->tod[1] = ((t->tm_sec / 10) << 4)  | (t->tm_sec % 10);
+	cia->tod[2] = ((t->tm_min / 10) << 4)  | (t->tm_min % 10);
+	cia->tod[3] = ((t->tm_hour / 10) << 4) | (t->tm_hour % 10);
+}
+
+
 void cia_tick ( struct Cia6526 *cia, int ticks )
 {
 	/* Timer A */
