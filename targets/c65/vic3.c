@@ -146,11 +146,11 @@ void vic3_check_raster_interrupt ( void )
 	for (a = 0; a < 640; a++) \
 		*(pixel++) = col
 
+
 static void renderer_disabled_screen ( void )
 {
 	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20));
 }
-
 
 
 static void renderer_invalid_mode ( void )
@@ -182,6 +182,7 @@ static void renderer_text_40 ( void )
 	}
 }
 
+
 static void renderer_text_80 ( void )
 {
 	Uint8 *vp = vicptr_video_80 + video_counter;
@@ -203,6 +204,7 @@ static void renderer_text_80 ( void )
 		*(pixel++) = vdata & 0x01 ? fg_colour : bg_colour;
 	}
 }
+
 
 static void renderer_ecmtext_40 ( void )
 {
@@ -234,10 +236,37 @@ static void renderer_ecmtext_40 ( void )
 	}
 }
 
+
 static void renderer_ecmtext_80 ( void )
 {
-	STATIC_COLOUR_RENDERER(RGB(15,0,0));	// TODO: not implemented!
+	Uint8 *vp = vicptr_video_80 + video_counter;
+	Uint8 *cp = COLMEMPTR + video_counter;
+	Uint8 *chargen = vicptr_chargen + row_counter;
+	Uint32 bg_colours[4] = {
+		VIC_REG_COLOUR(0x21),
+		VIC_REG_COLOUR(0x22),
+		VIC_REG_COLOUR(0x23),
+		VIC_REG_COLOUR(0x24)
+	};
+	int a;
+	for (a = 0; a < 80; a++) {
+		Uint8 vdata = *(vp++);
+		//Uint8 vdata = vicptr_chargen[((*(vp++)) << 3) + row_counter];
+		Uint8 data = chargen[(vdata & 63) << 3];
+		Uint32 fg_colour = palette[*(cp++) & 15];
+		vdata >>= 6;
+		pixel[0] = data & 0x80 ? fg_colour : bg_colours[vdata];
+		pixel[1] = data & 0x40 ? fg_colour : bg_colours[vdata];
+		pixel[2] = data & 0x20 ? fg_colour : bg_colours[vdata];
+		pixel[3] = data & 0x10 ? fg_colour : bg_colours[vdata];
+		pixel[4] = data & 0x08 ? fg_colour : bg_colours[vdata];
+		pixel[5] = data & 0x04 ? fg_colour : bg_colours[vdata];
+		pixel[6] = data & 0x02 ? fg_colour : bg_colours[vdata];
+		pixel[7] = data & 0x01 ? fg_colour : bg_colours[vdata];
+		pixel += 8;
+	}
 }
+
 
 static void renderer_mcmtext_40 ( void )
 {
@@ -278,10 +307,46 @@ static void renderer_mcmtext_40 ( void )
 	}
 }
 
+
 static void renderer_mcmtext_80 ( void )
 {
-	STATIC_COLOUR_RENDERER(RGB(15,0,0));	// TODO: not implemented!
+	Uint8 *vp = vicptr_video_80 + video_counter;
+	Uint8 *cp = COLMEMPTR + video_counter;
+	Uint8 *chargen = vicptr_chargen + row_counter;
+	Uint32 colours[4] = {
+		VIC_REG_COLOUR(0x21),
+		VIC_REG_COLOUR(0x22),
+                VIC_REG_COLOUR(0x23),
+		0	// to be filled during colour fetch ...
+	};
+	int a;
+	for (a = 0; a < 80; a++) {
+		//Uint8 vdata = vicptr_chargen[((*(vp++)) << 3) + row_counter];
+		Uint8 vdata = chargen[(*(vp++)) << 3];
+		Uint8 coldata = (*(cp++));
+		if (coldata & 8) {
+			// MCM character
+			colours[3] = palette[coldata & 7];
+			pixel[0] = pixel[1] = colours[ vdata >> 6     ];
+			pixel[2] = pixel[3] = colours[(vdata >> 4) & 3];
+			pixel[4] = pixel[5] = colours[(vdata >> 2) & 3];
+			pixel[6] = pixel[7] = colours[ vdata       & 3];
+		} else {
+			// non-MCM character
+			colours[3] = palette[coldata & 7];
+			pixel[0] = vdata & 0x80 ? colours[3] : colours[0];
+			pixel[1] = vdata & 0x40 ? colours[3] : colours[0];
+			pixel[2] = vdata & 0x20 ? colours[3] : colours[0];
+			pixel[3] = vdata & 0x10 ? colours[3] : colours[0];
+			pixel[4] = vdata & 0x08 ? colours[3] : colours[0];
+			pixel[5] = vdata & 0x04 ? colours[3] : colours[0];
+			pixel[6] = vdata & 0x02 ? colours[3] : colours[0];
+			pixel[7] = vdata & 0x01 ? colours[3] : colours[0];
+		}
+		pixel += 8;
+	}
 }
+
 
 static void renderer_bitmap_320 ( void )
 {
@@ -306,12 +371,30 @@ static void renderer_bitmap_320 ( void )
 	}
 }
 
+
 static void renderer_bitmap_640 ( void )
 {
 	Uint8 *vp = vicptr_video_80 + video_counter;
 	Uint8 *bp = vicptr_bitmap_640 + (video_counter << 3) + row_counter;
-	STATIC_COLOUR_RENDERER(RGB(15,0,0));	// TODO: not implemented!
+	int a;
+	for (a = 0; a < 80; a++) {
+		Uint8 data = *(vp++);
+		Uint32 fg_colour = palette[data >> 4];
+		Uint32 bg_colour = palette[data & 15];
+		data = *bp;
+		pixel[0] = data & 0x80 ? fg_colour : bg_colour;
+		pixel[1] = data & 0x40 ? fg_colour : bg_colour;
+		pixel[2] = data & 0x20 ? fg_colour : bg_colour;
+		pixel[3] = data & 0x10 ? fg_colour : bg_colour;
+		pixel[4] = data & 0x08 ? fg_colour : bg_colour;
+		pixel[5] = data & 0x04 ? fg_colour : bg_colour;
+		pixel[6] = data & 0x02 ? fg_colour : bg_colour;
+		pixel[7] = data & 0x01 ? fg_colour : bg_colour;
+		bp += 8;
+		pixel += 8;
+	}
 }
+
 
 static void renderer_mcmbitmap_320 ( void )
 {
@@ -336,11 +419,30 @@ static void renderer_mcmbitmap_320 ( void )
 	}
 }
 
+
 static void renderer_mcmbitmap_640 ( void )
 {
-
-	STATIC_COLOUR_RENDERER(RGB(15,0,0));	// TODO: not implemented!
+	Uint8 *vp = vicptr_video_80 + video_counter;
+	Uint8 *bp = vicptr_bitmap_640 + (video_counter << 3) + row_counter;
+	Uint8 *cp = COLMEMPTR + video_counter;
+	Uint32 colours[4];
+	int a;
+	colours[0] = VIC_REG_COLOUR(0x21);
+	for (a = 0; a < 80; a++) {
+		Uint8 data = *(vp++);
+		colours[1] = palette[data >> 4];
+		colours[2] = palette[data & 15];
+		colours[3] = palette[(*(cp++)) & 15];
+		data = *bp;
+		pixel[0] = pixel[1] = colours[ data >> 6     ];
+		pixel[2] = pixel[3] = colours[(data >> 4) & 3];
+		pixel[4] = pixel[5] = colours[(data >> 2) & 3];
+		pixel[6] = pixel[7] = colours[ data       & 3];
+		bp += 8;
+		pixel += 8;
+	}
 }
+
 
 static void renderer_bitplane_320 ( void )
 {
@@ -370,9 +472,31 @@ static void renderer_bitplane_320 ( void )
 	}
 }
 
+
 static void renderer_bitplane_640 ( void )
 {
-	STATIC_COLOUR_RENDERER(RGB(15,0,0));	// TODO: not implemented!
+	Uint8 *bp = memory + (video_counter << 3) + row_counter;
+	int a, enable = vic3_registers[0x32] & 15;	// in H640 bitplane modes, only lower 4 bitplanes can be used (TODO: is that true? check it!)
+	for (a = 0; a < 80; a++) {
+		int bitpos;
+		Uint8 fetch[8] = {
+			bp[bitplane_addr_640[0]], bp[bitplane_addr_640[1]], bp[bitplane_addr_640[2]], bp[bitplane_addr_640[3]],
+			bp[bitplane_addr_640[4]], bp[bitplane_addr_640[5]], bp[bitplane_addr_640[6]], bp[bitplane_addr_640[7]]
+		};
+		for (bitpos = 128; bitpos; bitpos >>= 1)
+			// Do not try this at home ...
+			*(pixel++) = palette[((
+				((fetch[0] & bitpos) ?   1 : 0) |
+				((fetch[1] & bitpos) ?   2 : 0) |
+				((fetch[2] & bitpos) ?   4 : 0) |
+				((fetch[3] & bitpos) ?   8 : 0) |
+				((fetch[4] & bitpos) ?  16 : 0) |
+				((fetch[5] & bitpos) ?  32 : 0) |
+				((fetch[6] & bitpos) ?  64 : 0) |
+				((fetch[7] & bitpos) ? 128 : 0)
+			) & enable) ^ vic3_registers[0x3B]];
+		bp += 8;
+	}
 }
 
 
