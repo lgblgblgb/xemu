@@ -26,13 +26,27 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "cpu65c02.h"
 #include "vic3.h"
 
+
+
+
+
 #define RGB(r,g,b)		rgb_palette[((r) << 8) | ((g) << 4) | (b)]
 #define COLMEMPTR		(memory + 0x1F800)
 #define IS_H640			(vic3_registers[0x31] & 0x80)
 #define BLINK_COUNTER_INIT	25
 
+#ifdef VIC_CACHE_COLOURS
+#define VIC_REG_COLOUR(n)	vic_reg_palette_cache[(n) - 0x20]
+#else
+#define	VIC_REG_COLOUR(n)	palette[vic3_registers[n]]
+#endif
 
 
+
+#ifdef VIC_CACHE_COLOURS
+#warning "VIC_CACHE_COLOURS feature has not been implemented, yet!"
+static Uint32 vic_reg_palette_cache[15];
+#endif
 static Uint32 rgb_palette[4096];	// all the C65 palette, 4096 colours (SDL pixel format related form)
 static Uint32 vic3_palette[0x100];	// VIC3 palette in SDL pixel format related form (can be written into the texture directly to be rendered)
 static Uint32 vic3_rom_palette[0x100];	// the "ROM" palette, for C64 colours (with some ticks, ie colours above 15 are the same as the "normal" programmable palette)
@@ -41,22 +55,16 @@ static Uint8 vic3_palette_nibbles[0x300];
 Uint8 vic3_registers[0x80];		// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
 int vic_new_mode;			// VIC3 "newVic" IO mode is activated flag
 static int scanline;			// current scan line number
-int clock_divider7_hack;
+int clock_divider7_hack;		// FIXME: ugly hack for fast/slow CPU mode
 static int compare_raster;		// raster compare (9 bits width) data
 static int interrupt_status;		// Interrupt status of VIC
-#if 0
-int vic2_16k_bank;			// VIC-2 modes' 16K BANK address within 64K (NOT the traditional naming of banks with 0,1,2,3)
-static Uint8 *sprite_pointers;		// Pointer to sprite pointers :)
-static Uint8 *sprite_bank;
-#endif
-static int blink_phase;			// blinking attribute helper, state.
-static int blink_counter;
+static int blink_phase;			// blinking attribute helper: on/off phase of blink
+static int blink_counter;		// blinking attribute helper: counter for blink_phase change
+static int attributes;			// hardware attribute mode. NOTE: currently implemented for normal text mode only, which is not so correct!
 
-
-
+// (SDL) target texture rendering pointers
 static Uint32 *pixel;			// pixel pointer to the rendering target (one pixel: 32 bit)
-static Uint32 *pixel_end, *pixel_start;
-
+static Uint32 *pixel_end, *pixel_start;	// points to the end and start of the buffer
 
 int frameskip;				// if non-zero: frameskip mode, do NOT render the frame, but maintain scanline counter
 static int video_counter;		// video counter ("VC") 0...1000 or 0...2000 (in H640 mode) Currently only the BEGINNING of lines, as it's scanline based emulation ...
@@ -76,11 +84,10 @@ static Uint8 *vicptr_bitmap_320;	// pointer to bitmap data, only used in !H640 b
 static Uint8 *vicptr_bitmap_640;	// pointer to bitmap data, only used in H640 bitmap modes (the only one which is calculated from 32K bank!)
 static Uint8 *vicptr_idlefetch_p;	// IDLE-fetch pointer
 static Uint8 *sprite_pointers;		// points to the actual memory bytes where currently sprite pointers are
+// For bitplanes we don't use pointers, since there are just too many sources (max of 8 bitplanes)
+// Instead we use integer values, as linear memory addresses.
 static int bitplane_addr_320[8];
 static int bitplane_addr_640[8];
-
-static int attributes;			// attribute mode?
-
 
 static int warn_sprites = 0, warn_ctrl_b_lo = 1;
 
@@ -141,7 +148,7 @@ void vic3_check_raster_interrupt ( void )
 
 static void renderer_disabled_screen ( void )
 {
-	STATIC_COLOUR_RENDERER(palette[vic3_registers[0x20]]);
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20));
 }
 
 
@@ -157,7 +164,7 @@ static void renderer_text_40 ( void )
 	Uint8 *vp = vicptr_video_40 + video_counter;
 	Uint8 *cp = COLMEMPTR + video_counter;
 	Uint8 *chargen = vicptr_chargen + row_counter;
-	Uint32 bg_colour = palette[vic3_registers[0x21]];
+	Uint32 bg_colour = VIC_REG_COLOUR(0x21);
 	int a;
 	for (a = 0; a < 40; a++) {
 		//Uint8 vdata = vicptr_chargen[((*(vp++)) << 3) + row_counter];
@@ -180,7 +187,7 @@ static void renderer_text_80 ( void )
 	Uint8 *vp = vicptr_video_80 + video_counter;
 	Uint8 *cp = COLMEMPTR + video_counter;
 	Uint8 *chargen = vicptr_chargen + row_counter;
-	Uint32 bg_colour = palette[vic3_registers[0x21]];
+	Uint32 bg_colour = VIC_REG_COLOUR(0x21);
 	int a;
 	for (a = 0; a < 80; a++) {
 		//Uint8 vdata = vicptr_chargen[((*(vp++)) << 3) + row_counter];
@@ -199,7 +206,32 @@ static void renderer_text_80 ( void )
 
 static void renderer_ecmtext_40 ( void )
 {
-	STATIC_COLOUR_RENDERER(RGB(15,0,0));	// TODO: not implemented!
+	Uint8 *vp = vicptr_video_40 + video_counter;
+	Uint8 *cp = COLMEMPTR + video_counter;
+	Uint8 *chargen = vicptr_chargen + row_counter;
+	Uint32 bg_colours[4] = {
+		VIC_REG_COLOUR(0x21),
+		VIC_REG_COLOUR(0x22),
+		VIC_REG_COLOUR(0x23),
+		VIC_REG_COLOUR(0x24)
+	};
+	int a;
+	for (a = 0; a < 40; a++) {
+		Uint8 vdata = *(vp++);
+		//Uint8 vdata = vicptr_chargen[((*(vp++)) << 3) + row_counter];
+		Uint8 data = chargen[(vdata & 63) << 3];
+		Uint32 fg_colour = palette[*(cp++) & 15];
+		vdata >>= 6;
+		pixel[ 0] = pixel[ 1] = data & 0x80 ? fg_colour : bg_colours[vdata];
+		pixel[ 2] = pixel[ 3] = data & 0x40 ? fg_colour : bg_colours[vdata];
+		pixel[ 4] = pixel[ 5] = data & 0x20 ? fg_colour : bg_colours[vdata];
+		pixel[ 6] = pixel[ 7] = data & 0x10 ? fg_colour : bg_colours[vdata];
+		pixel[ 8] = pixel[ 9] = data & 0x08 ? fg_colour : bg_colours[vdata];
+		pixel[10] = pixel[11] = data & 0x04 ? fg_colour : bg_colours[vdata];
+		pixel[12] = pixel[13] = data & 0x02 ? fg_colour : bg_colours[vdata];
+		pixel[14] = pixel[15] = data & 0x01 ? fg_colour : bg_colours[vdata];
+		pixel += 16;
+	}
 }
 
 static void renderer_ecmtext_80 ( void )
@@ -213,9 +245,9 @@ static void renderer_mcmtext_40 ( void )
 	Uint8 *cp = COLMEMPTR + video_counter;
 	Uint8 *chargen = vicptr_chargen + row_counter;
 	Uint32 colours[4] = {
-		palette[vic3_registers[0x21]],
-		palette[vic3_registers[0x22]],
-                palette[vic3_registers[0x23]],
+		VIC_REG_COLOUR(0x21),
+		VIC_REG_COLOUR(0x22),
+                VIC_REG_COLOUR(0x23),
 		0	// to be filled during colour fetch ...
 	};
 	int a;
@@ -288,7 +320,7 @@ static void renderer_mcmbitmap_320 ( void )
 	Uint8 *cp = COLMEMPTR + video_counter;
 	Uint32 colours[4];
 	int a;
-	colours[0] = palette[vic3_registers[0x21]];
+	colours[0] = VIC_REG_COLOUR(0x21);
 	for (a = 0; a < 40; a++) {
 		Uint8 data = *(vp++);
 		colours[1] = palette[data >> 4];
@@ -459,7 +491,7 @@ static void select_chargen ( void )
 		else
 			vicptr_chargen = memory + 0x2D000 + ((vic3_registers[0x18] & 0x0E) << 10) - 0x1000;	// ... and this should be the C64
 	} else
-		vicptr_chargen = vicptr_bank16k + ((vic3_registers[0x18] & 0x0E) << 10);
+		vicptr_chargen = vicptr_bank16k + ((vic3_registers[0x18] & 0x0E) << 10);	// otherwise, chargen is in RAM
 }
 
 
@@ -474,6 +506,10 @@ static void select_vic2_memory ( void )
 	sprite_pointers = IS_H640 ? vicptr_video_80 + 0x7F8 : vicptr_video_40 + 0x3F8;
 	select_chargen();
 	vicptr_bitmap_320 = vicptr_bank16k + ((vic3_registers[0x18] & 8) << 10);
+	// Interestingly, VIC-III has a notion of "32K sized bank" as well, over VIC-II but
+	// used only for H640 bit set with bitmap modes (the video matrix is still fetched
+	// from the 16K bank though). There is no other reason for the bank, other VIC-II
+	// modes use 16K bank and VIC-III bitplanes don't use the bank notion at all.
 	vicptr_bitmap_640 = vicptr_bank32k + ((vic3_registers[0x18] & 8) << 11);
 }
 
@@ -483,6 +519,7 @@ static void select_vic2_memory ( void )
 void vic3_select_bank ( int bank )
 {
 	bank &= 3;
+	// to avoid of pointer rebuilding on all writes, we do this only, if bank is changed
 	if (bank != vic2_bank_number) {
 		vic2_bank_number = bank;
 		bank <<= 14;
@@ -704,7 +741,7 @@ void vic3_init ( void )
 	bitplane_addr_320[1] = bitplane_addr_320[3] = bitplane_addr_320[5] = bitplane_addr_320[7] = 0;
 	bitplane_addr_640[1] = bitplane_addr_640[3] = bitplane_addr_640[5] = bitplane_addr_640[7] = 0x10000;
 	// To force bank selection, and pointer re-calculations
-	vic2_bank_number = -1;
+	vic2_bank_number = -1;	// invalid, faked one, so vic3_select_bank() will surely not use the "cached" result initially
 	vic3_select_bank(0);
 	// To force select _some_ renderer
 	select_renderer_func();
@@ -1023,11 +1060,11 @@ static void render_one_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uin
 	int lim_y = sprite_y + ((expand_y) ? 42 : 21);
 	int mcm = vic3_registers[0x1C] & sprite_mask;
 	int y;
-	colours[2] = palette[vic3_registers[39 + sprite_no] & 15];
+	colours[2] = VIC_REG_COLOUR(39 + sprite_no);
 	if (mcm) {
 		colours[0] = 0;	// transparent, not a real colour, just signaling of transparency
-		colours[1] = palette[vic3_registers[0x25] & 15];
-		colours[3] = palette[vic3_registers[0x26] & 15];
+		colours[1] = VIC_REG_COLOUR(0x25);
+		colours[3] = VIC_REG_COLOUR(0x26);
 	}
 	p += (640 + tail) * sprite_y;
 	for (y = sprite_y; y < lim_y; y += (expand_y ? 2 : 1), p += (640 + tail) * (expand_y ? 2 : 1))
