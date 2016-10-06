@@ -575,8 +575,8 @@ void vic3_write_reg ( int addr, Uint8 data )
 		case 0x38:
 		case 0x39:
 		case 0x3A:
-			bitplane_addr_320[addr - 0x33] = ((data & 12) << 12) + (addr & 1 ? 0 : 0x10000);
-			bitplane_addr_640[addr - 0x33] = ((data & 14) << 12) + (addr & 1 ? 0 : 0x10000);
+			bitplane_addr_320[addr - 0x33] = ((data & 14) << 12) + (addr & 1 ? 0 : 0x10000);
+			bitplane_addr_640[addr - 0x33] = ((data & 12) << 12) + (addr & 1 ? 0 : 0x10000);
 			break;
 		default:
 			if (addr >= 0x20 && addr < 0x2F)
