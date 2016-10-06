@@ -25,9 +25,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "commodore_65.h"
 #include "cpu65c02.h"
 #include "vic3.h"
-#include "emutools.h"
 
-#define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
+#define RGB(r,g,b)		rgb_palette[((r) << 8) | ((g) << 4) | (b)]
+#define COLMEMPTR		(memory + 0x1F800)
+#define IS_H640			(vic3_registers[0x31] & 0x80)
+#define BLINK_COUNTER_INIT	25
 
 
 
@@ -38,99 +40,64 @@ static Uint32 *palette;			// the selected palette ...
 static Uint8 vic3_palette_nibbles[0x300];
 Uint8 vic3_registers[0x80];		// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
 int vic_new_mode;			// VIC3 "newVic" IO mode is activated flag
-int scanline;				// current scan line number
+static int scanline;			// current scan line number
 int clock_divider7_hack;
 static int compare_raster;		// raster compare (9 bits width) data
 static int interrupt_status;		// Interrupt status of VIC
+#if 0
 int vic2_16k_bank;			// VIC-2 modes' 16K BANK address within 64K (NOT the traditional naming of banks with 0,1,2,3)
 static Uint8 *sprite_pointers;		// Pointer to sprite pointers :)
 static Uint8 *sprite_bank;
-int vic3_blink_phase;			// blinking attribute helper, state.
+#endif
+static int blink_phase;			// blinking attribute helper, state.
+static int blink_counter;
+
+
+
+static Uint32 *pixel;			// pixel pointer to the rendering target (one pixel: 32 bit)
+static Uint32 *pixel_end, *pixel_start;
+
+
+int frameskip;				// if non-zero: frameskip mode, do NOT render the frame, but maintain scanline counter
+static int video_counter;		// video counter ("VC") 0...1000 or 0...2000 (in H640 mode) Currently only the BEGINNING of lines, as it's scanline based emulation ...
+static int video_counter_inc;		// 40 or 80 based on H640 bit
+static int row_counter;			// character row counter ("RC") 0...7 (0=badline)
+static int vic2_bank_number = 0;	// vic-2 bank number written by CIA
+static void (*renderer_func)(void);	// the selected scanline renderer, modified on mode register writes automatically
+
+// Pointers of VIC base addresses. Not always used in all modes, of course.
+// They're updated on register writes. So we can save re-calculation addresses all the time
+static Uint8 *vicptr_video_40;		// pointer to video matrix, only used in !H640 modes
+static Uint8 *vicptr_video_80;		// pointer to video matrix, only used in H640 modes 
+static Uint8 *vicptr_chargen;		// pointer to chargen, can even point into the ROM! Used only in text modes
+static Uint8 *vicptr_bank16k;		// pointer to VIC-II 16K bank start address
+static Uint8 *vicptr_bank32k;		// pointer to VIC-III 32K bank start address (only used for H640 bitmap mode)
+static Uint8 *vicptr_bitmap_320;	// pointer to bitmap data, only used in !H640 bitmap modes
+static Uint8 *vicptr_bitmap_640;	// pointer to bitmap data, only used in H640 bitmap modes (the only one which is calculated from 32K bank!)
+static Uint8 *vicptr_idlefetch_p;	// IDLE-fetch pointer
+static Uint8 *sprite_pointers;		// points to the actual memory bytes where currently sprite pointers are
+static int bitplane_addr_320[8];
+static int bitplane_addr_640[8];
+
+static int attributes;			// attribute mode?
+
 
 static int warn_sprites = 0, warn_ctrl_b_lo = 1;
 
-
-#define CHECK_PIXEL_POINTER
-
+char scanline_render_debug_info[320];
 
 
-#ifdef CHECK_PIXEL_POINTER
-/* Temporary hack to be used in renders. Asserts out-of-texture accesses */
-static Uint32 *pixel_pointer_check_base;
-static Uint32 *pixel_pointer_check_end;
-static const char *pixel_pointer_check_modn;
-static inline void PIXEL_POINTER_CHECK_INIT( Uint32 *base, int tail, const char *module )
+
+
+void vic3_open_frame_access ( void )
 {
-	pixel_pointer_check_base = base;
-	pixel_pointer_check_end  = base + (640 + tail) * 200;
-	pixel_pointer_check_modn = module;
+	int tail_sdl;
+	pixel = pixel_start = emu_start_pixel_buffer_access(&tail_sdl);
+	pixel_end = pixel + 640 * 200;
+	if (tail_sdl)
+		FATAL("tail_sdl is not zero!");
 }
-static inline void PIXEL_POINTER_CHECK_ASSERT ( Uint32 *p )
-{
-	if (p < pixel_pointer_check_base)
-		FATAL("FATAL ASSERT: accessing texture (%p) under the base limit (%p).\nIn program module: %s", p, pixel_pointer_check_base, pixel_pointer_check_modn);
-	if (p >= pixel_pointer_check_end)
-		FATAL("FATAL ASSERT: accessing texture (%p) above the upper limit (%p).\nIn program module: %s", p, pixel_pointer_check_end, pixel_pointer_check_modn);
-}
-static inline void PIXEL_POINTER_FINAL_ASSERT ( Uint32 *p )
-{
-	if (p != pixel_pointer_check_end)
-		FATAL("FATAL ASSERT: final texture pointer (%p) is not the same as the desired one (%p),\nIn program module %s", p, pixel_pointer_check_end, pixel_pointer_check_modn);
-}
-#else
-#	define PIXEL_POINTER_CHECK_INIT(base,tail,mod)
-#	define PIXEL_POINTER_CHECK_ASSERT(p)
-#	define PIXEL_POINTER_FINAL_ASSERT(p)
-#endif
 
-
-
-
-
-
-void vic3_init ( void )
-{
-	int r, g, b, i;
-	// *** Init 4096 element palette with RGB components for faster access later on palette register changes (avoid SDL calls to convert)
-	for (r = 0, i = 0; r < 16; r++)
-		for (g = 0; g < 16; g++)
-			for (b = 0; b < 16; b++)
-				rgb_palette[i++] = SDL_MapRGBA(sdl_pix_fmt, r * 17, g * 17, b * 17, 0xFF); // 15*17=255, last arg 0xFF: alpha channel for SDL
-	// *** Init VIC3 registers and palette
-	vic2_16k_bank = 0;
-	vic_new_mode = 0;
-	interrupt_status = 0;
-	palette = vic3_rom_palette;
-	scanline = 0;
-	compare_raster = 0;
-	clock_divider7_hack = 7;
-	for (i = 0; i < 0x100; i++) {	// Initiailize all palette registers to zero, initially, to have something ...
-		if (i < sizeof vic3_registers)
-			vic3_registers[i] = 0;	// Also the VIC3 registers ...
-		vic3_rom_palette[i] = vic3_palette[i] = rgb_palette[0];
-		vic3_palette_nibbles[i] = 0;
-		vic3_palette_nibbles[i + 0x100] = 0;
-		vic3_palette_nibbles[i + 0x200] = 0;
-	}
-	// *** the ROM palette "fixed" colours
-	vic3_rom_palette[ 0] = RGB( 0,  0,  0);	// black
-	vic3_rom_palette[ 1] = RGB(15, 15, 15);	// white
-	vic3_rom_palette[ 2] = RGB(15,  0,  0);	// red
-	vic3_rom_palette[ 3] = RGB( 0, 15, 15);	// cyan
-	vic3_rom_palette[ 4] = RGB(15,  0, 15);	// magenta
-	vic3_rom_palette[ 5] = RGB( 0, 15,  0);	// green
-	vic3_rom_palette[ 6] = RGB( 0,  0, 15);	// blue
-	vic3_rom_palette[ 7] = RGB(15, 15,  0);	// yellow
-	vic3_rom_palette[ 8] = RGB(15,  6,  0);	// orange
-	vic3_rom_palette[ 9] = RGB(10,  4,  0);	// brown
-	vic3_rom_palette[10] = RGB(15,  7,  7);	// pink
-	vic3_rom_palette[11] = RGB( 5,  5,  5);	// dark grey
-	vic3_rom_palette[12] = RGB( 8,  8,  8);	// medium grey
-	vic3_rom_palette[13] = RGB( 9, 15,  9);	// light green
-	vic3_rom_palette[14] = RGB( 9,  9, 15);	// light blue
-	vic3_rom_palette[15] = RGB(11, 11, 11);	// light grey
-	DEBUG("VIC3: has been initialized." NL);
-}
 
 
 
@@ -158,34 +125,384 @@ static void vic3_interrupt_checker ( void )
 
 void vic3_check_raster_interrupt ( void )
 {
-	// I'm lame even with VIC2 knowledge it seems
-	// C65 seems to use raster interrupt to generate the usual periodic IRQ
-	// (which was done with CIA on C64) in raster line 511. However as
-	// raster line 511 can never be true, I really don't know what to do.
-	// To be able C65 ROM to work, I assume that raster 511 is raster 0.
-	// It's possible that this is an NTSC/PAL issue, as raster can be "negative"
-	// according to the specification in case of NTSC. I really don't know ...
-	if (
-		(scanline == compare_raster)
-	//	|| ((compare_raster == 511 || compare_raster == 319) && scanline == 0)
-	) {
+	if (scanline == compare_raster)
 		interrupt_status |= 1;
-	} else
+	else
 		interrupt_status &= 0xFE;
-	//interrupt_status &= vic3_registers[0x1A];
 	vic3_interrupt_checker();
 }
 
 
+#define STATIC_COLOUR_RENDERER(colour) \
+	register int a; \
+	register Uint32 col = colour; \
+	for (a = 0; a < 640; a++) \
+		*(pixel++) = col
 
+static void renderer_disabled_screen ( void )
+{
+	STATIC_COLOUR_RENDERER(palette[vic3_registers[0x20]]);
+}
+
+
+
+static void renderer_invalid_mode ( void )
+{
+	STATIC_COLOUR_RENDERER(rgb_palette[0]);	// invalid modes renders only blackness
+}
+
+
+static void renderer_text_40 ( void )
+{
+	Uint8 *vp = vicptr_video_40 + video_counter;
+	Uint8 *cp = COLMEMPTR + video_counter;
+	Uint8 *chargen = vicptr_chargen + row_counter;
+	Uint32 bg_colour = palette[vic3_registers[0x21]];
+	int a;
+	for (a = 0; a < 40; a++) {
+		//Uint8 vdata = vicptr_chargen[((*(vp++)) << 3) + row_counter];
+		Uint8 vdata = chargen[(*(vp++)) << 3];
+		Uint32 fg_colour = palette[*(cp++) & 15];
+		pixel[ 0] = pixel[ 1] = vdata & 0x80 ? fg_colour : bg_colour;
+		pixel[ 2] = pixel[ 3] = vdata & 0x40 ? fg_colour : bg_colour;
+		pixel[ 4] = pixel[ 5] = vdata & 0x20 ? fg_colour : bg_colour;
+		pixel[ 6] = pixel[ 7] = vdata & 0x10 ? fg_colour : bg_colour;
+		pixel[ 8] = pixel[ 9] = vdata & 0x08 ? fg_colour : bg_colour;
+		pixel[10] = pixel[11] = vdata & 0x04 ? fg_colour : bg_colour;
+		pixel[12] = pixel[13] = vdata & 0x02 ? fg_colour : bg_colour;
+		pixel[14] = pixel[15] = vdata & 0x01 ? fg_colour : bg_colour;
+		pixel += 16;
+	}
+}
+
+static void renderer_text_80 ( void )
+{
+	Uint8 *vp = vicptr_video_80 + video_counter;
+	Uint8 *cp = COLMEMPTR + video_counter;
+	Uint8 *chargen = vicptr_chargen + row_counter;
+	Uint32 bg_colour = palette[vic3_registers[0x21]];
+	int a;
+	for (a = 0; a < 80; a++) {
+		//Uint8 vdata = vicptr_chargen[((*(vp++)) << 3) + row_counter];
+		Uint8 vdata = chargen[(*(vp++)) << 3];
+		Uint32 fg_colour = palette[*(cp++) & 15];
+		*(pixel++) = vdata & 0x80 ? fg_colour : bg_colour;
+		*(pixel++) = vdata & 0x40 ? fg_colour : bg_colour;
+		*(pixel++) = vdata & 0x20 ? fg_colour : bg_colour;
+		*(pixel++) = vdata & 0x10 ? fg_colour : bg_colour;
+		*(pixel++) = vdata & 0x08 ? fg_colour : bg_colour;
+		*(pixel++) = vdata & 0x04 ? fg_colour : bg_colour;
+		*(pixel++) = vdata & 0x02 ? fg_colour : bg_colour;
+		*(pixel++) = vdata & 0x01 ? fg_colour : bg_colour;
+	}
+}
+
+static void renderer_ecmtext_40 ( void )
+{
+	STATIC_COLOUR_RENDERER(RGB(15,0,0));	// TODO: not implemented!
+}
+
+static void renderer_ecmtext_80 ( void )
+{
+	STATIC_COLOUR_RENDERER(RGB(15,0,0));	// TODO: not implemented!
+}
+
+static void renderer_mcmtext_40 ( void )
+{
+	Uint8 *vp = vicptr_video_40 + video_counter;
+	Uint8 *cp = COLMEMPTR + video_counter;
+	Uint8 *chargen = vicptr_chargen + row_counter;
+	Uint32 colours[4] = {
+		palette[vic3_registers[0x21]],
+		palette[vic3_registers[0x22]],
+                palette[vic3_registers[0x23]],
+		0	// to be filled during colour fetch ...
+	};
+	int a;
+	for (a = 0; a < 40; a++) {
+		//Uint8 vdata = vicptr_chargen[((*(vp++)) << 3) + row_counter];
+		Uint8 vdata = chargen[(*(vp++)) << 3];
+		Uint8 coldata = (*(cp++));
+		if (coldata & 8) {
+			// MCM character
+			colours[3] = palette[coldata & 7];
+			pixel[ 0] = pixel[ 1] = pixel[ 2] = pixel[ 3] = colours[ vdata >> 6     ];
+			pixel[ 4] = pixel[ 5] = pixel[ 6] = pixel[ 7] = colours[(vdata >> 4) & 3];
+			pixel[ 8] = pixel[ 9] = pixel[10] = pixel[11] = colours[(vdata >> 2) & 3];
+			pixel[12] = pixel[13] = pixel[14] = pixel[15] = colours[ vdata       & 3];
+		} else {
+			// non-MCM character
+			colours[3] = palette[coldata & 7];
+			pixel[ 0] = pixel[ 1] = vdata & 0x80 ? colours[3] : colours[0];
+			pixel[ 2] = pixel[ 3] = vdata & 0x40 ? colours[3] : colours[0];
+			pixel[ 4] = pixel[ 5] = vdata & 0x20 ? colours[3] : colours[0];
+			pixel[ 6] = pixel[ 7] = vdata & 0x10 ? colours[3] : colours[0];
+			pixel[ 8] = pixel[ 9] = vdata & 0x08 ? colours[3] : colours[0];
+			pixel[10] = pixel[11] = vdata & 0x04 ? colours[3] : colours[0];
+			pixel[12] = pixel[13] = vdata & 0x02 ? colours[3] : colours[0];
+			pixel[14] = pixel[15] = vdata & 0x01 ? colours[3] : colours[0];
+		}
+		pixel += 16;
+	}
+}
+
+static void renderer_mcmtext_80 ( void )
+{
+	STATIC_COLOUR_RENDERER(RGB(15,0,0));	// TODO: not implemented!
+}
+
+static void renderer_bitmap_320 ( void )
+{
+	Uint8 *vp = vicptr_video_40 + video_counter;
+	Uint8 *bp = vicptr_bitmap_320 + (video_counter << 3) + row_counter;
+	int a;
+	for (a = 0; a < 40; a++) {
+		Uint8 data = *(vp++);
+		Uint32 fg_colour = palette[data >> 4];
+		Uint32 bg_colour = palette[data & 15];
+		data = *bp;
+		pixel[ 0] = pixel[ 1] = data & 0x80 ? fg_colour : bg_colour;
+		pixel[ 2] = pixel[ 3] = data & 0x40 ? fg_colour : bg_colour;
+		pixel[ 4] = pixel[ 5] = data & 0x20 ? fg_colour : bg_colour;
+		pixel[ 6] = pixel[ 7] = data & 0x10 ? fg_colour : bg_colour;
+		pixel[ 8] = pixel[ 9] = data & 0x08 ? fg_colour : bg_colour;
+		pixel[10] = pixel[11] = data & 0x04 ? fg_colour : bg_colour;
+		pixel[12] = pixel[13] = data & 0x02 ? fg_colour : bg_colour;
+		pixel[14] = pixel[15] = data & 0x01 ? fg_colour : bg_colour;
+		bp += 8;
+		pixel += 16;
+	}
+}
+
+static void renderer_bitmap_640 ( void )
+{
+	Uint8 *vp = vicptr_video_80 + video_counter;
+	Uint8 *bp = vicptr_bitmap_640 + (video_counter << 3) + row_counter;
+	STATIC_COLOUR_RENDERER(RGB(15,0,0));	// TODO: not implemented!
+}
+
+static void renderer_mcmbitmap_320 ( void )
+{
+	Uint8 *vp = vicptr_video_40 + video_counter;
+	Uint8 *bp = vicptr_bitmap_320 + (video_counter << 3) + row_counter;
+	Uint8 *cp = COLMEMPTR + video_counter;
+	Uint32 colours[4];
+	int a;
+	colours[0] = palette[vic3_registers[0x21]];
+	for (a = 0; a < 40; a++) {
+		Uint8 data = *(vp++);
+		colours[1] = palette[data >> 4];
+		colours[2] = palette[data & 15];
+		colours[3] = palette[(*(cp++)) & 15];
+		data = *bp;
+		pixel[ 0] = pixel[ 1] = pixel[ 2] = pixel[ 3] = colours[ data >> 6     ];
+		pixel[ 4] = pixel[ 5] = pixel[ 6] = pixel[ 7] = colours[(data >> 4) & 3];
+		pixel[ 8] = pixel[ 9] = pixel[10] = pixel[11] = colours[(data >> 2) & 3];
+		pixel[12] = pixel[13] = pixel[14] = pixel[15] = colours[ data       & 3];
+		bp += 8;
+		pixel += 16;
+	}
+}
+
+static void renderer_mcmbitmap_640 ( void )
+{
+
+	STATIC_COLOUR_RENDERER(RGB(15,0,0));	// TODO: not implemented!
+}
+
+static void renderer_bitplane_320 ( void )
+{
+	Uint8 *bp = memory + (video_counter << 3) + row_counter;
+	int a;
+	for (a = 0; a < 40; a++) {
+		int bitpos;
+		Uint8 fetch[8] = {
+			bp[bitplane_addr_320[0]], bp[bitplane_addr_320[1]], bp[bitplane_addr_320[2]], bp[bitplane_addr_320[3]],
+			bp[bitplane_addr_320[4]], bp[bitplane_addr_320[5]], bp[bitplane_addr_320[6]], bp[bitplane_addr_320[7]]
+		};
+		for (bitpos = 128; bitpos; bitpos >>= 1) {
+			// Do not try this at home ...
+			pixel[0] = pixel[1] = palette[((
+				((fetch[0] & bitpos) ?   1 : 0) |
+				((fetch[1] & bitpos) ?   2 : 0) |
+				((fetch[2] & bitpos) ?   4 : 0) |
+				((fetch[3] & bitpos) ?   8 : 0) |
+				((fetch[4] & bitpos) ?  16 : 0) |
+				((fetch[5] & bitpos) ?  32 : 0) |
+				((fetch[6] & bitpos) ?  64 : 0) |
+				((fetch[7] & bitpos) ? 128 : 0)
+			) & vic3_registers[0x32]) ^ vic3_registers[0x3B]];
+			pixel += 2;
+		}
+		bp += 8;
+	}
+}
+
+static void renderer_bitplane_640 ( void )
+{
+	STATIC_COLOUR_RENDERER(RGB(15,0,0));	// TODO: not implemented!
+}
+
+
+
+static void sprite_renderer ( void );
+
+
+
+int vic3_render_scanline ( void )
+{
+	if (scanline < 50 || scanline >= 250) {
+		if (unlikely(scanline == 311)) {
+			scanline = 0;
+			video_counter = 0;
+			row_counter = 0;
+			if (blink_counter)
+				blink_counter--;
+			else {
+				blink_counter = BLINK_COUNTER_INIT;
+				blink_phase = ~blink_phase;
+			}
+			if (!frameskip) {
+				if (pixel != pixel_end)
+					FATAL("Renderer failure: pixel=%p != end=%p", pixel, pixel_end);
+				// FIXME: Highly incorrect, rendering sprites once *AFTER* the screen content ...
+				sprite_renderer();
+			} else if (pixel != pixel_start)
+					FATAL("Renderer failure: pixel=%p != start=%p", pixel, pixel_start);
+			return 1; // return value non-zero: end-of-frame, emulator should update the SDL rendering context, then call vic3_open_frame_access()
+		}
+		scanline++;
+		return 0;
+	}
+	if (!frameskip) {
+		scanline_render_debug_info[scanline] = (((vic3_registers[0x11] & 0x60) | (vic3_registers[0x16] & 0x10)) >> 4) + 'a';
+		renderer_func();	// call the scanline renderer for the current video mode, a function pointer
+		if (row_counter == 7) {
+			row_counter = 0;
+			video_counter += video_counter_inc;
+		} else
+			row_counter++;
+	}
+	scanline++;
+	return 0;
+}
+
+
+
+// write register functions should call this on any register change which may affect display mode with settings already stored in vic3_registers[]!
+static void select_renderer_func ( void )
+{
+	// Ugly, but I really don't have idea what happens in VIC-III internally when you
+	// switch H640 bit within a frame ... Currently I just limit video counter to be
+	// within 1K if H640 is not set. That's certainly incorrect, but it should be tested
+	// on a real C65 what happens (eg in text mode) if H640 bit is flipped at the middle
+	// of a screen.
+	// Also FIXME: where are the sprites in bitplane mode?!
+	if (!IS_H640) {
+		video_counter &= 1023;
+		video_counter_inc = 40;
+		sprite_pointers = vicptr_video_40 + 0x3F8;
+	} else {
+		video_counter_inc = 80;
+		sprite_pointers = vicptr_video_80 + 0x7F8;
+	}
+	// if DEN (Display Enable) bit is zero, then you won't see anything (border colour is rendered!)
+	if (!(vic3_registers[0x11] & 0x10)) {
+		renderer_func = renderer_disabled_screen;
+		return;
+	}
+	// if BPM bit is set, it's bitplane mode (VIC-III)
+	if (vic3_registers[0x31] & 16) {
+		renderer_func = IS_H640 ? renderer_bitplane_640 : renderer_bitplane_320;
+		return;
+	}
+	// Otherwise, classic VIC-II modes, select one, from the possible 8 modes (note: some of them are INVALID!)
+	// the pattern: ECM - BMM - MCM
+	switch (((vic3_registers[0x11] & 0x60) | (vic3_registers[0x16] & 0x10)) >> 4) {
+		case 0:	// Standard text mode		(ECM/BMM/MCM=0/0/0)
+			renderer_func = IS_H640 ? renderer_text_80       : renderer_text_40;
+			break;
+		case 1:	// Multicolor text mode		(ECM/BMM/MCM=0/0/1)
+			renderer_func = IS_H640 ? renderer_mcmtext_80    : renderer_mcmtext_40;
+			break;
+		case 2: // Standard bitmap mode		(ECM/BMM/MCM=0/1/0)
+			renderer_func = IS_H640 ? renderer_bitmap_640    : renderer_bitmap_320;
+			break;
+		case 3: // Multicolor bitmap mode	(ECM/BMM/MCM=0/1/1)
+			renderer_func = IS_H640 ? renderer_mcmbitmap_640 : renderer_mcmbitmap_320;
+			break;
+		case 4: // ECM text mode		(ECM/BMM/MCM=1/0/0)
+			renderer_func = IS_H640 ? renderer_ecmtext_80    : renderer_ecmtext_40;
+			break;
+		case 5: // Invalid text mode		(ECM/BMM/MCM=1/0/1)
+		case 6: // Invalid bitmap mode 1	(ECM/BMM/MCM=1/1/0)
+		case 7: // Invalid bitmap mode 2	(ECM/BMM/MCM=1/1/1)
+			// Invalid modes generate only "blackness"
+			renderer_func = renderer_invalid_mode;
+			break;
+	}
+}
+
+
+// Must be called if register 0x18 is written, or bank set, or CROM VIC-III setting changed
+static void select_chargen ( void )
+{
+	// TODO: incorrect implementation. Currently we handle the situation of "char ROM" in certain banks
+	// only for character generator info. That's not so correct, as VIC always see that memory in those
+	// banks not only for chargen info! However, it's much easier and faster to do this way ...
+	if ((!(vic2_bank_number & 1)) && ((vic3_registers[0x18] & 0x0C) == 4)) {
+		// FIXME: I am really lost with this CROM bit, and the layout of C65 ROM on charsets, sorry. Maybe this is totally wrong!
+		// The problem, for my eye, the two charsets (C64/C65?!) seems to be the very same :-/
+		// BUT, it seems, C65 mode *SETS* CROM bit. While for C64 mode it is CLEARED.
+		if (vic3_registers[0x30] & 64)	// the CROM bit
+			vicptr_chargen = memory + 0x29000 + ((vic3_registers[0x18] & 0x0E) << 10) - 0x1000;	// ... so this should be the C65 charset ...
+		else
+			vicptr_chargen = memory + 0x2D000 + ((vic3_registers[0x18] & 0x0E) << 10) - 0x1000;	// ... and this should be the C64
+	} else
+		vicptr_chargen = vicptr_bank16k + ((vic3_registers[0x18] & 0x0E) << 10);
+}
+
+
+
+// Must be called if any memory ptr is changed (not the bitplane related of VIC-III though!)
+// Also, if VIC-II bank is changed (that's done by vic3_select_bank function)
+static void select_vic2_memory ( void )
+{
+	// 24| $d018 |VM13|VM12|VM11|VM10|CB13|CB12|CB11|  - | Memory pointers
+	vicptr_video_40 = vicptr_bank16k + ((vic3_registers[0x18] & 0xF0) << 6);
+	vicptr_video_80 = vicptr_bank16k + ((vic3_registers[0x18] & 0xE0) << 6);
+	sprite_pointers = IS_H640 ? vicptr_video_80 + 0x7F8 : vicptr_video_40 + 0x3F8;
+	select_chargen();
+	vicptr_bitmap_320 = vicptr_bank16k + ((vic3_registers[0x18] & 8) << 10);
+	vicptr_bitmap_640 = vicptr_bank32k + ((vic3_registers[0x18] & 8) << 11);
+}
+
+
+// Called by the emulator on VIC bank selection
+// Parameter must be in range of 0-3, with 0 meaning the lowest addressed bank
+void vic3_select_bank ( int bank )
+{
+	bank &= 3;
+	if (bank != vic2_bank_number) {
+		vic2_bank_number = bank;
+		bank <<= 14;
+		vicptr_bank16k = memory +  bank;
+		vicptr_idlefetch_p = vicptr_bank16k + 0x3FFF;
+		vicptr_bank32k = memory + (bank & 0x8000);	// VIC-III also has 32K VIC bank if H640 is used with bitmap mode
+		select_vic2_memory();
+	}
+}
+
+
+
+
+
+// Caller should give only 0-$3F or 0-$7F addresses
 void vic3_write_reg ( int addr, Uint8 data )
 {
-	Uint8 old_data;
-	addr &= vic_new_mode ? 0x7F : 0x3F;
-	old_data = vic3_registers[addr];
 	DEBUG("VIC3: write reg $%02X with data $%02X" NL, addr, data);
 	if (addr == 0x2F) {
-		if (!vic_new_mode && data == 0x96 && old_data == 0xA5) {
+		if (!vic_new_mode && data == 0x96 && vic3_registers[0x2F] == 0xA5) {
 			vic_new_mode = VIC_NEW_MODE;
 			DEBUG("VIC3: switched into NEW I/O access mode :)" NL);
 		} else if (vic_new_mode) {
@@ -197,68 +514,91 @@ void vic3_write_reg ( int addr, Uint8 data )
 		DEBUG("VIC3: ignoring writing register $%02X (with data $%02X) because of old I/O access mode selected" NL, addr, data);
 		return;
 	}
-	vic3_registers[addr] = data;
 	switch (addr) {
 		case 0x11:
-			compare_raster = (compare_raster & 0xFF) | ((data & 128) ? 0x100 : 0);
+			vic3_registers[0x11] = data;
+			select_renderer_func();
+			compare_raster = (compare_raster & 0xFF) | ((data & 0x80) << 1);
 			DEBUG("VIC3: compare raster is now %d" NL, compare_raster);
 			break;
 		case 0x12:
 			compare_raster = (compare_raster & 0xFF00) | data;
 			DEBUG("VIC3: compare raster is now %d" NL, compare_raster);
 			break;
+		case 0x16:
+			vic3_registers[0x16] = data;
+			select_renderer_func();
+			break;
+		case 0x18:
+			vic3_registers[0x18] = data;
+			select_vic2_memory();
+			break;
 		case 0x19:
 			interrupt_status = interrupt_status & (~data) & 15;
 			vic3_interrupt_checker();
 			break;
 		case 0x1A:
-			vic3_registers[0x1A] &= 15;
+			data &= 15;
 			break;
 		case 0x30:
-			// Save some un-needed memory translating table rebuilds, if there is no important bits (of us) changed.
+			// Save some un-needed memory translating table rebuilds, if there is important bits (for us) changed.
 			// CRAM@DC00 is not handled by the translator directly, so bit0 does not apply here!
 			if (
-				(data & 0xF8) != (old_data & 0xF8)
+				(data & 0xF8) != (vic3_registers[0x30] & 0xF8)
 			) {
 				DEBUG("MEM: applying new memory configuration because of VIC3 $30 is written" NL);
+				vic3_registers[0x30] = data;	// early write because of apply_memory_config() needs it
 				apply_memory_config();
-			} else
+			} else {
+				vic3_registers[0x30] = data;	// we need this for select_chargen() below
 				DEBUG("MEM: no need for new memory configuration (because of VIC3 $30 is written): same ROM bit values are set" NL);
+			}
+			select_chargen();
 			palette = (data & 4) ? vic3_palette : vic3_rom_palette;
 			break;
 		case 0x31:
+			vic3_registers[0x31] = data;
+			attributes = (data & 32);
+			select_renderer_func();
 			clock_divider7_hack = (data & 64) ? 7 : 2;
 			DEBUG("VIC3: clock_divider7_hack = %d" NL, clock_divider7_hack);
 			if ((data & 15) && warn_ctrl_b_lo) {
-				INFO_WINDOW("VIC3 control-B register V400, H1280, MONO and INT features are not emulated yet!");
+				INFO_WINDOW("VIC3 control-B register V400, H1280, MONO and INT features are not emulated yet!\nThere will be no further warnings on this issue.");
 				warn_ctrl_b_lo = 0;
 			}
 			break;
-#if 0
-		case 0x15:
-			if (data && warn_sprites) {
-				INFO_WINDOW("VIC2 sprites are not emulated yet! [enabled: $%02X]", data);
-				warn_sprites = 0;
-			}
+		case 0x33:
+		case 0x34:
+		case 0x35:
+		case 0x36:
+		case 0x37:
+		case 0x38:
+		case 0x39:
+		case 0x3A:
+			bitplane_addr_320[addr - 0x33] = ((data & 12) << 12) + (addr & 1 ? 0 : 0x10000);
+			bitplane_addr_640[addr - 0x33] = ((data & 14) << 12) + (addr & 1 ? 0 : 0x10000);
 			break;
-#endif
+		default:
+			if (addr >= 0x20 && addr < 0x2F)
+				data &= 15;
+			break;
 	}
+	vic3_registers[addr] = data;
 }	
 
 
 
-
+// Caller should give only 0-$3F or 0-$7F addresses
 Uint8 vic3_read_reg ( int addr )
 {
 	Uint8 result;
-	addr &= vic_new_mode ? 0x7F : 0x3F;
 	if (!vic_new_mode && addr > 0x2F) {
 		DEBUG("VIC3: ignoring reading register $%02X because of old I/O access mode selected, answer is $FF" NL, addr);
 		return 0xFF;
 	}
 	switch (addr) {
 		case 0x11:
-			result =  (vic3_registers[0x11] & 0x7F) | ((scanline & 256) ? 0x80 : 0);
+			result =  (vic3_registers[0x11] & 0x7F) | ((scanline >> 1) & 0x80);
 			break;
 		case 0x12:
 			result = scanline & 0xFF;
@@ -307,6 +647,73 @@ void vic3_write_palette_reg ( int num, Uint8 data )
 	if ((num & 0xF0))
 		vic3_rom_palette[num & 0xFF] = vic3_palette[num & 0xFF];
 }
+
+
+
+void vic3_init ( void )
+{
+	int r, g, b, i;
+	// *** Init 4096 element palette with RGB components for faster access later on palette register changes (avoid SDL calls to convert)
+	for (r = 0, i = 0; r < 16; r++)
+		for (g = 0; g < 16; g++)
+			for (b = 0; b < 16; b++)
+				rgb_palette[i++] = SDL_MapRGBA(sdl_pix_fmt, r * 17, g * 17, b * 17, 0xFF); // 15*17=255, last arg 0xFF: alpha channel for SDL
+	// *** Init VIC3 registers and palette
+	memset(scanline_render_debug_info, 0x20, sizeof scanline_render_debug_info);
+	scanline_render_debug_info[sizeof(scanline_render_debug_info) - 1] = 0;
+	vic_new_mode = 0;
+	blink_counter = 0;
+	blink_phase = 0;
+	attributes = 0;
+	interrupt_status = 0;
+	palette = vic3_rom_palette;
+	frameskip = 0;
+	scanline = 0;
+	compare_raster = 0;
+	clock_divider7_hack = 7;
+	video_counter = 0;
+	row_counter = 0;
+	for (i = 0; i < 0x100; i++) {	// Initialize all palette registers to zero, initially, to have something ...
+		if (i < sizeof vic3_registers)
+			vic3_registers[i] = 0;	// Also the VIC3 registers ...
+		vic3_rom_palette[i] = vic3_palette[i] = rgb_palette[0];
+		vic3_palette_nibbles[i] = 0;
+		vic3_palette_nibbles[i + 0x100] = 0;
+		vic3_palette_nibbles[i + 0x200] = 0;
+	}
+	// *** the ROM palette "fixed" colours
+	vic3_rom_palette[ 0] = RGB( 0,  0,  0);	// black
+	vic3_rom_palette[ 1] = RGB(15, 15, 15);	// white
+	vic3_rom_palette[ 2] = RGB(15,  0,  0);	// red
+	vic3_rom_palette[ 3] = RGB( 0, 15, 15);	// cyan
+	vic3_rom_palette[ 4] = RGB(15,  0, 15);	// magenta
+	vic3_rom_palette[ 5] = RGB( 0, 15,  0);	// green
+	vic3_rom_palette[ 6] = RGB( 0,  0, 15);	// blue
+	vic3_rom_palette[ 7] = RGB(15, 15,  0);	// yellow
+	vic3_rom_palette[ 8] = RGB(15,  6,  0);	// orange
+	vic3_rom_palette[ 9] = RGB(10,  4,  0);	// brown
+	vic3_rom_palette[10] = RGB(15,  7,  7);	// pink
+	vic3_rom_palette[11] = RGB( 5,  5,  5);	// dark grey
+	vic3_rom_palette[12] = RGB( 8,  8,  8);	// medium grey
+	vic3_rom_palette[13] = RGB( 9, 15,  9);	// light green
+	vic3_rom_palette[14] = RGB( 9,  9, 15);	// light blue
+	vic3_rom_palette[15] = RGB(11, 11, 11);	// light grey
+	// bitplanes
+	bitplane_addr_320[0] = bitplane_addr_320[2] = bitplane_addr_320[4] = bitplane_addr_320[6] = 0;
+	bitplane_addr_640[0] = bitplane_addr_640[2] = bitplane_addr_640[4] = bitplane_addr_640[6] = 0x10000;
+	bitplane_addr_320[1] = bitplane_addr_320[3] = bitplane_addr_320[5] = bitplane_addr_320[7] = 0;
+	bitplane_addr_640[1] = bitplane_addr_640[3] = bitplane_addr_640[5] = bitplane_addr_640[7] = 0x10000;
+	// To force bank selection, and pointer re-calculations
+	vic2_bank_number = -1;
+	vic3_select_bank(0);
+	// To force select _some_ renderer
+	select_renderer_func();
+	DEBUG("VIC3: has been initialized." NL);
+}
+
+
+
+#if 0
 
 
 
@@ -592,6 +999,7 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
 	}
 	PIXEL_POINTER_FINAL_ASSERT(p);
 }
+#endif
 
 
 #define SPRITE_X_START_SCREEN	24
@@ -603,10 +1011,9 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
    * No sprite-background collision detection
    * No sprite-sprite collision detection
    * This is a simple, after-the-rendered-frame render-sprites one-by-one algorithm
-   * This also requires to give up direct rendering if a sprite is enabled
    * Very ugly, quick&dirty hack, not so optimal either, even without the other mentioned bugs ...
 */
-static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 *p, int tail )
+static void render_one_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 *p, int tail )
 {
 	Uint32 colours[4];
 	int sprite_y = vic3_registers[sprite_no * 2 + 1] - SPRITE_Y_START_SCREEN;
@@ -676,49 +1083,20 @@ static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 
 
 
 /* This is the one-frame-at-once (highly incorrect implementation, that is)
-   renderer. It will call legacy VIC2 text mode render (optionally with
-   80 columns mode, though, ECM is not supported),
-   VIC2 legacy HIRES/MCM mode or bitplane modes (V400,
-   H1280, odd scanning/interlace is not supported). Screen positioning/scroll/38-col/24-row
-   etc is not supported */
-void vic3_render_screen ( void )
+   renderer for sprites. */
+static void sprite_renderer ( void )
 {
-	int tail_sdl;
-	Uint32 *p_sdl = emu_start_pixel_buffer_access(&tail_sdl);
 	int sprites = vic3_registers[0x15];
-	if (!(vic3_registers[0x11] & 16)) {	// display is enabled at all? [DEN bit]
-		int y;
-		Uint32 col = palette[vic3_registers[0x21]];
-		for (y = 0; y < 200; y++) {
-			int x;
-			for (x = 0; x < 640; x++)
-				*(p_sdl++) = col;
-			p_sdl += tail_sdl;
+	if (sprites) {	// Render sprites. VERY BAD. We ignore sprite priority as well (cannot be behind the background)
+		int a;
+		if (warn_sprites) {
+			INFO_WINDOW("WARNING: Sprite emulation is really bad! (enabled_mask=$%02X)", sprites);
+			warn_sprites = 0;
 		}
-	} else {
-		if (vic3_registers[0x31] & 16) {
-			sprite_bank = memory + ((vic3_registers[0x35] & 12) << 12);	// FIXME: just guessing: sprite bank is bitplane 2 area, always 16K regardless of H640?
-			vic3_render_screen_bpm(p_sdl, tail_sdl);
-		} else {
-			sprite_bank = vic2_16k_bank + memory;				// VIC2 legacy modes uses the VIC2 bank for sure, as the sprite bank too
-			if (vic3_registers[0x11] & 32)
-				vic2_render_screen_bmm(p_sdl, tail_sdl);
-			else
-				vic2_render_screen_text(p_sdl, tail_sdl);
-		}
-		if (sprites) {	// Render sprites. VERY BAD. We ignore sprite priority as well (cannot be behind the background)
-			int a;
-			if (warn_sprites) {
-				INFO_WINDOW("WARNING: Sprite emulation is really bad! (enabled_mask=$%02X)", sprites);
-				warn_sprites = 0;
-			}
-			for (a = 7; a >= 0; a--) {
-				int mask = 1 << a;
-				if ((sprites & mask))
-					render_sprite(a, mask, sprite_bank + (sprite_pointers[a] << 6), p_sdl, tail_sdl);	// sprite_pointers are set by the renderer functions above!
-			}
+		for (a = 7; a >= 0; a--) {
+			int mask = 1 << a;
+			if ((sprites & mask))
+				render_one_sprite(a, mask, vicptr_bank16k + (sprite_pointers[a] << 6), pixel_start, 0);	// sprite_pointers are set by the renderer functions above!
 		}
 	}
-	emu_update_screen();
 }
-

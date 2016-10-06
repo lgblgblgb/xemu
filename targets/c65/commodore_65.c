@@ -57,7 +57,6 @@ static int map_mask;			// MAP mask, should be filled at the MAP opcode, *before*
 static int map_offset_low;		// MAP low offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 static int map_offset_high;		// MAP high offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 
-static int frame_counter;
 
 
 
@@ -176,8 +175,9 @@ static Uint8 cia1_in_a ( void )
 
 static void cia2_out_a ( Uint8 data )
 {
-	vic2_16k_bank = ((~(data | (~cia2.DDRA))) & 3) << 14;
-	DEBUG("VIC2: 16K BANK is set to $%04X (CIA mask=$%02X)" NL, vic2_16k_bank, cia2.DDRA);
+	vic3_select_bank((~(data | (~cia2.DDRA))) & 3);
+	//vic2_16k_bank = ((~(data | (~cia2.DDRA))) & 3) << 14;
+	//DEBUG("VIC2: 16K BANK is set to $%04X (CIA mask=$%02X)" NL, vic2_16k_bank, cia2.DDRA);
 }
 
 
@@ -307,6 +307,7 @@ void cpu_do_nop ( void )
 static inline Uint8 read_some_sid_register ( int addr )
 {
 	// currently we don't support reading SID registers at all (1351 mouse emulation may need POT-X and POT-Y in the future though, TODO)
+	// addr &= 0x1F;
 	return 0xFF;
 }
 
@@ -314,8 +315,8 @@ static inline Uint8 read_some_sid_register ( int addr )
 static inline void write_some_sid_register ( int addr, Uint8 data )
 {
 	// Selects SID "instance" based on address
-	DEBUG("SID%d: writing register $%04X ($%04X) with data $%02X @ PC=$%04X" NL, ((addr >> 6) & 1) + 1, addr & 31, addr + 0xD000, data, cpu_pc);
-	sid_write_reg(&sids[(addr >> 6) & 1], addr & 31, data);
+	DEBUG("SID%d: writing register $%04X ($%04X) with data $%02X @ PC=$%04X" NL, ((addr >> 6) & 1) + 1, addr & 0x1F, addr + 0xD000, data, cpu_pc);
+	sid_write_reg(&sids[(addr >> 6) & 1], addr & 0x1F, data);
 }
 
 
@@ -325,11 +326,11 @@ Uint8 io_read ( int addr )
 	switch ((addr >> 8) | vic_new_mode) {	// "addr >> 8" is from 0...F,  vic_new_mode can be $10 or 0, that is $00-$1F for all cases
 		/* --- I/O read in old VIC I/O mode --- */
 		case 0x00:	// $D000-$D0FF
-		case 0x01:	// $D100-$D1FF, C65 VIC-III palette, red components
-		case 0x02:	// $D200-$D2FF, C65 VIC-III palette, green components
-		case 0x03:	// $D300-$D3FF, C65 VIC-III palette, blue components
-			// NOTE: TODO: check this: VIC-III in old I/O mode would refeer for normal registers for the whole $D000-$D3FF range
-			return vic3_read_reg(addr);
+		case 0x01:	// $D100-$D1FF, C65 VIC-III palette, red components   (in old VIC mode, cannot be accessed)
+		case 0x02:	// $D200-$D2FF, C65 VIC-III palette, green components (in old VIC mode, cannot be accessed)
+		case 0x03:	// $D300-$D3FF, C65 VIC-III palette, blue components  (in old VIC mode, cannot be accessed)
+			// In old VIC-II mode, according to c65manual.txt and C64 "standard", VIC-II registers can be seen at every 64 bytes in I/O range $D000-$D3FF
+			return vic3_read_reg(addr & 0x3F);
 		case 0x04:	// $D400-$D4FF, SID stuffs
 		case 0x05:	// $D500-$D5FF
 		case 0x06:	// $D600-$D6FF, would be C65 UART, in old I/O mode: SID images still
@@ -350,7 +351,7 @@ Uint8 io_read ( int addr )
 			return vic3_registers[0x30] & 1 ? memory[0x1F000 + addr] : 0xFF;	// I/O exp area is not emulated by Xemu, gives $FF on reads
 		/* --- I/O read in new VIC I/O mode --- */
 		case 0x10:	// $D000-$D0FF
-			if (addr < 0x80)
+			if (likely(addr < 0x80))
 				return vic3_read_reg(addr);
 			if (addr < 0xA0)
 				return fdc_read_reg(addr & 0xF);
@@ -380,6 +381,7 @@ Uint8 io_read ( int addr )
 			return vic3_registers[0x30] & 1 ? memory[0x1F000 + addr] : 0xFF;	// I/O exp area is not emulated by Xemu, gives $FF on reads
 		default:
 			FATAL("Invalid switch case in io_read(%d)!! CASE=%X, vic_new_mode=%d", addr, (addr >> 8) | vic_new_mode, vic_new_mode);
+			break;
 	}
 	return 0xFF;	// just make gcc happy ...
 }
@@ -393,11 +395,11 @@ void io_write ( int addr, Uint8 data )
 	switch ((addr >> 8) | vic_new_mode) {	// "addr >> 8" is from 0...F,  vic_new_mode can be $10 or 0, that is $00-$1F for all cases
 		/* --- I/O write in old VIC I/O mode --- */
 		case 0x00:	// $D000-$D0FF
-		case 0x01:	// $D100-$D1FF, C65 VIC-III palette, red components
-		case 0x02:	// $D200-$D2FF, C65 VIC-III palette, green components
-		case 0x03:	// $D300-$D3FF, C65 VIC-III palette, blue components
-			// NOTE: TODO: check this: VIC-III in old I/O mode would refeer for normal registers for the whole $D000-$D3FF range
-			vic3_write_reg(addr, data);
+		case 0x01:	// $D100-$D1FF, C65 VIC-III palette, red components   (in old VIC mode, cannot be accessed)
+		case 0x02:	// $D200-$D2FF, C65 VIC-III palette, green components (in old VIC mode, cannot be accessed)
+		case 0x03:	// $D300-$D3FF, C65 VIC-III palette, blue components  (in old VIC mode, cannot be accessed)
+			// In old VIC-II mode, according to c65manual.txt and C64 "standard", VIC-II registers can be seen at every 64 bytes in I/O range $D000-$D3FF
+			vic3_write_reg(addr & 0x3F, data);
 			return;
 		case 0x04:	// $D400-$D4FF, SID stuffs
 		case 0x05:	// $D500-$D5FF
@@ -431,10 +433,14 @@ void io_write ( int addr, Uint8 data )
 			return;
 		/* --- I/O write in new VIC I/O mode --- */
 		case 0x10:	// $D000-$D0FF
-			if (addr < 0x80)
-				return vic3_write_reg(addr, data);
-			if (addr < 0xA0)
-				return fdc_write_reg(addr & 0xF, data);
+			if (likely(addr < 0x80)) {
+				vic3_write_reg(addr, data);
+				return;
+			}
+			if (addr < 0xA0) {
+				fdc_write_reg(addr & 0xF, data);
+				return;
+			}
 			return;	// Note: RAM expansion controller (not emulated by Xemu)
 		case 0x11:	// $D100-$D1FF, C65 VIC-III palette, red components
 		case 0x12:	// $D200-$D2FF, C65 VIC-III palette, green components
@@ -475,6 +481,7 @@ void io_write ( int addr, Uint8 data )
 			return;
 		default:
 			FATAL("Invalid switch case in io_write(%d)!! CASE=%X, vic_new_mode=%d", addr, (addr >> 8) | vic_new_mode, vic_new_mode);
+			return;
 	}
 }
 
@@ -519,10 +526,10 @@ Uint8 read_phys_mem ( int addr )
 Uint8 cpu_read ( Uint16 addr )
 {
 	register int phys_addr = addr_trans_rd[addr >> 12] + addr;	// translating address with the READ table created by apply_memory_config()
-	if (unlikely(phys_addr >= IO_REMAP_VIRTUAL))
-		return io_read(phys_addr);
-	else
+	if (likely(phys_addr < 0x10FF00))
 		return memory[phys_addr & 0xFFFFF];	// light optimization, do not call read_phys_mem for this single stuff :)
+	else
+		return io_read(phys_addr);
 }
 
 
@@ -531,10 +538,10 @@ Uint8 cpu_read ( Uint16 addr )
 void cpu_write ( Uint16 addr, Uint8 data )
 {
 	register int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
-	if (unlikely(phys_addr >= IO_REMAP_VIRTUAL))
-		io_write(phys_addr, data);
-	else
+	if (likely(phys_addr < 0x10FF00))
 		write_phys_mem(phys_addr, data);
+	else
+		io_write(phys_addr, data);
 }
 
 
@@ -549,12 +556,13 @@ void cpu_write ( Uint16 addr, Uint8 data )
 void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 {
 	int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
-	if (unlikely(phys_addr >= IO_REMAP_VIRTUAL)) {
+	if (likely(phys_addr < 0x10FF00))
+		write_phys_mem(phys_addr, new_data);	// "normal" memory, just write once, no need to emulate the behaviour
+	else {
 		DEBUG("CPU: RMW opcode is used on I/O area for $%04X" NL, addr);
 		io_write(phys_addr, old_data);		// first write back the old data ...
 		io_write(phys_addr, new_data);		// ... then the new
-	} else
-		write_phys_mem(phys_addr, new_data);	// "normal" memory, just write once, no need to emulate the behaviour
+	}
 }
 
 
@@ -578,6 +586,7 @@ static void shutdown_callback ( void )
 		DEBUG("Memory is dumped into " MEMDUMP_FILE NL);
 	}
 #endif
+	printf("Scanline render info = \"%s\"" NL, scanline_render_debug_info);
 	DEBUG("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
 }
 
@@ -604,9 +613,6 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 static void update_emulator ( void )
 {
 	hid_handle_all_sdl_events();
-	// Screen rendering: begin
-	vic3_render_screen();
-	// Screen rendering: end
 	emu_timekeeping_delay(40000);
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
 	if (seconds_timer_trigger) {
@@ -621,7 +627,7 @@ static void update_emulator ( void )
 
 int main ( int argc, char **argv )
 {
-	int cycles, frameskip;
+	int cycles;
 	printf("**** The Unusable Commodore 65 emulator from LGB" NL
 	"INFO: Texture resolution is %dx%d" NL "%s" NL,
 		SCREEN_WIDTH, SCREEN_HEIGHT,
@@ -652,12 +658,10 @@ int main ( int argc, char **argv )
 	);
 	// Start!!
 	cycles = 0;
-	frameskip = 0;
-	frame_counter = 0;
-	vic3_blink_phase = 0;
-	emu_timekeeping_start();
 	if (audio)
 		SDL_PauseAudioDevice(audio, 0);
+	vic3_open_frame_access();
+	emu_timekeeping_start();
 	for (;;) {
 		int opcyc;
 		// Trying to use at least some approx stuff :)
@@ -672,9 +676,21 @@ int main ( int argc, char **argv )
 		cia_tick(&cia2, opcyc);
 		cycles += (opcyc * 7) / clock_divider7_hack;
 		if (cycles >= 227) {
-			scanline++;
-			//DEBUG("VIC3: new scanline (%d)!" NL, scanline);
 			cycles -= 227;
+			if (vic3_render_scanline()) {
+				if (frameskip) {
+					frameskip = 0;
+				} else {
+					frameskip = 1;
+					emu_update_screen();
+					update_emulator();
+					vic3_open_frame_access();
+				}
+				sids[0].sFrameCount++;
+				sids[1].sFrameCount++;
+			}
+#if 0
+
 			if (scanline == 312) {
 				//DEBUG("VIC3: new frame!" NL);
 				frameskip = !frameskip;
@@ -689,6 +705,7 @@ int main ( int argc, char **argv )
 					vic3_blink_phase = !vic3_blink_phase;
 				}
 			}
+#endif
 			//DEBUG("RASTER=%d COMPARE=%d" NL,scanline,compare_raster);
 			//vic_interrupt();
 			vic3_check_raster_interrupt();
