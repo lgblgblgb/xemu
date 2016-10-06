@@ -1,11 +1,15 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
-   This is the VIC3 "emulation". Currently it does one-frame-at-once
-   kind of horrible work, and only a subset of VIC2 and VIC3 knowledge
-   is implemented. Some of the missing features: hardware DAT,
-   correct sprites (no bg priority etc), screen positioning, H1280 mode,
-   V400 mode, interlace, chroma killer, VIC2 ECM, 38/24 columns mode, border.
+   This is the VIC3 "emulation". Currently it does scanline based rendering,
+   though sprites are totally incorrect and rendered "at-once" after the
+   frame (very ugly! no sprite bg priority, no other tricks etc). Other
+   limitations: no DAT emulation, hardware attributes works only in col-80
+   (normal) text mode, no screen pisitioning, no H1280 mode, no V400 and
+   interlace mode, no chrome killer, no X/Y scroll and 28/24 column mode
+   (VIC-II stuff), no border is emulated. Timing is totally bad, but hey,
+   VIC-III wouldn't be compatible too much with VIC-II either for the
+   exact timing, so ...
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -28,8 +32,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 
-
-
 #define RGB(r,g,b)		rgb_palette[((r) << 8) | ((g) << 4) | (b)]
 #define COLMEMPTR		(memory + 0x1F800)
 #define IS_H640			(vic3_registers[0x31] & 0x80)
@@ -40,7 +42,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #else
 #define	VIC_REG_COLOUR(n)	palette[vic3_registers[n]]
 #endif
-
 
 
 #ifdef VIC_CACHE_COLOURS
@@ -893,296 +894,6 @@ void vic3_init ( void )
 	select_renderer_func();
 	DEBUG("VIC3: has been initialized." NL);
 }
-
-
-
-#if 0
-
-
-
-static inline Uint8 *vic2_get_chargen_pointer ( void )
-{
-	int offs = (vic3_registers[0x18] & 14) << 10;	// character generator address address within the current VIC2 bank
-	int crom = vic3_registers[0x30] & 64;
-	// DEBUG("VIC2: chargen: BANK=%04X OFS=%04X CROM=%d" NL, vic2_16k_bank, offs, crom);
-	if ((vic2_16k_bank == 0x0000 || vic2_16k_bank == 0x8000) && (offs == 0x1000 || offs == 0x1800)) {  // check if chargen info is in ROM
-		// FIXME: I am really lost with this CROM bit, and the layout of C65 ROM on charsets, sorry. Maybe this is totally wrong!
-		// The problem, for my eye, the two charsets (C64/C65?!) seems to be the very same :-/
-		// BUT, it seems, C65 mode *SETS* CROM bit. While for C64 mode it is CLEARED.
-		if (crom)
-			return memory + 0x29000 + offs - 0x1000;	// ... so this should be the C65 charset ...
-		else
-			return memory + 0x2D000 + offs - 0x1000;	// ... and this should be the C64 charset ...
-	} else
-		return memory + vic2_16k_bank + offs;
-}
-
-
-
-/* At-frame-at-once (thus incorrect implementation) renderer for H640 (80 column)
-   and "normal" (40 column) text VIC modes. Hardware attributes are supported.
-   No support for ECM!  */
-static inline void vic2_render_screen_text ( Uint32 *p, int tail )
-{
-	Uint8 *vidp, *colp = memory + 0x1F800;
-	int x = 0, y = 0, xlim, ylim, charline = 0;
-	Uint8 *chrg = vic2_get_chargen_pointer();
-	Uint32 colours[4];	// only two of them used in non-MCM mode
-	int mcm;
-	if (vic3_registers[0x31] & 128) { // check H640 bit: 80 column mode?
-		xlim = 79;
-		ylim = 24;
-		// Note: VIC2 sees ROM at some addresses thing is not emulated yet for other thing than chargen memory!
-		// Note: according to the specification bit 4 has no effect in 80 columns mode!
-		vidp = memory + ((vic3_registers[0x18] & 0xE0) << 6) + vic2_16k_bank;
-		sprite_pointers = vidp + 2040;
-	} else {
-		xlim = 39;
-		ylim = 24;
-		// Note: VIC2 sees ROM at some addresses thing is not emulated yet for other thing than chargen memory!
-		vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
-		sprite_pointers = vidp + 1016;
-	}
-	colours[0] = palette[vic3_registers[0x21] & 15];
-	if (vic3_registers[0x16] & 16) {
-		mcm = 1;
-		colours[1] = palette[vic3_registers[0x22] & 15];
-		colours[2] = palette[vic3_registers[0x23] & 15];
-	} else
-		mcm = 0;
-	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_text");
-	for (;;) {
-		Uint8 chrdata = chrg[((*(vidp++)) << 3) + charline];
-		Uint8 coldata = *(colp++);
-		if (vic3_registers[0x31] & 32) { 	// ATTR bit mode
-			if ((coldata & 0xF0) == 0x10) {	// only the blink bit for the character is set
-				if (vic3_blink_phase)
-					chrdata = 0;	// blinking character, in one phase, the character "disappears", ie blinking
-				coldata &= 15;
-			} else if ((!(coldata & 0x10)) || vic3_blink_phase) {
-				if (coldata & 0x80 && charline == 7)	// underline (must be before reverse, as underline can be reversed as well!)
-					chrdata = 0XFF; // the underline
-				if (coldata & 0x20)	// reverse bit for char
-					chrdata = ~chrdata;
-				if (coldata & 0x40)	// highlight, this must be the LAST, since it sets the low nibble of coldata ...
-					coldata = 0x10 | (coldata & 15);
-				else
-					coldata &= 15;
-			} else
-				coldata &= 15;
-		} else
-			coldata &= 15;
-		if (mcm) {
-			if (coldata & 8) {
-				mcm = 2;
-				colours[3] = palette[coldata & (~8)];
-			} else {
-				mcm = 1;
-				colours[3] = palette[coldata];
-			}
-		}
-			colours[3] = palette[coldata];
-		// FIXME: no ECM  ...
-		if (xlim == 79) {
-			PIXEL_POINTER_CHECK_ASSERT(p + 7);
-			if (mcm == 2) {
-				p[0] = p[1] = colours[ chrdata >> 6     ];
-				p[2] = p[3] = colours[(chrdata >> 4) & 3];
-				p[4] = p[5] = colours[(chrdata >> 2) & 3];
-				p[6] = p[7] = colours[ chrdata       & 3];
-				p += 8;
-			} else {
-				*(p++) = chrdata & 128 ? colours[3] : colours[0];
-				*(p++) = chrdata &  64 ? colours[3] : colours[0];
-				*(p++) = chrdata &  32 ? colours[3] : colours[0];
-				*(p++) = chrdata &  16 ? colours[3] : colours[0];
-				*(p++) = chrdata &   8 ? colours[3] : colours[0];
-				*(p++) = chrdata &   4 ? colours[3] : colours[0];
-				*(p++) = chrdata &   2 ? colours[3] : colours[0];
-				*(p++) = chrdata &   1 ? colours[3] : colours[0];
-			}
-		} else {
-			PIXEL_POINTER_CHECK_ASSERT(p + 15);
-			if (mcm == 2) {
-                                p[ 0] = p[ 1] = p[ 2] = p[ 3] = colours[ chrdata >> 6     ];
-                                p[ 4] = p[ 5] = p[ 6] = p[ 7] = colours[(chrdata >> 4) & 3];
-                                p[ 8] = p[ 9] = p[10] = p[11] = colours[(chrdata >> 2) & 3];
-                                p[12] = p[13] = p[14] = p[15] = colours[ chrdata       & 3];
-			} else {
-				p[ 0] = p[ 1] = chrdata & 128 ? colours[3] : colours[0];
-				p[ 2] = p[ 3] = chrdata &  64 ? colours[3] : colours[0];
-				p[ 4] = p[ 5] = chrdata &  32 ? colours[3] : colours[0];
-				p[ 6] = p[ 7] = chrdata &  16 ? colours[3] : colours[0];
-				p[ 8] = p[ 9] = chrdata &   8 ? colours[3] : colours[0];
-				p[10] = p[11] = chrdata &   4 ? colours[3] : colours[0];
-				p[12] = p[13] = chrdata &   2 ? colours[3] : colours[0];
-				p[14] = p[15] = chrdata &   1 ? colours[3] : colours[0];
-			}
-			p += 16;
-		}
-		if (x == xlim) {
-			p += tail;
-			x = 0;
-			if (charline == 7) {
-				if (y == ylim)
-					break;
-				y++;
-				charline = 0;
-			} else {
-				charline++;
-				vidp -= xlim + 1;
-				colp -= xlim + 1;
-			}
-		} else
-			x++;
-	}
-	PIXEL_POINTER_FINAL_ASSERT(p);
-}
-
-
-
-// VIC2 bitmap mode, now only HIRES/MCM modes, without H640 VIC3 feature!!
-// I am not even sure if H640 would work here, as it needs almost all the 16K of area what VIC-II can see,
-// that is, not so much RAM for the video matrix left would be used for the attribute information.
-// Note: VIC2 sees ROM at some addresses thing is not emulated yet!
-static inline void vic2_render_screen_bmm ( Uint32 *p, int tail )
-{
-	int mcm;
-	int x = 0, y = 0, charline = 0;
-	Uint8 *vidp, *chrp, *colp;
-	Uint32 colours[4];	// colours, only two are used in hi-res mode, all of four in MCM mode
-	vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
-	sprite_pointers = vidp + 1016;
-	chrp = memory + ((vic3_registers[0x18] & 8) ? 8192 : 0) + vic2_16k_bank;
-	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_bmm");
-	if (vic3_registers[0x16] & 16) {
-		mcm = 1;
-		colours[0] = palette[vic3_registers[0x21] & 15];	// used only in MCM-mode
-		colp = memory + 0x1F800;   // colp is used only in MCM mode
-	} else
-		mcm = 0;
-	for (;;) {
-		Uint8  data = *(vidp++);
-		colours[2] = palette[data & 15];	// pixel "0" in non-MCM mode, pixel "10" in MCM mode (thus index 2)
-		colours[1] = palette[data >> 4];	// pixel "1" in non-MCM mode, pixel "01" in MCM mode (thus index 1)
-		data = *chrp;
-		chrp += 8;
-		PIXEL_POINTER_CHECK_ASSERT(p);
-		if (mcm) {
-			colours[3] = palette[(*(colp++)) & 15];
-			p[ 0] = p[ 1] = p[ 2] = p[ 3] = colours[ data >> 6     ];
-			p[ 4] = p[ 5] = p[ 6] = p[ 7] = colours[(data >> 4) & 3];
-			p[ 8] = p[ 9] = p[10] = p[11] = colours[(data >> 2) & 3];
-			p[12] = p[13] = p[14] = p[15] = colours[ data       & 3];
-		} else {
-			p[ 0] = p[ 1] = data & 128 ? colours[1] : colours[2];
-			p[ 2] = p[ 3] = data &  64 ? colours[1] : colours[2];
-			p[ 4] = p[ 5] = data &  32 ? colours[1] : colours[2];
-			p[ 6] = p[ 7] = data &  16 ? colours[1] : colours[2];
-			p[ 8] = p[ 9] = data &   8 ? colours[1] : colours[2];
-			p[10] = p[11] = data &   4 ? colours[1] : colours[2];
-			p[12] = p[13] = data &   2 ? colours[1] : colours[2];
-			p[14] = p[15] = data &   1 ? colours[1] : colours[2];
-		}
-		p += 16;
-		if (x == 39) {
-			p += tail;
-			x = 0;
-			if (charline == 7) {
-				if (y == 24)
-					break;
-				y++;
-				charline = 0;
-				chrp -= 7;
-			} else {
-				charline++;
-				vidp -= 40;
-				colp -= 40;	// though used only in MCM mode, who cares :)
-				chrp -= 319;
-			}
-		} else
-			x++;
-	}
-	PIXEL_POINTER_FINAL_ASSERT(p);
-}
-
-
-
-// Renderer for bit-plane mode
-// NOTE: currently H1280 and V400 is NOT implemented
-// Note: I still think that bitplanes are children of evil, my brain simply cannot get them
-// takes hours and many confusions all the time, even if I *know* what they are :)
-// And hey dude, if it's not enough, there is time multiplex of bitplanes (not supported),
-// V400 + interlace odd/even scan addresses, and the original C64-like non-linear build-up
-// of the bitplane structure. Phewwww ....
-static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
-{
-	int bitpos = 128, charline = 0, offset = 0;
-	int xlim, x = 0, y = 0, h640 = (vic3_registers[0x31] & 128);
-	Uint8 bpe, *bp[8];
-	bp[0] = memory + ((vic3_registers[0x33] & (h640 ? 12 : 14)) << 12);
-	bp[1] = memory + ((vic3_registers[0x34] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[2] = memory + ((vic3_registers[0x35] & (h640 ? 12 : 14)) << 12);
-	bp[3] = memory + ((vic3_registers[0x36] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[4] = memory + ((vic3_registers[0x37] & (h640 ? 12 : 14)) << 12);
-	bp[5] = memory + ((vic3_registers[0x38] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[6] = memory + ((vic3_registers[0x39] & (h640 ? 12 : 14)) << 12);
-	bp[7] = memory + ((vic3_registers[0x3A] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bpe = vic3_registers[0x32];	// bit planes enabled mask
-	if (h640) {
-		bpe &= 15;		// it seems, with H640, only 4 bitplanes can be used (on lower 4 ones)
-		xlim = 79;
-		sprite_pointers = bp[2] + 0x3FF8;	// FIXME: just guessing
-	} else {
-		xlim = 39;
-		sprite_pointers = bp[2] + 0x1FF8;	// FIXME: just guessing
-	}
-        DEBUG("VIC3: bitplanes: enable_mask=$%02X comp_mask=$%02X H640=%d" NL,
-		bpe, vic3_registers[0x3B], h640 ? 1 : 0
-	);
-	PIXEL_POINTER_CHECK_INIT(p, tail, "vic3_render_screen_bpm");
-	for (;;) {
-		Uint32 col = palette[((				// Do not try this at home ...
-			(((*(bp[0] + offset)) & bitpos) ?   1 : 0) |
-			(((*(bp[1] + offset)) & bitpos) ?   2 : 0) |
-			(((*(bp[2] + offset)) & bitpos) ?   4 : 0) |
-			(((*(bp[3] + offset)) & bitpos) ?   8 : 0) |
-			(((*(bp[4] + offset)) & bitpos) ?  16 : 0) |
-			(((*(bp[5] + offset)) & bitpos) ?  32 : 0) |
-			(((*(bp[6] + offset)) & bitpos) ?  64 : 0) |
-			(((*(bp[7] + offset)) & bitpos) ? 128 : 0)
-			) & bpe) ^ vic3_registers[0x3B]
-		];
-		PIXEL_POINTER_CHECK_ASSERT(p);
-		*(p++) = col;
-		if (!h640) {
-			PIXEL_POINTER_CHECK_ASSERT(p);
-			*(p++) = col;
-		}
-		if (bitpos == 1) {
-			if (x == xlim) {
-				if (charline == 7) {
-					if (y == 24)
-						break;
-					y++;
-					charline = 0;
-					offset -= 7;
-				} else {
-					charline++;
-					offset -= h640 ? 639 : 319;
-				}
-				p += tail;
-				x = 0;
-			} else
-				x++;
-			bitpos = 128;
-			offset += 8;
-		} else
-			bitpos >>= 1;
-	}
-	PIXEL_POINTER_FINAL_ASSERT(p);
-}
-#endif
 
 
 #define SPRITE_X_START_SCREEN	24
