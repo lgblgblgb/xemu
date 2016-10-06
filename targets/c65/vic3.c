@@ -193,7 +193,29 @@ static void renderer_text_80 ( void )
 	for (a = 0; a < 80; a++) {
 		//Uint8 vdata = vicptr_chargen[((*(vp++)) << 3) + row_counter];
 		Uint8 vdata = chargen[(*(vp++)) << 3];
-		Uint32 fg_colour = palette[*(cp++) & 15];
+		Uint8 colour = *(cp++);
+		Uint32 fg_colour;
+		if (attributes) {
+			// FIXME: hardware attributes are supported now for only 80-col text mode!
+			// FIXME: for real, it's supported for everything, even bitplane mode .......... (surprisingly ...)
+			if ((colour & 0xF0) == 0x10) {	// only the blink bit for the character is set
+				if (blink_phase)
+					vdata = 0;	// blinking character, in one phase, the character "disappears", ie blinking
+				colour &= 15;
+			} else if ((!(colour & 0x10)) || blink_phase) {
+				if (colour & 0x80 && row_counter == 7)	// underline (must be before reverse, as underline can be reversed as well!)
+					vdata = 0xFF;	// the underline
+				if (colour & 0x20)	// reverse bit for char
+					vdata = ~vdata;
+				if (colour & 0x40)	// highlight, this must be the LAST, since it sets the low nibble of coldata ...
+					colour = 0x10 | (colour & 15);
+				else
+					colour &= 15;
+			} else
+				colour &= 15;
+		} else
+			colour &= 15;
+		fg_colour = palette[colour];
 		*(pixel++) = vdata & 0x80 ? fg_colour : bg_colour;
 		*(pixel++) = vdata & 0x40 ? fg_colour : bg_colour;
 		*(pixel++) = vdata & 0x20 ? fg_colour : bg_colour;
