@@ -32,8 +32,8 @@ extern Uint8 vic3_read_reg ( int addr );
 extern void  vic3_write_palette_reg ( int num, Uint8 data );
 extern void  vic3_check_raster_interrupt ( void );
 
-extern void vic3_select_bank ( int bank );
-extern void vic3_open_frame_access ( void );
-extern int  vic3_render_scanline ( void );
+extern void  vic3_select_bank ( int bank );
+extern void  vic3_open_frame_access ( void );
+extern int   vic3_render_scanline ( void );
 
 #endif

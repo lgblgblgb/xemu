@@ -64,7 +64,7 @@ static int map_offset_high;		// MAP high offset, should be filled at the MAP opc
 /* You *MUST* call this every time, when *any* of these events applies:
    * MAP 4510 opcode is issued, map_offset_low, map_offset_high, map_mask are modified
    * "CPU port" data or DDR register has been written, witn cpu_port[0 or 1] modified
-   * VIC3 register $30 is written, with vic3_registers[0x30] modified 
+   * VIC3 register $30 is written, with vic3_registers[0x30] modified
    The reason of this madness: do the ugly work here, as memory configuration change is
    less frequent than memory usage (read/write). Thus do more work here, but simplier
    work when doing actual memory read/writes, with a simple addition and shift, or such.
@@ -314,9 +314,9 @@ static inline Uint8 read_some_sid_register ( int addr )
 
 static inline void write_some_sid_register ( int addr, Uint8 data )
 {
-	// Selects SID "instance" based on address
+	int instance = (addr >> 6) & 1; // Selects left/right SID based on address
 	DEBUG("SID%d: writing register $%04X ($%04X) with data $%02X @ PC=$%04X" NL, ((addr >> 6) & 1) + 1, addr & 0x1F, addr + 0xD000, data, cpu_pc);
-	sid_write_reg(&sids[(addr >> 6) & 1], addr & 0x1F, data);
+	sid_write_reg(&sids[instance], addr & 0x1F, data);
 }
 
 
@@ -689,25 +689,6 @@ int main ( int argc, char **argv )
 				sids[0].sFrameCount++;
 				sids[1].sFrameCount++;
 			}
-#if 0
-
-			if (scanline == 312) {
-				//DEBUG("VIC3: new frame!" NL);
-				frameskip = !frameskip;
-				scanline = 0;
-				if (!frameskip)	// well, let's only render every full frames (~ie 25Hz)
-					update_emulator();
-				sids[0].sFrameCount++;
-				sids[1].sFrameCount++;
-				frame_counter++;
-				if (frame_counter == 25) {
-					frame_counter = 0;
-					vic3_blink_phase = !vic3_blink_phase;
-				}
-			}
-#endif
-			//DEBUG("RASTER=%d COMPARE=%d" NL,scanline,compare_raster);
-			//vic_interrupt();
 			vic3_check_raster_interrupt();
 		}
 		// Just a wild guess: update DMA state for every CPU cycles

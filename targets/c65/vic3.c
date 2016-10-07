@@ -77,7 +77,7 @@ static void (*renderer_func)(void);	// the selected scanline renderer, modified 
 // Pointers of VIC base addresses. Not always used in all modes, of course.
 // They're updated on register writes. So we can save re-calculation addresses all the time
 static Uint8 *vicptr_video_40;		// pointer to video matrix, only used in !H640 modes
-static Uint8 *vicptr_video_80;		// pointer to video matrix, only used in H640 modes 
+static Uint8 *vicptr_video_80;		// pointer to video matrix, only used in H640 modes
 static Uint8 *vicptr_chargen;		// pointer to chargen, can even point into the ROM! Used only in text modes
 static Uint8 *vicptr_bank16k;		// pointer to VIC-II 16K bank start address
 static Uint8 *vicptr_bank32k;		// pointer to VIC-III 32K bank start address (only used for H640 bitmap mode)
@@ -204,10 +204,10 @@ static void renderer_text_80 ( void )
 					vdata = 0;	// blinking character, in one phase, the character "disappears", ie blinking
 				colour &= 15;
 			} else if ((!(colour & 0x10)) || blink_phase) {
-				if (colour & 0x80 && row_counter == 7)	// underline (must be before reverse, as underline can be reversed as well!)
+				if ((colour & 0x80) && (row_counter == 7))	// underline (must be before reverse, as underline can be reversed as well!)
 					vdata = 0xFF;	// the underline
 				if (colour & 0x20)	// reverse bit for char
-					vdata = ~vdata;
+					vdata ^= 0xFF;
 				if (colour & 0x40)	// highlight, this must be the LAST, since it sets the low nibble of coldata ...
 					colour = 0x10 | (colour & 15);
 				else
@@ -299,7 +299,7 @@ static void renderer_mcmtext_40 ( void )
 	Uint32 colours[4] = {
 		VIC_REG_COLOUR(0x21),
 		VIC_REG_COLOUR(0x22),
-                VIC_REG_COLOUR(0x23),
+		VIC_REG_COLOUR(0x23),
 		0	// to be filled during colour fetch ...
 	};
 	int a;
@@ -339,7 +339,7 @@ static void renderer_mcmtext_80 ( void )
 	Uint32 colours[4] = {
 		VIC_REG_COLOUR(0x21),
 		VIC_REG_COLOUR(0x22),
-                VIC_REG_COLOUR(0x23),
+		VIC_REG_COLOUR(0x23),
 		0	// to be filled during colour fetch ...
 	};
 	int a;
@@ -883,9 +883,9 @@ void vic3_init ( void )
 	vic3_rom_palette[14] = RGB( 9,  9, 15);	// light blue
 	vic3_rom_palette[15] = RGB(11, 11, 11);	// light grey
 	// bitplanes
-	bitplane_addr_320[0] = bitplane_addr_320[2] = bitplane_addr_320[4] = bitplane_addr_320[6] = 0;
-	bitplane_addr_640[0] = bitplane_addr_640[2] = bitplane_addr_640[4] = bitplane_addr_640[6] = 0x10000;
-	bitplane_addr_320[1] = bitplane_addr_320[3] = bitplane_addr_320[5] = bitplane_addr_320[7] = 0;
+	bitplane_addr_320[0] = bitplane_addr_320[2] = bitplane_addr_320[4] = bitplane_addr_320[6] =
+	bitplane_addr_640[0] = bitplane_addr_640[2] = bitplane_addr_640[4] = bitplane_addr_640[6] = 0;
+	bitplane_addr_320[1] = bitplane_addr_320[3] = bitplane_addr_320[5] = bitplane_addr_320[7] =
 	bitplane_addr_640[1] = bitplane_addr_640[3] = bitplane_addr_640[5] = bitplane_addr_640[7] = 0x10000;
 	// To force bank selection, and pointer re-calculations
 	vic2_bank_number = -1;	// invalid, faked one, so vic3_select_bank() will surely not use the "cached" result initially
