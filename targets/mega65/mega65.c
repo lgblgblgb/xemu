@@ -940,7 +940,7 @@ void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 {
 	int phys_addr = addr >> 12;
 	phys_addr = addr_trans_wr_megabyte[phys_addr] | ((addr_trans_wr[phys_addr] + addr) & 0xFFFFF);
-	if (addr >= 0xff00000)	// Note: it's useless to "emulate" RMW opcode if the destination is memory, however the last MB of M65 addr.space is special, carrying I/O as well, etc!
+	if (phys_addr >= 0xff00000)	// Note: it's useless to "emulate" RMW opcode if the destination is memory, however the last MB of M65 addr.space is special, carrying I/O as well, etc!
 		write_phys_mem(phys_addr, old_data);
 	write_phys_mem(phys_addr, new_data);
 #if 0

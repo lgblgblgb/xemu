@@ -161,21 +161,10 @@ static void vic3_interrupt_checker ( void )
 void vic3_check_raster_interrupt ( void )
 {
 	raster_colours[scanline] = vic3_registers[0x21];	// ugly hack to make some kind of raster-bars visible :-/
-	// I'm lame even with VIC2 knowledge it seems
-	// C65 seems to use raster interrupt to generate the usual periodic IRQ
-	// (which was done with CIA on C64) in raster line 511. However as
-	// raster line 511 can never be true, I really don't know what to do.
-	// To be able C65 ROM to work, I assume that raster 511 is raster 0.
-	// It's possible that this is an NTSC/PAL issue, as raster can be "negative"
-	// according to the specification in case of NTSC. I really don't know ...
-	if (
-		(scanline == compare_raster)
-	//	|| ((compare_raster == 511 || compare_raster == 319) && scanline == 0)
-	) {
+	if (scanline == compare_raster)
 		interrupt_status |= 1;
-	} else
+	else
 		interrupt_status &= 0xFE;
-	//interrupt_status &= vic3_registers[0x1A];
 	vic3_interrupt_checker();
 }
 
