@@ -52,54 +52,49 @@ int sdcard_init ( const char *fn )
 	mounted = 0;
 	memset(sd_sector_bytes, 0, sizeof sd_sector_bytes);
 	memset(sd_d81_img1_start, 0, sizeof sd_d81_img1_start);
-	if (mega65_capable) {
-		sdfd = emu_load_file(fn, fnbuf, -1);    // get the file descriptor only ...
-		if (sdfd < 0) {
-			ERROR_WINDOW("Cannot open SD-card image %s, SD-card access won't work! ERROR: %s", fn, strerror(errno));
-			DEBUG("SDCARD: cannot open image %s" NL, fn);
-		} else {
-			// try to open in R/W mode ...
-			int tryfd = open(fnbuf, O_RDWR | O_BINARY);
-			if (tryfd >= 0) {
-				// use R/W mode descriptor if it was OK!
-				close(sdfd);
-				sdfd = tryfd;
-				DEBUG("SDCARD: image file re-opened in RD/WR mode, good" NL);
-				sd_is_read_only = 0;
-			} else
-				INFO_WINDOW("Image file %s could be open only in R/O mode", fnbuf);
-			// Check size!
-			DEBUG("SDCARD: cool, SD-card image %s (as %s) is open" NL, fn, fnbuf);
-			sd_card_size = lseek(sdfd, 0, SEEK_END);
-			if (sd_card_size == (off_t)-1) {
-				ERROR_WINDOW("Cannot query the size of the SD-card image %s, SD-card access won't work! ERROR: %s", fn, strerror(errno));
-				close(sdfd);
-				sdfd = -1;
-				return sdfd;
-			}
-			if (sd_card_size > 2147483648UL) {
-				ERROR_WINDOW("SD-card image is too large! Max allowed size is 2Gbytes!");
-				close(sdfd);
-				sdfd = -1;
-				return sdfd;
-			}
-			if (sd_card_size < 67108864) {
-				ERROR_WINDOW("SD-card image is too small! Min required size is 64Mbytes!");
-				close(sdfd);
-				sdfd = -1;
-				return sdfd;
-			}
-			DEBUG("SDCARD: detected size in Mbytes: %d" NL, (int)(sd_card_size >> 20));
-			if (sd_card_size & (off_t)511) {
-				ERROR_WINDOW("SD-card image size is not multiple of 512 bytes!!");
-				close(sdfd);
-				sdfd = -1;
-				return sdfd;
-			}
-		}
+	sdfd = emu_load_file(fn, fnbuf, -1);    // get the file descriptor only ...
+	if (sdfd < 0) {
+		ERROR_WINDOW("Cannot open SD-card image %s, SD-card access won't work! ERROR: %s", fn, strerror(errno));
+		DEBUG("SDCARD: cannot open image %s" NL, fn);
 	} else {
-		sdfd = -1;
-		DEBUG("SDCARD: not available in case of Commodore 65 startup mode!" NL);
+		// try to open in R/W mode ...
+		int tryfd = open(fnbuf, O_RDWR | O_BINARY);
+		if (tryfd >= 0) {
+			// use R/W mode descriptor if it was OK!
+			close(sdfd);
+			sdfd = tryfd;
+			DEBUG("SDCARD: image file re-opened in RD/WR mode, good" NL);
+			sd_is_read_only = 0;
+		} else
+			INFO_WINDOW("Image file %s could be open only in R/O mode", fnbuf);
+		// Check size!
+		DEBUG("SDCARD: cool, SD-card image %s (as %s) is open" NL, fn, fnbuf);
+		sd_card_size = lseek(sdfd, 0, SEEK_END);
+		if (sd_card_size == (off_t)-1) {
+			ERROR_WINDOW("Cannot query the size of the SD-card image %s, SD-card access won't work! ERROR: %s", fn, strerror(errno));
+			close(sdfd);
+			sdfd = -1;
+			return sdfd;
+		}
+		if (sd_card_size > 2147483648UL) {
+			ERROR_WINDOW("SD-card image is too large! Max allowed size is 2Gbytes!");
+			close(sdfd);
+			sdfd = -1;
+			return sdfd;
+		}
+		if (sd_card_size < 67108864) {
+			ERROR_WINDOW("SD-card image is too small! Min required size is 64Mbytes!");
+			close(sdfd);
+			sdfd = -1;
+			return sdfd;
+		}
+		DEBUG("SDCARD: detected size in Mbytes: %d" NL, (int)(sd_card_size >> 20));
+		if (sd_card_size & (off_t)511) {
+			ERROR_WINDOW("SD-card image size is not multiple of 512 bytes!!");
+			close(sdfd);
+			sdfd = -1;
+			return sdfd;
+		}
 	}
 	return sdfd;
 }

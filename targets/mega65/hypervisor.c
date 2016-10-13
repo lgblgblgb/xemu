@@ -114,8 +114,6 @@ int hypervisor_debug_init ( const char *fn )
 void hypervisor_enter ( int trapno )
 {
 	// Sanity checks
-	if (!mega65_capable)
-		FATAL("FATAL: hypervisor_enter() called without Mega65 capable mode");
 	if (trapno > 0x7F || trapno < 0)
 		FATAL("FATAL: got invalid trap number %d", trapno);
 	if (in_hypervisor)
@@ -171,8 +169,6 @@ void hypervisor_enter ( int trapno )
 void hypervisor_leave ( void )
 {
 	// Sanity checks
-	if (!mega65_capable)
-		FATAL("FATAL: hypervisor_leave() called without Mega65 capable mode");
 	if (!in_hypervisor)
 		FATAL("FATAL: not in hypervisor mode while calling hypervisor_leave()");
 	// First, restore machine status from hypervisor registers

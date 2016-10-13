@@ -82,7 +82,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern Uint8 memory[0x100000];
 extern Uint8 colour_ram[0x10000];
 extern Uint8 character_rom[0x1000];
-extern int   mega65_capable;
 extern int map_mask;
 extern int map_offset_low;
 extern int map_offset_high;

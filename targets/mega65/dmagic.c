@@ -178,8 +178,7 @@ void dma_write_reg ( int addr, Uint8 data )
 		dma_update_all();
 	}
 	dma_list_addr = dma_registers[0] | (dma_registers[1] << 8) | ((dma_registers[2] & 15) << 16);
-	if (mega65_capable)
-		dma_list_addr |= dma_registers[4] << 20;	// add the "MB" part to select MegaByte range for the DMA list reading
+	dma_list_addr |= dma_registers[4] << 20;	// add the "MB" part to select MegaByte range for the DMA list reading
 	DEBUG("DMA: list address is $%06X now, just written to register %d value $%02X" NL, dma_list_addr, addr, data);
 	dma_status = 0x80;	// DMA is busy now, also to signal the emulator core to call dma_update() in its main loop
 	command = -1;		// signal dma_update() that it's needed to fetch the DMA command, no command is fetched yet
@@ -220,10 +219,9 @@ void dma_update ( void )
 		target_uses_modulo = (target_addr & 0x200000);
 		source_addr &= 0xFFFFF;	// C65 1-mbyte range, chop bits used for other purposes off
 		target_addr &= 0xFFFFF; // C65 1-mbyte range, chop bits used for other purposes off
-		if (mega65_capable) {	// add "MB" part of the addresses, in case of Mega65, that is, selects MegaByte (MB)
-			source_addr |= dma_registers[5] << 20;
-			target_addr |= dma_registers[6] << 20;
-		}
+		// add "MB" part of the addresses, in case of Mega65, that is, selects MegaByte (MB)
+		source_addr |= dma_registers[5] << 20;
+		target_addr |= dma_registers[6] << 20;
 		chained = (command & 4);
 		DEBUG("DMA: READ COMMAND: $%05X[%s%s %d] -> $%05X[%s%s %d] (L=$%04X) CMD=%d (%s)" NL,
 			source_addr, source_is_io ? "I/O" : "MEM", source_uses_modulo ? " MOD" : "", source_step,

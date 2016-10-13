@@ -81,7 +81,6 @@ static int   trace_step_trigger = 0;
 static void (*m65mon_callback)(void) = NULL;
 static const char emulator_paused_title[] = "TRACE/PAUSE";
 
-int mega65_capable;			// emulator founds kickstart, sub-set of mega65 features CAN BE usable. It is an ERROR to use any of mega65 specific stuff, if it's zero!
 Uint8 gs_regs[0x1000];			// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
 static int rom_protect;			// C65 system ROM write protection
 static int fpga_switches = FPGA_SWITCHES;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
@@ -306,43 +305,20 @@ static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, i
 	memset(gs_regs, 0, sizeof gs_regs);
 	rom_protect = 1;
 	gs_regs[0x67E] = 0x80;	// this will signal Xemu, to ask the user on the first read!
+	DEBUG("MEGA65: I/O is remapped to $%X" NL, IO_REMAPPED);
 	// *** Trying to load kickstart image
-	mega65_capable = emu_load_file(KICKSTART_NAME, hypervisor_memory, 0x4001) == 0x4000;
-	if (mega65_capable) {
-		DEBUG("MEGA65: " KICKSTART_NAME " loaded into hypervisor memory, Mega65 capable mode is set" NL);
+	if (emu_load_file(KICKSTART_NAME, hypervisor_memory, 0x4001) == 0x4000) {
+		DEBUG("MEGA65: " KICKSTART_NAME " loaded into hypervisor memory." NL);
 	} else {
-		switch (QUESTION_WINDOW(
-			"Continue with built-in|Try C65 mode (ROM needed)|Exit Xemu/Mega65",
-			"Kickstart " KICKSTART_NAME " couldn't be loaded (not found, or wrong size).\n"
-			"What to do now?"
-		)) {
-			case 0:
-				if (sizeof initial_kickup != 0x4000)
-					FATAL("Internal error: initial kickup is not 16K!");
-				memcpy(hypervisor_memory, initial_kickup, 0x4000);
-				hypervisor_debug_invalidate("no kickup could be loaded, built-in one does not have debug info");
-				mega65_capable = 1;
-				DEBUG("MEGA65: Internal (AND MAY BE OUTDATED) kickstart loaded into hypervisor memory, Mega65 capable mode is set" NL);
-				break;
-			case 1:
-				break;
-			case 2:
-				exit(1);
-				break;
-		}
+		WARNING_WINDOW("Kickstart " KICKSTART_NAME " cannot be found. Using the default (maybe outdated!) built-in version");
+		if (sizeof initial_kickup != 0x4000)
+			FATAL("Internal error: initial kickup is not 16K!");
+		memcpy(hypervisor_memory, initial_kickup, 0x4000);
+		hypervisor_debug_invalidate("no kickup could be loaded, built-in one does not have debug info");
 	}
-	if (mega65_capable)
-		DEBUG("MEGA65: I/O is remapped to $%X" NL, IO_REMAPPED);
-	// *** Mega65 specific SDCARD support
-	if (mega65_capable) {
-		if (sdcard_init(SDCARD_NAME) < 0)
-			FATAL("Cannot find SD-card image (which is a must for Mega65 emulation): " SDCARD_NAME);
-	}
-	// *** Load ROM image
-	if (!mega65_capable) {
-		if (emu_load_file(ROM_NAME, memory + 0x20000, 0x20001) != 0x20000)
-			FATAL("Cannot load C65 system ROM (which is a must without kickstart): " ROM_NAME);
-	}
+	// *** Image file for SDCARD support
+	if (sdcard_init(SDCARD_NAME) < 0)
+		FATAL("Cannot find SD-card image (which is a must for Mega65 emulation): " SDCARD_NAME);
 	// *** Initialize VIC3
 	vic3_init();
 	// *** Memory configuration (later override will happen for mega65 mode though, this is only the default)
@@ -408,12 +384,9 @@ static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, i
 #endif
 	// *** RESET CPU, also fetches the RESET vector into PC
 	cpu_reset();
-	// *** In case of Mega65 mode, let's override the system configuration a bit ... It will also re-set PC to the trap address
-	if (mega65_capable) {
-		rom_protect = 0;
-		cpu_linear_memory_addressing_is_enabled = 1;
-		hypervisor_enter(TRAP_RESET);
-	}
+	rom_protect = 0;
+	cpu_linear_memory_addressing_is_enabled = 1;
+	hypervisor_enter(TRAP_RESET);
 	DEBUG("INIT: end of initialization!" NL);
 }
 
@@ -1000,10 +973,8 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			in_hypervisor = 0;
 			apply_memory_config();
 			cpu_reset();
-			if (mega65_capable) {
-				kicked_hypervisor = 0x80;	// this will signal Xemu, to ask the user on the first read!
-				hypervisor_enter(TRAP_RESET);
-			}
+			kicked_hypervisor = 0x80;	// this will signal Xemu, to ask the user on the first read!
+			hypervisor_enter(TRAP_RESET);
 			DEBUG("RESET!" NL);
 		} else if (key == SDL_SCANCODE_KP_ENTER) {
 			c64_toggle_joy_emu();

@@ -180,7 +180,7 @@ void vic3_write_reg ( int addr, Uint8 data )
 		int vic_new_iomode;
 		if (data == 0x96 && old_data == 0xA5)
 			vic_new_iomode = VIC3_IOMODE;
-		else if (data == 0x53 && old_data == 0x47 && mega65_capable)
+		else if (data == 0x53 && old_data == 0x47)
 			vic_new_iomode = VIC4_IOMODE;
 		else
 			vic_new_iomode = VIC2_IOMODE;
