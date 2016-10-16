@@ -148,12 +148,16 @@ int emu_load_file ( const char *fn, void *buffer, int maxsize )
 {
 	char fnbuf[PATH_MAX + 1];
 	char *search_paths[] = {
+#ifdef __EMSCRIPTEN__
+		"/",
+#else
 		".",
 		"." DIRSEP_STR "rom",
 		sdl_pref_dir,
 		sdl_base_dir,
 #ifndef _WIN32
 		DATADIR,
+#endif
 #endif
 		NULL
 	};
@@ -244,7 +248,10 @@ void emu_set_full_screen ( int setting )
 
 static inline void do_sleep ( int td )
 {
-#ifdef XEMU_SLEEP_IS_SDL_DELAY
+#ifdef __EMSCRIPTEN__
+#define __SLEEP_METHOD_DESC "emscripten_set_main_loop_timing"
+	emscripten_set_main_loop_timing(EM_TIMING_SETTIMEOUT, td / 1000);
+#elif XEMU_SLEEP_IS_SDL_DELAY
 #define __SLEEP_METHOD_DESC "SDL_Delay"
 	SDL_Delay(td / 1000);
 #elif defined(XEMU_SLEEP_IS_USLEEP)
@@ -385,7 +392,14 @@ int emu_init_sdl (
 		emu_init_debug(getenv("XEMU_DEBUG_FILE"));
 	if (!debug_fp)
 		printf("Logging into file: not enabled." NL);
-	if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
+	if (SDL_Init(
+#ifdef __EMSCRIPTEN__
+		// It seems there is an issue with emscripten SDL2: SDL_Init does not work if TIMER and/or HAPTIC is tried to be intialized or just "EVERYTHING" is used!!
+		SDL_INIT_EVERYTHING & ~(SDL_INIT_TIMER | SDL_INIT_HAPTIC)
+#else
+		SDL_INIT_EVERYTHING
+#endif
+	) != 0) {
 		ERROR_WINDOW("Cannot initialize SDL: %s", SDL_GetError());
 		return 1;
 	}
@@ -407,6 +421,10 @@ int emu_init_sdl (
 		SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver(),
 		__SLEEP_METHOD_DESC, __TIMING_METHOD_DESC
 	);
+#ifdef __EMSCRIPTEN__
+	sdl_pref_dir = strdup("/");
+	sdl_base_dir = strdup("/");
+#else
 	sdl_pref_dir = SDL_GetPrefPath(app_organization, app_name);
 	if (!sdl_pref_dir) {
 		ERROR_WINDOW("Cannot query SDL preferences directory: %s", SDL_GetError());
@@ -417,6 +435,7 @@ int emu_init_sdl (
 		ERROR_WINDOW("Cannot query SDL base directory: %s", SDL_GetError());
 		return 1;
 	}
+#endif
 	sdl_window_title = emu_strdup(window_title);
 	sdl_win = SDL_CreateWindow(
 		window_title,
@@ -684,9 +703,9 @@ void osd_write_char ( int x, int y, char ch )
 	int row;
 	const Uint16 *s;
 	Uint32 *d = osd_pixels + y * osd_xsize + x;
-	if (ch < 32 || ch > 128)
+	if (ch < 32 || (unsigned char)ch > 128)
 		ch = '?';
-	s = font_16x16 + ((ch - 32) << 4);
+	s = font_16x16 + (((unsigned char)ch - 32) << 4);
 	for (row = 0; row < 16; row++) {
 		Uint16 mask = 0x8000;
 		do {

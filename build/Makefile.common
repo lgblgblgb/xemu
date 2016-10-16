@@ -53,13 +53,13 @@ do-all:
 
 $(OBJPREFIX)%.o: %.c $(DEPALL)
 ifeq ($(ASMOUT), yes)
-	$(CC) $(CFLAGS) -Wa,-adhln -g -c -o /dev/null $< > $(@:.o=.s)
+	$(CC) $(CFLAGS) -Wa,-adhln -masm=intel -g -c -o /dev/null $< > $(@:.o=.s)
 endif
 	$(CC) $(CFLAGS) -c -o $@ $<
 
 $(OBJPREFIX)%.o: $(COMMONDIR)/%.c $(DEPALL)
 ifeq ($(ASMOUT), yes)
-	$(CC) $(CFLAGS) -Wa,-adhln -g -c -o /dev/null $< > $(@:.o=.s)
+	$(CC) $(CFLAGS) -Wa,-adhln -masm=intel -g -c -o /dev/null $< > $(@:.o=.s)
 endif
 	$(CC) $(CFLAGS) -c -o $@ $<
 

@@ -86,11 +86,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 extern FILE *debug_fp;
 
+#ifdef DISABLE_DEBUG
+#define DEBUG(...)
+#else
 #define DEBUG(...) do { \
 	if (unlikely(debug_fp))	\
 		fprintf(debug_fp, __VA_ARGS__);	\
 } while (0)
-
+#endif
 
 #ifndef __BIGGEST_ALIGNMENT__
 #define __BIGGEST_ALIGNMENT__	16

@@ -26,6 +26,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <SDL.h>
 #include "emutools_basicdefs.h"
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#endif
+
 #define APP_ORG "xemu-lgb"
 #define APP_DESC_APPEND " / LGB"
 
