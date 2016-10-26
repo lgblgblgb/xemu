@@ -49,5 +49,8 @@ all-dep:
 roms:
 	$(MAKE) -C rom
 
+deb:
+	$(MAKE) all
+	build/deb-build-simple
 
-.PHONY: all all-arch clean all-clean roms distclean dep all-dep
+.PHONY: all all-arch clean all-clean roms distclean dep all-dep deb

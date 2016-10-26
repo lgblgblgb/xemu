@@ -1,0 +1,65 @@
+#!/bin/bash
+# A very lame binary-level DEB package builder ... :-/
+# (C)2016 LGB Gabor Lenart
+
+PROJECT="xemu"
+DEPENDENCY="libsdl2-2.0-0 (>= 2.0.4), libc6 (>= 2.15)"
+AUTHOR="Gábor Lénárt <lgblgblgb@gmail.com>"
+WEBSITE="https://github.com/lgblgblgb/xemu/wiki"
+VERSION="`date '+%Y%m%d%H%M%S'`"
+ROOT=".dist/${PROJECT}_$VERSION"
+DEB="${PROJECT}_${VERSION}-ubuntu-xenial_amd64.deb"
+BINDIRREAL="/usr/local/bin"
+DATADIRREAL="/usr/local/lib/xemu"
+
+BINDIR="$ROOT$BINDIRREAL"
+DATADIR="$ROOT$DATADIRREAL"
+
+cd `dirname $0` || exit 1
+
+echo "Current directory: `pwd`"
+
+rm -fr .dist || exit 1
+
+mkdir -p $BINDIR $DATADIR $ROOT/DEBIAN || exit 1
+
+for a in bin/*.native ; do
+	b="$BINDIR/xemu-`basename $a .native`"
+	echo "Adding project binary: $b"
+	cp $a $b
+	strip $b
+done
+
+echo "Package: $PROJECT
+Version: $VERSION
+Section: base
+Priority: optional
+Architecture: amd64
+Depends: $DEPENDENCY
+Maintainer: $AUTHOR
+Description: Collection of software emulations of some (mainly 8 bit) computers.
+  X-Emulators (Xemu) is a kind of collection of software emulators targeting various
+  computers, including the quite rare Commodore LCD and Commodore 65 as well. On-going
+  work will provide Mega-65 emulation too. Xemu uses SDL2, and can run on Linux/UNIX,
+  Windows and OSX, also there is the possibility to use it within a web-browser with
+  the help of the Emscripten compiler.
+Homepage: $WEBSITE" > $ROOT/DEBIAN/control
+
+
+echo "#!/bin/sh" > $BINDIR/xemu-download-data
+awk -vromdir=$DATADIRREAL/ 'NF == 2 { print "test -f " romdir $1 " || wget -O " romdir $1 " " $2 " || { rm -f " romdir $1 " ; exit 1; }" }' ../rom/rom-fetch-list.txt >> $BINDIR/xemu-download-data
+echo "exit 0" >> $BINDIR/xemu-download-data
+
+find $ROOT -type d -exec chmod u-s,g-s,g-w,o-w,u+rwx,g+rx,o+rx {} \;
+find $ROOT -type f -exec chmod 0644 {} \;
+chmod 0755 $BINDIR/*
+touch $DATADIR/.placeholder
+
+fakeroot dpkg-deb --build $ROOT || exit 1
+
+mv .dist/*.deb bin/$DEB
+rm -fr .dist
+
+ls -l bin/$DEB || exit 1
+
+exit 0
