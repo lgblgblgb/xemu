@@ -3,4 +3,6 @@
 *.cdata linguist-language=C
 *.asm linguist-language=Assembly
 *.s linguist-language=Assembly
+*.S linguist-language=Assembly
 Makefile.* linguist-language=Makefile
+Makefile linguist-language=Makefile
