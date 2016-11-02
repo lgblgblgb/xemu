@@ -317,7 +317,7 @@ static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, i
 		hypervisor_debug_invalidate("no kickup could be loaded, built-in one does not have debug info");
 	}
 	// *** Image file for SDCARD support
-	if (sdcard_init(SDCARD_NAME) < 0)
+	if (sdcard_init(SDCARD_NAME, disk_image_name) < 0)
 		FATAL("Cannot find SD-card image (which is a must for Mega65 emulation): " SDCARD_NAME);
 	// *** Initialize VIC3
 	vic3_init();

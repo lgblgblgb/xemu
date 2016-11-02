@@ -32,7 +32,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 static int   sdfd;		// SD-card controller emulation, UNIX file descriptor of the open image file
 static int   d81fd = -1;	// special case for F011 access, allow emulator to access D81 image on the host OS, instead of "inside" the SD card image! [NOT SO MUCH USED YET]
-static int   d81_is_read_only;
+static int   use_d81 = 0;	// the above: actually USE that!
+static int   d81_is_read_only;	// access of the above, read-only or read-write
 static Uint8 sd_buffer[512];	// SD-card controller buffer
 static Uint8 sd_status;		// SD-status byte
 static Uint8 sd_sector_bytes[4];
@@ -43,7 +44,48 @@ static int   sd_is_read_only;
 static int   mounted;
 
 
-int sdcard_init ( const char *fn )
+static int open_external_d81 ( const char *fn )
+{
+	char fnbuf[PATH_MAX + 1];
+	if (!fn)
+		return -1;
+	d81_is_read_only = 1;
+	d81fd = emu_load_file(fn, fnbuf, -1);	// get the file descriptor only ...
+	if (d81fd < 0) {
+		ERROR_WINDOW("External D81 image was specified (%s) but it cannot be opened: %s", fn, strerror(errno));
+		DEBUG("SDCARD: cannot open external D81 image %s" NL, fn);
+	} else {
+		off_t d81_size;
+		// try to open in R/W mode
+		int tryfd = open(fnbuf, O_RDWR | O_BINARY);
+		if (tryfd >= 0) {
+			close(d81fd);
+			d81fd = tryfd;
+			DEBUG("SDCARD: exernal D81 image file re-opened in RD/WR mode, good" NL);
+			d81_is_read_only = 0;
+		} else {
+			INFO_WINDOW("External D81 image file %s could be open only in R/O mode", fnbuf);
+		}
+		d81_size = lseek(d81fd, 0, SEEK_END);
+		if (d81_size == (off_t)-1) {
+			ERROR_WINDOW("Cannot query the size of external D81 image %s, using on-SD images! ERROR: %s", fn, strerror(errno));
+			close(d81fd);
+			d81fd = -1;
+			return d81fd;
+		}
+		if (d81_size != D81_SIZE) {
+			ERROR_WINDOW("Bad external D81 image size " PRINTF_LLD " for %s, should be %d bytes!", (long long)d81_size, fnbuf, D81_SIZE);
+			close(d81fd);
+			d81fd = -1;
+			return d81fd;
+		}
+	}
+	return d81fd;
+}
+
+
+
+int sdcard_init ( const char *fn, const char *extd81fn )
 {
 	char fnbuf[PATH_MAX + 1];
 	sd_status = 0;
@@ -96,6 +138,8 @@ int sdcard_init ( const char *fn )
 			return sdfd;
 		}
 	}
+	if (sdfd >= 0)
+		open_external_d81(extd81fn);
 	return sdfd;
 }
 
@@ -170,18 +214,20 @@ static int diskimage_write_block ( Uint8 *io_buffer, Uint8 *addr_buffer, int add
 
 int fdc_cb_rd_sec ( Uint8 *buffer, int d81_offset )
 {
-	if (d81fd < 0)
+	if (use_d81)
+		return (diskimage_read_block(buffer, NULL, d81_offset, "reading[D81@HOST]", D81_SIZE, d81fd) != 512);
+	else
 		return (diskimage_read_block(buffer, sd_d81_img1_start, d81_offset, "reading[D81@SD]", sd_card_size, sdfd) != 512);
-	return (diskimage_read_block(buffer, NULL, d81_offset, "reading[D81@HOST]", D81_SIZE, d81fd) != 512);
 }
 
 
 
 int fdc_cb_wr_sec ( Uint8 *buffer, int d81_offset )
 {
-	if (d81fd < 0)
+	if (use_d81)
+		return (diskimage_write_block(buffer, NULL, d81_offset, "writing[D81@HOST]", D81_SIZE, d81fd) != 512);
+	else
 		return (diskimage_write_block(buffer, sd_d81_img1_start, d81_offset, "writing[D81@SD]", sd_card_size, sdfd) != 512);
-	return (diskimage_write_block(buffer, NULL, d81_offset, "writing[D81@HOST]", D81_SIZE, d81fd) != 512);
 }
 
 
@@ -254,11 +300,20 @@ static void sdcard_mount_d81 ( Uint8 data )
 {
 	printf("SD/FDC mount register request @ $D68B val=$%02X at PC=$%04X" NL, data, cpu_pc);
 	if ((data & 3) == 3) {
-		fdc_set_disk(1, sd_is_read_only ? 0 : QUESTION_WINDOW("Use read-only access|Use R/W access (can be dangerous, can corrupt the image!)", "Hypervisor seems to be about mounting a D81 image. You can override the access mode now."));
+		if (d81fd >= 0)
+			use_d81 = QUESTION_WINDOW("Use D81 from SD-card|Use external D81 image file", "Hypervisor mount request, and you have defined external D81 image.");
+		else
+			use_d81 = 0;
+		if (!use_d81) {
+			fdc_set_disk(1, sd_is_read_only ? 0 : QUESTION_WINDOW("Use read-only access|Use R/W access (can be dangerous, can corrupt the image!)", "Hypervisor seems to be about mounting a D81 image. You can override the access mode now."));
+			printf("SD/FDC: (re-?)mounted D81 for starting sector $%02X%02X%02X%02X" NL,
+				sd_d81_img1_start[3], sd_d81_img1_start[2], sd_d81_img1_start[1], sd_d81_img1_start[0]
+			);
+		} else {
+			fdc_set_disk(1, !d81_is_read_only);
+			printf("SD/FDC: mount *EXTERNAL* D81 image, not from SD card (emulator feature only)!" NL);
+		}
 		mounted = 1;
-		printf("SD/FDC: (re-?)mounted D81 for starting sector $%02X%02X%02X%02X" NL,
-			sd_d81_img1_start[3], sd_d81_img1_start[2], sd_d81_img1_start[1], sd_d81_img1_start[0]
-		);
 	} else {
 		if (mounted)
 			printf("SD/FDC: unmounted D81" NL);
