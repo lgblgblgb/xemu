@@ -366,7 +366,7 @@ Uint8 io_read ( int addr )
 		case 0x16:	// $D600-$D6FF, C65 UART
 			return 0xFF;			// not emulated by Xemu, yet, TODO
 		case 0x17:	// $D700-$D7FF, C65 DMA
-			return dma_read_reg(addr & 3);
+			return dma_read_reg(addr & 15);
 		case 0x18:	// $D800-$D8FF, colour SRAM
 		case 0x19:	// $D900-$D9FF, colour SRAM
 		case 0x1A:	// $DA00-$DAFF, colour SRAM
@@ -454,7 +454,7 @@ void io_write ( int addr, Uint8 data )
 		case 0x16:	// $D600-$D6FF, C65 UART
 			return;				// not emulated by Xemu, yet, TODO
 		case 0x17:	// $D700-$D7FF, C65 DMA
-			dma_write_reg(addr & 3, data);
+			dma_write_reg(addr & 15, data);
 			return;
 		case 0x18:	// $D800-$D8FF, colour SRAM
 		case 0x19:	// $D900-$D9FF, colour SRAM

@@ -154,8 +154,9 @@ static void dma_update_all ( void )
 void dma_write_reg ( int addr, Uint8 data )
 {
 	// DUNNO about DMAgic too much. It's merely guessing from my own ROM assembly tries, C65gs/Mega65 VHDL, and my ideas :)
-	if (vic_iomode != VIC4_IOMODE)
-		addr &= 3;
+	// The following condition is commented out for now. FIXME: how it is handled for real?!
+	//if (vic_iomode != VIC4_IOMODE)
+	//	addr &= 3;
 	dma_registers[addr] = data;
 	switch (addr) {
 		case 0x2:	// for compatibility with C65, Mega65 here resets the MB part of the DMA list address
@@ -279,6 +280,7 @@ void dma_init ( void )
 
 Uint8 dma_read_reg ( int addr )
 {
+	// FIXME: status on ALL registers when read?!
 	DEBUG("DMA: register reading at addr of %d" NL, addr);
 #if 0
 	if ((addr & 3) != 3)

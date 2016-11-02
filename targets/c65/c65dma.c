@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "c65dma.h"
 #include "commodore_65.h"
 #include "emutools.h"
+#include "cpu65c02.h"
 
 
 
@@ -45,7 +46,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 */
 
 
-static Uint8 dma_registers[4];		// The four DMA registers (with last values written by the CPU)
+static Uint8 dma_registers[16];		// The four DMA registers (with last values written by the CPU)
 static int   source_step;		// [-1, 0, 1] step value for source (0 = hold, constant address)
 static int   target_step;		// [-1, 0, 1] step value for target (0 = hold, constant address)
 static int   source_addr;		// DMA source address (the low byte is also used by COPY command as the "filler byte")
@@ -147,7 +148,8 @@ static void dma_update_all ( void )
 void dma_write_reg ( int addr, Uint8 data )
 {
 	// DUNNO about DMAgic too much. It's merely guessing from my own ROM assembly tries, C65gs/Mega65 VHDL, and my ideas :)
-	addr &= 3;
+	DEBUG("DMA: writing register $%X with value of $%X @ PC=$%04X" NL, addr, data, cpu_pc);
+	addr &= 15;	// FIXME: how it should be handled normally?!
 	dma_registers[addr] = data;
 	if (addr)
 		return;	// Only writing register 0 starts the DMA operation
@@ -263,6 +265,7 @@ void dma_init ( void )
 
 Uint8 dma_read_reg ( int addr )
 {
+	// FIXME: status on ALL registers when read?!
 	DEBUG("DMA: register reading at addr of %d" NL, addr);
 #if 0
 	if ((addr & 3) != 3)
