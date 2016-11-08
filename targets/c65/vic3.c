@@ -56,7 +56,7 @@ static Uint8 vic3_palette_nibbles[0x300];
 Uint8 vic3_registers[0x80];		// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
 int vic_new_mode;			// VIC3 "newVic" IO mode is activated flag
 static int scanline;			// current scan line number
-int clock_divider7_hack;		// FIXME: ugly hack for fast/slow CPU mode
+int cpu_cycles_per_scanline;
 static int compare_raster;		// raster compare (9 bits width) data
 static int interrupt_status;		// Interrupt status of VIC
 static int blink_phase;			// blinking attribute helper: on/off phase of blink
@@ -744,8 +744,8 @@ void vic3_write_reg ( int addr, Uint8 data )
 			vic3_registers[0x31] = data;
 			attributes = (data & 32);
 			select_renderer_func();
-			clock_divider7_hack = (data & 64) ? 7 : 2;
-			DEBUG("VIC3: clock_divider7_hack = %d" NL, clock_divider7_hack);
+			cpu_cycles_per_scanline = (data & 64) ? FAST_CPU_CYCLES_PER_SCANLINE : SLOW_CPU_CYCLES_PER_SCANLINE;
+			//DEBUG("VIC3: clock_divider7_hack = %d" NL, clock_divider7_hack);
 			if ((data & 15) && warn_ctrl_b_lo) {
 				INFO_WINDOW("VIC3 control-B register V400, H1280, MONO and INT features are not emulated yet!\nThere will be no further warnings on this issue.");
 				warn_ctrl_b_lo = 0;
@@ -854,7 +854,7 @@ void vic3_init ( void )
 	frameskip = 0;
 	scanline = 0;
 	compare_raster = 0;
-	clock_divider7_hack = 7;
+	cpu_cycles_per_scanline = FAST_CPU_CYCLES_PER_SCANLINE;
 	video_counter = 0;
 	row_counter = 0;
 	for (i = 0; i < 0x100; i++) {	// Initialize all palette registers to zero, initially, to have something ...

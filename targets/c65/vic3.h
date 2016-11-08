@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 extern int   vic_new_mode;
 extern Uint8 vic3_registers[];
-extern int   clock_divider7_hack;
+extern int   cpu_cycles_per_scanline;
 extern int   frameskip;
 extern char  scanline_render_debug_info[320];
 
