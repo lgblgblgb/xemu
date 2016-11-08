@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <stdio.h>
 #include <SDL_types.h>
 #include <SDL_endian.h>
+#include <limits.h>
 
 #define USE_REGPARM
 
