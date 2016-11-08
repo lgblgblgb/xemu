@@ -76,12 +76,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define NL		"\n"
 #	define PRINTF_LLD	"%lld"
 #	define PRINTF_LLU	"%llu"
+#	define MKDIR(__n)	mkdir((__n), 0777)
 #else
 #	define DIRSEP_STR	"\\"
 #	define DIRSEP_CHR	'\\'
 #	define NL		"\r\n"
 #	define PRINTF_LLD	"%I64d"
 #	define PRINTF_LLU	"%I64u"
+#	define MKDIR(__n)	mkdir(__n)
 #endif
 
 extern FILE *debug_fp;

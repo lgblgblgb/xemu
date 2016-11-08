@@ -45,7 +45,7 @@ Uint32 *sdl_pixel_buffer = NULL;
 int texture_x_size_in_bytes;
 int emu_is_fullscreen = 0;
 static int win_xsize, win_ysize;
-static char *sdl_pref_dir, *sdl_base_dir;
+char *sdl_pref_dir, *sdl_base_dir;
 Uint32 sdl_winid;
 static Uint32 black_colour;
 static void (*shutdown_user_function)(void);
@@ -436,6 +436,7 @@ int emu_init_sdl (
 		return 1;
 	}
 #endif
+	printf("SDL preferences directory: %s" NL, sdl_pref_dir);
 	sdl_window_title = emu_strdup(window_title);
 	sdl_win = SDL_CreateWindow(
 		window_title,

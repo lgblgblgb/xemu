@@ -71,6 +71,7 @@ extern Uint32 sdl_winid;
 extern SDL_PixelFormat *sdl_pix_fmt;
 extern int seconds_timer_trigger;
 extern const char emulators_disclaimer[];
+extern char *sdl_pref_dir, *sdl_base_dir;
 
 extern int emu_init_debug ( const char *fn );
 extern time_t emu_get_unixtime ( void );

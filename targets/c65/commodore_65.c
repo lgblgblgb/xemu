@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "emutools_hid.h"
 #include "vic3.h"
 #include "sid.h"
+#include "cbmhostfs.h"
 #include "c64_kbd_mapping.h"
 
 
@@ -210,6 +211,7 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 		SDL_ENABLE		// joy HID events enabled
 	);
 	joystick_emu = 1;
+	hostfs_init(sdl_pref_dir, "hostfs");
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
 	// *** Load ROM image
@@ -355,6 +357,10 @@ Uint8 io_read ( int addr )
 				return vic3_read_reg(addr);
 			if (addr < 0xA0)
 				return fdc_read_reg(addr & 0xF);
+			if (addr == 0xFE)
+				return hostfs_read_reg0();
+			if (addr == 0xFF)
+				return hostfs_read_reg1();
 			return 0xFF;	// RAM expansion controller (not emulated by Xemu)
 		case 0x11:	// $D100-$D1FF, C65 VIC-III palette, red components
 		case 0x12:	// $D200-$D2FF, C65 VIC-III palette, green components
@@ -439,6 +445,14 @@ void io_write ( int addr, Uint8 data )
 			}
 			if (addr < 0xA0) {
 				fdc_write_reg(addr & 0xF, data);
+				return;
+			}
+			if (addr == 0xFE) {
+				hostfs_write_reg0(data);
+				return;
+			}
+			if (addr == 0xFF) {
+				hostfs_write_reg1(data);
 				return;
 			}
 			return;	// Note: RAM expansion controller (not emulated by Xemu)
@@ -569,6 +583,7 @@ void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 
 static void shutdown_callback ( void )
 {
+	hostfs_close_all();
 #ifdef MEMDUMP_FILE
 	FILE *f;
 #endif
@@ -680,6 +695,7 @@ int main ( int argc, char **argv )
 			if (vic3_render_scanline()) {
 				if (frameskip) {
 					frameskip = 0;
+					hostfs_flush_all();
 				} else {
 					frameskip = 1;
 					emu_update_screen();
