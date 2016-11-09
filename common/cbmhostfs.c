@@ -159,8 +159,12 @@ static char hostfs_directory[PATH_MAX];
 void hostfs_init ( const char *basedir, const char *subdir )
 {
 	int a;
-	sprintf(hostfs_directory, "%s" DIRSEP_STR "%s" DIRSEP_STR, basedir, subdir);
-	MKDIR(hostfs_directory);
+	if (subdir) {
+		sprintf(hostfs_directory, "%s" DIRSEP_STR "%s" DIRSEP_STR, basedir, subdir);
+		MKDIR(hostfs_directory);
+	} else {
+		sprintf(hostfs_directory, "%s/", basedir);
+	}
 	for (a = 0; a < 16; a++) {
 		hostfs_channels[a].id = a;
 		hostfs_channels[a].dir = NULL;

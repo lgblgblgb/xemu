@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sid.h"
 #include "cbmhostfs.h"
 #include "c64_kbd_mapping.h"
+#include "emutools_config.h"
 
 
 
@@ -202,8 +203,9 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 
 
 
-static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int sound_mix_freq )
+static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 {
+	const char *p;
 	SDL_AudioSpec audio_want, audio_got;
 	hid_init(
 		c64_key_map,
@@ -211,12 +213,18 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 		SDL_ENABLE		// joy HID events enabled
 	);
 	joystick_emu = 1;
-	hostfs_init(sdl_pref_dir, "hostfs");
+	// *** host-FS
+	p = emucfg_get_str("hostfsdir");
+	if (p)
+		hostfs_init(p, NULL);
+	else
+		hostfs_init(sdl_pref_dir, "hostfs");
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
 	// *** Load ROM image
-	if (emu_load_file("c65-system.rom", memory + 0x20000, 0x20001) != 0x20000)
-		FATAL("Cannot load C65 system ROM!");
+	p = emucfg_get_str("rom");
+	if (emu_load_file(p, memory + 0x20000, 0x20001) != 0x20000)
+		FATAL("Cannot load C65 system ROM (%s) or invalid size!", p);
 	// *** Initialize VIC3
 	vic3_init();
 	// *** Memory configuration
@@ -246,7 +254,7 @@ static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int 
 	dma_init();
 	// Initialize FDC
 	fdc_init();
-	c65_d81_init(disk_image_name);
+	c65_d81_init(emucfg_get_str("8"));
 	// SIDs, plus SDL audio
 	sid_init(&sids[0], sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sids[1], sid_cycles_per_sec, sound_mix_freq);
@@ -648,6 +656,13 @@ int main ( int argc, char **argv )
 		SCREEN_WIDTH, SCREEN_HEIGHT,
 		emulators_disclaimer
 	);
+	emucfg_define_option("8", OPT_STR, NULL, "Path of the D81 disk image to be attached");
+	emucfg_define_option("fullscreen", OPT_NO, (void*)0, "Start in fullscreen mode");
+	emucfg_define_option("hostfsdir", OPT_STR, NULL, "Path of the directory to be used as Host-FS base");
+	//emucfg_define_option("noaudio", OPT_NO, (void*)0, "Disable audio");
+	emucfg_define_option("rom", OPT_STR, "c65-system.rom", "Override system ROM path to be loaded");
+	if (emucfg_parse_commandline(argc, argv))
+		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
         if (emu_init_sdl(
 		TARGET_DESC APP_DESC_APPEND,	// window title
@@ -667,7 +682,6 @@ int main ( int argc, char **argv )
 		return 1;
 	// Initialize C65 ...
 	c65_init(
-		argc > 1 ? argv[1] : NULL,	// disk image name
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
 		AUDIO_SAMPLE_FREQ		// sound mix freq
 	);
@@ -675,6 +689,7 @@ int main ( int argc, char **argv )
 	cycles = 0;
 	if (audio)
 		SDL_PauseAudioDevice(audio, 0);
+	emu_set_full_screen(emucfg_get_bool("fullscreen"));
 	vic3_open_frame_access();
 	emu_timekeeping_start();
 	for (;;) {
