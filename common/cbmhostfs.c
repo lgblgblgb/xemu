@@ -139,11 +139,10 @@ Current quick'n'dirty usage:
 struct hostfs_channels_st {
 	Uint8 read_buffer[READ_BUFFER_SIZE];
 	Uint8 write_buffer[WRITE_BUFFER_SIZE];
-	int  read_used;
-	int  write_used;
-	DIR *dir;	// if it's non-NULL, it has precedence over fd
-	int  fd;
-	int allow_write, allow_read,eof;
+	int   read_used, write_used;
+	DIR  *dir;
+	int   fd, id;
+	int   allow_write, allow_read, eof;
 };
 
 static struct hostfs_channels_st hostfs_channels[16];
@@ -163,10 +162,13 @@ void hostfs_init ( const char *basedir, const char *subdir )
 	sprintf(hostfs_directory, "%s" DIRSEP_STR "%s" DIRSEP_STR, basedir, subdir);
 	MKDIR(hostfs_directory);
 	for (a = 0; a < 16; a++) {
+		hostfs_channels[a].id = a;
 		hostfs_channels[a].dir = NULL;
 		hostfs_channels[a].fd = -1;
 		hostfs_channels[a].allow_write = 0;
 		hostfs_channels[a].allow_read = 0;
+		hostfs_channels[a].read_used = 0;
+		hostfs_channels[a].write_used = 0;
 	}
 	hfs_status = 0;
 	last_command = -1;
@@ -178,9 +180,10 @@ void hostfs_init ( const char *basedir, const char *subdir )
 static void hostfs_flush ( struct hostfs_channels_st *channel )
 {
 	int pos;
-	if (channel->fd < 0)
+	if (channel->fd < 0 || !channel->write_used)
 		return;
 	pos = 0;
+	DEBUG_HOSTFS("HOSTFS: flusing write cache on channel #%d for %d bytes ..." NL, channel->id, channel->write_used);
 	while (channel->write_used) {
 		int ret = write(channel->fd, channel->write_buffer + pos, channel->write_used);
 		switch (ret) {
@@ -201,6 +204,7 @@ static void hostfs_flush ( struct hostfs_channels_st *channel )
 
 static void hostfs_close ( struct hostfs_channels_st *channel )
 {
+	DEBUG_HOSTFS("HOSTFS: closing channel #%d" NL, channel->id);
 	if (channel->dir)
 		closedir(channel->dir);
 	if (channel->fd >= 0) {
@@ -233,6 +237,10 @@ void hostfs_flush_all ( void )
 
 static void hostfs_open ( struct hostfs_channels_st *channel )
 {
+	DEBUG_HOSTFS("HOSTFS: opening channel #%d ..." NL, channel->id);
+	if (channel->id == 15) {
+		FATAL("Sorry, channel#15 is not supported yet, and you must not use it!");
+	}
 	hostfs_close(channel);	// close channel if it was used before ...
 	if (spec_used[0] == 0) {
 		hfs_status = 64;
@@ -244,7 +252,8 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 	if (spec_used[0] == '$') {
 		channel->dir = opendir(hostfs_directory);
 		if (!channel->dir) {
-			hfs_status = 64;
+			hfs_status = 128;
+			DEBUG_HOSTFS("HOSTFS: cannot open directory '%s': %s" NL, hostfs_directory, strerror(errno));
 			return;
 		}
 		// TODO: prepare directory, first item ...
@@ -258,7 +267,7 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 		Uint8 *p0,*p1,*p2;
 		DIR *dir;
 		struct dirent *entry;
-		char filename[20];
+		char filename[PATH_MAX];
 		p1 = (Uint8*)strchr((char*)spec_used, ',');
 		if (p1) {
 			p2 = (Uint8*)strchr((char*)p1 + 1, ',');
@@ -297,24 +306,47 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 		dir = opendir(hostfs_directory);
 		if (!dir) {
 			hfs_status = 128;
+			DEBUG_HOSTFS("HOSTFS: cannot open directory '%s': %s" NL, hostfs_directory, strerror(errno));
 			return;
 		}
 		DEBUG_HOSTFS("HOSTFS: trying to open file %s" NL, filename);
+		/* Note: we have to walk the directory, as host OS may have case sensitive, or case-insensitive
+		   file names, also there will be PETSCII-ASCII file name conversion later, etc ...
+		   So we try to find a matching file, even if file name can't contain "joker" character for now ... */
 		while ((entry = readdir(dir))) {
 			DEBUG_HOSTFS("HOSTFS: considering file %s" NL, entry->d_name);
 			if (!strcasecmp(entry->d_name, filename)) {
 				DEBUG_HOSTFS("HOSTFS: file name accepted." NL);
 				closedir(dir);
-				channel->fd = open(entry->d_name, flags, 0666);
-				if (channel->fd < 0)
+				sprintf(filename, "%s%s", hostfs_directory, entry->d_name);
+				channel->fd = open(filename, flags, 0666);
+				if (channel->fd < 0) {
+					DEBUG_HOSTFS("HOSTFS: could not open host file '%s': %s" NL, filename, strerror(errno));
 					hfs_status = 128;
-				else
+				} else {
+					DEBUG_HOSTFS("HOSTFS: great, file is open as '%s'" NL, filename);
 					hfs_status = 0;
+				}
 				return;
 			}
 		}
 		closedir(dir);
-		hfs_status = 128;
+		// on write, if we don't have matching entry (we are here ...), we want to create new file here!!!
+		if (flags & O_CREAT) {
+			memmove(filename + strlen(hostfs_directory), filename, strlen(filename) + 1);
+			memcpy(filename, hostfs_directory, strlen(hostfs_directory));	// do not copy EOS by will!
+			channel->fd = open(filename, flags, 0666);
+			if (channel->fd < 0) {
+				DEBUG_HOSTFS("HOSTFS: could not create new host file entry '%s': %s" NL, filename, strerror(errno));
+				hfs_status = 128;
+			} else {
+				DEBUG_HOSTFS("HOSTFS: great, new host file is created as '%s'" NL, filename);
+				hfs_status = 0;
+			}
+		} else {
+			hfs_status = 128;
+			DEBUG_HOSTFS("HOSTFS: no matching pattern found for opening file" NL);
+		}
 	}
 }
 
@@ -390,6 +422,10 @@ Uint8 hostfs_read_reg1 ( void )
 		FATAL("Directory reading is not yet supported :-(");
 		return 0xFF;
 	}
+	if (use_channel->fd < 0) {
+		hfs_status = 64;	// not open channel
+		return 0xFF;
+	}
 	use_channel->read_used = read(use_channel->fd, use_channel->read_buffer, READ_BUFFER_SIZE);
 	if (use_channel->read_used == 0) {
 		hfs_status = 64;
@@ -414,6 +450,7 @@ void hostfs_write_reg1 ( Uint8 data )
 		if (spec_filling_index >= SPEC_BUFFER_SIZE - 1) {
 			hfs_status = 64;
 		} else {
+			// TODO: maybe PETSCII->ASCII conversion should be done here (on bytes in "data"), or such?
 			spec_filling[spec_filling_index++] = data;
 			hfs_status = 0;
 		}
@@ -424,6 +461,10 @@ void hostfs_write_reg1 ( Uint8 data )
 		return;
 	}
 	if (!use_channel->allow_write) {
+		hfs_status = 64;
+		return;
+	}
+	if (use_channel->fd < 0) {
 		hfs_status = 64;
 		return;
 	}
