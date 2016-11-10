@@ -28,10 +28,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SDCARD_NAME			"mega65.img"
 #define KICKSTART_LIST_FILE_NAME	"kickstart.list"
 
-// If it's defined, DMA operations will halts the CPU
-// NOTE: it seems this is the de-facto behaviour with M65, you should use it!
-#define DMA_STOPS_CPU
-
 // If you define this, you will got *VERY HUGE* number of messages into the debug log
 // It slows down the emulator *A LOT* as well!
 // With FPGA switch 12 too, it created 20Gbytes(!) log file and it even not booted yet :)
@@ -57,8 +53,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_WIDTH		640
 #define SCREEN_HEIGHT		200
 
-#define CPU_CLOCK		3546875
-#define FULL_FRAME_CPU_CYCLES	141875
+#define FAST_CPU_CYCLES_PER_SCANLINE	227
+#define SLOW_CPU_CYCLES_PER_SCANLINE	64
 
 #define SID_CYCLES_PER_SEC	1000000
 #define AUDIO_SAMPLE_FREQ	44100

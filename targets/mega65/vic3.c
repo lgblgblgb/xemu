@@ -40,7 +40,7 @@ static Uint8 vic3_palette_nibbles[0x300];
 Uint8 vic3_registers[0x80];		// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
 int vic_iomode;				// VIC2/VIC3/VIC4 mode
 int scanline;				// current scan line number
-int clock_divider7_hack;
+int cpu_cycles_per_scanline;
 static int compare_raster;		// raster compare (9 bits width) data
 static int interrupt_status;		// Interrupt status of VIC
 int vic2_16k_bank;			// VIC-2 modes' 16K BANK address within 64K (NOT the traditional naming of banks with 0,1,2,3)
@@ -105,7 +105,7 @@ void vic3_init ( void )
 	palette = vic3_rom_palette;
 	scanline = 0;
 	compare_raster = 0;
-	clock_divider7_hack = 7;
+	cpu_cycles_per_scanline = FAST_CPU_CYCLES_PER_SCANLINE;
 	for (i = 0; i < 0x100; i++) {	// Initiailize all palette registers to zero, initially, to have something ...
 		if (i < sizeof vic3_registers)
 			vic3_registers[i] = 0;	// Also the VIC3 registers ...
@@ -233,8 +233,8 @@ void vic3_write_reg ( int addr, Uint8 data )
 			palette = (data & 4) ? vic3_palette : vic3_rom_palette;
 			break;
 		case 0x31:
-			clock_divider7_hack = (data & 64) ? 7 : 2;
-			DEBUG("VIC3: clock_divider7_hack = %d" NL, clock_divider7_hack);
+			cpu_cycles_per_scanline = (data & 64) ? FAST_CPU_CYCLES_PER_SCANLINE : SLOW_CPU_CYCLES_PER_SCANLINE;
+			//DEBUG("VIC3: clock_divider7_hack = %d" NL, clock_divider7_hack);
 			if ((data & 15) && warn_ctrl_b_lo) {
 				INFO_WINDOW("VIC3 control-B register V400, H1280, MONO and INT features are not emulated yet!");
 				warn_ctrl_b_lo = 0;

@@ -183,9 +183,7 @@ void dma_write_reg ( int addr, Uint8 data )
 	DEBUG("DMA: list address is $%06X now, just written to register %d value $%02X" NL, dma_list_addr, addr, data);
 	dma_status = 0x80;	// DMA is busy now, also to signal the emulator core to call dma_update() in its main loop
 	command = -1;		// signal dma_update() that it's needed to fetch the DMA command, no command is fetched yet
-#ifdef DMA_STOPS_CPU
-	dma_update_all();
-#endif
+	dma_update_all();	// DMA _stops_ CPU, however FIXME: interrupts can (???) occur, so we need to emulate that somehow later?
 }
 
 
