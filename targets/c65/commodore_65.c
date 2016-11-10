@@ -698,19 +698,6 @@ int main ( int argc, char **argv )
 			}
 			vic3_check_raster_interrupt();
 		}
-		// Just a wild guess: update DMA state for every CPU cycles
-		// However it does not care about that some DMA commands need more time
-		// (ie COPY vs FILL).
-		// It seems two DMA updates are needed by CPU clock cycle not to apply the WORKAROUND
-		// situation (see in c65dma.c). Hopefully in this way, this is now closer to the native
-		// speed of DMA compared to the CPU. Or not :-D
-#ifndef DMA_STOPS_CPU
-#warning "Compile for non-C65 compatbile setting: without DMA_STOPS_CPU defined in commodore_65.h"
-		while (dma_status && (opcyc--)) {
-			dma_update();
-			dma_update();
-		}
-#endif
 	}
 	return 0;
 }
