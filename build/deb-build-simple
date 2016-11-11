@@ -8,7 +8,7 @@ AUTHOR="Gábor Lénárt <lgblgblgb@gmail.com>"
 WEBSITE="https://github.com/lgblgblgb/xemu/wiki"
 VERSION="`date '+%Y%m%d%H%M%S'`"
 ROOT=".dist/${PROJECT}_$VERSION"
-DEB="${PROJECT}_${VERSION}-ubuntu-xenial_amd64.deb"
+DEB="${PROJECT}_current-ubuntu-xenial_amd64.deb"
 BINDIRREAL="/usr/local/bin"
 DATADIRREAL="/usr/local/lib/xemu"
 

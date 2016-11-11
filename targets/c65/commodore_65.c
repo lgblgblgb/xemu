@@ -591,7 +591,6 @@ void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 
 static void shutdown_callback ( void )
 {
-	hostfs_close_all();
 #ifdef MEMDUMP_FILE
 	FILE *f;
 #endif

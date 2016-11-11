@@ -72,8 +72,7 @@ static void dump_help ( void )
 }
 
 
-#define OPT_ERROR(...) do { ERROR_WINDOW("Command line error: " __VA_ARGS__); return 1; } while(0)
-
+#define OPT_ERROR_CMDLINE(...) do { ERROR_WINDOW("Command line error: " __VA_ARGS__); return 1; } while(0)
 
 
 int emucfg_parse_commandline ( int argc, char **argv )
@@ -83,21 +82,21 @@ int emucfg_parse_commandline ( int argc, char **argv )
 	while (argc) {
 		struct emutools_config_st *p;
 		if (*argv[0] != '/' && *argv[0] != '-')
-			OPT_ERROR("Invalid option '%s', must start with '-'", *argv);
+			OPT_ERROR_CMDLINE("Invalid option '%s', must start with '-'", *argv);
 		if (!strcasecmp(*argv + 1, "h") || !strcasecmp(*argv + 1, "help") || !strcasecmp(*argv + 1, "-help") || !strcasecmp(*argv + 1, "?")) {
 			dump_help();
 			return 1;
 		}
 		p = search_option(*argv + 1);
 		if (!p)
-			OPT_ERROR("Unknown option '%s'", *argv);
+			OPT_ERROR_CMDLINE("Unknown option '%s'", *argv);
 		argc--;
 		argv++;
 		if (p->type == OPT_NO)
 			p->value = (void*)1;
 		else {
 			if (!argc)
-				OPT_ERROR("Option '%s' requires a parameter, but end of command line detected.", argv[-1]);
+				OPT_ERROR_CMDLINE("Option '%s' requires a parameter, but end of command line detected.", argv[-1]);
 			switch (p->type) {
 				case OPT_STR:
 					if (p->value)
@@ -105,12 +104,12 @@ int emucfg_parse_commandline ( int argc, char **argv )
 					p->value = emu_strdup(*argv);
 					break;
 				case OPT_BOOL:
-					if (!strcasecmp(*argv, "yes") || !strcasecmp(*argv, "on") || !strcasecmp(*argv, "1"))
+					if (!strcasecmp(*argv, "yes") || !strcasecmp(*argv, "on") || !strcmp(*argv, "1"))
 						p->value = (void*)1;
-					else if (!strcasecmp(*argv, "no") || !strcasecmp(*argv, "off") || !strcasecmp(*argv, "0"))
+					else if (!strcasecmp(*argv, "no") || !strcasecmp(*argv, "off") || !strcmp(*argv, "0"))
 						p->value = (void*)0;
 					else
-						OPT_ERROR("Option '%s' needs a boolean parameter (0/1 or on/off or yes/no), but '%s' is detected.", argv[-1], *argv);
+						OPT_ERROR_CMDLINE("Option '%s' needs a boolean parameter (0/1 or off/on or no/yes), but '%s' is detected.", argv[-1], *argv);
 					break;
 				case OPT_NUM:
 					p->value = (void*)(intptr_t)atoi(*argv);
@@ -152,7 +151,7 @@ int emucfg_get_num ( const char *optname )
 }
 
 
-int  emucfg_get_bool ( const char *optname )
+int emucfg_get_bool ( const char *optname )
 {
 	struct emutools_config_st *p = search_option_query(optname, OPT_BOOL);
 	return (int)(intptr_t)p->value;

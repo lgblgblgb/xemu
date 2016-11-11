@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <dirent.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <stdlib.h>
 
 
 #define DEBUG_HOSTFS	printf
@@ -158,6 +159,7 @@ static char hostfs_directory[PATH_MAX];
 
 void hostfs_init ( const char *basedir, const char *subdir )
 {
+	DIR *dir;
 	int a;
 	if (subdir) {
 		sprintf(hostfs_directory, "%s" DIRSEP_STR "%s" DIRSEP_STR, basedir, subdir);
@@ -165,6 +167,13 @@ void hostfs_init ( const char *basedir, const char *subdir )
 	} else {
 		sprintf(hostfs_directory, "%s/", basedir);
 	}
+	// opendir() here is only for testing ...
+	dir = opendir(hostfs_directory);
+	if (!dir) {
+		ERROR_WINDOW("Warning, specified hostFS directory (%s) cannot be used, you will have problems: %s", hostfs_directory, strerror(errno));
+	} else
+		closedir(dir);
+	// intialize channels to a known state
 	for (a = 0; a < 16; a++) {
 		hostfs_channels[a].id = a;
 		hostfs_channels[a].dir = NULL;
@@ -178,6 +187,7 @@ void hostfs_init ( const char *basedir, const char *subdir )
 	last_command = -1;
 	use_channel = NULL;
 	printf("HOSTFS: init @ %s" NL, hostfs_directory);
+	atexit(hostfs_close_all);	// registering function for exit, otherwise un-flushed write buffers may not be written on exit or panic!
 }
 
 
@@ -245,8 +255,8 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 	if (channel->id == 15) {
 		FATAL("Sorry, channel#15 is not supported yet, and you must not use it!");
 	}
-	hostfs_close(channel);	// close channel if it was used before ...
-	if (spec_used[0] == 0) {
+	hostfs_close(channel);	// close channel (maybe it was used before)
+	if (spec_used[0] == 0) {	// empty name/command is not valid
 		hfs_status = 64;
 		return;
 	}

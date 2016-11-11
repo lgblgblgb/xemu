@@ -121,6 +121,20 @@ void *emu_malloc ( size_t size )
 }
 
 
+#ifndef __EMSCRIPTEN__
+#ifdef _WIN32
+extern void *_mm_malloc ( size_t size, size_t alignment );	// it seems mingw/win has issue not to define this properly ... FIXME? Ugly windows, always the problems ...
+#endif
+void *emu_malloc_ALIGNED ( size_t size )
+{
+	// it seems _mm_malloc() is quite standard at least on gcc, mingw, clang ... so let's try to use it
+	void *p = _mm_malloc(size, __BIGGEST_ALIGNMENT__);
+	DEBUG("ALIGNED-ALLOC: base_pointer=%p size=%d alignment=%d" NL, p, (int)size, __BIGGEST_ALIGNMENT__);
+	return p;
+}
+#endif
+
+
 char *emu_strdup ( const char *s )
 {
 	char *p = strdup(s);
@@ -149,7 +163,7 @@ int emu_load_file ( const char *fn, void *buffer, int maxsize )
 	char fnbuf[PATH_MAX + 1];
 	char *search_paths[] = {
 #ifdef __EMSCRIPTEN__
-		"/",
+		EMSCRIPTEN_SDL_BASE_DIR,
 #else
 		".",
 		"." DIRSEP_STR "rom",
@@ -350,6 +364,9 @@ static void shutdown_emulator ( void )
 
 int emu_init_debug ( const char *fn )
 {
+#ifdef DISABLE_DEBUG
+	printf("Logging is disabled at compile-time." NL);
+#else
 	if (debug_fp) {
 		ERROR_WINDOW("Debug file %s already used, you can't call emu_init_debug() twice!\nUse it before emu_init_sdl() if you need it!", fn);
 		return 1;
@@ -362,6 +379,7 @@ int emu_init_debug ( const char *fn )
 		printf("Logging into file: %s (fd=%d)." NL, fn, fileno(debug_fp));
 		return 0;
 	}
+#endif
 	return 0;
 }
 
@@ -422,8 +440,9 @@ int emu_init_sdl (
 		__SLEEP_METHOD_DESC, __TIMING_METHOD_DESC
 	);
 #ifdef __EMSCRIPTEN__
-	sdl_pref_dir = strdup("/");
-	sdl_base_dir = strdup("/");
+	MKDIR(EMSCRIPTEN_SDL_BASE_DIR);
+	sdl_base_dir = emu_strdup(EMSCRIPTEN_SDL_BASE_DIR);
+	sdl_pref_dir = emu_strdup(EMSCRIPTEN_SDL_BASE_DIR);
 #else
 	sdl_pref_dir = SDL_GetPrefPath(app_organization, app_name);
 	if (!sdl_pref_dir) {
@@ -501,7 +520,7 @@ int emu_init_sdl (
 	SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");				// 1 = enable screen saver
 	/* texture access / buffer */
 	if (!locked_texture_update)
-		sdl_pixel_buffer = emu_malloc(texture_x_size_in_bytes * texture_y_size);
+		sdl_pixel_buffer = emu_malloc_ALIGNED(texture_x_size_in_bytes * texture_y_size);
 	// play a single frame game, to set a consistent colour (all black ...) for the emulator. Also, it reveals possible errors with rendering
 	emu_render_dummy_frame(black_colour, texture_x_size, texture_y_size);
 	printf(NL);
@@ -748,6 +767,10 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 		char *p = strchr(items, '|');
 		switch (*items) {
 			case '!':
+#ifdef __EMSCRIPTEN__
+				printf("Emscripten: faking chooser box answer %d for \"%s\"" NL, messageboxdata.numbuttons, msg);
+				return messageboxdata.numbuttons;
+#endif
 				buttons[messageboxdata.numbuttons].flags = SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT;
 				items++;
 				break;

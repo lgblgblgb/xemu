@@ -64,7 +64,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #if defined(USE_REGPARM) && defined(__GNUC__)
 #define REGPARM(__n__)	__attribute__ ((__regparm__ (__n__)))
 #else
-#define REGPARM(n)
+#define REGPARM(__n__)
 #endif
 
 /* Note: O_BINARY is a must for Windows for opening binary files, odd enough, I know ...
@@ -91,10 +91,15 @@ extern FILE *debug_fp;
 
 #ifdef DISABLE_DEBUG
 #define DEBUG(...)
+#define DEBUGPRINT(...) printf(__VA_ARGS__)
 #else
 #define DEBUG(...) do { \
 	if (unlikely(debug_fp))	\
 		fprintf(debug_fp, __VA_ARGS__);	\
+} while (0)
+#define DEBUGPRINT(...) do {	\
+        printf(__VA_ARGS__);	\
+        DEBUG(__VA_ARGS__);	\
 } while (0)
 #endif
 

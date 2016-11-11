@@ -28,6 +28,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
+#define EMSCRIPTEN_SDL_BASE_DIR "/files/"
+#define XEMUEXIT(n)	do { emscripten_cancel_main_loop(); emscripten_force_exit(n); exit(n); } while (0)
+#define MSG_POPUP_WINDOW(sdlflag, title, msg, win) \
+	do { if (1 || sdlflag == SDL_MESSAGEBOX_ERROR) { EM_ASM_INT({ window.alert(Pointer_stringify($0)); }, msg); } } while(0)
+#else
+#define XEMUEXIT(n)	exit(n)
+#define MSG_POPUP_WINDOW(sdlflag, title, msg, win) SDL_ShowSimpleMessageBox(sdlflag, title, msg, win)
 #endif
 
 #define APP_ORG "xemu-lgb"
@@ -45,7 +52,7 @@ extern void emu_drop_events ( void );
 	fprintf(stderr, str ": %s" NL, _buf_for_win_msg_); \
 	if (debug_fp)	\
 		fprintf(debug_fp, str ": %s" NL, _buf_for_win_msg_);	\
-	SDL_ShowSimpleMessageBox(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
+	MSG_POPUP_WINDOW(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
 	clear_emu_events(); \
 	emu_drop_events(); \
 	SDL_RaiseWindow(sdl_win); \
@@ -58,7 +65,7 @@ extern void emu_drop_events ( void );
 
 #define FATAL(...) do { \
 	ERROR_WINDOW(__VA_ARGS__); \
-	exit(1); \
+	XEMUEXIT(1); \
 } while (0)
 
 extern int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg );
@@ -77,6 +84,12 @@ extern int emu_init_debug ( const char *fn );
 extern time_t emu_get_unixtime ( void );
 extern struct tm *emu_get_localtime ( void );
 extern void *emu_malloc ( size_t size );
+#ifdef __EMSCRIPTEN__
+#define emu_malloc_ALIGNED emu_malloc
+#else
+extern void *emu_malloc_ALIGNED ( size_t size );
+#endif
+
 extern char *emu_strdup ( const char *s );
 extern int emu_load_file ( const char *fn, void *buffer, int maxsize );
 extern void emu_set_full_screen ( int setting );
