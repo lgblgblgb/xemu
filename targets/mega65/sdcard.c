@@ -85,9 +85,20 @@ static int open_external_d81 ( const char *fn )
 
 
 
+static void sdcard_shutdown ( void )
+{
+	if (sdfd >= 0)
+		close(sdfd);
+	if (d81fd >= 0)
+		close(d81fd);
+}
+
+
+
 int sdcard_init ( const char *fn, const char *extd81fn )
 {
 	char fnbuf[PATH_MAX + 1];
+	atexit(sdcard_shutdown);
 	sd_status = 0;
 	sd_is_read_only = 1;
 	d81_is_read_only = 1;

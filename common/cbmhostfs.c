@@ -218,7 +218,8 @@ static void hostfs_flush ( struct hostfs_channels_st *channel )
 
 static void hostfs_close ( struct hostfs_channels_st *channel )
 {
-	DEBUG_HOSTFS("HOSTFS: closing channel #%d" NL, channel->id);
+	if (channel->allow_write || channel->allow_read)
+		DEBUG_HOSTFS("HOSTFS: closing channel #%d" NL, channel->id);
 	if (channel->dir)
 		closedir(channel->dir);
 	if (channel->fd >= 0) {

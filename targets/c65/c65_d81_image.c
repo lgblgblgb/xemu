@@ -76,9 +76,20 @@ int fdc_cb_wr_sec ( Uint8 *buffer, int offset )
 
 
 
+static void c65_d81_shutdown ( void )
+{
+	if (disk_fd >= 0) {
+		printf("D81: disk image has been closed." NL);
+		close(disk_fd);
+	}
+	disk_fd = -1;
+}
+
+
 
 void c65_d81_init ( const char *dfn )
 {
+	atexit(c65_d81_shutdown);
 	fdc_init();
 	disk_inserted = 0;
 	read_only = 1;
