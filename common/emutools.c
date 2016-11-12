@@ -121,6 +121,15 @@ void *emu_malloc ( size_t size )
 }
 
 
+void *emu_realloc ( void *p, size_t size )
+{
+	p = realloc(p, size);
+	if (!p)
+		FATAL("Cannot re-allocate %d bytes of memory.", (int)size);
+	return p;
+}
+
+
 #ifndef __EMSCRIPTEN__
 #ifdef _WIN32
 extern void *_mm_malloc ( size_t size, size_t alignment );	// it seems mingw/win has issue not to define this properly ... FIXME? Ugly windows, always the problems ...

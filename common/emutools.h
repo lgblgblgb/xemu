@@ -84,6 +84,7 @@ extern int emu_init_debug ( const char *fn );
 extern time_t emu_get_unixtime ( void );
 extern struct tm *emu_get_localtime ( void );
 extern void *emu_malloc ( size_t size );
+extern void *emu_realloc ( void *p, size_t size );
 #ifdef __EMSCRIPTEN__
 #define emu_malloc_ALIGNED emu_malloc
 #else

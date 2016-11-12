@@ -20,30 +20,34 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_COMMON_EMUTOOLS_CONFIG_H_INCLUDED
 #define __XEMU_COMMON_EMUTOOLS_CONFIG_H_INCLUDED
 
+#define CONFIG_FILE_MAX_SIZE 0x10000
+
 enum emutools_option_type {
-	OPT_STR,
-	OPT_BOOL,
-	OPT_NUM,
-	OPT_NO
+	OPT_STR, OPT_BOOL, OPT_NUM, OPT_NO, OPT_PROC
 };
 
-
 struct emutools_config_st;
-
-//typedef const char* (*emuopt_parser_func_t)(struct emutools_config_st *, );
-
-
 struct emutools_config_st {
 	struct emutools_config_st *next;
 	const char *name;
 	enum emutools_option_type type;
-	//emuopt_parser_func_t *parser;
 	void *value;
 	const char *help;
 };
 
-extern void emucfg_define_option ( const char *optname, enum emutools_option_type type, void *defval, const char *help );
-extern int  emucfg_parse_commandline ( int argc, char **argv );
+#define EMUCFG_PARSER_CALLBACK_RET_TYPE const char*
+#define EMUCFG_PARSER_CALLBACK_ARG_LIST struct emutools_config_st *opt, const char *optname, const char *optvalue
+#define EMUCFG_PARSER_CALLBACK(name) EMUCFG_PARSER_CALLBACK_RET_TYPE name ( EMUCFG_PARSER_CALLBACK_ARG_LIST )
+typedef EMUCFG_PARSER_CALLBACK_RET_TYPE (*emucfg_parser_callback_func_t)( EMUCFG_PARSER_CALLBACK_ARG_LIST );
+
+extern void emucfg_define_option        ( const char *optname, enum emutools_option_type type, void *defval, const char *help );
+extern void emucfg_define_bool_option   ( const char *optname, int defval, const char *help );
+extern void emucfg_define_str_option    ( const char *optname, const char *defval, const char *help );
+extern void emucfg_define_num_option    ( const char *optname, int defval, const char *help );
+extern void emucfg_define_proc_option   ( const char *optname, emucfg_parser_callback_func_t defval, const char *help );
+extern void emucfg_define_switch_option ( const char *optname, const char *help );
+
+extern int  emucfg_parse_commandline ( int argc, char **argv, const char *only_this );
 extern const char *emucfg_get_str ( const char *optname );
 extern int  emucfg_get_num ( const char *optname );
 extern int  emucfg_get_bool ( const char *optname );

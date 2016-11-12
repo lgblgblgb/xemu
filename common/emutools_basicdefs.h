@@ -61,7 +61,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define INLINE		inline
 #endif
 
-#if defined(USE_REGPARM) && defined(__GNUC__)
+#if defined(USE_REGPARM) && defined(__GNUC__) && !defined(__EMSCRIPTEN__)
 #define REGPARM(__n__)	__attribute__ ((__regparm__ (__n__)))
 #else
 #define REGPARM(__n__)

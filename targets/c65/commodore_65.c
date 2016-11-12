@@ -655,12 +655,12 @@ int main ( int argc, char **argv )
 		SCREEN_WIDTH, SCREEN_HEIGHT,
 		emulators_disclaimer
 	);
-	emucfg_define_option("8", OPT_STR, NULL, "Path of the D81 disk image to be attached");
-	emucfg_define_option("fullscreen", OPT_NO, (void*)0, "Start in fullscreen mode");
-	emucfg_define_option("hostfsdir", OPT_STR, NULL, "Path of the directory to be used as Host-FS base");
-	//emucfg_define_option("noaudio", OPT_NO, (void*)0, "Disable audio");
-	emucfg_define_option("rom", OPT_STR, "c65-system.rom", "Override system ROM path to be loaded");
-	if (emucfg_parse_commandline(argc, argv))
+	emucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
+	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
+	emucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
+	//emucfg_define_switch_option("noaudio", "Disable audio");
+	emucfg_define_str_option("rom", "c65-system.rom", "Override system ROM path to be loaded");
+	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
         if (emu_init_sdl(
