@@ -52,9 +52,9 @@ static BYTE hostfs_open ( BYTE channel, const char *filename, BYTE mode )
 		POKE(HOSTFSR1,*(filename++));	// transmit filename
 	if (mode == HOSTFS_WRITE) {
 		POKE(HOSTFSR1,',');
-		POKE(HOSTFSR1,'P');	// this would be "P" as "PRG" file, though it's currently ignored (but needed!)
+		POKE(HOSTFSR1,'p');	// this would be "P" as "PRG" file, though it's currently ignored (but needed!)
 		POKE(HOSTFSR1,',');
-		POKE(HOSTFSR1,'W');	// Write access ...
+		POKE(HOSTFSR1,'w');	// Write access ...
 	}
 	POKE(HOSTFSR0,0x10 | channel);	// open "call", low nibble is channel number to open the desired filename at.
 	return PEEK(HOSTFSR0);
@@ -88,6 +88,23 @@ static int hostfs_read ( BYTE channel, void *buffer_spec, int num )
 }
 
 
+static int hostfs_write ( BYTE channel, void *buffer_spec, int num )
+{
+	int numwrite = 0;
+	BYTE *buffer = buffer_spec;
+	POKE(HOSTFSR0, 0x40 | (channel & 0xF)); // set channel (already open channel) number for communication
+	while (numwrite < num) {
+		POKE(HOSTFSR1, *(buffer++));
+		if (PEEK(HOSTFSR0))
+			return -1;
+		numwrite++;
+	}
+	return numwrite;
+}
+
+
+
+
 static const char *TEST_FILE_NAME = "testfile"; // filename. BEWARE! currently emulator does not do conversion PETSII<->ASCII etc ......
 
 static BYTE buffer[256];
@@ -107,7 +124,8 @@ int main ( void )
 	printf("Trying to open file: %s\n", TEST_FILE_NAME);
 	if (hostfs_open(2, TEST_FILE_NAME, HOSTFS_READ)) {
 		printf("Could not open hostfs file!\n");
-		return 1;
+		printf("Continue with test #2\n");
+		goto test2;
 	}
 	printf("OK, file is open\n");
 	ret = hostfs_read(2, buffer, sizeof buffer);
@@ -123,6 +141,40 @@ int main ( void )
 	
 	printf("Closing file\n");
 	hostfs_close(2);
+
+	/* test-2: try to open directory, dump that into a new file, overwriting it */
+
+test2:
+	printf("Test#2: dump dir to dirfile\n");
+
+	if (hostfs_open(3, "$", HOSTFS_READ)) {
+		printf("Cannot open file $\n");
+		return 1;
+	}
+	if (hostfs_open(4, "dirlist", HOSTFS_OVERWRITE)) {
+		printf("Cannot create file dirlist\n");
+		return 1;
+	}
+	for (;;) {
+		int r = hostfs_read(3, buffer, sizeof buffer);
+		printf("Read retval: %d\n", r);
+		if (r < 0) {
+			printf("I/O error while reading $\n");
+			hostfs_close(3);
+			hostfs_close(4);
+			return 1;
+		}
+		if (r == 0)
+			break;
+		if (hostfs_write(4, buffer, r) != r) {
+			printf("Error writing file dirlist\n");
+			hostfs_close(3);
+			hostfs_close(4);
+			return 1;
+		}
+	}
+	hostfs_close(3);
+	hostfs_close(4);
 
 	printf("END :-)\n");
 	return 0;

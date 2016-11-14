@@ -165,7 +165,7 @@ void hostfs_init ( const char *basedir, const char *subdir )
 		sprintf(hostfs_directory, "%s" DIRSEP_STR "%s" DIRSEP_STR, basedir, subdir);
 		MKDIR(hostfs_directory);
 	} else {
-		sprintf(hostfs_directory, "%s/", basedir);
+		sprintf(hostfs_directory, "%s" DIRSEP_STR, basedir);
 	}
 	// opendir() here is only for testing ...
 	dir = opendir(hostfs_directory);
@@ -250,6 +250,142 @@ void hostfs_flush_all ( void )
 }
 
 
+
+// Converts host filename to PETSCII, used by directory reading.
+// Returns zero if conversion cannot be done (long filename, non-PETSCII representable char, etc)
+// In case of zero value, the converted buffer is invalid, and should be not used!
+// Returns non-zero if success when it means the length of the file name.
+// "out" buffer must be 17 bytes at least (16 chars + NULL byte)
+static int filename_host2cbm ( const Uint8 *in, Uint8 *out )
+{
+	int len = 0;
+	if (*in == '.')
+		return 0;
+	for (;;) {
+		Uint8 c = *(in++);
+		if (!c)
+			break;
+		if (len == 16 || c < 32 || c > 126)
+			return 0;
+		if (c >= 97 && c <= 122)
+			c -= 32;
+		*(out++) = c;
+		len++;
+	}
+	*out = 0;
+	return len;
+}
+
+
+static int stat_at ( const char *dirname, const char *filename, struct stat *st )
+{
+	char namebuffer[PATH_MAX];
+	if (snprintf(namebuffer, sizeof namebuffer, "%s" DIRSEP_STR "%s", dirname, filename) >= sizeof namebuffer) {
+		errno = ENAMETOOLONG;
+		return -1;
+	}
+	return stat(namebuffer, st);
+}
+
+
+static int open_at ( const char *dirname, const char *filename, int flags, mode_t mode )
+{
+	char namebuffer[PATH_MAX];
+	if (snprintf(namebuffer, sizeof namebuffer, "%s" DIRSEP_STR "%s", dirname, filename) >= sizeof namebuffer) {
+		errno = ENAMETOOLONG;
+		return -1;
+	}
+	return open(namebuffer, flags, mode);
+}
+
+
+// Note: CBM DOS standard for pseudo-BASIC directory to use load address $0401, this is because of the PET-era.
+// PETs were incapable of relocting BASIC programs, so directory still use their BASIC load addr, newer CBM
+// machines can relocate, so they have no problem with this address, at the other hand.
+#define CBM_DIR_LOAD_ADDRESS	0x0401
+
+
+static const Uint8 dirheadline[] = {
+	CBM_DIR_LOAD_ADDRESS & 0xFF, CBM_DIR_LOAD_ADDRESS >> 8,				// load address (not the part of the basic program for real)
+	1, 1,		// link to the next line, simple version, just say something non-zero ...
+	0, 0,		// line number
+	0x12, '"',	// REVS ON and quote mark
+	'X','E','M','U','-','C','B','M',' ','H','O','S','T','-','F','S',
+	'"',' ','V','I','R','T',' ',0
+};
+static const Uint8 dirtailline[] = {
+	1, 1,	// link addr
+	0xFF,0xFF,	// free blocks number as line number, FIXME: later it should be set, if host OS has disk with less free space than 0xFFFF * 254 bytes ?!
+	'B','L','O','C','K','S',' ','F','R','E','E','.',
+	' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',' ',
+	0, 0, 0
+};
+
+
+
+static int cbm_read_directory ( struct hostfs_channels_st *channel )
+{
+	// channel->allow_read is also used to track the memory address in the generated BASIC program for directory listing,
+	// since it's basically a boolean value, so any non-zero value has the same "boolean value".
+	if (channel->allow_read == 1) {
+		// first item ... not a real directory entry, but the "header"
+		memcpy(channel->read_buffer, dirheadline, sizeof dirheadline);
+		channel->allow_read = 2;
+		channel->read_used = sizeof dirheadline;
+		return 0;
+	}
+	if (!channel->dir) {
+		channel->eof = 1;
+		return 64;
+	}
+	for (;;) {
+		struct dirent *entry = readdir(channel->dir);	// read host directory
+		if (entry) {
+			Uint8 *p = channel->read_buffer;
+			Uint8 filename[17];
+			int i;
+			int  namelength;
+			struct stat st;
+			if (!(namelength = filename_host2cbm((Uint8*)entry->d_name, filename)))
+				continue;	// cannot be represented name, skip it!
+			if (stat_at(hostfs_directory, entry->d_name, &st))
+				continue;
+			if (!S_ISREG(st.st_mode))	// FIXME: later we can announce 'DIR' entries as well, maybe ...
+				continue;
+			// Ok, it seems to be OK, let's present a directory line for the entry!
+			*(p++) = 1;	// link address, lo
+			*(p++) = 1;	// link address, hi
+			st.st_size = (st.st_size + 253) / 254;	// convert size to "blocks"
+			i = st.st_size > 0xFFFF ? 0xFFFF : st.st_size;
+			*(p++) = i & 0xFF;
+			*(p++) = i >> 8;
+			if (i < 10)	*(p++) = ' ';
+			if (i < 100)	*(p++) = ' ';
+			if (i < 1000)	*(p++) = ' ';
+			*(p++) = '"';
+			for (i = 0; i < 16; i++)
+				*(p++) = i < namelength ? filename[i] : (i == namelength ? '"' : ' ');
+			*(p++) = st.st_size ? ' ' : '*';
+			*(p++) = 'P';
+			*(p++) = 'R';
+			*(p++) = 'G';
+			*(p++) = ' ';	// later: read-only files with '<'
+			*(p++) = 0;
+			channel->read_used = p - channel->read_buffer;
+		} else {
+			closedir(channel->dir);
+			channel->dir = NULL;
+			// Put tail basic line ("BLOCKS FREE")!
+			memcpy(channel->read_buffer, dirtailline, sizeof dirtailline);
+			channel->read_used = sizeof dirtailline;
+		}
+		return 0;
+	}
+}
+
+
+
+
 static void hostfs_open ( struct hostfs_channels_st *channel )
 {
 	DEBUG_HOSTFS("HOSTFS: opening channel #%d ..." NL, channel->id);
@@ -271,11 +407,9 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 			DEBUG_HOSTFS("HOSTFS: cannot open directory '%s': %s" NL, hostfs_directory, strerror(errno));
 			return;
 		}
-		// TODO: prepare directory, first item ...
-		hfs_status = 0;
 		channel->allow_write = 0;
 		channel->allow_read  = 1;
-		FATAL("Directory reading is not implemented yet :(");
+		hfs_status = cbm_read_directory(channel);
 	} else {
 		/* normal file must be open ... */
 		int flags, len;
@@ -286,27 +420,33 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 		p1 = (Uint8*)strchr((char*)spec_used, ',');
 		if (p1) {
 			p2 = (Uint8*)strchr((char*)p1 + 1, ',');
-			len = (int)(p1 - spec_used + 1);
+			len = (int)(p1 - spec_used);
 		} else {
 			p2 = NULL;
 			len = strlen((char*)spec_used);
 		}
-		if (len > 16) {
+		if (len >= PATH_MAX) {
 			hfs_status = 64;
 			return;
 		}
-		if (p2 && (p2[1] == 'w' || p2[1] == 'W')) {
+		// FIXME TODO append mode is not supported yet!!!
+		// FIXME: while checking 'W' and such, we must aware PETSCII/ASCII differences!!!!!! at least with CC65 'W' results some bogus stuff ?!
+		// Maybe channel-1 is write by default (or only ... ?!), and reserved for that?
+		if ((channel->id == 1 && !p2) || (p2 && (p2[1] == 'w' || p2[1] == 'W'))) {
 			channel->allow_write = 1;
 			channel->allow_read  = 0;
 			if (spec_used[0] == '@') {
+				DEBUG_HOSTFS("HOSTFS: file is selected for overwrite" NL);
 				flags = O_WRONLY | O_CREAT | O_TRUNC | O_BINARY;
 				p0 = spec_used + 1;
 				len--;
 			} else {
+				DEBUG_HOSTFS("HOSTFS: file is selected for write" NL);
 				flags = O_WRONLY | O_CREAT | O_EXCL | O_BINARY;
 				p0 = spec_used;
 			}
 		} else {
+			DEBUG_HOSTFS("HOSTFS: file is selected for read" NL);
 			flags = O_RDONLY | O_BINARY;
 			channel->allow_write = 0;
 			channel->allow_read  = 1;
@@ -318,6 +458,14 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 		}
 		memcpy(filename, p0, len);
 		filename[len] = 0;
+		p0 = (Uint8*)filename;
+		while (*p0) {	// convert filename
+			if (*p0 >= 65 && *p0 <= 90)
+				*p0 += 32;
+			else if (*p0 == '/' || *p0 == '\\')
+				*p0 = '.';
+			p0++;
+		}
 		dir = opendir(hostfs_directory);
 		if (!dir) {
 			hfs_status = 128;
@@ -333,10 +481,9 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 			if (!strcasecmp(entry->d_name, filename)) {
 				DEBUG_HOSTFS("HOSTFS: file name accepted." NL);
 				closedir(dir);
-				sprintf(filename, "%s%s", hostfs_directory, entry->d_name);
-				channel->fd = open(filename, flags, 0666);
+				channel->fd = open_at(hostfs_directory, entry->d_name, flags, 0666);
 				if (channel->fd < 0) {
-					DEBUG_HOSTFS("HOSTFS: could not open host file '%s': %s" NL, filename, strerror(errno));
+					DEBUG_HOSTFS("HOSTFS: could not open host file '%s" DIRSEP_STR "%s': %s" NL, hostfs_directory, entry->d_name, strerror(errno));
 					hfs_status = 128;
 				} else {
 					DEBUG_HOSTFS("HOSTFS: great, file is open as '%s'" NL, filename);
@@ -348,11 +495,9 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 		closedir(dir);
 		// on write, if we don't have matching entry (we are here ...), we want to create new file here!!!
 		if (flags & O_CREAT) {
-			memmove(filename + strlen(hostfs_directory), filename, strlen(filename) + 1);
-			memcpy(filename, hostfs_directory, strlen(hostfs_directory));	// do not copy EOS by will!
-			channel->fd = open(filename, flags, 0666);
+			channel->fd = open_at(hostfs_directory, filename, flags, 0666);
 			if (channel->fd < 0) {
-				DEBUG_HOSTFS("HOSTFS: could not create new host file entry '%s': %s" NL, filename, strerror(errno));
+				DEBUG_HOSTFS("HOSTFS: could not create new host file entry '%s/%s': %s" NL, hostfs_directory, filename, strerror(errno));
 				hfs_status = 128;
 			} else {
 				DEBUG_HOSTFS("HOSTFS: great, new host file is created as '%s'" NL, filename);
@@ -392,6 +537,7 @@ void hostfs_write_reg0 ( Uint8 data )
 				spec_filling[spec_filling_index] = 0;
 				strcpy((char*)spec_used, (char*)spec_filling);
 				spec_filling_index = 0;
+				DEBUG_HOSTFS("HOSTFS: command=\"%s\" on channel #%d" NL, (char*)spec_used, channel->id);
 				hostfs_open(channel);
 			}
 			break;
@@ -434,7 +580,9 @@ Uint8 hostfs_read_reg1 ( void )
 		goto ret_one;
 	/* empty buffer, must read more bytes ... */
 	if (use_channel->dir) {
-		FATAL("Directory reading is not yet supported :-(");
+		hfs_status = cbm_read_directory(use_channel);
+		if (!hfs_status)
+			goto ret_one;
 		return 0xFF;
 	}
 	if (use_channel->fd < 0) {
@@ -465,7 +613,6 @@ void hostfs_write_reg1 ( Uint8 data )
 		if (spec_filling_index >= SPEC_BUFFER_SIZE - 1) {
 			hfs_status = 64;
 		} else {
-			// TODO: maybe PETSCII->ASCII conversion should be done here (on bytes in "data"), or such?
 			spec_filling[spec_filling_index++] = data;
 			hfs_status = 0;
 		}
