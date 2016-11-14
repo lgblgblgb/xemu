@@ -144,6 +144,7 @@ struct hostfs_channels_st {
 	DIR  *dir;
 	int   fd, id;
 	int   allow_write, allow_read, eof;
+	off_t file_size, trans_bytes;
 };
 
 static struct hostfs_channels_st hostfs_channels[16];
@@ -182,6 +183,8 @@ void hostfs_init ( const char *basedir, const char *subdir )
 		hostfs_channels[a].allow_read = 0;
 		hostfs_channels[a].read_used = 0;
 		hostfs_channels[a].write_used = 0;
+		hostfs_channels[a].file_size = 0;
+		hostfs_channels[a].trans_bytes = 0;
 	}
 	hfs_status = 0;
 	last_command = -1;
@@ -343,15 +346,17 @@ static int cbm_read_directory ( struct hostfs_channels_st *channel )
 		if (entry) {
 			Uint8 *p = channel->read_buffer;
 			Uint8 filename[17];
-			int i;
-			int  namelength;
+			int namelength, i;
 			struct stat st;
 			if (!(namelength = filename_host2cbm((Uint8*)entry->d_name, filename)))
 				continue;	// cannot be represented name, skip it!
 			if (stat_at(hostfs_directory, entry->d_name, &st))
 				continue;
-			if (!S_ISREG(st.st_mode))	// FIXME: later we can announce 'DIR' entries as well, maybe ...
+			if (!S_ISREG(st.st_mode) && !S_ISDIR(st.st_mode))
 				continue;
+			if (channel->allow_read == 144)
+				goto too_many_entries;
+			channel->allow_read++;
 			// Ok, it seems to be OK, let's present a directory line for the entry!
 			*(p++) = 1;	// link address, lo
 			*(p++) = 1;	// link address, hi
@@ -365,17 +370,27 @@ static int cbm_read_directory ( struct hostfs_channels_st *channel )
 			*(p++) = '"';
 			for (i = 0; i < 16; i++)
 				*(p++) = i < namelength ? filename[i] : (i == namelength ? '"' : ' ');
-			*(p++) = st.st_size ? ' ' : '*';
-			*(p++) = 'P';
-			*(p++) = 'R';
-			*(p++) = 'G';
-			*(p++) = ' ';	// later: read-only files with '<'
+			if (S_ISDIR(st.st_mode)) {
+				*(p++) = ' ';
+				*(p++) = 'D';
+				*(p++) = 'I';
+				*(p++) = 'R';
+			} else {
+				*(p++) = st.st_size ? ' ' : '*';
+				*(p++) = 'P';
+				*(p++) = 'R';
+				*(p++) = 'G';
+			}
+			*(p++) = ' ';	// later: read-only files with '<' TODO
 			*(p++) = 0;
 			channel->read_used = p - channel->read_buffer;
 		} else {
+		too_many_entries:
 			closedir(channel->dir);
 			channel->dir = NULL;
 			// Put tail basic line ("BLOCKS FREE")!
+			// Note, we always give back 65535 BLOCK FREE, but since about ~16Mbyte is usually have on host-FS nowadays,
+			// I guess it simple does not worth to invoke a statfs() call just for this ...
 			memcpy(channel->read_buffer, dirtailline, sizeof dirtailline);
 			channel->read_used = sizeof dirtailline;
 		}
@@ -383,6 +398,16 @@ static int cbm_read_directory ( struct hostfs_channels_st *channel )
 	}
 }
 
+
+
+static Uint8 char_cbm2ascii ( Uint8 c )
+{
+	if (c >= 65 && c <= 90)
+		return c + 32;
+	if (c >= 193 && c <= 218)
+		return c - 96;
+	return c;
+}
 
 
 
@@ -400,6 +425,8 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 	channel->write_used = 0;
 	channel->read_used = 0;
 	channel->eof = 0;
+	channel->file_size = 0;
+	channel->trans_bytes = 0;
 	if (spec_used[0] == '$') {
 		channel->dir = opendir(hostfs_directory);
 		if (!channel->dir) {
@@ -413,57 +440,79 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 	} else {
 		/* normal file must be open ... */
 		int flags, len;
-		Uint8 *p0,*p1,*p2;
+		Uint8 *p0, *p1;
 		DIR *dir;
 		struct dirent *entry;
 		char filename[PATH_MAX];
 		p1 = (Uint8*)strchr((char*)spec_used, ',');
 		if (p1) {
+			Uint8 *p2;
+			flags = char_cbm2ascii(p1[1]);
+			DEBUG_HOSTFS("HOSTFS: file type character is '%c'" NL, flags);
+			if (flags != 'p' && flags != 'u' && flags != 's') {
+				DEBUG_HOSTFS("HOSTFS: unknown file type character!" NL);
+				hfs_status = 128;
+				return;
+			}
 			p2 = (Uint8*)strchr((char*)p1 + 1, ',');
 			len = (int)(p1 - spec_used);
+			if (p2)
+				flags = char_cbm2ascii(p2[1]);
+			else
+				flags = channel->id == 1 ? 'w' : 'r';
 		} else {
-			p2 = NULL;
 			len = strlen((char*)spec_used);
+			flags = channel->id == 1 ? 'w' : 'r';	// TODO: is it correct? channel-1 is write by default. OR ONLY?! FIXME
 		}
 		if (len >= PATH_MAX) {
 			hfs_status = 64;
 			return;
 		}
-		// FIXME TODO append mode is not supported yet!!!
-		// FIXME: while checking 'W' and such, we must aware PETSCII/ASCII differences!!!!!! at least with CC65 'W' results some bogus stuff ?!
-		// Maybe channel-1 is write by default (or only ... ?!), and reserved for that?
-		if ((channel->id == 1 && !p2) || (p2 && (p2[1] == 'w' || p2[1] == 'W'))) {
-			channel->allow_write = 1;
-			channel->allow_read  = 0;
-			if (spec_used[0] == '@') {
-				DEBUG_HOSTFS("HOSTFS: file is selected for overwrite" NL);
+		// first char of file name can be '@' to signal overwriting situation!
+		if (spec_used[0] == '@') {
+			p0 = spec_used + 1;
+			len--;
+			if (flags == 'w')
+				flags = 'o';	// overwrite mode
+		} else
+			p0 = spec_used;
+		DEBUG_HOSTFS("HOSTFS: file mode char: '%c'" NL, flags);
+		switch (flags) {
+			case 'a':	// append mode
+				channel->allow_write = 1;
+				channel->allow_read  = 0;
+				flags = O_WRONLY | O_APPEND | O_BINARY; // FIXME: append mode allows _creation_ of file?! TODO
+				DEBUG_HOSTFS("HOSTFS: file is selected for append" NL);
+				break;
+			case 'o':	// overwrite mode
+				channel->allow_write = 1;
+				channel->allow_read  = 0;
 				flags = O_WRONLY | O_CREAT | O_TRUNC | O_BINARY;
-				p0 = spec_used + 1;
-				len--;
-			} else {
-				DEBUG_HOSTFS("HOSTFS: file is selected for write" NL);
+				DEBUG_HOSTFS("HOSTFS: file is selected for overwrite" NL);
+				break;
+			case 'w':	// write mode
+				channel->allow_write = 1;
+				channel->allow_read  = 0;
 				flags = O_WRONLY | O_CREAT | O_EXCL | O_BINARY;
-				p0 = spec_used;
-			}
-		} else {
-			DEBUG_HOSTFS("HOSTFS: file is selected for read" NL);
-			flags = O_RDONLY | O_BINARY;
-			channel->allow_write = 0;
-			channel->allow_read  = 1;
-			if (spec_used[0] == '@') {
-				p0 = spec_used + 1;
-				len--;
-			} else
-				p0 = spec_used;
+				DEBUG_HOSTFS("HOSTFS: file is selected for write" NL);
+				break;
+			case 'r':	// read mode
+			case 'm':	// no idea what it is, "modify" but strangely it seems also to be 'read' ...
+				channel->allow_write = 0;
+				channel->allow_read  = 1;
+				flags = O_RDONLY | O_BINARY;
+				DEBUG_HOSTFS("HOSTFS: file is selected for read" NL);
+				break;
+			default:
+				hfs_status = 128;
+				DEBUG_HOSTFS("HOSTFS: invalid file mode char!" NL);
+				return;
 		}
 		memcpy(filename, p0, len);
 		filename[len] = 0;
 		p0 = (Uint8*)filename;
 		while (*p0) {	// convert filename
-			if (*p0 >= 65 && *p0 <= 90)
-				*p0 += 32;
-			else if (*p0 == '/' || *p0 == '\\')
-				*p0 = '.';
+			*p0 = (*p0 == '/' || *p0 == '\\') ? '.' : char_cbm2ascii(*p0);
 			p0++;
 		}
 		dir = opendir(hostfs_directory);
@@ -479,8 +528,20 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 		while ((entry = readdir(dir))) {
 			DEBUG_HOSTFS("HOSTFS: considering file %s" NL, entry->d_name);
 			if (!strcasecmp(entry->d_name, filename)) {
+				struct stat st;
 				DEBUG_HOSTFS("HOSTFS: file name accepted." NL);
 				closedir(dir);
+				if (stat_at(hostfs_directory, entry->d_name, &st)) {
+					DEBUG_HOSTFS("HOSTFS: cannot stat file!" NL);
+					hfs_status = 128;
+					return;
+				}
+				if (!S_ISREG(st.st_mode)) {
+					DEBUG_HOSTFS("HOSTFS: not a regular file!" NL);
+					hfs_status = 128;
+					return;
+				}
+				channel->file_size = st.st_size;
 				channel->fd = open_at(hostfs_directory, entry->d_name, flags, 0666);
 				if (channel->fd < 0) {
 					DEBUG_HOSTFS("HOSTFS: could not open host file '%s" DIRSEP_STR "%s': %s" NL, hostfs_directory, entry->d_name, strerror(errno));
@@ -497,7 +558,7 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 		if (flags & O_CREAT) {
 			channel->fd = open_at(hostfs_directory, filename, flags, 0666);
 			if (channel->fd < 0) {
-				DEBUG_HOSTFS("HOSTFS: could not create new host file entry '%s/%s': %s" NL, hostfs_directory, filename, strerror(errno));
+				DEBUG_HOSTFS("HOSTFS: could not create new host file entry '%s" DIRSEP_STR "%s': %s" NL, hostfs_directory, filename, strerror(errno));
 				hfs_status = 128;
 			} else {
 				DEBUG_HOSTFS("HOSTFS: great, new host file is created as '%s'" NL, filename);
@@ -527,10 +588,10 @@ void hostfs_write_reg0 ( Uint8 data )
 	last_command = data >> 4;
 	hfs_status = 0;
 	switch (last_command) {
-		case 0:
+		case 0:	// start specification of channel, low nibble has no meaning
 			spec_filling_index = 0;
 			break;
-		case 1:
+		case 1:	// open/execute specified file/command, low nibble is the channel number
 			if (spec_filling_index >= SPEC_BUFFER_SIZE) {
 				hfs_status = 64;
 			} else {
@@ -541,14 +602,22 @@ void hostfs_write_reg0 ( Uint8 data )
 				hostfs_open(channel);
 			}
 			break;
-		case 2:
+		case 2: // re-execute/re-open last issued specification for channel in low-nibble
 			hostfs_open(channel);
 			break;
-		case 3:	// close channel
+		case 3:	// close channel for low-nibble
 			hostfs_close(channel);
 			break;
-		case 4:
+		case 4: // set channel (in low nibble) to be used for data register R/W
 			use_channel = channel;
+			break;
+		case 5:	// get number of bytes info [special command, the answer is sent back via the status register!]
+			if (use_channel) {
+				last_command = 4;
+				hfs_status = ((data & 8 ? use_channel->trans_bytes : use_channel->file_size) >> ((data & 3) << 3)) & 0xFF;
+				if (data & 4)
+					use_channel->trans_bytes = 0;
+			}
 			break;
 		default:
 			hfs_status = 64;
@@ -603,6 +672,7 @@ ret_one:
 	result = use_channel->read_buffer[0];
 	memmove(use_channel->read_buffer, use_channel->read_buffer + 1, --use_channel->read_used);
 	hfs_status = 0;
+	use_channel->trans_bytes++;
 	return result;
 }
 
@@ -633,5 +703,6 @@ void hostfs_write_reg1 ( Uint8 data )
 	if (use_channel->write_used == WRITE_BUFFER_SIZE)
 		hostfs_flush(use_channel);
 	use_channel->write_buffer[use_channel->write_used++] = data;
+	use_channel->trans_bytes++;
 	hfs_status = 0;
 }
