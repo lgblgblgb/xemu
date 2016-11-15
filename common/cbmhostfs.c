@@ -135,6 +135,7 @@ Current quick'n'dirty usage:
 #define WRITE_BUFFER_SIZE	256
 #define READ_BUFFER_SIZE	256
 #define SPEC_BUFFER_SIZE	4096
+#define CBM_MAX_DIR_ENTRIES	144
 
 
 struct hostfs_channels_st {
@@ -155,6 +156,27 @@ static int spec_filling_index;
 static int last_command;
 static struct hostfs_channels_st *use_channel;
 static char hostfs_directory[PATH_MAX];
+
+
+
+static Uint8 set_error ( int status, int errorcode, int tracknum, int sectnum, const char *description )
+{
+	const char *p;
+	hfs_status = status;
+	switch (errorcode) {
+		case  0: p = "OK"; break;
+		case 73: p = "XEMU SOFTWARE CBM-DOS SUBSET"; break;
+		default:
+			p = "UNHANDLED XEMU ERROR";
+			fprintf(stderr, "HOSTFS DOS: error code %02d is not defined, please report this." NL, errorcode);
+			break;
+	}
+	hostfs_channels[15].read_used = sprintf((char*)hostfs_channels[15].read_buffer, "%02d, %s,%02d,%02d", errorcode, p, tracknum, sectnum);
+	DEBUG_HOSTFS("HOSTFS: error (host_status=%d) is set to \"%s\": %s." NL, status, (char*)hostfs_channels[15].read_buffer, description ? description : "-");
+	return 0xFF;
+}
+
+#define NO_ERROR()	set_error(0, 0, 0, 0, NULL)
 
 
 
@@ -186,7 +208,7 @@ void hostfs_init ( const char *basedir, const char *subdir )
 		hostfs_channels[a].file_size = 0;
 		hostfs_channels[a].trans_bytes = 0;
 	}
-	hfs_status = 0;
+	set_error(0, 73, 0, 0, "init");	// set status reg, and DOS "error" ...
 	last_command = -1;
 	use_channel = NULL;
 	printf("HOSTFS: init @ %s" NL, hostfs_directory);
@@ -254,12 +276,13 @@ void hostfs_flush_all ( void )
 
 
 
-// Converts host filename to PETSCII, used by directory reading.
+// Converts host filename to PETSCII, used by directory reading. Both of them are NUL terminated strings.
 // Returns zero if conversion cannot be done (long filename, non-PETSCII representable char, etc)
-// In case of zero value, the converted buffer is invalid, and should be not used!
+// In case of zero value, the converted buffer is invalid, and should be not used! [zero length input is also invalid]
 // Returns non-zero if success when it means the length of the file name.
-// "out" buffer must be 17 bytes at least (16 chars + NULL byte)
-static int filename_host2cbm ( const Uint8 *in, Uint8 *out )
+// "out" buffer must be maxlen+1 bytes at least (for the plus NULL byte)
+static const char banned_hostfilename_chars[] = ":;,/\\#$=*?@";
+static int filename_host2cbm ( const Uint8 *in, Uint8 *out, int maxlen)
 {
 	int len = 0;
 	if (*in == '.')
@@ -268,19 +291,18 @@ static int filename_host2cbm ( const Uint8 *in, Uint8 *out )
 		Uint8 c = *(in++);
 		if (!c)
 			break;
-		if (len == 16 || c < 32 || c > 126)
+		if (++len > maxlen || c < 32 || c > 126 || strchr(banned_hostfilename_chars, c))
 			return 0;
 		if (c >= 97 && c <= 122)
 			c -= 32;
 		*(out++) = c;
-		len++;
 	}
 	*out = 0;
 	return len;
 }
 
 
-static int stat_at ( const char *dirname, const char *filename, struct stat *st )
+static int xemu_stat_at ( const char *dirname, const char *filename, struct stat *st )
 {
 	char namebuffer[PATH_MAX];
 	if (snprintf(namebuffer, sizeof namebuffer, "%s" DIRSEP_STR "%s", dirname, filename) >= sizeof namebuffer) {
@@ -291,7 +313,7 @@ static int stat_at ( const char *dirname, const char *filename, struct stat *st 
 }
 
 
-static int open_at ( const char *dirname, const char *filename, int flags, mode_t mode )
+static int xemu_open_at ( const char *dirname, const char *filename, int flags, mode_t mode )
 {
 	char namebuffer[PATH_MAX];
 	if (snprintf(namebuffer, sizeof namebuffer, "%s" DIRSEP_STR "%s", dirname, filename) >= sizeof namebuffer) {
@@ -314,7 +336,7 @@ static const Uint8 dirheadline[] = {
 	0, 0,		// line number
 	0x12, '"',	// REVS ON and quote mark
 	'X','E','M','U','-','C','B','M',' ','H','O','S','T','-','F','S',
-	'"',' ','V','I','R','T',' ',0
+	'"',' ','X','E',' ','M','U',0
 };
 static const Uint8 dirtailline[] = {
 	1, 1,	// link addr
@@ -348,13 +370,13 @@ static int cbm_read_directory ( struct hostfs_channels_st *channel )
 			Uint8 filename[17];
 			int namelength, i;
 			struct stat st;
-			if (!(namelength = filename_host2cbm((Uint8*)entry->d_name, filename)))
+			if (!(namelength = filename_host2cbm((Uint8*)entry->d_name, filename, 16)))
 				continue;	// cannot be represented name, skip it!
-			if (stat_at(hostfs_directory, entry->d_name, &st))
+			if (xemu_stat_at(hostfs_directory, entry->d_name, &st))
 				continue;
 			if (!S_ISREG(st.st_mode) && !S_ISDIR(st.st_mode))
 				continue;
-			if (channel->allow_read == 144)
+			if (channel->allow_read - 2 == CBM_MAX_DIR_ENTRIES)
 				goto too_many_entries;
 			channel->allow_read++;
 			// Ok, it seems to be OK, let's present a directory line for the entry!
@@ -456,9 +478,13 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 			}
 			p2 = (Uint8*)strchr((char*)p1 + 1, ',');
 			len = (int)(p1 - spec_used);
-			if (p2)
+			if (p2) {
+				if (strchr((char*)p2 + 1, ',')) {
+					hfs_status = 128;
+					return;
+				}
 				flags = char_cbm2ascii(p2[1]);
-			else
+			} else
 				flags = channel->id == 1 ? 'w' : 'r';
 		} else {
 			len = strlen((char*)spec_used);
@@ -472,10 +498,23 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 		if (spec_used[0] == '@') {
 			p0 = spec_used + 1;
 			len--;
-			if (flags == 'w')
-				flags = 'o';	// overwrite mode
+			if (flags == 'w') flags = 'o'; // overwrite mode
 		} else
 			p0 = spec_used;
+		// Skip the possible part of drive assignment (ie "0:FILENAME...")
+		if (len > 1 && p0[1] == ':') {
+			if (p0[0] != '0') {
+				hfs_status = 128;
+				return;
+			}
+			p0  += 2;
+			len -= 2;
+		}
+		// check if we have an invalid, empty file name
+		if (!len) {
+			hfs_status = 128;
+			return;
+		}
 		DEBUG_HOSTFS("HOSTFS: file mode char: '%c'" NL, flags);
 		switch (flags) {
 			case 'a':	// append mode
@@ -484,7 +523,7 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 				flags = O_WRONLY | O_APPEND | O_BINARY; // FIXME: append mode allows _creation_ of file?! TODO
 				DEBUG_HOSTFS("HOSTFS: file is selected for append" NL);
 				break;
-			case 'o':	// overwrite mode
+			case 'o':	// overwrite mode ("fake" mode, created with 'w' mode and '@' prefix above)
 				channel->allow_write = 1;
 				channel->allow_read  = 0;
 				flags = O_WRONLY | O_CREAT | O_TRUNC | O_BINARY;
@@ -531,18 +570,19 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 				struct stat st;
 				DEBUG_HOSTFS("HOSTFS: file name accepted." NL);
 				closedir(dir);
-				if (stat_at(hostfs_directory, entry->d_name, &st)) {
+				if (xemu_stat_at(hostfs_directory, entry->d_name, &st)) {
 					DEBUG_HOSTFS("HOSTFS: cannot stat file!" NL);
 					hfs_status = 128;
 					return;
 				}
 				if (!S_ISREG(st.st_mode)) {
+					// TODO: maybe in the future directory entries are "fake-loadable" to be able to change hostFS directory?
 					DEBUG_HOSTFS("HOSTFS: not a regular file!" NL);
 					hfs_status = 128;
 					return;
 				}
 				channel->file_size = st.st_size;
-				channel->fd = open_at(hostfs_directory, entry->d_name, flags, 0666);
+				channel->fd = xemu_open_at(hostfs_directory, entry->d_name, flags, 0666);
 				if (channel->fd < 0) {
 					DEBUG_HOSTFS("HOSTFS: could not open host file '%s" DIRSEP_STR "%s': %s" NL, hostfs_directory, entry->d_name, strerror(errno));
 					hfs_status = 128;
@@ -556,7 +596,7 @@ static void hostfs_open ( struct hostfs_channels_st *channel )
 		closedir(dir);
 		// on write, if we don't have matching entry (we are here ...), we want to create new file here!!!
 		if (flags & O_CREAT) {
-			channel->fd = open_at(hostfs_directory, filename, flags, 0666);
+			channel->fd = xemu_open_at(hostfs_directory, filename, flags, 0666);
 			if (channel->fd < 0) {
 				DEBUG_HOSTFS("HOSTFS: could not create new host file entry '%s" DIRSEP_STR "%s': %s" NL, hostfs_directory, filename, strerror(errno));
 				hfs_status = 128;
