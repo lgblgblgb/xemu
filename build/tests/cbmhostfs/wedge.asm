@@ -133,7 +133,7 @@ use_file_load_spec:
 	LDY	#0
 loader_loop:
 	LDA	$D0FF		; read file
-	LDX	$D0FE		; check status
+	LDX	$D0FE		; check status (currently in Xemu, you MUST check this *AFTER* trying to read, if EOF, the read byte is invalid!)
 	BNE	end_of_loop	; break loop if status is not zero (let's check the status outside of the loop, EOF or error)
 	STA	($AE), Y	; write byte into memory
 	INC	$AE		; using "Y" and then adding after the loop would be faster, but who cares now
@@ -148,8 +148,7 @@ end_of_loop:
 	STA	$D0FE		; Xemu to close its channel
 	; Check if status was an error
 	TXA
-	AND	#128
-	BNE	io_error
+	BMI	io_error
 	; Everything seems to be OK, it's time to return soon ...
 	STA	$D02F		; turn VIC-III mode off (any byte will do it)
 	; In my braindead implementation I have the load pointer AFTER the last byte

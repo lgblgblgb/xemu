@@ -8,7 +8,8 @@ AUTHOR="Gábor Lénárt <lgblgblgb@gmail.com>"
 WEBSITE="https://github.com/lgblgblgb/xemu/wiki"
 VERSION="`date '+%Y%m%d%H%M%S'`"
 ROOT=".dist/${PROJECT}_$VERSION"
-DEB="${PROJECT}_current-ubuntu-xenial_amd64.deb"
+ARCH=`dpkg --print-architecture`
+DEB="${PROJECT}_current_$ARCH.deb"
 BINDIRREAL="/usr/local/bin"
 DATADIRREAL="/usr/local/lib/xemu"
 
@@ -18,6 +19,7 @@ DATADIR="$ROOT$DATADIRREAL"
 cd `dirname $0` || exit 1
 
 echo "Current directory: `pwd`"
+echo "Build architecture: $ARCH"
 
 rm -fr .dist || exit 1
 
@@ -34,7 +36,7 @@ echo "Package: $PROJECT
 Version: $VERSION
 Section: base
 Priority: optional
-Architecture: amd64
+Architecture: $ARCH
 Depends: $DEPENDENCY
 Maintainer: $AUTHOR
 Description: Collection of software emulations of some (mainly 8 bit) computers.
