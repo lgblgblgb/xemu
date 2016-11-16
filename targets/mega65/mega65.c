@@ -319,6 +319,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	memset(gs_regs, 0, sizeof gs_regs);
 	rom_protect = 1;
 	gs_regs[0x67E] = 0x80;	// this will signal Xemu, to ask the user on the first read!
+	kicked_hypervisor = emucfg_get_num("kicked");
 	DEBUG("MEGA65: I/O is remapped to $%X" NL, IO_REMAPPED);
 	// *** Trying to load kickstart image
 	p = emucfg_get_str("kickup");
@@ -988,7 +989,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			in_hypervisor = 0;
 			apply_memory_config();
 			cpu_reset();
-			kicked_hypervisor = 0x80;	// this will signal Xemu, to ask the user on the first read!
+			kicked_hypervisor = emucfg_get_num("kicked");
 			hypervisor_enter(TRAP_RESET);
 			DEBUG("RESET!" NL);
 		} else if (key == SDL_SCANCODE_KP_ENTER) {
@@ -1092,11 +1093,12 @@ int main ( int argc, char **argv )
 		emulators_disclaimer
 	);
 	emucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
-	emucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA switches turned ON");
+	emucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA-board switches turned ON");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	emucfg_define_switch_option("hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode");
-	emucfg_define_str_option("kickup", KICKSTART_NAME, "Override path of KickStart to be used");
-	emucfg_define_str_option("kickuplist", NULL, "Set path of symbol list file for external kickstart");
+	emucfg_define_num_option("kicked", 0x80, "Answer to KickStart upgrade (128=ask user in a pop-up window)");
+	emucfg_define_str_option("kickup", KICKSTART_NAME, "Override path of external KickStart to be used");
+	emucfg_define_str_option("kickuplist", NULL, "Set path of symbol list file for external KickStart");
 	emucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used");
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
