@@ -15,30 +15,32 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include <stdio.h>
-
-#include <SDL.h>
-
+#include "emutools.h"
 #include "commodore_65.h"
 #include "cpu65c02.h"
 #include "cia6526.h"
-#include "c65fdc.h"
+#include "f011_core.h"
+#include "c65_d81_image.h"
 #include "c65dma.h"
-#include "c65hid.h"
+#include "emutools_hid.h"
 #include "vic3.h"
 #include "sid.h"
-#include "emutools.h"
+#include "cbmhostfs.h"
+#include "c64_kbd_mapping.h"
+#include "emutools_config.h"
 
 
 
 static SDL_AudioDeviceID audio = 0;
 
 Uint8 memory[0x100000];			// 65CE02 MAP'able address space
-static Uint8 cpu_port[2];		// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
 static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
-static struct SidEmulation sid1, sid2;	// the two SIDs
+static struct SidEmulation sids[2];	// the two SIDs
 
-// We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request (with the lower 16 bits as addr from $D000)
+// We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request
+// It must be high enough not to collide with the 1Mbyte address space + almost-64K "overflow" area and mapping should not cause to alter lower 12 bits of the addresses,
+// (that is, the constant should have three '0' hex digits at its end)
+// though the exact value does not matter too much over the mentioned requirements above.
 #define IO_REMAP_VIRTUAL	0x110000
 // Other re-mapping addresses
 // Re-mapping for VIC3 reg $30
@@ -57,35 +59,14 @@ static int map_mask;			// MAP mask, should be filled at the MAP opcode, *before*
 static int map_offset_low;		// MAP low offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 static int map_offset_high;		// MAP high offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 
-static int frame_counter;
 
-
-
-#ifdef DEBUG_STACK
-static int stackguard_address = -1;
-static Uint8 stackguard_data = 0;
-static Uint8 cpu_old_sp;
-static Uint16 cpu_old_pc_my;
-static void DEBUG_WRITE_ACCESS ( int physaddr, Uint8 data )
-{
-	if (
-		(physaddr >= 0x100 && physaddr < 0x200) ||
-		(physaddr >= 0x10100 && physaddr < 0x10200)
-	) {
-		stackguard_address = physaddr;
-		stackguard_data = data;
-	}
-}
-#else
-#define DEBUG_WRITE_ACCESS(unused1,unused2)
-#endif
 
 
 
 /* You *MUST* call this every time, when *any* of these events applies:
    * MAP 4510 opcode is issued, map_offset_low, map_offset_high, map_mask are modified
    * "CPU port" data or DDR register has been written, witn cpu_port[0 or 1] modified
-   * VIC3 register $30 is written, with vic3_registers[0x30] modified 
+   * VIC3 register $30 is written, with vic3_registers[0x30] modified
    The reason of this madness: do the ugly work here, as memory configuration change is
    less frequent than memory usage (read/write). Thus do more work here, but simplier
    work when doing actual memory read/writes, with a simple addition and shift, or such.
@@ -98,7 +79,7 @@ void apply_memory_config ( void )
 {
 	// FIXME: what happens if VIC-3 reg $30 mapped ROM is tried to be written? Ignored, or RAM is used to write to, as with the CPU port mapping?
 	// About the produced signals on the "CPU port"
-	int cp = (cpu_port[1] | (~cpu_port[0]));
+	int cp = (memory[1] | (~memory[0]));
 	// Simple ones, only CPU MAP may apply not other factors
 	// Also, these are the "lower" blocks, needs the offset for the "lower" area in case of CPU MAP'ed state
 	addr_trans_wr[0] = addr_trans_rd[0] = addr_trans_wr[1] = addr_trans_rd[1] = (map_mask & 1) ? map_offset_low : 0;	// $0XXX + $1XXX, MAP block 0 [mask 1]
@@ -123,7 +104,7 @@ void apply_memory_config ( void )
 		addr_trans_rd[0xA] = addr_trans_rd[0xB] = ((cp & 3) == 3) ? ROM_C64_BASIC_REMAP : 0;
 	}
 	// $CXXX, MAP block 6 [mask 64]
-	// Warning: all VIC3 reg $30 related ROM maps are for 8K size, *expect* of '@C000' (interface ROM) which is only 4K! Also this is in another ROM bank than the others
+	// Warning: all VIC3 reg $30 related ROM maps are for 8K size, *except* of '@C000' (interface ROM) which is only 4K! Also this is in another ROM bank than the others
 	if (vic3_registers[0x30] & 32)
 		addr_trans_wr[0xC] = addr_trans_rd[0xC] = ROM_C000_REMAP;
 	else
@@ -172,7 +153,7 @@ void clear_emu_events ( void )
 #define KBSEL cia1.PRA
 
 
-static Uint8 cia_read_keyboard ( Uint8 ddr_mask_unused )
+static Uint8 cia1_in_b ( void )
 {
 	return
 		((KBSEL &   1) ? 0xFF : kbd_matrix[0]) &
@@ -182,22 +163,29 @@ static Uint8 cia_read_keyboard ( Uint8 ddr_mask_unused )
 		((KBSEL &  16) ? 0xFF : kbd_matrix[4]) &
 		((KBSEL &  32) ? 0xFF : kbd_matrix[5]) &
 		((KBSEL &  64) ? 0xFF : kbd_matrix[6]) &
-		((KBSEL & 128) ? 0xFF : kbd_matrix[7])
+		((KBSEL & 128) ? 0xFF : kbd_matrix[7]) &
+		(joystick_emu == 1 ? c64_get_joy_state() : 0xFF)
 	;
 }
 
 
-
-static void cia2_outa ( Uint8 mask, Uint8 data )
+static Uint8 cia1_in_a ( void )
 {
-	vic2_16k_bank = (3 - (data & 3)) * 0x4000;
-	DEBUG("VIC2: 16K BANK is set to $%04X" NL, vic2_16k_bank);
+	return joystick_emu == 2 ? c64_get_joy_state() : 0xFF;
+}
+
+
+static void cia2_out_a ( Uint8 data )
+{
+	vic3_select_bank((~(data | (~cia2.DDRA))) & 3);
+	//vic2_16k_bank = ((~(data | (~cia2.DDRA))) & 3) << 14;
+	//DEBUG("VIC2: 16K BANK is set to $%04X (CIA mask=$%02X)" NL, vic2_16k_bank, cia2.DDRA);
 }
 
 
 
 // Just for easier test to have a given port value for CIA input ports
-static Uint8 cia_port_in_dummy ( Uint8 mask )
+static Uint8 cia_port_in_dummy ( void )
 {
 	return 0xFF;
 }
@@ -209,53 +197,67 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 	DEBUG("AUDIO: audio callback, wants %d samples" NL, len);
 	// We use the trick, to render boths SIDs with step of 2, with a byte offset
 	// to get a stereo stream, wanted by SDL.
-	sid_render(&sid2, ((short *)(stream)) + 0, len / 2, 2);		// SID @ left
-	sid_render(&sid1, ((short *)(stream)) + 1, len / 2, 2);		// SID @ right
+	sid_render(&sids[1], ((short *)(stream)) + 0, len >> 1, 2);	// SID @ left
+	sid_render(&sids[0], ((short *)(stream)) + 1, len >> 1, 2);	// SID @ right
 }
 
 
 
-static void c65_init ( const char *disk_image_name, int sid_cycles_per_sec, int sound_mix_freq )
+static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 {
+	const char *p;
 	SDL_AudioSpec audio_want, audio_got;
-	hid_init();
+	hid_init(
+		c64_key_map,
+		VIRTUAL_SHIFT_POS,
+		SDL_ENABLE		// joy HID events enabled
+	);
+	joystick_emu = 1;
+	// *** host-FS
+	p = emucfg_get_str("hostfsdir");
+	if (p)
+		hostfs_init(p, NULL);
+	else
+		hostfs_init(sdl_pref_dir, "hostfs");
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
 	// *** Load ROM image
-	if (emu_load_file("c65-system.rom", memory + 0x20000, 0x20001) != 0x20000)
-		FATAL("Cannot load C65 system ROM!");
+	p = emucfg_get_str("rom");
+	if (emu_load_file(p, memory + 0x20000, 0x20001) != 0x20000)
+		FATAL("Cannot load C65 system ROM (%s) or invalid size!", p);
 	// *** Initialize VIC3
 	vic3_init();
 	// *** Memory configuration
-	cpu_port[0] = cpu_port[1] = 0xFF;	// the "CPU I/O port" on 6510/C64, implemented by VIC3 for real in C65!
+	memory[0] = memory[1] = 0xFF;		// the "CPU I/O port" on 6510/C64, implemented by VIC3 for real in C65!
 	map_mask = 0;				// as all 8K blocks are unmapped, we don't need to worry about the low/high offset to set here
 	apply_memory_config();			// VIC3 $30 reg is already filled, so it's OK to call this now
 	// *** CIAs
 	cia_init(&cia1, "CIA-1",
-		NULL,	// callback: OUTA(mask, data)
-		NULL,	// callback: OUTB(mask, data)
-		NULL,	// callback: OUTSR(mask, data)
-		NULL,	// callback: INA(mask)
-		cia_read_keyboard,	// callback: INB(mask)
-		NULL,	// callback: INSR(mask)
-		cia_setint_cb	// callback: SETINT(level)
+		NULL,			// callback: OUTA
+		NULL,			// callback: OUTB
+		NULL,			// callback: OUTSR
+		cia1_in_a,		// callback: INA ~ joy#2
+		cia1_in_b,		// callback: INB ~ keyboard
+		NULL,			// callback: INSR
+		cia_setint_cb		// callback: SETINT
 	);
 	cia_init(&cia2, "CIA-2",
-		cia2_outa,	// callback: OUTA(mask, data)
-		NULL,	// callback: OUTB(mask, data)
-		NULL,	// callback: OUTSR(mask, data)
-		cia_port_in_dummy,	// callback: INA(mask)
-		NULL,	// callback: INB(mask)
-		NULL,	// callback: INSR(mask)
-		NULL	// callback: SETINT(level)	that would be NMI in our case
+		cia2_out_a,		// callback: OUTA ~ eg VIC-II bank
+		NULL,			// callback: OUTB
+		NULL,			// callback: OUTSR
+		cia_port_in_dummy,	// callback: INA
+		NULL,			// callback: INB
+		NULL,			// callback: INSR
+		NULL			// callback: SETINT ~ that would be NMI in our case
 	);
 	// *** Initialize DMA
 	dma_init();
 	// Initialize FDC
-	fdc_init(disk_image_name);
+	fdc_init();
+	c65_d81_init(emucfg_get_str("8"));
 	// SIDs, plus SDL audio
-	sid_init(&sid1, sid_cycles_per_sec, sound_mix_freq);
-	sid_init(&sid2, sid_cycles_per_sec, sound_mix_freq);
+	sid_init(&sids[0], sid_cycles_per_sec, sound_mix_freq);
+	sid_init(&sids[1], sid_cycles_per_sec, sound_mix_freq);
 	SDL_memset(&audio_want, 0, sizeof(audio_want));
 	audio_want.freq = sound_mix_freq;
 	audio_want.format = AUDIO_S16SYS;	// used format by SID emulation (ie: signed short)
@@ -308,189 +310,201 @@ void cpu_do_nop ( void )
 		cpu_inhibit_interrupts = 0;
 		DEBUG("CPU: EOM, interrupts were disabled because of MAP till the EOM" NL);
 	} else
-		DEBUG("CPU: NOP not reated as EOM (no MAP before)" NL);
+		DEBUG("CPU: NOP in not treated as EOM (no MAP before)" NL);
 }
 
 
-
-#define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
-	do { DEBUG("IO: NOT IMPLEMENTED read (emulator lacks feature), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
-	return fb; } while (0)
-#define RETURN_ON_IO_READ_NO_NEW_VIC_MODE(func, fb) \
-	do { DEBUG("IO: ignored read (not new VIC mode), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
-	return fb; } while (0)
-#define RETURN_ON_IO_WRITE_NOT_IMPLEMENTED(func) \
-	do { DEBUG("IO: NOT IMPLEMENTED write (emulator lacks feature), %s $%04X with data $%02X" NL, func, addr, data); \
-	return; } while(0)
-#define RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE(func) \
-	do { DEBUG("IO: ignored write (not new VIC mode), %s $%04X with data $%02X" NL, func, addr, data); \
-	return; } while(0)
-#define WARN_IO_MODE_WR(func) \
-	DEBUG("IO: write operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X, d=$%02X)" NL, func, addr, data)
-#define WARN_IO_MODE_RD(func) \
-	DEBUG("IO: read operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X)" NL, func, addr)
+static inline Uint8 read_some_sid_register ( int addr )
+{
+	// currently we don't support reading SID registers at all (1351 mouse emulation may need POT-X and POT-Y in the future though, TODO)
+	// addr &= 0x1F;
+	return 0xFF;
+}
 
 
-// Call this ONLY with addresses between $D000-$DFFF
-// Ranges marked with (*) needs "vic_new_mode"
+static inline void write_some_sid_register ( int addr, Uint8 data )
+{
+	int instance = (addr >> 6) & 1; // Selects left/right SID based on address
+	DEBUG("SID%d: writing register $%04X ($%04X) with data $%02X @ PC=$%04X" NL, ((addr >> 6) & 1) + 1, addr & 0x1F, addr + 0xD000, data, cpu_pc);
+	sid_write_reg(&sids[instance], addr & 0x1F, data);
+}
+
+
 Uint8 io_read ( int addr )
 {
-	// Future stuff: instead of slow tons of IFs, use the >> 5 maybe
-	// that can have new device at every 0x20 dividible addresses,
-	// that is: switch ((addr >> 5) & 127)
-	// Other idea: array of function pointers, maybe separated for new/old
-	// VIC modes as well so no need to check each time that either ...
-	if (addr < 0xD080)	// $D000 - $D07F:	VIC3
-		return vic3_read_reg(addr);
-	if (addr < 0xD0A0) {	// $D080 - $D09F	DISK controller (*)
-		if (vic_new_mode)
-			return fdc_read_reg(addr & 0xF);
-		else {
-			WARN_IO_MODE_RD("DISK controller");
-			return vic3_read_reg(addr);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
-		}
+	addr &= 0xFFF;	// Internally, we use I/O addresses $0000-$0FFF only!
+	switch ((addr >> 8) | vic_new_mode) {	// "addr >> 8" is from 0...F,  vic_new_mode can be $10 or 0, that is $00-$1F for all cases
+		/* --- I/O read in old VIC I/O mode --- */
+		case 0x00:	// $D000-$D0FF
+		case 0x01:	// $D100-$D1FF, C65 VIC-III palette, red components   (in old VIC mode, cannot be accessed)
+		case 0x02:	// $D200-$D2FF, C65 VIC-III palette, green components (in old VIC mode, cannot be accessed)
+		case 0x03:	// $D300-$D3FF, C65 VIC-III palette, blue components  (in old VIC mode, cannot be accessed)
+			// In old VIC-II mode, according to c65manual.txt and C64 "standard", VIC-II registers can be seen at every 64 bytes in I/O range $D000-$D3FF
+			return vic3_read_reg(addr & 0x3F);
+		case 0x04:	// $D400-$D4FF, SID stuffs
+		case 0x05:	// $D500-$D5FF
+		case 0x06:	// $D600-$D6FF, would be C65 UART, in old I/O mode: SID images still
+		case 0x07:	// $D700-$D7FF, would be C65 DMA, in old I/O mode; SID images still
+			return read_some_sid_register(addr);
+		case 0x08:	// $D800-$D8FF, colour SRAM
+		case 0x09:	// $D900-$D9FF, colour SRAM
+		case 0x0A:	// $DA00-$DAFF, colour SRAM
+		case 0x0B:	// $DB00-$DBFF, colour SRAM
+			return memory[0x1F000 + addr];	// 0x1F800 would be the colour RAM on C65, but since the offset in I/O address range is already $800, we use 0x1F000
+		case 0x0C:	// $DC00-$DCFF, CIA-1 or colour SRAM second half
+			// TODO: check if "extended colour SRAM" would work at all in old I/O mode this way!!!!
+			return vic3_registers[0x30] & 1 ? memory[0x1F000 + addr] : cia_read(&cia1, addr & 0xF);
+		case 0x0D:	// $DD00-$DDFF, CIA-2 or colour SRAM second half
+			return vic3_registers[0x30] & 1 ? memory[0x1F000 + addr] : cia_read(&cia2, addr & 0xF);
+		case 0x0E:	// $DE00-$DEFF, I/O-1 or colour SRAM second half on C65
+		case 0x0F:	// $DF00-$DFFF, I/O-2 or colour SRAM second half on C65
+			return vic3_registers[0x30] & 1 ? memory[0x1F000 + addr] : 0xFF;	// I/O exp area is not emulated by Xemu, gives $FF on reads
+		/* --- I/O read in new VIC I/O mode --- */
+		case 0x10:	// $D000-$D0FF
+			if (likely(addr < 0x80))
+				return vic3_read_reg(addr);
+			if (addr < 0xA0)
+				return fdc_read_reg(addr & 0xF);
+			if (addr == 0xFE)
+				return hostfs_read_reg0();
+			if (addr == 0xFF)
+				return hostfs_read_reg1();
+			return 0xFF;	// RAM expansion controller (not emulated by Xemu)
+		case 0x11:	// $D100-$D1FF, C65 VIC-III palette, red components
+		case 0x12:	// $D200-$D2FF, C65 VIC-III palette, green components
+		case 0x13:	// $D300-$D3FF, C65 VIC-III palette, blue components
+			return 0xFF;	// palette registers are write-only on C65????
+		case 0x14:	// $D400-$D4FF, SID stuffs
+		case 0x15:	// $D500-$D5FF
+			return read_some_sid_register(addr);
+		case 0x16:	// $D600-$D6FF, C65 UART
+			return 0xFF;			// not emulated by Xemu, yet, TODO
+		case 0x17:	// $D700-$D7FF, C65 DMA
+			return dma_read_reg(addr & 15);
+		case 0x18:	// $D800-$D8FF, colour SRAM
+		case 0x19:	// $D900-$D9FF, colour SRAM
+		case 0x1A:	// $DA00-$DAFF, colour SRAM
+		case 0x1B:	// $DB00-$DBFF, colour SRAM
+			return memory[0x1F000 + addr];  // 0x1F800 would be the colour RAM on C65, but since the offset in I/O address range is already $800, we use 0x1F000
+		case 0x1C:
+			return vic3_registers[0x30] & 1 ? memory[0x1F000 + addr] : cia_read(&cia1, addr & 0xF);
+		case 0x1D:
+			return vic3_registers[0x30] & 1 ? memory[0x1F000 + addr] : cia_read(&cia2, addr & 0xF);
+		case 0x1E:	// $DE00-$DEFF, I/O-1 or colour SRAM second half on C65
+		case 0x1F:	// $DF00-$DFFF, I/O-2 or colour SRAM second half on C65
+			return vic3_registers[0x30] & 1 ? memory[0x1F000 + addr] : 0xFF;	// I/O exp area is not emulated by Xemu, gives $FF on reads
+		default:
+			FATAL("Invalid switch case in io_read(%d)!! CASE=%X, vic_new_mode=%d", addr, (addr >> 8) | vic_new_mode, vic_new_mode);
+			break;
 	}
-	if (addr < 0xD100) {	// $D0A0 - $D0FF	RAM expansion controller (*)
-		if (vic_new_mode)
-			RETURN_ON_IO_READ_NOT_IMPLEMENTED("RAM expansion controller", 0xFF);
-		else {
-			WARN_IO_MODE_RD("RAM expansion controller");
-			return vic3_read_reg(addr);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
-		}
-	}
-	if (addr < 0xD400) {	// $D100 - $D3FF	palette red/green/blue nibbles (*)
-		if (vic_new_mode)
-			return 0xFF; // NOT READABLE ON VIC3!
-		else {
-			WARN_IO_MODE_RD("palette reg/green/blue nibbles");
-			return vic3_read_reg(addr);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
-		}
-	}
-	if (addr < 0xD440) {	// $D400 - $D43F	SID, right
-		RETURN_ON_IO_READ_NOT_IMPLEMENTED("right SID", 0xFF);
-	}
-	if (addr < 0xD600) {	// $D440 - $D5FF	SID, left
-		RETURN_ON_IO_READ_NOT_IMPLEMENTED("left SID", 0xFF);
-	}
-	if (addr < 0xD700) {	// $D600 - $D6FF	UART (*)
-		if (vic_new_mode)
-			RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);
-		else
-			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("UART", 0xFF);
-	}
-	if (addr < 0xD800) {	// $D700 - $D7FF	DMA (*)
-		if (vic_new_mode)
-			return dma_read_reg(addr & 3);
-		else
-			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("DMA controller", 0xFF);
-	}
-	if (addr < ((vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00)) {	// $D800-$DC00/$E000	COLOUR NIBBLES, mapped to $1F800 in BANK1
-		DEBUG("IO: reading colour RAM at offset $%04X" NL, addr - 0xD800);
-		return memory[0x1F800 + addr - 0xD800];
-	}
-	if (addr < 0xDD00) {	// $DC00 - $DCFF	CIA-1
-		Uint8 result = cia_read(&cia1, addr & 0xF);
-		//RETURN_ON_IO_READ_NOT_IMPLEMENTED("CIA-1", 0xFF);
-		DEBUG("%s: reading register $%X result is $%02X" NL, cia1.name, addr & 15, result);
-		return result;
-	}
-	if (addr < 0xDE00) {	// $DD00 - $DDFF	CIA-2
-		Uint8 result = cia_read(&cia2, addr & 0xF);
-		//RETURN_ON_IO_READ_NOT_IMPLEMENTED("CIA-2", 0xFF);
-		DEBUG("%s: reading register $%X result is $%02X" NL, cia2.name, addr & 15, result);
-		return result;
-	}
-	if (addr < 0xDF00) {	// $DE00 - $DEFF	IO-1 external
-		RETURN_ON_IO_READ_NOT_IMPLEMENTED("IO-1 external select", 0xFF);
-	}
-	// The rest: IO-2 external
-	RETURN_ON_IO_READ_NOT_IMPLEMENTED("IO-2 external select", 0xFF);
+	return 0xFF;	// just make gcc happy ...
 }
 
 
 
 
-// Call this ONLY with addresses between $D000-$DFFF
-// Ranges marked with (*) needs "vic_new_mode"
 void io_write ( int addr, Uint8 data )
 {
-	if (addr < 0xD080) {	// $D000 - $D07F:	VIC3
-		vic3_write_reg(addr, data);
-		return;
-	}
-	if (addr < 0xD0A0) {	// $D080 - $D09F	DISK controller (*)
-		if (vic_new_mode)
-			fdc_write_reg(addr & 0xF, data);
-		else {
-			WARN_IO_MODE_WR("DISK controller");
-			vic3_write_reg(addr, data);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
-		}
-		return;
-	}
-	if (addr < 0xD100) {	// $D0A0 - $D0FF	RAM expansion controller (*)
-		if (vic_new_mode)
-			RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("RAM expansion controller");
-		else {
-			WARN_IO_MODE_WR("RAM expansion controller");
-			vic3_write_reg(addr, data);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
-		}
-		return;
-	}
-	if (addr < 0xD400) {	// $D100 - $D3FF	palette red/green/blue nibbles (*)
-		if (vic_new_mode)
-			vic3_write_palette_reg(addr - 0xD100, data);
-		else {
-			WARN_IO_MODE_WR("palette red/green/blue nibbles");
-			vic3_write_reg(addr, data);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
-		}
-		return;
-	}
-	if (addr < 0xD440) {	// $D400 - $D43F	SID, right
-		sid_write_reg(&sid1, addr & 31, data);
-		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("right SID");
-		return;
-	}
-	if (addr < 0xD600) {	// $D440 - $D5FF	SID, left
-		sid_write_reg(&sid2, addr & 31, data);
-		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("left SID");
-		return;
-	}
-	if (addr < 0xD700) {	// $D600 - $D6FF	UART (*)
-		if (vic_new_mode)
-			RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");
-		else
-			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("UART");
-	}
-	if (addr < 0xD800) {	// $D700 - $D7FF	DMA (*)
-		if (vic_new_mode) {
-			dma_write_reg(addr & 3, data);
+	addr &= 0xFFF;	// Internally, we use I/O addresses $0000-$0FFF only!
+	switch ((addr >> 8) | vic_new_mode) {	// "addr >> 8" is from 0...F,  vic_new_mode can be $10 or 0, that is $00-$1F for all cases
+		/* --- I/O write in old VIC I/O mode --- */
+		case 0x00:	// $D000-$D0FF
+		case 0x01:	// $D100-$D1FF, C65 VIC-III palette, red components   (in old VIC mode, cannot be accessed)
+		case 0x02:	// $D200-$D2FF, C65 VIC-III palette, green components (in old VIC mode, cannot be accessed)
+		case 0x03:	// $D300-$D3FF, C65 VIC-III palette, blue components  (in old VIC mode, cannot be accessed)
+			// In old VIC-II mode, according to c65manual.txt and C64 "standard", VIC-II registers can be seen at every 64 bytes in I/O range $D000-$D3FF
+			vic3_write_reg(addr & 0x3F, data);
 			return;
-		} else
-			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("DMA controller");
+		case 0x04:	// $D400-$D4FF, SID stuffs
+		case 0x05:	// $D500-$D5FF
+		case 0x06:	// $D600-$D6FF, would be C65 UART, in old I/O mode: SID images still
+		case 0x07:	// $D700-$D7FF, would be C65 DMA, in old I/O mode; SID images still
+			write_some_sid_register(addr, data);
+			return;
+		case 0x08:	// $D800-$D8FF, colour SRAM
+		case 0x09:	// $D900-$D9FF, colour SRAM
+		case 0x0A:	// $DA00-$DAFF, colour SRAM
+		case 0x0B:	// $DB00-$DBFF, colour SRAM
+			memory[0x1F000 + addr] = data;	// 0x1F800 would be the colour RAM on C65, but since the offset in I/O address range is already $800, we use 0x1F000
+			return;
+		case 0x0C:	// $DC00-$DCFF, CIA-1 or colour SRAM second half
+			// TODO: check if "extended colour SRAM" would work at all in old I/O mode this way!!!!
+			if (vic3_registers[0x30] & 1)
+				memory[0x1F000 + addr] = data;
+			else
+				cia_write(&cia1, addr & 0xF, data);
+			return;
+		case 0x0D:	// $DD00-$DDFF, CIA-2 or colour SRAM second half
+			if (vic3_registers[0x30] & 1)
+				memory[0x1F000 + addr] = data;
+			else
+				cia_write(&cia2, addr & 0xF, data);
+			return;
+		case 0x0E:	// $DE00-$DEFF, I/O-1 or colour SRAM second half on C65
+		case 0x0F:	// $DF00-$DFFF, I/O-2 or colour SRAM second half on C65
+			if (vic3_registers[0x30] & 1)
+				memory[0x1F000 + addr] = data;
+			return;
+		/* --- I/O write in new VIC I/O mode --- */
+		case 0x10:	// $D000-$D0FF
+			if (likely(addr < 0x80)) {
+				vic3_write_reg(addr, data);
+				return;
+			}
+			if (addr < 0xA0) {
+				fdc_write_reg(addr & 0xF, data);
+				return;
+			}
+			if (addr == 0xFE) {
+				hostfs_write_reg0(data);
+				return;
+			}
+			if (addr == 0xFF) {
+				hostfs_write_reg1(data);
+				return;
+			}
+			return;	// Note: RAM expansion controller (not emulated by Xemu)
+		case 0x11:	// $D100-$D1FF, C65 VIC-III palette, red components
+		case 0x12:	// $D200-$D2FF, C65 VIC-III palette, green components
+		case 0x13:	// $D300-$D3FF, C65 VIC-III palette, blue components
+			vic3_write_palette_reg(addr - 0x100, data);
+			return;
+		case 0x14:	// $D400-$D4FF, SID stuffs
+		case 0x15:	// $D500-$D5FF
+			write_some_sid_register(addr, data);
+			return;
+		case 0x16:	// $D600-$D6FF, C65 UART
+			return;				// not emulated by Xemu, yet, TODO
+		case 0x17:	// $D700-$D7FF, C65 DMA
+			dma_write_reg(addr & 15, data);
+			return;
+		case 0x18:	// $D800-$D8FF, colour SRAM
+		case 0x19:	// $D900-$D9FF, colour SRAM
+		case 0x1A:	// $DA00-$DAFF, colour SRAM
+		case 0x1B:	// $DB00-$DBFF, colour SRAM
+			memory[0x1F000 + addr] = data;  // 0x1F800 would be the colour RAM on C65, but since the offset in I/O address range is already $800, we use 0x1F000
+			return ;
+		case 0x1C:
+			if (vic3_registers[0x30] & 1)
+				memory[0x1F000 + addr] = data;
+			else
+				cia_write(&cia1, addr & 0xF, data);
+			return;
+		case 0x1D:
+			if (vic3_registers[0x30] & 1)
+				memory[0x1F000 + addr] = data;
+			else
+				cia_write(&cia2, addr & 0xF, data);
+			return;
+		case 0x1E:	// $DE00-$DEFF, I/O-1 or colour SRAM second half on C65
+		case 0x1F:	// $DF00-$DFFF, I/O-2 or colour SRAM second half on C65
+			if (vic3_registers[0x30] & 1)
+				memory[0x1F000 + addr] = data;
+			return;
+		default:
+			FATAL("Invalid switch case in io_write(%d)!! CASE=%X, vic_new_mode=%d", addr, (addr >> 8) | vic_new_mode, vic_new_mode);
+			return;
 	}
-	if (addr < ((vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00)) {	// $D800-$DC00/$E000	COLOUR NIBBLES, mapped to $1F800 in BANK1
-		memory[0x1F800 + addr - 0xD800] = data;
-       //return memory[0x1F800 + addr - 0xD800];
-		DEBUG("IO: writing colour RAM at offset $%04X" NL, addr - 0xD800);
-		return;
-	}
-	if (addr < 0xDD00) {	// $DC00 - $DCFF	CIA-1
-		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("CIA-1");
-		DEBUG("%s: writing register $%X with data $%02X" NL, cia1.name, addr & 15, data);
-		cia_write(&cia1, addr & 0xF, data);
-		return;
-	}
-	if (addr < 0xDE00) {	// $DD00 - $DDFF	CIA-2
-		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("CIA-2");
-		DEBUG("%s: writing register $%X with data $%02X" NL, cia2.name, addr & 15, data);
-		cia_write(&cia2, addr & 0xF, data);
-		return;
-	}
-	if (addr < 0xDF00) {	// $DE00 - $DEFF	IO-1 external
-		RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("IO-1 external select");
-	}
-	// The rest: IO-2 external
-	RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("IO-2 external select");
 }
 
 
@@ -498,21 +512,15 @@ void io_write ( int addr, Uint8 data )
 void write_phys_mem ( int addr, Uint8 data )
 {
 	addr &= 0xFFFFF;
-#if 0
-       if (addr > 0x7FFFF)
-                DEBUG("HACKY: Someone writing upper RAM %06X PC=%04X (%06X) data = %02X!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc, data);
-       else if (addr > 0x3FFFF)
-                DEBUG("HACKY: Someone writing upper ROM %06X PC=%04X (%06X) data = %02X!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc, data);
-#endif
-	if (addr < 2) {
-		if ((cpu_port[addr] & 7) != (data & 7)) {
-			cpu_port[addr] = data;
+	if (unlikely(addr < 2)) {	// "CPU port" at memory addr 0/1
+		if ((memory[addr] & 7) != (data & 7)) {
+			memory[addr] = data;
 			DEBUG("MEM: applying new memory configuration because of CPU port writing" NL);
 			apply_memory_config();
 		} else
-			cpu_port[addr] = data;
+			memory[addr] = data;
 	} else if (
-		(addr < 0x20000)
+		(likely(addr < 0x20000))
 #if defined(ALLOW_256K_RAMEXP) && defined(ALLOW_512K_RAMEXP)
 		|| (addr >= 0x40000)
 #else
@@ -531,26 +539,7 @@ void write_phys_mem ( int addr, Uint8 data )
 
 Uint8 read_phys_mem ( int addr )
 {
-	addr &= 0xFFFFF;
-	if (addr < 2)
-		return cpu_port[addr];
-#if 0
-	if (
-		addr == 18552  + 0x20000 ||
-		addr == 26744  + 0x20000 ||
-		addr == 51330  + 0x20000 ||
-		addr == 116856 + 0x20000
-	) {
-		DEBUG("HACKY: PHYS=%06X PC=%04X PC_PHYS=%06X SPA=%04X" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc,
-			memory[cpu_sp + 0x104] | (memory[cpu_sp + 0x105] << 8)
-		);
-	}
-	if (addr > 0x7FFFF)
-		DEBUG("HACKY: Someone reading upper RAM %06X PC=%04X (%06X)!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
-	else if (addr > 0x3FFFF)
-		DEBUG("HACKY: Someone reading upper ROM %06X PC=%04X (%06X)!" NL, addr, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
-#endif
-	return memory[addr];
+	return memory[addr & 0xFFFFF];
 }
 
 
@@ -558,13 +547,11 @@ Uint8 read_phys_mem ( int addr )
 // This function is called by the 65CE02 emulator in case of reading a byte (regardless of data or code)
 Uint8 cpu_read ( Uint16 addr )
 {
-	int phys_addr = addr_trans_rd[addr >> 12] + addr;	// translating address with the READ table created by apply_memory_config()
-	if (phys_addr >= IO_REMAP_VIRTUAL) {
-		if ((addr & 0xF000) != 0xD000)
-			FATAL("Internal error: IO is not on the IO space!");
-		return io_read(addr);	// addr should be in $DXXX range to hit this, hopefully ...
-	}
-	return read_phys_mem(phys_addr);
+	register int phys_addr = addr_trans_rd[addr >> 12] + addr;	// translating address with the READ table created by apply_memory_config()
+	if (likely(phys_addr < 0x10FF00))
+		return memory[phys_addr & 0xFFFFF];	// light optimization, do not call read_phys_mem for this single stuff :)
+	else
+		return io_read(phys_addr);
 }
 
 
@@ -572,14 +559,11 @@ Uint8 cpu_read ( Uint16 addr )
 // This function is called by the 65CE02 emulator in case of writing a byte
 void cpu_write ( Uint16 addr, Uint8 data )
 {
-	int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
-	if (phys_addr >= IO_REMAP_VIRTUAL) {
-		if ((addr & 0xF000) != 0xD000)
-			FATAL("Internal error: IO is not on the IO space!");
-		io_write(addr, data);	// addr should be in $DXXX range to hit this, hopefully ...
-		return;
-	}
-	write_phys_mem(phys_addr, data);
+	register int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
+	if (likely(phys_addr < 0x10FF00))
+		write_phys_mem(phys_addr, data);
+	else
+		io_write(phys_addr, data);
 }
 
 
@@ -594,17 +578,13 @@ void cpu_write ( Uint16 addr, Uint8 data )
 void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 {
 	int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
-	if (phys_addr >= IO_REMAP_VIRTUAL) {
-		if ((addr & 0xF000) != 0xD000)
-			FATAL("Internal error: IO is not on the IO space!");
-		if (addr < 0xD800 || addr >= (vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00) {	// though, for only memory areas other than colour RAM (avoids unneeded warnings as well)
-			DEBUG("CPU: RMW opcode is used on I/O area for $%04X" NL, addr);
-			io_write(addr, old_data);	// first write back the old data ...
-		}
-		io_write(addr, new_data);	// ... then the new
-		return;
+	if (likely(phys_addr < 0x10FF00))
+		write_phys_mem(phys_addr, new_data);	// "normal" memory, just write once, no need to emulate the behaviour
+	else {
+		DEBUG("CPU: RMW opcode is used on I/O area for $%04X" NL, addr);
+		io_write(phys_addr, old_data);		// first write back the old data ...
+		io_write(phys_addr, new_data);		// ... then the new
 	}
-	write_phys_mem(phys_addr, new_data);	// "normal" memory, just write once, no need to emulate the behaviour
 }
 
 
@@ -628,73 +608,40 @@ static void shutdown_callback ( void )
 		DEBUG("Memory is dumped into " MEMDUMP_FILE NL);
 	}
 #endif
+	printf("Scanline render info = \"%s\"" NL, scanline_render_debug_info);
 	DEBUG("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
 }
 
 
 
-static void emulate_keyboard ( SDL_Scancode key, int pressed )
+// Called by emutools_hid!!! to handle special private keys assigned to this emulator
+int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
-	// Check for special, emulator-related hot-keys (not C65 key)
 	if (pressed) {
-		if (key == SDL_SCANCODE_F11) {
-			emu_set_full_screen(-1);
-			return;
-		} else if (key == SDL_SCANCODE_F9) {
-			exit(0);
-		} else if (key == SDL_SCANCODE_F10) {
-			cpu_port[0] = cpu_port[1] = 0xFF;
+		if (key == SDL_SCANCODE_F10) {	// reset
+			memory[0] = memory[1] = 0xFF;
 			map_mask = 0;
 			vic3_registers[0x30] = 0;
 			apply_memory_config();
 			cpu_reset();
 			DEBUG("RESET!" NL);
-			return;
-		}
+		} else if (key == SDL_SCANCODE_KP_ENTER)
+			c64_toggle_joy_emu();
 	}
-	// If not an emulator hot-key, try to handle as a C65 key
-	// This function also updates the keyboard matrix in that case
-	hid_key_event(key, pressed);
+	return 0;
 }
-
 
 
 static void update_emulator ( void )
 {
-	SDL_Event e;
-	while (SDL_PollEvent(&e) != 0) {
-		switch (e.type) {
-			case SDL_QUIT:
-				exit(0);
-			case SDL_KEYUP:
-			case SDL_KEYDOWN:
-				if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0))
-					emulate_keyboard(e.key.keysym.scancode, e.key.state == SDL_PRESSED);
-				break;
-			case SDL_JOYDEVICEADDED:
-			case SDL_JOYDEVICEREMOVED:
-				hid_joystick_device_event(e.jdevice.which, e.type == SDL_JOYDEVICEADDED);
-				break;
-			case SDL_JOYBUTTONDOWN:
-			case SDL_JOYBUTTONUP:
-				hid_joystick_button_event(e.type == SDL_JOYBUTTONDOWN);
-				break;
-			case SDL_JOYHATMOTION:
-				hid_joystick_hat_event(e.jhat.value);
-				break;
-			case SDL_JOYAXISMOTION:
-				if (e.jaxis.axis < 2)
-					hid_joystick_motion_event(e.jaxis.axis, e.jaxis.value);
-				break;
-			case SDL_MOUSEMOTION:
-				hid_mouse_motion_event(e.motion.xrel, e.motion.yrel);
-				break;
-		}
-	}
-	// Screen rendering: begin
-	vic3_render_screen();
-	// Screen rendering: end
+	hid_handle_all_sdl_events();
 	emu_timekeeping_delay(40000);
+	// Ugly CIA trick to maintain realtime TOD in CIAs :)
+	if (seconds_timer_trigger) {
+		struct tm *t = emu_get_localtime();
+		cia_ugly_tod_updater(&cia1, t);
+		cia_ugly_tod_updater(&cia2, t);
+	}
 }
 
 
@@ -702,12 +649,19 @@ static void update_emulator ( void )
 
 int main ( int argc, char **argv )
 {
-	int cycles, frameskip;
+	int cycles;
 	printf("**** The Unusable Commodore 65 emulator from LGB" NL
 	"INFO: Texture resolution is %dx%d" NL "%s" NL,
 		SCREEN_WIDTH, SCREEN_HEIGHT,
 		emulators_disclaimer
 	);
+	emucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
+	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
+	emucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
+	//emucfg_define_switch_option("noaudio", "Disable audio");
+	emucfg_define_str_option("rom", "c65-system.rom", "Override system ROM path to be loaded");
+	if (emucfg_parse_commandline(argc, argv, NULL))
+		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
         if (emu_init_sdl(
 		TARGET_DESC APP_DESC_APPEND,	// window title
@@ -727,81 +681,37 @@ int main ( int argc, char **argv )
 		return 1;
 	// Initialize C65 ...
 	c65_init(
-		argc > 1 ? argv[1] : NULL,	// disk image name
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
 		AUDIO_SAMPLE_FREQ		// sound mix freq
 	);
 	// Start!!
 	cycles = 0;
-	frameskip = 0;
-	frame_counter = 0;
-	vic3_blink_phase = 0;
-	emu_timekeeping_start();
 	if (audio)
 		SDL_PauseAudioDevice(audio, 0);
+	emu_set_full_screen(emucfg_get_bool("fullscreen"));
+	vic3_open_frame_access();
+	emu_timekeeping_start();
 	for (;;) {
-		int opcyc;
-#ifdef DEBUG_STACK
-		cpu_old_sp = cpu_sp;
-		cpu_old_pc_my = cpu_pc;
-		stackguard_address = -1;
-#endif
-		// Trying to use at least some approx stuff :)
-		// In FAST mode, the divider is 7. (see: vic3.c)
-		// Otherwise it's 2, thus giving about *3.5 slower CPU ... or something :)
-		opcyc = cpu_step();
-#ifdef DEBUG_STACK
-		if (cpu_sp != cpu_old_sp) {
-			DEBUG("STACK: pointer [OP=$%02X] change $%02X -> %02X [diff=%d]" NL, cpu_op, cpu_old_sp, cpu_sp, cpu_old_sp - cpu_sp);
-			cpu_old_sp = cpu_sp;
-		} else {
-			if (stackguard_address > -1) {
-				DEBUG("STACK: WARN: somebody modified stack-like memory at $%X [SP=$%02X] with data $%02X [PC=$%04X]" NL, stackguard_address, cpu_sp, stackguard_data, cpu_old_pc_my);
-			}
-		}
-#endif
-		// FIXME: maybe CIAs are not fed with the actual CPU clock and that cause the "too fast" C64 for me?
-		// ... though I tried to correct used CPU cycles with that divider hack at least to approx. the ~1MHz clock in non-FAST mode (see vic3.c)
-		// ... Now it seems to be approx. OK :-) Hopefully, but I have no idea what happens in C65 mode, as - it seems - the usual
-		// periodic IRQ is generated by VIC3 raster interrupt in C65 mode and not by CIA1.
-		cia_tick(&cia1, opcyc);
-		cia_tick(&cia2, opcyc);
-		cycles += (opcyc * 7) / clock_divider7_hack;
-		if (cycles >= 227) {
-			scanline++;
-			//DEBUG("VIC3: new scanline (%d)!" NL, scanline);
-			cycles -= 227;
-			if (scanline == 312) {
-				//DEBUG("VIC3: new frame!" NL);
-				frameskip = !frameskip;
-				scanline = 0;
-				if (!frameskip)	// well, let's only render every full frames (~ie 25Hz)
+		cycles += cpu_step();
+		if (cycles >= cpu_cycles_per_scanline) {
+			cia_tick(&cia1, 64);
+			cia_tick(&cia2, 64);
+			cycles -= cpu_cycles_per_scanline;
+			if (vic3_render_scanline()) {
+				if (frameskip) {
+					frameskip = 0;
+					hostfs_flush_all();
+				} else {
+					frameskip = 1;
+					emu_update_screen();
 					update_emulator();
-				sid1.sFrameCount++;
-				sid2.sFrameCount++;
-				frame_counter++;
-				if (frame_counter == 25) {
-					frame_counter = 0;
-					vic3_blink_phase = !vic3_blink_phase;
+					vic3_open_frame_access();
 				}
+				sids[0].sFrameCount++;
+				sids[1].sFrameCount++;
 			}
-			//DEBUG("RASTER=%d COMPARE=%d" NL,scanline,compare_raster);
-			//vic_interrupt();
 			vic3_check_raster_interrupt();
 		}
-		// Just a wild guess: update DMA state for every CPU cycles
-		// However it does not care about that some DMA commands need more time
-		// (ie COPY vs FILL).
-		// It seems two DMA updates are needed by CPU clock cycle not to apply the WORKAROUND
-		// situation (see in c65dma.c). Hopefully in this way, this is now closer to the native
-		// speed of DMA compared to the CPU. Or not :-D
-#ifndef DMA_STOPS_CPU
-#warning "Compile for non-C65 compatbile setting: without DMA_STOPS_CPU defined in commodore_65.h"
-		while (dma_status && (opcyc--)) {
-			dma_update();
-			dma_update();
-		}
-#endif
 	}
 	return 0;
 }

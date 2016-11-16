@@ -1,4 +1,6 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
+/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
+   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
+   and some Mega-65 features as well.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is a *VERY* lame CIA 6526 emulation, lacks of TOD, mostly to SDR stuff, timing,
@@ -86,22 +88,22 @@ void cia_flag ( struct Cia6526 *cia )
 
 
 
-static void  def_outa  (Uint8 mask, Uint8 data) {}
-static void  def_outb  (Uint8 mask, Uint8 data) {}
+static void  def_outa  (Uint8 data) {}
+static void  def_outb  (Uint8 data) {}
 static void  def_outsr (Uint8 data) {}
-static Uint8 def_ina   (Uint8 mask) { return 0xFF; }
-static Uint8 def_inb   (Uint8 mask) { return 0xFF; }
+static Uint8 def_ina   (void      ) { return 0xFF; }
+static Uint8 def_inb   (void)       { return 0xFF; }
 static Uint8 def_insr  (void)       { return 0xFF; }
 static void  def_setint(int level)  {}
 
 
 void cia_init (
 	struct Cia6526 *cia, const char *name,
-	void (*outa)(Uint8 mask, Uint8 data),
-	void (*outb)(Uint8 mask, Uint8 data),
+	void (*outa)(Uint8 data),
+	void (*outb)(Uint8 data),
 	void (*outsr)(Uint8 data),
-	Uint8 (*ina)(Uint8 mask),
-	Uint8 (*inb)(Uint8 mask),
+	Uint8 (*ina)(void),
+	Uint8 (*inb)(void),
 	Uint8 (*insr)(void),
 	void (*setint)(int level)
 ) {
@@ -123,9 +125,12 @@ Uint8 cia_read ( struct Cia6526 *cia, int addr )
 	Uint8 temp;
 	switch (addr & 0xF) {
 		case  0:	// reg#0: port A data
-			return (cia->PRA & cia->DDRA) | (cia->ina(255 - cia->DDRA) & (255 - cia->DDRA));
+			// Note: actually - it seems - CIA always reads the pins even if output DDR is set
+			// We leave the implementation details of the emulator targets to think about this ...
+			return cia->ina();
 		case  1:	// reg#1: port B data
-			return (cia->PRB & cia->DDRB) | (cia->inb(255 - cia->DDRB) & (255 - cia->DDRB));
+			// Note: see the note above, with port A
+			return cia->inb();
 		case  2:	// reg#2: DDR A
 			return cia->DDRA;
 		case  3:	// reg#3: DDR B
@@ -167,23 +172,29 @@ void cia_write ( struct Cia6526 *cia, int addr, Uint8 data )
 {
 	switch (addr & 0xF) {
 		case 0:		// reg#0: port A
+			// Note: we leave the details for the emulator targets to handle
+			// the situation what is really output in relation of the DDR register too ...
 			cia->PRA = data;
-			cia->outa(cia->DDRA, data);
+			cia->outa(data);
 			break;
 		case 1:		// reg#1: port B
+			// Note: see the note above with Port A
 			cia->PRB = data;
-			cia->outb(cia->DDRB, data);
+			cia->outb(data);
 			break;
 		case 2:		// reg#2: DDR A
+			// Note: we "notify" the emulation target that DDR changed with re-output the value
+			// Note: see the notes with registers 0, 1 on output/DDR related thing
 			if (cia->DDRA != data) {
 				cia->DDRA = data;
-				cia->outa(data, cia->PRA);
+				cia->outa(cia->PRA);
 			}
 			break;
 		case 3:		// reg#3: DDR B
+			// Note: see the note above with DDR of port A
 			if (cia->DDRB != data) {
 				cia->DDRB = data;
-				cia->outb(data, cia->PRB);
+				cia->outb(cia->PRB);
 			}
 			break;
 		case 4:		// reg#4: timer A latch low
@@ -255,6 +266,17 @@ void cia_write ( struct Cia6526 *cia, int addr, Uint8 data )
 			break;
 	}
 	cia->regWritten[addr] = data;
+}
+
+
+void cia_ugly_tod_updater ( struct Cia6526 *cia, struct tm *t )
+{
+	// Ugly CIA trick to maintain realtime TOD in CIAs :)
+	// FIXME: of course, that's simple crazy, not in sync with emu, no "stopping" clock on read, no setting etc ...
+	cia->tod[0] = 0;
+	cia->tod[1] = ((t->tm_sec / 10) << 4)  | (t->tm_sec % 10);
+	cia->tod[2] = ((t->tm_min / 10) << 4)  | (t->tm_min % 10);
+	cia->tod[3] = ((t->tm_hour / 10) << 4) | (t->tm_hour % 10);
 }
 
 

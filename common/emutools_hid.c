@@ -1,4 +1,6 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
+/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
+   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
+   and some Mega-65 features as well.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -15,33 +17,19 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include <stdio.h>
-
-#include <SDL.h>
-
-//#include "commodore_65.h"
-#include "c65hid.h"
 #include "emutools.h"
+#include "emutools_hid.h"
 
 
 /* Note: HID stands for "Human Input Devices" or something like that :)
    That is: keyboard, joystick, mouse.
-
-   TODO: unify this and move to emutools.c, and allow all emulators to share
-   on the common code (with keyboard map set by the emulator though!)
-
-   TODO: also include SDL event loop handling, hot-key "sensing" etc,
-   so if no special requirement from the emulator, then it does not even
-   deal with SDL events at all!
-
-   TODO: also the keyboard matrix default state should be configurable
-   (ie: Commodore LCD uses '0' as unpressed ...)
-
-   TODO: there is no configuration for multiple joysticks, axes, whatever :(
+   TODO: positional mapping stuff for keys _ONLY_
+   TODO: no precise joy emu (multiple joys/axes/buttons/whatsoever)
+   TODO: mouse emulation is unfinished
 */
 
 
-Uint8 kbd_matrix[8];		// keyboard matrix state, 8 * 8 bits
+Uint8 kbd_matrix[16];		// keyboard matrix state, 16 * 8 bits at max currently (not compulsory to use all positions!)
 static int mouse_delta_x;
 static int mouse_delta_y;
 static unsigned int hid_state;
@@ -58,93 +46,11 @@ static SDL_Joystick *joysticks[MAX_JOYSTICKS];
 #define MOUSESTATE_BUTTON_LEFT		32
 #define MOUSESTATE_BUTTON_RIGHT		64
 
+static const struct KeyMapping *key_map = NULL;
+static Uint8 virtual_shift_pos = 0;
 
-
-struct KeyMapping {
-	SDL_Scancode	scan;		// SDL scancode for the given key we want to map
-	Uint8		pos;		// BCD packed, high nibble / low nibble for col/row to map to.  0xFF means end of table!, high bit set on low nibble: press shift as well!
-};
-
-// Keyboard position of "shift" which is "virtually pressed" ie for cursor up/left
-#define SHIFTED_CURSOR_SHIFT_POS	0x64
-
-/* Notes:
-	* This is _POSITIONAL_ mapping (not symbolic), assuming US keyboard layout for the host machine (ie: the machine you run this emulator)
-	* Only 8*8 matrix is emulated currently, on C65 there is an "extra" line it seems
-	* I was lazy to map some keys, see in the comments :)
-*/
-static const struct KeyMapping key_map[] = {
-	{ SDL_SCANCODE_BACKSPACE,	0x00 },	// "backspace" for INS/DEL
-	{ SDL_SCANCODE_RETURN,		0x01 }, // RETURN
-	{ SDL_SCANCODE_RIGHT,		0x02 }, { SDL_SCANCODE_LEFT,	0x02 | 8 },	// Cursor Left / Right (Horizontal) [real key on C65 with the "auto-shift trick]
-	{ SDL_SCANCODE_F7,		0x03 }, { SDL_SCANCODE_F8,	0x03 | 8 },	// Real C65 does not have "F8" (but DOES have cursor up...), these are just for fun :)
-	{ SDL_SCANCODE_F1,		0x04 }, { SDL_SCANCODE_F2,	0x04 | 8 },
-	{ SDL_SCANCODE_F3,		0x05 }, { SDL_SCANCODE_F4,	0x05 | 8 },
-	{ SDL_SCANCODE_F5,		0x06 }, { SDL_SCANCODE_F6,	0x06 | 8 },
-	{ SDL_SCANCODE_DOWN,		0x07 }, { SDL_SCANCODE_UP,	0x07 | 8 },	// Cursor Down / Up (Vertical) [real key on C65 with the "auto-shift" trick]
-	{ SDL_SCANCODE_3,		0x10 },
-	{ SDL_SCANCODE_W,		0x11 },
-	{ SDL_SCANCODE_A,		0x12 },
-	{ SDL_SCANCODE_4,		0x13 },
-	{ SDL_SCANCODE_Z,		0x14 },
-	{ SDL_SCANCODE_S,		0x15 },
-	{ SDL_SCANCODE_E,		0x16 },
-	{ SDL_SCANCODE_LSHIFT,		0x17 },
-	{ SDL_SCANCODE_5,		0x20 },
-	{ SDL_SCANCODE_R,		0x21 },
-	{ SDL_SCANCODE_D,		0x22 },
-	{ SDL_SCANCODE_6,		0x23 },
-	{ SDL_SCANCODE_C,		0x24 },
-	{ SDL_SCANCODE_F,		0x25 },
-	{ SDL_SCANCODE_T,		0x26 },
-	{ SDL_SCANCODE_X,		0x27 },
-	{ SDL_SCANCODE_7,		0x30 },
-	{ SDL_SCANCODE_Y,		0x31 },
-	{ SDL_SCANCODE_G,		0x32 },
-	{ SDL_SCANCODE_8,		0x33 },
-	{ SDL_SCANCODE_B,		0x34 },
-	{ SDL_SCANCODE_H,		0x35 },
-	{ SDL_SCANCODE_U,		0x36 },
-	{ SDL_SCANCODE_V,		0x37 },
-	{ SDL_SCANCODE_9,		0x40 },
-	{ SDL_SCANCODE_I,		0x41 },
-	{ SDL_SCANCODE_J,		0x42 },
-	{ SDL_SCANCODE_0,		0x43 },
-	{ SDL_SCANCODE_M,		0x44 },
-	{ SDL_SCANCODE_K,		0x45 },
-	{ SDL_SCANCODE_O,		0x46 },
-	{ SDL_SCANCODE_N,		0x47 },
-	// FIXME: map something as +	0x50
-	{ SDL_SCANCODE_P,		0x51 },
-	{ SDL_SCANCODE_L,		0x52 },
-	{ SDL_SCANCODE_MINUS,		0x53 },
-	{ SDL_SCANCODE_PERIOD,		0x54 },
-	{ SDL_SCANCODE_APOSTROPHE,	0x55 },	// mapped as ":"
-	// FIXME: map something as @	0x56
-	{ SDL_SCANCODE_COMMA,		0x57 },
-	// FIXME: map something as pound0x60
-	// FIXME: map something as *	0x61
-	{ SDL_SCANCODE_SEMICOLON,	0x62 },
-	{ SDL_SCANCODE_HOME,		0x63 },	// CLR/HOME
-	{ SDL_SCANCODE_RSHIFT,		0x64 },
-	{ SDL_SCANCODE_EQUALS,		0x65 },
-	// FIXME: map something as Pi?	0x66
-	{ SDL_SCANCODE_SLASH,		0x67 },
-	{ SDL_SCANCODE_1,		0x70 },
-	// FIXME: map sg. as <--	0x71
-	{ SDL_SCANCODE_LCTRL,		0x72 },
-	{ SDL_SCANCODE_2,		0x73 },
-	{ SDL_SCANCODE_SPACE,		0x74 },
-	{ SDL_SCANCODE_LALT,		0x75 },	// Commodore key, PC kbd sux, does not have C= key ... Mapping left ALT as the C= key
-	{ SDL_SCANCODE_Q,		0x76 },
-	{ SDL_SCANCODE_END,		0x77 },	// RUN STOP key, we map 'END' as this key
-	// **** this must be the last line: end of mapping table ****
-	{ 0, 0xFF }
-};
-
-
-#define KBD_PRESS_KEY(a)        kbd_matrix[(a) >> 4] &= 255 - (1 << ((a) & 0x7))
-#define KBD_RELEASE_KEY(a)      kbd_matrix[(a) >> 4] |= 1 << ((a) & 0x7)
+#define KBD_PRESS_KEY(a)        kbd_matrix[(a) >> 4] &= ~(1 << ((a) & 0x7))
+#define KBD_RELEASE_KEY(a)      kbd_matrix[(a) >> 4] |=   1 << ((a) & 0x7)
 #define KBD_SET_KEY(a,state) do {	\
 	if (state)			\
 		KBD_PRESS_KEY(a);	\
@@ -156,16 +62,45 @@ static const struct KeyMapping key_map[] = {
 int hid_key_event ( SDL_Scancode key, int pressed )
 {
 	const struct KeyMapping *map = key_map;
-	while (map->pos != 0xFF) {
+	while (map->pos >= 0) {
 		if (map->scan == key) {
+			if (map->pos > 0xFF) {	// special emulator key!
+				switch (map->pos) {	// handle "built-in" events, if emulator target uses them at all ...
+					case XEMU_EVENT_EXIT:
+						exit(0);
+						break;
+					case XEMU_EVENT_FAKE_JOY_UP:
+						if (pressed) hid_state |= JOYSTATE_UP;     else hid_state &= ~JOYSTATE_UP;
+						break;
+					case XEMU_EVENT_FAKE_JOY_DOWN:
+						if (pressed) hid_state |= JOYSTATE_DOWN;   else hid_state &= ~JOYSTATE_DOWN;
+						break;
+					case XEMU_EVENT_FAKE_JOY_LEFT:
+						if (pressed) hid_state |= JOYSTATE_LEFT;   else hid_state &= ~JOYSTATE_LEFT;
+						break;
+					case XEMU_EVENT_FAKE_JOY_RIGHT:
+						if (pressed) hid_state |= JOYSTATE_RIGHT;  else hid_state &= ~JOYSTATE_RIGHT;
+						break;
+					case XEMU_EVENT_FAKE_JOY_FIRE:
+						if (pressed) hid_state |= JOYSTATE_BUTTON; else hid_state &= ~JOYSTATE_BUTTON;
+						break;
+					case XEMU_EVENT_TOGGLE_FULLSCREEN:
+						if (pressed)
+							emu_set_full_screen(-1);
+						break;
+					default:
+						return emu_callback_key(map->pos, key, pressed, 0);
+				}
+				return emu_callback_key(map->pos, key, pressed, 1);
+			}
 			if (map->pos & 8)			// shifted key emu?
-				KBD_SET_KEY(SHIFTED_CURSOR_SHIFT_POS, pressed);	// maintain the shift key
+				KBD_SET_KEY(virtual_shift_pos, pressed);	// maintain the shift key
 			KBD_SET_KEY(map->pos, pressed);
-			return 0;
+			return emu_callback_key(map->pos, key, pressed, 1);
 		}
 		map++;
 	}
-	return 1;
+	return emu_callback_key(-1, key, pressed, 0);
 }
 
 
@@ -180,21 +115,18 @@ void hid_reset_events ( int burn )
 	mouse_delta_x = 0;
 	mouse_delta_y = 0;
 	hid_state = 0;
-	if (burn) {
-		SDL_Event e;
-		burn = 0;
-		while (SDL_PollEvent(&e) != 0)
-			burn++;
-		DEBUG("HID: %d event(s) ignored." NL, burn);
-	}
+	if (burn)
+		emu_drop_events();
 }
 
 
-void hid_init ( void )
+void hid_init ( const struct KeyMapping *key_map_in, Uint8 virtual_shift_pos_in, int joy_enable )
 {
 	int a;
+	key_map = key_map_in;
+	virtual_shift_pos = virtual_shift_pos_in;
 	SDL_GameControllerEventState(SDL_DISABLE);
-	SDL_JoystickEventState(SDL_ENABLE);
+	SDL_JoystickEventState(joy_enable);
 	hid_reset_events(0);
 	for (a = 0; a < MAX_JOYSTICKS; a++)
 		joysticks[a] = NULL;
@@ -234,9 +166,9 @@ void hid_joystick_device_event ( int which , int is_attach )
 		if (joysticks[which])
 			hid_joystick_device_event(which, 0);
 		joysticks[which] = SDL_JoystickOpen(which);
-		if (joysticks[which])
-			DEBUG("HID: joystick device #%d \"%s\" has been added." NL, which, SDL_JoystickName(joysticks[which]));
-		else
+		if (joysticks[which]) {
+			INFO_WINDOW("HID: joystick device #%d \"%s\" has been added." NL, which, SDL_JoystickName(joysticks[which]));
+		} else
 			DEBUG("HID: joystick device #%d problem, cannot be opened on 'add' event: %s." NL, which, SDL_GetError());
 	} else {
 		if (joysticks[which]) {
@@ -354,4 +286,51 @@ int hid_read_mouse_button_left ( int on, int off )
 int hid_read_mouse_button_right ( int on, int off )
 {
 	return (hid_state & MOUSESTATE_BUTTON_RIGHT) ? on : off;
+}
+
+
+int hid_handle_one_sdl_event ( SDL_Event *event )
+{
+	int handled = 1;
+	switch (event->type) {
+		case SDL_QUIT:
+			exit(0);
+		case SDL_KEYUP:
+		case SDL_KEYDOWN:
+			if (event->key.repeat == 0 && (event->key.windowID == sdl_winid || event->key.windowID == 0))
+				hid_key_event(event->key.keysym.scancode, event->key.state == SDL_PRESSED);
+			break;
+		case SDL_JOYDEVICEADDED:
+		case SDL_JOYDEVICEREMOVED:
+			hid_joystick_device_event(event->jdevice.which, event->type == SDL_JOYDEVICEADDED);
+			break;
+		case SDL_JOYBUTTONDOWN:
+		case SDL_JOYBUTTONUP:
+			hid_joystick_button_event(event->type == SDL_JOYBUTTONDOWN);
+			break;
+		case SDL_JOYHATMOTION:
+			hid_joystick_hat_event(event->jhat.value);
+			break;
+		case SDL_JOYAXISMOTION:
+			if (event->jaxis.axis < 2)
+				hid_joystick_motion_event(event->jaxis.axis, event->jaxis.value);
+			break;
+		//case SDL_MOUSEMOTION:
+		//      hid_mouse_motion_event(e.motion.xrel, e.motion.yrel);
+		//      break;
+		default:
+			handled = 0;
+			break;
+	}
+	return handled;
+}
+
+
+// For simple emulators it's even enough to call regularly this function for all HID stuffs!
+void hid_handle_all_sdl_events ( void )
+{
+	SDL_Event event;
+	while (SDL_PollEvent(&event) != 0)
+		hid_handle_one_sdl_event(&event);
+
 }

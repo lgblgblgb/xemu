@@ -15,13 +15,11 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include <stdio.h>
-
-#include <SDL.h>
-
+#include "emutools.h"
 #include "c65dma.h"
 #include "commodore_65.h"
 #include "emutools.h"
+#include "cpu65c02.h"
 
 
 
@@ -48,7 +46,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 */
 
 
-static Uint8 dma_registers[4];		// The four DMA registers (with last values written by the CPU)
+static Uint8 dma_registers[16];		// The four DMA registers (with last values written by the CPU)
 static int   source_step;		// [-1, 0, 1] step value for source (0 = hold, constant address)
 static int   target_step;		// [-1, 0, 1] step value for target (0 = hold, constant address)
 static int   source_addr;		// DMA source address (the low byte is also used by COPY command as the "filler byte")
@@ -66,7 +64,8 @@ static Uint8 minterms[4];		// Used with MIX DMA command only
        Uint8 dma_status;
 
 
-#define IO_ADDR(a)		(0xD000 | ((a) & 0xFFF))
+//#define IO_ADDR(a)		(0xD000 | ((a) & 0xFFF))
+#define IO_ADDR(a)		a
 #define IO_READ(a)		io_read(IO_ADDR(a))
 #define IO_WRITE(a, d)		io_write(IO_ADDR(a), d)
 #define MEM_READ(a)		read_phys_mem(a)
@@ -149,29 +148,16 @@ static void dma_update_all ( void )
 void dma_write_reg ( int addr, Uint8 data )
 {
 	// DUNNO about DMAgic too much. It's merely guessing from my own ROM assembly tries, C65gs/Mega65 VHDL, and my ideas :)
-	addr &= 3;
+	DEBUG("DMA: writing register $%X with value of $%X @ PC=$%04X" NL, addr, data, cpu_pc);
+	addr &= 15;	// FIXME: how it should be handled normally?!
 	dma_registers[addr] = data;
 	if (addr)
 		return;	// Only writing register 0 starts the DMA operation
-	if (dma_status) {
-		DEBUG("DMA: WARNING: previous operation is in progress, WORKAROUND: finishing first." NL);
-		// Ugly hack: it seems even the C65 ROM issues new DMA commands while the previous is in-progress
-		// It's possible the fault of timing of my emulation.
-		// The current workaround: in this situation we run the DMA to finish the previous operation first.
-		// Note, that there is a possible two PROBLEMS with this solution:
-		// * Extremly long DMA command (ie chained) blocks the emulator to refresh screen etc for a long time
-		// * I/O redirection as target affecting the DMA registers can create a stack overflow in the emulator code :)
-		dma_update_all();
-	}
 	dma_list_addr = dma_registers[0] | (dma_registers[1] << 8) | ((dma_registers[2] & 15) << 16);
 	DEBUG("DMA: list address is $%06X now, just written to register %d value $%02X" NL, dma_list_addr, addr, data);
 	dma_status = 0x80;	// DMA is busy now, also to signal the emulator core to call dma_update() in its main loop
 	command = -1;		// signal dma_update() that it's needed to fetch the DMA command, no command is fetched yet
-#ifdef DMA_STOPS_CPU
-	dma_update_all();
-#else
-#warning "Compile for non-C65 compatbile setting: without DMA_STOPS_CPU defined in commodore_65.h"
-#endif
+	dma_update_all();	// DMA _stops_ CPU, however FIXME: interrupts can (???) occur, so we need to emulate that somehow later?
 }
 
 
@@ -263,6 +249,7 @@ void dma_init ( void )
 
 Uint8 dma_read_reg ( int addr )
 {
+	// FIXME: status on ALL registers when read?!
 	DEBUG("DMA: register reading at addr of %d" NL, addr);
 #if 0
 	if ((addr & 3) != 3)

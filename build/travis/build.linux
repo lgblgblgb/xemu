@@ -14,6 +14,8 @@ echo "<<< MARK: BUILD ALL BEGIN >>>"
 rm -f build/bin/*
 make all-arch
 ret="$?"
+echo "Optional part: DEB package"
+make deb
 echo "<<< MARK: BUILD ALL END >>>"
 
 echo "BUILD STATUS: $ret"

@@ -15,11 +15,15 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __LGB_C65FDC_H_INCLUDED
-#define __LGB_C65FDC_H_INCLUDED
+#ifndef __XEMU_COMMON_CBMHOSTFS_H_INCLUDED
+#define __XEMU_COMMON_CBMHOSTFS_H_INCLUDED
 
-extern void  fdc_write_reg ( int addr, Uint8 data );
-extern Uint8 fdc_read_reg  ( int addr );
-extern void  fdc_init      ( const char *dfn );
+extern void  hostfs_init       ( const char *basedir, const char *subdir );
+extern void  hostfs_close_all  ( void );
+extern void  hostfs_flush_all  ( void );
+extern Uint8 hostfs_read_reg0  ( void );
+extern Uint8 hostfs_read_reg1  ( void );
+extern void  hostfs_write_reg0 ( Uint8 data );
+extern void  hostfs_write_reg1 ( Uint8 data );
 
 #endif

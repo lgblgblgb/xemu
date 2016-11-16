@@ -21,10 +21,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include <stdio.h>
 
-#include <SDL.h>
-
+#include "emutools.h"
 #include "mega65.h"
 #include "cpu65c02.h"
 #include "vic3.h"
@@ -42,18 +40,19 @@ static Uint8 vic3_palette_nibbles[0x300];
 Uint8 vic3_registers[0x80];		// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
 int vic_iomode;				// VIC2/VIC3/VIC4 mode
 int scanline;				// current scan line number
-int clock_divider7_hack;
+int cpu_cycles_per_scanline;
 static int compare_raster;		// raster compare (9 bits width) data
 static int interrupt_status;		// Interrupt status of VIC
 int vic2_16k_bank;			// VIC-2 modes' 16K BANK address within 64K (NOT the traditional naming of banks with 0,1,2,3)
 static Uint8 *sprite_pointers;		// Pointer to sprite pointers :)
 static Uint8 *sprite_bank;
 int vic3_blink_phase;			// blinking attribute helper, state.
+static Uint8 raster_colours[512];
 
-static int warn_sprites = 1, warn_ctrl_b_lo = 1;
+static int warn_sprites = 0, warn_ctrl_b_lo = 1;
 
 
-#define CHECK_PIXEL_POINTER
+//#define CHECK_PIXEL_POINTER
 
 
 
@@ -99,7 +98,6 @@ void vic3_init ( void )
 		for (g = 0; g < 16; g++)
 			for (b = 0; b < 16; b++)
 				rgb_palette[i++] = SDL_MapRGBA(sdl_pix_fmt, r * 17, g * 17, b * 17, 0xFF); // 15*17=255, last arg 0xFF: alpha channel for SDL
-	SDL_FreeFormat(sdl_pix_fmt);	// thanks, we don't need this anymore from SDL
 	// *** Init VIC3 registers and palette
 	vic2_16k_bank = 0;
 	vic_iomode = VIC2_IOMODE;
@@ -107,7 +105,7 @@ void vic3_init ( void )
 	palette = vic3_rom_palette;
 	scanline = 0;
 	compare_raster = 0;
-	clock_divider7_hack = 7;
+	cpu_cycles_per_scanline = FAST_CPU_CYCLES_PER_SCANLINE;
 	for (i = 0; i < 0x100; i++) {	// Initiailize all palette registers to zero, initially, to have something ...
 		if (i < sizeof vic3_registers)
 			vic3_registers[i] = 0;	// Also the VIC3 registers ...
@@ -142,10 +140,11 @@ static void vic3_interrupt_checker ( void )
 {
 	int vic_irq_old = cpu_irqLevel & 2;
 	int vic_irq_new;
-	if (interrupt_status) {
+	if ((interrupt_status & vic3_registers[0x1A])) {
 		interrupt_status |= 128;
 		vic_irq_new = 2;
 	} else {
+		interrupt_status &= 127;
 		vic_irq_new = 0;
 	}
 	if (vic_irq_old != vic_irq_new) {
@@ -153,7 +152,7 @@ static void vic3_interrupt_checker ( void )
 		if (vic_irq_new)
 			cpu_irqLevel |= 2;
 		else
-			cpu_irqLevel &= 255 - 2;
+			cpu_irqLevel &= ~2;
 	}
 }
 
@@ -161,21 +160,11 @@ static void vic3_interrupt_checker ( void )
 
 void vic3_check_raster_interrupt ( void )
 {
-	// I'm lame even with VIC2 knowledge it seems
-	// C65 seems to use raster interrupt to generate the usual periodic IRQ
-	// (which was done with CIA on C64) in raster line 511. However as
-	// raster line 511 can never be true, I really don't know what to do.
-	// To be able C65 ROM to work, I assume that raster 511 is raster 0.
-	// It's possible that this is an NTSC/PAL issue, as raster can be "negative"
-	// according to the specification in case of NTSC. I really don't know ...
-	if (
-		(scanline == compare_raster)
-		|| (compare_raster == 511 && scanline == 0)
-	) {
+	raster_colours[scanline] = vic3_registers[0x21];	// ugly hack to make some kind of raster-bars visible :-/
+	if (scanline == compare_raster)
 		interrupt_status |= 1;
-	} else
+	else
 		interrupt_status &= 0xFE;
-	interrupt_status &= vic3_registers[0x1A];
 	vic3_interrupt_checker();
 }
 
@@ -191,7 +180,7 @@ void vic3_write_reg ( int addr, Uint8 data )
 		int vic_new_iomode;
 		if (data == 0x96 && old_data == 0xA5)
 			vic_new_iomode = VIC3_IOMODE;
-		else if (data == 0x53 && old_data == 0x47 && mega65_capable)
+		else if (data == 0x53 && old_data == 0x47)
 			vic_new_iomode = VIC4_IOMODE;
 		else
 			vic_new_iomode = VIC2_IOMODE;
@@ -213,7 +202,7 @@ void vic3_write_reg ( int addr, Uint8 data )
 	vic3_registers[addr] = data;
 	switch (addr) {
 		case 0x11:
-			compare_raster = (compare_raster & 0xFF) | ((data & 1) ? 0x100 : 0);
+			compare_raster = (compare_raster & 0xFF) | ((data & 128) ? 0x100 : 0);
 			DEBUG("VIC3: compare raster is now %d" NL, compare_raster);
 			break;
 		case 0x12:
@@ -221,11 +210,15 @@ void vic3_write_reg ( int addr, Uint8 data )
 			DEBUG("VIC3: compare raster is now %d" NL, compare_raster);
 			break;
 		case 0x19:
-			interrupt_status = interrupt_status & data & 15 & vic3_registers[0x1A];
+			interrupt_status = interrupt_status & (~data) & 15;
 			vic3_interrupt_checker();
 			break;
 		case 0x1A:
 			vic3_registers[0x1A] &= 15;
+			break;
+		case 0x21:	// TODO: it seems we have to do about the same with various registers later, FIXME not only this one ... FIXME #2: on reading though high bits should be '1' with C64 I/O mode
+			if (!vic_iomode)
+				vic3_registers[0x21] &= 15;
 			break;
 		case 0x30:
 			// Save some un-needed memory translating table rebuilds, if there is no important bits (of us) changed.
@@ -240,8 +233,8 @@ void vic3_write_reg ( int addr, Uint8 data )
 			palette = (data & 4) ? vic3_palette : vic3_rom_palette;
 			break;
 		case 0x31:
-			clock_divider7_hack = (data & 64) ? 7 : 2;
-			DEBUG("VIC3: clock_divider7_hack = %d" NL, clock_divider7_hack);
+			cpu_cycles_per_scanline = (data & 64) ? FAST_CPU_CYCLES_PER_SCANLINE : SLOW_CPU_CYCLES_PER_SCANLINE;
+			//DEBUG("VIC3: clock_divider7_hack = %d" NL, clock_divider7_hack);
 			if ((data & 15) && warn_ctrl_b_lo) {
 				INFO_WINDOW("VIC3 control-B register V400, H1280, MONO and INT features are not emulated yet!");
 				warn_ctrl_b_lo = 0;
@@ -326,19 +319,19 @@ void vic3_write_palette_reg ( int num, Uint8 data )
 static inline Uint8 *vic2_get_chargen_pointer ( void )
 {
 	int offs = (vic3_registers[0x18] & 14) << 10;	// character generator address address within the current VIC2 bank
-	int crom = vic3_registers[0x30] & 64;
-	// DEBUG("VIC2: chargen: BANK=%04X OFS=%04X CROM=%d" NL, vic2_16k_bank, offs, crom);
+	//int crom = vic3_registers[0x30] & 64;
+	//DEBUG("VIC2: chargen: BANK=%04X OFS=%04X CROM=%d" NL, vic2_16k_bank, offs, crom);
 	if ((vic2_16k_bank == 0x0000 || vic2_16k_bank == 0x8000) && (offs == 0x1000 || offs == 0x1800)) {  // check if chargen info is in ROM
-		// FIXME: I am really lost with this CROM bit, and the layout of C65 ROM on charsets, sorry. Maybe this is totally wrong!
-		// The problem, for my eye, the two charsets (C64/C65?!) seems to be the very same :-/
-		// BUT, it seems, C65 mode *SETS* CROM bit. While for C64 mode it is CLEARED.
-		if (crom)
-			return memory + 0x29000 + offs - 0x1000;	// ... so this should be the C65 charset ...
-		else
-			return memory + 0x2D000 + offs - 0x1000;	// ... and this should be the C64 charset ...
+		// In case of Mega65, fetching char-info from ROM means to access the "WOM"
+		// FIXME: what should I do with bit 6 of VIC-III register $30 ["CROM"] ?!
+		return character_rom + offs - 0x1000;
 	} else
 		return memory + vic2_16k_bank + offs;
 }
+
+
+//#define BG_FOR_Y(y) vic3_registers[0x21]
+#define BG_FOR_Y(y) raster_colours[(y) + 50]
 
 
 
@@ -348,10 +341,11 @@ static inline Uint8 *vic2_get_chargen_pointer ( void )
 static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 {
 	Uint32 bg;
-	Uint8 *vidp, *colp = memory + 0x1F800;
+	Uint8 *vidp, *colp = colour_ram;
 	int x = 0, y = 0, xlim, ylim, charline = 0;
 	Uint8 *chrg = vic2_get_chargen_pointer();
 	int inc_p = (vic3_registers[0x54] & 1) ? 2 : 1;	// VIC-IV (Mega-65) 16 bit text mode?
+	int scanline = 0;
 	if (vic3_registers[0x31] & 128) { // check H640 bit: 80 column mode?
 		xlim = 79;
 		ylim = 24;
@@ -367,56 +361,76 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 		sprite_pointers = vidp + 1016;
 	}
 	// Target SDL pixel related format for the background colour
-	bg = palette[vic3_registers[0x21] & 15];
+	bg = palette[BG_FOR_Y(0)];
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_text");
 	for (;;) {
-		Uint8 chrdata = chrg[(*vidp << 3) + charline];
 		Uint8 coldata = *colp;
 		Uint32 fg;
-		colp += inc_p;
-		vidp += inc_p;
-		if (vic3_registers[0x31] & 32) { 	// ATTR bit mode
-			if ((coldata & 0xF0) == 0x10) {	// only the blink bit for the character is set
-				if (vic3_blink_phase)
-					chrdata = 0;	// blinking character, in one phase, the character "disappears", ie blinking
-				coldata &= 15;
-			} else if ((!(coldata & 0x10)) || vic3_blink_phase) {
-				if (coldata & 0x80 && charline == 7)	// underline (must be before reverse, as underline can be reversed as well!)
-					chrdata = 0XFF; // the underline
-				if (coldata & 0x20)	// reverse bit for char
-					chrdata = ~chrdata;
-				if (coldata & 0x40)	// highlight, this must be the LAST, since it sets the low nibble of coldata ...
-					coldata = 0x10 | (coldata & 15);
-				else
+		if (
+			inc_p == 2 && (		// D054 bit 0 controlled stuff (16bit mode)
+			(vidp[1] == 0 && (vic3_registers[0x54] & 2)) ||	// enabled for =<$FF chars
+			(vidp[1] && (vic3_registers[0x54] & 4))		// enabled for >$FF chars
+		)) {
+			if (vidp[0] == 0xFF && vidp[1] == 0xFF) {
+				// end of line marker, let's use background to fill the rest of the line ...
+				// FIXME: however in the current situation we can't do that since of the "fixed" line length for 80 or 40 chars ... :(
+				p += xlim == 39 ? 16 : 8;	// so we just ignore ... FIXME !!
+			} else {
+				int a;
+				Uint8 *cp = memory + (((vidp[0] << 6) + (charline << 3) + (vidp[1] << 14)) & 0x1ffff); // and-mask: wrap-around in 128K of chip-RAM
+				for (a = 0; a < 8; a++) {
+					if (xlim != 79)
+						*(p++) = palette[*cp];
+					*(p++) = palette[*(cp++)];
+				}
+			}
+		} else {
+			Uint8 chrdata = chrg[(*vidp << 3) + charline];
+			if (vic3_registers[0x31] & 32) { 	// ATTR bit mode
+				if ((coldata & 0xF0) == 0x10) {	// only the blink bit for the character is set
+					if (vic3_blink_phase)
+						chrdata = 0;	// blinking character, in one phase, the character "disappears", ie blinking
+					coldata &= 15;
+				} else if ((!(coldata & 0x10)) || vic3_blink_phase) {
+					if (coldata & 0x80 && charline == 7)	// underline (must be before reverse, as underline can be reversed as well!)
+						chrdata = 0XFF; // the underline
+					if (coldata & 0x20)	// reverse bit for char
+						chrdata = ~chrdata;
+					if (coldata & 0x40)	// highlight, this must be the LAST, since it sets the low nibble of coldata ...
+						coldata = 0x10 | (coldata & 15);
+					else
+						coldata &= 15;
+				} else
 					coldata &= 15;
 			} else
 				coldata &= 15;
-		} else
-			coldata &= 15;
-		fg = palette[coldata];
-		// FIXME: no ECM, MCM stuff ...
-		if (xlim == 79) {
-			PIXEL_POINTER_CHECK_ASSERT(p + 7);
-			*(p++) = chrdata & 128 ? fg : bg;
-			*(p++) = chrdata &  64 ? fg : bg;
-			*(p++) = chrdata &  32 ? fg : bg;
-			*(p++) = chrdata &  16 ? fg : bg;
-			*(p++) = chrdata &   8 ? fg : bg;
-			*(p++) = chrdata &   4 ? fg : bg;
-			*(p++) = chrdata &   2 ? fg : bg;
-			*(p++) = chrdata &   1 ? fg : bg;
-		} else {
-			PIXEL_POINTER_CHECK_ASSERT(p + 15);
-			p[ 0] = p[ 1] = chrdata & 128 ? fg : bg;
-			p[ 2] = p[ 3] = chrdata &  64 ? fg : bg;
-			p[ 4] = p[ 5] = chrdata &  32 ? fg : bg;
-			p[ 6] = p[ 7] = chrdata &  16 ? fg : bg;
-			p[ 8] = p[ 9] = chrdata &   8 ? fg : bg;
-			p[10] = p[11] = chrdata &   4 ? fg : bg;
-			p[12] = p[13] = chrdata &   2 ? fg : bg;
-			p[14] = p[15] = chrdata &   1 ? fg : bg;
-			p += 16;
+			fg = palette[coldata];
+			// FIXME: no ECM, MCM stuff ...
+			if (xlim == 79) {
+				PIXEL_POINTER_CHECK_ASSERT(p + 7);
+				*(p++) = chrdata & 128 ? fg : bg;
+				*(p++) = chrdata &  64 ? fg : bg;
+				*(p++) = chrdata &  32 ? fg : bg;
+				*(p++) = chrdata &  16 ? fg : bg;
+				*(p++) = chrdata &   8 ? fg : bg;
+				*(p++) = chrdata &   4 ? fg : bg;
+				*(p++) = chrdata &   2 ? fg : bg;
+				*(p++) = chrdata &   1 ? fg : bg;
+			} else {
+				PIXEL_POINTER_CHECK_ASSERT(p + 15);
+				p[ 0] = p[ 1] = chrdata & 128 ? fg : bg;
+				p[ 2] = p[ 3] = chrdata &  64 ? fg : bg;
+				p[ 4] = p[ 5] = chrdata &  32 ? fg : bg;
+				p[ 6] = p[ 7] = chrdata &  16 ? fg : bg;
+				p[ 8] = p[ 9] = chrdata &   8 ? fg : bg;
+				p[10] = p[11] = chrdata &   4 ? fg : bg;
+				p[12] = p[13] = chrdata &   2 ? fg : bg;
+				p[14] = p[15] = chrdata &   1 ? fg : bg;
+				p += 16;
+			}
 		}
+		colp += inc_p;
+		vidp += inc_p;
 		if (x == xlim) {
 			p += tail;
 			x = 0;
@@ -430,6 +444,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 				vidp -= (xlim + 1) * inc_p;
 				colp -= (xlim + 1) * inc_p;
 			}
+			bg = palette[BG_FOR_Y(++scanline)];
 		} else
 			x++;
 	}
@@ -565,7 +580,7 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
 
 
 #define SPRITE_X_START_SCREEN	24
-#define SPRITE_Y_START_SCREEN	30
+#define SPRITE_Y_START_SCREEN	50
 
 
 /* Extremely incorrect sprite emulation! BUGS:
@@ -595,10 +610,11 @@ static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 
 			for (a = 0; a < 3; a++) {
 				for (mask = 128; mask; mask >>= 1) {
 					if (*data & mask) {
-						if (x >= 0 && x < 640)
+						if (x >= 0 && x < 640) {
 							p[x] = p[x + 1] = colour;
 							if (expand_y && y < 200)
 								p[x + 640 + tail] = p[x + 641 + tail] = colour;
+						}
 						x += 2;
 						if (expand_x && x >= 0 && x < 640) {
 							p[x] = p[x + 1] = colour;
@@ -606,7 +622,8 @@ static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 
 								p[x + 640 + tail] = p[x + 641 + tail] = colour;
 							x += 2;
 						}
-					}
+					} else
+						x += expand_x ? 4 : 2;
 				}
 				data++;
 			}
@@ -645,7 +662,7 @@ void vic3_render_screen ( void )
 		}
 		for (a = 7; a >= 0; a--) {
 			int mask = 1 << a;
-			if (sprites & (1 << a))
+			if ((sprites & mask))
 				render_sprite(a, mask, sprite_bank + (sprite_pointers[a] << 6), p_sdl, tail_sdl);	// sprite_pointers are set by the renderer functions above!
 		}
 	}

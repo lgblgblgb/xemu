@@ -1,4 +1,4 @@
-/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
+/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -15,11 +15,9 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_C65FDC_MEGA65_H_INCLUDED
-#define __XEMU_C65FDC_MEGA65_H_INCLUDED
+#ifndef __XEMU_C65_D81_IMAGE_H_INCLUDED
+#define __XEMU_C65_D81_IMAGE_H_INCLUDED
 
-extern void  fdc_write_reg ( int addr, Uint8 data );
-extern Uint8 fdc_read_reg  ( int addr );
-extern void  fdc_init      ( const char *dfn );
+extern void c65_d81_init ( const char *dfn );
 
 #endif

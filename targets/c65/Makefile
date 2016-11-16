@@ -20,7 +20,7 @@
 TARGET		= c65
 PRG_TARGET	= xc65
 CFLAGS_TARGET	=
-SRCS_TARGET	= commodore_65.c c65dma.c c65fdc.c vic3.c
-SRCS_COMMON	= emutools.c cpu65c02.c cia6526.c c65hid.c sid.c
+SRCS_TARGET	= commodore_65.c c65dma.c vic3.c c65_d81_image.c
+SRCS_COMMON	= emutools.c cpu65c02.c cia6526.c sid.c f011_core.c c64_kbd_mapping.c emutools_hid.c cbmhostfs.c emutools_config.c
 
 include ../../build/Makefile.common

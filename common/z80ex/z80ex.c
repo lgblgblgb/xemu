@@ -2,7 +2,8 @@
  * Z80Ex, ZILoG Z80 CPU emulator.
  *
  * by Pigmaker57 aka boo_boo [pigmaker57@kahoh57.info]
- * modified by Gabor Lenart LGB [lgblgblgb@gmail.com] for Xep128
+ * modified by Gabor Lenart LGB [lgblgblgb@gmail.com] for Xep128 project
+ * used by Gabor Lenart LGB [lgblgblgb@gmail.com] in Xemu project
  *
  * contains some code from the FUSE project (http://fuse-emulator.sourceforge.net)
  * Released under GNU GPL v2
@@ -78,7 +79,7 @@ int z80ex_step(void)
 						opcode = READ_OP();
 #ifdef Z80EX_Z180_SUPPORT
 						if (Z180_LIKELY(z80ex.z180)) {
-							if ((opcode & 7) != 6 || opcode == 0x36)
+							if (unlikely((opcode & 7) != 6 || opcode == 0x36))
 								ofn = trapping(z80ex.prefix, 0xCB, opcode, ITC_B3);
 							else
 								ofn = (z80ex.prefix == 0xDD) ? opcodes_ddcb[opcode] : opcodes_fdcb[opcode];

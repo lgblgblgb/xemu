@@ -1,6 +1,11 @@
-/* A Commodore LCD emulator using SDL2 library.
-   Also includes a test-case for a very simple and inaccurate Commodore VIC-20 emulator.
+/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
+   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
+   and some Mega-65 features as well.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+
+   THIS IS AN UGLY PIECE OF SOURCE REALLY.
+
+   Quite confusing comment section even at the beginning, from this point ...
 
    | This file tries to implement a 65C02 CPU, also with the ability (unused here) for
    | *some* kind of DTV CPU hacks (though incorrect as other opcodes would be emulated
@@ -34,7 +39,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  */
 
 #include "emutools_basicdefs.h"
+#ifndef CPU_CUSTOM_INCLUDED
 #include "cpu65c02.h"
+#endif
 
 #ifdef DEBUG_CPU
 #include "cpu65ce02_disasm_tables.c"
@@ -88,6 +95,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 Uint8 cpu_sp, cpu_op;
 #ifdef MEGA65
 #warning "Compiling for MEGA65, hacky stuff!"
+#define IS_FLAT32_DATA_OP() unlikely(cpu_previous_op == 0xEA && cpu_linear_memory_addressing_is_enabled)
 Uint8 cpu_previous_op;
 #endif
 Uint16 cpu_pc, cpu_old_pc;
@@ -539,7 +547,13 @@ int cpu_step () {
 #ifdef DTV_CPU_HACK
 			_BRA(1);		/* 0x12: DTV specific BRA */
 #else
-			setNZ(A_OP(|,cpu_read(_zpi())));	/* 0x12 ORA (Zero_Page) */
+			/* 0x12 ORA (Zero_Page) or (ZP),Z on 65CE02 */
+#ifdef MEGA65
+			if (IS_FLAT32_DATA_OP())
+				setNZ(A_OP(|,cpu_read_linear_opcode()));
+			else
+#endif
+				setNZ(A_OP(|,cpu_read(_zpi())));
 #endif
 			break;
 	case 0x13:
@@ -614,7 +628,13 @@ int cpu_step () {
 #ifdef DTV_CPU_HACK
 			cpu_a_sind = cpu_a_tind = cpu_read(cpu_pc++); cpu_a_sind &= 15; cpu_a_tind >>= 4; /* 0x32: DTV specific: SAC */
 #else
-			setNZ(A_OP(&,cpu_read(_zpi()))); /* 0x32 AND (Zero_Page) */
+			/* 0x32 AND (Zero_Page) or (ZP),Z on 65CE02*/
+#ifdef MEGA65
+			if (IS_FLAT32_DATA_OP())
+				setNZ(A_OP(&,cpu_read_linear_opcode()));
+			else
+#endif
+				setNZ(A_OP(&,cpu_read(_zpi())));
 #endif
 			break;
 	case 0x33:
@@ -692,7 +712,14 @@ int cpu_step () {
 	case 0x4f:	_BRA(!(cpu_read(_zp()) & 16)); break; /* 0x4f BBR Relative */
 	case 0x50:	_BRA(!cpu_pfv); break; /* 0x50 BVC Relative */
 	case 0x51:	setNZ(A_OP(^,cpu_read(_zpiy()))); break; /* 0x51 EOR (Zero_Page),Y */
-	case 0x52:	setNZ(A_OP(^,cpu_read(_zpi()))); break; /* 0x52 EOR (Zero_Page) */
+	case 0x52:	/* 0x52 EOR (Zero_Page) or (ZP),Z on 65CE02 */
+#ifdef MEGA65
+			if (IS_FLAT32_DATA_OP())
+				setNZ(A_OP(^,cpu_read_linear_opcode()));
+			else
+#endif
+				setNZ(A_OP(^,cpu_read(_zpi())));
+			break;
 	case 0x53:
 #ifdef CPU_65CE02
 			OPC_65CE02("BVC16");
@@ -777,7 +804,14 @@ int cpu_step () {
 	case 0x6f:	_BRA(!(cpu_read(_zp()) & 64)); break; /* 0x6f BBR Relative */
 	case 0x70:	_BRA(cpu_pfv); break; /* 0x70 BVS Relative */
 	case 0x71:	_ADC(cpu_read(_zpiy())); break; /* 0x71 ADC (Zero_Page),Y */
-	case 0x72:	_ADC(cpu_read(_zpi())); break; /* 0x72 ADC (Zero_Page) */
+	case 0x72:	/* 0x72 ADC (Zero_Page) or (ZP),Z on 65CE02 */
+#ifdef MEGA65
+			if (IS_FLAT32_DATA_OP())
+				_ADC(cpu_read(cpu_read_linear_opcode()));
+			else
+#endif
+				_ADC(cpu_read(_zpi()));
+			break;
 	case 0x73:
 #ifdef CPU_65CE02
 			OPC_65CE02("BVS16");
@@ -838,11 +872,11 @@ int cpu_step () {
 	case 0x91:	cpu_write(_zpiy(), CPU_A_GET()); break; /* 0x91 STA (Zero_Page),Y */
 	case 0x92:	// /* 0x92 STA (Zero_Page) or (ZP),Z on 65CE02 */
 #ifdef MEGA65
-			if (cpu_previous_op == 0xEA) 	// linear addressing trick of M65! FIXME: this is handled for *only* this opcode now!
+			if (IS_FLAT32_DATA_OP())
 				cpu_write_linear_opcode(CPU_A_GET());
 			else
 #endif
-			cpu_write(_zpi(), CPU_A_GET());
+				cpu_write(_zpi(), CPU_A_GET());
 			break;
 	case 0x93:
 #ifdef CPU_65CE02
@@ -895,7 +929,14 @@ int cpu_step () {
 	case 0xaf:	_BRA( cpu_read(_zp()) & 4 ); break; /* 0xaf BBS Relative */
 	case 0xb0:	_BRA(cpu_pfc); break; /* 0xb0 BCS Relative */
 	case 0xb1:	setNZ(CPU_A_SET(cpu_read(_zpiy()))); break; /* 0xb1 LDA (Zero_Page),Y */
-	case 0xb2:	setNZ(CPU_A_SET(cpu_read(_zpi()))); break; /* 0xb2 LDA (Zero_Page) */
+	case 0xb2:	/* 0xb2 LDA (Zero_Page) or (ZP),Z on 65CE02 */
+#ifdef MEGA65
+			if (IS_FLAT32_DATA_OP())
+				setNZ(CPU_A_SET(cpu_read_linear_opcode()));
+			else
+#endif
+				setNZ(CPU_A_SET(cpu_read(_zpi())));
+			break;
 	case 0xb3:
 #ifdef CPU_65CE02
 			OPC_65CE02("BCS16");
@@ -969,7 +1010,14 @@ int cpu_step () {
 	case 0xcf:	_BRA( cpu_read(_zp()) & 16 ); break; /* 0xcf BBS Relative */
 	case 0xd0:	_BRA(!cpu_pfz); break; /* 0xd0 BNE Relative */
 	case 0xd1:	_CMP(CPU_A_GET(), cpu_read(_zpiy())); break; /* 0xd1 CMP (Zero_Page),Y */
-	case 0xd2:	_CMP(CPU_A_GET(), cpu_read(_zpi())); break; /* 0xd2 CMP (Zero_Page) */
+	case 0xd2:	/* 0xd2 CMP (Zero_Page) or (ZP),Z on 65CE02 */
+#ifdef MEGA65
+			if (IS_FLAT32_DATA_OP())	// NOTE: this was not mentioned in Paul's blog-post, but this op should have this property as well, IMHO!
+				_CMP(CPU_A_GET(), cpu_read_linear_opcode());
+			else
+#endif
+				_CMP(CPU_A_GET(), cpu_read(_zpi()));
+			break;
 	case 0xd3:
 #ifdef CPU_65CE02
 			OPC_65CE02("BNE16");
@@ -1015,7 +1063,7 @@ int cpu_step () {
 			// 65CE02 LDA ($nn,SP),Y
 			// REALLY IMPORTANT: please read the comment at _GET_SP_INDIRECT_ADDR()!
 			setNZ(cpu_a = cpu_read(_GET_SP_INDIRECT_ADDR()));
-			DEBUG("CPU: LDA (nn,S),Y returned: A = $%02X, P before last IRQ was: $%02X" NL, cpu_a, last_p);
+			//DEBUG("CPU: LDA (nn,S),Y returned: A = $%02X, P before last IRQ was: $%02X" NL, cpu_a, last_p);
 #else
 			cpu_pc++; // 0xe2 NOP imm (non-std NOP with addr mode)
 #endif
@@ -1067,7 +1115,14 @@ int cpu_step () {
 	case 0xef:	_BRA( cpu_read(_zp()) & 64 ); break; /* 0xef BBS Relative */
 	case 0xf0:	_BRA(cpu_pfz); break; /* 0xf0 BEQ Relative */
 	case 0xf1:	_SBC(cpu_read(_zpiy())); break; /* 0xf1 SBC (Zero_Page),Y */
-	case 0xf2:	_SBC(cpu_read(_zpi())); break; /* 0xf2 SBC (Zero_Page) */
+	case 0xf2:	/* 0xf2 SBC (Zero_Page) or (ZP),Z on 65CE02 */
+#ifdef MEGA65
+			if (IS_FLAT32_DATA_OP())
+				_SBC(cpu_read_linear_opcode());
+			else
+#endif
+				_SBC(cpu_read(_zpi()));
+			break;
 	case 0xf3:
 #ifdef CPU_65CE02
 			OPC_65CE02("BEQ16");

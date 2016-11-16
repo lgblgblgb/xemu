@@ -15,13 +15,9 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include <stdio.h>
-
-#include <SDL.h>
-
+#include "emutools.h"
 #include "dmagic.h"
 #include "mega65.h"
-#include "emutools.h"
 #include "vic3.h"
 
 
@@ -71,33 +67,8 @@ static Uint8 minterms[4];		// Used with MIX DMA command only
        Uint8 dma_status;
 
 
-
-
-// FIXME: ugly hack: handle the hypervisor memory, using different mapping than the real Mega65!
-static void dma_write_phys_mem ( int addr, Uint8 data )
-{
-	if (addr >= 0xFFF8000 && addr < 0xFFFC000) {
-		if (!in_hypervisor)
-			FATAL("FATAL: DMA write tries to access hypervisor memory from non-hypervisor mode.");
-		write_phys_mem(addr - 0xFFF8000 + 0x100000, data);
-	} else if (addr < 0x100000)
-		write_phys_mem(addr, data);
-	else
-		FATAL("FATAL: DMA write to unhandled memory region: $%X", addr);
-}
-
-// FIXME: ugly hack: handle the hypervisor memory, using different mapping than the real Mega65!
-static Uint8 dma_read_phys_mem ( int addr )
-{
-	if (addr >= 0xFFF8000 && addr < 0xFFFC000) {
-		if (!in_hypervisor)
-			FATAL("FATAL: DMA read tries to access hypervisor memory from non-hypervisor mode.");
-		return read_phys_mem(addr- 0xFFF8000 + 0x100000);
-	} else if (addr < 0x100000)
-		return read_phys_mem(addr);
-	else
-		FATAL("FATAL: DMA read from unhandled memory region: $%X", addr);
-}
+#define dma_write_phys_mem(addr,data)	write_phys_mem(addr,data)
+#define dma_read_phys_mem(addr)		read_phys_mem(addr)
 
 
 #define IO_ADDR(a)		(0xD000 | ((a) & 0xFFF))
@@ -183,8 +154,9 @@ static void dma_update_all ( void )
 void dma_write_reg ( int addr, Uint8 data )
 {
 	// DUNNO about DMAgic too much. It's merely guessing from my own ROM assembly tries, C65gs/Mega65 VHDL, and my ideas :)
-	if (vic_iomode != VIC4_IOMODE)
-		addr &= 3;
+	// The following condition is commented out for now. FIXME: how it is handled for real?!
+	//if (vic_iomode != VIC4_IOMODE)
+	//	addr &= 3;
 	dma_registers[addr] = data;
 	switch (addr) {
 		case 0x2:	// for compatibility with C65, Mega65 here resets the MB part of the DMA list address
@@ -207,14 +179,11 @@ void dma_write_reg ( int addr, Uint8 data )
 		dma_update_all();
 	}
 	dma_list_addr = dma_registers[0] | (dma_registers[1] << 8) | ((dma_registers[2] & 15) << 16);
-	if (mega65_capable)
-		dma_list_addr |= dma_registers[4] << 20;	// add the "MB" part to select MegaByte range for the DMA list reading
+	dma_list_addr |= dma_registers[4] << 20;	// add the "MB" part to select MegaByte range for the DMA list reading
 	DEBUG("DMA: list address is $%06X now, just written to register %d value $%02X" NL, dma_list_addr, addr, data);
 	dma_status = 0x80;	// DMA is busy now, also to signal the emulator core to call dma_update() in its main loop
 	command = -1;		// signal dma_update() that it's needed to fetch the DMA command, no command is fetched yet
-#ifdef DMA_STOPS_CPU
-	dma_update_all();
-#endif
+	dma_update_all();	// DMA _stops_ CPU, however FIXME: interrupts can (???) occur, so we need to emulate that somehow later?
 }
 
 
@@ -249,10 +218,9 @@ void dma_update ( void )
 		target_uses_modulo = (target_addr & 0x200000);
 		source_addr &= 0xFFFFF;	// C65 1-mbyte range, chop bits used for other purposes off
 		target_addr &= 0xFFFFF; // C65 1-mbyte range, chop bits used for other purposes off
-		if (mega65_capable) {	// add "MB" part of the addresses, in case of Mega65, that is, selects MegaByte (MB)
-			source_addr |= dma_registers[5] << 20;
-			target_addr |= dma_registers[6] << 20;
-		}
+		// add "MB" part of the addresses, in case of Mega65, that is, selects MegaByte (MB)
+		source_addr |= dma_registers[5] << 20;
+		target_addr |= dma_registers[6] << 20;
 		chained = (command & 4);
 		DEBUG("DMA: READ COMMAND: $%05X[%s%s %d] -> $%05X[%s%s %d] (L=$%04X) CMD=%d (%s)" NL,
 			source_addr, source_is_io ? "I/O" : "MEM", source_uses_modulo ? " MOD" : "", source_step,
@@ -268,7 +236,7 @@ void dma_update ( void )
 		return;
 	}
 	// We have valid command to be executed, or continue to execute
-	DEBUG("DMA: EXECUTING: command=%d length=$%04X" NL, command & 3, length);
+	//DEBUG("DMA: EXECUTING: command=%d length=$%04X" NL, command & 3, length);
 	switch (command & 3) {
 		case 0:			// COPY command
 			write_target_next(read_source_next());
@@ -310,6 +278,7 @@ void dma_init ( void )
 
 Uint8 dma_read_reg ( int addr )
 {
+	// FIXME: status on ALL registers when read?!
 	DEBUG("DMA: register reading at addr of %d" NL, addr);
 #if 0
 	if ((addr & 3) != 3)

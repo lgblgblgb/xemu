@@ -30,16 +30,13 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include <stdio.h>
-
-#include <SDL.h>
-
+#include "emutools.h"
 #include "commodore_geos.h"
 #include "cpu65c02.h"
 #include "cia6526.h"
-#include "c65hid.h"
+#include "emutools_hid.h"
+#include "c64_kbd_mapping.h"
 #include "geos.h"
-#include "emutools.h"
 
 
 #define DISK_IMAGE_SIZE	819200
@@ -181,10 +178,11 @@ static void vic2_interrupt_checker ( void )
 {
 	int vic_irq_old = cpu_irqLevel & 2;
 	int vic_irq_new;
-	if (vic2_interrupt_status) {
+	if (vic2_interrupt_status & vic2_registers[0x1A]) {
 		vic2_interrupt_status |= 128;
 		vic_irq_new = 2;
 	} else {
+		vic2_interrupt_status &= 127;
 		vic_irq_new = 0;
 	}
 	if (vic_irq_old != vic_irq_new) {
@@ -207,14 +205,10 @@ void vic2_check_raster_interrupt ( void )
 	// To be able C65 ROM to work, I assume that raster 511 is raster 0.
 	// It's possible that this is an NTSC/PAL issue, as raster can be "negative"
 	// according to the specification in case of NTSC. I really don't know ...
-	if (
-		(scanline == compare_raster)
-		|| (compare_raster == 511 && scanline == 0)
-	) {
+	if (scanline == compare_raster)
 		vic2_interrupt_status |= 1;
-	} else
+	else
 		vic2_interrupt_status &= 0xFE;
-	vic2_interrupt_status &= vic2_registers[0x1A];
 	vic2_interrupt_checker();
 }
 
@@ -230,7 +224,7 @@ void vic2_write_reg ( int addr, Uint8 data )
 	vic2_registers[addr] = data;
 	switch (addr) {
 		case 0x11:
-			compare_raster = (compare_raster & 0xFF) | ((data & 1) ? 0x100 : 0);
+			compare_raster = (compare_raster & 0xFF) | ((data & 128) ? 0x100 : 0);
 			DEBUG("VIC2: compare raster is now %d" NL, compare_raster);
 			break;
 		case 0x12:
@@ -238,7 +232,7 @@ void vic2_write_reg ( int addr, Uint8 data )
 			DEBUG("VIC2: compare raster is now %d" NL, compare_raster);
 			break;
 		case 0x19:
-			vic2_interrupt_status = vic2_interrupt_status & (~data) & 15 & vic2_registers[0x1A];
+			vic2_interrupt_status = vic2_interrupt_status & (~data) & 15;
 			vic2_interrupt_checker();
 			break;
 		case 0x1A:
@@ -386,7 +380,7 @@ static inline void vic2_render_screen_bmm ( Uint32 *p, int tail )
 }
 
 #define SPRITE_X_START_SCREEN	24
-#define SPRITE_Y_START_SCREEN	30
+#define SPRITE_Y_START_SCREEN	50
 
 
 /* Extremely incorrect sprite emulation! BUGS:
@@ -416,10 +410,11 @@ static void vic2_render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Ui
 			for (a = 0; a < 3; a++) {
 				for (mask = 128; mask; mask >>= 1) {
 					if (*data & mask) {
-						if (x >= 0 && x < 320)
+						if (x >= 0 && x < 320) {
 							p[x] = colour;
 							if (expand_y && y < 200)
 								p[x + 320 + tail] = colour;
+						}
 						x++;
 						if (expand_x && x >= 0 && x < 320) {
 							p[x] = colour;
@@ -427,7 +422,8 @@ static void vic2_render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Ui
 								p[x + 320 + tail] = colour;
 							x++;
 						}
-					}
+					} else
+						x += expand_x ? 2 : 1;
 				}
 				data++;
 			}
@@ -456,7 +452,7 @@ void vic2_render_screen ( void )
 		int a;
 		for (a = 7; a >= 0; a--) {
 			int mask = 1 << a;
-			if (sprites & (1 << a))
+			if (sprites & mask)
 				vic2_render_sprite(a, mask, memory + vic2_16k_bank + (vic2_sprite_pointers[a] << 6), p_sdl, tail_sdl);	// sprite_pointers are set by the renderer functions above!
 		}
 	}
@@ -485,7 +481,7 @@ void clear_emu_events ( void )
 #define KBSEL cia1.PRA
 
 
-static Uint8 cia_read_keyboard ( Uint8 ddr_mask_unused )
+static Uint8 cia1_in_b ( void )
 {
 	return
 		((KBSEL &   1) ? 0xFF : kbd_matrix[0]) &
@@ -495,22 +491,30 @@ static Uint8 cia_read_keyboard ( Uint8 ddr_mask_unused )
 		((KBSEL &  16) ? 0xFF : kbd_matrix[4]) &
 		((KBSEL &  32) ? 0xFF : kbd_matrix[5]) &
 		((KBSEL &  64) ? 0xFF : kbd_matrix[6]) &
-		((KBSEL & 128) ? 0xFF : kbd_matrix[7])
+		((KBSEL & 128) ? 0xFF : kbd_matrix[7]) &
+		(joystick_emu == 1 ? c64_get_joy_state() : 0xFF)
 	;
 }
 
 
 
-static void cia2_outa ( Uint8 mask, Uint8 data )
+static Uint8 cia1_in_a ( void )
 {
-	vic2_16k_bank = (3 - (data & 3)) * 0x4000;
-	DEBUG("VIC2: 16K BANK is set to $%04X" NL, vic2_16k_bank);
+	return joystick_emu == 2 ? c64_get_joy_state() : 0xFF;
+}
+
+
+
+static void cia2_out_a ( Uint8 data )
+{
+	vic2_16k_bank = ((~(data | (~cia2.DDRA))) & 3) << 14;
+	DEBUG("VIC2: 16K BANK is set to $%04X (CIA mask=$%02X)" NL, vic2_16k_bank, cia2.DDRA);
 }
 
 
 
 // Just for easier test to have a given port value for CIA input ports
-static Uint8 cia_port_in_dummy ( Uint8 mask )
+static Uint8 cia_port_in_dummy ( void )
 {
 	return 0xFF;
 }
@@ -537,7 +541,12 @@ static void cpu_port_write ( int addr, Uint8 data )
 
 static void geosemu_init ( const char *disk_image_name )
 {
-	hid_init();
+	hid_init(
+		c64_key_map,
+		VIRTUAL_SHIFT_POS,
+		SDL_ENABLE		// joy HID events enabled
+	);
+	joystick_emu = 1;
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
 	cpu_port_write(0, CPU_PORT_DEFAULT_VALUE0);
@@ -562,22 +571,22 @@ static void geosemu_init ( const char *disk_image_name )
 	compare_raster = 0; 
 	// *** CIAs
 	cia_init(&cia1, "CIA-1",
-		NULL,	// callback: OUTA(mask, data)
-		NULL,	// callback: OUTB(mask, data)
-		NULL,	// callback: OUTSR(mask, data)
-		NULL,	// callback: INA(mask)
-		cia_read_keyboard,	// callback: INB(mask)
-		NULL,	// callback: INSR(mask)
-		cia_setint_cb	// callback: SETINT(level)
+		NULL,			// callback: OUTA
+		NULL,			// callback: OUTB
+		NULL,			// callback: OUTSR
+		cia1_in_a,		// callback: INA ~ joy#2
+		cia1_in_b,		// callback: INB ~ keyboard
+		NULL,			// callback: INSR
+		cia_setint_cb		// callback: SETINT
 	);
 	cia_init(&cia2, "CIA-2",
-		cia2_outa,	// callback: OUTA(mask, data)
-		NULL,	// callback: OUTB(mask, data)
-		NULL,	// callback: OUTSR(mask, data)
-		cia_port_in_dummy,	// callback: INA(mask)
-		NULL,	// callback: INB(mask)
-		NULL,	// callback: INSR(mask)
-		NULL	// callback: SETINT(level)	that would be NMI in our case
+		cia2_out_a,		// callback: OUTA ~ eg VIC-II bank
+		NULL,			// callback: OUTB
+		NULL,			// callback: OUTSR
+		cia_port_in_dummy,	// callback: INA
+		NULL,			// callback: INB
+		NULL,			// callback: INSR
+		NULL			// callback: SETINT ~ that would be NMI in our case
 	);
 	// Initialize Disk Image
 	// TODO
@@ -640,17 +649,22 @@ int cpu_trap ( Uint8 opcode )
 			FATAL("FATAL: CPU trap at unknown address in warp mode (pre-GEOS loading) PC=$%04X OP=$%02X" NL, cpu_pc, opcode);
 		if (pc_p >= memory + 0x10000)
 			FATAL("FATAL: unknown CPU trap not in the RAM PC=$%04X OP=$%02X" NL, cpu_pc, opcode);
-		if (!geos_loaded)
+		if (geos_loaded != 2)
 			FATAL("FATAL: unknown CPU without GEOS loaded PC=$%04X OP=$%02X" NL, cpu_pc, opcode);
 		geos_cpu_trap(opcode);
 		return 1;
 	}
 	warp = 0;	// turn warp speed off
 	// Try to load a custom GEOS kernal directly into the RAM
+	if (geos_loaded) {
+		cpu_pc = memory[0x300] | (memory[0x301] << 8);
+		return 1;
+	}
 	if (!geos_load_kernal()) {
-		geos_loaded = 1;
+		geos_loaded = 2;	// GEOS was OK!!!!
 		return 1;	// if no error, return with '1' (as not zero) to signal CPU emulator that trap should not be executed
 	}
+	geos_loaded = 1;
 	// In case if we cannot load some GEOS kernal stuff, continue in "C64 mode" ... :-/
 	// Some ugly method to produce custom "startup screen" :)
 	inject_screencoded_message(41, "**** Can't load GEOS, boot as C64 ****");
@@ -706,67 +720,35 @@ static void shutdown_callback ( void )
 }
 
 
-
-static void emulate_keyboard ( SDL_Scancode key, int pressed )
+// HID needs this to be defined, it's up to the emulator if it uses or not ...
+int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
-	// Check for special, emulator-related hot-keys (not C65 key)
-	if (pressed) {
-		if (key == SDL_SCANCODE_F11) {
-			emu_set_full_screen(-1);
-			return;
-		} else if (key == SDL_SCANCODE_F9) {
-			exit(0);
-		} else if (key == SDL_SCANCODE_F10) {
+        if (pressed) {
+		if (key == SDL_SCANCODE_F10) {
 			cpu_port_write(0, CPU_PORT_DEFAULT_VALUE0);
 			cpu_port_write(1, CPU_PORT_DEFAULT_VALUE1);
 			cpu_reset();
 			DEBUG("RESET!" NL);
-			return;
-		}
+		} else if (key == SDL_SCANCODE_KP_ENTER)
+			c64_toggle_joy_emu();
 	}
-	// If not an emulator hot-key, try to handle as a C65 key
-	// This function also updates the keyboard matrix in that case
-	hid_key_event(key, pressed);
+	return 0;
 }
-
 
 
 static void update_emulator ( void )
 {
-	SDL_Event e;
-	while (SDL_PollEvent(&e) != 0) {
-		switch (e.type) {
-			case SDL_QUIT:
-				exit(0);
-			case SDL_KEYUP:
-			case SDL_KEYDOWN:
-				if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0))
-					emulate_keyboard(e.key.keysym.scancode, e.key.state == SDL_PRESSED);
-				break;
-			case SDL_JOYDEVICEADDED:
-			case SDL_JOYDEVICEREMOVED:
-				hid_joystick_device_event(e.jdevice.which, e.type == SDL_JOYDEVICEADDED);
-				break;
-			case SDL_JOYBUTTONDOWN:
-			case SDL_JOYBUTTONUP:
-				hid_joystick_button_event(e.type == SDL_JOYBUTTONDOWN);
-				break;
-			case SDL_JOYHATMOTION:
-				hid_joystick_hat_event(e.jhat.value);
-				break;
-			case SDL_JOYAXISMOTION:
-				if (e.jaxis.axis < 2)
-					hid_joystick_motion_event(e.jaxis.axis, e.jaxis.value);
-				break;
-			case SDL_MOUSEMOTION:
-				hid_mouse_motion_event(e.motion.xrel, e.motion.yrel);
-				break;
-		}
-	}
+	hid_handle_all_sdl_events();
 	// Screen rendering: begin
 	vic2_render_screen();
 	// Screen rendering: end
 	emu_timekeeping_delay(40000);
+	// Ugly CIA trick to maintain realtime TOD in CIAs :)
+	if (seconds_timer_trigger) {
+		struct tm *t = emu_get_localtime();
+		cia_ugly_tod_updater(&cia1, t);
+		cia_ugly_tod_updater(&cia2, t);
+	}
 }
 
 
@@ -811,10 +793,12 @@ int main ( int argc, char **argv )
 		cia_tick(&cia2, opcyc);
 		cycles += opcyc;
 		if (cycles >= 63) {
+#if 0
 			vic2_registers[0] = 80;
 			vic2_registers[1] = 80;
 			vic2_registers[16] = 0;
 			vic2_registers[21] = 0xFF;
+#endif
 			scanline++;
 			//DEBUG("VIC3: new scanline (%d)!" NL, scanline);
 			cycles -= 63;

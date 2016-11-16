@@ -1,5 +1,6 @@
-/* Commodore LCD emulator using SDL2 library. Also includes:
-   Test-case for a very simple and inaccurate Commodore VIC-20 emulator.
+/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
+   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
+   and some Mega-65 features as well.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -16,7 +17,9 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include <stdio.h>
+
+#include "emutools.h"
+
 #include <string.h>
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -28,10 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <limits.h>
 #include <errno.h>
 
-#include <SDL.h>
-
-#include "emutools.h"
-
+#include "osd_font_16x16.c"
 
 
 SDL_Window   *sdl_win = NULL;
@@ -45,7 +45,7 @@ Uint32 *sdl_pixel_buffer = NULL;
 int texture_x_size_in_bytes;
 int emu_is_fullscreen = 0;
 static int win_xsize, win_ysize;
-static char *sdl_pref_dir, *sdl_base_dir;
+char *sdl_pref_dir, *sdl_base_dir;
 Uint32 sdl_winid;
 static Uint32 black_colour;
 static void (*shutdown_user_function)(void);
@@ -56,6 +56,13 @@ static time_t unix_time;
 static Uint64 et_old;
 static int td_balancer, td_em_ALL, td_pc_ALL;
 FILE *debug_fp = NULL;
+
+
+static int osd_enabled = 0, osd_status = 0, osd_available = 0, osd_xsize, osd_ysize, osd_fade_dec, osd_fade_end, osd_alpha_last;
+static Uint32 osd_colours[16], *osd_pixels = NULL, osd_colour_fg, osd_colour_bg;
+static SDL_Texture *sdl_osdtex = NULL;
+
+
 
 #if !SDL_VERSION_ATLEAST(2, 0, 4)
 #error "At least SDL version 2.0.4 is needed!"
@@ -114,6 +121,29 @@ void *emu_malloc ( size_t size )
 }
 
 
+void *emu_realloc ( void *p, size_t size )
+{
+	p = realloc(p, size);
+	if (!p)
+		FATAL("Cannot re-allocate %d bytes of memory.", (int)size);
+	return p;
+}
+
+
+#ifndef __EMSCRIPTEN__
+#ifdef _WIN32
+extern void *_mm_malloc ( size_t size, size_t alignment );	// it seems mingw/win has issue not to define this properly ... FIXME? Ugly windows, always the problems ...
+#endif
+void *emu_malloc_ALIGNED ( size_t size )
+{
+	// it seems _mm_malloc() is quite standard at least on gcc, mingw, clang ... so let's try to use it
+	void *p = _mm_malloc(size, __BIGGEST_ALIGNMENT__);
+	DEBUG("ALIGNED-ALLOC: base_pointer=%p size=%d alignment=%d" NL, p, (int)size, __BIGGEST_ALIGNMENT__);
+	return p;
+}
+#endif
+
+
 char *emu_strdup ( const char *s )
 {
 	char *p = strdup(s);
@@ -126,22 +156,31 @@ char *emu_strdup ( const char *s )
 // Just drop queued SDL events ...
 void emu_drop_events ( void )
 {
-	SDL_Event e;
-	while (SDL_PollEvent(&e) != 0)
-		;
+	SDL_PumpEvents();
+	SDL_FlushEvent(SDL_KEYDOWN);
+	SDL_FlushEvent(SDL_KEYUP);
+	SDL_FlushEvent(SDL_MOUSEMOTION);
+	SDL_FlushEvent(SDL_MOUSEWHEEL);
+	SDL_FlushEvent(SDL_MOUSEBUTTONDOWN);
+	SDL_FlushEvent(SDL_MOUSEBUTTONUP);
 }
 
 
 
 int emu_load_file ( const char *fn, void *buffer, int maxsize )
 {
+	char fnbuf[PATH_MAX + 1];
 	char *search_paths[] = {
+#ifdef __EMSCRIPTEN__
+		EMSCRIPTEN_SDL_BASE_DIR,
+#else
 		".",
 		"." DIRSEP_STR "rom",
 		sdl_pref_dir,
 		sdl_base_dir,
 #ifndef _WIN32
 		DATADIR,
+#endif
 #endif
 		NULL
 	};
@@ -161,7 +200,6 @@ int emu_load_file ( const char *fn, void *buffer, int maxsize )
 		search_paths[1] = NULL;
 	}
 	while (search_paths[a]) {
-		char fnbuf[PATH_MAX + 1];
 		if (search_paths[a][0] == 0)
 			strcpy(fnbuf,  fn);
 		else
@@ -177,8 +215,11 @@ int emu_load_file ( const char *fn, void *buffer, int maxsize )
 		return -1;
 	}
 	printf("OK, file is open (fd = %d)" NL, fd);
-	if (maxsize == -1)
+	if (maxsize < 0) {
+		if (buffer)
+			strcpy(buffer, fnbuf);
 		return fd;	// special mode to get a file descriptor, instead of loading anything ...
+	}
 	while (read_size < maxsize) {
 		a = read(fd, buffer, maxsize - read_size);
 		if (a < 0) {
@@ -230,7 +271,10 @@ void emu_set_full_screen ( int setting )
 
 static inline void do_sleep ( int td )
 {
-#ifdef XEMU_SLEEP_IS_SDL_DELAY
+#ifdef __EMSCRIPTEN__
+#define __SLEEP_METHOD_DESC "emscripten_set_main_loop_timing"
+	emscripten_set_main_loop_timing(EM_TIMING_SETTIMEOUT, td / 1000);
+#elif XEMU_SLEEP_IS_SDL_DELAY
 #define __SLEEP_METHOD_DESC "SDL_Delay"
 	SDL_Delay(td / 1000);
 #elif defined(XEMU_SLEEP_IS_USLEEP)
@@ -329,6 +373,9 @@ static void shutdown_emulator ( void )
 
 int emu_init_debug ( const char *fn )
 {
+#ifdef DISABLE_DEBUG
+	printf("Logging is disabled at compile-time." NL);
+#else
 	if (debug_fp) {
 		ERROR_WINDOW("Debug file %s already used, you can't call emu_init_debug() twice!\nUse it before emu_init_sdl() if you need it!", fn);
 		return 1;
@@ -341,6 +388,7 @@ int emu_init_debug ( const char *fn )
 		printf("Logging into file: %s (fd=%d)." NL, fn, fileno(debug_fp));
 		return 0;
 	}
+#endif
 	return 0;
 }
 
@@ -364,12 +412,21 @@ int emu_init_sdl (
 	int locked_texture_update,		// use locked texture method [non zero], or malloc'ed stuff [zero]. NOTE: locked access doesn't allow to _READ_ pixels and you must fill ALL pixels!
 	void (*shutdown_callback)(void)		// callback function called on exit (can be nULL to not have any emulator specific stuff)
 ) {
+	SDL_RendererInfo ren_info;
 	char render_scale_quality_s[2];
+	int a;
 	if (!debug_fp)
 		emu_init_debug(getenv("XEMU_DEBUG_FILE"));
 	if (!debug_fp)
 		printf("Logging into file: not enabled." NL);
-	if (SDL_Init(SDL_INIT_EVERYTHING) != 0) {
+	if (SDL_Init(
+#ifdef __EMSCRIPTEN__
+		// It seems there is an issue with emscripten SDL2: SDL_Init does not work if TIMER and/or HAPTIC is tried to be intialized or just "EVERYTHING" is used!!
+		SDL_INIT_EVERYTHING & ~(SDL_INIT_TIMER | SDL_INIT_HAPTIC)
+#else
+		SDL_INIT_EVERYTHING
+#endif
+	) != 0) {
 		ERROR_WINDOW("Cannot initialize SDL: %s", SDL_GetError());
 		return 1;
 	}
@@ -378,15 +435,24 @@ int emu_init_sdl (
 	SDL_VERSION(&sdlver_compiled);
         SDL_GetVersion(&sdlver_linked);
 	printf( "SDL version: (%s) compiled with %d.%d.%d, used with %d.%d.%d on platform %s" NL
+		"SDL system info: %d bits %s, %d cores, l1_line=%d, RAM=%dMbytes, CPU features: "
+		"3DNow=%d AVX=%d AVX2=%d AltiVec=%d MMX=%d RDTSC=%d SSE=%d SSE2=%d SSE3=%d SSE41=%d SSE42=%d" NL
 		"SDL drivers: video = %s, audio = %s" NL
-		"Timing: sleep = %s, query = %s" NL NL,
+		"Timing: sleep = %s, query = %s" NL,
 		SDL_GetRevision(),
 		sdlver_compiled.major, sdlver_compiled.minor, sdlver_compiled.patch,
 		sdlver_linked.major, sdlver_linked.minor, sdlver_linked.patch,
 		SDL_GetPlatform(),
+		ARCH_BITS, ENDIAN_NAME, SDL_GetCPUCount(), SDL_GetCPUCacheLineSize(), SDL_GetSystemRAM(),
+		SDL_Has3DNow(),SDL_HasAVX(),SDL_HasAVX2(),SDL_HasAltiVec(),SDL_HasMMX(),SDL_HasRDTSC(),SDL_HasSSE(),SDL_HasSSE2(),SDL_HasSSE3(),SDL_HasSSE41(),SDL_HasSSE42(),
 		SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver(),
 		__SLEEP_METHOD_DESC, __TIMING_METHOD_DESC
 	);
+#ifdef __EMSCRIPTEN__
+	MKDIR(EMSCRIPTEN_SDL_BASE_DIR);
+	sdl_base_dir = emu_strdup(EMSCRIPTEN_SDL_BASE_DIR);
+	sdl_pref_dir = emu_strdup(EMSCRIPTEN_SDL_BASE_DIR);
+#else
 	sdl_pref_dir = SDL_GetPrefPath(app_organization, app_name);
 	if (!sdl_pref_dir) {
 		ERROR_WINDOW("Cannot query SDL preferences directory: %s", SDL_GetError());
@@ -397,6 +463,8 @@ int emu_init_sdl (
 		ERROR_WINDOW("Cannot query SDL base directory: %s", SDL_GetError());
 		return 1;
 	}
+#endif
+	printf("SDL preferences directory: %s" NL, sdl_pref_dir);
 	sdl_window_title = emu_strdup(window_title);
 	sdl_win = SDL_CreateWindow(
 		window_title,
@@ -412,10 +480,29 @@ int emu_init_sdl (
 	strcpy(window_title_buffer, window_title);
 	window_title_buffer_end = window_title_buffer + strlen(window_title);
 	//SDL_SetWindowMinimumSize(sdl_win, SCREEN_WIDTH, SCREEN_HEIGHT * 2);
-	sdl_ren = SDL_CreateRenderer(sdl_win, -1, 0);
+	a = SDL_GetNumRenderDrivers();
+	while (--a >= 0) {
+		if (!SDL_GetRenderDriverInfo(a, &ren_info)) {
+			printf("SDL renderer driver #%d: \"%s\"" NL, a, ren_info.name);	
+		} else
+			printf("SDL renderer driver #%d: FAILURE TO QUERY (%s)" NL, a, SDL_GetError());
+	}
+	sdl_ren = SDL_CreateRenderer(sdl_win, -1, SDL_RENDERER_ACCELERATED);
 	if (!sdl_ren) {
-		ERROR_WINDOW("Cannot create SDL renderer: %s", SDL_GetError());
-		return 1;
+		ERROR_WINDOW("Cannot create accelerated SDL renderer: %s", SDL_GetError());
+		sdl_ren = SDL_CreateRenderer(sdl_win, -1, 0);
+		if (!sdl_ren) {
+			ERROR_WINDOW("... and not even non-accelerated driver could be created, giving up: %s", SDL_GetError());
+			return 1;
+		} else {
+			INFO_WINDOW("Created non-accelerated driver. NOTE: it will severly affect the performance!");
+		}
+	}
+	if (!SDL_GetRendererInfo(sdl_ren, &ren_info)) {
+		printf("SDL renderer used: \"%s\" max_tex=%dx%d tex_formats=%d ", ren_info.name, ren_info.max_texture_width, ren_info.max_texture_height, ren_info.num_texture_formats);
+		for (a = 0; a < ren_info.num_texture_formats; a++)
+			printf("%c%s", a ? ' ' : '(', SDL_GetPixelFormatName(ren_info.texture_formats[a]));
+		printf(")" NL);
 	}
 	SDL_RenderSetLogicalSize(sdl_ren, logical_x_size, logical_y_size);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
 	sdl_tex = SDL_CreateTexture(sdl_ren, pixel_format, SDL_TEXTUREACCESS_STREAMING, texture_x_size, texture_y_size);
@@ -438,13 +525,14 @@ int emu_init_sdl (
 #ifdef _WIN32
 	SDL_SetHint(SDL_HINT_WINDOWS_NO_CLOSE_ON_ALT_F4, "1");				// 1 = disable ALT-F4 close on Windows
 #endif
-	SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "1");			// 1 = do minimize the SDL_Window if it loses key focus when in fullscreen mode
+	SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");			// 1 = do minimize the SDL_Window if it loses key focus when in fullscreen mode
 	SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");				// 1 = enable screen saver
 	/* texture access / buffer */
 	if (!locked_texture_update)
-		sdl_pixel_buffer = emu_malloc(texture_x_size_in_bytes * texture_y_size);
+		sdl_pixel_buffer = emu_malloc_ALIGNED(texture_x_size_in_bytes * texture_y_size);
 	// play a single frame game, to set a consistent colour (all black ...) for the emulator. Also, it reveals possible errors with rendering
 	emu_render_dummy_frame(black_colour, texture_x_size, texture_y_size);
+	printf(NL);
 	return 0;
 }
 
@@ -518,7 +606,154 @@ void emu_update_screen ( void )
 	if (seconds_timer_trigger)
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
 	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);
+	if (osd_status) {
+		if (osd_status < OSD_STATIC)
+			osd_status -= osd_fade_dec;
+		if (osd_status <= osd_fade_end) {
+			osd_status = 0;
+			osd_alpha_last = 0;
+		} else {
+			int alpha = osd_status > 0xFF ? 0xFF : osd_status;
+			if (alpha != osd_alpha_last) {
+				osd_alpha_last = alpha;
+				SDL_SetTextureAlphaMod(sdl_osdtex, alpha);
+			}
+			SDL_RenderCopy(sdl_ren, sdl_osdtex, NULL, NULL);
+		}
+	}
 	SDL_RenderPresent(sdl_ren);
+}
+
+
+void osd_clear ( void )
+{
+	if (osd_enabled)
+		memset(osd_pixels, 0, osd_xsize * osd_ysize * 4);
+}
+
+
+void osd_update ()
+{
+	if (osd_enabled)
+                SDL_UpdateTexture(sdl_osdtex, NULL, osd_pixels, osd_xsize * sizeof (Uint32));
+}
+
+
+int osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_entries, int fade_dec, int fade_end )
+{
+	int a;
+	// start with disabled state, so we can abort our init process without need to disable this
+	osd_status = 0;
+	osd_enabled = 0;
+	if (sdl_osdtex || osd_pixels)
+		FATAL("Calling osd_init() multiple times?");
+	sdl_osdtex = SDL_CreateTexture(sdl_ren, sdl_pix_fmt->format, SDL_TEXTUREACCESS_STREAMING, xsize, ysize);
+	if (!sdl_osdtex) {
+		ERROR_WINDOW("Error with SDL_CreateTexture(), OSD won't be available: %s", SDL_GetError());
+		return 1;
+	}
+	if (SDL_SetTextureBlendMode(sdl_osdtex, SDL_BLENDMODE_BLEND)) {
+		ERROR_WINDOW("Error with SDL_SetTextureBlendMode(), OSD won't be available: %s", SDL_GetError());
+		SDL_DestroyTexture(sdl_osdtex);
+		sdl_osdtex = NULL;
+		return 1;
+	}
+	osd_pixels = malloc(xsize * ysize * 4);
+	if (!osd_pixels) {
+		ERROR_WINDOW("Not enough memory to allocate texture, OSD won't be available");
+		SDL_DestroyTexture(sdl_osdtex);
+		sdl_osdtex = NULL;
+		return 1;
+	}
+	osd_xsize = xsize;
+	osd_ysize = ysize;
+	osd_fade_dec = fade_dec;
+	osd_fade_end = fade_end;
+	for (a = 0; a < palette_entries; a++)
+		osd_colours[a] = SDL_MapRGBA(sdl_pix_fmt, palette[a << 2], palette[(a << 2) + 1], palette[(a << 2) + 2], palette[(a << 2) + 3]);
+	osd_enabled = 1;	// great, everything is OK, we can set enabled state!
+	osd_available = 1;
+	osd_clear();
+	osd_update();
+	osd_set_colours(1, 0);
+	return 0;
+}
+
+
+
+int osd_init_with_defaults ( void )
+{
+	const Uint8 palette[] = {
+		0, 0, 0, 0x80,		// black with alpha channel 0x80
+		0xFF,0xFF,0xFF,0xFF	// white
+	};
+	return osd_init(
+		400, 20,
+		palette,
+		sizeof(palette) >> 2,
+		2,
+		0x20
+	);
+}
+
+
+void osd_on ( int value )
+{
+	if (osd_enabled) {
+		osd_alpha_last = 0;	// force alphamod to set on next screen update
+		osd_status = value;
+	}
+}
+
+
+void osd_off ( void )
+{
+	osd_status = 0;
+}
+
+
+void osd_global_enable ( int status )
+{
+	osd_enabled = (status && osd_available);
+	osd_alpha_last = -1;
+	osd_status = 0;
+}
+
+
+void osd_set_colours ( int fg_index, int bg_index )
+{
+	osd_colour_fg = osd_colours[fg_index];
+	osd_colour_bg = osd_colours[bg_index];
+}
+
+
+void osd_write_char ( int x, int y, char ch )
+{
+	int row;
+	const Uint16 *s;
+	Uint32 *d = osd_pixels + y * osd_xsize + x;
+	if (ch < 32 || (unsigned char)ch > 128)
+		ch = '?';
+	s = font_16x16 + (((unsigned char)ch - 32) << 4);
+	for (row = 0; row < 16; row++) {
+		Uint16 mask = 0x8000;
+		do {
+			*(d++) = *s & mask ? osd_colour_fg : osd_colour_bg;
+			mask >>= 1;
+		} while (mask);
+		s++;
+		d += osd_xsize - 16;
+	}
+}
+
+
+void osd_write_string ( int x, int y, const char *s )
+{
+	while (*s) {
+		osd_write_char(x, y, *s);
+		s++;
+		x += 16;
+	}
 }
 
 
@@ -541,6 +776,10 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 		char *p = strchr(items, '|');
 		switch (*items) {
 			case '!':
+#ifdef __EMSCRIPTEN__
+				printf("Emscripten: faking chooser box answer %d for \"%s\"" NL, messageboxdata.numbuttons, msg);
+				return messageboxdata.numbuttons;
+#endif
 				buttons[messageboxdata.numbuttons].flags = SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT;
 				items++;
 				break;
@@ -563,6 +802,7 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 	SDL_ShowMessageBox(&messageboxdata, &buttonid);
 	clear_emu_events();
 	emu_drop_events();
+	SDL_RaiseWindow(sdl_win);
 	emu_timekeeping_start();
 	return buttonid;
 }

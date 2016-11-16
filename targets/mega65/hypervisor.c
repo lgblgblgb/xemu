@@ -15,22 +15,24 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include <stdio.h>
-#include <SDL.h>
-#include <sys/types.h>
-#include <unistd.h>
-#include <errno.h>
-
-#include "mega65.h"
 #include "emutools.h"
+#include "mega65.h"
 #include "hypervisor.h"
 #include "cpu65c02.h"
 #include "vic3.h"
 #include "dmagic.h"
 
+#include <sys/types.h>
+#include <unistd.h>
+#include <errno.h>
+
+
 #define INFO_MAX_SIZE	32
 
 
+int in_hypervisor;			// mega65 hypervisor mode
+Uint8 kicked_hypervisor = 0x80;		// 0x80 signals for XEMU (not for a real M65!) to *ASK* the user. It won't be the final answer!
+Uint8 hypervisor_memory[0x4001];	// 16K+1 byte, 1 byte is just used for length check on loading, ugly enough, indeed.
 
 static const char empty_string[] = "";
 static char debug_lines[0x4000][2][INFO_MAX_SIZE];		// I know. UGLY! and wasting memory. But this is only a HACK :)
@@ -39,11 +41,11 @@ static int resolver_ok = 0;
 static char  hypervisor_monout[0x10000];
 static char *hypervisor_monout_p = hypervisor_monout;
 
+static int debug_on = 0;
 
 
 
-
-int hypervisor_debug_init ( const char *fn )
+int hypervisor_debug_init ( const char *fn, int hypervisor_debug )
 {
 	char buffer[1024];
 	FILE *fp;
@@ -101,6 +103,7 @@ int hypervisor_debug_init ( const char *fn )
 	fclose(fp);
 	close(fd);
 	resolver_ok = 1;
+	debug_on = hypervisor_debug;
 	return 0;
 }
 
@@ -109,8 +112,6 @@ int hypervisor_debug_init ( const char *fn )
 void hypervisor_enter ( int trapno )
 {
 	// Sanity checks
-	if (!mega65_capable)
-		FATAL("FATAL: hypervisor_enter() called without Mega65 capable mode");
 	if (trapno > 0x7F || trapno < 0)
 		FATAL("FATAL: got invalid trap number %d", trapno);
 	if (in_hypervisor)
@@ -130,22 +131,32 @@ void hypervisor_enter ( int trapno )
 	gs_regs[0x64B] = ( map_offset_low  >>  8) & 0xFF  ;
 	gs_regs[0x64C] = ((map_offset_high >> 16) & 0x0F) | ( map_mask & 0xF0);
 	gs_regs[0x64D] = ( map_offset_high >>  8) & 0xFF  ;
-	gs_regs[0x650] = cpu_port[0];
-	gs_regs[0x651] = cpu_port[1];
+	gs_regs[0x64E] = map_megabyte_low  >> 20;
+	gs_regs[0x64F] = map_megabyte_high >> 20;
+	gs_regs[0x650] = CPU_PORT(0);
+	gs_regs[0x651] = CPU_PORT(1);
 	gs_regs[0x652] = vic_iomode;
+	gs_regs[0x653] = dma_registers[5];	// GS $D653 - Hypervisor DMAgic source MB
+	gs_regs[0x654] = dma_registers[6];	// GS $D654 - Hypervisor DMAgic destination MB
+	gs_regs[0x655] = dma_registers[0];	// GS $D655 - Hypervisor DMAGic list address bits 0-7
+	gs_regs[0x656] = dma_registers[1];	// GS $D656 - Hypervisor DMAGic list address bits 15-8
+	gs_regs[0x657] = (dma_registers[2] & 15) | ((dma_registers[4] & 15) << 4);	// GS $D657 - Hypervisor DMAGic list address bits 23-16
+	gs_regs[0x658] = dma_registers[4] >> 4;	// GS $D658 - Hypervisor DMAGic list address bits 27-24
 	// Now entering into hypervisor mode
 	in_hypervisor = 1;	// this will cause apply_memory_config to map hypervisor RAM, also for checks later to out-of-bound execution of hypervisor RAM, etc ...
 	vic_iomode = VIC4_IOMODE;
-	cpu_port[0] = 0x3F;	// apply_memory_config watch this also ...
-	cpu_port[1] = 0x35;	// and this too (this sets, all-RAM + I/O config)
+	CPU_PORT(0) = 0x3F;	// apply_memory_config watch this also ...
+	CPU_PORT(1) = 0x35;	// and this too (this sets, all-RAM + I/O config)
 	cpu_pfd = 0;		// clear decimal mode ... according to Paul, punnishment will be done, if it's removed :-)
 	cpu_pfi = 1;		// disable IRQ in hypervisor mode
 	cpu_pfe = 1;		// 8 bit stack in hypervisor mode
 	cpu_sphi = 0xBE00;	// set a nice shiny stack page
 	cpu_bphi = 0xBF00;	// ... and base page (aka zeropage)
 	cpu_sp = 0xFF;
+	// Set mapping for the hypervisor
 	map_mask = (map_mask & 0xF) | 0x30;	// mapping: 0011XXXX (it seems low region map mask is not changed by hypervisor entry)
-	// FIXME: as currently I can do only C65-MAP, we cheat a bit, and use a special case in apply_memory_config() instead of a "legal" map-hi offset
+	map_megabyte_high = 0xFF << 20;
+	map_offset_high = 0xF0000;
 	apply_memory_config();	// now the memory mapping is changed
 	cpu_pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
 	DEBUG("MEGA65: entering into hypervisor mode, trap=$%02X PC=$%04X" NL, trapno, cpu_pc);
@@ -156,8 +167,6 @@ void hypervisor_enter ( int trapno )
 void hypervisor_leave ( void )
 {
 	// Sanity checks
-	if (!mega65_capable)
-		FATAL("FATAL: hypervisor_leave() called without Mega65 capable mode");
 	if (!in_hypervisor)
 		FATAL("FATAL: not in hypervisor mode while calling hypervisor_leave()");
 	// First, restore machine status from hypervisor registers
@@ -175,17 +184,22 @@ void hypervisor_leave ( void )
 	map_offset_low  = ((gs_regs[0x64A] & 0xF) << 16) | (gs_regs[0x64B] << 8);
 	map_offset_high = ((gs_regs[0x64C] & 0xF) << 16) | (gs_regs[0x64D] << 8);
 	map_mask = (gs_regs[0x64A] >> 4) | (gs_regs[0x64C] & 0xF0);
-	cpu_port[0] = gs_regs[0x650];
-	cpu_port[1] = gs_regs[0x651];
+	map_megabyte_low =  gs_regs[0x64E] << 20;
+	map_megabyte_high = gs_regs[0x64F] << 20;
+	CPU_PORT(0) = gs_regs[0x650];
+	CPU_PORT(1) = gs_regs[0x651];
 	vic_iomode = gs_regs[0x652] & 3;
 	if (vic_iomode == VIC_BAD_IOMODE)
 		vic_iomode = VIC3_IOMODE;	// I/O mode "2" (binary: 10) is not used, I guess
+	dma_registers[5] = gs_regs[0x653];	// GS $D653 - Hypervisor DMAgic source MB
+	dma_registers[6] = gs_regs[0x654];	// GS $D654 - Hypervisor DMAgic destination MB
+	dma_registers[0] = gs_regs[0x655];	// GS $D655 - Hypervisor DMAGic list address bits 0-7
+	dma_registers[1] = gs_regs[0x656];	// GS $D656 - Hypervisor DMAGic list address bits 15-8
+	dma_registers[2] = gs_regs[0x657] & 15;	//
+	dma_registers[4] = (gs_regs[0x657] >> 4) | (gs_regs[0x658] << 4);
 	// Now leaving hypervisor mode ...
 	in_hypervisor = 0;
 	apply_memory_config();
-	// FIXME: ugly hack: C65 ROM goes nuts if "MB" part of DMA source/target is not reset here!
-	dma_registers[5] = 0;
-        dma_registers[6] = 0;
 	DEBUG("MEGA65: leaving hypervisor mode, (user) PC=$%04X" NL, cpu_pc);
 }
 
@@ -209,11 +223,11 @@ void hypervisor_serial_monitor_push_char ( Uint8 chr )
 
 
 
-void hypervisor_debug_invalidate ( void )
+void hypervisor_debug_invalidate ( const char *reason )
 {
 	if (resolver_ok) {
 		resolver_ok = 0;
-		INFO_WINDOW("Hypervisor debug feature is asked to be disabled (ie: upgraded kickstart?)");
+		INFO_WINDOW("Hypervisor debug feature is asked to be disabled: %s", reason);
 	}
 }
 
@@ -225,12 +239,12 @@ void hypervisor_debug ( void )
 		return;
 	// TODO: better hypervisor upgrade check, maybe with checking the exact range kickstart uses for upgrade outside of the "normal" hypervisor mem range
 	if (unlikely((cpu_pc & 0xFF00) == 0x3000)) {	// this area is used by kickstart upgrade
-		DEBUG("HYPERVISOR-DEBUG: allowed tun outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu_pc);
+		DEBUG("HYPERVISOR-DEBUG: allowed to run outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu_pc);
 		return;
 	}
 	if (unlikely((cpu_pc & 0xC000) != 0x8000)) {
 		DEBUG("HYPERVISOR-DEBUG: execution outside of the hypervisor memory, PC = $%04X" NL, cpu_pc);
-		FATAL("Hypervisor fatal error: execution outside of the hypervisor memory, PC = $%04X", cpu_pc);
+		FATAL("Hypervisor fatal error: execution outside of the hypervisor memory, PC=$%04X SP=$%04X", cpu_pc, cpu_sphi | cpu_sp);
 		return;
 	}
 	if (!resolver_ok) {
@@ -242,23 +256,24 @@ void hypervisor_debug ( void )
 		return;
 	}
 	// WARNING: as it turned out, using stdio I/O to log every opcodes even "only" at ~3.5MHz rate makes emulation _VERY_ slow ...
-#ifdef HYPERVISOR_DEBUG
-	if (debug_fp)
-		fprintf(
-			debug_fp,
-			"HYPERVISOR-DEBUG: %-32s PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%d @ %s" NL,
-			debug_lines[cpu_pc - 0x8000][0],
-			cpu_pc, cpu_sphi | cpu_sp, cpu_bphi >> 8, cpu_a, cpu_x, cpu_y, cpu_z,
-			cpu_pfn ? 'N' : 'n',
-			cpu_pfv ? 'V' : 'v',
-			cpu_pfe ? 'E' : 'e',
-			'-',
-			cpu_pfd ? 'D' : 'd',
-			cpu_pfi ? 'I' : 'i',
-			cpu_pfz ? 'Z' : 'z',
-			cpu_pfc ? 'C' : 'c',
-			vic_iomode,
-			debug_lines[cpu_pc - 0x8000][1]
-		);
-#endif
+	if (unlikely(debug_on)) {
+		if (debug_fp)
+			fprintf(
+				debug_fp,
+				"HYPERVISOR-DEBUG: %-32s PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%d OPC=%02X @ %s" NL,
+				debug_lines[cpu_pc - 0x8000][0],
+				cpu_pc, cpu_sphi | cpu_sp, cpu_bphi >> 8, cpu_a, cpu_x, cpu_y, cpu_z,
+				cpu_pfn ? 'N' : 'n',
+				cpu_pfv ? 'V' : 'v',
+				cpu_pfe ? 'E' : 'e',
+				'-',
+				cpu_pfd ? 'D' : 'd',
+				cpu_pfi ? 'I' : 'i',
+				cpu_pfz ? 'Z' : 'z',
+				cpu_pfc ? 'C' : 'c',
+				vic_iomode,
+				cpu_read(cpu_pc),
+				debug_lines[cpu_pc - 0x8000][1]
+			);
+	}
 }

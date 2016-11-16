@@ -15,8 +15,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __LGB_COMMODORE_65_H_INCLUDED
-#define __LGB_COMMODORE_65_H_INCLUDED
+#ifndef __XEMU_COMMODORE_65_H_INCLUDED
+#define __XEMU_COMMODORE_65_H_INCLUDED
 
 /* Do *NOT* modify these, as other parts of the emulator currently depends on these values ...
    You can try RENDER_SCALE_QUALITY though with values 0, 1, 2 */
@@ -25,16 +25,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define RENDER_SCALE_QUALITY	1
 #define SCREEN_WIDTH		640
 #define SCREEN_HEIGHT		200
-#define DMA_STOPS_CPU
 
-#define CPU_CLOCK		3546875
-#define FULL_FRAME_CPU_CYCLES	141875
+#define FAST_CPU_CYCLES_PER_SCANLINE	227
+#define SLOW_CPU_CYCLES_PER_SCANLINE	64
 
 #define SID_CYCLES_PER_SEC	1000000
 #define AUDIO_SAMPLE_FREQ	44100
 
-//#define DEBUG_MEMORY
-//#define DEBUG_STACK
 
 // Note: this is a hack, maybe not standard! No REC (Ram Expansion Controller) emulation is involved here ...
 // it's merely just that the upper 512K of the 1Mbyte addressing space is "free" and can be handled (maybe in a non standard way!) as RAM too ...

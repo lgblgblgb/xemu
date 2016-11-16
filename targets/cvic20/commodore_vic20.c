@@ -1,4 +1,5 @@
-/* Test-case for a very simple and inaccurate Commodore VIC-20 emulator using SDL2 library.
+/* Test-case for a very simple and inaccurate Commodore VIC-20 emulator using SDL2 library
+   within the Xemu project.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is the VIC-20 emulation. Note: the source is overcrowded with comments by intent :)
@@ -18,15 +19,12 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include <stdio.h>
-
-#include <SDL.h>
-
+#include "emutools.h"
+#include "emutools_hid.h"
 #include "commodore_vic20.h"
 #include "cpu65c02.h"
 #include "via65c22.h"
 #include "vic6561.h"
-#include "emutools.h"
 
 #define SCREEN_HEIGHT		(SCREEN_LAST_VISIBLE_SCANLINE - SCREEN_FIRST_VISIBLE_SCANLINE + 1)
 #define SCREEN_WIDTH		(SCREEN_LAST_VISIBLE_DOTPOS   - SCREEN_FIRST_VISIBLE_DOTPOS   + 1)
@@ -58,9 +56,7 @@ static char *emufile_p;
 static int emufile_size;
 static int frameskip = 0;
 static int nmi_level = 0;			// level of NMI (note: 6502 is _edge_ triggered on NMI, this is only used to check edges ...)
-static int running = 1;				// emulator won't exit till this value is non-zero
 static struct Via65c22 via1, via2;		// VIA-1 and VIA-2 emulation structures
-static Uint8 kbd_matrix[9];			// keyboard matrix state, 8 * 8 bits (the 8th - counted from zero - line is not "real" and only used to emulate RESTORE!)
 
 static Uint8 is_kpage_writable[64] = {		// writable flag (for different memory expansions) for every kilobytes of the address space, this shows the default, unexpanded config!
 	1,		// @ 0K     (sum 1K), RAM, built-in (VIC-I can reach it)
@@ -92,11 +88,10 @@ static Uint8 *vic_address_space_lo8[16] = {	// configure low 8 bits of VIC-I dat
 };
 
 
-struct KeyMapping {
-	SDL_Scancode	scan;		// SDL scancode for the given key we want to map
-	Uint8		pos;		// BCD packed, high nibble / low nibble for col/row to map to.  0xFF means end of table!, high bit set on low nibble: press virtual shift as well!
-};
-static const struct KeyMapping key_map[] = {
+#define VIRTUAL_SHIFT_POS	0x31
+
+
+static const struct KeyMapping vic20_key_map[] = {
 	{ SDL_SCANCODE_1,		0x00 }, // 1
 	{ SDL_SCANCODE_3,		0x01 }, // 3
 	{ SDL_SCANCODE_5,		0x02 }, // 5
@@ -161,22 +156,13 @@ static const struct KeyMapping key_map[] = {
 	{ SDL_SCANCODE_MINUS,		0x75 }, // -
 	{ SDL_SCANCODE_HOME,		0x76 }, // HOME
 	{ SDL_SCANCODE_F7, 0x77 }, { SDL_SCANCODE_F8, 0x77 | 8 }, // F7, _SHIFTED_: F8!
-	// -- the following key definitions are not really part of the original VIC20 kbd matrix, we just *emulate* things this way!!
-	// Note: the exact "virtual" kbd matrix positions are *important* and won't work otherwise (arranged to be used more positions with one bit mask and, etc).
-	{ SDL_SCANCODE_KP_5,		0x85 },	// for joy FIRE  we map PC num keypad 5
-	{ SDL_SCANCODE_KP_0,		0x85 },	// PC num keypad 0 is also the FIRE ...
-	{ SDL_SCANCODE_RCTRL,		0x85 }, // and RIGHT controll is also the FIRE ... to make Sven happy :)
-	{ SDL_SCANCODE_KP_8,		0x82 },	// for joy UP    we map PC num keypad 8
-	{ SDL_SCANCODE_KP_2,		0x83 },	// for joy DOWN  we map PC num keypad 2
-	{ SDL_SCANCODE_KP_4,		0x84 },	// for joy LEFT  we map PC num keypad 4
-	{ SDL_SCANCODE_KP_6,		0x87 },	// for joy RIGHT we map PC num keypad 6
-	{ SDL_SCANCODE_ESCAPE,		0x81 },	// RESTORE key
+	// -- the following definitions are not VIC-20 keys, but emulator related stuffs
+	STD_XEMU_SPECIAL_KEYS,
+	//{ SDL_SCANCODE_ESCAPE,		0x81 },	// RESTORE key
 	// **** this must be the last line: end of mapping table ****
-	{ 0, 0xFF }
+	{ 0, -1 }
 };
 
-#define MAX_JOYSTICKS	16
-static SDL_Joystick *joysticks[MAX_JOYSTICKS];
 
 
 
@@ -305,7 +291,7 @@ int cpu_trap ( Uint8 opcode )
 
 void clear_emu_events ( void )
 {
-	memset(kbd_matrix, 0xFF, sizeof kbd_matrix);	// initialize keyboard matrix [bit 1 = unpressed, thus 0xFF for a line]
+	hid_reset_events(1);
 }
 
 
@@ -370,117 +356,20 @@ Uint8 cpu_read ( Uint16 addr )
 }
 
 
-
-#define KBD_PRESS_KEY(a)	kbd_matrix[(a) >> 4] &= 255 - (1 << ((a) & 0x7))
-#define KBD_RELEASE_KEY(a)	kbd_matrix[(a) >> 4] |= 1 << ((a) & 0x7)
-#define KBD_SET_KEY(a,state) do {	\
-	if (state)			\
-		KBD_PRESS_KEY(a);	\
-	else				\
-		KBD_RELEASE_KEY(a);	\
-} while (0)
-
-
-
-// pressed: non zero value = key is pressed, zero value = key is released
-static void emulate_keyboard ( SDL_Scancode key, int pressed )
+// HID needs this to be defined, it's up to the emulator if it uses or not ...
+int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
-	if (key == SDL_SCANCODE_F11) {	// toggle full screen mode on/off
-		if (pressed)
-			emu_set_full_screen(-1);
-	} else if (key == SDL_SCANCODE_F9) {	// exit emulator ...
-		if (pressed)
-			running = 0;
-	} else {
-		const struct KeyMapping *map = key_map;
-		while (map->pos != 0xFF) {
-			if (map->scan == key) {
-				if (map->pos & 8)		// shifted key emu?
-					KBD_SET_KEY(0x31, pressed);	// maintain the shift key on VIC20!
-				KBD_SET_KEY(map->pos, pressed);
-				break;	// key found, end.
-			}
-			map++;
-		}
-	}
+	return 0;
 }
-
 
 
 static void update_emulator ( void )
 {
 	if (!frameskip) {
-		SDL_Event e;
 		// First: render VIC-20 screen ...
 		emu_update_screen();
 		// Second: we must handle SDL events waiting for us in the event queue ...
-		while (SDL_PollEvent(&e) != 0) {
-			switch (e.type) {
-				case SDL_QUIT:		// ie: someone closes the SDL window ...
-					running = 0;	// set running to zero, main loop will exit then
-					break;
-				/* --- keyboard events --- */
-				case SDL_KEYDOWN:	// key is pressed (down)
-				case SDL_KEYUP:		// key is released (up)
-					// make sure that key event is for our window, also that it's not a releated event by long key presses (repeats should be handled by the emulated machine's KERNAL)
-					if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0))
-						emulate_keyboard(e.key.keysym.scancode, e.key.state == SDL_PRESSED);	// the last argument will be zero in case of release, other val in case of pressing
-					break;
-				/* --- joystick device events --- */
-				case SDL_JOYDEVICEADDED:
-				case SDL_JOYDEVICEREMOVED:
-					printf("JOY: joystick/game-controller device #%d has been %s" NL, e.jdevice.which, e.type == SDL_JOYDEVICEADDED ? "attached/detected" : "removed");
-					clear_emu_events();	// to avoid of "stuck" joystick in case of new/removed device ...
-					if (e.type == SDL_JOYDEVICEADDED) {
-						if (e.jdevice.which < MAX_JOYSTICKS) {
-							joysticks[e.jdevice.which] = SDL_JoystickOpen(e.jdevice.which);
-							printf("JOY: device is \"%s\"." NL, SDL_JoystickName(joysticks[e.jdevice.which]));
-							//INFO_WINDOW("Found controller: %s", SDL_JoystickName(joysticks[e.jdevice.which]));
-						}
-					} else {
-						if (e.jdevice.which < MAX_JOYSTICKS && joysticks[e.jdevice.which]) {
-							SDL_JoystickClose(joysticks[e.jdevice.which]);
-							joysticks[e.jdevice.which] = NULL;
-						}
-					}
-					break;
-				/* --- joystick button events --- */
-				case SDL_JOYBUTTONDOWN:
-					KBD_PRESS_KEY(0x85);	// press FIRE
-					break;
-				case SDL_JOYBUTTONUP:
-					KBD_RELEASE_KEY(0x85);	// release FIRE
-					break;
-				/* --- joystick hat events --- */
-				case SDL_JOYHATMOTION:
-					KBD_SET_KEY(0x82, (e.jhat.value & SDL_HAT_UP));
-					KBD_SET_KEY(0x83, (e.jhat.value & SDL_HAT_DOWN));
-					KBD_SET_KEY(0x84, (e.jhat.value & SDL_HAT_LEFT));
-					KBD_SET_KEY(0x87, (e.jhat.value & SDL_HAT_RIGHT));
-					break;
-				/* --- joystick axis events --- */
-				case SDL_JOYAXISMOTION:
-					// printf("JOY: axis event: %d %d %d" NL, e.jaxis.which, e.jaxis.axis, e.jaxis.value);
-					if (e.jaxis.axis < 2) {
-						if ((e.jaxis.axis & 1))	{ // odd/even axis number is used to decide between vertical/horizontal stuff. Scary, and can be different on other controllers!
-							KBD_RELEASE_KEY(0x82);
-							KBD_RELEASE_KEY(0x83);
-							if (e.jaxis.value > 10000)
-								KBD_PRESS_KEY(0x83);
-							else if (e.jaxis.value < -10000)
-								KBD_PRESS_KEY(0x82);
-						} else {
-							KBD_RELEASE_KEY(0x84);
-							KBD_RELEASE_KEY(0x87);
-							if (e.jaxis.value > 10000)
-								KBD_PRESS_KEY(0x87);
-							else if (e.jaxis.value < -10000)
-								KBD_PRESS_KEY(0x84);
-						}
-					}
-					break;
-			}
-		}
+		hid_handle_all_sdl_events();
 		// Third: Sleep ... Please read emutools.c source about this madness ... 40000 is (PAL) microseconds for a full frame to be produced
 		emu_timekeeping_delay(FULL_FRAME_USECS);
 	}
@@ -528,14 +417,20 @@ static Uint8 via2_kbd_get_scan ( Uint8 mask )
 
 static Uint8 via1_ina ( Uint8 mask )
 {
-	return kbd_matrix[8] & (4 + 8 + 16 + 32); // joystick state (RIGHT direction is not handled here though)
+	// joystick state (RIGHT direction is not handled here though)
+	return
+		hid_read_joystick_left  (0, 1 << 4) |
+		hid_read_joystick_up    (0, 1 << 2) |
+		hid_read_joystick_down  (0, 1 << 3) |
+		hid_read_joystick_button(0, 1 << 5)
+	;
 }
 
 
 static Uint8 via2_inb ( Uint8 mask )
 {
 	// Port-B in VIA2 is used (temporary with DDR-B set to input) to scan joystick direction 'RIGHT'
-	return (kbd_matrix[8] & 128) | 0x7F;
+	return hid_read_joystick_right(0x7F, 0xFF);
 }
 
 
@@ -648,10 +543,11 @@ int main ( int argc, char **argv )
 		NULL			// no emulator specific shutdown function
 	))
 		return 1;
-	SDL_GameControllerEventState(SDL_DISABLE);
-	SDL_JoystickEventState(SDL_ENABLE);
-	for (cycles = 0; cycles < MAX_JOYSTICKS; cycles++)
-		joysticks[cycles] = NULL;
+	hid_init(
+		vic20_key_map,
+		VIRTUAL_SHIFT_POS,
+		SDL_ENABLE		// enable HID joy events
+	);
 	/* Parse command line */
 	parse_command_line(argc, argv);
 	/* Intialize memory and load ROMs */
@@ -700,7 +596,7 @@ int main ( int argc, char **argv )
 	vic_init(vic_address_space_lo8, vic_address_space_hi4);
 	cycles = 0;
 	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
-	while (running) { // our emulation loop ...
+	for (;;) { // our emulation loop ...
 		int opcyc;
 		opcyc = cpu_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles
 		via_tick(&via1, opcyc);	// run VIA-1 tasks for the same amount of cycles as the CPU
@@ -720,6 +616,5 @@ int main ( int argc, char **argv )
 			cycles -= CYCLES_PER_SCANLINE;
 		}
 	}
-	DEBUG("Goodbye!" NL);
 	return 0;
 }

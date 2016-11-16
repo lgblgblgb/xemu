@@ -27,13 +27,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SD_ST_BUSY1	0x02
 #define SD_ST_BUSY0	0x01
 
-extern int   sdcard_bytes_read;
 
-extern int   sdcard_init          ( const char *fn );
-extern void  sdcard_command       ( Uint8 cmd );
-extern void  sdcard_select_sector ( int secreg, Uint8 data );
-extern Uint8 sdcard_read_status   ( void );
-extern int   sdcard_read_buffer   ( int addr );
-extern int   sdcard_write_buffer  ( int addr,   Uint8 data );
+extern int   sdcard_init           ( const char *fn, const char *extd81fn );
+extern void  sdcard_write_register ( int reg, Uint8 data );
+extern Uint8 sdcard_read_register  ( int reg  );
+extern int   sdcard_read_buffer    ( int addr );
+extern int   sdcard_write_buffer   ( int addr,   Uint8 data );
 
 #endif

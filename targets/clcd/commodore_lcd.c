@@ -28,15 +28,13 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
-#include <stdio.h>
-#include <time.h>
-
-#include <SDL.h>
-
+#include "emutools.h"
+#include "emutools_hid.h"
 #include "cpu65c02.h"
 #include "via65c22.h"
 #include "emutools.h"
 #include "commodore_lcd.h"
+#include <time.h>
 
 
 static Uint8 memory[0x40001];	// +1 for checking load ...
@@ -51,9 +49,7 @@ static int *mmu_current = mmu[0];
 static int *mmu_saved = mmu[0];
 static Uint8 lcd_ctrl[4];
 static struct Via65c22 via1, via2;
-static Uint8 kbd_matrix[9];
 static Uint8 keysel;
-static int running = 1;
 static Uint8 rtc_regs[16];
 static int rtc_sel = 0;
 
@@ -79,11 +75,8 @@ static const Uint8 fontHack[] = {
 	0x00,0x9c,0xa0,0x60,0x3c,0x00,	0x00,0x64,0x54,0x54,0x4c,0x00
 };
 
-struct KeyMapping {
-	SDL_Scancode	scan;	// SDL scancode for the given key we want to map
-	Uint8		pos;	// BCD packed, high nibble / low nibble for col/row to map to.  0xFF means end of table!, high bit set on low nibble: press virtual shift as well!
-};
-static const struct KeyMapping key_map[] = {
+#define VIRTUAL_SHIFT_POS 0x82
+static const struct KeyMapping lcd_key_map[] = {
 	{ SDL_SCANCODE_BACKSPACE, 0x00 },
 	{ SDL_SCANCODE_3, 0x01 },
 	{ SDL_SCANCODE_5, 0x02 },
@@ -154,7 +147,8 @@ static const struct KeyMapping key_map[] = {
 	{ SDL_SCANCODE_LSHIFT, 0x82 }, { SDL_SCANCODE_RSHIFT, 0x82 },
 	{ SDL_SCANCODE_LCTRL, 0x83 }, { SDL_SCANCODE_RCTRL, 0x83 },
 	{ SDL_SCANCODE_LALT, 0x84 }, { SDL_SCANCODE_RALT, 0x84 },
-	{ 0,	0xFF	}	// this must be the last line: end of mapping table
+	STD_XEMU_SPECIAL_KEYS,
+	{ 0,	-1	}	// this must be the last line: end of mapping table
 };
 
 
@@ -168,7 +162,7 @@ int cpu_trap ( Uint8 opcode )
 
 void clear_emu_events ( void )
 {
-	memset(kbd_matrix, 0, sizeof kbd_matrix);	// resets the keyboard
+	hid_reset_events(1);
 }
 
 
@@ -287,17 +281,17 @@ static Uint8 via1_insr()
 	if (keytrans) {
 		int data = 0;
 		keytrans = 0;
-		if (!(keysel &   1)) data |= kbd_matrix[0];
-		if (!(keysel &   2)) data |= kbd_matrix[1];
-		if (!(keysel &   4)) data |= kbd_matrix[2];
-		if (!(keysel &   8)) data |= kbd_matrix[3];
-		if (!(keysel &  16)) data |= kbd_matrix[4];
-		if (!(keysel &  32)) data |= kbd_matrix[5];
-		if (!(keysel &  64)) data |= kbd_matrix[6];
-		if (!(keysel & 128)) data |= kbd_matrix[7];
+		if (!(keysel &   1)) data |= ~kbd_matrix[0];
+		if (!(keysel &   2)) data |= ~kbd_matrix[1];
+		if (!(keysel &   4)) data |= ~kbd_matrix[2];
+		if (!(keysel &   8)) data |= ~kbd_matrix[3];
+		if (!(keysel &  16)) data |= ~kbd_matrix[4];
+		if (!(keysel &  32)) data |= ~kbd_matrix[5];
+		if (!(keysel &  64)) data |= ~kbd_matrix[6];
+		if (!(keysel & 128)) data |= ~kbd_matrix[7];
 		return data;
 	} else
-		return kbd_matrix[8] | powerstatus;
+		return (~kbd_matrix[8]) | powerstatus;
 }
 static void  via1_setint(int level)
 {
@@ -367,29 +361,10 @@ static void render_screen ( void )
 
 
 
-// pressed: non zero value = key is pressed, zero value = key is released
-static void emulate_keyboard ( SDL_Scancode key, int pressed )
+// HID needs this to be defined, it's up to the emulator if it uses or not ...
+int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
-	if (key == SDL_SCANCODE_F11) {  // toggle full screen mode on/off
-		if (pressed)
-			emu_set_full_screen(-1);
-	} else if (key == SDL_SCANCODE_F9) {    // exit emulator ...
-		if (pressed)
-			running = 0;
-	} else {
-		const struct KeyMapping *map = key_map;
-		while (map->pos != 0xFF) {
-			if (map->scan == key) {
-				if (!pressed) {
-					kbd_matrix[map->pos >> 4] &= 255 - (1 << (map->pos & 0x7));
-				} else {
-					kbd_matrix[map->pos >> 4] |= 1 << (map->pos & 0x7);
-				}
-				break;  // key found, end.
-			}
-			map++;
-		}
-	}
+        return 0;
 }
 
 
@@ -417,21 +392,8 @@ static void update_rtc ( void )
 
 static void update_emulator ( void )
 {
-	SDL_Event e;
 	render_screen();
-	while (SDL_PollEvent(&e) != 0) {
-		switch (e.type) {
-			case SDL_QUIT:		// ie: someone closes the SDL window ...
-				running = 0;	// set running to zero, main loop will exit then
-				break;
-			case SDL_KEYDOWN:	// key is pressed (down)
-			case SDL_KEYUP:		// key is released (up)
-				// make sure that key event is for our window, also that it's not a releated event by long key presses (repeats should be handled by the emulated machine's KERNAL)
-				if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0))
-					emulate_keyboard(e.key.keysym.scancode, e.key.state == SDL_PRESSED);	// the last argument will be zero in case of release, other val in case of pressing
-				break;
-		}
-	}
+	hid_handle_all_sdl_events();
 	emu_timekeeping_delay(40000);	// 40000 microseconds would be the real time for a full TV frame (see main() for more info: CLCD is not TV based for real ...)
 	if (seconds_timer_trigger)
 		update_rtc();
@@ -463,6 +425,11 @@ int main ( int argc, char **argv )
 		NULL			// no emulator specific shutdown function
 	))
 		return 1;
+	hid_init(
+		lcd_key_map,
+		VIRTUAL_SHIFT_POS,
+		SDL_DISABLE	// no joystick HID events enabled
+	);
 	memset(memory, 0xFF, sizeof memory);
 	memset(charrom, 0xFF, sizeof charrom);
 	if (
@@ -513,7 +480,7 @@ int main ( int argc, char **argv )
 	cycles = 0;
 	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	update_rtc();			// this will use time-keeping stuff as well, so initially let's do after the function call above
-	while (running) {
+	for (;;) {
 		int opcyc = cpu_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles
 		via_tick(&via1, opcyc);	// run VIA-1 tasks for the same amount of cycles as the CPU
 		via_tick(&via2, opcyc);	// -- "" -- the same for VIA-2
@@ -524,6 +491,5 @@ int main ( int argc, char **argv )
 			cycles -= CPU_CYCLES_PER_TV_FRAME;	// not just cycle = 0, to avoid rounding errors, but it would not matter too much anyway ...
 		}
 	}
-	DEBUG("Goodbye!" NL);
 	return 0;
 }
