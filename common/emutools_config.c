@@ -28,6 +28,15 @@ static struct emutools_config_st *config_tail = NULL;
 
 
 
+static inline int check_string_size ( const char *s )
+{
+	if (!s)
+		return 0;
+	return strlen(s) >= CONFIG_VALUE_MAX_LENGTH;
+}
+
+
+
 void emucfg_define_option ( const char *optname, enum emutools_option_type type, void *defval, const char *help )
 {
 	struct emutools_config_st *p = emu_malloc(sizeof(struct emutools_config_st));
@@ -36,6 +45,8 @@ void emucfg_define_option ( const char *optname, enum emutools_option_type type,
 		config_tail = p;
 	} else
 		config_head = config_tail = p;
+	if (type == OPT_STR && check_string_size(defval))
+		FATAL("Xemu internal config error: too long default option for option '%s'", optname);
 	p->next = NULL;
 	p->name = emu_strdup(optname);
 	p->type = type;
@@ -192,6 +203,8 @@ int emucfg_parse_config_file ( const char *filename, int open_can_fail )
 				case OPT_STR:
 					if (o->value)
 						free(o->value);
+					if (check_string_size(p1))
+						FATAL("Config file (%s) error at line %d: keyword '%s' has too long value", filename, lineno, p);
 					o->value = emu_strdup(p1);
 					break;
 				case OPT_BOOL:
@@ -260,6 +273,8 @@ int emucfg_parse_commandline ( int argc, char **argv, const char *only_this )
 				case OPT_STR:
 					if (o->value)
 						free(o->value);
+					if (check_string_size(*argv))
+						OPT_ERROR_CMDLINE("Option '%s' has too long value.", argv[1]);
 					o->value = emu_strdup(*argv);
 					break;
 				case OPT_BOOL:
@@ -314,4 +329,22 @@ int emucfg_get_num ( const char *optname )
 int emucfg_get_bool ( const char *optname )
 {
 	return (int)(intptr_t)(search_option_query(optname, OPT_BOOL)->value);
+}
+
+
+int emucfg_integer_list_from_string ( const char *value, int *result, int maxitems, const char *delims )
+{
+	char buffer[CONFIG_VALUE_MAX_LENGTH], *p;
+	int num = 0;
+	if (!value)
+		return num;
+	strcpy(buffer, value);
+	p = strtok(buffer, delims);
+	while (p) {
+		if (num == maxitems)
+			return -1;
+		result[num++] = atoi(p);
+		p = strtok(NULL, delims);
+	}
+	return num;
 }

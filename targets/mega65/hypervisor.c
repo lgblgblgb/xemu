@@ -45,7 +45,7 @@ static int debug_on = 0;
 
 
 
-int hypervisor_debug_init ( const char *fn )
+int hypervisor_debug_init ( const char *fn, int hypervisor_debug )
 {
 	char buffer[1024];
 	FILE *fp;
@@ -103,9 +103,7 @@ int hypervisor_debug_init ( const char *fn )
 	fclose(fp);
 	close(fd);
 	resolver_ok = 1;
-#ifdef HYPERVISOR_DEBUG
-	debug_on = 1;
-#endif
+	debug_on = hypervisor_debug;
 	return 0;
 }
 

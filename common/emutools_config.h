@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define __XEMU_COMMON_EMUTOOLS_CONFIG_H_INCLUDED
 
 #define CONFIG_FILE_MAX_SIZE 0x10000
+#define CONFIG_VALUE_MAX_LENGTH	256
 
 enum emutools_option_type {
 	OPT_STR, OPT_BOOL, OPT_NUM, OPT_NO, OPT_PROC
@@ -51,5 +52,7 @@ extern int  emucfg_parse_commandline ( int argc, char **argv, const char *only_t
 extern const char *emucfg_get_str ( const char *optname );
 extern int  emucfg_get_num ( const char *optname );
 extern int  emucfg_get_bool ( const char *optname );
+
+extern int  emucfg_integer_list_from_string ( const char *value, int *result, int maxitems, const char *delims );
 
 #endif

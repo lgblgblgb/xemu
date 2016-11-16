@@ -22,7 +22,7 @@ extern int   in_hypervisor;
 extern Uint8 kicked_hypervisor;
 extern Uint8 hypervisor_memory[0x4001];		// 16K+1 byte, 1 byte is just used for length check on loading, ugly enough, indeed.
 
-extern int  hypervisor_debug_init ( const char *fn );
+extern int  hypervisor_debug_init ( const char *fn, int hypervisor_debug );
 extern void hypervisor_debug ( void );
 
 extern void hypervisor_enter ( int trapno );

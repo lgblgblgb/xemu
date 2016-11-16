@@ -29,6 +29,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "uart_monitor.h"
 #include "hypervisor.h"
 #include "c64_kbd_mapping.h"
+#include "emutools_config.h"
 
 
 static SDL_AudioDeviceID audio = 0;
@@ -83,7 +84,7 @@ static const char emulator_paused_title[] = "TRACE/PAUSE";
 
 Uint8 gs_regs[0x1000];			// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
 static int rom_protect;			// C65 system ROM write protection
-static int fpga_switches = FPGA_SWITCHES;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
+static int fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
 
 
 /* You *MUST* call this every time, when *any* of these events applies:
@@ -284,18 +285,31 @@ static const Uint8 initial_kickup[] = {
 #include "../../rom/kickup.cdata"
 };
 
-static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, int sound_mix_freq )
+static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 {
+	const char *p;
 #ifdef AUDIO_EMULATION
 	SDL_AudioSpec audio_want, audio_got;
 #endif
-	hypervisor_debug_init(KICKSTART_LIST_FILE_NAME);
+	hypervisor_debug_init(emucfg_get_str("kickuplist"), emucfg_get_bool("hyperdebug"));
 	hid_init(
 		c64_key_map,
 		VIRTUAL_SHIFT_POS,
 		SDL_ENABLE		// joy HID events enabled
 	);
 	joystick_emu = 1;
+	// *** FPGA switches ...
+	do {
+		int switches[16], r = emucfg_integer_list_from_string(emucfg_get_str("fpga"), switches, 16, ",");
+		if (r < 0)
+			FATAL("Too many FPGA switches specified for option 'fpga'");
+		while (r--) {
+			DEBUGPRINT("FPGA switch is turned on: #%d" NL, switches[r]);
+			if (switches[r] < 0 || switches[r] > 15)
+				FATAL("Invalid switch sepcifictation for option 'fpga': %d", switches[r]);
+			fpga_switches |= 1 << (switches[r]);
+		}
+	} while (0);
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
 	memcpy(character_rom, initial_charset, sizeof initial_charset); // pre-initialize charrom "WOM" with an initial charset
@@ -307,18 +321,19 @@ static void mega65_init ( const char *disk_image_name, int sid_cycles_per_sec, i
 	gs_regs[0x67E] = 0x80;	// this will signal Xemu, to ask the user on the first read!
 	DEBUG("MEGA65: I/O is remapped to $%X" NL, IO_REMAPPED);
 	// *** Trying to load kickstart image
-	if (emu_load_file(KICKSTART_NAME, hypervisor_memory, 0x4001) == 0x4000) {
-		DEBUG("MEGA65: " KICKSTART_NAME " loaded into hypervisor memory." NL);
+	p = emucfg_get_str("kickup");
+	if (emu_load_file(p, hypervisor_memory, 0x4001) == 0x4000) {
+		DEBUG("MEGA65: %s loaded into hypervisor memory." NL, p);
 	} else {
-		WARNING_WINDOW("Kickstart " KICKSTART_NAME " cannot be found. Using the default (maybe outdated!) built-in version");
+		WARNING_WINDOW("Kickstart %s cannot be found. Using the default (maybe outdated!) built-in version", p);
 		if (sizeof initial_kickup != 0x4000)
 			FATAL("Internal error: initial kickup is not 16K!");
 		memcpy(hypervisor_memory, initial_kickup, 0x4000);
 		hypervisor_debug_invalidate("no kickup could be loaded, built-in one does not have debug info");
 	}
 	// *** Image file for SDCARD support
-	if (sdcard_init(SDCARD_NAME, disk_image_name) < 0)
-		FATAL("Cannot find SD-card image (which is a must for Mega65 emulation): " SDCARD_NAME);
+	if (sdcard_init(emucfg_get_str("sdimg"), emucfg_get_str("8")) < 0)
+		FATAL("Cannot find SD-card image (which is a must for Mega65 emulation): %s", emucfg_get_str("sdimg"));
 	// *** Initialize VIC3
 	vic3_init();
 	// *** Memory configuration (later override will happen for mega65 mode though, this is only the default)
@@ -1076,6 +1091,15 @@ int main ( int argc, char **argv )
 		SCREEN_WIDTH, SCREEN_HEIGHT,
 		emulators_disclaimer
 	);
+	emucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
+	emucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA switches turned ON");
+	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
+	emucfg_define_switch_option("hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode");
+	emucfg_define_str_option("kickup", KICKSTART_NAME, "Override path of KickStart to be used");
+	emucfg_define_str_option("kickuplist", NULL, "Set path of symbol list file for external kickstart");
+	emucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used");
+	if (emucfg_parse_commandline(argc, argv, NULL))
+		return 1;
 	if (xemu_byte_order_test())
 		FATAL("Byte order test failed!!");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
@@ -1097,7 +1121,6 @@ int main ( int argc, char **argv )
 		return 1;
 	// Initialize Mega65
 	mega65_init(
-		argc > 1 ? argv[1] : NULL,	// FIXME: disk image name (in Mega65 mode, this will be SD-card image rather than a D81 in the future ...)
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
 		AUDIO_SAMPLE_FREQ		// sound mix freq
 	);
@@ -1109,6 +1132,7 @@ int main ( int argc, char **argv )
 	emu_timekeeping_start();
 	if (audio)
 		SDL_PauseAudioDevice(audio, 0);
+	emu_set_full_screen(emucfg_get_bool("fullscreen"));
 	for (;;) {
 		while (paused) {	// paused special mode, ie tracing support, or something ...
 			if (m65mon_callback) {	// delayed uart monitor command should be finished ...
