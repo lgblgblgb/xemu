@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "cbmhostfs.h"
 #include "c64_kbd_mapping.h"
 #include "emutools_config.h"
+#include "c65_snapshot.h"
 
 
 
@@ -282,6 +283,8 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// *** RESET CPU, also fetches the RESET vector into PC
 	cpu_reset();
 	DEBUG("INIT: end of initialization!" NL);
+	// *** Snapshot init and loading etc should be the LAST!!!!
+	c65snapshot_init(emucfg_get_str("snapload"), emucfg_get_str("snapsave"));
 }
 
 
@@ -660,6 +663,8 @@ int main ( int argc, char **argv )
 	emucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
 	//emucfg_define_switch_option("noaudio", "Disable audio");
 	emucfg_define_str_option("rom", "c65-system.rom", "Override system ROM path to be loaded");
+	emucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
+	emucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
