@@ -39,6 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  */
 
 #include "emutools_basicdefs.h"
+#include "emutools_snapshot.h"
 #ifndef CPU_CUSTOM_INCLUDED
 #include "cpu65c02.h"
 #endif
@@ -1178,3 +1179,84 @@ int cpu_step () {
 	return cpu_cycles;
 }
 
+
+/* ---- SNAPSHOT RELATED ---- */
+
+/* NOTE: cpu_linear_memory_addressing_is_enabled is not the CPU emulator handled data ...
+*/
+
+
+#ifdef XEMU_SNAPSHOT_ANY_SUPPORT
+
+#include <string.h>
+
+#define SNAPSHOT_CPU_BLOCK_VERSION	0
+#define SNAPSHOT_CPU_BLOCK_SIZE		256
+
+#ifdef CPU_65CE02
+#define SNAPSHOT_CPU_ID			2
+#else
+#define SNAPSHOT_CPU_ID			1
+#endif
+
+#ifdef XEMU_SNAPSHOT_LOAD_SUPPORT
+int cpu_snapshot_load_state ( struct xemu_snapshot_block_st *block )
+{
+	int ret;
+	Uint8 buffer[SNAPSHOT_CPU_BLOCK_SIZE];
+	if (block->sub_counter || block->block_version != SNAPSHOT_CPU_BLOCK_VERSION || block->sub_size != sizeof buffer)
+		RETURN_XSNAPERR_USER("Bad CPU 65xx block syntax");
+	ret = xemusnap_read_file(buffer, sizeof buffer);
+	if (ret) return ret;
+	if (buffer[0] != SNAPSHOT_CPU_ID)
+		RETURN_XSNAPERR_USER("CPU type mismatch");
+	cpu_pc = P_AS_BE16(buffer + 1);
+	cpu_a = buffer[3];
+	cpu_x = buffer[4];
+	cpu_y = buffer[5];
+	cpu_sp = buffer[6];
+	cpu_set_p(buffer[7]);
+	cpu_pfe = buffer[7] & 32;	// must be set manually ....
+	cpu_irqLevel = (int)P_AS_BE32(buffer + 32);
+	cpu_nmiEdge  = (int)P_AS_BE32(buffer + 36);
+	cpu_cycles = buffer[42];
+	cpu_op = buffer[43];
+#ifdef CPU_65CE02
+	cpu_z = buffer[64];
+	cpu_bphi = (Uint16)buffer[65] << 8;
+	cpu_sphi = (Uint16)buffer[66] << 8;
+	cpu_inhibit_interrupts = (int)P_AS_BE32(buffer + 96);
+#endif
+	return 0;
+}
+#endif
+
+
+#ifdef XEMU_SNAPSHOT_SAVE_SUPPORT
+int cpu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
+{
+	Uint8 buffer[SNAPSHOT_CPU_BLOCK_SIZE];
+	int ret = xemusnap_write_block_header(def->idstr, SNAPSHOT_CPU_BLOCK_VERSION);
+	if (ret) return ret;
+	memset(buffer, 0xFF, sizeof buffer);
+	buffer[0] = SNAPSHOT_CPU_ID;
+	U16_AS_BE(buffer + 1, cpu_pc);
+	buffer[3] = cpu_a;
+	buffer[4] = cpu_x;
+	buffer[5] = cpu_y;
+	buffer[6] = cpu_sp;
+	buffer[7] = cpu_get_p();
+	U32_AS_BE(buffer + 32, (Uint32)cpu_irqLevel);
+	U32_AS_BE(buffer + 36, (Uint32)cpu_nmiEdge);
+	buffer[42] = cpu_cycles;
+	buffer[43] = cpu_op;
+#ifdef CPU_65CE02
+	buffer[64] = cpu_z;
+	buffer[65] = cpu_bphi >> 8;
+	buffer[66] = cpu_sphi >> 8;
+	U32_AS_BE(buffer + 96, (Uint32)cpu_inhibit_interrupts);
+#endif
+	return xemusnap_write_sub_block(buffer, sizeof buffer);
+}
+#endif
+#endif

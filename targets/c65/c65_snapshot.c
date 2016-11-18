@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "emutools_snapshot.h"
 #include "emutools_config.h"
 #include "commodore_65.h"
+#include "cpu65c02.h"
 #include <stdlib.h>
 
 static char *savefile = NULL;
@@ -46,6 +47,7 @@ static int snap_memory_saver ( const struct xemu_snapshot_definition_st *def )
 
 
 static const struct xemu_snapshot_definition_st snapshot_definition[] = {
+	{ "CPU:65xx", cpu_snapshot_load_state, cpu_snapshot_save_state },
 	{ "Memory", snap_memory_loader, snap_memory_saver },
 	{ NULL, NULL, NULL }
 };
@@ -68,8 +70,9 @@ void c65snapshot_init ( const char *load, const char *save )
 		if (xemusnap_load(load)) {
 			ERROR_WINDOW("Couldn't load snapshot \"%s\": %s", load, xemusnap_error_buffer);
 			save = NULL;
-		} else
+		} else {
 			INFO_WINDOW("Snapshot has been loaded from file \"%s\"", load);
+		}
 	}
 	if (save) {
 		savefile = emu_strdup(save);
