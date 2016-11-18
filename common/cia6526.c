@@ -321,4 +321,65 @@ void cia_dump_state ( struct Cia6526 *cia )
 }
 
 
+/* --- SNAPSHOT RELATED --- */
 
+
+#ifdef XEMU_SNAPSHOT_SUPPORT
+
+#include "emutools_snapshot.h"
+#include <string.h>
+
+#define SNAPSHOT_CIA_BLOCK_VERSION	0
+#define SNAPSHOT_CIA_BLOCK_SIZE		256
+
+int cia_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
+{
+	Uint8 buffer[SNAPSHOT_CIA_BLOCK_SIZE];
+	struct Cia6526 *cia = (struct Cia6526 *)def->user_data;
+	int a;
+	if (block->block_version != SNAPSHOT_CIA_BLOCK_VERSION || block->sub_counter || block->sub_size != sizeof buffer)
+		RETURN_XSNAPERR_USER("Bad CIA block syntax");
+	a = xemusnap_read_file(buffer, sizeof buffer);
+	if (a) return a;
+	/* loading state ... */
+	for (a = 0; a < 16; a++) {
+		cia_write(cia, a, (cia->regWritten[a] = buffer[a + 16] ? -1 : buffer[a]));
+	}
+	cia->TCA = (int)P_AS_BE32(buffer + 128);
+	cia->TCB = (int)P_AS_BE32(buffer + 132);
+	cia->intLevel = (int)P_AS_BE32(buffer + 136);
+	cia->CRA = buffer[140];
+	cia->CRB = buffer[141];
+	cia->ICRdata = buffer[142];
+	cia->ICRmask = buffer[143];
+	ICR_CHECK();
+	cia->setint(cia->intLevel);	// just to be sure ...
+	cia->outa(cia->PRA);
+	cia->outb(cia->PRB);
+	return 0;
+}
+
+
+int cia_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
+{
+	Uint8 buffer[SNAPSHOT_CIA_BLOCK_SIZE];
+	struct Cia6526 *cia = (struct Cia6526 *)def->user_data;
+	int a = xemusnap_write_block_header(def->idstr, SNAPSHOT_CIA_BLOCK_VERSION);
+	if (a) return a;
+	memset(buffer, 0xFF, sizeof buffer);
+	/* saving state ... */
+	for (a = 0; a < 16; a++) {
+		buffer[a] = cia->regWritten[a] & 0xFF;
+		buffer[a + 16] = cia->regWritten[a] == -1 ? 0xFF : 0x00;
+	}
+	U32_AS_BE(buffer + 128, (Uint32)cia->TCA);
+	U32_AS_BE(buffer + 132, (Uint32)cia->TCB);
+	U32_AS_BE(buffer + 136, (Uint32)cia->intLevel);
+	buffer[140] = cia->CRA;
+	buffer[141] = cia->CRB;
+	buffer[142] = cia->ICRdata;
+	buffer[143] = cia->ICRmask;
+	return xemusnap_write_sub_block(buffer, sizeof buffer);
+}
+
+#endif

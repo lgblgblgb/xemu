@@ -18,6 +18,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_C65_VIC3_H_INCLUDED
 #define __XEMU_C65_VIC3_H_INCLUDED
 
+#include "emutools_snapshot.h"
+
 #define VIC_NEW_MODE 0x10
 
 extern int   vic_new_mode;
@@ -35,5 +37,10 @@ extern void  vic3_check_raster_interrupt ( void );
 extern void  vic3_select_bank ( int bank );
 extern void  vic3_open_frame_access ( void );
 extern int   vic3_render_scanline ( void );
+
+#ifdef XEMU_SNAPSHOT_SUPPORT
+extern int vic3_snapshot_load_state ( const struct xemu_snapshot_definition_st *def , struct xemu_snapshot_block_st *block );
+extern int vic3_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
+#endif
 
 #endif

@@ -20,11 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_COMMON_EMUTOOLS_SNAPSHOT_H_INCLUDED
 #define __XEMU_COMMON_EMUTOOLS_SNAPSHOT_H_INCLUDED
 
-#if (defined(XEMU_SNAPSHOT_SAVE_SUPPORT) || defined(XEMU_SNAPSHOT_LOAD_SUPPORT)) && !defined(XEMU_SNAPSHOT_ANY_SUPPORT)
-#	error "If XEMU_SNAPSHOT_SAVE_SUPPORT and/or XEMU_SNAPSHOT_LOAD_SUPPORT is/are defined, XEMU_SNAPSHOT_ANY_SUPPORT must be defined too in the target specific xemu-target.h header."
-#endif
-
-#ifdef XEMU_SNAPSHOT_ANY_SUPPORT
+#ifdef XEMU_SNAPSHOT_SUPPORT
 
 #define XEMUSNAP_MAX_IDENT_LENGTH	64
 #define XEMUSNAP_ERROR_BUFFER_SIZE	256
@@ -58,11 +54,12 @@ struct xemu_snapshot_block_st {
 
 struct xemu_snapshot_definition_st;
 
-typedef int (*xemu_snapshot_load_callback_t)(struct xemu_snapshot_block_st *);
-typedef int (*xemu_snapshot_save_callback_t)(const struct xemu_snapshot_definition_st *);
+typedef int (*xemu_snapshot_load_callback_t)( const struct xemu_snapshot_definition_st * , struct xemu_snapshot_block_st * );
+typedef int (*xemu_snapshot_save_callback_t)( const struct xemu_snapshot_definition_st * );
 
 struct xemu_snapshot_definition_st {
 	const char *idstr;
+	void *user_data;
 	xemu_snapshot_load_callback_t load;
 	xemu_snapshot_save_callback_t save;
 };

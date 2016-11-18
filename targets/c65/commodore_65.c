@@ -35,7 +35,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static SDL_AudioDeviceID audio = 0;
 
 Uint8 memory[0x100000];			// 65CE02 MAP'able address space
-static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
+struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 static struct SidEmulation sids[2];	// the two SIDs
 
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request
@@ -284,7 +284,12 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	cpu_reset();
 	DEBUG("INIT: end of initialization!" NL);
 	// *** Snapshot init and loading etc should be the LAST!!!!
-	c65snapshot_init(emucfg_get_str("snapload"), emucfg_get_str("snapsave"));
+#ifdef XEMU_SNAPSHOT_SUPPORT
+	if (!c65snapshot_init(emucfg_get_str("snapload"), emucfg_get_str("snapsave"))) {
+		printf("SNAP: ok, snapshot loaded, doing post-load steps." NL);
+		apply_memory_config();
+	}
+#endif
 }
 
 
@@ -650,6 +655,7 @@ static void update_emulator ( void )
 
 
 
+
 int main ( int argc, char **argv )
 {
 	int cycles;
@@ -663,8 +669,10 @@ int main ( int argc, char **argv )
 	emucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
 	//emucfg_define_switch_option("noaudio", "Disable audio");
 	emucfg_define_str_option("rom", "c65-system.rom", "Override system ROM path to be loaded");
+#ifdef XEMU_SNAPSHOT_SUPPORT
 	emucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
 	emucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
+#endif
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
@@ -720,3 +728,47 @@ int main ( int argc, char **argv )
 	}
 	return 0;
 }
+
+/* --- SNAPSHOT RELATED --- */
+
+#ifdef XEMU_SNAPSHOT_SUPPORT
+
+#include "emutools_snapshot.h"
+#include <string.h>
+
+#define SNAPSHOT_C65_BLOCK_VERSION	0
+#define SNAPSHOT_C65_BLOCK_SIZE		0x100
+
+
+int c65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
+{
+	Uint8 buffer[SNAPSHOT_C65_BLOCK_SIZE];
+	int a;
+	if (block->block_version != SNAPSHOT_C65_BLOCK_VERSION || block->sub_counter || block->sub_size != sizeof buffer)
+		RETURN_XSNAPERR_USER("Bad C65 block syntax");
+	a = xemusnap_read_file(buffer, sizeof buffer);
+	if (a) return a;
+	/* loading state ... */
+	map_mask = (int)P_AS_BE32(buffer + 0);
+	map_offset_low = (int)P_AS_BE32(buffer + 4);
+	map_offset_high = (int)P_AS_BE32(buffer + 8);
+	cpu_inhibit_interrupts = (int)P_AS_BE32(buffer + 12);
+	return 0;
+}
+
+
+int c65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
+{
+	Uint8 buffer[SNAPSHOT_C65_BLOCK_SIZE];
+	int a = xemusnap_write_block_header(def->idstr, SNAPSHOT_C65_BLOCK_VERSION);
+	if (a) return a;
+	memset(buffer, 0xFF, sizeof buffer);
+	/* saving state ... */
+	U32_AS_BE(buffer +  0, map_mask);
+	U32_AS_BE(buffer +  4, map_offset_low);
+	U32_AS_BE(buffer +  8, map_offset_high);
+	U32_AS_BE(buffer + 12, cpu_inhibit_interrupts);
+	return xemusnap_write_sub_block(buffer, sizeof buffer);
+}
+
+#endif

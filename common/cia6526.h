@@ -33,6 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_COMMON_CIA6526_H_INCLUDED
 #define __XEMU_COMMON_CIA6526_H_INCLUDED
 
+#include "emutools_snapshot.h"
 #include <time.h>
 
 struct Cia6526 {
@@ -73,6 +74,11 @@ extern Uint8 cia_read (struct Cia6526 *cia, int addr);
 extern void  cia_tick (struct Cia6526 *cia, int ticks);
 extern void  cia_dump_state ( struct Cia6526 *cia );
 extern void  cia_ugly_tod_updater ( struct Cia6526 *cia, struct tm *t ) ;
+
+#ifdef XEMU_SNAPSHOT_SUPPORT
+extern int cia_snapshot_load_state ( const struct xemu_snapshot_definition_st *def , struct xemu_snapshot_block_st *block );
+extern int cia_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
+#endif
 
 
 #endif

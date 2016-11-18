@@ -39,7 +39,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  */
 
 #include "emutools_basicdefs.h"
-#include "emutools_snapshot.h"
 #ifndef CPU_CUSTOM_INCLUDED
 #include "cpu65c02.h"
 #endif
@@ -1186,8 +1185,9 @@ int cpu_step () {
 */
 
 
-#ifdef XEMU_SNAPSHOT_ANY_SUPPORT
+#ifdef XEMU_SNAPSHOT_SUPPORT
 
+#include "emutools_snapshot.h"
 #include <string.h>
 
 #define SNAPSHOT_CPU_BLOCK_VERSION	0
@@ -1199,8 +1199,7 @@ int cpu_step () {
 #define SNAPSHOT_CPU_ID			1
 #endif
 
-#ifdef XEMU_SNAPSHOT_LOAD_SUPPORT
-int cpu_snapshot_load_state ( struct xemu_snapshot_block_st *block )
+int cpu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
 	int ret;
 	Uint8 buffer[SNAPSHOT_CPU_BLOCK_SIZE];
@@ -1229,10 +1228,8 @@ int cpu_snapshot_load_state ( struct xemu_snapshot_block_st *block )
 #endif
 	return 0;
 }
-#endif
 
 
-#ifdef XEMU_SNAPSHOT_SAVE_SUPPORT
 int cpu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 {
 	Uint8 buffer[SNAPSHOT_CPU_BLOCK_SIZE];
@@ -1258,5 +1255,4 @@ int cpu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 #endif
 	return xemusnap_write_sub_block(buffer, sizeof buffer);
 }
-#endif
 #endif
