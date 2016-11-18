@@ -20,6 +20,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_COMMON_EMUTOOLS_SNAPSHOT_H_INCLUDED
 #define __XEMU_COMMON_EMUTOOLS_SNAPSHOT_H_INCLUDED
 
+#if defined(XEMU_SNAPSHOT_SAVE_SUPPORT) || defined(XEMU_SNAPSHOT_LOAD_SUPPORT)
+#	define XEMU_SNAPSHOT_ANY_SUPPORT
+#elif defined(XEMU_SNAPSHOT_ANY_SUPPORT)
+#	undef XEMU_SNAPSHOT_ANY_SUPPORT
+#endif
+
+#ifdef XEMU_SNAPSHOT_ANY_SUPPORT
+
 #define XEMUSNAP_MAX_IDENT_LENGTH	64
 #define XEMUSNAP_ERROR_BUFFER_SIZE	256
 #define XEMUSNAP_FIXED_HEADER_SIZE	21
@@ -85,7 +93,7 @@ inline void   U16_AS_BE ( Uint8 *p, Uint16 n ) {
         p[0] = n >>  8; p[1] = n;
 }
 
-extern void xemusnap_init ( struct xemu_snapshot_definition_st *def, const char *ident );
+extern void xemusnap_init ( const struct xemu_snapshot_definition_st *def, const char *ident );
 extern int  xemusnap_read_file ( void *buffer, size_t size );
 extern int  xemusnap_skip_file_bytes ( off_t size );
 extern int  xemusnap_write_file ( const void *buffer, size_t size );
@@ -97,4 +105,5 @@ extern int  xemusnap_write_sub_block ( const Uint8 *buffer, Uint32 size );
 extern int  xemusnap_load ( const char *filename );
 extern int  xemusnap_save ( const char *filename );
 
+#endif
 #endif

@@ -29,19 +29,21 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <stdlib.h>
 
 
+#ifdef XEMU_SNAPSHOT_ANY_SUPPORT
+static int snapfd = -1;
 static const char *framework_ident = "github.com/lgblgblgb/xemu";
 static const Uint8 block_framing_id[] = { 'X','e','m','u','S','n','a','p' };
-static struct xemu_snapshot_definition_st *snapdef = NULL;
+static const struct xemu_snapshot_definition_st *snapdef = NULL;
 char xemusnap_error_buffer[XEMUSNAP_ERROR_BUFFER_SIZE * 2];
 char xemusnap_user_error_buffer[XEMUSNAP_ERROR_BUFFER_SIZE];
 static char *emu_ident;
-static Uint32 last_sub_block_size_written = -1;
+#endif
+#ifdef XEMU_SNAPSHOT_SAVE_SUPPORT
+static int last_sub_block_size_written = -1;
+#endif
 
 
-static int snapfd = -1;
-
-
-
+#ifdef XEMU_SNAPSHOT_ANY_SUPPORT
 void xemusnap_close ( void )
 {
 	if (snapfd >= 0) {
@@ -49,10 +51,11 @@ void xemusnap_close ( void )
 		snapfd = -1;
 	}
 }
+#endif
 
 
-
-void xemusnap_init ( struct xemu_snapshot_definition_st *def, const char *ident )
+#ifdef XEMU_SNAPSHOT_ANY_SUPPORT
+void xemusnap_init ( const struct xemu_snapshot_definition_st *def, const char *ident )
 {
 	if (snapdef)
 		return;
@@ -61,14 +64,15 @@ void xemusnap_init ( struct xemu_snapshot_definition_st *def, const char *ident 
 	sprintf(emu_ident, "Ident:%s:%s", framework_ident, ident);
 	atexit(xemusnap_close);	
 }
+#endif
 
 
-
+#ifdef XEMU_SNAPSHOT_LOAD_SUPPORT
 int xemusnap_read_file ( void *buffer, size_t size )
 {
 	size_t did = 0;
 	while (did < size) {
-		size_t r = read(snapfd, buffer, size);
+		ssize_t r = read(snapfd, buffer, size);
 		if (r < 0)
 			return XSNAPERR_IO;
 		if (!r)
@@ -80,24 +84,23 @@ int xemusnap_read_file ( void *buffer, size_t size )
 		return XSNAPERR_NODATA;
 	return did == size ? 0 : XSNAPERR_TRUNCATED;
 }
+#endif
 
 
+#ifdef XEMU_SNAPSHOT_LOAD_SUPPORT
 int xemusnap_skip_file_bytes ( off_t size )
 {
-	off_t result = lseek(snapfd, size, SEEK_CUR);
-	if (result == (off_t)-1)
-		return XSNAPERR_IO;
-	if (result != size)
-		return XSNAPERR_TRUNCATED;
-	return 0;
+	return (lseek(snapfd, size, SEEK_CUR) == (off_t)-1) ? XSNAPERR_IO : 0;
 }
+#endif
 
 
+#ifdef XEMU_SNAPSHOT_SAVE_SUPPORT
 int xemusnap_write_file ( const void *buffer, size_t size )
 {
 	size_t did = 0;
 	while (did < size) {
-		size_t r = write(snapfd, buffer, size);
+		ssize_t r = write(snapfd, buffer, size);
 		if (r < 0)
 			return XSNAPERR_IO;
 		if (!r)
@@ -107,11 +110,10 @@ int xemusnap_write_file ( const void *buffer, size_t size )
 	}
 	return ((did == size) && did) ? 0 : XSNAPERR_NODATA;
 }
+#endif
 
 
-
-
-
+#ifdef XEMU_SNAPSHOT_LOAD_SUPPORT
 int xemusnap_read_block_header ( struct xemu_snapshot_block_st *block )
 {
 	Uint8 buffer[256];
@@ -138,8 +140,10 @@ int xemusnap_read_block_header ( struct xemu_snapshot_block_st *block )
 	block->idstr[block->idlen] = 0;
 	return 0;
 }
+#endif
 
 
+#ifdef XEMU_SNAPSHOT_SAVE_SUPPORT
 int xemusnap_write_block_header ( const char *ident, Uint32 version )
 {
 	int len = strlen(ident);
@@ -153,9 +157,10 @@ int xemusnap_write_block_header ( const char *ident, Uint32 version )
 	last_sub_block_size_written = -1;
 	return xemusnap_write_file(buffer, len + XEMUSNAP_FIXED_HEADER_SIZE);
 }
+#endif
 
 
-
+#ifdef XEMU_SNAPSHOT_LOAD_SUPPORT
 int xemusnap_read_be32 ( Uint32 *result )
 {
 	Uint8 buffer[4];
@@ -163,9 +168,10 @@ int xemusnap_read_be32 ( Uint32 *result )
 	*result = P_AS_BE32(buffer);
 	return ret;
 }
+#endif
 
 
-
+#ifdef XEMU_SNAPSHOT_LOAD_SUPPORT
 int xemusnap_skip_sub_blocks ( int num )
 {
 	do {
@@ -182,9 +188,10 @@ int xemusnap_skip_sub_blocks ( int num )
 	} while (num);
 	return 0;
 }
+#endif
 
 
-
+#ifdef XEMU_SNAPSHOT_SAVE_SUPPORT
 int xemusnap_write_sub_block ( const Uint8 *buffer, Uint32 size )
 {
 	int ret;
@@ -203,8 +210,7 @@ int xemusnap_write_sub_block ( const Uint8 *buffer, Uint32 size )
 	}
 	return 0;
 }
-
-
+#endif
 
 
 #define RETURN_XSNAPERR(...)	\
@@ -214,8 +220,7 @@ int xemusnap_write_sub_block ( const Uint8 *buffer, Uint32 size )
 	} while (0)
 
 
-
-
+#ifdef XEMU_SNAPSHOT_LOAD_SUPPORT
 static int load_from_open_file ( void )
 {
 	struct xemu_snapshot_block_st block;
@@ -247,7 +252,7 @@ static int load_from_open_file ( void )
 					if (strcmp(block.idstr + 6, emu_ident + 6))
 						RETURN_XSNAPERR("Not our snapshot file, format is \"%s\", expected: \"%s\"", block.idstr + 6, emu_ident + 6);
 				} else {
-					struct xemu_snapshot_definition_st *p = snapdef;
+					const struct xemu_snapshot_definition_st *p = snapdef;
 					if (!block.counter)
 						RETURN_XSNAPERR("Invalid snapshot file, first block must be the ident block");
 					for (;;) {
@@ -285,9 +290,10 @@ static int load_from_open_file ( void )
 		block.counter++;
 	}
 }
+#endif
 
 
-
+#ifdef XEMU_SNAPSHOT_LOAD_SUPPORT
 int xemusnap_load ( const char *filename )
 {
 	xemusnap_close();
@@ -301,12 +307,13 @@ int xemusnap_load ( const char *filename )
 	xemusnap_close();
 	return 0;
 }
+#endif
 
 
-
+#ifdef XEMU_SNAPSHOT_SAVE_SUPPORT
 static int save_to_open_file ( void )
 {
-	struct xemu_snapshot_definition_st *p = snapdef;
+	const struct xemu_snapshot_definition_st *p = snapdef;
 	int ret;
 	// Ident block
 	ret = xemusnap_write_block_header(emu_ident, 0);
@@ -338,9 +345,10 @@ handle_error:
 			FATAL("Xemu snapshot save internal error: unknown error code: %d", ret);
 	}
 }
+#endif
 
 
-
+#ifdef XEMU_SNAPSHOT_SAVE_SUPPORT
 int xemusnap_save ( const char *filename )
 {
 	xemusnap_close();
@@ -355,3 +363,4 @@ int xemusnap_save ( const char *filename )
 	xemusnap_close();
 	return 0;
 }
+#endif
