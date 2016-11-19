@@ -1001,7 +1001,6 @@ static void sprite_renderer ( void )
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 
-#include "emutools_snapshot.h"
 #include <string.h>
 
 #define SNAPSHOT_VIC3_BLOCK_VERSION	0

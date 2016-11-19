@@ -88,7 +88,7 @@ inline void   U16_AS_BE ( Uint8 *p, Uint16 n ) {
         p[0] = n >>  8; p[1] = n;
 }
 
-extern void xemusnap_init ( const struct xemu_snapshot_definition_st *def, const char *ident );
+extern void xemusnap_init ( const struct xemu_snapshot_definition_st *def );
 extern int  xemusnap_read_file ( void *buffer, size_t size );
 extern int  xemusnap_skip_file_bytes ( off_t size );
 extern int  xemusnap_write_file ( const void *buffer, size_t size );

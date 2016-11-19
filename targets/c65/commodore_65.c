@@ -285,10 +285,7 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	DEBUG("INIT: end of initialization!" NL);
 	// *** Snapshot init and loading etc should be the LAST!!!!
 #ifdef XEMU_SNAPSHOT_SUPPORT
-	if (!c65snapshot_init(emucfg_get_str("snapload"), emucfg_get_str("snapsave"))) {
-		printf("SNAP: ok, snapshot loaded, doing post-load steps." NL);
-		apply_memory_config();
-	}
+	c65snapshot_init(emucfg_get_str("snapload"), emucfg_get_str("snapsave"));
 #endif
 }
 
@@ -733,7 +730,6 @@ int main ( int argc, char **argv )
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 
-#include "emutools_snapshot.h"
 #include <string.h>
 
 #define SNAPSHOT_C65_BLOCK_VERSION	0
@@ -771,4 +767,11 @@ int c65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	return xemusnap_write_sub_block(buffer, sizeof buffer);
 }
 
+
+int c65emu_snapshot_loading_finalize ( const char *filename )
+{
+	apply_memory_config();
+	printf("SNAP: loaded: %s" NL, filename);
+	return 0;
+}
 #endif

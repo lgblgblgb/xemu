@@ -15,6 +15,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
+#ifdef XEMU_SNAPSHOT_SUPPORT
+
 #include "emutools.h"
 #include "emutools_snapshot.h"
 #include "emutools_config.h"
@@ -28,17 +30,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 static char *savefile = NULL;
 
+#define C65_MEMORY_BLOCK_VERSION	0
 
 static int snapcallback_memory_loader ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
-	if (block->block_version != 0 || block->sub_counter != 0 || block->sub_size != sizeof(memory))
+	if (block->block_version != C65_MEMORY_BLOCK_VERSION || block->sub_counter != 0 || block->sub_size != sizeof(memory))
 		RETURN_XSNAPERR_USER("Bad memory block syntax");
 	return xemusnap_read_file(memory, block->sub_size);	// read that damn memory dump
 }
 
 static int snapcallback_memory_saver ( const struct xemu_snapshot_definition_st *def )
 {
-	int ret = xemusnap_write_block_header(def->idstr, 0);
+	int ret = xemusnap_write_block_header(def->idstr, C65_MEMORY_BLOCK_VERSION);
 	if (ret) return ret;
 	return xemusnap_write_sub_block(memory, sizeof memory);
 }
@@ -70,16 +73,14 @@ static void save_now ( void )
 int c65snapshot_init ( const char *load, const char *save )
 {
 	int ret = 0;
-	xemusnap_init(snapshot_definition, EMULATOR_SNAPSHOT_IDENT);
+	xemusnap_init(snapshot_definition);
 	if (load) {
 		if (xemusnap_load(load)) {
 			ERROR_WINDOW("Couldn't load snapshot \"%s\": %s", load, xemusnap_error_buffer);
 			save = NULL;
 			ret = 1;
 		} else {
-			apply_memory_config();
-			INFO_WINDOW("Snapshot has been loaded from file \"%s\"", load);
-			ret = 0;
+			ret = c65emu_snapshot_loading_finalize(load);
 		}
 	}
 	if (save) {
@@ -88,3 +89,5 @@ int c65snapshot_init ( const char *load, const char *save )
 	}
 	return ret;
 }
+
+#endif

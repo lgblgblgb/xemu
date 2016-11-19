@@ -326,7 +326,6 @@ void cia_dump_state ( struct Cia6526 *cia )
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 
-#include "emutools_snapshot.h"
 #include <string.h>
 
 #define SNAPSHOT_CIA_BLOCK_VERSION	0
