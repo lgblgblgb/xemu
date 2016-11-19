@@ -36,7 +36,7 @@ static SDL_AudioDeviceID audio = 0;
 
 Uint8 memory[0x100000];			// 65CE02 MAP'able address space
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
-static struct SidEmulation sids[2];	// the two SIDs
+struct SidEmulation sids[2];		// the two SIDs
 
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request
 // It must be high enough not to collide with the 1Mbyte address space + almost-64K "overflow" area and mapping should not cause to alter lower 12 bits of the addresses,

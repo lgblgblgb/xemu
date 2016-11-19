@@ -16,13 +16,14 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "emutools.h"
-#include "c65_snapshot.h"
 #include "emutools_snapshot.h"
 #include "emutools_config.h"
 #include "commodore_65.h"
 #include "cpu65c02.h"
 #include "cia6526.h"
 #include "vic3.h"
+#include "sid.h"
+#include "c65_snapshot.h"
 #include <stdlib.h>
 
 static char *savefile = NULL;
@@ -49,8 +50,8 @@ static const struct xemu_snapshot_definition_st snapshot_definition[] = {
 	{ "CIA#2", &cia2, cia_snapshot_load_state, cia_snapshot_save_state },
 	{ "VIC-3", NULL,  vic3_snapshot_load_state, vic3_snapshot_save_state },
 	{ "C65",   NULL,  c65emu_snapshot_load_state, c65emu_snapshot_save_state },
-//	{ "SID#1", &sids[0],
-//	{ "SID#2", &sids[1],
+	{ "SID#1", &sids[0], sid_snapshot_load_state, sid_snapshot_save_state },
+	{ "SID#2", &sids[1], sid_snapshot_load_state, sid_snapshot_save_state },
 	{ "Memory", NULL, snapcallback_memory_loader, snapcallback_memory_saver },
 	{ NULL, NULL, NULL, NULL }
 };

@@ -71,8 +71,12 @@ typedef enum {
 } EnvelopePhase;
 
 
+#define NUMBER_OF_SID_REGISTERS_FOR_SNAPSHOT	0x20
+
+
 struct SidEmulation {
 	int sFrameCount;
+	unsigned char writtenRegisterValues[NUMBER_OF_SID_REGISTERS_FOR_SNAPSHOT];
 	struct SidRegisters {
 		struct SidVoice {
 			unsigned short freq;
@@ -146,5 +150,12 @@ struct SidEmulation {
 extern void sid_write_reg ( struct SidEmulation *sidemu, int reg, unsigned char val );
 extern void sid_init      ( struct SidEmulation *sidemu, unsigned long cyclesPerSec, unsigned long mixfrq );
 extern void sid_render    ( struct SidEmulation *sidemu, short *buffer, unsigned long len, int step );
+
+#ifdef XEMU_SNAPSHOT_SUPPORT
+#include "emutools_basicdefs.h"
+#include "emutools_snapshot.h"
+extern int sid_snapshot_load_state ( const struct xemu_snapshot_definition_st *def , struct xemu_snapshot_block_st *block );
+extern int sid_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
+#endif
 
 #endif

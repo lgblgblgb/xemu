@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 // From other modules ...
 extern struct Cia6526 cia1, cia2;
+extern struct SidEmulation sids[2];
 extern int c65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block );
 extern int c65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
 

@@ -529,6 +529,8 @@ void sid_write_reg ( struct SidEmulation *sidemu, int reg, unsigned char val )
 #ifdef SID_DEBUG
 	// if (sTraceon) traceSidPoke(reg, val);
 #endif
+	if (reg < NUMBER_OF_SID_REGISTERS_FOR_SNAPSHOT)
+		sidemu->writtenRegisterValues[reg] = val;
 	if (reg < 7) {}
 	if ((reg >= 7) && (reg <=13)) {voice=1; reg-=7;}
 	if ((reg >= 14) && (reg <=20)) {voice=2; reg-=14;}
@@ -698,5 +700,48 @@ void sid_init ( struct SidEmulation *sidemu, unsigned long cyclesPerSec, unsigne
 			}
 		}
 		exponential_delays[i]= v;
+		if (i < NUMBER_OF_SID_REGISTERS_FOR_SNAPSHOT)
+			sidemu->writtenRegisterValues[i] = 0;
 	}
 }
+
+
+/* --- SNAPSHOT RELATED --- */
+
+
+#ifdef XEMU_SNAPSHOT_SUPPORT
+
+#include <string.h>
+
+#define SNAPSHOT_SID_BLOCK_VERSION	0
+#define SNAPSHOT_SID_BLOCK_SIZE		256
+
+int sid_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
+{
+	Uint8 buffer[SNAPSHOT_SID_BLOCK_SIZE];
+	struct SidEmulation *sidemu = (struct SidEmulation *)def->user_data;
+	int a;
+	if (block->block_version != SNAPSHOT_SID_BLOCK_VERSION || block->sub_counter || block->sub_size != sizeof buffer)
+		RETURN_XSNAPERR_USER("Bad CIA block syntax");
+	a = xemusnap_read_file(buffer, sizeof buffer);
+	if (a) return a;
+	/* loading state ... */
+	for (a = 0; a < NUMBER_OF_SID_REGISTERS_FOR_SNAPSHOT; a++)
+		sid_write_reg(sidemu, a, buffer[a]);
+	return 0;
+}
+
+
+int sid_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
+{
+	Uint8 buffer[SNAPSHOT_SID_BLOCK_SIZE];
+	struct SidEmulation *sidemu = (struct SidEmulation *)def->user_data;
+	int a = xemusnap_write_block_header(def->idstr, SNAPSHOT_SID_BLOCK_VERSION);
+	if (a) return a;
+	memset(buffer, 0xFF, sizeof buffer);
+	/* saving state ... */
+	memcpy(buffer, sidemu->writtenRegisterValues, NUMBER_OF_SID_REGISTERS_FOR_SNAPSHOT);
+	return xemusnap_write_sub_block(buffer, sizeof buffer);
+}
+
+#endif
