@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sid.h"
 #include "c65_snapshot.h"
 #include <stdlib.h>
+#include <string.h>
 
 static char *savefile = NULL;
 
@@ -34,8 +35,9 @@ static char *savefile = NULL;
 
 static int snapcallback_memory_loader ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
-	if (block->block_version != C65_MEMORY_BLOCK_VERSION || block->sub_counter != 0 || block->sub_size != sizeof(memory))
-		RETURN_XSNAPERR_USER("Bad memory block syntax");
+	if (block->block_version != C65_MEMORY_BLOCK_VERSION || block->sub_counter != 0 || block->sub_size > sizeof(memory))
+		RETURN_XSNAPERR_USER("Bad memory block syntax ver=%d, subcount=%d, size=%d", block->block_version, block->sub_counter, block->sub_size);
+	memset(memory, 0xFF, sizeof memory);
 	return xemusnap_read_file(memory, block->sub_size);	// read that damn memory dump
 }
 
@@ -43,7 +45,9 @@ static int snapcallback_memory_saver ( const struct xemu_snapshot_definition_st 
 {
 	int ret = xemusnap_write_block_header(def->idstr, C65_MEMORY_BLOCK_VERSION);
 	if (ret) return ret;
-	return xemusnap_write_sub_block(memory, sizeof memory);
+	ret = sizeof memory;
+	while (memory[--ret] == 0xFF) ;
+	return xemusnap_write_sub_block(memory, ret + 1);
 }
 
 
