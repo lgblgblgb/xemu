@@ -26,10 +26,10 @@ extern struct Cia6526 cia1, cia2;
 extern struct SidEmulation sids[2];
 extern int c65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block );
 extern int c65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
-extern int c65emu_snapshot_loading_finalize   ( const char *filename );
+extern int c65emu_snapshot_loading_finalize   ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block );
 
 // From our .c file
-extern int c65snapshot_init ( const char *load, const char *save );
+extern const struct xemu_snapshot_definition_st c65_snapshot_definition[];
 
 #endif
 #endif

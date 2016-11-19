@@ -203,6 +203,19 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 }
 
 
+#ifdef XEMU_SNAPSHOT_SUPPORT
+static const char *c65_snapshot_saver_filename = NULL;
+static void c65_snapshot_saver_on_exit_callback ( void )
+{
+	if (!c65_snapshot_saver_filename)
+		return;
+	if (xemusnap_save(c65_snapshot_saver_filename))
+		ERROR_WINDOW("Could not save snapshot \"%s\": %s", c65_snapshot_saver_filename, xemusnap_error_buffer);
+	else
+		INFO_WINDOW("Snapshot has been saved to \"%s\".", c65_snapshot_saver_filename);
+}
+#endif
+
 
 static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 {
@@ -283,11 +296,22 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// *** RESET CPU, also fetches the RESET vector into PC
 	cpu_reset();
 	DEBUG("INIT: end of initialization!" NL);
-	// *** Snapshot init and loading etc should be the LAST!!!!
+	// *** Snapshot init and loading etc should be the LAST!!!! (at least the load must be last to have initiated machine state, xemusnap_init() can be called earlier too)
 #ifdef XEMU_SNAPSHOT_SUPPORT
-	c65snapshot_init(emucfg_get_str("snapload"), emucfg_get_str("snapsave"));
+	xemusnap_init(c65_snapshot_definition);
+	p = emucfg_get_str("snapload");
+	if (p) {
+		if (xemusnap_load(p))
+			FATAL("Couldn't load snapshot \"%s\": %s", p, xemusnap_error_buffer);
+	}
+	c65_snapshot_saver_filename = emucfg_get_str("snapsave");
+	atexit(c65_snapshot_saver_on_exit_callback);
 #endif
 }
+
+
+
+
 
 
 
@@ -768,10 +792,10 @@ int c65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 }
 
 
-int c65emu_snapshot_loading_finalize ( const char *filename )
+int c65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
 	apply_memory_config();
-	printf("SNAP: loaded: %s" NL, filename);
+	printf("SNAP: loaded (finalize-callback!)." NL);
 	return 0;
 }
 #endif

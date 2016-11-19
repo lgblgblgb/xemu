@@ -203,12 +203,15 @@ static int load_from_open_file ( void )
 {
 	struct xemu_snapshot_block_st block;
 	const struct xemu_snapshot_definition_st *def;
+	int ret;
+	if (!snapdef)
+		RETURN_XSNAPERR("Xemu error: snapshot format is not defined!");
 	block.counter = 0;
 	block.sub_counter = -1;
 	for (;;) {
-		int ret = xemusnap_read_block_header(&block);
+		ret = xemusnap_read_block_header(&block);
 		if ((ret == XSNAPERR_NODATA) && block.counter)
-			return 0;
+			goto end_of_load;
 		block.sub_counter = -1;
 	handle_error:
 		switch (ret) {
@@ -226,7 +229,7 @@ static int load_from_open_file ( void )
 				def = snapdef;
 				if (block.is_ident) {	// is it an ident block?
 					if (block.counter)
-						return 0;		// ident block other than the first one also signals end of snapshot, regardless of the rest of ident string
+						goto end_of_load;	// ident block other than the first one also signals end of snapshot, regardless of the rest of ident string
 					// check the ident string if it's really our one
 					if (strcmp(block.idstr + 6, emu_ident + 6))
 						RETURN_XSNAPERR("Not our snapshot file, format is \"%s\", expected: \"%s\"", block.idstr + 6, emu_ident + 6);
@@ -244,19 +247,22 @@ static int load_from_open_file ( void )
 				block.sub_counter = 0;
 				for (;;) {
 					ret = xemusnap_read_be32(&block.sub_size);
-					if (ret)
-						goto handle_error;
+					if (ret) goto handle_error;
 					if (!block.sub_size)
 						break;
 					if (block.is_ident) {
 						ret = xemusnap_skip_sub_blocks(0);
-						if (ret)
-							goto handle_error;
+						if (ret) goto handle_error;
 					} else {
-						strcpy(xemusnap_user_error_buffer, "?");
-						ret = def->load(def, &block);
-						if (ret)
-							goto handle_error;
+						// Block can be "save only", ie no LOAD callback
+						if (def->load) {
+							strcpy(xemusnap_user_error_buffer, "?");
+							ret = def->load(def, &block);
+							if (ret) goto handle_error;
+						} else {
+							ret = xemusnap_skip_sub_blocks(0);
+							if (ret) goto handle_error;
+						}
 					}
 					block.sub_counter++;
 				}
@@ -266,6 +272,18 @@ static int load_from_open_file ( void )
 		}
 		block.counter++;
 	}
+end_of_load:
+	// the last entry given in the snapshot def table can hold the "finalizer" callback, call that too.
+	// for this, find the end of the definition first
+	def = snapdef;
+	while (def->idstr)
+		def++;
+	if (def->load) {	// and call it, if it's not NULL
+		strcpy(xemusnap_user_error_buffer, "?");
+		ret = def->load(def, NULL);
+		if (ret) goto handle_error;
+	}
+	return 0;
 }
 
 
@@ -286,21 +304,32 @@ int xemusnap_load ( const char *filename )
 
 static int save_to_open_file ( void )
 {
-	const struct xemu_snapshot_definition_st *p = snapdef;
+	const struct xemu_snapshot_definition_st *def = snapdef;
 	int ret;
+	if (!snapdef)
+		RETURN_XSNAPERR("Xemu error: snapshot format is not defined!");
 	// Ident block
 	ret = xemusnap_write_block_header(emu_ident, 0);
 	if (ret) goto handle_error;
 	ret = xemusnap_write_sub_block(NULL, 0);
 	if (ret) goto handle_error;
 	// Walk on blocks, use saver callback to save them all
-	while (p->idstr) {
+	while (def->idstr) {
+		if (def->save) {
+			// Block can be "load only", ie no SAVE callback
+			strcpy(xemusnap_user_error_buffer, "?");
+			ret = def->save(def);
+			if (ret) goto handle_error;
+			ret = xemusnap_write_sub_block(NULL, 0);	// close block with writing a zero-sized sub-block
+			if (ret) goto handle_error;
+		}
+		def++;
+	}
+	// the last entry given in the snapshot def table can hold the "finalizer" callback, call that too.
+	if (def->save) {
 		strcpy(xemusnap_user_error_buffer, "?");
-		ret = p->save(p);
+		ret = def->save(def);
 		if (ret) goto handle_error;
-		ret = xemusnap_write_sub_block(NULL, 0);
-		if (ret) goto handle_error;
-		p++;
 	}
 	return 0;
 handle_error:
@@ -313,7 +342,7 @@ handle_error:
 		case XSNAPERR_IO:
 			RETURN_XSNAPERR("File I/O error while writing snapshot: %s", strerror(errno));
 		case XSNAPERR_CALLBACK:
-			RETURN_XSNAPERR("Error while saving snapshot block \"%s\": %s", p->idstr, xemusnap_user_error_buffer);
+			RETURN_XSNAPERR("Error while saving snapshot block \"%s\": %s", def->idstr, xemusnap_user_error_buffer);
 		default:
 			FATAL("Xemu snapshot save internal error: unknown error code: %d", ret);
 	}

@@ -25,11 +25,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "cia6526.h"
 #include "vic3.h"
 #include "sid.h"
+#include "c65dma.h"
 #include "c65_snapshot.h"
 #include <stdlib.h>
 #include <string.h>
 
-static char *savefile = NULL;
 
 #define C65_MEMORY_BLOCK_VERSION	0
 
@@ -51,7 +51,18 @@ static int snapcallback_memory_saver ( const struct xemu_snapshot_definition_st 
 }
 
 
-static const struct xemu_snapshot_definition_st snapshot_definition[] = {
+/* The heart of the Snapshot handling. For the Xemu level snapshot support (both loading and saving)
+   A definition list like this must be created. Each entry defines a block type, a user parameter,
+   a load and save callback. Callbacks can be NULL to signal that no need to handle that for load or
+   save (that is: it's possible to support loading a block which is never written though on save).
+   The last entry MUST have a NULL entry in the place of block-identify string. This last entry can
+   specify callbacks too, if it's given it means, that Xemu snapshot handler will call those callbacks
+   at the end of loading or saving a snapshot. It's especially useful in case of "load finalization"
+   for example, when an emulator needs to execute some extra code to really use the loaded state. The
+   user parameter is accessible for the callbacks. Some of these callbacks are common code, ie
+   CIA/CPU/SID can be included this way without any emulator-specific snapshot code, and realized
+   in the shared/common code base. */
+const struct xemu_snapshot_definition_st c65_snapshot_definition[] = {
 	{ "CPU",   NULL,  cpu_snapshot_load_state, cpu_snapshot_save_state },
 	{ "CIA#1", &cia1, cia_snapshot_load_state, cia_snapshot_save_state },
 	{ "CIA#2", &cia2, cia_snapshot_load_state, cia_snapshot_save_state },
@@ -59,39 +70,9 @@ static const struct xemu_snapshot_definition_st snapshot_definition[] = {
 	{ "C65",   NULL,  c65emu_snapshot_load_state, c65emu_snapshot_save_state },
 	{ "SID#1", &sids[0], sid_snapshot_load_state, sid_snapshot_save_state },
 	{ "SID#2", &sids[1], sid_snapshot_load_state, sid_snapshot_save_state },
+	{ "DMA", NULL, dma_snapshot_load_state, dma_snapshot_save_state },
 	{ "Memory", NULL, snapcallback_memory_loader, snapcallback_memory_saver },
-	{ NULL, NULL, NULL, NULL }
+	{ NULL, NULL, c65emu_snapshot_loading_finalize, NULL }
 };
-
-static void save_now ( void )
-{
-	if (!savefile)
-		return;
-	if (xemusnap_save(savefile))
-		ERROR_WINDOW("Couldn't save snapshot \"%s\": %s", savefile, xemusnap_error_buffer);
-	else
-		INFO_WINDOW("Snapshot has been saved into file \"%s\"", savefile);
-}
-
-
-int c65snapshot_init ( const char *load, const char *save )
-{
-	int ret = 0;
-	xemusnap_init(snapshot_definition);
-	if (load) {
-		if (xemusnap_load(load)) {
-			ERROR_WINDOW("Couldn't load snapshot \"%s\": %s", load, xemusnap_error_buffer);
-			save = NULL;
-			ret = 1;
-		} else {
-			ret = c65emu_snapshot_loading_finalize(load);
-		}
-	}
-	if (save) {
-		savefile = emu_strdup(save);
-		atexit(save_now);
-	}
-	return ret;
-}
 
 #endif
