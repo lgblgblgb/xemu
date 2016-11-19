@@ -76,7 +76,7 @@ inline Uint32 P_AS_BE32 ( const Uint8 *p ) {
         return ((Uint32)p[0] << 24) | ((Uint32)p[1] << 16) | ((Uint32)p[2] <<  8) | ((Uint32)p[3]      ) ;
 }
 inline Uint16 P_AS_BE16 ( const Uint8 *p ) {
-        return ((Uint16)p[1] <<  8) | ((Uint16)p[0]      ) ; 
+        return ((Uint16)p[0] <<  8) | ((Uint16)p[1]      ) ;
 }
 inline void   U64_AS_BE ( Uint8 *p, Uint64 n ) {
         p[0] = n >> 56; p[1] = n >> 48; p[2] = n >> 40; p[3] = n >> 32; p[4] = n >> 24; p[5] = n >> 16; p[6] = n >> 8; p[7] = n;
