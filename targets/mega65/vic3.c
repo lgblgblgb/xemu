@@ -685,7 +685,7 @@ int vic4_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, st
 	Uint8 buffer[SNAPSHOT_VIC4_BLOCK_SIZE];
 	int a;
 	if (block->block_version != SNAPSHOT_VIC4_BLOCK_VERSION || block->sub_counter || block->sub_size != sizeof buffer)
-		RETURN_XSNAPERR_USER("Bad VIC3 block syntax");
+		RETURN_XSNAPERR_USER("Bad VIC-4 block syntax");
 	a = xemusnap_read_file(buffer, sizeof buffer);
 	if (a) return a;
 	/* loading state ... */

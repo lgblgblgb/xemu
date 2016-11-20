@@ -1239,7 +1239,7 @@ int main ( int argc, char **argv )
 #include <string.h>
 
 #define SNAPSHOT_M65_BLOCK_VERSION	0
-#define SNAPSHOT_M65_BLOCK_SIZE		0x100
+#define SNAPSHOT_M65_BLOCK_SIZE		(0x100 + sizeof(gs_regs))
 
 
 int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
@@ -1247,7 +1247,7 @@ int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, 
 	Uint8 buffer[SNAPSHOT_M65_BLOCK_SIZE];
 	int a;
 	if (block->block_version != SNAPSHOT_M65_BLOCK_VERSION || block->sub_counter || block->sub_size != sizeof buffer)
-		RETURN_XSNAPERR_USER("Bad C65 block syntax");
+		RETURN_XSNAPERR_USER("Bad M65 block syntax");
 	a = xemusnap_read_file(buffer, sizeof buffer);
 	if (a) return a;
 	/* loading state ... */
@@ -1258,6 +1258,9 @@ int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, 
 	in_hypervisor = (int)P_AS_BE32(buffer + 16);
 	map_megabyte_low = (int)P_AS_BE32(buffer + 20);
 	map_megabyte_high = (int)P_AS_BE32(buffer + 24);
+	rom_protect = (int)P_AS_BE32(buffer + 28);
+	kicked_hypervisor = (int)P_AS_BE32(buffer + 32);
+	memcpy(gs_regs, buffer + 0x100, sizeof gs_regs);
 	return 0;
 }
 
@@ -1276,6 +1279,9 @@ int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	U32_AS_BE(buffer + 16, in_hypervisor);
 	U32_AS_BE(buffer + 20, map_megabyte_low);
 	U32_AS_BE(buffer + 24, map_megabyte_high);
+	U32_AS_BE(buffer + 28, rom_protect);
+	U32_AS_BE(buffer + 32, kicked_hypervisor);
+	memcpy(buffer + 0x100, gs_regs, sizeof gs_regs);
 	return xemusnap_write_sub_block(buffer, sizeof buffer);
 }
 

@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sid.h"
 #include "dmagic.h"
 #include "hypervisor.h"
+#include "sdcard.h"
 #include "m65_snapshot.h"
 #include <string.h>
 
@@ -80,6 +81,7 @@ const struct xemu_snapshot_definition_st m65_snapshot_definition[] = {
 	{ "SID#1", &sid1, sid_snapshot_load_state, sid_snapshot_save_state },
 	{ "SID#2", &sid2, sid_snapshot_load_state, sid_snapshot_save_state },
 	{ "DMAgic", NULL, dma_snapshot_load_state, dma_snapshot_save_state },
+	{ "SDcard", NULL, sdcard_snapshot_load_state, sdcard_snapshot_save_state },
 	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:Chip", memblock_126k_ram),
 	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:Colour2K", memblock_colour_2k_ram),
 	DEFINE_SNAPSHOT_MEMORY_BLOCK("ROM", memblock_rom),
