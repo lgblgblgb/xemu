@@ -20,8 +20,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_COMMON_CPU65C02_H_INCLUDED
 #define __XEMU_COMMON_CPU65C02_H_INCLUDED
 
-#include "emutools_snapshot.h"
-
 extern int cpu_irqLevel;
 extern int cpu_nmiEdge;
 
@@ -64,6 +62,7 @@ extern void  cpu_set_p  ( Uint8 st );
 extern Uint8 cpu_get_p ( void );
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
+#include "emutools_snapshot.h"
 extern int cpu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block );
 extern int cpu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
 #endif

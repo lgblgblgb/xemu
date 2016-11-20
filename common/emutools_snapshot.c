@@ -17,6 +17,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
+#ifdef XEMU_SNAPSHOT_SUPPORT
+
 #include "emutools.h"
 #include "emutools_snapshot.h"
 #include <stdio.h>
@@ -27,9 +29,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <errno.h>
 #include <string.h>
 #include <stdlib.h>
-
-
-#ifdef XEMU_SNAPSHOT_SUPPORT
 
 
 static int snapfd = -1;

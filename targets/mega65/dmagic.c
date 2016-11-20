@@ -286,3 +286,42 @@ Uint8 dma_read_reg ( int addr )
 #endif
 	return dma_status;
 }
+
+
+/* --- SNAPSHOT RELATED --- */
+
+
+#ifdef XEMU_SNAPSHOT_SUPPORT
+
+#include <string.h>
+
+#define SNAPSHOT_DMA_BLOCK_VERSION	0
+#define SNAPSHOT_DMA_BLOCK_SIZE		0x100
+
+
+int dma_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
+{
+	Uint8 buffer[SNAPSHOT_DMA_BLOCK_SIZE];
+	int a;
+	if (block->block_version != SNAPSHOT_DMA_BLOCK_VERSION || block->sub_counter || block->sub_size != sizeof buffer)
+		RETURN_XSNAPERR_USER("Bad C65 block syntax");
+	a = xemusnap_read_file(buffer, sizeof buffer);
+	if (a) return a;
+	/* loading state ... */
+	memcpy(dma_registers, buffer, sizeof dma_registers);
+	return 0;
+}
+
+
+int dma_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
+{
+	Uint8 buffer[SNAPSHOT_DMA_BLOCK_SIZE];
+	int a = xemusnap_write_block_header(def->idstr, SNAPSHOT_DMA_BLOCK_VERSION);
+	if (a) return a;
+	memset(buffer, 0xFF, sizeof buffer);
+	/* saving state ... */
+	memcpy(buffer, dma_registers, sizeof dma_registers);
+	return xemusnap_write_sub_block(buffer, sizeof buffer);
+}
+
+#endif

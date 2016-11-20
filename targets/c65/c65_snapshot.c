@@ -27,7 +27,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sid.h"
 #include "c65dma.h"
 #include "c65_snapshot.h"
-#include <stdlib.h>
 #include <string.h>
 
 

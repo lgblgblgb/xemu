@@ -1,4 +1,4 @@
-/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
+/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -15,21 +15,21 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_DMAGIC_MEGA65_H_INCLUDED
-#define __XEMU_DMAGIC_MEGA65_H_INCLUDED
-
-extern Uint8 dma_status;
-extern Uint8 dma_registers[16];
-
-extern void  dma_write_reg ( int addr, Uint8 data );
-extern Uint8 dma_read_reg  ( int reg );
-extern void  dma_init      ( void );
-extern void  dma_update    ( void );
+#ifndef __XEMU_M65_SNAPSHOT_H_INCLUDED
+#define __XEMU_M65_SNAPSHOT_H_INCLUDED
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 #include "emutools_snapshot.h"
-extern int dma_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block );
-extern int dma_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
-#endif
 
+// From other modules ...
+extern struct Cia6526 cia1, cia2;
+extern struct SidEmulation sid1, sid2;;
+extern int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block );
+extern int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
+extern int m65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block );
+
+// From our .c file
+extern const struct xemu_snapshot_definition_st m65_snapshot_definition[];
+
+#endif
 #endif

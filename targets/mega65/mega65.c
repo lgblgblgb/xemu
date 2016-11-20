@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "hypervisor.h"
 #include "c64_kbd_mapping.h"
 #include "emutools_config.h"
+#include "m65_snapshot.h"
 
 
 static SDL_AudioDeviceID audio = 0;
@@ -39,8 +40,8 @@ Uint8 colour_ram[0x10000];
 Uint8 character_rom[0x1000];		// the "WOM"-like character ROM of VIC-IV
 Uint8 slow_ram[127 << 20];		// 127Mbytes of slowRAM, heh ...
 //Uint8 cpu_port[2];			// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
-static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
-static struct SidEmulation sid1, sid2;	// the two SIDs
+struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
+struct SidEmulation sid1, sid2;		// the two SIDs
 int cpu_linear_memory_addressing_is_enabled = 0;
 
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request
@@ -285,6 +286,23 @@ static const Uint8 initial_kickup[] = {
 #include "../../rom/kickup.cdata"
 };
 
+
+
+#ifdef XEMU_SNAPSHOT_SUPPORT
+static const char *m65_snapshot_saver_filename = NULL;
+static void m65_snapshot_saver_on_exit_callback ( void )
+{
+	if (!m65_snapshot_saver_filename)
+		return;
+	if (xemusnap_save(m65_snapshot_saver_filename))
+		ERROR_WINDOW("Could not save snapshot \"%s\": %s", m65_snapshot_saver_filename, xemusnap_error_buffer);
+	else
+		INFO_WINDOW("Snapshot has been saved to \"%s\".", m65_snapshot_saver_filename);
+}
+#endif
+
+
+
 static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 {
 	const char *p;
@@ -404,6 +422,16 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	cpu_linear_memory_addressing_is_enabled = 1;
 	hypervisor_enter(TRAP_RESET);
 	DEBUG("INIT: end of initialization!" NL);
+#ifdef XEMU_SNAPSHOT_SUPPORT
+	xemusnap_init(m65_snapshot_definition);
+	p = emucfg_get_str("snapload");
+	if (p) {
+		if (xemusnap_load(p))
+			FATAL("Couldn't load snapshot \"%s\": %s", p, xemusnap_error_buffer);
+	}
+	m65_snapshot_saver_filename = emucfg_get_str("snapsave");
+	atexit(m65_snapshot_saver_on_exit_callback);
+#endif
 }
 
 
@@ -1100,6 +1128,10 @@ int main ( int argc, char **argv )
 	emucfg_define_str_option("kickup", KICKSTART_NAME, "Override path of external KickStart to be used");
 	emucfg_define_str_option("kickuplist", NULL, "Set path of symbol list file for external KickStart");
 	emucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used");
+#ifdef XEMU_SNAPSHOT_SUPPORT
+	emucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
+	emucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
+#endif
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
 	if (xemu_byte_order_test())
@@ -1199,3 +1231,59 @@ int main ( int argc, char **argv )
 	}
 	return 0;
 }
+
+/* --- SNAPSHOT RELATED --- */
+
+#ifdef XEMU_SNAPSHOT_SUPPORT
+
+#include <string.h>
+
+#define SNAPSHOT_M65_BLOCK_VERSION	0
+#define SNAPSHOT_M65_BLOCK_SIZE		0x100
+
+
+int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
+{
+	Uint8 buffer[SNAPSHOT_M65_BLOCK_SIZE];
+	int a;
+	if (block->block_version != SNAPSHOT_M65_BLOCK_VERSION || block->sub_counter || block->sub_size != sizeof buffer)
+		RETURN_XSNAPERR_USER("Bad C65 block syntax");
+	a = xemusnap_read_file(buffer, sizeof buffer);
+	if (a) return a;
+	/* loading state ... */
+	map_mask = (int)P_AS_BE32(buffer + 0);
+	map_offset_low = (int)P_AS_BE32(buffer + 4);
+	map_offset_high = (int)P_AS_BE32(buffer + 8);
+	cpu_inhibit_interrupts = (int)P_AS_BE32(buffer + 12);
+	in_hypervisor = (int)P_AS_BE32(buffer + 16);
+	map_megabyte_low = (int)P_AS_BE32(buffer + 20);
+	map_megabyte_high = (int)P_AS_BE32(buffer + 24);
+	return 0;
+}
+
+
+int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
+{
+	Uint8 buffer[SNAPSHOT_M65_BLOCK_SIZE];
+	int a = xemusnap_write_block_header(def->idstr, SNAPSHOT_M65_BLOCK_VERSION);
+	if (a) return a;
+	memset(buffer, 0xFF, sizeof buffer);
+	/* saving state ... */
+	U32_AS_BE(buffer +  0, map_mask);
+	U32_AS_BE(buffer +  4, map_offset_low);
+	U32_AS_BE(buffer +  8, map_offset_high);
+	U32_AS_BE(buffer + 12, cpu_inhibit_interrupts);
+	U32_AS_BE(buffer + 16, in_hypervisor);
+	U32_AS_BE(buffer + 20, map_megabyte_low);
+	U32_AS_BE(buffer + 24, map_megabyte_high);
+	return xemusnap_write_sub_block(buffer, sizeof buffer);
+}
+
+
+int m65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
+{
+	apply_memory_config();
+	printf("SNAP: loaded (finalize-callback!)." NL);
+	return 0;
+}
+#endif

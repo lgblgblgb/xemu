@@ -18,8 +18,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_C65_SNAPSHOT_H_INCLUDED
 #define __XEMU_C65_SNAPSHOT_H_INCLUDED
 
-#include "emutools_snapshot.h"
 #ifdef XEMU_SNAPSHOT_SUPPORT
+#include "emutools_snapshot.h"
 
 // From other modules ...
 extern struct Cia6526 cia1, cia2;
