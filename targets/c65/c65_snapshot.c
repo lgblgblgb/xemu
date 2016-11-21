@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "vic3.h"
 #include "sid.h"
 #include "c65dma.h"
+#include "f011_core.h"
 #include "c65_snapshot.h"
 #include <string.h>
 
@@ -70,6 +71,7 @@ const struct xemu_snapshot_definition_st c65_snapshot_definition[] = {
 	{ "SID#1", &sids[0], sid_snapshot_load_state, sid_snapshot_save_state },
 	{ "SID#2", &sids[1], sid_snapshot_load_state, sid_snapshot_save_state },
 	{ "DMA", NULL, dma_snapshot_load_state, dma_snapshot_save_state },
+	{ "FDC-F011", NULL, fdc_snapshot_load_state, fdc_snapshot_save_state },
 	{ "Memory", NULL, snapcallback_memory_loader, snapcallback_memory_saver },
 	{ NULL, NULL, c65emu_snapshot_loading_finalize, NULL }
 };

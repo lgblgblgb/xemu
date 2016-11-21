@@ -469,3 +469,78 @@ Uint8 fdc_read_reg  ( int addr )
 	return result;
 }
 
+
+/* --- SNAPSHOT RELATED --- */
+
+
+#ifdef XEMU_SNAPSHOT_SUPPORT
+
+#include <string.h>
+
+#define SNAPSHOT_FDC_BLOCK_VERSION	0
+#define SNAPSHOT_FDC_BLOCK_SIZE		(0x100 + sizeof(cache))
+
+int fdc_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
+{
+	Uint8 buffer[SNAPSHOT_FDC_BLOCK_SIZE];
+	int a;
+	if (block->block_version != SNAPSHOT_FDC_BLOCK_VERSION || block->sub_counter || block->sub_size != sizeof buffer)
+		RETURN_XSNAPERR_USER("Bad FDC-F011 block syntax");
+	a = xemusnap_read_file(buffer, sizeof buffer);
+	if (a) return a;
+	/* loading state ... */
+	head_side = P_AS_BE32(buffer + 0);
+	curcmd = P_AS_BE32(buffer + 4);
+	emulate_busy = P_AS_BE32(buffer + 8);
+	drive = P_AS_BE32(buffer + 12);
+	cache_p_cpu = P_AS_BE32(buffer + 16);
+	cache_p_fdc = P_AS_BE32(buffer + 20);
+	swap_mask = P_AS_BE32(buffer + 24);
+	have_disk = P_AS_BE32(buffer + 28);
+	have_write = P_AS_BE32(buffer + 32);
+	head_track = buffer[128];
+	track = buffer[129];
+	sector = buffer[130];
+	side = buffer[131];
+	control = buffer[132];
+	status_a = buffer[133];
+	status_b = buffer[134];
+	cmd = buffer[135];
+	clock = buffer[136];
+	step = buffer[137];
+	memcpy(cache, buffer + 0x100, sizeof cache);
+	return 0;
+}
+
+
+int fdc_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
+{
+	Uint8 buffer[SNAPSHOT_FDC_BLOCK_SIZE];
+	int a = xemusnap_write_block_header(def->idstr, SNAPSHOT_FDC_BLOCK_VERSION);
+	if (a) return a;
+	memset(buffer, 0xFF, sizeof buffer);
+	/* saving state ... */
+	U32_AS_BE(buffer + 0, head_side);
+	U32_AS_BE(buffer + 4, curcmd);
+	U32_AS_BE(buffer + 8, emulate_busy);
+	U32_AS_BE(buffer + 12, drive);
+	U32_AS_BE(buffer + 16, cache_p_cpu);
+	U32_AS_BE(buffer + 20, cache_p_fdc);
+	U32_AS_BE(buffer + 24, swap_mask);
+	U32_AS_BE(buffer + 28, have_disk);
+	U32_AS_BE(buffer + 32, have_write);
+	buffer[128] = head_track;
+	buffer[129] = track;
+	buffer[130] = sector;
+	buffer[131] = side;
+	buffer[132] = control;
+	buffer[133] = status_a;
+	buffer[134] = status_b;
+	buffer[135] = cmd;
+	buffer[136] = clock;
+	buffer[137] = step;
+	memcpy(buffer + 0x100, cache, sizeof cache);
+	return xemusnap_write_sub_block(buffer, sizeof buffer);
+}
+
+#endif

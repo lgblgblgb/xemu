@@ -28,4 +28,10 @@ extern void  fdc_set_disk  ( int in_have_disk, int in_have_write );
 extern int   fdc_cb_rd_sec ( Uint8 *buffer, int offset );
 extern int   fdc_cb_wr_sec ( Uint8 *buffer, int offset );
 
+#ifdef XEMU_SNAPSHOT_SUPPORT
+#include "emutools_snapshot.h"
+extern int fdc_snapshot_load_state ( const struct xemu_snapshot_definition_st *def , struct xemu_snapshot_block_st *block );
+extern int fdc_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
+#endif
+
 #endif
