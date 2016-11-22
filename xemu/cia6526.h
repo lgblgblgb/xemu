@@ -33,7 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_COMMON_CIA6526_H_INCLUDED
 #define __XEMU_COMMON_CIA6526_H_INCLUDED
 
-#include "emutools_snapshot.h"
+#include "xemu/emutools_snapshot.h"
 #include <time.h>
 
 struct Cia6526 {

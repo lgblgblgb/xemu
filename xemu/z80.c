@@ -15,21 +15,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_Z80_H_INCLUDED
-#define __XEMU_Z80_H_INCLUDED
+#include "xemu/z80.h"
 
-#include <SDL_types.h>
+Z80EX_CONTEXT z80ex;
 
-#define Z80EX_CALLBACK_PROTOTYPE extern
-
-#define Z80EX_TYPES_DEFINED
-#define Z80EX_BYTE              Uint8
-#define Z80EX_SIGNED_BYTE       Sint8
-#define Z80EX_WORD              Uint16
-#define Z80EX_DWORD             Uint32
-
-#include "z80ex/z80ex.h"
-
-extern Z80EX_CONTEXT z80ex;
-
-#endif
+#include "xemu/z80ex/z80ex.c"

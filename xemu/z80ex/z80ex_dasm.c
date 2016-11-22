@@ -17,7 +17,7 @@
 #include <stdarg.h>
  
 #define __Z80EX_SELF_INCLUDE
-#include "z80ex_dasm.h"
+#include "xemu/z80ex/z80ex_dasm.h"
 
 #ifdef _MSC_VER
 #define snprintf _snprintf
@@ -29,7 +29,7 @@ typedef struct {
 	int t_states2;
 } z80ex_opc_dasm;
 
-#include "opcodes_dasm.c"
+#include "xemu/z80ex/opcodes_dasm.c"
 
 static const char *formats[] = {
 	"$%02X", /*bytes, # was deleted*/

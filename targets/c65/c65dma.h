@@ -26,7 +26,7 @@ extern void  dma_init      ( void );
 extern void  dma_update    ( void );
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
-#include "emutools_snapshot.h"
+#include "xemu/emutools_snapshot.h"
 extern int dma_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block );
 extern int dma_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
 #endif

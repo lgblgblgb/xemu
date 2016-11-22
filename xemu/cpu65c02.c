@@ -38,13 +38,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  * or visit this page: http://www.gnu.org/licenses/gpl-2.0.html
  */
 
-#include "emutools_basicdefs.h"
+#include "xemu/emutools_basicdefs.h"
 #ifndef CPU_CUSTOM_INCLUDED
-#include "cpu65c02.h"
+#include "xemu/cpu65c02.h"
 #endif
 
 #ifdef DEBUG_CPU
-#include "cpu65ce02_disasm_tables.c"
+#include "xemu/cpu65ce02_disasm_tables.c"
 //#include "cpu65ce02_disasm.c
 #endif
 
@@ -1187,7 +1187,7 @@ int cpu_step () {
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 
-#include "emutools_snapshot.h"
+#include "xemu/emutools_snapshot.h"
 #include <string.h>
 
 #define SNAPSHOT_CPU_BLOCK_VERSION	0

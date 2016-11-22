@@ -14,10 +14,10 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "z80ex.h"
-#include "macros.h"
+#include "xemu/z80ex/z80ex.h"
+#include "xemu/z80ex/macros.h"
 
-#include "emutools_basicdefs.h"
+#include "xemu/emutools_basicdefs.h"
 
 #define temp_byte z80ex.tmpbyte
 #define temp_byte_s z80ex.tmpbyte_s
@@ -32,15 +32,15 @@ typedef void (*z80ex_opcode_fn) (void);
 #define Z180_LIKELY unlikely
 #endif
 
-#include "ptables.c"
-#include "opcodes_base.c"
-#include "opcodes_dd.c"
-#include "opcodes_fd.c"
-#include "opcodes_cb.c"
-#include "opcodes_ed.c"
-#include "opcodes_ddcb.c"
-#include "opcodes_fdcb.c"
-#include "z180ex.c"
+#include "xemu/z80ex/ptables.c"
+#include "xemu/z80ex/opcodes_base.c"
+#include "xemu/z80ex/opcodes_dd.c"
+#include "xemu/z80ex/opcodes_fd.c"
+#include "xemu/z80ex/opcodes_cb.c"
+#include "xemu/z80ex/opcodes_ed.c"
+#include "xemu/z80ex/opcodes_ddcb.c"
+#include "xemu/z80ex/opcodes_fdcb.c"
+#include "xemu/z80ex/z180ex.c"
 
 /* do one opcode (instruction or prefix) */
 int z80ex_step(void)

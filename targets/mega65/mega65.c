@@ -16,20 +16,20 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
-#include "emutools.h"
+#include "xemu/emutools.h"
 #include "mega65.h"
-#include "cpu65c02.h"
-#include "cia6526.h"
-#include "f011_core.h"
+#include "xemu/cpu65c02.h"
+#include "xemu/cia6526.h"
+#include "xemu/f011_core.h"
 #include "dmagic.h"
-#include "emutools_hid.h"
+#include "xemu/emutools_hid.h"
 #include "vic3.h"
-#include "sid.h"
+#include "xemu/sid.h"
 #include "sdcard.h"
 #include "uart_monitor.h"
 #include "hypervisor.h"
-#include "c64_kbd_mapping.h"
-#include "emutools_config.h"
+#include "xemu/c64_kbd_mapping.h"
+#include "xemu/emutools_config.h"
 #include "m65_snapshot.h"
 
 

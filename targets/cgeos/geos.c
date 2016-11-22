@@ -37,9 +37,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <SDL.h>
 
 #include "commodore_geos.h"
-#include "cpu65c02.h"
+#include "xemu/cpu65c02.h"
 #include "geos.h"
-#include "emutools.h"
+#include "xemu/emutools.h"
 
 
 #define GEOS_KERNAL_NAME "geos-kernal.bin"

@@ -17,18 +17,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 
-#include "emutools.h"
-#include "emutools_snapshot.h"
-#include "emutools_config.h"
+#include "xemu/emutools.h"
+#include "xemu/emutools_snapshot.h"
+#include "xemu/emutools_config.h"
 #include "mega65.h"
-#include "cpu65c02.h"
-#include "cia6526.h"
+#include "xemu/cpu65c02.h"
+#include "xemu/cia6526.h"
 #include "vic3.h"
-#include "sid.h"
+#include "xemu/sid.h"
 #include "dmagic.h"
 #include "hypervisor.h"
 #include "sdcard.h"
-#include "f011_core.h"
+#include "xemu/f011_core.h"
 #include "m65_snapshot.h"
 #include <string.h>
 

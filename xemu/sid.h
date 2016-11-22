@@ -152,8 +152,8 @@ extern void sid_init      ( struct SidEmulation *sidemu, unsigned long cyclesPer
 extern void sid_render    ( struct SidEmulation *sidemu, short *buffer, unsigned long len, int step );
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
-#include "emutools_basicdefs.h"
-#include "emutools_snapshot.h"
+#include "xemu/emutools_basicdefs.h"
+#include "xemu/emutools_snapshot.h"
 extern int sid_snapshot_load_state ( const struct xemu_snapshot_definition_st *def , struct xemu_snapshot_block_st *block );
 extern int sid_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
 #endif

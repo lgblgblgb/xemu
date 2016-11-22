@@ -24,8 +24,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  * or visit this page: http://www.gnu.org/licenses/gpl-3.0.html
  */
 
-#include "emutools_basicdefs.h"
-#include "via65c22.h"
+#include "xemu/emutools_basicdefs.h"
+#include "xemu/via65c22.h"
 
 #define INA(via) (via->ina)(0xFF)
 #define INB(via) ((via->ORB & via->DDRB) | ((via->inb)(255 - via->DDRB) & (255 - via->DDRB)))

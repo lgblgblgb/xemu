@@ -24,9 +24,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
    commands on the C65, nothing too much more */
 
 
-#include "emutools.h"
-#include "f011_core.h"
-#include "cpu65c02.h"
+#include "xemu/emutools.h"
+#include "xemu/f011_core.h"
+#include "xemu/cpu65c02.h"
 
 
 

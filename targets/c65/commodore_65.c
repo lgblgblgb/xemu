@@ -15,19 +15,19 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "emutools.h"
+#include "xemu/emutools.h"
 #include "commodore_65.h"
-#include "cpu65c02.h"
-#include "cia6526.h"
-#include "f011_core.h"
+#include "xemu/cpu65c02.h"
+#include "xemu/cia6526.h"
+#include "xemu/f011_core.h"
 #include "c65_d81_image.h"
 #include "c65dma.h"
-#include "emutools_hid.h"
+#include "xemu/emutools_hid.h"
 #include "vic3.h"
-#include "sid.h"
-#include "cbmhostfs.h"
-#include "c64_kbd_mapping.h"
-#include "emutools_config.h"
+#include "xemu/sid.h"
+#include "xemu/cbmhostfs.h"
+#include "xemu/c64_kbd_mapping.h"
+#include "xemu/emutools_config.h"
 #include "c65_snapshot.h"
 
 

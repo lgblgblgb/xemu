@@ -11,7 +11,7 @@
 #ifndef _Z80EX_DASM_H_INCLUDED
 #define _Z80EX_DASM_H_INCLUDED
 
-#include "z80ex.h"
+#include "xemu/z80ex/z80ex.h"
 
 /*callback that returns byte for a given adress*/
 typedef Z80EX_BYTE (*z80ex_dasm_readbyte_cb)(Z80EX_WORD addr);

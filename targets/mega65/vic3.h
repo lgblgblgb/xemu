@@ -38,7 +38,7 @@ extern void  vic3_render_screen ( void );
 extern void  vic3_check_raster_interrupt ( void );
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
-#include "emutools_snapshot.h"
+#include "xemu/emutools_snapshot.h"
 extern int vic4_snapshot_load_state ( const struct xemu_snapshot_definition_st *def , struct xemu_snapshot_block_st *block );
 extern int vic4_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
 #endif

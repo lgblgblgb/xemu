@@ -59,20 +59,7 @@
 #include <math.h>
 #include <stdlib.h>
 
-
-#include "sid.h"
-
-
-/*
-#include "sidengine.h"
-
-#include "defines.h"
-#include "digi.h"
-#include "nanovic.h"
-#include "nanocia.h"
-#include "rsidengine.h"
-#include "sidplayer.h"
-*/
+#include "xemu/sid.h"
 
 static unsigned char exponential_delays[256];
 

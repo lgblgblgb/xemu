@@ -17,9 +17,9 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "emutools.h"
-#include "emutools_hid.h"
-#include "c64_kbd_mapping.h"
+#include "xemu/emutools.h"
+#include "xemu/emutools_hid.h"
+#include "xemu/c64_kbd_mapping.h"
 
 /* Definitions for "C64-like" systems (ie: C64, C65, M65). FIXME:
 	* This is _POSITIONAL_ mapping (not symbolic), assuming US keyboard layout for the host machine (ie: the machine you run this emulator)

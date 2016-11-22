@@ -32,18 +32,24 @@ DEBUG			=
 
 PRG_TOP_REL		= build/bin/$(PRG_TARGET).$(ARCH)
 PRG			= $(TOPDIR)/$(PRG_TOP_REL)
-COMMONDIR		= $(TOPDIR)/common
-CFLAGS_WITHOUT_DEBUG	= $(CFLAGS_ARCH) $(CFLAGS_TARGET) -I. -I$(COMMONDIR)
+COMMONDIR		= $(TOPDIR)/xemu
+CFLAGS_WITHOUT_DEBUG	= $(CFLAGS_ARCH) $(CFLAGS_TARGET) -I. -I$(TOPDIR)
 ifeq ($(NATIVE), yes)
 CFLAGS_WITHOUT_DEBUG	+= -mtune=native -march=native
 endif
-CFLAGS			= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG) -include arch-sys-$(ARCH).h -include xemu-target.h
+CFLAGS			= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG) -include xemu/arch-sys-$(ARCH).h
 LDFLAGS			= $(DEBUG) $(LDFLAGS_ARCH)
-OBJPREFIX       	= $(TOPDIR)/build/objs/$(ARCH)-$(TARGET)--
-DEPFILE			= $(OBJPREFIX)make.depend
+COMMONOBJPREFIX		= $(TOPDIR)/build/objs/c-$(ARCH)-$(TARGET)--
+TARGETOBJPREFIX		= $(TOPDIR)/build/objs/t-$(ARCH)-$(TARGET)--
+DEPFILEPREFIX		= $(TOPDIR)/build/objs/m-$(ARCH)-$(TARGET)--make
+DEPFILE			= $(DEPFILEPREFIX).depend
 DEPALL			= Makefile $(TOPDIR)/build/Makefile.common $(TOPDIR)/build/Makefile.$(ARCH)
-SRCS			= $(addprefix $(COMMONDIR)/, $(SRCS_COMMON)) $(SRCS_TARGET)
-OBJS			= $(addprefix $(OBJPREFIX), $(notdir $(SRCS:.c=.o)))
+TARGETOBJS		= $(addprefix $(TARGETOBJPREFIX), $(notdir $(SRCS_TARGET:.c=.o)))
+COMMONOBJS		= $(addprefix $(COMMONOBJPREFIX), $(notdir $(SRCS_COMMON:.c=.o)))
+SRCS_COMMON_PREFIXED	= $(addprefix $(COMMONDIR)/, $(SRCS_COMMON))
+SRCS_TARGET_PREFIXED	= $(SRCS_TARGET)
+SRCS			= $(SRCS_COMMON_PREFIXED) $(SRCS_TARGET_PREFIXED)
+OBJS			= $(TARGETOBJS) $(COMMONOBJS)
 ASMOUT			= no
 
 
@@ -51,13 +57,13 @@ do-all:
 	$(MAKE) $(DEPFILE)
 	$(MAKE) $(PRG)
 
-$(OBJPREFIX)%.o: %.c $(DEPALL)
+$(TARGETOBJPREFIX)%.o: %.c $(DEPALL)
 ifeq ($(ASMOUT), yes)
 	$(CC) $(CFLAGS) -Wa,-adhln -masm=intel -g -c -o /dev/null $< > $(@:.o=.s)
 endif
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(OBJPREFIX)%.o: $(COMMONDIR)/%.c $(DEPALL)
+$(COMMONOBJPREFIX)%.o: $(COMMONDIR)/%.c $(DEPALL)
 ifeq ($(ASMOUT), yes)
 	$(CC) $(CFLAGS) -Wa,-adhln -masm=intel -g -c -o /dev/null $< > $(@:.o=.s)
 endif
@@ -78,11 +84,12 @@ dep:
 	$(MAKE) $(DEPFILE)
 
 $(DEPFILE): $(DEPALL) $(SRCS)
-	$(CC) -MM $(CFLAGS) $(SRCS) | awk '/^[^.:\t ]+\.o:/ { print "$(OBJPREFIX)" $$0 ; next } { print }' > $(DEPFILE)
+	$(CC) -MM $(CFLAGS) $(SRCS_TARGET_PREFIXED) | awk '/^[^.:\t ]+\.o:/ { print "$(TARGETOBJPREFIX)" $$0 ; next } { print }' > $(DEPFILEPREFIX)-target.depend
+	$(CC) -MM $(CFLAGS) $(SRCS_COMMON_PREFIXED) | awk '/^[^.:\t ]+\.o:/ { print "$(COMMONOBJPREFIX)" $$0 ; next } { print }' > $(DEPFILEPREFIX)-common.depend
+	cat $(DEPFILEPREFIX)-target.depend $(DEPFILEPREFIX)-common.depend > $@
 
 clean:
-	rm -f $(OBJPREFIX)* $(PRG)
-
+	rm -f $(COMMONOBJPREFIX)*.o $(TARGETOBJPREFIX)*.o $(DEPFILEPREFIX)*.depend $(PRG)
 
 .PHONY: clean all strip dep do-all run
 

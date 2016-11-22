@@ -19,11 +19,11 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "emutools.h"
-#include "emutools_hid.h"
+#include "xemu/emutools.h"
+#include "xemu/emutools_hid.h"
 #include "commodore_vic20.h"
-#include "cpu65c02.h"
-#include "via65c22.h"
+#include "xemu/cpu65c02.h"
+#include "xemu/via65c22.h"
 #include "vic6561.h"
 
 #define SCREEN_HEIGHT		(SCREEN_LAST_VISIBLE_SCANLINE - SCREEN_FIRST_VISIBLE_SCANLINE + 1)

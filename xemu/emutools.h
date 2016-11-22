@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define __XEMU_COMMON_EMUTOOLS_H_INCLUDED
 
 #include <SDL.h>
-#include "emutools_basicdefs.h"
+#include "xemu/emutools_basicdefs.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
