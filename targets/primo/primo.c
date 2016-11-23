@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define CLOCKS_PER_FRAME (CPU_CLOCK / 50)
 
+Z80EX_CONTEXT z80ex;
 
 static Uint8 memory[0x10000];
 static const Uint8 init_primo_palette_rgb[2 * 3] = {	// Primo is simple enough, b&w :) Primo C/colour Primo is another problem ...

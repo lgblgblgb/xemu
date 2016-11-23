@@ -34,3 +34,5 @@
 # My stuffs
 *.depend
 *.s
+*.S
+*.c
