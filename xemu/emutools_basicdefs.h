@@ -159,4 +159,14 @@ static inline int xemu_byte_order_test ( void )
 	return (r.b.l != ENDIAN_CHECKER_BYTE_L || r.b.h != ENDIAN_CHECKER_BYTE_H || r.w.w != ENDIAN_CHECKER_WORD || r.d != ENDIAN_CHECKER_DWORD);
 }
 
+#ifdef __EMSCRIPTEN__
+#include <emscripten.h>
+#define XEMUEXIT(n)	do { emscripten_cancel_main_loop(); emscripten_force_exit(n); exit(n); } while (0)
+#else
+#include <stdlib.h>
+#define XEMUEXIT(n)	exit(n)
+#endif
+
+extern const char *XEMU_BUILDINFO_ON, *XEMU_BUILDINFO_AT, *XEMU_BUILDINFO_GIT, *XEMU_BUILDINFO_CC, *XEMU_BUILDINFO_TARGET;
+
 #endif

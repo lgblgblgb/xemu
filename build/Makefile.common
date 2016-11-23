@@ -30,6 +30,14 @@ include $(TOPDIR)/build/Makefile.$(ARCH)
 # If you want to compile with -g option, also *DELETE* the -flto, both of them together known to be problematic!
 DEBUG			=
 
+# Resolve syms from target specific Makefile which includes this one, based on the $PRG_TARGET (for multi make target emu targets ...)
+CFLAGS_TARGET		= $(CFLAGS_TARGET_$(PRG_TARGET))
+SRCS_TARGET		= $(SRCS_TARGET_$(PRG_TARGET))
+SRCS_COMMON		= $(SRCS_COMMON_$(PRG_TARGET))
+CONFIG_TARGET		= $(CONFIG_TARGET_$(PRG_TARGET))
+LDFLAGS_TARGET		= $(LDFLAGS_TARGET_$(PRG_TARGET))
+
+# ----
 PRG_TOP_REL		= build/bin/$(PRG_TARGET).$(ARCH)
 PRG			= $(TOPDIR)/$(PRG_TOP_REL)
 COMMONDIR		= $(TOPDIR)/xemu
@@ -39,9 +47,9 @@ CFLAGS_WITHOUT_DEBUG	+= -mtune=native -march=native
 endif
 CFLAGS			= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG) -include xemu/arch-sys-$(ARCH).h
 LDFLAGS			= $(DEBUG) $(LDFLAGS_ARCH)
-COMMONOBJPREFIX		= $(TOPDIR)/build/objs/c-$(ARCH)-$(TARGET)--
-TARGETOBJPREFIX		= $(TOPDIR)/build/objs/t-$(ARCH)-$(TARGET)--
-DEPFILEPREFIX		= $(TOPDIR)/build/objs/m-$(ARCH)-$(TARGET)--make
+COMMONOBJPREFIX		= $(TOPDIR)/build/objs/c-$(ARCH)-$(TARGET)-$(PRG_TARGET)--
+TARGETOBJPREFIX		= $(TOPDIR)/build/objs/t-$(ARCH)-$(TARGET)-$(PRG_TARGET)--
+DEPFILEPREFIX		= $(TOPDIR)/build/objs/m-$(ARCH)-$(TARGET)-$(PRG_TARGET)--make
 DEPFILE			= $(DEPFILEPREFIX).depend
 DEPALL			= Makefile $(TOPDIR)/build/Makefile.common $(TOPDIR)/build/Makefile.$(ARCH)
 TARGETOBJS		= $(addprefix $(TARGETOBJPREFIX), $(notdir $(SRCS_TARGET:.c=.o)))
@@ -57,6 +65,19 @@ do-all:
 	$(MAKE) $(DEPFILE)
 	$(MAKE) $(PRG)
 
+xemu-info:
+	@echo "-------------------------------------------"
+	@echo "Architecture: $(ARCH)"
+	@echo "Target: $(TARGET)"
+	@echo "Program name target: $(PRG_TARGET)"
+	@echo "Compiler: $(CC)"
+	@echo "Compiler flags: $(CFLAGS)"
+	@echo "Linking flags: $(LDFLAGS)"
+	@echo "Requested configuration: $(CONFIG_TARGET)"
+	@echo "Xemu-framework needed sources: $(SRCS_COMMON)"
+	@echo "Target-specific needed sources: $(SRCS_TARGET)"
+	@echo "Dependecy file created: $(DEPFILE)"
+
 $(TARGETOBJPREFIX)%.o: %.c $(DEPALL)
 ifeq ($(ASMOUT), yes)
 	$(CC) $(CFLAGS) -Wa,-adhln -masm=intel -g -c -o /dev/null $< > $(@:.o=.s)
@@ -69,9 +90,14 @@ ifeq ($(ASMOUT), yes)
 endif
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-
 $(PRG): $(OBJS) $(DEPALL)
-	$(CC) -o $(PRG) $(OBJS) $(LDFLAGS)
+	@echo "const char *XEMU_BUILDINFO_ON  = \"`whoami`@`uname -n` on `uname -s` `uname -r`\";" > $(DEPFILEPREFIX)-buildinfo.c
+	@echo "const char *XEMU_BUILDINFO_AT  = \"`date`\";" >> $(DEPFILEPREFIX)-buildinfo.c
+	@echo "const char *XEMU_BUILDINFO_GIT = \"`git config --get remote.origin.url` `git rev-parse --abbrev-ref HEAD` `git rev-parse HEAD`\";" >> $(DEPFILEPREFIX)-buildinfo.c
+	@echo "const char *XEMU_BUILDINFO_CC  = __VERSION__;" >> $(DEPFILEPREFIX)-buildinfo.c
+	@echo "const char *XEMU_BUILDINFO_TARGET = \"$(PRG_TARGET) ($(PRG)) for $(TARGET) on $(ARCH) using $(CC)\";" >> $(DEPFILEPREFIX)-buildinfo.c
+	$(CC) $(CFLAGS) -c -o $(DEPFILEPREFIX)-buildinfo.o $(DEPFILEPREFIX)-buildinfo.c
+	$(CC) -o $(PRG) $(OBJS) $(DEPFILEPREFIX)-buildinfo.o $(LDFLAGS)
 
 run:	$(PRG)
 	cd $(TOPDIR) && XEMU_DEBUG_FILE=debug.log $(PRG_TOP_REL)
@@ -89,9 +115,9 @@ $(DEPFILE): $(DEPALL) $(SRCS)
 	cat $(DEPFILEPREFIX)-target.depend $(DEPFILEPREFIX)-common.depend > $@
 
 clean:
-	rm -f $(COMMONOBJPREFIX)*.o $(TARGETOBJPREFIX)*.o $(DEPFILEPREFIX)*.depend $(PRG)
+	rm -f $(TOPDIR)/build/objs/?-$(ARCH)-$(TARGET)-* $(PRG)
 
-.PHONY: clean all strip dep do-all run
+.PHONY: clean all strip dep do-all run xemu-info
 
 ifneq ($(wildcard $(DEPFILE)),)
 include $(DEPFILE)

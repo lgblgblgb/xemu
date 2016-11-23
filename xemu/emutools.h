@@ -29,11 +29,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #define EMSCRIPTEN_SDL_BASE_DIR "/files/"
-#define XEMUEXIT(n)	do { emscripten_cancel_main_loop(); emscripten_force_exit(n); exit(n); } while (0)
 #define MSG_POPUP_WINDOW(sdlflag, title, msg, win) \
 	do { if (1 || sdlflag == SDL_MESSAGEBOX_ERROR) { EM_ASM_INT({ window.alert(Pointer_stringify($0)); }, msg); } } while(0)
 #else
-#define XEMUEXIT(n)	exit(n)
 #define MSG_POPUP_WINDOW(sdlflag, title, msg, win) SDL_ShowSimpleMessageBox(sdlflag, title, msg, win)
 #endif
 

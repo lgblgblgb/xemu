@@ -19,8 +19,9 @@
 
 TARGET		= clcd
 PRG_TARGET	= xclcd
-CFLAGS_TARGET	=
-SRCS_TARGET	= commodore_lcd.c
-SRCS_COMMON	= emutools.c cpu65c02.c via65c22.c emutools_hid.c
+
+CFLAGS_TARGET_xclcd	=
+SRCS_TARGET_xclcd	= commodore_lcd.c
+SRCS_COMMON_xclcd	= emutools.c cpu65c02.c via65c22.c emutools_hid.c
 
 include ../../build/Makefile.common

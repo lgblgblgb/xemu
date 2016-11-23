@@ -236,7 +236,7 @@ int emu_load_file ( const char *fn, void *buffer, int maxsize )
 }
 
 /* Meaning of "setting":
-	-1 (or anu negative integer): toggle, switch between fullscreen / windowed mode automatically depending on the previous state
+	-1 (or any negative integer): toggle, switch between fullscreen / windowed mode automatically depending on the previous state
 	 0: set windowed mode (if it's not that already, then nothing will happen)
 	 1 (or any positive integer): set full screen mode (if it's not that already, then nothing will happen)
 */
@@ -273,16 +273,26 @@ static inline void do_sleep ( int td )
 {
 #ifdef __EMSCRIPTEN__
 #define __SLEEP_METHOD_DESC "emscripten_set_main_loop_timing"
-	emscripten_set_main_loop_timing(EM_TIMING_SETTIMEOUT, td / 1000);
+	// Note: even if td is zero (or negative ...) give at least a little time for the browser
+	// do not detect the our JS script as a run-away one, suggesting to kill ...
+	// Note: this is not an actual sleep, we can't do that in JS. Instead of just "throttle"
+	// the "frequency" our main loop is called. This also means, that do_sleep should be
+	// called as last in case of emscripten target, since this does not sleep at all for real,
+	// unlike the other sleep methods for non-js targets.
+	emscripten_set_main_loop_timing(EM_TIMING_SETTIMEOUT, td > 999 ? td / 1000 : 1);
 #elif XEMU_SLEEP_IS_SDL_DELAY
 #define __SLEEP_METHOD_DESC "SDL_Delay"
-	SDL_Delay(td / 1000);
+	if (td > 0)
+		SDL_Delay(td / 1000);
 #elif defined(XEMU_SLEEP_IS_USLEEP)
 #define __SLEEP_METHOD_DESC "usleep"
-	usleep(td);
+	if (td > 0)
+		usleep(td);
 #elif defined(XEMU_SLEEP_IS_NANOSLEEP)
 #define __SLEEP_METHOD_DESC "nanosleep"
 	struct timespec req, rem;
+	if (td <= 0)
+		return;
 	td *= 1000;
 	req.tv_sec  = td / 1000000000UL;
 	req.tv_nsec = td % 1000000000UL;
