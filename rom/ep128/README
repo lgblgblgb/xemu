@@ -1,0 +1,6 @@
+This directory contains pre-stored or compile-time generated binary or C source-like data.
+
+If you modify xep_rom.asm (XEP internal ROM), you *MUST* say 'make' in this directory.
+It would need sjasm (0.42) installed on your system to be able to assemble the Z80 assembly
+source file xep_rom.asm. Of course you still need to say 'make' in the top level directory
+as well, after this step.
