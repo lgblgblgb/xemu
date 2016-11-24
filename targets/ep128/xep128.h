@@ -26,6 +26,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define	DIRSEP		DIRSEP_STR
 
+
+/* Ugly hack: now override DATADIR to the old Xep128 defaults for legacy Xep128 users.
+   This must be changed some time though ... */
+#ifdef DATADIR
+#undef DATADIR
+#define DATADIR		"/usr/local/lib/xep128"
+#endif
+
 /* the old: */
 
 

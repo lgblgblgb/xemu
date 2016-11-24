@@ -7,6 +7,12 @@
 Emulators running on Linux/Unix/Windows/OSX of various (mainly 8 bit) machines,
 including the Commodore LCD and Commodore 65 (and also some Mega65) as well.
 
+Written by (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+Source repository: https://github.com/lgblgblgb/xemu
+
+Xemu is licensed under the terms of GNU/GPL v2, for more information please
+read file LICENSE. You can find the source on github, see above.
+
 Note: there is *nothing* too much common in these machines. The only reason
 that I emulate these within a single project, that I can easily re-use some
 of the components needed, that's all! Also, the list of emulated machines is
