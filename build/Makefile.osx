@@ -25,5 +25,5 @@ CC		= gcc
 STRIP		= strip
 SDLCFG		= sdl2-config
 GENOPTS		= -Ofast -fno-common -falign-functions=16 -ffast-math
-CFLAGS_ARCH	= $(GENOPTS) -Wall -pipe $(shell $(SDLCFG) --cflags) -DDATADIR=\"$(DATADIR)\"
-LDFLAGS_ARCH	= $(GENOPTS) $(shell $(SDLCFG) --libs)
+CFLAGS_ARCH	= $(GENOPTS) -Wall -pipe ::CFLAGS:: -DDATADIR=\"$(DATADIR)\"
+LDFLAGS_ARCH	= $(GENOPTS) ::LDFLAGS::

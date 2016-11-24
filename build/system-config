@@ -1,0 +1,4 @@
+#!/bin/bash
+cd `dirname $0` || exit 1
+grep -E '^'$1'#('$2')#'$3'#' system-config-settings.txt | cut -d'#' -f4- | bash
+exit 0

@@ -45,8 +45,8 @@ CFLAGS_WITHOUT_DEBUG	= $(CFLAGS_ARCH) $(CFLAGS_TARGET) -I. -I$(TOPDIR)
 ifeq ($(NATIVE), yes)
 CFLAGS_WITHOUT_DEBUG	+= -mtune=native -march=native
 endif
-CFLAGS			= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG) -include xemu/arch-sys-$(ARCH).h
-LDFLAGS			= $(DEBUG) $(LDFLAGS_ARCH)
+PRE_CFLAGS		= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG) -include xemu/arch-sys-$(ARCH).h
+PRE_LDFLAGS		= $(DEBUG) $(LDFLAGS_ARCH)
 COMMONOBJPREFIX		= $(TOPDIR)/build/objs/c-$(ARCH)-$(TARGET)-$(PRG_TARGET)--
 TARGETOBJPREFIX		= $(TOPDIR)/build/objs/t-$(ARCH)-$(TARGET)-$(PRG_TARGET)--
 DEPFILEPREFIX		= $(TOPDIR)/build/objs/m-$(ARCH)-$(TARGET)-$(PRG_TARGET)--make
@@ -60,6 +60,9 @@ SRCS			= $(SRCS_COMMON_PREFIXED) $(SRCS_TARGET_PREFIXED)
 OBJS			= $(TARGETOBJS) $(COMMONOBJS)
 ASMOUT			= no
 
+# System configuration ...
+CFLAGS	= $(strip $(subst ::CFLAGS::, $(shell $(TOPDIR)/build/system-config $(ARCH) "$(CONFIG_TARGET)" cflags ), $(PRE_CFLAGS)))
+LDFLAGS	= $(strip $(subst ::LDFLAGS::, $(shell $(TOPDIR)/build/system-config $(ARCH) "$(CONFIG_TARGET)" ldflags ), $(PRE_LDFLAGS)))
 
 do-all:
 	$(MAKE) $(DEPFILE)

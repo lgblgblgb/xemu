@@ -1,0 +1,49 @@
+; This is the architecture specific configuration "dictionary".
+; Format:
+; ARCH#LIB#CLASS#	COMMAND-TO-EXECUTE
+; There should be *NO* empty "COMMAND-TO-EXECUTE", it should be
+; not present then, or "commented out".
+
+native#sdl2#cflags#		sdl2-config --cflags
+native#sdl2#ldflags#		sdl2-config --libs
+osx#sdl2#cflags#		sdl2-config --cflags
+osx#sdl2#ldflags#		sdl2-config --libs
+win32#sdl2#cflags#		/usr/local/cross-tools/i686-w64-mingw32/bin/sdl2-config --cflags
+win32#sdl2#ldflags#		/usr/local/cross-tools/i686-w64-mingw32/bin/sdl2-config --libs
+win64#sdl2#cflags#		/usr/local/cross-tools/x86_64-w64-mingw32/bin/sdl2-config --cflags
+win64#sdl2#ldflags#		/usr/local/cross-tools/x86_64-w64-mingw32/bin/sdl2-config --libs
+html#sdl2#cflags#		echo " -s USE_SDL=2"
+html#sdl2#ldflags#		echo " -s USE_SDL=2"
+
+;native#math#cflags#
+native#math#ldflags#		echo " -lm"
+;osx#math#cflags#
+osx#math#ldflags#		echo " -lm"
+;win32#math#cflags#
+;win32#math#ldflags#
+;win64#math#cflags#
+;win64#math#ldflags#
+;html#math#cflags#
+;html#math#ldflags#
+
+native#gtk3#cflags#		pkg-config --cflags-only-I gtk+-3.0
+native#gtk3#ldflags#		pkg-config --libs gtk+-3.0
+;osx#gtk3#cflags#
+;osx#gtk3#ldflags#
+;win32#gtk3#cflags#
+;win32#gtk3#ldflags#
+;win64#gtk3#cflags#
+;win64#gtk3#ldflags#
+;html#gtk3#cflags#
+;html#gtk3#ldflags#
+
+;native#readline#cflags#	
+native#readline#ldflags#	echo " -lreadline"
+;osx#readline#cflags#
+osx#readline#ldflags#		echo " -lreadline"
+;win32#readline#cflags
+;win32#readline#ldflags#
+;win64#readline#cflags#
+;win64#readline#ldflags#
+;html#readline#cflags#
+;html#readline#ldflags#
