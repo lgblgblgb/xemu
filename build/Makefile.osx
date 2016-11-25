@@ -17,13 +17,15 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
+# WARNING: the ::CFLAGS:: and ::LDFLAGS:: part are here for INTENT, do not alter or remove!
+# It will be replaced in Makefile.common with the right settings!
+
 ARCH_DESC	= "OSX"
 PREFIX		= /usr/local
 BINDIR		= $(PREFIX)/bin
 DATADIR		= $(PREFIX)/lib/xemu
 CC		= gcc
 STRIP		= strip
-SDLCFG		= sdl2-config
 GENOPTS		= -Ofast -fno-common -falign-functions=16 -ffast-math
 CFLAGS_ARCH	= $(GENOPTS) -Wall -pipe ::CFLAGS:: -DDATADIR=\"$(DATADIR)\"
 LDFLAGS_ARCH	= $(GENOPTS) ::LDFLAGS::

@@ -24,11 +24,41 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define __XEMU_COMMON_EMUTOOLS_BASICDEFS_H_INCLUDED
 
 #include <stdio.h>
-#include <SDL_types.h>
-#include <SDL_endian.h>
 #include <limits.h>
 
 #define USE_REGPARM
+
+#ifndef XEMU_DISABLE_SDL
+#include <SDL_types.h>
+#include <SDL_endian.h>
+#else
+#include <stdint.h>
+typedef int8_t Sint8;
+typedef uint8_t Uint8;
+typedef int16_t Sint16;
+typedef uint16_t Uint16;
+typedef int32_t Sint32;
+typedef uint32_t Uint32;
+typedef int64_t Sint64;
+typedef uint64_t Uint64;
+/* this part is taken from SDL2 header ... */
+#define SDL_LIL_ENDIAN  1234
+#define SDL_BIG_ENDIAN  4321
+#ifdef __linux__
+#include <endian.h>
+#define SDL_BYTEORDER  __BYTE_ORDER
+#else /* __linux__ */
+#if defined(__hppa__) || \
+    defined(__m68k__) || defined(mc68000) || defined(_M_M68K) || \
+    (defined(__MIPS__) && defined(__MISPEB__)) || \
+    defined(__ppc__) || defined(__POWERPC__) || defined(_M_PPC) || \
+    defined(__sparc__)
+#define SDL_BYTEORDER   SDL_BIG_ENDIAN
+#else
+#define SDL_BYTEORDER   SDL_LIL_ENDIAN
+#endif
+#endif /* __linux__ */
+#endif
 
 #if UINTPTR_MAX == 0xffffffff
 #	define ARCH_32BIT

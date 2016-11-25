@@ -17,14 +17,16 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
+# WARNING: the ::CFLAGS:: and ::LDFLAGS:: part are here for INTENT, do not alter or remove!
+# It will be replaced in Makefile.common with the right settings!
+
 ARCH_DESC	= "Emscripten HTML/JS"
 PREFIX		= /usr/local
 BINDIR		= $(PREFIX)/bin
 DATADIR		= /
 CC		= emcc
 STRIP		=
-SDLCFG		=
 GENOPTS		= -O3 -fno-common -ffast-math
 EMCCOPTS	= -s NO_EXIT_RUNTIME=1
 CFLAGS_ARCH	= $(GENOPTS) -Wall -pipe $(EMCCOPTS) ::CFLAGS::
-LDFLAGS_ARCH	= $(GENOPTS) $(EMCCOPTS) ::LDFLAGS:: --memory-init-file 1 -s ERROR_ON_UNDEFINED_SYMBOLS=1
+LDFLAGS_ARCH	= $(GENOPTS) $(EMCCOPTS) ::LDFLAGS:: --memory-init-file 1 -s ERROR_ON_UNDEFINED_SYMBOLS=1 -s EXPORTED_FUNCTIONS='["_main", "_monitor_queue_command"]'

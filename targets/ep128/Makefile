@@ -28,6 +28,7 @@ PRG_TARGET	= xep128
 CFLAGS_TARGET_xep128	=
 SRCS_TARGET_xep128	= lodepng.c screen.c main.c cpu.c z180.c nick.c dave.c input.c exdos_wd.c sdext.c rtc.c printer.c zxemu.c primoemu.c emu_rom_interface.c w5300.c apu.c keyboard_mapping.c configuration.c roms.c console.c emu_monitor.c joystick.c fileio.c gui.c snapshot.c
 SRCS_COMMON_xep128	= z80.c z80_dasm.c
-CONFIG_TARGET_xep128	= sdl2|math|gtk3|readline
+CONFIG_CFLAGS_TARGET_xep128	= sdl2|math|gtk3|readline
+CONFIG_LDFLAGS_TARGET_xep128	= sdl2|math|gtk3|readline
 
 include ../../build/Makefile.common

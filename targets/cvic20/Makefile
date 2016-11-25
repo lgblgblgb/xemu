@@ -23,6 +23,7 @@ PRG_TARGET	= xvic20
 CFLAGS_TARGET_xvic20	=
 SRCS_TARGET_xvic20	= commodore_vic20.c vic6561.c
 SRCS_COMMON_xvic20	= emutools.c cpu65c02.c via65c22.c emutools_hid.c
-CONFIG_TARGET_xvic20	= sdl2
+CONFIG_CFLAGS_TARGET_xvic20	= sdl2
+CONFIG_LDFLAGS_TARGET_xvic20	= sdl2
 
 include ../../build/Makefile.common
