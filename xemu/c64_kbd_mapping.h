@@ -23,6 +23,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // Keyboard position of "shift" which is "virtually pressed" ie for cursor up/left
 #define VIRTUAL_SHIFT_POS	0x64
 
+#define RESTORE_KEY_POS		0x80
+#define IS_RESTORE_PRESSED()	(!(kbd_matrix[RESTORE_KEY_POS >> 4] & (1 << (RESTORE_KEY_POS & 7))))
+
 extern const struct KeyMapping c64_key_map[];
 extern int joystick_emu;
 

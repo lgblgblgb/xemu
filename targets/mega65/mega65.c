@@ -43,6 +43,8 @@ Uint8 slow_ram[127 << 20];		// 127Mbytes of slowRAM, heh ...
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 struct SidEmulation sid1, sid2;		// the two SIDs
 int cpu_linear_memory_addressing_is_enabled = 0;
+static int nmi_level;			// please read the comment at nmi_set() below
+
 
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request
 // This is *still* not Mega65 compatible at implementation level, but it will work, unless az M65 software accesses the I/O space at the high
@@ -213,7 +215,7 @@ void apply_memory_config ( void )
 
 
 
-static void cia_setint_cb ( int level )
+static void cia1_setint_cb ( int level )
 {
 	DEBUG("%s: IRQ level changed to %d" NL, cia1.name, level);
 	if (level)
@@ -222,6 +224,35 @@ static void cia_setint_cb ( int level )
 		cpu_irqLevel &= ~1;
 }
 
+
+static inline void nmi_set ( int level, int mask )
+{
+	// NMI is a low active _EDGE_ triggered 65xx input ... In my emulator though, the signal
+	// is "high active", and also we must form the "edge" ourselves from "level". NMI level is
+	// set as a 2bit number, on bit 0, CIA2, on bit 1, keyboard RESTORE key. Thus having zero
+	// value for level means (in the emu!) that not RESTORE key is pressed neither CIA2 has active
+	// IRQ output, non-zero value means some activation. Well, if I am not confused enough here,
+	// this should mean that nmi_level zero->non-zero transit should produce the edge (which should
+	// be the falling edge in the real hardware anyway ... but the rising here. heh, I should follow
+	// the signal level of the hardware in my emulator, honestly ...)
+	int nmi_new_level;
+	if (level)
+		nmi_new_level = nmi_level | mask;
+	else
+		nmi_new_level = nmi_level & (~mask);
+	if ((!nmi_level) && nmi_new_level) {
+		DEBUG("NMI edge is emulated towards the CPU (%d->%d)" NL, nmi_level, nmi_new_level);
+		cpu_nmiEdge = 1;	// the "NMI edge" trigger is deleted by the CPU emulator itself (it's not a level trigger)
+	}
+	nmi_level = nmi_new_level;
+}
+
+
+
+static void cia2_setint_cb ( int level )
+{
+       nmi_set(level, 1);
+}
 
 
 void clear_emu_events ( void )
@@ -316,6 +347,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		SDL_ENABLE		// joy HID events enabled
 	);
 	joystick_emu = 1;
+	nmi_level = 0;
 	// *** FPGA switches ...
 	do {
 		int switches[16], r = emucfg_integer_list_from_string(emucfg_get_str("fpga"), switches, 16, ",");
@@ -371,7 +403,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		cia1_in_a,		// callback: INA ~ joy#2
 		cia1_in_b,		// callback: INB ~ keyboard
 		NULL,			// callback: INSR
-		cia_setint_cb		// callback: SETINT
+		cia1_setint_cb		// callback: SETINT
 	);
 	cia_init(&cia2, "CIA-2",
 		cia2_out_a,		// callback: OUTA
@@ -380,7 +412,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		cia_port_in_dummy,	// callback: INA
 		NULL,			// callback: INB
 		NULL,			// callback: INSR
-		NULL			// callback: SETINT ~ that would be NMI in our case
+		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	// *** Initialize DMA
 	dma_init();
@@ -1017,6 +1049,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			in_hypervisor = 0;
 			apply_memory_config();
 			cpu_reset();
+			nmi_level = 0;
 			kicked_hypervisor = emucfg_get_num("kicked");
 			hypervisor_enter(TRAP_RESET);
 			DEBUG("RESET!" NL);
@@ -1032,6 +1065,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 static void update_emulator ( void )
 {
 	hid_handle_all_sdl_events();
+	nmi_set(IS_RESTORE_PRESSED(), 2);	// Custom handling of the restore key ...
 #ifdef UARTMON_SOCKET
 	uartmon_update();
 #endif

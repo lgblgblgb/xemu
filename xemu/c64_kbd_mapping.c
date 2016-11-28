@@ -69,30 +69,33 @@ const struct KeyMapping c64_key_map[] = {
 	{ SDL_SCANCODE_K,		0x45 },
 	{ SDL_SCANCODE_O,		0x46 },
 	{ SDL_SCANCODE_N,		0x47 },
-	// FIXME: map something as +	0x50
+	{ SDL_SCANCODE_INSERT,		0x50 },	// FIXME: map something sane as + ?
 	{ SDL_SCANCODE_P,		0x51 },
 	{ SDL_SCANCODE_L,		0x52 },
 	{ SDL_SCANCODE_MINUS,		0x53 },
 	{ SDL_SCANCODE_PERIOD,		0x54 },
 	{ SDL_SCANCODE_APOSTROPHE,	0x55 },	// mapped as ":"
-	// FIXME: map something as @	0x56
+	{ SDL_SCANCODE_LEFTBRACKET,	0x56 },	// FIXME: map something sane as @ ?
 	{ SDL_SCANCODE_COMMA,		0x57 },
-	// FIXME: map something as pound0x60
-	// FIXME: map something as *	0x61
+	{ SDL_SCANCODE_DELETE,		0x60 }, // FIXME: map something sane as £ ?
+	{ SDL_SCANCODE_RIGHTBRACKET,	0x61 }, // FIXME: map something sane as * ?
 	{ SDL_SCANCODE_SEMICOLON,	0x62 },
 	{ SDL_SCANCODE_HOME,		0x63 },	// CLR/HOME
 	{ SDL_SCANCODE_RSHIFT,		0x64 },
 	{ SDL_SCANCODE_EQUALS,		0x65 },
-	// FIXME: map something as Pi?	0x66
+	{ SDL_SCANCODE_BACKSLASH,	0x66 },	// FIXME: map something sane as Pi?
 	{ SDL_SCANCODE_SLASH,		0x67 },
 	{ SDL_SCANCODE_1,		0x70 },
-	// FIXME: map sg. as <--	0x71
+	{ SDL_SCANCODE_GRAVE,		0x71 },	// FIXME: map something sane as <-- ?
 	{ SDL_SCANCODE_LCTRL,		0x72 },
 	{ SDL_SCANCODE_2,		0x73 },
 	{ SDL_SCANCODE_SPACE,		0x74 },
 	{ SDL_SCANCODE_LALT,		0x75 },	// Commodore key, PC kbd sux, does not have C= key ... Mapping left ALT as the C= key
 	{ SDL_SCANCODE_Q,		0x76 },
 	{ SDL_SCANCODE_END,		0x77 },	// RUN STOP key, we map 'END' as this key
+	{ SDL_SCANCODE_ESCAPE,		0x77 },	// RUN STOP can be also accessed as 'ESC' ...
+	// Not a real kbd-matrix key
+	{ SDL_SCANCODE_TAB,		RESTORE_KEY_POS }, // restore
 	// **** Emulates joystick with keypad
 	STD_XEMU_SPECIAL_KEYS,
 	// **** this must be the last line: end of mapping table ****
