@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cia6526.h"
 #include "xemu/f011_core.h"
 #include "c65_d81_image.h"
-#include "c65dma.h"
+#include "xemu/f018_core.h"
 #include "xemu/emutools_hid.h"
 #include "vic3.h"
 #include "xemu/sid.h"
@@ -297,7 +297,18 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	// *** Initialize DMA
-	dma_init();
+	dma_init(
+		read_phys_mem,	// dma_reader_cb_t set_source_mreader ,
+		write_phys_mem,	// dma_writer_cb_t set_source_mwriter ,
+		read_phys_mem,	// dma_reader_cb_t set_target_mreader ,
+		write_phys_mem,	// dma_writer_cb_t set_target_mwriter,
+		io_read,	// dma_reader_cb_t set_source_ioreader,
+		io_write,	// dma_writer_cb_t set_source_iowriter,
+		io_read,	// dma_reader_cb_t set_target_ioreader,
+		io_write,	// dma_writer_cb_t set_target_iowriter,
+		read_phys_mem	// dma_reader_cb_t set_list_reader
+	);
+	dma_set_phys_io_offset(0);
 	// Initialize FDC
 	fdc_init();
 	c65_d81_init(emucfg_get_str("8"));
@@ -685,6 +696,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			vic3_registers[0x30] = 0;
 			apply_memory_config();
 			cpu_reset();
+			dma_reset();
 			nmi_level = 0;
 			DEBUG("RESET!" NL);
 		} else if (key == SDL_SCANCODE_KP_ENTER)
