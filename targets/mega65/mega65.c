@@ -767,9 +767,8 @@ void io_write ( int addr, Uint8 data )
 			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("DMA controller");
 	}
 	if (addr < ((vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00)) {	// $D800-$DC00/$E000	COLOUR NIBBLES, mapped to $1F800 in BANK1
-		//memory[0x1F800 + addr - 0xD800] = data;
+		memory[0x1F800 + addr - 0xD800] = data;
 		colour_ram[addr - 0xD800] = data;
-       //return memory[0x1F800 + addr - 0xD800];
 		DEBUG("IO: writing colour RAM at offset $%04X" NL, addr - 0xD800);
 		return;
 	}
@@ -850,7 +849,7 @@ void REGPARM(2) write_phys_mem ( int addr, Uint8 data )
 		return;
 	}
 	if (addr < 0x020000) {		// the last 2K of the mentioned 128K is the mega65 mapped colour RAM (126K ... 128K)
-		memory[addr] = data; 	// also update the "legacy 2K C65 ROM @ 126K" so read func won't have a different case for this!
+		memory[addr] = data; 	// also update the "legacy 2K C65 colour-RAM @ 126K" so read func won't have a different case for this!
 		colour_ram[addr & 0x7FF] = data;
 		return;
 	}
@@ -870,6 +869,12 @@ void REGPARM(2) write_phys_mem ( int addr, Uint8 data )
 		// $0020000-$003FFFF
 		if (addr >= 0x8020000 && addr <= 0x803FFFF)
 			memory[addr - 0x8000000] = data;
+		return;
+	}
+	if ((addr & 0xFFF0000) == 0xFF80000) {
+		colour_ram[addr & 0xFFFF] = data;
+		if (addr < 0xFF80800)
+			memory[addr - 0xFF60800] = data;
 		return;
 	}
 	if ((addr & 0xFFFF000) == 0xFF7E000) {
@@ -943,6 +948,8 @@ Uint8 REGPARM(1) read_phys_mem ( int addr )
 	// No other memory accessible components/space on C65. The following areas on M65 currently decoded with masks:
 	if (addr >= 0x8000000 && addr < 0x8000000 + sizeof(slow_ram))
 		return slow_ram[addr - 0x8000000];
+	if ((addr & 0xFFF0000) == 0xFF80000)
+		return colour_ram[addr & 0xFFFF];
 	if ((addr & 0xFFFF000) == IO_REMAPPED)			// I/O stuffs (remapped from standard $D000 location as found on C64 or C65 too)
 		return io_read((addr & 0xFFF) | 0xD000);	// TODO/FIXME: later we can save using D000, if io_read/io_write internally uses 0-FFF range only!
 	if ((addr & 0xFFFC000) == 0xFFF8000) {			// accessing of hypervisor memory
