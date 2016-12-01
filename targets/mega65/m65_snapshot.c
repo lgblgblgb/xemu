@@ -25,7 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cia6526.h"
 #include "vic3.h"
 #include "xemu/sid.h"
-#include "dmagic.h"
+#include "xemu/f018_core.h"
 #include "hypervisor.h"
 #include "sdcard.h"
 #include "xemu/f011_core.h"

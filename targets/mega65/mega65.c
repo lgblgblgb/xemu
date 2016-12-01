@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65c02.h"
 #include "xemu/cia6526.h"
 #include "xemu/f011_core.h"
-#include "dmagic.h"
+#include "xemu/f018_core.h"
 #include "xemu/emutools_hid.h"
 #include "vic3.h"
 #include "xemu/sid.h"
@@ -415,7 +415,18 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	// *** Initialize DMA
-	dma_init();
+	dma_init(
+		read_phys_mem,  // dma_reader_cb_t set_source_mreader ,
+		write_phys_mem, // dma_writer_cb_t set_source_mwriter ,
+		read_phys_mem,  // dma_reader_cb_t set_target_mreader ,
+		write_phys_mem, // dma_writer_cb_t set_target_mwriter,
+		io_read,        // dma_reader_cb_t set_source_ioreader,
+		io_write,       // dma_writer_cb_t set_source_iowriter,
+		io_read,        // dma_reader_cb_t set_target_ioreader,
+		io_write,       // dma_writer_cb_t set_target_iowriter,
+		read_phys_mem   // dma_reader_cb_t set_list_reader
+	);
+	dma_set_phys_io_offset(0xD000);	// FIXME: currently Mega65 uses D000 based I/O decoding, so we need this here ...
 	// Initialize FDC
 	fdc_init();
 	// SIDs, plus SDL audio
@@ -549,6 +560,9 @@ void cpu_do_nop ( void )
 // Ranges marked with (*) needs "vic_new_mode"
 Uint8 io_read ( int addr )
 {
+	// FIXME: sanity check ...
+	if (addr < 0xD000 || addr > 0xDFFF)
+		FATAL("io_read() decoding problem addr $%X is not in range of $D000...$DFFF", addr);
 	// Future stuff: instead of slow tons of IFs, use the >> 5 maybe
 	// that can have new device at every 0x20 dividible addresses,
 	// that is: switch ((addr >> 5) & 127)
@@ -657,6 +671,9 @@ Uint8 io_read ( int addr )
 // Ranges marked with (*) needs "vic_new_mode"
 void io_write ( int addr, Uint8 data )
 {
+	// FIXME: sanity check ...
+	if (addr < 0xD000 || addr > 0xDFFF)
+		FATAL("io_read() decoding problem addr $%X is not in range of $D000...$DFFF", addr);
 	if (addr < 0xD080) {	// $D000 - $D07F:	VIC3
 		vic3_write_reg(addr, data);
 		return;
@@ -1049,6 +1066,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			in_hypervisor = 0;
 			apply_memory_config();
 			cpu_reset();
+			dma_reset();
 			nmi_level = 0;
 			kicked_hypervisor = emucfg_get_num("kicked");
 			hypervisor_enter(TRAP_RESET);
