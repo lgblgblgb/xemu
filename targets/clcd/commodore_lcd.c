@@ -405,10 +405,7 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles;
-	printf("**** The world's first Commodore LCD emulator from LGB" NL "%s" NL,
-		emulators_disclaimer
-	);
-
+	xemu_dump_version(stdout, "The world's first Commodore LCD emulator from LGB");
 	if (emu_init_sdl(
 		TARGET_DESC APP_DESC_APPEND,	// window title
 		APP_ORG, TARGET_NAME,		// app organization and name, used with SDL pref dir formation

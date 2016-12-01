@@ -63,20 +63,9 @@ static Uint32 osd_colours[16], *osd_pixels = NULL, osd_colour_fg, osd_colour_bg;
 static SDL_Texture *sdl_osdtex = NULL;
 
 
-
 #if !SDL_VERSION_ATLEAST(2, 0, 4)
 #error "At least SDL version 2.0.4 is needed!"
 #endif
-
-
-const char emulators_disclaimer[] =
-	"LICENSE: Copyright (C)2016 Gábor Lénárt (aka LGB) lgb@lgb.hu http://lgb.hu/" NL
-	"LICENSE: This software is a GNU/GPL version 2 (or later) software." NL
-	"LICENSE: <http://gnu.org/licenses/gpl.html>" NL
-        "LICENSE: This is free software; you are free to change and redistribute it." NL
-        "LICENSE: There is NO WARRANTY, to the extent permitted by law." NL
-;
-
 
 
 static inline int get_elapsed_time ( Uint64 t_old, Uint64 *t_new, time_t *store_unix_time )
@@ -395,7 +384,8 @@ int emu_init_debug ( const char *fn )
 			ERROR_WINDOW("Cannot open requested debug file: %s", fn);
 			return 1;
 		}
-		printf("Logging into file: %s (fd=%d)." NL, fn, fileno(debug_fp));
+		DEBUGPRINT("Logging into file: %s (fd=%d)." NL, fn, fileno(debug_fp));
+		xemu_dump_version(debug_fp, NULL);
 		return 0;
 	}
 #endif

@@ -1174,11 +1174,7 @@ void m65mon_breakpoint ( int brk )
 int main ( int argc, char **argv )
 {
 	int cycles, frameskip;
-	printf("**** The Incomplete Commodore-65/Mega-65 emulator from LGB" NL
-	"INFO: Texture resolution is %dx%d" NL "%s" NL,
-		SCREEN_WIDTH, SCREEN_HEIGHT,
-		emulators_disclaimer
-	);
+	xemu_dump_version(stdout, "The Incomplete Commodore-65/Mega-65 emulator from LGB");
 	emucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
 	emucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA-board switches turned ON");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");

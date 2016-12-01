@@ -726,11 +726,7 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles;
-	printf("**** The Unusable Commodore 65 emulator from LGB" NL
-	"INFO: Texture resolution is %dx%d" NL "%s" NL,
-		SCREEN_WIDTH, SCREEN_HEIGHT,
-		emulators_disclaimer
-	);
+	xemu_dump_version(stdout, "The Unusable Commodore 65 emulator from LGB");
 	emucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	emucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");

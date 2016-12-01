@@ -515,16 +515,16 @@ static int rom_load ( const char *name, void *buffer, int size )
 int main ( int argc, char **argv )
 {
 	int cycles;
-	printf("**** The Inaccurate Commodore VIC-20 emulator from LGB" NL
-	"INFO: CPU clock frequency (calculated) %d Hz (wanted: %d Hz)" NL
-	"INFO: Texture resolution is %dx%d" NL
-	"INFO: Defined visible area is (%d,%d)-(%d,%d)" NL "%s" NL,
+	xemu_dump_version(stdout, "The Inaccurate Commodore VIC-20 emulator from LGB");
+	printf(
+		"INFO: CPU clock frequency (calculated) %d Hz (wanted: %d Hz)" NL
+		"INFO: Texture resolution is %dx%d" NL
+		"INFO: Defined visible area is (%d,%d)-(%d,%d)" NL NL,
 		(int)((LAST_SCANLINE + 1) * CYCLES_PER_SCANLINE * (1000000.0 / (double)FULL_FRAME_USECS) * 2),
 		REAL_CPU_SPEED,
 		SCREEN_WIDTH, SCREEN_HEIGHT,
 		SCREEN_FIRST_VISIBLE_DOTPOS, SCREEN_FIRST_VISIBLE_SCANLINE,
-		SCREEN_LAST_VISIBLE_DOTPOS,  SCREEN_LAST_VISIBLE_SCANLINE,
-		emulators_disclaimer
+		SCREEN_LAST_VISIBLE_DOTPOS,  SCREEN_LAST_VISIBLE_SCANLINE
 	);
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (emu_init_sdl(

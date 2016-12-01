@@ -43,6 +43,4 @@ static inline const char *config_getopt_str ( const char *name ) {
 	return s;
 }
 
-#include "xemu/emutools_buildinfo.h"
-
 #endif

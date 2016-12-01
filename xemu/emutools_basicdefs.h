@@ -63,12 +63,16 @@ typedef uint64_t Uint64;
 #if UINTPTR_MAX == 0xffffffff
 #	define ARCH_32BIT
 #	define ARCH_BITS 32
+#	define ARCH_BITS_AS_TEXT "32"
 #else
 #	define ARCH_64BIT
 #	define ARCH_BITS 64
+#	define ARCH_BITS_AS_TEXT "64"
 #endif
 
-#if defined(__clang__)
+#if defined(__EMSCRIPTEN__)
+#	define CC_TYPE "emscripten"
+#elif defined(__clang__)
 #	define CC_TYPE "clang"
 #elif defined(__MINGW64__)
 #	define CC_TYPE "mingw64"
@@ -198,5 +202,7 @@ static inline int xemu_byte_order_test ( void )
 #endif
 
 extern const char *XEMU_BUILDINFO_ON, *XEMU_BUILDINFO_AT, *XEMU_BUILDINFO_GIT, *XEMU_BUILDINFO_CC, *XEMU_BUILDINFO_TARGET;
+extern const char emulators_disclaimer[];
+extern void xemu_dump_version ( FILE *fp, const char *slogan );
 
 #endif

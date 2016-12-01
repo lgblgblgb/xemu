@@ -789,11 +789,7 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles, frameskip;
-	printf("**** The Unexplained Commodore GEOS emulator from LGB" NL
-	"INFO: Texture resolution is %dx%d" NL "%s" NL,
-		SCREEN_WIDTH, SCREEN_HEIGHT,
-		emulators_disclaimer
-	);
+	xemu_dump_version(stdout, "The Unexplained Commodore GEOS emulator from LGB");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
         if (emu_init_sdl(
 		TARGET_DESC APP_DESC_APPEND,	// window title
