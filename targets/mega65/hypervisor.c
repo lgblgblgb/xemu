@@ -34,7 +34,6 @@ int in_hypervisor;			// mega65 hypervisor mode
 Uint8 kicked_hypervisor = 0x80;		// 0x80 signals for XEMU (not for a real M65!) to *ASK* the user. It won't be the final answer then.
 Uint8 hypervisor_memory[0x4001];	// 16K+1 byte, 1 byte is just used for length check on loading, ugly enough, indeed.
 
-static const char empty_string[] = "";
 static char debug_lines[0x4000][2][INFO_MAX_SIZE];		// I know. UGLY! and wasting memory. But this is only a HACK :)
 static int resolver_ok = 0;
 

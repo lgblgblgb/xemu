@@ -828,7 +828,7 @@ void cpu_write_linear_opcode ( Uint8 data )
 
 
 
-void REGPARM(2) write_phys_mem ( int addr, Uint8 data )
+void write_phys_mem ( int addr, Uint8 data )
 {
 	// NOTE: this function assumes that address within the valid 256Mbyte addressing range.
 	// Normal MAP stuffs does this, since it wraps within a single 1Mbyte "MB" already
@@ -931,7 +931,7 @@ void REGPARM(2) write_phys_mem ( int addr, Uint8 data )
 
 
 
-Uint8 REGPARM(1) read_phys_mem ( int addr )
+Uint8 read_phys_mem ( int addr )
 {
 	addr &= 0xFFFFFFF;		// warps around at 256Mbyte, for address bus of Mega65
 	//Check for < 2 not needed anymore, as CPU port is really the memory, though it can be a problem if DMA sees this issue differently?!

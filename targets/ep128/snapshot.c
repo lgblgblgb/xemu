@@ -36,8 +36,10 @@ static const Uint8 ep128emu_snapshot_marker[] = {
 #define BLOCK_MACH	5
 #define BLOCK_TYPES	6
 
+#ifndef DISABLE_DEBUG
 //                                                      <Z80>0      <MEM>1       <IO>2     <DAVE>3     <NICK>4  <MACHINE>5
 static const char  *block_names[BLOCK_TYPES]    = {      "Z80",      "MEM",       "IO",     "DAVE",     "NICK",  "MACHINE" };
+#endif
 static const Uint32 block_types[BLOCK_TYPES]    = { 0x45508001, 0x45508002, 0x45508003, 0x45508004, 0x45508005, 0x45508009 };
 static const int    block_versions[BLOCK_TYPES] = {  0x1000002,  0x1000000,  0x1000000,  0x1000000,  0x4000000,         -1 };
 

@@ -530,7 +530,7 @@ static void cmd_sdl ( void )
 	SDL_RendererInfo info;
 	SDL_Renderer *rendererp;
 	SDL_DisplayMode display;
-	const char *subsystem = "UnknownSystem";
+	const char *subsystem;
 	int a;
 	MPRINTF("Available SDL renderers:\n");
 	for (a = 0; a < SDL_GetNumRenderDrivers(); a++ ) {
@@ -557,7 +557,10 @@ static void cmd_sdl ( void )
 				SDL_BITSPERPIXEL(display.format), SDL_GetPixelFormatName(display.format)
 			);
 	switch (sdl_wminfo.subsystem) {
-		case SDL_SYSWM_UNKNOWN:	break;
+		default:
+		case SDL_SYSWM_UNKNOWN:
+			subsystem = "Unknown System";
+			break;
 		case SDL_SYSWM_WINDOWS:	subsystem = "Microsoft Windows(TM)";	break;
 		case SDL_SYSWM_X11:	subsystem = "X Window System";		break;
 		case SDL_SYSWM_WINRT:	subsystem = "WinRT";			break;
