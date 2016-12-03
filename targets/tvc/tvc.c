@@ -34,7 +34,9 @@ static Uint8 *pagedir_rd[8], *pagedir_wr[8];
 static Uint8 *crtc_p;			// points to the 16K video memory in use for CRTC
 static int   colour_mode;
 static int   keyboard_row;
-static int   crtc_register;
+static int   crtc_regsel;
+static Uint8 crtc_registers[18];
+static int   interrupt_active;
 
 static struct {
 	Uint8 drain    [0x02000];	// "drain", ROM writing points here, but this memory area is never read!
@@ -49,6 +51,7 @@ static struct {
 
 
 static Uint32 tvc_palette_rgb[16];
+static Uint32 tvc_palette_bw [16];
 static Uint32 palette[4];
 static Uint32 palette_col16_pixel1[0x100];
 static Uint32 palette_col16_pixel2[0x100];
@@ -66,9 +69,11 @@ static INLINE Uint32 TVC_COLOUR_BYTE_TO_SDL ( Uint8 c )
 
 static void crtc_write_register ( int reg, Uint8 data )
 {
-	DEBUGPRINT("CRTC: register %02Xh is written with data %02Xh" NL, reg, data);
+	if (reg < 12) {
+		DEBUGPRINT("CRTC: register %02Xh is written with data %02Xh" NL, reg, data);
+		crtc_registers[reg] = data;
+	}
 }
-
 
 
 // Well, the whole point of pagedir_XX stuff, that we have so simple
@@ -92,7 +97,9 @@ Z80EX_BYTE z80ex_pread_cb ( Z80EX_WORD port16 )
 	switch (port16) {
 		case 0x58:
 			DEBUGPRINT("Reading keyboard!" NL);
-			break;
+			return keyboard_row < 10 ? kbd_matrix[keyboard_row] : 0xFF;
+		case 0x59:
+			return interrupt_active ? 0xEF: 0xFF;
 	}
 	return 0xFF;
 }
@@ -171,30 +178,32 @@ void z80ex_pwrite_cb ( Z80EX_WORD port16, Z80EX_BYTE value )
 			// z80ex_pwrite_cb(2, io_port_values[2]); // TODO: we need this later with expansion mem paging!
 			keyboard_row = value & 0xF;	// however the lower 4 bits are for selecting row
 			break;
+		case 0x05:
+			DEBUGPRINT("Enabled_SoundIT=%d Enabled_CursorIT=%d" NL, value & 32 ? 1 : 0, value & 16 ? 1 : 0);
+			break;
 		case 0x06:
 			colour_mode = value & 3;
 			if (colour_mode == 3)
 				colour_mode = 2;
 			DEBUGPRINT("VIDEO: colour mode is %d" NL, colour_mode);
 			break;
-		case 0x0C:
-		case 0x0D:
-		case 0x0E:
-		case 0x0F:
+		case 0x07:
+			// clear cursor/sound IT. FIXME: any write would do it?!
+			interrupt_active = 0;
+			break;
+		case 0x0C: case 0x0D: case 0x0E: case 0x0F:
 			crtc_p = mem.video_ram + ((value & 0x30) << 10);
 			z80ex_pwrite_cb(2, io_port_values[2]);	// TODO: can be optimized to only call, if VID page is paged in by port 2 ...
 			break;
-		case 0x60:
-		case 0x61:
-		case 0x62:
-		case 0x63:
+		case 0x60: case 0x61: case 0x62: case 0x63: case 0x64: case 0x65: case 0x66: case 0x67:
+		case 0x68: case 0x69: case 0x6A: case 0x6B: case 0x6C: case 0x6D: case 0x6E: case 0x6F:
 			palette[port16 & 3] = TVC_COLOUR_BYTE_TO_SDL(value);
 			break;
-		case 0x70:
-			crtc_register = value;
+		case 0x70: case 0x72: case 0x74: case 0x76: case 0x78: case 0x7A: case 0x7C: case 0x7E:
+			crtc_regsel = value;
 			break;
-		case 0x71:
-			crtc_write_register(crtc_register, value);
+		case 0x71: case 0x73: case 0x75: case 0x77: case 0x79: case 0x7B: case 0x7D: case 0x7F:
+			crtc_write_register(crtc_regsel, value);
 			break;
 	}
 }
@@ -211,86 +220,93 @@ void z80ex_reti_cb ( void )
 }
 
 
+#define VIRTUAL_SHIFT_POS	0x63
 
-#define VIRTUAL_SHIFT_POS	0x03
 
-
-/* Primo for real does not have the notion if "keyboard matrix", well or we
-   can say it has 1*64 matrix (not like eg C64 with 8*8). Since the current
-   Xemu HID structure is more about a "real" matrix with "sane" dimensions,
-   I didn't want to hack it over, instead we use a more-or-less artificial
-   matrix, and we map that to the Primo I/O port request on port reading.
-   Since, HID assumes the high nibble of the "position" is the "row" and
-   low nibble can be only 0-7 we have values like:
-   $00 - $07, $10 - $17, $20 - $27, ...
-   ALSO: Primo uses bit '1' for pressed, so we also invert value in
-   the port read function above.
-*/
 static const struct KeyMapping tvc_key_map[] = {
-	{ SDL_SCANCODE_Y,	0x00 },	// scan 0 Y
-	{ SDL_SCANCODE_UP,	0x01 },	// scan 1 UP-ARROW
-	{ SDL_SCANCODE_S,	0x02 },	// scan 2 S
-	{ SDL_SCANCODE_LSHIFT,	0x03 },	{ SDL_SCANCODE_RSHIFT,  0x03 }, // scan 3 SHIFT
-	{ SDL_SCANCODE_E,	0x04 },	// scan 4 E
-	//{ SDL_SCANCODE_UPPER,	0x05 },	// scan 5 UPPER
-	{ SDL_SCANCODE_W,	0x06 },	// scan 6 W
-	{ SDL_SCANCODE_LCTRL,	0x07 },	// scan 7 CTR
-	{ SDL_SCANCODE_D,	0x10 },	// scan 8 D
-	{ SDL_SCANCODE_3,	0x11 },	// scan 9 3 #
-	{ SDL_SCANCODE_X,	0x12 },	// scan 10 X
-	{ SDL_SCANCODE_2,	0x13 },	// scan 11 2 "
-	{ SDL_SCANCODE_Q,	0x14 },	// scan 12 Q
-	{ SDL_SCANCODE_1,	0x15 },	// scan 13 1 !
-	{ SDL_SCANCODE_A,	0x16 },	// scan 14 A
-	{ SDL_SCANCODE_DOWN,	0x17 },	// scan 15 DOWN-ARROW
-	{ SDL_SCANCODE_C,	0x20 },	// scan 16 C
-	//{ SDL_SCANCODE_----,	0x21 },	// scan 17 ----
-	{ SDL_SCANCODE_F,	0x22 },	// scan 18 F
-	//{ SDL_SCANCODE_----,	0x23 },	// scan 19 ----
-	{ SDL_SCANCODE_R,	0x24 },	// scan 20 R
-	//{ SDL_SCANCODE_----,	0x25 },	// scan 21 ----
-	{ SDL_SCANCODE_T,	0x26 },	// scan 22 T
-	{ SDL_SCANCODE_7,	0x27 },	// scan 23 7 /
-	{ SDL_SCANCODE_H,	0x30 },	// scan 24 H
-	{ SDL_SCANCODE_SPACE,	0x31 },	// scan 25 SPACE
-	{ SDL_SCANCODE_B,	0x32 },	// scan 26 B
-	{ SDL_SCANCODE_6,	0x33 },	// scan 27 6 &
-	{ SDL_SCANCODE_G,	0x34 },	// scan 28 G
-	{ SDL_SCANCODE_5,	0x35 },	// scan 29 5 %
-	{ SDL_SCANCODE_V,	0x36 },	// scan 30 V
-	{ SDL_SCANCODE_4,	0x37 },	// scan 31 4 $
-	{ SDL_SCANCODE_N,	0x40 },	// scan 32 N
-	{ SDL_SCANCODE_8,	0x41 },	// scan 33 8 (
-	{ SDL_SCANCODE_Z,	0x42 },	// scan 34 Z
-	//{ SDL_SCANCODE_PLUS,	0x43 },	// scan 35 + ?
-	{ SDL_SCANCODE_U,	0x44 },	// scan 36 U
-	{ SDL_SCANCODE_0,	0x45 },	// scan 37 0
-	{ SDL_SCANCODE_J,	0x46 },	// scan 38 J
-	//{ SDL_SCANCODE_>,	0x47 },	// scan 39 > <
-	{ SDL_SCANCODE_L,	0x50 },	// scan 40 L
-	{ SDL_SCANCODE_MINUS,	0x51 },	// scan 41 - i
-	{ SDL_SCANCODE_K,	0x52 },	// scan 42 K
-	{ SDL_SCANCODE_PERIOD,	0x53 },	// scan 43 . :
-	{ SDL_SCANCODE_M,	0x54 },	// scan 44 M
-	{ SDL_SCANCODE_9,	0x55 },	// scan 45 9 ;
-	{ SDL_SCANCODE_I,	0x56 },	// scan 46 I
-	{ SDL_SCANCODE_COMMA,	0x57 },	// scan 47 ,
-	//{ SDL_SCANCODE_U",	0x60 },	// scan 48 U"
-	{ SDL_SCANCODE_APOSTROPHE,	0x61 },	// scan 49 ' #
-	{ SDL_SCANCODE_P,	0x62 },	// scan 50 P
-	//{ SDL_SCANCODE_u',	0x63 },	// scan 51 u' u"
-	{ SDL_SCANCODE_O,	0x64 },	// scan 52 O
-	{ SDL_SCANCODE_HOME,	0x65 },	// scan 53 CLS
-	//{ SDL_SCANCODE_----,	0x66 },	// scan 54 ----
-	{ SDL_SCANCODE_RETURN,	0x67 },	// scan 55 RETURN
-	//{ SDL_SCANCODE_----,	0x70 },	// scan 56 ----
-	{ SDL_SCANCODE_LEFT,	0x71 },	// scan 57 LEFT-ARROW
-	//{ SDL_SCANCODE_E',	0x72 },	// scan 58 E'
-	//{ SDL_SCANCODE_o',	0x73 },	// scan 59 o'
-	//{ SDL_SCANCODE_A',	0x74 },	// scan 60 A'
-	{ SDL_SCANCODE_RIGHT,	0x75 },	// scan 61 RIGHT-ARROW
-	//{ SDL_SCANCODE_O:,	0x76 },	// scan 62 O:
-	{ SDL_SCANCODE_ESCAPE,	0x77 },	// scan 63 BRK
+	// Row 0
+	{ SDL_SCANCODE_5,	0x00 },	// 5
+	{ SDL_SCANCODE_3,	0x01 },	// 3
+	{ SDL_SCANCODE_2,	0x02 }, // 2
+	{ SDL_SCANCODE_GRAVE,	0x03 }, // 0	we relocate 0, to match the "imagined" Hungarian keyboard layout ...
+	{ SDL_SCANCODE_6,	0x04 }, // 6
+	{ 100,			0x05 },	// í	this is hard one, the scancode "100" is ISO keyboard, not ANSI and has different meaning on platforms ...
+	{ SDL_SCANCODE_1,	0x06 }, // 1
+	{ SDL_SCANCODE_4,	0x07 },	// 4
+	// Row 1
+	{ -1,			0x10 },	// ^	TODO!
+	{ SDL_SCANCODE_8,	0x11 },	// 8
+	{ SDL_SCANCODE_9,	0x12 },	// 9
+	{ SDL_SCANCODE_MINUS,	0x13 },	// ü	Position on HUN kbd
+	{ -1,			0x14 },	// *	TODO!
+	{ SDL_SCANCODE_EQUALS,	0x15 },	// ó	Position on HUN kbd
+	{ SDL_SCANCODE_0,	0x16 },	// ö	Position on HUN kbd
+	{ SDL_SCANCODE_7,	0x17 },	// 7
+	// Row 2
+	{ SDL_SCANCODE_T,	0x20 },	// t
+	{ SDL_SCANCODE_E,	0x21 },	// e
+	{ SDL_SCANCODE_W,	0x22 },	// w
+	{ -1,			0x23 },	// ;	TODO!
+	{ SDL_SCANCODE_Z,	0x24 },	// z
+	{ -1,			0x25 },	// @	TODO!
+	{ SDL_SCANCODE_Q,	0x26 },	// q
+	{ SDL_SCANCODE_R,	0x27 },	// r
+	// Row 3
+	{ -1,			0x30 },	// ]	TODO!	sadly, stupid HUN layout uses that at normal place :(
+	{ SDL_SCANCODE_I,	0x31 },	// i
+	{ SDL_SCANCODE_O,	0x32 },	// o
+	{ SDL_SCANCODE_LEFTBRACKET,	0x33 },	// ő	on HUN kbd
+	{ -1,			0x34 },	// [	TODO!	sadly, stupid HUN layout uses that at normal place :(
+	{ SDL_SCANCODE_RIGHTBRACKET,	0x35 },	// ú
+	{ SDL_SCANCODE_P,	0x36 },	// p
+	{ SDL_SCANCODE_U,	0x37 },	// u
+	// Row 4
+	// gds\h<af
+	{ SDL_SCANCODE_G,	0x40 },	// g
+	{ SDL_SCANCODE_D,	0x41 },	// d
+	{ SDL_SCANCODE_S,	0x42 },	// s
+	{ -1,			0x43 },	// blackslash	TODO!
+	{ SDL_SCANCODE_H,	0x44 },	// h
+	{ -1,			0x45 },	// <		TODO!
+	{ SDL_SCANCODE_A,	0x46 },	// a
+	{ SDL_SCANCODE_F,	0x47 },	// f
+	// Row 5
+	//  klá űéj
+	{ SDL_SCANCODE_BACKSPACE, 0x50 },	// DEL
+	{ SDL_SCANCODE_K,	0x51 },	// k
+	{ SDL_SCANCODE_L,	0x52 },	// l
+	{ SDL_SCANCODE_APOSTROPHE,	0x53 },	// á	on HUN kbd
+	{ SDL_SCANCODE_RETURN,	0x54 },	// RETURN
+	{ SDL_SCANCODE_BACKSLASH,	0x55 },	// ű	on HUN kbd
+	{ SDL_SCANCODE_SEMICOLON,	0x56 },	// é	on HUN kbd
+	{ SDL_SCANCODE_J,	0x57 },	// j
+	// Row 6
+	// bcx n yv
+	{ SDL_SCANCODE_B,	0x60 },	// b
+	{ SDL_SCANCODE_C,	0x61 },	// c
+	{ SDL_SCANCODE_X,	0x62 },	// x
+	{ SDL_SCANCODE_LSHIFT,	0x63 },	// SHIFT
+	{ SDL_SCANCODE_N,	0x64 },	// n
+	{ SDL_SCANCODE_TAB,	0x65 },	// LOCK
+	{ SDL_SCANCODE_Y,	0x66 },	// y
+	{ SDL_SCANCODE_V,	0x67 },	// v
+	// Row 7
+	// 
+	{ SDL_SCANCODE_LALT,	0x70 },	// ALT
+	{ SDL_SCANCODE_COMMA,	0x71 },	// ,?
+	{ SDL_SCANCODE_PERIOD,	0x72 },	// .:
+	{ SDL_SCANCODE_ESCAPE,	0x73 },	// ESC
+	{ SDL_SCANCODE_LCTRL,	0x74 },	// CTRL
+	{ SDL_SCANCODE_SPACE,	0x75 },	// SPACE
+	{ SDL_SCANCODE_SLASH,	0x76 },	// -_
+	{ SDL_SCANCODE_M,	0x77 },	// m
+	// Row 8, has "only" cursor control (joy), _and_ INS
+	{ SDL_SCANCODE_INSERT,	0x80 },	// INS
+	{ SDL_SCANCODE_UP,	0x81 }, // cursor up
+	{ SDL_SCANCODE_DOWN,	0x82 },	// cursor down
+	{ SDL_SCANCODE_RIGHT,	0x85 }, // cursor right
+	{ SDL_SCANCODE_LEFT,	0x86 }, // cursor left
+	// Standard Xemu hot-keys, given by a macro
 	STD_XEMU_SPECIAL_KEYS,
 	// **** this must be the last line: end of mapping table ****
 	{ 0, -1 }
@@ -359,10 +375,19 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 
 static void update_emulator ( void )
 {
+	// FIXME: Ugly trick, we generate IRQ here, not by CRTC cursor stuff, what would do it for real on TVC!
+	// This means, that TVC uses the cursor info of CRTC "abused" to be used an a periodic interrupt source. Tricky!
+	// However, this implementation of mine if very wrong, and the exact time for the IRQ should depend on CRTC reg settings
+	// I THINK ... :-D
+	if (io_port_values[5] & 16) {	// if enabled at all!
+		interrupt_active = 1;
+		DEBUG("Cursor interrupt!" NL);
+	}
+	// Rest of the update stuff, but only at 25Hz rate ...
 	if (!frameskip) {
 		render_tvc_screen();
 		hid_handle_all_sdl_events();
-		emu_timekeeping_delay(40000);
+		emu_timekeeping_delay(40000);	// number: the time needed (real-time) for a "full frame"
 	}
 }
 
@@ -370,15 +395,14 @@ static void update_emulator ( void )
 static void init_tvc ( void )
 {
 	int a;
-	// Initialize colours (TODO: B&W mode is not implemented currently)
+	// Initialize colours (TODO: B&W mode is not used currently!)
 	for (a = 0; a < 16; a++) {
-		tvc_palette_rgb[a] = SDL_MapRGBA(
-			sdl_pix_fmt,
-			(a & 2) ? ((a & 8) ? 0xFF : 0x80) : 0,		// RED
-			(a & 4) ? ((a & 8) ? 0xFF : 0x80) : 0,		// GREEN
-			(a & 1) ? ((a & 8) ? 0xFF : 0x80) : 0,		// BLUE
-			0xFF						// alpha channel
-		);
+		int red   = (a & 2) ? ((a & 8) ? 0xFF : 0x80) : 0;
+		int green = (a & 4) ? ((a & 8) ? 0xFF : 0x80) : 0;
+		int blue  = (a & 1) ? ((a & 8) ? 0xFF : 0x80) : 0;
+		int y     = 0.299 * red + 0.587 * green + 0.114 * blue;
+		tvc_palette_rgb[a] = SDL_MapRGBA(sdl_pix_fmt, red, green, blue, 0xFF);
+		tvc_palette_bw [a] = SDL_MapRGBA(sdl_pix_fmt, y,   y,     y,    0xFF);
 	}
 	// Initialize helper tables for 16 colours mode
 	//  16 colour mode does not use the 4 element palette register, but layout is not "TVC colour byte" ...
@@ -395,6 +419,8 @@ static void init_tvc ( void )
 	memset(&io_port_values, 0x00, 0x100);	// some I/O handlers re-calls itself with other values, so we zero the stuff first
 	for (a = 0; a < 0x100; a++)		// ... and now use the callback which sets our variables for some initial value ...
 		z80ex_pwrite_cb(a, 0);
+	for (a = 0; a < sizeof crtc_registers; a++)
+		crtc_write_register(a, 0);
 	if (emu_load_file("TVC22_D6.64K", mem.sys_rom + 0x0000, 0x2001) != 0x2000 ||
 	    emu_load_file("TVC22_D4.64K", mem.sys_rom + 0x2000, 0x2001) != 0x2000 ||
 	    emu_load_file("TVC22_D7.64K", mem.ext_rom + 0x0000, 0x2001) != 0x2000
@@ -436,9 +462,17 @@ int main ( int argc, char **argv )
 	clear_emu_events();	// also resets the keyboard
 	z80ex_init();
 	cycles = 0;
+	interrupt_active = 0;
 	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	for (;;) { // our emulation loop ...
-		cycles += z80ex_step();
+		if (interrupt_active) {
+			int a = z80ex_int();
+			if (a)
+				cycles += a;
+			else
+				cycles += z80ex_step();
+		} else
+			cycles += z80ex_step();
 		if (cycles >= CLOCKS_PER_FRAME) {
 			update_emulator();
 			frameskip = !frameskip;
