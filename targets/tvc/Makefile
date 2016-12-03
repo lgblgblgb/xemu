@@ -17,40 +17,13 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
+TARGET		= tvc
+PRG_TARGET	= xtvc
 
-TARGETS = c65 cvic20 clcd cgeos ep128 mega65 primo tvc
-ARCHS	= native win32 win64 osx
+CFLAGS_TARGET_xtvc	=
+SRCS_TARGET_xtvc	= tvc.c
+SRCS_COMMON_xtvc	= emutools.c emutools_hid.c z80.c
+CONFIG_CFLAGS_TARGET_xtvc	= sdl2
+CONFIG_LDFLAGS_TARGET_xtvc	= sdl2
 
-
-
-all:
-	for t in $(TARGETS) ; do $(MAKE) -C targets/$$t || exit 1 ; done
-
-all-arch:
-	for t in $(TARGETS) ; do for a in $(ARCHS) ; do $(MAKE) -C targets/$$t ARCH=$$a || exit 1 ; done ; done
-
-clean:
-	for t in $(TARGETS) ; do $(MAKE) -C targets/$$t clean || exit 1 ; done
-
-all-clean:
-	for t in $(TARGETS) ; do for a in $(ARCHS) ; do $(MAKE) -C targets/$$t ARCH=$$a clean || exit 1 ; done ; done
-	$(MAKE) -C rom clean
-
-distclean:
-	$(MAKE) all-clean
-	$(MAKE) -C rom distclean
-
-dep:
-	for t in $(TARGETS) ; do $(MAKE) -C targets/$$t dep || exit 1 ; done
-
-all-dep:
-	for t in $(TARGETS) ; do for a in $(ARCHS) ; do $(MAKE) -C targets/$$t ARCH=$$a dep || exit 1 ; done ; done
-
-roms:
-	$(MAKE) -C rom
-
-deb:
-	$(MAKE) all
-	build/deb-build-simple
-
-.PHONY: all all-arch clean all-clean roms distclean dep all-dep deb
+include ../../build/Makefile.common
