@@ -261,7 +261,6 @@ static const struct KeyMapping tvc_key_map[] = {
 	{ SDL_SCANCODE_P,	0x36 },	// p
 	{ SDL_SCANCODE_U,	0x37 },	// u
 	// Row 4
-	// gds\h<af
 	{ SDL_SCANCODE_G,	0x40 },	// g
 	{ SDL_SCANCODE_D,	0x41 },	// d
 	{ SDL_SCANCODE_S,	0x42 },	// s
@@ -271,7 +270,6 @@ static const struct KeyMapping tvc_key_map[] = {
 	{ SDL_SCANCODE_A,	0x46 },	// a
 	{ SDL_SCANCODE_F,	0x47 },	// f
 	// Row 5
-	//  klá űéj
 	{ SDL_SCANCODE_BACKSPACE, 0x50 },	// DEL
 	{ SDL_SCANCODE_K,	0x51 },	// k
 	{ SDL_SCANCODE_L,	0x52 },	// l
@@ -281,7 +279,6 @@ static const struct KeyMapping tvc_key_map[] = {
 	{ SDL_SCANCODE_SEMICOLON,	0x56 },	// é	on HUN kbd
 	{ SDL_SCANCODE_J,	0x57 },	// j
 	// Row 6
-	// bcx n yv
 	{ SDL_SCANCODE_B,	0x60 },	// b
 	{ SDL_SCANCODE_C,	0x61 },	// c
 	{ SDL_SCANCODE_X,	0x62 },	// x
@@ -291,7 +288,6 @@ static const struct KeyMapping tvc_key_map[] = {
 	{ SDL_SCANCODE_Y,	0x66 },	// y
 	{ SDL_SCANCODE_V,	0x67 },	// v
 	// Row 7
-	// 
 	{ SDL_SCANCODE_LALT,	0x70 },	// ALT
 	{ SDL_SCANCODE_COMMA,	0x71 },	// ,?
 	{ SDL_SCANCODE_PERIOD,	0x72 },	// .:
@@ -421,9 +417,9 @@ static void init_tvc ( void )
 		z80ex_pwrite_cb(a, 0);
 	for (a = 0; a < sizeof crtc_registers; a++)
 		crtc_write_register(a, 0);
-	if (emu_load_file("TVC22_D6.64K", mem.sys_rom + 0x0000, 0x2001) != 0x2000 ||
-	    emu_load_file("TVC22_D4.64K", mem.sys_rom + 0x2000, 0x2001) != 0x2000 ||
-	    emu_load_file("TVC22_D7.64K", mem.ext_rom + 0x0000, 0x2001) != 0x2000
+	if (emu_load_file("tvc22_d6_64k.rom", mem.sys_rom + 0x0000, 0x2001) != 0x2000 ||
+	    emu_load_file("tvc22_d4_64k.rom", mem.sys_rom + 0x2000, 0x2001) != 0x2000 ||
+	    emu_load_file("tvc22_d7_64k.rom", mem.ext_rom + 0x0000, 0x2001) != 0x2000
 	)
 		FATAL("Cannot load ROM(s).");
 }
