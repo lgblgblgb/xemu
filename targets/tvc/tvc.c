@@ -70,7 +70,7 @@ static INLINE Uint32 TVC_COLOUR_BYTE_TO_SDL ( Uint8 c )
 static void crtc_write_register ( int reg, Uint8 data )
 {
 	if (reg < 12) {
-		DEBUGPRINT("CRTC: register %02Xh is written with data %02Xh" NL, reg, data);
+		DEBUG("CRTC: register %02Xh is written with data %02Xh" NL, reg, data);
 		crtc_registers[reg] = data;
 	}
 }
@@ -93,10 +93,10 @@ void z80ex_mwrite_cb ( Z80EX_WORD addr, Z80EX_BYTE value )
 Z80EX_BYTE z80ex_pread_cb ( Z80EX_WORD port16 )
 {
 	port16 &= 0xFF;
-	DEBUGPRINT("IO: reading I/O port %02Xh" NL, port16);
+	DEBUG("IO: reading I/O port %02Xh" NL, port16);
 	switch (port16) {
 		case 0x58:
-			DEBUGPRINT("Reading keyboard!" NL);
+			DEBUG("Reading keyboard!" NL);
 			return keyboard_row < 10 ? kbd_matrix[keyboard_row] : 0xFF;
 		case 0x59:
 			return interrupt_active ? 0xEF: 0xFF;
@@ -110,7 +110,7 @@ void z80ex_pwrite_cb ( Z80EX_WORD port16, Z80EX_BYTE value )
 	port16 &= 0xFF;
 	io_port_values[port16] = value;
 	if (port16 != 2)	// to avoid flooding ...
-		DEBUGPRINT("IO: writing I/O port %02Xh with data %02Xh" NL, port16, value);
+		DEBUG("IO: writing I/O port %02Xh with data %02Xh" NL, port16, value);
 	switch (port16) {
 		case 0x00:
 			border_colour = TVC_COLOUR_BYTE_TO_SDL(value >> 1);
@@ -179,13 +179,13 @@ void z80ex_pwrite_cb ( Z80EX_WORD port16, Z80EX_BYTE value )
 			keyboard_row = value & 0xF;	// however the lower 4 bits are for selecting row
 			break;
 		case 0x05:
-			DEBUGPRINT("Enabled_SoundIT=%d Enabled_CursorIT=%d" NL, value & 32 ? 1 : 0, value & 16 ? 1 : 0);
+			DEBUG("Enabled_SoundIT=%d Enabled_CursorIT=%d" NL, value & 32 ? 1 : 0, value & 16 ? 1 : 0);
 			break;
 		case 0x06:
 			colour_mode = value & 3;
 			if (colour_mode == 3)
 				colour_mode = 2;
-			DEBUGPRINT("VIDEO: colour mode is %d" NL, colour_mode);
+			DEBUG("VIDEO: colour mode is %d" NL, colour_mode);
 			break;
 		case 0x07:
 			// clear cursor/sound IT. FIXME: any write would do it?!
@@ -283,6 +283,7 @@ static const struct KeyMapping tvc_key_map[] = {
 	{ SDL_SCANCODE_C,	0x61 },	// c
 	{ SDL_SCANCODE_X,	0x62 },	// x
 	{ SDL_SCANCODE_LSHIFT,	0x63 },	// SHIFT
+	{ SDL_SCANCODE_RSHIFT,	0x63 },	// SHIFT (right shift is also shift ...)
 	{ SDL_SCANCODE_N,	0x64 },	// n
 	{ SDL_SCANCODE_TAB,	0x65 },	// LOCK
 	{ SDL_SCANCODE_Y,	0x66 },	// y
