@@ -20,6 +20,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	include <windows.h>
 #	define XEP128_HWND sdl_wminfo.info.win.window
 #elif defined(XEP128_GTK)
+#	ifndef HAVE_GTK3
+#		error "We need GTK3 with this target/platform, but HAVE_GTK3 was not defined: maybe GTK3 cannot be detected?"
+#	endif
 #	include <gtk/gtk.h>
 #endif
 

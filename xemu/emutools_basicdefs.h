@@ -29,9 +29,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define USE_REGPARM
 
 #ifndef XEMU_DISABLE_SDL
+#ifndef HAVE_SDL2
+#error  "We require SDL2, but HAVE_SDL2 was not defined: SDL2 cannot be detected?"
+#endif
 #include <SDL_types.h>
 #include <SDL_endian.h>
 #else
+#ifdef HAVE_SDL2
+#error "This build does not want SDL2, but HAVE_SDL2 was specified?"
+#endif
 #include <stdint.h>
 typedef int8_t Sint8;
 typedef uint8_t Uint8;

@@ -4,15 +4,15 @@
 ; There should be *NO* empty "COMMAND-TO-EXECUTE", it should be
 ; not present then, or "commented out".
 
-native#sdl2#cflags#		sdl2-config --cflags
-native#sdl2#ldflags#		sdl2-config --libs
-osx#sdl2#cflags#		sdl2-config --cflags
-osx#sdl2#ldflags#		sdl2-config --libs
-win32#sdl2#cflags#		/usr/local/cross-tools/i686-w64-mingw32/bin/sdl2-config --cflags
-win32#sdl2#ldflags#		/usr/local/cross-tools/i686-w64-mingw32/bin/sdl2-config --libs
-win64#sdl2#cflags#		/usr/local/cross-tools/x86_64-w64-mingw32/bin/sdl2-config --cflags
-win64#sdl2#ldflags#		/usr/local/cross-tools/x86_64-w64-mingw32/bin/sdl2-config --libs
-html#sdl2#cflags#		echo " -s USE_SDL=2"
+native#sdl2#cflags#		$SDL2_CONFIG_NATIVE --cflags && echo " -D HAVE_SDL2"
+native#sdl2#ldflags#		$SDL2_CONFIG_NATIVE --libs
+osx#sdl2#cflags#		$SDL2_CONFIG_OSX    --cflags && echo " -D HAVE_SDL2"
+osx#sdl2#ldflags#		$SDL2_CONFIG_OSX    --libs
+win32#sdl2#cflags#		$SDL2_CONFIG_WIN32  --cflags && echo " -D HAVE_SDL2"
+win32#sdl2#ldflags#		$SDL2_CONFIG_WIN32  --libs
+win64#sdl2#cflags#		$SDL2_CONFIG_WIN64  --cflags && echo " -D HAVE_SDL2"
+win64#sdl2#ldflags#		$SDL2_CONFIG_WIN64  --libs
+html#sdl2#cflags#		echo " -s USE_SDL=2" ; echo " -D HAVE_SDL2"
 html#sdl2#ldflags#		echo " -s USE_SDL=2"
 
 ;native#math#cflags#
@@ -26,8 +26,8 @@ osx#math#ldflags#		echo " -lm"
 ;html#math#cflags#
 ;html#math#ldflags#
 
-native#gtk3#cflags#		pkg-config --cflags-only-I gtk+-3.0
-native#gtk3#ldflags#		pkg-config --libs gtk+-3.0
+native#gtk3#cflags#		$PKG_CONFIG --cflags-only-I gtk+-3.0 && echo " -D HAVE_GTK3"
+native#gtk3#ldflags#		$PKG_CONFIG --libs gtk+-3.0
 ;osx#gtk3#cflags#
 ;osx#gtk3#ldflags#
 ;win32#gtk3#cflags#
@@ -37,9 +37,9 @@ native#gtk3#ldflags#		pkg-config --libs gtk+-3.0
 ;html#gtk3#cflags#
 ;html#gtk3#ldflags#
 
-;native#readline#cflags#	
+native#readline#cflags#		echo " -D HAVE_READLINE"
 native#readline#ldflags#	echo " -lreadline"
-;osx#readline#cflags#
+osx#readline#cflags#		echo " -D HAVE_READLINE"
 osx#readline#ldflags#		echo " -lreadline"
 ;win32#readline#cflags
 ;win32#readline#ldflags#

@@ -51,7 +51,8 @@ COMMONOBJPREFIX		= $(TOPDIR)/build/objs/c-$(ARCH)-$(TARGET)-$(PRG_TARGET)--
 TARGETOBJPREFIX		= $(TOPDIR)/build/objs/t-$(ARCH)-$(TARGET)-$(PRG_TARGET)--
 DEPFILEPREFIX		= $(TOPDIR)/build/objs/m-$(ARCH)-$(TARGET)-$(PRG_TARGET)--make
 DEPFILE			= $(DEPFILEPREFIX).depend
-DEPALL			= Makefile $(TOPDIR)/build/Makefile.common $(TOPDIR)/build/Makefile.$(ARCH)
+DEPALL_BUILDFILES	= Makefile.common Makefile.$(ARCH) system-config-settings.txt system-config
+DEPALL			= Makefile $(addprefix $(TOPDIR)/build/, $(DEPALL_BUILDFILES))
 TARGETOBJS		= $(addprefix $(TARGETOBJPREFIX), $(notdir $(SRCS_TARGET:.c=.o)))
 COMMONOBJS		= $(addprefix $(COMMONOBJPREFIX), $(notdir $(SRCS_COMMON:.c=.o)))
 SRCS_COMMON_PREFIXED	= $(addprefix $(COMMONDIR)/, $(SRCS_COMMON))
