@@ -26,18 +26,21 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #define CLOCKS_PER_FRAME (CPU_CLOCK / 50)
+#define VIRTUAL_SHIFT_POS 0x63
 
+extern const struct KeyMapping tvc_key_map[];
+
+// The Z80 emulation context itself
 Z80EX_CONTEXT z80ex;
 
+// Misc. system level stuffs
 static Uint8 io_port_values[0x100];
 static Uint8 *pagedir_rd[8], *pagedir_wr[8];
-static Uint8 *crtc_p;			// points to the 16K video memory in use for CRTC
 static int   colour_mode;
 static int   keyboard_row;
-static int   crtc_regsel;
-static Uint8 crtc_registers[18];
 static int   interrupt_active;
 
+// Memory emulation related stuffs
 static struct {
 	Uint8 drain    [0x02000];	// "drain", ROM writing points here, but this memory area is never read!
 	Uint8 empty    [0x02000];
@@ -46,10 +49,22 @@ static struct {
 	Uint8 sys_rom  [0x04000 + 1];
 	Uint8 cart_rom [0x04000 + 1];
 	Uint8 ext_rom  [0x02000 + 1];
-	Uint8 cst       [4][0x02000];
+//	Uint8 cst       [4][0x02000];
 } mem;
 
+// CRTC "internal" related stuffs
+const Uint8 crtc_write_masks[18] = {
+	0xFF /* R0 */, 0xFF /* R1 */, 0xFF /* R2 */, 0xFF /* R3 */, 0x7F /* R4 */, 0x1F /* R5 */,
+	0x7F /* R6 */, 0x7F /* R7 */, 0xFF /* R8 */, 0x1F /* R9 */, 0x7F /* R10*/, 0x1F /*R11 */,
+	0x3F /* R12 */, 0xFF /* R13 */, 0x3F /* R14 */, 0xFF /* R15 */, 0xFF /* R16 */, 0xFF /* R17 */
+};
+static struct {
+	Uint8 *mem;
+	Uint8 registers[18];
+	int   regsel;
+} crtc;
 
+// Palette related, contains "SDL-ready" values!
 static Uint32 tvc_palette_rgb[16];
 static Uint32 tvc_palette_bw [16];
 static Uint32 palette[4];
@@ -69,10 +84,19 @@ static INLINE Uint32 TVC_COLOUR_BYTE_TO_SDL ( Uint8 c )
 
 static void crtc_write_register ( int reg, Uint8 data )
 {
-	if (reg < 12) {
+	if (likely(reg < 16)) {
+		data &= crtc_write_masks[reg];	// this will chop unused bits off for the given register
 		DEBUG("CRTC: register %02Xh is written with data %02Xh" NL, reg, data);
-		crtc_registers[reg] = data;
+		crtc.registers[reg] = data;
 	}
+}
+
+
+static Uint8 crtc_read_register ( int reg )
+{
+	if (likely(reg >= 12 && reg <= 17))
+		return crtc.registers[reg];
+	return 0xFF;
 }
 
 
@@ -100,6 +124,10 @@ Z80EX_BYTE z80ex_pread_cb ( Z80EX_WORD port16 )
 			return keyboard_row < 10 ? kbd_matrix[keyboard_row] : 0xFF;
 		case 0x59:
 			return interrupt_active ? 0xEF: 0xFF;
+		case 0x70:
+			return crtc.regsel;
+		case 0x71:
+			return crtc_read_register(crtc.regsel);
 	}
 	return 0xFF;
 }
@@ -192,7 +220,7 @@ void z80ex_pwrite_cb ( Z80EX_WORD port16, Z80EX_BYTE value )
 			interrupt_active = 0;
 			break;
 		case 0x0C: case 0x0D: case 0x0E: case 0x0F:
-			crtc_p = mem.video_ram + ((value & 0x30) << 10);
+			crtc.mem = mem.video_ram + ((value & 0x30) << 10);
 			z80ex_pwrite_cb(2, io_port_values[2]);	// TODO: can be optimized to only call, if VID page is paged in by port 2 ...
 			break;
 		case 0x60: case 0x61: case 0x62: case 0x63: case 0x64: case 0x65: case 0x66: case 0x67:
@@ -200,10 +228,10 @@ void z80ex_pwrite_cb ( Z80EX_WORD port16, Z80EX_BYTE value )
 			palette[port16 & 3] = TVC_COLOUR_BYTE_TO_SDL(value);
 			break;
 		case 0x70: case 0x72: case 0x74: case 0x76: case 0x78: case 0x7A: case 0x7C: case 0x7E:
-			crtc_regsel = value;
+			crtc.regsel = value & 31;
 			break;
 		case 0x71: case 0x73: case 0x75: case 0x77: case 0x79: case 0x7B: case 0x7D: case 0x7F:
-			crtc_write_register(crtc_regsel, value);
+			crtc_write_register(crtc.regsel, value);
 			break;
 	}
 }
@@ -220,141 +248,71 @@ void z80ex_reti_cb ( void )
 }
 
 
-#define VIRTUAL_SHIFT_POS	0x63
-
-
-static const struct KeyMapping tvc_key_map[] = {
-	// Row 0
-	{ SDL_SCANCODE_5,	0x00 },	// 5
-	{ SDL_SCANCODE_3,	0x01 },	// 3
-	{ SDL_SCANCODE_2,	0x02 }, // 2
-	{ SDL_SCANCODE_GRAVE,	0x03 }, // 0	we relocate 0, to match the "imagined" Hungarian keyboard layout ...
-	{ SDL_SCANCODE_6,	0x04 }, // 6
-	{ 100,			0x05 },	// í	this is hard one, the scancode "100" is ISO keyboard, not ANSI and has different meaning on platforms ...
-	{ SDL_SCANCODE_1,	0x06 }, // 1
-	{ SDL_SCANCODE_4,	0x07 },	// 4
-	// Row 1
-	{ -1,			0x10 },	// ^	TODO!
-	{ SDL_SCANCODE_8,	0x11 },	// 8
-	{ SDL_SCANCODE_9,	0x12 },	// 9
-	{ SDL_SCANCODE_MINUS,	0x13 },	// ü	Position on HUN kbd
-	{ -1,			0x14 },	// *	TODO!
-	{ SDL_SCANCODE_EQUALS,	0x15 },	// ó	Position on HUN kbd
-	{ SDL_SCANCODE_0,	0x16 },	// ö	Position on HUN kbd
-	{ SDL_SCANCODE_7,	0x17 },	// 7
-	// Row 2
-	{ SDL_SCANCODE_T,	0x20 },	// t
-	{ SDL_SCANCODE_E,	0x21 },	// e
-	{ SDL_SCANCODE_W,	0x22 },	// w
-	{ -1,			0x23 },	// ;	TODO!
-	{ SDL_SCANCODE_Z,	0x24 },	// z
-	{ -1,			0x25 },	// @	TODO!
-	{ SDL_SCANCODE_Q,	0x26 },	// q
-	{ SDL_SCANCODE_R,	0x27 },	// r
-	// Row 3
-	{ -1,			0x30 },	// ]	TODO!	sadly, stupid HUN layout uses that at normal place :(
-	{ SDL_SCANCODE_I,	0x31 },	// i
-	{ SDL_SCANCODE_O,	0x32 },	// o
-	{ SDL_SCANCODE_LEFTBRACKET,	0x33 },	// ő	on HUN kbd
-	{ -1,			0x34 },	// [	TODO!	sadly, stupid HUN layout uses that at normal place :(
-	{ SDL_SCANCODE_RIGHTBRACKET,	0x35 },	// ú
-	{ SDL_SCANCODE_P,	0x36 },	// p
-	{ SDL_SCANCODE_U,	0x37 },	// u
-	// Row 4
-	{ SDL_SCANCODE_G,	0x40 },	// g
-	{ SDL_SCANCODE_D,	0x41 },	// d
-	{ SDL_SCANCODE_S,	0x42 },	// s
-	{ -1,			0x43 },	// blackslash	TODO!
-	{ SDL_SCANCODE_H,	0x44 },	// h
-	{ -1,			0x45 },	// <		TODO!
-	{ SDL_SCANCODE_A,	0x46 },	// a
-	{ SDL_SCANCODE_F,	0x47 },	// f
-	// Row 5
-	{ SDL_SCANCODE_BACKSPACE, 0x50 },	// DEL
-	{ SDL_SCANCODE_K,	0x51 },	// k
-	{ SDL_SCANCODE_L,	0x52 },	// l
-	{ SDL_SCANCODE_APOSTROPHE,	0x53 },	// á	on HUN kbd
-	{ SDL_SCANCODE_RETURN,	0x54 },	// RETURN
-	{ SDL_SCANCODE_BACKSLASH,	0x55 },	// ű	on HUN kbd
-	{ SDL_SCANCODE_SEMICOLON,	0x56 },	// é	on HUN kbd
-	{ SDL_SCANCODE_J,	0x57 },	// j
-	// Row 6
-	{ SDL_SCANCODE_B,	0x60 },	// b
-	{ SDL_SCANCODE_C,	0x61 },	// c
-	{ SDL_SCANCODE_X,	0x62 },	// x
-	{ SDL_SCANCODE_LSHIFT,	0x63 },	// SHIFT
-	{ SDL_SCANCODE_RSHIFT,	0x63 },	// SHIFT (right shift is also shift ...)
-	{ SDL_SCANCODE_N,	0x64 },	// n
-	{ SDL_SCANCODE_TAB,	0x65 },	// LOCK
-	{ SDL_SCANCODE_Y,	0x66 },	// y
-	{ SDL_SCANCODE_V,	0x67 },	// v
-	// Row 7
-	{ SDL_SCANCODE_LALT,	0x70 },	// ALT
-	{ SDL_SCANCODE_COMMA,	0x71 },	// ,?
-	{ SDL_SCANCODE_PERIOD,	0x72 },	// .:
-	{ SDL_SCANCODE_ESCAPE,	0x73 },	// ESC
-	{ SDL_SCANCODE_LCTRL,	0x74 },	// CTRL
-	{ SDL_SCANCODE_SPACE,	0x75 },	// SPACE
-	{ SDL_SCANCODE_SLASH,	0x76 },	// -_
-	{ SDL_SCANCODE_M,	0x77 },	// m
-	// Row 8, has "only" cursor control (joy), _and_ INS
-	{ SDL_SCANCODE_INSERT,	0x80 },	// INS
-	{ SDL_SCANCODE_UP,	0x81 }, // cursor up
-	{ SDL_SCANCODE_DOWN,	0x82 },	// cursor down
-	{ SDL_SCANCODE_RIGHT,	0x85 }, // cursor right
-	{ SDL_SCANCODE_LEFT,	0x86 }, // cursor left
-	// Standard Xemu hot-keys, given by a macro
-	STD_XEMU_SPECIAL_KEYS,
-	// **** this must be the last line: end of mapping table ****
-	{ 0, -1 }
-};
-
-
-
 void clear_emu_events ( void )
 {
 	hid_reset_events(1);
 }
 
 
-// Well :) So there is not so much *ANY* CRTC emulation, sorry ...
-// it just an ugly hack to render one frame at once, from the beginning
-// of the 16K video RAM, that's all
+// Well :) It's just an ugly hack to render one frame at once.
+// There is "some CRTC emulation", though far from being all
+// features are expected to work!
 // Note: though the selected 16K (TVC64+ is emulated!) is used ...
 static inline void render_tvc_screen ( void )
 {
 	int tail, y;
 	Uint32 *pix = emu_start_pixel_buffer_access(&tail);
-	int stupid_sweep = 0;
-	for (y = 0; y < 240; y++) {
+	int ma = (crtc.registers[12] << 8) | crtc.registers[13];	// CRTC MA signals, 14 bit
+	int ra = 0;	// CRTC RA signals
+	int start_line, limit_line, start_cpos, limit_cpos;
+	//DEBUG("CRTCINFO: start addr = $%04X" NL, ma);
+	//for (y = 0; y < sizeof crtc.registers; y++)
+	//	DEBUG("CRTCINFO: R%02d=%d" NL, y, crtc.registers[y]);
+	start_line = (SCREEN_HEIGHT - (crtc.registers[6] * (crtc.registers[9] + 1))) >> 1;
+	limit_line = SCREEN_HEIGHT - start_line;
+	start_cpos = ((SCREEN_WIDTH >> 3) - crtc.registers[1]) >> 1;
+	limit_cpos =  (SCREEN_WIDTH >> 3) - start_cpos;
+	for (y = 0; y < SCREEN_HEIGHT; y++) {
 		int x;
-		for (x = 0; x < 64; x++) {
-			Uint8 b = crtc_p[stupid_sweep];
-			switch (colour_mode) {
-				case 0:	// 2-colour mode
-					pix[0] = palette[(b >> 7) & 1];
-					pix[1] = palette[(b >> 6) & 1];
-					pix[2] = palette[(b >> 5) & 1];
-					pix[3] = palette[(b >> 4) & 1];
-					pix[4] = palette[(b >> 3) & 1];
-					pix[5] = palette[(b >> 2) & 1];
-					pix[6] = palette[(b >> 1) & 1];
-					pix[7] = palette[ b       & 1];
-					break;
-				case 1:	// 4-colour mode (this may be optimized with look-up table ...)
-					pix[0] = pix[1] = palette[((b & 0x80) >> 7) | ((b & 0x08) >> 2)];
-					pix[2] = pix[3] = palette[((b & 0x40) >> 6) | ((b & 0x04) >> 1)];
-					pix[4] = pix[5] = palette[((b & 0x20) >> 5) |  (b & 0x02)      ];
-					pix[6] = pix[7] = palette[((b & 0x10) >> 4) | ((b & 0x01) << 1)];
-					break;
-				case 2: // 16-colour mode
-					pix[0] = pix[1] = pix[2] = pix[3] = palette_col16_pixel1[b];
-					pix[4] = pix[5] = pix[6] = pix[7] = palette_col16_pixel2[b];
-					break;
+		if (y >= start_line && y < limit_line) {	// active content!
+			int addr = (ma & 63) | (ra << 6) | ((ma & 0xFC0) << 2);
+			for (x = 0; x < (SCREEN_WIDTH >> 3); x++) {
+				if (x >= start_cpos && x < limit_cpos) {
+					Uint8 b = crtc.mem[(addr++) & 0x3FFF];
+					switch (colour_mode) {
+						case 0:	// 2-colours mode
+							pix[0] = palette[(b >> 7) & 1];
+							pix[1] = palette[(b >> 6) & 1];
+							pix[2] = palette[(b >> 5) & 1];
+							pix[3] = palette[(b >> 4) & 1];
+							pix[4] = palette[(b >> 3) & 1];
+							pix[5] = palette[(b >> 2) & 1];
+							pix[6] = palette[(b >> 1) & 1];
+							pix[7] = palette[ b       & 1];
+							break;
+						case 1:	// 4-colours mode
+							pix[0] = pix[1] = palette[((b & 0x80) >> 7) | ((b & 0x08) >> 2)];
+							pix[2] = pix[3] = palette[((b & 0x40) >> 6) | ((b & 0x04) >> 1)];
+							pix[4] = pix[5] = palette[((b & 0x20) >> 5) |  (b & 0x02)      ];
+							pix[6] = pix[7] = palette[((b & 0x10) >> 4) | ((b & 0x01) << 1)];
+							break;
+						case 2: // 16-colours mode
+							pix[0] = pix[1] = pix[2] = pix[3] = palette_col16_pixel1[b];
+							pix[4] = pix[5] = pix[6] = pix[7] = palette_col16_pixel2[b];
+							break;
+					}
+				} else	// sider border
+					pix[0] = pix[1] = pix[2] = pix[3] = pix[4] = pix[5] = pix[6] = pix[7] = border_colour;
+				pix += 8;
 			}
-			pix += 8;
-			stupid_sweep = (stupid_sweep + 1 ) & 0x3FFF;
-		}
+			if (ra == crtc.registers[9]) {
+				ra = 0;
+				ma += crtc.registers[1];
+			} else
+				ra++;
+		} else					// top or bottom border ...
+			for (x = 0; x < SCREEN_WIDTH; x++)
+				*pix++ = border_colour;
 		pix += tail;
 	}
 	emu_update_screen();
@@ -414,9 +372,10 @@ static void init_tvc ( void )
 	// I/O, ROM and RAM intialization ...
 	memset(&mem, 0xFF, sizeof mem);
 	memset(&io_port_values, 0x00, 0x100);	// some I/O handlers re-calls itself with other values, so we zero the stuff first
+	memset(crtc.registers, 0x00, sizeof crtc.registers);
 	for (a = 0; a < 0x100; a++)		// ... and now use the callback which sets our variables for some initial value ...
 		z80ex_pwrite_cb(a, 0);
-	for (a = 0; a < sizeof crtc_registers; a++)
+	for (a = 0; a < sizeof crtc.registers; a++)
 		crtc_write_register(a, 0);
 	if (emu_load_file("tvc22_d6_64k.rom", mem.sys_rom + 0x0000, 0x2001) != 0x2000 ||
 	    emu_load_file("tvc22_d4_64k.rom", mem.sys_rom + 0x2000, 0x2001) != 0x2000 ||
