@@ -21,7 +21,7 @@ TARGET		= tvc
 PRG_TARGET	= xtvc
 
 CFLAGS_TARGET_xtvc	=
-SRCS_TARGET_xtvc	= tvc.c
+SRCS_TARGET_xtvc	= tvc.c tvc_keymatrix.c
 SRCS_COMMON_xtvc	= emutools.c emutools_hid.c z80.c
 CONFIG_CFLAGS_TARGET_xtvc	= sdl2
 CONFIG_LDFLAGS_TARGET_xtvc	= sdl2
