@@ -2,6 +2,7 @@
 /clcd-u103.rom
 /clcd-u104.rom
 /clcd-u105.rom
+/clcd-chargen.rom
 /vic20-basic.rom
 /vic20-chargen.rom
 /vic20-kernal.rom
@@ -15,6 +16,7 @@
 /tvc22_d4_64k.rom
 /tvc22_d6_64k.rom
 /tvc22_d7_64k.rom
+/tvc_sddos.rom
 /*.M65
 /*.img
 /*.bit
