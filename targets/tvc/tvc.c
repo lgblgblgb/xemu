@@ -21,8 +21,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
 #include "xemu/emutools_hid.h"
+#include "xemu/emutools_config.h"
 #include "xemu/z80.h"
 #include "tvc.h"
+#include "sdext.h"
 
 
 #define CLOCKS_PER_FRAME (CPU_CLOCK / 50)
@@ -35,21 +37,21 @@ Z80EX_CONTEXT z80ex;
 
 // Misc. system level stuffs
 static Uint8 io_port_values[0x100];
-static Uint8 *pagedir_rd[8], *pagedir_wr[8];
 static int   colour_mode;
 static int   keyboard_row;
 static int   interrupt_active;
 
 // Memory emulation related stuffs
+typedef void  (*memcbwr_type)(int, Uint8);
+typedef Uint8 (*memcbrd_type)(int);
 static struct {
-	Uint8 drain    [0x02000];	// "drain", ROM writing points here, but this memory area is never read!
-	Uint8 empty    [0x02000];
+	memcbwr_type wr_selector[4];
+	memcbrd_type rd_selector[4];
+	Uint8 *vmem;
 	Uint8 user_ram [0x10000];
 	Uint8 video_ram[0x10000];
 	Uint8 sys_rom  [0x04000 + 1];
-	Uint8 cart_rom [0x04000 + 1];
-	Uint8 ext_rom  [0x02000 + 1];
-//	Uint8 cst       [4][0x02000];
+	Uint8 ext_rom  [0x04000 + 1];	// the first 8K is not used from this, currently ...
 } mem;
 
 // CRTC "internal" related stuffs
@@ -59,7 +61,7 @@ const Uint8 crtc_write_masks[18] = {
 	0x3F /* R12 */, 0xFF /* R13 */, 0x3F /* R14 */, 0xFF /* R15 */, 0xFF /* R16 */, 0xFF /* R17 */
 };
 static struct {
-	Uint8 *mem;
+	Uint8 *vmem;
 	Uint8 registers[18];
 	int   regsel;
 } crtc;
@@ -100,18 +102,48 @@ static Uint8 crtc_read_register ( int reg )
 }
 
 
-// Well, the whole point of pagedir_XX stuff, that we have so simple
-// z80 emu callbacks for read/write to be fast.
-// Note: however then special cases are not supported, like clock streching on VRAM access
-// ROM cannot be overwritten, since then pagedir_wr[...] selects the "mem.drain" as destinaton pointer ...
+
+static void  memcbwr_ram_u0 ( int addr, Uint8 data ) { mem.user_ram[addr         ] = data; }
+static void  memcbwr_ram_u1 ( int addr, Uint8 data ) { mem.user_ram[addr + 0x4000] = data; }
+static void  memcbwr_ram_u2 ( int addr, Uint8 data ) { mem.user_ram[addr + 0x8000] = data; }
+static void  memcbwr_ram_u3 ( int addr, Uint8 data ) { mem.user_ram[addr + 0xC000] = data; }
+static Uint8 memcbrd_ram_u0 ( int addr ) { return mem.user_ram[addr         ]; }
+static Uint8 memcbrd_ram_u1 ( int addr ) { return mem.user_ram[addr + 0x4000]; }
+static Uint8 memcbrd_ram_u2 ( int addr ) { return mem.user_ram[addr + 0x8000]; }
+static Uint8 memcbrd_ram_u3 ( int addr ) { return mem.user_ram[addr + 0xC000]; }
+static void  memcbwr_ram_video ( int addr, Uint8 data ) { mem.vmem[addr] = data; }
+static Uint8 memcbrd_ram_video ( int addr ) { return mem.vmem[addr]; }
+static Uint8 memcbrd_rom_sys  ( int addr ) { return mem.sys_rom[addr]; }
+static Uint8 memcbrd_rom_ext  ( int addr ) { return mem.ext_rom[addr]; }
+static void  memcbwr_nowrite ( int addr, Uint8 data ) { }
+
+#ifdef CONFIG_SDEXT_SUPPORT
+#define memcbrd_rom_cart sdext_read_cart
+#define memcbwr_rom_cart sdext_write_cart
+#else
+static Uint8 memcbrd_rom_cart ( int addr ) { return 0xFF; }
+static void  memcbwr_rom_cart ( int addr, Uint8 data ) { }
+#endif
+
+static const memcbrd_type memory_rd_selectors_for_page3[4] = { memcbrd_rom_cart, memcbrd_rom_sys,  memcbrd_ram_u3, memcbrd_rom_ext };
+static const memcbwr_type memory_wr_selectors_for_page3[4] = { memcbwr_rom_cart, memcbwr_nowrite,  memcbwr_ram_u3, memcbwr_nowrite };
+static const memcbrd_type memory_rd_selectors_for_page0[4] = { memcbrd_rom_sys,  memcbrd_rom_cart, memcbrd_ram_u0, memcbrd_ram_u3  };
+static const memcbwr_type memory_wr_selectors_for_page0[4] = { memcbwr_nowrite,  memcbwr_rom_cart, memcbwr_ram_u0, memcbwr_ram_u3  };
+
+
+
 Z80EX_BYTE z80ex_mread_cb ( Z80EX_WORD addr, int m1_state )
 {
-	return *(pagedir_rd[addr >> 13] + addr);
+	return (mem.rd_selector[addr >> 14])(addr & 0x3FFF);
 }
+
+
+
 void z80ex_mwrite_cb ( Z80EX_WORD addr, Z80EX_BYTE value )
 {
-	*(pagedir_wr[addr >> 13] + addr) = value;
+	(mem.wr_selector[addr >> 14])(addr & 0x3FFF, value);
 }
+
 
 
 Z80EX_BYTE z80ex_pread_cb ( Z80EX_WORD port16 )
@@ -119,10 +151,10 @@ Z80EX_BYTE z80ex_pread_cb ( Z80EX_WORD port16 )
 	port16 &= 0xFF;
 	DEBUG("IO: reading I/O port %02Xh" NL, port16);
 	switch (port16) {
-		case 0x58:
-			DEBUG("Reading keyboard!" NL);
+		case 0x58: case 0x5C:
+			DEBUG("Reading keyboard (row=%d, result=$%02X)!" NL, keyboard_row, kbd_matrix[keyboard_row]);
 			return keyboard_row < 10 ? kbd_matrix[keyboard_row] : 0xFF;
-		case 0x59:
+		case 0x59: case 0x5D:
 			return interrupt_active ? 0xEF: 0xFF;
 		case 0x70:
 			return crtc.regsel;
@@ -131,6 +163,7 @@ Z80EX_BYTE z80ex_pread_cb ( Z80EX_WORD port16 )
 	}
 	return 0xFF;
 }
+
 
 
 void z80ex_pwrite_cb ( Z80EX_WORD port16, Z80EX_BYTE value )
@@ -145,62 +178,27 @@ void z80ex_pwrite_cb ( Z80EX_WORD port16, Z80EX_BYTE value )
 			break;
 		case 0x02:
 			// page 3
-			switch (value >> 6) {
-				case 0:
-					pagedir_rd[6] = mem.cart_rom - 0xC000;
-					pagedir_rd[7] = mem.cart_rom - 0xC000;
-					pagedir_wr[6] = mem.drain    - 0xC000;
-					pagedir_wr[7] = mem.drain    - 0xE000;
-					break;
-				case 1:
-					pagedir_rd[6] = mem.sys_rom  - 0xC000;
-					pagedir_rd[7] = mem.sys_rom  - 0xC000;
-					pagedir_wr[6] = mem.drain    - 0xC000;
-					pagedir_wr[7] = mem.drain    - 0xE000;
-					break;
-				case 2:
-					pagedir_rd[6] = pagedir_rd[7] = pagedir_wr[6] = pagedir_wr[7] = mem.user_ram;
-					break;
-				case 3:
-					pagedir_rd[6] = mem.empty    - 0xC000;	// would be cst stuffs can be paged with port 3
-					pagedir_rd[7] = mem.ext_rom  - 0xE000;
-					pagedir_wr[6] = mem.drain    - 0xC000;	// would be cst stuffs can be paged with port 3
-					pagedir_wr[7] = mem.drain    - 0xE000;
-					break;
-			}
+			mem.rd_selector[3] = memory_rd_selectors_for_page3[value >> 6];
+			mem.wr_selector[3] = memory_wr_selectors_for_page3[value >> 6];
 			// page 2
-			pagedir_rd[4] = pagedir_rd[5] = pagedir_wr[4] = pagedir_wr[5] = (
-				(value & 32) 	?
-				(mem.user_ram )	:
-				(mem.video_ram + ((io_port_values[0xF] & 0xC) << 12) - 0x8000)
-			);
-			// page 0
-			switch ((value >> 3) & 3) {
-				case 0:
-					pagedir_rd[0] = mem.sys_rom ;
-					pagedir_rd[1] = mem.sys_rom ;
-					pagedir_wr[0] = mem.drain   - 0x0000;
-					pagedir_wr[1] = mem.drain   - 0x2000;
-					break;
-				case 1:
-					pagedir_rd[0] = mem.cart_rom ;
-					pagedir_rd[1] = mem.cart_rom ;
-					pagedir_wr[0] = mem.drain    - 0x0000;
-					pagedir_wr[1] = mem.drain    - 0x2000;
-					break;
-				case 2:
-					pagedir_rd[0] = pagedir_rd[1] = pagedir_wr[0] = pagedir_wr[1] = mem.user_ram;
-					break;
-				case 3:
-					pagedir_rd[0] = pagedir_rd[1] = pagedir_wr[0] = pagedir_wr[1] = mem.user_ram + 0xC000;
-					break;
+			if (value & 32) {
+				mem.rd_selector[2] = memcbrd_ram_u2;
+				mem.wr_selector[2] = memcbwr_ram_u2;
+			} else {
+				mem.rd_selector[2] = memcbrd_ram_video;
+				mem.wr_selector[2] = memcbwr_ram_video;
 			}
+			// page 0
+			mem.rd_selector[0] = memory_rd_selectors_for_page0[(value >> 3) & 3];
+			mem.wr_selector[0] = memory_wr_selectors_for_page0[(value >> 3) & 3];
 			// page 1
-			pagedir_rd[2] = pagedir_rd[3] = pagedir_wr[2] = pagedir_wr[3] = (
-				(!(value & 4))	?
-				(mem.user_ram )	:
-				(mem.video_ram + ((io_port_values[0xF] & 3) << 14) - 0x4000)
-			);
+			if (!(value & 4)) {
+				mem.rd_selector[1] = memcbrd_ram_u1;
+				mem.wr_selector[1] = memcbwr_ram_u1;
+			} else {
+				mem.rd_selector[1] = memcbrd_ram_video;
+				mem.wr_selector[1] = memcbwr_ram_video;
+			}
 			break;
 		case 0x03:
 			// z80ex_pwrite_cb(2, io_port_values[2]); // TODO: we need this later with expansion mem paging!
@@ -220,8 +218,8 @@ void z80ex_pwrite_cb ( Z80EX_WORD port16, Z80EX_BYTE value )
 			interrupt_active = 0;
 			break;
 		case 0x0C: case 0x0D: case 0x0E: case 0x0F:
-			crtc.mem = mem.video_ram + ((value & 0x30) << 10);
-			z80ex_pwrite_cb(2, io_port_values[2]);	// TODO: can be optimized to only call, if VID page is paged in by port 2 ...
+			crtc.vmem = mem.video_ram + ((value & 0x30) << 10);
+			mem.vmem  = mem.video_ram + ((value & 0x03) << 14);
 			break;
 		case 0x60: case 0x61: case 0x62: case 0x63: case 0x64: case 0x65: case 0x66: case 0x67:
 		case 0x68: case 0x69: case 0x6A: case 0x6B: case 0x6C: case 0x6D: case 0x6E: case 0x6F:
@@ -235,6 +233,7 @@ void z80ex_pwrite_cb ( Z80EX_WORD port16, Z80EX_BYTE value )
 			break;
 	}
 }
+
 
 
 Z80EX_BYTE z80ex_intread_cb ( void )
@@ -278,7 +277,7 @@ static inline void render_tvc_screen ( void )
 			int addr = (ma & 63) | (ra << 6) | ((ma & 0xFC0) << 2);
 			for (x = 0; x < (SCREEN_WIDTH >> 3); x++) {
 				if (x >= start_cpos && x < limit_cpos) {
-					Uint8 b = crtc.mem[(addr++) & 0x3FFF];
+					Uint8 b = crtc.vmem[(addr++) & 0x3FFF];
 					switch (colour_mode) {
 						case 0:	// 2-colours mode
 							pix[0] = palette[(b >> 7) & 1];
@@ -379,9 +378,13 @@ static void init_tvc ( void )
 		crtc_write_register(a, 0);
 	if (emu_load_file("tvc22_d6_64k.rom", mem.sys_rom + 0x0000, 0x2001) != 0x2000 ||
 	    emu_load_file("tvc22_d4_64k.rom", mem.sys_rom + 0x2000, 0x2001) != 0x2000 ||
-	    emu_load_file("tvc22_d7_64k.rom", mem.ext_rom + 0x0000, 0x2001) != 0x2000
+	    emu_load_file("tvc22_d7_64k.rom", mem.ext_rom + 0x2000, 0x2001) != 0x2000
 	)
 		FATAL("Cannot load ROM(s).");
+#ifdef CONFIG_SDEXT_SUPPORT
+	if (emucfg_get_bool("sdext"))
+		sdext_init();
+#endif
 }
 
 
@@ -391,6 +394,12 @@ int main ( int argc, char **argv )
 {
 	int cycles;
 	xemu_dump_version(stdout, "The Careless Videoton TV Computer emulator from LGB");
+#ifdef CONFIG_SDEXT_SUPPORT
+	emucfg_define_switch_option("sdext", "Enables SD-ext");
+	emucfg_define_str_option("sdimg", SDCARD_IMG_FN, "SD-card image filename / path");
+#endif
+	if (emucfg_parse_commandline(argc, argv, NULL))
+		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (emu_init_sdl(
 		TARGET_DESC APP_DESC_APPEND,	// window title
