@@ -82,10 +82,15 @@ extern time_t emu_get_unixtime ( void );
 extern struct tm *emu_get_localtime ( void );
 extern void *emu_malloc ( size_t size );
 extern void *emu_realloc ( void *p, size_t size );
-#ifdef __EMSCRIPTEN__
-#define emu_malloc_ALIGNED emu_malloc
-#else
+
+#if !defined(__EMSCRIPTEN__) && !defined(__arm__)
+#define HAVE_MM_MALLOC
+#endif
+
+#ifdef HAVE_MM_MALLOC
 extern void *emu_malloc_ALIGNED ( size_t size );
+#else
+#define emu_malloc_ALIGNED emu_malloc
 #endif
 
 extern char *emu_strdup ( const char *s );

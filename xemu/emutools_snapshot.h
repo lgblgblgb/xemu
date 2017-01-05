@@ -69,22 +69,22 @@ extern char xemusnap_error_buffer[];
 extern char xemusnap_user_error_buffer[];
 
 
-inline Uint64 P_AS_BE64 ( const Uint8 *p ) {
+static inline Uint64 P_AS_BE64 ( const Uint8 *p ) {
         return ((Uint64)p[0] << 56) | ((Uint64)p[1] << 48) | ((Uint64)p[2] << 40) | ((Uint64)p[3] << 32) | ((Uint64)p[4] << 24) | ((Uint64)p[5] << 16) | ((Uint64)p[6] << 8) | (Uint64)p[7];
 }
-inline Uint32 P_AS_BE32 ( const Uint8 *p ) {
+static inline Uint32 P_AS_BE32 ( const Uint8 *p ) {
         return ((Uint32)p[0] << 24) | ((Uint32)p[1] << 16) | ((Uint32)p[2] <<  8) | ((Uint32)p[3]      ) ;
 }
-inline Uint16 P_AS_BE16 ( const Uint8 *p ) {
+static inline Uint16 P_AS_BE16 ( const Uint8 *p ) {
         return ((Uint16)p[0] <<  8) | ((Uint16)p[1]      ) ;
 }
-inline void   U64_AS_BE ( Uint8 *p, Uint64 n ) {
+static inline void   U64_AS_BE ( Uint8 *p, Uint64 n ) {
         p[0] = n >> 56; p[1] = n >> 48; p[2] = n >> 40; p[3] = n >> 32; p[4] = n >> 24; p[5] = n >> 16; p[6] = n >> 8; p[7] = n;
 }
-inline void   U32_AS_BE ( Uint8 *p, Uint32 n ) {
+static inline void   U32_AS_BE ( Uint8 *p, Uint32 n ) {
         p[0] = n >> 24; p[1] = n >> 16; p[2] = n >>  8; p[3] = n;
 }
-inline void   U16_AS_BE ( Uint8 *p, Uint16 n ) {
+static inline void   U16_AS_BE ( Uint8 *p, Uint16 n ) {
         p[0] = n >>  8; p[1] = n;
 }
 

@@ -119,7 +119,7 @@ void *emu_realloc ( void *p, size_t size )
 }
 
 
-#ifndef __EMSCRIPTEN__
+#ifdef HAVE_MM_MALLOC
 #ifdef _WIN32
 extern void *_mm_malloc ( size_t size, size_t alignment );	// it seems mingw/win has issue not to define this properly ... FIXME? Ugly windows, always the problems ...
 #endif
@@ -130,6 +130,8 @@ void *emu_malloc_ALIGNED ( size_t size )
 	DEBUG("ALIGNED-ALLOC: base_pointer=%p size=%d alignment=%d" NL, p, (int)size, __BIGGEST_ALIGNMENT__);
 	return p;
 }
+#else
+#warning "No _mm_malloc() for this architecture ..."
 #endif
 
 
