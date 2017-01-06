@@ -73,7 +73,7 @@ time_t unix_time;
 void *alloc_xep_aligned_mem ( size_t size )
 {
 	// it seems _mm_malloc() is quite standard at least on gcc, mingw, clang ... so let's try to use it
-#ifdef __EMSCRIPTEN__
+#if defined(__EMSCRIPTEN__) || defined(__arm__)
 	return SDL_malloc(size);
 #else
 	void *p = _mm_malloc(size, __BIGGEST_ALIGNMENT__);

@@ -1,7 +1,7 @@
 #define TARGET_NAME "ep128"
 #define TARGET_DESC "Enterprise 128"
 #define CONFIG_Z180
-#ifdef XEMU_ARCH_NATIVE
+#if defined(XEMU_ARCH_NATIVE) && !defined(__arm__)
 #define XEP128_GTK
 #endif
 #ifdef CONFIG_Z180
