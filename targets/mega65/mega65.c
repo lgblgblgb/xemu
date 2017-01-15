@@ -416,6 +416,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	);
 	// *** Initialize DMA
 	dma_init(
+		emucfg_get_num("dmarev"),
 		read_phys_mem,  // dma_reader_cb_t set_source_mreader ,
 		write_phys_mem, // dma_writer_cb_t set_source_mwriter ,
 		read_phys_mem,  // dma_reader_cb_t set_target_mreader ,
@@ -1176,6 +1177,7 @@ int main ( int argc, char **argv )
 	int cycles, frameskip;
 	xemu_dump_version(stdout, "The Incomplete Commodore-65/Mega-65 emulator from LGB");
 	emucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
+	emucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip  (0=F018A, other=F018B)");
 	emucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA-board switches turned ON");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	emucfg_define_switch_option("hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode");

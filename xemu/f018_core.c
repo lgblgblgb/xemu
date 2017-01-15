@@ -41,6 +41,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 Uint8 dma_registers[16];		// The four DMA registers (with last values written by the CPU)
+int   dma_chip_revision;		// revision of DMA chip
 static int   source_step;		// [-1, 0, 1] step value for source (0 = hold, constant address)
 static int   target_step;		// [-1, 0, 1] step value for target (0 = hold, constant address)
 static int   source_addr;		// DMA source address (the low byte is also used by COPY command as the "filler byte")
@@ -211,12 +212,42 @@ void dma_write_reg ( int addr, Uint8 data )
 
 
 
-// Main emulation loop should call this function regularly, if dma_status is not zero.
-// This way we have 'real' DMA, ie works while the rest of the machine is emulated too.
-// Please note, that the "exact" timing of DMA and eg the CPU is still incorrect, but it's far
-// better than the previous version where DMA was "blocky", ie the whole machine was "halted" while DMA worked ...
+/* Main emulation loop should call this function regularly, if dma_status is not zero.
+   This way we have 'real' DMA, ie works while the rest of the machine is emulated too.
+   Please note, that the "exact" timing of DMA and eg the CPU is still incorrect, but it's far
+   better than the previous version where DMA was "blocky", ie the whole machine was "halted" while DMA worked ...
+   ---------------------------------------------------------------------------------------------------------------
+   OK, now it seems, there are (at least?) two major (or planned?) DMA revisions in C65 with many incompatibilities.
+   Let's call them "A" and "B" (F018A and F018B). Currently, Xemu decides according the variable "dma_chip_revision" being 0
+   means "A" other non-zero values are "B", set by dma_init() function called by the emulator.
+
+   Command byte:   bits 0,1 -> DMA command
+                   bit  2   -> chained bit
+		   bit  3   -> interrupt? [not emulated!]
+		   F018A:
+			bit 4,5,6,7 = MIX minterm selection
+		   F018B:
+			bit4: source direction
+			bit5: target direction
+			bit6: ?
+			bit7: ?
+
+   Source/target MS byte:
+		   bits 0-3: -> address bits   19,18,17,16
+                   F018A:
+			bit 4:  HOLD
+			bit 5:  MOD
+			bit 6:  DIR
+			bit 7:  IO
+                   F018B:
+			no idea ... maybe 1Mb bank selection?
+
+   Extra byte in DMA list fetch before modulo (CALLED: "subcommand" also?):
+		ONLY IN CASE OF F016B (12 bytes / DMA command, for F018A it's only 11 bytes ...)
+*/
 void dma_update ( void )
 {
+	Uint8 subcommand;
 	if (!dma_status)
 		return;
 	if (command == -1) {
@@ -231,14 +262,32 @@ void dma_update ( void )
 		target_addr  = read_dma_list_next()      ;
 		target_addr |= read_dma_list_next() <<  8;
 		target_addr |= read_dma_list_next() << 16;
+		if (dma_chip_revision)	// for F018B we have an extra byte fetch here! used later in this function
+			subcommand = read_dma_list_next();
 		modulo       = read_dma_list_next()      ;	// modulo is not so much handled yet, maybe it's not even a 16 bit value
 		modulo      |= read_dma_list_next() <<  8;	// ... however since it's currently not used, it does not matter too much
-		source_step  = (source_addr & 0x100000) ? 0 : ((source_addr & 0x400000) ? -1 : 1);
-		target_step  = (target_addr & 0x100000) ? 0 : ((target_addr & 0x400000) ? -1 : 1);
+		if (dma_chip_revision) {
+			// F018B ("new") behaviour
+			source_step  = (command & 16) ? -1 : 1;
+			target_step  = (command & 32) ? -1 : 1;
+			//source_uses_modulo =
+			//target_uses_modulo =
+			// FIXME: what about minterms in F018B?!
+		} else {
+			// F018A ("old") behaviour
+			source_step  = (source_addr & 0x100000) ? 0 : ((source_addr & 0x400000) ? -1 : 1);
+			target_step  = (target_addr & 0x100000) ? 0 : ((target_addr & 0x400000) ? -1 : 1);
+			source_uses_modulo = (source_addr & 0x200000);
+			target_uses_modulo = (target_addr & 0x200000);
+			minterms[0] = (command &  16) ? 0xFF : 0x00;
+			minterms[1] = (command &  32) ? 0xFF : 0x00;
+			minterms[2] = (command &  64) ? 0xFF : 0x00;
+			minterms[3] = (command & 128) ? 0xFF : 0x00;
+		}
+		// It *seems* I/O stuff is still in the place even with F018B. FIXME: is it true?
 		source_is_io = (source_addr & 0x800000);
 		target_is_io = (target_addr & 0x800000);
-		source_uses_modulo = (source_addr & 0x200000);
-		target_uses_modulo = (target_addr & 0x200000);
+		// FIXME: for F018B, we should allow "1mbyte bank" selection!!!!!!!
 		source_addr &= 0xFFFFF;	// C65 1-mbyte range, chop bits used for other purposes off
 		target_addr &= 0xFFFFF; // C65 1-mbyte range, chop bits used for other purposes off
 		/* source selection */
@@ -276,10 +325,6 @@ void dma_update ( void )
 			target_addr, target_is_io ? "I/O" : "MEM", target_uses_modulo ? " MOD" : "", target_step,
 			length, command, chained ? "chain" : "last"
 		);
-		minterms[0] = (command &  16) ? 0xFF : 0x00;
-		minterms[1] = (command &  32) ? 0xFF : 0x00;
-		minterms[2] = (command &  64) ? 0xFF : 0x00;
-		minterms[3] = (command & 128) ? 0xFF : 0x00;
 		if (!length)
 			length = 0x10000;			// I *think* length of zero means 64K. Probably it's not true!!
 		return;
@@ -327,11 +372,14 @@ void dma_set_phys_io_offset ( int offs )
 
 
 void dma_init (
+	int dma_rev_set,
 	dma_reader_cb_t set_source_mreader , dma_writer_cb_t set_source_mwriter , dma_reader_cb_t set_target_mreader , dma_writer_cb_t set_target_mwriter,
 	dma_reader_cb_t set_source_ioreader, dma_writer_cb_t set_source_iowriter, dma_reader_cb_t set_target_ioreader, dma_writer_cb_t set_target_iowriter,
 	dma_reader_cb_t set_list_reader
 )
 {
+	dma_chip_revision = dma_rev_set;
+	DEBUGPRINT("DMA: initializing DMA engine for chip revision %d" NL, dma_rev_set);
 	cb_source_mreader  = set_source_mreader;
 	cb_source_mwriter  = set_source_mwriter;
 	cb_target_mreader  = set_target_mreader;
