@@ -29,7 +29,7 @@ extern void  dma_write_reg ( int addr, Uint8 data );
 extern Uint8 dma_read_reg  ( int reg );
 extern void  dma_set_phys_io_offset ( int offs );
 extern void  dma_init (
-	int dma_rev,
+	int dma_rev_set,
 	dma_reader_cb_t set_source_mreader , dma_writer_cb_t set_source_mwriter , dma_reader_cb_t set_target_mreader , dma_writer_cb_t set_target_mwriter,
 	dma_reader_cb_t set_source_ioreader, dma_writer_cb_t set_source_iowriter, dma_reader_cb_t set_target_ioreader, dma_writer_cb_t set_target_iowriter,
 	dma_reader_cb_t set_list_reader

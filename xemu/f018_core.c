@@ -427,7 +427,7 @@ Uint8 dma_read_reg ( int addr )
 
 #include <string.h>
 
-#define SNAPSHOT_DMA_BLOCK_VERSION	0
+#define SNAPSHOT_DMA_BLOCK_VERSION	1
 #define SNAPSHOT_DMA_BLOCK_SIZE		0x100
 
 
@@ -441,6 +441,7 @@ int dma_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, str
 	if (a) return a;
 	/* loading state ... */
 	memcpy(dma_registers, buffer, sizeof dma_registers);
+	dma_chip_revision = buffer[0x80];
 	return 0;
 }
 
@@ -453,6 +454,7 @@ int dma_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	memset(buffer, 0xFF, sizeof buffer);
 	/* saving state ... */
 	memcpy(buffer, dma_registers, sizeof dma_registers);
+	buffer[0x80] = dma_chip_revision;
 	return xemusnap_write_sub_block(buffer, sizeof buffer);
 }
 
