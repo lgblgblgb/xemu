@@ -24,6 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/f018_core.h"
 #include "xemu/emutools_hid.h"
 #include "vic3.h"
+#include "xemu/uart_monitor.h"
 #include "xemu/sid.h"
 #include "xemu/cbmhostfs.h"
 #include "xemu/c64_kbd_mapping.h"
@@ -58,8 +59,8 @@ static int nmi_level;			// please read the comment at nmi_set() below
 static int addr_trans_rd[16];		// address translating offsets for READ operation (it can be added to the CPU address simply, selected by the high 4 bits of the CPU address)
 static int addr_trans_wr[16];		// address translating offsets for WRITE operation (it can be added to the CPU address simply, selected by the high 4 bits of the CPU address)
 static int map_mask;			// MAP mask, should be filled at the MAP opcode, *before* calling apply_memory_config() then
-static int map_offset_low;		// MAP low offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
-static int map_offset_high;		// MAP high offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
+       int map_offset_low;		// MAP low offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
+       int map_offset_high;		// MAP high offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 
 
 
@@ -268,9 +269,16 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
 	// *** Load ROM image
-	p = emucfg_get_str("rom");
-	if (emu_load_file(p, memory + 0x20000, 0x20001) != 0x20000)
-		FATAL("Cannot load C65 system ROM (%s) or invalid size!", p);
+        p = emucfg_get_str("rom");
+        if (emu_load_file(p, memory + 0x20000, 0x20001) != 0x20000)
+                FATAL("Cannot load C65 system ROM (%s) or invalid size!", p);
+        p = emucfg_get_str("exram");
+        if (emu_load_file(p, memory + 0x80000, 0x80000) == 0x80000)
+                DEBUG("INIT: Loaded expansion-memory" NL);
+
+#ifdef UARTMON_SOCKET
+        uartmon_init(UARTMON_SOCKET);
+#endif
 	// *** Initialize VIC3
 	vic3_init();
 	// *** Memory configuration
@@ -681,6 +689,9 @@ static void shutdown_callback ( void )
 		DEBUG("Memory is dumped into " MEMDUMP_FILE NL);
 	}
 #endif
+#ifdef UARTMON_SOCKET
+        uartmon_close();
+#endif
 	printf("Scanline render info = \"%s\"" NL, scanline_render_debug_info);
 	DEBUG("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
 }
@@ -707,7 +718,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 }
 
 
-static void update_emulator ( void )
+void update_emulator ( void )
 {
 	hid_handle_all_sdl_events();
 	nmi_set(IS_RESTORE_PRESSED(), 2); // Custom handling of the restore key ...
@@ -718,6 +729,9 @@ static void update_emulator ( void )
 		cia_ugly_tod_updater(&cia1, t);
 		cia_ugly_tod_updater(&cia2, t);
 	}
+#ifdef UARTMON_SOCKET
+        uartmon_update();
+#endif
 }
 
 
@@ -727,13 +741,18 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles;
-	xemu_dump_version(stdout, "The Unusable Commodore 65 emulator from LGB");
+#ifdef UARTMON_SOCKET
+        int paused;
+#endif
+        xemu_dump_version(stdout, "The Unusable Commodore 65 emulator from LGB");
+       
 	emucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
 	emucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip (0=F018A, other=F018B)");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	emucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
 	//emucfg_define_switch_option("noaudio", "Disable audio");
 	emucfg_define_str_option("rom", "c65-system.rom", "Override system ROM path to be loaded");
+        emucfg_define_str_option("exram","expansion-ram.dat", "Override system path and name for expansion-ram to be loaded");
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	emucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
 	emucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
@@ -770,6 +789,17 @@ int main ( int argc, char **argv )
 	vic3_open_frame_access();
 	emu_timekeeping_start();
 	for (;;) {
+#ifdef UARTMON_SOCKET
+                /* Check for breakpoints or trace-mode , stay in the loop in single-step mode*/ 
+                do{
+                  paused=m65mon_update(); 
+                  // Decorate window title about the mode.
+                  // If "paused" mode is switched off ie by a monitor command (called from update_emulator() above!)
+                  // then it will resets back the the original state, etc
+                  window_title_custom_addon = paused ? (char*)emulator_paused_title : NULL;
+
+                }while (paused);
+#endif
 		cycles += cpu_step();
 		if (cycles >= cpu_cycles_per_scanline) {
 			cia_tick(&cia1, 64);

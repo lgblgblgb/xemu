@@ -37,6 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // It may cause incompatibilities (ie: real REC would allow VIC3 to access REC as well, I think ... It's not the case here. And it's just one example I know about)
 #define ALLOW_512K_RAMEXP
 
+#define UARTMON_SOCKET          "uart.sock"
 // It's *another* entity like the above, but now at the place where "expansion *ROM*" should be ... It's maybe even *worse* ... [??]
 // Combined with the 512K, the total RAM size would be 128K (base) + 512K + 256K = 896K, quite nice from a 8 bit machine
 // Enable only at your own risk!
@@ -56,4 +57,7 @@ extern void  io_write ( int addr, Uint8 data );
 extern void  write_phys_mem ( int addr, Uint8 data );
 extern Uint8 read_phys_mem  ( int addr );
 
+extern int map_offset_high;
+extern int map_offset_low;
+void update_emulator ( void );
 #endif
