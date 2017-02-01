@@ -28,6 +28,7 @@ int  umon_write_size;
 int  umon_send_ok;
 char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
+const char emulator_paused_title[] = "TRACE/PAUSE";
 
 #ifdef _WIN32
 // Windows is not supported currently, as it does not have POSIX-standard socket interface (?).
@@ -35,6 +36,7 @@ int  uartmon_init   ( const char *fn ) { return 1; }
 void uartmon_update ( void ) {}
 void uartmon_close  ( void ) {}
 void uartmon_finish_command ( void ) {}
+int  m65mon_update(void){ return 0;}
 #else
 
 
@@ -67,7 +69,7 @@ static int   breakpoint_pc = -1;
 static int   trace_step_trigger = 0;
 static void (*m65mon_callback)(void) = NULL;
 
-const char emulator_paused_title[] = "TRACE/PAUSE";
+
 
 
 
