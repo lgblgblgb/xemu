@@ -7,7 +7,8 @@
 Emulators running on Linux/Unix/Windows/OSX of various (mainly 8 bit) machines,
 including the Commodore LCD and Commodore 65 (and also some Mega65) as well.
 
-Written by (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+Written by (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+More detailed information about author(s): https://github.com/lgblgblgb/xemu/wiki/Copyright
 Source repository: https://github.com/lgblgblgb/xemu
 
 Xemu is licensed under the terms of GNU/GPL v2, for more information please
