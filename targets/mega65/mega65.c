@@ -77,6 +77,7 @@ int map_offset_high;		// MAP high offset, should be filled at the MAP opcode, *b
 int map_megabyte_low;		// Mega65 extension: selects the "MegaByte range" (MB) for the mappings on mapped blocks 0...3, NOTE: shifted to Mbyte position!
 int map_megabyte_high;		// Mega65 extension: selects the "MegaByte range" (MB) for the mappings on mapped blocks 4...7, NOTE: shifted to Mbyte position!
 int io_at_d000;
+int skip_unhandled_mem;
 
 static int frame_counter;
 
@@ -891,7 +892,10 @@ void write_phys_mem ( int addr, Uint8 data )
 			hypervisor_memory[addr & 0x3FFF] = data;
 		return;
 	}
-	FATAL("Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, addr, data, cpu_pc);
+	if (skip_unhandled_mem)
+		DEBUGPRINT("WARNING: Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, addr, data, cpu_pc);
+	else
+		FATAL("Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, addr, data, cpu_pc);
 #if 0
 	addr &= 0xFFFFFFF;	// warps around at 256Mbyte, for address bus of Mega65
 	// !!!! The following line was for C65 to make it secure, only access 1Mbyte of memory ...
@@ -959,7 +963,11 @@ Uint8 read_phys_mem ( int addr )
 		else
 			return 0xFF;	// hypervisor memory is unavailable from "user mode", FIXME: do we need to do trap/whatever if someone tries this?
 	}
-	FATAL("Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, addr, cpu_pc);
+	if (skip_unhandled_mem) {
+		DEBUGPRINT("WARNING: Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, addr, cpu_pc);
+		return 0xFF;
+	} else
+		FATAL("Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, addr, cpu_pc);
 }
 
 
@@ -1189,6 +1197,7 @@ int main ( int argc, char **argv )
 	emucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
 	emucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
 #endif
+	emucfg_define_switch_option("skipunhandledmem", "Do not panic on unhandled memory access (hides problems!!)");
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
 	if (xemu_byte_order_test())
@@ -1216,6 +1225,8 @@ int main ( int argc, char **argv )
 		AUDIO_SAMPLE_FREQ		// sound mix freq
 	);
 	// Start!!
+	skip_unhandled_mem = emucfg_get_bool("skipunhandledmem");
+	printf("UNHANDLED memory policy: %d" NL, skip_unhandled_mem);
 	cycles = 0;
 	frameskip = 0;
 	frame_counter = 0;
