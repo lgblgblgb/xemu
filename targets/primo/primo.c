@@ -18,14 +18,15 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "emutools.h"
-#include "emutools_hid.h"
-#include "z80.h"
+#include "xemu/emutools.h"
+#include "xemu/emutools_hid.h"
+#include "xemu/z80.h"
 #include "primo.h"
 
 
 #define CLOCKS_PER_FRAME (CPU_CLOCK / 50)
 
+Z80EX_CONTEXT z80ex;
 
 static Uint8 memory[0x10000];
 static const Uint8 init_primo_palette_rgb[2 * 3] = {	// Primo is simple enough, b&w :) Primo C/colour Primo is another problem ...
@@ -225,11 +226,7 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles;
-	printf("**** The Unknown Primo emulator from LGB" NL
-	"INFO: Texture resolution is %dx%d" NL "%s" NL,
-		SCREEN_WIDTH, SCREEN_HEIGHT,
-		emulators_disclaimer
-	);
+	xemu_dump_version(stdout, "The Unknown Primo emulator from LGB");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (emu_init_sdl(
 		TARGET_DESC APP_DESC_APPEND,	// window title

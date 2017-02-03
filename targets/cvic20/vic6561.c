@@ -26,7 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include <SDL.h>
 
-#include "emutools.h"
+#include "xemu/emutools.h"
 #include "vic6561.h"
 
 

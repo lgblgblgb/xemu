@@ -16,21 +16,23 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
-#include "emutools.h"
+#include "xemu/emutools.h"
 #include "mega65.h"
-#include "cpu65c02.h"
-#include "cia6526.h"
-#include "f011_core.h"
-#include "dmagic.h"
-#include "emutools_hid.h"
+#include "xemu/cpu65c02.h"
+#include "xemu/cia6526.h"
+#include "xemu/f011_core.h"
+#include "xemu/f018_core.h"
+#include "xemu/emutools_hid.h"
 #include "vic3.h"
-#include "sid.h"
+#include "xemu/sid.h"
 #include "sdcard.h"
 #include "uart_monitor.h"
 #include "hypervisor.h"
-#include "c64_kbd_mapping.h"
-#include "emutools_config.h"
+#include "xemu/c64_kbd_mapping.h"
+#include "xemu/emutools_config.h"
+#include "m65_snapshot.h"
 
+#define kicked_hypervisor gs_regs[0x67E]
 
 static SDL_AudioDeviceID audio = 0;
 
@@ -39,9 +41,11 @@ Uint8 colour_ram[0x10000];
 Uint8 character_rom[0x1000];		// the "WOM"-like character ROM of VIC-IV
 Uint8 slow_ram[127 << 20];		// 127Mbytes of slowRAM, heh ...
 //Uint8 cpu_port[2];			// CPU I/O port at 0/1 (implemented by the VIC3 for real, on C65 but for the usual - C64/6510 - name, it's the "CPU port")
-static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
-static struct SidEmulation sid1, sid2;	// the two SIDs
+struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
+struct SidEmulation sid1, sid2;		// the two SIDs
 int cpu_linear_memory_addressing_is_enabled = 0;
+static int nmi_level;			// please read the comment at nmi_set() below
+
 
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request
 // This is *still* not Mega65 compatible at implementation level, but it will work, unless az M65 software accesses the I/O space at the high
@@ -212,7 +216,7 @@ void apply_memory_config ( void )
 
 
 
-static void cia_setint_cb ( int level )
+static void cia1_setint_cb ( int level )
 {
 	DEBUG("%s: IRQ level changed to %d" NL, cia1.name, level);
 	if (level)
@@ -221,6 +225,35 @@ static void cia_setint_cb ( int level )
 		cpu_irqLevel &= ~1;
 }
 
+
+static inline void nmi_set ( int level, int mask )
+{
+	// NMI is a low active _EDGE_ triggered 65xx input ... In my emulator though, the signal
+	// is "high active", and also we must form the "edge" ourselves from "level". NMI level is
+	// set as a 2bit number, on bit 0, CIA2, on bit 1, keyboard RESTORE key. Thus having zero
+	// value for level means (in the emu!) that not RESTORE key is pressed neither CIA2 has active
+	// IRQ output, non-zero value means some activation. Well, if I am not confused enough here,
+	// this should mean that nmi_level zero->non-zero transit should produce the edge (which should
+	// be the falling edge in the real hardware anyway ... but the rising here. heh, I should follow
+	// the signal level of the hardware in my emulator, honestly ...)
+	int nmi_new_level;
+	if (level)
+		nmi_new_level = nmi_level | mask;
+	else
+		nmi_new_level = nmi_level & (~mask);
+	if ((!nmi_level) && nmi_new_level) {
+		DEBUG("NMI edge is emulated towards the CPU (%d->%d)" NL, nmi_level, nmi_new_level);
+		cpu_nmiEdge = 1;	// the "NMI edge" trigger is deleted by the CPU emulator itself (it's not a level trigger)
+	}
+	nmi_level = nmi_new_level;
+}
+
+
+
+static void cia2_setint_cb ( int level )
+{
+       nmi_set(level, 1);
+}
 
 
 void clear_emu_events ( void )
@@ -285,6 +318,23 @@ static const Uint8 initial_kickup[] = {
 #include "../../rom/kickup.cdata"
 };
 
+
+
+#ifdef XEMU_SNAPSHOT_SUPPORT
+static const char *m65_snapshot_saver_filename = NULL;
+static void m65_snapshot_saver_on_exit_callback ( void )
+{
+	if (!m65_snapshot_saver_filename)
+		return;
+	if (xemusnap_save(m65_snapshot_saver_filename))
+		ERROR_WINDOW("Could not save snapshot \"%s\": %s", m65_snapshot_saver_filename, xemusnap_error_buffer);
+	else
+		INFO_WINDOW("Snapshot has been saved to \"%s\".", m65_snapshot_saver_filename);
+}
+#endif
+
+
+
 static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 {
 	const char *p;
@@ -298,6 +348,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		SDL_ENABLE		// joy HID events enabled
 	);
 	joystick_emu = 1;
+	nmi_level = 0;
 	// *** FPGA switches ...
 	do {
 		int switches[16], r = emucfg_integer_list_from_string(emucfg_get_str("fpga"), switches, 16, ",");
@@ -318,7 +369,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	in_hypervisor = 0;
 	memset(gs_regs, 0, sizeof gs_regs);
 	rom_protect = 1;
-	gs_regs[0x67E] = 0x80;	// this will signal Xemu, to ask the user on the first read!
+	kicked_hypervisor = emucfg_get_num("kicked");
 	DEBUG("MEGA65: I/O is remapped to $%X" NL, IO_REMAPPED);
 	// *** Trying to load kickstart image
 	p = emucfg_get_str("kickup");
@@ -352,7 +403,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		cia1_in_a,		// callback: INA ~ joy#2
 		cia1_in_b,		// callback: INB ~ keyboard
 		NULL,			// callback: INSR
-		cia_setint_cb		// callback: SETINT
+		cia1_setint_cb		// callback: SETINT
 	);
 	cia_init(&cia2, "CIA-2",
 		cia2_out_a,		// callback: OUTA
@@ -361,10 +412,22 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		cia_port_in_dummy,	// callback: INA
 		NULL,			// callback: INB
 		NULL,			// callback: INSR
-		NULL			// callback: SETINT ~ that would be NMI in our case
+		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	// *** Initialize DMA
-	dma_init();
+	dma_init(
+		emucfg_get_num("dmarev"),
+		read_phys_mem,  // dma_reader_cb_t set_source_mreader ,
+		write_phys_mem, // dma_writer_cb_t set_source_mwriter ,
+		read_phys_mem,  // dma_reader_cb_t set_target_mreader ,
+		write_phys_mem, // dma_writer_cb_t set_target_mwriter,
+		io_read,        // dma_reader_cb_t set_source_ioreader,
+		io_write,       // dma_writer_cb_t set_source_iowriter,
+		io_read,        // dma_reader_cb_t set_target_ioreader,
+		io_write,       // dma_writer_cb_t set_target_iowriter,
+		read_phys_mem   // dma_reader_cb_t set_list_reader
+	);
+	dma_set_phys_io_offset(0xD000);	// FIXME: currently Mega65 uses D000 based I/O decoding, so we need this here ...
 	// Initialize FDC
 	fdc_init();
 	// SIDs, plus SDL audio
@@ -403,6 +466,16 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	cpu_linear_memory_addressing_is_enabled = 1;
 	hypervisor_enter(TRAP_RESET);
 	DEBUG("INIT: end of initialization!" NL);
+#ifdef XEMU_SNAPSHOT_SUPPORT
+	xemusnap_init(m65_snapshot_definition);
+	p = emucfg_get_str("snapload");
+	if (p) {
+		if (xemusnap_load(p))
+			FATAL("Couldn't load snapshot \"%s\": %s", p, xemusnap_error_buffer);
+	}
+	m65_snapshot_saver_filename = emucfg_get_str("snapsave");
+	atexit(m65_snapshot_saver_on_exit_callback);
+#endif
 }
 
 
@@ -488,6 +561,9 @@ void cpu_do_nop ( void )
 // Ranges marked with (*) needs "vic_new_mode"
 Uint8 io_read ( int addr )
 {
+	// FIXME: sanity check ...
+	if (addr < 0xD000 || addr > 0xDFFF)
+		FATAL("io_read() decoding problem addr $%X is not in range of $D000...$DFFF", addr);
 	// Future stuff: instead of slow tons of IFs, use the >> 5 maybe
 	// that can have new device at every 0x20 dividible addresses,
 	// that is: switch ((addr >> 5) & 127)
@@ -596,6 +672,9 @@ Uint8 io_read ( int addr )
 // Ranges marked with (*) needs "vic_new_mode"
 void io_write ( int addr, Uint8 data )
 {
+	// FIXME: sanity check ...
+	if (addr < 0xD000 || addr > 0xDFFF)
+		FATAL("io_read() decoding problem addr $%X is not in range of $D000...$DFFF", addr);
 	if (addr < 0xD080) {	// $D000 - $D07F:	VIC3
 		vic3_write_reg(addr, data);
 		return;
@@ -689,9 +768,8 @@ void io_write ( int addr, Uint8 data )
 			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("DMA controller");
 	}
 	if (addr < ((vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00)) {	// $D800-$DC00/$E000	COLOUR NIBBLES, mapped to $1F800 in BANK1
-		//memory[0x1F800 + addr - 0xD800] = data;
+		memory[0x1F800 + addr - 0xD800] = data;
 		colour_ram[addr - 0xD800] = data;
-       //return memory[0x1F800 + addr - 0xD800];
 		DEBUG("IO: writing colour RAM at offset $%04X" NL, addr - 0xD800);
 		return;
 	}
@@ -751,7 +829,7 @@ void cpu_write_linear_opcode ( Uint8 data )
 
 
 
-void REGPARM(2) write_phys_mem ( int addr, Uint8 data )
+void write_phys_mem ( int addr, Uint8 data )
 {
 	// NOTE: this function assumes that address within the valid 256Mbyte addressing range.
 	// Normal MAP stuffs does this, since it wraps within a single 1Mbyte "MB" already
@@ -772,7 +850,7 @@ void REGPARM(2) write_phys_mem ( int addr, Uint8 data )
 		return;
 	}
 	if (addr < 0x020000) {		// the last 2K of the mentioned 128K is the mega65 mapped colour RAM (126K ... 128K)
-		memory[addr] = data; 	// also update the "legacy 2K C65 ROM @ 126K" so read func won't have a different case for this!
+		memory[addr] = data; 	// also update the "legacy 2K C65 colour-RAM @ 126K" so read func won't have a different case for this!
 		colour_ram[addr & 0x7FF] = data;
 		return;
 	}
@@ -792,6 +870,12 @@ void REGPARM(2) write_phys_mem ( int addr, Uint8 data )
 		// $0020000-$003FFFF
 		if (addr >= 0x8020000 && addr <= 0x803FFFF)
 			memory[addr - 0x8000000] = data;
+		return;
+	}
+	if ((addr & 0xFFF0000) == 0xFF80000) {
+		colour_ram[addr & 0xFFFF] = data;
+		if (addr < 0xFF80800)
+			memory[addr - 0xFF60800] = data;
 		return;
 	}
 	if ((addr & 0xFFFF000) == 0xFF7E000) {
@@ -848,7 +932,7 @@ void REGPARM(2) write_phys_mem ( int addr, Uint8 data )
 
 
 
-Uint8 REGPARM(1) read_phys_mem ( int addr )
+Uint8 read_phys_mem ( int addr )
 {
 	addr &= 0xFFFFFFF;		// warps around at 256Mbyte, for address bus of Mega65
 	//Check for < 2 not needed anymore, as CPU port is really the memory, though it can be a problem if DMA sees this issue differently?!
@@ -865,6 +949,8 @@ Uint8 REGPARM(1) read_phys_mem ( int addr )
 	// No other memory accessible components/space on C65. The following areas on M65 currently decoded with masks:
 	if (addr >= 0x8000000 && addr < 0x8000000 + sizeof(slow_ram))
 		return slow_ram[addr - 0x8000000];
+	if ((addr & 0xFFF0000) == 0xFF80000)
+		return colour_ram[addr & 0xFFFF];
 	if ((addr & 0xFFFF000) == IO_REMAPPED)			// I/O stuffs (remapped from standard $D000 location as found on C64 or C65 too)
 		return io_read((addr & 0xFFF) | 0xD000);	// TODO/FIXME: later we can save using D000, if io_read/io_write internally uses 0-FFF range only!
 	if ((addr & 0xFFFC000) == 0xFFF8000) {			// accessing of hypervisor memory
@@ -988,7 +1074,9 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			in_hypervisor = 0;
 			apply_memory_config();
 			cpu_reset();
-			kicked_hypervisor = 0x80;	// this will signal Xemu, to ask the user on the first read!
+			dma_reset();
+			nmi_level = 0;
+			kicked_hypervisor = emucfg_get_num("kicked");
 			hypervisor_enter(TRAP_RESET);
 			DEBUG("RESET!" NL);
 		} else if (key == SDL_SCANCODE_KP_ENTER) {
@@ -1003,6 +1091,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 static void update_emulator ( void )
 {
 	hid_handle_all_sdl_events();
+	nmi_set(IS_RESTORE_PRESSED(), 2);	// Custom handling of the restore key ...
 #ifdef UARTMON_SOCKET
 	uartmon_update();
 #endif
@@ -1086,18 +1175,20 @@ void m65mon_breakpoint ( int brk )
 int main ( int argc, char **argv )
 {
 	int cycles, frameskip;
-	printf("**** The Incomplete Commodore-65/Mega-65 emulator from LGB" NL
-	"INFO: Texture resolution is %dx%d" NL "%s" NL,
-		SCREEN_WIDTH, SCREEN_HEIGHT,
-		emulators_disclaimer
-	);
+	xemu_dump_version(stdout, "The Incomplete Commodore-65/Mega-65 emulator from LGB");
 	emucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
-	emucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA switches turned ON");
+	emucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip  (0=F018A, other=F018B)");
+	emucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA-board switches turned ON");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	emucfg_define_switch_option("hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode");
-	emucfg_define_str_option("kickup", KICKSTART_NAME, "Override path of KickStart to be used");
-	emucfg_define_str_option("kickuplist", NULL, "Set path of symbol list file for external kickstart");
+	emucfg_define_num_option("kicked", 0x0, "Answer to KickStart upgrade (128=ask user in a pop-up window)");
+	emucfg_define_str_option("kickup", KICKSTART_NAME, "Override path of external KickStart to be used");
+	emucfg_define_str_option("kickuplist", NULL, "Set path of symbol list file for external KickStart");
 	emucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used");
+#ifdef XEMU_SNAPSHOT_SUPPORT
+	emucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
+	emucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
+#endif
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
 	if (xemu_byte_order_test())
@@ -1197,3 +1288,65 @@ int main ( int argc, char **argv )
 	}
 	return 0;
 }
+
+/* --- SNAPSHOT RELATED --- */
+
+#ifdef XEMU_SNAPSHOT_SUPPORT
+
+#include <string.h>
+
+#define SNAPSHOT_M65_BLOCK_VERSION	0
+#define SNAPSHOT_M65_BLOCK_SIZE		(0x100 + sizeof(gs_regs))
+
+
+int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
+{
+	Uint8 buffer[SNAPSHOT_M65_BLOCK_SIZE];
+	int a;
+	if (block->block_version != SNAPSHOT_M65_BLOCK_VERSION || block->sub_counter || block->sub_size != sizeof buffer)
+		RETURN_XSNAPERR_USER("Bad M65 block syntax");
+	a = xemusnap_read_file(buffer, sizeof buffer);
+	if (a) return a;
+	/* loading state ... */
+	map_mask = (int)P_AS_BE32(buffer + 0);
+	map_offset_low = (int)P_AS_BE32(buffer + 4);
+	map_offset_high = (int)P_AS_BE32(buffer + 8);
+	cpu_inhibit_interrupts = (int)P_AS_BE32(buffer + 12);
+	in_hypervisor = (int)P_AS_BE32(buffer + 16);
+	map_megabyte_low = (int)P_AS_BE32(buffer + 20);
+	map_megabyte_high = (int)P_AS_BE32(buffer + 24);
+	rom_protect = (int)P_AS_BE32(buffer + 28);
+	kicked_hypervisor = (int)P_AS_BE32(buffer + 32);
+	memcpy(gs_regs, buffer + 0x100, sizeof gs_regs);
+	return 0;
+}
+
+
+int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
+{
+	Uint8 buffer[SNAPSHOT_M65_BLOCK_SIZE];
+	int a = xemusnap_write_block_header(def->idstr, SNAPSHOT_M65_BLOCK_VERSION);
+	if (a) return a;
+	memset(buffer, 0xFF, sizeof buffer);
+	/* saving state ... */
+	U32_AS_BE(buffer +  0, map_mask);
+	U32_AS_BE(buffer +  4, map_offset_low);
+	U32_AS_BE(buffer +  8, map_offset_high);
+	U32_AS_BE(buffer + 12, cpu_inhibit_interrupts);
+	U32_AS_BE(buffer + 16, in_hypervisor);
+	U32_AS_BE(buffer + 20, map_megabyte_low);
+	U32_AS_BE(buffer + 24, map_megabyte_high);
+	U32_AS_BE(buffer + 28, rom_protect);
+	U32_AS_BE(buffer + 32, kicked_hypervisor);
+	memcpy(buffer + 0x100, gs_regs, sizeof gs_regs);
+	return xemusnap_write_sub_block(buffer, sizeof buffer);
+}
+
+
+int m65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
+{
+	apply_memory_config();
+	printf("SNAP: loaded (finalize-callback!)." NL);
+	return 0;
+}
+#endif

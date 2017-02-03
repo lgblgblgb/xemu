@@ -5,7 +5,7 @@
 
 	* Commodore LCD emulator, C version.
 	* (C)2013,2014 LGB Gabor Lenart
-	* Visit my site (the better, JavaScript version of the emu is here too): http://commodore-lcd.lgb.hu/
+	* Visit my site (the older, JavaScript version of the emu is here too): http://commodore-lcd.lgb.hu/
 
    The goal is - of course - writing a primitive but still better than previous Commodore LCD emulator :)
    Note: I would be interested in VICE adoption, but I am lame with VICE, too complex for me :)
@@ -28,17 +28,18 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
-#include "emutools.h"
-#include "emutools_hid.h"
-#include "cpu65c02.h"
-#include "via65c22.h"
-#include "emutools.h"
+#include "xemu/emutools.h"
+#include "xemu/emutools_hid.h"
+#include "xemu/emutools_config.h"
+#include "xemu/cpu65c02.h"
+#include "xemu/via65c22.h"
+#include "xemu/emutools.h"
 #include "commodore_lcd.h"
 #include <time.h>
 
 
 static Uint8 memory[0x40001];	// +1 for checking load ...
-static Uint8 charrom[2048];
+static Uint8 charrom[4096 + 1];
 extern unsigned const char roms[];
 static int mmu[3][4] = {
 	{0, 0, 0, 0},
@@ -52,28 +53,13 @@ static struct Via65c22 via1, via2;
 static Uint8 keysel;
 static Uint8 rtc_regs[16];
 static int rtc_sel = 0;
+static int ram_size;
 
 static const Uint8 init_lcd_palette_rgb[6] = {
 	0xC0, 0xC0, 0xC0,
 	0x00, 0x00, 0x00
 };
 static Uint32 lcd_palette[2];
-
-static const Uint8 fontHack[] = {
-	0x00,0x20,0x54,0x54,0x54,0x78,	0x00,0x7f,0x44,0x44,0x44,0x38,
-	0x00,0x38,0x44,0x44,0x44,0x28,	0x00,0x38,0x44,0x44,0x44,0x7f,
-	0x00,0x38,0x54,0x54,0x54,0x08,	0x00,0x08,0x7e,0x09,0x09,0x00,
-	0x00,0x18,0xa4,0xa4,0xa4,0x7c,	0x00,0x7f,0x04,0x04,0x78,0x00,
-	0x00,0x00,0x00,0x7d,0x40,0x00,	0x00,0x40,0x80,0x84,0x7d,0x00,
-	0x00,0x7f,0x10,0x28,0x44,0x00,	0x00,0x00,0x00,0x7f,0x40,0x00,
-	0x00,0x7c,0x04,0x18,0x04,0x78,	0x00,0x7c,0x04,0x04,0x78,0x00,
-	0x00,0x38,0x44,0x44,0x44,0x38,	0x00,0xfc,0x44,0x44,0x44,0x38,
-	0x00,0x38,0x44,0x44,0x44,0xfc,	0x00,0x44,0x78,0x44,0x04,0x08,
-	0x00,0x08,0x54,0x54,0x54,0x20,	0x00,0x04,0x3e,0x44,0x24,0x00,
-	0x00,0x3c,0x40,0x20,0x7c,0x00,	0x00,0x1c,0x20,0x40,0x20,0x1c,
-	0x00,0x3c,0x60,0x30,0x60,0x3c,	0x00,0x6c,0x10,0x10,0x6c,0x00,
-	0x00,0x9c,0xa0,0x60,0x3c,0x00,	0x00,0x64,0x54,0x54,0x4c,0x00
-};
 
 #define VIRTUAL_SHIFT_POS 0x82
 static const struct KeyMapping lcd_key_map[] = {
@@ -169,23 +155,6 @@ void clear_emu_events ( void )
 #define GET_MEMORY(phys_addr) memory[phys_addr]
 
 
-#if 0
-static Uint8 GET_MEMORY(int phys_addr)
-{
-	if (phys_addr == 0x382F7) {
-		DEBUG("Before romchecksum: X=%02Xh A=%02Xh" NL, cpu_x, cpu_a);
-	}
-	if (phys_addr == 0x383A1) {
-		DEBUG("At romchecksum RTS: X=%02Xh A=%02Xh" NL, cpu_x, cpu_a);
-	}
-	if (phys_addr == 0x382FA) {
-		DEBUG("After romchecksum : X=%02Xh A=%02Xh" NL, cpu_x, cpu_a);
-	}
-	return memory[phys_addr];
-}
-#endif
-
-
 Uint8 cpu_read ( Uint16 addr ) {
 	if (addr <  0x1000) return GET_MEMORY(addr);
 	if (addr <  0xF800) return GET_MEMORY((mmu_current[addr >> 14] + addr) & 0x3FFFF);
@@ -225,7 +194,7 @@ void cpu_write ( Uint16 addr, Uint8 data ) {
 		return;
 	}
 	maddr = (mmu_current[addr >> 14] + addr) & 0x3FFFF;
-	if (maddr < RAM_SIZE) {
+	if (maddr < ram_size) {
 		memory[maddr] = data;
 		return;
 	}
@@ -307,53 +276,52 @@ static void  via1_setint(int level)
 static void render_screen ( void )
 {
 	int ps = lcd_ctrl[1] << 7;
-	int pd = 0, x, y, ch;
+	int x, y, ch;
 	int tail;
 	Uint32 *pix = emu_start_pixel_buffer_access(&tail);
 	if (lcd_ctrl[2] & 2) { // graphic mode
 		for (y = 0; y < 128; y++) {
 			for (x = 0; x < 60; x++) {
 				ch = memory[ps++];
-				*(pix++) = (ch & 128) ? FG : BG;
-				*(pix++) = (ch &  64) ? FG : BG;
-				*(pix++) = (ch &  32) ? FG : BG;
-				*(pix++) = (ch &  16) ? FG : BG;
-				*(pix++) = (ch &   8) ? FG : BG;
-				*(pix++) = (ch &   4) ? FG : BG;
-				*(pix++) = (ch &   2) ? FG : BG;
-				*(pix++) = (ch &   1) ? FG : BG;
+				*(pix++) = (ch & 0x80) ? FG : BG;
+				*(pix++) = (ch & 0x40) ? FG : BG;
+				*(pix++) = (ch & 0x20) ? FG : BG;
+				*(pix++) = (ch & 0x10) ? FG : BG;
+				*(pix++) = (ch & 0x08) ? FG : BG;
+				*(pix++) = (ch & 0x04) ? FG : BG;
+				*(pix++) = (ch & 0x02) ? FG : BG;
+				*(pix++) = (ch & 0x01) ? FG : BG;
 			}
 			ps = (ps + 4) & 0x7FFF;
 			pix += tail;
 		}
 	} else { // text mode
-		int a, pc, m, cof = (lcd_ctrl[2] & 1) << 10, col;
-		ps += lcd_ctrl[0] & 127; // X-Scroll register, only the lower 7 bits are used
-		for (y = 0; y < 16; y++) {
-			for (x = 0; x < 80; x++) {
+		int cof  = (lcd_ctrl[2] & 1) << 10;
+		int maxx = (lcd_ctrl[3] & 4) ? 60 : 80;
+		ps += lcd_ctrl[0] & 0x7F; // X-Scroll register, only the lower 7 bits are used
+		for (y = 0; y < 128; y++) {
+			for (x = 0; x < maxx; x++) {
 				ps &= 0x7FFF;
 				ch = memory[ps++];
-				/* BEGIN hack: lowercase */
-				//if ((ch & 127) >= 65 && (ch & 127) <= 90)
-				//	ch = ( ch & 128) | ((ch & 127) - 64 );
-				/* END hack */
-				pc = cof + (6 * (ch & 127));
-				col = (ch & 128) ? 0xff : 0x00;
-				for (a = 0; a < 6; a++) {
-					m = charrom[pc++] ^ col;
-					pix[pd       ] = (m &   1) ? FG : BG;
-					pix[pd +  480 + 1 * tail] = (m &   2) ? FG : BG;
-					pix[pd +  960 + 2 * tail] = (m &   4) ? FG : BG;
-					pix[pd + 1440 + 3 * tail] = (m &   8) ? FG : BG;
-					pix[pd + 1920 + 4 * tail] = (m &  16) ? FG : BG;
-					pix[pd + 2400 + 5 * tail] = (m &  32) ? FG : BG;
-					pix[pd + 2880 + 6 * tail] = (m &  64) ? FG : BG;
-					pix[pd + 3360 + 7 * tail] = (m & 128) ? FG : BG;
-					pd++;
-				}
+				ch = charrom[cof + ((ch & 0x7F) << 3) + (y & 7)] ^ ((ch & 0x80) ? 0xFF : 0x00);
+				pix[0] = (ch & 0x80) ? FG : BG;
+				pix[1] = (ch & 0x40) ? FG : BG;
+				pix[2] = (ch & 0x20) ? FG : BG;
+				pix[3] = (ch & 0x10) ? FG : BG;
+				pix[4] = (ch & 0x08) ? FG : BG;
+				pix[5] = (ch & 0x04) ? FG : BG;
+				if (lcd_ctrl[3] & 4) {
+					pix[6] = (ch & 0x02) ? FG : BG;
+					pix[7] = (ch & 0x01) ? FG : BG;
+					pix += 8;
+				} else
+					pix += 6;
 			}
-			ps += 48; // 128 - 80
-			pd += 3360;
+			if ((y & 7) == 7)
+				ps += 128 - maxx;
+			else
+				ps -= maxx;
+			pix += tail;
 		}
 	}
 	emu_update_screen();
@@ -405,10 +373,16 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles;
-	printf("**** The world's first Commodore LCD emulator from LGB" NL "%s" NL,
-		emulators_disclaimer
-	);
-
+	xemu_dump_version(stdout, "The world's first Commodore LCD emulator from LGB");
+	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
+	emucfg_define_num_option("ram", 128, "Sets RAM size in KBytes.");
+	if (emucfg_parse_commandline(argc, argv, NULL))
+		return 1;
+	ram_size = emucfg_get_num("ram");
+	if (ram_size < 32 || ram_size > 128)
+		FATAL("Bad ram size is defined, must be 32...128");
+	ram_size <<= 10;
+	DEBUGPRINT("CFG: ram size is %d bytes." NL, ram_size);
 	if (emu_init_sdl(
 		TARGET_DESC APP_DESC_APPEND,	// window title
 		APP_ORG, TARGET_NAME,		// app organization and name, used with SDL pref dir formation
@@ -436,10 +410,11 @@ int main ( int argc, char **argv )
 		emu_load_file("clcd-u102.rom", memory + 0x38000, 0x8001) != 0x8000 ||
 		emu_load_file("clcd-u103.rom", memory + 0x30000, 0x8001) != 0x8000 ||
 		emu_load_file("clcd-u104.rom", memory + 0x28000, 0x8001) != 0x8000 ||
-		emu_load_file("clcd-u105.rom", memory + 0x20000, 0x8001) != 0x8000
+		emu_load_file("clcd-u105.rom", memory + 0x20000, 0x8001) != 0x8000 ||
+		emu_load_file("clcd-chargen.rom", charrom, 4097) != 4096
 	) {
 		ERROR_WINDOW("Cannot load some of the needed ROM images (see console messages)!");
-		return 1;
+		//return 1;
 	}
 	// Ugly hacks :-( <patching ROM>
 #ifdef ROM_HACK_COLD_START
@@ -462,12 +437,6 @@ int main ( int argc, char **argv )
 	emu_load_file("clcd-u105-parasite.rom", memory + 0x26800, 0x8000 - 0x6800);
 	emu_load_file("clcd-u104-parasite.rom", memory + 0x2E800, 0x8000 - 0x6800);
 #endif
-	/* we would need the chargen ROM of CLCD but we don't have. We have to use
-	 * some charset from the KERNAL (which is NOT the "hardware" charset!) and cheat a bit to create the alternate charset */
-	memcpy(charrom, memory + 0x3F700, 1024);
-	memcpy(charrom + 1024, memory + 0x3F700, 1024);
-	memcpy(charrom + 390, charrom + 6, 26 * 6);
-	memcpy(charrom + 6, fontHack, sizeof fontHack);
 	/* init CPU */
 	cpu_reset();	// we must do this after loading KERNAL at least, since PC is fetched from reset vector here!
 	/* init VIAs */
@@ -478,6 +447,7 @@ int main ( int argc, char **argv )
 	keysel = 0;
 	/* --- START EMULATION --- */
 	cycles = 0;
+	emu_set_full_screen(emucfg_get_bool("fullscreen"));
 	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	update_rtc();			// this will use time-keeping stuff as well, so initially let's do after the function call above
 	for (;;) {

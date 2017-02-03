@@ -17,13 +17,15 @@
 # along with this program; if not, write to the Free Software
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
+# WARNING: the ::CFLAGS:: and ::LDFLAGS:: part are here for INTENT, do not alter or remove!
+# It will be replaced in Makefile.common with the right settings!
+
 ARCH_DESC	= "Windows WIN64 cross-compilation on UNIX"
 PREFIX		=
 BINDIR		=
 DATADIR		=
 CC		= x86_64-w64-mingw32-gcc
 STRIP		= x86_64-w64-mingw32-strip
-SDLCFG		= /usr/local/cross-tools/x86_64-w64-mingw32/bin/sdl2-config
 GENOPTS		= -Ofast -fno-common -falign-functions=16 -falign-loops=16 -ffast-math
-CFLAGS_ARCH	= $(GENOPTS) -Wall -pipe $(shell $(SDLCFG) --cflags)
-LDFLAGS_ARCH	= $(GENOPTS) $(shell $(SDLCFG) --libs)
+CFLAGS_ARCH	= $(GENOPTS) -Wall -pipe ::CFLAGS::
+LDFLAGS_ARCH	= $(GENOPTS) ::LDFLAGS::

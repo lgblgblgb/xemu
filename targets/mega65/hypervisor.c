@@ -15,12 +15,12 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "emutools.h"
+#include "xemu/emutools.h"
 #include "mega65.h"
 #include "hypervisor.h"
-#include "cpu65c02.h"
+#include "xemu/cpu65c02.h"
 #include "vic3.h"
-#include "dmagic.h"
+#include "xemu/f018_core.h"
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -31,10 +31,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 int in_hypervisor;			// mega65 hypervisor mode
-Uint8 kicked_hypervisor = 0x80;		// 0x80 signals for XEMU (not for a real M65!) to *ASK* the user. It won't be the final answer!
 Uint8 hypervisor_memory[0x4001];	// 16K+1 byte, 1 byte is just used for length check on loading, ugly enough, indeed.
 
-static const char empty_string[] = "";
 static char debug_lines[0x4000][2][INFO_MAX_SIZE];		// I know. UGLY! and wasting memory. But this is only a HACK :)
 static int resolver_ok = 0;
 

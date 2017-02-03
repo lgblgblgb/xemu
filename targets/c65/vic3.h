@@ -36,4 +36,10 @@ extern void  vic3_select_bank ( int bank );
 extern void  vic3_open_frame_access ( void );
 extern int   vic3_render_scanline ( void );
 
+#ifdef XEMU_SNAPSHOT_SUPPORT
+#include "xemu/emutools_snapshot.h"
+extern int vic3_snapshot_load_state ( const struct xemu_snapshot_definition_st *def , struct xemu_snapshot_block_st *block );
+extern int vic3_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
+#endif
+
 #endif

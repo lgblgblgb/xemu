@@ -19,11 +19,11 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "emutools.h"
-#include "emutools_hid.h"
+#include "xemu/emutools.h"
+#include "xemu/emutools_hid.h"
 #include "commodore_vic20.h"
-#include "cpu65c02.h"
-#include "via65c22.h"
+#include "xemu/cpu65c02.h"
+#include "xemu/via65c22.h"
 #include "vic6561.h"
 
 #define SCREEN_HEIGHT		(SCREEN_LAST_VISIBLE_SCANLINE - SCREEN_FIRST_VISIBLE_SCANLINE + 1)
@@ -515,16 +515,16 @@ static int rom_load ( const char *name, void *buffer, int size )
 int main ( int argc, char **argv )
 {
 	int cycles;
-	printf("**** The Inaccurate Commodore VIC-20 emulator from LGB" NL
-	"INFO: CPU clock frequency (calculated) %d Hz (wanted: %d Hz)" NL
-	"INFO: Texture resolution is %dx%d" NL
-	"INFO: Defined visible area is (%d,%d)-(%d,%d)" NL "%s" NL,
+	xemu_dump_version(stdout, "The Inaccurate Commodore VIC-20 emulator from LGB");
+	printf(
+		"INFO: CPU clock frequency (calculated) %d Hz (wanted: %d Hz)" NL
+		"INFO: Texture resolution is %dx%d" NL
+		"INFO: Defined visible area is (%d,%d)-(%d,%d)" NL NL,
 		(int)((LAST_SCANLINE + 1) * CYCLES_PER_SCANLINE * (1000000.0 / (double)FULL_FRAME_USECS) * 2),
 		REAL_CPU_SPEED,
 		SCREEN_WIDTH, SCREEN_HEIGHT,
 		SCREEN_FIRST_VISIBLE_DOTPOS, SCREEN_FIRST_VISIBLE_SCANLINE,
-		SCREEN_LAST_VISIBLE_DOTPOS,  SCREEN_LAST_VISIBLE_SCANLINE,
-		emulators_disclaimer
+		SCREEN_LAST_VISIBLE_DOTPOS,  SCREEN_LAST_VISIBLE_SCANLINE
 	);
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (emu_init_sdl(

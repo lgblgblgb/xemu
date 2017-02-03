@@ -77,8 +77,8 @@ extern Uint8 gs_regs[0x1000];
 extern void  apply_memory_config ( void );
 extern Uint8 io_read  ( int addr );
 extern void  io_write ( int addr, Uint8 data );
-extern void  REGPARM(2) write_phys_mem ( int addr, Uint8 data );
-extern Uint8 REGPARM(1) read_phys_mem  ( int addr );
+extern void  write_phys_mem ( int addr, Uint8 data );
+extern Uint8 read_phys_mem  ( int addr );
 
 extern void m65mon_show_regs ( void );
 extern void m65mon_dumpmem16 ( Uint16 addr );

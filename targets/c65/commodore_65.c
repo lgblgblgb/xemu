@@ -15,27 +15,29 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "emutools.h"
+#include "xemu/emutools.h"
 #include "commodore_65.h"
-#include "cpu65c02.h"
-#include "cia6526.h"
-#include "f011_core.h"
+#include "xemu/cpu65c02.h"
+#include "xemu/cia6526.h"
+#include "xemu/f011_core.h"
 #include "c65_d81_image.h"
-#include "c65dma.h"
-#include "emutools_hid.h"
+#include "xemu/f018_core.h"
+#include "xemu/emutools_hid.h"
 #include "vic3.h"
-#include "sid.h"
-#include "cbmhostfs.h"
-#include "c64_kbd_mapping.h"
-#include "emutools_config.h"
+#include "xemu/sid.h"
+#include "xemu/cbmhostfs.h"
+#include "xemu/c64_kbd_mapping.h"
+#include "xemu/emutools_config.h"
+#include "c65_snapshot.h"
 
 
 
 static SDL_AudioDeviceID audio = 0;
 
 Uint8 memory[0x100000];			// 65CE02 MAP'able address space
-static struct Cia6526 cia1, cia2;	// CIA emulation structures for the two CIAs
-static struct SidEmulation sids[2];	// the two SIDs
+struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
+struct SidEmulation sids[2];		// the two SIDs
+static int nmi_level;			// please read the comment at nmi_set() below
 
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request
 // It must be high enough not to collide with the 1Mbyte address space + almost-64K "overflow" area and mapping should not cause to alter lower 12 bits of the addresses,
@@ -133,13 +135,43 @@ void apply_memory_config ( void )
 
 
 
-static void cia_setint_cb ( int level )
+static void cia1_setint_cb ( int level )
 {
 	DEBUG("%s: IRQ level changed to %d" NL, cia1.name, level);
 	if (level)
 		cpu_irqLevel |= 1;
 	else
 		cpu_irqLevel &= ~1;
+}
+
+
+static inline void nmi_set ( int level, int mask )
+{
+	// NMI is a low active _EDGE_ triggered 65xx input ... In my emulator though, the signal
+	// is "high active", and also we must form the "edge" ourselves from "level". NMI level is
+	// set as a 2bit number, on bit 0, CIA2, on bit 1, keyboard RESTORE key. Thus having zero
+	// value for level means (in the emu!) that not RESTORE key is pressed neither CIA2 has active
+	// IRQ output, non-zero value means some activation. Well, if I am not confused enough here,
+	// this should mean that nmi_level zero->non-zero transit should produce the edge (which should
+	// be the falling edge in the real hardware anyway ... but the rising here. heh, I should follow
+	// the signal level of the hardware in my emulator, honestly ...)
+	int nmi_new_level;
+	if (level)
+		nmi_new_level = nmi_level | mask;
+	else
+		nmi_new_level = nmi_level & (~mask);
+	if ((!nmi_level) && nmi_new_level) {
+		DEBUG("NMI edge is emulated towards the CPU (%d->%d)" NL, nmi_level, nmi_new_level);
+		cpu_nmiEdge = 1;	// the "NMI edge" trigger is deleted by the CPU emulator itself (it's not a level trigger)
+	}
+	nmi_level = nmi_new_level;
+}
+
+
+
+static void cia2_setint_cb ( int level )
+{
+	nmi_set(level, 1);
 }
 
 
@@ -202,6 +234,19 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 }
 
 
+#ifdef XEMU_SNAPSHOT_SUPPORT
+static const char *c65_snapshot_saver_filename = NULL;
+static void c65_snapshot_saver_on_exit_callback ( void )
+{
+	if (!c65_snapshot_saver_filename)
+		return;
+	if (xemusnap_save(c65_snapshot_saver_filename))
+		ERROR_WINDOW("Could not save snapshot \"%s\": %s", c65_snapshot_saver_filename, xemusnap_error_buffer);
+	else
+		INFO_WINDOW("Snapshot has been saved to \"%s\".", c65_snapshot_saver_filename);
+}
+#endif
+
 
 static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 {
@@ -213,6 +258,7 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		SDL_ENABLE		// joy HID events enabled
 	);
 	joystick_emu = 1;
+	nmi_level = 0;
 	// *** host-FS
 	p = emucfg_get_str("hostfsdir");
 	if (p)
@@ -239,7 +285,7 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		cia1_in_a,		// callback: INA ~ joy#2
 		cia1_in_b,		// callback: INB ~ keyboard
 		NULL,			// callback: INSR
-		cia_setint_cb		// callback: SETINT
+		cia1_setint_cb		// callback: SETINT
 	);
 	cia_init(&cia2, "CIA-2",
 		cia2_out_a,		// callback: OUTA ~ eg VIC-II bank
@@ -248,10 +294,22 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		cia_port_in_dummy,	// callback: INA
 		NULL,			// callback: INB
 		NULL,			// callback: INSR
-		NULL			// callback: SETINT ~ that would be NMI in our case
+		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	// *** Initialize DMA
-	dma_init();
+	dma_init(
+		emucfg_get_num("dmarev"),
+		read_phys_mem,	// dma_reader_cb_t set_source_mreader ,
+		write_phys_mem,	// dma_writer_cb_t set_source_mwriter ,
+		read_phys_mem,	// dma_reader_cb_t set_target_mreader ,
+		write_phys_mem,	// dma_writer_cb_t set_target_mwriter,
+		io_read,	// dma_reader_cb_t set_source_ioreader,
+		io_write,	// dma_writer_cb_t set_source_iowriter,
+		io_read,	// dma_reader_cb_t set_target_ioreader,
+		io_write,	// dma_writer_cb_t set_target_iowriter,
+		read_phys_mem	// dma_reader_cb_t set_list_reader
+	);
+	dma_set_phys_io_offset(0);
 	// Initialize FDC
 	fdc_init();
 	c65_d81_init(emucfg_get_str("8"));
@@ -282,7 +340,22 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// *** RESET CPU, also fetches the RESET vector into PC
 	cpu_reset();
 	DEBUG("INIT: end of initialization!" NL);
+	// *** Snapshot init and loading etc should be the LAST!!!! (at least the load must be last to have initiated machine state, xemusnap_init() can be called earlier too)
+#ifdef XEMU_SNAPSHOT_SUPPORT
+	xemusnap_init(c65_snapshot_definition);
+	p = emucfg_get_str("snapload");
+	if (p) {
+		if (xemusnap_load(p))
+			FATAL("Couldn't load snapshot \"%s\": %s", p, xemusnap_error_buffer);
+	}
+	c65_snapshot_saver_filename = emucfg_get_str("snapsave");
+	atexit(c65_snapshot_saver_on_exit_callback);
+#endif
 }
+
+
+
+
 
 
 
@@ -624,6 +697,8 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			vic3_registers[0x30] = 0;
 			apply_memory_config();
 			cpu_reset();
+			dma_reset();
+			nmi_level = 0;
 			DEBUG("RESET!" NL);
 		} else if (key == SDL_SCANCODE_KP_ENTER)
 			c64_toggle_joy_emu();
@@ -635,6 +710,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 static void update_emulator ( void )
 {
 	hid_handle_all_sdl_events();
+	nmi_set(IS_RESTORE_PRESSED(), 2); // Custom handling of the restore key ...
 	emu_timekeeping_delay(40000);
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
 	if (seconds_timer_trigger) {
@@ -647,19 +723,21 @@ static void update_emulator ( void )
 
 
 
+
 int main ( int argc, char **argv )
 {
 	int cycles;
-	printf("**** The Unusable Commodore 65 emulator from LGB" NL
-	"INFO: Texture resolution is %dx%d" NL "%s" NL,
-		SCREEN_WIDTH, SCREEN_HEIGHT,
-		emulators_disclaimer
-	);
+	xemu_dump_version(stdout, "The Unusable Commodore 65 emulator from LGB");
 	emucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
+	emucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip (0=F018A, other=F018B)");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	emucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
 	//emucfg_define_switch_option("noaudio", "Disable audio");
 	emucfg_define_str_option("rom", "c65-system.rom", "Override system ROM path to be loaded");
+#ifdef XEMU_SNAPSHOT_SUPPORT
+	emucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
+	emucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
+#endif
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
@@ -715,3 +793,53 @@ int main ( int argc, char **argv )
 	}
 	return 0;
 }
+
+/* --- SNAPSHOT RELATED --- */
+
+#ifdef XEMU_SNAPSHOT_SUPPORT
+
+#include <string.h>
+
+#define SNAPSHOT_C65_BLOCK_VERSION	0
+#define SNAPSHOT_C65_BLOCK_SIZE		0x100
+
+
+int c65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
+{
+	Uint8 buffer[SNAPSHOT_C65_BLOCK_SIZE];
+	int a;
+	if (block->block_version != SNAPSHOT_C65_BLOCK_VERSION || block->sub_counter || block->sub_size != sizeof buffer)
+		RETURN_XSNAPERR_USER("Bad C65 block syntax");
+	a = xemusnap_read_file(buffer, sizeof buffer);
+	if (a) return a;
+	/* loading state ... */
+	map_mask = (int)P_AS_BE32(buffer + 0);
+	map_offset_low = (int)P_AS_BE32(buffer + 4);
+	map_offset_high = (int)P_AS_BE32(buffer + 8);
+	cpu_inhibit_interrupts = (int)P_AS_BE32(buffer + 12);
+	return 0;
+}
+
+
+int c65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
+{
+	Uint8 buffer[SNAPSHOT_C65_BLOCK_SIZE];
+	int a = xemusnap_write_block_header(def->idstr, SNAPSHOT_C65_BLOCK_VERSION);
+	if (a) return a;
+	memset(buffer, 0xFF, sizeof buffer);
+	/* saving state ... */
+	U32_AS_BE(buffer +  0, map_mask);
+	U32_AS_BE(buffer +  4, map_offset_low);
+	U32_AS_BE(buffer +  8, map_offset_high);
+	U32_AS_BE(buffer + 12, cpu_inhibit_interrupts);
+	return xemusnap_write_sub_block(buffer, sizeof buffer);
+}
+
+
+int c65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
+{
+	apply_memory_config();
+	printf("SNAP: loaded (finalize-callback!)." NL);
+	return 0;
+}
+#endif

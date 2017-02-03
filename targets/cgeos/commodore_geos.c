@@ -30,17 +30,17 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "emutools.h"
+#include "xemu/emutools.h"
 #include "commodore_geos.h"
-#include "cpu65c02.h"
-#include "cia6526.h"
-#include "emutools_hid.h"
-#include "c64_kbd_mapping.h"
+#include "xemu/cpu65c02.h"
+#include "xemu/cia6526.h"
+#include "xemu/emutools_hid.h"
+#include "xemu/c64_kbd_mapping.h"
 #include "geos.h"
 
 
 #define DISK_IMAGE_SIZE	819200
-static Uint8 disk_image[DISK_IMAGE_SIZE + 1];
+//static Uint8 disk_image[DISK_IMAGE_SIZE + 1];
 
 /*
       -- Port pin (bit)    $A000 to $BFFF       $D000 to $DFFF       $E000 to $FFFF
@@ -118,6 +118,7 @@ static int    vic2_interrupt_status;	// Interrupt status of VIC
 static Uint8 *vic2_sprite_pointers;
 static int    warp = 1;			// warp speed for initially to faster "boot" for C64
 static int    geos_loaded = 0;
+static int    nmi_level;		// please read the comment at nmi_set() below
 
 
 static const Uint8 init_vic2_palette_rgb[16 * 3] = {	// VIC2 palette given by RGB components
@@ -461,7 +462,7 @@ void vic2_render_screen ( void )
 
 
 
-static void cia_setint_cb ( int level )
+static void cia1_setint_cb ( int level )
 {
 	DEBUG("%s: IRQ level changed to %d" NL, cia1.name, level);
 	if (level)
@@ -470,6 +471,34 @@ static void cia_setint_cb ( int level )
 		cpu_irqLevel &= ~1;
 }
 
+
+static inline void nmi_set ( int level, int mask )
+{
+	// NMI is a low active _EDGE_ triggered 65xx input ... In my emulator though, the signal
+	// is "high active", and also we must form the "edge" ourselves from "level". NMI level is
+	// set as a 2bit number, on bit 0, CIA2, on bit 1, keyboard RESTORE key. Thus having zero
+	// value for level means (in the emu!) that not RESTORE key is pressed neither CIA2 has active
+	// IRQ output, non-zero value means some activation. Well, if I am not confused enough here,
+	// this should mean that nmi_level zero->non-zero transit should produce the edge (which should
+	// be the falling edge in the real hardware anyway ... but the rising here. heh, I should follow
+	// the signal level of the hardware in my emulator, honestly ...)
+	int nmi_new_level;
+	if (level)
+		nmi_new_level = nmi_level | mask;
+	else
+		nmi_new_level = nmi_level & (~mask);
+	if ((!nmi_level) && nmi_new_level) {
+		DEBUG("NMI edge is emulated towards the CPU (%d->%d)" NL, nmi_level, nmi_new_level);
+		cpu_nmiEdge = 1;	// the "NMI edge" trigger is deleted by the CPU emulator itself (it's not a level trigger)
+	}
+	nmi_level = nmi_new_level;
+}
+
+
+static void cia2_setint_cb ( int level )
+{
+	nmi_set(level, 1);
+}
 
 
 void clear_emu_events ( void )
@@ -547,6 +576,7 @@ static void geosemu_init ( const char *disk_image_name )
 		SDL_ENABLE		// joy HID events enabled
 	);
 	joystick_emu = 1;
+	nmi_level = 0;
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
 	cpu_port_write(0, CPU_PORT_DEFAULT_VALUE0);
@@ -577,7 +607,7 @@ static void geosemu_init ( const char *disk_image_name )
 		cia1_in_a,		// callback: INA ~ joy#2
 		cia1_in_b,		// callback: INB ~ keyboard
 		NULL,			// callback: INSR
-		cia_setint_cb		// callback: SETINT
+		cia1_setint_cb		// callback: SETINT
 	);
 	cia_init(&cia2, "CIA-2",
 		cia2_out_a,		// callback: OUTA ~ eg VIC-II bank
@@ -586,7 +616,7 @@ static void geosemu_init ( const char *disk_image_name )
 		cia_port_in_dummy,	// callback: INA
 		NULL,			// callback: INB
 		NULL,			// callback: INSR
-		NULL			// callback: SETINT ~ that would be NMI in our case
+		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	// Initialize Disk Image
 	// TODO
@@ -728,6 +758,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			cpu_port_write(0, CPU_PORT_DEFAULT_VALUE0);
 			cpu_port_write(1, CPU_PORT_DEFAULT_VALUE1);
 			cpu_reset();
+			nmi_level = 0;
 			DEBUG("RESET!" NL);
 		} else if (key == SDL_SCANCODE_KP_ENTER)
 			c64_toggle_joy_emu();
@@ -739,6 +770,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 static void update_emulator ( void )
 {
 	hid_handle_all_sdl_events();
+	nmi_set(IS_RESTORE_PRESSED(), 2);	// Custom handling of the restore key ...
 	// Screen rendering: begin
 	vic2_render_screen();
 	// Screen rendering: end
@@ -757,11 +789,7 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles, frameskip;
-	printf("**** The Unexplained Commodore GEOS emulator from LGB" NL
-	"INFO: Texture resolution is %dx%d" NL "%s" NL,
-		SCREEN_WIDTH, SCREEN_HEIGHT,
-		emulators_disclaimer
-	);
+	xemu_dump_version(stdout, "The Unexplained Commodore GEOS emulator from LGB");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
         if (emu_init_sdl(
 		TARGET_DESC APP_DESC_APPEND,	// window title

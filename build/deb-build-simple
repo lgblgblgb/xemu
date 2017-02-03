@@ -3,9 +3,10 @@
 # (C)2016 LGB Gabor Lenart
 
 PROJECT="xemu"
-DEPENDENCY="libsdl2-2.0-0 (>= 2.0.4), libc6 (>= 2.15)"
+DEPENDENCY="libsdl2-2.0-0 (>= 2.0.4), libc6 (>= 2.15), libreadline6 (>= 6.3), libgtk-3-0 (>= 3.18)"
 AUTHOR="Gábor Lénárt <lgblgblgb@gmail.com>"
 WEBSITE="https://github.com/lgblgblgb/xemu/wiki"
+BUGSITE="https://github.com/lgblgblgb/xemu/issues"
 VERSION="`date '+%Y%m%d%H%M%S'`"
 ROOT=".dist/${PROJECT}_$VERSION"
 ARCH=`dpkg --print-architecture`
@@ -23,7 +24,7 @@ echo "Build architecture: $ARCH"
 
 rm -fr .dist || exit 1
 
-mkdir -p $BINDIR $DATADIR $ROOT/DEBIAN || exit 1
+mkdir -p $BINDIR $DATADIR $ROOT/DEBIAN $ROOT/usr/share/doc/$PROJECT || exit 1
 
 for a in bin/*.native ; do
 	b="$BINDIR/xemu-`basename $a .native`"
@@ -32,9 +33,18 @@ for a in bin/*.native ; do
 	strip $b
 done
 
+gzip -9 < ../LICENSE > $ROOT/usr/share/doc/$PROJECT/COPYING.gz
+gzip -9 < ../README.md > $ROOT/usr/share/doc/$PROJECT/README.gz
+echo "Ugly, direct binary build, without source package :(" > $ROOT/usr/share/doc/$PROJECT/README.Debian
+git log --max-count=100 | gzip -9 > $ROOT/usr/share/doc/$PROJECT/changelog.Debian.gz
+echo "(C) $AUTHOR" > $ROOT/usr/share/doc/$PROJECT/copyright
+echo "$WEBSITE" >> $ROOT/usr/share/doc/$PROJECT/copyright
+echo >> $ROOT/usr/share/doc/$PROJECT/copyright
+cat ../LICENSE >> $ROOT/usr/share/doc/$PROJECT/copyright
+
 echo "Package: $PROJECT
 Version: $VERSION
-Section: base
+Section: universe/otherosfs
 Priority: optional
 Architecture: $ARCH
 Depends: $DEPENDENCY
@@ -45,7 +55,9 @@ Description: Collection of software emulations of some (mainly 8 bit) computers.
   work will provide Mega-65 emulation too. Xemu uses SDL2, and can run on Linux/UNIX,
   Windows and OSX, also there is the possibility to use it within a web-browser with
   the help of the Emscripten compiler.
-Homepage: $WEBSITE" > $ROOT/DEBIAN/control
+Homepage: $WEBSITE
+Bugs: $BUGSITE
+Original-Maintainer: $AUTHOR" > $ROOT/DEBIAN/control
 
 
 echo "#!/bin/sh" > $BINDIR/xemu-download-data
@@ -63,5 +75,18 @@ mv .dist/*.deb bin/$DEB
 rm -fr .dist
 
 ls -l bin/$DEB || exit 1
+
+cd bin
+
+rm -f *.rpm
+fakeroot alien -r $DEB
+pwd
+if [ -f *.rpm ]; then
+	ls -l *.rpm
+	RPM="`ls *.rpm`"
+	echo $RPM
+	mv $RPM `echo $RPM | sed 's/[0-9][0-9-]*/current-1/'`
+	ls -l *.rpm
+fi
 
 exit 0

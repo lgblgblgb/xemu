@@ -30,42 +30,78 @@ include $(TOPDIR)/build/Makefile.$(ARCH)
 # If you want to compile with -g option, also *DELETE* the -flto, both of them together known to be problematic!
 DEBUG			=
 
+# Resolve syms from target specific Makefile which includes this one, based on the $PRG_TARGET (for multi make target emu targets ...)
+CFLAGS_TARGET		= $(CFLAGS_TARGET_$(PRG_TARGET))
+SRCS_TARGET		= $(SRCS_TARGET_$(PRG_TARGET))
+SRCS_COMMON		= $(SRCS_COMMON_$(PRG_TARGET)) emutools_buildinfo.c
+CONFIG_CFLAGS_TARGET	= $(CONFIG_CFLAGS_TARGET_$(PRG_TARGET))
+CONFIG_LDFLAGS_TARGET	= $(CONFIG_LDFLAGS_TARGET_$(PRG_TARGET))
+LDFLAGS_TARGET		= $(LDFLAGS_TARGET_$(PRG_TARGET))
+# ----
 PRG_TOP_REL		= build/bin/$(PRG_TARGET).$(ARCH)
 PRG			= $(TOPDIR)/$(PRG_TOP_REL)
-COMMONDIR		= $(TOPDIR)/common
-CFLAGS_WITHOUT_DEBUG	= $(CFLAGS_ARCH) $(CFLAGS_TARGET) -I. -I$(COMMONDIR)
+COMMONDIR		= $(TOPDIR)/xemu
+CFLAGS_WITHOUT_DEBUG	= $(CFLAGS_ARCH) $(CFLAGS_TARGET) -I. -I$(TOPDIR)
 ifeq ($(NATIVE), yes)
 CFLAGS_WITHOUT_DEBUG	+= -mtune=native -march=native
 endif
-CFLAGS			= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG) -include arch-sys-$(ARCH).h -include xemu-target.h
-LDFLAGS			= $(DEBUG) $(LDFLAGS_ARCH)
-OBJPREFIX       	= $(TOPDIR)/build/objs/$(ARCH)-$(TARGET)--
-DEPFILE			= $(OBJPREFIX)make.depend
-DEPALL			= Makefile $(TOPDIR)/build/Makefile.common $(TOPDIR)/build/Makefile.$(ARCH)
-SRCS			= $(addprefix $(COMMONDIR)/, $(SRCS_COMMON)) $(SRCS_TARGET)
-OBJS			= $(addprefix $(OBJPREFIX), $(notdir $(SRCS:.c=.o)))
+PRE_CFLAGS		= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG) -include xemu/arch-sys-$(ARCH).h
+PRE_LDFLAGS		= $(DEBUG) $(LDFLAGS_ARCH)
+COMMONOBJPREFIX		= $(TOPDIR)/build/objs/c-$(ARCH)-$(TARGET)-$(PRG_TARGET)--
+TARGETOBJPREFIX		= $(TOPDIR)/build/objs/t-$(ARCH)-$(TARGET)-$(PRG_TARGET)--
+DEPFILEPREFIX		= $(TOPDIR)/build/objs/m-$(ARCH)-$(TARGET)-$(PRG_TARGET)--make
+DEPFILE			= $(DEPFILEPREFIX).depend
+DEPALL_BUILDFILES	= Makefile.common Makefile.$(ARCH) system-config-settings.txt system-config
+DEPALL			= Makefile $(addprefix $(TOPDIR)/build/, $(DEPALL_BUILDFILES))
+TARGETOBJS		= $(addprefix $(TARGETOBJPREFIX), $(notdir $(SRCS_TARGET:.c=.o)))
+COMMONOBJS		= $(addprefix $(COMMONOBJPREFIX), $(notdir $(SRCS_COMMON:.c=.o)))
+SRCS_COMMON_PREFIXED	= $(addprefix $(COMMONDIR)/, $(SRCS_COMMON))
+SRCS_TARGET_PREFIXED	= $(SRCS_TARGET)
+SRCS			= $(SRCS_COMMON_PREFIXED) $(SRCS_TARGET_PREFIXED)
+OBJS			= $(TARGETOBJS) $(COMMONOBJS)
 ASMOUT			= no
 
+# System configuration ...
+CFLAGS	= $(strip $(subst ::CFLAGS::, $(shell $(TOPDIR)/build/system-config $(ARCH) "$(CONFIG_CFLAGS_TARGET)" cflags ), $(PRE_CFLAGS)))
+LDFLAGS	= $(strip $(subst ::LDFLAGS::, $(shell $(TOPDIR)/build/system-config $(ARCH) "$(CONFIG_LDFLAGS_TARGET)" ldflags ), $(PRE_LDFLAGS)))
 
 do-all:
 	$(MAKE) $(DEPFILE)
 	$(MAKE) $(PRG)
 
-$(OBJPREFIX)%.o: %.c $(DEPALL)
+xemu-info:
+	@echo "-------------------------------------------"
+	@echo "Architecture: $(ARCH)"
+	@echo "Target: $(TARGET)"
+	@echo "Program name target: $(PRG_TARGET)"
+	@echo "Compiler: $(CC)"
+	@echo "Compiler flags: $(CFLAGS)"
+	@echo "Linking flags: $(LDFLAGS)"
+	@echo "Requested configuration for CFLAGS: $(CONFIG_CFLAGS_TARGET)"
+	@echo "Requested configuration for LDFLAGS: $(CONFIG_LDFLAGS_TARGET)"
+	@echo "Xemu-framework needed sources: $(SRCS_COMMON)"
+	@echo "Target-specific needed sources: $(SRCS_TARGET)"
+	@echo "Dependecy file created: $(DEPFILE)"
+
+$(TARGETOBJPREFIX)%.o: %.c $(DEPALL)
 ifeq ($(ASMOUT), yes)
 	$(CC) $(CFLAGS) -Wa,-adhln -masm=intel -g -c -o /dev/null $< > $(@:.o=.s)
 endif
 	$(CC) $(CFLAGS) -c -o $@ $<
 
-$(OBJPREFIX)%.o: $(COMMONDIR)/%.c $(DEPALL)
+$(COMMONOBJPREFIX)%.o: $(COMMONDIR)/%.c $(DEPALL)
 ifeq ($(ASMOUT), yes)
 	$(CC) $(CFLAGS) -Wa,-adhln -masm=intel -g -c -o /dev/null $< > $(@:.o=.s)
 endif
 	$(CC) $(CFLAGS) -c -o $@ $<
-
 
 $(PRG): $(OBJS) $(DEPALL)
-	$(CC) -o $(PRG) $(OBJS) $(LDFLAGS)
+	@echo "const char *XEMU_BUILDINFO_ON  = \"`whoami`@`uname -n` on `uname -s` `uname -r`\";" > $(DEPFILEPREFIX)-buildinfo.c
+	@echo "const char *XEMU_BUILDINFO_AT  = \"`date`\";" >> $(DEPFILEPREFIX)-buildinfo.c
+	@echo "const char *XEMU_BUILDINFO_GIT = \"`git config --get remote.origin.url` `git rev-parse --abbrev-ref HEAD` `git rev-parse HEAD`\";" >> $(DEPFILEPREFIX)-buildinfo.c
+	@echo "const char *XEMU_BUILDINFO_TARGET = \"$(PRG_TARGET) ($(PRG)) for $(TARGET) on $(ARCH) using $(CC)\";" >> $(DEPFILEPREFIX)-buildinfo.c
+	$(CC) $(CFLAGS) -c -o $(DEPFILEPREFIX)-buildinfo.o $(DEPFILEPREFIX)-buildinfo.c
+	$(CC) -o $(PRG) $(OBJS) $(DEPFILEPREFIX)-buildinfo.o $(LDFLAGS)
 
 run:	$(PRG)
 	cd $(TOPDIR) && XEMU_DEBUG_FILE=debug.log $(PRG_TOP_REL)
@@ -78,13 +114,17 @@ dep:
 	$(MAKE) $(DEPFILE)
 
 $(DEPFILE): $(DEPALL) $(SRCS)
-	$(CC) -MM $(CFLAGS) $(SRCS) | awk '/^[^.:\t ]+\.o:/ { print "$(OBJPREFIX)" $$0 ; next } { print }' > $(DEPFILE)
+	$(CC) -MM $(CFLAGS) $(SRCS_TARGET_PREFIXED) > $(DEPFILEPREFIX)-target-pre.depend
+	awk '/^[^.:\t ]+\.o:/ { print "$(TARGETOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-target-pre.depend > $(DEPFILEPREFIX)-target.depend
+	$(CC) -MM $(CFLAGS) $(SRCS_COMMON_PREFIXED) > $(DEPFILEPREFIX)-common-pre.depend
+	awk '/^[^.:\t ]+\.o:/ { print "$(COMMONOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-common-pre.depend > $(DEPFILEPREFIX)-common.depend
+	cat $(DEPFILEPREFIX)-target.depend $(DEPFILEPREFIX)-common.depend > $@
+	rm -f $(DEPFILEPREFIX)-target-pre.depend $(DEPFILEPREFIX)-common-pre.depend
 
 clean:
-	rm -f $(OBJPREFIX)* $(PRG)
+	rm -f $(TOPDIR)/build/objs/?-$(ARCH)-$(TARGET)-* $(PRG)
 
-
-.PHONY: clean all strip dep do-all run
+.PHONY: clean all strip dep do-all run xemu-info
 
 ifneq ($(wildcard $(DEPFILE)),)
 include $(DEPFILE)

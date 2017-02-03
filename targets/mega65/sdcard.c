@@ -16,11 +16,11 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
-#include "emutools.h"
+#include "xemu/emutools.h"
 #include "sdcard.h"
-#include "f011_core.h"
+#include "xemu/f011_core.h"
 #include "mega65.h"
-#include "cpu65c02.h"
+#include "xemu/cpu65c02.h"
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -384,3 +384,57 @@ Uint8 sdcard_read_register ( int reg )
 	}
 	return data;
 }
+
+
+/* --- SNAPSHOT RELATED --- */
+
+
+#ifdef XEMU_SNAPSHOT_SUPPORT
+
+#include <string.h>
+
+#define SNAPSHOT_SDCARD_BLOCK_VERSION	0
+#define SNAPSHOT_SDCARD_BLOCK_SIZE	(0x100 + sizeof(sd_buffer))
+
+int sdcard_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
+{
+	Uint8 buffer[SNAPSHOT_SDCARD_BLOCK_SIZE];
+	int a;
+	if (block->block_version != SNAPSHOT_SDCARD_BLOCK_VERSION || block->sub_counter || block->sub_size != sizeof buffer)
+		RETURN_XSNAPERR_USER("Bad SD-Card block syntax");
+	a = xemusnap_read_file(buffer, sizeof buffer);
+	if (a) return a;
+	/* loading state ... */
+	memcpy(sd_sector_bytes, buffer, 4);
+	memcpy(sd_d81_img1_start, buffer + 4, 4);
+	mounted = (int)P_AS_BE32(buffer + 8);
+	sdcard_bytes_read = (int)P_AS_BE32(buffer + 12);
+	sd_is_read_only = (int)P_AS_BE32(buffer + 16);
+	d81_is_read_only = (int)P_AS_BE32(buffer + 20);
+	use_d81 = (int)P_AS_BE32(buffer + 24);
+	sd_status = buffer[0xFF];
+	memcpy(sd_buffer, buffer + 0x100, sizeof sd_buffer);
+	return 0;
+}
+
+
+int sdcard_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
+{
+	Uint8 buffer[SNAPSHOT_SDCARD_BLOCK_SIZE];
+	int a = xemusnap_write_block_header(def->idstr, SNAPSHOT_SDCARD_BLOCK_VERSION);
+	if (a) return a;
+	memset(buffer, 0xFF, sizeof buffer);
+	/* saving state ... */
+	memcpy(buffer, sd_sector_bytes, 4);
+	memcpy(buffer + 4,sd_d81_img1_start, 4);
+	U32_AS_BE(buffer + 8, mounted);
+	U32_AS_BE(buffer + 12, sdcard_bytes_read);
+	U32_AS_BE(buffer + 16, sd_is_read_only);
+	U32_AS_BE(buffer + 20, d81_is_read_only);
+	U32_AS_BE(buffer + 24, use_d81);
+	buffer[0xFF] = sd_status;
+	memcpy(buffer + 0x100, sd_buffer, sizeof sd_buffer);
+	return xemusnap_write_sub_block(buffer, sizeof buffer);
+}
+
+#endif

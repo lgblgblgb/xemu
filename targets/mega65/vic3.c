@@ -22,11 +22,10 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
-#include "emutools.h"
+#include "xemu/emutools.h"
 #include "mega65.h"
-#include "cpu65c02.h"
+#include "xemu/cpu65c02.h"
 #include "vic3.h"
-#include "emutools.h"
 
 #define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
 
@@ -669,3 +668,50 @@ void vic3_render_screen ( void )
 	emu_update_screen();
 }
 
+
+/* --- SNAPSHOT RELATED --- */
+
+
+#ifdef XEMU_SNAPSHOT_SUPPORT
+
+#include <string.h>
+
+#define SNAPSHOT_VIC4_BLOCK_VERSION	0
+#define SNAPSHOT_VIC4_BLOCK_SIZE	0x400
+
+int vic4_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
+{
+	Uint8 buffer[SNAPSHOT_VIC4_BLOCK_SIZE];
+	int a;
+	if (block->block_version != SNAPSHOT_VIC4_BLOCK_VERSION || block->sub_counter || block->sub_size != sizeof buffer)
+		RETURN_XSNAPERR_USER("Bad VIC-4 block syntax");
+	a = xemusnap_read_file(buffer, sizeof buffer);
+	if (a) return a;
+	/* loading state ... */
+	for (a = 0; a < 0x80; a++) {
+		vic_iomode = VIC4_IOMODE;
+		vic3_write_reg(a, buffer[a + 0x80]);
+	}
+	for (a = 0; a < 0x300; a++)
+		vic3_write_palette_reg(a, buffer[a + 0x100]);
+	vic_iomode = buffer[128];
+	interrupt_status = (int)P_AS_BE32(buffer + 129);
+	return 0;
+}
+
+
+int vic4_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
+{
+	Uint8 buffer[SNAPSHOT_VIC4_BLOCK_SIZE];
+	int a = xemusnap_write_block_header(def->idstr, SNAPSHOT_VIC4_BLOCK_VERSION);
+	if (a) return a;
+	memset(buffer, 0xFF, sizeof buffer);
+	/* saving state ... */
+	memcpy(buffer + 0x80,  vic3_registers, 0x80);		//  $80 bytes
+	memcpy(buffer + 0x100, vic3_palette_nibbles, 0x300);	// $300 bytes
+	buffer[128] = vic_iomode;
+	U32_AS_BE(buffer + 129, interrupt_status);
+	return xemusnap_write_sub_block(buffer, sizeof buffer);
+}
+
+#endif

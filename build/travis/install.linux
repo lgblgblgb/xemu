@@ -28,7 +28,7 @@ fi
 
 
 echo "*** Installing packages (THIS MAY TAKE A WHILE)"
-CMD="apt-get -yq --no-install-suggests --no-install-recommends --force-yes install libc6-dev tar bzip2 binutils-mingw-w64-i686 binutils-mingw-w64-x86-64 gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 gcc make libsdl2-dev wget libreadline6-dev libgtk-3-dev git gawk sed coreutils file vim-common libc-bin fakeroot dpkg curl libcurl4-openssl-dev zip"
+CMD="apt-get -yq --no-install-suggests --no-install-recommends --force-yes install libc6-dev tar bzip2 binutils-mingw-w64-i686 binutils-mingw-w64-x86-64 gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 gcc make libsdl2-dev wget libreadline6-dev libgtk-3-dev git gawk sed coreutils file vim-common libc-bin fakeroot dpkg curl libcurl4-openssl-dev zip alien"
 echo $CMD
 $CMD &> /tmp/apt-install.log < /dev/null
 r="$?"

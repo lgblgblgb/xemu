@@ -17,8 +17,8 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
-#include "emutools.h"
-#include "f011_core.h"
+#include "xemu/emutools.h"
+#include "xemu/f011_core.h"
 #include "c65_d81_image.h"
 
 #include <sys/types.h>
