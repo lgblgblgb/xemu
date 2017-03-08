@@ -813,6 +813,7 @@ int main ( int argc, char **argv )
 					frameskip = 1;
 					emu_update_screen();
 					update_emulator();
+                                        dma_update();
 					vic3_open_frame_access();
 				}
 				sids[0].sFrameCount++;

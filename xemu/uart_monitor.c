@@ -303,7 +303,7 @@ void m65mon_do_trace ( void )
 {
         if (paused) {
                 umon_send_ok = 0; // delay command execution!
-                m65mon_callback = m65mon_show_disam ; //m65mon_show_regs; // register callback
+                m65mon_callback = m65mon_show_regs; // register callback
                 trace_step_trigger = 1; // trigger one step
         } else {
                 umon_printf(SYNTAX_ERROR "trace can be used only in trace mode");
