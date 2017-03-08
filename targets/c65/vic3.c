@@ -1,5 +1,5 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is the VIC3 "emulation". Currently it does scanline based rendering,
    though sprites are totally incorrect and rendered "at-once" after the
@@ -61,7 +61,7 @@ static int compare_raster;		// raster compare (9 bits width) data
 static int interrupt_status;		// Interrupt status of VIC
 static int blink_phase;			// blinking attribute helper: on/off phase of blink
 static int blink_counter;		// blinking attribute helper: counter for blink_phase change
-static int attributes;			// hardware attribute mode. NOTE: currently implemented for normal text mode only, which is not so correct!
+static Uint8 attributes;		// hardware attribute mode ($F0 ON, $00 OFF). NOTE: currently implemented for normal text mode only, which is not so correct!
 
 // (SDL) target texture rendering pointers
 static Uint32 *pixel;			// pixel pointer to the rendering target (one pixel: 32 bit)
@@ -160,6 +160,32 @@ static void renderer_invalid_mode ( void )
 }
 
 
+
+// FIXME: hardware attributes are supported now for only 40/80-col text mode!
+// FIXME: for real, it's supported for everything, _even_ for bitplane mode .......... (surprisingly ...)
+#define VIC3_ADJUST_BY_HARDWARE_ATTRIBUTES( has_attrib_condition, colour_var, vdata_var ) do {								\
+	if (has_attrib_condition) {															\
+		if ((colour_var & 0xF0) == 0x10) {	/* only the blink bit for the character is set */						\
+			if (blink_phase)														\
+				vdata_var = 0;	/* blinking character, in one phase, the character "disappears", ie blinking */				\
+			colour_var &= 15;														\
+		} else if ((!(colour_var & 0x10)) || blink_phase) {											\
+			if ((colour_var & 0x80) && (row_counter == 7))	/* underline (must be before reverse, as underline can be reversed as well!) */	\
+				vdata_var = 0xFF;	/* the underline */										\
+			if (colour_var & 0x20)	/* reverse bit for char */										\
+				vdata_var ^= 0xFF;													\
+			if (colour_var & 0x40)	/* highlight, this must be the LAST, since it sets the low nibble of coldata ... */			\
+				colour_var = 0x10 | (colour_var & 15);											\
+			else																\
+				colour_var &= 15;													\
+		} else																	\
+			colour_var &= 15;														\
+	} else																		\
+		colour_var &= 15;															\
+} while (0)
+
+
+
 static void renderer_text_40 ( void )
 {
 	Uint8 *vp = vicptr_video_40 + video_counter;
@@ -168,9 +194,11 @@ static void renderer_text_40 ( void )
 	Uint32 bg_colour = VIC_REG_COLOUR(0x21);
 	int a;
 	for (a = 0; a < 40; a++) {
-		//Uint8 vdata = vicptr_chargen[((*(vp++)) << 3) + row_counter];
 		Uint8 vdata = chargen[(*(vp++)) << 3];
-		Uint32 fg_colour = palette[*(cp++) & 15];
+		Uint32 colour = *(cp++);
+		Uint32 fg_colour;
+		VIC3_ADJUST_BY_HARDWARE_ATTRIBUTES(unlikely(colour & attributes), colour, vdata);
+		fg_colour = palette[colour];
 		pixel[ 0] = pixel[ 1] = vdata & 0x80 ? fg_colour : bg_colour;
 		pixel[ 2] = pixel[ 3] = vdata & 0x40 ? fg_colour : bg_colour;
 		pixel[ 4] = pixel[ 5] = vdata & 0x20 ? fg_colour : bg_colour;
@@ -192,30 +220,10 @@ static void renderer_text_80 ( void )
 	Uint32 bg_colour = VIC_REG_COLOUR(0x21);
 	int a;
 	for (a = 0; a < 80; a++) {
-		//Uint8 vdata = vicptr_chargen[((*(vp++)) << 3) + row_counter];
 		Uint8 vdata = chargen[(*(vp++)) << 3];
 		Uint8 colour = *(cp++);
 		Uint32 fg_colour;
-		if (attributes) {
-			// FIXME: hardware attributes are supported now for only 80-col text mode!
-			// FIXME: for real, it's supported for everything, even bitplane mode .......... (surprisingly ...)
-			if ((colour & 0xF0) == 0x10) {	// only the blink bit for the character is set
-				if (blink_phase)
-					vdata = 0;	// blinking character, in one phase, the character "disappears", ie blinking
-				colour &= 15;
-			} else if ((!(colour & 0x10)) || blink_phase) {
-				if ((colour & 0x80) && (row_counter == 7))	// underline (must be before reverse, as underline can be reversed as well!)
-					vdata = 0xFF;	// the underline
-				if (colour & 0x20)	// reverse bit for char
-					vdata ^= 0xFF;
-				if (colour & 0x40)	// highlight, this must be the LAST, since it sets the low nibble of coldata ...
-					colour = 0x10 | (colour & 15);
-				else
-					colour &= 15;
-			} else
-				colour &= 15;
-		} else
-			colour &= 15;
+		VIC3_ADJUST_BY_HARDWARE_ATTRIBUTES(unlikely(colour & attributes), colour, vdata);
 		fg_colour = palette[colour];
 		*(pixel++) = vdata & 0x80 ? fg_colour : bg_colour;
 		*(pixel++) = vdata & 0x40 ? fg_colour : bg_colour;
@@ -243,7 +251,6 @@ static void renderer_ecmtext_40 ( void )
 	int a;
 	for (a = 0; a < 40; a++) {
 		Uint8 vdata = *(vp++);
-		//Uint8 vdata = vicptr_chargen[((*(vp++)) << 3) + row_counter];
 		Uint8 data = chargen[(vdata & 63) << 3];
 		Uint32 fg_colour = palette[*(cp++) & 15];
 		vdata >>= 6;
@@ -274,7 +281,6 @@ static void renderer_ecmtext_80 ( void )
 	int a;
 	for (a = 0; a < 80; a++) {
 		Uint8 vdata = *(vp++);
-		//Uint8 vdata = vicptr_chargen[((*(vp++)) << 3) + row_counter];
 		Uint8 data = chargen[(vdata & 63) << 3];
 		Uint32 fg_colour = palette[*(cp++) & 15];
 		vdata >>= 6;
@@ -304,7 +310,6 @@ static void renderer_mcmtext_40 ( void )
 	};
 	int a;
 	for (a = 0; a < 40; a++) {
-		//Uint8 vdata = vicptr_chargen[((*(vp++)) << 3) + row_counter];
 		Uint8 vdata = chargen[(*(vp++)) << 3];
 		Uint8 coldata = (*(cp++));
 		if (coldata & 8) {
@@ -344,7 +349,6 @@ static void renderer_mcmtext_80 ( void )
 	};
 	int a;
 	for (a = 0; a < 80; a++) {
-		//Uint8 vdata = vicptr_chargen[((*(vp++)) << 3) + row_counter];
 		Uint8 vdata = chargen[(*(vp++)) << 3];
 		Uint8 coldata = (*(cp++));
 		if (coldata & 8) {
@@ -742,7 +746,7 @@ void vic3_write_reg ( int addr, Uint8 data )
 			break;
 		case 0x31:
 			vic3_registers[0x31] = data;
-			attributes = (data & 32);
+			attributes = (data & 32) ? 0xF0 : 0x00;	// currently, I use $F0 for on, 00 off, to be able to use as an attrib mask directly for upper 4 bits
 			select_renderer_func();
 			cpu_cycles_per_scanline = (data & 64) ? FAST_CPU_CYCLES_PER_SCANLINE : SLOW_CPU_CYCLES_PER_SCANLINE;
 			//DEBUG("VIC3: clock_divider7_hack = %d" NL, clock_divider7_hack);
