@@ -1,5 +1,5 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,6 +19,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define __XEMU_C65_VIC3_H_INCLUDED
 
 #define VIC_NEW_MODE 0x10
+
+#define LEFT_BORDER_SIZE		32
+#define RIGHT_BORDER_SIZE		32
+#define TOP_BORDER_SIZE			16
+#define BOTTOM_BORDER_SIZE		16
+
+#define SCREEN_WIDTH			(640 + LEFT_BORDER_SIZE +  RIGHT_BORDER_SIZE)
+#define SCREEN_HEIGHT			(200 +  TOP_BORDER_SIZE + BOTTOM_BORDER_SIZE)
 
 extern int   vic_new_mode;
 extern Uint8 vic3_registers[];

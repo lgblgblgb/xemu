@@ -1,5 +1,5 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -23,8 +23,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888
 #define USE_LOCKED_TEXTURE	1
 #define RENDER_SCALE_QUALITY	1
-#define SCREEN_WIDTH		640
-#define SCREEN_HEIGHT		200
 
 #define FAST_CPU_CYCLES_PER_SCANLINE	227
 #define SLOW_CPU_CYCLES_PER_SCANLINE	64

@@ -101,7 +101,7 @@ void vic3_open_frame_access ( void )
 {
 	int tail_sdl;
 	pixel = pixel_start = emu_start_pixel_buffer_access(&tail_sdl);
-	pixel_end = pixel + 640 * 200;
+	pixel_end = pixel + (SCREEN_WIDTH * SCREEN_HEIGHT);
 	if (tail_sdl)
 		FATAL("tail_sdl is not zero!");
 }
@@ -141,22 +141,22 @@ void vic3_check_raster_interrupt ( void )
 }
 
 
-#define STATIC_COLOUR_RENDERER(colour) \
-	register int a; \
-	register Uint32 col = colour; \
-	for (a = 0; a < 640; a++) \
-		*(pixel++) = col
+#define STATIC_COLOUR_RENDERER(colour, size) do { \
+	register int a = size; \
+	while (a--) \
+		*(pixel++) = colour; \
+} while(0)
 
 
 static void renderer_disabled_screen ( void )
 {
-	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20));
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), SCREEN_WIDTH);
 }
 
 
 static void renderer_invalid_mode ( void )
 {
-	STATIC_COLOUR_RENDERER(rgb_palette[0]);	// invalid modes renders only blackness
+	STATIC_COLOUR_RENDERER(rgb_palette[0], SCREEN_WIDTH);	// invalid modes renders only blackness
 }
 
 
@@ -193,6 +193,7 @@ static void renderer_text_40 ( void )
 	Uint8 *chargen = vicptr_chargen + row_counter;
 	Uint32 bg_colour = VIC_REG_COLOUR(0x21);
 	int a;
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), LEFT_BORDER_SIZE);
 	for (a = 0; a < 40; a++) {
 		Uint8 vdata = chargen[(*(vp++)) << 3];
 		Uint32 colour = *(cp++);
@@ -209,6 +210,7 @@ static void renderer_text_40 ( void )
 		pixel[14] = pixel[15] = vdata & 0x01 ? fg_colour : bg_colour;
 		pixel += 16;
 	}
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), RIGHT_BORDER_SIZE);
 }
 
 
@@ -219,6 +221,7 @@ static void renderer_text_80 ( void )
 	Uint8 *chargen = vicptr_chargen + row_counter;
 	Uint32 bg_colour = VIC_REG_COLOUR(0x21);
 	int a;
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), LEFT_BORDER_SIZE);
 	for (a = 0; a < 80; a++) {
 		Uint8 vdata = chargen[(*(vp++)) << 3];
 		Uint8 colour = *(cp++);
@@ -234,6 +237,7 @@ static void renderer_text_80 ( void )
 		*(pixel++) = vdata & 0x02 ? fg_colour : bg_colour;
 		*(pixel++) = vdata & 0x01 ? fg_colour : bg_colour;
 	}
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), RIGHT_BORDER_SIZE);
 }
 
 
@@ -249,6 +253,7 @@ static void renderer_ecmtext_40 ( void )
 		VIC_REG_COLOUR(0x24)
 	};
 	int a;
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), LEFT_BORDER_SIZE);
 	for (a = 0; a < 40; a++) {
 		Uint8 vdata = *(vp++);
 		Uint8 data = chargen[(vdata & 63) << 3];
@@ -264,6 +269,7 @@ static void renderer_ecmtext_40 ( void )
 		pixel[14] = pixel[15] = data & 0x01 ? fg_colour : bg_colours[vdata];
 		pixel += 16;
 	}
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), RIGHT_BORDER_SIZE);
 }
 
 
@@ -279,6 +285,7 @@ static void renderer_ecmtext_80 ( void )
 		VIC_REG_COLOUR(0x24)
 	};
 	int a;
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), LEFT_BORDER_SIZE);
 	for (a = 0; a < 80; a++) {
 		Uint8 vdata = *(vp++);
 		Uint8 data = chargen[(vdata & 63) << 3];
@@ -294,6 +301,7 @@ static void renderer_ecmtext_80 ( void )
 		pixel[7] = data & 0x01 ? fg_colour : bg_colours[vdata];
 		pixel += 8;
 	}
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), RIGHT_BORDER_SIZE);
 }
 
 
@@ -309,6 +317,7 @@ static void renderer_mcmtext_40 ( void )
 		0	// to be filled during colour fetch ...
 	};
 	int a;
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), LEFT_BORDER_SIZE);
 	for (a = 0; a < 40; a++) {
 		Uint8 vdata = chargen[(*(vp++)) << 3];
 		Uint8 coldata = (*(cp++));
@@ -333,6 +342,7 @@ static void renderer_mcmtext_40 ( void )
 		}
 		pixel += 16;
 	}
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), RIGHT_BORDER_SIZE);
 }
 
 
@@ -348,6 +358,7 @@ static void renderer_mcmtext_80 ( void )
 		0	// to be filled during colour fetch ...
 	};
 	int a;
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), LEFT_BORDER_SIZE);
 	for (a = 0; a < 80; a++) {
 		Uint8 vdata = chargen[(*(vp++)) << 3];
 		Uint8 coldata = (*(cp++));
@@ -372,6 +383,7 @@ static void renderer_mcmtext_80 ( void )
 		}
 		pixel += 8;
 	}
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), RIGHT_BORDER_SIZE);
 }
 
 
@@ -380,6 +392,7 @@ static void renderer_bitmap_320 ( void )
 	Uint8 *vp = vicptr_video_40 + video_counter;
 	Uint8 *bp = vicptr_bitmap_320 + (video_counter << 3) + row_counter;
 	int a;
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), LEFT_BORDER_SIZE);
 	for (a = 0; a < 40; a++) {
 		Uint8 data = *(vp++);
 		Uint32 fg_colour = palette[data >> 4];
@@ -396,6 +409,7 @@ static void renderer_bitmap_320 ( void )
 		bp += 8;
 		pixel += 16;
 	}
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), RIGHT_BORDER_SIZE);
 }
 
 
@@ -404,6 +418,7 @@ static void renderer_bitmap_640 ( void )
 	Uint8 *vp = vicptr_video_80 + video_counter;
 	Uint8 *bp = vicptr_bitmap_640 + (video_counter << 3) + row_counter;
 	int a;
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), LEFT_BORDER_SIZE);
 	for (a = 0; a < 80; a++) {
 		Uint8 data = *(vp++);
 		Uint32 fg_colour = palette[data >> 4];
@@ -420,6 +435,7 @@ static void renderer_bitmap_640 ( void )
 		bp += 8;
 		pixel += 8;
 	}
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), RIGHT_BORDER_SIZE);
 }
 
 
@@ -431,6 +447,7 @@ static void renderer_mcmbitmap_320 ( void )
 	Uint32 colours[4];
 	int a;
 	colours[0] = VIC_REG_COLOUR(0x21);
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), LEFT_BORDER_SIZE);
 	for (a = 0; a < 40; a++) {
 		Uint8 data = *(vp++);
 		colours[1] = palette[data >> 4];
@@ -444,6 +461,7 @@ static void renderer_mcmbitmap_320 ( void )
 		bp += 8;
 		pixel += 16;
 	}
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), RIGHT_BORDER_SIZE);
 }
 
 
@@ -455,6 +473,7 @@ static void renderer_mcmbitmap_640 ( void )
 	Uint32 colours[4];
 	int a;
 	colours[0] = VIC_REG_COLOUR(0x21);
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), LEFT_BORDER_SIZE);
 	for (a = 0; a < 80; a++) {
 		Uint8 data = *(vp++);
 		colours[1] = palette[data >> 4];
@@ -468,6 +487,7 @@ static void renderer_mcmbitmap_640 ( void )
 		bp += 8;
 		pixel += 8;
 	}
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), RIGHT_BORDER_SIZE);
 }
 
 
@@ -475,6 +495,7 @@ static void renderer_bitplane_320 ( void )
 {
 	Uint8 *bp = memory + (video_counter << 3) + row_counter;
 	int a;
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), LEFT_BORDER_SIZE);
 	for (a = 0; a < 40; a++) {
 		int bitpos;
 		Uint8 fetch[8] = {
@@ -497,6 +518,7 @@ static void renderer_bitplane_320 ( void )
 		}
 		bp += 8;
 	}
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), RIGHT_BORDER_SIZE);
 }
 
 
@@ -504,6 +526,7 @@ static void renderer_bitplane_640 ( void )
 {
 	Uint8 *bp = memory + (video_counter << 3) + row_counter;
 	int a, enable = vic3_registers[0x32] & 15;	// in H640 bitplane modes, only lower 4 bitplanes can be used (TODO: is that true? check it!)
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), LEFT_BORDER_SIZE);
 	for (a = 0; a < 80; a++) {
 		int bitpos;
 		Uint8 fetch[8] = {
@@ -524,6 +547,7 @@ static void renderer_bitplane_640 ( void )
 			) & enable) ^ vic3_registers[0x3B]];
 		bp += 8;
 	}
+	STATIC_COLOUR_RENDERER(VIC_REG_COLOUR(0x20), RIGHT_BORDER_SIZE);
 }
 
 
@@ -531,41 +555,55 @@ static void renderer_bitplane_640 ( void )
 static void sprite_renderer ( void );
 
 
-
 int vic3_render_scanline ( void )
 {
-	if (scanline < 50 || scanline >= 250) {
-		if (unlikely(scanline == 311)) {
-			scanline = 0;
-			video_counter = 0;
-			row_counter = 0;
-			if (blink_counter)
-				blink_counter--;
-			else {
-				blink_counter = BLINK_COUNTER_INIT;
-				blink_phase = ~blink_phase;
-			}
-			if (!frameskip) {
-				if (pixel != pixel_end)
-					FATAL("Renderer failure: pixel=%p != end=%p", pixel, pixel_end);
-				// FIXME: Highly incorrect, rendering sprites once *AFTER* the screen content ...
-				sprite_renderer();
-			} else if (pixel != pixel_start)
-					FATAL("Renderer failure: pixel=%p != start=%p", pixel, pixel_start);
-			return 1; // return value non-zero: end-of-frame, emulator should update the SDL rendering context, then call vic3_open_frame_access()
+	if (scanline < 50 - TOP_BORDER_SIZE) {
+		scanline++;
+		return 0;
+	} else if (scanline < 50) {
+		if (!frameskip)
+			renderer_disabled_screen();
+		scanline++;
+		return 0;
+	} else if (scanline < 250) {
+		if (!frameskip) {
+			scanline_render_debug_info[scanline] = (((vic3_registers[0x11] & 0x60) | (vic3_registers[0x16] & 0x10)) >> 4) + 'a';
+			renderer_func();	// call the scanline renderer for the current video mode, a function pointer
+			if (row_counter == 7) {
+				row_counter = 0;
+				video_counter += video_counter_inc;
+			} else
+				row_counter++;
 		}
 		scanline++;
 		return 0;
+	} else if (scanline < 250 + BOTTOM_BORDER_SIZE) {
+		if (!frameskip)
+			renderer_disabled_screen();
+		scanline++;
+		return 0;
+	} else if (scanline == 311) {
+		scanline = 0;
+		video_counter = 0;
+		row_counter = 0;
+		if (blink_counter)
+			blink_counter--;
+		else {
+			blink_counter = BLINK_COUNTER_INIT;
+			blink_phase = ~blink_phase;
+		}
+		if (!frameskip) {
+			if (unlikely(pixel != pixel_end))
+				FATAL("Renderer failure: pixel=%p != end=%p (diff=%d) height=%d", pixel, pixel_end, (int)(pixel_end - pixel), SCREEN_HEIGHT);
+			// FIXME: Highly incorrect, rendering sprites once *AFTER* the screen content ...
+			sprite_renderer();
+		} else {
+			if (unlikely(pixel != pixel_start))
+				FATAL("Renderer failure: pixel=%p != start=%p", pixel, pixel_start);
+		}
+		return 1; // return value non-zero: end-of-frame, emulator should update the SDL rendering context, then call vic3_open_frame_access()
 	}
-	if (!frameskip) {
-		scanline_render_debug_info[scanline] = (((vic3_registers[0x11] & 0x60) | (vic3_registers[0x16] & 0x10)) >> 4) + 'a';
-		renderer_func();	// call the scanline renderer for the current video mode, a function pointer
-		if (row_counter == 7) {
-			row_counter = 0;
-			video_counter += video_counter_inc;
-		} else
-			row_counter++;
-	}
+	// else ...
 	scanline++;
 	return 0;
 }
@@ -911,7 +949,7 @@ void vic3_init ( void )
    * This is a simple, after-the-rendered-frame render-sprites one-by-one algorithm
    * Very ugly, quick&dirty hack, not so optimal either, even without the other mentioned bugs ...
 */
-static void render_one_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 *p, int tail )
+static void render_one_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 *p )
 {
 	Uint32 colours[4];
 	int sprite_y = vic3_registers[sprite_no * 2 + 1] - SPRITE_Y_START_SCREEN;
@@ -927,8 +965,8 @@ static void render_one_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uin
 		colours[1] = VIC_REG_COLOUR(0x25);
 		colours[3] = VIC_REG_COLOUR(0x26);
 	}
-	p += (640 + tail) * sprite_y;
-	for (y = sprite_y; y < lim_y; y += (expand_y ? 2 : 1), p += (640 + tail) * (expand_y ? 2 : 1))
+	p += SCREEN_WIDTH * (sprite_y + TOP_BORDER_SIZE) + LEFT_BORDER_SIZE;
+	for (y = sprite_y; y < lim_y; y += (expand_y ? 2 : 1), p += SCREEN_WIDTH * (expand_y ? 2 : 1))
 		if (y < 0 || y >= 200)
 			data += 3;	// skip one line (three bytes) of sprite data if outside of screen
 		else {
@@ -941,13 +979,13 @@ static void render_one_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uin
 							if (x >= 0 && x < 640) {
 								p[x] = p[x + 1] = p[x + 2] = p[x + 3] = col;
 								if (expand_y && y < 200)
-									p[x + 640] = p[x + 641] = p[x + 642] = p[x + 643] = col;
+									p[x + SCREEN_WIDTH] = p[x + SCREEN_WIDTH + 1] = p[x + SCREEN_WIDTH + 2] = p[x + SCREEN_WIDTH + 3] = col;
 							}
 							x += 4;
 							if (expand_x && x >= 0 && x < 640) {
 								p[x] = p[x + 1] = p[x + 2] = p[x + 3] = col;
 								if (expand_y && y < 200)
-									p[x + 640] = p[x + 641] = p[x + 642] = p[x + 643] = col;
+									p[x + SCREEN_WIDTH] = p[x + SCREEN_WIDTH + 1] = p[x + SCREEN_WIDTH + 2] = p[x + SCREEN_WIDTH + 3] = col;
 								x += 4;
 							}
 						} else
@@ -959,13 +997,13 @@ static void render_one_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uin
 							if (x >= 0 && x < 640) {
 								p[x] = p[x + 1] = colours[2];
 								if (expand_y && y < 200)
-									p[x + 640 + tail] = p[x + 641 + tail] = colours[2];
+									p[x + SCREEN_WIDTH] = p[x + SCREEN_WIDTH + 1] = colours[2];
 							}
 							x += 2;
 							if (expand_x && x >= 0 && x < 640) {
 								p[x] = p[x + 1] = colours[2];
 								if (expand_y && y < 200)
-									p[x + 640 + tail] = p[x + 641 + tail] = colours[2];
+									p[x + SCREEN_WIDTH] = p[x + SCREEN_WIDTH + 1] = colours[2];
 								x += 2;
 							}
 						} else
@@ -994,7 +1032,7 @@ static void sprite_renderer ( void )
 		for (a = 7; a >= 0; a--) {
 			int mask = 1 << a;
 			if ((sprites & mask))
-				render_one_sprite(a, mask, vicptr_bank16k + (sprite_pointers[a] << 6), pixel_start, 0);	// sprite_pointers are set by the renderer functions above!
+				render_one_sprite(a, mask, vicptr_bank16k + (sprite_pointers[a] << 6), pixel_start);	// sprite_pointers are set by the renderer functions above!
 		}
 	}
 }
