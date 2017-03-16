@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -315,9 +315,17 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 			if (event->jaxis.axis < 2)
 				hid_joystick_motion_event(event->jaxis.axis, event->jaxis.value);
 			break;
-		//case SDL_MOUSEMOTION:
-		//      hid_mouse_motion_event(e.motion.xrel, e.motion.yrel);
-		//      break;
+		case SDL_MOUSEMOTION:
+			if (is_mouse_grab())
+				hid_mouse_motion_event(event->motion.xrel, event->motion.yrel);
+			break;
+		case SDL_MOUSEBUTTONDOWN:
+		case SDL_MOUSEBUTTONUP:
+			if (is_mouse_grab())
+				hid_mouse_button_event(event->button.button, event->type == SDL_MOUSEBUTTONDOWN);
+			else
+				emu_callback_key(-2, 0, event->type == SDL_MOUSEBUTTONDOWN, event->button.button);
+			break;
 		default:
 			handled = 0;
 			break;

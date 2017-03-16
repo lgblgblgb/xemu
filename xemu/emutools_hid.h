@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -29,6 +29,7 @@ struct KeyMapping {
 };
 
 extern Uint8 kbd_matrix[16];
+extern int   hid_mouse_enabled;
 
 // This one must be defined by the emulator!
 extern int  emu_callback_key		( int pos, SDL_Scancode key, int pressed, int handled ) ;

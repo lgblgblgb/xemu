@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -120,10 +120,10 @@ Uint8 c64_get_joy_state ( void )
 {
 	return
 			0xE0 |
-			hid_read_joystick_up     ( 0,  1 ) |
+			(hid_read_joystick_up    ( 0,  1 ) & (is_mouse_grab() ? hid_read_mouse_button_right(0,  1) :  1)) |
 			hid_read_joystick_down   ( 0,  2 ) |
 			hid_read_joystick_left   ( 0,  4 ) |
 			hid_read_joystick_right  ( 0,  8 ) |
-			hid_read_joystick_button ( 0, 16 )
+			(hid_read_joystick_button( 0, 16 ) & (is_mouse_grab() ? hid_read_mouse_button_left (0, 16) : 16))
 	;
 }

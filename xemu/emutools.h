@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -44,17 +44,23 @@ extern void clear_emu_events ( void );
 
 extern void emu_drop_events ( void );
 
+extern void set_mouse_grab ( SDL_bool state );
+extern SDL_bool is_mouse_grab ( void );
+
 #define _REPORT_WINDOW_(sdlflag, str, ...) do { \
 	char _buf_for_win_msg_[4096]; \
+	SDL_bool old_mouse_grab = is_mouse_grab(); \
 	snprintf(_buf_for_win_msg_, sizeof _buf_for_win_msg_, __VA_ARGS__); \
 	fprintf(stderr, str ": %s" NL, _buf_for_win_msg_); \
 	if (debug_fp)	\
 		fprintf(debug_fp, str ": %s" NL, _buf_for_win_msg_);	\
+	set_mouse_grab(SDL_FALSE); \
 	MSG_POPUP_WINDOW(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
 	clear_emu_events(); \
 	emu_drop_events(); \
 	SDL_RaiseWindow(sdl_win); \
 	emu_timekeeping_start(); \
+	set_mouse_grab(old_mouse_grab); \
 } while (0)
 
 #define INFO_WINDOW(...)	_REPORT_WINDOW_(SDL_MESSAGEBOX_INFORMATION, "INFO", __VA_ARGS__)

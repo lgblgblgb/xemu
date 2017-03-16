@@ -1,5 +1,5 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -38,6 +38,8 @@ Uint8 memory[0x100000];			// 65CE02 MAP'able address space
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 struct SidEmulation sids[2];		// the two SIDs
 static int nmi_level;			// please read the comment at nmi_set() below
+static int mouse_x = 0;
+static int mouse_y = 0;
 
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request
 // It must be high enough not to collide with the 1Mbyte address space + almost-64K "overflow" area and mapping should not cause to alter lower 12 bits of the addresses,
@@ -375,7 +377,6 @@ void cpu_do_aug ( void )
 }
 
 
-
 // *** Implements the EOM opcode of 4510, called by the 65CE02 emulator
 void cpu_do_nop ( void )
 {
@@ -390,8 +391,20 @@ void cpu_do_nop ( void )
 static inline Uint8 read_some_sid_register ( int addr )
 {
 	// currently we don't support reading SID registers at all (1351 mouse emulation may need POT-X and POT-Y in the future though, TODO)
-	// addr &= 0x1F;
-	return 0xFF;
+	switch (addr & 0x1F) {
+		case 0x19:
+			if (!is_mouse_grab())
+				return 0xFF;
+			mouse_x = (mouse_x + hid_read_mouse_rel_x(-31, 31)) & 63;
+			return mouse_x << 1;
+		case 0x1A:
+			if (!is_mouse_grab())
+				return 0xFF;
+			mouse_y = (mouse_y - hid_read_mouse_rel_y(-31, 31)) & 63;
+			return mouse_y << 1;
+		default:
+			return 0xFF;
+	}
 }
 
 
@@ -702,7 +715,15 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			DEBUG("RESET!" NL);
 		} else if (key == SDL_SCANCODE_KP_ENTER)
 			c64_toggle_joy_emu();
-	}
+		else if (key == SDL_SCANCODE_ESCAPE)
+			set_mouse_grab(SDL_FALSE);
+	} else
+		if (pos == -2 && key == 0) {	// special case pos = -2, key = 0, handled = mouse button (which?) and release event!
+			if (handled == SDL_BUTTON_LEFT) {
+				INFO_WINDOW("Mouse grab activated. Press ESC to cancel.");
+				set_mouse_grab(SDL_TRUE);
+			}
+		}
 	return 0;
 }
 

@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -61,11 +61,28 @@ FILE *debug_fp = NULL;
 static int osd_enabled = 0, osd_status = 0, osd_available = 0, osd_xsize, osd_ysize, osd_fade_dec, osd_fade_end, osd_alpha_last;
 static Uint32 osd_colours[16], *osd_pixels = NULL, osd_colour_fg, osd_colour_bg;
 static SDL_Texture *sdl_osdtex = NULL;
+static int grabbed_mouse = 0;
 
 
 #if !SDL_VERSION_ATLEAST(2, 0, 4)
 #error "At least SDL version 2.0.4 is needed!"
 #endif
+
+
+void set_mouse_grab ( SDL_bool state )
+{
+	if (state != grabbed_mouse) {
+		grabbed_mouse = state;
+		SDL_SetRelativeMouseMode(state);
+		SDL_SetWindowGrab(sdl_win, state);
+	}
+}
+
+
+SDL_bool is_mouse_grab ( void )
+{
+	return grabbed_mouse;
+}
 
 
 static inline int get_elapsed_time ( Uint64 t_old, Uint64 *t_new, time_t *store_unix_time )
