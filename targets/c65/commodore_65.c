@@ -720,7 +720,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 	} else
 		if (pos == -2 && key == 0) {	// special case pos = -2, key = 0, handled = mouse button (which?) and release event!
 			if (handled == SDL_BUTTON_LEFT) {
-				INFO_WINDOW("Mouse grab activated. Press ESC to cancel.");
+				OSD(-1, -1, "Mouse grab activated.\nPress ESC to cancel.");
 				set_mouse_grab(SDL_TRUE);
 			}
 		}
@@ -783,6 +783,7 @@ int main ( int argc, char **argv )
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
 		AUDIO_SAMPLE_FREQ		// sound mix freq
 	);
+	osd_init_with_defaults();
 	// Start!!
 	cycles = 0;
 	if (audio)

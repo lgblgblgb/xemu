@@ -46,21 +46,22 @@ extern void emu_drop_events ( void );
 
 extern void set_mouse_grab ( SDL_bool state );
 extern SDL_bool is_mouse_grab ( void );
+extern void save_mouse_grab ( void );
+extern void restore_mouse_grab ( void );
 
 #define _REPORT_WINDOW_(sdlflag, str, ...) do { \
 	char _buf_for_win_msg_[4096]; \
-	SDL_bool old_mouse_grab = is_mouse_grab(); \
 	snprintf(_buf_for_win_msg_, sizeof _buf_for_win_msg_, __VA_ARGS__); \
 	fprintf(stderr, str ": %s" NL, _buf_for_win_msg_); \
 	if (debug_fp)	\
 		fprintf(debug_fp, str ": %s" NL, _buf_for_win_msg_);	\
-	set_mouse_grab(SDL_FALSE); \
+	save_mouse_grab(); \
 	MSG_POPUP_WINDOW(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
 	clear_emu_events(); \
 	emu_drop_events(); \
 	SDL_RaiseWindow(sdl_win); \
+	restore_mouse_grab(); \
 	emu_timekeeping_start(); \
-	set_mouse_grab(old_mouse_grab); \
 } while (0)
 
 #define INFO_WINDOW(...)	_REPORT_WINDOW_(SDL_MESSAGEBOX_INFORMATION, "INFO", __VA_ARGS__)
@@ -135,6 +136,21 @@ extern void osd_set_colours ( int fg_index, int bg_index );
 extern void osd_write_char ( int x, int y, char ch );
 extern void osd_write_string ( int x, int y, const char *s );
 
-#define OSD_STATIC 0x1000
+#define OSD_STATIC		0x1000
+#define OSD_FADE_START		300
+#define OSD_FADE_DEC_VAL	5
+#define OSD_FADE_END_VAL	0x20
+
+#define OSD_TEXTURE_X_SIZE	640
+#define OSD_TEXTURE_Y_SIZE	200
+
+
+#define OSD(x, y, ...) do { \
+	osd_clear(); \
+	osd_write_string(x, y, __VA_ARGS__); \
+	osd_update(); \
+	osd_on(OSD_FADE_START); \
+} while(0)
+
 
 #endif
