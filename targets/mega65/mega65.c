@@ -607,6 +607,8 @@ Uint8 io_read ( int addr )
 			if (addr >= 0xD680 && addr <= 0xD693)		// SDcard controller etc of Mega65
 				return sdcard_read_register(addr - 0xD680);
 			switch (addr) {
+				case 0xD67C:
+					return 0;	// emulate the "UART is ready" situation (used by newer kickstarts around from v0.11 or so)
 				case 0xD67E:				// upgraded hypervisor signal
 					if (kicked_hypervisor == 0x80)	// 0x80 means for Xemu (not for a real M65!): ask the user!
 						kicked_hypervisor = QUESTION_WINDOW(
