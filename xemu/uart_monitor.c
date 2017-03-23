@@ -57,10 +57,6 @@ static int  umon_echo;
 static char umon_read_buffer [0x1000];
 
 #include "cpu65ce02_disasm_tables.c"
-static const char  opcode_adm_off [] = {0    ,1     ,2     ,1   ,2        ,1      ,1      ,2      ,2        ,2        ,3    ,4      ,1        ,1        ,1           ,1        ,2        ,2          ,0  };
-static const char *opcode_adm_pre [] = {""   ,"#$"  ,"#$"  ,"$" ,"$"      ,"$"    ,"$"    ,"$"    ,"$"      ,"$"      ,"$"  ,"$"    ,"($"     ,"($"     ,"($"        ,"($"     ,"($"     ,"($"       ," "};
-static const char *opcode_adm_post[] = {""   ,""    ,""    ,""  ,",$rr"   ,",X"   ,",Y"   ,""     ,",X"     ,",Y"     ,""    ,"" ,"),Y"    ,"),Z"    ,",SP),Y"    ,",X)"    ,")"      ,",X)"      ,"A"};
-                                     //{"","#$nn","#$nnnn","$nn","$nn,$rr","$nn,X","$nn,Y","$nnnn","$nnnn,X","$nnnn,Y","$rr","$rrrr","($nn),Y","($nn),Z","($nn,SP),Y","($nn,X)","($nnnn)","($nnnn,X)","A"};
 
 
 /* Variables controlling behaviourt of EMU main-loop*/
@@ -160,12 +156,12 @@ static void execute_command ( char *cmd )
 		case 'd':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
 			if (cmd && check_end_of_command(cmd, 1))
-				m65mon_dissassmem16(par1);                                
+				m65mon_dumpmem16(par1);                                
 			break;
                 case 'm':
-                        cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
+                        cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFF);
                         if (cmd && check_end_of_command(cmd, 1))
-                                m65mon_dumpmem16(par1);
+                                m65mon_dumpmem24(par1);
                         break;
 		case 't':
 			if (!*cmd)
@@ -194,54 +190,6 @@ static void execute_command ( char *cmd )
 }
 
 /***************************************************************************/
-/*   Disassembler */
-/***************************************************************************/
-
-
-Uint16 umon_print_disass_line(Uint16 disass_pc, Uint8 disass_op){
-    
-      Uint16 addr_off=opcode_adm_off[opcode_adms[disass_op]];
-  
-       switch (addr_off){
-         case 0:  // no extra argument
-                umon_printf(
-                "%04X %s %s%s         \r\n",                          // PC , disambled opcode , prefix , postfix
-                disass_pc, opcode_names[disass_op], opcode_adm_pre[opcode_adms[disass_op]], opcode_adm_post[opcode_adms[disass_op]] );
-                break;
-         case 1: // 8-bit argument
-                umon_printf(
-                "%04X %s %s%02X%s     \r\n",                          // PC , disambled opcode , prefix , postfix
-                disass_pc, opcode_names[disass_op], opcode_adm_pre[opcode_adms[disass_op]],cpu_read(disass_pc+1)&0xff, opcode_adm_post[opcode_adms[disass_op]] );
-                break;
-         case 2: // 16-bit argument
-                umon_printf(
-                "%04X %s %s%02X%02x%s    \r\n",                          // PC , disambled opcode , prefix , postfix
-                disass_pc, opcode_names[disass_op], opcode_adm_pre[opcode_adms[disass_op]],cpu_read(disass_pc+2)&0xff,cpu_read(disass_pc+1)&0xff, opcode_adm_post[opcode_adms[disass_op]] );
-                break;
-         case 3: // 8-bit relative argument
-                umon_printf(
-                "%04X %s %s%04X%s    \r\n",                          // PC , disambled opcode , prefix , postfix
-                disass_pc, opcode_names[disass_op], opcode_adm_pre[opcode_adms[disass_op]],disass_pc+(char)(cpu_read(disass_pc+1)&0xff)+2, opcode_adm_post[opcode_adms[disass_op]] );
-                addr_off=1;
-                break;
-         case 4: // 16-bit releative argument
-                umon_printf(
-                "%04X %s %s%04X%s    \r\n",                          // PC , disambled opcode , prefix , postfix
-                disass_pc, opcode_names[disass_op], opcode_adm_pre[opcode_adms[disass_op]],disass_pc+(int16_t)((cpu_read(disass_pc+1)&0xff)+0x100*(cpu_read(disass_pc+2)&0xff))+3, opcode_adm_post[opcode_adms[disass_op]] );
-                addr_off=2;
-                break;
-                
-         default:
-           printf ( "Unkonw opcode %02X at address $%0X4 ",disass_op,disass_pc); 
-           break;
-      }
-     
-     return (addr_off);
-      
-}
-
-
-/***************************************************************************/
 /*   Monitor- commands */
 /***************************************************************************/
 void m65mon_dumpmem16 ( Uint16 addr )
@@ -252,22 +200,14 @@ void m65mon_dumpmem16 ( Uint16 addr )
                 umon_printf(" %02X", cpu_read(addr++));
 }
 
-void m65mon_dissassmem16 ( Uint16 addr )
+void m65mon_dumpmem24 ( Uint32 addr )
 {
         int n = 16;
-        Uint16 addr_off;
-        do {
-          addr_off=umon_print_disass_line(addr,cpu_read(addr)); 
-          addr++; // at least to next opcode
-          addr+=addr_off; // skip arguments
-        }while (n--);
-                
+        umon_printf(":0%06X", addr);
+        while (n--)
+                umon_printf(" %02X", read_phys_mem(addr++));
 }
 
-void m65mon_show_disam ( void )
-{
-   umon_print_disass_line(cpu_old_pc,cpu_op);
-}
 
 
 
