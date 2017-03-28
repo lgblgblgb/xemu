@@ -807,7 +807,7 @@ int cpu_step () {
 	case 0x72:	/* 0x72 ADC (Zero_Page) or (ZP),Z on 65CE02 */
 #ifdef MEGA65
 			if (IS_FLAT32_DATA_OP())
-				_ADC(cpu_read(cpu_read_linear_opcode()));
+				_ADC(cpu_read_linear_opcode());
 			else
 #endif
 				_ADC(cpu_read(_zpi()));
