@@ -56,7 +56,7 @@ static int  umon_write_pos, umon_read_pos;
 static int  umon_echo;
 static char umon_read_buffer [0x1000];
 
-#include "cpu65ce02_disasm_tables.c"
+//#include "cpu65ce02_disasm_tables.c"
 
 
 /* Variables controlling behaviourt of EMU main-loop*/
@@ -98,6 +98,7 @@ static char *parse_hex_arg ( char *p, int *val, int min, int max )
 		p++;
 	}
 	*val = r;
+
 	if (r < min || r > max) {
 		umon_printf(SYNTAX_ERROR "command parameter's value is outside of the allowed range for this command %X (%X...%X)", r, min, max);
 		return NULL;
@@ -140,7 +141,7 @@ static void execute_command ( char *cmd )
 	p--;
 	while (p >= cmd && *p <= 32)
 		*(p--) = 0;
-	DEBUG("UARTMON: command got \"%s\" (%d bytes)." NL, cmd, (int)strlen(cmd));
+	DEBUG("UARTMON: command got \"%s\" (%d bytes)." NL, cmd, (int)strlen(cmd));	
 	switch (*(cmd++)) {
 		case 'h':
 		case 'H':
@@ -153,16 +154,36 @@ static void execute_command ( char *cmd )
 			if (check_end_of_command(cmd, 1))
 				m65mon_show_regs();
 			break;
+		case 's':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFF);
+			if (cmd)
+				m65mon_storemem24(par1,cmd);
+			break;
+		case '!':
+			if (check_end_of_command(cmd, 1))
+				m65mon_do_reset();
+			break;
 		case 'd':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
 			if (cmd && check_end_of_command(cmd, 1))
 				m65mon_dumpmem16(par1);                                
+			break;
+		case 'D':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
+			if (cmd && check_end_of_command(cmd, 1))
+				m65mon_dumpmem16_bulk(par1);                                
 			break;
                 case 'm':
                         cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFF);
                         if (cmd && check_end_of_command(cmd, 1))
                                 m65mon_dumpmem24(par1);
                         break;
+               case 'M':
+                        cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFF);
+                        if (cmd && check_end_of_command(cmd, 1))
+                                m65mon_dumpmem24_bulk(par1);
+                        break;
+
 		case 't':
 			if (!*cmd)
 				m65mon_do_trace();
@@ -200,6 +221,16 @@ void m65mon_dumpmem16 ( Uint16 addr )
                 umon_printf(" %02X", cpu_read(addr++));
 }
 
+void m65mon_dumpmem16_bulk ( Uint16 addr )
+{
+        int n = 32;
+        while (n--){
+              m65mon_dumpmem16(addr);
+	      umon_printf("\r\n");
+              addr+=16;				
+	}
+}
+
 void m65mon_dumpmem24 ( Uint32 addr )
 {
         int n = 16;
@@ -208,9 +239,34 @@ void m65mon_dumpmem24 ( Uint32 addr )
                 umon_printf(" %02X", read_phys_mem(addr++));
 }
 
+void m65mon_dumpmem24_bulk ( Uint32 addr )
+{
+        int n = 32;
+        while (n--){
+              m65mon_dumpmem24(addr);
+	      umon_printf("\r\n");
+              addr+=16;				
+	}
+}
 
+void m65mon_storemem24 ( Uint32 addr,char * values )
+{
+       
+        int val;
 
+	do{
+                if (*values)
+        	  values = parse_hex_arg(values, &val, 0, 0xFF);
+                else
+		  val=-1;  // EOL reached ;	
+                
+		if (val>=0)
+			write_phys_mem(addr++,val);
+        
+        }while (values && (val>=0));
 
+        umon_printf("s%08X",addr);  // On real machine some kind of checksum is returned here. Don't know how to calculate ...
+}
 void m65mon_show_regs ( void )
 {
         umon_printf(
@@ -232,6 +288,13 @@ void m65mon_show_regs ( void )
         );
 }
 
+void m65mon_do_reset ( void )
+{
+	reset_machine();
+	umon_printf("Xemu/Mega65 Serial Monitor\r\nWarning: not 100%% compatible with UART monitor of a *real* Mega65 ...");
+
+
+}
     
 
 void m65mon_set_trace ( int m )

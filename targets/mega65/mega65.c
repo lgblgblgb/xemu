@@ -1055,7 +1055,22 @@ static void shutdown_callback ( void )
 	DEBUG("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
 }
 
+void reset_machine(void){
 
+	CPU_PORT(0) = CPU_PORT(1) = 0xFF;
+	map_mask = 0;
+	vic3_registers[0x30] = 0;
+	in_hypervisor = 0;
+	apply_memory_config();
+	cpu_reset();
+	dma_reset();
+	nmi_level = 0;
+	kicked_hypervisor = emucfg_get_num("kicked");
+	hypervisor_enter(TRAP_RESET);
+	DEBUG("RESET!" NL);
+
+
+}
 
 // Called by emutools_hid!!! to handle special private keys assigned to this emulator
 int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
@@ -1063,17 +1078,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 	// Check for special, emulator-related hot-keys (not C65 key)
 	if (pressed) {
 		if (key == SDL_SCANCODE_F10) {
-			CPU_PORT(0) = CPU_PORT(1) = 0xFF;
-			map_mask = 0;
-			vic3_registers[0x30] = 0;
-			in_hypervisor = 0;
-			apply_memory_config();
-			cpu_reset();
-			dma_reset();
-			nmi_level = 0;
-			kicked_hypervisor = emucfg_get_num("kicked");
-			hypervisor_enter(TRAP_RESET);
-			DEBUG("RESET!" NL);
+			reset_machine();
 		} else if (key == SDL_SCANCODE_KP_ENTER) {
 			c64_toggle_joy_emu();
 		}

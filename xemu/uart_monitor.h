@@ -33,14 +33,20 @@ extern void uartmon_update ( void );
 extern void uartmon_close  ( void );
 extern void uartmon_finish_command ( void );
 
+extern void reset_machine(void);
+
 extern int  m65mon_update ( void );
 extern void m65mon_show_regs(void);
 extern void m65mon_dumpmem16(Uint16 addr);
+extern void m65mon_dumpmem16_bulk(Uint16 addr);
 extern void m65mon_dumpmem24 ( Uint32 addr );
+extern void m65mon_dumpmem24_bulk ( Uint32 addr );
+extern void m65mon_storemem24 ( Uint32 addr,char * values );
 extern void m65mon_do_trace(void);
 extern void m65mon_do_trace_c(void);
 extern void m65mon_set_trace(int n);
 extern void m65mon_breakpoint(int brk);
+extern void m65mon_do_reset(void);
 extern void m65mon_empty_command(void); // emulator can use it, if it wants
 
 
