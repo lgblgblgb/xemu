@@ -80,12 +80,6 @@ extern void  io_write ( int addr, Uint8 data );
 extern void  write_phys_mem ( int addr, Uint8 data );
 extern Uint8 read_phys_mem  ( int addr );
 
-extern void m65mon_show_regs ( void );
-extern void m65mon_dumpmem16 ( Uint16 addr );
-extern void m65mon_set_trace ( int m );
-extern void m65mon_do_trace  ( void );
-extern void m65mon_empty_command ( void );
-extern void m65mon_do_trace_c ( void );
-extern void m65mon_breakpoint ( int brk );
+extern void update_emulator ( void );
 
 #endif

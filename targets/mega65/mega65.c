@@ -26,7 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "vic3.h"
 #include "xemu/sid.h"
 #include "sdcard.h"
-#include "uart_monitor.h"
+#include "xemu/uart_monitor.h"
 #include "hypervisor.h"
 #include "xemu/c64_kbd_mapping.h"
 #include "xemu/emutools_config.h"
@@ -81,11 +81,6 @@ int skip_unhandled_mem;
 
 static int frame_counter;
 
-static int   paused = 0, paused_old = 0;
-static int   breakpoint_pc = -1;
-static int   trace_step_trigger = 0;
-static void (*m65mon_callback)(void) = NULL;
-static const char emulator_paused_title[] = "TRACE/PAUSE";
 
 Uint8 gs_regs[0x1000];			// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
 static int rom_protect;			// C65 system ROM write protection
@@ -1070,7 +1065,22 @@ static void shutdown_callback ( void )
 	DEBUG("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
 }
 
+void reset_machine(void){
 
+	CPU_PORT(0) = CPU_PORT(1) = 0xFF;
+	map_mask = 0;
+	vic3_registers[0x30] = 0;
+	in_hypervisor = 0;
+	apply_memory_config();
+	cpu_reset();
+	dma_reset();
+	nmi_level = 0;
+	kicked_hypervisor = emucfg_get_num("kicked");
+	hypervisor_enter(TRAP_RESET);
+	DEBUG("RESET!" NL);
+
+
+}
 
 // Called by emutools_hid!!! to handle special private keys assigned to this emulator
 int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
@@ -1078,17 +1088,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 	// Check for special, emulator-related hot-keys (not C65 key)
 	if (pressed) {
 		if (key == SDL_SCANCODE_F10) {
-			CPU_PORT(0) = CPU_PORT(1) = 0xFF;
-			map_mask = 0;
-			vic3_registers[0x30] = 0;
-			in_hypervisor = 0;
-			apply_memory_config();
-			cpu_reset();
-			dma_reset();
-			nmi_level = 0;
-			kicked_hypervisor = emucfg_get_num("kicked");
-			hypervisor_enter(TRAP_RESET);
-			DEBUG("RESET!" NL);
+			reset_machine();
 		} else if (key == SDL_SCANCODE_KP_ENTER) {
 			c64_toggle_joy_emu();
 		}
@@ -1098,7 +1098,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 
 
 
-static void update_emulator ( void )
+void update_emulator ( void )
 {
 	hid_handle_all_sdl_events();
 	nmi_set(IS_RESTORE_PRESSED(), 2);	// Custom handling of the restore key ...
@@ -1119,73 +1119,17 @@ static void update_emulator ( void )
 
 
 
-void m65mon_show_regs ( void )
-{
-	umon_printf(
-		"PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
-		"%04X %02X %02X %02X %02X %02X %04X "		// register banned message and things from PC to SP
-		"%04X %04X %02X       %02X %02X "		// from MAPL to P
-		"%c%c%c%c%c%c%c%c ",				// P-FLAGS
-		cpu_pc, cpu_a, cpu_x, cpu_y, cpu_z, cpu_bphi >> 8, cpu_sphi | cpu_sp,
-		map_offset_low >> 8, map_offset_high >> 8, cpu_op,
-		cpu_get_p(), 0,	// flags
-		cpu_pfn ? 'N' : '-',
-		cpu_pfv ? 'V' : '-',
-		cpu_pfe ? 'E' : '-',
-		cpu_pfb ? 'B' : '-',
-		cpu_pfd ? 'D' : '-',
-		cpu_pfi ? 'I' : '-',
-		cpu_pfz ? 'Z' : '-',
-		cpu_pfc ? 'C' : '-'
-	);
-}
-
-void m65mon_dumpmem16 ( Uint16 addr )
-{
-	int n = 16;
-	umon_printf(":000%04X", addr);
-	while (n--)
-		umon_printf(" %02X", cpu_read(addr++));
-}
-
-void m65mon_set_trace ( int m )
-{
-	paused = m;
-}
-
-void m65mon_do_trace ( void )
-{
-	if (paused) {
-		umon_send_ok = 0; // delay command execution!
-		m65mon_callback = m65mon_show_regs; // register callback
-		trace_step_trigger = 1;	// trigger one step
-	} else {
-		umon_printf(SYNTAX_ERROR "trace can be used only in trace mode");
-	}
-}
-
-void m65mon_do_trace_c ( void )
-{
-	umon_printf(SYNTAX_ERROR "command 'tc' is not implemented yet");
-}
-
-void m65mon_empty_command ( void )
-{
-	if (paused)
-		m65mon_do_trace();
-}
-
-void m65mon_breakpoint ( int brk )
-{
-	breakpoint_pc = brk;
-}
 
 
 
 int main ( int argc, char **argv )
 {
 	int cycles, frameskip;
-	xemu_dump_version(stdout, "The Incomplete Commodore-65/Mega-65 emulator from LGB");
+#ifdef UARTMON_SOCKET
+        int paused;
+#endif         
+
+        xemu_dump_version(stdout, "The Incomplete Commodore-65/Mega-65 emulator from LGB");
 	emucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
 	emucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip  (0=F018A, other=F018B)");
 	emucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA-board switches turned ON");
@@ -1238,40 +1182,19 @@ int main ( int argc, char **argv )
 		SDL_PauseAudioDevice(audio, 0);
 	emu_set_full_screen(emucfg_get_bool("fullscreen"));
 	for (;;) {
-		while (paused) {	// paused special mode, ie tracing support, or something ...
-			if (m65mon_callback) {	// delayed uart monitor command should be finished ...
-				m65mon_callback();
-				m65mon_callback = NULL;
-				uartmon_finish_command();
-			}
-			// we still need to feed our emulator with update events ... It also slows this pause-busy-loop down to every full frames (~25Hz)
-			// note, that it messes timing up a bit here, as there is update_emulator() calls later in the "normal" code as well
-			// this can be a bug, but real-time emulation is not so much an issue if you eg doing trace of your code ...
-			update_emulator();
-			if (trace_step_trigger) {
-				// if monitor trigges a step, break the pause loop, however we will get back the control on the next
-				// iteration of the infinite "for" loop, as "paused" is not altered
-				trace_step_trigger = 0;
-				break;	// break the pause loop now
-			}
-			// Decorate window title about the mode.
-			// If "paused" mode is switched off ie by a monitor command (called from update_emulator() above!)
-			// then it will resets back the the original state, etc
-			window_title_custom_addon = paused ? (char*)emulator_paused_title : NULL;
-			if (paused != paused_old) {
-				paused_old = paused;
-				if (paused)
-					fprintf(stderr, "TRACE: entering into trace mode @ $%04X" NL, cpu_pc);
-				else
-					fprintf(stderr, "TRACE: leaving trace mode @ $%04X" NL, cpu_pc);
-			}
-		}
+#ifdef UARTMON_SOCKET
+                /* Check for breakpoints or trace-mode , stay in the loop in single-step mode*/ 
+                do{
+                  paused=m65mon_update(); 
+                  // Decorate window title about the mode.
+                  // If "paused" mode is switched off ie by a monitor command (called from update_emulator() above!)
+                  // then it will resets back the the original state, etc
+                  window_title_custom_addon = paused ? (char*)emulator_paused_title : NULL;
+
+                }while (paused);
+#endif 
 		if (in_hypervisor) {
 			hypervisor_debug();
-		}
-		if (breakpoint_pc == cpu_pc) {
-			fprintf(stderr, "Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu_pc);
-			paused = 1;
 		}
 		cycles += cpu_step();
 		if (cycles >= cpu_cycles_per_scanline) {

@@ -16,13 +16,19 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
+#ifdef MEGA65
 #include "mega65.h"
+#else
+#include "commodore_65.h"
+#endif
+#include "cpu65c02.h"
 #include "uart_monitor.h"
 
 int  umon_write_size;
 int  umon_send_ok;
 char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
+const char emulator_paused_title[] = "TRACE/PAUSE";
 
 #ifdef _WIN32
 // Windows is not supported currently, as it does not have POSIX-standard socket interface (?).
@@ -30,6 +36,7 @@ int  uartmon_init   ( const char *fn ) { return 1; }
 void uartmon_update ( void ) {}
 void uartmon_close  ( void ) {}
 void uartmon_finish_command ( void ) {}
+int  m65mon_update(void){ return 0;}
 #else
 
 
@@ -48,6 +55,18 @@ static int  sock_server, sock_client;
 static int  umon_write_pos, umon_read_pos;
 static int  umon_echo;
 static char umon_read_buffer [0x1000];
+
+//#include "cpu65ce02_disasm_tables.c"
+
+
+/* Variables controlling behaviourt of EMU main-loop*/
+static int   paused = 0, paused_old = 0;
+static int   breakpoint_pc = -1;
+static int   trace_step_trigger = 0;
+static void (*m65mon_callback)(void) = NULL;
+
+
+
 
 
 // WARNING: This source is pretty ugly, ie not so much check of overflow of the output (write) buffer.
@@ -79,6 +98,7 @@ static char *parse_hex_arg ( char *p, int *val, int min, int max )
 		p++;
 	}
 	*val = r;
+
 	if (r < min || r > max) {
 		umon_printf(SYNTAX_ERROR "command parameter's value is outside of the allowed range for this command %X (%X...%X)", r, min, max);
 		return NULL;
@@ -121,7 +141,7 @@ static void execute_command ( char *cmd )
 	p--;
 	while (p >= cmd && *p <= 32)
 		*(p--) = 0;
-	DEBUG("UARTMON: command got \"%s\" (%d bytes)." NL, cmd, (int)strlen(cmd));
+	DEBUG("UARTMON: command got \"%s\" (%d bytes)." NL, cmd, (int)strlen(cmd));	
 	switch (*(cmd++)) {
 		case 'h':
 		case 'H':
@@ -134,11 +154,36 @@ static void execute_command ( char *cmd )
 			if (check_end_of_command(cmd, 1))
 				m65mon_show_regs();
 			break;
+		case 's':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFF);
+			if (cmd)
+				m65mon_storemem24(par1,cmd);
+			break;
+		case '!':
+			if (check_end_of_command(cmd, 1))
+				m65mon_do_reset();
+			break;
 		case 'd':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
 			if (cmd && check_end_of_command(cmd, 1))
-				m65mon_dumpmem16(par1);
+				m65mon_dumpmem16(par1);                                
 			break;
+		case 'D':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
+			if (cmd && check_end_of_command(cmd, 1))
+				m65mon_dumpmem16_bulk(par1);                                
+			break;
+                case 'm':
+                        cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFF);
+                        if (cmd && check_end_of_command(cmd, 1))
+                                m65mon_dumpmem24(par1);
+                        break;
+               case 'M':
+                        cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFF);
+                        if (cmd && check_end_of_command(cmd, 1))
+                                m65mon_dumpmem24_bulk(par1);
+                        break;
+
 		case 't':
 			if (!*cmd)
 				m65mon_do_trace();
@@ -165,7 +210,169 @@ static void execute_command ( char *cmd )
 	}
 }
 
+/***************************************************************************/
+/*   Monitor- commands */
+/***************************************************************************/
+void m65mon_dumpmem16 ( Uint16 addr )
+{
+        int n = 16;
+        umon_printf(":000%04X", addr);
+        while (n--)
+                umon_printf(" %02X", cpu_read(addr++));
+}
 
+void m65mon_dumpmem16_bulk ( Uint16 addr )
+{
+        int n = 32;
+        while (n--){
+              m65mon_dumpmem16(addr);
+	      umon_printf("\r\n");
+              addr+=16;				
+	}
+}
+
+void m65mon_dumpmem24 ( Uint32 addr )
+{
+        int n = 16;
+        umon_printf(":0%06X", addr);
+        while (n--)
+                umon_printf(" %02X", read_phys_mem(addr++));
+}
+
+void m65mon_dumpmem24_bulk ( Uint32 addr )
+{
+        int n = 32;
+        while (n--){
+              m65mon_dumpmem24(addr);
+	      umon_printf("\r\n");
+              addr+=16;				
+	}
+}
+
+void m65mon_storemem24 ( Uint32 addr,char * values )
+{
+       
+        int val;
+
+	do{
+                if (*values)
+        	  values = parse_hex_arg(values, &val, 0, 0xFF);
+                else
+		  val=-1;  // EOL reached ;	
+                
+		if (val>=0)
+			write_phys_mem(addr++,val);
+        
+        }while (values && (val>=0));
+
+        umon_printf("s%08X",addr);  // On real machine some kind of checksum is returned here. Don't know how to calculate ...
+}
+void m65mon_show_regs ( void )
+{
+        umon_printf(
+                "PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
+                "%04X %02X %02X %02X %02X %02X %04X "           // register banned message and things from PC to SP
+                "%04X %04X %02X       %02X %02X "               // from MAPL to P
+                "%c%c%c%c%c%c%c%c ",                            // P-FLAGS
+                cpu_pc, cpu_a, cpu_x, cpu_y, cpu_z, cpu_bphi >> 8, cpu_sphi | cpu_sp,
+                map_offset_low >> 8, map_offset_high >> 8, cpu_op,
+                cpu_get_p(), 0, // flags
+                cpu_pfn ? 'N' : '-',
+                cpu_pfv ? 'V' : '-',
+                cpu_pfe ? 'E' : '-',
+                cpu_pfb ? 'B' : '-',
+                cpu_pfd ? 'D' : '-',
+                cpu_pfi ? 'I' : '-',
+                cpu_pfz ? 'Z' : '-',
+                cpu_pfc ? 'C' : '-'
+        );
+}
+
+void m65mon_do_reset ( void )
+{
+	reset_machine();
+	umon_printf("Xemu/Mega65 Serial Monitor\r\nWarning: not 100%% compatible with UART monitor of a *real* Mega65 ...");
+
+
+}
+    
+
+void m65mon_set_trace ( int m )
+{
+        paused = m;
+}
+
+void m65mon_do_trace ( void )
+{
+        if (paused) {
+                umon_send_ok = 0; // delay command execution!
+                m65mon_callback = m65mon_show_regs; // register callback
+                trace_step_trigger = 1; // trigger one step
+        } else {
+                umon_printf(SYNTAX_ERROR "trace can be used only in trace mode");
+        }
+}
+
+void m65mon_do_trace_c ( void )
+{
+        umon_printf(SYNTAX_ERROR "command 'tc' is not implemented yet");
+}
+
+void m65mon_empty_command ( void )
+{
+        if (paused)
+                m65mon_do_trace();
+}
+
+void m65mon_breakpoint ( int brk )
+{
+        breakpoint_pc = brk;
+}
+
+/**************************************************************************/
+/*       m65mon_update is called from emulator-mainloop returns pause-mode */
+/**************************************************************************/
+
+int m65mon_update ( void )
+{
+
+    if (paused){
+     if (m65mon_callback) {  // delayed uart monitor command should be finished ...
+            m65mon_callback();
+            m65mon_callback = NULL;
+            uartmon_finish_command();
+     }
+     // we still need to feed our emulator with update events ... It also slows this pause-busy-loop down to every full frames (~25Hz)
+     // note, that it messes timing up a bit here, as there is update_emulator() calls later in the "normal" code as well
+     // this can be a bug, but real-time emulation is not so much an issue if you eg doing trace of your code ...
+     update_emulator();
+     if (trace_step_trigger) {
+          // if monitor trigges a step, break the pause loop, however we will get back the control on the next
+          // iteration of the infinite "for" loop, as "paused" is not altered
+          trace_step_trigger = 0;
+          return (0);
+     }
+     if (paused != paused_old) {
+             paused_old = paused;
+             if (paused){
+                     fprintf(stderr, "TRACE: entering into trace mode @ $%04X" NL, cpu_pc);
+                     m65mon_show_regs();       
+             }else{
+                     fprintf(stderr, "TRACE: leaving trace mode @ $%04X" NL, cpu_pc);
+             }
+     }
+    }else{
+      if (breakpoint_pc == cpu_pc) {
+         fprintf(stderr, "Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu_pc);
+         paused = 1;
+      }
+    }
+        
+   
+    return (paused);
+}
+
+/**************************************************************************/
 
 /* ------------------------- SOCKET HANDLING, etc ------------------------- */
 
