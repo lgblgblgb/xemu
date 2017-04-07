@@ -174,7 +174,8 @@ void vic3_write_reg ( int addr, Uint8 data )
 	Uint8 old_data;
 	addr &= vic_iomode ? 0x7F : 0x3F;
 	old_data = vic3_registers[addr];
-	DEBUG("VIC3: write reg $%02X with data $%02X" NL, addr, data);
+	DEBUG("VIC3: write reg $%02X with data $%02X" NL, addr, data);       
+
 	if (addr == 0x2F) {
 		int vic_new_iomode;
 		if (data == 0x96 && old_data == 0xA5)
@@ -198,6 +199,7 @@ void vic3_write_reg ( int addr, Uint8 data )
 	}
 	if (addr > 0x3D)
 		DEBUG("VIC4: writing VIC4 register $%02X in Mega65 I/O mode (data=$%02X)" NL, addr, data);
+                
 	vic3_registers[addr] = data;
 	switch (addr) {
 		case 0x11:
@@ -232,13 +234,27 @@ void vic3_write_reg ( int addr, Uint8 data )
 			palette = (data & 4) ? vic3_palette : vic3_rom_palette;
 			break;
 		case 0x31:
-			cpu_cycles_per_scanline = (data & 64) ? FAST_CPU_CYCLES_PER_SCANLINE : SLOW_CPU_CYCLES_PER_SCANLINE;
+                       if ((vic_iomode == VIC4_IOMODE) && (vic3_registers[0x54] & 64 )){
+                        cpu_cycles_per_scanline =  MEGA_FAST_CPU_CYCLES_PER_SCANLINE ;
+                       }else{                        
+                        cpu_cycles_per_scanline = ( data & 64) ? FAST_CPU_CYCLES_PER_SCANLINE : SLOW_CPU_CYCLES_PER_SCANLINE;                         
+                       }
 			//DEBUG("VIC3: clock_divider7_hack = %d" NL, clock_divider7_hack);
 			if ((data & 15) && warn_ctrl_b_lo) {
 				INFO_WINDOW("VIC3 control-B register V400, H1280, MONO and INT features are not emulated yet!");
 				warn_ctrl_b_lo = 0;
 			}
 			break;
+                        
+                case 0x54:                      
+                      if (data & 64){
+                        cpu_cycles_per_scanline =  MEGA_FAST_CPU_CYCLES_PER_SCANLINE ;
+                      }else{                        
+                        cpu_cycles_per_scanline = ( vic3_registers[0x31] & 64) ? FAST_CPU_CYCLES_PER_SCANLINE : SLOW_CPU_CYCLES_PER_SCANLINE;                         
+                      }
+                     
+                      break;
+                      
 #if 0
 		case 0x15:
 			if (data && warn_sprites) {
