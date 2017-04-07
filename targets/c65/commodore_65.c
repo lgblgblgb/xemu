@@ -730,6 +730,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 
 static void update_emulator ( void )
 {
+	emu_update_screen();
 	hid_handle_all_sdl_events();
 	nmi_set(IS_RESTORE_PRESSED(), 2); // Custom handling of the restore key ...
 	emu_timekeeping_delay(40000);
@@ -792,7 +793,7 @@ int main ( int argc, char **argv )
 	vic3_open_frame_access();
 	emu_timekeeping_start();
 	for (;;) {
-		cycles += cpu_step();
+		cycles += unlikely(dma_status) ? dma_update() : cpu_step();	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
 		if (cycles >= cpu_cycles_per_scanline) {
 			cia_tick(&cia1, 64);
 			cia_tick(&cia2, 64);
@@ -803,7 +804,6 @@ int main ( int argc, char **argv )
 					hostfs_flush_all();
 				} else {
 					frameskip = 1;
-					emu_update_screen();
 					update_emulator();
 					vic3_open_frame_access();
 				}

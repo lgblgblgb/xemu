@@ -1,5 +1,5 @@
 /* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -35,7 +35,7 @@ extern void  dma_init (
 	dma_reader_cb_t set_list_reader
 );
 extern void  dma_reset     ( void );
-extern void  dma_update    ( void );
+extern int   dma_update    ( void );
 
 /* Things should be provided by the emulator: */
 

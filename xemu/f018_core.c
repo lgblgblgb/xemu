@@ -1,5 +1,6 @@
 /* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   DMAgic emulation.
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -36,8 +37,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 	* Reading status would resume interrupted DMA operation (?) it's not emulated
 	* MEGA65 macro is defined in case of M65 target, then we handle the "megabyte slice stuff" as well.
 */
-
-#define DMA_MAX_ITERATIONS	(256*1024)
 
 
 Uint8 dma_registers[16];		// The four DMA registers (with last values written by the CPU)
@@ -153,17 +152,6 @@ static INLINE Uint8 read_dma_list_next ( void )
 }
 
 
-static void dma_update_all ( void )
-{
-	int limit = DMA_MAX_ITERATIONS;
-	while (dma_status) {
-		dma_update();
-		if (!limit--)
-			FATAL("FATAL: Run-away DMA session, still blocking the emulator after %d iterations, exiting!", DMA_MAX_ITERATIONS);
-	}
-}
-
-
 
 void dma_write_reg ( int addr, Uint8 data )
 {
@@ -190,16 +178,8 @@ void dma_write_reg ( int addr, Uint8 data )
 #endif
 	if (addr)
 		return;	// Only writing register 0 starts the DMA operation, otherwise just return from this function (reg write already happened)
-	if (dma_status) {
-		DEBUG("DMA: WARNING: previous operation is in progress, WORKAROUND: finishing first." NL);
-		// Ugly hack: it seems even the C65 ROM issues new DMA commands while the previous is in-progress
-		// It's possible the fault of timing of my emulation.
-		// The current workaround: in this situation we run the DMA to finish the previous operation first.
-		// Note, that there is a possible two PROBLEMS with this solution:
-		// * Extremly long DMA command (ie chained) blocks the emulator to refresh screen etc for a long time
-		// * I/O redirection as target affecting the DMA registers can create a stack overflow in the emulator code :)
-		dma_update_all();
-	}
+	if (unlikely(dma_status))
+		FATAL("dma_write_reg(): new DMA op with dma_status != 0");
 	dma_list_addr = dma_registers[0] | (dma_registers[1] << 8) | ((dma_registers[2] & 15) << 16);
 #ifdef MEGA65
 	list_megabyte = (int)dma_registers[4] << 20;	// the "MB" part to select MegaByte range for the DMA list reading
@@ -207,7 +187,6 @@ void dma_write_reg ( int addr, Uint8 data )
 	DEBUG("DMA: list address is [MB=$%02X]$%06X now, just written to register %d value $%02X" NL, list_megabyte >> 20, dma_list_addr, addr, data);
 	dma_status = 0x80;	// DMA is busy now, also to signal the emulator core to call dma_update() in its main loop
 	command = -1;		// signal dma_update() that it's needed to fetch the DMA command, no command is fetched yet
-	dma_update_all();	// DMA _stops_ CPU, however FIXME: interrupts can (???) occur, so we need to emulate that somehow later?
 }
 
 
@@ -245,12 +224,13 @@ void dma_write_reg ( int addr, Uint8 data )
    Extra byte in DMA list fetch before modulo (CALLED: "subcommand" also?):
 		ONLY IN CASE OF F016B (12 bytes / DMA command, for F018A it's only 11 bytes ...)
 */
-void dma_update ( void )
+int dma_update ( void )
 {
 	Uint8 subcommand;
-	if (!dma_status)
-		return;
-	if (command == -1) {
+	int time;
+	if (unlikely(!dma_status))
+		FATAL("dma_update() called with no dma_status set!");
+	if (unlikely(command == -1)) {
 		// command == -1 signals the situation, that the (next) DMA command should be read!
 		// This part is highly incorrect, ie fetching so many bytes in one step only of dma_update()
 		command      = read_dma_list_next()      ;
@@ -267,6 +247,7 @@ void dma_update ( void )
 		modulo       = read_dma_list_next()      ;	// modulo is not so much handled yet, maybe it's not even a 16 bit value
 		modulo      |= read_dma_list_next() <<  8;	// ... however since it's currently not used, it does not matter too much
 		if (dma_chip_revision) {
+			time = 12;	// FIXME: correct timing?
 			// F018B ("new") behaviour
 			source_step  = (command & 16) ? -1 : 1;
 			target_step  = (command & 32) ? -1 : 1;
@@ -274,6 +255,7 @@ void dma_update ( void )
 			//target_uses_modulo =
 			// FIXME: what about minterms in F018B?!
 		} else {
+			time = 11;	// FIXME: correct timing?
 			// F018A ("old") behaviour
 			source_step  = (source_addr & 0x100000) ? 0 : ((source_addr & 0x400000) ? -1 : 1);
 			target_step  = (target_addr & 0x100000) ? 0 : ((target_addr & 0x400000) ? -1 : 1);
@@ -327,22 +309,26 @@ void dma_update ( void )
 		);
 		if (!length)
 			length = 0x10000;			// I *think* length of zero means 64K. Probably it's not true!!
-		return;
+		return time;
 	}
 	// We have valid command to be executed, or continue to execute
 	//DEBUG("DMA: EXECUTING: command=%d length=$%04X" NL, command & 3, length);
 	switch (command & 3) {
 		case 0:			// COPY command
 			write_target_next(read_source_next());
+			time = 2;	// FIXME: correct timing?
 			break;
 		case 1:			// MIX command
 			mix_next();
+			time = 3;	// FIXME: correct timing?
 			break;
 		case 2:			// SWAP command
 			swap_next();
+			time = 4;	// FIXME: correct timing?
 			break;
 		case 3:			// FILL command (SRC LO is the filler byte!)
 			write_target_next(source_addr & 0xFF);
+			time = 1;	// FIXME: correct timing?
 			break;
 	}
 	// Check the situation of end of the operation
@@ -358,6 +344,7 @@ void dma_update ( void )
 			command = -1;
 		}
 	}
+	return time;
 }
 
 
@@ -455,6 +442,8 @@ int dma_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	/* saving state ... */
 	memcpy(buffer, dma_registers, sizeof dma_registers);
 	buffer[0x80] = dma_chip_revision;
+	if (dma_status)
+		WARNING_WINDOW("f018_core DMA snapshot save: snapshot with DMA pending! Snapshot WILL BE incorrect on loading! FIXME!");	// FIXME!
 	return xemusnap_write_sub_block(buffer, sizeof buffer);
 }
 
