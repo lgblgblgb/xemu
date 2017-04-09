@@ -1,5 +1,5 @@
 /* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is the VIC3 "emulation". Currently it does one-frame-at-once
    kind of horrible work, and only a subset of VIC2 and VIC3 knowledge
@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "xemu/cpu65c02.h"
 #include "vic3.h"
+#include "hypervisor.h"
 
 #define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
 
@@ -38,6 +39,7 @@ static Uint32 *palette;			// the selected palette ...
 static Uint8 vic3_palette_nibbles[0x300];
 Uint8 vic3_registers[0x80];		// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
 int vic_iomode;				// VIC2/VIC3/VIC4 mode
+int force_fast;				// POKE 0,64 and 0,65 trick ...
 int scanline;				// current scan line number
 int cpu_cycles_per_scanline;
 static int compare_raster;		// raster compare (9 bits width) data
@@ -97,6 +99,7 @@ void vic3_init ( void )
 		for (g = 0; g < 16; g++)
 			for (b = 0; b < 16; b++)
 				rgb_palette[i++] = SDL_MapRGBA(sdl_pix_fmt, r * 17, g * 17, b * 17, 0xFF); // 15*17=255, last arg 0xFF: alpha channel for SDL
+	force_fast = 0;
 	// *** Init VIC3 registers and palette
 	vic2_16k_bank = 0;
 	vic_iomode = VIC2_IOMODE;
@@ -104,7 +107,6 @@ void vic3_init ( void )
 	palette = vic3_rom_palette;
 	scanline = 0;
 	compare_raster = 0;
-	cpu_cycles_per_scanline = FAST_CPU_CYCLES_PER_SCANLINE;
 	for (i = 0; i < 0x100; i++) {	// Initiailize all palette registers to zero, initially, to have something ...
 		if (i < sizeof vic3_registers)
 			vic3_registers[i] = 0;	// Also the VIC3 registers ...
@@ -165,6 +167,53 @@ void vic3_check_raster_interrupt ( void )
 	else
 		interrupt_status &= 0xFE;
 	vic3_interrupt_checker();
+}
+
+
+
+void machine_set_speed ( int verbose )
+{
+	// TODO: Mega65 speed is not handled yet. Reasons: too slow emulation for average PC, and the complete control of speed, ie lack of C128-fast (2MHz mode,
+	// because of incomplete VIC register I/O handling).
+	// Actually the rule would be something like that (this comment is here by intent, for later implementation FIXME TODO), some VHDL draft only:
+	// cpu_speed := vicii_2mhz&viciii_fast&viciv_fast
+	// if hypervisor_mode='0' and ((speed_gate='1') and (force_fast='0')) then -- LGB: vicii_2mhz seems to be a low-active signal?
+	// case cpu_speed is ...... 100=1MHz, 101=1MHz, 110=3.5MHz, 111=48Mhz, 000=2MHz, 001=48MHz, 010=3.5MHz, 011=48MHz
+	// else 48MHz end if;
+	// it seems hypervisor always got full speed, and force_fast (ie, POKE 0,65) always forces the max
+	// TODO: what is speed_gate? (it seems to be a PMOD input and/or keyboard controll with CAPS-LOCK)
+	// TODO: how 2MHz is selected, it seems a double decoded VIC-X registers which is not so common in VIC modes yet, I think ...
+	if (verbose)
+		printf("SPEED: in_hypervisor=%d force_fast=%d c65_fast=%d m65_fast=%d" NL,
+			in_hypervisor, force_fast, vic3_registers[0x31] & 64, vic3_registers[0x54] & 64
+		);
+	if (in_hypervisor || force_fast) {
+		if (allow_turbo) {
+			cpu_cycles_per_scanline = CPU_M65_CYCLES_PER_SCANLINE;
+			strcpy(emulator_speed_title, "48MHz");
+		} else {
+			cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
+			strcpy(emulator_speed_title, ">3.5MHz");
+		}
+	} else {
+		if ((vic3_registers[0x31] & 64)) {
+			if ((vic3_registers[0x54] & 64)) {
+				if (allow_turbo) {
+					cpu_cycles_per_scanline = CPU_M65_CYCLES_PER_SCANLINE;
+					strcpy(emulator_speed_title, "48MHz");
+				} else {
+					cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
+					strcpy(emulator_speed_title, ">3.5MHz");
+				}
+			} else {
+				cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
+				strcpy(emulator_speed_title, "3.5MHz");
+			}
+		} else {
+			cpu_cycles_per_scanline = CPU_C64_CYCLES_PER_SCANLINE;
+			strcpy(emulator_speed_title, "1MHz");
+		}
+	}
 }
 
 
@@ -232,12 +281,14 @@ void vic3_write_reg ( int addr, Uint8 data )
 			palette = (data & 4) ? vic3_palette : vic3_rom_palette;
 			break;
 		case 0x31:
-			cpu_cycles_per_scanline = (data & 64) ? FAST_CPU_CYCLES_PER_SCANLINE : SLOW_CPU_CYCLES_PER_SCANLINE;
-			//DEBUG("VIC3: clock_divider7_hack = %d" NL, clock_divider7_hack);
+			machine_set_speed(0);
 			if ((data & 15) && warn_ctrl_b_lo) {
 				INFO_WINDOW("VIC3 control-B register V400, H1280, MONO and INT features are not emulated yet!");
 				warn_ctrl_b_lo = 0;
 			}
+			break;
+		case 0x54:
+			machine_set_speed(0);
 			break;
 #if 0
 		case 0x15:
@@ -676,7 +727,7 @@ void vic3_render_screen ( void )
 
 #include <string.h>
 
-#define SNAPSHOT_VIC4_BLOCK_VERSION	0
+#define SNAPSHOT_VIC4_BLOCK_VERSION	1
 #define SNAPSHOT_VIC4_BLOCK_SIZE	0x400
 
 int vic4_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
@@ -694,8 +745,9 @@ int vic4_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, st
 	}
 	for (a = 0; a < 0x300; a++)
 		vic3_write_palette_reg(a, buffer[a + 0x100]);
-	vic_iomode = buffer[128];
-	interrupt_status = (int)P_AS_BE32(buffer + 129);
+	vic_iomode = buffer[0];
+	interrupt_status = (int)P_AS_BE32(buffer + 1);
+	force_fast = (int)P_AS_BE32(buffer + 1 + 4);
 	return 0;
 }
 
@@ -709,8 +761,9 @@ int vic4_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	/* saving state ... */
 	memcpy(buffer + 0x80,  vic3_registers, 0x80);		//  $80 bytes
 	memcpy(buffer + 0x100, vic3_palette_nibbles, 0x300);	// $300 bytes
-	buffer[128] = vic_iomode;
-	U32_AS_BE(buffer + 129, interrupt_status);
+	buffer[0] = vic_iomode;
+	U32_AS_BE(buffer + 1, interrupt_status);
+	U32_AS_BE(buffer + 1 + 4, force_fast);
 	return xemusnap_write_sub_block(buffer, sizeof buffer);
 }
 

@@ -1,5 +1,5 @@
 /* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -29,6 +29,7 @@ extern Uint8 vic3_registers[];
 extern int   cpu_cycles_per_scanline;
 extern int   vic2_16k_bank;
 extern int   vic3_blink_phase;
+extern int   force_fast;
 
 extern void  vic3_init ( void );
 extern void  vic3_write_reg ( int addr, Uint8 data );
@@ -36,6 +37,7 @@ extern Uint8 vic3_read_reg ( int addr );
 extern void  vic3_write_palette_reg ( int num, Uint8 data );
 extern void  vic3_render_screen ( void );
 extern void  vic3_check_raster_interrupt ( void );
+extern void  machine_set_speed ( int verbose );
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 #include "xemu/emutools_snapshot.h"

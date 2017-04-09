@@ -63,7 +63,7 @@ static int map_mask;			// MAP mask, should be filled at the MAP opcode, *before*
 static int map_offset_low;		// MAP low offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 static int map_offset_high;		// MAP high offset, should be filled at the MAP opcode, *before* calling apply_memory_config() then
 
-
+char emulator_speed_title[] = "???MHz";
 
 
 
@@ -763,6 +763,7 @@ int main ( int argc, char **argv )
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
+	window_title_info_addon = emulator_speed_title;
         if (emu_init_sdl(
 		TARGET_DESC APP_DESC_APPEND,	// window title
 		APP_ORG, TARGET_NAME,		// app organization and name, used with SDL pref dir formation

@@ -1,5 +1,5 @@
 /* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -156,6 +156,7 @@ void hypervisor_enter ( int trapno )
 	map_megabyte_high = 0xFF << 20;
 	map_offset_high = 0xF0000;
 	apply_memory_config();	// now the memory mapping is changed
+	machine_set_speed(0);	// set machine speed (hypervisor always runs at M65 fast ... ??) FIXME: check this!
 	cpu_pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
 	DEBUG("MEGA65: entering into hypervisor mode, trap=$%02X PC=$%04X" NL, trapno, cpu_pc);
 	fprintf(stderr, "HYPERVISOR: entering into hypervisor mode @ $%04X -> $%04X" NL, gs_regs[0x648] | (gs_regs[0x649] << 8), cpu_pc);
@@ -197,6 +198,7 @@ void hypervisor_leave ( void )
 	dma_registers[4] = (gs_regs[0x657] >> 4) | (gs_regs[0x658] << 4);
 	// Now leaving hypervisor mode ...
 	in_hypervisor = 0;
+	machine_set_speed(0);	// restore speed ...
 	apply_memory_config();
 	DEBUG("MEGA65: leaving hypervisor mode, (user) PC=$%04X" NL, cpu_pc);
 }

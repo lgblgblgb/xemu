@@ -47,6 +47,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 extern Uint8 memory[0x100000];
+extern char emulator_speed_title[];
 
 extern void  apply_memory_config ( void );
 extern Uint8 io_read  ( int addr );

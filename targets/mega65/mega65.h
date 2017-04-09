@@ -1,5 +1,5 @@
 /* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -40,8 +40,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_WIDTH		640
 #define SCREEN_HEIGHT		200
 
-#define FAST_CPU_CYCLES_PER_SCANLINE	227
-#define SLOW_CPU_CYCLES_PER_SCANLINE	64
+#define CPU_M65_CYCLES_PER_SCANLINE	3113
+#define CPU_C65_CYCLES_PER_SCANLINE	227
+#define CPU_C64_CYCLES_PER_SCANLINE	64
 
 #define SID_CYCLES_PER_SEC	1000000
 #define AUDIO_SAMPLE_FREQ	44100
@@ -71,6 +72,8 @@ extern int map_offset_high;
 extern int map_megabyte_low;
 extern int map_megabyte_high;
 extern Uint8 gs_regs[0x1000];
+extern char emulator_speed_title[];
+extern int  allow_turbo;
 //extern Uint8 cpu_port[2];
 #define CPU_PORT(n)	memory[n]
 

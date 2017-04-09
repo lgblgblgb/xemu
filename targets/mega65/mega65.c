@@ -79,6 +79,8 @@ int map_megabyte_high;		// Mega65 extension: selects the "MegaByte range" (MB) f
 int io_at_d000;
 int skip_unhandled_mem;
 
+int allow_turbo;
+
 static int frame_counter;
 
 static int   paused = 0, paused_old = 0;
@@ -86,6 +88,7 @@ static int   breakpoint_pc = -1;
 static int   trace_step_trigger = 0;
 static void (*m65mon_callback)(void) = NULL;
 static const char emulator_paused_title[] = "TRACE/PAUSE";
+char emulator_speed_title[] = "????MHz";
 
 Uint8 gs_regs[0x1000];			// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
 static int rom_protect;			// C65 system ROM write protection
@@ -840,12 +843,22 @@ void write_phys_mem ( int addr, Uint8 data )
 	// FIXME: check that at DMAgic, also the situation that DMAgic can/should/etc wrap at all on MB ranges, and on 256Mbyte too!
 	addr &= 0xFFFFFFF;		// warps around at 256Mbyte, for address bus of Mega65
 	if (addr < 0x000002) {
-		if ((CPU_PORT(addr) & 7) != (data & 7)) {
-			CPU_PORT(addr) = data;
-			DEBUG("MEM: applying new memory configuration because of CPU port writing." NL);
-			apply_memory_config();
-		} else
-			CPU_PORT(addr) = data;
+		// FIXME: handle the magic M65 access: POKEing addr 0 with 64 means force_fast<='0' and 65 force_fast<='1'
+		// forcefast==1 _seems_ to be override all speed settings and force to 48Mhz ...
+		if (unlikely((addr == 0) && ((data & 0xFE) == 0x40))) {
+			data &= 1;
+			if (force_fast != data) {
+				force_fast = data;
+				machine_set_speed(0);
+			}
+		} else {
+			if ((CPU_PORT(addr) & 7) != (data & 7)) {
+				CPU_PORT(addr) = data;
+				DEBUG("MEM: applying new memory configuration because of CPU port writing." NL);
+				apply_memory_config();
+			} else
+				CPU_PORT(addr) = data;
+		}
 		return;
 	}
 	if (addr < 0x01F800) {		// accessing RAM @ 2 ... 128-2K.
@@ -1078,6 +1091,8 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 	// Check for special, emulator-related hot-keys (not C65 key)
 	if (pressed) {
 		if (key == SDL_SCANCODE_F10) {
+			force_fast = 0;	// FIXME: other default speed controls on reset?
+			machine_set_speed(0);
 			CPU_PORT(0) = CPU_PORT(1) = 0xFF;
 			map_mask = 0;
 			vic3_registers[0x30] = 0;
@@ -1200,11 +1215,13 @@ int main ( int argc, char **argv )
 	emucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
 #endif
 	emucfg_define_switch_option("skipunhandledmem", "Do not panic on unhandled memory access (hides problems!!)");
+	emucfg_define_switch_option("turbo", "Allow emulation of 48MHz (problematic, currently)");
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
 	if (xemu_byte_order_test())
 		FATAL("Byte order test failed!!");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
+	window_title_info_addon = emulator_speed_title;
         if (emu_init_sdl(
 		TARGET_DESC APP_DESC_APPEND,	// window title
 		APP_ORG, TARGET_NAME,		// app organization and name, used with SDL pref dir formation
@@ -1228,6 +1245,9 @@ int main ( int argc, char **argv )
 	);
 	// Start!!
 	skip_unhandled_mem = emucfg_get_bool("skipunhandledmem");
+	allow_turbo = emucfg_get_bool("turbo");
+	if (allow_turbo)
+		WARNING_WINDOW("Warning! Emulation of 48MHz is unstable and slow now!");
 	printf("UNHANDLED memory policy: %d" NL, skip_unhandled_mem);
 	cycles = 0;
 	frameskip = 0;
@@ -1358,8 +1378,10 @@ int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 
 int m65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
+	printf("SNAP: loaded (finalize-callback: begin)" NL);
 	apply_memory_config();
-	printf("SNAP: loaded (finalize-callback!)." NL);
+	machine_set_speed(1);
+	printf("SNAP: loaded (finalize-callback: end)" NL);
 	return 0;
 }
 #endif

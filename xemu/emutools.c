@@ -41,6 +41,7 @@ SDL_PixelFormat *sdl_pix_fmt;
 static const char default_window_title[] = "XEMU";
 char *sdl_window_title = (char*)default_window_title;
 char *window_title_custom_addon = NULL;
+char *window_title_info_addon = NULL;
 Uint32 *sdl_pixel_buffer = NULL;
 int texture_x_size_in_bytes;
 int emu_is_fullscreen = 0;
@@ -360,9 +361,10 @@ void emu_timekeeping_delay ( int td_em )
 	td = get_elapsed_time(et_new, &et_old, &unix_time);
 	seconds_timer_trigger = (unix_time != old_unix_time);
 	if (seconds_timer_trigger) {
-		snprintf(window_title_buffer_end, 32, "  [%d%%] %s",
+		snprintf(window_title_buffer_end, 32, "  [%d%%] %s %s",
 			td_em_ALL ? (td_pc_ALL * 100 / td_em_ALL) : -1,
-			window_title_custom_addon ? window_title_custom_addon : "running"
+			window_title_custom_addon ? window_title_custom_addon : "running",
+			window_title_info_addon ? window_title_info_addon : ""
 		);
 		SDL_SetWindowTitle(sdl_win, window_title_buffer);
 		td_pc_ALL = td_pc;

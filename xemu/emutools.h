@@ -78,6 +78,7 @@ extern int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 
 extern char *sdl_window_title;
 extern char *window_title_custom_addon;
+extern char *window_title_info_addon;
 extern SDL_Window   *sdl_win;
 extern Uint32 sdl_winid;
 extern SDL_PixelFormat *sdl_pix_fmt;

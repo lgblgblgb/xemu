@@ -786,8 +786,13 @@ void vic3_write_reg ( int addr, Uint8 data )
 			vic3_registers[0x31] = data;
 			attributes = (data & 32) ? 0xF0 : 0x00;	// currently, I use $F0 for on, 00 off, to be able to use as an attrib mask directly for upper 4 bits
 			select_renderer_func();
-			cpu_cycles_per_scanline = (data & 64) ? FAST_CPU_CYCLES_PER_SCANLINE : SLOW_CPU_CYCLES_PER_SCANLINE;
-			//DEBUG("VIC3: clock_divider7_hack = %d" NL, clock_divider7_hack);
+			if ((data & 64)) {
+				cpu_cycles_per_scanline = FAST_CPU_CYCLES_PER_SCANLINE;
+				strcpy(emulator_speed_title, "3.5MHz");
+			} else {
+				cpu_cycles_per_scanline = SLOW_CPU_CYCLES_PER_SCANLINE;
+				strcpy(emulator_speed_title, "1MHz");
+			}
 			if ((data & 15) && warn_ctrl_b_lo) {
 				INFO_WINDOW("VIC3 control-B register V400, H1280, MONO and INT features are not emulated yet!\nThere will be no further warnings on this issue.");
 				warn_ctrl_b_lo = 0;
@@ -897,6 +902,7 @@ void vic3_init ( void )
 	scanline = 0;
 	compare_raster = 0;
 	cpu_cycles_per_scanline = FAST_CPU_CYCLES_PER_SCANLINE;
+	strcpy(emulator_speed_title, "3.5MHz");
 	video_counter = 0;
 	row_counter = 0;
 	for (i = 0; i < 0x100; i++) {	// Initialize all palette registers to zero, initially, to have something ...
