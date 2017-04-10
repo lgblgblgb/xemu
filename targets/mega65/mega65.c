@@ -79,7 +79,7 @@ int map_megabyte_high;		// Mega65 extension: selects the "MegaByte range" (MB) f
 int io_at_d000;
 int skip_unhandled_mem;
 
-int allow_turbo;
+int disallow_turbo;
 
 static int frame_counter;
 
@@ -1092,6 +1092,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 	if (pressed) {
 		if (key == SDL_SCANCODE_F10) {
 			force_fast = 0;	// FIXME: other default speed controls on reset?
+			c128_d030_reg = 0xFF;
 			machine_set_speed(0);
 			CPU_PORT(0) = CPU_PORT(1) = 0xFF;
 			map_mask = 0;
@@ -1215,7 +1216,7 @@ int main ( int argc, char **argv )
 	emucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
 #endif
 	emucfg_define_switch_option("skipunhandledmem", "Do not panic on unhandled memory access (hides problems!!)");
-	emucfg_define_switch_option("turbo", "Allow emulation of 48MHz (problematic, currently)");
+	emucfg_define_switch_option("c65speed", "Allow emulation of 48MHz (problematic, currently)");
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
 	if (xemu_byte_order_test())
@@ -1245,9 +1246,9 @@ int main ( int argc, char **argv )
 	);
 	// Start!!
 	skip_unhandled_mem = emucfg_get_bool("skipunhandledmem");
-	allow_turbo = emucfg_get_bool("turbo");
-	if (allow_turbo)
-		WARNING_WINDOW("Warning! Emulation of 48MHz is unstable and slow now!");
+	disallow_turbo = emucfg_get_bool("c65speed");
+	if (disallow_turbo)
+		printf("SPEED: WARNING: limitation of max CPU clock to 3.5MHz request is in use!" NL);
 	printf("UNHANDLED memory policy: %d" NL, skip_unhandled_mem);
 	cycles = 0;
 	frameskip = 0;

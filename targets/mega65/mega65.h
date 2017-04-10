@@ -42,6 +42,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define CPU_M65_CYCLES_PER_SCANLINE	3113
 #define CPU_C65_CYCLES_PER_SCANLINE	227
+#define CPU_C128_CYCLES_PER_SCANLINE	128
 #define CPU_C64_CYCLES_PER_SCANLINE	64
 
 #define SID_CYCLES_PER_SEC	1000000
@@ -73,7 +74,7 @@ extern int map_megabyte_low;
 extern int map_megabyte_high;
 extern Uint8 gs_regs[0x1000];
 extern char emulator_speed_title[];
-extern int  allow_turbo;
+extern int  disallow_turbo;
 //extern Uint8 cpu_port[2];
 #define CPU_PORT(n)	memory[n]
 

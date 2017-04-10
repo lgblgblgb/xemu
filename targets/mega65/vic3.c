@@ -49,6 +49,7 @@ static Uint8 *sprite_pointers;		// Pointer to sprite pointers :)
 static Uint8 *sprite_bank;
 int vic3_blink_phase;			// blinking attribute helper, state.
 static Uint8 raster_colours[512];
+Uint8 c128_d030_reg;			// C128-like register can be only accessed in VIC-II mode but not in others, quite special!
 
 static int warn_sprites = 0, warn_ctrl_b_lo = 1;
 
@@ -102,6 +103,7 @@ void vic3_init ( void )
 	force_fast = 0;
 	// *** Init VIC3 registers and palette
 	vic2_16k_bank = 0;
+	c128_d030_reg = 0xFF;
 	vic_iomode = VIC2_IOMODE;
 	interrupt_status = 0;
 	palette = vic3_rom_palette;
@@ -184,35 +186,35 @@ void machine_set_speed ( int verbose )
 	// TODO: what is speed_gate? (it seems to be a PMOD input and/or keyboard controll with CAPS-LOCK)
 	// TODO: how 2MHz is selected, it seems a double decoded VIC-X registers which is not so common in VIC modes yet, I think ...
 	if (verbose)
-		printf("SPEED: in_hypervisor=%d force_fast=%d c65_fast=%d m65_fast=%d" NL,
-			in_hypervisor, force_fast, vic3_registers[0x31] & 64, vic3_registers[0x54] & 64
+		printf("SPEED: in_hypervisor=%d force_fast=%d c128_fast=%d, c65_fast=%d m65_fast=%d" NL,
+			in_hypervisor, force_fast, (c128_d030_reg & 1) ^ 1, vic3_registers[0x31] & 64, vic3_registers[0x54] & 64
 		);
-	if (in_hypervisor || force_fast) {
-		if (allow_turbo) {
-			cpu_cycles_per_scanline = CPU_M65_CYCLES_PER_SCANLINE;
-			strcpy(emulator_speed_title, "48MHz");
-		} else {
-			cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
-			strcpy(emulator_speed_title, ">3.5MHz");
-		}
-	} else {
-		if ((vic3_registers[0x31] & 64)) {
-			if ((vic3_registers[0x54] & 64)) {
-				if (allow_turbo) {
-					cpu_cycles_per_scanline = CPU_M65_CYCLES_PER_SCANLINE;
-					strcpy(emulator_speed_title, "48MHz");
-				} else {
-					cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
-					strcpy(emulator_speed_title, ">3.5MHz");
-				}
-			} else {
-				cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
-				strcpy(emulator_speed_title, "3.5MHz");
-			}
-		} else {
+	switch ((in_hypervisor || force_fast) ? 7 : (((c128_d030_reg & 1) << 2) | ((vic3_registers[0x31] & 64) >> 5) | ((vic3_registers[0x54] & 64) >> 6))) {
+		case 4:	// 100 - 1MHz
+		case 5:	// 101 - 1MHz
 			cpu_cycles_per_scanline = CPU_C64_CYCLES_PER_SCANLINE;
 			strcpy(emulator_speed_title, "1MHz");
-		}
+			break;
+		case 0:	// 000 - 2MHz
+			cpu_cycles_per_scanline = CPU_C128_CYCLES_PER_SCANLINE;
+			strcpy(emulator_speed_title, "2MHz");
+			break;
+		case 2:	// 010 - 3.5MHz
+		case 6:	// 110 - 3.5MHz
+			cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
+			strcpy(emulator_speed_title, "3.5MHz");
+			break;
+		case 1:	// 001 - 48MHz
+		case 3:	// 011 - 48MHz
+		case 7:	// 111 - 48MHz
+			if (likely(!disallow_turbo)) {
+				cpu_cycles_per_scanline = CPU_M65_CYCLES_PER_SCANLINE;
+				strcpy(emulator_speed_title, "48MHz");
+			} else {
+				cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
+				strcpy(emulator_speed_title, ">3.5MHz");
+			}
+			break;
 	}
 }
 
@@ -238,7 +240,11 @@ void vic3_write_reg ( int addr, Uint8 data )
 		}
 	}
 	if (vic_iomode == VIC2_IOMODE && addr > 0x2F) {
-		DEBUG("VIC3: ignoring writing register $%02X (with data $%02X) because of old I/O access mode selected" NL, addr, data);
+		if (addr == 0x30) {	// special care about D030 in VIC-II mode, which is C128-like reg, but only *IN* that mode!
+			c128_d030_reg = data;
+			machine_set_speed(0);
+		} else
+			DEBUG("VIC3: ignoring writing register $%02X (with data $%02X) because of old I/O access mode selected" NL, addr, data);
 		return;
 	}
 	if (vic_iomode != VIC4_IOMODE && addr > 0x3D) {
@@ -309,6 +315,8 @@ Uint8 vic3_read_reg ( int addr )
 	Uint8 result;
 	addr &= vic_iomode ? 0x7F : 0x3F;
 	if (vic_iomode == VIC2_IOMODE && addr > 0x2F) {
+		if (addr == 0x30)	// special care about D030 in VIC-II mode, which is C128-like reg, but only *IN* that mode!
+			return c128_d030_reg;
 		DEBUG("VIC3: ignoring reading register $%02X because of old I/O access mode selected, answer is $FF" NL, addr);
 		return 0xFF;
 	}
@@ -727,7 +735,7 @@ void vic3_render_screen ( void )
 
 #include <string.h>
 
-#define SNAPSHOT_VIC4_BLOCK_VERSION	1
+#define SNAPSHOT_VIC4_BLOCK_VERSION	2
 #define SNAPSHOT_VIC4_BLOCK_SIZE	0x400
 
 int vic4_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
@@ -743,6 +751,7 @@ int vic4_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, st
 		vic_iomode = VIC4_IOMODE;
 		vic3_write_reg(a, buffer[a + 0x80]);
 	}
+	c128_d030_reg = buffer[0x7F];
 	for (a = 0; a < 0x300; a++)
 		vic3_write_palette_reg(a, buffer[a + 0x100]);
 	vic_iomode = buffer[0];
@@ -760,6 +769,7 @@ int vic4_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	memset(buffer, 0xFF, sizeof buffer);
 	/* saving state ... */
 	memcpy(buffer + 0x80,  vic3_registers, 0x80);		//  $80 bytes
+	buffer[0x7F] = c128_d030_reg;
 	memcpy(buffer + 0x100, vic3_palette_nibbles, 0x300);	// $300 bytes
 	buffer[0] = vic_iomode;
 	U32_AS_BE(buffer + 1, interrupt_status);

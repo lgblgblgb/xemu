@@ -30,6 +30,7 @@ extern int   cpu_cycles_per_scanline;
 extern int   vic2_16k_bank;
 extern int   vic3_blink_phase;
 extern int   force_fast;
+extern Uint8 c128_d030_reg;
 
 extern void  vic3_init ( void );
 extern void  vic3_write_reg ( int addr, Uint8 data );
