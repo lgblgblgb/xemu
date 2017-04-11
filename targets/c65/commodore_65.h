@@ -43,7 +43,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 // If defined, a file name string must be used.
 // Then RAM content (low 128K) will be written into this file on exit.
-#define MEMDUMP_FILE		"dump.mem"
+//#define MEMDUMP_FILE		"dump.mem"
 
 
 extern Uint8 memory[0x100000];

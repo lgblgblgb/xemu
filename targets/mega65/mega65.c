@@ -911,42 +911,6 @@ void write_phys_mem ( int addr, Uint8 data )
 		DEBUGPRINT("WARNING: Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, addr, data, cpu_pc);
 	else
 		FATAL("Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, addr, data, cpu_pc);
-#if 0
-	addr &= 0xFFFFFFF;	// warps around at 256Mbyte, for address bus of Mega65
-	// !!!! The following line was for C65 to make it secure, only access 1Mbyte of memory ...
-	//addr &= 0xFFFFF;
-	if (addr < 2) {
-		if ((cpu_port[addr] & 7) != (data & 7)) {
-			cpu_port[addr] = data;
-			DEBUG("MEM: applying new memory configuration because of CPU port writing." NL);
-			apply_memory_config();
-		} else
-			cpu_port[addr] = data;
-	} else if (
-		(addr < 0x20000)
-#if defined(ALLOW_256K_RAMEXP) && defined(ALLOW_512K_RAMEXP)
-		|| (addr >= (rom_protect ? 0x40000 : 0x20000))
-#else
-#	ifdef ALLOW_256K_RAMEXP
-		|| (addr >= (rom_protect ? 0x40000 : 0x20000) && addr < 0x80000)
-#	endif
-#	ifdef ALLOW_512K_RAMEXP
-		|| (addr >= 0x80000)
-#	endif
-#endif
-	) {
-		if ((addr & 0xFFFF000) == 0xFF7E000) {	// FIXME: temporary hack to allow non-existing VIC-IV charrom writes :-/
-			DEBUG("LINEAR: VIC-IV charrom writes are ignored for now in Xemu" NL);
-		} else {
-		if (addr > sizeof memory)
-			FATAL("Invalid physical memory write at $%X" NL, addr);
-		if (addr == HYPERVISOR_MEM_REMAP_VIRTUAL + 0x8000)
-			FATAL("Somebody EVIL writes hypervisor memory!!! PC=$%04X" NL, cpu_pc);
-		memory[addr] = data;
-		}
-	} else
-		DEBUG("MMU: this _physical_ address is not writable: $%X (data=$%02X)" NL, addr, data);
-#endif
 }
 
 
@@ -955,14 +919,8 @@ Uint8 read_phys_mem ( int addr )
 {
 	addr &= 0xFFFFFFF;		// warps around at 256Mbyte, for address bus of Mega65
 	//Check for < 2 not needed anymore, as CPU port is really the memory, though it can be a problem if DMA sees this issue differently?!
-	//if (addr < 0x000002)
-	//	return CPU_PORT(addr);
 	if (addr < 0x040000)		// accessing C65 RAM+ROM @ 0 ... 256K
 		return memory[addr];
-//	if (addr < 0x020000)		// the last 2K of the mentioned 128K is the mega65 mapped colour RAM (126K ... 128K)
-//		return colour_ram[addr & 0x7FF]; 	// FIXME: currently it's not mapped for real at the last Mbyte of 256MBytes, as it should be!
-//	if (addr < 0x040000)		// ROM area (128K ... 256K)
-//		return memory[addr];
 	if (addr < 0x100000)		// unused space (256K ... 1M)
 		return 0xFF;
 	// No other memory accessible components/space on C65. The following areas on M65 currently decoded with masks:
@@ -992,17 +950,6 @@ Uint8 cpu_read ( Uint16 addr )
 {
 	register int range4k = addr >> 12;
 	return read_phys_mem(addr_trans_rd_megabyte[range4k] | ((addr_trans_rd[range4k] + addr) & 0xFFFFF));
-#if 0
-	int phys_addr = addr_trans_rd[addr >> 12] + addr;	// translating address with the READ table created by apply_memory_config()
-	//if (in_hypervisor)	// DEBUG
-	//	DEBUG("MEGA65: cpu_read, addr=%X phys_addr=%X" NL, addr, phys_addr);
-	if (phys_addr >= IO_REMAP_VIRTUAL) {
-		if ((addr & 0xF000) != 0xD000)
-			FATAL("Internal error: IO is not on the IO space!");
-		return io_read(addr);	// addr should be in $DXXX range to hit this, hopefully ...
-	}
-	return read_phys_mem((phys_addr & 0xFFFFF) | addr_trans_rd_megabyte[addr >> 12]);
-#endif
 }
 
 
@@ -1012,16 +959,6 @@ void cpu_write ( Uint16 addr, Uint8 data )
 {
 	register int range4k = addr >> 12;
 	write_phys_mem(addr_trans_wr_megabyte[range4k] | ((addr_trans_wr[range4k] + addr) & 0xFFFFF), data);
-#if 0
-	int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
-	if (phys_addr >= IO_REMAP_VIRTUAL) {
-		if ((addr & 0xF000) != 0xD000)
-			FATAL("Internal error: IO is not on the IO space!");
-		io_write(addr, data);	// addr should be in $DXXX range to hit this, hopefully ...
-		return;
-	}
-	write_phys_mem((phys_addr & 0xFFFFF) | addr_trans_wr_megabyte[addr >> 12], data);
-#endif
 }
 
 
@@ -1037,23 +974,10 @@ void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 {
 	int phys_addr = addr >> 12;
 	phys_addr = addr_trans_wr_megabyte[phys_addr] | ((addr_trans_wr[phys_addr] + addr) & 0xFFFFF);
+	// FIXME: maybe we should check only "problematic registers?"
 	if (phys_addr >= 0xff00000)	// Note: it's useless to "emulate" RMW opcode if the destination is memory, however the last MB of M65 addr.space is special, carrying I/O as well, etc!
 		write_phys_mem(phys_addr, old_data);
 	write_phys_mem(phys_addr, new_data);
-#if 0
-	int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
-	if (phys_addr >= IO_REMAP_VIRTUAL) {
-		if ((addr & 0xF000) != 0xD000)
-			FATAL("Internal error: IO is not on the IO space!");
-		if (addr < 0xD800 || addr >= (vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00) {	// though, for only memory areas other than colour RAM (avoids unneeded warnings as well)
-			DEBUG("CPU: RMW opcode is used on I/O area for $%04X" NL, addr);
-			io_write(addr, old_data);	// first write back the old data ...
-		}
-		io_write(addr, new_data);	// ... then the new
-		return;
-	}
-	write_phys_mem((phys_addr & 0xFFFFF) | addr_trans_wr_megabyte[addr >> 12], new_data);	// "normal" memory, just write once, no need to emulate the behaviour
-#endif
 }
 
 
@@ -1085,26 +1009,33 @@ static void shutdown_callback ( void )
 
 
 
+static void reset_mega65 ( void )
+{
+	force_fast = 0;	// FIXME: other default speed controls on reset?
+	c128_d030_reg = 0xFF;
+	machine_set_speed(0);
+	CPU_PORT(0) = CPU_PORT(1) = 0xFF;
+	map_mask = 0;
+	vic3_registers[0x30] = 0;
+	in_hypervisor = 0;
+	apply_memory_config();
+	cpu_reset();
+	dma_reset();
+	nmi_level = 0;
+	kicked_hypervisor = emucfg_get_num("kicked");
+	hypervisor_enter(TRAP_RESET);
+	DEBUG("RESET!" NL);
+}
+
+
+
 // Called by emutools_hid!!! to handle special private keys assigned to this emulator
 int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
 	// Check for special, emulator-related hot-keys (not C65 key)
 	if (pressed) {
 		if (key == SDL_SCANCODE_F10) {
-			force_fast = 0;	// FIXME: other default speed controls on reset?
-			c128_d030_reg = 0xFF;
-			machine_set_speed(0);
-			CPU_PORT(0) = CPU_PORT(1) = 0xFF;
-			map_mask = 0;
-			vic3_registers[0x30] = 0;
-			in_hypervisor = 0;
-			apply_memory_config();
-			cpu_reset();
-			dma_reset();
-			nmi_level = 0;
-			kicked_hypervisor = emucfg_get_num("kicked");
-			hypervisor_enter(TRAP_RESET);
-			DEBUG("RESET!" NL);
+			reset_mega65();
 		} else if (key == SDL_SCANCODE_KP_ENTER) {
 			c64_toggle_joy_emu();
 		}
@@ -1203,6 +1134,7 @@ int main ( int argc, char **argv )
 	int cycles, frameskip;
 	xemu_dump_version(stdout, "The Incomplete Commodore-65/Mega-65 emulator from LGB");
 	emucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
+	emucfg_define_switch_option("c65speed", "Allow emulation of 48MHz (problematic, currently)");
 	emucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip  (0=F018A, other=F018B)");
 	emucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA-board switches turned ON");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
@@ -1216,7 +1148,6 @@ int main ( int argc, char **argv )
 	emucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
 #endif
 	emucfg_define_switch_option("skipunhandledmem", "Do not panic on unhandled memory access (hides problems!!)");
-	emucfg_define_switch_option("c65speed", "Allow emulation of 48MHz (problematic, currently)");
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
 	if (xemu_byte_order_test())

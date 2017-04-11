@@ -699,20 +699,26 @@ static void shutdown_callback ( void )
 }
 
 
+static void c65_reset ( void )
+{
+	memory[0] = memory[1] = 0xFF;
+	map_mask = 0;
+	vic3_registers[0x30] = 0;
+	apply_memory_config();
+	cpu_reset();
+	dma_reset();
+	nmi_level = 0;
+	DEBUG("RESET!" NL);
+}
+
+
 
 // Called by emutools_hid!!! to handle special private keys assigned to this emulator
 int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
 	if (pressed) {
 		if (key == SDL_SCANCODE_F10) {	// reset
-			memory[0] = memory[1] = 0xFF;
-			map_mask = 0;
-			vic3_registers[0x30] = 0;
-			apply_memory_config();
-			cpu_reset();
-			dma_reset();
-			nmi_level = 0;
-			DEBUG("RESET!" NL);
+			c65_reset();
 		} else if (key == SDL_SCANCODE_KP_ENTER)
 			c64_toggle_joy_emu();
 		else if (key == SDL_SCANCODE_ESCAPE)
