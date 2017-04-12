@@ -800,7 +800,11 @@ int main ( int argc, char **argv )
 	vic3_open_frame_access();
 	emu_timekeeping_start();
 	for (;;) {
-		cycles += unlikely(dma_status) ? dma_update() : cpu_step();	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
+		cycles += unlikely(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu_step(
+#ifdef CPU_STEP_MULTI_OPS
+			cpu_cycles_per_scanline
+#endif
+		);	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
 		if (cycles >= cpu_cycles_per_scanline) {
 			cia_tick(&cia1, 64);
 			cia_tick(&cia2, 64);

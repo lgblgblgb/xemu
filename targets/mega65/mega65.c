@@ -1190,7 +1190,9 @@ int main ( int argc, char **argv )
 		SDL_PauseAudioDevice(audio, 0);
 	emu_set_full_screen(emucfg_get_bool("fullscreen"));
 	for (;;) {
-		while (paused) {	// paused special mode, ie tracing support, or something ...
+		while (unlikely(paused)) {	// paused special mode, ie tracing support, or something ...
+			if (unlikely(dma_status))
+				break;		// if DMA is pending, do not allow monitor/etc features
 			if (m65mon_callback) {	// delayed uart monitor command should be finished ...
 				m65mon_callback();
 				m65mon_callback = NULL;
@@ -1218,14 +1220,18 @@ int main ( int argc, char **argv )
 					fprintf(stderr, "TRACE: leaving trace mode @ $%04X" NL, cpu_pc);
 			}
 		}
-		if (in_hypervisor) {
+		if (unlikely(in_hypervisor)) {
 			hypervisor_debug();
 		}
-		if (breakpoint_pc == cpu_pc) {
+		if (unlikely(breakpoint_pc == cpu_pc)) {
 			fprintf(stderr, "Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu_pc);
 			paused = 1;
 		}
-		cycles += unlikely(dma_status) ? dma_update() : cpu_step();	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
+		cycles += unlikely(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu_step(
+#ifdef CPU_STEP_MULTI_OPS
+			unlikely(paused) ? 0 : cpu_cycles_per_scanline
+#endif
+		);	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
 		if (cycles >= cpu_cycles_per_scanline) {
 			scanline++;
 			//DEBUG("VIC3: new scanline (%d)!" NL, scanline);

@@ -36,6 +36,7 @@ extern void  dma_init (
 );
 extern void  dma_reset     ( void );
 extern int   dma_update    ( void );
+extern int   dma_update_multi_steps ( int do_for_cycles );
 
 /* Things should be provided by the emulator: */
 

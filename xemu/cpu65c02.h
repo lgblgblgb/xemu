@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -38,6 +38,7 @@ extern Uint16 cpu_sphi;	// NOTE: it must store the value shifted to the high byt
 #ifdef MEGA65
 extern int cpu_linear_memory_addressing_is_enabled;
 #endif
+extern int cpu_multi_step_stop_trigger;
 
 extern void  cpu_write     ( Uint16 addr, Uint8 data );
 extern void  cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data );
@@ -48,7 +49,13 @@ extern Uint8 cpu_read_linear_opcode  ( void );
 #endif
 
 extern void cpu_reset ( void );
-extern int  cpu_step  ( void );
+extern int  cpu_step  (
+#ifdef CPU_STEP_MULTI_OPS
+	int run_for_cycles
+#else
+	void
+#endif
+);
 
 #ifdef CPU_TRAP
 extern int  cpu_trap ( Uint8 opcode );

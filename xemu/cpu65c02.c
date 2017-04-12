@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    THIS IS AN UGLY PIECE OF SOURCE REALLY.
 
@@ -94,7 +94,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 Uint8 cpu_sp, cpu_op;
 #ifdef MEGA65
-#warning "Compiling for MEGA65, hacky stuff!"
+//#warning "Compiling for MEGA65, hacky stuff!"
 #define IS_FLAT32_DATA_OP() unlikely(cpu_previous_op == 0xEA && cpu_linear_memory_addressing_is_enabled)
 Uint8 cpu_previous_op;
 #endif
@@ -102,21 +102,13 @@ Uint16 cpu_pc, cpu_old_pc;
 int cpu_pfn,cpu_pfv,cpu_pfb,cpu_pfd,cpu_pfi,cpu_pfz,cpu_pfc;
 int cpu_irqLevel = 0, cpu_nmiEdge = 0;
 int cpu_cycles;
+int cpu_multi_step_stop_trigger;	// not used only with multi-op mode but still here because some devices (like DMA) would use it
 
 #ifdef CPU_65CE02
 #ifdef DEBUG_CPU
 #define OPC_65CE02(w) DEBUG("CPU: 65CE02 opcode: %s" NL, w)
 #else
 #define OPC_65CE02(w)
-#endif
-#if 0
-static inline void UNIMPLEMENTED_65CE02 ( const char *msg )
-{
-	fprintf(stderr, "UNIMPLEMENTED 65CE02 opcode $%02X [$%02X $%02X] at $%04X: \"%s\"" NL,
-		cpu_op, cpu_read(cpu_pc), cpu_read(cpu_pc + 1), (cpu_pc - 1) & 0xFFFF, msg
-	);
-	exit(1);
-}
 #endif
 static const Uint8 opcycles[] = {7,5,2,2,4,3,4,4,3,2,1,1,5,4,5,4,2,5,5,3,4,3,4,4,1,4,1,1,5,4,5,4,5,5,7,7,3,3,4,4,3,2,1,1,4,4,5,4,2,5,5,3,3,3,4,4,1,4,1,1,4,4,5,4,5,5,2,2,4,3,4,4,3,2,1,1,3,4,5,4,2,5,5,3,4,3,4,4,2,4,3,1,4,4,5,4,4,5,7,5,3,3,4,4,3,2,1,1,5,4,5,4,2,5,5,3,3,3,4,4,2,4,3,1,5,4,5,4,2,5,6,3,3,3,3,4,1,2,1,4,4,4,4,4,2,5,5,3,3,3,3,4,1,4,1,4,4,4,4,4,2,5,2,2,3,3,3,4,1,2,1,4,4,4,4,4,2,5,5,3,3,3,3,4,1,4,1,4,4,4,4,4,2,5,2,6,3,3,4,4,1,2,1,7,4,4,5,4,2,5,5,3,3,3,4,4,1,4,3,3,4,4,5,4,2,5,6,6,3,3,4,4,1,2,1,7,4,4,5,4,2,5,5,3,5,3,4,4,1,4,3,3,7,4,5,4};
 #else
@@ -289,17 +281,7 @@ static inline void _BRA(int cond) {
 static inline void _BRA16(int cond) {
 	if (cond) {
 		// Note: 16 bit PC relative stuffs works a bit differently as 8 bit ones, not the same base of the offsets!
-#if 0
-		int temp = cpu_read(cpu_pc) | (cpu_read(cpu_pc + 1) << 8);
-		//if (temp & 0x8000) temp = 1 + cpu_pc - (temp ^ 0xFFFF);
-		//else temp = cpu_pc + temp + 2;
-		if (temp & 0x8000) temp = 1 + cpu_pc - (temp ^ 0xFFFF);
-		else temp = cpu_pc + temp + 2;
-#endif
 		cpu_pc += 1 + (Sint16)(cpu_read(cpu_pc) | (cpu_read(cpu_pc + 1) << 8));
-
-		//if ((temp & 0xFF00) != (cpu_pc & 0xFF00)) cpu_cycles++; // FIXME: sill applies in 16 bit relative mode as well?!
-		//cpu_pc = temp;
 		cpu_cycles++;
 	} else
 		cpu_pc += 2;
@@ -321,14 +303,6 @@ static inline Uint16 _GET_SP_INDIRECT_ADDR ( void )
 		tmp &= 0xFF;
 	tmp2 |= cpu_read((cpu_sphi + tmp) & 0xFFFF) << 8;
 	return (Uint16)(tmp2 + cpu_y);
-#if 0
-	// Older, bad implementation, by misunderstanding the stuff badly:
-	Uint16 res = cpu_read(cpu_pc++) + cpu_y + cpu_sp + 1;
-	// Guessing: if stack is in 8 bit mode, it warps around inside the given stack page
-	if (cpu_pfe)
-		res &= 0xFF; 
-	return (Uint16)(res + cpu_sphi);
-#endif
 }
 #endif
 static inline void _CMP(Uint8 reg, Uint8 data) {
@@ -438,12 +412,20 @@ static inline void _ROL(int addr) {
 static Uint8 last_p;
 
 
-int cpu_step () {
-	if (cpu_nmiEdge
+int cpu_step (
+#ifdef CPU_STEP_MULTI_OPS
+	int run_for_cycles
+#endif
+) {
+#ifdef CPU_STEP_MULTI_OPS
+	int cpu_all_cycles = 0;
+	do {
+#endif
+	if (unlikely(cpu_nmiEdge
 #ifdef CPU_65CE02
 		&& cpu_cycles != 1 && !cpu_inhibit_interrupts
 #endif
-	) {
+	)) {
 #ifdef DEBUG_CPU
 		DEBUG("CPU: serving NMI on NMI edge at PC $%04X" NL, cpu_pc);
 #endif
@@ -453,13 +435,18 @@ int cpu_step () {
 		cpu_pfi = 1;
 		cpu_pfd = 0;			// NOTE: D flag clearing was not done on the original 6502 I guess, but indeed on the 65C02 already
 		cpu_pc = readWord(0xFFFA);
+#ifdef CPU_STEP_MULTI_OPS
+		cpu_all_cycles += 7;
+		continue;
+#else
 		return 7;
+#endif
 	}
-	if (cpu_irqLevel && (!cpu_pfi)
+	if (unlikely(cpu_irqLevel && (!cpu_pfi)
 #ifdef CPU_65CE02
 		&& cpu_cycles != 1 && !cpu_inhibit_interrupts
 #endif
-	) {
+	)) {
 #ifdef DEBUG_CPU
 		DEBUG("CPU: servint IRQ on IRQ level at PC $%04X" NL, cpu_pc);
 #endif
@@ -470,7 +457,12 @@ int cpu_step () {
 		cpu_pfi = 1;
 		cpu_pfd = 0;
 		cpu_pc = readWord(0xFFFE);
+#ifdef CPU_STEP_MULTI_OPS
+		cpu_all_cycles += 7;
+		continue;
+#else
 		return 7;
+#endif
 	}
 	cpu_old_pc = cpu_pc;
 #ifdef DEBUG_CPU
@@ -489,7 +481,7 @@ int cpu_step () {
 		DEBUG("CPU: SP before RTS is (SPHI=$%04X) SP=$%02X" NL, cpu_sphi, cpu_sp);
 #endif
 #ifdef CPU_TRAP
-	if (cpu_op == CPU_TRAP) {
+	if (unlikely(cpu_op == CPU_TRAP)) {
 		int ret = cpu_trap(CPU_TRAP);
 		if (ret > 0)
 			return ret;
@@ -1155,13 +1147,6 @@ int cpu_step () {
 			OPC_65CE02("PHW nnnn");
 			PUSH_FOR_PHW(readWord(readWord(cpu_pc)));	// PHW $nnnn [? push word from an absolute address, maybe?] Note: C65 BASIC depends on this opcode to be correct!
 			cpu_pc += 2;
-#if 0
-			{					// PHW $nnnn [? push word from an absolute address, maybe?]
-			Uint16 temp = cpu_read(cpu_pc++);
-			temp |= cpu_read(cpu_pc++) << 8;
-			pushWord(readWord(temp));
-			}
-#endif
 #else
 			cpu_pc += 2;
 #endif
@@ -1175,7 +1160,17 @@ int cpu_step () {
 			break;
 #endif
 	}
+#ifdef CPU_STEP_MULTI_OPS
+	cpu_all_cycles += cpu_cycles;
+	if (unlikely(cpu_multi_step_stop_trigger)) {
+		cpu_multi_step_stop_trigger = 0;
+		return cpu_all_cycles;
+	}
+	} while (cpu_all_cycles < run_for_cycles);
+	return cpu_all_cycles;
+#else
 	return cpu_cycles;
+#endif
 }
 
 
