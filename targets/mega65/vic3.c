@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65c02.h"
 #include "vic3.h"
 #include "hypervisor.h"
+#include "memory65.h"
 
 #define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
 
@@ -173,50 +174,6 @@ void vic3_check_raster_interrupt ( void )
 
 
 
-void machine_set_speed ( int verbose )
-{
-	// TODO: Mega65 speed is not handled yet. Reasons: too slow emulation for average PC, and the complete control of speed, ie lack of C128-fast (2MHz mode,
-	// because of incomplete VIC register I/O handling).
-	// Actually the rule would be something like that (this comment is here by intent, for later implementation FIXME TODO), some VHDL draft only:
-	// cpu_speed := vicii_2mhz&viciii_fast&viciv_fast
-	// if hypervisor_mode='0' and ((speed_gate='1') and (force_fast='0')) then -- LGB: vicii_2mhz seems to be a low-active signal?
-	// case cpu_speed is ...... 100=1MHz, 101=1MHz, 110=3.5MHz, 111=48Mhz, 000=2MHz, 001=48MHz, 010=3.5MHz, 011=48MHz
-	// else 48MHz end if;
-	// it seems hypervisor always got full speed, and force_fast (ie, POKE 0,65) always forces the max
-	// TODO: what is speed_gate? (it seems to be a PMOD input and/or keyboard controll with CAPS-LOCK)
-	// TODO: how 2MHz is selected, it seems a double decoded VIC-X registers which is not so common in VIC modes yet, I think ...
-	if (verbose)
-		printf("SPEED: in_hypervisor=%d force_fast=%d c128_fast=%d, c65_fast=%d m65_fast=%d" NL,
-			in_hypervisor, force_fast, (c128_d030_reg & 1) ^ 1, vic3_registers[0x31] & 64, vic3_registers[0x54] & 64
-		);
-	switch ((in_hypervisor || force_fast) ? 7 : (((c128_d030_reg & 1) << 2) | ((vic3_registers[0x31] & 64) >> 5) | ((vic3_registers[0x54] & 64) >> 6))) {
-		case 4:	// 100 - 1MHz
-		case 5:	// 101 - 1MHz
-			cpu_cycles_per_scanline = CPU_C64_CYCLES_PER_SCANLINE;
-			strcpy(emulator_speed_title, "1MHz");
-			break;
-		case 0:	// 000 - 2MHz
-			cpu_cycles_per_scanline = CPU_C128_CYCLES_PER_SCANLINE;
-			strcpy(emulator_speed_title, "2MHz");
-			break;
-		case 2:	// 010 - 3.5MHz
-		case 6:	// 110 - 3.5MHz
-			cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
-			strcpy(emulator_speed_title, "3.5MHz");
-			break;
-		case 1:	// 001 - 48MHz
-		case 3:	// 011 - 48MHz
-		case 7:	// 111 - 48MHz
-			if (likely(!disallow_turbo)) {
-				cpu_cycles_per_scanline = CPU_M65_CYCLES_PER_SCANLINE;
-				strcpy(emulator_speed_title, "48MHz");
-			} else {
-				cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
-				strcpy(emulator_speed_title, ">3.5MHz");
-			}
-			break;
-	}
-}
 
 
 
@@ -275,15 +232,16 @@ void vic3_write_reg ( int addr, Uint8 data )
 				vic3_registers[0x21] &= 15;
 			break;
 		case 0x30:
-			// Save some un-needed memory translating table rebuilds, if there is no important bits (of us) changed.
-			// CRAM@DC00 is not handled by the translator directly, so bit0 does not apply here!
-			if (
-				(data & 0xF8) != (old_data & 0xF8)
-			) {
-				DEBUG("MEM: applying new memory configuration because of VIC3 $30 is written" NL);
-				apply_memory_config();
-			} else
-				DEBUG("MEM: no need for new memory configuration (because of VIC3 $30 is written): same ROM bit values are set" NL);
+			// Bits:
+			// C65 $D030.0 2nd KB of colour RAM @ $DC00-$DFFF
+			// C65 $D030.1 VIC-III EXT SYNC (not implemented)
+			// C65 $D030.2 Use PALETTE ROM or RAM entries for colours 0 - 15
+			// C65 $D030.3 Map C65 ROM @ $8000
+			// C65 $D030.4 Map C65 ROM @ $A000
+			// C65 $D030.5 Map C65 ROM @ $C000
+			// C65 $D030.6 Select between C64 and C65 charset.
+			// C65 $D030.7 Map C65 ROM @ $E000
+			memory_set_vic3_rom_mapping(data);
 			palette = (data & 4) ? vic3_palette : vic3_rom_palette;
 			break;
 		case 0x31:
@@ -382,9 +340,9 @@ static inline Uint8 *vic2_get_chargen_pointer ( void )
 	if ((vic2_16k_bank == 0x0000 || vic2_16k_bank == 0x8000) && (offs == 0x1000 || offs == 0x1800)) {  // check if chargen info is in ROM
 		// In case of Mega65, fetching char-info from ROM means to access the "WOM"
 		// FIXME: what should I do with bit 6 of VIC-III register $30 ["CROM"] ?!
-		return character_rom + offs - 0x1000;
+		return char_wom + offs - 0x1000;
 	} else
-		return memory + vic2_16k_bank + offs;
+		return chip_ram + vic2_16k_bank + offs;
 }
 
 
@@ -409,13 +367,13 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 		ylim = 24;
 		// Note: VIC2 sees ROM at some addresses thing is not emulated yet for other thing than chargen memory!
 		// Note: according to the specification bit 4 has no effect in 80 columns mode!
-		vidp = memory + ((vic3_registers[0x18] & 0xE0) << 6) + vic2_16k_bank;
+		vidp = chip_ram + ((vic3_registers[0x18] & 0xE0) << 6) + vic2_16k_bank;
 		sprite_pointers = vidp + 2040;
 	} else {
 		xlim = 39;
 		ylim = 24;
 		// Note: VIC2 sees ROM at some addresses thing is not emulated yet for other thing than chargen memory!
-		vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
+		vidp = chip_ram + ((vic3_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
 		sprite_pointers = vidp + 1016;
 	}
 	// Target SDL pixel related format for the background colour
@@ -435,7 +393,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 				p += xlim == 39 ? 16 : 8;	// so we just ignore ... FIXME !!
 			} else {
 				int a;
-				Uint8 *cp = memory + (((vidp[0] << 6) + (charline << 3) + (vidp[1] << 14)) & 0x1ffff); // and-mask: wrap-around in 128K of chip-RAM
+				Uint8 *cp = chip_ram + (((vidp[0] << 6) + (charline << 3) + (vidp[1] << 14)) & 0x1ffff); // and-mask: wrap-around in 128K of chip-RAM
 				for (a = 0; a < 8; a++) {
 					if (xlim != 79)
 						*(p++) = palette[*cp];
@@ -519,9 +477,9 @@ static inline void vic2_render_screen_bmm ( Uint32 *p, int tail )
 {
 	int x = 0, y = 0, charline = 0;
 	Uint8 *vidp, *chrp;
-	vidp = memory + ((vic3_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
+	vidp = chip_ram + ((vic3_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
 	sprite_pointers = vidp + 1016;
-	chrp = memory + ((vic3_registers[0x18] & 8) ? 8192 : 0) + vic2_16k_bank;
+	chrp = chip_ram + ((vic3_registers[0x18] & 8) ? 8192 : 0) + vic2_16k_bank;
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_bmm");
 	for (;;) {
 		Uint8  data = *(vidp++);
@@ -573,14 +531,14 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
 	int bitpos = 128, charline = 0, offset = 0;
 	int xlim, x = 0, y = 0, h640 = (vic3_registers[0x31] & 128);
 	Uint8 bpe, *bp[8];
-	bp[0] = memory + ((vic3_registers[0x33] & (h640 ? 12 : 14)) << 12);
-	bp[1] = memory + ((vic3_registers[0x34] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[2] = memory + ((vic3_registers[0x35] & (h640 ? 12 : 14)) << 12);
-	bp[3] = memory + ((vic3_registers[0x36] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[4] = memory + ((vic3_registers[0x37] & (h640 ? 12 : 14)) << 12);
-	bp[5] = memory + ((vic3_registers[0x38] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[6] = memory + ((vic3_registers[0x39] & (h640 ? 12 : 14)) << 12);
-	bp[7] = memory + ((vic3_registers[0x3A] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[0] = chip_ram + ((vic3_registers[0x33] & (h640 ? 12 : 14)) << 12);
+	bp[1] = chip_ram + ((vic3_registers[0x34] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[2] = chip_ram + ((vic3_registers[0x35] & (h640 ? 12 : 14)) << 12);
+	bp[3] = chip_ram + ((vic3_registers[0x36] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[4] = chip_ram + ((vic3_registers[0x37] & (h640 ? 12 : 14)) << 12);
+	bp[5] = chip_ram + ((vic3_registers[0x38] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[6] = chip_ram + ((vic3_registers[0x39] & (h640 ? 12 : 14)) << 12);
+	bp[7] = chip_ram + ((vic3_registers[0x3A] & (h640 ? 12 : 14)) << 12) + 0x10000;
 	bpe = vic3_registers[0x32];	// bit planes enabled mask
 	if (h640) {
 		bpe &= 15;		// it seems, with H640, only 4 bitplanes can be used (on lower 4 ones)
@@ -703,10 +661,10 @@ void vic3_render_screen ( void )
 	Uint32 *p_sdl = emu_start_pixel_buffer_access(&tail_sdl);
 	int sprites = vic3_registers[0x15];
 	if (vic3_registers[0x31] & 16) {
-	        sprite_bank = memory + ((vic3_registers[0x35] & 12) << 12);	// FIXME: just guessing: sprite bank is bitplane 2 area, always 16K regardless of H640?
+	        sprite_bank = chip_ram + ((vic3_registers[0x35] & 12) << 12);	// FIXME: just guessing: sprite bank is bitplane 2 area, always 16K regardless of H640?
 		vic3_render_screen_bpm(p_sdl, tail_sdl);
 	} else {
-		sprite_bank = vic2_16k_bank + memory;				// VIC2 legacy modes uses the VIC2 bank for sure, as the sprite bank too
+		sprite_bank = vic2_16k_bank + chip_ram;				// VIC2 legacy modes uses the VIC2 bank for sure, as the sprite bank too
 		if (vic3_registers[0x11] & 32)
 			vic2_render_screen_bmm(p_sdl, tail_sdl);
 		else

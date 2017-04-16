@@ -21,6 +21,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65c02.h"
 #include "vic3.h"
 #include "xemu/f018_core.h"
+#include "memory65.h"
+#include "io65.h"
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -131,8 +133,8 @@ void hypervisor_enter ( int trapno )
 	gs_regs[0x64D] = ( map_offset_high >>  8) & 0xFF  ;
 	gs_regs[0x64E] = map_megabyte_low  >> 20;
 	gs_regs[0x64F] = map_megabyte_high >> 20;
-	gs_regs[0x650] = CPU_PORT(0);
-	gs_regs[0x651] = CPU_PORT(1);
+	gs_regs[0x650] = memory_get_cpu_io_port(0);
+	gs_regs[0x651] = memory_get_cpu_io_port(1);
 	gs_regs[0x652] = vic_iomode;
 	gs_regs[0x653] = dma_registers[5];	// GS $D653 - Hypervisor DMAgic source MB
 	gs_regs[0x654] = dma_registers[6];	// GS $D654 - Hypervisor DMAgic destination MB
@@ -143,8 +145,7 @@ void hypervisor_enter ( int trapno )
 	// Now entering into hypervisor mode
 	in_hypervisor = 1;	// this will cause apply_memory_config to map hypervisor RAM, also for checks later to out-of-bound execution of hypervisor RAM, etc ...
 	vic_iomode = VIC4_IOMODE;
-	CPU_PORT(0) = 0x3F;	// apply_memory_config watch this also ...
-	CPU_PORT(1) = 0x35;	// and this too (this sets, all-RAM + I/O config)
+	memory_set_cpu_io_port_ddr_and_data(0x3F, 0x35); // sets all-RAM + I/O config up!
 	cpu_pfd = 0;		// clear decimal mode ... according to Paul, punnishment will be done, if it's removed :-)
 	cpu_pfi = 1;		// disable IRQ in hypervisor mode
 	cpu_pfe = 1;		// 8 bit stack in hypervisor mode
@@ -155,7 +156,7 @@ void hypervisor_enter ( int trapno )
 	map_mask = (map_mask & 0xF) | 0x30;	// mapping: 0011XXXX (it seems low region map mask is not changed by hypervisor entry)
 	map_megabyte_high = 0xFF << 20;
 	map_offset_high = 0xF0000;
-	apply_memory_config();	// now the memory mapping is changed
+	memory_set_do_map();	// now the memory mapping is changed
 	machine_set_speed(0);	// set machine speed (hypervisor always runs at M65 fast ... ??) FIXME: check this!
 	cpu_pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
 	DEBUG("MEGA65: entering into hypervisor mode, trap=$%02X PC=$%04X" NL, trapno, cpu_pc);
@@ -185,8 +186,7 @@ void hypervisor_leave ( void )
 	map_mask = (gs_regs[0x64A] >> 4) | (gs_regs[0x64C] & 0xF0);
 	map_megabyte_low =  gs_regs[0x64E] << 20;
 	map_megabyte_high = gs_regs[0x64F] << 20;
-	CPU_PORT(0) = gs_regs[0x650];
-	CPU_PORT(1) = gs_regs[0x651];
+	memory_set_cpu_io_port_ddr_and_data(gs_regs[0x650], gs_regs[0x651]);
 	vic_iomode = gs_regs[0x652] & 3;
 	if (vic_iomode == VIC_BAD_IOMODE)
 		vic_iomode = VIC3_IOMODE;	// I/O mode "2" (binary: 10) is not used, I guess
@@ -199,7 +199,7 @@ void hypervisor_leave ( void )
 	// Now leaving hypervisor mode ...
 	in_hypervisor = 0;
 	machine_set_speed(0);	// restore speed ...
-	apply_memory_config();
+	memory_set_do_map();
 	DEBUG("MEGA65: leaving hypervisor mode, (user) PC=$%04X" NL, cpu_pc);
 }
 

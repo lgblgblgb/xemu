@@ -21,7 +21,7 @@ TARGET		= mega65
 PRG_TARGET	= xmega65
 
 CFLAGS_TARGET_xmega65	=
-SRCS_TARGET_xmega65	= mega65.c vic3.c sdcard.c uart_monitor.c hypervisor.c m65_snapshot.c
+SRCS_TARGET_xmega65	= mega65.c vic3.c sdcard.c uart_monitor.c hypervisor.c m65_snapshot.c memory65.c io65.c
 SRCS_COMMON_xmega65	= emutools.c cpu65c02.c cia6526.c emutools_hid.c sid.c f011_core.c f018_core.c c64_kbd_mapping.c emutools_config.c emutools_snapshot.c
 CONFIG_CFLAGS_TARGET_xmega65	= sdl2|math
 CONFIG_LDFLAGS_TARGET_xmega65	= sdl2|math

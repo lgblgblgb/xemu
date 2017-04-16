@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
 #include "memory65.h"
+#include "mega65.h"
 #include "io65.h"
 #include "xemu/cpu65c02.h"
 #include "hypervisor.h"
@@ -90,7 +91,8 @@ struct m65_memory_map_st {
 #define MEM_SLOT_DMA_WR_DST	0x2D3
 #define MEM_SLOT_DMA_RD_LST	0x2D4
 #define MEM_SLOT_CPU_32BIT	0x2D5
-#define MEM_SLOTS		0x2D6
+#define MEM_SLOT_DEBUG_RESOLVER	0x2D6
+#define MEM_SLOTS		0x2D7
 
 static int mem_page_phys[MEM_SLOTS];
 static int mem_page_rd_o[MEM_SLOTS];
@@ -117,9 +119,10 @@ static const int memcfg_cpu_io_port_policies_E000_to_FFFF[8] = {
 
 static int memcfg_vic3_rom_mapping_last, memcfg_cpu_io_port_last;
 static int cpu_io_port[2];
-static int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high, map_marker_low, map_marker_high;
-static int rom_protect;
-static int skip_unhandled_mem;
+int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
+static int map_marker_low, map_marker_high;
+int rom_protect;
+int skip_unhandled_mem;
 
 
 static Uint8 zero_physical_page_reader ( int ofs ) {
@@ -226,7 +229,7 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 };
 // a mapping item which NEVER matches (ie, starting address of region is higher then ending ...)
 static const struct m65_memory_map_st impossible_mapping = {
-	10, 1, unreferenced_mem_reader, unreferenced_mem_writer
+	0x10000001, 0x10000000, unreferenced_mem_reader, unreferenced_mem_writer
 };
 
 
@@ -547,6 +550,21 @@ void memory_set_vic3_rom_mapping ( Uint8 value )
 }
 
 
+static void apply_cpu_io_port ( Uint8 value )
+{
+	if (value != memcfg_cpu_io_port_last) {
+		DEBUG("MEM: CPU I/O port composite value (new one) is %d" NL, value);
+		memcfg_cpu_io_port_last = value;
+		memcfg_cpu_io_port_policy_A000_to_BFFF = memcfg_cpu_io_port_policies_A000_to_BFFF[value];
+		memcfg_cpu_io_port_policy_D000_to_DFFF = memcfg_cpu_io_port_policies_D000_to_DFFF[value];
+		memcfg_cpu_io_port_policy_E000_to_FFFF = memcfg_cpu_io_port_policies_E000_to_FFFF[value];
+		// check only regions to apply, where CPU I/O port can change anything
+		apply_memory_config_A000_to_BFFF();
+		apply_memory_config_D000_to_DFFF();
+		apply_memory_config_E000_to_FFFF();
+	}
+}
+
 
 
 // must be called on CPU I/O port write, addr=0/1 for DDR/DATA
@@ -561,19 +579,22 @@ void memory_set_cpu_io_port ( int addr, Uint8 value )
 		}
 	} else {
 		cpu_io_port[addr] = value;
-		value = (cpu_io_port[1] | (~cpu_io_port[0])) & 7;
-		if (value != memcfg_cpu_io_port_last) {
-			DEBUG("MEM: CPU I/O port composite value (new one) is %d" NL, value);
-			memcfg_cpu_io_port_last = value;
-			memcfg_cpu_io_port_policy_A000_to_BFFF = memcfg_cpu_io_port_policies_A000_to_BFFF[value];
-			memcfg_cpu_io_port_policy_D000_to_DFFF = memcfg_cpu_io_port_policies_D000_to_DFFF[value];
-			memcfg_cpu_io_port_policy_E000_to_FFFF = memcfg_cpu_io_port_policies_E000_to_FFFF[value];
-			// check only regions to apply, where CPU I/O port can change anything
-			apply_memory_config_A000_to_BFFF();
-			apply_memory_config_D000_to_DFFF();
-			apply_memory_config_E000_to_FFFF();
-		}
+		apply_cpu_io_port((cpu_io_port[1] | (~cpu_io_port[0])) & 7);
 	}
+}
+
+
+void memory_set_cpu_io_port_ddr_and_data ( Uint8 p0, Uint8 p1 )
+{
+	cpu_io_port[0] = p0;
+	cpu_io_port[1] = p1;
+	apply_cpu_io_port((cpu_io_port[1] | (~cpu_io_port[0])) & 7);
+}
+
+
+Uint8 memory_get_cpu_io_port ( int addr )
+{
+	return cpu_io_port[addr];
 }
 
 
@@ -657,13 +678,13 @@ void cpu_do_nop ( void )
 
 Uint8 cpu_read ( Uint16 addr )
 {
-	return mem_page_rd_f[addr >> 8](mem_page_rd_o[addr >> 8] | (addr & 0xFF));
+	return mem_page_rd_f[addr >> 8](mem_page_rd_o[addr >> 8] + (addr & 0xFF));
 }
 
 
 void  cpu_write ( Uint16 addr, Uint8 data )
 {
-	mem_page_wr_f[addr >> 8](mem_page_wr_o[addr >> 8] | (addr & 0xFF), data);
+	mem_page_wr_f[addr >> 8](mem_page_wr_o[addr >> 8] + (addr & 0xFF), data);
 }
 
 
@@ -678,7 +699,7 @@ void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 {
 	// TODO; optimize this, enough for I/O range to do this behaviour ...
 	register mem_page_wr_f_type f = mem_page_wr_f[addr >> 8];
-	register int ofs = mem_page_wr_o[addr >> 8] | (addr & 0xFF);
+	register int ofs = mem_page_wr_o[addr >> 8] + (addr & 0xFF);
 	f(ofs, old_data);
 	f(ofs, new_data);
 }
@@ -703,7 +724,7 @@ Uint8 cpu_read_linear_opcode ( void )
 	int addr = cpu_get_flat_addressing_mode_address();
 	Uint8 data;
 	phys_addr_decoder(addr, MEM_SLOT_CPU_32BIT, MEM_SLOT_CPU_32BIT);
-	data = mem_page_rd_f[MEM_SLOT_CPU_32BIT](mem_page_rd_o[MEM_SLOT_CPU_32BIT] | (addr & 0xFF));
+	data = mem_page_rd_f[MEM_SLOT_CPU_32BIT](mem_page_rd_o[MEM_SLOT_CPU_32BIT] + (addr & 0xFF));
 	DEBUG("MEGA65: reading LINEAR memory [PC=$%04X/OPC=$%02X] @ $%X with result $%02X" NL, cpu_old_pc, cpu_op, addr, data);
 	return data;
 }
@@ -715,6 +736,37 @@ void cpu_write_linear_opcode ( Uint8 data )
 	int addr = cpu_get_flat_addressing_mode_address();
 	DEBUG("MEGA65: writing LINEAR memory [PC=$%04X/OPC=$%02X] @ $%X with data $%02X" NL, cpu_old_pc, cpu_op, addr, data);
 	phys_addr_decoder(addr, MEM_SLOT_CPU_32BIT, MEM_SLOT_CPU_32BIT);
-	mem_page_wr_f[MEM_SLOT_CPU_32BIT](mem_page_wr_o[MEM_SLOT_CPU_32BIT] | (addr & 0xFF), data);
+	mem_page_wr_f[MEM_SLOT_CPU_32BIT](mem_page_wr_o[MEM_SLOT_CPU_32BIT] + (addr & 0xFF), data);
 }
 
+
+
+Uint8 memory_dma_source_mreader ( int addr )
+{
+	phys_addr_decoder(addr, MEM_SLOT_DMA_RD_SRC, MEM_SLOT_DMA_RD_SRC);
+	return mem_page_rd_f[MEM_SLOT_DMA_RD_SRC](mem_page_rd_o[MEM_SLOT_DMA_RD_SRC] + (addr & 0xFF));
+}
+
+void  memory_dma_source_mwriter ( int addr, Uint8 data )
+{
+	phys_addr_decoder(addr, MEM_SLOT_DMA_WR_SRC, MEM_SLOT_DMA_WR_SRC);
+	mem_page_wr_f[MEM_SLOT_DMA_WR_SRC](mem_page_wr_o[MEM_SLOT_DMA_WR_SRC] + (addr & 0xFF), data);
+}
+
+Uint8 memory_dma_target_mreader ( int addr )
+{
+	phys_addr_decoder(addr, MEM_SLOT_DMA_RD_DST, MEM_SLOT_DMA_RD_DST);
+	return mem_page_rd_f[MEM_SLOT_DMA_RD_DST](mem_page_rd_o[MEM_SLOT_DMA_RD_DST] + (addr & 0xFF));
+}
+
+void  memory_dma_target_mwriter ( int addr, Uint8 data )
+{
+	phys_addr_decoder(addr, MEM_SLOT_DMA_WR_DST, MEM_SLOT_DMA_WR_DST);
+	mem_page_wr_f[MEM_SLOT_DMA_WR_DST](mem_page_wr_o[MEM_SLOT_DMA_WR_DST] + (addr & 0xFF), data);
+}
+
+Uint8 memory_dma_list_reader    ( int addr )
+{
+	phys_addr_decoder(addr, MEM_SLOT_DMA_RD_LST, MEM_SLOT_DMA_RD_LST);
+	return mem_page_rd_f[MEM_SLOT_DMA_RD_LST](mem_page_rd_o[MEM_SLOT_DMA_RD_LST] + (addr & 0xFF));
+}

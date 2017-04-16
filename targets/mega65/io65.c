@@ -18,6 +18,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
 #include "io65.h"
+#include "memory65.h"
 
 #include "mega65.h"
 #include "xemu/cpu65c02.h"
@@ -34,6 +35,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_config.h"
 #include "m65_snapshot.h"
 
+
+int fpga_switches = 0;	// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
+Uint8 gs_regs[0x1000];	// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
+struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
+struct SidEmulation sid1, sid2;		// the two SIDs
 
 
 /* Internal decoder for I/O reads. Address *must* be within the 0-$4FFF (!!) range. The low 12 bits is the actual address inside the I/O area,
@@ -280,7 +286,6 @@ void io_writer_internal_decoder ( int addr, Uint8 data )
 			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("DMA controller");
 	}
 	if (addr < ((vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00)) {	// $D800-$DC00/$E000	COLOUR NIBBLES, mapped to $1F800 in BANK1
-		memory[0x1F800 + addr - 0xD800] = data;
 		colour_ram[addr - 0xD800] = data;
 		DEBUG("IO: writing colour RAM at offset $%04X" NL, addr - 0xD800);
 		return;

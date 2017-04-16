@@ -22,5 +22,17 @@ extern void memory_init ( void );
 extern void memory_set_do_map ( void );
 extern void memory_set_vic3_rom_mapping ( Uint8 value );
 extern void memory_set_cpu_io_port ( int addr, Uint8 value );
+extern void memory_set_cpu_io_port_ddr_and_data ( Uint8 p0, Uint8 p1 );
+extern Uint8 memory_get_cpu_io_port ( int addr );
+
+extern Uint8 memory_dma_source_mreader ( int addr );
+extern void  memory_dma_source_mwriter ( int addr, Uint8 data );
+extern Uint8 memory_dma_target_mreader ( int addr );
+extern void  memory_dma_target_mwriter ( int addr, Uint8 data );
+extern Uint8 memory_dma_list_reader    ( int addr );
+
+extern int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
+extern int rom_protect, skip_unhandled_mem;
+extern Uint8 chip_ram[], fast_ram[], colour_ram[], char_wom[];
 
 #endif

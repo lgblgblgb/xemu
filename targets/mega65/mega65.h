@@ -51,24 +51,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // Then hypervisor memory content will be written into this file on exit.
 //#define MEMDUMP_FILE		"dump.mem"
 
-extern Uint8 memory[0x100000];
-extern Uint8 colour_ram[0x10000];
-extern Uint8 character_rom[0x1000];
-extern int map_mask;
-extern int map_offset_low;
-extern int map_offset_high;
-extern int map_megabyte_low;
-extern int map_megabyte_high;
-extern Uint8 gs_regs[0x1000];
-extern char emulator_speed_title[];
-extern int  disallow_turbo;
-#define CPU_PORT(n)	memory[n]
-
-extern void  apply_memory_config ( void );
-extern Uint8 io_read  ( int addr );
-extern void  io_write ( int addr, Uint8 data );
-extern void  write_phys_mem ( int addr, Uint8 data );
-extern Uint8 read_phys_mem  ( int addr );
+//extern char emulator_speed_title[];
+//extern int  disallow_turbo;
 
 extern void m65mon_show_regs ( void );
 extern void m65mon_dumpmem16 ( Uint16 addr );
@@ -77,5 +61,7 @@ extern void m65mon_do_trace  ( void );
 extern void m65mon_empty_command ( void );
 extern void m65mon_do_trace_c ( void );
 extern void m65mon_breakpoint ( int brk );
+
+extern void machine_set_speed ( int verbose );
 
 #endif

@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/f011_core.h"
 #include "mega65.h"
 #include "xemu/cpu65c02.h"
+#include "io65.h"
 
 #include <sys/types.h>
 #include <unistd.h>
