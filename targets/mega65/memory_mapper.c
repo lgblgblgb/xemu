@@ -1,4 +1,4 @@
-/* Mega-65 emulator, memory handling part (sort of ...)
+/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator.
    Copyright (C)2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -24,15 +24,21 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #include "xemu/emutools.h"
-#include "memory65.h"
+#include "memory_mapper.h"
 #include "mega65.h"
-#include "io65.h"
+#include "io_mapper.h"
 #include "xemu/cpu65c02.h"
 #include "hypervisor.h"
 #include "vic3.h"
-#include "initial_charset.c"
 #include <string.h>
 
+
+#define DEBUGMEM DEBUG
+
+
+// Character-WOM (Write-Only-Memory) for VIC-IV, with pre-initialized values.
+// Please read the comment at the beginning of this file.
+#include "character_wom_initialized.c"
 
 
 // 128K of "chip-RAM". VIC-IV in M65 can see this, though the last 2K is also covered by the first 2K of the colour RAM.
@@ -47,10 +53,7 @@ Uint8 fast_ram[0x20000];
 // the chip-RAM. Also, the first 1 or 2K can be seen in the C64-style I/O area too, at $D800
 Uint8 colour_ram[0x8000];
 // 16K of hypervisor RAM, can be only seen in hypervisor mode.
-Uint8 hypervisor_ram[0x4000];
-// 4K of character generator "WOM" (Write-Only-Memory). VIC-IV can read it in the case when ROM based charset would
-// be fetched with VIC-II for example. This area can be written in a high-address range, but never read (by CPU).
-Uint8 char_wom[0x1000];
+Uint8 hypervisor_ram[0x4001];
 // Ethernet buffer, this works that the SAME memory is used, TX is only writable, RX is only readable
 Uint8 ethernet_tx_buffer[0x800];
 Uint8 ethernet_rx_buffer[0x800];
@@ -160,9 +163,17 @@ static Uint8 dummy_reader ( int ofs ) {
 //static void  dummy_writer ( int ofs, Uint8 data ) {
 //}
 static Uint8 hypervisor_ram_reader ( int ofs ) {
+	DEBUG("HYPRAMREAD: from offset $%04X data %02X [hypmod=%d]" NL,
+		ofs, (likely(in_hypervisor)) ? hypervisor_ram[ofs] : 0xFF,
+		in_hypervisor
+	);
 	return (likely(in_hypervisor)) ? hypervisor_ram[ofs] : 0xFF;
 }
 static void  hypervisor_ram_writer ( int ofs, Uint8 data ) {
+	DEBUG("HYPRAMWRITE: from offset $%04X data %02X [hypmod=%d]" NL,
+		ofs, data,
+		in_hypervisor
+	);
 	if (likely(in_hypervisor))
 		hypervisor_ram[ofs] = data;
 }
@@ -255,8 +266,10 @@ static void phys_addr_decoder ( int phys, int slot, int prev_slot )
 	// as "slot" if you need a "moving" mapping in a "caching" slot, ie DMA-aux access functions, etc.
 	if (prev_slot >= 0) {
 		p = mem_page_refp[prev_slot];
-		if (phys >= p->start && phys <= p->end)
+		if (phys >= p->start && phys <= p->end) {
+			DEBUGMEM("MEM: PHYS-MAP: slot#$%03X: previous slot hint TAKEN :)" NL, slot);
 			goto found;
+		}
 	}
 	for (p = m65_memory_map; phys < p->start || phys > p->end; p++)
 		;
@@ -265,6 +278,13 @@ found:
 	mem_page_rd_f[slot] = p->rd_f;
 	mem_page_wr_f[slot] = p->wr_f;
 	mem_page_refp[slot] = p;
+	DEBUGMEM("MEM: PHYS-MAP: slot#$%03X: phys = $%X mapped (area: $%X-$%X, rd_o=%X, wr_o=%X) [hint slot was: %03X]" NL,
+		slot,
+		phys,
+		p->start, p->end,
+		mem_page_rd_o[slot], mem_page_wr_o[slot],
+		prev_slot
+	);
 }
 
 
@@ -368,8 +388,7 @@ void memory_init ( void )
 		applied_memcfg[a] = 0;	// unmapped marker
 	// Setting up the default memory configuration for M65 at least!
 	// Note, the exact order is IMPORTANT as being the first use of memory subsystem, actually these will initialize some things ...
-	memory_set_cpu_io_port(0, 7);	// must be before the other memory_set stuffs, here at least in init, I mean!
-	memory_set_cpu_io_port(1, 7);	// -- "" --
+	memory_set_cpu_io_port_ddr_and_data(7, 7);
 	memory_set_vic3_rom_mapping(0);
 	memory_set_do_map();
 	// Initiailize memory content with something ...
@@ -377,7 +396,7 @@ void memory_init ( void )
 	memset(fast_ram, 0xFF, sizeof fast_ram);
 	memset(colour_ram, 0xFF, sizeof colour_ram);
 	memset(hypervisor_ram, 0xFF, sizeof hypervisor_ram);		// this will be overwritten with kickstart, but anyway ...
-	memcpy(char_wom, initial_charset, sizeof initial_charset);	// pre-initialize charrom "WOM" with an initial charset
+	DEBUG("MEM: --- END OF INIT ---" NL);
 }
 
 
@@ -550,14 +569,15 @@ void memory_set_vic3_rom_mapping ( Uint8 value )
 }
 
 
-static void apply_cpu_io_port ( Uint8 value )
+static void apply_cpu_io_port_config ( void )
 {
-	if (value != memcfg_cpu_io_port_last) {
-		DEBUG("MEM: CPU I/O port composite value (new one) is %d" NL, value);
-		memcfg_cpu_io_port_last = value;
-		memcfg_cpu_io_port_policy_A000_to_BFFF = memcfg_cpu_io_port_policies_A000_to_BFFF[value];
-		memcfg_cpu_io_port_policy_D000_to_DFFF = memcfg_cpu_io_port_policies_D000_to_DFFF[value];
-		memcfg_cpu_io_port_policy_E000_to_FFFF = memcfg_cpu_io_port_policies_E000_to_FFFF[value];
+	Uint8 desired = (cpu_io_port[1] | (~cpu_io_port[0])) & 7;
+	if (desired != memcfg_cpu_io_port_last) {
+		DEBUG("MEM: CPU I/O port composite value (new one) is %d" NL, desired);
+		memcfg_cpu_io_port_last = desired;
+		memcfg_cpu_io_port_policy_A000_to_BFFF = memcfg_cpu_io_port_policies_A000_to_BFFF[desired];
+		memcfg_cpu_io_port_policy_D000_to_DFFF = memcfg_cpu_io_port_policies_D000_to_DFFF[desired];
+		memcfg_cpu_io_port_policy_E000_to_FFFF = memcfg_cpu_io_port_policies_E000_to_FFFF[desired];
 		// check only regions to apply, where CPU I/O port can change anything
 		apply_memory_config_A000_to_BFFF();
 		apply_memory_config_D000_to_DFFF();
@@ -579,7 +599,7 @@ void memory_set_cpu_io_port ( int addr, Uint8 value )
 		}
 	} else {
 		cpu_io_port[addr] = value;
-		apply_cpu_io_port((cpu_io_port[1] | (~cpu_io_port[0])) & 7);
+		apply_cpu_io_port_config();
 	}
 }
 
@@ -588,7 +608,7 @@ void memory_set_cpu_io_port_ddr_and_data ( Uint8 p0, Uint8 p1 )
 {
 	cpu_io_port[0] = p0;
 	cpu_io_port[1] = p1;
-	apply_cpu_io_port((cpu_io_port[1] | (~cpu_io_port[0])) & 7);
+	apply_cpu_io_port_config();
 }
 
 
@@ -678,6 +698,7 @@ void cpu_do_nop ( void )
 
 Uint8 cpu_read ( Uint16 addr )
 {
+	DEBUG("CPUREAD: $%04X synth_offset=%X" NL, addr, mem_page_rd_o[addr >> 8] + (addr & 0xFF));
 	return mem_page_rd_f[addr >> 8](mem_page_rd_o[addr >> 8] + (addr & 0xFF));
 }
 

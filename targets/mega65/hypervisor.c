@@ -1,4 +1,4 @@
-/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
+/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator.
    Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -21,8 +21,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65c02.h"
 #include "vic3.h"
 #include "xemu/f018_core.h"
-#include "memory65.h"
-#include "io65.h"
+#include "memory_mapper.h"
+#include "io_mapper.h"
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -33,7 +33,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 int in_hypervisor;			// mega65 hypervisor mode
-Uint8 hypervisor_memory[0x4001];	// 16K+1 byte, 1 byte is just used for length check on loading, ugly enough, indeed.
 
 static char debug_lines[0x4000][2][INFO_MAX_SIZE];		// I know. UGLY! and wasting memory. But this is only a HACK :)
 static int resolver_ok = 0;

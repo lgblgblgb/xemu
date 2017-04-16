@@ -1,4 +1,4 @@
-/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
+/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator.
    Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -50,9 +50,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // If defined, a file name string must be used.
 // Then hypervisor memory content will be written into this file on exit.
 //#define MEMDUMP_FILE		"dump.mem"
-
-//extern char emulator_speed_title[];
-//extern int  disallow_turbo;
 
 extern void m65mon_show_regs ( void );
 extern void m65mon_dumpmem16 ( Uint16 addr );

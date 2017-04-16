@@ -1,4 +1,4 @@
-/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
+/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator.
    Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -31,8 +31,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/c64_kbd_mapping.h"
 #include "xemu/emutools_config.h"
 #include "m65_snapshot.h"
-#include "memory65.h"
-#include "io65.h"
+#include "memory_mapper.h"
+#include "io_mapper.h"
 
 
 static SDL_AudioDeviceID audio = 0;
@@ -71,6 +71,9 @@ void machine_set_speed ( int verbose )
 	// it seems hypervisor always got full speed, and force_fast (ie, POKE 0,65) always forces the max
 	// TODO: what is speed_gate? (it seems to be a PMOD input and/or keyboard controll with CAPS-LOCK)
 	// TODO: how 2MHz is selected, it seems a double decoded VIC-X registers which is not so common in VIC modes yet, I think ...
+	//Uint8 desired = (in_hypervisor || force_fast) ? 7 : (((c128_d030_reg & 1) << 2) | ((vic3_registers[0x31] & 64) >> 5) | ((vic3_registers[0x54] & 64) >> 6));
+	//if (desired == current_speed_config)
+	//	return;
 	if (verbose)
 		printf("SPEED: in_hypervisor=%d force_fast=%d c128_fast=%d, c65_fast=%d m65_fast=%d" NL,
 			in_hypervisor, force_fast, (c128_d030_reg & 1) ^ 1, vic3_registers[0x31] & 64, vic3_registers[0x54] & 64
@@ -251,20 +254,20 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		}
 	} while (0);
 	// *** Init memory space
-	memory_init();
 	in_hypervisor = 0;
+	memory_init();
 	memset(gs_regs, 0, sizeof gs_regs);
 	rom_protect = 1;
 	kicked_hypervisor = emucfg_get_num("kicked");
 	// *** Trying to load kickstart image
 	p = emucfg_get_str("kickup");
-	if (emu_load_file(p, hypervisor_memory, 0x4001) == 0x4000) {
+	if (emu_load_file(p, hypervisor_ram, 0x4001) == 0x4000) {
 		DEBUG("MEGA65: %s loaded into hypervisor memory." NL, p);
 	} else {
 		WARNING_WINDOW("Kickstart %s cannot be found. Using the default (maybe outdated!) built-in version", p);
 		if (sizeof initial_kickup != 0x4000)
 			FATAL("Internal error: initial kickup is not 16K!");
-		memcpy(hypervisor_memory, initial_kickup, 0x4000);
+		memcpy(hypervisor_ram, initial_kickup, 0x4000);
 		hypervisor_debug_invalidate("no kickup could be loaded, built-in one does not have debug info");
 	}
 	// *** Image file for SDCARD support
@@ -291,21 +294,20 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		NULL,			// callback: INSR
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
-	// *** Initialize DMA
+	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
 	dma_init(
 		emucfg_get_num("dmarev"),
-		memory_dma_source_mreader,	// dma_reader_cb_t set_source_mreader ,
-		memory_dma_source_mwriter,	// dma_writer_cb_t set_source_mwriter ,
-		memory_dma_target_mreader,	// dma_reader_cb_t set_target_mreader ,
-		memory_dma_target_mwriter,	// dma_writer_cb_t set_target_mwriter,
-		io_read,			// dma_reader_cb_t set_source_ioreader,
-		io_write,			// dma_writer_cb_t set_source_iowriter,
-		io_read,			// dma_reader_cb_t set_target_ioreader,
-		io_write,			// dma_writer_cb_t set_target_iowriter,
+		memory_dma_source_mreader,	// dma_reader_cb_t set_source_mreader
+		memory_dma_source_mwriter,	// dma_writer_cb_t set_source_mwriter
+		memory_dma_target_mreader,	// dma_reader_cb_t set_target_mreader
+		memory_dma_target_mwriter,	// dma_writer_cb_t set_target_mwriter
+		io_reader_internal_decoder,	// dma_reader_cb_t set_source_ioreader
+		io_writer_internal_decoder,	// dma_writer_cb_t set_source_iowriter
+		io_reader_internal_decoder,	// dma_reader_cb_t set_target_ioreader
+		io_writer_internal_decoder,	// dma_writer_cb_t set_target_iowriter
 		memory_dma_list_reader		// dma_reader_cb_t set_list_reader
 	);
-	// TODO FIXME set this to 0x4000 later, and use "internal" functions above for I/O read/write to gain a minor performance :-]
-	dma_set_phys_io_offset(0xD000);	// FIXME: currently Mega65 uses D000 based I/O decoding, so we need this here ...
+	dma_set_phys_io_offset(0x4000);	// preformance hack: we use I/O internal decoders, where offset 0x4000 in multi-mode I/O areas mean the _CURRENT_ I/O VIC mode!
 	// Initialize FDC
 	fdc_init();
 	// SIDs, plus SDL audio
@@ -338,8 +340,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 #ifdef UARTMON_SOCKET
 	uartmon_init(UARTMON_SOCKET);
 #endif
-	// *** RESET CPU, also fetches the RESET vector into PC
-	cpu_reset();
+	cpu_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
 	rom_protect = 0;
 	cpu_linear_memory_addressing_is_enabled = 1;
 	hypervisor_enter(TRAP_RESET);
@@ -376,7 +377,7 @@ static void shutdown_callback ( void )
 	// Dump hypervisor memory to a file, so you can check it after exit.
 	f = fopen(MEMDUMP_FILE, "wb");
 	if (f) {
-		fwrite(hypervisor_memory, 1, 0x4000, f);
+		fwrite(hypervisor_ram, 1, 0x4000, f);
 		fclose(f);
 		DEBUG("Hypervisor memory state is dumped into " MEMDUMP_FILE NL);
 	}
@@ -394,8 +395,7 @@ static void reset_mega65 ( void )
 	force_fast = 0;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0xFF;
 	machine_set_speed(0);
-	memory_set_cpu_io_port(0, 0xFF);
-	memory_set_cpu_io_port(1, 0xFF);
+	memory_set_cpu_io_port_ddr_and_data(0xFF, 0xFF);
 	map_mask = 0;
 	vic3_registers[0x30] = 0;	// FIXME: hack! we need this, and memory_set_vic3_rom_mapping above too :(
 	memory_set_vic3_rom_mapping(0);

@@ -1,0 +1,39 @@
+This is a work-in-progress, for internal use TODO file only!
+
+TODO list for Mega-65 shorter term (m65mem branch lifetime):
+
+* Write new memory handling [DONE]
+* Make new memory handling work ...
+* ... test it!
+* Try to in-line CPU read/write primitives, check the performance impact
+* Rewrite I/O decoder ...
+* ... test it!
+* Hook DMA for direct internal I/O decoder [DONE]
+* CPU optimization idea: paged read/write primitives
+* RMW CPU primitive optimization
+* Move VIC mode change into a handler in vic stuff
+* Make snapshotting working again
+* Make (uart-)mon working again
+* Fix uart-mon with breakpoint (didn't worked even in master branch since the multi-op CPU performance patch)
+* Better speed control, allow custom M65-fast mode, just for test (CLI-switch?)
+* Maybe: rationalize the place of functions/variables within sources, maybe rename some sources
+* Check header includes, a mess now :( Kill ones not needed in a given source (see the previous point too)
+* Clean-up ...
+* Extensive testing!!
+* Merge m65mem into master, delete m65mem branch
+* Binary deployment
+
+SMALLER [?] misc TODOs in the future:
+
+* Allow kbd scanning work in the oppsite way too (C65 material too)
+* Import some C65 cnanges, OSD tries, and C1531 mouse emulation
+* SD-card: emulate some delay after operation: it causes too much load on the host box being "zero time ready" condition
+* M65 similar FDC r/w control "LED" on the screen corner?
+
+Some theory should be checked:
+
+* Colour related VIC reg: only lower 4 bits in C65 mode? (C65 material too)
+* CPU I/O port "unused bits" on C65/M65: are the values readable back? (C65 material too)
+* VIC-III ROM mappings cannot be "written-through" as C65 ROM mappings? (C65 material too)
+* Extended colour RAM (C65 too!) and SD-card buffer mapping remains if mode switched back to VIC-II?
+* Extended colour related VIC-regs remains if switched back VIC mode?

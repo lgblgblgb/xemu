@@ -1,7 +1,7 @@
-## Collection of *simple* emulators of some 8 bits machines using SDL2 library,
-## including the Commodore LCD and Commodore 65 too.
+## Xemu: Collection of *simple* emulators of some 8 bits machines using SDL2 library,
+## including the Commodore LCD, Commodore 65 and Mega-65 too.
 ##
-## Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@ TARGET		= mega65
 PRG_TARGET	= xmega65
 
 CFLAGS_TARGET_xmega65	=
-SRCS_TARGET_xmega65	= mega65.c vic3.c sdcard.c uart_monitor.c hypervisor.c m65_snapshot.c memory65.c io65.c
+SRCS_TARGET_xmega65	= mega65.c vic3.c sdcard.c uart_monitor.c hypervisor.c m65_snapshot.c memory_mapper.c io_mapper.c
 SRCS_COMMON_xmega65	= emutools.c cpu65c02.c cia6526.c emutools_hid.c sid.c f011_core.c f018_core.c c64_kbd_mapping.c emutools_config.c emutools_snapshot.c
 CONFIG_CFLAGS_TARGET_xmega65	= sdl2|math
 CONFIG_LDFLAGS_TARGET_xmega65	= sdl2|math

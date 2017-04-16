@@ -1,4 +1,4 @@
-/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
+/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator.
    Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is the VIC3 "emulation". Currently it does one-frame-at-once
@@ -27,7 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65c02.h"
 #include "vic3.h"
 #include "hypervisor.h"
-#include "memory65.h"
+#include "memory_mapper.h"
 
 #define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
 

@@ -1,5 +1,5 @@
-/* Mega-65 emulator, I/O decoding part (used by memory65.h mainly)
-   Also glue function for DMA-level I/O access.
+/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator.
+   I/O decoding part (used by memory65.h and DMA mainly)
    Copyright (C)2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -17,8 +17,8 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
-#include "io65.h"
-#include "memory65.h"
+#include "io_mapper.h"
+#include "memory_mapper.h"
 
 #include "mega65.h"
 #include "xemu/cpu65c02.h"
@@ -310,14 +310,4 @@ void io_writer_internal_decoder ( int addr, Uint8 data )
 	}
 	// The rest: IO-2 external
 	RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("IO-2 external select");
-}
-
-
-
-/* These are just short wrappers, to set "current I/O mode" request, and call the actual internal handlers */
-Uint8 io_read ( int addr ) {
-	return io_reader_internal_decoder(0x4000 | (addr & 0xFFF));
-}
-void  io_write ( int addr, Uint8 data ) {
-	io_writer_internal_decoder(0x4000 | (addr & 0xFFF), data);
 }
