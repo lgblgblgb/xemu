@@ -45,7 +45,8 @@ static int nmi_level;			// please read the comment at nmi_set() below
 
 #define TRAP_RESET	0x40
 
-static int disallow_turbo;
+static int fast_mhz, cpu_cycles_per_scanline_for_fast_mode;
+static char fast_mhz_in_string[8];
 
 static int frame_counter;
 
@@ -97,13 +98,8 @@ void machine_set_speed ( int verbose )
 		case 1:	// 001 - 48MHz
 		case 3:	// 011 - 48MHz
 		case 7:	// 111 - 48MHz
-			if (likely(!disallow_turbo)) {
-				cpu_cycles_per_scanline = CPU_M65_CYCLES_PER_SCANLINE;
-				strcpy(emulator_speed_title, "48MHz");
-			} else {
-				cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
-				strcpy(emulator_speed_title, ">3.5MHz");
-			}
+			cpu_cycles_per_scanline = cpu_cycles_per_scanline_for_fast_mode;
+			strcpy(emulator_speed_title, fast_mhz_in_string);
 			break;
 		}
 }
@@ -341,6 +337,11 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 #ifdef UARTMON_SOCKET
 	uartmon_init(UARTMON_SOCKET);
 #endif
+	fast_mhz = emucfg_get_num("fastclock");
+	if (fast_mhz < 3 || fast_mhz > 200)
+		fast_mhz = 48;
+	sprintf(fast_mhz_in_string, "%dMHz", fast_mhz);
+	cpu_cycles_per_scanline_for_fast_mode = 64 * fast_mhz;
 	cpu_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
 	rom_protect = 0;
 	cpu_linear_memory_addressing_is_enabled = 1;
@@ -519,8 +520,8 @@ int main ( int argc, char **argv )
 	int cycles, frameskip;
 	xemu_dump_version(stdout, "The Incomplete Commodore-65/Mega-65 emulator from LGB");
 	emucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
-	emucfg_define_switch_option("c65speed", "Allow emulation of 48MHz (problematic, currently)");
 	emucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip  (0=F018A, other=F018B)");
+	emucfg_define_num_option("fastclock", 48, "Clock of M65 fast mode (normally: 48 for 48MHz)");
 	emucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA-board switches turned ON");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	emucfg_define_switch_option("hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode");
@@ -562,9 +563,6 @@ int main ( int argc, char **argv )
 	);
 	// Start!!
 	skip_unhandled_mem = emucfg_get_bool("skipunhandledmem");
-	disallow_turbo = emucfg_get_bool("c65speed");
-	if (disallow_turbo)
-		printf("SPEED: WARNING: limitation of max CPU clock to 3.5MHz request is in use!" NL);
 	printf("UNHANDLED memory policy: %d" NL, skip_unhandled_mem);
 	cycles = 0;
 	frameskip = 0;
