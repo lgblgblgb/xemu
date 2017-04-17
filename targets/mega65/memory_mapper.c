@@ -55,6 +55,7 @@ Uint8 fast_ram[0x20000];
 // the chip-RAM. Also, the first 1 or 2K can be seen in the C64-style I/O area too, at $D800
 Uint8 colour_ram[0x8000];
 // 16K of hypervisor RAM, can be only seen in hypervisor mode.
+// FIXME: +1 byte for the idiotic Xemu length checking only :)
 Uint8 hypervisor_ram[0x4001];
 // Ethernet buffer, this works that the SAME memory is used, TX is only writable, RX is only readable
 Uint8 ethernet_tx_buffer[0x800];
@@ -64,11 +65,6 @@ Uint8 ethernet_rx_buffer[0x800];
 Uint8 slow_ram[127 << 20];
 #endif
 
-
-
-#define HANDLERS_ADDR_TYPE int
-typedef Uint8 (*mem_page_rd_f_type)(HANDLERS_ADDR_TYPE);
-typedef void  (*mem_page_wr_f_type)(HANDLERS_ADDR_TYPE, Uint8);
 
 struct m65_memory_map_st {
 	int start, end;		// starting and ending physical address of a memory region
@@ -104,12 +100,13 @@ struct m65_memory_map_st {
 #define VIC3_ROM_MASK_C000	0x20
 #define VIC3_ROM_MASK_E000	0x80
 
-static int mem_page_phys[MEM_SLOTS];
-int mem_page_rd_o[MEM_SLOTS];
-int mem_page_wr_o[MEM_SLOTS];
-static const struct m65_memory_map_st *mem_page_refp[MEM_SLOTS];
-mem_page_rd_f_type mem_page_rd_f[MEM_SLOTS];
-mem_page_wr_f_type mem_page_wr_f[MEM_SLOTS];
+#define MAP_MARKER_DUMMY_OFFSET	0x2000
+
+static int mem_page_phys[MEM_SLOTS] MAXALIGNED;
+int mem_page_rd_o[MEM_SLOTS] MAXALIGNED;
+int mem_page_wr_o[MEM_SLOTS] MAXALIGNED;
+mem_page_rd_f_type mem_page_rd_f[MEM_SLOTS] MAXALIGNED;
+mem_page_wr_f_type mem_page_wr_f[MEM_SLOTS] MAXALIGNED;
 static const struct m65_memory_map_st *mem_page_refp[MEM_SLOTS];
 
 static int applied_memcfg[9];	// not 8, since one slot is actually halved because of CXXX/DXXX handled differently
@@ -135,86 +132,89 @@ int rom_protect;
 int skip_unhandled_mem;
 
 
-static Uint8 zero_physical_page_reader ( int ofs ) {
-	return (likely(ofs > 1)) ? chip_ram[ofs] : cpu_io_port[ofs];
+#define DEFINE_READER(name) static Uint8 name ( MEMORY_HANDLERS_ADDR_TYPE )
+#define DEFINE_WRITER(name) static void  name ( MEMORY_HANDLERS_ADDR_TYPE, Uint8 data )
+
+DEFINE_READER(zero_physical_page_reader) {
+	return (likely(GET_OFFSET_BYTE_ONLY() > 1)) ? chip_ram[GET_OFFSET_BYTE_ONLY()] : cpu_io_port[GET_OFFSET_BYTE_ONLY()];
 }
-static void  zero_physical_page_writer ( int ofs, Uint8 data )
+DEFINE_WRITER(zero_physical_page_writer)
 {
-	if (likely(ofs > 1))
-		chip_ram[ofs] = data;
+	if (likely(GET_OFFSET_BYTE_ONLY() > 1))
+		chip_ram[GET_OFFSET_BYTE_ONLY()] = data;
 	else
-		memory_set_cpu_io_port(ofs, data);
+		memory_set_cpu_io_port(GET_OFFSET_BYTE_ONLY(), data);
 }
-static Uint8 chip_ram_from_page1_reader ( int ofs ) {
-	return chip_ram[ofs + 0x100];
+DEFINE_READER(chip_ram_from_page1_reader) {
+	return chip_ram[GET_READER_OFFSET() + 0x100];
 }
-static void  chip_ram_from_page1_writer ( int ofs, Uint8 data ) {
-	chip_ram[ofs + 0x100] = data;
+DEFINE_WRITER(chip_ram_from_page1_writer) {
+	chip_ram[GET_WRITER_OFFSET() + 0x100] = data;
 }
-static Uint8 fast_ram_reader ( int ofs ) {
-	return fast_ram[ofs];
+DEFINE_READER(fast_ram_reader) {
+	return fast_ram[GET_READER_OFFSET()];
 }
-static void  fast_ram_writer ( int ofs, Uint8 data ) {
+DEFINE_WRITER(fast_ram_writer) {
 	if (likely(!rom_protect))
-		fast_ram[ofs] = data;
+		fast_ram[GET_WRITER_OFFSET()] = data;
 }
-static Uint8 colour_ram_reader ( int ofs ) {
-	return colour_ram[ofs];
+DEFINE_READER(colour_ram_reader) {
+	return colour_ram[GET_READER_OFFSET()];
 }
-static void  colour_ram_writer ( int ofs, Uint8 data ) {
-	colour_ram[ofs] = data;
+DEFINE_WRITER(colour_ram_writer) {
+	colour_ram[GET_WRITER_OFFSET()] = data;
 }
-static Uint8 dummy_reader ( int ofs ) {
+DEFINE_READER(dummy_reader) {
 	return 0xFF;
 }
-static void  dummy_writer ( int ofs, Uint8 data ) {
+DEFINE_WRITER(dummy_writer) {
 }
-static Uint8 hypervisor_ram_reader ( int ofs ) {
-	return (likely(in_hypervisor)) ? hypervisor_ram[ofs] : 0xFF;
+DEFINE_READER(hypervisor_ram_reader) {
+	return (likely(in_hypervisor)) ? hypervisor_ram[GET_READER_OFFSET()] : 0xFF;
 }
-static void  hypervisor_ram_writer ( int ofs, Uint8 data ) {
+DEFINE_WRITER(hypervisor_ram_writer) {
 	if (likely(in_hypervisor))
-		hypervisor_ram[ofs] = data;
+		hypervisor_ram[GET_WRITER_OFFSET()] = data;
 }
-static void  char_wom_writer ( int ofs, Uint8 data ) {	// Note: there is NO read for this, as it's write-only memory!
-	char_wom[ofs] = data;
+DEFINE_WRITER(char_wom_writer) {	// Note: there is NO read for this, as it's write-only memory!
+	char_wom[GET_WRITER_OFFSET()] = data;
 }
-static Uint8 slow_ram_reader ( int ofs ) {
+DEFINE_READER(slow_ram_reader) {
 #ifdef SLOW_RAM_SUPPORT
-	return slow_ram[ofs];
+	return slow_ram[GET_READER_OFFSET()];
 #else
 	return 0xFF;
 #endif
 }
-static void  slow_ram_writer ( int ofs, Uint8 data ) {
+DEFINE_WRITER(slow_ram_writer) {
 #ifdef SLOW_RAM_SUPPORT
-	slow_ram[ofs] = data;
+	slow_ram[GET_WRITER_OFFSET()] = data;
 #endif
 }
-static Uint8 invalid_mem_reader ( int addr ) {
-	if (skip_unhandled_mem)
-		DEBUGPRINT("WARNING: Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, addr, cpu_pc);
+DEFINE_READER(invalid_mem_reader) {
+	if (likely(skip_unhandled_mem))
+		DEBUGPRINT("WARNING: Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, GET_READER_OFFSET(), cpu_pc);
 	else
-		FATAL("Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, addr, cpu_pc);
+		FATAL("Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, GET_READER_OFFSET(), cpu_pc);
 	return 0xFF;
 }
-static void  invalid_mem_writer ( int addr, Uint8 data ) {
-	if (skip_unhandled_mem)
-		DEBUGPRINT("WARNING: Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, addr, data, cpu_pc);
+DEFINE_WRITER(invalid_mem_writer) {
+	if (likely(skip_unhandled_mem))
+		DEBUGPRINT("WARNING: Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, GET_WRITER_OFFSET(), data, cpu_pc);
 	else
-		FATAL("Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, addr, data, cpu_pc);
+		FATAL("Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, GET_WRITER_OFFSET(), data, cpu_pc);
 }
-static Uint8 fatal_mem_reader ( int addr ) {
-	FATAL("Unhandled physical memory mapping on read map");
+DEFINE_READER(fatal_mem_reader) {
+	FATAL("Unhandled physical memory mapping on read map. Xemu software bug?");
 }
-static void  fatal_mem_writer ( int addr, Uint8 data ) {
-	FATAL("Unhandled physical memory mapping on write map");
+DEFINE_WRITER(fatal_mem_writer) {
+	FATAL("Unhandled physical memory mapping on write map. Xemu software bug?");
 }
-static Uint8 unreferenced_mem_reader ( int addr ) {
-	FATAL("Unreferenced physical memory mapping on read map");
+DEFINE_READER(unreferenced_mem_reader) {
+	FATAL("Unreferenced physical memory mapping on read map. Xemu software bug?");
 }
-static void  unreferenced_mem_writer ( int addr, Uint8 data ) {
-	FATAL("Unreferenced physical memory mapping on write map");
+DEFINE_WRITER(unreferenced_mem_writer) {
+	FATAL("Unreferenced physical memory mapping on write map. Xemu software bug?");
 }
 
 
@@ -242,7 +242,7 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 	{ 0xFFF8000, 0xFFFBFFF, hypervisor_ram_reader, hypervisor_ram_writer },	// 16KB Kickstart/hypervisor ROM
 	{ 0xFF7E000, 0xFF7EFFF, dummy_reader, char_wom_writer },		// Character "WriteOnlyMemory"
 	{ 0x8000000, 0xFEFFFFF, slow_ram_reader, slow_ram_writer },		// 127Mbytes of "slow RAM" (Nexys4 DDR2 RAM)
-	{ 0x40000, 0xFFFFF, dummy_reader, dummy_writer },
+	{ 0x40000, 0xFFFFF, dummy_reader, dummy_writer },			// upper "unused" area of C65 (!) memory map. It seems C65 ROMs want it (Expansion RAM?) so we define as unused.
 	// the last entry *MUST* include the all possible addressing space to "catch" undecoded memory area accesses!!
 	{ 0, 0xFFFFFFF, invalid_mem_reader, invalid_mem_writer },
 	// even after the last entry :-) to filter out programming bugs, catch all possible even not valid M65 physical address space acceses ...
@@ -283,6 +283,7 @@ static void phys_addr_decoder ( int phys, int slot, int hint_slot )
 			goto found;
 		}
 	}
+	// Scan the memory map, as not found "cached" result on the same slot, or by the hinting slot
 	for (p = m65_memory_map; phys < p->start || phys > p->end; p++)
 		;
 found:
@@ -396,12 +397,12 @@ void memory_init ( void )
 	map_offset_high = 0;
 	map_megabyte_low = 0;
 	map_megabyte_high = 0;
-	map_marker_low = 0x2000;
-	map_marker_high = 0x2000;
+	map_marker_low =  MAP_MARKER_DUMMY_OFFSET;
+	map_marker_high = MAP_MARKER_DUMMY_OFFSET;
 	rom_protect = 0;
 	skip_unhandled_mem = 0;
 	for (a = 0; a < 9; a++)
-		applied_memcfg[a] = 0x1FFF;
+		applied_memcfg[a] = MAP_MARKER_DUMMY_OFFSET - 1;
 	// Setting up the default memory configuration for M65 at least!
 	// Note, the exact order is IMPORTANT as being the first use of memory subsystem, actually these will initialize some things ...
 	memory_set_cpu_io_port_ddr_and_data(7, 7);
@@ -580,13 +581,13 @@ void memory_set_vic3_rom_mapping ( Uint8 value )
 		Uint8 change = memcfg_vic3_rom_mapping_last ^ value;	// change mask, bits have 1 only if there was a change
 		memcfg_vic3_rom_mapping_last = value;	// don't forget to store the current state for next check!
 		// now check bits changed in ROM mapping
-		if (change &   8)
+		if (change & VIC3_ROM_MASK_8000)
 			apply_memory_config_8000_to_9FFF();
-		if (change &  16)
+		if (change & VIC3_ROM_MASK_A000)
 			apply_memory_config_A000_to_BFFF();
-		if (change &  32)
+		if (change & VIC3_ROM_MASK_C000)
 			apply_memory_config_C000_to_CFFF();
-		if (change & 128)
+		if (change & VIC3_ROM_MASK_E000)
 			apply_memory_config_E000_to_FFFF();
 	}
 }
@@ -654,8 +655,8 @@ void memory_set_do_map ( void )
 	// detect already done operations. It must be unique for each possible mappings, that is the only rule.
 	// to leave room for other values we use both of megabyte info and offset info, but moved from the zero
 	// reference (WARNING: mapped from zero and unmapped are different states!) to have place for other markers too.
-	map_marker_low  = (map_megabyte_low  | map_offset_low ) + 0x2000;
-	map_marker_high = (map_megabyte_high | map_offset_high) + 0x2000;
+	map_marker_low  = (map_megabyte_low  | map_offset_low ) + MAP_MARKER_DUMMY_OFFSET;
+	map_marker_high = (map_megabyte_high | map_offset_high) + MAP_MARKER_DUMMY_OFFSET;
 	// We need to check every possible memory regions for the effect caused by MAPping ...
 	apply_memory_config_0000_to_7FFF();
 	apply_memory_config_8000_to_9FFF();
@@ -667,6 +668,7 @@ void memory_set_do_map ( void )
 
 
 // This implements the MAP opcode, ie "AUG" in case of 65CE02, which was re-defined to "MAP" in C65's CPU
+// M65's extension to select "MB" (ie: megabyte slice, which wraps within!) is supported as well
 void cpu_do_aug ( void )
 {
 	/*   7       6       5       4       3       2       1       0    BIT
@@ -720,19 +722,6 @@ void cpu_do_nop ( void )
 		DEBUG("CPU: NOP not treated as EOM (no MAP before)" NL);
 }
 
-#if 0
-Uint8 cpu_read ( Uint16 addr )
-{
-	return mem_page_rd_f[addr >> 8](mem_page_rd_o[addr >> 8] + (addr & 0xFF));
-}
-
-
-void  cpu_write ( Uint16 addr, Uint8 data )
-{
-	mem_page_wr_f[addr >> 8](mem_page_wr_o[addr >> 8] + (addr & 0xFF), data);
-}
-#endif
-
 
 // Called in case of an RMW (read-modify-write) opcode write access.
 // Original NMOS 6502 would write the old_data first, then new_data.
@@ -751,6 +740,12 @@ void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 }
 
 
+/* For 32 (28 ...) bit linear addressing we use a dedicated mapper slot. Please read
+   command above, similar situation as with the DMA. However we need to fetch the
+   base (+Z) from base page, so it can be a bit less efficient if different 32 bit
+   pointers used all the time in 4510GS code. */
+
+
 static INLINE int cpu_get_flat_addressing_mode_address ( void )
 {
 	register int addr = cpu_read(cpu_pc++);	// fetch base page address
@@ -764,55 +759,64 @@ static INLINE int cpu_get_flat_addressing_mode_address ( void )
 	) + cpu_z) & 0xFFFFFFF;	// FIXME: check if it's really apply here: warps around at 256Mbyte, for address bus of Mega65
 }
 
-
 Uint8 cpu_read_linear_opcode ( void )
 {
 	int addr = cpu_get_flat_addressing_mode_address();
 	Uint8 data;
 	phys_addr_decoder(addr, MEM_SLOT_CPU_32BIT, MEM_SLOT_CPU_32BIT);
-	data = mem_page_rd_f[MEM_SLOT_CPU_32BIT](mem_page_rd_o[MEM_SLOT_CPU_32BIT] + (addr & 0xFF));
+	//data = mem_page_rd_f[MEM_SLOT_CPU_32BIT](mem_page_rd_o[MEM_SLOT_CPU_32BIT] + (addr & 0xFF));
+	data = CALL_MEMORY_READER(MEM_SLOT_CPU_32BIT, addr);
 	DEBUG("MEGA65: reading LINEAR memory [PC=$%04X/OPC=$%02X] @ $%X with result $%02X" NL, cpu_old_pc, cpu_op, addr, data);
 	return data;
 }
-
-
 
 void cpu_write_linear_opcode ( Uint8 data )
 {
 	int addr = cpu_get_flat_addressing_mode_address();
 	DEBUG("MEGA65: writing LINEAR memory [PC=$%04X/OPC=$%02X] @ $%X with data $%02X" NL, cpu_old_pc, cpu_op, addr, data);
 	phys_addr_decoder(addr, MEM_SLOT_CPU_32BIT, MEM_SLOT_CPU_32BIT);
-	mem_page_wr_f[MEM_SLOT_CPU_32BIT](mem_page_wr_o[MEM_SLOT_CPU_32BIT] + (addr & 0xFF), data);
+	//mem_page_wr_f[MEM_SLOT_CPU_32BIT](mem_page_wr_o[MEM_SLOT_CPU_32BIT] + (addr & 0xFF), data);
+	CALL_MEMORY_WRITER(MEM_SLOT_CPU_32BIT, addr, data);
 }
 
+
+/* DMA related call-backs. We use a dedicated memory mapper "slot" for each DMA functions.
+   Source can be _written_ too (in case of SWAP operation for example). There are dedicated
+   slots for each functionality, so we don't need to re-map physical address again and again,
+   and we can take advantage of using the "cache" provided by phys_addr_decoder() which can
+   be especially efficient in case of linear operations, what DMA usually does.
+   Performance analysis (can be applied to other memory operations somewhat too, even CPU):
+   * if the next access for the given DMA func is in the same 256 page, phys_addr_decoder will return after just a comparsion operation
+   * if not, the "hint_slot" (3rd paramater) is used, if at least the same physical region (ie also fast-ram, etc) is used, again it's faster than full scan
+   * if even the previous statment is not true, phys_addr_decoder will scan the phyisical M65 memory layout to find the region, only */
 
 
 Uint8 memory_dma_source_mreader ( int addr )
 {
 	phys_addr_decoder(addr, MEM_SLOT_DMA_RD_SRC, MEM_SLOT_DMA_RD_SRC);
-	return mem_page_rd_f[MEM_SLOT_DMA_RD_SRC](mem_page_rd_o[MEM_SLOT_DMA_RD_SRC] + (addr & 0xFF));
+	return CALL_MEMORY_READER(MEM_SLOT_DMA_RD_SRC, addr);
 }
 
 void  memory_dma_source_mwriter ( int addr, Uint8 data )
 {
 	phys_addr_decoder(addr, MEM_SLOT_DMA_WR_SRC, MEM_SLOT_DMA_WR_SRC);
-	mem_page_wr_f[MEM_SLOT_DMA_WR_SRC](mem_page_wr_o[MEM_SLOT_DMA_WR_SRC] + (addr & 0xFF), data);
+	CALL_MEMORY_WRITER(MEM_SLOT_DMA_WR_SRC, addr, data);
 }
 
 Uint8 memory_dma_target_mreader ( int addr )
 {
 	phys_addr_decoder(addr, MEM_SLOT_DMA_RD_DST, MEM_SLOT_DMA_RD_DST);
-	return mem_page_rd_f[MEM_SLOT_DMA_RD_DST](mem_page_rd_o[MEM_SLOT_DMA_RD_DST] + (addr & 0xFF));
+	return CALL_MEMORY_READER(MEM_SLOT_DMA_RD_DST, addr);
 }
 
 void  memory_dma_target_mwriter ( int addr, Uint8 data )
 {
 	phys_addr_decoder(addr, MEM_SLOT_DMA_WR_DST, MEM_SLOT_DMA_WR_DST);
-	mem_page_wr_f[MEM_SLOT_DMA_WR_DST](mem_page_wr_o[MEM_SLOT_DMA_WR_DST] + (addr & 0xFF), data);
+	CALL_MEMORY_WRITER(MEM_SLOT_DMA_WR_DST, addr, data);
 }
 
 Uint8 memory_dma_list_reader    ( int addr )
 {
 	phys_addr_decoder(addr, MEM_SLOT_DMA_RD_LST, MEM_SLOT_DMA_RD_LST);
-	return mem_page_rd_f[MEM_SLOT_DMA_RD_LST](mem_page_rd_o[MEM_SLOT_DMA_RD_LST] + (addr & 0xFF));
+	return CALL_MEMORY_READER(MEM_SLOT_DMA_RD_LST, addr);
 }

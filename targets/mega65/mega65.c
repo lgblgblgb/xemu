@@ -45,11 +45,9 @@ static int nmi_level;			// please read the comment at nmi_set() below
 
 #define TRAP_RESET	0x40
 
-static int fast_mhz, cpu_cycles_per_scanline_for_fast_mode;
+static int fast_mhz, cpu_cycles_per_scanline_for_fast_mode, speed_current;
 static char fast_mhz_in_string[8];
-
 static int frame_counter;
-
 static int   paused = 0, paused_old = 0;
 static int   breakpoint_pc = -1;
 static int   trace_step_trigger = 0;
@@ -63,6 +61,7 @@ static char emulator_speed_title[] = "????MHz";
 
 void machine_set_speed ( int verbose )
 {
+	int speed_wanted;
 	// TODO: Mega65 speed is not handled yet. Reasons: too slow emulation for average PC, and the complete control of speed, ie lack of C128-fast (2MHz mode,
 	// because of incomplete VIC register I/O handling).
 	// Actually the rule would be something like that (this comment is here by intent, for later implementation FIXME TODO), some VHDL draft only:
@@ -80,28 +79,33 @@ void machine_set_speed ( int verbose )
 		printf("SPEED: in_hypervisor=%d force_fast=%d c128_fast=%d, c65_fast=%d m65_fast=%d" NL,
 			in_hypervisor, force_fast, (c128_d030_reg & 1) ^ 1, vic3_registers[0x31] & 64, vic3_registers[0x54] & 64
 	);
-	switch ((in_hypervisor || force_fast) ? 7 : (((c128_d030_reg & 1) << 2) | ((vic3_registers[0x31] & 64) >> 5) | ((vic3_registers[0x54] & 64) >> 6))) {
-		case 4:	// 100 - 1MHz
-		case 5:	// 101 - 1MHz
-			cpu_cycles_per_scanline = CPU_C64_CYCLES_PER_SCANLINE;
-			strcpy(emulator_speed_title, "1MHz");
-			break;
-		case 0:	// 000 - 2MHz
-			cpu_cycles_per_scanline = CPU_C128_CYCLES_PER_SCANLINE;
-			strcpy(emulator_speed_title, "2MHz");
-			break;
-		case 2:	// 010 - 3.5MHz
-		case 6:	// 110 - 3.5MHz
-			cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
-			strcpy(emulator_speed_title, "3.5MHz");
-			break;
-		case 1:	// 001 - 48MHz
-		case 3:	// 011 - 48MHz
-		case 7:	// 111 - 48MHz
-			cpu_cycles_per_scanline = cpu_cycles_per_scanline_for_fast_mode;
-			strcpy(emulator_speed_title, fast_mhz_in_string);
-			break;
+	speed_wanted = (in_hypervisor || force_fast) ? 7 : (((c128_d030_reg & 1) << 2) | ((vic3_registers[0x31] & 64) >> 5) | ((vic3_registers[0x54] & 64) >> 6));
+	if (speed_wanted != speed_current) {
+		speed_current = speed_wanted;
+		switch (speed_wanted) {
+			case 4:	// 100 - 1MHz
+			case 5:	// 101 - 1MHz
+				cpu_cycles_per_scanline = CPU_C64_CYCLES_PER_SCANLINE;
+				strcpy(emulator_speed_title, "1MHz");
+				break;
+			case 0:	// 000 - 2MHz
+				cpu_cycles_per_scanline = CPU_C128_CYCLES_PER_SCANLINE;
+				strcpy(emulator_speed_title, "2MHz");
+				break;
+			case 2:	// 010 - 3.5MHz
+			case 6:	// 110 - 3.5MHz
+				cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
+				strcpy(emulator_speed_title, "3.5MHz");
+				break;
+			case 1:	// 001 - 48MHz
+			case 3:	// 011 - 48MHz
+			case 7:	// 111 - 48MHz
+				cpu_cycles_per_scanline = cpu_cycles_per_scanline_for_fast_mode;
+				strcpy(emulator_speed_title, fast_mhz_in_string);
+				break;
 		}
+		DEBUG("SPEED: CPU speed is set to %s" NL, emulator_speed_title);
+	}
 }
 
 
@@ -338,14 +342,19 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	uartmon_init(UARTMON_SOCKET);
 #endif
 	fast_mhz = emucfg_get_num("fastclock");
-	if (fast_mhz < 3 || fast_mhz > 200)
+	if (fast_mhz < 3 || fast_mhz > 200) {
+		ERROR_WINDOW("Fast clock given by -fastclock switch must be between 3...200MHz. Bad value, defaulting to 48MHz");
 		fast_mhz = 48;
+	}
 	sprintf(fast_mhz_in_string, "%dMHz", fast_mhz);
 	cpu_cycles_per_scanline_for_fast_mode = 64 * fast_mhz;
+	DEBUGPRINT("SPEED: fast clock is set to %dMHz, %d CPU cycles per scanline." NL, fast_mhz, cpu_cycles_per_scanline_for_fast_mode);
 	cpu_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
 	rom_protect = 0;
 	cpu_linear_memory_addressing_is_enabled = 1;
 	hypervisor_enter(TRAP_RESET);
+	speed_current = 0;
+	machine_set_speed(1);
 	DEBUG("INIT: end of initialization!" NL);
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemusnap_init(m65_snapshot_definition);

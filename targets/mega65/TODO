@@ -3,20 +3,21 @@ This is a work-in-progress, for internal use TODO file only!
 TODO list for Mega-65 shorter term (m65mem branch lifetime):
 
 * Write new memory handling [DONE]
-* Again: try different solutions for best performance within similar constraints?
+* Again: try different solutions for best performance within similar constraints? [PENDING]
 * Make new memory handling work ... [DONE?]
 * ... test it!
 * Try to in-line CPU read/write primitives, check the performance impact
 * Rewrite I/O decoder ...
 * ... test it!
-* Hook DMA for direct internal I/O decoder [DONE?]
+* Hook DMA for (the new) direct internal I/O decoder [DONE?]
 * CPU optimization idea: paged read/write primitives
 * RMW CPU primitive optimization
 * Move VIC mode change into a handler in vic stuff
 * Make snapshotting working again
 * Make (uart-)mon working again
 * Fix uart-mon with breakpoint (didn't worked even in master branch since the multi-op CPU performance patch)
-* Better speed control, allow custom M65-fast mode, just for test (CLI-switch?)
+* Test if uart-mon works at all in a sane way ...
+* Better speed control, allow custom M65-fast mode, just for test (CLI-switch?) [DONE]
 * Maybe: rationalize the place of functions/variables within sources, maybe rename some sources
 * Check header includes, a mess now :( Kill ones not needed in a given source (see the previous point too)
 * Clean-up ...
