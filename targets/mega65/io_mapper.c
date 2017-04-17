@@ -1,5 +1,6 @@
-/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator.
-   I/O decoding part (used by memory65.h and DMA mainly)
+/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   I/O decoding part (used by memory_mapper.h and DMA mainly)
    Copyright (C)2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -76,9 +77,6 @@ struct SidEmulation sid1, sid2;		// the two SIDs
 Uint8 io_reader_internal_decoder ( int addr )
 {
 	addr = 0xD000 | (addr & 0xFFF);
-	// FIXME: sanity check ...
-	if (addr < 0xD000 || addr > 0xDFFF)
-		FATAL("io_read() decoding problem addr $%X is not in range of $D000...$DFFF", addr);
 	// Future stuff: instead of slow tons of IFs, use the >> 5 maybe
 	// that can have new device at every 0x20 dividible addresses,
 	// that is: switch ((addr >> 5) & 127)
@@ -190,9 +188,6 @@ Uint8 io_reader_internal_decoder ( int addr )
 void io_writer_internal_decoder ( int addr, Uint8 data )
 {
 	addr = 0xD000 | (addr & 0xFFF);
-	// FIXME: sanity check ...
-	if (addr < 0xD000 || addr > 0xDFFF)
-		FATAL("io_read() decoding problem addr $%X is not in range of $D000...$DFFF", addr);
 	if (addr < 0xD080) {	// $D000 - $D07F:	VIC3
 		vic3_write_reg(addr, data);
 		return;

@@ -3,12 +3,13 @@ This is a work-in-progress, for internal use TODO file only!
 TODO list for Mega-65 shorter term (m65mem branch lifetime):
 
 * Write new memory handling [DONE]
-* Make new memory handling work ...
+* Again: try different solutions for best performance within similar constraints?
+* Make new memory handling work ... [DONE?]
 * ... test it!
 * Try to in-line CPU read/write primitives, check the performance impact
 * Rewrite I/O decoder ...
 * ... test it!
-* Hook DMA for direct internal I/O decoder [DONE]
+* Hook DMA for direct internal I/O decoder [DONE?]
 * CPU optimization idea: paged read/write primitives
 * RMW CPU primitive optimization
 * Move VIC mode change into a handler in vic stuff

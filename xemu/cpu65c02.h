@@ -40,12 +40,16 @@ extern int cpu_linear_memory_addressing_is_enabled;
 #endif
 extern int cpu_multi_step_stop_trigger;
 
+#ifndef CPU_CUSTOM_MEMORY_FUNCTIONS_H
 extern void  cpu_write     ( Uint16 addr, Uint8 data );
 extern void  cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data );
 extern Uint8 cpu_read      ( Uint16 addr );
 #ifdef MEGA65
 extern void  cpu_write_linear_opcode ( Uint8 data );
 extern Uint8 cpu_read_linear_opcode  ( void );
+#endif
+#else
+#include CPU_CUSTOM_MEMORY_FUNCTIONS_H
 #endif
 
 extern void cpu_reset ( void );

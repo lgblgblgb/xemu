@@ -1,4 +1,5 @@
-/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator.
+/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -32,8 +33,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "vic3.h"
 #include <string.h>
 
+#include "cpu_custom_functions.h"
 
-#define DEBUGMEM DEBUG
+//#define DEBUGMEM DEBUG
 
 
 // Character-WOM (Write-Only-Memory) for VIC-IV, with pre-initialized values.
@@ -57,8 +59,8 @@ Uint8 hypervisor_ram[0x4001];
 // Ethernet buffer, this works that the SAME memory is used, TX is only writable, RX is only readable
 Uint8 ethernet_tx_buffer[0x800];
 Uint8 ethernet_rx_buffer[0x800];
-#ifdef SLOW_RAM_SUPPORT
 // 127Mbytes of slow-RAM. Would be the DDR memory on M65/Nexys4
+#ifdef SLOW_RAM_SUPPORT
 Uint8 slow_ram[127 << 20];
 #endif
 
@@ -81,13 +83,13 @@ struct m65_memory_map_st {
 // The extra elements over 0x200 used for ROM and I/O mapping, DMA access decoding, and 32 bit opcodes.
 
 #define MEM_SLOT_C64_8KROM_A000	0x200
-#define MEM_SLOT_C64_4KROM_D000 0x220
-#define MEM_SLOT_C64_8KROM_E000 0x230
-#define MEM_SLOT_C65_8KROM_8000 0x250
-#define MEM_SLOT_C65_8KROM_A000 0x270
-#define MEM_SLOT_C65_4KROM_C000 0x290
-#define MEM_SLOT_C65_8KROM_E000 0x2A0
-#define MEM_SLOT_OLD_4K_IO_D000 0x2C0
+#define MEM_SLOT_C64_4KROM_D000	0x220
+#define MEM_SLOT_OLD_4K_IO_D000	0x230
+#define MEM_SLOT_C64_8KROM_E000	0x240
+#define MEM_SLOT_C65_8KROM_8000	0x260
+#define MEM_SLOT_C65_8KROM_A000	0x280
+#define MEM_SLOT_C65_8KROM_E000	0x2A0
+#define MEM_SLOT_C65_4KROM_C000	0x2C0
 #define MEM_SLOT_DMA_RD_SRC	0x2D0
 #define MEM_SLOT_DMA_WR_SRC	0x2D1
 #define MEM_SLOT_DMA_RD_DST	0x2D2
@@ -97,12 +99,17 @@ struct m65_memory_map_st {
 #define MEM_SLOT_DEBUG_RESOLVER	0x2D6
 #define MEM_SLOTS		0x2D7
 
+#define VIC3_ROM_MASK_8000	0x08
+#define VIC3_ROM_MASK_A000	0x10
+#define VIC3_ROM_MASK_C000	0x20
+#define VIC3_ROM_MASK_E000	0x80
+
 static int mem_page_phys[MEM_SLOTS];
-static int mem_page_rd_o[MEM_SLOTS];
-static int mem_page_wr_o[MEM_SLOTS];
+int mem_page_rd_o[MEM_SLOTS];
+int mem_page_wr_o[MEM_SLOTS];
 static const struct m65_memory_map_st *mem_page_refp[MEM_SLOTS];
-static mem_page_rd_f_type mem_page_rd_f[MEM_SLOTS];
-static mem_page_wr_f_type mem_page_wr_f[MEM_SLOTS];
+mem_page_rd_f_type mem_page_rd_f[MEM_SLOTS];
+mem_page_wr_f_type mem_page_wr_f[MEM_SLOTS];
 static const struct m65_memory_map_st *mem_page_refp[MEM_SLOTS];
 
 static int applied_memcfg[9];	// not 8, since one slot is actually halved because of CXXX/DXXX handled differently
@@ -120,8 +127,8 @@ static const int memcfg_cpu_io_port_policies_E000_to_FFFF[8] = {
 	0x1E0, 0x1E0, MEM_SLOT_C64_8KROM_E000, MEM_SLOT_C64_8KROM_E000, 0x1E0, 0x1E0, MEM_SLOT_C64_8KROM_E000, MEM_SLOT_C64_8KROM_E000
 };
 
-static int memcfg_vic3_rom_mapping_last, memcfg_cpu_io_port_last;
-static int cpu_io_port[2];
+static Uint8 memcfg_vic3_rom_mapping_last, memcfg_cpu_io_port_last;
+static Uint8 cpu_io_port[2];
 int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
 static int map_marker_low, map_marker_high;
 int rom_protect;
@@ -138,11 +145,11 @@ static void  zero_physical_page_writer ( int ofs, Uint8 data )
 	else
 		memory_set_cpu_io_port(ofs, data);
 }
-static Uint8 chip_ram_reader ( int ofs ) {
-	return chip_ram[ofs];
+static Uint8 chip_ram_from_page1_reader ( int ofs ) {
+	return chip_ram[ofs + 0x100];
 }
-static void  chip_ram_writer ( int ofs, Uint8 data ) {
-	chip_ram[ofs] = data;
+static void  chip_ram_from_page1_writer ( int ofs, Uint8 data ) {
+	chip_ram[ofs + 0x100] = data;
 }
 static Uint8 fast_ram_reader ( int ofs ) {
 	return fast_ram[ofs];
@@ -160,25 +167,29 @@ static void  colour_ram_writer ( int ofs, Uint8 data ) {
 static Uint8 dummy_reader ( int ofs ) {
 	return 0xFF;
 }
-//static void  dummy_writer ( int ofs, Uint8 data ) {
-//}
+static void  dummy_writer ( int ofs, Uint8 data ) {
+}
 static Uint8 hypervisor_ram_reader ( int ofs ) {
-	DEBUG("HYPRAMREAD: from offset $%04X data %02X [hypmod=%d]" NL,
-		ofs, (likely(in_hypervisor)) ? hypervisor_ram[ofs] : 0xFF,
-		in_hypervisor
-	);
 	return (likely(in_hypervisor)) ? hypervisor_ram[ofs] : 0xFF;
 }
 static void  hypervisor_ram_writer ( int ofs, Uint8 data ) {
-	DEBUG("HYPRAMWRITE: from offset $%04X data %02X [hypmod=%d]" NL,
-		ofs, data,
-		in_hypervisor
-	);
 	if (likely(in_hypervisor))
 		hypervisor_ram[ofs] = data;
 }
 static void  char_wom_writer ( int ofs, Uint8 data ) {	// Note: there is NO read for this, as it's write-only memory!
 	char_wom[ofs] = data;
+}
+static Uint8 slow_ram_reader ( int ofs ) {
+#ifdef SLOW_RAM_SUPPORT
+	return slow_ram[ofs];
+#else
+	return 0xFF;
+#endif
+}
+static void  slow_ram_writer ( int ofs, Uint8 data ) {
+#ifdef SLOW_RAM_SUPPORT
+	slow_ram[ofs] = data;
+#endif
 }
 static Uint8 invalid_mem_reader ( int addr ) {
 	if (skip_unhandled_mem)
@@ -214,7 +225,7 @@ static void  unreferenced_mem_writer ( int addr, Uint8 data ) {
 // to have most common entries first, for faster hit in most cases.
 static const struct m65_memory_map_st m65_memory_map[] = {
 	// 126K chip-RAM (last 2K is not availbale because it's colour RAM), with physical zero page excluded (this is because it needs the CPU port handled with different handler!)
-	{ 0x100,	0x1F7FF, chip_ram_reader, chip_ram_writer },
+	{ 0x100,	0x1F7FF, chip_ram_from_page1_reader, chip_ram_from_page1_writer },
 	// the "physical" zero page because of CPU port ...
 	{ 0, 0xFF, zero_physical_page_reader, zero_physical_page_writer },
 	// 128K of fast-RAM, normally ROM for C65, but can be RAM too!
@@ -230,9 +241,8 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 	{ 0xFF80000, 0xFF87FFF, colour_ram_reader, colour_ram_writer },		// full colour RAM (32K)
 	{ 0xFFF8000, 0xFFFBFFF, hypervisor_ram_reader, hypervisor_ram_writer },	// 16KB Kickstart/hypervisor ROM
 	{ 0xFF7E000, 0xFF7EFFF, dummy_reader, char_wom_writer },		// Character "WriteOnlyMemory"
-#ifdef SLOW_RAM_SUPPORT
 	{ 0x8000000, 0xFEFFFFF, slow_ram_reader, slow_ram_writer },		// 127Mbytes of "slow RAM" (Nexys4 DDR2 RAM)
-#endif
+	{ 0x40000, 0xFFFFF, dummy_reader, dummy_writer },
 	// the last entry *MUST* include the all possible addressing space to "catch" undecoded memory area accesses!!
 	{ 0, 0xFFFFFFF, invalid_mem_reader, invalid_mem_writer },
 	// even after the last entry :-) to filter out programming bugs, catch all possible even not valid M65 physical address space acceses ...
@@ -251,23 +261,25 @@ static const struct m65_memory_map_st impossible_mapping = {
 
 
 
-static void phys_addr_decoder ( int phys, int slot, int prev_slot )
+static void phys_addr_decoder ( int phys, int slot, int hint_slot )
 {
 	const struct m65_memory_map_st *p;
 	phys &= 0xFFFFF00;	// we map only at 256 bytes boundaries!!!! It also helps to wrap around 28 bit M65 addresses TODO/FIXME: is this correct behaviour?
 	if (mem_page_phys[slot] == phys)	// kind of "mapping cache" for the given cache slot
 		return;				// skip, if the slot already contains info on the current physical address
 	mem_page_phys[slot] = phys;
-	// tricky part: if prev_slot is non-negative, it's used for "contiunity" information related to this slot,
-	// ie check, if the current map request can be fit into the region already mapped by prev_slot, then no
-	// need for the search loop. prev_slot can be any slot, but logically it's sane to be used when the given
-	// prev_slot is "likely" to have some contiunity with the slot given by "slot" otherwise it's just makes
-	// thing worse. If not used, prev_slot should be negative to skip this feature. prev_slot can be even same
+	// tricky part: if hint_slot is non-negative, it's used for "contiunity" information related to this slot,
+	// ie check, if the current map request can be fit into the region already mapped by hint_slot, then no
+	// need for the search loop. hint_slot can be any slot, but logically it's sane to be used when the given
+	// hint_slot is "likely" to have some contiunity with the slot given by "slot" otherwise it's just makes
+	// thing worse. If not used, hint_slot should be negative to skip this feature. hint_slot can be even same
 	// as "slot" if you need a "moving" mapping in a "caching" slot, ie DMA-aux access functions, etc.
-	if (prev_slot >= 0) {
-		p = mem_page_refp[prev_slot];
+	if (hint_slot >= 0) {
+		p = mem_page_refp[hint_slot];
 		if (phys >= p->start && phys <= p->end) {
-			DEBUGMEM("MEM: PHYS-MAP: slot#$%03X: previous slot hint TAKEN :)" NL, slot);
+#ifdef DEBUGMEM
+			DEBUGMEM("MEM: PHYS-MAP: slot#$%03X: slot hint TAKEN :)" NL, slot);
+#endif
 			goto found;
 		}
 	}
@@ -277,27 +289,31 @@ found:
 	mem_page_rd_o[slot] = mem_page_wr_o[slot] = phys - p->start;
 	mem_page_rd_f[slot] = p->rd_f;
 	mem_page_wr_f[slot] = p->wr_f;
+	//if (p->rd_f == invalid_mem_reader)
+	//	FATAL("Invalid memory region is tried to be mapped to slot $%X for phys addr $%X" NL, slot, phys);
 	mem_page_refp[slot] = p;
+#ifdef DEBUGMEM
 	DEBUGMEM("MEM: PHYS-MAP: slot#$%03X: phys = $%X mapped (area: $%X-$%X, rd_o=%X, wr_o=%X) [hint slot was: %03X]" NL,
 		slot,
 		phys,
 		p->start, p->end,
 		mem_page_rd_o[slot], mem_page_wr_o[slot],
-		prev_slot
+		hint_slot
 	);
+#endif
 }
 
 
-static void INLINE phys_addr_decoder_array ( int megabyte_offset, int offset, int slot, int slots, int prev_slot )
+static void INLINE phys_addr_decoder_array ( int megabyte_offset, int offset, int slot, int slots, int hint_slot )
 {
 	for (;;) {
-		// we try to use the "prev_slot" feature, which tries to optimize table building with exploiting the
+		// we try to use the "hint_slot" feature, which tries to optimize table building with exploiting the
 		// fact, that "likely" the next page table entry suits into the same physical decoding "entry" just
 		// with different offset (so we don't need to re-walk the memory configuration table)
-		phys_addr_decoder(megabyte_offset | (offset & 0xFFFFF), slot, prev_slot);
+		phys_addr_decoder(megabyte_offset | (offset & 0xFFFFF), slot, hint_slot);
 		if (!--slots)
 			return;
-		prev_slot = slot++;
+		hint_slot = slot++;
 		offset += 0x100;
 	}
 }
@@ -353,7 +369,7 @@ void memory_init ( void )
 	}
 	// Generate "templates" for VIC-III ROM mapping entry points
 	// FIXME: the theory, that VIC-III ROM mapping is not like C64, ie writing a mapped in ROM, would write the ROM, not something "under" as with C64
-	// static void INLINE phys_addr_decoder_array ( int megabyte_offset, int offset, int slot, int slots, int prev_slot )
+	// static void INLINE phys_addr_decoder_array ( int megabyte_offset, int offset, int slot, int slots, int hint_slot )
 	phys_addr_decoder_array(0, 0x38000, MEM_SLOT_C65_8KROM_8000, 32, -1);	// 8K(32 pages) C65 VIC-III ROM mapping ($8000) from $38000
 	phys_addr_decoder_array(0, 0x3A000, MEM_SLOT_C65_8KROM_A000, 32, -1);	// 8K(32 pages) C65 VIC-III ROM mapping ($A000) from $3A000
 	phys_addr_decoder_array(0, 0x2C000, MEM_SLOT_C65_4KROM_C000, 16, -1);	// 4K(16 pages) C65 VIC-III ROM mapping ($C000) from $2C000
@@ -368,11 +384,11 @@ void memory_init ( void )
 	init_helper_custom_memtab_policy(-1, NULL, mem_page_wr_o[0xE0], mem_page_wr_f[0xE0], MEM_SLOT_C64_8KROM_E000, 32);	// for C64 KERNAL ROM
 	// The C64/C65-style I/O area is handled in this way: as it is I/O mode dependent unlike M65 high-megabyte areas,
 	// we maps I/O (any mode) and "customize it" with an offset to transfer into the right mode (or such).
-	phys_addr_decoder_array(0xFF, 0xD0000, MEM_SLOT_OLD_4K_IO_D000,  16, -1);
+	phys_addr_decoder_array(0xFF << 20, 0xD0000, MEM_SLOT_OLD_4K_IO_D000,  16, -1);
 	init_helper_custom_memtab_policy(0x4000, NULL, 0x4000, NULL, MEM_SLOT_OLD_4K_IO_D000, 16);
 	// Initialize some memory related "caching" stuffs and state etc ...
-	memcfg_vic3_rom_mapping_last = 0;
-	memcfg_cpu_io_port_last = 0;
+	memcfg_vic3_rom_mapping_last = 0xFF;
+	memcfg_cpu_io_port_last = 0xFF;
 	cpu_io_port[0] = 0;
 	cpu_io_port[1] = 0;
 	map_mask = 0;
@@ -380,12 +396,12 @@ void memory_init ( void )
 	map_offset_high = 0;
 	map_megabyte_low = 0;
 	map_megabyte_high = 0;
-	map_marker_low = 0;
-	map_marker_high = 0;
+	map_marker_low = 0x2000;
+	map_marker_high = 0x2000;
 	rom_protect = 0;
 	skip_unhandled_mem = 0;
 	for (a = 0; a < 9; a++)
-		applied_memcfg[a] = 0;	// unmapped marker
+		applied_memcfg[a] = 0x1FFF;
 	// Setting up the default memory configuration for M65 at least!
 	// Note, the exact order is IMPORTANT as being the first use of memory subsystem, actually these will initialize some things ...
 	memory_set_cpu_io_port_ddr_and_data(7, 7);
@@ -396,7 +412,10 @@ void memory_init ( void )
 	memset(fast_ram, 0xFF, sizeof fast_ram);
 	memset(colour_ram, 0xFF, sizeof colour_ram);
 	memset(hypervisor_ram, 0xFF, sizeof hypervisor_ram);		// this will be overwritten with kickstart, but anyway ...
-	DEBUG("MEM: --- END OF INIT ---" NL);
+#ifdef SLOW_RAM_SUPPORT
+	memset(slow_ram, 0xFF, sizeof slow_ram);
+#endif
+	DEBUG("MEM: End of memory initiailization" NL);
 }
 
 
@@ -404,14 +423,14 @@ void memory_init ( void )
 
 
 static void apply_memory_config_0000_to_7FFF ( void ) {
-	int prev = -1;
+	int hint_slot = -1;
 	// 0000 - 1FFF
 	if (map_mask & 0x01) {
 		if (applied_memcfg[0] != map_marker_low) {
 			phys_addr_decoder_array(map_megabyte_low, map_offset_low, 0x00, 0x20, -1);
 			applied_memcfg[0] = map_marker_low;
 		}
-		prev = 0x1F;
+		hint_slot = 0x1F;
 	} else {
 		if (applied_memcfg[0]) {
 			MEM_TABLE_COPY(0x00, 0x100, 0x20);
@@ -421,10 +440,10 @@ static void apply_memory_config_0000_to_7FFF ( void ) {
 	// 2000 - 3FFF
 	if (map_mask & 0x02) {
 		if (applied_memcfg[1] != map_marker_low) {
-			phys_addr_decoder_array(map_megabyte_low, map_offset_low + 0x2000, 0x20, 0x20, prev);
+			phys_addr_decoder_array(map_megabyte_low, map_offset_low + 0x2000, 0x20, 0x20, hint_slot);
 			applied_memcfg[1] = map_marker_low;
 		}
-		prev = 0x3F;
+		hint_slot = 0x3F;
 	} else {
 		if (applied_memcfg[1]) {
 			MEM_TABLE_COPY(0x20, 0x120, 0x20);
@@ -434,10 +453,10 @@ static void apply_memory_config_0000_to_7FFF ( void ) {
 	// 4000 - 5FFF
 	if (map_mask & 0x04) {
 		if (applied_memcfg[2] != map_marker_low) {
-			phys_addr_decoder_array(map_megabyte_low, map_offset_low + 0x4000, 0x40, 0x20, prev);
+			phys_addr_decoder_array(map_megabyte_low, map_offset_low + 0x4000, 0x40, 0x20, hint_slot);
 			applied_memcfg[2] = map_marker_low;
 		}
-		prev = 0x5F;
+		hint_slot = 0x5F;
 	} else {
 		if (applied_memcfg[2]) {
 			MEM_TABLE_COPY(0x40, 0x140, 0x20);
@@ -447,7 +466,7 @@ static void apply_memory_config_0000_to_7FFF ( void ) {
 	// 6000 - 7FFF
 	if (map_mask & 0x08) {
 		if (applied_memcfg[3] != map_marker_low) {
-			phys_addr_decoder_array(map_megabyte_low, map_offset_low + 0x6000, 0x60, 0x20, prev);
+			phys_addr_decoder_array(map_megabyte_low, map_offset_low + 0x6000, 0x60, 0x20, hint_slot);
 			applied_memcfg[3] = map_marker_low;
 		}
 	} else {
@@ -458,14 +477,14 @@ static void apply_memory_config_0000_to_7FFF ( void ) {
 	}
 }
 static void apply_memory_config_8000_to_9FFF ( void ) {
-	if (memcfg_vic3_rom_mapping_last & 8) {
+	if (memcfg_vic3_rom_mapping_last & VIC3_ROM_MASK_8000) {
 		if (applied_memcfg[4] >= 0) {
 			MEM_TABLE_COPY(0x80, MEM_SLOT_C65_8KROM_8000, 0x20);
 			applied_memcfg[4] = -1;
 		}
 	} else if (map_mask & 0x10) {
 		if (applied_memcfg[4] != map_marker_high) {
-			phys_addr_decoder_array(map_megabyte_high, map_offset_high + 0x8000, 0x80, 0x20, 0x80);
+			phys_addr_decoder_array(map_megabyte_high, map_offset_high + 0x8000, 0x80, 0x20, -1);
 			applied_memcfg[4] = map_marker_high;
 		}
 	} else {
@@ -476,14 +495,14 @@ static void apply_memory_config_8000_to_9FFF ( void ) {
 	}
 }
 static void apply_memory_config_A000_to_BFFF ( void ) {
-	if (memcfg_vic3_rom_mapping_last & 16) {
+	if (memcfg_vic3_rom_mapping_last & VIC3_ROM_MASK_A000) {
 		if (applied_memcfg[5] >= 0) {
 			MEM_TABLE_COPY(0xA0, MEM_SLOT_C65_8KROM_A000, 0x20);
 			applied_memcfg[5] = -1;
 		}
 	} else if (map_mask & 0x20) {
 		if (applied_memcfg[5] != map_marker_high) {
-			phys_addr_decoder_array(map_megabyte_high, map_offset_high + 0xA000, 0xA0, 0x20, 0xA0);
+			phys_addr_decoder_array(map_megabyte_high, map_offset_high + 0xA000, 0xA0, 0x20, -1);
 			applied_memcfg[5] = map_marker_high;
 		}
 	} else {
@@ -495,14 +514,14 @@ static void apply_memory_config_A000_to_BFFF ( void ) {
 }
 static void apply_memory_config_C000_to_CFFF ( void ) {
 	// Special range, just 4K in length!
-	if (memcfg_vic3_rom_mapping_last & 32) {
+	if (memcfg_vic3_rom_mapping_last & VIC3_ROM_MASK_C000) {
 		if (applied_memcfg[6] >= 0) {
-			MEM_TABLE_COPY(0xC0, MEM_SLOT_C65_8KROM_A000, 0x10);
+			MEM_TABLE_COPY(0xC0, MEM_SLOT_C65_4KROM_C000, 0x10);
 			applied_memcfg[6] = -1;
 		}
 	} else if (map_mask & 0x40) {
 		if (applied_memcfg[6] != map_marker_high) {
-			phys_addr_decoder_array(map_megabyte_high, map_offset_high + 0xC000, 0xC0, 0x10, 0xC0);
+			phys_addr_decoder_array(map_megabyte_high, map_offset_high + 0xC000, 0xC0, 0x10, -1);
 			applied_memcfg[6] = map_marker_high;
 		}
 	} else {
@@ -515,26 +534,26 @@ static void apply_memory_config_C000_to_CFFF ( void ) {
 static void apply_memory_config_D000_to_DFFF ( void ) {
 	// Special range, just 4K in length!
 	if (map_mask & 0x40) {
-		if (applied_memcfg[7] >= 0) {
-			phys_addr_decoder_array(map_megabyte_high, map_offset_high + 0xD000, 0xD0, 0x10, 0xD0);
-			applied_memcfg[7] = -1;
+		if (applied_memcfg[7] != map_marker_high) {
+			phys_addr_decoder_array(map_megabyte_high, map_offset_high + 0xD000, 0xD0, 0x10, -1);
+			applied_memcfg[7] = map_marker_high;
 		}
 	} else {
 		if (applied_memcfg[7] != memcfg_cpu_io_port_policy_D000_to_DFFF) {
-			MEM_TABLE_COPY(0xC0, 0x1C0, 0x10);
+			MEM_TABLE_COPY(0xD0, memcfg_cpu_io_port_policy_D000_to_DFFF, 0x10);
 			applied_memcfg[7] = memcfg_cpu_io_port_policy_D000_to_DFFF;
 		}
 	}
 }
 static void apply_memory_config_E000_to_FFFF ( void ) {
-	if (memcfg_vic3_rom_mapping_last & 128) {
+	if (memcfg_vic3_rom_mapping_last & VIC3_ROM_MASK_E000) {
 		if (applied_memcfg[8] >= 0) {
 			MEM_TABLE_COPY(0xE0, MEM_SLOT_C65_8KROM_E000, 0x20);
 			applied_memcfg[8] = -1;
 		}
-	} else if (map_mask & 0x40) {
+	} else if (map_mask & 0x80) {
 		if (applied_memcfg[8] != map_marker_high) {
-			phys_addr_decoder_array(map_megabyte_high, map_offset_high + 0xE000, 0xE0, 0x20, 0xE0);
+			phys_addr_decoder_array(map_megabyte_high, map_offset_high + 0xE000, 0xE0, 0x20, -1);
 			applied_memcfg[8] = map_marker_high;
 		}
 	} else {
@@ -552,7 +571,11 @@ static void apply_memory_config_E000_to_FFFF ( void ) {
 // must be called when VIC-III register $D030 is written, with the written value exactly
 void memory_set_vic3_rom_mapping ( Uint8 value )
 {
-	value &= 0xB8;	// only keep bits we're interested in
+	// D030 regiser of VIC-III is:
+	//   7       6       5       4       3       2       1       0
+	// | ROM   | CROM  | ROM   | ROM   | ROM   | PAL   | EXT   | CRAM  |
+	// | @E000 | @9000 | @C000 | @A000 | @8000 |       | SYNC  | @DC00 |
+	value &= VIC3_ROM_MASK_8000 | VIC3_ROM_MASK_A000 | VIC3_ROM_MASK_C000 | VIC3_ROM_MASK_E000;	// only keep bits we're interested in
 	if (value != memcfg_vic3_rom_mapping_last) {	// only do, if there was a change
 		Uint8 change = memcfg_vic3_rom_mapping_last ^ value;	// change mask, bits have 1 only if there was a change
 		memcfg_vic3_rom_mapping_last = value;	// don't forget to store the current state for next check!
@@ -572,8 +595,9 @@ void memory_set_vic3_rom_mapping ( Uint8 value )
 static void apply_cpu_io_port_config ( void )
 {
 	Uint8 desired = (cpu_io_port[1] | (~cpu_io_port[0])) & 7;
+	DEBUG("MEM: CPUIOPORT: port composite value %d is considered ..." NL, desired);
 	if (desired != memcfg_cpu_io_port_last) {
-		DEBUG("MEM: CPU I/O port composite value (new one) is %d" NL, desired);
+		DEBUG("MEM: CPUIOPORT: port composite value (new one) is %d" NL, desired);
 		memcfg_cpu_io_port_last = desired;
 		memcfg_cpu_io_port_policy_A000_to_BFFF = memcfg_cpu_io_port_policies_A000_to_BFFF[desired];
 		memcfg_cpu_io_port_policy_D000_to_DFFF = memcfg_cpu_io_port_policies_D000_to_DFFF[desired];
@@ -582,6 +606,7 @@ static void apply_cpu_io_port_config ( void )
 		apply_memory_config_A000_to_BFFF();
 		apply_memory_config_D000_to_DFFF();
 		apply_memory_config_E000_to_FFFF();
+		DEBUG("MEM: CPUIOPORT: new config had been applied" NL);
 	}
 }
 
@@ -695,10 +720,9 @@ void cpu_do_nop ( void )
 		DEBUG("CPU: NOP not treated as EOM (no MAP before)" NL);
 }
 
-
+#if 0
 Uint8 cpu_read ( Uint16 addr )
 {
-	DEBUG("CPUREAD: $%04X synth_offset=%X" NL, addr, mem_page_rd_o[addr >> 8] + (addr & 0xFF));
 	return mem_page_rd_f[addr >> 8](mem_page_rd_o[addr >> 8] + (addr & 0xFF));
 }
 
@@ -707,6 +731,7 @@ void  cpu_write ( Uint16 addr, Uint8 data )
 {
 	mem_page_wr_f[addr >> 8](mem_page_wr_o[addr >> 8] + (addr & 0xFF), data);
 }
+#endif
 
 
 // Called in case of an RMW (read-modify-write) opcode write access.

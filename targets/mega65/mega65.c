@@ -1,4 +1,5 @@
-/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator.
+/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -377,7 +378,9 @@ static void shutdown_callback ( void )
 	// Dump hypervisor memory to a file, so you can check it after exit.
 	f = fopen(MEMDUMP_FILE, "wb");
 	if (f) {
-		fwrite(hypervisor_ram, 1, 0x4000, f);
+		fwrite(chip_ram, 1, sizeof chip_ram, f);
+		fwrite(colour_ram, 1, 2048, f);
+		fwrite(fast_ram, 1, sizeof fast_ram, f);
 		fclose(f);
 		DEBUG("Hypervisor memory state is dumped into " MEMDUMP_FILE NL);
 	}
