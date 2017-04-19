@@ -33,6 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "vic3.h"
 #include <string.h>
 
+#define ALLOW_CPU_CUSTOM_FUNCTIONS_INCLUDE
 #include "cpu_custom_functions.h"
 
 //#define DEBUGMEM DEBUG
@@ -216,7 +217,18 @@ DEFINE_READER(unreferenced_mem_reader) {
 DEFINE_WRITER(unreferenced_mem_writer) {
 	FATAL("Unreferenced physical memory mapping on write map. Xemu software bug?");
 }
-
+DEFINE_READER(m65_io_reader) {
+	return io_read(GET_READER_OFFSET());
+}
+DEFINE_WRITER(m65_io_writer) {
+	io_write(GET_WRITER_OFFSET(), data);
+}
+DEFINE_READER(legacy_io_reader) {
+	return io_read(GET_READER_OFFSET() | (vic_iomode << 12));
+}
+DEFINE_WRITER(legacy_io_writer) {
+	io_write(GET_WRITER_OFFSET() | (vic_iomode << 12), data);
+}
 
 
 
@@ -234,9 +246,7 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 	{ 0x1F800, 0x1FFFF, colour_ram_reader, colour_ram_writer },
 	// As I/O can be handled quite uniformely, and needs other decoding later anyway, we handle the WHOLE I/O area for all modes in once!
 	// This is 16K space, though one 4K is invalid for I/O modes ($FFD2000-$FFD2FFF), the sequence: C64,C65,INVALID,M65 of 4Ks
-	// Note, that an "virtual" I/O mode is set after M65 mode in series, used internally to refer for the *current* video mode,
-	// though it cannot be mapped or accessed used only in I/O decoder level!!!
-	{ 0xFFD0000, 0xFFD3FFF, io_reader_internal_decoder, io_writer_internal_decoder },
+	{ 0xFFD0000, 0xFFD3FFF, m65_io_reader, m65_io_writer },
 	// full colour RAM
 	{ 0xFF80000, 0xFF87FFF, colour_ram_reader, colour_ram_writer },		// full colour RAM (32K)
 	{ 0xFFF8000, 0xFFFBFFF, hypervisor_ram_reader, hypervisor_ram_writer },	// 16KB Kickstart/hypervisor ROM
@@ -386,7 +396,7 @@ void memory_init ( void )
 	// The C64/C65-style I/O area is handled in this way: as it is I/O mode dependent unlike M65 high-megabyte areas,
 	// we maps I/O (any mode) and "customize it" with an offset to transfer into the right mode (or such).
 	phys_addr_decoder_array(0xFF << 20, 0xD0000, MEM_SLOT_OLD_4K_IO_D000,  16, -1);
-	init_helper_custom_memtab_policy(0x4000, NULL, 0x4000, NULL, MEM_SLOT_OLD_4K_IO_D000, 16);
+	init_helper_custom_memtab_policy(-1, legacy_io_reader, -1, legacy_io_writer, MEM_SLOT_OLD_4K_IO_D000, 16);
 	// Initialize some memory related "caching" stuffs and state etc ...
 	memcfg_vic3_rom_mapping_last = 0xFF;
 	memcfg_cpu_io_port_last = 0xFF;

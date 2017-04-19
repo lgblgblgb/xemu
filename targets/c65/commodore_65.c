@@ -311,7 +311,6 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		io_write,	// dma_writer_cb_t set_target_iowriter,
 		read_phys_mem	// dma_reader_cb_t set_list_reader
 	);
-	dma_set_phys_io_offset(0);
 	// Initialize FDC
 	fdc_init();
 	c65_d81_init(emucfg_get_str("8"));

@@ -302,13 +302,12 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		memory_dma_source_mwriter,	// dma_writer_cb_t set_source_mwriter
 		memory_dma_target_mreader,	// dma_reader_cb_t set_target_mreader
 		memory_dma_target_mwriter,	// dma_writer_cb_t set_target_mwriter
-		io_reader_internal_decoder,	// dma_reader_cb_t set_source_ioreader
-		io_writer_internal_decoder,	// dma_writer_cb_t set_source_iowriter
-		io_reader_internal_decoder,	// dma_reader_cb_t set_target_ioreader
-		io_writer_internal_decoder,	// dma_writer_cb_t set_target_iowriter
+		io_dma_reader,			// dma_reader_cb_t set_source_ioreader
+		io_dma_writer,			// dma_writer_cb_t set_source_iowriter
+		io_dma_reader,			// dma_reader_cb_t set_target_ioreader
+		io_dma_writer,			// dma_writer_cb_t set_target_iowriter
 		memory_dma_list_reader		// dma_reader_cb_t set_list_reader
 	);
-	dma_set_phys_io_offset(0x4000);	// preformance hack: we use I/O internal decoders, where offset 0x4000 in multi-mode I/O areas mean the _CURRENT_ I/O VIC mode!
 	// Initialize FDC
 	fdc_init();
 	// SIDs, plus SDL audio

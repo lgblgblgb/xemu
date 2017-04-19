@@ -81,7 +81,6 @@ static dma_writer_cb_t source_writer;
 static dma_writer_cb_t target_writer;
 // ...
 static int source_mask, target_mask, source_megabyte, target_megabyte, list_megabyte;
-static int dma_phys_io_offset, dma_phys_io_offset_default = 0;
 
 
 
@@ -279,7 +278,7 @@ int dma_update ( void )
 			source_reader	= cb_source_ioreader;
 			source_writer	= cb_source_iowriter;
 			source_mask	= 0xFFF;	// 4K I/O size
-			source_megabyte	= dma_phys_io_offset;
+			source_megabyte	= 0;
 		} else {
 			source_reader	= cb_source_mreader;
 			source_writer	= cb_source_mwriter;
@@ -293,7 +292,7 @@ int dma_update ( void )
 			target_reader	= cb_target_ioreader;
 			target_writer	= cb_target_iowriter;
 			target_mask	= 0xFFF;	// 4K I/O size
-			target_megabyte	= dma_phys_io_offset;
+			target_megabyte	= 0;
 		} else {
 			target_reader	= cb_target_mreader;
 			target_writer	= cb_target_mwriter;
@@ -362,16 +361,6 @@ int dma_update_multi_steps ( int do_for_cycles )
 
 
 
-void dma_set_phys_io_offset ( int offs )
-{
-	dma_phys_io_offset_default = dma_phys_io_offset = offs;
-	if (source_is_io)
-		source_megabyte = offs;
-	if (target_is_io)
-		target_megabyte = offs;
-}
-
-
 void dma_init (
 	int dma_rev_set,
 	dma_reader_cb_t set_source_mreader , dma_writer_cb_t set_source_mwriter , dma_reader_cb_t set_target_mreader , dma_writer_cb_t set_target_mwriter,
@@ -402,7 +391,6 @@ void dma_reset ( void )
 	source_megabyte = 0;
 	target_megabyte = 0;
 	list_megabyte = 0;
-	dma_phys_io_offset = dma_phys_io_offset_default;
 }
 
 

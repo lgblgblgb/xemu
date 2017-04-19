@@ -22,8 +22,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cia6526.h"
 #include "xemu/sid.h"
 
-extern Uint8 io_reader_internal_decoder ( int addr );
-extern void  io_writer_internal_decoder ( int addr, Uint8 data );
+extern Uint8 io_read  ( int addr );
+extern void  io_write ( int addr, Uint8 data );
+extern Uint8 io_dma_reader ( int addr );
+extern void  io_dma_writer ( int addr, Uint8 data );
 
 #define kicked_hypervisor gs_regs[0x67E]
 extern Uint8 gs_regs[0x1000];

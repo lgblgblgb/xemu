@@ -28,6 +28,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifdef CPU_CUSTOM_MEMORY_FUNCTIONS_H
 #define CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR static INLINE
 #else
+#ifndef ALLOW_CPU_CUSTOM_FUNCTIONS_INCLUDE
+#error "cpu_custom_functions.h must not be included by anything other than the CPU emulator and memory_mapper.c"
+#endif
 #define CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR
 #endif
 

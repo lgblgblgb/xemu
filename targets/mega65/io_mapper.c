@@ -74,7 +74,7 @@ struct SidEmulation sid1, sid2;		// the two SIDs
 
 // Call this ONLY with addresses between $D000-$DFFF
 // Ranges marked with (*) needs "vic_new_mode"
-Uint8 io_reader_internal_decoder ( int addr )
+Uint8 io_read ( int addr )
 {
 	addr = 0xD000 | (addr & 0xFFF);
 	// Future stuff: instead of slow tons of IFs, use the >> 5 maybe
@@ -185,7 +185,7 @@ Uint8 io_reader_internal_decoder ( int addr )
 
 // Call this ONLY with addresses between $D000-$DFFF
 // Ranges marked with (*) needs "vic_new_mode"
-void io_writer_internal_decoder ( int addr, Uint8 data )
+void io_write ( int addr, Uint8 data )
 {
 	addr = 0xD000 | (addr & 0xFFF);
 	if (addr < 0xD080) {	// $D000 - $D07F:	VIC3
@@ -305,4 +305,13 @@ void io_writer_internal_decoder ( int addr, Uint8 data )
 	}
 	// The rest: IO-2 external
 	RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("IO-2 external select");
+}
+
+
+Uint8 io_dma_reader ( int addr ) {
+	return io_read(addr | (vic_iomode << 12));
+}
+
+void  io_dma_writer ( int addr, Uint8 data ) {
+	io_write(addr | (vic_iomode << 12), data);
 }
