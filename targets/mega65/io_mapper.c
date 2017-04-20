@@ -43,17 +43,6 @@ struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 struct SidEmulation sid1, sid2;		// the two SIDs
 
 
-/* Internal decoder for I/O reads. Address *must* be within the 0-$4FFF (!!) range. The low 12 bits is the actual address inside the I/O area,
-   while the most significant nibble shows the I/O mode the operation is meant, according to the following table:
-   0 = C64 (VIC-II) I/O mode
-   1 = C65 (VIC-III) I/O mode
-   2 = *INVALID* should not happen, unless some maps the $FF-megabyte M65 specific area, then it should do nothing or so ...
-   3 = M65 (VIC-IV) I/O mode
-   4 = *CURRENT* I/O mode, will set the right one above, and re-try (actually any larger value than $3FFF */
-/* Please read comments at io_reader_internal_decoder() above */
-
-
-
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
 	do { DEBUG("IO: NOT IMPLEMENTED read (emulator lacks feature), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
 	return fb; } while (0)
@@ -76,7 +65,8 @@ struct SidEmulation sid1, sid2;		// the two SIDs
 // Ranges marked with (*) needs "vic_new_mode"
 Uint8 io_read ( int addr )
 {
-	addr = 0xD000 | (addr & 0xFFF);
+	DEBUG("IOOP: %04X" NL, addr);
+	addr = 0xD000 | (addr & 0xFFF); // temporary solution: as old decoder needs $DXXX addresses! TO BE REPLACED!
 	// Future stuff: instead of slow tons of IFs, use the >> 5 maybe
 	// that can have new device at every 0x20 dividible addresses,
 	// that is: switch ((addr >> 5) & 127)
@@ -187,7 +177,15 @@ Uint8 io_read ( int addr )
 // Ranges marked with (*) needs "vic_new_mode"
 void io_write ( int addr, Uint8 data )
 {
-	addr = 0xD000 | (addr & 0xFFF);
+	if (unlikely(cpu_rmw_old_data >= 0)) {
+		// RMW handling! FIXME: do this only in the needed I/O ports only, not here, globally!
+		Uint8 old_data = cpu_rmw_old_data;
+		cpu_rmw_old_data = -1;
+		DEBUG("RMW: addr %04X old data %02X new data %02X" NL, addr, old_data, data);
+		io_write(addr, old_data);
+	}
+	DEBUG("IOOP: %04X" NL, addr);
+	addr = 0xD000 | (addr & 0xFFF);	// temporary solution: as old decoder needs $DXXX addresses! TO BE REPLACED!
 	if (addr < 0xD080) {	// $D000 - $D07F:	VIC3
 		vic3_write_reg(addr, data);
 		return;

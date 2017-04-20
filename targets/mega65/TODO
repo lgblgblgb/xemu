@@ -6,12 +6,12 @@ TODO list for Mega-65 shorter term (m65mem branch lifetime):
 * Again: try different solutions for best performance within similar constraints? [PENDING]
 * Make new memory handling work ... [DONE?]
 * ... test it!
-* Try to in-line CPU read/write primitives, check the performance impact
+* Try to in-line CPU read/write primitives, check the performance impact [PENDING, TESTING]
 * Rewrite I/O decoder ...
 * ... test it!
 * Hook DMA for (the new) direct internal I/O decoder [DONE?]
 * CPU optimization idea: paged read/write primitives
-* RMW CPU primitive optimization
+* RMW CPU primitive optimization [PENDING]
 * Move VIC mode change into a handler in vic stuff
 * Make snapshotting working again
 * Make (uart-)mon working again
@@ -30,6 +30,7 @@ SMALLER [?] misc TODOs in the future:
 * Allow kbd scanning work in the oppsite way too (C65 material too)
 * Import some C65 cnanges, OSD tries, and C1531 mouse emulation
 * SD-card: emulate some delay after operation: it causes too much load on the host box being "zero time ready" condition
+* FDC: C65/M65 too: similar as the previous one ...
 * M65 similar FDC r/w control "LED" on the screen corner?
 
 Some theory should be checked:

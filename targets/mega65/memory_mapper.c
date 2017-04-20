@@ -58,9 +58,6 @@ Uint8 colour_ram[0x8000];
 // 16K of hypervisor RAM, can be only seen in hypervisor mode.
 // FIXME: +1 byte for the idiotic Xemu length checking only :)
 Uint8 hypervisor_ram[0x4001];
-// Ethernet buffer, this works that the SAME memory is used, TX is only writable, RX is only readable
-Uint8 ethernet_tx_buffer[0x800];
-Uint8 ethernet_rx_buffer[0x800];
 // 127Mbytes of slow-RAM. Would be the DDR memory on M65/Nexys4
 #ifdef SLOW_RAM_SUPPORT
 Uint8 slow_ram[127 << 20];
@@ -109,6 +106,8 @@ int mem_page_wr_o[MEM_SLOTS] MAXALIGNED;
 mem_page_rd_f_type mem_page_rd_f[MEM_SLOTS] MAXALIGNED;
 mem_page_wr_f_type mem_page_wr_f[MEM_SLOTS] MAXALIGNED;
 static const struct m65_memory_map_st *mem_page_refp[MEM_SLOTS];
+
+int cpu_rmw_old_data;
 
 static int applied_memcfg[9];	// not 8, since one slot is actually halved because of CXXX/DXXX handled differently
 static int memcfg_cpu_io_port_policy_A000_to_BFFF;
@@ -398,6 +397,7 @@ void memory_init ( void )
 	phys_addr_decoder_array(0xFF << 20, 0xD0000, MEM_SLOT_OLD_4K_IO_D000,  16, -1);
 	init_helper_custom_memtab_policy(-1, legacy_io_reader, -1, legacy_io_writer, MEM_SLOT_OLD_4K_IO_D000, 16);
 	// Initialize some memory related "caching" stuffs and state etc ...
+	cpu_rmw_old_data = -1;
 	memcfg_vic3_rom_mapping_last = 0xFF;
 	memcfg_cpu_io_port_last = 0xFF;
 	cpu_io_port[0] = 0;
@@ -733,23 +733,6 @@ void cpu_do_nop ( void )
 }
 
 
-// Called in case of an RMW (read-modify-write) opcode write access.
-// Original NMOS 6502 would write the old_data first, then new_data.
-// It has no inpact in case of normal RAM, but it *does* with an I/O register in some cases!
-// CMOS line of 65xx (probably 65CE02 as well?) seems not write twice, but read twice.
-// However this leads to incompatibilities, as some software used the RMW behavour by intent.
-// Thus Mega65 fixed the problem to "restore" the old way of RMW behaviour.
-// I also follow this path here, even if it's *NOT* what 65CE02 would do actually!
-void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
-{
-	// TODO; optimize this, enough for I/O range to do this behaviour ...
-	register mem_page_wr_f_type f = mem_page_wr_f[addr >> 8];
-	register int ofs = mem_page_wr_o[addr >> 8] + (addr & 0xFF);
-	f(ofs, old_data);
-	f(ofs, new_data);
-}
-
-
 /* For 32 (28 ...) bit linear addressing we use a dedicated mapper slot. Please read
    command above, similar situation as with the DMA. However we need to fetch the
    base (+Z) from base page, so it can be a bit less efficient if different 32 bit
@@ -771,21 +754,15 @@ static INLINE int cpu_get_flat_addressing_mode_address ( void )
 
 Uint8 cpu_read_linear_opcode ( void )
 {
-	int addr = cpu_get_flat_addressing_mode_address();
-	Uint8 data;
+	register int addr = cpu_get_flat_addressing_mode_address();
 	phys_addr_decoder(addr, MEM_SLOT_CPU_32BIT, MEM_SLOT_CPU_32BIT);
-	//data = mem_page_rd_f[MEM_SLOT_CPU_32BIT](mem_page_rd_o[MEM_SLOT_CPU_32BIT] + (addr & 0xFF));
-	data = CALL_MEMORY_READER(MEM_SLOT_CPU_32BIT, addr);
-	DEBUG("MEGA65: reading LINEAR memory [PC=$%04X/OPC=$%02X] @ $%X with result $%02X" NL, cpu_old_pc, cpu_op, addr, data);
-	return data;
+	return CALL_MEMORY_READER(MEM_SLOT_CPU_32BIT, addr);
 }
 
 void cpu_write_linear_opcode ( Uint8 data )
 {
-	int addr = cpu_get_flat_addressing_mode_address();
-	DEBUG("MEGA65: writing LINEAR memory [PC=$%04X/OPC=$%02X] @ $%X with data $%02X" NL, cpu_old_pc, cpu_op, addr, data);
+	register int addr = cpu_get_flat_addressing_mode_address();
 	phys_addr_decoder(addr, MEM_SLOT_CPU_32BIT, MEM_SLOT_CPU_32BIT);
-	//mem_page_wr_f[MEM_SLOT_CPU_32BIT](mem_page_wr_o[MEM_SLOT_CPU_32BIT] + (addr & 0xFF), data);
 	CALL_MEMORY_WRITER(MEM_SLOT_CPU_32BIT, addr, data);
 }
 

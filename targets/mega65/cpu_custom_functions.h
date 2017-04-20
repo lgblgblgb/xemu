@@ -64,11 +64,8 @@ extern int mem_page_rd_o[];
 extern int mem_page_wr_o[];
 extern mem_page_rd_f_type mem_page_rd_f[];
 extern mem_page_wr_f_type mem_page_wr_f[];
+extern int cpu_rmw_old_data;
 
-
-//extern void  cpu_write     ( Uint16 addr, Uint8 data );
-extern void  cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data );
-//extern Uint8 cpu_read      ( Uint16 addr );
 extern void  cpu_write_linear_opcode ( Uint8 data );
 extern Uint8 cpu_read_linear_opcode  ( void );
 
@@ -77,6 +74,20 @@ CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR Uint8 cpu_read ( Uint16 addr ) {
 }
 CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR void  cpu_write ( Uint16 addr, Uint8 data ) {
 	CALL_MEMORY_WRITER(addr >> 8, addr, data);
+}
+// Called in case of an RMW (read-modify-write) opcode write access.
+// Original NMOS 6502 would write the old_data first, then new_data.
+// It has no inpact in case of normal RAM, but it *does* with an I/O register in some cases!
+// CMOS line of 65xx (probably 65CE02 as well?) seems not write twice, but read twice.
+// However this leads to incompatibilities, as some software used the RMW behavour by intent.
+// Thus Mega65 fixed the problem to "restore" the old way of RMW behaviour.
+// I also follow this path here, even if it's *NOT* what 65CE02 would do actually!
+CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR void  cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data ) {
+	cpu_rmw_old_data = old_data;
+	// It's the backend's (which realizes the op) responsibility to handle or not handle the RMW behaviour,
+	// based on the fact if cpu_rmw_old_data is non-negative (being an int type) when it holds the "old_data".
+	CALL_MEMORY_WRITER(addr >> 8, addr, new_data);
+	cpu_rmw_old_data = -1;
 }
 
 #undef CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR

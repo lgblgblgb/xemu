@@ -35,5 +35,6 @@ extern Uint8 memory_dma_list_reader    ( int addr );
 extern int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
 extern int rom_protect, skip_unhandled_mem;
 extern Uint8 chip_ram[0x20000], fast_ram[0x20000], colour_ram[0x8000], char_wom[0x1000], hypervisor_ram[0x4001];
+extern int cpu_rmw_old_data;
 
 #endif
