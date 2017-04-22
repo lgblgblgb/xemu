@@ -9,10 +9,10 @@ TODO list for Mega-65 shorter term (m65mem branch lifetime):
 * Try to in-line CPU read/write primitives, check the performance impact [PENDING, TESTING]
 * Rewrite I/O decoder ...
 * ... test it!
-* Hook DMA for (the new) direct internal I/O decoder [DONE?]
-* CPU optimization idea: paged read/write primitives
-* RMW CPU primitive optimization [PENDING]
-* Move VIC mode change into a handler in vic stuff
+* Hook DMA for (the new) direct internal I/O decoder [DONE]
+* CPU optimization idea: paged read/write primitives (this means eg ZP aka. BP related opcodes can be optimized a very little in general ...)
+* RMW CPU primitive optimization [DONE, though I/O related stuff is not, only for the full I/O area]
+* Move VIC mode change into a handler in vic stuff (is this needed in this stage at all?)
 * Make snapshotting working again
 * Make (uart-)mon working again
 * Fix uart-mon with breakpoint (didn't worked even in master branch since the multi-op CPU performance patch)

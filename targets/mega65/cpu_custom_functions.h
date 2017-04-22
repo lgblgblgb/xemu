@@ -37,6 +37,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #if 1
 #define CALL_MEMORY_READER(slot,addr)		mem_page_rd_f[slot](mem_page_rd_o[slot] + ((addr) & 0xFF))
 #define CALL_MEMORY_WRITER(slot,addr,data)	mem_page_wr_f[slot](mem_page_wr_o[slot] + ((addr) & 0xFF), data)
+#define CALL_MEMORY_READER_PAGED(slot,addr)		mem_page_rd_f[slot](mem_page_rd_o[slot] + addr)
+#define CALL_MEMORY_WRITER_PAGED(slot,addr,data)	mem_page_wr_f[slot](mem_page_wr_o[slot] + addr, data)
 #define SAVE_USED_SLOT(slot)			last_slot_ref = slot
 #define MEMORY_HANDLERS_ADDR_TYPE		int area_offset
 #define GET_READER_OFFSET()			area_offset
@@ -48,6 +50,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #if 0
 #define CALL_MEMORY_READER(slot,addr)		mem_page_rd_f[slot](slot, addr)
 #define CALL_MEMORY_WRITER(slot,addr,data)	mem_page_wr_f[slot](slot, addr, data)
+#define CALL_MEMORY_READER_PAGED(slot,addr)		mem_page_rd_f[slot](slot, addr)
+#define CALL_MEMORY_WRITER_PAGED(slot,addr,data)	mem_page_wr_f[slot](slot, addr, data)
 #define SAVE_USED_SLOT(slot)
 #define MEMORY_HANDLERS_ADDR_TYPE		int slot, Uint8 lo_addr
 #define GET_READER_OFFSET()			(mem_page_rd_o[slot] + lo_addr)
@@ -75,6 +79,12 @@ CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR Uint8 cpu_read ( Uint16 addr ) {
 CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR void  cpu_write ( Uint16 addr, Uint8 data ) {
 	CALL_MEMORY_WRITER(addr >> 8, addr, data);
 }
+CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR Uint8 cpu_read_paged ( Uint8 page, Uint8 addr8 ) {
+	return CALL_MEMORY_READER_PAGED(page, addr8);
+}
+CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR void  cpu_write_paged ( Uint8 page, Uint8 addr8, Uint8 data ) {
+	CALL_MEMORY_WRITER_PAGED(page, addr8, data);
+}
 // Called in case of an RMW (read-modify-write) opcode write access.
 // Original NMOS 6502 would write the old_data first, then new_data.
 // It has no inpact in case of normal RAM, but it *does* with an I/O register in some cases!
@@ -87,6 +97,11 @@ CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR void  cpu_write_rmw ( Uint16 addr, Uint8 o
 	// It's the backend's (which realizes the op) responsibility to handle or not handle the RMW behaviour,
 	// based on the fact if cpu_rmw_old_data is non-negative (being an int type) when it holds the "old_data".
 	CALL_MEMORY_WRITER(addr >> 8, addr, new_data);
+	cpu_rmw_old_data = -1;
+}
+CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR void cpu_write_rmw_paged ( Uint8 page, Uint8 addr8, Uint8 old_data, Uint8 new_data ) {
+	cpu_rmw_old_data = old_data;
+	CALL_MEMORY_WRITER_PAGED(page, addr8, new_data);
 	cpu_rmw_old_data = -1;
 }
 

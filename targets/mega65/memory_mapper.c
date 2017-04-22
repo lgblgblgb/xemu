@@ -742,14 +742,15 @@ void cpu_do_nop ( void )
 static INLINE int cpu_get_flat_addressing_mode_address ( void )
 {
 	register int addr = cpu_read(cpu_pc++);	// fetch base page address
-	// FIXME: really, BP/ZP is wrapped around in case of linear addressing and eg BP addr of $FF got??????
-	// TODO: optimize this maybe to do direct mem_page_* references ...
-	return ((
+	// FIXME: really, BP/ZP is wrapped around in case of linear addressing and eg BP addr of $FF got?????? (I think IT SHOULD BE!)
+	// FIXME: migrate to cpu_read_paged(), but we need CPU emu core to utilize BP rather than BP << 8, and
+	// similar older hacks ...
+	return (
 		 cpu_read(cpu_bphi |   addr             )        |
 		(cpu_read(cpu_bphi | ((addr + 1) & 0xFF)) <<  8) |
 		(cpu_read(cpu_bphi | ((addr + 2) & 0xFF)) << 16) |
 		(cpu_read(cpu_bphi | ((addr + 3) & 0xFF)) << 24)
-	) + cpu_z) & 0xFFFFFFF;	// FIXME: check if it's really apply here: warps around at 256Mbyte, for address bus of Mega65
+	) + cpu_z;	// I don't handle the overflow of 28 bit addr.space situation, as addr will be anyway "trimmed" later in phys_addr_decoder() issued by the user of this func
 }
 
 Uint8 cpu_read_linear_opcode ( void )
