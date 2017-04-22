@@ -657,7 +657,7 @@ int main ( int argc, char **argv )
 
 #include <string.h>
 
-#define SNAPSHOT_M65_BLOCK_VERSION	0
+#define SNAPSHOT_M65_BLOCK_VERSION	1
 #define SNAPSHOT_M65_BLOCK_SIZE		(0x100 + sizeof(gs_regs))
 
 
@@ -679,6 +679,7 @@ int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, 
 	map_megabyte_high = (int)P_AS_BE32(buffer + 24);
 	rom_protect = (int)P_AS_BE32(buffer + 28);
 	kicked_hypervisor = (int)P_AS_BE32(buffer + 32);
+	memory_set_cpu_io_port_ddr_and_data(buffer[36], buffer[37]);
 	memcpy(gs_regs, buffer + 0x100, sizeof gs_regs);
 	return 0;
 }
@@ -700,6 +701,8 @@ int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	U32_AS_BE(buffer + 24, map_megabyte_high);
 	U32_AS_BE(buffer + 28, rom_protect);
 	U32_AS_BE(buffer + 32, kicked_hypervisor);
+	buffer[36] = memory_get_cpu_io_port(0);
+	buffer[37] = memory_get_cpu_io_port(1);
 	memcpy(buffer + 0x100, gs_regs, sizeof gs_regs);
 	return xemusnap_write_sub_block(buffer, sizeof buffer);
 }
@@ -708,7 +711,8 @@ int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 int m65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
 	printf("SNAP: loaded (finalize-callback: begin)" NL);
-	apply_memory_config();
+	memory_set_vic3_rom_mapping(vic3_registers[0x30]);
+	memory_set_do_map();
 	machine_set_speed(1);
 	printf("SNAP: loaded (finalize-callback: end)" NL);
 	return 0;
