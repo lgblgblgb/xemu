@@ -13,7 +13,7 @@ TODO list for Mega-65 shorter term (m65mem branch lifetime):
 * CPU optimization idea: paged read/write primitives (this means eg ZP aka. BP related opcodes can be optimized a very little in general ...)
 * RMW CPU primitive optimization [DONE, though I/O related stuff is not, only for the full I/O area]
 * Move VIC mode change into a handler in vic stuff (is this needed in this stage at all?)
-* Make snapshotting working again
+* Make snapshotting working again [DONE?]
 * Make (uart-)mon working again
 * Fix uart-mon with breakpoint (didn't worked even in master branch since the multi-op CPU performance patch)
 * Test if uart-mon works at all in a sane way ...
@@ -28,10 +28,16 @@ TODO list for Mega-65 shorter term (m65mem branch lifetime):
 SMALLER [?] misc TODOs in the future:
 
 * Allow kbd scanning work in the oppsite way too (C65 material too)
-* Import some C65 cnanges, OSD tries, and C1531 mouse emulation
+* Import some C65 changes, OSD tries, and C1531 mouse emulation [OSD init, OSD(), mouse grab OK, C1351 untested]
 * SD-card: emulate some delay after operation: it causes too much load on the host box being "zero time ready" condition
 * FDC: C65/M65 too: similar as the previous one ...
+* FDC: C65/M65 too: EQ bit more "delayed" handling without the needed hacks we currently have
+* FDC: C65/M65 too: debug write problems (only on M65????)
+* FDC D81 image mount from Hypervisor on M65: check the read/write only state, debug/test/etc
 * M65 similar FDC r/w control "LED" on the screen corner?
+* C65/M65 too: check Mega-65 kbd layout on PS/2 keyboard, and implement similar with Xemu!
+* ALL/XEMU: config file support (in theory, the framework is there ...)
+* ALL/XEMU: OSD menu possibility at least
 
 Some theory should be checked:
 

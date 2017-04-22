@@ -41,6 +41,7 @@ int fpga_switches = 0;	// State of FPGA board switches (bits 0 - 15), set switch
 Uint8 gs_regs[0x1000];	// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 struct SidEmulation sid1, sid2;		// the two SIDs
+static int mouse_x = 0, mouse_y = 0;
 
 
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
@@ -99,7 +100,20 @@ Uint8 io_read ( int addr )
 		}
 	}
 	if (addr < 0xD440) {	// $D400 - $D43F	SID, right
-		RETURN_ON_IO_READ_NOT_IMPLEMENTED("right SID", 0xFF);
+		switch (addr & 0x1F) {
+			case 0x19:
+				if (!is_mouse_grab())
+					return 0xFF;
+				mouse_x = (mouse_x + hid_read_mouse_rel_x(-31, 31)) & 63;
+				return mouse_x << 1;
+			case 0x1A:
+				if (!is_mouse_grab())
+					return 0xFF;
+				mouse_y = (mouse_y - hid_read_mouse_rel_y(-31, 31)) & 63;
+				return mouse_y << 1;
+			default:
+				RETURN_ON_IO_READ_NOT_IMPLEMENTED("right SID", 0xFF);
+		}
 	}
 	if (addr < 0xD600) {	// $D440 - $D5FF	SID, left
 		RETURN_ON_IO_READ_NOT_IMPLEMENTED("left SID", 0xFF);

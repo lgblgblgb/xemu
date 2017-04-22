@@ -97,9 +97,9 @@ void machine_set_speed ( int verbose )
 				cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
 				strcpy(emulator_speed_title, "3.5MHz");
 				break;
-			case 1:	// 001 - 48MHz
-			case 3:	// 011 - 48MHz
-			case 7:	// 111 - 48MHz
+			case 1:	// 001 - 48MHz (or Xemu specified custom speed)
+			case 3:	// 011 -		-- "" --
+			case 7:	// 111 -		-- "" --
 				cpu_cycles_per_scanline = cpu_cycles_per_scanline_for_fast_mode;
 				strcpy(emulator_speed_title, fast_mhz_in_string);
 				break;
@@ -391,7 +391,7 @@ static void shutdown_callback ( void )
 		fwrite(colour_ram, 1, 2048, f);
 		fwrite(fast_ram, 1, sizeof fast_ram, f);
 		fclose(f);
-		DEBUG("Hypervisor memory state is dumped into " MEMDUMP_FILE NL);
+		DEBUGPRINT("Memory state (chip+fast RAM, 256K) is dumped into " MEMDUMP_FILE NL);
 	}
 #endif
 #ifdef UARTMON_SOCKET
@@ -428,12 +428,20 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
 	// Check for special, emulator-related hot-keys (not C65 key)
 	if (pressed) {
-		if (key == SDL_SCANCODE_F10) {
+		if (key == SDL_SCANCODE_F10)
 			reset_mega65();
-		} else if (key == SDL_SCANCODE_KP_ENTER) {
+		else if (key == SDL_SCANCODE_KP_ENTER) {
 			c64_toggle_joy_emu();
+			OSD(-1, -1, "Joystick emulation on port #%d", joystick_emu);
+		} else if (key == SDL_SCANCODE_ESCAPE)
+			set_mouse_grab(SDL_FALSE);
+	} else
+		if (pos == -2 && key == 0) {	// special case pos = -2, key = 0, handled = mouse button (which?) and release event!
+			if (handled == SDL_BUTTON_LEFT) {
+				OSD(-1, -1, "Mouse grab activated.\nPress ESC to cancel.");
+				set_mouse_grab(SDL_TRUE);
+			}
 		}
-	}
 	return 0;
 }
 
@@ -564,6 +572,7 @@ int main ( int argc, char **argv )
 		shutdown_callback		// registered shutdown function
 	))
 		return 1;
+	osd_init_with_defaults();
 	// Initialize Mega65
 	mega65_init(
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
@@ -715,6 +724,7 @@ int m65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st 
 	memory_set_do_map();
 	machine_set_speed(1);
 	printf("SNAP: loaded (finalize-callback: end)" NL);
+	OSD(-1, -1, "Snapshot has been loaded.");
 	return 0;
 }
 #endif

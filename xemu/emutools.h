@@ -147,8 +147,11 @@ extern void osd_write_string ( int x, int y, const char *s );
 
 
 #define OSD(x, y, ...) do { \
+	char _buf_for_msg_[4096]; \
+	snprintf(_buf_for_msg_, sizeof _buf_for_msg_, __VA_ARGS__); \
+	fprintf(stderr, "OSD: %s" NL, _buf_for_msg_); \
 	osd_clear(); \
-	osd_write_string(x, y, __VA_ARGS__); \
+	osd_write_string(x, y, _buf_for_msg_); \
 	osd_update(); \
 	osd_on(OSD_FADE_START); \
 } while(0)
