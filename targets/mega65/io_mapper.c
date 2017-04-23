@@ -169,14 +169,11 @@ Uint8 io_read ( int addr )
 		return result;
 	}
 	// Only IO-1 and IO-2 areas left, if SD-card buffer is mapped for Mega65, this is our only case left!
-	do {
-		int result = sdcard_read_buffer(addr - 0xDE00);	// try to read SD buffer
-		if (result >= 0) {	// if non-negative number got, answer is really the SD card (mapped buffer)
-			DEBUG("SDCARD: BUFFER: reading SD-card buffer at offset $%03X with result $%02X PC=$%04X" NL, addr - 0xDE00, result, cpu_pc);
-			return result;
-		} else
-			DEBUG("SDCARD: BUFFER: *NOT* mapped SD-card buffer is read, can it be a bug?? PC=$%04X" NL, cpu_pc);
-	} while (0);
+	if (sd_status & SD_ST_MAPPED) {
+		Uint8 result = sd_buffer[addr & 511];
+		DEBUG("SDCARD: BUFFER: reading SD-card buffer at offset $%03X with result $%02X PC=$%04X" NL, addr & 511, result, cpu_pc);
+		return result;
+	}
 	if (addr < 0xDF00) {	// $DE00 - $DEFF	IO-1 external
 		RETURN_ON_IO_READ_NOT_IMPLEMENTED("IO-1 external select", 0xFF);
 	}
@@ -310,8 +307,11 @@ void io_write ( int addr, Uint8 data )
 		return;
 	}
 	// Only IO-1 and IO-2 areas left, if SD-card buffer is mapped for Mega65, this is our only case left!
-	if (sdcard_write_buffer(addr - 0xDE00, data) >= 0)
-		return;	// if return value is non-negative, buffer was mapped and written!
+	if (sd_status & SD_ST_MAPPED) {
+		sd_buffer[addr & 511] = data;
+		DEBUG("SDCARD: BUFFER: writing SD-card buffer at offset $%03X with data $%02X PC=$%04X" NL, addr & 511, data, cpu_pc);
+		return;
+	}
 	if (addr < 0xDF00) {	// $DE00 - $DEFF	IO-1 external
 		RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("IO-1 external select");
 	}
