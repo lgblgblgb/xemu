@@ -586,7 +586,10 @@ void memory_set_vic3_rom_mapping ( Uint8 value )
 	//   7       6       5       4       3       2       1       0
 	// | ROM   | CROM  | ROM   | ROM   | ROM   | PAL   | EXT   | CRAM  |
 	// | @E000 | @9000 | @C000 | @A000 | @8000 |       | SYNC  | @DC00 |
-	value &= VIC3_ROM_MASK_8000 | VIC3_ROM_MASK_A000 | VIC3_ROM_MASK_C000 | VIC3_ROM_MASK_E000;	// only keep bits we're interested in
+	if (in_hypervisor)
+		value = 0;	// in hypervisor, VIC-III ROM banking should *not* work (newer M65 change)
+	else
+		value &= VIC3_ROM_MASK_8000 | VIC3_ROM_MASK_A000 | VIC3_ROM_MASK_C000 | VIC3_ROM_MASK_E000;	// only keep bits we're interested in
 	if (value != memcfg_vic3_rom_mapping_last) {	// only do, if there was a change
 		Uint8 change = memcfg_vic3_rom_mapping_last ^ value;	// change mask, bits have 1 only if there was a change
 		memcfg_vic3_rom_mapping_last = value;	// don't forget to store the current state for next check!

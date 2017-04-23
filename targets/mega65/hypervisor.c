@@ -156,6 +156,7 @@ void hypervisor_enter ( int trapno )
 	map_mask = (map_mask & 0xF) | 0x30;	// mapping: 0011XXXX (it seems low region map mask is not changed by hypervisor entry)
 	map_megabyte_high = 0xFF << 20;
 	map_offset_high = 0xF0000;
+	memory_set_vic3_rom_mapping(0);	// for VIC-III rom mapping disable in hypervisor mode
 	memory_set_do_map();	// now the memory mapping is changed
 	machine_set_speed(0);	// set machine speed (hypervisor always runs at M65 fast ... ??) FIXME: check this!
 	cpu_pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
@@ -199,7 +200,8 @@ void hypervisor_leave ( void )
 	// Now leaving hypervisor mode ...
 	in_hypervisor = 0;
 	machine_set_speed(0);	// restore speed ...
-	memory_set_do_map();
+	memory_set_vic3_rom_mapping(vic3_registers[0x30]);	// restore possible active VIC-III mapping
+	memory_set_do_map();	// restore mapping ...
 	DEBUG("MEGA65: leaving hypervisor mode, (user) PC=$%04X" NL, cpu_pc);
 }
 
