@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "hypervisor.h"
 #include "xemu/cpu65c02.h"
-#include "vic3.h"
+#include "vic4.h"
 #include "xemu/f018_core.h"
 #include "memory_mapper.h"
 #include "io_mapper.h"
@@ -200,7 +200,7 @@ void hypervisor_leave ( void )
 	// Now leaving hypervisor mode ...
 	in_hypervisor = 0;
 	machine_set_speed(0);	// restore speed ...
-	memory_set_vic3_rom_mapping(vic3_registers[0x30]);	// restore possible active VIC-III mapping
+	memory_set_vic3_rom_mapping(vic_registers[0x30]);	// restore possible active VIC-III mapping
 	memory_set_do_map();	// restore mapping ...
 	DEBUG("MEGA65: leaving hypervisor mode, (user) PC=$%04X" NL, cpu_pc);
 }

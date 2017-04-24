@@ -30,7 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "io_mapper.h"
 #include "xemu/cpu65c02.h"
 #include "hypervisor.h"
-#include "vic3.h"
+#include "vic4.h"
 #include <string.h>
 
 #define ALLOW_CPU_CUSTOM_FUNCTIONS_INCLUDE

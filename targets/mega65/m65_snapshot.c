@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "xemu/cpu65c02.h"
 #include "xemu/cia6526.h"
-#include "vic3.h"
+#include "vic4.h"
 #include "xemu/sid.h"
 #include "xemu/f018_core.h"
 #include "hypervisor.h"

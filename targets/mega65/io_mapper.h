@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,14 +22,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cia6526.h"
 #include "xemu/sid.h"
 
-extern Uint8 io_read  ( int addr );
-extern void  io_write ( int addr, Uint8 data );
+extern Uint8 io_read  ( unsigned int addr );
+extern void  io_write ( unsigned int addr, Uint8 data );
 extern Uint8 io_dma_reader ( int addr );
 extern void  io_dma_writer ( int addr, Uint8 data );
 
 #define kicked_hypervisor gs_regs[0x67E]
-extern Uint8 gs_regs[0x1000];
-extern int   fpga_switches;
+extern Uint8  gs_regs[0x1000];
+extern int    fpga_switches;
 extern struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 extern struct SidEmulation sid1, sid2;		// the two SIDs
 

@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/f011_core.h"
 #include "xemu/f018_core.h"
 #include "xemu/emutools_hid.h"
-#include "vic3.h"
+#include "vic4.h"
 #include "xemu/sid.h"
 #include "sdcard.h"
 #include "uart_monitor.h"
@@ -72,14 +72,14 @@ void machine_set_speed ( int verbose )
 	// it seems hypervisor always got full speed, and force_fast (ie, POKE 0,65) always forces the max
 	// TODO: what is speed_gate? (it seems to be a PMOD input and/or keyboard controll with CAPS-LOCK)
 	// TODO: how 2MHz is selected, it seems a double decoded VIC-X registers which is not so common in VIC modes yet, I think ...
-	//Uint8 desired = (in_hypervisor || force_fast) ? 7 : (((c128_d030_reg & 1) << 2) | ((vic3_registers[0x31] & 64) >> 5) | ((vic3_registers[0x54] & 64) >> 6));
+	//Uint8 desired = (in_hypervisor || force_fast) ? 7 : (((c128_d030_reg & 1) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
 	//if (desired == current_speed_config)
 	//	return;
 	if (verbose)
 		printf("SPEED: in_hypervisor=%d force_fast=%d c128_fast=%d, c65_fast=%d m65_fast=%d" NL,
-			in_hypervisor, force_fast, (c128_d030_reg & 1) ^ 1, vic3_registers[0x31] & 64, vic3_registers[0x54] & 64
+			in_hypervisor, force_fast, (c128_d030_reg & 1) ^ 1, vic_registers[0x31] & 64, vic_registers[0x54] & 64
 	);
-	speed_wanted = (in_hypervisor || force_fast) ? 7 : (((c128_d030_reg & 1) << 2) | ((vic3_registers[0x31] & 64) >> 5) | ((vic3_registers[0x54] & 64) >> 6));
+	speed_wanted = (in_hypervisor || force_fast) ? 7 : (((c128_d030_reg & 1) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
 	if (speed_wanted != speed_current) {
 		speed_current = speed_wanted;
 		switch (speed_wanted) {
@@ -274,8 +274,8 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// *** Image file for SDCARD support
 	if (sdcard_init(emucfg_get_str("sdimg"), emucfg_get_str("8")) < 0)
 		FATAL("Cannot find SD-card image (which is a must for Mega65 emulation): %s", emucfg_get_str("sdimg"));
-	// *** Initialize VIC3
-	vic3_init();
+	// *** Initialize VIC4
+	vic_init();
 	// *** CIAs
 	cia_init(&cia1, "CIA-1",
 		NULL,			// callback: OUTA
@@ -342,7 +342,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 #endif
 	fast_mhz = emucfg_get_num("fastclock");
 	if (fast_mhz < 3 || fast_mhz > 200) {
-		ERROR_WINDOW("Fast clock given by -fastclock switch must be between 3...200MHz. Bad value, defaulting to 48MHz");
+		ERROR_WINDOW("Fast clock given by -fastclock switch must be between 3...200MHz. Bad value, defaulting to %dMHz", MEGA65_DEFAULT_FAST_CLOCK);
 		fast_mhz = 48;
 	}
 	sprintf(fast_mhz_in_string, "%dMHz", fast_mhz);
@@ -380,7 +380,7 @@ static void shutdown_callback ( void )
 #endif
 	int a;
 	for (a = 0; a < 0x40; a++)
-		DEBUG("VIC-3 register $%02X is %02X" NL, a, vic3_registers[a]);
+		DEBUG("VIC-3 register $%02X is %02X" NL, a, vic_registers[a]);
 	cia_dump_state (&cia1);
 	cia_dump_state (&cia2);
 #ifdef MEMDUMP_FILE
@@ -409,9 +409,9 @@ static void reset_mega65 ( void )
 	machine_set_speed(0);
 	memory_set_cpu_io_port_ddr_and_data(0xFF, 0xFF);
 	map_mask = 0;
-	vic3_registers[0x30] = 0;	// FIXME: hack! we need this, and memory_set_vic3_rom_mapping above too :(
-	memory_set_vic3_rom_mapping(0);
 	in_hypervisor = 0;
+	vic_registers[0x30] = 0;	// FIXME: hack! we need this, and memory_set_vic3_rom_mapping above too :(
+	memory_set_vic3_rom_mapping(0);
 	memory_set_do_map();
 	cpu_reset();
 	dma_reset();
@@ -455,7 +455,7 @@ static void update_emulator ( void )
 	uartmon_update();
 #endif
 	// Screen rendering: begin
-	vic3_render_screen();
+	vic_render_screen();
 	// Screen rendering: end
 	emu_timekeeping_delay(40000);
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
@@ -537,7 +537,7 @@ int main ( int argc, char **argv )
 	xemu_dump_version(stdout, "The Incomplete Commodore-65/Mega-65 emulator from LGB");
 	emucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
 	emucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip  (0=F018A, other=F018B)");
-	emucfg_define_num_option("fastclock", 48, "Clock of M65 fast mode (normally: 48 for 48MHz)");
+	emucfg_define_num_option("fastclock", MEGA65_DEFAULT_FAST_CLOCK, "Clock of M65 fast mode (in MHz)");
 	emucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA-board switches turned ON");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	emucfg_define_switch_option("hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode");
@@ -720,7 +720,7 @@ int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 int m65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
 	printf("SNAP: loaded (finalize-callback: begin)" NL);
-	memory_set_vic3_rom_mapping(vic3_registers[0x30]);
+	memory_set_vic3_rom_mapping(vic_registers[0x30]);
 	memory_set_do_map();
 	machine_set_speed(1);
 	printf("SNAP: loaded (finalize-callback: end)" NL);

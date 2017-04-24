@@ -1,7 +1,7 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    I/O decoding part (used by memory_mapper.h and DMA mainly)
-   Copyright (C)2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -27,7 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/f011_core.h"
 #include "xemu/f018_core.h"
 #include "xemu/emutools_hid.h"
-#include "vic3.h"
+#include "vic4.h"
 #include "xemu/sid.h"
 #include "sdcard.h"
 #include "uart_monitor.h"
@@ -37,95 +37,109 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "m65_snapshot.h"
 
 
-int fpga_switches = 0;	// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
-Uint8 gs_regs[0x1000];	// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
+int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
+Uint8  gs_regs[0x1000];			// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 struct SidEmulation sid1, sid2;		// the two SIDs
-static int mouse_x = 0, mouse_y = 0;
+static int mouse_x = 0, mouse_y = 0;	// for our primitive C1351 mouse emulation
 
 
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
-	do { DEBUG("IO: NOT IMPLEMENTED read (emulator lacks feature), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
-	return fb; } while (0)
+        do { DEBUG("IO: NOT IMPLEMENTED read (emulator lacks feature), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
+        return fb; } while (0)
 #define RETURN_ON_IO_READ_NO_NEW_VIC_MODE(func, fb) \
-	do { DEBUG("IO: ignored read (not new VIC mode), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
-	return fb; } while (0)
+        do { DEBUG("IO: ignored read (not new VIC mode), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
+        return fb; } while (0)
 #define RETURN_ON_IO_WRITE_NOT_IMPLEMENTED(func) \
-	do { DEBUG("IO: NOT IMPLEMENTED write (emulator lacks feature), %s $%04X with data $%02X" NL, func, addr, data); \
-	return; } while(0)
+        do { DEBUG("IO: NOT IMPLEMENTED write (emulator lacks feature), %s $%04X with data $%02X" NL, func, addr, data); \
+        return; } while(0)
 #define RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE(func) \
-	do { DEBUG("IO: ignored write (not new VIC mode), %s $%04X with data $%02X" NL, func, addr, data); \
-	return; } while(0)
+        do { DEBUG("IO: ignored write (not new VIC mode), %s $%04X with data $%02X" NL, func, addr, data); \
+        return; } while(0)
 #define WARN_IO_MODE_WR(func) \
-	DEBUG("IO: write operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X, d=$%02X)" NL, func, addr, data)
+        DEBUG("IO: write operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X, d=$%02X)" NL, func, addr, data)
 #define WARN_IO_MODE_RD(func) \
-	DEBUG("IO: read operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X)" NL, func, addr)
+        DEBUG("IO: read operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X)" NL, func, addr)
 
 
-// Call this ONLY with addresses between $D000-$DFFF
-// Ranges marked with (*) needs "vic_new_mode"
-Uint8 io_read ( int addr )
+
+/* Internal decoder for I/O reads. Address *must* be within the 0-$3FFF (!!) range. The low 12 bits is the actual address inside the I/O area,
+   while the most significant nibble shows the I/O mode the operation is meant, according to the following table:
+   0 = C64 (VIC-II) I/O mode
+   1 = C65 (VIC-III) I/O mode
+   2 = *INVALID* should not happen, unless some maps the $FF-megabyte M65 specific area, then it should do nothing or so ...
+   3 = M65 (VIC-IV) I/O mode.
+   Even writing the "classic" I/O area at $D000 will ends up here. These addressed are stricly based on the VIC mode
+   according the table above, no $D000 addresses here at all!
+   FIXME: it seems I/O mode "2" may be not invalid, but some tricky stuff, C64 with extensions, or such. I have not so much idea yet :(
+   NOTE: vic_read_reg() and vic_write_reg() is kinda special! It uses offset'ed register addresses for different VIC mode registers ... */
+
+Uint8 io_read ( unsigned int addr )
 {
-	DEBUG("IOOP: %04X" NL, addr);
-	addr = 0xD000 | (addr & 0xFFF); // temporary solution: as old decoder needs $DXXX addresses! TO BE REPLACED!
-	// Future stuff: instead of slow tons of IFs, use the >> 5 maybe
-	// that can have new device at every 0x20 dividible addresses,
-	// that is: switch ((addr >> 5) & 127)
-	// Other idea: array of function pointers, maybe separated for new/old
-	// VIC modes as well so no need to check each time that either ...
-	if (addr < 0xD080)	// $D000 - $D07F:	VIC3
-		return vic3_read_reg(addr);
-	if (addr < 0xD0A0) {	// $D080 - $D09F	DISK controller (*)
-		if (vic_iomode)
-			return fdc_read_reg(addr & 0xF);
-		else {
-			WARN_IO_MODE_RD("DISK controller");
-			return vic3_read_reg(addr);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
-		}
-	}
-	if (addr < 0xD100) {	// $D0A0 - $D0FF	RAM expansion controller (*)
-		if (vic_iomode)
+	switch (addr >> 8) {
+		/* ---------------------------------------------------- */
+		/* $D000-$D3FF: VIC-II, VIC-III+FDC+REC, VIC-IV+FDC+REC */
+		/* ---------------------------------------------------- */
+		case 0x00:	// $D000-$D0FF ~ C64 I/O mode
+		case 0x01:	// $D100-$D1FF ~ C64 I/O mode
+		case 0x02:	// $D200-$D2FF ~ C64 I/O mode
+		case 0x03:	// $D300-$D3FF ~ C64 I/O mode
+			return vic_read_reg((addr & 0x3F) | 0x100);	// VIC-II read register
+		case 0x10:	// $D000-$D0FF ~ C65 I/O mode
+			addr &= 0xFF;
+			if (likely(addr < 0x80))
+				return vic_read_reg(addr | 0x80);	// VIC-III read register
+			if (likely(addr < 0xA0))
+				return fdc_read_reg(addr & 0xF);
 			RETURN_ON_IO_READ_NOT_IMPLEMENTED("RAM expansion controller", 0xFF);
-		else {
-			WARN_IO_MODE_RD("RAM expansion controller");
-			return vic3_read_reg(addr);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
-		}
-	}
-	if (addr < 0xD400) {	// $D100 - $D3FF	palette red/green/blue nibbles (*)
-		if (vic_iomode)
-			return 0xFF; // NOT READABLE ON VIC3!
-		else {
-			WARN_IO_MODE_RD("palette reg/green/blue nibbles");
-			return vic3_read_reg(addr);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
-		}
-	}
-	if (addr < 0xD440) {	// $D400 - $D43F	SID, right
-		switch (addr & 0x1F) {
-			case 0x19:
-				if (!is_mouse_grab())
-					return 0xFF;
-				mouse_x = (mouse_x + hid_read_mouse_rel_x(-31, 31)) & 63;
-				return mouse_x << 1;
-			case 0x1A:
-				if (!is_mouse_grab())
-					return 0xFF;
-				mouse_y = (mouse_y - hid_read_mouse_rel_y(-31, 31)) & 63;
-				return mouse_y << 1;
-			default:
-				RETURN_ON_IO_READ_NOT_IMPLEMENTED("right SID", 0xFF);
-		}
-	}
-	if (addr < 0xD600) {	// $D440 - $D5FF	SID, left
-		RETURN_ON_IO_READ_NOT_IMPLEMENTED("left SID", 0xFF);
-	}
-	if (addr < 0xD700) {	// $D600 - $D6FF	UART (*)
-		if (vic_iomode == VIC4_IOMODE && addr >= 0xD609) {	// D609 - D6FF: Mega65 suffs
-			if (addr >= 0xD680 && addr <= 0xD693)		// SDcard controller etc of Mega65
-				return sdcard_read_register(addr - 0xD680);
+		case 0x30:	// $D000-$D0FF ~ M65 I/O mode
+			addr &= 0xFF;
+			if (likely(addr < 0x80))
+				return vic_read_reg(addr);		// VIC-IV read register
+			if (likely(addr < 0xA0))
+				return fdc_read_reg(addr & 0xF);
+			RETURN_ON_IO_READ_NOT_IMPLEMENTED("RAM expansion controller", 0xFF);
+		case 0x11:	// $D100-$D1FF ~ C65 I/O mode
+		case 0x12:	// $D200-$D2FF ~ C65 I/O mode
+		case 0x13:	// $D300-$D3FF ~ C65 I/O mode
+		case 0x31:	// $D100-$D1FF ~ M65 I/O mode
+		case 0x32:	// $D200-$D2FF ~ M65 I/O mode
+		case 0x33:	// $D300-$D3FF ~ M65 I/O mode
+			return 0xFF;	// FIXME: check, if applies: palette register entries are write-only, in both of C65 and M65 modes??
+		/* ------------------------------------------------ */
+		/* $D400-$D7FF: SID, SID+UART+DMA, SID+UART+DMA+M65 */
+		/* ------------------------------------------------ */
+		case 0x04:	// $D400-$D4FF ~ C64 I/O mode
+		case 0x05:	// $D500-$D5FF ~ C64 I/O mode
+		case 0x06:	// $D600-$D6FF ~ C64 I/O mode
+		case 0x07:	// $D700-$D7FF ~ C64 I/O mode
+		case 0x14:	// $D400-$D4FF ~ C65 I/O mode
+		case 0x15:	// $D500-$D5FF ~ C65 I/O mode
+		case 0x34:	// $D400-$D4FF ~ M65 I/O mode
+		case 0x35:	// $D500-$D5FF ~ M65 I/O mode
+			if (is_mouse_grab()) {		// Rudimentary C1351 mouse emulation (on SID#1) ...
+				switch (addr & 0x5F) {
+					case 0x19:
+						mouse_x = (mouse_x + hid_read_mouse_rel_x(-31, 31)) & 63;
+						return mouse_x << 1;
+					case 0x1A:
+						mouse_y = (mouse_y - hid_read_mouse_rel_y(-31, 31)) & 63;
+						return mouse_y << 1;
+				}
+			}
+			return 0xFF;
+		case 0x16:	// $D600-$D6FF ~ C65 I/O mode
+			RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);	// FIXME: UART is not yet supported!
+		case 0x36:	// $D600-$D6FF ~ M65 I/O mode
+			addr &= 0xFFF;
+			if (addr < 0x609)
+				RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);	// FIXME: UART is not yet supported!
+			if (addr >= 0x680 && addr <= 0x693)	// SDcard controller etc of Mega65
+				return sdcard_read_register(addr - 0x680);
 			switch (addr) {
-				case 0xD67C:
-					return 0;	// emulate the "UART is ready" situation (used by newer kickstarts around from v0.11 or so)
-				case 0xD67E:				// upgraded hypervisor signal
+				case 0x67C:
+					return 0;			// emulate the "UART is ready" situation (used by newer kickstarts around from v0.11 or so)
+				case 0x67E:				// upgraded hypervisor signal
 					if (kicked_hypervisor == 0x80)	// 0x80 means for Xemu (not for a real M65!): ask the user!
 						kicked_hypervisor = QUESTION_WINDOW(
 							"Not upgraded yet, it can do it|Already upgraded, I test kicked state",
@@ -133,191 +147,316 @@ Uint8 io_read ( int addr )
 							"(don't worry, it won't be asked again without RESET)"
 						) ? 0xFF : 0;
 					return kicked_hypervisor;
-				case 0xD6F0:
+				case 0x67F:
+					return in_hypervisor ? 'H' : 'U';	// FIXME: I am not sure about 'U' here (U for userspace, H for hypervisor mode)
+				case 0x6F0:
 					return fpga_switches & 0xFF;
-				case 0xD6F1:
+				case 0x6F1:
 					return (fpga_switches >> 8) & 0xFF;
 				default:
-					DEBUG("MEGA65: reading Mega65 specific I/O @ $%04X result is $%02X" NL, addr, gs_regs[addr & 0xFFF]);
-					return gs_regs[addr & 0xFFF];
+					DEBUG("MEGA65: reading Mega65 specific I/O @ $D%03X result is $%02X" NL, addr, gs_regs[addr]);
+					return gs_regs[addr];
 			}
-		} else if (vic_iomode)
-			RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);
-		else
-			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("UART", 0xFF);
-	}
-	if (addr < 0xD800) {	// $D700 - $D7FF	DMA (*)
-		if (vic_iomode)
+		case 0x17:	// $D700-$D7FF ~ C65 I/O mode
 			return dma_read_reg(addr & 0xF);
-		else
-			RETURN_ON_IO_READ_NO_NEW_VIC_MODE("DMA controller", 0xFF);
+		case 0x37:	// $D700-$D7FF ~ M65 I/O mode
+			return dma_read_reg(addr & 0xF);
+		/* ----------------------- */
+		/* $D800-$DBFF: COLOUR RAM */
+		/* ----------------------- */
+		case 0x08:	// $D800-$D8FF ~ C64 I/O mode
+		case 0x09:	// $D900-$D9FF ~ C64 I/O mode
+		case 0x0A:	// $DA00-$DAFF ~ C64 I/O mode
+		case 0x0B:	// $DB00-$DBFF ~ C64 I/O mode
+			return colour_ram[addr - 0x0800] | 0xF0;	// FIXME: is this true, that high nibble if faked to be '1' in C64 I/O mode, always?
+		case 0x18:	// $D800-$D8FF ~ C65 I/O mode
+		case 0x19:	// $D900-$D9FF ~ C65 I/O mode
+		case 0x1A:	// $DA00-$DAFF ~ C65 I/O mode
+		case 0x1B:	// $DB00-$DBFF ~ C65 I/O mode
+			return colour_ram[addr - 0x1800];
+		case 0x38:	// $D800-$D8FF ~ M65 I/O mode
+		case 0x39:	// $D900-$D9FF ~ M65 I/O mode
+		case 0x3A:	// $DA00-$DAFF ~ M65 I/O mode
+		case 0x3B:	// $DB00-$DBFF ~ M65 I/O mode
+			return colour_ram[addr - 0x3800];
+		/* --------------------------------------- */
+		/* $DC00-$DCFF: CIA#1, EXTENDED COLOUR RAM */
+		/* --------------------------------------- */
+		case 0x0C:	// $DC00-$DCFF ~ C64 I/O mode
+			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x0800] : cia_read(&cia1, addr & 0xF);
+		case 0x1C:	// $DC00-$DCFF ~ C65 I/O mode
+			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x1800] : cia_read(&cia1, addr & 0xF);
+		case 0x3C:	// $DC00-$DCFF ~ M65 I/O mode
+			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x3800] : cia_read(&cia1, addr & 0xF);
+		/* --------------------------------------- */
+		/* $DD00-$DDFF: CIA#2, EXTENDED COLOUR RAM */
+		/* --------------------------------------- */
+		case 0x0D:	// $DD00-$DDFF ~ C64 I/O mode
+			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x0800] : cia_read(&cia2, addr & 0xF);
+		case 0x1D:	// $DD00-$DDFF ~ C65 I/O mode
+			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x1800] : cia_read(&cia2, addr & 0xF);
+		case 0x3D:	// $DD00-$DDFF ~ M65 I/O mode
+			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x3800] : cia_read(&cia2, addr & 0xF);
+		/* --------------------------------------------------- */
+		/* $DE00-$DFFF: IO exp, EXTENDED COLOUR RAM, SD buffer */
+		/* --------------------------------------------------- */
+		case 0x0E:	// $DE00-$DEFF ~ C64 I/O mode
+		case 0x0F:	// $DF00-$DFFF ~ C64 I/O mode
+			if (vic_registers[0x30] & 1)
+				return colour_ram[addr - 0x0800];
+			if (likely(sd_status & SD_ST_MAPPED))
+				return sd_buffer[addr - 0x0E00];
+			return 0xFF;	// I/O exp is not supported
+		case 0x1E:	// $DE00-$DEFF ~ C65 I/O mode
+		case 0x1F:	// $DF00-$DFFF ~ C65 I/O mode
+			if (vic_registers[0x30] & 1)
+				return colour_ram[addr - 0x1800];
+			if (likely(sd_status & SD_ST_MAPPED))
+				return sd_buffer[addr - 0x1E00];
+			return 0xFF;	// I/O exp is not supported
+		case 0x3E:	// $DE00-$DEFF ~ M65 I/O mode
+		case 0x3F:	// $DF00-$DFFF ~ M65 I/O mode
+			if (vic_registers[0x30] & 1)
+				return colour_ram[addr - 0x3800];
+			if (likely(sd_status & SD_ST_MAPPED))
+				return sd_buffer[addr - 0x3E00];
+			return 0xFF;	// I/O exp is not supported
+		/* --------------------------------------------------------------- */
+		/* $2xxx I/O area is not supported: FIXME: what is that for real?! */
+		/* --------------------------------------------------------------- */
+		case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27:
+		case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
+			return 0xFF;
+		default:
+			FATAL("Xemu internal error: undecoded I/O area reading for address $(%X)%03X", addr >> 8, addr & 0xFFF);
 	}
-	if (addr < ((vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00)) {	// $D800-$DC00/$E000	COLOUR NIBBLES, mapped to $1F800 in BANK1
-		DEBUG("IO: reading colour RAM at offset $%04X" NL, addr - 0xD800);
-		return colour_ram[addr - 0xD800];
-	}
-	if (addr < 0xDD00) {	// $DC00 - $DCFF	CIA-1
-		Uint8 result = cia_read(&cia1, addr & 0xF);
-		//RETURN_ON_IO_READ_NOT_IMPLEMENTED("CIA-1", 0xFF);
-		DEBUG("%s: reading register $%X result is $%02X" NL, cia1.name, addr & 15, result);
-		return result;
-	}
-	if (addr < 0xDE00) {	// $DD00 - $DDFF	CIA-2
-		Uint8 result = cia_read(&cia2, addr & 0xF);
-		//RETURN_ON_IO_READ_NOT_IMPLEMENTED("CIA-2", 0xFF);
-		DEBUG("%s: reading register $%X result is $%02X" NL, cia2.name, addr & 15, result);
-		return result;
-	}
-	// Only IO-1 and IO-2 areas left, if SD-card buffer is mapped for Mega65, this is our only case left!
-	if (sd_status & SD_ST_MAPPED) {
-		Uint8 result = sd_buffer[addr & 511];
-		DEBUG("SDCARD: BUFFER: reading SD-card buffer at offset $%03X with result $%02X PC=$%04X" NL, addr & 511, result, cpu_pc);
-		return result;
-	}
-	if (addr < 0xDF00) {	// $DE00 - $DEFF	IO-1 external
-		RETURN_ON_IO_READ_NOT_IMPLEMENTED("IO-1 external select", 0xFF);
-	}
-	// The rest: IO-2 external
-	RETURN_ON_IO_READ_NOT_IMPLEMENTED("IO-2 external select", 0xFF);
 }
 
 
 
-
-// Call this ONLY with addresses between $D000-$DFFF
-// Ranges marked with (*) needs "vic_new_mode"
-void io_write ( int addr, Uint8 data )
+/* Please read comments at io_read() above, those apply here too.
+   In nutshell: this function *NEEDS* addresses 0-$3FFF based on the given I/O (VIC) mode! */
+void io_write ( unsigned int addr, Uint8 data )
 {
 	if (unlikely(cpu_rmw_old_data >= 0)) {
 		// RMW handling! FIXME: do this only in the needed I/O ports only, not here, globally!
+		// however, for that, we must check this at every devices where it can make any difference ...
 		Uint8 old_data = cpu_rmw_old_data;
-		cpu_rmw_old_data = -1;
-		DEBUG("RMW: addr %04X old data %02X new data %02X" NL, addr, old_data, data);
+		cpu_rmw_old_data = -1;	// set this back to minus _before_ doing self-call, or it would cause an infinite recursion-like madness ...
+		DEBUG("RMW: I/O internal addr %04X old data %02X new data %02X" NL, addr, old_data, data);
 		io_write(addr, old_data);
 	}
-	DEBUG("IOOP: %04X" NL, addr);
-	addr = 0xD000 | (addr & 0xFFF);	// temporary solution: as old decoder needs $DXXX addresses! TO BE REPLACED!
-	if (addr < 0xD080) {	// $D000 - $D07F:	VIC3
-		vic3_write_reg(addr, data);
-		return;
-	}
-	if (addr < 0xD0A0) {	// $D080 - $D09F	DISK controller (*)
-		if (vic_iomode)
-			fdc_write_reg(addr & 0xF, data);
-		else {
-			WARN_IO_MODE_WR("DISK controller");
-			vic3_write_reg(addr, data);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
-		}
-		return;
-	}
-	if (addr < 0xD100) {	// $D0A0 - $D0FF	RAM expansion controller (*)
-		if (vic_iomode)
+	switch (addr >> 8) {
+		/* ---------------------------------------------------- */
+		/* $D000-$D3FF: VIC-II, VIC-III+FDC+REC, VIC-IV+FDC+REC */
+		/* ---------------------------------------------------- */
+		case 0x00:	// $D000-$D0FF ~ C64 I/O mode
+		case 0x01:	// $D100-$D1FF ~ C64 I/O mode
+		case 0x02:	// $D200-$D2FF ~ C64 I/O mode
+		case 0x03:	// $D300-$D3FF ~ C64 I/O mode
+			vic_write_reg((addr & 0x3F) | 0x100, data);	// VIC-II write register
+			return;
+		case 0x10:	// $D000-$D0FF ~ C65 I/O mode
+			addr &= 0xFF;
+			if (likely(addr < 0x80)) {
+				vic_write_reg(addr | 0x80, data);	// VIC-III write register
+				return;
+			}
+			if (likely(addr < 0xA0)) {
+				fdc_write_reg(addr & 0xF, data);
+				return;
+			}
 			RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("RAM expansion controller");
-		else {
-			WARN_IO_MODE_WR("RAM expansion controller");
-			vic3_write_reg(addr, data);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
-		}
-		return;
-	}
-	if (addr < 0xD400) {	// $D100 - $D3FF	palette red/green/blue nibbles (*)
-		if (vic_iomode)
-			vic3_write_palette_reg(addr - 0xD100, data);
-		else {
-			WARN_IO_MODE_WR("palette red/green/blue nibbles");
-			vic3_write_reg(addr, data);	// if I understand correctly, without newVIC mode, $D000-$D3FF will mean legacy VIC-2 everywhere [?]
-		}
-		return;
-	}
-	if (addr < 0xD440) {	// $D400 - $D43F	SID, right
-		sid_write_reg(&sid1, addr & 31, data);
-		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("right SID");
-		return;
-	}
-	if (addr < 0xD600) {	// $D440 - $D5FF	SID, left
-		sid_write_reg(&sid2, addr & 31, data);
-		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("left SID");
-		return;
-	}
-	if (addr < 0xD700) {	// $D600 - $D6FF	UART (*)
-		if (vic_iomode == VIC4_IOMODE && addr >= 0xD609) {	// D609 - D6FF: Mega65 suffs
-			gs_regs[addr & 0xFFF] = data;
-			DEBUG("MEGA65: writing Mega65 specific I/O range @ $%04X with $%02X" NL, addr, data);
-			if (!in_hypervisor && addr >= 0xD640 && addr <= 0xD67F) {
+		case 0x30:	// $D000-$D0FF ~ M65 I/O mode
+			addr &= 0xFF;
+			if (likely(addr < 0x80)) {
+				vic_write_reg(addr, data);		// VIC-IV write register
+				return;
+			}
+			if (likely(addr < 0xA0)) {
+				fdc_write_reg(addr & 0xF, data);
+				return;
+			}
+			RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("RAM expansion controller");
+		case 0x11:	// $D100-$D1FF ~ C65 I/O mode
+		case 0x12:	// $D200-$D2FF ~ C65 I/O mode
+		case 0x13:	// $D300-$D3FF ~ C65 I/O mode
+			vic3_write_palette_reg(addr - 0x1100, data);
+			return;
+		case 0x31:	// $D100-$D1FF ~ M65 I/O mode
+		case 0x32:	// $D200-$D2FF ~ M65 I/O mode
+		case 0x33:	// $D300-$D3FF ~ M65 I/O mode
+			vic4_write_palette_reg(addr - 0x3100, data);
+			return;
+		/* ------------------------------------------------ */
+		/* $D400-$D7FF: SID, SID+UART+DMA, SID+UART+DMA+M65 */
+		/* ------------------------------------------------ */
+		case 0x04:	// $D400-$D4FF ~ C64 I/O mode
+		case 0x05:	// $D500-$D5FF ~ C64 I/O mode
+		case 0x06:	// $D600-$D6FF ~ C64 I/O mode
+		case 0x07:	// $D700-$D7FF ~ C64 I/O mode
+		case 0x14:	// $D400-$D4FF ~ C65 I/O mode
+		case 0x15:	// $D500-$D5FF ~ C65 I/O mode
+		case 0x34:	// $D400-$D4FF ~ M65 I/O mode
+		case 0x35:	// $D500-$D5FF ~ M65 I/O mode
+			sid_write_reg(addr & 0x40 ? &sid2 : &sid1, addr & 31, data);
+			return;
+		case 0x16:	// $D600-$D6FF ~ C65 I/O mode
+			RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");	// FIXME: UART is not yet supported!
+		case 0x36:	// $D600-$D6FF ~ M65 I/O mode
+			addr &= 0xFFF;
+			if (addr < 0x609)
+				RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");	// FIXME: UART is not yet supported!
+			gs_regs[addr] = data;
+			if (!in_hypervisor && addr >= 0x640 && addr <= 0x67F) {
 				// In user mode, writing to $D640-$D67F (in VIC4 iomode) causes to enter hypervisor mode with
 				// the trap number given by the offset in this range
 				hypervisor_enter(addr & 0x3F);
 				return;
 			}
-			if (addr >= 0xD680 && addr <= 0xD693) {
-				sdcard_write_register(addr - 0xD680, data);
+			if (addr >= 0x680 && addr <= 0x693) {			// SDcard controller etc of Mega65
+				sdcard_write_register(addr - 0x680, data);
 				return;
 			}
 			switch (addr) {
-				case 0xD67C:	// hypervisor serial monitor port
+				case 0x67C:					// hypervisor serial monitor port
 					hypervisor_serial_monitor_push_char(data);
-					break;
-				case 0xD67D:
+					return;
+				case 0x67D:
 					DEBUG("MEGA65: features set as $%02X" NL, data);
 					if ((data & 4) != rom_protect) {
 						fprintf(stderr, "MEGA65: ROM protection has been turned %s." NL, data & 4 ? "ON" : "OFF");
 						rom_protect = data & 4;
 					}
-					break;
-				case 0xD67E:	// it seems any write (?) here marks the byte as non-zero?! FIXME TODO
+                                        return;
+				case 0x67E:	// it seems any write (?) here marks the byte as non-zero?! FIXME TODO
 					kicked_hypervisor = 0xFF;
 					fprintf(stderr, "Writing already-kicked register $%04X!" NL, addr);
 					hypervisor_debug_invalidate("$D67E was written, maybe new kickstart will boot!");
-					break;
-				case 0xD67F:	// hypervisor leave
-					hypervisor_leave();
-					break;
+					return;
+				case 0x67F:	// hypervisor leave
+					hypervisor_leave();	// 0x67F is also handled on enter's state, so it will be executed only in_hypervisor mode, which is what I want
+					return;
 				default:
-					DEBUG("MEGA65: this I/O port is not emulated in Xemu yet: $%04X" NL, addr);
-					break;
+					DEBUG("MEGA65: this I/O port is not emulated in Xemu yet: $%04X (tried to be written with $%02X)" NL, addr, data);
+					return;
 			}
-                        return;
-		} else if (vic_iomode)
-			RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");
-		else
-			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("UART");
-	}
-	if (addr < 0xD800) {	// $D700 - $D7FF	DMA (*)
-		DEBUG("DMA: writing register $%04X (data = $%02X)" NL, addr, data);
-		if (vic_iomode) {
+		case 0x17:	// $D700-$D7FF ~ C65 I/O mode
 			dma_write_reg(addr & 0xF, data);
 			return;
-		} else
-			RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE("DMA controller");
+		case 0x37:	// $D700-$D7FF ~ M65 I/O mode
+			dma_write_reg(addr & 0xF, data);
+			return;
+		/* ----------------------- */
+		/* $D800-$DBFF: COLOUR RAM */
+		/* ----------------------- */
+		case 0x08:	// $D800-$D8FF ~ C64 I/O mode
+		case 0x09:	// $D900-$D9FF ~ C64 I/O mode
+		case 0x0A:	// $DA00-$DAFF ~ C64 I/O mode
+		case 0x0B:	// $DB00-$DBFF ~ C64 I/O mode
+			colour_ram[addr - 0x0800] = data & 0xF;		// FIXME: is this true, that high nibble is masked, so switching to C65/M65 mode high nibble will be zero??
+			return;
+		case 0x18:	// $D800-$D8FF ~ C65 I/O mode
+		case 0x19:	// $D900-$D9FF ~ C65 I/O mode
+		case 0x1A:	// $DA00-$DAFF ~ C65 I/O mode
+		case 0x1B:	// $DB00-$DBFF ~ C65 I/O mode
+			colour_ram[addr - 0x1800] = data;
+			return;
+		case 0x38:	// $D800-$D8FF ~ M65 I/O mode
+		case 0x39:	// $D900-$D9FF ~ M65 I/O mode
+		case 0x3A:	// $DA00-$DAFF ~ M65 I/O mode
+		case 0x3B:	// $DB00-$DBFF ~ M65 I/O mode
+			colour_ram[addr - 0x3800] = data;
+			return;
+		/* --------------------------------------- */
+		/* $DC00-$DCFF: CIA#1, EXTENDED COLOUR RAM */
+		/* --------------------------------------- */
+		case 0x0C:	// $DC00-$DCFF ~ C64 I/O mode
+			if (vic_registers[0x30] & 1)
+				colour_ram[addr - 0x0800] = data;
+			else
+				cia_write(&cia1, addr & 0xF, data);
+			return;
+		case 0x1C:	// $DC00-$DCFF ~ C65 I/O mode
+			if (vic_registers[0x30] & 1)
+				colour_ram[addr - 0x1800] = data;
+			else
+				cia_write(&cia1, addr & 0xF, data);
+			return;
+		case 0x3C:	// $DC00-$DCFF ~ M65 I/O mode
+			if (vic_registers[0x30] & 1)
+				colour_ram[addr - 0x3800] = data;
+			else
+				cia_write(&cia1, addr & 0xF, data);
+			return;
+		/* --------------------------------------- */
+		/* $DD00-$DDFF: CIA#2, EXTENDED COLOUR RAM */
+		/* --------------------------------------- */
+		case 0x0D:	// $DD00-$DDFF ~ C64 I/O mode
+			if (vic_registers[0x30] & 1)
+				colour_ram[addr - 0x0800] = data;
+			else
+				cia_write(&cia2, addr & 0xF, data);
+			return;
+		case 0x1D:	// $DD00-$DDFF ~ C65 I/O mode
+			if (vic_registers[0x30] & 1)
+				colour_ram[addr - 0x1800] = data;
+			else
+				cia_write(&cia2, addr & 0xF, data);
+			return;
+		case 0x3D:	// $DD00-$DDFF ~ M65 I/O mode
+			if (vic_registers[0x30] & 1)
+				colour_ram[addr - 0x3800] = data;
+			else
+				cia_write(&cia2, addr & 0xF, data);
+			return;
+		/* --------------------------------------------------- */
+		/* $DE00-$DFFF: IO exp, EXTENDED COLOUR RAM, SD buffer */
+		/* --------------------------------------------------- */
+		case 0x0E:	// $DE00-$DEFF ~ C64 I/O mode
+		case 0x0F:	// $DF00-$DFFF ~ C64 I/O mode
+			if (vic_registers[0x30] & 1) {
+				colour_ram[addr - 0x0800] = data;
+				return;
+			}
+			if (likely(sd_status & SD_ST_MAPPED)) {
+				sd_buffer[addr - 0x0E00] = data;
+				return;
+			}
+			return;		// I/O exp is not supported
+		case 0x1E:	// $DE00-$DEFF ~ C65 I/O mode
+		case 0x1F:	// $DF00-$DFFF ~ C65 I/O mode
+			if (vic_registers[0x30] & 1) {
+				colour_ram[addr - 0x1800] = data;
+				return;
+			}
+			if (likely(sd_status & SD_ST_MAPPED)) {
+				sd_buffer[addr - 0x1E00] = data;
+				return;
+			}
+			return;		// I/O exp is not supported
+		case 0x3E:	// $DE00-$DEFF ~ M65 I/O mode
+		case 0x3F:	// $DF00-$DFFF ~ M65 I/O mode
+			if (vic_registers[0x30] & 1) {
+				colour_ram[addr - 0x3800] = data;
+				return;
+			}
+			if (likely(sd_status & SD_ST_MAPPED)) {
+				sd_buffer[addr - 0x3E00] = data;
+				return;
+			}
+			return;		// I/O exp is not supported
+		/* --------------------------------------------------------------- */
+		/* $2xxx I/O area is not supported: FIXME: what is that for real?! */
+		/* --------------------------------------------------------------- */
+		case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27:
+		case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
+			return;
+		default:
+			FATAL("Xemu internal error: undecoded I/O area writing for address $(%X)%03X and data $%02X", addr >> 8, addr & 0xFFF, data);
 	}
-	if (addr < ((vic3_registers[0x30] & 1) ? 0xE000 : 0xDC00)) {	// $D800-$DC00/$E000	COLOUR NIBBLES, mapped to $1F800 in BANK1
-		colour_ram[addr - 0xD800] = data;
-		DEBUG("IO: writing colour RAM at offset $%04X" NL, addr - 0xD800);
-		return;
-	}
-	if (addr < 0xDD00) {	// $DC00 - $DCFF	CIA-1
-		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("CIA-1");
-		DEBUG("%s: writing register $%X with data $%02X" NL, cia1.name, addr & 15, data);
-		cia_write(&cia1, addr & 0xF, data);
-		return;
-	}
-	if (addr < 0xDE00) {	// $DD00 - $DDFF	CIA-2
-		//RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("CIA-2");
-		DEBUG("%s: writing register $%X with data $%02X" NL, cia2.name, addr & 15, data);
-		cia_write(&cia2, addr & 0xF, data);
-		return;
-	}
-	// Only IO-1 and IO-2 areas left, if SD-card buffer is mapped for Mega65, this is our only case left!
-	if (sd_status & SD_ST_MAPPED) {
-		sd_buffer[addr & 511] = data;
-		DEBUG("SDCARD: BUFFER: writing SD-card buffer at offset $%03X with data $%02X PC=$%04X" NL, addr & 511, data, cpu_pc);
-		return;
-	}
-	if (addr < 0xDF00) {	// $DE00 - $DEFF	IO-1 external
-		RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("IO-1 external select");
-	}
-	// The rest: IO-2 external
-	RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("IO-2 external select");
 }
+
 
 
 Uint8 io_dma_reader ( int addr ) {
