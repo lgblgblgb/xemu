@@ -7,20 +7,22 @@ TODO list for Mega-65 shorter term (m65mem branch lifetime):
 * Make new memory handling work ... [DONE?]
 * ... test it!
 * Try to in-line CPU read/write primitives, check the performance impact [PENDING, TESTING]
-* Rewrite I/O decoder ...
+* Rewrite I/O decoder ... [DONE?]
 * ... test it!
 * Hook DMA for (the new) direct internal I/O decoder [DONE]
 * CPU optimization idea: paged read/write primitives (this means eg ZP aka. BP related opcodes can be optimized a very little in general ...)
 * RMW CPU primitive optimization [DONE, though I/O related stuff is not, only for the full I/O area]
+* Reorganize VIC reg access for the new I/O decoder, etc [DONE?]
 * Move VIC mode change into a handler in vic stuff (is this needed in this stage at all?)
 * Make snapshotting working again [DONE?]
 * Make (uart-)mon working again
 * Fix uart-mon with breakpoint (didn't worked even in master branch since the multi-op CPU performance patch)
 * Test if uart-mon works at all in a sane way ...
 * Better speed control, allow custom M65-fast mode, just for test (CLI-switch?) [DONE]
-* Maybe: rationalize the place of functions/variables within sources, maybe rename some sources
-* Check header includes, a mess now :( Kill ones not needed in a given source (see the previous point too)
+* Maybe: rationalize the place of functions/variables within sources, maybe rename some sources [DONE?]
+* Check header includes, a mess now :( Kill ones not needed in a given source (see the previous point too) [DONE?]
 * Clean-up ...
+* Study debug log, to kill some too verbose stuff now!!
 * Extensive testing!!
 * Merge m65mem into master, delete m65mem branch
 * Binary deployment
@@ -34,10 +36,17 @@ SMALLER [?] misc TODOs in the future:
 * FDC: C65/M65 too: EQ bit more "delayed" handling without the needed hacks we currently have
 * FDC: C65/M65 too: debug write problems (only on M65????)
 * FDC D81 image mount from Hypervisor on M65: check the read/write only state, debug/test/etc
+* FDC D81 image mount: two drives ...
+* Xemu's external D81 mount: do not ask to do, if it's logically from a command line switch
+* Xemu's external D81 mount: allow some hack to mount external/internal from SYS49152 mounter
 * M65 similar FDC r/w control "LED" on the screen corner?
 * C65/M65 too: check Mega-65 kbd layout on PS/2 keyboard, and implement similar with Xemu!
+* Build SD-card image for the user, if needed files are in place at least for that
+* Installer mode: allow to download needed files, ROM images, etc after asking the user if it's OK to do
 * ALL/XEMU: config file support (in theory, the framework is there ...)
 * ALL/XEMU: OSD menu possibility at least
+* ALL/XEMU: windows console handling (Windows sucks, it needs re-open console to be able to see ... ehm)
+* ALL/XEMU: on UNIX-like OS, link preferences directory to $HOME/.xemu for some comfort
 
 Some theory should be checked:
 

@@ -4,9 +4,12 @@
 
    This is the VIC-IV "emulation". Currently it does one-frame-at-once
    kind of horrible work, and only a subset of VIC2 and VIC3 knowledge
-   is implemented. Some of the missing features: hardware attributes,
+   is implemented, with some light VIC-IV features, to be able to "boot"
+   of Mega-65 with standard configuration (kickstart, SD-card).
+   Some of the missing features (VIC-2/3): hardware attributes,
    DAT, sprites, screen positioning, H1280 mode, V400 mode, interlace,
    chroma killer, VIC2 MCM, ECM, 38/24 columns mode, border.
+   VIC-4: almost everything :(
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -27,7 +30,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "xemu/cpu65c02.h"
 #include "vic4.h"
-#include "hypervisor.h"
 #include "memory_mapper.h"
 
 #define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
@@ -112,7 +114,7 @@ void vic_init ( void )
 	compare_raster = 0;
 	for (i = 0; i < 0x100; i++) {	// Initiailize all palette registers to zero, initially, to have something ...
 		if (i < sizeof vic_registers)
-			vic_registers[i] = 0;	// Also the VIC3 registers ...
+			vic_registers[i] = 0;	// Also the VIC registers ...
 		vic3_rom_palette[i] = vic3_palette[i] = rgb_palette[0];
 		vic3_palette_nibbles[i] = 0;
 		vic3_palette_nibbles[i + 0x100] = 0;
@@ -135,6 +137,11 @@ void vic_init ( void )
 	vic3_rom_palette[13] = RGB( 9, 15,  9);	// light green
 	vic3_rom_palette[14] = RGB( 9,  9, 15);	// light blue
 	vic3_rom_palette[15] = RGB(11, 11, 11);	// light grey
+	// *** Just a check to try all possible regs (in VIC2,VIC3 and VIC4 modes), it should not panic ...
+	for (i = 0; i < 0x140; i++) {
+		vic_write_reg(i, 0);
+		(void)vic_read_reg(i);
+	}
 	DEBUG("VIC4: has been initialized." NL);
 }
 
@@ -182,6 +189,9 @@ void vic3_check_raster_interrupt ( void )
 	* ALL cases must be handled!! from 000-13F for both of reading/writing funcs, otherwise Xemu will panic! this is a safety stuff
 	* on write, later an M65-alike solution is needed: ie "hot registers" for VIC-II,VIC-III also writes VIC-IV specific registers then
 	* currently MANY things are not handled, it will be the task of "move to VIC-IV internals" project ...
+	* the purpose of ugly "tons of case" implementation that it should compile into a simple jump-table, which cannot be done faster too much ...
+	* do not confuse these "vic reg mode" ranges with the vic_iomode variable, not so much direct connection between them! vic_iomode referred
+	  for the I/O mode used on the "classic $D000 area" and DMA I/O access only
 */
 
 
@@ -308,7 +318,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_3(0x78): CASE_VIC_3(0x79): CASE_VIC_3(0x7A): CASE_VIC_3(0x7B): CASE_VIC_3(0x7C): CASE_VIC_3(0x7D): CASE_VIC_3(0x7E): CASE_VIC_3(0x7F):
 			DEBUG("VIC3: this register does not exist for this mode, ignoring write." NL);
 			return;		// not existing VIC-III registers, do not write!
-		/* --- FINALLY, IF THIS HIT, IT MEANS A MISTAKE SOMEWHERE IN MY CODE --- */
+		/* --- FINALLY, IF THIS IS HIT, IT MEANS A MISTAKE SOMEWHERE IN MY CODE --- */
 		default:
 			FATAL("Xemu: invalid VIC internal register numbering on write: $%X", addr);
 	}
@@ -412,7 +422,7 @@ Uint8 vic_read_reg ( int unsigned addr )
 			DEBUG("VIC3: this register does not exist for this mode, $FF for read answer." NL);
 			result = 0xFF;
 			break;			// not existing VIC-III registers
-		/* --- FINALLY, IF THIS HIT, IT MEANS A MISTAKE SOMEWHERE IN MY CODE --- */
+		/* --- FINALLY, IF THIS IS HIT, IT MEANS A MISTAKE SOMEWHERE IN MY CODE --- */
 		default:
 			FATAL("Xemu: invalid VIC internal register numbering on read: $%X", addr);
 	}

@@ -20,21 +20,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "io_mapper.h"
 #include "memory_mapper.h"
-
-#include "mega65.h"
-#include "xemu/cpu65c02.h"
-#include "xemu/cia6526.h"
 #include "xemu/f011_core.h"
 #include "xemu/f018_core.h"
 #include "xemu/emutools_hid.h"
 #include "vic4.h"
-#include "xemu/sid.h"
 #include "sdcard.h"
-#include "uart_monitor.h"
 #include "hypervisor.h"
-#include "xemu/c64_kbd_mapping.h"
-#include "xemu/emutools_config.h"
-#include "m65_snapshot.h"
 
 
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
@@ -47,20 +38,9 @@ static int mouse_x = 0, mouse_y = 0;	// for our primitive C1351 mouse emulation
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
         do { DEBUG("IO: NOT IMPLEMENTED read (emulator lacks feature), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
         return fb; } while (0)
-#define RETURN_ON_IO_READ_NO_NEW_VIC_MODE(func, fb) \
-        do { DEBUG("IO: ignored read (not new VIC mode), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
-        return fb; } while (0)
 #define RETURN_ON_IO_WRITE_NOT_IMPLEMENTED(func) \
         do { DEBUG("IO: NOT IMPLEMENTED write (emulator lacks feature), %s $%04X with data $%02X" NL, func, addr, data); \
         return; } while(0)
-#define RETURN_ON_IO_WRITE_NO_NEW_VIC_MODE(func) \
-        do { DEBUG("IO: ignored write (not new VIC mode), %s $%04X with data $%02X" NL, func, addr, data); \
-        return; } while(0)
-#define WARN_IO_MODE_WR(func) \
-        DEBUG("IO: write operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X, d=$%02X)" NL, func, addr, data)
-#define WARN_IO_MODE_RD(func) \
-        DEBUG("IO: read operation defaults (not new VIC mode) to VIC-2 registers, though it would be: \"%s\" (a=$%04X)" NL, func, addr)
-
 
 
 /* Internal decoder for I/O reads. Address *must* be within the 0-$3FFF (!!) range. The low 12 bits is the actual address inside the I/O area,
