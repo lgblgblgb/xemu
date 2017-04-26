@@ -754,6 +754,7 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles;
+	sysconsole_open();
 	xemu_dump_version(stdout, "The Unusable Commodore 65 emulator from LGB");
 	emucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
 	emucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip (0=F018A, other=F018B)");

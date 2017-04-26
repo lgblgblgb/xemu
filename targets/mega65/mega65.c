@@ -532,6 +532,7 @@ void m65mon_breakpoint ( int brk )
 int main ( int argc, char **argv )
 {
 	int cycles, frameskip;
+	sysconsole_open();
 	xemu_dump_version(stdout, "The Incomplete Commodore-65/Mega-65 emulator from LGB");
 	emucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
 	emucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip  (0=F018A, other=F018B)");

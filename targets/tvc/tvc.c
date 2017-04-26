@@ -393,6 +393,7 @@ static void init_tvc ( void )
 int main ( int argc, char **argv )
 {
 	int cycles;
+	sysconsole_open();
 	xemu_dump_version(stdout, "The Careless Videoton TV Computer emulator from LGB");
 #ifdef CONFIG_SDEXT_SUPPORT
 	emucfg_define_switch_option("sdext", "Enables SD-ext");

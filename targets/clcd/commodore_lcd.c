@@ -1,5 +1,5 @@
 /* Commodore LCD emulator.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is an ongoing work to rewrite my old Commodore LCD emulator:
 
@@ -373,6 +373,7 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles;
+	sysconsole_open();
 	xemu_dump_version(stdout, "The world's first Commodore LCD emulator from LGB");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	emucfg_define_num_option("ram", 128, "Sets RAM size in KBytes.");
