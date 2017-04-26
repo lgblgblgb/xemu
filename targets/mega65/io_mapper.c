@@ -36,11 +36,11 @@ static int mouse_x = 0, mouse_y = 0;	// for our primitive C1351 mouse emulation
 
 
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
-        do { DEBUG("IO: NOT IMPLEMENTED read (emulator lacks feature), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
-        return fb; } while (0)
+	do { DEBUG("IO: NOT IMPLEMENTED read (emulator lacks feature), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
+	return fb; } while (0)
 #define RETURN_ON_IO_WRITE_NOT_IMPLEMENTED(func) \
-        do { DEBUG("IO: NOT IMPLEMENTED write (emulator lacks feature), %s $%04X with data $%02X" NL, func, addr, data); \
-        return; } while(0)
+	do { DEBUG("IO: NOT IMPLEMENTED write (emulator lacks feature), %s $%04X with data $%02X" NL, func, addr, data); \
+	return; } while(0)
 
 
 /* Internal decoder for I/O reads. Address *must* be within the 0-$3FFF (!!) range. The low 12 bits is the actual address inside the I/O area,

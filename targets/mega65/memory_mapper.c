@@ -592,6 +592,7 @@ void memory_set_vic3_rom_mapping ( Uint8 value )
 		value &= VIC3_ROM_MASK_8000 | VIC3_ROM_MASK_A000 | VIC3_ROM_MASK_C000 | VIC3_ROM_MASK_E000;	// only keep bits we're interested in
 	if (value != memcfg_vic3_rom_mapping_last) {	// only do, if there was a change
 		Uint8 change = memcfg_vic3_rom_mapping_last ^ value;	// change mask, bits have 1 only if there was a change
+		DEBUG("MEM: VIC-III ROM mapping change $%02X -> %02X" NL, memcfg_vic3_rom_mapping_last, value);
 		memcfg_vic3_rom_mapping_last = value;	// don't forget to store the current state for next check!
 		// now check bits changed in ROM mapping
 		if (change & VIC3_ROM_MASK_8000)
@@ -609,7 +610,6 @@ void memory_set_vic3_rom_mapping ( Uint8 value )
 static void apply_cpu_io_port_config ( void )
 {
 	Uint8 desired = (cpu_io_port[1] | (~cpu_io_port[0])) & 7;
-	DEBUG("MEM: CPUIOPORT: port composite value %d is considered ..." NL, desired);
 	if (desired != memcfg_cpu_io_port_last) {
 		DEBUG("MEM: CPUIOPORT: port composite value (new one) is %d" NL, desired);
 		memcfg_cpu_io_port_last = desired;
@@ -677,6 +677,7 @@ void memory_set_do_map ( void )
 	apply_memory_config_C000_to_CFFF();
 	apply_memory_config_D000_to_DFFF();
 	apply_memory_config_E000_to_FFFF();
+	DEBUG("MEM: memory_set_do_map() applied" NL);
 }
 
 

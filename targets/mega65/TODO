@@ -29,6 +29,9 @@ TODO list for Mega-65 shorter term (m65mem branch lifetime):
 
 SMALLER [?] misc TODOs in the future:
 
+* C65/M65: implement UART, at least for extended keys ...
+* M65: ethernet emulation? if possible (maybe not in host-independent way ...)
+* C65/M65: REC (Ram Expansion Controller) emulation?
 * Allow kbd scanning work in the oppsite way too (C65 material too), generic "c64-style" HID common source material
 * Import some C65 changes, OSD tries, and C1531 mouse emulation [DONE]
 * M65: OSD feedback on joystick emulation status [DONE]
@@ -49,7 +52,7 @@ SMALLER [?] misc TODOs in the future:
 * Installer mode: allow to download needed files, ROM images, etc after asking the user if it's OK to do
 * ALL/XEMU: config file support (in theory, the framework is there ...)
 * ALL/XEMU: OSD menu possibility at least
-* ALL/XEMU: windows console handling (Windows sucks, it needs re-open console to be able to see stdout/stderr, braindead Microsoft programmers ... ehm)
+* ALL/XEMU: windows console handling (Windows sucks, it needs re-open console to be able to see stdout/stderr, braindead Microsoft programmers ... ehm) [DONE in m65mem-nondependent branch?]
 * ALL/XEMU: on UNIX-like OS, link preferences directory to $HOME/.xemu for some comfort
 * ALL/XEMU: platform-native file dialog functions, used by some OSD menu stuff, ie loading snapshot, attaching another disk image, etc
 * M65: check the speed impact of having data pointers in memory_mapper and CPU emulation directly where it is possible at least
