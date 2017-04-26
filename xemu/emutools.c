@@ -951,7 +951,7 @@ void sysconsole_close ( const char *waitmsg )
 	if (!sysconsole_is_open)
 		return;
 #ifdef _WIN32
-	if (wait)
+	if (waitmsg)
 		INFO_WINDOW("%s", waitmsg);
 	if (!FreeConsole())
 		ERROR_WINDOW("Cannot release windows console!");
