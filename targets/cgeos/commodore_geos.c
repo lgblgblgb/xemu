@@ -789,6 +789,7 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles, frameskip;
+	sysconsole_open();
 	xemu_dump_version(stdout, "The Unexplained Commodore GEOS emulator from LGB");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
         if (emu_init_sdl(
