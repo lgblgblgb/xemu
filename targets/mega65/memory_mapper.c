@@ -811,3 +811,27 @@ Uint8 memory_dma_list_reader    ( int addr )
 	phys_addr_decoder(addr, MEM_SLOT_DMA_RD_LST, MEM_SLOT_DMA_RD_LST);
 	return CALL_MEMORY_READER(MEM_SLOT_DMA_RD_LST, addr);
 }
+
+/* Debugger (ie: [uart]monitor) for reading/writing physical address */
+Uint8 memory_debug_read_phys_addr ( int addr )
+{
+	phys_addr_decoder(addr, MEM_SLOT_DEBUG_RESOLVER, MEM_SLOT_DEBUG_RESOLVER);
+	return CALL_MEMORY_READER(MEM_SLOT_DEBUG_RESOLVER, addr);
+}
+
+void  memory_debug_write_phys_addr ( int addr, Uint8 data )
+{
+	phys_addr_decoder(addr, MEM_SLOT_DEBUG_RESOLVER, MEM_SLOT_DEBUG_RESOLVER);
+	CALL_MEMORY_WRITER(MEM_SLOT_DEBUG_RESOLVER, addr, data);
+}
+
+/* the same as above but for CPU addresses */
+Uint8 memory_debug_read_cpu_addr   ( Uint16 addr )
+{
+	return CALL_MEMORY_READER(addr >> 8, addr);
+}
+
+void  memory_debug_write_cpu_addr  ( Uint16 addr, Uint8 data )
+{
+	CALL_MEMORY_WRITER(addr >> 8, addr, data);
+}

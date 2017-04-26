@@ -29,14 +29,18 @@ TODO list for Mega-65 shorter term (m65mem branch lifetime):
 
 SMALLER [?] misc TODOs in the future:
 
-* Allow kbd scanning work in the oppsite way too (C65 material too)
-* Import some C65 changes, OSD tries, and C1531 mouse emulation [OSD init, OSD(), mouse grab OK, C1351 untested]
+* Allow kbd scanning work in the oppsite way too (C65 material too), generic "c64-style" HID common source material
+* Import some C65 changes, OSD tries, and C1531 mouse emulation [DONE]
+* M65: OSD feedback on joystick emulation status [DONE]
+* M65: C1351 mouse emulation [preliminary one, DONE, UNTESTED]
 * SD-card: emulate some delay after operation: it causes too much load on the host box being "zero time ready" condition
 * FDC: C65/M65 too: similar as the previous one ...
 * FDC: C65/M65 too: EQ bit more "delayed" handling without the needed hacks we currently have
 * FDC: C65/M65 too: debug write problems (only on M65????)
+* FDC: C65/M65 too: silent debug messages on the screen ...
 * FDC D81 image mount from Hypervisor on M65: check the read/write only state, debug/test/etc
 * FDC D81 image mount: two drives ...
+* Wild idea: FDC D81: allow real floppy drive (is there any out there still?) to be used by Xemu (C65/M65, not for D81 mounted, of course!)
 * Xemu's external D81 mount: do not ask to do, if it's logically from a command line switch
 * Xemu's external D81 mount: allow some hack to mount external/internal from SYS49152 mounter
 * M65 similar FDC r/w control "LED" on the screen corner?
@@ -45,8 +49,23 @@ SMALLER [?] misc TODOs in the future:
 * Installer mode: allow to download needed files, ROM images, etc after asking the user if it's OK to do
 * ALL/XEMU: config file support (in theory, the framework is there ...)
 * ALL/XEMU: OSD menu possibility at least
-* ALL/XEMU: windows console handling (Windows sucks, it needs re-open console to be able to see ... ehm)
+* ALL/XEMU: windows console handling (Windows sucks, it needs re-open console to be able to see stdout/stderr, braindead Microsoft programmers ... ehm)
 * ALL/XEMU: on UNIX-like OS, link preferences directory to $HOME/.xemu for some comfort
+* ALL/XEMU: platform-native file dialog functions, used by some OSD menu stuff, ie loading snapshot, attaching another disk image, etc
+* M65: check the speed impact of having data pointers in memory_mapper and CPU emulation directly where it is possible at least
+* Optimize CPU emulation at some points (ie paged read/write, flag tuning for NZ bits, more optimized IRQ check)
+* M65: allow 8 bit info per colour channel in palette registers in VIC-IV I/O mode
+* M65: memory mapper description for areas (for later provider for advanced monitor/debug features)
+
+Some more fundamental changes:
+
+* event driven emulation, let CPU emulation runs till an pre-registered event or a current happening is hit needed to return
+* M65: Move to VIC-IV internals
+* M65: implement the X/Y hardware scaling somehow hmmm (idea: use SDL with the help of HW GPU accel to do, at least for full frame, would be better for even a given number of scanlines only)
+* VIC-2,3,4 *sane* sprite rendering at last (ie, sprite multiplexing, allow to have behind the text, etc)
+* VIC-3,4: implement all hw attributes in all possible modes
+* VIC-4: full spoort of 16C modes, FCM, etc etc
+* full-featured monitor/debug protocol, provider
 
 Some theory should be checked:
 

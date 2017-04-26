@@ -32,6 +32,11 @@ extern Uint8 memory_dma_target_mreader ( int addr );
 extern void  memory_dma_target_mwriter ( int addr, Uint8 data );
 extern Uint8 memory_dma_list_reader    ( int addr );
 
+extern Uint8 memory_debug_read_phys_addr  ( int addr );
+extern void  memory_debug_write_phys_addr ( int addr, Uint8 data );
+extern Uint8 memory_debug_read_cpu_addr   ( Uint16 addr );
+extern void  memory_debug_write_cpu_addr  ( Uint16 addr, Uint8 data );
+
 extern int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
 extern int rom_protect, skip_unhandled_mem;
 extern Uint8 chip_ram[0x20000], fast_ram[0x20000], colour_ram[0x8000], char_wom[0x1000], hypervisor_ram[0x4001];

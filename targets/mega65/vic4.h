@@ -16,13 +16,13 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_VIC4_MEGA65_H_INCLUDED
-#define __XEMU_VIC4_MEGA65_H_INCLUDED
+#ifndef __XEMU_MEGA65_VIC4_H_INCLUDED
+#define __XEMU_MEGA65_VIC4_H_INCLUDED
 
-#define VIC2_IOMODE 0
-#define VIC3_IOMODE 1
-#define VIC_BAD_IOMODE 2
-#define VIC4_IOMODE 3
+#define VIC2_IOMODE	0
+#define VIC3_IOMODE	1
+#define VIC_BAD_IOMODE	2
+#define VIC4_IOMODE	3
 
 extern int   vic_iomode;
 extern int   scanline;

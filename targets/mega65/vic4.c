@@ -106,7 +106,6 @@ void vic_init ( void )
 	force_fast = 0;
 	// *** Init VIC3 registers and palette
 	vic2_16k_bank = 0;
-	c128_d030_reg = 0xFF;
 	vic_iomode = VIC2_IOMODE;
 	interrupt_status = 0;
 	palette = vic3_rom_palette;
@@ -138,10 +137,13 @@ void vic_init ( void )
 	vic3_rom_palette[14] = RGB( 9,  9, 15);	// light blue
 	vic3_rom_palette[15] = RGB(11, 11, 11);	// light grey
 	// *** Just a check to try all possible regs (in VIC2,VIC3 and VIC4 modes), it should not panic ...
+	// It may also sets/initializes some internal variables sets by register writes, which would cause a crash on screen rendering without prior setup!
 	for (i = 0; i < 0x140; i++) {
 		vic_write_reg(i, 0);
 		(void)vic_read_reg(i);
 	}
+	c128_d030_reg = 0xFF;	// this may be set to 2MHz in the previous step, so be sure to set to FF here
+	machine_set_speed(0);
 	DEBUG("VIC4: has been initialized." NL);
 }
 
@@ -250,6 +252,9 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_3(0x20): CASE_VIC_3(0x21): CASE_VIC_3(0x22): CASE_VIC_3(0x23): CASE_VIC_3(0x24): CASE_VIC_3(0x25): CASE_VIC_3(0x26): CASE_VIC_3(0x27):
 		CASE_VIC_3(0x28): CASE_VIC_3(0x29): CASE_VIC_3(0x2A): CASE_VIC_3(0x2B): CASE_VIC_3(0x2C): CASE_VIC_3(0x2D): CASE_VIC_3(0x2E):
 			// FIXME TODO IS VIC-III also 4 bit only for colour regs?! according to c65manual.txt it seems! However according to M65's implementation it seems not ...
+			// It seems, M65 policy for this VIC-III feature is: enable 8 bit colour entires if D031.5 is set (also extended attributes)
+			if (!(vic_registers[0x31] & 32))
+				data &= 0xF;
 			break;
 		CASE_VIC_4(0x20): CASE_VIC_4(0x21): CASE_VIC_4(0x22): CASE_VIC_4(0x23): CASE_VIC_4(0x24): CASE_VIC_4(0x25): CASE_VIC_4(0x26): CASE_VIC_4(0x27):
 		CASE_VIC_4(0x28): CASE_VIC_4(0x29): CASE_VIC_4(0x2A): CASE_VIC_4(0x2B): CASE_VIC_4(0x2C): CASE_VIC_4(0x2D): CASE_VIC_4(0x2E):
@@ -329,7 +334,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 
 Uint8 vic_read_reg ( int unsigned addr )
 {
-	Uint8 result = vic_registers[addr & 0x7F];
+	Uint8 result = vic_registers[addr & 0x7F];	// read the answer by default (mostly this will be), allow to override/modify in the switch construct if needed
 	switch (addr) {
 		CASE_VIC_ALL(0x00): CASE_VIC_ALL(0x01): CASE_VIC_ALL(0x02): CASE_VIC_ALL(0x03): CASE_VIC_ALL(0x04): CASE_VIC_ALL(0x05): CASE_VIC_ALL(0x06): CASE_VIC_ALL(0x07):
 		CASE_VIC_ALL(0x08): CASE_VIC_ALL(0x09): CASE_VIC_ALL(0x0A): CASE_VIC_ALL(0x0B): CASE_VIC_ALL(0x0C): CASE_VIC_ALL(0x0D): CASE_VIC_ALL(0x0E): CASE_VIC_ALL(0x0F):
@@ -374,6 +379,9 @@ Uint8 vic_read_reg ( int unsigned addr )
 		CASE_VIC_3(0x20): CASE_VIC_3(0x21): CASE_VIC_3(0x22): CASE_VIC_3(0x23): CASE_VIC_3(0x24): CASE_VIC_3(0x25): CASE_VIC_3(0x26): CASE_VIC_3(0x27):
 		CASE_VIC_3(0x28): CASE_VIC_3(0x29): CASE_VIC_3(0x2A): CASE_VIC_3(0x2B): CASE_VIC_3(0x2C): CASE_VIC_3(0x2D): CASE_VIC_3(0x2E):
 			// FIXME TODO IS VIC-III also 4 bit only for colour regs?! according to c65manual.txt it seems! However according to M65's implementation it seems not ...
+			// It seems, M65 policy for this VIC-III feature is: enable 8 bit colour entires if D031.5 is set (also extended attributes)
+			if (!(vic_registers[0x31] & 32))
+				result |= 0xF0;
 			break;
 		CASE_VIC_4(0x20): CASE_VIC_4(0x21): CASE_VIC_4(0x22): CASE_VIC_4(0x23): CASE_VIC_4(0x24): CASE_VIC_4(0x25): CASE_VIC_4(0x26): CASE_VIC_4(0x27):
 		CASE_VIC_4(0x28): CASE_VIC_4(0x29): CASE_VIC_4(0x2A): CASE_VIC_4(0x2B): CASE_VIC_4(0x2C): CASE_VIC_4(0x2D): CASE_VIC_4(0x2E):
