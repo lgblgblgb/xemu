@@ -277,7 +277,7 @@ void uartmon_update ( void )
 				// Reset reading/writing information
 				umon_write_size = 0;
 				umon_read_pos = 0;
-				fprintf(stderr, "UARTMON: new connection established on socket %d" NL, sock_client);
+				DEBUGPRINT("UARTMON: new connection established on socket %d" NL, sock_client);
 			}
 		}
 	}
@@ -297,7 +297,7 @@ void uartmon_update ( void )
 		if (ret == 0) { // client socket closed
 			close(sock_client);
 			sock_client = -1;
-			fprintf(stderr, "UARTMON: connection closed by peer while writing" NL);
+			DEBUGPRINT("UARTMON: connection closed by peer while writing" NL);
 			return;
 		}
 		if (ret > 0) {
@@ -321,7 +321,7 @@ void uartmon_update ( void )
 	if (ret == 0) { // client socket closed
 		close(sock_client);
 		sock_client = -1;
-		fprintf(stderr, "UARTMON: connection closed by peer while reading" NL);
+		DEBUGPRINT("UARTMON: connection closed by peer while reading" NL);
 		return;
 	}
 	if (ret > 0) {

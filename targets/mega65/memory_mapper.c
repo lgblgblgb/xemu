@@ -372,6 +372,9 @@ static void init_helper_custom_memtab_policy (
 void memory_init ( void )
 {
 	int a;
+	memset(gs_regs, 0, sizeof gs_regs);
+	rom_protect = 1;
+	in_hypervisor = 0;
 	for (a = 0; a < MEM_SLOTS; a++) {
 		// First of ALL! Initialize mem_page_phys for an impossible value! or otherwise bad crashes would happen ...
 		mem_page_phys[a] = 1;	// this is cool enough, since phys addr for this func, can be only 256 byte aligned, so it won't find these ever as cached!

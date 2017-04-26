@@ -160,8 +160,7 @@ void hypervisor_enter ( int trapno )
 	memory_set_do_map();	// now the memory mapping is changed
 	machine_set_speed(0);	// set machine speed (hypervisor always runs at M65 fast ... ??) FIXME: check this!
 	cpu_pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
-	DEBUG("MEGA65: entering into hypervisor mode, trap=$%02X PC=$%04X" NL, trapno, cpu_pc);
-	fprintf(stderr, "HYPERVISOR: entering into hypervisor mode @ $%04X -> $%04X" NL, gs_regs[0x648] | (gs_regs[0x649] << 8), cpu_pc);
+	DEBUG("HYPERVISOR: entering into hypervisor mode, trap=$%02X @ $%04X -> $%04X" NL, trapno, gs_regs[0x648] | (gs_regs[0x649] << 8), cpu_pc);
 }
 
 
@@ -171,7 +170,7 @@ void hypervisor_leave ( void )
 	if (!in_hypervisor)
 		FATAL("FATAL: not in hypervisor mode while calling hypervisor_leave()");
 	// First, restore machine status from hypervisor registers
-	fprintf(stderr, "HYPERVISOR: leaving hypervisor mode @ $%04X -> $%04X" NL, cpu_pc, gs_regs[0x648] | (gs_regs[0x649] << 8));
+	DEBUG("HYPERVISOR: leaving hypervisor mode @ $%04X -> $%04X" NL, cpu_pc, gs_regs[0x648] | (gs_regs[0x649] << 8));
 	cpu_a    = gs_regs[0x640];
 	cpu_x    = gs_regs[0x641];
 	cpu_y    = gs_regs[0x642];
@@ -202,7 +201,6 @@ void hypervisor_leave ( void )
 	machine_set_speed(0);	// restore speed ...
 	memory_set_vic3_rom_mapping(vic_registers[0x30]);	// restore possible active VIC-III mapping
 	memory_set_do_map();	// restore mapping ...
-	DEBUG("MEGA65: leaving hypervisor mode, (user) PC=$%04X" NL, cpu_pc);
 }
 
 

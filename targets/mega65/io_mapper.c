@@ -305,13 +305,13 @@ void io_write ( unsigned int addr, Uint8 data )
 				case 0x67D:
 					DEBUG("MEGA65: features set as $%02X" NL, data);
 					if ((data & 4) != rom_protect) {
-						fprintf(stderr, "MEGA65: ROM protection has been turned %s." NL, data & 4 ? "ON" : "OFF");
+						DEBUG("MEGA65: ROM protection has been turned %s." NL, data & 4 ? "ON" : "OFF");
 						rom_protect = data & 4;
 					}
                                         return;
 				case 0x67E:	// it seems any write (?) here marks the byte as non-zero?! FIXME TODO
 					kicked_hypervisor = 0xFF;
-					fprintf(stderr, "Writing already-kicked register $%04X!" NL, addr);
+					DEBUG("Writing already-kicked register $%04X!" NL, addr);
 					hypervisor_debug_invalidate("$D67E was written, maybe new kickstart will boot!");
 					return;
 				case 0x67F:	// hypervisor leave

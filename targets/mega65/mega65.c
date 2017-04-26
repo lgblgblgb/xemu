@@ -36,7 +36,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 static SDL_AudioDeviceID audio = 0;
 
-int cpu_linear_memory_addressing_is_enabled = 0;
+int    cpu_linear_memory_addressing_is_enabled;
 static int nmi_level;			// please read the comment at nmi_set() below
 
 
@@ -52,6 +52,7 @@ static int   trace_step_trigger = 0;
 static void (*m65mon_callback)(void) = NULL;
 static const char emulator_paused_title[] = "TRACE/PAUSE";
 static char emulator_speed_title[] = "????MHz";
+static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 
 
 
@@ -103,6 +104,8 @@ void machine_set_speed ( int verbose )
 				break;
 		}
 		DEBUG("SPEED: CPU speed is set to %s" NL, emulator_speed_title);
+		if (cpu_cycles_per_step > 1)	// if in trace mode, do not set this!
+			cpu_cycles_per_step = cpu_cycles_per_scanline;
 	}
 }
 
@@ -253,10 +256,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		}
 	} while (0);
 	// *** Init memory space
-	in_hypervisor = 0;
 	memory_init();
-	memset(gs_regs, 0, sizeof gs_regs);
-	rom_protect = 1;
 	kicked_hypervisor = emucfg_get_num("kicked");
 	// *** Trying to load kickstart image
 	p = emucfg_get_str("kickup");
@@ -525,6 +525,10 @@ void m65mon_empty_command ( void )
 void m65mon_breakpoint ( int brk )
 {
 	breakpoint_pc = brk;
+	if (brk < 0)
+		cpu_cycles_per_step = cpu_cycles_per_scanline;
+	else
+		cpu_cycles_per_step = 0;
 }
 
 
@@ -613,22 +617,28 @@ int main ( int argc, char **argv )
 			window_title_custom_addon = paused ? (char*)emulator_paused_title : NULL;
 			if (paused != paused_old) {
 				paused_old = paused;
-				if (paused)
-					fprintf(stderr, "TRACE: entering into trace mode @ $%04X" NL, cpu_pc);
-				else
-					fprintf(stderr, "TRACE: leaving trace mode @ $%04X" NL, cpu_pc);
+				if (paused) {
+					DEBUGPRINT("TRACE: entering into trace mode @ $%04X" NL, cpu_pc);
+					cpu_cycles_per_step = 0;
+				} else {
+					DEBUGPRINT("TRACE: leaving trace mode @ $%04X" NL, cpu_pc);
+					if (breakpoint_pc < 0)
+						cpu_cycles_per_step = cpu_cycles_per_scanline;
+					else
+						cpu_cycles_per_step = 0;
+				}
 			}
 		}
 		if (unlikely(in_hypervisor)) {
 			hypervisor_debug();
 		}
 		if (unlikely(breakpoint_pc == cpu_pc)) {
-			fprintf(stderr, "Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu_pc);
+			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu_pc);
 			paused = 1;
 		}
 		cycles += unlikely(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu_step(
 #ifdef CPU_STEP_MULTI_OPS
-			unlikely(paused) ? 0 : cpu_cycles_per_scanline
+			cpu_cycles_per_step
 #endif
 		);	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
 		if (cycles >= cpu_cycles_per_scanline) {
