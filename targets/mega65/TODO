@@ -28,6 +28,7 @@ TODO list for Mega-65 shorter term (m65mem branch lifetime):
 
 SMALLER [?] misc TODOs in the future:
 
+* C65 only: emulate the behaviour to allow VIC mode change only at char-line bondary. This BREAKS C64 compatibility a lot (though that is how C65 did ...), maybe should be done optionally!
 * M65: killing "gs_regs" stuff with a better solution for $(D)6XX I/O area [DONE, D6XX_registers]
 * M65: $(D)7XX I/O area stuffs if any other than DMA there?
 * 6502 emulation in general: CPU optimization idea: paged read/write primitives (this means eg ZP aka. BP related opcodes can be optimized a very little in general ...)
@@ -64,6 +65,7 @@ SMALLER [?] misc TODOs in the future:
 * M65: allow 8 bit info per colour channel in palette registers in VIC-IV I/O mode
 * M65: memory mapper description for areas (for later provider for advanced monitor/debug features)
 * M65: CPU FAR CALL/JUMP stuff (is it implemented in VHDL at all?)
+* ALL/XEMU: rewrite file load/handle/etc function in emulator, and that guessing file location madness, it's really ugly :(
 
 Some more fundamental changes:
 

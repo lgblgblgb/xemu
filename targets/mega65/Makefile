@@ -1,6 +1,5 @@
-## Xemu: Collection of *simple* emulators of some 8 bits machines using SDL2 library,
-## including the Commodore LCD, Commodore 65 and Mega-65 too.
-##
+## A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+## Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
 ## Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify

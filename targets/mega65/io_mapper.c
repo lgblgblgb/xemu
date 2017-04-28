@@ -121,13 +121,13 @@ Uint8 io_read ( unsigned int addr )
 				case 0x7C:
 					return 0;			// emulate the "UART is ready" situation (used by newer kickstarts around from v0.11 or so)
 				case 0x7E:				// upgraded hypervisor signal
-					if (kicked_hypervisor == 0x80)	// 0x80 means for Xemu (not for a real M65!): ask the user!
-						kicked_hypervisor = QUESTION_WINDOW(
+					if (D6XX_registers[0x7E] == 0x80)	// 0x80 means for Xemu (not for a real M65!): ask the user!
+						D6XX_registers[0x7E] = QUESTION_WINDOW(
 							"Not upgraded yet, it can do it|Already upgraded, I test kicked state",
 							"Kickstart asks hypervisor upgrade state. What do you want Xemu to answer?\n"
 							"(don't worry, it won't be asked again without RESET)"
 						) ? 0xFF : 0;
-					return kicked_hypervisor;
+					return D6XX_registers[0x7E];
 				case 0x7F:
 					return in_hypervisor ? 'H' : 'U';	// FIXME: I am not sure about 'U' here (U for userspace, H for hypervisor mode)
 				case 0xF0:
@@ -288,13 +288,13 @@ void io_write ( unsigned int addr, Uint8 data )
 			addr &= 0xFF;
 			if (addr < 9)
 				RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");	// FIXME: UART is not yet supported!
-			D6XX_registers[addr] = data;
 			if (!in_hypervisor && addr >= 0x40 && addr <= 0x7F) {
 				// In user mode, writing to $D640-$D67F (in VIC4 iomode) causes to enter hypervisor mode with
 				// the trap number given by the offset in this range
 				hypervisor_enter(addr & 0x3F);
 				return;
 			}
+			D6XX_registers[addr] = data;	// I guess, the actual write won't happens if it was trapped, so I moved this to here after the previous "if"
 			if (addr >= 0x80 && addr <= 0x93) {			// SDcard controller etc of Mega65
 				sdcard_write_register(addr - 0x80, data);
 				return;
@@ -314,9 +314,9 @@ void io_write ( unsigned int addr, Uint8 data )
 						rom_protect = data & 4;
 					}
                                         return;
-				case 0x7E:	// it seems any write (?) here marks the byte as non-zero?! FIXME TODO
-					kicked_hypervisor = 0xFF;
-					DEBUG("Writing already-kicked register $%04X!" NL, addr);
+				case 0x7E:
+					D6XX_registers[0x7E] = 0xFF;	// iomap.txt: "Hypervisor already-upgraded bit (sets permanently)"
+					DEBUG("MEGA65: Writing already-kicked register $%04X!" NL, addr);
 					hypervisor_debug_invalidate("$D67E was written, maybe new kickstart will boot!");
 					return;
 				case 0x7F:	// hypervisor leave

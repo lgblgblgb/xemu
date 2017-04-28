@@ -27,7 +27,6 @@ extern void  io_write ( unsigned int addr, Uint8 data );
 extern Uint8 io_dma_reader ( int addr );
 extern void  io_dma_writer ( int addr, Uint8 data );
 
-#define kicked_hypervisor D6XX_registers[0x7E]
 extern Uint8  D6XX_registers[0x100];
 extern int    fpga_switches;
 extern struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
