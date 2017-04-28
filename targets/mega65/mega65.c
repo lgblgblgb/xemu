@@ -36,7 +36,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 static SDL_AudioDeviceID audio = 0;
 
-int    cpu_linear_memory_addressing_is_enabled;
 static int nmi_level;			// please read the comment at nmi_set() below
 
 
@@ -348,7 +347,6 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	DEBUGPRINT("SPEED: fast clock is set to %dMHz, %d CPU cycles per scanline." NL, fast_mhz, cpu_cycles_per_scanline_for_fast_mode);
 	cpu_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
 	rom_protect = 0;
-	cpu_linear_memory_addressing_is_enabled = 1;
 	hypervisor_enter(TRAP_RESET);
 	speed_current = 0;
 	machine_set_speed(1);
@@ -676,7 +674,7 @@ int main ( int argc, char **argv )
 #include <string.h>
 
 #define SNAPSHOT_M65_BLOCK_VERSION	1
-#define SNAPSHOT_M65_BLOCK_SIZE		(0x100 + sizeof(gs_regs))
+#define SNAPSHOT_M65_BLOCK_SIZE		(0x100 + sizeof(D6XX_registers))
 
 
 int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
@@ -688,17 +686,20 @@ int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, 
 	a = xemusnap_read_file(buffer, sizeof buffer);
 	if (a) return a;
 	/* loading state ... */
+	memcpy(D6XX_registers, buffer + 0x100, sizeof D6XX_registers);
+	in_hypervisor = 1;	// simulate hypervisor mode, to allow to write some regs now instead of causing a TRAP now ...
+	io_write(0x367D, D6XX_registers[0x7D]);			// write $(D)67D in VIC-IV I/O mode!
+	// end of spec, hypervisor-needed faked mode for loading snapshot ...
 	map_mask = (int)P_AS_BE32(buffer + 0);
 	map_offset_low = (int)P_AS_BE32(buffer + 4);
 	map_offset_high = (int)P_AS_BE32(buffer + 8);
-	cpu_inhibit_interrupts = (int)P_AS_BE32(buffer + 12);
+	//cpu_inhibit_interrupts = (int)P_AS_BE32(buffer + 12);		HANDLED ABOVE AT reg (D)67D!
 	in_hypervisor = (int)P_AS_BE32(buffer + 16);
 	map_megabyte_low = (int)P_AS_BE32(buffer + 20);
 	map_megabyte_high = (int)P_AS_BE32(buffer + 24);
-	rom_protect = (int)P_AS_BE32(buffer + 28);
+	//rom_protect = (int)P_AS_BE32(buffer + 28);			HANDLED ABOVE AT reg (D)67D!
 	kicked_hypervisor = (int)P_AS_BE32(buffer + 32);
 	memory_set_cpu_io_port_ddr_and_data(buffer[36], buffer[37]);
-	memcpy(gs_regs, buffer + 0x100, sizeof gs_regs);
 	return 0;
 }
 
@@ -721,7 +722,7 @@ int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	U32_AS_BE(buffer + 32, kicked_hypervisor);
 	buffer[36] = memory_get_cpu_io_port(0);
 	buffer[37] = memory_get_cpu_io_port(1);
-	memcpy(buffer + 0x100, gs_regs, sizeof gs_regs);
+	memcpy(buffer + 0x100, D6XX_registers, sizeof D6XX_registers);
 	return xemusnap_write_sub_block(buffer, sizeof buffer);
 }
 

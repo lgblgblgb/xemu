@@ -10,14 +10,13 @@ TODO list for Mega-65 shorter term (m65mem branch lifetime):
 * Rewrite I/O decoder ... [DONE?]
 * ... test it!
 * Hook DMA for (the new) direct internal I/O decoder [DONE]
-* CPU optimization idea: paged read/write primitives (this means eg ZP aka. BP related opcodes can be optimized a very little in general ...)
 * RMW CPU primitive optimization [DONE, though I/O related stuff is not, only for the full I/O area]
 * Reorganize VIC reg access for the new I/O decoder, etc [DONE?]
-* Move VIC mode change into a handler in vic stuff (is this needed in this stage at all?)
+* Move VIC mode change into a handler in vic stuff (is this needed in this stage at all?) [MEANINGLESS NOW]
 * Make snapshotting working again [DONE?]
-* Make (uart-)mon working again
-* Fix uart-mon with breakpoint (didn't worked even in master branch since the multi-op CPU performance patch)
-* Test if uart-mon works at all in a sane way ...
+* Make (uart-)mon working again [DONE? needs testing]
+* Fix uart-mon with breakpoint (didn't worked even in master branch since the multi-op CPU performance patch) [DONE? needs testing]
+* Test if uart-mon works at all in a sane way ... [PENDING]
 * Better speed control, allow custom M65-fast mode, just for test (CLI-switch?) [DONE]
 * Maybe: rationalize the place of functions/variables within sources, maybe rename some sources [DONE?]
 * Check header includes, a mess now :( Kill ones not needed in a given source (see the previous point too) [DONE?]
@@ -29,6 +28,11 @@ TODO list for Mega-65 shorter term (m65mem branch lifetime):
 
 SMALLER [?] misc TODOs in the future:
 
+* M65: killing "gs_regs" stuff with a better solution for $(D)6XX I/O area [DONE, D6XX_registers]
+* M65: $(D)7XX I/O area stuffs if any other than DMA there?
+* 6502 emulation in general: CPU optimization idea: paged read/write primitives (this means eg ZP aka. BP related opcodes can be optimized a very little in general ...)
+* M65: rom protect and things like linear addressing enable now cannot be changed in a sane way, revise this, also should be allowed for hypervisor only via some regs?
+* M65: $D6XX registers over UART: better decoding, check if hypervisor mode, whatever
 * C65/M65: implement UART, at least for extended keys ...
 * M65: ethernet emulation? if possible (maybe not in host-independent way ...)
 * C65/M65: REC (Ram Expansion Controller) emulation?
@@ -59,6 +63,7 @@ SMALLER [?] misc TODOs in the future:
 * Optimize CPU emulation at some points (ie paged read/write, flag tuning for NZ bits, more optimized IRQ check)
 * M65: allow 8 bit info per colour channel in palette registers in VIC-IV I/O mode
 * M65: memory mapper description for areas (for later provider for advanced monitor/debug features)
+* M65: CPU FAR CALL/JUMP stuff (is it implemented in VHDL at all?)
 
 Some more fundamental changes:
 
@@ -67,7 +72,10 @@ Some more fundamental changes:
 * M65: implement the X/Y hardware scaling somehow hmmm (idea: use SDL with the help of HW GPU accel to do, at least for full frame, would be better for even a given number of scanlines only)
 * VIC-2,3,4 *sane* sprite rendering at last (ie, sprite multiplexing, allow to have behind the text, etc)
 * VIC-3,4: implement all hw attributes in all possible modes
-* VIC-4: full spoort of 16C modes, FCM, etc etc
+* VIC-4: full support of 16C modes, FCM, etc etc
+* VIC-4: colour banks? What are those at all?
+* VIC-4: sprite extensions (?) of VIC-II sprites, what are those?
+* VIC-4: VIC-IV specific sprites????
 * full-featured monitor/debug protocol, provider
 
 Some theory should be checked:

@@ -117,31 +117,31 @@ void hypervisor_enter ( int trapno )
 	if (in_hypervisor)
 		FATAL("FATAL: already in hypervisor mode while calling hypervisor_enter()");
 	// First, save machine status into hypervisor registers, TODO: incomplete, can be buggy!
-	gs_regs[0x640] = cpu_a;
-	gs_regs[0x641] = cpu_x;
-	gs_regs[0x642] = cpu_y;
-	gs_regs[0x643] = cpu_z;
-	gs_regs[0x644] = cpu_bphi >> 8;	// "B" register
-	gs_regs[0x645] = cpu_sp;
-	gs_regs[0x646] = cpu_sphi >> 8;	// stack page register
-	gs_regs[0x647] = cpu_get_p();
-	gs_regs[0x648] = cpu_pc & 0xFF;
-	gs_regs[0x649] = cpu_pc >> 8;
-	gs_regs[0x64A] = ((map_offset_low  >> 16) & 0x0F) | ((map_mask & 0x0F) << 4);
-	gs_regs[0x64B] = ( map_offset_low  >>  8) & 0xFF  ;
-	gs_regs[0x64C] = ((map_offset_high >> 16) & 0x0F) | ( map_mask & 0xF0);
-	gs_regs[0x64D] = ( map_offset_high >>  8) & 0xFF  ;
-	gs_regs[0x64E] = map_megabyte_low  >> 20;
-	gs_regs[0x64F] = map_megabyte_high >> 20;
-	gs_regs[0x650] = memory_get_cpu_io_port(0);
-	gs_regs[0x651] = memory_get_cpu_io_port(1);
-	gs_regs[0x652] = vic_iomode;
-	gs_regs[0x653] = dma_registers[5];	// GS $D653 - Hypervisor DMAgic source MB
-	gs_regs[0x654] = dma_registers[6];	// GS $D654 - Hypervisor DMAgic destination MB
-	gs_regs[0x655] = dma_registers[0];	// GS $D655 - Hypervisor DMAGic list address bits 0-7
-	gs_regs[0x656] = dma_registers[1];	// GS $D656 - Hypervisor DMAGic list address bits 15-8
-	gs_regs[0x657] = (dma_registers[2] & 15) | ((dma_registers[4] & 15) << 4);	// GS $D657 - Hypervisor DMAGic list address bits 23-16
-	gs_regs[0x658] = dma_registers[4] >> 4;	// GS $D658 - Hypervisor DMAGic list address bits 27-24
+	D6XX_registers[0x40] = cpu_a;
+	D6XX_registers[0x41] = cpu_x;
+	D6XX_registers[0x42] = cpu_y;
+	D6XX_registers[0x43] = cpu_z;
+	D6XX_registers[0x44] = cpu_bphi >> 8;	// "B" register
+	D6XX_registers[0x45] = cpu_sp;
+	D6XX_registers[0x46] = cpu_sphi >> 8;	// stack page register
+	D6XX_registers[0x47] = cpu_get_p();
+	D6XX_registers[0x48] = cpu_pc & 0xFF;
+	D6XX_registers[0x49] = cpu_pc >> 8;
+	D6XX_registers[0x4A] = ((map_offset_low  >> 16) & 0x0F) | ((map_mask & 0x0F) << 4);
+	D6XX_registers[0x4B] = ( map_offset_low  >>  8) & 0xFF  ;
+	D6XX_registers[0x4C] = ((map_offset_high >> 16) & 0x0F) | ( map_mask & 0xF0);
+	D6XX_registers[0x4D] = ( map_offset_high >>  8) & 0xFF  ;
+	D6XX_registers[0x4E] = map_megabyte_low  >> 20;
+	D6XX_registers[0x4F] = map_megabyte_high >> 20;
+	D6XX_registers[0x50] = memory_get_cpu_io_port(0);
+	D6XX_registers[0x51] = memory_get_cpu_io_port(1);
+	D6XX_registers[0x52] = vic_iomode;
+	D6XX_registers[0x53] = dma_registers[5];	// GS $D653 - Hypervisor DMAgic source MB
+	D6XX_registers[0x54] = dma_registers[6];	// GS $D654 - Hypervisor DMAgic destination MB
+	D6XX_registers[0x55] = dma_registers[0];	// GS $D655 - Hypervisor DMAGic list address bits 0-7
+	D6XX_registers[0x56] = dma_registers[1];	// GS $D656 - Hypervisor DMAGic list address bits 15-8
+	D6XX_registers[0x57] = (dma_registers[2] & 15) | ((dma_registers[4] & 15) << 4);	// GS $D657 - Hypervisor DMAGic list address bits 23-16
+	D6XX_registers[0x58] = dma_registers[4] >> 4;	// GS $D658 - Hypervisor DMAGic list address bits 27-24
 	// Now entering into hypervisor mode
 	in_hypervisor = 1;	// this will cause apply_memory_config to map hypervisor RAM, also for checks later to out-of-bound execution of hypervisor RAM, etc ...
 	vic_iomode = VIC4_IOMODE;
@@ -160,7 +160,7 @@ void hypervisor_enter ( int trapno )
 	memory_set_do_map();	// now the memory mapping is changed
 	machine_set_speed(0);	// set machine speed (hypervisor always runs at M65 fast ... ??) FIXME: check this!
 	cpu_pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
-	DEBUG("HYPERVISOR: entering into hypervisor mode, trap=$%02X @ $%04X -> $%04X" NL, trapno, gs_regs[0x648] | (gs_regs[0x649] << 8), cpu_pc);
+	DEBUG("HYPERVISOR: entering into hypervisor mode, trap=$%02X @ $%04X -> $%04X" NL, trapno, D6XX_registers[0x48] | (D6XX_registers[0x49] << 8), cpu_pc);
 }
 
 
@@ -170,32 +170,32 @@ void hypervisor_leave ( void )
 	if (!in_hypervisor)
 		FATAL("FATAL: not in hypervisor mode while calling hypervisor_leave()");
 	// First, restore machine status from hypervisor registers
-	DEBUG("HYPERVISOR: leaving hypervisor mode @ $%04X -> $%04X" NL, cpu_pc, gs_regs[0x648] | (gs_regs[0x649] << 8));
-	cpu_a    = gs_regs[0x640];
-	cpu_x    = gs_regs[0x641];
-	cpu_y    = gs_regs[0x642];
-	cpu_z    = gs_regs[0x643];
-	cpu_bphi = gs_regs[0x644] << 8;	// "B" register
-	cpu_sp   = gs_regs[0x645];
-	cpu_sphi = gs_regs[0x646] << 8;	// stack page register
-	cpu_set_p(gs_regs[0x647]);
-	cpu_pfe = gs_regs[0x647] & 32;	// cpu_set_p() does NOT set 'E' bit by design, so we do at our own
-	cpu_pc   = gs_regs[0x648] | (gs_regs[0x649] << 8);
-	map_offset_low  = ((gs_regs[0x64A] & 0xF) << 16) | (gs_regs[0x64B] << 8);
-	map_offset_high = ((gs_regs[0x64C] & 0xF) << 16) | (gs_regs[0x64D] << 8);
-	map_mask = (gs_regs[0x64A] >> 4) | (gs_regs[0x64C] & 0xF0);
-	map_megabyte_low =  gs_regs[0x64E] << 20;
-	map_megabyte_high = gs_regs[0x64F] << 20;
-	memory_set_cpu_io_port_ddr_and_data(gs_regs[0x650], gs_regs[0x651]);
-	vic_iomode = gs_regs[0x652] & 3;
+	DEBUG("HYPERVISOR: leaving hypervisor mode @ $%04X -> $%04X" NL, cpu_pc, D6XX_registers[0x48] | (D6XX_registers[0x49] << 8));
+	cpu_a    = D6XX_registers[0x40];
+	cpu_x    = D6XX_registers[0x41];
+	cpu_y    = D6XX_registers[0x42];
+	cpu_z    = D6XX_registers[0x43];
+	cpu_bphi = D6XX_registers[0x44] << 8;	// "B" register
+	cpu_sp   = D6XX_registers[0x45];
+	cpu_sphi = D6XX_registers[0x46] << 8;	// stack page register
+	cpu_set_p(D6XX_registers[0x47]);
+	cpu_pfe = D6XX_registers[0x47] & 32;	// cpu_set_p() does NOT set 'E' bit by design, so we do at our own
+	cpu_pc   = D6XX_registers[0x48] | (D6XX_registers[0x49] << 8);
+	map_offset_low  = ((D6XX_registers[0x4A] & 0xF) << 16) | (D6XX_registers[0x4B] << 8);
+	map_offset_high = ((D6XX_registers[0x4C] & 0xF) << 16) | (D6XX_registers[0x4D] << 8);
+	map_mask = (D6XX_registers[0x4A] >> 4) | (D6XX_registers[0x4C] & 0xF0);
+	map_megabyte_low =  D6XX_registers[0x4E] << 20;
+	map_megabyte_high = D6XX_registers[0x4F] << 20;
+	memory_set_cpu_io_port_ddr_and_data(D6XX_registers[0x50], D6XX_registers[0x51]);
+	vic_iomode = D6XX_registers[0x52] & 3;
 	if (vic_iomode == VIC_BAD_IOMODE)
 		vic_iomode = VIC3_IOMODE;	// I/O mode "2" (binary: 10) is not used, I guess
-	dma_registers[5] = gs_regs[0x653];	// GS $D653 - Hypervisor DMAgic source MB
-	dma_registers[6] = gs_regs[0x654];	// GS $D654 - Hypervisor DMAgic destination MB
-	dma_registers[0] = gs_regs[0x655];	// GS $D655 - Hypervisor DMAGic list address bits 0-7
-	dma_registers[1] = gs_regs[0x656];	// GS $D656 - Hypervisor DMAGic list address bits 15-8
-	dma_registers[2] = gs_regs[0x657] & 15;	//
-	dma_registers[4] = (gs_regs[0x657] >> 4) | (gs_regs[0x658] << 4);
+	dma_registers[5] = D6XX_registers[0x53];	// GS $D653 - Hypervisor DMAgic source MB
+	dma_registers[6] = D6XX_registers[0x54];	// GS $D654 - Hypervisor DMAgic destination MB
+	dma_registers[0] = D6XX_registers[0x55];	// GS $D655 - Hypervisor DMAGic list address bits 0-7
+	dma_registers[1] = D6XX_registers[0x56];	// GS $D656 - Hypervisor DMAGic list address bits 15-8
+	dma_registers[2] = D6XX_registers[0x57] & 15;	//
+	dma_registers[4] = (D6XX_registers[0x57] >> 4) | (D6XX_registers[0x58] << 4);
 	// Now leaving hypervisor mode ...
 	in_hypervisor = 0;
 	machine_set_speed(0);	// restore speed ...

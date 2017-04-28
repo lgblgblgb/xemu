@@ -29,10 +29,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
-Uint8  gs_regs[0x1000];			// mega65 specific I/O registers, currently an ugly way, as only some bytes are used, ie not VIC3/4, etc etc ...
+Uint8  D6XX_registers[0x100];		// mega65 specific D6XX range, excluding the UART part (not used here!)
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 struct SidEmulation sid1, sid2;		// the two SIDs
 static int mouse_x = 0, mouse_y = 0;	// for our primitive C1351 mouse emulation
+int    cpu_linear_memory_addressing_is_enabled = 0;	// used by the CPU emu as well!
 
 
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
@@ -111,15 +112,15 @@ Uint8 io_read ( unsigned int addr )
 		case 0x16:	// $D600-$D6FF ~ C65 I/O mode
 			RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);	// FIXME: UART is not yet supported!
 		case 0x36:	// $D600-$D6FF ~ M65 I/O mode
-			addr &= 0xFFF;
-			if (addr < 0x609)
+			addr &= 0xFF;
+			if (addr < 9)
 				RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);	// FIXME: UART is not yet supported!
-			if (addr >= 0x680 && addr <= 0x693)	// SDcard controller etc of Mega65
-				return sdcard_read_register(addr - 0x680);
+			if (addr >= 0x80 && addr <= 0x93)	// SDcard controller etc of Mega65
+				return sdcard_read_register(addr - 0x80);
 			switch (addr) {
-				case 0x67C:
+				case 0x7C:
 					return 0;			// emulate the "UART is ready" situation (used by newer kickstarts around from v0.11 or so)
-				case 0x67E:				// upgraded hypervisor signal
+				case 0x7E:				// upgraded hypervisor signal
 					if (kicked_hypervisor == 0x80)	// 0x80 means for Xemu (not for a real M65!): ask the user!
 						kicked_hypervisor = QUESTION_WINDOW(
 							"Not upgraded yet, it can do it|Already upgraded, I test kicked state",
@@ -127,15 +128,15 @@ Uint8 io_read ( unsigned int addr )
 							"(don't worry, it won't be asked again without RESET)"
 						) ? 0xFF : 0;
 					return kicked_hypervisor;
-				case 0x67F:
+				case 0x7F:
 					return in_hypervisor ? 'H' : 'U';	// FIXME: I am not sure about 'U' here (U for userspace, H for hypervisor mode)
-				case 0x6F0:
+				case 0xF0:
 					return fpga_switches & 0xFF;
-				case 0x6F1:
+				case 0xF1:
 					return (fpga_switches >> 8) & 0xFF;
 				default:
-					DEBUG("MEGA65: reading Mega65 specific I/O @ $D%03X result is $%02X" NL, addr, gs_regs[addr]);
-					return gs_regs[addr];
+					DEBUG("MEGA65: reading Mega65 specific I/O @ $D6%02X result is $%02X" NL, addr, D6XX_registers[addr]);
+					return D6XX_registers[addr];
 			}
 		case 0x17:	// $D700-$D7FF ~ C65 I/O mode
 			return dma_read_reg(addr & 0xF);
@@ -284,41 +285,45 @@ void io_write ( unsigned int addr, Uint8 data )
 		case 0x16:	// $D600-$D6FF ~ C65 I/O mode
 			RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");	// FIXME: UART is not yet supported!
 		case 0x36:	// $D600-$D6FF ~ M65 I/O mode
-			addr &= 0xFFF;
-			if (addr < 0x609)
+			addr &= 0xFF;
+			if (addr < 9)
 				RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");	// FIXME: UART is not yet supported!
-			gs_regs[addr] = data;
-			if (!in_hypervisor && addr >= 0x640 && addr <= 0x67F) {
+			D6XX_registers[addr] = data;
+			if (!in_hypervisor && addr >= 0x40 && addr <= 0x7F) {
 				// In user mode, writing to $D640-$D67F (in VIC4 iomode) causes to enter hypervisor mode with
 				// the trap number given by the offset in this range
 				hypervisor_enter(addr & 0x3F);
 				return;
 			}
-			if (addr >= 0x680 && addr <= 0x693) {			// SDcard controller etc of Mega65
-				sdcard_write_register(addr - 0x680, data);
+			if (addr >= 0x80 && addr <= 0x93) {			// SDcard controller etc of Mega65
+				sdcard_write_register(addr - 0x80, data);
 				return;
 			}
 			switch (addr) {
-				case 0x67C:					// hypervisor serial monitor port
+				case 0x7C:					// hypervisor serial monitor port
 					hypervisor_serial_monitor_push_char(data);
 					return;
-				case 0x67D:
+				case 0x7D:
 					DEBUG("MEGA65: features set as $%02X" NL, data);
+					if ((data & 2) != cpu_linear_memory_addressing_is_enabled) {
+						DEBUG("MEGA65: 32-bit linear addressing opcodes have been turned %s." NL, data & 2 ? "ON" : "OFF");
+						cpu_linear_memory_addressing_is_enabled = data & 2;
+					}
 					if ((data & 4) != rom_protect) {
 						DEBUG("MEGA65: ROM protection has been turned %s." NL, data & 4 ? "ON" : "OFF");
 						rom_protect = data & 4;
 					}
                                         return;
-				case 0x67E:	// it seems any write (?) here marks the byte as non-zero?! FIXME TODO
+				case 0x7E:	// it seems any write (?) here marks the byte as non-zero?! FIXME TODO
 					kicked_hypervisor = 0xFF;
 					DEBUG("Writing already-kicked register $%04X!" NL, addr);
 					hypervisor_debug_invalidate("$D67E was written, maybe new kickstart will boot!");
 					return;
-				case 0x67F:	// hypervisor leave
+				case 0x7F:	// hypervisor leave
 					hypervisor_leave();	// 0x67F is also handled on enter's state, so it will be executed only in_hypervisor mode, which is what I want
 					return;
 				default:
-					DEBUG("MEGA65: this I/O port is not emulated in Xemu yet: $%04X (tried to be written with $%02X)" NL, addr, data);
+					DEBUG("MEGA65: this I/O port is not emulated in Xemu yet: $D6%02X (tried to be written with $%02X)" NL, addr, data);
 					return;
 			}
 		case 0x17:	// $D700-$D7FF ~ C65 I/O mode

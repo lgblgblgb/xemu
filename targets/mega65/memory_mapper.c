@@ -372,8 +372,8 @@ static void init_helper_custom_memtab_policy (
 void memory_init ( void )
 {
 	int a;
-	memset(gs_regs, 0, sizeof gs_regs);
-	rom_protect = 1;
+	memset(D6XX_registers, 0, sizeof D6XX_registers);
+	rom_protect = 0;
 	in_hypervisor = 0;
 	for (a = 0; a < MEM_SLOTS; a++) {
 		// First of ALL! Initialize mem_page_phys for an impossible value! or otherwise bad crashes would happen ...
@@ -412,7 +412,6 @@ void memory_init ( void )
 	map_megabyte_high = 0;
 	map_marker_low =  MAP_MARKER_DUMMY_OFFSET;
 	map_marker_high = MAP_MARKER_DUMMY_OFFSET;
-	rom_protect = 0;
 	skip_unhandled_mem = 0;
 	for (a = 0; a < 9; a++)
 		applied_memcfg[a] = MAP_MARKER_DUMMY_OFFSET - 1;

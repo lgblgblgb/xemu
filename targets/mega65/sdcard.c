@@ -318,7 +318,7 @@ static void sdcard_mount_d81 ( Uint8 data )
 
 void sdcard_write_register ( int reg, Uint8 data )
 {
-	gs_regs[reg + 0x680] = data;
+	D6XX_registers[reg + 0x80] = data;
 	switch (reg) {
 		case 0:		// command/status register
 			sdcard_command(data);
@@ -359,7 +359,7 @@ Uint8 sdcard_read_register ( int reg )
 			data = sdcard_bytes_read >> 8;
 			break;
 		default:
-			data = gs_regs[reg + 0x680];
+			data = D6XX_registers[reg + 0x80];
 			break;
 	}
 	return data;
