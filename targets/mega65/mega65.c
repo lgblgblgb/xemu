@@ -146,7 +146,7 @@ static inline void nmi_set ( int level, int mask )
 
 static void cia2_setint_cb ( int level )
 {
-       nmi_set(level, 1);
+	nmi_set(level, 1);
 }
 
 
@@ -455,7 +455,7 @@ static void update_emulator ( void )
 	// Screen rendering: end
 	emu_timekeeping_delay(40000);
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
-        if (seconds_timer_trigger) {
+	if (seconds_timer_trigger) {
 		struct tm *t = emu_get_localtime();
 		cia_ugly_tod_updater(&cia1, t);
 		cia_ugly_tod_updater(&cia2, t);
@@ -557,7 +557,7 @@ int main ( int argc, char **argv )
 		FATAL("Byte order test failed!!");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	window_title_info_addon = emulator_speed_title;
-        if (emu_init_sdl(
+	if (emu_init_sdl(
 		TARGET_DESC APP_DESC_APPEND,	// window title
 		APP_ORG, TARGET_NAME,		// app organization and name, used with SDL pref dir formation
 		1,				// resizable window
@@ -676,6 +676,8 @@ int main ( int argc, char **argv )
 #define SNAPSHOT_M65_BLOCK_VERSION	2
 #define SNAPSHOT_M65_BLOCK_SIZE		(0x100 + sizeof(D6XX_registers))
 
+static int force_fast_loaded;
+
 
 int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
@@ -698,8 +700,8 @@ int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, 
 	in_hypervisor = (int)P_AS_BE32(buffer + 16);	// sets hypervisor state from snapshot (hypervisor/userspace)
 	map_megabyte_low = (int)P_AS_BE32(buffer + 20);
 	map_megabyte_high = (int)P_AS_BE32(buffer + 24);
-	//rom_protect = (int)P_AS_BE32(buffer + 28);			HANDLED ABOVE AT reg (D)67D!
-	//kicked_hypervisor = (int)P_AS_BE32(buffer + 32);		NOT NEEDED, as part of D6XX_registers regs!
+	force_fast_loaded = (int)P_AS_BE32(buffer + 28);	// activated in m65emu_snapshot_loading_finalize() as force_fast can be set at multiple places through loading snapshot!
+	// +32 is free for 4 bytes now ... can be used later
 	memory_set_cpu_io_port_ddr_and_data(buffer[36], buffer[37]);
 	return 0;
 }
@@ -719,8 +721,8 @@ int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	U32_AS_BE(buffer + 16, in_hypervisor);
 	U32_AS_BE(buffer + 20, map_megabyte_low);
 	U32_AS_BE(buffer + 24, map_megabyte_high);
-	//U32_AS_BE(buffer + 28, rom_protect);				NOT NEEDED, as part of D6XX_registers reg (D)67D!
-	//U32_AS_BE(buffer + 32, kicked_hypervisor);			NOT NEEDED, as part of D6XX_registers regs!
+	U32_AS_BE(buffer + 28, force_fast);	// see notes on this at load_state and finalize stuff!
+	// +32 is free for 4 bytes now ... can be used later
 	buffer[36] = memory_get_cpu_io_port(0);
 	buffer[37] = memory_get_cpu_io_port(1);
 	memcpy(buffer + 0x100, D6XX_registers, sizeof D6XX_registers);
@@ -733,6 +735,7 @@ int m65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st 
 	printf("SNAP: loaded (finalize-callback: begin)" NL);
 	memory_set_vic3_rom_mapping(vic_registers[0x30]);
 	memory_set_do_map();
+	force_fast = force_fast_loaded;	// force_fast is handled through different places, so we must have a "finalize" construct and saved separately to have the actual effect ...
 	machine_set_speed(1);
 	printf("SNAP: loaded (finalize-callback: end)" NL);
 	OSD(-1, -1, "Snapshot has been loaded.");

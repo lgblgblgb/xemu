@@ -36,8 +36,8 @@ static int   sdfd;		// SD-card controller emulation, UNIX file descriptor of the
 static int   d81fd = -1;	// special case for F011 access, allow emulator to access D81 image on the host OS, instead of "inside" the SD card image! [NOT SO MUCH USED YET]
 static int   use_d81 = 0;	// the above: actually USE that!
 static int   d81_is_read_only;	// access of the above, read-only or read-write
-       Uint8 sd_buffer[512];	// SD-card controller buffer
-       Uint8 sd_status;		// SD-status byte
+Uint8 sd_buffer[512];		// SD-card controller buffer
+Uint8 sd_status;		// SD-status byte
 static Uint8 sd_sector_bytes[4];
 static Uint8 sd_d81_img1_start[4];
 static off_t sd_card_size;

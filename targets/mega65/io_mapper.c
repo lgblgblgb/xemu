@@ -313,7 +313,8 @@ void io_write ( unsigned int addr, Uint8 data )
 						DEBUG("MEGA65: ROM protection has been turned %s." NL, data & 4 ? "ON" : "OFF");
 						rom_protect = data & 4;
 					}
-                                        return;
+					force_fast = data & 16;
+					return;
 				case 0x7E:
 					D6XX_registers[0x7E] = 0xFF;	// iomap.txt: "Hypervisor already-upgraded bit (sets permanently)"
 					DEBUG("MEGA65: Writing already-kicked register $%04X!" NL, addr);
@@ -326,6 +327,7 @@ void io_write ( unsigned int addr, Uint8 data )
 					DEBUG("MEGA65: this I/O port is not emulated in Xemu yet: $D6%02X (tried to be written with $%02X)" NL, addr, data);
 					return;
 			}
+			return;
 		case 0x17:	// $D700-$D7FF ~ C65 I/O mode
 			dma_write_reg(addr & 0xF, data);
 			return;

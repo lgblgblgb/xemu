@@ -66,6 +66,7 @@ SMALLER [?] misc TODOs in the future:
 * M65: memory mapper description for areas (for later provider for advanced monitor/debug features)
 * M65: CPU FAR CALL/JUMP stuff (is it implemented in VHDL at all?)
 * ALL/XEMU: rewrite file load/handle/etc function in emulator, and that guessing file location madness, it's really ugly :(
+* M65: "integer math unit" if it's every implemented
 
 Some more fundamental changes:
 
@@ -77,7 +78,7 @@ Some more fundamental changes:
 * VIC-4: full support of 16C modes, FCM, etc etc
 * VIC-4: colour banks? What are those at all?
 * VIC-4: sprite extensions (?) of VIC-II sprites, what are those?
-* VIC-4: VIC-IV specific sprites????
+* VIC-4: VIC-IV specific sprites???? (do they exist on M65 at all yet?)
 * full-featured monitor/debug protocol, provider
 
 Some theory should be checked:

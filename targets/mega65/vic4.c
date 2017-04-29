@@ -854,7 +854,6 @@ int vic4_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, st
 	vic_iomode = buffer[0];
 	DEBUG("SNAP: VIC: changing I/O mode to %d(%s)" NL, vic_iomode, iomode_names[vic_iomode]);
 	interrupt_status = (int)P_AS_BE32(buffer + 1);
-	force_fast = (int)P_AS_BE32(buffer + 1 + 4);
 	return 0;
 }
 
@@ -871,7 +870,6 @@ int vic4_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	memcpy(buffer + 0x100, vic3_palette_nibbles, 0x300);	// $300 bytes
 	buffer[0] = vic_iomode;
 	U32_AS_BE(buffer + 1, interrupt_status);
-	U32_AS_BE(buffer + 1 + 4, force_fast);
 	return xemusnap_write_sub_block(buffer, sizeof buffer);
 }
 
