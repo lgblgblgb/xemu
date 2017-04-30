@@ -76,6 +76,7 @@ Some more fundamental changes:
 * VIC-2,3,4 *sane* sprite rendering at last (ie, sprite multiplexing, allow to have behind the text, etc)
 * VIC-3,4: implement all hw attributes in all possible modes
 * VIC-4: full support of 16C modes, FCM, etc etc
+* VIC-4: scaling support (this is really hard because of performance reasons, maybe SDL GPU accelerated rendering helps)
 * VIC-4: colour banks? What are those at all?
 * VIC-4: sprite extensions (?) of VIC-II sprites, what are those?
 * VIC-4: VIC-IV specific sprites???? (do they exist on M65 at all yet?)
