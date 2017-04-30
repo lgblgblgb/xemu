@@ -1,5 +1,6 @@
-/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -21,6 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/f011_core.h"
 #include "mega65.h"
 #include "xemu/cpu65c02.h"
+#include "io_mapper.h"
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -34,8 +36,8 @@ static int   sdfd;		// SD-card controller emulation, UNIX file descriptor of the
 static int   d81fd = -1;	// special case for F011 access, allow emulator to access D81 image on the host OS, instead of "inside" the SD card image! [NOT SO MUCH USED YET]
 static int   use_d81 = 0;	// the above: actually USE that!
 static int   d81_is_read_only;	// access of the above, read-only or read-write
-static Uint8 sd_buffer[512];	// SD-card controller buffer
-static Uint8 sd_status;		// SD-status byte
+Uint8 sd_buffer[512];		// SD-card controller buffer
+Uint8 sd_status;		// SD-status byte
 static Uint8 sd_sector_bytes[4];
 static Uint8 sd_d81_img1_start[4];
 static off_t sd_card_size;
@@ -153,28 +155,6 @@ int sdcard_init ( const char *fn, const char *extd81fn )
 		open_external_d81(extd81fn);
 	return sdfd;
 }
-
-
-// Reads a byte from buffer. Return with -1 if buffer is not I/O mapped.
-int sdcard_read_buffer ( int addr )
-{
-	if (sd_status & SD_ST_MAPPED)
-		return sd_buffer[addr & 511];
-	else
-		return -1;
-}
-
-
-// Writes a byte into buffer. Return with -1 if buffer is not I/O mapped.
-int sdcard_write_buffer ( int addr, Uint8 data )
-{
-	if (sd_status & SD_ST_MAPPED) {
-		sd_buffer[addr & 511] = data;
-		return (int)data;
-	} else
-		return -1;
-}
-
 
 
 static int host_seek_to ( Uint8 *addr_buffer, int addressing_offset, const char *description, off_t size_limit, int fd )
@@ -338,7 +318,7 @@ static void sdcard_mount_d81 ( Uint8 data )
 
 void sdcard_write_register ( int reg, Uint8 data )
 {
-	gs_regs[reg + 0x680] = data;
+	D6XX_registers[reg + 0x80] = data;
 	switch (reg) {
 		case 0:		// command/status register
 			sdcard_command(data);
@@ -379,7 +359,7 @@ Uint8 sdcard_read_register ( int reg )
 			data = sdcard_bytes_read >> 8;
 			break;
 		default:
-			data = gs_regs[reg + 0x680];
+			data = D6XX_registers[reg + 0x80];
 			break;
 	}
 	return data;

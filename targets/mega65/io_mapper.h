@@ -16,21 +16,20 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_M65_SNAPSHOT_H_INCLUDED
-#define __XEMU_M65_SNAPSHOT_H_INCLUDED
+#ifndef __XEMU_MEGA65_IO_MAPPER_H_INCLUDED
+#define __XEMU_MEGA65_IO_MAPPER_H_INCLUDED
 
-#ifdef XEMU_SNAPSHOT_SUPPORT
-#include "xemu/emutools_snapshot.h"
+#include "xemu/cia6526.h"
+#include "xemu/sid.h"
 
-// From other modules ...
-extern struct Cia6526 cia1, cia2;
-extern struct SidEmulation sid1, sid2;;
-extern int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block );
-extern int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
-extern int m65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block );
+extern Uint8 io_read  ( unsigned int addr );
+extern void  io_write ( unsigned int addr, Uint8 data );
+extern Uint8 io_dma_reader ( int addr );
+extern void  io_dma_writer ( int addr, Uint8 data );
 
-// From our .c file
-extern const struct xemu_snapshot_definition_st m65_snapshot_definition[];
+extern Uint8  D6XX_registers[0x100];
+extern int    fpga_switches;
+extern struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
+extern struct SidEmulation sid1, sid2;		// the two SIDs
 
-#endif
 #endif

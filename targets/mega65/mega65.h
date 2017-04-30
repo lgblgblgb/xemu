@@ -1,4 +1,5 @@
-/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
+/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -39,7 +40,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_WIDTH		640
 #define SCREEN_HEIGHT		200
 
-#define CPU_M65_CYCLES_PER_SCANLINE	3113
+// Default fast clock of M65, in MHz (can be overriden with CLI switch)
+#define MEGA65_DEFAULT_FAST_CLOCK	48
+
+// Needed CPU cycles for a (PAL) scanline for a given mode.
+// For "fast clock", it's calculated, see MEGA65_DEFAULT_FAST_CLOCK
 #define CPU_C65_CYCLES_PER_SCANLINE	227
 #define CPU_C128_CYCLES_PER_SCANLINE	128
 #define CPU_C64_CYCLES_PER_SCANLINE	64
@@ -49,26 +54,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 // If defined, a file name string must be used.
 // Then hypervisor memory content will be written into this file on exit.
-//#define MEMDUMP_FILE		"dump.mem"
-
-extern Uint8 memory[0x100000];
-extern Uint8 colour_ram[0x10000];
-extern Uint8 character_rom[0x1000];
-extern int map_mask;
-extern int map_offset_low;
-extern int map_offset_high;
-extern int map_megabyte_low;
-extern int map_megabyte_high;
-extern Uint8 gs_regs[0x1000];
-extern char emulator_speed_title[];
-extern int  disallow_turbo;
-#define CPU_PORT(n)	memory[n]
-
-extern void  apply_memory_config ( void );
-extern Uint8 io_read  ( int addr );
-extern void  io_write ( int addr, Uint8 data );
-extern void  write_phys_mem ( int addr, Uint8 data );
-extern Uint8 read_phys_mem  ( int addr );
+#define MEMDUMP_FILE		"dump.mem"
 
 extern void m65mon_show_regs ( void );
 extern void m65mon_dumpmem16 ( Uint16 addr );
@@ -77,5 +63,7 @@ extern void m65mon_do_trace  ( void );
 extern void m65mon_empty_command ( void );
 extern void m65mon_do_trace_c ( void );
 extern void m65mon_breakpoint ( int brk );
+
+extern void machine_set_speed ( int verbose );
 
 #endif

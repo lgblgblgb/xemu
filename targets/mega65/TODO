@@ -1,0 +1,91 @@
+This is a work-in-progress, for internal use TODO file only!
+
+TODO list for Mega-65 shorter term (m65mem branch lifetime):
+
+* Write new memory handling [DONE]
+* Again: try different solutions for best performance within similar constraints? [PENDING]
+* Make new memory handling work ... [DONE?]
+* ... test it!
+* Try to in-line CPU read/write primitives, check the performance impact [PENDING, TESTING]
+* Rewrite I/O decoder ... [DONE?]
+* ... test it!
+* Hook DMA for (the new) direct internal I/O decoder [DONE]
+* RMW CPU primitive optimization [DONE, though I/O related stuff is not, only for the full I/O area]
+* Reorganize VIC reg access for the new I/O decoder, etc [DONE?]
+* Move VIC mode change into a handler in vic stuff (is this needed in this stage at all?) [MEANINGLESS NOW]
+* Make snapshotting working again [DONE?]
+* Make (uart-)mon working again [DONE? needs testing]
+* Fix uart-mon with breakpoint (didn't worked even in master branch since the multi-op CPU performance patch) [DONE? needs testing]
+* Test if uart-mon works at all in a sane way ... [PENDING]
+* Better speed control, allow custom M65-fast mode, just for test (CLI-switch?) [DONE]
+* Maybe: rationalize the place of functions/variables within sources, maybe rename some sources [DONE?]
+* Check header includes, a mess now :( Kill ones not needed in a given source (see the previous point too) [DONE?]
+* Clean-up ...
+* Study debug log, to kill some too verbose stuff now!!
+* Extensive testing!!
+* Merge m65mem into master, delete m65mem branch
+* Binary deployment
+
+SMALLER [?] misc TODOs in the future:
+
+* C65 only: emulate the behaviour to allow VIC mode change only at char-line bondary. This BREAKS C64 compatibility a lot (though that is how C65 did ...), maybe should be done optionally!
+* M65: killing "gs_regs" stuff with a better solution for $(D)6XX I/O area [DONE, D6XX_registers]
+* M65: $(D)7XX I/O area stuffs if any other than DMA there?
+* 6502 emulation in general: CPU optimization idea: paged read/write primitives (this means eg ZP aka. BP related opcodes can be optimized a very little in general ...)
+* M65: rom protect and things like linear addressing enable now cannot be changed in a sane way, revise this, also should be allowed for hypervisor only via some regs?
+* M65: $D6XX registers over UART: better decoding, check if hypervisor mode, whatever
+* C65/M65: implement UART, at least for extended keys ...
+* M65: ethernet emulation? if possible (maybe not in host-independent way ...)
+* C65/M65: REC (Ram Expansion Controller) emulation?
+* Allow kbd scanning work in the oppsite way too (C65 material too), generic "c64-style" HID common source material
+* Import some C65 changes, OSD tries, and C1531 mouse emulation [DONE]
+* M65: OSD feedback on joystick emulation status [DONE]
+* M65: C1351 mouse emulation [preliminary one, DONE, UNTESTED]
+* SD-card: emulate some delay after operation: it causes too much load on the host box being "zero time ready" condition
+* FDC: C65/M65 too: similar as the previous one ...
+* FDC: C65/M65 too: EQ bit more "delayed" handling without the needed hacks we currently have
+* FDC: C65/M65 too: debug write problems (only on M65????)
+* FDC: C65/M65 too: silent debug messages on the screen ...
+* FDC D81 image mount from Hypervisor on M65: check the read/write only state, debug/test/etc
+* FDC D81 image mount: two drives ...
+* Wild idea: FDC D81: allow real floppy drive (is there any out there still?) to be used by Xemu (C65/M65, not for D81 mounted, of course!)
+* Xemu's external D81 mount: do not ask to do, if it's logically from a command line switch
+* Xemu's external D81 mount: allow some hack to mount external/internal from SYS49152 mounter
+* M65 similar FDC r/w control "LED" on the screen corner?
+* C65/M65 too: check Mega-65 kbd layout on PS/2 keyboard, and implement similar with Xemu!
+* Build SD-card image for the user, if needed files are in place at least for that
+* Installer mode: allow to download needed files, ROM images, etc after asking the user if it's OK to do
+* ALL/XEMU: config file support (in theory, the framework is there ...)
+* ALL/XEMU: OSD menu possibility at least
+* ALL/XEMU: windows console handling (Windows sucks, it needs re-open console to be able to see stdout/stderr, braindead Microsoft programmers ... ehm) [DONE in m65mem-nondependent branch?]
+* ALL/XEMU: on UNIX-like OS, link preferences directory to $HOME/.xemu for some comfort
+* ALL/XEMU: platform-native file dialog functions, used by some OSD menu stuff, ie loading snapshot, attaching another disk image, etc
+* M65: check the speed impact of having data pointers in memory_mapper and CPU emulation directly where it is possible at least
+* Optimize CPU emulation at some points (ie paged read/write, flag tuning for NZ bits, more optimized IRQ check)
+* M65: allow 8 bit info per colour channel in palette registers in VIC-IV I/O mode
+* M65: memory mapper description for areas (for later provider for advanced monitor/debug features)
+* M65: CPU FAR CALL/JUMP stuff (is it implemented in VHDL at all?)
+* ALL/XEMU: rewrite file load/handle/etc function in emulator, and that guessing file location madness, it's really ugly :(
+* M65: "integer math unit" if it's every implemented
+
+Some more fundamental changes:
+
+* event driven emulation, let CPU emulation runs till an pre-registered event or a current happening is hit needed to return
+* M65: Move to VIC-IV internals
+* M65: implement the X/Y hardware scaling somehow hmmm (idea: use SDL with the help of HW GPU accel to do, at least for full frame, would be better for even a given number of scanlines only)
+* VIC-2,3,4 *sane* sprite rendering at last (ie, sprite multiplexing, allow to have behind the text, etc)
+* VIC-3,4: implement all hw attributes in all possible modes
+* VIC-4: full support of 16C modes, FCM, etc etc
+* VIC-4: scaling support (this is really hard because of performance reasons, maybe SDL GPU accelerated rendering helps)
+* VIC-4: colour banks? What are those at all?
+* VIC-4: sprite extensions (?) of VIC-II sprites, what are those?
+* VIC-4: VIC-IV specific sprites???? (do they exist on M65 at all yet?)
+* full-featured monitor/debug protocol, provider
+
+Some theory should be checked:
+
+* Colour related VIC reg: only lower 4 bits in C65 mode? (C65 material too)
+* CPU I/O port "unused bits" on C65/M65: are the values readable back? (C65 material too)
+* VIC-III ROM mappings cannot be "written-through" as C65 ROM mappings? (C65 material too)
+* Extended colour RAM (C65 too!) and SD-card buffer mapping remains if mode switched back to VIC-II?
+* Extended colour related VIC-regs remains if switched back VIC mode?

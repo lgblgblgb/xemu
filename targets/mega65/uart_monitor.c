@@ -1,5 +1,6 @@
-/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -194,7 +195,7 @@ int uartmon_init ( const char *fn )
 	}
 	sock_st.sun_family = AF_UNIX;
 	strcpy(sock_st.sun_path, fn);
-        unlink(sock_st.sun_path);
+	unlink(sock_st.sun_path);
 	if (bind(sock, (struct sockaddr*)&sock_st, sizeof(struct sockaddr_un))) {
 		ERROR_WINDOW("Cannot bind named socket %s, UART monitor cannot be used: %s\n", fn, strerror(errno));
 		close(sock);
@@ -276,7 +277,7 @@ void uartmon_update ( void )
 				// Reset reading/writing information
 				umon_write_size = 0;
 				umon_read_pos = 0;
-				fprintf(stderr, "UARTMON: new connection established on socket %d" NL, sock_client);
+				DEBUGPRINT("UARTMON: new connection established on socket %d" NL, sock_client);
 			}
 		}
 	}
@@ -296,7 +297,7 @@ void uartmon_update ( void )
 		if (ret == 0) { // client socket closed
 			close(sock_client);
 			sock_client = -1;
-			fprintf(stderr, "UARTMON: connection closed by peer while writing" NL);
+			DEBUGPRINT("UARTMON: connection closed by peer while writing" NL);
 			return;
 		}
 		if (ret > 0) {
@@ -320,7 +321,7 @@ void uartmon_update ( void )
 	if (ret == 0) { // client socket closed
 		close(sock_client);
 		sock_client = -1;
-		fprintf(stderr, "UARTMON: connection closed by peer while reading" NL);
+		DEBUGPRINT("UARTMON: connection closed by peer while reading" NL);
 		return;
 	}
 	if (ret > 0) {

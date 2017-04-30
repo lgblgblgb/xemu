@@ -38,6 +38,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define APP_ORG "xemu-lgb"
 #define APP_DESC_APPEND " / LGB"
 
+extern void sysconsole_open  ( void );
+extern void sysconsole_close ( const char *waitmsg );
+
 // You should define this in your emulator, most probably with resetting the keyboard matrix
 // Purpose: emulator windows my cause the emulator does not get the key event normally, thus some keys "seems to be stucked"
 extern void clear_emu_events ( void );
@@ -84,6 +87,7 @@ extern Uint32 sdl_winid;
 extern SDL_PixelFormat *sdl_pix_fmt;
 extern int seconds_timer_trigger;
 extern char *sdl_pref_dir, *sdl_base_dir;
+extern int sysconsole_is_open;
 
 extern int emu_init_debug ( const char *fn );
 extern time_t emu_get_unixtime ( void );
@@ -147,8 +151,11 @@ extern void osd_write_string ( int x, int y, const char *s );
 
 
 #define OSD(x, y, ...) do { \
+	char _buf_for_msg_[4096]; \
+	snprintf(_buf_for_msg_, sizeof _buf_for_msg_, __VA_ARGS__); \
+	fprintf(stderr, "OSD: %s" NL, _buf_for_msg_); \
 	osd_clear(); \
-	osd_write_string(x, y, __VA_ARGS__); \
+	osd_write_string(x, y, _buf_for_msg_); \
 	osd_update(); \
 	osd_on(OSD_FADE_START); \
 } while(0)

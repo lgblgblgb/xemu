@@ -311,7 +311,6 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		io_write,	// dma_writer_cb_t set_target_iowriter,
 		read_phys_mem	// dma_reader_cb_t set_list_reader
 	);
-	dma_set_phys_io_offset(0);
 	// Initialize FDC
 	fdc_init();
 	c65_d81_init(emucfg_get_str("8"));
@@ -755,6 +754,7 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles;
+	sysconsole_open();
 	xemu_dump_version(stdout, "The Unusable Commodore 65 emulator from LGB");
 	emucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
 	emucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip (0=F018A, other=F018B)");

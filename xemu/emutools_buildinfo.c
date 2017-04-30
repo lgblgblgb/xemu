@@ -25,7 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 const char *XEMU_BUILDINFO_CC  = CC_TYPE " " __VERSION__ " " ARCH_BITS_AS_TEXT ENDIAN_NAME;
 
 const char emulators_disclaimer[] =
-	"LICENSE: Copyright (C)2016 Gábor Lénárt (aka LGB) lgb@lgb.hu http://lgb.hu/" NL
+	"LICENSE: Copyright (C)2016,2017 Gábor Lénárt (aka LGB) lgb@lgb.hu http://lgb.hu/" NL
 	"LICENSE: This software is a GNU/GPL version 2 (or later) software." NL
 	"LICENSE: <http://gnu.org/licenses/gpl.html>" NL
 	"LICENSE: This is free software; you are free to change and redistribute it." NL
@@ -36,7 +36,8 @@ void xemu_dump_version ( FILE *fp, const char *slogan )
 {
 	if (slogan)
 		fprintf(fp, "**** %s ****" NL, slogan);
-	fprintf(fp, "CREATED: %s at %s with %s for %s" NL, XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT, XEMU_BUILDINFO_CC, XEMU_ARCH_NAME);
+	fprintf(fp, "This software is part of the Xemu project: https://github.com/lgblgblgb/xemu" NL);
+	fprintf(fp, "CREATED: %s at %s" NL "CREATED: %s for %s" NL, XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT, XEMU_BUILDINFO_CC, XEMU_ARCH_NAME);
 	fprintf(fp, "VERSION: %s" NL, XEMU_BUILDINFO_GIT);
 	fprintf(fp, "EMULATE: %s (%s): %s" NL, TARGET_DESC, TARGET_NAME, XEMU_BUILDINFO_TARGET);
 	fprintf(fp, "%s" NL, emulators_disclaimer);

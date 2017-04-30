@@ -1,5 +1,6 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -23,16 +24,17 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "xemu/cpu65c02.h"
 #include "xemu/cia6526.h"
-#include "vic3.h"
+#include "vic4.h"
 #include "xemu/sid.h"
 #include "xemu/f018_core.h"
 #include "hypervisor.h"
 #include "sdcard.h"
 #include "xemu/f011_core.h"
 #include "m65_snapshot.h"
+#include "memory_mapper.h"
 #include <string.h>
 
-#define M65_MEMORY_BLOCK_VERSION	0
+#define M65_MEMORY_BLOCK_VERSION	1
 
 struct memblock_st {
 	Uint8	*data;
@@ -65,13 +67,11 @@ static int snapcallback_memory_saver ( const struct xemu_snapshot_definition_st 
 #define DEFINE_SNAPSHOT_MEMORY_BLOCK(name, structure) { "MemoryRegion:" name, (void*)&structure, snapcallback_memory_loader, snapcallback_memory_saver }
 
 
-static const struct memblock_st memblock_126k_ram	= { memory, 126 * 1024 };
-static const struct memblock_st memblock_colour_2k_ram	= { memory + 126 * 1024, 2 * 1024 };
-static const struct memblock_st memblock_rom		= { memory + 128 * 1024, 128 * 1024 };
-static const struct memblock_st memblock_unused_lo	= { memory + 256 * 1024, sizeof(memory) - (256 * 1024) };
+static const struct memblock_st memblock_chip_ram	= { chip_ram, sizeof chip_ram };
+static const struct memblock_st memblock_fast_ram	= { fast_ram, sizeof fast_ram };
 static const struct memblock_st memblock_colour_ram	= { colour_ram, sizeof colour_ram };
-static const struct memblock_st memblock_char_wom	= { character_rom, sizeof character_rom };
-static const struct memblock_st memblock_hypervisor	= { hypervisor_memory, sizeof hypervisor_memory };
+static const struct memblock_st memblock_char_wom	= { char_wom, sizeof char_wom };
+static const struct memblock_st memblock_hypervisor	= { hypervisor_ram, 0x4000 };
 
 const struct xemu_snapshot_definition_st m65_snapshot_definition[] = {
 	{ "CPU",   NULL,  cpu_snapshot_load_state, cpu_snapshot_save_state },
@@ -84,13 +84,11 @@ const struct xemu_snapshot_definition_st m65_snapshot_definition[] = {
 	{ "DMAgic", NULL, dma_snapshot_load_state, dma_snapshot_save_state },
 	{ "SDcard", NULL, sdcard_snapshot_load_state, sdcard_snapshot_save_state },
 	{ "FDC-F011", NULL, fdc_snapshot_load_state, fdc_snapshot_save_state },
-	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:Chip", memblock_126k_ram),
-	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:Colour2K", memblock_colour_2k_ram),
-	DEFINE_SNAPSHOT_MEMORY_BLOCK("ROM", memblock_rom),
-	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:LoUnused", memblock_unused_lo),
-	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:Colour", memblock_colour_ram),
-	DEFINE_SNAPSHOT_MEMORY_BLOCK("WOM:Char", memblock_char_wom),
-	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:HyperVisor", memblock_hypervisor),
+	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:ChipRam", memblock_chip_ram),
+	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:FastRam", memblock_fast_ram),
+	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:ColourRam", memblock_colour_ram),
+	DEFINE_SNAPSHOT_MEMORY_BLOCK("WOM:CharWom", memblock_char_wom),
+	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:HyperVisorRam", memblock_hypervisor),
 	{ NULL, NULL, m65emu_snapshot_loading_finalize, NULL }
 };
 

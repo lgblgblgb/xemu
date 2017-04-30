@@ -56,6 +56,7 @@ static char *window_title_buffer, *window_title_buffer_end;
 static time_t unix_time;
 static Uint64 et_old;
 static int td_balancer, td_em_ALL, td_pc_ALL;
+int sysconsole_is_open = 0;
 FILE *debug_fp = NULL;
 
 
@@ -394,6 +395,7 @@ static void shutdown_emulator ( void )
 		shutdown_user_function();
 	if (sdl_win)
 		SDL_DestroyWindow(sdl_win);
+	sysconsole_close("Please review the console content (if you need it) then click OK to close and exit Xemu");
 	SDL_Quit();
 	if (debug_fp) {
 		fclose(debug_fp);
@@ -872,4 +874,92 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 	restore_mouse_grab();
 	emu_timekeeping_start();
 	return buttonid;
+}
+
+
+#ifdef _WIN32
+#include <windows.h>
+#include <stdio.h>
+#include <io.h>
+#include <fcntl.h>
+#endif
+
+/* Note, Windows has some braindead idea about console, ie even the standard stdout/stderr/stdin does not work with
+   a GUI application. We have to dance a bit, to fool Windows to do what is SHOULD according the standard to be used
+   by every other operating systems. Ehhh, Microsoft, please, get some real designers and programmers :-)
+   Though one thing is clear: I am *NOT* a Windows developer, I can't even understand what this does exactly to be
+   honest, just try&error, and some advices from other people. For example, in Win64 there are some warnings about
+   this function. I can't do anything, since Windows API is a nightmare, using non-C-standard types for system
+   calls, I have no idea ... */
+
+void sysconsole_open ( void )
+{
+#ifdef _WIN32
+	int hConHandle;
+	long lStdHandle;
+	//HANDLE lStdHandle;
+	CONSOLE_SCREEN_BUFFER_INFO coninfo;
+	FILE *fp;
+	if (sysconsole_is_open)
+		return;
+	sysconsole_is_open = 0;
+	FreeConsole();
+	if (!AllocConsole()) {
+		ERROR_WINDOW("Cannot allocate windows console!");
+		return;
+	}
+	SetConsoleTitle("Xemu Console");
+	// set the screen buffer to be big enough to let us scroll text
+	GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &coninfo);
+	coninfo.dwSize.Y = 1024;
+	//coninfo.dwSize.X = 100;
+	SetConsoleScreenBufferSize(GetStdHandle(STD_OUTPUT_HANDLE), coninfo.dwSize);
+	// redirect unbuffered STDOUT to the console
+	lStdHandle = (long)GetStdHandle(STD_OUTPUT_HANDLE);
+	hConHandle = _open_osfhandle(lStdHandle, _O_TEXT);
+	fp = _fdopen( hConHandle, "w" );
+	*stdout = *fp;
+	setvbuf( stdout, NULL, _IONBF, 0 );
+	// redirect unbuffered STDIN to the console
+	lStdHandle = (long)GetStdHandle(STD_INPUT_HANDLE);
+	hConHandle = _open_osfhandle(lStdHandle, _O_TEXT);
+	fp = _fdopen( hConHandle, "r" );
+	*stdin = *fp;
+	setvbuf( stdin, NULL, _IONBF, 0 );
+	// redirect unbuffered STDERR to the console
+	lStdHandle = (long)GetStdHandle(STD_ERROR_HANDLE);
+	hConHandle = _open_osfhandle(lStdHandle, _O_TEXT);
+	fp = _fdopen( hConHandle, "w" );
+	*stderr = *fp;
+	setvbuf( stderr, NULL, _IONBF, 0 );
+	// make cout, wcout, cin, wcin, wcerr, cerr, wclog and clog point to console as well
+	// sync_with_stdio();
+	// Set Con Attributes
+	//SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), FOREGROUND_RED | FOREGROUND_INTENSITY);
+	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_GREEN | FOREGROUND_INTENSITY);
+	SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT);
+	SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT);
+	DEBUGPRINT("WINDOWS: console is open" NL);
+#endif
+	sysconsole_is_open = 1;
+}
+
+
+
+void sysconsole_close ( const char *waitmsg )
+{
+	if (!sysconsole_is_open)
+		return;
+#ifdef _WIN32
+	if (waitmsg)
+		INFO_WINDOW("%s", waitmsg);
+	if (!FreeConsole())
+		ERROR_WINDOW("Cannot release windows console!");
+	else {
+		sysconsole_is_open = 0;
+		DEBUGPRINT("WINDOWS: console is closed" NL);
+	}
+#else
+	sysconsole_is_open = 0;
+#endif
 }

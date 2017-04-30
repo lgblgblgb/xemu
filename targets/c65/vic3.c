@@ -770,7 +770,7 @@ void vic3_write_reg ( int addr, Uint8 data )
 			// Save some un-needed memory translating table rebuilds, if there is important bits (for us) changed.
 			// CRAM@DC00 is not handled by the translator directly, so bit0 does not apply here!
 			if (
-				(data & 0xF8) != (vic3_registers[0x30] & 0xF8)
+				(data & 0xB8) != (vic3_registers[0x30] & 0xB8)
 			) {
 				DEBUG("MEM: applying new memory configuration because of VIC3 $30 is written" NL);
 				vic3_registers[0x30] = data;	// early write because of apply_memory_config() needs it

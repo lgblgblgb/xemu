@@ -515,6 +515,7 @@ static int rom_load ( const char *name, void *buffer, int size )
 int main ( int argc, char **argv )
 {
 	int cycles;
+	sysconsole_open();
 	xemu_dump_version(stdout, "The Inaccurate Commodore VIC-20 emulator from LGB");
 	printf(
 		"INFO: CPU clock frequency (calculated) %d Hz (wanted: %d Hz)" NL
