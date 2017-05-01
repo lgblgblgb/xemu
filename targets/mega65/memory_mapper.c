@@ -57,7 +57,9 @@ Uint8 fast_ram[0x20000];
 Uint8 colour_ram[0x8000];
 // 16K of hypervisor RAM, can be only seen in hypervisor mode.
 // FIXME: +1 byte for the idiotic Xemu length checking only :)
-Uint8 hypervisor_ram[0x4001];
+Uint8 hypervisor_ram[0x4001] = {
+#include "../../rom/kickup.cdata"
+};
 // 127Mbytes of slow-RAM. Would be the DDR memory on M65/Nexys4
 #ifdef SLOW_RAM_SUPPORT
 Uint8 slow_ram[127 << 20];
@@ -424,7 +426,6 @@ void memory_init ( void )
 	memset(chip_ram, 0xFF, sizeof chip_ram);
 	memset(fast_ram, 0xFF, sizeof fast_ram);
 	memset(colour_ram, 0xFF, sizeof colour_ram);
-	memset(hypervisor_ram, 0xFF, sizeof hypervisor_ram);		// this will be overwritten with kickstart, but anyway ...
 #ifdef SLOW_RAM_SUPPORT
 	memset(slow_ram, 0xFF, sizeof slow_ram);
 #endif

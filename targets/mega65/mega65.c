@@ -207,11 +207,6 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 }
 
 
-static const Uint8 initial_kickup[] = {
-#include "../../rom/kickup.cdata"
-};
-
-
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 static const char *m65_snapshot_saver_filename = NULL;
@@ -262,10 +257,8 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	if (emu_load_file(p, hypervisor_ram, 0x4001) == 0x4000) {
 		DEBUG("MEGA65: %s loaded into hypervisor memory." NL, p);
 	} else {
+		// note, hypervisor_ram is pre-initialized with the built-in kickstart already, included from memory_mapper.c
 		WARNING_WINDOW("Kickstart %s cannot be found. Using the default (maybe outdated!) built-in version", p);
-		if (sizeof initial_kickup != 0x4000)
-			FATAL("Internal error: initial kickup is not 16K!");
-		memcpy(hypervisor_ram, initial_kickup, 0x4000);
 		hypervisor_debug_invalidate("no kickup could be loaded, built-in one does not have debug info");
 	}
 	// *** Image file for SDCARD support
