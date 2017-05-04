@@ -896,8 +896,7 @@ void sysconsole_open ( void )
 {
 #ifdef _WIN32
 	int hConHandle;
-	long lStdHandle;
-	//HANDLE lStdHandle;
+	HANDLE lStdHandle;
 	CONSOLE_SCREEN_BUFFER_INFO coninfo;
 	FILE *fp;
 	if (sysconsole_is_open)
@@ -915,20 +914,20 @@ void sysconsole_open ( void )
 	//coninfo.dwSize.X = 100;
 	SetConsoleScreenBufferSize(GetStdHandle(STD_OUTPUT_HANDLE), coninfo.dwSize);
 	// redirect unbuffered STDOUT to the console
-	lStdHandle = (long)GetStdHandle(STD_OUTPUT_HANDLE);
-	hConHandle = _open_osfhandle(lStdHandle, _O_TEXT);
+	lStdHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+	hConHandle = _open_osfhandle((INT_PTR)lStdHandle, _O_TEXT);
 	fp = _fdopen( hConHandle, "w" );
 	*stdout = *fp;
 	setvbuf( stdout, NULL, _IONBF, 0 );
 	// redirect unbuffered STDIN to the console
-	lStdHandle = (long)GetStdHandle(STD_INPUT_HANDLE);
-	hConHandle = _open_osfhandle(lStdHandle, _O_TEXT);
+	lStdHandle = GetStdHandle(STD_INPUT_HANDLE);
+	hConHandle = _open_osfhandle((INT_PTR)lStdHandle, _O_TEXT);
 	fp = _fdopen( hConHandle, "r" );
 	*stdin = *fp;
 	setvbuf( stdin, NULL, _IONBF, 0 );
 	// redirect unbuffered STDERR to the console
-	lStdHandle = (long)GetStdHandle(STD_ERROR_HANDLE);
-	hConHandle = _open_osfhandle(lStdHandle, _O_TEXT);
+	lStdHandle = GetStdHandle(STD_ERROR_HANDLE);
+	hConHandle = _open_osfhandle((INT_PTR)lStdHandle, _O_TEXT);
 	fp = _fdopen( hConHandle, "w" );
 	*stderr = *fp;
 	setvbuf( stderr, NULL, _IONBF, 0 );
