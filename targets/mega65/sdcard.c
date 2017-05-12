@@ -248,8 +248,18 @@ static void sdcard_command ( Uint8 cmd )
 		case 0x01:	// END RESET
 			sd_status &= ~(SD_ST_RESET | SD_ST_ERROR | SD_ST_FSM_ERROR);
 			break;
-		case 0x02:	// read sector
+		case 0x02:	// read block
 			ret = diskimage_read_block(sd_buffer, sd_sector_bytes, 0, "reading[SD]", sd_card_size, sdfd);
+			if (ret < 0) {
+				sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR; // | SD_ST_BUSY1 | SD_ST_BUSY0;
+				sdcard_bytes_read = 0;
+			} else {
+				sd_status &= ~(SD_ST_ERROR | SD_ST_FSM_ERROR);
+				sdcard_bytes_read = ret;
+			}
+			break;
+		case 0x03:	// write block
+			ret = diskimage_write_block(sd_buffer, sd_sector_bytes, 0, "writing[SD]", sd_card_size, sdfd);
 			if (ret < 0) {
 				sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR; // | SD_ST_BUSY1 | SD_ST_BUSY0;
 				sdcard_bytes_read = 0;
