@@ -156,28 +156,23 @@ void clear_emu_events ( void )
 }
 
 
-#define KBSEL cia1.PRA
-
-
 static Uint8 cia1_in_b ( void )
 {
-	return
-		((KBSEL &   1) ? 0xFF : kbd_matrix[0]) &
-		((KBSEL &   2) ? 0xFF : kbd_matrix[1]) &
-		((KBSEL &   4) ? 0xFF : kbd_matrix[2]) &
-		((KBSEL &   8) ? 0xFF : kbd_matrix[3]) &
-		((KBSEL &  16) ? 0xFF : kbd_matrix[4]) &
-		((KBSEL &  32) ? 0xFF : kbd_matrix[5]) &
-		((KBSEL &  64) ? 0xFF : kbd_matrix[6]) &
-		((KBSEL & 128) ? 0xFF : kbd_matrix[7]) &
-		(joystick_emu == 1 ? c64_get_joy_state() : 0xFF)
-	;
+	return c64_keyboard_read_on_CIA1_B(
+		cia1.PRA | (~cia1.DDRA),
+		cia1.PRB | (~cia1.DDRB),
+		joystick_emu == 1 ? c64_get_joy_state() : 0xFF
+	);
 }
 
 
 static Uint8 cia1_in_a ( void )
 {
-	return joystick_emu == 2 ? c64_get_joy_state() : 0xFF;
+	return c64_keyboard_read_on_CIA1_A(
+		cia1.PRB | (~cia1.DDRB),
+		cia1.PRA | (~cia1.DDRA),
+		joystick_emu == 2 ? c64_get_joy_state() : 0xFF
+	);
 }
 
 

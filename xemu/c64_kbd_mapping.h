@@ -32,4 +32,47 @@ extern int joystick_emu;
 extern Uint8 c64_get_joy_state  ( void );
 extern void  c64_toggle_joy_emu ( void );
 
+static INLINE Uint8 c64_keyboard_read_on_CIA1_B ( Uint8 kbsel_a, Uint8 effect_b, Uint8 joy_state )
+{
+	// selected line(s) for scan: LOW pin state on port A, while reading in port B
+	// CIA uses pull-ups, output can be LOW only, if port data is zero, and ddr is output (thus being 1)
+	// so the "caller" of this func will do something like this:
+	// kbsel_a = cia1.PRA | (~cia1.DDRA)
+	// effect_b = cia1.PRB | (~cia1.DDRB)
+	// the second is needed: the read value is still low, if the port we're reading on is configured for output with port value set 0
+	return
+		((kbsel_a &   1) ? 0xFF : kbd_matrix[0]) &
+		((kbsel_a &   2) ? 0xFF : kbd_matrix[1]) &
+		((kbsel_a &   4) ? 0xFF : kbd_matrix[2]) &
+		((kbsel_a &   8) ? 0xFF : kbd_matrix[3]) &
+		((kbsel_a &  16) ? 0xFF : kbd_matrix[4]) &
+		((kbsel_a &  32) ? 0xFF : kbd_matrix[5]) &
+		((kbsel_a &  64) ? 0xFF : kbd_matrix[6]) &
+		((kbsel_a & 128) ? 0xFF : kbd_matrix[7]) &
+		joy_state &
+		effect_b
+	;
+}
+
+static INLINE Uint8 c64_keyboard_read_on_CIA1_A ( Uint8 kbsel_b, Uint8 effect_a, Uint8 joy_state )
+{
+	// For description on this logic, please see comments at c64_keyboard_read_on_CIA1_B() above.
+	// The theory is the same, however here we use the negated value. it's not because it's different by hardware
+	// but because we handle kbsel_b value differently than with c64_keyboard_read_on_CIA1_B(), that's all!
+	kbsel_b = ~kbsel_b;
+	return (
+		(((kbd_matrix[0] & kbsel_b) == kbsel_b) ?   1 : 0) |
+		(((kbd_matrix[1] & kbsel_b) == kbsel_b) ?   2 : 0) |
+		(((kbd_matrix[2] & kbsel_b) == kbsel_b) ?   4 : 0) |
+		(((kbd_matrix[3] & kbsel_b) == kbsel_b) ?   8 : 0) |
+		(((kbd_matrix[4] & kbsel_b) == kbsel_b) ?  16 : 0) |
+		(((kbd_matrix[5] & kbsel_b) == kbsel_b) ?  32 : 0) |
+		(((kbd_matrix[6] & kbsel_b) == kbsel_b) ?  64 : 0) |
+		(((kbd_matrix[7] & kbsel_b) == kbsel_b) ? 128 : 0)
+	) &
+		joy_state &
+		effect_a
+	;
+}
+
 #endif
