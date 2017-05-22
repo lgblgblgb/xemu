@@ -246,6 +246,12 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	} while (0);
 	// *** Init memory space
 	memory_init();
+	p = emucfg_get_str("loadcram");
+	if (p) {
+		DEBUGPRINT("Loading colour-RAM content from file: %s" NL, p);
+		if (emu_load_file(p, colour_ram, 0x8000) != 0x8000)
+			ERROR_WINDOW("Colour RAM content cannot be loaded (file not found, or not 32K in size?)\nFile was requested: %s", p);
+	}
 	D6XX_registers[0x7E] = emucfg_get_num("kicked");
 	// *** Trying to load kickstart image
 	p = emucfg_get_str("kickup");
@@ -533,6 +539,7 @@ int main ( int argc, char **argv )
 	emucfg_define_num_option("kicked", 0x0, "Answer to KickStart upgrade (128=ask user in a pop-up window)");
 	emucfg_define_str_option("kickup", KICKSTART_NAME, "Override path of external KickStart to be used");
 	emucfg_define_str_option("kickuplist", NULL, "Set path of symbol list file for external KickStart");
+	emucfg_define_str_option("loadcram", NULL, "Load memory content (32K) into colour RAM");
 	emucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used");
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	emucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
