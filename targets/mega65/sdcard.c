@@ -157,16 +157,17 @@ int sdcard_init ( const char *fn, const char *extd81fn )
 }
 
 
-static int host_seek_to ( Uint8 *addr_buffer, int addressing_offset, const char *description, off_t size_limit, int fd )
+static off_t host_seek_to ( Uint8 *addr_buffer, int addressing_offset, const char *description, off_t size_limit, int fd )
 {
 	off_t image_offset = (addr_buffer ? (((off_t)addr_buffer[0]) | ((off_t)addr_buffer[1] << 8) | ((off_t)addr_buffer[2] << 16) | ((off_t)addr_buffer[3] << 24)) : 0) + (off_t)addressing_offset;
 	DEBUG("SDCARD: %s card at position " PRINTF_LLD " (offset=%d) PC=$%04X" NL, description, (long long)image_offset, addressing_offset, cpu_pc);
 	if (image_offset < 0 || image_offset > size_limit - 512) {
-		FATAL("SDCARD: SEEK: invalid offset requested for %s with offset " PRINTF_LLD " PC=$%04X", description, (long long)image_offset, cpu_pc);
+		DEBUG("SDCARD: SEEK: invalid offset requested for %s with offset " PRINTF_LLD " PC=$%04X" NL, description, (long long)image_offset, cpu_pc);
+		return -1;
 	}
 	if (lseek(fd, image_offset, SEEK_SET) != image_offset)
 		FATAL("SDCARD: SEEK: image seek host-OS failure: %s", strerror(errno));
-	return 0;
+	return image_offset;
 }
 
 
@@ -176,10 +177,11 @@ static int diskimage_read_block ( Uint8 *io_buffer, Uint8 *addr_buffer, int addr
 	int ret;
 	if (sdfd < 0)
 		return -1;
-	host_seek_to(addr_buffer, addressing_offset, description, size_limit, fd);
+	if (host_seek_to(addr_buffer, addressing_offset, description, size_limit, fd) < 0)
+		return -1;
 	ret = read(fd, io_buffer, 512);
 	if (ret != 512)
-		FATAL("SDCARD: %s failure ... ERROR: %s", description, ret >=0 ? "not 512 bytes could be read" : strerror(errno));
+		FATAL("SDCARD: %s failure ... ERROR: %s", description, ret >= 0 ? "not 512 bytes could be read" : strerror(errno));
 	DEBUG("SDCARD: cool, sector %s was OK (%d bytes read)!" NL, description, ret);
 	return ret;
 }
@@ -193,10 +195,11 @@ static int diskimage_write_block ( Uint8 *io_buffer, Uint8 *addr_buffer, int add
 		return -1;
 	if (sd_is_read_only)
 		return -1;
-	host_seek_to(addr_buffer, addressing_offset, description, size_limit, fd);
+	if (host_seek_to(addr_buffer, addressing_offset, description, size_limit, fd) < 0)
+		return -1;
 	ret = write(fd, io_buffer, 512);
 	if (ret != 512)
-		FATAL("SDCARD: %s failure ... ERROR: %s", description, ret >=0 ? "not 512 bytes could be written" : strerror(errno));
+		FATAL("SDCARD: %s failure ... ERROR: %s", description, ret >= 0 ? "not 512 bytes could be written" : strerror(errno));
 	DEBUG("SDCARD: cool, sector %s was OK (%d bytes read)!" NL, description, ret);
 	return ret;
 }
