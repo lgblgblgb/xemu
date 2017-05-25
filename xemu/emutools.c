@@ -33,6 +33,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/osd_font_16x16.c"
 
+#ifdef _WIN32
+static int atexit_callback_for_console_registered = 0;
+#endif
 
 SDL_Window   *sdl_win = NULL;
 SDL_Renderer *sdl_ren = NULL;
@@ -388,6 +391,12 @@ void emu_timekeeping_delay ( int td_em )
 
 
 
+static void atexit_callback_for_console ( void )
+{
+	sysconsole_close("Please review the console content (if you need it) then click OK to close and exit Xemu");
+}
+
+
 static void shutdown_emulator ( void )
 {
 	DEBUG("XEMU: Shutdown callback function has been called." NL);
@@ -395,7 +404,7 @@ static void shutdown_emulator ( void )
 		shutdown_user_function();
 	if (sdl_win)
 		SDL_DestroyWindow(sdl_win);
-	sysconsole_close("Please review the console content (if you need it) then click OK to close and exit Xemu");
+	atexit_callback_for_console();
 	SDL_Quit();
 	if (debug_fp) {
 		fclose(debug_fp);
@@ -939,6 +948,10 @@ void sysconsole_open ( void )
 	SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT);
 	SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT);
 	DEBUGPRINT("WINDOWS: console is open" NL);
+	if (!atexit_callback_for_console_registered) {
+		atexit(atexit_callback_for_console);
+		atexit_callback_for_console_registered = 1;
+	}
 #endif
 	sysconsole_is_open = 1;
 }
