@@ -539,13 +539,14 @@ int main ( int argc, char **argv )
 	emucfg_define_num_option("kicked", 0x0, "Answer to KickStart upgrade (128=ask user in a pop-up window)");
 	emucfg_define_str_option("kickup", KICKSTART_NAME, "Override path of external KickStart to be used");
 	emucfg_define_str_option("kickuplist", NULL, "Set path of symbol list file for external KickStart");
-	emucfg_define_str_option("loadcram", NULL, "Load memory content (32K) into colour RAM");
+	emucfg_define_str_option("loadcram", NULL, "Load initial content (32K) into the colour RAM");
 	emucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used");
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	emucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
 	emucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
 #endif
 	emucfg_define_switch_option("skipunhandledmem", "Do not panic on unhandled memory access (hides problems!!)");
+	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
 	if (xemu_byte_order_test())
@@ -581,10 +582,12 @@ int main ( int argc, char **argv )
 	frameskip = 0;
 	frame_counter = 0;
 	vic3_blink_phase = 0;
-	emu_timekeeping_start();
 	if (audio)
 		SDL_PauseAudioDevice(audio, 0);
 	emu_set_full_screen(emucfg_get_bool("fullscreen"));
+	if (!emucfg_get_bool("syscon"))
+		sysconsole_close(NULL);
+	emu_timekeeping_start();
 	for (;;) {
 		while (unlikely(paused)) {	// paused special mode, ie tracing support, or something ...
 			if (unlikely(dma_status))

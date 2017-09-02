@@ -809,6 +809,7 @@ int main ( int argc, char **argv )
 	cycles = 0;
 	frameskip = 0;
 	emu_timekeeping_start();
+	sysconsole_close(NULL);
 	for (;;) {
 		int opcyc = cpu_step();
 		cia_tick(&cia1, opcyc);

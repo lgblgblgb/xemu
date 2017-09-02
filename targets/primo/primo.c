@@ -258,6 +258,7 @@ int main ( int argc, char **argv )
 	clear_emu_events();	// also resets the keyboard
 	z80ex_init();
 	cycles = 0;
+	sysconsole_close(NULL);
 	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	for (;;) { // our emulation loop ...
 		cycles += z80ex_step();

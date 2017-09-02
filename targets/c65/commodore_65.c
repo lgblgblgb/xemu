@@ -761,6 +761,7 @@ int main ( int argc, char **argv )
 	emucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
 	emucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
 #endif
+	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
@@ -793,6 +794,8 @@ int main ( int argc, char **argv )
 		SDL_PauseAudioDevice(audio, 0);
 	emu_set_full_screen(emucfg_get_bool("fullscreen"));
 	vic3_open_frame_access();
+	if (!emucfg_get_bool("syscon"))
+		sysconsole_close(NULL);
 	emu_timekeeping_start();
 	for (;;) {
 		cycles += unlikely(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu_step(

@@ -399,6 +399,7 @@ int main ( int argc, char **argv )
 	emucfg_define_switch_option("sdext", "Enables SD-ext");
 	emucfg_define_str_option("sdimg", SDCARD_IMG_FN, "SD-card image filename / path");
 #endif
+	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
@@ -429,6 +430,8 @@ int main ( int argc, char **argv )
 	z80ex_init();
 	cycles = 0;
 	interrupt_active = 0;
+	if (!emucfg_get_bool("syscon"))
+		sysconsole_close(NULL);
 	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	for (;;) { // our emulation loop ...
 		if (interrupt_active) {

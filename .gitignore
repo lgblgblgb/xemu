@@ -1,4 +1,5 @@
 .*.swp
+*~
 gmon.out
 dump.mem
 a.out

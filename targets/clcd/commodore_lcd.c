@@ -377,6 +377,7 @@ int main ( int argc, char **argv )
 	xemu_dump_version(stdout, "The world's first Commodore LCD emulator from LGB");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	emucfg_define_num_option("ram", 128, "Sets RAM size in KBytes.");
+	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
 	ram_size = emucfg_get_num("ram");
@@ -449,6 +450,8 @@ int main ( int argc, char **argv )
 	/* --- START EMULATION --- */
 	cycles = 0;
 	emu_set_full_screen(emucfg_get_bool("fullscreen"));
+	if (!emucfg_get_bool("syscon"))
+		sysconsole_close(NULL);
 	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	update_rtc();			// this will use time-keeping stuff as well, so initially let's do after the function call above
 	for (;;) {

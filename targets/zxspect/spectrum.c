@@ -321,6 +321,7 @@ int main ( int argc, char **argv )
 	sysconsole_open();
 	xemu_dump_version(stdout, "The learner's ZX Spectrum emulator from LGB (the learner)");
 	emucfg_define_str_option("rom", ROM_NAME, "Path and filename for ROM to be loaded");
+	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
 	if (xemu_byte_order_test())
@@ -361,7 +362,8 @@ int main ( int argc, char **argv )
 	scanline = 0;
 	flash_state = 0xFF;
 	frame_counter = 0;
-	sysconsole_close(NULL);
+	if (!emucfg_get_bool("syscon"))
+		sysconsole_close(NULL);
 	open_new_frame();		// open new frame at the very first time, the rest of frames handled below, during the emulation
 	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	for (;;) { // our emulation loop ...

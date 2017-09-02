@@ -596,6 +596,7 @@ int main ( int argc, char **argv )
 	);
 	vic_init(vic_address_space_lo8, vic_address_space_hi4);
 	cycles = 0;
+	sysconsole_close(NULL);
 	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	for (;;) { // our emulation loop ...
 		int opcyc;
