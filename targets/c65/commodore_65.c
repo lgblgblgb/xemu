@@ -266,8 +266,8 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	memset(memory, 0xFF, sizeof memory);
 	// *** Load ROM image
 	p = emucfg_get_str("rom");
-	if (emu_load_file(p, memory + 0x20000, 0x20001) != 0x20000)
-		FATAL("Cannot load C65 system ROM (%s) or invalid size!", p);
+	if (xemu_load_file(p, memory + 0x20000, 0x20000, 0x20000, "Selected C65 system ROM is needed for Xemu") < 0)
+		XEMUEXIT(1);
 	// *** Initialize VIC3
 	vic3_init();
 	// *** Memory configuration
@@ -756,7 +756,7 @@ int main ( int argc, char **argv )
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	emucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
 	//emucfg_define_switch_option("noaudio", "Disable audio");
-	emucfg_define_str_option("rom", "c65-system.rom", "Override system ROM path to be loaded");
+	emucfg_define_str_option("rom", "#c65-system.rom", "Override system ROM path to be loaded");
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	emucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
 	emucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");

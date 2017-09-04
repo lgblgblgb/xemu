@@ -249,17 +249,15 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	p = emucfg_get_str("loadcram");
 	if (p) {
 		DEBUGPRINT("Loading colour-RAM content from file: %s" NL, p);
-		if (emu_load_file(p, colour_ram, 0x8000) != 0x8000)
-			ERROR_WINDOW("Colour RAM content cannot be loaded (file not found, or not 32K in size?)\nFile was requested: %s", p);
+		xemu_load_file(p, colour_ram, 0x8000, 0x8000, "Colour RAM content cannot be loaded");
 	}
 	D6XX_registers[0x7E] = emucfg_get_num("kicked");
 	// *** Trying to load kickstart image
 	p = emucfg_get_str("kickup");
-	if (emu_load_file(p, hypervisor_ram, 0x4001) == 0x4000) {
+	if (xemu_load_file(p, hypervisor_ram, 0x4000, 0x4000, "Kickstart cannot be loaded. Using the default (maybe outdated!) built-in version") >= 0) {
 		DEBUG("MEGA65: %s loaded into hypervisor memory." NL, p);
 	} else {
 		// note, hypervisor_ram is pre-initialized with the built-in kickstart already, included from memory_mapper.c
-		WARNING_WINDOW("Kickstart %s cannot be found. Using the default (maybe outdated!) built-in version", p);
 		hypervisor_debug_invalidate("no kickup could be loaded, built-in one does not have debug info");
 	}
 	// *** Image file for SDCARD support

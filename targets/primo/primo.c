@@ -1,6 +1,6 @@
 /* Test-case for a very simple and inaccurate Primo (a Hungarian U880 - Z80 compatible - based
    8 bit computer) emulator using SDL2 library.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This Primo emulator is HIGHLY inaccurate and unusable.
 
@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
 #include "xemu/emutools_hid.h"
+#include "xemu/emutools_config.h"
 #include "xemu/z80.h"
 #include "primo.h"
 
@@ -228,6 +229,13 @@ int main ( int argc, char **argv )
 	int cycles;
 	sysconsole_open();
 	xemu_dump_version(stdout, "The Unknown Primo emulator from LGB");
+	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
+	emucfg_define_str_option("rom", DEFAULT_ROM_FILE_PATH, "Select ROM to use");
+	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+	if (emucfg_parse_commandline(argc, argv, NULL))
+		return 1;
+	if (xemu_byte_order_test())
+		FATAL("Byte order test failed!!");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (emu_init_sdl(
 		TARGET_DESC APP_DESC_APPEND,	// window title
@@ -252,13 +260,15 @@ int main ( int argc, char **argv )
 	);
 	/* Intialize memory and load ROMs */
 	memset(memory, 0xFF, sizeof memory);
-	if (emu_load_file(ROM_NAME, memory, 0x4001) != 0x4000)
-		FATAL("Cannot load ROM: %s", ROM_NAME);
+	if (xemu_load_file(emucfg_get_str("rom"), memory, 0x4000, 0x4000, "This is the selected primo ROM. Without it, Xemu won't work.\nInstall it, or use -rom CLI switch to specify another path.") < 0)
+		return 1;
 	// Continue with initializing ...
 	clear_emu_events();	// also resets the keyboard
 	z80ex_init();
 	cycles = 0;
-	sysconsole_close(NULL);
+	emu_set_full_screen(emucfg_get_bool("fullscreen"));
+	if (!emucfg_get_bool("syscon"))
+		sysconsole_close(NULL);
 	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	for (;;) { // our emulation loop ...
 		cycles += z80ex_step();

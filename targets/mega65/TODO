@@ -1,6 +1,6 @@
 This is a work-in-progress, for internal use TODO file only!
 
-TODO list for Mega-65 shorter term (m65mem branch lifetime):
+TODO list for Mega-65 shorter term (m65mem branch lifetime, mostly done already btw):
 
 * Write new memory handling [DONE]
 * Again: try different solutions for best performance within similar constraints? [PENDING]
@@ -31,14 +31,16 @@ SMALLER [?] misc TODOs in the future:
 * C65 only: emulate the behaviour to allow VIC mode change only at char-line bondary. This BREAKS C64 compatibility a lot (though that is how C65 did ...), maybe should be done optionally!
 * M65: killing "gs_regs" stuff with a better solution for $(D)6XX I/O area [DONE, D6XX_registers]
 * M65: $(D)7XX I/O area stuffs if any other than DMA there?
-* 6502 emulation in general: CPU optimization idea: paged read/write primitives (this means eg ZP aka. BP related opcodes can be optimized a very little in general ...)
+* 65xx emulation in general: CPU optimization idea: paged read/write primitives (this means eg ZP aka. BP related opcodes can be optimized a very little in general ...)
 * M65: rom protect and things like linear addressing enable now cannot be changed in a sane way, revise this, also should be allowed for hypervisor only via some regs?
 * M65: $D6XX registers over UART: better decoding, check if hypervisor mode, whatever
 * C65/M65: implement UART, at least for extended keys ...
 * M65: ethernet emulation? if possible (maybe not in host-independent way ...)
 * C65/M65: REC (Ram Expansion Controller) emulation?
-* Allow kbd scanning work in the oppsite way too (C65 material too), generic "c64-style" HID common source material
+* Allow kbd scanning work in the oppsite way too (C65 material too), generic "c64-style" HID common source material [DONE]
 * Import some C65 changes, OSD tries, and C1531 mouse emulation [DONE]
+* 1531 mouse emulation should be do better ...
+* CORE: better joy/gamepad support (configuration, etc?)
 * M65: OSD feedback on joystick emulation status [DONE]
 * M65: C1351 mouse emulation [preliminary one, DONE, UNTESTED]
 * SD-card: emulate some delay after operation: it causes too much load on the host box being "zero time ready" condition
@@ -67,6 +69,12 @@ SMALLER [?] misc TODOs in the future:
 * M65: CPU FAR CALL/JUMP stuff (is it implemented in VHDL at all?)
 * ALL/XEMU: rewrite file load/handle/etc function in emulator, and that guessing file location madness, it's really ugly :(
 * M65: "integer math unit" if it's every implemented
+* M65: check for other things missed in the global memory map, not emulated yet
+* Exiting mouse grab mode shouldn't be ESC, as it also mapped as a key on most targets and also emited ...
+
+Projects:
+
+* M65: import many changes happened on the M65 scene (ie, new DMA stuffs, new CPU speed, new KS with pre-inited memory content and using colour RAM etc etc)
 
 Some more fundamental changes:
 
@@ -77,10 +85,11 @@ Some more fundamental changes:
 * VIC-3,4: implement all hw attributes in all possible modes
 * VIC-4: full support of 16C modes, FCM, etc etc
 * VIC-4: scaling support (this is really hard because of performance reasons, maybe SDL GPU accelerated rendering helps)
-* VIC-4: colour banks? What are those at all?
+* VIC-4: colour banks? What are those at all exactly?
 * VIC-4: sprite extensions (?) of VIC-II sprites, what are those?
 * VIC-4: VIC-IV specific sprites???? (do they exist on M65 at all yet?)
 * full-featured monitor/debug protocol, provider
+* M65: CPU personalities, ie 4502/6502?
 
 Some theory should be checked:
 

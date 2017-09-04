@@ -1,6 +1,6 @@
 /* Test-case for a very simple and inaccurate Primo (a Hungarian U880 - Z80 compatible - based
    8 bit computer) emulator using SDL2 library.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This Primo emulator is HIGHTLY inaccurate and unusable.
 
@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_PRIMO_H_INCLUDED
 #define __XEMU_PRIMO_H_INCLUDED
 
-#define ROM_NAME		"primo-b64.rom"
+#define DEFAULT_ROM_FILE_PATH	"#primo-b64.rom"
 #define SCREEN_FORMAT		SDL_PIXELFORMAT_ARGB8888
 #define USE_LOCKED_TEXTURE	1
 #define RENDER_SCALE_QUALITY	1

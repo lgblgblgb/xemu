@@ -13,7 +13,7 @@
    ie GTK, so a dozens years old (unmodified) GEOS app would be able to run on a PC
    with modern look and feel, ie anti-aliased fonts, whatever ...
    ---------------------------------------------------------------------------------
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    ---------------------------------------------------------------------------------
 
 This program is free software; you can redistribute it and/or modify
@@ -35,6 +35,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65c02.h"
 #include "xemu/cia6526.h"
 #include "xemu/emutools_hid.h"
+#include "xemu/emutools_config.h"
 #include "xemu/c64_kbd_mapping.h"
 #include "geos.h"
 
@@ -100,6 +101,8 @@ static Uint8 *memcfgs[8][2][16] = {
 #define GET_READ_P(a)	(memcfgs[cpu_port_memconfig][0][(a)>>12] + (a))
 #define GET_WRITE_P(a)	(memcfgs[cpu_port_memconfig][1][(a)>>12] + (a))
 #define IS_P_IO(p)	((p) >= IO_VIRT_ADDR)
+
+static const char *rom_fatal_msg = "This is one of the selected ROMs. Without it, Xemu won't work.\nInstall it, or use -romXXX CLI switches to specify another path, see the -h output for help.";
 
 static const char *memconfig_descriptions[8] = {
 		"ALL RAM [v1]", "CHAR+RAM", "CHAR+KERNAL", "ALL *ROM*",
@@ -561,7 +564,7 @@ static void cpu_port_write ( int addr, Uint8 data )
 }
 
 
-static void geosemu_init ( const char *disk_image_name )
+static void geosemu_init ( void )
 {
 	hid_init(
 		c64_key_map,
@@ -576,11 +579,11 @@ static void geosemu_init ( const char *disk_image_name )
 	cpu_port_write(1, CPU_PORT_DEFAULT_VALUE1);
 	// *** Load ROM image
 	if (
-		emu_load_file("c64-basic.rom",   memory + BASIC_ROM_OFFSET,  8193) != 8192 ||
-		emu_load_file("c64-kernal.rom",  memory + KERNAL_ROM_OFFSET, 8193) != 8192 ||
-		emu_load_file("c64-chargen.rom", memory + CHAR_ROM_OFFSET,   4097) != 4096
+		xemu_load_file(emucfg_get_str("rombasic"),  memory + BASIC_ROM_OFFSET,  8192, 8192, rom_fatal_msg) < 0 ||
+		xemu_load_file(emucfg_get_str("romkernal"), memory + KERNAL_ROM_OFFSET, 8192, 8192, rom_fatal_msg) < 0 ||
+		xemu_load_file(emucfg_get_str("romchar"),   memory + CHAR_ROM_OFFSET,   4096, 4096, rom_fatal_msg) < 0
 	)
-		FATAL("Cannot load (one of the) system ROMs!");
+		XEMUEXIT(1);
 	// *** Patching ROM for custom GEOS loader
 	if (PATCH_P != PATCH_OLD_BYTE)
 		FATAL("FATAL: ROM problem, patching point does not contain the expected value!");
@@ -683,7 +686,7 @@ int cpu_trap ( Uint8 opcode )
 		cpu_pc = memory[0x300] | (memory[0x301] << 8);
 		return 1;
 	}
-	if (!geos_load_kernal()) {
+	if (!geos_load_kernal(emucfg_get_str("geoskernal"))) {
 		geos_loaded = 2;	// GEOS was OK!!!!
 		return 1;	// if no error, return with '1' (as not zero) to signal CPU emulator that trap should not be executed
 	}
@@ -784,6 +787,15 @@ int main ( int argc, char **argv )
 	int cycles, frameskip;
 	sysconsole_open();
 	xemu_dump_version(stdout, "The Unexplained Commodore GEOS emulator from LGB");
+	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
+	emucfg_define_str_option("geosimg", NULL, "Select GEOS disk image to use (NOT USED YET!)");
+	emucfg_define_str_option("geoskernal", "#geos-kernal.bin", "Select GEOS KERNAL to use");
+	emucfg_define_str_option("rombasic", "#c64-basic.rom", "Select BASIC ROM to use");
+	emucfg_define_str_option("romchar", "#c64-chargen.rom", "Select CHARACTER ROM to use");
+	emucfg_define_str_option("romkernal", "#c64-kernal.rom", "Select KERNAL ROM to use");
+	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+	if (emucfg_parse_commandline(argc, argv, NULL))
+		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
         if (emu_init_sdl(
 		TARGET_DESC APP_DESC_APPEND,	// window title
@@ -801,15 +813,15 @@ int main ( int argc, char **argv )
 		shutdown_callback		// registered shutdown function
 	))
 		return 1;
-	// Initialize C65 ...
-	geosemu_init(
-		argc > 1 ? argv[1] : NULL	// disk image name
-	);
-	// Start!!
+	// Initialize
+	geosemu_init();
 	cycles = 0;
 	frameskip = 0;
+	emu_set_full_screen(emucfg_get_bool("fullscreen"));
+	if (!emucfg_get_bool("syscon"))
+		sysconsole_close(NULL);
+	// Start!!
 	emu_timekeeping_start();
-	sysconsole_close(NULL);
 	for (;;) {
 		int opcyc = cpu_step();
 		cia_tick(&cia1, opcyc);

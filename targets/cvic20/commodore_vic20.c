@@ -1,6 +1,6 @@
 /* Test-case for a very simple and inaccurate Commodore VIC-20 emulator using SDL2 library
    within the Xemu project.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is the VIC-20 emulation. Note: the source is overcrowded with comments by intent :)
    That it can useful for other people as well, or someone wants to contribute, etc ...
@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
 #include "xemu/emutools_hid.h"
+#include "xemu/emutools_config.h"
 #include "commodore_vic20.h"
 #include "xemu/cpu65c02.h"
 #include "xemu/via65c22.h"
@@ -28,6 +29,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define SCREEN_HEIGHT		(SCREEN_LAST_VISIBLE_SCANLINE - SCREEN_FIRST_VISIBLE_SCANLINE + 1)
 #define SCREEN_WIDTH		(SCREEN_LAST_VISIBLE_DOTPOS   - SCREEN_FIRST_VISIBLE_DOTPOS   + 1)
+
+
+static const char *rom_fatal_msg = "This is one of the selected ROMs. Without it, Xemu won't work.\nInstall it, or use -romXXX CLI switches to specify another path, see the -h output for help.";
 
 
 static Uint8 memory[0x10001];	// 64K (+1 for load check) address space of the 6502 CPU (some of it is ROM, undecoded, whatsoever ... it's simply the whole address space, *NOT* only RAM!)
@@ -435,81 +439,6 @@ static Uint8 via2_inb ( Uint8 mask )
 
 
 
-#define LOAD_ERROR(...) do {	\
-	ERROR_WINDOW(__VA_ARGS__);	\
-	free(emufile_p);	\
-	emufile_p = NULL;	\
-	emufile_size = 0;	\
-} while(0)
-
-
-
-
-static void parse_command_line ( int argc, char **argv )
-{
-	int a;
-	emurom_policy = 0;	// normally: "boot" into BASIC
-	emufile_p = NULL;
-	emufile_size = 0;
-	for (a = 1; a < argc; a++) {
-		if (argv[a][0] == '@') {
-			if (!strcmp(argv[a] + 1, "1"))
-				__mark_ram( 1, 3);
-			else if (!strcmp(argv[a] + 1, "8"))
-				__mark_ram( 8, 8);
-			else if (!strcmp(argv[a] + 1, "16"))
-				__mark_ram(16, 8);
-			else if (!strcmp(argv[a] + 1, "24"))
-				__mark_ram(24, 8);
-			else if (!strcmp(argv[a] + 1, "40")) {
-				__mark_ram(40, 8);
-				INFO_WINDOW("Warning, RAM from 40K (at $A000) is defined.\nThis may collide with the loaded EMU ROM there!");
-			} else
-				FATAL("Unknown command line memory ('@') option: %s", argv[a]);
-		} else if (argv[a][0] == '-') {
-			if (argv[a][1] == 0) {	// a single '-' option is interpreted, as monitor should be run
-				emurom_policy = 1;	// will cause to "boot" into monitor
-			} else
-				FATAL("Unknown command line '-' option: %s", argv[a]);
-		} else {
-			int ret;
-			emufile_p = emu_malloc(0x8000);
-			emufile_p[0] = '!';
-			strcpy(emufile_p + 1, argv[a]);
-			ret = emu_load_file(emufile_p, emufile_p, 0x8000);
-			if (ret < 0)
-				LOAD_ERROR("Cannot load file %s", argv[a]);
-			else if (ret < 3)
-				LOAD_ERROR("Abnormally short loaded file");
-			else if (ret == 0x8000)
-				LOAD_ERROR("Too large loaded file");
-			else {
-				emufile_size = ret;
-			}
-		}
-	}
-}
-
-
-static int rom_load ( const char *name, void *buffer, int size )
-{
-	void *load_buffer = emu_malloc(size + 1);
-	int ret = emu_load_file(name, load_buffer, size + 1);
-	if (ret < 0) {
-		free(load_buffer);
-		ERROR_WINDOW("Cannot load ROM %s", name);
-		return -1;
-	} else if (ret != size) {
-		free(load_buffer);
-		ERROR_WINDOW("Wrong ROM size %s\nShould be %d bytes long.", name, size);
-		return -1;
-	}
-	memcpy(buffer, load_buffer, size);
-	free(load_buffer);
-	return 0;
-}
-
-
 
 
 int main ( int argc, char **argv )
@@ -517,6 +446,20 @@ int main ( int argc, char **argv )
 	int cycles;
 	sysconsole_open();
 	xemu_dump_version(stdout, "The Inaccurate Commodore VIC-20 emulator from LGB");
+	emucfg_define_switch_option("bootmon", "Boot into monitor");
+	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
+	emucfg_define_str_option("prg", NULL, "Load a PRG file");
+	emucfg_define_str_option("ramexp", NULL, "Comma separated list of installed RAM expansions at Kbyte(s)");
+	emucfg_define_str_option("romchr",    CHR_ROM_NAME, "Sets character ROM to use");
+	emucfg_define_str_option("rombasic",  BASIC_ROM_NAME, "Sets BASIC ROM to use");
+	emucfg_define_str_option("romkernal", KERNAL_ROM_NAME, "Sets KERNAL ROM to use");
+	emucfg_define_str_option("romemu",    EMU_ROM_NAME, "Sets EMU ROM to use");
+	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+	if (emucfg_parse_commandline(argc, argv, NULL))
+		return 1;
+	emurom_policy = emucfg_get_bool("bootmon");	// normally: "boot" into BASIC, but to monitor of -bootmon was used
+	emufile_p = NULL;
+	emufile_size = 0;
 	printf(
 		"INFO: CPU clock frequency (calculated) %d Hz (wanted: %d Hz)" NL
 		"INFO: Texture resolution is %dx%d" NL
@@ -549,25 +492,61 @@ int main ( int argc, char **argv )
 		VIRTUAL_SHIFT_POS,
 		SDL_ENABLE		// enable HID joy events
 	);
-	/* Parse command line */
-	parse_command_line(argc, argv);
+	// Program to load?
+	if (emucfg_get_str("prg")) {
+		emufile_size = xemu_load_file(emucfg_get_str("prg"), NULL, 3, 0x8000, "Cannot load user specified PRG with -prg");
+		if (emufile_size < 0) {
+			emufile_p = NULL;
+			emufile_size = 0;
+		} else
+			emufile_p = xemu_load_buffer_p;
+	}
+	// RAM expansion
+	if (emucfg_get_str("ramexp")) {
+		int explist[5], r = emucfg_integer_list_from_string(emucfg_get_str("ramexp"), explist, 5, ",");
+		if (r < 0)
+			FATAL("Invalid memory expansion list (not comma separated list, more than 5 elements, etc) syntax given with -ramexp");
+		else
+			while (r--)
+				switch (explist[r]) {
+					case  1:
+						__mark_ram( 1, 3);
+						break;
+					case  8:
+						__mark_ram( 8, 8);
+						break;
+					case 16:
+						__mark_ram(16, 8);
+						break;
+					case 24:
+						__mark_ram(24, 8);
+						break;
+					case 40:
+						__mark_ram(40, 8);
+						INFO_WINDOW("Warning, RAM from 40K (at $A000) is defined.\nThis may collide with the loaded EMU ROM there!");
+						break;
+					default:
+						FATAL("Unknown memory expansion element %d in -ramexp %s", explist[r], emucfg_get_str("ramexp"));
+						break;
+				}
+	}
 	/* Intialize memory and load ROMs */
 	memset(memory, 0xFF, sizeof memory);
 	memset(dummy_vic_access, 0xFF, sizeof dummy_vic_access);	// define 1K of "nothing" for VIC-I memory regions what it can't access by hardware constraints
 	if (
-		rom_load(CHR_ROM_NAME,    memory + 0x8000, 0x1000) < 0 ||		// load chargen ROM
-		rom_load(BASIC_ROM_NAME,  memory + 0xC000, 0x2000) < 0 ||		// load basic ROM
-		rom_load(KERNAL_ROM_NAME, memory + 0xE000, 0x2000) < 0 ||		// load kernal ROM
-		rom_load(EMU_ROM_NAME,    memory + 0xA000, 0x2000) < 0			// load our "emulator monitor" ROM
+		xemu_load_file(emucfg_get_str("romchr"),    memory + 0x8000, 0x1000, 0x1000, rom_fatal_msg) < 0 ||	// load chargen ROM
+		xemu_load_file(emucfg_get_str("rombasic"),  memory + 0xC000, 0x2000, 0x2000, rom_fatal_msg) < 0 ||	// load basic ROM
+		xemu_load_file(emucfg_get_str("romkernal"), memory + 0xE000, 0x2000, 0x2000, rom_fatal_msg) < 0 ||	// load kernal ROM
+		xemu_load_file(emucfg_get_str("romemu"),    memory + 0xA000, 0x2000, 0x2000, rom_fatal_msg) < 0		// load our "emulator monitor" ROM
 	)
 		return 1;
 	// Check our "emulator monitor" ROM ...
 	if (is_our_rom() < -1) {
-		ERROR_WINDOW("Unknown emulator ROM " EMU_ROM_NAME);
+		ERROR_WINDOW("Unknown emulator ROM: %s", emucfg_get_str("romemu"));
 		return 1;
 	}
 	if (is_our_rom() != EMU_ROM_VERSION) {
-		ERROR_WINDOW("Bad emulator ROM " EMU_ROM_NAME " version, we need v%d\nPlease upgrade the ROM image!", EMU_ROM_VERSION);
+		ERROR_WINDOW("Bad emulator ROM %s version, we need v%d\nPlease upgrade the ROM image!", emucfg_get_str("romemu"), EMU_ROM_VERSION);
 		return 1;
 	}
 	// Continue with initializing ...
@@ -596,7 +575,9 @@ int main ( int argc, char **argv )
 	);
 	vic_init(vic_address_space_lo8, vic_address_space_hi4);
 	cycles = 0;
-	sysconsole_close(NULL);
+	emu_set_full_screen(emucfg_get_bool("fullscreen"));
+	if (!emucfg_get_bool("syscon"))
+		sysconsole_close(NULL);
 	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	for (;;) { // our emulation loop ...
 		int opcyc;

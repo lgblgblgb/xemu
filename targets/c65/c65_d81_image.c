@@ -1,6 +1,6 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 / Mega-65 emulator,
    within the Xemu project.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -97,20 +97,16 @@ void c65_d81_init ( const char *dfn )
 		close(disk_fd);
 	disk_fd = -1;
 	if (dfn) {
-		// Note about O_BINARY: it's a windows stuff, it won't work without that.
-		// HOWEVER, O_BINARY defined as zero on non-win archs in one of my include headers, thus it won't bother us with the good OSes :)
-		disk_fd = open(dfn, O_RDWR|O_BINARY);	// First, try to open D81 file in read-write mode
+		read_only = O_RDONLY;
+		disk_fd = xemu_open_file(dfn, O_RDWR, &read_only, NULL);
 		if (disk_fd < 0) {
-			disk_fd = open(dfn, O_RDONLY|O_BINARY);	// If R/W was not ok, try read-only!
-			if (disk_fd >= 0) {
-				WARNING_WINDOW("Disk image \"%s\" could be open only in read-only mode", dfn);
-				disk_inserted = 1;
-			} else {
-				ERROR_WINDOW("Couldn't open disk image \"%s\": %s", dfn, strerror(errno));
-			}
+			ERROR_WINDOW("Couldn't open disk image \"%s\": %s", dfn, strerror(errno));
 		} else {
-			disk_inserted  = 1;
-			read_only = 0;
+			disk_inserted = 1;
+			if (read_only)
+				WARNING_WINDOW("Disk image \"%s\" could be open only in read-only mode", dfn);
+			else
+				DEBUGPRINT("DISK: disk image \"%s\" opened in read-write mode" NL, dfn);
 		}
 	}
 	if (disk_inserted) {

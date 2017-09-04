@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "io_mapper.h"
 
 #include <sys/types.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
 
@@ -57,7 +58,7 @@ int hypervisor_debug_init ( const char *fn, int hypervisor_debug )
 	for (fd = 0; fd < 0x4000; fd++) {
 		debug_lines[fd][0][0] = 0;
 	}
-	fd = emu_load_file(fn, NULL, -1);
+	fd = xemu_open_file(fn, O_RDONLY, NULL, NULL);
 	if (fd < 0) {
 		INFO_WINDOW("Cannot open %s, no resolved symbols will be used.", fn);
 		return 1;

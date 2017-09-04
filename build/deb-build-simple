@@ -1,6 +1,6 @@
 #!/bin/bash
 # A very lame binary-level DEB package builder ... :-/
-# (C)2016 LGB Gabor Lenart
+# (C)2016,2017 LGB Gabor Lenart
 
 PROJECT="xemu"
 DEPENDENCY="libsdl2-2.0-0 (>= 2.0.4), libc6 (>= 2.15), libreadline6 (>= 6.3), libgtk-3-0 (>= 3.18)"
@@ -12,7 +12,7 @@ ROOT=".dist/${PROJECT}_$VERSION"
 ARCH=`dpkg --print-architecture`
 DEB="${PROJECT}_current_$ARCH.deb"
 BINDIRREAL="/usr/local/bin"
-DATADIRREAL="/usr/local/lib/xemu"
+DATADIRREAL="/usr/local/share/xemu"
 
 BINDIR="$ROOT$BINDIRREAL"
 DATADIR="$ROOT$DATADIRREAL"

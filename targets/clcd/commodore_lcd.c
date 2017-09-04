@@ -38,8 +38,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <time.h>
 
 
-static Uint8 memory[0x40001];	// +1 for checking load ...
-static Uint8 charrom[4096 + 1];
+static const char *rom_fatal_msg = "This is one of the selected ROMs. Without it, Xemu won't work.\nInstall it, or use -romXXX CLI switches to specify another path, see the -h output for help.";
+
+static Uint8 memory[0x40000];
+static Uint8 charrom[4096];
 extern unsigned const char roms[];
 static int mmu[3][4] = {
 	{0, 0, 0, 0},
@@ -377,6 +379,11 @@ int main ( int argc, char **argv )
 	xemu_dump_version(stdout, "The world's first Commodore LCD emulator from LGB");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	emucfg_define_num_option("ram", 128, "Sets RAM size in KBytes.");
+	emucfg_define_str_option("rom102", "#clcd-u102.rom", "Selects 'U102' ROM to use");
+	emucfg_define_str_option("rom103", "#clcd-u103.rom", "Selects 'U103' ROM to use");
+	emucfg_define_str_option("rom104", "#clcd-u104.rom", "Selects 'U104' ROM to use");
+	emucfg_define_str_option("rom105", "#clcd-u105.rom", "Selects 'U105' ROM to use");
+	emucfg_define_str_option("romchr", "#clcd-chargen.rom", "Selects character ROM to use");
 	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
@@ -409,15 +416,13 @@ int main ( int argc, char **argv )
 	memset(memory, 0xFF, sizeof memory);
 	memset(charrom, 0xFF, sizeof charrom);
 	if (
-		emu_load_file("clcd-u102.rom", memory + 0x38000, 0x8001) != 0x8000 ||
-		emu_load_file("clcd-u103.rom", memory + 0x30000, 0x8001) != 0x8000 ||
-		emu_load_file("clcd-u104.rom", memory + 0x28000, 0x8001) != 0x8000 ||
-		emu_load_file("clcd-u105.rom", memory + 0x20000, 0x8001) != 0x8000 ||
-		emu_load_file("clcd-chargen.rom", charrom, 4097) != 4096
-	) {
-		ERROR_WINDOW("Cannot load some of the needed ROM images (see console messages)!");
-		//return 1;
-	}
+		xemu_load_file(emucfg_get_str("rom102"), memory + 0x38000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
+		xemu_load_file(emucfg_get_str("rom103"), memory + 0x30000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
+		xemu_load_file(emucfg_get_str("rom104"), memory + 0x28000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
+		xemu_load_file(emucfg_get_str("rom105"), memory + 0x20000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
+		xemu_load_file(emucfg_get_str("romchr"), charrom,          0x1000, 0x1000, rom_fatal_msg) < 0
+	)
+		return 1;
 	// Ugly hacks :-( <patching ROM>
 #ifdef ROM_HACK_COLD_START
 	// this ROM patching is needed, as Commodore LCD seems not to work to well with "not intact" SRAM content (ie: it has battery powered SRAM even when "switched off")
@@ -436,8 +441,8 @@ int main ( int argc, char **argv )
 	memory[0x382CE] = 0xAA;	// offset 0x6800 in the ROM image of clcd-u104.rom [phys memory address: 0x2E800]
 	// try to load "parasite" ROMs (it's not fatal if we cannot ...)
 	// these loads to an unused part of the original ROM images
-	emu_load_file("clcd-u105-parasite.rom", memory + 0x26800, 0x8000 - 0x6800);
-	emu_load_file("clcd-u104-parasite.rom", memory + 0x2E800, 0x8000 - 0x6800);
+	xemu_load_file("#clcd-u105-parasite.rom", memory + 0x26800, 32, 0x8000 - 0x6800, NULL);
+	xemu_load_file("#clcd-u104-parasite.rom", memory + 0x2E800, 32, 0x8000 - 0x6800, NULL);
 #endif
 	/* init CPU */
 	cpu_reset();	// we must do this after loading KERNAL at least, since PC is fetched from reset vector here!

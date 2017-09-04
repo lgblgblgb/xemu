@@ -1,5 +1,5 @@
 /* Test-case for a very simple and inaccurate Commodore VIC-20 emulator using SDL2 library.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -28,10 +28,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define USE_LOCKED_TEXTURE	1
 #define RENDER_SCALE_QUALITY	2
 
-#define EMU_ROM_NAME		"vic20-emulator-tool.rom"
+#define EMU_ROM_NAME		"#vic20-emulator-tool.rom"
 #define EMU_ROM_VERSION		0
-#define CHR_ROM_NAME		"vic20-chargen.rom"
-#define KERNAL_ROM_NAME		"vic20-kernal.rom"
-#define BASIC_ROM_NAME		"vic20-basic.rom"
+#define CHR_ROM_NAME		"#vic20-chargen.rom"
+#define KERNAL_ROM_NAME		"#vic20-kernal.rom"
+#define BASIC_ROM_NAME		"#vic20-basic.rom"
 
 #endif

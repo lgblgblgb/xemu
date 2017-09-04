@@ -1,5 +1,5 @@
 /* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015,2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    http://xep128.lgb.hu/
 
 This program is free software; you can redistribute it and/or modify
@@ -20,11 +20,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define __TVC_SDEXT_H_INCLUDED
 #ifdef CONFIG_SDEXT_SUPPORT
 
-#define SDCARD_IMG_FN		"sdcard.img"
-#define SDCARD_ROM_FN		"tvc_sddos.rom"
 #define SDCARD_ROM_SIZE		(40*1024)
 
-extern void  sdext_init ( void );
+extern void  sdext_init ( const char *sdimg_filename, const char *sdrom_filename );
 extern Uint8 sdext_read_cart ( int addr );
 extern void  sdext_write_cart ( int addr, Uint8 data );
 extern void  sdext_clear_ram ( void );

@@ -1,3 +1,7 @@
 This directory is used to build result binaries.
 
 This directory must exist for the build process!
+
+Symbolic link to the directory '../../rom' here is used to be able to
+run the emulator from the source tree without preliminary install, since
+emulators also search for $(BINARY_PATH)/rom/... for its rom or data files.

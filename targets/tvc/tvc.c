@@ -1,7 +1,7 @@
 /* Test-case for a very simple and inaccurate Videoton TV computer
    (a Z80 based 8 bit computer) emulator using SDL2 library.
 
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This emulator is HIGHLY inaccurate and unusable.
 
@@ -50,8 +50,8 @@ static struct {
 	Uint8 *vmem;
 	Uint8 user_ram [0x10000];
 	Uint8 video_ram[0x10000];
-	Uint8 sys_rom  [0x04000 + 1];
-	Uint8 ext_rom  [0x04000 + 1];	// the first 8K is not used from this, currently ...
+	Uint8 sys_rom  [0x04000];
+	Uint8 ext_rom  [0x04000];	// the first 8K is not used from this, currently ...
 } mem;
 
 // CRTC "internal" related stuffs
@@ -376,14 +376,14 @@ static void init_tvc ( void )
 		z80ex_pwrite_cb(a, 0);
 	for (a = 0; a < sizeof crtc.registers; a++)
 		crtc_write_register(a, 0);
-	if (emu_load_file("tvc22_d6_64k.rom", mem.sys_rom + 0x0000, 0x2001) != 0x2000 ||
-	    emu_load_file("tvc22_d4_64k.rom", mem.sys_rom + 0x2000, 0x2001) != 0x2000 ||
-	    emu_load_file("tvc22_d7_64k.rom", mem.ext_rom + 0x2000, 0x2001) != 0x2000
+	if (xemu_load_file("#tvc22_d6_64k.rom", mem.sys_rom + 0x0000, 0x2000, 0x2000, NULL) < 0 ||
+	    xemu_load_file("#tvc22_d4_64k.rom", mem.sys_rom + 0x2000, 0x2000, 0x2000, NULL) < 0 ||
+	    xemu_load_file("#tvc22_d7_64k.rom", mem.ext_rom + 0x2000, 0x2000, 0x2000, NULL) < 0
 	)
 		FATAL("Cannot load ROM(s).");
 #ifdef CONFIG_SDEXT_SUPPORT
 	if (emucfg_get_bool("sdext"))
-		sdext_init();
+		sdext_init(emucfg_get_str("sdimg"), emucfg_get_str("sdrom"));
 #endif
 }
 
@@ -397,11 +397,14 @@ int main ( int argc, char **argv )
 	xemu_dump_version(stdout, "The Careless Videoton TV Computer emulator from LGB");
 #ifdef CONFIG_SDEXT_SUPPORT
 	emucfg_define_switch_option("sdext", "Enables SD-ext");
-	emucfg_define_str_option("sdimg", SDCARD_IMG_FN, "SD-card image filename / path");
+	emucfg_define_str_option("sdimg", "@sdcard.img", "SD-card image filename / path");
+	emucfg_define_str_option("sdrom", "#tvc_sddos.rom", "SD-card cartridge ROM image path");
 #endif
 	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
 	if (emucfg_parse_commandline(argc, argv, NULL))
 		return 1;
+	if (xemu_byte_order_test())
+		FATAL("Byte order test failed!!");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (emu_init_sdl(
 		TARGET_DESC APP_DESC_APPEND,	// window title

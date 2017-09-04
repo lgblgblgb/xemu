@@ -1,7 +1,7 @@
 /* This is an odd emulator, emulating a Commodore 64 like machine only for the
    level needed for a special version of GEOS to be able to run on it.
 
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern Uint8 memory[];
 extern Uint8 colour_sram[];
 
-extern int  geos_load_kernal ( void );
+extern int  geos_load_kernal ( const char *kernal_image_name );
 extern void geos_cpu_trap ( Uint8 opcode );
 extern void inject_screencoded_message ( int addr, const char *s );
 

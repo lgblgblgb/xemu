@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_ZXSPECT_SPECTRUM_H_INCLUDED
 #define __XEMU_ZXSPECT_SPECTRUM_H_INCLUDED
 
-#define ROM_NAME		"zxspect48.rom"
+#define ROM_NAME		"#zxspect48.rom"
 #define SCREEN_FORMAT		SDL_PIXELFORMAT_ARGB8888
 #define USE_LOCKED_TEXTURE	1
 #define RENDER_SCALE_QUALITY	1

@@ -13,7 +13,7 @@
    ie GTK, so a dozens years old (unmodified) GEOS app would be able to run on a PC
    with modern look and feel, ie anti-aliased fonts, whatever ...
    ---------------------------------------------------------------------------------
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    ---------------------------------------------------------------------------------
 
 This program is free software; you can redistribute it and/or modify
@@ -41,8 +41,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "geos.h"
 #include "xemu/emutools.h"
 
-
-#define GEOS_KERNAL_NAME "geos-kernal.bin"
 
 
 
@@ -87,36 +85,25 @@ static int check_basic_stub ( Uint8 *p, int addr )
 
 
 
-int geos_load_kernal ( void )
+int geos_load_kernal ( const char *kernal_image_name )
 {
 	Uint8 buffer[0xB000];
-	int len = emu_load_file(GEOS_KERNAL_NAME, buffer, sizeof buffer);
-	int addr;
-	if (len < 0) {
-		INFO_WINDOW("Cannot open GEOS kernal (%s), or I/O error", GEOS_KERNAL_NAME);
-		return 1;	// file not found, or I/O error
-	}
-	if (len < 0x1000) {
-		INFO_WINDOW("Abnormally short GEOS kernal (%s)", GEOS_KERNAL_NAME);
+	int addr, len = xemu_load_file(kernal_image_name, buffer, 0x1000, sizeof buffer, "Cannot load specified GEOS kernal image");
+	if (len < 0)
 		return 1;
-	}
-	if (len == sizeof buffer) {
-		INFO_WINDOW("Abnormally large GEOS kernal (%s)", GEOS_KERNAL_NAME);
-		return 1;
-	}
 	addr = buffer[0] | (buffer[1] << 8);	// load address
 	if (addr == 0x5000) {
 		cpu_pc = 0x5000;
 	} else if (addr == 0x801) {
 		int sys = check_basic_stub(buffer + 6, addr);
 		if (sys < 0) {
-			INFO_WINDOW("Invalid BASIC stub for the GEOS kernal (%s)", GEOS_KERNAL_NAME);
+			INFO_WINDOW("Invalid BASIC stub for the GEOS kernal (%s)", xemu_load_filepath);
 			return 1;
 		}
 		cpu_pc = sys;
 		inject_screencoded_message(6 * 40, "*** Basic stub, you need to wait now ***");
 	} else {
-		INFO_WINDOW("Invalid GEOS kernal load address ($%04X) in (%s)", addr, GEOS_KERNAL_NAME);
+		INFO_WINDOW("Invalid GEOS kernal load address ($%04X) in (%s)", addr, xemu_load_filepath);
 		return 1;
 	}
 	// OK. Everything seems to be so okey ...

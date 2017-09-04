@@ -1,5 +1,5 @@
 /* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015,2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    http://xep128.lgb.hu/
 
 This program is free software; you can redistribute it and/or modify
@@ -25,7 +25,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 */
 
 #include "xemu/emutools.h"
-#include "xemu/emutools_config.h"
 #include "xemu/z80.h"
 #include "sdext.h"
 #include <unistd.h>
@@ -54,9 +53,10 @@ static int is_hs_read;
 static Uint8 _spi_last_w;
 static int cs0, cs1;
 static Uint8 status;
+static int sd_is_ro;
 
 static Uint8 sd_ram_ext[7 * 1024]; // 7K of accessible SRAM
-static Uint8 sd_rom_ext[SDCARD_ROM_SIZE + 1];
+static Uint8 sd_rom_ext[SDCARD_ROM_SIZE];
 
 static Uint8 cmd[6], cmd_index, _read_b, _write_b, _write_specified;
 static const Uint8 *ans_p;
@@ -297,12 +297,11 @@ static int sdext_check_and_set_size ( void )
  * with the FLASH ROM content. Even segment 7, which will be copied to the second 64K "hidden"
  * and pagable flash area of the SD cartridge. Currently, there is no support for the full
  * sized SDEXT flash image */
-void sdext_init ( void )
+void sdext_init ( const char *sdimg_filename, const char *sdrom_filename )
 {
 	sdext_enabled = 0;
 	// try to load our ROM ...
-	if (emu_load_file(SDCARD_ROM_FN, sd_rom_ext, SDCARD_ROM_SIZE + 1) != SDCARD_ROM_SIZE) {
-		WARNING_WINDOW("Cannot load SDext+DOS \"%s\" or wrong size. SD card hardware emulation has been disabled! (%s)", SDCARD_ROM_FN, strerror(errno));
+	if (xemu_load_file(sdrom_filename, sd_rom_ext, SDCARD_ROM_SIZE, SDCARD_ROM_SIZE, "Cannot load SD-card cartridge ROM, SD emulation has been disabled!") < 0) {
 		SD_DEBUG("SDEXT: init: REFUSE: no SD-card cartridge ROM code found in loaded ROM set." NL);
 		goto error;
 	}
@@ -310,21 +309,17 @@ void sdext_init ( void )
 	// try to open SD card image. If not found, and it's the DEFAULT config option we provide user to install an empty one (and later to download a populated one)
 //try_to_open_image:
 	//sdf = open_emu_file(emucfg_get_str("sdimg"), "rb", sdimg_path); // open in read-only mode, to get the path
-	sdfd = emu_load_file(emucfg_get_str("sdimg"), sdimg_path, -1);
-	if (sdfd >= 0) {
-		int sdfd_rw = open(sdimg_path, O_RDWR | O_BINARY);
-		if (sdfd_rw >= 0) {
-			DEBUGPRINT("SDEXT: SD image file is re-open in read/write mode, good (fd=%d)." NL, sdfd_rw);
-			close(sdfd);
-			sdfd = sdfd_rw;
-		} else {
-			DEBUGPRINT("SDEXT: SD image cannot be re-open in read-write mode, using read-only access (fd=%d): %s" NL, sdfd, strerror(errno));
-		}
-	} else {
-		WARNING_WINDOW("SD card image file \"%s\" cannot be open: %s. You can use the emulator but SD card access won't work!", emucfg_get_str("sdimg"), strerror(errno));
+	sd_is_ro = O_RDONLY;
+	sdfd = xemu_open_file(sdimg_filename, O_RDWR, &sd_is_ro, sdimg_path);
+	if (sdfd < 0) {
+		WARNING_WINDOW("SD card image file \"%s\" cannot be open: %s. You can use the emulator but SD card access won't work!", sdimg_path, strerror(errno));
 		goto error;
+	} else {
+		if (sd_is_ro)
+			DEBUGPRINT("SDEXT: SD image cannot be open in read-write mode, using read-only access (fd=%d)." NL, sdfd);
+		else
+			DEBUGPRINT("SDEXT: SD image file is open in read/write mode, good (fd=%d)" NL, sdfd);
 	}
-
 	// size, etc
 	sd_card_size = lseek(sdfd, 0, SEEK_END);
 	if (sdext_check_and_set_size()) {

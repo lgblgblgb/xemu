@@ -44,12 +44,14 @@ SDL_PixelFormat *sdl_pix_fmt;
 static const char default_window_title[] = "XEMU";
 char *sdl_window_title = (char*)default_window_title;
 char *window_title_custom_addon = NULL;
+void *xemu_load_buffer_p;
+char xemu_load_filepath[PATH_MAX];
 char *window_title_info_addon = NULL;
 Uint32 *sdl_pixel_buffer = NULL;
 int texture_x_size_in_bytes;
 int emu_is_fullscreen = 0;
 static int win_xsize, win_ysize;
-char *sdl_pref_dir, *sdl_base_dir;
+char *sdl_pref_dir, *sdl_base_dir, *sdl_inst_dir;
 Uint32 sdl_winid;
 static Uint32 black_colour;
 static void (*shutdown_user_function)(void);
@@ -192,74 +194,159 @@ void emu_drop_events ( void )
 }
 
 
-
-int emu_load_file ( const char *fn, void *buffer, int maxsize )
+/* Open a file, returning a file descriptor, or negative value in case of failure.
+ * Input parameters:
+ *	filename: name of the file
+ *		- if it begins with '@' the file is meant to relative to the SDL preferences directory (ie: @thisisit.rom, no need for dirsep!)
+ *		- if it begins with '#' the file is meant for 'data directory' which is probed then multiple places, depends on the OS as well
+ *		- otherwise it's simply a file name, passed as-is
+ *	mode: actually the flags parameter for open (O_RDONLY, etc)
+ *		- O_BINARY is used automatically in case of Windows, no need to specify as input data
+ *		- you can even use creating file effect with the right value here
+ *	*mode2: pointer to an int, secondary open mode set
+ *		- if it's NULL pointer, it won't be used ever
+ *		- if it's not NULL, open() is also tried with the pointed flags for open() after trying (and failed!) open() with the 'mode' par
+ *		- if mode2 pointer is not NULL, the pointed value will be zeroed by this func, if NOT *mode2 is used with successfull open
+ *		- the reason for this madness: opening a disk image which neads to be read/write access, but also works for read-only, however
+ *		  then the caller needs to know if the disk emulation is about r/w or ro only ...
+ *	*filepath_back: if not null, actually tried path will be placed here (even in case of non-successfull call, ie retval is negative)
+ *		- in case of multiple-path tries (# prefix) the first (so the most relevant, hopefully) is passed back
+ *		- note: if no prefix (@ and #) the filename will be returned as is, even if didn't hold absolute path (only relative) or no path as all (both: relative to cwd)!
+ *
+ */
+int xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_back )
 {
-	char fnbuf[PATH_MAX + 1];
-	char *search_paths[] = {
+	char paths[10][PATH_MAX];
+	int a, max_paths;
+	if (!filename)
+		FATAL("Calling xemu_open_file() with NULL filename!");
+	if (!*filename)
+		FATAL("Calling xemu_open_file() with empty filename!");
+	max_paths = 0;
 #ifdef __EMSCRIPTEN__
-		EMSCRIPTEN_SDL_BASE_DIR,
+	sprintf(paths[max_paths++], "%s%s", EMSCRIPTEN_SDL_BASE_DIR, (filename[0] == '@' || filename[0] == '#') ? filename + 1 : filename);
 #else
-		".",
-		"." DIRSEP_STR "rom",
-		sdl_pref_dir,
-		sdl_base_dir,
+	if (*filename == '@') {
+		sprintf(paths[max_paths++], "%s%s", sdl_pref_dir, filename + 1);
+	} else if (*filename == '#') {
+		sprintf(paths[max_paths++], "%s%s", sdl_inst_dir, filename + 1);
+		sprintf(paths[max_paths++], "%s%s", sdl_pref_dir, filename + 1);
+		sprintf(paths[max_paths++], "%srom" DIRSEP_STR "%s", sdl_base_dir, filename + 1);
+		sprintf(paths[max_paths++], "%s%s", sdl_base_dir, filename + 1);
 #ifndef _WIN32
-		DATADIR,
+		sprintf(paths[max_paths++], "/usr/local/share/xemu/%s", filename + 1);
+		sprintf(paths[max_paths++], "/usr/local/lib/xemu/%s", filename + 1);
+		sprintf(paths[max_paths++], "/usr/share/xemu/%s", filename + 1);
+		sprintf(paths[max_paths++], "/usr/lib/xemu/%s", filename + 1);
 #endif
+	} else
+		strcpy(paths[max_paths++], filename);
 #endif
-		NULL
-	};
-	int a = 0, fd = -1, read_size = 0;
-	if (fn[0] == '!') {
-		fn++;
-		search_paths[0] = "";
-		search_paths[1] = NULL;
-	} else if (
-		fn[0] == DIRSEP_CHR ||
-		(fn[0] == '.' && fn[1] == DIRSEP_CHR)
-#ifdef _WIN32
-		|| fn[1] == ':'
-#endif
-	) {
-		search_paths[0] = "";
-		search_paths[1] = NULL;
-	}
-	while (search_paths[a]) {
-		if (search_paths[a][0] == 0)
-			strcpy(fnbuf,  fn);
-		else
-			snprintf(fnbuf, sizeof fnbuf, "%s%c%s", search_paths[a], DIRSEP_CHR, fn);
-		printf("Trying to open file \"%s\" as \"%s\" ..." NL, fn, fnbuf);
-		fd = open(fnbuf, O_RDONLY | O_BINARY);	// O_BINARY is Windows stuff, but we define it as zero in case of non-Win32 system, so it won't hurt
-		if (fd > -1)
-			break;
-		a++;
-	}
-	if (fd < 0) {
-		fprintf(stderr, "Cannot open file %s" NL, fn);
-		return -1;
-	}
-	printf("OK, file is open (fd = %d)" NL, fd);
-	if (maxsize < 0) {
-		if (buffer)
-			strcpy(buffer, fnbuf);
-		return fd;	// special mode to get a file descriptor, instead of loading anything ...
-	}
-	while (read_size < maxsize) {
-		a = read(fd, buffer, maxsize - read_size);
-		if (a < 0) {
-			fprintf(stderr, "Reading error!" NL);
-			return -1;
+	a = 0;
+	do {
+		int fd;
+		// Notes:
+		// 1. O_BINARY is a windows stuff. However, since we define O_BINARY as zero for non-win archs, it's OK
+		// 2. 0666 mask is needed as it can be also a creat() function basically ...
+		fd = open(paths[a], mode | O_BINARY, 0666);
+		if (filepath_back)
+			strcpy(filepath_back, paths[a]);
+		if (fd >= 0) {
+			if (mode2)
+				*mode2 = 0;
+			DEBUGPRINT("FILE: file %s opened as %s with base mode-set as fd=%d" NL, filename, paths[a], fd);
+			return fd;
 		}
-		if (a == 0)
-			break;
-		buffer += a;
-		read_size += a;
-	}
-	close(fd);
-	return read_size;
+		if (mode2) {
+			fd = open(paths[a], *mode2 | O_BINARY, 0666);	// please read the comments at the previous open(), above
+			if (fd >= 0) {
+				DEBUGPRINT("FILE: file %s opened as %s with *second* mode-set as fd=%d" NL, filename, paths[a], fd);
+				return fd;
+			}
+		}
+	} while (++a < max_paths);
+	// if not found, copy the first try so the report for user is more sane
+	if (filepath_back)
+		strcpy(filepath_back, paths[0]);
+	DEBUGPRINT("FILE: %s cannot be open, tried path(s): ", filename);
+	for (a = 0; a < max_paths; a++)
+		DEBUGPRINT(" %s", paths[a]);
+	DEBUGPRINT(NL);
+	return -1;
 }
+
+
+
+/* Loads a file, probably ROM image etc. It uses xemu_open_file() - see above - for opening it.
+ * Return value:
+ * 	- non-negative: given mumber of bytes loaded
+ * 	- negative, error: -1 file open error, -2 file read error, -3 limit constraint violation
+ * Input parameters:
+ * 	* filename: see comments at xemu_open_file()
+ * 	* store_to: pointer to the store buffer
+ * 		- note: the buffer will be filled only in case of success, no partial modification can be
+ * 		- if store_to is NULL, then the load buffer is NOT free'd and the buffer pointer is assigned to xemu_load_buffer_p
+ * 	* min_size,max_size: in bytes, the minimal needed and the maximal allowed file size (can be the same)
+ * 		- note: limit contraint violation, if this does not meet during the read ("load") process
+ * 	* cry: character message, to 'cry' (show an error window) in case of a problem. if NULL = no dialog box
+ */
+int xemu_load_file ( const char *filename, void *store_to, int min_size, int max_size, const char *cry )
+{
+	int fd = xemu_open_file(filename, O_RDONLY, NULL, xemu_load_filepath);
+	if (fd < 0) {
+		if (cry) {
+			ERROR_WINDOW("Cannot open file requested by %s: %s\nTried as: %s\n%s%s", filename, strerror(errno), xemu_load_filepath,
+				(*filename == '#') ? "(# prefixed, multiple paths also tried)\n" : "",
+				cry
+			);
+		}
+		return -1;
+	} else {
+		int load_size = 0;
+		xemu_load_buffer_p = emu_malloc(max_size + 1);	// try to load one byte more than the max allowed, to detect too large file scenario
+		do {
+			int r = read(fd, xemu_load_buffer_p + load_size, max_size - load_size + 1);
+			if (r == 0)
+				break;	// end-of-file situation
+			if (r < 0) {
+				ERROR_WINDOW("Cannot read file %s: %s\n%s", xemu_load_filepath, strerror(errno), cry ? cry : "");
+				free(xemu_load_buffer_p);
+				xemu_load_buffer_p = NULL;
+				close(fd);
+				return -2;
+			}
+			load_size += r;
+		} while (load_size < max_size + 1);
+		close(fd);
+		if (load_size < min_size) {
+			free(xemu_load_buffer_p);
+			xemu_load_buffer_p = NULL;
+			if (cry)
+				ERROR_WINDOW("File (%s) is too small (%d bytes), %d bytes needed.\n%s", xemu_load_filepath, load_size, min_size, cry);
+			else
+				DEBUGPRINT("FILE: file (%s) is too small (%d bytes), %d bytes needed." NL, xemu_load_filepath, load_size, min_size);
+			return -3;
+		}
+		if (load_size > max_size) {
+			free(xemu_load_buffer_p);
+			xemu_load_buffer_p = NULL;
+			if (cry)
+				ERROR_WINDOW("File (%s) is too large, larger than %d bytes.\n%s", xemu_load_filepath, max_size, cry);
+			else
+				DEBUGPRINT("FILE: file (%s) is too large, larger than %d bytes needed." NL, xemu_load_filepath, max_size);
+			return -3;
+		}
+		if (store_to) {
+			memcpy(store_to, xemu_load_buffer_p, load_size);
+			free(xemu_load_buffer_p);
+			xemu_load_buffer_p = NULL;
+		} else
+			xemu_load_buffer_p = emu_realloc(xemu_load_buffer_p, load_size);
+		DEBUGPRINT("FILE: %d bytes loaded from file: %s" NL, load_size, xemu_load_filepath);
+		return load_size;
+	}
+}
+
 
 /* Meaning of "setting":
 	-1 (or any negative integer): toggle, switch between fullscreen / windowed mode automatically depending on the previous state
@@ -497,6 +584,7 @@ int emu_init_sdl (
 	MKDIR(EMSCRIPTEN_SDL_BASE_DIR);
 	sdl_base_dir = emu_strdup(EMSCRIPTEN_SDL_BASE_DIR);
 	sdl_pref_dir = emu_strdup(EMSCRIPTEN_SDL_BASE_DIR);
+	sdl_inst_dir = emu_strdup(EMSCRIPTEN_SDL_BASE_DIR);
 #else
 	sdl_pref_dir = SDL_GetPrefPath(app_organization, app_name);
 	if (!sdl_pref_dir) {
@@ -508,6 +596,28 @@ int emu_init_sdl (
 		ERROR_WINDOW("Cannot query SDL base directory: %s", SDL_GetError());
 		return 1;
 	}
+	do {
+		char s[PATH_MAX];
+#ifndef _WIN32
+		char *p;
+#endif
+		sprintf(s, "%s%s" DIRSEP_STR, sdl_pref_dir, "default-files");
+		sdl_inst_dir = emu_strdup(s);
+		if (MKDIR(sdl_inst_dir) && errno != EEXIST)
+			ERROR_WINDOW("Warning: cannot create directory %s: %s", sdl_inst_dir, strerror(errno));
+#ifndef _WIN32
+		p = getenv("HOME");
+		if (p && strlen(sdl_pref_dir) > strlen(p) + 1 && !strncmp(p, sdl_pref_dir, strlen(p)) && sdl_pref_dir[strlen(p)] == DIRSEP_CHR) {
+			sprintf(s, "%s" DIRSEP_STR "." APP_ORG, p);
+			p = sdl_pref_dir + strlen(p) + 1;
+			if (symlink(p, s)) {
+				if (errno != EEXIST)
+					WARNING_WINDOW("Warning: cannot create symlink %s to %s: %s", p, s, strerror(errno));
+			} else
+				INFO_WINDOW("Old-style link for pref.directory has been created as %s\npointing to: %s", s, p);
+		}
+#endif
+	} while (0);
 #endif
 	printf("SDL preferences directory: %s" NL, sdl_pref_dir);
 	sdl_window_title = emu_strdup(window_title);

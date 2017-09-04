@@ -22,3 +22,5 @@
 /*.bit
 /*.d81
 /*.list
+/*.o
+/clcd-*-parasite.rom

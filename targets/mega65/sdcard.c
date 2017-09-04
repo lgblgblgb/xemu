@@ -51,23 +51,17 @@ static int open_external_d81 ( const char *fn )
 	char fnbuf[PATH_MAX + 1];
 	if (!fn)
 		return -1;
-	d81_is_read_only = 1;
-	d81fd = emu_load_file(fn, fnbuf, -1);	// get the file descriptor only ...
+	d81_is_read_only = O_RDONLY;
+	d81fd = xemu_open_file(fn, O_RDWR, &d81_is_read_only, fnbuf);
 	if (d81fd < 0) {
 		ERROR_WINDOW("External D81 image was specified (%s) but it cannot be opened: %s", fn, strerror(errno));
 		DEBUG("SDCARD: cannot open external D81 image %s" NL, fn);
 	} else {
 		off_t d81_size;
-		// try to open in R/W mode
-		int tryfd = open(fnbuf, O_RDWR | O_BINARY);
-		if (tryfd >= 0) {
-			close(d81fd);
-			d81fd = tryfd;
-			DEBUG("SDCARD: exernal D81 image file re-opened in RD/WR mode, good" NL);
-			d81_is_read_only = 0;
-		} else {
+		if (d81_is_read_only)
 			INFO_WINDOW("External D81 image file %s could be open only in R/O mode", fnbuf);
-		}
+		else
+			DEBUG("SDCARD: exernal D81 image file re-opened in RD/WR mode, good" NL);
 		d81_size = lseek(d81fd, 0, SEEK_END);
 		if (d81_size == (off_t)-1) {
 			ERROR_WINDOW("Cannot query the size of external D81 image %s, using on-SD images! ERROR: %s", fn, strerror(errno));
@@ -102,26 +96,20 @@ int sdcard_init ( const char *fn, const char *extd81fn )
 	char fnbuf[PATH_MAX + 1];
 	atexit(sdcard_shutdown);
 	sd_status = 0;
-	sd_is_read_only = 1;
 	d81_is_read_only = 1;
 	mounted = 0;
 	memset(sd_sector_bytes, 0, sizeof sd_sector_bytes);
 	memset(sd_d81_img1_start, 0, sizeof sd_d81_img1_start);
-	sdfd = emu_load_file(fn, fnbuf, -1);    // get the file descriptor only ...
+	sd_is_read_only = O_RDONLY;
+	sdfd = xemu_open_file(fn, O_RDWR, &sd_is_read_only, fnbuf);
 	if (sdfd < 0) {
 		ERROR_WINDOW("Cannot open SD-card image %s, SD-card access won't work! ERROR: %s", fn, strerror(errno));
 		DEBUG("SDCARD: cannot open image %s" NL, fn);
 	} else {
-		// try to open in R/W mode ...
-		int tryfd = open(fnbuf, O_RDWR | O_BINARY);
-		if (tryfd >= 0) {
-			// use R/W mode descriptor if it was OK!
-			close(sdfd);
-			sdfd = tryfd;
-			DEBUG("SDCARD: image file re-opened in RD/WR mode, good" NL);
-			sd_is_read_only = 0;
-		} else
+		if (sd_is_read_only)
 			INFO_WINDOW("Image file %s could be open only in R/O mode", fnbuf);
+		else
+			DEBUG("SDCARD: image file re-opened in RD/WR mode, good" NL);
 		// Check size!
 		DEBUG("SDCARD: cool, SD-card image %s (as %s) is open" NL, fn, fnbuf);
 		sd_card_size = lseek(sdfd, 0, SEEK_END);

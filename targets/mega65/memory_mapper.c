@@ -56,8 +56,7 @@ Uint8 fast_ram[0x20000];
 // the chip-RAM. Also, the first 1 or 2K can be seen in the C64-style I/O area too, at $D800
 Uint8 colour_ram[0x8000];
 // 16K of hypervisor RAM, can be only seen in hypervisor mode.
-// FIXME: +1 byte for the idiotic Xemu length checking only :)
-Uint8 hypervisor_ram[0x4001] = {
+Uint8 hypervisor_ram[0x4000] = {
 #include "../../rom/kickup.cdata"
 };
 // 127Mbytes of slow-RAM. Would be the DDR memory on M65/Nexys4

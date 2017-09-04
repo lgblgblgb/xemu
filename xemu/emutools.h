@@ -86,8 +86,10 @@ extern SDL_Window   *sdl_win;
 extern Uint32 sdl_winid;
 extern SDL_PixelFormat *sdl_pix_fmt;
 extern int seconds_timer_trigger;
-extern char *sdl_pref_dir, *sdl_base_dir;
+extern char *sdl_pref_dir, *sdl_base_dir, *sdl_inst_dir;
 extern int sysconsole_is_open;
+extern void *xemu_load_buffer_p;
+extern char xemu_load_filepath[PATH_MAX];
 
 extern int emu_init_debug ( const char *fn );
 extern time_t emu_get_unixtime ( void );
@@ -106,7 +108,8 @@ extern void *emu_malloc_ALIGNED ( size_t size );
 #endif
 
 extern char *emu_strdup ( const char *s );
-extern int emu_load_file ( const char *fn, void *buffer, int maxsize );
+extern int xemu_load_file ( const char *filename, void *store_to, int min_size, int max_size, const char *cry );
+extern int xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_back );
 extern void emu_set_full_screen ( int setting );
 extern void emu_timekeeping_delay ( int td_em );
 extern int emu_init_sdl (

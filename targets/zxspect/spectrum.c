@@ -351,8 +351,8 @@ int main ( int argc, char **argv )
 	init_ula_tables();
 	/* Intialize memory and load ROMs */
 	memset(memory, 0xFF, sizeof memory);
-	if (emu_load_file(emucfg_get_str("rom"), memory, 0x4001) != 0x4000)
-		FATAL("Cannot load ROM: %s", emucfg_get_str("rom"));
+	if (xemu_load_file(emucfg_get_str("rom"), memory, 0x4000, 0x4000, "Selected ROM image cannot be loaded. Without it, Xemu won't work.\nPlease install it, or use the CLI switch -rom to specify one.") < 0)
+		return 1;
 	// Continue with initializing ...
 	clear_emu_events();	// also resets the keyboard
 	z80ex_init();
