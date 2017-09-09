@@ -224,7 +224,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 #ifdef AUDIO_EMULATION
 	SDL_AudioSpec audio_want, audio_got;
 #endif
-	hypervisor_debug_init(emucfg_get_str("kickuplist"), emucfg_get_bool("hyperdebug"));
+	hypervisor_debug_init(xemucfg_get_str("kickuplist"), xemucfg_get_bool("hyperdebug"));
 	hid_init(
 		c64_key_map,
 		VIRTUAL_SHIFT_POS,
@@ -234,7 +234,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	nmi_level = 0;
 	// *** FPGA switches ...
 	do {
-		int switches[16], r = emucfg_integer_list_from_string(emucfg_get_str("fpga"), switches, 16, ",");
+		int switches[16], r = xemucfg_integer_list_from_string(xemucfg_get_str("fpga"), switches, 16, ",");
 		if (r < 0)
 			FATAL("Too many FPGA switches specified for option 'fpga'");
 		while (r--) {
@@ -246,14 +246,14 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	} while (0);
 	// *** Init memory space
 	memory_init();
-	p = emucfg_get_str("loadcram");
+	p = xemucfg_get_str("loadcram");
 	if (p) {
 		DEBUGPRINT("Loading colour-RAM content from file: %s" NL, p);
 		xemu_load_file(p, colour_ram, 0x8000, 0x8000, "Colour RAM content cannot be loaded");
 	}
-	D6XX_registers[0x7E] = emucfg_get_num("kicked");
+	D6XX_registers[0x7E] = xemucfg_get_num("kicked");
 	// *** Trying to load kickstart image
-	p = emucfg_get_str("kickup");
+	p = xemucfg_get_str("kickup");
 	if (xemu_load_file(p, hypervisor_ram, 0x4000, 0x4000, "Kickstart cannot be loaded. Using the default (maybe outdated!) built-in version") >= 0) {
 		DEBUG("MEGA65: %s loaded into hypervisor memory." NL, p);
 	} else {
@@ -261,8 +261,8 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		hypervisor_debug_invalidate("no kickup could be loaded, built-in one does not have debug info");
 	}
 	// *** Image file for SDCARD support
-	if (sdcard_init(emucfg_get_str("sdimg"), emucfg_get_str("8")) < 0)
-		FATAL("Cannot find SD-card image (which is a must for Mega65 emulation): %s", emucfg_get_str("sdimg"));
+	if (sdcard_init(xemucfg_get_str("sdimg"), xemucfg_get_str("8")) < 0)
+		FATAL("Cannot find SD-card image (which is a must for Mega65 emulation): %s", xemucfg_get_str("sdimg"));
 	// *** Initialize VIC4
 	vic_init();
 	// *** CIAs
@@ -286,7 +286,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	);
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
 	dma_init(
-		emucfg_get_num("dmarev"),
+		xemucfg_get_num("dmarev"),
 		memory_dma_source_mreader,	// dma_reader_cb_t set_source_mreader
 		memory_dma_source_mwriter,	// dma_writer_cb_t set_source_mwriter
 		memory_dma_target_mreader,	// dma_reader_cb_t set_target_mreader
@@ -329,7 +329,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 #ifdef UARTMON_SOCKET
 	uartmon_init(UARTMON_SOCKET);
 #endif
-	fast_mhz = emucfg_get_num("fastclock");
+	fast_mhz = xemucfg_get_num("fastclock");
 	if (fast_mhz < 3 || fast_mhz > 200) {
 		ERROR_WINDOW("Fast clock given by -fastclock switch must be between 3...200MHz. Bad value, defaulting to %dMHz", MEGA65_DEFAULT_FAST_CLOCK);
 		fast_mhz = 48;
@@ -345,12 +345,12 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	DEBUG("INIT: end of initialization!" NL);
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemusnap_init(m65_snapshot_definition);
-	p = emucfg_get_str("snapload");
+	p = xemucfg_get_str("snapload");
 	if (p) {
 		if (xemusnap_load(p))
 			FATAL("Couldn't load snapshot \"%s\": %s", p, xemusnap_error_buffer);
 	}
-	m65_snapshot_saver_filename = emucfg_get_str("snapsave");
+	m65_snapshot_saver_filename = xemucfg_get_str("snapsave");
 	atexit(m65_snapshot_saver_on_exit_callback);
 #endif
 }
@@ -404,7 +404,7 @@ static void reset_mega65 ( void )
 	cpu_reset();
 	dma_reset();
 	nmi_level = 0;
-	D6XX_registers[0x7E] = emucfg_get_num("kicked");
+	D6XX_registers[0x7E] = xemucfg_get_num("kicked");
 	hypervisor_enter(TRAP_RESET);
 	DEBUG("RESET!" NL);
 }
@@ -445,10 +445,10 @@ static void update_emulator ( void )
 	// Screen rendering: begin
 	vic_render_screen();
 	// Screen rendering: end
-	emu_timekeeping_delay(40000);
+	xemu_timekeeping_delay(40000);
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
 	if (seconds_timer_trigger) {
-		struct tm *t = emu_get_localtime();
+		struct tm *t = xemu_get_localtime();
 		cia_ugly_tod_updater(&cia1, t);
 		cia_ugly_tod_updater(&cia2, t);
 	}
@@ -527,24 +527,24 @@ int main ( int argc, char **argv )
 {
 	int cycles, frameskip;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Incomplete Commodore-65/Mega-65 emulator from LGB");
-	emucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
-	emucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip  (0=F018A, other=F018B)");
-	emucfg_define_num_option("fastclock", MEGA65_DEFAULT_FAST_CLOCK, "Clock of M65 fast mode (in MHz)");
-	emucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA-board switches turned ON");
-	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	emucfg_define_switch_option("hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode");
-	emucfg_define_num_option("kicked", 0x0, "Answer to KickStart upgrade (128=ask user in a pop-up window)");
-	emucfg_define_str_option("kickup", KICKSTART_NAME, "Override path of external KickStart to be used");
-	emucfg_define_str_option("kickuplist", NULL, "Set path of symbol list file for external KickStart");
-	emucfg_define_str_option("loadcram", NULL, "Load initial content (32K) into the colour RAM");
-	emucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used");
+	xemucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
+	xemucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip  (0=F018A, other=F018B)");
+	xemucfg_define_num_option("fastclock", MEGA65_DEFAULT_FAST_CLOCK, "Clock of M65 fast mode (in MHz)");
+	xemucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA-board switches turned ON");
+	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
+	xemucfg_define_switch_option("hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode");
+	xemucfg_define_num_option("kicked", 0x0, "Answer to KickStart upgrade (128=ask user in a pop-up window)");
+	xemucfg_define_str_option("kickup", KICKSTART_NAME, "Override path of external KickStart to be used");
+	xemucfg_define_str_option("kickuplist", NULL, "Set path of symbol list file for external KickStart");
+	xemucfg_define_str_option("loadcram", NULL, "Load initial content (32K) into the colour RAM");
+	xemucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used");
 #ifdef XEMU_SNAPSHOT_SUPPORT
-	emucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
-	emucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
+	xemucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
+	xemucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
 #endif
-	emucfg_define_switch_option("skipunhandledmem", "Do not panic on unhandled memory access (hides problems!!)");
-	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	if (emucfg_parse_all(argc, argv))
+	xemucfg_define_switch_option("skipunhandledmem", "Do not panic on unhandled memory access (hides problems!!)");
+	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	window_title_info_addon = emulator_speed_title;
@@ -570,7 +570,7 @@ int main ( int argc, char **argv )
 		AUDIO_SAMPLE_FREQ		// sound mix freq
 	);
 	// Start!!
-	skip_unhandled_mem = emucfg_get_bool("skipunhandledmem");
+	skip_unhandled_mem = xemucfg_get_bool("skipunhandledmem");
 	printf("UNHANDLED memory policy: %d" NL, skip_unhandled_mem);
 	cycles = 0;
 	frameskip = 0;
@@ -578,13 +578,13 @@ int main ( int argc, char **argv )
 	vic3_blink_phase = 0;
 	if (audio)
 		SDL_PauseAudioDevice(audio, 0);
-	emu_set_full_screen(emucfg_get_bool("fullscreen"));
-	if (!emucfg_get_bool("syscon"))
+	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
+	if (!xemucfg_get_bool("syscon"))
 		sysconsole_close(NULL);
-	emu_timekeeping_start();
+	xemu_timekeeping_start();
 	for (;;) {
-		while (unlikely(paused)) {	// paused special mode, ie tracing support, or something ...
-			if (unlikely(dma_status))
+		while (XEMU_UNLIKELY(paused)) {	// paused special mode, ie tracing support, or something ...
+			if (XEMU_UNLIKELY(dma_status))
 				break;		// if DMA is pending, do not allow monitor/etc features
 			if (m65mon_callback) {	// delayed uart monitor command should be finished ...
 				m65mon_callback();
@@ -619,14 +619,14 @@ int main ( int argc, char **argv )
 				}
 			}
 		}
-		if (unlikely(in_hypervisor)) {
+		if (XEMU_UNLIKELY(in_hypervisor)) {
 			hypervisor_debug();
 		}
-		if (unlikely(breakpoint_pc == cpu_pc)) {
+		if (XEMU_UNLIKELY(breakpoint_pc == cpu_pc)) {
 			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu_pc);
 			paused = 1;
 		}
-		cycles += unlikely(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu_step(
+		cycles += XEMU_UNLIKELY(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu_step(
 #ifdef CPU_STEP_MULTI_OPS
 			cpu_cycles_per_step
 #endif

@@ -4,6 +4,7 @@
  * by Pigmaker57 aka boo_boo [pigmaker57@kahoh57.info]
  * modified by Gabor Lenart LGB [lgblgblgb@gmail.com] for Xep128 project
  * used by Gabor Lenart LGB [lgblgblgb@gmail.com] in Xemu project
+ * my modifications (C)2015,2016,2017
  *
  * contains some code from the FUSE project (http://fuse-emulator.sourceforge.net)
  * Released under GNU GPL v2
@@ -27,9 +28,9 @@
 typedef void (*z80ex_opcode_fn) (void);
 
 #ifdef Z80EX_Z180_BY_DEFAULT
-#define Z180_LIKELY likely
+#define Z180_LIKELY XEMU_LIKELY
 #else
-#define Z180_LIKELY unlikely
+#define Z180_LIKELY XEMU_UNLIKELY
 #endif
 
 #include "xemu/z80ex/ptables.c"
@@ -79,7 +80,7 @@ int z80ex_step(void)
 						opcode = READ_OP();
 #ifdef Z80EX_Z180_SUPPORT
 						if (Z180_LIKELY(z80ex.z180)) {
-							if (unlikely((opcode & 7) != 6 || opcode == 0x36))
+							if (XEMU_UNLIKELY((opcode & 7) != 6 || opcode == 0x36))
 								ofn = trapping(z80ex.prefix, 0xCB, opcode, ITC_B3);
 							else
 								ofn = (z80ex.prefix == 0xDD) ? opcodes_ddcb[opcode] : opcodes_fdcb[opcode];
@@ -88,12 +89,12 @@ int z80ex_step(void)
 							ofn = (z80ex.prefix == 0xDD) ? opcodes_ddcb[opcode] : opcodes_fdcb[opcode];
 					} else { /* FD/DD prefixed base opcodes */
 #ifdef Z80EX_Z180_SUPPORT
-						if (unlikely(z80ex.z180 && opcodes_ddfd_bad_for_z180[opcode])) {
+						if (XEMU_UNLIKELY(z80ex.z180 && opcodes_ddfd_bad_for_z180[opcode])) {
 							ofn = trapping(z80ex.prefix, 0x00, opcode, ITC_B2);
 						} else {
 #endif
 							ofn = (z80ex.prefix == 0xDD) ? opcodes_dd[opcode] : opcodes_fd[opcode];
-							if (unlikely(ofn == NULL)) ofn = opcodes_base[opcode]; /* 'mirrored' instructions NOTE: this should NOT happen with Z180! */
+							if (XEMU_UNLIKELY(ofn == NULL)) ofn = opcodes_base[opcode]; /* 'mirrored' instructions NOTE: this should NOT happen with Z180! */
 #ifdef Z80EX_Z180_SUPPORT
 						}
 #endif
@@ -102,7 +103,7 @@ int z80ex_step(void)
 								
 				case 0xED: /* ED opcodes */
 #ifdef Z80EX_ED_TRAPPING_SUPPORT
-					if (unlikely(opcode > 0xBB)) {
+					if (XEMU_UNLIKELY(opcode > 0xBB)) {
 						/* check if ED-trap emu func accepted the opcode as its own "faked" */
 						if (z80ex_ed_cb(opcode)) {
 							ofn = opcodes_base[0x00];
@@ -118,7 +119,7 @@ int z80ex_step(void)
 						ofn = opcodes_ed[opcode];
 					if (ofn == NULL) {
 #ifdef Z80EX_Z180_SUPPORT
-						if (unlikely(z80ex.z180))
+						if (XEMU_UNLIKELY(z80ex.z180))
 							ofn = trapping(0x00, 0xED, opcode, ITC_B2);
 						else
 #endif
@@ -128,7 +129,7 @@ int z80ex_step(void)
 				
 				case 0xCB: /* CB opcodes */
 #ifdef Z80EX_Z180_SUPPORT
-					if (unlikely(z80ex.z180 && (opcode & 0xF8) == 0x30))
+					if (XEMU_UNLIKELY(z80ex.z180 && (opcode & 0xF8) == 0x30))
 						ofn = trapping(0x00, 0xCB, opcode, ITC_B2);
 					else
 #endif

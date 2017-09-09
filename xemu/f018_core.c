@@ -85,7 +85,7 @@ static int source_mask, target_mask, source_megabyte, target_megabyte, list_mega
 
 
 // TODO: modulo?
-static INLINE Uint8 read_source_next ( void )
+static XEMU_INLINE Uint8 read_source_next ( void )
 {
 	// We use "+" operator for "megabyte" (see the similar functions below too)
 	// Since, if it is I/O source/target, then it's allowed the emulator specify
@@ -99,7 +99,7 @@ static INLINE Uint8 read_source_next ( void )
 
 
 // TODO: modulo?
-static INLINE void write_target_next ( Uint8 data )
+static XEMU_INLINE void write_target_next ( Uint8 data )
 {
 	// See the comment at read_source_next()
 	target_writer((target_addr & target_mask) + target_megabyte, data);
@@ -108,7 +108,7 @@ static INLINE void write_target_next ( Uint8 data )
 
 
 // TODO: modulo?
-static INLINE void swap_next ( void )
+static XEMU_INLINE void swap_next ( void )
 {
 	// See the comment at read_source_next()
 	Uint8 sa = source_reader((source_addr & source_mask) + source_megabyte);
@@ -121,7 +121,7 @@ static INLINE void swap_next ( void )
 
 
 // TODO: modulo?
-static INLINE void mix_next ( void )
+static XEMU_INLINE void mix_next ( void )
 {
 	// See the comment at read_source_next()
 	Uint8 sa = source_reader((source_addr & source_mask) + source_megabyte);
@@ -144,7 +144,7 @@ static INLINE void mix_next ( void )
 
 
 
-static INLINE Uint8 read_dma_list_next ( void )
+static XEMU_INLINE Uint8 read_dma_list_next ( void )
 {
 	// Unlike the functions above, DMA list read is always memory (not I/O)
 	// Also the "step" is always one. So it's a bit special case ....
@@ -178,7 +178,7 @@ void dma_write_reg ( int addr, Uint8 data )
 #endif
 	if (addr)
 		return;	// Only writing register 0 starts the DMA operation, otherwise just return from this function (reg write already happened)
-	if (unlikely(dma_status))
+	if (XEMU_UNLIKELY(dma_status))
 		FATAL("dma_write_reg(): new DMA op with dma_status != 0");
 	dma_list_addr = dma_registers[0] | (dma_registers[1] << 8) | ((dma_registers[2] & 15) << 16);
 #ifdef MEGA65
@@ -229,9 +229,9 @@ int dma_update ( void )
 {
 	Uint8 subcommand;
 	int time;
-	if (unlikely(!dma_status))
+	if (XEMU_UNLIKELY(!dma_status))
 		FATAL("dma_update() called with no dma_status set!");
-	if (unlikely(command == -1)) {
+	if (XEMU_UNLIKELY(command == -1)) {
 		// command == -1 signals the situation, that the (next) DMA command should be read!
 		// This part is highly incorrect, ie fetching so many bytes in one step only of dma_update()
 		command      = read_dma_list_next()      ;

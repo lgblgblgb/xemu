@@ -183,7 +183,7 @@ void clear_emu_events ( void )
 static inline void render_primo_screen ( void )
 {
 	int tail, y;
-	Uint32 *pix = emu_start_pixel_buffer_access(&tail);
+	Uint32 *pix = xemu_start_pixel_buffer_access(&tail);
 	Uint8 *scr = memory + primo_screen;
 	for (y = 0; y < 192; y++) {
 		int x;
@@ -200,7 +200,7 @@ static inline void render_primo_screen ( void )
 		}
 		pix += tail;
 	}
-	emu_update_screen();
+	xemu_update_screen();
 }
 
 
@@ -218,7 +218,7 @@ static void update_emulator ( void )
 	if (!frameskip) {
 		render_primo_screen();
 		hid_handle_all_sdl_events();
-		emu_timekeeping_delay(40000);
+		xemu_timekeeping_delay(40000);
 	}
 }
 
@@ -228,10 +228,10 @@ int main ( int argc, char **argv )
 {
 	int cycles;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unknown Primo emulator from LGB");
-	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	emucfg_define_str_option("rom", DEFAULT_ROM_FILE_PATH, "Select ROM to use");
-	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	if (emucfg_parse_all(argc, argv))
+	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
+	xemucfg_define_str_option("rom", DEFAULT_ROM_FILE_PATH, "Select ROM to use");
+	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (xemu_post_init(
@@ -256,16 +256,16 @@ int main ( int argc, char **argv )
 	);
 	/* Intialize memory and load ROMs */
 	memset(memory, 0xFF, sizeof memory);
-	if (xemu_load_file(emucfg_get_str("rom"), memory, 0x4000, 0x4000, "This is the selected primo ROM. Without it, Xemu won't work.\nInstall it, or use -rom CLI switch to specify another path.") < 0)
+	if (xemu_load_file(xemucfg_get_str("rom"), memory, 0x4000, 0x4000, "This is the selected primo ROM. Without it, Xemu won't work.\nInstall it, or use -rom CLI switch to specify another path.") < 0)
 		return 1;
 	// Continue with initializing ...
 	clear_emu_events();	// also resets the keyboard
 	z80ex_init();
 	cycles = 0;
-	emu_set_full_screen(emucfg_get_bool("fullscreen"));
-	if (!emucfg_get_bool("syscon"))
+	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
+	if (!xemucfg_get_bool("syscon"))
 		sysconsole_close(NULL);
-	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
+	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	for (;;) { // our emulation loop ...
 		cycles += z80ex_step();
 		if (cycles >= CLOCKS_PER_FRAME) {

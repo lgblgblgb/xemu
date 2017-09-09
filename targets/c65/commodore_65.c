@@ -257,7 +257,7 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	joystick_emu = 1;
 	nmi_level = 0;
 	// *** host-FS
-	p = emucfg_get_str("hostfsdir");
+	p = xemucfg_get_str("hostfsdir");
 	if (p)
 		hostfs_init(p, NULL);
 	else
@@ -265,7 +265,7 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
 	// *** Load ROM image
-	p = emucfg_get_str("rom");
+	p = xemucfg_get_str("rom");
 	if (xemu_load_file(p, memory + 0x20000, 0x20000, 0x20000, "Selected C65 system ROM is needed for Xemu") < 0)
 		XEMUEXIT(1);
 	// *** Initialize VIC3
@@ -295,7 +295,7 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	);
 	// *** Initialize DMA
 	dma_init(
-		emucfg_get_num("dmarev"),
+		xemucfg_get_num("dmarev"),
 		read_phys_mem,	// dma_reader_cb_t set_source_mreader ,
 		write_phys_mem,	// dma_writer_cb_t set_source_mwriter ,
 		read_phys_mem,	// dma_reader_cb_t set_target_mreader ,
@@ -308,7 +308,7 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	);
 	// Initialize FDC
 	fdc_init();
-	c65_d81_init(emucfg_get_str("8"));
+	c65_d81_init(xemucfg_get_str("8"));
 	// SIDs, plus SDL audio
 	sid_init(&sids[0], sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sids[1], sid_cycles_per_sec, sound_mix_freq);
@@ -339,12 +339,12 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// *** Snapshot init and loading etc should be the LAST!!!! (at least the load must be last to have initiated machine state, xemusnap_init() can be called earlier too)
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemusnap_init(c65_snapshot_definition);
-	p = emucfg_get_str("snapload");
+	p = xemucfg_get_str("snapload");
 	if (p) {
 		if (xemusnap_load(p))
 			FATAL("Couldn't load snapshot \"%s\": %s", p, xemusnap_error_buffer);
 	}
-	c65_snapshot_saver_filename = emucfg_get_str("snapsave");
+	c65_snapshot_saver_filename = xemucfg_get_str("snapsave");
 	atexit(c65_snapshot_saver_on_exit_callback);
 #endif
 }
@@ -441,7 +441,7 @@ Uint8 io_read ( int addr )
 			return vic3_registers[0x30] & 1 ? memory[0x1F000 + addr] : 0xFF;	// I/O exp area is not emulated by Xemu, gives $FF on reads
 		/* --- I/O read in new VIC I/O mode --- */
 		case 0x10:	// $D000-$D0FF
-			if (likely(addr < 0x80))
+			if (XEMU_LIKELY(addr < 0x80))
 				return vic3_read_reg(addr);
 			if (addr < 0xA0)
 				return fdc_read_reg(addr & 0xF);
@@ -527,7 +527,7 @@ void io_write ( int addr, Uint8 data )
 			return;
 		/* --- I/O write in new VIC I/O mode --- */
 		case 0x10:	// $D000-$D0FF
-			if (likely(addr < 0x80)) {
+			if (XEMU_LIKELY(addr < 0x80)) {
 				vic3_write_reg(addr, data);
 				return;
 			}
@@ -592,7 +592,7 @@ void io_write ( int addr, Uint8 data )
 void write_phys_mem ( int addr, Uint8 data )
 {
 	addr &= 0xFFFFF;
-	if (unlikely(addr < 2)) {	// "CPU port" at memory addr 0/1
+	if (XEMU_UNLIKELY(addr < 2)) {	// "CPU port" at memory addr 0/1
 		if ((memory[addr] & 7) != (data & 7)) {
 			memory[addr] = data;
 			DEBUG("MEM: applying new memory configuration because of CPU port writing" NL);
@@ -600,7 +600,7 @@ void write_phys_mem ( int addr, Uint8 data )
 		} else
 			memory[addr] = data;
 	} else if (
-		(likely(addr < 0x20000))
+		(XEMU_LIKELY(addr < 0x20000))
 #if defined(ALLOW_256K_RAMEXP) && defined(ALLOW_512K_RAMEXP)
 		|| (addr >= 0x40000)
 #else
@@ -628,7 +628,7 @@ Uint8 read_phys_mem ( int addr )
 Uint8 cpu_read ( Uint16 addr )
 {
 	register int phys_addr = addr_trans_rd[addr >> 12] + addr;	// translating address with the READ table created by apply_memory_config()
-	if (likely(phys_addr < 0x10FF00))
+	if (XEMU_LIKELY(phys_addr < 0x10FF00))
 		return memory[phys_addr & 0xFFFFF];	// light optimization, do not call read_phys_mem for this single stuff :)
 	else
 		return io_read(phys_addr);
@@ -640,7 +640,7 @@ Uint8 cpu_read ( Uint16 addr )
 void cpu_write ( Uint16 addr, Uint8 data )
 {
 	register int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
-	if (likely(phys_addr < 0x10FF00))
+	if (XEMU_LIKELY(phys_addr < 0x10FF00))
 		write_phys_mem(phys_addr, data);
 	else
 		io_write(phys_addr, data);
@@ -658,7 +658,7 @@ void cpu_write ( Uint16 addr, Uint8 data )
 void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 {
 	int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
-	if (likely(phys_addr < 0x10FF00))
+	if (XEMU_LIKELY(phys_addr < 0x10FF00))
 		write_phys_mem(phys_addr, new_data);	// "normal" memory, just write once, no need to emulate the behaviour
 	else {
 		DEBUG("CPU: RMW opcode is used on I/O area for $%04X" NL, addr);
@@ -730,13 +730,13 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 
 static void update_emulator ( void )
 {
-	emu_update_screen();
+	xemu_update_screen();
 	hid_handle_all_sdl_events();
 	nmi_set(IS_RESTORE_PRESSED(), 2); // Custom handling of the restore key ...
-	emu_timekeeping_delay(40000);
+	xemu_timekeeping_delay(40000);
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
 	if (seconds_timer_trigger) {
-		struct tm *t = emu_get_localtime();
+		struct tm *t = xemu_get_localtime();
 		cia_ugly_tod_updater(&cia1, t);
 		cia_ugly_tod_updater(&cia2, t);
 	}
@@ -750,18 +750,18 @@ int main ( int argc, char **argv )
 {
 	int cycles;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unusable Commodore 65 emulator from LGB");
-	emucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
-	emucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip (0=F018A, other=F018B)");
-	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	emucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
-	//emucfg_define_switch_option("noaudio", "Disable audio");
-	emucfg_define_str_option("rom", "#c65-system.rom", "Override system ROM path to be loaded");
+	xemucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
+	xemucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip (0=F018A, other=F018B)");
+	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
+	xemucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
+	//xemucfg_define_switch_option("noaudio", "Disable audio");
+	xemucfg_define_str_option("rom", "#c65-system.rom", "Override system ROM path to be loaded");
 #ifdef XEMU_SNAPSHOT_SUPPORT
-	emucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
-	emucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
+	xemucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
+	xemucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
 #endif
-	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	if (emucfg_parse_all(argc, argv))
+	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	window_title_info_addon = emulator_speed_title;
@@ -790,13 +790,13 @@ int main ( int argc, char **argv )
 	cycles = 0;
 	if (audio)
 		SDL_PauseAudioDevice(audio, 0);
-	emu_set_full_screen(emucfg_get_bool("fullscreen"));
+	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
 	vic3_open_frame_access();
-	if (!emucfg_get_bool("syscon"))
+	if (!xemucfg_get_bool("syscon"))
 		sysconsole_close(NULL);
-	emu_timekeeping_start();
+	xemu_timekeeping_start();
 	for (;;) {
-		cycles += unlikely(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu_step(
+		cycles += XEMU_UNLIKELY(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu_step(
 #ifdef CPU_STEP_MULTI_OPS
 			cpu_cycles_per_scanline
 #endif

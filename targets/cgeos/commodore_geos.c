@@ -446,7 +446,7 @@ static void vic2_render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Ui
 void vic2_render_screen ( void )
 {
 	int tail_sdl;
-	Uint32 *p_sdl = emu_start_pixel_buffer_access(&tail_sdl);
+	Uint32 *p_sdl = xemu_start_pixel_buffer_access(&tail_sdl);
 	int sprites = vic2_registers[0x15];
 	if (vic2_registers[0x11] & 32)
 		vic2_render_screen_bmm(p_sdl, tail_sdl);
@@ -460,7 +460,7 @@ void vic2_render_screen ( void )
 				vic2_render_sprite(a, mask, memory + vic2_16k_bank + (vic2_sprite_pointers[a] << 6), p_sdl, tail_sdl);	// sprite_pointers are set by the renderer functions above!
 		}
 	}
-	emu_update_screen();
+	xemu_update_screen();
 }
 
 
@@ -579,9 +579,9 @@ static void geosemu_init ( void )
 	cpu_port_write(1, CPU_PORT_DEFAULT_VALUE1);
 	// *** Load ROM image
 	if (
-		xemu_load_file(emucfg_get_str("rombasic"),  memory + BASIC_ROM_OFFSET,  8192, 8192, rom_fatal_msg) < 0 ||
-		xemu_load_file(emucfg_get_str("romkernal"), memory + KERNAL_ROM_OFFSET, 8192, 8192, rom_fatal_msg) < 0 ||
-		xemu_load_file(emucfg_get_str("romchar"),   memory + CHAR_ROM_OFFSET,   4096, 4096, rom_fatal_msg) < 0
+		xemu_load_file(xemucfg_get_str("rombasic"),  memory + BASIC_ROM_OFFSET,  8192, 8192, rom_fatal_msg) < 0 ||
+		xemu_load_file(xemucfg_get_str("romkernal"), memory + KERNAL_ROM_OFFSET, 8192, 8192, rom_fatal_msg) < 0 ||
+		xemu_load_file(xemucfg_get_str("romchar"),   memory + CHAR_ROM_OFFSET,   4096, 4096, rom_fatal_msg) < 0
 	)
 		XEMUEXIT(1);
 	// *** Patching ROM for custom GEOS loader
@@ -686,7 +686,7 @@ int cpu_trap ( Uint8 opcode )
 		cpu_pc = memory[0x300] | (memory[0x301] << 8);
 		return 1;
 	}
-	if (!geos_load_kernal(emucfg_get_str("geoskernal"))) {
+	if (!geos_load_kernal(xemucfg_get_str("geoskernal"))) {
 		geos_loaded = 2;	// GEOS was OK!!!!
 		return 1;	// if no error, return with '1' (as not zero) to signal CPU emulator that trap should not be executed
 	}
@@ -770,10 +770,10 @@ static void update_emulator ( void )
 	// Screen rendering: begin
 	vic2_render_screen();
 	// Screen rendering: end
-	emu_timekeeping_delay(40000);
+	xemu_timekeeping_delay(40000);
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
 	if (seconds_timer_trigger) {
-		struct tm *t = emu_get_localtime();
+		struct tm *t = xemu_get_localtime();
 		cia_ugly_tod_updater(&cia1, t);
 		cia_ugly_tod_updater(&cia2, t);
 	}
@@ -786,14 +786,14 @@ int main ( int argc, char **argv )
 {
 	int cycles, frameskip;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unexplained Commodore GEOS emulator from LGB");
-	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	emucfg_define_str_option("geosimg", NULL, "Select GEOS disk image to use (NOT USED YET!)");
-	emucfg_define_str_option("geoskernal", "#geos-kernal.bin", "Select GEOS KERNAL to use");
-	emucfg_define_str_option("rombasic", "#c64-basic.rom", "Select BASIC ROM to use");
-	emucfg_define_str_option("romchar", "#c64-chargen.rom", "Select CHARACTER ROM to use");
-	emucfg_define_str_option("romkernal", "#c64-kernal.rom", "Select KERNAL ROM to use");
-	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	if (emucfg_parse_all(argc, argv))
+	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
+	xemucfg_define_str_option("geosimg", NULL, "Select GEOS disk image to use (NOT USED YET!)");
+	xemucfg_define_str_option("geoskernal", "#geos-kernal.bin", "Select GEOS KERNAL to use");
+	xemucfg_define_str_option("rombasic", "#c64-basic.rom", "Select BASIC ROM to use");
+	xemucfg_define_str_option("romchar", "#c64-chargen.rom", "Select CHARACTER ROM to use");
+	xemucfg_define_str_option("romkernal", "#c64-kernal.rom", "Select KERNAL ROM to use");
+	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
         if (xemu_post_init(
@@ -815,11 +815,11 @@ int main ( int argc, char **argv )
 	geosemu_init();
 	cycles = 0;
 	frameskip = 0;
-	emu_set_full_screen(emucfg_get_bool("fullscreen"));
-	if (!emucfg_get_bool("syscon"))
+	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
+	if (!xemucfg_get_bool("syscon"))
 		sysconsole_close(NULL);
 	// Start!!
-	emu_timekeeping_start();
+	xemu_timekeeping_start();
 	for (;;) {
 		int opcyc = cpu_step();
 		cia_tick(&cia1, opcyc);

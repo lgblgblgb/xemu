@@ -280,7 +280,7 @@ static void render_screen ( void )
 	int ps = lcd_ctrl[1] << 7;
 	int x, y, ch;
 	int tail;
-	Uint32 *pix = emu_start_pixel_buffer_access(&tail);
+	Uint32 *pix = xemu_start_pixel_buffer_access(&tail);
 	if (lcd_ctrl[2] & 2) { // graphic mode
 		for (y = 0; y < 128; y++) {
 			for (x = 0; x < 60; x++) {
@@ -326,7 +326,7 @@ static void render_screen ( void )
 			pix += tail;
 		}
 	}
-	emu_update_screen();
+	xemu_update_screen();
 }
 
 
@@ -341,7 +341,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 
 static void update_rtc ( void )
 {
-	struct tm *t = emu_get_localtime();
+	struct tm *t = xemu_get_localtime();
 	rtc_regs[ 0] = t->tm_sec % 10;
 	rtc_regs[ 1] = t->tm_sec / 10;
 	rtc_regs[ 2] = t->tm_min % 10;
@@ -364,7 +364,7 @@ static void update_emulator ( void )
 {
 	render_screen();
 	hid_handle_all_sdl_events();
-	emu_timekeeping_delay(40000);	// 40000 microseconds would be the real time for a full TV frame (see main() for more info: CLCD is not TV based for real ...)
+	xemu_timekeeping_delay(40000);	// 40000 microseconds would be the real time for a full TV frame (see main() for more info: CLCD is not TV based for real ...)
 	if (seconds_timer_trigger)
 		update_rtc();
 }
@@ -376,17 +376,17 @@ int main ( int argc, char **argv )
 {
 	int cycles;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The world's first Commodore LCD emulator from LGB");
-	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	emucfg_define_num_option("ram", 128, "Sets RAM size in KBytes.");
-	emucfg_define_str_option("rom102", "#clcd-u102.rom", "Selects 'U102' ROM to use");
-	emucfg_define_str_option("rom103", "#clcd-u103.rom", "Selects 'U103' ROM to use");
-	emucfg_define_str_option("rom104", "#clcd-u104.rom", "Selects 'U104' ROM to use");
-	emucfg_define_str_option("rom105", "#clcd-u105.rom", "Selects 'U105' ROM to use");
-	emucfg_define_str_option("romchr", "#clcd-chargen.rom", "Selects character ROM to use");
-	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	if (emucfg_parse_all(argc, argv))
+	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
+	xemucfg_define_num_option("ram", 128, "Sets RAM size in KBytes.");
+	xemucfg_define_str_option("rom102", "#clcd-u102.rom", "Selects 'U102' ROM to use");
+	xemucfg_define_str_option("rom103", "#clcd-u103.rom", "Selects 'U103' ROM to use");
+	xemucfg_define_str_option("rom104", "#clcd-u104.rom", "Selects 'U104' ROM to use");
+	xemucfg_define_str_option("rom105", "#clcd-u105.rom", "Selects 'U105' ROM to use");
+	xemucfg_define_str_option("romchr", "#clcd-chargen.rom", "Selects character ROM to use");
+	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+	if (xemucfg_parse_all(argc, argv))
 		return 1;
-	ram_size = emucfg_get_num("ram");
+	ram_size = xemucfg_get_num("ram");
 	if (ram_size < 32 || ram_size > 128)
 		FATAL("Bad ram size is defined, must be 32...128");
 	ram_size <<= 10;
@@ -414,11 +414,11 @@ int main ( int argc, char **argv )
 	memset(memory, 0xFF, sizeof memory);
 	memset(charrom, 0xFF, sizeof charrom);
 	if (
-		xemu_load_file(emucfg_get_str("rom102"), memory + 0x38000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
-		xemu_load_file(emucfg_get_str("rom103"), memory + 0x30000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
-		xemu_load_file(emucfg_get_str("rom104"), memory + 0x28000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
-		xemu_load_file(emucfg_get_str("rom105"), memory + 0x20000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
-		xemu_load_file(emucfg_get_str("romchr"), charrom,          0x1000, 0x1000, rom_fatal_msg) < 0
+		xemu_load_file(xemucfg_get_str("rom102"), memory + 0x38000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
+		xemu_load_file(xemucfg_get_str("rom103"), memory + 0x30000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
+		xemu_load_file(xemucfg_get_str("rom104"), memory + 0x28000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
+		xemu_load_file(xemucfg_get_str("rom105"), memory + 0x20000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
+		xemu_load_file(xemucfg_get_str("romchr"), charrom,          0x1000, 0x1000, rom_fatal_msg) < 0
 	)
 		return 1;
 	// Ugly hacks :-( <patching ROM>
@@ -452,10 +452,10 @@ int main ( int argc, char **argv )
 	keysel = 0;
 	/* --- START EMULATION --- */
 	cycles = 0;
-	emu_set_full_screen(emucfg_get_bool("fullscreen"));
-	if (!emucfg_get_bool("syscon"))
+	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
+	if (!xemucfg_get_bool("syscon"))
 		sysconsole_close(NULL);
-	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
+	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	update_rtc();			// this will use time-keeping stuff as well, so initially let's do after the function call above
 	for (;;) {
 		int opcyc = cpu_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles

@@ -46,7 +46,7 @@ extern void sysconsole_close ( const char *waitmsg );
 // Purpose: emulator windows my cause the emulator does not get the key event normally, thus some keys "seems to be stucked"
 extern void clear_emu_events ( void );
 
-extern void emu_drop_events ( void );
+extern void xemu_drop_events ( void );
 
 extern void set_mouse_grab ( SDL_bool state );
 extern SDL_bool is_mouse_grab ( void );
@@ -63,10 +63,10 @@ extern void restore_mouse_grab ( void );
 		save_mouse_grab(); \
 		MSG_POPUP_WINDOW(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
 		clear_emu_events(); \
-		emu_drop_events(); \
+		xemu_drop_events(); \
 		SDL_RaiseWindow(sdl_win); \
 		restore_mouse_grab(); \
-		emu_timekeeping_start(); \
+		xemu_timekeeping_start(); \
 	} else \
 		MSG_POPUP_WINDOW(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
 } while (0)
@@ -96,29 +96,29 @@ extern int sysconsole_is_open;
 extern void *xemu_load_buffer_p;
 extern char xemu_load_filepath[PATH_MAX];
 
-extern int emu_init_debug ( const char *fn );
-extern time_t emu_get_unixtime ( void );
-extern struct tm *emu_get_localtime ( void );
-extern void *emu_malloc ( size_t size );
-extern void *emu_realloc ( void *p, size_t size );
+extern int xemu_init_debug ( const char *fn );
+extern time_t xemu_get_unixtime ( void );
+extern struct tm *xemu_get_localtime ( void );
+extern void *xemu_malloc ( size_t size );
+extern void *xemu_realloc ( void *p, size_t size );
 
 #if !defined(__EMSCRIPTEN__) && !defined(__arm__)
 #define HAVE_MM_MALLOC
 #endif
 
 #ifdef HAVE_MM_MALLOC
-extern void *emu_malloc_ALIGNED ( size_t size );
+extern void *xemu_malloc_ALIGNED ( size_t size );
 #else
-#define emu_malloc_ALIGNED emu_malloc
+#define xemu_malloc_ALIGNED xemu_malloc
 #endif
 
-extern char *emu_strdup ( const char *s );
+extern char *xemu_strdup ( const char *s );
 extern int xemu_load_file ( const char *filename, void *store_to, int min_size, int max_size, const char *cry );
 extern int xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_back );
 extern ssize_t xemu_safe_read ( int fd, void *buffer, size_t length );
 extern ssize_t xemu_safe_write ( int fd, const void *buffer, size_t length );
-extern void emu_set_full_screen ( int setting );
-extern void emu_timekeeping_delay ( int td_em );
+extern void xemu_set_full_screen ( int setting );
+extern void xemu_timekeeping_delay ( int td_em );
 extern void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan );
 extern int xemu_init_sdl ( void );
 extern int xemu_post_init (
@@ -135,10 +135,10 @@ extern int xemu_post_init (
         int locked_texture_update,              // use locked texture method [non zero], or malloc'ed stuff [zero]. NOTE: locked access doesn't allow to _READ_ pixels and you must fill ALL pixels!
         void (*shutdown_callback)(void)         // callback function called on exit (can be nULL to not have any emulator specific stuff)
 );
-extern void emu_timekeeping_start ( void );
-extern void emu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_size );
-extern Uint32 *emu_start_pixel_buffer_access ( int *texture_tail );
-extern void emu_update_screen ( void );
+extern void xemu_timekeeping_start ( void );
+extern void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_size );
+extern Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail );
+extern void xemu_update_screen ( void );
 
 extern int  osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_entries, int fade_dec, int fade_end );
 extern int  osd_init_with_defaults ( void );

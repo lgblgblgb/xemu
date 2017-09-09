@@ -239,11 +239,11 @@ void hypervisor_debug ( void )
 	if (!in_hypervisor)
 		return;
 	// TODO: better hypervisor upgrade check, maybe with checking the exact range kickstart uses for upgrade outside of the "normal" hypervisor mem range
-	if (unlikely((cpu_pc & 0xFF00) == 0x3000)) {	// this area is used by kickstart upgrade
+	if (XEMU_UNLIKELY((cpu_pc & 0xFF00) == 0x3000)) {	// this area is used by kickstart upgrade
 		DEBUG("HYPERVISOR-DEBUG: allowed to run outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu_pc);
 		return;
 	}
-	if (unlikely((cpu_pc & 0xC000) != 0x8000)) {
+	if (XEMU_UNLIKELY((cpu_pc & 0xC000) != 0x8000)) {
 		DEBUG("HYPERVISOR-DEBUG: execution outside of the hypervisor memory, PC = $%04X" NL, cpu_pc);
 		FATAL("Hypervisor fatal error: execution outside of the hypervisor memory, PC=$%04X SP=$%04X", cpu_pc, cpu_sphi | cpu_sp);
 		return;
@@ -251,13 +251,13 @@ void hypervisor_debug ( void )
 	if (!resolver_ok) {
 		return;	// no debug info loaded from kickstart.list ...
 	}
-	if (unlikely(!debug_lines[cpu_pc - 0x8000][0][0])) {
+	if (XEMU_UNLIKELY(!debug_lines[cpu_pc - 0x8000][0][0])) {
 		DEBUG("HYPERVISOR-DEBUG: execution address not found in list file (out-of-bound code?), PC = $%04X" NL, cpu_pc);
 		FATAL("Hypervisor fatal error: execution address not found in list file (out-of-bound code?), PC = $%04X", cpu_pc);
 		return;
 	}
 	// WARNING: as it turned out, using stdio I/O to log every opcodes even "only" at ~3.5MHz rate makes emulation _VERY_ slow ...
-	if (unlikely(debug_on)) {
+	if (XEMU_UNLIKELY(debug_on)) {
 		if (debug_fp)
 			fprintf(
 				debug_fp,

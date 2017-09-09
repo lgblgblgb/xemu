@@ -371,11 +371,11 @@ static void update_emulator ( void )
 {
 	if (!frameskip) {
 		// First: render VIC-20 screen ...
-		emu_update_screen();
+		xemu_update_screen();
 		// Second: we must handle SDL events waiting for us in the event queue ...
 		hid_handle_all_sdl_events();
 		// Third: Sleep ... Please read emutools.c source about this madness ... 40000 is (PAL) microseconds for a full frame to be produced
-		emu_timekeeping_delay(FULL_FRAME_USECS);
+		xemu_timekeeping_delay(FULL_FRAME_USECS);
 	}
 	vic_vsync(!frameskip);	// prepare for the next frame!
 }
@@ -445,18 +445,18 @@ int main ( int argc, char **argv )
 {
 	int cycles;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Inaccurate Commodore VIC-20 emulator from LGB");
-	emucfg_define_switch_option("bootmon", "Boot into monitor");
-	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	emucfg_define_str_option("prg", NULL, "Load a PRG file");
-	emucfg_define_str_option("ramexp", NULL, "Comma separated list of installed RAM expansions at Kbyte(s)");
-	emucfg_define_str_option("romchr",    CHR_ROM_NAME, "Sets character ROM to use");
-	emucfg_define_str_option("rombasic",  BASIC_ROM_NAME, "Sets BASIC ROM to use");
-	emucfg_define_str_option("romkernal", KERNAL_ROM_NAME, "Sets KERNAL ROM to use");
-	emucfg_define_str_option("romemu",    EMU_ROM_NAME, "Sets EMU ROM to use");
-	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	if (emucfg_parse_all(argc, argv))
+	xemucfg_define_switch_option("bootmon", "Boot into monitor");
+	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
+	xemucfg_define_str_option("prg", NULL, "Load a PRG file");
+	xemucfg_define_str_option("ramexp", NULL, "Comma separated list of installed RAM expansions at Kbyte(s)");
+	xemucfg_define_str_option("romchr",    CHR_ROM_NAME, "Sets character ROM to use");
+	xemucfg_define_str_option("rombasic",  BASIC_ROM_NAME, "Sets BASIC ROM to use");
+	xemucfg_define_str_option("romkernal", KERNAL_ROM_NAME, "Sets KERNAL ROM to use");
+	xemucfg_define_str_option("romemu",    EMU_ROM_NAME, "Sets EMU ROM to use");
+	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+	if (xemucfg_parse_all(argc, argv))
 		return 1;
-	emurom_policy = emucfg_get_bool("bootmon");	// normally: "boot" into BASIC, but to monitor of -bootmon was used
+	emurom_policy = xemucfg_get_bool("bootmon");	// normally: "boot" into BASIC, but to monitor of -bootmon was used
 	emufile_p = NULL;
 	emufile_size = 0;
 	printf(
@@ -491,8 +491,8 @@ int main ( int argc, char **argv )
 		SDL_ENABLE		// enable HID joy events
 	);
 	// Program to load?
-	if (emucfg_get_str("prg")) {
-		emufile_size = xemu_load_file(emucfg_get_str("prg"), NULL, 3, 0x8000, "Cannot load user specified PRG with -prg");
+	if (xemucfg_get_str("prg")) {
+		emufile_size = xemu_load_file(xemucfg_get_str("prg"), NULL, 3, 0x8000, "Cannot load user specified PRG with -prg");
 		if (emufile_size < 0) {
 			emufile_p = NULL;
 			emufile_size = 0;
@@ -500,8 +500,8 @@ int main ( int argc, char **argv )
 			emufile_p = xemu_load_buffer_p;
 	}
 	// RAM expansion
-	if (emucfg_get_str("ramexp")) {
-		int explist[5], r = emucfg_integer_list_from_string(emucfg_get_str("ramexp"), explist, 5, ",");
+	if (xemucfg_get_str("ramexp")) {
+		int explist[5], r = xemucfg_integer_list_from_string(xemucfg_get_str("ramexp"), explist, 5, ",");
 		if (r < 0)
 			FATAL("Invalid memory expansion list (not comma separated list, more than 5 elements, etc) syntax given with -ramexp");
 		else
@@ -524,7 +524,7 @@ int main ( int argc, char **argv )
 						INFO_WINDOW("Warning, RAM from 40K (at $A000) is defined.\nThis may collide with the loaded EMU ROM there!");
 						break;
 					default:
-						FATAL("Unknown memory expansion element %d in -ramexp %s", explist[r], emucfg_get_str("ramexp"));
+						FATAL("Unknown memory expansion element %d in -ramexp %s", explist[r], xemucfg_get_str("ramexp"));
 						break;
 				}
 	}
@@ -532,19 +532,19 @@ int main ( int argc, char **argv )
 	memset(memory, 0xFF, sizeof memory);
 	memset(dummy_vic_access, 0xFF, sizeof dummy_vic_access);	// define 1K of "nothing" for VIC-I memory regions what it can't access by hardware constraints
 	if (
-		xemu_load_file(emucfg_get_str("romchr"),    memory + 0x8000, 0x1000, 0x1000, rom_fatal_msg) < 0 ||	// load chargen ROM
-		xemu_load_file(emucfg_get_str("rombasic"),  memory + 0xC000, 0x2000, 0x2000, rom_fatal_msg) < 0 ||	// load basic ROM
-		xemu_load_file(emucfg_get_str("romkernal"), memory + 0xE000, 0x2000, 0x2000, rom_fatal_msg) < 0 ||	// load kernal ROM
-		xemu_load_file(emucfg_get_str("romemu"),    memory + 0xA000, 0x2000, 0x2000, rom_fatal_msg) < 0		// load our "emulator monitor" ROM
+		xemu_load_file(xemucfg_get_str("romchr"),    memory + 0x8000, 0x1000, 0x1000, rom_fatal_msg) < 0 ||	// load chargen ROM
+		xemu_load_file(xemucfg_get_str("rombasic"),  memory + 0xC000, 0x2000, 0x2000, rom_fatal_msg) < 0 ||	// load basic ROM
+		xemu_load_file(xemucfg_get_str("romkernal"), memory + 0xE000, 0x2000, 0x2000, rom_fatal_msg) < 0 ||	// load kernal ROM
+		xemu_load_file(xemucfg_get_str("romemu"),    memory + 0xA000, 0x2000, 0x2000, rom_fatal_msg) < 0		// load our "emulator monitor" ROM
 	)
 		return 1;
 	// Check our "emulator monitor" ROM ...
 	if (is_our_rom() < -1) {
-		ERROR_WINDOW("Unknown emulator ROM: %s", emucfg_get_str("romemu"));
+		ERROR_WINDOW("Unknown emulator ROM: %s", xemucfg_get_str("romemu"));
 		return 1;
 	}
 	if (is_our_rom() != EMU_ROM_VERSION) {
-		ERROR_WINDOW("Bad emulator ROM %s version, we need v%d\nPlease upgrade the ROM image!", emucfg_get_str("romemu"), EMU_ROM_VERSION);
+		ERROR_WINDOW("Bad emulator ROM %s version, we need v%d\nPlease upgrade the ROM image!", xemucfg_get_str("romemu"), EMU_ROM_VERSION);
 		return 1;
 	}
 	// Continue with initializing ...
@@ -573,10 +573,10 @@ int main ( int argc, char **argv )
 	);
 	vic_init(vic_address_space_lo8, vic_address_space_hi4);
 	cycles = 0;
-	emu_set_full_screen(emucfg_get_bool("fullscreen"));
-	if (!emucfg_get_bool("syscon"))
+	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
+	if (!xemucfg_get_bool("syscon"))
 		sysconsole_close(NULL);
-	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
+	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	for (;;) { // our emulation loop ...
 		int opcyc;
 		opcyc = cpu_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles

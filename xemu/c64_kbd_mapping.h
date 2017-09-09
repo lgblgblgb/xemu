@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -32,7 +32,7 @@ extern int joystick_emu;
 extern Uint8 c64_get_joy_state  ( void );
 extern void  c64_toggle_joy_emu ( void );
 
-static INLINE Uint8 c64_keyboard_read_on_CIA1_B ( Uint8 kbsel_a, Uint8 effect_b, Uint8 joy_state )
+static XEMU_INLINE Uint8 c64_keyboard_read_on_CIA1_B ( Uint8 kbsel_a, Uint8 effect_b, Uint8 joy_state )
 {
 	// selected line(s) for scan: LOW pin state on port A, while reading in port B
 	// CIA uses pull-ups, output can be LOW only, if port data is zero, and ddr is output (thus being 1)
@@ -54,7 +54,7 @@ static INLINE Uint8 c64_keyboard_read_on_CIA1_B ( Uint8 kbsel_a, Uint8 effect_b,
 	;
 }
 
-static INLINE Uint8 c64_keyboard_read_on_CIA1_A ( Uint8 kbsel_b, Uint8 effect_a, Uint8 joy_state )
+static XEMU_INLINE Uint8 c64_keyboard_read_on_CIA1_A ( Uint8 kbsel_b, Uint8 effect_a, Uint8 joy_state )
 {
 	// For description on this logic, please see comments at c64_keyboard_read_on_CIA1_B() above.
 	// The theory is the same, however here we use the negated value. it's not because it's different by hardware

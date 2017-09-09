@@ -1,5 +1,5 @@
 /* Test-case for a very simple and inaccurate Commodore VIC-20 emulator using SDL2 library.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is the VIC-20 emulation. Note: the source is overcrowded with comments by intent :)
    That it can useful for other people as well, or someone wants to contribute, etc ...
@@ -155,7 +155,7 @@ void cpu_vic_reg_write ( int addr, Uint8 data )
 void vic_vsync ( int relock_texture )
 {
 	if (relock_texture)
-		pixels = emu_start_pixel_buffer_access(&pixels_tail);	// get texture access stuffs for the new frame
+		pixels = xemu_start_pixel_buffer_access(&pixels_tail);	// get texture access stuffs for the new frame
 	scanline = 0;		// current scanline (other than this, incrementation, calling vsync on last scanline etc, the emulator should manage ...)
 	charline = 0;
 	vic_vertical_area = 1;

@@ -78,7 +78,7 @@ static int frameskip = 0;
 
 
 
-static INLINE Uint32 TVC_COLOUR_BYTE_TO_SDL ( Uint8 c )
+static XEMU_INLINE Uint32 TVC_COLOUR_BYTE_TO_SDL ( Uint8 c )
 {
 	return tvc_palette_rgb[(c & 1) | ((c >> 1) & 2) | ((c >> 2) & 4) | ((c >> 3) & 8)];
 }
@@ -86,7 +86,7 @@ static INLINE Uint32 TVC_COLOUR_BYTE_TO_SDL ( Uint8 c )
 
 static void crtc_write_register ( int reg, Uint8 data )
 {
-	if (likely(reg < 16)) {
+	if (XEMU_LIKELY(reg < 16)) {
 		data &= crtc_write_masks[reg];	// this will chop unused bits off for the given register
 		DEBUG("CRTC: register %02Xh is written with data %02Xh" NL, reg, data);
 		crtc.registers[reg] = data;
@@ -96,7 +96,7 @@ static void crtc_write_register ( int reg, Uint8 data )
 
 static Uint8 crtc_read_register ( int reg )
 {
-	if (likely(reg >= 12 && reg <= 17))
+	if (XEMU_LIKELY(reg >= 12 && reg <= 17))
 		return crtc.registers[reg];
 	return 0xFF;
 }
@@ -260,7 +260,7 @@ void clear_emu_events ( void )
 static inline void render_tvc_screen ( void )
 {
 	int tail, y;
-	Uint32 *pix = emu_start_pixel_buffer_access(&tail);
+	Uint32 *pix = xemu_start_pixel_buffer_access(&tail);
 	int ma = (crtc.registers[12] << 8) | crtc.registers[13];	// CRTC MA signals, 14 bit
 	int ra = 0;	// CRTC RA signals
 	int start_line, limit_line, start_cpos, limit_cpos;
@@ -314,7 +314,7 @@ static inline void render_tvc_screen ( void )
 				*pix++ = border_colour;
 		pix += tail;
 	}
-	emu_update_screen();
+	xemu_update_screen();
 }
 
 
@@ -341,7 +341,7 @@ static void update_emulator ( void )
 	if (!frameskip) {
 		render_tvc_screen();
 		hid_handle_all_sdl_events();
-		emu_timekeeping_delay(40000);	// number: the time needed (real-time) for a "full frame"
+		xemu_timekeeping_delay(40000);	// number: the time needed (real-time) for a "full frame"
 	}
 }
 
@@ -382,8 +382,8 @@ static void init_tvc ( void )
 	)
 		FATAL("Cannot load ROM(s).");
 #ifdef CONFIG_SDEXT_SUPPORT
-	if (emucfg_get_bool("sdext"))
-		sdext_init(emucfg_get_str("sdimg"), emucfg_get_str("sdrom"));
+	if (xemucfg_get_bool("sdext"))
+		sdext_init(xemucfg_get_str("sdimg"), xemucfg_get_str("sdrom"));
 #endif
 }
 
@@ -395,12 +395,12 @@ int main ( int argc, char **argv )
 	int cycles;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Careless Videoton TV Computer emulator from LGB");
 #ifdef CONFIG_SDEXT_SUPPORT
-	emucfg_define_switch_option("sdext", "Enables SD-ext");
-	emucfg_define_str_option("sdimg", "@sdcard.img", "SD-card image filename / path");
-	emucfg_define_str_option("sdrom", "#tvc_sddos.rom", "SD-card cartridge ROM image path");
+	xemucfg_define_switch_option("sdext", "Enables SD-ext");
+	xemucfg_define_str_option("sdimg", "@sdcard.img", "SD-card image filename / path");
+	xemucfg_define_str_option("sdrom", "#tvc_sddos.rom", "SD-card cartridge ROM image path");
 #endif
-	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	if (emucfg_parse_all(argc, argv))
+	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (xemu_post_init(
@@ -429,9 +429,9 @@ int main ( int argc, char **argv )
 	z80ex_init();
 	cycles = 0;
 	interrupt_active = 0;
-	if (!emucfg_get_bool("syscon"))
+	if (!xemucfg_get_bool("syscon"))
 		sysconsole_close(NULL);
-	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
+	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	for (;;) { // our emulation loop ...
 		if (interrupt_active) {
 			int a = z80ex_int();

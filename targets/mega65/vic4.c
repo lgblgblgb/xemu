@@ -208,7 +208,7 @@ static const char vic_registers_internal_mode_names[] = {'4', '3', '2'};
 
 void vic_write_reg ( unsigned int addr, Uint8 data )
 {
-	DEBUG("VIC%c: write reg $%02X (internally $%03X) with data $%02X" NL, likely(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, data);
+	DEBUG("VIC%c: write reg $%02X (internally $%03X) with data $%02X" NL, XEMU_LIKELY(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, data);
 	// IMPORTANT NOTE: writing of vic_registers[] happens only *AFTER* this switch/case construct! This means if you need to do this before, you must do it manually at the right "case"!!!!
 	// if you do so, you can even use "return" instead of "break" to save the then-redundant write of the register
 	switch (addr) {
@@ -438,7 +438,7 @@ Uint8 vic_read_reg ( int unsigned addr )
 		default:
 			FATAL("Xemu: invalid VIC internal register numbering on read: $%X", addr);
 	}
-	DEBUG("VIC%c: read reg $%02X (internally $%03X) with result $%02X" NL, likely(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, result);
+	DEBUG("VIC%c: read reg $%02X (internally $%03X) with result $%02X" NL, XEMU_LIKELY(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, result);
 	return result;
 }
 
@@ -803,7 +803,7 @@ static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 
 void vic_render_screen ( void )
 {
 	int tail_sdl;
-	Uint32 *p_sdl = emu_start_pixel_buffer_access(&tail_sdl);
+	Uint32 *p_sdl = xemu_start_pixel_buffer_access(&tail_sdl);
 	int sprites = vic_registers[0x15];
 	if (vic_registers[0x31] & 16) {
 	        sprite_bank = chip_ram + ((vic_registers[0x35] & 12) << 12);	// FIXME: just guessing: sprite bank is bitplane 2 area, always 16K regardless of H640?
@@ -827,7 +827,7 @@ void vic_render_screen ( void )
 				render_sprite(a, mask, sprite_bank + (sprite_pointers[a] << 6), p_sdl, tail_sdl);	// sprite_pointers are set by the renderer functions above!
 		}
 	}
-	emu_update_screen();
+	xemu_update_screen();
 }
 
 

@@ -1,5 +1,5 @@
 /* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015,2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    http://xep128.lgb.hu/
 
 This program is free software; you can redistribute it and/or modify
@@ -606,7 +606,7 @@ void nick_render_slot ( void )
 			if (pixels >= pixels_limit_vsync_long_force)
 				_update();
 			visible = (pixels >= pixels_limit_up && pixels < pixels_limit_bottom && (!frameskip));
-			if (unlikely((vm | ((a >> 2) & 0x18)) >= 8*4))
+			if (XEMU_UNLIKELY((vm | ((a >> 2) & 0x18)) >= 8*4))
 				FATAL("FATAL ERROR: NICK: render funcarray bound check failure!");
 			_render = render_modes[vm | ((a >> 2) & 0x18)];
 			break;

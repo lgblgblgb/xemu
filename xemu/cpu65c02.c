@@ -95,7 +95,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 Uint8 cpu_sp, cpu_op;
 #ifdef MEGA65
 //#warning "Compiling for MEGA65, hacky stuff!"
-#define IS_FLAT32_DATA_OP() unlikely(cpu_previous_op == 0xEA && cpu_linear_memory_addressing_is_enabled)
+#define IS_FLAT32_DATA_OP() XEMU_UNLIKELY(cpu_previous_op == 0xEA && cpu_linear_memory_addressing_is_enabled)
 Uint8 cpu_previous_op;
 #endif
 Uint16 cpu_pc, cpu_old_pc;
@@ -421,7 +421,7 @@ int cpu_step (
 	int cpu_all_cycles = 0;
 	do {
 #endif
-	if (unlikely(cpu_nmiEdge
+	if (XEMU_UNLIKELY(cpu_nmiEdge
 #ifdef CPU_65CE02
 		&& cpu_cycles != 1 && !cpu_inhibit_interrupts
 #endif
@@ -442,7 +442,7 @@ int cpu_step (
 		return 7;
 #endif
 	}
-	if (unlikely(cpu_irqLevel && (!cpu_pfi)
+	if (XEMU_UNLIKELY(cpu_irqLevel && (!cpu_pfi)
 #ifdef CPU_65CE02
 		&& cpu_cycles != 1 && !cpu_inhibit_interrupts
 #endif
@@ -481,7 +481,7 @@ int cpu_step (
 		DEBUG("CPU: SP before RTS is (SPHI=$%04X) SP=$%02X" NL, cpu_sphi, cpu_sp);
 #endif
 #ifdef CPU_TRAP
-	if (unlikely(cpu_op == CPU_TRAP)) {
+	if (XEMU_UNLIKELY(cpu_op == CPU_TRAP)) {
 		int ret = cpu_trap(CPU_TRAP);
 		if (ret > 0)
 			return ret;
@@ -1162,7 +1162,7 @@ int cpu_step (
 	}
 #ifdef CPU_STEP_MULTI_OPS
 	cpu_all_cycles += cpu_cycles;
-	if (unlikely(cpu_multi_step_stop_trigger)) {
+	if (XEMU_UNLIKELY(cpu_multi_step_stop_trigger)) {
 		cpu_multi_step_stop_trigger = 0;
 		return cpu_all_cycles;
 	}

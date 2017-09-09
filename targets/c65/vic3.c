@@ -100,7 +100,7 @@ char scanline_render_debug_info[320];
 void vic3_open_frame_access ( void )
 {
 	int tail_sdl;
-	pixel = pixel_start = emu_start_pixel_buffer_access(&tail_sdl);
+	pixel = pixel_start = xemu_start_pixel_buffer_access(&tail_sdl);
 	pixel_end = pixel + (SCREEN_WIDTH * SCREEN_HEIGHT);
 	if (tail_sdl)
 		FATAL("tail_sdl is not zero!");
@@ -198,7 +198,7 @@ static void renderer_text_40 ( void )
 		Uint8 vdata = chargen[(*(vp++)) << 3];
 		Uint32 colour = *(cp++);
 		Uint32 fg_colour;
-		VIC3_ADJUST_BY_HARDWARE_ATTRIBUTES(unlikely(colour & attributes), colour, vdata);
+		VIC3_ADJUST_BY_HARDWARE_ATTRIBUTES(XEMU_UNLIKELY(colour & attributes), colour, vdata);
 		fg_colour = palette[colour];
 		pixel[ 0] = pixel[ 1] = vdata & 0x80 ? fg_colour : bg_colour;
 		pixel[ 2] = pixel[ 3] = vdata & 0x40 ? fg_colour : bg_colour;
@@ -226,7 +226,7 @@ static void renderer_text_80 ( void )
 		Uint8 vdata = chargen[(*(vp++)) << 3];
 		Uint8 colour = *(cp++);
 		Uint32 fg_colour;
-		VIC3_ADJUST_BY_HARDWARE_ATTRIBUTES(unlikely(colour & attributes), colour, vdata);
+		VIC3_ADJUST_BY_HARDWARE_ATTRIBUTES(XEMU_UNLIKELY(colour & attributes), colour, vdata);
 		fg_colour = palette[colour];
 		*(pixel++) = vdata & 0x80 ? fg_colour : bg_colour;
 		*(pixel++) = vdata & 0x40 ? fg_colour : bg_colour;
@@ -593,12 +593,12 @@ int vic3_render_scanline ( void )
 			blink_phase = ~blink_phase;
 		}
 		if (!frameskip) {
-			if (unlikely(pixel != pixel_end))
+			if (XEMU_UNLIKELY(pixel != pixel_end))
 				FATAL("Renderer failure: pixel=%p != end=%p (diff=%d) height=%d", pixel, pixel_end, (int)(pixel_end - pixel), SCREEN_HEIGHT);
 			// FIXME: Highly incorrect, rendering sprites once *AFTER* the screen content ...
 			sprite_renderer();
 		} else {
-			if (unlikely(pixel != pixel_start))
+			if (XEMU_UNLIKELY(pixel != pixel_start))
 				FATAL("Renderer failure: pixel=%p != start=%p", pixel, pixel_start);
 		}
 		return 1; // return value non-zero: end-of-frame, emulator should update the SDL rendering context, then call vic3_open_frame_access()

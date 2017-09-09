@@ -1,5 +1,5 @@
 /* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015,2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    http://xep128.lgb.hu/
 
 This program is free software; you can redistribute it and/or modify
@@ -378,27 +378,27 @@ static void xep128_emulation ( void )
 	emu_timekeeping_check();
 	for (;;) {
 		int t;
-		if (unlikely(paused && !z80ex.prefix)) {
+		if (XEMU_UNLIKELY(paused && !z80ex.prefix)) {
 			/* Paused is non-zero for special cases, like pausing emulator :) or single-step execution mode
                            We only do this if z80ex.prefix is non-zero, ie not in the "middle" of a prefixed Z80 opcode or so ... */
 			__emu_one_frame(312, 0); // keep UI stuffs (and some timing) intact ... with a faked about 312 scanline (normal frame) timing needed ...
 			return;
 		}
-		if (unlikely(nmi_pending)) {
+		if (XEMU_UNLIKELY(nmi_pending)) {
 			t = z80ex_nmi();
 			DEBUG("NMI: %d" NL, t);
 			if (t)
 				nmi_pending = 0;
 		} else
 			t = 0;
-		//if (unlikely((dave_int_read & 0xAA) && t == 0)) {
+		//if (XEMU_UNLIKELY((dave_int_read & 0xAA) && t == 0)) {
 		if ((dave_int_read & 0xAA) && t == 0) {
 			t = z80ex_int();
 			if (t)
 				DEBUG("CPU: int and accepted = %d" NL, t);
 		} else
 			t = 0;
-		if (likely(!t))
+		if (XEMU_LIKELY(!t))
 			t = z80ex_step();
 		cpu_cycles_for_dave_sync += t;
 		//DEBUG("DAVE: SYNC: CPU cycles = %d, Dave sync val = %d, limit = %d" NL, t, cpu_cycles_for_dave_sync, cpu_cycles_per_dave_tick);
@@ -411,7 +411,7 @@ static void xep128_emulation ( void )
 		while (balancer >= 0.5) {
 			nick_render_slot();
 			balancer -= 1.0;
-			if (unlikely(emu_one_frame_rasters != -1)) {
+			if (XEMU_UNLIKELY(emu_one_frame_rasters != -1)) {
 				__emu_one_frame(
 					emu_one_frame_rasters,
 					emu_one_frame_frameskip

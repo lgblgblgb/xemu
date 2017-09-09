@@ -137,11 +137,11 @@ int skip_unhandled_mem;
 #define DEFINE_WRITER(name) static void  name ( MEMORY_HANDLERS_ADDR_TYPE, Uint8 data )
 
 DEFINE_READER(zero_physical_page_reader) {
-	return (likely(GET_OFFSET_BYTE_ONLY() > 1)) ? chip_ram[GET_OFFSET_BYTE_ONLY()] : cpu_io_port[GET_OFFSET_BYTE_ONLY()];
+	return (XEMU_LIKELY(GET_OFFSET_BYTE_ONLY() > 1)) ? chip_ram[GET_OFFSET_BYTE_ONLY()] : cpu_io_port[GET_OFFSET_BYTE_ONLY()];
 }
 DEFINE_WRITER(zero_physical_page_writer)
 {
-	if (likely(GET_OFFSET_BYTE_ONLY() > 1))
+	if (XEMU_LIKELY(GET_OFFSET_BYTE_ONLY() > 1))
 		chip_ram[GET_OFFSET_BYTE_ONLY()] = data;
 	else
 		memory_set_cpu_io_port(GET_OFFSET_BYTE_ONLY(), data);
@@ -156,7 +156,7 @@ DEFINE_READER(fast_ram_reader) {
 	return fast_ram[GET_READER_OFFSET()];
 }
 DEFINE_WRITER(fast_ram_writer) {
-	if (likely(!rom_protect))
+	if (XEMU_LIKELY(!rom_protect))
 		fast_ram[GET_WRITER_OFFSET()] = data;
 }
 DEFINE_READER(colour_ram_reader) {
@@ -171,10 +171,10 @@ DEFINE_READER(dummy_reader) {
 DEFINE_WRITER(dummy_writer) {
 }
 DEFINE_READER(hypervisor_ram_reader) {
-	return (likely(in_hypervisor)) ? hypervisor_ram[GET_READER_OFFSET()] : 0xFF;
+	return (XEMU_LIKELY(in_hypervisor)) ? hypervisor_ram[GET_READER_OFFSET()] : 0xFF;
 }
 DEFINE_WRITER(hypervisor_ram_writer) {
-	if (likely(in_hypervisor))
+	if (XEMU_LIKELY(in_hypervisor))
 		hypervisor_ram[GET_WRITER_OFFSET()] = data;
 }
 DEFINE_WRITER(char_wom_writer) {	// Note: there is NO read for this, as it's write-only memory!
@@ -193,14 +193,14 @@ DEFINE_WRITER(slow_ram_writer) {
 #endif
 }
 DEFINE_READER(invalid_mem_reader) {
-	if (likely(skip_unhandled_mem))
+	if (XEMU_LIKELY(skip_unhandled_mem))
 		DEBUGPRINT("WARNING: Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, GET_READER_OFFSET(), cpu_pc);
 	else
 		FATAL("Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, GET_READER_OFFSET(), cpu_pc);
 	return 0xFF;
 }
 DEFINE_WRITER(invalid_mem_writer) {
-	if (likely(skip_unhandled_mem))
+	if (XEMU_LIKELY(skip_unhandled_mem))
 		DEBUGPRINT("WARNING: Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, GET_WRITER_OFFSET(), data, cpu_pc);
 	else
 		FATAL("Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, GET_WRITER_OFFSET(), data, cpu_pc);
@@ -315,7 +315,7 @@ found:
 }
 
 
-static void INLINE phys_addr_decoder_array ( int megabyte_offset, int offset, int slot, int slots, int hint_slot )
+static void XEMU_INLINE phys_addr_decoder_array ( int megabyte_offset, int offset, int slot, int slots, int hint_slot )
 {
 	for (;;) {
 		// we try to use the "hint_slot" feature, which tries to optimize table building with exploiting the
@@ -383,7 +383,7 @@ void memory_init ( void )
 	}
 	// Generate "templates" for VIC-III ROM mapping entry points
 	// FIXME: the theory, that VIC-III ROM mapping is not like C64, ie writing a mapped in ROM, would write the ROM, not something "under" as with C64
-	// static void INLINE phys_addr_decoder_array ( int megabyte_offset, int offset, int slot, int slots, int hint_slot )
+	// static void XEMU_INLINE phys_addr_decoder_array ( int megabyte_offset, int offset, int slot, int slots, int hint_slot )
 	phys_addr_decoder_array(0, 0x38000, MEM_SLOT_C65_8KROM_8000, 32, -1);	// 8K(32 pages) C65 VIC-III ROM mapping ($8000) from $38000
 	phys_addr_decoder_array(0, 0x3A000, MEM_SLOT_C65_8KROM_A000, 32, -1);	// 8K(32 pages) C65 VIC-III ROM mapping ($A000) from $3A000
 	phys_addr_decoder_array(0, 0x2C000, MEM_SLOT_C65_4KROM_C000, 16, -1);	// 4K(16 pages) C65 VIC-III ROM mapping ($C000) from $2C000
@@ -632,7 +632,7 @@ static void apply_cpu_io_port_config ( void )
 // do not call with other addr than 0/1!
 void memory_set_cpu_io_port ( int addr, Uint8 value )
 {
-	if (unlikely((addr == 0) && ((value & 0xFE) == 64))) {	// M65-specific speed control stuff!
+	if (XEMU_UNLIKELY((addr == 0) && ((value & 0xFE) == 64))) {	// M65-specific speed control stuff!
 		value &= 1;
 		if (force_fast != value) {
 			force_fast = value;
@@ -745,7 +745,7 @@ void cpu_do_nop ( void )
    pointers used all the time in 4510GS code. */
 
 
-static INLINE int cpu_get_flat_addressing_mode_address ( void )
+static XEMU_INLINE int cpu_get_flat_addressing_mode_address ( void )
 {
 	register int addr = cpu_read(cpu_pc++);	// fetch base page address
 	// FIXME: really, BP/ZP is wrapped around in case of linear addressing and eg BP addr of $FF got?????? (I think IT SHOULD BE!)

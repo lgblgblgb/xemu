@@ -150,8 +150,8 @@ void z80ex_tstate_cb ( void )
 		}
 	}
 	// Next tstate in this line, or next line, or next frame ...
-	if (unlikely(tstate_x == 223)) {
-		if (unlikely(scanline == 311)) {
+	if (XEMU_UNLIKELY(tstate_x == 223)) {
+		if (XEMU_UNLIKELY(scanline == 311)) {
 			vsync_int = 1;
 			frame_counter++;
 			flash_state = (frame_counter & 16) ? 0xFF : 0x7F;
@@ -175,7 +175,7 @@ Z80EX_BYTE z80ex_mread_cb ( Z80EX_WORD addr, int m1_state )
 
 void z80ex_mwrite_cb ( Z80EX_WORD addr, Z80EX_BYTE value )
 {
-	if (unlikely(addr < 0x4000))
+	if (XEMU_UNLIKELY(addr < 0x4000))
 		return;		// ROM is not writable
 	if (addr >= 0x8000)
 		memory[addr] = value;	// no contended memory, simply do the write
@@ -190,7 +190,7 @@ void z80ex_mwrite_cb ( Z80EX_WORD addr, Z80EX_BYTE value )
 
 Z80EX_BYTE z80ex_pread_cb ( Z80EX_WORD port16 )
 {
-	if (unlikely(port16 & 1))
+	if (XEMU_UNLIKELY(port16 & 1))
 		return 0xFF;
 	// The ULA port: every even addresses ...
 	return (
@@ -208,7 +208,7 @@ Z80EX_BYTE z80ex_pread_cb ( Z80EX_WORD port16 )
 
 void z80ex_pwrite_cb ( Z80EX_WORD port16, Z80EX_BYTE value )
 {
-	if (unlikely(port16 & 1))
+	if (XEMU_UNLIKELY(port16 & 1))
 		return;
 	// The ULA port: every even addresses ...
 	border_colour = ula_palette[value & 7];
@@ -308,8 +308,8 @@ static void open_new_frame ( void )
 {
 	int tail;
 	frame_done = 0;
-	pix = emu_start_pixel_buffer_access(&tail);
-	if (unlikely(tail))
+	pix = xemu_start_pixel_buffer_access(&tail);
+	if (XEMU_UNLIKELY(tail))
 		FATAL("FATAL: Xemu texture tail is not zero, but %d", tail);
 }
 
@@ -319,9 +319,9 @@ static void open_new_frame ( void )
 int main ( int argc, char **argv )
 {
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The learner's ZX Spectrum emulator from LGB (the learner)");
-	emucfg_define_str_option("rom", ROM_NAME, "Path and filename for ROM to be loaded");
-	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	if (emucfg_parse_all(argc, argv))
+	xemucfg_define_str_option("rom", ROM_NAME, "Path and filename for ROM to be loaded");
+	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (xemu_post_init(
@@ -347,7 +347,7 @@ int main ( int argc, char **argv )
 	init_ula_tables();
 	/* Intialize memory and load ROMs */
 	memset(memory, 0xFF, sizeof memory);
-	if (xemu_load_file(emucfg_get_str("rom"), memory, 0x4000, 0x4000, "Selected ROM image cannot be loaded. Without it, Xemu won't work.\nPlease install it, or use the CLI switch -rom to specify one.") < 0)
+	if (xemu_load_file(xemucfg_get_str("rom"), memory, 0x4000, 0x4000, "Selected ROM image cannot be loaded. Without it, Xemu won't work.\nPlease install it, or use the CLI switch -rom to specify one.") < 0)
 		return 1;
 	// Continue with initializing ...
 	clear_emu_events();	// also resets the keyboard
@@ -358,23 +358,23 @@ int main ( int argc, char **argv )
 	scanline = 0;
 	flash_state = 0xFF;
 	frame_counter = 0;
-	if (!emucfg_get_bool("syscon"))
+	if (!xemucfg_get_bool("syscon"))
 		sysconsole_close(NULL);
 	open_new_frame();		// open new frame at the very first time, the rest of frames handled below, during the emulation
-	emu_timekeeping_start();	// we must call this once, right before the start of the emulation
+	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	for (;;) { // our emulation loop ...
-		if (unlikely(vsync_int)) {
+		if (XEMU_UNLIKELY(vsync_int)) {
 			if (z80ex_int())
 				vsync_int = 0;
 			else
 				z80ex_step();
 		} else
 			z80ex_step();
-		if (unlikely(frame_done)) {
+		if (XEMU_UNLIKELY(frame_done)) {
 			if (frame_counter & 1)	// currently Xemu framework assumes about ~25Hz for calling this, so we do this at every second frames
 				hid_handle_all_sdl_events();
-			emu_update_screen();		// updates screen (Xemu framework), also closes the access to the buffer
-			emu_timekeeping_delay(19968);	// FIXME: better accuracy, as some T-states over it is now ....
+			xemu_update_screen();		// updates screen (Xemu framework), also closes the access to the buffer
+			xemu_timekeeping_delay(19968);	// FIXME: better accuracy, as some T-states over it is now ....
 			open_new_frame();		// open new frame
 		}
 	}

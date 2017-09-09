@@ -130,19 +130,19 @@ static inline int get_elapsed_time ( Uint64 t_old, Uint64 *t_new, time_t *store_
 
 
 
-struct tm *emu_get_localtime ( void )
+struct tm *xemu_get_localtime ( void )
 {
 	return localtime(&unix_time);
 }
 
 
-time_t emu_get_unixtime ( void )
+time_t xemu_get_unixtime ( void )
 {
 	return unix_time;
 }
 
 
-void *emu_malloc ( size_t size )
+void *xemu_malloc ( size_t size )
 {
 	void *p = malloc(size);
 	if (!p)
@@ -151,7 +151,7 @@ void *emu_malloc ( size_t size )
 }
 
 
-void *emu_realloc ( void *p, size_t size )
+void *xemu_realloc ( void *p, size_t size )
 {
 	p = realloc(p, size);
 	if (!p)
@@ -164,7 +164,7 @@ void *emu_realloc ( void *p, size_t size )
 #ifdef _WIN32
 extern void *_mm_malloc ( size_t size, size_t alignment );	// it seems mingw/win has issue not to define this properly ... FIXME? Ugly windows, always the problems ...
 #endif
-void *emu_malloc_ALIGNED ( size_t size )
+void *xemu_malloc_ALIGNED ( size_t size )
 {
 	// it seems _mm_malloc() is quite standard at least on gcc, mingw, clang ... so let's try to use it
 	void *p = _mm_malloc(size, __BIGGEST_ALIGNMENT__);
@@ -176,7 +176,7 @@ void *emu_malloc_ALIGNED ( size_t size )
 #endif
 
 
-char *emu_strdup ( const char *s )
+char *xemu_strdup ( const char *s )
 {
 	char *p = strdup(s);
 	if (!p)
@@ -186,7 +186,7 @@ char *emu_strdup ( const char *s )
 
 
 // Just drop queued SDL events ...
-void emu_drop_events ( void )
+void xemu_drop_events ( void )
 {
 	SDL_PumpEvents();
 	SDL_FlushEvent(SDL_KEYDOWN);
@@ -342,7 +342,7 @@ int xemu_load_file ( const char *filename, void *store_to, int min_size, int max
 		return -1;
 	} else {
 		int load_size;
-		xemu_load_buffer_p = emu_malloc(max_size + 1);	// try to load one byte more than the max allowed, to detect too large file scenario
+		xemu_load_buffer_p = xemu_malloc(max_size + 1);	// try to load one byte more than the max allowed, to detect too large file scenario
 		load_size = xemu_safe_read(fd, xemu_load_buffer_p, max_size + 1);
 		if (load_size < 0) {
 			ERROR_WINDOW("Cannot read file %s: %s\n%s", xemu_load_filepath, strerror(errno), cry ? cry : "");
@@ -375,7 +375,7 @@ int xemu_load_file ( const char *filename, void *store_to, int min_size, int max
 			free(xemu_load_buffer_p);
 			xemu_load_buffer_p = NULL;
 		} else
-			xemu_load_buffer_p = emu_realloc(xemu_load_buffer_p, load_size);
+			xemu_load_buffer_p = xemu_realloc(xemu_load_buffer_p, load_size);
 		DEBUGPRINT("FILE: %d bytes loaded from file: %s" NL, load_size, xemu_load_filepath);
 		return load_size;
 	}
@@ -387,7 +387,7 @@ int xemu_load_file ( const char *filename, void *store_to, int min_size, int max
 	 0: set windowed mode (if it's not that already, then nothing will happen)
 	 1 (or any positive integer): set full screen mode (if it's not that already, then nothing will happen)
 */
-void emu_set_full_screen ( int setting )
+void xemu_set_full_screen ( int setting )
 {
 	if (setting > 1)
 		setting = 1;
@@ -467,7 +467,7 @@ static inline void do_sleep ( int td )
    frame) or 50Hz (for PAL half frame).
    Input: td_em: time in microseconds would be need on the REAL (emulated)
    machine to do the task, since the last call of this function! */
-void emu_timekeeping_delay ( int td_em )
+void xemu_timekeeping_delay ( int td_em )
 {
 	int td, td_pc;
 	time_t old_unix_time = unix_time;
@@ -590,21 +590,21 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 	atexit(shutdown_emulator);
 	p = SDL_GetPrefPath(app_organization, app_name);
 	if (p) {
-		sdl_pref_dir = emu_strdup(p);	// we are too careful: I can't be sure the used SQL_Quit messes up the allocated buffer, so we "clone" it
-		sdl_inst_dir = emu_malloc(strlen(p) + strlen(INSTALL_DIRECTORY_ENTRY_NAME) + strlen(DIRSEP_STR) + 1);
+		sdl_pref_dir = xemu_strdup(p);	// we are too careful: I can't be sure the used SQL_Quit messes up the allocated buffer, so we "clone" it
+		sdl_inst_dir = xemu_malloc(strlen(p) + strlen(INSTALL_DIRECTORY_ENTRY_NAME) + strlen(DIRSEP_STR) + 1);
 		sprintf(sdl_inst_dir, "%s%s" DIRSEP_STR, p, INSTALL_DIRECTORY_ENTRY_NAME);
 		SDL_free(p);
 	} else
 		FATAL("Cannot query SDL preference directory: %s", SDL_GetError());
 	p = SDL_GetBasePath();
 	if (p) {
-		sdl_base_dir = emu_strdup(p);
+		sdl_base_dir = xemu_strdup(p);
 		SDL_free(p);
 	} else
 		FATAL("Cannot query SDL base directory: %s", SDL_GetError());
 #endif
-	xemu_app_org = emu_strdup(app_organization);
-	xemu_app_name = emu_strdup(app_name);
+	xemu_app_org = xemu_strdup(app_organization);
+	xemu_app_name = xemu_strdup(app_name);
 }
 
 
@@ -697,7 +697,7 @@ int xemu_post_init (
 		}
 	} while (0);
 #endif
-	sdl_window_title = emu_strdup(window_title);
+	sdl_window_title = xemu_strdup(window_title);
 	sdl_win = SDL_CreateWindow(
 		window_title,
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
@@ -708,7 +708,7 @@ int xemu_post_init (
 		ERROR_WINDOW("Cannot create SDL window: %s", SDL_GetError());
 		return 1;
 	}
-	window_title_buffer = emu_malloc(strlen(window_title) + 128);
+	window_title_buffer = xemu_malloc(strlen(window_title) + 128);
 	strcpy(window_title_buffer, window_title);
 	window_title_buffer_end = window_title_buffer + strlen(window_title);
 	//SDL_SetWindowMinimumSize(sdl_win, SCREEN_WIDTH, SCREEN_HEIGHT * 2);
@@ -761,16 +761,16 @@ int xemu_post_init (
 	SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");				// 1 = enable screen saver
 	/* texture access / buffer */
 	if (!locked_texture_update)
-		sdl_pixel_buffer = emu_malloc_ALIGNED(texture_x_size_in_bytes * texture_y_size);
+		sdl_pixel_buffer = xemu_malloc_ALIGNED(texture_x_size_in_bytes * texture_y_size);
 	// play a single frame game, to set a consistent colour (all black ...) for the emulator. Also, it reveals possible errors with rendering
-	emu_render_dummy_frame(black_colour, texture_x_size, texture_y_size);
+	xemu_render_dummy_frame(black_colour, texture_x_size, texture_y_size);
 	printf(NL);
 	return 0;
 }
 
 
 // this is just for the time keeping stuff, to avoid very insane values (ie, years since the last update for the first call ...)
-void emu_timekeeping_start ( void )
+void xemu_timekeeping_start ( void )
 {
 	(void)get_elapsed_time(0, &et_old, &unix_time);
 	td_balancer = 0;
@@ -781,10 +781,10 @@ void emu_timekeeping_start ( void )
 
 
 
-void emu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_size )
+void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_size )
 {
 	int tail;
-	Uint32 *pp = emu_start_pixel_buffer_access(&tail);
+	Uint32 *pp = xemu_start_pixel_buffer_access(&tail);
 	int x, y;
 	for (y = 0; y < texture_y_size; y++) {
 		for (x = 0; x < texture_x_size; x++)
@@ -792,7 +792,7 @@ void emu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_s
 		pp += tail;
 	}
 	seconds_timer_trigger = 1;
-	emu_update_screen();
+	xemu_update_screen();
 }
 
 
@@ -800,11 +800,11 @@ void emu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_s
 /* You *MUST* call this _ONCE_ before any access of pixels of the rendering target
    after render is done. Then pixels can be written but especially in locked_texture
    mode, you CAN'T read the previous frame pixels back! Also then you need to update
-   *ALL* pixels of the texture before calling emu_update_screen() func at the end!
+   *ALL* pixels of the texture before calling xemu_update_screen() func at the end!
    tail should have added at the end of each lines of the texture, in theory it should
    be zero (when it's not needed ...) but you CANNOT be sure, if it's really true!
    tail is meant in 4 bytes (ie Uint32 pointer)! */
-Uint32 *emu_start_pixel_buffer_access ( int *texture_tail )
+Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail )
 {
 	if (sdl_pixel_buffer) {
 		*texture_tail = 0;		// using non-locked texture access, "tail" is always zero
@@ -829,7 +829,7 @@ Uint32 *emu_start_pixel_buffer_access ( int *texture_tail )
    got by calling emu_start_pixel_buffer_access(). Please read the notes at
    emu_start_pixel_buffer_access() carefully, especially, if you use the locked
    texture method! */
-void emu_update_screen ( void )
+void xemu_update_screen ( void )
 {
 	if (sdl_pixel_buffer)
 		SDL_UpdateTexture(sdl_tex, NULL, sdl_pixel_buffer, texture_x_size_in_bytes);
@@ -982,7 +982,7 @@ void osd_write_char ( int x, int y, char ch )
 	for (row = 0; row < 16; row++) {
 		Uint16 mask = 0x8000;
 		do {
-			if (likely(d >= osd_pixels && d < e))
+			if (XEMU_LIKELY(d >= osd_pixels && d < e))
 				*d = *s & mask ? osd_colour_fg : osd_colour_bg;
 			else if (warn) {
 				warn = 0;
@@ -1067,10 +1067,10 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 	save_mouse_grab();
 	SDL_ShowMessageBox(&messageboxdata, &buttonid);
 	clear_emu_events();
-	emu_drop_events();
+	xemu_drop_events();
 	SDL_RaiseWindow(sdl_win);
 	restore_mouse_grab();
-	emu_timekeeping_start();
+	xemu_timekeeping_start();
 	return buttonid;
 }
 

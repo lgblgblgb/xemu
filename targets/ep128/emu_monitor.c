@@ -1,5 +1,5 @@
 /* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015,2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    http://xep128.lgb.hu/
 
 This program is free software; you can redistribute it and/or modify
@@ -795,7 +795,7 @@ int monitor_queue_used ( void )
 /* for use by the console input thread */
 int monitor_queue_command ( char *buffer )
 {
-	if (unlikely(is_queued_command))
+	if (XEMU_UNLIKELY(is_queued_command))
 		return 1;
 	is_queued_command = 1;
 	strcpy(queued_command, buffer);

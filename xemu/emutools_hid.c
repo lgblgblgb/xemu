@@ -86,7 +86,7 @@ int hid_key_event ( SDL_Scancode key, int pressed )
 						break;
 					case XEMU_EVENT_TOGGLE_FULLSCREEN:
 						if (pressed)
-							emu_set_full_screen(-1);
+							xemu_set_full_screen(-1);
 						break;
 					default:
 						return emu_callback_key(map->pos, key, pressed, 0);
@@ -116,7 +116,7 @@ void hid_reset_events ( int burn )
 	mouse_delta_y = 0;
 	hid_state = 0;
 	if (burn)
-		emu_drop_events();
+		xemu_drop_events();
 }
 
 

@@ -68,16 +68,16 @@ Uint8 io_read ( unsigned int addr )
 			return vic_read_reg((addr & 0x3F) | 0x100);	// VIC-II read register
 		case 0x10:	// $D000-$D0FF ~ C65 I/O mode
 			addr &= 0xFF;
-			if (likely(addr < 0x80))
+			if (XEMU_LIKELY(addr < 0x80))
 				return vic_read_reg(addr | 0x80);	// VIC-III read register
-			if (likely(addr < 0xA0))
+			if (XEMU_LIKELY(addr < 0xA0))
 				return fdc_read_reg(addr & 0xF);
 			RETURN_ON_IO_READ_NOT_IMPLEMENTED("RAM expansion controller", 0xFF);
 		case 0x30:	// $D000-$D0FF ~ M65 I/O mode
 			addr &= 0xFF;
-			if (likely(addr < 0x80))
+			if (XEMU_LIKELY(addr < 0x80))
 				return vic_read_reg(addr);		// VIC-IV read register
-			if (likely(addr < 0xA0))
+			if (XEMU_LIKELY(addr < 0xA0))
 				return fdc_read_reg(addr & 0xF);
 			RETURN_ON_IO_READ_NOT_IMPLEMENTED("RAM expansion controller", 0xFF);
 		case 0x11:	// $D100-$D1FF ~ C65 I/O mode
@@ -185,21 +185,21 @@ Uint8 io_read ( unsigned int addr )
 		case 0x0F:	// $DF00-$DFFF ~ C64 I/O mode
 			if (vic_registers[0x30] & 1)
 				return colour_ram[addr - 0x0800];
-			if (likely(sd_status & SD_ST_MAPPED))
+			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED))
 				return sd_buffer[addr - 0x0E00];
 			return 0xFF;	// I/O exp is not supported
 		case 0x1E:	// $DE00-$DEFF ~ C65 I/O mode
 		case 0x1F:	// $DF00-$DFFF ~ C65 I/O mode
 			if (vic_registers[0x30] & 1)
 				return colour_ram[addr - 0x1800];
-			if (likely(sd_status & SD_ST_MAPPED))
+			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED))
 				return sd_buffer[addr - 0x1E00];
 			return 0xFF;	// I/O exp is not supported
 		case 0x3E:	// $DE00-$DEFF ~ M65 I/O mode
 		case 0x3F:	// $DF00-$DFFF ~ M65 I/O mode
 			if (vic_registers[0x30] & 1)
 				return colour_ram[addr - 0x3800];
-			if (likely(sd_status & SD_ST_MAPPED))
+			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED))
 				return sd_buffer[addr - 0x3E00];
 			return 0xFF;	// I/O exp is not supported
 		/* --------------------------------------------------------------- */
@@ -219,7 +219,7 @@ Uint8 io_read ( unsigned int addr )
    In nutshell: this function *NEEDS* addresses 0-$3FFF based on the given I/O (VIC) mode! */
 void io_write ( unsigned int addr, Uint8 data )
 {
-	if (unlikely(cpu_rmw_old_data >= 0)) {
+	if (XEMU_UNLIKELY(cpu_rmw_old_data >= 0)) {
 		// RMW handling! FIXME: do this only in the needed I/O ports only, not here, globally!
 		// however, for that, we must check this at every devices where it can make any difference ...
 		Uint8 old_data = cpu_rmw_old_data;
@@ -239,22 +239,22 @@ void io_write ( unsigned int addr, Uint8 data )
 			return;
 		case 0x10:	// $D000-$D0FF ~ C65 I/O mode
 			addr &= 0xFF;
-			if (likely(addr < 0x80)) {
+			if (XEMU_LIKELY(addr < 0x80)) {
 				vic_write_reg(addr | 0x80, data);	// VIC-III write register
 				return;
 			}
-			if (likely(addr < 0xA0)) {
+			if (XEMU_LIKELY(addr < 0xA0)) {
 				fdc_write_reg(addr & 0xF, data);
 				return;
 			}
 			RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("RAM expansion controller");
 		case 0x30:	// $D000-$D0FF ~ M65 I/O mode
 			addr &= 0xFF;
-			if (likely(addr < 0x80)) {
+			if (XEMU_LIKELY(addr < 0x80)) {
 				vic_write_reg(addr, data);		// VIC-IV write register
 				return;
 			}
-			if (likely(addr < 0xA0)) {
+			if (XEMU_LIKELY(addr < 0xA0)) {
 				fdc_write_reg(addr & 0xF, data);
 				return;
 			}
@@ -406,7 +406,7 @@ void io_write ( unsigned int addr, Uint8 data )
 				colour_ram[addr - 0x0800] = data;
 				return;
 			}
-			if (likely(sd_status & SD_ST_MAPPED)) {
+			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED)) {
 				sd_buffer[addr - 0x0E00] = data;
 				return;
 			}
@@ -417,7 +417,7 @@ void io_write ( unsigned int addr, Uint8 data )
 				colour_ram[addr - 0x1800] = data;
 				return;
 			}
-			if (likely(sd_status & SD_ST_MAPPED)) {
+			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED)) {
 				sd_buffer[addr - 0x1E00] = data;
 				return;
 			}
@@ -428,7 +428,7 @@ void io_write ( unsigned int addr, Uint8 data )
 				colour_ram[addr - 0x3800] = data;
 				return;
 			}
-			if (likely(sd_status & SD_ST_MAPPED)) {
+			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED)) {
 				sd_buffer[addr - 0x3E00] = data;
 				return;
 			}
