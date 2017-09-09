@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -128,27 +128,18 @@ static const char *set_boolean_value ( const char *str, void **set_this )
 
 
 
-int emucfg_parse_config_file ( const char *filename, int open_can_fail )
+int emucfg_parse_config_file ( const char *filename_in, int open_can_fail )
 {
-	int lineno;
-	char *p;
-	char *cfgmem = emu_malloc(CONFIG_FILE_MAX_SIZE);
-	FILE *f = fopen(filename, "rb");
-	if (!f) {
+	char *p, cfgmem[CONFIG_FILE_MAX_SIZE + 1];
+	int  lineno = xemu_load_file(filename_in, cfgmem, 0, CONFIG_FILE_MAX_SIZE, open_can_fail ? NULL : "Cannot load specified configuration file.");
+	if (lineno < 0) {
 		if (open_can_fail)
 			return 1;
-		FATAL("Config: cannot open config file (%s): %s", filename, strerror(errno));
+		XEMUEXIT(1);
 	}
-	lineno = fread(cfgmem, 1, CONFIG_FILE_MAX_SIZE, f);
-	if (lineno < 0)
-		FATAL("Config: error reading config file (%s): %s", filename, strerror(errno));
-	fclose(f);
-	if (lineno == CONFIG_FILE_MAX_SIZE)
-		FATAL("Config: too long config file (%s), maximum allowed size is %d bytes.", filename, CONFIG_FILE_MAX_SIZE);
 	cfgmem[lineno] = 0;	// terminate string
 	if (strlen(cfgmem) != lineno)
-		FATAL("Config: bad config file (%s), contains NULL character (not a text file)", filename);
-	cfgmem = emu_realloc(cfgmem, lineno + 1);
+		FATAL("Config: bad config file (%s), contains NULL character (not a text file)", xemu_load_filepath);
 	p = cfgmem;
 	lineno = 1;	// line number counter in read config file from now
 	do {
@@ -196,34 +187,34 @@ int emucfg_parse_config_file ( const char *filename, int open_can_fail )
 			printf("Line#%d = \"%s\",\"%s\"" NL, lineno, p, p1 ? p1 : "<no-specified>");
 			o = search_option(p);
 			if (!o)
-				FATAL("Config file (%s) error at line %d: keyword '%s' is unknown.", filename, lineno, p);
+				FATAL("Config file (%s) error at line %d: keyword '%s' is unknown.", xemu_load_filepath, lineno, p);
 			if (o->type != OPT_NO && !p1)
-				FATAL("Config file (%s) error at line %d: keyword '%s' requires a value.", filename, lineno, p);
+				FATAL("Config file (%s) error at line %d: keyword '%s' requires a value.", xemu_load_filepath, lineno, p);
 			switch (o->type) {
 				case OPT_STR:
 					if (o->value)
 						free(o->value);
 					if (check_string_size(p1))
-						FATAL("Config file (%s) error at line %d: keyword '%s' has too long value", filename, lineno, p);
+						FATAL("Config file (%s) error at line %d: keyword '%s' has too long value", xemu_load_filepath, lineno, p);
 					o->value = emu_strdup(p1);
 					break;
 				case OPT_BOOL:
 					s = set_boolean_value(p1, &o->value);
 					if (s)
-						FATAL("Config file (%s) error at line %d: keyword '%s' %s, but '%s' is detected.", filename, lineno, p, s, p1);
+						FATAL("Config file (%s) error at line %d: keyword '%s' %s, but '%s' is detected.", xemu_load_filepath, lineno, p, s, p1);
 					break;
 				case OPT_NUM:
 					o->value = (void*)(intptr_t)atoi(p1);
 					break;
 				case OPT_NO:
 					if (p1)
-						FATAL("Config file (%s) error at line %d: keyword '%s' DOES NOT require any value, but '%s' is detected.", filename, lineno, p, p1);
+						FATAL("Config file (%s) error at line %d: keyword '%s' DOES NOT require any value, but '%s' is detected.", xemu_load_filepath, lineno, p, p1);
 					o->value = (void*)1;
 					break;
 				case OPT_PROC:
 					s = (*(emucfg_parser_callback_func_t)(o->value))(o, p, p1);
 					if (s)
-						FATAL("Config file (%s) error at line %d: keyword's '%s' parameter '%s' is invalid: %s", filename, lineno, p, p1, s);
+						FATAL("Config file (%s) error at line %d: keyword's '%s' parameter '%s' is invalid: %s", xemu_load_filepath, lineno, p, p1, s);
 					break;
 			}
 		}
@@ -231,13 +222,12 @@ int emucfg_parse_config_file ( const char *filename, int open_can_fail )
 		p = pn;	// start of next line (or EOF if NULL)
 		lineno++;
 	} while (p);
-	free(cfgmem);
 	return 0;
 }
 
 
 
-int emucfg_parse_commandline ( int argc, char **argv, const char *only_this )
+static int emucfg_parse_commandline ( int argc, char **argv, const char *only_this )
 {
 	argc--;
 	argv++;
@@ -300,6 +290,22 @@ int emucfg_parse_commandline ( int argc, char **argv, const char *only_this )
 	}
 	return 0;
 }
+
+
+
+int emucfg_parse_all ( int argc, char **argv )
+{
+	char cfgfn[PATH_MAX];
+	if (emucfg_parse_commandline(argc, argv, "help"))
+		return 1;
+	sprintf(cfgfn, "@%s-default.cfg", xemu_app_name);
+	if (emucfg_parse_config_file(cfgfn, 1))
+		DEBUGPRINT("CFG: Default config file %s cannot be used" NL, cfgfn);
+	else
+		DEBUGPRINT("CFG: Default config file %s has been used" NL, cfgfn);
+	return emucfg_parse_commandline(argc, argv, NULL);
+}
+
 
 
 static struct emutools_config_st *search_option_query ( const char *name, enum emutools_option_type type )

@@ -375,8 +375,7 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles;
-	sysconsole_open();
-	xemu_dump_version(stdout, "The world's first Commodore LCD emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The world's first Commodore LCD emulator from LGB");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	emucfg_define_num_option("ram", 128, "Sets RAM size in KBytes.");
 	emucfg_define_str_option("rom102", "#clcd-u102.rom", "Selects 'U102' ROM to use");
@@ -385,16 +384,15 @@ int main ( int argc, char **argv )
 	emucfg_define_str_option("rom105", "#clcd-u105.rom", "Selects 'U105' ROM to use");
 	emucfg_define_str_option("romchr", "#clcd-chargen.rom", "Selects character ROM to use");
 	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	if (emucfg_parse_commandline(argc, argv, NULL))
+	if (emucfg_parse_all(argc, argv))
 		return 1;
 	ram_size = emucfg_get_num("ram");
 	if (ram_size < 32 || ram_size > 128)
 		FATAL("Bad ram size is defined, must be 32...128");
 	ram_size <<= 10;
 	DEBUGPRINT("CFG: ram size is %d bytes." NL, ram_size);
-	if (emu_init_sdl(
+	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
-		APP_ORG, TARGET_NAME,		// app organization and name, used with SDL pref dir formation
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// logical size (same as texture for now ...)

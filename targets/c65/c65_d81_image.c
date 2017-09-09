@@ -42,7 +42,7 @@ int fdc_cb_rd_sec ( Uint8 *buffer, int offset )
 		FATAL("D81: not inserted");
 	if (lseek(disk_fd, offset, SEEK_SET) != offset)
 		FATAL("D81: host-OS seek failure to %d: %s", offset, strerror(errno));
-	ret = read(disk_fd, buffer, 512);
+	ret = xemu_safe_read(disk_fd, buffer, 512);
 	if (ret < 0)
 		FATAL("D81: host-OS read failure: %s", strerror(errno));
 	if (ret != 512)
@@ -66,7 +66,7 @@ int fdc_cb_wr_sec ( Uint8 *buffer, int offset )
 		FATAL("D81: read-only disk");
 	if (lseek(disk_fd, offset, SEEK_SET) != offset)
 		FATAL("D81: host-OS seek failure to %d: %s", offset, strerror(errno));
-	ret = write(disk_fd, buffer, 512);
+	ret = xemu_safe_write(disk_fd, buffer, 512);
 	if (ret < 0)
 		FATAL("D81: host-OS write failure: %s", strerror(errno));
 	if (ret != 512)

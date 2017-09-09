@@ -526,8 +526,7 @@ void m65mon_breakpoint ( int brk )
 int main ( int argc, char **argv )
 {
 	int cycles, frameskip;
-	sysconsole_open();
-	xemu_dump_version(stdout, "The Incomplete Commodore-65/Mega-65 emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Incomplete Commodore-65/Mega-65 emulator from LGB");
 	emucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
 	emucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip  (0=F018A, other=F018B)");
 	emucfg_define_num_option("fastclock", MEGA65_DEFAULT_FAST_CLOCK, "Clock of M65 fast mode (in MHz)");
@@ -545,15 +544,12 @@ int main ( int argc, char **argv )
 #endif
 	emucfg_define_switch_option("skipunhandledmem", "Do not panic on unhandled memory access (hides problems!!)");
 	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	if (emucfg_parse_commandline(argc, argv, NULL))
+	if (emucfg_parse_all(argc, argv))
 		return 1;
-	if (xemu_byte_order_test())
-		FATAL("Byte order test failed!!");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	window_title_info_addon = emulator_speed_title;
-	if (emu_init_sdl(
+	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
-		APP_ORG, TARGET_NAME,		// app organization and name, used with SDL pref dir formation
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
 		SCREEN_WIDTH, SCREEN_HEIGHT * 2,// logical size (used with keeping aspect ratio by the SDL render stuffs)

@@ -42,6 +42,10 @@ SDL_Renderer *sdl_ren = NULL;
 SDL_Texture  *sdl_tex = NULL;
 SDL_PixelFormat *sdl_pix_fmt;
 static const char default_window_title[] = "XEMU";
+char *xemu_app_org = NULL, *xemu_app_name = NULL;
+#ifdef __EMSCRIPTEN__
+static const char *emscripten_sdl_base_dir = EMSCRIPTEN_SDL_BASE_DIR;
+#endif
 char *sdl_window_title = (char*)default_window_title;
 char *window_title_custom_addon = NULL;
 void *xemu_load_buffer_p;
@@ -51,10 +55,10 @@ Uint32 *sdl_pixel_buffer = NULL;
 int texture_x_size_in_bytes;
 int emu_is_fullscreen = 0;
 static int win_xsize, win_ysize;
-char *sdl_pref_dir, *sdl_base_dir, *sdl_inst_dir;
+char *sdl_pref_dir = NULL, *sdl_base_dir = NULL, *sdl_inst_dir = NULL;
 Uint32 sdl_winid;
 static Uint32 black_colour;
-static void (*shutdown_user_function)(void);
+static void (*shutdown_user_function)(void) = NULL;
 int seconds_timer_trigger;
 SDL_version sdlver_compiled, sdlver_linked;
 static char *window_title_buffer, *window_title_buffer_end;
@@ -277,6 +281,41 @@ int xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_
 
 
 
+ssize_t xemu_safe_read ( int fd, void *buffer, size_t length )
+{
+	ssize_t loaded = 0;
+	while (length > 0) {
+		ssize_t r = read(fd, buffer, length);
+		if (r < 0)	// I/O error on read
+			return -1;
+		if (r == 0)	// end of file
+			break;
+		loaded += r;
+		length -= r;
+		buffer += r;
+	}
+	return loaded;
+}
+
+
+ssize_t xemu_safe_write ( int fd, const void *buffer, size_t length )
+{
+	ssize_t saved = 0;
+	while (length > 0) {
+		ssize_t w = write(fd, buffer, length);
+		if (w < 0)	// I/O error on write
+			return -1;
+		if (w == 0)	// to avoid endless loop, if no data could be written more
+			break;
+		saved  += w;
+		length -= w;
+		buffer += w;
+	}
+	return saved;
+}
+
+
+
 /* Loads a file, probably ROM image etc. It uses xemu_open_file() - see above - for opening it.
  * Return value:
  * 	- non-negative: given mumber of bytes loaded
@@ -302,21 +341,16 @@ int xemu_load_file ( const char *filename, void *store_to, int min_size, int max
 		}
 		return -1;
 	} else {
-		int load_size = 0;
+		int load_size;
 		xemu_load_buffer_p = emu_malloc(max_size + 1);	// try to load one byte more than the max allowed, to detect too large file scenario
-		do {
-			int r = read(fd, xemu_load_buffer_p + load_size, max_size - load_size + 1);
-			if (r == 0)
-				break;	// end-of-file situation
-			if (r < 0) {
-				ERROR_WINDOW("Cannot read file %s: %s\n%s", xemu_load_filepath, strerror(errno), cry ? cry : "");
-				free(xemu_load_buffer_p);
-				xemu_load_buffer_p = NULL;
-				close(fd);
-				return -2;
-			}
-			load_size += r;
-		} while (load_size < max_size + 1);
+		load_size = xemu_safe_read(fd, xemu_load_buffer_p, max_size + 1);
+		if (load_size < 0) {
+			ERROR_WINDOW("Cannot read file %s: %s\n%s", xemu_load_filepath, strerror(errno), cry ? cry : "");
+			free(xemu_load_buffer_p);
+			xemu_load_buffer_p = NULL;
+			close(fd);
+			return -2;
+		}
 		close(fd);
 		if (load_size < min_size) {
 			free(xemu_load_buffer_p);
@@ -497,12 +531,12 @@ static void shutdown_emulator ( void )
 		fclose(debug_fp);
 		debug_fp = NULL;
 	}
-	printf("XEMU: shutdown callback says good by(T)e to you!" NL);
+	printf(NL "XEMU: good by(T)e." NL);
 }
 
 
 
-int emu_init_debug ( const char *fn )
+int xemu_init_debug ( const char *fn )
 {
 #ifdef DISABLE_DEBUG
 	printf("Logging is disabled at compile-time." NL);
@@ -526,12 +560,93 @@ int emu_init_debug ( const char *fn )
 
 
 
-/* The SDL init stuff
-   Return value: 0 = ok, otherwise: ERROR, caller must exit, and can't use any other functionality, otherwise crash would happen.*/
-int emu_init_sdl (
+void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan )
+{
+#ifdef __EMSCRIPTEN__
+	xemu_dump_version(stdout, slogan);
+	MKDIR(emscripten_sdl_base_dir);
+	sdl_base_dir = emscripten_sdl_base_dir;
+	sdl_pref_dir = emscripten_sdl_base_dir;
+	sdl_inst_dir = emscripten_sdl_base_dir;
+	// In case of emscripten we do all the SDL init here!!!
+	// Please note: with emscripten, you can't use SDL_INIT_TIMER and SDL_INIT_HAPTIC subsystems it seems, it will
+	// give error on SDL_Init (I can understand with timer, as it would require multithreading)
+	if (SDL_Init(SDL_INIT_EVERYTHING & ~(SDL_INIT_TIMER | SDL_INIT_HAPTIC)))
+		FATAL("Cannot initialize SDL: %s", SDL_GetError());
+	atexit(shutdown_emulator);
+#else
+	char *p;
+	sysconsole_open();
+	xemu_dump_version(stdout, slogan);
+	// Initialize SDL with no subsystems
+	// This is needed, because SDL_GetPrefPath and co. are not safe on every platforms without it.
+	// But we DO want to use *before* the real SDL_Init, as the configuration file may describe
+	// parameters on the init itself, but to read the config file we must know where it is.
+	// You see, chicken & egg problem. We try to work this around with the solution to do the
+	// minimal init for the path info functions, then we shuts SDL down, and the "real" SDL_Init
+	// with subsystems etc will happen later!
+	if (SDL_Init(0))
+		FATAL("Cannot pre-initialize SDL without any subsystem: %s", SDL_GetError());
+	atexit(shutdown_emulator);
+	p = SDL_GetPrefPath(app_organization, app_name);
+	if (p) {
+		sdl_pref_dir = emu_strdup(p);	// we are too careful: I can't be sure the used SQL_Quit messes up the allocated buffer, so we "clone" it
+		sdl_inst_dir = emu_malloc(strlen(p) + strlen(INSTALL_DIRECTORY_ENTRY_NAME) + strlen(DIRSEP_STR) + 1);
+		sprintf(sdl_inst_dir, "%s%s" DIRSEP_STR, p, INSTALL_DIRECTORY_ENTRY_NAME);
+		SDL_free(p);
+	} else
+		FATAL("Cannot query SDL preference directory: %s", SDL_GetError());
+	p = SDL_GetBasePath();
+	if (p) {
+		sdl_base_dir = emu_strdup(p);
+		SDL_free(p);
+	} else
+		FATAL("Cannot query SDL base directory: %s", SDL_GetError());
+#endif
+	xemu_app_org = emu_strdup(app_organization);
+	xemu_app_name = emu_strdup(app_name);
+}
+
+
+
+int xemu_init_sdl ( void )
+{
+#ifndef __EMSCRIPTEN__
+	if (!SDL_WasInit(SDL_INIT_EVERYTHING)) {
+		DEBUGPRINT("SDL: no SDL subsystem initialization has been done yet, do it!" NL);
+		SDL_Quit();	// Please read the long comment at the pre-init func above to understand this SDL_Quit() here and then the SDL_Init() right below ...
+		if (SDL_Init(SDL_INIT_EVERYTHING)) {
+			ERROR_WINDOW("Cannot initialize SDL: %s", SDL_GetError());
+			return 1;
+		}
+		if (!SDL_WasInit(SDL_INIT_EVERYTHING))
+			FATAL("SDL_WasInit()=0 after init??");
+	} else
+		DEBUGPRINT("SDL: no SDL subsystem initialization has been done already." NL);
+#endif
+	SDL_VERSION(&sdlver_compiled);
+        SDL_GetVersion(&sdlver_linked);
+	printf( "SDL version: (%s) compiled with %d.%d.%d, used with %d.%d.%d on platform %s" NL
+		"SDL system info: %d bits %s, %d cores, l1_line=%d, RAM=%dMbytes, CPU features: "
+		"3DNow=%d AVX=%d AVX2=%d AltiVec=%d MMX=%d RDTSC=%d SSE=%d SSE2=%d SSE3=%d SSE41=%d SSE42=%d" NL
+		"SDL drivers: video = %s, audio = %s" NL,
+		SDL_GetRevision(),
+		sdlver_compiled.major, sdlver_compiled.minor, sdlver_compiled.patch,
+		sdlver_linked.major, sdlver_linked.minor, sdlver_linked.patch,
+		SDL_GetPlatform(),
+		ARCH_BITS, ENDIAN_NAME, SDL_GetCPUCount(), SDL_GetCPUCacheLineSize(), SDL_GetSystemRAM(),
+		SDL_Has3DNow(),SDL_HasAVX(),SDL_HasAVX2(),SDL_HasAltiVec(),SDL_HasMMX(),SDL_HasRDTSC(),SDL_HasSSE(),SDL_HasSSE2(),SDL_HasSSE3(),SDL_HasSSE41(),SDL_HasSSE42(),
+		SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver()
+	);
+	return 0;
+}
+
+
+
+
+/* Return value: 0 = ok, otherwise: ERROR, caller must exit, and can't use any other functionality, otherwise crash would happen.*/
+int xemu_post_init (
 	const char *window_title,		// title of our window
-	const char *app_organization,		// organization produced the application, used with SDL_GetPrefPath()
-	const char *app_name,			// name of the application, used with SDL_GetPrefPath()
 	int is_resizable,			// allow window resize? [0 = no]
 	int texture_x_size, int texture_y_size,	// raw size of texture (in pixels)
 	int logical_x_size, int logical_y_size,	// "logical" size in pixels, ie to correct aspect ratio, etc, can be the as texture of course, if it's OK ...
@@ -548,67 +663,31 @@ int emu_init_sdl (
 	char render_scale_quality_s[2];
 	int a;
 	if (!debug_fp)
-		emu_init_debug(getenv("XEMU_DEBUG_FILE"));
+		xemu_init_debug(getenv("XEMU_DEBUG_FILE"));
 	if (!debug_fp)
 		printf("Logging into file: not enabled." NL);
-	if (SDL_Init(
-#ifdef __EMSCRIPTEN__
-		// It seems there is an issue with emscripten SDL2: SDL_Init does not work if TIMER and/or HAPTIC is tried to be intialized or just "EVERYTHING" is used!!
-		SDL_INIT_EVERYTHING & ~(SDL_INIT_TIMER | SDL_INIT_HAPTIC)
-#else
-		SDL_INIT_EVERYTHING
-#endif
-	) != 0) {
-		ERROR_WINDOW("Cannot initialize SDL: %s", SDL_GetError());
+	if (!sdl_pref_dir)
+		FATAL("xemu_pre_init() hasn't been called yet!");
+	if (xemu_byte_order_test()) {
+		ERROR_WINDOW("Byte order test failed!!");
+		return 1;}
+	if (xemu_init_sdl())	// it is possible that is has been already called, but it's not a problem
 		return 1;
-	}
 	shutdown_user_function = shutdown_callback;
-	atexit(shutdown_emulator);
-	SDL_VERSION(&sdlver_compiled);
-        SDL_GetVersion(&sdlver_linked);
-	printf( "SDL version: (%s) compiled with %d.%d.%d, used with %d.%d.%d on platform %s" NL
-		"SDL system info: %d bits %s, %d cores, l1_line=%d, RAM=%dMbytes, CPU features: "
-		"3DNow=%d AVX=%d AVX2=%d AltiVec=%d MMX=%d RDTSC=%d SSE=%d SSE2=%d SSE3=%d SSE41=%d SSE42=%d" NL
-		"SDL drivers: video = %s, audio = %s" NL
-		"Timing: sleep = %s, query = %s" NL,
-		SDL_GetRevision(),
-		sdlver_compiled.major, sdlver_compiled.minor, sdlver_compiled.patch,
-		sdlver_linked.major, sdlver_linked.minor, sdlver_linked.patch,
-		SDL_GetPlatform(),
-		ARCH_BITS, ENDIAN_NAME, SDL_GetCPUCount(), SDL_GetCPUCacheLineSize(), SDL_GetSystemRAM(),
-		SDL_Has3DNow(),SDL_HasAVX(),SDL_HasAVX2(),SDL_HasAltiVec(),SDL_HasMMX(),SDL_HasRDTSC(),SDL_HasSSE(),SDL_HasSSE2(),SDL_HasSSE3(),SDL_HasSSE41(),SDL_HasSSE42(),
-		SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver(),
-		__SLEEP_METHOD_DESC, __TIMING_METHOD_DESC
-	);
-#ifdef __EMSCRIPTEN__
-	MKDIR(EMSCRIPTEN_SDL_BASE_DIR);
-	sdl_base_dir = emu_strdup(EMSCRIPTEN_SDL_BASE_DIR);
-	sdl_pref_dir = emu_strdup(EMSCRIPTEN_SDL_BASE_DIR);
-	sdl_inst_dir = emu_strdup(EMSCRIPTEN_SDL_BASE_DIR);
-#else
-	sdl_pref_dir = SDL_GetPrefPath(app_organization, app_name);
-	if (!sdl_pref_dir) {
-		ERROR_WINDOW("Cannot query SDL preferences directory: %s", SDL_GetError());
-		return 1;
-	}
-	sdl_base_dir = SDL_GetBasePath();
-	if (!sdl_base_dir) {
-		ERROR_WINDOW("Cannot query SDL base directory: %s", SDL_GetError());
-		return 1;
-	}
-	do {
-		char s[PATH_MAX];
-#ifndef _WIN32
-		char *p;
+	printf("Timing: sleep = %s, query = %s" NL, __SLEEP_METHOD_DESC, __TIMING_METHOD_DESC);
+	DEBUGPRINT("SDL preferences directory: %s" NL, sdl_pref_dir);
+	DEBUG("SDL install directory: %s" NL, sdl_inst_dir);
+	DEBUG("SDL base directory: %s" NL, sdl_base_dir);
+#ifndef __EMSCRIPTEN__
+	if (MKDIR(sdl_inst_dir) && errno != EEXIST)
+		ERROR_WINDOW("Warning: cannot create directory %s: %s", sdl_inst_dir, strerror(errno));
 #endif
-		sprintf(s, "%s%s" DIRSEP_STR, sdl_pref_dir, "default-files");
-		sdl_inst_dir = emu_strdup(s);
-		if (MKDIR(sdl_inst_dir) && errno != EEXIST)
-			ERROR_WINDOW("Warning: cannot create directory %s: %s", sdl_inst_dir, strerror(errno));
 #ifndef _WIN32
-		p = getenv("HOME");
+	do {
+		char *p = getenv("HOME");
 		if (p && strlen(sdl_pref_dir) > strlen(p) + 1 && !strncmp(p, sdl_pref_dir, strlen(p)) && sdl_pref_dir[strlen(p)] == DIRSEP_CHR) {
-			sprintf(s, "%s" DIRSEP_STR "." APP_ORG, p);
+			char s[PATH_MAX];
+			sprintf(s, "%s" DIRSEP_STR ".%s", p, xemu_app_org);
 			p = sdl_pref_dir + strlen(p) + 1;
 			if (symlink(p, s)) {
 				if (errno != EEXIST)
@@ -616,10 +695,8 @@ int emu_init_sdl (
 			} else
 				INFO_WINDOW("Old-style link for pref.directory has been created as %s\npointing to: %s", s, p);
 		}
-#endif
 	} while (0);
 #endif
-	printf("SDL preferences directory: %s" NL, sdl_pref_dir);
 	sdl_window_title = emu_strdup(window_title);
 	sdl_win = SDL_CreateWindow(
 		window_title,
@@ -957,6 +1034,8 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 		buttons,
 		NULL    // &colorScheme
 	};
+	if (!SDL_WasInit(0))
+		FATAL("Calling _sdl_emu_secured_modal_box_() without non-zero SDL_Init() before!");
 	strcpy(items_buf, items_in);
 	for (;;) {
 		char *p = strchr(items, '|');

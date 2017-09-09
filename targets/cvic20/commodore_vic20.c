@@ -444,8 +444,7 @@ static Uint8 via2_inb ( Uint8 mask )
 int main ( int argc, char **argv )
 {
 	int cycles;
-	sysconsole_open();
-	xemu_dump_version(stdout, "The Inaccurate Commodore VIC-20 emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Inaccurate Commodore VIC-20 emulator from LGB");
 	emucfg_define_switch_option("bootmon", "Boot into monitor");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	emucfg_define_str_option("prg", NULL, "Load a PRG file");
@@ -455,7 +454,7 @@ int main ( int argc, char **argv )
 	emucfg_define_str_option("romkernal", KERNAL_ROM_NAME, "Sets KERNAL ROM to use");
 	emucfg_define_str_option("romemu",    EMU_ROM_NAME, "Sets EMU ROM to use");
 	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	if (emucfg_parse_commandline(argc, argv, NULL))
+	if (emucfg_parse_all(argc, argv))
 		return 1;
 	emurom_policy = emucfg_get_bool("bootmon");	// normally: "boot" into BASIC, but to monitor of -bootmon was used
 	emufile_p = NULL;
@@ -471,9 +470,8 @@ int main ( int argc, char **argv )
 		SCREEN_LAST_VISIBLE_DOTPOS,  SCREEN_LAST_VISIBLE_SCANLINE
 	);
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
-	if (emu_init_sdl(
+	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
-		APP_ORG, TARGET_NAME,		// app organization and name, used with SDL pref dir formation
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
 		SCREEN_WIDTH * 2, SCREEN_HEIGHT,	// logical size (width is doubled for somewhat correct aspect ratio)

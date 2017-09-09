@@ -749,8 +749,7 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles;
-	sysconsole_open();
-	xemu_dump_version(stdout, "The Unusable Commodore 65 emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unusable Commodore 65 emulator from LGB");
 	emucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
 	emucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip (0=F018A, other=F018B)");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
@@ -762,13 +761,12 @@ int main ( int argc, char **argv )
 	emucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
 #endif
 	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	if (emucfg_parse_commandline(argc, argv, NULL))
+	if (emucfg_parse_all(argc, argv))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	window_title_info_addon = emulator_speed_title;
-        if (emu_init_sdl(
+        if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
-		APP_ORG, TARGET_NAME,		// app organization and name, used with SDL pref dir formation
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
 		SCREEN_WIDTH, SCREEN_HEIGHT * 2,// logical size (used with keeping aspect ratio by the SDL render stuffs)

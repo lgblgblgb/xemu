@@ -33,6 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 	do { if (1 || sdlflag == SDL_MESSAGEBOX_ERROR) { EM_ASM_INT({ window.alert(Pointer_stringify($0)); }, msg); } } while(0)
 #else
 #define MSG_POPUP_WINDOW(sdlflag, title, msg, win) SDL_ShowSimpleMessageBox(sdlflag, title, msg, win)
+#define INSTALL_DIRECTORY_ENTRY_NAME "default-files"
 #endif
 
 #define APP_ORG "xemu-lgb"
@@ -58,13 +59,16 @@ extern void restore_mouse_grab ( void );
 	fprintf(stderr, str ": %s" NL, _buf_for_win_msg_); \
 	if (debug_fp)	\
 		fprintf(debug_fp, str ": %s" NL, _buf_for_win_msg_);	\
-	save_mouse_grab(); \
-	MSG_POPUP_WINDOW(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
-	clear_emu_events(); \
-	emu_drop_events(); \
-	SDL_RaiseWindow(sdl_win); \
-	restore_mouse_grab(); \
-	emu_timekeeping_start(); \
+	if (sdl_win) { \
+		save_mouse_grab(); \
+		MSG_POPUP_WINDOW(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
+		clear_emu_events(); \
+		emu_drop_events(); \
+		SDL_RaiseWindow(sdl_win); \
+		restore_mouse_grab(); \
+		emu_timekeeping_start(); \
+	} else \
+		MSG_POPUP_WINDOW(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
 } while (0)
 
 #define INFO_WINDOW(...)	_REPORT_WINDOW_(SDL_MESSAGEBOX_INFORMATION, "INFO", __VA_ARGS__)
@@ -85,6 +89,7 @@ extern char *window_title_info_addon;
 extern SDL_Window   *sdl_win;
 extern Uint32 sdl_winid;
 extern SDL_PixelFormat *sdl_pix_fmt;
+extern char *xemu_app_org, *xemu_app_name;
 extern int seconds_timer_trigger;
 extern char *sdl_pref_dir, *sdl_base_dir, *sdl_inst_dir;
 extern int sysconsole_is_open;
@@ -110,12 +115,14 @@ extern void *emu_malloc_ALIGNED ( size_t size );
 extern char *emu_strdup ( const char *s );
 extern int xemu_load_file ( const char *filename, void *store_to, int min_size, int max_size, const char *cry );
 extern int xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_back );
+extern ssize_t xemu_safe_read ( int fd, void *buffer, size_t length );
+extern ssize_t xemu_safe_write ( int fd, const void *buffer, size_t length );
 extern void emu_set_full_screen ( int setting );
 extern void emu_timekeeping_delay ( int td_em );
-extern int emu_init_sdl (
+extern void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan );
+extern int xemu_init_sdl ( void );
+extern int xemu_post_init (
         const char *window_title,               // title of our window
-        const char *app_organization,           // organization produced the application, used with SDL_GetPrefPath()
-        const char *app_name,                   // name of the application, used with SDL_GetPrefPath()
         int is_resizable,                       // allow window resize? [0 = no]
         int texture_x_size, int texture_y_size, // raw size of texture (in pixels)
         int logical_x_size, int logical_y_size, // "logical" size in pixels, ie to correct aspect ratio, etc, can be the as texture of course, if it's OK ...

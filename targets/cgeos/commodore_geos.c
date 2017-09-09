@@ -785,8 +785,7 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles, frameskip;
-	sysconsole_open();
-	xemu_dump_version(stdout, "The Unexplained Commodore GEOS emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unexplained Commodore GEOS emulator from LGB");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	emucfg_define_str_option("geosimg", NULL, "Select GEOS disk image to use (NOT USED YET!)");
 	emucfg_define_str_option("geoskernal", "#geos-kernal.bin", "Select GEOS KERNAL to use");
@@ -794,12 +793,11 @@ int main ( int argc, char **argv )
 	emucfg_define_str_option("romchar", "#c64-chargen.rom", "Select CHARACTER ROM to use");
 	emucfg_define_str_option("romkernal", "#c64-kernal.rom", "Select KERNAL ROM to use");
 	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	if (emucfg_parse_commandline(argc, argv, NULL))
+	if (emucfg_parse_all(argc, argv))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
-        if (emu_init_sdl(
+        if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
-		APP_ORG, TARGET_NAME,		// app organization and name, used with SDL pref dir formation
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
 		SCREEN_WIDTH * 2, SCREEN_HEIGHT * 2,// logical size (used with keeping aspect ratio by the SDL render stuffs)

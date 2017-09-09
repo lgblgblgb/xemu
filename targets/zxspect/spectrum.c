@@ -318,18 +318,14 @@ static void open_new_frame ( void )
 
 int main ( int argc, char **argv )
 {
-	sysconsole_open();
-	xemu_dump_version(stdout, "The learner's ZX Spectrum emulator from LGB (the learner)");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The learner's ZX Spectrum emulator from LGB (the learner)");
 	emucfg_define_str_option("rom", ROM_NAME, "Path and filename for ROM to be loaded");
 	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	if (emucfg_parse_commandline(argc, argv, NULL))
+	if (emucfg_parse_all(argc, argv))
 		return 1;
-	if (xemu_byte_order_test())
-		FATAL("Byte order test failed!!");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
-	if (emu_init_sdl(
+	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
-		APP_ORG, TARGET_NAME,		// app organization and name, used with SDL pref dir formation
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// logical sizes

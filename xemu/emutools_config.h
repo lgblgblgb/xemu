@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -48,7 +48,7 @@ extern void emucfg_define_num_option    ( const char *optname, int defval, const
 extern void emucfg_define_proc_option   ( const char *optname, emucfg_parser_callback_func_t defval, const char *help );
 extern void emucfg_define_switch_option ( const char *optname, const char *help );
 
-extern int  emucfg_parse_commandline ( int argc, char **argv, const char *only_this );
+extern int  emucfg_parse_all ( int argc, char **argv );
 extern const char *emucfg_get_str ( const char *optname );
 extern int  emucfg_get_num ( const char *optname );
 extern int  emucfg_get_bool ( const char *optname );

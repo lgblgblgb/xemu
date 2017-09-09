@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -63,19 +63,14 @@ void xemusnap_init ( const struct xemu_snapshot_definition_st *def )
 
 int xemusnap_read_file ( void *buffer, size_t size )
 {
-	size_t did = 0;
-	while (did < size) {
-		ssize_t r = read(snapfd, buffer, size);
-		if (r < 0)
-			return XSNAPERR_IO;
-		if (!r)
-			break;
-		did += r;
-		buffer += r;
-	}
-	if (!did)
+	size_t ret = xemu_safe_read(snapfd, buffer, size);
+	if (ret < 0)
+		return XSNAPERR_IO;
+	if (!ret)
 		return XSNAPERR_NODATA;
-	return did == size ? 0 : XSNAPERR_TRUNCATED;
+	if (ret != size)
+		return XSNAPERR_TRUNCATED;
+	return 0;
 }
 
 
@@ -87,17 +82,12 @@ int xemusnap_skip_file_bytes ( off_t size )
 
 int xemusnap_write_file ( const void *buffer, size_t size )
 {
-	size_t did = 0;
-	while (did < size) {
-		ssize_t r = write(snapfd, buffer, size);
-		if (r < 0)
-			return XSNAPERR_IO;
-		if (!r)
-			break;
-		did += r;
-		buffer += r;
-	}
-	return ((did == size) && did) ? 0 : XSNAPERR_NODATA;
+	size_t ret = xemu_safe_write(snapfd, buffer, size);
+	if (ret < 0)
+		return XSNAPERR_IO;
+	if (ret == 0 || ret != size)
+		return XSNAPERR_NODATA;
+	return 0;
 }
 
 
@@ -288,10 +278,10 @@ end_of_load:
 
 int xemusnap_load ( const char *filename )
 {
-	xemusnap_close();
-	snapfd = open(filename, O_RDONLY | O_BINARY);
+	char pathbuf[PATH_MAX];
+	snapfd = xemu_open_file(filename, O_RDONLY, NULL, pathbuf);
 	if (snapfd < 0)
-		RETURN_XSNAPERR("Cannot open file: %s", strerror(errno));
+		RETURN_XSNAPERR("Cannot open file %s: %s", pathbuf, strerror(errno));
 	if (load_from_open_file()) {
 		xemusnap_close();
 		return 1;
@@ -350,10 +340,11 @@ handle_error:
 
 int xemusnap_save ( const char *filename )
 {
+	char pathbuf[PATH_MAX];
 	xemusnap_close();
-	snapfd = open(filename, O_WRONLY | O_CREAT | O_TRUNC | O_BINARY, 0666);
+	snapfd = xemu_open_file(filename, O_WRONLY | O_CREAT | O_TRUNC, NULL, pathbuf);
 	if (snapfd < 0)
-		RETURN_XSNAPERR("Cannot create file: %s", strerror(errno));
+		RETURN_XSNAPERR("Cannot create file %s: %s", pathbuf, strerror(errno));
 	if (save_to_open_file()) {
 		xemusnap_close();
 		unlink(filename);

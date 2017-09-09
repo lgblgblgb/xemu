@@ -393,22 +393,18 @@ static void init_tvc ( void )
 int main ( int argc, char **argv )
 {
 	int cycles;
-	sysconsole_open();
-	xemu_dump_version(stdout, "The Careless Videoton TV Computer emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Careless Videoton TV Computer emulator from LGB");
 #ifdef CONFIG_SDEXT_SUPPORT
 	emucfg_define_switch_option("sdext", "Enables SD-ext");
 	emucfg_define_str_option("sdimg", "@sdcard.img", "SD-card image filename / path");
 	emucfg_define_str_option("sdrom", "#tvc_sddos.rom", "SD-card cartridge ROM image path");
 #endif
 	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	if (emucfg_parse_commandline(argc, argv, NULL))
+	if (emucfg_parse_all(argc, argv))
 		return 1;
-	if (xemu_byte_order_test())
-		FATAL("Byte order test failed!!");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
-	if (emu_init_sdl(
+	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
-		APP_ORG, TARGET_NAME,		// app organization and name, used with SDL pref dir formation
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
 		SCREEN_WIDTH, SCREEN_HEIGHT * 2,	// logical size (width is doubled for somewhat correct aspect ratio)

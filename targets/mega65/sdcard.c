@@ -103,7 +103,7 @@ int sdcard_init ( const char *fn, const char *extd81fn )
 	sd_is_read_only = O_RDONLY;
 	sdfd = xemu_open_file(fn, O_RDWR, &sd_is_read_only, fnbuf);
 	if (sdfd < 0) {
-		ERROR_WINDOW("Cannot open SD-card image %s, SD-card access won't work! ERROR: %s", fn, strerror(errno));
+		ERROR_WINDOW("Cannot open SD-card image %s, SD-card access won't work! ERROR: %s", fnbuf, strerror(errno));
 		DEBUG("SDCARD: cannot open image %s" NL, fn);
 	} else {
 		if (sd_is_read_only)
@@ -167,7 +167,7 @@ static int diskimage_read_block ( Uint8 *io_buffer, Uint8 *addr_buffer, int addr
 		return -1;
 	if (host_seek_to(addr_buffer, addressing_offset, description, size_limit, fd) < 0)
 		return -1;
-	ret = read(fd, io_buffer, 512);
+	ret = xemu_safe_read(fd, io_buffer, 512);
 	if (ret != 512)
 		FATAL("SDCARD: %s failure ... ERROR: %s", description, ret >= 0 ? "not 512 bytes could be read" : strerror(errno));
 	DEBUG("SDCARD: cool, sector %s was OK (%d bytes read)!" NL, description, ret);
@@ -185,7 +185,7 @@ static int diskimage_write_block ( Uint8 *io_buffer, Uint8 *addr_buffer, int add
 		return -1;
 	if (host_seek_to(addr_buffer, addressing_offset, description, size_limit, fd) < 0)
 		return -1;
-	ret = write(fd, io_buffer, 512);
+	ret = xemu_safe_write(fd, io_buffer, 512);
 	if (ret != 512)
 		FATAL("SDCARD: %s failure ... ERROR: %s", description, ret >= 0 ? "not 512 bytes could be written" : strerror(errno));
 	DEBUG("SDCARD: cool, sector %s was OK (%d bytes read)!" NL, description, ret);

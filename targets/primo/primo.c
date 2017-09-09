@@ -227,19 +227,15 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles;
-	sysconsole_open();
-	xemu_dump_version(stdout, "The Unknown Primo emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unknown Primo emulator from LGB");
 	emucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	emucfg_define_str_option("rom", DEFAULT_ROM_FILE_PATH, "Select ROM to use");
 	emucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	if (emucfg_parse_commandline(argc, argv, NULL))
+	if (emucfg_parse_all(argc, argv))
 		return 1;
-	if (xemu_byte_order_test())
-		FATAL("Byte order test failed!!");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
-	if (emu_init_sdl(
+	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
-		APP_ORG, TARGET_NAME,		// app organization and name, used with SDL pref dir formation
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// logical size (width is doubled for somewhat correct aspect ratio)
