@@ -343,7 +343,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	fast_mhz = xemucfg_get_num("fastclock");
 	if (fast_mhz < 3 || fast_mhz > 200) {
 		ERROR_WINDOW("Fast clock given by -fastclock switch must be between 3...200MHz. Bad value, defaulting to %dMHz", MEGA65_DEFAULT_FAST_CLOCK);
-		fast_mhz = 48;
+		fast_mhz = MEGA65_DEFAULT_FAST_CLOCK;
 	}
 	sprintf(fast_mhz_in_string, "%dMHz", fast_mhz);
 	cpu_cycles_per_scanline_for_fast_mode = 64 * fast_mhz;
