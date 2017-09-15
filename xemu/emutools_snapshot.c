@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifdef XEMU_SNAPSHOT_SUPPORT
 
 #include "xemu/emutools.h"
+#include "xemu/emutools_files.h"
 #include "xemu/emutools_snapshot.h"
 #include <stdio.h>
 #include <unistd.h>

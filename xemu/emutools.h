@@ -93,8 +93,6 @@ extern char *xemu_app_org, *xemu_app_name;
 extern int seconds_timer_trigger;
 extern char *sdl_pref_dir, *sdl_base_dir, *sdl_inst_dir;
 extern int sysconsole_is_open;
-extern void *xemu_load_buffer_p;
-extern char xemu_load_filepath[PATH_MAX];
 
 extern int xemu_init_debug ( const char *fn );
 extern time_t xemu_get_unixtime ( void );
@@ -113,10 +111,6 @@ extern void *xemu_malloc_ALIGNED ( size_t size );
 #endif
 
 extern char *xemu_strdup ( const char *s );
-extern int xemu_load_file ( const char *filename, void *store_to, int min_size, int max_size, const char *cry );
-extern int xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_back );
-extern ssize_t xemu_safe_read ( int fd, void *buffer, size_t length );
-extern ssize_t xemu_safe_write ( int fd, const void *buffer, size_t length );
 extern void xemu_set_full_screen ( int setting );
 extern void xemu_timekeeping_delay ( int td_em );
 extern void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan );

@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 */
 
 #include "xemu/emutools.h"
+#include "xemu/emutools_files.h"
 #include "xemu/z80.h"
 #include "sdext.h"
 #include <unistd.h>

@@ -22,7 +22,7 @@ PRG_TARGET	= xprimo
 
 CFLAGS_TARGET_xprimo	=
 SRCS_TARGET_xprimo	= primo.c
-SRCS_COMMON_xprimo	= emutools.c emutools_hid.c z80.c emutools_config.c
+SRCS_COMMON_xprimo	= emutools.c emutools_hid.c z80.c emutools_config.c emutools_files.c
 CONFIG_CFLAGS_TARGET_xprimo	= sdl2
 CONFIG_LDFLAGS_TARGET_xprimo	= sdl2
 

@@ -31,6 +31,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
+#include "xemu/emutools_files.h"
 #include "commodore_geos.h"
 #include "xemu/cpu65c02.h"
 #include "xemu/cia6526.h"

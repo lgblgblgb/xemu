@@ -22,7 +22,7 @@ PRG_TARGET	= xgeos
 
 CFLAGS_TARGET_xgeos	=
 SRCS_TARGET_xgeos	= commodore_geos.c geos.c
-SRCS_COMMON_xgeos	= emutools.c cpu65c02.c cia6526.c emutools_hid.c c64_kbd_mapping.c emutools_config.c
+SRCS_COMMON_xgeos	= emutools.c cpu65c02.c cia6526.c emutools_hid.c c64_kbd_mapping.c emutools_config.c emutools_files.c
 CONFIG_CFLAGS_TARGET_xgeos	= sdl2
 CONFIG_LDFLAGS_TARGET_xgeos	= sdl2
 

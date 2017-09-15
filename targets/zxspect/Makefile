@@ -22,7 +22,7 @@ PRG_TARGET	= xzxspect
 
 CFLAGS_TARGET_$(PRG_TARGET)		=
 SRCS_TARGET_$(PRG_TARGET)		= spectrum.c
-SRCS_COMMON_$(PRG_TARGET)		= emutools.c emutools_hid.c z80.c emutools_config.c
+SRCS_COMMON_$(PRG_TARGET)		= emutools.c emutools_hid.c z80.c emutools_config.c emutools_files.c
 CONFIG_CFLAGS_TARGET_$(PRG_TARGET)	= sdl2
 CONFIG_LDFLAGS_TARGET_$(PRG_TARGET)	= sdl2
 
