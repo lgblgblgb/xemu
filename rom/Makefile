@@ -1,6 +1,6 @@
 ## XEmu: collection of simple emulators
 ##
-## Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -17,11 +17,14 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 WGET		= wget
+SHELL		= sh
+AWK		= awk
+CL65		= cl65
 URL_LIST	= rom-fetch-list.txt
 #OUR_ROMS	= clcd-u104-parasite.rom vic20-emulator-tool.rom
 OUR_ROMS	= vic20-emulator-tool.rom
 #FETCH_ROMS	= vic20-basic.rom vic20-kernal.rom vic20-chargen.rom clcd-u105.rom clcd-u102.rom clcd-u104.rom clcd-u103.rom c65-system.rom c64-chargen.rom c64-kernal.rom c64-basic.rom primo-b64.rom
-FETCH_ROMS	= $(shell awk '{ print $$1 }' $(URL_LIST))
+#FETCH_ROMS	= $(shell awk '{ print $$1 }' $(URL_LIST))
 
 all: roms $(OUR_ROMS)
 
@@ -30,18 +33,15 @@ clean:
 
 distclean:
 	$(MAKE) clean
-	rm -f $(FETCH_ROMS)
+	rm -f `$(AWK) 'NF == 2 && $$1 ~ /^[a-zA-Z0-9]/ { print $$1 }' < $(URL_LIST)`
 
 kickup.cdata: KICKUP.M65
 	../build/bin2values.py $< $@
 
-roms: $(FETCH_ROMS)
-
 %.rom: %.asm
-	cl65 -t none --cpu 65c02 -o $@ $<
+	$(CL65) -t none --cpu 65c02 -o $@ $<
 
-%.rom:
-	rm -f $@
-	$(WGET) -O $@ `awk '$$1 == "$@" { print $$2 ; exit }' $(URL_LIST)` || { rm -f $@ ; false; }
+roms:
+	$(AWK) 'NF == 2 && $$1 ~ /^[a-zA-Z0-9]/ { print "test -s " $$1 " || { rm -f " $$1 ".tmp && $(WGET) -O " $$1 ".tmp " $$2 " && mv " $$1 ".tmp " $$1 "; } || exit $$?" }' < $(URL_LIST) | $(SHELL)
 
-.PHONY: all clean distclean roms kickup.cdata
+.PHONY: all clean distclean roms

@@ -17,9 +17,12 @@
 /tvc22_d6_64k.rom
 /tvc22_d7_64k.rom
 /tvc_sddos.rom
+/*.tmp
 /*.M65
+/*.m65
 /*.img
 /*.bit
+/*.bin
 /*.d81
 /*.list
 /*.o

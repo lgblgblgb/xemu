@@ -59,10 +59,7 @@ Homepage: $WEBSITE
 Bugs: $BUGSITE
 Original-Maintainer: $AUTHOR" > $ROOT/DEBIAN/control
 
-
-echo "#!/bin/sh" > $BINDIR/xemu-download-data
-awk -vromdir=$DATADIRREAL/ 'NF == 2 { print "test -f " romdir $1 " || wget -O " romdir $1 " " $2 " || { rm -f " romdir $1 " ; exit 1; }" }' ../rom/rom-fetch-list.txt >> $BINDIR/xemu-download-data
-echo "exit 0" >> $BINDIR/xemu-download-data
+awk -vromdir=$DATADIRREAL/ 'BEGIN { print "#!/bin/sh" ; print "mkdir -p " romdir " || exit $?" } END { print "exit 0" } NF == 2 && $1 ~ /^[a-zA-Z0-9]/ { print "test -s " romdir $1 " || { rm -f " romdir $1 ".tmp && wget -O " romdir $1 ".tmp " $2 " && mv " romdir $1 ".tmp " romdir $1 "; } || exit $?" }' ../rom/rom-fetch-list.txt > $BINDIR/xemu-download-data
 
 find $ROOT -type d -exec chmod u-s,g-s,g-w,o-w,u+rwx,g+rx,o+rx {} \;
 find $ROOT -type f -exec chmod 0644 {} \;
