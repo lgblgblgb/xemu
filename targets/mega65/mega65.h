@@ -24,7 +24,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // Real M65 would not expect to have eg the ROM, as it can be loaded from the SD-card,
 // but it's not the case with Xemu, as you wouldn't have charset either without prior
 // loading it (however kickstart can overwrite "C65 ROM" anyway, later)
-#define KICKSTART_NAME			"#KICKUP.M65"
 #define SDCARD_NAME			"@mega65.img"
 
 // You may want to disable audio emulation since it can disturb non-real-time emulation
