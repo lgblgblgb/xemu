@@ -251,6 +251,11 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		DEBUGPRINT("Loading colour-RAM content from file: %s" NL, p);
 		xemu_load_file(p, colour_ram, 0x8000, 0x8000, "Colour RAM content cannot be loaded");
 	}
+	p = xemucfg_get_str("loadbanner");
+	if (p) {
+		DEBUGPRINT("Loading banner content from file: %s" NL, p);
+		xemu_load_file(p, chip_ram + 0x3D00, 21248, 21248, "Banner file cannot be loaded");
+	}
 	D6XX_registers[0x7E] = xemucfg_get_num("kicked");
 	// *** Trying to load kickstart image
 	p = xemucfg_get_str("kickup");
@@ -536,6 +541,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_num_option("kicked", 0x0, "Answer to KickStart upgrade (128=ask user in a pop-up window)");
 	xemucfg_define_str_option("kickup", KICKSTART_NAME, "Override path of external KickStart to be used");
 	xemucfg_define_str_option("kickuplist", NULL, "Set path of symbol list file for external KickStart");
+	xemucfg_define_str_option("loadbanner", NULL, "Load initial memory content for banner (to $3D00)");
 	xemucfg_define_str_option("loadcram", NULL, "Load initial content (32K) into the colour RAM");
 	xemucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used");
 #ifdef XEMU_SNAPSHOT_SUPPORT
