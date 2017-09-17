@@ -27,14 +27,186 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <fcntl.h>
 #include <unistd.h>
 #include <stdlib.h>
-#include <sys/time.h>
-#include <time.h>
 #include <limits.h>
 #include <errno.h>
 
 
 void *xemu_load_buffer_p;
 char  xemu_load_filepath[PATH_MAX];
+
+
+#ifdef HAVE_XEMU_EXEC_API
+#ifndef _WIN32
+#include <sys/wait.h>
+
+int xemuexec_run ( char *const args[] )
+{
+	pid_t pid = fork();
+	if (pid == -1) {
+		DEBUGPRINT("EXEC: fork() failed: %s" NL, strerror(errno));
+		return -1;	// fork failed?
+	}
+	if (!pid) {	// the child's execution process after fork()
+		int a;
+		for(a = 3; a < 1024; a++)
+			close(a);
+		close(0);
+		execvp(args[0], args);
+		// exec won't return in case if it's OK. so if we're still here, there was a problem with the exec func ...
+		printf("EXEC: execution of \"%s\" failed: %s" NL, args[0], strerror(errno));
+		_exit(127);	// important to call this and not plain exit(), as we don't want to run atexit() registered stuffs and so on!!!
+	}
+	return pid;	// the parent's execution process after fork()
+}
+
+
+int xemuexec_check_status ( pid_t pid, int wait )
+{
+	int status;
+	pid_t ret;
+	if (pid <= 0)
+		return 127;
+	do {
+		ret = waitpid(pid, &status, wait ? 0 : WNOHANG);
+		if (ret == -1) {
+			if (errno == EINTR)
+				continue;
+			DEBUGPRINT("EXEC: WAIT: waitpid(%d) returned error: %s" NL, pid, strerror(errno));
+			return -1;
+		}
+	} while (ret < 0);
+	if (ret != pid) {
+		DEBUGPRINT("EXEC: still running" NL);
+		return XEMUEXEC_STILL_RUNNING;	// still running?
+	}
+	if (WIFEXITED(status))
+		return WEXITSTATUS(status);
+	return 127;	// we have not so much a standard status (not exited normally?!) so fake one ...
+}
+
+#else
+#include <windows.h>
+#include <tchar.h>
+
+/* I'm not a Windows programmer not even a user ... By inpsecting MSDN articles, I am not sure, what needs
+ * to be kept to be able to query the process later. So I keep about everything, namely this struct, malloc()'ed.
+ * Though to be able to ratioanalize the prototype of functions (no need for include windows.h all the time by
+ * callers too ...) the data type is a void* pointer instead of this madness "externally" ... */
+
+struct ugly_windows_ps_t {
+	PROCESS_INFORMATION pi;
+	STARTUPINFO si;
+	LPTSTR cmdline;
+	DWORD creationstatus;
+};
+
+void *xemuexec_run ( char *const args[] )
+{
+	char cmdline[1024];
+	int cmdlinesize = sizeof cmdline;
+	struct ugly_windows_ps_t *st = malloc(sizeof(struct ugly_windows_ps_t));
+	if (!st)
+		FATAL("exec: cannot allocate memory");
+	ZeroMemory(st, sizeof(struct ugly_windows_ps_t));
+	st->si.cb = sizeof(STARTUPINFO);
+	st->cmdline = NULL;
+	if (snprintf(cmdline, cmdlinesize,"\"%s\"", args[0]) != strlen(args[0]) + 2)
+		FATAL("exec: too long commandline");
+	cmdlinesize -= strlen(args[0]) + 2;
+	while (*(++args)) {
+		if (cmdlinesize <= 0)
+			FATAL("exec: too long commandline");
+		if (snprintf(cmdline + strlen(cmdline), cmdlinesize, " %s", *args) != strlen(*args) + 1)
+			FATAL("exec: too long commandline");
+		cmdlinesize -= strlen(*args) + 1;
+	}
+	st->cmdline = _tcsdup(TEXT(cmdline));	// really no idea about this windows madness, just copying examples ...
+	if (!st->cmdline) {
+		free(st);
+		FATAL("exec: cannot allocate memory");
+	}
+	// TODO: figure out what I should have for std handles to do and inheritance for the "child" process
+#if 0
+	//st->si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
+	st->si.hStdError = (HANDLE)_open_osfhandle(_fileno(stderr), _O_TEXT);
+	st->si.hStdOutput = (HANDLE)_open_osfhandle(_fileno(stdout), _O_TEXT);
+		//_open_osfhandle((INT_PTR)_fileno(stdout), _O_TEXT);	
+		//GetStdHandle(STD_OUTPUT_HANDLE);
+	//st->si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
+	st->si.hStdInput = (HANDLE)_get_osfhandle(fileno(stdin));
+	//st->si.dwFlags |= STARTF_USESTDHANDLES;
+	SetHandleInformation(st->si.hStdError, HANDLE_FLAG_INHERIT, 0);
+	SetHandleInformation(st->si.hStdOutput, HANDLE_FLAG_INHERIT, 0);
+	SetHandleInformation(st->si.hStdInput, HANDLE_FLAG_INHERIT, 0);
+#endif
+	if (CreateProcess(NULL,
+		st->cmdline,
+		NULL,		// process handle not inheritable
+		NULL,		// thread handle not inheritable
+		FALSE,		// set handle inheritance
+		0,		// no creation flags
+		NULL,		// use parent's env. block
+		NULL,		// use parent's starting directory
+		&st->si,	// startup-info structure pointer
+		&st->pi		// process-info structure pointer
+	)) {	// Windows does this differently as well compared to others: non-zero value means OKEY ....
+		st->creationstatus = 0;
+		DEBUGPRINT("EXEC: (%s) seems to be OK :-)" NL, cmdline);
+	} else {
+		st->creationstatus = GetLastError();
+		DEBUGPRINT("EXEC: (%s) failed with %d" NL, cmdline, (int)st->creationstatus);
+		if (!st->creationstatus) {	// I am not sure what Windows fumbles for, even MSDN is quite lame without _exact_ specification (MS should learn from POSIX dox ...)
+			st->creationstatus = 1;
+		}
+	}
+	//CloseHandle(st->si.hStdError);
+	//CloseHandle(st->si.hStdOutput);
+	//CloseHandle(st->si.hStdInput);
+	return st;
+}
+
+
+static void free_exec_struct_win32 ( struct ugly_windows_ps_t *st )
+{
+	if (!st)
+		return;
+	if (st->creationstatus) {
+		CloseHandle(st->pi.hProcess);
+		CloseHandle(st->pi.hThread);
+	}
+	if (st->cmdline)
+		free(st->cmdline);
+	free(st);
+}
+
+
+#define PID ((struct ugly_windows_ps_t *)pid)
+int xemuexec_check_status ( void* pid, int wait )
+{
+	if (!pid)
+		return 127;
+	if (PID->creationstatus) {
+		DEBUGPRINT("EXEC: WAIT: returning because of deferred creationstatus(%d) != 0 situation" NL, (int)PID->creationstatus);
+		free_exec_struct_win32(PID);
+		return 127;
+	} else {
+		DWORD result = 0;
+		do {
+			if (!result)
+				usleep(10000);
+			GetExitCodeProcess(PID->pi.hProcess, &result);	// TODO: check return value if GetExitCodeProcess() was OK at all!
+		} while (wait && result == STILL_ACTIVE);
+		if (result == STILL_ACTIVE)
+			return XEMUEXEC_STILL_RUNNING;
+		free_exec_struct_win32(PID);
+		return result;
+	}
+}
+#undef PID
+
+#endif
+#endif
+
 
 
 
@@ -126,8 +298,11 @@ ssize_t xemu_safe_read ( int fd, void *buffer, size_t length )
 	ssize_t loaded = 0;
 	while (length > 0) {
 		ssize_t r = read(fd, buffer, length);
-		if (r < 0)	// I/O error on read
+		if (r < 0) {	// I/O error on read
+			if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
+				continue;
 			return -1;
+		}
 		if (r == 0)	// end of file
 			break;
 		loaded += r;
@@ -143,8 +318,11 @@ ssize_t xemu_safe_write ( int fd, const void *buffer, size_t length )
 	ssize_t saved = 0;
 	while (length > 0) {
 		ssize_t w = write(fd, buffer, length);
-		if (w < 0)	// I/O error on write
+		if (w < 0) {	// I/O error on write
+			if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR)
+				continue;
 			return -1;
+		}
 		if (w == 0)	// to avoid endless loop, if no data could be written more
 			break;
 		saved  += w;

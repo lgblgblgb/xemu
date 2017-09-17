@@ -31,4 +31,19 @@ extern int xemu_open_file ( const char *filename, int mode, int *mode2, char *fi
 extern ssize_t xemu_safe_read ( int fd, void *buffer, size_t length );
 extern ssize_t xemu_safe_write ( int fd, const void *buffer, size_t length );
 
+#if defined(HAVE_XEMU_INSTALLER) && !defined(HAVE_XEMU_EXEC_API)
+#define HAVE_XEMU_EXEC_API
+#endif
+
+#ifdef HAVE_XEMU_EXEC_API
+#define XEMUEXEC_STILL_RUNNING 259
+#ifdef _WIN32
+typedef void* xemuexec_process_t;
+#else
+typedef int xemuexec_process_t;
+#endif
+extern xemuexec_process_t xemuexec_run ( char *const args[] );
+extern int xemuexec_check_status ( xemuexec_process_t pid, int wait );
+#endif
+
 #endif
