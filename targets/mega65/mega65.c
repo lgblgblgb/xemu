@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "hypervisor.h"
 #include "xemu/c64_kbd_mapping.h"
 #include "xemu/emutools_config.h"
+#include "xemu/emutools_umon.h"
 #include "m65_snapshot.h"
 #include "memory_mapper.h"
 #include "io_mapper.h"
@@ -557,6 +558,7 @@ int main ( int argc, char **argv )
 #endif
 	xemucfg_define_switch_option("skipunhandledmem", "Do not panic on unhandled memory access (hides problems!!)");
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+	xemucfg_define_num_option("umon", 0, "TCP-based dual mode (http and text) monitor port number [NOT YET WORKING]");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
@@ -594,6 +596,19 @@ int main ( int argc, char **argv )
 	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
 	if (!xemucfg_get_bool("syscon"))
 		sysconsole_close(NULL);
+	if (xemucfg_get_num("umon") != 0) {
+		int port = xemucfg_get_num("umon");
+		int threaded;
+		if (port < 0) {
+			port = -port;
+			threaded = 0;
+		} else
+			threaded = 1;
+		if (port > 1023 && port < 65536)
+			xumon_init(port, threaded);
+		else
+			ERROR_WINDOW("UMON: Invalid TCP port: %d", port);
+	}
 	xemu_timekeeping_start();
 	for (;;) {
 		while (XEMU_UNLIKELY(paused)) {	// paused special mode, ie tracing support, or something ...
