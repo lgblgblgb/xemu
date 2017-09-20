@@ -41,6 +41,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 extern void sysconsole_open  ( void );
 extern void sysconsole_close ( const char *waitmsg );
+#ifdef HAVE_XEMU_SOCKET_API
+extern int  xemu_use_sockapi ( void );
+extern void xemu_free_sockapi ( void );
+#endif
 
 // You should define this in your emulator, most probably with resetting the keyboard matrix
 // Purpose: emulator windows my cause the emulator does not get the key event normally, thus some keys "seems to be stucked"

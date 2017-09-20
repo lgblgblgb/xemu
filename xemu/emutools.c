@@ -340,6 +340,9 @@ static void shutdown_emulator ( void )
 	if (sdl_win)
 		SDL_DestroyWindow(sdl_win);
 	atexit_callback_for_console();
+#ifdef HAVE_XEMU_SOCKET_API
+	xemu_free_sockapi();
+#endif
 	SDL_Quit();
 	if (debug_fp) {
 		fclose(debug_fp);
@@ -890,10 +893,67 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 
 
 #ifdef _WIN32
+
+/* winsock related ... */
+
+#ifdef HAVE_XEMU_SOCKET_API
+
+#include <winsock2.h>
+
+static int _winsock_init_status = 1;	// 1 = todo, 0 = was OK, -1 = error!
+
+int xemu_use_sockapi ( void )
+{
+	WSADATA wsa;
+	if (_winsock_init_status <= 0)
+		return _winsock_init_status;
+	if (WSAStartup(MAKEWORD(2, 2), &wsa)) {
+		ERROR_WINDOW("Failed to initialize winsock2, error code: %d", WSAGetLastError());
+		_winsock_init_status = -1;
+		return -1;
+	}
+	if (LOBYTE(wsa.wVersion) != 2 || HIBYTE(wsa.wVersion) != 2) {
+		WSACleanup();
+		ERROR_WINDOW("No suitable winsock API in the implemantion DLL (we need v2.2, we got: v%d.%d), windows system error ...", HIBYTE(wsa.wVersion), LOBYTE(wsa.wVersion));
+		_winsock_init_status = -1;
+		return -1;
+	}
+	DEBUGPRINT("WINSOCK: initialized, version %d.%d\n", HIBYTE(wsa.wVersion), LOBYTE(wsa.wVersion));
+	_winsock_init_status = 0;
+	return 0;
+}
+
+
+void xemu_free_sockapi ( void )
+{
+	if (_winsock_init_status == 0) {
+		WSACleanup();
+		_winsock_init_status = 1;
+	}
+}
+
+#endif
+
+/* for windows console madness */
+
 #include <windows.h>
 #include <stdio.h>
 #include <io.h>
 #include <fcntl.h>
+
+#else
+
+#ifdef HAVE_XEMU_SOCKET_API
+
+int xemu_use_sockapi ( void )
+{
+	return 0;
+}
+
+void xemu_free_sockapi ( void ) {}
+
+#endif
+
 #endif
 
 /* Note, Windows has some braindead idea about console, ie even the standard stdout/stderr/stdin does not work with
