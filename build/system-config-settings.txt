@@ -47,3 +47,14 @@ osx#readline#ldflags#		echo " -lreadline"
 ;win64#readline#ldflags#
 ;html#readline#cflags#
 ;html#readline#ldflags#
+
+native#socketapi#cflags#	echo " -D HAVE_SOCKET_OS_API"
+;native#socketapi#ldflags#
+osx#socketapi#cflags#		echo " -D HAVE_SOCKET_OS_API"
+;osx#socketapi#ldflags#
+win32#socketapi#cflags#		echo " -D HAVE_SOCKET_OS_API"
+win32#socketapi#ldflags#	echo " -lwsock32"
+win64#socketapi#cflags#		echo " -D HAVE_SOCKET_OS_API"
+win64#socketapi#ldflags#	echo " -lwsock32"
+;html#socketapi#cflags#
+;html#socketapi#ldflags#

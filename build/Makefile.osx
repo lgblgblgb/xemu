@@ -26,6 +26,6 @@ BINDIR		= $(PREFIX)/bin
 DATADIR		= $(PREFIX)/lib/xemu
 CC		= gcc
 STRIP		= strip
-GENOPTS		= -Ofast -fno-common -falign-functions=16 -ffast-math
+GENOPTS		= -Ofast -fno-common -ffast-math
 CFLAGS_ARCH	= $(GENOPTS) -Wall -pipe ::CFLAGS::
 LDFLAGS_ARCH	= $(GENOPTS) ::LDFLAGS::

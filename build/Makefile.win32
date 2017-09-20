@@ -28,4 +28,4 @@ CC		= i686-w64-mingw32-gcc
 STRIP		= i686-w64-mingw32-strip
 GENOPTS		= -Ofast -fno-common -falign-functions=16 -falign-loops=16 -ffast-math
 CFLAGS_ARCH	= $(GENOPTS) -Wall -pipe ::CFLAGS::
-LDFLAGS_ARCH	= $(GENOPTS) ::LDFLAGS:: -lwsock32
+LDFLAGS_ARCH	= $(GENOPTS) ::LDFLAGS::

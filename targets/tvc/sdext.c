@@ -508,7 +508,7 @@ static void _spi_shifting_with_sd_card ()
 				_read_b = 32; // address error, if no SD card image ... [this is bad TODO, better error handling]
 			else {
 				off_t ret, _offset = (cmd[1] << 24) | (cmd[2] << 16) | (cmd[3] << 8) | cmd[4];
-				SD_DEBUG("SDEXT: REGIO: seek to %ld in the image file." NL, _offset);
+				SD_DEBUG("SDEXT: REGIO: seek to " PRINTF_LLD " in the image file." NL, (long long)_offset);
 				z80ex_w_states(100);	// TODO: fake some wait states here, actully this is the WRONG method, as not the Z80 should wait but the SD card's answer ...
 				if (_offset > sd_card_size - 512UL) {
 					_read_b = 32; // address error, TODO: what is the correct answer here?
@@ -518,7 +518,7 @@ static void _spi_shifting_with_sd_card ()
 					ret = lseek(sdfd, _offset, SEEK_SET);
 					if (ret != _offset) {
 						_read_b = 32; // address error, TODO: what is the correct answer here?
-						SD_DEBUG("SDEXT: seek error to %ld (got: %ld)" NL, _offset, ret);
+						SD_DEBUG("SDEXT: seek error to " PRINTF_LLD " (got: " PRINTF_LLD ")" NL, (long long)_offset, (long long)ret);
 					} else {
 						_block_read();
 						if (cmd[0] == 18)
