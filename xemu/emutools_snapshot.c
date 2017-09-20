@@ -64,7 +64,7 @@ void xemusnap_init ( const struct xemu_snapshot_definition_st *def )
 
 int xemusnap_read_file ( void *buffer, size_t size )
 {
-	size_t ret = xemu_safe_read(snapfd, buffer, size);
+	ssize_t ret = xemu_safe_read(snapfd, buffer, size);
 	if (ret < 0)
 		return XSNAPERR_IO;
 	if (!ret)
@@ -83,7 +83,7 @@ int xemusnap_skip_file_bytes ( off_t size )
 
 int xemusnap_write_file ( const void *buffer, size_t size )
 {
-	size_t ret = xemu_safe_write(snapfd, buffer, size);
+	ssize_t ret = xemu_safe_write(snapfd, buffer, size);
 	if (ret < 0)
 		return XSNAPERR_IO;
 	if (ret == 0 || ret != size)
