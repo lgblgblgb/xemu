@@ -25,7 +25,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 static struct xemutools_config_st *config_head = NULL;
-static struct xemutools_config_st *config_tail = NULL;
 
 
 
@@ -40,19 +39,43 @@ static inline int check_string_size ( const char *s )
 
 void xemucfg_define_option ( const char *optname, enum xemutools_option_type type, void *defval, const char *help )
 {
-	struct xemutools_config_st *p = xemu_malloc(sizeof(struct xemutools_config_st));
-	if (config_head) {
-		config_tail->next = p;
-		config_tail = p;
-	} else
-		config_head = config_tail = p;
+	struct xemutools_config_st *entry;
 	if (type == OPT_STR && check_string_size(defval))
 		FATAL("Xemu internal config error: too long default option for option '%s'", optname);
-	p->next = NULL;
-	p->name = xemu_strdup(optname);
-	p->type = type;
-	p->value = (defval && type == OPT_STR) ? xemu_strdup(defval) : defval;
-	p->help = help;
+	entry = xemu_malloc(sizeof(struct xemutools_config_st));
+	if (!config_head) {
+		config_head = entry;
+		entry->next = NULL;
+	} else {
+		struct xemutools_config_st *p = config_head, *p_prev = NULL;
+		for (;;) {
+			// we want to manage alphabet sorted list just for nice help output, and for checking re-definition assertion in one step as well
+			int ret = strcasecmp(optname, p->name);
+			if (!ret)
+				FATAL("Xemu internal config error: trying to re-define option '%s'", optname);
+			if (ret < 0) {	// we want the first entry already later in alphabet than current one, insert new entry before that!
+				entry->next = p;
+				if (p_prev)
+					p_prev->next = entry;
+				else
+					config_head = entry;
+				break;
+			}
+			if (p->next) {
+				p_prev = p;
+				p = p->next;
+			} else {
+				p->next = entry;
+				entry->next = NULL;
+				break;
+			}
+
+		}
+	}
+	entry->name = xemu_strdup(optname);
+	entry->type = type;
+	entry->value = (defval && type == OPT_STR) ? xemu_strdup(defval) : defval;
+	entry->help = help;
 }
 
 
@@ -74,19 +97,16 @@ void xemucfg_define_switch_option ( const char *optname, const char *help ) {
 
 
 
-static struct xemutools_config_st *search_option ( const char *name_in )
+static struct xemutools_config_st *search_option ( const char *name )
 {
 	struct xemutools_config_st *p = config_head;
-	char *name = xemu_strdup(name_in);
 	char *s = strchr(name, '@');
-	if (s)
-		*s = 0;
+	int l = s ? s - name : strlen(name);
 	while (p)
-		if (!strcasecmp(name, p->name))
+		if (!strncasecmp(name, p->name, l) && p->name[l] == 0 && (name[l] == 0 || name[l] == '@'))
 			break;
 		else
 			p = p->next;
-	free(name);
 	return (p && s && p->type != OPT_PROC) ? NULL : p;
 }
 
