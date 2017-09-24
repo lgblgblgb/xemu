@@ -33,7 +33,7 @@ clean:
 
 distclean:
 	$(MAKE) clean
-	rm -f `$(AWK) 'NF == 2 && $$1 ~ /^[a-zA-Z0-9]/ { print $$1 }' < $(URL_LIST)`
+	rm -f `$(AWK) 'NF == 3 && $$1 ~ /^[a-zA-Z0-9]/ { print $$1 }' < $(URL_LIST)`
 
 kickup.cdata: KICKUP.M65
 	../build/bin2values.py $< $@
@@ -42,6 +42,6 @@ kickup.cdata: KICKUP.M65
 	$(CL65) -t none --cpu 65c02 -o $@ $<
 
 roms:
-	$(AWK) 'NF == 2 && $$1 ~ /^[a-zA-Z0-9]/ { print "test -s " $$1 " || { rm -f " $$1 ".tmp && $(WGET) -O " $$1 ".tmp " $$2 " && mv " $$1 ".tmp " $$1 "; } || exit $$?" }' < $(URL_LIST) | $(SHELL)
+	$(AWK) 'NF == 3 && $$1 ~ /^[a-zA-Z0-9]/ { print "test -s " $$1 " || { rm -f " $$1 ".tmp && $(WGET) -O " $$1 ".tmp " $$2 " && mv " $$1 ".tmp " $$1 "; } || exit $$?" }' < $(URL_LIST) | $(SHELL)
 
 .PHONY: all clean distclean roms
