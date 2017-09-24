@@ -114,11 +114,12 @@ void *xemuexec_run ( char *const args[] )
 		FATAL("exec: too long commandline");
 	cmdlinesize -= strlen(args[0]) + 2;
 	while (*(++args)) {
+		int arg_padding_len = strchr(*args, ' ') ? 3 : 1;
 		if (cmdlinesize <= 0)
 			FATAL("exec: too long commandline");
-		if (snprintf(cmdline + strlen(cmdline), cmdlinesize, " %s", *args) != strlen(*args) + 1)
+		if (snprintf(cmdline + strlen(cmdline), cmdlinesize, arg_padding_len == 1 ? " %s" : " \"%s\"", *args) != strlen(*args) + arg_padding_len)
 			FATAL("exec: too long commandline");
-		cmdlinesize -= strlen(*args) + 1;
+		cmdlinesize -= strlen(*args) + arg_padding_len;
 	}
 	st->cmdline = _tcsdup(TEXT(cmdline));	// really no idea about this windows madness, just copying examples ...
 	if (!st->cmdline) {
@@ -204,7 +205,159 @@ int xemuexec_check_status ( void* pid, int wait )
 }
 #undef PID
 
+// end of #ifndef _WIN32
 #endif
+
+#ifdef HAVE_XEMU_INSTALLER
+
+char *xemu_installer_db = NULL;
+
+static const char installer_marker_prefix[] = "[XEMU_DOWNLOADER]=";
+
+static char installer_store_to[PATH_MAX];
+static char installer_fetch_url[256];
+static const char *downloader_utility_specifications[] = {
+#ifdef _WIN32
+	"powershell", "-Command", "Invoke-WebRequest", installer_fetch_url, "-OutFile", installer_store_to, "-Verbose", NULL,
+	"powershell.exe", "-Command", "Invoke-WebRequest", installer_fetch_url, "-OutFile", installer_store_to, "-Verbose", NULL,
+#endif
+	"curl", "-o", installer_store_to, installer_fetch_url, NULL,
+#ifdef _WIN32
+	"curl.exe", "-o", installer_store_to, installer_fetch_url, NULL,
+#endif
+	"wget", "-O", installer_store_to, installer_fetch_url, NULL,
+#ifdef _WIN32
+	"wget.exe", "-O", installer_store_to, installer_fetch_url, NULL,
+#endif
+	NULL	// the final stop of listing
+};
+
+static const char **downloader_utility_spec_start_p = downloader_utility_specifications;
+
+
+
+static int download_file ( int size )
+{
+	int ret;
+	char path_final[PATH_MAX];
+	const char **execargs_p = downloader_utility_spec_start_p;
+	struct stat st;
+	strcpy(path_final, installer_store_to);
+	strcat(installer_store_to, ".temp");
+	DEBUGPRINT("INSTALLER: goal: %s -> %s -> %s (%d bytes)" NL,
+		installer_fetch_url, installer_store_to, path_final, size
+	);
+	if (unlink(path_final) && errno != ENOENT) {
+		ERROR_WINDOW("Installer: cannot delete already existing final file");
+		return -1;
+	}
+	do {
+		xemuexec_process_t proc;
+		printf("Tryning: %s\n", *execargs_p);
+		if (unlink(installer_store_to) && errno != ENOENT) {
+			ERROR_WINDOW("Installer: cannot delete already exisiting temp file");
+			return -1;
+		}
+		proc = xemuexec_run((char* const*)execargs_p);
+		ret = xemuexec_check_status(proc, 1);
+		printf("Exit status: %d\n", ret);
+		if (!ret || downloader_utility_spec_start_p != downloader_utility_specifications)
+			break;
+		while (*(execargs_p++))
+			;
+	} while (*execargs_p);
+	if (ret) {
+		ERROR_WINDOW("Installer: cannot download and/or no working download utility can be used");
+		unlink(installer_store_to);
+		return -1;
+	}
+	if (stat(installer_store_to, &st)) {
+		ERROR_WINDOW("Installer: cannot stat file");
+		return -1;
+	}
+	printf("File size = %d\n", (int)st.st_size);
+	if (st.st_size != size) {
+		ERROR_WINDOW("Installer: download file has wrong size (%d, wanted: %d)", (int)st.st_size, size);
+		return -1;
+	}
+	if (rename(installer_store_to, path_final)) {
+		ERROR_WINDOW("Installer: cannot rename to final");
+		return -1;
+	}
+	downloader_utility_spec_start_p = execargs_p;
+	DEBUGPRINT("INSTALLER: setting \"%s\" as the default downloader for this session." NL, *execargs_p);
+	return 0;
+}
+
+
+
+static int download_file_by_db ( const char *filename, const char *storepath )
+{
+	char *p;
+	int i;
+	if (!xemu_installer_db)
+		return -1;
+	strcpy(installer_store_to, storepath);
+	p = xemu_installer_db;
+	i = strlen(filename);
+	while (*p) {
+		while (*p && *p <= 32)
+			p++;
+		if (!strncmp(filename, p, i) && (p[i] == '\t' || p[i] == ' ')) {
+			p += i + 1;
+			while (*p == ' ' || *p == '\t')
+				p++;
+			if (*p > 32) {
+				long int sizereq;
+				char *q;
+				if (strncasecmp(p, "http://", 7) && strncasecmp(p, "https://", 8) && strncasecmp(p, "ftp://", 6)) {
+					ERROR_WINDOW("Bad download descriptor file at URL field for record \"%s\"", filename);
+					return -1;
+				}
+				q = installer_fetch_url;
+				while (*p > 32)
+					*q++ = *p++;
+				*q = 0;
+				sizereq = strtol(p, &p, 0);
+				if (sizereq > 0 && sizereq <= 4194304) {
+					int ret = download_file(sizereq);
+					if (!ret)
+						INFO_WINDOW("File %s seems to be OK with download", filename);
+					return ret;
+				} else {
+					ERROR_WINDOW("Bad download descriptor file at size field for record \"%s\"", filename);
+					return -1;
+				}
+			}
+		}
+		while (*p && *p != '\n' && *p != '\r')
+			p++;
+	}
+	DEBUGPRINT("INSTALLER: file-key %s cannot be found in the download description file" NL, filename);
+	return -1;
+}
+
+
+void xemu_set_installer ( const char *filename )
+{
+	if (xemu_installer_db) {
+		free(xemu_installer_db);
+		xemu_installer_db = NULL;
+	}
+	if (filename) {
+		int ret = xemu_load_file(filename, NULL, 32, 65535, "Specified installer-description file cannot be loaded");
+		if (ret > 0) {
+			xemu_installer_db = xemu_load_buffer_p;
+			DEBUGPRINT("INSTALLER: description file loaded, %d bytes. Parsing will be done only on demand." NL, ret);
+		}
+	} else
+		DEBUGPRINT("INSTALLER: not activated." NL);
+}
+
+
+// end of #ifdef HAVE_XEMU_INSTALLER
+#endif
+// end of #ifdef HAVE_XEMU_EXEC_API
 #endif
 
 
@@ -232,7 +385,7 @@ int xemuexec_check_status ( void* pid, int wait )
  */
 int xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_back )
 {
-	char paths[10][PATH_MAX];
+	char paths[16][PATH_MAX];
 	int a, max_paths;
 	if (!filename)
 		FATAL("Calling xemu_open_file() with NULL filename!");
@@ -255,18 +408,29 @@ int xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_
 		sprintf(paths[max_paths++], "/usr/share/xemu/%s", filename + 1);
 		sprintf(paths[max_paths++], "/usr/lib/xemu/%s", filename + 1);
 #endif
+#ifdef HAVE_XEMU_INSTALLER
+		sprintf(paths[max_paths++], "%s%s%s", installer_marker_prefix, sdl_inst_dir, filename + 1);
+#endif
 	} else
 		strcpy(paths[max_paths++], filename);
+// End of #ifdef __EMSCRIPTEN__
 #endif
 	a = 0;
 	do {
 		int fd;
+		const char *filepath = paths[a];
+#ifdef HAVE_XEMU_INSTALLER
+		if (!strncmp(paths[a], installer_marker_prefix, strlen(installer_marker_prefix))) {
+			filepath += strlen(installer_marker_prefix);
+			download_file_by_db(filename + 1, filepath);
+		}
+#endif
 		// Notes:
-		// 1. O_BINARY is a windows stuff. However, since we define O_BINARY as zero for non-win archs, it's OK
-		// 2. 0666 mask is needed as it can be also a creat() function basically ...
-		fd = open(paths[a], mode | O_BINARY, 0666);
+		//   1. O_BINARY is a windows stuff. However, since we define O_BINARY as zero for non-win archs, it's OK
+		//   2. 0666 mask is needed as it can be also a creat() function basically ...
+		fd = open(filepath, mode | O_BINARY, 0666);
 		if (filepath_back)
-			strcpy(filepath_back, paths[a]);
+			strcpy(filepath_back, filepath);
 		if (fd >= 0) {
 			if (mode2)
 				*mode2 = 0;
@@ -274,14 +438,14 @@ int xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_
 			return fd;
 		}
 		if (mode2) {
-			fd = open(paths[a], *mode2 | O_BINARY, 0666);	// please read the comments at the previous open(), above
+			fd = open(filepath, *mode2 | O_BINARY, 0666);	// please read the comments at the previous open(), above
 			if (fd >= 0) {
 				DEBUGPRINT("FILE: file %s opened as %s with *second* mode-set as fd=%d" NL, filename, paths[a], fd);
 				return fd;
 			}
 		}
 	} while (++a < max_paths);
-	// if not found, copy the first try so the report for user is more sane
+	// if not found, copy the first try so the report to user is more sane
 	if (filepath_back)
 		strcpy(filepath_back, paths[0]);
 	DEBUGPRINT("FILE: %s cannot be open, tried path(s): ", filename);
@@ -349,7 +513,8 @@ ssize_t xemu_safe_write ( int fd, const void *buffer, size_t length )
  */
 int xemu_load_file ( const char *filename, void *store_to, int min_size, int max_size, const char *cry )
 {
-	int fd = xemu_open_file(filename, O_RDONLY, NULL, xemu_load_filepath);
+	int fd;
+	fd = xemu_open_file(filename, O_RDONLY, NULL, xemu_load_filepath);
 	if (fd < 0) {
 		if (cry) {
 			ERROR_WINDOW("Cannot open file requested by %s: %s\nTried as: %s\n%s%s", filename, strerror(errno), xemu_load_filepath,

@@ -46,4 +46,8 @@ extern xemuexec_process_t xemuexec_run ( char *const args[] );
 extern int xemuexec_check_status ( xemuexec_process_t pid, int wait );
 #endif
 
+#ifdef HAVE_XEMU_INSTALLER
+extern void xemu_set_installer ( const char *filename );
+#endif
+
 #endif
