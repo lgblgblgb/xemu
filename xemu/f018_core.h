@@ -37,6 +37,7 @@ extern void  dma_init (
 extern void  dma_reset     ( void );
 extern void  dma_update    ( void );
 
+
 /* Things should be provided by the emulator: */
 
 

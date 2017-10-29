@@ -43,7 +43,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 Uint8 dma_registers[16];		// The four DMA registers (with last values written by the CPU)
 int   dma_chip_revision;		// revision of DMA chip
 static int   source_step;		// [-1, 0, 1] step value for source (0 = hold, constant address)
+#ifdef MEGA65
+static int   source_step_fraction;      // [1/256] step value for source (0x100 = no fraction)
+static int   source_step_remain;        // fractional reaminder for the next DMA-step
+#endif
 static int   target_step;		// [-1, 0, 1] step value for target (0 = hold, constant address)
+#ifdef MEGA65
+static int   target_step_fraction;      // [1/256] step value for source (0x100 = no fraction)
+static int   target_step_remain;        // fractional reaminder for the next DMA-step
+#endif
 static int   source_addr;		// DMA source address (the low byte is also used by COPY command as the "filler byte")
 static int   target_addr;		// DMA target address
 static int   source_is_io;		// DMA source is I/O space (only the lower 12 bits are used of the source_addr then?)
@@ -83,6 +91,19 @@ static dma_writer_cb_t target_writer;
 static int source_mask, target_mask, source_megabyte, target_megabyte, list_megabyte;
 static int dma_phys_io_offset, dma_phys_io_offset_default = 0;
 
+int calc_fractional_step(int step, int fraction, int * remainder){
+  
+        long int temp_step=step;
+
+        temp_step  *= fraction;
+        *remainder += temp_step%0x100;  // remember the fractional part for the next step
+        temp_step  /= 0x100;
+        temp_step  += (*remainder)/256;
+        *remainder &= 255;
+  
+        return (temp_step);
+}
+
 
 
 // TODO: modulo?
@@ -93,8 +114,13 @@ static INLINE Uint8 read_source_next ( void )
 	// a physical address for I/O which also contains an offset within the "mbyte slice"
 	// range as well (ie, mega65 uses I/O areas mapped in the $FF megabyte area, for
 	// various I/O modes)
-	Uint8 result = source_reader((source_addr & source_mask) + source_megabyte);
-	source_addr += source_step;
+        Uint8 result = source_reader((source_addr & source_mask) + source_megabyte);
+
+#ifdef MEGA65
+        source_addr += calc_fractional_step(source_step,source_step_fraction,&source_step_remain);
+#else        
+        source_addr += source_step;
+#endif        
 	return result;
 }
 
@@ -104,7 +130,11 @@ static INLINE void write_target_next ( Uint8 data )
 {
 	// See the comment at read_source_next()
 	target_writer((target_addr & target_mask) + target_megabyte, data);
-	target_addr += target_step;
+#ifdef MEGA65
+        target_addr += calc_fractional_step(target_step,target_step_fraction,&target_step_remain);
+#else        
+        target_addr += target_step;
+#endif        
 }
 
 
@@ -220,6 +250,7 @@ void dma_write_reg ( int addr, Uint8 data )
    OK, now it seems, there are (at least?) two major (or planned?) DMA revisions in C65 with many incompatibilities.
    Let's call them "A" and "B" (F018A and F018B). Currently, Xemu decides according the variable "dma_chip_revision" being 0
    means "A" other non-zero values are "B", set by dma_init() function called by the emulator.
+   With MEGA65, some extra features have been added, we call this revision F018A+
 
    Command byte:   bits 0,1 -> DMA command
                    bit  2   -> chained bit
@@ -276,7 +307,13 @@ void dma_update ( void )
 		} else {
 			// F018A ("old") behaviour
 			source_step  = (source_addr & 0x100000) ? 0 : ((source_addr & 0x400000) ? -1 : 1);
-			target_step  = (target_addr & 0x100000) ? 0 : ((target_addr & 0x400000) ? -1 : 1);
+                        target_step  = (target_addr & 0x100000) ? 0 : ((target_addr & 0x400000) ? -1 : 1);
+#ifdef MEGA65
+                        source_step_fraction=dma_registers[8]  + (dma_registers[9]  <<8);                          
+                        target_step_fraction=dma_registers[10] + (dma_registers[11] <<8);   
+                        source_step_remain=0;
+                        target_step_remain=0;
+#endif                        
 			source_uses_modulo = (source_addr & 0x200000);
 			target_uses_modulo = (target_addr & 0x200000);
 			minterms[0] = (command &  16) ? 0xFF : 0x00;
@@ -356,6 +393,13 @@ void dma_update ( void )
 			DEBUG("DMA: end of operation, no chained next one." NL);
 			dma_status = 0;		// end of DMA command
 			command = -1;
+#ifdef MEGA65
+                        dma_registers[8]=0;        // Initialize fractional stepping to 1     
+                        dma_registers[9]=1;
+                        dma_registers[10]=0;    
+                        dma_registers[11]=1;    
+#endif        
+                          
 		}
 	}
 }
@@ -398,6 +442,10 @@ void dma_reset ( void )
 	command = -1;	// no command is fetched yet
 	dma_status = 0;
 	memset(dma_registers, 0, sizeof dma_registers);
+#ifdef MEGA65
+        dma_registers[9]=1;        // Initialize fractional stepping to 1     
+        dma_registers[11]=1;    
+#endif        
 	source_megabyte = 0;
 	target_megabyte = 0;
 	list_megabyte = 0;
