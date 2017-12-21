@@ -432,10 +432,12 @@ int xemu_init_sdl ( void )
 	if (!SDL_WasInit(SDL_INIT_EVERYTHING)) {
 		DEBUGPRINT("SDL: no SDL subsystem initialization has been done yet, do it!" NL);
 		SDL_Quit();	// Please read the long comment at the pre-init func above to understand this SDL_Quit() here and then the SDL_Init() right below ...
+		DEBUGPRINT("SDL: before SDL init" NL);
 		if (SDL_Init(SDL_INIT_EVERYTHING)) {
 			ERROR_WINDOW("Cannot initialize SDL: %s", SDL_GetError());
 			return 1;
 		}
+		DEBUGPRINT("SDL: after SDL init" NL);
 		if (!SDL_WasInit(SDL_INIT_EVERYTHING))
 			FATAL("SDL_WasInit()=0 after init??");
 	} else
@@ -547,6 +549,7 @@ int xemu_post_init (
 			INFO_WINDOW("Created non-accelerated driver. NOTE: it will severly affect the performance!");
 		}
 	}
+	SDL_SetRenderDrawColor(sdl_ren, 0, 0, 0, SDL_ALPHA_OPAQUE);
 	if (!SDL_GetRendererInfo(sdl_ren, &ren_info)) {
 		printf("SDL renderer used: \"%s\" max_tex=%dx%d tex_formats=%d ", ren_info.name, ren_info.max_texture_width, ren_info.max_texture_height, ren_info.num_texture_formats);
 		for (a = 0; a < ren_info.num_texture_formats; a++)
@@ -929,6 +932,7 @@ void xemu_free_sockapi ( void )
 	if (_winsock_init_status == 0) {
 		WSACleanup();
 		_winsock_init_status = 1;
+		DEBUGPRINT("WINSOCK: uninitialized." NL);
 	}
 }
 

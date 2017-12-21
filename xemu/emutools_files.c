@@ -233,6 +233,8 @@ static const char *downloader_utility_specifications[] = {
 };
 
 static const char **downloader_utility_spec_start_p = downloader_utility_specifications;
+static int downloader_utility_selected = 0;
+static int legal_warning = 1;
 
 
 
@@ -261,7 +263,7 @@ static int download_file ( int size )
 		proc = xemuexec_run((char* const*)execargs_p);
 		ret = xemuexec_check_status(proc, 1);
 		printf("Exit status: %d\n", ret);
-		if (!ret || downloader_utility_spec_start_p != downloader_utility_specifications)
+		if (!ret || downloader_utility_selected)
 			break;
 		while (*(execargs_p++))
 			;
@@ -272,20 +274,24 @@ static int download_file ( int size )
 		return -1;
 	}
 	if (stat(installer_store_to, &st)) {
-		ERROR_WINDOW("Installer: cannot stat file");
+		ERROR_WINDOW("Installer: cannot stat file (not downloaded at all?)");
 		return -1;
 	}
 	printf("File size = %d\n", (int)st.st_size);
 	if (st.st_size != size) {
-		ERROR_WINDOW("Installer: download file has wrong size (%d, wanted: %d)", (int)st.st_size, size);
+		unlink(installer_store_to);
+		ERROR_WINDOW("Installer: downloaded file has wrong size (%d, wanted: %d)", (int)st.st_size, size);
 		return -1;
 	}
 	if (rename(installer_store_to, path_final)) {
 		ERROR_WINDOW("Installer: cannot rename to final");
 		return -1;
 	}
-	downloader_utility_spec_start_p = execargs_p;
-	DEBUGPRINT("INSTALLER: setting \"%s\" as the default downloader for this session." NL, *execargs_p);
+	if (!downloader_utility_selected) {
+		downloader_utility_spec_start_p = execargs_p;
+		downloader_utility_selected = 1;
+		DEBUGPRINT("INSTALLER: setting \"%s\" as the default downloader utility for this session." NL, *execargs_p);
+	}
 	return 0;
 }
 
@@ -311,21 +317,39 @@ static int download_file_by_db ( const char *filename, const char *storepath )
 				long int sizereq;
 				char *q;
 				if (strncasecmp(p, "http://", 7) && strncasecmp(p, "https://", 8) && strncasecmp(p, "ftp://", 6)) {
-					ERROR_WINDOW("Bad download descriptor file at URL field for record \"%s\"", filename);
+					ERROR_WINDOW("Bad download descriptor file at URL field (bar protocol) for record \"%s\"", filename);
 					return -1;
 				}
 				q = installer_fetch_url;
-				while (*p > 32)
+				sizereq = 0;
+				while (*p > 32) {
+					if (sizereq == sizeof(installer_fetch_url) - 2) {
+						ERROR_WINDOW("Bad download descriptor file at URL field (too long) for record \"%s\"", filename);
+						return -1;
+					}
 					*q++ = *p++;
+					sizereq++;
+				}
 				*q = 0;
 				sizereq = strtol(p, &p, 0);
+				if (*p > 32)
+					sizereq = -1;
 				if (sizereq > 0 && sizereq <= 4194304) {
-					int ret = download_file(sizereq);
+					int ret;
+					char msgbuffer[sizeof(installer_fetch_url) + 256];
+					if (legal_warning) {
+						INFO_WINDOW("Legal-warning blah-blah ...");
+						legal_warning = 0;
+					}
+					sprintf(msgbuffer, "Downloading file \"%s\". Do you agree?\nSource: %s", filename, installer_fetch_url);
+					if (QUESTION_WINDOW("YES|NO", msgbuffer))
+						return -1;
+					ret = download_file(sizereq);
 					if (!ret)
-						INFO_WINDOW("File %s seems to be OK with download", filename);
+						INFO_WINDOW("File %s seems to be downloaded nicely with %s", filename, *downloader_utility_spec_start_p);
 					return ret;
 				} else {
-					ERROR_WINDOW("Bad download descriptor file at size field for record \"%s\"", filename);
+					ERROR_WINDOW("Bad download descriptor file at size field for record \"%s\" (or this file is not auto-installable)", filename);
 					return -1;
 				}
 			}
@@ -368,6 +392,7 @@ void xemu_set_installer ( const char *filename )
  *	filename: name of the file
  *		- if it begins with '@' the file is meant to relative to the SDL preferences directory (ie: @thisisit.rom, no need for dirsep!)
  *		- if it begins with '#' the file is meant for 'data directory' which is probed then multiple places, depends on the OS as well
+ *		  - Note: in this case, if installer is enabled and file not found, Xemu can try to download the file. For this, see above the "installer" part of this source
  *		- otherwise it's simply a file name, passed as-is
  *	mode: actually the flags parameter for open (O_RDONLY, etc)
  *		- O_BINARY is used automatically in case of Windows, no need to specify as input data

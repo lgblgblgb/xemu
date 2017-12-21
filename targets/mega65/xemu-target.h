@@ -8,6 +8,7 @@
 #define CPU_CUSTOM_MEMORY_FUNCTIONS_H "cpu_custom_functions.h"
 #define HAVE_XEMU_EXEC_API
 #ifdef HAVE_SOCKET_OS_API
-#define HAVE_XEMU_SOCKET_API
-#define HAVE_XEMU_UMON
+//#define HAVE_XEMU_SOCKET_API
+//#define HAVE_XEMU_UMON
 #endif
+#define HAVE_XEMU_INSTALLER

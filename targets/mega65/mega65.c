@@ -558,9 +558,17 @@ int main ( int argc, char **argv )
 #endif
 	xemucfg_define_switch_option("skipunhandledmem", "Do not panic on unhandled memory access (hides problems!!)");
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+#ifdef HAVE_XEMU_UMON
 	xemucfg_define_num_option("umon", 0, "TCP-based dual mode (http and text) monitor port number [NOT YET WORKING]");
+#endif
+#ifdef HAVE_XEMU_INSTALLER
+	xemucfg_define_str_option("installer", NULL, "Sets a download-specification descriptor file for auto-downloading data files");
+#endif
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
+#ifdef HAVE_XEMU_INSTALLER
+	xemu_set_installer(xemucfg_get_str("installer"));
+#endif
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	window_title_info_addon = emulator_speed_title;
 	if (xemu_post_init(
@@ -584,18 +592,9 @@ int main ( int argc, char **argv )
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
 		AUDIO_SAMPLE_FREQ		// sound mix freq
 	);
-	// Start!!
 	skip_unhandled_mem = xemucfg_get_bool("skipunhandledmem");
 	printf("UNHANDLED memory policy: %d" NL, skip_unhandled_mem);
-	cycles = 0;
-	frameskip = 0;
-	frame_counter = 0;
-	vic3_blink_phase = 0;
-	if (audio)
-		SDL_PauseAudioDevice(audio, 0);
-	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
-	if (!xemucfg_get_bool("syscon"))
-		sysconsole_close(NULL);
+#ifdef HAVE_XEMU_UMON
 	if (xemucfg_get_num("umon") != 0) {
 		int port = xemucfg_get_num("umon");
 		int threaded;
@@ -609,6 +608,16 @@ int main ( int argc, char **argv )
 		else
 			ERROR_WINDOW("UMON: Invalid TCP port: %d", port);
 	}
+#endif
+	cycles = 0;
+	frameskip = 0;
+	frame_counter = 0;
+	vic3_blink_phase = 0;
+	if (audio)
+		SDL_PauseAudioDevice(audio, 0);
+	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
+	if (!xemucfg_get_bool("syscon"))
+		sysconsole_close(NULL);
 	xemu_timekeeping_start();
 	for (;;) {
 		while (XEMU_UNLIKELY(paused)) {	// paused special mode, ie tracing support, or something ...

@@ -27,6 +27,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #error "Need HAVE_XEMU_SOCKET_API for HAVE_XEMU_UMON to be enabled at the target!"
 #endif
 
+extern volatile int xumon_is_running;
+
 extern int xumon_init ( int port, int threaded );
 
 #endif
