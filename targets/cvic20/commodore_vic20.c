@@ -71,7 +71,7 @@ static Uint8 is_kpage_writable[64] = {		// writable flag (for different memory e
 	0,0,0,0,0,0,0,0,// @16K-23K (sum 8K), expansion block [will be filled with RAM on memcfg request]
 	0,0,0,0,0,0,0,0,// @24K-31K (sum 8K), expansion block [will be filled with RAM on memcfg request]
 	0,0,0,0,	// @32K-35K (sum 4K), character ROM (VIC-I can reach it)
-	0,		// @36K     (sum 1K), I/O block   (VIAs, VIC-I, ...)
+	0,		// @36K     (sum 1K), I/O block 0 (VIAs, VIC-I, ...)
 	1,		// @37K     (sum 1K), colour RAM (VIC-I can reach it directly), only 0.5K, but the position depends on the config ... [handled as a special case on READ - 4 bit wide only!]
 	0,		// @38K     (sum 1K), I/O block 2 (not used now, gives 0xFF on read)
 	0,		// @39K     (sum 1K), I/O block 3 (not used now, gives 0xFF on read)
@@ -306,13 +306,13 @@ void clear_emu_events ( void )
 void  cpu_write ( Uint16 addr, Uint8 data )
 {
 	// Write optimization, handle the most common case first: memory byte to be written is not special, ie writable RAM, not I/O, etc
-	if (is_kpage_writable[addr >> 10]) {	// writable flag for every Kbytes of 64K is checked (for different memory configurations, faster "decoding", etc)
+	if (XEMU_LIKELY(is_kpage_writable[addr >> 10])) {	// writable flag for every Kbytes of 64K is checked (for different memory configurations, faster "decoding", etc)
 		memory[addr] = data;
 		return;
 	}
 	// ELSE: other kind of address space is tried to be written ...
 	// TODO check if I/O devices are fully decoded or there can be multiple mirror ranges
-	if ((addr & 0xFFF0) == 0x9000) {	// VIC-I register is written
+	if ((addr & 0xFF00) == 0x9000) {	// VIC-I register is written (decoded for a full 256 bytes long area)
 		cpu_vic_reg_write(addr & 0xF, data);
 		return;
 	}
@@ -332,7 +332,12 @@ void  cpu_write ( Uint16 addr, Uint8 data )
 // TODO: Use RMW write function in a proper way!
 void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 {
-	cpu_write(addr, new_data);
+	if (XEMU_UNLIKELY(addr & 0x8000)) {
+		cpu_write(addr, old_data);
+		cpu_write(addr, new_data);
+	} else {
+		cpu_write(addr, new_data);
+	}
 }
 
 
@@ -343,7 +348,7 @@ Uint8 cpu_read ( Uint16 addr )
 	// Optimization: handle the most common case first!
 	// Check if our read is NOT about the (built-in) I/O area. If it's true, let's just use the memory array
 	// (even for undecoded areas, memory[] is intiailized with 0xFF values
-	if ((addr & 0xF800) != 0x9000)
+	if (XEMU_LIKELY((addr & 0xF800) != 0x9000))
 		return memory[addr];
 	// ELSE: it IS the I/O area or colour SRAM ... Let's see what we want!
 	// TODO check if I/O devices are fully decoded or there can be multiple mirror ranges
@@ -371,7 +376,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 static void update_emulator ( void )
 {
 	if (!frameskip) {
-		// First: render VIC-20 screen ...
+		// First: update VIC-20 screen ...
 		xemu_update_screen();
 		// Second: we must handle SDL events waiting for us in the event queue ...
 		hid_handle_all_sdl_events();
