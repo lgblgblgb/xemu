@@ -32,7 +32,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_files.h"
 #include "xemu/emutools_hid.h"
 #include "xemu/emutools_config.h"
-#include "xemu/cpu65c02.h"
+#include "xemu/cpu65.h"
 #include "xemu/via65c22.h"
 #include "xemu/emutools.h"
 #include "commodore_lcd.h"
@@ -143,7 +143,7 @@ static const struct KeyMapping lcd_key_map[] = {
 
 
 
-int cpu_trap ( Uint8 opcode )
+int cpu65_trap_callback ( Uint8 opcode )
 {
 	return 0;	// not recognized
 }
@@ -158,7 +158,7 @@ void clear_emu_events ( void )
 #define GET_MEMORY(phys_addr) memory[phys_addr]
 
 
-Uint8 cpu_read ( Uint16 addr ) {
+Uint8 cpu65_read_callback ( Uint16 addr ) {
 	if (addr <  0x1000) return GET_MEMORY(addr);
 	if (addr <  0xF800) return GET_MEMORY((mmu_current[addr >> 14] + addr) & 0x3FFFF);
 	if (addr >= 0xFA00) return GET_MEMORY(addr | 0x30000);
@@ -168,7 +168,7 @@ Uint8 cpu_read ( Uint16 addr ) {
 	return via_read(&via1, addr & 15);
 }
 
-void cpu_write ( Uint16 addr, Uint8 data ) {
+void cpu65_write_callback ( Uint16 addr, Uint8 data ) {
 	int maddr;
 	if (addr < 0x1000) {
 		memory[addr] = data;
@@ -206,9 +206,9 @@ void cpu_write ( Uint16 addr, Uint8 data ) {
 
 
 // I guess Commodore LCD since used CMOS 65C02 already, no need to emulate the RMW behaviour on NMOS 6502 (??)
-void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
+void cpu65_write_rmw_callback ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 {
-	cpu_write(addr, new_data);
+	cpu65_write_callback(addr, new_data);
 }
 
 
@@ -268,7 +268,7 @@ static Uint8 via1_insr()
 static void  via1_setint(int level)
 {
 	//DEBUG("IRQ level: %d" NL, level);
-	cpu_irqLevel = level;
+	cpu65.irqLevel = level;
 }
 
 
@@ -444,7 +444,7 @@ int main ( int argc, char **argv )
 	xemu_load_file("#clcd-u104-parasite.rom", memory + 0x2E800, 32, 0x8000 - 0x6800, NULL);
 #endif
 	/* init CPU */
-	cpu_reset();	// we must do this after loading KERNAL at least, since PC is fetched from reset vector here!
+	cpu65_reset();	// we must do this after loading KERNAL at least, since PC is fetched from reset vector here!
 	/* init VIAs */
 	via_init(&via1, "VIA#1", via1_outa, via1_outb, via1_outsr, via1_ina, via1_inb, via1_insr, via1_setint);
 	via_init(&via2, "VIA#2", via2_outa, via2_outb, via2_outsr, via2_ina, via2_inb, via2_insr, via2_setint);
@@ -459,7 +459,7 @@ int main ( int argc, char **argv )
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	update_rtc();			// this will use time-keeping stuff as well, so initially let's do after the function call above
 	for (;;) {
-		int opcyc = cpu_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles
+		int opcyc = cpu65_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles
 		via_tick(&via1, opcyc);	// run VIA-1 tasks for the same amount of cycles as the CPU
 		via_tick(&via2, opcyc);	// -- "" -- the same for VIA-2
 		cycles += opcyc;

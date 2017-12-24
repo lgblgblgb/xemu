@@ -37,7 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <SDL.h>
 
 #include "commodore_geos.h"
-#include "xemu/cpu65c02.h"
+#include "xemu/cpu65.h"
 #include "geos.h"
 #include "xemu/emutools.h"
 #include "xemu/emutools_files.h"
@@ -94,14 +94,14 @@ int geos_load_kernal ( const char *kernal_image_name )
 		return 1;
 	addr = buffer[0] | (buffer[1] << 8);	// load address
 	if (addr == 0x5000) {
-		cpu_pc = 0x5000;
+		cpu65.pc = 0x5000;
 	} else if (addr == 0x801) {
 		int sys = check_basic_stub(buffer + 6, addr);
 		if (sys < 0) {
 			INFO_WINDOW("Invalid BASIC stub for the GEOS kernal (%s)", xemu_load_filepath);
 			return 1;
 		}
-		cpu_pc = sys;
+		cpu65.pc = sys;
 		inject_screencoded_message(6 * 40, "*** Basic stub, you need to wait now ***");
 	} else {
 		INFO_WINDOW("Invalid GEOS kernal load address ($%04X) in (%s)", addr, xemu_load_filepath);
@@ -116,6 +116,6 @@ int geos_load_kernal ( const char *kernal_image_name )
 void geos_cpu_trap ( Uint8 opcode )
 {
 	// Hopefully the trap itself is in RAM ..
-	DEBUG("GEOS: TRAP-SYM: \"%s\"" NL, memory + cpu_pc);
-	cpu_pc += strlen((const char*)memory + cpu_pc) + 1;
+	DEBUG("GEOS: TRAP-SYM: \"%s\"" NL, memory + cpu65.pc);
+	cpu65.pc += strlen((const char*)memory + cpu65.pc) + 1;
 }

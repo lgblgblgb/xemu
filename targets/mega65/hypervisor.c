@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_files.h"
 #include "mega65.h"
 #include "hypervisor.h"
-#include "xemu/cpu65c02.h"
+#include "xemu/cpu65.h"
 #include "vic4.h"
 #include "xemu/f018_core.h"
 #include "memory_mapper.h"
@@ -119,16 +119,16 @@ void hypervisor_enter ( int trapno )
 	if (in_hypervisor)
 		FATAL("FATAL: already in hypervisor mode while calling hypervisor_enter()");
 	// First, save machine status into hypervisor registers, TODO: incomplete, can be buggy!
-	D6XX_registers[0x40] = cpu_a;
-	D6XX_registers[0x41] = cpu_x;
-	D6XX_registers[0x42] = cpu_y;
-	D6XX_registers[0x43] = cpu_z;
-	D6XX_registers[0x44] = cpu_bphi >> 8;	// "B" register
-	D6XX_registers[0x45] = cpu_sp;
-	D6XX_registers[0x46] = cpu_sphi >> 8;	// stack page register
-	D6XX_registers[0x47] = cpu_get_p();
-	D6XX_registers[0x48] = cpu_pc & 0xFF;
-	D6XX_registers[0x49] = cpu_pc >> 8;
+	D6XX_registers[0x40] = cpu65.a;
+	D6XX_registers[0x41] = cpu65.x;
+	D6XX_registers[0x42] = cpu65.y;
+	D6XX_registers[0x43] = cpu65.z;
+	D6XX_registers[0x44] = cpu65.bphi >> 8;	// "B" register
+	D6XX_registers[0x45] = cpu65.s;
+	D6XX_registers[0x46] = cpu65.sphi >> 8;	// stack page register
+	D6XX_registers[0x47] = cpu65_get_pf();
+	D6XX_registers[0x48] = cpu65.pc & 0xFF;
+	D6XX_registers[0x49] = cpu65.pc >> 8;
 	D6XX_registers[0x4A] = ((map_offset_low  >> 16) & 0x0F) | ((map_mask & 0x0F) << 4);
 	D6XX_registers[0x4B] = ( map_offset_low  >>  8) & 0xFF  ;
 	D6XX_registers[0x4C] = ((map_offset_high >> 16) & 0x0F) | ( map_mask & 0xF0);
@@ -148,12 +148,12 @@ void hypervisor_enter ( int trapno )
 	in_hypervisor = 1;	// this will cause apply_memory_config to map hypervisor RAM, also for checks later to out-of-bound execution of hypervisor RAM, etc ...
 	vic_iomode = VIC4_IOMODE;
 	memory_set_cpu_io_port_ddr_and_data(0x3F, 0x35); // sets all-RAM + I/O config up!
-	cpu_pfd = 0;		// clear decimal mode ... according to Paul, punnishment will be done, if it's removed :-)
-	cpu_pfi = 1;		// disable IRQ in hypervisor mode
-	cpu_pfe = 1;		// 8 bit stack in hypervisor mode
-	cpu_sphi = 0xBE00;	// set a nice shiny stack page
-	cpu_bphi = 0xBF00;	// ... and base page (aka zeropage)
-	cpu_sp = 0xFF;
+	cpu65.pf_d = 0;		// clear decimal mode ... according to Paul, punnishment will be done, if it's removed :-)
+	cpu65.pf_i = 1;		// disable IRQ in hypervisor mode
+	cpu65.pf_e = 1;		// 8 bit stack in hypervisor mode
+	cpu65.sphi = 0xBE00;	// set a nice shiny stack page
+	cpu65.bphi = 0xBF00;	// ... and base page (aka zeropage)
+	cpu65.s = 0xFF;
 	// Set mapping for the hypervisor
 	map_mask = (map_mask & 0xF) | 0x30;	// mapping: 0011XXXX (it seems low region map mask is not changed by hypervisor entry)
 	map_megabyte_high = 0xFF << 20;
@@ -161,8 +161,8 @@ void hypervisor_enter ( int trapno )
 	memory_set_vic3_rom_mapping(0);	// for VIC-III rom mapping disable in hypervisor mode
 	memory_set_do_map();	// now the memory mapping is changed
 	machine_set_speed(0);	// set machine speed (hypervisor always runs at M65 fast ... ??) FIXME: check this!
-	cpu_pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
-	DEBUG("HYPERVISOR: entering into hypervisor mode, trap=$%02X @ $%04X -> $%04X" NL, trapno, D6XX_registers[0x48] | (D6XX_registers[0x49] << 8), cpu_pc);
+	cpu65.pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
+	DEBUG("HYPERVISOR: entering into hypervisor mode, trap=$%02X @ $%04X -> $%04X" NL, trapno, D6XX_registers[0x48] | (D6XX_registers[0x49] << 8), cpu65.pc);
 }
 
 
@@ -172,17 +172,17 @@ void hypervisor_leave ( void )
 	if (!in_hypervisor)
 		FATAL("FATAL: not in hypervisor mode while calling hypervisor_leave()");
 	// First, restore machine status from hypervisor registers
-	DEBUG("HYPERVISOR: leaving hypervisor mode @ $%04X -> $%04X" NL, cpu_pc, D6XX_registers[0x48] | (D6XX_registers[0x49] << 8));
-	cpu_a    = D6XX_registers[0x40];
-	cpu_x    = D6XX_registers[0x41];
-	cpu_y    = D6XX_registers[0x42];
-	cpu_z    = D6XX_registers[0x43];
-	cpu_bphi = D6XX_registers[0x44] << 8;	// "B" register
-	cpu_sp   = D6XX_registers[0x45];
-	cpu_sphi = D6XX_registers[0x46] << 8;	// stack page register
-	cpu_set_p(D6XX_registers[0x47]);
-	cpu_pfe = D6XX_registers[0x47] & 32;	// cpu_set_p() does NOT set 'E' bit by design, so we do at our own
-	cpu_pc   = D6XX_registers[0x48] | (D6XX_registers[0x49] << 8);
+	DEBUG("HYPERVISOR: leaving hypervisor mode @ $%04X -> $%04X" NL, cpu65.pc, D6XX_registers[0x48] | (D6XX_registers[0x49] << 8));
+	cpu65.a    = D6XX_registers[0x40];
+	cpu65.x    = D6XX_registers[0x41];
+	cpu65.y    = D6XX_registers[0x42];
+	cpu65.z    = D6XX_registers[0x43];
+	cpu65.bphi = D6XX_registers[0x44] << 8;	// "B" register
+	cpu65.s    = D6XX_registers[0x45];
+	cpu65.sphi = D6XX_registers[0x46] << 8;	// stack page register
+	cpu65_set_pf(D6XX_registers[0x47]);
+	cpu65.pf_e = D6XX_registers[0x47] & 32;	// cpu_set_p() does NOT set 'E' bit by design, so we do at our own
+	cpu65.pc   = D6XX_registers[0x48] | (D6XX_registers[0x49] << 8);
 	map_offset_low  = ((D6XX_registers[0x4A] & 0xF) << 16) | (D6XX_registers[0x4B] << 8);
 	map_offset_high = ((D6XX_registers[0x4C] & 0xF) << 16) | (D6XX_registers[0x4D] << 8);
 	map_mask = (D6XX_registers[0x4A] >> 4) | (D6XX_registers[0x4C] & 0xF0);
@@ -240,21 +240,21 @@ void hypervisor_debug ( void )
 	if (!in_hypervisor)
 		return;
 	// TODO: better hypervisor upgrade check, maybe with checking the exact range kickstart uses for upgrade outside of the "normal" hypervisor mem range
-	if (XEMU_UNLIKELY((cpu_pc & 0xFF00) == 0x3000)) {	// this area is used by kickstart upgrade
-		DEBUG("HYPERVISOR-DEBUG: allowed to run outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu_pc);
+	if (XEMU_UNLIKELY((cpu65.pc & 0xFF00) == 0x3000)) {	// this area is used by kickstart upgrade
+		DEBUG("HYPERVISOR-DEBUG: allowed to run outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu65.pc);
 		return;
 	}
-	if (XEMU_UNLIKELY((cpu_pc & 0xC000) != 0x8000)) {
-		DEBUG("HYPERVISOR-DEBUG: execution outside of the hypervisor memory, PC = $%04X" NL, cpu_pc);
-		FATAL("Hypervisor fatal error: execution outside of the hypervisor memory, PC=$%04X SP=$%04X", cpu_pc, cpu_sphi | cpu_sp);
+	if (XEMU_UNLIKELY((cpu65.pc & 0xC000) != 0x8000)) {
+		DEBUG("HYPERVISOR-DEBUG: execution outside of the hypervisor memory, PC = $%04X" NL, cpu65.pc);
+		FATAL("Hypervisor fatal error: execution outside of the hypervisor memory, PC=$%04X SP=$%04X", cpu65.pc, cpu65.sphi | cpu65.s);
 		return;
 	}
 	if (!resolver_ok) {
 		return;	// no debug info loaded from kickstart.list ...
 	}
-	if (XEMU_UNLIKELY(!debug_lines[cpu_pc - 0x8000][0][0])) {
-		DEBUG("HYPERVISOR-DEBUG: execution address not found in list file (out-of-bound code?), PC = $%04X" NL, cpu_pc);
-		FATAL("Hypervisor fatal error: execution address not found in list file (out-of-bound code?), PC = $%04X", cpu_pc);
+	if (XEMU_UNLIKELY(!debug_lines[cpu65.pc - 0x8000][0][0])) {
+		DEBUG("HYPERVISOR-DEBUG: execution address not found in list file (out-of-bound code?), PC = $%04X" NL, cpu65.pc);
+		FATAL("Hypervisor fatal error: execution address not found in list file (out-of-bound code?), PC = $%04X", cpu65.pc);
 		return;
 	}
 	// WARNING: as it turned out, using stdio I/O to log every opcodes even "only" at ~3.5MHz rate makes emulation _VERY_ slow ...
@@ -263,19 +263,19 @@ void hypervisor_debug ( void )
 			fprintf(
 				debug_fp,
 				"HYPERVISOR-DEBUG: %-32s PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%d OPC=%02X @ %s" NL,
-				debug_lines[cpu_pc - 0x8000][0],
-				cpu_pc, cpu_sphi | cpu_sp, cpu_bphi >> 8, cpu_a, cpu_x, cpu_y, cpu_z,
-				cpu_pfn ? 'N' : 'n',
-				cpu_pfv ? 'V' : 'v',
-				cpu_pfe ? 'E' : 'e',
+				debug_lines[cpu65.pc - 0x8000][0],
+				cpu65.pc, cpu65.sphi | cpu65.s, cpu65.bphi >> 8, cpu65.a, cpu65.x, cpu65.y, cpu65.z,
+				(cpu65.pf_nz & 128) ? 'N' : 'n',
+				cpu65.pf_v ? 'V' : 'v',
+				cpu65.pf_e ? 'E' : 'e',
 				'-',
-				cpu_pfd ? 'D' : 'd',
-				cpu_pfi ? 'I' : 'i',
-				cpu_pfz ? 'Z' : 'z',
-				cpu_pfc ? 'C' : 'c',
+				cpu65.pf_d ? 'D' : 'd',
+				cpu65.pf_i ? 'I' : 'i',
+				(cpu65.pf_nz & 2) ? 'Z' : 'z',
+				cpu65.pf_c ? 'C' : 'c',
 				vic_iomode,
-				cpu_read(cpu_pc),
-				debug_lines[cpu_pc - 0x8000][1]
+				cpu65_read_callback(cpu65.pc),
+				debug_lines[cpu65.pc - 0x8000][1]
 			);
 	}
 }

@@ -26,7 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
 #include "xemu/f011_core.h"
-#include "xemu/cpu65c02.h"
+#include "xemu/cpu65.h"
 
 
 
@@ -104,7 +104,7 @@ void fdc_set_disk ( int in_have_disk, int in_have_write )
 static int calc_offset ( const char *opdesc )
 {
 	int offset;
-	DEBUG("FDC: %s sector track=%d sector=%d side=%d @ PC=$%04X" NL, opdesc, track, sector, side, cpu_old_pc);
+	DEBUG("FDC: %s sector track=%d sector=%d side=%d @ PC=$%04X" NL, opdesc, track, sector, side, cpu65.old_pc);
 	// FIXME: no checking of input parameters, can be insane values
 	// FIXME: no check for desired track/side and the currently selected/seeked, what should be!
 	// FIXME: whatever :)

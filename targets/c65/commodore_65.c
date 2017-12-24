@@ -18,7 +18,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "xemu/emutools_files.h"
 #include "commodore_65.h"
-#include "xemu/cpu65c02.h"
+#include "xemu/cpu65.h"
 #include "xemu/cia6526.h"
 #include "xemu/f011_core.h"
 #include "c65_d81_image.h"
@@ -142,9 +142,9 @@ static void cia1_setint_cb ( int level )
 {
 	DEBUG("%s: IRQ level changed to %d" NL, cia1.name, level);
 	if (level)
-		cpu_irqLevel |= 1;
+		cpu65.irqLevel |= 1;
 	else
-		cpu_irqLevel &= ~1;
+		cpu65.irqLevel &= ~1;
 }
 
 
@@ -165,7 +165,7 @@ static inline void nmi_set ( int level, int mask )
 		nmi_new_level = nmi_level & (~mask);
 	if ((!nmi_level) && nmi_new_level) {
 		DEBUG("NMI edge is emulated towards the CPU (%d->%d)" NL, nmi_level, nmi_new_level);
-		cpu_nmiEdge = 1;	// the "NMI edge" trigger is deleted by the CPU emulator itself (it's not a level trigger)
+		cpu65.nmiEdge = 1;	// the "NMI edge" trigger is deleted by the CPU emulator itself (it's not a level trigger)
 	}
 	nmi_level = nmi_new_level;
 }
@@ -335,7 +335,7 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	} else
 		ERROR_WINDOW("Cannot open audio device!");
 	// *** RESET CPU, also fetches the RESET vector into PC
-	cpu_reset();
+	cpu65_reset();
 	DEBUG("INIT: end of initialization!" NL);
 	// *** Snapshot init and loading etc should be the LAST!!!! (at least the load must be last to have initiated machine state, xemusnap_init() can be called earlier too)
 #ifdef XEMU_SNAPSHOT_SUPPORT
@@ -357,13 +357,13 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 
 
 // *** Implements the MAP opcode of 4510, called by the 65CE02 emulator
-void cpu_do_aug ( void )
+void cpu65_do_aug_callback ( void )
 {
-	cpu_inhibit_interrupts = 1;	// disable interrupts to the next "EOM" (ie: NOP) opcode
-	DEBUG("CPU: MAP opcode, input A=$%02X X=$%02X Y=$%02X Z=$%02X" NL, cpu_a, cpu_x, cpu_y, cpu_z);
-	map_offset_low  = (cpu_a << 8) | ((cpu_x & 15) << 16);	// offset of lower half (blocks 0-3)
-	map_offset_high = (cpu_y << 8) | ((cpu_z & 15) << 16);	// offset of higher half (blocks 4-7)
-	map_mask        = (cpu_z & 0xF0) | (cpu_x >> 4);	// "is mapped" mask for blocks (1 bit for each)
+	cpu65.cpu_inhibit_interrupts = 1;	// disable interrupts to the next "EOM" (ie: NOP) opcode
+	DEBUG("CPU: MAP opcode, input A=$%02X X=$%02X Y=$%02X Z=$%02X" NL, cpu65.a, cpu65.x, cpu65.y, cpu65.z);
+	map_offset_low  = (cpu65.a << 8) | ((cpu65.x & 15) << 16);	// offset of lower half (blocks 0-3)
+	map_offset_high = (cpu65.y << 8) | ((cpu65.z & 15) << 16);	// offset of higher half (blocks 4-7)
+	map_mask        = (cpu65.z & 0xF0) | (cpu65.x >> 4);	// "is mapped" mask for blocks (1 bit for each)
 	DEBUG("MEM: applying new memory configuration because of MAP CPU opcode" NL);
 	DEBUG("LOW -OFFSET = $%X" NL, map_offset_low);
 	DEBUG("HIGH-OFFSET = $%X" NL, map_offset_high);
@@ -373,10 +373,10 @@ void cpu_do_aug ( void )
 
 
 // *** Implements the EOM opcode of 4510, called by the 65CE02 emulator
-void cpu_do_nop ( void )
+void cpu65_do_nop_callback ( void )
 {
-	if (cpu_inhibit_interrupts) {
-		cpu_inhibit_interrupts = 0;
+	if (cpu65.cpu_inhibit_interrupts) {
+		cpu65.cpu_inhibit_interrupts = 0;
 		DEBUG("CPU: EOM, interrupts were disabled because of MAP till the EOM" NL);
 	} else
 		DEBUG("CPU: NOP in not treated as EOM (no MAP before)" NL);
@@ -406,7 +406,7 @@ static inline Uint8 read_some_sid_register ( int addr )
 static inline void write_some_sid_register ( int addr, Uint8 data )
 {
 	int instance = (addr >> 6) & 1; // Selects left/right SID based on address
-	DEBUG("SID%d: writing register $%04X ($%04X) with data $%02X @ PC=$%04X" NL, ((addr >> 6) & 1) + 1, addr & 0x1F, addr + 0xD000, data, cpu_pc);
+	DEBUG("SID%d: writing register $%04X ($%04X) with data $%02X @ PC=$%04X" NL, ((addr >> 6) & 1) + 1, addr & 0x1F, addr + 0xD000, data, cpu65.pc);
 	sid_write_reg(&sids[instance], addr & 0x1F, data);
 }
 
@@ -626,7 +626,7 @@ Uint8 read_phys_mem ( int addr )
 
 
 // This function is called by the 65CE02 emulator in case of reading a byte (regardless of data or code)
-Uint8 cpu_read ( Uint16 addr )
+Uint8 cpu65_read_callback ( Uint16 addr )
 {
 	register int phys_addr = addr_trans_rd[addr >> 12] + addr;	// translating address with the READ table created by apply_memory_config()
 	if (XEMU_LIKELY(phys_addr < 0x10FF00))
@@ -638,7 +638,7 @@ Uint8 cpu_read ( Uint16 addr )
 
 
 // This function is called by the 65CE02 emulator in case of writing a byte
-void cpu_write ( Uint16 addr, Uint8 data )
+void cpu65_write_callback ( Uint16 addr, Uint8 data )
 {
 	register int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
 	if (XEMU_LIKELY(phys_addr < 0x10FF00))
@@ -656,7 +656,7 @@ void cpu_write ( Uint16 addr, Uint8 data )
 // However this leads to incompatibilities, as some software used the RMW behavour by intent.
 // Thus Mega65 fixed the problem to "restore" the old way of RMW behaviour.
 // I also follow this path here, even if it's *NOT* what 65CE02 would do actually!
-void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
+void cpu65_write_rmw_callback ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 {
 	int phys_addr = addr_trans_wr[addr >> 12] + addr;	// translating address with the WRITE table created by apply_memory_config()
 	if (XEMU_LIKELY(phys_addr < 0x10FF00))
@@ -690,7 +690,7 @@ static void shutdown_callback ( void )
 	}
 #endif
 	printf("Scanline render info = \"%s\"" NL, scanline_render_debug_info);
-	DEBUG("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu_pc, addr_trans_rd[cpu_pc >> 12] + cpu_pc);
+	DEBUG("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu65.pc, addr_trans_rd[cpu65.pc >> 12] + cpu65.pc);
 }
 
 
@@ -700,7 +700,7 @@ static void c65_reset ( void )
 	map_mask = 0;
 	vic3_registers[0x30] = 0;
 	apply_memory_config();
-	cpu_reset();
+	cpu65_reset();
 	dma_reset();
 	nmi_level = 0;
 	DEBUG("RESET!" NL);
@@ -797,7 +797,7 @@ int main ( int argc, char **argv )
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();
 	for (;;) {
-		cycles += XEMU_UNLIKELY(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu_step(
+		cycles += XEMU_UNLIKELY(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
 #ifdef CPU_STEP_MULTI_OPS
 			cpu_cycles_per_scanline
 #endif
@@ -846,7 +846,7 @@ int c65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, 
 	map_mask = (int)P_AS_BE32(buffer + 0);
 	map_offset_low = (int)P_AS_BE32(buffer + 4);
 	map_offset_high = (int)P_AS_BE32(buffer + 8);
-	cpu_inhibit_interrupts = (int)P_AS_BE32(buffer + 12);
+	cpu65.cpu_inhibit_interrupts = (int)P_AS_BE32(buffer + 12);
 	return 0;
 }
 
@@ -861,7 +861,7 @@ int c65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	U32_AS_BE(buffer +  0, map_mask);
 	U32_AS_BE(buffer +  4, map_offset_low);
 	U32_AS_BE(buffer +  8, map_offset_high);
-	U32_AS_BE(buffer + 12, cpu_inhibit_interrupts);
+	U32_AS_BE(buffer + 12, cpu65.cpu_inhibit_interrupts);
 	return xemusnap_write_sub_block(buffer, sizeof buffer);
 }
 

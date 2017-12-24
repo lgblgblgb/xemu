@@ -18,7 +18,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
 #include "xemu/f018_core.h"
-#include "xemu/cpu65c02.h"
+#include "xemu/cpu65.h"
 
 
 /* NOTES ABOUT C65/M65 DMAgic "F018", AND THIS EMULATION:
@@ -187,7 +187,7 @@ void dma_write_reg ( int addr, Uint8 data )
 	DEBUG("DMA: list address is [MB=$%02X]$%06X now, just written to register %d value $%02X" NL, list_megabyte >> 20, dma_list_addr, addr, data);
 	dma_status = 0x80;	// DMA is busy now, also to signal the emulator core to call dma_update() in its main loop
 	command = -1;		// signal dma_update() that it's needed to fetch the DMA command, no command is fetched yet
-	cpu_multi_step_stop_trigger = 1;	// trigger stopping multi-op CPU emulation mode, otherwise "delayed DMAs" would overlap each other resulting "panic"
+	cpu65.multi_step_stop_trigger = 1;	// trigger stopping multi-op CPU emulation mode, otherwise "delayed DMAs" would overlap each other resulting "panic"
 }
 
 

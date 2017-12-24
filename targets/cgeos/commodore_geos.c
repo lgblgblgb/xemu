@@ -33,7 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "xemu/emutools_files.h"
 #include "commodore_geos.h"
-#include "xemu/cpu65c02.h"
+#include "xemu/cpu65.h"
 #include "xemu/cia6526.h"
 #include "xemu/emutools_hid.h"
 #include "xemu/emutools_config.h"
@@ -82,7 +82,7 @@ Uint8 memory[IO_OFFSET + 1];
 #define KERNAL_PATCH_ADDR	0xE388
 #define PATCH_P			memory[KERNAL_PATCH_ADDR - 0xE000 + KERNAL_ROM_OFFSET]
 #define PATCH_OLD_BYTE		0x6C
-#define PATCH_NEW_BYTE		CPU_TRAP
+#define PATCH_NEW_BYTE		CPU65_TRAP_OPCODE
 
 
 static Uint8 *memcfgs[8][2][16] = {
@@ -181,7 +181,7 @@ static inline void PIXEL_POINTER_FINAL_ASSERT ( Uint32 *p )
 
 static void vic2_interrupt_checker ( void )
 {
-	int vic_irq_old = cpu_irqLevel & 2;
+	int vic_irq_old = cpu65.irqLevel & 2;
 	int vic_irq_new;
 	if (vic2_interrupt_status & vic2_registers[0x1A]) {
 		vic2_interrupt_status |= 128;
@@ -193,9 +193,9 @@ static void vic2_interrupt_checker ( void )
 	if (vic_irq_old != vic_irq_new) {
 		DEBUG("VIC2: interrupt change %s -> %s" NL, vic_irq_old ? "active" : "inactive", vic_irq_new ? "active" : "inactive");
 		if (vic_irq_new)
-			cpu_irqLevel |= 2;
+			cpu65.irqLevel |= 2;
 		else
-			cpu_irqLevel &= ~2;
+			cpu65.irqLevel &= ~2;
 	}
 }
 
@@ -470,9 +470,9 @@ static void cia1_setint_cb ( int level )
 {
 	DEBUG("%s: IRQ level changed to %d" NL, cia1.name, level);
 	if (level)
-		cpu_irqLevel |= 1;
+		cpu65.irqLevel |= 1;
 	else
-		cpu_irqLevel &= ~1;
+		cpu65.irqLevel &= ~1;
 }
 
 
@@ -493,7 +493,7 @@ static inline void nmi_set ( int level, int mask )
 		nmi_new_level = nmi_level & (~mask);
 	if ((!nmi_level) && nmi_new_level) {
 		DEBUG("NMI edge is emulated towards the CPU (%d->%d)" NL, nmi_level, nmi_new_level);
-		cpu_nmiEdge = 1;	// the "NMI edge" trigger is deleted by the CPU emulator itself (it's not a level trigger)
+		cpu65.nmiEdge = 1;	// the "NMI edge" trigger is deleted by the CPU emulator itself (it's not a level trigger)
 	}
 	nmi_level = nmi_new_level;
 }
@@ -552,12 +552,12 @@ static void cpu_port_write ( int addr, Uint8 data )
 	memory[addr] = data;
 	if (addr) {
 		if (cpu_port_memconfig == (data & 7))
-			DEBUG("MEM: memory configuration is the SAME: %d %s @ PC = $%04X" NL, cpu_port_memconfig, memconfig_descriptions[cpu_port_memconfig], cpu_pc);
+			DEBUG("MEM: memory configuration is the SAME: %d %s @ PC = $%04X" NL, cpu_port_memconfig, memconfig_descriptions[cpu_port_memconfig], cpu65.pc);
 		else {
 			DEBUG("MEM: memory configuration is CHANGED : %d %s (from %d %s) @ PC = $%02X" NL,
 				data & 7,           memconfig_descriptions[data & 7],
 				cpu_port_memconfig, memconfig_descriptions[cpu_port_memconfig],
-				cpu_pc
+				cpu65.pc
 			);
 			cpu_port_memconfig = data & 7;
 		}
@@ -618,7 +618,7 @@ static void geosemu_init ( void )
 	// Initialize Disk Image
 	// TODO
 	// *** RESET CPU, also fetches the RESET vector into PC
-	cpu_reset();
+	cpu65_reset();
 	DEBUG("INIT: end of initialization!" NL);
 }
 
@@ -626,7 +626,7 @@ static void geosemu_init ( void )
 
 static Uint8 io_read ( int addr )
 {
-	DEBUG("IO: reading $%04X @ PC=$%04X" NL, addr, cpu_pc);
+	DEBUG("IO: reading $%04X @ PC=$%04X" NL, addr, cpu65.pc);
 	if (addr < 0xD400)		// D000-D3FF  VIC-II
 		return vic2_read_reg(addr);
 	if (addr < 0xD800)		// D400-D7FF  SID   (not emulated here)
@@ -644,7 +644,7 @@ static Uint8 io_read ( int addr )
 
 static void io_write ( int addr, Uint8 data )
 {
-	DEBUG("IO: writing $%04X with $%02X @ PC=$%04X" NL, addr, data, cpu_pc);
+	DEBUG("IO: writing $%04X with $%02X @ PC=$%04X" NL, addr, data, cpu65.pc);
 	if (addr < 0xD400) {		// D000-D3FF  VIC-II
 		vic2_write_reg(addr, data);
 		return;
@@ -668,23 +668,23 @@ static void io_write ( int addr, Uint8 data )
 
 
 
-int cpu_trap ( Uint8 opcode )
+int cpu65_trap_callback ( Uint8 opcode )
 {
-	Uint8 *pc_p = GET_READ_P(cpu_pc);
+	Uint8 *pc_p = GET_READ_P(cpu65.pc);
 	if (pc_p != 1 + &PATCH_P) {
 		if (warp)
-			FATAL("FATAL: CPU trap at unknown address in warp mode (pre-GEOS loading) PC=$%04X OP=$%02X" NL, cpu_pc, opcode);
+			FATAL("FATAL: CPU trap at unknown address in warp mode (pre-GEOS loading) PC=$%04X OP=$%02X" NL, cpu65.pc, opcode);
 		if (pc_p >= memory + 0x10000)
-			FATAL("FATAL: unknown CPU trap not in the RAM PC=$%04X OP=$%02X" NL, cpu_pc, opcode);
+			FATAL("FATAL: unknown CPU trap not in the RAM PC=$%04X OP=$%02X" NL, cpu65.pc, opcode);
 		if (geos_loaded != 2)
-			FATAL("FATAL: unknown CPU without GEOS loaded PC=$%04X OP=$%02X" NL, cpu_pc, opcode);
+			FATAL("FATAL: unknown CPU without GEOS loaded PC=$%04X OP=$%02X" NL, cpu65.pc, opcode);
 		geos_cpu_trap(opcode);
 		return 1;
 	}
 	warp = 0;	// turn warp speed off
 	// Try to load a custom GEOS kernal directly into the RAM
 	if (geos_loaded) {
-		cpu_pc = memory[0x300] | (memory[0x301] << 8);
+		cpu65.pc = memory[0x300] | (memory[0x301] << 8);
 		return 1;
 	}
 	if (!geos_load_kernal(xemucfg_get_str("geoskernal"))) {
@@ -695,14 +695,14 @@ int cpu_trap ( Uint8 opcode )
 	// In case if we cannot load some GEOS kernal stuff, continue in "C64 mode" ... :-/
 	// Some ugly method to produce custom "startup screen" :)
 	inject_screencoded_message(41, "**** Can't load GEOS, boot as C64 ****");
-	cpu_pc = memory[0x300] | (memory[0x301] << 8);
+	cpu65.pc = memory[0x300] | (memory[0x301] << 8);
 	return 1;	// do NOT execute the trap op
 }
 
 
 
 // This function is called by the 65C02 emulator in case of reading a byte (regardless of data or code)
-Uint8 cpu_read ( Uint16 addr )
+Uint8 cpu65_read_callback ( Uint16 addr )
 {
 	Uint8 *p = GET_READ_P(addr);
 	return IS_P_IO(p) ? io_read(addr) : *p;
@@ -711,7 +711,7 @@ Uint8 cpu_read ( Uint16 addr )
 
 
 // This function is called by the 65C02 emulator in case of writing a byte
-void cpu_write ( Uint16 addr, Uint8 data )
+void cpu65_write_callback ( Uint16 addr, Uint8 data )
 {
 	Uint8 *p = GET_WRITE_P(addr);
 	if (IS_P_IO(p))
@@ -727,7 +727,7 @@ void cpu_write ( Uint16 addr, Uint8 data )
 // Called in case of an RMW (read-modify-write) opcode write access.
 // Original NMOS 6502 would write the old_data first, then new_data.
 // It has no inpact in case of normal RAM, but it *does* with an I/O register in some cases!
-void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
+void cpu65_write_rmw_callback ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 {
 	Uint8 *p = GET_WRITE_P(addr);
 	if (IS_P_IO(p)) {
@@ -743,7 +743,7 @@ void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 
 static void shutdown_callback ( void )
 {
-	DEBUG("SHUTDOWN: @ PC=$%04X" NL, cpu_pc);
+	DEBUG("SHUTDOWN: @ PC=$%04X" NL, cpu65.pc);
 }
 
 
@@ -754,7 +754,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 		if (key == SDL_SCANCODE_F10) {
 			cpu_port_write(0, CPU_PORT_DEFAULT_VALUE0);
 			cpu_port_write(1, CPU_PORT_DEFAULT_VALUE1);
-			cpu_reset();
+			cpu65_reset();
 			nmi_level = 0;
 			DEBUG("RESET!" NL);
 		} else if (key == SDL_SCANCODE_KP_ENTER)
@@ -822,7 +822,7 @@ int main ( int argc, char **argv )
 	// Start!!
 	xemu_timekeeping_start();
 	for (;;) {
-		int opcyc = cpu_step();
+		int opcyc = cpu65_step();
 		cia_tick(&cia1, opcyc);
 		cia_tick(&cia2, opcyc);
 		cycles += opcyc;

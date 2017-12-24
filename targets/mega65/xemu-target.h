@@ -12,3 +12,4 @@
 //#define HAVE_XEMU_UMON
 #endif
 #define HAVE_XEMU_INSTALLER
+#define CPU65 cpu65

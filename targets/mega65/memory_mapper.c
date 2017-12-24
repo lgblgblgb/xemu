@@ -28,7 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "memory_mapper.h"
 #include "mega65.h"
 #include "io_mapper.h"
-#include "xemu/cpu65c02.h"
+#include "xemu/cpu65.h"
 #include "hypervisor.h"
 #include "vic4.h"
 #include <string.h>
@@ -194,16 +194,16 @@ DEFINE_WRITER(slow_ram_writer) {
 }
 DEFINE_READER(invalid_mem_reader) {
 	if (XEMU_LIKELY(skip_unhandled_mem))
-		DEBUGPRINT("WARNING: Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, GET_READER_OFFSET(), cpu_pc);
+		DEBUGPRINT("WARNING: Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, GET_READER_OFFSET(), cpu65.pc);
 	else
-		FATAL("Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, GET_READER_OFFSET(), cpu_pc);
+		FATAL("Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, GET_READER_OFFSET(), cpu65.pc);
 	return 0xFF;
 }
 DEFINE_WRITER(invalid_mem_writer) {
 	if (XEMU_LIKELY(skip_unhandled_mem))
-		DEBUGPRINT("WARNING: Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, GET_WRITER_OFFSET(), data, cpu_pc);
+		DEBUGPRINT("WARNING: Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, GET_WRITER_OFFSET(), data, cpu65.pc);
 	else
-		FATAL("Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, GET_WRITER_OFFSET(), data, cpu_pc);
+		FATAL("Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, GET_WRITER_OFFSET(), data, cpu65.pc);
 }
 DEFINE_READER(fatal_mem_reader) {
 	FATAL("Unhandled physical memory mapping on read map. Xemu software bug?");
@@ -685,7 +685,7 @@ void memory_set_do_map ( void )
 
 // This implements the MAP opcode, ie "AUG" in case of 65CE02, which was re-defined to "MAP" in C65's CPU
 // M65's extension to select "MB" (ie: megabyte slice, which wraps within!) is supported as well
-void cpu_do_aug ( void )
+void cpu65_do_aug_callback ( void )
 {
 	/*   7       6       5       4       3       2       1       0    BIT
 	+-------+-------+-------+-------+-------+-------+-------+-------+
@@ -709,16 +709,16 @@ void cpu_do_aug ( void )
 	if reg_z = x"0f" then
 		reg_mb_high <= reg_y;
 	end if; */
-	cpu_inhibit_interrupts = 1;	// disable interrupts till the next "EOM" (ie: NOP) opcode
-	DEBUG("CPU: MAP opcode, input A=$%02X X=$%02X Y=$%02X Z=$%02X" NL, cpu_a, cpu_x, cpu_y, cpu_z);
-	map_offset_low	= (cpu_a << 8) | ((cpu_x & 15) << 16);	// offset of lower half (blocks 0-3)
-	map_offset_high	= (cpu_y << 8) | ((cpu_z & 15) << 16);	// offset of higher half (blocks 4-7)
-	map_mask	= (cpu_z & 0xF0) | (cpu_x >> 4);	// "is mapped" mask for blocks (1 bit for each)
+	cpu65.cpu_inhibit_interrupts = 1;	// disable interrupts till the next "EOM" (ie: NOP) opcode
+	DEBUG("CPU: MAP opcode, input A=$%02X X=$%02X Y=$%02X Z=$%02X" NL, cpu65.a, cpu65.x, cpu65.y, cpu65.z);
+	map_offset_low	= (cpu65.a <<   8) | ((cpu65.x & 15) << 16);	// offset of lower half (blocks 0-3)
+	map_offset_high	= (cpu65.y <<   8) | ((cpu65.z & 15) << 16);	// offset of higher half (blocks 4-7)
+	map_mask	= (cpu65.z & 0xF0) | ( cpu65.x >> 4);		// "is mapped" mask for blocks (1 bit for each)
 	// M65 specific "MB" (megabyte) selector "mode":
-	if (cpu_x == 0x0F)
-		map_megabyte_low  = (int)cpu_a << 20;
-	if (cpu_z == 0x0F)
-		map_megabyte_high = (int)cpu_y << 20;
+	if (cpu65.x == 0x0F)
+		map_megabyte_low  = (int)cpu65.a << 20;
+	if (cpu65.z == 0x0F)
+		map_megabyte_high = (int)cpu65.y << 20;
 	DEBUG("MEM: applying new memory configuration because of MAP CPU opcode" NL);
 	DEBUG("LOW -OFFSET = $%03X, MB = $%02X" NL, map_offset_low , map_megabyte_low  >> 20);
 	DEBUG("HIGH-OFFSET = $%03X, MB = $%02X" NL, map_offset_high, map_megabyte_high >> 20);
@@ -729,10 +729,10 @@ void cpu_do_aug ( void )
 
 
 // *** Implements the EOM opcode of 4510, called by the 65CE02 emulator
-void cpu_do_nop ( void )
+void cpu65_do_nop_callback ( void )
 {
-	if (cpu_inhibit_interrupts) {
-		cpu_inhibit_interrupts = 0;
+	if (cpu65.cpu_inhibit_interrupts) {
+		cpu65.cpu_inhibit_interrupts = 0;
 		DEBUG("CPU: EOM, interrupts were disabled because of MAP till the EOM" NL);
 	} else
 		DEBUG("CPU: NOP not treated as EOM (no MAP before)" NL);
@@ -747,26 +747,26 @@ void cpu_do_nop ( void )
 
 static XEMU_INLINE int cpu_get_flat_addressing_mode_address ( void )
 {
-	register int addr = cpu_read(cpu_pc++);	// fetch base page address
+	register int addr = cpu65_read_callback(cpu65.pc++);	// fetch base page address
 	// FIXME: really, BP/ZP is wrapped around in case of linear addressing and eg BP addr of $FF got?????? (I think IT SHOULD BE!)
 	// FIXME: migrate to cpu_read_paged(), but we need CPU emu core to utilize BP rather than BP << 8, and
 	// similar older hacks ...
 	return (
-		 cpu_read(cpu_bphi |   addr             )        |
-		(cpu_read(cpu_bphi | ((addr + 1) & 0xFF)) <<  8) |
-		(cpu_read(cpu_bphi | ((addr + 2) & 0xFF)) << 16) |
-		(cpu_read(cpu_bphi | ((addr + 3) & 0xFF)) << 24)
-	) + cpu_z;	// I don't handle the overflow of 28 bit addr.space situation, as addr will be anyway "trimmed" later in phys_addr_decoder() issued by the user of this func
+		 cpu65_read_callback(cpu65.bphi |   addr             )        |
+		(cpu65_read_callback(cpu65.bphi | ((addr + 1) & 0xFF)) <<  8) |
+		(cpu65_read_callback(cpu65.bphi | ((addr + 2) & 0xFF)) << 16) |
+		(cpu65_read_callback(cpu65.bphi | ((addr + 3) & 0xFF)) << 24)
+	) + cpu65.z;	// I don't handle the overflow of 28 bit addr.space situation, as addr will be anyway "trimmed" later in phys_addr_decoder() issued by the user of this func
 }
 
-Uint8 cpu_read_linear_opcode ( void )
+Uint8 cpu65_read_linear_opcode_callback ( void )
 {
 	register int addr = cpu_get_flat_addressing_mode_address();
 	phys_addr_decoder(addr, MEM_SLOT_CPU_32BIT, MEM_SLOT_CPU_32BIT);
 	return CALL_MEMORY_READER(MEM_SLOT_CPU_32BIT, addr);
 }
 
-void cpu_write_linear_opcode ( Uint8 data )
+void cpu65_write_linear_opcode_callback ( Uint8 data )
 {
 	register int addr = cpu_get_flat_addressing_mode_address();
 	phys_addr_decoder(addr, MEM_SLOT_CPU_32BIT, MEM_SLOT_CPU_32BIT);

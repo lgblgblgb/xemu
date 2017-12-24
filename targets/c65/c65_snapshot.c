@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_snapshot.h"
 #include "xemu/emutools_config.h"
 #include "commodore_65.h"
-#include "xemu/cpu65c02.h"
+#include "xemu/cpu65.h"
 #include "xemu/cia6526.h"
 #include "vic3.h"
 #include "xemu/sid.h"
@@ -63,7 +63,7 @@ static int snapcallback_memory_saver ( const struct xemu_snapshot_definition_st 
    CIA/CPU/SID can be included this way without any emulator-specific snapshot code, and realized
    in the shared/common code base. */
 const struct xemu_snapshot_definition_st c65_snapshot_definition[] = {
-	{ "CPU",   NULL,  cpu_snapshot_load_state, cpu_snapshot_save_state },
+	{ "CPU",   NULL,  cpu65_snapshot_load_state, cpu65_snapshot_save_state },
 	{ "CIA#1", &cia1, cia_snapshot_load_state, cia_snapshot_save_state },
 	{ "CIA#2", &cia2, cia_snapshot_load_state, cia_snapshot_save_state },
 	{ "VIC-3", NULL,  vic3_snapshot_load_state, vic3_snapshot_save_state },

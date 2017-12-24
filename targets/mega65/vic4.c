@@ -28,7 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
 #include "mega65.h"
-#include "xemu/cpu65c02.h"
+#include "xemu/cpu65.h"
 #include "vic4.h"
 #include "memory_mapper.h"
 
@@ -151,7 +151,7 @@ void vic_init ( void )
 
 static void vic3_interrupt_checker ( void )
 {
-	int vic_irq_old = cpu_irqLevel & 2;
+	int vic_irq_old = cpu65.irqLevel & 2;
 	int vic_irq_new;
 	if ((interrupt_status & vic_registers[0x1A])) {
 		interrupt_status |= 128;
@@ -163,9 +163,9 @@ static void vic3_interrupt_checker ( void )
 	if (vic_irq_old != vic_irq_new) {
 		DEBUG("VIC3: interrupt change %s -> %s" NL, vic_irq_old ? "active" : "inactive", vic_irq_new ? "active" : "inactive");
 		if (vic_irq_new)
-			cpu_irqLevel |= 2;
+			cpu65.irqLevel |= 2;
 		else
-			cpu_irqLevel &= ~2;
+			cpu65.irqLevel &= ~2;
 	}
 }
 

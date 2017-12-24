@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_snapshot.h"
 #include "xemu/emutools_config.h"
 #include "mega65.h"
-#include "xemu/cpu65c02.h"
+#include "xemu/cpu65.h"
 #include "xemu/cia6526.h"
 #include "vic4.h"
 #include "xemu/sid.h"
@@ -74,7 +74,7 @@ static const struct memblock_st memblock_char_wom	= { char_wom, sizeof char_wom 
 static const struct memblock_st memblock_hypervisor	= { hypervisor_ram, 0x4000 };
 
 const struct xemu_snapshot_definition_st m65_snapshot_definition[] = {
-	{ "CPU",   NULL,  cpu_snapshot_load_state, cpu_snapshot_save_state },
+	{ "CPU",   NULL,  cpu65_snapshot_load_state, cpu65_snapshot_save_state },
 	{ "CIA#1", &cia1, cia_snapshot_load_state, cia_snapshot_save_state },
 	{ "CIA#2", &cia2, cia_snapshot_load_state, cia_snapshot_save_state },
 	{ "VIC-4", NULL,  vic4_snapshot_load_state, vic4_snapshot_save_state },
