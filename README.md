@@ -27,3 +27,18 @@ This file is only some place holder :) For some sane documentation, please **vis
 the wiki section of the project, here**:
 
 https://github.com/lgblgblgb/xemu/wiki
+
+## Quick start on Ubuntu Linux
+```sh
+sudo apt update
+sudo apt install git build-essential libsdl2-dev libgtk-3-dev libreadline-dev
+git clone https://github.com/lgblgblgb/xemu.git
+cd xemu/
+# Download ROMs:
+make roms
+# Compile:
+make
+# Run:
+build/bin/xmega65.native
+```
+For other platforms and more details, see the [Wiki](https://github.com/lgblgblgb/xemu/wiki/Source).
