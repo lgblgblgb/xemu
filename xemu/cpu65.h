@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -27,7 +27,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 	  need to "construct" it from individual flag info data.
 	  Type is "int" since in some cases they're implemented with > 8 bit data
 	  length steps during opcode emulation.
-	* pf_nz is an exception to the scheme above: 65xx CPU family is famous for
+	* if CPU65_DISCRETE_PF_NZ is *NOT* defined:
+	  pf_nz is an exception to the scheme above: 65xx CPU family is famous for
 	  altering N and Z flags always if a general purpose register is filled,
 	  even with eg TXA. So this is the way more frequent opcode flag operation
 	  in general. Thus, I included two bits at the right bit position for N and
@@ -51,7 +52,12 @@ struct cpu65_st {
 	int cpu_inhibit_interrupts;
 	int pf_e;
 #endif
-	int pf_nz, pf_c, pf_v, pf_d, pf_i;
+#ifdef CPU65_DISCRETE_PF_NZ
+	int pf_n, pf_z;
+#else
+	Uint8 pf_nz;
+#endif
+	int pf_c, pf_v, pf_d, pf_i;
 	Uint16 pc, old_pc;
 	int multi_step_stop_trigger;	// not used, only with multi-op mode but still here because some devices (like DMA) would use it
 	int irqLevel, nmiEdge;
@@ -64,21 +70,6 @@ struct cpu65_st {
 
 extern struct cpu65_st CPU65;
 
-//extern int cpu_irqLevel;
-//extern int cpu_nmiEdge;
-
-//extern Uint16 cpu_pc, cpu_old_pc;
-//extern Uint8  cpu_op;
-
-//extern Uint8 cpu_a, cpu_x, cpu_y, cpu_sp;
-//extern int cpu_pfn,cpu_pfv,cpu_pfb,cpu_pfd,cpu_pfi,cpu_pfz,cpu_pfc;
-#ifdef CPU_65CE02
-//extern int cpu_pfe;
-//extern Uint8 cpu_z;
-//extern int cpu_inhibit_interrupts;
-//extern Uint16 cpu_bphi;	// NOTE: it must store the value shifted to the high byte!
-//extern Uint16 cpu_sphi;	// NOTE: it must store the value shifted to the high byte!
-#endif
 #ifdef MEGA65
 extern int cpu_linear_memory_addressing_is_enabled;
 #endif

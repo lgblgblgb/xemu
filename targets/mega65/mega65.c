@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -67,8 +67,8 @@ void machine_set_speed ( int verbose )
 	// Actually the rule would be something like that (this comment is here by intent, for later implementation FIXME TODO), some VHDL draft only:
 	// cpu_speed := vicii_2mhz&viciii_fast&viciv_fast
 	// if hypervisor_mode='0' and ((speed_gate='1') and (force_fast='0')) then -- LGB: vicii_2mhz seems to be a low-active signal?
-	// case cpu_speed is ...... 100=1MHz, 101=1MHz, 110=3.5MHz, 111=48Mhz, 000=2MHz, 001=48MHz, 010=3.5MHz, 011=48MHz
-	// else 48MHz end if;
+	// case cpu_speed is ...... 100=1MHz, 101=1MHz, 110=3.5MHz, 111=50Mhz, 000=2MHz, 001=50MHz, 010=3.5MHz, 011=50MHz
+	// else 50MHz end if;
 	// it seems hypervisor always got full speed, and force_fast (ie, POKE 0,65) always forces the max
 	// TODO: what is speed_gate? (it seems to be a PMOD input and/or keyboard controll with CAPS-LOCK)
 	// TODO: how 2MHz is selected, it seems a double decoded VIC-X registers which is not so common in VIC modes yet, I think ...
@@ -97,7 +97,7 @@ void machine_set_speed ( int verbose )
 				cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
 				strcpy(emulator_speed_title, "3.5MHz");
 				break;
-			case 1:	// 001 - 48MHz (or Xemu specified custom speed)
+			case 1:	// 001 - 50MHz (or Xemu specified custom speed)
 			case 3:	// 011 -		-- "" --
 			case 7:	// 111 -		-- "" --
 				cpu_cycles_per_scanline = cpu_cycles_per_scanline_for_fast_mode;
@@ -470,6 +470,7 @@ static void update_emulator ( void )
 
 void m65mon_show_regs ( void )
 {
+	Uint8 pf = cpu65_get_pf();
 	umon_printf(
 		"PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
 		"%04X %02X %02X %02X %02X %02X %04X "		// register banned message and things from PC to SP
@@ -477,16 +478,16 @@ void m65mon_show_regs ( void )
 		"%c%c%c%c%c%c%c%c ",				// P-FLAGS
 		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z, cpu65.bphi >> 8, cpu65.sphi | cpu65.s,
 		map_offset_low >> 8, map_offset_high >> 8, cpu65.op,
-		cpu65_get_pf(), 0,	// flags
-		(cpu65.pf_nz & 128) ? 'N' : '-',
-		cpu65.pf_v ? 'V' : '-',
-		cpu65.pf_e ? 'E' : '-',
+		pf, 0,	// flags
+		(pf & 128) ? 'N' : '-',
+		(pf &  64) ? 'V' : '-',
+		(pf &  32) ? 'E' : '-',
 		//cpu_pfb ? 'B' : '-',
 		'-',
-		cpu65.pf_d ? 'D' : '-',
-		cpu65.pf_i ? 'I' : '-',
-		(cpu65.pf_nz & 2) ? 'Z' : '-',
-		cpu65.pf_c ? 'C' : '-'
+		(pf &   8) ? 'D' : '-',
+		(pf &   4) ? 'I' : '-',
+		(pf &   2) ? 'Z' : '-',
+		(pf &   1) ? 'C' : '-'
 	);
 }
 

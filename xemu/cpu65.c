@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    THIS IS AN UGLY PIECE OF SOURCE REALLY.
 
@@ -89,9 +89,11 @@ static const Uint8 opcycles[] = {7,6,2,2,5,3,5,5,3,2,2,2,6,4,6,2,2,5,5,2,5,4,6,5
 #define PF_D 0x08
 #define PF_I 0x04
 #define PF_Z 0x02
-#define PF_C 0x00
+#define PF_C 0x01
 
+#ifndef CPU65_DISCRETE_PF_NZ
 #define VALUE_TO_PF_ZERO(a) ((a) ? 0 : PF_Z)
+#endif
 
 #define writeFlatAddressedByte(d)	cpu65_write_linear_opcode_callback(d)
 #define writeByteTwice(a,od,nd)		cpu65_write_rmw_callback(a,od,nd)
@@ -112,7 +114,7 @@ static XEMU_INLINE void push ( Uint8 data )
 {
 	writeByte(CPU65.s | CPU65.sphi, data);
 	CPU65.s--;
-	if (CPU65.s == 0xFF && (!CPU65.pf_e)) {
+	if (XEMU_UNLIKELY(CPU65.s == 0xFF && (!CPU65.pf_e))) {
 		CPU65.sphi -= 0x100;
 #ifdef DEBUG_CPU
 		DEBUG("CPU: 65CE02: SPHI changed to $%04X" NL, CPU65.sphi);
@@ -122,7 +124,7 @@ static XEMU_INLINE void push ( Uint8 data )
 static XEMU_INLINE Uint8 pop ( void )
 {
 	CPU65.s++;
-	if (CPU65.s == 0 && (!CPU65.pf_e)) {
+	if (XEMU_UNLIKELY(CPU65.s == 0 && (!CPU65.pf_e))) {
 		CPU65.sphi += 0x100;
 #ifdef DEBUG_CPU
 		DEBUG("CPU: 65CE02: SPHI changed to $%04X" NL, CPU65.sphi);
@@ -148,30 +150,37 @@ static XEMU_INLINE void  pushWord_rev(Uint16 data) { push(data & 0xFF); push(dat
 
 
 void cpu65_set_pf(Uint8 st) {
-	//cpu_pfn = st & 128;
+#ifdef CPU65_DISCRETE_PF_NZ
+	CPU65.pf_n = st & PF_N;
+	CPU65.pf_z = st & PF_Z;
+#else
 	CPU65.pf_nz = st & (PF_N | PF_Z);
+#endif
 	CPU65.pf_v = st & PF_V;
 #ifdef CPU_65CE02
 	// Note: E bit cannot be changed by PLP/RTI, so it's commented out here ...
 	// At least *I* think :) FIXME?
 	// CPU65.pf_e = st & PF_E;
 #endif
-	//cpu_pfb = st &  16;
 	CPU65.pf_d = st & PF_D;
 	CPU65.pf_i = st & PF_I;
-	//cpu_pfz = st &   2;
 	CPU65.pf_c = st & PF_C;
 }
 
 Uint8 cpu65_get_pf() {
-	return CPU65.pf_nz |
+	return
+#ifdef CPU65_DISCRETE_PF_NZ
+	(CPU65.pf_n ? PF_N : 0) | (CPU65.pf_z ? PF_Z : 0)
+#else
+	CPU65.pf_nz
+#endif
+	|
 	(CPU65.pf_v ?  PF_V : 0) |
 #ifdef CPU_65CE02
 	(CPU65.pf_e ?  PF_E : 0) |
 #else
 	PF_E |
 #endif
-	//(cpu_pfb ?  16 : 0) |
 	(CPU65.pf_d ? PF_D : 0) |
 	(CPU65.pf_i ? PF_I : 0) |
 	(CPU65.pf_c ? PF_C : 0);
@@ -198,15 +207,21 @@ void cpu65_reset() {
 
 
 static XEMU_INLINE void setNZ(Uint8 st) {
-	//cpu_pfn = st & 128;
-	//cpu_pfz = !st;
-	CPU65.pf_nz = (st & 0x80) | VALUE_TO_PF_ZERO(st);
+#ifdef CPU65_DISCRETE_PF_NZ
+	CPU65.pf_n = st & PF_N;
+	CPU65.pf_z = !st;
+#else
+	CPU65.pf_nz = (st & PF_N) | VALUE_TO_PF_ZERO(st);
+#endif
 }
 #ifdef CPU_65CE02
 static XEMU_INLINE void setNZ16(Uint16 st) {
-	//cpu_pfn = st & 0x8000;
-	//cpu_pfz = !st;
+#ifdef CPU65_DISCRETE_PF_NZ
+	CPU65.pf_n = st & 0x8000;
+	CPU65.pf_z = !st;
+#else
 	CPU65.pf_nz = ((st & 0x8000) >> 8) | VALUE_TO_PF_ZERO(st);
+#endif
 }
 #endif
 
@@ -290,14 +305,20 @@ static XEMU_INLINE void _CMP(Uint8 reg, Uint8 data) {
 }
 static XEMU_INLINE void _TSB(int addr) {
 	Uint8 m = readByte(addr);
-	//cpu_pfz = (!(m & CPU65.a));
+#ifdef CPU65_DISCRETE_PF_NZ
+	CPU65.pf_z = (!(m & CPU65.a));
+#else
 	if (m & CPU65.a) CPU65.pf_nz &= (~PF_Z); else CPU65.pf_nz |= PF_Z;
+#endif
 	writeByte(addr, m | CPU65.a);
 }
 static XEMU_INLINE void _TRB(int addr) {
 	Uint8 m = readByte(addr);
-	//cpu_pfz = (!(m & CPU65.a));
+#ifdef CPU65_DISCRETE_PF_NZ
+	CPU65.pf_z = (!(m & CPU65.a));
+#else
 	if (m & CPU65.a) CPU65.pf_nz &= (~PF_Z); else CPU65.pf_nz |= PF_Z;
+#endif
 	writeByte(addr, m & (255 - CPU65.a));
 }
 static XEMU_INLINE void _ASL(int addr) {
@@ -329,10 +350,13 @@ static XEMU_INLINE void _ASR(int addr) {
 }
 #endif
 static XEMU_INLINE void _BIT(Uint8 data) {
-	//cpu_pfn = data & 128;
 	CPU65.pf_v = data & 64;
-	//cpu_pfz = (!(CPU65.a & data));
-	CPU65.pf_nz = (data & 0x80) | VALUE_TO_PF_ZERO(CPU65.a & data);
+#ifdef CPU65_DISCRETE_PF_NZ
+	CPU65.pf_n = data & PF_N;
+	CPU65.pf_z = (!(CPU65.a & data));
+#else
+	CPU65.pf_nz = (data & PF_N) | VALUE_TO_PF_ZERO(CPU65.a & data);
+#endif
 }
 static XEMU_INLINE void _ADC(int data) {
 	if (CPU65.pf_d) {
@@ -433,7 +457,6 @@ int cpu65_step (
 #endif
 		//last_p = cpu65_get_pf();
 		pushWord(CPU65.pc);
-		//cpu_pfb = 0;
 		push(cpu65_get_pf());	// no PF_B is pushed!
 		CPU65.pf_i = 1;
 		CPU65.pf_d = 0;
@@ -514,7 +537,13 @@ int cpu65_step (
 	case 0x0d:	setNZ(A_OP(|,readByte(_abs()))); break; /* 0xd ORA Absolute */
 	case 0x0e:	_ASL(_abs()); break; /* 0xe ASL Absolute */
 	case 0x0f:	_BRA(!(readByte(_zp()) & 1)); break; /* 0xf BBR Relative */
-	case 0x10:	_BRA(!(CPU65.pf_nz & 0x80)); break; /* 0x10 BPL Relative */
+	case 0x10:
+#ifdef CPU65_DISCRETE_PF_NZ
+			_BRA(! CPU65.pf_n);
+#else
+			_BRA(!(CPU65.pf_nz & PF_N));
+#endif
+			break;	/* 0x10 BPL Relative */
 	case 0x11:	setNZ(A_OP(|,readByte(_zpiy()))); break; /* 0x11 ORA (Zero_Page),Y */
 	case 0x12:
 			/* 0x12 ORA (Zero_Page) or (ZP),Z on 65CE02 */
@@ -528,7 +557,12 @@ int cpu65_step (
 	case 0x13:
 #ifdef CPU_65CE02
 			OPC_65CE02("BPL16");
-			_BRA16(!(CPU65.pf_nz & 0x80));		// 65CE02: BPL 16 bit relative
+			// 65CE02: BPL 16 bit relative
+#ifdef CPU65_DISCRETE_PF_NZ
+			_BRA16(!CPU65.pf_n);
+#else
+			_BRA16(!(CPU65.pf_nz & PF_N));
+#endif
 #endif
 			break; /* 0x13 NOP (nonstd loc, implied) */
 	case 0x14:	_TRB(_zp()); break; /* 0x14 TRB Zero_Page */
@@ -573,7 +607,7 @@ int cpu65_step (
 	case 0x26:	_ROL(_zp()); break; /* 0x26 ROL Zero_Page */
 	case 0x27:	{ int a = _zp(); writeByte(a, readByte(a) & 251); } break; /* 0x27 RMB Zero_Page */
 	case 0x28:
-			cpu65_set_pf(pop() | PF_B);
+			cpu65_set_pf(pop());
 			break; /* 0x28 PLP Implied */
 	case 0x29:	setNZ(A_OP(&,readByte(_imm()))); break; /* 0x29 AND Immediate */
 	case 0x2a:	_ROL(-1); break; /* 0x2a ROL Accumulator */
@@ -591,7 +625,13 @@ int cpu65_step (
 	case 0x2d:	setNZ(A_OP(&,readByte(_abs()))); break; /* 0x2d AND Absolute */
 	case 0x2e:	_ROL(_abs()); break; /* 0x2e ROL Absolute */
 	case 0x2f:	_BRA(!(readByte(_zp()) & 4)); break; /* 0x2f BBR Relative */
-	case 0x30:	_BRA(CPU65.pf_nz & 0x80); break; /* 0x30 BMI Relative */
+	case 0x30:
+#ifdef CPU65_DISCRETE_PF_NZ
+			_BRA(CPU65.pf_n);
+#else
+			_BRA(CPU65.pf_nz & PF_N);
+#endif
+			break; /* 0x30 BMI Relative */
 	case 0x31:	setNZ(A_OP(&,readByte(_zpiy()))); break; /* 0x31 AND (Zero_Page),Y */
 	case 0x32:
 			/* 0x32 AND (Zero_Page) or (ZP),Z on 65CE02*/
@@ -605,7 +645,12 @@ int cpu65_step (
 	case 0x33:
 #ifdef CPU_65CE02
 			OPC_65CE02("BMI16");
-			_BRA16(CPU65.pf_nz & 0x80); // 65CE02 BMI 16 bit relative
+#ifdef CPU65_DISCRETE_PF_NZ
+			_BRA16(CPU65.pf_n);
+#else
+			_BRA16(CPU65.pf_nz & PF_N);
+#endif
+			// 65CE02 BMI 16 bit relative
 #endif
 			break; /* 0x33 NOP (nonstd loc, implied) */
 	case 0x34:	_BIT(readByte(_zpx())); break; /* 0x34 BIT Zero_Page,X */
@@ -625,7 +670,7 @@ int cpu65_step (
 	case 0x3d:	setNZ(A_OP(&,readByte(_absx()))); break; /* 0x3d AND Absolute,X */
 	case 0x3e:	_ROL(_absx()); break; /* 0x3e ROL Absolute,X */
 	case 0x3f:	_BRA(!(readByte(_zp()) & 8)); break; /* 0x3f BBR Relative */
-	case 0x40:	cpu65_set_pf(pop() | PF_B); CPU65.pc = popWord(); break; /* 0x40 RTI Implied */
+	case 0x40:	cpu65_set_pf(pop()); CPU65.pc = popWord(); break; /* 0x40 RTI Implied */
 	case 0x41:	setNZ(A_OP(^,readByte(_zpxi()))); break; /* 0x41 EOR (Zero_Page,X) */
 	case 0x42:
 #ifdef CPU_65CE02
@@ -815,9 +860,13 @@ int cpu65_step (
 	case 0x86:	writeByte(_zp(), CPU65.x); break; /* 0x86 STX Zero_Page */
 	case 0x87:	{ int a = _zp(); writeByte(a, readByte(a) | 1); } break; /* 0x87 SMB Zero_Page */
 	case 0x88:	setNZ(--CPU65.y); break; /* 0x88 DEY Implied */
-	case 0x89:	//cpu_pfz = (!(CPU65.a & readByte(_imm()))); break; /* 0x89 BIT+ Immediate */
+	case 0x89:
+#ifdef CPU65_DISCRETE_PF_NZ
+			CPU65.pf_z = (!(CPU65.a & readByte(_imm())));
+#else
 			if (CPU65.a & readByte(_imm())) CPU65.pf_nz &= (~PF_Z); else CPU65.pf_nz |= PF_Z;
-			break;
+#endif
+			break;	/* 0x89 BIT+ Immediate */
 	case 0x8a:	setNZ(CPU65.a = CPU65.x); break; /* 0x8a TXA Implied */
 	case 0x8b:
 #ifdef CPU_65CE02
@@ -969,7 +1018,13 @@ int cpu65_step (
 	case 0xcd:	_CMP(CPU65.a, readByte(_abs())); break; /* 0xcd CMP Absolute */
 	case 0xce:	{ int addr = _abs(); Uint8 data = readByte(addr) - 1; setNZ(data); writeByte(addr, data); } break; /* 0xce DEC Absolute */
 	case 0xcf:	_BRA( readByte(_zp()) & 16 ); break; /* 0xcf BBS Relative */
-	case 0xd0:	_BRA(!(CPU65.pf_nz & PF_Z)); break; /* 0xd0 BNE Relative */
+	case 0xd0:
+#ifdef CPU65_DISCRETE_PF_NZ
+			_BRA( !CPU65.pf_z);
+#else
+			_BRA(!(CPU65.pf_nz & PF_Z));
+#endif
+			break; /* 0xd0 BNE Relative */
 	case 0xd1:	_CMP(CPU65.a, readByte(_zpiy())); break; /* 0xd1 CMP (Zero_Page),Y */
 	case 0xd2:	/* 0xd2 CMP (Zero_Page) or (ZP),Z on 65CE02 */
 #ifdef MEGA65
@@ -982,7 +1037,12 @@ int cpu65_step (
 	case 0xd3:
 #ifdef CPU_65CE02
 			OPC_65CE02("BNE16");
-			_BRA16(!(CPU65.pf_nz & PF_Z));	// 65CE02 BNE $nnnn
+#ifdef CPU65_DISCRETE_PF_NZ
+			_BRA16( !CPU65.pf_z);
+#else
+			_BRA16(!(CPU65.pf_nz & PF_Z));
+#endif
+			// 65CE02 BNE $nnnn
 #endif
 			break; /* 0xd3 NOP (nonstd loc, implied) */
 	case 0xd4:
@@ -1074,7 +1134,13 @@ int cpu65_step (
 	case 0xed:	_SBC(readByte(_abs())); break; /* 0xed SBC Absolute */
 	case 0xee:	{ int addr = _abs(); Uint8 data = readByte(addr) + 1; setNZ(data); writeByte(addr, data); } break; /* 0xee INC Absolute */
 	case 0xef:	_BRA( readByte(_zp()) & 64 ); break; /* 0xef BBS Relative */
-	case 0xf0:	_BRA(CPU65.pf_nz & PF_Z); break; /* 0xf0 BEQ Relative */
+	case 0xf0:
+#ifdef CPU65_DISCRETE_PF_NZ
+			_BRA(CPU65.pf_z);
+#else
+			_BRA(CPU65.pf_nz & PF_Z);
+#endif
+			break; /* 0xf0 BEQ Relative */
 	case 0xf1:	_SBC(readByte(_zpiy())); break; /* 0xf1 SBC (Zero_Page),Y */
 	case 0xf2:	/* 0xf2 SBC (Zero_Page) or (ZP),Z on 65CE02 */
 #ifdef MEGA65
@@ -1087,7 +1153,12 @@ int cpu65_step (
 	case 0xf3:
 #ifdef CPU_65CE02
 			OPC_65CE02("BEQ16");
-			_BRA16(CPU65.pf_nz & PF_Z);	// 65CE02 BEQ $nnnn
+#ifdef CPU65_DISCRETE_PF_NZ
+			_BRA16(CPU65.pf_z);
+#else
+			_BRA16(CPU65.pf_nz & PF_Z);
+#endif
+			// 65CE02 BEQ $nnnn
 #endif
 			break; /* 0xf3 NOP (nonstd loc, implied) */
 	case 0xf4:

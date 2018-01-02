@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -181,7 +181,7 @@ void hypervisor_leave ( void )
 	cpu65.s    = D6XX_registers[0x45];
 	cpu65.sphi = D6XX_registers[0x46] << 8;	// stack page register
 	cpu65_set_pf(D6XX_registers[0x47]);
-	cpu65.pf_e = D6XX_registers[0x47] & 32;	// cpu_set_p() does NOT set 'E' bit by design, so we do at our own
+	cpu65.pf_e = D6XX_registers[0x47] & 32;	// cpu65_set_pf() does NOT set 'E' bit by design, so we do at our own
 	cpu65.pc   = D6XX_registers[0x48] | (D6XX_registers[0x49] << 8);
 	map_offset_low  = ((D6XX_registers[0x4A] & 0xF) << 16) | (D6XX_registers[0x4B] << 8);
 	map_offset_high = ((D6XX_registers[0x4C] & 0xF) << 16) | (D6XX_registers[0x4D] << 8);
@@ -259,23 +259,25 @@ void hypervisor_debug ( void )
 	}
 	// WARNING: as it turned out, using stdio I/O to log every opcodes even "only" at ~3.5MHz rate makes emulation _VERY_ slow ...
 	if (XEMU_UNLIKELY(debug_on)) {
-		if (debug_fp)
+		if (debug_fp) {
+			Uint8 pf = cpu65_get_pf();
 			fprintf(
 				debug_fp,
 				"HYPERVISOR-DEBUG: %-32s PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%d OPC=%02X @ %s" NL,
 				debug_lines[cpu65.pc - 0x8000][0],
 				cpu65.pc, cpu65.sphi | cpu65.s, cpu65.bphi >> 8, cpu65.a, cpu65.x, cpu65.y, cpu65.z,
-				(cpu65.pf_nz & 128) ? 'N' : 'n',
-				cpu65.pf_v ? 'V' : 'v',
-				cpu65.pf_e ? 'E' : 'e',
+				(pf & 128) ? 'N' : 'n',
+				(pf &  64) ? 'V' : 'v',
+				(pf &  32) ? 'E' : 'e',
 				'-',
-				cpu65.pf_d ? 'D' : 'd',
-				cpu65.pf_i ? 'I' : 'i',
-				(cpu65.pf_nz & 2) ? 'Z' : 'z',
-				cpu65.pf_c ? 'C' : 'c',
+				(pf &   8) ? 'D' : 'd',
+				(pf &   4) ? 'I' : 'i',
+				(pf &   2) ? 'Z' : 'z',
+				(pf &   1) ? 'C' : 'c',
 				vic_iomode,
 				cpu65_read_callback(cpu65.pc),
 				debug_lines[cpu65.pc - 0x8000][1]
 			);
+		}
 	}
 }
