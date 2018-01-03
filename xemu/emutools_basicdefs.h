@@ -94,7 +94,11 @@ typedef uint64_t Uint64;
 #ifdef __GNUC__
 #define XEMU_LIKELY(__x__)	__builtin_expect(!!(__x__), 1)
 #define XEMU_UNLIKELY(__x__)	__builtin_expect(!!(__x__), 0)
+#ifdef DO_NOT_FORCE_INLINE
+#define XEMU_INLINE		inline
+#else
 #define XEMU_INLINE		__attribute__ ((__always_inline__)) inline
+#endif
 #else
 #define XEMU_LIKELY(__x__)	(__x__)
 #define XEMU_UNLIKELY(__x__)	(__x__)

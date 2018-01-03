@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sdcard.h"
 #include "xemu/f011_core.h"
 #include "mega65.h"
-#include "xemu/cpu65c02.h"
+#include "xemu/cpu65.h"
 #include "io_mapper.h"
 
 #include <sys/types.h>
@@ -149,9 +149,9 @@ int sdcard_init ( const char *fn, const char *extd81fn )
 static off_t host_seek_to ( Uint8 *addr_buffer, int addressing_offset, const char *description, off_t size_limit, int fd )
 {
 	off_t image_offset = (addr_buffer ? (((off_t)addr_buffer[0]) | ((off_t)addr_buffer[1] << 8) | ((off_t)addr_buffer[2] << 16) | ((off_t)addr_buffer[3] << 24)) : 0) + (off_t)addressing_offset;
-	DEBUG("SDCARD: %s card at position " PRINTF_LLD " (offset=%d) PC=$%04X" NL, description, (long long)image_offset, addressing_offset, cpu_pc);
+	DEBUG("SDCARD: %s card at position " PRINTF_LLD " (offset=%d) PC=$%04X" NL, description, (long long)image_offset, addressing_offset, cpu65.pc);
 	if (image_offset < 0 || image_offset > size_limit - 512) {
-		DEBUG("SDCARD: SEEK: invalid offset requested for %s with offset " PRINTF_LLD " PC=$%04X" NL, description, (long long)image_offset, cpu_pc);
+		DEBUG("SDCARD: SEEK: invalid offset requested for %s with offset " PRINTF_LLD " PC=$%04X" NL, description, (long long)image_offset, cpu65.pc);
 		return -1;
 	}
 	if (lseek(fd, image_offset, SEEK_SET) != image_offset)
@@ -220,7 +220,7 @@ int fdc_cb_wr_sec ( Uint8 *buffer, int d81_offset )
 static Uint8 sdcard_read_status ( void )
 {
 	Uint8 ret = sd_status;
-	DEBUG("SDCARD: reading SD status $D680 result is $%02X PC=$%04X" NL, ret, cpu_pc);
+	DEBUG("SDCARD: reading SD status $D680 result is $%02X PC=$%04X" NL, ret, cpu65.pc);
 	sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);
 	return ret;
 }
@@ -230,7 +230,7 @@ static Uint8 sdcard_read_status ( void )
 static void sdcard_command ( Uint8 cmd )
 {
 	int ret;
-	DEBUG("SDCARD: writing command register $D680 with $%02X PC=$%04X" NL, cmd, cpu_pc);
+	DEBUG("SDCARD: writing command register $D680 with $%02X PC=$%04X" NL, cmd, cpu65.pc);
 	sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);	// ugly hack :-@
 	switch (cmd) {
 		case 0x00:	// RESET SD-card
@@ -291,7 +291,7 @@ static void sdcard_command ( Uint8 cmd )
 // data = D68B write
 static void sdcard_mount_d81 ( Uint8 data )
 {
-	printf("SD/FDC mount register request @ $D68B val=$%02X at PC=$%04X" NL, data, cpu_pc);
+	printf("SD/FDC mount register request @ $D68B val=$%02X at PC=$%04X" NL, data, cpu65.pc);
 	if ((data & 3) == 3) {
 		if (d81fd >= 0)
 			use_d81 = QUESTION_WINDOW("Use D81 from SD-card|Use external D81 image file", "Hypervisor mount request, and you have defined external D81 image.");
@@ -330,7 +330,7 @@ void sdcard_write_register ( int reg, Uint8 data )
 		case 3:		// sector address
 		case 4:		// sector address
 			sd_sector_bytes[reg - 1] = data;
-			DEBUG("SDCARD: writing sector number register $%04X with $%02X PC=$%04X" NL, reg + 0xD680, data, cpu_pc);
+			DEBUG("SDCARD: writing sector number register $%04X with $%02X PC=$%04X" NL, reg + 0xD680, data, cpu65.pc);
 			break;
 		case 0xB:
 			sdcard_mount_d81(data);
@@ -340,7 +340,7 @@ void sdcard_write_register ( int reg, Uint8 data )
 		case 0xE:
 		case 0xF:
 			sd_d81_img1_start[reg - 0xC] = data;
-			DEBUG("SDCARD: writing D81 #1 sector register $%04X with $%02X PC=$%04X" NL, reg + 0xD680, data, cpu_pc);
+			DEBUG("SDCARD: writing D81 #1 sector register $%04X with $%02X PC=$%04X" NL, reg + 0xD680, data, cpu65.pc);
 			break;
 	}
 }

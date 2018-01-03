@@ -12,3 +12,6 @@
 //#define HAVE_XEMU_UMON
 #endif
 #define HAVE_XEMU_INSTALLER
+#define CPU65 cpu65
+//#define DO_NOT_FORCE_INLINE
+//#define CPU65_DISCRETE_PF_NZ

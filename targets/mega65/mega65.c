@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "xemu/emutools_files.h"
 #include "mega65.h"
-#include "xemu/cpu65c02.h"
+#include "xemu/cpu65.h"
 #include "xemu/f011_core.h"
 #include "xemu/f018_core.h"
 #include "xemu/emutools_hid.h"
@@ -67,8 +67,8 @@ void machine_set_speed ( int verbose )
 	// Actually the rule would be something like that (this comment is here by intent, for later implementation FIXME TODO), some VHDL draft only:
 	// cpu_speed := vicii_2mhz&viciii_fast&viciv_fast
 	// if hypervisor_mode='0' and ((speed_gate='1') and (force_fast='0')) then -- LGB: vicii_2mhz seems to be a low-active signal?
-	// case cpu_speed is ...... 100=1MHz, 101=1MHz, 110=3.5MHz, 111=48Mhz, 000=2MHz, 001=48MHz, 010=3.5MHz, 011=48MHz
-	// else 48MHz end if;
+	// case cpu_speed is ...... 100=1MHz, 101=1MHz, 110=3.5MHz, 111=50Mhz, 000=2MHz, 001=50MHz, 010=3.5MHz, 011=50MHz
+	// else 50MHz end if;
 	// it seems hypervisor always got full speed, and force_fast (ie, POKE 0,65) always forces the max
 	// TODO: what is speed_gate? (it seems to be a PMOD input and/or keyboard controll with CAPS-LOCK)
 	// TODO: how 2MHz is selected, it seems a double decoded VIC-X registers which is not so common in VIC modes yet, I think ...
@@ -97,7 +97,7 @@ void machine_set_speed ( int verbose )
 				cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
 				strcpy(emulator_speed_title, "3.5MHz");
 				break;
-			case 1:	// 001 - 48MHz (or Xemu specified custom speed)
+			case 1:	// 001 - 50MHz (or Xemu specified custom speed)
 			case 3:	// 011 -		-- "" --
 			case 7:	// 111 -		-- "" --
 				cpu_cycles_per_scanline = cpu_cycles_per_scanline_for_fast_mode;
@@ -116,9 +116,9 @@ static void cia1_setint_cb ( int level )
 {
 	DEBUG("%s: IRQ level changed to %d" NL, cia1.name, level);
 	if (level)
-		cpu_irqLevel |= 1;
+		cpu65.irqLevel |= 1;
 	else
-		cpu_irqLevel &= ~1;
+		cpu65.irqLevel &= ~1;
 }
 
 
@@ -139,7 +139,7 @@ static inline void nmi_set ( int level, int mask )
 		nmi_new_level = nmi_level & (~mask);
 	if ((!nmi_level) && nmi_new_level) {
 		DEBUG("NMI edge is emulated towards the CPU (%d->%d)" NL, nmi_level, nmi_new_level);
-		cpu_nmiEdge = 1;	// the "NMI edge" trigger is deleted by the CPU emulator itself (it's not a level trigger)
+		cpu65.nmiEdge = 1;	// the "NMI edge" trigger is deleted by the CPU emulator itself (it's not a level trigger)
 	}
 	nmi_level = nmi_new_level;
 }
@@ -349,7 +349,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	sprintf(fast_mhz_in_string, "%dMHz", fast_mhz);
 	cpu_cycles_per_scanline_for_fast_mode = 64 * fast_mhz;
 	DEBUGPRINT("SPEED: fast clock is set to %dMHz, %d CPU cycles per scanline." NL, fast_mhz, cpu_cycles_per_scanline_for_fast_mode);
-	cpu_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
+	cpu65_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
 	rom_protect = 0;
 	hypervisor_enter(TRAP_RESET);
 	speed_current = 0;
@@ -397,7 +397,7 @@ static void shutdown_callback ( void )
 #ifdef UARTMON_SOCKET
 	uartmon_close();
 #endif
-	DEBUG("Execution has been stopped at PC=$%04X" NL, cpu_pc);
+	DEBUG("Execution has been stopped at PC=$%04X" NL, cpu65.pc);
 }
 
 
@@ -413,7 +413,7 @@ static void reset_mega65 ( void )
 	vic_registers[0x30] = 0;	// FIXME: hack! we need this, and memory_set_vic3_rom_mapping above too :(
 	memory_set_vic3_rom_mapping(0);
 	memory_set_do_map();
-	cpu_reset();
+	cpu65_reset();
 	dma_reset();
 	nmi_level = 0;
 	D6XX_registers[0x7E] = xemucfg_get_num("kicked");
@@ -470,22 +470,23 @@ static void update_emulator ( void )
 
 void m65mon_show_regs ( void )
 {
+	Uint8 pf = cpu65_get_pf();
 	umon_printf(
 		"PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
 		"%04X %02X %02X %02X %02X %02X %04X "		// register banned message and things from PC to SP
 		"%04X %04X %02X       %02X %02X "		// from MAPL to P
 		"%c%c%c%c%c%c%c%c ",				// P-FLAGS
-		cpu_pc, cpu_a, cpu_x, cpu_y, cpu_z, cpu_bphi >> 8, cpu_sphi | cpu_sp,
-		map_offset_low >> 8, map_offset_high >> 8, cpu_op,
-		cpu_get_p(), 0,	// flags
-		cpu_pfn ? 'N' : '-',
-		cpu_pfv ? 'V' : '-',
-		cpu_pfe ? 'E' : '-',
-		cpu_pfb ? 'B' : '-',
-		cpu_pfd ? 'D' : '-',
-		cpu_pfi ? 'I' : '-',
-		cpu_pfz ? 'Z' : '-',
-		cpu_pfc ? 'C' : '-'
+		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z, cpu65.bphi >> 8, cpu65.sphi | cpu65.s,
+		map_offset_low >> 8, map_offset_high >> 8, cpu65.op,
+		pf, 0,	// flags
+		(pf & CPU65_PF_N) ? 'N' : '-',
+		(pf & CPU65_PF_V) ? 'V' : '-',
+		(pf & CPU65_PF_E) ? 'E' : '-',
+		'-',
+		(pf & CPU65_PF_D) ? 'D' : '-',
+		(pf & CPU65_PF_I) ? 'I' : '-',
+		(pf & CPU65_PF_Z) ? 'Z' : '-',
+		(pf & CPU65_PF_C) ? 'C' : '-'
 	);
 }
 
@@ -494,7 +495,7 @@ void m65mon_dumpmem16 ( Uint16 addr )
 	int n = 16;
 	umon_printf(":000%04X", addr);
 	while (n--)
-		umon_printf(" %02X", cpu_read(addr++));
+		umon_printf(" %02X", cpu65_read_callback(addr++));
 }
 
 void m65mon_set_trace ( int m )
@@ -645,10 +646,10 @@ int main ( int argc, char **argv )
 			if (paused != paused_old) {
 				paused_old = paused;
 				if (paused) {
-					DEBUGPRINT("TRACE: entering into trace mode @ $%04X" NL, cpu_pc);
+					DEBUGPRINT("TRACE: entering into trace mode @ $%04X" NL, cpu65.pc);
 					cpu_cycles_per_step = 0;
 				} else {
-					DEBUGPRINT("TRACE: leaving trace mode @ $%04X" NL, cpu_pc);
+					DEBUGPRINT("TRACE: leaving trace mode @ $%04X" NL, cpu65.pc);
 					if (breakpoint_pc < 0)
 						cpu_cycles_per_step = cpu_cycles_per_scanline;
 					else
@@ -659,11 +660,11 @@ int main ( int argc, char **argv )
 		if (XEMU_UNLIKELY(in_hypervisor)) {
 			hypervisor_debug();
 		}
-		if (XEMU_UNLIKELY(breakpoint_pc == cpu_pc)) {
-			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu_pc);
+		if (XEMU_UNLIKELY(breakpoint_pc == cpu65.pc)) {
+			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu65.pc);
 			paused = 1;
 		}
-		cycles += XEMU_UNLIKELY(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu_step(
+		cycles += XEMU_UNLIKELY(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
 #ifdef CPU_STEP_MULTI_OPS
 			cpu_cycles_per_step
 #endif
@@ -725,7 +726,7 @@ int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, 
 	map_mask = (int)P_AS_BE32(buffer + 0);
 	map_offset_low = (int)P_AS_BE32(buffer + 4);
 	map_offset_high = (int)P_AS_BE32(buffer + 8);
-	cpu_inhibit_interrupts = (int)P_AS_BE32(buffer + 12);
+	cpu65.cpu_inhibit_interrupts = (int)P_AS_BE32(buffer + 12);
 	in_hypervisor = (int)P_AS_BE32(buffer + 16);	// sets hypervisor state from snapshot (hypervisor/userspace)
 	map_megabyte_low = (int)P_AS_BE32(buffer + 20);
 	map_megabyte_high = (int)P_AS_BE32(buffer + 24);
@@ -746,7 +747,7 @@ int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	U32_AS_BE(buffer +  0, map_mask);
 	U32_AS_BE(buffer +  4, map_offset_low);
 	U32_AS_BE(buffer +  8, map_offset_high);
-	U32_AS_BE(buffer + 12, cpu_inhibit_interrupts);
+	U32_AS_BE(buffer + 12, cpu65.cpu_inhibit_interrupts);
 	U32_AS_BE(buffer + 16, in_hypervisor);
 	U32_AS_BE(buffer + 20, map_megabyte_low);
 	U32_AS_BE(buffer + 24, map_megabyte_high);

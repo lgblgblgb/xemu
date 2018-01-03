@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_hid.h"
 #include "xemu/emutools_config.h"
 #include "commodore_vic20.h"
-#include "xemu/cpu65c02.h"
+#include "xemu/cpu65.h"
 #include "xemu/via65c22.h"
 #include "vic6561.h"
 
@@ -220,7 +220,7 @@ static void execute_monitor_command ( void )
 	while (*p <= 32)
 		p++;
 	if (p[0] == 'X') {
-		cpu_a = 0;	// do not continue ...
+		cpu65.a = 0;	// do not continue ...
 		emuprint("\r");
 		return;
 	}
@@ -258,16 +258,16 @@ static int is_our_rom ( void )
 
 
 
-// Need to be defined, if CPU_TRAP is defined for the CPU emulator!
-int cpu_trap ( Uint8 opcode )
+// Need to be defined, if CPU65_TRAP_OPCODE is defined for the CPU emulator!
+int cpu65_trap_callback ( Uint8 opcode )
 {
-	if (cpu_pc >= 0xA000 && opcode == CPU_TRAP) {	// cpu_pc always meant to be the position _after_ the trap opcode!
-		Uint8 trap = memory[cpu_pc];
+	if (cpu65.pc >= 0xA000 && opcode == CPU65_TRAP_OPCODE) {	// cpu65.pc always meant to be the position _after_ the trap opcode!
+		Uint8 trap = memory[cpu65.pc];
 		if (is_our_rom() < 0)
-			FATAL("Unknown ROM/RAM code at $%04X caused trap!", cpu_pc - 1);
+			FATAL("Unknown ROM/RAM code at $%04X caused trap!", cpu65.pc - 1);
 		switch (trap) {
 			case 0:
-				cpu_a = inject_prg();
+				cpu65.a = inject_prg();
 				EMUPRINTF("\rMONITOR: SYS %d\r", 0xA009);
 				break;
 			case 1:
@@ -277,16 +277,16 @@ int cpu_trap ( Uint8 opcode )
 					memory[648] << 8,
 					vic20_get_memconfig_string()
 				);
-				cpu_a = 1;
+				cpu65.a = 1;
 				break;
 			case 2:
-				cpu_a = 1;	// by default, set the continue flag ...
+				cpu65.a = 1;	// by default, set the continue flag ...
 				execute_monitor_command();
 				break;
 			default:
-				FATAL("Unknown CPU trap (%d) at $%04X", trap, cpu_pc - 1);
+				FATAL("Unknown CPU trap (%d) at $%04X", trap, cpu65.pc - 1);
 		}
-		cpu_pc++;	// jump over the trap number byte ...
+		cpu65.pc++;	// jump over the trap number byte ...
 		return 1; // you must return with the CPU cycles used, but at least with value of 1!
 	} else
 		return 0; // ignore trap!! Return with zero means, the CPU emulator should execute the opcode anyway
@@ -303,7 +303,7 @@ void clear_emu_events ( void )
 
 // Called by CPU emulation code when any kind of memory byte must be written.
 // Note: optimization is used, to make the *most common* type of write access easy. Even if the whole function is more complex, or longer/slower this way for other accesses!
-void  cpu_write ( Uint16 addr, Uint8 data )
+void  cpu65_write_callback ( Uint16 addr, Uint8 data )
 {
 	// Write optimization, handle the most common case first: memory byte to be written is not special, ie writable RAM, not I/O, etc
 	if (XEMU_LIKELY(is_kpage_writable[addr >> 10])) {	// writable flag for every Kbytes of 64K is checked (for different memory configurations, faster "decoding", etc)
@@ -330,20 +330,20 @@ void  cpu_write ( Uint16 addr, Uint8 data )
 
 
 // TODO: Use RMW write function in a proper way!
-void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
+void cpu65_write_rmw_callback ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 {
 	if (XEMU_UNLIKELY(addr & 0x8000)) {
-		cpu_write(addr, old_data);
-		cpu_write(addr, new_data);
+		cpu65_write_callback(addr, old_data);
+		cpu65_write_callback(addr, new_data);
 	} else {
-		cpu_write(addr, new_data);
+		cpu65_write_callback(addr, new_data);
 	}
 }
 
 
 // Called by CPU emulation code when any kind of memory byte must be read.
 // Note: optimization is used, to make the *most common* type of read access easy. Even if the whole function is more complex, or longer/slower this way for other accesses!
-Uint8 cpu_read ( Uint16 addr )
+Uint8 cpu65_read_callback ( Uint16 addr )
 {
 	// Optimization: handle the most common case first!
 	// Check if our read is NOT about the (built-in) I/O area. If it's true, let's just use the memory array
@@ -395,7 +395,7 @@ static void via1_setint ( int level )
 {
 	if (nmi_level != level) {
 		printf("VIA-1: NMI edge: %d->%d" NL, nmi_level, level);
-		cpu_nmiEdge = 1;
+		cpu65.nmiEdge = 1;
 		nmi_level = level;
 	}
 }
@@ -404,7 +404,7 @@ static void via1_setint ( int level )
 // VIA-2 is used to generate IRQ on VIC-20
 static void via2_setint ( int level )
 {
-	cpu_irqLevel = level;
+	cpu65.irqLevel = level;
 }
 
 
@@ -555,7 +555,7 @@ int main ( int argc, char **argv )
 	}
 	// Continue with initializing ...
 	clear_emu_events();	// also resets the keyboard
-	cpu_reset();	// reset CPU: it must be AFTER kernal is loaded at least, as reset also fetches the reset vector into PC ...
+	cpu65_reset();	// reset CPU: it must be AFTER kernal is loaded at least, as reset also fetches the reset vector into PC ...
 	// Initiailize VIAs.
 	// Note: this is my unfinished VIA emulation skeleton, for my Commodore LCD emulator originally, ported from my JavaScript code :)
 	// it uses callback functions, which must be registered here, NULL values means unused functionality
@@ -585,7 +585,7 @@ int main ( int argc, char **argv )
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	for (;;) { // our emulation loop ...
 		int opcyc;
-		opcyc = cpu_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles
+		opcyc = cpu65_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles
 		via_tick(&via1, opcyc);	// run VIA-1 tasks for the same amount of cycles as the CPU
 		via_tick(&via2, opcyc);	// -- "" -- the same for VIA-2
 		cycles += opcyc;
