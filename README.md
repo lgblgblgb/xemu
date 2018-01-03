@@ -7,7 +7,7 @@
 Emulators running on Linux/Unix/Windows/OSX of various (mainly 8 bit) machines,
 including the Commodore LCD and Commodore 65 (and also some Mega65) as well.
 
-Written by (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+Written by (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 Source repository: https://github.com/lgblgblgb/xemu
 
 Xemu also contains code wasn't written by me. Please read this page to get to
@@ -27,3 +27,67 @@ This file is only some place holder :) For some sane documentation, please **vis
 the wiki section of the project, here**:
 
 https://github.com/lgblgblgb/xemu/wiki
+
+## Quick start (from source)
+
+### Install software for compilaton
+
+#### Example for Ubuntu Linux
+
+    sudo apt update
+    sudo apt install git build-essential libsdl2-dev libgtk-3-dev libreadline-dev
+
+#### Example for MacOS (assuming homebrew is already installed):
+
+    brew update
+    brew install sdl2
+
+### Clone source respository
+
+    git clone https://github.com/lgblgblgb/xemu.git
+    cd xemu
+
+### Download needed ROM images, etc
+
+    make roms
+
+### Compilation
+
+    make
+
+Optinally, to create binary DEBian .deb package for Ubuntu/Debian Linux,
+result will be built in build/bin (which can be installed with `dpkg -i`):
+
+    make deb
+
+To compile only a given emulator (let's say mega65):
+
+    cd targets
+    ls -l
+    cd mega65
+    make
+    cd ../..
+
+### Run the binary
+
+    ls -l build/bin/
+
+to get a list of compilaed binaries, like xmega65.native or xc65.native
+
+Run one of them, like:
+
+    build/bin/xclcd.native
+
+### Windows
+
+For building binary (exe) for Windows, you still need a UNIX-like environment
+(in theory WSL - Windows Subsystem for Linux - should be enough)  for the
+compilation, with cross-compiler and SDL2 cross platform suite installed.
+Then you can say the following for 32 bit or 64 bit build process:
+
+    make ARCH=win32
+    make ARCH=win64
+
+In build/bin you'll find files like *.win32 and *.win64, they are exe files
+for real, you can rename and copy them to a Windows box to be able to run
+them (you also need the specific SDL2.dll though).

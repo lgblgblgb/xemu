@@ -181,7 +181,7 @@ void hypervisor_leave ( void )
 	cpu65.s    = D6XX_registers[0x45];
 	cpu65.sphi = D6XX_registers[0x46] << 8;	// stack page register
 	cpu65_set_pf(D6XX_registers[0x47]);
-	cpu65.pf_e = D6XX_registers[0x47] & 32;	// cpu65_set_pf() does NOT set 'E' bit by design, so we do at our own
+	cpu65.pf_e = D6XX_registers[0x47] & CPU65_PF_E;	// cpu65_set_pf() does NOT set 'E' bit by design, so we do at our own
 	cpu65.pc   = D6XX_registers[0x48] | (D6XX_registers[0x49] << 8);
 	map_offset_low  = ((D6XX_registers[0x4A] & 0xF) << 16) | (D6XX_registers[0x4B] << 8);
 	map_offset_high = ((D6XX_registers[0x4C] & 0xF) << 16) | (D6XX_registers[0x4D] << 8);
@@ -266,14 +266,14 @@ void hypervisor_debug ( void )
 				"HYPERVISOR-DEBUG: %-32s PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%d OPC=%02X @ %s" NL,
 				debug_lines[cpu65.pc - 0x8000][0],
 				cpu65.pc, cpu65.sphi | cpu65.s, cpu65.bphi >> 8, cpu65.a, cpu65.x, cpu65.y, cpu65.z,
-				(pf & 128) ? 'N' : 'n',
-				(pf &  64) ? 'V' : 'v',
-				(pf &  32) ? 'E' : 'e',
+				(pf & CPU65_PF_N) ? 'N' : 'n',
+				(pf & CPU65_PF_V) ? 'V' : 'v',
+				(pf & CPU65_PF_E) ? 'E' : 'e',
 				'-',
-				(pf &   8) ? 'D' : 'd',
-				(pf &   4) ? 'I' : 'i',
-				(pf &   2) ? 'Z' : 'z',
-				(pf &   1) ? 'C' : 'c',
+				(pf & CPU65_PF_D) ? 'D' : 'd',
+				(pf & CPU65_PF_I) ? 'I' : 'i',
+				(pf & CPU65_PF_Z) ? 'Z' : 'z',
+				(pf & CPU65_PF_C) ? 'C' : 'c',
 				vic_iomode,
 				cpu65_read_callback(cpu65.pc),
 				debug_lines[cpu65.pc - 0x8000][1]

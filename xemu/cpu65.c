@@ -28,7 +28,7 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-/* Original information/copyright:
+/* Original information/copyright (also written by me):
  * Commodore LCD emulator, C version.
  * (C)2013,2014 LGB Gabor Lenart
  * Visit my site (the better, JavaScript version of the emu is here too): http://commodore-lcd.lgb.hu/
@@ -81,18 +81,8 @@ static const Uint8 opcycles[] = {7,5,2,2,4,3,4,4,3,2,1,1,5,4,5,4,2,5,5,3,4,3,4,4
 static const Uint8 opcycles[] = {7,6,2,2,5,3,5,5,3,2,2,2,6,4,6,2,2,5,5,2,5,4,6,5,2,4,2,2,6,4,7,2,6,6,2,2,3,3,5,5,4,2,2,2,4,4,6,2,2,5,5,2,4,4,6,5,2,4,2,2,4,4,7,2,6,6,2,2,3,3,5,5,3,2,2,2,3,4,6,2,2,5,5,2,4,4,6,5,2,4,3,2,2,4,7,2,6,6,2,2,3,3,5,5,4,2,2,2,5,4,6,2,2,5,5,2,4,4,6,5,2,4,4,2,6,4,7,2,3,6,2,2,3,3,3,5,2,2,2,2,4,4,4,2,2,6,5,2,4,4,4,5,2,5,2,2,4,5,5,2,2,6,2,2,3,3,3,5,2,2,2,2,4,4,4,2,2,5,5,2,4,4,4,5,2,4,2,2,4,4,4,2,2,6,2,2,3,3,5,5,2,2,2,2,4,4,6,2,2,5,5,2,4,4,6,5,2,4,3,2,2,4,7,2,2,6,2,2,3,3,5,5,2,2,2,2,4,4,6,2,2,5,5,2,4,4,6,5,2,4,4,2,2,4,7,2};
 #endif
 
-
-#define PF_N 0x80
-#define PF_V 0x40
-#define PF_E 0x20
-#define PF_B 0x10
-#define PF_D 0x08
-#define PF_I 0x04
-#define PF_Z 0x02
-#define PF_C 0x01
-
 #ifndef CPU65_DISCRETE_PF_NZ
-#define VALUE_TO_PF_ZERO(a) ((a) ? 0 : PF_Z)
+#define VALUE_TO_PF_ZERO(a) ((a) ? 0 : CPU65_PF_Z)
 #endif
 
 #define writeFlatAddressedByte(d)	cpu65_write_linear_opcode_callback(d)
@@ -151,39 +141,39 @@ static XEMU_INLINE void  pushWord_rev(Uint16 data) { push(data & 0xFF); push(dat
 
 void cpu65_set_pf(Uint8 st) {
 #ifdef CPU65_DISCRETE_PF_NZ
-	CPU65.pf_n = st & PF_N;
-	CPU65.pf_z = st & PF_Z;
+	CPU65.pf_n = st & CPU65_PF_N;
+	CPU65.pf_z = st & CPU65_PF_Z;
 #else
-	CPU65.pf_nz = st & (PF_N | PF_Z);
+	CPU65.pf_nz = st & (CPU65_PF_N | CPU65_PF_Z);
 #endif
-	CPU65.pf_v = st & PF_V;
+	CPU65.pf_v = st & CPU65_PF_V;
 #ifdef CPU_65CE02
 	// Note: E bit cannot be changed by PLP/RTI, so it's commented out here ...
 	// At least *I* think :) FIXME?
-	// CPU65.pf_e = st & PF_E;
+	// CPU65.pf_e = st & CPU65_PF_E;
 #endif
-	CPU65.pf_d = st & PF_D;
-	CPU65.pf_i = st & PF_I;
-	CPU65.pf_c = st & PF_C;
+	CPU65.pf_d = st & CPU65_PF_D;
+	CPU65.pf_i = st & CPU65_PF_I;
+	CPU65.pf_c = st & CPU65_PF_C;
 }
 
 Uint8 cpu65_get_pf() {
 	return
 #ifdef CPU65_DISCRETE_PF_NZ
-	(CPU65.pf_n ? PF_N : 0) | (CPU65.pf_z ? PF_Z : 0)
+	(CPU65.pf_n ? CPU65_PF_N : 0) | (CPU65.pf_z ? CPU65_PF_Z : 0)
 #else
 	CPU65.pf_nz
 #endif
 	|
-	(CPU65.pf_v ?  PF_V : 0) |
+	(CPU65.pf_v ?  CPU65_PF_V : 0) |
 #ifdef CPU_65CE02
-	(CPU65.pf_e ?  PF_E : 0) |
+	(CPU65.pf_e ?  CPU65_PF_E : 0) |
 #else
-	PF_E |
+	CPU65_PF_E |
 #endif
-	(CPU65.pf_d ? PF_D : 0) |
-	(CPU65.pf_i ? PF_I : 0) |
-	(CPU65.pf_c ? PF_C : 0);
+	(CPU65.pf_d ? CPU65_PF_D : 0) |
+	(CPU65.pf_i ? CPU65_PF_I : 0) |
+	(CPU65.pf_c ? CPU65_PF_C : 0);
 }
 
 void cpu65_reset() {
@@ -206,16 +196,16 @@ void cpu65_reset() {
 }
 
 
-static XEMU_INLINE void setNZ(Uint8 st) {
+static XEMU_INLINE void SET_NZ(Uint8 st) {
 #ifdef CPU65_DISCRETE_PF_NZ
-	CPU65.pf_n = st & PF_N;
+	CPU65.pf_n = st & CPU65_PF_N;
 	CPU65.pf_z = !st;
 #else
-	CPU65.pf_nz = (st & PF_N) | VALUE_TO_PF_ZERO(st);
+	CPU65.pf_nz = (st & CPU65_PF_N) | VALUE_TO_PF_ZERO(st);
 #endif
 }
 #ifdef CPU_65CE02
-static XEMU_INLINE void setNZ16(Uint16 st) {
+static XEMU_INLINE void SET_NZ16(Uint16 st) {
 #ifdef CPU65_DISCRETE_PF_NZ
 	CPU65.pf_n = st & 0x8000;
 	CPU65.pf_z = !st;
@@ -301,14 +291,14 @@ static XEMU_INLINE Uint16 _GET_SP_INDIRECT_ADDR ( void )
 static XEMU_INLINE void _CMP(Uint8 reg, Uint8 data) {
 	Uint16 temp = reg - data;
 	CPU65.pf_c = temp < 0x100;
-	setNZ(temp);
+	SET_NZ(temp);
 }
 static XEMU_INLINE void _TSB(int addr) {
 	Uint8 m = readByte(addr);
 #ifdef CPU65_DISCRETE_PF_NZ
 	CPU65.pf_z = (!(m & CPU65.a));
 #else
-	if (m & CPU65.a) CPU65.pf_nz &= (~PF_Z); else CPU65.pf_nz |= PF_Z;
+	if (m & CPU65.a) CPU65.pf_nz &= (~CPU65_PF_Z); else CPU65.pf_nz |= CPU65_PF_Z;
 #endif
 	writeByte(addr, m | CPU65.a);
 }
@@ -317,7 +307,7 @@ static XEMU_INLINE void _TRB(int addr) {
 #ifdef CPU65_DISCRETE_PF_NZ
 	CPU65.pf_z = (!(m & CPU65.a));
 #else
-	if (m & CPU65.a) CPU65.pf_nz &= (~PF_Z); else CPU65.pf_nz |= PF_Z;
+	if (m & CPU65.a) CPU65.pf_nz &= (~CPU65_PF_Z); else CPU65.pf_nz |= CPU65_PF_Z;
 #endif
 	writeByte(addr, m & (255 - CPU65.a));
 }
@@ -327,7 +317,7 @@ static XEMU_INLINE void _ASL(int addr) {
 	CPU65.pf_c = t & 128;
 	//t = (t << 1) & 0xFF;
 	t <<= 1;
-	setNZ(t);
+	SET_NZ(t);
 	if (addr == -1) CPU65.a = t; else writeByteTwice(addr, o, t);
 }
 static XEMU_INLINE void _LSR(int addr) {
@@ -336,7 +326,7 @@ static XEMU_INLINE void _LSR(int addr) {
 	CPU65.pf_c = t & 1;
 	//t = (t >> 1) & 0xFF;
 	t >>= 1;
-	setNZ(t);
+	SET_NZ(t);
 	if (addr == -1) CPU65.a = t; else writeByteTwice(addr, o, t);
 }
 #ifdef CPU_65CE02
@@ -345,17 +335,17 @@ static XEMU_INLINE void _ASR(int addr) {
 	Uint8 o = t;
 	CPU65.pf_c = t & 1;
 	t = (t >> 1) | (t & 0x80);
-	setNZ(t);
+	SET_NZ(t);
 	if (addr == -1) CPU65.a = t; else writeByteTwice(addr, o, t);
 }
 #endif
 static XEMU_INLINE void _BIT(Uint8 data) {
 	CPU65.pf_v = data & 64;
 #ifdef CPU65_DISCRETE_PF_NZ
-	CPU65.pf_n = data & PF_N;
+	CPU65.pf_n = data & CPU65_PF_N;
 	CPU65.pf_z = (!(CPU65.a & data));
 #else
-	CPU65.pf_nz = (data & PF_N) | VALUE_TO_PF_ZERO(CPU65.a & data);
+	CPU65.pf_nz = (data & CPU65_PF_N) | VALUE_TO_PF_ZERO(CPU65.a & data);
 #endif
 }
 static XEMU_INLINE void _ADC(int data) {
@@ -367,13 +357,13 @@ static XEMU_INLINE void _ADC(int data) {
 		if (temp2 > 0x90) temp2 += 0x60;
 		CPU65.pf_c = (temp2 & 0xFF00);
 		CPU65.a = (temp & 0x0F) + (temp2 & 0xF0);
-		setNZ(CPU65.a);
+		SET_NZ(CPU65.a);
 	} else {
 		Uint16 temp = data + CPU65.a + (CPU65.pf_c ? 1 : 0);
 		CPU65.pf_c = temp > 0xFF;
 		CPU65.pf_v = (!((CPU65.a ^ data) & 0x80) && ((CPU65.a ^ temp) & 0x80));
 		CPU65.a = temp & 0xFF;
-		setNZ(CPU65.a);
+		SET_NZ(CPU65.a);
 	}
 }
 static XEMU_INLINE void _SBC(int data) {
@@ -385,13 +375,13 @@ static XEMU_INLINE void _SBC(int data) {
 		CPU65.pf_v = (!(temp > CPU65.a));
 		CPU65.pf_c = (!(temp > CPU65.a));
 		CPU65.a = temp & 0xFF;
-		setNZ(CPU65.a);
+		SET_NZ(CPU65.a);
 	} else {
 		Uint16 temp = CPU65.a - data - (CPU65.pf_c ? 0 : 1);
 		CPU65.pf_c = temp < 0x100;
 		CPU65.pf_v = ((CPU65.a ^ temp) & 0x80) && ((CPU65.a ^ data) & 0x80);
 		CPU65.a = temp & 0xFF;
-		setNZ(CPU65.a);
+		SET_NZ(CPU65.a);
 	}
 }
 static XEMU_INLINE void _ROR(int addr) {
@@ -400,7 +390,7 @@ static XEMU_INLINE void _ROR(int addr) {
 	if (CPU65.pf_c) t |= 0x100;
 	CPU65.pf_c = t & 1;
 	t >>= 1;
-	setNZ(t);
+	SET_NZ(t);
 	if (addr == -1) CPU65.a = t; else writeByteTwice(addr, o, t);
 }
 static XEMU_INLINE void _ROL(int addr) {
@@ -409,7 +399,7 @@ static XEMU_INLINE void _ROL(int addr) {
 	t = (t << 1) | (CPU65.pf_c ? 1 : 0);
 	CPU65.pf_c = t & 0x100;
 	t &= 0xFF;
-	setNZ(t);
+	SET_NZ(t);
 	if (addr == -1) CPU65.a = t; else writeByteTwice(addr, o, t);
 }
 
@@ -436,7 +426,7 @@ int cpu65_step (
 #endif
 		CPU65.nmiEdge = 0;
 		pushWord(CPU65.pc);
-		push(cpu65_get_pf());	// no PF_B is pushed!
+		push(cpu65_get_pf());	// no CPU65_PF_B is pushed!
 		CPU65.pf_i = 1;
 		CPU65.pf_d = 0;			// NOTE: D flag clearing was not done on the original 6502 I guess, but indeed on the 65C02 already
 		CPU65.pc = readWord(0xFFFA);
@@ -457,7 +447,7 @@ int cpu65_step (
 #endif
 		//last_p = cpu65_get_pf();
 		pushWord(CPU65.pc);
-		push(cpu65_get_pf());	// no PF_B is pushed!
+		push(cpu65_get_pf());	// no CPU65_PF_B is pushed!
 		CPU65.pf_i = 1;
 		CPU65.pf_d = 0;
 		CPU65.pc = readWord(0xFFFE);
@@ -493,17 +483,18 @@ int cpu65_step (
 #endif
 	CPU65.op_cycles = opcycles[CPU65.op];
 	switch (CPU65.op) {
-	case 0x00:
+	case 0x00:	/* $00 BRK Implied */
 #ifdef DEBUG_CPU
 			DEBUG("CPU: WARN: BRK is about executing at PC=$%04X" NL, (CPU65.pc - 1) & 0xFFFF);
 #endif
 			// FIXME: does BRK sets I and D flag? Hmm, I can't even remember now why I wrote these :-D
 			// FIXME-2: does BRK sets B flag, or only in the saved copy on the stack??
 			// NOTE: D flag clearing was not done on the original 6502 I guess, but indeed on the 65C02 already
-			pushWord(CPU65.pc + 1); push(cpu65_get_pf() | PF_B); CPU65.pf_d = 0; CPU65.pf_i = 1; CPU65.pc = readWord(0xFFFE); /* 0x0 BRK Implied */
+			pushWord(CPU65.pc + 1); push(cpu65_get_pf() | CPU65_PF_B); CPU65.pf_d = 0; CPU65.pf_i = 1; CPU65.pc = readWord(0xFFFE);
 			break;
-	case 0x01:	setNZ(A_OP(|,readByte(_zpxi()))); break; /* 0x1 ORA (Zero_Page,X) */
-	case 0x02:
+	case 0x01:	/* $01 ORA (Zero_Page,X) */
+			SET_NZ(A_OP(|,readByte(_zpxi()))); break;
+	case 0x02:	/* $02 65C02: NOP imm (non-std NOP with addr mode), 65CE02: CLE */
 #ifdef CPU_65CE02
 			OPC_65CE02("CLE");
 			CPU65.pf_e = 0;	// 65CE02: CLE
@@ -511,48 +502,48 @@ int cpu65_step (
 			DEBUG("CPU: WARN: E flag is cleared!" NL);
 #endif
 #else
-			CPU65.pc++; /* 0x2 NOP imm (non-std NOP with addr mode) */
+			CPU65.pc++; /* NOP imm (non-std NOP with addr mode) */
 #endif
 			break;
-	case 0x03:
+	case 0x03:	/* $03 65C02: NOP (nonstd loc, implied), 65CE02: SEE */
 #ifdef CPU_65CE02
 			OPC_65CE02("SEE");
 			CPU65.pf_e = 1;	// 65CE02: SEE
 #endif
-			break; /* 0x3 NOP (nonstd loc, implied) */
+			break;
 	case 0x04:	_TSB(_zp()); break; /* 0x4 TSB Zero_Page */
-	case 0x05:	setNZ(A_OP(|,readByte(_zp()))); break; /* 0x5 ORA Zero_Page */
+	case 0x05:	SET_NZ(A_OP(|,readByte(_zp()))); break; /* 0x5 ORA Zero_Page */
 	case 0x06:	_ASL(_zp()); break; /* 0x6 ASL Zero_Page */
 	case 0x07:	{ int a = _zp(); writeByte(a, readByte(a) & 254);  } break; /* 0x7 RMB Zero_Page */
-	case 0x08:	push(cpu65_get_pf() | PF_B); break; /* 0x8 PHP Implied */
-	case 0x09:	setNZ(A_OP(|,readByte(_imm()))); break; /* 0x9 ORA Immediate */
+	case 0x08:	push(cpu65_get_pf() | CPU65_PF_B); break; /* 0x8 PHP Implied */
+	case 0x09:	SET_NZ(A_OP(|,readByte(_imm()))); break; /* 0x9 ORA Immediate */
 	case 0x0a:	_ASL(-1); break; /* 0xa ASL Accumulator */
 	case 0x0b:
 #ifdef CPU_65CE02
 			OPC_65CE02("TSY");
-			setNZ(CPU65.y = (CPU65.sphi >> 8));   // TSY                  0B   65CE02
+			SET_NZ(CPU65.y = (CPU65.sphi >> 8));   // TSY                  0B   65CE02
 #endif
 			break; /* 0xb NOP (nonstd loc, implied) */
 	case 0x0c:	_TSB(_abs()); break; /* 0xc TSB Absolute */
-	case 0x0d:	setNZ(A_OP(|,readByte(_abs()))); break; /* 0xd ORA Absolute */
+	case 0x0d:	SET_NZ(A_OP(|,readByte(_abs()))); break; /* 0xd ORA Absolute */
 	case 0x0e:	_ASL(_abs()); break; /* 0xe ASL Absolute */
 	case 0x0f:	_BRA(!(readByte(_zp()) & 1)); break; /* 0xf BBR Relative */
 	case 0x10:
 #ifdef CPU65_DISCRETE_PF_NZ
 			_BRA(! CPU65.pf_n);
 #else
-			_BRA(!(CPU65.pf_nz & PF_N));
+			_BRA(!(CPU65.pf_nz & CPU65_PF_N));
 #endif
 			break;	/* 0x10 BPL Relative */
-	case 0x11:	setNZ(A_OP(|,readByte(_zpiy()))); break; /* 0x11 ORA (Zero_Page),Y */
+	case 0x11:	SET_NZ(A_OP(|,readByte(_zpiy()))); break; /* 0x11 ORA (Zero_Page),Y */
 	case 0x12:
 			/* 0x12 ORA (Zero_Page) or (ZP),Z on 65CE02 */
 #ifdef MEGA65
 			if (IS_FLAT32_DATA_OP())
-				setNZ(A_OP(|,readFlatAddressedByte()));
+				SET_NZ(A_OP(|,readFlatAddressedByte()));
 			else
 #endif
-				setNZ(A_OP(|,readByte(_zpi())));
+				SET_NZ(A_OP(|,readByte(_zpi())));
 			break;
 	case 0x13:
 #ifdef CPU_65CE02
@@ -561,29 +552,29 @@ int cpu65_step (
 #ifdef CPU65_DISCRETE_PF_NZ
 			_BRA16(!CPU65.pf_n);
 #else
-			_BRA16(!(CPU65.pf_nz & PF_N));
+			_BRA16(!(CPU65.pf_nz & CPU65_PF_N));
 #endif
 #endif
 			break; /* 0x13 NOP (nonstd loc, implied) */
 	case 0x14:	_TRB(_zp()); break; /* 0x14 TRB Zero_Page */
-	case 0x15:	setNZ(A_OP(|,readByte(_zpx()))); break; /* 0x15 ORA Zero_Page,X */
+	case 0x15:	SET_NZ(A_OP(|,readByte(_zpx()))); break; /* 0x15 ORA Zero_Page,X */
 	case 0x16:	_ASL(_zpx()); break; /* 0x16 ASL Zero_Page,X */
 	case 0x17:	{ int a = _zp(); writeByte(a, readByte(a) & 253); } break; /* 0x17 RMB Zero_Page */
 	case 0x18:	CPU65.pf_c = 0; break; /* 0x18 CLC Implied */
-	case 0x19:	setNZ(A_OP(|,readByte(_absy()))); break; /* 0x19 ORA Absolute,Y */
-	case 0x1a:	setNZ(++CPU65.a); break; /* 0x1a INA Accumulator */
+	case 0x19:	SET_NZ(A_OP(|,readByte(_absy()))); break; /* 0x19 ORA Absolute,Y */
+	case 0x1a:	SET_NZ(++CPU65.a); break; /* 0x1a INA Accumulator */
 	case 0x1b:
 #ifdef CPU_65CE02
 			OPC_65CE02("INZ");
-			setNZ(++CPU65.z);	// 65CE02: INZ
+			SET_NZ(++CPU65.z);	// 65CE02: INZ
 #endif
 			break; /* 0x1b NOP (nonstd loc, implied) */
 	case 0x1c:	_TRB(_abs()); break; /* 0x1c TRB Absolute */
-	case 0x1d:	setNZ(A_OP(|,readByte(_absx()))); break; /* 0x1d ORA Absolute,X */
+	case 0x1d:	SET_NZ(A_OP(|,readByte(_absx()))); break; /* 0x1d ORA Absolute,X */
 	case 0x1e:	_ASL(_absx()); break; /* 0x1e ASL Absolute,X */
 	case 0x1f:	_BRA(!(readByte(_zp()) & 2)); break; /* 0x1f BBR Relative */
 	case 0x20:	pushWord(CPU65.pc + 1); CPU65.pc = _abs(); break; /* 0x20 JSR Absolute */
-	case 0x21:	setNZ(A_OP(&,readByte(_zpxi()))); break; /* 0x21 AND (Zero_Page,X) */
+	case 0x21:	SET_NZ(A_OP(&,readByte(_zpxi()))); break; /* 0x21 AND (Zero_Page,X) */
 	case 0x22:
 #ifdef CPU_65CE02
 			OPC_65CE02("JSR (nnnn)");
@@ -603,13 +594,13 @@ int cpu65_step (
 #endif
 			break; /* 0x23 NOP (nonstd loc, implied) */
 	case 0x24:	_BIT(readByte(_zp())); break; /* 0x24 BIT Zero_Page */
-	case 0x25:	setNZ(A_OP(&,readByte(_zp()))); break; /* 0x25 AND Zero_Page */
+	case 0x25:	SET_NZ(A_OP(&,readByte(_zp()))); break; /* 0x25 AND Zero_Page */
 	case 0x26:	_ROL(_zp()); break; /* 0x26 ROL Zero_Page */
 	case 0x27:	{ int a = _zp(); writeByte(a, readByte(a) & 251); } break; /* 0x27 RMB Zero_Page */
 	case 0x28:
 			cpu65_set_pf(pop());
 			break; /* 0x28 PLP Implied */
-	case 0x29:	setNZ(A_OP(&,readByte(_imm()))); break; /* 0x29 AND Immediate */
+	case 0x29:	SET_NZ(A_OP(&,readByte(_imm()))); break; /* 0x29 AND Immediate */
 	case 0x2a:	_ROL(-1); break; /* 0x2a ROL Accumulator */
 	case 0x2b:
 #ifdef CPU_65CE02
@@ -622,25 +613,25 @@ int cpu65_step (
 #endif
 			break; /* 0x2b NOP (nonstd loc, implied) */
 	case 0x2c:	_BIT(readByte(_abs())); break; /* 0x2c BIT Absolute */
-	case 0x2d:	setNZ(A_OP(&,readByte(_abs()))); break; /* 0x2d AND Absolute */
+	case 0x2d:	SET_NZ(A_OP(&,readByte(_abs()))); break; /* 0x2d AND Absolute */
 	case 0x2e:	_ROL(_abs()); break; /* 0x2e ROL Absolute */
 	case 0x2f:	_BRA(!(readByte(_zp()) & 4)); break; /* 0x2f BBR Relative */
 	case 0x30:
 #ifdef CPU65_DISCRETE_PF_NZ
 			_BRA(CPU65.pf_n);
 #else
-			_BRA(CPU65.pf_nz & PF_N);
+			_BRA(CPU65.pf_nz & CPU65_PF_N);
 #endif
 			break; /* 0x30 BMI Relative */
-	case 0x31:	setNZ(A_OP(&,readByte(_zpiy()))); break; /* 0x31 AND (Zero_Page),Y */
+	case 0x31:	SET_NZ(A_OP(&,readByte(_zpiy()))); break; /* 0x31 AND (Zero_Page),Y */
 	case 0x32:
 			/* 0x32 AND (Zero_Page) or (ZP),Z on 65CE02*/
 #ifdef MEGA65
 			if (IS_FLAT32_DATA_OP())
-				setNZ(A_OP(&,readFlatAddressedByte()));
+				SET_NZ(A_OP(&,readFlatAddressedByte()));
 			else
 #endif
-				setNZ(A_OP(&,readByte(_zpi())));
+				SET_NZ(A_OP(&,readByte(_zpi())));
 			break;
 	case 0x33:
 #ifdef CPU_65CE02
@@ -648,34 +639,34 @@ int cpu65_step (
 #ifdef CPU65_DISCRETE_PF_NZ
 			_BRA16(CPU65.pf_n);
 #else
-			_BRA16(CPU65.pf_nz & PF_N);
+			_BRA16(CPU65.pf_nz & CPU65_PF_N);
 #endif
 			// 65CE02 BMI 16 bit relative
 #endif
 			break; /* 0x33 NOP (nonstd loc, implied) */
 	case 0x34:	_BIT(readByte(_zpx())); break; /* 0x34 BIT Zero_Page,X */
-	case 0x35:	setNZ(A_OP(&,readByte(_zpx()))); break; /* 0x35 AND Zero_Page,X */
+	case 0x35:	SET_NZ(A_OP(&,readByte(_zpx()))); break; /* 0x35 AND Zero_Page,X */
 	case 0x36:	_ROL(_zpx()); break; /* 0x36 ROL Zero_Page,X */
 	case 0x37:	{ int a = _zp(); writeByte(a, readByte(a) & 247); } break; /* 0x37 RMB Zero_Page */
 	case 0x38:	CPU65.pf_c = 1; break; /* 0x38 SEC Implied */
-	case 0x39:	setNZ(A_OP(&,readByte(_absy()))); break; /* 0x39 AND Absolute,Y */
-	case 0x3a:	setNZ(--CPU65.a); break; /* 0x3a DEA Accumulator */
+	case 0x39:	SET_NZ(A_OP(&,readByte(_absy()))); break; /* 0x39 AND Absolute,Y */
+	case 0x3a:	SET_NZ(--CPU65.a); break; /* 0x3a DEA Accumulator */
 	case 0x3b:
 #ifdef CPU_65CE02
 			OPC_65CE02("DEZ");
-			setNZ(--CPU65.z);		// 65CE02	DEZ
+			SET_NZ(--CPU65.z);		// 65CE02	DEZ
 #endif
 			break; /* 0x3b NOP (nonstd loc, implied) */
 	case 0x3c:	_BIT(readByte(_absx())); break; /* 0x3c BIT Absolute,X */
-	case 0x3d:	setNZ(A_OP(&,readByte(_absx()))); break; /* 0x3d AND Absolute,X */
+	case 0x3d:	SET_NZ(A_OP(&,readByte(_absx()))); break; /* 0x3d AND Absolute,X */
 	case 0x3e:	_ROL(_absx()); break; /* 0x3e ROL Absolute,X */
 	case 0x3f:	_BRA(!(readByte(_zp()) & 8)); break; /* 0x3f BBR Relative */
 	case 0x40:	cpu65_set_pf(pop()); CPU65.pc = popWord(); break; /* 0x40 RTI Implied */
-	case 0x41:	setNZ(A_OP(^,readByte(_zpxi()))); break; /* 0x41 EOR (Zero_Page,X) */
+	case 0x41:	SET_NZ(A_OP(^,readByte(_zpxi()))); break; /* 0x41 EOR (Zero_Page,X) */
 	case 0x42:
 #ifdef CPU_65CE02
 			OPC_65CE02("NEG");
-			setNZ(CPU65.a = -CPU65.a);	// 65CE02: NEG	FIXME: flags etc are correct?
+			SET_NZ(CPU65.a = -CPU65.a);	// 65CE02: NEG	FIXME: flags etc are correct?
 #else
 			CPU65.pc++;	/* 0x42 NOP imm (non-std NOP with addr mode) */
 #endif
@@ -687,7 +678,7 @@ int cpu65_step (
 			_ASR(-1);
 			//CPU65.pf_c = CPU65.a & 1;
 			//CPU65.a = (CPU65.a >> 1) | (CPU65.a & 0x80);
-			//setNZ(CPU65.a);
+			//SET_NZ(CPU65.a);
 #endif
 			break; /* 0x43 NOP (nonstd loc, implied) */
 	case 0x44:
@@ -698,31 +689,31 @@ int cpu65_step (
 			CPU65.pc++;	// 0x44 NOP zp (non-std NOP with addr mode)
 #endif
 			break;
-	case 0x45:	setNZ(A_OP(^,readByte(_zp()))); break; /* 0x45 EOR Zero_Page */
+	case 0x45:	SET_NZ(A_OP(^,readByte(_zp()))); break; /* 0x45 EOR Zero_Page */
 	case 0x46:	_LSR(_zp()); break; /* 0x46 LSR Zero_Page */
 	case 0x47:	{ int a = _zp(); writeByte(a, readByte(a) & 239); } break; /* 0x47 RMB Zero_Page */
 	case 0x48:	push(CPU65.a); break; /* 0x48 PHA Implied */
-	case 0x49:	setNZ(A_OP(^,readByte(_imm()))); break; /* 0x49 EOR Immediate */
+	case 0x49:	SET_NZ(A_OP(^,readByte(_imm()))); break; /* 0x49 EOR Immediate */
 	case 0x4a:	_LSR(-1); break; /* 0x4a LSR Accumulator */
 	case 0x4b:
 #ifdef CPU_65CE02
 			OPC_65CE02("TAZ");
-			setNZ(CPU65.z = CPU65.a);	// 65CE02: TAZ
+			SET_NZ(CPU65.z = CPU65.a);	// 65CE02: TAZ
 #endif
 			break; /* 0x4b NOP (nonstd loc, implied) */
 	case 0x4c:	CPU65.pc = _abs(); break; /* 0x4c JMP Absolute */
-	case 0x4d:	setNZ(A_OP(^,readByte(_abs()))); break; /* 0x4d EOR Absolute */
+	case 0x4d:	SET_NZ(A_OP(^,readByte(_abs()))); break; /* 0x4d EOR Absolute */
 	case 0x4e:	_LSR(_abs()); break; /* 0x4e LSR Absolute */
 	case 0x4f:	_BRA(!(readByte(_zp()) & 16)); break; /* 0x4f BBR Relative */
 	case 0x50:	_BRA(!CPU65.pf_v); break; /* 0x50 BVC Relative */
-	case 0x51:	setNZ(A_OP(^,readByte(_zpiy()))); break; /* 0x51 EOR (Zero_Page),Y */
+	case 0x51:	SET_NZ(A_OP(^,readByte(_zpiy()))); break; /* 0x51 EOR (Zero_Page),Y */
 	case 0x52:	/* 0x52 EOR (Zero_Page) or (ZP),Z on 65CE02 */
 #ifdef MEGA65
 			if (IS_FLAT32_DATA_OP())
-				setNZ(A_OP(^,readFlatAddressedByte()));
+				SET_NZ(A_OP(^,readFlatAddressedByte()));
 			else
 #endif
-				setNZ(A_OP(^,readByte(_zpi())));
+				SET_NZ(A_OP(^,readByte(_zpi())));
 			break;
 	case 0x53:
 #ifdef CPU_65CE02
@@ -738,11 +729,11 @@ int cpu65_step (
 			CPU65.pc++;	// NOP zpx (non-std NOP with addr mode)
 #endif
 			break;
-	case 0x55:	setNZ(A_OP(^,readByte(_zpx()))); break; /* 0x55 EOR Zero_Page,X */
+	case 0x55:	SET_NZ(A_OP(^,readByte(_zpx()))); break; /* 0x55 EOR Zero_Page,X */
 	case 0x56:	_LSR(_zpx()); break; /* 0x56 LSR Zero_Page,X */
 	case 0x57:	{ int a = _zp(); writeByte(a, readByte(a) & 223); } break; /* 0x57 RMB Zero_Page */
 	case 0x58:	CPU65.pf_i = 0; break; /* 0x58 CLI Implied */
-	case 0x59:	setNZ(A_OP(^,readByte(_absy()))); break; /* 0x59 EOR Absolute,Y */
+	case 0x59:	SET_NZ(A_OP(^,readByte(_absy()))); break; /* 0x59 EOR Absolute,Y */
 	case 0x5a:	push(CPU65.y); break; /* 0x5a PHY Implied */
 	case 0x5b:
 #ifdef CPU_65CE02
@@ -762,7 +753,7 @@ int cpu65_step (
 			CPU65.pc += 2;
 #endif
 			break; /* 0x5c NOP (nonstd loc, implied) */ // FIXME: NOP absolute!
-	case 0x5d:	setNZ(A_OP(^,readByte(_absx()))); break; /* 0x5d EOR Absolute,X */
+	case 0x5d:	SET_NZ(A_OP(^,readByte(_absx()))); break; /* 0x5d EOR Absolute,X */
 	case 0x5e:	_LSR(_absx()); break; /* 0x5e LSR Absolute,X */
 	case 0x5f:	_BRA(!(readByte(_zp()) & 32)); break; /* 0x5f BBR Relative */
 	case 0x60:	CPU65.pc = popWord() + 1; break; /* 0x60 RTS Implied */
@@ -793,13 +784,13 @@ int cpu65_step (
 	case 0x65:	_ADC(readByte(_zp())); break; /* 0x65 ADC Zero_Page */
 	case 0x66:	_ROR(_zp()); break; /* 0x66 ROR Zero_Page */
 	case 0x67:	{ int a = _zp(); writeByte(a, readByte(a) & 191); } break; /* 0x67 RMB Zero_Page */
-	case 0x68:	setNZ(CPU65.a = pop()); break; /* 0x68 PLA Implied */
+	case 0x68:	SET_NZ(CPU65.a = pop()); break; /* 0x68 PLA Implied */
 	case 0x69:	_ADC(readByte(_imm())); break; /* 0x69 ADC Immediate */
 	case 0x6a:	_ROR(-1); break; /* 0x6a ROR Accumulator */
 	case 0x6b:
 #ifdef CPU_65CE02
 			OPC_65CE02("TZA");
-			setNZ(CPU65.a = CPU65.z);	// 65CE02 TZA
+			SET_NZ(CPU65.a = CPU65.z);	// 65CE02 TZA
 #endif
 			break; /* 0x6b NOP (nonstd loc, implied) */
 	case 0x6c:	CPU65.pc = _absi(); break; /* 0x6c JMP (Absolute) */
@@ -828,11 +819,11 @@ int cpu65_step (
 	case 0x77:	{ int a = _zp(); writeByte(a, readByte(a) & 127); } break; /* 0x77 RMB Zero_Page */
 	case 0x78:	CPU65.pf_i = 1; break; /* 0x78 SEI Implied */
 	case 0x79:	_ADC(readByte(_absy())); break; /* 0x79 ADC Absolute,Y */
-	case 0x7a:	setNZ(CPU65.y = pop()); break; /* 0x7a PLY Implied */
+	case 0x7a:	SET_NZ(CPU65.y = pop()); break; /* 0x7a PLY Implied */
 	case 0x7b:
 #ifdef CPU_65CE02
 			OPC_65CE02("TBA");
-			setNZ(CPU65.a = (CPU65.bphi >> 8));	// 65C02 TBA
+			SET_NZ(CPU65.a = (CPU65.bphi >> 8));	// 65C02 TBA
 #endif
 			break; /* 0x7b NOP (nonstd loc, implied) */
 	case 0x7c:	CPU65.pc = _absxi(); break; /* 0x7c JMP (Absolute,X) */
@@ -859,15 +850,15 @@ int cpu65_step (
 	case 0x85:	writeByte(_zp(), CPU65.a); break; /* 0x85 STA Zero_Page */
 	case 0x86:	writeByte(_zp(), CPU65.x); break; /* 0x86 STX Zero_Page */
 	case 0x87:	{ int a = _zp(); writeByte(a, readByte(a) | 1); } break; /* 0x87 SMB Zero_Page */
-	case 0x88:	setNZ(--CPU65.y); break; /* 0x88 DEY Implied */
+	case 0x88:	SET_NZ(--CPU65.y); break; /* 0x88 DEY Implied */
 	case 0x89:
 #ifdef CPU65_DISCRETE_PF_NZ
 			CPU65.pf_z = (!(CPU65.a & readByte(_imm())));
 #else
-			if (CPU65.a & readByte(_imm())) CPU65.pf_nz &= (~PF_Z); else CPU65.pf_nz |= PF_Z;
+			if (CPU65.a & readByte(_imm())) CPU65.pf_nz &= (~CPU65_PF_Z); else CPU65.pf_nz |= CPU65_PF_Z;
 #endif
 			break;	/* 0x89 BIT+ Immediate */
-	case 0x8a:	setNZ(CPU65.a = CPU65.x); break; /* 0x8a TXA Implied */
+	case 0x8a:	SET_NZ(CPU65.a = CPU65.x); break; /* 0x8a TXA Implied */
 	case 0x8b:
 #ifdef CPU_65CE02
 			OPC_65CE02("STY nnnn,X");
@@ -898,7 +889,7 @@ int cpu65_step (
 	case 0x95:	writeByte(_zpx(), CPU65.a); break; /* 0x95 STA Zero_Page,X */
 	case 0x96:	writeByte(_zpy(), CPU65.x); break; /* 0x96 STX Zero_Page,Y */
 	case 0x97:	{ int a = _zp(); writeByte(a, readByte(a) | 2); } break; /* 0x97 SMB Zero_Page */
-	case 0x98:	setNZ(CPU65.a = CPU65.y); break; /* 0x98 TYA Implied */
+	case 0x98:	SET_NZ(CPU65.a = CPU65.y); break; /* 0x98 TYA Implied */
 	case 0x99:	writeByte(_absy(), CPU65.a); break; /* 0x99 STA Absolute,Y */
 	case 0x9a:	CPU65.s = CPU65.x; break; /* 0x9a TXS Implied */
 	case 0x9b:
@@ -911,41 +902,41 @@ int cpu65_step (
 	case 0x9d:	writeByte(_absx(), CPU65.a); break; /* 0x9d STA Absolute,X */
 	case 0x9e:	writeByte(_absx(), ZERO_REG); break; /* 0x9e STZ Absolute,X */
 	case 0x9f:	_BRA( readByte(_zp()) & 2 ); break; /* 0x9f BBS Relative */
-	case 0xa0:	setNZ(CPU65.y = readByte(_imm())); break; /* 0xa0 LDY Immediate */
-	case 0xa1:	setNZ(CPU65.a = readByte(_zpxi())); break; /* 0xa1 LDA (Zero_Page,X) */
-	case 0xa2:	setNZ(CPU65.x = readByte(_imm())); break; /* 0xa2 LDX Immediate */
+	case 0xa0:	SET_NZ(CPU65.y = readByte(_imm())); break; /* 0xa0 LDY Immediate */
+	case 0xa1:	SET_NZ(CPU65.a = readByte(_zpxi())); break; /* 0xa1 LDA (Zero_Page,X) */
+	case 0xa2:	SET_NZ(CPU65.x = readByte(_imm())); break; /* 0xa2 LDX Immediate */
 	case 0xa3:
 #ifdef CPU_65CE02
 			OPC_65CE02("LDZ #nn");
-			setNZ(CPU65.z = readByte(_imm())); // LDZ #$nn             A3   65CE02
+			SET_NZ(CPU65.z = readByte(_imm())); // LDZ #$nn             A3   65CE02
 #endif
 			break; /* 0xa3 NOP (nonstd loc, implied) */
-	case 0xa4:	setNZ(CPU65.y = readByte(_zp())); break; /* 0xa4 LDY Zero_Page */
-	case 0xa5:	setNZ(CPU65.a = readByte(_zp())); break; /* 0xa5 LDA Zero_Page */
-	case 0xa6:	setNZ(CPU65.x = readByte(_zp())); break; /* 0xa6 LDX Zero_Page */
+	case 0xa4:	SET_NZ(CPU65.y = readByte(_zp())); break; /* 0xa4 LDY Zero_Page */
+	case 0xa5:	SET_NZ(CPU65.a = readByte(_zp())); break; /* 0xa5 LDA Zero_Page */
+	case 0xa6:	SET_NZ(CPU65.x = readByte(_zp())); break; /* 0xa6 LDX Zero_Page */
 	case 0xa7:	{ int a = _zp(); writeByte(a, readByte(a) | 4); } break; /* 0xa7 SMB Zero_Page */
-	case 0xa8:	setNZ(CPU65.y = CPU65.a); break; /* 0xa8 TAY Implied */
-	case 0xa9:	setNZ(CPU65.a = readByte(_imm())); break; /* 0xa9 LDA Immediate */
-	case 0xaa:	setNZ(CPU65.x = CPU65.a); break; /* 0xaa TAX Implied */
+	case 0xa8:	SET_NZ(CPU65.y = CPU65.a); break; /* 0xa8 TAY Implied */
+	case 0xa9:	SET_NZ(CPU65.a = readByte(_imm())); break; /* 0xa9 LDA Immediate */
+	case 0xaa:	SET_NZ(CPU65.x = CPU65.a); break; /* 0xaa TAX Implied */
 	case 0xab:
 #ifdef CPU_65CE02
 			OPC_65CE02("LDZ nnnn");
-			setNZ(CPU65.z = readByte(_abs()));	// 65CE02 LDZ $nnnn
+			SET_NZ(CPU65.z = readByte(_abs()));	// 65CE02 LDZ $nnnn
 #endif
 			break; /* 0xab NOP (nonstd loc, implied) */
-	case 0xac:	setNZ(CPU65.y = readByte(_abs())); break; /* 0xac LDY Absolute */
-	case 0xad:	setNZ(CPU65.a = readByte(_abs())); break; /* 0xad LDA Absolute */
-	case 0xae:	setNZ(CPU65.x = readByte(_abs())); break; /* 0xae LDX Absolute */
+	case 0xac:	SET_NZ(CPU65.y = readByte(_abs())); break; /* 0xac LDY Absolute */
+	case 0xad:	SET_NZ(CPU65.a = readByte(_abs())); break; /* 0xad LDA Absolute */
+	case 0xae:	SET_NZ(CPU65.x = readByte(_abs())); break; /* 0xae LDX Absolute */
 	case 0xaf:	_BRA( readByte(_zp()) & 4 ); break; /* 0xaf BBS Relative */
 	case 0xb0:	_BRA(CPU65.pf_c); break; /* 0xb0 BCS Relative */
-	case 0xb1:	setNZ(CPU65.a = readByte(_zpiy())); break; /* 0xb1 LDA (Zero_Page),Y */
+	case 0xb1:	SET_NZ(CPU65.a = readByte(_zpiy())); break; /* 0xb1 LDA (Zero_Page),Y */
 	case 0xb2:	/* 0xb2 LDA (Zero_Page) or (ZP),Z on 65CE02 */
 #ifdef MEGA65
 			if (IS_FLAT32_DATA_OP())
-				setNZ(CPU65.a = readFlatAddressedByte());
+				SET_NZ(CPU65.a = readFlatAddressedByte());
 			else
 #endif
-				setNZ(CPU65.a = readByte(_zpi()));
+				SET_NZ(CPU65.a = readByte(_zpi()));
 			break;
 	case 0xb3:
 #ifdef CPU_65CE02
@@ -953,22 +944,22 @@ int cpu65_step (
 			_BRA16(CPU65.pf_c);	// 65CE02 BCS $nnnn
 #endif
 			break; /* 0xb3 NOP (nonstd loc, implied) */
-	case 0xb4:	setNZ(CPU65.y = readByte(_zpx())); break; /* 0xb4 LDY Zero_Page,X */
-	case 0xb5:	setNZ(CPU65.a = readByte(_zpx())); break; /* 0xb5 LDA Zero_Page,X */
-	case 0xb6:	setNZ(CPU65.x = readByte(_zpy())); break; /* 0xb6 LDX Zero_Page,Y */
+	case 0xb4:	SET_NZ(CPU65.y = readByte(_zpx())); break; /* 0xb4 LDY Zero_Page,X */
+	case 0xb5:	SET_NZ(CPU65.a = readByte(_zpx())); break; /* 0xb5 LDA Zero_Page,X */
+	case 0xb6:	SET_NZ(CPU65.x = readByte(_zpy())); break; /* 0xb6 LDX Zero_Page,Y */
 	case 0xb7:	{ int a = _zp(); writeByte(a, readByte(a) | 8); } break; /* 0xb7 SMB Zero_Page */
 	case 0xb8:	CPU65.pf_v = 0; break; /* 0xb8 CLV Implied */
-	case 0xb9:	setNZ(CPU65.a = readByte(_absy())); break; /* 0xb9 LDA Absolute,Y */
-	case 0xba:	setNZ(CPU65.x = CPU65.s); break; /* 0xba TSX Implied */
+	case 0xb9:	SET_NZ(CPU65.a = readByte(_absy())); break; /* 0xb9 LDA Absolute,Y */
+	case 0xba:	SET_NZ(CPU65.x = CPU65.s); break; /* 0xba TSX Implied */
 	case 0xbb:
 #ifdef CPU_65CE02
 			OPC_65CE02("LDZ nnnn,X");
-			setNZ(CPU65.z = readByte(_absx()));	// 65CE02 LDZ $nnnn,X
+			SET_NZ(CPU65.z = readByte(_absx()));	// 65CE02 LDZ $nnnn,X
 #endif
 			break; /* 0xbb NOP (nonstd loc, implied) */
-	case 0xbc:	setNZ(CPU65.y = readByte(_absx())); break; /* 0xbc LDY Absolute,X */
-	case 0xbd:	setNZ(CPU65.a = readByte(_absx())); break; /* 0xbd LDA Absolute,X */
-	case 0xbe:	setNZ(CPU65.x = readByte(_absy())); break; /* 0xbe LDX Absolute,Y */
+	case 0xbc:	SET_NZ(CPU65.y = readByte(_absx())); break; /* 0xbc LDY Absolute,X */
+	case 0xbd:	SET_NZ(CPU65.a = readByte(_absx())); break; /* 0xbd LDA Absolute,X */
+	case 0xbe:	SET_NZ(CPU65.x = readByte(_absy())); break; /* 0xbe LDX Absolute,Y */
 	case 0xbf:	_BRA( readByte(_zp()) & 8 ); break; /* 0xbf BBS Relative */
 	case 0xc0:	_CMP(CPU65.y, readByte(_imm())); break; /* 0xc0 CPY Immediate */
 	case 0xc1:	_CMP(CPU65.a, readByte(_zpxi())); break; /* 0xc1 CMP (Zero_Page,X) */
@@ -987,7 +978,7 @@ int cpu65_step (
                         int alo = _zp();
                         int ahi = (alo & 0xFF00) | ((alo + 1) & 0xFF);
                         Uint16 data = (readByte(alo) | (readByte(ahi) << 8)) - 1;
-                        setNZ16(data);
+                        SET_NZ16(data);
                         writeByte(alo, data & 0xFF);
                         writeByte(ahi, data >> 8);
                         }
@@ -995,11 +986,11 @@ int cpu65_step (
 			break; /* 0xc3 NOP (nonstd loc, implied) */
 	case 0xc4:	_CMP(CPU65.y, readByte(_zp())); break; /* 0xc4 CPY Zero_Page */
 	case 0xc5:	_CMP(CPU65.a, readByte(_zp())); break; /* 0xc5 CMP Zero_Page */
-	case 0xc6:	{ int addr = _zp(); Uint8 data = readByte(addr) - 1; setNZ(data); writeByte(addr, data); } break; /* 0xc6 DEC Zero_Page */
+	case 0xc6:	{ int addr = _zp(); Uint8 data = readByte(addr) - 1; SET_NZ(data); writeByte(addr, data); } break; /* 0xc6 DEC Zero_Page */
 	case 0xc7:	{ int a = _zp(); writeByte(a, readByte(a) | 16); } break; /* 0xc7 SMB Zero_Page */
-	case 0xc8:	setNZ(++CPU65.y); break; /* 0xc8 INY Implied */
+	case 0xc8:	SET_NZ(++CPU65.y); break; /* 0xc8 INY Implied */
 	case 0xc9:	_CMP(CPU65.a, readByte(_imm())); break; /* 0xc9 CMP Immediate */
-	case 0xca:	setNZ(--CPU65.x); break; /* 0xca DEX Implied */
+	case 0xca:	SET_NZ(--CPU65.x); break; /* 0xca DEX Implied */
 	case 0xcb:
 #ifdef CPU_65CE02
 			OPC_65CE02("ASW nnnn");
@@ -1008,7 +999,7 @@ int cpu65_step (
 			Uint16 data = readByte(addr) | (readByte(addr + 1) << 8);
 			CPU65.pf_c = data & 0x8000;
 			data <<= 1;
-			setNZ16(data);
+			SET_NZ16(data);
 			writeByte(addr, data & 0xFF);
 			writeByte(addr + 1, data >> 8);
 			}
@@ -1016,13 +1007,13 @@ int cpu65_step (
 			break; /* 0xcb NOP (nonstd loc, implied) */
 	case 0xcc:	_CMP(CPU65.y, readByte(_abs())); break; /* 0xcc CPY Absolute */
 	case 0xcd:	_CMP(CPU65.a, readByte(_abs())); break; /* 0xcd CMP Absolute */
-	case 0xce:	{ int addr = _abs(); Uint8 data = readByte(addr) - 1; setNZ(data); writeByte(addr, data); } break; /* 0xce DEC Absolute */
+	case 0xce:	{ int addr = _abs(); Uint8 data = readByte(addr) - 1; SET_NZ(data); writeByte(addr, data); } break; /* 0xce DEC Absolute */
 	case 0xcf:	_BRA( readByte(_zp()) & 16 ); break; /* 0xcf BBS Relative */
 	case 0xd0:
 #ifdef CPU65_DISCRETE_PF_NZ
 			_BRA( !CPU65.pf_z);
 #else
-			_BRA(!(CPU65.pf_nz & PF_Z));
+			_BRA(!(CPU65.pf_nz & CPU65_PF_Z));
 #endif
 			break; /* 0xd0 BNE Relative */
 	case 0xd1:	_CMP(CPU65.a, readByte(_zpiy())); break; /* 0xd1 CMP (Zero_Page),Y */
@@ -1040,7 +1031,7 @@ int cpu65_step (
 #ifdef CPU65_DISCRETE_PF_NZ
 			_BRA16( !CPU65.pf_z);
 #else
-			_BRA16(!(CPU65.pf_nz & PF_Z));
+			_BRA16(!(CPU65.pf_nz & CPU65_PF_Z));
 #endif
 			// 65CE02 BNE $nnnn
 #endif
@@ -1054,7 +1045,7 @@ int cpu65_step (
 #endif
 			break;
 	case 0xd5:	_CMP(CPU65.a, readByte(_zpx())); break; /* 0xd5 CMP Zero_Page,X */
-	case 0xd6:	{ int addr = _zpx(); Uint8 data = readByte(addr) - 1; setNZ(data); writeByte(addr, data); } break; /* 0xd6 DEC Zero_Page,X */
+	case 0xd6:	{ int addr = _zpx(); Uint8 data = readByte(addr) - 1; SET_NZ(data); writeByte(addr, data); } break; /* 0xd6 DEC Zero_Page,X */
 	case 0xd7:	{ int a = _zp(); writeByte(a, readByte(a) | 32); } break; /* 0xd7 SMB Zero_Page */
 	case 0xd8:	CPU65.pf_d = 0; break; /* 0xd8 CLD Implied */
 	case 0xd9:	_CMP(CPU65.a, readByte(_absy())); break; /* 0xd9 CMP Absolute,Y */
@@ -1074,7 +1065,7 @@ int cpu65_step (
 #endif
 			break; /* 0xdc NOP (nonstd loc, implied) */ // FIXME: bugfix NOP absolute!
 	case 0xdd:	_CMP(CPU65.a, readByte(_absx())); break; /* 0xdd CMP Absolute,X */
-	case 0xde:	{ int addr = _absx(); Uint8 data = readByte(addr) - 1; setNZ(data); writeByte(addr, data); } break; /* 0xde DEC Absolute,X */
+	case 0xde:	{ int addr = _absx(); Uint8 data = readByte(addr) - 1; SET_NZ(data); writeByte(addr, data); } break; /* 0xde DEC Absolute,X */
 	case 0xdf:	_BRA( readByte(_zp()) & 32 ); break; /* 0xdf BBS Relative */
 	case 0xe0:	_CMP(CPU65.x, readByte(_imm())); break; /* 0xe0 CPX Immediate */
 	case 0xe1:	_SBC(readByte(_zpxi())); break; /* 0xe1 SBC (Zero_Page,X) */
@@ -1083,7 +1074,7 @@ int cpu65_step (
 			OPC_65CE02("LDA (nn,S),Y");
 			// 65CE02 LDA ($nn,SP),Y
 			// REALLY IMPORTANT: please read the comment at _GET_SP_INDIRECT_ADDR()!
-			setNZ(CPU65.a = readByte(_GET_SP_INDIRECT_ADDR()));
+			SET_NZ(CPU65.a = readByte(_GET_SP_INDIRECT_ADDR()));
 			//DEBUG("CPU: LDA (nn,S),Y returned: A = $%02X, P before last IRQ was: $%02X" NL, CPU65.a, last_p);
 #else
 			CPU65.pc++; // 0xe2 NOP imm (non-std NOP with addr mode)
@@ -1096,7 +1087,7 @@ int cpu65_step (
 			int alo = _zp();
 			int ahi = (alo & 0xFF00) | ((alo + 1) & 0xFF);
 			Uint16 data = (readByte(alo) | (readByte(ahi) << 8)) + 1;
-			setNZ16(data);
+			SET_NZ16(data);
 			//cpu_pfz = (data == 0);
 			writeByte(alo, data & 0xFF);
 			writeByte(ahi, data >> 8);
@@ -1105,9 +1096,9 @@ int cpu65_step (
 			break; /* 0xe3 NOP (nonstd loc, implied) */
 	case 0xe4:	_CMP(CPU65.x, readByte(_zp())); break; /* 0xe4 CPX Zero_Page */
 	case 0xe5:	_SBC(readByte(_zp())); break; /* 0xe5 SBC Zero_Page */
-	case 0xe6:	{ int addr = _zp(); Uint8 data = readByte(addr) + 1; setNZ(data); writeByte(addr, data); } break; /* 0xe6 INC Zero_Page */
+	case 0xe6:	{ int addr = _zp(); Uint8 data = readByte(addr) + 1; SET_NZ(data); writeByte(addr, data); } break; /* 0xe6 INC Zero_Page */
 	case 0xe7:	{ int a = _zp(); writeByte(a, readByte(a) | 64); } break; /* 0xe7 SMB Zero_Page */
-	case 0xe8:	setNZ(++CPU65.x); break; /* 0xe8 INX Implied */
+	case 0xe8:	SET_NZ(++CPU65.x); break; /* 0xe8 INX Implied */
 	case 0xe9:	_SBC(readByte(_imm())); break; /* 0xe9 SBC Immediate */
 	case 0xea:
 #ifdef CPU_65CE02
@@ -1124,7 +1115,7 @@ int cpu65_step (
 			int data = ((readByte(addr) | (readByte(addr + 1) << 8)) << 1) | (CPU65.pf_c ? 1 : 0);
 			CPU65.pf_c = data & 0x10000;
 			data &= 0xFFFF;
-			setNZ16(data);
+			SET_NZ16(data);
 			writeByte(addr, data & 0xFF);
 			writeByte(addr + 1, data >> 8);
 			}
@@ -1132,13 +1123,13 @@ int cpu65_step (
 			break; /* 0xeb NOP (nonstd loc, implied) */
 	case 0xec:	_CMP(CPU65.x, readByte(_abs())); break; /* 0xec CPX Absolute */
 	case 0xed:	_SBC(readByte(_abs())); break; /* 0xed SBC Absolute */
-	case 0xee:	{ int addr = _abs(); Uint8 data = readByte(addr) + 1; setNZ(data); writeByte(addr, data); } break; /* 0xee INC Absolute */
+	case 0xee:	{ int addr = _abs(); Uint8 data = readByte(addr) + 1; SET_NZ(data); writeByte(addr, data); } break; /* 0xee INC Absolute */
 	case 0xef:	_BRA( readByte(_zp()) & 64 ); break; /* 0xef BBS Relative */
 	case 0xf0:
 #ifdef CPU65_DISCRETE_PF_NZ
 			_BRA(CPU65.pf_z);
 #else
-			_BRA(CPU65.pf_nz & PF_Z);
+			_BRA(CPU65.pf_nz & CPU65_PF_Z);
 #endif
 			break; /* 0xf0 BEQ Relative */
 	case 0xf1:	_SBC(readByte(_zpiy())); break; /* 0xf1 SBC (Zero_Page),Y */
@@ -1156,7 +1147,7 @@ int cpu65_step (
 #ifdef CPU65_DISCRETE_PF_NZ
 			_BRA16(CPU65.pf_z);
 #else
-			_BRA16(CPU65.pf_nz & PF_Z);
+			_BRA16(CPU65.pf_nz & CPU65_PF_Z);
 #endif
 			// 65CE02 BEQ $nnnn
 #endif
@@ -1171,15 +1162,15 @@ int cpu65_step (
 #endif
 			break;
 	case 0xf5:	_SBC(readByte(_zpx())); break; /* 0xf5 SBC Zero_Page,X */
-	case 0xf6:	{ int addr = _zpx(); Uint8 data = readByte(addr) + 1; setNZ(data); writeByte(addr, data); } break; /* 0xf6 INC Zero_Page,X */
+	case 0xf6:	{ int addr = _zpx(); Uint8 data = readByte(addr) + 1; SET_NZ(data); writeByte(addr, data); } break; /* 0xf6 INC Zero_Page,X */
 	case 0xf7:	{ int a = _zp(); writeByte(a, readByte(a) | 128); } break; /* 0xf7 SMB Zero_Page */
 	case 0xf8:	CPU65.pf_d = 1; break; /* 0xf8 SED Implied */
 	case 0xf9:	_SBC(readByte(_absy())); break; /* 0xf9 SBC Absolute,Y */
-	case 0xfa:	setNZ(CPU65.x = pop()); break; /* 0xfa PLX Implied */
+	case 0xfa:	SET_NZ(CPU65.x = pop()); break; /* 0xfa PLX Implied */
 	case 0xfb:
 #ifdef CPU_65CE02
 			OPC_65CE02("PLZ");
-			setNZ(CPU65.z = pop());	// 65CE02 PLZ
+			SET_NZ(CPU65.z = pop());	// 65CE02 PLZ
 #endif
 			break; /* 0xfb NOP (nonstd loc, implied) */
 	case 0xfc:
@@ -1192,7 +1183,7 @@ int cpu65_step (
 #endif
 			break; /* 0xfc NOP (nonstd loc, implied) */ // FIXME: bugfix NOP absolute?
 	case 0xfd:	_SBC(readByte(_absx())); break; /* 0xfd SBC Absolute,X */
-	case 0xfe:	{ int addr = _absx(); Uint8 data = readByte(addr) + 1; setNZ(data); writeByte(addr, data); } break; /* 0xfe INC Absolute,X */
+	case 0xfe:	{ int addr = _absx(); Uint8 data = readByte(addr) + 1; SET_NZ(data); writeByte(addr, data); } break; /* 0xfe INC Absolute,X */
 	case 0xff:	_BRA( readByte(_zp()) & 128 ); break; /* 0xff BBS Relative */
 #ifdef DEBUG_CPU
 	default:
@@ -1225,24 +1216,24 @@ int cpu65_step (
 #include "xemu/emutools_snapshot.h"
 #include <string.h>
 
-#define SNAPSHOT_CPU_BLOCK_VERSION	0
-#define SNAPSHOT_CPU_BLOCK_SIZE		256
+#define SNAPSHOT_CPU65_BLOCK_VERSION	0
+#define SNAPSHOT_CPU65_BLOCK_SIZE	256
 
 #ifdef CPU_65CE02
-#define SNAPSHOT_CPU_ID			2
+#define SNAPSHOT_CPU65_ID		2
 #else
-#define SNAPSHOT_CPU_ID			1
+#define SNAPSHOT_CPU65_ID		1
 #endif
 
 int cpu65_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
 	int ret;
-	Uint8 buffer[SNAPSHOT_CPU_BLOCK_SIZE];
-	if (block->sub_counter || block->block_version != SNAPSHOT_CPU_BLOCK_VERSION || block->sub_size != sizeof buffer)
+	Uint8 buffer[SNAPSHOT_CPU65_BLOCK_SIZE];
+	if (block->sub_counter || block->block_version != SNAPSHOT_CPU65_BLOCK_VERSION || block->sub_size != sizeof buffer)
 		RETURN_XSNAPERR_USER("Bad CPU 65xx block syntax");
 	ret = xemusnap_read_file(buffer, sizeof buffer);
 	if (ret) return ret;
-	if (buffer[0] != SNAPSHOT_CPU_ID)
+	if (buffer[0] != SNAPSHOT_CPU65_ID)
 		RETURN_XSNAPERR_USER("CPU type mismatch");
 	CPU65.pc = P_AS_BE16(buffer + 1);
 	CPU65.a = buffer[3];
@@ -1250,7 +1241,7 @@ int cpu65_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, s
 	CPU65.y = buffer[5];
 	CPU65.s = buffer[6];
 	cpu65_set_pf(buffer[7]);
-	CPU65.pf_e = buffer[7] & 32;	// must be set manually ....
+	CPU65.pf_e = buffer[7] & CPU65_PF_E;	// must be set manually ....
 	CPU65.irqLevel = (int)P_AS_BE32(buffer + 32);
 	CPU65.nmiEdge  = (int)P_AS_BE32(buffer + 36);
 	CPU65.op_cycles = buffer[42];
@@ -1267,11 +1258,11 @@ int cpu65_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, s
 
 int cpu65_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 {
-	Uint8 buffer[SNAPSHOT_CPU_BLOCK_SIZE];
-	int ret = xemusnap_write_block_header(def->idstr, SNAPSHOT_CPU_BLOCK_VERSION);
+	Uint8 buffer[SNAPSHOT_CPU65_BLOCK_SIZE];
+	int ret = xemusnap_write_block_header(def->idstr, SNAPSHOT_CPU65_BLOCK_VERSION);
 	if (ret) return ret;
 	memset(buffer, 0xFF, sizeof buffer);
-	buffer[0] = SNAPSHOT_CPU_ID;
+	buffer[0] = SNAPSHOT_CPU65_ID;
 	U16_AS_BE(buffer + 1, CPU65.pc);
 	buffer[3] = CPU65.a;
 	buffer[4] = CPU65.x;

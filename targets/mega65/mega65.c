@@ -479,15 +479,14 @@ void m65mon_show_regs ( void )
 		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z, cpu65.bphi >> 8, cpu65.sphi | cpu65.s,
 		map_offset_low >> 8, map_offset_high >> 8, cpu65.op,
 		pf, 0,	// flags
-		(pf & 128) ? 'N' : '-',
-		(pf &  64) ? 'V' : '-',
-		(pf &  32) ? 'E' : '-',
-		//cpu_pfb ? 'B' : '-',
+		(pf & CPU65_PF_N) ? 'N' : '-',
+		(pf & CPU65_PF_V) ? 'V' : '-',
+		(pf & CPU65_PF_E) ? 'E' : '-',
 		'-',
-		(pf &   8) ? 'D' : '-',
-		(pf &   4) ? 'I' : '-',
-		(pf &   2) ? 'Z' : '-',
-		(pf &   1) ? 'C' : '-'
+		(pf & CPU65_PF_D) ? 'D' : '-',
+		(pf & CPU65_PF_I) ? 'I' : '-',
+		(pf & CPU65_PF_Z) ? 'Z' : '-',
+		(pf & CPU65_PF_C) ? 'C' : '-'
 	);
 }
 

@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -432,12 +432,12 @@ int xemu_init_sdl ( void )
 	if (!SDL_WasInit(SDL_INIT_EVERYTHING)) {
 		DEBUGPRINT("SDL: no SDL subsystem initialization has been done yet, do it!" NL);
 		SDL_Quit();	// Please read the long comment at the pre-init func above to understand this SDL_Quit() here and then the SDL_Init() right below ...
-		DEBUGPRINT("SDL: before SDL init" NL);
+		DEBUG("SDL: before SDL init" NL);
 		if (SDL_Init(SDL_INIT_EVERYTHING)) {
 			ERROR_WINDOW("Cannot initialize SDL: %s", SDL_GetError());
 			return 1;
 		}
-		DEBUGPRINT("SDL: after SDL init" NL);
+		DEBUG("SDL: after SDL init" NL);
 		if (!SDL_WasInit(SDL_INIT_EVERYTHING))
 			FATAL("SDL_WasInit()=0 after init??");
 	} else

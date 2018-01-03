@@ -20,6 +20,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_COMMON_CPU65_H_INCLUDED
 #define __XEMU_COMMON_CPU65_H_INCLUDED
 
+#define CPU65_PF_N 0x80
+#define CPU65_PF_V 0x40
+#define CPU65_PF_E 0x20
+#define CPU65_PF_B 0x10
+#define CPU65_PF_D 0x08
+#define CPU65_PF_I 0x04
+#define CPU65_PF_Z 0x02
+#define CPU65_PF_C 0x01
+
 /* Notes:
 	* cpu flags (pf_*) are INT in type, and "logic" types not actual bit mask.
 	  this is because using flags are frequent and faster (maybe ... ?) this way,
