@@ -293,6 +293,13 @@ int cpu65_trap_callback ( Uint8 opcode )
 }
 
 
+void cpu65_illegal_opcode_callback ( void )
+{
+	ERROR_WINDOW("Unemulated NMOS 6502 opcode $%02X at PC=$%04X", cpu65.op, cpu65.pc - 1);
+	cpu65_reset();
+}
+
+
 
 void clear_emu_events ( void )
 {

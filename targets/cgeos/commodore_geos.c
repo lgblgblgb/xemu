@@ -700,6 +700,13 @@ int cpu65_trap_callback ( Uint8 opcode )
 }
 
 
+void cpu65_illegal_opcode_callback ( void )
+{
+	ERROR_WINDOW("Unemulated NMOS 6502 opcode $%02X at PC=$%04X", cpu65.op, cpu65.pc - 1);
+	cpu65_reset();
+}
+
+
 
 // This function is called by the 65C02 emulator in case of reading a byte (regardless of data or code)
 Uint8 cpu65_read_callback ( Uint16 addr )

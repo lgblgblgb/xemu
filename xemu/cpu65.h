@@ -3,6 +3,8 @@
    and some Mega-65 features as well.
    Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
+| For more information about "cpu65" please also read comments in file cpu65.c |
+
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or
@@ -86,11 +88,16 @@ extern int cpu_linear_memory_addressing_is_enabled;
 
 #ifndef CPU_CUSTOM_MEMORY_FUNCTIONS_H
 extern void  cpu65_write_callback      ( Uint16 addr, Uint8 data );
+#ifndef CPU65_NO_RMW_EMULATION
 extern void  cpu65_write_rmw_callback  ( Uint16 addr, Uint8 old_data, Uint8 new_data );
+#endif
 extern Uint8 cpu65_read_callback       ( Uint16 addr );
 #ifdef MEGA65
 extern void  cpu65_write_linear_opcode_callback ( Uint8 data );
 extern Uint8 cpu65_read_linear_opcode_callback  ( void );
+#endif
+#ifdef CPU_6502_NMOS_ONLY
+extern void  cpu65_illegal_opcode_callback ( void );
 #endif
 #else
 #include CPU_CUSTOM_MEMORY_FUNCTIONS_H

@@ -31,7 +31,7 @@ https://github.com/lgblgblgb/xemu/wiki
 ## Quick start (using binary)
 
 For probably seriously outdated pre-compiled binaries for MacOS, Win32, Win64,
-(and some deb package) please visit this link:
+(and some deb package) please follow this link:
 
 https://bintray.com/lgblgblgb/generic/xemu/current_version
 
@@ -39,7 +39,7 @@ https://bintray.com/lgblgblgb/generic/xemu/current_version
 
 For more information: https://github.com/lgblgblgb/xemu/wiki/Source
 
-### Install software for compilaton
+### Install software for compilation
 
 #### Example for Ubuntu Linux
 
