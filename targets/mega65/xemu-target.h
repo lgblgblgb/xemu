@@ -25,3 +25,8 @@
 #define M65_CPU_NMOS_ONLY_BUG_JMP_INDIRECT		1
 #define M65_CPU_NMOS_ONLY_BUG_NO_RESET_PFD_ON_INT	1
 #define M65_CPU_NMOS_ONLY_BUG_BCD			1
+
+// Currently only Linux-TAP device is supported to have emulated ethernet controller
+#ifdef __linux__
+#define HAVE_ETHERTAP
+#endif

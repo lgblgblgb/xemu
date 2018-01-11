@@ -34,6 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "m65_snapshot.h"
 #include "memory_mapper.h"
 #include "io_mapper.h"
+#include "ethernet65.h"
 
 
 static SDL_AudioDeviceID audio = 0;
@@ -384,6 +385,9 @@ static void shutdown_callback ( void )
 	FILE *f;
 #endif
 	int a;
+#ifdef HAVE_ETHERTAP
+	eth65_shutdown();
+#endif
 	for (a = 0; a < 0x40; a++)
 		DEBUG("VIC-3 register $%02X is %02X" NL, a, vic_registers[a]);
 	cia_dump_state (&cia1);
@@ -570,6 +574,9 @@ int main ( int argc, char **argv )
 #ifdef HAVE_XEMU_INSTALLER
 	xemucfg_define_str_option("installer", NULL, "Sets a download-specification descriptor file for auto-downloading data files");
 #endif
+#ifdef HAVE_ETHERTAP
+	xemucfg_define_str_option("ethertap", NULL, "Enable ethernet emulation, parameter is the already configured TAP device name");
+#endif
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 #ifdef HAVE_XEMU_INSTALLER
@@ -600,6 +607,9 @@ int main ( int argc, char **argv )
 	);
 	skip_unhandled_mem = xemucfg_get_bool("skipunhandledmem");
 	printf("UNHANDLED memory policy: %d" NL, skip_unhandled_mem);
+#ifdef HAVE_ETHERTAP
+	eth65_init(xemucfg_get_str("ethertap"));
+#endif
 #ifdef HAVE_XEMU_UMON
 	if (xemucfg_get_num("umon") != 0) {
 		int port = xemucfg_get_num("umon");
