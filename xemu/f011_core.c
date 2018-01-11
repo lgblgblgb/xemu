@@ -39,7 +39,7 @@ static Uint8 track, sector, side;	// parameters given for an operation ("find"),
 static Uint8 control, status_a, status_b;
 static Uint8 cmd;
 static int   curcmd;
-static Uint8 clock, step;
+static Uint8 dskclock, step;
 static int   emulate_busy;
 static int   drive;
 static Uint8 cache[512];		// 512 bytes cache FDC will use. This is a real 512byte RAM attached to the FDC controller for buffered operations on the C65
@@ -70,7 +70,7 @@ void fdc_init ( void )
 	side = 0;
 	cmd = 0;
 	curcmd = -1;
-	clock = 0xFF;
+	dskclock = 0xFF;
 	step = 0xFF;
 	cache_p_cpu = 0;
 	cache_p_fdc = 0;
@@ -280,7 +280,7 @@ void fdc_write_reg ( int addr, Uint8 data )
 			break;
 		// TODO: write DATA register (7) [only for writing it is needed anyway]
 		case 8:
-			clock = data;
+			dskclock = data;
 			break;
 		case 9:
 			step = data;
@@ -450,7 +450,7 @@ Uint8 fdc_read_reg  ( int addr )
 				status_a &= ~32;	// turn EQ off
 			break;
 		case 8:
-			result = clock;
+			result = dskclock;
 			break;
 		case 9:
 			result = step;
@@ -506,7 +506,7 @@ int fdc_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, str
 	status_a = buffer[133];
 	status_b = buffer[134];
 	cmd = buffer[135];
-	clock = buffer[136];
+	dskclock = buffer[136];
 	step = buffer[137];
 	memcpy(cache, buffer + 0x100, sizeof cache);
 	return 0;
@@ -537,7 +537,7 @@ int fdc_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	buffer[133] = status_a;
 	buffer[134] = status_b;
 	buffer[135] = cmd;
-	buffer[136] = clock;
+	buffer[136] = dskclock;
 	buffer[137] = step;
 	memcpy(buffer + 0x100, cache, sizeof cache);
 	return xemusnap_write_sub_block(buffer, sizeof buffer);
