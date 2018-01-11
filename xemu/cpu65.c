@@ -89,7 +89,8 @@ struct cpu65_st CPU65;
 #else
 #define OPC_65CE02(w)
 #endif
-static const Uint8 opcycles[] = {7,5,2,2,4,3,4,4,3,2,1,1,5,4,5,4,2,5,5,3,4,3,4,4,1,4,1,1,5,4,5,4,5,5,7,7,3,3,4,4,3,2,1,1,4,4,5,4,2,5,5,3,3,3,4,4,1,4,1,1,4,4,5,4,5,5,2,2,4,3,4,4,3,2,1,1,3,4,5,4,2,5,5,3,4,3,4,4,2,4,3,1,4,4,5,4,4,5,7,5,3,3,4,4,3,2,1,1,5,4,5,4,2,5,5,3,3,3,4,4,2,4,3,1,5,4,5,4,2,5,6,3,3,3,3,4,1,2,1,4,4,4,4,4,2,5,5,3,3,3,3,4,1,4,1,4,4,4,4,4,2,5,2,2,3,3,3,4,1,2,1,4,4,4,4,4,2,5,5,3,3,3,3,4,1,4,1,4,4,4,4,4,2,5,2,6,3,3,4,4,1,2,1,7,4,4,5,4,2,5,5,3,3,3,4,4,1,4,3,3,4,4,5,4,2,5,6,6,3,3,4,4,1,2,1,7,4,4,5,4,2,5,5,3,5,3,4,4,1,4,3,3,7,4,5,4}; // 65CE02 timing
+//static const Uint8 opcycles[] = {7,5,2,2,4,3,4,4,3,2,1,1,5,4,5,4,2,5,5,3,4,3,4,4,1,4,1,1,5,4,5,4,5,5,7,7,3,3,4,4,3,2,1,1,4,4,5,4,2,5,5,3,3,3,4,4,1,4,1,1,4,4,5,4,5,5,2,2,4,3,4,4,3,2,1,1,3,4,5,4,2,5,5,3,4,3,4,4,2,4,3,1,4,4,5,4,4,5,7,5,3,3,4,4,3,2,1,1,5,4,5,4,2,5,5,3,3,3,4,4,2,4,3,1,5,4,5,4,2,5,6,3,3,3,3,4,1,2,1,4,4,4,4,4,2,5,5,3,3,3,3,4,1,4,1,4,4,4,4,4,2,5,2,2,3,3,3,4,1,2,1,4,4,4,4,4,2,5,5,3,3,3,3,4,1,4,1,4,4,4,4,4,2,5,2,6,3,3,4,4,1,2,1,7,4,4,5,4,2,5,5,3,3,3,4,4,1,4,3,3,4,4,5,4,2,5,6,6,3,3,4,4,1,2,1,7,4,4,5,4,2,5,5,3,5,3,4,4,1,4,3,3,7,4,5,4}; // 65CE02 timing (my findings)
+static const Uint8 opcycles[] = {7,5,2,2,4,3,4,4,3,2,1,1,5,4,5,4,2,5,5,3,4,3,4,4,1,4,1,1,5,4,5,4,2,5,7,7,4,3,4,4,3,2,1,1,5,4,4,4,2,5,5,3,4,3,4,4,1,4,1,1,5,4,5,4,5,5,2,2,4,3,4,4,3,2,1,1,3,4,5,4,2,5,5,3,4,3,4,4,1,4,3,3,4,4,5,4,4,5,7,5,3,3,4,4,3,2,1,1,5,4,5,4,2,5,5,3,3,3,4,4,2,4,3,1,5,4,5,4,2,5,6,3,3,3,3,4,1,2,1,4,4,4,4,4,2,5,5,3,3,3,3,4,1,4,1,4,4,4,4,4,2,5,2,2,3,3,3,4,1,2,1,4,4,4,4,4,2,5,5,3,3,3,3,4,1,4,1,4,4,4,4,4,2,5,2,6,3,3,4,4,1,2,1,7,4,4,5,4,2,5,5,3,3,3,4,4,1,4,3,3,4,4,5,4,2,5,6,6,3,3,4,4,1,2,1,6,4,4,5,4,2,5,5,3,5,3,4,4,1,4,3,3,7,4,5,4}; // 65CE02 timing (from gs4510.vhdl)
 #else
 #ifdef CPU_6502_NMOS_ONLY
 static const Uint8 opcycles[] = {7,6,0,8,3,3,5,5,3,2,2,2,4,4,6,6,2,5,0,8,4,4,6,6,2,4,2,7,4,4,7,7,6,6,0,8,3,3,5,5,4,2,2,2,4,4,6,6,2,5,0,8,4,4,6,6,2,4,2,7,4,4,7,7,6,6,0,8,3,3,5,5,3,2,2,2,3,4,6,6,2,5,0,8,4,4,6,6,2,4,2,7,4,4,7,7,6,6,0,8,3,3,5,5,4,2,2,2,5,4,6,6,2,5,0,8,4,4,6,6,2,4,2,7,4,4,7,7,2,6,2,6,3,3,3,3,2,2,2,2,4,4,4,4,2,6,0,6,4,4,4,4,2,5,2,5,5,5,5,5,2,6,2,6,3,3,3,3,2,2,2,2,4,4,4,4,2,5,0,5,4,4,4,4,2,4,2,4,4,4,4,4,2,6,2,8,3,3,5,5,2,2,2,2,4,4,6,6,2,5,0,8,4,4,6,6,2,4,2,7,4,4,7,7,2,6,2,8,3,3,5,5,2,2,2,2,4,4,6,6,2,5,0,8,4,4,6,6,2,4,2,7,4,4,7,7}; // NMOS timing
@@ -112,12 +113,38 @@ static const Uint8 opcycles[] = {7,6,2,2,5,3,5,5,3,2,2,2,6,4,6,2,2,5,5,2,5,4,6,5
 #define writeByte(a,d)			cpu65_write_callback(a,d)
 #define readByte(a)			cpu65_read_callback(a)
 
+
+/* Three possible behaviour in term of operating mode:
+   * NMOS 6502 CPU core only (CPU_6502_NMOS_ONLY is defined)
+   * 65C02/65CE02 mode only (real 65CE02 - Commodore 65 - or 65C02 - Commodore LCD) depending to CPU_65CE02 defined or not
+   * Mega65, having NMOS persona _AS_WELL_ (CPU_65CE02 and MEGA65 macros are defined) */
+
 #ifdef CPU_6502_NMOS_ONLY
+/* NMOS CPU mode only, for emulators like VIC-20, etc. We define IS_CPU_NMOS as a constant 1, hopefully the C compiler is smart enough
+   to see, that is an always true statement used with 'if', thus it won't generate any condition when used that way */
 #define IS_CPU_NMOS			1
-#define ILLEGAL_OPCODE()		cpu65_illegal_opcode_callback()
+#define NMOS_JAM_OPCODE()		cpu65_illegal_opcode_callback()
+#define HAS_NMOS_BUG_JMP_INDIRECT	1
+#define HAS_NMOS_BUG_NO_PFD_RES_ON_INT	1
+#define HAS_NMOS_BUG_BCD		1
 #else
+#ifdef MEGA65
+/* Mega65 supports NMOS CPU persona as well, however the main performance bottleneck is more like the 50MHz 4510 mode, thus it's hinted as "unlikely" for the C compiler */
+#define	IS_CPU_NMOS			XEMU_UNLIKELY(CPU65.nmos_mode)
+#define	NMOS_JAM_OPCODE()		cpu65_illegal_opcode_callback()
+#define HAS_NMOS_BUG_JMP_INDIRECT	M65_CPU_ALWAYS_BUG_JMP_INDIRECT || (M65_CPU_NMOS_ONLY_BUG_JMP_INDIRECT && CPU65.nmos_mode)
+#define HAS_NMOS_BUG_NO_PFD_RES_ON_INT	M65_CPU_ALWAYS_BUG_NO_RESET_PFD_ON_INT || (M65_CPU_NMOS_ONLY_BUG_NO_RESET_PFD_ON_INT && CPU65.nmos_mode)
+#define HAS_NMOS_BUG_BCD		M65_CPU_ALWAYS_BUG_BCD || (M65_CPU_NMOS_ONLY_BUG_BCD && CPU65.nmos_mode)
+#else
+/* 65C02 mode, eg for Commodore LCD or 65CE02 mode for Commodore 65 (based on the macro of CPU_65CE02). We define IS_CPU_NMOS as a constant 0, hopefully the C compiler is smart enough
+   to see, that is an always true statement used with 'if', thus it won't generate any condition when used that way.
+   NMOS_JAM_OPCODE() is a null-op, as it won't be ever referenced. */
 #define IS_CPU_NMOS			0
-#define ILLEGAL_OPCODE()
+#define NMOS_JAM_OPCODE()
+#define HAS_NMOS_BUG_JMP_INDIRECT	0
+#define HAS_NMOS_BUG_NO_PFD_RES_ON_INT	0
+#define HAS_NMOS_BUG_BCD		0
+#endif
 #endif
 
 
@@ -197,6 +224,9 @@ Uint8 cpu65_get_pf() {
 	|
 	(CPU65.pf_v ?  CPU65_PF_V : 0) |
 #ifdef CPU_65CE02
+	// FIXME: for M65 in NMOS-persona, some should always force '1' here,
+	// however, that's a bit cryptic for me, as it would be simplier to actual E flag
+	// would be 1, as for NMOS, the stack should be not in 16 bits mode, I guess ...
 	(CPU65.pf_e ?  CPU65_PF_E : 0) |
 #else
 	CPU65_PF_E |
@@ -220,6 +250,9 @@ void cpu65_reset() {
 	CPU65.bphi = 0x0000;
 	CPU65.sphi = 0x0100;
 	CPU65.cpu_inhibit_interrupts = 0;
+#endif
+#ifdef MEGA65
+	CPU65.nmos_mode = 0;
 #endif
 	CPU65.pc = readWord(0xFFFC);
 	DEBUG("CPU[" CPU_TYPE "]: RESET, PC=%04X" NL, CPU65.pc);
@@ -473,7 +506,6 @@ int cpu65_step (
 #ifdef DEBUG_CPU
 		DEBUG("CPU: servint IRQ on IRQ level at PC $%04X" NL, CPU65.pc);
 #endif
-		//last_p = cpu65_get_pf();
 		pushWord(CPU65.pc);
 		push(cpu65_get_pf());	// no CPU65_PF_B is pushed!
 		CPU65.pf_i = 1;
@@ -524,8 +556,9 @@ int cpu65_step (
 	case 0x01:	/* ORA (Zero_Page,X) */
 			SET_NZ(A_OP(|,readByte(_zpxi())));
 			break;
-	case 0x02:	/* 65C02: NOP imm (non-std NOP with addr mode), 65CE02: CLE */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+	case 0x02:	/* 65C02: NOP imm (non-std NOP with addr mode), 65CE02: CLE
+			   NMOS: KIL */
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("CLE");
 			CPU65.pf_e = 0;	// 65CE02: CLE
@@ -537,8 +570,9 @@ int cpu65_step (
 #endif
 			}
 			break;
-	case 0x03:	/* $03 65C02: NOP (nonstd loc, implied), 65CE02: SEE */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+	case 0x03:	/* $03 65C02: NOP (nonstd loc, implied), 65CE02: SEE
+			   NMOS: SLO ($00,X) -> TODO */
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("SEE");
 			CPU65.pf_e = 1;	// 65CE02: SEE
@@ -546,7 +580,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x04:	/* TSB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else { _TSB(_zp()); }
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else { _TSB(_zp()); }
 			break;
 	case 0x05:	/* ORA Zero_Page */
 			SET_NZ(A_OP(|,readByte(_zp())));
@@ -555,7 +589,7 @@ int cpu65_step (
 			_ASL(_zp());
 			break;
 	case 0x07:	/* RMB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			int a = _zp();
 			writeByte(a, readByte(a) & 254);
 			}
@@ -570,7 +604,7 @@ int cpu65_step (
 			_ASL(-1);
 			break;
 	case 0x0B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: TSY */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("TSY");
 			SET_NZ(CPU65.y = (CPU65.sphi >> 8));	// TSY
@@ -578,7 +612,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x0C:	/* TSB Absolute */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_TSB(_abs());
 			}
 			break;
@@ -589,7 +623,7 @@ int cpu65_step (
 			_ASL(_abs());
 			break;
 	case 0x0F:	/* BBR Relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BRA(!(readByte(_zp()) & 1));
 			}
 			break;
@@ -604,7 +638,7 @@ int cpu65_step (
 			SET_NZ(A_OP(|,readByte(_zpiy())));
 			break;
 	case 0x12:	/* ORA (Zero_Page) or (ZP),Z on 65CE02 */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
 			if (IS_FLAT32_DATA_OP())
 				SET_NZ(A_OP(|,readFlatAddressedByte()));
@@ -614,7 +648,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x13:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BPL 16 bit relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("BPL16");
 #ifdef CPU65_DISCRETE_PF_NZ
@@ -626,7 +660,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x14:	/* TRB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_TRB(_zp());
 			}
 			break;
@@ -637,7 +671,7 @@ int cpu65_step (
 			_ASL(_zpx());
 			break;
 	case 0x17:	/* RMB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			int a = _zp(); writeByte(a, readByte(a) & 253);
 			}
 			break;
@@ -648,12 +682,12 @@ int cpu65_step (
 			SET_NZ(A_OP(|,readByte(_absy())));
 			break;
 	case 0x1A:	/* INA Accumulator */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			SET_NZ(++CPU65.a);
 			}
 			break;
 	case 0x1B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: INZ */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("INZ");
 			SET_NZ(++CPU65.z);
@@ -661,7 +695,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x1C:	/* TRB Absolute */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_TRB(_abs());
 			}
 			break;
@@ -672,7 +706,7 @@ int cpu65_step (
 			_ASL(_absx());
 			break;
 	case 0x1F:	/* BBR Relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BRA(!(readByte(_zp()) & 2));
 			}
 			break;
@@ -684,7 +718,7 @@ int cpu65_step (
 			SET_NZ(A_OP(&,readByte(_zpxi())));
 			break;
 	case 0x22:	/* 65C02 NOP imm (non-std NOP with addr mode), 65CE02: JSR (nnnn) */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("JSR (nnnn)");
 			// 65CE02 JSR ($nnnn)
@@ -696,7 +730,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x23:	/* 65C02 NOP (nonstd loc, implied), 65CE02: JSR (nnnn,X) */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("JSR (nnnn,X)");
 			pushWord(CPU65.pc + 1);
@@ -714,7 +748,7 @@ int cpu65_step (
 			_ROL(_zp());
 			break;
 	case 0x27:	/* RMB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			int a = _zp();
 			writeByte(a, readByte(a) & 251);
 			}
@@ -729,7 +763,7 @@ int cpu65_step (
 			_ROL(-1);
 			break;
 	case 0x2B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: TYS */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("TYS");
 			CPU65.sphi = CPU65.y << 8;	// 65CE02 TYS
@@ -750,7 +784,7 @@ int cpu65_step (
 			_ROL(_abs());
 			break;
 	case 0x2F:	/* BBR Relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BRA(!(readByte(_zp()) & 4));
 			}
 			break;
@@ -765,7 +799,7 @@ int cpu65_step (
 			SET_NZ(A_OP(&,readByte(_zpiy())));
 			break;
 	case 0x32:	/* 65C02: AND (Zero_Page), 65CE02: AND (ZP),Z */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
 			if (IS_FLAT32_DATA_OP())
 				SET_NZ(A_OP(&,readFlatAddressedByte()));
@@ -775,7 +809,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x33:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BMI 16-bit relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("BMI16");
 #ifdef CPU65_DISCRETE_PF_NZ
@@ -787,7 +821,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x34:	/* BIT Zero_Page,X */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BIT(readByte(_zpx()));
 			}
 			break;
@@ -798,7 +832,7 @@ int cpu65_step (
 			_ROL(_zpx());
 			break;
 	case 0x37:	/* RMB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			int a = _zp();
 			writeByte(a, readByte(a) & 247);
 			}
@@ -810,12 +844,12 @@ int cpu65_step (
 			SET_NZ(A_OP(&,readByte(_absy())));
 			break;
 	case 0x3A:	/* DEA Accumulator */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			SET_NZ(--CPU65.a);
 			}
 			break;
 	case 0x3B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: DEZ */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("DEZ");
 			SET_NZ(--CPU65.z);
@@ -823,7 +857,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x3C:	/* BIT Absolute,X */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BIT(readByte(_absx()));
 			}
 			break;
@@ -834,7 +868,7 @@ int cpu65_step (
 			_ROL(_absx());
 			break;
 	case 0x3F:	/* BBR Relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BRA(!(readByte(_zp()) & 8));
 			}
 			break;
@@ -846,7 +880,7 @@ int cpu65_step (
 			SET_NZ(A_OP(^,readByte(_zpxi())));
 			break;
 	case 0x42:	/* 65C02: NOP imm (non-std NOP with addr mode), 65CE02: NEG */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("NEG");
 			SET_NZ(CPU65.a = -CPU65.a);	// 65CE02: NEG	FIXME: flags etc are correct?
@@ -856,7 +890,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x43:	/* 65C02: NOP (nonstd loc, implied), 65CE02: ASR A */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("ASR A");
 			_ASR(-1);
@@ -867,7 +901,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x44:	/* 65C02: NOP zp (non-std NOP with addr mode), 65CE02: ASR $nn */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("ASR nn");
 			_ASR(_zp());				// 65CE02: ASR $nn
@@ -883,7 +917,7 @@ int cpu65_step (
 			_LSR(_zp());
 			break;
 	case 0x47:	/* RMB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			int a = _zp();
 			writeByte(a, readByte(a) & 239);
 			}
@@ -898,7 +932,7 @@ int cpu65_step (
 			_LSR(-1);
 			break;
 	case 0x4B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: TAZ */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("TAZ");
 			SET_NZ(CPU65.z = CPU65.a);	// 65CE02: TAZ
@@ -915,7 +949,7 @@ int cpu65_step (
 			_LSR(_abs());
 			break;
 	case 0x4F:	/* BBR Relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BRA(!(readByte(_zp()) & 16));
 			}
 			break;
@@ -926,7 +960,7 @@ int cpu65_step (
 			SET_NZ(A_OP(^,readByte(_zpiy())));
 			break;
 	case 0x52:	/* EOR (Zero_Page) or (ZP),Z on 65CE02 */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
 			if (IS_FLAT32_DATA_OP())
 				SET_NZ(A_OP(^,readFlatAddressedByte()));
@@ -936,7 +970,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x53:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BVC 16-bit-relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("BVC16");
 			_BRA16(!CPU65.pf_v);
@@ -944,7 +978,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x54:	/* 65C02: NOP zpx (non-std NOP with addr mode), 65CE02: ASR $nn,X */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("ASR nn,X");
 			_ASR(_zpx());
@@ -960,7 +994,7 @@ int cpu65_step (
 			_LSR(_zpx());
 			break;
 	case 0x57:	/* RMB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			int a = _zp();
 			writeByte(a, readByte(a) & 223);
 			}
@@ -972,12 +1006,12 @@ int cpu65_step (
 			SET_NZ(A_OP(^,readByte(_absy())));
 			break;
 	case 0x5A:	/* PHY Implied */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			push(CPU65.y);
 			}
 			break;
 	case 0x5B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: TAB */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("TAB");
 			CPU65.bphi = CPU65.a << 8;
@@ -989,7 +1023,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x5C:	/* 65C02: NOP (nonstd loc, implied FIXME or absolute?!), 65CE02: AUG/MAP */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("MAP");
 			cpu65_do_aug_callback();	/* $5C on 65CE02: this is the "AUG" opcode. It must be handled by the emulator, on 4510 (C65) it's redefined as MAP for MMU functionality */
@@ -1005,7 +1039,7 @@ int cpu65_step (
 			_LSR(_absx());
 			break;
 	case 0x5F:	/* BBR Relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BRA(!(readByte(_zp()) & 32));
 			}
 			break;
@@ -1017,7 +1051,7 @@ int cpu65_step (
 			break;
 	case 0x62:	/* 65C02: NOP imm (non-std NOP with addr mode), 65CE02: RTS #$nn */
 			/* 65CE02 FIXME TODO : what this opcode does _exactly_? Guess: correcting stack pointer with a given value? Also some docs says it's RTN ... */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("RTS #nn");
 			{	// 65CE02 RTS #$nn TODO: what this opcode does _exactly_? Guess: correcting stack pointer with a given value? Also some docs says it's RTN ...
@@ -1034,7 +1068,7 @@ int cpu65_step (
 			break;
 	case 0x63:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BSR16 */
 			/* FIXME TODO: BSR $nnnn Interesting 65C02-only? does this opcode exist before 65CE02 as well?! */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("BSR16");
 			// 65C02 ?! BSR $nnnn Interesting 65C02-only? FIXME TODO: does this opcode exist before 65CE02 as well?!
@@ -1044,7 +1078,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x64:	/* STZ Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			writeByte(_zp(), ZERO_REG);
 			}
 			break;
@@ -1055,7 +1089,7 @@ int cpu65_step (
 			_ROR(_zp());
 			break;
 	case 0x67:	/* RMB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			int a = _zp();
 			writeByte(a, readByte(a) & 191);
 			}
@@ -1070,7 +1104,7 @@ int cpu65_step (
 			_ROR(-1);
 			break;
 	case 0x6B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: TZA */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("TZA");
 			SET_NZ(CPU65.a = CPU65.z);	// 65CE02 TZA
@@ -1078,7 +1112,11 @@ int cpu65_step (
 			}
 			break;
 	case 0x6C:	/* JMP (Absolute) */
-			CPU65.pc = _absi();
+			if (HAS_NMOS_BUG_JMP_INDIRECT) {
+				int t = _abs();
+				CPU65.pc = readByte(t) | (readByte((t & 0xFF00) | ((t + 1) & 0xFF)) << 8);
+			} else
+				CPU65.pc = _absi();
 			break;
 	case 0x6D:	/* ADC Absolute */
 			_ADC(readByte(_abs()));
@@ -1087,7 +1125,7 @@ int cpu65_step (
 			_ROR(_abs());
 			break;
 	case 0x6F:	/* BBR Relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BRA(!(readByte(_zp()) & 64));
 			}
 			break;
@@ -1098,7 +1136,7 @@ int cpu65_step (
 			_ADC(readByte(_zpiy()));
 			break;
 	case 0x72:	/* 0x72 ADC (Zero_Page) or (ZP),Z on 65CE02 */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
 			if (IS_FLAT32_DATA_OP())
 				_ADC(readFlatAddressedByte());
@@ -1108,7 +1146,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x73:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BVS 16 bit relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("BVS16");
 			_BRA16(CPU65.pf_v);
@@ -1116,7 +1154,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x74:	/* STZ Zero_Page,X */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			writeByte(_zpx(), ZERO_REG);
 			}
 			break;
@@ -1127,7 +1165,7 @@ int cpu65_step (
 			_ROR(_zpx());
 			break;
 	case 0x77:	/* RMB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			int a = _zp();
 			writeByte(a, readByte(a) & 127);
 			}
@@ -1139,12 +1177,12 @@ int cpu65_step (
 			_ADC(readByte(_absy()));
 			break;
 	case 0x7A:	/* PLY Implied */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			SET_NZ(CPU65.y = pop());
 			}
 			break;
 	case 0x7B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: TBA */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("TBA");
 			SET_NZ(CPU65.a = (CPU65.bphi >> 8));	// 65C02 TBA
@@ -1152,7 +1190,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x7C:	/* JMP (Absolute,X) */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			CPU65.pc = _absxi();
 			}
 			break;
@@ -1163,12 +1201,12 @@ int cpu65_step (
 			_ROR(_absx());
 			break;
 	case 0x7F:	/* BBR Relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BRA(!(readByte(_zp()) & 128));
 			}
 			break;
 	case 0x80:	/* BRA Relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BRA(1);
 			}
 			break;
@@ -1176,7 +1214,7 @@ int cpu65_step (
 			writeByte(_zpxi(), CPU65.a);
 			break;
 	case 0x82:	/* 65C02: NOP imm (non-std NOP with addr mode), 65CE02: STA ($nn,SP),Y */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("STA (nn,S),Y");
 			writeByte(_GET_SP_INDIRECT_ADDR(), CPU65.a);	// 65CE02 STA ($nn,SP),Y
@@ -1186,7 +1224,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x83:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BRA $nnnn 16-bit-pc-rel? */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("BRA16");
 			_BRA16(1);	// 65CE02 BRA $nnnn 16-bit-pc-rel?
@@ -1203,7 +1241,7 @@ int cpu65_step (
 			writeByte(_zp(), CPU65.x);
 			break;
 	case 0x87:	/* SMB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			int a = _zp();
 			writeByte(a, readByte(a) | 1);
 			}
@@ -1212,7 +1250,7 @@ int cpu65_step (
 			SET_NZ(--CPU65.y);
 			break;
 	case 0x89:	/* BIT+ Immediate */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU65_DISCRETE_PF_NZ
 			CPU65.pf_z = (!(CPU65.a & readByte(_imm())));
 #else
@@ -1224,7 +1262,7 @@ int cpu65_step (
 			SET_NZ(CPU65.a = CPU65.x);
 			break;
 	case 0x8B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: STY $nnnn,X */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("STY nnnn,X");
 			writeByte(_absx(), CPU65.y); // 65CE02 STY $nnnn,X
@@ -1241,7 +1279,7 @@ int cpu65_step (
 			writeByte(_abs(), CPU65.x);
 			break;
 	case 0x8F:	/* BBS Relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BRA( readByte(_zp()) & 1 );
 			}
 			break;
@@ -1252,7 +1290,7 @@ int cpu65_step (
 			writeByte(_zpiy(), CPU65.a);
 			break;
 	case 0x92:	/* STA (Zero_Page) or (ZP),Z on 65CE02 */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
 			if (IS_FLAT32_DATA_OP())
 				writeFlatAddressedByte(CPU65.a);
@@ -1262,7 +1300,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x93:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BCC $nnnn */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("BCC16");
 			_BRA16(!CPU65.pf_c);	// 65CE02  BCC $nnnn
@@ -1279,7 +1317,7 @@ int cpu65_step (
 			writeByte(_zpy(), CPU65.x);
 			break;
 	case 0x97:	/* SMB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			int a = _zp();
 			writeByte(a, readByte(a) | 2);
 			}
@@ -1294,7 +1332,7 @@ int cpu65_step (
 			CPU65.s = CPU65.x;
 			break;
 	case 0x9B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: STX $nnnn,Y */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("STX nnnn,Y");
 			writeByte(_absy(), CPU65.x);	// 65CE02 STX $nnnn,Y
@@ -1302,7 +1340,7 @@ int cpu65_step (
 			}
 			break;
 	case 0x9C:	/* STZ Absolute */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			writeByte(_abs(), ZERO_REG);
 			}
 			break;
@@ -1310,12 +1348,12 @@ int cpu65_step (
 			writeByte(_absx(), CPU65.a);
 			break;
 	case 0x9E:	/* STZ Absolute,X */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			writeByte(_absx(), ZERO_REG);
 			}
 			break;
 	case 0x9F:	/* BBS Relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BRA( readByte(_zp()) & 2 );
 			}
 			break;
@@ -1329,7 +1367,7 @@ int cpu65_step (
 			SET_NZ(CPU65.x = readByte(_imm()));
 			break;
 	case 0xA3:	/* 65C02: NOP (nonstd loc, implied), 65CE02: LDZ #$nn */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("LDZ #nn");
 			SET_NZ(CPU65.z = readByte(_imm()));
@@ -1346,7 +1384,7 @@ int cpu65_step (
 			SET_NZ(CPU65.x = readByte(_zp()));
 			break;
 	case 0xA7:	/* SMB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			int a = _zp();
 			writeByte(a, readByte(a) | 4);
 			}
@@ -1361,7 +1399,7 @@ int cpu65_step (
 			SET_NZ(CPU65.x = CPU65.a);
 			break;
 	case 0xAB:	/* 65C02: NOP (nonstd loc, implied), 65CE02: LDZ $nnnn */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("LDZ nnnn");
 			SET_NZ(CPU65.z = readByte(_abs()));
@@ -1378,7 +1416,7 @@ int cpu65_step (
 			SET_NZ(CPU65.x = readByte(_abs()));
 			break;
 	case 0xAF:	/* BSS Relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BRA( readByte(_zp()) & 4 );
 			}
 			break;
@@ -1389,7 +1427,7 @@ int cpu65_step (
 			SET_NZ(CPU65.a = readByte(_zpiy()));
 			break;
 	case 0xB2:	/* LDA (Zero_Page) or (ZP),Z on 65CE02 */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
 			if (IS_FLAT32_DATA_OP())
 				SET_NZ(CPU65.a = readFlatAddressedByte());
@@ -1399,7 +1437,7 @@ int cpu65_step (
 			}
 			break;
 	case 0xB3:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BCS $nnnn */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("BCS16");
 			_BRA16(CPU65.pf_c);
@@ -1416,7 +1454,7 @@ int cpu65_step (
 			SET_NZ(CPU65.x = readByte(_zpy()));
 			break;
 	case 0xB7:	/* SMB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			int a = _zp();
 			writeByte(a, readByte(a) | 8);
 			}
@@ -1431,7 +1469,7 @@ int cpu65_step (
 			SET_NZ(CPU65.x = CPU65.s);
 			break;
 	case 0xBB:	/* 65C02: NOP (nonstd loc, implied), 65CE02: LDZ $nnnn,X */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("LDZ nnnn,X");
 			SET_NZ(CPU65.z = readByte(_absx()));
@@ -1448,7 +1486,7 @@ int cpu65_step (
 			SET_NZ(CPU65.x = readByte(_absy()));
 			break;
 	case 0xBF:	/* BBS Relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BRA( readByte(_zp()) & 8 );
 			}
 			break;
@@ -1459,7 +1497,7 @@ int cpu65_step (
 			_CMP(CPU65.a, readByte(_zpxi()));
 			break;
 	case 0xC2:	/* 65C02: imm (non-std NOP with addr mode), 65CE02: CPZ #$nn */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("CPZ #nn");
 			_CMP(CPU65.z, readByte(_imm()));
@@ -1470,7 +1508,7 @@ int cpu65_step (
 			break;
 	case 0xC3:	/* 65C02: NOP (nonstd loc, implied), 65CE02: DEW $nn */
 			/* DEW $nn 65CE02  C3  Decrement Word (maybe an error in 64NET.OPC ...) ANOTHER FIXME: this is zero (errr, base ...) page!!! */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("DEW nn");
 			int alo = _zp();
@@ -1497,7 +1535,7 @@ int cpu65_step (
 			}
 			break;
 	case 0xC7:	/* SMB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			int a = _zp();
 			writeByte(a, readByte(a) | 16);
 			}
@@ -1512,7 +1550,7 @@ int cpu65_step (
 			SET_NZ(--CPU65.x);
 			break;
 	case 0xCB:	/* 65C02: NOP (nonstd loc, implied), 65CE02: ASW $nnnn ("Arithmetic Shift Left Word") */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("ASW nnnn");
 			int addr = _abs();
@@ -1540,7 +1578,7 @@ int cpu65_step (
 			}
 			break;
 	case 0xCF:	/* BBS Relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BRA( readByte(_zp()) & 16 );
 			}
 			break;
@@ -1555,7 +1593,7 @@ int cpu65_step (
 			_CMP(CPU65.a, readByte(_zpiy()));
 			break;
 	case 0xD2:	/* CMP (Zero_Page) or (ZP),Z on 65CE02 */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
 			if (IS_FLAT32_DATA_OP())	// NOTE: this was not mentioned in Paul's blog-post, but this op should have this property as well, IMHO!
 				_CMP(CPU65.a, readFlatAddressedByte());
@@ -1565,7 +1603,7 @@ int cpu65_step (
 			}
 			break;
 	case 0xD3:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BNE16 */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("BNE16");
 #ifdef CPU65_DISCRETE_PF_NZ
@@ -1577,7 +1615,7 @@ int cpu65_step (
 			}
 			break;
 	case 0xD4:	/* 65C02: NOP zpx (non-std NOP with addr mode), 65CE02: CPZ $nn */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("CPZ nn");
 			_CMP(CPU65.z, readByte(_zp()));
@@ -1597,7 +1635,7 @@ int cpu65_step (
 			}
 			break;
 	case 0xD7:	/* SMB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			int a = _zp();
 			writeByte(a, readByte(a) | 32);
 			}
@@ -1609,12 +1647,12 @@ int cpu65_step (
 			_CMP(CPU65.a, readByte(_absy()));
 			break;
 	case 0xDA:	/* PHX Implied */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			push(CPU65.x);
 			}
 			break;
 	case 0xDB:	/* 65C02: NOP (nonstd loc, implied), 65CE02: PHZ */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("PHZ");
 			push(CPU65.z);
@@ -1622,7 +1660,7 @@ int cpu65_step (
 			}
 			break;
 	case 0xDC:	/* 65C02: NOP (nonstd loc, implied) FIXME: bugfix NOP absolute!, 65CE02: CPZ $nnnn */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("CPZ nnnn");
 			_CMP(CPU65.z, readByte(_abs()));
@@ -1643,7 +1681,7 @@ int cpu65_step (
 			}
 			break;
 	case 0xDF:	/* BBS Relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BRA( readByte(_zp()) & 32 );
 			}
 			break;
@@ -1654,7 +1692,7 @@ int cpu65_step (
 			_SBC(readByte(_zpxi()));
 			break;
 	case 0xE2:	/* 65C02: NOP imm (non-std NOP with addr mode), 65CE02: LDA (nn,S),Y */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("LDA (nn,S),Y");
 			// 65CE02 LDA ($nn,SP),Y
@@ -1667,7 +1705,7 @@ int cpu65_step (
 			}
 			break;
 	case 0xE3:	/* 65C02: NOP (nonstd loc, implied), 65CE02: Increment Word (maybe an error in 64NET.OPC ...) ANOTHER FIXME: this is zero (errr, base ...) page!!! */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("INW nn");
 			int alo = _zp();
@@ -1695,7 +1733,7 @@ int cpu65_step (
 			}
 			break;
 	case 0xE7:	/* SMB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			int a = _zp();
 			writeByte(a, readByte(a) | 64);
 			}
@@ -1713,7 +1751,7 @@ int cpu65_step (
 #endif
 			break;
 	case 0xEB:	/* 65C02: NOP (nonstd loc, implied), 65CE02: ROW $nnnn Rotate word LEFT?! [other documents says RIGHT!!! FIXME] */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("ROW nnnn");
 			int addr = _abs();
@@ -1741,7 +1779,7 @@ int cpu65_step (
 			}
 			break;
 	case 0xEF:	/* BBS Relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BRA( readByte(_zp()) & 64 );
 			}
 			break;
@@ -1756,7 +1794,7 @@ int cpu65_step (
 			_SBC(readByte(_zpiy()));
 			break;
 	case 0xF2:	/* SBC (Zero_Page) or (ZP),Z on 65CE02 */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
 			if (IS_FLAT32_DATA_OP())
 				_SBC(readFlatAddressedByte());
@@ -1766,7 +1804,7 @@ int cpu65_step (
 			}
 			break;
 	case 0xF3:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BEQ16 */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("BEQ16");
 #ifdef CPU65_DISCRETE_PF_NZ
@@ -1778,7 +1816,7 @@ int cpu65_step (
 			}
 			break;
 	case 0xF4:	/* 65C02: NOP zpx (non-std NOP with addr mode), 65CE02: PHW #$nnnn (push word) */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("PHW #nnnn");
 			PUSH_FOR_PHW(readWord(CPU65.pc));	// 65CE02 PHW #$nnnn
@@ -1800,7 +1838,7 @@ int cpu65_step (
 			}
 			break;
 	case 0xF7:	/* SMB Zero_Page */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			int a = _zp();
 			writeByte(a, readByte(a) | 128);
 			}
@@ -1812,12 +1850,12 @@ int cpu65_step (
 			_SBC(readByte(_absy()));
 			break;
 	case 0xFA:	/* PLX Implied */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			SET_NZ(CPU65.x = pop());
 			}
 			break;
 	case 0xFB:	/* 65C02: NOP (nonstd loc, implied), 65CE02: PLZ */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("PLZ");
 			SET_NZ(CPU65.z = pop());	// PLZ
@@ -1826,7 +1864,7 @@ int cpu65_step (
 			break;
 	case 0xFC:	/* 65C02: NOP (nonstd loc, implied) FIXME: bugfix NOP absolute?
 			   65CE02: PHW $nnnn [? push word from an absolute address, maybe?] Note: C65 BASIC depends on this opcode to be correct! */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("PHW nnnn");
 			PUSH_FOR_PHW(readWord(readWord(CPU65.pc)));
@@ -1848,7 +1886,7 @@ int cpu65_step (
 			}
 			break;
 	case 0xFF:	/* BBS Relative */
-			if (IS_CPU_NMOS) { ILLEGAL_OPCODE(); } else {
+			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 			_BRA( readByte(_zp()) & 128 );
 			}
 			break;

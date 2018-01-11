@@ -56,6 +56,7 @@ struct cpu65_st {
 	Uint8 op;
 #ifdef MEGA65
 	Uint8 previous_op;
+	int nmos_mode;
 #endif
 #ifdef CPU_65CE02
 	Uint8 z;
@@ -96,7 +97,7 @@ extern Uint8 cpu65_read_callback       ( Uint16 addr );
 extern void  cpu65_write_linear_opcode_callback ( Uint8 data );
 extern Uint8 cpu65_read_linear_opcode_callback  ( void );
 #endif
-#ifdef CPU_6502_NMOS_ONLY
+#if defined(CPU_6502_NMOS_ONLY) || defined(MEGA65)
 extern void  cpu65_illegal_opcode_callback ( void );
 #endif
 #else

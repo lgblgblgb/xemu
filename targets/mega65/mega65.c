@@ -57,6 +57,11 @@ static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, bu
 
 
 
+void cpu65_illegal_opcode_callback ( void )
+{
+	FATAL("Internal error: 6502 NMOS persona is not supported yet.");
+}
+
 
 
 void machine_set_speed ( int verbose )
