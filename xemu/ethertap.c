@@ -18,14 +18,12 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
-/* http://backreference.org/2010/03/26/tuntap-interface-tutorial/
+/* NOTES - NOTES - NOTES - NOTES
 
 Ether-TAP interface handling for Linux. Currently, I don't know
 if other OSes has some kind of TAP interface as well (MacOS
 - AFAIK - supports only TUN, but not TAP, what we need here,
 I have no idea about Windows).
-
-
 
 Assuming that you have Linux which is needed:
 
@@ -44,12 +42,6 @@ security aware, like an emulator (Xemu) otherwise. Also, the
 10.10.10.1 is set for the interface address, with netmask of
 /24 (255.255.255.0).
 
-Then, you can start this program with parameter mega65 to
-indicate the TAP device name to be used.
-
-lgb@oxygene:~$ gcc -Wall tap.c 
-lgb@oxygene:~$ ./a.out mega65
-
 Here, mega65 parameter is the device name we configured above.
 I run as user lgb, what I configured the device for (note:
 the program can run without it, but then it allocates a new
@@ -57,19 +49,7 @@ interface, it won't work a user only as root, but I want to
 avoid that, as the TAP handling part needed for the Xemu
 and it's really a bad idea to run Xemu as root for obvious
 security reasons! Even if it would mean that Xemu would be
-able to configure the device for itself, hmmm ...)
-
-This program implements a very crude test, that it answers
-ARP requests, and also to ICMP echo requests ("ping").
-
-NOTE: the source is hard-wired to use 10.10.10.10 address.
-So you should use a network for the TAP device config which
-includes this address, like the example 10.10.10.1/24, thus
-the Linux box itself will have 10.10.10.1, and this program
-10.10.10.10
-
-The desired IP and MAC address for ourselves are defined in
-this program, see later. */
+able to configure the device for itself, hmmm ...)  */
 
 #ifdef HAVE_ETHERTAP
 
@@ -82,6 +62,8 @@ this program, see later. */
 #include <sys/ioctl.h>
 #include <fcntl.h>
 #include <unistd.h>
+// net/if.h is not needed in my Linux box, but it seems it is needed on older Ubuntu versions at least, so ...
+#include <net/if.h>
 #include <linux/if.h>
 #include <linux/if_tun.h>
 #include <errno.h>
@@ -159,6 +141,8 @@ int xemu_tuntap_write ( void *buffer, int size )
    dev_out_size: size of dev_out buffer storage
    flags: XEMU_TUNTAP_IS_TAP / XEMU_TUNTAP_IS_TUN, only one, but one is compulsory!
           XEMU_TUNTAP_NO_PI can be OR'ed to the type above though
+   Some core concepts are nicely summarized here:
+   http://backreference.org/2010/03/26/tuntap-interface-tutorial/
 */
 
 int xemu_tuntap_alloc ( const char *dev_in, char *dev_out, int dev_out_size, unsigned int flags )
@@ -181,33 +165,16 @@ int xemu_tuntap_alloc ( const char *dev_in, char *dev_out, int dev_out_size, uns
 	}
 	if (flags & XEMU_TUNTAP_NO_PI)
 		ifr.ifr_flags |= IFF_NO_PI;
-  //char *clonedev = "/dev/net/tun";
-
-  /* Arguments taken by the function:
-   *
-   * char *dev: the name of an interface (or '\0'). MUST have enough
-   *   space to hold the interface name if '\0' is passed
-   * int flags: interface flags (eg, IFF_TUN etc.)
-   */
-
 	if ((fd = open(CLONE_TUNTAP_NAME, O_RDWR)) < 0)
 		return fd;
-	if (dev_in && *dev_in) {
-		/* if a device name was specified, put it in the structure; otherwise,
-		* the kernel will try to allocate the "next" device of the
-		* specified type */
+	if (dev_in && *dev_in)
 		strncpy(ifr.ifr_name, dev_in, IFNAMSIZ);
-	} else
+	else
 		ifr.ifr_name[0] = 0;
-	/* try to create the device */
 	if ((err = ioctl(fd, TUNSETIFF, (void *) &ifr)) < 0) {
 		close(fd);
 		return err;
 	}
-	/* if the operation was successful, write back the name of the
-	 * interface to the variable "dev", so the caller can know
-	 * it. Note that the caller MUST reserve space in *dev (see calling
-	 * code below) */
 	if (dev_out) {
 		if (strlen(ifr.ifr_name) >= dev_out_size) {
 			close(fd);
@@ -216,8 +183,6 @@ int xemu_tuntap_alloc ( const char *dev_in, char *dev_out, int dev_out_size, uns
 		} else
 			strcpy(dev_out, ifr.ifr_name);
 	}
-	/* this is the special file descriptor that the caller will use to talk
-	 * with the virtual interface */
 	tuntap_fd = fd;	// file descriptor is available now, good
 	return fd;	// also return the FD, but note, that it should not be used too much currently outside of this source
 }
