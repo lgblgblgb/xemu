@@ -1,6 +1,6 @@
 /* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
    DMAgic emulation.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -37,13 +37,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 	* C65 specification tells about "not implemented sub-commands": I am curious what "sub commands" are or planned as, etc ...
 	* Reading status would resume interrupted DMA operation (?) it's not emulated
 	* MEGA65 macro is defined in case of M65 target, then we handle the "megabyte slice stuff" as well.
+	* FIXME: I am not sure what's the truth: DMA session "warps" within the 1Mbyte address range or within the 64K address set?!
 */
 
 
 Uint8 dma_registers[16];		// The four DMA registers (with last values written by the CPU)
 int   dma_chip_revision;		// revision of DMA chip
-static int   source_step;		// [-1, 0, 1] step value for source (0 = hold, constant address)
-static int   target_step;		// [-1, 0, 1] step value for target (0 = hold, constant address)
+static int   source_step;		// [-1, 0, 1] step value for source (0 = hold, constant address) [for Mega65, this can be -0xFFFF ... 0 ... 0xFFFF for fractional stepping, being the hi byte the int part]
+static int   target_step;		// [-1, 0, 1] step value for target (0 = hold, constant address) [-- "" --]
 static int   source_addr;		// DMA source address (the low byte is also used by COPY command as the "filler byte")
 static int   target_addr;		// DMA target address
 static int   source_is_io;		// DMA source is I/O space (only the lower 12 bits are used of the source_addr then?)
@@ -84,6 +85,22 @@ static int source_mask, target_mask, source_megabyte, target_megabyte, list_mega
 
 
 
+// In case of Mega65 we should support fractional steps (1 byte for fraction). We do this to have
+// common code base with C65 emulator's DMA to have a single variable for source (source_addr) and
+// target (target_addr) "within the megabyte" variable, but in case of C65 it's the "clean" address,
+// while in case of Mega-65, the lower 8 bits are the fraction. This macro is used to reference the
+// integer part only, in case of C65 it's simply as-is, for Mega65, it's skipping the low 8 bits, ie
+// shifting data to the right by 8. Note, that since within a megabyte DMA can operate only, 32 bits
+// are more than enough even this way (20 bits + 8 bits = 28 bits, even signed 32 bit int type is
+// suitable).
+#ifdef MEGA65
+#define DMA_ADDR_INTEGER_PART(p) ((p)>>8)
+#else
+#define DMA_ADDR_INTEGER_PART(p) (p)
+#endif
+
+
+
 // TODO: modulo?
 static XEMU_INLINE Uint8 read_source_next ( void )
 {
@@ -92,7 +109,7 @@ static XEMU_INLINE Uint8 read_source_next ( void )
 	// a physical address for I/O which also contains an offset within the "mbyte slice"
 	// range as well (ie, mega65 uses I/O areas mapped in the $FF megabyte area, for
 	// various I/O modes)
-	Uint8 result = source_reader((source_addr & source_mask) + source_megabyte);
+	Uint8 result = source_reader((DMA_ADDR_INTEGER_PART(source_addr) & source_mask) + source_megabyte);
 	source_addr += source_step;
 	return result;
 }
@@ -102,7 +119,7 @@ static XEMU_INLINE Uint8 read_source_next ( void )
 static XEMU_INLINE void write_target_next ( Uint8 data )
 {
 	// See the comment at read_source_next()
-	target_writer((target_addr & target_mask) + target_megabyte, data);
+	target_writer((DMA_ADDR_INTEGER_PART(target_addr) & target_mask) + target_megabyte, data);
 	target_addr += target_step;
 }
 
@@ -111,10 +128,10 @@ static XEMU_INLINE void write_target_next ( Uint8 data )
 static XEMU_INLINE void swap_next ( void )
 {
 	// See the comment at read_source_next()
-	Uint8 sa = source_reader((source_addr & source_mask) + source_megabyte);
-	Uint8 da = target_reader((target_addr & target_mask) + target_megabyte);
-	source_writer((source_addr & source_mask) + source_megabyte, da);
-	target_writer((target_addr & target_mask) + target_megabyte, sa);
+	Uint8 sa = source_reader((DMA_ADDR_INTEGER_PART(source_addr) & source_mask) + source_megabyte);
+	Uint8 da = target_reader((DMA_ADDR_INTEGER_PART(target_addr) & target_mask) + target_megabyte);
+	source_writer((DMA_ADDR_INTEGER_PART(source_addr) & source_mask) + source_megabyte, da);
+	target_writer((DMA_ADDR_INTEGER_PART(target_addr) & target_mask) + target_megabyte, sa);
 	source_addr += source_step;
 	target_addr += target_step;
 }
@@ -124,8 +141,8 @@ static XEMU_INLINE void swap_next ( void )
 static XEMU_INLINE void mix_next ( void )
 {
 	// See the comment at read_source_next()
-	Uint8 sa = source_reader((source_addr & source_mask) + source_megabyte);
-	Uint8 da = target_reader((target_addr & target_mask) + target_megabyte);
+	Uint8 sa = source_reader((DMA_ADDR_INTEGER_PART(source_addr) & source_mask) + source_megabyte);
+	Uint8 da = target_reader((DMA_ADDR_INTEGER_PART(target_addr) & target_mask) + target_megabyte);
 	// NOTE: it's not clear from the specification, what MIX
 	// does. I assume, that it does some kind of minterm
 	// with source and target and writes the result to
@@ -137,7 +154,7 @@ static XEMU_INLINE void mix_next ( void )
 		((~sa) & ( da) & minterms[1]) |
 		((~sa) & (~da) & minterms[0]) ;
 	// See the comment at read_source_next()
-	target_writer((target_addr & target_mask) + target_megabyte, da);
+	target_writer((DMA_ADDR_INTEGER_PART(target_addr) & target_mask) + target_megabyte, da);
 	source_addr += source_step;
 	target_addr += target_step;	
 }
@@ -271,8 +288,19 @@ int dma_update ( void )
 		source_is_io = (source_addr & 0x800000);
 		target_is_io = (target_addr & 0x800000);
 		// FIXME: for F018B, we should allow "1mbyte bank" selection!!!!!!!
+#ifdef MEGA65
+		// in case of Mega65, we use the lower 8 bits of addr vars as the fractional part, so do the 1mbyte range correction, etc with keeping that in mind
+		// please read the big comment at macro definition DMA_ADDR_INTEGER_PART() near to the beginning somewhere
+		source_addr = (source_addr & 0xFFFFF) << 8;
+		target_addr = (target_addr & 0xFFFFF) << 8;
+		// fractional step stuff. We use '*' here to have - or + value for the given step
+		source_step *= dma_registers[0x08] | (dma_registers[0x09] << 8);
+		target_step *= dma_registers[0x0A] | (dma_registers[0x0B] << 8);
+
+#else
 		source_addr &= 0xFFFFF;	// C65 1-mbyte range, chop bits used for other purposes off
 		target_addr &= 0xFFFFF; // C65 1-mbyte range, chop bits used for other purposes off
+#endif
 		/* source selection */
 		if (source_is_io) {
 			source_reader	= cb_source_ioreader;
@@ -303,9 +331,10 @@ int dma_update ( void )
 		}
 		/* other stuff */
 		chained = (command & 4);
+		// FIXME: this is a debug mesg, yeah, but with fractional step on M65, the step values needs to interpreted with keep in mind the fixed point math ...
 		DEBUG("DMA: READ COMMAND: $%05X[%s%s %d] -> $%05X[%s%s %d] (L=$%04X) CMD=%d (%s)" NL,
-			source_addr, source_is_io ? "I/O" : "MEM", source_uses_modulo ? " MOD" : "", source_step,
-			target_addr, target_is_io ? "I/O" : "MEM", target_uses_modulo ? " MOD" : "", target_step,
+			DMA_ADDR_INTEGER_PART(source_addr), source_is_io ? "I/O" : "MEM", source_uses_modulo ? " MOD" : "", source_step,
+			DMA_ADDR_INTEGER_PART(target_addr), target_is_io ? "I/O" : "MEM", target_uses_modulo ? " MOD" : "", target_step,
 			length, command, chained ? "chain" : "last"
 		);
 		if (!length)
@@ -328,7 +357,7 @@ int dma_update ( void )
 			time = 4;	// FIXME: correct timing?
 			break;
 		case 3:			// FILL command (SRC LO is the filler byte!)
-			write_target_next(source_addr & 0xFF);
+			write_target_next(DMA_ADDR_INTEGER_PART(source_addr) & 0xFF);
 			time = 1;	// FIXME: correct timing?
 			break;
 	}
@@ -391,6 +420,10 @@ void dma_reset ( void )
 	source_megabyte = 0;
 	target_megabyte = 0;
 	list_megabyte = 0;
+#ifdef MEGA65
+	dma_registers[0x09] = 1;	// fixpoint math source step integer part (1), fractional (reg#8) is already zero
+	dma_registers[0x0B] = 1;	// fixpoint math target step integer part (1), fractional (reg#A) is already zero
+#endif
 }
 
 
