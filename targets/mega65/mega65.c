@@ -303,18 +303,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
-	dma_init(
-		xemucfg_get_num("dmarev"),
-		memory_dma_source_mreader,	// dma_reader_cb_t set_source_mreader
-		memory_dma_source_mwriter,	// dma_writer_cb_t set_source_mwriter
-		memory_dma_target_mreader,	// dma_reader_cb_t set_target_mreader
-		memory_dma_target_mwriter,	// dma_writer_cb_t set_target_mwriter
-		io_dma_reader,			// dma_reader_cb_t set_source_ioreader
-		io_dma_writer,			// dma_writer_cb_t set_source_iowriter
-		io_dma_reader,			// dma_reader_cb_t set_target_ioreader
-		io_dma_writer,			// dma_writer_cb_t set_target_iowriter
-		memory_dma_list_reader		// dma_reader_cb_t set_list_reader
-	);
+	dma_init(xemucfg_get_num("dmarev"));
 	// Initialize FDC
 	fdc_init();
 	// SIDs, plus SDL audio
@@ -550,7 +539,7 @@ int main ( int argc, char **argv )
 	int cycles, frameskip;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Incomplete Commodore-65/Mega-65 emulator from LGB");
 	xemucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
-	xemucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip  (0=F018A, other=F018B)");
+	xemucfg_define_num_option("dmarev", 0x100, "DMA revision (0/1=F018A/B +256=autochange, +512=modulo, you always wants +256!)");
 	xemucfg_define_num_option("fastclock", MEGA65_DEFAULT_FAST_CLOCK, "Clock of M65 fast mode (in MHz)");
 	xemucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA-board switches turned ON");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");

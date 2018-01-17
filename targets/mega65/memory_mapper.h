@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2017,2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -25,12 +25,6 @@ extern void memory_set_vic3_rom_mapping ( Uint8 value );
 extern void memory_set_cpu_io_port ( int addr, Uint8 value );
 extern void memory_set_cpu_io_port_ddr_and_data ( Uint8 p0, Uint8 p1 );
 extern Uint8 memory_get_cpu_io_port ( int addr );
-
-extern Uint8 memory_dma_source_mreader ( int addr );
-extern void  memory_dma_source_mwriter ( int addr, Uint8 data );
-extern Uint8 memory_dma_target_mreader ( int addr );
-extern void  memory_dma_target_mwriter ( int addr, Uint8 data );
-extern Uint8 memory_dma_list_reader    ( int addr );
 
 extern Uint8 memory_debug_read_phys_addr  ( int addr );
 extern void  memory_debug_write_phys_addr ( int addr, Uint8 data );

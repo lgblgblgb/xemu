@@ -18,27 +18,37 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_F018_CORE_H_INCLUDED
 #define __XEMU_F018_CORE_H_INCLUDED
 
-typedef Uint8 (*dma_reader_cb_t)(int);
-typedef void  (*dma_writer_cb_t)(int, Uint8);
+/* Feature bit masks for dma_init(): */
+
+#define DMA_FEATRUE_DYNMODESET	0x100
+#define DMA_FEATURE_MODULO	0x200
+
+/* Variables */
 
 extern Uint8 dma_status;
 extern Uint8 dma_registers[16];
 extern int   dma_chip_revision;
 
+/* Functions: */
+
 extern void  dma_write_reg ( int addr, Uint8 data );
 extern Uint8 dma_read_reg  ( int reg );
-extern void  dma_init (
-	int dma_rev_set,
-	dma_reader_cb_t set_source_mreader , dma_writer_cb_t set_source_mwriter , dma_reader_cb_t set_target_mreader , dma_writer_cb_t set_target_mwriter,
-	dma_reader_cb_t set_source_ioreader, dma_writer_cb_t set_source_iowriter, dma_reader_cb_t set_target_ioreader, dma_writer_cb_t set_target_iowriter,
-	dma_reader_cb_t set_list_reader
-);
+extern void  dma_init      ( unsigned int dma_rev_set );
 extern void  dma_reset     ( void );
 extern int   dma_update    ( void );
 extern int   dma_update_multi_steps ( int do_for_cycles );
 
 /* Things should be provided by the emulator: */
 
+extern Uint8 DMA_SOURCE_IOREADER_FUNC	( int );
+extern Uint8 DMA_SOURCE_MEMREADER_FUNC	( int );
+extern Uint8 DMA_TARGET_IOREADER_FUNC	( int );
+extern Uint8 DMA_TARGET_MEMREADER_FUNC	( int );
+extern Uint8 DMA_LIST_READER_FUNC	( int );
+extern void  DMA_SOURCE_IOWRITER_FUNC	( int, Uint8 );
+extern void  DMA_SOURCE_MEMWRITER_FUNC	( int, Uint8 );
+extern void  DMA_TARGET_IOWRITER_FUNC	( int, Uint8 );
+extern void  DMA_TARGET_MEMWRITER_FUNC	( int, Uint8 );
 
 /* Snapshot related part: */
 

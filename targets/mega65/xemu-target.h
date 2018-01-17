@@ -28,5 +28,16 @@
 
 // Currently only Linux-TAP device is supported to have emulated ethernet controller
 #ifdef __linux__
-#define HAVE_ETHERTAP
+//#define HAVE_ETHERTAP
 #endif
+
+
+#define DMA_SOURCE_IOREADER_FUNC	io_dma_reader
+#define DMA_SOURCE_MEMREADER_FUNC	memory_dma_source_mreader
+#define DMA_TARGET_IOREADER_FUNC	io_dma_reader
+#define DMA_TARGET_MEMREADER_FUNC	memory_dma_target_mreader
+#define DMA_SOURCE_IOWRITER_FUNC	io_dma_writer
+#define DMA_SOURCE_MEMWRITER_FUNC	memory_dma_source_mwriter
+#define DMA_TARGET_IOWRITER_FUNC	io_dma_writer
+#define DMA_TARGET_MEMWRITER_FUNC	memory_dma_target_mwriter
+#define DMA_LIST_READER_FUNC		memory_dma_list_reader

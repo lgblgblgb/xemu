@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -24,8 +24,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 extern Uint8 io_read  ( unsigned int addr );
 extern void  io_write ( unsigned int addr, Uint8 data );
-extern Uint8 io_dma_reader ( int addr );
-extern void  io_dma_writer ( int addr, Uint8 data );
 
 extern Uint8  D6XX_registers[0x100];
 extern int    fpga_switches;

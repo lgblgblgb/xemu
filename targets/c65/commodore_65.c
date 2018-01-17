@@ -1,5 +1,5 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -295,18 +295,7 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	// *** Initialize DMA
-	dma_init(
-		xemucfg_get_num("dmarev"),
-		read_phys_mem,	// dma_reader_cb_t set_source_mreader ,
-		write_phys_mem,	// dma_writer_cb_t set_source_mwriter ,
-		read_phys_mem,	// dma_reader_cb_t set_target_mreader ,
-		write_phys_mem,	// dma_writer_cb_t set_target_mwriter,
-		io_read,	// dma_reader_cb_t set_source_ioreader,
-		io_write,	// dma_writer_cb_t set_source_iowriter,
-		io_read,	// dma_reader_cb_t set_target_ioreader,
-		io_write,	// dma_writer_cb_t set_target_iowriter,
-		read_phys_mem	// dma_reader_cb_t set_list_reader
-	);
+	dma_init(xemucfg_get_num("dmarev"));
 	// Initialize FDC
 	fdc_init();
 	c65_d81_init(xemucfg_get_str("8"));
@@ -617,10 +606,29 @@ void write_phys_mem ( int addr, Uint8 data )
 }
 
 
+void write_phys_mem_for_dma ( int addr, Uint8 data )
+{
+	if (XEMU_LIKELY(addr <= 0xFFFFF))
+		write_phys_mem(addr, data);
+	else
+		DEBUG("DMA-C65-BACKEND: writing memory above 1Mbyte (addr=$%X,data=%02X) PC=%04X" NL, addr, data, cpu65.pc);
+}
+
 
 Uint8 read_phys_mem ( int addr )
 {
 	return memory[addr & 0xFFFFF];
+}
+
+
+Uint8 read_phys_mem_for_dma ( int addr )
+{
+	if (XEMU_LIKELY(addr <= 0xFFFFF))
+		return memory[addr & 0xFFFFF];
+	else {
+		DEBUG("DMA-C65-BACKEND: reading memory above 1Mbyte (addr=$%X) PC=%04X" NL, addr, cpu65.pc);
+		return 0xFF;
+	}
 }
 
 
@@ -752,7 +760,7 @@ int main ( int argc, char **argv )
 	int cycles;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unusable Commodore 65 emulator from LGB");
 	xemucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
-	xemucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip (0=F018A, other=F018B)");
+	xemucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip (0/1=F018A/B, +512=modulo))");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	xemucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
 	//xemucfg_define_switch_option("noaudio", "Disable audio");
