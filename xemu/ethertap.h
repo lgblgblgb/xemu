@@ -23,14 +23,24 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools_basicdefs.h"
 
-extern int xemu_tuntap_close ( void );
-extern int xemu_tuntap_alloc ( const char *dev_in, char *dev_out, int dev_out_size, unsigned int flags );
-extern int xemu_tuntap_read  ( void *buffer, int min_size, int max_size );
-extern int xemu_tuntap_write ( void *buffer, int size );
+extern int xemu_tuntap_close  ( void );
+extern int xemu_tuntap_alloc  ( const char *dev_in, char *dev_out, int dev_out_size, unsigned int flags );
+extern int xemu_tuntap_read   ( void *buffer, int min_size, int max_size );
+extern int xemu_tuntap_write  ( void *buffer, int size );
+extern int xemu_tuntap_select ( int flags, int timeout_usecs );
 
-#define XEMU_TUNTAP_IS_TAP	1
-#define XEMU_TUNTAP_IS_TUN	2
-#define XEMU_TUNTAP_NO_PI	0x100
+
+// for xemu_tuntap_alloc():
+
+#define XEMU_TUNTAP_IS_TAP		1
+#define XEMU_TUNTAP_IS_TUN		2
+#define XEMU_TUNTAP_NO_PI		0x100
+#define XEMU_TUNTAP_NONBLOCKING_IO	0x200
+
+// for xemu_tuntap_select:
+
+#define XEMU_TUNTAP_SELECT_R		1
+#define XEMU_TUNTAP_SELECT_W		2
 
 #endif
 #endif

@@ -60,6 +60,8 @@ able to configure the device for itself, hmmm ...)  */
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <sys/ioctl.h>
+#include <sys/time.h>
+#include <sys/select.h>
 #include <fcntl.h>
 #include <unistd.h>
 // net/if.h is not needed in my Linux box, but it seems it is needed on older Ubuntu versions at least, so ...
@@ -73,6 +75,21 @@ able to configure the device for itself, hmmm ...)  */
 
 
 static volatile int tuntap_fd = -1;
+static int nonblocking = 0;
+
+
+static int xemu_tuntap_set_nonblocking ( int fd, int is_nonblocking )
+{
+	int flags;
+	if ((flags = fcntl(fd, F_GETFL, 0)) == -1)
+		flags = 0;
+	if (is_nonblocking)
+		flags |= O_NONBLOCK;
+	else
+		flags &= ~O_NONBLOCK;
+	nonblocking = is_nonblocking;
+	return fcntl(fd, F_SETFL, flags);
+}
 
 
 int xemu_tuntap_close ( void )
@@ -80,6 +97,8 @@ int xemu_tuntap_close ( void )
 	if (tuntap_fd >= 0) {
 		int fd = tuntap_fd;
 		tuntap_fd = -1;
+		if (nonblocking)
+			xemu_tuntap_set_nonblocking(fd, 0);
 		return close(fd);
 	}
 	return 0;
@@ -93,13 +112,20 @@ int xemu_tuntap_read ( void *buffer, int min_size, int max_size )
 		return 0;
 	while (got < min_size) {
 		int r = read(tuntap_fd, buffer, max_size);
-		if (r <= 0) {
-			if (errno == EINTR)
-				continue;
-			if (errno == EAGAIN || errno == EWOULDBLOCK)
-				break;
-			xemu_tuntap_close();
-			return r;
+		printf("ETH-LOW: read ret %d %s\n", r, r >= 0 ? "NO-ERROR-CONDITION" : strerror(errno));
+		if (!r) {
+			return got;
+		} else if (r < 0) {
+			if (errno == EINTR) {
+				continue;	// try again if it's interrupted. I am not sure if it's the correct behaviour
+			} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				if (nonblocking)
+					return (got > 0) ? got : -2;	// -2: signal initial EAGAIN situation
+				else
+					return -1;
+			} else {
+				return -1;
+			}
 		}
 		max_size -= r;
 		got += r;
@@ -116,19 +142,57 @@ int xemu_tuntap_write ( void *buffer, int size )
 		return 0;
 	while (size > 0) {
 		int w = write(tuntap_fd, buffer, size);
-		if (w <= 0) {
-			if (errno == EINTR)
+		if (!w) {
+			return did;
+		} else if (w < 0) {
+			if (errno == EINTR) {
 				continue;
-			if (errno == EAGAIN || errno == EWOULDBLOCK)
-				break;
-			xemu_tuntap_close();
-			return w;
+			} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
+				if (nonblocking)
+					return (did > 0) ? did : -2;
+				else
+					return -1;
+			} else {
+				return -1;
+			}
 		}
 		size -= w;
 		did += w;
 		buffer += w;
 	}
 	return did;
+}
+
+
+int xemu_tuntap_select ( int flags, int timeout_usecs )
+{
+	for (;;) {
+		struct timeval timeout;
+		fd_set fdsr, fdsw;
+		int r;
+		FD_ZERO(&fdsr);
+		FD_ZERO(&fdsw);
+		timeout.tv_sec = 0;
+		timeout.tv_usec = timeout_usecs;
+		r = select(
+			tuntap_fd + 1,
+			(flags & XEMU_TUNTAP_SELECT_R) ? &fdsr : NULL,
+			(flags & XEMU_TUNTAP_SELECT_W) ? &fdsw : NULL,
+			NULL,
+			timeout_usecs >= 0 ? &timeout : NULL
+		);
+		if (r < 0) {
+			if (errno == EINTR)
+				continue;
+			else
+				return -1;
+		} else if (r == 0) {
+			return 0;
+		} else {
+			r = FD_ISSET(tuntap_fd, &fdsr) ? XEMU_TUNTAP_SELECT_R : 0;
+			return FD_ISSET(tuntap_fd, &fdsw) ? (r | XEMU_TUNTAP_SELECT_W) : r;
+		}
+	}
 }
 
 
@@ -151,6 +215,7 @@ int xemu_tuntap_alloc ( const char *dev_in, char *dev_out, int dev_out_size, uns
 	int fd, err;
 	if (tuntap_fd >= 0)
 		return tuntap_fd;
+	nonblocking = 0;
 	memset(&ifr, 0, sizeof(ifr));
 	ifr.ifr_flags = 0;
 	switch (flags & 0xFF) {
@@ -182,6 +247,13 @@ int xemu_tuntap_alloc ( const char *dev_in, char *dev_out, int dev_out_size, uns
 			
 		} else
 			strcpy(dev_out, ifr.ifr_name);
+	}
+	if (flags & XEMU_TUNTAP_NONBLOCKING_IO) {
+		// sets non blocking I/O up, if requested
+		if (xemu_tuntap_set_nonblocking(fd, 1)) {
+			close(fd);
+			return -1;
+		}
 	}
 	tuntap_fd = fd;	// file descriptor is available now, good
 	return fd;	// also return the FD, but note, that it should not be used too much currently outside of this source

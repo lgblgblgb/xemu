@@ -374,7 +374,7 @@ static void shutdown_callback ( void )
 	FILE *f;
 #endif
 	int a;
-#ifdef HAVE_ETHERTAP
+#ifdef HAVE_ETHERNET65
 	eth65_shutdown();
 #endif
 	for (a = 0; a < 0x40; a++)
@@ -563,7 +563,7 @@ int main ( int argc, char **argv )
 #ifdef HAVE_XEMU_INSTALLER
 	xemucfg_define_str_option("installer", NULL, "Sets a download-specification descriptor file for auto-downloading data files");
 #endif
-#ifdef HAVE_ETHERTAP
+#ifdef HAVE_ETHERNET65
 	xemucfg_define_str_option("ethertap", NULL, "Enable ethernet emulation, parameter is the already configured TAP device name");
 #endif
 	if (xemucfg_parse_all(argc, argv))
@@ -596,7 +596,7 @@ int main ( int argc, char **argv )
 	);
 	skip_unhandled_mem = xemucfg_get_bool("skipunhandledmem");
 	printf("UNHANDLED memory policy: %d" NL, skip_unhandled_mem);
-#ifdef HAVE_ETHERTAP
+#ifdef HAVE_ETHERNET65
 	eth65_init(xemucfg_get_str("ethertap"));
 #endif
 #ifdef HAVE_XEMU_UMON

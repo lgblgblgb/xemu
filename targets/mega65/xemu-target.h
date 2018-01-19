@@ -6,15 +6,19 @@
 #define CPU_STEP_MULTI_OPS
 //#define DEBUG_CPU
 #define CPU_CUSTOM_MEMORY_FUNCTIONS_H "cpu_custom_functions.h"
+#define CPU65 cpu65
+//#define CPU65_DISCRETE_PF_NZ
+
 #define HAVE_XEMU_EXEC_API
+
 #ifdef HAVE_SOCKET_OS_API
 //#define HAVE_XEMU_SOCKET_API
 //#define HAVE_XEMU_UMON
 #endif
 #define HAVE_XEMU_INSTALLER
-#define CPU65 cpu65
+
+/* Globally: XEMU_INLINE hints gcc to always inline a function. Using this define switches that behaviour off, defaulting to standard "inline" (as it would be without using gcc as well) */
 //#define DO_NOT_FORCE_INLINE
-//#define CPU65_DISCRETE_PF_NZ
 
 // CPU emulation has always has these (originally NMOS) bugs, regardless of the CPU mode (1 = yes, 0 = no-or-mode-dependent)
 #define M65_CPU_ALWAYS_BUG_JMP_INDIRECT			0
@@ -28,9 +32,12 @@
 
 // Currently only Linux-TAP device is supported to have emulated ethernet controller
 #ifdef __linux__
-//#define HAVE_ETHERTAP
+#define HAVE_ETHERTAP
 #endif
 
+#ifdef HAVE_ETHERTAP
+#define HAVE_ETHERNET65
+#endif
 
 #define DMA_SOURCE_IOREADER_FUNC	io_dma_reader
 #define DMA_SOURCE_MEMREADER_FUNC	memory_dma_source_mreader

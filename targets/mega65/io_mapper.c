@@ -1,7 +1,7 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    I/O decoding part (used by memory_mapper.h and DMA mainly)
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "vic4.h"
 #include "sdcard.h"
 #include "hypervisor.h"
+#include "ethernet65.h"
 
 
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
@@ -130,6 +131,12 @@ Uint8 io_read ( unsigned int addr )
 					return D6XX_registers[0x7E];
 				case 0x7F:
 					return in_hypervisor ? 'H' : 'U';	// FIXME: I am not sure about 'U' here (U for userspace, H for hypervisor mode)
+				case 0xE1:
+#ifdef HAVE_ETHERNET65
+					return eth65_read_reg_D6E1();
+#else
+					return 0;
+#endif
 				case 0xF0:
 					return fpga_switches & 0xFF;
 				case 0xF1:
@@ -323,6 +330,19 @@ void io_write ( unsigned int addr, Uint8 data )
 				case 0x7F:	// hypervisor leave
 					hypervisor_leave();	// 0x67F is also handled on enter's state, so it will be executed only in_hypervisor mode, which is what I want
 					return;
+				case 0xE1:
+#ifdef HAVE_ETHERNET65
+					eth65_write_reg_D6E1(data);
+#endif
+					break;
+				case 0xE2:
+				case 0xE3:
+					break;		// Ethernet, we ignore write (not reporting debug msg by "default" case below), but we will use D6XX_registers in ethetnet65.c!!!
+				case 0xE4:
+#ifdef HAVE_ETHERNET65
+					eth65_write_reg_D6E4(data);
+#endif
+					break;
 				default:
 					DEBUG("MEGA65: this I/O port is not emulated in Xemu yet: $D6%02X (tried to be written with $%02X)" NL, addr, data);
 					return;
