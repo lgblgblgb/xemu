@@ -18,16 +18,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifndef __XEMU_ETHERNET65_MEGA65_H_INCLUDED
 #define __XEMU_ETHERNET65_MEGA65_H_INCLUDED
-#ifdef HAVE_ETHERNET65
 
-extern void  eth65_init			( const char *device_name );
+extern int   eth65_init			( const char *options    );
 extern void  eth65_shutdown		( void );
 extern void  eth65_reset		( void );
-extern Uint8 eth65_read_rx_buffer	( int offset );
+extern Uint8 eth65_read_rx_buffer	( int offset  );
 extern void  eth65_write_tx_buffer	( int offset, Uint8 data );
-extern Uint8 eth65_read_reg_D6E1	( void );
-extern void  eth65_write_reg_D6E1	( Uint8 data );
-extern void  eth65_write_reg_D6E4	( Uint8 data );
+extern Uint8 eth65_read_reg		( int addr    );
+extern void  eth65_write_reg		( int addr  , Uint8 data );
 
-#endif
 #endif

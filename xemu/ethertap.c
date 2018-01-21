@@ -166,33 +166,27 @@ int xemu_tuntap_write ( void *buffer, int size )
 
 int xemu_tuntap_select ( int flags, int timeout_usecs )
 {
-	for (;;) {
-		struct timeval timeout;
-		fd_set fdsr, fdsw;
-		int r;
+	int r;
+	fd_set fdsr, fdsw;
+	do {
+		struct timeval timeout, *timeout_p;
 		FD_ZERO(&fdsr);
 		FD_ZERO(&fdsw);
-		timeout.tv_sec = 0;
-		timeout.tv_usec = timeout_usecs;
+		if (timeout_usecs >= 0) {
+			timeout.tv_sec  = timeout_usecs / 1000000;
+			timeout.tv_usec = timeout_usecs % 1000000;
+			timeout_p = &timeout;
+		} else
+			timeout_p = NULL;
 		r = select(
 			tuntap_fd + 1,
 			(flags & XEMU_TUNTAP_SELECT_R) ? &fdsr : NULL,
 			(flags & XEMU_TUNTAP_SELECT_W) ? &fdsw : NULL,
 			NULL,
-			timeout_usecs >= 0 ? &timeout : NULL
+			timeout_p
 		);
-		if (r < 0) {
-			if (errno == EINTR)
-				continue;
-			else
-				return -1;
-		} else if (r == 0) {
-			return 0;
-		} else {
-			r = FD_ISSET(tuntap_fd, &fdsr) ? XEMU_TUNTAP_SELECT_R : 0;
-			return FD_ISSET(tuntap_fd, &fdsw) ? (r | XEMU_TUNTAP_SELECT_W) : r;
-		}
-	}
+	} while (r < 0 && errno == EINTR);
+	return (r > 0) ? ((FD_ISSET(tuntap_fd, &fdsr) ? XEMU_TUNTAP_SELECT_R : 0) | (FD_ISSET(tuntap_fd, &fdsw) ? XEMU_TUNTAP_SELECT_W : 0)) : r;
 }
 
 

@@ -118,6 +118,8 @@ Uint8 io_read ( unsigned int addr )
 				RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);	// FIXME: UART is not yet supported!
 			if (addr >= 0x80 && addr <= 0x93)	// SDcard controller etc of Mega65
 				return sdcard_read_register(addr - 0x80);
+			if ((addr & 0xF0) == 0xE0)
+				return eth65_read_reg(addr);
 			switch (addr) {
 				case 0x7C:
 					return 0;			// emulate the "UART is ready" situation (used by newer kickstarts around from v0.11 or so)
@@ -131,12 +133,6 @@ Uint8 io_read ( unsigned int addr )
 					return D6XX_registers[0x7E];
 				case 0x7F:
 					return in_hypervisor ? 'H' : 'U';	// FIXME: I am not sure about 'U' here (U for userspace, H for hypervisor mode)
-				case 0xE1:
-#ifdef HAVE_ETHERNET65
-					return eth65_read_reg_D6E1();
-#else
-					return 0;
-#endif
 				case 0xF0:
 					return fpga_switches & 0xFF;
 				case 0xF1:
@@ -293,8 +289,6 @@ void io_write ( unsigned int addr, Uint8 data )
 			RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");	// FIXME: UART is not yet supported!
 		case 0x36:	// $D600-$D6FF ~ M65 I/O mode
 			addr &= 0xFF;
-			if (addr < 9)
-				RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");	// FIXME: UART is not yet supported!
 			if (!in_hypervisor && addr >= 0x40 && addr <= 0x7F) {
 				// In user mode, writing to $D640-$D67F (in VIC4 iomode) causes to enter hypervisor mode with
 				// the trap number given by the offset in this range
@@ -302,8 +296,14 @@ void io_write ( unsigned int addr, Uint8 data )
 				return;
 			}
 			D6XX_registers[addr] = data;	// I guess, the actual write won't happens if it was trapped, so I moved this to here after the previous "if"
+			if (addr < 9)
+				RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");	// FIXME: UART is not yet supported!
 			if (addr >= 0x80 && addr <= 0x93) {			// SDcard controller etc of Mega65
 				sdcard_write_register(addr - 0x80, data);
+				return;
+			}
+			if ((addr & 0xF0) == 0xE0) {
+				eth65_write_reg(addr, data);
 				return;
 			}
 			switch (addr) {
@@ -330,19 +330,6 @@ void io_write ( unsigned int addr, Uint8 data )
 				case 0x7F:	// hypervisor leave
 					hypervisor_leave();	// 0x67F is also handled on enter's state, so it will be executed only in_hypervisor mode, which is what I want
 					return;
-				case 0xE1:
-#ifdef HAVE_ETHERNET65
-					eth65_write_reg_D6E1(data);
-#endif
-					break;
-				case 0xE2:
-				case 0xE3:
-					break;		// Ethernet, we ignore write (not reporting debug msg by "default" case below), but we will use D6XX_registers in ethetnet65.c!!!
-				case 0xE4:
-#ifdef HAVE_ETHERNET65
-					eth65_write_reg_D6E4(data);
-#endif
-					break;
 				default:
 					DEBUG("MEGA65: this I/O port is not emulated in Xemu yet: $D6%02X (tried to be written with $%02X)" NL, addr, data);
 					return;

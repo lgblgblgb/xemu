@@ -35,10 +35,6 @@
 #define HAVE_ETHERTAP
 #endif
 
-#ifdef HAVE_ETHERTAP
-#define HAVE_ETHERNET65
-#endif
-
 #define DMA_SOURCE_IOREADER_FUNC	io_dma_reader
 #define DMA_SOURCE_MEMREADER_FUNC	memory_dma_source_mreader
 #define DMA_TARGET_IOREADER_FUNC	io_dma_reader

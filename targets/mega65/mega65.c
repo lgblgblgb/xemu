@@ -60,6 +60,7 @@ static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, bu
 
 void cpu65_illegal_opcode_callback ( void )
 {
+	// FIXME: implement this, it won't be ever seen now, as not even switch to 6502 NMOS persona is done yet ...
 	FATAL("Internal error: 6502 NMOS persona is not supported yet.");
 }
 
@@ -374,9 +375,7 @@ static void shutdown_callback ( void )
 	FILE *f;
 #endif
 	int a;
-#ifdef HAVE_ETHERNET65
 	eth65_shutdown();
-#endif
 	for (a = 0; a < 0x40; a++)
 		DEBUG("VIC-3 register $%02X is %02X" NL, a, vic_registers[a]);
 	cia_dump_state (&cia1);
@@ -402,6 +401,7 @@ static void shutdown_callback ( void )
 
 static void reset_mega65 ( void )
 {
+	eth65_reset();
 	force_fast = 0;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0xFF;
 	machine_set_speed(0);
@@ -563,7 +563,7 @@ int main ( int argc, char **argv )
 #ifdef HAVE_XEMU_INSTALLER
 	xemucfg_define_str_option("installer", NULL, "Sets a download-specification descriptor file for auto-downloading data files");
 #endif
-#ifdef HAVE_ETHERNET65
+#ifdef HAVE_ETHERTAP
 	xemucfg_define_str_option("ethertap", NULL, "Enable ethernet emulation, parameter is the already configured TAP device name");
 #endif
 	if (xemucfg_parse_all(argc, argv))
@@ -596,9 +596,13 @@ int main ( int argc, char **argv )
 	);
 	skip_unhandled_mem = xemucfg_get_bool("skipunhandledmem");
 	printf("UNHANDLED memory policy: %d" NL, skip_unhandled_mem);
-#ifdef HAVE_ETHERNET65
-	eth65_init(xemucfg_get_str("ethertap"));
+	eth65_init(
+#ifdef HAVE_ETHERTAP
+		xemucfg_get_str("ethertap")
+#else
+		NULL
 #endif
+	);
 #ifdef HAVE_XEMU_UMON
 	if (xemucfg_get_num("umon") != 0) {
 		int port = xemucfg_get_num("umon");

@@ -231,14 +231,12 @@ DEFINE_READER(legacy_io_reader) {
 DEFINE_WRITER(legacy_io_writer) {
 	io_write(GET_WRITER_OFFSET() | (vic_iomode << 12), data);
 }
-#ifdef HAVE_ETHERNET65
 DEFINE_READER(eth_buffer_reader) {
 	return eth65_read_rx_buffer(GET_READER_OFFSET());
 }
 DEFINE_WRITER(eth_buffer_writer) {
 	eth65_write_tx_buffer(GET_WRITER_OFFSET(), data);
 }
-#endif
 
 
 
@@ -261,9 +259,7 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 	{ 0xFF80000, 0xFF87FFF, colour_ram_reader, colour_ram_writer },		// full colour RAM (32K)
 	{ 0xFFF8000, 0xFFFBFFF, hypervisor_ram_reader, hypervisor_ram_writer },	// 16KB Kickstart/hypervisor ROM
 	{ 0xFF7E000, 0xFF7EFFF, dummy_reader, char_wom_writer },		// Character "WriteOnlyMemory"
-#ifdef HAVE_ETHERNET65
 	{ 0xFFDE800, 0xFFDEFFF, eth_buffer_reader, eth_buffer_writer },		// ethernet RX/TX buffer, NOTE: the same address, reading is always the RX_read, writing is always TX_write
-#endif
 	{ 0x8000000, 0xFEFFFFF, slow_ram_reader, slow_ram_writer },		// 127Mbytes of "slow RAM" (Nexys4 DDR2 RAM)
 	{ 0x40000, 0xFFFFF, dummy_reader, dummy_writer },			// upper "unused" area of C65 (!) memory map. It seems C65 ROMs want it (Expansion RAM?) so we define as unused.
 	// the last entry *MUST* include the all possible addressing space to "catch" undecoded memory area accesses!!
