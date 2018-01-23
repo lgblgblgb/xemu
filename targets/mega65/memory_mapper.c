@@ -293,7 +293,7 @@ static void phys_addr_decoder ( int phys, int slot, int hint_slot )
 	// hint_slot is "likely" to have some contiunity with the slot given by "slot" otherwise it's just makes
 	// thing worse. If not used, hint_slot should be negative to skip this feature. hint_slot can be even same
 	// as "slot" if you need a "moving" mapping in a "caching" slot, ie DMA-aux access functions, etc.
-	if (hint_slot >= 0) {
+	if (hint_slot >= 0 && mem_page_refp[hint_slot]->end < 0xFFFFFFF) {	// FIXME there was a serious bug here, takinking invalid mem slot for anything after hinting that
 		p = mem_page_refp[hint_slot];
 		if (phys >= p->start && phys <= p->end) {
 #ifdef DEBUGMEM

@@ -30,7 +30,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 /* Possible future work:
-	* FIXME: it uses thread, and it's horrible code!! Maybe there are tons of race conditions, etc ...
+	* FIXME: there is no IRQ generated currently for the CPU! So only polling method is used.
+	  the problem is not as trivial to solve as it seems, since a *thread* can affect IRQs
+	  also updated by the main CPU emulator thread ... With using locking for all of these,
+          would result in quite slow emulation :(
+	* FIXME: it uses thread, and it's horrible code!! there are tons of race conditions, etc ...
 	It's not so nice work to use threads, but it would be hard to do otherwise, sadly.
 	* FIXME FIXME FIXME: No support for snapshotting ...
 	* Maybe allow TUN devices to be supported. It does not handle ethernet level stuffs, no source and
@@ -84,6 +88,10 @@ static volatile struct {
 	int	accept_multicast;
 	int	mac_filter;
 	int	xemu_always_filters;
+	int	disable_crc_chk;
+	int	adjust_txd_phase;
+	int	miim_register;
+	int	phy_number;
 	Uint8	rx_buffer[0x1000];	// actually, two 2048 bytes long buffers in one array
 	Uint8	tx_buffer[0x0800];	// a 2048 bytes long buffer to TX
 } eth65;
@@ -93,6 +101,8 @@ static Uint8 mac_address[6]	= {0x02,0x47,0x53,0x65,0x65,0x65};	// 00:80:10:... w
 #ifdef HAVE_ETHERTAP
 static const Uint8 mac_bcast[6]	= {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};	// also used as IPv4 bcast detection with filters, if only the first 4 bytes are checked
 #endif
+
+static Uint16 miimlo8[0x20], miimhi8[0x20];
 
 #ifndef ETH65_NO_DEBUG
 #define ETHDEBUG(...)	do { \
@@ -232,15 +242,23 @@ static XEMU_INLINE int ethernet_rx_processor ( void )
 
 static XEMU_INLINE int ethernet_tx_processor ( void )
 {
-	int ret;
+	int ret, size;
 	if (eth65.tx_size < 14 || eth65.tx_size > ETH_FRAME_MAX_SIZE) {
 		ETHDEBUG("ETH-THREAD: skipping TX, because invalid frame size: %d" NL, eth65.tx_size);
-		// still fake an OK answer
+		// still fake an OK answer FIXME ?
 		TX_IRQ_ON();
 		eth65.tx_trigger = 0;
 		return 0;
 	}
-	ret = xemu_tuntap_write((void*)eth65.tx_buffer, eth65.tx_size);
+#if 0
+	// maybe this is not needed, and TAP device can handle autmatically, but anyway
+	if (eth65.tx_size < ETH_FRAME_MIN_SIZE) {
+		memset((void*)eth65.tx_buffer + eth65.tx_size, 0, ETH_FRAME_MIN_SIZE - eth65.tx_size);
+		size = ETH_FRAME_MIN_SIZE;
+	} else
+#endif
+		size = eth65.tx_size;
+	ret = xemu_tuntap_write((void*)eth65.tx_buffer, size);
 	if (ret == -2) {	// FIXME: with read OK, but for write????
 		eth65.select_wait_usec = 1000000;	// serious problem, do 1sec wait ...
 		ETHDEBUG("ETH-THREAD: write with EAGAIN, continue ..." NL);
@@ -255,8 +273,8 @@ static XEMU_INLINE int ethernet_tx_processor ( void )
 		ETHDEBUG("ETH-THREAD: write() returned with zero! continue ..." NL);
 		return 0;
 	}
-	if (ret != eth65.tx_size) {
-		ETHDEBUG("ETH-THREAD: partial write only?! wanted = %d, written = %d" NL, eth65.tx_size, ret);
+	if (ret != size) {
+		ETHDEBUG("ETH-THREAD: partial write only?! wanted = %d, written = %d" NL, size, ret);
 		return 1;
 	}
 	ETHDEBUG("ETH-THREAD: write() returned with %d bytes read, OK!" NL, ret);
@@ -281,6 +299,7 @@ static int ethernet_thread ( void *unused )
 			eth65.rx_enabled = 1;
 			eth65.rx_buffer_using = eth65.rx_buffer_mapped ^ 0x800;
 			eth65.sense_activity = 1;
+			ETHDEBUG("ETH-THREAD: rx enabled flipped to OK!" NL);
 		}
 		/* ------------------- Throttling controll of thread's CPU usage ------------------- */
 		if (eth65.sense_activity) {
@@ -292,6 +311,9 @@ static int ethernet_thread ( void *unused )
 		}
 		/* ------------------- The select() stuff ------------------- */
 		ret = xemu_tuntap_select(((eth65.rx_enabled && eth65.no_reset) ? XEMU_TUNTAP_SELECT_R : 0) | ((eth65.tx_trigger && eth65.no_reset) ? XEMU_TUNTAP_SELECT_W : 0), eth65.select_wait_usec);
+		//ETHDEBUG("ETH-THREAD: after select with %d usecs, retval = %d, rx_enabled = %d, tx_trigger = %d" NL,
+		//	eth65.select_wait_usec, ret, eth65.rx_enabled, eth65.tx_trigger
+		//);
 		if (ret < 0) {
 			ETHDEBUG("ETH-THREAD: EMERGENCY STOP: select error: %s" NL, strerror(errno));
 			break;
@@ -332,6 +354,8 @@ Uint8 eth65_read_reg ( int addr )
 {
 	switch (addr & 0xF) {
 		/* **** $D6E0 register **** */
+		case 0x00:
+			return eth65.no_reset;	// FIXME: not other bits emulated yet here
 		/* **** $D6E1 register **** */
 		case 0x01:
 			return
@@ -356,6 +380,26 @@ Uint8 eth65_read_reg ( int addr )
 		case 0x02: return eth65.tx_size & 0xFF;
 		/* **** $D6E3 register: TX size register high (4 bits only) **** */
 		case 0x03: return (eth65.tx_size >> 8) & 0xFF;	// 4 bits, but tx_size var cannot contain more anyway
+		/* **** $D6E5 register **** */
+		case 0x05:
+			return
+				eth65.mac_filter   |
+				eth65.disable_crc_chk |
+				( eth65.adjust_txd_phase << 2) |
+				eth65.accept_broadcast |
+				eth65.accept_multicast
+			;
+			break;
+		/* **** $D6E6 register **** */
+		case 0x06:
+			return
+				eth65.miim_register |
+				(eth65.phy_number << 5)
+			;
+		/* **** $D6E7 register **** */
+		case 0x07: return miimlo8[eth65.miim_register];
+		/* **** $D6E8 register **** */
+		case 0x08: return miimhi8[eth65.miim_register];
 		/* **** $D6E9 - $D6EE registers: MAC address **** */
 		case 0x09: return mac_address[0];
 		case 0x0A: return mac_address[1];
@@ -391,13 +435,15 @@ void eth65_write_reg ( int addr, Uint8 data )
 			// Bit3: Enable real-time video streaming via ethernet (well, it's not supported by Xemu, but it would be fancy stuff btw ...) -- we don't care on this one
 			eth65.video_streaming = (data & 0x08);
 			// Bit4: ethernet TX IRQ status, this will be cleared on writing $D6E1, regardless of value written!
-			TX_IRQ_OFF();
 			// Bit5: ethernet RX IRQ status, this will be cleared on writing $D6E1, regardless of value written!
-			RX_IRQ_OFF();
 			// Bit6: Enable ethernet TX IRQ, not yet supported in Xemu! FIXME
 			eth65.tx_irq_enabled = (data & 0x40);	// not yet used, FIXME
 			// Bit7: Enable ethernet RX IRQ, not yet supported in Xemu! FIXME
 			eth65.rx_irq_enabled = (data & 0x80);	// not yet used, FIXME
+			// see comments above with bits 4 and 5
+			TX_IRQ_OFF();
+			RX_IRQ_OFF();
+			ETHDEBUG("ETH: $D6E1 has been written with data $%02X" NL, data);
 			break;
 		/* **** $D6E2 register: TX size low **** */
 		case 0x02:
@@ -413,23 +459,37 @@ void eth65_write_reg ( int addr, Uint8 data )
 			// clear (pending?) TX is $00 [marked as 'DEBUG' in iomap.txt']: FIXME? not implemented
 			if (data == 0) {	// but anyway, here you are the debug stuff as well ...
 				eth65.tx_trigger = 0;
-			} else if (data == 1) {
+			} else if (data == 1) {	// the only "official" command here: TX trigger!
 				if (eth65.tx_size >= 14 || eth65.tx_size <= ETH_FRAME_MAX_SIZE) {
-					if (eth65.tx_size < ETH_FRAME_MIN_SIZE) {
-						// maybe this is not needed, and TAP device can handle autmatically, but anyway:
-						// most ETH controllers would pad frame with zeroes, if it's shorter then the minimum size for the medium
-						memset((void*)eth65.tx_buffer + eth65.tx_size, 0, ETH_FRAME_MIN_SIZE - eth65.tx_size);
-						eth65.tx_size = ETH_FRAME_MIN_SIZE;
-					}
 					eth65.sense_activity = 1;
-					// FIXME: I guess, TX IRQ must be cleared by the user ...
+					// FIXME: I guess, TX IRQ must be cleared by the user ... so we don't do here
 					eth65.tx_trigger = 1;		// now ask the triggy stuff!
-					// BAD: we may want to use a separated trigger to actually TX!
 				} else {
 					// leave this for the handler thread to check, but warning here
 					DEBUGPRINT("ETH: warning, invalid sized (%d) frame tried to be TX'ed" NL, eth65.tx_size);
 				}
 			}
+			break;
+		/* **** $D6E5 register **** */
+		case 0x05:
+			eth65.mac_filter       = (data & 0x01);
+			eth65.disable_crc_chk  = (data & 0x02);
+			eth65.adjust_txd_phase = (data >> 2) & 3;
+			eth65.accept_broadcast = (data & 0x10);
+			eth65.accept_multicast = (data & 0x20);
+			break;
+		/* **** $D6E6 register **** */
+		case 0x06:
+			eth65.miim_register = (data & 0x1F);
+			eth65.phy_number    = (data & 0xE0) >> 5;
+			break;
+		/* **** $D6E7 register **** */
+		case 0x07:
+			miimlo8[eth65.miim_register] = data;
+			break;
+		/* **** $D6E8 register **** */
+		case 0x08:
+			miimhi8[eth65.miim_register] = data;
 			break;
 		/* **** $D6E9 - $D6EE registers: MAC address **** */
 		case 0x09: mac_address[0] = data; break;
@@ -479,6 +539,8 @@ void eth65_shutdown ( void )
 // This is not the reset what eth65.no_reset stuff does, but reset of M65 (also called by eth65_init)
 void eth65_reset ( void )
 {
+	memset(&miimlo8, 0, sizeof miimlo8);
+	memset(&miimhi8, 0, sizeof miimhi8);
 	memset((void*)&eth65, 0, sizeof eth65);
 	RX_IRQ_OFF();
 	TX_IRQ_OFF();
@@ -487,8 +549,8 @@ void eth65_reset ( void )
 	eth65.select_wait_usec = SELECT_WAIT_USEC_MAX;
 	eth65.rx_buffer_using    = 0x800;	// RX buffer is used to RX @ ofs 0
 	eth65.rx_buffer_mapped   = 0x000;	// RX buffer mapped @ ofs 0
-	eth65.accept_broadcast = 1;
-	eth65.accept_multicast = 1;
+	eth65.accept_broadcast = 16;
+	eth65.accept_multicast = 32;
 	eth65.mac_filter = 1;
 }
 
@@ -518,10 +580,20 @@ int eth65_init ( const char *options )
 				eth_debug = 1;
 			} else if (len == 13 && !strncmp(options, "alwaysfilters", len)) {
 				eth65.xemu_always_filters = 1;
+			} else if (!strncmp(options, "mac=", 4)) {
+				if (len != 16 || sscanf(
+					options + 4,
+					"%02hhX%02hhX%02hhX%02hhX%02hhX%02hhX",
+					mac_address + 0, mac_address + 1, mac_address + 2,
+					mac_address + 3, mac_address + 4, mac_address + 5
+				) != 6) {
+					ERROR_WINDOW("%sbad mac= option, invalid MAC", init_error_prefix);
+					return 1;
+				}
 			} else {
 				strncpy(device_name, options, len);	// use device_name as a temp storage for now, we won't need it anymore, as final error.
 				device_name[len] = 0;
-				ERROR_WINDOW("%sunknown sub-option given in CLI/config: %s", init_error_prefix, device_name);
+				ERROR_WINDOW("%sunknown/bad sub-option given in CLI/config: %s", init_error_prefix, device_name);
 				return 1;
 			}
 			if (r)
@@ -537,7 +609,11 @@ int eth65_init ( const char *options )
 		// Initialize our thread for device read/write ...
 		thread_id = SDL_CreateThread(ethernet_thread, "Xemu-EtherTAP", NULL);
 		if (thread_id) {
-			DEBUGPRINT("ETH: enabled - thread %p started, device attached: \"%s\"" NL, thread_id, device_name);
+			DEBUGPRINT("ETH: enabled - thread %p started, device attached: \"%s\", initial MAC: %02X:%02X:%02X:%02X:%02X:%02X" NL,
+				thread_id, device_name,
+				mac_address[0], mac_address[1], mac_address[2],
+				mac_address[3], mac_address[4], mac_address[5]
+			);
 		} else {
 			ERROR_WINDOW("%serror creating thread for Ethernet emulation: %s", init_error_prefix, SDL_GetError());
 			eth65.enabled = 0;

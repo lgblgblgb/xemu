@@ -172,6 +172,8 @@ int xemu_tuntap_select ( int flags, int timeout_usecs )
 		struct timeval timeout, *timeout_p;
 		FD_ZERO(&fdsr);
 		FD_ZERO(&fdsw);
+		FD_SET(tuntap_fd, &fdsr);
+		FD_SET(tuntap_fd, &fdsw);
 		if (timeout_usecs >= 0) {
 			timeout.tv_sec  = timeout_usecs / 1000000;
 			timeout.tv_usec = timeout_usecs % 1000000;
