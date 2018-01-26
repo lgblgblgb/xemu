@@ -35,6 +35,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "memory_mapper.h"
 #include "io_mapper.h"
 #include "ethernet65.h"
+#include "input_devices.h"
 
 
 static SDL_AudioDeviceID audio = 0;
@@ -156,32 +157,6 @@ static inline void nmi_set ( int level, int mask )
 static void cia2_setint_cb ( int level )
 {
 	nmi_set(level, 1);
-}
-
-
-void clear_emu_events ( void )
-{
-	hid_reset_events(1);
-}
-
-
-static Uint8 cia1_in_b ( void )
-{
-	return c64_keyboard_read_on_CIA1_B(
-		cia1.PRA | (~cia1.DDRA),
-		cia1.PRB | (~cia1.DDRB),
-		joystick_emu == 1 ? c64_get_joy_state() : 0xFF
-	);
-}
-
-
-static Uint8 cia1_in_a ( void )
-{
-	return c64_keyboard_read_on_CIA1_A(
-		cia1.PRB | (~cia1.DDRB),
-		cia1.PRA | (~cia1.DDRA),
-		joystick_emu == 2 ? c64_get_joy_state() : 0xFF
-	);
 }
 
 
@@ -399,7 +374,7 @@ static void shutdown_callback ( void )
 
 
 
-static void reset_mega65 ( void )
+void reset_mega65 ( void )
 {
 	eth65_reset();
 	force_fast = 0;	// FIXME: other default speed controls on reset?
@@ -418,31 +393,6 @@ static void reset_mega65 ( void )
 	hypervisor_enter(TRAP_RESET);
 	DEBUG("RESET!" NL);
 }
-
-
-
-// Called by emutools_hid!!! to handle special private keys assigned to this emulator
-int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
-{
-	// Check for special, emulator-related hot-keys (not C65 key)
-	if (pressed) {
-		if (key == SDL_SCANCODE_F10)
-			reset_mega65();
-		else if (key == SDL_SCANCODE_KP_ENTER) {
-			c64_toggle_joy_emu();
-			OSD(-1, -1, "Joystick emulation on port #%d", joystick_emu);
-		} else if (key == SDL_SCANCODE_ESCAPE)
-			set_mouse_grab(SDL_FALSE);
-	} else
-		if (pos == -2 && key == 0) {	// special case pos = -2, key = 0, handled = mouse button (which?) and release event!
-			if (handled == SDL_BUTTON_LEFT) {
-				OSD(-1, -1, "Mouse grab activated.\nPress ESC to cancel.");
-				set_mouse_grab(SDL_TRUE);
-			}
-		}
-	return 0;
-}
-
 
 
 static void update_emulator ( void )
@@ -537,7 +487,7 @@ void m65mon_breakpoint ( int brk )
 int main ( int argc, char **argv )
 {
 	int cycles, frameskip;
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The Incomplete Commodore-65/Mega-65 emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Incomplete Mega-65 emulator from LGB");
 	xemucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
 	xemucfg_define_num_option("dmarev", 0x100, "DMA revision (0/1=F018A/B +256=autochange, +512=modulo, you always wants +256!)");
 	xemucfg_define_num_option("fastclock", MEGA65_DEFAULT_FAST_CLOCK, "Clock of M65 fast mode (in MHz)");
