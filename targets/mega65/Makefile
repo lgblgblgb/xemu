@@ -1,6 +1,6 @@
 ## A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
 ## Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-## Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -26,3 +26,8 @@ CONFIG_CFLAGS_TARGET_xmega65	= sdl2|math|socketapi
 CONFIG_LDFLAGS_TARGET_xmega65	= sdl2|math|socketapi
 
 include ../../build/Makefile.common
+
+character_wom_initialized.c:
+	rm -f $@ $(@).tmp
+	../../build/m65-import-charset < ../../../mega65-core/src/vhdl/charrom.vhdl > $(@).tmp
+	mv $(@).tmp $@
