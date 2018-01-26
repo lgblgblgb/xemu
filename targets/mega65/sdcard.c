@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -101,11 +101,23 @@ int sdcard_init ( const char *fn, const char *extd81fn )
 	mounted = 0;
 	memset(sd_sector_bytes, 0, sizeof sd_sector_bytes);
 	memset(sd_d81_img1_start, 0, sizeof sd_d81_img1_start);
+retry:
 	sd_is_read_only = O_RDONLY;
 	sdfd = xemu_open_file(fn, O_RDWR, &sd_is_read_only, fnbuf);
 	if (sdfd < 0) {
-		ERROR_WINDOW("Cannot open SD-card image %s, SD-card access won't work! ERROR: %s", fnbuf, strerror(errno));
+		int err = errno;
+		ERROR_WINDOW("Cannot open SD-card image %s, SD-card access won't work! ERROR: %s", fnbuf, strerror(err));
 		DEBUG("SDCARD: cannot open image %s" NL, fn);
+		if (err == ENOENT && !strcmp(fn, SDCARD_NAME)) {
+			unsigned int r = QUESTION_WINDOW("No|128M|256M|512M|1G|2G", "Default SDCARD image does not exist.\nWould you like me to create one for you?");
+			if (r) {
+				int r2 = xemu_create_empty_image(fnbuf, (1U << (r + 26U)));
+				if (r2)
+					ERROR_WINDOW("Couldn't create: %s", strerror(r2));
+				else
+					goto retry;
+			}
+		}
 	} else {
 		if (sd_is_read_only)
 			INFO_WINDOW("Image file %s could be open only in R/O mode", fnbuf);
@@ -281,8 +293,7 @@ static void sdcard_command ( Uint8 cmd )
 			break;
 		default:
 			// FIXME: how to signal this to the user/sys app? error flags, etc?
-			DEBUG("SDCARD: warning, unimplemented SD-card controller command $%02X" NL, cmd);
-			printf("MEGA65: SD: unimplemented command $%02X" NL, cmd);
+			DEBUGPRINT("SDCARD: warning, unimplemented SD-card controller command $%02X" NL, cmd);
 			break;
 	}
 }
@@ -291,7 +302,7 @@ static void sdcard_command ( Uint8 cmd )
 // data = D68B write
 static void sdcard_mount_d81 ( Uint8 data )
 {
-	printf("SD/FDC mount register request @ $D68B val=$%02X at PC=$%04X" NL, data, cpu65.pc);
+	DEBUGPRINT("SDCARD: SD/FDC mount register request @ $D68B val=$%02X at PC=$%04X" NL, data, cpu65.pc);
 	if ((data & 3) == 3) {
 		if (d81fd >= 0)
 			use_d81 = QUESTION_WINDOW("Use D81 from SD-card|Use external D81 image file", "Hypervisor mount request, and you have defined external D81 image.");
@@ -299,17 +310,17 @@ static void sdcard_mount_d81 ( Uint8 data )
 			use_d81 = 0;
 		if (!use_d81) {
 			fdc_set_disk(1, sd_is_read_only ? 0 : QUESTION_WINDOW("Use read-only access|Use R/W access (can be dangerous, can corrupt the image!)", "Hypervisor seems to be about mounting a D81 image. You can override the access mode now."));
-			printf("SD/FDC: (re-?)mounted D81 for starting sector $%02X%02X%02X%02X" NL,
+			DEBUGPRINT("SDCARD: SD/FDC: (re-?)mounted D81 for starting sector $%02X%02X%02X%02X" NL,
 				sd_d81_img1_start[3], sd_d81_img1_start[2], sd_d81_img1_start[1], sd_d81_img1_start[0]
 			);
 		} else {
 			fdc_set_disk(1, !d81_is_read_only);
-			printf("SD/FDC: mount *EXTERNAL* D81 image, not from SD card (emulator feature only)!" NL);
+			DEBUGPRINT("SDCARD: SD/FDC: mount *EXTERNAL* D81 image, not from SD card (emulator feature only)!" NL);
 		}
 		mounted = 1;
 	} else {
 		if (mounted)
-			printf("SD/FDC: unmounted D81" NL);
+			DEBUGPRINT("SDCARD: SD/FDC: unmounted D81" NL);
 		fdc_set_disk(0, 0);
 		mounted = 0;
 	}

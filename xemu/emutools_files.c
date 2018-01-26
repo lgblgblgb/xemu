@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -587,4 +587,32 @@ int xemu_load_file ( const char *filename, void *store_to, int min_size, int max
 		DEBUGPRINT("FILE: %d bytes loaded from file: %s" NL, load_size, xemu_load_filepath);
 		return load_size;
 	}
+}
+
+
+int xemu_create_empty_image ( const char *os_path, unsigned int size )
+{
+	int err = 0, fd;
+	unsigned char zero = 0;
+	fd = open(os_path, O_BINARY | O_RDWR | O_CREAT, 0600);
+	if (fd < 0)
+		goto error;
+	if (size > 0) {
+		size--;
+		if (lseek(fd, size, SEEK_SET) != size)
+			goto error;
+		if (write(fd, &zero, 1) != 1)
+			goto error;
+		if (lseek(fd, -1, SEEK_CUR) != size)
+			goto error;
+	}
+	if (close(fd))
+		goto error;
+	return 0;
+error:
+	err = errno;
+	if (fd >= 0)
+		close(fd);
+	unlink(os_path);
+	return err ? err : -1;
 }
