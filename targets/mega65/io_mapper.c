@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sdcard.h"
 #include "hypervisor.h"
 #include "ethernet65.h"
+#include "input_devices.h"
 
 
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
@@ -137,6 +138,10 @@ Uint8 io_read ( unsigned int addr )
 					return fpga_switches & 0xFF;
 				case 0xF1:
 					return (fpga_switches >> 8) & 0xFF;
+				case 0x10:				// last keypress ASCII value
+					return kbd_get_last();
+				case 0x11:				// modifier keys on kbd being used
+					return kbd_get_modifiers();
 				default:
 					DEBUG("MEGA65: reading Mega65 specific I/O @ $D6%02X result is $%02X" NL, addr, D6XX_registers[addr]);
 					return D6XX_registers[addr];
@@ -307,6 +312,9 @@ void io_write ( unsigned int addr, Uint8 data )
 				return;
 			}
 			switch (addr) {
+				case 0x10:	// ASCII kbd last press value to zero whatever the written data would be
+					kbd_move_next();
+					return;
 				case 0x7C:					// hypervisor serial monitor port
 					hypervisor_serial_monitor_push_char(data);
 					return;

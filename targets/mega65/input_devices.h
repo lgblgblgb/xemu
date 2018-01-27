@@ -19,9 +19,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_MEGA65_INPUT_DEVICES_H_INCLUDED
 #define __XEMU_MEGA65_INPUT_DEVICES_H_INCLUDED
 
-extern void clear_emu_events ( void );
-extern Uint8 cia1_in_b       ( void );
-extern Uint8 cia1_in_a       ( void );
-extern int emu_callback_key  ( int pos, SDL_Scancode key, int pressed, int handled );
+extern void  clear_emu_events  ( void );
+extern Uint8 cia1_in_b         ( void );
+extern Uint8 cia1_in_a         ( void );
+extern int   emu_callback_key  ( int pos, SDL_Scancode key, int pressed, int handled );
+
+extern Uint8 kbd_get_last      ( void );
+extern Uint8 kbd_get_modifiers ( void );
+extern void  kbd_move_next     ( void );
 
 #endif

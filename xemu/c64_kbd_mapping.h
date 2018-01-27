@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -23,8 +23,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // Keyboard position of "shift" which is "virtually pressed" ie for cursor up/left
 #define VIRTUAL_SHIFT_POS	0x64
 
+#define LSHIFT_KEY_POS		0x17
+#define RSHIFT_KEY_POS		0x64
+#define CBM_KEY_POS		0x75
+#define CTRL_KEY_POS		0x72
+
+#define IS_KEY_PRESSED(pos)	(!(kbd_matrix[(pos) >> 4] & (1 << ((pos) & 7))))
+
 #define RESTORE_KEY_POS		0x80
-#define IS_RESTORE_PRESSED()	(!(kbd_matrix[RESTORE_KEY_POS >> 4] & (1 << (RESTORE_KEY_POS & 7))))
+#define IS_RESTORE_PRESSED()	IS_KEY_PRESSED(RESTORE_KEY_POS)
+//#define IS_RESTORE_PRESSED()	(!(kbd_matrix[RESTORE_KEY_POS >> 4] & (1 << (RESTORE_KEY_POS & 7))))
 
 extern const struct KeyMapping c64_key_map[];
 extern int joystick_emu;
