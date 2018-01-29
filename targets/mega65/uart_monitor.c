@@ -140,6 +140,11 @@ static void execute_command ( char *cmd )
 			if (cmd && check_end_of_command(cmd, 1))
 				m65mon_dumpmem16(par1);
 			break;
+		case 'm':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
+			if (cmd && check_end_of_command(cmd, 1))
+				m65mon_dumpmem28(par1);
+			break;
 		case 't':
 			if (!*cmd)
 				m65mon_do_trace();

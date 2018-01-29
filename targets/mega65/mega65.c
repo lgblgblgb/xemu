@@ -446,6 +446,16 @@ void m65mon_dumpmem16 ( Uint16 addr )
 		umon_printf(" %02X", cpu65_read_callback(addr++));
 }
 
+void m65mon_dumpmem28 ( int addr )
+{
+	int n = 16;
+	addr &= 0xFFFFFFF;
+	umon_printf(":%07X", addr);
+	while (n--)
+		umon_printf(" %02X", memory_debug_read_phys_addr(addr++));
+}
+
+
 void m65mon_set_trace ( int m )
 {
 	paused = m;
