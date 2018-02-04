@@ -455,6 +455,13 @@ void m65mon_dumpmem28 ( int addr )
 		umon_printf(" %02X", memory_debug_read_phys_addr(addr++));
 }
 
+void m65mon_setmem28( int addr, int cnt, Uint8* vals )
+{
+  for (int k = 0; k < cnt; k++)
+  {
+    memory_debug_write_phys_addr(addr++, vals[k]);
+  }
+}
 
 void m65mon_set_trace ( int m )
 {
