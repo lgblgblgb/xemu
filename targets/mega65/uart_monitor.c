@@ -102,6 +102,34 @@ static int check_end_of_command ( char *p, int error_out )
 }
 
 
+static void setmem28(char *param, int addr)
+{
+	addr &= 0xFFFFFFF;
+  Uint8* vals = NULL;
+  char* orig_param = param;
+  int cnt = 0;
+  int val;
+
+  // get param count
+  while (param && !check_end_of_command(param, 0))
+  {
+    param = parse_hex_arg(param, &val, 0, 0xFF); 
+    cnt++;
+  }
+
+  vals = calloc(cnt, sizeof(Uint8));
+  param = orig_param;
+
+  int idx = 0;
+  while (param && !check_end_of_command(param, 0))
+  {
+    param = parse_hex_arg(param, &val, 0, 0xFF);
+    vals[idx++] = (Uint8)val;
+  }
+
+  m65mon_setmem28(addr, cnt, vals);
+  free(vals);
+}
 
 static void execute_command ( char *cmd )
 {
@@ -145,6 +173,10 @@ static void execute_command ( char *cmd )
 			if (cmd && check_end_of_command(cmd, 1))
 				m65mon_dumpmem28(par1);
 			break;
+    case 's':
+      cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
+      setmem28(cmd, par1);
+      break;
 		case 't':
 			if (!*cmd)
 				m65mon_do_trace();
