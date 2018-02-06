@@ -30,6 +30,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 
+
+
 // #define DEBUG_FOR_PAUL
 
 
@@ -42,7 +44,7 @@ static int   curcmd;
 static Uint8 dskclock, step;
 static int   emulate_busy;
 static int   drive;
-static Uint8 cache[512];		// 512 bytes cache FDC will use. This is a real 512byte RAM attached to the FDC controller for buffered operations on the C65
+static Uint8 *cache;			// 512 bytes cache FDC will use. This is a real 512byte RAM attached to the FDC controller for buffered operations on the C65
 static int   cache_p_cpu;		// cache pointer if CPU accesses the FDC buffer cache. 0 ... 511!
 static int   cache_p_fdc;		// cache pointer if FDC accesses the FDC buffer cache. 0 ... 511!
 //static int   disk_fd;			// disk image file descriptor (if disk_fd < 0 ----> no disk image, ie "no disk inserted" is emulated)
@@ -57,9 +59,10 @@ static int   have_disk, have_write;
 
 
 
-void fdc_init ( void )
+void fdc_init ( Uint8 *cache_set )
 {
 	DEBUG("FDC: init F011 emulation core" NL);
+	cache = cache_set;
 	head_track = 0;
 	head_side = 0;
 	control = 0;
@@ -478,7 +481,13 @@ Uint8 fdc_read_reg  ( int addr )
 #include <string.h>
 
 #define SNAPSHOT_FDC_BLOCK_VERSION	0
-#define SNAPSHOT_FDC_BLOCK_SIZE		(0x100 + sizeof(cache))
+
+#ifdef MEGA65
+#define SNAPSHOT_FDC_BLOCK_SIZE		0x100
+#else
+#define CACHE_SIZE 512
+#define SNAPSHOT_FDC_BLOCK_SIZE		(0x100 + CACHE_SIZE)
+#endif
 
 int fdc_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
@@ -508,7 +517,9 @@ int fdc_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, str
 	cmd = buffer[135];
 	dskclock = buffer[136];
 	step = buffer[137];
-	memcpy(cache, buffer + 0x100, sizeof cache);
+#ifndef MEGA65
+	memcpy(cache, buffer + 0x100, CACHE_SIZE);
+#endif
 	return 0;
 }
 
@@ -539,7 +550,9 @@ int fdc_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	buffer[135] = cmd;
 	buffer[136] = dskclock;
 	buffer[137] = step;
-	memcpy(buffer + 0x100, cache, sizeof cache);
+#ifndef MEGA65
+	memcpy(buffer + 0x100, cache, CACHE_SIZE);
+#endif
 	return xemusnap_write_sub_block(buffer, sizeof buffer);
 }
 

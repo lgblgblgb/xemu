@@ -1,5 +1,5 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,5 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define __XEMU_C65_D81_IMAGE_H_INCLUDED
 
 extern void c65_d81_init ( const char *dfn );
+
+extern Uint8 disk_cache[512];	// internal memory of the F011 disk controller
 
 #endif

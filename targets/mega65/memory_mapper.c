@@ -33,6 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "vic4.h"
 #include "xemu/f018_core.h"
 #include "ethernet65.h"
+#include "sdcard.h"
 #include <string.h>
 
 #define ALLOW_CPU_CUSTOM_FUNCTIONS_INCLUDE
@@ -237,7 +238,12 @@ DEFINE_READER(eth_buffer_reader) {
 DEFINE_WRITER(eth_buffer_writer) {
 	eth65_write_tx_buffer(GET_WRITER_OFFSET(), data);
 }
-
+DEFINE_READER(disk_buffers_reader) {
+	return disk_buffers[GET_READER_OFFSET()];
+}
+DEFINE_WRITER(disk_buffers_writer) {
+	disk_buffers[GET_WRITER_OFFSET()] = data;
+}
 
 
 // Memory layout table for Mega-65
@@ -260,6 +266,7 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 	{ 0xFFF8000, 0xFFFBFFF, hypervisor_ram_reader, hypervisor_ram_writer },	// 16KB Kickstart/hypervisor ROM
 	{ 0xFF7E000, 0xFF7EFFF, dummy_reader, char_wom_writer },		// Character "WriteOnlyMemory"
 	{ 0xFFDE800, 0xFFDEFFF, eth_buffer_reader, eth_buffer_writer },		// ethernet RX/TX buffer, NOTE: the same address, reading is always the RX_read, writing is always TX_write
+	{ 0xFFD6000, 0xFFD6FFF, disk_buffers_reader, disk_buffers_writer },	// disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space" [??]
 	{ 0x8000000, 0xFEFFFFF, slow_ram_reader, slow_ram_writer },		// 127Mbytes of "slow RAM" (Nexys4 DDR2 RAM)
 	{ 0x40000, 0xFFFFF, dummy_reader, dummy_writer },			// upper "unused" area of C65 (!) memory map. It seems C65 ROMs want it (Expansion RAM?) so we define as unused.
 	// the last entry *MUST* include the all possible addressing space to "catch" undecoded memory area accesses!!
@@ -271,7 +278,6 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 static const struct m65_memory_map_st impossible_mapping = {
 	0x10000001, 0x10000000, unreferenced_mem_reader, unreferenced_mem_writer
 };
-
 
 
 

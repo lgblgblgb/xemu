@@ -1,6 +1,6 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 / Mega-65 emulator,
    within the Xemu project.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -30,6 +30,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 static int disk_fd = -1, disk_inserted = 0, read_only = 1;
+
+Uint8 disk_cache[512];	// internal memory of the F011 disk controller
+
 
 
 int fdc_cb_rd_sec ( Uint8 *buffer, int offset )
@@ -91,7 +94,7 @@ static void c65_d81_shutdown ( void )
 void c65_d81_init ( const char *dfn )
 {
 	atexit(c65_d81_shutdown);
-	fdc_init();
+	fdc_init(disk_cache);
 	disk_inserted = 0;
 	read_only = 1;
 	if (disk_fd >= 0)

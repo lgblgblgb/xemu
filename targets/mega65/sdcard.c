@@ -16,7 +16,6 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-
 #include "xemu/emutools.h"
 #include "xemu/emutools_files.h"
 #include "sdcard.h"
@@ -31,13 +30,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <fcntl.h>
 #include <limits.h>
 
-
-
 static int   sdfd;		// SD-card controller emulation, UNIX file descriptor of the open image file
 static int   d81fd = -1;	// special case for F011 access, allow emulator to access D81 image on the host OS, instead of "inside" the SD card image! [NOT SO MUCH USED YET]
 static int   use_d81 = 0;	// the above: actually USE that!
 static int   d81_is_read_only;	// access of the above, read-only or read-write
-Uint8 sd_buffer[512];		// SD-card controller buffer
 Uint8 sd_status;		// SD-status byte
 static Uint8 sd_sector_bytes[4];
 static Uint8 sd_d81_img1_start[4];
@@ -45,6 +41,8 @@ static off_t sd_card_size;
 static int   sdcard_bytes_read = 0;
 static int   sd_is_read_only;
 static int   mounted;
+// 4K buffer space: Actually the SD buffer _IS_ inside this, also the F011 buffer should be (FIXME: that is not implemented yet right now!!)
+Uint8 disk_buffers[0x1000];
 
 
 static int open_external_d81 ( const char *fn )
@@ -387,7 +385,7 @@ Uint8 sdcard_read_register ( int reg )
 #include <string.h>
 
 #define SNAPSHOT_SDCARD_BLOCK_VERSION	0
-#define SNAPSHOT_SDCARD_BLOCK_SIZE	(0x100 + sizeof(sd_buffer))
+#define SNAPSHOT_SDCARD_BLOCK_SIZE	(0x100 + sizeof(disk_buffers))
 
 int sdcard_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
@@ -406,7 +404,7 @@ int sdcard_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, 
 	d81_is_read_only = (int)P_AS_BE32(buffer + 20);
 	use_d81 = (int)P_AS_BE32(buffer + 24);
 	sd_status = buffer[0xFF];
-	memcpy(sd_buffer, buffer + 0x100, sizeof sd_buffer);
+	memcpy(disk_buffers, buffer + 0x100, sizeof disk_buffers);
 	return 0;
 }
 
@@ -426,7 +424,7 @@ int sdcard_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	U32_AS_BE(buffer + 20, d81_is_read_only);
 	U32_AS_BE(buffer + 24, use_d81);
 	buffer[0xFF] = sd_status;
-	memcpy(buffer + 0x100, sd_buffer, sizeof sd_buffer);
+	memcpy(buffer + 0x100, sd_buffer, sizeof disk_buffers);
 	return xemusnap_write_sub_block(buffer, sizeof buffer);
 }
 

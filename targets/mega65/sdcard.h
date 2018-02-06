@@ -32,10 +32,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern int   sdcard_init           ( const char *fn, const char *extd81fn );
 extern void  sdcard_write_register ( int reg, Uint8 data );
 extern Uint8 sdcard_read_register  ( int reg  );
-extern int   sdcard_read_buffer    ( int addr );
-extern int   sdcard_write_buffer   ( int addr,   Uint8 data );
 
-extern Uint8 sd_buffer[512];
+#define SD_BUFFER_POS 0x0E00
+#define FD_BUFFER_POS 0x0C00
+
+#define sd_buffer	(disk_buffers+SD_BUFFER_POS)
+
+// disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space"
+extern Uint8 disk_buffers[0x1000];
 extern Uint8 sd_status;
 
 #ifdef XEMU_SNAPSHOT_SUPPORT

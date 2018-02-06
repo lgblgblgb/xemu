@@ -297,7 +297,7 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// *** Initialize DMA
 	dma_init(xemucfg_get_num("dmarev"));
 	// Initialize FDC
-	fdc_init();
+	fdc_init(disk_cache);
 	c65_d81_init(xemucfg_get_str("8"));
 	// SIDs, plus SDL audio
 	sid_init(&sids[0], sid_cycles_per_sec, sound_mix_freq);

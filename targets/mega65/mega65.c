@@ -282,7 +282,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
 	dma_init(newhack ? DMA_FEATURE_HACK | DMA_FEATURE_DYNMODESET : xemucfg_get_num("dmarev"));
 	// Initialize FDC
-	fdc_init();
+	fdc_init(disk_buffers + FD_BUFFER_POS);
 	// SIDs, plus SDL audio
 	sid_init(&sid1, sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sid2, sid_cycles_per_sec, sound_mix_freq);
