@@ -42,6 +42,7 @@ static SDL_AudioDeviceID audio = 0;
 
 static int nmi_level;			// please read the comment at nmi_set() below
 
+int newhack = 0;
 
 
 #define TRAP_RESET	0x40
@@ -279,7 +280,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
-	dma_init(xemucfg_get_num("dmarev"));
+	dma_init(newhack ? DMA_FEATURE_HACK | DMA_FEATURE_DYNMODESET : xemucfg_get_num("dmarev"));
 	// Initialize FDC
 	fdc_init();
 	// SIDs, plus SDL audio
@@ -533,11 +534,15 @@ int main ( int argc, char **argv )
 #ifdef HAVE_ETHERTAP
 	xemucfg_define_str_option("ethertap", NULL, "Enable ethernet emulation, parameter is the already configured TAP device name");
 #endif
+	xemucfg_define_switch_option("newhack", "Tries to implement NEW M65 features till the 'mature' support is done");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(xemucfg_get_str("installer"));
 #endif
+	newhack = xemucfg_get_bool("newhack");
+	if (newhack)
+		DEBUGPRINT("WARNING: *** NEW M65 HACK MODE ACTIVATED ***" NL);
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	window_title_info_addon = emulator_speed_title;
 	if (xemu_post_init(
@@ -679,7 +684,7 @@ int main ( int argc, char **argv )
 #include <string.h>
 
 #define SNAPSHOT_M65_BLOCK_VERSION	2
-#define SNAPSHOT_M65_BLOCK_SIZE		(0x100 + sizeof(D6XX_registers))
+#define SNAPSHOT_M65_BLOCK_SIZE		(0x100 + sizeof(D6XX_registers) + sizeof(D7XX))
 
 static int force_fast_loaded;
 
@@ -694,6 +699,7 @@ int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, 
 	if (a) return a;
 	/* loading state ... */
 	memcpy(D6XX_registers, buffer + 0x100, sizeof D6XX_registers);
+	memcpy(D7XX, buffer + 0x200, sizeof D7XX);
 	in_hypervisor = 1;	// simulate hypervisor mode, to allow to write some regs now instead of causing a TRAP now ...
 	io_write(0x367D, D6XX_registers[0x7D]);			// write $(D)67D in VIC-IV I/O mode! (sets ROM protection, linear addressing mode enable ...)
 	// TODO FIXME: see if there is a need for other registers from D6XX_registers to write back to take effect on loading snapshot!
@@ -731,6 +737,7 @@ int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	buffer[36] = memory_get_cpu_io_port(0);
 	buffer[37] = memory_get_cpu_io_port(1);
 	memcpy(buffer + 0x100, D6XX_registers, sizeof D6XX_registers);
+	memcpy(buffer + 0x200, D7XX, sizeof D7XX);
 	return xemusnap_write_sub_block(buffer, sizeof buffer);
 }
 

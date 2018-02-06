@@ -1,5 +1,5 @@
-/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
-   DMAgic emulation.
+/* F018 DMA core emulation for Commodore 65 and Mega 65, part of the Xemu project.
+   https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -42,6 +42,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 */
 
 
+#define DEBUGDMA(...)   DEBUG(__VA_ARGS__)
+//#define DEBUGDMA(...) DEBUGPRINT(__VA_ARGS__)
+
+
 Uint8 dma_status;
 Uint8 dma_registers[16];		// The four DMA registers (with last values written by the CPU)
 int   dma_chip_revision;		// revision of DMA chip
@@ -69,6 +73,19 @@ static int   in_dma_update;		// signal that DMA update do something. Currently o
 static int   dma_self_write_warning;	// Warning window policy for the event in case of the happening described in the comment of the previous line :)
 static int   list_base;			// base address of the DMA list fetch, like base in the source/target struct later, see there
 static int   filler_byte;		// byte used for FILL DMA command only
+
+
+/* BEGIN HACK */
+#ifdef MEGA65
+static struct {
+	int enabled;
+	int enhanced_dma;
+	//Uint8 saved_regs[16];
+	int saved_revision;
+} hack;
+#endif
+/* END HACK */
+
 
 // In case of Mega65 we should support fractional steps (1 byte for fraction). We do this to have
 // common code base with C65 emulator's DMA to have a single variable for source (source_addr) and
@@ -135,19 +152,6 @@ static struct {
 
 
 
-static XEMU_INLINE Uint8 __read_source_next ( void )
-{
-	register Uint8 result = DMA_READ_SOURCE();
-	source.addr += source.step;
-	return result;
-}
-
-static XEMU_INLINE void __write_target_next ( Uint8 data )
-{
-	DMA_WRITE_TARGET(data);
-	target.addr += target.step;
-}
-
 static XEMU_INLINE void copy_next ( void )
 {
 	DMA_WRITE_TARGET(DMA_READ_SOURCE());
@@ -213,12 +217,21 @@ void dma_write_reg ( int addr, Uint8 data )
 	}
 #ifdef MEGA65
 	dma_registers[addr] = data;
+	hack.enhanced_dma = 0;
 	switch (addr) {
 		case 0x2:	// for compatibility with C65, Mega65 here resets the MB part of the DMA list address
 			dma_registers[4] = 0;	// this is the "MB" part of the DMA list address (hopefully ...)
 			break;
 		case 0xE:	// Set low order bits of DMA list address, without starting (Mega65 feature, but without VIC4 new mode, this reg will never addressed here anyway)
 			dma_registers[0] = data;
+			break;
+		case 5:
+			if (hack.enabled) {
+				addr = 0;		// fool the code that it's a DMA trigger ...
+				hack.enhanced_dma = 1;	// ... and also set the enhanced mode flag though
+				dma_registers[0] = data;
+				dma_registers[5] = data;
+			}
 			break;
 	}
 #else
@@ -234,11 +247,24 @@ void dma_write_reg ( int addr, Uint8 data )
 		FATAL("dma_write_reg(): new DMA op with dma_status != 0");
 	list_addr = dma_registers[0] | (dma_registers[1] << 8); // | ((dma_registers[2] & 0xF) << 16);
 #ifdef MEGA65
+	if (hack.enhanced_dma) {
+		DEBUGDMA("DMA: initiation of ENCHANCED MODE DMA!!!!\n");
+		// FAKE enhanced mode DMA! By using old register-set pre-inited, and allow
+		// an enhanced option list to modify them :-@
+		dma_registers[0x08] = 0;	// source skip rate, fraction part
+		dma_registers[0x09] = 1;	// source skip rate, integer part
+		dma_registers[0x0A] = 0;	// target skip rate, fraction part
+		dma_registers[0x0B] = 1;	// target skip rate, integer part
+		dma_registers[0x05] = 0;	// source MB
+		dma_registers[0x06] = 0;	// target MB
+		hack.saved_revision = dma_chip_revision;	// save this (will be restored at the end of DMA chain) so the "hack" can modify without loosing the original setting
+	} else
+		DEBUGDMA("DMA: initiation of normal mode DMA\n");
 	list_base = (dma_registers[4] << 20) | ((dma_registers[2] & 0xF) << 16);
 #else
 	list_base = (dma_registers[2] & 0xF) << 16;
 #endif
-	DEBUG("DMA: list address is $%06X now, just written to register %d value $%02X" NL, list_base | list_addr, addr, data);
+	DEBUGDMA("DMA: list address is $%06X now, just written to register %d value $%02X @ PC=$%04X" NL, list_base | list_addr, addr, data, cpu65.pc);
 	dma_status = 0x80;	// DMA is busy now, also to signal the emulator core to call dma_update() in its main loop
 	command = -1;		// signal dma_update() that it's needed to fetch the DMA command, no command is fetched yet
 	cpu65.multi_step_stop_trigger = 1;	// trigger stopping multi-op CPU emulation mode, otherwise "delayed DMAs" would overlap each other resulting "panic"
@@ -255,10 +281,78 @@ void dma_write_reg ( int addr, Uint8 data )
 int dma_update ( void )
 {
 	Uint8 subcommand;
-	int cycles;
+	int cycles = 0;
 	if (XEMU_UNLIKELY(!dma_status))
 		FATAL("dma_update() called with no dma_status set!");
 	if (XEMU_UNLIKELY(command == -1)) {
+#ifdef MEGA65
+		/* don't do this here, it will reset these in chained list for enhanced DMA!
+		if (hack.enabled) {
+			dma_registers[0x08] = 0;	// source skip rate, fraction part
+			dma_registers[0x09] = 1;	// source skip rate, integer part
+			dma_registers[0x0A] = 0;	// target skip rate, fraction part
+			dma_registers[0x0B] = 1;	// target skip rate, integer part
+			dma_registers[0x05] = 0;	// source MB
+			dma_registers[0x06] = 0;	// target MB
+		} */
+		if (hack.enhanced_dma) {
+			Uint8 opt;
+			//memcpy(hack.saved_regs, dma_registers, sizeof(dma_registers));
+			hack.saved_revision = dma_chip_revision;
+			do {
+				opt = DMA_READ_LIST_NEXT_BYTE();
+				DEBUGDMA("DMA: enhanced option byte $%02X read" NL, opt);
+				cycles++;
+				switch (opt) {
+					case 0x86:	// not supported yet
+						list_addr++;	// skip the parameter too
+						cycles++;
+						// flow onto the next 'case'!!
+					case 0x06:
+					case 0x07:
+						DEBUGPRINT("DMA: enhanced DMA transparency is not supported yet (option=$%02X) @ PC=$%04X" NL, opt, cpu65.pc);
+						break;
+					case 0x0A:
+						dma_chip_revision = 0;
+						break;
+					case 0x0B:
+						dma_chip_revision = 1;
+						break;
+					case 0x80:	// set MB of source
+						dma_registers[0x05] = DMA_READ_LIST_NEXT_BYTE();
+						cycles++;
+						break;
+					case 0x81:	// set MB of target
+						dma_registers[0x06] = DMA_READ_LIST_NEXT_BYTE();
+						cycles++;
+						break;
+					case 0x82:	// set source skip rate, fraction part
+						dma_registers[0x08] = DMA_READ_LIST_NEXT_BYTE();
+						cycles++;
+						break;
+					case 0x83:	// set source skip rate, integer part
+						dma_registers[0x09] = DMA_READ_LIST_NEXT_BYTE();
+						cycles++;
+						break;
+					case 0x84:	// set target skip rate, fraction part
+						dma_registers[0x0A] = DMA_READ_LIST_NEXT_BYTE();
+						cycles++;
+						break;
+					case 0x85:	// set target skip rate, integer part
+						dma_registers[0x0B] = DMA_READ_LIST_NEXT_BYTE();
+						cycles++;
+						break;
+					case 0x00:
+						DEBUGDMA("DMA: end of enhanced options" NL);
+						break;
+					default:
+						// maybe later we should keep this quiet ...
+						DEBUGPRINT("DMA: *unknown* enhanced option: $%02X @ PC=$%04X" NL, opt, cpu65.pc);
+						break;
+				}
+			} while (opt);
+		}
+#endif
 		// command == -1 signals the situation, that the (next) DMA command should be read!
 		// This part is highly incorrect, ie fetching so many bytes in one step only of dma_update()
 #ifdef MEGA65
@@ -297,7 +391,7 @@ int dma_update ( void )
 		modulo.value      |= DMA_READ_LIST_NEXT_BYTE() <<  8;
 #endif
 		if (dma_chip_revision) {
-			cycles = 12;	// FIXME: correct timing?
+			cycles += 12;	// FIXME: correct timing?
 			// F018B ("new") behaviour
 			source.step  = (subcommand & 2) ? 0 : ((command & 16) ? -DMA_SOURCE_SKIP_RATE : DMA_SOURCE_SKIP_RATE);
 			target.step  = (subcommand & 8) ? 0 : ((command & 32) ? -DMA_TARGET_SKIP_RATE : DMA_TARGET_SKIP_RATE);
@@ -311,7 +405,7 @@ int dma_update ( void )
 				minterms[3] = (subcommand & 128) ? 0xFF : 0x00;
 			}
 		} else {
-			cycles = 11;	// FIXME: correct timing?
+			cycles += 11;	// FIXME: correct timing?
 			// F018A ("old") behaviour
 			source.step  = (source.addr & 0x100000) ? 0 : ((source.addr & 0x400000) ? -DMA_SOURCE_SKIP_RATE : DMA_SOURCE_SKIP_RATE);
 			target.step  = (target.addr & 0x100000) ? 0 : ((target.addr & 0x400000) ? -DMA_TARGET_SKIP_RATE : DMA_TARGET_SKIP_RATE);
@@ -425,7 +519,6 @@ int dma_update ( void )
 	// We have valid command to be executed, or continue to execute
 	//DEBUG("DMA: EXECUTING: command=%d length=$%04X" NL, command & 3, length);
 	in_dma_update = 1;
-	cycles = 0; // make stupid GCC happy. it complains being uninitialized cycles after the switch(), but it's not possible as that switch handles ALL cases of input enum and in all cases cycles is set
 	switch (dma_op) {
 		case COPY_OP:		// COPY command (0)
 			copy_next();
@@ -470,15 +563,22 @@ int dma_update ( void )
 	}
 	if (length <= 0) {			// end of DMA operation for the current DMA list entry?
 		if (chained) {			// chained?
-			DEBUG("DMA: end of operation, but chained!" NL);
+			DEBUGDMA("DMA: end of operation, but chained!" NL);
 			dma_status = 0x81;	// still busy then, with also bit0 set (chained)
 			command = -1;		// signal for next DMA command fetch
 		} else {
-			DEBUG("DMA: end of operation, no chained next one." NL);
+			DEBUGDMA("DMA: end of operation, no chained next one." NL);
 			dma_status = 0;		// end of DMA command
 			command = -1;
 #ifdef MEGA65
+			if (hack.enhanced_dma) {
+				DEBUGDMA("DMA: enhanced-end-of-op, restoring context" NL);
+				//memcpy(dma_registers, hack.saved_regs, sizeof(dma_registers));
+				dma_chip_revision = hack.saved_revision;
+				hack.enhanced_dma = 0;
+			}
 			// Mega65: reset fractional step registers to the default at the end! (it seems M65 does this, by reading its VHDL source)
+			// Note, this is the old DMA behaviour not connected to the "hack" ...
 			dma_registers[0x08] = 0;	// source skip rate, fraction part
 			dma_registers[0x09] = 1;	// source skip rate, integer part
 			dma_registers[0x0A] = 0;	// target skip rate, fraction part
@@ -508,10 +608,14 @@ void dma_init ( unsigned int dma_rev_set )
 	modulo.enabled = (dma_rev_set & DMA_FEATURE_MODULO);
 	dma_rev_set &= ~DMA_FEATURE_MODULO;
 #ifdef MEGA65
-	dma_chip_revision_is_dynamic = (dma_rev_set & DMA_FEATRUE_DYNMODESET);	// this bit flag means that normal behaviour (M65 can change DMA revision) works
-	dma_rev_set &= ~DMA_FEATRUE_DYNMODESET;
+	hack.enhanced_dma = 0;
+	dma_chip_revision_is_dynamic = (dma_rev_set & DMA_FEATURE_DYNMODESET);	// this bit flag means that normal behaviour (M65 can change DMA revision) works
+	dma_rev_set &= ~DMA_FEATURE_DYNMODESET;
+	hack.enabled = (dma_rev_set & DMA_FEATURE_HACK);
+	dma_rev_set &= ~DMA_FEATURE_HACK;
+	DEBUGPRINT("DMA: 'hack' (preliminary!! support for new-style M65 DMA) status: %s" NL, hack.enabled ? "**ENABLED**" : "disabled");
 #else
-	if (dma_rev_set & DMA_FEATRUE_DYNMODESET)
+	if (dma_rev_set & DMA_FEATURE_DYNMODESET)
 		FATAL("DMA feature DMA_FEATRUE_DYNMODESET is not supported on C65!");
 #endif
 	dma_chip_revision = dma_rev_set;

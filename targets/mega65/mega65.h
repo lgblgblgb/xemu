@@ -69,4 +69,7 @@ extern void machine_set_speed ( int verbose );
 
 extern void reset_mega65      ( void );
 
+
+extern int newhack;
+
 #endif

@@ -26,6 +26,7 @@ extern Uint8 io_read  ( unsigned int addr );
 extern void  io_write ( unsigned int addr, Uint8 data );
 
 extern Uint8  D6XX_registers[0x100];
+extern Uint8  D7XX[0x100];			// FIXME: newhack!
 extern int    fpga_switches;
 extern struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 extern struct SidEmulation sid1, sid2;		// the two SIDs

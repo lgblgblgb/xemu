@@ -383,6 +383,7 @@ void memory_init ( void )
 {
 	int a;
 	memset(D6XX_registers, 0, sizeof D6XX_registers);
+	memset(D7XX, 0xFF, sizeof D7XX);
 	rom_protect = 0;
 	in_hypervisor = 0;
 	for (a = 0; a < MEM_SLOTS; a++) {

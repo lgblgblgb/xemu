@@ -32,6 +32,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
 Uint8  D6XX_registers[0x100];		// mega65 specific D6XX range, excluding the UART part (not used here!)
+Uint8  D7XX[0x100];			// FIXME: hack for future M65 stuffs like ALU! FIXME: no snapshot on these!
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 struct SidEmulation sid1, sid2;		// the two SIDs
 static int mouse_x = 0, mouse_y = 0;	// for our primitive C1351 mouse emulation
@@ -44,6 +45,28 @@ int    cpu_linear_memory_addressing_is_enabled = 0;	// used by the CPU emu as we
 #define RETURN_ON_IO_WRITE_NOT_IMPLEMENTED(func) \
 	do { DEBUG("IO: NOT IMPLEMENTED write (emulator lacks feature), %s $%04X with data $%02X" NL, func, addr, data); \
 	return; } while(0)
+
+
+static void update_hw_multiplier ( void )
+{
+	register Uint64 result = (Uint64)(
+		((Uint32) D7XX[0x80]           ) |
+		((Uint32) D7XX[0x81]       << 8) |
+		((Uint32) D7XX[0x82]      << 16) |
+		((Uint32)(D7XX[0x83] & 1) << 24)
+	) * (Uint64)(
+		((Uint32) D7XX[0x84]           ) |
+		((Uint32) D7XX[0x85]      <<  8) |
+		((Uint32)(D7XX[0x86] & 3) << 16)
+	);
+	D7XX[0x88] = (result      ) & 0xFF;
+	D7XX[0x89] = (result >>  8) & 0xFF;
+	D7XX[0x8A] = (result >> 16) & 0xFF;
+	D7XX[0x8B] = (result >> 24) & 0xFF;
+	D7XX[0x8C] = (result >> 32) & 0xFF;
+	D7XX[0x8D] = (result >> 40) & 0xFF;
+}
+
 
 
 /* Internal decoder for I/O reads. Address *must* be within the 0-$3FFF (!!) range. The low 12 bits is the actual address inside the I/O area,
@@ -147,9 +170,14 @@ Uint8 io_read ( unsigned int addr )
 					return D6XX_registers[addr];
 			}
 		case 0x17:	// $D700-$D7FF ~ C65 I/O mode
+			// FIXME: really a partial deconding like this? really on every 16 bytes?!
 			return dma_read_reg(addr & 0xF);
 		case 0x37:	// $D700-$D7FF ~ M65 I/O mode
-			return dma_read_reg(addr & 0xF);
+			// FIXME: this is probably very bad! I guess DMA does not decode for every 16 addresses ... Proposed fix is here:
+			addr &= 0xFF;
+			if (addr < 16)
+				return dma_read_reg(addr & 0xF);
+			return D7XX[addr];
 		/* ----------------------- */
 		/* $D800-$DBFF: COLOUR RAM */
 		/* ----------------------- */
@@ -344,10 +372,16 @@ void io_write ( unsigned int addr, Uint8 data )
 			}
 			return;
 		case 0x17:	// $D700-$D7FF ~ C65 I/O mode
+			// FIXME: really a partial deconding like this? really on every 16 bytes?!
 			dma_write_reg(addr & 0xF, data);
 			return;
 		case 0x37:	// $D700-$D7FF ~ M65 I/O mode
-			dma_write_reg(addr & 0xF, data);
+			// FIXME: this is probably very bad! I guess DMA does not decode for every 16 addresses ... Proposed fix is here:
+			addr &= 0xFF;
+			if (addr < 16)
+				dma_write_reg(addr & 0xF, data);
+			D7XX[addr] = data;
+			update_hw_multiplier();
 			return;
 		/* ----------------------- */
 		/* $D800-$DBFF: COLOUR RAM */

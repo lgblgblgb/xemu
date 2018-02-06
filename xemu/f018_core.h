@@ -1,4 +1,5 @@
-/* Very primitive emulator of Commodore 65 + sub-set (!!) of Mega65 fetures.
+/* F018 DMA core emulation for Commodore 65 and Mega 65, part of the Xemu project.
+   https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -20,8 +21,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* Feature bit masks for dma_init(): */
 
-#define DMA_FEATRUE_DYNMODESET	0x100
+#define DMA_FEATURE_DYNMODESET	0x100
 #define DMA_FEATURE_MODULO	0x200
+#ifdef MEGA65
+#define DMA_FEATURE_HACK	0x400
+#endif
 
 /* Variables */
 
