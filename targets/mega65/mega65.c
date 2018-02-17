@@ -52,6 +52,8 @@ static char fast_mhz_in_string[16];
 static int frame_counter;
 static int   paused = 0, paused_old = 0;
 static int   breakpoint_pc = -1;
+static int   orig_sp = 0;
+static int   trace_next_trigger = 0;
 static int   trace_step_trigger = 0;
 #ifdef HAS_UARTMON_SUPPORT
 static void (*m65mon_callback)(void) = NULL;
@@ -561,6 +563,19 @@ void m65mon_set_trace ( int m )
 	paused = m;
 }
 
+void m65mon_do_next ( void )
+{
+	if (paused) {
+		umon_send_ok = 0; // delay command execution!
+		m65mon_callback = m65mon_show_regs; // register callback
+		trace_next_trigger = 2; // if JSR, then trigger until RTS to next_addr
+    orig_sp = cpu65.sphi | cpu65.s;
+		paused = 0;
+	} else {
+		umon_printf(UMON_SYNTAX_ERROR "trace can be used only in trace mode");
+	}
+}
+
 void m65mon_do_trace ( void )
 {
 	if (paused) {
@@ -575,6 +590,11 @@ void m65mon_do_trace ( void )
 void m65mon_do_trace_c ( void )
 {
 	umon_printf(UMON_SYNTAX_ERROR "command 'tc' is not implemented yet");
+}
+void m65mon_next_command ( void )
+{
+  if (paused)
+    m65mon_do_next();
 }
 
 void m65mon_empty_command ( void )
@@ -598,6 +618,26 @@ static int cycles, frameskip;
 static void emulation_loop ( void )
 {
 	for (;;) {
+
+			if (trace_next_trigger == 2)
+			{
+				if (cpu65.op == 0x20) // was the current opcode a JSR $nnnn ? (0x20)
+					trace_next_trigger = 1; // if so, let's loop until the stack pointer returns back, then pause
+				else
+				{
+					trace_next_trigger = 0; // if the current opcode wasn't a JSR, then lets pause immediately after
+					paused = 1;
+				}
+			}
+			else if (trace_next_trigger == 1) // are we presently stepping over a JSR?
+			{
+				if ((cpu65.sphi | cpu65.s) == orig_sp ) // did the current sp return to its original position?
+				{
+					trace_next_trigger = 0; // if so, lets pause the emulation, as we have successfully stepped over the JSR
+					paused = 1;
+				}
+			}
+
 		while (XEMU_UNLIKELY(paused)) {	// paused special mode, ie tracing support, or something ...
 			if (XEMU_UNLIKELY(dma_status))
 				break;		// if DMA is pending, do not allow monitor/etc features

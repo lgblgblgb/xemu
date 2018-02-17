@@ -201,6 +201,9 @@ static void execute_command ( char *cmd )
 			if (cmd && check_end_of_command(cmd, 1))
 				m65mon_breakpoint(par1);
 			break;
+		case 'N':
+			m65mon_next_command();
+			break;
 		case 0:
 			m65mon_empty_command();	// emulator can use this, if it wants
 			break;

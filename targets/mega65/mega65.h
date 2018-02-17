@@ -61,6 +61,7 @@ extern void m65mon_dumpmem28 ( int addr );
 extern void m65mon_setmem28  ( int addr, int cnt, Uint8* vals );
 extern void m65mon_set_trace ( int m );
 extern void m65mon_do_trace  ( void );
+extern void m65mon_next_command ( void );
 extern void m65mon_empty_command ( void );
 extern void m65mon_do_trace_c ( void );
 extern void m65mon_breakpoint ( int brk );
