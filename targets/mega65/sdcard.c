@@ -41,6 +41,7 @@ static off_t sd_card_size;
 static int   sdcard_bytes_read = 0;
 static int   sd_is_read_only;
 static int   mounted;
+static int   keep_busy = 0;
 // 4K buffer space: Actually the SD buffer _IS_ inside this, also the F011 buffer should be (FIXME: that is not implemented yet right now!!)
 Uint8 disk_buffers[0x1000];
 
@@ -94,6 +95,7 @@ int sdcard_init ( const char *fn, const char *extd81fn )
 {
 	char fnbuf[PATH_MAX + 1];
 	atexit(sdcard_shutdown);
+	keep_busy = 0;
 	sd_status = 0;
 	d81_is_read_only = 1;
 	mounted = 0;
@@ -231,7 +233,8 @@ static Uint8 sdcard_read_status ( void )
 {
 	Uint8 ret = sd_status;
 	DEBUG("SDCARD: reading SD status $D680 result is $%02X PC=$%04X" NL, ret, cpu65.pc);
-	sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);
+	if (!keep_busy)
+		sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);
 	return ret;
 }
 
@@ -242,6 +245,7 @@ static void sdcard_command ( Uint8 cmd )
 	int ret;
 	DEBUG("SDCARD: writing command register $D680 with $%02X PC=$%04X" NL, cmd, cpu65.pc);
 	sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);	// ugly hack :-@
+	keep_busy = 0;
 	switch (cmd) {
 		case 0x00:	// RESET SD-card
 			sd_status = SD_ST_RESET;	// clear all other flags
@@ -251,29 +255,42 @@ static void sdcard_command ( Uint8 cmd )
 			sd_status &= ~(SD_ST_RESET | SD_ST_ERROR | SD_ST_FSM_ERROR);
 			break;
 		case 0x02:	// read block
-			ret = diskimage_read_block(sd_buffer, sd_sector_bytes, 0, "reading[SD]", sd_card_size, sdfd);
-			if (ret < 0) {
-				sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR; // | SD_ST_BUSY1 | SD_ST_BUSY0;
-				sdcard_bytes_read = 0;
+			if (sd_sector_bytes[0] || (sd_sector_bytes[1] & 1)) {
+				sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR | SD_ST_BUSY1 | SD_ST_BUSY0;
+				keep_busy = 1;
+				DEBUGPRINT("SDCARD: warning, unaligned read access!" NL);
 			} else {
-				sd_status &= ~(SD_ST_ERROR | SD_ST_FSM_ERROR);
-				sdcard_bytes_read = ret;
+				ret = diskimage_read_block(sd_buffer, sd_sector_bytes, 0, "reading[SD]", sd_card_size, sdfd);
+				if (ret < 0) {
+					sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR; // | SD_ST_BUSY1 | SD_ST_BUSY0;
+					sdcard_bytes_read = 0;
+				} else {
+					sd_status &= ~(SD_ST_ERROR | SD_ST_FSM_ERROR);
+					sdcard_bytes_read = ret;
+				}
 			}
 			break;
 		case 0x03:	// write block
-			ret = diskimage_write_block(sd_buffer, sd_sector_bytes, 0, "writing[SD]", sd_card_size, sdfd);
-			if (ret < 0) {
-				sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR; // | SD_ST_BUSY1 | SD_ST_BUSY0;
-				sdcard_bytes_read = 0;
+			if (sd_sector_bytes[0] || (sd_sector_bytes[1] & 1)) {
+				sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR | SD_ST_BUSY1 | SD_ST_BUSY0;
+				keep_busy = 1;
+				DEBUGPRINT("SDCARD: warning, unaligned write access!" NL);
 			} else {
-				sd_status &= ~(SD_ST_ERROR | SD_ST_FSM_ERROR);
-				sdcard_bytes_read = ret;
+				ret = diskimage_write_block(sd_buffer, sd_sector_bytes, 0, "writing[SD]", sd_card_size, sdfd);
+				if (ret < 0) {
+					sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR; // | SD_ST_BUSY1 | SD_ST_BUSY0;
+					sdcard_bytes_read = 0;
+				} else {
+					sd_status &= ~(SD_ST_ERROR | SD_ST_FSM_ERROR);
+					sdcard_bytes_read = ret;
+				}
 			}
 			break;
 		case 0x40:	// SDHC mode OFF
 			sd_status &= ~SD_ST_SDHC;
 			break;
 		case 0x41:	// SDHC mode ON
+			DEBUGPRINT("SDCARD: warning, SDHC mode is turned ON with SD command $41, though Xemu does not support SDHC! PC=$%02X" NL, cpu65.pc);
 			sd_status |= SD_ST_SDHC;
 			break;
 		case 0x42:	// half-speed OFF
