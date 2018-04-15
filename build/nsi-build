@@ -1,0 +1,19 @@
+#!/bin/bash
+# A very lame NSI installer stuff, Windows/NSI expert is wanted ...
+# (C)2018 LGB Gabor Lenart
+
+cd `dirname $0` || exit 1
+echo "Current directory: `pwd`"
+rm -f bin/XemuInstaller.exe || exit 1
+
+for a in bin/*.win64 ; do
+	exe="`echo $a | sed 's/\.win[0-9]*$/.exe/'`"
+	rm -f $exe || exit 1
+	cp $a $exe || exit 1
+done
+
+rm -f bin/*.dll
+cp /usr/local/cross-tools/x86_64-w64-mingw32/bin/SDL2.dll bin/ || exit 1
+wine ~/.wine/drive_c/Program\ Files\ \(x86\)/NSIS/makensis.exe /DWIN64 /DXEMUVER=`date '+%Y.%m.%d.%H%M'` xemu.nsi || exit 1
+ls -l bin/XemuInstaller.exe
+

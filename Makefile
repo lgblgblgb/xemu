@@ -53,4 +53,8 @@ deb:
 	$(MAKE) all
 	build/deb-build-simple
 
-.PHONY: all all-arch clean all-clean roms distclean dep all-dep deb
+nsi:
+	for t in $(TARGETS) ; do for a in $(ARCHS) ; do $(MAKE) -C targets/$$t ARCH=win64 || exit 1 ; done ; done
+	build/nsi-build
+
+.PHONY: all all-arch clean all-clean roms distclean dep all-dep deb nsi
