@@ -19,6 +19,7 @@
 
 TARGET		= zxspect
 PRG_TARGET	= xzxspect
+EMU_DESCRIPTION	= ZX Spectrum
 
 CFLAGS_TARGET_$(PRG_TARGET)		=
 SRCS_TARGET_$(PRG_TARGET)		= spectrum.c

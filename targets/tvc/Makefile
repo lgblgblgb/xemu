@@ -19,6 +19,7 @@
 
 TARGET		= tvc
 PRG_TARGET	= xtvc
+EMU_DESCRIPTION	= Videoton TV Computer
 
 CFLAGS_TARGET_xtvc	=
 SRCS_TARGET_xtvc	= tvc.c tvc_keymatrix.c sdext.c

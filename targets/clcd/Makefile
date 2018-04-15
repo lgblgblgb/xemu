@@ -19,6 +19,7 @@
 
 TARGET		= clcd
 PRG_TARGET	= xclcd
+EMU_DESCRIPTION	= Commodore LCD
 
 CFLAGS_TARGET_xclcd	=
 SRCS_TARGET_xclcd	= commodore_lcd.c

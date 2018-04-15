@@ -18,6 +18,7 @@
 
 TARGET		= mega65
 PRG_TARGET	= xmega65
+EMU_DESCRIPTION	= Mega 65
 
 CFLAGS_TARGET_xmega65	=
 SRCS_TARGET_xmega65	= mega65.c sdcard.c uart_monitor.c hypervisor.c m65_snapshot.c memory_mapper.c io_mapper.c vic4.c ethernet65.c input_devices.c

@@ -1,0 +1,13 @@
+[Desktop Entry]
+Version=1.1
+Type=Application
+Categories=Emulator;X-Debian-Applications-Emulators;Application;Game;
+GenericName=Xemu
+Name=Xemu for %machine
+Comment=Xemu's emulation of %machine
+StartupNotify=false
+Terminal=false
+Exec=%binary
+Icon=/usr/share/pixmaps/xemu-32x28.xpm
+Keywords=Emulator;Xemu;
+

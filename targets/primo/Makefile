@@ -19,6 +19,7 @@
 
 TARGET		= primo
 PRG_TARGET	= xprimo
+EMU_DESCRIPTION	= Primo
 
 CFLAGS_TARGET_xprimo	=
 SRCS_TARGET_xprimo	= primo.c

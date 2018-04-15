@@ -19,6 +19,7 @@
 
 TARGET		= c65
 PRG_TARGET	= xc65
+EMU_DESCRIPTION	= Commodore 65
 
 CFLAGS_TARGET_xc65	=
 SRCS_TARGET_xc65	= commodore_65.c vic3.c c65_d81_image.c c65_snapshot.c

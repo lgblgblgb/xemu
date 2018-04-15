@@ -66,7 +66,7 @@ Assuming `homebrew` is already installed on your Mac: https://brew.sh/
 
     make
 
-Optinally, to create binary DEBian .deb package for Ubuntu/Debian Linux,
+Optionally, to create binary DEBian .deb package for Ubuntu/Debian Linux,
 result will be built in build/bin (which can be installed with `dpkg -i`,
 followed by a `sudo xemu-download-data` which will download the data
 files as well, you can then execute emulators like `xemu-xmega65`):

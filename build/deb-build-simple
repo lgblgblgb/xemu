@@ -3,7 +3,7 @@
 # (C)2016,2017 LGB Gabor Lenart
 
 PROJECT="xemu"
-DEPENDENCY="libsdl2-2.0-0 (>= 2.0.4), libc6 (>= 2.15), libreadline6 (>= 6.3), libgtk-3-0 (>= 3.18)"
+DEPENDENCY="libsdl2-2.0-0 (>= 2.0.4), libc6 (>= 2.15), libreadline6 (>= 6.3), libgtk-3-0 (>= 3.18), wget"
 AUTHOR="Gábor Lénárt <lgblgblgb@gmail.com>"
 WEBSITE="https://github.com/lgblgblgb/xemu/wiki"
 BUGSITE="https://github.com/lgblgblgb/xemu/issues"
@@ -11,8 +11,8 @@ VERSION="`date '+%Y%m%d%H%M%S'`"
 ROOT=".dist/${PROJECT}_$VERSION"
 ARCH=`dpkg --print-architecture`
 DEB="${PROJECT}_current_$ARCH.deb"
-BINDIRREAL="/usr/local/bin"
-DATADIRREAL="/usr/local/share/xemu"
+BINDIRREAL="/usr/bin"
+DATADIRREAL="/usr/share/xemu"
 
 BINDIR="$ROOT$BINDIRREAL"
 DATADIR="$ROOT$DATADIRREAL"
@@ -24,13 +24,25 @@ echo "Build architecture: $ARCH"
 
 rm -fr .dist || exit 1
 
-mkdir -p $BINDIR $DATADIR $ROOT/DEBIAN $ROOT/usr/share/doc/$PROJECT || exit 1
+mkdir -p $BINDIR $DATADIR $ROOT/DEBIAN $ROOT/usr/share/doc/$PROJECT $ROOT/usr/share/applications $ROOT/usr/share/pixmaps || exit 1
+
+cp xemu-32x28.xpm $ROOT/usr/share/pixmaps/xemu-32x28.xpm
 
 for a in bin/*.native ; do
 	b="$BINDIR/xemu-`basename $a .native`"
 	echo "Adding project binary: $b"
 	cp $a $b
 	strip $b
+done
+
+for a in ../targets/*/Makefile ; do
+	if [ -s $a ]; then
+		prgtarget="`sed -n 's/^PRG_TARGET[\t ]*=[\t ]*//p' $a`"
+		machine="`sed -n 's/^EMU_DESCRIPTION[\t ]*=[\t ]*//p' $a`"
+		if [ "$prgtarget" != "" -a "$machine" != "" -a -x "bin/$prgtarget.native" ]; then
+			cat xemu.desktop | sed "s/%machine/$machine/g;s/%binary/xemu-$prgtarget/g" > $ROOT/usr/share/applications/xemu-$prgtarget.desktop
+		fi
+	fi
 done
 
 gzip -9 < ../LICENSE > $ROOT/usr/share/doc/$PROJECT/COPYING.gz
@@ -44,7 +56,7 @@ cat ../LICENSE >> $ROOT/usr/share/doc/$PROJECT/copyright
 
 echo "Package: $PROJECT
 Version: $VERSION
-Section: universe/otherosfs
+Section: otherosfs
 Priority: optional
 Architecture: $ARCH
 Depends: $DEPENDENCY
@@ -84,6 +96,8 @@ if [ -f *.rpm ]; then
 	echo $RPM
 	mv $RPM `echo $RPM | sed 's/[0-9][0-9-]*/current-1/'`
 	ls -l *.rpm
+else
+	echo "If you see an error with 'alien', do not panic. It is only an ugly extra to convert DEB package to RPM, so you can have an RPM package as well. Which may fail anyway on an RPM based distro, since dependency problems."
 fi
 
 exit 0

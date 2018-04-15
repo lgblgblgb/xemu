@@ -19,6 +19,7 @@
 
 TARGET		= cvic20
 PRG_TARGET	= xvic20
+EMU_DESCRIPTION	= Commodore VIC-20
 
 CFLAGS_TARGET_xvic20	=
 SRCS_TARGET_xvic20	= commodore_vic20.c vic6561.c
