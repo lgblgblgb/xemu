@@ -44,14 +44,16 @@ static char  hypervisor_monout[0x10000];
 static char *hypervisor_monout_p = hypervisor_monout;
 
 static int debug_on = 0;
+static int hypervisor_serial_out_asciizer;
 
 
 
-int hypervisor_debug_init ( const char *fn, int hypervisor_debug )
+int hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hypervisor_serial_out_asciizer )
 {
 	char buffer[1024];
 	FILE *fp;
 	int fd;
+	hypervisor_serial_out_asciizer = use_hypervisor_serial_out_asciizer;
 	if (!fn || !*fn) {
 		DEBUG("MEGADEBUG: feature is not enabled, null file name for list file" NL);
 		return 1;
@@ -211,10 +213,23 @@ void hypervisor_serial_monitor_push_char ( Uint8 chr )
 {
 	if (hypervisor_monout_p >= hypervisor_monout - 1 + sizeof hypervisor_monout)
 		return;
-	if (hypervisor_monout_p == hypervisor_monout && (chr == 13 || chr == 10))
+	int flush = (chr == 0x0A || chr == 0x0D || chr == 0x8A || chr == 0x8D);
+	if (hypervisor_monout_p == hypervisor_monout && flush)
 		return;
-	if (chr == 13 || chr == 10) {
+	if (flush) {
 		*hypervisor_monout_p = 0;
+		if (hypervisor_serial_out_asciizer) {
+			char *p = hypervisor_monout;
+			while (*p) {
+				if      (*p >= 0x61 && *p <= 0x7A)
+					*p -= 0x20;
+				else if (*p >= 0xC1 && *p <= 0xDA)
+					*p -= 0x80;
+				else if (*p < 0x20 || *p >= 0x80)
+					*p = '?';
+				p++;
+			}
+		}
 		fprintf(stderr, "Hypervisor serial output: \"%s\"." NL, hypervisor_monout);
 		DEBUG("MEGA65: Hypervisor serial output: \"%s\"." NL, hypervisor_monout);
 		hypervisor_monout_p = hypervisor_monout;

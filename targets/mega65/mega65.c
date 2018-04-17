@@ -209,7 +209,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 #ifdef AUDIO_EMULATION
 	SDL_AudioSpec audio_want, audio_got;
 #endif
-	hypervisor_debug_init(xemucfg_get_str("kickuplist"), xemucfg_get_bool("hyperdebug"));
+	hypervisor_debug_init(xemucfg_get_str("kickuplist"), xemucfg_get_bool("hyperdebug"), xemucfg_get_bool("hyperserialascii"));
 	hid_init(
 		c64_key_map,
 		VIRTUAL_SHIFT_POS,
@@ -512,6 +512,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA-board switches turned ON");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	xemucfg_define_switch_option("hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode");
+	xemucfg_define_switch_option("hyperserialascii", "Convert PETSCII/ASCII hypervisor serial debug output to ASCII upper-case");
 	xemucfg_define_num_option("kicked", 0x0, "Answer to KickStart upgrade (128=ask user in a pop-up window)");
 	xemucfg_define_str_option("kickup", "#mega65-kickup.m65", "Override path of external KickStart to be used");
 	xemucfg_define_str_option("kickuplist", NULL, "Set path of symbol list file for external KickStart");
