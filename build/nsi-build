@@ -4,16 +4,25 @@
 
 cd `dirname $0` || exit 1
 echo "Current directory: `pwd`"
-rm -f bin/XemuInstaller.exe || exit 1
 
-for a in bin/*.win64 ; do
+installer="install-xemu-$1.exe"
+echo "Target installer:  $installer"
+echo "Using DLL:         $2"
+
+cp "$2" bin/ || exit 1
+
+size=`stat -c '%s' "$2"`
+
+for a in bin/*.$1 ; do
 	exe="`echo $a | sed 's/\.win[0-9]*$/.exe/'`"
+	echo "Adding binary: $exe based on $a"
 	rm -f $exe || exit 1
 	cp $a $exe || exit 1
+	size=$((size+`stat -c '%s' $exe`))
 done
 
-rm -f bin/*.dll
-cp /usr/local/cross-tools/x86_64-w64-mingw32/bin/SDL2.dll bin/ || exit 1
-wine ~/.wine/drive_c/Program\ Files\ \(x86\)/NSIS/makensis.exe /DWIN64 /DXEMUVER=`date '+%Y.%m.%d.%H%M'` xemu.nsi || exit 1
-ls -l bin/XemuInstaller.exe
+convert xemu-32x28.xpm bin/xemu.ico
+
+wine ~/.wine/drive_c/Program\ Files\ \(x86\)/NSIS/makensis.exe /D`echo $1 | tr 'a-z' 'A-Z'` /DSDL2DLL=`basename $2` /DEXENAME=$installer /DARCH=$1 /DXEMUVER=`date '+%Y.%m.%d.%H%M'` /DVERSIONMAJOR=0 /DVERSIONMINOR=`date '+%Y%m%d%H%M'` /DVERSIONBUILD=0 /DINSTALLSIZE=$((size/1024)) xemu.nsi || exit 1
+ls -l bin/$installer
 

@@ -54,6 +54,10 @@ echo "$WEBSITE" >> $ROOT/usr/share/doc/$PROJECT/copyright
 echo >> $ROOT/usr/share/doc/$PROJECT/copyright
 cat ../LICENSE >> $ROOT/usr/share/doc/$PROJECT/copyright
 
+awk -vromdir=$DATADIRREAL/ 'BEGIN { print "#!/bin/sh" ; print "mkdir -p " romdir " || exit $?" } END { print "exit 0" } NF == 3 && $1 ~ /^[a-zA-Z0-9]/ { print "test -s " romdir $1 " || { rm -f " romdir $1 ".tmp && wget -O " romdir $1 ".tmp " $2 " && mv " romdir $1 ".tmp " romdir $1 "; } || exit $?" }' ../rom/rom-fetch-list.txt > $BINDIR/xemu-download-data
+
+SIZE="`find $ROOT -type f -exec stat -c '%s' {} \; | awk '{ s += $1 } END { print int(s / 1024) }'`"
+
 echo "Package: $PROJECT
 Version: $VERSION
 Section: otherosfs
@@ -61,6 +65,7 @@ Priority: optional
 Architecture: $ARCH
 Depends: $DEPENDENCY
 Maintainer: $AUTHOR
+Installed-Size: $SIZE
 Description: Collection of software emulations of some (mainly 8 bit) computers.
   X-Emulators (Xemu) is a kind of collection of software emulators targeting various
   computers, including the quite rare Commodore LCD and Commodore 65 as well. On-going
@@ -70,8 +75,6 @@ Description: Collection of software emulations of some (mainly 8 bit) computers.
 Homepage: $WEBSITE
 Bugs: $BUGSITE
 Original-Maintainer: $AUTHOR" > $ROOT/DEBIAN/control
-
-awk -vromdir=$DATADIRREAL/ 'BEGIN { print "#!/bin/sh" ; print "mkdir -p " romdir " || exit $?" } END { print "exit 0" } NF == 3 && $1 ~ /^[a-zA-Z0-9]/ { print "test -s " romdir $1 " || { rm -f " romdir $1 ".tmp && wget -O " romdir $1 ".tmp " $2 " && mv " romdir $1 ".tmp " romdir $1 "; } || exit $?" }' ../rom/rom-fetch-list.txt > $BINDIR/xemu-download-data
 
 find $ROOT -type d -exec chmod u-s,g-s,g-w,o-w,u+rwx,g+rx,o+rx {} \;
 find $ROOT -type f -exec chmod 0644 {} \;

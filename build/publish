@@ -1,0 +1,37 @@
+#!/bin/bash
+VER="`date '+%Y%m%d%H%M'`"
+TARGET="/home/lgb/vega/lgb.hu/www-lgb/xemu.lgb.hu/files"
+
+WIN32DLL=/usr/local/cross-tools/i686-w64-mingw32/bin/SDL2.dll
+WIN64DLL=/usr/local/cross-tools/x86_64-w64-mingw32/bin/SDL2.dll
+
+cd `dirname $0` || exit 1
+echo "Current directory: `pwd`"
+
+for a in bin/install-xemu-win32.exe bin/install-xemu-win64.exe bin/xemu-current-1.x86_64.rpm bin/xemu_current_amd64.deb ../rom/rom-fetch-list.txt ; do
+	echo "Copy: $a -> $TARGET/`basename $a`.$VER"
+	cp $a $TARGET/`basename $a`.$VER || exit 1
+done
+
+for arch in win32 win64 ; do
+	for a in bin/*.$arch ; do
+		if [ -s $a ]; then
+			echo "Copy: $a -> $TARGET/`basename $a`.$VER"
+			cp $a $TARGET/`basename $a`.$VER || exit 1
+		fi
+	done
+done
+
+echo "Copy: $WIN32DLL -> $TARGET/SDL2-win32.dll.$VER"
+cp $WIN32DLL $TARGET/SDL2-win32.dll.$VER || exit 1
+echo "Copy: $WIN64DLL -> $TARGET/SDL2-win64.dll.$VER"
+cp $WIN64DLL $TARGET/SDL2-win64.dll.$VER || exit 1
+
+echo "Syncing"
+sync
+
+echo "Validation file: $TARGET/done.$VER"
+touch $TARGET/done.$VER || exit 1
+
+echo "READY."
+exit 0

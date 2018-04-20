@@ -35,6 +35,11 @@ For probably seriously outdated pre-compiled binaries for MacOS, Win32, Win64,
 
 https://bintray.com/lgblgblgb/generic/xemu/current_version
 
+Maybe more up-to-date site of mine for binaries (but no MacOS here) with experimental
+windows installer and Ubuntu DEB package:
+
+http://xemu.lgb.hu/download.php
+
 ## Quick start (from source)
 
 For more information: https://github.com/lgblgblgb/xemu/wiki/Source
@@ -48,7 +53,8 @@ For more information: https://github.com/lgblgblgb/xemu/wiki/Source
 
 #### Example for MacOS
 
-Assuming `homebrew` is already installed on your Mac: https://brew.sh/
+Assuming development Apple development components and `homebrew` is already installed on
+your Mac: https://brew.sh/
 
     brew update
     brew install sdl2 wget git
