@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/c64_kbd_mapping.h"
 #include "mega65.h"
 #include "io_mapper.h"
+#include "xemu/cpu65.h"
 
 
 #define DEBUGKBD(...)	DEBUG(__VA_ARGS__)
@@ -63,6 +64,7 @@ static Uint8 key_modifiers = 0;
 /* used by actual I/O function to read $D610 */
 Uint8 kbd_get_last ( void )
 {
+	DEBUG("KBD: HWA: reading key @ PC=$%04X result = $%02X" NL, cpu65.pc, last_key_as_ascii);
 	return last_key_as_ascii;
 }
 
@@ -70,6 +72,7 @@ Uint8 kbd_get_last ( void )
 /* used by actual I/O function to read $D611 */
 Uint8 kbd_get_modifiers ( void )
 {
+	DEBUG("KBD: HWA: reading key modifiers @ PC=$%04X result = $%02X" NL, cpu65.pc, key_modifiers);
 	return key_modifiers;
 }
 
@@ -77,6 +80,7 @@ Uint8 kbd_get_modifiers ( void )
 /* used by actual I/O function to write $D610, the written data itself is not used, only the fact of writing */
 void kbd_move_next ( void )
 {
+	DEBUG("KBD: HWA: moving to next key @ PC=$%04X previous value was: $%02X" NL, cpu65.pc, last_key_as_ascii);
 	last_key_as_ascii = 0;
 }
 
@@ -84,6 +88,7 @@ void kbd_move_next ( void )
 /* basically the opposite as kbd_get_last() but this one used internally only */
 static void store_new_ascii_keypress ( Uint8 ascii )
 {
+	DEBUG("KBD: HWA: storing key $%02X" NL, ascii);
 	last_key_as_ascii = ascii;
 }
 

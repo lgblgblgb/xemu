@@ -37,6 +37,7 @@ struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 struct SidEmulation sid1, sid2;		// the two SIDs
 static int mouse_x = 0, mouse_y = 0;	// for our primitive C1351 mouse emulation
 int    cpu_linear_memory_addressing_is_enabled = 0;	// used by the CPU emu as well!
+static int bigmult_valid_result = 0;
 
 
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
@@ -46,25 +47,36 @@ int    cpu_linear_memory_addressing_is_enabled = 0;	// used by the CPU emu as we
 	do { DEBUG("IO: NOT IMPLEMENTED write (emulator lacks feature), %s $%04X with data $%02X" NL, func, addr, data); \
 	return; } while(0)
 
+// Address of the "big" multiplier within the $D7XX area (byte only)
+#define BIGMULT_ADDR	0x70
+
+
 
 static void update_hw_multiplier ( void )
 {
+	D7XX[BIGMULT_ADDR + 3] &= 0x01;
+	D7XX[BIGMULT_ADDR + 6] &= 0x03;
+	D7XX[BIGMULT_ADDR + 7] =  0x00;
 	register Uint64 result = (Uint64)(
-		((Uint32) D7XX[0x80]           ) |
-		((Uint32) D7XX[0x81]       << 8) |
-		((Uint32) D7XX[0x82]      << 16) |
-		((Uint32)(D7XX[0x83] & 1) << 24)
+		((Uint32) D7XX[BIGMULT_ADDR + 0]      ) |
+		((Uint32) D7XX[BIGMULT_ADDR + 1] <<  8) |
+		((Uint32) D7XX[BIGMULT_ADDR + 2] << 16) |
+		((Uint32) D7XX[BIGMULT_ADDR + 3] << 24)
 	) * (Uint64)(
-		((Uint32) D7XX[0x84]           ) |
-		((Uint32) D7XX[0x85]      <<  8) |
-		((Uint32)(D7XX[0x86] & 3) << 16)
+		((Uint32) D7XX[BIGMULT_ADDR + 4]      ) |
+		((Uint32) D7XX[BIGMULT_ADDR + 5] <<  8) |
+		((Uint32) D7XX[BIGMULT_ADDR + 6] << 16) |
+		((Uint32) D7XX[BIGMULT_ADDR + 7] << 24)
 	);
-	D7XX[0x88] = (result      ) & 0xFF;
-	D7XX[0x89] = (result >>  8) & 0xFF;
-	D7XX[0x8A] = (result >> 16) & 0xFF;
-	D7XX[0x8B] = (result >> 24) & 0xFF;
-	D7XX[0x8C] = (result >> 32) & 0xFF;
-	D7XX[0x8D] = (result >> 40) & 0xFF;
+	D7XX[BIGMULT_ADDR + 0x8] = (result      ) & 0xFF;
+	D7XX[BIGMULT_ADDR + 0x9] = (result >>  8) & 0xFF;
+	D7XX[BIGMULT_ADDR + 0xA] = (result >> 16) & 0xFF;
+	D7XX[BIGMULT_ADDR + 0xB] = (result >> 24) & 0xFF;
+	D7XX[BIGMULT_ADDR + 0xC] = (result >> 32) & 0xFF;
+	D7XX[BIGMULT_ADDR + 0xD] = (result >> 40) & 0xFF;
+	D7XX[BIGMULT_ADDR + 0xE] = 0;
+	D7XX[BIGMULT_ADDR + 0xF] = 0;
+	bigmult_valid_result = 1;
 }
 
 
@@ -177,6 +189,8 @@ Uint8 io_read ( unsigned int addr )
 			addr &= 0xFF;
 			if (addr < 16)
 				return dma_read_reg(addr & 0xF);
+			if (XEMU_UNLIKELY(!bigmult_valid_result))
+				update_hw_multiplier();
 			return D7XX[addr];
 		/* ----------------------- */
 		/* $D800-$DBFF: COLOUR RAM */
@@ -380,8 +394,9 @@ void io_write ( unsigned int addr, Uint8 data )
 			addr &= 0xFF;
 			if (addr < 16)
 				dma_write_reg(addr & 0xF, data);
+			else if (XEMU_UNLIKELY((addr & 0xF0) == BIGMULT_ADDR))
+				bigmult_valid_result = 0;
 			D7XX[addr] = data;
-			update_hw_multiplier();
 			return;
 		/* ----------------------- */
 		/* $D800-$DBFF: COLOUR RAM */
