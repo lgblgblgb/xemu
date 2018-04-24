@@ -24,8 +24,8 @@ extern Uint8 cia1_in_b         ( void );
 extern Uint8 cia1_in_a         ( void );
 extern int   emu_callback_key  ( int pos, SDL_Scancode key, int pressed, int handled );
 
-extern Uint8 kbd_get_last      ( void );
-extern Uint8 kbd_get_modifiers ( void );
-extern void  kbd_move_next     ( void );
+extern Uint8 hwa_kbd_get_last      ( void );
+extern Uint8 hwa_kbd_get_modifiers ( void );
+extern void  hwa_kbd_move_next     ( void );
 
 #endif

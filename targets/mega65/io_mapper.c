@@ -174,9 +174,9 @@ Uint8 io_read ( unsigned int addr )
 				case 0xF1:
 					return (fpga_switches >> 8) & 0xFF;
 				case 0x10:				// last keypress ASCII value
-					return kbd_get_last();
+					return hwa_kbd_get_last();
 				case 0x11:				// modifier keys on kbd being used
-					return kbd_get_modifiers();
+					return hwa_kbd_get_modifiers();
 				default:
 					DEBUG("MEGA65: reading Mega65 specific I/O @ $D6%02X result is $%02X" NL, addr, D6XX_registers[addr]);
 					return D6XX_registers[addr];
@@ -355,7 +355,7 @@ void io_write ( unsigned int addr, Uint8 data )
 			}
 			switch (addr) {
 				case 0x10:	// ASCII kbd last press value to zero whatever the written data would be
-					kbd_move_next();
+					hwa_kbd_move_next();
 					return;
 				case 0x7C:					// hypervisor serial monitor port
 					hypervisor_serial_monitor_push_char(data);
