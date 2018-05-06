@@ -41,6 +41,7 @@ struct SidEmulation sids[2];		// the two SIDs
 static int nmi_level;			// please read the comment at nmi_set() below
 static int mouse_x = 0;
 static int mouse_y = 0;
+static int shift_status = 0;
 
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request
 // It must be high enough not to collide with the 1Mbyte address space + almost-64K "overflow" area and mapping should not cause to alter lower 12 bits of the addresses,
@@ -722,17 +723,28 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 	if (pressed) {
 		if (key == SDL_SCANCODE_F10) {	// reset
 			c65_reset();
-		} else if (key == SDL_SCANCODE_KP_ENTER)
+		} else if (key == SDL_SCANCODE_KP_ENTER) {
 			c64_toggle_joy_emu();
-		else if (key == SDL_SCANCODE_ESCAPE)
-			set_mouse_grab(SDL_FALSE);
-	} else
-		if (pos == -2 && key == 0) {	// special case pos = -2, key = 0, handled = mouse button (which?) and release event!
-			if (handled == SDL_BUTTON_LEFT) {
-				OSD(-1, -1, "Mouse grab activated.\nPress ESC to cancel.");
-				set_mouse_grab(SDL_TRUE);
+		} else if (key == SDL_SCANCODE_LSHIFT) {
+			shift_status |= 1;
+		} else if (key == SDL_SCANCODE_RSHIFT) {
+			shift_status |= 2;
+		}
+		if (shift_status == 3 && set_mouse_grab(SDL_FALSE)) {
+			DEBUGPRINT("UI: mouse grab cancelled" NL);
+		}
+	} else {
+		if (key == SDL_SCANCODE_LSHIFT) {
+			shift_status &= 2;
+		} else if (key == SDL_SCANCODE_RSHIFT) {
+			shift_status &= 1;
+		} else if (pos == -2 && key == 0) {	// special case pos = -2, key = 0, handled = mouse button (which?) and release event!
+			if (handled == SDL_BUTTON_LEFT && set_mouse_grab(SDL_TRUE)) {
+				OSD(-1, -1, "Mouse grab activated. Press\nboth SHIFTs together to cancel.");
+				DEBUGPRINT("UI: mouse grab activated" NL);
 			}
 		}
+	}
 	return 0;
 }
 

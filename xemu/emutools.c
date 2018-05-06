@@ -78,13 +78,15 @@ static SDL_bool grabbed_mouse = SDL_FALSE, grabbed_mouse_saved = SDL_FALSE;
 #endif
 
 
-void set_mouse_grab ( SDL_bool state )
+int set_mouse_grab ( SDL_bool state )
 {
 	if (state != grabbed_mouse) {
 		grabbed_mouse = state;
 		SDL_SetRelativeMouseMode(state);
 		SDL_SetWindowGrab(sdl_win, state);
-	}
+		return 1;
+	} else
+		return 0;
 }
 
 
