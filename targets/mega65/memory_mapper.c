@@ -42,11 +42,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 //#define DEBUGMEM DEBUG
 
 
-// Character-WOM (Write-Only-Memory) for VIC-IV, with pre-initialized values.
-// Please read the comment at the beginning of this file.
-#include "character_wom_initialized.c"
-
-
 // 128K of "chip-RAM". VIC-IV in M65 can see this, though the last 2K is also covered by the first 2K of the colour RAM.
 // that area from chip-RAM cannot be modified by the CPU/DMA/etc though since the colour RAM is there. We emulate anyway
 // 128K of chip-RAM so we don't need to check memory access limit all the time in VIC-IV emulation. But it's still true,
@@ -58,10 +53,10 @@ Uint8 fast_ram[0x20000];
 // 32K of colour RAM. VIC-IV can see this as for colour information only. The first 2K can be seen at the last 2K of
 // the chip-RAM. Also, the first 1 or 2K can be seen in the C64-style I/O area too, at $D800
 Uint8 colour_ram[0x8000];
+// Write-Only memory (WOM) for character fetch when it would be the ROM (on C64 eg)
+Uint8 char_wom[0x1000];
 // 16K of hypervisor RAM, can be only seen in hypervisor mode.
-Uint8 hypervisor_ram[0x4000] = {
-#include "../../rom/kickup.cdata"
-};
+Uint8 hypervisor_ram[0x4000];
 // 127Mbytes of slow-RAM. Would be the DDR memory on M65/Nexys4
 #ifdef SLOW_RAM_SUPPORT
 Uint8 slow_ram[127 << 20];

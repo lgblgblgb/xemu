@@ -163,7 +163,7 @@ static off_t host_seek_to ( Uint8 *addr_buffer, int addressing_offset, const cha
 	off_t image_offset = (addr_buffer ? (((off_t)addr_buffer[0]) | ((off_t)addr_buffer[1] << 8) | ((off_t)addr_buffer[2] << 16) | ((off_t)addr_buffer[3] << 24)) : 0) + (off_t)addressing_offset;
 	DEBUG("SDCARD: %s card at position " PRINTF_LLD " (offset=%d) PC=$%04X" NL, description, (long long)image_offset, addressing_offset, cpu65.pc);
 	if (image_offset < 0 || image_offset > size_limit - 512) {
-		DEBUG("SDCARD: SEEK: invalid offset requested for %s with offset " PRINTF_LLD " PC=$%04X" NL, description, (long long)image_offset, cpu65.pc);
+		DEBUGPRINT("SDCARD: SEEK: invalid offset requested for %s with offset " PRINTF_LLD " PC=$%04X" NL, description, (long long)image_offset, cpu65.pc);
 		return -1;
 	}
 	if (lseek(fd, image_offset, SEEK_SET) != image_offset)
@@ -263,6 +263,8 @@ static void sdcard_command ( Uint8 cmd )
 				ret = diskimage_read_block(sd_buffer, sd_sector_bytes, 0, "reading[SD]", sd_card_size, sdfd);
 				if (ret < 0) {
 					sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR; // | SD_ST_BUSY1 | SD_ST_BUSY0;
+						sd_status |= SD_ST_BUSY1 | SD_ST_BUSY0;
+						//keep_busy = 1;
 					sdcard_bytes_read = 0;
 				} else {
 					sd_status &= ~(SD_ST_ERROR | SD_ST_FSM_ERROR);
@@ -284,6 +286,17 @@ static void sdcard_command ( Uint8 cmd )
 					sd_status &= ~(SD_ST_ERROR | SD_ST_FSM_ERROR);
 					sdcard_bytes_read = ret;
 				}
+#if 0
+				do {
+				int sums[8] = {0,0,0,0, 0,0,0,0};
+				for (int t = 0; t < 8; t++)
+					for (int a = 0; a < 512; a++)
+						sums[t] += disk_buffers[(t * 512) + a];
+				DEBUGPRINT("SDCARD: writing sector $%02X%02X%02X%02X (sums=%d %d %d %d %d %d %d %d) with result of %d status is $%02X" NL, sd_sector_bytes[3], sd_sector_bytes[2], sd_sector_bytes[1], sd_sector_bytes[0],
+				sums[0], sums[1], sums[2], sums[3], sums[4], sums[5], sums[6], sums[7],
+				ret, sd_status);
+				} while (0);
+#endif
 			}
 			break;
 		case 0x40:	// SDHC mode OFF

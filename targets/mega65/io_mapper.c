@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/f011_core.h"
 #include "xemu/f018_core.h"
 #include "xemu/emutools_hid.h"
+//#include "xemu/cpu65.h"
 #include "vic4.h"
 #include "sdcard.h"
 #include "hypervisor.h"
@@ -94,6 +95,7 @@ static void update_hw_multiplier ( void )
 
 Uint8 io_read ( unsigned int addr )
 {
+	// DEBUG("IO: read $%03X IO_mode is %d @ PC=$%04X" NL, addr & 0xFFF, addr >> 12, cpu65.pc);
 	switch (addr >> 8) {
 		/* ---------------------------------------------------- */
 		/* $D000-$D3FF: VIC-II, VIC-III+FDC+REC, VIC-IV+FDC+REC */
@@ -269,6 +271,7 @@ Uint8 io_read ( unsigned int addr )
    In nutshell: this function *NEEDS* addresses 0-$3FFF based on the given I/O (VIC) mode! */
 void io_write ( unsigned int addr, Uint8 data )
 {
+	// DEBUG("IO: write $%03X with data $%02X IO_mode is %d @ PC=$%04X" NL, addr & 0xFFF, data, addr >> 12, cpu65.pc);
 	if (XEMU_UNLIKELY(cpu_rmw_old_data >= 0)) {
 		// RMW handling! FIXME: do this only in the needed I/O ports only, not here, globally!
 		// however, for that, we must check this at every devices where it can make any difference ...

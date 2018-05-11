@@ -35,9 +35,6 @@ distclean:
 	$(MAKE) clean
 	rm -f `$(AWK) 'NF == 3 && $$1 ~ /^[a-zA-Z0-9]/ { print $$1 }' < $(URL_LIST)`
 
-kickup.cdata: KICKUP.M65
-	../build/bin2values.py $< $@
-
 %.rom: %.asm
 	$(CL65) -t none --cpu 65c02 -o $@ $<
 
