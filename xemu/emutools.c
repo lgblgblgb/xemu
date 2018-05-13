@@ -216,14 +216,17 @@ void xemu_set_full_screen ( int setting )
 		SDL_GetWindowSize(sdl_win, &win_xsize, &win_ysize); // save window size, it seems there are some problems with leaving fullscreen then
 		if (SDL_SetWindowFullscreen(sdl_win, SDL_WINDOW_FULLSCREEN_DESKTOP)) {
 			fprintf(stderr, "Cannot enter full screen mode: %s" NL, SDL_GetError());
-		} else
+		} else {
 			emu_is_fullscreen = 1;
+			DEBUGPRINT("UI: entering fullscreen mode." NL);
+		}
 	} else {
 		// leaving full screen mode ...
 		if (SDL_SetWindowFullscreen(sdl_win, 0)) {
 			fprintf(stderr, "Cannot leave full screen mode: %s" NL, SDL_GetError());
 		} else {
 			emu_is_fullscreen = 0;
+			DEBUGPRINT("UI: leaving fullscreen mode." NL);
 			SDL_SetWindowSize(sdl_win, win_xsize, win_ysize); // restore window size saved on leaving fullscreen, there can be some bugs ...
 		}
 	}

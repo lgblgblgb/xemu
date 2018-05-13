@@ -33,6 +33,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static int   sdfd;		// SD-card controller emulation, UNIX file descriptor of the open image file
 static int   d81fd = -1;	// special case for F011 access, allow emulator to access D81 image on the host OS, instead of "inside" the SD card image! [NOT SO MUCH USED YET]
 static int   use_d81 = 0;	// the above: actually USE that!
+static int   d81_is_prg;	// d81 specific external disk image access refeers for a CBM program file with on-the-fly virtual disk image contruction rather than a real D81
+static int   prg_blk_size;
+static int   prg_blk_last_size;
 static int   d81_is_read_only;	// access of the above, read-only or read-write
 Uint8 sd_status;		// SD-status byte
 static Uint8 sd_sector_bytes[4];
@@ -46,6 +49,23 @@ static int   keep_busy = 0;
 Uint8 disk_buffers[0x1000];
 
 
+static const Uint8 vdsk_head_sect[] = {
+	0x28, 0x03,
+	0x44, 0x00,
+	'X', 'E', 'M', 'U', ' ', 'V', 'R', '-', 'D', 'I', 'S', 'K', ' ', 'R', '/', 'O',
+	0xA0, 0xA0,
+	'6', '5',
+	0xA0,
+	0x33, 0x44, 0xA0, 0xA0
+};
+static const Uint8 vdsk_file_name[16] = {
+	'F', 'I', 'L', 'E', 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0
+};
+
+
+
+
+
 static int open_external_d81 ( const char *fn )
 {
 	char fnbuf[PATH_MAX + 1];
@@ -53,27 +73,41 @@ static int open_external_d81 ( const char *fn )
 		return -1;
 	d81_is_read_only = O_RDONLY;
 	d81fd = xemu_open_file(fn, O_RDWR, &d81_is_read_only, fnbuf);
+	d81_is_prg = 0;
 	if (d81fd < 0) {
-		ERROR_WINDOW("External D81 image was specified (%s) but it cannot be opened: %s", fn, strerror(errno));
-		DEBUG("SDCARD: cannot open external D81 image %s" NL, fn);
+		ERROR_WINDOW("External D81 image/program file was specified (%s) but it cannot be opened: %s", fn, strerror(errno));
+		DEBUG("SDCARD: cannot open external D81 image/program file %s" NL, fn);
 	} else {
 		off_t d81_size;
-		if (d81_is_read_only)
-			INFO_WINDOW("External D81 image file %s could be open only in R/O mode", fnbuf);
-		else
-			DEBUG("SDCARD: exernal D81 image file re-opened in RD/WR mode, good" NL);
 		d81_size = lseek(d81fd, 0, SEEK_END);
 		if (d81_size == (off_t)-1) {
-			ERROR_WINDOW("Cannot query the size of external D81 image %s, using on-SD images! ERROR: %s", fn, strerror(errno));
+			ERROR_WINDOW("Cannot query the size of external D81 image/program file %s ERROR: %s", fn, strerror(errno));
 			close(d81fd);
 			d81fd = -1;
 			return d81fd;
 		}
-		if (d81_size != D81_SIZE) {
+		if (d81_size < 16) {	// the minimal size which is not treated as valid program file, and for sure, not D81 image either!
+		} else if (d81_size < 32000) {	// some random size at max which is treated as valid program file
+			d81_is_prg = d81_size;	// we use the "d81_is_prg" flag to carry the file size as well
+			// However we need the size in 254 bytes unit as well
+			prg_blk_size = d81_size / 254;
+			prg_blk_last_size = d81_size % 254;
+			if (!prg_blk_last_size)
+				prg_blk_last_size = 254;
+			else
+				prg_blk_size++;
+			INFO_WINDOW("External file opened as a program file, guessed on its size (smaller than a D81). Size = %d, blocks = %d", d81_is_prg, prg_blk_size);
+		} else if (d81_size != D81_SIZE) {
 			ERROR_WINDOW("Bad external D81 image size " PRINTF_LLD " for %s, should be %d bytes!", (long long)d81_size, fnbuf, D81_SIZE);
 			close(d81fd);
 			d81fd = -1;
 			return d81fd;
+		}
+		if (!d81_is_prg) {
+			if (d81_is_read_only)
+				INFO_WINDOW("External D81 image file %s could be open only in R/O mode", fnbuf);
+			else
+				DEBUG("SDCARD: exernal D81 image file re-opened in RD/WR mode, good" NL);
 		}
 	}
 	return d81fd;
@@ -206,12 +240,63 @@ static int diskimage_write_block ( Uint8 *io_buffer, Uint8 *addr_buffer, int add
 }
 
 
-
 int fdc_cb_rd_sec ( Uint8 *buffer, int d81_offset )
 {
-	if (use_d81)
-		return (diskimage_read_block(buffer, NULL, d81_offset, "reading[D81@HOST]", D81_SIZE, d81fd) != 512);
-	else
+	if (!mounted)
+		return -1;
+	if (use_d81) {
+		if (d81_is_prg) {
+			// just pre-zero buffer, so we don't need to take care on this at various code points with possible partly filled output
+			memset(buffer, 0, 512);
+			// disk organization at CBM-DOS level is 256 byte sector based, though FDC F011 itself is 512 bytes sectored stuff
+			for (int a = 0; a < 2; a++, d81_offset += 0x100, buffer += 0x100) {
+				DEBUGPRINT("D81VIRTUAL: reading sub-sector (%d) @ %d" NL, a, d81_offset);
+				if (d81_offset == 0x61800) {		// the header sector
+					memcpy(buffer, vdsk_head_sect, sizeof vdsk_head_sect);
+				} else if (d81_offset == 0x61900 || d81_offset == 0x61A00) {	// BAM sectors (we don't handle BAM entries at all, so it will be a filled disk ...)
+					if (d81_offset == 0x61900) {
+						buffer[0] = 0x28;
+						buffer[1] = 0x02;
+					} else
+						buffer[1] = 0xFF;	// chain, byte #0 is already 0
+					buffer[2] = 0x44;
+					buffer[3] = 0xBB;
+					buffer[4] = vdsk_head_sect[0x16];
+					buffer[5] = vdsk_head_sect[0x17];
+					buffer[6] = 0xC0;
+				} else if (d81_offset == 0x61B00) {	// directory sector, the only one we want to handle here
+					buffer[2] = 0x82;	// PRG
+					buffer[3] = 0x01;	// starts on track-1
+					// starts on sector-0 of track-1, 0 is already set
+					memcpy(buffer + 5, vdsk_file_name, 16);
+					buffer[0x1E] = prg_blk_size & 0xFF;
+					buffer[0x1F] = prg_blk_size >> 8;
+				} else {		// what we want to handle at all yet, is the file itself, which starts at the very beginning at our 'virtual' disk
+					int block = d81_offset >> 8;	// calculate the block from offset
+					if (block < prg_blk_size) {	// so it seems, we need to do something here at last, disk area belongs to our file!
+						int reqsize;
+						if (block == prg_blk_size -1) {   // last block of file
+							reqsize = prg_blk_last_size;
+							buffer[1] = 0xFF;	// offs 0 is already 0
+						} else {				// not the last block, we must resolve the track/sector info of the next block
+							reqsize = 254;
+							buffer[0] = ((block + 1) / 40) + 1;
+							buffer[1] = (block + 1) % 40;
+						}
+						DEBUGPRINT("D81VIRTUAL: ... data block, block number %d, next_track = $%02X next_sector = $%02X" NL, block, buffer[0], buffer[1]);
+						if (host_seek_to(NULL, block * 254, "reading[VIRTUAL-PRG@HOST]", 9999999 /* random insane value */, d81fd) < 0)
+							return -1;
+						block = xemu_safe_read(d81fd, buffer + 2, reqsize);
+						DEBUGPRINT("D81VIRTUAL: ... reading result: expexted %d retval %d" NL, reqsize, block);
+						if (block != reqsize)
+							return -1;
+					}
+				}
+			}
+			return 0;
+		} else
+			return (diskimage_read_block(buffer, NULL, d81_offset, "reading[D81@HOST]", D81_SIZE, d81fd) != 512);
+	} else
 		return (diskimage_read_block(buffer, sd_d81_img1_start, d81_offset, "reading[D81@SD]", sd_card_size, sdfd) != 512);
 }
 
@@ -219,9 +304,14 @@ int fdc_cb_rd_sec ( Uint8 *buffer, int d81_offset )
 
 int fdc_cb_wr_sec ( Uint8 *buffer, int d81_offset )
 {
-	if (use_d81)
-		return (diskimage_write_block(buffer, NULL, d81_offset, "writing[D81@HOST]", D81_SIZE, d81fd) != 512);
-	else
+	if (!mounted)
+		return -1;
+	if (use_d81) {
+		if (d81_is_prg)
+			return -1;	// no write access in this mode
+		else
+			return (diskimage_write_block(buffer, NULL, d81_offset, "writing[D81@HOST]", D81_SIZE, d81fd) != 512);
+	} else
 		return (diskimage_write_block(buffer, sd_d81_img1_start, d81_offset, "writing[D81@SD]", sd_card_size, sdfd) != 512);
 }
 
