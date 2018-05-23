@@ -30,6 +30,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <fcntl.h>
 #include <limits.h>
 
+#define PRG_MIN_SIZE	16
+#define PRG_MAX_SIZE	38000
+
 static int   sdfd;		// SD-card controller emulation, UNIX file descriptor of the open image file
 static int   d81fd = -1;	// special case for F011 access, allow emulator to access D81 image on the host OS, instead of "inside" the SD card image! [NOT SO MUCH USED YET]
 static int   use_d81 = 0;	// the above: actually USE that!
@@ -44,6 +47,7 @@ static off_t sd_card_size;
 static int   sdcard_bytes_read = 0;
 static int   sd_is_read_only;
 static int   mounted;
+static int   first_mount = 1;
 static int   keep_busy = 0;
 // 4K buffer space: Actually the SD buffer _IS_ inside this, also the F011 buffer should be (FIXME: that is not implemented yet right now!!)
 Uint8 disk_buffers[0x1000];
@@ -86,8 +90,12 @@ static int open_external_d81 ( const char *fn )
 			d81fd = -1;
 			return d81fd;
 		}
-		if (d81_size < 16) {	// the minimal size which is not treated as valid program file, and for sure, not D81 image either!
-		} else if (d81_size < 32000) {	// some random size at max which is treated as valid program file
+		if (d81_size < PRG_MIN_SIZE) {	// the minimal size which is not treated as valid program file, and for sure, not D81 image either!
+			ERROR_WINDOW("External PRG file tried to open as virtual-D81 but it's too short (" PRINTF_LLD " bytes) for %s, should be at least %d bytes!", (long long)d81_size, fnbuf, PRG_MIN_SIZE);
+			close(d81fd);
+			d81fd = -1;
+			return d81fd;
+		} else if (d81_size <= PRG_MAX_SIZE) {	// some random size at max which is treated as valid program file
 			d81_is_prg = d81_size;	// we use the "d81_is_prg" flag to carry the file size as well
 			// However we need the size in 254 bytes unit as well
 			prg_blk_size = d81_size / 254;
@@ -249,6 +257,7 @@ int fdc_cb_rd_sec ( Uint8 *buffer, int d81_offset )
 			// just pre-zero buffer, so we don't need to take care on this at various code points with possible partly filled output
 			memset(buffer, 0, 512);
 			// disk organization at CBM-DOS level is 256 byte sector based, though FDC F011 itself is 512 bytes sectored stuff
+			// so we always need to check to 256 bytes "DOS-evel" sectors even if F011 itself handled 512 bytes long sectors
 			for (int a = 0; a < 2; a++, d81_offset += 0x100, buffer += 0x100) {
 				DEBUGPRINT("D81VIRTUAL: reading sub-sector (%d) @ %d" NL, a, d81_offset);
 				if (d81_offset == 0x61800) {		// the header sector
@@ -284,13 +293,13 @@ int fdc_cb_rd_sec ( Uint8 *buffer, int d81_offset )
 							buffer[1] = (block + 1) % 40;
 						}
 						DEBUGPRINT("D81VIRTUAL: ... data block, block number %d, next_track = $%02X next_sector = $%02X" NL, block, buffer[0], buffer[1]);
-						if (host_seek_to(NULL, block * 254, "reading[VIRTUAL-PRG@HOST]", 9999999 /* random insane value */, d81fd) < 0)
+						if (host_seek_to(NULL, block * 254, "reading[PRG81VIRT@HOST]", d81_is_prg + 512, d81fd) < 0)
 							return -1;
 						block = xemu_safe_read(d81fd, buffer + 2, reqsize);
 						DEBUGPRINT("D81VIRTUAL: ... reading result: expexted %d retval %d" NL, reqsize, block);
 						if (block != reqsize)
 							return -1;
-					}
+					} // if it's not our block of the file, not BAMs, header block or directory, the default zeroed area is returned, what we memset()'ed to zero
 				}
 			}
 			return 0;
@@ -422,9 +431,13 @@ static void sdcard_mount_d81 ( Uint8 data )
 {
 	DEBUGPRINT("SDCARD: SD/FDC mount register request @ $D68B val=$%02X at PC=$%04X" NL, data, cpu65.pc);
 	if ((data & 3) == 3) {
-		if (d81fd >= 0)
-			use_d81 = QUESTION_WINDOW("Use D81 from SD-card|Use external D81 image file", "Hypervisor mount request, and you have defined external D81 image.");
-		else
+		if (d81fd >= 0) {
+			if (first_mount) {
+				first_mount = 0;
+				use_d81 = 1;
+			} else
+				use_d81 = QUESTION_WINDOW("Use D81 from SD-card|Use external D81 image/prg file", "Hypervisor mount request, and you have defined external D81 image.");
+		} else
 			use_d81 = 0;
 		if (!use_d81) {
 			fdc_set_disk(1, sd_is_read_only ? 0 : QUESTION_WINDOW("Use read-only access|Use R/W access (can be dangerous, can corrupt the image!)", "Hypervisor seems to be about mounting a D81 image. You can override the access mode now."));
