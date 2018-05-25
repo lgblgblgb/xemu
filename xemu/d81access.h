@@ -19,7 +19,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_COMMON_D81ACCESS_H_INCLUDED
 #define __XEMU_COMMON_D81ACCESS_H_INCLUDED
 
+#ifndef D81_SIZE
 #define D81_SIZE		819200
+#endif
+
 #define PRG_MIN_SIZE		16
 #define PRG_MAX_SIZE		38000
 

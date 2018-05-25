@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 #include "xemu/cia6526.h"
 #include "xemu/f011_core.h"
-#include "c65_d81_image.h"
+#include "xemu/d81access.h"
 #include "xemu/f018_core.h"
 #include "xemu/emutools_hid.h"
 #include "vic3.h"
@@ -42,6 +42,9 @@ static int nmi_level;			// please read the comment at nmi_set() below
 static int mouse_x = 0;
 static int mouse_y = 0;
 static int shift_status = 0;
+
+Uint8 disk_cache[512];			// internal memory of the F011 disk controller
+
 
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request
 // It must be high enough not to collide with the 1Mbyte address space + almost-64K "overflow" area and mapping should not cause to alter lower 12 bits of the addresses,
@@ -247,6 +250,26 @@ static void c65_snapshot_saver_on_exit_callback ( void )
 #endif
 
 
+// define the callback, d81access call this, we can dispatch the change in FDC config to the F011 core emulation this way, automatically
+void d81access_cb_chgmode ( int mode ) {
+	int have_disk = ((mode & 0xFF) != D81ACCESS_EMPTY);
+	int can_write = (!(mode & D81ACCESS_RO));
+	DEBUGPRINT("C65FDC: configuring F011 FDC with have_disk=%d, can_write=%d" NL, have_disk, can_write);
+	fdc_set_disk(have_disk, can_write);
+}
+// Here we implement F011 core's callbacks using d81access (and yes, F011 uses 512 bytes long sectors for real)
+int fdc_cb_rd_sec ( Uint8 *buffer, int d81_offset ) {
+	int ret = d81access_read_sect(buffer, d81_offset, 512);
+	DEBUG("C65FDC: D81: reading sector at d81_offset=%d, return value=%d" NL, d81_offset, ret);
+	return ret;
+}
+int fdc_cb_wr_sec ( Uint8 *buffer, int d81_offset ) {
+	int ret = d81access_write_sect(buffer, d81_offset, 512);
+	DEBUG("C65FDC: D81: writing sector at d81_offset=%d, return value=%d" NL, d81_offset, ret);
+	return ret;
+}
+
+
 static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 {
 	const char *p;
@@ -299,7 +322,10 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	dma_init(xemucfg_get_num("dmarev"));
 	// Initialize FDC
 	fdc_init(disk_cache);
-	c65_d81_init(xemucfg_get_str("8"), xemucfg_get_bool("d81ro"));
+	// Initialize D81 access abstraction for FDC
+	d81access_init();
+	atexit(d81access_close);
+	d81access_attach_fsobj(xemucfg_get_str("8"), D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (xemucfg_get_bool("d81ro") ? D81ACCESS_RO : 0));
 	// SIDs, plus SDL audio
 	sid_init(&sids[0], sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sids[1], sid_cycles_per_sec, sound_mix_freq);
