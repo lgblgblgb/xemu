@@ -18,7 +18,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_C65_D81_IMAGE_H_INCLUDED
 #define __XEMU_C65_D81_IMAGE_H_INCLUDED
 
-extern void c65_d81_init ( const char *dfn );
+extern void c65_d81_init ( const char *dfn, int force_ro );
 
 extern Uint8 disk_cache[512];	// internal memory of the F011 disk controller
 

@@ -299,7 +299,7 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	dma_init(xemucfg_get_num("dmarev"));
 	// Initialize FDC
 	fdc_init(disk_cache);
-	c65_d81_init(xemucfg_get_str("8"));
+	c65_d81_init(xemucfg_get_str("8"), xemucfg_get_bool("d81ro"));
 	// SIDs, plus SDL audio
 	sid_init(&sids[0], sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sids[1], sid_cycles_per_sec, sound_mix_freq);
@@ -772,6 +772,7 @@ int main ( int argc, char **argv )
 	int cycles;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unusable Commodore 65 emulator from LGB");
 	xemucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
+	xemucfg_define_switch_option("d81ro", "Force read-only status for image specified with -8 option");
 	xemucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip (0/1=F018A/B, +512=modulo))");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	xemucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");

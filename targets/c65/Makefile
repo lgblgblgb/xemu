@@ -23,7 +23,7 @@ EMU_DESCRIPTION	= Commodore 65
 
 CFLAGS_TARGET_xc65	=
 SRCS_TARGET_xc65	= commodore_65.c vic3.c c65_d81_image.c c65_snapshot.c
-SRCS_COMMON_xc65	= emutools.c cpu65.c cia6526.c sid.c f011_core.c f018_core.c c64_kbd_mapping.c emutools_hid.c cbmhostfs.c emutools_config.c emutools_snapshot.c emutools_files.c
+SRCS_COMMON_xc65	= emutools.c cpu65.c cia6526.c sid.c f011_core.c f018_core.c c64_kbd_mapping.c emutools_hid.c cbmhostfs.c emutools_config.c emutools_snapshot.c emutools_files.c d81access.c
 CONFIG_CFLAGS_TARGET_xc65	= sdl2|math
 CONFIG_LDFLAGS_TARGET_xc65	= sdl2|math
 
