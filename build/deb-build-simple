@@ -1,9 +1,9 @@
 #!/bin/bash
 # A very lame binary-level DEB package builder ... :-/
-# (C)2016,2017 LGB Gabor Lenart
+# (C)2016,2017,2018 LGB Gabor Lenart
 
 PROJECT="xemu"
-DEPENDENCY="libsdl2-2.0-0 (>= 2.0.4), libc6 (>= 2.15), libreadline6 (>= 6.3), libgtk-3-0 (>= 3.18), wget"
+DEPENDENCY="libsdl2-2.0-0 (>= 2.0.4), libc6 (>= 2.15), libreadline7 (>= 7.0), libgtk-3-0 (>= 3.18), wget"
 AUTHOR="Gábor Lénárt <lgblgblgb@gmail.com>"
 WEBSITE="https://github.com/lgblgblgb/xemu/wiki"
 BUGSITE="https://github.com/lgblgblgb/xemu/issues"

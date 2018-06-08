@@ -280,6 +280,11 @@ static Uint8 sdcard_read_status ( void )
 }
 
 
+/* Lots of TODO's here:
+ * + study M65's quite complex error handling behaviour to really match ...
+ * + with external D81 mounting: have a "fake D81" on the card, and redirect accesses to that, if someone if insane enough to try to access D81 at the SD-level too ...
+ * + In general: SD emulation is "too fast" done in zero emulated CPU time, which can affect the emulation badly if an I/O-rich task is running on Xemu/M65
+ * */
 static void sdcard_block_io ( int is_write )
 {
 	DEBUG("SDCARD: %s block #$%02X%02X%02X%02X @ PC=$%04X" NL,
@@ -467,7 +472,10 @@ static void sdcard_mount_d81 ( Uint8 data )
 		} else {
 			//fdc_set_disk(1, !d81_is_read_only);
 			DEBUGPRINT("SDCARD: D81: mounting *EXTERNAL* D81 image, not from SD card (emulator feature only)!" NL);
-			mount_external_d81(external_d81, 0);
+			if (!mount_external_d81(external_d81, 0)) {
+				ERROR_WINDOW("Cannot mount external D81 (see previous error), mounting the internal D81");
+				mount_internal_d81(0);
+			}
 		}
 		DEBUGPRINT("SDCARD: D81: mounting %s" NL, mounted ? "OK" : "*FAILED*");
 	} else {

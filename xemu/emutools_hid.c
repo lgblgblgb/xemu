@@ -297,7 +297,11 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 			exit(0);
 		case SDL_KEYUP:
 		case SDL_KEYDOWN:
-			if (event->key.repeat == 0 && (event->key.windowID == sdl_winid || event->key.windowID == 0))
+			if (event->key.repeat == 0
+#ifdef CONFIG_KBD_SELECT_FOCUS
+				&& (event->key.windowID == sdl_winid || event->key.windowID == 0)
+#endif
+			)
 				hid_key_event(event->key.keysym.scancode, event->key.state == SDL_PRESSED);
 			break;
 		case SDL_JOYDEVICEADDED:

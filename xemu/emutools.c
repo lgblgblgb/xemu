@@ -989,6 +989,7 @@ void sysconsole_open ( void )
 		ERROR_WINDOW("Cannot allocate windows console!");
 		return;
 	}
+	SetConsoleOutputCP(65001); // CP_UTF8, just to be sure to use the constant as not all mingw versions seems to define it
 	SetConsoleTitle("Xemu Console");
 	// set the screen buffer to be big enough to let us scroll text
 	GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &coninfo);
