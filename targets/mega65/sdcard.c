@@ -472,7 +472,7 @@ static void sdcard_mount_d81 ( Uint8 data )
 		} else {
 			//fdc_set_disk(1, !d81_is_read_only);
 			DEBUGPRINT("SDCARD: D81: mounting *EXTERNAL* D81 image, not from SD card (emulator feature only)!" NL);
-			if (!mount_external_d81(external_d81, 0)) {
+			if (mount_external_d81(external_d81, 0)) {
 				ERROR_WINDOW("Cannot mount external D81 (see previous error), mounting the internal D81");
 				mount_internal_d81(0);
 			}
