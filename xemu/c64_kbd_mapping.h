@@ -83,4 +83,12 @@ static XEMU_INLINE Uint8 c64_keyboard_read_on_CIA1_A ( Uint8 kbsel_b, Uint8 effe
 	;
 }
 
+#ifdef FAKE_TYPING_SUPPORT
+extern void c64_register_fake_typing		( const Uint8 *keys );
+extern void c64_stop_fake_typing		( void  );
+extern void c64_handle_fake_typing_internals	( Uint8 keysel );
+
+extern int  c64_fake_typing_enabled;
+#endif
+
 #endif

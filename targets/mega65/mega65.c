@@ -44,6 +44,7 @@ static SDL_AudioDeviceID audio = 0;
 static int nmi_level;			// please read the comment at nmi_set() below
 
 int newhack = 0;
+unsigned int frames_total_counter = 0;
 
 
 #define TRAP_RESET	0x40
@@ -58,6 +59,31 @@ static void (*m65mon_callback)(void) = NULL;
 static const char emulator_paused_title[] = "TRACE/PAUSE";
 static char emulator_speed_title[] = "????MHz";
 static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
+
+
+
+#ifdef FAKE_TYPING_SUPPORT
+static const Uint8 fake_typing_for_go64[] = {
+	0x32,0x46,0x23,0x13,0x01,0x31,0x01,  0xFF		// GO64 <RETURN> Y <RETURN> <END_MARKER>
+};
+static const Uint8 fake_typing_for_load64[] = {
+	0x32,0x46,0x23,0x13,0x01,0x31,0x01,			// GO64 <RETURN> Y <RETURN>
+	0x51,0xFE,0x46,0xFE,0x43,0x57,0x23,0x20,0x01,0x01,	// P <TOGGLE_SHIFT> O <TOGGGLE_SHIFT> 0,65 <RETURN>
+	0x52,0xFE,0x46,0x73,0xFE,0x61,0xFE,0x73,0xFE,0x01,	// L <TOGGLE_SHIFT> O 2 <TOGGLE_SHIFT> * <TOGGLE_SHIFT> 2 <RETURN>
+	0x51,0xFE,0x46,0xFE,0x43,0x57,0x23,0x13,0x01,0x01,	// P <TOGGLE_SHIFT> O <TOGGGLE_SHIFT> 0,64 <RETURN>
+	0x21,0x36,0x47,0x01,					// RUN <RETURN>
+	0xFF							// <END_MARKER>
+};
+static const Uint8 fake_typing_for_load65[] = {
+	//0x21,0x36,0x47,0xFE,0x73,0xFE,0x61,0xFE,0x73,0xFE,0x01,				// RUN"*"
+	//0xFF
+	0x51,0x46,0x45,0x16,0x43,0x57,0x23,0x20,0x01,0x01,	// POKE 0,65 <RETURN>
+	0x52,0xFE,0x46,0x73,0xFE,0x61,0xFE,0x73,0xFE,0x01,	// L <TOGGLE_SHIFT> O 2 <TOGGLE_SHIFT> * <TOGGLE_SHIFT> 2 <RETURN>
+	0x51,0x46,0x45,0x16,0x43,0x57,0x23,0x13,0x01,0x01,	// POKE 0,64 <RETURN>
+	0x21,0x36,0x47,0x01,					// RUN <RETURN>
+	0xFF							// <END_MARKER>
+};
+#endif
 
 
 
@@ -557,6 +583,10 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("loadrom", NULL, "Preload C65 ROM image");
 	xemucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used");
 	xemucfg_define_switch_option("sdhc", "Use SDHC mode for SD-card (will be auto-applied if card is 2-32Gbytes)");
+#ifdef FAKE_TYPING_SUPPORT
+	xemucfg_define_switch_option("go64", "Go into C64 mode after start");
+	xemucfg_define_switch_option("autoload", "Load and start the first program from disk");
+#endif
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
 	xemucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
@@ -627,6 +657,15 @@ int main ( int argc, char **argv )
 		else
 			ERROR_WINDOW("UMON: Invalid TCP port: %d", port);
 	}
+#endif
+#ifdef FAKE_TYPING_SUPPORT
+	if (xemucfg_get_bool("go64")) {
+		if (xemucfg_get_bool("autoload"))
+			c64_register_fake_typing(fake_typing_for_load64);
+		else
+			c64_register_fake_typing(fake_typing_for_go64);
+	} else if (xemucfg_get_bool("autoload"))
+		c64_register_fake_typing(fake_typing_for_load65);
 #endif
 	cycles = 0;
 	frameskip = 0;
@@ -706,6 +745,7 @@ int main ( int argc, char **argv )
 					frame_counter = 0;
 					vic3_blink_phase = !vic3_blink_phase;
 				}
+				frames_total_counter++;
 			}
 			//DEBUG("RASTER=%d COMPARE=%d" NL,scanline,compare_raster);
 			//vic_interrupt();

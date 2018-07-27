@@ -133,6 +133,10 @@ void clear_emu_events ( void )
 
 Uint8 cia1_in_b ( void )
 {
+#ifdef FAKE_TYPING_SUPPORT
+	if (XEMU_UNLIKELY(c64_fake_typing_enabled) && (((cia1.PRA | (~cia1.DDRA)) & 0xFF) != 0xFF) && (((cia1.PRB | (~cia1.DDRB)) & 0xFF) == 0xFF))
+		c64_handle_fake_typing_internals(cia1.PRA | (~cia1.DDRA));
+#endif
 	return c64_keyboard_read_on_CIA1_B(
 		cia1.PRA | (~cia1.DDRA),
 		cia1.PRB | (~cia1.DDRB),

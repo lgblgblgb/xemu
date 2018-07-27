@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017,2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -48,15 +48,6 @@ static SDL_Joystick *joysticks[MAX_JOYSTICKS];
 
 static const struct KeyMapping *key_map = NULL;
 static Uint8 virtual_shift_pos = 0;
-
-#define KBD_PRESS_KEY(a)        kbd_matrix[(a) >> 4] &= ~(1 << ((a) & 0x7))
-#define KBD_RELEASE_KEY(a)      kbd_matrix[(a) >> 4] |=   1 << ((a) & 0x7)
-#define KBD_SET_KEY(a,state) do {	\
-	if (state)			\
-		KBD_PRESS_KEY(a);	\
-	else				\
-		KBD_RELEASE_KEY(a);	\
-} while (0)
 
 
 int hid_key_event ( SDL_Scancode key, int pressed )
@@ -111,7 +102,7 @@ int hid_key_event ( SDL_Scancode key, int pressed )
 // events" scheme to skip the possible received stuffs.
 void hid_reset_events ( int burn )
 {
-	memset(kbd_matrix, 0xFF, sizeof kbd_matrix);	// set keyboard matrix to default state (unpressed for all positions)
+	KBD_CLEAR_MATRIX();	// set keyboard matrix to default state (unpressed for all positions)
 	mouse_delta_x = 0;
 	mouse_delta_y = 0;
 	hid_state = 0;

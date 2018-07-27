@@ -71,5 +71,7 @@ extern void reset_mega65      ( void );
 
 
 extern int newhack;
+extern unsigned int frames_total_counter;
+
 
 #endif

@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017,2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -127,3 +127,105 @@ Uint8 c64_get_joy_state ( void )
 			(hid_read_joystick_button( 0, 16 ) & (is_mouse_grab() ? hid_read_mouse_button_left (0, 16) : 16))
 	;
 }
+
+
+#ifdef FAKE_TYPING_SUPPORT
+
+
+static struct {
+	int attention;
+	const Uint8 *typing;
+	int virtual_shift;
+} kbd_inject;
+int c64_fake_typing_enabled = 0;
+
+
+void c64_register_fake_typing ( const Uint8 *keys )
+{
+	c64_fake_typing_enabled = 1;
+	kbd_inject.attention = 0;
+	kbd_inject.typing = keys;
+	kbd_inject.virtual_shift = 0;
+}
+
+
+void c64_stop_fake_typing ( void )
+{
+	if (XEMU_UNLIKELY(c64_fake_typing_enabled)) {
+		c64_fake_typing_enabled = 0;
+		KBD_CLEAR_MATRIX();
+	}
+}
+
+
+void c64_handle_fake_typing_internals ( Uint8 keysel )
+{
+	// It seems, both of C64 and C65 ROM uses this for keyboard scanning.
+	// Now, we have to check if we need to "inject" keypresses (eg for auto-load) but also,
+	// that if the machine itself is in the state of watching the keyboard at this point or eg not yet.
+	// For the second task, we want to use a routine in c64_keyboard_mapping.c (in xemu common code)
+	// so it's shared with emulators based on the C64-scheme on keyboard handling, ie C65 emulator in Xemu
+	// (or later even eg C128, or C64). Probably that can be generalized even more later, ie with different
+	// matrix based scenarios as well.
+	//printf("SCAN: on B, sel=%02X effect=%02X" NL, (cia1.PRA | (~cia1.DDRA)) & 0xFF, (cia1.PRB | (~cia1.DDRB)) & 0xFF);
+	kbd_inject.attention++;
+	if (kbd_inject.attention > 25) {
+		kbd_inject.attention = 0;
+		KBD_CLEAR_MATRIX();
+		if (kbd_inject.virtual_shift)
+			KBD_PRESS_KEY(VIRTUAL_SHIFT_POS);
+		if (*kbd_inject.typing != 0xFF) {
+			if (*kbd_inject.typing == 0xFE) {
+				kbd_inject.virtual_shift = !kbd_inject.virtual_shift;
+				KBD_SET_KEY(VIRTUAL_SHIFT_POS, kbd_inject.virtual_shift);
+			} else
+				KBD_PRESS_KEY(*kbd_inject.typing);
+			kbd_inject.typing++;
+		} else {
+			c64_fake_typing_enabled = 0;
+			KBD_CLEAR_MATRIX();
+		}
+	}
+#if 0
+	if (kbd_inject.next_ok) {
+		kbd_inject.next_ok = 0;
+	}
+	Uint8 mask = (cia1.PRA | (~cia1.DDRA)) & 0xFF;
+	switch (mask) {
+		case 0xFF:
+			break;
+		case 0x00:
+			kbd_inject.attention++;
+			break;
+		case 0xFE: case 0xFD: case 0xFB: case 0xF7:
+		case 0xEF: case 0xDF: case 0xBF: case 0x7F:
+			kbd_inject.checked_lines &= mask;
+			kbd_inject.attention++;
+			break;
+		default:
+			printf("UNKNOWN SCAN SELECTOR: %02X" NL, mask);
+			break;
+	}
+	if (!kbd_inject.checked_lines) {
+		kbd_inject.next_ok = 1;
+		kbd_inject.checked_lines = 0xFF;
+	}
+	SDL_Event sdlevent = {};
+	sdlevent.type = SDL_KEYDOWN;
+	sdlevent.key.repeat = 0;
+	sdlevent.key.windowID = sdl_winid;
+	sdlevent.key.state = SDL_PRESSED;
+	//if (event->key.repeat == 0
+	//#ifdef CONFIG_KBD_SELECT_FOCUS
+	//&& (event->key.windowID == sdl_winid || event->key.windowID == 0)
+	//hid_key_event(event->key.keysym.scancode, event->key.state == SDL_PRESSED);
+	//sdlevent.key.keysym.sym = SDLK_1;
+	// event->key.keysym.scancode
+	sdlevent.key.keysym.scancode = SDL_SCANCODE_A;
+	//SDL_PushEvent(&sdlevent);
+	//printf("ACTIVE SCAN-LIKE STUFF" NL);
+	//do_inject = 0;
+#endif
+}
+
+#endif
