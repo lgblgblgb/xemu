@@ -191,6 +191,10 @@ void clear_emu_events ( void )
 
 static Uint8 cia1_in_b ( void )
 {
+#ifdef FAKE_TYPING_SUPPORT
+ 	if (XEMU_UNLIKELY(c64_fake_typing_enabled) && (((cia1.PRA | (~cia1.DDRA)) & 0xFF) != 0xFF) && (((cia1.PRB | (~cia1.DDRB)) & 0xFF) == 0xFF))
+		c64_handle_fake_typing_internals(cia1.PRA | (~cia1.DDRA));
+#endif
 	return c64_keyboard_read_on_CIA1_B(
 		cia1.PRA | (~cia1.DDRA),
 		cia1.PRB | (~cia1.DDRB),
@@ -804,6 +808,10 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
 	//xemucfg_define_switch_option("noaudio", "Disable audio");
 	xemucfg_define_str_option("rom", "#c65-system.rom", "Override system ROM path to be loaded");
+#ifdef FAKE_TYPING_SUPPORT
+	xemucfg_define_switch_option("go64", "Go into C64 mode after start");
+	xemucfg_define_switch_option("autoload", "Load and start the first program from disk");
+#endif
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
 	xemucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
@@ -835,6 +843,15 @@ int main ( int argc, char **argv )
 	);
 	osd_init_with_defaults();
 	// Start!!
+#ifdef FAKE_TYPING_SUPPORT
+	if (xemucfg_get_bool("go64")) {
+		if (xemucfg_get_bool("autoload"))
+			c64_register_fake_typing(fake_typing_for_load64);
+		else
+			c64_register_fake_typing(fake_typing_for_go64);
+	} else if (xemucfg_get_bool("autoload"))
+		c64_register_fake_typing(fake_typing_for_load65);
+#endif
 	cycles = 0;
 	if (audio)
 		SDL_PauseAudioDevice(audio, 0);
