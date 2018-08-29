@@ -1,6 +1,6 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 / Mega-65 emulator,
    within the Xemu project. F011 FDC core implementation.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

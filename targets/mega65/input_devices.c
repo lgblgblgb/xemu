@@ -22,10 +22,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/c64_kbd_mapping.h"
 #include "mega65.h"
 #include "io_mapper.h"
+#include "xemu/cpu65.h"
 
 
-#define DEBUGKBD(...)	DEBUG(__VA_ARGS__)
-//#define DEBUGKBD(...)	DEBUGPRINT(__VA_ARGS__)
+#define DEBUGKBD(...)		DEBUG(__VA_ARGS__)
+#define DEBUGKBDHWA(...)	DEBUG(__VA_ARGS__)
+#define DEBUGKBDHWACOM(...)	//DEBUGPRINT(__VA_ARGS__)
 
 
 /* Note: M65 has a "hardware accelerated" keyboard scanner, it can provide you the
@@ -56,47 +58,85 @@ static const Uint8 *matrix_to_ascii_table_selector[16] = {
 	matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,   matrix_cbm_to_ascii	// CBM key has priority
 };
 
-static Uint8 last_key_as_ascii = 0;
-static Uint8 key_modifiers = 0;
+#define HWA_SINGLE_ITEM
+
+
+static struct {
+	Uint8	modifiers;
+	Uint8	next;
+	Uint8	last;
+} hwa_kbd;
 
 
 /* used by actual I/O function to read $D610 */
-Uint8 kbd_get_last ( void )
+Uint8 hwa_kbd_get_last ( void )
 {
-	return last_key_as_ascii;
+	if (hwa_kbd.next && !hwa_kbd.last) {
+		hwa_kbd.last = hwa_kbd.next;
+		hwa_kbd.next = 0;
+	}
+	DEBUGKBDHWACOM("KBD: HWA: reading key @ PC=$%04X result = $%02X" NL, cpu65.pc, hwa_kbd.last);
+	return hwa_kbd.last;
 }
 
 
 /* used by actual I/O function to read $D611 */
-Uint8 kbd_get_modifiers ( void )
+Uint8 hwa_kbd_get_modifiers ( void )
 {
-	return key_modifiers;
+	DEBUGKBDHWACOM("KBD: HWA: reading key modifiers @ PC=$%04X result = $%02X" NL, cpu65.pc, hwa_kbd.modifiers);
+	return hwa_kbd.modifiers;
 }
 
 
 /* used by actual I/O function to write $D610, the written data itself is not used, only the fact of writing */
-void kbd_move_next ( void )
+void hwa_kbd_move_next ( void )
 {
-	last_key_as_ascii = 0;
+	DEBUGKBDHWACOM("KBD: HWA: moving to next key @ PC=$%04X previous queued key = $%02X" NL, cpu65.pc, hwa_kbd.last);
+	hwa_kbd.last = 0;
 }
 
 
+#define CHR_EQU(i) ((i >= 32 && i < 127) ? (char)i : '?')
+
+
 /* basically the opposite as kbd_get_last() but this one used internally only */
-static void store_new_ascii_keypress ( Uint8 ascii )
+static void hwa_kbd_convert_and_push ( int pos )
 {
-	last_key_as_ascii = ascii;
+	// Xemu has a design to have key positions stored in row/col as low/high nible of a byte
+	// normalize this here, to have a linear index
+	int i = ((pos & 0xF0) >> 1) | (pos & 7);
+	if (i < MAT2ASC_TAB_SIZE) {
+		int ascii = matrix_to_ascii_table_selector[hwa_kbd.modifiers & 0xF][i];
+		if (ascii) {
+			if (!hwa_kbd.next) {
+				DEBUGKBDHWA("KBD: HWA: storing key $%02X '%c' from kbd pos $%02X and table index $%02X at PC=$%04X" NL, ascii, CHR_EQU(ascii), pos, i, cpu65.pc);
+				hwa_kbd.next = ascii;
+			} else
+				DEBUGKBDHWA("KBD: HWA: NOT storing key (already waiting) $%02X '%c' from kbd pos $%02X and table index $%02X at PC=$%04X" NL, ascii, CHR_EQU(ascii), pos, i, cpu65.pc);
+		} else
+			DEBUGKBDHWA("KBD: HWA: NOT storing key (zero in translation table) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, pos, i, cpu65.pc);
+	} else
+		DEBUGKBDHWA("KBD: HWA: NOT storing key (outside of translation table) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, pos, i, cpu65.pc);
 }
 
 
 
 void clear_emu_events ( void )
 {
+	DEBUGKBDHWA("KBD: HWA: reset");
 	hid_reset_events(1);
+	hwa_kbd.modifiers = 0;
+	hwa_kbd.next = 0;
+	hwa_kbd.last = 0;
 }
 
 
 Uint8 cia1_in_b ( void )
 {
+#ifdef FAKE_TYPING_SUPPORT
+	if (XEMU_UNLIKELY(c64_fake_typing_enabled) && (((cia1.PRA | (~cia1.DDRA)) & 0xFF) != 0xFF) && (((cia1.PRB | (~cia1.DDRB)) & 0xFF) == 0xFF))
+		c64_handle_fake_typing_internals(cia1.PRA | (~cia1.DDRA));
+#endif
 	return c64_keyboard_read_on_CIA1_B(
 		cia1.PRA | (~cia1.DDRA),
 		cia1.PRB | (~cia1.DDRB),
@@ -120,7 +160,7 @@ Uint8 cia1_in_a ( void )
 int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
 	// Update status of modifier keys
-	key_modifiers =
+	hwa_kbd.modifiers =
 		  (IS_KEY_PRESSED(LSHIFT_KEY_POS) ? MODKEY_LSHIFT : 0)
 		| (IS_KEY_PRESSED(RSHIFT_KEY_POS) ? MODKEY_RSHIFT : 0)
 		| (IS_KEY_PRESSED(CTRL_KEY_POS)   ? MODKEY_CTRL   : 0)
@@ -132,38 +172,25 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 		| (IS_KEY_PRESSED(SCRL_KEY_POS)   ? MODKEY_SCRL   : 0)
 #endif
 	;
-	DEBUGKBD("KBD: pos = %d sdl_key = %d, pressed = %d, handled = %d" NL, pos, key, pressed, handled);
+	DEBUGKBD("KBD: HWA: pos = %d sdl_key = %d, pressed = %d, handled = %d" NL, pos, key, pressed, handled);
 	if (pressed) {
-		if ((pos & (~0xF7)) == 0) {
-			// Xemu has a design to have key positions stored in row/col as low/high nible of a byte
-			// normalize this here, to have a linear index
-			int i = ((pos & 0xF0) >> 1) | (pos & 7);
-			if (i < MAT2ASC_TAB_SIZE) {
-				int si = i;
-				i = matrix_to_ascii_table_selector[key_modifiers & 0xF][i];
-				store_new_ascii_keypress(i);
-				DEBUGKBD("KBD: cool, ASCII val $%02X '%c' is stored for pos %X (serialized to %d)" NL,
-					i,
-					i >= 32 && i < 127 ? i : '?',
-					pos,
-					si
-				);
-			}
-		}
-		// Also check for special, emulator-related hot-keys (not C65 key)
+	        // Check to be sure, some special Xemu internal stuffs uses kbd matrix positions does not exist for real
+		if (pos >= 0 && pos < 0x100)
+			hwa_kbd_convert_and_push(pos);
+		// Also check for special, emulator-related hot-keys
 		if (key == SDL_SCANCODE_F10) {
 			reset_mega65();
 		} else if (key == SDL_SCANCODE_KP_ENTER) {
 			c64_toggle_joy_emu();
 			OSD(-1, -1, "Joystick emulation on port #%d", joystick_emu);
-		} else if (key == SDL_SCANCODE_ESCAPE) {
-			set_mouse_grab(SDL_FALSE);
+		} else if (((hwa_kbd.modifiers & (MODKEY_LSHIFT | MODKEY_RSHIFT)) == (MODKEY_LSHIFT | MODKEY_RSHIFT)) && set_mouse_grab(SDL_FALSE)) {
+			DEBUGPRINT("UI: mouse grab cancelled" NL);
 		}
 	} else {
 		if (pos == -2 && key == 0) {	// special case pos = -2, key = 0, handled = mouse button (which?) and release event!
-			if (handled == SDL_BUTTON_LEFT) {
-				OSD(-1, -1, "Mouse grab activated.\nPress ESC to cancel.");
-				set_mouse_grab(SDL_TRUE);
+			if ((handled == SDL_BUTTON_LEFT) && set_mouse_grab(SDL_TRUE)) {
+				OSD(-1, -1, "Mouse grab activated. Press\nboth SHIFTs together to cancel.");
+				DEBUGPRINT("UI: mouse grab activated" NL);
 			}
 		}
 	}

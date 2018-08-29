@@ -36,6 +36,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "io_mapper.h"
 #include "ethernet65.h"
 #include "input_devices.h"
+#include "memcontent.h"
 
 
 static SDL_AudioDeviceID audio = 0;
@@ -43,6 +44,7 @@ static SDL_AudioDeviceID audio = 0;
 static int nmi_level;			// please read the comment at nmi_set() below
 
 int newhack = 0;
+unsigned int frames_total_counter = 0;
 
 
 #define TRAP_RESET	0x40
@@ -203,6 +205,45 @@ static void m65_snapshot_saver_on_exit_callback ( void )
 
 
 
+static int load_memory_preinit_cache ( int to_prezero, const char *config_name, const char *description, Uint8 *memory_pointer, int size )
+{
+	const char *p = xemucfg_get_str(config_name);
+	if (to_prezero) {
+		DEBUGPRINT("BIN: config \"%s\" as \"%s\": pre-zero policy, clearing memory content." NL, config_name, description);
+		memset(memory_pointer, 0, size);
+	} else
+		DEBUGPRINT("BIN: config \"%s\" as \"%s\": no pre-zero policy, using some (possible) built-in default content." NL, config_name, description);
+	if (p) {
+		if (!strcmp(p, "-")) {
+			DEBUGPRINT("BIN: config \"%s\" as \"%s\": has option override policy to force and use pre-zeroed content." NL, config_name, description);
+			memset(memory_pointer, 0, size);
+			return 0;
+		} else {
+			DEBUGPRINT("BIN: config \"%s\" as \"%s\": has option override, trying to load content: \"%s\"." NL, config_name, description, p);
+			return xemu_load_file(p, memory_pointer, size, size, description);
+		}
+	} else {
+		DEBUGPRINT("BIN: config \"%s\" as \"%s\": has no option override, using the previously stated policy." NL, config_name, description);
+		return 0;
+	}
+}
+
+
+static Uint8 rom_init_image[0x20000];
+static Uint8 c000_init_image[0x1000];
+
+
+static void refill_memory_from_preinit_cache ( void )
+{
+	memcpy(char_wom, meminitdata_chrwom, MEMINITDATA_CHRWOM_SIZE);
+	memcpy(colour_ram, meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
+	memcpy(chip_ram + 0x3D00, meminitdata_banner, MEMINITDATA_BANNER_SIZE);
+	memcpy(fast_ram, rom_init_image, sizeof rom_init_image);
+	memcpy(hypervisor_ram, meminitdata_kickstart, MEMINITDATA_KICKSTART_SIZE);
+	memcpy(chip_ram + 0xC000, c000_init_image, sizeof c000_init_image);
+}
+
+
 static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 {
 	const char *p;
@@ -230,33 +271,28 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		}
 	} while (0);
 	// *** Init memory space
+	// *** Pre-init some memory areas from built-in resources, or by loaded binaries, see the
+	//     previous part of the source here and refill_memory_from_preinit_cache() function definitation
+	// Notes about the used "built-in" contents as "binary blobs":
+	// C65 ROM image is not included in Xemu built-in, since it's a copyrighted, non-CPL licensed material
+	// Other "blobs" are built-in, they are extracted from mega65-core project (unmodified) and it's also a GPL
+	// project, with all sources available on-line, thus no licensing/copyright problem here.
+	// For mega65-core source, visit https://github.com/MEGA65/mega65-core
+	// For C000 utilties: mega65-core currently under reorganization, no C000 utilties are provided.
+	load_memory_preinit_cache(1, "loadrom", "C65 ROM image", rom_init_image, sizeof rom_init_image);
+	load_memory_preinit_cache(0, "loadcram", "CRAM utilities", meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
+	load_memory_preinit_cache(0, "loadbanner", "M65 logo", meminitdata_banner, MEMINITDATA_BANNER_SIZE);
+	load_memory_preinit_cache(1, "loadc000", "C000 utilities", c000_init_image, sizeof c000_init_image);
+	if (load_memory_preinit_cache(0, "kickup", "M65 kickstart", meminitdata_kickstart, MEMINITDATA_KICKSTART_SIZE)  != MEMINITDATA_KICKSTART_SIZE)
+		hypervisor_debug_invalidate("no kickup is loaded, built-in one does not have debug info");
+	// *** Initializes memory subsystem of Mega65 emulation itself
 	memory_init();
-	p = xemucfg_get_str("loadcram");
-	if (p) {
-		DEBUGPRINT("Loading colour-RAM content from file: %s" NL, p);
-		xemu_load_file(p, colour_ram, 0x8000, 0x8000, "Colour RAM content cannot be loaded");
-	}
-	p = xemucfg_get_str("loadbanner");
-	if (p) {
-		DEBUGPRINT("Loading banner content from file: %s" NL, p);
-		xemu_load_file(p, chip_ram + 0x3D00, 21248, 21248, "Banner file cannot be loaded");
-	}
-	p = xemucfg_get_str("loadc000");
-	if (p) {
-		DEBUGPRINT("Loading C000 utility content from file: %s" NL, p);
-		xemu_load_file(p, chip_ram + 0xC000, 3, 4096, "Utility-C000 file cannot be loaded");
-	}
-	D6XX_registers[0x7E] = xemucfg_get_num("kicked");
-	// *** Trying to load kickstart image
-	p = xemucfg_get_str("kickup");
-	if (xemu_load_file(p, hypervisor_ram, 0x4000, 0x4000, "Kickstart cannot be loaded. Using the default (maybe outdated!) built-in version") >= 0) {
-		DEBUG("MEGA65: %s loaded into hypervisor memory." NL, p);
-	} else {
-		// note, hypervisor_ram is pre-initialized with the built-in kickstart already, included from memory_mapper.c
-		hypervisor_debug_invalidate("no kickup could be loaded, built-in one does not have debug info");
-	}
+	// fill the actual M65 memory areas with values managed by load_memory_preinit_cache() calls
+	// This is a separated step, to be able to call refill_memory_from_preinit_cache() later as well, in case of a "deep reset" functionality is needed for Xemu (not just CPU/hw reset),
+	// without restarting Xemu for that purpose.
+	refill_memory_from_preinit_cache();
 	// *** Image file for SDCARD support
-	if (sdcard_init(xemucfg_get_str("sdimg"), xemucfg_get_str("8")) < 0)
+	if (sdcard_init(xemucfg_get_str("sdimg"), xemucfg_get_str("8"), xemucfg_get_bool("sdhc")) < 0)
 		FATAL("Cannot find SD-card image (which is a must for Mega65 emulation): %s", xemucfg_get_str("sdimg"));
 	// *** Initialize VIC4
 	vic_init();
@@ -514,12 +550,18 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode");
 	xemucfg_define_switch_option("hyperserialascii", "Convert PETSCII/ASCII hypervisor serial debug output to ASCII upper-case");
 	xemucfg_define_num_option("kicked", 0x0, "Answer to KickStart upgrade (128=ask user in a pop-up window)");
-	xemucfg_define_str_option("kickup", "#mega65-kickup.m65", "Override path of external KickStart to be used");
+	xemucfg_define_str_option("kickup", NULL, "Override path of external KickStart to be used");
 	xemucfg_define_str_option("kickuplist", NULL, "Set path of symbol list file for external KickStart");
-	xemucfg_define_str_option("loadbanner", "#mega65-banner.m65", "Load initial memory content for banner (to $3D00)");
-	xemucfg_define_str_option("loadc000", "#mega65-diskmenu_c000.bin", "Load initial memory content at $C000 (usually disk mounter)");
+	xemucfg_define_str_option("loadbanner", NULL, "Load initial memory content for banner (to $3D00)");
+	xemucfg_define_str_option("loadc000", NULL, "Load initial memory content at $C000 (usually disk mounter)");
 	xemucfg_define_str_option("loadcram", NULL, "Load initial content (32K) into the colour RAM");
+	xemucfg_define_str_option("loadrom", NULL, "Preload C65 ROM image");
 	xemucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used");
+	xemucfg_define_switch_option("sdhc", "Use SDHC mode for SD-card (will be auto-applied if card is 2-32Gbytes)");
+#ifdef FAKE_TYPING_SUPPORT
+	xemucfg_define_switch_option("go64", "Go into C64 mode after start");
+	xemucfg_define_switch_option("autoload", "Load and start the first program from disk");
+#endif
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
 	xemucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
@@ -535,13 +577,13 @@ int main ( int argc, char **argv )
 #ifdef HAVE_ETHERTAP
 	xemucfg_define_str_option("ethertap", NULL, "Enable ethernet emulation, parameter is the already configured TAP device name");
 #endif
-	xemucfg_define_switch_option("newhack", "Tries to implement NEW M65 features till the 'mature' support is done");
+	xemucfg_define_switch_option("nonewhack", "Disables the preliminary NEW M65 features (Xemu will fail to use built-in KS and newer external KS too!)");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(xemucfg_get_str("installer"));
 #endif
-	newhack = xemucfg_get_bool("newhack");
+	newhack = !xemucfg_get_bool("nonewhack");
 	if (newhack)
 		DEBUGPRINT("WARNING: *** NEW M65 HACK MODE ACTIVATED ***" NL);
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
@@ -590,6 +632,15 @@ int main ( int argc, char **argv )
 		else
 			ERROR_WINDOW("UMON: Invalid TCP port: %d", port);
 	}
+#endif
+#ifdef FAKE_TYPING_SUPPORT
+	if (xemucfg_get_bool("go64")) {
+		if (xemucfg_get_bool("autoload"))
+			c64_register_fake_typing(fake_typing_for_load64);
+		else
+			c64_register_fake_typing(fake_typing_for_go64);
+	} else if (xemucfg_get_bool("autoload"))
+		c64_register_fake_typing(fake_typing_for_load65);
 #endif
 	cycles = 0;
 	frameskip = 0;
@@ -669,6 +720,7 @@ int main ( int argc, char **argv )
 					frame_counter = 0;
 					vic3_blink_phase = !vic3_blink_phase;
 				}
+				frames_total_counter++;
 			}
 			//DEBUG("RASTER=%d COMPARE=%d" NL,scanline,compare_raster);
 			//vic_interrupt();

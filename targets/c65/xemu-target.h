@@ -14,3 +14,6 @@
 #define DMA_TARGET_IOWRITER_FUNC        io_write
 #define DMA_TARGET_MEMWRITER_FUNC       write_phys_mem_for_dma
 #define DMA_LIST_READER_FUNC            read_phys_mem_for_dma
+
+#define FAKE_TYPING_SUPPORT
+#define C65_FAKE_TYPING_LOAD_SEQS

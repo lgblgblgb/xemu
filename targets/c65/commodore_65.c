@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 #include "xemu/cia6526.h"
 #include "xemu/f011_core.h"
-#include "c65_d81_image.h"
+#include "xemu/d81access.h"
 #include "xemu/f018_core.h"
 #include "xemu/emutools_hid.h"
 #include "vic3.h"
@@ -41,6 +41,10 @@ struct SidEmulation sids[2];		// the two SIDs
 static int nmi_level;			// please read the comment at nmi_set() below
 static int mouse_x = 0;
 static int mouse_y = 0;
+static int shift_status = 0;
+
+Uint8 disk_cache[512];			// internal memory of the F011 disk controller
+
 
 // We re-map I/O requests to a high address space does not exist for real. cpu_read() and cpu_write() should handle this as an IO space request
 // It must be high enough not to collide with the 1Mbyte address space + almost-64K "overflow" area and mapping should not cause to alter lower 12 bits of the addresses,
@@ -187,6 +191,10 @@ void clear_emu_events ( void )
 
 static Uint8 cia1_in_b ( void )
 {
+#ifdef FAKE_TYPING_SUPPORT
+ 	if (XEMU_UNLIKELY(c64_fake_typing_enabled) && (((cia1.PRA | (~cia1.DDRA)) & 0xFF) != 0xFF) && (((cia1.PRB | (~cia1.DDRB)) & 0xFF) == 0xFF))
+		c64_handle_fake_typing_internals(cia1.PRA | (~cia1.DDRA));
+#endif
 	return c64_keyboard_read_on_CIA1_B(
 		cia1.PRA | (~cia1.DDRA),
 		cia1.PRB | (~cia1.DDRB),
@@ -246,6 +254,26 @@ static void c65_snapshot_saver_on_exit_callback ( void )
 #endif
 
 
+// define the callback, d81access call this, we can dispatch the change in FDC config to the F011 core emulation this way, automatically
+void d81access_cb_chgmode ( int mode ) {
+	int have_disk = ((mode & 0xFF) != D81ACCESS_EMPTY);
+	int can_write = (!(mode & D81ACCESS_RO));
+	DEBUGPRINT("C65FDC: configuring F011 FDC with have_disk=%d, can_write=%d" NL, have_disk, can_write);
+	fdc_set_disk(have_disk, can_write);
+}
+// Here we implement F011 core's callbacks using d81access (and yes, F011 uses 512 bytes long sectors for real)
+int fdc_cb_rd_sec ( Uint8 *buffer, int d81_offset ) {
+	int ret = d81access_read_sect(buffer, d81_offset, 512);
+	DEBUG("C65FDC: D81: reading sector at d81_offset=%d, return value=%d" NL, d81_offset, ret);
+	return ret;
+}
+int fdc_cb_wr_sec ( Uint8 *buffer, int d81_offset ) {
+	int ret = d81access_write_sect(buffer, d81_offset, 512);
+	DEBUG("C65FDC: D81: writing sector at d81_offset=%d, return value=%d" NL, d81_offset, ret);
+	return ret;
+}
+
+
 static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 {
 	const char *p;
@@ -298,7 +326,10 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	dma_init(xemucfg_get_num("dmarev"));
 	// Initialize FDC
 	fdc_init(disk_cache);
-	c65_d81_init(xemucfg_get_str("8"));
+	// Initialize D81 access abstraction for FDC
+	d81access_init();
+	atexit(d81access_close);
+	d81access_attach_fsobj(xemucfg_get_str("8"), D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (xemucfg_get_bool("d81ro") ? D81ACCESS_RO : 0));
 	// SIDs, plus SDL audio
 	sid_init(&sids[0], sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sids[1], sid_cycles_per_sec, sound_mix_freq);
@@ -722,17 +753,28 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 	if (pressed) {
 		if (key == SDL_SCANCODE_F10) {	// reset
 			c65_reset();
-		} else if (key == SDL_SCANCODE_KP_ENTER)
+		} else if (key == SDL_SCANCODE_KP_ENTER) {
 			c64_toggle_joy_emu();
-		else if (key == SDL_SCANCODE_ESCAPE)
-			set_mouse_grab(SDL_FALSE);
-	} else
-		if (pos == -2 && key == 0) {	// special case pos = -2, key = 0, handled = mouse button (which?) and release event!
-			if (handled == SDL_BUTTON_LEFT) {
-				OSD(-1, -1, "Mouse grab activated.\nPress ESC to cancel.");
-				set_mouse_grab(SDL_TRUE);
+		} else if (key == SDL_SCANCODE_LSHIFT) {
+			shift_status |= 1;
+		} else if (key == SDL_SCANCODE_RSHIFT) {
+			shift_status |= 2;
+		}
+		if (shift_status == 3 && set_mouse_grab(SDL_FALSE)) {
+			DEBUGPRINT("UI: mouse grab cancelled" NL);
+		}
+	} else {
+		if (key == SDL_SCANCODE_LSHIFT) {
+			shift_status &= 2;
+		} else if (key == SDL_SCANCODE_RSHIFT) {
+			shift_status &= 1;
+		} else if (pos == -2 && key == 0) {	// special case pos = -2, key = 0, handled = mouse button (which?) and release event!
+			if (handled == SDL_BUTTON_LEFT && set_mouse_grab(SDL_TRUE)) {
+				OSD(-1, -1, "Mouse grab activated. Press\nboth SHIFTs together to cancel.");
+				DEBUGPRINT("UI: mouse grab activated" NL);
 			}
 		}
+	}
 	return 0;
 }
 
@@ -760,11 +802,16 @@ int main ( int argc, char **argv )
 	int cycles;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unusable Commodore 65 emulator from LGB");
 	xemucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
+	xemucfg_define_switch_option("d81ro", "Force read-only status for image specified with -8 option");
 	xemucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip (0/1=F018A/B, +512=modulo))");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	xemucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
 	//xemucfg_define_switch_option("noaudio", "Disable audio");
 	xemucfg_define_str_option("rom", "#c65-system.rom", "Override system ROM path to be loaded");
+#ifdef FAKE_TYPING_SUPPORT
+	xemucfg_define_switch_option("go64", "Go into C64 mode after start");
+	xemucfg_define_switch_option("autoload", "Load and start the first program from disk");
+#endif
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
 	xemucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
@@ -796,6 +843,15 @@ int main ( int argc, char **argv )
 	);
 	osd_init_with_defaults();
 	// Start!!
+#ifdef FAKE_TYPING_SUPPORT
+	if (xemucfg_get_bool("go64")) {
+		if (xemucfg_get_bool("autoload"))
+			c64_register_fake_typing(fake_typing_for_load64);
+		else
+			c64_register_fake_typing(fake_typing_for_go64);
+	} else if (xemucfg_get_bool("autoload"))
+		c64_register_fake_typing(fake_typing_for_load65);
+#endif
 	cycles = 0;
 	if (audio)
 		SDL_PauseAudioDevice(audio, 0);

@@ -78,13 +78,15 @@ static SDL_bool grabbed_mouse = SDL_FALSE, grabbed_mouse_saved = SDL_FALSE;
 #endif
 
 
-void set_mouse_grab ( SDL_bool state )
+int set_mouse_grab ( SDL_bool state )
 {
 	if (state != grabbed_mouse) {
 		grabbed_mouse = state;
 		SDL_SetRelativeMouseMode(state);
 		SDL_SetWindowGrab(sdl_win, state);
-	}
+		return 1;
+	} else
+		return 0;
 }
 
 
@@ -214,14 +216,17 @@ void xemu_set_full_screen ( int setting )
 		SDL_GetWindowSize(sdl_win, &win_xsize, &win_ysize); // save window size, it seems there are some problems with leaving fullscreen then
 		if (SDL_SetWindowFullscreen(sdl_win, SDL_WINDOW_FULLSCREEN_DESKTOP)) {
 			fprintf(stderr, "Cannot enter full screen mode: %s" NL, SDL_GetError());
-		} else
+		} else {
 			emu_is_fullscreen = 1;
+			DEBUGPRINT("UI: entering fullscreen mode." NL);
+		}
 	} else {
 		// leaving full screen mode ...
 		if (SDL_SetWindowFullscreen(sdl_win, 0)) {
 			fprintf(stderr, "Cannot leave full screen mode: %s" NL, SDL_GetError());
 		} else {
 			emu_is_fullscreen = 0;
+			DEBUGPRINT("UI: leaving fullscreen mode." NL);
 			SDL_SetWindowSize(sdl_win, win_xsize, win_ysize); // restore window size saved on leaving fullscreen, there can be some bugs ...
 		}
 	}
@@ -523,6 +528,7 @@ int xemu_post_init (
 		win_x_size, win_y_size,
 		SDL_WINDOW_SHOWN | (is_resizable ? SDL_WINDOW_RESIZABLE : 0)
 	);
+	printf("SDL window native pixel format: %s" NL, SDL_GetPixelFormatName(SDL_GetWindowPixelFormat(sdl_win)));
 	if (!sdl_win) {
 		ERROR_WINDOW("Cannot create SDL window: %s", SDL_GetError());
 		return 1;
@@ -655,7 +661,7 @@ void xemu_update_screen ( void )
 		SDL_UpdateTexture(sdl_tex, NULL, sdl_pixel_buffer, texture_x_size_in_bytes);
 	else
 		SDL_UnlockTexture(sdl_tex);
-	if (seconds_timer_trigger)
+	//if (seconds_timer_trigger)
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
 	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);
 	if (osd_status) {
@@ -983,6 +989,7 @@ void sysconsole_open ( void )
 		ERROR_WINDOW("Cannot allocate windows console!");
 		return;
 	}
+	SetConsoleOutputCP(65001); // CP_UTF8, just to be sure to use the constant as not all mingw versions seems to define it
 	SetConsoleTitle("Xemu Console");
 	// set the screen buffer to be big enough to let us scroll text
 	GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &coninfo);

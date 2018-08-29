@@ -219,7 +219,7 @@ void hypervisor_serial_monitor_push_char ( Uint8 chr )
 	if (flush) {
 		*hypervisor_monout_p = 0;
 		if (hypervisor_serial_out_asciizer) {
-			char *p = hypervisor_monout;
+			unsigned char *p = (unsigned char*)hypervisor_monout;
 			while (*p) {
 				if      (*p >= 0x61 && *p <= 0x7A)
 					*p -= 0x20;

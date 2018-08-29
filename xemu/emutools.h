@@ -52,7 +52,7 @@ extern void clear_emu_events ( void );
 
 extern void xemu_drop_events ( void );
 
-extern void set_mouse_grab ( SDL_bool state );
+extern int  set_mouse_grab ( SDL_bool state );
 extern SDL_bool is_mouse_grab ( void );
 extern void save_mouse_grab ( void );
 extern void restore_mouse_grab ( void );

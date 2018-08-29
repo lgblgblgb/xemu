@@ -253,6 +253,7 @@ void cpu65_reset() {
 #endif
 #ifdef MEGA65
 	CPU65.nmos_mode = 0;
+	CPU65.previous_op = 0;
 #endif
 	CPU65.pc = readWord(0xFFFC);
 	DEBUG("CPU[" CPU_TYPE "]: RESET, PC=%04X" NL, CPU65.pc);
