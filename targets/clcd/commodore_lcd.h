@@ -18,9 +18,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __LGB_COMMODORE_LCD_H_INCLUDED
 #define __LGB_COMMODORE_LCD_H_INCLUDED
 
-#define CPU_CLOCK               1000000
-#define CPU_CYCLES_PER_TV_FRAME 40000
-
 #define SCREEN_WIDTH            480
 #define SCREEN_HEIGHT           128
 #define SCREEN_DEFAULT_ZOOM     2
