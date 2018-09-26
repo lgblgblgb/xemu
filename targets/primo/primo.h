@@ -1,8 +1,7 @@
-/* Test-case for a very simple and inaccurate Primo (a Hungarian U880 - Z80 compatible - based
-   8 bit computer) emulator using SDL2 library.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-
-   This Primo emulator is HIGHTLY inaccurate and unusable.
+/* Test-case for a very simple Primo (a Hungarian U880 - Z80
+   compatible clone CPU - based 8 bit computer) emulator.
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -27,6 +26,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define RENDER_SCALE_QUALITY	1
 #define SCREEN_WIDTH		256
 #define SCREEN_HEIGHT		192
-#define CPU_CLOCK		2500000
+#define DEFAULT_CPU_CLOCK	2500000
 
 #endif
