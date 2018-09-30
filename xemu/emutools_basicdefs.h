@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -27,6 +27,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <limits.h>
 
 #define USE_REGPARM
+
+#if defined(__EMSCRIPTEN__) && !defined(CONFIG_EMSCRIPTEN_OK)
+#error "Sorry, emscripten is not yet validated for this sub-project ..."
+#endif
 
 #ifndef XEMU_DISABLE_SDL
 #ifndef HAVE_SDL2

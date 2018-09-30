@@ -34,6 +34,8 @@ const char emulators_disclaimer[] =
 
 void xemu_dump_version ( FILE *fp, const char *slogan )
 {
+	if (!fp)
+		return;
 	if (slogan)
 		fprintf(fp, "**** %s ****" NL, slogan);
 	fprintf(fp, "This software is part of the Xemu project: https://github.com/lgblgblgb/xemu" NL);

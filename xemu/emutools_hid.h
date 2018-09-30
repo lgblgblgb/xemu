@@ -44,6 +44,9 @@ extern int   hid_mouse_enabled;
 
 // This one must be defined by the emulator!
 extern int  emu_callback_key		( int pos, SDL_Scancode key, int pressed, int handled ) ;
+// Optinally can be defined by the emulator:
+extern void emu_dropfile_callback	( const char *fn );
+extern void emu_quit_callback		( void );
 
 // Provided HID functions:
 extern int  hid_key_event		( SDL_Scancode key, int pressed ) ;

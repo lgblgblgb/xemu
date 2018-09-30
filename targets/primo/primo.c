@@ -75,6 +75,7 @@ static struct {
 
 #define AUDIO_SAMPLING_FREQ	(PAL_LINE_FREQ * 2)
 #define AUDIO_PULSE_SAMPLES_MAX_PASS	(AUDIO_SAMPLING_FREQ / 32)
+#define VOLUME8 0x10
 
 static int beeper;
 static Uint64 beeper_last_changed;
@@ -85,18 +86,12 @@ static SDL_AudioDeviceID audio;
 static int primo_read_joy ( int on, int off )
 {
 	switch (joy.step) {
-		case 0:
-			return hid_read_joystick_left(on, off);
-		case 1:
-			return hid_read_joystick_down(on, off);
-		case 2:
-			return hid_read_joystick_right(on, off);
-		case 3:
-			return hid_read_joystick_up(on, off);
-		case 4:
-			return hid_read_joystick_button(on, off);
-		default:
-			return off;
+		case 0:	return hid_read_joystick_left	(on, off);
+		case 1:	return hid_read_joystick_down	(on, off);
+		case 2:	return hid_read_joystick_right	(on, off);
+		case 3:	return hid_read_joystick_up	(on, off);
+		case 4:	return hid_read_joystick_button	(on, off);
+		default:return off;
 	}
 }
 
@@ -155,7 +150,7 @@ void z80ex_pwrite_cb ( Z80EX_WORD port16, Z80EX_BYTE value )
 			rounding_error       = (rounding_error + all_cycles_spent - beeper_last_changed) % cpu_clocks_per_audio_sample;
 			if (no_of_samples <= AUDIO_PULSE_SAMPLES_MAX_PASS && no_of_samples > 0 && audio) {
 				Uint8 samples[no_of_samples];
-				memset(samples, value & 16 ? 0xFF : 0x00, no_of_samples);
+				memset(samples, value & 16 ? 0x80 + VOLUME8 : 0x80 - VOLUME8, no_of_samples);
 				int ret = SDL_QueueAudio(audio, samples, no_of_samples);	// last param are (number of) BYTES not samles. But we use 1 byte/samle audio ...
 				if (ret)
 					DEBUGPRINT("AUDIO: DATA: ERROR: %s" NL, SDL_GetError());
@@ -316,18 +311,6 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 
 
 
-static void update_emulator ( void )
-{
-	static int frameskip = 0;
-	if (!frameskip) {
-		render_primo_screen();
-		hid_handle_all_sdl_events();
-		xemu_timekeeping_delay(40000);
-	}
-	frameskip = !frameskip;
-}
-
-
 static int pri_apply ( Uint8 *data, int size, int wet_run )
 {
 	int i = 0;
@@ -414,8 +397,11 @@ static int set_cpu_clock_from_string ( const char *s )
 
 
 
-static int emulation_loop ( int cycles )
+static void emulation_loop ( void )
 {
+	static int cycles = 0;
+	static int frameskip = 0;
+	Uint64 all_cycles_old = all_cycles_spent;
 	for (;;) { // our emulation loop ...
 		int op_cycles = z80ex_step();
 		cycles -= op_cycles;
@@ -462,6 +448,7 @@ static int emulation_loop ( int cycles )
 						DEBUGPRINT("PRI: cannot load program" NL);
 				}
 			}
+			// This is not very much used currently, but maybe in the future:
 			if (emu_loop_notification & EMU_LOOP_UPDATE_NOTIFY) {	// update notification for the emulator core
 				emu_loop_notification &= ~EMU_LOOP_UPDATE_NOTIFY;	// clear notification, it's done
 				break;	// end of the emulation loop!
@@ -472,16 +459,18 @@ static int emulation_loop ( int cycles )
 			// of cycles Z80 spent to execute code at each step. The value "cycles" must be intialized
 			// with the desired number of CPU cycles for a scanline, which is calculated by the set_cpu_hz()
 			// function to configure CPU clock speed.
-			if (scanline == 310) {
+			if (scanline == 311) {
 				cycles += cpu_clocks_per_scanline / 2;	// last scanline is only a "half" according to the PAL standard. Or such ...
 				scanline++;
-			} else if (scanline == 311) {	// we were at the last scanline of a half-frame.
+			} else if (scanline == 312) {	// we were at the last scanline of a half-frame.
 				cycles += cpu_clocks_per_scanline;
 				scanline = 0;
 				vblank = VBLANK_OFF;
 				manage_nmi();
 				//DEBUGPRINT("VIDEO: new frame!" NL);
-				break;	// end of the emulation loop!
+				frameskip = !frameskip;
+				if (!frameskip)
+					break;	// end of the emulation loop!
 			} else {
 				cycles += cpu_clocks_per_scanline;
 				scanline++;
@@ -495,10 +484,29 @@ static int emulation_loop ( int cycles )
 			}
 		}
 	}
-	return cycles;
+	render_primo_screen();
+	hid_handle_all_sdl_events();
+	xemu_timekeeping_delay((Uint64)(1000000L * (Uint64)(all_cycles_spent - all_cycles_old) / (Uint64)cpu_clock));
 }
 
 
+void emu_dropfile_callback ( const char *fn )
+{
+	static char fn_storage[PATH_MAX];
+	static int choice = 0;
+	if (strlen(fn) >= sizeof fn_storage)
+		return;
+	if (choice != 1)
+		choice = QUESTION_WINDOW("Load as PRI now|Load as PRI always|Cancel for now", "What should I do with dropped file?");
+	if (choice > 1)
+		return;
+	emu_loop_notification |= EMU_LOOP_LOAD_NOTIFY;
+	strcpy(fn_storage, fn);
+	pri_name = fn_storage;
+	z80ex_reset();
+	OSD(-1, -1, "File has been dropped!");
+	//DEBUGPRINT("DROPFILE: %s" NL, fn);
+}
 
 
 
@@ -534,6 +542,7 @@ int main ( int argc, char **argv )
 		VIRTUAL_SHIFT_POS,
 		SDL_ENABLE		// enable joystick HID events
 	);
+	osd_init_with_defaults();
 	SDL_AudioSpec audio_want, audio_have;
 	SDL_memset(&audio_want, 0, sizeof audio_want);
 	audio_want.freq = AUDIO_SAMPLING_FREQ;
@@ -562,16 +571,12 @@ int main ( int argc, char **argv )
 	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
 	if (!xemucfg_get_bool("syscon"))
 		sysconsole_close(NULL);
-	int cycles = cpu_clocks_per_scanline;
 	emu_loop_notification = 0;
 	all_cycles_spent = 0;
 	if (pri_name)
 		emu_loop_notification |= EMU_LOOP_LOAD_NOTIFY;
 	SDL_PauseAudioDevice(audio, 0);
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
-	for (;;) {
-		cycles = emulation_loop(cycles);
-		update_emulator();
-	}
+	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;
 }
