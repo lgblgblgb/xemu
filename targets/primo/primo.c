@@ -4,7 +4,7 @@
    Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    NOTE: Primo's CPU is U880, but for the simplicity I still call it Z80, as
-   it's a clone anyway.
+   it's [unlicensed] clone anyway.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -25,22 +25,33 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_hid.h"
 #include "xemu/emutools_config.h"
 #include "xemu/z80.h"
+#include "xemu/z80_dasm.h"
 #include "primo.h"
+
+#include <ctype.h>
+#include <strings.h>
 
 
 Z80EX_CONTEXT z80ex;
 
 #define ROM_Z80_PC_LOAD_TRIGGER	0x3994
 
-static Uint8 memory[0x10000];
-static const Uint8 init_primo_palette_rgb[2 * 3] = {	// Primo is simple enough, b&w :) Primo C/colour Primo is another problem ...
-	0x00, 0x00, 0x00,	// black
-	0xFF, 0xFF, 0xFF	// white
-};
-static Uint32 primo_palette[2];
-static int primo_screen = 0xC800;
+struct {
+	Uint8 *wr_p[4], *rd_p[4];	// write and read pointers for the 4*16K=64K Z80 address space
+	Uint8 *vid16k;			// memory pointer to the 16K of RAM what video circuit sees on a given Primo model
+	Uint8  main   [0x10000];	// main memory area of traditional Primo, 16K ROM + max of 48K RAM
+	Uint8  exprom [ 0x8000];	// expansion 2*16K ROM with the "memory paging addon" (replacing 16K ROM if paged)
+	Uint8  expram [ 0x4000];	// expansion 16K RAM with the "memory paging addon" (replacing 16K ROM if paged)
+	Uint8  wrwaste[ 0x4000];	// 16K of "wasteland", writes to ROM redirected here, saving "if"'s in the code
+	Uint8  rdempty[ 0x4000];	// 16K of "undecoded" nothing, in case of smaller RAM capacity than 48K (saves "if"s in the code)
+} memory;
+static Uint32 primo_palette_white;
+static Uint32 primo_palette[0x100];
+static int border_top, border_bottom, border_left, border_right;
+static int primo_screen = 0;
 static int nmi_enabled = 0;
 static int nmi_status = 0;
+static void (*renderer)(void);
 
 static const char *pri_name;
 
@@ -55,10 +66,11 @@ static int emu_loop_notification;
 #define EMU_LOOP_NMI_NOTIFY	1
 #define	EMU_LOOP_LOAD_NOTIFY	2
 #define EMU_LOOP_UPDATE_NOTIFY	4
+#define EMU_LOOP_DISASM_NOTIFY	8
 
 #define VBLANK_ON	32
 #define VBLANK_OFF	0
-#define VBLANK_START_SCANLINE	(312 - 9)
+#define VBLANK_START_SCANLINE	256
 #define PAL_LINE_FREQ		15625
 
 static int vblank = VBLANK_OFF;
@@ -98,25 +110,34 @@ static int primo_read_joy ( int on, int off )
 
 Z80EX_BYTE z80ex_mread_cb ( Z80EX_WORD addr, int m1_state )
 {
-	return memory[addr];
+	return memory.rd_p[addr >> 14][addr & 0x3FFF];
 }
 
+static Uint8 disasm_read_callback ( Uint16 addr )
+{
+	return memory.rd_p[addr >> 14][addr & 0x3FFF];
+}
 
 void z80ex_mwrite_cb ( Z80EX_WORD addr, Z80EX_BYTE value )
 {
-	if (XEMU_LIKELY(addr >= 0x4000))
-		memory[addr] = value;
+	memory.wr_p[addr >> 14][addr & 0x3FFF] = value;
 }
+
+
+int serial = 2 | 8 | 16 | 32;
 
 
 Z80EX_BYTE z80ex_pread_cb ( Z80EX_WORD port16 )
 {
 	if ((port16 & 0xFF) < 0x40) {
+		static int random_2 = 0;
+		random_2 ^= 2;
+		//DEBUGPRINT("VBLANK = %d" NL, vblank);
 		// See the comments at the "matrix" definition below
 		return (((~kbd_matrix[(port16 >> 3) & 7]) >> (port16 & 7)) & 1) | vblank;
 	} else if ((port16 & 0xFF) < 0x80) {
 		DEBUG("JOY: read state at step=%d" NL, joy.step);
-		return primo_read_joy(0, 1);
+		return primo_read_joy(0, 1) | serial;
 	} else
 		return 0xFF;
 }
@@ -141,7 +162,7 @@ static void manage_nmi ( void )
 void z80ex_pwrite_cb ( Z80EX_WORD port16, Z80EX_BYTE value )
 {
 	if ((port16 & 0xFF) < 0x40) {
-		primo_screen = (value & 8) ? 0xE800 : 0xC800;
+		primo_screen = (value & 8) ? 0x2000 : 0x0000;
 		nmi_enabled = value & 128;
 		manage_nmi();
 		if ((value & 16) != beeper) {
@@ -170,6 +191,13 @@ void z80ex_pwrite_cb ( Z80EX_WORD port16, Z80EX_BYTE value )
 					joy.step = 0;
 			}
 		}
+	} else if ((port16 & 0xFF) < 0x80) {
+		serial = value & (2 | 8 | 16 | 32);
+	} else if ((port16 & 0xFF) == 0xFD) {
+		static Uint8* const rd_tab[] = { memory.main,    memory.expram, memory.exprom,   memory.exprom + 0x4000 };
+		static Uint8* const wr_tab[] = { memory.wrwaste, memory.expram, memory.wrwaste , memory.wrwaste         };
+		memory.rd_p[0] = rd_tab[value & 3];
+		memory.wr_p[0] = wr_tab[value & 3];
 	}
 }
 
@@ -199,6 +227,7 @@ void z80ex_reti_cb ( void )
    $00 - $07, $10 - $17, $20 - $27, ...
    ALSO: Primo uses bit '1' for pressed, so we also invert value in
    the port read function above.
+   FIXME: better map, missing keys, some differences between Primo models!
 */
 static const struct KeyMapping primo_key_map[] = {
 	{ SDL_SCANCODE_Y,	0x00 },	// scan 0 Y
@@ -278,24 +307,127 @@ void clear_emu_events ( void )
 }
 
 
-static inline void render_primo_screen ( void )
+
+static void set_border_geometry ( int xres, int yres )
 {
-	int tail, y;
+	border_left = (SCREEN_WIDTH - xres) / 2;
+	border_right = (SCREEN_WIDTH - xres) - border_left;
+	border_top = (SCREEN_HEIGHT - yres) / 2;
+	border_bottom = (SCREEN_HEIGHT - yres) - border_top;
+	if (XEMU_UNLIKELY(border_left < 0 || border_top < 0))
+		FATAL("Internal error: too small target texture!");
+}
+
+
+
+// ABSOLUTELY LAME implementation!
+// We render the screen "at once" :-O
+
+static void render_primo_bw_screen ( void )
+{
+	int tail;
 	Uint32 *pix = xemu_start_pixel_buffer_access(&tail);
-	Uint8 *scr = memory + primo_screen;
-	for (y = 0; y < 192; y++) {
-		int x;
-		for (x = 0; x < 32; x++) {
-			Uint8 b = *(scr++);
-			*(pix++) = primo_palette[(b >> 7) & 1];
-			*(pix++) = primo_palette[(b >> 6) & 1];
-			*(pix++) = primo_palette[(b >> 5) & 1];
-			*(pix++) = primo_palette[(b >> 4) & 1];
-			*(pix++) = primo_palette[(b >> 3) & 1];
-			*(pix++) = primo_palette[(b >> 2) & 1];
-			*(pix++) = primo_palette[(b >> 1) & 1];
-			*(pix++) = primo_palette[b & 1];
-		}
+	Uint8 *scr = memory.vid16k + primo_screen + 0x800;
+	for (int y = 0; y < border_top; y++) {
+		for (int x = 0; x < 256 + border_left + border_right; x++)
+			*pix++ = primo_palette[0];
+		pix += tail;
+	}
+	for (int y = 0; y < 192; y++) {
+		for (int x = 0; x < border_left; x++)
+			*pix++ = primo_palette[0];
+		for (int x = 0; x < 32; x++)
+			for (int z = 0, b = *scr++; z < 8; z++, b <<= 1)
+				*pix++ = b & 0x80 ? primo_palette_white : primo_palette[0];
+		for (int x = 0; x < border_right; x++)
+			*pix++ = primo_palette[0];
+		pix += tail;
+	}
+	for (int y = 0; y < border_bottom; y++) {
+		for (int x = 0; x < 256 + border_left + border_right; x++)
+			*pix++ = primo_palette[0];
+		pix += tail;
+	}
+	xemu_update_screen();
+}
+
+
+
+static  void render_primo_c_screen ( void )
+{
+	int tail;
+	Uint32 *pix = xemu_start_pixel_buffer_access(&tail);
+	Uint8 *scr = memory.vid16k + primo_screen + 0x500;
+	//DEBUGPRINT("B0=%02X B1=%02X B2=%02X B3=%02X B4=%02X" NL,
+	//	scr[-0x800], scr[-0x800+1], scr[0x800+2], scr[0x800+3], scr[0x800+4]
+	//);
+#if 0
+	case	// 4x4 mode.
+		yres = 200;
+		attrw = 4;
+		attrh = 4;
+	case	// 6x6 mode
+		yres = 216;
+		attrw = 6;
+		attrh = 6;
+	case	// 6x9 mode
+		yres = 225;
+		attrw = 6;
+		attrh = 9;
+#endif
+	// for now, just use the settings of the default mode, fixed
+	int yres = 216;
+	int attrw = 6;
+	int attrh = 6;
+	int attrstartpos = 1;
+	int attrincelstart = 2;
+	// that was it for the defaults
+	int attrline = 0;
+	scr = memory.vid16k + primo_screen + 0x2000 - yres * 32;
+	Uint8 *col = scr - (yres / attrh) * 32;
+	Uint8 *pal_bg_sel = memory.vid16k + primo_screen + 32;
+	Uint8 *pal_fg_sel = memory.vid16k + primo_screen + 32 + 16;
+	set_border_geometry(256, yres);
+	for (int y = 0; y < border_top; y++) {
+		for (int x = 0; x < 256 + border_left + border_right; x++)
+			*pix++ = primo_palette[0];
+		pix += tail;
+	}
+	Uint32 foregrounds[64], backgrounds[64];
+	for (int y = 0; y < yres; y++) {
+		if (!attrline)
+			for (int x = 0; x < 64; ) {	// decode a full line of attribute (we may not use ALL!!!)
+				int b = *col++;
+				foregrounds[x] = primo_palette[pal_fg_sel[b >> 4]];
+				backgrounds[x] = primo_palette[pal_bg_sel[b >> 4]];
+				x++;
+				foregrounds[x] = primo_palette[pal_fg_sel[b & 15]];
+				backgrounds[x] = primo_palette[pal_bg_sel[b & 15]];
+				x++;
+			}
+		for (int x = 0; x < border_left; x++)
+			*pix++ = primo_palette[0];
+		int attrpos = attrstartpos;
+		int attrcountincel = attrincelstart;
+		for (int x = 0; x < 32; x++)
+			for (int z = 0, b = *scr++; z < 8; z++, b <<= 1) {
+				*pix++ = b & 0x80 ? foregrounds[attrpos] : backgrounds[attrpos];
+				attrcountincel++;
+				if (attrcountincel == attrw) {
+					attrcountincel = 0;
+					attrpos++;
+				}
+			}
+		for (int x = 0; x < border_right; x++)
+			*pix++ = primo_palette[0];
+		attrline++;
+		if (attrline == attrh)
+			attrline = 0;
+		pix += tail;
+	}
+	for (int y = 0; y < border_bottom; y++) {
+		for (int x = 0; x < 256 + border_left + border_right; x++)
+			*pix++ = primo_palette[0];
 		pix += tail;
 	}
 	xemu_update_screen();
@@ -307,6 +439,12 @@ static inline void render_primo_screen ( void )
 int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
         return 0;
+}
+
+
+void emu_quit_callback ( void )
+{
+	DEBUGPRINT("Exiting @ PC=$%04X" NL, Z80_PC);
 }
 
 
@@ -328,10 +466,10 @@ static int pri_apply ( Uint8 *data, int size, int wet_run )
 			break;
 		int bsize = data[i + 3] | (data[i + 4] << 8);
 		if (btype == 0xD1) {
-			baddr += memory[0x40A4] | (memory[0x40A5] << 8);
+			baddr += memory.main[0x40A4] | (memory.main[0x40A5] << 8);
 			if (wet_run) {
-				memory[0x40F9] = (baddr + bsize + 1) &  0xFF;
-				memory[0x40FA] = (baddr + bsize + 1) >> 8;
+				memory.main[0x40F9] = (baddr + bsize + 1) &  0xFF;
+				memory.main[0x40FA] = (baddr + bsize + 1) >> 8;
 			}
 		} else if (btype != 0xD5 && btype != 0xD9) {
 			ERROR_WINDOW("Invalid PRI file, unknown block type $%02X @ %d", btype, i);
@@ -340,9 +478,17 @@ static int pri_apply ( Uint8 *data, int size, int wet_run )
 		if (i >= size - bsize)
 			break;
 		DEBUGPRINT("  ... ADDR=%04X SIZE=%04X" NL, baddr, bsize);
+		i += 5;
+		while (bsize--) {
+			if (wet_run)	// I don't use direct memory.main access here, as PRI could overwrite ROM etc ...
+				z80ex_mwrite_cb(baddr++, data[i]);
+			i++;
+		}
+#if 0
 		if (wet_run)
-			memcpy(memory + baddr, data + i + 5, bsize);
+			memcpy(memory.main + baddr, data + i + 5, bsize);
 		i += 5 + bsize;
+#endif
 	}
 	ERROR_WINDOW("Invalid PRI file, probably truncated");
 	return -1;
@@ -354,7 +500,7 @@ static int pri_load ( const char *file_name )
 {
 	if (!file_name || !*file_name)
 		return -1;
-	int file_size = xemu_load_file(file_name, NULL, 10, 0xC000, "Cannot load PRI file");
+	int file_size = xemu_load_file(file_name, NULL, 10, 0xC000, "Cannot open/use PRI file");
 	if (file_size < 0)
 		return file_size;
 	int ret = pri_apply(xemu_load_buffer_p, file_size, 1);
@@ -402,10 +548,12 @@ static void emulation_loop ( void )
 	static int cycles = 0;
 	static int frameskip = 0;
 	Uint64 all_cycles_old = all_cycles_spent;
+	goto first_shot;
 	for (;;) { // our emulation loop ...
 		int op_cycles = z80ex_step();
 		cycles -= op_cycles;
 		all_cycles_spent += op_cycles;
+	first_shot:
 		if (XEMU_UNLIKELY(emu_loop_notification)) {
 			DEBUG("EMU: notification" NL);
 			// DESIGN: for fast emulation loop, we have a "notification" system. In general,
@@ -453,6 +601,12 @@ static void emulation_loop ( void )
 				emu_loop_notification &= ~EMU_LOOP_UPDATE_NOTIFY;	// clear notification, it's done
 				break;	// end of the emulation loop!
 			}
+			if (emu_loop_notification & EMU_LOOP_DISASM_NOTIFY) {
+				char buf[256];
+				int t1, t2;
+				z80ex_dasm(buf, sizeof buf, 0, &t1, &t2, disasm_read_callback, Z80_PC);
+				DEBUGPRINT("%04X %s" NL, Z80_PC, buf);
+			}
 		}
 		if (XEMU_UNLIKELY(cycles <= 0)) {
 			// We run at least enough CPU cycles for a scanline, by decrementing cycles with the number
@@ -484,7 +638,7 @@ static void emulation_loop ( void )
 			}
 		}
 	}
-	render_primo_screen();
+	renderer();
 	hid_handle_all_sdl_events();
 	xemu_timekeeping_delay((Uint64)(1000000L * (Uint64)(all_cycles_spent - all_cycles_old) / (Uint64)cpu_clock));
 }
@@ -501,11 +655,91 @@ void emu_dropfile_callback ( const char *fn )
 	if (choice > 1)
 		return;
 	emu_loop_notification |= EMU_LOOP_LOAD_NOTIFY;
+	emu_loop_notification &= ~EMU_LOOP_NMI_NOTIFY;
 	strcpy(fn_storage, fn);
 	pri_name = fn_storage;
+	primo_screen = 0;
+	nmi_status = 0;
+	vblank = VBLANK_OFF;
+	memory.rd_p[0] = memory.main;
+	memory.wr_p[0] = memory.wrwaste;
 	z80ex_reset();
 	OSD(-1, -1, "File has been dropped!");
 	//DEBUGPRINT("DROPFILE: %s" NL, fn);
+}
+
+
+
+static int set_model ( const char *model_id, int do_load_rom )
+{
+	static const char *model_ids[] = { "a32", "a48", "a64", "b32", "b48", "b64", "c", NULL };
+	int id = 0;
+	while (model_ids[id] && strcasecmp(model_id, model_ids[id]))
+		id++;
+	if (!model_ids[id]) {
+		ERROR_WINDOW("Unknown Primo model requested: %s", model_id);
+		return -1;
+	}
+	char model_desc[16];
+	sprintf(model_desc, "Primo-%c%s", toupper(model_ids[id][0]), model_ids[id] + 1);
+	DEBUGPRINT("PRIMO: trying to initialize to model: %s" NL, model_desc);
+	if (do_load_rom) {
+		if (xemucfg_get_str("rom")) {
+			DEBUGPRINT("ROM: trying to load forced (by config) ROM, regardless of the selected model" NL);
+			if (xemu_load_file(xemucfg_get_str("rom"), memory.main, 0x4000, 0x4000, "This is the selected primo ROM. Without it, Xemu won't work.\nInstall it, or use -rom CLI switch to specify another path.") < 0)
+				return -1;
+		} else {
+			char rom_file[64];
+			char rom_err[128];
+			sprintf(rom_file, "#primo-%s.rom", model_ids[id]);
+			sprintf(rom_err, "Cannot load default %s ROM file.\nYou can try to force one with the -rom CLI option.", model_desc);
+			DEBUGPRINT("ROM: trying to load model dependent default ROM file" NL);
+			if (xemu_load_file(rom_file, memory.main, 0x4000, 0x4000, rom_err) < 0)
+				return -1;
+		}
+	}
+	memory.rd_p[0] = memory.main;
+	memory.wr_p[0] = memory.wrwaste;
+	memory.rd_p[1] = memory.wr_p[1] = memory.main + 0x4000;
+	memory.rd_p[2] = memory.rd_p[3] = memory.rdempty;
+	memory.wr_p[2] = memory.wr_p[3] = memory.wrwaste;
+	renderer = render_primo_bw_screen; 	// default for all A and B models here
+	set_border_geometry(256, 192);	// for colour primo, it's more complex, and handled in the render_primo_c_screen function, actually. this is the default for all other primo's, though
+	switch (id) {
+		case 0:	// Primo-A32
+			memory.vid16k  = memory.main + 0x4000;
+			break;
+		case 1:	// Primo-A48
+			memory.wr_p[2] = memory.rd_p[2] = memory.main + 0x8000;
+			memory.vid16k  = memory.main + 0x8000;
+			break;
+		case 2: // Primo-A64
+			memory.wr_p[2] = memory.rd_p[2] = memory.main + 0x8000;
+			memory.wr_p[3] = memory.rd_p[3] = memory.main + 0xC000;
+			memory.vid16k  = memory.main + 0xC000;
+			break;
+		case 3: // Primo-B32
+			memory.vid16k  = memory.main + 0x4000;
+			break;
+		case 4: // Primo-B48
+			memory.wr_p[2] = memory.rd_p[2] = memory.main + 0x8000;
+			memory.vid16k  = memory.main + 0x8000;
+			break;
+		case 5: // Primo-B64
+			memory.wr_p[2] = memory.rd_p[2] = memory.main + 0x8000;
+			memory.wr_p[3] = memory.rd_p[3] = memory.main + 0xC000;
+			memory.vid16k  = memory.main + 0xC000;
+			break;
+		case 6: // Primo-C
+			memory.wr_p[2] = memory.rd_p[2] = memory.main + 0x8000;
+			memory.wr_p[3] = memory.rd_p[3] = memory.main + 0xC000;
+			memory.vid16k  = memory.main + 0xC000;
+			renderer = render_primo_c_screen;
+			break;
+		default:
+			FATAL("Unknown primo model ID #%d", id);
+	}
+	return 0;
 }
 
 
@@ -516,9 +750,12 @@ int main ( int argc, char **argv )
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unknown Primo emulator from LGB");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	xemucfg_define_str_option("clock", "2.5", "Selects CPU frequency (1.00-8.00 in MHz)");
-	xemucfg_define_str_option("rom", DEFAULT_ROM_FILE_PATH, "Select ROM to use");
+	xemucfg_define_str_option("rom", NULL, "Select ROM to use");
+	xemucfg_define_str_option("exprom", NULL, "ROM expansion file selector (max 32K size)");
 	xemucfg_define_str_option("pri", NULL, "Loads a PRI file");
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+	xemucfg_define_switch_option("disasm", "Disassemble every CPU step (uber-spammy, uber-slow!)");
+	xemucfg_define_str_option("model", "b64", "Set Primo model: a32, a48, a64, b32, b48, b64, c");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
@@ -529,14 +766,17 @@ int main ( int argc, char **argv )
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// logical size (width is doubled for somewhat correct aspect ratio)
 		SCREEN_WIDTH * 3, SCREEN_HEIGHT * 3,	// window size (tripled in size, original would be too small)
 		SCREEN_FORMAT,		// pixel format
-		2,			// we have 2 colours
-		init_primo_palette_rgb,	// initialize palette from this constant array
-		primo_palette,		// initialize palette into this stuff
+		0,			// Prepare for colour primo, we have many colours, we want to generate at our own, later
+		NULL,			// -- "" --
+		NULL,			// -- "" --
 		RENDER_SCALE_QUALITY,	// render scaling quality
 		USE_LOCKED_TEXTURE,	// 1 = locked texture access
 		NULL			// no emulator specific shutdown function
 	))
 		return 1;
+	for (int a = 0; a < 0x100; a++)	// generate (colour primo's) palette
+		primo_palette[a] = SDL_MapRGBA(sdl_pix_fmt, (a >> 5) * 0xFF / 7, ((a >> 2) & 7) * 0xFF / 7, ((a << 1) & 7) * 0xFF / 7, 0xFF);
+	primo_palette_white = SDL_MapRGBA(sdl_pix_fmt, 0xFF, 0xFF, 0xFF, 0xFF); // colour primo scheme seems to have no white :-O So we do an extra entry for non-colour primo's only colour :)
 	hid_init(
 		primo_key_map,
 		VIRTUAL_SHIFT_POS,
@@ -553,9 +793,29 @@ int main ( int argc, char **argv )
 	audio = SDL_OpenAudioDevice(NULL, 0, &audio_want, &audio_have, 0);
 	DEBUGPRINT("AUDIO: dev=#%d driver=\"%s\" sampling at %d Hz" NL, audio, SDL_GetCurrentAudioDriver(), audio_have.freq);
 	/* Intialize memory and load ROMs */
-	memset(memory, 0xFF, sizeof memory);
-	if (xemu_load_file(xemucfg_get_str("rom"), memory, 0x4000, 0x4000, "This is the selected primo ROM. Without it, Xemu won't work.\nInstall it, or use -rom CLI switch to specify another path.") < 0)
-		return 1;
+	memset(&memory, 0xFF, sizeof memory);
+	//memory.rd_p[0] = memory.main;
+	//memory.wr_p[0] = memory.wrwaste;
+	//memory.rd_p[1] = memory.wr_p[1] = memory.main + 0x4000;
+	//memory.rd_p[2] = memory.wr_p[2] = memory.main + 0x8000;
+	//memory.rd_p[3] = memory.wr_p[3] = memory.main + 0xC000;
+	//memory.vid16k  = memory.main + 0xC000;
+	//border_left = (SCREEN_WIDTH - 256) / 2;
+	//border_right = (SCREEN_WIDTH - 256) - border_left;
+	//border_top = (SCREEN_HEIGHT - 192) / 2;
+	//border_bottom = (SCREEN_HEIGHT - 192) - border_top;
+	//if (border_left < 0 || border_top < 0)
+	//	FATAL("Internal error: too small target texture!");
+	//DEBUGPRINT("Video: %dx%d pixels, border top,bottom,left,right=%d,%d,%d,%d" NL,
+	//	SCREEN_WIDTH, SCREEN_HEIGHT,
+	//	border_top, border_bottom, border_left, border_right
+	//);
+	if (set_model(xemucfg_get_str("model"), 1))
+		FATAL("Bad Primo model specified and/or ROM not found (more details: the previous message)");
+	//if (xemu_load_file(xemucfg_get_str("rom"), memory.main, 0x4000, 0x4000, "This is the selected primo ROM. Without it, Xemu won't work.\nInstall it, or use -rom CLI switch to specify another path.") < 0)
+	//	return 1;
+	if (xemucfg_get_str("exprom"))
+		xemu_load_file(xemucfg_get_str("exprom"), memory.exprom, 1, sizeof memory.exprom, "Invalid selected expansion ROM");
 	// Continue with initializing ...
 	clear_emu_events();	// also resets the keyboard
 	z80ex_init();
@@ -575,6 +835,8 @@ int main ( int argc, char **argv )
 	all_cycles_spent = 0;
 	if (pri_name)
 		emu_loop_notification |= EMU_LOOP_LOAD_NOTIFY;
+	if (xemucfg_get_bool("disasm"))
+		emu_loop_notification |= EMU_LOOP_DISASM_NOTIFY;
 	SDL_PauseAudioDevice(audio, 0);
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
