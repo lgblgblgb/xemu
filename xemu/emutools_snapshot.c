@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -184,7 +184,7 @@ int xemusnap_write_sub_block ( const Uint8 *buffer, Uint32 size )
 
 #define RETURN_XSNAPERR(...)	\
 	do {	\
-		snprintf(xemusnap_error_buffer, sizeof xemusnap_error_buffer, __VA_ARGS__);	\
+		CHECK_SNPRINTF(snprintf(xemusnap_error_buffer, sizeof xemusnap_error_buffer, __VA_ARGS__), sizeof xemusnap_error_buffer);	\
 		return 1;	\
 	} while (0)
 

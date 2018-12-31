@@ -1,5 +1,5 @@
 /* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    http://xep128.lgb.hu/
 
 This program is free software; you can redistribute it and/or modify
@@ -644,7 +644,8 @@ static void cmd_dir ( void )
 		struct stat st;
 		if (entry->d_name[0] == '.')
 			continue;
-		sprintf(fn, "%s%s%s", fileio_cwd, DIRSEP, entry->d_name);
+		if (CHECK_SNPRINTF(snprintf(fn, sizeof fn, "%s%s%s", fileio_cwd, DIRSEP, entry->d_name), sizeof fn))
+			continue;
 		if (!stat(fn, &st)) {
 			char size_info[10];
 			if (S_ISDIR(st.st_mode))

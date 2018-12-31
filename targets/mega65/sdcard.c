@@ -587,7 +587,7 @@ int sdcard_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	//U32_AS_BE(buffer + 20, d81_is_read_only);
 	//U32_AS_BE(buffer + 24, use_d81);
 	buffer[0xFF] = sd_status;
-	memcpy(buffer + 0x100, sd_buffer, sizeof disk_buffers);
+	memcpy(buffer + 0x100, disk_buffers, sizeof disk_buffers);
 	return xemusnap_write_sub_block(buffer, sizeof buffer);
 }
 

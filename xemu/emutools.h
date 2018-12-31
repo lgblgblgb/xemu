@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -65,9 +65,18 @@ extern SDL_bool is_mouse_grab ( void );
 extern void save_mouse_grab ( void );
 extern void restore_mouse_grab ( void );
 
+static XEMU_INLINE int CHECK_SNPRINTF( int ret, int limit )
+{
+	if (ret < 0 || ret >= limit - 1) {
+		fprintf(stderr, "SNPRINTF-ERROR: too long string or other error (ret=%d) ..." NL, ret);
+		return -1;
+	}
+	return 0;
+}
+
 #define _REPORT_WINDOW_(sdlflag, str, ...) do { \
 	char _buf_for_win_msg_[4096]; \
-	snprintf(_buf_for_win_msg_, sizeof _buf_for_win_msg_, __VA_ARGS__); \
+	CHECK_SNPRINTF(snprintf(_buf_for_win_msg_, sizeof _buf_for_win_msg_, __VA_ARGS__), sizeof _buf_for_win_msg_); \
 	fprintf(stderr, str ": %s" NL, _buf_for_win_msg_); \
 	if (debug_fp)	\
 		fprintf(debug_fp, str ": %s" NL, _buf_for_win_msg_);	\
@@ -168,7 +177,7 @@ extern void osd_write_string ( int x, int y, const char *s );
 
 #define OSD(x, y, ...) do { \
 	char _buf_for_msg_[4096]; \
-	snprintf(_buf_for_msg_, sizeof _buf_for_msg_, __VA_ARGS__); \
+	CHECK_SNPRINTF(snprintf(_buf_for_msg_, sizeof _buf_for_msg_, __VA_ARGS__), sizeof _buf_for_msg_); \
 	fprintf(stderr, "OSD: %s" NL, _buf_for_msg_); \
 	osd_clear(); \
 	osd_write_string(x, y, _buf_for_msg_); \

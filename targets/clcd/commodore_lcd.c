@@ -1,5 +1,6 @@
 /* Commodore LCD emulator.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Part of the Xemu project: https://github.com/lgblgblgb/xemu
 
    This is an ongoing work to rewrite my old Commodore LCD emulator:
 
@@ -11,7 +12,9 @@
    Note: I would be interested in VICE adoption, but I am lame with VICE, too complex for me :)
 
    This emulator based on my previous try (written in C), which is based on my previous JavaScript
-   based emulator, which was the world's first Commodore LCD emulator.
+   based emulator, which was the world's first Commodore LCD emulator. Actually this emulator turned
+   out to be Xemu with many new machines since then to be emulated, including Commodore 65 and
+   Mega 65 too.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
