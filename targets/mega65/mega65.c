@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -315,6 +315,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		NULL,			// callback: INSR
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
+	cia2.DDRA = 3; // Ugly workaround ... I think, SD-card setup "CRAM UTIL" (or better: the kickstart) should set this by its own. Maybe Xemu bug, maybe not?
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
 	dma_init(newhack ? DMA_FEATURE_HACK | DMA_FEATURE_DYNMODESET : xemucfg_get_num("dmarev"));
 	// Initialize FDC
