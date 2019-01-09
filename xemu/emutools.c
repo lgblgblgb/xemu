@@ -387,9 +387,9 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 #ifdef __EMSCRIPTEN__
 	xemu_dump_version(stdout, slogan);
 	MKDIR(emscripten_sdl_base_dir);
-	sdl_base_dir = emscripten_sdl_base_dir;
-	sdl_pref_dir = emscripten_sdl_base_dir;
-	sdl_inst_dir = emscripten_sdl_base_dir;
+	sdl_base_dir = (void*)emscripten_sdl_base_dir;
+	sdl_pref_dir = (void*)emscripten_sdl_base_dir;
+	sdl_inst_dir = (void*)emscripten_sdl_base_dir;
 	// In case of emscripten we do all the SDL init here!!!
 	// Please note: with emscripten, you can't use SDL_INIT_TIMER and SDL_INIT_HAPTIC subsystems it seems, it will
 	// give error on SDL_Init (I can understand with timer, as it would require multithreading)

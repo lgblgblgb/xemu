@@ -10,7 +10,12 @@ c65-system.rom			http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c65/9
 c64-chargen.rom			http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c64/characters.901225-01.bin		4096
 c64-kernal.rom			http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c64/kernal.901227-03.bin		8192
 c64-basic.rom			http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c64/basic.901226-01.bin		8192
-primo-b64.rom			http://github.lgb.hu/xemu/files/pr_b64.rom							16384
+primo-a32.rom			http://github.lgb.hu/xemu/files/primo_a32.rom							16384
+primo-a48.rom			http://github.lgb.hu/xemu/files/primo_a48.rom							16384
+primo-a64.rom			http://github.lgb.hu/xemu/files/primo_a64.rom							16384
+primo-b64-cdos.rom		http://github.lgb.hu/xemu/files/primo_b64_cdos.rom						16384
+primo-b64.rom			http://github.lgb.hu/xemu/files/primo_b64.rom							16384
+primo-c.rom			http://github.lgb.hu/xemu/files/primo_c.rom							16384
 tvc22_d4_64k.rom		http://github.lgb.hu/xemu/files/tvc22_d4_64k.rom						8192
 tvc22_d6_64k.rom		http://github.lgb.hu/xemu/files/tvc22_d6_64k.rom						8192
 tvc22_d7_64k.rom		http://github.lgb.hu/xemu/files/tvc22_d7_64k.rom						8192

@@ -1,5 +1,5 @@
 /* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015,2016,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    http://xep128.lgb.hu/
 
 This program is free software; you can redistribute it and/or modify
@@ -127,7 +127,8 @@ static int open_host_file ( const char *dirname, const char *filename, int creat
 			int ret;
 			char buffer[PATH_MAX + 1];
 			closedir(dir);
-			snprintf(buffer, sizeof buffer, "%s%s%s", dirname, DIRSEP, entry->d_name);
+			if (CHECK_SNPRINTF(snprintf(buffer, sizeof buffer, "%s%s%s", dirname, DIRSEP, entry->d_name), sizeof buffer))
+				return -1;
 			DEBUGPRINT("FILEIO: opening file \"%s\"" NL, buffer);
 			ret = open(buffer, mode | O_BINARY, 0666);
 			if (ret < 0 && !create)	// handle the situation when host OS file is read-only ...
@@ -144,7 +145,8 @@ static int open_host_file ( const char *dirname, const char *filename, int creat
 	if (create) {
 		int ret;
 		char buffer[PATH_MAX + 1];
-		snprintf(buffer, sizeof buffer, "%s%s%s", dirname, DIRSEP, filename);
+		if (CHECK_SNPRINTF(snprintf(buffer, sizeof buffer, "%s%s%s", dirname, DIRSEP, filename), sizeof buffer))
+			return -1;
 		ret = open(buffer, mode | O_BINARY, 0666);
 		if (ret < 0) {
 			fileio_host_errstr();

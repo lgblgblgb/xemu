@@ -1,5 +1,5 @@
 /* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    http://xep128.lgb.hu/
 
 This program is free software; you can redistribute it and/or modify
@@ -88,10 +88,19 @@ extern FILE *debug_fp;
 #endif
 #endif
 
+static inline int CHECK_SNPRINTF( int ret, int limit )
+{
+	if (ret < 0 || ret >= limit - 1) {
+		fprintf(stderr, "SNPRINTF-ERROR: too long string or other error (ret=%d) ..." NL, ret);
+		return -1;
+	}
+	return 0;
+}
+
 extern void osd_notification ( const char *s );
 #define OSD(...) do { \
 	char _buf_for_win_msg_[4096]; \
-	snprintf(_buf_for_win_msg_, sizeof _buf_for_win_msg_, __VA_ARGS__); \
+	CHECK_SNPRINTF(snprintf(_buf_for_win_msg_, sizeof _buf_for_win_msg_, __VA_ARGS__), sizeof _buf_for_win_msg_); \
 	DEBUGPRINT("OSD: %s" NL, _buf_for_win_msg_); \
 	osd_notification(_buf_for_win_msg_); \
 } while(0)
@@ -99,7 +108,7 @@ extern void osd_notification ( const char *s );
 extern int _sdl_emu_secured_message_box_ ( Uint32 sdlflag, const char *msg );
 #define _REPORT_WINDOW_(sdlflag, str, ...) do { \
 	char _buf_for_win_msg_[4096]; \
-	snprintf(_buf_for_win_msg_, sizeof _buf_for_win_msg_, __VA_ARGS__); \
+	CHECK_SNPRINTF(snprintf(_buf_for_win_msg_, sizeof _buf_for_win_msg_, __VA_ARGS__), sizeof _buf_for_win_msg_); \
 	DEBUGPRINT(str ": %s" NL, _buf_for_win_msg_); \
 	_sdl_emu_secured_message_box_(sdlflag, _buf_for_win_msg_); \
 } while(0)

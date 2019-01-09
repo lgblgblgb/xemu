@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
 *  SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
 *  and some Mega-65 features as well.
-*  Copyright (C)2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+*  Copyright (C)2017-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 *  NOTE: I AM NOT a windows programmer, not even a user ...
 *  These are my best tries with winsock to be usable also on the win32/64 platform ...
@@ -113,7 +113,7 @@ static int xemunet_select_1 ( xemunet_socket_t sock, int msec, int what )
 		timeout.tv_sec = 0;
 		timeout.tv_usec = msec;
 		ret = select(sock + 1, &fds_r, &fds_w, &fds_e, msec >= 0 ? &timeout : NULL);
-		if (ret == SOCKET_ERROR) {
+		if (ret == XEMUNET_SOCKET_ERROR) {
 			if (xemunet_errno == EINTR)
 				continue;
 			return -1;

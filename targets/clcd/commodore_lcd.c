@@ -1,5 +1,6 @@
 /* Commodore LCD emulator.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Part of the Xemu project: https://github.com/lgblgblgb/xemu
 
    This is an ongoing work to rewrite my old Commodore LCD emulator:
 
@@ -11,7 +12,9 @@
    Note: I would be interested in VICE adoption, but I am lame with VICE, too complex for me :)
 
    This emulator based on my previous try (written in C), which is based on my previous JavaScript
-   based emulator, which was the world's first Commodore LCD emulator.
+   based emulator, which was the world's first Commodore LCD emulator. Actually this emulator turned
+   out to be Xemu with many new machines since then to be emulated, including Commodore 65 and
+   Mega 65 too.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -41,6 +44,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 static const char *rom_fatal_msg = "This is one of the selected ROMs. Without it, Xemu won't work.\nInstall it, or use -romXXX CLI switches to specify another path, see the -h output for help.";
 
+static int cpu_mhz, cpu_cycles_per_tv_frame;
+
 static Uint8 memory[0x40000];
 static Uint8 charrom[4096];
 extern unsigned const char roms[];
@@ -57,6 +62,12 @@ static Uint8 keysel;
 static Uint8 rtc_regs[16];
 static int rtc_sel = 0;
 static int ram_size;
+
+static struct {
+	int phase;
+	Uint8 data[65536];
+	int size;
+} prg_inject;
 
 static const Uint8 init_lcd_palette_rgb[6] = {
 	0xC0, 0xC0, 0xC0,
@@ -360,9 +371,32 @@ static void update_rtc ( void )
 
 
 
-
 static void update_emulator ( void )
 {
+	if (XEMU_UNLIKELY(prg_inject.phase == 1)) {
+		static const Uint8 screen_sample1[] = { 0x20, 0x03, 0x0f, 0x0d, 0x0d, 0x0f, 0x04, 0x0f, 0x12, 0x05, 0x20, 0x0c, 0x03, 0x04, 0x20 };
+		static const Uint8 screen_sample2[] = { 0x12, 0x05, 0x01, 0x04, 0x19, 0x2e };
+		if (
+			!memcmp(memory + 0x880, screen_sample1, sizeof screen_sample1) &&
+			!memcmp(memory + 0x980, screen_sample2, sizeof screen_sample2)
+		) {
+			prg_inject.phase = 2;
+			DEBUGPRINT("BASIC: startup screen detected, injecting loaded basic program!" NL);
+			memory[0xA01] = 'R' - 'A' + 1;
+			memory[0xA02] = 'U' - 'A' + 1;
+			memory[0xA03] = 'N' - 'A' + 1;
+			memory[0x1000] = 0;
+			memset(memory + 0x1000, 0, 0x8000);
+			memcpy(memory + 0x1001, prg_inject.data + 2, prg_inject.size - 2);
+			//memset(memory + 0x1001 + prg_inject.size - 2, 0, 4);
+			int addr = 0x1001;
+			memory[0x65] = addr & 0xFF;
+			memory[0x66] = addr >> 8;
+			addr += prg_inject.size - 2;
+			memory[0x67] = addr & 0xFF;
+			memory[0x68] = addr >> 8;
+		}
+	}
 	render_screen();
 	hid_handle_all_sdl_events();
 	xemu_timekeeping_delay(40000);	// 40000 microseconds would be the real time for a full TV frame (see main() for more info: CLCD is not TV based for real ...)
@@ -370,6 +404,97 @@ static void update_emulator ( void )
 		update_rtc();
 }
 
+
+static void shutdown_emu ( void )
+{
+	FILE *f = fopen("memory.dump", "wb");
+	if (f) {
+		fwrite(memory, sizeof memory, 1, f);
+		fclose(f);
+	}
+	printf("Shutting down ...\n");
+}
+
+
+static void rom_list ( void )
+{
+	//const char *defprg = xemucfg_get_str("defprg");
+	for (int addr = 0x20000; addr < 0x40000; addr += 0x4000) {
+		if (!memcmp(memory + addr + 8, "Commodore LCD", 13)) {
+			printf("ROM directory entry point @ $%05X\n", addr);
+			int pos = addr + 13 + 8;
+			while (memory[pos]) {
+				char name[256];
+				memcpy(name, memory + pos + 6, memory[pos] - 6);
+				name[memory[pos] - 6] = 0;
+				printf("\t($%02X $%02X $%02X) START=$%04X : \"%s\"\n",
+					memory[pos + 1], memory[pos + 2], memory[pos + 3],
+					memory[pos + 4] | (memory[pos + 5] <<8),
+					name
+				);
+				//if (defprg && !strcasecmp(name, defprg)) {
+				//	printf("\tFOUND!!!!!\n");
+				//	memory[pos + 1] |= 0x20;
+				//	memory[pos + 1] = 0x20;
+				//} else if (defprg) {
+				//	//memory[pos + 1] &= ~0x20;
+				//}
+				pos += memory[pos];
+			}
+		}
+	}
+}
+
+
+
+static void load_program_for_inject ( const char *file_name, int new_address )
+{
+	prg_inject.phase = 0;
+	if (!file_name || !*file_name)
+		return;
+	memset(prg_inject.data, 0, sizeof prg_inject.data);
+	prg_inject.size = xemu_load_file(file_name, prg_inject.data, 8, sizeof(prg_inject.data) - 4, "Cannot load program");
+	if (prg_inject.size <= 0)
+		return;
+	int old_address = prg_inject.data[0] | (prg_inject.data[1] << 8);
+	DEBUGPRINT("PRG: program \"%s\" load_addr=$%04X, new_load_addr=$%04X" NL, file_name, old_address, new_address);
+	if (old_address != new_address) {
+		int i = 2;
+		for (;;) {
+			if (prg_inject.data[i] == 0 && prg_inject.data[i + 1] == 0)
+				break;
+			int o = i;	// offset of the next addr to patch
+			i += 4;		// skip next line offset + line number
+			while (prg_inject.data[i])
+				i++;
+			i++;
+			new_address += i - o;
+			DEBUGPRINT("BASIC: re-linking line (%d) $%04X -> $%04X" NL,
+				prg_inject.data[o + 2] | (prg_inject.data[o + 3] << 8),
+				prg_inject.data[o] | (prg_inject.data[o + 1] << 8),
+				new_address
+			);
+			prg_inject.data[o] = new_address & 0xFF;
+			prg_inject.data[o + 1] = new_address >> 8;
+		}
+
+	}
+	prg_inject.phase = 1;
+}
+
+
+
+
+static void set_cpu_speed ( int mhz )
+{
+	if (mhz < 1)
+		mhz = 1;
+	else if (mhz > 16)
+		mhz = 16;
+	cpu_mhz = mhz;
+	cpu_cycles_per_tv_frame = mhz * 1000000 / 25;
+	DEBUGPRINT("CPU: setting CPU to %dMHz, %d CPU cycles per full 1/25sec frame." NL, mhz, cpu_cycles_per_tv_frame);
+}
 
 
 
@@ -379,14 +504,18 @@ int main ( int argc, char **argv )
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The world's first Commodore LCD emulator from LGB");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	xemucfg_define_num_option("ram", 128, "Sets RAM size in KBytes.");
+	xemucfg_define_num_option("clock", 1, "Sets CPU speed in MHz, integer only, 1-16");
 	xemucfg_define_str_option("rom102", "#clcd-u102.rom", "Selects 'U102' ROM to use");
 	xemucfg_define_str_option("rom103", "#clcd-u103.rom", "Selects 'U103' ROM to use");
 	xemucfg_define_str_option("rom104", "#clcd-u104.rom", "Selects 'U104' ROM to use");
 	xemucfg_define_str_option("rom105", "#clcd-u105.rom", "Selects 'U105' ROM to use");
 	xemucfg_define_str_option("romchr", "#clcd-chargen.rom", "Selects character ROM to use");
+	//xemucfg_define_str_option("defprg", NULL, "Selects the ROM-program to set default to");
+	xemucfg_define_str_option("prg", NULL, "Inject BASIC program on entering to BASIC");
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
+	set_cpu_speed(xemucfg_get_num("clock"));
 	ram_size = xemucfg_get_num("ram");
 	if (ram_size < 32 || ram_size > 128)
 		FATAL("Bad ram size is defined, must be 32...128");
@@ -404,7 +533,7 @@ int main ( int argc, char **argv )
 		lcd_palette,		// initialize palette into this stuff
 		RENDER_SCALE_QUALITY,	// render scaling quality
 		USE_LOCKED_TEXTURE,	// 1 = locked texture access
-		NULL			// no emulator specific shutdown function
+		shutdown_emu		// no emulator specific shutdown function
 	))
 		return 1;
 	hid_init(
@@ -443,6 +572,8 @@ int main ( int argc, char **argv )
 	xemu_load_file("#clcd-u105-parasite.rom", memory + 0x26800, 32, 0x8000 - 0x6800, NULL);
 	xemu_load_file("#clcd-u104-parasite.rom", memory + 0x2E800, 32, 0x8000 - 0x6800, NULL);
 #endif
+	load_program_for_inject(xemucfg_get_str("prg"), 0x1001);
+	rom_list();
 	/* init CPU */
 	cpu65_reset();	// we must do this after loading KERNAL at least, since PC is fetched from reset vector here!
 	/* init VIAs */
@@ -458,15 +589,21 @@ int main ( int argc, char **argv )
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	update_rtc();			// this will use time-keeping stuff as well, so initially let's do after the function call above
+	int viacyc = 0;
 	for (;;) {
 		int opcyc = cpu65_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles
-		via_tick(&via1, opcyc);	// run VIA-1 tasks for the same amount of cycles as the CPU
-		via_tick(&via2, opcyc);	// -- "" -- the same for VIA-2
+		viacyc += opcyc;
 		cycles += opcyc;
+		if (viacyc >= cpu_mhz) {
+			int steps = viacyc / cpu_mhz;
+			viacyc = viacyc % cpu_mhz;
+			via_tick(&via1, steps);	// run VIA-1 tasks for the same amount of cycles as the CPU would do @ 1MHz
+			via_tick(&via2, steps);	// -- "" -- the same for VIA-2
+		}
 		/* Note, Commodore LCD is not TV standard based ... Since I have no idea about the update etc, I still assume some kind of TV-related stuff, who cares :) */
-		if (cycles >= CPU_CYCLES_PER_TV_FRAME) {	// if enough cycles elapsed (what would be the amount of CPU cycles for a TV frame), let's call the update function.
+		if (XEMU_UNLIKELY(cycles >= cpu_cycles_per_tv_frame)) {	// if enough cycles elapsed (what would be the amount of CPU cycles for a TV frame), let's call the update function.
 			update_emulator();			// this is the heart of screen update, also to handle SDL events (like key presses ...)
-			cycles -= CPU_CYCLES_PER_TV_FRAME;	// not just cycle = 0, to avoid rounding errors, but it would not matter too much anyway ...
+			cycles -= cpu_cycles_per_tv_frame;	// not just cycle = 0, to avoid rounding errors, but it would not matter too much anyway ...
 		}
 	}
 	return 0;

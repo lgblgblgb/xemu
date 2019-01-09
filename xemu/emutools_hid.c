@@ -284,8 +284,20 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 {
 	int handled = 1;
 	switch (event->type) {
+#ifdef CONFIG_DROPFILE_CALLBACK
+		case SDL_DROPFILE:
+			if (event->drop.file && event->drop.file[0]) {
+				emu_dropfile_callback(event->drop.file);
+				SDL_free(event->drop.file);
+			}
+			break;
+#endif
 		case SDL_QUIT:
+#ifdef CONFIG_QUIT_CALLBACK
+			emu_quit_callback();
+#endif
 			exit(0);
+			break;
 		case SDL_KEYUP:
 		case SDL_KEYDOWN:
 			if (event->key.repeat == 0
