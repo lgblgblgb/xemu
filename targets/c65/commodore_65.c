@@ -274,6 +274,24 @@ int fdc_cb_wr_sec ( Uint8 *buffer, int d81_offset ) {
 }
 
 
+static int detect_rom_version ( Uint8 *s )
+{
+	if (s[0] == 0x56) {	// 'V'
+		int version = 0;
+		for (int a = 0; a < 6; a++) {
+			s++;
+			if (*s >= '0' && *s <= '9')
+				version = version * 10 + *s - '0';
+			else
+				return 0;
+		}
+		return (version >= C65_ROM_MINIMAL_VERSION_DATE && version <= C65_ROM_MAXIMAL_VERSION_DATE) ? version : 0;
+	} else
+		return 0;
+}
+
+
+
 static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 {
 	const char *p;
@@ -297,6 +315,11 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	p = xemucfg_get_str("rom");
 	if (xemu_load_file(p, memory + 0x20000, 0x20000, 0x20000, "Selected C65 system ROM is needed for Xemu") < 0)
 		XEMUEXIT(1);
+	int rom_version = detect_rom_version(memory + 0x20000 + 0x16);
+	if (rom_version)
+		DEBUGPRINT("ROM: version string = V%d" NL, rom_version);
+	else
+		WARNING_WINDOW("Warning: unknown ROM version (no valid VXXXXXX date string at offset $10?)");
 	// *** Initialize VIC3
 	vic3_init();
 	// *** Memory configuration
@@ -323,7 +346,18 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	// *** Initialize DMA
-	dma_init(xemucfg_get_num("dmarev"));
+	if ((xemucfg_get_num("dmarev") & 0xFF) == 2) {
+		if (rom_version) {
+			int dma_version_detect = rom_version >= C65_ROM_DMA_R2_VERSION_DATE ? 1 : 0;
+			DEBUGPRINT("DMA: according to ROM version and requested auto-detection (-dmarev 2), DMA rev #%d will be used" NL, dma_version_detect);
+			dma_init(dma_version_detect | (xemucfg_get_num("dmarev") & (~0xFF)));
+		} else {
+			ERROR_WINDOW("ROM version auto-detect requested for DMA (-dmarev 2), but cannot detect version\nThese can lead to serious issues, you must use proper ROM or manually set DMA revision!");
+			dma_init(0 | (xemucfg_get_num("dmarev") & (~0xFF)));
+		}
+	} else {
+		dma_init(xemucfg_get_num("dmarev"));
+	}
 	// Initialize FDC
 	fdc_init(disk_cache);
 	// Initialize D81 access abstraction for FDC
@@ -803,7 +837,7 @@ int main ( int argc, char **argv )
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unusable Commodore 65 emulator from LGB");
 	xemucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
 	xemucfg_define_switch_option("d81ro", "Force read-only status for image specified with -8 option");
-	xemucfg_define_num_option("dmarev", 0, "Revision of the DMAgic chip (0/1=F018A/B, +512=modulo))");
+	xemucfg_define_num_option("dmarev", 2, "Revision of the DMAgic chip (0/1=F018A/B, 2=rom_auto, +512=modulo))");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	xemucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
 	//xemucfg_define_switch_option("noaudio", "Disable audio");
