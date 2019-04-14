@@ -25,8 +25,10 @@ int  umon_send_ok;
 char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(__EMSCRIPTEN__)
+#warning "Platform does not support UMON"
 // Windows is not supported currently, as it does not have POSIX-standard socket interface (?).
+// Also, it's pointless for emscripten, for sure.
 int  uartmon_init   ( const char *fn ) { return 1; }
 void uartmon_update ( void ) {}
 void uartmon_close  ( void ) {}

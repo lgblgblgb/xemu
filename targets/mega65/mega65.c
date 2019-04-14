@@ -384,18 +384,15 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 
 static void shutdown_callback ( void )
 {
-#ifdef MEMDUMP_FILE
-	FILE *f;
-#endif
 	int a;
 	eth65_shutdown();
 	for (a = 0; a < 0x40; a++)
 		DEBUG("VIC-3 register $%02X is %02X" NL, a, vic_registers[a]);
 	cia_dump_state (&cia1);
 	cia_dump_state (&cia2);
-#ifdef MEMDUMP_FILE
+#if defined(MEMDUMP_FILE) && !defined(__EMSCRIPTEN__)
 	// Dump hypervisor memory to a file, so you can check it after exit.
-	f = fopen(MEMDUMP_FILE, "wb");
+	FILE *f = fopen(MEMDUMP_FILE, "wb");
 	if (f) {
 		fwrite(chip_ram, 1, sizeof chip_ram, f);
 		fwrite(colour_ram, 1, 2048, f);
