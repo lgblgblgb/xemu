@@ -610,6 +610,8 @@ static void emulation_loop ( void )
 					vic3_blink_phase = !vic3_blink_phase;
 				}
 				frames_total_counter++;
+				if (!frameskip)	// FIXME: do this better!!!!!!
+					return;
 			}
 			//DEBUG("RASTER=%d COMPARE=%d" NL,scanline,compare_raster);
 			//vic_interrupt();

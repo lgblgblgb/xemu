@@ -112,7 +112,7 @@
 <span id='controls'>
   <span><input type="checkbox" id="resize">Resize canvas</span>
   <span><input type="checkbox" id="pointerLock" checked>Lock/hide mouse pointer &nbsp;&nbsp;&nbsp;</span>
-  <span><input type="button" value="Fullscreen" onclick="Module.requestFullScreen(document.getElementById('pointerLock').checked, 
+  <span><input type="button" value="Fullscreen" onclick="Module.requestFullscreen(document.getElementById('pointerLock').checked, 
                                                                             document.getElementById('resize').checked)">
   </span>
 </span>
@@ -129,13 +129,14 @@
 
     <script>
 	var emuparams = {
-		emulatorId: "xprimo",
+		emulatorId: "xmega65",
 		// the same as native Xep128 command line, so even '-' signs are needed
 		// however every options separated by space should be separated by a new list element!
 		arguments: [
 			//"-rom@00", "EXOS24UK-NOILLOPS.rom",
 			//"-rom@04", "EXDOS14ISDOS10UK-1770.rom",
 			//"-wdimg",  "ep-lgb-hu.dsk"
+			"-sdimg", "mega65-compressed-sd-card.img"
 		],
 		// If the emulator is instructed to load something from a file, you need to specify above with
 		// the options, BUT also here, that the loader fetch them so the emulator can use!
@@ -148,11 +149,11 @@
 		// do anything with it ...
 		// IMPORTANT: try to minimalize the fetched objects, as every visitor on your page needs to
 		// download all ... which requires time, bandwith and data usage ...
-		fileFetchList: ["primo-b64.rom"],
+		fileFetchList: ["mega65-compressed-sd-card.img"],
 		divId: "shit"
 	};
     </script>
   
-    <script type='text/javascript' src="boot.js" onload="Module.Xemu.start(emuparams);"></script>
+    <script type='text/javascript' src="xemu-boot.js" onload="Module.Xemu.start(emuparams);"></script>
 </body>
 </html>
