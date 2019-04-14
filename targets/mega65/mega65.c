@@ -181,7 +181,7 @@ static Uint8 cia_port_in_dummy ( void )
 
 static void audio_callback(void *userdata, Uint8 *stream, int len)
 {
-	//DEBUG("AUDIO: audio callback, wants %d samples" NL, len);
+	// DEBUG("AUDIO: audio callback, wants %d samples" NL, len);
 	// We use the trick, to render boths SIDs with step of 2, with a byte offset
 	// to get a stereo stream, wanted by SDL.
 	sid_render(&sid2, ((short *)(stream)) + 0, len >> 1, 2);	// SID @ left
@@ -342,7 +342,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 			audio = 0;
 			ERROR_WINDOW("Audio parameter mismatches.");
 		}
-		DEBUG("AUDIO: initialized (#%d), %d Hz, %d channels, %d buffer sample size." NL, audio, audio_got.freq, audio_got.channels, audio_got.samples);
+		DEBUGPRINT("AUDIO: initialized (#%d), %d Hz, %d channels, %d buffer sample size." NL, audio, audio_got.freq, audio_got.channels, audio_got.samples);
 	} else
 		ERROR_WINDOW("Cannot open audio device!");
 #endif
@@ -537,11 +537,90 @@ void m65mon_breakpoint ( int brk )
 		cpu_cycles_per_step = 0;
 }
 
+static int cycles, frameskip;
+
+static void emulation_loop ( void )
+{
+	for (;;) {
+		while (XEMU_UNLIKELY(paused)) {	// paused special mode, ie tracing support, or something ...
+			if (XEMU_UNLIKELY(dma_status))
+				break;		// if DMA is pending, do not allow monitor/etc features
+			if (m65mon_callback) {	// delayed uart monitor command should be finished ...
+				m65mon_callback();
+				m65mon_callback = NULL;
+				uartmon_finish_command();
+			}
+			// we still need to feed our emulator with update events ... It also slows this pause-busy-loop down to every full frames (~25Hz)
+			// note, that it messes timing up a bit here, as there is update_emulator() calls later in the "normal" code as well
+			// this can be a bug, but real-time emulation is not so much an issue if you eg doing trace of your code ...
+			update_emulator();
+			if (trace_step_trigger) {
+				// if monitor trigges a step, break the pause loop, however we will get back the control on the next
+				// iteration of the infinite "for" loop, as "paused" is not altered
+				trace_step_trigger = 0;
+				break;	// break the pause loop now
+			}
+			// Decorate window title about the mode.
+			// If "paused" mode is switched off ie by a monitor command (called from update_emulator() above!)
+			// then it will resets back the the original state, etc
+			window_title_custom_addon = paused ? (char*)emulator_paused_title : NULL;
+			if (paused != paused_old) {
+				paused_old = paused;
+				if (paused) {
+					DEBUGPRINT("TRACE: entering into trace mode @ $%04X" NL, cpu65.pc);
+					cpu_cycles_per_step = 0;
+				} else {
+					DEBUGPRINT("TRACE: leaving trace mode @ $%04X" NL, cpu65.pc);
+					if (breakpoint_pc < 0)
+						cpu_cycles_per_step = cpu_cycles_per_scanline;
+					else
+						cpu_cycles_per_step = 0;
+				}
+			}
+		}
+		if (XEMU_UNLIKELY(in_hypervisor)) {
+			hypervisor_debug();
+		}
+		if (XEMU_UNLIKELY(breakpoint_pc == cpu65.pc)) {
+			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu65.pc);
+			paused = 1;
+		}
+		cycles += XEMU_UNLIKELY(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
+#ifdef CPU_STEP_MULTI_OPS
+			cpu_cycles_per_step
+#endif
+		);	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
+		if (cycles >= cpu_cycles_per_scanline) {
+			scanline++;
+			//DEBUG("VIC3: new scanline (%d)!" NL, scanline);
+			cycles -= cpu_cycles_per_scanline;
+			cia_tick(&cia1, 64);
+			cia_tick(&cia2, 64);
+			if (scanline == 312) {
+				//DEBUG("VIC3: new frame!" NL);
+				frameskip = !frameskip;
+				scanline = 0;
+				if (!frameskip)	// well, let's only render every full frames (~ie 25Hz)
+					update_emulator();
+				sid1.sFrameCount++;
+				sid2.sFrameCount++;
+				frame_counter++;
+				if (frame_counter == 25) {
+					frame_counter = 0;
+					vic3_blink_phase = !vic3_blink_phase;
+				}
+				frames_total_counter++;
+			}
+			//DEBUG("RASTER=%d COMPARE=%d" NL,scanline,compare_raster);
+			//vic_interrupt();
+			vic3_check_raster_interrupt();
+		}
+	}
+}
 
 
 int main ( int argc, char **argv )
 {
-	int cycles, frameskip;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Incomplete Mega-65 emulator from LGB");
 	xemucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
 	xemucfg_define_num_option("dmarev", 0x100, "DMA revision (0/1=F018A/B +256=autochange, +512=modulo, you always wants +256!)");
@@ -647,87 +726,15 @@ int main ( int argc, char **argv )
 	frameskip = 0;
 	frame_counter = 0;
 	vic3_blink_phase = 0;
-	if (audio)
+	if (audio) {
+		DEBUGPRINT("AUDIO: start" NL);
 		SDL_PauseAudioDevice(audio, 0);
+	}
 	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
 	if (!xemucfg_get_bool("syscon"))
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();
-	for (;;) {
-		while (XEMU_UNLIKELY(paused)) {	// paused special mode, ie tracing support, or something ...
-			if (XEMU_UNLIKELY(dma_status))
-				break;		// if DMA is pending, do not allow monitor/etc features
-			if (m65mon_callback) {	// delayed uart monitor command should be finished ...
-				m65mon_callback();
-				m65mon_callback = NULL;
-				uartmon_finish_command();
-			}
-			// we still need to feed our emulator with update events ... It also slows this pause-busy-loop down to every full frames (~25Hz)
-			// note, that it messes timing up a bit here, as there is update_emulator() calls later in the "normal" code as well
-			// this can be a bug, but real-time emulation is not so much an issue if you eg doing trace of your code ...
-			update_emulator();
-			if (trace_step_trigger) {
-				// if monitor trigges a step, break the pause loop, however we will get back the control on the next
-				// iteration of the infinite "for" loop, as "paused" is not altered
-				trace_step_trigger = 0;
-				break;	// break the pause loop now
-			}
-			// Decorate window title about the mode.
-			// If "paused" mode is switched off ie by a monitor command (called from update_emulator() above!)
-			// then it will resets back the the original state, etc
-			window_title_custom_addon = paused ? (char*)emulator_paused_title : NULL;
-			if (paused != paused_old) {
-				paused_old = paused;
-				if (paused) {
-					DEBUGPRINT("TRACE: entering into trace mode @ $%04X" NL, cpu65.pc);
-					cpu_cycles_per_step = 0;
-				} else {
-					DEBUGPRINT("TRACE: leaving trace mode @ $%04X" NL, cpu65.pc);
-					if (breakpoint_pc < 0)
-						cpu_cycles_per_step = cpu_cycles_per_scanline;
-					else
-						cpu_cycles_per_step = 0;
-				}
-			}
-		}
-		if (XEMU_UNLIKELY(in_hypervisor)) {
-			hypervisor_debug();
-		}
-		if (XEMU_UNLIKELY(breakpoint_pc == cpu65.pc)) {
-			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu65.pc);
-			paused = 1;
-		}
-		cycles += XEMU_UNLIKELY(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
-#ifdef CPU_STEP_MULTI_OPS
-			cpu_cycles_per_step
-#endif
-		);	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
-		if (cycles >= cpu_cycles_per_scanline) {
-			scanline++;
-			//DEBUG("VIC3: new scanline (%d)!" NL, scanline);
-			cycles -= cpu_cycles_per_scanline;
-			cia_tick(&cia1, 64);
-			cia_tick(&cia2, 64);
-			if (scanline == 312) {
-				//DEBUG("VIC3: new frame!" NL);
-				frameskip = !frameskip;
-				scanline = 0;
-				if (!frameskip)	// well, let's only render every full frames (~ie 25Hz)
-					update_emulator();
-				sid1.sFrameCount++;
-				sid2.sFrameCount++;
-				frame_counter++;
-				if (frame_counter == 25) {
-					frame_counter = 0;
-					vic3_blink_phase = !vic3_blink_phase;
-				}
-				frames_total_counter++;
-			}
-			//DEBUG("RASTER=%d COMPARE=%d" NL,scanline,compare_raster);
-			//vic_interrupt();
-			vic3_check_raster_interrupt();
-		}
-	}
+	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;
 }
 
