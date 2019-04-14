@@ -36,6 +36,8 @@ static struct {
 	int	prg_size;
 	int	prg_blk_size;
 	int	prg_blk_last_size;
+	d81access_rd_cb_t read_cb;
+	d81access_wr_cb_t write_cb;
 } d81;
 static int enable_mode_transient_callback = -1;
 
@@ -138,6 +140,18 @@ void d81access_attach_fd ( int fd, off_t offset, int mode )
 	if (check_mode != D81ACCESS_IMG && check_mode != D81ACCESS_EMPTY)
 		FATAL("d81access_attach_fd() mode low bits must have D81ACCESS_IMG or D81ACCESS_EMPTY");
 	d81access_attach_fd_internal(fd, offset, mode);
+}
+
+
+// Attach callbacks instead of handling requests in this source
+void d81access_attach_cb ( off_t offset, d81access_rd_cb_t rd_callback, d81access_wr_cb_t wr_callback )
+{
+	d81access_close_internal();
+	d81.mode = D81ACCESS_CALLBACKS | D81ACCESS_RO;	// R/O mode for now only, even that we have wr_callback ...
+	d81.read_cb = rd_callback;
+	d81.write_cb = wr_callback;
+	d81.start_at = offset;
+	d81access_cb_chgmode(d81.mode);
 }
 
 
@@ -396,6 +410,8 @@ int d81access_read_sect  ( Uint8 *buffer, int d81_offset, int sector_size )
 			return read_prg(buffer, d81_offset, sector_size >> 8);
 		case D81ACCESS_DIR:
 			FATAL("DIR access method is not yet implemented in Xemu, sorry :-(");
+		case D81ACCESS_CALLBACKS:
+			return d81.read_cb(buffer, d81.start_at + d81_offset, sector_size);
 		default:
 			FATAL("d81access_read_sect(): invalid d81.mode & 0xFF");
 	}
@@ -419,6 +435,8 @@ int d81access_write_sect ( Uint8 *buffer, int d81_offset, int sector_size )
 		case D81ACCESS_PRG:
 		case D81ACCESS_DIR:
 			return -1;	// currently, these are all read-only, even if caller forgets that and try :-O
+		case D81ACCESS_CALLBACKS:
+			return d81.write_cb(buffer, d81.start_at + d81_offset, sector_size);
 		default:
 			FATAL("d81access_write_sect(): invalid d81.mode & 0xFF");
 	}

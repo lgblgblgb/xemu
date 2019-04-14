@@ -476,6 +476,36 @@ static void sdcard_command ( Uint8 cmd )
 }
 
 
+#ifdef COMPRESSED_SD
+static int on_compressed_sd_d81_read_cb ( void *buffer, off_t offset, int sector_size )
+{
+	int ret = host_seek(offset);
+	if (ret) {
+		FATAL("Compressed SD seek error");
+		return -1;
+	}
+	if (sector_size != 512) {
+		FATAL("Compressed SD got non-512 sector size!");
+		return -1;
+	}
+	ret = xemu_safe_read(sdfd, buffer, sector_size);
+	if (ret != sector_size) {
+		FATAL("Compressed SD read error");
+		return -1;
+	}
+	//DEBUGPRINT("SDCARD: compressed-SD-D81: read ..." NL);
+	return 0;
+}
+
+
+static int on_compressed_sd_d81_write_cb ( void *buffer, off_t offset, int sector_size )
+{
+	return -1;
+}
+#endif
+
+
+
 static int mount_external_d81 ( const char *name, int force_ro )
 {
 	// Let fsobj func guess the "name" being image, a program file, or an FS directory
@@ -501,7 +531,12 @@ static int mount_internal_d81 ( int force_ro )
 	//       which can be used in the future to trigger external mount with native-M65 in-emulator tools, instead of emulator controls externally (like -8 option).
 	// Do not use D81ACCESS_AUTOCLOSE here! It would cause to close the sdfd by d81access on umount, thus even our SD card image is closed!
 	// Also, let's inherit the possible read-only status of our SD image, of course.
-	d81access_attach_fd(sdfd, offset, D81ACCESS_IMG | ((sd_is_read_only || force_ro) ? D81ACCESS_RO : 0));
+#ifdef COMPRESSED_SD
+	if (sd_compressed) {
+		d81access_attach_cb(offset, on_compressed_sd_d81_read_cb, on_compressed_sd_d81_write_cb);
+	} else
+#endif
+		d81access_attach_fd(sdfd, offset, D81ACCESS_IMG | ((sd_is_read_only || force_ro) ? D81ACCESS_RO : 0));
 	mounted = 1;
 	return 0;
 }
