@@ -496,12 +496,6 @@ static int on_compressed_sd_d81_read_cb ( void *buffer, off_t offset, int sector
 	//DEBUGPRINT("SDCARD: compressed-SD-D81: read ..." NL);
 	return 0;
 }
-
-
-static int on_compressed_sd_d81_write_cb ( void *buffer, off_t offset, int sector_size )
-{
-	return -1;
-}
 #endif
 
 
@@ -533,7 +527,7 @@ static int mount_internal_d81 ( int force_ro )
 	// Also, let's inherit the possible read-only status of our SD image, of course.
 #ifdef COMPRESSED_SD
 	if (sd_compressed) {
-		d81access_attach_cb(offset, on_compressed_sd_d81_read_cb, on_compressed_sd_d81_write_cb);
+		d81access_attach_cb(offset, on_compressed_sd_d81_read_cb, NULL);	// we pass NULL as write callback to signal, that disk is R/O
 	} else
 #endif
 		d81access_attach_fd(sdfd, offset, D81ACCESS_IMG | ((sd_is_read_only || force_ro) ? D81ACCESS_RO : 0));

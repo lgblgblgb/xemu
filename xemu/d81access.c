@@ -147,10 +147,13 @@ void d81access_attach_fd ( int fd, off_t offset, int mode )
 void d81access_attach_cb ( off_t offset, d81access_rd_cb_t rd_callback, d81access_wr_cb_t wr_callback )
 {
 	d81access_close_internal();
-	d81.mode = D81ACCESS_CALLBACKS | D81ACCESS_RO;	// R/O mode for now only, even that we have wr_callback ...
+	d81.mode = D81ACCESS_CALLBACKS;
+	if (!wr_callback)
+		d81.mode |= D81ACCESS_RO;
 	d81.read_cb = rd_callback;
 	d81.write_cb = wr_callback;
 	d81.start_at = offset;
+	DEBUGPRINT("D81: attaching D81 via provided callbacks, read=%p, write=%p" NL, rd_callback, wr_callback);
 	d81access_cb_chgmode(d81.mode);
 }
 
@@ -161,6 +164,13 @@ int d81access_attach_fsobj ( const char *fn, int mode )
 		DEBUGPRINT("D81: attach file request with empty file name, not using FS based disk attachment." NL);
 		return -1;
 	}
+#ifdef __EMSCRIPTEN__
+	// TODO FIXE I have really no idea what I wanted to this with this!!! ;-O I mean, open with both DIR/FILE/etc mode :-O
+	// suprisingly it works in native builds for C65 mode but not with emscripten (see #else branch). So just forget this
+	// shit with emscripten now as a fix till I figure out what I did like this, I have *no* idea at all :-O
+	// Hint for the problem: see for example c65 target setting D81ACCESS_DIR as well, so in theory this cannot work anywhere :-O
+	mode &= ~D81ACCESS_DIR;
+#else
 	if (mode & D81ACCESS_DIR) {
 		DIR *dir = opendir(fn);
 		if (dir) {
@@ -176,6 +186,7 @@ int d81access_attach_fsobj ( const char *fn, int mode )
 			return 1;
 		}
 	}
+#endif
 	// So, we can assume that the object should be a file ...
 	if (!(mode & (D81ACCESS_IMG | D81ACCESS_PRG))) {
 		if (mode & D81ACCESS_DIR)
@@ -436,7 +447,7 @@ int d81access_write_sect ( Uint8 *buffer, int d81_offset, int sector_size )
 		case D81ACCESS_DIR:
 			return -1;	// currently, these are all read-only, even if caller forgets that and try :-O
 		case D81ACCESS_CALLBACKS:
-			return d81.write_cb(buffer, d81.start_at + d81_offset, sector_size);
+			return (d81.write_cb ? d81.write_cb(buffer, d81.start_at + d81_offset, sector_size) : -1);
 		default:
 			FATAL("d81access_write_sect(): invalid d81.mode & 0xFF");
 	}
