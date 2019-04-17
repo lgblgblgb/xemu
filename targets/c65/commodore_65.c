@@ -828,12 +828,48 @@ static void update_emulator ( void )
 }
 
 
+static int cycles;
+
+
+static void emulation_loop ( void )
+{
+	vic3_open_frame_access();
+	for (;;) {
+		cycles += XEMU_UNLIKELY(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
+#ifdef CPU_STEP_MULTI_OPS
+			cpu_cycles_per_scanline
+#endif
+		);	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
+		if (cycles >= cpu_cycles_per_scanline) {
+			int exit_loop = 0;
+			cia_tick(&cia1, 64);
+			cia_tick(&cia2, 64);
+			cycles -= cpu_cycles_per_scanline;
+			if (vic3_render_scanline()) {
+				if (frameskip) {
+					frameskip = 0;
+					hostfs_flush_all();
+				} else {
+					frameskip = 1;
+					update_emulator();
+					//vic3_open_frame_access();
+					exit_loop = 1;
+				}
+				sids[0].sFrameCount++;
+				sids[1].sFrameCount++;
+			}
+			vic3_check_raster_interrupt();
+			if (exit_loop)
+				return;
+		}
+	}
+}
 
 
 
 int main ( int argc, char **argv )
 {
-	int cycles;
+	//int cycles;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unusable Commodore 65 emulator from LGB");
 	xemucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
 	xemucfg_define_switch_option("d81ro", "Force read-only status for image specified with -8 option");
@@ -890,35 +926,10 @@ int main ( int argc, char **argv )
 	if (audio)
 		SDL_PauseAudioDevice(audio, 0);
 	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
-	vic3_open_frame_access();
 	if (!xemucfg_get_bool("syscon"))
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();
-	for (;;) {
-		cycles += XEMU_UNLIKELY(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
-#ifdef CPU_STEP_MULTI_OPS
-			cpu_cycles_per_scanline
-#endif
-		);	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
-		if (cycles >= cpu_cycles_per_scanline) {
-			cia_tick(&cia1, 64);
-			cia_tick(&cia2, 64);
-			cycles -= cpu_cycles_per_scanline;
-			if (vic3_render_scanline()) {
-				if (frameskip) {
-					frameskip = 0;
-					hostfs_flush_all();
-				} else {
-					frameskip = 1;
-					update_emulator();
-					vic3_open_frame_access();
-				}
-				sids[0].sFrameCount++;
-				sids[1].sFrameCount++;
-			}
-			vic3_check_raster_interrupt();
-		}
-	}
+	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;
 }
 

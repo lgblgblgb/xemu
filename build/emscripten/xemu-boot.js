@@ -112,11 +112,12 @@ Module.printErr = function ( text ) {
 	if (arguments.length > 1)
 		text = Array.prototype.slice.call(arguments).join(' ');
 	if (text == "Looks like you are rendering without using requestAnimationFrame for the main loop. You should use 0 for the frame rate in emscripten_set_main_loop in order to use requestAnimationFrame, as that can greatly improve your frame rates!")
-		text = "Bla-bla";
+		text = "EMSCRIPTEN-MADNESS-POINTLESS-ERROR";
 	if (0) { // XXX disabled for safety typeof dump == 'function') {
 		dump(text + '\n'); // fast, straight to the real console
 	} else {
-		console.error(text);
+		if (text != "EMSCRIPTEN-MADNESS-POINTLESS-ERROR")
+			console.error(text);
 	}
 };
 
