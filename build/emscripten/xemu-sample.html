@@ -10,7 +10,8 @@
 
 	<p>Xemu emulator demonstrations compiled from Xemu source with the emscripten emulator, so you can try them with only a web broser. <b>WORK-IN-PROGRESS</b>
 	<br><b>NOTE</b>: this requires relative decent browser, almost no hope for IE, and probably even Safari is not decent enough (?), I would recommend
-	up-to-date version of Firefox or Chrome, probably (what we need: HTML5 canvas support, asm.js and WebAssembly support).</p>
+	up-to-date version of Firefox or Chrome, probably (what we need: HTML5 canvas 2D context, ArrayBuffer, WebGL, asm.js and WebAssembly, File API, WebAudio, Game API support).
+	In theory game controllers should work via your browser too, if your browser supports it (though you can have axis/button-mapping problems).</p>
 
 	<script>
 		function XemuSamplePage() {
@@ -19,11 +20,15 @@
 				[
 					"xmega65", {},
 					"Xemu Mega65 emulator",
-					"Mega65 emulation"
+					"<a href=\"http://mega65.org/\">Mega 65</a> emulation. Beware, visiting the emulation page will cause a quite large download, around 20Mbytes or such."
 				], [
 					"xc65", {},
 					"Xemu Commodore 65 emulator",
-					"Commodore 65 emulation." 
+					"Commodore 65 emulation. <b>NEW</b>: you can try (not so much tested yet) to use the borken-UI's 'Browse' button at the bottom to <b>attach any D81 file</b> to the emulator from your computer (you should wait first though, till you see the READY prompt)" 
+				], [
+					"xvic20", {},
+					"Xemu Commodore VIC20 emulator",
+					"Commodore VIC20 emulation - no disk/tape support ..."
 				], [
 					"xprimo", {},
 					"Xemu Primo emulator",
