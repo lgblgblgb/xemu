@@ -498,9 +498,36 @@ static void set_cpu_speed ( int mhz )
 
 
 
+static int cycles, viacyc;
+
+
+static void emulation_loop ( void )
+{
+	for (;;) {
+		int opcyc = cpu65_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles
+		viacyc += opcyc;
+		cycles += opcyc;
+		if (viacyc >= cpu_mhz) {
+			int steps = viacyc / cpu_mhz;
+			viacyc = viacyc % cpu_mhz;
+			via_tick(&via1, steps);	// run VIA-1 tasks for the same amount of cycles as the CPU would do @ 1MHz
+			via_tick(&via2, steps);	// -- "" -- the same for VIA-2
+		}
+		/* Note, Commodore LCD is not TV standard based ... Since I have no idea about the update etc, I still assume some kind of TV-related stuff, who cares :) */
+		if (XEMU_UNLIKELY(cycles >= cpu_cycles_per_tv_frame)) {	// if enough cycles elapsed (what would be the amount of CPU cycles for a TV frame), let's call the update function.
+			update_emulator();			// this is the heart of screen update, also to handle SDL events (like key presses ...)
+			cycles -= cpu_cycles_per_tv_frame;	// not just cycle = 0, to avoid rounding errors, but it would not matter too much anyway ...
+			return;
+		}
+	}
+}
+
+
+
+
+
 int main ( int argc, char **argv )
 {
-	int cycles;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The world's first Commodore LCD emulator from LGB");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	xemucfg_define_num_option("ram", 128, "Sets RAM size in KBytes.");
@@ -589,22 +616,7 @@ int main ( int argc, char **argv )
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	update_rtc();			// this will use time-keeping stuff as well, so initially let's do after the function call above
-	int viacyc = 0;
-	for (;;) {
-		int opcyc = cpu65_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles
-		viacyc += opcyc;
-		cycles += opcyc;
-		if (viacyc >= cpu_mhz) {
-			int steps = viacyc / cpu_mhz;
-			viacyc = viacyc % cpu_mhz;
-			via_tick(&via1, steps);	// run VIA-1 tasks for the same amount of cycles as the CPU would do @ 1MHz
-			via_tick(&via2, steps);	// -- "" -- the same for VIA-2
-		}
-		/* Note, Commodore LCD is not TV standard based ... Since I have no idea about the update etc, I still assume some kind of TV-related stuff, who cares :) */
-		if (XEMU_UNLIKELY(cycles >= cpu_cycles_per_tv_frame)) {	// if enough cycles elapsed (what would be the amount of CPU cycles for a TV frame), let's call the update function.
-			update_emulator();			// this is the heart of screen update, also to handle SDL events (like key presses ...)
-			cycles -= cpu_cycles_per_tv_frame;	// not just cycle = 0, to avoid rounding errors, but it would not matter too much anyway ...
-		}
-	}
+	viacyc = 0;
+	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;
 }

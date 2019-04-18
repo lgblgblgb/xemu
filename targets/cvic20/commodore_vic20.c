@@ -452,7 +452,7 @@ static Uint8 via2_inb ( Uint8 mask )
 
 
 
-int cycles;
+static int cycles;
 
 
 static void emulation_loop ( void )
