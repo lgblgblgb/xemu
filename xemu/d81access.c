@@ -1,6 +1,6 @@
 /* Various D81 access method for F011 core, for Xemu / C65 and M65 emulators.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -164,14 +164,12 @@ int d81access_attach_fsobj ( const char *fn, int mode )
 		DEBUGPRINT("D81: attach file request with empty file name, not using FS based disk attachment." NL);
 		return -1;
 	}
-#ifdef __EMSCRIPTEN__
-	// TODO FIXE I have really no idea what I wanted to this with this!!! ;-O I mean, open with both DIR/FILE/etc mode :-O
-	// suprisingly it works in native builds for C65 mode but not with emscripten (see #else branch). So just forget this
-	// shit with emscripten now as a fix till I figure out what I did like this, I have *no* idea at all :-O
-	// Hint for the problem: see for example c65 target setting D81ACCESS_DIR as well, so in theory this cannot work anywhere :-O
-	mode &= ~D81ACCESS_DIR;
-#else
 	if (mode & D81ACCESS_DIR) {
+		// if we passed D81ACCESS_DIR, we try to open the named object as a directory first.
+		// if it was OK, let's containue with that
+		// if not OK and error was ENOTDIR or ENOENT then simply assume to continue with other methods (not as directory).
+		// this is because, the "fn" parameter can be a relative path too, later can be used with relative-to-preferences directory or so.
+		// though directory opening is always absolute path what we're assuming.
 		DIR *dir = opendir(fn);
 		if (dir) {
 			// It seems we could open the "raw" object as directory
@@ -181,12 +179,11 @@ int d81access_attach_fsobj ( const char *fn, int mode )
 			DEBUGPRINT("D81: file system object \"%s\" opened as a directory." NL, fn);
 			d81access_cb_chgmode(d81.mode);
 			return 0;
-		} else if (errno != ENOTDIR) {
+		} else if (errno != ENOTDIR && errno != ENOENT) {
 			ERROR_WINDOW("D81: cannot open directory %s for virtual D81 mode: %s", fn, strerror(errno));
 			return 1;
 		}
 	}
-#endif
 	// So, we can assume that the object should be a file ...
 	if (!(mode & (D81ACCESS_IMG | D81ACCESS_PRG))) {
 		if (mode & D81ACCESS_DIR)

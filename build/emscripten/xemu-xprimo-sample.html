@@ -148,8 +148,8 @@
 		fileFetchList: ["primo-b64.rom"],
 		divId: "shit"
 	};
+	document.write("<" + "script type=\"text/javascript\" src=\"xemu-boot.js?" + (new Date).getTime() + "\" onload=\"Module.Xemu.start(emuparams);\"><" + "/script>");
     </script>
   
-    <script type='text/javascript' src="xemu-boot.js" onload="Module.Xemu.start(emuparams);"></script>
 </body>
 </html>

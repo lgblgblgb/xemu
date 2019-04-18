@@ -161,6 +161,115 @@ Module.monitorRunDependencies = function ( left ) {
 //Xemu.requestFullScreen = Module.requestFullScreen;
 
 
+// Optional functionality provided to the user to help to "upload" things to the browser.
+// Must be used as an event handler for file type input field.
+// The actual work then should be done by the passResult callback
+Xemu.fileUploadHandler = function ( file, minsize, maxsize, passResult, passResultParams ) {
+	"use strict";
+	function upload_msg ( msg ) {
+		console.log("FILE-UPLOAD: " + msg);
+	}
+	function upload_error ( msg ) {
+		upload_msg("ERROR: " + msg);
+		alert(msg);
+	}
+	if (!window.FileReader) {
+		upload_error("Your browser is too old, it does not seem to support FileReader API.");
+		return;
+	}
+	var reader = new FileReader();
+	if (!reader.readAsArrayBuffer) {
+		upload_error("Your browser is too old, does not support readAsArrayBuffer() method in FileReader instance");
+		return ;
+	}
+	if (file.length != 1 || !file[0] || !file[0].name || !file[0].size) {
+		upload_error("Select exactly one (non-zero length) file!");
+		return;
+	}
+	file = file[0];
+	if (minsize <= 0)
+		minsize = 1;
+	if (maxsize <= 0 || maxsize > 1000000)
+		maxsize = 1000000;
+	if (file.size < minsize || file.size > maxsize) {
+		upload_error("Selected file has size of " + file.size + ", but must be " + (minsize == maxsize ? "exactly " + minsize : "between " + minsize + " and " + maxsize) + " bytes.");
+		return;
+	}
+	reader.onerror = function (e) {
+		this.onloadend = undefined;
+		upload_error("File upload to your browser has caught an error (your browser may not have the privilege to read that file, or such).");
+	};
+	reader.onabort = function (e) {
+		this.onloadend = undefined;
+		upload_error("File upload to your browser has been aborted.");
+	};
+	reader.onloadend = function (e) {
+		if (this.result) {
+			if (this.result.byteLength == file.size) {
+				upload_msg("file read is done :-) Calling the specified handler with the result ArrayBuffer.");
+				passResult(this.result, passResultParams);
+			} else
+				upload_error("uploaded file has different size (" + this.result.byteLength + ") than it was requested (" + file.size + ")");
+		} else
+			upload_msg("?? uploaded ended with no result (ie: error?). See previous message(s).");
+	};
+	console.log("FILE-UPLOAD: received file upload request for " + file.name + " with length of " + file.size + " bytes. Starting FileReader ...");
+	reader.readAsArrayBuffer(file);
+};
+
+
+Xemu.fileEmscriptenWriter = function ( data, params ) {
+	// Module.Xemu.dir("/files/");
+	data = new Uint8Array(data);
+	console.log("About to writing " + data.length + " bytes to the file " + params.fileName + " with open mode " + params.openMode);
+	var stream = FS.open(params.fileName, params.openMode);
+	console.log("FS.open = " + stream);
+	// console.log(data);
+	console.log("FS.write[len=" + data.length + "] = " + FS.write(stream, data, 0, data.length, 0));
+	console.log("FS.close = " + FS.close(stream));
+	FS.syncfs(true, function (e) {
+		console.log("FS.syncfs: " + e);
+		// Module.Xemu.dir("/files/");
+	});
+};
+
+
+// for debug purposes, it shows the contents of the "emscripten VFS" into an object
+function __dir__ ( dirName, result ) {
+	"use strict";
+	if (dirName == undefined)
+		dirName = "/";
+	if (result == undefined)
+		result = [];
+	var list = FS.readdir(dirName);
+	var a;
+	var dirs = [];
+	for (a in list) {
+		var name = dirName + list[a];
+		if (list[a] != "." && list[a] != "..") {
+			var stat = FS.stat(name);
+			if (FS.isDir(stat.mode)) {
+				name += "/";
+				dirs.push(name);
+			}
+			result.push({"name": name, "size": stat.size, "mode": stat.mode, "mtime": stat.mtime});
+		}
+	}
+	for (a in dirs) {
+		try {
+			result = __dir__(dirs[a], result);
+		} catch { }
+	}
+	return result;
+}
+
+
+Xemu.dir = function ( dirName )
+{
+	console.table(__dir__(dirName));
+};
+
+
 Xemu.start = function (user_settings) {
 	"use strict";
 	var item;
@@ -240,7 +349,7 @@ Xemu.start = function (user_settings) {
 	// application robust, you may want to override this behavior before shipping!
 	// See http://www.khronos.org/registry/webgl/specs/latest/1.0/#5.15.2
 	Module.canvas.addEventListener("webglcontextlost", function(e) {
-		if (window.confirm("WebGL context lost. Can I try to reload with the hope to fix the problem?"))
+		if (window.confirm("Your browser lost WebGL context. Can I try to reload with the hope to fix the problem (resets/reload the emulation!)?"))
 			window.location.reload();
 		e.preventDefault();
 	}, false);

@@ -127,6 +127,8 @@
     </div>
     <textarea id="output" rows="8"></textarea>
 
+    <input type="file" onchange="Module.Xemu.fileUploadHandler(this.files, 819200, 819200, Module.Xemu.fileEmscriptenWriter, {fileName: '/files/empty.d81', openMode: 'r+'})">
+
     <script>
 	var emuparams = {
 		emulatorId: "xc65",
@@ -149,8 +151,7 @@
 		fileFetchList: ["empty.d81", "c65-system.rom"],
 		divId: "shit"
 	};
+	document.write("<" + "script type=\"text/javascript\" src=\"xemu-boot.js?" + (new Date).getTime() + "\" onload=\"Module.Xemu.start(emuparams);\"><" + "/script>");
     </script>
-  
-    <script type='text/javascript' src="xemu-boot.js" onload="Module.Xemu.start(emuparams);"></script>
 </body>
 </html>
