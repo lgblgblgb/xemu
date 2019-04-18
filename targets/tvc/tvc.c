@@ -389,11 +389,33 @@ static void init_tvc ( void )
 }
 
 
+static int cycles;
+
+
+static void emulation_loop ( void )
+{
+	for (;;) { // our emulation loop ...
+		if (interrupt_active) {
+			int a = z80ex_int();
+			if (a)
+				cycles += a;
+			else
+				cycles += z80ex_step();
+		} else
+			cycles += z80ex_step();
+		if (cycles >= CLOCKS_PER_FRAME) {
+			update_emulator();
+			frameskip = !frameskip;
+			cycles -= CLOCKS_PER_FRAME;
+			return;
+		}
+	}
+}
+
 
 
 int main ( int argc, char **argv )
 {
-	int cycles;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Careless Videoton TV Computer emulator from LGB");
 #ifdef CONFIG_SDEXT_SUPPORT
 	xemucfg_define_switch_option("sdext", "Enables SD-ext");
@@ -433,20 +455,6 @@ int main ( int argc, char **argv )
 	if (!xemucfg_get_bool("syscon"))
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
-	for (;;) { // our emulation loop ...
-		if (interrupt_active) {
-			int a = z80ex_int();
-			if (a)
-				cycles += a;
-			else
-				cycles += z80ex_step();
-		} else
-			cycles += z80ex_step();
-		if (cycles >= CLOCKS_PER_FRAME) {
-			update_emulator();
-			frameskip = !frameskip;
-			cycles -= CLOCKS_PER_FRAME;
-		}
-	}
+	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;
 }

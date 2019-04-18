@@ -28,11 +28,19 @@
 				], [
 					"xclcd", {},
 					"Xemu Commodore LCD emulator",
-					"Commodore LCD emulation, a quite unknown machine, much more rare/unknown that the Commodore 65 itself! I've written the world's first working emulator and made a sane specification on it."
+					"Commodore LCD emulation, a quite unknown machine, much-much more rare/unknown than the Commodore 65 itself! I've written the world's first working emulator and made a sane specification on it."
 				], [
 					"xvic20", {},
 					"Xemu Commodore VIC20 emulator",
 					"Commodore VIC20 emulation - no disk/tape support ..."
+				], [
+					"xep128", {},
+					"Xemu Enterprise-128 emulator",
+					"Enterprise-128 emulator, originally Xep128 project of mine. Enterprise-128 is a really fantastic and 'futuristic' computer to its time, both from hardware and software point of view. It's a shame it hasn't spreaded too much (it's said it was too difficult to understand with its unusal ideas not used in the 8 bit world too often before) ..."
+				], [
+					"xtvc", {},
+					"Xemu Videoton TV Computer (TVC) emulator",
+					"Videton TV Computer (TVC) is a Hungarian Z80 based computer."
 				], [
 					"xprimo", {},
 					"Xemu Primo emulator",
@@ -45,7 +53,7 @@
 				url = "xemu-" + emulatorPages[a][0] + "-sample.html?" + (new Date).getTime();
 				for (b in emulatorPages[a][1])
 					url += "&amp;" + encodeURIComponent(b) + "=" + encodeURIComponent(emulatorPages[a][1][b]);
-				document.write("<li><a href=\"" + url + "\">" + emulatorPages[a][2] + "</a><p>" + emulatorPages[a][3] + "</p></li>\n");
+				document.write("<li><b><a href=\"" + url + "\">" + emulatorPages[a][2] + "</a></b><p>" + emulatorPages[a][3] + "</p></li>\n");
 			}
 			document.write("</ul>\n");
 		}

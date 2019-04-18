@@ -407,11 +407,13 @@ static void update_emulator ( void )
 
 static void shutdown_emu ( void )
 {
+#ifndef __EMSCRIPTEN__
 	FILE *f = fopen("memory.dump", "wb");
 	if (f) {
 		fwrite(memory, sizeof memory, 1, f);
 		fclose(f);
 	}
+#endif
 	printf("Shutting down ...\n");
 }
 
