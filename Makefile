@@ -29,16 +29,21 @@ all:
 all-arch:
 	for t in $(TARGETS) ; do for a in $(ARCHS) ; do $(MAKE) -C targets/$$t ARCH=$$a || exit 1 ; done ; done
 
+all-html:
+	for t in $(TARGETS) ; do egrep -q '^#\s*define\s+CONFIG_EMSCRIPTEN_OK\s*$$' targets/$$t/xemu-target.h && make -C targets/$$t ARCH=html ; done
+
 clean:
 	for t in $(TARGETS) ; do $(MAKE) -C targets/$$t clean || exit 1 ; done
 
 all-clean:
 	for t in $(TARGETS) ; do for a in $(ARCHS) ; do $(MAKE) -C targets/$$t ARCH=$$a clean || exit 1 ; done ; done
 	$(MAKE) -C rom clean
+	$(MAKE) -C build/bin clean
 
 distclean:
 	$(MAKE) all-clean
 	$(MAKE) -C rom distclean
+	$(MAKE) -C build/bin/clean
 
 dep:
 	for t in $(TARGETS) ; do $(MAKE) -C targets/$$t dep || exit 1 ; done

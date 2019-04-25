@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+	<meta charset="utf-8">
+	<title>Xemu</title>
+	<style>
+		h1 {
+			margin: 0 0 1em;
+			font-weight: 900;
+			font-style: italic;
+			color: #ee6352;
+			line-height: .8;
+		}
+		li {
+			border-top: 2px #ee6352 solid;
+			padding-top: 2px;
+		}
+	</style>
+	<script>
+		document.write('<' + 'script src="dist/filedb.js?' + (new Date).getTime() +  '" language="javascript"><' + '/script>');
+		function getfileinfo ( name ) {
+			"use strict";
+			if (xemufiledb == undefined || xemufiledb[name] == undefined)
+				return "";
+			var x = xemufiledb[name];
+			var date = new Date(x[1] * 1000);
+			return " (created at " + date.toISOString() + ", " + x[0] + " bytes)";
+		}
+	</script>
+</head>
+<body>
+
+<h1>Temporary Xemu Distribution/Demonstration page</h1>
+
+<ul>
+	<li><a id="ref1" href="dist/xemu-sample.html"><b>In-browser demonstration of Xemu emulators</b></a>
+		<p><i>The same source code what native (ie, Windows, or Linux executable) version of Xemu is built from, just
+		built with a compiler named "emscripten", which makes it possible to generatre "web-aware" result (WebAssembly, asm.js).
+		This is a <b>highly work in progress</b> version, you can see ugly, and partially broken user interface (among other problems), and
+		it requires fairly modern browser, possibly (latest version of) Firefox or Chrome (even Safari is too old, it seems, no hope
+		for IE too much, of course, or anything MS ... Maybe Edge with the Blink rendering engine which is not even released yet officially ..).
+		Beware, it causes quite huge data download when
+		visiting this page, around 20Mbyte or such in case of Mega65 emulator for example. This version also includes a mostly working setup to really see Xemu/Mega65 in action
+		(prepared SD-card image, etc).</i></p>
+	</li>
+
+	<li><b>Download experimental NSIS installer of Xemu for Microsoft(TM) Windows:</b>
+	<p><b><a id="ref2" href="dist/install-xemu-win64.exe">Installer for 64 bit Windows</a></b><script>document.write(getfileinfo("install-xemu-win64.exe"));</script><br>
+	   <b><a id="ref3" href="dist/install-xemu-win32.exe">Installer for 32 bit Windows</a></b><script>document.write(getfileinfo("install-xemu-win32.exe"));</script></p>
+		<p><i><b>Experimental</b> installer of Xemu for Windows using NullSoft's install shield ("NSIS").
+		Please use the 64 bit version, unless you have a 32 bit OS from the stone age.
+		Note: you probably need Windows 10 (earlier Windows versions are kinda lame from programmer's view point,
+		Microsoft started to implement sane programming APIs in Windows 10 ...). Besides of the installer, you <b>still need to
+		manually provide the needed non-free components, eg ROM images, SD-card image ...</b>.</i></p>
+		<p><b><i>WARNING: according to a report, some antivirus software detects NSIS installer as a trojan/virus. I can't be <u>totally</u> sure on this since
+		I only use NSIS as the installer, though I strongly believe at least, it's just
+		a false positive. <a href="https://nsis.sourceforge.io/NSIS_False_Positives">Here it is some description from Nullsoft itself about this - unfortunately - quite common problem</a>.</i></b>
+		<i>In case of doubts, you can still try the ZIP'ed version without an installer (see below).</i>
+		</p>
+	</li>
+
+	<li><b>Download only the binaries of Xemu for Microsoft(TM) Windows:</b>
+	<p><b><a id="ref4" href="dist/xemu-win64-binaries.zip">ZIP archive for 64 bit Windows</a></b><script>document.write(getfileinfo("xemu-win64-binaries.zip"));</script><br>
+	   <b><a id="ref5" href="dist/xemu-win32-binaries.zip">ZIP archive for 32 bit Windows</a></b><script>document.write(getfileinfo("xemu-win32-binaries.zip"));</script></p>
+	   <p><i>
+	   	ZIP archive, with only the needed EXE + DLL files, but without any installer. Can be usefull for more advanced Windows users. Please use the 64 bit version, unless you
+		really have a 32 bit OS from the stone age.
+	   </i></p>
+	</li>
+
+	<li><b><a id="ref6" href="dist/xemu_current_amd64.deb">Download: experimental, DEB package of Xemu (done on Ubuntu Linux 18.04 LTS, 64 bit)</a></b><script>document.write(getfileinfo("xemu_current_amd64.deb"));</script>
+
+		<p><i>Debian package built from Xemu on Ubuntu Linux 18.04 LTS, 64 bit version. <b>Bonus:</b> you can try to
+		run command <code>xemu-download-data</code> (as root, so probably with <code>sudo</code>) to fetch some ROMs,
+		emulators included in Xemu need, but note; this is your own legal/whatever risk to do so! Note, even that, it won't
+		give you the SD-card image for the Mega65 emulator of Xemu unfortunately, currently.
+		</i></p>
+	</li>
+
+	<li><b><a id="ref7" href="dist/xemu-current-1.x86_64.rpm">Download: really experimental RPM package (64 bit)</a></b><script>document.write(getfileinfo("xemu-current-1.x86_64.rpm"));</script>
+
+		<p><i>Simply a converted version (with the tool 'alien') of the DEB package above. So it's highly possible it won't work on any RPM based Linux
+		distrubitions, I have no idea at all :(
+		</i></p>
+	</li>
+
+	<li><b><a href="https://github.com/lgblgblgb/xemu">Source code, GIT repository of Xemu</a></b>
+		<p><i>You should focus mostly on the "dev" branch here ...</i></p>
+	</li>
+
+	<li><b>Where is the MacOS pre-built version?</b>
+		<p><i>Not so much here ... Unfortunately Apple makes it hard or even impossible to ship free software to their OS, ie they require me to buy a Mac ...
+		Other solutions (including using cross compiler) still does not work, since it depends on non-free components, ie XCode to be installed, and such ...
+		For Windows (which I don't have either) you can have cross-compilers without the need of any Microsoft-material to be able to work at least.
+		If you are expert in this area, and you have an idea, please do not keep it yourself :) Thanks.
+		</i></p>
+	</li>
+</ul>
+
+<script language="javascript">
+function pageMain() {
+	"use strict";
+	var a = 1;
+	var elem;
+	while (elem = document.getElementById("ref" + a)) {
+		elem.href += "?" + ((new Date).getTime());
+		a += 1;
+	}
+}
+pageMain();
+</script>
+
+
+</body>
+</html>
+

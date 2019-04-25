@@ -3,12 +3,22 @@
 <head>
 	<meta charset="utf-8">
 	<title>Xemu in-browser demonstration page</title>
+	<style>
+		h1 {
+			margin: 0 0 1em;
+			font-weight: 900;
+			font-style: italic;
+			color: #ee6352;
+			line-height: .8;
+		}
+	</style>
 </head>
 <body>
 
 	<h1>Xemu in-browser demonstration page</h1>
 
 	<p>Xemu emulator demonstrations compiled from Xemu source with the emscripten emulator, so you can try them with only a web broser. <b>WORK-IN-PROGRESS</b>
+	<br>All of these emulators are available for native versions as well, for Windows, Linux (possible other UNIX'es) and MacOS too, which may give you a much better experience. These are just for quick preview purposes.
 	<br><b>NOTE</b>: this requires relative decent browser, almost no hope for IE, and probably even Safari is not decent enough (?), I would recommend
 	up-to-date version of Firefox or Chrome, probably (what we need: HTML5 canvas 2D context, ArrayBuffer, WebGL, asm.js and WebAssembly, File API, WebAudio, Game API support).
 	In theory game controllers should work via your browser too, if your browser supports it (though you can have axis/button-mapping problems).</p>
@@ -28,7 +38,7 @@
 				], [
 					"xclcd", {},
 					"Xemu Commodore LCD emulator",
-					"Commodore LCD emulation, a quite unknown machine, much-much more rare/unknown than the Commodore 65 itself! I've written the world's first working emulator and made a sane specification on it."
+					"Commodore LCD emulation, a quite unknown machine, much-much more rare/unknown than the Commodore 65 itself! I've written the world's first working emulator and made a sane specification on it after weeks of debugging of the ROM, hunting for ex-Commodore engineers and searching for PCB images on the web, etc ..."
 				], [
 					"xvic20", {},
 					"Xemu Commodore VIC20 emulator",
@@ -36,11 +46,11 @@
 				], [
 					"xep128", {},
 					"Xemu Enterprise-128 emulator",
-					"Enterprise-128 emulator, originally Xep128 project of mine. Enterprise-128 is a really fantastic and 'futuristic' computer to its time, both from hardware and software point of view. It's a shame it hasn't spreaded too much (it's said it was too difficult to understand with its unusal ideas not used in the 8 bit world too often before) ..."
+					"Enterprise-128 emulator, originally Xep128 project of mine. Enterprise-128 is a really fantastic and 'futuristic' computer to its time, both from hardware and software point of view. It's a shame it hasn't spreaded too much (it's said it was too difficult to understand with its unusal ideas not used in the 8 bit world too often before) ... Warning, this emulator is not so much integrated into the web framework, so it will drop you some alert windows before starting"
 				], [
 					"xtvc", {},
 					"Xemu Videoton TV Computer (TVC) emulator",
-					"Videton TV Computer (TVC) is a Hungarian Z80 based computer."
+					"Videton TV Computer (TVC) is a Hungarian Z80 based computer. Warning, you may need to wait a bit after visiting the page, that's normal in case of TVC."
 				], [
 					"xprimo", {},
 					"Xemu Primo emulator",

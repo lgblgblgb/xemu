@@ -6,8 +6,12 @@ cd `dirname $0` || exit 1
 echo "Current directory: `pwd`"
 
 installer="install-xemu-$1.exe"
+zipfile="xemu-$1-binaries.zip"
 echo "Target installer:  $installer"
+echo "Target ZIP file:   $zipfile"
 echo "Using DLL:         $2"
+zipfile="bin/$zipfile"
+zipcmd="zip $zipfile bin/`basename $2`"
 
 cp "$2" bin/ || exit 1
 
@@ -19,10 +23,17 @@ for a in bin/*.$1 ; do
 	rm -f $exe || exit 1
 	cp $a $exe || exit 1
 	size=$((size+`stat -c '%s' $exe`))
+	zipcmd="$zipcmd $exe"
 done
+#zipfile="zip $zipfile bin/`basename $2`"
+#echo "COMMAND LINE for ZIP: $zipcmd"
 
 convert xemu-32x28.xpm bin/xemu.ico
 
 wine ~/.wine/drive_c/Program\ Files\ \(x86\)/NSIS/makensis.exe /D`echo $1 | tr 'a-z' 'A-Z'` /DSDL2DLL=`basename $2` /DEXENAME=$installer /DARCH=$1 /DXEMUVER=`date '+%Y.%m.%d.%H%M'` /DVERSIONMAJOR=0 /DVERSIONMINOR=`date '+%Y%m%d%H%M'` /DVERSIONBUILD=0 /DINSTALLSIZE=$((size/1024)) xemu.nsi || exit 1
 ls -l bin/$installer
 
+echo "ZIPPING (to $zipfile) with command line: $zipcmd"
+rm -f $zipfile
+$zipcmd
+ls -l $zipfile
