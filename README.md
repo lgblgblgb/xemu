@@ -28,17 +28,51 @@ the wiki section of the project, here**:
 
 https://github.com/lgblgblgb/xemu/wiki
 
-## Quick start (using binary)
+## Most quick start (Xemu running in your web browser!)
 
-For probably seriously outdated pre-compiled binaries for MacOS, Win32, Win64,
-(and some deb package) please follow this link:
+Just visit this page, and use the "in-browser demonstration" link:
 
-https://bintray.com/lgblgblgb/generic/xemu/current_version
+http://xemu-dist.lgb.hu/
 
-Maybe more up-to-date site of mine for binaries (but no MacOS here) with experimental
-windows installer and Ubuntu DEB package:
+Nore: this kind of demonstration is limited, often not in pair with the native
+client for your OS (a "binary"), which - at the other hand - requires more
+work: installation, configuration, etc ...
 
-http://xemu.lgb.hu/download.php
+## Quick start (using pre-built binaries)
+
+I'm trying to provide some sane ways to install/use Xemu for people don't like
+to compile from source. Visit this page:
+
+http://xemu-dist.lgb.hu/
+
+You can find 32 and 64 bit windows based installers for Windows. No need to say,
+highly experimental (as I am not a windows user at all ...). You can find some
+DEB package as well.
+
+Also, you can find ZIP archives on that page, contains only the executable files
+and the needed DLL, without any installer.
+
+On Linux, you can try the provided DEB pacakge to install, if you run Ubuntu (may
+work on other DEB based distriutions as well). There is an RPM package provided
+too, however that is simply a converted version of the DEB pakcage (with "alien")
+so it may or may not work for you.
+
+### Where is the MacOS binary build?
+
+Sorry, there is no MacOS build this time, since I don't find any sane way to
+compile for MacOS legally without buying a Mac. That's a kind of lame from
+Apple btw, since I want to help Apple users to have more software, but I
+can't accept that I am forced to buy something to be able to do so (for
+Windows, I can use mingw cross-compiler from Linux - basically without
+any material from Microsoft I had to buy and/or use, there is no such a way
+for MacOS, or even if there is, it needs X-code components, etc, so it cannot
+be totally free / legal ...).
+
+Also I have no idea how installers work on MacOS, how to create one, etc ...
+One thing is clear: Xemu should work on Xemu, if you compile it yourself.
+
+Surely, if you have any suggestions, feel free to contact me, I've never
+even used MacOS.
 
 ## Quick start (from source)
 

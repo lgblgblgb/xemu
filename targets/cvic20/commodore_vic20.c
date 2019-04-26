@@ -452,11 +452,38 @@ static Uint8 via2_inb ( Uint8 mask )
 
 
 
+static int cycles;
+
+
+static void emulation_loop ( void )
+{
+	for (;;) { // our emulation loop ...
+		int opcyc;
+		opcyc = cpu65_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles
+		via_tick(&via1, opcyc);	// run VIA-1 tasks for the same amount of cycles as the CPU
+		via_tick(&via2, opcyc);	// -- "" -- the same for VIA-2
+		cycles += opcyc;
+		if (cycles >= CYCLES_PER_SCANLINE) {	// if [at least!] 71 (on PAL) CPU cycles passed then render a VIC-I scanline, and maintain scanline value + texture/SDL update (at the end of a frame)
+			// render one (scan)line. Note: this is INACCURATE, we should do rendering per dot clock/cycle or something,
+			// but for a simple emulator like this, it's already acceptable solultion, I think!
+			// Note about frameskip: we render only every second (half) frame, no interlace (PAL VIC), not so correct, but we also save some resources this way
+			if (!frameskip)
+				vic_render_line();
+			if (scanline == LAST_SCANLINE) {
+				update_emulator();
+				frameskip = !frameskip;
+				return;
+			} else
+				scanline++;
+			cycles -= CYCLES_PER_SCANLINE;
+		}
+	}
+}
+
 
 
 int main ( int argc, char **argv )
 {
-	int cycles;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Inaccurate Commodore VIC-20 emulator from LGB");
 	xemucfg_define_switch_option("bootmon", "Boot into monitor");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
@@ -590,25 +617,6 @@ int main ( int argc, char **argv )
 	if (!xemucfg_get_bool("syscon"))
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
-	for (;;) { // our emulation loop ...
-		int opcyc;
-		opcyc = cpu65_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles
-		via_tick(&via1, opcyc);	// run VIA-1 tasks for the same amount of cycles as the CPU
-		via_tick(&via2, opcyc);	// -- "" -- the same for VIA-2
-		cycles += opcyc;
-		if (cycles >= CYCLES_PER_SCANLINE) {	// if [at least!] 71 (on PAL) CPU cycles passed then render a VIC-I scanline, and maintain scanline value + texture/SDL update (at the end of a frame)
-			// render one (scan)line. Note: this is INACCURATE, we should do rendering per dot clock/cycle or something,
-			// but for a simple emulator like this, it's already acceptable solultion, I think!
-			// Note about frameskip: we render only every second (half) frame, no interlace (PAL VIC), not so correct, but we also save some resources this way
-			if (!frameskip)
-				vic_render_line();
-			if (scanline == LAST_SCANLINE) {
-				update_emulator();
-				frameskip = !frameskip;
-			} else
-				scanline++;
-			cycles -= CYCLES_PER_SCANLINE;
-		}
-	}
+	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;
 }

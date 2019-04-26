@@ -30,8 +30,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define D81ACCESS_IMG		1
 #define D81ACCESS_PRG		2
 #define D81ACCESS_DIR		4
+#define D81ACCESS_CALLBACKS	8
 #define D81ACCESS_RO		0x100
 #define D81ACCESS_AUTOCLOSE	0x200
+
+typedef int(*d81access_rd_cb_t)(void *buffer, off_t offset, int sector_size);
+typedef int(*d81access_wr_cb_t)(void *buffer, off_t offset, int sector_size);
 
 // must be defined by the caller!
 extern void d81access_cb_chgmode ( int mode );
@@ -44,5 +48,6 @@ extern int  d81access_get_mode   ( void );
 extern void d81access_close      ( void );
 extern void d81access_attach_fd  ( int fd, off_t offset, int mode );
 extern int  d81access_attach_fsobj ( const char *fn, int mode );
+extern void d81access_attach_cb	   ( off_t offset, d81access_rd_cb_t rd_callback, d81access_wr_cb_t wd_callback );
 
 #endif

@@ -1,6 +1,6 @@
 /* Various D81 access method for F011 core, for Xemu / C65 and M65 emulators.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -36,6 +36,8 @@ static struct {
 	int	prg_size;
 	int	prg_blk_size;
 	int	prg_blk_last_size;
+	d81access_rd_cb_t read_cb;
+	d81access_wr_cb_t write_cb;
 } d81;
 static int enable_mode_transient_callback = -1;
 
@@ -141,6 +143,21 @@ void d81access_attach_fd ( int fd, off_t offset, int mode )
 }
 
 
+// Attach callbacks instead of handling requests in this source
+void d81access_attach_cb ( off_t offset, d81access_rd_cb_t rd_callback, d81access_wr_cb_t wr_callback )
+{
+	d81access_close_internal();
+	d81.mode = D81ACCESS_CALLBACKS;
+	if (!wr_callback)
+		d81.mode |= D81ACCESS_RO;
+	d81.read_cb = rd_callback;
+	d81.write_cb = wr_callback;
+	d81.start_at = offset;
+	DEBUGPRINT("D81: attaching D81 via provided callbacks, read=%p, write=%p" NL, rd_callback, wr_callback);
+	d81access_cb_chgmode(d81.mode);
+}
+
+
 int d81access_attach_fsobj ( const char *fn, int mode )
 {
 	if (!fn || !*fn) {
@@ -148,6 +165,11 @@ int d81access_attach_fsobj ( const char *fn, int mode )
 		return -1;
 	}
 	if (mode & D81ACCESS_DIR) {
+		// if we passed D81ACCESS_DIR, we try to open the named object as a directory first.
+		// if it was OK, let's containue with that
+		// if not OK and error was ENOTDIR or ENOENT then simply assume to continue with other methods (not as directory).
+		// this is because, the "fn" parameter can be a relative path too, later can be used with relative-to-preferences directory or so.
+		// though directory opening is always absolute path what we're assuming.
 		DIR *dir = opendir(fn);
 		if (dir) {
 			// It seems we could open the "raw" object as directory
@@ -157,7 +179,7 @@ int d81access_attach_fsobj ( const char *fn, int mode )
 			DEBUGPRINT("D81: file system object \"%s\" opened as a directory." NL, fn);
 			d81access_cb_chgmode(d81.mode);
 			return 0;
-		} else if (errno != ENOTDIR) {
+		} else if (errno != ENOTDIR && errno != ENOENT) {
 			ERROR_WINDOW("D81: cannot open directory %s for virtual D81 mode: %s", fn, strerror(errno));
 			return 1;
 		}
@@ -396,6 +418,8 @@ int d81access_read_sect  ( Uint8 *buffer, int d81_offset, int sector_size )
 			return read_prg(buffer, d81_offset, sector_size >> 8);
 		case D81ACCESS_DIR:
 			FATAL("DIR access method is not yet implemented in Xemu, sorry :-(");
+		case D81ACCESS_CALLBACKS:
+			return d81.read_cb(buffer, d81.start_at + d81_offset, sector_size);
 		default:
 			FATAL("d81access_read_sect(): invalid d81.mode & 0xFF");
 	}
@@ -419,6 +443,8 @@ int d81access_write_sect ( Uint8 *buffer, int d81_offset, int sector_size )
 		case D81ACCESS_PRG:
 		case D81ACCESS_DIR:
 			return -1;	// currently, these are all read-only, even if caller forgets that and try :-O
+		case D81ACCESS_CALLBACKS:
+			return (d81.write_cb ? d81.write_cb(buffer, d81.start_at + d81_offset, sector_size) : -1);
 		default:
 			FATAL("d81access_write_sect(): invalid d81.mode & 0xFF");
 	}

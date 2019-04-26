@@ -13,3 +13,5 @@
 #ifdef __EMSCRIPTEN__
 #define NO_CONSOLE
 #endif
+
+#define CONFIG_EMSCRIPTEN_OK

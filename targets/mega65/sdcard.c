@@ -31,6 +31,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <fcntl.h>
 #include <limits.h>
 
+#define COMPRESSED_SD
+
 
 static int   sdfd;		// SD-card controller emulation, UNIX file descriptor of the open image file
 //static int   d81fd = -1;	// special case for F011 access, allow emulator to access D81 image on the host OS, instead of "inside" the SD card image! [NOT SO MUCH USED YET]
@@ -44,6 +46,11 @@ static Uint8 sd_sector_bytes[4];
 static Uint8 sd_d81_img1_start[4];
 static off_t sd_card_size;
 static int   sdcard_bytes_read = 0;
+#ifdef COMPRESSED_SD
+static int   sd_compressed = 0;
+static off_t sd_bdata_start;
+static int   compressed_block;
+#endif
 static int   sd_is_read_only;
 static int   is_sdhc_card;
 static int   mounted;
@@ -95,6 +102,30 @@ static void sdcard_set_external_d81_name ( const char *name )
 }
 
 
+#ifdef COMPRESSED_SD
+static int detect_compressed_image ( int fd )
+{
+	static const char compressed_marker[] = "XemuBlockCompressedImage000";
+	Uint8 buf[512];
+	if (lseek(sdfd, 0, SEEK_SET) == (off_t)-1 || xemu_safe_read(fd, buf, 512) != 512)
+		return -1;
+	if (memcmp(buf, compressed_marker, sizeof compressed_marker)) {
+		DEBUGPRINT("SDCARD: image is not compressed" NL);
+		return 0;
+	}
+	if (((buf[0x1C] << 16) | (buf[0x1D] << 8) | buf[0x1E]) != 3) {
+		ERROR_WINDOW("Invalid/unknown compressed image format");
+		return -1;
+	}
+	sd_card_size = (buf[0x1F] << 16) | (buf[0x20] << 8) | buf[0x21];
+	DEBUGPRINT("SDCARD: compressed image with %d blocks" NL, (int)sd_card_size);
+	sd_bdata_start = 3 * sd_card_size + 0x22;
+	sd_card_size <<= 9;	// convert to bytes
+	sd_is_read_only = O_RDONLY;
+	return 1;
+}
+#endif
+
 
 int sdcard_init ( const char *fn, const char *extd81fn, int sdhc_flag )
 {
@@ -138,6 +169,13 @@ retry:
 			sdfd = -1;
 			return sdfd;
 		}
+#ifdef COMPRESSED_SD
+		sd_compressed = detect_compressed_image(sdfd);
+		if (sd_compressed < 0) {
+			ERROR_WINDOW("Error while trying to detect compressed SD-image");
+			sd_card_size = 0; // just cheating to trigger error handling later
+		}
+#endif
 		DEBUG("SDCARD: detected size in Mbytes: %d" NL, (int)(sd_card_size >> 20));
 		if (sd_card_size < 67108864) {
 			ERROR_WINDOW("SD-card image is too small! Min required size is 64Mbytes!");
@@ -211,6 +249,22 @@ static int host_seek ( off_t offset )
 		DEBUGPRINT("SDCARD: SEEK: invalid offset requested: offset " PRINTF_LLD " PC=$%04X" NL, (long long)offset, cpu65.pc);
 		return -1;
 	}
+#ifdef COMPRESSED_SD
+	if (sd_compressed) {
+		if (offset & 511)
+			FATAL("Compressed SD got request for non-aligned access, it won't work, sorry ...");
+		offset = (offset >> 9) * 3 + 0x22;
+		if (lseek(sdfd, offset, SEEK_SET) != offset)
+			FATAL("SDCARD: SEEK: compressed image host-OS seek failure: %s", strerror(errno));
+		Uint8 buf[3];
+		if (xemu_safe_read(sdfd, buf, 3) != 3)
+			FATAL("SDCARD: SEEK: compressed image host-OK pre-read failure: %s", strerror(errno));
+		compressed_block = (buf[0] & 0x80);
+		buf[0] &= 0x7F;
+		offset = ((off_t)((buf[0] << 16) | (buf[1] << 8) | buf[2]) << 9) + sd_bdata_start;
+		//DEBUGPRINT("SD-COMP: got address: %d" NL, (int)offset);
+	}
+#endif
 	if (lseek(sdfd, offset, SEEK_SET) != offset)
 		FATAL("SDCARD: SEEK: image seek host-OS failure: %s", strerror(errno));
 	return 0;
@@ -308,7 +362,12 @@ static void sdcard_block_io ( int is_write )
 		ret = 1;	// write protected SD image?
 	}
 	if (!ret) {
-		if ((is_write ? xemu_safe_write(sdfd, sd_buffer, 512) : xemu_safe_read(sdfd, sd_buffer, 512)) != 512)
+		if (
+#ifdef COMPRESSED_SD
+			(is_write && compressed_block) ||
+#endif
+			(is_write ? xemu_safe_write(sdfd, sd_buffer, 512) : xemu_safe_read(sdfd, sd_buffer, 512)) != 512
+		)
 			ret = -1;
 		//ret = diskimage_read_block(sd_buffer, sd_sector_bytes, 0, "reading[SD]", sd_card_size, sdfd);
 	}
@@ -417,6 +476,30 @@ static void sdcard_command ( Uint8 cmd )
 }
 
 
+#ifdef COMPRESSED_SD
+static int on_compressed_sd_d81_read_cb ( void *buffer, off_t offset, int sector_size )
+{
+	int ret = host_seek(offset);
+	if (ret) {
+		FATAL("Compressed SD seek error");
+		return -1;
+	}
+	if (sector_size != 512) {
+		FATAL("Compressed SD got non-512 sector size!");
+		return -1;
+	}
+	ret = xemu_safe_read(sdfd, buffer, sector_size);
+	if (ret != sector_size) {
+		FATAL("Compressed SD read error");
+		return -1;
+	}
+	//DEBUGPRINT("SDCARD: compressed-SD-D81: read ..." NL);
+	return 0;
+}
+#endif
+
+
+
 static int mount_external_d81 ( const char *name, int force_ro )
 {
 	// Let fsobj func guess the "name" being image, a program file, or an FS directory
@@ -442,7 +525,12 @@ static int mount_internal_d81 ( int force_ro )
 	//       which can be used in the future to trigger external mount with native-M65 in-emulator tools, instead of emulator controls externally (like -8 option).
 	// Do not use D81ACCESS_AUTOCLOSE here! It would cause to close the sdfd by d81access on umount, thus even our SD card image is closed!
 	// Also, let's inherit the possible read-only status of our SD image, of course.
-	d81access_attach_fd(sdfd, offset, D81ACCESS_IMG | ((sd_is_read_only || force_ro) ? D81ACCESS_RO : 0));
+#ifdef COMPRESSED_SD
+	if (sd_compressed) {
+		d81access_attach_cb(offset, on_compressed_sd_d81_read_cb, NULL);	// we pass NULL as write callback to signal, that disk is R/O
+	} else
+#endif
+		d81access_attach_fd(sdfd, offset, D81ACCESS_IMG | ((sd_is_read_only || force_ro) ? D81ACCESS_RO : 0));
 	mounted = 1;
 	return 0;
 }
