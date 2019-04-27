@@ -2,20 +2,49 @@
 <html>
 <head>
 	<meta charset="utf-8">
-	<title>Xemu in-browser demonstration page</title>
-	<style>
-		h1 {
-			margin: 0 0 1em;
-			font-weight: 900;
-			font-style: italic;
-			color: #ee6352;
-			line-height: .8;
-		}
-	</style>
+        <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+        <meta http-equiv="X-UA-Compatible" content="ie=edge">
+        <title>Xemu in-browser demonstration page</title>
+        <style>
+                h1 {
+                        margin: 0 0 1em;
+                        font-weight: 900;
+                        font-style: italic;
+                        color: #ee6352;
+                        line-height: .8;
+                }
+                a:hover {
+                        color: #ee6352;
+                        background-color: black;
+                }
+                a:link, a:visited, a:active {
+                        color: #ee6352;
+                }
+                ul {
+                        list-style: none;
+                        padding-right: 1em;
+                }
+                ul li::before {
+                        content: "";
+                        color: black;
+                        font-weight: bold;
+                        display: inline-block;
+                        width: 1em;
+                        margin-left: -1em;
+                }
+                li {
+                        border-top: 2px #ee6352 solid;
+                        border-left: 1em #ee6352 solid;
+                        padding-left: 1em;
+                        padding-right: 1em;
+                }
+        </style>
 </head>
 <body>
 
 	<h1>Xemu in-browser demonstration page</h1>
+
+	<p id="javascriptwarning">You must enable javascript to be able to use this page.</p>
 
 	<p>Xemu emulator demonstrations compiled from Xemu source with the emscripten emulator, so you can try them with only a web broser. <b>WORK-IN-PROGRESS</b>
 	<br>All of these emulators are available for native versions as well, for Windows, Linux (possible other UNIX'es) and MacOS too, which may give you a much better experience. These are just for quick preview purposes.
@@ -26,6 +55,7 @@
 	<script>
 		function XemuSamplePage() {
 			"use strict";
+			document.getElementById("javascriptwarning").style.display = "none";
 			var emulatorPages = [
 				[
 					"xmega65", {},
@@ -63,7 +93,7 @@
 				url = "xemu-" + emulatorPages[a][0] + "-sample.html?" + (new Date).getTime();
 				for (b in emulatorPages[a][1])
 					url += "&amp;" + encodeURIComponent(b) + "=" + encodeURIComponent(emulatorPages[a][1][b]);
-				document.write("<li><b><a href=\"" + url + "\">" + emulatorPages[a][2] + "</a></b><p>" + emulatorPages[a][3] + "</p></li>\n");
+				document.write("<li><b><a href=\"" + url + "\">" + emulatorPages[a][2] + "</a></b><p><i>" + emulatorPages[a][3] + "</i></p></li>\n");
 			}
 			document.write("</ul>\n");
 		}

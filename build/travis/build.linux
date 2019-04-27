@@ -29,7 +29,8 @@ if [ "$ret" = "0" ]; then
 	for a in *.win32 ; do
 		mv $a `basename $a .win32`.exe
 	done
-	cp /usr/local/cross-tools/i686-w64-mingw32.SDL-2.0.4/bin/SDL2.dll .
+	#cp /usr/local/cross-tools/i686-w64-mingw32.SDL-2.0.4/bin/SDL2.dll .
+	cp "`../system-config win32 sdl2 dll`" SDL2.dll
 	zip xemu-binaries-win64.zip *.exe README.md LICENSE SDL2.dll
 	ls -l xemu-binaries-win64.zip
 
@@ -38,7 +39,8 @@ if [ "$ret" = "0" ]; then
 	for a in *.win64 ; do
 		mv $a `basename $a .win64`.exe
 	done
-	cp /usr/local/cross-tools/x86_64-w64-mingw32/bin/SDL2.dll .
+	#cp /usr/local/cross-tools/x86_64-w64-mingw32/bin/SDL2.dll .
+	cp "`../system-config win64 sdl2 dll`" SDL2.dll
 	zip xemu-binaries-win32.zip *.exe README.md LICENSE SDL2.dll
 	ls -l xemu-binaries-win32.zip
 fi
