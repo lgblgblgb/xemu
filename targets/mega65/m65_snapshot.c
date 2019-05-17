@@ -67,8 +67,7 @@ static int snapcallback_memory_saver ( const struct xemu_snapshot_definition_st 
 #define DEFINE_SNAPSHOT_MEMORY_BLOCK(name, structure) { "MemoryRegion:" name, (void*)&structure, snapcallback_memory_loader, snapcallback_memory_saver }
 
 
-static const struct memblock_st memblock_chip_ram	= { chip_ram, sizeof chip_ram };
-static const struct memblock_st memblock_fast_ram	= { fast_ram, sizeof fast_ram };
+static const struct memblock_st memblock_main_ram	= { main_ram, sizeof main_ram };
 static const struct memblock_st memblock_colour_ram	= { colour_ram, sizeof colour_ram };
 static const struct memblock_st memblock_char_wom	= { char_wom, sizeof char_wom };
 static const struct memblock_st memblock_hypervisor	= { hypervisor_ram, 0x4000 };
@@ -84,11 +83,10 @@ const struct xemu_snapshot_definition_st m65_snapshot_definition[] = {
 	{ "DMAgic", NULL, dma_snapshot_load_state, dma_snapshot_save_state },
 	{ "SDcard", NULL, sdcard_snapshot_load_state, sdcard_snapshot_save_state },
 	{ "FDC-F011", NULL, fdc_snapshot_load_state, fdc_snapshot_save_state },
-	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:ChipRam", memblock_chip_ram),
-	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:FastRam", memblock_fast_ram),
-	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:ColourRam", memblock_colour_ram),
-	DEFINE_SNAPSHOT_MEMORY_BLOCK("WOM:CharWom", memblock_char_wom),
-	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:HyperVisorRam", memblock_hypervisor),
+	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:Main", memblock_main_ram),
+	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:Colour", memblock_colour_ram),
+	DEFINE_SNAPSHOT_MEMORY_BLOCK("WOM:Char", memblock_char_wom),
+	DEFINE_SNAPSHOT_MEMORY_BLOCK("RAM:Hyppo", memblock_hypervisor),
 	{ NULL, NULL, m65emu_snapshot_loading_finalize, NULL }
 };
 

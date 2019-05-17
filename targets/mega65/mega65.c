@@ -237,10 +237,10 @@ static void refill_memory_from_preinit_cache ( void )
 {
 	memcpy(char_wom, meminitdata_chrwom, MEMINITDATA_CHRWOM_SIZE);
 	memcpy(colour_ram, meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
-	memcpy(chip_ram + 0x3D00, meminitdata_banner, MEMINITDATA_BANNER_SIZE);
-	memcpy(fast_ram, rom_init_image, sizeof rom_init_image);
+	memcpy(main_ram +  0x3D00, meminitdata_banner, MEMINITDATA_BANNER_SIZE);
+	memcpy(main_ram + 0x20000, rom_init_image, sizeof rom_init_image);
 	memcpy(hypervisor_ram, meminitdata_kickstart, MEMINITDATA_KICKSTART_SIZE);
-	memcpy(chip_ram + 0xC000, c000_init_image, sizeof c000_init_image);
+	memcpy(main_ram +  0xC000, c000_init_image, sizeof c000_init_image);
 }
 
 
@@ -377,7 +377,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 }
 
 
-
+#include <unistd.h>
 
 
 
@@ -394,11 +394,11 @@ static void shutdown_callback ( void )
 	// Dump hypervisor memory to a file, so you can check it after exit.
 	FILE *f = fopen(MEMDUMP_FILE, "wb");
 	if (f) {
-		fwrite(chip_ram, 1, sizeof chip_ram, f);
-		fwrite(colour_ram, 1, 2048, f);
-		fwrite(fast_ram, 1, sizeof fast_ram, f);
+		fwrite(main_ram,		1, 0x20000 - 2048, f);
+		fwrite(colour_ram,		1, 2048, f);
+		fwrite(main_ram + 0x20000,	1, 0x40000, f);
 		fclose(f);
-		DEBUGPRINT("Memory state (chip+fast RAM, 256K) is dumped into " MEMDUMP_FILE NL);
+		DEBUGPRINT("Memory state is dumped into %s" DIRSEP_STR "%s" NL, getcwd(NULL, PATH_MAX), MEMDUMP_FILE);
 	}
 #endif
 #ifdef UARTMON_SOCKET

@@ -487,7 +487,7 @@ static inline Uint8 *vic2_get_chargen_pointer ( void )
 		// FIXME: what should I do with bit 6 of VIC-III register $30 ["CROM"] ?!
 		return char_wom + offs - 0x1000;
 	} else
-		return chip_ram + vic2_16k_bank + offs;
+		return main_ram + vic2_16k_bank + offs;
 }
 
 
@@ -512,13 +512,13 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 		ylim = 24;
 		// Note: VIC2 sees ROM at some addresses thing is not emulated yet for other thing than chargen memory!
 		// Note: according to the specification bit 4 has no effect in 80 columns mode!
-		vidp = chip_ram + ((vic_registers[0x18] & 0xE0) << 6) + vic2_16k_bank;
+		vidp = main_ram + ((vic_registers[0x18] & 0xE0) << 6) + vic2_16k_bank;
 		sprite_pointers = vidp + 2040;
 	} else {
 		xlim = 39;
 		ylim = 24;
 		// Note: VIC2 sees ROM at some addresses thing is not emulated yet for other thing than chargen memory!
-		vidp = chip_ram + ((vic_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
+		vidp = main_ram + ((vic_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
 		sprite_pointers = vidp + 1016;
 	}
 	// Target SDL pixel related format for the background colour
@@ -538,7 +538,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 				p += xlim == 39 ? 16 : 8;	// so we just ignore ... FIXME !!
 			} else {
 				int a;
-				Uint8 *cp = chip_ram + (((vidp[0] << 6) + (charline << 3) + (vidp[1] << 14)) & 0x1ffff); // and-mask: wrap-around in 128K of chip-RAM
+				Uint8 *cp = main_ram + (((vidp[0] << 6) + (charline << 3) + (vidp[1] << 14)) & 0x1ffff); // and-mask: wrap-around in 128K of chip-RAM
 				for (a = 0; a < 8; a++) {
 					if (xlim != 79)
 						*(p++) = palette[*cp];
@@ -622,9 +622,9 @@ static inline void vic2_render_screen_bmm ( Uint32 *p, int tail )
 {
 	int x = 0, y = 0, charline = 0;
 	Uint8 *vidp, *chrp;
-	vidp = chip_ram + ((vic_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
+	vidp = main_ram + ((vic_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
 	sprite_pointers = vidp + 1016;
-	chrp = chip_ram + ((vic_registers[0x18] & 8) ? 8192 : 0) + vic2_16k_bank;
+	chrp = main_ram + ((vic_registers[0x18] & 8) ? 8192 : 0) + vic2_16k_bank;
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_bmm");
 	for (;;) {
 		Uint8  data = *(vidp++);
@@ -676,14 +676,14 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
 	int bitpos = 128, charline = 0, offset = 0;
 	int xlim, x = 0, y = 0, h640 = (vic_registers[0x31] & 128);
 	Uint8 bpe, *bp[8];
-	bp[0] = chip_ram + ((vic_registers[0x33] & (h640 ? 12 : 14)) << 12);
-	bp[1] = chip_ram + ((vic_registers[0x34] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[2] = chip_ram + ((vic_registers[0x35] & (h640 ? 12 : 14)) << 12);
-	bp[3] = chip_ram + ((vic_registers[0x36] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[4] = chip_ram + ((vic_registers[0x37] & (h640 ? 12 : 14)) << 12);
-	bp[5] = chip_ram + ((vic_registers[0x38] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[6] = chip_ram + ((vic_registers[0x39] & (h640 ? 12 : 14)) << 12);
-	bp[7] = chip_ram + ((vic_registers[0x3A] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[0] = main_ram + ((vic_registers[0x33] & (h640 ? 12 : 14)) << 12);
+	bp[1] = main_ram + ((vic_registers[0x34] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[2] = main_ram + ((vic_registers[0x35] & (h640 ? 12 : 14)) << 12);
+	bp[3] = main_ram + ((vic_registers[0x36] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[4] = main_ram + ((vic_registers[0x37] & (h640 ? 12 : 14)) << 12);
+	bp[5] = main_ram + ((vic_registers[0x38] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[6] = main_ram + ((vic_registers[0x39] & (h640 ? 12 : 14)) << 12);
+	bp[7] = main_ram + ((vic_registers[0x3A] & (h640 ? 12 : 14)) << 12) + 0x10000;
 	bpe = vic_registers[0x32];	// bit planes enabled mask
 	if (h640) {
 		bpe &= 15;		// it seems, with H640, only 4 bitplanes can be used (on lower 4 ones)
@@ -806,10 +806,10 @@ void vic_render_screen ( void )
 	Uint32 *p_sdl = xemu_start_pixel_buffer_access(&tail_sdl);
 	int sprites = vic_registers[0x15];
 	if (vic_registers[0x31] & 16) {
-	        sprite_bank = chip_ram + ((vic_registers[0x35] & 12) << 12);	// FIXME: just guessing: sprite bank is bitplane 2 area, always 16K regardless of H640?
+	        sprite_bank = main_ram + ((vic_registers[0x35] & 12) << 12);	// FIXME: just guessing: sprite bank is bitplane 2 area, always 16K regardless of H640?
 		vic3_render_screen_bpm(p_sdl, tail_sdl);
 	} else {
-		sprite_bank = vic2_16k_bank + chip_ram;				// VIC2 legacy modes uses the VIC2 bank for sure, as the sprite bank too
+		sprite_bank = vic2_16k_bank + main_ram;				// VIC2 legacy modes uses the VIC2 bank for sure, as the sprite bank too
 		if (vic_registers[0x11] & 32)
 			vic2_render_screen_bmm(p_sdl, tail_sdl);
 		else

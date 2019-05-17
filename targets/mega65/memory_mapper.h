@@ -31,9 +31,19 @@ extern void  memory_debug_write_phys_addr ( int addr, Uint8 data );
 extern Uint8 memory_debug_read_cpu_addr   ( Uint16 addr );
 extern void  memory_debug_write_cpu_addr  ( Uint16 addr, Uint8 data );
 
+//#define SIZEOF_CHIP_RAM  0x20000
+//#define SIZEOF_FAST_RAM  0x20000
+//#define SIZEOF_EXTRA_RAM 0x20000
+
 extern int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
 extern int rom_protect, skip_unhandled_mem;
-extern Uint8 chip_ram[0x20000], fast_ram[0x20000], colour_ram[0x8000], char_wom[0x1000], hypervisor_ram[0x4000];
+extern Uint8 main_ram[512 << 10], colour_ram[0x8000], char_wom[0x1000], hypervisor_ram[0x4000];
+//extern Uint8 chip_ram[SIZEOF_CHIP_RAM], fast_ram[SIZEOF_FAST_RAM];
+// Ugly hack for more RAM!
+//#define chip_ram  (main_ram + 0)
+//#define fast_ram  (main_ram + 0x20000)
+//#define extra_ram (main_ram + 0x40000)
+
 extern int cpu_rmw_old_data;
 
 #endif
