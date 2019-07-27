@@ -1,5 +1,5 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -301,6 +301,9 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		VIRTUAL_SHIFT_POS,
 		SDL_ENABLE		// joy HID events enabled
 	);
+#ifdef HID_KBD_MAP_CFG_SUPPORT
+	hid_keymap_from_config_file(xemucfg_get_str("keymap"));
+#endif
 	joystick_emu = 1;
 	nmi_level = 0;
 	// *** host-FS
@@ -878,6 +881,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
 	//xemucfg_define_switch_option("noaudio", "Disable audio");
 	xemucfg_define_str_option("rom", "#c65-system.rom", "Override system ROM path to be loaded");
+	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
 #ifdef FAKE_TYPING_SUPPORT
 	xemucfg_define_switch_option("go64", "Go into C64 mode after start");
 	xemucfg_define_switch_option("autoload", "Load and start the first program from disk");

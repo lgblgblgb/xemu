@@ -34,7 +34,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define IS_RESTORE_PRESSED()	IS_KEY_PRESSED(RESTORE_KEY_POS)
 //#define IS_RESTORE_PRESSED()	(!(kbd_matrix[RESTORE_KEY_POS >> 4] & (1 << (RESTORE_KEY_POS & 7))))
 
-extern const struct KeyMapping c64_key_map[];
+#ifdef C65_KEYBOARD
+#define C65_KEYBOARD_EXTRA_POS	0x90
+#endif
+
+extern const struct KeyMappingDefault c64_key_map[];
 extern int joystick_emu;
 
 extern Uint8 c64_get_joy_state  ( void );

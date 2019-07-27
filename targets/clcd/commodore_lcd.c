@@ -76,7 +76,7 @@ static const Uint8 init_lcd_palette_rgb[6] = {
 static Uint32 lcd_palette[2];
 
 #define VIRTUAL_SHIFT_POS 0x82
-static const struct KeyMapping lcd_key_map[] = {
+static const struct KeyMappingDefault lcd_key_map[] = {
 	{ SDL_SCANCODE_BACKSPACE, 0x00 },
 	{ SDL_SCANCODE_3, 0x01 },
 	{ SDL_SCANCODE_5, 0x02 },

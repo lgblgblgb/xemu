@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -328,6 +328,10 @@ int xemucfg_parse_all ( int argc, char **argv )
 }
 
 
+int xemucfg_has_option ( const char *name )
+{
+	return (search_option(name) != NULL);
+}
 
 static struct xemutools_config_st *search_option_query ( const char *name, enum xemutools_option_type type )
 {
@@ -338,7 +342,6 @@ static struct xemutools_config_st *search_option_query ( const char *name, enum 
 		return p;
 	FATAL("Internal ConfigDB error: queried option '%s' with different type as defined inside Xemu!", name);
 }
-
 
 
 const char *xemucfg_get_str ( const char *optname )

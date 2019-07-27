@@ -166,6 +166,10 @@ static void cia2_setint_cb ( int level )
 static void cia2_out_a ( Uint8 data )
 {
 	vic2_16k_bank = ((~(data | (~cia2.DDRA))) & 3) << 14;
+	vic_vidp_legacy = 1;
+	vic_chrp_legacy = 1;
+	vic_sprp_legacy = 1;
+	// TODO FIXME: add sprites pointers!
 	DEBUG("VIC2: 16K BANK is set to $%04X (CIA mask=$%02X)" NL, vic2_16k_bank, cia2.DDRA);
 }
 
@@ -256,6 +260,9 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		VIRTUAL_SHIFT_POS,
 		SDL_ENABLE		// joy HID events enabled
 	);
+#ifdef HID_KBD_MAP_CFG_SUPPORT
+	hid_keymap_from_config_file(xemucfg_get_str("keymap"));
+#endif
 	joystick_emu = 1;
 	nmi_level = 0;
 	// *** FPGA switches ...
@@ -661,6 +668,9 @@ int main ( int argc, char **argv )
 		return 1;
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(xemucfg_get_str("installer"));
+#endif
+#ifdef HID_KBD_MAP_CFG_SUPPORT
+	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
 #endif
 	newhack = !xemucfg_get_bool("nonewhack");
 	if (newhack)

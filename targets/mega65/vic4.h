@@ -33,6 +33,8 @@ extern int   vic3_blink_phase;
 extern int   force_fast;
 extern Uint8 c128_d030_reg;
 
+extern int   vic_vidp_legacy, vic_chrp_legacy, vic_sprp_legacy;
+
 extern void  vic_init ( void );
 extern void  vic_write_reg ( unsigned int addr, Uint8 data );
 extern Uint8 vic_read_reg  ( unsigned int addr );

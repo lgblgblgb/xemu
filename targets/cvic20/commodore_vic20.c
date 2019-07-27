@@ -96,7 +96,7 @@ static Uint8 *vic_address_space_lo8[16] = {	// configure low 8 bits of VIC-I dat
 #define VIRTUAL_SHIFT_POS	0x31
 
 
-static const struct KeyMapping vic20_key_map[] = {
+static const struct KeyMappingDefault vic20_key_map[] = {
 	{ SDL_SCANCODE_1,		0x00 }, // 1
 	{ SDL_SCANCODE_3,		0x01 }, // 3
 	{ SDL_SCANCODE_5,		0x02 }, // 5

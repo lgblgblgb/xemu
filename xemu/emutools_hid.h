@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016,2017,2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -23,10 +23,22 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 /* Note: HID stands for "Human Input Devices" or something like that :)
    That is: keyboard, joystick, mouse. */
 
-struct KeyMapping {
+struct KeyMappingDefault {
 	SDL_Scancode	scan;	// SDL scancode for the given key we want to map
 	int		pos;	// BCD packed, high nibble / low nibble (x <= 7) for col/row to map to, -1 end of table, > 0xFF is special key event
+	const char*	name;	// name of the emulated key. It's just for "comment" or layout config load/save whatever, the emulation itself does not use it
 };
+struct KeyMappingUsed {
+	SDL_Scancode	scan;
+	int		pos;
+	int		set;
+};
+
+#ifdef HID_KBD_MAP_CFG_SUPPORT
+#define KEYMAP_DEFAULT_FILENAME	"@keymap-default.cfg"
+#define KEYMAP_USER_FILENAME	"@keymap.cfg"
+extern void hid_keymap_from_config_file ( const char *fn );
+#endif
 
 extern Uint8 kbd_matrix[16];
 
@@ -40,7 +52,7 @@ extern Uint8 kbd_matrix[16];
 		KBD_RELEASE_KEY(a);	\
 } while (0)
 
-extern int   hid_mouse_enabled;
+extern int  hid_mouse_enabled;
 
 // This one must be defined by the emulator!
 extern int  emu_callback_key		( int pos, SDL_Scancode key, int pressed, int handled ) ;
@@ -51,7 +63,7 @@ extern void emu_quit_callback		( void );
 // Provided HID functions:
 extern int  hid_key_event		( SDL_Scancode key, int pressed ) ;
 extern void hid_reset_events		( int burn ) ;
-extern void hid_init			( const struct KeyMapping *key_map_in, Uint8 virtual_shift_pos_in, int joy_enable ) ;
+extern void hid_init			( const struct KeyMappingDefault *key_map_in, Uint8 virtual_shift_pos_in, int joy_enable ) ;
 extern void hid_mouse_motion_event      ( int xrel, int yrel ) ;
 extern void hid_mouse_button_event      ( int button, int pressed ) ;
 extern void hid_joystick_device_event   ( int which , int is_attach ) ;
@@ -78,16 +90,15 @@ extern void hid_handle_all_sdl_events   ( void ) ;
 #define XEMU_EVENT_FAKE_JOY_FIRE	0x105
 #define XEMU_EVENT_TOGGLE_FULLSCREEN	0x106
 
-
 #define STD_XEMU_SPECIAL_KEYS	\
-	{ SDL_SCANCODE_F9,	XEMU_EVENT_EXIT }, \
-	{ SDL_SCANCODE_F11,	XEMU_EVENT_TOGGLE_FULLSCREEN }, \
-	{ SDL_SCANCODE_KP_5,	XEMU_EVENT_FAKE_JOY_FIRE },	/* for joy FIRE  we map PC num keypad 5 */ \
-	{ SDL_SCANCODE_KP_0,	XEMU_EVENT_FAKE_JOY_FIRE },	/* PC num keypad 0 is also the FIRE ... */ \
-	{ SDL_SCANCODE_RCTRL,	XEMU_EVENT_FAKE_JOY_FIRE },	/* and RIGHT controll is also the FIRE ... to make Sven happy :) */ \
-	{ SDL_SCANCODE_KP_8,	XEMU_EVENT_FAKE_JOY_UP },	/* for joy UP    we map PC num keypad 8 */ \
-	{ SDL_SCANCODE_KP_2,	XEMU_EVENT_FAKE_JOY_DOWN },	/* for joy DOWN  we map PC num keypad 2 */ \
-	{ SDL_SCANCODE_KP_4,	XEMU_EVENT_FAKE_JOY_LEFT },	/* for joy LEFT  we map PC num keypad 4 */ \
-	{ SDL_SCANCODE_KP_6,	XEMU_EVENT_FAKE_JOY_RIGHT }	/* for joy RIGHT we map PC num keypad 6 */
+	{ SDL_SCANCODE_F9,	XEMU_EVENT_EXIT,		"XEMU-EXIT" }, \
+	{ SDL_SCANCODE_F11,	XEMU_EVENT_TOGGLE_FULLSCREEN,	"XEMU-FULLSCREEN" }, \
+	{ SDL_SCANCODE_KP_5,	XEMU_EVENT_FAKE_JOY_FIRE,	"XEMU-JOY-FIRE" },	/* for joy FIRE  we map PC num keypad 5 */ \
+	{ SDL_SCANCODE_KP_0,	XEMU_EVENT_FAKE_JOY_FIRE,	"XEMU-JOY-FIRE" },	/* PC num keypad 0 is also the FIRE ... */ \
+	{ SDL_SCANCODE_RCTRL,	XEMU_EVENT_FAKE_JOY_FIRE,	"XEMU-JOY-FIRE" },	/* and RIGHT controll is also the FIRE ... to make Sven happy :) */ \
+	{ SDL_SCANCODE_KP_8,	XEMU_EVENT_FAKE_JOY_UP,		"XEMU-JOY-UP" },	/* for joy UP    we map PC num keypad 8 */ \
+	{ SDL_SCANCODE_KP_2,	XEMU_EVENT_FAKE_JOY_DOWN,	"XEMU-JOY-DOWN" },	/* for joy DOWN  we map PC num keypad 2 */ \
+	{ SDL_SCANCODE_KP_4,	XEMU_EVENT_FAKE_JOY_LEFT,	"XEMU-JOY-LEFT" },	/* for joy LEFT  we map PC num keypad 4 */ \
+	{ SDL_SCANCODE_KP_6,	XEMU_EVENT_FAKE_JOY_RIGHT,	"XEMU-JOY-RIGHT" }	/* for joy RIGHT we map PC num keypad 6 */
 
 #endif

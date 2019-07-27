@@ -1,7 +1,7 @@
 /* Test-case for a very simple Primo (a Hungarian U880 - Z80
    compatible clone CPU - based 8 bit computer) emulator.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    NOTE: Primo's CPU is U880, but for the simplicity I still call it Z80, as
    it's [unlicensed] clone anyway.
@@ -24,6 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_files.h"
 #include "xemu/emutools_hid.h"
 #include "xemu/emutools_config.h"
+// #include "xemu/emutools_nativegui.h"
 #include "xemu/z80.h"
 #include "xemu/z80_dasm.h"
 #include "primo.h"
@@ -229,7 +230,7 @@ void z80ex_reti_cb ( void )
    the port read function above.
    FIXME: better map, missing keys, some differences between Primo models!
 */
-static const struct KeyMapping primo_key_map[] = {
+static const struct KeyMappingDefault primo_key_map[] = {
 	{ SDL_SCANCODE_Y,	0x00 },	// scan 0 Y
 	{ SDL_SCANCODE_UP,	0x01 },	// scan 1 UP-ARROW
 	{ SDL_SCANCODE_S,	0x02 },	// scan 2 S
@@ -758,6 +759,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("model", "b64", "Set Primo model: a32, a48, a64, b32, b48, b64, c");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
+	// xemunativegui_init();
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title

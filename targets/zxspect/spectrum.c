@@ -242,7 +242,7 @@ void z80ex_reti_cb ( void )
    ALSO: Primo uses bit '1' for pressed, so we also invert value in
    the port read function above.
 */
-static const struct KeyMapping speccy_key_map[] = {
+static const struct KeyMappingDefault speccy_key_map[] = {
 	{ SDL_SCANCODE_LSHIFT,	0x00 }, { SDL_SCANCODE_RSHIFT,	0x00},
 	{ SDL_SCANCODE_Z,	0x01 },
 	{ SDL_SCANCODE_X,	0x02 },

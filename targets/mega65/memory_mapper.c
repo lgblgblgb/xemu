@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2017,2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2017-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -69,6 +69,15 @@ Uint8 hypervisor_ram[0x4000];
 // 127Mbytes of slow-RAM. Would be the DDR memory on M65/Nexys4
 #ifdef SLOW_RAM_SUPPORT
 Uint8 slow_ram[127 << 20];
+#endif
+
+#define HYPER_RAM_SUPPORT
+#define HYPER_RAM_SIZE		(128 << 20)
+#define HYPER_RAM_START		0x100000
+#define HYPER_RAM_END 		(HYPER_RAM_START + HYPER_RAM_SIZE - 1)
+
+#ifdef HYPER_RAM_SUPPORT
+Uint8 hyper_ram[HYPER_RAM_SIZE];
 #endif
 
 
@@ -207,6 +216,18 @@ DEFINE_WRITER(slow_ram_writer) {
 	slow_ram[GET_WRITER_OFFSET()] = data;
 #endif
 }
+DEFINE_READER(hyper_ram_reader) {
+#ifdef HYPER_RAM_SUPPORT
+	return hyper_ram[GET_READER_OFFSET()];
+#else
+	return 0xFF;
+#endif
+}
+DEFINE_WRITER(hyper_ram_writer) {
+#ifdef HYPER_RAM_SUPPORT
+	hyper_ram[GET_WRITER_OFFSET()] = data;
+#endif
+}
 DEFINE_READER(invalid_mem_reader) {
 	if (XEMU_LIKELY(skip_unhandled_mem))
 		DEBUGPRINT("WARNING: Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, GET_READER_OFFSET(), cpu65.pc);
@@ -282,6 +303,7 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 	{ 0xFFD6000, 0xFFD6FFF, disk_buffers_reader, disk_buffers_writer },	// disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space" [??]
 	{ 0x8000000, 0xFEFFFFF, slow_ram_reader, slow_ram_writer },		// 127Mbytes of "slow RAM" (Nexys4 DDR2 RAM)
 	{ 0x60000, 0xFFFFF, dummy_reader, dummy_writer },			// upper "unused" area of C65 (!) memory map. It seems C65 ROMs want it (Expansion RAM?) so we define as unused.
+	{ HYPER_RAM_START, HYPER_RAM_END, hyper_ram_reader, hyper_ram_writer },
 	// the last entry *MUST* include the all possible addressing space to "catch" undecoded memory area accesses!!
 	{ 0, 0xFFFFFFF, invalid_mem_reader, invalid_mem_writer },
 	// even after the last entry :-) to filter out programming bugs, catch all possible even not valid M65 physical address space acceses ...
