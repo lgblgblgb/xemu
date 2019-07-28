@@ -31,6 +31,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // Comments on this table: for uncommented lines, it's a kinda trivial mapping, like '3' on PC is for sure, '3' on C64 ...
 // Since, it's positional mapping, there is no need to talk about key '3' shifted, it simply means the result of shifted '3' on C64, that's all.
 // For 'PC key', we assume the scancode, thus about the US PC keyboard layout, in general! [but this can be vary if OS remaps scancodes, who knows how SDL handles this ...]
+// NOTE: The term "C65", "C65 keyboard" means C65 or M65 emulators. You can ask wow, then what left in Xemu not C65 kbd? Well, there is C64/GEOS emulataion "leftover", which is only C64 :)
+// "SDL_SCANCODE_UNKNOWN" does not map a key, but user can still give a custom keymap config file to map those.
 const struct KeyMappingDefault c64_key_map[] = {
 	// SDL SCANCODE                 POS.   EMU-KEY-NAME
 	// ---------------------------- ----   ------------
@@ -77,21 +79,21 @@ const struct KeyMappingDefault c64_key_map[] = {
 	{ SDL_SCANCODE_K,		0x45, "K" },
 	{ SDL_SCANCODE_O,		0x46, "O" },
 	{ SDL_SCANCODE_N,		0x47, "N" },
-	{ SDL_SCANCODE_INSERT,		0x50, "PLUS" },	// PC "Insert" key -> C64 '+' (plus) key [FIXME: map something more sane as '+' ?]
+	{ SDL_SCANCODE_INSERT,		0x50, "PLUS" },		// PC "Insert" key -> C64 '+' (plus) key [FIXME: map something more sane as '+' ?]
 	{ SDL_SCANCODE_P,		0x51, "P" },
 	{ SDL_SCANCODE_L,		0x52, "L" },
 	{ SDL_SCANCODE_MINUS,		0x53, "MINUS" },
 	{ SDL_SCANCODE_PERIOD,		0x54, "PERIOD" },
 	{ SDL_SCANCODE_APOSTROPHE,	0x55, "COLON" },	// mapped as ":"
-	{ SDL_SCANCODE_LEFTBRACKET,	0x56, "AT" },	// FIXME: map something sane as @ ?
+	{ SDL_SCANCODE_LEFTBRACKET,	0x56, "AT" },		// FIXME: map something sane as @ ?
 	{ SDL_SCANCODE_COMMA,		0x57, "COMMA" },
-	{ SDL_SCANCODE_DELETE,		0x60, "POUND" }, // FIXME: map something sane as £ ?
-	{ SDL_SCANCODE_RIGHTBRACKET,	0x61, "JOKER" }, // FIXME: map something sane as * ?
+	{ SDL_SCANCODE_DELETE,		0x60, "POUND" },	// FIXME: map something sane as £ ?
+	{ SDL_SCANCODE_RIGHTBRACKET,	0x61, "ASTERISK" },	// FIXME: map something sane as * ?
 	{ SDL_SCANCODE_SEMICOLON,	0x62, "SEMICOLON" },
-	{ SDL_SCANCODE_HOME,		0x63, "CLR" },	// PC "home" -> C64 "CLR/HOME"
-	{ SDL_SCANCODE_RSHIFT,		0x64, "RSHIFT" }, // PC right shift -> C64 right shift
+	{ SDL_SCANCODE_HOME,		0x63, "CLR" },		// PC "home" -> C64 "CLR/HOME"
+	{ SDL_SCANCODE_RSHIFT,		0x64, "RSHIFT" }, 	// PC right shift -> C64 right shift
 	{ SDL_SCANCODE_EQUALS,		0x65, "EQUALS" },
-	{ SDL_SCANCODE_BACKSLASH,	0x66, "UARROW" },	// PC \ (backslash) -> C64 "up-arrow" symbol
+	{ SDL_SCANCODE_BACKSLASH,	0x66, "UARROW" },	// PC \ (backslash) -> C64 "up-arrow" symbol [which is the PI, when shifted ...]
 	{ SDL_SCANCODE_SLASH,		0x67, "SLASH" },
 	{ SDL_SCANCODE_1,		0x70, "1" },
 	{ SDL_SCANCODE_GRAVE,		0x71, "LARROW" },	// FIXME: map something sane as <-- ?
@@ -99,24 +101,35 @@ const struct KeyMappingDefault c64_key_map[] = {
 	{ SDL_SCANCODE_2,		0x73, "2" },
 	{ SDL_SCANCODE_SPACE,		0x74, "SPACE" },
 	{ SDL_SCANCODE_LALT,		0x75, "COMMODORE" },	// Commodore key, PC kbd sux, does not have C= key ... Mapping left ALT as the C= key
-	{ SDL_SCANCODE_RALT,		0x75, "COMMODORE" },
+#ifndef C65_KEYBOARD
+	{ SDL_SCANCODE_RALT,		0x75, "COMMODORE" },	// RALT is used as the real ALT on C65 kbd ... if no C65 keyboard is used, still, map RALT as Commodore key as well.
+#endif
 	{ SDL_SCANCODE_Q,		0x76, "Q" },
 	{ SDL_SCANCODE_END,		0x77, "RUNSTOP" },	// C64 "RUN STOP" key, we map PC 'END' as this key
-	{ SDL_SCANCODE_ESCAPE,		0x77, "RUNSTOP" },	// C64 "RUN STOP" can be also accessed as PC 'ESC' ...
+#ifndef C65_KEYBOARD
+	{ SDL_SCANCODE_ESCAPE,		0x77, "RUNSTOP" },	// C64 "RUN STOP" can be also accessed as PC 'ESC' ... On C65 kbd, this is not done, and leaving ESC as ESC, you can still use END key as RUN/STOP there
+#endif
 	// Not a real kbd-matrix key
-	{ SDL_SCANCODE_TAB,		RESTORE_KEY_POS, "RESTORE" }, // PC TAB -> C64 "restore"   [FIXME: on C65/M65 this is really not so nice, as TAB should be used as TAB ...]
+#ifndef C65_KEYBOARD
+	{ SDL_SCANCODE_TAB,		RESTORE_KEY_POS, "RESTORE" },	// PC TAB -> C64 "restore", but NOT on C65 as it has a TAB key, which needs it!
+#endif
+	{ SDL_SCANCODE_PAGEDOWN,	RESTORE_KEY_POS, "RESTORE" },	// PC PageDown as Restore
+#ifdef C65_KEYBOARD
+	// Not a real kbd-matrix key
+	// currently not used (not just here as UNKNOWN but not emulated either in C65/M65 emu part), since it's not clear for me, if this key is hardware/mechanical-latching, or not (only done in software) ...
+	{ SDL_SCANCODE_UNKNOWN,		CAPSLOCK_KEY_POS, "CAPSLOCK" },
+#endif
 #ifdef C65_KEYBOARD
 	// C65 (and thus M65 too) keyboard is basically the same as C64, however there are extra keys which are handled differently than the "C64-compatible" keys.
 	// Thus, if requested with macro C65_KEYBOARD defined, we have some extra "virtual" matrix positions for those keys here.
-#warning "C65 keyboard extra keys are not implemented yet."
-	//{ SDL_SCANCODE_,		C65_KEYBOARD_EXTRA_POS + 0, "NOSCROLL" },	//NO SCROLL
-	//{ SDL_SCANCODE_TAB,		C65_KEYBOARD_EXTRA_POS + 1, "TAB" },	//TAB
-	//{ SDL_SCANCODE_RALT,		C65_KEYBOARD_EXTRA_POS + 2, "ALT" },	// ALT on C65: right alt (AltGr) on PC [left ALT on PC is used as the commodore key]
-	//{ SDL_SCANCODE_,		C65_KEYBOARD_EXTRA_POS + 3, "HELP" },	//HELP
-	//{ SDL_SCANCODE_,		C65_KEYBOARD_EXTRA_POS + 4, "F9" },	//F9/F10
-	//{ SDL_SCANCODE_,		C65_KEYBOARD_EXTRA_POS + 5, "F11" },	//F11/F12
-	//{ SDL_SCANCODE_,		C65_KEYBOARD_EXTRA_POS + 6, "F13" },	//F13/F14
-	//{ SDL_SCANCODE_ESCAPE,	C65_KEYBOARD_EXTRA_POS + 7, "ESC" },	//ESC
+	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + 0, "NOSCROLL" },//NO SCROLL: FIXME: where should we map this key to?
+	{ SDL_SCANCODE_TAB,		C65_KEYBOARD_EXTRA_POS + 1, "TAB" },	// TAB
+	{ SDL_SCANCODE_RALT,		C65_KEYBOARD_EXTRA_POS + 2, "ALT" },	// ALT on C65: right alt (AltGr) on PC [left ALT on PC is used as the commodore key]
+	{ SDL_SCANCODE_PAGEUP,		C65_KEYBOARD_EXTRA_POS + 3, "HELP" },	// HELP: FIXME: where should we map this key to?
+	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + 4, "F9" },	// F9/F10: FIXME: where should we map this key to?
+	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + 5, "F11" },	// F11/F12: FIXME: where should we map this key to?
+	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + 6, "F13" },	// F13/F14: FIXME: where should we map this key to?
+	{ SDL_SCANCODE_ESCAPE,		C65_KEYBOARD_EXTRA_POS + 7, "ESC" },	// ESC
 #endif
 	// **** Emulates joystick with keypad
 	STD_XEMU_SPECIAL_KEYS,

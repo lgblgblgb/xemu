@@ -140,7 +140,8 @@ Uint8 cia1_in_b ( void )
 	return c64_keyboard_read_on_CIA1_B(
 		cia1.PRA | (~cia1.DDRA),
 		cia1.PRB | (~cia1.DDRB),
-		joystick_emu == 1 ? c64_get_joy_state() : 0xFF
+		joystick_emu == 1 ? c64_get_joy_state() : 0xFF,
+		port_d607 & 2
 	);
 }
 

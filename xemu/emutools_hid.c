@@ -116,14 +116,24 @@ void hid_reset_events ( int burn )
 }
 
 
+#ifdef HID_KBD_MAP_CFG_SUPPORT
+
+#define CLEARALLMAPPING "CLEARALLMAPPING"
+
 static const char *HID_ERR_STR_UNKNOWN_HOST_KEYNAME = "Unknown host keyname";
 static const char *HID_ERR_STR_UNKNOWN_EMU_KEYNAME = "Unknown emu keyname";
 
+static const char *scan_name_unknown = "Unknown";
+
 const char *hid_keymap_add_mapping ( const char *emu_key_name, const char *host_key_name )
 {
-	SDL_Scancode scan = SDL_GetScancodeFromName(host_key_name);
-	if (scan == SDL_SCANCODE_UNKNOWN)
-		return HID_ERR_STR_UNKNOWN_HOST_KEYNAME;
+	SDL_Scancode scan;
+	if (strcmp(host_key_name, scan_name_unknown)) {
+		scan = SDL_GetScancodeFromName(host_key_name);
+		if (scan == SDL_SCANCODE_UNKNOWN)
+			return HID_ERR_STR_UNKNOWN_HOST_KEYNAME;
+	} else
+		scan = SDL_SCANCODE_UNKNOWN;
 	// Look up matrix position from the default mapping given to hid_init() which also carries the "emu key names"
 	int pos;
 	int source;
@@ -140,7 +150,7 @@ const char *hid_keymap_add_mapping ( const char *emu_key_name, const char *host_
 	// We change all mappings' scan code to the desired ones (maybe more PC keys is mapped to a single emulated key!)
 	for (int a = 0; key_map[a].pos >= 0 ; a++) {
 		if (key_map[a].pos == pos && key_map[a].set != source) {
-			if (key_map[a].scan != scan) {
+			if (key_map[a].scan != scan && key_map[a].set != -2) {
 				DEBUGPRINT("HID: altering keyboard mapping for \"%s\" from \"%s\" to \"%s\" at array index #%d" NL,
 					emu_key_name, SDL_GetScancodeName(key_map[a].scan), host_key_name, a
 				);
@@ -168,6 +178,13 @@ const char *hid_keymap_add_mapping_from_config_line ( const char *p, int *num_of
 		goto skip_rest;
 	memcpy(emu_name, emu_p, p - emu_p);
 	emu_name[p - emu_p] = 0;
+	if (!strcmp(emu_name, CLEARALLMAPPING)) {
+		for (int a = 0; key_map[a].pos >= 0; a++) {
+			key_map[a].set = -2;
+			key_map[a].scan = 0;
+		}
+		goto skip_rest;
+	}
 	while (*p <= 32 && *p)
 		p++;
 	if (*p == 0 || *p == '#')
@@ -184,7 +201,7 @@ const char *hid_keymap_add_mapping_from_config_line ( const char *p, int *num_of
 	host_name[p - host_p] = 0;
 	const char *res = hid_keymap_add_mapping(emu_name, host_name);
 	if (res)
-		DEBUGPRINT("HID: error on keymap user config: [%s] [%s]: %s\n", emu_name, host_name, res);
+		DEBUGPRINT("HID: error on keymap user config: emu_name=[%s] host_key=<%s>: %s\n", emu_name, host_name, res);
 	else
 		(*num_of_items)++;
 skip_rest:
@@ -193,15 +210,15 @@ skip_rest:
 	return p;
 }
 
-#ifdef HID_KBD_MAP_CFG_SUPPORT
+
 void hid_keymap_from_config_file ( const char *fn )
 {
 	char kbdcfg[8192];
 	int a = xemu_load_file(fn, kbdcfg, 1, sizeof(kbdcfg) - 1, NULL);
 	if (a == -1)
-		DEBUGPRINT("HID: cannot open keymap user config file, ignoring: %s" NL, fn);
+		DEBUGPRINT("HID: cannot open keymap user config file (maybe does not exist), ignoring: %s" NL, fn);
 	else if (a < 1)
-		DEBUGPRINT("HID: cannot read keymap user config file, ignoring: %s" NL, fn);
+		DEBUGPRINT("HID: cannot read keymap user config file (maybe too large file), ignoring: %s" NL, fn);
 	else {
 		kbdcfg[a] = 0;
 		const char *p = kbdcfg;
@@ -224,8 +241,19 @@ void hid_init ( const struct KeyMappingDefault *key_map_in, Uint8 virtual_shift_
 #ifdef HID_KBD_MAP_CFG_SUPPORT
 	char kbdcfg[8192];
 	char *kp = kbdcfg + sprintf(kbdcfg,
-		"# default settings for keyboard mapping" NL "# copy this file to filename '%s' in the same directory, and customize (this file is OVERWRITTEN every time, you must copy and customize that one!)" NL
-		"# Syntax is: EMU-KEY-NAME PC-KEY-NAME" NL "# one assignment per line (key name is case/space/etc sensitive, must be put as is!)" NL NL, KEYMAP_USER_FILENAME + 1
+		"# default settings for keyboard mapping" NL
+		"# copy this file to filename '%s' in the same directory, and customize (this file is OVERWRITTEN every time, you must copy and customize that one!)" NL
+		"# you can also use the -keymap option of the emulator to specify a keymap file to load (if the specific Xemu emulator supports, use -h to get help)" NL
+		"# Syntax is: EMU-KEY-NAME PC-KEY-NAME" NL
+		"# one assignment per line (EMU-KEY-NAME is always uppercase and one word, while PC-KEY-NAME is case/space/etc sensitive, must be put as is!)" NL
+		"# EMU-KEY-NAME ends in '*' means that it's a virtual key, it is emulated by emulating pressed shift key at the same time" NL
+		"# special line " CLEARALLMAPPING " can be put to clear all existing mappings, it make sense only as the first statement" NL
+		"# without " CLEARALLMAPPING ", only maps are modified which are part of the keymap config file, the rest is left at their default state" NL
+		"# PC-KEY-NAME Unknown means that the certain feature for the emulated keyboard is not mapped to a PC key" NL
+		"# EMU-KEY-NAME strings starting with XEMU- are special Xemu related 'hot keys'" NL
+		NL
+		,
+		KEYMAP_USER_FILENAME + 1
 	);
 #endif
 	for (a = 0;;) {
@@ -246,7 +274,7 @@ void hid_init ( const struct KeyMappingDefault *key_map_in, Uint8 virtual_shift_
 			break;
 		}
 #ifdef HID_KBD_MAP_CFG_SUPPORT
-		register const char *scan_name = SDL_GetScancodeName(key_map_in[a].scan);
+		register const char *scan_name = (key_map_in[a].scan == SDL_SCANCODE_UNKNOWN ? scan_name_unknown : SDL_GetScancodeName(key_map_in[a].scan));
 		if (scan_name && *scan_name && key_map_in[a].name && key_map_in[a].name[0])
 			kp += sprintf(kp, "%s %s" NL, key_map_in[a].name, scan_name);
 		else
@@ -440,7 +468,7 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 			break;
 		case SDL_KEYUP:
 		case SDL_KEYDOWN:
-			if (event->key.repeat == 0
+			if (event->key.repeat == 0 && event->key.keysym.scancode != SDL_SCANCODE_UNKNOWN
 #ifdef CONFIG_KBD_SELECT_FOCUS
 				&& (event->key.windowID == sdl_winid || event->key.windowID == 0)
 #endif

@@ -189,6 +189,9 @@ void clear_emu_events ( void )
 }
 
 
+static Uint8 port_d607 = 0xFF;
+
+
 static Uint8 cia1_in_b ( void )
 {
 #ifdef FAKE_TYPING_SUPPORT
@@ -198,7 +201,7 @@ static Uint8 cia1_in_b ( void )
 	return c64_keyboard_read_on_CIA1_B(
 		cia1.PRA | (~cia1.DDRA),
 		cia1.PRB | (~cia1.DDRB),
-		joystick_emu == 1 ? c64_get_joy_state() : 0xFF
+		joystick_emu == 1 ? c64_get_joy_state() : 0xFF, port_d607 & 2
 	);
 }
 
@@ -516,6 +519,7 @@ Uint8 io_read ( int addr )
 		case 0x15:	// $D500-$D5FF
 			return read_some_sid_register(addr);
 		case 0x16:	// $D600-$D6FF, C65 UART
+			//DEBUGPRINT("READ  D%03X" NL, addr);
 			return 0xFF;			// not emulated by Xemu, yet, TODO
 		case 0x17:	// $D700-$D7FF, C65 DMA
 			return dma_read_reg(addr & 15);
@@ -612,6 +616,10 @@ void io_write ( int addr, Uint8 data )
 			write_some_sid_register(addr, data);
 			return;
 		case 0x16:	// $D600-$D6FF, C65 UART
+			if (addr == 0x607) {
+				port_d607 = data;
+			}
+			//DEBUGPRINT("WRITE D%03X with data %02X" NL, addr, data);
 			return;				// not emulated by Xemu, yet, TODO
 		case 0x17:	// $D700-$D7FF, C65 DMA
 			dma_write_reg(addr & 15, data);
