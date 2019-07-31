@@ -246,13 +246,16 @@ static void refill_memory_from_preinit_cache ( void )
 }
 
 
-void refill_c65_rom_from_preinit_cache ( void )
+int refill_c65_rom_from_preinit_cache ( void )
 {
 	if (force_external_rom) {
 		DEBUGPRINT("MEM: re-applying C65 ROM image on the first hypervisor leave ..." NL);
 		memcpy(main_ram + 0x20000, rom_init_image, sizeof rom_init_image);
-	} else
+		return 1;	// yes, we issued a re-fill!
+	} else {
 		DEBUGPRINT("MEM: no force C65 ROM re-apply policy on the first hypevisor leave ..." NL);
+		return 0;	// no, no re-fill ...
+	}
 }
 
 

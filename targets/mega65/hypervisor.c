@@ -218,7 +218,13 @@ void hypervisor_leave ( void )
 	memory_set_do_map();	// restore mapping ...
 	if (XEMU_UNLIKELY(first_hypervisor_leave)) {
 		first_hypervisor_leave = 0;
-		refill_c65_rom_from_preinit_cache();	// this function should decide then, if it's really a (forced) thing to do ...
+		if (refill_c65_rom_from_preinit_cache()) {	// this function should decide then, if it's really a (forced) thing to do ...
+			// non-zero return value from the re-fill routine: we DID re-fill, we should re-initialize "user space" PC ...
+			DEBUGPRINT("MEM: ROM re-apply policy PC change: %04X -> %02X%02X" NL,
+				cpu65.pc, main_ram[0x2FFFD], main_ram[0x2FFFC]
+			);
+			cpu65.pc = main_ram[0x2FFFC] | (main_ram[0x2FFFD] << 8);
+		}
 	}
 }
 
