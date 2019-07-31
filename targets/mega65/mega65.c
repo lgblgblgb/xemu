@@ -46,8 +46,6 @@ static int nmi_level;			// please read the comment at nmi_set() below
 int newhack = 0;
 unsigned int frames_total_counter = 0;
 
-#define TRAP_RESET	0x40
-
 static int fast_mhz, cpu_cycles_per_scanline_for_fast_mode, speed_current;
 static char fast_mhz_in_string[8];
 static int frame_counter;
@@ -381,7 +379,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	DEBUGPRINT("SPEED: fast clock is set to %dMHz, %d CPU cycles per scanline." NL, fast_mhz, cpu_cycles_per_scanline_for_fast_mode);
 	cpu65_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
 	rom_protect = 0;
-	hypervisor_enter(TRAP_RESET);
+	hypervisor_start_machine();
 	speed_current = 0;
 	machine_set_speed(1);
 	DEBUG("INIT: end of initialization!" NL);
@@ -446,8 +444,7 @@ void reset_mega65 ( void )
 	dma_reset();
 	nmi_level = 0;
 	D6XX_registers[0x7E] = xemucfg_get_num("kicked");
-	first_hypervisor_leave = 1;
-	hypervisor_enter(TRAP_RESET);
+	hypervisor_start_machine();
 	DEBUG("RESET!" NL);
 }
 

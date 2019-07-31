@@ -20,12 +20,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define __XEMU_HYPERVISOR_MEGA65_H_INCLUDED
 
 extern int   in_hypervisor;
-extern int   first_hypervisor_leave;
 
 extern int  hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hypervisor_serial_out_asciizer );
 extern void hypervisor_debug ( void );
 
 extern void hypervisor_enter ( int trapno );
+extern void hypervisor_start_machine ( void );
 extern void hypervisor_leave ( void );
 extern void hypervisor_serial_monitor_push_char ( Uint8 chr );
 extern void hypervisor_debug_invalidate ( const char *reason );
