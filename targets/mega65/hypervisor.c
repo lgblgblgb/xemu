@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -45,6 +45,8 @@ static char *hypervisor_monout_p = hypervisor_monout;
 
 static int debug_on = 0;
 static int hypervisor_serial_out_asciizer;
+
+int first_hypervisor_leave = 1;
 
 
 
@@ -205,6 +207,10 @@ void hypervisor_leave ( void )
 	machine_set_speed(0);	// restore speed ...
 	memory_set_vic3_rom_mapping(vic_registers[0x30]);	// restore possible active VIC-III mapping
 	memory_set_do_map();	// restore mapping ...
+	if (first_hypervisor_leave) {
+		first_hypervisor_leave = 0;
+		refill_c65_rom_from_preinit_cache();	// this function should decide then, if it's really a (forced) thing to do ...
+	}
 }
 
 

@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define __XEMU_HYPERVISOR_MEGA65_H_INCLUDED
 
 extern int   in_hypervisor;
+extern int   first_hypervisor_leave;
 
 extern int  hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hypervisor_serial_out_asciizer );
 extern void hypervisor_debug ( void );
