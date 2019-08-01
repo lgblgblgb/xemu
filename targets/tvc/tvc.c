@@ -31,7 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define CLOCKS_PER_FRAME (CPU_CLOCK / 50)
 #define VIRTUAL_SHIFT_POS 0x63
 
-extern const struct KeyMapping tvc_key_map[];
+extern const struct KeyMappingDefault tvc_key_map[];
 
 // The Z80 emulation context itself
 Z80EX_CONTEXT z80ex;

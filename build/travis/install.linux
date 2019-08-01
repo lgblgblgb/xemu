@@ -47,11 +47,15 @@ echo "*** Installing SDL2 cross compilation environment"
 mkdir -p /usr/local/cross-tools || exit 1
 cd /usr/local/cross-tools || exit 1
 rm -f sdl204-win-crosstools.tar.bz2
-URL="http://github.lgb.hu/xep128/files/sdl204-win-crosstools.tar.bz2"
+#URL="http://github.lgb.hu/xep128/files/sdl204-win-crosstools.tar.bz2"
+URL="https://github.com/lgblgblgb/xep128/raw/gh-pages/files/sdl204-win-crosstools.tar.bz2"
 echo "... downloading archive from $URL"
-wget $URL || exit 1
+wget --no-check-certificate $URL || exit 1
 echo "... extracting archive"
 tar xfpj sdl204-win-crosstools.tar.bz2 || exit 1
+echo "... linking sdl2-config files"
+ln -s /usr/local/cross-tools/i686-w64-mingw32/bin/sdl2-config /usr/bin/i686-w64-mingw32-sdl2-config || exit 1
+ln -s /usr/local/cross-tools/x86_64-w64-mingw32/bin/sdl2-config /usr/bin/x86_64-w64-mingw32-sdl2-config || exit 1
 echo "OK :-)"
 ls -la
 rm -f sdl204-win-crosstools.tar.bz2

@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2017,2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2017-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -42,14 +42,23 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 //#define DEBUGMEM DEBUG
 
 
+// 512K is the max "main" RAM. Currently only 384K is used by M65
+Uint8 main_ram[512 << 10];
+
+// Ugly hack for more RAM!
+#define chip_ram  (main_ram + 0)
+#define fast_ram  (main_ram + 0x20000)
+#define extra_ram (main_ram + 0x40000)
+
+
 // 128K of "chip-RAM". VIC-IV in M65 can see this, though the last 2K is also covered by the first 2K of the colour RAM.
 // that area from chip-RAM cannot be modified by the CPU/DMA/etc though since the colour RAM is there. We emulate anyway
 // 128K of chip-RAM so we don't need to check memory access limit all the time in VIC-IV emulation. But it's still true,
 // that the last 2K of chip-RAM is a "static" content and not so much useful.
-Uint8 chip_ram[0x20000];
+//Uint8 chip_ram[0x20000];
 // 128K of "fast-RAM". In English, this is C65 ROM, but on M65 you can actually write this area too, and you can use it
 // as normal RAM. However VIC-IV cannot see this.
-Uint8 fast_ram[0x20000];
+//Uint8 fast_ram[0x20000];
 // 32K of colour RAM. VIC-IV can see this as for colour information only. The first 2K can be seen at the last 2K of
 // the chip-RAM. Also, the first 1 or 2K can be seen in the C64-style I/O area too, at $D800
 Uint8 colour_ram[0x8000];
@@ -60,6 +69,15 @@ Uint8 hypervisor_ram[0x4000];
 // 127Mbytes of slow-RAM. Would be the DDR memory on M65/Nexys4
 #ifdef SLOW_RAM_SUPPORT
 Uint8 slow_ram[127 << 20];
+#endif
+
+#define HYPER_RAM_SUPPORT
+#define HYPER_RAM_SIZE		(128 << 20)
+#define HYPER_RAM_START		0x100000
+#define HYPER_RAM_END 		(HYPER_RAM_START + HYPER_RAM_SIZE - 1)
+
+#ifdef HYPER_RAM_SUPPORT
+Uint8 hyper_ram[HYPER_RAM_SIZE];
 #endif
 
 
@@ -157,11 +175,19 @@ DEFINE_WRITER(fast_ram_writer) {
 	if (XEMU_LIKELY(!rom_protect))
 		fast_ram[GET_WRITER_OFFSET()] = data;
 }
+DEFINE_READER(extra_ram_reader) {
+	return extra_ram[GET_READER_OFFSET()];
+}
+DEFINE_WRITER(extra_ram_writer) {
+	extra_ram[GET_WRITER_OFFSET()] = data;
+}
 DEFINE_READER(colour_ram_reader) {
 	return colour_ram[GET_READER_OFFSET()];
 }
 DEFINE_WRITER(colour_ram_writer) {
 	colour_ram[GET_WRITER_OFFSET()] = data;
+	// we also need the update the "real" RAM
+	//main_ram[GET_WRITER_OFFSET() & 2047] = data;
 }
 DEFINE_READER(dummy_reader) {
 	return 0xFF;
@@ -188,6 +214,18 @@ DEFINE_READER(slow_ram_reader) {
 DEFINE_WRITER(slow_ram_writer) {
 #ifdef SLOW_RAM_SUPPORT
 	slow_ram[GET_WRITER_OFFSET()] = data;
+#endif
+}
+DEFINE_READER(hyper_ram_reader) {
+#ifdef HYPER_RAM_SUPPORT
+	return hyper_ram[GET_READER_OFFSET()];
+#else
+	return 0xFF;
+#endif
+}
+DEFINE_WRITER(hyper_ram_writer) {
+#ifdef HYPER_RAM_SUPPORT
+	hyper_ram[GET_WRITER_OFFSET()] = data;
 #endif
 }
 DEFINE_READER(invalid_mem_reader) {
@@ -251,6 +289,7 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 	{ 0, 0xFF, zero_physical_page_reader, zero_physical_page_writer },
 	// 128K of fast-RAM, normally ROM for C65, but can be RAM too!
 	{ 0x20000, 0x3FFFF, fast_ram_reader, fast_ram_writer },
+	{ 0x40000, 0x5FFFF, extra_ram_reader, extra_ram_writer },
 	// the last 2K of the first 128K, being the first 2K of the colour RAM (quite nice sentence in my opinion)
 	{ 0x1F800, 0x1FFFF, colour_ram_reader, colour_ram_writer },
 	// As I/O can be handled quite uniformely, and needs other decoding later anyway, we handle the WHOLE I/O area for all modes in once!
@@ -263,7 +302,8 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 	{ 0xFFDE800, 0xFFDEFFF, eth_buffer_reader, eth_buffer_writer },		// ethernet RX/TX buffer, NOTE: the same address, reading is always the RX_read, writing is always TX_write
 	{ 0xFFD6000, 0xFFD6FFF, disk_buffers_reader, disk_buffers_writer },	// disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space" [??]
 	{ 0x8000000, 0xFEFFFFF, slow_ram_reader, slow_ram_writer },		// 127Mbytes of "slow RAM" (Nexys4 DDR2 RAM)
-	{ 0x40000, 0xFFFFF, dummy_reader, dummy_writer },			// upper "unused" area of C65 (!) memory map. It seems C65 ROMs want it (Expansion RAM?) so we define as unused.
+	{ 0x60000, 0xFFFFF, dummy_reader, dummy_writer },			// upper "unused" area of C65 (!) memory map. It seems C65 ROMs want it (Expansion RAM?) so we define as unused.
+	{ HYPER_RAM_START, HYPER_RAM_END, hyper_ram_reader, hyper_ram_writer },
 	// the last entry *MUST* include the all possible addressing space to "catch" undecoded memory area accesses!!
 	{ 0, 0xFFFFFFF, invalid_mem_reader, invalid_mem_writer },
 	// even after the last entry :-) to filter out programming bugs, catch all possible even not valid M65 physical address space acceses ...
@@ -433,8 +473,7 @@ void memory_init ( void )
 	memory_set_vic3_rom_mapping(0);
 	memory_set_do_map();
 	// Initiailize memory content with something ...
-	memset(chip_ram, 0xFF, sizeof chip_ram);
-	memset(fast_ram, 0xFF, sizeof fast_ram);
+	memset(main_ram, 0xFF, sizeof main_ram);
 	memset(colour_ram, 0xFF, sizeof colour_ram);
 #ifdef SLOW_RAM_SUPPORT
 	memset(slow_ram, 0xFF, sizeof slow_ram);

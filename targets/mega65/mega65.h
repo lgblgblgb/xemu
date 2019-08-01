@@ -69,9 +69,9 @@ extern void machine_set_speed ( int verbose );
 
 extern void reset_mega65      ( void );
 
+extern int  refill_c65_rom_from_preinit_cache ( void );
 
 extern int newhack;
 extern unsigned int frames_total_counter;
-
 
 #endif

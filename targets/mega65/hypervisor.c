@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -45,6 +45,8 @@ static char *hypervisor_monout_p = hypervisor_monout;
 
 static int debug_on = 0;
 static int hypervisor_serial_out_asciizer;
+
+static int first_hypervisor_leave;
 
 
 
@@ -116,9 +118,9 @@ int hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hyperv
 void hypervisor_enter ( int trapno )
 {
 	// Sanity checks
-	if (trapno > 0x7F || trapno < 0)
+	if (XEMU_UNLIKELY(trapno > 0x7F || trapno < 0))
 		FATAL("FATAL: got invalid trap number %d", trapno);
-	if (in_hypervisor)
+	if (XEMU_UNLIKELY(in_hypervisor))
 		FATAL("FATAL: already in hypervisor mode while calling hypervisor_enter()");
 	// First, save machine status into hypervisor registers, TODO: incomplete, can be buggy!
 	D6XX_registers[0x40] = cpu65.a;
@@ -168,10 +170,19 @@ void hypervisor_enter ( int trapno )
 }
 
 
+// Actual (CPU level opcode execution) emulation of Mega65 should start with calling this function (surely after initialization of every subsystems etc).
+void hypervisor_start_machine ( void )
+{
+	in_hypervisor = 0;
+	first_hypervisor_leave = 1;
+	hypervisor_enter(0x40);	// 0x40 is the RESET TRAP!
+}
+
+
 void hypervisor_leave ( void )
 {
-	// Sanity checks
-	if (!in_hypervisor)
+	// Sanity check
+	if (XEMU_UNLIKELY(!in_hypervisor))
 		FATAL("FATAL: not in hypervisor mode while calling hypervisor_leave()");
 	// First, restore machine status from hypervisor registers
 	DEBUG("HYPERVISOR: leaving hypervisor mode @ $%04X -> $%04X" NL, cpu65.pc, D6XX_registers[0x48] | (D6XX_registers[0x49] << 8));
@@ -205,6 +216,16 @@ void hypervisor_leave ( void )
 	machine_set_speed(0);	// restore speed ...
 	memory_set_vic3_rom_mapping(vic_registers[0x30]);	// restore possible active VIC-III mapping
 	memory_set_do_map();	// restore mapping ...
+	if (XEMU_UNLIKELY(first_hypervisor_leave)) {
+		first_hypervisor_leave = 0;
+		if (refill_c65_rom_from_preinit_cache()) {	// this function should decide then, if it's really a (forced) thing to do ...
+			// non-zero return value from the re-fill routine: we DID re-fill, we should re-initialize "user space" PC ...
+			DEBUGPRINT("MEM: ROM re-apply policy PC change: %04X -> %02X%02X" NL,
+				cpu65.pc, main_ram[0x2FFFD], main_ram[0x2FFFC]
+			);
+			cpu65.pc = main_ram[0x2FFFC] | (main_ram[0x2FFFD] << 8);
+		}
+	}
 }
 
 

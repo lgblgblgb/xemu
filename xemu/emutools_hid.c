@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016,2017,2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,6 +19,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
 #include "xemu/emutools_hid.h"
+#ifdef HID_KBD_MAP_CFG_SUPPORT
+#include "xemu/emutools_files.h"
+#endif
 
 
 /* Note: HID stands for "Human Input Devices" or something like that :)
@@ -46,13 +49,15 @@ static SDL_Joystick *joysticks[MAX_JOYSTICKS];
 #define MOUSESTATE_BUTTON_LEFT		32
 #define MOUSESTATE_BUTTON_RIGHT		64
 
-static const struct KeyMapping *key_map = NULL;
+//static const struct KeyMappingUsed *key_map = NULL;
 static Uint8 virtual_shift_pos = 0;
+static struct KeyMappingUsed key_map[0x100];
+static const struct KeyMappingDefault *key_map_default;
 
 
 int hid_key_event ( SDL_Scancode key, int pressed )
 {
-	const struct KeyMapping *map = key_map;
+	const struct KeyMappingUsed *map = key_map;
 	while (map->pos >= 0) {
 		if (map->scan == key) {
 			if (map->pos > 0xFF) {	// special emulator key!
@@ -111,15 +116,178 @@ void hid_reset_events ( int burn )
 }
 
 
-void hid_init ( const struct KeyMapping *key_map_in, Uint8 virtual_shift_pos_in, int joy_enable )
+#ifdef HID_KBD_MAP_CFG_SUPPORT
+
+#define CLEARALLMAPPING "CLEARALLMAPPING"
+
+static const char *HID_ERR_STR_UNKNOWN_HOST_KEYNAME = "Unknown host keyname";
+static const char *HID_ERR_STR_UNKNOWN_EMU_KEYNAME = "Unknown emu keyname";
+
+static const char *scan_name_unknown = "Unknown";
+
+const char *hid_keymap_add_mapping ( const char *emu_key_name, const char *host_key_name )
+{
+	SDL_Scancode scan;
+	if (strcmp(host_key_name, scan_name_unknown)) {
+		scan = SDL_GetScancodeFromName(host_key_name);
+		if (scan == SDL_SCANCODE_UNKNOWN)
+			return HID_ERR_STR_UNKNOWN_HOST_KEYNAME;
+	} else
+		scan = SDL_SCANCODE_UNKNOWN;
+	// Look up matrix position from the default mapping given to hid_init() which also carries the "emu key names"
+	int pos;
+	int source;
+	for (source = 0 ;; source++) {
+		if (key_map_default[source].pos < 0)
+			return HID_ERR_STR_UNKNOWN_EMU_KEYNAME;
+		if (key_map_default[source].name && (!strcmp(key_map_default[source].name, emu_key_name))) {
+			//DEBUGPRINT("FOUND KEY: %s for %s" NL, key_map_default[source].name, emu_key_name);
+			pos = key_map_default[source].pos;
+			break;
+		}
+	}
+	// At this point we have the SDL scancode, and the "matrix position" ...
+	// We change all mappings' scan code to the desired ones (maybe more PC keys is mapped to a single emulated key!)
+	for (int a = 0; key_map[a].pos >= 0 ; a++) {
+		if (key_map[a].pos == pos && key_map[a].set != source) {
+			if (key_map[a].scan != scan && key_map[a].set != -2) {
+				DEBUGPRINT("HID: altering keyboard mapping for \"%s\" from \"%s\" to \"%s\" at array index #%d" NL,
+					emu_key_name, SDL_GetScancodeName(key_map[a].scan), host_key_name, a
+				);
+			}
+			key_map[a].scan = scan;
+			key_map[a].set = source;
+			break;
+		}
+	}
+	return NULL;
+}
+
+
+const char *hid_keymap_add_mapping_from_config_line ( const char *p, int *num_of_items )
+{
+	char emu_name[64], host_name[64];
+	while (*p <= 0x20 && *p)
+		p++;
+	if (*p == '\0' || *p == '#')
+		goto skip_rest;
+	const char *emu_p = p;
+	while (*p > 32)
+		p++;
+	if (*p == '\0' || *p == '#' || p - emu_p >= sizeof(emu_name))
+		goto skip_rest;
+	memcpy(emu_name, emu_p, p - emu_p);
+	emu_name[p - emu_p] = 0;
+	if (!strcmp(emu_name, CLEARALLMAPPING)) {
+		for (int a = 0; key_map[a].pos >= 0; a++) {
+			key_map[a].set = -2;
+			key_map[a].scan = 0;
+		}
+		goto skip_rest;
+	}
+	while (*p <= 32 && *p)
+		p++;
+	if (*p == 0 || *p == '#')
+		goto skip_rest;
+	const char *host_p = p;
+	while (*p && *p != 13 && *p != 10 && *p != '#')
+		p++;
+	//p--;
+	while (p[-1] <= 0x20 && p > host_p)
+		p--;
+	if (p - host_p >= sizeof(host_name))
+		goto skip_rest;
+	memcpy(host_name, host_p, p - host_p);
+	host_name[p - host_p] = 0;
+	const char *res = hid_keymap_add_mapping(emu_name, host_name);
+	if (res)
+		DEBUGPRINT("HID: error on keymap user config: emu_name=[%s] host_key=<%s>: %s\n", emu_name, host_name, res);
+	else
+		(*num_of_items)++;
+skip_rest:
+	while (*p != 10 && *p != 13 && *p)
+		p++;
+	return p;
+}
+
+
+void hid_keymap_from_config_file ( const char *fn )
+{
+	char kbdcfg[8192];
+	int a = xemu_load_file(fn, kbdcfg, 1, sizeof(kbdcfg) - 1, NULL);
+	if (a == -1)
+		DEBUGPRINT("HID: cannot open keymap user config file (maybe does not exist), ignoring: %s" NL, fn);
+	else if (a < 1)
+		DEBUGPRINT("HID: cannot read keymap user config file (maybe too large file), ignoring: %s" NL, fn);
+	else {
+		kbdcfg[a] = 0;
+		const char *p = kbdcfg;
+		for (a = 0; key_map[a].pos >= 0; a++) {
+			key_map[a].set = -1;
+			//key_map[a].scan = 0;
+		}
+		int num_of_items = 0;
+		while (*p) {
+			p = hid_keymap_add_mapping_from_config_line(p, &num_of_items);
+		}
+		DEBUGPRINT("HID: keymap configuration from file %s has been processed (%d successfull mappings)." NL, fn, num_of_items);
+	}
+}
+#endif
+
+void hid_init ( const struct KeyMappingDefault *key_map_in, Uint8 virtual_shift_pos_in, int joy_enable )
 {
 	int a;
-	key_map = key_map_in;
+#ifdef HID_KBD_MAP_CFG_SUPPORT
+	char kbdcfg[8192];
+	char *kp = kbdcfg + sprintf(kbdcfg,
+		"# default settings for keyboard mapping" NL
+		"# copy this file to filename '%s' in the same directory, and customize (this file is OVERWRITTEN every time, you must copy and customize that one!)" NL
+		"# you can also use the -keymap option of the emulator to specify a keymap file to load (if the specific Xemu emulator supports, use -h to get help)" NL
+		"# Syntax is: EMU-KEY-NAME PC-KEY-NAME" NL
+		"# one assignment per line (EMU-KEY-NAME is always uppercase and one word, while PC-KEY-NAME is case/space/etc sensitive, must be put as is!)" NL
+		"# EMU-KEY-NAME ends in '*' means that it's a virtual key, it is emulated by emulating pressed shift key at the same time" NL
+		"# special line " CLEARALLMAPPING " can be put to clear all existing mappings, it make sense only as the first statement" NL
+		"# without " CLEARALLMAPPING ", only maps are modified which are part of the keymap config file, the rest is left at their default state" NL
+		"# PC-KEY-NAME Unknown means that the certain feature for the emulated keyboard is not mapped to a PC key" NL
+		"# EMU-KEY-NAME strings starting with XEMU- are special Xemu related 'hot keys'" NL
+		NL
+		,
+		KEYMAP_USER_FILENAME + 1
+	);
+#endif
+	for (a = 0;;) {
+		if (a >= 0x100)
+			FATAL("Too long default keymapping table for hid_init()");
+		key_map[a].pos = key_map_in[a].pos;
+		key_map[a].scan = key_map_in[a].scan;
+		key_map[a].set = 0;
+		if (key_map[a].pos < 0) {
+#ifdef HID_KBD_MAP_CFG_SUPPORT
+			int fd = xemu_open_file(KEYMAP_DEFAULT_FILENAME, O_WRONLY|O_TRUNC|O_CREAT, NULL, NULL);
+			if (fd >= 0) {
+				xemu_safe_write(fd, kbdcfg, kp - kbdcfg);
+				close(fd);
+			}
+#endif
+			DEBUGPRINT("HID: %d key bindings has been added as the default built-in configuration" NL, a);
+			break;
+		}
+#ifdef HID_KBD_MAP_CFG_SUPPORT
+		register const char *scan_name = (key_map_in[a].scan == SDL_SCANCODE_UNKNOWN ? scan_name_unknown : SDL_GetScancodeName(key_map_in[a].scan));
+		if (scan_name && *scan_name && key_map_in[a].name && key_map_in[a].name[0])
+			kp += sprintf(kp, "%s %s" NL, key_map_in[a].name, scan_name);
+		else
+			DEBUGPRINT("HID: skipping keyboard entry on writing default map: scan <%s> name <%s>" NL, scan_name ? scan_name : "NULL", key_map_in[a].name ? key_map_in[a].name : "NULL");
+#endif
+		a++;
+	}
+	key_map_default = key_map_in;
 	virtual_shift_pos = virtual_shift_pos_in;
 	SDL_GameControllerEventState(SDL_DISABLE);
 	SDL_JoystickEventState(joy_enable);
 	hid_reset_events(0);
-	for (a = 0; a < MAX_JOYSTICKS; a++)
+	for (int a = 0; a < MAX_JOYSTICKS; a++)
 		joysticks[a] = NULL;
 }
 
@@ -300,7 +468,7 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 			break;
 		case SDL_KEYUP:
 		case SDL_KEYDOWN:
-			if (event->key.repeat == 0
+			if (event->key.repeat == 0 && event->key.keysym.scancode != SDL_SCANCODE_UNKNOWN
 #ifdef CONFIG_KBD_SELECT_FOCUS
 				&& (event->key.windowID == sdl_winid || event->key.windowID == 0)
 #endif

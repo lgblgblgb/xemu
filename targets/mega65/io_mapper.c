@@ -39,6 +39,7 @@ struct SidEmulation sid1, sid2;		// the two SIDs
 static int mouse_x = 0, mouse_y = 0;	// for our primitive C1351 mouse emulation
 int    cpu_linear_memory_addressing_is_enabled = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;
+int port_d607 = 0xFF;	// ugly hack to be able to read extra char row of C65
 
 
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
@@ -336,7 +337,11 @@ void io_write ( unsigned int addr, Uint8 data )
 			sid_write_reg(addr & 0x40 ? &sid2 : &sid1, addr & 31, data);
 			return;
 		case 0x16:	// $D600-$D6FF ~ C65 I/O mode
-			RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");	// FIXME: UART is not yet supported!
+			if ((addr & 0xFF) == 0x07) {
+				port_d607 = data;
+				return;
+			} else
+				RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");	// FIXME: UART is not yet supported!
 		case 0x36:	// $D600-$D6FF ~ M65 I/O mode
 			addr &= 0xFF;
 			if (!in_hypervisor && addr >= 0x40 && addr <= 0x7F) {
@@ -346,8 +351,13 @@ void io_write ( unsigned int addr, Uint8 data )
 				return;
 			}
 			D6XX_registers[addr] = data;	// I guess, the actual write won't happens if it was trapped, so I moved this to here after the previous "if"
-			if (addr < 9)
-				RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");	// FIXME: UART is not yet supported!
+			if (addr < 9) {
+				if (addr == 7) {
+					port_d607 = data;
+					return;
+				} else
+					RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");	// FIXME: UART is not yet supported!
+			}
 			if (addr >= 0x80 && addr <= 0x93) {			// SDcard controller etc of Mega65
 				sdcard_write_register(addr - 0x80, data);
 				return;

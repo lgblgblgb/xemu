@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "xemu/emutools_hid.h"
 
-const struct KeyMapping tvc_key_map[] = {
+const struct KeyMappingDefault tvc_key_map[] = {
 	// Row 0
 	{ SDL_SCANCODE_5,	0x00 },	// 5
 	{ SDL_SCANCODE_3,	0x01 },	// 3

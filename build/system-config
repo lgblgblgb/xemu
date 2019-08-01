@@ -21,11 +21,12 @@
 
 SDL2_CONFIG_NATIVE="sdl2-config"
 SDL2_CONFIG_OSX="sdl2-config"
-SDL2_CONFIG_WIN32="/usr/local/cross-tools/i686-w64-mingw32/bin/sdl2-config"
-SDL2_CONFIG_WIN64="/usr/local/cross-tools/x86_64-w64-mingw32/bin/sdl2-config"
+SDL2_CONFIG_WIN32="i686-w64-mingw32-sdl2-config"
+SDL2_CONFIG_WIN64="x86_64-w64-mingw32-sdl2-config"
+SDL2_DLL_RELPATH="bin/SDL2.dll"
 PKG_CONFIG="pkg-config"
 
-export SDL2_CONFIG_NATIVE SDL2_CONFIG_OSX SDL2_CONFIG_WIN32 SDL2_CONFIG_WIN64 PKG_CONFIG
+export SDL2_CONFIG_NATIVE SDL2_CONFIG_OSX SDL2_CONFIG_WIN32 SDL2_CONFIG_WIN64 SDL2_DLL_RELPATH PKG_CONFIG
 
 cd `dirname $0` || exit 1
 grep -E '^'$1'#('$2')#'$3'#' system-config-settings.txt | cut -d'#' -f4- | bash

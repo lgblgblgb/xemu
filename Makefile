@@ -59,16 +59,16 @@ deb:
 	build/deb-build-simple
 
 nsi:
-	rm -f build/bin/*.dll build/bin/*.DLL build/bin/*.exe build/bin/*.EXE
+	rm -f build/bin/*.[dD][lL][lL] build/bin/*.[eE][xX][eE]
 	for t in $(TARGETS) ; do for a in win32 win64 ; do $(MAKE) -C targets/$$t ARCH=$$a || exit 1 ; done ; done
-	build/nsi-build win32 /usr/local/cross-tools/i686-w64-mingw32/bin/SDL2.dll
-	build/nsi-build win64 /usr/local/cross-tools/x86_64-w64-mingw32/bin/SDL2.dll
+	build/nsi-build win32 `build/system-config win32 sdl2 dll`
+	build/nsi-build win64 `build/system-config win64 sdl2 dll`
 
 publish:
 	$(MAKE)
 	$(MAKE) deb
 	$(MAKE) nsi
+	$(MAKE) -C build/bin dist
 	@echo "*** You should not use this target, this is only for distributing binaries on the site of the author!"
-	build/publish
 
 .PHONY: all all-arch clean all-clean roms distclean dep all-dep deb nsi publish

@@ -55,7 +55,16 @@ int vic3_blink_phase;			// blinking attribute helper, state.
 static Uint8 raster_colours[512];
 Uint8 c128_d030_reg;			// C128-like register can be only accessed in VIC-II mode but not in others, quite special!
 
+int vic_vidp_legacy = 1, vic_chrp_legacy = 1, vic_sprp_legacy = 1;
+
 static int warn_sprites = 0, warn_ctrl_b_lo = 1;
+
+#if 0
+// UGLY: decides to use VIC-II/III method (val!=0), or the VIC-IV "precise address" selection (val == 0)
+// this is based on the idea that VIC-II compatible register writing will set that, overriding the "precise" setting if there was any, before.
+static int vic2_vidp_method = 1;
+static int vic2_chrp_method = 1;
+#endif
 
 
 //#define CHECK_PIXEL_POINTER
@@ -231,6 +240,18 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_ALL(0x17):	// sprite-Y expansion
 			break;
 		CASE_VIC_ALL(0x18):	// memory pointers
+			if (!vic_vidp_legacy) {
+				vic_vidp_legacy = 1;
+				DEBUGPRINT("VIC4: compatibility screen address mode" NL);
+			}
+			if (!vic_chrp_legacy) {
+				vic_chrp_legacy = 1;
+				DEBUGPRINT("VIC4: compatibility character address mode" NL);
+			}
+			if (!vic_sprp_legacy) {
+				vic_sprp_legacy = 1;
+				DEBUGPRINT("VIC4: compatibility sprite pointer address mode" NL);
+			}
 			data &= 0xFE;
 			break;
 		CASE_VIC_ALL(0x19):
@@ -307,11 +328,29 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			machine_set_speed(0);
 			return;				// since we DID the write, it's OK to return here and not using "break"
 		CASE_VIC_4(0x55): CASE_VIC_4(0x56): CASE_VIC_4(0x57): CASE_VIC_4(0x58): CASE_VIC_4(0x59): CASE_VIC_4(0x5A): CASE_VIC_4(0x5B): CASE_VIC_4(0x5C):
-		CASE_VIC_4(0x5D): CASE_VIC_4(0x5E): CASE_VIC_4(0x5F): CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63): CASE_VIC_4(0x64):
-		CASE_VIC_4(0x65): CASE_VIC_4(0x66): CASE_VIC_4(0x67): CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A): CASE_VIC_4(0x6B): CASE_VIC_4(0x6C):
-		CASE_VIC_4(0x6D): CASE_VIC_4(0x6E): CASE_VIC_4(0x6F): CASE_VIC_4(0x70): CASE_VIC_4(0x71): CASE_VIC_4(0x72): CASE_VIC_4(0x73): CASE_VIC_4(0x74):
+		CASE_VIC_4(0x5D): CASE_VIC_4(0x5E): CASE_VIC_4(0x5F): /*CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):*/ CASE_VIC_4(0x64):
+		CASE_VIC_4(0x65): CASE_VIC_4(0x66): CASE_VIC_4(0x67): /*CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):*/ CASE_VIC_4(0x6B): /*CASE_VIC_4(0x6C):
+		CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):*/ CASE_VIC_4(0x6F): CASE_VIC_4(0x70): CASE_VIC_4(0x71): CASE_VIC_4(0x72): CASE_VIC_4(0x73): CASE_VIC_4(0x74):
 		CASE_VIC_4(0x75): CASE_VIC_4(0x76): CASE_VIC_4(0x77): CASE_VIC_4(0x78): CASE_VIC_4(0x79): CASE_VIC_4(0x7A): CASE_VIC_4(0x7B): CASE_VIC_4(0x7C):
 		CASE_VIC_4(0x7D): CASE_VIC_4(0x7E): CASE_VIC_4(0x7F):
+			break;
+		CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):
+			if (vic_vidp_legacy) {
+				vic_vidp_legacy = 0;
+				DEBUGPRINT("VIC4: precise video address mode" NL);
+			}
+			break;
+		CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):
+			if (vic_chrp_legacy) {
+				vic_chrp_legacy = 0;
+				DEBUGPRINT("VIC4: precise character address mode" NL);
+			}
+			break;
+		CASE_VIC_4(0x6C): CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):
+			if (vic_sprp_legacy) {
+				vic_sprp_legacy = 0;
+				DEBUGPRINT("VIC4: precise sprite pointer address mode" NL);
+			}
 			break;
 		/* --- NON-EXISTING REGISTERS --- */
 		CASE_VIC_2(0x31): CASE_VIC_2(0x32): CASE_VIC_2(0x33): CASE_VIC_2(0x34): CASE_VIC_2(0x35): CASE_VIC_2(0x36): CASE_VIC_2(0x37): CASE_VIC_2(0x38):
@@ -439,6 +478,7 @@ Uint8 vic_read_reg ( int unsigned addr )
 			FATAL("Xemu: invalid VIC internal register numbering on read: $%X", addr);
 	}
 	DEBUG("VIC%c: read reg $%02X (internally $%03X) with result $%02X" NL, XEMU_LIKELY(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, result);
+	vic_registers[0x51]++; 	//ugly hack, MEGAWAT wants this to change or what?!
 	return result;
 }
 
@@ -479,15 +519,19 @@ void vic4_write_palette_reg ( int num, Uint8 data )
 
 static inline Uint8 *vic2_get_chargen_pointer ( void )
 {
-	int offs = (vic_registers[0x18] & 14) << 10;	// character generator address address within the current VIC2 bank
-	//int crom = vic_registers[0x30] & 64;
-	//DEBUG("VIC2: chargen: BANK=%04X OFS=%04X CROM=%d" NL, vic2_16k_bank, offs, crom);
-	if ((vic2_16k_bank == 0x0000 || vic2_16k_bank == 0x8000) && (offs == 0x1000 || offs == 0x1800)) {  // check if chargen info is in ROM
-		// In case of Mega65, fetching char-info from ROM means to access the "WOM"
-		// FIXME: what should I do with bit 6 of VIC-III register $30 ["CROM"] ?!
-		return char_wom + offs - 0x1000;
-	} else
-		return chip_ram + vic2_16k_bank + offs;
+	if (vic_chrp_legacy) {
+		int offs = (vic_registers[0x18] & 14) << 10;	// character generator address address within the current VIC2 bank
+		//int crom = vic_registers[0x30] & 64;
+		//DEBUG("VIC2: chargen: BANK=%04X OFS=%04X CROM=%d" NL, vic2_16k_bank, offs, crom);
+		if ((vic2_16k_bank == 0x0000 || vic2_16k_bank == 0x8000) && (offs == 0x1000 || offs == 0x1800)) {  // check if chargen info is in ROM
+			// In case of Mega65, fetching char-info from ROM means to access the "WOM"
+			// FIXME: what should I do with bit 6 of VIC-III register $30 ["CROM"] ?!
+			return char_wom + offs - 0x1000;
+		} else
+			return main_ram + vic2_16k_bank + offs;
+	} else {
+		return main_ram + ((vic_registers[0x68] | (vic_registers[0x69] << 8) | (vic_registers[0x6A] << 16)) & ((512 << 10) - 1));
+	}
 }
 
 
@@ -512,14 +556,21 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 		ylim = 24;
 		// Note: VIC2 sees ROM at some addresses thing is not emulated yet for other thing than chargen memory!
 		// Note: according to the specification bit 4 has no effect in 80 columns mode!
-		vidp = chip_ram + ((vic_registers[0x18] & 0xE0) << 6) + vic2_16k_bank;
+		vidp = main_ram + ((vic_registers[0x18] & 0xE0) << 6) + vic2_16k_bank;
 		sprite_pointers = vidp + 2040;
 	} else {
 		xlim = 39;
 		ylim = 24;
 		// Note: VIC2 sees ROM at some addresses thing is not emulated yet for other thing than chargen memory!
-		vidp = chip_ram + ((vic_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
+		vidp = main_ram + ((vic_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
 		sprite_pointers = vidp + 1016;
+	}
+	// Ugly hack, override video ram if no legacy starting address policy applied
+	if (!vic_vidp_legacy) {
+		vidp = main_ram + ((vic_registers[0x60] | (vic_registers[0x61] << 8) | (vic_registers[0x62] << 16)) & ((512 << 10) - 1));
+	}
+	if (!vic_sprp_legacy) {
+		sprite_pointers = main_ram + ((vic_registers[0x6C] | (vic_registers[0x6D] << 8) | (vic_registers[0x6E] << 16)) & ((512 << 10) - 1));
 	}
 	// Target SDL pixel related format for the background colour
 	bg = palette[BG_FOR_Y(0)];
@@ -538,7 +589,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 				p += xlim == 39 ? 16 : 8;	// so we just ignore ... FIXME !!
 			} else {
 				int a;
-				Uint8 *cp = chip_ram + (((vidp[0] << 6) + (charline << 3) + (vidp[1] << 14)) & 0x1ffff); // and-mask: wrap-around in 128K of chip-RAM
+				Uint8 *cp = main_ram + (((vidp[0] << 6) + (charline << 3) + (vidp[1] << 14)) & 0x1ffff); // and-mask: wrap-around in 128K of chip-RAM
 				for (a = 0; a < 8; a++) {
 					if (xlim != 79)
 						*(p++) = palette[*cp];
@@ -622,9 +673,9 @@ static inline void vic2_render_screen_bmm ( Uint32 *p, int tail )
 {
 	int x = 0, y = 0, charline = 0;
 	Uint8 *vidp, *chrp;
-	vidp = chip_ram + ((vic_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
+	vidp = main_ram + ((vic_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
 	sprite_pointers = vidp + 1016;
-	chrp = chip_ram + ((vic_registers[0x18] & 8) ? 8192 : 0) + vic2_16k_bank;
+	chrp = main_ram + ((vic_registers[0x18] & 8) ? 8192 : 0) + vic2_16k_bank;
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_bmm");
 	for (;;) {
 		Uint8  data = *(vidp++);
@@ -676,14 +727,14 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
 	int bitpos = 128, charline = 0, offset = 0;
 	int xlim, x = 0, y = 0, h640 = (vic_registers[0x31] & 128);
 	Uint8 bpe, *bp[8];
-	bp[0] = chip_ram + ((vic_registers[0x33] & (h640 ? 12 : 14)) << 12);
-	bp[1] = chip_ram + ((vic_registers[0x34] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[2] = chip_ram + ((vic_registers[0x35] & (h640 ? 12 : 14)) << 12);
-	bp[3] = chip_ram + ((vic_registers[0x36] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[4] = chip_ram + ((vic_registers[0x37] & (h640 ? 12 : 14)) << 12);
-	bp[5] = chip_ram + ((vic_registers[0x38] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[6] = chip_ram + ((vic_registers[0x39] & (h640 ? 12 : 14)) << 12);
-	bp[7] = chip_ram + ((vic_registers[0x3A] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[0] = main_ram + ((vic_registers[0x33] & (h640 ? 12 : 14)) << 12);
+	bp[1] = main_ram + ((vic_registers[0x34] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[2] = main_ram + ((vic_registers[0x35] & (h640 ? 12 : 14)) << 12);
+	bp[3] = main_ram + ((vic_registers[0x36] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[4] = main_ram + ((vic_registers[0x37] & (h640 ? 12 : 14)) << 12);
+	bp[5] = main_ram + ((vic_registers[0x38] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[6] = main_ram + ((vic_registers[0x39] & (h640 ? 12 : 14)) << 12);
+	bp[7] = main_ram + ((vic_registers[0x3A] & (h640 ? 12 : 14)) << 12) + 0x10000;
 	bpe = vic_registers[0x32];	// bit planes enabled mask
 	if (h640) {
 		bpe &= 15;		// it seems, with H640, only 4 bitplanes can be used (on lower 4 ones)
@@ -806,10 +857,10 @@ void vic_render_screen ( void )
 	Uint32 *p_sdl = xemu_start_pixel_buffer_access(&tail_sdl);
 	int sprites = vic_registers[0x15];
 	if (vic_registers[0x31] & 16) {
-	        sprite_bank = chip_ram + ((vic_registers[0x35] & 12) << 12);	// FIXME: just guessing: sprite bank is bitplane 2 area, always 16K regardless of H640?
+	        sprite_bank = main_ram + ((vic_registers[0x35] & 12) << 12);	// FIXME: just guessing: sprite bank is bitplane 2 area, always 16K regardless of H640?
 		vic3_render_screen_bpm(p_sdl, tail_sdl);
 	} else {
-		sprite_bank = vic2_16k_bank + chip_ram;				// VIC2 legacy modes uses the VIC2 bank for sure, as the sprite bank too
+		sprite_bank = vic2_16k_bank + main_ram;				// VIC2 legacy modes uses the VIC2 bank for sure, as the sprite bank too
 		if (vic_registers[0x11] & 32)
 			vic2_render_screen_bmm(p_sdl, tail_sdl);
 		else

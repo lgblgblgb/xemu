@@ -46,9 +46,6 @@ static int nmi_level;			// please read the comment at nmi_set() below
 int newhack = 0;
 unsigned int frames_total_counter = 0;
 
-
-#define TRAP_RESET	0x40
-
 static int fast_mhz, cpu_cycles_per_scanline_for_fast_mode, speed_current;
 static char fast_mhz_in_string[8];
 static int frame_counter;
@@ -60,6 +57,7 @@ static const char emulator_paused_title[] = "TRACE/PAUSE";
 static char emulator_speed_title[] = "????MHz";
 static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 
+static int force_external_rom = 0;
 
 
 void cpu65_illegal_opcode_callback ( void )
@@ -166,6 +164,10 @@ static void cia2_setint_cb ( int level )
 static void cia2_out_a ( Uint8 data )
 {
 	vic2_16k_bank = ((~(data | (~cia2.DDRA))) & 3) << 14;
+	vic_vidp_legacy = 1;
+	vic_chrp_legacy = 1;
+	vic_sprp_legacy = 1;
+	// TODO FIXME: add sprites pointers!
 	DEBUG("VIC2: 16K BANK is set to $%04X (CIA mask=$%02X)" NL, vic2_16k_bank, cia2.DDRA);
 }
 
@@ -237,10 +239,23 @@ static void refill_memory_from_preinit_cache ( void )
 {
 	memcpy(char_wom, meminitdata_chrwom, MEMINITDATA_CHRWOM_SIZE);
 	memcpy(colour_ram, meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
-	memcpy(chip_ram + 0x3D00, meminitdata_banner, MEMINITDATA_BANNER_SIZE);
-	memcpy(fast_ram, rom_init_image, sizeof rom_init_image);
+	memcpy(main_ram +  0x3D00, meminitdata_banner, MEMINITDATA_BANNER_SIZE);
+	memcpy(main_ram + 0x20000, rom_init_image, sizeof rom_init_image);
 	memcpy(hypervisor_ram, meminitdata_kickstart, MEMINITDATA_KICKSTART_SIZE);
-	memcpy(chip_ram + 0xC000, c000_init_image, sizeof c000_init_image);
+	memcpy(main_ram +  0xC000, c000_init_image, sizeof c000_init_image);
+}
+
+
+int refill_c65_rom_from_preinit_cache ( void )
+{
+	if (force_external_rom) {
+		DEBUGPRINT("MEM: re-applying C65 ROM image on the first hypervisor leave ..." NL);
+		memcpy(main_ram + 0x20000, rom_init_image, sizeof rom_init_image);
+		return 1;	// yes, we issued a re-fill!
+	} else {
+		DEBUGPRINT("MEM: no force C65 ROM re-apply policy on the first hypevisor leave ..." NL);
+		return 0;	// no, no re-fill ...
+	}
 }
 
 
@@ -256,6 +271,9 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		VIRTUAL_SHIFT_POS,
 		SDL_ENABLE		// joy HID events enabled
 	);
+#ifdef HID_KBD_MAP_CFG_SUPPORT
+	hid_keymap_from_config_file(xemucfg_get_str("keymap"));
+#endif
 	joystick_emu = 1;
 	nmi_level = 0;
 	// *** FPGA switches ...
@@ -279,7 +297,11 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// project, with all sources available on-line, thus no licensing/copyright problem here.
 	// For mega65-core source, visit https://github.com/MEGA65/mega65-core
 	// For C000 utilties: mega65-core currently under reorganization, no C000 utilties are provided.
-	load_memory_preinit_cache(1, "loadrom", "C65 ROM image", rom_init_image, sizeof rom_init_image);
+	force_external_rom = ((load_memory_preinit_cache(1, "loadrom", "C65 ROM image", rom_init_image, sizeof rom_init_image) == (int)sizeof(rom_init_image)) && xemucfg_get_bool("forcerom"));
+	if (force_external_rom)
+		DEBUGPRINT("MEM: forcing external ROM usage (hypervisor leave memory re-fill policy)" NL);
+	else if (xemucfg_get_bool("forcerom"))
+		ERROR_WINDOW("-forcerom is ignored, because no -loadrom <filename> option was used, or it was not a succesfull load operation at least");
 	load_memory_preinit_cache(0, "loadcram", "CRAM utilities", meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
 	load_memory_preinit_cache(0, "loadbanner", "M65 logo", meminitdata_banner, MEMINITDATA_BANNER_SIZE);
 	load_memory_preinit_cache(1, "loadc000", "C000 utilities", c000_init_image, sizeof c000_init_image);
@@ -360,7 +382,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	DEBUGPRINT("SPEED: fast clock is set to %dMHz, %d CPU cycles per scanline." NL, fast_mhz, cpu_cycles_per_scanline_for_fast_mode);
 	cpu65_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
 	rom_protect = 0;
-	hypervisor_enter(TRAP_RESET);
+	hypervisor_start_machine();
 	speed_current = 0;
 	machine_set_speed(1);
 	DEBUG("INIT: end of initialization!" NL);
@@ -377,7 +399,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 }
 
 
-
+#include <unistd.h>
 
 
 
@@ -394,11 +416,11 @@ static void shutdown_callback ( void )
 	// Dump hypervisor memory to a file, so you can check it after exit.
 	FILE *f = fopen(MEMDUMP_FILE, "wb");
 	if (f) {
-		fwrite(chip_ram, 1, sizeof chip_ram, f);
-		fwrite(colour_ram, 1, 2048, f);
-		fwrite(fast_ram, 1, sizeof fast_ram, f);
+		fwrite(main_ram,		1, 0x20000 - 2048, f);
+		fwrite(colour_ram,		1, 2048, f);
+		fwrite(main_ram + 0x20000,	1, 0x40000, f);
 		fclose(f);
-		DEBUGPRINT("Memory state (chip+fast RAM, 256K) is dumped into " MEMDUMP_FILE NL);
+		DEBUGPRINT("Memory state is dumped into %s" DIRSEP_STR "%s" NL, getcwd(NULL, PATH_MAX), MEMDUMP_FILE);
 	}
 #endif
 #ifdef UARTMON_SOCKET
@@ -425,7 +447,7 @@ void reset_mega65 ( void )
 	dma_reset();
 	nmi_level = 0;
 	D6XX_registers[0x7E] = xemucfg_get_num("kicked");
-	hypervisor_enter(TRAP_RESET);
+	hypervisor_start_machine();
 	DEBUG("RESET!" NL);
 }
 
@@ -634,12 +656,13 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("loadbanner", NULL, "Load initial memory content for banner (to $3D00)");
 	xemucfg_define_str_option("loadc000", NULL, "Load initial memory content at $C000 (usually disk mounter)");
 	xemucfg_define_str_option("loadcram", NULL, "Load initial content (32K) into the colour RAM");
-	xemucfg_define_str_option("loadrom", NULL, "Preload C65 ROM image");
+	xemucfg_define_str_option("loadrom", NULL, "Preload C65 ROM image (you may need the -forcerom option to prevent KickStart to re-load from SD)");
+	xemucfg_define_switch_option("forcerom", "Re-fill 'ROM' from external source on start-up, requires option -loadrom <filename>");
 	xemucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used");
 	xemucfg_define_switch_option("sdhc", "Use SDHC mode for SD-card (will be auto-applied if card is 2-32Gbytes)");
 #ifdef FAKE_TYPING_SUPPORT
-	xemucfg_define_switch_option("go64", "Go into C64 mode after start");
-	xemucfg_define_switch_option("autoload", "Load and start the first program from disk");
+	xemucfg_define_switch_option("go64", "Go into C64 mode after start (with auto-typing, can be combined with -autoload)");
+	xemucfg_define_switch_option("autoload", "Load and start the first program from disk (with auto-typing, can be combined with -go64)");
 #endif
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
@@ -661,6 +684,9 @@ int main ( int argc, char **argv )
 		return 1;
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(xemucfg_get_str("installer"));
+#endif
+#ifdef HID_KBD_MAP_CFG_SUPPORT
+	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
 #endif
 	newhack = !xemucfg_get_bool("nonewhack");
 	if (newhack)

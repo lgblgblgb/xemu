@@ -5,7 +5,7 @@ all:
 	@false
 
 dist:
-	rsync -av --ignore-existing $(TARGET) .
+	rsync -av --ignore-existing --progress $(TARGET) .
 	make -C ../emscripten
 	{ echo "var xemufiledb = {" ; for a in * ; do if [ -s $$a ]; then stat -c '"%n": [%s, %Y],' $$a ; fi ; done ; echo "};" ; } > filedb.js
 	for a in *.js *.wasm ; do if [ $$a -nt $$a.gz ] ; then echo "Compressing file $$a -> $$a.gz" ; gzip -9 < $$a > $$a.gz && touch -r $$a $$a.gz ; fi ; done

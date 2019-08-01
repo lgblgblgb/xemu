@@ -4,6 +4,10 @@
 ; There should be *NO* empty "COMMAND-TO-EXECUTE", it should be
 ; not present then, or "commented out".
 
+; First some special values only used with win32/win64 DLL ...
+win32#sdl2#dll#			echo "`$SDL2_CONFIG_WIN32 --prefix`/$SDL2_DLL_RELPATH"
+win64#sdl2#dll#			echo "`$SDL2_CONFIG_WIN64 --prefix`/$SDL2_DLL_RELPATH"
+
 native#sdl2#cflags#		$SDL2_CONFIG_NATIVE --cflags && echo " -D HAVE_SDL2"
 native#sdl2#ldflags#		$SDL2_CONFIG_NATIVE --libs
 osx#sdl2#cflags#		$SDL2_CONFIG_OSX    --cflags && echo " -D HAVE_SDL2"

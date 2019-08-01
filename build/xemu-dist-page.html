@@ -2,7 +2,9 @@
 <html lang="en">
 <head>
 	<meta charset="utf-8">
-	<title>Xemu</title>
+	<meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+	<meta http-equiv="X-UA-Compatible" content="ie=edge">
+	<title>Xemu download/demonstration page</title>
 	<style>
 		h1 {
 			margin: 0 0 1em;
@@ -11,9 +13,30 @@
 			color: #ee6352;
 			line-height: .8;
 		}
+		a:hover {
+			color: #ee6352;
+			background-color: black;
+		}
+		a:link, a:visited, a:active {
+			color: #ee6352;
+		}
+		ul {
+			list-style: none;
+			padding-right: 1em;
+		}
+		ul li::before {
+			content: "";
+			color: black;
+			font-weight: bold;
+			display: inline-block;
+			width: 1em;
+			margin-left: -1em;
+		}
 		li {
 			border-top: 2px #ee6352 solid;
-			padding-top: 2px;
+			border-left: 1em #ee6352 solid;
+			padding-left: 1em;
+			padding-right: 1em;
 		}
 	</style>
 	<script>
@@ -31,6 +54,8 @@
 <body>
 
 <h1>Temporary Xemu Distribution/Demonstration page</h1>
+
+<p id="javascriptwarning">You must enable javascript to be able to use this page.</p>
 
 <ul>
 	<li><a id="ref1" href="dist/xemu-sample.html"><b>In-browser demonstration of Xemu emulators</b></a>
@@ -106,6 +131,7 @@ function pageMain() {
 		elem.href += "?" + ((new Date).getTime());
 		a += 1;
 	}
+	document.getElementById("javascriptwarning").style.display = "none";
 }
 pageMain();
 </script>

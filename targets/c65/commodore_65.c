@@ -1,5 +1,5 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -189,6 +189,9 @@ void clear_emu_events ( void )
 }
 
 
+static Uint8 port_d607 = 0xFF;
+
+
 static Uint8 cia1_in_b ( void )
 {
 #ifdef FAKE_TYPING_SUPPORT
@@ -198,7 +201,7 @@ static Uint8 cia1_in_b ( void )
 	return c64_keyboard_read_on_CIA1_B(
 		cia1.PRA | (~cia1.DDRA),
 		cia1.PRB | (~cia1.DDRB),
-		joystick_emu == 1 ? c64_get_joy_state() : 0xFF
+		joystick_emu == 1 ? c64_get_joy_state() : 0xFF, port_d607 & 2
 	);
 }
 
@@ -301,6 +304,9 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		VIRTUAL_SHIFT_POS,
 		SDL_ENABLE		// joy HID events enabled
 	);
+#ifdef HID_KBD_MAP_CFG_SUPPORT
+	hid_keymap_from_config_file(xemucfg_get_str("keymap"));
+#endif
 	joystick_emu = 1;
 	nmi_level = 0;
 	// *** host-FS
@@ -513,6 +519,7 @@ Uint8 io_read ( int addr )
 		case 0x15:	// $D500-$D5FF
 			return read_some_sid_register(addr);
 		case 0x16:	// $D600-$D6FF, C65 UART
+			//DEBUGPRINT("READ  D%03X" NL, addr);
 			return 0xFF;			// not emulated by Xemu, yet, TODO
 		case 0x17:	// $D700-$D7FF, C65 DMA
 			return dma_read_reg(addr & 15);
@@ -609,6 +616,10 @@ void io_write ( int addr, Uint8 data )
 			write_some_sid_register(addr, data);
 			return;
 		case 0x16:	// $D600-$D6FF, C65 UART
+			if (addr == 0x607) {
+				port_d607 = data;
+			}
+			//DEBUGPRINT("WRITE D%03X with data %02X" NL, addr, data);
 			return;				// not emulated by Xemu, yet, TODO
 		case 0x17:	// $D700-$D7FF, C65 DMA
 			dma_write_reg(addr & 15, data);
@@ -878,6 +889,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
 	//xemucfg_define_switch_option("noaudio", "Disable audio");
 	xemucfg_define_str_option("rom", "#c65-system.rom", "Override system ROM path to be loaded");
+	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
 #ifdef FAKE_TYPING_SUPPORT
 	xemucfg_define_switch_option("go64", "Go into C64 mode after start");
 	xemucfg_define_switch_option("autoload", "Load and start the first program from disk");
