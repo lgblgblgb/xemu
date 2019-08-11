@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    THIS IS AN UGLY PIECE OF SOURCE REALLY.
 
@@ -48,6 +48,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_basicdefs.h"
 #ifndef CPU_CUSTOM_INCLUDED
 #include "xemu/cpu65.h"
+#endif
+
+#ifdef MEGA65
+#include "hypervisor.h"
 #endif
 
 #ifdef DEBUG_CPU
@@ -482,6 +486,9 @@ int cpu65_step (
 #ifdef CPU_65CE02
 		&& CPU65.op_cycles != 1 && !CPU65.cpu_inhibit_interrupts
 #endif
+#ifdef MEGA65
+		&& !in_hypervisor
+#endif
 	)) {
 #ifdef DEBUG_CPU
 		DEBUG("CPU: serving NMI on NMI edge at PC $%04X" NL, CPU65.pc);
@@ -502,6 +509,9 @@ int cpu65_step (
 	if (XEMU_UNLIKELY(CPU65.irqLevel && (!CPU65.pf_i)
 #ifdef CPU_65CE02
 		&& CPU65.op_cycles != 1 && !CPU65.cpu_inhibit_interrupts
+#endif
+#ifdef MEGA65
+		&& !in_hypervisor
 #endif
 	)) {
 #ifdef DEBUG_CPU
