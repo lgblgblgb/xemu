@@ -447,7 +447,6 @@ void reset_mega65 ( void )
 	nmi_level = 0;
 	D6XX_registers[0x7E] = xemucfg_get_num("kicked");
 	hypervisor_start_machine();
-	restore_is_held = 0;
 	DEBUG("RESET!" NL);
 }
 
@@ -457,18 +456,8 @@ static void update_emulator ( void )
 	hid_handle_all_sdl_events();
 	nmi_set(IS_RESTORE_PRESSED(), 2);	// Custom handling of the restore key ...
 	// this part is used to trigger 'RESTORE trap' with long press on RESTORE.
-	// Please read comments in file input_devices.c near the ALT-TAB press trap handling (which is handled there, unlike this one).
-	if (restore_is_held) {
-		restore_is_held++;
-		if (restore_is_held >= 20) {
-			restore_is_held = 0;
-			if (!in_hypervisor) {
-				DEBUGPRINT("KBD: RESTORE trap has been triggered." NL);
-				KBD_RELEASE_KEY(RESTORE_KEY_POS);
-				hypervisor_enter(TRAP_RESTORE);
-			}
-		}
-	}
+	// see input_devices.c for more information
+	kbd_trigger_restore_trap();
 #ifdef UARTMON_SOCKET
 	uartmon_update();
 #endif

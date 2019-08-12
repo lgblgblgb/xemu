@@ -37,6 +37,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifdef C65_KEYBOARD
 #define C65_KEYBOARD_EXTRA_POS	0x90
+#define SCRL_KEY_POS		(C65_KEYBOARD_EXTRA_POS + 0)
+#define TAB_KEY_POS		(C65_KEYBOARD_EXTRA_POS + 1)
 #define ALT_KEY_POS		(C65_KEYBOARD_EXTRA_POS + 2)
 #endif
 

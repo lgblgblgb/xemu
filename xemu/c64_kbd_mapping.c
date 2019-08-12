@@ -121,9 +121,9 @@ const struct KeyMappingDefault c64_key_map[] = {
 #ifdef C65_KEYBOARD
 	// C65 (and thus M65 too) keyboard is basically the same as C64, however there are extra keys which are handled differently than the "C64-compatible" keys.
 	// Thus, if requested with macro C65_KEYBOARD defined, we have some extra "virtual" matrix positions for those keys here.
-	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + 0, "NOSCROLL" },//NO SCROLL: FIXME: where should we map this key to?
-	{ SDL_SCANCODE_TAB,		C65_KEYBOARD_EXTRA_POS + 1, "TAB" },	// TAB
-	{ SDL_SCANCODE_RALT,		C65_KEYBOARD_EXTRA_POS + 2, "ALT" },	// ALT on C65: right alt (AltGr) on PC [left ALT on PC is used as the commodore key]
+	{ SDL_SCANCODE_UNKNOWN,		SCRL_KEY_POS, "NOSCROLL" },		// NO SCROLL: FIXME: where should we map this key to?
+	{ SDL_SCANCODE_TAB,		TAB_KEY_POS, "TAB" },			// TAB
+	{ SDL_SCANCODE_RALT,		ALT_KEY_POS, "ALT" },			// ALT on C65: right alt (AltGr) on PC [left ALT on PC is used as the commodore key]
 	{ SDL_SCANCODE_PAGEUP,		C65_KEYBOARD_EXTRA_POS + 3, "HELP" },	// HELP: FIXME: where should we map this key to?
 	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + 4, "F9" },	// F9/F10: FIXME: where should we map this key to?
 	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + 5, "F11" },	// F11/F12: FIXME: where should we map this key to?

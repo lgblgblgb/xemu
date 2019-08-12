@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/f018_core.h"
 #include "memory_mapper.h"
 #include "io_mapper.h"
+#include "xemu/emutools_config.h"
 
 #include <sys/types.h>
 #include <fcntl.h>
@@ -48,6 +49,7 @@ static int hypervisor_serial_out_asciizer;
 
 static int first_hypervisor_leave;
 
+static int hypervisor_queued_trap = -1;
 
 
 int hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hypervisor_serial_out_asciizer )
@@ -114,6 +116,23 @@ int hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hyperv
 }
 
 
+int hypervisor_queued_enter ( int trapno )
+{
+	if (!in_hypervisor) {
+		DEBUG("HYPERVISOR: no need to queue trap, can be executed now #$%02X" NL, trapno);
+		hypervisor_enter(trapno);
+		return 0;
+	} else if (hypervisor_queued_trap < 0) {
+		hypervisor_queued_trap = trapno;
+		DEBUG("HYPERVISOR: queueing trap #$%02X" NL, trapno);
+		return 0;
+	} else {
+		DEBUGPRINT("HYPERVISOR: cannot queue trap #$%02X, already have a queued one #$%02X" NL, trapno, hypervisor_queued_trap);
+		return 1;
+	}
+}
+
+
 
 void hypervisor_enter ( int trapno )
 {
@@ -174,6 +193,7 @@ void hypervisor_enter ( int trapno )
 void hypervisor_start_machine ( void )
 {
 	in_hypervisor = 0;
+	hypervisor_queued_trap = -1;
 	first_hypervisor_leave = 1;
 	hypervisor_enter(TRAP_RESET);
 }
@@ -228,6 +248,12 @@ void hypervisor_leave ( void )
 		} else
 			DEBUGPRINT("MEM: no force ROM re-apply policy was requested" NL);
 		dma_init_set_rev(xemucfg_get_num("dmarev"), main_ram + 0x20000 + 0x16);
+	}
+	if (XEMU_UNLIKELY(hypervisor_queued_trap >= 0)) {
+		// Not so much used currently ...
+		DEBUG("HYPERVISOR: processing queued trap on leaving hypervisor: trap #$%02X" NL, hypervisor_queued_trap);
+		hypervisor_enter(hypervisor_queued_trap);
+		hypervisor_queued_trap = -1;
 	}
 }
 

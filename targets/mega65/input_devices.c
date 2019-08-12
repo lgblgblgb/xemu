@@ -68,7 +68,7 @@ static struct {
 	Uint8	last;
 } hwa_kbd;
 
-int restore_is_held = 0;
+static int restore_is_held = 0;
 
 
 /* used by actual I/O function to read $D610 */
@@ -159,6 +159,35 @@ Uint8 cia1_in_a ( void )
 }
 
 
+void kbd_trigger_restore_trap ( void )
+{
+	if (XEMU_UNLIKELY(restore_is_held)) {
+		restore_is_held++;
+		if (restore_is_held >= 20) {
+			restore_is_held = 0;
+			if (!in_hypervisor) {
+				DEBUGPRINT("KBD: RESTORE trap has been triggered." NL);
+				KBD_RELEASE_KEY(RESTORE_KEY_POS);
+				hypervisor_enter(TRAP_RESTORE);
+			} else
+				DEBUGPRINT("KBD: *IGNORING* RESTORE trap trigger, already in hypervisor mode!" NL);
+		}
+	}
+}
+
+
+static void kbd_trigger_alttab_trap ( void )
+{
+	KBD_RELEASE_KEY(TAB_KEY_POS);
+	//KBD_RELEASE_KEY(ALT_KEY_POS);
+	//hwa_kbd.modifiers &= ~MODKEY_ALT;
+	if (!in_hypervisor) {
+		DEBUGPRINT("KBD: ALT-TAB trap has been triggered." NL);
+		hypervisor_enter(TRAP_ALTTAB);
+	} else
+		DEBUGPRINT("KBD: *IGNORING* ALT-TAB trap trigger, already in hypervisor mode!" NL);
+}
+
 
 // Called by emutools_hid!!! to handle special private keys assigned to this emulator
 int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
@@ -179,16 +208,13 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 	DEBUGKBD("KBD: HWA: pos = %d sdl_key = %d, pressed = %d, handled = %d" NL, pos, key, pressed, handled);
 	if (pressed) {
 		// check if we have the ALT-TAB trap triggered (TAB is pressed now, and ALT is hold)
-		if (pos == (C65_KEYBOARD_EXTRA_POS + 1) && (hwa_kbd.modifiers & MODKEY_ALT) && !in_hypervisor) {
-			KBD_RELEASE_KEY(ALT_KEY_POS);
-			KBD_RELEASE_KEY(C65_KEYBOARD_EXTRA_POS + 1);
-			hwa_kbd.modifiers &= ~MODKEY_ALT;
-			DEBUGPRINT("KBD: ALT-TAB trap has been triggered." NL);
-			hypervisor_enter(TRAP_ALTTAB);
+		if (pos == TAB_KEY_POS && (hwa_kbd.modifiers & MODKEY_ALT)) {
+			kbd_trigger_alttab_trap();
 			return 0;
 		}
 		// RESTORE triggered trap is different as it depends on timing (how long it's pressed)
 		// So we just flag this, and the main emulation loop need to increment the value to see if the long press event comes, and trigger the trap.
+		// This is done by main emulation loop calling kbd_trigger_restore_trap() function, see above in this very source.
 		// Please note about the pair of this condition below with the "else" branch of the "pressed" condition.
 		if (pos == RESTORE_KEY_POS)
 			restore_is_held = 1;

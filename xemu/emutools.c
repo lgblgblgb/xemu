@@ -540,7 +540,7 @@ int xemu_post_init (
 	a = SDL_GetNumRenderDrivers();
 	while (--a >= 0) {
 		if (!SDL_GetRenderDriverInfo(a, &ren_info)) {
-			printf("SDL renderer driver #%d: \"%s\"" NL, a, ren_info.name);	
+			printf("SDL renderer driver #%d: \"%s\"" NL, a, ren_info.name);
 		} else
 			printf("SDL renderer driver #%d: FAILURE TO QUERY (%s)" NL, a, SDL_GetError());
 	}

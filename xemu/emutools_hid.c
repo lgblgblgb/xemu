@@ -58,7 +58,7 @@ static const struct KeyMappingDefault *key_map_default;
 int hid_key_event ( SDL_Scancode key, int pressed )
 {
 	const struct KeyMappingUsed *map = key_map;
-	OSD(-1, -1, "Key %s <%s>", pressed ? "press  " : "release", SDL_GetScancodeName(key));
+	//OSD(-1, -1, "Key %s <%s>", pressed ? "press  " : "release", SDL_GetScancodeName(key));
 	while (map->pos >= 0) {
 		if (map->scan == key) {
 			if (map->pos > 0xFF) {	// special emulator key!
@@ -472,6 +472,12 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 			if (event->key.repeat == 0 && event->key.keysym.scancode != SDL_SCANCODE_UNKNOWN
 #ifdef CONFIG_KBD_SELECT_FOCUS
 				&& (event->key.windowID == sdl_winid || event->key.windowID == 0)
+#endif
+#ifdef CONFIG_KBD_AVOID_LALTTAB
+				/* ALT-TAB is usually used by the OS, and it can be ignored to "leak" this event into Xemu
+				 * so if it's requested, we filter out. NOTE: it's only for LALT (left ALT), right ALT maybe
+				 * used	for other emulation purposes ... */
+				&& !(event->key.keysym.scancode == SDL_SCANCODE_TAB && (event->key.keysym.mod & KMOD_LALT))
 #endif
 			)
 				hid_key_event(event->key.keysym.scancode, event->key.state == SDL_PRESSED);
