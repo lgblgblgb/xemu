@@ -175,7 +175,7 @@ void hypervisor_start_machine ( void )
 {
 	in_hypervisor = 0;
 	first_hypervisor_leave = 1;
-	hypervisor_enter(0x40);	// 0x40 is the RESET TRAP!
+	hypervisor_enter(TRAP_RESET);
 }
 
 
@@ -218,13 +218,16 @@ void hypervisor_leave ( void )
 	memory_set_do_map();	// restore mapping ...
 	if (XEMU_UNLIKELY(first_hypervisor_leave)) {
 		first_hypervisor_leave = 0;
-		if (refill_c65_rom_from_preinit_cache()) {	// this function should decide then, if it's really a (forced) thing to do ...
-			// non-zero return value from the re-fill routine: we DID re-fill, we should re-initialize "user space" PC ...
-			DEBUGPRINT("MEM: ROM re-apply policy PC change: %04X -> %02X%02X" NL,
-				cpu65.pc, main_ram[0x2FFFD], main_ram[0x2FFFC]
+		int new_pc = refill_c65_rom_from_preinit_cache();	// this function should decide then, if it's really a (forced) thing to do ...
+		if (new_pc >= 0) {
+			// positive return value from the re-fill routine: we DID re-fill, we should re-initialize "user space" PC from the return value
+			DEBUGPRINT("MEM: force ROM re-apply policy, PC change: $%04X -> $%04X" NL,
+				cpu65.pc, new_pc
 			);
-			cpu65.pc = main_ram[0x2FFFC] | (main_ram[0x2FFFD] << 8);
-		}
+			cpu65.pc = new_pc;
+		} else
+			DEBUGPRINT("MEM: no force ROM re-apply policy was requested" NL);
+		dma_init_set_rev(xemucfg_get_num("dmarev"), main_ram + 0x20000 + 0x16);
 	}
 }
 

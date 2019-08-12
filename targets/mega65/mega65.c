@@ -249,13 +249,12 @@ static void refill_memory_from_preinit_cache ( void )
 int refill_c65_rom_from_preinit_cache ( void )
 {
 	if (force_external_rom) {
-		DEBUGPRINT("MEM: re-applying C65 ROM image on the first hypervisor leave ..." NL);
 		memcpy(main_ram + 0x20000, rom_init_image, sizeof rom_init_image);
-		return 1;	// yes, we issued a re-fill!
-	} else {
-		DEBUGPRINT("MEM: no force C65 ROM re-apply policy on the first hypevisor leave ..." NL);
-		return 0;	// no, no re-fill ...
-	}
+		// memcpy(char_wom, rom_init_image + 0xD000, sizeof char_wom);	// also fill char-WOM [FIXME: do we really want this?!]
+		// The 128K ROM image is actually holds the reset bector at the lower 64K, ie C65 would start in "C64 mode" for real, just it switches into C65 mode then ...
+		return rom_init_image[0xFFFC] | (rom_init_image[0xFFFD] << 8);	// pass back new reset vector
+	} else
+		return -1; // no refill force external rom policy ...
 }
 
 
@@ -448,6 +447,7 @@ void reset_mega65 ( void )
 	nmi_level = 0;
 	D6XX_registers[0x7E] = xemucfg_get_num("kicked");
 	hypervisor_start_machine();
+	restore_is_held = 0;
 	DEBUG("RESET!" NL);
 }
 
@@ -456,6 +456,19 @@ static void update_emulator ( void )
 {
 	hid_handle_all_sdl_events();
 	nmi_set(IS_RESTORE_PRESSED(), 2);	// Custom handling of the restore key ...
+	// this part is used to trigger 'RESTORE trap' with long press on RESTORE.
+	// Please read comments in file input_devices.c near the ALT-TAB press trap handling (which is handled there, unlike this one).
+	if (restore_is_held) {
+		restore_is_held++;
+		if (restore_is_held >= 20) {
+			restore_is_held = 0;
+			if (!in_hypervisor) {
+				DEBUGPRINT("KBD: RESTORE trap has been triggered." NL);
+				KBD_RELEASE_KEY(RESTORE_KEY_POS);
+				hypervisor_enter(TRAP_RESTORE);
+			}
+		}
+	}
 #ifdef UARTMON_SOCKET
 	uartmon_update();
 #endif

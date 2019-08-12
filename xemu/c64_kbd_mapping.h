@@ -37,7 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifdef C65_KEYBOARD
 #define C65_KEYBOARD_EXTRA_POS	0x90
-//#define c65_keyboard_get_extra_row() kbd_matrix[(C65_KEYBOARD_EXTRA_POS) >> 4]
+#define ALT_KEY_POS		(C65_KEYBOARD_EXTRA_POS + 2)
 #endif
 
 extern const struct KeyMappingDefault c64_key_map[];

@@ -21,11 +21,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_hid.h"
 #include "xemu/c64_kbd_mapping.h"
 
-/* Definitions for "C64-like" systems (ie: C64, C65, M65). FIXME:
-	* This is _POSITIONAL_ mapping (not symbolic), assuming US keyboard layout for the host machine (ie: the machine you run this emulator)
-	* Only 8*8 matrix is emulated currently, on C65/M65 there is an "extra" line it seems, not handled yet!
+/* Definitions for "C64-like" systems (ie: C64, C65, M65).
 	* I was lazy to map some keys, see in the comments :)
 	* The mapping should be revised at some point, this was only a quick setup without too much work since then ...
+	* ... but anyway it's only a default map anyway, since HID can load custom keymaps now!
 */
 
 // Comments on this table: for uncommented lines, it's a kinda trivial mapping, like '3' on PC is for sure, '3' on C64 ...
@@ -147,7 +146,7 @@ void c64_toggle_joy_emu ( void )
 	else if (joystick_emu == 2)
 		joystick_emu = 1;
 	if (joystick_emu)
-		printf("Joystick emulation for Joy#%d" NL, joystick_emu);
+		DEBUGPRINT("Joystick emulation for Joy#%d" NL, joystick_emu);
 }
 
 

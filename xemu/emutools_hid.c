@@ -58,6 +58,7 @@ static const struct KeyMappingDefault *key_map_default;
 int hid_key_event ( SDL_Scancode key, int pressed )
 {
 	const struct KeyMappingUsed *map = key_map;
+	OSD(-1, -1, "Key %s <%s>", pressed ? "press  " : "release", SDL_GetScancodeName(key));
 	while (map->pos >= 0) {
 		if (map->scan == key) {
 			if (map->pos > 0xFF) {	// special emulator key!
