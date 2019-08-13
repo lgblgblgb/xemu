@@ -45,7 +45,7 @@ recreatememcontent:
 	echo '#include "xemu/emutools.h"' >> memcontent.c.tmp
 	echo '#include "memcontent.h"' >> memcontent.c.tmp
 	echo "Uint8 meminitdata_kickstart[MEMINITDATA_KICKSTART_SIZE] = {" >> memcontent.c.tmp
-	../../build/bin2values.py ../../../mega65-core/bin/KICKUP.M65 - >> memcontent.c.tmp
+	../../build/bin2values.py ../../../mega65-core/bin/HICKUP.M65 - >> memcontent.c.tmp
 	echo "};" >> memcontent.c.tmp
 	echo "Uint8 meminitdata_chrwom[MEMINITDATA_CHRWOM_SIZE] = {" >> memcontent.c.tmp
 	gawk '/^[\t ]*[xX]"/ { $$0 = toupper($$0); gsub("X\"","0x",$$0); gsub("\"","",$$0); print "\t" $$0 }' < ../../../mega65-core/src/vhdl/charrom.vhdl >> memcontent.c.tmp
