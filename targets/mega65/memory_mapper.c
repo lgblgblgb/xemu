@@ -277,7 +277,12 @@ DEFINE_READER(disk_buffers_reader) {
 DEFINE_WRITER(disk_buffers_writer) {
 	disk_buffers[GET_WRITER_OFFSET()] = data;
 }
-
+DEFINE_READER(i2c_io_reader) {
+	return 0;	// now just ignore, and give ZERO as answer [no I2C devices]
+}
+DEFINE_WRITER(i2c_io_writer) {
+	// now just ignore [no I2C devices]
+}
 
 // Memory layout table for Mega-65
 // Please note, that for optimization considerations, it should be organized in a way
@@ -301,6 +306,7 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 	{ 0xFF7E000, 0xFF7EFFF, dummy_reader, char_wom_writer },		// Character "WriteOnlyMemory"
 	{ 0xFFDE800, 0xFFDEFFF, eth_buffer_reader, eth_buffer_writer },		// ethernet RX/TX buffer, NOTE: the same address, reading is always the RX_read, writing is always TX_write
 	{ 0xFFD6000, 0xFFD6FFF, disk_buffers_reader, disk_buffers_writer },	// disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space" [??]
+	{ 0xFFD7000, 0xFFD70FF, i2c_io_reader, i2c_io_writer },			// I2C devices
 	{ 0x8000000, 0xFEFFFFF, slow_ram_reader, slow_ram_writer },		// 127Mbytes of "slow RAM" (Nexys4 DDR2 RAM)
 	{ 0x60000, 0xFFFFF, dummy_reader, dummy_writer },			// upper "unused" area of C65 (!) memory map. It seems C65 ROMs want it (Expansion RAM?) so we define as unused.
 	{ HYPER_RAM_START, HYPER_RAM_END, hyper_ram_reader, hyper_ram_writer },
