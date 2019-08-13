@@ -235,11 +235,14 @@ static Uint8 rom_init_image[0x20000];
 static Uint8 c000_init_image[0x1000];
 
 
+//#define BANNER_MEM_ADDRESS	0x3D00
+#define BANNER_MEM_ADDRESS	(0x58000 - 3*256)
+
 static void refill_memory_from_preinit_cache ( void )
 {
 	memcpy(char_wom, meminitdata_chrwom, MEMINITDATA_CHRWOM_SIZE);
 	memcpy(colour_ram, meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
-	memcpy(main_ram +  0x3D00, meminitdata_banner, MEMINITDATA_BANNER_SIZE);
+	memcpy(main_ram +  BANNER_MEM_ADDRESS, meminitdata_banner, MEMINITDATA_BANNER_SIZE);
 	memcpy(main_ram + 0x20000, rom_init_image, sizeof rom_init_image);
 	memcpy(hypervisor_ram, meminitdata_kickstart, MEMINITDATA_KICKSTART_SIZE);
 	memcpy(main_ram +  0xC000, c000_init_image, sizeof c000_init_image);
@@ -655,7 +658,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_num_option("kicked", 0x0, "Answer to KickStart upgrade (128=ask user in a pop-up window)");
 	xemucfg_define_str_option("kickup", NULL, "Override path of external KickStart to be used");
 	xemucfg_define_str_option("kickuplist", NULL, "Set path of symbol list file for external KickStart");
-	xemucfg_define_str_option("loadbanner", NULL, "Load initial memory content for banner (to $3D00)");
+	xemucfg_define_str_option("loadbanner", NULL, "Load initial memory content for banner");
 	xemucfg_define_str_option("loadc000", NULL, "Load initial memory content at $C000 (usually disk mounter)");
 	xemucfg_define_str_option("loadcram", NULL, "Load initial content (32K) into the colour RAM");
 	xemucfg_define_str_option("loadrom", NULL, "Preload C65 ROM image (you may need the -forcerom option to prevent KickStart to re-load from SD)");
