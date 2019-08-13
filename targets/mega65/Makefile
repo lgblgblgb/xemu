@@ -29,6 +29,12 @@ CONFIG_LDFLAGS_TARGET_xmega65	= sdl2|math|socketapi
 include ../../build/Makefile.common
 
 recreatememcontent:
+	@echo "*** Creating needed files from mega65-core ..."
+	$(MAKE) -C ../../../mega65-core bin/HICKUP.M65
+	$(MAKE) -C ../../../mega65-core bin/COLOURRAM.BIN
+	$(MAKE) -C ../../../mega65-core sdcard-files/BANNER.M65
+	$(MAKE) -C ../../../mega65-core sdcard-files/FREEZER.M65
+	@echo "*** About creating our C file"
 	rm -f memcontent.c.tmp
 	echo "/* !THIS IS A GENERATED FILE! DO NOT EDIT!" >> memcontent.c.tmp
 	echo " * Instead, say 'make recreatememcontent' to re-generate this file" >> memcontent.c.tmp
@@ -50,4 +56,8 @@ recreatememcontent:
 	echo "Uint8 meminitdata_banner[MEMINITDATA_BANNER_SIZE] = {" >> memcontent.c.tmp
 	../../build/bin2values.py ../../../mega65-core/sdcard-files/BANNER.M65 - >> memcontent.c.tmp
 	echo "};" >> memcontent.c.tmp
-	mv memcontent.c.tmp memcontent.c
+	echo "Uint8 meminitdata_freezer[] = { /* Not used currently but we will be ... */" >> memcontent.c.tmp
+	../../build/bin2values.py ../../../mega65-core/sdcard-files/FREEZER.M65 - >> memcontent.c.tmp
+	echo "};" >> memcontent.c.tmp
+	cp memcontent.c memcontent.c.BAK
+	@echo "*** OK. Please rename memcontent.c.tmp to memcontent.c to really apply these changed ***"
