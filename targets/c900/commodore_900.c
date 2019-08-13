@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_files.h"
 
 
-#define BOOT_ROM "#boot-combined.bin"
+#define BOOT_ROM "#c900-boot-combined.rom"
 
 static Uint8 memory[0x10000];
 
@@ -48,6 +48,11 @@ Uint16 z8k1_read_word_cb ( int seg, Uint16 ofs )
 	return (memory[ofs] << 8) | memory[ofs + 1];
 }
 
+Uint16 z8k1_read_code_cb ( int seg, Uint16 ofs )
+{
+	return z8k1_read_word_cb(seg, ofs);
+}
+
 
 
 void clear_emu_events ( void )
@@ -68,6 +73,8 @@ int main ( int argc, char **argv )
 	z8k1_init();
 	puts("\nCURRENT GOAL: only disassembly the BOOT ROM and compare it with well known disasm result done by others on boot ROMs\n");
 	z8k1_reset();
+	z8010_init();
+	z8010_reset();
 	for (;;) {
 		if (z8k1_step(0) < 0)
 			break;

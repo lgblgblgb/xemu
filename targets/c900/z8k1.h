@@ -28,6 +28,7 @@ extern int  z8k1_step  ( int cycles_limit );
 
 extern Uint8  z8k1_read_byte_cb		( int seg, Uint16 ofs );
 extern Uint16 z8k1_read_word_cb		( int seg, Uint16 ofs );
+extern Uint16 z8k1_read_code_cb		( int seg, Uint16 ofs );
 extern void   z8k1_write_byte_cb	( int seg, Uint16 ofs, Uint8  data );
 extern void   z8k1_write_word_cb	( int seg, Uint16 ofs, Uint16 data );
 

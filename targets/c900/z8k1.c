@@ -58,7 +58,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #define DO_DISASM
-#define DO_EXEC		0
+#define DO_EXEC		1
 
 #define FLAG_CARRY	0x80
 #define FLAG_ZERO	0x40
@@ -122,7 +122,7 @@ static int do_disasm = 1;
 // mode stack etc is not handled, and must be COPIED the appropriate one here
 // on CPU mode change, etc!
 static struct {
-	Uint8 RegisterFile[32];
+	Uint16 regs[16];
 	Uint8 fcw, flags;	// for real, these are one word in most cases
 	Uint16 pc;
 	Uint8 codeseg;
@@ -131,7 +131,10 @@ static struct {
 	Uint16 refresh;
 	Uint8 psaseg;
 	Uint16 psaofs;
-	int m1;		// FIXME: no sane "bus mode" (encoded with 4 bits) are used in emulation. this wanted to mean the opcode fetch though if set in read mem callback
+	//int m1;		// FIXME: no sane "bus mode" (encoded with 4 bits) are used in emulation. this wanted to mean the opcode fetch though if set in read mem callback
+	Uint16 use_ofs;
+	Uint8  use_seg;
+	int get_address_mode;
 } z8k1;
 
 
@@ -142,18 +145,18 @@ static const char *__reg8names__[16] = {
 };
 #define reg8names(n) __reg8names__[(n) & 0xF]
 static const char *__reg16names__[16] = {
-	"R0", "R1", "R2", "R3", "R4", "R5", "R6", "R7",
+	"R0", "R1", "R2",  "R3",  "R4",  "R5",  "R6",  "R7",
 	"R8", "R9", "R10", "R11", "R12", "R13", "R14", "R15"
 };
 #define reg16names(n) __reg16names__[(n) & 0xF]
 static const char *__reg32names__[16] = {
-	"RR0", "RR0", "RR2", "RR2", "RR4", "RR4", "RR6", "RR6",
-	"RR8", "RR8", "RR10", "RR10", "RR12", "RR12", "RR14", "RR14"
+	"RR0", "RR0?", "RR2",  "RR2?",  "RR4",  "RR4?",  "RR6",  "RR6?",
+	"RR8", "RR8?", "RR10", "RR10?", "RR12", "RR12?", "RR14", "RR14?"
 };
 #define reg32names(n) __reg32names__[(n) & 0xF]
 static const char *__reg64names__[16] = {
-	"RQ0", "RQ0", "RQ0", "RQ0", "RQ4", "RQ4", "RQ4", "RQ4",
-	"RQ8", "RQ8", "RQ8", "RQ8", "RQ12", "RQ12", "RQ12", "RQ12"
+	"RQ0", "RQ0?", "RQ0??", "RQ0???", "RQ4",  "RQ4?",  "RQ4??",  "RQ4???",
+	"RQ8", "RQ8?", "RQ8??", "RQ8???", "RQ12", "RQ12?", "RQ12??", "RQ12???"
 };
 #define reg64names(n) __reg64names__[(n) & 0xF]
 static const char *__ccnames__[16] = {
@@ -170,8 +173,9 @@ static Uint16 READCODE ( void )
 	Uint16 ret;
 	if (XEMU_UNLIKELY(z8k1.pc & 1))
 		FATAL("READCODE() at odd address $%04X", z8k1.pc);
-	ret = z8k1_read_word_cb(z8k1.codeseg, z8k1.pc);
+	ret = z8k1_read_code_cb(z8k1.codeseg, z8k1.pc);
 	z8k1.pc += 2;
+	//z8k1.opfetch_cycle++;
 	return ret;
 }
 
@@ -254,33 +258,74 @@ static int check_cc ( int cc )
 #define NIB1(n)		(((n) >> 4) & 0xF)
 #define NIB0(n)		((n) & 0xF)
 
+#define OPCNIB3		NIB3(opc)
+#define OPCNIB2		NIB2(opc)
+#define OPCNIB1		NIB1(opc)
+#define OPCNIB0		NIB0(opc)
+
 
 static inline Uint8 GetReg8 ( int index ) // Get register value according to a 8 bit Z8K encoded register
 {
-	return z8k1.RegisterFile[REG8INDEX(index)];
-}
-
-static inline Uint16 GetReg16 ( int index )
-{
-	index &= 0xE;
-	return (z8k1.RegisterFile[index] << 8) | z8k1.RegisterFile[index + 1];
+	return (index & 8) ? (z8k1.regs[index & 7] & 0xFF) : (z8k1.regs[index & 7] >> 8);
 }
 
 static inline void SetReg8 ( int index, Uint8 data )
 {
-	z8k1.RegisterFile[REG8INDEX(index)] = data;
+	if (index & 8)
+		z8k1.regs[index & 7] = (z8k1.regs[index & 7] & 0xFF00) | data;
+	else
+		z8k1.regs[index & 7] = (z8k1.regs[index & 7] & 0x00FF) | (data << 8);
+}
+
+static inline Uint16 GetReg16 ( int index )
+{
+	return z8k1.regs[index & 0xF];
+}
+
+static inline void SetReg16 ( int index, Uint8 data )
+{
+	z8k1.regs[index & 0xF] = data;
+}
+
+static inline Uint32 GetReg32 ( int index )
+{
+	index &= 0xE;
+	return ((Uint32)z8k1.regs[index] << 16) | (Uint32)z8k1.regs[index + 1];
+}
+
+static inline void SetReg32 ( int index, Uint32 data )
+{
+	index &= 0xE;
+	z8k1.regs[index] = data >> 16;
+	z8k1.regs[index + 1] = data & 0xFFFF;
 }
 
 
+#if 0
 // that is tricky ... it seems, Z8K wastes a byte to have word aligned
+// immediate byte value in the code,
 // but it's unclear that the low or high byte is used actually to fill
 // a register in case of a 8 bit immediate data "normally encoded".
+// (Z8000 manual seems to indicate that both of low/high bytes should
+// have the same value, so it gives the hint, that it's based on the
+// actual 8 bit register used lo or hi 8 bit part of a register)
 // I am just guessing that the low/hi usage is connected to the lo/hi
 // 8 bit register selected ...
+// Index is the encoded register number
+static inline Uint8 GetVal8FromImmediateWord ( int index, Uint16 data )
+{
+	return (index & 8) ? (data & 0xFF) : (data >> 8);
+}
+
+#define IMMEDBYTEFROMWORD(index,n)	(((n)>>(((index)&8)?0:8))&0xFF)
+
+
 static inline void SetReg8FromWord ( int index, Uint16 data )
 {
-	index = REG8INDEX(index);
-	z8k1.RegisterFile[index] = ((index & 1) ? (data & 0xFF) : (data >> 8));
+	if (index & 8)
+		z8k1.regs[index & 7] = (z8k1.regs[index & 7] & 0xFF00) | (data & 0x00FF);
+	else
+		z8k1.regs[index & 7] = (z8k1.regs[index & 7] & 0x00FF) | (data & 0xFF00);
 }
 
 static inline void SetReg16 ( int index, Uint16 data )
@@ -289,6 +334,7 @@ static inline void SetReg16 ( int index, Uint16 data )
 	z8k1.RegisterFile[index] = data >> 8;
 	z8k1.RegisterFile[index + 1] = data & 0xFF;
 }
+#endif
 
 #if 0
 // that is tricky ... it seems, Z8K wastes a byte to have word aligned
@@ -325,20 +371,57 @@ static inline void SetReg32FromCodeRead ( int index )
 
 static inline Uint8 IncReg8 ( int index, int incval )
 {
-	index = REG8INDEX(index);
-	z8k1.RegisterFile[index] += incval;
-	return z8k1.RegisterFile[index];
+	Uint8 temp = incval + GetReg8(index);
+	SetReg8(index, temp);
+	return temp;
 }
 
 
 static inline Uint16 IncReg16 ( int index, int incval )
 {
-	index &= 0xE;
-	Uint16 temp = (int)((z8k1.RegisterFile[index] << 8) | z8k1.RegisterFile[index + 1]) + incval;
-	z8k1.RegisterFile[index] = temp >> 8;
-	z8k1.RegisterFile[index + 1] = temp & 0xFF;
-	return temp;
+	z8k1.regs[index & 0xF] += incval;
+	return z8k1.regs[index & 0xF];
 }
+
+#ifdef DO_DISASM
+static char disasm_get_address_code[5+5+1];
+static char disasm_get_address[5+3+1+1];
+#endif
+
+
+static void get_address ( void )
+{
+	if (IS_SEGMENTED_MODE) {
+		// segmented mode
+		int seg = READCODE();
+		z8k1.use_seg = (seg >> 8) & 0x7F;
+		if (seg & 0x8000) {
+			z8k1.use_ofs = READCODE();
+#ifdef DO_DISASM
+			sprintf(disasm_get_address_code, "%04X %04X", seg, z8k1.use_ofs);
+			sprintf(disasm_get_address, "$%02X:$%04X", z8k1.use_seg, z8k1.use_ofs);
+#endif
+			z8k1.get_address_mode = 1;
+		} else {
+			z8k1.use_ofs = seg & 0xFF;
+#ifdef DO_DISASM
+			sprintf(disasm_get_address_code, "%04X", seg);
+			sprintf(disasm_get_address, "$%02X:$%02X", z8k1.use_seg, z8k1.use_ofs);
+#endif
+			z8k1.get_address_mode = 2;
+		}
+	} else {
+		// nonsegmented mode, simple reads a word as the address
+		z8k1.use_seg = 0;
+		z8k1.use_ofs = READCODE();
+#ifdef DO_DISASM
+		sprintf(disasm_get_address_code, "%04X", z8k1.use_ofs);
+		sprintf(disasm_get_address, "$%04X", z8k1.use_ofs);
+#endif
+		z8k1.get_address_mode = 0;
+	}
+}
+
 
 
 #if 0
@@ -403,11 +486,10 @@ static void set_fcw_byte ( Uint8 newfcw )
 
 void z8k1_reset ( void )
 {
-	memset(z8k1.RegisterFile, 0, sizeof z8k1.RegisterFile);
+	memset(z8k1.regs, 0, sizeof z8k1.regs);
 	z8k1.refresh = 0;	// refresh register
 	z8k1.psaseg = 0;
 	z8k1.psaofs = 0;
-	z8k1.m1 = 1;	// initial fcw, seg, pc initialization is probably done with this mode
 	// You should NEVER directly access these! Let these set_fcw_byte() to handle.
 	// Teset is the sole exception of this rule, since set_fcw_byte() will clone from these,
 	// and can be unititalized otherwise.
@@ -418,17 +500,16 @@ void z8k1_reset ( void )
 	z8k1.stacksegsys = 0;
 	z8k1.stackptrsys = 0;
 	// Z8K1 initializes some registers near the beginning of the system memory
-	Uint16 data = z8k1_read_word_cb(0, 2);
+	Uint16 data = z8k1_read_code_cb(0, 2);
 	set_fcw_byte(data >> 8);	// FCW byte (hi byte of the word)
 	// the CPU flags (actually FCW + flags form a word but anyway, I handle as two separated entities, easier and quickier to manipulate in opcode emulation,
 	// since flags are often modified but the "real' FCW part is kinda limited what can modify it, only a few privileged opcodes, which must call
 	// set_fcw_byte anyway to take care about normal/system mode transition and so on)
 	// Flags has unused bits at pos 0,1. Be careful, documents often call FCW for the whole word, ie the lower byte being the "traditional" CPU flags!
 	z8k1.flags = data & 0xFC;
-	data = z8k1_read_word_cb(0, 4);
+	data = z8k1_read_code_cb(0, 4);
 	z8k1.codeseg = (data >> 8) & 0x7F;	// code segment, Z8K1 uses 7 bits segment numbers! [low byte of this word is unused - AFAIK ...]
-	z8k1.pc = z8k1_read_word_cb(0, 6);	// also initialize the PC itself
-	z8k1.m1 = 0;
+	z8k1.pc = z8k1_read_code_cb(0, 6);	// also initialize the PC itself
 	printf("Z8000: reset -> FCW=$%02X%02X SEG=$%02X PC=$%04X\n" NL, z8k1.fcw, z8k1.flags, z8k1.codeseg, z8k1.pc);
 }
 
@@ -441,9 +522,8 @@ int z8k1_step ( int cycles_limit )
 	int cycles = 0;
 	do {
 	int pc_orig = z8k1.pc;
-	z8k1.m1 = 1;
+	//z8k1.opfetchcycle = 0;
 	Uint16 opc = READCODE();
-	z8k1.m1 = 0;
 	switch (opc >> 8) {
 	// the seems to be crazy order of opcodes has a reason: the opcode
 	// construction of Z8K, to keep opcodes closer with different addr.modes ...
@@ -526,11 +606,11 @@ int z8k1_step ( int cycles_limit )
 	/*************************** OPC-HI = $83 ***************************/
 	case 0x83:
 	// SUB	Rd,Rs {WORD}		|1 0|0 0 0 0 1 1| Rs    | Rd
-	DISASM("|%s\t%s,%s", "SUB", reg16names(NIB0(opc)), reg16names(NIB1(opc)));
+	DISASM("|%s\t%s,%s", "SUB", reg16names(OPCNIB0), reg16names(OPCNIB1));
 	if (DO_EXEC) {
-		int s = GetReg16(NIB1(opc)), d = GetReg16(NIB0(opc)), r = d - s;
+		int s = GetReg16(OPCNIB1), d = GetReg16(OPCNIB0), r = d - s;
 		z8k1.flags = (z8k1.flags & (FLAG_DA | FLAG_HC)) | F_CARRY_BY16(r) | F_ZERO_BY16(r) | F_SIGN_BY16(r) | F_OVERFLOWSUB_BY16(s,d,r); // FIXME: overflow on SUB is different!!!!!!!
-		SetReg16(NIB0(opc), r);
+		SetReg16(OPCNIB0, r);
 		cycles += 4;
 	}
 	break;
@@ -907,14 +987,14 @@ int z8k1_step ( int cycles_limit )
 	case 0x14:
 	// LDL	RRd,@Rs			|0 0|0 1 0 1 0 0| Rs!=0 | RRd
 	// LDL	RRd,#data		|0 0|0 1 0 1 0 0|0 0 0 0| RRd
-	if (NIB1(opc)) {
+	if (OPCNIB1) {
 		NOT_EMULATED_OPCODE_VARIANT();
 	} else {
 		Uint32 val = READCODE() << 16;
 		val |= READCODE();
-		DISASM("%04X %04X|%s\t%s,#$%08X", val >> 16, val & 0xFFFF, "LDL", reg32names(NIB0(opc)), val);
+		DISASM("%04X %04X|%s\t%s,#$%08X", val >> 16, val & 0xFFFF, "LDL", reg32names(OPCNIB0), val);
 		if (DO_EXEC) {
-			SetReg32(NIB0(opc), val);
+			SetReg32(OPCNIB0, val);
 			cycles += 11;
 		}
 	}
@@ -1117,6 +1197,7 @@ int z8k1_step ( int cycles_limit )
 	/*************************** OPC-HI = $1E ***************************/
 	case 0x1E:
 	// JP	cc,@Rd			|0 0|0 1 1 1 1 0| Rd!=0 | cc
+	// in segmented mode: RRd!
 	NOT_EMULATED_OPCODE();
 	break;
 
@@ -1130,7 +1211,20 @@ int z8k1_step ( int cycles_limit )
 	case 0x5E:
 	// JP	cc,address		|0 1|0 1 1 1 1 0|0 0 0 0| cc
 	// JP	cc,addr(Rd)		|0 1|0 1 1 1 1 0| Rd!=0 | cc
-	NOT_EMULATED_OPCODE();
+	if (OPCNIB1) {
+		NOT_EMULATED_OPCODE_VARIANT();
+	} else {
+		get_address();
+		DISASM("%s|%s\t%s,%s", disasm_get_address_code, "JP", ccnames(OPCNIB0), disasm_get_address);
+		if (DO_EXEC) {
+			if (check_cc(OPCNIB0)) {
+				z8k1.codeseg = z8k1.use_seg;
+				z8k1.pc = z8k1.use_ofs;
+			}
+			static const int jp_cycles[] = { 7, 8, 10 };
+			cycles += jp_cycles[z8k1.get_address_mode];
+		}
+	}
 	break;
 
 	/*************************** OPC-HI = $5F ***************************/
@@ -1162,13 +1256,13 @@ int z8k1_step ( int cycles_limit )
 	case 0x21:
 	// LD	Rd,@Rs {WORD}		|0 0|1 0 0 0 0 1| Rs!=0 | Rd
 	// LD	Rd,#data		|0 0|1 0 0 0 0 1|0 0 0 0| Rd
-	if (NIB1(opc)) {
+	if (OPCNIB1) {
 		NOT_EMULATED_OPCODE_VARIANT();
 	} else {
 		Uint16 data = READCODE();
-		DISASM("%04X|%s\t%s,#$%04X", data, "LD", reg16names(NIB0(opc)), data);
+		DISASM("%04X|%s\t%s,#$%04X", data, "LD", reg16names(OPCNIB0), data);
 		if (DO_EXEC) {
-			SetReg16(NIB0(opc), data);
+			SetReg16(OPCNIB0, data);
 			cycles += 7;
 		}
 	}
@@ -1191,13 +1285,21 @@ int z8k1_step ( int cycles_limit )
 	/*************************** OPC-HI = $A0 ***************************/
 	case 0xA0:
 	// LDB Rd,Rs {BYTE}		|1 0|1 0 0 0 0 0| Rs    | Rd
-	NOT_EMULATED_OPCODE();
+	DISASM("|%s\t%s,%s", "LDB", reg8names(OPCNIB0), reg8names(OPCNIB1));
+	if (DO_EXEC) {
+		SetReg8(OPCNIB0, GetReg8(OPCNIB1));
+		cycles += 3;
+	}
 	break;
 
 	/*************************** OPC-HI = $A1 ***************************/
 	case 0xA1:
 	// LD	Rd,Rs {WORD}		|1 0|1 0 0 0 0 1| Rs    | Rd
-	NOT_EMULATED_OPCODE();
+	DISASM("|%s\t%s,%s", "LDB", reg16names(OPCNIB0), reg16names(OPCNIB1));
+	if (DO_EXEC) {
+		SetReg16(OPCNIB0, GetReg16(OPCNIB1));
+		cycles += 3;
+	}
 	break;
 
 	/*************************** OPC-HI = $22 ***************************/
@@ -1349,10 +1451,10 @@ int z8k1_step ( int cycles_limit )
 	/*************************** OPC-HI = $A8 ***************************/
 	case 0xA8:
 	// INCB Rd,#n {BYTE}		|1 0|1 0 1 0 0 0| Rd    | n-1
-	DISASM("|%s\t%s,#$%02X", "INCB", reg8names(NIB1(opc)), NIB0(opc) + 1);
+	DISASM("|%s\t%s,#$%02X", "INCB", reg8names(OPCNIB1), OPCNIB0 + 1);
 	if (DO_EXEC) {
-		int n = NIB0(opc) + 1, d = GetReg8(NIB1(opc)), r = n + d;
-		SetReg8(NIB1(opc), r);
+		int n = OPCNIB0 + 1, d = GetReg8(OPCNIB1), r = n + d;
+		SetReg8(OPCNIB1, r);
 		z8k1.flags = (z8k1.flags & (FLAG_CARRY | FLAG_DA | FLAG_HC)) | F_ZERO_BY16(r) | F_SIGN_BY16(r) | F_OVERFLOW_BY16(d,n,r);
 		cycles += 4;
 	}
@@ -1515,7 +1617,34 @@ int z8k1_step ( int cycles_limit )
 	// EXTSB Rd			|1 0|1 1 0 0 0 1| Rd    |0 0 0 0
 	// EXTS	RRd			|1 0|1 1 0 0 0 1| RRd   |1 0 1 0
 	// EXTSL RQd			|1 0|1 1 0 0 0 1| RQd   |0 1 1 1
-	NOT_EMULATED_OPCODE();
+	switch (OPCNIB0) {
+		case 0:
+			DISASM("|EXTSB\t%s", reg16names(OPCNIB1));
+			if (DO_EXEC) {
+				if (z8k1.regs[OPCNIB1] & 0x80)
+					z8k1.regs[OPCNIB1] |= 0xFF00;
+				else
+					z8k1.regs[OPCNIB1] &= 0x00FF;
+				cycles += 11;
+			}
+			break;
+		case 9:
+			DISASM("|EXTS\t%s", reg32names(OPCNIB1));
+			if (DO_EXEC) {
+				z8k1.regs[OPCNIB1 & 0xE] = (z8k1.regs[OPCNIB1 | 1] & 0x8000) ? 0xFFFF : 0x0000;
+				cycles += 11;
+			}
+			break;
+		case 7:
+			DISASM("|EXTSL\t%s", reg64names(OPCNIB1));
+			if (DO_EXEC) {
+				z8k1.regs[OPCNIB1 & 0xC] = z8k1.regs[(OPCNIB1 & 0xC) | 1] = (z8k1.regs[(OPCNIB1 & 0xC) | 2] & 0x8000) ? 0xFFFF : 0x0000;
+				cycles += 11;
+			}
+			break;
+		default:
+			NOT_EMULATED_OPCODE_VARIANT();
+	}
 	break;
 
 	/*************************** OPC-HI = $32 ***************************/
@@ -1578,17 +1707,17 @@ int z8k1_step ( int cycles_limit )
 	case 0x34:
 	// LDA	Sd,Rs(#disp16)		|0 0|1 1 0 1 0 0| Rs!=0 | Sd    | disp16
 	// LDAR	Rd,disp16		|0 0 1 1 0 1 0 0|0 0 0 0| Rd    | disp16
-	if (NIB1(opc)) {
+	if (OPCNIB1) {
 		NOT_EMULATED_OPCODE_VARIANT();
 	} else {
 		Uint16 disp = READCODE();
 		Uint16 val = z8k1.pc + (Sint16)disp;
 		if (IS_SEGMENTED_MODE) {
-			DISASM("%04X|%s\t%s,$%04X", disp, "LDAR", reg32names(NIB0(opc)), val);
-			if (DO_EXEC) SetReg32(NIB0(opc), (z8k1.codeseg << 16) | val);
+			DISASM("%04X|%s\t%s,$%04X", disp, "LDAR", reg32names(OPCNIB0), val);
+			if (DO_EXEC) SetReg32(OPCNIB0, (z8k1.codeseg << 16) | val);
 		} else {
-			DISASM("%04X|%s\t%s,$%04X", disp, "LDAR", reg16names(NIB0(opc)), val);
-			if (DO_EXEC) SetReg16(NIB0(opc), val);
+			DISASM("%04X|%s\t%s,$%04X", disp, "LDAR", reg16names(OPCNIB0), val);
+			if (DO_EXEC) SetReg16(OPCNIB0, val);
 		}
 		if (DO_EXEC) cycles += 15;
 	}
@@ -1616,11 +1745,11 @@ int z8k1_step ( int cycles_limit )
 	/*************************** OPC-HI = $B4 ***************************/
 	case 0xB4:
 	// ADCB Rd,Rs {BYTE}		|1 0|1 1 0 1 0 0| Rs    | Rd
-	DISASM("|%s\t%s,%s", "ADCB", reg8names(NIB0(opc)), reg8names(NIB1(opc)));
+	DISASM("|%s\t%s,%s", "ADCB", reg8names(OPCNIB0), reg8names(OPCNIB1));
 	if (DO_EXEC) {
-		int s = GetReg8(NIB1(opc)), d = GetReg8(NIB0(opc)), r = s + d + F_CARRY_BOOL;
+		int s = GetReg8(OPCNIB1), d = GetReg8(OPCNIB0), r = s + d + F_CARRY_BOOL;
 		z8k1.flags = F_CARRY_BY8(r) | F_ZERO_BY8(r) | F_SIGN_BY8(r) | F_OVERFLOW_BY8(s,d,r) | F_HALFCARRY_BY8(s,d,r);
-		SetReg8(NIB0(opc), r);
+		SetReg8(OPCNIB0, r);
 		cycles += 5;
 	}
 	break;
@@ -1628,11 +1757,11 @@ int z8k1_step ( int cycles_limit )
 	/*************************** OPC-HI = $B5 ***************************/
 	case 0xB5:
 	// ADC	Rd,Rs {WORD}		|1 0|1 1 0 1 0 1| Rs    | Rd
-	DISASM("|%s\t%s,%s", "ADC", reg16names(NIB0(opc)), reg16names(NIB1(opc)));
+	DISASM("|%s\t%s,%s", "ADC", reg16names(OPCNIB0), reg16names(OPCNIB1));
 	if (DO_EXEC) {
-		int s = GetReg16(NIB1(opc)), d = GetReg16(NIB0(opc)), r = s + d + F_CARRY_BOOL;
+		int s = GetReg16(OPCNIB1), d = GetReg16(OPCNIB0), r = s + d + F_CARRY_BOOL;
 		z8k1.flags = (z8k1.flags & (FLAG_DA | FLAG_HC)) | F_CARRY_BY16(r) | F_ZERO_BY16(r) | F_SIGN_BY16(r) | F_OVERFLOW_BY16(s,d,r);
-		SetReg16(NIB0(opc), r);
+		SetReg16(OPCNIB0, r);
 		cycles += 5;
 	}
 	break;
@@ -1731,10 +1860,10 @@ int z8k1_step ( int cycles_limit )
 		case 3:
 			BEGIN
 			Uint16 port = READCODE();
-			DISASM("%04X|%s\t$%04X,%s", port, (opc & 1) ? "SOUTB" : "OUTB", port, reg8names(NIB1(opc)));
+			DISASM("%04X|%s\t$%04X,%s", port, (opc & 1) ? "SOUTB" : "OUTB", port, reg8names(OPCNIB1));
 			if (DO_EXEC) {
 				cycles += 12;
-				z8k1_out_byte_cb(opc & 1, port, GetReg8(NIB1(opc)));
+				z8k1_out_byte_cb(opc & 1, port, GetReg8(OPCNIB1));
 			}
 			END;
 		default:
@@ -1840,58 +1969,58 @@ int z8k1_step ( int cycles_limit )
 	// LDCTL Rd,PSAPOFF		|0 1 1 1 1 1 0 1| Rd    |0 1 0 1
 	// LDCTL Rd,NSPSEG		|0 1 1 1 1 1 0 1| Rd    |0 1 1 0
 	// LDCTL Rd,NSPOFF		|0 1 1 1 1 1 0 1| Rd    |0 1 1 1
-	switch (NIB0(opc)) {
+	switch (OPCNIB0) {
 		case 2:
-			DISASM("|%s\t%s,%s", "LDCTL", reg16names(NIB1(opc)), "FCW");
-			if (DO_EXEC) SetReg16(NIB1(opc), (z8k1.fcw << 8) | z8k1.flags);
+			DISASM("|%s\t%s,%s", "LDCTL", reg16names(OPCNIB1), "FCW");
+			if (DO_EXEC) SetReg16(OPCNIB1, (z8k1.fcw << 8) | z8k1.flags);
 			break;
 		case 3:
-			DISASM("|%s\t%s,%s", "LDCTL", reg16names(NIB1(opc)), "REFRESH");
-			if (DO_EXEC) SetReg16(NIB1(opc), z8k1.refresh);
+			DISASM("|%s\t%s,%s", "LDCTL", reg16names(OPCNIB1), "REFRESH");
+			if (DO_EXEC) SetReg16(OPCNIB1, z8k1.refresh);
 			break;
 		case 4:
-			DISASM("|%s\t%s,%s", "LDCTL", reg16names(NIB1(opc)), "PSAPSEG");
-			if (DO_EXEC) SetReg16(NIB1(opc), z8k1.psaseg << 8);
+			DISASM("|%s\t%s,%s", "LDCTL", reg16names(OPCNIB1), "PSAPSEG");
+			if (DO_EXEC) SetReg16(OPCNIB1, z8k1.psaseg << 8);
 			break;
 		case 5:
-			DISASM("|%s\t%s,%s", "LDCTL", reg16names(NIB1(opc)), "PSAPOFF");
-			if (DO_EXEC) SetReg16(NIB1(opc), z8k1.psaofs);
+			DISASM("|%s\t%s,%s", "LDCTL", reg16names(OPCNIB1), "PSAPOFF");
+			if (DO_EXEC) SetReg16(OPCNIB1, z8k1.psaofs);
 			break;
 		case 6:
-			DISASM("|%s\t%s,%s", "LDCTL", reg16names(NIB1(opc)), "NSPSEG");
-			if (DO_EXEC) SetReg16(NIB1(opc), z8k1.stacksegusr << 8);
+			DISASM("|%s\t%s,%s", "LDCTL", reg16names(OPCNIB1), "NSPSEG");
+			if (DO_EXEC) SetReg16(OPCNIB1, z8k1.stacksegusr << 8);
 			break;
 		case 7:
-			DISASM("|%s\t%s,%s", "LDCTL", reg16names(NIB1(opc)), "NSPOFF");
-			if (DO_EXEC) SetReg16(NIB1(opc), z8k1.stackptrusr);
+			DISASM("|%s\t%s,%s", "LDCTL", reg16names(OPCNIB1), "NSPOFF");
+			if (DO_EXEC) SetReg16(OPCNIB1, z8k1.stackptrusr);
 			break;
 		case 10:
-			DISASM("|%s\t%s,%s", "LDCTL", "FCW", reg16names(NIB1(opc)));
+			DISASM("|%s\t%s,%s", "LDCTL", "FCW", reg16names(OPCNIB1));
 			if (DO_EXEC) {
-				Uint16 temp = GetReg16(NIB1(opc));
+				Uint16 temp = GetReg16(OPCNIB1);
 				set_fcw_byte(temp >> 8);
 				z8k1.flags = temp & 0xFC;
 			}
 			break;
 		case 11:
-			DISASM("|%s\t%s,%s", "LDCTL", "REFRESH", reg16names(NIB1(opc)));
-			if (DO_EXEC) z8k1.refresh = GetReg16(NIB1(opc)) & 0xFFFE;
+			DISASM("|%s\t%s,%s", "LDCTL", "REFRESH", reg16names(OPCNIB1));
+			if (DO_EXEC) z8k1.refresh = GetReg16(OPCNIB1) & 0xFFFE;
 			break;
 		case 12:
-			DISASM("|%s\t%s,%s", "LDCTL", "PSAPSEG", reg16names(NIB1(opc)));
-			if (DO_EXEC) z8k1.psaseg = (GetReg16(NIB1(opc)) >> 8) & 0x7F;
+			DISASM("|%s\t%s,%s", "LDCTL", "PSAPSEG", reg16names(OPCNIB1));
+			if (DO_EXEC) z8k1.psaseg = (GetReg16(OPCNIB1) >> 8) & 0x7F;
 			break;
 		case 13:
-			DISASM("|%s\t%s,%s", "LDCTL", "PSAPOFF", reg16names(NIB1(opc)));
-			if (DO_EXEC) z8k1.psaofs = GetReg16(NIB1(opc));
+			DISASM("|%s\t%s,%s", "LDCTL", "PSAPOFF", reg16names(OPCNIB1));
+			if (DO_EXEC) z8k1.psaofs = GetReg16(OPCNIB1);
 			break;
 		case 14:
-			DISASM("|%s\t%s,%s", "LDCTL", "NSPSEG", reg16names(NIB1(opc)));
-			if (DO_EXEC) z8k1.stacksegusr = (GetReg16(NIB1(opc)) >> 8) & 0x7F;
+			DISASM("|%s\t%s,%s", "LDCTL", "NSPSEG", reg16names(OPCNIB1));
+			if (DO_EXEC) z8k1.stacksegusr = (GetReg16(OPCNIB1) >> 8) & 0x7F;
 			break;
 		case 15:
-			DISASM("|%s\t%s,%s", "LDCTL", "NSPOFF", reg16names(NIB1(opc)));
-			if (DO_EXEC) z8k1.stackptrusr = GetReg16(NIB1(opc));
+			DISASM("|%s\t%s,%s", "LDCTL", "NSPOFF", reg16names(OPCNIB1));
+			if (DO_EXEC) z8k1.stackptrusr = GetReg16(OPCNIB1);
 			break;
 		default:
 			NOT_EMULATED_OPCODE_VARIANT();
@@ -1910,9 +2039,9 @@ int z8k1_step ( int cycles_limit )
 	/*************************** OPC-HI = $BD ***************************/
 	case 0xBD:
 	// LDK	Rd,#nibble		|1 0|1 1 1 1 0 1| Rd    | nibble
-	DISASM("%s\t%s,#$%X", "LDK", reg16names(NIB1(opc)), NIB0(opc));
+	DISASM("%s\t%s,#$%X", "LDK", reg16names(OPCNIB1), OPCNIB0);
 	if (DO_EXEC) {
-		SetReg16(NIB1(opc), NIB0(opc));
+		SetReg16(OPCNIB1, OPCNIB0);
 		cycles += 5;
 	}
 	break;
@@ -2007,9 +2136,9 @@ int z8k1_step ( int cycles_limit )
 		// low byte of opcode is the 8 bit immediate data
 		case 0xC0: case 0xC1: case 0xC2: case 0xC3: case 0xC4: case 0xC5: case 0xC6: case 0xC7:
 		case 0xC8: case 0xC9: case 0xCA: case 0xCB: case 0xCC: case 0xCD: case 0xCE: case 0xCF:
-			DISASM("|%s\t%s,#$%02X", "LDB", reg8names(NIB2(opc)), opc & 0xFF);
+			DISASM("|%s\t%s,#$%02X", "LDB", reg8names(OPCNIB2), opc & 0xFF);
 			if (DO_EXEC) {
-				SetReg8(NIB2(opc), opc & 0xFF);
+				SetReg8(OPCNIB2, opc & 0xFF);
 				cycles += 5;
 			}
 			break;
@@ -2038,8 +2167,8 @@ int z8k1_step ( int cycles_limit )
 		case 0xE8: case 0xE9: case 0xEA: case 0xEB: case 0xEC: case 0xED: case 0xEE: case 0xEF:
 			BEGIN
 			Uint16 pc_new = z8k1.pc + (2 * (int)(Sint8)(opc & 0xFF));
-			DISASM("|%s\t%s,$%04X", "JR", ccnames(NIB2(opc)), pc_new);
-			if (DO_EXEC && check_cc(NIB2(opc)))
+			DISASM("|%s\t%s,$%04X", "JR", ccnames(OPCNIB2), pc_new);
+			if (DO_EXEC && check_cc(OPCNIB2))
 				z8k1.pc = pc_new;
 			if (DO_EXEC)
 				cycles += 6;
@@ -2054,12 +2183,12 @@ int z8k1_step ( int cycles_limit )
 			BEGIN
 			Uint16 pc_new = z8k1.pc - ((opc & 0x7F) << 1);
 			if (opc & 0x80) {
-				DISASM("|%s\t%s,$%04X", "DJNZ", reg16names(NIB2(opc)), pc_new);
-				if (DO_EXEC && IncReg16(NIB2(opc), -1))
+				DISASM("|%s\t%s,$%04X", "DJNZ", reg16names(OPCNIB2), pc_new);
+				if (DO_EXEC && IncReg16(OPCNIB2, -1))
 					z8k1.pc = pc_new;
 			} else {
-				DISASM("|%s\t%s,$%04X", "DBJNZ", reg8names(NIB2(opc)), pc_new);
-				if (DO_EXEC && IncReg8(NIB2(opc), -1))
+				DISASM("|%s\t%s,$%04X", "DBJNZ", reg8names(OPCNIB2), pc_new);
+				if (DO_EXEC && IncReg8(OPCNIB2, -1))
 					z8k1.pc = pc_new;
 			}
 			if (DO_EXEC)
