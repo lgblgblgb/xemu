@@ -203,7 +203,7 @@ retry:
 				DEBUGPRINT("SDCARD: using SDHC mode with 2-32Gbyte card, OK" NL);
 		} else {
 			if (sdhc_flag)
-				INFO_WINDOW("You've requested SDHC mode for a card smaller than 2Gbytes!\nIn reality this would not happen (ie, all SDHC cards are >= 2Gbytes).\nSo you have been warned ...");
+				DEBUGPRINT("SDHC: You've requested SDHC mode for a card smaller than 2Gbytes! In reality this would not happen (ie, all SDHC cards are >= 2Gbytes). So you have been warned ..." NL);
 		}
 	}
 #if 0

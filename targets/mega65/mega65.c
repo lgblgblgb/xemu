@@ -316,7 +316,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// without restarting Xemu for that purpose.
 	refill_memory_from_preinit_cache();
 	// *** Image file for SDCARD support
-	if (sdcard_init(xemucfg_get_str("sdimg"), xemucfg_get_str("8"), xemucfg_get_bool("sdhc")) < 0)
+	if (sdcard_init(xemucfg_get_str("sdimg"), xemucfg_get_str("8"), xemucfg_get_num("sdhc")) < 0)
 		FATAL("Cannot find SD-card image (which is a must for Mega65 emulation): %s", xemucfg_get_str("sdimg"));
 	// *** Initialize VIC4
 	vic_init();
@@ -664,7 +664,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("loadrom", NULL, "Preload C65 ROM image (you may need the -forcerom option to prevent KickStart to re-load from SD)");
 	xemucfg_define_switch_option("forcerom", "Re-fill 'ROM' from external source on start-up, requires option -loadrom <filename>");
 	xemucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used");
-	xemucfg_define_switch_option("sdhc", "Use SDHC mode for SD-card (will be auto-applied if card is 2-32Gbytes)");
+	xemucfg_define_num_option("sdhc", 1, "Use SDHC mode for SD-card (1) or not (0).");
 #ifdef FAKE_TYPING_SUPPORT
 	xemucfg_define_switch_option("go64", "Go into C64 mode after start (with auto-typing, can be combined with -autoload)");
 	xemucfg_define_switch_option("autoload", "Load and start the first program from disk (with auto-typing, can be combined with -go64)");
@@ -676,7 +676,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("skipunhandledmem", "Do not panic on unhandled memory access (hides problems!!)");
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
 #ifdef HAVE_XEMU_UMON
-	xemucfg_define_num_option("umon", 0, "TCP-based dual mode (http and text) monitor port number [NOT YET WORKING]");
+	xemucfg_define_num_option("umon", 0, "TCP-based dual mode (http / text) monitor port number [NOT YET WORKING]");
 #endif
 #ifdef HAVE_XEMU_INSTALLER
 	xemucfg_define_str_option("installer", NULL, "Sets a download-specification descriptor file for auto-downloading data files");
