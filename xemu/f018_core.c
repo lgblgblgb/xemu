@@ -1,6 +1,6 @@
 /* F018 DMA core emulation for Commodore 65 and Mega 65, part of the Xemu project.
    https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -602,24 +602,70 @@ int dma_update_multi_steps ( int do_for_cycles )
 }
 
 
-
-void dma_init ( unsigned int dma_rev_set )
+static int detect_rom_version ( Uint8 *p )
 {
-	modulo.enabled = (dma_rev_set & DMA_FEATURE_MODULO);
-	dma_rev_set &= ~DMA_FEATURE_MODULO;
+	if (p[0] == 0x56) {     // 'V'
+		int version = 0;
+		for (int a = 0; a < 6; a++) {
+			p++;
+			if (*p >= '0' && *p <= '9')
+				version = version * 10 + *p - '0';
+			else
+				return -1;
+		}
+		return version;
+	} else
+		return -1;
+}
+
+
+void dma_init_set_rev ( unsigned int revision, Uint8 *rom_ver_signature )
+{
+	revision &= 0xFF;
+	if (revision > 2) {
+		FATAL("Unknown DMA revision value tried to be set (%d)!", revision);
+	} else if (revision == 2) {
+		if (!rom_ver_signature)
+			FATAL("dma_ini_set_rev(): revision == 2 but rom_ver_signature == NULL");
+		int rom_date = detect_rom_version(rom_ver_signature);
+		DEBUGPRINT("DMA: ROM: version string detected: %d" NL, rom_date);
+		if (rom_date < 880101 || rom_date > 991231)
+			rom_date = -1;
+		if (rom_date < 0) {
+			ERROR_WINDOW("ROM version cannot be detected, but auto-detect for DMA chip revision is set.\nLeaving revision as #%d, which can be incorrect and causes serious problems!", dma_chip_initial_revision);
+		} else {
+			dma_chip_revision = dma_chip_initial_revision = (rom_date >= C65_ROM_DMA_R2_VERSION_DATE) ? 1 : 0;
+			DEBUGPRINT("DMA: setting chip revision to #%d based on the ROM auto-detection" NL, dma_chip_initial_revision);
+		}
+	} else {
+		dma_chip_revision = revision;
+		dma_chip_initial_revision = revision;
+		DEBUGPRINT("DMA: setting chip revision to #%d based on configuration/command line request" NL, dma_chip_initial_revision);
+	}
+}
+
+
+void dma_init ( unsigned int revision )
+{
+	modulo.enabled = (revision & DMA_FEATURE_MODULO);
+	revision &= ~DMA_FEATURE_MODULO;
 #ifdef MEGA65
 	hack.enhanced_dma = 0;
-	dma_chip_revision_is_dynamic = (dma_rev_set & DMA_FEATURE_DYNMODESET);	// this bit flag means that normal behaviour (M65 can change DMA revision) works
-	dma_rev_set &= ~DMA_FEATURE_DYNMODESET;
-	hack.enabled = (dma_rev_set & DMA_FEATURE_HACK);
-	dma_rev_set &= ~DMA_FEATURE_HACK;
+	dma_chip_revision_is_dynamic = (revision & DMA_FEATURE_DYNMODESET);	// this bit flag means that normal behaviour (M65 can change DMA revision) works
+	revision &= ~DMA_FEATURE_DYNMODESET;
+	hack.enabled = (revision & DMA_FEATURE_HACK);
+	revision &= ~DMA_FEATURE_HACK;
 	DEBUGPRINT("DMA: 'hack' (preliminary!! support for new-style M65 DMA) status: %s" NL, hack.enabled ? "**ENABLED**" : "disabled");
 #else
-	if (dma_rev_set & DMA_FEATURE_DYNMODESET)
+	if (revision & DMA_FEATURE_DYNMODESET)
 		FATAL("DMA feature DMA_FEATRUE_DYNMODESET is not supported on C65!");
 #endif
-	dma_chip_revision = dma_rev_set;
-	dma_chip_initial_revision = dma_rev_set;
+	if (revision > 1) {
+		FATAL("Unknown DMA revision value tried to be set (%d)!", revision);
+	} else {
+		dma_chip_revision = revision;
+		dma_chip_initial_revision = revision;
+	}
 	DEBUGPRINT("DMA: initializing DMA engine for chip revision %d, dyn_mode=%s, modulo_support=%s." NL,
 		dma_chip_revision,
 #ifdef MEGA65
@@ -629,8 +675,6 @@ void dma_init ( unsigned int dma_rev_set )
 #endif
 		modulo.enabled ? "ENABLED" : "DISABLED"
 	);
-	if (dma_chip_revision > 1)
-		FATAL("Unknown DMA revision value tried to be set (%d)!", dma_chip_revision);
 	dma_reset();
 }
 
