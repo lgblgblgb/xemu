@@ -85,7 +85,7 @@ void machine_set_speed ( int verbose )
 	//if (desired == current_speed_config)
 	//	return;
 	if (verbose)
-		printf("SPEED: in_hypervisor=%d force_fast=%d c128_fast=%d, c65_fast=%d m65_fast=%d" NL,
+		DEBUGPRINT("SPEED: in_hypervisor=%d force_fast=%d c128_fast=%d, c65_fast=%d m65_fast=%d" NL,
 			in_hypervisor, force_fast, (c128_d030_reg & 1) ^ 1, vic_registers[0x31] & 64, vic_registers[0x54] & 64
 	);
 	speed_wanted = (in_hypervisor || force_fast) ? 7 : (((c128_d030_reg & 1) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
@@ -720,7 +720,7 @@ int main ( int argc, char **argv )
 		AUDIO_SAMPLE_FREQ		// sound mix freq
 	);
 	skip_unhandled_mem = xemucfg_get_bool("skipunhandledmem");
-	printf("UNHANDLED memory policy: %d" NL, skip_unhandled_mem);
+	DEBUGPRINT("MEM: UNHANDLED memory policy: %d" NL, skip_unhandled_mem);
 	eth65_init(
 #ifdef HAVE_ETHERTAP
 		xemucfg_get_str("ethertap")
@@ -835,12 +835,12 @@ int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 
 int m65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
-	printf("SNAP: loaded (finalize-callback: begin)" NL);
+	DEBUGPRINT("SNAP: loaded (finalize-callback: begin)" NL);
 	memory_set_vic3_rom_mapping(vic_registers[0x30]);
 	memory_set_do_map();
 	force_fast = force_fast_loaded;	// force_fast is handled through different places, so we must have a "finalize" construct and saved separately to have the actual effect ...
 	machine_set_speed(1);
-	printf("SNAP: loaded (finalize-callback: end)" NL);
+	DEBUGPRINT("SNAP: loaded (finalize-callback: end)" NL);
 	OSD(-1, -1, "Snapshot has been loaded.");
 	return 0;
 }
