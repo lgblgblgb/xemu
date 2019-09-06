@@ -20,7 +20,3 @@ tvc22_d4_64k.rom		http://github.lgb.hu/xemu/files/tvc22_d4_64k.rom						8192
 tvc22_d6_64k.rom		http://github.lgb.hu/xemu/files/tvc22_d6_64k.rom						8192
 tvc22_d7_64k.rom		http://github.lgb.hu/xemu/files/tvc22_d7_64k.rom						8192
 tvc_sddos.rom			http://github.lgb.hu/xemu/files/tvc_sddos.rom							40960
-mega65-banner.m65		http://github.lgb.hu/xemu/files/mega65-banner.m65						21248
-mega65-diskmenu_c000.bin	http://github.lgb.hu/xemu/files/mega65-diskmenu_c000.bin					4069
-mega65-kickup.list		http://github.lgb.hu/xemu/files/mega65-kickup.list						0
-mega65-kickup.m65		http://github.lgb.hu/xemu/files/mega65-kickup.m65						16384

@@ -45,8 +45,10 @@ extern int xemu_create_empty_image ( const char *os_path, unsigned int size );
 #define XEMUEXEC_STILL_RUNNING 259
 #ifdef _WIN32
 typedef void* xemuexec_process_t;
+#define XEMUEXEC_NULL_PROCESS_ID NULL
 #else
 typedef int xemuexec_process_t;
+#define XEMUEXEC_NULL_PROCESS_ID 0
 #endif
 extern xemuexec_process_t xemuexec_run ( char *const args[] );
 extern int xemuexec_check_status ( xemuexec_process_t pid, int wait );

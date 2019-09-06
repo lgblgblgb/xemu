@@ -32,18 +32,23 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <limits.h>
 
 #define COMPRESSED_SD
+#define USE_KEEP_BUSY
 
+#ifdef USE_KEEP_BUSY
+#	define KEEP_BUSY(n)	keep_busy=n
+#else
+#	define KEEP_BUSY(n)
+#endif
 
 static int	sdfd;			// SD-card controller emulation, UNIX file descriptor of the open image file
 Uint8		sd_status;		// SD-status byte
 static Uint8	sd_sector_bytes[4];
+static Uint32	sd_sector;
 static Uint8	sd_d81_img1_start[4];
 static off_t	sd_card_size;
 static int	sdcard_bytes_read = 0;
-static Uint8	sd_fill_value = 0;
 static int	sd_fill_mode = 0;
-static Uint32	sd_multi_offset = 0;
-static int	sd_multi_mode = 0;
+static Uint8	sd_fill_value = 0;
 #ifdef COMPRESSED_SD
 static int	sd_compressed = 0;
 static off_t	sd_bdata_start;
@@ -51,9 +56,11 @@ static int	compressed_block;
 #endif
 static int	sd_is_read_only;
 static int	is_sdhc_card;
-static int	mounted;
+int		fd_mounted;
 static int	first_mount = 1;
+#ifdef USE_KEEP_BUSY
 static int	keep_busy = 0;
+#endif
 // 4K buffer space: Actually the SD buffer _IS_ inside this, also the F011 buffer should be (FIXME: that is not implemented yet right now!!)
 Uint8		disk_buffers[0x1000];
 static Uint8	sd_fill_buffer[512];	// Only used by the sd fill mode write command
@@ -131,9 +138,9 @@ int sdcard_init ( const char *fn, const char *extd81fn, int sdhc_flag )
 	sdcard_set_external_d81_name(extd81fn);
 	d81access_init();
 	atexit(sdcard_shutdown);
-	keep_busy = 0;
+	KEEP_BUSY(0);
 	sd_status = 0;
-	mounted = 0;
+	fd_mounted = 0;
 	memset(sd_sector_bytes, 0, sizeof sd_sector_bytes);
 	memset(sd_d81_img1_start, 0, sizeof sd_d81_img1_start);
 	memset(sd_fill_buffer, sd_fill_value, 512);
@@ -206,27 +213,20 @@ retry:
 		}
 	}
 	is_sdhc_card = sdhc_flag;
+#if 0
 	if (sdhc_flag) {
 		sd_status |= SD_ST_SDHC;
 	}
+#endif
 	DEBUGPRINT("SDCARD: card init done, size=%d Mbytes, SDHC flag = %d" NL, (int)(sd_card_size >> 20), sdhc_flag);
 	return sdfd;
 }
 
 
-// Calculates byte-offset from M65-specific (4 bytes long) addressing registers.
-// It takes "SDHC" mode account
-// It's used by the actual SD card block read/write function, but also for the internal D81 mounting functionality
-static off_t calc_offset ( Uint8 *addr_regs )
+static XEMU_INLINE Uint32 U8A_TO_U32 ( Uint8 *a )
 {
-	off_t offset = ((off_t)addr_regs[0]) | ((off_t)addr_regs[1] << 8) | ((off_t)addr_regs[2] << 16) | ((off_t)addr_regs[3] << 24);
-	// This is the only place where the difference between SDHC and non-SDHC card handling
-	if (is_sdhc_card)
-		offset <<= 9;	// multiplies by 512
-	offset += sd_multi_offset << 9;
-	return offset;
+	return ((Uint32)a[0]) | ((Uint32)a[1] << 8) | ((Uint32)a[2] << 16) | ((Uint32)a[3] << 24);
 }
-
 
 
 static int host_seek ( off_t offset )
@@ -266,15 +266,17 @@ static Uint8 sdcard_read_status ( void )
 {
 	Uint8 ret = sd_status;
 	DEBUG("SDCARD: reading SD status $D680 result is $%02X PC=$%04X" NL, ret, cpu65.pc);
+#ifdef USE_KEEP_BUSY
 	if (!keep_busy)
 		sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);
+#endif
 	//ret |= SD_ST_SDHC;	// ??? FIXME
-	return ret & 0x7F;
+	return ret;
 }
 
 
 // TODO: later we need to deal with buffer selection, whatever
-static inline Uint8 *get_buffer_memory ( int is_write )
+static XEMU_INLINE Uint8 *get_buffer_memory ( int is_write )
 {
 	// Currently the only buffer available in Xemu is the SD buffer, UNLESS it's a write operation and "fill mode" is used
 	// (sd_fill_buffer is just filled with a single byte value)
@@ -290,47 +292,51 @@ static inline Uint8 *get_buffer_memory ( int is_write )
  * */
 static void sdcard_block_io ( int is_write )
 {
-	DEBUG("SDCARD: %s block #$%02X%02X%02X%02X @ PC=$%04X" NL,
+	DEBUG("SDCARD: %s block #%d @ PC=$%04X" NL,
 		is_write ? "writing" : "reading",
-		sd_sector_bytes[3], sd_sector_bytes[2], sd_sector_bytes[1], sd_sector_bytes[0],
+		sd_sector,
 		cpu65.pc
 	);
-	if (sdfd < 0)
+	if (XEMU_UNLIKELY(sdfd < 0))
 		FATAL("sdcard_block_io(): no SD image open");
-	if ((sd_status & SD_ST_EXT_BUS)) {
+	if (XEMU_UNLIKELY(sd_status & SD_ST_EXT_BUS)) {
 		DEBUGPRINT("SDCARD: bus #1 is empty" NL);
 		// FIXME: what kind of error we should create here?????
 		sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR | SD_ST_BUSY1 | SD_ST_BUSY0;
-		keep_busy = 1;
+		KEEP_BUSY(1);
 		return;
 	}
-	if (
+#if 0
+	if (XEMU_UNLIKELY(
 		sd_multi_offset && (
 			!sd_multi_mode ||
 			(sd_multi_mode == 1 && !is_write) ||
 			(sd_multi_mode == 2 && is_write)
 		)
-	) {
+	)) {
 		// trying to do multi-I/O without multi mode
-		DEBUGPRINT("SDCARD: invalid use of multi-I/O command" NL);
+		DEBUGPRINT("SDCARD: invalid use of multi-I/O command ofs=%d,mode=%d,is_write=%d" NL, sd_multi_offset, sd_multi_mode, is_write);
 		sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR | SD_ST_BUSY1 | SD_ST_BUSY0;
 		keep_busy = 1;
 		return;
 	}
-	off_t offset = calc_offset(sd_sector_bytes);
-	if (offset & 511UL) {
+#endif
+	off_t offset = sd_sector;
+	if (is_sdhc_card)
+		offset <<= 9;
+	if (XEMU_UNLIKELY(offset & 511UL)) {
 		if (is_sdhc_card)
 			FATAL("Unaligned access in sdcard_block_io() with SDHC card. This cannot happen!");
 		sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR | SD_ST_BUSY1 | SD_ST_BUSY0;
-		keep_busy = 1;
+		KEEP_BUSY(1);
 		DEBUGPRINT("SDCARD: warning, unaligned %s access: offset = " PRINTF_LLD NL, is_write ? "write" : "read", (long long)offset);
 		return;
 	}
 	int ret = host_seek(offset);
-	if (!ret && is_write && sd_is_read_only) {
+	if (XEMU_UNLIKELY(!ret && is_write && sd_is_read_only)) {
 		ret = 1;	// write protected SD image?
 	}
-	if (!ret) {
+	if (XEMU_LIKELY(!ret)) {
 		Uint8 *wp = get_buffer_memory(is_write);
 		if (
 #ifdef COMPRESSED_SD
@@ -339,60 +345,69 @@ static void sdcard_block_io ( int is_write )
 			(is_write ? xemu_safe_write(sdfd, wp, 512) : xemu_safe_read(sdfd, wp, 512)) != 512
 		)
 			ret = -1;
-		//ret = diskimage_read_block(sd_buffer, sd_sector_bytes, 0, "reading[SD]", sd_card_size, sdfd);
 	}
-	if (ret < 0) {
+	if (XEMU_UNLIKELY(ret < 0)) {
 		sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR; // | SD_ST_BUSY1 | SD_ST_BUSY0;
 			sd_status |= SD_ST_BUSY1 | SD_ST_BUSY0;
-			//keep_busy = 1;
+			//KEEP_BUSY(1);
 		sdcard_bytes_read = 0;
-	} else {
-		sd_status &= ~(SD_ST_ERROR | SD_ST_FSM_ERROR);
-		sdcard_bytes_read = 512;
+		return;
 	}
-
+	sd_status &= ~(SD_ST_ERROR | SD_ST_FSM_ERROR);
+	sdcard_bytes_read = 512;
 }
 
 
 static void sdcard_command ( Uint8 cmd )
 {
+	static Uint8 sd_last_ok_cmd;
 	DEBUG("SDCARD: writing command register $D680 with $%02X PC=$%04X" NL, cmd, cpu65.pc);
 	sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);	// ugly hack :-@
-	keep_busy = 0;
+	KEEP_BUSY(0);
 	switch (cmd) {
 		case 0x00:	// RESET SD-card
 		case 0x10:	// RESET SD-card with flags specified [FIXME: I don't know what the difference is ...]
-			sd_status = SD_ST_RESET;	// clear all other flags
+			sd_status = SD_ST_RESET | (sd_status & SD_ST_EXT_BUS);	// clear all other flags, but not the bus selection, FIXME: bus selection should not be touched?
 			memset(sd_sector_bytes, 0, sizeof sd_sector_bytes);
-			sd_multi_offset = 0;
-			sd_multi_mode = 0;
 			break;
 		case 0x01:	// END RESET
 		case 0x11:	// ... [FIXME: again, I don't know what the difference is ...]
 			sd_status &= ~(SD_ST_RESET | SD_ST_ERROR | SD_ST_FSM_ERROR);
 			break;
 		case 0x02:	// read block
-			sd_multi_offset = 0;
-			sd_multi_mode = 0;
+			sd_sector = U8A_TO_U32(sd_sector_bytes);
 			sdcard_block_io(0);
 			break;
 		case 0x03:	// write block
-			sd_multi_offset = 0;
-			sd_multi_mode = 0;
+			sd_sector = U8A_TO_U32(sd_sector_bytes);
 			sdcard_block_io(1);
 			break;
 		case 0x04:	// multi sector write - first sector
-			sd_multi_offset = 0;
-			sd_multi_mode = 1;
-			sdcard_block_io(1);
+			if (sd_last_ok_cmd != 0x04) {
+				sd_sector = U8A_TO_U32(sd_sector_bytes);
+				sdcard_block_io(1);
+			} else {
+				DEBUGPRINT("SDCARD: bad multi-command sequence command $%02X after command $%02X" NL, cmd, sd_last_ok_cmd);
+				sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR;
+			}
 			break;
 		case 0x05:	// multi sector write - not the first, neither the last sector
-			sd_multi_offset++;
-			sdcard_block_io(1);
+			if (sd_last_ok_cmd == 0x04 || sd_last_ok_cmd == 0x05) {
+				sd_sector++;
+				sdcard_block_io(1);
+			} else {
+				DEBUGPRINT("SDCARD: bad multi-command sequence command $%02X after command $%02X" NL, cmd, sd_last_ok_cmd);
+				sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR;
+			}
 			break;
 		case 0x06:	// multi sector write - last sector
-			sd_multi_offset++;
-			sdcard_block_io(1);
+			if (sd_last_ok_cmd == 0x04 || sd_last_ok_cmd == 0x05) {
+				sd_sector++;
+				sdcard_block_io(1);
+			} else {
+				DEBUGPRINT("SDCARD: bad multi-command sequence command $%02X after command $%02X" NL, cmd, sd_last_ok_cmd);
+				sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR;
+			}
 			break;
 		case 0x0C:	// request flush of the SD-card [currently does nothing in Xemu ...]
 			break;
@@ -400,7 +415,6 @@ static void sdcard_command ( Uint8 cmd )
 			sd_status &= ~SD_ST_SDHC;
 			break;
 		case 0x41:	// SDHC mode ON
-			//DEBUGPRINT("SDCARD: warning, SDHC mode is turned ON with SD command $41, though Xemu does not support SDHC! PC=$%02X" NL, cpu65.pc);
 			sd_status |= SD_ST_SDHC;
 			break;
 		case 0x44:	// sd_clear_error <= '0'	FIXME: what is this?
@@ -427,10 +441,14 @@ static void sdcard_command ( Uint8 cmd )
 			sd_status |= SD_ST_EXT_BUS;
 			break;
 		default:
-			// FIXME: is this the right way in this case?
 			sd_status |= SD_ST_ERROR;
 			DEBUGPRINT("SDCARD: warning, unimplemented SD-card controller command $%02X" NL, cmd);
 			break;
+	}
+	if (XEMU_UNLIKELY(sd_status & (SD_ST_ERROR | SD_ST_FSM_ERROR))) {
+		sd_last_ok_cmd = 0xFF;
+	} else {
+		sd_last_ok_cmd = cmd;
 	}
 }
 
@@ -459,14 +477,14 @@ static int on_compressed_sd_d81_read_cb ( void *buffer, off_t offset, int sector
 
 
 
-static int mount_external_d81 ( const char *name, int force_ro )
+int mount_external_d81 ( const char *name, int force_ro )
 {
 	// Let fsobj func guess the "name" being image, a program file, or an FS directory
 	// In addition, pass AUTOCLOSE parameter, as it will be managed by d81access subsys, not sdcard level!
 	// This is the opposite situation compared to mount_internal_d81() where an sdcard.c managed FD is passed only.
 	int ret = d81access_attach_fsobj(name, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (force_ro ? D81ACCESS_RO : 0));
 	if (!ret)
-		mounted = 1;
+		fd_mounted = 1;
 	else
 		DEBUGPRINT("SDCARD: D81: couldn't mount external D81 image" NL);
 	return ret;
@@ -475,7 +493,9 @@ static int mount_external_d81 ( const char *name, int force_ro )
 
 static int mount_internal_d81 ( int force_ro )
 {
-	off_t offset = calc_offset(sd_d81_img1_start);
+	off_t offset = U8A_TO_U32(sd_d81_img1_start);
+	if (is_sdhc_card)
+		offset <<= 9;
 	if (offset > sd_card_size - (off_t)D81_SIZE) {
 		DEBUGPRINT("SDCARD: D81: image is outside of the SD-card boundaries! Refusing to mount." NL);
 		return -1;
@@ -490,7 +510,7 @@ static int mount_internal_d81 ( int force_ro )
 	} else
 #endif
 		d81access_attach_fd(sdfd, offset, D81ACCESS_IMG | ((sd_is_read_only || force_ro) ? D81ACCESS_RO : 0));
-	mounted = 1;
+	fd_mounted = 1;
 	return 0;
 }
 
@@ -501,7 +521,7 @@ static void sdcard_mount_d81 ( Uint8 data )
 	DEBUGPRINT("SDCARD: D81: mount register request @ $D68B val=$%02X at PC=$%04X" NL, data, cpu65.pc);
 	if ((data & 3) == 3) {
 		int use_d81;
-		mounted = 0;
+		fd_mounted = 0;
 		if (*external_d81) {	// request for external mounting
 			if (first_mount) {
 				first_mount = 0;
@@ -525,13 +545,13 @@ static void sdcard_mount_d81 ( Uint8 data )
 				mount_internal_d81(0);
 			}
 		}
-		DEBUGPRINT("SDCARD: D81: mounting %s" NL, mounted ? "OK" : "*FAILED*");
+		DEBUGPRINT("SDCARD: D81: mounting %s" NL, fd_mounted ? "OK" : "*FAILED*");
 	} else {
-		if (mounted)
+		if (fd_mounted)
 			DEBUGPRINT("SDCARD: D81: unmounting." NL);
 		//fdc_set_disk(0, 0);
 		d81access_close();
-		mounted = 0;
+		fd_mounted = 0;
 	}
 }
 
@@ -625,7 +645,7 @@ int sdcard_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, 
 	/* loading state ... */
 	memcpy(sd_sector_bytes, buffer, 4);
 	memcpy(sd_d81_img1_start, buffer + 4, 4);
-	mounted = (int)P_AS_BE32(buffer + 8);
+	fd_mounted = (int)P_AS_BE32(buffer + 8);
 	sdcard_bytes_read = (int)P_AS_BE32(buffer + 12);
 	sd_is_read_only = (int)P_AS_BE32(buffer + 16);
 	//d81_is_read_only = (int)P_AS_BE32(buffer + 20);
@@ -645,7 +665,7 @@ int sdcard_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	/* saving state ... */
 	memcpy(buffer, sd_sector_bytes, 4);
 	memcpy(buffer + 4,sd_d81_img1_start, 4);
-	U32_AS_BE(buffer + 8, mounted);
+	U32_AS_BE(buffer + 8, fd_mounted);
 	U32_AS_BE(buffer + 12, sdcard_bytes_read);
 	U32_AS_BE(buffer + 16, sd_is_read_only);
 	//U32_AS_BE(buffer + 20, d81_is_read_only);

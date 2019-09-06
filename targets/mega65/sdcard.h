@@ -33,6 +33,8 @@ extern int   sdcard_init           ( const char *fn, const char *extd81fn, int s
 extern void  sdcard_write_register ( int reg, Uint8 data );
 extern Uint8 sdcard_read_register  ( int reg  );
 
+extern int   mount_external_d81    ( const char *name, int force_ro );
+
 #define SD_BUFFER_POS 0x0E00
 #define FD_BUFFER_POS 0x0C00
 
@@ -41,6 +43,8 @@ extern Uint8 sdcard_read_register  ( int reg  );
 // disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space"
 extern Uint8 disk_buffers[0x1000];
 extern Uint8 sd_status;
+
+extern int fd_mounted;
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 #include "xemu/emutools_snapshot.h"
