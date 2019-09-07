@@ -1,6 +1,5 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,13 +15,18 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#define xemu_drop_events sdl_burn_events
+#ifndef __EMUTOOLS_NATIVEGUI_H_INCLUDED
+#define __EMUTOOLS_NATIVEGUI_H_INCLUDED
 
-// FIXME: very ugly hack, EP128 emulator sill uses its own things, we have to deal with ...
+#define XEMUNATIVEGUI_FSEL_DIRECTORY		0
+#define XEMUNATIVEGUI_FSEL_OPEN			1
+#define XEMUNATIVEGUI_FSEL_SAVE			2
+#define XEMUNATIVEGUI_FSEL_FLAG_STORE_DIR	0x100
 
-#define DO_NOT_INCLUDE_EMUTOOLS
-#include "xep128.h"
-#include "screen.h"
+extern int is_xemunativegui_ok;
 
-#include "gui.h"
-#include "xemu/emutools_nativegui.c"
+extern int xemunativegui_init          ( void );
+extern int xemunativegui_iteration     ( void );
+extern int xemunativegui_file_selector ( int dialog_mode, const char *dialog_title, char *default_dir, char *selected, int path_max_size );
+
+#endif
