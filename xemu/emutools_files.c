@@ -204,6 +204,29 @@ int xemuexec_check_status ( void* pid, int wait )
 // end of #ifndef _WIN32
 #endif
 
+void xemuexec_open_native_file_browser ( char *dir )
+{
+#ifdef HAVE_XEMU_EXEC_API
+	static xemuexec_process_t fbp = XEMUEXEC_NULL_PROCESS_ID;
+	char *args[] = {FILE_BROWSER, dir, NULL};
+	if (fbp != XEMUEXEC_NULL_PROCESS_ID) {
+		int w = xemuexec_check_status(fbp, 0);
+		DEBUGPRINT("EXEC: FILEBROWSER: previous file browser process (" PRINTF_LLD ") status was: %d" NL, (unsigned long long int)(uintptr_t)fbp, w);
+		if (w == XEMUEXEC_STILL_RUNNING)
+			ERROR_WINDOW("A file browser is already has been opened.");
+		else if (w == -1)
+			ERROR_WINDOW("Process communication problem");
+		else
+			fbp = XEMUEXEC_NULL_PROCESS_ID;
+	}
+	if (XEMU_LIKELY(fbp == XEMUEXEC_NULL_PROCESS_ID))
+		fbp = xemuexec_run(args);	// FIXME: process on exit will be "orphaned" (ie zombie) till exit from Xemu, because it won't be wait()'ed by the parent (us) ...
+#else
+	ERROR_WINDOW("Sorry, no execution API is supported by this Xemu build\nto allow to launch an OS-native file browser for you on directory:\n%s", dir);
+#endif
+}
+
+
 #ifdef HAVE_XEMU_INSTALLER
 
 char *xemu_installer_db = NULL;
@@ -377,7 +400,16 @@ void xemu_set_installer ( const char *filename )
 
 // end of #ifdef HAVE_XEMU_INSTALLER
 #endif
-// end of #ifdef HAVE_XEMU_EXEC_API
+
+// end of #ifdef HAVE_XEMU_EXEC_API - else ...
+#else
+
+void xemuexec_open_native_file_browser ( char *dir )
+{
+	ERROR_WINDOW("Sorry, no execution API is supported by this Xemu build\nto allow to launch an OS-native file browser for you on directory:\n%s", dir);
+}
+
+// end of #ifdef HAVE_XEMU_EXEC_API - all
 #endif
 
 

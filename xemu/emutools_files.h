@@ -28,6 +28,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <fcntl.h>
 #include <unistd.h>
 
+#ifdef _WIN32
+#	define FILE_BROWSER	"explorer"
+#elif __APPLE__
+#	define FILE_BROWSER	"open"
+#else
+#	define FILE_BROWSER	"xdg-open"
+#endif
+
 extern void *xemu_load_buffer_p;
 extern char xemu_load_filepath[PATH_MAX];
 
@@ -53,6 +61,8 @@ typedef int xemuexec_process_t;
 extern xemuexec_process_t xemuexec_run ( char *const args[] );
 extern int xemuexec_check_status ( xemuexec_process_t pid, int wait );
 #endif
+
+extern void xemuexec_open_native_file_browser ( char *dir );
 
 #ifdef HAVE_XEMU_INSTALLER
 extern void xemu_set_installer ( const char *filename );

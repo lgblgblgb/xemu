@@ -23,6 +23,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMUNATIVEGUI_FSEL_SAVE			2
 #define XEMUNATIVEGUI_FSEL_FLAG_STORE_DIR	0x100
 
+
+#if defined(_WIN32) || defined(HAVE_GTK3)
+#	define XEMU_NATIVEGUI
+#endif
+
 extern int is_xemunativegui_ok;
 
 extern int xemunativegui_init          ( void );

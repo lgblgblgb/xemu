@@ -989,6 +989,19 @@ void sysconsole_open ( void )
 		ERROR_WINDOW("Cannot allocate windows console!");
 		return;
 	}
+	// disallow closing console (this would kill the app, too!!!!)
+#if 1
+	HWND hwnd = GetConsoleWindow();
+	if (hwnd != NULL) {
+		HMENU hmenu = GetSystemMenu(hwnd, FALSE);
+		if (hmenu != NULL)
+			DeleteMenu(hmenu, SC_CLOSE, MF_BYCOMMAND);
+		else
+			DEBUGPRINT("WINDOWS: GetSystemMenu() failed to give the menu for our console window." NL);
+	} else
+		DEBUGPRINT("WINDOWS: GetConsoleWindow() failed to give a handle." NL);
+#endif
+	// end of close madness
 	SetConsoleOutputCP(65001); // CP_UTF8, just to be sure to use the constant as not all mingw versions seems to define it
 	SetConsoleTitle("Xemu Console");
 	// set the screen buffer to be big enough to let us scroll text
@@ -1048,4 +1061,24 @@ void sysconsole_close ( const char *waitmsg )
 #else
 	sysconsole_is_open = 0;
 #endif
+}
+
+
+int sysconsole_toggle ( int set )
+{
+	switch (set) {
+		case 0:
+			sysconsole_close(NULL);
+			break;
+		case 1:
+			sysconsole_open();
+			break;
+		default:
+			if (sysconsole_is_open)
+				sysconsole_close(NULL);
+			else
+				sysconsole_open();
+			break;
+	}
+	return sysconsole_is_open;
 }

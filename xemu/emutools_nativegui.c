@@ -30,14 +30,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools_nativegui.h"
 
-#if defined(_WIN32) || defined (HAVE_GTK3)
-#define XEMU_NATIVEGUI_C
-#endif
 
 int is_xemunativegui_ok = 0;
 
 
-#ifdef XEMU_NATIVEGUI_C
+#ifdef XEMU_NATIVEGUI
 static void store_dir_from_file_selection ( char *store_dir, const char *filename, int dialog_mode )
 {
 	if (store_dir && (dialog_mode & XEMUNATIVEGUI_FSEL_FLAG_STORE_DIR)) {

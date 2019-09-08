@@ -19,31 +19,30 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
 #include "ui.h"
-
-#ifndef __EMSCRIPTEN__
-
+#include "xemu/emutools_nativegui.h"
 #include "mega65.h"
 #include "xemu/emutools_files.h"
 #include "xemu/d81access.h"
 #include "sdcard.h"
 
-#ifdef _WIN32
-#	define FILE_BROWSER "explorer"
-#elif __APPLE__
-#	define FILE_BROWSER "open"
-#	define UNIXISH
-#else
-#	define FILE_BROWSER "xdg-open"
-#	define UNIXISH
-#endif
 
+#if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_NATIVEGUI)
 
-static int are_you_sure ( const char *s )
+static void attach_d81 ( const char *fn )
 {
-	return (QUESTION_WINDOW("YES|NO", (s != NULL && *s != '\0') ? s : "Are you sure?") == 0);
+	if (fd_mounted) {
+		if (mount_external_d81(fn, 0))
+			ERROR_WINDOW("Mount failed for some reason.");
+	} else
+		ERROR_WINDOW("Cannot mount external D81, since Mega65 was not instructed to mount any FD access yet.");
 }
 
 
+// #if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_NATIVEGUI_C)
+#endif
+
+
+#ifdef CONFIG_DROPFILE_CALLBACK
 void emu_dropfile_callback ( const char *fn )
 {
 	DEBUGPRINT("UI: drop event, file: %s" NL, fn);
@@ -56,50 +55,43 @@ void emu_dropfile_callback ( const char *fn )
 		free(xemu_load_buffer_p);
 		// !!! buffer is not valid anymore, only things can go below, who does not need to access the loaded buffer which is lost now!
 		if (ret == D81_SIZE) {
-			if (are_you_sure("According to its size, the dropped file can be a D81 image. Shall I mount it for you?")) {
-				if (fd_mounted) {
-					if (mount_external_d81(fn, 0))
-						ERROR_WINDOW("Mount failed for some reason.");
-				} else
-					ERROR_WINDOW("Cannot mount external D81, since Mega65 was not instructed to mount any FD access yet.");
+			if (ARE_YOU_SURE("According to its size, the dropped file can be a D81 image. Shall I mount it for you?")) {
+				attach_d81(fn);
 			}
 		}
 	}
 }
-
-
-static void open_native_file_browser ( char *dir )
-{
-#ifdef HAVE_XEMU_EXEC_API
-	static xemuexec_process_t fbp = XEMUEXEC_NULL_PROCESS_ID;
-	char *args[] = {FILE_BROWSER, dir, NULL};
-	if (fbp) {
-		int w = xemuexec_check_status(fbp, 0);
-		DEBUGPRINT("UI: previous file browser process (" PRINTF_LLD ") status was: %d" NL, (unsigned long long int)(uintptr_t)fbp, w);
-		if (w == XEMUEXEC_STILL_RUNNING)
-			ERROR_WINDOW("A file browser is already has been opened.");
-		else if (w == -1)
-			ERROR_WINDOW("Process communication problem");
-		else
-			fbp = 0;
-	}
-	if (!fbp)
-		fbp = xemuexec_run(args);	// FIXME: process on exit will be "orpahned" (ie zombie) till exit from Xemu, because it won't be wait()'ed by the parent (us) ...
-#else
-	ERROR_WINDOW("Sorry, no execution API is supported by this Xemu build\nto allow to launch an OS-native file browser for you on directory:\n%s", dir);
 #endif
+
+
+#ifdef XEMU_NATIVEGUI
+
+
+static void attach_d81_by_browsing ( void )
+{
+	char fnbuf[PATH_MAX + 1];
+	static char dir[PATH_MAX + 1] = "";
+	if (!xemunativegui_file_selector(
+		XEMUNATIVEGUI_FSEL_OPEN | XEMUNATIVEGUI_FSEL_FLAG_STORE_DIR,
+		"Select D81 to attach",
+		dir,
+		fnbuf,
+		sizeof fnbuf
+	))
+		attach_d81(fnbuf);
 }
+
 
 
 void ui_enter ( void )
 {
 	DEBUGPRINT("UI: right-click" NL);
-	switch (QUESTION_WINDOW("Reset|Quit|Fullscr|Pref.dir", "Xemu Quick Task Menu")) {
+	switch (QUESTION_WINDOW("Reset|Quit|Fullscr|Pref.dir|Console|Attach D81", "Xemu Quick Task Menu")) {
 		case 0:
 			reset_mega65();
 			break;
 		case 1:
-			if (are_you_sure(NULL)) {
+			if (ARE_YOU_SURE(NULL)) {
 				SDL_Event ev;
 				ev.type = SDL_QUIT;
 				SDL_PushEvent(&ev);
@@ -110,14 +102,22 @@ void ui_enter ( void )
 			xemu_set_full_screen(-1);
 			break;
 		case 3:
-			open_native_file_browser(sdl_pref_dir);
+			xemuexec_open_native_file_browser(sdl_pref_dir);
+			break;
+		case 4:
+			sysconsole_toggle(-1);
+			break;
+		case 5:
+			attach_d81_by_browsing();
 			break;
 		default:
 			break;
 	}
 }
 
-
+// #ifdef XEMU_NATIVEGUI_C
 #else
-void ui_enter ( void ) {}
+void ui_enter ( void ) {
+	DEBUGPRINT("UI: no menu handler is implemented :(" NL);
+}
 #endif

@@ -37,6 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "ethernet65.h"
 #include "input_devices.h"
 #include "memcontent.h"
+#include "xemu/emutools_nativegui.h"
 
 
 static SDL_AudioDeviceID audio = 0;
@@ -457,6 +458,7 @@ void reset_mega65 ( void )
 static void update_emulator ( void )
 {
 	hid_handle_all_sdl_events();
+	xemunativegui_iteration();
 	nmi_set(IS_RESTORE_PRESSED(), 2);	// Custom handling of the restore key ...
 	// this part is used to trigger 'RESTORE trap' with long press on RESTORE.
 	// see input_devices.c for more information
@@ -685,13 +687,13 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("ethertap", NULL, "Enable ethernet emulation, parameter is the already configured TAP device name");
 #endif
 	xemucfg_define_switch_option("nonewhack", "Disables the preliminary NEW M65 features (Xemu will fail to use built-in KS and newer external KS too!)");
+#ifdef HID_KBD_MAP_CFG_SUPPORT
+	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
+#endif
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(xemucfg_get_str("installer"));
-#endif
-#ifdef HID_KBD_MAP_CFG_SUPPORT
-	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
 #endif
 	newhack = !xemucfg_get_bool("nonewhack");
 	if (newhack)
@@ -714,6 +716,7 @@ int main ( int argc, char **argv )
 	))
 		return 1;
 	osd_init_with_defaults();
+	xemunativegui_init();
 	// Initialize Mega65
 	mega65_init(
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
