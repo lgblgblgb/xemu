@@ -24,28 +24,55 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 
 
-static struct {
-	int	inc;
+#define DEBUGVERA DEBUGPRINT
+//#define DEBUGVERA(...)
+
+
+#define MODE_NTSC_COMPOSITE	2
+
+static struct {			// current_port variable selects one of these
+	Uint8	regspace[3];	// used as "storage only", ie to be able to read back the registers by CPU, nothing more
 	int	addr;
-	Uint8	r[3];
+	int	inc;
 } dataport[2];
-static int    current_port;
-static Uint8  ien_reg, isr_reg;
-static Uint32 palette[0x100];	// target texture format!
-static Uint8  border_index;	// colour of border with index
-static Uint32 border_colour;	// colour of border in texture format
+static int	current_port;	// current dataport in use for CPU VERA registers 0/1/2
+
+static struct {
+	Uint8	regspace[0x10];
+	int	map_base, tile_base;
+	int	hscroll, vscroll, bitmap_palette_offset;
+	int	enabled, mode, tileh, tilew, mapw, maph;
+} layer[2];
+
+static struct {
+	int	index;
+	Uint32	colour;
+	int	changed;
+} border;
+
+static struct {
+	Uint8	regspace[0x10];
+	int	hstart, hstop, vstart, vstop;
+	int	hscale, vscale;
+	int 	mode, field;
+	int	irqline;
+	int	chromakill;
+	int	is_mono_mode;	// a value takes chromakill and NTSC mode to be true to use the mono mode for real
+} composer;
+
+static struct {
+	Uint32	colours[0x100];
+	Uint32	all[4096];
+	Uint32	all_mono[4096];
+	Uint8	regspace[0x200];
+} palette;
+
+static Uint8	ien_reg, isr_reg;
 // VRAM is actually only 128K. However this is a kind of optimization:
 // We can read from "vmem" (which actually means here the entries Vera decoded address space including "gaps") with no further decoding.
 // And it's much easier to handle things like "is the character set now in ROM or RAM?" since we need only offset in VMEM, no matter RAM/ROM or even setting to undecoded area, etc ...
-static Uint8  vmem[0x41000];
+static Uint8	vmem[1 * 1024 * 1024];
 
-#define CHRROMS	(vmem + 0x20000)
-#define L1REGS	(vmem + 0x40000)
-#define L2REGS	(vmem + 0x40010)
-#define SPRREGS	(vmem + 0x40020)
-#define DCREGS	(vmem + 0x40040)
-#define PALMEM	(vmem + 0x40200)
-#define SPRMEM	(vmem + 0x40800)
 
 // This table is taken from Mist's X16 emulator, since I have no idea what the default palette is ...
 static const Uint16 default_palette[] = {
@@ -54,67 +81,137 @@ static const Uint16 default_palette[] = {
 
 
 
-static XEMU_INLINE void CHECK_IRQ ( void )
+static XEMU_INLINE void UPDATE_IRQ ( void )
 {
-	cpu65.irqLevel =
-		(cpu65.irqLevel & 0xF8) |	// leave any upper bits as-is, used by other IRQ sources than VERA, in the emulation
-		(ien_reg & isr_reg & 7);
+	// leave any upper bits as-is, used by other IRQ sources than VERA, in the emulation of VIAs for example
+	// This works at the 65XX emulator level, that is a single irqLevel variable is though to be boolean as zero (no IRQ) or non-ZERO (IRQ request),
+	// but, on other component level we use it as bit fields from various IRQ sources. That is, we save emulator time to create an 'OR" logic for
+	// various interrupt sources.
+	cpu65.irqLevel = (cpu65.irqLevel & ~7) | (ien_reg & isr_reg);
 }
 
 
-
-static XEMU_INLINE void set_border ( Uint8 data )
-{
-	border_index = data;
-	border_colour = palette[data];
-}
-
+// Updates a palette enty based on the "addr" in palette-memory
+// Also gives "monochrome" version if it's needed
+// Also, updates the border colour if the changed x16 colour index is used for the border
 static void update_palette_entry ( int addr )
 {
-	addr &= 0x1FF;
-	palette[addr >> 1] = SDL_MapRGBA(
-		sdl_pix_fmt,
-		(PALMEM[addr |  1] & 0x0F) << 4,	// RED component
-		(PALMEM[addr & ~1] & 0xF0),		// GREEN component
-		(PALMEM[addr & ~1] & 0x0F) << 4,	// BLUE component
-		0xFF					// alpha channel
-	);
-	border_colour = palette[border_index];	// to be sure border colour is updated (actually probbaly faster than with an 'if' to see if border is involved at all)
-}
-
-
-
-void vera_reset ( void )
-{
-	current_port = 0;
-	memset(dataport, 0, sizeof dataport);
-	ien_reg = 0;
-	isr_reg = 0;
-	CHECK_IRQ();
-	border_index = 0;
-	for (int a = 0, b = 0; a < 0x100;) {
-		PALMEM[b++] = default_palette[a  ] & 0xFF;
-		PALMEM[b  ] = default_palette[a++] >> 8;
-		update_palette_entry(b++);
+	addr &= 0x1FE;
+	int index = addr >> 1;
+	Uint32 colour = *((XEMU_UNLIKELY(composer.is_mono_mode) ? palette.all_mono : palette.all) + (palette.regspace[addr] + ((palette.regspace[addr + 1] & 0xF) << 8)));
+	//palatte[index] = XEMU_LIKELY(index) ? colour : 0;	// transparent, if index is zero
+	palette.colours[index] = colour;
+	if (index == border.index) {
+		border.colour = colour;
+		border.changed = 1;
 	}
 }
 
 
-void vera_init ( void )
+static XEMU_INLINE void update_all_palette_entries ( void )
 {
-	memset(vmem, 0xFF, sizeof vmem);
-	vera_reset();
+	for (int a = 0; a < 0x200; a += 2)
+		update_palette_entry(a);
 }
 
 
 
-int vera_load_rom ( const char *fn )
+static void write_layer_register ( int ln, int reg, Uint8 data )
 {
-	return xemu_load_file(fn, CHRROMS, 0x1000, 0x1000, "Character ROM") != 0x1000;
+	switch (reg) {
+		case 0x0:
+			layer[ln].enabled = data & 1;
+			layer[ln].mode = data >> 5;
+			if (layer[ln].mode >= 5) // bitmap mode
+				layer[ln].hscroll &= 0xFF;
+			else
+				layer[ln].hscroll = (layer[ln].hscroll & 0xFF) | (layer[ln].bitmap_palette_offset << 8);
+			DEBUGVERA("VERA: LAYER-%d#0 register write: enabled=%d mode=%d" NL, ln, layer[ln].enabled, layer[ln].mode);
+			data &= 0x80 | 0x40 | 0x20 | 0x01;
+			break;
+		case 0x1:
+			layer[ln].tileh = (data & 32) ? 1 : 0;
+			layer[ln].tilew = (data & 16) ? 1 : 0;
+			layer[ln].maph  = (data >> 2) & 3;
+			layer[ln].mapw  =  data       & 3;
+			DEBUGVERA("VERA: LAYER-%d#1 register write: tilew=%d tileh=%d mapw=%d maph=%d" NL, ln, layer[ln].tilew, layer[ln].tileh, layer[ln].mapw, layer[ln].maph);
+			data &= 0xFF - 0x80 - 0x40;
+			break;
+		case 0x2:	// MAP base, bits 9 downto 2
+			layer[ln].map_base = (layer[ln].map_base & 0x3FC00) | (data << 2);
+			DEBUGVERA("VERA: LAYER-%d#2 register write: map_base=$%05X" NL, ln, layer[ln].map_base);
+			break;
+		case 0x3:	// MAP base, bits 17 downto 10
+			layer[ln].map_base = (layer[ln].map_base & 0x3FC) | (data << 10);
+			DEBUGVERA("VERA: LAYER-%d#3 register write: map_base=$%05X" NL, ln, layer[ln].map_base);
+			break;
+		case 0x4:	// TILE base, bits 9 downto 2
+			layer[ln].tile_base = (layer[ln].tile_base & 0x3FC00) | (data << 2);
+			DEBUGVERA("VERA: LAYER-%d#4 register write: tile_base=$%05X" NL, ln, layer[ln].tile_base);
+			break;
+		case 0x5:	// TILE base, bits 17 downto 10
+			layer[ln].tile_base = (layer[ln].tile_base & 0x3FC) | (data << 10);
+			DEBUGVERA("VERA: LAYER-%d#5 register write: tile_base=$%05X" NL, ln, layer[ln].tile_base);
+			break;
+		case 0x6:
+			if (layer[ln].mode >= 5) // in bitmap modes ...
+				layer[ln].hscroll = data;
+			else
+				layer[ln].hscroll = data | (layer[ln].bitmap_palette_offset << 8);
+			DEBUGVERA("VERA: LAYER-%d#6 register write: hscroll=%d" NL, ln, layer[ln].hscroll);
+			break;
+		case 0x7:
+			data &= 0xF;
+			layer[ln].bitmap_palette_offset = data;	// only used in bitmap modes, but we always update it for reasons above ... [meaning of these bit can change!]
+			if (layer[ln].mode < 5) // not biitmap modes ...
+				layer[ln].hscroll = (layer[ln].hscroll & 0xFF) | (data << 8);
+			DEBUGVERA("VERA: LAYER-%d#7 register write: hscroll=%d" NL, ln, layer[ln].hscroll);
+			break;
+		case 0x8:
+			layer[ln].vscroll = (layer[ln].vscroll & 0xF00) | data;
+			DEBUGVERA("VERA: LAYER-%d#8 register write: vscroll=%d" NL, ln, layer[ln].vscroll);
+			break;
+		case 0x9:
+			data &= 0xF;
+			layer[ln].vscroll = (layer[ln].vscroll & 0xFF) | (data << 8);
+			DEBUGVERA("VERA: LAYER-%d#2 register write: vscroll=%d" NL, ln, layer[ln].vscroll);
+			break;
+		default:
+			DEBUGVERA("VERA: LAYER-%d#%d register write: ?UNKNOWN_REGISTER?=?%d?" NL, ln, reg & 0xF, data);
+			data = 0xFF;	// FIXME: unused register returns with 0xFF?
+			break;
+	}
+	layer[ln].regspace[reg] = data;
 }
 
 
-
+static void write_composer_register ( int reg, Uint8 data )
+{
+	switch (reg) {
+		case 0:	{
+			composer.chromakill = data & 4;
+			composer.mode = data & 3;
+			int is_mono_mode = (composer.mode == MODE_NTSC_COMPOSITE) && (data & 4);
+			if (is_mono_mode != composer.is_mono_mode) {
+				composer.is_mono_mode = is_mono_mode;
+				update_all_palette_entries();
+			}
+			DEBUGVERA("VERA: COMPOSER #0 register write: chroma_kill=%d output_mode=%d MONO_MODE=%d" NL, composer.chromakill ? 1 : 0, composer.mode, composer.is_mono_mode ? 1 : 0);
+			data = composer.field | (data & 7);	// also use the interlace bit field [0x80 or 0x00] when register is used
+			}
+			break;
+		case 1:
+			composer.hscale = data;
+			break;
+		case 2:
+			composer.vscale = data;
+			break;
+		default:
+			data = 0xFF;	// FIXME: unused register returns with 0xFF?
+			break;
+	}
+	composer.regspace[reg] = data;
+}
 
 static void write_vmem_through_dataport ( int port, Uint8 data )
 {
@@ -127,40 +224,75 @@ static void write_vmem_through_dataport ( int port, Uint8 data )
 		vmem[addr] = data;
 		return;
 	}
-	if (XEMU_UNLIKELY(addr < 0x40000 || addr > 0x40FFF))
-		return;	// for write, there is nothing between $20000 - $3FFFF, as the char ROM is not writable, neither the "gap". Also ignore if the write op refeers a too big, undecoded address
-	// FIXME: it still allows to write later "gaps" which is probably not the case with the "real" thing?
-	vmem[addr] = data;
-	if (addr >= 0x40200 && addr < 0x40400)
-		update_palette_entry(data);	// writing palette registers: as addr is masked in the update function, we don't need to do here
+	if (XEMU_UNLIKELY(addr < 0xF0000 || addr > 0xF5FFF))
+		return;	// writes between the "gap" and writes above the last used address do not have any affect
+	if (addr < 0xF1000) {
+		write_composer_register(addr & 0xF, data);
+		return;
+	}
+	if (addr < 0xF2000) {
+		addr &= 0x1FF;
+		palette.regspace[addr] = data;
+		update_palette_entry(addr);
+		return;
+	}
+	if (addr < 0xF3000) {
+		write_layer_register(0, addr & 0xF, data);
+		return;
+	}
+	if (addr < 0xF4000) {
+		write_layer_register(1, addr & 0xF, data);
+		return;
+	}
+	// FIXME: implement other registers as well!
 }
 
 
-static XEMU_INLINE Uint8 read_vmem_through_dataport ( int port )
+static Uint8 read_vmem_through_dataport ( int port )
 {
 	// FIXME: what is the wrapping point on incrementation? Ie, data port can address 24 bit, but VERA may not have such an addressing space
 	int addr = dataport[port].addr;
 	dataport[port].addr = (addr + dataport[port].inc) & 0xFFFFF;
-	return XEMU_LIKELY(addr < 0x41000) ? vmem[addr] : 0xFF;
+	// OK, let's see, wwhat is about to read ...
+	if (XEMU_LIKELY(addr < 0x20000)) {
+		return vmem[addr];
+	}
+	if (XEMU_UNLIKELY(addr < 0xF0000 || addr > 0xF5FFF))
+		return 0xFF;	// reads between the "gap" and writes above the last used address do not have any affect
+	if (addr < 0xF1000) {
+		return composer.regspace[addr & 0xF];
+	}
+	if (addr < 0xF2000) {
+		return palette.regspace[addr & 0x1FF];
+	}
+	if (addr < 0xF3000) {
+		return layer[0].regspace[addr & 0xF];
+	}
+	if (addr < 0xF4000) {
+		return layer[1].regspace[addr & 0xF];
+	}
+	// FIXME: implement other registers as well!
+	return 0xFF;
 }
 
 
-void vera_write_reg_by_cpu ( int reg, Uint8 data )
+void vera_write_cpu_register ( int reg, Uint8 data )
 {
+	//increment = (1 << ((data >> 4) - 1)) & 0xFFFF;
 	DEBUGPRINT("VERA: writing register %d with data $%02X" NL, reg & 7, data);
 	switch (reg & 7) {
 		case 0:
-			dataport[current_port].r[0] = data;
-			dataport[current_port].inc  = data >> 4;
-			dataport[current_port].addr = (dataport[current_port].addr & 0x0FFFF) | ((data & 0xF) << 16);
+			dataport[current_port].regspace[0] = data;
+			dataport[current_port].addr = (dataport[current_port].addr & 0xFFF00) | data;
 			break;
 		case 1:
-			dataport[current_port].r[1] = data;
+			dataport[current_port].regspace[1] = data;
 			dataport[current_port].addr = (dataport[current_port].addr & 0xF00FF) | (data << 8);
 			break;
 		case 2:
-			dataport[current_port].r[2] = data;
-			dataport[current_port].addr = (dataport[current_port].addr & 0xFFF00) | data;
+			dataport[current_port].regspace[2] = data;
+			dataport[current_port].inc  = (1 << ((data >> 4) - 1)) & 0xFFFF;
+			dataport[current_port].addr = (dataport[current_port].addr & 0x0FFFF) | ((data & 0xF) << 16);
 			break;
 		case 3:
 			write_vmem_through_dataport(0, data);
@@ -176,31 +308,31 @@ void vera_write_reg_by_cpu ( int reg, Uint8 data )
 			break;
 		case 6:
 			ien_reg = data & 7;
-			CHECK_IRQ();
+			UPDATE_IRQ();
 			break;
 		case 7:
 			isr_reg &= (~data) & 7;
-			CHECK_IRQ();
+			UPDATE_IRQ();
 			break;
 	}
 }
 
 
-Uint8 vera_read_reg_by_cpu ( int reg )
+Uint8 vera_read_cpu_register ( int reg )
 {
 	switch (reg & 7) {
 		case 0:
-			return dataport[current_port].r[0];
+			return dataport[current_port].regspace[0];
 		case 1:
-			return dataport[current_port].r[1];
+			return dataport[current_port].regspace[1];
 		case 2:
-			return dataport[current_port].r[2];
+			return dataport[current_port].regspace[2];
 		case 3:
 			return read_vmem_through_dataport(0);
 		case 4:
 			return read_vmem_through_dataport(1);
 		case 5:
-			return current_port;
+			return current_port;		// only give back dataport. We always reports back "no reset" state, though we DO it on write, within zero cycles ;-P
 		case 6:
 			return ien_reg;
 		case 7:
@@ -212,8 +344,9 @@ Uint8 vera_read_reg_by_cpu ( int reg )
 
 static Uint32 *pixel;
 static int scanline;
-static int map_base, tile_base;
+//static int map_base; //, tile_base;
 static int tile_row;
+static int map_counter;
 
 static int hacky_shit = 0;
 
@@ -233,13 +366,15 @@ void vera_vsync ( void )
 	int tail;
 	pixel = xemu_start_pixel_buffer_access(&tail);
 	scanline = 0;
-	map_base = (L1REGS[2] << 2) | (L1REGS[3] << 10);
-	tile_base = (L1REGS[4] << 2) | (L1REGS[5] << 10);
+	//map_base = (L1REGS[2] << 2) | (L1REGS[3] << 10);
+	//tile_base = (L1REGS[4] << 2) | (L1REGS[5] << 10);
+	map_counter = 0;
 	tile_row = 0;
+#if 0
 	fprintf(stderr, "L1: EN=%d MODE=%d MAP_BASE=%d TILE_BASE=%d TILEH=%d TILEW=%d MAPH=%d MAPW=%d "
 			"HSTOP=%d HSTART=%d VSTOP=%d VSTART=%d OUT_MODE=%d "
 			"IEN=%d\n",
-			L1REGS[0] & 1, L1REGS[0] >> 5, map_base, tile_base,
+			L1REGS[0] & 1, L1REGS[0] >> 5, layer[0].map_base, layer[0].tile_base,
 			(L1REGS[1] >> 5) & 1,	// TILEH
 			(L1REGS[1] >> 4) & 1,	// TILEW
 			(L1REGS[1] >> 2) & 3,	// MAPH
@@ -251,44 +386,101 @@ void vera_vsync ( void )
 			DCREGS[0] & 3,
 			ien_reg
 	);
+#endif
 	if (!hacky_shit) {
 		hacky_shit = 1;
 		atexit(hacky_shitter);
 	}
 	isr_reg |= 1;
-	CHECK_IRQ();
+	UPDATE_IRQ();
 }
 
 
+// CURRENTLY a hard coded case, for 16 colour text mode using layer-1 only (what is the default used one by the KERNAL/BASIC at least)
 int vera_render_line ( void )
 {
+	Uint8 *v = vmem + layer[0].map_base + map_counter;
 	for (int x = 0; x < 80; x++) {
-		Uint8 chr = vmem[map_base++];
-		Uint32 fg = palette[vmem[map_base  ] & 0xF];
-		Uint32 bg = palette[vmem[map_base++] >> 4 ];
-		//fg = 0xFFFFFFFFU;
-		//bg = 0x88888888U;
-		chr = vmem[tile_base + (chr << 3) + tile_row];
-		// HACK
-		//chr = CHRROMS[8 + tile_row];
-		//chr = 0x55;
-		//chr = hackrom[8 + tile_row];
+		Uint8 chr = vmem[layer[0].tile_base + ((*v++) << 3) + tile_row];
+		Uint32 fg = palette.colours[*v & 0xF];
+		Uint32 bg = palette.colours[(*v++) >> 4 ];
 		for (int b = 128; b; b >>= 1) {
 			*pixel++ = (chr & b) ? fg : bg;
 		}
 	}
 	if (isr_reg & 1) {
 		isr_reg &= ~1;
-		CHECK_IRQ();
+		UPDATE_IRQ();
 	}
 	scanline++;
 	if (tile_row == 7) {
 		tile_row = 0;
-		map_base += 256 - 80*2;
+//		map_base += 256 - 80*2;
+		map_counter += 256;
 		return (scanline >= 480);
 	} else {
 		tile_row++;
-		map_base -= 80 * 2;
+//		map_base -= 80 * 2;
 		return 0;
 	}
+}
+
+
+
+void vera_reset ( void )
+{
+	current_port = 0;
+	memset(dataport, 0, sizeof dataport);
+	// Make sure, that we clear (maybe there was some during the reset request) + disable interrupts ...
+	ien_reg = 0;
+	isr_reg = 0;
+	UPDATE_IRQ();
+	// Populate the default palette for VERA after reset.
+	border.index = 0;	// update palette step below will take it account then ...
+	for (int a = 0, b = 0; a < 0x100;) {
+		palette.regspace[b++] = default_palette[a  ];
+		palette.regspace[b  ] = default_palette[a++] >> 8;
+		update_palette_entry(b++);
+	}
+	// Clear all registers
+	// This is needed, as those write functions decodes the meanings to structs
+	// It's more easy,quick to solve this way, rather than to init those decoded stuffs by "hand",
+	// also would result in code duplication more or less ...
+	for (int a = 0; a < 0x10; a++) {
+		write_layer_register(0, a, 0);
+		write_layer_register(1, a, 0);
+		write_composer_register(a, 0);
+	}
+}
+
+
+
+// This function must be called only ONCE, before other vera... functions!
+void vera_init ( void )
+{
+	// Generate full system palette [4096 colours]
+	// Yeah, it's 4096 * 4 * 2 bytes of memory (*2 because of chroma killed mono version as well), but
+	// that it's still "only" 32Kbytes, nothing for a modern PC, but then we have the advantage to get SDL formatted
+	// DWORD available for any colour, without any conversion work in run-time!
+	for (int r = 0, index = 0; r < 0x10; r++)
+		for (int g = 0; g < 0x10; g++)
+			for (int b = 0; b < 0x10; b++, index++) {
+				// 0xFF = alpha channel
+				// "*17" => 255/15 = 17.0 Thus we can reach full brightness on 4 bit RGB component values
+				palette.all[index] = SDL_MapRGBA(sdl_pix_fmt, r * 17, g * 17, b * 17, 0xFF);
+				// About CHROMAKILL:
+				//	this is not the right solution too much, but anyway
+				//	RGB -> mono conversion would need some gamma correction and whatever black magic still ...
+				//	the formula is taken from wikipedia/MSDN, BUT as I noted above, it's maybe incorrect because of the lack of gamma correction
+				//	FIXME: we would need to see HDL implmenetation of VERA to be sure what it uses ...
+				//int mono = ((0.2125 * r) + (0.7154 * g) + (0.0721 * b)) * 17;
+				int mono = ((0.299 * (float)r) + (0.587 * (float)g) + (0.114 * (float)b)) * 17.0;
+				palette.all_mono[index] = SDL_MapRGBA(sdl_pix_fmt, mono, mono, mono, 0xFF);
+			}
+	SDL_free(sdl_pix_fmt);	// we don't need this any more
+	sdl_pix_fmt = NULL;
+	// Clear all of vmem
+	memset(vmem, 0xFF, sizeof vmem);
+	// Reset VERA
+	vera_reset();
 }

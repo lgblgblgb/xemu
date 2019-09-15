@@ -41,9 +41,6 @@ static Uint8 rom[9 * 8192];		// there are 8 banks, but kernal has one too!
 static int   hi_ram_access_offset;
 static int   hi_rom_access_offset;
 
-static int   scanline = 0;
-
-
 static int frameskip = 0;
 static struct Via65c22 via1, via2;		// VIA-1 and VIA-2 emulation structures
 
@@ -87,7 +84,7 @@ void  cpu65_write_callback ( Uint16 addr, Uint8 data )
 			case 0x2:
 			case 0x3:
 				DEBUGPRINT("IO_W: writing to reg $%04X (data=$%02X), VERA video controller @ PC=$%04X" NL, addr, data, cpu65.old_pc);
-				vera_write_reg_by_cpu(addr, data);	// VERA masks the addr bits, so it's OK.
+				vera_write_cpu_register(addr, data);	// VERA masks the addr bits, so it's OK.
 				break;
 			case 0x6:
 				DEBUGPRINT("IO_W: writing to reg $%04X (data=$%02X), VIA-1 @ PC=$%04X" NL, addr, data, cpu65.old_pc);
@@ -131,7 +128,7 @@ Uint8 cpu65_read_callback ( Uint16 addr )
 				break;
 			case 0x2:
 			case 0x3:
-				data = vera_read_reg_by_cpu(addr);	// VERA masks the addr bits, so it's OK
+				data = vera_read_cpu_register(addr);	// VERA masks the addr bits, so it's OK
 				DEBUGPRINT("IO_R: reading from reg $%04X (data=$%02X), VERA video controller @ PC=$%04X" NL, addr, data, cpu65.old_pc);
 				break;
 			case 0x6:
@@ -178,6 +175,10 @@ static int load_rom ( const char *fn )
 	int size = xemu_load_file(fn, rom, 2 * 8192, 9 * 8192, "Cannot load ROM");
 	if (size < 0)
 		return size;
+	if (size & 8191) {
+		ERROR_WINDOW("ROM image size must be multiple of 8192 bytes!");
+		return -1;
+	}
 	if (size < 9 * 8192)
 		memset(rom + size, 0xFF, 9 * 8192 - size);
 	set_rom_bank(7);
@@ -255,7 +256,7 @@ static Uint8 via2_kbd_get_scan ( Uint8 mask )
 }
 
 
-static Uint8 via1_ina ( Uint8 mask )
+static Uint8 via1_ina_OFF ( Uint8 mask )
 {
 	// joystick state (RIGHT direction is not handled here though)
 	return
@@ -267,8 +268,26 @@ static Uint8 via1_ina ( Uint8 mask )
 }
 
 
+static Uint8 via1_inb ( Uint8 mask )
+{
+//	static Uint8 hack;
+//	fprintf(stderr, "VIA1 port B read\n");
+	return 0xFF;
+}
+
+static Uint8 via2_ina ( Uint8 mask )
+{
+	static Uint8 hack = 0xFF;
+//	hack ^= 2;
+//	hack ^= 1;
+//	fprintf(stderr, "VIA2 port A read\n");
+	return hack;
+}
+
+
 static Uint8 via2_inb ( Uint8 mask )
 {
+	fprintf(stderr, "VIA2 port B read\n");
 	// Port-B in VIA2 is used (temporary with DDR-B set to input) to scan joystick direction 'RIGHT'
 	return hid_read_joystick_right(0x7F, 0xFF);
 }
@@ -315,8 +334,7 @@ static void emulation_loop ( void )
 				vera_vsync();
 				frameskip = !frameskip;
 				return;
-			} else
-				scanline++;
+			}
 			cycles -= CYCLES_PER_SCANLINE;
 		}
 	}
@@ -329,7 +347,6 @@ int main ( int argc, char **argv )
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Surprising Commander X16 emulator from LGB");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	xemucfg_define_str_option("rom", ROM_NAME, "Sets character ROM to use");
-	xemucfg_define_str_option("chrrom",  CHR_ROM_NAME, "Sets BASIC ROM to use");
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
@@ -358,10 +375,9 @@ int main ( int argc, char **argv )
 	init_ram();
 	vera_init(); // must be before vera_load_rom(), since it clears the charrom as well!
 	if (
-		load_rom(xemucfg_get_str("rom")) ||
-		vera_load_rom(xemucfg_get_str("chrrom"))
+		load_rom(xemucfg_get_str("rom"))
 	)
-		FATAL("You need the ROM images ...");
+		return 1;
 	// Continue with initializing ...
 	clear_emu_events();	// also resets the keyboard
 	cpu65_reset();	// reset CPU: it must be AFTER kernal is loaded at least, as reset also fetches the reset vector into PC ...
@@ -373,7 +389,7 @@ int main ( int argc, char **argv )
 		via1_outb_rom_bank,	// outb
 		NULL,	// outsr
 		NULL,	// ina
-		NULL,	// inb
+		via1_inb,	// inb
 		NULL,	// insr
 		via1_setint	// setint, called by via core, if interrupt level changed for whatever reason (ie: expired timer ...). It is wired to NMI on VIC20.
 	);
@@ -381,7 +397,7 @@ int main ( int argc, char **argv )
 		NULL,			// outa [reg 1]
 		NULL, //via2_kbd_set_scan,	// outb [reg 0], we wire port B as output to set keyboard scan, HOWEVER, we use ORB directly in get scan!
 		NULL,	// outsr
-		via2_kbd_get_scan,	// ina  [reg 1], we wire port A as input to get the scan result, which was selected with port-A
+		via2_ina,	// ina  [reg 1], we wire port A as input to get the scan result, which was selected with port-A
 		via2_inb,		// inb  [reg 0], used with DDR set to input for joystick direction 'right' in VIC20
 		NULL,	// insr
 		via2_setint	// setint, same for VIA2 as with VIA1, but this is wired to IRQ on VIC20.

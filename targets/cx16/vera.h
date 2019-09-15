@@ -21,10 +21,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_LOCAL_VERA_H_INCLUDED
 #define __XEMU_LOCAL_VERA_H_INCLUDED
 
-extern void  vera_init ( void );
-extern int   vera_load_rom ( const char *fn );
-extern void  vera_write_reg_by_cpu ( int reg, Uint8 data );
-extern Uint8 vera_read_reg_by_cpu  ( int reg );
+extern void  vera_init  ( void );
+extern void  vera_reset ( void );
+extern void  vera_write_cpu_register ( int reg, Uint8 data );
+extern Uint8 vera_read_cpu_register  ( int reg );
 extern int   vera_render_line ( void );
 extern void  vera_vsync ( void );
 

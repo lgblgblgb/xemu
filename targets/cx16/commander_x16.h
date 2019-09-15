@@ -28,6 +28,5 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define RENDER_SCALE_QUALITY	2
 
 #define ROM_NAME		"#cx16-system.rom"
-#define CHR_ROM_NAME		"#cx16-chargen.rom"
 
 #endif
