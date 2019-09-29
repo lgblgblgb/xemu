@@ -22,13 +22,27 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_files.h"
 #include "vera.h"
 #include "xemu/cpu65.h"
+#include "sdcard.h"
+#include "commander_x16.h"
 
 
-#define DEBUGVERA DEBUGPRINT
+//#define DEBUGVERA DEBUGPRINT
+#define DEBUGVERA DEBUG
 //#define DEBUGVERA(...)
 
 
 #define MODE_NTSC_COMPOSITE	2
+// 4 bits of interrupt info
+#define INTERRUPT_REGISTER_MASK	15
+#define VRAM_SIZE		0x20000
+#define UART_CLOCK		25000000
+#define UART_DEFAULT_BAUD_RATE	1000000
+
+#define	VSYNC_IRQ		1
+#define	RASTER_IRQ		2
+#define	SPRITE_IRQ		4
+#define	UART_IRQ		8
+
 
 static struct {			// current_port variable selects one of these
 	Uint8	regspace[3];	// used as "storage only", ie to be able to read back the registers by CPU, nothing more
@@ -67,17 +81,32 @@ static struct {
 	Uint8	regspace[0x200];
 } palette;
 
+static struct {
+	Uint8	spi_received_data;
+	int	spi_select;
+	int	spi_busy;		// not so much used currently ...
+	int	uart_baud_divisor;
+	int	uart_baud_rate;
+} serial;
+
 static Uint8	ien_reg, isr_reg;
 // VRAM is actually only 128K. However this is a kind of optimization:
-// We can read from "vmem" (which actually means here the entries Vera decoded address space including "gaps") with no further decoding.
 // And it's much easier to handle things like "is the character set now in ROM or RAM?" since we need only offset in VMEM, no matter RAM/ROM or even setting to undecoded area, etc ...
-static Uint8	vmem[1 * 1024 * 1024];
+static Uint8	vram[1 * 1024 * 1024];
 
 
 // This table is taken from Mist's X16 emulator, since I have no idea what the default palette is ...
-static const Uint16 default_palette[] = {
+static const Uint16 x16paldata[] = {
 	0x0000,0xfff,0x800,0xafe,0xc4c,0x0c5,0x00a,0xee7,0xd85,0x640,0xf77,0x333,0x777,0xaf6,0x08f,0xbbb,0x000,0x111,0x222,0x333,0x444,0x555,0x666,0x777,0x888,0x999,0xaaa,0xbbb,0xccc,0xddd,0xeee,0xfff,0x211,0x433,0x644,0x866,0xa88,0xc99,0xfbb,0x211,0x422,0x633,0x844,0xa55,0xc66,0xf77,0x200,0x411,0x611,0x822,0xa22,0xc33,0xf33,0x200,0x400,0x600,0x800,0xa00,0xc00,0xf00,0x221,0x443,0x664,0x886,0xaa8,0xcc9,0xfeb,0x211,0x432,0x653,0x874,0xa95,0xcb6,0xfd7,0x210,0x431,0x651,0x862,0xa82,0xca3,0xfc3,0x210,0x430,0x640,0x860,0xa80,0xc90,0xfb0,0x121,0x343,0x564,0x786,0x9a8,0xbc9,0xdfb,0x121,0x342,0x463,0x684,0x8a5,0x9c6,0xbf7,0x120,0x241,0x461,0x582,0x6a2,0x8c3,0x9f3,0x120,0x240,0x360,0x480,0x5a0,0x6c0,0x7f0,0x121,0x343,0x465,0x686,0x8a8,0x9ca,0xbfc,0x121,0x242,0x364,0x485,0x5a6,0x6c8,0x7f9,0x020,0x141,0x162,0x283,0x2a4,0x3c5,0x3f6,0x020,0x041,0x061,0x082,0x0a2,0x0c3,0x0f3,0x122,0x344,0x466,0x688,0x8aa,0x9cc,0xbff,0x122,0x244,0x366,0x488,0x5aa,0x6cc,0x7ff,0x022,0x144,0x166,0x288,0x2aa,0x3cc,0x3ff,0x022,0x044,0x066,0x088,0x0aa,0x0cc,0x0ff,0x112,0x334,0x456,0x668,0x88a,0x9ac,0xbcf,0x112,0x224,0x346,0x458,0x56a,0x68c,0x79f,0x002,0x114,0x126,0x238,0x24a,0x35c,0x36f,0x002,0x014,0x016,0x028,0x02a,0x03c,0x03f,0x112,0x334,0x546,0x768,0x98a,0xb9c,0xdbf,0x112,0x324,0x436,0x648,0x85a,0x96c,0xb7f,0x102,0x214,0x416,0x528,0x62a,0x83c,0x93f,0x102,0x204,0x306,0x408,0x50a,0x60c,0x70f,0x212,0x434,0x646,0x868,0xa8a,0xc9c,0xfbe,0x211,0x423,0x635,0x847,0xa59,0xc6b,0xf7d,0x201,0x413,0x615,0x826,0xa28,0xc3a,0xf3c,0x201,0x403,0x604,0x806,0xa08,0xc09,0xf0b
 };
+
+static XEMU_INLINE void uart_set_baud_divisor ( int div )
+{
+	serial.uart_baud_divisor = div;
+	serial.uart_baud_rate = (UART_CLOCK) / (div + 1);
+	DEBUGVERA("UART: %d bps, divisor = %d" NL, serial.uart_baud_rate, serial.uart_baud_divisor);
+}
+
 
 
 
@@ -87,8 +116,21 @@ static XEMU_INLINE void UPDATE_IRQ ( void )
 	// This works at the 65XX emulator level, that is a single irqLevel variable is though to be boolean as zero (no IRQ) or non-ZERO (IRQ request),
 	// but, on other component level we use it as bit fields from various IRQ sources. That is, we save emulator time to create an 'OR" logic for
 	// various interrupt sources.
-	cpu65.irqLevel = (cpu65.irqLevel & ~7) | (ien_reg & isr_reg);
+	cpu65.irqLevel = (cpu65.irqLevel & ~INTERRUPT_REGISTER_MASK) | (ien_reg & isr_reg);
 }
+
+static XEMU_INLINE void SET_IRQ ( int irq_type )
+{
+	isr_reg |= irq_type;
+	UPDATE_IRQ();
+}
+
+static XEMU_INLINE void CLEAR_IRQ ( int irq_type )
+{
+	isr_reg &= ~irq_type;
+	UPDATE_IRQ();
+}
+
 
 
 // Updates a palette enty based on the "addr" in palette-memory
@@ -206,6 +248,42 @@ static void write_composer_register ( int reg, Uint8 data )
 		case 2:
 			composer.vscale = data;
 			break;
+		case 3:
+			if (data != border.index) {
+				border.index = data;
+				border.colour = palette.colours[data];
+				border.changed = 1;
+			}
+			break;
+		case 4:
+			composer.hstart = (composer.hstart & 0xFF00) | data;
+			break;
+		case 5:
+			composer.hstop  = (composer.hstop  & 0xFF00) | data;
+			break;
+		case 6:
+			composer.vstart = (composer.vstart & 0xFF00) | data;
+			break;
+		case 7:
+			composer.vstop  = (composer.vstop  & 0xFF00) | data;
+			break;
+		case 8:
+			composer.hstart = (composer.hstart &   0xFF) | ((data &  3) << 8);
+			composer.hstop  = (composer.hstop  &   0xFF) | ((data & 12) << 6);
+			composer.vstart = (composer.vstart &   0xFF) | ((data & 16) << 4);
+			composer.vstop  = (composer.vstop  &   0xFF) | ((data & 32) << 3);
+			data &= 0xFF - 0x80 - 0x40;
+			break;
+		case 9:
+			composer.irqline = (composer.irqline & 0xFF00) | data;
+			//for (int a = 0; a < 3; a++)
+			//	composer.irqline_next = composer.irqline + 1;
+			break;
+		case 10:
+			data &= 1;
+			composer.irqline = (composer.irqline & 0xFF) | (data << 8);
+			//composer.irqline_next = composer.irqline + 1;
+			break;
 		default:
 			data = 0xFF;	// FIXME: unused register returns with 0xFF?
 			break;
@@ -213,73 +291,135 @@ static void write_composer_register ( int reg, Uint8 data )
 	composer.regspace[reg] = data;
 }
 
+
 static void write_vmem_through_dataport ( int port, Uint8 data )
 {
-	// FIXME: what is the wrapping point on incrementation? Ie, data port can address 24 bit, but VERA may not have such an addressing space
 	int addr = dataport[port].addr;
 	dataport[port].addr = (addr + dataport[port].inc) & 0xFFFFF;
 	// OK, let's see, what is about to be written ...
-	DEBUGPRINT("VERA: writing VMEM at $%05X with data $%02X" NL, addr, data);
-	if (XEMU_LIKELY(addr < 0x20000)) {
-		vmem[addr] = data;
+	DEBUGVERA("VERA: writing VMEM at $%05X with data $%02X" NL, addr, data);
+	if (XEMU_LIKELY(addr < VRAM_SIZE)) {
+		vram[addr] = data;
 		return;
 	}
-	if (XEMU_UNLIKELY(addr < 0xF0000 || addr > 0xF5FFF))
-		return;	// writes between the "gap" and writes above the last used address do not have any affect
-	if (addr < 0xF1000) {
-		write_composer_register(addr & 0xF, data);
-		return;
+	if (XEMU_UNLIKELY(addr < 0xF0000)) {
+		return;	// writes between the "gap" of end of VRAM and begin of registers etc area does nothing
 	}
-	if (addr < 0xF2000) {
-		addr &= 0x1FF;
-		palette.regspace[addr] = data;
-		update_palette_entry(addr);
-		return;
+	switch ((addr >> 12) & 0xF) {
+		case 0:
+			write_composer_register(addr & 0xF, data);
+			return;
+		case 1:
+			addr &= 0x1FF;
+			palette.regspace[addr] = data;
+			update_palette_entry(addr);
+			return;
+		case 2:
+			write_layer_register(0, addr & 0xF, data);
+			return;
+		case 3:
+			write_layer_register(1, addr & 0xF, data);
+			return;
+		case 4:
+			// FIXME: sprite registers to be implemented ...
+			return;
+		case 5:
+			// FIXME: sprite attributes to be implemented ...
+			return;
+		case 6:
+			// FIXME: audio registers to be implemented ...
+			return;
+		case 7:
+			if ((addr & 1) == 0)
+				serial.spi_received_data = sdcard_spi_transfer(data);
+			else {
+				data &= 1;
+				serial.spi_select = data;
+				sdcard_spi_select(data);
+			}
+			return;
+		case 8:
+			// FIXME: UART does not emulated, just mostly the BAUD RATE setting / reading back ...
+			switch (addr & 3) {
+				case 0:
+					return;		// we do not store, we can't TX yet, not emulated ...
+				case 1:
+					return;		// not a writable register at all ...
+				case 2:
+					uart_set_baud_divisor((serial.uart_baud_divisor & 0xFF00) |  data      );
+					return;
+				case 3:
+					uart_set_baud_divisor((serial.uart_baud_divisor & 0x00FF) | (data << 8));
+					return;
+			}
+			return;
+		default:
+			DEBUGVERA("UNKNOWN_WRITE: address $%X" NL, addr);
+			return;
 	}
-	if (addr < 0xF3000) {
-		write_layer_register(0, addr & 0xF, data);
-		return;
-	}
-	if (addr < 0xF4000) {
-		write_layer_register(1, addr & 0xF, data);
-		return;
-	}
-	// FIXME: implement other registers as well!
 }
 
 
 static Uint8 read_vmem_through_dataport ( int port )
 {
-	// FIXME: what is the wrapping point on incrementation? Ie, data port can address 24 bit, but VERA may not have such an addressing space
 	int addr = dataport[port].addr;
 	dataport[port].addr = (addr + dataport[port].inc) & 0xFFFFF;
 	// OK, let's see, wwhat is about to read ...
-	if (XEMU_LIKELY(addr < 0x20000)) {
-		return vmem[addr];
+	if (XEMU_LIKELY(addr < VRAM_SIZE)) {
+		return vram[addr];
 	}
-	if (XEMU_UNLIKELY(addr < 0xF0000 || addr > 0xF5FFF))
-		return 0xFF;	// reads between the "gap" and writes above the last used address do not have any affect
-	if (addr < 0xF1000) {
-		return composer.regspace[addr & 0xF];
+	if (XEMU_UNLIKELY(addr < 0xF0000)) {
+		return 0xFF;	// writes between the "gap" of end of VRAM and begin of registers etc area does nothing
 	}
-	if (addr < 0xF2000) {
-		return palette.regspace[addr & 0x1FF];
+	switch ((addr >> 12) & 0xF) {
+		case 0:
+			return composer.regspace[addr & 0xF];
+		case 1:
+			return palette.regspace[addr & 0x1FF];
+		case 2:
+			return layer[0].regspace[addr & 0xF];
+		case 3:
+			return layer[1].regspace[addr & 0xF];
+		case 4:
+			// FIXME: sprite registers to be implemented ...
+			return 0xFF;
+		case 5:
+			// FIXME: sprite attributes to be implemented ...
+			return 0xFF;
+		case 6:
+			// FIXME: audio registers to be implemented ...
+			return 0xFF;
+		case 7:
+			if ((addr & 1) == 0)
+				return serial.spi_received_data;	// READ of REG0: data received
+			else
+				return serial.spi_select;		// READ of REG1: we never use the BUSY flag ...
+		case 8:
+			// FIXME: UART does not emulated, just mostly the BAUD RATE setting / reading back ...
+			switch (addr & 3) {
+				case 0:
+					return 0xFF;	// received data, we have no ...
+				case 1:
+					return 0;	// return with always non-busy on TX and RXFIFO empty
+				case 2:
+					return serial.uart_baud_divisor & 0xFF;
+				case 3:
+					return serial.uart_baud_divisor >> 8;
+			}
+			return 0xFF;
+		default:
+			DEBUGVERA("UNKNOWN_READ: address $%X" NL, addr);
+			return 0xFF;
 	}
-	if (addr < 0xF3000) {
-		return layer[0].regspace[addr & 0xF];
-	}
-	if (addr < 0xF4000) {
-		return layer[1].regspace[addr & 0xF];
-	}
-	// FIXME: implement other registers as well!
-	return 0xFF;
 }
+
+
 
 
 void vera_write_cpu_register ( int reg, Uint8 data )
 {
 	//increment = (1 << ((data >> 4) - 1)) & 0xFFFF;
-	DEBUGPRINT("VERA: writing register %d with data $%02X" NL, reg & 7, data);
+	DEBUGVERA("VERA: writing register %d with data $%02X" NL, reg & 7, data);
 	switch (reg & 7) {
 		case 0:
 			dataport[current_port].regspace[0] = data;
@@ -307,11 +447,11 @@ void vera_write_cpu_register ( int reg, Uint8 data )
 				current_port = data & 1;
 			break;
 		case 6:
-			ien_reg = data & 7;
+			ien_reg = data & INTERRUPT_REGISTER_MASK;
 			UPDATE_IRQ();
 			break;
 		case 7:
-			isr_reg &= (~data) & 7;
+			isr_reg &= (~data) & INTERRUPT_REGISTER_MASK;
 			UPDATE_IRQ();
 			break;
 	}
@@ -348,16 +488,11 @@ static int scanline;
 static int tile_row;
 static int map_counter;
 
-static int hacky_shit = 0;
 
 
-static void hacky_shitter ( void )
+int vera_dump_vram ( const char *fn )
 {
-	FILE *f = fopen("vmem.dump", "w");
-	if (f) {
-		fwrite(vmem, sizeof vmem, 1, f);
-		fclose(f);
-	}
+	return dump_stuff(fn, vram, VRAM_SIZE);
 }
 
 
@@ -387,21 +522,18 @@ void vera_vsync ( void )
 			ien_reg
 	);
 #endif
-	if (!hacky_shit) {
-		hacky_shit = 1;
-		atexit(hacky_shitter);
-	}
-	isr_reg |= 1;
-	UPDATE_IRQ();
+//	isr_reg |= 1;
+//	UPDATE_IRQ();
+	SET_IRQ(VSYNC_IRQ);
 }
 
 
 // CURRENTLY a hard coded case, for 16 colour text mode using layer-1 only (what is the default used one by the KERNAL/BASIC at least)
 int vera_render_line ( void )
 {
-	Uint8 *v = vmem + layer[0].map_base + map_counter;
+	Uint8 *v = vram + layer[0].map_base + map_counter;
 	for (int x = 0; x < 80; x++) {
-		Uint8 chr = vmem[layer[0].tile_base + ((*v++) << 3) + tile_row];
+		Uint8 chr = vram[layer[0].tile_base + ((*v++) << 3) + tile_row];
 		Uint32 fg = palette.colours[*v & 0xF];
 		Uint32 bg = palette.colours[(*v++) >> 4 ];
 		for (int b = 128; b; b >>= 1) {
@@ -409,8 +541,9 @@ int vera_render_line ( void )
 		}
 	}
 	if (isr_reg & 1) {
-		isr_reg &= ~1;
-		UPDATE_IRQ();
+		//isr_reg &= ~1;
+		//UPDATE_IRQ();
+		CLEAR_IRQ(VSYNC_IRQ);
 	}
 	scanline++;
 	if (tile_row == 7) {
@@ -426,11 +559,15 @@ int vera_render_line ( void )
 }
 
 
-
 void vera_reset ( void )
 {
 	current_port = 0;
 	memset(dataport, 0, sizeof dataport);
+	// Serial stuffs
+	serial.spi_select = 0;
+	sdcard_spi_select(serial.spi_select);
+	serial.spi_received_data = 0xFF;
+	uart_set_baud_divisor((UART_CLOCK / UART_DEFAULT_BAUD_RATE) - 1);
 	// Make sure, that we clear (maybe there was some during the reset request) + disable interrupts ...
 	ien_reg = 0;
 	isr_reg = 0;
@@ -438,8 +575,8 @@ void vera_reset ( void )
 	// Populate the default palette for VERA after reset.
 	border.index = 0;	// update palette step below will take it account then ...
 	for (int a = 0, b = 0; a < 0x100;) {
-		palette.regspace[b++] = default_palette[a  ];
-		palette.regspace[b  ] = default_palette[a++] >> 8;
+		palette.regspace[b++] = x16paldata[a  ];
+		palette.regspace[b  ] = x16paldata[a++] >> 8;
 		update_palette_entry(b++);
 	}
 	// Clear all registers
@@ -479,8 +616,8 @@ void vera_init ( void )
 			}
 	SDL_free(sdl_pix_fmt);	// we don't need this any more
 	sdl_pix_fmt = NULL;
-	// Clear all of vmem
-	memset(vmem, 0xFF, sizeof vmem);
+	// Clear all of vram
+	memset(vram, 0, sizeof vram);
 	// Reset VERA
 	vera_reset();
 }

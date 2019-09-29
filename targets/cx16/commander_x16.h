@@ -29,4 +29,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define ROM_NAME		"#cx16-system.rom"
 
+extern Uint64 all_virt_cycles;
+
+extern int dump_stuff ( const char *fn, void *mem, int size );
+
+
 #endif

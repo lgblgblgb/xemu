@@ -18,15 +18,26 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_LOCAL_VERA_H_INCLUDED
-#define __XEMU_LOCAL_VERA_H_INCLUDED
+#include "xemu/emutools.h"
+//#include "xemu/emutools_files.h"
+#include "sdcard.h"
 
-extern void  vera_init  ( void );
-extern void  vera_reset ( void );
-extern void  vera_write_cpu_register ( int reg, Uint8 data );
-extern Uint8 vera_read_cpu_register  ( int reg );
-extern int   vera_render_line ( void );
-extern void  vera_vsync ( void );
-extern int   vera_dump_vram ( const char *fn );
+static int sd_selected = 0;
+static int select_line_transitions = 0;
 
-#endif
+
+void  sdcard_spi_select ( int select )
+{
+	if (select != sd_selected) {
+		sd_selected = select;
+		select_line_transitions++;
+		DEBUGPRINT("SDCARD: select line goes to %s (#%d)" NL, select ? "high" : "low", select_line_transitions);
+	}
+}
+
+
+Uint8 sdcard_spi_transfer ( Uint8 data )
+{
+	DEBUGPRINT("SDCARD: initiated SPI transfer, MOSI=$%02X" NL, data);
+	return 0xFF;
+}
