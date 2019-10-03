@@ -22,4 +22,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern void bdos_install ( int addr );
 extern int  bdos_handle  ( int addr );
 
+extern int cpm_dma;
+
 #endif

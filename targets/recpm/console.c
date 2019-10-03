@@ -19,7 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "xemu/emutools_hid.h"
 #include "console.h"
-#include "recpm.h"
+#include "hardware.h"
 #include <string.h>
 
 
@@ -61,6 +61,7 @@ static int   serial_delay;
 static Uint8 kbd_queue[16];
 static int   kbd_queue_len;
 static int   kbd_waiting = 0;	// just an indicator [different cursor if we sense console input waiting from program]
+static int   input_waiting;
 
 
 
@@ -150,8 +151,10 @@ int console_input ( void )
 			memmove(kbd_queue, kbd_queue + 1, kbd_queue_len);
 		emu_cost_usecs += serial_delay;
 		return ret;
-	} else
+	} else {
+		input_waiting = 1;
 		return 0;
+	}
 }
 
 
@@ -261,6 +264,7 @@ void emu_callback_key_textinput_sdl  ( SDL_TextInputEvent   *ev )
 	}
 }
 
+
 int console_init ( int width, int height, int zoom_percent, int *map_to_ram, int baud_emu )
 {
 	int screen_width = width * 9;
@@ -283,7 +287,7 @@ int console_init ( int width, int height, int zoom_percent, int *map_to_ram, int
 		palette,			// initialize palette into this stuff
 		RENDER_SCALE_QUALITY,		// render scaling quality
 		USE_LOCKED_TEXTURE,		// 1 = locked texture access
-		NULL				// shutdown function
+		recpm_shutdown_callback		// shutdown function
 	))
 		return 1;
 	hid_init(
@@ -316,7 +320,6 @@ int console_init ( int width, int height, int zoom_percent, int *map_to_ram, int
 	cursor.phase = 1;
 	cursor.phase_counter = 0;
 	cursor.cursor_color = 2;
-	conprintf("re-CP/M: Hello, World! W=%d H=%d\n\r", width, height);
 	SDL_StartTextInput();
 	return 0;
 }

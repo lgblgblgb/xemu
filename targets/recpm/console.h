@@ -39,4 +39,6 @@ extern void console_cursor_blink ( int delay );
 extern void console_iteration ( void );
 extern int  console_init ( int width, int height, int zoom_percent, int *map_to_ram, int baud_emu );
 
+extern void recpm_shutdown_callback ( void );
+
 #endif

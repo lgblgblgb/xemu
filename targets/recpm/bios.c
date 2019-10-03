@@ -18,14 +18,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #include "xemu/emutools.h"
-#include "xemu/z80.h"
 #include "bios.h"
-#include "recpm.h"
+#include "hardware.h"
 #include "console.h"
+#include "bdos.h"
 
 
 static int bios_start;
-static int bios_dma = 0x80;
 
 // Addr must be 256 byte aligned! This is not a need by the func too much, but in general CP/M apps
 // may depend on that (?).
@@ -59,10 +58,12 @@ int bios_handle ( int addr )
 	DEBUG("BIOS: calling function #%d" NL, addr);
 	switch (addr) {
 		case 0:	// BOOT
-			conputs("BOOT BIOS vector. Press a key to exit");
+			conputs("<<BOOT BIOS vector>>");
+			stop_emulation = 1;
 			break;
 		case 1: // WBOOT
-			conputs("WBOOT BIOS vector. Press a key to exit");
+			conputs("<<WBOOT BIOS vector>>");
+			stop_emulation = 1;
 			break;
 		case 2:	// CONST
 			Z80_A = console_status();
@@ -92,7 +93,8 @@ int bios_handle ( int addr )
 		case 11:	// SETSEC, set sector of current drive
 			break;		// ignore
 		case 12:	// SETDMA
-			bios_dma = Z80_BC;
+			cpm_dma = Z80_BC;	// FIXME: is BDOS and BIOS call of setting DMA is the same?!
+			DEBUGPRINT("BIOS: setting DMA to $%04X" NL, cpm_dma);
 			break;
 		case 13:	// READ
 			Z80_A = 1;	// report unrecoverable error, as we don't emulate low level disk access
@@ -108,6 +110,7 @@ int bios_handle ( int addr )
 			break;
 		// The rest is for CP/M 3 BIOS ... Not so much supported ...
 		default:
+			DEBUGPRINT("BIOS: unknown BIOS call #%d, triggering JMP 0" NL, addr);
 			Z80_PC = 0;
 			break;
 	}
