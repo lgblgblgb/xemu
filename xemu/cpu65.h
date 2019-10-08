@@ -57,6 +57,7 @@ struct cpu65_st {
 #ifdef MEGA65
 	Uint8 previous_op;
 	int nmos_mode;
+	int neg_neg_prefix;
 #endif
 #ifdef CPU_65CE02
 	Uint8 z;

@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include <stdio.h>
 #include <limits.h>
+#include <stdlib.h>
 
 #define USE_REGPARM
 
@@ -81,32 +82,40 @@ typedef uint64_t Uint64;
 #endif
 
 #if defined(__EMSCRIPTEN__)
-#	define CC_TYPE "emscripten"
+#	define CC_TYPE "clang-emscripten"
 #elif defined(__clang__)
 #	define CC_TYPE "clang"
 #elif defined(__MINGW64__)
-#	define CC_TYPE "mingw64"
+#	define CC_TYPE "gcc-mingw64"
 #elif defined(__MINGW32__)
-#	define CC_TYPE "mingw32"
+#	define CC_TYPE "gcc-mingw32"
 #elif defined(__GNUC__)
-#	define CC_TYPE "gcc"
+#	define CC_TYPE "gcc-compatible"
 #else
-#	define CC_TYPE "Something"
+#	define CC_TYPE "UNKNOWN-COMPILER"
 #	warning "Unrecognizable C compiler"
 #endif
 
+#define XEMU_UNREACHABLE_FATAL_ERROR()	do { fprintf(stderr, "*** Unreachable code point hit in function %s\n", __func__); exit(1); } while(0)
+
 #ifdef __GNUC__
-#define XEMU_LIKELY(__x__)	__builtin_expect(!!(__x__), 1)
-#define XEMU_UNLIKELY(__x__)	__builtin_expect(!!(__x__), 0)
-#ifdef DO_NOT_FORCE_INLINE
-#define XEMU_INLINE		inline
+#	define XEMU_LIKELY(__x__)	__builtin_expect(!!(__x__), 1)
+#	define XEMU_UNLIKELY(__x__)	__builtin_expect(!!(__x__), 0)
+#	ifdef DO_NOT_FORCE_UNREACHABLE
+#		define XEMU_UNREACHABLE()	XEMU_UNREACHABLE_FATAL_ERROR()
+#	else
+#		define XEMU_UNREACHABLE()	__builtin_unreachable()
+#	endif
+#	ifdef DO_NOT_FORCE_INLINE
+#		define XEMU_INLINE		inline
+#	else
+#		define XEMU_INLINE		__attribute__ ((__always_inline__)) inline
+#	endif
 #else
-#define XEMU_INLINE		__attribute__ ((__always_inline__)) inline
-#endif
-#else
-#define XEMU_LIKELY(__x__)	(__x__)
-#define XEMU_UNLIKELY(__x__)	(__x__)
-#define XEMU_INLINE		inline
+#	define XEMU_LIKELY(__x__)	(__x__)
+#	define XEMU_UNLIKELY(__x__)	(__x__)
+#	define XEMU_INLINE		inline
+#	define XEMU_UNREACHABLE()	XEMU_UNREACHABLE_FATAL_ERROR()
 #endif
 
 #if defined(USE_REGPARM) && defined(__GNUC__) && !defined(__EMSCRIPTEN__)

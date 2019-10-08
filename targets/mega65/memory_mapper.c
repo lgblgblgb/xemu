@@ -830,6 +830,38 @@ void cpu65_write_linear_opcode_callback ( Uint8 data )
 }
 
 
+// FIXME: very ugly and very slow and maybe very buggy implementation! Should be done in a sane way in the next memory decoder version being developmented ...
+Uint32 cpu65_read_linear_long_opcode_callback ( void )
+{
+	register int addr = cpu_get_flat_addressing_mode_address();
+	Uint32 ret = 0;
+	for (int a = 0 ;;) {
+		phys_addr_decoder(addr, MEM_SLOT_CPU_32BIT, MEM_SLOT_CPU_32BIT);
+		ret += CALL_MEMORY_READER(MEM_SLOT_CPU_32BIT, addr);
+		if (a == 3)
+			return ret;
+		addr++;
+		ret <<= 8;
+		a++;
+	}
+}
+
+// FIXME: very ugly and very slow and maybe very buggy implementation! Should be done in a sane way in the next memory decoder version being developmented ...
+void cpu65_write_linear_long_opcode_callback ( Uint32 data )
+{
+	register int addr = cpu_get_flat_addressing_mode_address();
+	for (int a = 0 ;;) {
+		phys_addr_decoder(addr, MEM_SLOT_CPU_32BIT, MEM_SLOT_CPU_32BIT);
+		CALL_MEMORY_WRITER(MEM_SLOT_CPU_32BIT, addr, data & 0xFF);
+		if (a == 3)
+			break;
+		addr++;
+		data >>= 8;
+		a++;
+	}
+}
+
+
 /* DMA related call-backs. We use a dedicated memory mapper "slot" for each DMA functions.
    Source can be _written_ too (in case of SWAP operation for example). There are dedicated
    slots for each functionality, so we don't need to re-map physical address again and again,
