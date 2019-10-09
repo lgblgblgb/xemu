@@ -20,3 +20,4 @@ tvc22_d4_64k.rom		http://github.lgb.hu/xemu/files/tvc22_d4_64k.rom						8192
 tvc22_d6_64k.rom		http://github.lgb.hu/xemu/files/tvc22_d6_64k.rom						8192
 tvc22_d7_64k.rom		http://github.lgb.hu/xemu/files/tvc22_d7_64k.rom						8192
 tvc_sddos.rom			http://github.lgb.hu/xemu/files/tvc_sddos.rom							40960
+c900-boot-combined.rom		http://github.lgb.hu/xemu/files/c900-boot-combined.rom						32768
