@@ -1796,10 +1796,9 @@ int cpu65_step (
 				OPC_65CE02("NEG-NEG-NOP");
 				goto do_not_reset_neg_neg_prefix;	// FIXME: NEG NEG NOP sequence, should we treat ALSO as EOM that NOP and execute the nop callback above in that case?
 			}
-#else
+#endif
 			OPC_65CE02("EOM");
 			cpu65_do_nop_callback();
-#endif
 #endif
 			break;
 	case 0xEB:	/* 65C02: NOP (nonstd loc, implied), 65CE02: ROW $nnnn Rotate word LEFT?! [other documents says RIGHT!!! FIXME] */
