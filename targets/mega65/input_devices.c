@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "io_mapper.h"
 #include "xemu/cpu65.h"
+#include "hypervisor.h"
 
 
 #define DEBUGKBD(...)		DEBUG(__VA_ARGS__)
@@ -66,6 +67,8 @@ static struct {
 	Uint8	next;
 	Uint8	last;
 } hwa_kbd;
+
+static int restore_is_held = 0;
 
 
 /* used by actual I/O function to read $D610 */
@@ -156,6 +159,35 @@ Uint8 cia1_in_a ( void )
 }
 
 
+void kbd_trigger_restore_trap ( void )
+{
+	if (XEMU_UNLIKELY(restore_is_held)) {
+		restore_is_held++;
+		if (restore_is_held >= 20) {
+			restore_is_held = 0;
+			if (!in_hypervisor) {
+				DEBUGPRINT("KBD: RESTORE trap has been triggered." NL);
+				KBD_RELEASE_KEY(RESTORE_KEY_POS);
+				hypervisor_enter(TRAP_RESTORE);
+			} else
+				DEBUGPRINT("KBD: *IGNORING* RESTORE trap trigger, already in hypervisor mode!" NL);
+		}
+	}
+}
+
+
+static void kbd_trigger_alttab_trap ( void )
+{
+	KBD_RELEASE_KEY(TAB_KEY_POS);
+	//KBD_RELEASE_KEY(ALT_KEY_POS);
+	//hwa_kbd.modifiers &= ~MODKEY_ALT;
+	if (!in_hypervisor) {
+		DEBUGPRINT("KBD: ALT-TAB trap has been triggered." NL);
+		hypervisor_enter(TRAP_ALTTAB);
+	} else
+		DEBUGPRINT("KBD: *IGNORING* ALT-TAB trap trigger, already in hypervisor mode!" NL);
+}
+
 
 // Called by emutools_hid!!! to handle special private keys assigned to this emulator
 int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
@@ -175,6 +207,17 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 	;
 	DEBUGKBD("KBD: HWA: pos = %d sdl_key = %d, pressed = %d, handled = %d" NL, pos, key, pressed, handled);
 	if (pressed) {
+		// check if we have the ALT-TAB trap triggered (TAB is pressed now, and ALT is hold)
+		if (pos == TAB_KEY_POS && (hwa_kbd.modifiers & MODKEY_ALT)) {
+			kbd_trigger_alttab_trap();
+			return 0;
+		}
+		// RESTORE triggered trap is different as it depends on timing (how long it's pressed)
+		// So we just flag this, and the main emulation loop need to increment the value to see if the long press event comes, and trigger the trap.
+		// This is done by main emulation loop calling kbd_trigger_restore_trap() function, see above in this very source.
+		// Please note about the pair of this condition below with the "else" branch of the "pressed" condition.
+		if (pos == RESTORE_KEY_POS)
+			restore_is_held = 1;
 	        // Check to be sure, some special Xemu internal stuffs uses kbd matrix positions does not exist for real
 		if (pos >= 0 && pos < 0x100)
 			hwa_kbd_convert_and_push(pos);
@@ -188,6 +231,8 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			DEBUGPRINT("UI: mouse grab cancelled" NL);
 		}
 	} else {
+		if (pos == RESTORE_KEY_POS)
+			restore_is_held = 0;
 		if (pos == -2 && key == 0) {	// special case pos = -2, key = 0, handled = mouse button (which?) and release event!
 			if ((handled == SDL_BUTTON_LEFT) && set_mouse_grab(SDL_TRUE)) {
 				OSD(-1, -1, "Mouse grab activated. Press\nboth SHIFTs together to cancel.");

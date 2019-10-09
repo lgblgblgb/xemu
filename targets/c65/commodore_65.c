@@ -277,20 +277,13 @@ int fdc_cb_wr_sec ( Uint8 *buffer, int d81_offset ) {
 }
 
 
-static int detect_rom_version ( Uint8 *s )
+static int c65_load_rom ( const char *fn, unsigned int dma_rev )
 {
-	if (s[0] == 0x56) {	// 'V'
-		int version = 0;
-		for (int a = 0; a < 6; a++) {
-			s++;
-			if (*s >= '0' && *s <= '9')
-				version = version * 10 + *s - '0';
-			else
-				return 0;
-		}
-		return (version >= C65_ROM_MINIMAL_VERSION_DATE && version <= C65_ROM_MAXIMAL_VERSION_DATE) ? version : 0;
-	} else
-		return 0;
+	if (xemu_load_file(fn, memory + 0x20000, 0x20000, 0x20000, "Cannot load C65 ROM, which is needed for the emulation") != 0x20000)
+		return -1;
+	if ((dma_rev & 0xFF) == 2)
+		dma_init_set_rev(dma_rev, memory + 0x20000 + 0x16);
+	return 0;
 }
 
 
@@ -317,15 +310,6 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		hostfs_init(sdl_pref_dir, "hostfs");
 	// *** Init memory space
 	memset(memory, 0xFF, sizeof memory);
-	// *** Load ROM image
-	p = xemucfg_get_str("rom");
-	if (xemu_load_file(p, memory + 0x20000, 0x20000, 0x20000, "Selected C65 system ROM is needed for Xemu") < 0)
-		XEMUEXIT(1);
-	int rom_version = detect_rom_version(memory + 0x20000 + 0x16);
-	if (rom_version)
-		DEBUGPRINT("ROM: version string = V%d" NL, rom_version);
-	else
-		WARNING_WINDOW("Warning: unknown ROM version (no valid VXXXXXX date string at offset $10?)");
 	// *** Initialize VIC3
 	vic3_init();
 	// *** Memory configuration
@@ -352,18 +336,10 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	// *** Initialize DMA
-	if ((xemucfg_get_num("dmarev") & 0xFF) == 2) {
-		if (rom_version) {
-			int dma_version_detect = rom_version >= C65_ROM_DMA_R2_VERSION_DATE ? 1 : 0;
-			DEBUGPRINT("DMA: according to ROM version and requested auto-detection (-dmarev 2), DMA rev #%d will be used" NL, dma_version_detect);
-			dma_init(dma_version_detect | (xemucfg_get_num("dmarev") & (~0xFF)));
-		} else {
-			ERROR_WINDOW("ROM version auto-detect requested for DMA (-dmarev 2), but cannot detect version\nThese can lead to serious issues, you must use proper ROM or manually set DMA revision!");
-			dma_init(0 | (xemucfg_get_num("dmarev") & (~0xFF)));
-		}
-	} else {
-		dma_init(xemucfg_get_num("dmarev"));
-	}
+	dma_init(xemucfg_get_num("dmarev") & 0xFF00);				// initial DMA revision will be zero ...
+	// *** Load ROM image
+	if (c65_load_rom(xemucfg_get_str("rom"), xemucfg_get_num("dmarev")))	// ... but this overrides the DMA revision!
+		XEMUEXIT(1);
 	// Initialize FDC
 	fdc_init(disk_cache);
 	// Initialize D81 access abstraction for FDC

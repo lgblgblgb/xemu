@@ -19,12 +19,17 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_HYPERVISOR_MEGA65_H_INCLUDED
 #define __XEMU_HYPERVISOR_MEGA65_H_INCLUDED
 
+#define TRAP_RESET	0x40
+#define TRAP_RESTORE	0x42
+#define TRAP_ALTTAB	0x43
+
 extern int   in_hypervisor;
 
 extern int  hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hypervisor_serial_out_asciizer );
 extern void hypervisor_debug ( void );
 
 extern void hypervisor_enter ( int trapno );
+extern int  hypervisor_queued_enter ( int trapno );
 extern void hypervisor_start_machine ( void );
 extern void hypervisor_leave ( void );
 extern void hypervisor_serial_monitor_push_char ( Uint8 chr );

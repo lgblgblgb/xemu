@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -27,5 +27,7 @@ extern int   emu_callback_key  ( int pos, SDL_Scancode key, int pressed, int han
 extern Uint8 hwa_kbd_get_last      ( void );
 extern Uint8 hwa_kbd_get_modifiers ( void );
 extern void  hwa_kbd_move_next     ( void );
+
+extern void  kbd_trigger_restore_trap ( void );
 
 #endif

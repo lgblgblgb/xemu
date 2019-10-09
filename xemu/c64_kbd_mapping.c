@@ -21,11 +21,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_hid.h"
 #include "xemu/c64_kbd_mapping.h"
 
-/* Definitions for "C64-like" systems (ie: C64, C65, M65). FIXME:
-	* This is _POSITIONAL_ mapping (not symbolic), assuming US keyboard layout for the host machine (ie: the machine you run this emulator)
-	* Only 8*8 matrix is emulated currently, on C65/M65 there is an "extra" line it seems, not handled yet!
+/* Definitions for "C64-like" systems (ie: C64, C65, M65).
 	* I was lazy to map some keys, see in the comments :)
 	* The mapping should be revised at some point, this was only a quick setup without too much work since then ...
+	* ... but anyway it's only a default map anyway, since HID can load custom keymaps now!
 */
 
 // Comments on this table: for uncommented lines, it's a kinda trivial mapping, like '3' on PC is for sure, '3' on C64 ...
@@ -122,9 +121,9 @@ const struct KeyMappingDefault c64_key_map[] = {
 #ifdef C65_KEYBOARD
 	// C65 (and thus M65 too) keyboard is basically the same as C64, however there are extra keys which are handled differently than the "C64-compatible" keys.
 	// Thus, if requested with macro C65_KEYBOARD defined, we have some extra "virtual" matrix positions for those keys here.
-	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + 0, "NOSCROLL" },//NO SCROLL: FIXME: where should we map this key to?
-	{ SDL_SCANCODE_TAB,		C65_KEYBOARD_EXTRA_POS + 1, "TAB" },	// TAB
-	{ SDL_SCANCODE_RALT,		C65_KEYBOARD_EXTRA_POS + 2, "ALT" },	// ALT on C65: right alt (AltGr) on PC [left ALT on PC is used as the commodore key]
+	{ SDL_SCANCODE_UNKNOWN,		SCRL_KEY_POS, "NOSCROLL" },		// NO SCROLL: FIXME: where should we map this key to?
+	{ SDL_SCANCODE_TAB,		TAB_KEY_POS, "TAB" },			// TAB
+	{ SDL_SCANCODE_RALT,		ALT_KEY_POS, "ALT" },			// ALT on C65: right alt (AltGr) on PC [left ALT on PC is used as the commodore key]
 	{ SDL_SCANCODE_PAGEUP,		C65_KEYBOARD_EXTRA_POS + 3, "HELP" },	// HELP: FIXME: where should we map this key to?
 	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + 4, "F9" },	// F9/F10: FIXME: where should we map this key to?
 	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + 5, "F11" },	// F11/F12: FIXME: where should we map this key to?
@@ -147,7 +146,7 @@ void c64_toggle_joy_emu ( void )
 	else if (joystick_emu == 2)
 		joystick_emu = 1;
 	if (joystick_emu)
-		printf("Joystick emulation for Joy#%d" NL, joystick_emu);
+		DEBUGPRINT("Joystick emulation for Joy#%d" NL, joystick_emu);
 }
 
 
