@@ -15,17 +15,29 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
+#ifndef __COMMON_EMUTOOLS_GUI_H_INCLUDED
+#define __COMMON_EMUTOOLS_GUI_H_INCLUDED
 
-/* ----------------------------- NO GUI IS AVAILABLE ---------------------- */
+#define XEMUGUI_FSEL_DIRECTORY		0
+#define XEMUGUI_FSEL_OPEN		1
+#define XEMUGUI_FSEL_SAVE		2
+#define XEMUGUI_FSEL_FLAG_STORE_DIR	0x100
 
-
-static const struct xemugui_descriptor_st xemunullgui_descriptor = {
-	"none",						// name
-	"Not using GUI - the null GUI :)",		// desc
-	NULL,						// init
-	NULL,						// shutdown
-	NULL,						// iteration
-	NULL,						// file_selector
-	NULL						// xemugtkgui
+struct menu_st {
+	const char *name;
+	enum {
+		CALLABLE, SUBMENU, TITLE, SEPARATOR
+	} type;
+	const void *handler;
+	const void *user_data;
 };
 
+extern int is_xemungui_ok;
+
+extern int  xemugui_init		( const char *name );
+extern void xemugui_shutdown		( void );
+extern int  xemugui_iteration		( void );
+extern int  xemugui_file_selector	( int dialog_mode, const char *dialog_title, char *default_dir, char *selected, int path_max_size );
+extern int  xemugui_popup		( const struct menu_st desc[] );
+
+#endif

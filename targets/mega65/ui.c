@@ -19,74 +19,70 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
 #include "ui.h"
-#include "xemu/emutools_nativegui.h"
+#include "xemu/emutools_gui.h"
 #include "mega65.h"
 #include "xemu/emutools_files.h"
 #include "xemu/d81access.h"
 #include "sdcard.h"
 
 
-#if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_NATIVEGUI)
+//#if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_GUI)
 
-static void attach_d81 ( const char *fn )
+static int attach_d81 ( const char *fn )
 {
 	if (fd_mounted) {
-		if (mount_external_d81(fn, 0))
+		if (mount_external_d81(fn, 0)) {
 			ERROR_WINDOW("Mount failed for some reason.");
-	} else
+			return 1;
+		} else {
+			DEBUGPRINT("UI: file seems to be mounted successfully as D81: %s" NL, fn);
+			return 0;
+		}
+	} else {
 		ERROR_WINDOW("Cannot mount external D81, since Mega65 was not instructed to mount any FD access yet.");
+		return 1;
+	}
 }
 
 
-// #if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_NATIVEGUI_C)
-#endif
+// end of #if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_GUI_C)
+//#endif
 
 
 #ifdef CONFIG_DROPFILE_CALLBACK
 void emu_dropfile_callback ( const char *fn )
 {
 	DEBUGPRINT("UI: drop event, file: %s" NL, fn);
-	int ret = xemu_load_file(fn, NULL, 10, D81_SIZE, "Cannot load and/or process the dropped file.");
-	DEBUGPRINT("BUFFER=%p" NL, xemu_load_buffer_p);
-	if (ret >= 0) {
-		if (ret == 128 * 1024) {
-			INFO_WINDOW("Maybe ROM image?");
-		}
-		free(xemu_load_buffer_p);
-		// !!! buffer is not valid anymore, only things can go below, who does not need to access the loaded buffer which is lost now!
-		if (ret == D81_SIZE) {
-			if (ARE_YOU_SURE("According to its size, the dropped file can be a D81 image. Shall I mount it for you?")) {
-				attach_d81(fn);
-			}
-		}
-	}
+	if (ARE_YOU_SURE("Shall I try to mount the dropped file as D81 for you?"))
+		attach_d81(fn);
 }
 #endif
 
 
-#ifdef XEMU_NATIVEGUI
 
 
 static void attach_d81_by_browsing ( void )
 {
 	char fnbuf[PATH_MAX + 1];
 	static char dir[PATH_MAX + 1] = "";
-	if (!xemunativegui_file_selector(
-		XEMUNATIVEGUI_FSEL_OPEN | XEMUNATIVEGUI_FSEL_FLAG_STORE_DIR,
+	if (!xemugui_file_selector(
+		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
 		"Select D81 to attach",
 		dir,
 		fnbuf,
 		sizeof fnbuf
 	))
 		attach_d81(fnbuf);
+	else
+		DEBUGPRINT("UI: file selection for D81 mount was cancalled." NL);
 }
 
 
 
-void ui_enter ( void )
+
+static void do_menu ( int n )
 {
-	DEBUGPRINT("UI: right-click" NL);
-	switch (QUESTION_WINDOW("Reset|Quit|Fullscr|Pref.dir|Console|Attach D81", "Xemu Quick Task Menu")) {
+	switch (n) {
 		case 0:
 			reset_mega65();
 			break;
@@ -115,9 +111,39 @@ void ui_enter ( void )
 	}
 }
 
-// #ifdef XEMU_NATIVEGUI_C
-#else
-void ui_enter ( void ) {
-	DEBUGPRINT("UI: no menu handler is implemented :(" NL);
+
+static void menuitem_response( struct menu_st *m )
+{
+	do_menu((int)(uintptr_t)m->user_data);
 }
+
+
+/*
+static const struct menu_st menu_subsystem[] = {
+	{ "ItemSub1", CALLABLE, menuitem_response,"SUB1" },
+	{ "ItemSub2", CALLABLE, menuitem_response,"SUB2" },
+	{ NULL }
+};
+*/
+
+static const struct menu_st menu_system[] = {
+	{ "Reset M65",  CALLABLE, menuitem_response, (void*)0 },
+	{ "Fullscreen", CALLABLE, menuitem_response, (void*)2 },
+	{ "Attach D81", CALLABLE, menuitem_response, (void*)5 },
+	{ "Browse dir", CALLABLE, menuitem_response, (void*)3 },
+#ifdef _WIN32
+	{ "Console on/off", CALLABLE, menuitem_response, (void*)4 },
 #endif
+	{ "Quit", CALLABLE, menuitem_response, (void*)1 },
+	{ NULL }
+};
+
+
+void ui_enter ( void )
+{
+	DEBUGPRINT("UI: handler has been called." NL);
+	if (xemugui_popup(menu_system)) {
+		DEBUGPRINT("UI: GUI POPUP seems to be not working, using a question window instead ..." NL);
+		do_menu(QUESTION_WINDOW("Reset|Quit|Fullscr|Pref.dir|Console|Attach D81", "Xemu Quick Task Menu"));
+	}
+}

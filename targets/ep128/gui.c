@@ -25,4 +25,4 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "screen.h"
 
 #include "gui.h"
-#include "xemu/emutools_nativegui.c"
+#include "xemu/emutools_gui.c"

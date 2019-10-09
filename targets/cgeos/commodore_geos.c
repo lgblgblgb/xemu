@@ -797,6 +797,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	xemucfg_define_str_option("geosimg", NULL, "Select GEOS disk image to use (NOT USED YET!)");
 	xemucfg_define_str_option("geoskernal", "#geos-kernal.bin", "Select GEOS KERNAL to use");
+	xemucfg_define_str_option("drive", NULL, "Path/name of a D81 GEOS will see as the disk drive");
 	xemucfg_define_str_option("rombasic", "#c64-basic.rom", "Select BASIC ROM to use");
 	xemucfg_define_str_option("romchar", "#c64-chargen.rom", "Select CHARACTER ROM to use");
 	xemucfg_define_str_option("romkernal", "#c64-kernal.rom", "Select KERNAL ROM to use");

@@ -37,7 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "ethernet65.h"
 #include "input_devices.h"
 #include "memcontent.h"
-#include "xemu/emutools_nativegui.h"
+#include "xemu/emutools_gui.h"
 
 
 static SDL_AudioDeviceID audio = 0;
@@ -458,7 +458,7 @@ void reset_mega65 ( void )
 static void update_emulator ( void )
 {
 	hid_handle_all_sdl_events();
-	xemunativegui_iteration();
+	xemugui_iteration();
 	nmi_set(IS_RESTORE_PRESSED(), 2);	// Custom handling of the restore key ...
 	// this part is used to trigger 'RESTORE trap' with long press on RESTORE.
 	// see input_devices.c for more information
@@ -667,6 +667,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("forcerom", "Re-fill 'ROM' from external source on start-up, requires option -loadrom <filename>");
 	xemucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used");
 	xemucfg_define_num_option("sdhc", 1, "Use SDHC mode for SD-card (1) or not (0).");
+	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
 #ifdef FAKE_TYPING_SUPPORT
 	xemucfg_define_switch_option("go64", "Go into C64 mode after start (with auto-typing, can be combined with -autoload)");
 	xemucfg_define_switch_option("autoload", "Load and start the first program from disk (with auto-typing, can be combined with -go64)");
@@ -716,7 +717,7 @@ int main ( int argc, char **argv )
 	))
 		return 1;
 	osd_init_with_defaults();
-	xemunativegui_init();
+	xemugui_init(xemucfg_get_str("gui"));
 	// Initialize Mega65
 	mega65_init(
 		SID_CYCLES_PER_SEC,		// SID cycles per sec

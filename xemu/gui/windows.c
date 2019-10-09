@@ -18,22 +18,24 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* ---------------------------------------- Windows STUFFS based on Win32 native APIs ---------------------------------------- */
 
+#include <windows.h>
 
-int xemunativegui_init ( void )
+
+static int xemuwingui_init ( void )
 {
-	DEBUGPRINT("NATIVEGUI: windows GUI is being used." NL);
-	is_xemunativegui_ok = 1;
+	is_xemugui_ok = 1;
 	return 0;
 }
 
 
-int xemunativegui_iteration ( void )
+#if 0
+static int xemuwingui_iteration ( void )
 {
 	return 0;
 }
+#endif
 
-
-int xemunativegui_file_selector ( int dialog_mode, const char *dialog_title, char *default_dir, char *selected, int path_max_size )
+static int xemuwingui_file_selector ( int dialog_mode, const char *dialog_title, char *default_dir, char *selected, int path_max_size )
 {
 	int res;
 	OPENFILENAME ofn;		// common dialog box structure
@@ -54,12 +56,23 @@ int xemunativegui_file_selector ( int dialog_mode, const char *dialog_title, cha
 	if (res) {
 		int err = CommDlgExtendedError();
 		*selected = '\0';
-		DEBUG("GUI: file selector (Windows) error code: %04Xh for HWND owner %p" NL, err, ofn.hwndOwner);
+		DEBUGGUI("GUI: file selector (Windows) error code: %04Xh for HWND owner %p" NL, err, ofn.hwndOwner);
 		if (err)
 			ERROR_WINDOW("Windows CommDlgExtendedError: %04Xh for HWND owner %p", err, ofn.hwndOwner);
 	} else
 		store_dir_from_file_selection(default_dir, selected, dialog_mode);
-	xemunativegui_iteration();
+	//xemunativegui_iteration();
 	xemu_drop_events();
 	return res;
 }
+
+
+static const struct xemugui_descriptor_st xemuwingui_descriptor = {
+	"windows",					// name
+	"Windows API based Xemu UI implementation",	// desc
+	xemuwingui_init,
+	NULL,						// shutdown (we don't need shutdown for windows?)
+	NULL,						// iteration (we don't need iteration for windows?)
+	xemuwingui_file_selector,
+	NULL						// popup FIXME: not implemented yet!
+};
