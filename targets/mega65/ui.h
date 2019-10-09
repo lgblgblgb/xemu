@@ -1,6 +1,6 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2016,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
+/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,13 +16,9 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#define xemu_drop_events sdl_burn_events
+#ifndef __XEMU_MEGA65_UI_H_INCLUDED
+#define __XEMU_MEGA65_UI_H_INCLUDED
 
-// FIXME: very ugly hack, EP128 emulator sill uses its own things, we have to deal with ...
+extern void ui_enter ( void );
 
-#define DO_NOT_INCLUDE_EMUTOOLS
-#include "xep128.h"
-#include "screen.h"
-
-#include "gui.h"
-#include "xemu/emutools_gui.c"
+#endif

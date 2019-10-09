@@ -47,10 +47,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMU_MAIN_LOOP(func,p1,p2) for (;;) func()
 #endif
 
-extern void sysconsole_open  ( void );
-extern void sysconsole_close ( const char *waitmsg );
+extern void sysconsole_open   ( void );
+extern void sysconsole_close  ( const char *waitmsg );
+extern int  sysconsole_toggle ( int set );
 #ifdef HAVE_XEMU_SOCKET_API
-extern int  xemu_use_sockapi ( void );
+extern int  xemu_use_sockapi  ( void );
 extern void xemu_free_sockapi ( void );
 #endif
 
@@ -103,6 +104,10 @@ static XEMU_INLINE int CHECK_SNPRINTF( int ret, int limit )
 
 extern int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg );
 #define QUESTION_WINDOW(items, msg) _sdl_emu_secured_modal_box_(items, msg)
+
+static inline int ARE_YOU_SURE ( const char *s ) {
+	return (QUESTION_WINDOW("YES|NO", (s != NULL && *s != '\0') ? s : "Are you sure?") == 0);
+}
 
 extern char *sdl_window_title;
 extern char *window_title_custom_addon;

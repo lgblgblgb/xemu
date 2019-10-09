@@ -6,7 +6,7 @@ clcd-u102.rom			http://github.lgb.hu/xemu/files/kizapr-u102.bin							32768
 clcd-u104.rom			http://github.lgb.hu/xemu/files/sept-M-13apr-u104.bin						32768
 clcd-u103.rom			http://github.lgb.hu/xemu/files/sizapr-u103.bin							32768
 clcd-chargen.rom		http://github.lgb.hu/xemu/files/clcd-chargen.rom						4096
-c65-system.rom			http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c65/910111-390488-01.bin		131072
+c65-system.rom			http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c65/911001.bin			131072
 c64-chargen.rom			http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c64/characters.901225-01.bin		4096
 c64-kernal.rom			http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c64/kernal.901227-03.bin		8192
 c64-basic.rom			http://www.zimmers.net/anonftp/pub/cbm/firmware/computers/c64/basic.901226-01.bin		8192
@@ -20,8 +20,4 @@ tvc22_d4_64k.rom		http://github.lgb.hu/xemu/files/tvc22_d4_64k.rom						8192
 tvc22_d6_64k.rom		http://github.lgb.hu/xemu/files/tvc22_d6_64k.rom						8192
 tvc22_d7_64k.rom		http://github.lgb.hu/xemu/files/tvc22_d7_64k.rom						8192
 tvc_sddos.rom			http://github.lgb.hu/xemu/files/tvc_sddos.rom							40960
-mega65-banner.m65		http://github.lgb.hu/xemu/files/mega65-banner.m65						21248
-mega65-diskmenu_c000.bin	http://github.lgb.hu/xemu/files/mega65-diskmenu_c000.bin					4069
-mega65-kickup.list		http://github.lgb.hu/xemu/files/mega65-kickup.list						0
-mega65-kickup.m65		http://github.lgb.hu/xemu/files/mega65-kickup.m65						16384
 c900-boot-combined.rom		http://github.lgb.hu/xemu/files/c900-boot-combined.rom						32768

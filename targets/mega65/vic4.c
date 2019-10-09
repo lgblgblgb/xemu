@@ -70,7 +70,6 @@ static int vic2_chrp_method = 1;
 //#define CHECK_PIXEL_POINTER
 
 
-
 #ifdef CHECK_PIXEL_POINTER
 /* Temporary hack to be used in renders. Asserts out-of-texture accesses */
 static Uint32 *pixel_pointer_check_base;
@@ -585,11 +584,11 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 		)) {
 			if (vidp[0] == 0xFF && vidp[1] == 0xFF) {
 				// end of line marker, let's use background to fill the rest of the line ...
-				// FIXME: however in the current situation we can't do that since of the "fixed" line length for 80 or 40 chars ... :(
+				// FIXME: however in the current situation we can't do that because of the "fixed" line length for 80 or 40 chars ... :(
 				p += xlim == 39 ? 16 : 8;	// so we just ignore ... FIXME !!
 			} else {
 				int a;
-				Uint8 *cp = main_ram + (((vidp[0] << 6) + (charline << 3) + (vidp[1] << 14)) & 0x1ffff); // and-mask: wrap-around in 128K of chip-RAM
+				Uint8 *cp = main_ram + (((vidp[0] << 6) + (charline << 3) + (vidp[1] << 14)) & 0x7ffff); // and-mask: wrap-around @ 512K of RAM [though only 384K is used by M65]
 				for (a = 0; a < 8; a++) {
 					if (xlim != 79)
 						*(p++) = palette[*cp];

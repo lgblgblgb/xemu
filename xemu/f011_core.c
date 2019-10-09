@@ -238,7 +238,7 @@ void fdc_write_reg ( int addr, Uint8 data )
 			if (data & 16) {
 				DEBUG("FDC: WARN: SWAP bit emulation is experimental!" NL);
 				if (warn_swap_bit) {
-					INFO_WINDOW("FDC SWAP bit emulation is experimental! There will be no further warnings on this.");
+					DEBUGPRINT("FDC: warning: SWAP bit emulation is experimental! There will be no further warnings on this." NL);
 					warn_swap_bit = 0;
 				}
 				swap_mask = 0x100;

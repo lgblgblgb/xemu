@@ -37,6 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "ethernet65.h"
 #include "input_devices.h"
 #include "memcontent.h"
+#include "xemu/emutools_gui.h"
 
 
 static SDL_AudioDeviceID audio = 0;
@@ -85,7 +86,7 @@ void machine_set_speed ( int verbose )
 	//if (desired == current_speed_config)
 	//	return;
 	if (verbose)
-		printf("SPEED: in_hypervisor=%d force_fast=%d c128_fast=%d, c65_fast=%d m65_fast=%d" NL,
+		DEBUGPRINT("SPEED: in_hypervisor=%d force_fast=%d c128_fast=%d, c65_fast=%d m65_fast=%d" NL,
 			in_hypervisor, force_fast, (c128_d030_reg & 1) ^ 1, vic_registers[0x31] & 64, vic_registers[0x54] & 64
 	);
 	speed_wanted = (in_hypervisor || force_fast) ? 7 : (((c128_d030_reg & 1) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
@@ -235,11 +236,14 @@ static Uint8 rom_init_image[0x20000];
 static Uint8 c000_init_image[0x1000];
 
 
+//#define BANNER_MEM_ADDRESS	0x3D00
+#define BANNER_MEM_ADDRESS	(0x58000 - 3*256)
+
 static void refill_memory_from_preinit_cache ( void )
 {
 	memcpy(char_wom, meminitdata_chrwom, MEMINITDATA_CHRWOM_SIZE);
 	memcpy(colour_ram, meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
-	memcpy(main_ram +  0x3D00, meminitdata_banner, MEMINITDATA_BANNER_SIZE);
+	memcpy(main_ram +  BANNER_MEM_ADDRESS, meminitdata_banner, MEMINITDATA_BANNER_SIZE);
 	memcpy(main_ram + 0x20000, rom_init_image, sizeof rom_init_image);
 	memcpy(hypervisor_ram, meminitdata_kickstart, MEMINITDATA_KICKSTART_SIZE);
 	memcpy(main_ram +  0xC000, c000_init_image, sizeof c000_init_image);
@@ -313,7 +317,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// without restarting Xemu for that purpose.
 	refill_memory_from_preinit_cache();
 	// *** Image file for SDCARD support
-	if (sdcard_init(xemucfg_get_str("sdimg"), xemucfg_get_str("8"), xemucfg_get_bool("sdhc")) < 0)
+	if (sdcard_init(xemucfg_get_str("sdimg"), xemucfg_get_str("8"), xemucfg_get_num("sdhc")) < 0)
 		FATAL("Cannot find SD-card image (which is a must for Mega65 emulation): %s", xemucfg_get_str("sdimg"));
 	// *** Initialize VIC4
 	vic_init();
@@ -454,6 +458,7 @@ void reset_mega65 ( void )
 static void update_emulator ( void )
 {
 	hid_handle_all_sdl_events();
+	xemugui_iteration();
 	nmi_set(IS_RESTORE_PRESSED(), 2);	// Custom handling of the restore key ...
 	// this part is used to trigger 'RESTORE trap' with long press on RESTORE.
 	// see input_devices.c for more information
@@ -655,13 +660,14 @@ int main ( int argc, char **argv )
 	xemucfg_define_num_option("kicked", 0x0, "Answer to KickStart upgrade (128=ask user in a pop-up window)");
 	xemucfg_define_str_option("kickup", NULL, "Override path of external KickStart to be used");
 	xemucfg_define_str_option("kickuplist", NULL, "Set path of symbol list file for external KickStart");
-	xemucfg_define_str_option("loadbanner", NULL, "Load initial memory content for banner (to $3D00)");
+	xemucfg_define_str_option("loadbanner", NULL, "Load initial memory content for banner");
 	xemucfg_define_str_option("loadc000", NULL, "Load initial memory content at $C000 (usually disk mounter)");
 	xemucfg_define_str_option("loadcram", NULL, "Load initial content (32K) into the colour RAM");
 	xemucfg_define_str_option("loadrom", NULL, "Preload C65 ROM image (you may need the -forcerom option to prevent KickStart to re-load from SD)");
 	xemucfg_define_switch_option("forcerom", "Re-fill 'ROM' from external source on start-up, requires option -loadrom <filename>");
 	xemucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used");
-	xemucfg_define_switch_option("sdhc", "Use SDHC mode for SD-card (will be auto-applied if card is 2-32Gbytes)");
+	xemucfg_define_num_option("sdhc", 1, "Use SDHC mode for SD-card (1) or not (0).");
+	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
 #ifdef FAKE_TYPING_SUPPORT
 	xemucfg_define_switch_option("go64", "Go into C64 mode after start (with auto-typing, can be combined with -autoload)");
 	xemucfg_define_switch_option("autoload", "Load and start the first program from disk (with auto-typing, can be combined with -go64)");
@@ -673,7 +679,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("skipunhandledmem", "Do not panic on unhandled memory access (hides problems!!)");
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
 #ifdef HAVE_XEMU_UMON
-	xemucfg_define_num_option("umon", 0, "TCP-based dual mode (http and text) monitor port number [NOT YET WORKING]");
+	xemucfg_define_num_option("umon", 0, "TCP-based dual mode (http / text) monitor port number [NOT YET WORKING]");
 #endif
 #ifdef HAVE_XEMU_INSTALLER
 	xemucfg_define_str_option("installer", NULL, "Sets a download-specification descriptor file for auto-downloading data files");
@@ -682,13 +688,13 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("ethertap", NULL, "Enable ethernet emulation, parameter is the already configured TAP device name");
 #endif
 	xemucfg_define_switch_option("nonewhack", "Disables the preliminary NEW M65 features (Xemu will fail to use built-in KS and newer external KS too!)");
+#ifdef HID_KBD_MAP_CFG_SUPPORT
+	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
+#endif
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(xemucfg_get_str("installer"));
-#endif
-#ifdef HID_KBD_MAP_CFG_SUPPORT
-	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
 #endif
 	newhack = !xemucfg_get_bool("nonewhack");
 	if (newhack)
@@ -711,13 +717,14 @@ int main ( int argc, char **argv )
 	))
 		return 1;
 	osd_init_with_defaults();
+	xemugui_init(xemucfg_get_str("gui"));
 	// Initialize Mega65
 	mega65_init(
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
 		AUDIO_SAMPLE_FREQ		// sound mix freq
 	);
 	skip_unhandled_mem = xemucfg_get_bool("skipunhandledmem");
-	printf("UNHANDLED memory policy: %d" NL, skip_unhandled_mem);
+	DEBUGPRINT("MEM: UNHANDLED memory policy: %d" NL, skip_unhandled_mem);
 	eth65_init(
 #ifdef HAVE_ETHERTAP
 		xemucfg_get_str("ethertap")
@@ -832,12 +839,12 @@ int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 
 int m65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
-	printf("SNAP: loaded (finalize-callback: begin)" NL);
+	DEBUGPRINT("SNAP: loaded (finalize-callback: begin)" NL);
 	memory_set_vic3_rom_mapping(vic_registers[0x30]);
 	memory_set_do_map();
 	force_fast = force_fast_loaded;	// force_fast is handled through different places, so we must have a "finalize" construct and saved separately to have the actual effect ...
 	machine_set_speed(1);
-	printf("SNAP: loaded (finalize-callback: end)" NL);
+	DEBUGPRINT("SNAP: loaded (finalize-callback: end)" NL);
 	OSD(-1, -1, "Snapshot has been loaded.");
 	return 0;
 }

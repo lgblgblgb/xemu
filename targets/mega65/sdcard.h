@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,7 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_SDCARD_MEGA65_H_INCLUDED
 #define __XEMU_SDCARD_MEGA65_H_INCLUDED
 
-#define SD_ST_HALFSPEED	0x80
+#define SD_ST_EXT_BUS	0x80
 #define SD_ST_ERROR	0x40
 #define SD_ST_FSM_ERROR	0x20
 #define SD_ST_SDHC	0x10
@@ -33,6 +33,8 @@ extern int   sdcard_init           ( const char *fn, const char *extd81fn, int s
 extern void  sdcard_write_register ( int reg, Uint8 data );
 extern Uint8 sdcard_read_register  ( int reg  );
 
+extern int   mount_external_d81    ( const char *name, int force_ro );
+
 #define SD_BUFFER_POS 0x0E00
 #define FD_BUFFER_POS 0x0C00
 
@@ -41,6 +43,8 @@ extern Uint8 sdcard_read_register  ( int reg  );
 // disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space"
 extern Uint8 disk_buffers[0x1000];
 extern Uint8 sd_status;
+
+extern int fd_mounted;
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 #include "xemu/emutools_snapshot.h"

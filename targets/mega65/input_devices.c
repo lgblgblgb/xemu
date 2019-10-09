@@ -24,6 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "io_mapper.h"
 #include "xemu/cpu65.h"
 #include "hypervisor.h"
+#include "ui.h"
 
 
 #define DEBUGKBD(...)		DEBUG(__VA_ARGS__)
@@ -237,6 +238,9 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			if ((handled == SDL_BUTTON_LEFT) && set_mouse_grab(SDL_TRUE)) {
 				OSD(-1, -1, "Mouse grab activated. Press\nboth SHIFTs together to cancel.");
 				DEBUGPRINT("UI: mouse grab activated" NL);
+			}
+			if (handled == SDL_BUTTON_RIGHT) {
+				ui_enter();
 			}
 		}
 	}

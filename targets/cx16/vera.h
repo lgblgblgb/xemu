@@ -1,6 +1,8 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2016,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
+/* The Xemu project.
+   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+
+   This is the Commander X16 emulation. Note: the source is overcrowded with comments by intent :)
+   That it can useful for other people as well, or someone wants to contribute, etc ...
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,13 +18,14 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#define xemu_drop_events sdl_burn_events
+#ifndef __XEMU_LOCAL_VERA_H_INCLUDED
+#define __XEMU_LOCAL_VERA_H_INCLUDED
 
-// FIXME: very ugly hack, EP128 emulator sill uses its own things, we have to deal with ...
+extern void  vera_init ( void );
+extern int   vera_load_rom ( const char *fn );
+extern void  vera_write_reg_by_cpu ( int reg, Uint8 data );
+extern Uint8 vera_read_reg_by_cpu  ( int reg );
+extern int   vera_render_line ( void );
+extern void  vera_vsync ( void );
 
-#define DO_NOT_INCLUDE_EMUTOOLS
-#include "xep128.h"
-#include "screen.h"
-
-#include "gui.h"
-#include "xemu/emutools_gui.c"
+#endif

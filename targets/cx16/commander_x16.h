@@ -1,6 +1,5 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2016,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
+/* Preliminary Commander X16 emulation ...
+   Copyright (C)2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,13 +15,19 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#define xemu_drop_events sdl_burn_events
+#ifndef __XEMU_LOCAL_COMMANDER_X16_H_INCLUDED
+#define __XEMU_LOCAL_COMMANDER_X16_H_INCLUDED
 
-// FIXME: very ugly hack, EP128 emulator sill uses its own things, we have to deal with ...
+#define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888
 
-#define DO_NOT_INCLUDE_EMUTOOLS
-#include "xep128.h"
-#include "screen.h"
+#define FULL_FRAME_USECS	39971
 
-#include "gui.h"
-#include "xemu/emutools_gui.c"
+#define REAL_CPU_SPEED		1108404
+
+#define USE_LOCKED_TEXTURE	1
+#define RENDER_SCALE_QUALITY	2
+
+#define ROM_NAME		"#cx16-system.rom"
+#define CHR_ROM_NAME		"#cx16-chargen.rom"
+
+#endif

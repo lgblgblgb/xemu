@@ -108,12 +108,14 @@ static const Uint8 opcycles[] = {7,6,2,2,5,3,5,5,3,2,2,2,6,4,6,2,2,5,5,2,5,4,6,5
 #endif
 
 #define writeFlatAddressedByte(d)	cpu65_write_linear_opcode_callback(d)
+#define readFlatAddressedByte()		cpu65_read_linear_opcode_callback()
+#define writeFlatAddressedLong(d)	cpu65_write_linear_long_opcode_callback(d)
+#define readFlatAddressedLong()		cpu65_read_linear_long_opcode_callback()
 #ifdef CPU65_NO_RMW_EMULATION
 #define writeByteTwice(a,od,nd)		cpu65_write_callback(a,nd)
 #else
 #define writeByteTwice(a,od,nd)		cpu65_write_rmw_callback(a,od,nd)
 #endif
-#define readFlatAddressedByte()		cpu65_read_linear_opcode_callback()
 #define writeByte(a,d)			cpu65_write_callback(a,d)
 #define readByte(a)			cpu65_read_callback(a)
 
@@ -156,6 +158,26 @@ static const Uint8 opcycles[] = {7,6,2,2,5,3,5,5,3,2,2,2,6,4,6,2,2,5,5,2,5,4,6,5
 static XEMU_INLINE Uint16 readWord(Uint16 addr) {
 	return readByte(addr) | (readByte(addr + 1) << 8);
 }
+
+
+#ifdef MEGA65
+static Uint32 readLong ( Uint16 addr ) {
+	return
+		 readByte(addr    )        |
+		(readByte(addr + 1) << 8 ) |
+		(readByte(addr + 2) << 16) |
+		(readByte(addr + 3) << 24)
+	;
+}
+
+static void writeLong ( Uint16 addr, Uint32 data ) {
+	writeByte(addr    ,  data        & 0xFF);
+	writeByte(addr + 1, (data >>  8) & 0xFF);
+	writeByte(addr + 2, (data >> 16) & 0xFF);
+	writeByte(addr + 3, (data >> 24) & 0xFF);
+}
+#endif
+
 
 #ifdef CPU_65CE02
 /* The stack pointer is a 16 bit register that has two modes. It can be programmed to be either an 8-bit page Programmable pointer, or a full 16-bit pointer.
@@ -258,6 +280,7 @@ void cpu65_reset() {
 #ifdef MEGA65
 	CPU65.nmos_mode = 0;
 	CPU65.previous_op = 0;
+	CPU65.neg_neg_prefix = 0;
 #endif
 	CPU65.pc = readWord(0xFFFC);
 	DEBUG("CPU[" CPU_TYPE "]: RESET, PC=%04X" NL, CPU65.pc);
@@ -893,6 +916,17 @@ int cpu65_step (
 	case 0x42:	/* 65C02: NOP imm (non-std NOP with addr mode), 65CE02: NEG */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
+#ifdef MEGA65
+			if (XEMU_UNLIKELY(CPU65.previous_op == 0x42)) {
+				CPU65.neg_neg_prefix = 1;
+				// 65GS02 extension for "32 bit opcodes" (not to be confused with 32 bit addressing ...)
+				// we continue with NEG execution though, since it restores the original A then also the NZ
+				// flags, so no need to remember what was the NZ flags and A values before the first NEG :)
+				OPC_65CE02("NEG-NEG");
+				SET_NZ(CPU65.a = -CPU65.a);
+				goto do_not_reset_neg_neg_prefix;
+			}
+#endif
 			OPC_65CE02("NEG");
 			SET_NZ(CPU65.a = -CPU65.a);	// 65CE02: NEG	FIXME: flags etc are correct?
 #else
@@ -1757,6 +1791,12 @@ int cpu65_step (
 			break;
 	case 0xEA:	/* NOP, 65CE02: it's not special, but in C65 (4510) it is (EOM). It's up the emulator though (in the the second case) ... */
 #ifdef CPU_65CE02
+#ifdef MEGA65
+			if (XEMU_UNLIKELY(CPU65.neg_neg_prefix)) {
+				OPC_65CE02("NEG-NEG-NOP");
+				goto do_not_reset_neg_neg_prefix;	// FIXME: NEG NEG NOP sequence, should we treat ALSO as EOM that NOP and execute the nop callback above in that case?
+			}
+#endif
 			OPC_65CE02("EOM");
 			cpu65_do_nop_callback();
 #endif
@@ -1901,12 +1941,14 @@ int cpu65_step (
 			_BRA( readByte(_zp()) & 128 );
 			}
 			break;
-#ifdef DEBUG_CPU
 	default:
-			FATAL("FATAL: not handled CPU opcode: $%02X", CPU65.op);
+			XEMU_UNREACHABLE();
 			break;
-#endif
 	}
+#ifdef MEGA65
+	CPU65.neg_neg_prefix = 0;
+do_not_reset_neg_neg_prefix:
+#endif
 #ifdef CPU_STEP_MULTI_OPS
 	all_cycles += CPU65.op_cycles;
 	if (XEMU_UNLIKELY(CPU65.multi_step_stop_trigger)) {
@@ -1924,6 +1966,10 @@ int cpu65_step (
 /* ---- SNAPSHOT RELATED ---- */
 
 /* NOTE: cpu_linear_memory_addressing_is_enabled is not the CPU emulator handled data ...
+ * FIXME: many things are missing for now from snapshot ... I should review all cpu65 struct things
+ * if they're really stored, I can't remember, but at least things like neg_neg_prefix is not,
+ * and maybe tons of others. Certainly it will cause problems on shapshot loading back, which is
+ * not so much a frequent usage in Xemu now but there can be in the future!
 */
 
 

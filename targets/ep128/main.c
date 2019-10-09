@@ -462,7 +462,7 @@ int main (int argc, char *argv[])
 	"files");
 	if (screen_init())
 		return 1;
-	if (xepgui_init())
+	if (xepgui_init(NULL))
 		return 1;
 	audio_init(config_getopt_int("audio"));
 	z80ex_init();

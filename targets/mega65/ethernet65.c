@@ -352,6 +352,7 @@ static int ethernet_thread ( void *unused )
 
 Uint8 eth65_read_reg ( int addr )
 {
+	DEBUG("ETH: reading register $%02X" NL, addr & 0xF);
 	switch (addr & 0xF) {
 		/* **** $D6E0 register **** */
 		case 0x00:
@@ -417,6 +418,7 @@ Uint8 eth65_read_reg ( int addr )
 
 void eth65_write_reg ( int addr, Uint8 data )
 {
+	DEBUG("ETH: writing register $%02X with data $%02X" NL, addr & 0xF, data);
 	switch (addr & 0xF) {
 		/* **** $D6E0 register **** */
 		case 0x00:
