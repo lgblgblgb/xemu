@@ -65,6 +65,7 @@ static Uint64 et_old;
 static int td_balancer, td_em_ALL, td_pc_ALL;
 int sysconsole_is_open = 0;
 FILE *debug_fp = NULL;
+int chatty_xemu = 1;
 
 
 static int osd_enabled = 0, osd_status = 0, osd_available = 0, osd_xsize, osd_ysize, osd_fade_dec, osd_fade_end, osd_alpha_last;
@@ -353,7 +354,7 @@ static void shutdown_emulator ( void )
 		fclose(debug_fp);
 		debug_fp = NULL;
 	}
-	printf(NL "XEMU: good by(T)e." NL);
+	DEBUGPRINT(NL "XEMU: good by(T)e." NL);
 }
 
 
@@ -385,7 +386,8 @@ int xemu_init_debug ( const char *fn )
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan )
 {
 #ifdef __EMSCRIPTEN__
-	xemu_dump_version(stdout, slogan);
+	if (chatty_xemu)
+		xemu_dump_version(stdout, slogan);
 	MKDIR(emscripten_sdl_base_dir);
 	sdl_base_dir = (void*)emscripten_sdl_base_dir;
 	sdl_pref_dir = (void*)emscripten_sdl_base_dir;
@@ -399,7 +401,8 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 #else
 	char *p;
 	sysconsole_open();
-	xemu_dump_version(stdout, slogan);
+	if (chatty_xemu)
+		xemu_dump_version(stdout, slogan);
 	// Initialize SDL with no subsystems
 	// This is needed, because SDL_GetPrefPath and co. are not safe on every platforms without it.
 	// But we DO want to use *before* the real SDL_Init, as the configuration file may describe
@@ -450,18 +453,19 @@ int xemu_init_sdl ( void )
 #endif
 	SDL_VERSION(&sdlver_compiled);
         SDL_GetVersion(&sdlver_linked);
-	printf( "SDL version: (%s) compiled with %d.%d.%d, used with %d.%d.%d on platform %s" NL
-		"SDL system info: %d bits %s, %d cores, l1_line=%d, RAM=%dMbytes, CPU features: "
-		"3DNow=%d AVX=%d AVX2=%d AltiVec=%d MMX=%d RDTSC=%d SSE=%d SSE2=%d SSE3=%d SSE41=%d SSE42=%d" NL
-		"SDL drivers: video = %s, audio = %s" NL,
-		SDL_GetRevision(),
-		sdlver_compiled.major, sdlver_compiled.minor, sdlver_compiled.patch,
-		sdlver_linked.major, sdlver_linked.minor, sdlver_linked.patch,
-		SDL_GetPlatform(),
-		ARCH_BITS, ENDIAN_NAME, SDL_GetCPUCount(), SDL_GetCPUCacheLineSize(), SDL_GetSystemRAM(),
-		SDL_Has3DNow(),SDL_HasAVX(),SDL_HasAVX2(),SDL_HasAltiVec(),SDL_HasMMX(),SDL_HasRDTSC(),SDL_HasSSE(),SDL_HasSSE2(),SDL_HasSSE3(),SDL_HasSSE41(),SDL_HasSSE42(),
-		SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver()
-	);
+	if (chatty_xemu)
+		printf( "SDL version: (%s) compiled with %d.%d.%d, used with %d.%d.%d on platform %s" NL
+			"SDL system info: %d bits %s, %d cores, l1_line=%d, RAM=%dMbytes, CPU features: "
+			"3DNow=%d AVX=%d AVX2=%d AltiVec=%d MMX=%d RDTSC=%d SSE=%d SSE2=%d SSE3=%d SSE41=%d SSE42=%d" NL
+			"SDL drivers: video = %s, audio = %s" NL,
+			SDL_GetRevision(),
+			sdlver_compiled.major, sdlver_compiled.minor, sdlver_compiled.patch,
+			sdlver_linked.major, sdlver_linked.minor, sdlver_linked.patch,
+			SDL_GetPlatform(),
+			ARCH_BITS, ENDIAN_NAME, SDL_GetCPUCount(), SDL_GetCPUCacheLineSize(), SDL_GetSystemRAM(),
+			SDL_Has3DNow(),SDL_HasAVX(),SDL_HasAVX2(),SDL_HasAltiVec(),SDL_HasMMX(),SDL_HasRDTSC(),SDL_HasSSE(),SDL_HasSSE2(),SDL_HasSSE3(),SDL_HasSSE41(),SDL_HasSSE42(),
+			SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver()
+		);
 	return 0;
 }
 
@@ -488,7 +492,7 @@ int xemu_post_init (
 	int a;
 	if (!debug_fp)
 		xemu_init_debug(getenv("XEMU_DEBUG_FILE"));
-	if (!debug_fp)
+	if (!debug_fp && chatty_xemu)
 		printf("Logging into file: not enabled." NL);
 	if (!sdl_pref_dir)
 		FATAL("xemu_pre_init() hasn't been called yet!");
@@ -498,7 +502,7 @@ int xemu_post_init (
 	if (xemu_init_sdl())	// it is possible that is has been already called, but it's not a problem
 		return 1;
 	shutdown_user_function = shutdown_callback;
-	printf("Timing: sleep = %s, query = %s" NL, __SLEEP_METHOD_DESC, __TIMING_METHOD_DESC);
+	DEBUGPRINT("Timing: sleep = %s, query = %s" NL, __SLEEP_METHOD_DESC, __TIMING_METHOD_DESC);
 	DEBUGPRINT("SDL preferences directory: %s" NL, sdl_pref_dir);
 	DEBUG("SDL install directory: %s" NL, sdl_inst_dir);
 	DEBUG("SDL base directory: %s" NL, sdl_base_dir);
@@ -528,7 +532,7 @@ int xemu_post_init (
 		win_x_size, win_y_size,
 		SDL_WINDOW_SHOWN | (is_resizable ? SDL_WINDOW_RESIZABLE : 0)
 	);
-	printf("SDL window native pixel format: %s" NL, SDL_GetPixelFormatName(SDL_GetWindowPixelFormat(sdl_win)));
+	DEBUGPRINT("SDL window native pixel format: %s" NL, SDL_GetPixelFormatName(SDL_GetWindowPixelFormat(sdl_win)));
 	if (!sdl_win) {
 		ERROR_WINDOW("Cannot create SDL window: %s", SDL_GetError());
 		return 1;
@@ -540,9 +544,9 @@ int xemu_post_init (
 	a = SDL_GetNumRenderDrivers();
 	while (--a >= 0) {
 		if (!SDL_GetRenderDriverInfo(a, &ren_info)) {
-			printf("SDL renderer driver #%d: \"%s\"" NL, a, ren_info.name);
+			DEBUGPRINT("SDL renderer driver #%d: \"%s\"" NL, a, ren_info.name);
 		} else
-			printf("SDL renderer driver #%d: FAILURE TO QUERY (%s)" NL, a, SDL_GetError());
+			DEBUGPRINT("SDL renderer driver #%d: FAILURE TO QUERY (%s)" NL, a, SDL_GetError());
 	}
 	sdl_ren = SDL_CreateRenderer(sdl_win, -1, SDL_RENDERER_ACCELERATED);
 	if (!sdl_ren) {
@@ -557,10 +561,10 @@ int xemu_post_init (
 	}
 	SDL_SetRenderDrawColor(sdl_ren, 0, 0, 0, SDL_ALPHA_OPAQUE);
 	if (!SDL_GetRendererInfo(sdl_ren, &ren_info)) {
-		printf("SDL renderer used: \"%s\" max_tex=%dx%d tex_formats=%d ", ren_info.name, ren_info.max_texture_width, ren_info.max_texture_height, ren_info.num_texture_formats);
+		DEBUGPRINT("SDL renderer used: \"%s\" max_tex=%dx%d tex_formats=%d ", ren_info.name, ren_info.max_texture_width, ren_info.max_texture_height, ren_info.num_texture_formats);
 		for (a = 0; a < ren_info.num_texture_formats; a++)
-			printf("%c%s", a ? ' ' : '(', SDL_GetPixelFormatName(ren_info.texture_formats[a]));
-		printf(")" NL);
+			DEBUGPRINT("%c%s", a ? ' ' : '(', SDL_GetPixelFormatName(ren_info.texture_formats[a]));
+		DEBUGPRINT(")" NL);
 	}
 	SDL_RenderSetLogicalSize(sdl_ren, logical_x_size, logical_y_size);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
 	sdl_tex = SDL_CreateTexture(sdl_ren, pixel_format, SDL_TEXTUREACCESS_STREAMING, texture_x_size, texture_y_size);
@@ -590,7 +594,8 @@ int xemu_post_init (
 		sdl_pixel_buffer = xemu_malloc_ALIGNED(texture_x_size_in_bytes * texture_y_size);
 	// play a single frame game, to set a consistent colour (all black ...) for the emulator. Also, it reveals possible errors with rendering
 	xemu_render_dummy_frame(black_colour, texture_x_size, texture_y_size);
-	printf(NL);
+	if (chatty_xemu)
+		printf(NL);
 	return 0;
 }
 

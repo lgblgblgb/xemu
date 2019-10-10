@@ -145,18 +145,20 @@ typedef uint64_t Uint64;
 #endif
 
 extern FILE *debug_fp;
+extern int chatty_xemu;
 
 #ifdef DISABLE_DEBUG
 #define DEBUG(...)
 #define DEBUGPRINT(...) printf(__VA_ARGS__)
 #else
-#define DEBUG(...) do { \
+#define DEBUG(...) do { 		\
 	if (XEMU_UNLIKELY(debug_fp))	\
 		fprintf(debug_fp, __VA_ARGS__);	\
 } while (0)
-#define DEBUGPRINT(...) do {	\
-        printf(__VA_ARGS__);	\
-        DEBUG(__VA_ARGS__);	\
+#define DEBUGPRINT(...) do {		\
+	if (chatty_xemu)		\
+		printf(__VA_ARGS__);	\
+	DEBUG(__VA_ARGS__);		\
 } while (0)
 #endif
 

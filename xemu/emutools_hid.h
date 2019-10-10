@@ -59,6 +59,9 @@ extern int  emu_callback_key		( int pos, SDL_Scancode key, int pressed, int hand
 // Optinally can be defined by the emulator:
 extern void emu_dropfile_callback	( const char *fn );
 extern void emu_quit_callback		( void );
+extern void emu_callback_key_raw_sdl	( SDL_KeyboardEvent *ev );
+extern void emu_callback_key_texteditng_sdl ( SDL_TextEditingEvent *ev );
+extern void emu_callback_key_textinput_sdl  ( SDL_TextInputEvent   *ev );
 
 // Provided HID functions:
 extern int  hid_key_event		( SDL_Scancode key, int pressed ) ;

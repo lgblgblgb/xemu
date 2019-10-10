@@ -28,6 +28,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define RENDER_SCALE_QUALITY	2
 
 #define ROM_NAME		"#cx16-system.rom"
-#define CHR_ROM_NAME		"#cx16-chargen.rom"
+
+extern Uint64 all_virt_cycles;
+
+extern int dump_stuff ( const char *fn, void *mem, int size );
+
 
 #endif

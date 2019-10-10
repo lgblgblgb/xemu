@@ -1,8 +1,6 @@
-/* The Xemu project.
+/* Re-CP/M: CP/M-like own implementation + Z80 emulator
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-
-   This is the Commander X16 emulation. Note: the source is overcrowded with comments by intent :)
-   That it can useful for other people as well, or someone wants to contribute, etc ...
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,15 +16,12 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_LOCAL_VERA_H_INCLUDED
-#define __XEMU_LOCAL_VERA_H_INCLUDED
+#ifndef __XEMU_RECPM_BDOS_H_INCLUDED
+#define __XEMU_RECPM_BDOS_H_INCLUDED
 
-extern void  vera_init  ( void );
-extern void  vera_reset ( void );
-extern void  vera_write_cpu_register ( int reg, Uint8 data );
-extern Uint8 vera_read_cpu_register  ( int reg );
-extern int   vera_render_line ( void );
-extern void  vera_vsync ( void );
-extern int   vera_dump_vram ( const char *fn );
+extern void bdos_install ( int addr );
+extern int  bdos_handle  ( int addr );
+
+extern int cpm_dma;
 
 #endif
