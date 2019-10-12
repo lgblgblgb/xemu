@@ -118,23 +118,28 @@ static void menuitem_response( struct menu_st *m )
 }
 
 
-/*
 static const struct menu_st menu_subsystem[] = {
-	{ "ItemSub1", CALLABLE, menuitem_response,"SUB1" },
-	{ "ItemSub2", CALLABLE, menuitem_response,"SUB2" },
+	{ "ItemSub1", XEMUGUI_MENUID_CALLABLE, menuitem_response,"SUB1" },
+	{ "ItemSub2", XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_BEGIN_RADIO, menuitem_response,"SUB2" },
+	{ "ItemSub3", XEMUGUI_MENUID_CALLABLE, menuitem_response,"SUB1" },
+	{ "ItemSub4", XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_END_RADIO, menuitem_response,"SUB2" },
+	{ "ItemSub5", XEMUGUI_MENUID_CALLABLE, menuitem_response,"SUB1" },
+	{ "ItemSub6", XEMUGUI_MENUID_CALLABLE, menuitem_response,"SUB2" },
+	{ "ItemSub7", XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR, menuitem_response,"SUB1" },
+	{ "ItemSub8", XEMUGUI_MENUID_CALLABLE, menuitem_response,"SUB2" },
 	{ NULL }
 };
-*/
 
 static const struct menu_st menu_system[] = {
-	{ "Reset M65",  CALLABLE, menuitem_response, (void*)0 },
-	{ "Fullscreen", CALLABLE, menuitem_response, (void*)2 },
-	{ "Attach D81", CALLABLE, menuitem_response, (void*)5 },
-	{ "Browse dir", CALLABLE, menuitem_response, (void*)3 },
+	{ "Reset M65",  XEMUGUI_MENUID_CALLABLE, menuitem_response, (void*)0 },
+	{ "Fullscreen", XEMUGUI_MENUID_CALLABLE, menuitem_response, (void*)2 },
+	{ "Attach D81", XEMUGUI_MENUID_CALLABLE, menuitem_response, (void*)5 },
+	{ "Browse dir", XEMUGUI_MENUID_CALLABLE, menuitem_response, (void*)3 },
 #ifdef _WIN32
-	{ "Console on/off", CALLABLE, menuitem_response, (void*)4 },
+	{ "Console on/off", XEMUGUI_MENUID_CALLABLE, menuitem_response, (void*)4 },
 #endif
-	{ "Quit", CALLABLE, menuitem_response, (void*)1 },
+	{ "Submenu-test", XEMUGUI_MENUID_SUBMENU, menu_subsystem, menu_subsystem },
+	{ "Quit", XEMUGUI_MENUID_CALLABLE, menuitem_response, (void*)1 },
 	{ NULL }
 };
 

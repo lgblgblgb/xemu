@@ -23,11 +23,22 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMUGUI_FSEL_SAVE		2
 #define XEMUGUI_FSEL_FLAG_STORE_DIR	0x100
 
+#define XEMUGUI_MENUID_CALLABLE		0
+#define XEMUGUI_MENUID_SUBMENU		1
+#define XEMUGUI_MENUID_TITLE		2
+
+#define XEMUGUI_MENUFLAG_INACTIVE	0x0100
+#define XEMUGUI_MENUFLAG_BEGIN_RADIO	0x0200
+#define XEMUGUI_MENUFLAG_END_RADIO	0x0400
+#define XEMUGUI_MENUFLAG_ACTIVE_RADIO	0x0800
+#define XEMUGUI_MENUFLAG_SEPARATOR	0x1000
+#define XEMUGUI_MENUFLAG_CHECKABLE	0x2000
+#define XEMUGUI_MENUFLAG_CHECKED	0x4000
+
+
 struct menu_st {
 	const char *name;
-	enum {
-		CALLABLE, SUBMENU, TITLE, SEPARATOR
-	} type;
+	int type;
 	const void *handler;
 	const void *user_data;
 };

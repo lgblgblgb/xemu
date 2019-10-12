@@ -19,11 +19,31 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 /* ---------------------------------------- Windows STUFFS based on Win32 native APIs ---------------------------------------- */
 
 #include <windows.h>
+#include <SDL_syswm.h>
+
+#define XEMU_WINGUI_MAX_SUBMENUS	100
+#define XEMU_WINGUI_MAX_ITEMS		900
+
+
+static HWND _wingui_hwnd;
+static struct {
+	int num_of_hmenus;
+	int num_of_items;
+	HMENU hmenus[XEMU_WINGUI_MAX_SUBMENUS];
+	const struct menu_st *items[XEMU_WINGUI_MAX_ITEMS];
+
+} xemuwinmenu;
 
 
 static int xemuwingui_init ( void )
 {
+	SDL_SysWMinfo info;
+	SDL_VERSION(&info.version);
+	SDL_GetWindowWMInfo(sdl_win, &info);
+	_wingui_hwnd = info.info.win.window;
 	is_xemugui_ok = 1;
+	xemuwinmenu.num_of_hmenus = 0;
+	xemuwinmenu.num_of_items = 0;
 	return 0;
 }
 
@@ -41,7 +61,7 @@ static int xemuwingui_file_selector ( int dialog_mode, const char *dialog_title,
 	OPENFILENAME ofn;		// common dialog box structure
 	ZeroMemory(&ofn, sizeof ofn);
 	ofn.lStructSize = sizeof ofn;
-	ofn.hwndOwner = 0; // XEP128_HWND;
+	ofn.hwndOwner = 0; // FIXME: if I specify the hwnd of the SDL window here, I experience strange behaviour, it seems it works better this way ...
 	ofn.lpstrFile = selected;
 	*selected = '\0';	// sets to zero, since it seems windows dialog handler also used this as input?
 	ofn.nMaxFile = path_max_size;
@@ -67,6 +87,130 @@ static int xemuwingui_file_selector ( int dialog_mode, const char *dialog_title,
 }
 
 
+
+
+static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[] )
+{
+	HMENU menu = CreatePopupMenu();
+	if (!menu) {
+		ERROR_WINDOW("CreatePopupMenu() failed in menu builder!");
+		return NULL;
+	}
+	if (xemuwinmenu.num_of_hmenus >= XEMU_WINGUI_MAX_SUBMENUS)
+		FATAL("GUI: too many submenus!");
+	xemuwinmenu.hmenus[xemuwinmenu.num_of_hmenus++] = menu;
+	int radio_begin = xemuwinmenu.num_of_items;
+	int radio_active = xemuwinmenu.num_of_items; // radio active is a kinda odd name, but never mind ...
+	for (int a = 0; desc[a].name; a++) {
+		int ret;
+		if (xemuwinmenu.num_of_items >= XEMU_WINGUI_MAX_ITEMS)
+			FATAL("GUI: too many items in menu builder!");
+		ret = 1;
+		switch (desc[a].type & 0xFF) {
+			case XEMUGUI_MENUID_SUBMENU: {
+				HMENU submenu = _wingui_recursive_menu_builder(desc[a].handler);	// that's a prime example for using recursion :)
+				if (!submenu)
+					return NULL;
+				ret = AppendMenu(menu, MF_POPUP, (UINT_PTR)submenu, desc[a].name);
+				}
+				break;
+			case XEMUGUI_MENUID_CALLABLE:
+				xemuwinmenu.items[xemuwinmenu.num_of_items] = &desc[a];
+				// Note the +1 for ID. That is because some stange Windows sting:
+				// TrackPopupMenu() with TPM_RETURNCMD returns zero as error/no-selection ...
+				// So we want to being with '1' that's why the PRE-incrementation instead of the POST
+				ret = AppendMenu(menu, MF_STRING, ++xemuwinmenu.num_of_items, desc[a].name);
+				break;
+			default:
+				break;
+		}
+		if (!ret) {
+			ERROR_WINDOW("AppendMenu() failed in menu builder!");
+			return NULL;
+		}
+		//CheckMenuItem(ghMenu, IDM_VIEW_STB, MF_CHECKED);
+		if ((desc[a].type & XEMUGUI_MENUFLAG_SEPARATOR))
+			AppendMenu(menu, MF_SEPARATOR, 0, NULL);
+		if ((desc[a].type & XEMUGUI_MENUFLAG_BEGIN_RADIO)) {
+			radio_begin = xemuwinmenu.num_of_items;
+			radio_active = xemuwinmenu.num_of_items;
+		}
+		if ((desc[a].type & XEMUGUI_MENUFLAG_ACTIVE_RADIO))
+			radio_active = xemuwinmenu.num_of_items;
+		if ((desc[a].type & XEMUGUI_MENUFLAG_END_RADIO)) {
+			CheckMenuRadioItem(menu, radio_begin, xemuwinmenu.num_of_items, radio_active, MF_BYCOMMAND);
+			radio_begin = xemuwinmenu.num_of_items;
+			radio_active = xemuwinmenu.num_of_items;
+		}
+	}
+	return menu;
+}
+
+
+static void _wingui_destroy_menu ( void )
+{
+	while (xemuwinmenu.num_of_hmenus > 0) {
+		int ret = DestroyMenu(xemuwinmenu.hmenus[--xemuwinmenu.num_of_hmenus]);
+		DEBUGGUI("GUI: destroyed menu at %p, retval = %d" NL, xemuwinmenu.hmenus[xemuwinmenu.num_of_hmenus], ret);
+	}
+	xemuwinmenu.num_of_hmenus = 0;
+	xemuwinmenu.num_of_items = 0;
+}
+
+
+static HMENU _wingui_create_popup_menu ( const struct menu_st desc[] )
+{
+	_wingui_destroy_menu();
+	HMENU menu = _wingui_recursive_menu_builder(desc);
+	if (!menu)
+		_wingui_destroy_menu();
+	return menu;
+}
+
+
+
+typedef void (*wingui_callback_t)(const struct menu_st *);
+
+
+static inline void _wingui_getmousecoords ( POINT *point )
+{
+	int x, y;
+	SDL_GetMouseState(&x, &y);
+	point->x = x;	// we must play with these, since Windows uses point struct members type long (or WTF and why ...), rather than int ...
+	point->y = y;
+}
+
+
+static int xemuwingui_popup ( const struct menu_st desc[] )
+{
+	DEBUGPRINT("GUI: WIN: popup!" NL);
+	HMENU menu = _wingui_create_popup_menu(desc);
+	if (!menu)
+		return 1;
+	int num_of_items = xemuwinmenu.num_of_items;
+	POINT point;
+	_wingui_getmousecoords(&point);
+	if (!ClientToScreen(_wingui_hwnd, &point)) {
+		// ClientToScreen returns with non-zero if it's OK!!!!
+		_wingui_destroy_menu();
+		ERROR_WINDOW("ClientToScreen returned with zero");
+		return 1;
+	}
+	int n = TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY, point.x, point.y, 0, _wingui_hwnd, NULL);	// TPM_RETURNCMD causes to return with the selected ID (ie the 3rd param of AppendMenu)
+	xemu_drop_events();
+	_wingui_destroy_menu();
+	DEBUGPRINT("Returned: items=%d RETVAL=%d" NL, num_of_items, n);
+	if (n > 0 && n <= num_of_items) {
+		n--;	// again, do not forget that IDs are from one in windows, since zero means non-selection or error!
+		DEBUGPRINT("Return value = %s" NL, xemuwinmenu.items[n]->name);
+	}
+	xemu_drop_events();
+	return 0;
+}
+
+
+
+
 static const struct xemugui_descriptor_st xemuwingui_descriptor = {
 	"windows",					// name
 	"Windows API based Xemu UI implementation",	// desc
@@ -74,5 +218,5 @@ static const struct xemugui_descriptor_st xemuwingui_descriptor = {
 	NULL,						// shutdown (we don't need shutdown for windows?)
 	NULL,						// iteration (we don't need iteration for windows?)
 	xemuwingui_file_selector,
-	NULL						// popup FIXME: not implemented yet!
+	xemuwingui_popup
 };

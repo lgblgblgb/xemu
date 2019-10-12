@@ -23,8 +23,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_gui.h"
 #include <string.h>
 
-//#define DEBUGGUI	DEBUGPRINT
-#define DEBUGGUI	DEBUG
+#define DEBUGGUI	DEBUGPRINT
+//#define DEBUGGUI	DEBUG
 //#define DEBUGGUI(...)
 
 int is_xemugui_ok = 0;
@@ -65,19 +65,21 @@ struct xemugui_descriptor_st {
 #	include "xemu/gui/windows.c"
 #endif
 #include "xemu/gui/nogui.c"
+#include "xemu/gui/osd.c"
 
 static const struct xemugui_descriptor_st *current_gui = NULL;
 
 static const struct xemugui_descriptor_st *xemugui_descriptor_list[] = {
-#if defined(HAVE_GTK3)
-	&xemugtkgui_descriptor,
-#endif
 //#if defined(__APPLE__)
 //	&xemuosxgui_descriptor,
 //#endif
 #if defined (_WIN32)
 	&xemuwingui_descriptor,
 #endif
+#if defined(HAVE_GTK3)
+	&xemugtkgui_descriptor,
+#endif
+//	&xemuosdgui_descriptor,
 	&xemunullgui_descriptor		// THIS MUST BE THE LAST ENTRY
 };
 
