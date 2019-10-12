@@ -334,7 +334,7 @@ void xemu_timekeeping_delay ( int td_em )
 
 static void atexit_callback_for_console ( void )
 {
-	sysconsole_close("Please review the console content (if you need it) then click OK to close and exit Xemu");
+	sysconsole_close("Please review the console content (if you need it) before exiting!");
 }
 
 
@@ -1049,17 +1049,39 @@ void sysconsole_open ( void )
 }
 
 
+#ifdef _WIN32
+static CHAR sysconsole_getch( void )
+{
+	HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
+	if (!h)	// console cannot be accessed or WTF?
+		return 0;
+	DWORD cc, mode_saved;
+	GetConsoleMode (h, &mode_saved);
+	SetConsoleMode (h, mode_saved & ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT));
+	TCHAR c = 0;
+	ReadConsole(h, &c, 1, &cc, NULL);
+	SetConsoleMode(h, mode_saved);
+	return c;
+}
+#endif
+
 
 void sysconsole_close ( const char *waitmsg )
 {
 	if (!sysconsole_is_open)
 		return;
 #ifdef _WIN32
-	if (waitmsg)
-		INFO_WINDOW("%s", waitmsg);
-	if (!FreeConsole())
-		ERROR_WINDOW("Cannot release windows console!");
-	else {
+	if (waitmsg) {
+		// FIXME: for some reason on Windows (no idea why), window cannot be open from an atexit callback
+		// So instead of a GUI element here with a dialog box, we must rely on the console to press a key to continue ...
+		printf("\n\n*** %s\nPress SPACE to continue.", waitmsg);
+		while (sysconsole_getch() != 32)
+			;
+	}
+	if (!FreeConsole()) {
+		if (!waitmsg)
+			ERROR_WINDOW("Cannot release windows console!");
+	} else {
 		sysconsole_is_open = 0;
 		DEBUGPRINT("WINDOWS: console is closed" NL);
 	}
