@@ -25,11 +25,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static int _gtkgui_active = 0;
 static int _gtkgui_popup_is_open = 0;
 
-#define XEMU_GTKGUI_MAX_SUBMENUS 50
-
 static struct {
 	int num_of_menus;
-	GtkWidget *menus[XEMU_GTKGUI_MAX_SUBMENUS];
+	GtkWidget *menus[XEMUGUI_MAX_SUBMENUS];
 	int problem;
 } xemugtkmenu;
 
@@ -137,7 +135,6 @@ static void _gtkgui_destroy_menu ( void )
 }
 
 
-typedef void (*gtkgui_callback_t)(const struct menu_st *);
 
 static void _gtkgui_callback ( const struct menu_st *item )
 {
@@ -145,38 +142,55 @@ static void _gtkgui_callback ( const struct menu_st *item )
 	//gtk_widget_destroy(_gtkgui_popup);
 	//_gtkgui_popup = NULL;
 	DEBUGGUI("GUI: menu point \"%s\" has been activated." NL, item->name);
-	((gtkgui_callback_t)(item->handler))(item);
+	((xemugui_callback_t)(item->handler))(item, NULL);
 }
 
 
 static GtkWidget *_gtkgui_recursive_menu_builder ( const struct menu_st desc[] )
 {
-	if (xemugtkmenu.num_of_menus >= XEMU_GTKGUI_MAX_SUBMENUS) {
+	if (xemugtkmenu.num_of_menus >= XEMUGUI_MAX_SUBMENUS) {
 		ERROR_WINDOW("Too much submenus");
 		goto PROBLEM;
 	}
 	GtkWidget *menu = gtk_menu_new();
 	xemugtkmenu.menus[xemugtkmenu.num_of_menus++] = menu;
-	int i = 0;
-	while (desc[i].name) {
-		GtkWidget *item = gtk_menu_item_new_with_label(desc[i].name);
-		if (!item)
-			goto PROBLEM;
-		gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
-		if ((desc[i].type & 0xFF) == XEMUGUI_MENUID_SUBMENU) {
-			GtkWidget *submenu = _gtkgui_recursive_menu_builder(desc[i].handler);	// who does not like recursion, seriously? :-)
-			if (!submenu)
-				goto PROBLEM;
-			gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), submenu);
-		} else
-			g_signal_connect_swapped(
-				item,
-				"activate",
-				G_CALLBACK(_gtkgui_callback),	// G_CALLBACK(desc[i].handler),
-				(gpointer)&desc[i]	// (gpointer)&desc[i]
-			);
-		gtk_widget_show(item);
-		i++;
+	for (int a = 0; desc[a].name; a++) {
+		if (!desc[a].handler || !desc[a].name) {
+			DEBUGPRINT("GUI: invalid meny entry found, skipping it" NL);
+			continue;
+		}
+		GtkWidget *item = NULL;
+		int type = desc[a].type;
+		switch (type & 0xFF) {
+			case XEMUGUI_MENUID_SUBMENU:
+				item = gtk_menu_item_new_with_label(desc[a].name);
+				if (!item)
+					goto PROBLEM;
+				gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+				GtkWidget *submenu = _gtkgui_recursive_menu_builder(desc[a].handler);	// who does not like recursion, seriously? :-)
+				if (!submenu)
+					goto PROBLEM;
+				gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), submenu);
+				break;
+			case XEMUGUI_MENUID_CALLABLE:
+				if ((type & XEMUGUI_MENUFLAG_QUERYBACK)) {
+					DEBUGGUI("GUI: query-back for \"%s\"" NL, desc[a].name);
+					((xemugui_callback_t)(desc[a].handler))(&desc[a], &type);
+				}
+				item = gtk_menu_item_new_with_label(desc[a].name);
+				if (!item)
+					goto PROBLEM;
+				gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+				g_signal_connect_swapped(
+					item,
+					"activate",
+					G_CALLBACK(_gtkgui_callback),
+					(gpointer)&desc[a]
+				);
+				break;
+		}
+		if (item)
+			gtk_widget_show(item);
 	}
 	gtk_widget_show(menu);
 	return menu;
@@ -191,9 +205,11 @@ static GtkWidget *_gtkgui_create_menu ( const struct menu_st desc[] )
 	_gtkgui_destroy_menu();
 	xemugtkmenu.problem = 0;
 	GtkWidget *menu = _gtkgui_recursive_menu_builder(desc);
-	if (!menu || xemugtkmenu.problem)
+	if (!menu || xemugtkmenu.problem) {
 		_gtkgui_destroy_menu();
-	return menu;
+		return NULL;
+	} else
+		return menu;
 }
 
 
@@ -218,7 +234,7 @@ static GdkWindow *super_ugly_gtk_hack ( void )
 	SDL_VERSION(&info.version);
 	SDL_GetWindowWMInfo(sdl_win, &info);
 	if (info.subsystem != SDL_SYSWM_X11)
-		ERROR_WINDOW("Sorry, it won't work, GTK GUI is supported only on top of X11");
+		ERROR_WINDOW("Sorry, it won't work, GTK GUI is supported only on top of X11, because of GTK3 makes it no possible to get uniform window-ID from non-GTK window.");
 	//return gdk_x11_window_lookup_for_display(info.info.x11.display, info.info.x11.window);
 	//GdkWindow *gwin = gdk_x11_window_lookup_for_display(gdk_display_get_default(), info.info.x11.window);
 	GdkDisplay *gdisp = gdk_x11_lookup_xdisplay(info.info.x11.display);

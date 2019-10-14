@@ -66,6 +66,8 @@ static int td_balancer, td_em_ALL, td_pc_ALL;
 int sysconsole_is_open = 0;
 FILE *debug_fp = NULL;
 int chatty_xemu = 1;
+int sdl_default_win_x_size;
+int sdl_default_win_y_size;
 
 
 static int osd_enabled = 0, osd_status = 0, osd_available = 0, osd_xsize, osd_ysize, osd_fade_dec, osd_fade_end, osd_alpha_last;
@@ -234,6 +236,18 @@ void xemu_set_full_screen ( int setting )
 	SDL_RaiseWindow(sdl_win); // I have some problems with EP128 emulator that window went to the background. Let's handle that with raising it anyway :)
 }
 
+
+// 0 = full screen, 1 = default window size, 2 = zoom 200%, 3 = zoom 300%, 4 = zoom 400%
+void xemu_set_screen_mode ( int setting )
+{
+	if (setting <= 0) {
+		xemu_set_full_screen(1);
+	} else {
+		xemu_set_full_screen(0);
+		SDL_SetWindowSize(sdl_win, sdl_default_win_x_size * setting, sdl_default_win_y_size * setting);
+	}
+	SDL_RaiseWindow(sdl_win);
+}
 
 
 static inline void do_sleep ( int td )
@@ -532,6 +546,8 @@ int xemu_post_init (
 		win_x_size, win_y_size,
 		SDL_WINDOW_SHOWN | (is_resizable ? SDL_WINDOW_RESIZABLE : 0)
 	);
+	sdl_default_win_x_size = win_x_size;
+	sdl_default_win_y_size = win_y_size;
 	DEBUGPRINT("SDL window native pixel format: %s" NL, SDL_GetPixelFormatName(SDL_GetWindowPixelFormat(sdl_win)));
 	if (!sdl_win) {
 		ERROR_WINDOW("Cannot create SDL window: %s", SDL_GetError());

@@ -21,17 +21,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <windows.h>
 #include <SDL_syswm.h>
 
-#define XEMU_WINGUI_MAX_SUBMENUS	100
-#define XEMU_WINGUI_MAX_ITEMS		900
-
-
-static HWND _wingui_hwnd;
 static struct {
 	int num_of_hmenus;
 	int num_of_items;
-	HMENU hmenus[XEMU_WINGUI_MAX_SUBMENUS];
-	const struct menu_st *items[XEMU_WINGUI_MAX_ITEMS];
-
+	HMENU hmenus[XEMUGUI_MAX_SUBMENUS];
+	const struct menu_st *items[XEMUGUI_MAX_ITEMS];
+	HWND win_hwnd;
+	int problem;
 } xemuwinmenu;
 
 
@@ -40,7 +36,7 @@ static int xemuwingui_init ( void )
 	SDL_SysWMinfo info;
 	SDL_VERSION(&info.version);
 	SDL_GetWindowWMInfo(sdl_win, &info);
-	_wingui_hwnd = info.info.win.window;
+	xemuwinmenu.win_hwnd = info.info.win.window;
 	is_xemugui_ok = 1;
 	xemuwinmenu.num_of_hmenus = 0;
 	xemuwinmenu.num_of_items = 0;
@@ -61,7 +57,7 @@ static int xemuwingui_file_selector ( int dialog_mode, const char *dialog_title,
 	OPENFILENAME ofn;		// common dialog box structure
 	ZeroMemory(&ofn, sizeof ofn);
 	ofn.lStructSize = sizeof ofn;
-	ofn.hwndOwner = 0; // FIXME: if I specify the hwnd of the SDL window here, I experience strange behaviour, it seems it works better this way ...
+	ofn.hwndOwner = xemuwinmenu.win_hwnd; // FIXME: it should be this way, though it seems sometimes works better with the value 0 ...
 	ofn.lpstrFile = selected;
 	*selected = '\0';	// sets to zero, since it seems windows dialog handler also used this as input?
 	ofn.nMaxFile = path_max_size;
@@ -94,27 +90,34 @@ static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[] )
 	HMENU menu = CreatePopupMenu();
 	if (!menu) {
 		ERROR_WINDOW("CreatePopupMenu() failed in menu builder!");
-		return NULL;
+		goto PROBLEM;
 	}
-	if (xemuwinmenu.num_of_hmenus >= XEMU_WINGUI_MAX_SUBMENUS)
+	if (xemuwinmenu.num_of_hmenus >= XEMUGUI_MAX_SUBMENUS)
 		FATAL("GUI: too many submenus!");
 	xemuwinmenu.hmenus[xemuwinmenu.num_of_hmenus++] = menu;
 	int radio_begin = xemuwinmenu.num_of_items;
 	int radio_active = xemuwinmenu.num_of_items; // radio active is a kinda odd name, but never mind ...
 	for (int a = 0; desc[a].name; a++) {
-		int ret;
-		if (xemuwinmenu.num_of_items >= XEMU_WINGUI_MAX_ITEMS)
+		if (!desc[a].handler || !desc[a].name) {
+			DEBUGPRINT("GUI: invalid meny entry found, skipping it" NL);
+			continue;
+		}
+		if (xemuwinmenu.num_of_items >= XEMUGUI_MAX_ITEMS)
 			FATAL("GUI: too many items in menu builder!");
-		ret = 1;
-		switch (desc[a].type & 0xFF) {
+		int ret = 1, type = desc[a].type;
+		switch (type & 0xFF) {
 			case XEMUGUI_MENUID_SUBMENU: {
 				HMENU submenu = _wingui_recursive_menu_builder(desc[a].handler);	// that's a prime example for using recursion :)
 				if (!submenu)
-					return NULL;
+					goto PROBLEM;
 				ret = AppendMenu(menu, MF_POPUP, (UINT_PTR)submenu, desc[a].name);
 				}
 				break;
 			case XEMUGUI_MENUID_CALLABLE:
+				if ((type & XEMUGUI_MENUFLAG_QUERYBACK)) {
+					DEBUGGUI("GUI: query-back for \"%s\"" NL, desc[a].name);
+					((xemugui_callback_t)(desc[a].handler))(&desc[a], &type);
+				}
 				xemuwinmenu.items[xemuwinmenu.num_of_items] = &desc[a];
 				// Note the +1 for ID. That is because some stange Windows sting:
 				// TrackPopupMenu() with TPM_RETURNCMD returns zero as error/no-selection ...
@@ -126,24 +129,28 @@ static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[] )
 		}
 		if (!ret) {
 			ERROR_WINDOW("AppendMenu() failed in menu builder!");
-			return NULL;
+			goto PROBLEM;
 		}
-		//CheckMenuItem(ghMenu, IDM_VIEW_STB, MF_CHECKED);
-		if ((desc[a].type & XEMUGUI_MENUFLAG_SEPARATOR))
+		if ((type & XEMUGUI_MENUFLAG_CHECKED))
+			CheckMenuItem(menu, xemuwinmenu.num_of_items, MF_CHECKED);
+		if ((type & XEMUGUI_MENUFLAG_SEPARATOR))
 			AppendMenu(menu, MF_SEPARATOR, 0, NULL);
-		if ((desc[a].type & XEMUGUI_MENUFLAG_BEGIN_RADIO)) {
+		if ((type & XEMUGUI_MENUFLAG_BEGIN_RADIO)) {
 			radio_begin = xemuwinmenu.num_of_items;
 			radio_active = xemuwinmenu.num_of_items;
 		}
-		if ((desc[a].type & XEMUGUI_MENUFLAG_ACTIVE_RADIO))
+		if ((type & XEMUGUI_MENUFLAG_ACTIVE_RADIO))
 			radio_active = xemuwinmenu.num_of_items;
-		if ((desc[a].type & XEMUGUI_MENUFLAG_END_RADIO)) {
+		if ((type & XEMUGUI_MENUFLAG_END_RADIO)) {
 			CheckMenuRadioItem(menu, radio_begin, xemuwinmenu.num_of_items, radio_active, MF_BYCOMMAND);
 			radio_begin = xemuwinmenu.num_of_items;
 			radio_active = xemuwinmenu.num_of_items;
 		}
 	}
 	return menu;
+PROBLEM:
+	xemuwinmenu.problem = 1;
+	return NULL;
 }
 
 
@@ -161,15 +168,14 @@ static void _wingui_destroy_menu ( void )
 static HMENU _wingui_create_popup_menu ( const struct menu_st desc[] )
 {
 	_wingui_destroy_menu();
+	xemuwinmenu.problem = 0;
 	HMENU menu = _wingui_recursive_menu_builder(desc);
-	if (!menu)
+	if (!menu || xemuwinmenu.problem) {
 		_wingui_destroy_menu();
-	return menu;
+		return NULL;
+	} else
+		return menu;
 }
-
-
-
-typedef void (*wingui_callback_t)(const struct menu_st *);
 
 
 static inline void _wingui_getmousecoords ( POINT *point )
@@ -181,29 +187,40 @@ static inline void _wingui_getmousecoords ( POINT *point )
 }
 
 
+static void _wingui_callback ( const struct menu_st *item )
+{
+	DEBUGGUI("Return value = %s" NL, item->name);
+	if ((item->type & 0xFF) == XEMUGUI_MENUID_CALLABLE && item->handler)
+		((xemugui_callback_t)(item->handler))(item, NULL);
+}
+
+
+// Compared to the GTK version, it seems Windows is unable to do async GUI so it's a blocking implementation :(
 static int xemuwingui_popup ( const struct menu_st desc[] )
 {
-	DEBUGPRINT("GUI: WIN: popup!" NL);
+	DEBUGGUI("GUI: WIN: popup!" NL);
 	HMENU menu = _wingui_create_popup_menu(desc);
 	if (!menu)
 		return 1;
 	int num_of_items = xemuwinmenu.num_of_items;
 	POINT point;
 	_wingui_getmousecoords(&point);
-	if (!ClientToScreen(_wingui_hwnd, &point)) {
+	if (!ClientToScreen(xemuwinmenu.win_hwnd, &point)) {
 		// ClientToScreen returns with non-zero if it's OK!!!!
 		_wingui_destroy_menu();
 		ERROR_WINDOW("ClientToScreen returned with zero");
 		return 1;
 	}
-	int n = TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY, point.x, point.y, 0, _wingui_hwnd, NULL);	// TPM_RETURNCMD causes to return with the selected ID (ie the 3rd param of AppendMenu)
+	int n = TrackPopupMenu(menu, TPM_RIGHTBUTTON | TPM_RETURNCMD | TPM_NONOTIFY, point.x, point.y, 0, xemuwinmenu.win_hwnd, NULL);	// TPM_RETURNCMD causes to return with the selected ID (ie the 3rd param of AppendMenu)
 	xemu_drop_events();
-	_wingui_destroy_menu();
-	DEBUGPRINT("Returned: items=%d RETVAL=%d" NL, num_of_items, n);
+	DEBUGGUI("Returned: items=%d RETVAL=%d" NL, num_of_items, n);
+	// again, do not forget that IDs are from one in windows, since zero means non-selection or error!
 	if (n > 0 && n <= num_of_items) {
-		n--;	// again, do not forget that IDs are from one in windows, since zero means non-selection or error!
-		DEBUGPRINT("Return value = %s" NL, xemuwinmenu.items[n]->name);
-	}
+		const struct menu_st *item = xemuwinmenu.items[n - 1];
+		_wingui_destroy_menu();
+		_wingui_callback(item);
+	} else
+		_wingui_destroy_menu();
 	xemu_drop_events();
 	return 0;
 }

@@ -23,10 +23,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_gui.h"
 #include <string.h>
 
-#define DEBUGGUI	DEBUGPRINT
-//#define DEBUGGUI	DEBUG
-//#define DEBUGGUI(...)
-
 int is_xemugui_ok = 0;
 
 
@@ -45,6 +41,11 @@ static void store_dir_from_file_selection ( char *store_dir, const char *filenam
 		}
 	}
 }
+#endif
+
+// FIXME: ugly hack again, see above ...
+#ifndef DO_NOT_INCLUDE_EMUTOOLS
+#include "xemu/gui/popular_user_funcs.c"
 #endif
 
 struct xemugui_descriptor_st {
@@ -109,7 +110,7 @@ int xemugui_init ( const char *name )
 		}
 	}
 	DEBUGPRINT("GUI: using \"%s\" (%s)" NL, current_gui->name, current_gui->description);
-	return current_gui->init();
+	return current_gui->init ? current_gui->init() : 1;
 }
 
 
@@ -122,9 +123,7 @@ void xemugui_shutdown ( void )
 
 int xemugui_iteration ( void )
 {
-	if (current_gui && current_gui->iteration)
-		return current_gui->iteration();
-	return 0;
+	return (current_gui && current_gui->iteration) ? current_gui->iteration() : 0;
 }
 
 
@@ -132,7 +131,8 @@ int xemugui_file_selector ( int dialog_mode, const char *dialog_title, char *def
 {
 	if (current_gui && current_gui->file_selector)
 		return current_gui->file_selector(dialog_mode, dialog_title, default_dir, selected, path_max_size);
-	return 1;
+	else
+		return 1;
 }
 
 
@@ -140,5 +140,6 @@ int xemugui_popup ( const struct menu_st desc[] )
 {
 	if (current_gui && current_gui->popup)
 		return current_gui->popup(desc);
-	return 1;
+	else
+		return 1;
 }

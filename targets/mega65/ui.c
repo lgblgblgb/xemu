@@ -52,16 +52,14 @@ static int attach_d81 ( const char *fn )
 #ifdef CONFIG_DROPFILE_CALLBACK
 void emu_dropfile_callback ( const char *fn )
 {
-	DEBUGPRINT("UI: drop event, file: %s" NL, fn);
+	DEBUGGUI("UI: drop event, file: %s" NL, fn);
 	if (ARE_YOU_SURE("Shall I try to mount the dropped file as D81 for you?"))
 		attach_d81(fn);
 }
 #endif
 
 
-
-
-static void attach_d81_by_browsing ( void )
+static void ui_attach_d81_by_browsing ( void )
 {
 	char fnbuf[PATH_MAX + 1];
 	static char dir[PATH_MAX + 1] = "";
@@ -78,77 +76,37 @@ static void attach_d81_by_browsing ( void )
 }
 
 
-
-
-static void do_menu ( int n )
+static void ui_native_os_file_browser ( void )
 {
-	switch (n) {
-		case 0:
-			reset_mega65();
-			break;
-		case 1:
-			if (ARE_YOU_SURE(NULL)) {
-				SDL_Event ev;
-				ev.type = SDL_QUIT;
-				SDL_PushEvent(&ev);
-				//exit(0);
-			}
-			break;
-		case 2:
-			xemu_set_full_screen(-1);
-			break;
-		case 3:
-			xemuexec_open_native_file_browser(sdl_pref_dir);
-			break;
-		case 4:
-			sysconsole_toggle(-1);
-			break;
-		case 5:
-			attach_d81_by_browsing();
-			break;
-		default:
-			break;
-	}
+	xemuexec_open_native_file_browser(sdl_pref_dir);
 }
 
 
-static void menuitem_response( struct menu_st *m )
-{
-	do_menu((int)(uintptr_t)m->user_data);
-}
-
-
-static const struct menu_st menu_subsystem[] = {
-	{ "ItemSub1", XEMUGUI_MENUID_CALLABLE, menuitem_response,"SUB1" },
-	{ "ItemSub2", XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_BEGIN_RADIO, menuitem_response,"SUB2" },
-	{ "ItemSub3", XEMUGUI_MENUID_CALLABLE, menuitem_response,"SUB1" },
-	{ "ItemSub4", XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_END_RADIO, menuitem_response,"SUB2" },
-	{ "ItemSub5", XEMUGUI_MENUID_CALLABLE, menuitem_response,"SUB1" },
-	{ "ItemSub6", XEMUGUI_MENUID_CALLABLE, menuitem_response,"SUB2" },
-	{ "ItemSub7", XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR, menuitem_response,"SUB1" },
-	{ "ItemSub8", XEMUGUI_MENUID_CALLABLE, menuitem_response,"SUB2" },
+static const struct menu_st menu_display[] = {
+	{ "Fullscreen",    XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)0 },
+	{ "Window - 100%", XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)1 },
+	{ "Window - 200%", XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)2 },
 	{ NULL }
 };
 
-static const struct menu_st menu_system[] = {
-	{ "Reset M65",  XEMUGUI_MENUID_CALLABLE, menuitem_response, (void*)0 },
-	{ "Fullscreen", XEMUGUI_MENUID_CALLABLE, menuitem_response, (void*)2 },
-	{ "Attach D81", XEMUGUI_MENUID_CALLABLE, menuitem_response, (void*)5 },
-	{ "Browse dir", XEMUGUI_MENUID_CALLABLE, menuitem_response, (void*)3 },
+
+static const struct menu_st menu_main[] = {
+	{ "Display",			XEMUGUI_MENUID_SUBMENU,		menu_display, NULL },
+	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_mega65 },
+	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
+	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_native_os_file_browser },
 #ifdef _WIN32
-	{ "Console on/off", XEMUGUI_MENUID_CALLABLE, menuitem_response, (void*)4 },
+	{ "System console", XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK, xemugui_cb_sysconsole, NULL },
 #endif
-	{ "Submenu-test", XEMUGUI_MENUID_SUBMENU, menu_subsystem, menu_subsystem },
-	{ "Quit", XEMUGUI_MENUID_CALLABLE, menuitem_response, (void*)1 },
+	{ "Quit", XEMUGUI_MENUID_CALLABLE, xemugui_cb_call_quit_if_sure, NULL },
 	{ NULL }
 };
 
 
 void ui_enter ( void )
 {
-	DEBUGPRINT("UI: handler has been called." NL);
-	if (xemugui_popup(menu_system)) {
-		DEBUGPRINT("UI: GUI POPUP seems to be not working, using a question window instead ..." NL);
-		do_menu(QUESTION_WINDOW("Reset|Quit|Fullscr|Pref.dir|Console|Attach D81", "Xemu Quick Task Menu"));
+	DEBUGGUI("UI: handler has been called." NL);
+	if (xemugui_popup(menu_main)) {
+		DEBUGPRINT("UI: oops, POPUP does not worked :(" NL);
 	}
 }

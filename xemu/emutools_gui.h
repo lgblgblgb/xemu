@@ -18,6 +18,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __COMMON_EMUTOOLS_GUI_H_INCLUDED
 #define __COMMON_EMUTOOLS_GUI_H_INCLUDED
 
+#define DEBUGGUI        DEBUGPRINT
+//#define DEBUGGUI      DEBUG
+//#define DEBUGGUI(...)
+
 #define XEMUGUI_FSEL_DIRECTORY		0
 #define XEMUGUI_FSEL_OPEN		1
 #define XEMUGUI_FSEL_SAVE		2
@@ -32,9 +36,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMUGUI_MENUFLAG_END_RADIO	0x0400
 #define XEMUGUI_MENUFLAG_ACTIVE_RADIO	0x0800
 #define XEMUGUI_MENUFLAG_SEPARATOR	0x1000
-#define XEMUGUI_MENUFLAG_CHECKABLE	0x2000
-#define XEMUGUI_MENUFLAG_CHECKED	0x4000
+#define XEMUGUI_MENUFLAG_CHECKED	0x2000
+#define XEMUGUI_MENUFLAG_QUERYBACK	0x4000
 
+#ifndef XEMUGUI_MAX_SUBMENUS
+#define XEMUGUI_MAX_SUBMENUS		100
+#endif
+#ifndef XEMUGUI_MAX_ITEMS
+#define XEMUGUI_MAX_ITEMS		900
+#endif
 
 struct menu_st {
 	const char *name;
@@ -43,6 +53,8 @@ struct menu_st {
 	const void *user_data;
 };
 
+typedef void (*xemugui_callback_t)(const struct menu_st *desc, int *query);
+
 extern int is_xemungui_ok;
 
 extern int  xemugui_init		( const char *name );
@@ -50,5 +62,14 @@ extern void xemugui_shutdown		( void );
 extern int  xemugui_iteration		( void );
 extern int  xemugui_file_selector	( int dialog_mode, const char *dialog_title, char *default_dir, char *selected, int path_max_size );
 extern int  xemugui_popup		( const struct menu_st desc[] );
+
+extern void xemugui_cb_call_user_data ( const struct menu_st *m, int *query );
+extern void xemugui_cb_call_user_data_if_sure ( const struct menu_st *m, int *query );
+extern void xemugui_cb_quit ( const struct menu_st *m, int *query );
+extern void xemugui_cb_call_quit_if_sure ( const struct menu_st *m, int *query );
+#ifdef _WIN32
+extern void xemugui_cb_sysconsole ( const struct menu_st *m, int *query );
+#endif
+extern void xemugui_cb_windowsize ( const struct menu_st *m, int *query );
 
 #endif
