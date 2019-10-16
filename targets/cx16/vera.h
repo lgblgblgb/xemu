@@ -26,7 +26,6 @@ extern void  vera_reset ( void );
 extern void  vera_write_cpu_register ( int reg, Uint8 data );
 extern Uint8 vera_read_cpu_register  ( int reg );
 extern int   vera_render_line ( void );
-extern void  vera_vsync ( void );
 extern int   vera_dump_vram ( const char *fn );
 
 #endif

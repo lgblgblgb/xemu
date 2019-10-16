@@ -24,14 +24,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "commander_x16.h"
 #include <string.h>
 
-struct keymap_st {
+struct ps2_keymap_st {
 	SDL_Scancode	key;
 	int		ps2_code;	// + 0x100 for extended codes
 };
 
 // This table is taken from Mist's X16 emulator, but converted into a table
 // >0xFF codes are extended keys (and only the low byte should be treated then as the PS/2 keycode)
-static const struct keymap_st keymap[] = {
+static const struct ps2_keymap_st ps2_keymap[] = {
 	{SDL_SCANCODE_GRAVE,		0x0e},	{SDL_SCANCODE_BACKSPACE,	0x66},	{SDL_SCANCODE_TAB,		0xd},	{SDL_SCANCODE_CLEAR,		0},	{SDL_SCANCODE_RETURN,		0x5a},
 	{SDL_SCANCODE_PAUSE,		0},	{SDL_SCANCODE_ESCAPE,		0x76},	{SDL_SCANCODE_SPACE,		0x29},	{SDL_SCANCODE_APOSTROPHE,	0x52},	{SDL_SCANCODE_COMMA,		0x41},
 	{SDL_SCANCODE_MINUS,		0x4e},	{SDL_SCANCODE_PERIOD,		0x49},	{SDL_SCANCODE_SLASH,		0x4a},	{SDL_SCANCODE_0,		0x45},	{SDL_SCANCODE_1,		0x16},
@@ -74,14 +74,17 @@ int read_ps2_port ( void )
 	static int data = 1;
 	if (ps2_stream_w_pos) {
 		Uint64 since = all_virt_cycles - virt_cycle_last_read;
+		// This is BAD, since actually the keyboard sends data the CPU takes care or not, it won't "pause" just because PS/2 lines are not checked ...
 		if (since > 333) {
 			virt_cycle_last_read = all_virt_cycles;
-			clk ^= 2;
-			if (!clk) {
-				data = ps2_stream[0];
-				ps2_stream_w_pos--;
-				memmove(ps2_stream, ps2_stream + 1, ps2_stream_w_pos);
-			}
+			//while (since > 333 && ps2_stream_w_pos) {
+				clk ^= 2;
+				if (!clk) {
+					data = ps2_stream[0];
+					memmove(ps2_stream, ps2_stream + 1, --ps2_stream_w_pos);
+				}
+			//	since -= 333;
+			//}
 		}
 	} else {
 		clk = 2;
@@ -106,9 +109,9 @@ static void queue_ps2_device_packet ( Uint8 data )
 }
 
 
-static void emit_ps2_event ( SDL_Scancode key, int pressed )
+static XEMU_INLINE void emit_ps2_event ( SDL_Scancode key, int pressed )
 {
-	const struct keymap_st *p = keymap;
+	const struct ps2_keymap_st *p = ps2_keymap;
 	while (p->ps2_code >= 0)
 		if (key == p->key) {
 			if (ps2_stream_w_pos < sizeof(ps2_stream) - 12 * 3) {

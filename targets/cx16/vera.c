@@ -26,10 +26,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "commander_x16.h"
 
 
-//#define DEBUGVERA DEBUGPRINT
-#define DEBUGVERA DEBUG
+#define DEBUGVERA DEBUGPRINT
+//#define DEBUGVERA DEBUG
 //#define DEBUGVERA(...)
 
+#define SCANLINES_TOTAL		525
+#define SCANLINE_START_VSYNC	492
+#define SCANLINE_STOP_VSYNC	495
 
 #define MODE_NTSC_COMPOSITE	2
 // 4 bits of interrupt info
@@ -56,6 +59,7 @@ static struct {
 	int	map_base, tile_base;
 	int	hscroll, vscroll, bitmap_palette_offset;
 	int	enabled, mode, tileh, tilew, mapw, maph;
+	int	counter_map, counter_tile_row;		// Xemu specific things!
 } layer[2];
 
 static struct {
@@ -72,6 +76,7 @@ static struct {
 	int	irqline;
 	int	chromakill;
 	int	is_mono_mode;	// a value takes chromakill and NTSC mode to be true to use the mono mode for real
+	int	hwidth;		// this is an Xemu specific field, calculated to be the number of VGA pixels to be processed in a line, based on hstart..hend, also chopping of overflow etc
 } composer;
 
 static struct {
@@ -119,6 +124,7 @@ static XEMU_INLINE void UPDATE_IRQ ( void )
 	cpu65.irqLevel = (cpu65.irqLevel & ~INTERRUPT_REGISTER_MASK) | (ien_reg & isr_reg);
 }
 
+#if 0
 static XEMU_INLINE void SET_IRQ ( int irq_type )
 {
 	isr_reg |= irq_type;
@@ -130,7 +136,7 @@ static XEMU_INLINE void CLEAR_IRQ ( int irq_type )
 	isr_reg &= ~irq_type;
 	UPDATE_IRQ();
 }
-
+#endif
 
 
 // Updates a palette enty based on the "addr" in palette-memory
@@ -227,6 +233,23 @@ static void write_layer_register ( int ln, int reg, Uint8 data )
 }
 
 
+static void recalculate_hwidth ( void )
+{
+	if (composer.mode == 0) {
+		composer.hwidth = 0; // output disabled. We do this by faking hwidth is zero
+	} else if (composer.hstart < 640 && composer.hstart < composer.hstop) {
+		composer.hwidth = composer.hstop - composer.hstart;
+		if (composer.hstop > 640)
+			composer.hwidth -= (composer.hstop - 640);
+	} else
+		composer.hwidth = 0;
+	DEBUGVERA("VERA: %s() hstart=%d,hstop=%d,out_mode=%d -> hwidth=%d" NL, __func__, composer.hstart, composer.hstop, composer.mode, composer.hwidth);
+	if (XEMU_UNLIKELY(composer.hwidth < 0))
+		FATAL("hwidth becomes %d in %s() even after adjusing!", composer.hwidth, __func__);
+}
+
+
+
 static void write_composer_register ( int reg, Uint8 data )
 {
 	switch (reg) {
@@ -241,6 +264,7 @@ static void write_composer_register ( int reg, Uint8 data )
 			DEBUGVERA("VERA: COMPOSER #0 register write: chroma_kill=%d output_mode=%d MONO_MODE=%d" NL, composer.chromakill ? 1 : 0, composer.mode, composer.is_mono_mode ? 1 : 0);
 			data = composer.field | (data & 7);	// also use the interlace bit field [0x80 or 0x00] when register is used
 			}
+			recalculate_hwidth();
 			break;
 		case 1:
 			composer.hscale = data;
@@ -257,21 +281,26 @@ static void write_composer_register ( int reg, Uint8 data )
 			break;
 		case 4:
 			composer.hstart = (composer.hstart & 0xFF00) | data;
+			recalculate_hwidth();
 			break;
 		case 5:
 			composer.hstop  = (composer.hstop  & 0xFF00) | data;
+			recalculate_hwidth();
 			break;
 		case 6:
 			composer.vstart = (composer.vstart & 0xFF00) | data;
+			recalculate_hwidth();
 			break;
 		case 7:
 			composer.vstop  = (composer.vstop  & 0xFF00) | data;
+			recalculate_hwidth();
 			break;
 		case 8:
 			composer.hstart = (composer.hstart &   0xFF) | ((data &  3) << 8);
 			composer.hstop  = (composer.hstop  &   0xFF) | ((data & 12) << 6);
 			composer.vstart = (composer.vstart &   0xFF) | ((data & 16) << 4);
 			composer.vstop  = (composer.vstop  &   0xFF) | ((data & 32) << 3);
+			recalculate_hwidth();
 			data &= 0xFF - 0x80 - 0x40;
 			break;
 		case 9:
@@ -482,11 +511,13 @@ Uint8 vera_read_cpu_register ( int reg )
 }
 
 
+#if 0
 static Uint32 *pixel;
 static int scanline;
 //static int map_base; //, tile_base;
 static int tile_row;
 static int map_counter;
+#endif
 
 
 
@@ -496,6 +527,7 @@ int vera_dump_vram ( const char *fn )
 }
 
 
+#if 0
 void vera_vsync ( void )
 {
 	int tail;
@@ -526,18 +558,129 @@ void vera_vsync ( void )
 //	UPDATE_IRQ();
 	SET_IRQ(VSYNC_IRQ);
 }
+#endif
+
+
+static void render_text_c16 ( int ln, Uint8 *op, int active_size )
+{
+	Uint8 *vp = vram + layer[ln].map_base + layer[ln].counter_map;
+	for (;;) {
+		Uint8 chr = vram[layer[ln].tile_base + (*vp << 3) + layer[ln].counter_tile_row];
+		vp++;
+		Uint8 fg  = *vp & 0xF, bg  = *vp >> 4 ;
+		for (int b = 128; b; b >>= 1) {
+			*op++ = (chr & b) ? fg : bg;
+			active_size--;
+			// TODO: later optimization: allow to check only after the bit loop ...
+			// Yes, it can cause emit too much pixel, but it can be handled later with border
+			// rendering at the end, which will cover it. And it's faster not to check this
+			// condition inside this loop at least (also it's more likely that the loop can be unrolled for more speed ...)
+			// This will also rewquire to make output buffer at least 7 bytes larger not to overflow in this case if scrolled by pixel resolution
+			if (XEMU_UNLIKELY(active_size == 0)) {
+				if (layer[ln].counter_tile_row == 7) {
+					layer[ln].counter_tile_row = 0;
+					layer[ln].counter_map += 1 << (layer[ln].mapw + 6);	// FIXME: CHECK: is this correct?
+				} else
+					layer[ln].counter_tile_row++;
+				return;
+			}
+		}
+		vp++;
+	}
+}
+
+
+static void render_bitmap_c256 ( int ln, Uint8 *op, int active_size )
+{
+	Uint8 *vp = vram + layer[ln].tile_base + layer[ln].counter_map;	// FIXME looks ugly to use counter_map for tile ...
+	memcpy(op, vp, active_size);
+	layer[ln].counter_map += active_size;	// FIXME: ???
+}
+
 
 
 // CURRENTLY a hard coded case, for 16 colour text mode using layer-1 only (what is the default used one by the KERNAL/BASIC at least)
 int vera_render_line ( void )
 {
-	Uint8 *v = vram + layer[0].map_base + map_counter;
-	for (int x = 0; x < 80; x++) {
-		Uint8 chr = vram[layer[0].tile_base + ((*v++) << 3) + tile_row];
-		Uint32 fg = palette.colours[*v & 0xF];
-		Uint32 bg = palette.colours[(*v++) >> 4 ];
-		for (int b = 128; b; b >>= 1) {
-			*pixel++ = (chr & b) ? fg : bg;
+	static Uint32 *pixel;
+	static Uint8 vera_line[640];	// 256-colour pixel values in X16 colour space. it will be rendered later into native SDL stuff
+	static int   vera_line_is_border = -1;
+	static int scanline = 0;
+	if (XEMU_UNLIKELY(scanline == 0)) {
+		layer[0].counter_map = 0;
+		layer[1].counter_map = 0;
+		layer[0].counter_tile_row = 0;
+		layer[1].counter_tile_row = 0;
+		int tail;	// not so much used, it should be zero
+		pixel = xemu_start_pixel_buffer_access(&tail);
+		if (XEMU_UNLIKELY(tail))
+			FATAL("Texture TAIL is not zero");
+	}
+	if (XEMU_LIKELY(scanline < 480)) { // actual screen content as VGA signal, can be still border (thus 'inactive'), etc ...
+		if (XEMU_LIKELY(scanline < composer.vstop && scanline >= composer.vstart && composer.hwidth)) {
+			if (vera_line_is_border != border.index) {
+				memset(vera_line, 640, border.index);	// first, fill with border (ie "display is inactive") colour
+				vera_line_is_border = border.index;
+			}
+			for (int ln = 0; ln < 2; ln++)
+				if (layer[ln].enabled) {
+					vera_line_is_border = -1;
+					switch (layer[ln].mode) {
+						case 0:
+							render_text_c16(ln, vera_line + composer.hstart, composer.hwidth);
+							break;
+						case 7:
+							render_bitmap_c256(ln, vera_line + composer.hstart, composer.hwidth);
+							break;
+						default:
+							fprintf(stderr, "Unimplemented video mode #%d on layer#%d" NL, layer[ln].mode, ln);
+							break;
+					}
+				}
+			// Finally, fill the texture with our line, now already with SDL-specific colour values
+			for (int x = 0; x < 640; x++)
+				*pixel++ = palette.colours[vera_line[x]];
+		} else {
+			// Otherwise (composer does not active in the visible line), it's just border, so no layers, no sprites, etc ...
+			for (int x = 0; x < 640; x++)
+				*pixel++ = border.colour;
+		}
+	}
+	// Manage end of full frame and vsync IRQ handling
+	if (XEMU_UNLIKELY(scanline == SCANLINES_TOTAL - 1)) {
+		scanline = 0;
+	} else {
+		scanline++;
+		if (XEMU_UNLIKELY(scanline == SCANLINE_START_VSYNC))
+			isr_reg |= VSYNC_IRQ;
+		if (XEMU_UNLIKELY(scanline == SCANLINE_STOP_VSYNC))
+			isr_reg &= ~VSYNC_IRQ;
+	}
+	// Check and deal with raster IRQ condition [for the next line ... so our line based emulation is more OK]
+	if (XEMU_UNLIKELY(scanline == composer.irqline))
+		isr_reg |= RASTER_IRQ;
+	else
+		isr_reg &= ~RASTER_IRQ;
+	// Then, update the IRQ status
+	UPDATE_IRQ();
+	return scanline;
+#if 0
+	//fprintf(stderr, "TILE BASE is: $%X" NL, layer[0].tile_base);
+	//layer[0].tile_base = 0xF800;	// HACK! FIXME
+	//DEBUGPRINT("tile base=$%X" NL, layer[0].tile_base);
+	if (layer[BITMAP_LAYER].mode == 7) {
+		Uint8 *v = vram + layer[BITMAP_LAYER].tile_base + map_counter;
+		for (int x = 0; x < 640; x++)
+			*pixel++ = palette.colours[*v++];
+	} else {
+		Uint8 *v = vram + layer[TEXT_LAYER].map_base + map_counter;
+		for (int x = 0; x < 80; x++) {
+			Uint8 chr = vram[layer[TEXT_LAYER].tile_base + ((*v++) << 3) + tile_row];
+			Uint32 fg = palette.colours[*v & 0xF];
+			Uint32 bg = palette.colours[(*v++) >> 4 ];
+			for (int b = 128; b; b >>= 1) {
+				*pixel++ = (chr & b) ? fg : bg;
+			}
 		}
 	}
 	if (isr_reg & 1) {
@@ -546,16 +689,23 @@ int vera_render_line ( void )
 		CLEAR_IRQ(VSYNC_IRQ);
 	}
 	scanline++;
-	if (tile_row == 7) {
-		tile_row = 0;
-//		map_base += 256 - 80*2;
-		map_counter += 256;
+	if (layer[BITMAP_LAYER].mode == 7) {
+		map_counter += 640;
 		return (scanline >= 480);
 	} else {
-		tile_row++;
-//		map_base -= 80 * 2;
-		return 0;
+		if (tile_row == 7) {
+			tile_row = 0;
+	//		map_base += 256 - 80*2;
+			map_counter += 256;
+			return (scanline >= 480);
+		} else {
+			tile_row++;
+	//		map_base -= 80 * 2;
+			return 0;
+		}
 	}
+	// return !scanline;
+#endif
 }
 
 
