@@ -306,7 +306,15 @@ int cpmfs_search_file_setup ( int drive, const Uint8 *input, int options )
 	}
 	if (drive < 0 || drive > 26 || !drives[drive].dir)
 		return 1;
-	rewinddir(drives[drive].dir);
+#if 0
+	DIR *dir = opendir(drives[drive].dir_path);
+	if (dir) {
+		if (drives[drive].dir)
+			closedir(drives[drive].dir);
+		drives[drive].dir = dir;
+	} else
+#endif
+		rewinddir(drives[drive].dir);
 	ff.drive = drive;
 	ff.stop_search = 0;
 	return 0;
