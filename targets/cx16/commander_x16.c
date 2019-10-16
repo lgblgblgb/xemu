@@ -56,9 +56,7 @@ static struct Via65c22 via1, via2;		// VIA-1 and VIA-2 emulation structures
 
 
 static const struct KeyMappingDefault x16_key_map[] = {
-	// -- the following definitions are not VIC-20 keys, but emulator related stuffs
 	STD_XEMU_SPECIAL_KEYS,
-	//{ SDL_SCANCODE_ESCAPE,		0x81 },	// RESTORE key
 	// **** this must be the last line: end of mapping table ****
 	{ 0, -1 }
 };
@@ -180,7 +178,7 @@ static int load_rom ( const char *fn )
 {
 	if (xemu_load_file(fn, rom, sizeof rom, sizeof rom, "Cannot load ROM") != sizeof rom)
 		return 1;
-	set_rom_bank(7);
+	set_rom_bank(0);
 	return 0;
 }
 
@@ -253,18 +251,10 @@ static Uint8 via2_ina ( Uint8 mask )
 }
 
 
-static Uint8 via2_inb ( Uint8 mask )
-{
-	fprintf(stderr, "VIA2 port B read\n");
-	// Port-B in VIA2 is used (temporary with DDR-B set to input) to scan joystick direction 'RIGHT'
-	return hid_read_joystick_right(0x7F, 0xFF);
-}
-
-
 static void update_emulator ( void )
 {
 	if (!frameskip) {
-		// First: update VIC-20 screen ...
+		// First: update screen ...
 		xemu_update_screen();
 		// Second: we must handle SDL events waiting for us in the event queue ...
 		hid_handle_all_sdl_events();
@@ -291,16 +281,12 @@ static void emulation_loop ( void )
 		//opcyc <<= speed_shifter;
 		cycles += opcyc;
 		all_virt_cycles += opcyc;	// FIXME: should be scaled for different CPU speeds, but then also CYCLES_PER_SECOND should be altered for the desired CPU speed!!!
-		if (cycles >= CYCLES_PER_SCANLINE) {	// if [at least!] 71 (on PAL) CPU cycles passed then render a VIC-I scanline, and maintain scanline value + texture/SDL update (at the end of a frame)
-			// render one (scan)line. Note: this is INACCURATE, we should do rendering per dot clock/cycle or something,
-			// but for a simple emulator like this, it's already acceptable solultion, I think!
-			// Note about frameskip: we render only every second (half) frame, no interlace (PAL VIC), not so correct, but we also save some resources this way
+		if (cycles >= CYCLES_PER_SCANLINE) {
 			if (!frameskip) {
-				//vic_render_line();
 			}
-			if (vera_render_line()) {
+			if (vera_render_line() == 0) {	// start of a new frame that is ...
 				update_emulator();
-				vera_vsync();
+				//vera_vsync();
 				frameskip = !frameskip;
 				return;
 			}
@@ -347,6 +333,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	xemucfg_define_str_option("rom", ROM_NAME, "Sets character ROM to use");
 	xemucfg_define_num_option("hiramsize", 2048, "Size of high-RAM in Kbytes");
+	xemucfg_define_num_option("clock", 8, "CPU frequency in MHz [1..8]");
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
 	xemucfg_define_switch_option("dumpmem", "Dump memory states on exit into files");
 	if (xemucfg_parse_all(argc, argv))
@@ -385,35 +372,35 @@ int main ( int argc, char **argv )
 	// Initiailize VIAs.
 	// Note: this is my unfinished VIA emulation skeleton, for my Commodore LCD emulator originally, ported from my JavaScript code :)
 	// it uses callback functions, which must be registered here, NULL values means unused functionality
-	via_init(&via1, "VIA-1",	// from $9110 on VIC-20
+	via_init(&via1, "VIA-1",
 		via1_outa_ram_bank,	// outa
 		via1_outb_rom_bank,	// outb
 		NULL,	// outsr
 		via1_ina_ram_bank,	// ina
 		via1_inb_rom_bank,	// inb
 		NULL,	// insr
-		via1_setint	// setint, called by via core, if interrupt level changed for whatever reason (ie: expired timer ...). It is wired to NMI on VIC20.
+		via1_setint
 	);
-	via_init(&via2, "VIA-2",	// from $9120 on VIC-20
+	via_init(&via2, "VIA-2",
 		NULL,			// outa [reg 1]
 		NULL, //via2_kbd_set_scan,	// outb [reg 0], we wire port B as output to set keyboard scan, HOWEVER, we use ORB directly in get scan!
 		NULL,	// outsr
 		via2_ina,	// ina  [reg 1], we wire port A as input to get the scan result, which was selected with port-A
-		via2_inb,		// inb  [reg 0], used with DDR set to input for joystick direction 'right' in VIC20
+		NULL, //via2_inb,
 		NULL,	// insr
-		via2_setint	// setint, same for VIA2 as with VIA1, but this is wired to IRQ on VIC20.
+		via2_setint
 	);
 	// Without these, the first DDR register writes would cause problems, since not OR* (Output Register) is written first ...
-	via1.ORA = 0xFF;
-	via1.ORB = 0xFF;
-	via2.ORA = 0xFF;
-	via2.ORB = 0xFF;
+	//via1.ORA = 0xFF;
+	//via1.ORB = 0xFF;
+	//via2.ORA = 0xFF;
+	//via2.ORB = 0xFF;
 	cycles = 0;
 	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
 	if (!xemucfg_get_bool("syscon"))
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
-	vera_vsync();
+	//vera_vsync();
 #ifdef __EMSCRIPTEN__
 	// http://xemu-dist.lgb.hu/dist/x16/xemu-xcx16-sample.html?t=11
 	close(1);

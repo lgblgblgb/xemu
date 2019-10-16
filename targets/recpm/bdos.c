@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "cpmfs.h"
 
 
-static int bdos_start;
+int bdos_start;
 int cpm_dma;
 
 
@@ -141,6 +141,7 @@ int bdos_handle ( int addr )
 			break;
 		default:
 			DEBUGPRINT("BDOS: sorry, function #%d is not implemented" NL, Z80_C);
+			Z80_A = 0;	// ??? FIXME: on unknown function ...
 			break;
 	}
 	return 1;	// it WAS the BDOS call dispatch!

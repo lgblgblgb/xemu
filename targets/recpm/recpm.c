@@ -41,7 +41,8 @@ static void emulation_loop ( void )
 			char disasm_buffer[128];
 			while (cpu_cycles < cpu_cycles_per_frame) {
 				z80_custom_disasm(Z80_PC, disasm_buffer, sizeof disasm_buffer);
-				puts(disasm_buffer);
+				if (*disasm_buffer)
+					puts(disasm_buffer);
 				cpu_cycles += z80ex_step();
 			}
 		} else {
@@ -87,6 +88,27 @@ void recpm_shutdown_callback ( void )
 	cpmfs_uninit();
 }
 
+
+#if 0
+int cpmprg_prepare_psp ( int argc, char **argv )
+{
+        memset(memory + 8, 0, 0x100 - 8);
+        memset(memory + 0x5C + 1, 32, 11);
+        memset(memory + 0x6C + 1, 32, 11);
+        for (int a = 0; a < argc; a++) {
+                if (a <= 1)
+                        write_filename_to_fcb(a == 0 ? 0x5C : 0x6C, argv[a]);
+                if (memory[0x81])
+                        strcat((char*)memory + 0x81, " ");
+                strcat((char*)memory + 0x81, argv[a]);
+                if (strlen((char*)memory + 0x81) > 0x7F)
+                        return CPMPRG_STOP(1, "Too long command line for the CP/M program");
+        }
+        memory[0x80] = strlen((char*)memory + 0x81);
+        return 0;
+}
+#endif
+
 static int load ( const char *fn )
 {
 	if (!fn)
@@ -105,6 +127,10 @@ static int load ( const char *fn )
 	DEBUGPRINT("LOAD: Program loaded, %d bytes, %d bytes TPA remained free" NL, size, tpa_size - size);
 	Z80_PC = 0x100;
 	cpm_dma = 0x80;	// default DMA
+	Z80_C = 0;	// FIXME: should be the same as zero page loc 4, drive + user number ...
+	memset(memory + 8, 0, 0x100 - 8);
+	memset(memory + 0x5C + 1, 32, 11);
+	memset(memory + 0x6C + 1, 32, 11);
 	return 0;
 }
 

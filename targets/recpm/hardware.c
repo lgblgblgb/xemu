@@ -43,6 +43,9 @@ Z80EX_BYTE z80ex_mread_cb ( Z80EX_WORD addr, int m1_state )
 
 void z80ex_mwrite_cb ( Z80EX_WORD addr, Z80EX_BYTE value )
 {
+	if (XEMU_UNLIKELY(addr < 8 || addr >= bdos_start)) {
+		FATAL("Tampering system memory addr=$%04X PC=$%04X" NL, addr, Z80_PC);
+	}
 	//if (addr >= bdos_entry_addr)
 	
 	memory[addr] = value;
@@ -114,6 +117,11 @@ static XEMU_INLINE Z80EX_BYTE disasm_mreader ( Z80EX_WORD addr )
 
 int z80_custom_disasm ( int addr, char *buf, int buf_size )
 {
+	if (z80ex.prefix) {
+		//snprintf(buf, buf_size, "%04X  %02X-PREFIX", addr, z80ex.prefix);
+		*buf = 0;
+		return 0;
+	}
 	int t1, t2;
 	char o_head[256];
 	char o_dasm[256];
