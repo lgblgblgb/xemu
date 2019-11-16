@@ -794,6 +794,7 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
 #define SPRITE_Y_START_SCREEN	50
 
 
+#if 0
 /* Extremely incorrect sprite emulation! BUGS:
    * Sprites cannot be behind the background (sprite priority)
    * Multicolour sprites are not supported
@@ -842,6 +843,90 @@ static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 
 }
 
 
+#else
+
+// kust temporaty to bridge the differences between my C65 emu (where I copy this code from)
+// and current M65 emu implementation. This WILL change a lot in the future, the whole VIC-II/III/IV stuff ...
+#define TOP_BORDER_SIZE 0
+#define LEFT_BORDER_SIZE 0
+//#define VIC_REG_COLOUR(n) palette[vic_registers[n] & 15]
+#define VIC_REG_COLOUR(n) palette[vic_registers[n]]
+
+/* Extremely incorrect sprite emulation! BUGS:
+   * Sprites cannot be behind the background (sprite priority)
+   * No sprite-background collision detection
+   * No sprite-sprite collision detection
+   * This is a simple, after-the-rendered-frame render-sprites one-by-one algorithm
+   * Very ugly, quick&dirty hack, not so optimal either, even without the other mentioned bugs ...
+*/
+static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 *p, int tail )
+{
+	Uint32 colours[4];
+	int sprite_y = vic_registers[sprite_no * 2 + 1] - SPRITE_Y_START_SCREEN;
+	int sprite_x = ((vic_registers[sprite_no * 2] | ((vic_registers[16] & sprite_mask) ? 0x100 : 0)) - SPRITE_X_START_SCREEN) * 2;
+	int expand_x = vic_registers[29] & sprite_mask;
+	int expand_y = vic_registers[23] & sprite_mask;
+	int lim_y = sprite_y + ((expand_y) ? 42 : 21);
+	int mcm = vic_registers[0x1C] & sprite_mask;
+	int y;
+	colours[2] = VIC_REG_COLOUR(39 + sprite_no);
+	if (mcm) {
+		colours[0] = 0;	// transparent, not a real colour, just signaling of transparency
+		colours[1] = VIC_REG_COLOUR(0x25);
+		colours[3] = VIC_REG_COLOUR(0x26);
+	}
+	p += SCREEN_WIDTH * (sprite_y + TOP_BORDER_SIZE) + LEFT_BORDER_SIZE;
+	for (y = sprite_y; y < lim_y; y += (expand_y ? 2 : 1), p += SCREEN_WIDTH * (expand_y ? 2 : 1))
+		if (y < 0 || y >= 200)
+			data += 3;	// skip one line (three bytes) of sprite data if outside of screen
+		else {
+			int mask, a, x = sprite_x;
+			for (a = 0; a < 3; a++) {
+				if (mcm) {
+					for (mask = 6; mask >=0; mask -= 2) {
+						Uint32 col = colours[(*data >> mask) & 3];
+						if (col) {
+							if (x >= 0 && x < 640) {
+								p[x] = p[x + 1] = p[x + 2] = p[x + 3] = col;
+								if (expand_y && y < 200)
+									p[x + SCREEN_WIDTH] = p[x + SCREEN_WIDTH + 1] = p[x + SCREEN_WIDTH + 2] = p[x + SCREEN_WIDTH + 3] = col;
+							}
+							x += 4;
+							if (expand_x && x >= 0 && x < 640) {
+								p[x] = p[x + 1] = p[x + 2] = p[x + 3] = col;
+								if (expand_y && y < 200)
+									p[x + SCREEN_WIDTH] = p[x + SCREEN_WIDTH + 1] = p[x + SCREEN_WIDTH + 2] = p[x + SCREEN_WIDTH + 3] = col;
+								x += 4;
+							}
+						} else
+							x += expand_x ? 8 : 4;
+					}
+				} else {
+					for (mask = 128; mask; mask >>= 1) {
+						if (*data & mask) {
+							if (x >= 0 && x < 640) {
+								p[x] = p[x + 1] = colours[2];
+								if (expand_y && y < 200)
+									p[x + SCREEN_WIDTH] = p[x + SCREEN_WIDTH + 1] = colours[2];
+							}
+							x += 2;
+							if (expand_x && x >= 0 && x < 640) {
+								p[x] = p[x + 1] = colours[2];
+								if (expand_y && y < 200)
+									p[x + SCREEN_WIDTH] = p[x + SCREEN_WIDTH + 1] = colours[2];
+								x += 2;
+							}
+						} else
+							x += expand_x ? 4 : 2;
+					}
+				}
+				data++;
+			}
+		}
+}
+
+
+#endif
 
 
 /* This is the one-frame-at-once (highly incorrect implementation, that is)
