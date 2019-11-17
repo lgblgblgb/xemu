@@ -54,5 +54,6 @@ extern Uint8 io_read  ( int addr );
 extern void  io_write ( int addr, Uint8 data );
 extern void  write_phys_mem ( int addr, Uint8 data );
 extern Uint8 read_phys_mem  ( int addr );
+extern void  c65_reset ( void );
 
 #endif
