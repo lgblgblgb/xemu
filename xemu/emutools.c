@@ -396,6 +396,25 @@ int xemu_init_debug ( const char *fn )
 }
 
 
+#ifndef __EMSCRIPTEN__
+static char *GetHackedPrefDir ( const char *base_path, const char *name )
+{
+	char path[PATH_MAX];
+	sprintf(path, "%s%s%c", base_path, name, DIRSEP_CHR);
+	char file[PATH_MAX];
+	sprintf(file, "%s%s", path, "prefdir-is-here.txt");
+	int fd = open(file, O_RDONLY | O_BINARY);
+	if (fd < 0)
+		return NULL;
+	close(fd);
+	char *p = SDL_malloc(strlen(path) + 1);
+	if (!p)
+		return NULL;
+	strcpy(p, path);
+	return p;
+}
+#endif
+
 
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan )
 {
@@ -427,7 +446,15 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 	if (SDL_Init(0))
 		FATAL("Cannot pre-initialize SDL without any subsystem: %s", SDL_GetError());
 	atexit(shutdown_emulator);
-	p = SDL_GetPrefPath(app_organization, app_name);
+	p = SDL_GetBasePath();
+	if (p) {
+		sdl_base_dir = xemu_strdup(p);
+		SDL_free(p);
+	} else
+		FATAL("Cannot query SDL base directory: %s", SDL_GetError());
+	p = GetHackedPrefDir(sdl_base_dir, app_name);
+	if (!p)
+		p = SDL_GetPrefPath(app_organization, app_name);
 	if (p) {
 		sdl_pref_dir = xemu_strdup(p);	// we are too careful: I can't be sure the used SQL_Quit messes up the allocated buffer, so we "clone" it
 		sdl_inst_dir = xemu_malloc(strlen(p) + strlen(INSTALL_DIRECTORY_ENTRY_NAME) + strlen(DIRSEP_STR) + 1);
@@ -435,12 +462,6 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 		SDL_free(p);
 	} else
 		FATAL("Cannot query SDL preference directory: %s", SDL_GetError());
-	p = SDL_GetBasePath();
-	if (p) {
-		sdl_base_dir = xemu_strdup(p);
-		SDL_free(p);
-	} else
-		FATAL("Cannot query SDL base directory: %s", SDL_GetError());
 #endif
 	xemu_app_org = xemu_strdup(app_organization);
 	xemu_app_name = xemu_strdup(app_name);
