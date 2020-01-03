@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -20,18 +20,14 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_COMMON_EMUTOOLS_BASICDEFS_H_INCLUDED
-#define __XEMU_COMMON_EMUTOOLS_BASICDEFS_H_INCLUDED
+#ifndef XEMU_COMMON_EMUTOOLS_BASICDEFS_H_INCLUDED
+#define XEMU_COMMON_EMUTOOLS_BASICDEFS_H_INCLUDED
 
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
 
 #define USE_REGPARM
-
-#if defined(__EMSCRIPTEN__) && !defined(CONFIG_EMSCRIPTEN_OK)
-#error "Sorry, emscripten is not yet validated for this sub-project ..."
-#endif
 
 #ifndef XEMU_DISABLE_SDL
 #ifndef HAVE_SDL2
@@ -127,7 +123,7 @@ typedef uint64_t Uint64;
 /* Note: O_BINARY is a must for Windows for opening binary files, odd enough, I know ...
          So we always use O_BINARY in the code, and defining O_BINARY as zero for non-Windows systems, so it won't hurt at all.
 	 Surely, SDL has some kind of file abstraction layer, but I seem to get used to some "native" code as well :-) */
-#ifndef _WIN32
+#ifndef XEMU_ARCH_WIN
 #	define O_BINARY		0
 #	define DIRSEP_STR	"/"
 #	define DIRSEP_CHR	'/'
