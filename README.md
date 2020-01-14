@@ -189,6 +189,43 @@ For building binary (exe) for Windows, you still need a UNIX-like environment
 (in theory WSL - Windows Subsystem for Linux - should be enough)  for the
 compilation, with cross-compiler and SDL2 MinGW cross platform suite installed.
 
+#### MSYS2 native build
+
+An easy way to build xemu under Windows is to use the  MSYS2 package which includes
+a full MinGW compiler, associated headers, tools , and a nice package management utility
+for easy installation of required components: Pacman, popular in ArchLinux-based distros.
+
+The following steps are based on a Windows-10 x64 system.
+
+* Download the executable installer in https://www.msys2.org for x86-64 architecture.
+* Install on the default location.
+* Execute the MSYS2 MinGW 64bit system prompt at installation end, or by looking into your Start Menu.
+* In the command prompt, ensure you have the latest repositories by doing:
+
+```
+pacman -Syu
+```
+Restart the prompt if needed, and finish installing remaining packages with:
+
+```
+pacman -Su
+```
+
+Now we can install the GCC compiler and required packages to build xemu with one command call:
+
+```
+pacman -S base-devel mingw-w64-x86_64-toolchain mingw-w64-x86_64-SDL2 
+```
+
+Build the native Windows executables by issuing:
+```
+make ARCH=nativewin
+```
+
+
+
+#### Alternative method (Cross-compilation)
+
 For Ubuntu (and probably other DEB based distros, this also includes of course
 WSL if Ubuntu is used as the guest) you can install mingw by:
 
