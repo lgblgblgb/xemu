@@ -10,6 +10,8 @@ win64#sdl2#dll#			echo "`$SDL2_CONFIG_WIN64 --prefix`/$SDL2_DLL_RELPATH"
 
 native#sdl2#cflags#		$SDL2_CONFIG_NATIVE --cflags && echo " -D HAVE_SDL2"
 native#sdl2#ldflags#		$SDL2_CONFIG_NATIVE --libs
+nativewin#sdl2#cflags#		$SDL2_CONFIG_NATIVE --cflags && echo " -D HAVE_SDL2"
+nativewin#sdl2#ldflags#		$SDL2_CONFIG_NATIVE --libs
 osx#sdl2#cflags#		$SDL2_CONFIG_OSX    --cflags && echo " -D HAVE_SDL2"
 osx#sdl2#ldflags#		$SDL2_CONFIG_OSX    --libs
 win32#sdl2#cflags#		$SDL2_CONFIG_WIN32  --cflags && echo " -D HAVE_SDL2"
@@ -21,6 +23,7 @@ html#sdl2#ldflags#		echo " -s USE_SDL=2"
 
 ;native#math#cflags#
 native#math#ldflags#		echo " -lm"
+nativewin#math#ldflags		echo " -lm"
 ;osx#math#cflags#
 osx#math#ldflags#		echo " -lm"
 ;win32#math#cflags#
@@ -60,5 +63,6 @@ win32#socketapi#cflags#		echo " -D HAVE_SOCKET_OS_API"
 win32#socketapi#ldflags#	echo " -lwsock32"
 win64#socketapi#cflags#		echo " -D HAVE_SOCKET_OS_API"
 win64#socketapi#ldflags#	echo " -lwsock32"
+nativewin#socketapi#ldflags#    echo " -lwsock32"
 ;html#socketapi#cflags#
 ;html#socketapi#ldflags#
