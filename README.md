@@ -7,7 +7,7 @@
 Emulators running on Linux/Unix/Windows/OSX of various (mainly 8 bit) machines,
 including the Commodore LCD and Commodore 65 (and also some Mega65) as well.
 
-Written by (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+Written by (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 Source repository: https://github.com/lgblgblgb/xemu
 
 Xemu also contains code wasn't written by me. Please read this page to get to
@@ -214,7 +214,7 @@ pacman -Su
 Now we can install the GCC compiler and required packages to build xemu with one command call:
 
 ```
-pacman -S base-devel mingw-w64-x86_64-toolchain mingw-w64-x86_64-SDL2 
+pacman -S make mingw-w64-x86_64-toolchain mingw-w64-x86_64-SDL2 
 ```
 
 Build the native Windows executables by issuing:
@@ -222,7 +222,7 @@ Build the native Windows executables by issuing:
 make ARCH=nativewin
 ```
 
-
+You can find the executables, with '.nativewin' extension, in the 'build/bin' directory.
 
 #### Alternative method (Cross-compilation)
 
