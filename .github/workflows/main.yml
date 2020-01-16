@@ -1,0 +1,33 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v1
+    - name: Install OS packages for building
+      run: sudo apt-get -yq --no-install-suggests --no-install-recommends --force-yes install alien bash binutils-mingw-w64-i686 binutils-mingw-w64-x86-64 bison build-essential bzip2 coreutils curl deborphan dpkg fakeroot file g++ gawk gcc gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 git libc6-dev libc-bin libcurl4-openssl-dev libgtk-3-dev libreadline6-dev libsdl2-dev lsb-release make pciutils sed tar util-linux vim-common wget zip
+    - name: Remove unwanted packages
+      run: sudo apt-get -yq --purge --force-yes autoremove || true ; sudo apt-get -yq --purge --force-yes remove `deborphan` || true
+    - name: Modifying the system
+      run: pwd ; hostname ; sudo hostname actions.github.com && sudo adduser --home `pwd` --shell /bin/bash --no-create-home --disabled-password --disabled-login --gecos Builder lgb && sudo chown -R lgb:lgb .
+    - name: Show system status
+      run: cat /etc/debian_version ; lsb_release -a ; yacc --version | head -n 1 ; gcc --version | head -n 1 ; g++ --version | head -n 1 ; make --version | head -n 1 ; git --version | head -n 1 ; gawk --version | head -n 1 ; bash --version | head -n 1 ; uname -a ; id -a ; echo "CWD is `pwd`" ; echo "PATH is $PATH" ; echo "Hostname is `hostname`" ; lscpu ; lspci ; uptime ; /sbin/ip a ; df -h . ; ls -la .
+    - name: List of all installed packages
+      run: dpkg -l | cat || true
+    - name: Compiling for native (Linux)
+      run: sudo -u lgb make
+    - name: Installing Windows SDL2 cross-development components
+      run: sudo mkdir -p /usr/local/cross-tools && cd /usr/local/cross-tools && sudo wget --no-check-certificate https://github.com/lgblgblgb/xep128/raw/gh-pages/files/sdl204-win-crosstools.tar.bz2 && sudo tar xfpj sdl204-win-crosstools.tar.bz2 && sudo ln -s /usr/local/cross-tools/i686-w64-mingw32/bin/sdl2-config /usr/bin/i686-w64-mingw32-sdl2-config && sudo ln -s /usr/local/cross-tools/x86_64-w64-mingw32/bin/sdl2-config /usr/bin/x86_64-w64-mingw32-sdl2-config
+    - name: Compiling for Windows 32 bit
+      run: sudo -u lgb make ARCH=win32
+    - name: Compiling for Windows 64 bit
+      run: sudo -u lgb make ARCH=win64
+    - name: Show result
+      run: ls -l build/bin/*.native ; md5sum build/bin/*.native ; sha512sum build/bin/*.native ; ls -l build/bin/*.win64 ; md5sum build/bin/*.win64 ; sha512sum build/bin/*.win64 ; ls -l build/bin/*.win32 ; md5sum build/bin/*.win32 ; sha512sum build/bin/*.win32 ; true
+    - name: Showing output of an emulator
+      run: build/bin/xmega65.native --help || true
