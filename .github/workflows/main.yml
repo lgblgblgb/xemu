@@ -10,7 +10,7 @@ jobs:
     steps:
     - uses: actions/checkout@v1
     - name: Install OS packages for building
-      run: sudo apt-get -yq --no-install-suggests --no-install-recommends --force-yes install alien bash binutils-mingw-w64-i686 binutils-mingw-w64-x86-64 bison build-essential bzip2 coreutils curl deborphan dpkg fakeroot file g++ gawk gcc gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 git libc6-dev libc-bin libcurl4-openssl-dev libgtk-3-dev libreadline6-dev libsdl2-dev lsb-release make pciutils sed tar util-linux vim-common wget zip
+      run: sudo apt-get update || true ; sudo apt-get dist-upgrade || true; sudo apt-get -yq --no-install-suggests --no-install-recommends --force-yes install alien bash binutils-mingw-w64-i686 binutils-mingw-w64-x86-64 bison build-essential bzip2 coreutils curl deborphan dpkg fakeroot file g++ gawk gcc gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 git libc6-dev libc-bin libcurl4-openssl-dev libgtk-3-dev libreadline6-dev libsdl2-dev lsb-release make pciutils sed tar util-linux vim-common wget zip
     - name: Remove unwanted packages
       run: sudo apt-get -yq --purge --force-yes autoremove || true ; sudo apt-get -yq --purge --force-yes remove `deborphan` || true
     - name: Modifying the system
