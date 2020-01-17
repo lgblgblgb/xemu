@@ -1,0 +1,14 @@
+name: Greetings
+
+on: [pull_request, issues]
+
+jobs:
+  greeting:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/first-interaction@v1
+      with:
+        repo-token: ${{ secrets.GITHUB_TOKEN }}
+        issue-message: 'This seems to be your first issue in the Xemu project! Thank you VERY MUCH for your first contribution in this area. This is an automatic message, you don''t need to react. Surely, I''ll respond you ASAP.'
+        pr-message: 'This seems to be your first pull-request in the Xemu project! Thank you VERY MUCH for your first contribution in this area. This is an autmatic message, you don''t need to react. Surely, I''ll respond you ASAP.'
+
