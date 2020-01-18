@@ -67,8 +67,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	error	"Unknown target OS architecture."
 #endif
 
-#include "xemu-target.h"
-
-#if defined(XEMU_ARCH_HTML) && !defined(CONFIG_EMSCRIPTEN_OK)
-#	error "Sorry, emscripten is not yet validated for this sub-project (CONFIG_EMSCRIPTEN_OK is not defined in xemu-target.h) ..."
+#ifndef XEMU_NO_TARGET
+#	include "xemu-target.h"
+#	if defined(XEMU_ARCH_HTML) && !defined(CONFIG_EMSCRIPTEN_OK)
+#		error "Sorry, emscripten is not yet validated for this sub-project (CONFIG_EMSCRIPTEN_OK is not defined in xemu-target.h) ..."
+#	endif
 #endif

@@ -202,27 +202,22 @@ The following steps are based on a Windows-10 x64 system.
 * Execute the MSYS2 MinGW 64bit system prompt at installation end, or by looking into your Start Menu.
 * In the command prompt, ensure you have the latest repositories by doing:
 
-```
-pacman -Syu
-```
+    pacman -Syu
+
 Restart the prompt if needed, and finish installing remaining packages with:
 
-```
-pacman -Su
-```
+    pacman -Su
 
 Now we can install the GCC compiler and required packages to build xemu with one command call:
 
-```
-pacman -S make mingw-w64-x86_64-toolchain mingw-w64-x86_64-SDL2 
-```
+    pacman -S make mingw-w64-x86_64-toolchain mingw-w64-x86_64-SDL2 
 
 Build the native Windows executables by issuing:
-```
-make ARCH=nativewin
-```
 
-You can find the executables, with '.nativewin' extension, in the 'build/bin' directory.
+    make ARCH=nativewin
+
+You can find the executables, with '.nativewin' extension, in the 'build/bin' directory. Surely,
+you can (and maybe you want) rename that to have extension '.exe' ...
 
 #### Alternative method (Cross-compilation)
 

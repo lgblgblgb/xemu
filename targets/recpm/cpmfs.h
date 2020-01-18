@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define __XEMU_RECPM_CPMFS_H_INCLUDED
 
 // These must be this way, ALWAYS! Only one should be used from the DMA stuffs, and file find functions should return with
-// these values to the BDOS level at least!
+// these values (low two bits only) to the BDOS level at least!
 #define CPMFS_SF_STORE_IN_DMA0	0x10
 #define CPMFS_SF_STORE_IN_DMA1	0x11
 #define CPMFS_SF_STORE_IN_DMA2	0x12
