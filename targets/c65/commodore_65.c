@@ -30,6 +30,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/c64_kbd_mapping.h"
 #include "xemu/emutools_config.h"
 #include "c65_snapshot.h"
+#include "xemu/emutools_gui.h"
+#include "ui.h"
 
 
 
@@ -754,7 +756,7 @@ static void shutdown_callback ( void )
 }
 
 
-static void c65_reset ( void )
+void c65_reset ( void )
 {
 	memory[0] = memory[1] = 0xFF;
 	map_mask = 0;
@@ -794,6 +796,9 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 				OSD(-1, -1, "Mouse grab activated. Press\nboth SHIFTs together to cancel.");
 				DEBUGPRINT("UI: mouse grab activated" NL);
 			}
+			if (handled == SDL_BUTTON_RIGHT) {
+				ui_enter();
+			}
 		}
 	}
 	return 0;
@@ -804,6 +809,7 @@ static void update_emulator ( void )
 {
 	xemu_update_screen();
 	hid_handle_all_sdl_events();
+	xemugui_iteration();
 	nmi_set(IS_RESTORE_PRESSED(), 2); // Custom handling of the restore key ...
 	xemu_timekeeping_delay(40000);
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
@@ -866,6 +872,7 @@ int main ( int argc, char **argv )
 	//xemucfg_define_switch_option("noaudio", "Disable audio");
 	xemucfg_define_str_option("rom", "#c65-system.rom", "Override system ROM path to be loaded");
 	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
+	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
 #ifdef FAKE_TYPING_SUPPORT
 	xemucfg_define_switch_option("go64", "Go into C64 mode after start");
 	xemucfg_define_switch_option("autoload", "Load and start the first program from disk");
@@ -900,6 +907,7 @@ int main ( int argc, char **argv )
 		AUDIO_SAMPLE_FREQ		// sound mix freq
 	);
 	osd_init_with_defaults();
+	xemugui_init(xemucfg_get_str("gui"));
 	// Start!!
 #ifdef FAKE_TYPING_SUPPORT
 	if (xemucfg_get_bool("go64")) {

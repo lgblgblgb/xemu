@@ -65,6 +65,9 @@ static Uint64 et_old;
 static int td_balancer, td_em_ALL, td_pc_ALL;
 int sysconsole_is_open = 0;
 FILE *debug_fp = NULL;
+int chatty_xemu = 1;
+int sdl_default_win_x_size;
+int sdl_default_win_y_size;
 
 
 static int osd_enabled = 0, osd_status = 0, osd_available = 0, osd_xsize, osd_ysize, osd_fade_dec, osd_fade_end, osd_alpha_last;
@@ -234,6 +237,18 @@ void xemu_set_full_screen ( int setting )
 }
 
 
+// 0 = full screen, 1 = default window size, 2 = zoom 200%, 3 = zoom 300%, 4 = zoom 400%
+void xemu_set_screen_mode ( int setting )
+{
+	if (setting <= 0) {
+		xemu_set_full_screen(1);
+	} else {
+		xemu_set_full_screen(0);
+		SDL_SetWindowSize(sdl_win, sdl_default_win_x_size * setting, sdl_default_win_y_size * setting);
+	}
+	SDL_RaiseWindow(sdl_win);
+}
+
 
 static inline void do_sleep ( int td )
 {
@@ -305,7 +320,8 @@ void xemu_timekeeping_delay ( int td_em )
 	td = get_elapsed_time(et_new, &et_old, &unix_time);
 	seconds_timer_trigger = (unix_time != old_unix_time);
 	if (seconds_timer_trigger) {
-		snprintf(window_title_buffer_end, 32, "  [%d%%] %s %s",
+		snprintf(window_title_buffer_end, 32, "  [%d%% %d%%] %s %s",
+			((td_em_ALL < td_pc_ALL) && td_pc_ALL) ? td_em_ALL * 100 / td_pc_ALL : 100,
 			td_em_ALL ? (td_pc_ALL * 100 / td_em_ALL) : -1,
 			window_title_custom_addon ? window_title_custom_addon : "running",
 			window_title_info_addon ? window_title_info_addon : ""
@@ -333,7 +349,7 @@ void xemu_timekeeping_delay ( int td_em )
 
 static void atexit_callback_for_console ( void )
 {
-	sysconsole_close("Please review the console content (if you need it) then click OK to close and exit Xemu");
+	sysconsole_close("Please review the console content (if you need it) before exiting!");
 }
 
 
@@ -353,7 +369,7 @@ static void shutdown_emulator ( void )
 		fclose(debug_fp);
 		debug_fp = NULL;
 	}
-	printf(NL "XEMU: good by(T)e." NL);
+	DEBUGPRINT(NL "XEMU: good by(T)e." NL);
 }
 
 
@@ -381,11 +397,31 @@ int xemu_init_debug ( const char *fn )
 }
 
 
+#ifndef __EMSCRIPTEN__
+static char *GetHackedPrefDir ( const char *base_path, const char *name )
+{
+	char path[PATH_MAX];
+	sprintf(path, "%s%s%c", base_path, name, DIRSEP_CHR);
+	char file[PATH_MAX];
+	sprintf(file, "%s%s", path, "prefdir-is-here.txt");
+	int fd = open(file, O_RDONLY | O_BINARY);
+	if (fd < 0)
+		return NULL;
+	close(fd);
+	char *p = SDL_malloc(strlen(path) + 1);
+	if (!p)
+		return NULL;
+	strcpy(p, path);
+	return p;
+}
+#endif
+
 
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan )
 {
 #ifdef __EMSCRIPTEN__
-	xemu_dump_version(stdout, slogan);
+	if (chatty_xemu)
+		xemu_dump_version(stdout, slogan);
 	MKDIR(emscripten_sdl_base_dir);
 	sdl_base_dir = (void*)emscripten_sdl_base_dir;
 	sdl_pref_dir = (void*)emscripten_sdl_base_dir;
@@ -399,7 +435,8 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 #else
 	char *p;
 	sysconsole_open();
-	xemu_dump_version(stdout, slogan);
+	if (chatty_xemu)
+		xemu_dump_version(stdout, slogan);
 	// Initialize SDL with no subsystems
 	// This is needed, because SDL_GetPrefPath and co. are not safe on every platforms without it.
 	// But we DO want to use *before* the real SDL_Init, as the configuration file may describe
@@ -410,7 +447,15 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 	if (SDL_Init(0))
 		FATAL("Cannot pre-initialize SDL without any subsystem: %s", SDL_GetError());
 	atexit(shutdown_emulator);
-	p = SDL_GetPrefPath(app_organization, app_name);
+	p = SDL_GetBasePath();
+	if (p) {
+		sdl_base_dir = xemu_strdup(p);
+		SDL_free(p);
+	} else
+		FATAL("Cannot query SDL base directory: %s", SDL_GetError());
+	p = GetHackedPrefDir(sdl_base_dir, app_name);
+	if (!p)
+		p = SDL_GetPrefPath(app_organization, app_name);
 	if (p) {
 		sdl_pref_dir = xemu_strdup(p);	// we are too careful: I can't be sure the used SQL_Quit messes up the allocated buffer, so we "clone" it
 		sdl_inst_dir = xemu_malloc(strlen(p) + strlen(INSTALL_DIRECTORY_ENTRY_NAME) + strlen(DIRSEP_STR) + 1);
@@ -418,12 +463,6 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 		SDL_free(p);
 	} else
 		FATAL("Cannot query SDL preference directory: %s", SDL_GetError());
-	p = SDL_GetBasePath();
-	if (p) {
-		sdl_base_dir = xemu_strdup(p);
-		SDL_free(p);
-	} else
-		FATAL("Cannot query SDL base directory: %s", SDL_GetError());
 #endif
 	xemu_app_org = xemu_strdup(app_organization);
 	xemu_app_name = xemu_strdup(app_name);
@@ -450,18 +489,19 @@ int xemu_init_sdl ( void )
 #endif
 	SDL_VERSION(&sdlver_compiled);
         SDL_GetVersion(&sdlver_linked);
-	printf( "SDL version: (%s) compiled with %d.%d.%d, used with %d.%d.%d on platform %s" NL
-		"SDL system info: %d bits %s, %d cores, l1_line=%d, RAM=%dMbytes, CPU features: "
-		"3DNow=%d AVX=%d AVX2=%d AltiVec=%d MMX=%d RDTSC=%d SSE=%d SSE2=%d SSE3=%d SSE41=%d SSE42=%d" NL
-		"SDL drivers: video = %s, audio = %s" NL,
-		SDL_GetRevision(),
-		sdlver_compiled.major, sdlver_compiled.minor, sdlver_compiled.patch,
-		sdlver_linked.major, sdlver_linked.minor, sdlver_linked.patch,
-		SDL_GetPlatform(),
-		ARCH_BITS, ENDIAN_NAME, SDL_GetCPUCount(), SDL_GetCPUCacheLineSize(), SDL_GetSystemRAM(),
-		SDL_Has3DNow(),SDL_HasAVX(),SDL_HasAVX2(),SDL_HasAltiVec(),SDL_HasMMX(),SDL_HasRDTSC(),SDL_HasSSE(),SDL_HasSSE2(),SDL_HasSSE3(),SDL_HasSSE41(),SDL_HasSSE42(),
-		SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver()
-	);
+	if (chatty_xemu)
+		printf( "SDL version: (%s) compiled with %d.%d.%d, used with %d.%d.%d on platform %s" NL
+			"SDL system info: %d bits %s, %d cores, l1_line=%d, RAM=%dMbytes, CPU features: "
+			"3DNow=%d AVX=%d AVX2=%d AltiVec=%d MMX=%d RDTSC=%d SSE=%d SSE2=%d SSE3=%d SSE41=%d SSE42=%d" NL
+			"SDL drivers: video = %s, audio = %s" NL,
+			SDL_GetRevision(),
+			sdlver_compiled.major, sdlver_compiled.minor, sdlver_compiled.patch,
+			sdlver_linked.major, sdlver_linked.minor, sdlver_linked.patch,
+			SDL_GetPlatform(),
+			ARCH_BITS, ENDIAN_NAME, SDL_GetCPUCount(), SDL_GetCPUCacheLineSize(), SDL_GetSystemRAM(),
+			SDL_Has3DNow(),SDL_HasAVX(),SDL_HasAVX2(),SDL_HasAltiVec(),SDL_HasMMX(),SDL_HasRDTSC(),SDL_HasSSE(),SDL_HasSSE2(),SDL_HasSSE3(),SDL_HasSSE41(),SDL_HasSSE42(),
+			SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver()
+		);
 	return 0;
 }
 
@@ -488,7 +528,7 @@ int xemu_post_init (
 	int a;
 	if (!debug_fp)
 		xemu_init_debug(getenv("XEMU_DEBUG_FILE"));
-	if (!debug_fp)
+	if (!debug_fp && chatty_xemu)
 		printf("Logging into file: not enabled." NL);
 	if (!sdl_pref_dir)
 		FATAL("xemu_pre_init() hasn't been called yet!");
@@ -498,7 +538,7 @@ int xemu_post_init (
 	if (xemu_init_sdl())	// it is possible that is has been already called, but it's not a problem
 		return 1;
 	shutdown_user_function = shutdown_callback;
-	printf("Timing: sleep = %s, query = %s" NL, __SLEEP_METHOD_DESC, __TIMING_METHOD_DESC);
+	DEBUGPRINT("Timing: sleep = %s, query = %s" NL, __SLEEP_METHOD_DESC, __TIMING_METHOD_DESC);
 	DEBUGPRINT("SDL preferences directory: %s" NL, sdl_pref_dir);
 	DEBUG("SDL install directory: %s" NL, sdl_inst_dir);
 	DEBUG("SDL base directory: %s" NL, sdl_base_dir);
@@ -528,7 +568,9 @@ int xemu_post_init (
 		win_x_size, win_y_size,
 		SDL_WINDOW_SHOWN | (is_resizable ? SDL_WINDOW_RESIZABLE : 0)
 	);
-	printf("SDL window native pixel format: %s" NL, SDL_GetPixelFormatName(SDL_GetWindowPixelFormat(sdl_win)));
+	sdl_default_win_x_size = win_x_size;
+	sdl_default_win_y_size = win_y_size;
+	DEBUGPRINT("SDL window native pixel format: %s" NL, SDL_GetPixelFormatName(SDL_GetWindowPixelFormat(sdl_win)));
 	if (!sdl_win) {
 		ERROR_WINDOW("Cannot create SDL window: %s", SDL_GetError());
 		return 1;
@@ -540,9 +582,9 @@ int xemu_post_init (
 	a = SDL_GetNumRenderDrivers();
 	while (--a >= 0) {
 		if (!SDL_GetRenderDriverInfo(a, &ren_info)) {
-			printf("SDL renderer driver #%d: \"%s\"" NL, a, ren_info.name);
+			DEBUGPRINT("SDL renderer driver #%d: \"%s\"" NL, a, ren_info.name);
 		} else
-			printf("SDL renderer driver #%d: FAILURE TO QUERY (%s)" NL, a, SDL_GetError());
+			DEBUGPRINT("SDL renderer driver #%d: FAILURE TO QUERY (%s)" NL, a, SDL_GetError());
 	}
 	sdl_ren = SDL_CreateRenderer(sdl_win, -1, SDL_RENDERER_ACCELERATED);
 	if (!sdl_ren) {
@@ -557,10 +599,10 @@ int xemu_post_init (
 	}
 	SDL_SetRenderDrawColor(sdl_ren, 0, 0, 0, SDL_ALPHA_OPAQUE);
 	if (!SDL_GetRendererInfo(sdl_ren, &ren_info)) {
-		printf("SDL renderer used: \"%s\" max_tex=%dx%d tex_formats=%d ", ren_info.name, ren_info.max_texture_width, ren_info.max_texture_height, ren_info.num_texture_formats);
+		DEBUGPRINT("SDL renderer used: \"%s\" max_tex=%dx%d tex_formats=%d ", ren_info.name, ren_info.max_texture_width, ren_info.max_texture_height, ren_info.num_texture_formats);
 		for (a = 0; a < ren_info.num_texture_formats; a++)
-			printf("%c%s", a ? ' ' : '(', SDL_GetPixelFormatName(ren_info.texture_formats[a]));
-		printf(")" NL);
+			DEBUGPRINT("%c%s", a ? ' ' : '(', SDL_GetPixelFormatName(ren_info.texture_formats[a]));
+		DEBUGPRINT(")" NL);
 	}
 	SDL_RenderSetLogicalSize(sdl_ren, logical_x_size, logical_y_size);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
 	sdl_tex = SDL_CreateTexture(sdl_ren, pixel_format, SDL_TEXTUREACCESS_STREAMING, texture_x_size, texture_y_size);
@@ -590,7 +632,8 @@ int xemu_post_init (
 		sdl_pixel_buffer = xemu_malloc_ALIGNED(texture_x_size_in_bytes * texture_y_size);
 	// play a single frame game, to set a consistent colour (all black ...) for the emulator. Also, it reveals possible errors with rendering
 	xemu_render_dummy_frame(black_colour, texture_x_size, texture_y_size);
-	printf(NL);
+	if (chatty_xemu)
+		printf(NL);
 	return 0;
 }
 
@@ -989,6 +1032,19 @@ void sysconsole_open ( void )
 		ERROR_WINDOW("Cannot allocate windows console!");
 		return;
 	}
+	// disallow closing console (this would kill the app, too!!!!)
+#if 1
+	HWND hwnd = GetConsoleWindow();
+	if (hwnd != NULL) {
+		HMENU hmenu = GetSystemMenu(hwnd, FALSE);
+		if (hmenu != NULL)
+			DeleteMenu(hmenu, SC_CLOSE, MF_BYCOMMAND);
+		else
+			DEBUGPRINT("WINDOWS: GetSystemMenu() failed to give the menu for our console window." NL);
+	} else
+		DEBUGPRINT("WINDOWS: GetConsoleWindow() failed to give a handle." NL);
+#endif
+	// end of close madness
 	SetConsoleOutputCP(65001); // CP_UTF8, just to be sure to use the constant as not all mingw versions seems to define it
 	SetConsoleTitle("Xemu Console");
 	// set the screen buffer to be big enough to let us scroll text
@@ -1031,21 +1087,63 @@ void sysconsole_open ( void )
 }
 
 
+#ifdef _WIN32
+static CHAR sysconsole_getch( void )
+{
+	HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
+	if (!h)	// console cannot be accessed or WTF?
+		return 0;
+	DWORD cc, mode_saved;
+	GetConsoleMode (h, &mode_saved);
+	SetConsoleMode (h, mode_saved & ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT));
+	TCHAR c = 0;
+	ReadConsole(h, &c, 1, &cc, NULL);
+	SetConsoleMode(h, mode_saved);
+	return c;
+}
+#endif
+
 
 void sysconsole_close ( const char *waitmsg )
 {
 	if (!sysconsole_is_open)
 		return;
 #ifdef _WIN32
-	if (waitmsg)
-		INFO_WINDOW("%s", waitmsg);
-	if (!FreeConsole())
-		ERROR_WINDOW("Cannot release windows console!");
-	else {
+	if (waitmsg) {
+		// FIXME: for some reason on Windows (no idea why), window cannot be open from an atexit callback
+		// So instead of a GUI element here with a dialog box, we must rely on the console to press a key to continue ...
+		printf("\n\n*** %s\nPress SPACE to continue.", waitmsg);
+		while (sysconsole_getch() != 32)
+			;
+	}
+	if (!FreeConsole()) {
+		if (!waitmsg)
+			ERROR_WINDOW("Cannot release windows console!");
+	} else {
 		sysconsole_is_open = 0;
 		DEBUGPRINT("WINDOWS: console is closed" NL);
 	}
 #else
 	sysconsole_is_open = 0;
 #endif
+}
+
+
+int sysconsole_toggle ( int set )
+{
+	switch (set) {
+		case 0:
+			sysconsole_close(NULL);
+			break;
+		case 1:
+			sysconsole_open();
+			break;
+		default:
+			if (sysconsole_is_open)
+				sysconsole_close(NULL);
+			else
+				sysconsole_open();
+			break;
+	}
+	return sysconsole_is_open;
 }

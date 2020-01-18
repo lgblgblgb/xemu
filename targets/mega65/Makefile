@@ -1,6 +1,6 @@
 ## A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
 ## Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-## Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,14 +21,22 @@ PRG_TARGET	= xmega65
 EMU_DESCRIPTION	= Mega 65
 
 CFLAGS_TARGET_xmega65	= -Wvla
-SRCS_TARGET_xmega65	= mega65.c sdcard.c uart_monitor.c hypervisor.c m65_snapshot.c memory_mapper.c io_mapper.c vic4.c ethernet65.c input_devices.c memcontent.c
-SRCS_COMMON_xmega65	= emutools.c cpu65.c cia6526.c emutools_hid.c sid.c f011_core.c f018_core.c c64_kbd_mapping.c emutools_config.c emutools_snapshot.c emutools_files.c emutools_umon.c ethertap.c d81access.c
-CONFIG_CFLAGS_TARGET_xmega65	= sdl2|math|socketapi
-CONFIG_LDFLAGS_TARGET_xmega65	= sdl2|math|socketapi
+SRCS_TARGET_xmega65	= mega65.c sdcard.c uart_monitor.c hypervisor.c m65_snapshot.c memory_mapper.c io_mapper.c vic4.c ethernet65.c input_devices.c memcontent.c ui.c
+SRCS_COMMON_xmega65	= emutools.c cpu65.c cia6526.c emutools_hid.c sid.c f011_core.c f018_core.c c64_kbd_mapping.c emutools_config.c emutools_snapshot.c emutools_files.c emutools_umon.c ethertap.c d81access.c emutools_gui.c
+CONFIG_CFLAGS_TARGET_xmega65	= sdl2|math|socketapi|gtk3
+CONFIG_LDFLAGS_TARGET_xmega65	= sdl2|math|socketapi|gtk3
+
+MEGA65_CORE = ../../../mega65-core
 
 include ../../build/Makefile.common
 
 recreatememcontent:
+	@echo "*** Creating needed files from mega65-core ..."
+	$(MAKE) -C $(MEGA65_CORE) bin/HICKUP.M65
+	$(MAKE) -C $(MEGA65_CORE) bin/COLOURRAM.BIN
+	$(MAKE) -C $(MEGA65_CORE) sdcard-files/BANNER.M65
+	$(MAKE) -C $(MEGA65_CORE) sdcard-files/FREEZER.M65
+	@echo "*** About creating our C file"
 	rm -f memcontent.c.tmp
 	echo "/* !THIS IS A GENERATED FILE! DO NOT EDIT!" >> memcontent.c.tmp
 	echo " * Instead, say 'make recreatememcontent' to re-generate this file" >> memcontent.c.tmp
@@ -39,15 +47,19 @@ recreatememcontent:
 	echo '#include "xemu/emutools.h"' >> memcontent.c.tmp
 	echo '#include "memcontent.h"' >> memcontent.c.tmp
 	echo "Uint8 meminitdata_kickstart[MEMINITDATA_KICKSTART_SIZE] = {" >> memcontent.c.tmp
-	../../build/bin2values.py ../../../mega65-core/bin/KICKUP.M65 - >> memcontent.c.tmp
+	../../build/bin2values.py $(MEGA65_CORE)/bin/HICKUP.M65 - >> memcontent.c.tmp
 	echo "};" >> memcontent.c.tmp
 	echo "Uint8 meminitdata_chrwom[MEMINITDATA_CHRWOM_SIZE] = {" >> memcontent.c.tmp
-	gawk '/^[\t ]*[xX]"/ { $$0 = toupper($$0); gsub("X\"","0x",$$0); gsub("\"","",$$0); print "\t" $$0 }' < ../../../mega65-core/src/vhdl/charrom.vhdl >> memcontent.c.tmp
+	gawk '/^[\t ]*[xX]"/ { $$0 = toupper($$0); gsub("X\"","0x",$$0); gsub("\"","",$$0); print "\t" $$0 }' < $(MEGA65_CORE)/src/vhdl/charrom.vhdl >> memcontent.c.tmp
 	echo "};" >> memcontent.c.tmp
 	echo "Uint8 meminitdata_cramutils[MEMINITDATA_CRAMUTILS_SIZE] = {" >> memcontent.c.tmp
-	../../build/bin2values.py ../../../mega65-core/bin/COLOURRAM.BIN - >> memcontent.c.tmp
+	../../build/bin2values.py $(MEGA65_CORE)/bin/COLOURRAM.BIN - >> memcontent.c.tmp
 	echo "};" >> memcontent.c.tmp
 	echo "Uint8 meminitdata_banner[MEMINITDATA_BANNER_SIZE] = {" >> memcontent.c.tmp
-	../../build/bin2values.py ../../../mega65-core/sdcard-files/BANNER.M65 - >> memcontent.c.tmp
+	../../build/bin2values.py $(MEGA65_CORE)/sdcard-files/BANNER.M65 - >> memcontent.c.tmp
 	echo "};" >> memcontent.c.tmp
-	mv memcontent.c.tmp memcontent.c
+	echo "Uint8 meminitdata_freezer[] = { /* Not used currently but we will be ... */" >> memcontent.c.tmp
+	../../build/bin2values.py $(MEGA65_CORE)/sdcard-files/FREEZER.M65 - >> memcontent.c.tmp
+	echo "};" >> memcontent.c.tmp
+	cp memcontent.c memcontent.c.BAK
+	@echo "*** OK. Please rename memcontent.c.tmp to memcontent.c to really apply these changed ***"

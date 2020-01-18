@@ -47,10 +47,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMU_MAIN_LOOP(func,p1,p2) for (;;) func()
 #endif
 
-extern void sysconsole_open  ( void );
-extern void sysconsole_close ( const char *waitmsg );
+extern void sysconsole_open   ( void );
+extern void sysconsole_close  ( const char *waitmsg );
+extern int  sysconsole_toggle ( int set );
 #ifdef HAVE_XEMU_SOCKET_API
-extern int  xemu_use_sockapi ( void );
+extern int  xemu_use_sockapi  ( void );
 extern void xemu_free_sockapi ( void );
 #endif
 
@@ -104,6 +105,10 @@ static XEMU_INLINE int CHECK_SNPRINTF( int ret, int limit )
 extern int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg );
 #define QUESTION_WINDOW(items, msg) _sdl_emu_secured_modal_box_(items, msg)
 
+static inline int ARE_YOU_SURE ( const char *s ) {
+	return (QUESTION_WINDOW("YES|NO", (s != NULL && *s != '\0') ? s : "Are you sure?") == 0);
+}
+
 extern char *sdl_window_title;
 extern char *window_title_custom_addon;
 extern char *window_title_info_addon;
@@ -114,6 +119,7 @@ extern char *xemu_app_org, *xemu_app_name;
 extern int seconds_timer_trigger;
 extern char *sdl_pref_dir, *sdl_base_dir, *sdl_inst_dir;
 extern int sysconsole_is_open;
+extern int sdl_default_win_x_size, sdl_default_win_y_size;
 
 extern int xemu_init_debug ( const char *fn );
 extern time_t xemu_get_unixtime ( void );
@@ -133,6 +139,7 @@ extern void *xemu_malloc_ALIGNED ( size_t size );
 
 extern char *xemu_strdup ( const char *s );
 extern void xemu_set_full_screen ( int setting );
+extern void xemu_set_screen_mode ( int setting );
 extern void xemu_timekeeping_delay ( int td_em );
 extern void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan );
 extern int xemu_init_sdl ( void );

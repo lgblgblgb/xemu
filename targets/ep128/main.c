@@ -65,6 +65,7 @@ static double SCALER;
 static int sram_ready = 0;
 time_t unix_time;
 
+int chatty_xemu = 1;	// needed by the ugly mix of old Xep128 solutions and newer Xemu headers :-O
 
 
 /* Ugly indeed, but it seems some architecture/OS does not support "standard"
@@ -462,7 +463,7 @@ int main (int argc, char *argv[])
 	"files");
 	if (screen_init())
 		return 1;
-	if (xepgui_init())
+	if (xepgui_init(NULL))
 		return 1;
 	audio_init(config_getopt_int("audio"));
 	z80ex_init();

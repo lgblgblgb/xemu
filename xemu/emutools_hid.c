@@ -469,7 +469,11 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 			break;
 		case SDL_KEYUP:
 		case SDL_KEYDOWN:
-			if (event->key.repeat == 0 && event->key.keysym.scancode != SDL_SCANCODE_UNKNOWN
+			if (
+#ifndef CONFIG_KBD_ALSO_REPEATS
+				event->key.repeat == 0 &&
+#endif
+				event->key.keysym.scancode != SDL_SCANCODE_UNKNOWN
 #ifdef CONFIG_KBD_SELECT_FOCUS
 				&& (event->key.windowID == sdl_winid || event->key.windowID == 0)
 #endif
@@ -479,8 +483,12 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 				 * used	for other emulation purposes ... */
 				&& !(event->key.keysym.scancode == SDL_SCANCODE_TAB && (event->key.keysym.mod & KMOD_LALT))
 #endif
-			)
+			) {
+#ifdef CONFIG_KBD_ALSO_RAW_SDL_CALLBACK
+				emu_callback_key_raw_sdl(&event->key);
+#endif
 				hid_key_event(event->key.keysym.scancode, event->key.state == SDL_PRESSED);
+			}
 			break;
 		case SDL_JOYDEVICEADDED:
 		case SDL_JOYDEVICEREMOVED:
@@ -508,6 +516,16 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 			else
 				emu_callback_key(-2, 0, event->type == SDL_MOUSEBUTTONDOWN, event->button.button);
 			break;
+#ifdef CONFIG_KBD_ALSO_TEXTEDITING_SDL_CALLBACK
+		case SDL_TEXTEDITING:
+			emu_callback_key_texteditng_sdl(&event->edit);
+			break;
+#endif
+#ifdef CONFIG_KBD_ALSO_TEXTINPUT_SDL_CALLBACK
+		case SDL_TEXTINPUT:
+			emu_callback_key_textinput_sdl(&event->text);
+			break;
+#endif
 		default:
 			handled = 0;
 			break;

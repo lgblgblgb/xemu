@@ -1,0 +1,37 @@
+name: CI
+
+on: [push, pull_request]
+
+jobs:
+  build:
+
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v1
+    - name: Update APT database
+      run: sudo apt-get -yq update || true
+    - name: Install OS packages for building
+      run: sudo apt-get -yq --no-install-suggests --no-install-recommends --force-yes install alien bash binutils-mingw-w64-i686 binutils-mingw-w64-x86-64 bison build-essential bzip2 coreutils curl deborphan dpkg fakeroot file g++ gawk gcc gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 git libc6-dev libc-bin libcurl4-openssl-dev libgtk-3-dev libreadline6-dev libsdl2-dev lsb-release make pciutils sed tar util-linux vim-common wget zip
+    - name: List of all installed packages
+      run: dpkg -l | cat || true
+    - name: Modifying the build system
+      run: pwd ; hostname ; sudo hostname actions.github.com || true ; sudo adduser --home `pwd` --shell /bin/bash --no-create-home --disabled-password --disabled-login --gecos "LGB builder" lgb && sudo chown -R lgb:lgb .
+    - name: Show system status
+      run: cat /etc/debian_version ; lsb_release -a ; yacc --version | head -n 1 ; gcc --version | head -n 1 ; g++ --version | head -n 1 ; make --version | head -n 1 ; git --version | head -n 1 ; gawk --version | head -n 1 ; bash --version | head -n 1 ; uname -a ; id -a ; echo "CWD is `pwd`" ; echo "PATH is $PATH" ; echo "Hostname is `hostname`" ; sudo lscpu || true ; sudo lspci || true ; uptime ; sudo /sbin/ip a || true ; df -h . ; ls -la .
+    - name: Show native SDL2 status
+      run: ls -l `which sdl2-config` || true ; sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true
+    - name: Compiling for native (Linux)
+      run: sudo -u lgb make
+    - name: Installing Windows SDL2 cross-development components
+      run: sudo mkdir -p /usr/local/cross-tools && cd /usr/local/cross-tools && sudo wget --no-check-certificate https://github.com/lgblgblgb/xep128/raw/gh-pages/files/sdl204-win-crosstools.tar.bz2 && sudo tar xfpjv sdl204-win-crosstools.tar.bz2 && sudo ln -s /usr/local/cross-tools/i686-w64-mingw32/bin/sdl2-config /usr/bin/i686-w64-mingw32-sdl2-config && sudo ln -s /usr/local/cross-tools/x86_64-w64-mingw32/bin/sdl2-config /usr/bin/x86_64-w64-mingw32-sdl2-config && ls -l /usr/bin/i686-w64-mingw32-sdl2-config /usr/bin/x86_64-w64-mingw32-sdl2-config
+    - name: Show Windows SDL2 status
+      run: echo "*** 64-bit Windows SDL2 status ***" ; ls -l `which x86_64-w64-mingw32-sdl2-config` || true ; x86_64-w64-mingw32-sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true ; echo "*** 32-bit Windows SDL2 status ***" ; ls -l `which i686-w64-mingw32-sdl2-config` || true ; i686-w64-mingw32-sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true
+    - name: Compiling for Windows 32-bit
+      run: sudo -u lgb make ARCH=win32
+    - name: Compiling for Windows 64-bit
+      run: sudo -u lgb make ARCH=win64
+    - name: Show result
+      run: ls -l build/bin/*.native || true ; md5sum build/bin/*.native || true ; sha512sum build/bin/*.native || true ; ls -l build/bin/*.win64 || true ; md5sum build/bin/*.win64 || true ; sha512sum build/bin/*.win64 || true ; ls -l build/bin/*.win32 || true ; md5sum build/bin/*.win32 || true ; sha512sum build/bin/*.win32 || true
+    - name: Showing output of an emulator
+      run: build/bin/xmega65.native --help || true

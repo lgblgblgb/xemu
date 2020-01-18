@@ -236,7 +236,7 @@ int d81access_attach_fsobj ( const char *fn, int mode )
 		return 0;
 	}
 	close(fd);
-	ERROR_WINDOW("Cannot guess the type of object wanted to use for floppy emulation, sorry");
+	ERROR_WINDOW("Cannot guess the type of object (from its size) wanted to use for floppy emulation, sorry");
 	return 1;
 #if 0
 	return 1;

@@ -10,5 +10,6 @@ extern Uint8 meminitdata_kickstart[MEMINITDATA_KICKSTART_SIZE];
 extern Uint8 meminitdata_chrwom[MEMINITDATA_CHRWOM_SIZE];
 extern Uint8 meminitdata_cramutils[MEMINITDATA_CRAMUTILS_SIZE];
 extern Uint8 meminitdata_banner[MEMINITDATA_BANNER_SIZE];
+extern Uint8 meminitdata_freezer[];
 
 #endif
