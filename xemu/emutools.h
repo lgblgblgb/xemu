@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -157,6 +157,7 @@ extern int xemu_post_init (
         int locked_texture_update,              // use locked texture method [non zero], or malloc'ed stuff [zero]. NOTE: locked access doesn't allow to _READ_ pixels and you must fill ALL pixels!
         void (*shutdown_callback)(void)         // callback function called on exit (can be nULL to not have any emulator specific stuff)
 );
+extern int xemu_set_icon_from_xpm ( char *xpm[] );
 extern void xemu_timekeeping_start ( void );
 extern void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_size );
 extern Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail );

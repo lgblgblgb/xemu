@@ -107,6 +107,16 @@ static const Uint8 opcycles[] = {7,6,2,2,5,3,5,5,3,2,2,2,6,4,6,2,2,5,5,2,5,4,6,5
 #define VALUE_TO_PF_ZERO(a) ((a) ? 0 : CPU65_PF_Z)
 #endif
 
+
+#ifdef CPU65_DISCRETE_PF_NZ
+#	define ASSIGN_PF_Z_BY_COND(a)	CPU65.pf_z = (a)
+#	define ASSIGN_PF_N_BY_COND(a)	CPU65.pf_n = (a)
+#else
+#	define ASSIGN_PF_Z_BY_COND(a)	do { if (a) CPU65.pf_nz |= CPU65_PF_Z; else CPU65.pf_nz &= ~CPU65_PF_Z; } while(0)
+#	define ASSIGN_PF_N_BY_COND(a)	do { if (a) CPU65.pf_nz |= CPU65_PF_N; else CPU65.pf_nz &= ~CPU65_PF_N; } while(0)
+#endif
+
+
 #define writeFlatAddressedByte(d)	cpu65_write_linear_opcode_callback(d)
 #define readFlatAddressedByte()		cpu65_read_linear_opcode_callback()
 #define writeFlatAddressedLong(d)	cpu65_write_linear_long_opcode_callback(d)
@@ -140,7 +150,9 @@ static const Uint8 opcycles[] = {7,6,2,2,5,3,5,5,3,2,2,2,6,4,6,2,2,5,5,2,5,4,6,5
 #define	NMOS_JAM_OPCODE()		cpu65_illegal_opcode_callback()
 #define HAS_NMOS_BUG_JMP_INDIRECT	M65_CPU_ALWAYS_BUG_JMP_INDIRECT || (M65_CPU_NMOS_ONLY_BUG_JMP_INDIRECT && CPU65.nmos_mode)
 #define HAS_NMOS_BUG_NO_PFD_RES_ON_INT	M65_CPU_ALWAYS_BUG_NO_RESET_PFD_ON_INT || (M65_CPU_NMOS_ONLY_BUG_NO_RESET_PFD_ON_INT && CPU65.nmos_mode)
-#define HAS_NMOS_BUG_BCD		M65_CPU_ALWAYS_BUG_BCD || (M65_CPU_NMOS_ONLY_BUG_BCD && CPU65.nmos_mode)
+//#define HAS_NMOS_BUG_BCD		M65_CPU_ALWAYS_BUG_BCD || (M65_CPU_NMOS_ONLY_BUG_BCD && CPU65.nmos_mode)
+// Note: it seems Mega65 is special, and would have the 6502-semantic of BCD even in native, etc mode!! This is NOT true for C65, for example!
+#define HAS_NMOS_BUG_BCD		1
 #else
 /* 65C02 mode, eg for Commodore LCD or 65CE02 mode for Commodore 65 (based on the macro of CPU_65CE02). We define IS_CPU_NMOS as a constant 0, hopefully the C compiler is smart enough
    to see, that is an always true statement used with 'if', thus it won't generate any condition when used that way.
@@ -283,7 +295,10 @@ void cpu65_reset() {
 	CPU65.neg_neg_prefix = 0;
 #endif
 	CPU65.pc = readWord(0xFFFC);
-	DEBUG("CPU[" CPU_TYPE "]: RESET, PC=%04X" NL, CPU65.pc);
+	DEBUGPRINT("CPU[" CPU_TYPE "]: RESET, PC=%04X, BCD_behaviour=%s" NL,
+			CPU65.pc, // FIXME
+			HAS_NMOS_BUG_BCD ? "NMOS-6502" : "65C02+"
+	);
 }
 
 
@@ -439,34 +454,70 @@ static XEMU_INLINE void _BIT(Uint8 data) {
 	CPU65.pf_nz = (data & CPU65_PF_N) | VALUE_TO_PF_ZERO(CPU65.a & data);
 #endif
 }
-static XEMU_INLINE void _ADC(int data) {
-	if (CPU65.pf_d) {
-		Uint16 temp  = (CPU65.a & 0x0F) + (data & 0x0F) + (CPU65.pf_c ? 1 : 0);
-		Uint16 temp2 = (CPU65.a & 0xF0) + (data & 0xF0);
-		if (temp > 9) { temp2 += 0x10; temp += 6; }
-		CPU65.pf_v = (~(CPU65.a ^ data) & (CPU65.a ^ temp) & 0x80);
-		if (temp2 > 0x90) temp2 += 0x60;
-		CPU65.pf_c = (temp2 & 0xFF00);
-		CPU65.a = (temp & 0x0F) + (temp2 & 0xF0);
-		SET_NZ(CPU65.a);
+static XEMU_INLINE void _ADC(unsigned int data) {
+	if (XEMU_UNLIKELY(CPU65.pf_d)) {
+		if (HAS_NMOS_BUG_BCD) {
+			/* This algorithm was written according the one found in VICE: 6510core.c */
+			unsigned int temp = (CPU65.a & 0xF) + (data & 0xF) + (CPU65.pf_c ? 1 : 0);
+			if (temp > 0x9)
+				temp += 6;
+			if (temp <= 0x0F)
+				temp = (temp & 0xF) + (CPU65.a & 0xF0) + (data & 0xF0);
+			else
+				temp = (temp & 0xF) + (CPU65.a & 0xF0) + (data & 0xF0) + 0x10;
+			ASSIGN_PF_Z_BY_COND(!((CPU65.a + data + (CPU65.pf_c ? 1 : 0)) & 0xFF));
+			ASSIGN_PF_N_BY_COND(temp & 0x80);
+			CPU65.pf_v = (((CPU65.a ^ temp) & 0x80)  && !((CPU65.a ^ data) & 0x80));
+			if ((temp & 0x1F0) > 0x90)
+				temp += 0x60;
+			CPU65.pf_c = ((temp & 0xFF0) > 0xF0);
+			CPU65.a = temp & 0xFF;
+		} else {
+			/* This algorithm was written according the one found in VICE: 65c02core.c */
+			unsigned int temp  = (CPU65.a & 0x0F) + (data & 0x0F) + (CPU65.pf_c ? 1 : 0);
+			unsigned int temp2 = (CPU65.a & 0xF0) + (data & 0xF0);
+			if (temp > 9) { temp2 += 0x10; temp += 6; }
+			CPU65.pf_v = (~(CPU65.a ^ data) & (CPU65.a ^ temp) & 0x80);
+			if (temp2 > 0x90) temp2 += 0x60;
+			CPU65.pf_c = (temp2 & 0xFF00);
+			CPU65.a = (temp & 0x0F) + (temp2 & 0xF0);
+			SET_NZ(CPU65.a);
+		}
 	} else {
-		Uint16 temp = data + CPU65.a + (CPU65.pf_c ? 1 : 0);
+		unsigned int temp = data + CPU65.a + (CPU65.pf_c ? 1 : 0);
 		CPU65.pf_c = temp > 0xFF;
 		CPU65.pf_v = (!((CPU65.a ^ data) & 0x80) && ((CPU65.a ^ temp) & 0x80));
 		CPU65.a = temp & 0xFF;
 		SET_NZ(CPU65.a);
 	}
 }
-static XEMU_INLINE void _SBC(int data) {
-	if (CPU65.pf_d) {
-		Uint16 temp = CPU65.a - (data & 0x0F) - (CPU65.pf_c ? 0 : 1);
-		if ((temp & 0x0F) > (CPU65.a & 0x0F)) temp -= 6;
-		temp -= (data & 0xF0);
-		if ((temp & 0xF0) > (CPU65.a & 0xF0)) temp -= 0x60;
-		CPU65.pf_v = (!(temp > CPU65.a));
-		CPU65.pf_c = (!(temp > CPU65.a));
-		CPU65.a = temp & 0xFF;
-		SET_NZ(CPU65.a);
+static XEMU_INLINE void _SBC(Uint16 data) {
+	if (XEMU_UNLIKELY(CPU65.pf_d)) {
+		if (HAS_NMOS_BUG_BCD) {
+			/* This algorithm was written according the one found in VICE: 6510core.c */
+			Uint16 temp = CPU65.a - data - (CPU65.pf_c ? 0 : 1);
+			unsigned int temp_a = (CPU65.a & 0xF) - (data & 0xF) - (CPU65.pf_c ? 0 : 1);
+			if (temp_a & 0x10)
+				temp_a = ((temp_a - 6) & 0xf) | ((CPU65.a & 0xf0) - (data & 0xf0) - 0x10);
+			else
+				temp_a = (temp_a & 0xf) | ((CPU65.a & 0xf0) - (data & 0xf0));
+			if (temp_a & 0x100)
+				temp_a -= 0x60;
+			CPU65.pf_c = (temp < 0x100);
+			SET_NZ(temp & 0xFF);
+			CPU65.pf_v = (((CPU65.a ^ temp) & 0x80) && ((CPU65.a ^ data) & 0x80));
+			CPU65.a = temp_a & 0xFF;
+		} else {
+			/* This algorithm was written according the one found in VICE: 65c02core.c */
+			Uint16 temp = CPU65.a - (data & 0x0F) - (CPU65.pf_c ? 0 : 1);
+			if ((temp & 0x0F) > (CPU65.a & 0x0F)) temp -= 6;
+			temp -= (data & 0xF0);
+			if ((temp & 0xF0) > (CPU65.a & 0xF0)) temp -= 0x60;
+			CPU65.pf_v = (!(temp > CPU65.a));
+			CPU65.pf_c = (!(temp > CPU65.a));
+			CPU65.a = temp & 0xFF;
+			SET_NZ(CPU65.a);
+		}
 	} else {
 		Uint16 temp = CPU65.a - data - (CPU65.pf_c ? 0 : 1);
 		CPU65.pf_c = temp < 0x100;

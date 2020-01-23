@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -523,6 +523,7 @@ int xemu_post_init (
 	int locked_texture_update,		// use locked texture method [non zero], or malloc'ed stuff [zero]. NOTE: locked access doesn't allow to _READ_ pixels and you must fill ALL pixels!
 	void (*shutdown_callback)(void)		// callback function called on exit (can be nULL to not have any emulator specific stuff)
 ) {
+#	include "build/xemu-48x48.xpm"
 	SDL_RendererInfo ren_info;
 	char render_scale_quality_s[2];
 	int a;
@@ -634,6 +635,62 @@ int xemu_post_init (
 	xemu_render_dummy_frame(black_colour, texture_x_size, texture_y_size);
 	if (chatty_xemu)
 		printf(NL);
+	xemu_set_icon_from_xpm(favicon_xpm);
+	return 0;
+}
+
+
+int xemu_set_icon_from_xpm ( char *xpm[] )
+{
+	int width, height, colours, chperpix;
+	if (sscanf(xpm[0], "%d %d %d %d", &width, &height, &colours, &chperpix) != 4) {
+		ERROR_WINDOW("Icon internal error: bad format");
+		return -1;
+	}
+	if (chperpix != 1) {
+		ERROR_WINDOW("Icon internal error: not one-char per pixel format");
+		return -1;
+	}
+	Uint8 *data = xemu_malloc(height * width);
+	SDL_Surface *surf = SDL_CreateRGBSurfaceFrom(data, width, height, 8, width, 0, 0, 0, 0);
+	if (!surf) {
+		ERROR_WINDOW("Icon internal error: cannot allocate surface: %s", SDL_GetError());
+		free(data);
+		return -1;
+	}
+	int i = 1;
+	while (colours) {
+		SDL_Color *palentry = &(surf->format->palette->colors[(Uint8)xpm[i][0]]);
+		Uint8 *p = (Uint8*)strchr(xpm[i] + 1, '#');
+		if (p) {
+			int vals[6];	// ugly, but again, Windows ... it does not support %02hhx for scanf(). Really what windows is for? it does not know any standards at all :-O
+			for (int a = 0; a < 6; a++) {
+				int hdig = p[a + 1];
+				if (hdig >= '0' && hdig <= '9')
+					vals[a] = hdig - '0';
+				else if (hdig >= 'A' && hdig <= 'F')
+					vals[a] = hdig - 'A' + 10;
+				else
+					vals[a] = hdig - 'a' + 10;
+			}
+			palentry->r = (vals[0] << 4) + vals[1];
+			palentry->g = (vals[2] << 4) + vals[3];
+			palentry->b = (vals[4] << 4) + vals[5];
+			palentry->a = 0xFF;
+		} else
+			palentry->a = 0x00;
+		colours--;
+		i++;
+	}
+	Uint8 *d = data;
+	while (height) {
+		memcpy(d, xpm[i++], width);
+		d += width;
+		height--;
+	}
+	SDL_SetWindowIcon(sdl_win, surf);
+	SDL_FreeSurface(surf);
+	free(data);
 	return 0;
 }
 
