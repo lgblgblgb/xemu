@@ -429,9 +429,6 @@ static void shutdown_callback ( void )
 #ifdef UARTMON_SOCKET
 	uartmon_close();
 #endif
-#ifdef VIRTUAL_DISK_IMAGE_SUPPORT
-	virtdisk_destroy();
-#endif
 	DEBUG("Execution has been stopped at PC=$%04X" NL, cpu65.pc);
 }
 

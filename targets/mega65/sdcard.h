@@ -28,9 +28,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SD_ST_BUSY1	0x02
 #define SD_ST_BUSY0	0x01
 
-#ifdef VIRTUAL_DISK_IMAGE_SUPPORT
-extern void  virtdisk_destroy      ( void );
-#endif
 extern int   sdcard_init           ( const char *fn, const char *extd81fn, int virtsd_flag );
 extern void  sdcard_write_register ( int reg, Uint8 data );
 extern Uint8 sdcard_read_register  ( int reg  );

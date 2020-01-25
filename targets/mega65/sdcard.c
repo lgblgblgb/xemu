@@ -40,11 +40,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define KEEP_BUSY(n)
 #endif
 
+#define SD_ST_SDHC    0x10
+
 static int	sdfd;			// SD-card controller emulation, UNIX file descriptor of the open image file
 Uint8		sd_status;		// SD-status byte
 static Uint8	sd_sector_registers[4];
 static Uint8	sd_d81_img1_start[4];
-//static off_t	sd_card_size;
+static int	sdhc_mode = 1;
 Uint32		sdcard_size_in_blocks;	// SD card size in term of number of 512 byte blocks
 static int	sdcard_bytes_read = 0;
 static int	sd_fill_mode = 0;
@@ -91,7 +93,7 @@ struct virtdisk_st {
 
 static struct virtdisk_st vdisk = { .head = NULL };
 
-void virtdisk_destroy ( void )
+static inline void virtdisk_destroy ( void )
 {
 	if (vdisk.head) {
 		struct virtdisk_chunk_st *v = vdisk.head;
@@ -174,13 +176,16 @@ static Uint8 *virtdisk_search_block ( Uint32 block, int do_allocate )
 
 static inline void virtdisk_write_block ( Uint32 block, Uint8 *buffer )
 {
-	for (int a = 0; a < 512; a++)
+	int do_allocate = 0;
+	// Check if the block is all zero. If yes, do_allocate remains zero (no need to store a NEW all-zero block), otherwise is changed to one
+	for (unsigned int a = 0; a < 512; a++)
 		if (buffer[a]) {
-			// If we found ANY byte which is not zero, we have no choice, but write the result
-			memcpy(virtdisk_search_block(block, 1), buffer, 512);
-			return;
+			do_allocate = 1;
+			break;
 		}
-	// If all bytes are zero, actually we don't even need to store it, since the default is "all zero" ;)
+	Uint8 *vbuf = virtdisk_search_block(block, do_allocate);
+	if (vbuf)
+		memcpy(vbuf, buffer, 512);
 	// TODO: Like with the next function, this whole strategy needs to be changed when mixed operation is used!!!!!
 }
 
@@ -221,6 +226,9 @@ static void sdcard_shutdown ( void )
 	d81access_close();
 	if (sdfd >= 0)
 		close(sdfd);
+#ifdef VIRTUAL_DISK_IMAGE_SUPPORT
+	virtdisk_destroy();
+#endif
 }
 
 
@@ -361,13 +369,6 @@ static int host_seek ( Uint32 block )
 {
 	if (sdfd < 0)
 		FATAL("host_seek is called with invalid sdfd!");	// FIXME: this check can go away, once we're sure it does not apply!
-#if 0
-	// FIXME: this should NOT be handled here but at the main primitive of reading/writing an SD sector!!!!!
-	if (block >= sdcard_size_in_blocks) {
-		DEBUGPRINT("SDCARD: SEEK: invalid block was requested: block=%u (max_block=%u) PC=$%04X" NL, block, sdcard_size_in_blocks, cpu65.pc);
-		return -1;
-	}
-#endif
 	off_t offset;
 #ifdef COMPRESSED_SD
 	if (sd_compressed) {
@@ -404,7 +405,7 @@ static Uint8 sdcard_read_status ( void )
 	if (!keep_busy)
 		sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);
 #endif
-	ret |= 0x10;	// according to Paul, the old "SDHC" flag stuck to one always from now
+	//ret |= 0x10;	// FIXME? according to Paul, the old "SDHC" flag stuck to one always from now
 	return ret;
 }
 
@@ -474,10 +475,6 @@ static void sdcard_block_io ( Uint32 block, int is_write )
 		is_write ? "writing" : "reading",
 		block, cpu65.pc
 	);
-#if 0
-	if (XEMU_UNLIKELY(sdfd < 0))
-		FATAL("sdcard_block_io(): no SD image open");
-#endif
 	if (XEMU_UNLIKELY(sd_status & SD_ST_EXT_BUS)) {
 		DEBUGPRINT("SDCARD: bus #1 is empty" NL);
 		// FIXME: what kind of error we should create here?????
@@ -485,24 +482,9 @@ static void sdcard_block_io ( Uint32 block, int is_write )
 		KEEP_BUSY(1);
 		return;
 	}
-#if 0
-	if (XEMU_UNLIKELY(
-		sd_multi_offset && (
-			!sd_multi_mode ||
-			(sd_multi_mode == 1 && !is_write) ||
-			(sd_multi_mode == 2 && is_write)
-		)
-	)) {
-		// trying to do multi-I/O without multi mode
-		DEBUGPRINT("SDCARD: invalid use of multi-I/O command ofs=%d,mode=%d,is_write=%d" NL, sd_multi_offset, sd_multi_mode, is_write);
-		sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR | SD_ST_BUSY1 | SD_ST_BUSY0;
-		keep_busy = 1;
-		return;
-	}
-#endif
 	Uint8 *buffer = get_buffer_memory(is_write);
 	int ret = is_write ? sdcard_write_block(block, buffer) : sdcard_read_block(block, buffer);
-	if (ret) {
+	if (ret || !sdhc_mode) {
 		sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR; // | SD_ST_BUSY1 | SD_ST_BUSY0;
 			sd_status |= SD_ST_BUSY1 | SD_ST_BUSY0;
 			//KEEP_BUSY(1);
@@ -514,7 +496,7 @@ static void sdcard_block_io ( Uint32 block, int is_write )
 #if 0
 	off_t offset = sd_sector;
 	offset <<= 9;	// make byte offset from sector (always SDHC card!)
-	int ret = host_seek(offset);
+	int ret = host__seek(offset);
 	if (XEMU_UNLIKELY(!ret && is_write && sd_is_read_only)) {
 		ret = 1;	// write protected SD image?
 	}
@@ -553,6 +535,7 @@ static void sdcard_command ( Uint8 cmd )
 		case 0x10:	// RESET SD-card with flags specified [FIXME: I don't know what the difference is ...]
 			sd_status = SD_ST_RESET | (sd_status & SD_ST_EXT_BUS);	// clear all other flags, but not the bus selection, FIXME: bus selection should not be touched?
 			memset(sd_sector_registers, 0, sizeof sd_sector_registers);
+			sdhc_mode = 1;
 			break;
 		case 0x01:	// END RESET
 		case 0x11:	// ... [FIXME: again, I don't know what the difference is ...]
@@ -593,14 +576,14 @@ static void sdcard_command ( Uint8 cmd )
 			break;
 		case 0x0C:	// request flush of the SD-card [currently does nothing in Xemu ...]
 			break;
-#if 0
-		case 0x40:	// SDHC mode OFF
+		case 0x40:	// SDHC mode OFF - Not supported on newer M65s!
 			sd_status &= ~SD_ST_SDHC;
+			sdhc_mode = 0;
 			break;
-		case 0x41:	// SDHC mode ON
+		case 0x41:	// SDHC mode ON - Not supported on newer M65s!
 			sd_status |= SD_ST_SDHC;
+			sdhc_mode = 1;
 			break;
-#endif
 		case 0x44:	// sd_clear_error <= '0'	FIXME: what is this?
 			break;
 		case 0x45:	// sd_clear_error <= '1'	FIXME: what is this?
@@ -637,46 +620,21 @@ static void sdcard_command ( Uint8 cmd )
 }
 
 
-#if 0
-#ifdef COMPRESSED_SD
-static int on_compressed_sd_d81_read_cb ( void *buffer, off_t offset, int sector_size )
-{
-	int ret = host_seek(offset);
-	if (ret) {
-		FATAL("Compressed SD seek error");
-		return -1;
-	}
-	if (sector_size != 512) {
-		FATAL("Compressed SD got non-512 sector size!");
-		return -1;
-	}
-	ret = xemu_safe_read(sdfd, buffer, sector_size);
-	if (ret != sector_size) {
-		FATAL("Compressed SD read error");
-		return -1;
-	}
-	//DEBUGPRINT("SDCARD: compressed-SD-D81: read ..." NL);
-	return 0;
-}
-#endif
-#endif
-
-
 // Note: off_t for "block" is requirement of the FDC core framework, not so much sdcard.c, where it's used as Uint32
 static int on_sd_fdc_read_block_cb ( void *buffer, off_t offset, int sector_size )
 {
-	if (sector_size != 512)
+	if (XEMU_UNLIKELY(sector_size != 512))
 		FATAL("Invalid sector size in fdc read CB: %d" NL, sector_size);
-	if (offset & 511)
+	if (XEMU_UNLIKELY(offset & 511))
 		FATAL("Invalid offset in fdc read CB" NL);
 	return sdcard_read_block((Uint32)(offset >> 9), buffer);
 }
 
 static int on_sd_fdc_write_block_cb ( void *buffer, off_t offset, int sector_size )
 {
-	if (sector_size != 512)
+	if (XEMU_UNLIKELY(sector_size != 512))
 		FATAL("Invalid sector size in fdc write CB: %d" NL, sector_size);
-	if (offset & 511)
+	if (XEMU_UNLIKELY(offset & 511))
 		FATAL("Invalid offset in fdc read CB" NL);
 	return sdcard_write_block((Uint32)(offset >> 9), buffer);
 }
@@ -699,7 +657,7 @@ int mount_external_d81 ( const char *name, int force_ro )
 static int mount_internal_d81 ( int force_ro )
 {
 	int block = U8A_TO_U32(sd_d81_img1_start);
-	if (block >= (sdcard_size_in_blocks - (D81_SIZE >> 9))) {
+	if (XEMU_UNLIKELY(block + (D81_SIZE >> 9) >= sdcard_size_in_blocks)) {
 		DEBUGPRINT("SDCARD: D81: image is outside of the SD-card boundaries! Refusing to mount." NL);
 		return -1;
 	}
@@ -707,23 +665,8 @@ static int mount_internal_d81 ( int force_ro )
 	//       which can be used in the future to trigger external mount with native-M65 in-emulator tools, instead of emulator controls externally (like -8 option).
 	// Do not use D81ACCESS_AUTOCLOSE here! It would cause to close the sdfd by d81access on umount, thus even our SD card image is closed!
 	// Also, let's inherit the possible read-only status of our SD image, of course.
-#ifdef COMPRESSED_SD
-	int ro = sd_is_read_only || force_ro || sd_compressed;
-#else
-	int ro = sd_is_read_only || force_ro;
-#endif
-	d81access_attach_cb((off_t)block << 9, on_sd_fdc_read_block_cb, !ro ? on_sd_fdc_write_block_cb : NULL);
+	d81access_attach_cb((off_t)block << 9, on_sd_fdc_read_block_cb, (sd_is_read_only || force_ro) ? NULL : on_sd_fdc_write_block_cb);
 	return 0;
-#if 0
-#ifdef COMPRESSED_SD
-	if (sd_compressed) {
-		d81access_attach_cb(offset, on_compressed_sd_d81_read_cb, NULL);	// we pass NULL as write callback to signal, that disk is R/O
-	} else
-#endif
-		d81access_attach_fd(sdfd, offset, D81ACCESS_IMG | ((sd_is_read_only || force_ro) ? D81ACCESS_RO : 0));
-	fd_mounted = 1;
-	return 0;
-#endif
 }
 
 
