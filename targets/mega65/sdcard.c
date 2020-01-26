@@ -24,6 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "xemu/cpu65.h"
 #include "io_mapper.h"
+#include "fat32.h"
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -93,13 +94,14 @@ struct virtdisk_st {
 
 static struct virtdisk_st vdisk = { .head = NULL };
 
-static inline void virtdisk_destroy ( void )
+static void virtdisk_destroy ( void )
 {
 	if (vdisk.head) {
 		struct virtdisk_chunk_st *v = vdisk.head;
-		DEBUGPRINT("SDCARD: VDISK: destroying %d chunks (active data: %d blocks, %dKbytes, %d%%) of storage" NL,
+		DEBUGPRINT("SDCARD: VDISK: destroying %d chunks (active data: %d blocks, %dKbytes, %d%%) of storage. Max block no. %d" NL,
 			vdisk.all_chunks, vdisk.all_blocks, vdisk.all_blocks >> 1,
-			100 * vdisk.all_blocks / (vdisk.all_chunks * vdisk.blocks_per_chunk)
+			100 * vdisk.all_blocks / (vdisk.all_chunks * vdisk.blocks_per_chunk),
+			vdisk.block_no_max
 		);
 		while (v) {
 			struct virtdisk_chunk_st *next = v->next;
@@ -114,7 +116,7 @@ static inline void virtdisk_destroy ( void )
 	vdisk.block_no_max = 0;
 }
 
-static inline void virtdisk_init ( int blocks_per_chunk )
+static void virtdisk_init ( int blocks_per_chunk )
 {
 	virtdisk_destroy();
 	vdisk.blocks_per_chunk = blocks_per_chunk;
@@ -136,6 +138,8 @@ static Uint8 *virtdisk_search_block ( Uint32 block, int do_allocate )
 			v = v->next;
 		} while (v);
 	}
+	// if we can't found the block, and do_allocate is false, we return with zero
+	// otherwise we continue to allocate a block
 	if (!do_allocate)
 		return NULL;
 	// We're instructed to allocate block if cannot be found already elsewhere
@@ -265,8 +269,16 @@ static int detect_compressed_image ( int fd )
 #endif
 
 
+static void fat32_handling ( void )
+{
+	mfat_init(sdcard_read_block, sdcard_write_block, sdcard_size_in_blocks);
+	mfat_init_mbr();
+}
+
+
 int sdcard_init ( const char *fn, const char *extd81fn, int virtsd_flag )
 {
+	char fnbuf[PATH_MAX + 1];
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	if (virtsd_flag) {
 		virtdisk_init(VIRTUAL_DISK_BLOCKS_PER_CHUNK);
@@ -274,7 +286,6 @@ int sdcard_init ( const char *fn, const char *extd81fn, int virtsd_flag )
 	} else
 		vdisk.mode = 0;
 #endif
-	char fnbuf[PATH_MAX + 1];
 	sdcard_set_external_d81_name(extd81fn);
 	d81access_init();
 	atexit(sdcard_shutdown);
@@ -292,6 +303,8 @@ int sdcard_init ( const char *fn, const char *extd81fn, int virtsd_flag )
 #ifdef COMPRESSED_SD
 		sd_compressed = 0;
 #endif
+		DEBUGPRINT("SDCARD: card init done (VDISK!), size=%u Mbytes, virtsd_flag=%d" NL, sdcard_size_in_blocks >> 11, virtsd_flag);
+		fat32_handling();
 		return 0;
 	}
 #endif
@@ -354,7 +367,8 @@ retry:
 			return sdfd;
 		}
 	}
-	DEBUGPRINT("SDCARD: card init done, size=%u Mbytes, virtsd_flag=%d" NL, (sdcard_size_in_blocks >> 1), virtsd_flag);
+	DEBUGPRINT("SDCARD: card init done, size=%u Mbytes, virtsd_flag=%d" NL, sdcard_size_in_blocks >> 11, virtsd_flag);
+	fat32_handling();
 	return sdfd;
 }
 
@@ -691,14 +705,15 @@ static void sdcard_mount_d81 ( Uint8 data )
 				sd_d81_img1_start[3], sd_d81_img1_start[2], sd_d81_img1_start[1], sd_d81_img1_start[0]
 			);
 			//mount_internal_d81(!QUESTION_WINDOW("Use read-only access|Use R/W access (can be dangerous, can corrupt the image!)", "Hypervisor seems to be about mounting a D81 image. You can override the access mode now."));
-			mount_internal_d81(0);
+			fd_mounted = !mount_internal_d81(0);
 		} else {
 			//fdc_set_disk(1, !d81_is_read_only);
 			DEBUGPRINT("SDCARD: D81: mounting *EXTERNAL* D81 image, not from SD card (emulator feature only)!" NL);
 			if (mount_external_d81(external_d81, 0)) {
 				ERROR_WINDOW("Cannot mount external D81 (see previous error), mounting the internal D81");
-				mount_internal_d81(0);
-			}
+				fd_mounted = !mount_internal_d81(0);
+			} else
+				fd_mounted = 1;
 		}
 		DEBUGPRINT("SDCARD: D81: mounting %s" NL, fd_mounted ? "OK" : "*FAILED*");
 	} else {

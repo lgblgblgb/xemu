@@ -24,6 +24,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define	_ISOC11_SOURCE
 #endif
 
+// Generic stuff to signal we're inside XEMU build
+// Useful for multi-purpose sources, can be also compiled out-of-source-tree, and stuff like that ...
+#define	XEMU_BUILD
+
 #ifdef	__EMSCRIPTEN__
 #	define	XEMU_ARCH_HTML
 #	define	XEMU_ARCH_NAME	"html"
