@@ -16,8 +16,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_SDCARD_MEGA65_H_INCLUDED
-#define __XEMU_SDCARD_MEGA65_H_INCLUDED
+#ifndef XEMU_MEGA65_SDCARD_H_INCLUDED
+#define XEMU_MEGA65_SDCARD_H_INCLUDED
 
 #define SD_ST_EXT_BUS	0x80
 #define SD_ST_ERROR	0x40
@@ -45,9 +45,16 @@ extern int   mount_external_d81    ( const char *name, int force_ro );
 // disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space"
 extern Uint8  disk_buffers[0x1000];
 extern Uint8  sd_status;
-extern Uint32 sdcard_size_in_blocks;
 
 extern int fd_mounted;
+
+static inline int has_block_nonzero_byte ( const Uint8 *p )
+{
+	for (register unsigned int a = 0; a < 512; a++)
+		if (p[a])
+			return 1;
+	return 0;
+}
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 #include "xemu/emutools_snapshot.h"

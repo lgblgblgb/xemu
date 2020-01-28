@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "xemu/cpu65.h"
 #include "io_mapper.h"
-#include "fat32.h"
+#include "sdcontent.h"
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -48,7 +48,7 @@ Uint8		sd_status;		// SD-status byte
 static Uint8	sd_sector_registers[4];
 static Uint8	sd_d81_img1_start[4];
 static int	sdhc_mode = 1;
-Uint32		sdcard_size_in_blocks;	// SD card size in term of number of 512 byte blocks
+static Uint32	sdcard_size_in_blocks;	// SD card size in term of number of 512 byte blocks
 static int	sdcard_bytes_read = 0;
 static int	sd_fill_mode = 0;
 static Uint8	sd_fill_value = 0;
@@ -72,7 +72,13 @@ static char	external_d81[PATH_MAX + 1];
 
 
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
-#define VIRTUAL_DISK_BLOCKS_PER_CHUNK 2048
+
+#define VIRTUAL_DISK_BLOCKS_PER_CHUNK	2048
+// Simulate a 4Gbyte card for virtual disk (the number is: number of blocks). Does not matter since only the actual written blocks stored in memory from it
+#define VIRTUAL_DISK_SIZE_IN_BLOCKS	8388608U
+
+#define RANGE_MAP_SIZE 256
+
 struct virtdisk_chunk_st {
 	struct	virtdisk_chunk_st *next;	// pointer to the next chunk, or NULL, if it was the last (in that case vdisk.tail should point to this chunk)
 	int	used_blocks;			// number of used blocks in this chunk (up to vidsk.blocks_per_chunk)
@@ -88,7 +94,8 @@ struct virtdisk_st {
 	int	base_offset;			// pre-calculated to have the offset to the data area inside a chunk
 	int	all_chunks;			// number of all currently allocated chunks
 	int	all_blocks;			// number of all currently USED blocks within all chunks
-	Uint32	block_no_max;			// optimization: highest numbered block in the _WHOLE_ storage
+	Uint8	range_map[RANGE_MAP_SIZE];	// optimization: store here if a given range is stored in memory, eliminating the need to search all chunks over, if not
+	Uint32	range_map_divisor;		// optimization: for the above, to form range number from block number
 	int	mode;				// what mode is used, 0=no virtual disk
 };
 
@@ -98,10 +105,15 @@ static void virtdisk_destroy ( void )
 {
 	if (vdisk.head) {
 		struct virtdisk_chunk_st *v = vdisk.head;
-		DEBUGPRINT("SDCARD: VDISK: destroying %d chunks (active data: %d blocks, %dKbytes, %d%%) of storage. Max block no. %d" NL,
+		int ranges = 0;
+		for (unsigned int a = 0; a < RANGE_MAP_SIZE; a++)
+			for (Uint8 m = 0x80; m; m >>= 1)
+				if ((vdisk.range_map[a] & m))
+					ranges++;
+		DEBUGPRINT("SDCARD: VDISK: destroying %d chunks (active data: %d blocks, %dKbytes, %d%%, ranges: %d/%d) of storage." NL,
 			vdisk.all_chunks, vdisk.all_blocks, vdisk.all_blocks >> 1,
 			100 * vdisk.all_blocks / (vdisk.all_chunks * vdisk.blocks_per_chunk),
-			vdisk.block_no_max
+			ranges, RANGE_MAP_SIZE * 8
 		);
 		while (v) {
 			struct virtdisk_chunk_st *next = v->next;
@@ -113,22 +125,28 @@ static void virtdisk_destroy ( void )
 	vdisk.tail = NULL;
 	vdisk.all_chunks = 0;
 	vdisk.all_blocks = 0;
-	vdisk.block_no_max = 0;
+	memset(vdisk.range_map, 0, RANGE_MAP_SIZE);
 }
 
-static void virtdisk_init ( int blocks_per_chunk )
+static void virtdisk_init ( int blocks_per_chunk, Uint32 total_number_of_blocks )
 {
 	virtdisk_destroy();
 	vdisk.blocks_per_chunk = blocks_per_chunk;
 	vdisk.base_offset = sizeof(struct virtdisk_chunk_st) + (sizeof(Uint32) * blocks_per_chunk);
 	vdisk.allocation_size = (blocks_per_chunk << 9) + vdisk.base_offset;
-	DEBUGPRINT("SDCARD: VDISK: %d blocks (%dKbytes) per chunk" NL, blocks_per_chunk, blocks_per_chunk >> 1);
+	vdisk.range_map_divisor = (total_number_of_blocks / (RANGE_MAP_SIZE * 8)) + 1;
+	DEBUGPRINT("SDCARD: VDISK: %d blocks (%dKbytes) per chunk, range-divisor is %u" NL, blocks_per_chunk, blocks_per_chunk >> 1, vdisk.range_map_divisor);
 }
 
+// Note: you must take care to call this function with "block" not outside of the desired capacity or some logic (range_map) will cause crash.
+// That's not a problem, as this function is intended to use as storage backend, thus boundary checking should be done BEFORE you call this!
 static Uint8 *virtdisk_search_block ( Uint32 block, int do_allocate )
 {
 	struct virtdisk_chunk_st *v;
-	if (vdisk.head && block <= vdisk.block_no_max) {
+	Uint32 range_index = block / vdisk.range_map_divisor;
+	Uint8  range_mask  = 1U << (range_index & 7U);
+	range_index >>= 3U;
+	if (XEMU_LIKELY(vdisk.head && (vdisk.range_map[range_index] & range_mask))) {
 		v = vdisk.head;
 		do {
 			if (block >= v->block_no_min && block <= v->block_no_max)
@@ -142,6 +160,7 @@ static Uint8 *virtdisk_search_block ( Uint32 block, int do_allocate )
 	// otherwise we continue to allocate a block
 	if (!do_allocate)
 		return NULL;
+	//DEBUGPRINT("RANGE-INDEX=%d RANGE-MASK=%d" NL, range_index, range_mask);
 	// We're instructed to allocate block if cannot be found already elsewhere
 	// This condition checks if we have room in "tail" or there is any chunk already at all (tail is not NULL)
 	if (vdisk.tail && (vdisk.tail->used_blocks < vdisk.blocks_per_chunk)) {
@@ -152,8 +171,7 @@ static Uint8 *virtdisk_search_block ( Uint32 block, int do_allocate )
 			v->block_no_min = block;
 		if (block > v->block_no_max)
 			v->block_no_max = block;
-		if (block > vdisk.block_no_max)
-			vdisk.block_no_max = block;
+		vdisk.range_map[range_index] |= range_mask;
 		v->list[v->used_blocks] = block;
 		return v->base + ((v->used_blocks++) << 9);
 	}
@@ -172,22 +190,15 @@ static Uint8 *virtdisk_search_block ( Uint32 block, int do_allocate )
 	v->used_blocks = 1;
 	v->block_no_min = block;
 	v->block_no_max = block;
-	if (block > vdisk.block_no_max)
-		vdisk.block_no_max = block;
+	vdisk.range_map[range_index] |= range_mask;
 	vdisk.all_blocks++;
 	return v->base;	// no need to add block offset in storage, always the first block is served in a new chunk!
 }
 
 static inline void virtdisk_write_block ( Uint32 block, Uint8 *buffer )
 {
-	int do_allocate = 0;
-	// Check if the block is all zero. If yes, do_allocate remains zero (no need to store a NEW all-zero block), otherwise is changed to one
-	for (unsigned int a = 0; a < 512; a++)
-		if (buffer[a]) {
-			do_allocate = 1;
-			break;
-		}
-	Uint8 *vbuf = virtdisk_search_block(block, do_allocate);
+	// Check if the block is all zero. If yes, we can omit write if the block is not cached
+	Uint8 *vbuf = virtdisk_search_block(block, has_block_nonzero_byte(buffer));
 	if (vbuf)
 		memcpy(vbuf, buffer, 512);
 	// TODO: Like with the next function, this whole strategy needs to be changed when mixed operation is used!!!!!
@@ -228,8 +239,10 @@ int fdc_cb_wr_sec ( Uint8 *buffer, int d81_offset ) {
 static void sdcard_shutdown ( void )
 {
 	d81access_close();
-	if (sdfd >= 0)
+	if (sdfd >= 0) {
 		close(sdfd);
+		sdfd = -1;
+	}
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	virtdisk_destroy();
 #endif
@@ -269,19 +282,12 @@ static int detect_compressed_image ( int fd )
 #endif
 
 
-static void fat32_handling ( void )
-{
-	mfat_init(sdcard_read_block, sdcard_write_block, sdcard_size_in_blocks);
-	mfat_init_mbr();
-}
-
-
 int sdcard_init ( const char *fn, const char *extd81fn, int virtsd_flag )
 {
 	char fnbuf[PATH_MAX + 1];
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	if (virtsd_flag) {
-		virtdisk_init(VIRTUAL_DISK_BLOCKS_PER_CHUNK);
+		virtdisk_init(VIRTUAL_DISK_BLOCKS_PER_CHUNK, VIRTUAL_DISK_SIZE_IN_BLOCKS);
 		vdisk.mode = 1;
 	} else
 		vdisk.mode = 0;
@@ -299,15 +305,18 @@ int sdcard_init ( const char *fn, const char *extd81fn, int virtsd_flag )
 	if (vdisk.mode) {
 		sdfd = -1;
 		sd_is_read_only = 0;
-		sdcard_size_in_blocks = 8388608;	// Simulate a 4Gbyte card for virtual disk (the number is: number of blocks). Does not matter since only the actual written blocks stored in memory from it
+		sdcard_size_in_blocks = VIRTUAL_DISK_SIZE_IN_BLOCKS;
 #ifdef COMPRESSED_SD
 		sd_compressed = 0;
 #endif
 		DEBUGPRINT("SDCARD: card init done (VDISK!), size=%u Mbytes, virtsd_flag=%d" NL, sdcard_size_in_blocks >> 11, virtsd_flag);
-		fat32_handling();
+#ifdef SD_CONTENT_SUPPORT
+		sdcontent_handle(sdcard_size_in_blocks, 1, 0, fn);
+#endif
 		return 0;
 	}
 #endif
+	int force_fdisk = 0;
 retry:
 	sd_is_read_only = O_RDONLY;
 	sdfd = xemu_open_file(fn, O_RDWR, &sd_is_read_only, fnbuf);
@@ -321,8 +330,10 @@ retry:
 				int r2 = xemu_create_empty_image(fnbuf, (1U << (r + 26U)));
 				if (r2)
 					ERROR_WINDOW("Couldn't create: %s", strerror(r2));
-				else
+				else {
+					force_fdisk = 1;
 					goto retry;
+				}
 			}
 		}
 	} else {
@@ -367,8 +378,12 @@ retry:
 			return sdfd;
 		}
 	}
-	DEBUGPRINT("SDCARD: card init done, size=%u Mbytes, virtsd_flag=%d" NL, sdcard_size_in_blocks >> 11, virtsd_flag);
-	fat32_handling();
+	if (sdfd >= 0) {
+		DEBUGPRINT("SDCARD: card init done, size=%u Mbytes, virtsd_flag=%d" NL, sdcard_size_in_blocks >> 11, virtsd_flag);
+#ifdef SD_CONTENT_SUPPORT
+		sdcontent_handle(sdcard_size_in_blocks, force_fdisk, 1, NULL);
+#endif
+	}
 	return sdfd;
 }
 

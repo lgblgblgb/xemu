@@ -21,7 +21,7 @@ PRG_TARGET	= xmega65
 EMU_DESCRIPTION	= Mega 65
 
 CFLAGS_TARGET_xmega65	= -Wvla
-SRCS_TARGET_xmega65	= mega65.c sdcard.c uart_monitor.c hypervisor.c m65_snapshot.c memory_mapper.c io_mapper.c vic4.c ethernet65.c input_devices.c memcontent.c ui.c fat32.c
+SRCS_TARGET_xmega65	= mega65.c sdcard.c uart_monitor.c hypervisor.c m65_snapshot.c memory_mapper.c io_mapper.c vic4.c ethernet65.c input_devices.c memcontent.c ui.c fat32.c sdcontent.c
 SRCS_COMMON_xmega65	= emutools.c cpu65.c cia6526.c emutools_hid.c sid.c f011_core.c f018_core.c c64_kbd_mapping.c emutools_config.c emutools_snapshot.c emutools_files.c emutools_umon.c ethertap.c d81access.c emutools_gui.c basic_text.c
 CONFIG_CFLAGS_TARGET_xmega65	= sdl2|math|socketapi|gtk3
 CONFIG_LDFLAGS_TARGET_xmega65	= sdl2|math|socketapi|gtk3
@@ -61,5 +61,6 @@ recreatememcontent:
 	echo "Uint8 meminitdata_freezer[] = { /* Not used currently but we will be ... */" >> memcontent.c.tmp
 	../../build/bin2values.py $(MEGA65_CORE)/sdcard-files/FREEZER.M65 - >> memcontent.c.tmp
 	echo "};" >> memcontent.c.tmp
+	echo "const int meminitdata_freezer_size = sizeof(meminitdata_freezer);" >> memcontent.c.tmp
 	cp memcontent.c memcontent.c.BAK
-	@echo "*** OK. Please rename memcontent.c.tmp to memcontent.c to really apply these changed ***"
+	@echo "*** OK. Please rename memcontent.c.tmp to memcontent.c to really apply these changes, then re-compile the emulator ***"

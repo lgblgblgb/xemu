@@ -23,6 +23,7 @@
 #define CONFIG_DROPFILE_CALLBACK
 #define VIRTUAL_DISK_IMAGE_SUPPORT
 //#define BASIC_TEXT_SUPPORT
+//#define SD_CONTENT_SUPPORT
 #endif
 
 /* Globally: XEMU_INLINE hints gcc to always inline a function. Using this define switches that behaviour off, defaulting to standard "inline" (as it would be without using gcc as well) */

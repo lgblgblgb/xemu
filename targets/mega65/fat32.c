@@ -137,13 +137,14 @@ static Uint32 mfat_read_fat_chain ( Uint32 cluster )
 {
 	static Uint8 cache[512];
 	static Uint32 cached_block = 0;
+	Uint32 block, ofs;
 	cluster &= 0x0FFFFFFFU;	// some well known fact, that FAT32 is actually FAT28, and the highest 4 bits should not be used!
 	if (cluster < 2 || cluster >= mfat_partitions[disk.part].clusters) {
 		fprintf(stderr, "read fat: invalid cluster number %d\n", cluster);
 		return 1;
 	}
-	Uint32 block = mfat_partitions[disk.part].fat1_start + cluster / 128;
-	Uint32 ofs   = (cluster & 127) * 4;
+	block = mfat_partitions[disk.part].fat1_start + cluster / 128;
+	ofs   = (cluster & 127) * 4;
 	if (block != cached_block) {
 		if (mfat_read_part_blk(block, cache))
 			return 1;
@@ -178,12 +179,12 @@ void mfat_init ( mfat_io_callback_func_t reader, mfat_io_callback_func_t writer,
 int mfat_init_mbr ( void )
 {
 	int first_valid = -1;
-	Uint8 cache[512];
+	Uint8 cache[512], *p;
 	if (mfat_read_DEVICE_blk(0, cache))	// read MBR
 		return -1;
 	// parse partition entries
 	memset(mfat_partitions, 0, sizeof mfat_partitions);
-	Uint8 *p = cache + 0x1BE;
+	p = cache + 0x1BE;
 	for (int a = 0; a < 4; a++, p += 16) {
 		mfat_partitions[a].fs_validated = 0;
 		mfat_partitions[a].valid = 0;
@@ -542,11 +543,14 @@ static int raw_reader ( Uint32 block, Uint8 *buf )
 	return 0;
 }
 
-int main ( void )
+int main ( int argc, char **argv )
 {
-	fd = open("hyppo.disk", O_RDONLY);
-	//fd = open("/home/lgb/.local/share/xemu-lgb/mega65/mega65.img", O_RDONLY);
-	if (fd < -1) {
+	// static const char default_fn[] = "/home/lgb/.local/share/xemu-lgb/mega65/mega65.img";
+	static const char default_fn[] = "hyppo.disk";
+	const char *fn = (argc > 1) ? argv[1] : default_fn;
+	printf("Disk image: %s\n", fn);
+	fd = open(fn, O_RDONLY);
+	if (fd < 0) {
 		perror("Open disk image");
 		return 1;
 	}

@@ -100,7 +100,7 @@ static void ui_save_basic_as_text ( void )
 		return;
 	}
 	printf("%s", buffer);
-	FILE *f = fopen("/tmp/faszom.txt", "wb");
+	FILE *f = fopen("/tmp/prgout.txt", "wb");
 	if (f) {
 		fwrite(buffer, size, 1, f);
 		fclose(f);

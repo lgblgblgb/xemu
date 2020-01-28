@@ -16,13 +16,12 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef XEMU_MEGA65_FAT32_H_INCLUDED
-#define XEMU_MEGA65_FAT32_H_INCLUDED
+#ifndef XEMU_MEGA65_SDCONTENT_H_INCLUDED
+#define XEMU_MEGA65_SDCONTENT_H_INCLUDED
+#ifdef SD_CONTENT_SUPPORT
 
-typedef int(*mfat_io_callback_func_t)(Uint32 block, Uint8 *data);
+extern int sdcontent_handle ( Uint32 size_in_blocks, int do_fdisk, int do_commons, const char *update_dir_path );
 
-extern void mfat_init     ( mfat_io_callback_func_t reader, mfat_io_callback_func_t writer, Uint32 device_size );
-extern int  mfat_init_mbr ( void     );
-extern int  mfat_use_part ( int part );
 
+#endif
 #endif
