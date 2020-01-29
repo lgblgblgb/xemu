@@ -51,6 +51,7 @@ Uint8 dma_registers[16];		// The four DMA registers (with last values written by
 int   dma_chip_revision;		// revision of DMA chip
 #ifdef MEGA65
 int   dma_chip_revision_is_dynamic;	// allowed to change DMA chip revision (normally yes) by Mega65
+int   dma_chip_revision_override;
 #endif
 int   dma_chip_initial_revision;
 
@@ -280,6 +281,8 @@ void dma_write_reg ( int addr, Uint8 data )
    for a comment here, so it has been deleted. See here: http://c65.lgb.hu/dma.html */
 int dma_update ( void )
 {
+#ifdef MEGA65
+#endif
 	Uint8 subcommand;
 	int cycles = 0;
 	if (XEMU_UNLIKELY(!dma_status))
@@ -313,10 +316,10 @@ int dma_update ( void )
 						DEBUGPRINT("DMA: enhanced DMA transparency is not supported yet (option=$%02X) @ PC=$%04X" NL, opt, cpu65.pc);
 						break;
 					case 0x0A:
-						dma_chip_revision = 0;
+						dma_chip_revision_override = 0;
 						break;
 					case 0x0B:
-						dma_chip_revision = 1;
+						dma_chip_revision_override = 1;
 						break;
 					case 0x80:	// set MB of source
 						dma_registers[0x05] = DMA_READ_LIST_NEXT_BYTE();
@@ -357,7 +360,10 @@ int dma_update ( void )
 		// This part is highly incorrect, ie fetching so many bytes in one step only of dma_update()
 #ifdef MEGA65
 		// set DMA revision based on register #3 bit 0, this is a Mega65 feature
-		if (dma_chip_revision != (dma_registers[3] & 1)) {
+		if (dma_chip_revision_override >= 0) {
+			DEBUG("DMA: changing DMA revision by enhanced list %d -> %d" NL, dma_chip_revision, dma_chip_revision_override);
+			dma_chip_revision = dma_chip_revision_override;
+		} else if (dma_chip_revision != (dma_registers[3] & 1)) {
 			if (dma_chip_revision_is_dynamic) {
 				DEBUG("DMA: changing DMA revision %d -> %d" NL, dma_chip_revision, dma_registers[3] & 1);
 				dma_chip_revision = dma_registers[3] & 1;
@@ -577,6 +583,7 @@ int dma_update ( void )
 				dma_chip_revision = hack.saved_revision;
 				hack.enhanced_dma = 0;
 			}
+			dma_chip_revision_override = -1;
 			// Mega65: reset fractional step registers to the default at the end! (it seems M65 does this, by reading its VHDL source)
 			// Note, this is the old DMA behaviour not connected to the "hack" ...
 			dma_registers[0x08] = 0;	// source skip rate, fraction part
@@ -693,6 +700,7 @@ void dma_reset ( void )
 #ifdef MEGA65
 	dma_registers[0x09] = 1;	// fixpoint math source step integer part (1), fractional (reg#8) is already zero by memset() above
 	dma_registers[0x0B] = 1;	// fixpoint math target step integer part (1), fractional (reg#A) is already zero by memset() above
+	dma_chip_revision_override = -1;
 #endif
 }
 
