@@ -1,6 +1,6 @@
 /* Various D81 access method for F011 core, for Xemu / C65 and M65 emulators.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -200,8 +200,8 @@ int d81access_attach_fsobj ( const char *fn, int mode )
 		return 1;
 	}
 	ro = (IS_RO(mode) || ro) ? D81ACCESS_RO : 0;
-	off_t size = lseek(fd, 0, SEEK_END);
-	if (size == (off_t)-1) {
+	off_t size = xemu_safe_file_size_by_fd(fd);
+	if (size == OFF_T_ERROR) {
 		ERROR_WINDOW("D81: Cannot query the size of external D81 image/program file %s ERROR: %s", fn, strerror(errno));
 		close(fd);
 		return 1;

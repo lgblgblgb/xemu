@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2019-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -26,7 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 int is_xemugui_ok = 0;
 
 
-#if defined(HAVE_GTK3) || defined(__APPLE__) || defined(_WIN32)
+#if defined(HAVE_GTK3) || defined(XEMU_ARCH_MAC) || defined(XEMU_ARCH_WIN)
 static void store_dir_from_file_selection ( char *store_dir, const char *filename, int dialog_mode )
 {
 	if (store_dir && (dialog_mode & XEMUGUI_FSEL_FLAG_STORE_DIR)) {
@@ -60,9 +60,9 @@ struct xemugui_descriptor_st {
 
 #if defined(HAVE_GTK3)
 #	include "xemu/gui/gtk.c"
-//#elif defined(__APPLE__)
+//#elif defined(XEMU_ARCH_MAC)
 //#	include "xemu/gui/osx.c"
-#elif defined(_WIN32)
+#elif defined(XEMU_ARCH_WIN)
 #	include "xemu/gui/windows.c"
 #endif
 #include "xemu/gui/nogui.c"
@@ -71,10 +71,10 @@ struct xemugui_descriptor_st {
 static const struct xemugui_descriptor_st *current_gui = NULL;
 
 static const struct xemugui_descriptor_st *xemugui_descriptor_list[] = {
-//#if defined(__APPLE__)
+//#if defined(XEMU_ARCH_MAC)
 //	&xemuosxgui_descriptor,
 //#endif
-#if defined (_WIN32)
+#if defined (XEMU_ARCH_WIN)
 	&xemuwingui_descriptor,
 #endif
 #if defined(HAVE_GTK3)

@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -549,6 +549,23 @@ ssize_t xemu_safe_write ( int fd, const void *buffer, size_t length )
 	return saved;
 }
 
+
+off_t xemu_safe_file_size_by_fd ( int fd )
+{
+	struct stat st;
+	if (fstat(fd, &st))
+		return OFF_T_ERROR;
+	return st.st_size;
+}
+
+
+off_t xemu_safe_file_size_by_name ( const char *name )
+{
+	struct stat st;
+	if (stat(name, &st))
+		return OFF_T_ERROR;
+	return st.st_size;
+}
 
 
 /* Loads a file, probably ROM image etc. It uses xemu_open_file() - see above - for opening it.

@@ -58,7 +58,7 @@ recreatememcontent:
 	echo "Uint8 meminitdata_banner[MEMINITDATA_BANNER_SIZE] = {" >> memcontent.c.tmp
 	../../build/bin2values.py $(MEGA65_CORE)/sdcard-files/BANNER.M65 - >> memcontent.c.tmp
 	echo "};" >> memcontent.c.tmp
-	echo "Uint8 meminitdata_freezer[] = { /* Not used currently but we will be ... */" >> memcontent.c.tmp
+	echo "Uint8 meminitdata_freezer[] = {" >> memcontent.c.tmp
 	../../build/bin2values.py $(MEGA65_CORE)/sdcard-files/FREEZER.M65 - >> memcontent.c.tmp
 	echo "};" >> memcontent.c.tmp
 	echo "const int meminitdata_freezer_size = sizeof(meminitdata_freezer);" >> memcontent.c.tmp
