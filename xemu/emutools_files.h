@@ -30,7 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifdef	XEMU_ARCH_WIN
 #	define FILE_BROWSER	"explorer"
-#elif	XEMU_ARCH_MAC
+#elif	defined(XEMU_ARCH_MAC)
 #	define FILE_BROWSER	"open"
 #else
 #	define FILE_BROWSER	"xdg-open"
@@ -45,6 +45,7 @@ extern int     xemu_load_file ( const char *filename, void *store_to, int min_si
 extern int     xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_back );
 extern ssize_t xemu_safe_read ( int fd, void *buffer, size_t length );
 extern ssize_t xemu_safe_write ( int fd, const void *buffer, size_t length );
+extern int     xemu_safe_close ( int fd );
 extern off_t   xemu_safe_file_size_by_fd ( int fd );
 extern off_t   xemu_safe_file_size_by_name ( const char *name );
 extern int     xemu_create_empty_image ( const char *os_path, unsigned int size );
@@ -55,7 +56,7 @@ extern int     xemu_create_empty_image ( const char *os_path, unsigned int size 
 
 #ifdef HAVE_XEMU_EXEC_API
 #define XEMUEXEC_STILL_RUNNING 259
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 typedef void* xemuexec_process_t;
 #define XEMUEXEC_NULL_PROCESS_ID NULL
 #else
