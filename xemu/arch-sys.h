@@ -35,17 +35,17 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #		define	DISABLE_DEBUG
 #	endif
 //#	define	XEMU_OLD_TIMING
-#elif	_WIN64
+#elif	defined(_WIN64)
 #	define	XEMU_ARCH_WIN64
 #	define	XEMU_ARCH_WIN
 #	define	XEMU_ARCH_NAME	"win64"
 #	define	XEMU_SLEEP_IS_USLEEP
-#elif	_WIN32
+#elif	defined(_WIN32)
 #	define	XEMU_ARCH_WIN32
 #	define	XEMU_ARCH_WIN
 #	define	XEMU_ARCH_NAME	"win32"
 #	define	XEMU_SLEEP_IS_USLEEP
-#elif	__APPLE__
+#elif	defined(__APPLE__)
 	// Actually, MacOS / OSX is kinda UNIX, but for some minor reasons we handle it differently here
 #	include	<TargetConditionals.h>
 #	ifndef	TARGET_OS_MAC

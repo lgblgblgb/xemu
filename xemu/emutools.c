@@ -261,7 +261,7 @@ static inline void do_sleep ( int td )
 	// called as last in case of emscripten target, since this does not sleep at all for real,
 	// unlike the other sleep methods for non-js targets.
 	emscripten_set_main_loop_timing(EM_TIMING_SETTIMEOUT, td > 999 ? td / 1000 : 1);
-#elif XEMU_SLEEP_IS_SDL_DELAY
+#elif defined(XEMU_SLEEP_IS_SDL_DELAY)
 #define __SLEEP_METHOD_DESC "SDL_Delay"
 	if (td > 0)
 		SDL_Delay(td / 1000);
