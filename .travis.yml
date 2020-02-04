@@ -92,7 +92,8 @@ matrix:
         - uname -a ; pwd ; df -h ; id -a
         - hostname ; sudo hostname lgb || true ; hostname
         - set -e
-        - SDL_WIN_URL="https://github.com/lgblgblgb/xep128/raw/gh-pages/files/sdl204-win-crosstools.tar.bz2"
+        - SDL_WIN_URL_OLDER="https://github.com/lgblgblgb/xep128/raw/gh-pages/files/sdl204-win-crosstools.tar.bz2"
+        - SDL_WIN_URL="https://github.com/lgblgblgb/xemu/raw/gh-pages/files/sdl-2.0.10-win-mingw-crosstools-on-linux-installed.tar.bz2"
         - sudo mkdir -p /usr/local/cross-tools
         - rm -f /tmp/sdl-win.tar.bz2
         - wget -q -O /tmp/sdl-win.tar.bz2 --no-check-certificate $SDL_WIN_URL

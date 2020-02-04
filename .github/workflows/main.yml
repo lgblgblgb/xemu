@@ -22,15 +22,15 @@ jobs:
     - name: Show native SDL2 status
       run: ls -l `which sdl2-config` || true ; sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true
     - name: Compiling for native (Linux)
-      run: sudo -u lgb make
+      run: sudo -u lgb make -j 2
     - name: Installing Windows SDL2 cross-development components
-      run: sudo mkdir -p /usr/local/cross-tools && cd /usr/local/cross-tools && sudo wget --no-check-certificate https://github.com/lgblgblgb/xep128/raw/gh-pages/files/sdl204-win-crosstools.tar.bz2 && sudo tar xfpjv sdl204-win-crosstools.tar.bz2 && sudo ln -s /usr/local/cross-tools/i686-w64-mingw32/bin/sdl2-config /usr/bin/i686-w64-mingw32-sdl2-config && sudo ln -s /usr/local/cross-tools/x86_64-w64-mingw32/bin/sdl2-config /usr/bin/x86_64-w64-mingw32-sdl2-config && ls -l /usr/bin/i686-w64-mingw32-sdl2-config /usr/bin/x86_64-w64-mingw32-sdl2-config
+      run: sudo mkdir -p /usr/local/cross-tools && cd /usr/local/cross-tools && sudo wget -q -O sdl-win.tar.bz2 --no-check-certificate https://github.com/lgblgblgb/xemu/raw/gh-pages/files/sdl-2.0.10-win-mingw-crosstools-on-linux-installed.tar.bz2 && sudo tar xfjv sdl-win.tar.bz2 && sudo ln -s /usr/local/cross-tools/i686-w64-mingw32/bin/sdl2-config /usr/bin/i686-w64-mingw32-sdl2-config && sudo ln -s /usr/local/cross-tools/x86_64-w64-mingw32/bin/sdl2-config /usr/bin/x86_64-w64-mingw32-sdl2-config && ls -l /usr/bin/i686-w64-mingw32-sdl2-config /usr/bin/x86_64-w64-mingw32-sdl2-config
     - name: Show Windows SDL2 status
       run: echo "*** 64-bit Windows SDL2 status ***" ; ls -l `which x86_64-w64-mingw32-sdl2-config` || true ; x86_64-w64-mingw32-sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true ; echo "*** 32-bit Windows SDL2 status ***" ; ls -l `which i686-w64-mingw32-sdl2-config` || true ; i686-w64-mingw32-sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true
     - name: Compiling for Windows 32-bit
-      run: sudo -u lgb make ARCH=win32
+      run: echo "Currently turned off, for performace reasons ... sudo -u lgb make -j 2 ARCH=win32"
     - name: Compiling for Windows 64-bit
-      run: sudo -u lgb make ARCH=win64
+      run: sudo -u lgb make -j 2 ARCH=win64
     - name: Show result
       run: ls -l build/bin/*.native || true ; md5sum build/bin/*.native || true ; sha512sum build/bin/*.native || true ; ls -l build/bin/*.win64 || true ; md5sum build/bin/*.win64 || true ; sha512sum build/bin/*.win64 || true ; ls -l build/bin/*.win32 || true ; md5sum build/bin/*.win32 || true ; sha512sum build/bin/*.win32 || true
     - name: Showing output of an emulator
