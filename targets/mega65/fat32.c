@@ -30,10 +30,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifdef XEMU_BUILD
 #	include "xemu/emutools.h"
+#	include "xemu/emutools_files.h"
 #else
 #	define NL		"\n"
 #	define DEBUG		printf
 #	define DEBUGPRINT	printf
+#	define OFF_T_ERROR	((off_t)-1)
 #	ifdef MEGA65_BUILD
 		typedef unsigned long int	Uint32;
 		typedef unsigned int		Uint16;
@@ -52,6 +54,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
 
 #include "fat32.h"
 
@@ -68,24 +71,6 @@ static struct {
 } disk;
 
 
-struct mfat_part_st {
-	Uint32	first_block;
-	Uint32	last_block;
-	Uint32	blocks;
-	//Uint32	blocks_per_cluster;
-	int	part_type;
-	int	valid;			// partition seems to be valid by part_type and size and layout requirements
-	int	fs_validated;		// FAT32 is validated already, all data below is filled
-	Uint32	clusters;		// total number of clusters (don't forget, the two first clusters cannot be used, but it counts here!)
-	Uint32	data_area_fake_ofs;	// the 'fake' offset (taking account the cluster<2 invalidity) which must be added to the converted cluster->block value
-	Uint32	cluster_size_in_blocks;	// cluster size in blocks
-	Uint32	fat1_start, fat2_start;
-	Uint32	root_dir_cluster;
-	Uint32	fs_info_block_number;
-	Uint32	eoc_marker;
-};
-
-
 struct mfat_part_st mfat_partitions[4];
 
 
@@ -96,6 +81,14 @@ static int mfat_read_DEVICE_blk ( Uint32 block, void *buf )
 		return -1;
 	}
 	return disk.reader(block, buf);
+}
+static int mfat_write_DEVICE_blk ( Uint32 block, void *buf )
+{
+	if (block >= disk.blocks) {
+		fprintf(stderr, "Host FS: writing outside of the device\n");
+		return -1;
+	}
+	return disk.writer(block, buf);
 }
 
 static int mfat_read_part_blk ( Uint32 block, void *buf )
@@ -109,6 +102,18 @@ static int mfat_read_part_blk ( Uint32 block, void *buf )
 		return -1;
 	}
 	return mfat_read_DEVICE_blk(block + mfat_partitions[disk.part].first_block, buf);
+}
+static int mfat_write_part_blk ( Uint32 block, void *buf )
+{
+	if (disk.part < 0) {
+		fprintf(stderr, "write partition block: invalid partition is selected\n");
+		return -1;
+	}
+	if (block >= mfat_partitions[disk.part].blocks) {
+		fprintf(stderr, "write partition block: trying to read block outside of partition!\n");
+		return -1;
+	}
+	return mfat_write_DEVICE_blk(block + mfat_partitions[disk.part].first_block, buf);
 }
 
 static int mfat_read_cluster ( Uint32 cluster, Uint32 block_in_cluster, void *buf )
@@ -124,9 +129,49 @@ static int mfat_read_cluster ( Uint32 cluster, Uint32 block_in_cluster, void *bu
 	}
 	return mfat_read_part_blk(cluster * mfat_partitions[disk.part].cluster_size_in_blocks + mfat_partitions[disk.part].data_area_fake_ofs + block_in_cluster, buf);
 }
+static int mfat_write_cluster ( Uint32 cluster, Uint32 block_in_cluster, void *buf )
+{
+	cluster &= 0x0FFFFFFFU;	// some well known fact, that FAT32 is actually FAT28, and the highest 4 bits should not be used!
+	if (cluster < 2 || cluster >= mfat_partitions[disk.part].clusters) {
+		fprintf(stderr, "write cluster: invalid cluster number %d\n", cluster);
+		return -1;
+	}
+	if (block_in_cluster >= mfat_partitions[disk.part].cluster_size_in_blocks) {
+		fprintf(stderr, "write cluster: invalid in-cluster-block data %d\n", block_in_cluster);
+		return -1;
+	}
+	return mfat_write_part_blk(cluster * mfat_partitions[disk.part].cluster_size_in_blocks + mfat_partitions[disk.part].data_area_fake_ofs + block_in_cluster, buf);
+}
 
 #define AS_WORD(p,o)	(p[o] + (p[o+1] << 8))
 #define AS_DWORD(p,o)	(p[o] + (p[o+1] << 8) + (p[o+2] << 16) + (p[o+3] << 24))
+
+
+static struct {
+	Uint8  buf[512];
+	Uint32 block;
+	int    dirty;
+	int    ofs;
+} fat_cache;
+
+
+
+static int mfat_flush_fat_cache ( void )
+{
+	if (fat_cache.dirty) {
+		if (mfat_write_part_blk(fat_cache.block, fat_cache.buf))
+			return -1;
+		// Also, we need to write the "backup" copy of FAT.
+		// We assume max of two FATs are used, but currenty, other parts of this source assumes ALWAYS two copies.
+		// To be careful, let's check it here though.
+		int fat2_offset = mfat_partitions[disk.part].fat2_start - mfat_partitions[disk.part].fat1_start;
+		if (fat2_offset > 0)
+			mfat_write_part_blk(fat_cache.block + fat2_offset, fat_cache.buf);	// FIXME: should we error check this? if "main" FAT was OK to be written but not the "backup" one??
+		fat_cache.dirty = 0;
+	}
+	return 0;
+}
+
 
 
 // Return value:
@@ -135,31 +180,71 @@ static int mfat_read_cluster ( Uint32 cluster, Uint32 block_in_cluster, void *bu
 // other = cluster number from the chained cluster
 static Uint32 mfat_read_fat_chain ( Uint32 cluster )
 {
-	static Uint8 cache[512];
-	static Uint32 cached_block = 0;
-	Uint32 block, ofs;
+	Uint32 block;
 	cluster &= 0x0FFFFFFFU;	// some well known fact, that FAT32 is actually FAT28, and the highest 4 bits should not be used!
 	if (cluster < 2 || cluster >= mfat_partitions[disk.part].clusters) {
 		fprintf(stderr, "read fat: invalid cluster number %d\n", cluster);
 		return 1;
 	}
-	block = mfat_partitions[disk.part].fat1_start + cluster / 128;
-	ofs   = (cluster & 127) * 4;
-	if (block != cached_block) {
-		if (mfat_read_part_blk(block, cache))
+	block = mfat_partitions[disk.part].fat1_start + (cluster >> 7);
+	fat_cache.ofs   = (cluster & 127) << 2;
+	if (block != fat_cache.block) {
+		mfat_flush_fat_cache();
+		if (mfat_read_part_blk(block, fat_cache.buf))
 			return 1;
-		cached_block = block;
+		fat_cache.block = block;
 		printf("UNCACHED block: %d\n", block);
 	} else
 		printf("COOL, fat block is cached for %d\n", block);
-	cluster = AS_DWORD(cache, ofs) & 0x0FFFFFFFU;
-	printf("DEBUG: mfat_read_chain: got cluster: $%08X\n", AS_DWORD(cache, ofs));
-	// in theory there is some "official" end-of-chain marker, but in reality it seems anything which is outside of normal
-	// cluster number on the FS "should" be considered as end-of-chain marker
+	cluster = AS_DWORD(fat_cache.buf, fat_cache.ofs) & 0x0FFFFFFFU;
+	printf("DEBUG: mfat_read_chain: got cluster: $%08X\n", AS_DWORD(fat_cache.buf, fat_cache.ofs));
+	// In theory there is some "official" end-of-chain marker, but in reality it seems anything which is outside of normal
+	// cluster number on the FS "should" be considered as end-of-chain marker.
+	// That's actually great, we should not worry here what is the "EOC" marker, and just say this:
 	if (cluster < 2 || cluster >= mfat_partitions[disk.part].clusters)
 		return 0;
 	return cluster;
 }
+
+
+// Next can be:
+// 0 = end of chain
+// 1 = FREE
+// Other = valid next cluster to be chained
+static int mfat_write_fat_chain ( Uint32 cluster, Uint32 next )
+{
+	if (next >= mfat_partitions[disk.part].clusters)
+		return 1;
+	else if (next == 0)
+		next = 0x0FFFFFFFU;
+	else if (next == 1)
+		next = 0;
+	// first we want to READ ... it also flushes possible previous cached dirty block
+	// It also calculates the block offset (fat_cache.ofs) for us!
+	// And moreover, it also uses cached copies to avoid read, if the same block from FAT was used before!!
+	int ret = mfat_read_fat_chain(cluster);
+	if (ret == 1)	// ERROR!!!!
+		return 1;
+	for (int a = fat_cache.ofs; a < fat_cache.ofs + 4; a++, next >>= 8) {
+		if (fat_cache.buf[a] != (Uint8)next) {
+			fat_cache.buf[a] = (Uint8)next;
+			fat_cache.dirty = 1;	// now we make the cache dirty, oh-oh
+		}
+	}
+	return 0;
+}
+
+
+static int mfat_free_fat_chain ( Uint32 cluster )
+{
+	while (cluster >= 2) {
+		Uint32 next_cluster = mfat_read_fat_chain(cluster);
+		mfat_write_fat_chain(cluster, 1); // 1=FREE in our API	FIXME: error handling!
+		cluster = next_cluster;
+	}
+	return 0;	// FIXME: always OK?? see above!
+}
+
 
 
 void mfat_init ( mfat_io_callback_func_t reader, mfat_io_callback_func_t writer, Uint32 device_size )
@@ -168,6 +253,8 @@ void mfat_init ( mfat_io_callback_func_t reader, mfat_io_callback_func_t writer,
 	disk.writer = writer;
 	disk.blocks = device_size;
 	disk.part = -1;
+	fat_cache.block = -1;
+	fat_cache.dirty = 0;
 }
 
 
@@ -180,6 +267,11 @@ int mfat_init_mbr ( void )
 {
 	int first_valid = -1;
 	Uint8 cache[512], *p;
+	// DANGER WILL ROBINSON! Previous partition may be was in use! Flush cache!
+	mfat_flush_fat_cache();
+	fat_cache.block = -1;
+	fat_cache.dirty =  0;
+	// end of the danger zone
 	if (mfat_read_DEVICE_blk(0, cache))	// read MBR
 		return -1;
 	// parse partition entries
@@ -241,6 +333,11 @@ static void hexdump ( Uint8 *p, int lines, const char *title )
 int mfat_use_part ( int part )
 {
 	int previous_part = disk.part;
+	// DANGER WILL ROBINSON! Previous partition may be was in use! Flush cache!
+	mfat_flush_fat_cache();
+	fat_cache.block = -1;
+	fat_cache.dirty =  0;
+	// end of the danger zone
 	disk.part = part;
 	if (part < 0 || part > 3 || !mfat_partitions[part].valid)
 		goto error;
@@ -350,19 +447,6 @@ error:
 /* ---- FILESYSTEM like functions, generic, even directories are just "files" with special format though ---- */
 
 
-typedef struct {
-	Uint32	cluster;
-	int	in_cluster_block;
-	int	in_block_pos;
-	int	eof;
-	int	size_constraint;
-	int	file_pos;
-	struct mfat_part_st *partition;
-	Uint32	start_cluster;
-} mfat_stream_t;
-
-
-
 void mfat_open_stream ( mfat_stream_t *p, Uint32 cluster )
 {
 	p->cluster = cluster;
@@ -376,6 +460,12 @@ void mfat_open_stream ( mfat_stream_t *p, Uint32 cluster )
 }
 
 
+void mfat_open_rootdir ( mfat_stream_t *p )
+{
+	mfat_open_stream(p, mfat_partitions[disk.part].root_dir_cluster);	// we can't use p->partition here since mfat_open_stream is what sets it!!!
+}
+
+
 void mfat_rewind_stream ( mfat_stream_t *p )
 {
 	p->cluster = p->start_cluster;
@@ -386,6 +476,25 @@ void mfat_rewind_stream ( mfat_stream_t *p )
 }
 
 
+Uint32 mfat_get_real_size ( mfat_stream_t *p, int *fragmented )
+{
+	Uint32 clusters = 0;
+	Uint32 cluster = p->start_cluster;
+	if (fragmented)
+		*fragmented = 0;
+	while (cluster >= 2 && cluster < p->partition->clusters) {
+		clusters++;
+		Uint32 next_cluster = mfat_read_fat_chain(cluster);
+		if (next_cluster == 1)
+			return 0;	// error
+		if (next_cluster >= 2 && next_cluster != (cluster + 1) && fragmented)
+			*fragmented = 1;
+		cluster = next_cluster;
+	}
+	return clusters * p->partition->cluster_size_in_blocks * 512;
+}
+
+// Warning: uses own cache! That is, it's not possible to deal with more than ONE stream at the same time!!
 int mfat_read_stream ( mfat_stream_t *p, void *buf, int size )
 {
 	static Uint8 cache[512];
@@ -443,57 +552,95 @@ error:
 
 /* ---- functions for handling directories ---- */
 
-
-typedef struct {
-	mfat_stream_t stream;
-	char	name[8+3+1];
-	Uint32	cluster;
-	Uint32	size;
-	Uint8	type;
-} mfat_dirent_t;
-
-int mfat_read_directory ( mfat_dirent_t *p )
+int mfat_read_directory ( mfat_dirent_t *p, int type_filter )
 {
 	Uint8 buf[32];
-	for (;;) {
+	do {
 		int ret = mfat_read_stream(&p->stream, buf, 32);
-		if (ret <= 0)
+		if (ret <= 0) {
+			printf("%s getting ret %d\n", __func__, ret);
 			return ret;
+		}
 		if (ret != 32) {
 			fprintf(stderr, "FATAL ERROR: dirent read 32 is not 32\n");
 			exit(1);
 		}
-		if (buf[0] == 0) {	// marks end of directory
+		if (buf[0] == 0) {		// marks end of directory, thus returning with no entry found at this point
+			printf("%s end of stream\n", __func__);
 			p->stream.eof = 1;
 			return 0;
 		}
-		if (buf[0] == 0xE5)	// deleted file
-			continue;
-		if (buf[0] < 0x20 || buf[0] > 127)	// some random stuff?
-			continue;
-		if ((buf[0xB] & 0xF) == 0xF)	// LFN piece? currently not supported
-			continue;
-		break;
+	} while (
+		((buf[0xB] &  0x0F) == 0x0F) ||	// LFN piece is ignored for now, not supported
+		( buf[0x0] <= 0x20) ||		// strange character as the first char is not supported, and ignored, even space
+		( buf[0x0] &  0x80) ||		// ... or any high-bit set byte (that includes 0xE5 too, which is deleted file)
+		// if it's a volume label but we haven't requested for volume label to be found, then ignore it
+		((buf[0xB] &  0x08) &&      !(type_filter & MFAT_FIND_VOL )) ||
+		// if it's a directory but we haven't requested for directory to be found, then ignore it
+		((buf[0xB] &  0x10) &&      !(type_filter & MFAT_FIND_DIR )) ||
+		// if it's a regular file (ie, not volume label, not directory) but we haven't requested for regular file to be found, then ignore it
+		((buf[0xB] &  0x18) == 0 && !(type_filter & MFAT_FIND_FILE))
+	);
+	// Convert name into "string" format with BASE8.EXT3 ...
+	// Technically it's kind of valid if space is part of file name, but we don't support such a scenario and simply ignore the problem ...
+	int i = 0;
+	char *d = p->name;
+	while (buf[i] != 0x20 && i < 8)
+		*d++ = buf[i++];
+	if (buf[8] != 0x20) {
+		i = 0;
+		*d++ = '.';
+		while (buf[8 + i] != 0x20 && i < 3)
+			*d++ = buf[8 + (i++)];
 	}
-	memcpy(p->name, buf, 8+3);
-	p->name[8+3] = 0;
+	*d = '\0';
+	// end of filename stuff. Also store (just in case) the FAT name as-is
+	memcpy(p->fat_name, buf, 8 + 3);
+	p->fat_name[8 + 3] = '\0';
+	// Also store start cluster, size, file type and date!
 	p->cluster = AS_WORD(buf, 0x1A) + (AS_WORD(buf, 0x14) << 16);
 	p->size = AS_DWORD(buf, 0x1C);
 	p->type = buf[0xB];
+	struct tm time;
+	time.tm_sec   = (AS_WORD(buf, 0x0E) &  31) <<  1;
+	time.tm_min   = (AS_WORD(buf, 0x0E) >>  5) &  63;
+	time.tm_hour  = (AS_WORD(buf, 0x0E) >> 11) &  31;
+	time.tm_mday  =  AS_WORD(buf, 0x10)        &  31;
+	time.tm_mon   = (AS_WORD(buf, 0x10) >>  5) &  15;
+	time.tm_year  = (AS_WORD(buf, 0x10) >>  9) +  80;
+	time.tm_wday  = 0;
+	time.tm_yday  = 0;
+	time.tm_isdst = -1;
+	p->time = mktime(&time);
 	return 1;
 }
 
 
-int mfat_search_in_directory ( mfat_dirent_t *p, const char *name )
+// int mfat_append_directory  FIXME
+
+// "name" can be NULL to return with the first valid one according to type_filter!
+int mfat_search_in_directory ( mfat_dirent_t *p, const char *name, int type_filter )
 {
+	// normalize the search name, ie shorten to 8+3, all capitals, also checking for invalid chars, etc
+	char normalized_search_name[8 + 1 + 3 + 1];
+	if (name && mfat_normalize_name(normalized_search_name, name)) {	// only do normalization if name != NULL, "short circuit" kind of solution
+		p->name[0] = 0;
+		return -1;	// bad search name!
+	}
 	mfat_rewind_stream(&p->stream);
 	for (;;) {
-		int ret = mfat_read_directory(p);
+		int ret = mfat_read_directory(p, type_filter);
 		if (ret == 1) {
-			if (!strcmp(name, p->name))
+			printf("%s considering file [%s] as [%s]\n", __func__, p->name, name ? normalized_search_name : "<first>");
+			// FIXME: probably, later we want to allow joker characters?
+			if (!name)
 				return 1;
-		} else
+			if (!strcmp(p->name, normalized_search_name))
+				return 1;
+		} else {
+			printf("%s returns because of ret being %d\n", __func__, ret);
 			return ret;
+		}
 	}
 }
 
@@ -509,9 +656,9 @@ int mfat_open_file_by_dirent ( mfat_dirent_t *p )
 }
 
 
-int mfat_open_file_by_name ( mfat_dirent_t *p, const char *name )
+int mfat_open_file_by_name ( mfat_dirent_t *p, const char *name, int type_filter )
 {
-	int ret = mfat_search_in_directory(p, name);
+	int ret = mfat_search_in_directory(p, name, type_filter);
 	if (ret != 1)
 		return ret;
 	return mfat_open_file_by_dirent(p);
@@ -523,6 +670,82 @@ int mfat_read_file ( mfat_dirent_t *p, void *buf, int size )
 	return mfat_read_stream(&p->stream, buf, size);
 }
 
+
+/* ----- UTILS ------- */
+
+static const char *allowed_dos_name_chars = "!#$%&'()-@^_`{}~0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ";	// we don't allow space, even if it's technically not illegal
+
+#if 0
+static char fat_dirent_name[8 + 3 + 1];
+
+int filename_to_fat_dirent ( char *d, const char *s )
+{
+	int len = 8;
+	int in_ext = 0;
+	if (!d)
+		d = fat_dirent_name;
+	memset(d, 0x20, 8 + 3);
+	d[8 + 3] = 0;
+	for (;;) {
+		char c = *s++;
+		if (c == 0) {
+			return 0;
+		} else if (c == '.') {
+			if (in_ext)
+				return -1;	// more than one dot in FN
+			if (len == 8)
+				return -1;	// file name begins with dot (we don't allow '.' and '..' reference in this func, btw)
+			in_ext = 1;
+			d += len;
+			len = 3;
+		} else {
+			if (len) {
+				if (c >= 'a' && c <= 'z')
+					c -= 'a' - 'A';
+				if (!strchr(allowed_dos_name_chars, c))
+					return -1;	// not allowd character in filename
+				*d++ = c;
+				len--;
+			}
+		}
+	}
+}
+#endif
+
+// Again this function does not support scenario, where name contains a space
+int mfat_normalize_name ( char *d, const char *s )
+{
+	int len = 8;
+	int in_ext = 0;
+	char *d_orig = d;
+	for (;;) {
+		char c = *s++;
+		if (c == 0) {
+			*d = '\0';
+			return 0;
+		} else if (c == '.') {
+			if (in_ext)
+				break;	// more than one dot in FN
+			if (len == 8)
+				break;	// file name begins with dot (we don't allow '.' and '..' reference in this func, btw)
+			in_ext = 1;
+			*d++ = '.';
+			len = 3;
+		} else {
+			if (len) {
+				if (c >= 'a' && c <= 'z')
+					c -= 'a' - 'A';
+				if (!strchr(allowed_dos_name_chars, c))
+					break;	// not allowd character in filename
+				*d++ = c;
+				len--;
+			}
+		}
+	}
+	d_orig[0] = '?';
+	d_orig[1] = '\0';
+	return -1;
+}
 
 
 #ifndef XEMU_BUILD
@@ -555,7 +778,7 @@ int main ( int argc, char **argv )
 		return 1;
 	}
 	off_t devsize = lseek(fd, 0, SEEK_END);
-	if (devsize == (off_t)-1) {
+	if (devsize == OFF_T_ERROR) {
 		perror("Host lseek to get device size");
 		close(fd);
 		return 1;
@@ -591,12 +814,31 @@ int main ( int argc, char **argv )
 	// STREAM TEST
 	//Uint8 dirent[32];
 	mfat_dirent_t dirent;
-	mfat_open_stream(&dirent.stream, mfat_partitions[part].root_dir_cluster);
+	//mfat_open_stream(&dirent.stream, mfat_partitions[part].root_dir_cluster);
+	mfat_open_rootdir(&dirent.stream);
+	int ret;
+	int fragmented;
+	ret = mfat_get_real_size(&dirent.stream, &fragmented);
+	printf("GET REAL SIZE = %d, fragmented = %d\n", ret, fragmented);
+	ret = mfat_search_in_directory(&dirent, NULL, MFAT_FIND_VOL);
+	printf("VOLUME NAME: \"%s\"\n", ret == 1 ? dirent.fat_name : "???");
+	for (int x = 0; x < 2; x++) {
+		mfat_rewind_stream(&dirent.stream);
 	for (;;) {
-		int ret = mfat_read_directory(&dirent);
+		int ret = mfat_read_directory(&dirent, 0xFF);
 		if (ret != 1)
 			break;
-		printf("FILE: \"%s\"\n", dirent.name);
+		printf("FILE: \"%s\" size = %u cluster=%u\n", dirent.name, dirent.size, dirent.cluster);
+	}
+	}
+	// SEARCH TEST
+	ret = mfat_search_in_directory(&dirent, "FOOD", 0xFF);
+	printf("SEARCH FOR FOOD: %d\n", ret);
+	if (!ret) {
+		ret = mfat_search_in_directory(&dirent, "MEGA65.ROM", 0xFF);
+		printf("RESULT of searching file : %d\n", ret);
+		ret = mfat_search_in_directory(&dirent, "MEGA65.ROM", 0xFF);
+		printf("RESULT of searching file (AGAIN!): %d\n", ret);
 	}
 	close(fd);
 	puts("WOW :-)");

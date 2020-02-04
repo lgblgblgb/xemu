@@ -48,6 +48,8 @@ extern Uint8  sd_status;
 
 extern int fd_mounted;
 
+extern const char xemu_external_d81_signature[];
+
 static inline int has_block_nonzero_byte ( const Uint8 *p )
 {
 	for (register unsigned int a = 0; a < 512; a++)

@@ -69,6 +69,7 @@ static Uint8	sd_fill_buffer[512];	// Only used by the sd fill mode write command
 
 static char	external_d81[PATH_MAX + 1];
 
+const char	xemu_external_d81_signature[] = "\xFF\xFE<{[(XemuExternalDiskMagic)]}>";
 
 
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
@@ -263,7 +264,7 @@ static int detect_compressed_image ( int fd )
 {
 	static const char compressed_marker[] = "XemuBlockCompressedImage000";
 	Uint8 buf[512];
-	if (lseek(sdfd, 0, SEEK_SET) == (off_t)-1 || xemu_safe_read(fd, buf, 512) != 512)
+	if (lseek(sdfd, 0, SEEK_SET) == OFF_T_ERROR || xemu_safe_read(fd, buf, 512) != 512)
 		return -1;
 	if (memcmp(buf, compressed_marker, sizeof compressed_marker)) {
 		DEBUGPRINT("SDCARD: image is not compressed" NL);
@@ -311,12 +312,11 @@ int sdcard_init ( const char *fn, const char *extd81fn, int virtsd_flag )
 #endif
 		DEBUGPRINT("SDCARD: card init done (VDISK!), size=%u Mbytes, virtsd_flag=%d" NL, sdcard_size_in_blocks >> 11, virtsd_flag);
 #ifdef SD_CONTENT_SUPPORT
-		sdcontent_handle(sdcard_size_in_blocks, 1, 0, fn);
+		sdcontent_handle(sdcard_size_in_blocks, fn, SDCONTENT_FORCE_FDISK);
 #endif
 		return 0;
 	}
 #endif
-	int force_fdisk = 0;
 retry:
 	sd_is_read_only = O_RDONLY;
 	sdfd = xemu_open_file(fn, O_RDWR, &sd_is_read_only, fnbuf);
@@ -330,10 +330,8 @@ retry:
 				int r2 = xemu_create_empty_image(fnbuf, (1U << (r + 26U)));
 				if (r2)
 					ERROR_WINDOW("Couldn't create: %s", strerror(r2));
-				else {
-					force_fdisk = 1;
+				else
 					goto retry;
-				}
 			}
 		}
 	} else {
@@ -343,8 +341,8 @@ retry:
 			DEBUG("SDCARD: image file re-opened in RD/WR mode, good" NL);
 		// Check size!
 		DEBUG("SDCARD: cool, SD-card image %s (as %s) is open" NL, fn, fnbuf);
-		off_t size_in_bytes = lseek(sdfd, 0, SEEK_END);
-		if (size_in_bytes == (off_t)-1) {
+		off_t size_in_bytes = xemu_safe_file_size_by_fd(sdfd);
+		if (size_in_bytes == OFF_T_ERROR) {
 			ERROR_WINDOW("Cannot query the size of the SD-card image %s, SD-card access won't work! ERROR: %s", fn, strerror(errno));
 			close(sdfd);
 			sdfd = -1;
@@ -381,7 +379,7 @@ retry:
 	if (sdfd >= 0) {
 		DEBUGPRINT("SDCARD: card init done, size=%u Mbytes, virtsd_flag=%d" NL, sdcard_size_in_blocks >> 11, virtsd_flag);
 #ifdef SD_CONTENT_SUPPORT
-		sdcontent_handle(sdcard_size_in_blocks, force_fdisk, 1, NULL);
+		sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_ASK_FDISK | SDCONTENT_ASK_FILES);
 #endif
 	}
 	return sdfd;
