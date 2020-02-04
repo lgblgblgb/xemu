@@ -26,7 +26,7 @@ rm -fr .dist || exit 1
 
 mkdir -p $BINDIR $DATADIR $ROOT/DEBIAN $ROOT/usr/share/doc/$PROJECT $ROOT/usr/share/applications $ROOT/usr/share/pixmaps || exit 1
 
-cp xemu-32x28.xpm $ROOT/usr/share/pixmaps/xemu-32x28.xpm
+cp xemu-48x48.xpm $ROOT/usr/share/pixmaps/xemu-48x48.xpm
 
 for a in bin/*.native ; do
 	b="$BINDIR/xemu-`basename $a .native`"

@@ -1,39 +1,181 @@
+dist: bionic
 sudo: required
 language: c
-git:
-  depth: 32
-os:
-- linux
-- osx
+
 matrix:
-  allow_failures:
-  - os: osx
+  include:
+    - name: Linux native compilation
+      os: linux
+      addons:
+        apt:
+          packages:
+            - alien
+            - build-essential
+            - bzip2
+            - coreutils
+            - curl
+            - dpkg
+            - fakeroot
+            - gawk
+            - gcc
+            - file
+            - libc-bin
+            - libc6-dev
+            - libcurl4-openssl-dev
+            - libgtk-3-dev
+            - libreadline6-dev
+            - libsdl2-dev
+            - make
+            - rpm
+            - sed
+            - tar
+            - vim-common
+            - wget
+            - zip
+      compiler: gcc
+      before_script:
+        - set +e
+        - uname -a ; lsb_release -a || true ; hostname ; pwd ; df -h ; id -a
+        - hostname ; sudo hostname lgb || true ; hostname
+        - set -e
+        - sdl2-config --version --prefix --cflags --libs --static-libs
+        - pkg-config --cflags-only-I --libs gtk+-3.0
+        - set +e
+        - uptime
+      script:
+        - set -e
+        - make -j 2
+        - set +e
+        - for a in build/bin/*.native ; do strip $a ; ls -l $a ; done
+        - set -e
+        - make deb
+        - set +e
+        - cp build/bin/*.deb build/bin/*.rpm . || true
+        - build/bin/xc65.native --help || true
+        - ldd build/bin/xc65.native
+        - uptime ; pwd ; ls -l
+      before_deploy:
+        - build/deploy/before-deploy.sh xemu-deploy Linux
+      deploy:
+        provider: pages
+        local_dir: xemu-deploy
+        skip_cleanup: true
+        github_token: $GHDEPLOYKEY2
+        keep_history: true
+        target_branch: binary-native
+        email: lgb@lgb.hu
+        name: Gabor Lenart LGB
+        verbose: false
+        on:
+          branch: risky-disky
+    - name: Windows cross-compilation on Linux
+      os: linux
+      addons:
+        apt:
+          packages:
+            - binutils-mingw-w64-i686
+            - binutils-mingw-w64-x86-64
+            - bzip2
+            - coreutils
+            - file
+            - gawk
+            - gcc-mingw-w64-i686
+            - gcc-mingw-w64-x86-64
+            - make
+            - sed
+            - tar
+            - vim-common
+            - wget
+            - zip
+      before_script:
+        - set +e
+        - uname -a ; pwd ; df -h ; id -a
+        - hostname ; sudo hostname lgb || true ; hostname
+        - set -e
+        - SDL_WIN_URL="https://github.com/lgblgblgb/xep128/raw/gh-pages/files/sdl204-win-crosstools.tar.bz2"
+        - sudo mkdir -p /usr/local/cross-tools
+        - rm -f /tmp/sdl-win.tar.bz2
+        - wget -q -O /tmp/sdl-win.tar.bz2 --no-check-certificate $SDL_WIN_URL
+        - ls -l /tmp/sdl-win.tar.bz2
+        - sudo tar xfvj /tmp/sdl-win.tar.bz2 -C /usr/local/cross-tools/
+        - find /usr/local/cross-tools/ -ls
+        - rm -f /tmp/sdl-win.tar.bz2
+        - sudo ln -s /usr/local/cross-tools/i686-w64-mingw32/bin/sdl2-config /usr/bin/i686-w64-mingw32-sdl2-config
+        - i686-w64-mingw32-sdl2-config --version --prefix --cflags --libs --static-libs
+        - sudo ln -s /usr/local/cross-tools/x86_64-w64-mingw32/bin/sdl2-config /usr/bin/x86_64-w64-mingw32-sdl2-config
+        - x86_64-w64-mingw32-sdl2-config --version --prefix --cflags --libs --static-libs
+        - set +e
+        - uptime
+      script:
+        - set -e
+        - make -j 2 ARCH=win64
+        - set +e
+        - for a in build/bin/*.win64 ; do x86_64-w64-mingw32-strip $a ; ls -l $a ; done
+        - cp README.md LICENSE `x86_64-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
+        - build/zipper.sh build/bin xemu-binaries-win64.zip build/bin/*.dll build/bin/*.win64 README.md LICENSE
+        - cp build/bin/xemu-binaries-win64.zip .
+        - set -e
+        - make -j 2 ARCH=win32
+        - set +e
+        - for a in build/bin/*.win32 ; do i686-w64-mingw32-strip $a ; ls -l $a ; done
+        - cp README.md LICENSE `i686-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
+        - build/zipper.sh build/bin xemu-binaries-win32.zip build/bin/*.dll build/bin/*.win32 README.md LICENSE
+        - cp build/bin/xemu-binaries-win32.zip .
+        - uptime ; pwd ; ls -l
+      before_deploy:
+        - build/deploy/before-deploy.sh xemu-deploy Windows
+      deploy:
+        provider: pages
+        local_dir: xemu-deploy
+        skip_cleanup: true
+        github_token: $GHDEPLOYKEY2
+        keep_history: true
+        target_branch: binary-windows
+        email: lgb@lgb.hu
+        name: Gabor Lenart LGB
+        verbose: false
+        on:
+          branch: risky-disky
+    - name: MacOS native compilation
+      os: osx
+      osx_image: xcode11
+      addons:
+        homebrew:
+          packages:
+            - sdl2
+      before_script:
+        - set +e
+        - uname -a ; pwd ; df -h ; id -a
+        - hostname ; sudo hostname lgb || true ; hostname
+        - set -e
+        - sdl2-config --version --prefix --cflags --libs --static-libs
+        - set +e
+        - uptime
+      script:
+        - set -e
+        - make -j 2 ARCH=osx
+        - set +e
+        - for a in build/bin/*.osx ; do build/mangle_dylib_osx.sh $a ; strip $a ; done
+        - build/bin/xc65.osx --help || true
+        - cp README.md LICENSE build/bin/
+        - build/zipper.sh build/bin xemu-binaries-osx.zip build/bin/*.dylib build/bin/*.osx README.md LICENSE
+        - cp build/bin/xemu-binaries-osx.zip .
+        - uptime ; pwd ; ls -l
+      before_deploy:
+        - build/deploy/before-deploy.sh xemu-deploy MacOS
+      deploy:
+        provider: pages
+        local_dir: xemu-deploy
+        skip_cleanup: true
+        github_token: $GHDEPLOYKEY2
+        keep_history: true
+        target_branch: binary-osx
+        email: lgb@lgb.hu
+        name: Gabor Lenart LGB
+        verbose: false
+        on:
+          branch: risky-disky
+
 env:
-  linux_dist: ubuntu
-  linux_ver: 16.04
-  linux_init: "/lib/systemd/systemd"
-  linux_opts: "--privileged --volume=/sys/fs/cgroup:/sys/fs/cgroup:ro"
-services:
-- docker
-before_install:
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo docker pull ${linux_dist}:${linux_ver}
-  ; fi
-script:
-- build/travis/store-travis-info
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then container_id_file=$(mktemp) ; export
-  container_id_file ; fi
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo docker run --detach --volume="${PWD}":/srv/git:rw
-  ${linux_opts} ${linux_dist}:${linux_ver} "${linux_init}" > "${container_id_file}"
-  ; fi
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo docker exec --tty "$(cat ${container_id_file})"
-  /srv/git/build/travis/install.linux  ; fi
-- if [[ "$TRAVIS_OS_NAME" == "osx" ]];   then build/travis/install.osx ; fi
-- if [[ "$TRAVIS_OS_NAME" == "linux" ]]; then sudo docker stop "$(cat ${container_id_file})"
-  ; fi
-deploy:
-  provider: bintray
-  user: "lgblgblgb"
-  file: "build/deploy/bintray-description.json"
-  on: deploy
-  key:
-    secure: h/8a6mRDEkYNV6xUJkPeW2/yrc7Xh0dF6RDU+GLTOtkRHVDKh08G0XIdOO07Brv+hEEpV5vYWoFuet+nirz65XKnW5tzfmvCTcOt7uK+aNpN0vXn2HAy5eeXI+JpfwwLvS0VnabTl4V+sZ2dOfCPNy94gmMVB8DaityG/iVlUIXXPDllQhPlnhDK6OZJ9hVrxJ1IJ7A8yW5eNU18ZFHpjyjbR+eCuuwdy0HAVvk2PwCk1YretnAt0WLACfcjDJp002WKyB6KilzvAloWYNkWXKZz/ZP2RdcH0enKE/cmsI9Fb4S4qQqQQx7h+CaKTlB7mt1u60J92geaFVdCGkPE4vyhckMyGist5Ggej28G+9wQtvd+2W6klb6RbQuKWL08sEFue8xqqYtg9qdkkEEG0DCxi5j7ytFmXSHsaZFwEgVqGMQDocKO4Wk5uCRkPbyfoSXRJOcwUEL90VpOYCSTAZL2XhFY1pA/ZdqO4ENWlhs/80Rpnadr+O/LkoXLtv2NTA7ku9onV1GiccEuHvFKhc3hawm/wdPVVcXO8sgfebxHJ5MrLmhhP0ivxd2RRWS6ZALXdlqWEx0uFVosVsNLVGfkkJZLJRW3ZnF3kheofM2fDqsMUH7QElb+8qfGWSKrpZD3k1QWQP03da1V0mRFNWLxG0MsIPwl1qf0KZPz9oI=
+  global:
+    secure: "OMFY2V+IyO53dbjtoIkPD+FBffcPI/+EhQkzqqItgqiQshKTZoeK5g8hGx6Vrj+IMKhACOD0juL7uo0yJm6B38HI0t0o8bAuKEdDsHygFRdgKe+vlf6h3FgNl5iUcFm7el352BWtXzB4CRNtoDL32xVBicBnv4LBdcks3qy7YaAN5Rq03QijlemwZxmbXAIGLCdc14fwKPGNtdrpcxNCi2dhL3zVrU2elfvozoUodrnPPmVOHLEyPXkMqlgvGz/NWrFAoq+PzEblmFtnpWFEqi2JdrTb6WYIwo+49cObArh2Musv7+eAzflqylf3yaCx0mTGIETVS+Gc2hoHN1iCMbQI3OMGWw1083Z4cBovCP58+8/wtU0Lu57Ea8QKMKViZPiAd4r0ydcei8GSdful7YYL0eux1nsF+ldB7fv0U8Bc7gWLOPHphtjFqLM7kbomaDDRH97rSYlKDehdKew+olz6xRitHuhWTkzjX92tLX18z0FV/dUc+lGjbf6R1EHg5gbhHtY7ImNktoTSc3KMr3tePESlvNeQzM5Q6zbOI5JIXUve0UqdvFTf9Bq1S73Dfmj0Ckc9kcsbPuIrSTtnoSy5T7P5HsqoUJk+ahtD3mQs/PceYsTvziBedFhUG2RPAPdOq+bg1X9QSoCxcXQthh8ZWzOcTJTwpqFhtTERWoI="

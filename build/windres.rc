@@ -1,0 +1,19 @@
+#include <winver.h>
+
+1 VERSIONINFO
+BEGIN
+	BLOCK "StringFileInfo"
+	BEGIN
+		BLOCK "040904E4"
+		BEGIN
+			VALUE "Comments",		"https://github.com/lgblgblgb/xemu/wiki"
+			VALUE "CompanyName",		"LGB (Gabor Lenart)"
+			VALUE "FileDescription",	"xemu - X-Emulators"
+			VALUE "InternalName",		"xemu"
+			VALUE "LegalCopyright",		"GNU/GPL (General Public License) v2 or later"
+			VALUE "OriginalFilename",	"xemu"
+			VALUE "ProductName",		"xemu"
+		END
+	END
+END
+1 ICON "../../build/xemu.ico"
