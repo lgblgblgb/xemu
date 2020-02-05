@@ -2,7 +2,7 @@
 
 [![Build Status](https://api.travis-ci.org/lgblgblgb/xemu.svg?branch=master)](https://travis-ci.org/lgblgblgb/xemu)
 [![Gitter](https://badges.gitter.im/lgblgblgb/xemu.svg)](https://gitter.im/lgblgblgb/xemu)
-[![Download](https://img.shields.io/badge/download-master-%23FF6060)](https://github.com/lgblgblgb/xemu-binaries/blob/master/README.md)
+[![Download](https://img.shields.io/badge/download-master-%236060FF)](https://github.com/lgblgblgb/xemu-binaries/blob/master/README.md)
 [![License: GPL-2.0](https://img.shields.io/github/license/lgblgblgb/xemu.svg)](./LICENSE)
 [![Contributors](https://img.shields.io/github/contributors/lgblgblgb/xemu.svg)](https://github.com/lgblgblgb/xemu/graphs/contributors)
 [![GitHub last commit (branch)](https://img.shields.io/github/last-commit/lgblgblgb/xemu/dev)](https://github.com/lgblgblgb/xemu/tree/dev)
@@ -41,17 +41,17 @@ Note: this kind of demonstration is limited (or even broken!), often not in
 pair with the native client for your OS (a "binary"), which - at the other
 hand - requires more work: installation, configuration, etc ...
 
-**Plese note, that binaries on that site can be OUTDATED. Currently to download
-ready-to-use Xemu binaries, you may want to go here:**
-
-https://github.com/lgblgblgb/xemu-binaries/blob/master/README.md
-
 ## Quick start (using pre-built binaries)
 
 I'm trying to provide some sane ways to install/use Xemu for people don't like
 to compile from source. Visit this page:
 
 http://xemu-dist.lgb.hu/
+
+**Plese note, that binaries on that site can be OUTDATED. Currently to download
+ready-to-use Xemu binaries, you may want to go here:**
+
+https://github.com/lgblgblgb/xemu-binaries/blob/master/README.md
 
 ### Windows
 
