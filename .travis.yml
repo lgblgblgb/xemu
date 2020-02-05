@@ -62,7 +62,8 @@ matrix:
         skip_cleanup: true
         github_token: $GHDEPLOYKEY2
         keep_history: true
-        target_branch: binary-native
+        repo: lgblgblgb/xemu-binaries
+        target_branch: binary-linux
         email: lgb@lgb.hu
         name: Gabor Lenart LGB
         verbose: false
@@ -119,6 +120,7 @@ matrix:
         skip_cleanup: true
         github_token: $GHDEPLOYKEY2
         keep_history: true
+        repo: lgblgblgb/xemu-binaries
         target_branch: binary-windows
         email: lgb@lgb.hu
         name: Gabor Lenart LGB
@@ -158,6 +160,7 @@ matrix:
         skip_cleanup: true
         github_token: $GHDEPLOYKEY2
         keep_history: true
+        repo: lgblgblgb/xemu-binaries
         target_branch: binary-osx
         email: lgb@lgb.hu
         name: Gabor Lenart LGB
