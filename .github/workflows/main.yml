@@ -24,7 +24,7 @@ jobs:
     - name: Compiling for native (Linux)
       run: sudo -u lgb make -j 2
     - name: Installing Windows SDL2 cross-development components
-      run: sudo build/install-cross-win-mingw-sdl-on-linux
+      run: build/install-cross-win-mingw-sdl-on-linux /usr/bin
     - name: Show Windows SDL2 status
       run: echo "*** 64-bit Windows SDL2 status ***" ; ls -l `which x86_64-w64-mingw32-sdl2-config` || true ; x86_64-w64-mingw32-sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true ; echo "*** 32-bit Windows SDL2 status ***" ; ls -l `which i686-w64-mingw32-sdl2-config` || true ; i686-w64-mingw32-sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true
     - name: Compiling for Windows 32-bit

@@ -3,12 +3,16 @@
 
 set -e
 
+if [ "$1" = "" ]; then
+	echo "ERROR: bad usage, missing argument" >&2
+	exit 1
+fi
+
 #SDL_WIN_URL="https://github.com/lgblgblgb/xep128/raw/gh-pages/files/sdl204-win-crosstools.tar.bz2"
 SDL_WIN_URL="https://github.com/lgblgblgb/xemu/raw/gh-pages/files/sdl-2.0.10-win-mingw-crosstools-on-linux-installed.tar.bz2"
 
-CROSS_ROOT=/usr/local/cross-tools
-BIN_DIR=/usr/local/bin
-
+CROSS_ROOT="/usr/local/cross-tools"
+BIN_DIR="$1"
 
 if [ "`whoami`" != "root" ]; then
 	echo "WARNING: running $0 as non-root user, defaultung to use 'sudo' for certain tasks."

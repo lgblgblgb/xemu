@@ -238,7 +238,11 @@ do the task with a single command. It needs you to be at the top directory
 of the downloaded/cloned Xemu repository. You may want to run this as root,
 or at least you need to have 'sudo' capabilities. The command:
 
-    build/install-cross-win-mingw-sdl-on-linux
+    build/install-cross-win-mingw-sdl-on-linux /usr/local/bin
+
+This command will install stuffs in /usr/local/cross-tools (regardless of the
+parameter!) and create symlinks in /usr/local/bin. If it's not in your PATH
+by default, you may need to put it, or use different argument than /usr/local/bin.
 
 Then you can say the following for 32 bit or 64 bit build process (in general,
 32 bit version should be avoided on any OS - for performance reasons as well):
