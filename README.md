@@ -191,6 +191,9 @@ compilation, with cross-compiler and SDL2 MinGW cross platform suite installed.
 
 #### MSYS2 native build
 
+Note: this is probably the easier method for a Windows user, however this is **not the
+method we use to build official** binaries for Windows.
+
 An easy way to build xemu under Windows is to use the  MSYS2 package which includes
 a full MinGW compiler, associated headers, tools , and a nice package management utility
 for easy installation of required components: Pacman, popular in ArchLinux-based distros.
@@ -221,27 +224,21 @@ you can (and maybe you want) rename that to have extension '.exe' ...
 
 #### Alternative method (Cross-compilation)
 
+Note: this is the official method we use to build official binaries for Windows.
+
 For Ubuntu (and probably other DEB based distros, this also includes of course
 WSL if Ubuntu is used as the guest) you can install mingw by:
 
     apt-get install binutils-mingw-w64-i686 binutils-mingw-w64-x86-64 gcc-mingw-w64-i686 gcc-mingw-w64-x86-64
 
-Then, you need to install mingw-specific SDL2 development suite. Visit SDL site
-at https://libsdl.org/ and use the Download / SDL 2.0 link. You will need
-the development libraries (as a form of some .tar.gz) for Windows, the MinGW
-version. Extract that into some directory. You'll find a Makefile inside,
-you should utilize it by saying:
+Then, you need to install mingw-specific SDL2 development suite, download,
+modify its Makefile probably, install it, create compatibility symlinks for
+Xemu ... If you trust into the version Xemu uses, probably it's better to
+do the task with a single command. It needs you to be at the top directory
+of the downloaded/cloned Xemu repository. You may want to run this as root,
+or at least you need to have 'sudo' capabilities. The command:
 
-    make cross
-
-After that, one thing is still missing: Xemu's build system won't find the
-sdl2-config scripts. Thus, you need to symlink them into a directory which
-is in your PATH, let's say /usr/local/bin in our example. Let's assume,
-SDL2 above has been already installed at prefix /usr/local. Then, the commands
-you need:
-
-    ln -s /usr/local/i686-w64-mingw32/bin/sdl2-config /usr/local/bin/i686-w64-mingw32-sdl2-config
-    ln -s /usr/local/x86_64-w64-mingw32/bin/sdl2-config /usr/local/bin/x86_64-w64-mingw32-sdl2-config
+    build/install-cross-win-mingw-sdl-on-linux
 
 Then you can say the following for 32 bit or 64 bit build process (in general,
 32 bit version should be avoided on any OS - for performance reasons as well):
