@@ -2,7 +2,9 @@
 
 [![Build Status](https://api.travis-ci.org/lgblgblgb/xemu.svg?branch=master)](https://travis-ci.org/lgblgblgb/xemu)
 [![Gitter](https://badges.gitter.im/lgblgblgb/xemu.svg)](https://gitter.im/lgblgblgb/xemu)
-[![Download](https://api.bintray.com/packages/lgblgblgb/generic/xemu/images/download.svg)](http://xemu-dist.lgb.hu/)
+[![Download](https://api.bintray.com/packages/lgblgblgb/generic/xemu/images/download.svg)](https://github.com/lgblgblgb/xemu-binaries/blob/master/README.md)
+[![License: GPL-2.0](https://img.shields.io/github/license/lgblgblgb/xemu.svg)](./LICENSE)
+[![Contributors](https://img.shields.io/github/contributors/lgblgblgb/xemu.svg)](https://github.com/lgblgblgb/xemu/graphs/contributors)
 
 Emulators running on Linux/Unix/Windows/OSX of various (mainly 8 bit) machines,
 including the Commodore LCD and Commodore 65 (and also some Mega65) as well.
@@ -34,9 +36,14 @@ Just visit this page, and use the "in-browser demonstration" link:
 
 http://xemu-dist.lgb.hu/
 
-Note: this kind of demonstration is limited, often not in pair with the native
-client for your OS (a "binary"), which - at the other hand - requires more
-work: installation, configuration, etc ...
+Note: this kind of demonstration is limited (or even broken!), often not in
+pair with the native client for your OS (a "binary"), which - at the other
+hand - requires more work: installation, configuration, etc ...
+
+**Plese note, that binaries on that site can be OUTDATED. Currently to download
+ready-to-use Xemu binaries, you may want to go here:**
+
+https://github.com/lgblgblgb/xemu-binaries/blob/master/README.md
 
 ## Quick start (using pre-built binaries)
 
