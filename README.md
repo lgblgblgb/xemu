@@ -34,7 +34,7 @@ Just visit this page, and use the "in-browser demonstration" link:
 
 http://xemu-dist.lgb.hu/
 
-Nore: this kind of demonstration is limited, often not in pair with the native
+Note: this kind of demonstration is limited, often not in pair with the native
 client for your OS (a "binary"), which - at the other hand - requires more
 work: installation, configuration, etc ...
 
@@ -205,7 +205,7 @@ The following steps are based on a Windows-10 x64 system.
 * Execute the MSYS2 MinGW 64bit system prompt at installation end, or by looking into your Start Menu.
 * In the command prompt, ensure you have the latest repositories by doing:
 
-    pacman -Syu
+`pacman -Syu`
 
 Restart the prompt if needed, and finish installing remaining packages with:
 
@@ -224,7 +224,7 @@ you can (and maybe you want) rename that to have extension '.exe' ...
 
 #### Alternative method (Cross-compilation)
 
-Note: this is the official method we use to build official binaries for Windows.
+Note: this is the **official method we use to build official binaries for Windows**.
 
 For Ubuntu (and probably other DEB based distros, this also includes of course
 WSL if Ubuntu is used as the guest) you can install mingw by:
@@ -238,7 +238,7 @@ do the task with a single command. It needs you to be at the top directory
 of the downloaded/cloned Xemu repository. You may want to run this as root,
 or at least you need to have 'sudo' capabilities. The command:
 
-    build/install-cross-win-mingw-sdl-on-linux /usr/local/bin
+    build/install-cross-win-mingw-sdl-on-linux.sh /usr/local/bin
 
 This command will install stuffs in /usr/local/cross-tools (regardless of the
 parameter!) and create symlinks in /usr/local/bin. If it's not in your PATH

@@ -93,7 +93,7 @@ matrix:
         - uname -a ; pwd ; df -h ; id -a
         - set -e
         - hostname ; sudo hostname lgb || true ; hostname
-        - build/install-cross-win-mingw-sdl-on-linux /usr/bin
+        - build/install-cross-win-mingw-sdl-on-linux.sh /usr/bin
         - set +e
         - uptime
       script:
