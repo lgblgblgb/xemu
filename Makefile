@@ -59,13 +59,13 @@ roms:
 
 deb:
 	$(MAKE) all
-	build/deb-build-simple
+	build/deb-build-simple.sh
 
 nsi:
 	rm -f build/bin/*.[dD][lL][lL] build/bin/*.[eE][xX][eE]
 	for t in $(TARGETS) ; do for a in win32 win64 ; do $(MAKE) -C targets/$$t ARCH=$$a || exit 1 ; done ; done
-	build/nsi-build win32 `build/system-config win32 sdl2 dll`
-	build/nsi-build win64 `build/system-config win64 sdl2 dll`
+	build/nsi-build-native.sh win32 `build/system-config win32 sdl2 dll`
+	build/nsi-build-native.sh win64 `build/system-config win64 sdl2 dll`
 
 publish:
 	$(MAKE)

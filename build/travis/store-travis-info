@@ -1,3 +1,0 @@
-#!/bin/bash
-set | awk -F= '/^TRAVIS_[A-Z_]+=/  { print "export " $1 "=\"" $2 "\"" ; urlpar = urlpar $1 "=" $2 "&" } END { print "export URLPAR=\"" urlpar "end\"" }' > .travis-info
-echo "export uploader=$uploader" > .uploader

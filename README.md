@@ -2,10 +2,13 @@
 
 [![Build Status](https://api.travis-ci.org/lgblgblgb/xemu.svg?branch=master)](https://travis-ci.org/lgblgblgb/xemu)
 [![Gitter](https://badges.gitter.im/lgblgblgb/xemu.svg)](https://gitter.im/lgblgblgb/xemu)
-[![Download](https://api.bintray.com/packages/lgblgblgb/generic/xemu/images/download.svg)](http://xemu-dist.lgb.hu/)
+[![Download](https://img.shields.io/badge/download-master-%236060FF)](https://github.com/lgblgblgb/xemu-binaries/blob/master/README.md)
+[![License: GPL-2.0](https://img.shields.io/github/license/lgblgblgb/xemu.svg)](./LICENSE)
+[![Contributors](https://img.shields.io/github/contributors/lgblgblgb/xemu.svg)](https://github.com/lgblgblgb/xemu/graphs/contributors)
+[![GitHub last commit (branch)](https://img.shields.io/github/last-commit/lgblgblgb/xemu/dev)](https://github.com/lgblgblgb/xemu/tree/dev)
 
 Emulators running on Linux/Unix/Windows/OSX of various (mainly 8 bit) machines,
-including the Commodore LCD and Commodore 65 (and also some Mega65) as well.
+including the Commodore LCD and Commodore 65 (and also some MEGA65) as well.
 
 Written by (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 Source repository: https://github.com/lgblgblgb/xemu
@@ -34,9 +37,9 @@ Just visit this page, and use the "in-browser demonstration" link:
 
 http://xemu-dist.lgb.hu/
 
-Nore: this kind of demonstration is limited, often not in pair with the native
-client for your OS (a "binary"), which - at the other hand - requires more
-work: installation, configuration, etc ...
+Note: this kind of demonstration is limited (or even broken!), often not in
+pair with the native client for your OS (a "binary"), which - at the other
+hand - requires more work: installation, configuration, etc ...
 
 ## Quick start (using pre-built binaries)
 
@@ -44,6 +47,11 @@ I'm trying to provide some sane ways to install/use Xemu for people don't like
 to compile from source. Visit this page:
 
 http://xemu-dist.lgb.hu/
+
+**Plese note, that binaries on that site can be OUTDATED. Currently to download
+ready-to-use Xemu binaries, you may want to go here:**
+
+https://github.com/lgblgblgb/xemu-binaries/blob/master/README.md
 
 ### Windows
 
@@ -57,10 +65,6 @@ about the NSIS-related problem which causes false positive detections as
 Also, you can find ZIP archives on that page, contains only the executable files
 and the needed DLL, without any installer.
 
-*HELP WANTED*: if you are an advanced Windows user, and want to help, contant me.
-I would need tester, and somebody who knows Windows quite well, including being
-able to suggest better installation and other solutions ...
-
 ### Linux
 
 On Linux, you can try the provided DEB pacakge to install, if you run Ubuntu (may
@@ -72,27 +76,12 @@ Work in progress to provide other - less distribution dependent - ways to instal
 Xemu on Linux (other than compiling yourself), maybe in the form for flatpak,
 AppImage or something like that (though I really hate Snappy ...) in the future.
 
-### Where is the MacOS binary build?
+### MacOS
 
-Sorry, there is no MacOS build this time, since I don't find any sane way to
-compile for MacOS legally without buying a Mac. That's a kind of lame from
-Apple btw, since I want to help Apple users to have more software, but I
-can't accept that I am forced to buy something to be able to do so (for
-Windows, I can use mingw cross-compiler from Linux - basically without
-any material from Microsoft I had to buy and/or use, there is no such a way
-for MacOS, or even if there is, it needs Xcode components, etc, so it cannot
-be totally free / legal ...).
+On MacOS, you want to use the MacOS build, of course. Currently there is only
+a ZIP file, with a binary and a .dylib, they must be in the same directory!
 
-Also I have no idea how installers work on MacOS, how to create one, etc ...
-One thing is clear: Xemu should work on MacOS, if you compile it yourself.
-
-*HELP WANTED* Surely, if you have any suggestions, feel free to contact me,
-I've never even used MacOS, even less than Windows. I should find a way
-to make Xemu MacOS builds without me needing to pay for Apple (to buy
-a Mac) or to be illegal (using "Hackintosh"). Also, I don't know anything
-about MacOS-specific installation methods preferred. Also, I soon would need
-to have some GUI components, MacOS - again - is missing from my knowledge
-totally.
+Work in progress to have a DMG material as well.
 
 ## Quick start (from source)
 
@@ -112,6 +101,8 @@ your Mac: https://brew.sh/
 
     brew update
     brew install sdl2 wget git
+
+Xemu should build with a simple `make` but I recommend `make ARCH=osx` to build!
 
 #### Raspberry Pi
 
@@ -141,10 +132,6 @@ me, but unfortunately I don't have too much time to play with this idea :(
     git clone https://github.com/lgblgblgb/xemu.git
     cd xemu
 
-### Download needed ROM images, etc
-
-    make roms
-
 ### Compilation
 
     make
@@ -157,7 +144,7 @@ files as well, you can then execute emulators like `xemu-xmega65`):
     make deb
 
 To compile only (`make` in the top level directory will compile all of the
-targets automatically) a given emulator (let's say mega65):
+targets automatically) a given emulator (let's say MEGA65):
 
     cd targets
     ls -l
@@ -191,6 +178,9 @@ compilation, with cross-compiler and SDL2 MinGW cross platform suite installed.
 
 #### MSYS2 native build
 
+Note: this is probably the easier method for a Windows user, however this is **not the
+method we use to build official** binaries for Windows.
+
 An easy way to build xemu under Windows is to use the  MSYS2 package which includes
 a full MinGW compiler, associated headers, tools , and a nice package management utility
 for easy installation of required components: Pacman, popular in ArchLinux-based distros.
@@ -202,7 +192,7 @@ The following steps are based on a Windows-10 x64 system.
 * Execute the MSYS2 MinGW 64bit system prompt at installation end, or by looking into your Start Menu.
 * In the command prompt, ensure you have the latest repositories by doing:
 
-    pacman -Syu
+`pacman -Syu`
 
 Restart the prompt if needed, and finish installing remaining packages with:
 
@@ -221,27 +211,25 @@ you can (and maybe you want) rename that to have extension '.exe' ...
 
 #### Alternative method (Cross-compilation)
 
+Note: this is the **official method we use to build official binaries for Windows**.
+
 For Ubuntu (and probably other DEB based distros, this also includes of course
 WSL if Ubuntu is used as the guest) you can install mingw by:
 
     apt-get install binutils-mingw-w64-i686 binutils-mingw-w64-x86-64 gcc-mingw-w64-i686 gcc-mingw-w64-x86-64
 
-Then, you need to install mingw-specific SDL2 development suite. Visit SDL site
-at https://libsdl.org/ and use the Download / SDL 2.0 link. You will need
-the development libraries (as a form of some .tar.gz) for Windows, the MinGW
-version. Extract that into some directory. You'll find a Makefile inside,
-you should utilize it by saying:
+Then, you need to install mingw-specific SDL2 development suite, download,
+modify its Makefile probably, install it, create compatibility symlinks for
+Xemu ... If you trust into the version Xemu uses, probably it's better to
+do the task with a single command. It needs you to be at the top directory
+of the downloaded/cloned Xemu repository. You may want to run this as root,
+or at least you need to have 'sudo' capabilities. The command:
 
-    make cross
+    build/install-cross-win-mingw-sdl-on-linux.sh /usr/local/bin
 
-After that, one thing is still missing: Xemu's build system won't find the
-sdl2-config scripts. Thus, you need to symlink them into a directory which
-is in your PATH, let's say /usr/local/bin in our example. Let's assume,
-SDL2 above has been already installed at prefix /usr/local. Then, the commands
-you need:
-
-    ln -s /usr/local/i686-w64-mingw32/bin/sdl2-config /usr/local/bin/i686-w64-mingw32-sdl2-config
-    ln -s /usr/local/x86_64-w64-mingw32/bin/sdl2-config /usr/local/bin/x86_64-w64-mingw32-sdl2-config
+This command will install stuffs in /usr/local/cross-tools (regardless of the
+parameter!) and create symlinks in /usr/local/bin. If it's not in your PATH
+by default, you may need to put it, or use different argument than /usr/local/bin.
 
 Then you can say the following for 32 bit or 64 bit build process (in general,
 32 bit version should be avoided on any OS - for performance reasons as well):
