@@ -71,6 +71,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	error	"Unknown target OS architecture."
 #endif
 
+#if defined(XEMU_ARCH_WIN) && !defined(_USE_MATH_DEFINES)
+	// It seems, some (?) versions of Windows requires _USE_MATH_DEFINES to be defined to define some math constants by math.h
+#	define	_USE_MATH_DEFINES
+#endif
+
+#if defined(XEMU_ARCH_UNIX) && !defined(_XOPEN_SOURCE)
+#	define	_XOPEN_SOURCE	700
+#endif
+
 #ifndef XEMU_NO_TARGET
 #	include "xemu-target.h"
 #	if defined(XEMU_ARCH_HTML) && !defined(CONFIG_EMSCRIPTEN_OK)

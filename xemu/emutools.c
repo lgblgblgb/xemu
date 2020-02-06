@@ -33,7 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/osd_font_16x16.c"
 
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 static int atexit_callback_for_console_registered = 0;
 #endif
 
@@ -43,7 +43,7 @@ SDL_Texture  *sdl_tex = NULL;
 SDL_PixelFormat *sdl_pix_fmt;
 static const char default_window_title[] = "XEMU";
 char *xemu_app_org = NULL, *xemu_app_name = NULL;
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 static const char *emscripten_sdl_base_dir = EMSCRIPTEN_SDL_BASE_DIR;
 #endif
 char *sdl_window_title = (char*)default_window_title;
@@ -164,7 +164,7 @@ void *xemu_realloc ( void *p, size_t size )
 
 
 #ifdef HAVE_MM_MALLOC
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 extern void *_mm_malloc ( size_t size, size_t alignment );	// it seems mingw/win has issue not to define this properly ... FIXME? Ugly windows, always the problems ...
 #endif
 void *xemu_malloc_ALIGNED ( size_t size )
@@ -252,7 +252,7 @@ void xemu_set_screen_mode ( int setting )
 
 static inline void do_sleep ( int td )
 {
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 #define __SLEEP_METHOD_DESC "emscripten_set_main_loop_timing"
 	// Note: even if td is zero (or negative ...) give at least a little time for the browser
 	// do not detect the our JS script as a run-away one, suggesting to kill ...
@@ -397,13 +397,14 @@ int xemu_init_debug ( const char *fn )
 }
 
 
-#ifndef __EMSCRIPTEN__
+#ifndef XEMU_ARCH_HTML
 static char *GetHackedPrefDir ( const char *base_path, const char *name )
 {
+	static const char prefdir_is_here_marker[] = "prefdir-is-here.txt";
 	char path[PATH_MAX];
 	sprintf(path, "%s%s%c", base_path, name, DIRSEP_CHR);
-	char file[PATH_MAX];
-	sprintf(file, "%s%s", path, "prefdir-is-here.txt");
+	char file[PATH_MAX + sizeof(prefdir_is_here_marker)];
+	sprintf(file, "%s%s", path, prefdir_is_here_marker);
 	int fd = open(file, O_RDONLY | O_BINARY);
 	if (fd < 0)
 		return NULL;
@@ -419,7 +420,7 @@ static char *GetHackedPrefDir ( const char *base_path, const char *name )
 
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan )
 {
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 	if (chatty_xemu)
 		xemu_dump_version(stdout, slogan);
 	MKDIR(emscripten_sdl_base_dir);
@@ -472,7 +473,7 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 
 int xemu_init_sdl ( void )
 {
-#ifndef __EMSCRIPTEN__
+#ifndef XEMU_ARCH_HTML
 	if (!SDL_WasInit(SDL_INIT_EVERYTHING)) {
 		DEBUGPRINT("SDL: no SDL subsystem initialization has been done yet, do it!" NL);
 		SDL_Quit();	// Please read the long comment at the pre-init func above to understand this SDL_Quit() here and then the SDL_Init() right below ...
@@ -543,11 +544,11 @@ int xemu_post_init (
 	DEBUGPRINT("SDL preferences directory: %s" NL, sdl_pref_dir);
 	DEBUG("SDL install directory: %s" NL, sdl_inst_dir);
 	DEBUG("SDL base directory: %s" NL, sdl_base_dir);
-#ifndef __EMSCRIPTEN__
+#ifndef XEMU_ARCH_HTML
 	if (MKDIR(sdl_inst_dir) && errno != EEXIST)
 		ERROR_WINDOW("Warning: cannot create directory %s: %s", sdl_inst_dir, strerror(errno));
 #endif
-#ifndef _WIN32
+#ifndef XEMU_ARCH_WIN
 	do {
 		char *p = getenv("HOME");
 		if (p && strlen(sdl_pref_dir) > strlen(p) + 1 && !strncmp(p, sdl_pref_dir, strlen(p)) && sdl_pref_dir[strlen(p)] == DIRSEP_CHR) {
@@ -623,7 +624,7 @@ int xemu_post_init (
 	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, render_scale_quality_s);		// render scale quality 0, 1, 2
 	SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_PING, "0");				// disable WM ping, SDL dialog boxes makes WMs things emu is dead (?)
 	SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0");					// disable vsync aligned screen rendering
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 	SDL_SetHint(SDL_HINT_WINDOWS_NO_CLOSE_ON_ALT_F4, "1");				// 1 = disable ALT-F4 close on Windows
 #endif
 	SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");			// 1 = do minimize the SDL_Window if it loses key focus when in fullscreen mode
@@ -967,7 +968,7 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 		char *p = strchr(items, '|');
 		switch (*items) {
 			case '!':
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 				printf("Emscripten: faking chooser box answer %d for \"%s\"" NL, messageboxdata.numbuttons, msg);
 				return messageboxdata.numbuttons;
 #endif
@@ -1001,7 +1002,7 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 }
 
 
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 
 /* winsock related ... */
 
@@ -1076,7 +1077,7 @@ void xemu_free_sockapi ( void ) {}
 
 void sysconsole_open ( void )
 {
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 	int hConHandle;
 	HANDLE lStdHandle;
 	CONSOLE_SCREEN_BUFFER_INFO coninfo;
@@ -1144,7 +1145,7 @@ void sysconsole_open ( void )
 }
 
 
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 static CHAR sysconsole_getch( void )
 {
 	HANDLE h = GetStdHandle(STD_INPUT_HANDLE);
@@ -1165,7 +1166,7 @@ void sysconsole_close ( const char *waitmsg )
 {
 	if (!sysconsole_is_open)
 		return;
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 	if (waitmsg) {
 		// FIXME: for some reason on Windows (no idea why), window cannot be open from an atexit callback
 		// So instead of a GUI element here with a dialog box, we must rely on the console to press a key to continue ...
