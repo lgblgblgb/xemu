@@ -8,7 +8,7 @@
 [![GitHub last commit (branch)](https://img.shields.io/github/last-commit/lgblgblgb/xemu/dev)](https://github.com/lgblgblgb/xemu/tree/dev)
 
 Emulators running on Linux/Unix/Windows/OSX of various (mainly 8 bit) machines,
-including the Commodore LCD and Commodore 65 (and also some Mega65) as well.
+including the Commodore LCD and Commodore 65 (and also some MEGA65) as well.
 
 Written by (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 Source repository: https://github.com/lgblgblgb/xemu
@@ -65,10 +65,6 @@ about the NSIS-related problem which causes false positive detections as
 Also, you can find ZIP archives on that page, contains only the executable files
 and the needed DLL, without any installer.
 
-*HELP WANTED*: if you are an advanced Windows user, and want to help, contant me.
-I would need tester, and somebody who knows Windows quite well, including being
-able to suggest better installation and other solutions ...
-
 ### Linux
 
 On Linux, you can try the provided DEB pacakge to install, if you run Ubuntu (may
@@ -80,27 +76,12 @@ Work in progress to provide other - less distribution dependent - ways to instal
 Xemu on Linux (other than compiling yourself), maybe in the form for flatpak,
 AppImage or something like that (though I really hate Snappy ...) in the future.
 
-### Where is the MacOS binary build?
+### MacOS
 
-Sorry, there is no MacOS build this time, since I don't find any sane way to
-compile for MacOS legally without buying a Mac. That's a kind of lame from
-Apple btw, since I want to help Apple users to have more software, but I
-can't accept that I am forced to buy something to be able to do so (for
-Windows, I can use mingw cross-compiler from Linux - basically without
-any material from Microsoft I had to buy and/or use, there is no such a way
-for MacOS, or even if there is, it needs Xcode components, etc, so it cannot
-be totally free / legal ...).
+On MacOS, you want to use the MacOS build, of course. Currently there is only
+a ZIP file, with a binary and a .dylib, they must be in the same directory!
 
-Also I have no idea how installers work on MacOS, how to create one, etc ...
-One thing is clear: Xemu should work on MacOS, if you compile it yourself.
-
-*HELP WANTED* Surely, if you have any suggestions, feel free to contact me,
-I've never even used MacOS, even less than Windows. I should find a way
-to make Xemu MacOS builds without me needing to pay for Apple (to buy
-a Mac) or to be illegal (using "Hackintosh"). Also, I don't know anything
-about MacOS-specific installation methods preferred. Also, I soon would need
-to have some GUI components, MacOS - again - is missing from my knowledge
-totally.
+Work in progress to have a DMG material as well.
 
 ## Quick start (from source)
 
@@ -120,6 +101,8 @@ your Mac: https://brew.sh/
 
     brew update
     brew install sdl2 wget git
+
+Xemu should build with a simple `make` but I recommend `make ARCH=osx` to build!
 
 #### Raspberry Pi
 
@@ -149,10 +132,6 @@ me, but unfortunately I don't have too much time to play with this idea :(
     git clone https://github.com/lgblgblgb/xemu.git
     cd xemu
 
-### Download needed ROM images, etc
-
-    make roms
-
 ### Compilation
 
     make
@@ -165,7 +144,7 @@ files as well, you can then execute emulators like `xemu-xmega65`):
     make deb
 
 To compile only (`make` in the top level directory will compile all of the
-targets automatically) a given emulator (let's say mega65):
+targets automatically) a given emulator (let's say MEGA65):
 
     cd targets
     ls -l
