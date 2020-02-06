@@ -12,7 +12,12 @@ for a in build/bin/*.osx ; do
 	cp -a $a $b
 done
 
+cp build/bin/*.dylib .dmg/
 cp README.md LICENSE .dmg/
+
+echo "*** DMG content will be:"
+
+find .dmg -ls
 
 echo "*** Starting create-dmg now ***"
 
