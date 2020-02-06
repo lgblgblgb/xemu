@@ -6,7 +6,15 @@ echo "DMG begin"
 
 mkdir .dmg
 
-cp * .dmg/ || true
+for a in build/bin/*.osx ; do
+	b=".dmg/`basename $a .osx`"
+	echo "Copying OSX binary $a -> $b"
+	cp -a $a $b
+done
+
+cp README.md LICENSE .dmg/
+
+echo "*** Starting create-dmg now ***"
 
 create-dmg	\
 	--volname "Xemu Installer" \
