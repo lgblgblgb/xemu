@@ -138,6 +138,7 @@ matrix:
       addons:
         homebrew:
           packages:
+            - create-dmg
             - sdl2
       before_script:
         - set +e
@@ -158,6 +159,7 @@ matrix:
         - cp build/bin/xemu-binaries-osx.zip .
         - uptime ; pwd ; ls -l
       before_deploy:
+        - build/dmg-osx-creator.sh
         - build/deploy/before-deploy.sh xemu-deploy MacOS
       deploy:
         provider: pages
