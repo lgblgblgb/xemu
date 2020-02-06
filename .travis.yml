@@ -83,6 +83,7 @@ matrix:
             - gcc-mingw-w64-i686
             - gcc-mingw-w64-x86-64
             - make
+            - nsis
             - sed
             - tar
             - vim-common
@@ -104,6 +105,8 @@ matrix:
         - cp README.md LICENSE `x86_64-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
         - build/zipper.sh build/bin xemu-binaries-win64.zip build/bin/*.dll build/bin/*.win64 README.md LICENSE
         - cp build/bin/xemu-binaries-win64.zip .
+        - build/nsi-build-native.sh win64 `build/system-config win64 sdl2 dll` || true
+        - cp build/bin/install-xemu-win64.exe . || true
         - set -e
         - make -j 2 ARCH=win32
         - set +e
@@ -111,6 +114,8 @@ matrix:
         - cp README.md LICENSE `i686-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
         - build/zipper.sh build/bin xemu-binaries-win32.zip build/bin/*.dll build/bin/*.win32 README.md LICENSE
         - cp build/bin/xemu-binaries-win32.zip .
+        - build/nsi-build-native.sh win32 `build/system-config win32 sdl2 dll` || true
+        - cp build/bin/install-xemu-win32.exe . || true
         - uptime ; pwd ; ls -l
       before_deploy:
         - build/deploy/before-deploy.sh xemu-deploy Windows
