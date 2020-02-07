@@ -61,11 +61,11 @@ matrix:
         local_dir: xemu-deploy
         skip_cleanup: true
         github_token: $GHDEPLOYKEY2
-        keep_history: true
+        keep_history: false
         repo: lgblgblgb/xemu-binaries
         target_branch: binary-linux
-        email: lgb@lgb.hu
-        name: Gabor Lenart LGB
+        email: lgblgblgb@gmail.com
+        name: Gábor Lénárt aka. LGB
         verbose: false
         on:
           branch: risky-disky
@@ -124,11 +124,11 @@ matrix:
         local_dir: xemu-deploy
         skip_cleanup: true
         github_token: $GHDEPLOYKEY2
-        keep_history: true
+        keep_history: false
         repo: lgblgblgb/xemu-binaries
         target_branch: binary-windows
-        email: lgb@lgb.hu
-        name: Gabor Lenart LGB
+        email: lgblgblgb@gmail.com
+        name: Gábor Lénárt aka. LGB
         verbose: false
         on:
           branch: risky-disky
@@ -166,11 +166,11 @@ matrix:
         local_dir: xemu-deploy
         skip_cleanup: true
         github_token: $GHDEPLOYKEY2
-        keep_history: true
+        keep_history: false
         repo: lgblgblgb/xemu-binaries
         target_branch: binary-osx
-        email: lgb@lgb.hu
-        name: Gabor Lenart LGB
+        email: lgblgblgb@gmail.com
+        name: Gábor Lénárt aka. LGB
         verbose: false
         on:
           branch: risky-disky
