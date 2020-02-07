@@ -1182,18 +1182,22 @@ void sysconsole_close ( const char *waitmsg )
 		DEBUGPRINT("WINDOWS: console is closed" NL);
 	}
 #elif defined(XEMU_ARCH_MAC)
-	for (int fd = 0; fd < 1000; fd++) {
+	pid_t setsidres = setsid();
+	DEBUGPRINT("OSX: TERMINAL: result of setsidres() = %lld with error = \"%s\"" NL, (long long int)setsidres, setsidres == (pid_t)-1 ? strerror(errno) : "WAS OK");
+	for (int fd = 0; fd < 100; fd++) {
 		if (isatty(fd)) {
 			if (fd <= 2) {
 				int dupres = 0;
 				int devnull = open("/dev/null", O_RDWR);
 				if (devnull >= 0)
 					dupres = dup2(devnull, fd);
-				DEBUGPRINT("OSX: trying to 'close' terminal, fd %d was tty, devnull_d=%d, dup2_res=%d" NL, fd, devnull, dupres);
+				DEBUGPRINT("OSX: TERMINAL: trying to 'close' terminal, fd %d was tty, devnull_d=%d, dup2_res=%d" NL, fd, devnull, dupres);
 			} else
 				close(fd);
 		}
 	}
+	setsidres = setsid();
+	sysconsole_is_open = 0;
 #else
 	sysconsole_is_open = 0;
 #endif
