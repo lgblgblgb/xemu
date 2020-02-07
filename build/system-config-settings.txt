@@ -13,7 +13,7 @@ native#sdl2#ldflags#	$SDL2_CONFIG_NATIVE --libs
 nativewin#sdl2#cflags#	$SDL2_CONFIG_NATIVE --cflags && echo " -D HAVE_SDL2"
 nativewin#sdl2#ldflags#	$SDL2_CONFIG_NATIVE --libs
 osx#sdl2#cflags#		$SDL2_CONFIG_OSX    --cflags && echo " -D HAVE_SDL2"
-osx#sdl2#ldflags#		$SDL2_CONFIG_OSX    --libs
+osx#sdl2#ldflags#		$SDL2_CONFIG_OSX    --libs && echo " -lobjc"
 win32#sdl2#cflags#		$SDL2_CONFIG_WIN32  --cflags && echo " -D HAVE_SDL2"
 win32#sdl2#ldflags#		$SDL2_CONFIG_WIN32  --libs
 win64#sdl2#cflags#		$SDL2_CONFIG_WIN64  --cflags && echo " -D HAVE_SDL2"
