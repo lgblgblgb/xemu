@@ -60,8 +60,8 @@ struct xemugui_descriptor_st {
 
 #if defined(HAVE_GTK3)
 #	include "xemu/gui/gtk.c"
-//#elif defined(XEMU_ARCH_MAC)
-//#	include "xemu/gui/osx.c"
+#elif defined(XEMU_ARCH_MAC)
+#	include "xemu/gui/osx.c"
 #elif defined(XEMU_ARCH_WIN)
 #	include "xemu/gui/windows.c"
 #endif
@@ -71,9 +71,9 @@ struct xemugui_descriptor_st {
 static const struct xemugui_descriptor_st *current_gui = NULL;
 
 static const struct xemugui_descriptor_st *xemugui_descriptor_list[] = {
-//#if defined(XEMU_ARCH_MAC)
-//	&xemuosxgui_descriptor,
-//#endif
+#if defined(XEMU_ARCH_MAC)
+	&xemuosxgui_descriptor,
+#endif
 #if defined (XEMU_ARCH_WIN)
 	&xemuwingui_descriptor,
 #endif
