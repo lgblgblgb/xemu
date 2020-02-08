@@ -30,6 +30,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <time.h>
 #include <limits.h>
 #include <errno.h>
+#ifdef XEMU_ARCH_UNIX
+#include <signal.h>
+#endif
 
 #include "xemu/osd_font_16x16.c"
 
@@ -420,6 +423,9 @@ static char *GetHackedPrefDir ( const char *base_path, const char *name )
 
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan )
 {
+#ifdef XEMU_ARCH_UNIX
+	signal(SIGHUP, SIG_IGN);	// ignore SIGHUP, eg closing the terminal Xemu was started from ...
+#endif
 #ifdef XEMU_ARCH_HTML
 	if (chatty_xemu)
 		xemu_dump_version(stdout, slogan);
@@ -1182,21 +1188,22 @@ void sysconsole_close ( const char *waitmsg )
 		DEBUGPRINT("WINDOWS: console is closed" NL);
 	}
 #elif defined(XEMU_ARCH_MAC)
-	pid_t setsidres = setsid();
-	DEBUGPRINT("OSX: TERMINAL: result of setsidres() = %lld with error = \"%s\"" NL, (long long int)setsidres, setsidres == (pid_t)-1 ? strerror(errno) : "WAS OK");
+#if 0
+	// FIXME: do we really need this? AFAIK MacOS may cause to log things if terminal is not there but there is output, which is not so nice ...
 	for (int fd = 0; fd < 100; fd++) {
 		if (isatty(fd)) {
 			if (fd <= 2) {
 				int dupres = 0;
-				int devnull = open("/dev/null", O_RDWR);
-				if (devnull >= 0)
+				int devnull = open("/dev/null", O_WRONLY);	// WR by will, so even for STDIN, it will cause an error on read
+				if (devnull >= 0 && devnull != fd)
 					dupres = dup2(devnull, fd);
-				DEBUGPRINT("OSX: TERMINAL: trying to 'close' terminal, fd %d was tty, devnull_d=%d, dup2_res=%d" NL, fd, devnull, dupres);
+				if (devnull > 2)
+					close(devnull);
 			} else
 				close(fd);
 		}
 	}
-	setsidres = setsid();
+#endif
 	sysconsole_is_open = 0;
 #else
 	sysconsole_is_open = 0;
