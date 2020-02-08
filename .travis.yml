@@ -63,12 +63,15 @@ matrix:
         github_token: $GHDEPLOYKEY2
         keep_history: true
         repo: lgblgblgb/xemu-binaries
-        target_branch: binary-linux
-        email: lgb@lgb.hu
-        name: Gabor Lenart LGB
+        target_branch: binary-linux-$TRAVIS_BRANCH
+        email: lgblgblgb@gmail.com
+        name: Gábor Lénárt aka. LGB
         verbose: false
         on:
-          branch: risky-disky
+          branch:
+            - master
+            - dev
+            - risky-disky
     - name: Windows cross-compilation on Linux
       os: linux
       addons:
@@ -126,12 +129,15 @@ matrix:
         github_token: $GHDEPLOYKEY2
         keep_history: true
         repo: lgblgblgb/xemu-binaries
-        target_branch: binary-windows
-        email: lgb@lgb.hu
-        name: Gabor Lenart LGB
+        target_branch: binary-windows-$TRAVIS_BRANCH
+        email: lgblgblgb@gmail.com
+        name: Gábor Lénárt aka. LGB
         verbose: false
         on:
-          branch: risky-disky
+          branch:
+            - master
+            - dev
+            - risky-disky
     - name: MacOS native compilation
       os: osx
       osx_image: xcode11
@@ -168,12 +174,15 @@ matrix:
         github_token: $GHDEPLOYKEY2
         keep_history: true
         repo: lgblgblgb/xemu-binaries
-        target_branch: binary-osx
-        email: lgb@lgb.hu
-        name: Gabor Lenart LGB
+        target_branch: binary-osx-$TRAVIS_BRANCH
+        email: lgblgblgb@gmail.com
+        name: Gábor Lénárt aka. LGB
         verbose: false
         on:
-          branch: risky-disky
+          branch:
+            - master
+            - dev
+            - risky-disky
 
 env:
   global:
