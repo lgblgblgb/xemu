@@ -17,7 +17,7 @@ rm $TARGET/Makefile
 cp README.md $TARGET/README-XEMU.md
 
 (
-	sed "s/%ARCH%/$ARCH/" < build/deploy/README.md
+	sed "s/%ARCH%/$ARCH/" < build/deploy/README.md | sed "s/%BRANCH%/$TRAVIS_BRANCH/"
 	echo "* **BUILD_COMMIT = https://github.com/$TRAVIS_REPO_SLUG/commit/$TRAVIS_COMMIT**"
 	echo "* **BUILD_DATE = `date`**"
 	echo "* **BUILD_GIT_REMOTE = `git config --get remote.origin.url` (branch: $TRAVIS_BRANCH)**"
