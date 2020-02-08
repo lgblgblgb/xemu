@@ -68,7 +68,10 @@ matrix:
         name: Gábor Lénárt aka. LGB
         verbose: false
         on:
-          branch: risky-disky
+          branch:
+            - master
+            - dev
+            - risky-disky
     - name: Windows cross-compilation on Linux
       os: linux
       addons:
@@ -131,7 +134,10 @@ matrix:
         name: Gábor Lénárt aka. LGB
         verbose: false
         on:
-          branch: risky-disky
+          branch:
+            - master
+            - dev
+            - risky-disky
     - name: MacOS native compilation
       os: osx
       osx_image: xcode11
@@ -173,7 +179,10 @@ matrix:
         name: Gábor Lénárt aka. LGB
         verbose: false
         on:
-          branch: risky-disky
+          branch:
+            - master
+            - dev
+            - risky-disky
 
 env:
   global:
