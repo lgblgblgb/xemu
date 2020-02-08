@@ -24,6 +24,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define	_ISOC11_SOURCE
 #endif
 
+// Generic stuff to signal we're inside XEMU build
+// Useful for multi-purpose sources, can be also compiled out-of-source-tree, and stuff like that ...
+#define	XEMU_BUILD
+
 #ifdef	__EMSCRIPTEN__
 #	define	XEMU_ARCH_HTML
 #	define	XEMU_ARCH_NAME	"html"
@@ -31,17 +35,17 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #		define	DISABLE_DEBUG
 #	endif
 //#	define	XEMU_OLD_TIMING
-#elif	_WIN64
+#elif	defined(_WIN64)
 #	define	XEMU_ARCH_WIN64
 #	define	XEMU_ARCH_WIN
 #	define	XEMU_ARCH_NAME	"win64"
 #	define	XEMU_SLEEP_IS_USLEEP
-#elif	_WIN32
+#elif	defined(_WIN32)
 #	define	XEMU_ARCH_WIN32
 #	define	XEMU_ARCH_WIN
 #	define	XEMU_ARCH_NAME	"win32"
 #	define	XEMU_SLEEP_IS_USLEEP
-#elif	__APPLE__
+#elif	defined(__APPLE__)
 	// Actually, MacOS / OSX is kinda UNIX, but for some minor reasons we handle it differently here
 #	include	<TargetConditionals.h>
 #	ifndef	TARGET_OS_MAC
@@ -65,6 +69,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define	XEMU_SLEEP_IS_NANOSLEEP
 #else
 #	error	"Unknown target OS architecture."
+#endif
+
+#if defined(XEMU_ARCH_WIN) && !defined(_USE_MATH_DEFINES)
+	// It seems, some (?) versions of Windows requires _USE_MATH_DEFINES to be defined to define some math constants by math.h
+#	define	_USE_MATH_DEFINES
+#endif
+
+#if defined(XEMU_ARCH_UNIX) && !defined(_XOPEN_SOURCE)
+#	define	_XOPEN_SOURCE	700
 #endif
 
 #ifndef XEMU_NO_TARGET

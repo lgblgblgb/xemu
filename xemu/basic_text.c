@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "xemu/basic_text.h"
 
+#ifdef BASIC_TEXT_SUPPORT
 
 // This table is from VICE (utility petcat), though with a heavy edited form, current
 // no multiple BASIC versions etc, just straight BASIC 10 ...
@@ -377,3 +378,5 @@ int xemu_basic_to_text ( Uint8 *output, int output_size, const Uint8 *prg, int r
 	}
 	return output_used;		// END OF BASIC PROGRAM :) Give back the size of output buffer used
 }
+
+#endif

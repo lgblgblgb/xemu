@@ -18,9 +18,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_COMMON_BASIC_TEXT_H_INCLUDED
 #define XEMU_COMMON_BASIC_TEXT_H_INCLUDED
 
+#ifdef BASIC_TEXT_SUPPORT
+
 #define BASIC_TO_TEXT_FLAG_TEX	1
 
 extern int xemu_basic_to_text_malloc ( Uint8 **buffer, int output_super_limit, const Uint8 *prg, int real_addr, const Uint8 *prg_limit, int basic_dialect, int flags );
 extern int xemu_basic_to_text ( Uint8 *output, int output_size, const Uint8 *prg, int real_addr, const Uint8 *prg_limit, int basic_dialect, int flags );
+
+#endif
 
 #endif

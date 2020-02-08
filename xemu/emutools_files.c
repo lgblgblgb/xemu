@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -32,7 +32,7 @@ char  xemu_load_filepath[PATH_MAX];
 
 
 #ifdef HAVE_XEMU_EXEC_API
-#ifndef _WIN32
+#ifndef XEMU_ARCH_WIN
 #include <sys/wait.h>
 
 int xemuexec_run ( char *const args[] )
@@ -201,7 +201,7 @@ int xemuexec_check_status ( void* pid, int wait )
 }
 #undef PID
 
-// end of #ifndef _WIN32
+// end of #ifndef XEMU_ARCH_WIN
 #endif
 
 void xemuexec_open_native_file_browser ( char *dir )
@@ -236,16 +236,16 @@ static const char installer_marker_prefix[] = "[XEMU_DOWNLOADER]=";
 static char installer_store_to[PATH_MAX];
 static char installer_fetch_url[256];
 static const char *downloader_utility_specifications[] = {
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 	"powershell", "-Command", "Invoke-WebRequest", installer_fetch_url, "-OutFile", installer_store_to, "-Verbose", NULL,
 	"powershell.exe", "-Command", "Invoke-WebRequest", installer_fetch_url, "-OutFile", installer_store_to, "-Verbose", NULL,
 #endif
 	"curl", "-o", installer_store_to, installer_fetch_url, NULL,
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 	"curl.exe", "-o", installer_store_to, installer_fetch_url, NULL,
 #endif
 	"wget", "-O", installer_store_to, installer_fetch_url, NULL,
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 	"wget.exe", "-O", installer_store_to, installer_fetch_url, NULL,
 #endif
 	NULL	// the final stop of listing
@@ -445,7 +445,7 @@ int xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_
 	if (!*filename)
 		FATAL("Calling xemu_open_file() with empty filename!");
 	max_paths = 0;
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 	sprintf(paths[max_paths++], "%s%s", EMSCRIPTEN_SDL_BASE_DIR, (filename[0] == '@' || filename[0] == '#') ? filename + 1 : filename);
 #else
 	if (*filename == '@') {
@@ -455,7 +455,7 @@ int xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_
 		sprintf(paths[max_paths++], "%s%s", sdl_pref_dir, filename + 1);
 		sprintf(paths[max_paths++], "%srom" DIRSEP_STR "%s", sdl_base_dir, filename + 1);
 		sprintf(paths[max_paths++], "%s%s", sdl_base_dir, filename + 1);
-#ifndef _WIN32
+#ifndef XEMU_ARCH_WIN
 		sprintf(paths[max_paths++], "/usr/local/share/xemu/%s", filename + 1);
 		sprintf(paths[max_paths++], "/usr/local/lib/xemu/%s", filename + 1);
 		sprintf(paths[max_paths++], "/usr/share/xemu/%s", filename + 1);
@@ -466,7 +466,7 @@ int xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_
 #endif
 	} else
 		strcpy(paths[max_paths++], filename);
-// End of #ifdef __EMSCRIPTEN__
+// End of #ifdef XEMU_ARCH_HTML
 #endif
 	a = 0;
 	do {
@@ -549,6 +549,44 @@ ssize_t xemu_safe_write ( int fd, const void *buffer, size_t length )
 	return saved;
 }
 
+
+off_t xemu_safe_file_size_by_fd ( int fd )
+{
+	struct stat st;
+	if (fstat(fd, &st))
+		return OFF_T_ERROR;
+	return st.st_size;
+}
+
+
+off_t xemu_safe_file_size_by_name ( const char *name )
+{
+	struct stat st;
+	if (stat(name, &st))
+		return OFF_T_ERROR;
+	return st.st_size;
+}
+
+int xemu_safe_close ( int fd )
+{
+	return close(fd);
+}
+
+
+#ifdef XEMU_ARCH_WIN
+#endif
+
+
+int xemu_safe_open ( const char *fn, int flags )
+{
+	return open(fn, flags | O_BINARY);
+}
+
+
+int xemu_safe_open_with_mode ( const char *fn, int flags, int mode )
+{
+	return open(fn, flags | O_BINARY, mode);
+}
 
 
 /* Loads a file, probably ROM image etc. It uses xemu_open_file() - see above - for opening it.

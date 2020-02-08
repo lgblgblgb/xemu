@@ -206,11 +206,12 @@ typedef union {
 #endif
 static inline int xemu_byte_order_test ( void )
 {
-	RegPair r;
-	r._raw[0] = 0x01;
-	r._raw[1] = 0x23;
-	r._raw[2] = 0x45;
-	r._raw[3] = 0x67;
+	static volatile RegPair r;
+	volatile RegPair *w = &r;
+	w->_raw[0] = 0x01;
+	w->_raw[1] = 0x23;
+	w->_raw[2] = 0x45;
+	w->_raw[3] = 0x67;
 	return (r.b.l != ENDIAN_CHECKER_BYTE_L || r.b.h != ENDIAN_CHECKER_BYTE_H || r.w.w != ENDIAN_CHECKER_WORD || r.d != ENDIAN_CHECKER_DWORD);
 }
 

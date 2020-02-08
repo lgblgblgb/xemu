@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -82,6 +82,37 @@ static void ui_native_os_file_browser ( void )
 }
 
 
+#ifdef BASIC_TEXT_SUPPORT
+#include "xemu/basic_text.h"
+#include "memory_mapper.h"
+
+static void ui_save_basic_as_text ( void )
+{
+	Uint8 *start = main_ram + 0x2001;
+	Uint8 *end = main_ram + 0x4000;
+	Uint8 *buffer;
+	int size = xemu_basic_to_text_malloc(&buffer, 1000000, start, 0x2001, end, 0, 0);
+	if (size < 0)
+		return;
+	if (size == 0) {
+		INFO_WINDOW("BASIC memory is empty.");
+		free(buffer);
+		return;
+	}
+	printf("%s", buffer);
+	FILE *f = fopen("/tmp/prgout.txt", "wb");
+	if (f) {
+		fwrite(buffer, size, 1, f);
+		fclose(f);
+	}
+	size = SDL_SetClipboardText((const char *)buffer);
+	free(buffer);
+	if (size)
+		ERROR_WINDOW("Cannot set clipboard: %s", SDL_GetError());
+}
+#endif
+
+
 static const struct menu_st menu_display[] = {
 	{ "Fullscreen",    XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)0 },
 	{ "Window - 100%", XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)1 },
@@ -94,6 +125,9 @@ static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		menu_display, NULL },
 	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_mega65 },
 	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
+#ifdef BASIC_TEXT_SUPPORT
+	{ "Save BASIC as text",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_save_basic_as_text },
+#endif
 	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_native_os_file_browser },
 #ifdef _WIN32
 	{ "System console", XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK, xemugui_cb_sysconsole, NULL },

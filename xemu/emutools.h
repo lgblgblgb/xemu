@@ -20,13 +20,13 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_COMMON_EMUTOOLS_H_INCLUDED
-#define __XEMU_COMMON_EMUTOOLS_H_INCLUDED
+#ifndef XEMU_COMMON_EMUTOOLS_H_INCLUDED
+#define XEMU_COMMON_EMUTOOLS_H_INCLUDED
 
 #include <SDL.h>
 #include "xemu/emutools_basicdefs.h"
 
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 #include <emscripten.h>
 #define EMSCRIPTEN_SDL_BASE_DIR "/files/"
 #define MSG_POPUP_WINDOW(sdlflag, title, msg, win) \
@@ -41,7 +41,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define APP_DESC_APPEND " - Xemu"
 #endif
 
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 #define XEMU_MAIN_LOOP(func,p1,p2) emscripten_set_main_loop(func,p1,p2)
 #else
 #define XEMU_MAIN_LOOP(func,p1,p2) for (;;) func()

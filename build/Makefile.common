@@ -61,6 +61,17 @@ SRCS			= $(SRCS_COMMON_PREFIXED) $(SRCS_TARGET_PREFIXED)
 OBJS			= $(TARGETOBJS) $(COMMONOBJS)
 ASMOUT			= no
 
+ifdef WINDRES
+WINDRES_SRC	= $(TOPDIR)/build/windres.rc
+WINDRES_OBJ	= $(COMMONOBJPREFIX)windres.res
+OBJS		+= $(WINDRES_OBJ)
+$(WINDRES_OBJ): $(WINDRES_SRC) $(TOPDIR)/build/xemu.ico
+	$(WINDRES) $< -O coff -o $@
+endif
+
+$(TOPDIR)/build/xemu.ico:
+	convert $(TOPDIR)/build/xemu-48x48.xpm $@
+
 # System configuration ...
 CFLAGS	= $(strip $(subst ::CFLAGS::, $(shell $(TOPDIR)/build/system-config $(ARCH) "$(CONFIG_CFLAGS_TARGET)" cflags ), $(PRE_CFLAGS)))
 LDFLAGS	= $(strip $(subst ::LDFLAGS::, $(shell $(TOPDIR)/build/system-config $(ARCH) "$(CONFIG_LDFLAGS_TARGET)" ldflags ), $(PRE_LDFLAGS)))

@@ -1,6 +1,6 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -317,7 +317,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// without restarting Xemu for that purpose.
 	refill_memory_from_preinit_cache();
 	// *** Image file for SDCARD support
-	if (sdcard_init(xemucfg_get_str("sdimg"), xemucfg_get_str("8"), xemucfg_get_num("sdhc")) < 0)
+	if (sdcard_init(xemucfg_get_str("sdimg"), xemucfg_get_str("8"), xemucfg_get_bool("virtsd")) < 0)
 		FATAL("Cannot find SD-card image (which is a must for Mega65 emulation): %s", xemucfg_get_str("sdimg"));
 	// *** Initialize VIC4
 	vic_init();
@@ -665,8 +665,10 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("loadcram", NULL, "Load initial content (32K) into the colour RAM");
 	xemucfg_define_str_option("loadrom", NULL, "Preload C65 ROM image (you may need the -forcerom option to prevent KickStart to re-load from SD)");
 	xemucfg_define_switch_option("forcerom", "Re-fill 'ROM' from external source on start-up, requires option -loadrom <filename>");
-	xemucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used");
-	xemucfg_define_num_option("sdhc", 1, "Use SDHC mode for SD-card (1) or not (0).");
+	xemucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used (also see the -virtsd option!)");
+#ifdef VIRTUAL_DISK_IMAGE_SUPPORT
+	xemucfg_define_switch_option("virtsd", "Interpret -sdimg option as a DIRECTORY to be fed onto the FAT32FS and use virtual-in-memory disk storage.");
+#endif
 	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
 #ifdef FAKE_TYPING_SUPPORT
 	xemucfg_define_switch_option("go64", "Go into C64 mode after start (with auto-typing, can be combined with -autoload)");

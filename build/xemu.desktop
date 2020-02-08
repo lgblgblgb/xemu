@@ -8,6 +8,6 @@ Comment=Xemu's emulation of %machine
 StartupNotify=false
 Terminal=false
 Exec=%binary
-Icon=/usr/share/pixmaps/xemu-32x28.xpm
+Icon=/usr/share/pixmaps/xemu-48x48.xpm
 Keywords=Emulator;Xemu;
 

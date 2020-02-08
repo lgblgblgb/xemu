@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2019-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,8 +15,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __COMMON_EMUTOOLS_GUI_H_INCLUDED
-#define __COMMON_EMUTOOLS_GUI_H_INCLUDED
+#ifndef XEMU_XEMU_EMUTOOLS_GUI_H_INCLUDED
+#define XEMU_XEMU_EMUTOOLS_GUI_H_INCLUDED
 
 #define DEBUGGUI        DEBUGPRINT
 //#define DEBUGGUI      DEBUG
@@ -67,7 +67,7 @@ extern void xemugui_cb_call_user_data ( const struct menu_st *m, int *query );
 extern void xemugui_cb_call_user_data_if_sure ( const struct menu_st *m, int *query );
 extern void xemugui_cb_quit ( const struct menu_st *m, int *query );
 extern void xemugui_cb_call_quit_if_sure ( const struct menu_st *m, int *query );
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 extern void xemugui_cb_sysconsole ( const struct menu_st *m, int *query );
 #endif
 extern void xemugui_cb_windowsize ( const struct menu_st *m, int *query );
