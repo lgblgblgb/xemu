@@ -31,10 +31,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifdef XEMU_BUILD
 #	include "xemu/emutools.h"
 #	include "xemu/emutools_files.h"
+#	define FAT32DEBUG	DEBUG
+#	define FAT32DEBUGPRINT	DEBUGPRINT
 #else
 #	define NL		"\n"
-#	define DEBUG		printf
-#	define DEBUGPRINT	printf
+#	define FAT32DEBUG	printf
+#	define FAT32DEBUGPRINT	printf
+#	define FATAL(...)	do { fprintf(stderr, "FATAL: "); fprintf(stderr, __VA_ARGS__); exit(1); } while(0)
 #	define OFF_T_ERROR	((off_t)-1)
 #	ifdef MEGA65_BUILD
 		typedef unsigned long int	Uint32;
@@ -186,6 +189,7 @@ static Uint32 mfat_read_fat_chain ( Uint32 cluster )
 		fprintf(stderr, "read fat: invalid cluster number %d\n", cluster);
 		return 1;
 	}
+	Uint32 cluster_in = cluster;
 	block = mfat_partitions[disk.part].fat1_start + (cluster >> 7);
 	fat_cache.ofs   = (cluster & 127) << 2;
 	if (block != fat_cache.block) {
@@ -203,6 +207,9 @@ static Uint32 mfat_read_fat_chain ( Uint32 cluster )
 	// That's actually great, we should not worry here what is the "EOC" marker, and just say this:
 	if (cluster < 2 || cluster >= mfat_partitions[disk.part].clusters)
 		return 0;
+	if (cluster == cluster_in) {
+		return 1;	// serious problem, cluster refeers to itself????
+	}
 	return cluster;
 }
 
@@ -234,16 +241,72 @@ static int mfat_write_fat_chain ( Uint32 cluster, Uint32 next )
 	return 0;
 }
 
-
+// Free a chain of clusters in FAT starting at argument "cluster"
+// Returns with zero on successfull operation, or non-zero if any error encountered
 static int mfat_free_fat_chain ( Uint32 cluster )
 {
 	while (cluster >= 2) {
 		Uint32 next_cluster = mfat_read_fat_chain(cluster);
-		mfat_write_fat_chain(cluster, 1); // 1=FREE in our API	FIXME: error handling!
+		if (next_cluster == 1)
+			goto error;
+		if (mfat_write_fat_chain(cluster, 1))	// 1=FREE in our API
+			goto error;
 		cluster = next_cluster;
 	}
-	return 0;	// FIXME: always OK?? see above!
+	if (mfat_flush_fat_cache())
+		return 1;
+	return cluster;		// mfat_read_fat_chain() returns with zero on last cluster thus return with 0 considered OK, other error is PROBLEM!
+error:
+	mfat_flush_fat_cache();	// even in case of error, we try to flush FAT cache to avoid further corruption of FAT without forgetting this!
+	return 1;
 }
+
+
+// Allocate LINEAR chunk in FAT for "size" bytes. SIZE CANNOT BE ZERO!!!!!!
+// Returns cluster number as the first one, or ZERO IN CASE OF ERROR
+// In case of success, FAT is already written to have the correct chain.
+Uint32 mfat_allocate_linear_fat_chunk ( Uint32 size )
+{
+	if (!size)
+		return 0;	// error
+	Uint32 cluster_byte_size = mfat_partitions[disk.part].cluster_size_in_blocks * 512;
+	printf("%s() is about seeking for free linear chunk in FAT for %u bytes size object" NL, __func__, size);
+	// OK, so now, size is the needed number of clusters to allocate
+	// start from cluster 2, the first data cluster, to try with (though probably that's root dir, so won't be free, but anyway, for strange situations ...)
+	for (Uint32 cluster = 2, first = 0, len, seq; cluster < mfat_partitions[disk.part].clusters; cluster++) {
+		Uint32 next = mfat_read_fat_chain(cluster);
+		if (next == 1)
+			return 0;	// error!
+		if (next == 0) {	// cluster is free
+			if (first == 0) {
+				first = cluster;
+				len = cluster_byte_size;
+				seq = 1;
+			} else {
+				len += cluster_byte_size;
+				seq++;
+			}
+			if (len >= size) {	// we found it :)
+				printf("%s() founds %u sized free linear chunk in FAT at cluster %u" NL, __func__, size, first);
+				for (Uint32 a = 0; a < seq; a++) {
+					if (mfat_write_fat_chain(first + a, a != seq - 1 ? first + a + 1 : 0)) {	// 0 is end-of-chain marker in my implementation
+						// In case of an error, we try to FREE what we've did ...
+						// if that errors out, we can't do too much at this point
+						// And btw that called mfat_flush_fat_cache() as well ...
+						mfat_free_fat_chain(first);
+						return 0;	// error!
+					}
+				}
+				mfat_flush_fat_cache();	// flush FAT cache at the end, to be sure everything is written out. FIXME: what happens if it errors out? :-O
+				return first;
+			}
+		} else			// cluster is not free
+			first = 0;
+	}
+	printf("%s() could not found %d sized free linear chunk in FAT ..." NL, __func__, size);
+	return 0;	// not found :(
+}
+
 
 
 
@@ -476,6 +539,8 @@ void mfat_rewind_stream ( mfat_stream_t *p )
 }
 
 
+// Return value: 0=error, otherwise file size determined by fat chains converted to bytes, not the one given in the directory entry!
+// It also fills fragmented (if it's not NULL) with the fact, that file is fragmented or not, unless return value is zero (error)
 Uint32 mfat_get_real_size ( mfat_stream_t *p, int *fragmented )
 {
 	Uint32 clusters = 0;
@@ -493,6 +558,7 @@ Uint32 mfat_get_real_size ( mfat_stream_t *p, int *fragmented )
 	}
 	return clusters * p->partition->cluster_size_in_blocks * 512;
 }
+
 
 // Warning: uses own cache! That is, it's not possible to deal with more than ONE stream at the same time!!
 int mfat_read_stream ( mfat_stream_t *p, void *buf, int size )
@@ -536,8 +602,7 @@ int mfat_read_stream ( mfat_stream_t *p, void *buf, int size )
 				p->in_cluster_block = 0;
 			}
 		} else if (p->in_block_pos > 512) {
-			fprintf(stderr, "FATAL ERROR.\n");
-			exit(1);
+			FATAL("FATFS: in_block_pos is greater than 512");
 		}
 	}
 	return ret;
@@ -562,8 +627,7 @@ int mfat_read_directory ( mfat_dirent_t *p, int type_filter )
 			return ret;
 		}
 		if (ret != 32) {
-			fprintf(stderr, "FATAL ERROR: dirent read 32 is not 32\n");
-			exit(1);
+			FATAL("FATFS: dirent read 32 is not 32\n");
 		}
 		if (buf[0] == 0) {		// marks end of directory, thus returning with no entry found at this point
 			printf("%s end of stream\n", __func__);
