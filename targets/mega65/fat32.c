@@ -31,12 +31,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifdef XEMU_BUILD
 #	include "xemu/emutools.h"
 #	include "xemu/emutools_files.h"
-#	define FAT32DEBUG	DEBUG
-#	define FAT32DEBUGPRINT	DEBUGPRINT
+#	define FATDEBUG		DEBUG
+#	define FATDEBUGPRINT	DEBUGPRINT
 #else
 #	define NL		"\n"
-#	define FAT32DEBUG	printf
-#	define FAT32DEBUGPRINT	printf
+#	define FATDEBUG		printf
+#	define FATDEBUGPRINT	printf
 #	define FATAL(...)	do { fprintf(stderr, "FATAL: "); fprintf(stderr, __VA_ARGS__); exit(1); } while(0)
 #	define OFF_T_ERROR	((off_t)-1)
 #	ifdef MEGA65_BUILD
@@ -208,7 +208,8 @@ static Uint32 mfat_read_fat_chain ( Uint32 cluster )
 	if (cluster < 2 || cluster >= mfat_partitions[disk.part].clusters)
 		return 0;
 	if (cluster == cluster_in) {
-		return 1;	// serious problem, cluster refeers to itself????
+		FATDEBUGPRINT("FAT32FS: ERROR: cluster %u refers itself!" NL, cluster);
+		return 0;	// serious problem, cluster refeers to itself???? We just handle the problem as it would be EOC as well ...
 	}
 	return cluster;
 }
@@ -330,7 +331,7 @@ int mfat_init_mbr ( void )
 {
 	int first_valid = -1;
 	Uint8 cache[512], *p;
-	// DANGER WILL ROBINSON! Previous partition may be was in use! Flush cache!
+	// DANGER WILL ROBINSON! Previous partition could be in use!! Flush cache!
 	mfat_flush_fat_cache();
 	fat_cache.block = -1;
 	fat_cache.dirty =  0;
@@ -617,10 +618,20 @@ error:
 
 /* ---- functions for handling directories ---- */
 
+static mfat_stream_t dir_cur_item_stream;
+
+
+static void repos_cur_dirent ( mfat_stream_t *p )
+{
+	memcpy(p, &dir_cur_item_stream, sizeof(mfat_stream_t));
+}
+
+
 int mfat_read_directory ( mfat_dirent_t *p, int type_filter )
 {
 	Uint8 buf[32];
 	do {
+		memcpy(&dir_cur_item_stream, &p->stream, sizeof(mfat_stream_t));
 		int ret = mfat_read_stream(&p->stream, buf, 32);
 		if (ret <= 0) {
 			printf("%s getting ret %d\n", __func__, ret);
@@ -646,7 +657,7 @@ int mfat_read_directory ( mfat_dirent_t *p, int type_filter )
 		((buf[0xB] &  0x18) == 0 && !(type_filter & MFAT_FIND_FILE))
 	);
 	// Convert name into "string" format with BASE8.EXT3 ...
-	// Technically it's kind of valid if space is part of file name, but we don't support such a scenario and simply ignore the problem ...
+	// Technically it's kinda valid if space is part of file name, but we don't support such a scenario and simply ignore the problem ...
 	int i = 0;
 	char *d = p->name;
 	while (buf[i] != 0x20 && i < 8)
@@ -707,6 +718,38 @@ int mfat_search_in_directory ( mfat_dirent_t *p, const char *name, int type_filt
 		}
 	}
 }
+
+
+
+Uint32 mfat_overwrite_file ( mfat_dirent_t *dirent, const char *name, Uint32 size )
+{
+	int ret = mfat_search_in_directory(dirent, name, MFAT_FIND_FILE | MFAT_FIND_DIR);	// we also want to find dirs so we avoid the collosion between the same name
+	if (ret == 1) {
+		// found the file
+		if (IS_MFAT_DIR(dirent->type)) {
+			// PROBLEM: the found item is a _DIRECTORY_, we can't overwrite that with a file!
+			ERROR_WINDOW("Problem: file %s already exists as a directory on the image\nNot possible to overwrite with a file", dirent->name);
+			return 0;	// functions as an error!
+		}
+		// Check if we have enough space in the already exisiting FAT chain of the file _AND_ if it's not fragmented
+		int fragmented;
+		Uint32 fat_size = mfat_get_real_size(dirent->cluster, &fragmented);
+		if (fat_size < size || fragemented) {
+			// Need to allocate new space!
+			// However, first free the old space ...
+			mfat_free_fat_chain(dirent->cluster);
+			cluster = mfat_allocate_linear_fat_chunk(size);
+		}
+		repos_cur_dirent();
+	} else if (ret == 0) {
+		// not found the file
+	} else if (ret == -1) {
+		// some error occured
+	} else {
+		// unknown ret code!!!!
+	}
+}
+
 
 
 int mfat_open_file_by_dirent ( mfat_dirent_t *p )
