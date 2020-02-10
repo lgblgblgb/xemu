@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define MEGA65_BUILD
 #endif
 
-#if defined(MEGA65_BUILD) || !defined(XEMU_BUILD) || (defined(XEMU_BUILD) && !defined(XEMU_ARCH_HTML))
+#if defined(MEGA65_BUILD) || !defined(XEMU_BUILD) || (defined(XEMU_BUILD) && defined(SD_CONTENT_SUPPORT))
 
 #ifndef MEGA65_BUILD
 #	define	FDISK_SUPPORT
@@ -38,6 +38,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define FATDEBUG		printf
 #	define FATDEBUGPRINT	printf
 #	define FATAL(...)	do { fprintf(stderr, "FATAL: "); fprintf(stderr, __VA_ARGS__); exit(1); } while(0)
+#	define ERROR_WINDOW(...)	do { fprintf(stderr, "ERROR: "); fprintf(stderr, __VA_ARGS__); } while(0)
 #	define OFF_T_ERROR	((off_t)-1)
 #	ifdef MEGA65_BUILD
 		typedef unsigned long int	Uint32;
@@ -631,6 +632,7 @@ int mfat_read_directory ( mfat_dirent_t *p, int type_filter )
 {
 	Uint8 buf[32];
 	do {
+		// FIXME: below, check if this really works on abnormal direcotry as well when it's not closed with a null entry!
 		memcpy(&dir_cur_item_stream, &p->stream, sizeof(mfat_stream_t));
 		int ret = mfat_read_stream(&p->stream, buf, 32);
 		if (ret <= 0) {
@@ -720,34 +722,43 @@ int mfat_search_in_directory ( mfat_dirent_t *p, const char *name, int type_filt
 }
 
 
-
-Uint32 mfat_overwrite_file ( mfat_dirent_t *dirent, const char *name, Uint32 size )
+// about the details how it returns, please reas the comments near the end of this functions. Zero return value = error
+Uint32 mfat_overwrite_file_with_direct_linear_device_block_write ( mfat_dirent_t *dirent, const char *name, Uint32 size )
 {
+	int write_null_entry = 0;
 	int ret = mfat_search_in_directory(dirent, name, MFAT_FIND_FILE | MFAT_FIND_DIR);	// we also want to find dirs so we avoid the collosion between the same name
 	if (ret == 1) {
 		// found the file
 		if (IS_MFAT_DIR(dirent->type)) {
 			// PROBLEM: the found item is a _DIRECTORY_, we can't overwrite that with a file!
-			ERROR_WINDOW("Problem: file %s already exists as a directory on the image\nNot possible to overwrite with a file", dirent->name);
-			return 0;	// functions as an error!
+			ERROR_WINDOW("Problem: file %s already exists as a directory on the image\nNot possible to overwrite with a file\nSource file: %s", dirent->name, name);
+			return 0;	// error
 		}
-		// Check if we have enough space in the already exisiting FAT chain of the file _AND_ if it's not fragmented
-		int fragmented;
-		Uint32 fat_size = mfat_get_real_size(dirent->cluster, &fragmented);
-		if (fat_size < size || fragemented) {
-			// Need to allocate new space!
-			// However, first free the old space ...
-			mfat_free_fat_chain(dirent->cluster);
-			cluster = mfat_allocate_linear_fat_chunk(size);
-		}
-		repos_cur_dirent();
+		// let's be cheap and wasteful. We're just DELETE the old FAT chain, and allocate a new one, even if file existed before and would be enough for us, and also non-fragmented
+		// if the scenario above is true, probably it will allocate the same space then, so no harm is done, just slower ...
+		// however these stuffs are Xemu init time tasks, so does not matter a lot, to be slower a bit ...
+		mfat_free_fat_chain(dirent->cluster);
+		repos_cur_dirent(&dirent->stream);
 	} else if (ret == 0) {
 		// not found the file
+		// ... so we should extend directory and allocate new chain of FAT as well
+		repos_cur_dirent(&dirent->stream);	// repos (re-position ...) on the NULL (last) entry in the directory, we will overwrite that [but we need to produce a null entry then!]
+		write_null_entry = 1;
 	} else if (ret == -1) {
 		// some error occured
+		return 0;	// ERROR?
 	} else {
-		// unknown ret code!!!!
+		FATAL("Unknown error code of %d in %s", ret, __func__);
 	}
+	dirent->cluster = mfat_allocate_linear_fat_chunk(size);
+	if (!dirent->cluster) {
+		// ERROR: could not allocate chain!!!!
+		// We should delete the file (since its old chain is free'd ...) and give up :(
+	}
+	// RETURN VALUE:
+	// just calculate a DEVICE dependent block offset of the cluster.
+	// Now it's the caller responsibility to simply copy anything (do NOT exceed the specified size this function was called with!)
+	return dirent->cluster * mfat_partitions[disk.part].cluster_size_in_blocks + mfat_partitions[disk.part].data_area_fake_ofs + mfat_partitions[disk.part].first_block;
 }
 
 
