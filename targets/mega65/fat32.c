@@ -561,9 +561,81 @@ Uint32 mfat_get_real_size ( mfat_stream_t *p, int *fragmented )
 	return clusters * p->partition->cluster_size_in_blocks * 512;
 }
 
+// Warning: uses own cache! That is, it's not possible to deal with more than ONE stream at the same time!!
+static struct {
+	Uint8	buf[512];
+	Uint32	cluster;
+	int	cluster_block;
+	int	part;
+} stream_cache = {
+	.part = -1,
+	.cluster_block = -1,
+	.cluster = -1
+};
+
 
 // Warning: uses own cache! That is, it's not possible to deal with more than ONE stream at the same time!!
+// Currently do NOT mix with mfat_write_stream()!
 int mfat_read_stream ( mfat_stream_t *p, void *buf, int size )
+{
+	//static Uint8 cache[512];
+	//static Uint32 cached_cluster;
+	//static int cached_cluster_block = -1;
+	//static int cached_part = -1;
+	int ret = 0;
+	if (p->eof)
+		return 0;
+	if (p->size_constraint >= 0 && p->file_pos + size > p->size_constraint)
+		size = p->size_constraint - p->file_pos;
+	while (size > 0) {
+		if (p->cluster != stream_cache.cluster || p->in_cluster_block != stream_cache.cluster_block || disk.part != stream_cache.part) {
+			if (mfat_read_cluster(p->cluster, p->in_cluster_block, stream_cache.buf))
+				goto error;
+			stream_cache.cluster = p->cluster;
+			stream_cache.cluster_block = p->in_cluster_block;
+			stream_cache.part = disk.part;
+		} else
+			printf("WOW, data block has been cached for cluster %d, block %d within cluster\n", stream_cache.cluster, stream_cache.cluster_block);
+		int piece = 512 - p->in_block_pos;
+		if (size < piece)
+			piece = size;
+		if (piece == 0)
+			goto eof;
+		memcpy(buf, stream_cache.buf + p->in_block_pos, piece);
+		ret += piece;
+		p->file_pos += piece;
+		size -= piece;
+		buf = (Uint8*)buf + piece;
+		p->in_block_pos += piece;
+		if (p->in_block_pos == 512) {
+			p->in_block_pos = 0;
+			p->in_cluster_block++;
+			if (p->in_cluster_block == p->partition->cluster_size_in_blocks) {
+				p->cluster = mfat_read_fat_chain(p->cluster);
+				if (p->cluster == 1)
+					goto error;
+				if (p->cluster == 0)
+					goto eof;
+				p->in_cluster_block = 0;
+			}
+		} else if (p->in_block_pos > 512) {
+			FATAL("FATFS: in_block_pos is greater than 512");
+		}
+	}
+	return ret;
+eof:
+	p->eof = 1;
+	return ret;
+error:
+	p->eof = 1;
+	return -1;
+}
+
+
+#if 0
+// Warning: uses own cache! That is, it's not possible to deal with more than ONE stream at the same time!!
+// Currently do NOT mix with mfat_read_stream()!
+int mfat_write_stream ( mfat_stream_t *p, void *buf, int size )
 {
 	static Uint8 cache[512];
 	static Uint32 cached_cluster;
@@ -615,6 +687,7 @@ error:
 	p->eof = 1;
 	return -1;
 }
+#endif
 
 
 /* ---- functions for handling directories ---- */
@@ -725,6 +798,8 @@ int mfat_search_in_directory ( mfat_dirent_t *p, const char *name, int type_filt
 // about the details how it returns, please reas the comments near the end of this functions. Zero return value = error
 Uint32 mfat_overwrite_file_with_direct_linear_device_block_write ( mfat_dirent_t *dirent, const char *name, Uint32 size )
 {
+	char fat_name[8 + 3 + 1];
+	mfat_fatize_name(fat_name, name);
 	int write_null_entry = 0;
 	int ret = mfat_search_in_directory(dirent, name, MFAT_FIND_FILE | MFAT_FIND_DIR);	// we also want to find dirs so we avoid the collosion between the same name
 	if (ret == 1) {
@@ -738,12 +813,10 @@ Uint32 mfat_overwrite_file_with_direct_linear_device_block_write ( mfat_dirent_t
 		// if the scenario above is true, probably it will allocate the same space then, so no harm is done, just slower ...
 		// however these stuffs are Xemu init time tasks, so does not matter a lot, to be slower a bit ...
 		mfat_free_fat_chain(dirent->cluster);
-		repos_cur_dirent(&dirent->stream);
 	} else if (ret == 0) {
 		// not found the file
 		// ... so we should extend directory and allocate new chain of FAT as well
-		repos_cur_dirent(&dirent->stream);	// repos (re-position ...) on the NULL (last) entry in the directory, we will overwrite that [but we need to produce a null entry then!]
-		write_null_entry = 1;
+		write_null_entry = 1;	// TODO: this should be handled!
 	} else if (ret == -1) {
 		// some error occured
 		return 0;	// ERROR?
@@ -754,6 +827,28 @@ Uint32 mfat_overwrite_file_with_direct_linear_device_block_write ( mfat_dirent_t
 	if (!dirent->cluster) {
 		// ERROR: could not allocate chain!!!!
 		// We should delete the file (since its old chain is free'd ...) and give up :(
+		stream_cache.buf[dirent->stream.in_block_pos] = 0xE5;
+		// if this one does not work, we can't do anything too much, anyway ...
+		mfat_write_cluster(stream_cache.cluster, stream_cache.cluster_block, stream_cache.buf);
+		return 0;
+	}
+	// We assume that *NO* stream operation was done, so stream cache STILL holds the directory entry!!!!
+	// that is, we just modify the cache and write back ...
+	repos_cur_dirent(&dirent->stream);	// sets "filepos" stuffs the current entry back
+	Uint8 *p = stream_cache.buf + dirent->stream.in_block_pos;
+	memcpy(p, fat_name, 8 + 3);	// copy FAT style file name in
+	p[0x1A] =  dirent->cluster        & 0xFF;
+	p[0x1B] = (dirent->cluster >>  8) & 0xFF;
+	p[0x14] = (dirent->cluster >> 16) & 0xFF;
+	p[0x15] = (dirent->cluster >> 24) & 0xFF;
+	p[0x1C] =  size        & 0xFF;
+	p[0x1D] = (size >>  8) & 0xFF;
+	p[0x1E] = (size >> 16) & 0xFF;
+	p[0x1F] = (size >> 24) & 0xFF;
+	p[0x0B] = 0;	// file type
+	// TODO: file date as well!
+	if (mfat_write_cluster(stream_cache.cluster, stream_cache.cluster_block, stream_cache.buf)) {
+		return 0;	// ERROR
 	}
 	// RETURN VALUE:
 	// just calculate a DEVICE dependent block offset of the cluster.
@@ -795,13 +890,14 @@ static const char *allowed_dos_name_chars = "!#$%&'()-@^_`{}~0123456789ABCDEFGHI
 
 #if 0
 static char fat_dirent_name[8 + 3 + 1];
+#endif
 
-int filename_to_fat_dirent ( char *d, const char *s )
+int mfat_fatize_name ( char *d, const char *s )
 {
 	int len = 8;
 	int in_ext = 0;
-	if (!d)
-		d = fat_dirent_name;
+	//if (!d)
+	//	d = fat_dirent_name;
 	memset(d, 0x20, 8 + 3);
 	d[8 + 3] = 0;
 	for (;;) {
@@ -828,7 +924,7 @@ int filename_to_fat_dirent ( char *d, const char *s )
 		}
 	}
 }
-#endif
+
 
 // Again this function does not support scenario, where name contains a space
 int mfat_normalize_name ( char *d, const char *s )
