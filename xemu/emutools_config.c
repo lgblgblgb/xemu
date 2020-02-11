@@ -252,6 +252,14 @@ static int xemucfg_parse_commandline ( int argc, char **argv, const char *only_t
 {
 	argc--;
 	argv++;
+#ifdef XEMU_ARCH_MAC
+	// Oh no, another MacOS miss-feature :-O it seems Finder passes a strange parameter to EVERY up it starts
+	// We must strip it away!
+	if (argc && !memcmp(argv[0], "-psn_", 5)) {
+		argc--;
+		argv++;
+	}
+#endif
 	while (argc) {
 		struct xemutools_config_st *o;
 		if (*argv[0] != '/' && *argv[0] != '-')
