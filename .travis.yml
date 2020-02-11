@@ -61,7 +61,7 @@ matrix:
         local_dir: xemu-deploy
         skip_cleanup: true
         github_token: $GHDEPLOYKEY2
-        keep_history: true
+        keep_history: false
         repo: lgblgblgb/xemu-binaries
         target_branch: binary-linux-$TRAVIS_BRANCH
         email: lgblgblgb@gmail.com
@@ -127,7 +127,7 @@ matrix:
         local_dir: xemu-deploy
         skip_cleanup: true
         github_token: $GHDEPLOYKEY2
-        keep_history: true
+        keep_history: false
         repo: lgblgblgb/xemu-binaries
         target_branch: binary-windows-$TRAVIS_BRANCH
         email: lgblgblgb@gmail.com
@@ -172,7 +172,7 @@ matrix:
         local_dir: xemu-deploy
         skip_cleanup: true
         github_token: $GHDEPLOYKEY2
-        keep_history: true
+        keep_history: false
         repo: lgblgblgb/xemu-binaries
         target_branch: binary-osx-$TRAVIS_BRANCH
         email: lgblgblgb@gmail.com
