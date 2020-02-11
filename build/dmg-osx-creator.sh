@@ -74,9 +74,13 @@ find .dmg -ls
 
 echo "*** Starting create-dmg now ***"
 
+# Note: I have no idea on mac .. what is "add-drop-link" what application needs to be dropped etc? Why it is needed at all?
+
 time create-dmg	\
 	--volname "Xemu - $TRAVIS_BRANCH - $TIMESTAMP" \
 	--volicon "build/xemu.icns" \
+	--eula LICENSE \
+	--background "build/xemu-bg.png" \
 	--window-pos 200 120 \
 	--window-size 800 400 \
 	--icon-size 100 \
