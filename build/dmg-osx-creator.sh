@@ -5,7 +5,8 @@
 # https://github.com/andreyvit/create-dmg
 # -------------------------------------------------
 
-BUNDLE="no"
+BUNDLE="yes"
+TIMESTAMP="`date '+%Y%m%d%H%M%S'`"
 
 echo "DMG begin"
 
@@ -16,7 +17,39 @@ if [ "$BUNDLE" = "yes" ]; then
 		b="`basename $a .osx`"
 		mkdir -p .dmg/$b.app/Contents/{Frameworks,MacOS,Resources}
 		cp $a .dmg/$b.app/Contents/MacOS/$b
-		cp build/bin/*.dylib .dmg/$b.app/Contents/Frameworks/
+		cp build/bin/libSDL2-xemu.dylib .dmg/$b.app/Contents/Frameworks/
+		install_name_tool -change @executable_path/libSDL2-xemu.dylib @executable_path/../Frameworks/libSDL2-xemu.dylib .dmg/$b.app/Contents/MacOS/$b
+		cp build/xemu.icns .dmg/$b.app/Contents/Resources/$b.icns
+		echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
+<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
+<plist version=\"1.0\">
+<dict>
+	<key>CFBundleExecutable</key>
+	<string>$b</string>
+	<key>CFBundleGetInfoString</key>
+	<string>$b $TRAVIS_BRANCH $TIMESTAMP</string>
+	<key>CFBundleIconFile</key>
+	<string>$b.icns</string>
+	<key>CFBundleIdentifier</key>
+	<string>org.lgb.xemu.$b</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>$TIMESTAMP-$TRAVIS_BRANCH</string>
+	<key>CFBundleName</key>
+	<string>$b</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleSignature</key>
+	<string>XEMU</string>
+	<key>CFBundleVersion</key>
+	<string>$TIMESTAMP-$TRAVIS_BRANCH</string>
+	<key>NSHighResolutionCapable</key>
+	<true/>
+	<key>NSAppSleepDisabled</key>
+	<true/>
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.education</string>
+</dict>
+</plist>" > .dmg/$b.app/Contents/Info.plist
 	done
 else
 	cp build/bin/*.dylib .dmg/
@@ -36,7 +69,7 @@ find .dmg -ls
 echo "*** Starting create-dmg now ***"
 
 create-dmg	\
-	--volname "Xemu Installer" \
+	--volname "Xemu - $TRAVIS_BRANCH - $TIMESTAMP" \
 	--volicon "build/xemu.icns" \
 	--window-pos 200 120 \
 	--window-size 800 400 \
