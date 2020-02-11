@@ -13,11 +13,17 @@ echo "DMG begin"
 mkdir .dmg
 
 if [ "$BUNDLE" = "yes" ]; then
+	dylink=""
 	for a in build/bin/*.osx ; do
 		b="`basename $a .osx`"
 		mkdir -p .dmg/$b.app/Contents/{Frameworks,MacOS,Resources}
 		cp $a .dmg/$b.app/Contents/MacOS/$b
-		cp build/bin/libSDL2-xemu.dylib .dmg/$b.app/Contents/Frameworks/
+		if [ "$dylink" = "" ]; then
+			dylink=".dmg/$b.app/Contents/Frameworks/libSDL2-xemu.dylib"
+			cp build/bin/libSDL2-xemu.dylib $dylink
+		else
+			ln $dylink .dmg/$b.app/Contents/Frameworks/libSDL2-xemu.dylib
+		fi
 		install_name_tool -change @executable_path/libSDL2-xemu.dylib @executable_path/../Frameworks/libSDL2-xemu.dylib .dmg/$b.app/Contents/MacOS/$b
 		cp build/xemu.icns .dmg/$b.app/Contents/Resources/$b.icns
 		echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
@@ -68,7 +74,7 @@ find .dmg -ls
 
 echo "*** Starting create-dmg now ***"
 
-create-dmg	\
+time create-dmg	\
 	--volname "Xemu - $TRAVIS_BRANCH - $TIMESTAMP" \
 	--volicon "build/xemu.icns" \
 	--window-pos 200 120 \
