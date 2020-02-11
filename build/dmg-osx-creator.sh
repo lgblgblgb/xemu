@@ -1,18 +1,32 @@
 #!/bin/bash
+# (C)2020 Gabor Lenart LGB, lgblgblgb@gmail.com
+# -------------------------------------------------
 # Requires create-dmg (eg with homebrew'ing it ...)
 # https://github.com/andreyvit/create-dmg
+# -------------------------------------------------
+
+BUNDLE="no"
 
 echo "DMG begin"
 
 mkdir .dmg
 
-for a in build/bin/*.osx ; do
-	b=".dmg/`basename $a .osx`"
-	echo "Copying OSX binary $a -> $b"
-	cp -a $a $b
-done
+if [ "$BUNDLE" = "yes" ]; then
+	for a in build/bin/*.osx ; do
+		b="`basename $a .osx`"
+		mkdir -p .dmg/$b.app/Contents/{Frameworks,MacOS,Resources}
+		cp $a .dmg/$b.app/Contents/MacOS/$b
+		cp build/bin/*.dylib .dmg/$b.app/Contents/Frameworks/
+	done
+else
+	cp build/bin/*.dylib .dmg/
+	for a in build/bin/*.osx ; do
+		b=".dmg/`basename $a .osx`"
+		echo "Copying OSX binary $a -> $b"
+		cp -a $a $b
+	done
+fi
 
-cp build/bin/*.dylib .dmg/
 cp README.md LICENSE .dmg/
 
 echo "*** DMG content will be:"

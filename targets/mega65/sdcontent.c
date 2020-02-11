@@ -411,6 +411,7 @@ static int update_sdcard_file ( const char *on_card_name, int options, const cha
 		}
 		off_t oft = xemu_safe_file_size_by_fd(fd);
 		if (oft == OFF_T_ERROR || (size_to_install < 0 && oft != (off_t)(-size_to_install))) {
+			DEBUGPRINT("Got size: %lld instruct size: %d" NL, (long long int)oft, size_to_install);
 			ERROR_WINDOW("Bad file, size is incorrect or other I/O error\n%s", fn_or_data);
 			goto error_on_maybe_sys_file;
 		}
@@ -418,9 +419,9 @@ static int update_sdcard_file ( const char *on_card_name, int options, const cha
 		if (!size_to_install)
 			return 0;	// FIXME: we don't allow empty files to be written. Though we fake OK result no to disturb the user
 	}
-	mfat_dirent_t rootdir;
-	mfat_open_rootdir(&rootdir.stream);
-	Uint32 block = mfat_overwrite_file_with_direct_linear_device_block_write(&rootdir, on_card_name, size_to_install);
+	//mfat_dirent_t rootdir;
+	//mfat_open_rootdir(&rootdir.stream);
+	Uint32 block = mfat_overwrite_file_with_direct_linear_device_block_write(&sd_rootdirent, on_card_name, size_to_install);
 	if (block == 0)
 		goto error_on_maybe_sys_file;
 	// Copy file block by block
@@ -497,7 +498,8 @@ static int update_from_directory ( const char *dirname, int options )
 			DEBUGPRINT("SDCARD: CONTENT: skipping updating file \"%s\": too large (limit is %d bytes) or null-sized file" NL, fn, MAX_IMPORT_FILE_SIZE);
 			continue;
 		}
-		update_sdcard_file(entry->d_name, options, fn, -(int)st.st_size);
+		int ret = update_sdcard_file(entry->d_name, options, fn, -(int)st.st_size);
+		DEBUGPRINT("SDCARD: CONTENT: updated file \"%s\" status is %d" NL, fn, ret);
 	}
 	int ret = errno;
 	closedir(dir);

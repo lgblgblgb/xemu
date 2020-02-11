@@ -823,19 +823,20 @@ Uint32 mfat_overwrite_file_with_direct_linear_device_block_write ( mfat_dirent_t
 	} else {
 		FATAL("Unknown error code of %d in %s", ret, __func__);
 	}
-	dirent->cluster = mfat_allocate_linear_fat_chunk(size);
-	if (!dirent->cluster) {
-		// ERROR: could not allocate chain!!!!
-		// We should delete the file (since its old chain is free'd ...) and give up :(
-		stream_cache.buf[dirent->stream.in_block_pos] = 0xE5;
-		// if this one does not work, we can't do anything too much, anyway ...
-		mfat_write_cluster(stream_cache.cluster, stream_cache.cluster_block, stream_cache.buf);
-		return 0;
-	}
 	// We assume that *NO* stream operation was done, so stream cache STILL holds the directory entry!!!!
 	// that is, we just modify the cache and write back ...
 	repos_cur_dirent(&dirent->stream);	// sets "filepos" stuffs the current entry back
 	Uint8 *p = stream_cache.buf + dirent->stream.in_block_pos;
+	// Allocate FAT!!!!
+	dirent->cluster = mfat_allocate_linear_fat_chunk(size);
+	if (!dirent->cluster) {
+		// ERROR: could not allocate chain!!!!
+		// We should delete the file (since its old chain is free'd ...) and give up :(
+		*p = 0xE5;
+		// if this one does not work, we can't do anything too much, anyway ...
+		mfat_write_cluster(stream_cache.cluster, stream_cache.cluster_block, stream_cache.buf);
+		return 0;
+	}
 	memcpy(p, fat_name, 8 + 3);	// copy FAT style file name in
 	p[0x1A] =  dirent->cluster        & 0xFF;
 	p[0x1B] = (dirent->cluster >>  8) & 0xFF;
