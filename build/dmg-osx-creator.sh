@@ -10,6 +10,13 @@ TIMESTAMP="`date '+%Y%m%d%H%M%S'`"
 
 echo "DMG begin"
 
+# Though on travis we can know branch from $BRANCH_TRAVIS
+# that would be problematic when run this script on other
+# environments. So let's figure out the branch as at own!
+# Also the last commit ...
+BRANCH="`git rev-parse --symbolic-full-name --abbrev-ref HEAD`"
+COMMIT="`git rev-parse HEAD`"
+
 mkdir .dmg
 
 if [ "$BUNDLE" = "yes" ]; then
@@ -33,13 +40,13 @@ if [ "$BUNDLE" = "yes" ]; then
 	<key>CFBundleExecutable</key>
 	<string>$b</string>
 	<key>CFBundleGetInfoString</key>
-	<string>$b $TRAVIS_BRANCH $TIMESTAMP</string>
+	<string>$b $BRANCH $TIMESTAMP</string>
 	<key>CFBundleIconFile</key>
 	<string>$b.icns</string>
 	<key>CFBundleIdentifier</key>
 	<string>org.lgb.xemu.$b</string>
 	<key>CFBundleInfoDictionaryVersion</key>
-	<string>$TIMESTAMP-$TRAVIS_BRANCH</string>
+	<string>$TIMESTAMP-$BRANCH</string>
 	<key>CFBundleName</key>
 	<string>$b</string>
 	<key>CFBundlePackageType</key>
@@ -47,7 +54,7 @@ if [ "$BUNDLE" = "yes" ]; then
 	<key>CFBundleSignature</key>
 	<string>XEMU</string>
 	<key>CFBundleVersion</key>
-	<string>$TIMESTAMP-$TRAVIS_BRANCH</string>
+	<string>$TIMESTAMP-$BRANCH</string>
 	<key>NSHighResolutionCapable</key>
 	<true/>
 	<key>NSAppSleepDisabled</key>
@@ -68,6 +75,17 @@ fi
 
 cp README.md LICENSE .dmg/
 
+echo "Branch: $BRANCH
+Commit: $COMMIT
+Link:   https://github.com/lgblgblgb/xemu/commit/$COMMIT
+Remote: `git config --get remote.origin.url`" > .dmg/THIS_VERSION.txt
+if [ "$TRAVIS_REPO_SLUG" != "" -a "$TRAVIS_COMMIT" != "" ]; then
+        echo "Commit URL: https://github.com/$TRAVIS_REPO_SLUG/commit/$TRAVIS_COMMIT" >> .dmg/THIS_VERSION.txt
+fi
+echo >> .dmg/THIS_VERSION.txt
+env | grep '^TRAVIS_' | grep -v '=$' | grep -vi secure | sort | sed 's/=/ = /' >> .dmg/THIS_VERSION.txt
+git log -25 >> .dmg/THIS_VERSION.txt
+
 echo "*** DMG content will be:"
 
 find .dmg -ls
@@ -77,7 +95,7 @@ echo "*** Starting create-dmg now ***"
 # Note: I have no idea on mac .. what is "add-drop-link" what application needs to be dropped etc? Why it is needed at all?
 
 time create-dmg	\
-	--volname "Xemu - $TRAVIS_BRANCH - $TIMESTAMP" \
+	--volname "Xemu - $BRANCH - $TIMESTAMP" \
 	--volicon "build/xemu.icns" \
 	--eula LICENSE \
 	--background "build/xemu-bg.png" \
