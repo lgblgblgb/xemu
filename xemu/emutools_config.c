@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and some Mega-65 features as well.
-   Copyright (C)2016,2017,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -253,8 +253,8 @@ static int xemucfg_parse_commandline ( int argc, char **argv, const char *only_t
 	argc--;
 	argv++;
 #ifdef XEMU_ARCH_MAC
-	// Oh no, another MacOS miss-feature :-O it seems Finder passes a strange parameter to EVERY up it starts
-	// We must strip it away!
+	// Oh no, another MacOS miss-feature :-O it seems Finder passes a strange parameter to EVERY app it starts!!
+	// We must strip it away, otherwise the user will experience an error box about unknown option and Xemu exits ...
 	if (argc && !memcmp(argv[0], "-psn_", 5)) {
 		argc--;
 		argv++;
