@@ -10,11 +10,31 @@ TIMESTAMP="`date '+%Y%m%d%H%M%S'`"
 
 echo "DMG begin"
 
+# Determine MacOS version
+# Should give us some numeric answer like: 10.15.1
+# We can use this info to decide on some options ...
+MACOSVER="`sw_vers -productVersion`"
+echo "MacOS version number: $MACOSVER"
+if [ "$MACOSVER" != "" ]; then
+	MACOSMAJORVER="`echo $MACOSVER | cut -f1 -d.`"
+	MACOSMINORVER="`echo $MACOSVER | cut -f2 -d.`"
+	MACOSPATCHVER="`echo $MACOSVER | cut -f3 -d.`"
+	echo "MacOS major version: $MACOSMAJORVER"
+	echo "MacOS minor version: $MACOSMINORVER"
+	echo "MacOS patch version: $MACOSPATCHVER"
+	if [ "$MACOSMAJORVER" = "10" -a "$MACOSMINORVER" -ge "15" ]; then
+		echo "Post 10.15 version is detected."
+	else
+		echo "Pre 10.15 version is detected."
+	fi
+fi
+
 # Though on travis we can know branch from $BRANCH_TRAVIS
 # that would be problematic when run this script on other
 # environments. So let's figure out the branch as at own!
 # Also the last commit ...
-BRANCH="`git rev-parse --symbolic-full-name --abbrev-ref HEAD`"
+#BRANCH="`git rev-parse --symbolic-full-name --abbrev-ref HEAD`"	Problematic, gives HEAD or such on detached-head mode
+BRANCH="`git branch | sed -n 's/^\*[\t ]*//p'`"
 COMMIT="`git rev-parse HEAD`"
 
 mkdir .dmg
