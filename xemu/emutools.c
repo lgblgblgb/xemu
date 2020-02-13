@@ -1230,7 +1230,17 @@ int sysconsole_toggle ( int set )
 }
 
 #ifdef XEMU_ARCH_WIN
-//#define BUILD_BUG_ON(condition) ((void)sizeof(char[1 - 2*!!(condition)]))
+
+// WideCharToMultiByte(UINT CodePage, DWORD dwFlags, _In_NLS_string_(cchWideChar)LPCWCH lpWideCharStr, int cchWideChar, LPSTR lpMultiByteStr, int cbMultiByte, LPCCH lpDefaultChar, LPBOOL lpUsedDefaultChar)
+//                     CP_UTF8,       0,             i,                                                -1,              o,                    size,            NULL,                NULL
+#define WIN_WCHAR_TO_UTF8(o,i,size) !WideCharToMultiByte(CP_UTF8, 0, i, -1, o, size, NULL, NULL)
+// int MultiByteToWideChar(UINT CodePage, DWORD dwFlags, _In_NLS_string_(cbMultiByte)LPCCH lpMultiByteStr, int cbMultiByte, LPWSTR lpWideCharStr, int cchWideChar)
+//                         CP_UTF8,       0,             i,                                                -1,              o                      size
+#define WIN_UTF8_TO_WCHAR(o,i,size) !MultiByteToWideChar(CP_UTF8, 0, i, -1, o, size)
+
+#if 0
+#define WIN_WCHAR_TO_UTF8(o,i,size)	xemu_winos_wchar_to_utf8
+#define WIN_UTF8_TO_WCHAR(o,i,size)	xemu_winos_utf8_to_wchar
 #include <assert.h>
 // This function does not make fully extensive work to detect all errors etc ...
 int xemu_winos_utf8_to_wchar ( wchar_t *restrict o, const char *restrict i, size_t size )
@@ -1292,6 +1302,8 @@ int xemu_winos_utf8_to_wchar ( wchar_t *restrict o, const char *restrict i, size
 	}
 }
 
+
+
 int xemu_winos_wchar_to_utf8 ( char *restrict o, const wchar_t *restrict i, size_t size )
 {
 	unsigned int sur = 0;
@@ -1348,11 +1360,12 @@ int xemu_winos_wchar_to_utf8 ( char *restrict o, const wchar_t *restrict i, size
 			return -1;
 	}
 }
+#endif
 
 int xemu_os_open ( const char *fn, int flags )
 {
 	wchar_t wchar_fn[PATH_MAX];
-	if (xemu_winos_utf8_to_wchar(wchar_fn, fn, PATH_MAX)) {
+	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
 		errno = ENOENT;
 		return -1;
 	}
@@ -1362,7 +1375,7 @@ int xemu_os_open ( const char *fn, int flags )
 int xemu_os_creat ( const char *fn, int flags, int pmode )
 {
 	wchar_t wchar_fn[PATH_MAX];
-	if (xemu_winos_utf8_to_wchar(wchar_fn, fn, PATH_MAX)) {
+	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
 		errno = ENOENT;
 		return -1;
 	}
@@ -1373,11 +1386,11 @@ FILE *xemu_os_fopen ( const char *restrict fn, const char *restrict mode )
 {
 	wchar_t wchar_fn[PATH_MAX];
 	wchar_t wchar_mode[32];	// FIXME?
-	if (xemu_winos_utf8_to_wchar(wchar_fn, fn, PATH_MAX)) {
+	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
 		errno = ENOENT;
 		return NULL;
 	}
-	if (xemu_winos_utf8_to_wchar(wchar_mode, mode, sizeof wchar_mode)) {
+	if (WIN_UTF8_TO_WCHAR(wchar_mode, mode, sizeof wchar_mode)) {
 		errno = EINVAL;		// FIXME?
 		return NULL;
 	}
@@ -1387,7 +1400,7 @@ FILE *xemu_os_fopen ( const char *restrict fn, const char *restrict mode )
 int xemu_os_unlink ( const char *fn )
 {
 	wchar_t wchar_fn[PATH_MAX];
-	if (xemu_winos_utf8_to_wchar(wchar_fn, fn, PATH_MAX)) {
+	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
 		errno = ENOENT;
 		return -1;
 	}
@@ -1399,7 +1412,7 @@ int xemu_os_unlink ( const char *fn )
 int xemu_os_mkdir ( const char *fn, const int mode )	// "mode" parameter is unused in Windows
 {
 	wchar_t wchar_fn[PATH_MAX];
-	if (xemu_winos_utf8_to_wchar(wchar_fn, fn, PATH_MAX)) {
+	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
 		errno = ENOENT;
 		return -1;
 	}
@@ -1409,7 +1422,7 @@ int xemu_os_mkdir ( const char *fn, const int mode )	// "mode" parameter is unus
 XDIR *xemu_os_opendir ( const char *fn )
 {
 	wchar_t wchar_fn[PATH_MAX];
-	if (xemu_winos_utf8_to_wchar(wchar_fn, fn, PATH_MAX)) {
+	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
 		errno = ENOENT;
 		return NULL;
 	}
@@ -1423,17 +1436,47 @@ int xemu_os_closedir ( XDIR *dirp )
 
 struct dirent *xemu_os_readdir ( XDIR *dirp, struct dirent *entry )
 {
-	struct _wdirent *p = _wreaddir(dirp);
-	if (!p)
-		return NULL;
-	entry->d_ino = p->d_ino;
-	//entry->d_off = p->d_off;
-	entry->d_reclen = p->d_reclen;
-	//entry->d_type = p->d_type;
-	if (xemu_winos_wchar_to_utf8(entry->d_name, p->d_name, FILENAME_MAX)) {
-		errno = EINVAL;	// FIXME
-		return NULL;
-	}
+	struct _wdirent *p;
+	do {
+		p = _wreaddir(dirp);
+		if (!p)
+			return NULL;
+		entry->d_ino = p->d_ino;
+		//entry->d_off = p->d_off;
+		entry->d_reclen = p->d_reclen;
+		//entry->d_type = p->d_type;
+	} while (WIN_WCHAR_TO_UTF8(entry->d_name, p->d_name, FILENAME_MAX));	// UGLY! Though without this probably an opendir/readdir scan would be interrupted by this anomaly ...
 	return entry;
 }
+
+#include <assert.h>
+
+int xemu_os_stat ( const char *fn, struct stat *statbuf )
+{
+	wchar_t wchar_fn[PATH_MAX];
+	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
+		errno = ENOENT;
+		return -1;
+	}
+	struct __stat64 st;
+	if (_wstat64(wchar_fn, &st))
+		return -1;	// _wstat64() sets errno
+	//static_assert(sizeof(statbuf->st_atime) <= 4, "32-bit time for stat");
+	//static_assert(sizeof(statbuf->st_size) <= 4, "32-bit file size for stat");
+	//FIXME: how can be sure we have 64-bit time and 64-bit file size ALWAYS, win32+win64 too!!! (2038 is not so far away now ...)
+	//FIXME-2: how can we present the input parameter of this func being struct stat (POSIX) but the same requirements as the previous comment line ...
+	statbuf->st_gid   = st.st_gid;
+	statbuf->st_atime = st.st_atime;
+	statbuf->st_ctime = st.st_ctime;
+	statbuf->st_dev   = st.st_dev;
+	statbuf->st_ino   = st.st_ino;
+	statbuf->st_mode  = st.st_mode;
+	statbuf->st_mtime = st.st_mtime;
+	statbuf->st_nlink = st.st_nlink;
+	statbuf->st_rdev  = st.st_rdev;
+	statbuf->st_size  = st.st_size;
+	statbuf->st_uid   = st.st_uid;
+	return 0;
+}
+
 #endif
