@@ -193,5 +193,29 @@ extern void osd_write_string ( int x, int y, const char *s );
 	osd_on(OSD_FADE_START); \
 } while(0)
 
+#include <dirent.h>
+#ifdef XEMU_ARCH_WIN
+	typedef _WDIR XDIR;
+	extern int   xemu_winos_utf8_to_wchar ( wchar_t *restrict o, const char *restrict i, size_t size );
+	extern int   xemu_os_open   ( const char *fn, int flags );
+	extern int   xemu_os_creat  ( const char *fn, int flags, int pmode );
+	extern FILE *xemu_os_fopen  ( const char *restrict fn, const char *restrict mode );
+	extern int   xemu_os_unlink ( const char *fn );
+	extern int   xemu_os_mkdir  ( const char *fn, const int mode );
+	extern XDIR *xemu_os_opendir ( const char *fn );
+	extern struct dirent *xemu_os_readdir ( XDIR *dirp, struct dirent *entry );
+	extern int   xemu_os_closedir ( XDIR *dir );
+#else
+	typedef	DIR	XDIR;
+#	define	xemu_os_open			open
+#	define	xemu_os_creat			creat
+#	define	xemu_os_fopen			fopen
+#	define	xemu_os_unlink			unlink
+#	define	xemu_os_mkdir			mkdir
+#	define	xemu_os_opendir			opendir
+#	define	xemu_os_readdir(dirp,not_used)	readdir(dirp)
+#	define	xemu_os_closedir 		closedir
+#endif
+#define	xemu_os_close	close
 
 #endif
