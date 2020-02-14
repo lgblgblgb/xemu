@@ -1,4 +1,4 @@
-/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+/* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
@@ -53,7 +53,9 @@ static int frame_counter;
 static int   paused = 0, paused_old = 0;
 static int   breakpoint_pc = -1;
 static int   trace_step_trigger = 0;
+#ifdef HAS_UARTMON_SUPPORT
 static void (*m65mon_callback)(void) = NULL;
+#endif
 static const char emulator_paused_title[] = "TRACE/PAUSE";
 static char emulator_speed_title[] = "????MHz";
 static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
@@ -372,8 +374,8 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		ERROR_WINDOW("Cannot open audio device!");
 #endif
 	//
-#ifdef UARTMON_SOCKET
-	uartmon_init(UARTMON_SOCKET);
+#ifdef HAS_UARTMON_SUPPORT
+	uartmon_init(xemucfg_get_str("uartmon"));
 #endif
 	fast_mhz = xemucfg_get_num("fastclock");
 	if (fast_mhz < 3 || fast_mhz > 200) {
@@ -426,7 +428,7 @@ static void shutdown_callback ( void )
 		DEBUGPRINT("Memory state is dumped into %s" DIRSEP_STR "%s" NL, getcwd(NULL, PATH_MAX), MEMDUMP_FILE);
 	}
 #endif
-#ifdef UARTMON_SOCKET
+#ifdef HAS_UARTMON_SUPPORT
 	uartmon_close();
 #endif
 	DEBUG("Execution has been stopped at PC=$%04X" NL, cpu65.pc);
@@ -463,7 +465,7 @@ static void update_emulator ( void )
 	// this part is used to trigger 'RESTORE trap' with long press on RESTORE.
 	// see input_devices.c for more information
 	kbd_trigger_restore_trap();
-#ifdef UARTMON_SOCKET
+#ifdef HAS_UARTMON_SUPPORT
 	uartmon_update();
 #endif
 	// Screen rendering: begin
@@ -479,7 +481,7 @@ static void update_emulator ( void )
 }
 
 
-
+#ifdef HAS_UARTMON_SUPPORT
 void m65mon_show_regs ( void )
 {
 	Uint8 pf = cpu65_get_pf();
@@ -562,6 +564,7 @@ void m65mon_breakpoint ( int brk )
 	else
 		cpu_cycles_per_step = 0;
 }
+#endif
 
 static int cycles, frameskip;
 
@@ -571,11 +574,13 @@ static void emulation_loop ( void )
 		while (XEMU_UNLIKELY(paused)) {	// paused special mode, ie tracing support, or something ...
 			if (XEMU_UNLIKELY(dma_status))
 				break;		// if DMA is pending, do not allow monitor/etc features
+#ifdef HAS_UARTMON_SUPPORT
 			if (m65mon_callback) {	// delayed uart monitor command should be finished ...
 				m65mon_callback();
 				m65mon_callback = NULL;
 				uartmon_finish_command();
 			}
+#endif
 			// we still need to feed our emulator with update events ... It also slows this pause-busy-loop down to every full frames (~25Hz)
 			// note, that it messes timing up a bit here, as there is update_emulator() calls later in the "normal" code as well
 			// this can be a bug, but real-time emulation is not so much an issue if you eg doing trace of your code ...
@@ -682,6 +687,9 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
 #ifdef HAVE_XEMU_UMON
 	xemucfg_define_num_option("umon", 0, "TCP-based dual mode (http / text) monitor port number [NOT YET WORKING]");
+#endif
+#ifdef HAS_UARTMON_SUPPORT
+	xemucfg_define_str_option("uartmon", NULL, "Sets the name for named unix-domain socket for uartmon, otherwise disabled");
 #endif
 #ifdef HAVE_XEMU_INSTALLER
 	xemucfg_define_str_option("installer", NULL, "Sets a download-specification descriptor file for auto-downloading data files");

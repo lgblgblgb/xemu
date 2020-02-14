@@ -8,7 +8,7 @@
 BUNDLE="yes"
 TIMESTAMP="`date '+%Y%m%d%H%M%S'`"
 
-echo "DMG begin"
+echo "*** *** DMG begin: $0 @ `date` *** ***"
 
 # Determine MacOS version
 # Should give us some numeric answer like: 10.15.1
@@ -44,10 +44,8 @@ if [ "$TRAVIS_COMMIT" = "" ]; then
 else
 	COMMIT="$TRAVIS_COMMIT"
 fi
-echo "Branch: $BRANCH"
-echo "Commit: $COMMIT"
 
-mkdir .dmg
+mkdir .dmg || exit 1
 
 if [ "$BUNDLE" = "yes" ]; then
 	dylink=""
@@ -114,12 +112,11 @@ if [ "$TRAVIS_REPO_SLUG" != "" -a "$TRAVIS_COMMIT" != "" ]; then
         echo "Commit URL: https://github.com/$TRAVIS_REPO_SLUG/commit/$TRAVIS_COMMIT" >> .dmg/THIS_VERSION.txt
 fi
 echo >> .dmg/THIS_VERSION.txt
-env | grep '^TRAVIS_' | grep -v '=$' | grep -vi secure | sort | sed 's/=/ = /' >> .dmg/THIS_VERSION.txt
-git log -25 >> .dmg/THIS_VERSION.txt
-
-echo "THIS_VERSION.txt is:"
 
 cat .dmg/THIS_VERSION.txt
+
+env | grep '^TRAVIS_' | grep -v '=$' | grep -vi secure | sort | sed 's/=/ = /' >> .dmg/THIS_VERSION.txt
+git log -25 >> .dmg/THIS_VERSION.txt
 
 echo "*** DMG content will be:"
 
@@ -145,4 +142,6 @@ time create-dmg	\
 
 ls -l Xemu-Installer.dmg
 
-echo "DMG end"
+echo "*** *** DMG end: $0 @ `date` *** ***"
+
+exit 0
