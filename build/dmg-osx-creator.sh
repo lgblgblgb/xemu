@@ -23,9 +23,9 @@ if [ "$MACOSVER" != "" ]; then
 	echo "MacOS minor version: $MACOSMINORVER"
 	echo "MacOS patch version: $MACOSPATCHVER"
 	if [ "$MACOSMAJORVER" = "10" -a "$MACOSMINORVER" -ge "15" ]; then
-		echo "Post 10.15 version is detected."
+		echo "Post-10.15 version is detected."
 	else
-		echo "Pre 10.15 version is detected."
+		echo "Pre-10.15 version is detected."
 	fi
 fi
 
@@ -33,9 +33,19 @@ fi
 # that would be problematic when run this script on other
 # environments. So let's figure out the branch as at own!
 # Also the last commit ...
-#BRANCH="`git rev-parse --symbolic-full-name --abbrev-ref HEAD`"	Problematic, gives HEAD or such on detached-head mode
-BRANCH="`git branch | sed -n 's/^\*[\t ]*//p'`"
-COMMIT="`git rev-parse HEAD`"
+if [ "$TRAVIS_BRANCH" = "" ]; then
+	BRANCH="`git rev-parse --symbolic-full-name --abbrev-ref HEAD`"
+	#BRANCH="`git branch | sed -n 's/^\*[\t ]*//p'`"
+else
+	BRANCH="$TRAVIS_BRANCH"
+fi
+if [ "$TRAVIS_COMMIT" = "" ]; then
+	COMMIT="`git rev-parse HEAD`"
+else
+	COMMIT="$TRAVIS_COMMIT"
+fi
+echo "Branch: $BRANCH"
+echo "Commit: $COMMIT"
 
 mkdir .dmg
 
@@ -95,7 +105,8 @@ fi
 
 cp README.md LICENSE .dmg/
 
-echo "Branch: $BRANCH
+echo "Buildsys: MacOS $MACOSVER `whoami`@`hostname` uname: `uname -a`
+Branch: $BRANCH
 Commit: $COMMIT
 Link:   https://github.com/lgblgblgb/xemu/commit/$COMMIT
 Remote: `git config --get remote.origin.url`" > .dmg/THIS_VERSION.txt
@@ -105,6 +116,10 @@ fi
 echo >> .dmg/THIS_VERSION.txt
 env | grep '^TRAVIS_' | grep -v '=$' | grep -vi secure | sort | sed 's/=/ = /' >> .dmg/THIS_VERSION.txt
 git log -25 >> .dmg/THIS_VERSION.txt
+
+echo "THIS_VERSION.txt is:"
+
+cat .dmg/THIS_VERSION.txt
 
 echo "*** DMG content will be:"
 
