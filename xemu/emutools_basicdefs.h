@@ -67,7 +67,7 @@ typedef uint64_t Uint64;
 #endif /* __linux__ */
 #endif
 
-#if UINTPTR_MAX == 0xffffffff
+#if UINTPTR_MAX == 0xffffffffU
 #	define ARCH_32BIT
 #	define ARCH_BITS 32
 #	define ARCH_BITS_AS_TEXT "32"
