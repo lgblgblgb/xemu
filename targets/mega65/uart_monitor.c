@@ -22,15 +22,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #if !defined(HAS_UARTMON_SUPPORT)
-#warning "Platform does not support UMON"
 // Windows is not supported currently, as it does not have POSIX-standard socket interface (?).
 // Also, it's pointless for emscripten, for sure.
-#if 0
-int  uartmon_init   ( const char *fn ) { return 1; }
-void uartmon_update ( void ) {}
-void uartmon_close  ( void ) {}
-void uartmon_finish_command ( void ) {}
-#endif
+#warning "Platform does not support UMON"
 #else
 
 
