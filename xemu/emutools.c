@@ -1,6 +1,6 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and some Mega-65 features as well.
+   and MEGA65 as well.
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -34,6 +34,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 
 #include "xemu/osd_font_16x16.c"
+
+#ifdef XEMU_ARCH_MAC
+int macos_gui_started = 0;
+#endif
 
 #ifdef XEMU_ARCH_WIN
 static int atexit_callback_for_console_registered = 0;
@@ -1187,6 +1191,15 @@ void sysconsole_close ( const char *waitmsg )
 		DEBUGPRINT("WINDOWS: console is closed" NL);
 	}
 #elif defined(XEMU_ARCH_MAC)
+	if (macos_gui_started) {
+		DEBUGPRINT("MACOS: GUI-startup detected, closing standard in/out/error file descriptors ..." NL);
+		for (int fd = 0; fd <= 2; fd++) {
+			int devnull = open("/dev/null", O_WRONLY);	// WR by will, so even for STDIN, it will cause an error on read
+			if (devnull >= 0 && devnull != fd)
+				dup2(devnull, fd);
+			if (devnull > 2)
+				close(devnull);
+		}
 #if 0
 	// FIXME: do we really need this? AFAIK MacOS may cause to log things if terminal is not there but there is output, which is not so nice ...
 	for (int fd = 0; fd < 100; fd++) {
@@ -1203,6 +1216,7 @@ void sysconsole_close ( const char *waitmsg )
 		}
 	}
 #endif
+	}
 	sysconsole_is_open = 0;
 #else
 	sysconsole_is_open = 0;

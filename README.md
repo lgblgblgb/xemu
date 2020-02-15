@@ -20,11 +20,11 @@ https://github.com/lgblgblgb/xemu/wiki/Copyright
 Xemu is licensed under the terms of GNU/GPL v2, for more information please
 read file LICENSE. You can find the source on github, see above.
 
-Note: there is *nothing* too much common in these machines. The only reason
-that I emulate these within a single project, that I can easily re-use some
-of the components needed, that's all! Also, the list of emulated machines is
-simply the preference of myself, what I would like to emulate, nothing special
-about my selection.
+Note: there is no serious logic about the set of emulated machines by the
+Xemu project. The only reason that I emulate these within a single project,
+that I can easily re-use some of the components needed, that's all! Also, the
+list of emulated machines is simply the preference of myself, what I would
+like to emulate, nothing special about my selection.
 
 This file is only some place holder :) For some sane documentation, please **visit
 the wiki section of the project, here**:
@@ -33,19 +33,21 @@ https://github.com/lgblgblgb/xemu/wiki
 
 ## Most quick start (Xemu running in your web browser!)
 
-Just visit this page, and use the "in-browser demonstration" link:
+Just visit this page:
 
 http://xemu-dist.lgb.hu/dist/xemu-sample.html
 
-Note: this kind of demonstration is limited (or even broken!), often not in
-pair with the native client for your OS (a "binary"), which - at the other
-hand - requires more work: installation, configuration, etc ... Also, currenty
-there can be problems with some emulators in this form (especially MEGA65).
+Note: this kind of demonstration is **limited** (or **even broken**!), often
+not in pair with the native client for your OS (a "binary"), which - at the
+other hand - requires more work: installation, configuration, etc ... Also,
+currenty there can be problems with some emulators in this form (especially
+MEGA65).
 
 ## Quick start (using pre-built binaries)
 
-**Plese note, that binaries on some older site of me can be OUTDATED. Currently
-to download up-to-date, ready-to-use Xemu binaries, you may want to go here:**
+**Plese note, that binaries on some older site of me (especially on bintray.com,
+and xemu-dist.lgb.hu) can be OUTDATED. Currently to download up-to-date,
+ready-to-use Xemu binaries, you may want to go here:**
 
 https://github.lgb.hu/xemu/
 
@@ -61,11 +63,13 @@ You can find 32 and 64 bit windows based installers for Windows. No need to
 say, highly experimental (as I am not a windows user at all ...). You can
 also use the ZIP'ed versions, which are simply the needed exe + dll files,
 without any installer. Please carefully read the download page, about these,
-especially about the NSIS-related problem which causes false positive
-detections as *trojan/virus* by many antivirus software, unfortunately.
+especially about the NSIS-related problem which causes *false positive*
+detections as **trojan/virus** by many antivirus software, unfortunately.
+If you don't believe me: https://nsis.sourceforge.io/NSIS_False_Positives
 
 Also, you can find ZIP archives on that page, contains only the executable
-files and the needed DLL, without any installer.
+files and the needed `DLL`, without any installer. This may also solve the
+false virus detection ...
 
 ### Linux
 
@@ -106,7 +110,9 @@ installed on your Mac: https://brew.sh/
     brew update
     brew install sdl2 wget git
 
-Xemu should build with a simple `make` but I recommend `make ARCH=osx` to build!
+Xemu should build with command:
+
+    make ARCH=osx
 
 #### Raspberry Pi
 
@@ -186,12 +192,12 @@ compilation, with cross-compiler and SDL2 MinGW cross platform suite installed.
 Note: this is probably the easier method for a Windows user, however this is
 _not the method we use to build official_ binaries for Windows.
 
-An easy way to build xemu under Windows is to use the  MSYS2 package which
-includes a full MinGW compiler, associated headers, tools , and a nice package
-management utility for easy installation of required components: Pacman,
-popular in ArchLinux-based distros.
+An easy way to build xemu under Windows is to use the `MSYS2` package which
+includes a full `MinGW` compiler, associated headers, tools , and a nice package
+management utility for easy installation of required components: `Pacman`,
+popular in Arch Linux based distributions.
 
-The following steps are based on a Windows-10 x64 system.
+The following steps are based on a Windows 10 x64 system.
 
 * Download the executable installer in https://www.msys2.org for x86-64
   architecture.
@@ -232,14 +238,15 @@ Then, you need to install mingw-specific SDL2 development suite, download,
 modify its Makefile probably, install it, create compatibility symlinks for
 Xemu ... If you trust into the version Xemu uses, probably it's better to
 do the task with a single command. It needs you to be at the top directory
-of the downloaded/cloned Xemu repository. You may want to run this as root,
+of the downloaded or cloned Xemu repository. You may want to run this as root,
 or at least you need to have `sudo` capabilities. The command:
 
     build/install-cross-win-mingw-sdl-on-linux.sh /usr/local/bin
 
-This command will install stuffs in /usr/local/cross-tools (regardless of the
-parameter!) and create symlinks in /usr/local/bin. If it's not in your PATH
-by default, you may need to put it, or use different argument than /usr/local/bin.
+This command will install stuffs in `/usr/local/cross-tools` (regardless of
+the parameter!) and create symlinks in `/usr/local/bin`. If it's not in your
+`PATH` by default, you may need to put it, or use different argument than
+`/usr/local/bin`.
 
 Then you can say the following for 32 bit or 64 bit build process (in general,
 32 bit version should be avoided on any OS - for performance reasons as well):
@@ -247,8 +254,8 @@ Then you can say the following for 32 bit or 64 bit build process (in general,
     make ARCH=win32
     make ARCH=win64
 
-In build/bin you'll find files like *.win32 and *.win64, they are `exe` files
-for real, you can rename and copy them to a Windows box to be able to run
-them using Windows only (you also need the specific SDL2.dll though - those can
-be found at the same directory where the given - 32 or 64 bit - sdl2-config
-script is from the development SDL2 stuff you've installed).
+In `build/bin` you'll find files like `*.win32` and `*.win64`, they are `exe`
+files for real, you can rename and copy them to a Windows box to be able to run
+them using Windows only (you also need the specific `SDL2.dll` though - those
+can be found at the same directory where the given - 32 or 64 bit -
+`sdl2-config` script is from the development SDL2 stuff you've installed).

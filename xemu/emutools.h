@@ -1,6 +1,6 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and some Mega-65 features as well.
+   and MEGA65 as well.
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
@@ -34,6 +34,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #else
 #define MSG_POPUP_WINDOW(sdlflag, title, msg, win) SDL_ShowSimpleMessageBox(sdlflag, title, msg, win)
 #define INSTALL_DIRECTORY_ENTRY_NAME "default-files"
+#endif
+
+#ifdef XEMU_ARCH_MAC
+extern int macos_gui_started;
 #endif
 
 #define APP_ORG "xemu-lgb"
