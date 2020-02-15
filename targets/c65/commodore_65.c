@@ -756,6 +756,12 @@ static void shutdown_callback ( void )
 }
 
 
+void c65_reset_asked ( void )
+{
+	if (ARE_YOU_SURE_OVERRIDABLE("Are you sure to HARD RESET your Commodore-65?"))
+		c65_reset();
+}
+
 void c65_reset ( void )
 {
 	memory[0] = memory[1] = 0xFF;
@@ -775,7 +781,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
 	if (pressed) {
 		if (key == SDL_SCANCODE_F10) {	// reset
-			c65_reset();
+			c65_reset_asked();
 		} else if (key == SDL_SCANCODE_KP_ENTER) {
 			c64_toggle_joy_emu();
 		} else if (key == SDL_SCANCODE_LSHIFT) {
@@ -882,8 +888,10 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
 #endif
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
+	i_am_sure_override = xemucfg_get_bool("besure");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	window_title_info_addon = emulator_speed_title;
         if (xemu_post_init(

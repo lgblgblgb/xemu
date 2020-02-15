@@ -46,7 +46,6 @@ static int nmi_level;			// please read the comment at nmi_set() below
 
 int newhack = 0;
 unsigned int frames_total_counter = 0;
-int no_hotkey_security;
 
 static int fast_mhz, cpu_cycles_per_scanline_for_fast_mode, speed_current;
 static char fast_mhz_in_string[8];
@@ -454,13 +453,13 @@ void reset_mega65 ( void )
 	nmi_level = 0;
 	D6XX_registers[0x7E] = xemucfg_get_num("kicked");
 	hypervisor_start_machine();
-	DEBUG("RESET!" NL);
+	DEBUGPRINT("SYSTEM RESET." NL);
 }
 
 
 void reset_mega65_asked ( void )
 {
-	if (no_hotkey_security || ARE_YOU_SURE("Are you sure to HARD RESET your emulated machine?"))
+	if (ARE_YOU_SURE_OVERRIDABLE("Are you sure to HARD RESET your emulated machine?"))
 		reset_mega65();
 }
 
@@ -708,10 +707,10 @@ int main ( int argc, char **argv )
 #ifdef HID_KBD_MAP_CFG_SUPPORT
 	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
 #endif
-	xemucfg_define_switch_option("nohotkeysecurity", "Skip asking \"are you sure?\" on RESET/EXIT by hot-keys");
+	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
-	no_hotkey_security = xemucfg_get_bool("nohotkeysecurity");
+	i_am_sure_override = xemucfg_get_bool("besure");
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(xemucfg_get_str("installer"));
 #endif

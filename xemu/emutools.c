@@ -43,6 +43,9 @@ int macos_gui_started = 0;
 static int atexit_callback_for_console_registered = 0;
 #endif
 
+int i_am_sure_override = 0;
+const char *str_are_you_sure_to_exit = "Are you sure to exit Xemu?";
+
 SDL_Window   *sdl_win = NULL;
 SDL_Renderer *sdl_ren = NULL;
 SDL_Texture  *sdl_tex = NULL;

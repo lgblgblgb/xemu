@@ -45,7 +45,7 @@ void xemugui_cb_quit ( const struct menu_st *m, int *query )
 
 void xemugui_cb_call_quit_if_sure ( const struct menu_st *m, int *query )
 {
-	if (!query && ARE_YOU_SURE(NULL))
+	if (!query && ARE_YOU_SURE_OVERRIDABLE(str_are_you_sure_to_exit))
 		UI_CB_QUIT();
 }
 

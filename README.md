@@ -45,9 +45,9 @@ MEGA65).
 
 ## Quick start (using pre-built binaries)
 
-**Plese note, that binaries on some older site of me (especially on bintray.com,
+**Plese note, that binaries on some older site of mine (especially on bintray.com,
 and xemu-dist.lgb.hu) can be OUTDATED. Currently to download up-to-date,
-ready-to-use Xemu binaries, you may want to go here:**
+ready-to-use Xemu binaries, you should go here:**
 
 https://github.lgb.hu/xemu/
 
@@ -63,7 +63,7 @@ You can find 32 and 64 bit windows based installers for Windows. No need to
 say, highly experimental (as I am not a windows user at all ...). You can
 also use the ZIP'ed versions, which are simply the needed exe + dll files,
 without any installer. Please carefully read the download page, about these,
-especially about the NSIS-related problem which causes *false positive*
+especially about the NSIS-related problem which causes **false positive**
 detections as **trojan/virus** by many antivirus software, unfortunately.
 If you don't believe me: https://nsis.sourceforge.io/NSIS_False_Positives
 
@@ -80,13 +80,13 @@ provided too, however that is simply a converted version of the DEB pakcage
 
 Work in progress to provide other - less distribution dependent - ways to
 install Xemu on Linux (other than compiling yourself), maybe in the form for
-flatpak, AppImage or something like that (though I really hate Snappy ...)
-in the future.
+`flatpak`, `AppImage` or something like that (though I really don't like
+`Snappy` ...) in the future.
 
 ### MacOS
 
-On MacOS, you want to use the MacOS build, of course. Currently there is only
-a ZIP file, with a binary and a .dylib, they must be in the same directory!
+On MacOS, you want to use the MacOS build, of course. You can download a ZIP
+file, with a binary and a .dylib, they must be in the same directory!
 
 You can also download DMG, however the maturity of my DMG is considered "low"
 currently.
@@ -104,8 +104,8 @@ For more information: https://github.com/lgblgblgb/xemu/wiki/Source
 
 #### Example for MacOS
 
-Assuming development Apple development components and `homebrew` is already
-installed on your Mac: https://brew.sh/
+Assuming Apple development components and `homebrew` is already installed on your
+Mac: https://brew.sh/
 
     brew update
     brew install sdl2 wget git
@@ -122,7 +122,7 @@ so nothing special here.
 
 However. If you plan to run Xemu without X11, you need a special build of SDL2
 must be done by yourself first. This is because, SDL2 provides a way to run
-SDL applications on Raspberry without X11 ("RPI" architecture), however the
+SDL2 applications on Raspberry without X11 ("RPI" architecture), however the
 standard Raspbian - as far as I know - provides only SDL2 library with X11
 support (though I can be wrong, contant me, if you know more on this topic).
 
@@ -175,7 +175,11 @@ using plain `make`, use this: `make ARCH=osx`.
 
     ls -l build/bin/
 
-to get a list of compiled binaries, like `xmega65.native` or `xc65.native`
+to get a list of compiled binaries, like `xmega65.native` or `xc65.native`.
+You may want to copy those files to `/usr/local/bin` or such. Surely you
+can drop the .native ending. I also like to rename (done this way in the
+DEB package) to have names like `xemu-xmega65` and such to avoid "collusion"
+with other emulators in case of emulators with short names (probably).
 
 Run one of them, like (the Commodore LCD emulator in this case):
 
