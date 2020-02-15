@@ -8,7 +8,7 @@
 [![GitHub last commit (branch)](https://img.shields.io/github/last-commit/lgblgblgb/xemu/dev)](https://github.com/lgblgblgb/xemu/tree/dev)
 
 Emulators running on Linux/Unix/Windows/OSX of various (mainly 8 bit) machines,
-including the Commodore LCD and Commodore 65 (and also some MEGA65) as well.
+including the Commodore LCD and Commodore 65 and MEGA65 as well.
 
 Written by (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 Source repository: https://github.com/lgblgblgb/xemu
@@ -35,53 +35,57 @@ https://github.com/lgblgblgb/xemu/wiki
 
 Just visit this page, and use the "in-browser demonstration" link:
 
-http://xemu-dist.lgb.hu/
+http://xemu-dist.lgb.hu/dist/xemu-sample.html
 
 Note: this kind of demonstration is limited (or even broken!), often not in
 pair with the native client for your OS (a "binary"), which - at the other
-hand - requires more work: installation, configuration, etc ...
+hand - requires more work: installation, configuration, etc ... Also, currenty
+there can be problems with some emulators in this form (especially MEGA65).
 
 ## Quick start (using pre-built binaries)
 
-I'm trying to provide some sane ways to install/use Xemu for people don't like
-to compile from source. Visit this page:
+**Plese note, that binaries on some older site of me can be OUTDATED. Currently
+to download up-to-date, ready-to-use Xemu binaries, you may want to go here:**
 
-http://xemu-dist.lgb.hu/
+https://github.lgb.hu/xemu/
 
-**Plese note, that binaries on that site can be OUTDATED. Currently to download
-ready-to-use Xemu binaries, you may want to go here:**
+Or, if you'are more an insider-oriented to see various builds from branches,
+additional information, etc, you can go here (the same as above, but instead
+of direct links, a more in-depth view of the distribution repository):
 
 https://github.com/lgblgblgb/xemu-binaries/blob/master/README.md
 
 ### Windows
 
-You can find 32 and 64 bit windows based installers for Windows. No need to say,
-highly experimental (as I am not a windows user at all ...). You can also use
-the ZIP'ed versions, which are simply the needed exe + dll files, without any
-installer. Please carefully read the download page, about these, especially
-about the NSIS-related problem which causes false positive detections as
-*trojan/virus* by many antivirus software, unfortunately.
+You can find 32 and 64 bit windows based installers for Windows. No need to
+say, highly experimental (as I am not a windows user at all ...). You can
+also use the ZIP'ed versions, which are simply the needed exe + dll files,
+without any installer. Please carefully read the download page, about these,
+especially about the NSIS-related problem which causes false positive
+detections as *trojan/virus* by many antivirus software, unfortunately.
 
-Also, you can find ZIP archives on that page, contains only the executable files
-and the needed DLL, without any installer.
+Also, you can find ZIP archives on that page, contains only the executable
+files and the needed DLL, without any installer.
 
 ### Linux
 
-On Linux, you can try the provided DEB pacakge to install, if you run Ubuntu (may
-work on other DEB based distriutions as well). There is an RPM package provided
-too, however that is simply a converted version of the DEB pakcage (with "alien")
-so it may or may not work for you.
+On Linux, you can try the provided DEB pacakge to install, if you run Ubuntu
+(may work on other DEB based distriutions as well). There is an RPM package
+provided too, however that is simply a converted version of the DEB pakcage
+(with `alien`) so it may or may not work for you.
 
-Work in progress to provide other - less distribution dependent - ways to install
-Xemu on Linux (other than compiling yourself), maybe in the form for flatpak,
-AppImage or something like that (though I really hate Snappy ...) in the future.
+Work in progress to provide other - less distribution dependent - ways to
+install Xemu on Linux (other than compiling yourself), maybe in the form for
+flatpak, AppImage or something like that (though I really hate Snappy ...)
+in the future.
 
 ### MacOS
 
 On MacOS, you want to use the MacOS build, of course. Currently there is only
 a ZIP file, with a binary and a .dylib, they must be in the same directory!
 
-Work in progress to have a DMG material as well.
+You can also download DMG, however the maturity of my DMG is considered "low"
+currently.
 
 ## Quick start (from source)
 
@@ -96,8 +100,8 @@ For more information: https://github.com/lgblgblgb/xemu/wiki/Source
 
 #### Example for MacOS
 
-Assuming development Apple development components and `homebrew` is already installed on
-your Mac: https://brew.sh/
+Assuming development Apple development components and `homebrew` is already
+installed on your Mac: https://brew.sh/
 
     brew update
     brew install sdl2 wget git
@@ -106,26 +110,27 @@ Xemu should build with a simple `make` but I recommend `make ARCH=osx` to build!
 
 #### Raspberry Pi
 
-If you use some Linux distributions (probably Raspbian) on your Raspberry Pi, it should
-behave more or less the same way as a Linux distribution on your PC, so nothing special
-here.
+If you use some Linux distributions (probably Raspbian) on your Raspberry Pi,
+it should behave more or less the same way as a Linux distribution on your PC,
+so nothing special here.
 
-However. If you plan to run Xemu without X11, you need a special build of SDL2 must be
-done by yourself first. This is because, SDL2 provides a way to run SDL applications
-on Raspberry without X11 ("RPI" architecture), however the standard Raspbian - as far
-as I know - provides only SDL2 library with X support (though I can be wrong, contant
-me, if you know more on this topic).
+However. If you plan to run Xemu without X11, you need a special build of SDL2
+must be done by yourself first. This is because, SDL2 provides a way to run
+SDL applications on Raspberry without X11 ("RPI" architecture), however the
+standard Raspbian - as far as I know - provides only SDL2 library with X11
+support (though I can be wrong, contant me, if you know more on this topic).
 
-I've - of course - tested this and it worked, however it's hard to provide a binary
-build this way currently, and needs more "manual work" to compile Xemu, and even SDL2
-before.
+I've - of course - tested this and it worked, however it's hard to provide a
+binary build this way currently, and needs more "manual work" to compile Xemu,
+and even SDL2 before.
 
 #### Bare metal?
 
-I received the idea to be able to run Xemu as a "bare-metal" project on Raspberry Pi
-for example. "Bare metal" means that it does not run an OS but uses the hardware directly,
-ie, Xemu needs to be booted instead of an OS. Surely, it's a kind of exciting route for
-me, but unfortunately I don't have too much time to play with this idea :(
+I received the idea to be able to run Xemu as a "bare-metal" project on
+Raspberry Pi for example. "Bare metal" means that it does not run an OS but
+uses the hardware directly, ie, Xemu needs to be booted instead of an OS.
+Surely, it's a kind of exciting route for me, but unfortunately I don't have
+too much time to play with this idea :(
 
 ### Clone source respository
 
@@ -178,18 +183,21 @@ compilation, with cross-compiler and SDL2 MinGW cross platform suite installed.
 
 #### MSYS2 native build
 
-Note: this is probably the easier method for a Windows user, however this is **not the
-method we use to build official** binaries for Windows.
+Note: this is probably the easier method for a Windows user, however this is
+_not the method we use to build official_ binaries for Windows.
 
-An easy way to build xemu under Windows is to use the  MSYS2 package which includes
-a full MinGW compiler, associated headers, tools , and a nice package management utility
-for easy installation of required components: Pacman, popular in ArchLinux-based distros.
+An easy way to build xemu under Windows is to use the  MSYS2 package which
+includes a full MinGW compiler, associated headers, tools , and a nice package
+management utility for easy installation of required components: Pacman,
+popular in ArchLinux-based distros.
 
 The following steps are based on a Windows-10 x64 system.
 
-* Download the executable installer in https://www.msys2.org for x86-64 architecture.
+* Download the executable installer in https://www.msys2.org for x86-64
+  architecture.
 * Install on the default location.
-* Execute the MSYS2 MinGW 64bit system prompt at installation end, or by looking into your Start Menu.
+* Execute the MSYS2 MinGW 64bit system prompt at installation end, or by
+  looking into your Start Menu.
 * In the command prompt, ensure you have the latest repositories by doing:
 
 `pacman -Syu`
@@ -198,7 +206,8 @@ Restart the prompt if needed, and finish installing remaining packages with:
 
     pacman -Su
 
-Now we can install the GCC compiler and required packages to build xemu with one command call:
+Now we can install the GCC compiler and required packages to build xemu with
+one command executed:
 
     pacman -S make mingw-w64-x86_64-toolchain mingw-w64-x86_64-SDL2 
 
@@ -206,12 +215,13 @@ Build the native Windows executables by issuing:
 
     make ARCH=nativewin
 
-You can find the executables, with '.nativewin' extension, in the 'build/bin' directory. Surely,
-you can (and maybe you want) rename that to have extension '.exe' ...
+You can find the executables, with `.nativewin` extension, in the `build/bin`
+directory. Surely, you can (and maybe you want) rename that to have extension
+`.exe`.
 
 #### Alternative method (Cross-compilation)
 
-Note: this is the **official method we use to build official binaries for Windows**.
+Note: this is the _official method we use to build official binaries for Windows_.
 
 For Ubuntu (and probably other DEB based distros, this also includes of course
 WSL if Ubuntu is used as the guest) you can install mingw by:
@@ -223,7 +233,7 @@ modify its Makefile probably, install it, create compatibility symlinks for
 Xemu ... If you trust into the version Xemu uses, probably it's better to
 do the task with a single command. It needs you to be at the top directory
 of the downloaded/cloned Xemu repository. You may want to run this as root,
-or at least you need to have 'sudo' capabilities. The command:
+or at least you need to have `sudo` capabilities. The command:
 
     build/install-cross-win-mingw-sdl-on-linux.sh /usr/local/bin
 

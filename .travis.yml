@@ -41,6 +41,7 @@ matrix:
         - sdl2-config --version --prefix --cflags --libs --static-libs
         - pkg-config --cflags-only-I --libs gtk+-3.0
         - set +e
+        - ps auxwwww || true
         - uptime
       script:
         - set -e
@@ -99,6 +100,7 @@ matrix:
         - hostname ; sudo hostname lgb || true ; hostname
         - build/install-cross-win-mingw-sdl-on-linux.sh /usr/bin
         - set +e
+        - ps auxwwww || true
         - uptime
       script:
         - set -e
