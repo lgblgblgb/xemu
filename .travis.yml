@@ -51,8 +51,8 @@ matrix:
         - make deb
         - set +e
         - cp build/bin/*.deb build/bin/*.rpm . || true
-        - build/bin/xc65.native --help || true
-        - ldd build/bin/xc65.native
+        - build/bin/xmega65.native --help || true
+        - ldd build/bin/xmega65.native
         - uptime ; pwd ; ls -l
       before_deploy:
         - build/deploy/before-deploy.sh xemu-deploy Linux
@@ -153,13 +153,14 @@ matrix:
         - set -e
         - sdl2-config --version --prefix --cflags --libs --static-libs
         - set +e
+        - ps auxwwww || true
         - uptime
       script:
         - set -e
         - make -j 2 ARCH=osx
         - set +e
         - for a in build/bin/*.osx ; do build/mangle_dylib_osx.sh $a ; strip $a ; done
-        - build/bin/xc65.osx --help || true
+        - build/bin/xmega65.osx --help || true
         - cp README.md LICENSE build/bin/
         - build/zipper.sh build/bin xemu-binaries-osx.zip build/bin/*.dylib build/bin/*.osx README.md LICENSE
         - cp build/bin/xemu-binaries-osx.zip .

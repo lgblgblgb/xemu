@@ -46,6 +46,7 @@ static int nmi_level;			// please read the comment at nmi_set() below
 
 int newhack = 0;
 unsigned int frames_total_counter = 0;
+int no_hotkey_security;
 
 static int fast_mhz, cpu_cycles_per_scanline_for_fast_mode, speed_current;
 static char fast_mhz_in_string[8];
@@ -457,6 +458,12 @@ void reset_mega65 ( void )
 }
 
 
+void reset_mega65_asked ( void )
+{
+	if (no_hotkey_security || ARE_YOU_SURE("Are you sure to HARD RESET your emulated machine?"))
+		reset_mega65();
+}
+
 static void update_emulator ( void )
 {
 	hid_handle_all_sdl_events();
@@ -701,8 +708,10 @@ int main ( int argc, char **argv )
 #ifdef HID_KBD_MAP_CFG_SUPPORT
 	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
 #endif
+	xemucfg_define_switch_option("nohotkeysecurity", "Skip asking \"are you sure?\" on RESET/EXIT by hot-keys");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
+	no_hotkey_security = xemucfg_get_bool("nohotkeysecurity");
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(xemucfg_get_str("installer"));
 #endif
