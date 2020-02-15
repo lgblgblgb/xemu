@@ -259,6 +259,7 @@ static int xemucfg_parse_commandline ( int argc, char **argv, const char *only_t
 	if (argc && !strncmp(argv[0], "-psn_", 5)) {
 		argc--;
 		argv++;
+		macos_gui_started = 1;
 	}
 #endif
 	while (argc) {

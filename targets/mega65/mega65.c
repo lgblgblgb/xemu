@@ -453,9 +453,15 @@ void reset_mega65 ( void )
 	nmi_level = 0;
 	D6XX_registers[0x7E] = xemucfg_get_num("kicked");
 	hypervisor_start_machine();
-	DEBUG("RESET!" NL);
+	DEBUGPRINT("SYSTEM RESET." NL);
 }
 
+
+void reset_mega65_asked ( void )
+{
+	if (ARE_YOU_SURE_OVERRIDABLE("Are you sure to HARD RESET your emulated machine?"))
+		reset_mega65();
+}
 
 static void update_emulator ( void )
 {
@@ -701,8 +707,10 @@ int main ( int argc, char **argv )
 #ifdef HID_KBD_MAP_CFG_SUPPORT
 	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
 #endif
+	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
+	i_am_sure_override = xemucfg_get_bool("besure");
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(xemucfg_get_str("installer"));
 #endif

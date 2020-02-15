@@ -1,6 +1,6 @@
-/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+/* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -224,7 +224,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			hwa_kbd_convert_and_push(pos);
 		// Also check for special, emulator-related hot-keys
 		if (key == SDL_SCANCODE_F10) {
-			reset_mega65();
+			reset_mega65_asked();
 		} else if (key == SDL_SCANCODE_KP_ENTER) {
 			c64_toggle_joy_emu();
 			OSD(-1, -1, "Joystick emulation on port #%d", joystick_emu);
