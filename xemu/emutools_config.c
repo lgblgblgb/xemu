@@ -368,7 +368,7 @@ int xemucfg_get_num ( const char *optname )
 
 int xemucfg_get_bool ( const char *optname )
 {
-	return (int)(intptr_t)(search_option_query(optname, OPT_BOOL)->value);
+	return BOOLEAN_VALUE((int)(intptr_t)(search_option_query(optname, OPT_BOOL)->value));
 }
 
 

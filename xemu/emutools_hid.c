@@ -64,7 +64,7 @@ int hid_key_event ( SDL_Scancode key, int pressed )
 			if (map->pos > 0xFF) {	// special emulator key!
 				switch (map->pos) {	// handle "built-in" events, if emulator target uses them at all ...
 					case XEMU_EVENT_EXIT:
-						if (ARE_YOU_SURE_OVERRIDABLE(str_are_you_sure_to_exit))
+						if (ARE_YOU_SURE(str_are_you_sure_to_exit, i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
 							exit(0);
 						break;
 					case XEMU_EVENT_FAKE_JOY_UP:
@@ -463,7 +463,7 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 			break;
 #endif
 		case SDL_QUIT:
-			if (ARE_YOU_SURE_OVERRIDABLE(str_are_you_sure_to_exit)) {
+			if (ARE_YOU_SURE(str_are_you_sure_to_exit, i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
 #ifdef CONFIG_QUIT_CALLBACK
 				emu_quit_callback();
 #endif

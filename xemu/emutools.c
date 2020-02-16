@@ -959,6 +959,22 @@ void osd_write_string ( int x, int y, const char *s )
 }
 
 
+int ARE_YOU_SURE ( const char *s, int flags )
+{
+	static const char *selector_default_yes = "!Yes|?No";
+	static const char *selector_default_no  = "?Yes|!No";
+	static const char *selector_generic     = "Yes|No";
+	const char *selector;
+	if ((flags & ARE_YOU_SURE_DEFAULT_YES))
+		selector = selector_default_yes;
+	else if ((flags & ARE_YOU_SURE_DEFAULT_NO))
+		selector = selector_default_no;
+	else
+		selector = selector_generic;
+	return (QUESTION_WINDOW(selector, (s != NULL && *s != '\0') ? s : "Are you sure?") == 0);
+}
+
+
 int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 {
 	char items_buf[512], *items = items_buf;
@@ -981,7 +997,7 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 		switch (*items) {
 			case '!':
 #ifdef XEMU_ARCH_HTML
-				printf("Emscripten: faking chooser box answer %d for \"%s\"" NL, messageboxdata.numbuttons, msg);
+				DEBUGPRINT("Emscripten: faking chooser box answer %d for \"%s\"" NL, messageboxdata.numbuttons, msg);
 				return messageboxdata.numbuttons;
 #endif
 				buttons[messageboxdata.numbuttons].flags = SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT;

@@ -33,7 +33,7 @@ void xemugui_cb_call_user_data ( const struct menu_st *m, int *query )
 
 void xemugui_cb_call_user_data_if_sure ( const struct menu_st *m, int *query )
 {
-	if (!query && ARE_YOU_SURE(NULL))
+	if (!query && ARE_YOU_SURE(NULL, 0))
 		((void(*)(void))(m->user_data))();
 }
 
@@ -45,7 +45,7 @@ void xemugui_cb_quit ( const struct menu_st *m, int *query )
 
 void xemugui_cb_call_quit_if_sure ( const struct menu_st *m, int *query )
 {
-	if (!query && ARE_YOU_SURE_OVERRIDABLE(str_are_you_sure_to_exit))
+	if (!query && ARE_YOU_SURE(str_are_you_sure_to_exit, i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
 		UI_CB_QUIT();
 }
 
