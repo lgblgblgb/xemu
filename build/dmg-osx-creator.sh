@@ -45,7 +45,7 @@ else
 	COMMIT="$TRAVIS_COMMIT"
 fi
 
-mkdir .dmg || exit 1
+mkdir .dmg .dmg/bin || exit 1
 
 if [ "$BUNDLE" = "yes" ]; then
 	dylink=""
@@ -60,6 +60,7 @@ if [ "$BUNDLE" = "yes" ]; then
 			ln $dylink .dmg/$b.app/Contents/Frameworks/libSDL2-xemu.dylib
 		fi
 		install_name_tool -change @executable_path/libSDL2-xemu.dylib @executable_path/../Frameworks/libSDL2-xemu.dylib .dmg/$b.app/Contents/MacOS/$b
+		ln -s ../$b.app/Contents/MacOS/$b .dmg/bin/$b
 		cp build/xemu.icns .dmg/$b.app/Contents/Resources/$b.icns
 		echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
