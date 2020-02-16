@@ -610,7 +610,7 @@ int sdcontent_handle ( Uint32 size_in_blocks, const char *update_dir_path, int o
 			if ((options & SDCONTENT_ASK_FDISK)) {
 				char msg[256];
 				snprintf(msg, sizeof msg, "SD-card image seems to have invalid format!\nReason: %s\nCan I format it?\nALL DATA WILL BE LOST!", p);
-				do_fdisk = ARE_YOU_SURE(msg);
+				do_fdisk = ARE_YOU_SURE(msg, 0);
 			} else
 				DEBUGPRINT("SDCARD: WARNING(SDCONTENT_ASK_FDISK was not requested, but problem detected): %s" NL, p);
 		}

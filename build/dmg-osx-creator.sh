@@ -102,7 +102,18 @@ else
 	done
 fi
 
-cp README.md LICENSE .dmg/
+cp README.md .dmg/README-XEMU.md
+cp LICENSE .dmg/
+echo "For generic information on Xemu please read: README-XEMU.md
+For version informations on this very DMG: THIS_VERSION.txt
+For license/copyright information: LICENSE
+
+This file is about the DMG distribution media of Xemu.
+
+Generally you may want to start the '.app' items via Finder.
+For command line use, I would recommend to use binaries in the bin/
+folder, probably from your own project and/or starting from terminal.
+They're symlinks for real." > .dmg/README.txt
 
 echo "Buildsys: MacOS $MACOSVER `whoami`@`hostname` uname: `uname -a`
 Branch: $BRANCH
