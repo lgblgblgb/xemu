@@ -91,7 +91,7 @@ void shutdown_sdl(void)
 		audio_close();
 		printer_close();
 #ifdef CONFIG_W5300_SUPPORT
-		w5300_shutdown();
+		w5300_uninit();
 #endif
 #ifdef CONFIG_EXDOS_SUPPORT
 		wd_detach_disk_image();

@@ -305,12 +305,23 @@ Z80EX_BYTE z80ex_pread_cb(Z80EX_WORD port16) {
 		return primo_read_io(port);
 	switch (port) {
 #ifdef CONFIG_W5300_SUPPORT
-		case W5300_IO_BASE + 0: return w5300_read_mr0();
-		case W5300_IO_BASE + 1: return w5300_read_mr1();
-		case W5300_IO_BASE + 2: return w5300_read_idm_ar0();
-		case W5300_IO_BASE + 3: return w5300_read_idm_ar1();
-		case W5300_IO_BASE + 4: return w5300_read_idm_dr0();
-		case W5300_IO_BASE + 5: return w5300_read_idm_dr1();
+		case W5300_IO_BASE + 0x0: return w5300_read_mr0();
+		case W5300_IO_BASE + 0x1: return w5300_read_mr1();
+		case W5300_IO_BASE + 0x2: return w5300_read_idm_ar0();
+		case W5300_IO_BASE + 0x3: return w5300_read_idm_ar1();
+		case W5300_IO_BASE + 0x4: return w5300_read_idm_dr0();
+		case W5300_IO_BASE + 0x5: return w5300_read_idm_dr1();
+		case W5300_IO_BASE + 0x6: return 0xFF;
+		case W5300_IO_BASE + 0x7: return 0xFF;
+		// ports for CF on EPNET. I don't emulate that, I simply give back some dummy answer!
+		case W5300_IO_BASE + 0x8:
+		case W5300_IO_BASE + 0x9:
+		case W5300_IO_BASE + 0xA:
+		case W5300_IO_BASE + 0xB:
+		case W5300_IO_BASE + 0xC:
+		case W5300_IO_BASE + 0xD:
+		case W5300_IO_BASE + 0xE:
+		case W5300_IO_BASE + 0xF: return 0xFF;
 #endif
 		/* EXDOS/WD registers */
 #ifdef CONFIG_EXDOS_SUPPORT
@@ -364,7 +375,7 @@ Z80EX_BYTE z80ex_pread_cb(Z80EX_WORD port16) {
 		case 0xFE:
 			return zxemu_read_ula(IO16_HI_BYTE(port16));
 	}
-	DEBUG("IO: READ: unhandled port %02Xh read" NL, port);
+	DEBUGPRINT("IO: READ: unhandled port %02Xh read" NL, port);
 	return 0xFF;
 	//return ports[port];
 }
@@ -391,12 +402,23 @@ void z80ex_pwrite_cb(Z80EX_WORD port16, Z80EX_BYTE value) {
 	//DEBUG("IO: WRITE: OUT (%02Xh),%02Xh" NL, port, value);
 	switch (port) {
 #ifdef CONFIG_W5300_SUPPORT
-		case W5300_IO_BASE + 0: w5300_write_mr0(value); break;
-		case W5300_IO_BASE + 1: w5300_write_mr1(value); break;
-		case W5300_IO_BASE + 2: w5300_write_idm_ar0(value); break;
-		case W5300_IO_BASE + 3: w5300_write_idm_ar1(value); break;
-		case W5300_IO_BASE + 4: w5300_write_idm_dr0(value); break;
-		case W5300_IO_BASE + 5: w5300_write_idm_dr1(value); break;
+		case W5300_IO_BASE + 0x0: w5300_write_mr0(value); break;
+		case W5300_IO_BASE + 0x1: w5300_write_mr1(value); break;
+		case W5300_IO_BASE + 0x2: w5300_write_idm_ar0(value); break;
+		case W5300_IO_BASE + 0x3: w5300_write_idm_ar1(value); break;
+		case W5300_IO_BASE + 0x4: w5300_write_idm_dr0(value); break;
+		case W5300_IO_BASE + 0x5: w5300_write_idm_dr1(value); break;
+		case W5300_IO_BASE + 0x6: break;
+		case W5300_IO_BASE + 0x7: break;
+		// ports for CF on EPNET. I don't emulate that, I simply ignore the writes!
+		case W5300_IO_BASE + 0x8:
+		case W5300_IO_BASE + 0x9:
+		case W5300_IO_BASE + 0xA:
+		case W5300_IO_BASE + 0xB:
+		case W5300_IO_BASE + 0xC:
+		case W5300_IO_BASE + 0xD:
+		case W5300_IO_BASE + 0xE:
+		case W5300_IO_BASE + 0xF: break;
 #endif
 		/* EXDOS/WD registers */
 #ifdef CONFIG_EXDOS_SUPPORT
@@ -533,7 +555,7 @@ void z80ex_pwrite_cb(Z80EX_WORD port16, Z80EX_BYTE value) {
 			zxemu_write_ula(IO16_HI_BYTE(port16), value);
 			break;
 		default:
-			DEBUG("IO: WRITE: unhandled port %02Xh write with data %02Xh" NL, port, value);
+			DEBUGPRINT("IO: WRITE: unhandled port %02Xh write with data %02Xh" NL, port, value);
 			break;
 	}
 }

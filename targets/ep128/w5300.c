@@ -1,5 +1,5 @@
 /* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015,2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    http://xep128.lgb.hu/
 
    Partial Wiznet W5300 emulation, using the host OS (which runs the emulator)
@@ -11,10 +11,12 @@
    get IP address via DHCP or wanting resolve a DNS name would get an answer
    from this w5300 emulator instead of from the "real" network.
 
-   Note: I've just discovered that FUSE Spectrum emulator does have some kind
-   of w5100 emulation. Though w5100 and w5300 are not the very same, some things
-   are similar, so their sources may help me in the future, thanks for their
-   work (also a GNU/GPL software, so there is no license problem here).
+   BIG-FAT-WARNING: this does NOT emulate w5300 just how EPNET and EP software
+   needs. Also DIRECT memory access mode is WRONG, but this is by will: on
+   EPNET this is just an "artifact" to be used as a dirty way to check link
+   status ;-P On EPNET only the first 8 addresses (8 bit ...) can be
+   accessed, so direct mode is really a trick here only!!! Also, it implements
+   only 8 bit access.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -38,12 +40,59 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifdef CONFIG_W5300_SUPPORT
 
 int w5300_int;
+int w5300_does_work = 0;
 
-//static Uint8 wmem[0x20000];	// 128K of internal RAM of w5300
+static Uint8 wmem[0x20000];	// 128K of internal RAM of w5300
 static Uint8 wregs[0x400];	// W5300 registers
 static Uint8 idm_ar0, idm_ar1, idm_ar;
 static Uint8 mr0, mr1;
+static int direct_mode;
 static void (*interrupt_cb)(int);
+
+
+#ifdef XEMU_ARCH_WIN
+#include <winsock2.h>
+#include <windows.h>
+static int _winsock_init_status = 1;    // 1 = todo, 0 = was OK, -1 = error!
+int xemu_use_sockapi ( void )
+{
+	WSADATA wsa;
+	if (_winsock_init_status <= 0)
+		return _winsock_init_status;
+	if (WSAStartup(MAKEWORD(2, 2), &wsa)) {
+		ERROR_WINDOW("Failed to initialize winsock2, error code: %d", WSAGetLastError());
+		_winsock_init_status = -1;
+		return -1;
+	}
+	if (LOBYTE(wsa.wVersion) != 2 || HIBYTE(wsa.wVersion) != 2) {
+		WSACleanup();
+		ERROR_WINDOW("No suitable winsock API in the implemantion DLL (we need v2.2, we got: v%d.%d), windows system error ...", HIBYTE(wsa.wVersion), LOBYTE(wsa.wVersion));
+		_winsock_init_status = -1;
+		return -1;
+	}
+	DEBUGPRINT("WINSOCK: initialized, version %d.%d\n", HIBYTE(wsa.wVersion), LOBYTE(wsa.wVersion));
+	_winsock_init_status = 0;
+	return 0;
+}
+
+void xemu_free_sockapi ( void )
+{
+	if (_winsock_init_status == 0) {
+		WSACleanup();
+		_winsock_init_status = 1;
+		DEBUGPRINT("WINSOCK: uninitialized." NL);
+	}
+}
+#else
+int xemu_use_sockapi ( void ) {
+	return 0;
+}
+void xemu_free_sockapi ( void ) {
+}
+#endif
+
+
+
 
 
 static void update_interrupts ( void )
@@ -59,11 +108,14 @@ static void update_interrupts ( void )
 
 static Uint8 read_reg ( int addr )
 {
-	return wregs[addr];
+	Uint8 data = wregs[addr];
+	DEBUGPRINT("W5300: reading register $%03X with data $%02X" NL, addr, data);
+	return data;
 }
 
 static void write_reg ( int addr, Uint8 data )
 {
+	DEBUGPRINT("W5300: writing register $%03X with data $%02X" NL, addr, data);
 	switch (addr) {
 		case 2: // IR0
 		case 3: // IR1
@@ -76,7 +128,6 @@ static void write_reg ( int addr, Uint8 data )
 			update_interrupts();
 			break;
 		default:
-			wregs[addr] = data;
 			break;
 	}
 }
@@ -91,26 +142,46 @@ static void default_interrupt_callback ( int level ) {
 
 void w5300_reset ( void )
 {
+	static const Uint8 default_mac[] = {0x00,0x08,0xDC,0x01,0x02,0x03};
 	memset(wregs, 0, sizeof wregs);
+	memset(wmem, 0, sizeof wmem);
 	mr0 = 0x38; mr1 = 0x00;
+	direct_mode = !(mr1 & 1);
 	idm_ar0 = 0; idm_ar1 = 0; idm_ar = 0;
 	w5300_int = 0;
 	wregs[0x1C] = 0x07; wregs[0x1D] = 0xD0; // RTR retransmission timeout-period register
 	wregs[0x1F] = 8; 			// RCR retransmission retry-count register
 	memset(wregs + 0x20, 8, 16);		// TX and RX mem size conf
 	wregs[0x31] = 0xFF;			// MTYPER1
-	DEBUG("W5300: reset" NL);
+	wregs[0xFE] = 0x53;	// IDR: ID register
+	wregs[0xFF] = 0x00;	// IDR: ID register
+	memcpy(wregs + 8, default_mac, 6);
+	DEBUGPRINT("W5300: reset, direct_mode = %d" NL, direct_mode);
 }
 
 void w5300_init ( void (*cb)(int) )
 {
-	interrupt_cb = cb ? cb : default_interrupt_callback;
-	DEBUG("W5300: init" NL);
+	if (xemu_use_sockapi())
+		w5300_does_work = 0;
+	else {
+		w5300_does_work = 1;
+		interrupt_cb = cb ? cb : default_interrupt_callback;
+		DEBUGPRINT("W5300: init" NL);
+		w5300_reset();
+	}
 }
 
 void w5300_shutdown ( void )
 {
-	DEBUG("W5300: shutdown pending connections (if any)" NL);
+	DEBUGPRINT("W5300: shutdown pending connections (if any)" NL);
+}
+
+void w5300_uninit ( void )
+{
+	w5300_shutdown();
+	xemu_free_sockapi();
+	w5300_does_work = 0;
+	DEBUGPRINT("W5300: uninit" NL);
 }
 
 void w5300_write_mr0 ( Uint8 data ) {		// high byte of MR
@@ -120,11 +191,18 @@ void w5300_write_mr0 ( Uint8 data ) {		// high byte of MR
 void w5300_write_mr1 ( Uint8 data ) {		// low byte of MR
 	if (data & 128) { // software reset?
 		w5300_reset();
-		w5300_shutdown();	// shuts down host OS connections, etc, emulator is being done
+		w5300_shutdown();
 	} else {
 		if (data & 8) ERROR_WINDOW("W5300: PPPoE mode is not emulated");
 		if (data & 4) ERROR_WINDOW("W5300: data bus byte-order swap feature is not emulated");
-		if ((data & 1) == 0) ERROR_WINDOW("W5300: direct mode is NOT emulated, only indirect");
+		//if ((data & 1) == 0) ERROR_WINDOW("W5300: direct mode is NOT emulated, only indirect");
+		if (((mr1 ^ data) & 1)) {
+			DEBUGPRINT("W5300: mode change: %s -> %s\n",
+					(mr1 & 1) ? "indirect" : "direct",
+					(data & 1) ? "indirect" : "direct"
+			);
+			direct_mode = !(data & 1);
+		}
 		mr1 = data;
 	}
 }
