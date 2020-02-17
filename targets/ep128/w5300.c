@@ -144,7 +144,6 @@ void w5300_reset ( void )
 {
 	static const Uint8 default_mac[] = {0x00,0x08,0xDC,0x01,0x02,0x03};
 	memset(wregs, 0, sizeof wregs);
-	memset(wmem, 0, sizeof wmem);
 	mr0 = 0x38; mr1 = 0x00;
 	direct_mode = !(mr1 & 1);
 	idm_ar0 = 0; idm_ar1 = 0; idm_ar = 0;
@@ -168,6 +167,7 @@ void w5300_init ( void (*cb)(int) )
 		interrupt_cb = cb ? cb : default_interrupt_callback;
 		DEBUGPRINT("W5300: init" NL);
 		w5300_reset();
+		memset(wmem, 0, sizeof wmem);
 	}
 }
 
@@ -207,17 +207,25 @@ void w5300_write_mr1 ( Uint8 data ) {		// low byte of MR
 	}
 }
 void w5300_write_idm_ar0 ( Uint8 data ) {	// high byte of address
+	if (direct_mode)
+		return;
 	idm_ar0 = data;
 	idm_ar = (idm_ar & 0xFF) | ((data & 0x3F) << 8);
 }
 void w5300_write_idm_ar1 ( Uint8 data ) {	// low byte of address
+	if (direct_mode)
+		return;
 	idm_ar1 = data;
 	idm_ar = (idm_ar & 0xFF00) | (data & 0xFE);
 }
 void w5300_write_idm_dr0 ( Uint8 data ) {	// high byte of adta
+	if (direct_mode)
+		return;
 	write_reg(idm_ar, data);
 }
 void w5300_write_idm_dr1 ( Uint8 data ) {	// low byte of data
+	if (direct_mode)
+		return;
 	write_reg(idm_ar | 1, data);
 }
 Uint8 w5300_read_mr0 ( void ) {
@@ -227,15 +235,23 @@ Uint8 w5300_read_mr1 ( void ) {
 	return mr1;
 }
 Uint8 w5300_read_idm_ar0 ( void ) {
+	if (direct_mode)
+		return 0x53;
 	return idm_ar0;
 }
 Uint8 w5300_read_idm_ar1 ( void ) {
+	if (direct_mode)
+		return 0x00;
 	return idm_ar1;
 }
 Uint8 w5300_read_idm_dr0 ( void ) {
+	if (direct_mode)
+		return 0x53;
 	return read_reg(idm_ar);
 }
 Uint8 w5300_read_idm_dr1 ( void ) {
+	if (direct_mode)
+		return 0x00;
 	return read_reg(idm_ar | 1);
 }
 
