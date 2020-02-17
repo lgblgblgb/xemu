@@ -33,12 +33,16 @@ extern void  w5300_write_idm_ar0 ( Uint8 data );
 extern void  w5300_write_idm_ar1 ( Uint8 data );
 extern void  w5300_write_idm_dr0 ( Uint8 data );
 extern void  w5300_write_idm_dr1 ( Uint8 data );
+extern void  w5300_write_direct_reg6 ( Uint8 data );
+extern void  w5300_write_direct_reg7 ( Uint8 data );
 extern Uint8 w5300_read_mr0 ( void );
 extern Uint8 w5300_read_mr1 ( void );
 extern Uint8 w5300_read_idm_ar0 ( void );
 extern Uint8 w5300_read_idm_ar1 ( void );
 extern Uint8 w5300_read_idm_dr0 ( void );
 extern Uint8 w5300_read_idm_dr1 ( void );
+extern Uint8 w5300_read_direct_reg6 ( void );
+extern Uint8 w5300_read_direct_reg7 ( void );
 
 #endif
 #endif

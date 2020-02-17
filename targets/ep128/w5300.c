@@ -134,6 +134,7 @@ static void write_reg ( int addr, Uint8 data )
 
 
 static void default_interrupt_callback ( int level ) {
+	DEBUGPRINT("W5300: INTERRUPT -> %d" NL, level);
 }
 
 
@@ -185,10 +186,12 @@ void w5300_uninit ( void )
 }
 
 void w5300_write_mr0 ( Uint8 data ) {		// high byte of MR
+	DEBUGPRINT("W5300: writing MR0 with data $%02X" NL, data);
 	if (data & 1) ERROR_WINDOW("W5300: FIFO byte-order swap feature is not emulated");
 	mr0 = data & 0x3F; // DBW and MPF bits cannot be overwritten by user
 }
 void w5300_write_mr1 ( Uint8 data ) {		// low byte of MR
+	DEBUGPRINT("W5300: writing MR1 with data $%02X" NL, data);
 	if (data & 128) { // software reset?
 		w5300_reset();
 		w5300_shutdown();
@@ -207,53 +210,84 @@ void w5300_write_mr1 ( Uint8 data ) {		// low byte of MR
 	}
 }
 void w5300_write_idm_ar0 ( Uint8 data ) {	// high byte of address
-	if (direct_mode)
+	if (direct_mode) {
+		DEBUGPRINT("W5300: writing IDM_AR0 in DIRECT mode with data $%02X" NL, data);
 		return;
+	}
 	idm_ar0 = data;
 	idm_ar = (idm_ar & 0xFF) | ((data & 0x3F) << 8);
 }
 void w5300_write_idm_ar1 ( Uint8 data ) {	// low byte of address
-	if (direct_mode)
+	if (direct_mode) {
+		DEBUGPRINT("W5300: writing IDM_AR1 in DIRECT mode with data $%02X" NL, data);
 		return;
+	}
 	idm_ar1 = data;
-	idm_ar = (idm_ar & 0xFF00) | (data & 0xFE);
+	idm_ar = (idm_ar & 0xFF00) | (data & 0xFE);	// LSB is chopped off, since reading/writing IDM_DR0 and 1 will tell that ...
 }
 void w5300_write_idm_dr0 ( Uint8 data ) {	// high byte of adta
-	if (direct_mode)
+	if (direct_mode) {
+		DEBUGPRINT("W5300: writing IDM_DR0 in DIRECT mode with data $%02X" NL, data);
 		return;
+	}
 	write_reg(idm_ar, data);
 }
 void w5300_write_idm_dr1 ( Uint8 data ) {	// low byte of data
-	if (direct_mode)
+	if (direct_mode) {
+		DEBUGPRINT("W5300: writing IDM_DR1 in DIRECT mode with data $%02X" NL, data);
 		return;
+	}
 	write_reg(idm_ar | 1, data);
 }
+
+void  w5300_write_direct_reg6 ( Uint8 data ) {
+}
+void  w5300_write_direct_reg7 ( Uint8 data ) {
+}
+
+
 Uint8 w5300_read_mr0 ( void ) {
+	DEBUGPRINT("W5300: reading MR0 with data $%02X" NL, mr0);
 	return mr0;
 }
 Uint8 w5300_read_mr1 ( void ) {
+	DEBUGPRINT("W5300: reading MR1 with data $%02X" NL, mr1);
 	return mr1;
 }
 Uint8 w5300_read_idm_ar0 ( void ) {
-	if (direct_mode)
+	if (direct_mode) {
+		DEBUGPRINT("W5300: reading IDM_AR0 in DIRECT mode" NL);
 		return 0x53;
+	}
 	return idm_ar0;
 }
 Uint8 w5300_read_idm_ar1 ( void ) {
-	if (direct_mode)
+	if (direct_mode) {
+		DEBUGPRINT("W5300: reading IDM_AR1 in DIRECT mode" NL);
 		return 0x00;
+	}
 	return idm_ar1;
 }
 Uint8 w5300_read_idm_dr0 ( void ) {
-	if (direct_mode)
+	if (direct_mode) {
+		DEBUGPRINT("W5300: reading IDM_DR0 in DIRECT mode" NL);
 		return 0x53;
+	}
 	return read_reg(idm_ar);
 }
 Uint8 w5300_read_idm_dr1 ( void ) {
-	if (direct_mode)
+	if (direct_mode) {
+		DEBUGPRINT("W5300: reading IDM_DR1 in DIRECT mode" NL);
 		return 0x00;
+	}
 	return read_reg(idm_ar | 1);
 }
+Uint8 w5300_read_direct_reg6 ( void ) {
+
+}
+Uint8 w5300_read_direct_reg7 ( void ) {
+}
+
 
 #endif
 

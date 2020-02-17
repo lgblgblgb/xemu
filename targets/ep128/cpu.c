@@ -311,8 +311,8 @@ Z80EX_BYTE z80ex_pread_cb(Z80EX_WORD port16) {
 		case W5300_IO_BASE + 0x3: return w5300_read_idm_ar1();
 		case W5300_IO_BASE + 0x4: return w5300_read_idm_dr0();
 		case W5300_IO_BASE + 0x5: return w5300_read_idm_dr1();
-		case W5300_IO_BASE + 0x6: return 0xFF;
-		case W5300_IO_BASE + 0x7: return 0xFF;
+		case W5300_IO_BASE + 0x6: return w5300_read_direct_reg6();
+		case W5300_IO_BASE + 0x7: return w5300_read_direct_reg7();
 		// ports for CF on EPNET. I don't emulate that, I simply give back some dummy answer!
 		case W5300_IO_BASE + 0x8:
 		case W5300_IO_BASE + 0x9:
@@ -408,8 +408,8 @@ void z80ex_pwrite_cb(Z80EX_WORD port16, Z80EX_BYTE value) {
 		case W5300_IO_BASE + 0x3: w5300_write_idm_ar1(value); break;
 		case W5300_IO_BASE + 0x4: w5300_write_idm_dr0(value); break;
 		case W5300_IO_BASE + 0x5: w5300_write_idm_dr1(value); break;
-		case W5300_IO_BASE + 0x6: break;
-		case W5300_IO_BASE + 0x7: break;
+		case W5300_IO_BASE + 0x6: w5300_write_direct_reg6(value); break;
+		case W5300_IO_BASE + 0x7: w5300_write_direct_reg7(value); break;
 		// ports for CF on EPNET. I don't emulate that, I simply ignore the writes!
 		case W5300_IO_BASE + 0x8:
 		case W5300_IO_BASE + 0x9:
