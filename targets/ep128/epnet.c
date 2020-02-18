@@ -14,7 +14,7 @@
    BIG-FAT-WARNING: this does NOT emulate w5300 just how EPNET and EP software
    needs. Also DIRECT memory access mode is WRONG, but this is by will: on
    EPNET this is just an "artifact" to be used as a dirty way to check link
-   status ;-P On EPNET only the first 8 addresses (8 bit ...) can be
+   status ;-P On EPNET only the first 8 addresses can be
    accessed, so direct mode is really a trick here only!!! Also, it implements
    only 8 bit access.
 
@@ -33,11 +33,11 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xep128.h"
-#include "w5300.h"
+#include "epnet.h"
 
+#ifdef CONFIG_EPNET_SUPPORT
 
-
-#ifdef CONFIG_W5300_SUPPORT
+#define direct_mode_epnet_shift 0
 
 int w5300_int;
 int w5300_does_work = 0;
@@ -108,14 +108,16 @@ static void update_interrupts ( void )
 
 static Uint8 read_reg ( int addr )
 {
+	addr &= 0x3FF;
 	Uint8 data = wregs[addr];
-	DEBUGPRINT("W5300: reading register $%03X with data $%02X" NL, addr, data);
+	DEBUGPRINT("EPNET: reading register $%03X with data $%02X" NL, addr, data);
 	return data;
 }
 
 static void write_reg ( int addr, Uint8 data )
 {
-	DEBUGPRINT("W5300: writing register $%03X with data $%02X" NL, addr, data);
+	addr &= 0x3FF;
+	DEBUGPRINT("EPNET: writing register $%03X with data $%02X" NL, addr, data);
 	switch (addr) {
 		case 2: // IR0
 		case 3: // IR1
@@ -134,19 +136,19 @@ static void write_reg ( int addr, Uint8 data )
 
 
 static void default_interrupt_callback ( int level ) {
-	DEBUGPRINT("W5300: INTERRUPT -> %d" NL, level);
+	DEBUGPRINT("EPNET: INTERRUPT -> %d" NL, level);
 }
 
 
 /* ---Interface functions --- */
 
 
-void w5300_reset ( void )
+void epnet_reset ( void )
 {
 	static const Uint8 default_mac[] = {0x00,0x08,0xDC,0x01,0x02,0x03};
 	memset(wregs, 0, sizeof wregs);
 	mr0 = 0x38; mr1 = 0x00;
-	direct_mode = !(mr1 & 1);
+	direct_mode = (mr1 & 1) ? 0 : 1;
 	idm_ar0 = 0; idm_ar1 = 0; idm_ar = 0;
 	w5300_int = 0;
 	wregs[0x1C] = 0x07; wregs[0x1D] = 0xD0; // RTR retransmission timeout-period register
@@ -156,136 +158,146 @@ void w5300_reset ( void )
 	wregs[0xFE] = 0x53;	// IDR: ID register
 	wregs[0xFF] = 0x00;	// IDR: ID register
 	memcpy(wregs + 8, default_mac, 6);
-	DEBUGPRINT("W5300: reset, direct_mode = %d" NL, direct_mode);
+	DEBUGPRINT("EPNET: reset, direct_mode = %d" NL, direct_mode);
 }
 
-void w5300_init ( void (*cb)(int) )
+void epnet_init ( void (*cb)(int) )
 {
 	if (xemu_use_sockapi())
 		w5300_does_work = 0;
 	else {
 		w5300_does_work = 1;
 		interrupt_cb = cb ? cb : default_interrupt_callback;
-		DEBUGPRINT("W5300: init" NL);
-		w5300_reset();
+		DEBUGPRINT("EPNET: init" NL);
+		epnet_reset();
 		memset(wmem, 0, sizeof wmem);
 	}
 }
 
-void w5300_shutdown ( void )
+void epnet_shutdown ( void )
 {
-	DEBUGPRINT("W5300: shutdown pending connections (if any)" NL);
+	DEBUGPRINT("EPNET: shutdown pending connections (if any)" NL);
 }
 
-void w5300_uninit ( void )
+void epnet_uninit ( void )
 {
-	w5300_shutdown();
+	epnet_shutdown();
 	xemu_free_sockapi();
 	w5300_does_work = 0;
-	DEBUGPRINT("W5300: uninit" NL);
+	DEBUGPRINT("EPNET: uninit" NL);
 }
 
-void w5300_write_mr0 ( Uint8 data ) {		// high byte of MR
-	DEBUGPRINT("W5300: writing MR0 with data $%02X" NL, data);
-	if (data & 1) ERROR_WINDOW("W5300: FIFO byte-order swap feature is not emulated");
-	mr0 = data & 0x3F; // DBW and MPF bits cannot be overwritten by user
-}
-void w5300_write_mr1 ( Uint8 data ) {		// low byte of MR
-	DEBUGPRINT("W5300: writing MR1 with data $%02X" NL, data);
-	if (data & 128) { // software reset?
-		w5300_reset();
-		w5300_shutdown();
-	} else {
-		if (data & 8) ERROR_WINDOW("W5300: PPPoE mode is not emulated");
-		if (data & 4) ERROR_WINDOW("W5300: data bus byte-order swap feature is not emulated");
-		//if ((data & 1) == 0) ERROR_WINDOW("W5300: direct mode is NOT emulated, only indirect");
-		if (((mr1 ^ data) & 1)) {
-			DEBUGPRINT("W5300: mode change: %s -> %s\n",
-					(mr1 & 1) ? "indirect" : "direct",
-					(data & 1) ? "indirect" : "direct"
-			);
-			direct_mode = !(data & 1);
-		}
-		mr1 = data;
+Uint8 epnet_read_cpu_port ( int port )
+{
+	Uint8 data;
+	switch (port) {
+		case 0:
+			//data = (direct_mode ? read_reg(port + direct_mode_epnet_shift) : mr0);
+			data = mr0;
+			break;
+		case 1:
+			//data = (direct_mode ? read_reg(port + direct_mode_epnet_shift) : mr1);
+			data = mr1;
+			break;
+		case 2:
+			data = (direct_mode ? read_reg(port + direct_mode_epnet_shift) : idm_ar0);
+			break;
+		case 3:
+			data = (direct_mode ? read_reg(port + direct_mode_epnet_shift) : idm_ar1);
+			break;
+		case 4:
+			data = read_reg(direct_mode ? (port + direct_mode_epnet_shift) : idm_ar);
+			break;
+		case 5:
+			data = read_reg(direct_mode ? (port + direct_mode_epnet_shift) : (idm_ar + 1));
+			break;
+		case 6:
+		case 7:
+			data = (direct_mode ? read_reg(port + direct_mode_epnet_shift) : 0xFF);
+			break;
+		default:
+			// Note: ports 8-15 are for CF on EPNET, but not emulated yet!
+			data = 0xFF;
+			break;
 	}
-}
-void w5300_write_idm_ar0 ( Uint8 data ) {	// high byte of address
-	if (direct_mode) {
-		DEBUGPRINT("W5300: writing IDM_AR0 in DIRECT mode with data $%02X" NL, data);
-		return;
-	}
-	idm_ar0 = data;
-	idm_ar = (idm_ar & 0xFF) | ((data & 0x3F) << 8);
-}
-void w5300_write_idm_ar1 ( Uint8 data ) {	// low byte of address
-	if (direct_mode) {
-		DEBUGPRINT("W5300: writing IDM_AR1 in DIRECT mode with data $%02X" NL, data);
-		return;
-	}
-	idm_ar1 = data;
-	idm_ar = (idm_ar & 0xFF00) | (data & 0xFE);	// LSB is chopped off, since reading/writing IDM_DR0 and 1 will tell that ...
-}
-void w5300_write_idm_dr0 ( Uint8 data ) {	// high byte of adta
-	if (direct_mode) {
-		DEBUGPRINT("W5300: writing IDM_DR0 in DIRECT mode with data $%02X" NL, data);
-		return;
-	}
-	write_reg(idm_ar, data);
-}
-void w5300_write_idm_dr1 ( Uint8 data ) {	// low byte of data
-	if (direct_mode) {
-		DEBUGPRINT("W5300: writing IDM_DR1 in DIRECT mode with data $%02X" NL, data);
-		return;
-	}
-	write_reg(idm_ar | 1, data);
-}
-
-void  w5300_write_direct_reg6 ( Uint8 data ) {
-}
-void  w5300_write_direct_reg7 ( Uint8 data ) {
+	if ((port & 7) == port)
+		DEBUGPRINT("EPNET: IO: after reading EPNET CPU-port $%03X by CPU in %s mode, result: $%02X" NL, port, direct_mode ? "*DIRECT*" : "indirect", data);
+	return data;
 }
 
 
-Uint8 w5300_read_mr0 ( void ) {
-	DEBUGPRINT("W5300: reading MR0 with data $%02X" NL, mr0);
-	return mr0;
-}
-Uint8 w5300_read_mr1 ( void ) {
-	DEBUGPRINT("W5300: reading MR1 with data $%02X" NL, mr1);
-	return mr1;
-}
-Uint8 w5300_read_idm_ar0 ( void ) {
-	if (direct_mode) {
-		DEBUGPRINT("W5300: reading IDM_AR0 in DIRECT mode" NL);
-		return 0x53;
+void  epnet_write_cpu_port ( int port, Uint8 data )
+{
+	if ((port & 7) == port)
+		DEBUGPRINT("EPNET: IO: before writing EPNET CPU-port $%03X by CPU in %s mode, data: $%02X" NL, port, direct_mode ? "*DIRECT*" : "indirect", data);
+	switch (port) {
+		case 0:
+			DEBUGPRINT("EPNET: writing MR0 with data $%02X" NL, data);
+			if (data & 1) ERROR_WINDOW("EPNET: FIFO byte-order swap feature is not emulated");
+			mr0 = mr0 | (data & 0x3F); // DBW and MPF bits cannot be overwritten by user
+			break;
+		case 1:
+			DEBUGPRINT("EPNET: writing MR1 with data $%02X" NL, data);
+			if (data & 128) { // software reset?
+				epnet_reset();
+				epnet_shutdown();
+			} else {
+				if (data & 8) ERROR_WINDOW("EPNET: PPPoE mode is not emulated");
+				if (data & 4) ERROR_WINDOW("EPNET: data bus byte-order swap feature is not emulated");
+				//if ((data & 1) == 0) ERROR_WINDOW("EPNET: direct mode is NOT emulated, only indirect");
+				if (((mr1 ^ data) & 1)) {
+					direct_mode = (data & 1) ? 0 : 1;
+					DEBUGPRINT("EPNET: w5300 access mode change: %s -> %s, new val: %s\n",
+							(mr1 & 1) ? "indirect" : "direct",
+							(data & 1) ? "indirect" : "direct",
+							direct_mode ? "direct" : "indirect"
+					);
+				}
+				mr1 = data;
+			}
+			break;
+		case 2:
+			if (direct_mode) {
+				write_reg(port + direct_mode_epnet_shift, data);
+			} else {
+				idm_ar0 = data;
+				idm_ar = ((data & 0x3F) << 8) | idm_ar1;
+			}
+			break;
+		case 3:
+			if (direct_mode) {
+				write_reg(port + direct_mode_epnet_shift, data);
+			} else {
+				idm_ar1 = data;	// FIXME: should I chop the LSB here?
+				idm_ar = (idm_ar0 << 8) | (data & 0xFE);	// LSB is chopped off, since reading/writing IDM_DR0 and 1 will tell that ...
+			}
+			break;
+		case 4:
+			if (direct_mode) {
+				write_reg(port + direct_mode_epnet_shift, data);
+			} else {
+				write_reg(idm_ar, data);
+			}
+			break;
+		case 5:
+			if (direct_mode) {
+				write_reg(port + direct_mode_epnet_shift, data);
+			} else {
+				write_reg(idm_ar + 1, data);
+			}
+			break;
+		case 6:
+			if (direct_mode)
+				write_reg(port + direct_mode_epnet_shift, data);
+			break;
+		case 7:
+			if (direct_mode)
+				write_reg(port + direct_mode_epnet_shift, data);
+			break;
+		default:
+			// Note: ports 8-15 are for CF on EPNET, but not emulated yet!
+			break;
 	}
-	return idm_ar0;
-}
-Uint8 w5300_read_idm_ar1 ( void ) {
-	if (direct_mode) {
-		DEBUGPRINT("W5300: reading IDM_AR1 in DIRECT mode" NL);
-		return 0x00;
-	}
-	return idm_ar1;
-}
-Uint8 w5300_read_idm_dr0 ( void ) {
-	if (direct_mode) {
-		DEBUGPRINT("W5300: reading IDM_DR0 in DIRECT mode" NL);
-		return 0x53;
-	}
-	return read_reg(idm_ar);
-}
-Uint8 w5300_read_idm_dr1 ( void ) {
-	if (direct_mode) {
-		DEBUGPRINT("W5300: reading IDM_DR1 in DIRECT mode" NL);
-		return 0x00;
-	}
-	return read_reg(idm_ar | 1);
-}
-Uint8 w5300_read_direct_reg6 ( void ) {
-
-}
-Uint8 w5300_read_direct_reg7 ( void ) {
 }
 
 

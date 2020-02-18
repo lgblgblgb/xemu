@@ -1,5 +1,5 @@
 /* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015,2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    http://xep128.lgb.hu/
 
 This program is free software; you can redistribute it and/or modify
@@ -27,7 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "printer.h"
 #include "zxemu.h"
 #include "primoemu.h"
-#include "w5300.h"
+#include "epnet.h"
 #include "roms.h"
 #include "input.h"
 #include "emu_rom_interface.h"
@@ -304,24 +304,24 @@ Z80EX_BYTE z80ex_pread_cb(Z80EX_WORD port16) {
 	if (port < primo_on)
 		return primo_read_io(port);
 	switch (port) {
-#ifdef CONFIG_W5300_SUPPORT
-		case W5300_IO_BASE + 0x0: return w5300_read_mr0();
-		case W5300_IO_BASE + 0x1: return w5300_read_mr1();
-		case W5300_IO_BASE + 0x2: return w5300_read_idm_ar0();
-		case W5300_IO_BASE + 0x3: return w5300_read_idm_ar1();
-		case W5300_IO_BASE + 0x4: return w5300_read_idm_dr0();
-		case W5300_IO_BASE + 0x5: return w5300_read_idm_dr1();
-		case W5300_IO_BASE + 0x6: return w5300_read_direct_reg6();
-		case W5300_IO_BASE + 0x7: return w5300_read_direct_reg7();
-		// ports for CF on EPNET. I don't emulate that, I simply give back some dummy answer!
-		case W5300_IO_BASE + 0x8:
-		case W5300_IO_BASE + 0x9:
-		case W5300_IO_BASE + 0xA:
-		case W5300_IO_BASE + 0xB:
-		case W5300_IO_BASE + 0xC:
-		case W5300_IO_BASE + 0xD:
-		case W5300_IO_BASE + 0xE:
-		case W5300_IO_BASE + 0xF: return 0xFF;
+#ifdef CONFIG_EPNET_SUPPORT
+		case EPNET_IO_BASE + 0x0:
+		case EPNET_IO_BASE + 0x1:
+		case EPNET_IO_BASE + 0x2:
+		case EPNET_IO_BASE + 0x3:
+		case EPNET_IO_BASE + 0x4:
+		case EPNET_IO_BASE + 0x5:
+		case EPNET_IO_BASE + 0x6:
+		case EPNET_IO_BASE + 0x7:
+		case EPNET_IO_BASE + 0x8:
+		case EPNET_IO_BASE + 0x9:
+		case EPNET_IO_BASE + 0xA:
+		case EPNET_IO_BASE + 0xB:
+		case EPNET_IO_BASE + 0xC:
+		case EPNET_IO_BASE + 0xD:
+		case EPNET_IO_BASE + 0xE:
+		case EPNET_IO_BASE + 0xF:
+			return epnet_read_cpu_port(port - EPNET_IO_BASE);
 #endif
 		/* EXDOS/WD registers */
 #ifdef CONFIG_EXDOS_SUPPORT
@@ -401,24 +401,25 @@ void z80ex_pwrite_cb(Z80EX_WORD port16, Z80EX_BYTE value) {
 	ports[port] = value;
 	//DEBUG("IO: WRITE: OUT (%02Xh),%02Xh" NL, port, value);
 	switch (port) {
-#ifdef CONFIG_W5300_SUPPORT
-		case W5300_IO_BASE + 0x0: w5300_write_mr0(value); break;
-		case W5300_IO_BASE + 0x1: w5300_write_mr1(value); break;
-		case W5300_IO_BASE + 0x2: w5300_write_idm_ar0(value); break;
-		case W5300_IO_BASE + 0x3: w5300_write_idm_ar1(value); break;
-		case W5300_IO_BASE + 0x4: w5300_write_idm_dr0(value); break;
-		case W5300_IO_BASE + 0x5: w5300_write_idm_dr1(value); break;
-		case W5300_IO_BASE + 0x6: w5300_write_direct_reg6(value); break;
-		case W5300_IO_BASE + 0x7: w5300_write_direct_reg7(value); break;
-		// ports for CF on EPNET. I don't emulate that, I simply ignore the writes!
-		case W5300_IO_BASE + 0x8:
-		case W5300_IO_BASE + 0x9:
-		case W5300_IO_BASE + 0xA:
-		case W5300_IO_BASE + 0xB:
-		case W5300_IO_BASE + 0xC:
-		case W5300_IO_BASE + 0xD:
-		case W5300_IO_BASE + 0xE:
-		case W5300_IO_BASE + 0xF: break;
+#ifdef CONFIG_EPNET_SUPPORT
+		case EPNET_IO_BASE + 0x0:
+		case EPNET_IO_BASE + 0x1:
+		case EPNET_IO_BASE + 0x2:
+		case EPNET_IO_BASE + 0x3:
+		case EPNET_IO_BASE + 0x4:
+		case EPNET_IO_BASE + 0x5:
+		case EPNET_IO_BASE + 0x6:
+		case EPNET_IO_BASE + 0x7:
+		case EPNET_IO_BASE + 0x8:
+		case EPNET_IO_BASE + 0x9:
+		case EPNET_IO_BASE + 0xA:
+		case EPNET_IO_BASE + 0xB:
+		case EPNET_IO_BASE + 0xC:
+		case EPNET_IO_BASE + 0xD:
+		case EPNET_IO_BASE + 0xE:
+		case EPNET_IO_BASE + 0xF:
+			epnet_write_cpu_port(port - EPNET_IO_BASE, value);
+			break;
 #endif
 		/* EXDOS/WD registers */
 #ifdef CONFIG_EXDOS_SUPPORT

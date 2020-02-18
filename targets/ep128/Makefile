@@ -6,7 +6,7 @@
 ## Xemu projects. Though, the build system and Z80 emulation core (Z80ex) is
 ## from Xemu now!
 ##
-## Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -27,7 +27,7 @@ PRG_TARGET	= xep128
 EMU_DESCRIPTION	= Enterprise 128
 
 CFLAGS_TARGET_xep128	=
-SRCS_TARGET_xep128	= lodepng.c screen.c main.c cpu.c z180.c nick.c dave.c input.c exdos_wd.c sdext.c rtc.c printer.c zxemu.c primoemu.c emu_rom_interface.c w5300.c apu.c keyboard_mapping.c configuration.c roms.c console.c emu_monitor.c joystick.c fileio.c gui.c snapshot.c
+SRCS_TARGET_xep128	= lodepng.c screen.c main.c cpu.c z180.c nick.c dave.c input.c exdos_wd.c sdext.c rtc.c printer.c zxemu.c primoemu.c emu_rom_interface.c epnet.c apu.c keyboard_mapping.c configuration.c roms.c console.c emu_monitor.c joystick.c fileio.c gui.c snapshot.c
 SRCS_COMMON_xep128	= z80.c z80_dasm.c
 CONFIG_CFLAGS_TARGET_xep128	= sdl2|math|gtk3|readline|socketapi
 CONFIG_LDFLAGS_TARGET_xep128	= sdl2|math|gtk3|readline|socketapi

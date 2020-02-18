@@ -1,5 +1,5 @@
 /* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2017,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    http://xep128.lgb.hu/
 
 This program is free software; you can redistribute it and/or modify
@@ -30,7 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "cpu.h"
 #include "primoemu.h"
 #include "emu_rom_interface.h"
-#include "w5300.h"
+#include "epnet.h"
 #include "zxemu.h"
 #include "printer.h"
 #include "joystick.h"
@@ -90,8 +90,8 @@ void shutdown_sdl(void)
 	if (guarded_exit) {
 		audio_close();
 		printer_close();
-#ifdef CONFIG_W5300_SUPPORT
-		w5300_uninit();
+#ifdef CONFIG_EPNET_SUPPORT
+		epnet_uninit();
 #endif
 #ifdef CONFIG_EXDOS_SUPPORT
 		wd_detach_disk_image();
@@ -495,8 +495,8 @@ int main (int argc, char *argv[])
 	wd_exdos_reset();
 	wd_attach_disk_image(config_getopt_str("wdimg"));
 #endif
-#ifdef CONFIG_W5300_SUPPORT
-	w5300_init(NULL);
+#ifdef CONFIG_EPNET_SUPPORT
+	epnet_init(NULL);
 #endif
 	ticks = SDL_GetTicks();
 	balancer = 0;
