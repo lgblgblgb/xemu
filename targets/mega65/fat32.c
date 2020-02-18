@@ -177,7 +177,7 @@ static int mfat_flush_fat_cache ( void )
 }
 
 
-static int eoc;
+static int cluster_was_free;
 
 // Return value:
 // 0 = end of chain [regardless of the real used EOC]
@@ -208,7 +208,11 @@ static Uint32 mfat_read_fat_chain ( Uint32 cluster )
 	// cluster number on the FS "should" be considered as end-of-chain marker.
 	// That's actually great, we should not worry here what is the "EOC" marker, and just say this:
 	if (cluster < 2 || cluster >= mfat_partitions[disk.part].clusters) {
-		eoc = ((cluster & 0x0FFFFFF0U) == 0x0FFFFFF0U);
+		// THIS IS AN IMPORTANT HACK! Normally this function is used to follow FAT chain. There, it's should never
+		// enounter free cluster in chain, if it does, that's considered error or "EOC". However. In case of searching
+		// free cluster it is VERY important to know it was EOC (thus the cluster is not free!) or free. So we create
+		// this ugly stuff here can be used by the caller ...
+		cluster_was_free = (cluster == 0);
 		return 0;
 	}
 	if (cluster == cluster_in) {
@@ -284,7 +288,7 @@ Uint32 mfat_allocate_linear_fat_chunk ( Uint32 size )
 		DEBUGPRINT("FAT32FS: %u cluster's result in FAT: %u" NL, cluster, next);
 		if (next == 1)
 			return 0;	// error!
-		if (next == 0 && !eoc) {	// cluster is free
+		if (next == 0 && cluster_was_free) {	// cluster is free
 			if (first == 0) {
 				first = cluster;
 				len = cluster_byte_size;

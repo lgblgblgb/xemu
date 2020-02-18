@@ -20,8 +20,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMU_EP128_EPNET_H_INCLUDED
 #ifdef CONFIG_EPNET_SUPPORT
 
-extern Uint8 epnet_read_cpu_port ( int port );
-extern void  epnet_write_cpu_port ( int port, Uint8 data );
+extern Uint8 epnet_read_cpu_port  ( unsigned int port );
+extern void  epnet_write_cpu_port ( unsigned int port, Uint8 data );
 extern void  epnet_init ( void (*cb)(int) );
 extern void  epnet_uninit ( void );
 

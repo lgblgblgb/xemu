@@ -313,6 +313,7 @@ Z80EX_BYTE z80ex_pread_cb(Z80EX_WORD port16) {
 		case EPNET_IO_BASE + 0x5:
 		case EPNET_IO_BASE + 0x6:
 		case EPNET_IO_BASE + 0x7:
+			return epnet_read_cpu_port(port - EPNET_IO_BASE);
 		case EPNET_IO_BASE + 0x8:
 		case EPNET_IO_BASE + 0x9:
 		case EPNET_IO_BASE + 0xA:
@@ -321,7 +322,8 @@ Z80EX_BYTE z80ex_pread_cb(Z80EX_WORD port16) {
 		case EPNET_IO_BASE + 0xD:
 		case EPNET_IO_BASE + 0xE:
 		case EPNET_IO_BASE + 0xF:
-			return epnet_read_cpu_port(port - EPNET_IO_BASE);
+			// return epnet_cf_read_cpu_port(port - EPNET_IO_BASE - 8);
+			return 0xFF;
 #endif
 		/* EXDOS/WD registers */
 #ifdef CONFIG_EXDOS_SUPPORT
@@ -410,6 +412,8 @@ void z80ex_pwrite_cb(Z80EX_WORD port16, Z80EX_BYTE value) {
 		case EPNET_IO_BASE + 0x5:
 		case EPNET_IO_BASE + 0x6:
 		case EPNET_IO_BASE + 0x7:
+			epnet_write_cpu_port(port - EPNET_IO_BASE, value);
+			break;
 		case EPNET_IO_BASE + 0x8:
 		case EPNET_IO_BASE + 0x9:
 		case EPNET_IO_BASE + 0xA:
@@ -418,7 +422,7 @@ void z80ex_pwrite_cb(Z80EX_WORD port16, Z80EX_BYTE value) {
 		case EPNET_IO_BASE + 0xD:
 		case EPNET_IO_BASE + 0xE:
 		case EPNET_IO_BASE + 0xF:
-			epnet_write_cpu_port(port - EPNET_IO_BASE, value);
+			//epnet_cf_write_cpu_port(port - EPNET_IO_BASE - 8, value);
 			break;
 #endif
 		/* EXDOS/WD registers */

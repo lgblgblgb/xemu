@@ -34,6 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xep128.h"
 #include "epnet.h"
+#include "xemu/z80.h"
 
 #ifdef CONFIG_EPNET_SUPPORT
 
@@ -187,57 +188,67 @@ void epnet_uninit ( void )
 	DEBUGPRINT("EPNET: uninit" NL);
 }
 
-Uint8 epnet_read_cpu_port ( int port )
+Uint8 epnet_read_cpu_port ( unsigned int port )
 {
 	Uint8 data;
+	if (XEMU_UNLIKELY(direct_mode)) {
+		port += direct_mode_epnet_shift;
+		if (port >= 2) {
+			data = read_reg(port);
+			DEBUGPRINT("EPNET: IO: reading in *DIRECT-MODE* W5300 register $%03X, data: $%02X @ PC=$%04X" NL, port, data, Z80_PC);
+			return data;
+		}
+	}
 	switch (port) {
 		case 0:
-			//data = (direct_mode ? read_reg(port + direct_mode_epnet_shift) : mr0);
 			data = mr0;
-			break;
+			DEBUGPRINT("EPNET: IO: reading MR0: $%02X @ PC=$%04X" NL, data, Z80_PC);
+			return data;
 		case 1:
-			//data = (direct_mode ? read_reg(port + direct_mode_epnet_shift) : mr1);
 			data = mr1;
-			break;
+			DEBUGPRINT("EPNET: IO: reading MR1: $%02X @ PC=$%04X" NL, data, Z80_PC);
+			return data;
 		case 2:
-			data = (direct_mode ? read_reg(port + direct_mode_epnet_shift) : idm_ar0);
-			break;
+			data = idm_ar0;
+			DEBUGPRINT("EPNET: IO: reading IDM_AR0: $%02X @ PC=$%04X" NL, data, Z80_PC);
+			return data;
 		case 3:
-			data = (direct_mode ? read_reg(port + direct_mode_epnet_shift) : idm_ar1);
-			break;
+			data = idm_ar1;
+			DEBUGPRINT("EPNET: IO: reading IDM_AR1: $%02X @ PC=$%04X" NL, data, Z80_PC);
+			return data;
 		case 4:
-			data = read_reg(direct_mode ? (port + direct_mode_epnet_shift) : idm_ar);
-			break;
+			data = read_reg(idm_ar + 0);
+			DEBUGPRINT("EPNET: IO: reading W5300 reg#$%03X through IDM_DR0: $%02X @ PC=$%04X" NL, idm_ar + 0, data, Z80_PC);
+			return data;
 		case 5:
-			data = read_reg(direct_mode ? (port + direct_mode_epnet_shift) : (idm_ar + 1));
-			break;
-		case 6:
-		case 7:
-			data = (direct_mode ? read_reg(port + direct_mode_epnet_shift) : 0xFF);
-			break;
+			data = read_reg(idm_ar + 1);
+			DEBUGPRINT("EPNET: IO: reading W5300 reg#$%03X through IDM_DR1: $%02X @ PC=$%04X" NL, idm_ar + 1, data, Z80_PC);
+			return data;
 		default:
-			// Note: ports 8-15 are for CF on EPNET, but not emulated yet!
-			data = 0xFF;
-			break;
+			DEBUGPRINT("EPNET: IO: reading *UNDECODED* W5300 port in indirect mode: $%03X @ PC=$%04X" NL, port, Z80_PC);
+			return 0xFF;
 	}
-	if ((port & 7) == port)
-		DEBUGPRINT("EPNET: IO: after reading EPNET CPU-port $%03X by CPU in %s mode, result: $%02X" NL, port, direct_mode ? "*DIRECT*" : "indirect", data);
-	return data;
 }
 
 
-void  epnet_write_cpu_port ( int port, Uint8 data )
+void  epnet_write_cpu_port ( unsigned int port, Uint8 data )
 {
-	if ((port & 7) == port)
-		DEBUGPRINT("EPNET: IO: before writing EPNET CPU-port $%03X by CPU in %s mode, data: $%02X" NL, port, direct_mode ? "*DIRECT*" : "indirect", data);
+	if (XEMU_UNLIKELY(direct_mode)) {
+		port += direct_mode_epnet_shift;
+		if (port >= 2) {
+			DEBUGPRINT("EPNET: IO: writing in *DIRECT-MODE* W5300 register $%03X, data: $%02X @ PC=$%04X" NL, port, data, Z80_PC);
+			write_reg(port, data);
+			return;
+		}
+	}
 	switch (port) {
 		case 0:
-			DEBUGPRINT("EPNET: writing MR0 with data $%02X" NL, data);
+			DEBUGPRINT("EPNET: IO: writing MR0: $%02X @ PC=$%04X" NL, data, Z80_PC);
 			if (data & 1) ERROR_WINDOW("EPNET: FIFO byte-order swap feature is not emulated");
 			mr0 = (mr0 & 0xC0) | (data & 0x3F); // DBW and MPF bits cannot be overwritten by user
 			break;
 		case 1:
-			DEBUGPRINT("EPNET: writing MR1 with data $%02X" NL, data);
+			DEBUGPRINT("EPNET: IO: writing MR1: $%02X @ PC=$%04X" NL, data, Z80_PC);
 			if (data & 128) { // software reset?
 				epnet_reset();
 				epnet_shutdown();
@@ -257,45 +268,20 @@ void  epnet_write_cpu_port ( int port, Uint8 data )
 			}
 			break;
 		case 2:
-			if (direct_mode) {
-				write_reg(port + direct_mode_epnet_shift, data);
-			} else {
-				idm_ar0 = data & 0x3F;
-				idm_ar = (idm_ar0 << 8) | idm_ar1;
-			}
+			idm_ar0 = data & 0x3F;
+			idm_ar = (idm_ar0 << 8) | idm_ar1;
 			break;
 		case 3:
-			if (direct_mode) {
-				write_reg(port + direct_mode_epnet_shift, data);
-			} else {
-				idm_ar1 = data & 0xFE;	// LSB is chopped off, since reading/writing IDM_DR0 and 1 will tell that ...
-				idm_ar = (idm_ar0 << 8) | idm_ar1;
-			}
+			idm_ar1 = data & 0xFE;	// LSB is chopped off, since reading/writing IDM_DR0 and 1 will tell that ...
+			idm_ar = (idm_ar0 << 8) | idm_ar1;
 			break;
 		case 4:
-			if (direct_mode) {
-				write_reg(port + direct_mode_epnet_shift, data);
-			} else {
-				write_reg(idm_ar, data);
-			}
+			write_reg(idm_ar + 0, data);
 			break;
 		case 5:
-			if (direct_mode) {
-				write_reg(port + direct_mode_epnet_shift, data);
-			} else {
-				write_reg(idm_ar + 1, data);
-			}
-			break;
-		case 6:
-			if (direct_mode)
-				write_reg(port + direct_mode_epnet_shift, data);
-			break;
-		case 7:
-			if (direct_mode)
-				write_reg(port + direct_mode_epnet_shift, data);
+			write_reg(idm_ar + 1, data);
 			break;
 		default:
-			// Note: ports 8-15 are for CF on EPNET, but not emulated yet!
 			break;
 	}
 }
