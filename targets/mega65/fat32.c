@@ -177,6 +177,7 @@ static int mfat_flush_fat_cache ( void )
 }
 
 
+static int eoc;
 
 // Return value:
 // 0 = end of chain [regardless of the real used EOC]
@@ -206,8 +207,10 @@ static Uint32 mfat_read_fat_chain ( Uint32 cluster )
 	// In theory there is some "official" end-of-chain marker, but in reality it seems anything which is outside of normal
 	// cluster number on the FS "should" be considered as end-of-chain marker.
 	// That's actually great, we should not worry here what is the "EOC" marker, and just say this:
-	if (cluster < 2 || cluster >= mfat_partitions[disk.part].clusters)
+	if (cluster < 2 || cluster >= mfat_partitions[disk.part].clusters) {
+		eoc = ((cluster & 0x0FFFFFF0U) == 0x0FFFFFF0U);
 		return 0;
+	}
 	if (cluster == cluster_in) {
 		FATDEBUGPRINT("FAT32FS: ERROR: cluster %u refers itself!" NL, cluster);
 		return 0;	// serious problem, cluster refeers to itself???? We just handle the problem as it would be EOC as well ...
@@ -275,11 +278,13 @@ Uint32 mfat_allocate_linear_fat_chunk ( Uint32 size )
 	printf("%s() is about seeking for free linear chunk in FAT for %u bytes size object" NL, __func__, size);
 	// OK, so now, size is the needed number of clusters to allocate
 	// start from cluster 2, the first data cluster, to try with (though probably that's root dir, so won't be free, but anyway, for strange situations ...)
-	for (Uint32 cluster = 2, first = 0, len, seq; cluster < mfat_partitions[disk.part].clusters; cluster++) {
+	for (Uint32 cluster = 2, first = 0, len = 0, seq = 0; cluster < mfat_partitions[disk.part].clusters; cluster++) {
+		DEBUGPRINT("FAT32FS: considering cluster %u" NL, cluster);
 		Uint32 next = mfat_read_fat_chain(cluster);
+		DEBUGPRINT("FAT32FS: %u cluster's result in FAT: %u" NL, cluster, next);
 		if (next == 1)
 			return 0;	// error!
-		if (next == 0) {	// cluster is free
+		if (next == 0 && !eoc) {	// cluster is free
 			if (first == 0) {
 				first = cluster;
 				len = cluster_byte_size;

@@ -378,8 +378,8 @@ retry:
 	}
 	if (sdfd >= 0) {
 		DEBUGPRINT("SDCARD: card init done, size=%u Mbytes, virtsd_flag=%d" NL, sdcard_size_in_blocks >> 11, virtsd_flag);
-#ifdef SD_CONTENT_SUPPORT
-		//sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_ASK_FDISK | SDCONTENT_ASK_FILES);
+#ifdef SD_CONTENT_SUPPORT_DANGEROUS
+		sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_ASK_FDISK | SDCONTENT_ASK_FILES);
 #endif
 	}
 	return sdfd;

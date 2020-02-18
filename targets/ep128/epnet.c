@@ -234,7 +234,7 @@ void  epnet_write_cpu_port ( int port, Uint8 data )
 		case 0:
 			DEBUGPRINT("EPNET: writing MR0 with data $%02X" NL, data);
 			if (data & 1) ERROR_WINDOW("EPNET: FIFO byte-order swap feature is not emulated");
-			mr0 = mr0 | (data & 0x3F); // DBW and MPF bits cannot be overwritten by user
+			mr0 = (mr0 & 0xC0) | (data & 0x3F); // DBW and MPF bits cannot be overwritten by user
 			break;
 		case 1:
 			DEBUGPRINT("EPNET: writing MR1 with data $%02X" NL, data);
