@@ -110,14 +110,14 @@ static Uint8 read_reg ( int addr )
 {
 	addr &= 0x3FF;
 	Uint8 data = wregs[addr];
-	DEBUGPRINT("EPNET: reading register $%03X with data $%02X" NL, addr, data);
+	DEBUGPRINT("EPNET: W5300-REG: reading register $%03X with data $%02X" NL, addr, data);
 	return data;
 }
 
 static void write_reg ( int addr, Uint8 data )
 {
 	addr &= 0x3FF;
-	DEBUGPRINT("EPNET: writing register $%03X with data $%02X" NL, addr, data);
+	DEBUGPRINT("EPNET: W5300-REG: writing register $%03X with data $%02X" NL, addr, data);
 	switch (addr) {
 		case 2: // IR0
 		case 3: // IR1
@@ -145,7 +145,7 @@ static void default_interrupt_callback ( int level ) {
 
 void epnet_reset ( void )
 {
-	static const Uint8 default_mac[] = {0x00,0x08,0xDC,0x01,0x02,0x03};
+	static const Uint8 default_mac[] = {0xC1,0xC2,0xC3,0xC4,0xC5,0xC6};
 	memset(wregs, 0, sizeof wregs);
 	mr0 = 0x38; mr1 = 0x00;
 	direct_mode = (mr1 & 1) ? 0 : 1;
@@ -260,16 +260,16 @@ void  epnet_write_cpu_port ( int port, Uint8 data )
 			if (direct_mode) {
 				write_reg(port + direct_mode_epnet_shift, data);
 			} else {
-				idm_ar0 = data;
-				idm_ar = ((data & 0x3F) << 8) | idm_ar1;
+				idm_ar0 = data & 0x3F;
+				idm_ar = (idm_ar0 << 8) | idm_ar1;
 			}
 			break;
 		case 3:
 			if (direct_mode) {
 				write_reg(port + direct_mode_epnet_shift, data);
 			} else {
-				idm_ar1 = data;	// FIXME: should I chop the LSB here?
-				idm_ar = (idm_ar0 << 8) | (data & 0xFE);	// LSB is chopped off, since reading/writing IDM_DR0 and 1 will tell that ...
+				idm_ar1 = data & 0xFE;	// LSB is chopped off, since reading/writing IDM_DR0 and 1 will tell that ...
+				idm_ar = (idm_ar0 << 8) | idm_ar1;
 			}
 			break;
 		case 4:
@@ -300,6 +300,4 @@ void  epnet_write_cpu_port ( int port, Uint8 data )
 	}
 }
 
-
 #endif
-
