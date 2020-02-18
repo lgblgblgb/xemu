@@ -72,9 +72,11 @@ extern int    mfat_init_mbr ( void     );
 extern int    mfat_use_part ( int part );
 
 extern int    mfat_normalize_name ( char *d, const char *s );
+extern int    mfat_fatize_name    ( char *d, const char *s );
 extern int    mfat_read_directory ( mfat_dirent_t *p, int type_filter );
 extern int    mfat_search_in_directory ( mfat_dirent_t *p, const char *name, int type_filter );
 extern void   mfat_open_rootdir ( mfat_stream_t *p );
 extern Uint32 mfat_get_real_size ( mfat_stream_t *p, int *fragmented );
+extern Uint32 mfat_overwrite_file_with_direct_linear_device_block_write ( mfat_dirent_t *dirent, const char *name, Uint32 size );
 
 #endif

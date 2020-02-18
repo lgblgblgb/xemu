@@ -403,34 +403,6 @@ static int fdisk ( Uint32 device_size )
 static int update_sdcard_file ( const char *on_card_name, int options, const char *fn_or_data, int size_to_install )
 {
 	int fd = -1;
-	//int need_unfragmented = strcasecmp(on_card_name + strlen(on_card_name) - 4, ".D81");
-	/*char  fat_name[8 + 3 + 1];
-	if (filename_to_fat_dirent(fat_name, on_card_name)) {
-		DEBUGPRINT("SDCARD: UPDATE: skipping file (non-DOS compliant name): %s" NL, on_card_name);
-		goto error;
-	}*/
-	// First, check if we found the file in the directory on the SD-card
-	// This gives us the size info, also, we know what we have to overwrite
-	// if we found it _OR_ create a new directory entry.
-	int fatres = mfat_search_in_directory(&sd_rootdirent, on_card_name, MFAT_FIND_FILE | MFAT_FIND_DIR);	// we also want to find dirs so we avoid the collosion between the same name
-	if (fatres < 0) {	// Directory problem???? FIXME
-		ERROR_WINDOW("Problem while updating SD-card image\nat file \"%s\"->\"%s\"\nUnexpected FAT32FS level problem while scanning FAT directory.", on_card_name, sd_rootdirent.name);
-		return -1;
-	}
-	int real_size = 0;
-	int fragmented = 0;
-	if (fatres == 1) {
-		if (IS_MFAT_DIR(sd_rootdirent.type)) {
-			// and now warn about the file-dir collolsion I mentioned above ...
-			ERROR_WINDOW("Serious problem on updating SD-card image:\nFile \"%s\" already exists on image but it is a directory!!\nThat's an unhandable situation, I'm sorry ..", sd_rootdirent.fat_name);
-			return -1;
-		}
-		real_size = mfat_get_real_size(&sd_rootdirent.stream, &fragmented);
-		if (!real_size) {
-			ERROR_WINDOW("Serious problem on updating SD-card image:\nFile \"%s\" had problems to follow FAT chains", sd_rootdirent.name);
-			return -1;
-		}
-	}
 	if (size_to_install <= 0) {
 		fd = open(fn_or_data, O_RDONLY | O_BINARY);
 		if (fd < 0) {
@@ -439,6 +411,7 @@ static int update_sdcard_file ( const char *on_card_name, int options, const cha
 		}
 		off_t oft = xemu_safe_file_size_by_fd(fd);
 		if (oft == OFF_T_ERROR || (size_to_install < 0 && oft != (off_t)(-size_to_install))) {
+			DEBUGPRINT("Got size: " PRINTF_LLD " instruct size: %d" NL, (long long int)oft, size_to_install);
 			ERROR_WINDOW("Bad file, size is incorrect or other I/O error\n%s", fn_or_data);
 			goto error_on_maybe_sys_file;
 		}
@@ -446,15 +419,19 @@ static int update_sdcard_file ( const char *on_card_name, int options, const cha
 		if (!size_to_install)
 			return 0;	// FIXME: we don't allow empty files to be written. Though we fake OK result no to disturb the user
 	}
-	int fat_result;
-	if (fd < 0) {
-		// UPDATE FAT32FS file from memory
-		fat_result = mfat_write_file(&dirent, fn_or_data, size_to_install);
-	} else {
-		// UPDATE FAT32FS file from host-OS file
-		while (size_to_install) {
-			Uint8 buffer[8 * 512];
-			int need = (size_to_install < sizeof buffer) ? size_to_install : sizeof buffer;
+	//mfat_dirent_t rootdir;
+	//mfat_open_rootdir(&rootdir.stream);
+	Uint32 block = mfat_overwrite_file_with_direct_linear_device_block_write(&sd_rootdirent, on_card_name, size_to_install);
+	if (block == 0)
+		goto error_on_maybe_sys_file;
+	// Copy file block by block
+	while (size_to_install) {
+		Uint8 buffer[512];
+		int need = (size_to_install < sizeof buffer) ? size_to_install : sizeof buffer;
+		if (need < sizeof(buffer))
+			memset(buffer + need, 0, sizeof(buffer) - need);
+		if (fd >= 0) {
+			// Read from external file
 			int got = xemu_safe_read(fd, buffer, need);
 			if (got < 0)
 				goto error;
@@ -462,17 +439,15 @@ static int update_sdcard_file ( const char *on_card_name, int options, const cha
 				goto error;
 			if (got != need)
 				goto error;
-			fat_result = mfat_write_file(&dirent, buffer, got);
-			if (fat_result != got) {
-				size_to_install = got;
-				break;
-			}
-			size_to_install -= got;
+		} else {
+			// Read from memory
+			memcpy(buffer, fn_or_data, need);
+			fn_or_data += need;
 		}
+		// And now WRITE!!!!!
+		sdcard_write_block(block++, buffer);	// FIXME: error handling!!!
+		size_to_install -= need;
 	}
-	if (fat_result != size_to_install) ;;;;;;;;;
-	// Close FAT32FS file, which also updates size info etc.
-	//mfat_close_file(&dirent);
 	if (fd >= 0)
 		close(fd);
 	return 0;
@@ -523,7 +498,8 @@ static int update_from_directory ( const char *dirname, int options )
 			DEBUGPRINT("SDCARD: CONTENT: skipping updating file \"%s\": too large (limit is %d bytes) or null-sized file" NL, fn, MAX_IMPORT_FILE_SIZE);
 			continue;
 		}
-		update_sdcard_file(entry->d_name, options, fn, -(int)st.st_size);
+		int ret = update_sdcard_file(entry->d_name, options, fn, -(int)st.st_size);
+		DEBUGPRINT("SDCARD: CONTENT: updated file \"%s\" status is %d" NL, fn, ret);
 	}
 	int ret = errno;
 	closedir(dir);
@@ -634,13 +610,13 @@ int sdcontent_handle ( Uint32 size_in_blocks, const char *update_dir_path, int o
 			if ((options & SDCONTENT_ASK_FDISK)) {
 				char msg[256];
 				snprintf(msg, sizeof msg, "SD-card image seems to have invalid format!\nReason: %s\nCan I format it?\nALL DATA WILL BE LOST!", p);
-				do_fdisk = ARE_YOU_SURE(msg);
+				do_fdisk = ARE_YOU_SURE(msg, 0);
 			} else
 				DEBUGPRINT("SDCARD: WARNING(SDCONTENT_ASK_FDISK was not requested, but problem detected): %s" NL, p);
 		}
 	}
 	if (do_fdisk) {
-		FATAL("YAY, DOING FDISK!");
+		//FATAL("YAY, DOING FDISK!");
 		if (fdisk(size_in_blocks))
 			return -1;
 	}
