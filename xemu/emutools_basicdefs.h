@@ -223,6 +223,8 @@ static inline int xemu_byte_order_test ( void )
 #define XEMUEXIT(n)	exit(n)
 #endif
 
+#define BOOLEAN_VALUE(n)	((n)?1:0)
+
 extern const char *XEMU_BUILDINFO_ON, *XEMU_BUILDINFO_AT, *XEMU_BUILDINFO_GIT, *XEMU_BUILDINFO_CC, *XEMU_BUILDINFO_TARGET;
 extern const char emulators_disclaimer[];
 extern void xemu_dump_version ( FILE *fp, const char *slogan );

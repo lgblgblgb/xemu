@@ -758,7 +758,7 @@ static void shutdown_callback ( void )
 
 void c65_reset_asked ( void )
 {
-	if (ARE_YOU_SURE_OVERRIDABLE("Are you sure to HARD RESET your Commodore-65?"))
+	if (ARE_YOU_SURE("Are you sure to HARD RESET your Commodore-65?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
 		c65_reset();
 }
 

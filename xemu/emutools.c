@@ -959,13 +959,29 @@ void osd_write_string ( int x, int y, const char *s )
 }
 
 
+int ARE_YOU_SURE ( const char *s, int flags )
+{
+	static const char *selector_default_yes = "!Yes|?No";
+	static const char *selector_default_no  = "Yes|*No";
+	static const char *selector_generic     = "Yes|No";
+	const char *selector;
+	if ((flags & ARE_YOU_SURE_DEFAULT_YES))
+		selector = selector_default_yes;
+	else if ((flags & ARE_YOU_SURE_DEFAULT_NO))
+		selector = selector_default_no;
+	else
+		selector = selector_generic;
+	return (QUESTION_WINDOW(selector, (s != NULL && *s != '\0') ? s : "Are you sure?") == 0);
+}
+
+
 int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 {
 	char items_buf[512], *items = items_buf;
 	int buttonid;
 	SDL_MessageBoxButtonData buttons[16];
 	SDL_MessageBoxData messageboxdata = {
-		SDL_MESSAGEBOX_INFORMATION, /* .flags */
+		SDL_MESSAGEBOX_WARNING, /* .flags */
 		sdl_win, /* .window */
 		default_window_title, /* .title */
 		msg, /* .message */
@@ -980,10 +996,6 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 		char *p = strchr(items, '|');
 		switch (*items) {
 			case '!':
-#ifdef XEMU_ARCH_HTML
-				printf("Emscripten: faking chooser box answer %d for \"%s\"" NL, messageboxdata.numbuttons, msg);
-				return messageboxdata.numbuttons;
-#endif
 				buttons[messageboxdata.numbuttons].flags = SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT;
 				items++;
 				break;
@@ -991,10 +1003,20 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 				buttons[messageboxdata.numbuttons].flags = SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT;
 				items++;
 				break;
+			case '*':
+				buttons[messageboxdata.numbuttons].flags = SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT | SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT;
+				items++;
+				break;
 			default:
 				buttons[messageboxdata.numbuttons].flags = 0;
 				break;
 		}
+#ifdef XEMU_ARCH_HTML
+		if ((buttons[messageboxdata.numbuttons].flags & SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT)) {
+			DEBUGPRINT("Emscripten: faking chooser box answer %d for \"%s\"" NL, messageboxdata.numbuttons, msg);
+			return messageboxdata.numbuttons;
+		}
+#endif
 		buttons[messageboxdata.numbuttons].text = items;
 		buttons[messageboxdata.numbuttons].buttonid = messageboxdata.numbuttons;
 		messageboxdata.numbuttons++;

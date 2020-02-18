@@ -112,12 +112,11 @@ extern int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 extern int i_am_sure_override;
 extern const char *str_are_you_sure_to_exit;
 
-static inline int ARE_YOU_SURE ( const char *s ) {
-	return (QUESTION_WINDOW("YES|NO", (s != NULL && *s != '\0') ? s : "Are you sure?") == 0);
-}
-static inline int ARE_YOU_SURE_OVERRIDABLE ( const char *s ) {
-	return i_am_sure_override ? 1 : ARE_YOU_SURE(s);
-}
+#define ARE_YOU_SURE_OVERRIDE		1
+#define ARE_YOU_SURE_DEFAULT_YES	2
+#define ARE_YOU_SURE_DEFAULT_NO		4
+
+extern int ARE_YOU_SURE ( const char *s, int flags );
 
 extern char *sdl_window_title;
 extern char *window_title_custom_addon;

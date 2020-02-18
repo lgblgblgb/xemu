@@ -53,7 +53,7 @@ static int attach_d81 ( const char *fn )
 void emu_dropfile_callback ( const char *fn )
 {
 	DEBUGGUI("UI: drop event, file: %s" NL, fn);
-	if (ARE_YOU_SURE("Shall I try to mount the dropped file as D81 for you?"))
+	if (ARE_YOU_SURE("Shall I try to mount the dropped file as D81 for you?", 0))
 		attach_d81(fn);
 }
 #endif

@@ -45,7 +45,7 @@ else
 	COMMIT="$TRAVIS_COMMIT"
 fi
 
-mkdir .dmg || exit 1
+mkdir .dmg .dmg/bin || exit 1
 
 if [ "$BUNDLE" = "yes" ]; then
 	dylink=""
@@ -60,6 +60,7 @@ if [ "$BUNDLE" = "yes" ]; then
 			ln $dylink .dmg/$b.app/Contents/Frameworks/libSDL2-xemu.dylib
 		fi
 		install_name_tool -change @executable_path/libSDL2-xemu.dylib @executable_path/../Frameworks/libSDL2-xemu.dylib .dmg/$b.app/Contents/MacOS/$b
+		ln -s ../$b.app/Contents/MacOS/$b .dmg/bin/$b
 		cp build/xemu.icns .dmg/$b.app/Contents/Resources/$b.icns
 		echo "<?xml version=\"1.0\" encoding=\"UTF-8\"?>
 <!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" \"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">
@@ -101,7 +102,18 @@ else
 	done
 fi
 
-cp README.md LICENSE .dmg/
+cp README.md .dmg/README-XEMU.md
+cp LICENSE .dmg/
+echo "For generic information on Xemu please read: README-XEMU.md
+For version informations on this very DMG: THIS_VERSION.txt
+For license/copyright information: LICENSE
+
+This file is about the DMG distribution media of Xemu.
+
+Generally you may want to start the '.app' items via Finder.
+For command line use, I would recommend to use binaries in the bin/
+folder, probably from your own project and/or starting from terminal.
+They're symlinks for real." > .dmg/README.txt
 
 echo "Buildsys: MacOS $MACOSVER `whoami`@`hostname` uname: `uname -a`
 Branch: $BRANCH

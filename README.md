@@ -206,11 +206,12 @@ The following steps are based on a Windows 10 x64 system.
 * Download the executable installer in https://www.msys2.org for x86-64
   architecture.
 * Install on the default location.
-* Execute the MSYS2 MinGW 64bit system prompt at installation end, or by
-  looking into your Start Menu.
-* In the command prompt, ensure you have the latest repositories by doing:
+* Execute the MSYS2 MinGW 64bit system prompt at the end of the installation,
+  or via your Start Menu.
 
-`pacman -Syu`
+At the command prompt, ensure you have the latest repositories by doing:
+
+    pacman -Syu
 
 Restart the prompt if needed, and finish installing remaining packages with:
 
