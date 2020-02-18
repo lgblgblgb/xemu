@@ -111,14 +111,14 @@ static Uint8 read_reg ( int addr )
 {
 	addr &= 0x3FF;
 	Uint8 data = wregs[addr];
-	DEBUGPRINT("EPNET: W5300-REG: reading register $%03X with data $%02X" NL, addr, data);
+	//DEBUGPRINT("EPNET: W5300-REG: reading register $%03X with data $%02X" NL, addr, data);
 	return data;
 }
 
 static void write_reg ( int addr, Uint8 data )
 {
 	addr &= 0x3FF;
-	DEBUGPRINT("EPNET: W5300-REG: writing register $%03X with data $%02X" NL, addr, data);
+	//DEBUGPRINT("EPNET: W5300-REG: writing register $%03X with data $%02X" NL, addr, data);
 	switch (addr) {
 		case 2: // IR0
 		case 3: // IR1
@@ -130,7 +130,11 @@ static void write_reg ( int addr, Uint8 data )
 			wregs[addr] = data;
 			update_interrupts();
 			break;
+		case 0xFE:	// ID register: not writable
+		case 0xFF:	// ID register: not writable
+			break;	// these registers are not writable, skip writing!
 		default:
+			wregs[addr] = data;
 			break;
 	}
 }
@@ -253,6 +257,8 @@ void  epnet_write_cpu_port ( unsigned int port, Uint8 data )
 				epnet_reset();
 				epnet_shutdown();
 			} else {
+				if (data & 0x20)
+					DEBUGPRINT("EPNET: memory-test mode by 0x20 on MR1" NL);
 				if (data & 8) ERROR_WINDOW("EPNET: PPPoE mode is not emulated");
 				if (data & 4) ERROR_WINDOW("EPNET: data bus byte-order swap feature is not emulated");
 				//if ((data & 1) == 0) ERROR_WINDOW("EPNET: direct mode is NOT emulated, only indirect");
@@ -276,12 +282,15 @@ void  epnet_write_cpu_port ( unsigned int port, Uint8 data )
 			idm_ar = (idm_ar0 << 8) | idm_ar1;
 			break;
 		case 4:
+			DEBUGPRINT("EPNET: IO: writing W5300 reg#$%03X through IDM_DR0: $%02X @ PC=$%04X" NL, idm_ar + 0, data, Z80_PC);
 			write_reg(idm_ar + 0, data);
 			break;
 		case 5:
+			DEBUGPRINT("EPNET: IO: writing W5300 reg#$%03X through IDM_DR1: $%02X @ PC=$%04X" NL, idm_ar + 1, data, Z80_PC);
 			write_reg(idm_ar + 1, data);
 			break;
 		default:
+			DEBUGPRINT("EPNET: IO: writing *UNDECODED* W5300 port in indirect mode: $%03X @ PC=$%04X" NL, port, Z80_PC);
 			break;
 	}
 }

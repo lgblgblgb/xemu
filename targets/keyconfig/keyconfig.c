@@ -59,12 +59,14 @@ int main ( int argc, char **argv )
 	xemu_pre_init(APP_ORG, TARGET_NAME, "Xemu Keyboard Configurator from LGB");
 	xemucfg_define_str_option("defaultmap", NULL, "Full path of the default keyboard map");
 	xemucfg_define_str_option("usermap", NULL, "Full path of the used, user-definiable map");
+	xemucfg_define_str_option("symbolmap", NULL, "Full path of symbol map of the keyboard");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	const char *defmap = xemucfg_get_str("defaultmap");
 	const char *usrmap = xemucfg_get_str("usermap");
-	if (!defmap || !*defmap || !usrmap || !*usrmap)
-		FATAL("Missing specifier(s) from command line. This program is not meant to be used manually.");
+	const char *symmap = xemucfg_get_str("symbolmap");
+	if (!defmap || !*defmap || !usrmap || !*usrmap || !symmap || !*symmap)
+		FATAL("Missing specifier(s) from command line. This program is not meant to be used manually.\nPlease use the menu of an Xemu emulator which supports key re-mapping.");
 	// xemunativegui_init();
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (xemu_post_init(
@@ -88,7 +90,7 @@ int main ( int argc, char **argv )
 	hid_init(
 		dummy_key_map,
 		0,
-		SDL_DISABLE		// joystick HID events?
+		SDL_DISABLE		// joystick HID events
 	);
 	osd_init_with_defaults();
 	clear_emu_events();	// also resets the keyboard
