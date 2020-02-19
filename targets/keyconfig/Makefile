@@ -23,7 +23,7 @@ EMU_DESCRIPTION	= "Keyboard Layout Configurator"
 
 CFLAGS_TARGET_xkeyconfig	=
 SRCS_TARGET_xkeyconfig		= keyconfig.c
-SRCS_COMMON_xkeyconfig		= emutools.c emutools_hid.c emutools_config.c emutools_files.c
+SRCS_COMMON_xkeyconfig		= emutools.c
 CONFIG_CFLAGS_TARGET_xkeyconfig	= sdl2
 CONFIG_LDFLAGS_TARGET_xkeyconfig= sdl2
 
