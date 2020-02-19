@@ -16,17 +16,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
-//#include "xemu/emutools_files.h"
-//#include "xemu/emutools_hid.h"
-//#include "xemu/emutools_config.h"
-// #include "xemu/emutools_nativegui.h"
 
-
-//#include <ctype.h>
-//#include <strings.h>
-
-
-extern Uint32 *sdl_pixel_buffer;
 
 #define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888
 // Do not modify this, this very program depends on it being 0.
@@ -34,12 +24,9 @@ extern Uint32 *sdl_pixel_buffer;
 #define RENDER_SCALE_QUALITY    1
 #define SCREEN_WIDTH            800
 #define SCREEN_HEIGHT           600
-
 #define FRAME_DELAY		40
 
-//static const struct KeyMappingDefault dummy_key_map[] = { { 0, -1 } };
-
-
+extern Uint32 *sdl_pixel_buffer;
 static const Uint8 init_vic2_palette_rgb[16 * 3] = {    // VIC2 palette given by RGB components
 	0x00, 0x00, 0x00,
 	0xFF, 0xFF, 0xFF,
@@ -58,15 +45,7 @@ static const Uint8 init_vic2_palette_rgb[16 * 3] = {    // VIC2 palette given by
 	0x78, 0x6a, 0xbd,
 	0x9f, 0x9f, 0x9f
 };
-
-
-static Uint32 palette[16];
-
-
-
-
-
-
+static Uint32 palette[256];
 
 
 void clear_emu_events ( void )
@@ -74,12 +53,60 @@ void clear_emu_events ( void )
 	xemu_drop_events();
 }
 
+static void clear_screen ( void )
+{
+	for (unsigned int a = 0; a < SCREEN_WIDTH * SCREEN_HEIGHT; a++)
+		sdl_pixel_buffer[a] = palette[6];
+}
 
+static void clear_area ( int x1, int y1, int x2, int y2, Uint32 colour )
+{
+	Uint32 *pix = sdl_pixel_buffer + y1 * SCREEN_WIDTH;
+	while (y1 <= y2) {
+		y1++;
+		for (int x = x1; x <= x2; x++)
+			pix[x] = colour;
+		pix += SCREEN_WIDTH;
+	}
+}
+
+static void write_char ( int x1, int y1, char chr, Uint32 colour )
+{
+	Uint32 *pix = sdl_pixel_buffer + y1 * SCREEN_WIDTH + x1;
+	chr = ((signed char)chr < 32) ? '?' - 32 : chr - 32;
+	for (int y = 0; y < 16; y++) {
+		for (Uint32 b = font_16x16[(chr << 4) + y], x = 0; x < 16; b <<= 1, x++) {
+			if ((b & 0x8000))
+				pix[x] = colour;
+		}
+		pix += SCREEN_WIDTH;
+	}
+}
+
+static void write_string ( int x1, int y1, const char *str, Uint32 colour )
+{
+	while (*str) {
+		write_char(x1, y1, *str++, colour);
+		x1 += 9;
+	}
+}
+
+static void construct_keyboard ( void )
+{
+}
+
+static struct {
+	int position;
+} keyboard[] = {
+};
+
+
+#define OSD_TRAY(...)	OSD(-1,SCREEN_HEIGHT-20,__VA_ARGS__)
 
 
 int main ( int argc, char **argv )
 {
-	xemu_pre_init(APP_ORG, TARGET_NAME, "Xemu Keyboard Configurator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "Xemu Keyboard Configurator");
 	if (argc != 4)
 		FATAL("Missing specifier(s) from command line. This program is not meant to be used manually.\nPlease use the menu of an Xemu emulator which supports key re-mapping.");
 	if (xemu_post_init(
@@ -97,12 +124,46 @@ int main ( int argc, char **argv )
 		NULL			// no emulator specific shutdown function
 	))
 		return 1;
-	osd_init_with_defaults();
-	OSD(-1, -1, "Welcome to the Keymap Configurator!");
-	for (unsigned int a = 0; a < SCREEN_WIDTH * SCREEN_HEIGHT; a++)
-		sdl_pixel_buffer[a] = palette[6];
+	//osd_init_with_defaults();
+	const Uint8 osd_palette[] = {
+		0xFF, 0, 0, 0x80,	// with alpha channel 0x80
+		0xFF,0xFF,0xFF,0xFF	// white
+	};
+	osd_init(
+		//OSD_TEXTURE_X_SIZE, OSD_TEXTURE_Y_SIZE,
+		SCREEN_WIDTH * 1, SCREEN_HEIGHT * 1,
+		osd_palette,
+		sizeof(osd_palette) >> 2,
+		OSD_FADE_DEC_VAL,
+		OSD_FADE_END_VAL
+	);
+	OSD_TRAY("Welcome to the Keymap Configurator!");
+	clear_screen();
+	SDL_Surface *surf = SDL_LoadBMP("mega65-kbd.bmp");
+	if (surf) {
+		printf("Colours=%d\n", surf->format->palette->ncolors);
+		for (int a = 0; a < 128; a++)
+			palette[128 + (a & 127)] = SDL_MapRGBA(
+				sdl_pix_fmt,
+				surf->format->palette->colors[a].r,
+				surf->format->palette->colors[a].g,
+				surf->format->palette->colors[a].b,
+				0xFF
+			);
+		printf("BitsPerPixel=%d BytesPerPixel=%d\n",
+			surf->format->BitsPerPixel,
+			surf->format->BytesPerPixel
+		);
+		for (int a = 0; a < 800 * 300; a++)
+			sdl_pixel_buffer[a] = palette[128 + (((Uint8*)surf->pixels)[a] & 127)];
+	} else
+		FATAL("Cannot load keyboard image: %s", SDL_GetError());
+	//write_char(10,10,'A', palette[1]);
+	write_string(10, 10, "Printout!", palette[1]);
 	Uint32 old_ticks;
 	xemu_update_screen();
+	SDL_Scancode result_for_assignment = SDL_SCANCODE_UNKNOWN;
+	int wait_for_assignment = 0;
 	for (;;) {
 		int force_render = 0;
 		SDL_Event ev;
@@ -113,37 +174,57 @@ int main ( int argc, char **argv )
 					if (ARE_YOU_SURE(NULL, ARE_YOU_SURE_DEFAULT_YES))
 						exit(1);
 					break;
-				case SDL_KEYDOWN:
-					OSD(-1, -1, "%s", SDL_GetScancodeName(ev.key.keysym.scancode));
+				case SDL_KEYUP:
+					if (wait_for_assignment) {
+						if (ev.key.repeat) {
+							OSD_TRAY("ERROR: key repeats, too long press");
+						} else if (result_for_assignment != ev.key.keysym.scancode && ev.key.keysym.scancode != SDL_SCANCODE_UNKNOWN) {
+							OSD_TRAY("ERROR: multiple keys used!");
+							result_for_assignment = SDL_SCANCODE_UNKNOWN;
+						} else if (result_for_assignment == ev.key.keysym.scancode && result_for_assignment != SDL_SCANCODE_UNKNOWN) {
+							// FIXME TODO: check is key is free! And only allow to accept then!
+							OSD_TRAY("OK: assigned key: %s", SDL_GetScancodeName(ev.key.keysym.scancode));
+							result_for_assignment = SDL_SCANCODE_UNKNOWN;
+							wait_for_assignment = 0;
+						}
+					}/*else
+						OSD_TRAY("No key is clicked on the map");*/
 					break;
-				//case SDL_KEYUP:
-				//case SDL_MOUSEBUTTONDOWN:
+				case SDL_KEYDOWN:
+					if (wait_for_assignment) {
+						if (ev.key.repeat) {
+							OSD_TRAY("ERROR: key repeats, too long press");
+						} else if (result_for_assignment != SDL_SCANCODE_UNKNOWN) {
+							OSD_TRAY("ERROR: multiple keypressed used!");
+							//result_for_assignment = ev.key.keysym.scancode;
+						} else {
+							if (ev.key.keysym.scancode == SDL_SCANCODE_UNKNOWN)
+								OSD_TRAY("ERROR: This key has no proper SDL decode");
+							else
+								result_for_assignment = ev.key.keysym.scancode;
+						}
+					}/* else
+						OSD_TRAY("No key is clicked on the map");*/
+					break;
+				case SDL_MOUSEBUTTONDOWN:
+					DEBUGPRINT("X=%d, Y=%d" NL, ev.button.x, ev.button.y);
+					OSD_TRAY("Waiting your keypress to assign!!");
+					wait_for_assignment = 1;
+					break;
 				//case SDL_MOUSEBUTTONUP:
 				case SDL_MOUSEMOTION:
 					if (ev.motion.x >= 0 && ev.motion.x < SCREEN_WIDTH && ev.motion.y >= 0 && ev.motion.y < SCREEN_HEIGHT) {
-						DEBUGPRINT("X=%d, Y=%d" NL, ev.motion.x, ev.motion.y);
+						//DEBUGPRINT("X=%d, Y=%d" NL, ev.motion.x, ev.motion.y);
 						sdl_pixel_buffer[ev.motion.x + ev.motion.y * SCREEN_WIDTH] = palette[1];
 						force_render = 1;
 					}
 					break;
 				case SDL_WINDOWEVENT:
-					switch (ev.window.event) {
-						case SDL_WINDOWEVENT_SHOWN:
-						case SDL_WINDOWEVENT_HIDDEN:
-						case SDL_WINDOWEVENT_EXPOSED:
-						case SDL_WINDOWEVENT_RESIZED:
-						case SDL_WINDOWEVENT_SIZE_CHANGED:
-						case SDL_WINDOWEVENT_MOVED:
-						case SDL_WINDOWEVENT_MINIMIZED:
-						case SDL_WINDOWEVENT_MAXIMIZED:
-						case SDL_WINDOWEVENT_RESTORED:
-							DEBUGPRINT("EVENT: handled window event" NL);
-							force_render = 1;
-							break;
-						default:
-							DEBUGPRINT("EVENT: un-handled window event" NL);
-							break;
-					}
+					// it's a bit cruel, but it'll do
+					// basically I just want to avoid rendering texture to screen if not needed
+					// any window event MAY mean some reason to do it, some of them may be not
+					// but it's not fatal anyway to do so.
+					force_render = 1;
 					break;
 				default:
 					break;
