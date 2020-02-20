@@ -41,6 +41,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifdef CONFIG_EPNET_SUPPORT
 
 #define direct_mode_epnet_shift 0
+#define IS_DIRECT_MODE() (!(mr1&1))
 
 int w5300_int;
 int w5300_does_work = 0;
@@ -50,11 +51,16 @@ static Uint8 wregs[0x400];	// W5300 registers
 static Uint8 idm_ar0, idm_ar1;
 static int   idm_ar;
 static Uint8 mr0, mr1;
-static int direct_mode;
+//static int   direct_mode;
 static void (*interrupt_cb)(int);
 
 
 #ifdef XEMU_ARCH_WIN
+
+// NOTE: Xemu framework has some networking even for WIN. However Enterprise-128 emulator is not yet
+// fully integrated into the framework :( So for now, let's implement everything here. Later it's a
+// TODO to re-factor the whole Enterprise-128 target within Xemu anyway, and this will go away as well then.
+
 #include <winsock2.h>
 #include <windows.h>
 static int _winsock_init_status = 1;    // 1 = todo, 0 = was OK, -1 = error!
@@ -260,7 +266,7 @@ void epnet_reset ( void )
 	static const Uint8 default_mac[] = {0xC1,0xC2,0xC3,0xC4,0xC5,0xC6};
 	memset(wregs, 0, sizeof wregs);
 	mr0 = 0x38; mr1 = 0x00;
-	direct_mode = (mr1 & 1) ? 0 : 1;
+	//direct_mode = (mr1 & 1) ? 0 : 1;
 	idm_ar0 = 0; idm_ar1 = 0; idm_ar = 0;
 	w5300_int = 0;
 	wregs[0x1C] = 0x07; wregs[0x1D] = 0xD0; // RTR retransmission timeout-period register
@@ -270,7 +276,7 @@ void epnet_reset ( void )
 	wregs[0xFE] = 0x53;	// IDR: ID register
 	wregs[0xFF] = 0x00;	// IDR: ID register
 	memcpy(wregs + 8, default_mac, 6);
-	DEBUGPRINT("EPNET: reset, direct_mode = %d" NL, direct_mode);
+	DEBUGPRINT("EPNET: reset, direct_mode = %s" NL, IS_DIRECT_MODE() ? "yes" : "no");
 }
 
 
@@ -325,7 +331,7 @@ void epnet_uninit ( void )
 Uint8 epnet_read_cpu_port ( unsigned int port )
 {
 	Uint8 data;
-	if (XEMU_UNLIKELY(direct_mode)) {
+	if (XEMU_UNLIKELY(IS_DIRECT_MODE())) {
 		port += direct_mode_epnet_shift;
 		if (port >= 2) {
 			data = read_reg(port);
@@ -365,9 +371,10 @@ Uint8 epnet_read_cpu_port ( unsigned int port )
 }
 
 
+
 void  epnet_write_cpu_port ( unsigned int port, Uint8 data )
 {
-	if (XEMU_UNLIKELY(direct_mode)) {
+	if (XEMU_UNLIKELY(IS_DIRECT_MODE())) {
 		port += direct_mode_epnet_shift;
 		if (port >= 2) {
 			DEBUGPRINT("EPNET: IO: writing in *DIRECT-MODE* W5300 register $%03X, data: $%02X @ PC=$%04X" NL, port, data, Z80_PC);
@@ -393,11 +400,9 @@ void  epnet_write_cpu_port ( unsigned int port, Uint8 data )
 				if (data & 4) ERROR_WINDOW("EPNET: data bus byte-order swap feature is not emulated");
 				//if ((data & 1) == 0) ERROR_WINDOW("EPNET: direct mode is NOT emulated, only indirect");
 				if (((mr1 ^ data) & 1)) {
-					direct_mode = (data & 1) ? 0 : 1;
-					DEBUGPRINT("EPNET: w5300 access mode change: %s -> %s, new val: %s\n",
+					DEBUGPRINT("EPNET: w5300 access mode change: %s -> %s\n",
 							(mr1 & 1) ? "indirect" : "direct",
-							(data & 1) ? "indirect" : "direct",
-							direct_mode ? "direct" : "indirect"
+							(data & 1) ? "indirect" : "direct"
 					);
 				}
 				mr1 = data;

@@ -278,8 +278,10 @@ static void assign_named_key ( const char *name, SDL_Scancode code )
 	struct keyboard_st *k = search_key_by_name(name);
 	if (!k)
 		DEBUGPRINT("WARNING: unknown referenced entity: \"%s\"" NL, name);
-	else
+	else {
 		k->code = code;
+		DEBUGPRINT("ASSIGN: assigned \"%s\"" NL, name);
+	}
 }
 
 static void draw_full_keyboard ( void )
@@ -297,7 +299,12 @@ static double construct_keyboard_row ( double x, double y, double x_step, int wi
 		char *e = strchr(s, '\1');
 		if (e)
 			*e = '\0';
-		construct_key(x, y, x + width, y + height, s, s, SDL_SCANCODE_UNKNOWN);
+		char *p = strchr(s, '=');
+		if (p)
+			*p++ = '\0';
+		else
+			p = s;
+		construct_key(x, y, x + width, y + height, s, p, SDL_SCANCODE_UNKNOWN);
 		x += x_step;
 		if (!e)
 			break;
@@ -311,16 +318,20 @@ static void construct_mega_keyboard ( void )
 {
 	construct_keyboard_row(100, 114, 48.6, 26, 26, "Q\1W\1E\1R\1T\1Y\1U\1I\1O\1P");
 	construct_keyboard_row(111, 158, 48.6, 26, 26, "A\1S\1D\1F\1G\1H\1J\1K\1L");
-	construct_keyboard_row(136, 202, 48.6, 26, 26, "Z\1X\1C\1V\1B\1N\1M");
+	construct_keyboard_row(136, 202, 48.6, 26, 26, "Z\1X\1C\1V\1B\1N\1M\1<\n,\1>\n.\1?\n/");
 }
 
 
 int main ( int argc, char **argv )
 {
+	static const char boring_warning[] = "\nThis program is not meant to be used manually.\nPlease use the menu of an Xemu emulator which supports key re-mapping.";
 	xemu_pre_init(APP_ORG, TARGET_NAME, "Xemu Keyboard Configurator");
 	if (argc != 4)
-		FATAL("Missing specifier(s) from command line. This program is not meant to be used manually.\nPlease use the menu of an Xemu emulator which supports key re-mapping.");
-	construct_mega_keyboard();
+		FATAL("Missing specifier(s) from command line.%s", boring_warning);
+	if (!strcmp(argv[3], "mega65"))
+		construct_mega_keyboard();
+	else
+		FATAL("Bad target specifier: \"%s\"%s", argv[3], boring_warning);
 	DEBUGPRINT("Loading default set: %s" NL, argv[1]);
 	if (load_keymap(argv[1], assign_named_key))
 		return 1;
@@ -354,7 +365,7 @@ int main ( int argc, char **argv )
 		OSD_FADE_DEC_VAL,
 		OSD_FADE_END_VAL
 	);
-	OSD_TRAY("Welcome to the Keymap Configurator!");
+	OSD_TRAY("Welcome to Xemu's Keymap Configurator!");
 	clear_screen();
 	SDL_Surface *surf = SDL_LoadBMP("mega65-kbd.bmp");
 	if (surf) {
@@ -379,7 +390,8 @@ int main ( int argc, char **argv )
 	//write_char(10,10,'A', palette[1]);
 	//write_string(10, SCREEN_HEIGHT - 30, "Printout!", palette[1]);
 	//write_status("Hi!\nHow are you?\nHmm?!");
-	STATUS("Quick help: click on a key to assign, then press a key\non your keyboard to define it\nClose window to save or cancel your mapping.");
+	static const char help_msg[] =  "Quick help: click on a key to assign, then press a key\non your keyboard to define it\nClose window to save or cancel your mapping.";
+	STATUS("%s", help_msg);
 	Uint32 old_ticks;
 	xemu_update_screen();
 	int frames = 0;
@@ -404,14 +416,18 @@ int main ( int argc, char **argv )
 							result_for_assignment = SDL_SCANCODE_UNKNOWN;
 						} else if (result_for_assignment == ev.key.keysym.scancode && result_for_assignment != SDL_SCANCODE_UNKNOWN) {
 							// FIXME TODO: check is key is free! And only allow to accept then!
+							//struct keyboard_st *k = search_key_by_code(ev.key.keysym.scancode);
+							//if (k != NULL)
+							//	QUESTION("This pressed key \"%\" already assigned to function \"%s\"");
 							OSD_TRAY("OK: assigned key: %s", SDL_GetScancodeName(ev.key.keysym.scancode));
 							STATUS("Last operation: assigned key: %s\nDo not give up, assign a new key today! Just here and now!", SDL_GetScancodeName(ev.key.keysym.scancode));
 							wait_for_assignment->code = result_for_assignment;
 							result_for_assignment = SDL_SCANCODE_UNKNOWN;
 							wait_for_assignment = NULL;
 						}
-					}/*else
-						OSD_TRAY("No key is clicked on the map");*/
+					} else {
+						//OSD_TRAY("No key is clicked on the map");*/
+					}
 					break;
 				case SDL_KEYDOWN:
 					if (ev.key.keysym.scancode == SDL_SCANCODE_ESCAPE)
@@ -428,14 +444,23 @@ int main ( int argc, char **argv )
 							else
 								result_for_assignment = ev.key.keysym.scancode;
 						}
-					}/* else
-						OSD_TRAY("No key is clicked on the map");*/
+					} else {
+						//OSD_TRAY("No key is clicked on the map");*/
+						struct keyboard_st *k = search_key_by_code(ev.key.keysym.scancode);
+						const char *sname = SDL_GetScancodeName(ev.key.keysym.scancode);
+						if (k) {
+							STATUS("KEY: %s %s %s", k->title, k->name, *sname ? sname : "UNASSIGNED");
+						} else {
+							STATUS("The pressed key (%s) is not assigned to any emulated key.", sname);
+						}
+					}
+					force_render = 1;
 					break;
 				case SDL_MOUSEBUTTONDOWN:
 					if (mouse_on_key) {
 						DEBUGPRINT("X=%d, Y=%d" NL, ev.button.x, ev.button.y);
 						OSD_TRAY("Waiting your keypress to assign!!");
-						STATUS("Assigning now :)");
+						STATUS("Now please press a key on your keyboard to assign for the emulated key: %s", mouse_on_key->name);
 						wait_for_assignment = mouse_on_key;
 						force_render = 1;
 						mouse_on_key = NULL;
@@ -449,13 +474,16 @@ int main ( int argc, char **argv )
 						//sdl_pixel_buffer[ev.motion.x + ev.motion.y * SCREEN_WIDTH] = palette[1];
 						struct keyboard_st *k = search_key_by_coord(ev.motion.x, ev.motion.y);
 						if (k) {
-							mouse_on_key = k;
-							draw_full_keyboard();
-							draw_key(k, OVER_COLOUR_INDEX);
-							const char *sname = SDL_GetScancodeName(k->code);
-							STATUS("KEY: %s %s %s", k->title, k->name, *sname ? sname : "UNASSINGED");
-							force_render = 1;
+							if (mouse_on_key != k) {
+								mouse_on_key = k;
+								draw_full_keyboard();
+								draw_key(k, OVER_COLOUR_INDEX);
+								const char *sname = SDL_GetScancodeName(k->code);
+								STATUS("KEY: %s %s %s", k->title, k->name, *sname ? sname : "UNASSIGNED");
+								force_render = 1;
+							}
 						} else if (mouse_on_key) {
+							STATUS("%s", help_msg);
 							draw_full_keyboard();
 							mouse_on_key = NULL;
 							force_render = 1;
