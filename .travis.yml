@@ -150,6 +150,8 @@ matrix:
             - sdl2
       before_script:
         - set +e
+        - brew update || true
+        - brew install sdl2 create-dmg
         - uname -a ; pwd ; df -h ; id -a
         - hostname ; sudo hostname lgb || true ; hostname
         - set -e
