@@ -155,16 +155,36 @@ static void update_interrupts ( void )
 }
 
 
+static int socket0_fifo_pointer = 0;
+
 
 static Uint8 read_reg ( int addr )
 {
 	Uint8 data;
 	addr &= 0x3FF;
 	if (addr >= 0x200) {
-		int sn = (addr - 0x200) >> 5;	// sn: socket number (0-7)
-		switch (addr & 0x1F) {
+		int sn = (addr - 0x200) >> 6;	// sn: socket number (0-7)
+		int sn_base = addr & ~0x3F;
+		int sn_reg  = addr &  0x3F;
+		data = wregs[addr];
+		switch (sn_reg) {
+			case 0x00:
+			case 0x01:
+			case 0x02:
+			case 0x03:
+			case 0x08:
+			case 0x09:
+				break;
+			case 0x30:	// Sn_RX_FIFOR0
+				data = wmem[socket0_fifo_pointer];
+				socket0_fifo_pointer = (socket0_fifo_pointer + 1) & 8191;
+				break;
+			case 0x31:	// Sn_RX_FIFOR1
+				data = wmem[socket0_fifo_pointer];
+				socket0_fifo_pointer = (socket0_fifo_pointer + 1) & 8191;
+				break;
 			default:
-				data = wregs[addr];
+				DEBUGPRINT("EPNET: W5300: reading unemulated SOCKET register $%03X S-%d/$%02X" NL, addr, sn, sn_reg);
 				break;
 		}
 	} else {
@@ -180,41 +200,62 @@ static void write_reg ( int addr, Uint8 data )
 	addr &= 0x3FF;
 	//DEBUGPRINT("EPNET: W5300-REG: writing register $%03X with data $%02X" NL, addr, data);
 	if (addr >= 0x200) {
-		int sn = (addr - 0x200) >> 5;	// sn: socket number (0-7)
-		wregs[addr] = data;
-		switch (addr & 0x1F) {
+		int sn = (addr - 0x200) >> 6;	// sn: socket number (0-7)
+		int sn_base = addr & ~0x3F;
+		int sn_reg  = addr &  0x3F;
+		switch (sn_reg) {
 			case 0x00:	// Sn_MR0, socket mode register
 			case 0x01:	// Sn_MR1
-			case 0x02:	// Sn_CR0 [reversed], command register
+				wregs[addr] = data;
+				break;
+			case 0x02:	// Sn_CR0 [reserved], command register
+				break;
 			case 0x03:	// Sn_CR1, command register
-			case 0x04:
-			case 0x05:
-			case 0x06:
-			case 0x07:
-			case 0x08:
-			case 0x09:
-			case 0x0A:
-			case 0x0B:
-			case 0x0C:
-			case 0x0D:
-			case 0x0E:
-			case 0x0F:
-			case 0x10:
-			case 0x11:
-			case 0x12:
-			case 0x13:
-			case 0x14:
-			case 0x15:
-			case 0x16:
-			case 0x17:
-			case 0x18:
-			case 0x19:
-			case 0x1A:
-			case 0x1B:
-			case 0x1C:
-			case 0x1D:
-			case 0x1E:
-			case 0x1F:
+				// "When W5300 detects any command, Sn_CR is automatically cleared to 0x00. Even though Sn_CR is
+				// cleared to 0x00, the command can be still performing. It can be checked by Sn_IR or Sn_SSR if
+				// command is completed or not."
+				wregs[sn_base + 2] = 0;
+				wregs[sn_base + 3] = 0;
+				// Hack for EPNET test, we pre-set SSR now!
+				// FIXME: we should parse the command etc ... this is just a wild stuff now to bypass EPNET ROM's init routine!
+				DEBUGPRINT("EPNET: W5300: got command $%02X on SOCKET %d" NL, data, sn);
+				switch (data) {
+					case 0x01:	// OPEN
+					case 0x02:	// LISTEN  only valid in TCP mode, operates as "server" mode
+					case 0x04:	// CONNECT only valid in TCP mode, operates as "client" mode
+					case 0x08:	// DISCON  only valid in TCP mode
+					case 0x10:	// CLOSE
+						// "Sn_SSR is changed to SOCK_CLOSED."
+						wregs[sn_base + 8] = 0;
+						wregs[sn_base + 9] = 0;
+						DEBUGPRINT("EPNET: W5300: command CLOSE on SOCKET %d" NL, sn);
+						break;
+					case 0x20:	// SEND
+					case 0x21:	// SEND_MAC
+					case 0x22:	// SEND_KEEP
+					case 0x40:	// RECV
+					default:
+						break;
+				}
+				if (data == 0x10) {
+					wregs[sn_base + 8] = 0;
+					wregs[sn_base + 9] = 0;
+				} else {
+					wregs[sn_base + 8] = 0;
+					wregs[sn_base + 9] = 0x13;
+				}
+				break;
+			case 0x30:	// Sn_RX_FIFOR0, for real RX can only be written in memory test mode ..
+				wmem[socket0_fifo_pointer] = data;
+				socket0_fifo_pointer = (socket0_fifo_pointer + 1) & 8191;
+				break;
+			case 0x31:	// Sn_RX_FIFOR1
+				wmem[socket0_fifo_pointer] = data;
+				socket0_fifo_pointer = (socket0_fifo_pointer + 1) & 8191;
+				break;
+			default:
+				DEBUGPRINT("EPNET: W5300: writing unemulated SOCKET register $%03X S-%d/$%02X" NL, addr, sn, sn_reg);
+				wregs[addr] = data;
 				break;
 		}
 	} else switch (addr) {
@@ -235,21 +276,6 @@ static void write_reg ( int addr, Uint8 data )
 			wregs[addr] = data;
 			break;
 	}
-		/*
-		 *	200	S0_MR		mode register
-		 *	202	S0_CR		command register
-		 *	204	S0_IMR		interrupt mask register
-		 *	206	S0_IR		interrupt register
-		 *	208	S0_SSR		socket status register
-		 *	20A	S0_PORTR	source port register
-		 *	20C	S0_DHAR		destination hardware address register
-		 *	212	S0_DPORTR	Destination Port Register
-		 *	214	S0_DIPR		destination IP address register
-		 *	218	S0_MSSR		maximum segment size register
-		 *	21A	S0_PORTOR	keep alive time register (0), protocol number register (1)
-		 *	21C	S0_TOSR		TOS Register
-		 *	21E	S0_TTLR		TTL register
-		 */
 }
 
 
@@ -273,9 +299,9 @@ void epnet_reset ( void )
 	wregs[0x1F] = 8; 			// RCR retransmission retry-count register
 	memset(wregs + 0x20, 8, 16);		// TX and RX mem size conf
 	wregs[0x31] = 0xFF;			// MTYPER1
-	wregs[0xFE] = 0x53;	// IDR: ID register
-	wregs[0xFF] = 0x00;	// IDR: ID register
-	memcpy(wregs + 8, default_mac, 6);
+	wregs[0xFE] = 0x53;			// IDR: ID register
+	wregs[0xFF] = 0x00;			// IDR: ID register
+	memcpy(wregs + 8, default_mac, 6);	// some default MAC, maybe it's not needed as w5300 does not have it too much AND this emulation does not care either ;)
 	DEBUGPRINT("EPNET: reset, direct_mode = %s" NL, IS_DIRECT_MODE() ? "yes" : "no");
 }
 
@@ -414,7 +440,7 @@ void  epnet_write_cpu_port ( unsigned int port, Uint8 data )
 			//DEBUGPRINT("EPNET: IO: IDM: setting AR0 to $%02X, AR now: $%03X" NL, idm_ar0, idm_ar);
 			break;
 		case 3:
-			idm_ar1 = data & 0xFE;	// LSB is chopped off, since reading/writing IDM_DR0 and 1 will tell that ...
+			idm_ar1 = data & 0xFE;	// LSB is chopped off, since the fact reading/writing IDM_DR0 _OR_ 1 will tell that ...
 			idm_ar = (idm_ar0 << 8) | idm_ar1;
 			//DEBUGPRINT("EPNET: IO: IDM: setting AR1 to $%02X, AR now: $%03X" NL, idm_ar1, idm_ar);
 			break;
