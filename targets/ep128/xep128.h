@@ -54,8 +54,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define CONFIG_USE_LODEPNG
 #define CONFIG_EXDOS_SUPPORT
-#define CONFIG_EPNET_SUPPORT
-#define EPNET_IO_BASE		0x90
+#ifdef	HAVE_SOCKET_OS_API
+#	define CONFIG_EPNET_SUPPORT
+#	define EPNET_IO_BASE		0x90
+#endif
 #define DEFAULT_CPU_CLOCK	4000000
 
 #define COMBINED_ROM_FN		"combined.rom"

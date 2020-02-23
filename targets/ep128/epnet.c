@@ -34,7 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xep128.h"
 #include "epnet.h"
-#include "xemu/z80.h"
+#include "cpu.h"
 #include <SDL.h>
 #include <unistd.h>
 
@@ -46,7 +46,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 int w5300_int;
 int w5300_does_work = 0;
 
-static Uint8 wmem[0x20000];	// 128K of internal RAM of w5300
+static Uint16 wmem[0x10000];	// 128K of internal RAM of w5300
 static Uint8 wregs[0x400];	// W5300 registers
 static Uint8 idm_ar0, idm_ar1;
 static int   idm_ar;
@@ -56,13 +56,102 @@ static void (*interrupt_cb)(int);
 
 
 #ifdef XEMU_ARCH_WIN
+#	include <winsock2.h>
+#	include <windows.h>
+#else
+	typedef int SOCKET;
+#	define closesocket(n) close(n)
+#endif
+
+struct w5300_fifo_st {
+	Uint16	*w;
+	int	readpos, storepos;
+	int	free, stored;
+	int	size;
+};
+
+struct w5300_socket_st {
+	struct w5300_fifo_st rx_fifo;
+	struct w5300_fifo_st tx_fifo;
+	SOCKET	sock;
+	int	mode;
+};
+
+static struct w5300_socket_st sockets[8];
+
+#define RX_FIFO_FILL(sn,data)	fifo_fill(&sockets[sn].rx_fifo,data)
+#define RX_FIFO_CONSUME(sn)	fifo_consume(&sockets[sn].rx_fifo)
+#define RX_FIFO_RESET(sn)	fifo_reset(&sockets[sn].rx_fifo)
+#define RX_FIFO_GET_FREE(sn)	sockets[sn].rx_fifo.free
+#define RX_FIFO_GET_USED(sn)	sockets[sn].rx_fifo_stored
+#define TX_FIFO_FILL(sn,data)	fifo_fill(&sockets[sn].tx_fifo,data)
+#define TX_FIFO_CONSUME(sn)	fifo_consume(&sockets[sn].tx_fifo)
+#define TX_FIFO_RESET(sn)	fifo_reset(&sockets[sn].tx_fifo)
+#define TX_FIFO_GET_FREE(sn)	sockets[sn].tx_fifo.free
+#define TX_FIFO_GET_USED(sn)	sockets[sn].tx_fifo_stored
+
+static void   fifo_fill    ( struct w5300_fifo_st *f, Uint16 data )
+{
+	if (XEMU_LIKELY(f->free)) {
+		if (f->stored == 0) {
+			f->storepos = 0;
+			f->readpos = 0;
+		}
+		f->w[f->storepos] = data;
+		f->storepos = XEMU_UNLIKELY(f->storepos == f->size - 1) ? 0 : f->storepos + 1;
+		f->stored++;
+		f->free = f->size - f->stored;
+	} else
+		DEBUGPRINT("EPNET: W5300: FIFO: fifo is full!!" NL);
+}
+
+static Uint16 fifo_consume ( struct w5300_fifo_st *f )
+{
+	if (XEMU_LIKELY(f->stored)) {
+		Uint16 data = f->w[f->readpos];
+		f->readpos = XEMU_UNLIKELY(f->readpos == f->size - 1) ? 0 : f->readpos + 1;
+		f->stored--;
+		f->free = f->size - f->stored;
+		return data;
+	} else {
+		DEBUGPRINT("EPNET: W5300: FIFO: fifo is empty!!" NL);
+		return 0xFFFF;	// some answer ...
+	}
+}
+
+static void fifo_reset ( struct w5300_fifo_st *f )
+{
+	f->stored = 0;
+	f->free = f->size;
+	f->readpos = 0;
+	f->storepos = 0;
+}
+
+static void default_w5300_config ( void )
+{
+	Uint16 *w = wmem;
+	// FIXME!!! This only knows about the default memory layout!
+	// FIXME!!! Currently not emulated other modification of this via w5300 registers!
+	for (int sn = 0; sn < 8; sn++) {
+		sockets[sn].rx_fifo.w = w;
+		w += 4096;
+		sockets[sn].tx_fifo.w = w;
+		w += 4096;
+		sockets[sn].rx_fifo.size = 4096;
+		sockets[sn].tx_fifo.size = 4096;
+		sockets[sn].mode = 0;
+		sockets[sn].sock = -1;
+		RX_FIFO_RESET(sn);
+		TX_FIFO_RESET(sn);
+	}
+}
+
+#ifdef XEMU_ARCH_WIN
 
 // NOTE: Xemu framework has some networking even for WIN. However Enterprise-128 emulator is not yet
 // fully integrated into the framework :( So for now, let's implement everything here. Later it's a
 // TODO to re-factor the whole Enterprise-128 target within Xemu anyway, and this will go away as well then.
 
-#include <winsock2.h>
-#include <windows.h>
 static int _winsock_init_status = 1;    // 1 = todo, 0 = was OK, -1 = error!
 int xemu_use_sockapi ( void )
 {
@@ -94,29 +183,27 @@ void xemu_free_sockapi ( void )
 	}
 }
 #else
-typedef int SOCKET;
-#define closesocket(n) close(n)
-int xemu_use_sockapi ( void ) {
-	return 0;
-}
-void xemu_free_sockapi ( void ) {
-}
+int  xemu_use_sockapi  ( void ) { return 0; }
+void xemu_free_sockapi ( void ) { }
 #endif
 
 
 static SDL_Thread *thread = NULL;
 static SDL_atomic_t thread_can_go;
-static struct {
-	SOCKET sock;
-} sockets[8];
 
 
-
+// WARNING: this code runs as a _THREAD_!!
+// Must be very careful what data is touched an in what way, because of the probability of race-condition with the main thread!
 static int net_thread ( void *ptr )
 {
 	SDL_AtomicSet(&thread_can_go, 2);
-	while (SDL_AtomicGet(&thread_can_go) != 0)
-		SDL_Delay(10);
+	while (SDL_AtomicGet(&thread_can_go) != 0) {
+		int activity = 0;
+		for (int sn = 0; sn < 8; sn++) {
+		}
+		if (!activity)
+			SDL_Delay(10);
+	}
 	return 1976;
 }
 
@@ -155,8 +242,6 @@ static void update_interrupts ( void )
 }
 
 
-static int socket0_fifo_pointer = 0;
-
 
 static Uint8 read_reg ( int addr )
 {
@@ -166,25 +251,44 @@ static Uint8 read_reg ( int addr )
 		int sn = (addr - 0x200) >> 6;	// sn: socket number (0-7)
 		int sn_base = addr & ~0x3F;
 		int sn_reg  = addr &  0x3F;
-		data = wregs[addr];
 		switch (sn_reg) {
 			case 0x00:
 			case 0x01:
 			case 0x02:
 			case 0x03:
-			case 0x08:
-			case 0x09:
+			case 0x08:	// Sn_SSR0 [reserved]
+			case 0x09:	// Sn_SSR1
+				// for these registers are KNOWN it's OK to pass the value in "wregs" as answer
+				data = wregs[addr];
+				break;
+			case 0x25:	// Sn_TX_FSR1 (Sn_TX_FSR0 is not written, since the value cannot be so big, even this FSR1 only 1 bit LSB is used!)
+				data = (TX_FIFO_GET_FREE(sn) >> 16) & 0x01;
+				break;
+			case 0x26:	// Sn_TX_FSR2
+				data = (TX_FIFO_GET_FREE(sn) >>  8) & 0xFF;
+				break;
+			case 0x27:	// Sn_TX_FSR3
+				data =  TX_FIFO_GET_FREE(sn)        & 0xFF;
+				break;
+			case 0x2E:	// Sn_TX_FIFOR0, for real TX FIFO can only be read in memory test mode ... FIXME
+				{ Uint16 data16 = TX_FIFO_CONSUME(sn);
+				data = data16 >> 8;
+				wregs[addr + 1] = data16 & 0xFF; }
+				break;
+			case 0x2F:	// Sn_TX_FIFOR1, for real TX FIFO can only be read in memory test mode ... FIXME
+				data = wregs[addr];	// access of reg Sn_BASE + 0x2E stored the needed value here!
 				break;
 			case 0x30:	// Sn_RX_FIFOR0
-				data = wmem[socket0_fifo_pointer];
-				socket0_fifo_pointer = (socket0_fifo_pointer + 1) & 8191;
+				{ Uint16 data16 = RX_FIFO_CONSUME(sn);
+				data = data16 >> 8;
+				wregs[addr + 1] = data16 & 0xFF; }
 				break;
 			case 0x31:	// Sn_RX_FIFOR1
-				data = wmem[socket0_fifo_pointer];
-				socket0_fifo_pointer = (socket0_fifo_pointer + 1) & 8191;
+				data = wregs[addr];	// access of reg Sn_BASE + 0x30 stored the needed value here!
 				break;
 			default:
 				DEBUGPRINT("EPNET: W5300: reading unemulated SOCKET register $%03X S-%d/$%02X" NL, addr, sn, sn_reg);
+				data = wregs[addr];	// no idea, just pass back the value ...
 				break;
 		}
 	} else {
@@ -208,50 +312,69 @@ static void write_reg ( int addr, Uint8 data )
 			case 0x01:	// Sn_MR1
 				wregs[addr] = data;
 				break;
-			case 0x02:	// Sn_CR0 [reserved], command register
+			case 0x02:	// Sn_CR0 [reserved], command register, this byte cannot be written
+			case 0x08:	// SSR0 [reserved] cannot be written by the USER
+			case 0x09:	// SSR1 cannot be written by the USER
 				break;
 			case 0x03:	// Sn_CR1, command register
 				// "When W5300 detects any command, Sn_CR is automatically cleared to 0x00. Even though Sn_CR is
 				// cleared to 0x00, the command can be still performing. It can be checked by Sn_IR or Sn_SSR if
 				// command is completed or not."
-				wregs[sn_base + 2] = 0;
-				wregs[sn_base + 3] = 0;
-				// Hack for EPNET test, we pre-set SSR now!
-				// FIXME: we should parse the command etc ... this is just a wild stuff now to bypass EPNET ROM's init routine!
+				wregs[addr] = 0;
 				DEBUGPRINT("EPNET: W5300: got command $%02X on SOCKET %d" NL, data, sn);
 				switch (data) {
 					case 0x01:	// OPEN
-					case 0x02:	// LISTEN  only valid in TCP mode, operates as "server" mode
-					case 0x04:	// CONNECT only valid in TCP mode, operates as "client" mode
-					case 0x08:	// DISCON  only valid in TCP mode
+						// See the protocol the socket wanted to be open with. Currently supporting only TCP and UDP, no raw or anything ...
+						switch (wregs[sn_base + 1] & 15) {
+							case 1: // TCP
+								sockets[sn].mode = 1;
+								wregs[sn_base + 9] = 0x13;	// SOCK_INIT status, telling that socket is open in TCP mode
+								DEBUGPRINT("EPNET: W5300: OPEN: socket %d is open in TCP mode now" NL, sn);
+								break;
+							case 2: // UDP
+								sockets[sn].mode = 2;
+								wregs[sn_base + 9] = 0x22;	// SOCK_UDP status, telling that socket is open in UDP mode
+								DEBUGPRINT("EPNET: W5300: OPEN: socket %d is open in UDP mode now" NL, sn);
+								break;
+							default:
+								wregs[sn_base + 9] = 0;
+								DEBUGPRINT("EPNET: W5300: OPEN: unknown protocol on SOCKET %d: %d" NL, sn, wregs[sn_base + 1] & 15);
+								break;
+						}
+						break;
 					case 0x10:	// CLOSE
 						// "Sn_SSR is changed to SOCK_CLOSED."
-						wregs[sn_base + 8] = 0;
+						sockets[sn].mode = 0;
 						wregs[sn_base + 9] = 0;
 						DEBUGPRINT("EPNET: W5300: command CLOSE on SOCKET %d" NL, sn);
 						break;
 					case 0x20:	// SEND
+						DEBUGPRINT("EPNET: W5300: SEND command on SOCKET %d" NL, sn);
+						if (wregs[sn_base + 9] == 0x22) {	// check if we have SOCK_UDP status, thus being OK to handle this as UDP
+						}
+						break;
+					case 0x02:	// LISTEN  only valid in TCP mode, operates as "server" mode
+					case 0x04:	// CONNECT only valid in TCP mode, operates as "client" mode
+					case 0x08:	// DISCON  only valid in TCP mode
 					case 0x21:	// SEND_MAC
 					case 0x22:	// SEND_KEEP
 					case 0x40:	// RECV
 					default:
+						DEBUGPRINT("EPNET: W5300: command *UNKNOWN* ($%02X) on SOCKET %d" NL, data, sn);
 						break;
 				}
-				if (data == 0x10) {
-					wregs[sn_base + 8] = 0;
-					wregs[sn_base + 9] = 0;
-				} else {
-					wregs[sn_base + 8] = 0;
-					wregs[sn_base + 9] = 0x13;
-				}
 				break;
-			case 0x30:	// Sn_RX_FIFOR0, for real RX can only be written in memory test mode ..
-				wmem[socket0_fifo_pointer] = data;
-				socket0_fifo_pointer = (socket0_fifo_pointer + 1) & 8191;
+			case 0x2E:	// Sn_TX_FIFOR0
+				wregs[addr] = data;
 				break;
-			case 0x31:	// Sn_RX_FIFOR1
-				wmem[socket0_fifo_pointer] = data;
-				socket0_fifo_pointer = (socket0_fifo_pointer + 1) & 8191;
+			case 0x2F:	// Sn_TX_FIFOR1
+				TX_FIFO_FILL(sn, (wregs[addr - 1] << 8) | data);	// access of reg Sn_BASE + 0x2E stored the needed value we're referencing here!
+				break;
+			case 0x30:	// Sn_RX_FIFOR0, for real RX FIFO can only be written in memory test mode ... FIXME
+				wregs[addr] = data;
+				break;
+			case 0x31:	// Sn_RX_FIFOR1, for real RX FIFO can only be written in memory test mode ... FIXME
+				RX_FIFO_FILL(sn, (wregs[addr - 1] << 8) | data);	// access of reg Sn_BASE + 0x30 stored the needed value we're referencing here!
 				break;
 			default:
 				DEBUGPRINT("EPNET: W5300: writing unemulated SOCKET register $%03X S-%d/$%02X" NL, addr, sn, sn_reg);
@@ -289,7 +412,6 @@ static void default_interrupt_callback ( int level ) {
 
 void epnet_reset ( void )
 {
-	static const Uint8 default_mac[] = {0xC1,0xC2,0xC3,0xC4,0xC5,0xC6};
 	memset(wregs, 0, sizeof wregs);
 	mr0 = 0x38; mr1 = 0x00;
 	//direct_mode = (mr1 & 1) ? 0 : 1;
@@ -301,29 +423,86 @@ void epnet_reset ( void )
 	wregs[0x31] = 0xFF;			// MTYPER1
 	wregs[0xFE] = 0x53;			// IDR: ID register
 	wregs[0xFF] = 0x00;			// IDR: ID register
-	memcpy(wregs + 8, default_mac, 6);	// some default MAC, maybe it's not needed as w5300 does not have it too much AND this emulation does not care either ;)
 	DEBUGPRINT("EPNET: reset, direct_mode = %s" NL, IS_DIRECT_MODE() ? "yes" : "no");
+}
+
+
+static Uint8 *patch_rom_add_config_pair ( Uint8 *p, const char *name, const char *value )
+{
+	int name_len = strlen(name);
+	int value_len = strlen(value);
+	*p++ = name_len;
+	memcpy(p, name, name_len);
+	p += name_len;
+	*p++ = value_len;
+	memcpy(p, value, value_len);
+	p += value_len;
+	*p++ = 0;
+	*p = 0;	// this will be overwritten if there is more call of this func, otherwise it will close the list of var=val pair list
+	return p;
+}
+
+static int patch_rom ( void )
+{
+	Uint8 *epnet = NULL;
+	// Search for our ROM ...
+	for (Uint8 *p = memory; p < memory + sizeof(memory); p += 0x4000)
+		if (!memcmp(p, "EXOS_ROM", 8) && !memcmp(p + 0xD, "EPNET", 5)) {
+			if (epnet) {
+				ERROR_WINDOW("Multiple instances of EPNET ROM in memory?\nIt won't work too well!");
+				return -1;
+			} else
+				epnet = p;
+		}
+	if (epnet) {
+		int segment = (int)(epnet - memory) >> 14;
+		DEBUGPRINT("EPNET: found ROM in segment %03Xh" NL, segment);
+		// Found our EPNET ROM :-) Now, it's time to patch things up!
+		/*if (epnet[0x18] == EPNET_IO_BASE) {
+			ERROR_WINDOW("EPNET ROM has been already patched?!");
+			return -1;
+		}*/
+		Uint8 *q = epnet + 0x4000 + (epnet[0x19] | (epnet[0x1A] << 8));
+		if (q > epnet + 0x7F00) {
+			ERROR_WINDOW("Bad EPNET ROM, invalid position of settings area!");
+			//return -1;
+		} else {
+			//DEBUGPRINT("EPNET: byte at set area: %02Xh" NL, *q);
+			q = patch_rom_add_config_pair(q, "DHCP",	"n");
+			q = patch_rom_add_config_pair(q, "NTP",		"n");
+			q = patch_rom_add_config_pair(q, "IP",		"192.168.192.168");
+			q = patch_rom_add_config_pair(q, "SUBNET",	"255.255.255.0");
+			q = patch_rom_add_config_pair(q, "GATEWAY",	"192.168.192.169");
+			q = patch_rom_add_config_pair(q, "DNS",		"8.8.8.8");
+			q = patch_rom_add_config_pair(q, "XEP128",	"this-is-an-easter-egg-from-lgb");
+		}
+		epnet[0x18] = EPNET_IO_BASE;	// using fixed port (instead of EPNET's decoding based on the ROM position), which matches our emulation of course.
+		// MAC address setup :) According to Bruce's suggestion, though it does not matter in the emulation too much.
+		static const Uint8 mac_address[] = {0x00,0x00,0xF6,0x42,0x42,0x76};
+		memcpy(epnet + 0x20, mac_address, sizeof(mac_address));
+		return 0;
+	} else {
+		DEBUGPRINT("EPNET: cannot found EPNET ROM! Maybe it's not loaded?! EPNET emulation will not work!" NL);
+		return -1;
+	}
 }
 
 
 void epnet_init ( void (*cb)(int) )
 {
-	if (xemu_use_sockapi())
+	w5300_does_work = 0;
+	patch_rom();
+	if (xemu_use_sockapi()) {
 		w5300_does_work = 0;
-	else if (!start_net_thread()) {
+	} else if (!start_net_thread()) {
 		w5300_does_work = 1;
 		interrupt_cb = cb ? cb : default_interrupt_callback;
 		DEBUGPRINT("EPNET: init seems to be OK." NL);
 		epnet_reset();
 		memset(wmem, 0, sizeof wmem);
-		for (int a = 0; a < 8; a++) {
-			sockets[a].sock = -1;
-		}
+		default_w5300_config();
 	}
 }
-
-
-
 
 
 static void epnet_shutdown ( int restart )
