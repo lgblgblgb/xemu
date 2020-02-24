@@ -58,9 +58,12 @@ static void (*interrupt_cb)(int);
 #ifdef XEMU_ARCH_WIN
 #	include <winsock2.h>
 #	include <windows.h>
+#	define CLOSE_SOCKET(n)	closesocket(n)
+#	define SOCKET_ERRNO	WSAGetLastError()
 #else
 	typedef int SOCKET;
-#	define closesocket(n) close(n)
+#	define CLOSE_SOCKET(n)	close(n)
+#	define SOCKET_ERRNO	errno
 #endif
 
 struct w5300_fifo_st {
@@ -76,18 +79,18 @@ struct w5300_socket_st {
 	int	mode;
 };
 
-static struct w5300_socket_st sockets[8];
+static struct w5300_socket_st wsockets[8];
 
-#define RX_FIFO_FILL(sn,data)	fifo_fill(&sockets[sn].rx_fifo,data)
-#define RX_FIFO_CONSUME(sn)	fifo_consume(&sockets[sn].rx_fifo)
-#define RX_FIFO_RESET(sn)	fifo_reset(&sockets[sn].rx_fifo)
-#define RX_FIFO_GET_FREE(sn)	sockets[sn].rx_fifo.free
-#define RX_FIFO_GET_USED(sn)	sockets[sn].rx_fifo_stored
-#define TX_FIFO_FILL(sn,data)	fifo_fill(&sockets[sn].tx_fifo,data)
-#define TX_FIFO_CONSUME(sn)	fifo_consume(&sockets[sn].tx_fifo)
-#define TX_FIFO_RESET(sn)	fifo_reset(&sockets[sn].tx_fifo)
-#define TX_FIFO_GET_FREE(sn)	sockets[sn].tx_fifo.free
-#define TX_FIFO_GET_USED(sn)	sockets[sn].tx_fifo_stored
+#define RX_FIFO_FILL(sn,data)	fifo_fill(&wsockets[sn].rx_fifo,data)
+#define RX_FIFO_CONSUME(sn)	fifo_consume(&wsockets[sn].rx_fifo)
+#define RX_FIFO_RESET(sn)	fifo_reset(&wsockets[sn].rx_fifo)
+#define RX_FIFO_GET_FREE(sn)	wsockets[sn].rx_fifo.free
+#define RX_FIFO_GET_USED(sn)	wsockets[sn].rx_fifo.stored
+#define TX_FIFO_FILL(sn,data)	fifo_fill(&wsockets[sn].tx_fifo,data)
+#define TX_FIFO_CONSUME(sn)	fifo_consume(&wsockets[sn].tx_fifo)
+#define TX_FIFO_RESET(sn)	fifo_reset(&wsockets[sn].tx_fifo)
+#define TX_FIFO_GET_FREE(sn)	wsockets[sn].tx_fifo.free
+#define TX_FIFO_GET_USED(sn)	wsockets[sn].tx_fifo.stored
 
 static void   fifo_fill    ( struct w5300_fifo_st *f, Uint16 data )
 {
@@ -132,13 +135,13 @@ static void default_w5300_config ( void )
 	// FIXME!!! This only knows about the default memory layout!
 	// FIXME!!! Currently not emulated other modification of this via w5300 registers!
 	for (int sn = 0; sn < 8; sn++) {
-		sockets[sn].rx_fifo.w = w;
+		wsockets[sn].rx_fifo.w = w;
 		w += 4096;
-		sockets[sn].tx_fifo.w = w;
+		wsockets[sn].tx_fifo.w = w;
 		w += 4096;
-		sockets[sn].rx_fifo.size = 4096;
-		sockets[sn].tx_fifo.size = 4096;
-		sockets[sn].mode = 0;
+		wsockets[sn].rx_fifo.size = 4096;
+		wsockets[sn].tx_fifo.size = 4096;
+		wsockets[sn].mode = 0;
 		RX_FIFO_RESET(sn);
 		TX_FIFO_RESET(sn);
 	}
@@ -411,16 +414,17 @@ static void write_reg ( int addr, Uint8 data )
 						// See the protocol the socket wanted to be open with. Currently supporting only TCP and UDP, no raw or anything ...
 						switch (wregs[sn_base + 1] & 15) {
 							case 1: // TCP
-								sockets[sn].mode = 1;
+								wsockets[sn].mode = 1;
 								wregs[sn_base + 9] = 0x13;	// SOCK_INIT status, telling that socket is open in TCP mode
 								DEBUGPRINT("EPNET: W5300: OPEN: socket %d is open in TCP mode now" NL, sn);
 								break;
 							case 2: // UDP
-								sockets[sn].mode = 2;
+								wsockets[sn].mode = 2;
 								wregs[sn_base + 9] = 0x22;	// SOCK_UDP status, telling that socket is open in UDP mode
 								DEBUGPRINT("EPNET: W5300: OPEN: socket %d is open in UDP mode now" NL, sn);
 								break;
 							default:
+								wsockets[sn].mode = 0;		// ???
 								wregs[sn_base + 9] = 0;
 								DEBUGPRINT("EPNET: W5300: OPEN: unknown protocol on SOCKET %d: %d" NL, sn, wregs[sn_base + 1] & 15);
 								break;
@@ -428,7 +432,7 @@ static void write_reg ( int addr, Uint8 data )
 						break;
 					case 0x10:	// CLOSE
 						// "Sn_SSR is changed to SOCK_CLOSED."
-						sockets[sn].mode = 0;
+						wsockets[sn].mode = 0;
 						wregs[sn_base + 9] = 0;
 						DEBUGPRINT("EPNET: W5300: command CLOSE on SOCKET %d" NL, sn);
 						break;
@@ -444,15 +448,25 @@ static void write_reg ( int addr, Uint8 data )
 									(wregs[sn_base + 0x0A] << 8) + wregs[sn_base + 0x0B],
 									(wregs[sn_base + 0x21] << 16) + (wregs[sn_base + 0x22] << 8) +   wregs[sn_base + 0x23]
 							);
-							// add_net_thread_task(
+							int b = 0;
+							Uint8 debug[1024];
+							while (TX_FIFO_GET_USED(sn)) {
+								Uint16 data = TX_FIFO_CONSUME(sn);
+								debug[b++] = data >> 8;
+								debug[b++] = data & 0xFF;
+							}
+							for (int a = 0; a < b; a++) {
+								printf("HEXDUMP @ %04X  %02X  [%c]\n", a, debug[a], debug[a] >= 0x20 && debug[a] < 127 ? debug[a] : '?');
+							}
+							//add_net_thread_tx(sn, sn_base);
 						}
 						break;
-					case 0x02:	// LISTEN  only valid in TCP mode, operates as "server" mode
-					case 0x04:	// CONNECT only valid in TCP mode, operates as "client" mode
+					case 0x40:	// RECV
 					case 0x08:	// DISCON  only valid in TCP mode
+					case 0x04:	// CONNECT only valid in TCP mode, operates as "client" mode
+					case 0x02:	// LISTEN  only valid in TCP mode, operates as "server" mode
 					case 0x21:	// SEND_MAC
 					case 0x22:	// SEND_KEEP
-					case 0x40:	// RECV
 					default:
 						DEBUGPRINT("EPNET: W5300: command *UNKNOWN* ($%02X) on SOCKET %d" NL, data, sn);
 						break;
@@ -654,7 +668,7 @@ static void epnet_shutdown ( int restart )
 	// since thread does not run here, it's safe to "play" with net_thread_tasks[] stuffs without any lock!
 	for (int sn = 0; sn < 8; sn++) {
 		if (net_thread_tasks[sn].sock >= 0) {
-			closesocket(net_thread_tasks[sn].sock);
+			CLOSE_SOCKET(net_thread_tasks[sn].sock);
 			net_thread_tasks[sn].sock = -1;
 		}
 	}
