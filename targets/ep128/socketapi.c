@@ -22,6 +22,7 @@
 #	define	XSEINPROGRESS		WSAEINPROGRESS
 #	define	XSEINTR			WSAEINTR
 #	define	XS_INVALID_SOCKET	INVALID_SOCKET
+#	define	XS_SOCKET_ERROR		SOCKET_ERROR
 #else
 #	include <arpa/inet.h> 
 #	include <sys/socket.h> 
@@ -34,6 +35,7 @@
 #	define	XSEINPROGRESS		EINPROGRESS
 #	define	XSEINTR			EINTR
 #	define	XS_INVALID_SOCKET	-1
+#	define	XS_SOCKET_ERROR		-1
 #	define	xs_strerror(_n)		strerror(_n)
 #endif
 
@@ -166,7 +168,7 @@ int main()
 
 	// connect to server
 	for (int a = 0 ;; a++) {
-		if (connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) < 0) {
+		if (connect(sockfd, (struct sockaddr *)&servaddr, sizeof(servaddr)) == XS_SOCKET_ERROR) {
 			int err = xemusock_errno();
 			if (err == XSEINTR)
 				continue;
@@ -187,7 +189,7 @@ int main()
 	// connect stores the peers IP and port
 	for (int a = 0 ;; a++) {
 		ret = sendto(sockfd, (void*)message, sizeof(message), 0, (struct sockaddr*)NULL, sizeof(servaddr)); 
-		if (ret == -1) {
+		if (ret == XS_SOCKET_ERROR) {
 			int err = xemusock_errno();
 			if (err == XSEINTR)
 				continue;
@@ -206,7 +208,7 @@ int main()
 	// waiting for response
 	for (int a = 0 ;; a++) {
 		ret = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)NULL, NULL); 
-		if (ret == -1) {
+		if (ret == XS_SOCKET_ERROR) {
 			int err = xemusock_errno();
 			if (err == XSEINTR)
 				continue;
