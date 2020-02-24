@@ -73,7 +73,6 @@ struct w5300_fifo_st {
 struct w5300_socket_st {
 	struct w5300_fifo_st rx_fifo;
 	struct w5300_fifo_st tx_fifo;
-	SOCKET	sock;
 	int	mode;
 };
 
@@ -140,7 +139,6 @@ static void default_w5300_config ( void )
 		sockets[sn].rx_fifo.size = 4096;
 		sockets[sn].tx_fifo.size = 4096;
 		sockets[sn].mode = 0;
-		sockets[sn].sock = -1;
 		RX_FIFO_RESET(sn);
 		TX_FIFO_RESET(sn);
 	}
@@ -190,23 +188,85 @@ void xemu_free_sockapi ( void ) { }
 
 static SDL_Thread *thread = NULL;
 static SDL_atomic_t thread_can_go;
+struct net_task_data_st {
+	volatile int	task;
+};
+static struct {
+	SDL_SpinLock	lock;		// this lock MUST be held in case of accessing fields I mark with
+	volatile SOCKET	sock;		// other than init, it's the net thread only stuff, no need to lock
+	//volatile int	task;		// LOCK!
+	volatile int	response;	// LOCK!
+	Uint8		source_ip[4];	// LOCK!
+	Uint8		target_ip[4];	// LOCK!
+	int		source_port;	// LOCK!
+	int		target_port;	// LOCK!
+	int		proto;		// LOCK!
+	int		tx_size;	// LOCK!
+	int		rx_size;	// LOCK!
+	Uint8		rx_buf[0x20000];// LOCK!
+	Uint8		tx_buf[0x20000];// LOCK!
+	struct net_task_data_st data;
+} net_thread_tasks[8];
 
 
 // WARNING: this code runs as a _THREAD_!!
 // Must be very careful what data is touched an in what way, because of the probability of race-condition with the main thread!
+// SURELY the same warning applies for the main thread want to access "shared" structures!
 static int net_thread ( void *ptr )
 {
+	int delay = 0;
 	SDL_AtomicSet(&thread_can_go, 2);
 	while (SDL_AtomicGet(&thread_can_go) != 0) {
 		int activity = 0;
 		for (int sn = 0; sn < 8; sn++) {
+			Uint8 buffer[0x20000];
+			struct net_task_data_st data;
+			/* LOCK BEGINS */
+			if (SDL_AtomicTryLock(&net_thread_tasks[sn].lock) == SDL_FALSE) {
+				activity = 1;
+				continue;	// if could not locked, let's continue the check on w5300 sockets, maybe we have better luck next time ...
+			}
+			memcpy(&data, &net_thread_tasks[sn].data, sizeof(data));
+			SDL_AtomicUnlock(&net_thread_tasks[sn].lock);
+			/* LOCK ENDS */
+			// We don't want to held lock while doing things, like socket operations!
+			switch (data.task) {
+				case 0:		// there was no task ... no need to answer, etc
+					continue;
+				case 1:		// UDP send request
+					break;
+			}
+			// the response should be done while locking too!
+			/* LOCK BEGINS */
+			SDL_AtomicLock(&net_thread_tasks[sn].lock);	// we can't use "TryLock" here, as we MUST write the response before checking the next w5300 soket!!
+			memcpy(&net_thread_tasks[sn].data, &data, sizeof(data));
+			SDL_AtomicUnlock(&net_thread_tasks[sn].lock);
+			/* LOCK ENDS */
 		}
-		if (!activity)
-			SDL_Delay(10);
+		if (activity) {
+			delay = 0;
+		} else {
+			if (delay < 50)
+				delay++;
+			SDL_Delay(delay);
+		}
 	}
 	return 1976;
 }
 
+
+static void init_net_thread_task_list ( void )
+{
+	for (int sn = 0; sn < 8; sn++) {
+		net_thread_tasks[sn].sock = -1;
+		net_thread_tasks[sn].data.task = 0;
+	}
+}
+
+
+static int add_net_thread_task ( int sn, Uint8 *buf )
+{
+}
 
 
 int start_net_thread ( void )
@@ -256,9 +316,33 @@ static Uint8 read_reg ( int addr )
 			case 0x01:
 			case 0x02:
 			case 0x03:
+			case 0x06:	// Sn_IR0
+			case 0x07:	// Sn_IR1
 			case 0x08:	// Sn_SSR0 [reserved]
 			case 0x09:	// Sn_SSR1
+			case 0x0A:	// Sn_PORTR0, source port register
+			case 0x0B:	// Sn_PORTR1, source port register
+			case 0x14:	// Sn_DIPR0, Destination IP Address Register
+			case 0x15:	// Sn_DIPR1, Destination IP Address Register
+			case 0x16:	// Sn_DIPR2, Destination IP Address Register
+			case 0x17:	// Sn_DIPR3, Destination IP Address Register
+			case 0x20:	// Sn_TX_WRSR0, TX Write Size Register, but all bits are unused so ...
 				// for these registers are KNOWN it's OK to pass the value in "wregs" as answer
+				data = wregs[addr];
+				break;
+			case 0x12:	// Sn_DPORTR0, destination port register, !!WRITE-ONLY-REGISTER!!
+				data = 0xFF;
+				break;
+			case 0x13:	// Sn_DPORTR1, destination port register, !!WRITE-ONLY-REGISTER!!
+				data = 0xFF;
+				break;
+			case 0x21:	// Sn_TX_WRSR1, TX Write Size Register
+				data = wregs[addr] & 1;	// only LSB one bit is valid!
+				break;
+			case 0x22:	// Sn_TX_WRSR2, TX Write Size Register
+				data = wregs[addr];
+				break;
+			case 0x23:	// Sn_TX_WRSR3, TX Write Size Register
 				data = wregs[addr];
 				break;
 			case 0x25:	// Sn_TX_FSR1 (Sn_TX_FSR0 is not written, since the value cannot be so big, even this FSR1 only 1 bit LSB is used!)
@@ -351,6 +435,16 @@ static void write_reg ( int addr, Uint8 data )
 					case 0x20:	// SEND
 						DEBUGPRINT("EPNET: W5300: SEND command on SOCKET %d" NL, sn);
 						if (wregs[sn_base + 9] == 0x22) {	// check if we have SOCK_UDP status, thus being OK to handle this as UDP
+							DEBUGPRINT("Target is %d.%d.%d.%d:%d UDP, source port: %d TXLEN=%d" NL,
+									wregs[sn_base + 0x14],
+									wregs[sn_base + 0x15],
+									wregs[sn_base + 0x16],
+									wregs[sn_base + 0x17],
+									(wregs[sn_base + 0x12] << 8) + wregs[sn_base + 0x13],
+									(wregs[sn_base + 0x0A] << 8) + wregs[sn_base + 0x0B],
+									(wregs[sn_base + 0x21] << 16) + (wregs[sn_base + 0x22] << 8) +   wregs[sn_base + 0x23]
+							);
+							// add_net_thread_task(
 						}
 						break;
 					case 0x02:	// LISTEN  only valid in TCP mode, operates as "server" mode
@@ -364,11 +458,53 @@ static void write_reg ( int addr, Uint8 data )
 						break;
 				}
 				break;
+			case 0x06:	// Sn_IR0: not used for too much (but see Sn_IR1)
+				break;
+			case 0x07:	// Sn_IR1: Socket interrupt register (Sn_IR0 part is not so much used)
+				wregs[addr] &= ~data;	// All bits written to '1' will cause that bit to be CLEARED!
+				// TODO: if we have all zero bits now, no interrupt pending, and IR for the given socket should be cleared!
+				//update_socket_interrupts(sn, wregs[addr]);
+				break;
+			case 0x0A:	// Sn_PORTR0, source port register [should be set before OPEN]
+				wregs[addr] = data;
+				break;
+			case 0x0B:	// Sn_PORTR1, source port register [should be set before OPEN]
+				wregs[addr] = data;
+				break;
+			case 0x12:	// Sn_DPORTR0, destination port register
+				wregs[addr] = data;
+				break;
+			case 0x13:	// Sn_DPORTR1, destination port register
+				wregs[addr] = data;
+				break;
+			case 0x14:	// Sn_DIPR0, Destination IP Address Register
+				wregs[addr] = data;
+				break;
+			case 0x15:	// Sn_DIPR1, Destination IP Address Register
+				wregs[addr] = data;
+				break;
+			case 0x16:	// Sn_DIPR3, Destination IP Address Register
+				wregs[addr] = data;
+				break;
+			case 0x17:	// Sn_DIPR4, Destination IP Address Register
+				wregs[addr] = data;
+				break;
 			case 0x2E:	// Sn_TX_FIFOR0
 				wregs[addr] = data;
 				break;
 			case 0x2F:	// Sn_TX_FIFOR1
 				TX_FIFO_FILL(sn, (wregs[addr - 1] << 8) | data);	// access of reg Sn_BASE + 0x2E stored the needed value we're referencing here!
+				break;
+			case 0x20:	// Sn_TX_WRSR0, TX Write Size Register, but all bits are unused so ...
+				break;
+			case 0x21:	// Sn_TX_WRSR1, TX Write Size Register
+				wregs[addr] = data & 1;	// only LSB one bit is valid!
+				break;
+			case 0x22:	// Sn_TX_WRSR2, TX Write Size Register
+				wregs[addr] = data;
+				break;
+			case 0x23:	// Sn_TX_WRSR3, TX Write Size Register
+				wregs[addr] = data;
 				break;
 			case 0x30:	// Sn_RX_FIFOR0, for real RX FIFO can only be written in memory test mode ... FIXME
 				wregs[addr] = data;
@@ -501,6 +637,7 @@ void epnet_init ( void (*cb)(int) )
 		epnet_reset();
 		memset(wmem, 0, sizeof wmem);
 		default_w5300_config();
+		init_net_thread_task_list();
 	}
 }
 
@@ -514,10 +651,11 @@ static void epnet_shutdown ( int restart )
 		SDL_WaitThread(thread, &retval);
 		DEBUGPRINT("EPNET: THREAD: %p exited with code %d" NL, thread, retval);
 	}
+	// since thread does not run here, it's safe to "play" with net_thread_tasks[] stuffs without any lock!
 	for (int sn = 0; sn < 8; sn++) {
-		if (sockets[sn].sock >= 0) {
-			closesocket(sockets[sn].sock);
-			sockets[sn].sock = -1;
+		if (net_thread_tasks[sn].sock >= 0) {
+			closesocket(net_thread_tasks[sn].sock);
+			net_thread_tasks[sn].sock = -1;
 		}
 	}
 	if (restart && thread) {
