@@ -157,11 +157,9 @@ const char *xemusock_strerror ( int err )
 #endif
 
 
-
-
-
-
 static int _winsock_init_status = 1;	// 1 = todo, 0 = was OK, -1 = error!
+
+
 int xemusock_init ( char *msg )
 {
 	if (msg)
@@ -172,7 +170,7 @@ int xemusock_init ( char *msg )
 	WSADATA wsa;
 	if (WSAStartup(MAKEWORD(WINSOCK_VERSION_MAJOR, WINSOCK_VERSION_MINOR), &wsa)) {
 		if (msg)
-			sprintf(msg, "Failed to initialize winsock2, error code: %d", WSAGetLastError());
+			sprintf(msg, "WINSOCK: ERROR: Failed to initialize winsock2, error code: %d", WSAGetLastError());
 		_winsock_init_status = -1;
 		return -1;
 	}
@@ -180,7 +178,7 @@ int xemusock_init ( char *msg )
 		WSACleanup();
 		if (msg)
 			sprintf(msg,
-				"No suitable winsock API in the implemantion DLL (we need v%d.%d, we got: v%d.%d), windows system error ...",
+				"WINSOCK: ERROR: No suitable winsock API in the implemantion DLL (we need v%d.%d, we got: v%d.%d), windows system error ...",
 				WINSOCK_VERSION_MAJOR, WINSOCK_VERSION_MINOR,
 				HIBYTE(wsa.wVersion), LOBYTE(wsa.wVersion)
 			);
@@ -188,11 +186,9 @@ int xemusock_init ( char *msg )
 		return -1;
 	}
 	if (msg)
-		sprintf(msg, "WINSOCK: initialized, version %d.%d", HIBYTE(wsa.wVersion), LOBYTE(wsa.wVersion));
-	_winsock_init_status = 0;
-#else
-	_winsock_init_status = 0;
+		sprintf(msg, "WINSOCK: OK: initialized, version %d.%d", HIBYTE(wsa.wVersion), LOBYTE(wsa.wVersion));
 #endif
+	_winsock_init_status = 0;
 	return 0;
 }
 
@@ -207,9 +203,6 @@ void xemusock_uninit ( void )
 	}
 #endif
 }
-
-
-
 
 
 void xemusock_fill_servaddr_for_inet ( struct sockaddr_in *servaddr, const unsigned char ip[4], int port )
@@ -340,14 +333,11 @@ int main()
 	//char *message = "Hello Server";
 	xemusock_socket_t sockfd;
 	struct sockaddr_in servaddr;
-
 	if (xemusock_init(buffer)) {
 		fprintf(stderr, "ERROR: %s\n", buffer);
 		exit(1);
 	}
 	printf("INIT: %s\n", buffer);
-
-
 #if 0
 	// clear servaddr
 	memset(&servaddr, 0, sizeof(servaddr));
@@ -356,13 +346,11 @@ int main()
 	servaddr.sin_family = AF_INET;
 #endif
 	xemusock_fill_servaddr_for_inet(&servaddr, TARGET_IP, TARGET_PORT);
-
 #if 0
 	// create datagram socket
 	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
 	if (sockfd == XS_INVALID_SOCKET)
 		perror("socket()");
-
 	// setsockopt(sockfd, SOL_SOCKET
 #ifdef XEMU_ARCH_WIN
 	u_long mode = 1;  // 1 to enable non-blocking socket
@@ -375,13 +363,11 @@ int main()
 		perror("ERROR: could not set TCP listening socket to be non-blocking");
 #endif
 #endif
-
 	sockfd = xemusock_create_for_inet ( TARGET_PROTOCOL, XEMUSOCK_NONBLOCKING, &xerrno );
 	if (sockfd == XS_INVALID_SOCKET) {
 		fprintf(stderr, "Cannot create socket, because: %s.\n", xemusock_strerror(xerrno));
 		exit(0);
 	}
-
 #if 0
 	// connect to server
 	for (int a = 0 ;; a++) {
@@ -414,7 +400,6 @@ int main()
 			break;
 		}
 	}
-
 	// request to send datagram
 	// no need to specify server address in sendto
 	// connect stores the peers IP and port
@@ -451,9 +436,6 @@ int main()
 			break;
 		}
 	}
-
-
-
 	// waiting for response
 #if 0
 	for (int a = 0 ;; a++) {
@@ -489,8 +471,6 @@ int main()
 			break;
 		}
 	}
-
-	// close the descriptor
 	xemusock_close(sockfd, NULL);
 	xemusock_uninit();
 	return 0;

@@ -785,4 +785,5 @@ void  epnet_write_cpu_port ( unsigned int port, Uint8 data )
 	}
 }
 
+// CONIG_EPNET_SUPPORT
 #endif

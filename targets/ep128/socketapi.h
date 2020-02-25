@@ -25,7 +25,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifdef XEMU_ARCH_WIN
 #	include <winsock2.h>
-#	include <windows.h>
 	typedef	SOCKET			xemusock_socket_t;
 	// it seems Windows has no EAGAIN thing ...
 #	define	XSEAGAIN		WSAEWOULDBLOCK
@@ -36,7 +35,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define	XS_INVALID_SOCKET	INVALID_SOCKET
 #	define	XS_SOCKET_ERROR		SOCKET_ERROR
 #	define	SHUT_RDWR		SD_BOTH
-	extern const char *xemusock_strerror ( int err );
+	extern	const char *xemusock_strerror ( int err );
 #else
 #	include <arpa/inet.h>
 #	include <sys/socket.h>
@@ -49,7 +48,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define	XSEINTR			EINTR
 #	define	XS_INVALID_SOCKET	-1
 #	define	XS_SOCKET_ERROR		-1
-#	define	xemusock_strerror(_n)		strerror(_n)
+#	define	xemusock_strerror(_n)	strerror(_n)
 #endif
 
 #define	XEMUSOCK_UDP		0
@@ -57,14 +56,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define	XEMUSOCK_BLOCKING	0
 #define	XEMUSOCK_NONBLOCKING	1
 
-extern int  xemusock_close  ( xemusock_socket_t sock, int *xerrno );
-extern int  xemusock_init   ( char *msg );
-extern void xemusock_uninit ( void );
+extern int  xemusock_close	( xemusock_socket_t sock, int *xerrno );
+extern int  xemusock_init	( char *msg );
+extern void xemusock_uninit	( void );
 extern void xemusock_fill_servaddr_for_inet ( struct sockaddr_in *servaddr, const unsigned char ip[4], int port );
-extern int  xemusock_set_nonblocking ( xemusock_socket_t sock, int is_nonblock, int *xerrno );
-extern int  xemusock_connect  ( xemusock_socket_t sock, struct sockaddr_in *servaddr, int *xerrno );
-extern int  xemusock_sendto   ( xemusock_socket_t sock, const void *message, int message_length, int *xerrno );
-extern int  xemusock_recvfrom ( xemusock_socket_t sock, void *buffer, int buffer_max_length, int *xerrno );
+extern int  xemusock_set_nonblocking	( xemusock_socket_t sock, int is_nonblock, int *xerrno );
+extern int  xemusock_connect		( xemusock_socket_t sock, struct sockaddr_in *servaddr, int *xerrno );
+extern int  xemusock_sendto		( xemusock_socket_t sock, const void *message, int message_length, int *xerrno );
+extern int  xemusock_recvfrom		( xemusock_socket_t sock, void *buffer, int buffer_max_length, int *xerrno );
 extern xemusock_socket_t xemusock_create_for_inet ( int is_tcp, int is_nonblock, int *xerrno );
 
 static inline int xemusock_should_repeat_from_error ( int err ) {
