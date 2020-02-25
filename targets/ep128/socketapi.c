@@ -49,9 +49,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 
 #ifdef	XEMU_ARCH_WIN
-#	define	SOCK_ERR()		WSAGetLastError()
+#	define	SOCK_ERR()	WSAGetLastError()
 #else
-#	define	SOCK_ERR()		(errno)
+#	define	SOCK_ERR()	(errno)
 #endif
 
 #ifndef XEMU_BUILD
@@ -205,12 +205,17 @@ void xemusock_uninit ( void )
 }
 
 
+#include <stdint.h>
+
 void xemusock_fill_servaddr_for_inet ( struct sockaddr_in *servaddr, const unsigned char ip[4], int port )
 {
 	char ipstr[32];
 	sprintf(ipstr, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
 	memset(servaddr, 0, sizeof(struct sockaddr_in));
 	servaddr->sin_addr.s_addr = inet_addr(ipstr);
+	printf("ORIG=%X\n", servaddr->sin_addr.s_addr);
+	servaddr->sin_addr.s_addr = (uint32_t)((((uint32_t)ip[3]) << 24) + (((uint32_t)ip[2]) << 16) + (((uint32_t)ip[1]) << 8) + ((uint32_t)ip[0]));
+	printf("TRY1=%X\n", servaddr->sin_addr.s_addr);
 	servaddr->sin_port = htons(port);
 	servaddr->sin_family = AF_INET;
 }
@@ -363,7 +368,7 @@ int main()
 		perror("ERROR: could not set TCP listening socket to be non-blocking");
 #endif
 #endif
-	sockfd = xemusock_create_for_inet ( TARGET_PROTOCOL, XEMUSOCK_NONBLOCKING, &xerrno );
+	sockfd = xemusock_create_for_inet(TARGET_PROTOCOL, XEMUSOCK_NONBLOCKING, &xerrno);
 	if (sockfd == XS_INVALID_SOCKET) {
 		fprintf(stderr, "Cannot create socket, because: %s.\n", xemusock_strerror(xerrno));
 		exit(0);
@@ -423,7 +428,7 @@ int main()
 	}
 #endif
 	for (int a = 0 ;; a++) {
-		int ret = xemusock_sendto ( sockfd, message, sizeof(message), &xerrno );
+		int ret = xemusock_sendto(sockfd, message, sizeof(message), &xerrno);
 		if (ret == XS_SOCKET_ERROR) {
 			if (xemusock_should_repeat_from_error(xerrno)) {
 				usleep(1);
