@@ -14,4 +14,8 @@
 #define NO_CONSOLE
 #endif
 
+#ifdef HAVE_SOCKET_OS_API
+#define HAVE_XEMU_SOCKET_API
+#endif
+
 #define CONFIG_EMSCRIPTEN_OK

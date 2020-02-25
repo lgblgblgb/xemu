@@ -35,6 +35,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xep128.h"
 #include "epnet.h"
 #include "cpu.h"
+#include "socketapi.h"
 #include <SDL.h>
 #include <unistd.h>
 
@@ -55,16 +56,6 @@ static Uint8 mr0, mr1;
 static void (*interrupt_cb)(int);
 
 
-#ifdef XEMU_ARCH_WIN
-#	include <winsock2.h>
-#	include <windows.h>
-#	define CLOSE_SOCKET(n)	closesocket(n)
-#	define SOCKET_ERRNO	WSAGetLastError()
-#else
-	typedef int SOCKET;
-#	define CLOSE_SOCKET(n)	close(n)
-#	define SOCKET_ERRNO	errno
-#endif
 
 struct w5300_fifo_st {
 	Uint16	*w;
@@ -147,6 +138,7 @@ static void default_w5300_config ( void )
 	}
 }
 
+#if 0
 #ifdef XEMU_ARCH_WIN
 
 // NOTE: Xemu framework has some networking even for WIN. However Enterprise-128 emulator is not yet
@@ -187,6 +179,7 @@ void xemu_free_sockapi ( void )
 int  xemu_use_sockapi  ( void ) { return 0; }
 void xemu_free_sockapi ( void ) { }
 #endif
+#endif
 
 
 static SDL_Thread *thread = NULL;
@@ -196,7 +189,7 @@ struct net_task_data_st {
 };
 static struct {
 	SDL_SpinLock	lock;		// this lock MUST be held in case of accessing fields I mark with
-	volatile SOCKET	sock;		// other than init, it's the net thread only stuff, no need to lock
+	volatile xemusock_socket_t	sock;		// other than init, it's the net thread only stuff, no need to lock
 	//volatile int	task;		// LOCK!
 	volatile int	response;	// LOCK!
 	Uint8		source_ip[4];	// LOCK!
@@ -261,7 +254,7 @@ static int net_thread ( void *ptr )
 static void init_net_thread_task_list ( void )
 {
 	for (int sn = 0; sn < 8; sn++) {
-		net_thread_tasks[sn].sock = -1;
+		net_thread_tasks[sn].sock = XS_INVALID_SOCKET;
 		net_thread_tasks[sn].data.task = 0;
 	}
 }
@@ -642,7 +635,9 @@ void epnet_init ( void (*cb)(int) )
 {
 	w5300_does_work = 0;
 	patch_rom();
-	if (xemu_use_sockapi()) {
+	char sockapi_error_msg[256];
+	if (xemusock_init(sockapi_error_msg)) {
+		ERROR_WINDOW("Cannot intiailize socket API:\n%s", sockapi_error_msg);
 		w5300_does_work = 0;
 	} else if (!start_net_thread()) {
 		w5300_does_work = 1;
@@ -667,9 +662,9 @@ static void epnet_shutdown ( int restart )
 	}
 	// since thread does not run here, it's safe to "play" with net_thread_tasks[] stuffs without any lock!
 	for (int sn = 0; sn < 8; sn++) {
-		if (net_thread_tasks[sn].sock >= 0) {
-			CLOSE_SOCKET(net_thread_tasks[sn].sock);
-			net_thread_tasks[sn].sock = -1;
+		if (net_thread_tasks[sn].sock != XS_INVALID_SOCKET) {
+			xemusock_close(net_thread_tasks[sn].sock, NULL);
+			net_thread_tasks[sn].sock = XS_INVALID_SOCKET;
 		}
 	}
 	if (restart && thread) {
@@ -680,7 +675,8 @@ static void epnet_shutdown ( int restart )
 void epnet_uninit ( void )
 {
 	epnet_shutdown(0);
-	xemu_free_sockapi();
+	//xemu_free_sockapi();
+	xemusock_uninit();
 	w5300_does_work = 0;
 	DEBUGPRINT("EPNET: uninit" NL);
 }
