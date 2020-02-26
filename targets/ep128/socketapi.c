@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <fcntl.h>
 #include <errno.h>
 #include <string.h>
+#include <sys/time.h>
 #include "socketapi.h"
 
 #ifndef	WINSOCK_VERSION_MAJOR
@@ -79,6 +80,7 @@ static const unsigned char message[] = "GET / HTTP/1.0\r\nHost: lgb.hu\r\n\r\n";
 
 
 #ifdef XEMU_ARCH_WIN
+// FIXME: maybe migrate this to Windows' FormatMessage() at some point?
 const char *xemusock_strerror ( int err )
 {
 	switch (err) {
@@ -162,15 +164,16 @@ static int _winsock_init_status = 1;	// 1 = todo, 0 = was OK, -1 = error!
 
 int xemusock_init ( char *msg )
 {
-	if (msg)
-		strcpy(msg, "NO-MSG");
+	*msg = '\0';
 	if (_winsock_init_status <= 0)
 		return _winsock_init_status;
 #ifdef XEMU_ARCH_WIN
 	WSADATA wsa;
 	if (WSAStartup(MAKEWORD(WINSOCK_VERSION_MAJOR, WINSOCK_VERSION_MINOR), &wsa)) {
-		if (msg)
-			sprintf(msg, "WINSOCK: ERROR: Failed to initialize winsock2, error code: %d", WSAGetLastError());
+		if (msg) {
+			int err = SOCK_ERR();
+			sprintf(msg, "WINSOCK: ERROR: Failed to initialize winsock2, [%d]: %s", err, xemusock_strerror(err));
+		}
 		_winsock_init_status = -1;
 		return -1;
 	}
@@ -205,17 +208,10 @@ void xemusock_uninit ( void )
 }
 
 
-#include <stdint.h>
-
-void xemusock_fill_servaddr_for_inet ( struct sockaddr_in *servaddr, const unsigned char ip[4], int port )
+void xemusock_fill_servaddr_for_inet ( struct sockaddr_in *servaddr, unsigned int ip_netlong, int port )
 {
-	char ipstr[32];
-	sprintf(ipstr, "%d.%d.%d.%d", ip[0], ip[1], ip[2], ip[3]);
 	memset(servaddr, 0, sizeof(struct sockaddr_in));
-	servaddr->sin_addr.s_addr = inet_addr(ipstr);
-	printf("ORIG=%X\n", servaddr->sin_addr.s_addr);
-	servaddr->sin_addr.s_addr = (uint32_t)((((uint32_t)ip[3]) << 24) + (((uint32_t)ip[2]) << 16) + (((uint32_t)ip[1]) << 8) + ((uint32_t)ip[0]));
-	printf("TRY1=%X\n", servaddr->sin_addr.s_addr);
+	servaddr->sin_addr.s_addr = ip_netlong;
 	servaddr->sin_port = htons(port);
 	servaddr->sin_family = AF_INET;
 }
@@ -307,9 +303,9 @@ int xemusock_shutdown ( xemusock_socket_t sock, int *xerrno )
 }
 
 
-int xemusock_sendto ( xemusock_socket_t sock, const void *message, int message_length, int *xerrno )
+int xemusock_sendto ( xemusock_socket_t sock, const void *buffer, int length, struct sockaddr_in *servaddr, int *xerrno )
 {
-	int ret = sendto(sock, (void*)message, message_length, 0, (struct sockaddr*)NULL, sizeof(struct sockaddr_in));
+	int ret = sendto(sock, buffer, length, 0, (struct sockaddr*)servaddr, sizeof(struct sockaddr_in));
 	if (ret == XS_SOCKET_ERROR) {
 		if (xerrno)
 			*xerrno = SOCK_ERR();
@@ -319,9 +315,9 @@ int xemusock_sendto ( xemusock_socket_t sock, const void *message, int message_l
 }
 
 
-int xemusock_recvfrom ( xemusock_socket_t sock, void *buffer, int buffer_max_length, int *xerrno )
+int xemusock_send ( xemusock_socket_t sock, const void *buffer, int length, int *xerrno )
 {
-	int ret = recvfrom(sock, buffer, buffer_max_length, 0, (struct sockaddr*)NULL, NULL);
+	int ret = sendto(sock, buffer, length, 0, (struct sockaddr*)NULL, 0);
 	if (ret == XS_SOCKET_ERROR) {
 		if (xerrno)
 			*xerrno = SOCK_ERR();
@@ -329,6 +325,63 @@ int xemusock_recvfrom ( xemusock_socket_t sock, void *buffer, int buffer_max_len
 	} else
 		return ret;
 }
+
+
+int xemusock_recvfrom ( xemusock_socket_t sock, void *buffer, int length, struct sockaddr_in *servaddr, int *xerrno )
+{
+	xemusock_socklen_t addrlen = sizeof(struct sockaddr_in);
+	int ret = recvfrom(sock, buffer, length, 0, (struct sockaddr*)servaddr, &addrlen);
+	if (ret == XS_SOCKET_ERROR) {
+		if (xerrno)
+			*xerrno = SOCK_ERR();
+		return -1;
+	} else
+		return ret;
+}
+
+
+int xemusock_recv ( xemusock_socket_t sock, void *buffer, int length, int *xerrno )
+{
+	int ret = recvfrom(sock, buffer, length, 0, (struct sockaddr*)NULL, NULL);
+	if (ret == XS_SOCKET_ERROR) {
+		if (xerrno)
+			*xerrno = SOCK_ERR();
+		return -1;
+	} else
+		return ret;
+}
+
+
+int xemusock_select_1 ( xemusock_socket_t sock, int usec, int what )
+{
+	for (;;) {
+		int ret;
+		struct timeval timeout;
+		fd_set fds_r, fds_w, fds_e;
+		FD_ZERO(&fds_r);
+		FD_ZERO(&fds_w);
+		FD_ZERO(&fds_e);
+		if (what & XEMUSOCK_SELECT_R)
+			FD_SET(sock, &fds_r);
+		if (what & XEMUSOCK_SELECT_W)
+			FD_SET(sock, &fds_w);
+		if (what & XEMUSOCK_SELECT_E)
+			FD_SET(sock, &fds_e);
+		timeout.tv_sec = 0;
+		timeout.tv_usec = usec;
+		ret = select(sock + 1, &fds_r, &fds_w, &fds_e, usec >= 0 ? &timeout : NULL);
+		if (ret == XS_SOCKET_ERROR) {
+			int err = SOCK_ERR();
+			if (err == XSEINTR)
+				continue;
+			return -1;
+		}
+		if (ret == 0)
+			return 0;
+		return (FD_ISSET(sock, &fds_r) ? XEMUSOCK_SELECT_R : 0) | (FD_ISSET(sock, &fds_w) ? XEMUSOCK_SELECT_W : 0) | (FD_ISSET(sock, &fds_e) ? XEMUSOCK_SELECT_E : 0);
+	}
+}
+
 
 #ifndef XEMU_BUILD
 int main()
@@ -350,7 +403,7 @@ int main()
 	servaddr.sin_port = htons(PORT);
 	servaddr.sin_family = AF_INET;
 #endif
-	xemusock_fill_servaddr_for_inet(&servaddr, TARGET_IP, TARGET_PORT);
+	xemusock_fill_servaddr_for_inet(&servaddr, xemusock_ipv4_octetarray_to_netlong(TARGET_IP), TARGET_PORT);
 #if 0
 	// create datagram socket
 	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
@@ -428,16 +481,16 @@ int main()
 	}
 #endif
 	for (int a = 0 ;; a++) {
-		int ret = xemusock_sendto(sockfd, message, sizeof(message), &xerrno);
+		int ret = xemusock_send(sockfd, message, sizeof(message), &xerrno);
 		if (ret == XS_SOCKET_ERROR) {
 			if (xemusock_should_repeat_from_error(xerrno)) {
 				usleep(1);
 				continue;
 			}
-			fprintf(stderr, "Error at sendto(): %s\n", xemusock_strerror(xerrno));
+			fprintf(stderr, "Error at send(): %s\n", xemusock_strerror(xerrno));
 			exit(1);
 		} else {
-			printf("sendto() was ok after %d iterations, sent %d bytes\n", a, ret);
+			printf("send() was ok after %d iterations, sent %d bytes\n", a, ret);
 			break;
 		}
 	}
@@ -463,16 +516,16 @@ int main()
 	}
 #endif
 	for (int a = 0 ;; a++) {
-		int ret = xemusock_recvfrom(sockfd, buffer, sizeof(buffer), &xerrno);
+		int ret = xemusock_recv(sockfd, buffer, sizeof(buffer), &xerrno);
 		if (ret == XS_SOCKET_ERROR) {
 			if (xemusock_should_repeat_from_error(xerrno)) {
 				usleep(1);
 				continue;
 			}
-			fprintf(stderr, "Error at recvfrom(): %s\n", xemusock_strerror(xerrno));
+			fprintf(stderr, "Error at recv(): %s\n", xemusock_strerror(xerrno));
 			exit(1);
 		} else {
-			printf("recvfrom() was ok after %d iterations, recieved %d bytes\n", a, ret);
+			printf("recv() was ok after %d iterations, recieved %d bytes\n", a, ret);
 			break;
 		}
 	}

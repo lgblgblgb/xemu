@@ -67,7 +67,11 @@ struct w5300_fifo_st {
 struct w5300_socket_st {
 	struct w5300_fifo_st rx_fifo;
 	struct w5300_fifo_st tx_fifo;
-	int	mode;
+	volatile int	mode;
+	struct sockaddr_in servaddr;
+	volatile xemusock_socket_t sock;
+	volatile int	todo;
+	volatile int	resp;
 };
 
 static struct w5300_socket_st wsockets[8];
@@ -387,6 +391,7 @@ static void write_reg ( int addr, Uint8 data )
 		int sn = (addr - 0x200) >> 6;	// sn: socket number (0-7)
 		int sn_base = addr & ~0x3F;
 		int sn_reg  = addr &  0x3F;
+		int xerrno;
 		switch (sn_reg) {
 			case 0x00:	// Sn_MR0, socket mode register
 			case 0x01:	// Sn_MR1
@@ -407,16 +412,54 @@ static void write_reg ( int addr, Uint8 data )
 						// See the protocol the socket wanted to be open with. Currently supporting only TCP and UDP, no raw or anything ...
 						switch (wregs[sn_base + 1] & 15) {
 							case 1: // TCP
+								if (wsockets[sn].sock != XS_INVALID_SOCKET) {
+									xemusock_close(wsockets[sn].sock, NULL);
+									wsockets[sn].sock = XS_INVALID_SOCKET;
+								}
 								wsockets[sn].mode = 1;
 								wregs[sn_base + 9] = 0x13;	// SOCK_INIT status, telling that socket is open in TCP mode
-								DEBUGPRINT("EPNET: W5300: OPEN: socket %d is open in TCP mode now" NL, sn);
+								xemusock_fill_servaddr_for_inet(
+									&wsockets[sn].servaddr,
+									xemusock_ipv4_netoctetarray_to_netlong(wregs + sn_base + 0x14),	// pointer to IP address bytes
+									(wregs[sn_base + 0x12] << 8) | wregs[sn_base + 0x13]	// port number
+								);
+								//wsockets[sn].todo = TODO_TCP_CREATE;
+								DEBUGPRINT("EPNET: W5300: OPEN: socket %d is open in TCP mode now towards %d.%d.%d.%d:%d" NL,
+									sn,
+									wregs[sn_base + 0x14], wregs[sn_base + 0x15], wregs[sn_base + 0x16], wregs[sn_base + 0x17],	// IP
+									(wregs[sn_base + 0x12] << 8) | wregs[sn_base + 0x13]	// port number
+								);
 								break;
 							case 2: // UDP
-								wsockets[sn].mode = 2;
-								wregs[sn_base + 9] = 0x22;	// SOCK_UDP status, telling that socket is open in UDP mode
-								DEBUGPRINT("EPNET: W5300: OPEN: socket %d is open in UDP mode now" NL, sn);
+								if (wsockets[sn].sock != XS_INVALID_SOCKET) {
+									xemusock_close(wsockets[sn].sock, NULL);
+									wsockets[sn].sock = XS_INVALID_SOCKET;
+								}
+								xemusock_fill_servaddr_for_inet(
+									&wsockets[sn].servaddr,
+									xemusock_ipv4_netoctetarray_to_netlong(wregs + sn_base + 0x14),	// pointer to IP address bytes
+									(wregs[sn_base + 0x12] << 8) | wregs[sn_base + 0x13]	// port number
+								);
+								wsockets[sn].sock = xemusock_create_for_inet(XEMUSOCK_UDP, XEMUSOCK_NONBLOCKING, &xerrno);
+								if (wsockets[sn].sock != XS_INVALID_SOCKET) {
+									wsockets[sn].mode = 2;
+									wregs[sn_base + 9] = 0x22;	// SOCK_UDP status, telling that socket is open in UDP mode
+									DEBUGPRINT("EPNET: W5300: OPEN: socket %d is open in UDP mode now towards %d.%d.%d.%d:%d" NL,
+										sn,
+										wregs[sn_base + 0x14], wregs[sn_base + 0x15], wregs[sn_base + 0x16], wregs[sn_base + 0x17], // IP
+										(wregs[sn_base + 0x12] << 8) | wregs[sn_base + 0x13]	// port number
+									);
+								} else {
+									DEBUGPRINT("EPNET: EMU: network problem: %s" NL, xemusock_strerror(xerrno));
+									wsockets[sn].mode = 0;
+									wregs[sn_base + 9] = 0;
+								}
 								break;
 							default:
+								if (wsockets[sn].sock != XS_INVALID_SOCKET) {
+									xemusock_close(wsockets[sn].sock, NULL);
+									wsockets[sn].sock = XS_INVALID_SOCKET;
+								}
 								wsockets[sn].mode = 0;		// ???
 								wregs[sn_base + 9] = 0;
 								DEBUGPRINT("EPNET: W5300: OPEN: unknown protocol on SOCKET %d: %d" NL, sn, wregs[sn_base + 1] & 15);
@@ -424,14 +467,19 @@ static void write_reg ( int addr, Uint8 data )
 						}
 						break;
 					case 0x10:	// CLOSE
-						// "Sn_SSR is changed to SOCK_CLOSED."
+						wsockets[sn].todo = 0;
 						wsockets[sn].mode = 0;
-						wregs[sn_base + 9] = 0;
+						wregs[sn_base + 9] = 0;	// "Sn_SSR is changed to SOCK_CLOSED."
 						DEBUGPRINT("EPNET: W5300: command CLOSE on SOCKET %d" NL, sn);
+						if (wsockets[sn].sock != XS_INVALID_SOCKET) {
+							xemusock_close(wsockets[sn].sock, NULL);
+							wsockets[sn].sock = XS_INVALID_SOCKET;
+						}
 						break;
 					case 0x20:	// SEND
 						DEBUGPRINT("EPNET: W5300: SEND command on SOCKET %d" NL, sn);
-						if (wregs[sn_base + 9] == 0x22) {	// check if we have SOCK_UDP status, thus being OK to handle this as UDP
+						if (wregs[sn_base + 9] == 0x22) {
+							// UDP-SEND!!
 							DEBUGPRINT("Target is %d.%d.%d.%d:%d UDP, source port: %d TXLEN=%d" NL,
 									wregs[sn_base + 0x14],
 									wregs[sn_base + 0x15],
