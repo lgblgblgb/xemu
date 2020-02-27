@@ -89,9 +89,10 @@ void machine_set_speed ( int verbose )
 	//	return;
 	if (verbose)
 		DEBUGPRINT("SPEED: in_hypervisor=%d force_fast=%d c128_fast=%d, c65_fast=%d m65_fast=%d" NL,
-			in_hypervisor, force_fast, (c128_d030_reg & 1) ^ 1, vic_registers[0x31] & 64, vic_registers[0x54] & 64
+			in_hypervisor, force_fast, (c128_d030_reg & 1), vic_registers[0x31] & 64, vic_registers[0x54] & 64
 	);
-	speed_wanted = (in_hypervisor || force_fast) ? 7 : (((c128_d030_reg & 1) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
+	// ^1 at c128... because it was inverted :-O --> FIXME: this is ugly workaround, the switch statement should be re-organized
+	speed_wanted = (in_hypervisor || force_fast) ? 7 : ((((c128_d030_reg & 1) ^ 1) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
 	if (speed_wanted != speed_current) {
 		speed_current = speed_wanted;
 		switch (speed_wanted) {

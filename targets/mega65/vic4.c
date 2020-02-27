@@ -150,7 +150,7 @@ void vic_init ( void )
 		vic_write_reg(i, 0);
 		(void)vic_read_reg(i);
 	}
-	c128_d030_reg = 0xFF;	// this may be set to 2MHz in the previous step, so be sure to set to FF here
+	c128_d030_reg = 0xFE;	// this may be set to 2MHz in the previous step, so be sure to set to FF here, BUT FIX: bit 0 should be inverted!!
 	machine_set_speed(0);
 	DEBUG("VIC4: has been initialized." NL);
 }
