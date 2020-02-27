@@ -142,49 +142,6 @@ static void default_w5300_config ( void )
 	}
 }
 
-#if 0
-#ifdef XEMU_ARCH_WIN
-
-// NOTE: Xemu framework has some networking even for WIN. However Enterprise-128 emulator is not yet
-// fully integrated into the framework :( So for now, let's implement everything here. Later it's a
-// TODO to re-factor the whole Enterprise-128 target within Xemu anyway, and this will go away as well then.
-
-static int _winsock_init_status = 1;    // 1 = todo, 0 = was OK, -1 = error!
-int xemu_use_sockapi ( void )
-{
-	WSADATA wsa;
-	if (_winsock_init_status <= 0)
-		return _winsock_init_status;
-	if (WSAStartup(MAKEWORD(2, 2), &wsa)) {
-		ERROR_WINDOW("Failed to initialize winsock2, error code: %d", WSAGetLastError());
-		_winsock_init_status = -1;
-		return -1;
-	}
-	if (LOBYTE(wsa.wVersion) != 2 || HIBYTE(wsa.wVersion) != 2) {
-		WSACleanup();
-		ERROR_WINDOW("No suitable winsock API in the implemantion DLL (we need v2.2, we got: v%d.%d), windows system error ...", HIBYTE(wsa.wVersion), LOBYTE(wsa.wVersion));
-		_winsock_init_status = -1;
-		return -1;
-	}
-	DEBUGPRINT("WINSOCK: initialized, version %d.%d\n", HIBYTE(wsa.wVersion), LOBYTE(wsa.wVersion));
-	_winsock_init_status = 0;
-	return 0;
-}
-
-void xemu_free_sockapi ( void )
-{
-	if (_winsock_init_status == 0) {
-		WSACleanup();
-		_winsock_init_status = 1;
-		DEBUGPRINT("WINSOCK: uninitialized." NL);
-	}
-}
-#else
-int  xemu_use_sockapi  ( void ) { return 0; }
-void xemu_free_sockapi ( void ) { }
-#endif
-#endif
-
 
 static SDL_Thread *thread = NULL;
 static SDL_atomic_t thread_can_go;
@@ -668,7 +625,7 @@ static int patch_rom ( void )
 			q = patch_rom_add_config_pair(q, "XEP128",	"this-is-an-easter-egg-from-lgb");
 		}
 		epnet[0x18] = EPNET_IO_BASE;	// using fixed port (instead of EPNET's decoding based on the ROM position), which matches our emulation of course.
-		// MAC address setup :) According to Bruce's suggestion, though it does not matter in the emulation too much.
+		// MAC address setup :) According to Bruce's suggestion, though it does not matter in the emulation too much (we don't use eth level stuff anyway, but ask our host OS to do TCP/IP things ...)
 		static const Uint8 mac_address[] = {0x00,0x00,0xF6,0x42,0x42,0x76};
 		memcpy(epnet + 0x20, mac_address, sizeof(mac_address));
 		return 0;
