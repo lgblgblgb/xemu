@@ -78,8 +78,8 @@ int chatty_xemu = 1;
 int sdl_default_win_x_size;
 int sdl_default_win_y_size;
 
-
-static int osd_enabled = 0, osd_status = 0, osd_available = 0, osd_xsize, osd_ysize, osd_fade_dec, osd_fade_end, osd_alpha_last;
+static int osd_enabled = 0, osd_available = 0, osd_xsize, osd_ysize, osd_fade_dec, osd_fade_end, osd_alpha_last;
+int osd_status = 0;
 static Uint32 osd_colours[16], *osd_pixels = NULL, osd_colour_fg, osd_colour_bg;
 static SDL_Texture *sdl_osdtex = NULL;
 static SDL_bool grabbed_mouse = SDL_FALSE, grabbed_mouse_saved = SDL_FALSE;
@@ -961,6 +961,8 @@ void osd_write_string ( int x, int y, const char *s )
 
 int ARE_YOU_SURE ( const char *s, int flags )
 {
+	if ((flags & ARE_YOU_SURE_OVERRIDE))
+		return 1;
 	static const char *selector_default_yes = "!Yes|?No";
 	static const char *selector_default_no  = "Yes|*No";
 	static const char *selector_generic     = "Yes|No";

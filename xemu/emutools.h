@@ -172,6 +172,9 @@ extern void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int tex
 extern Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail );
 extern void xemu_update_screen ( void );
 
+extern int  osd_status;
+extern const Uint16 font_16x16[];
+
 extern int  osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_entries, int fade_dec, int fade_end );
 extern int  osd_init_with_defaults ( void );
 extern void osd_clear ( void );
