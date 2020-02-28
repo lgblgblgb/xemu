@@ -35,7 +35,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xep128.h"
 #include "epnet.h"
 #include "cpu.h"
-#include "socketapi.h"
+#include "xemu/emutools_socketapi.h"
 #include <SDL.h>
 #include <unistd.h>
 

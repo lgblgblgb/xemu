@@ -15,11 +15,6 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-
-#ifndef	XEMU_BUILD
-#define	HAVE_XEMU_SOCKET_API
-#endif
-
 #ifdef	HAVE_XEMU_SOCKET_API
 
 #include <stdio.h>
@@ -31,7 +26,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <errno.h>
 #include <string.h>
 #include <sys/time.h>
-#include "socketapi.h"
+#include "xemu/emutools_basicdefs.h"
+#include "xemu/emutools_socketapi.h"
 
 #ifndef	WINSOCK_VERSION_MAJOR
 #define	WINSOCK_VERSION_MAJOR	2
@@ -40,44 +36,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define	WINSOCK_VERSION_MINOR	2
 #endif
 
-
-#ifdef XEMU_BUILD
-#	include <xemu/emutools_basicdefs.h>
-#else
-#	define	DEBUGPRINT	printf
-#	define	DEBUG		printf
-#	define	NL		"\n"
-#endif
-
 #ifdef	XEMU_ARCH_WIN
 #	define	SOCK_ERR()	WSAGetLastError()
 #else
-#	define	SOCK_ERR()	(errno)
+#	define	SOCK_ERR()	(errno+0)
 #endif
-
-#ifndef XEMU_BUILD
-#if 0
-// Test google DNS with UDP
-static const unsigned char TARGET_IP[4] = {8,8,8,8};
-#define TARGET_PORT 53
-#define TARGET_PROTOCOL XEMUSOCK_UDP
-static const unsigned char message[] = {0,1,1,0,0,1,0,0,0,0,0,0,3,'l','g','b',2,'h','u',0,0,1,0,1};
-#endif
-
-#if 1
-// Test LGB.HU webserver with TCP
-static const unsigned char TARGET_IP[4] = {172,104,143,43};
-#define TARGET_PORT 80
-#define TARGET_PROTOCOL XEMUSOCK_TCP
-static const unsigned char message[] = "GET / HTTP/1.0\r\nHost: lgb.hu\r\n\r\n";
-#endif
-#endif
-
-
-// NOTE: Xemu framework has some networking even for WIN. However Enterprise-128 emulator is not yet
-// fully integrated into the framework :( So for now, let's implement everything here. Later it's a
-// TODO to re-factor the whole Enterprise-128 target within Xemu anyway, and this will go away as well then.
-
 
 #ifdef XEMU_ARCH_WIN
 // FIXME: maybe migrate this to Windows' FormatMessage() at some point?
@@ -317,7 +280,7 @@ int xemusock_sendto ( xemusock_socket_t sock, const void *buffer, int length, st
 
 int xemusock_send ( xemusock_socket_t sock, const void *buffer, int length, int *xerrno )
 {
-	int ret = sendto(sock, buffer, length, 0, (struct sockaddr*)NULL, 0);
+	int ret = send(sock, buffer, length, 0);
 	if (ret == XS_SOCKET_ERROR) {
 		if (xerrno)
 			*xerrno = SOCK_ERR();
@@ -342,7 +305,7 @@ int xemusock_recvfrom ( xemusock_socket_t sock, void *buffer, int length, struct
 
 int xemusock_recv ( xemusock_socket_t sock, void *buffer, int length, int *xerrno )
 {
-	int ret = recvfrom(sock, buffer, length, 0, (struct sockaddr*)NULL, NULL);
+	int ret = recv(sock, buffer, length, 0);
 	if (ret == XS_SOCKET_ERROR) {
 		if (xerrno)
 			*xerrno = SOCK_ERR();
@@ -382,156 +345,4 @@ int xemusock_select_1 ( xemusock_socket_t sock, int usec, int what )
 	}
 }
 
-
-#ifndef XEMU_BUILD
-int main()
-{
-	int xerrno;
-	char buffer[1000];
-	//char *message = "Hello Server";
-	xemusock_socket_t sockfd;
-	struct sockaddr_in servaddr;
-	if (xemusock_init(buffer)) {
-		fprintf(stderr, "ERROR: %s\n", buffer);
-		exit(1);
-	}
-	printf("INIT: %s\n", buffer);
-#if 0
-	// clear servaddr
-	memset(&servaddr, 0, sizeof(servaddr));
-	servaddr.sin_addr.s_addr = inet_addr("8.8.8.8");
-	servaddr.sin_port = htons(PORT);
-	servaddr.sin_family = AF_INET;
-#endif
-	xemusock_fill_servaddr_for_inet(&servaddr, xemusock_ipv4_octetarray_to_netlong(TARGET_IP), TARGET_PORT);
-#if 0
-	// create datagram socket
-	sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-	if (sockfd == XS_INVALID_SOCKET)
-		perror("socket()");
-	// setsockopt(sockfd, SOL_SOCKET
-#ifdef XEMU_ARCH_WIN
-	u_long mode = 1;  // 1 to enable non-blocking socket
-	ioctlsocket(sockfd, FIONBIO, &mode);
-#else
-	int flags = fcntl(sockfd, F_GETFL);
-	if (flags == -1)
-		perror("ERROR: could not get flags on TCP listening socket");
-	if (fcntl(sockfd, F_SETFL, flags | O_NONBLOCK) == -1)
-		perror("ERROR: could not set TCP listening socket to be non-blocking");
-#endif
-#endif
-	sockfd = xemusock_create_for_inet(TARGET_PROTOCOL, XEMUSOCK_NONBLOCKING, &xerrno);
-	if (sockfd == XS_INVALID_SOCKET) {
-		fprintf(stderr, "Cannot create socket, because: %s.\n", xemusock_strerror(xerrno));
-		exit(0);
-	}
-#if 0
-	// connect to server
-	for (int a = 0 ;; a++) {
-		if (connect(sockfd, (struct sockaddr *)&servaddr, sizeof(struct sockaddr_in)) == XS_SOCKET_ERROR) {
-			int err = SOCK_ERR();
-			if (err == XSEINTR)
-				continue;
-			if (err == XSEAGAIN || err == XSEWOULDBLOCK || err == XSEINPROGRESS) {
-				usleep(1);
-				continue;
-			}
-			perror("ERROR: connect()");
-			exit(0);
-		} else {
-			printf("connect() was ok after %d iterations\n", a);
-			break;
-		}
-	}
-#endif
-	for (int a = 0 ;; a++) {
-		if (xemusock_connect(sockfd, &servaddr, &xerrno)) {
-			if (xemusock_should_repeat_from_error(xerrno)) {
-				usleep(1);
-				continue;
-			}
-			fprintf(stderr, "Error at connect(): %s\n", xemusock_strerror(xerrno));
-			exit(1);
-		} else {
-			printf("connect() was ok after %d iterations\n", a);
-			break;
-		}
-	}
-	// request to send datagram
-	// no need to specify server address in sendto
-	// connect stores the peers IP and port
-#if 0
-	for (int a = 0 ;; a++) {
-		ret = sendto(sockfd, (void*)message, sizeof(message), 0, (struct sockaddr*)NULL, sizeof(struct sockaddr_in));
-		if (ret == XS_SOCKET_ERROR) {
-			int err = SOCK_ERR();
-			if (err == XSEINTR)
-				continue;
-			if (err == XSEAGAIN || err == XSEWOULDBLOCK || err == XSEINPROGRESS) {
-				usleep(1);
-				continue;
-			}
-			perror("ERROR: sendto()");
-			exit(0);
-		} else {
-			printf("sendto() was ok after %d iterations, sent %d bytes\n", a, ret);
-			break;
-		}
-	}
-#endif
-	for (int a = 0 ;; a++) {
-		int ret = xemusock_send(sockfd, message, sizeof(message), &xerrno);
-		if (ret == XS_SOCKET_ERROR) {
-			if (xemusock_should_repeat_from_error(xerrno)) {
-				usleep(1);
-				continue;
-			}
-			fprintf(stderr, "Error at send(): %s\n", xemusock_strerror(xerrno));
-			exit(1);
-		} else {
-			printf("send() was ok after %d iterations, sent %d bytes\n", a, ret);
-			break;
-		}
-	}
-	// waiting for response
-#if 0
-	for (int a = 0 ;; a++) {
-		ret = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr*)NULL, NULL);
-		if (ret == XS_SOCKET_ERROR) {
-			int err = SOCK_ERR();
-			if (err == XSEINTR)
-				continue;
-			if (err == XSEAGAIN || err == XSEWOULDBLOCK || err == XSEINPROGRESS) {
-				usleep(1);
-				continue;
-			}
-			perror("ERROR: recvfrom()");
-			printf("revform() error code: %d\n", err);
-			exit(0);
-		} else {
-			printf("recvfrom() was ok after %d iterations, received %d bytes\n", a, ret);
-			break;
-		}
-	}
-#endif
-	for (int a = 0 ;; a++) {
-		int ret = xemusock_recv(sockfd, buffer, sizeof(buffer), &xerrno);
-		if (ret == XS_SOCKET_ERROR) {
-			if (xemusock_should_repeat_from_error(xerrno)) {
-				usleep(1);
-				continue;
-			}
-			fprintf(stderr, "Error at recv(): %s\n", xemusock_strerror(xerrno));
-			exit(1);
-		} else {
-			printf("recv() was ok after %d iterations, recieved %d bytes\n", a, ret);
-			break;
-		}
-	}
-	xemusock_close(sockfd, NULL);
-	xemusock_uninit();
-	return 0;
-}
-#endif
 #endif

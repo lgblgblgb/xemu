@@ -19,10 +19,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMU_COMMON_EMUTOOLS_SOCKETAPI_H_INCLUDED
 #ifdef	HAVE_XEMU_SOCKET_API
 
-#ifdef	XEMU_BUILD
-//#include <SDL.h>
-#endif
-
 #ifdef XEMU_ARCH_WIN
 #	include <winsock2.h>
 	typedef	SOCKET			xemusock_socket_t;
