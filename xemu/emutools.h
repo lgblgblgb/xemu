@@ -54,10 +54,6 @@ extern int macos_gui_started;
 extern void sysconsole_open   ( void );
 extern void sysconsole_close  ( const char *waitmsg );
 extern int  sysconsole_toggle ( int set );
-#ifdef HAVE_XEMU_SOCKET_API
-extern int  xemu_use_sockapi  ( void );
-extern void xemu_free_sockapi ( void );
-#endif
 
 // You should define this in your emulator, most probably with resetting the keyboard matrix
 // Purpose: emulator windows my cause the emulator does not get the key event normally, thus some keys "seems to be stucked"

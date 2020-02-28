@@ -14,7 +14,7 @@
 #define HAVE_XEMU_EXEC_API
 
 #ifdef HAVE_SOCKET_OS_API
-#define HAVE_XEMU_SOCKET_API
+//#define HAVE_XEMU_SOCKET_API
 //#define HAVE_XEMU_UMON
 #endif
 #define HAVE_XEMU_INSTALLER
