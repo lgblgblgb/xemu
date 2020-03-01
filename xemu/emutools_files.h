@@ -48,7 +48,7 @@ extern ssize_t xemu_safe_write ( int fd, const void *buffer, size_t length );
 extern int     xemu_safe_close ( int fd );
 extern off_t   xemu_safe_file_size_by_fd ( int fd );
 extern off_t   xemu_safe_file_size_by_name ( const char *name );
-extern int     xemu_create_empty_image ( const char *os_path, unsigned int size );
+extern int     xemu_create_sparse_file ( const char *os_path, Uint64 size );
 
 #if defined(HAVE_XEMU_INSTALLER) && !defined(HAVE_XEMU_EXEC_API)
 #define HAVE_XEMU_EXEC_API

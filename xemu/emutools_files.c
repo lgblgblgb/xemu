@@ -656,7 +656,7 @@ int xemu_load_file ( const char *filename, void *store_to, int min_size, int max
 }
 
 
-int xemu_create_empty_image ( const char *os_path, unsigned int size )
+int xemu_create_sparse_file ( const char *os_path, Uint64 size )
 {
 	int err = 0, fd;
 	unsigned char zero = 0;
