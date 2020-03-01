@@ -100,21 +100,25 @@ void machine_set_speed ( int verbose )
 			case 5:	// 101 - 1MHz
 				cpu_cycles_per_scanline = CPU_C64_CYCLES_PER_SCANLINE;
 				strcpy(emulator_speed_title, "1MHz");
+				cpu65_set_ce_timing(0);
 				break;
 			case 0:	// 000 - 2MHz
 				cpu_cycles_per_scanline = CPU_C128_CYCLES_PER_SCANLINE;
 				strcpy(emulator_speed_title, "2MHz");
+				cpu65_set_ce_timing(0);
 				break;
 			case 2:	// 010 - 3.5MHz
 			case 6:	// 110 - 3.5MHz
 				cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
 				strcpy(emulator_speed_title, "3.5MHz");
+				cpu65_set_ce_timing(1);
 				break;
-			case 1:	// 001 - 50MHz (or Xemu specified custom speed)
+			case 1:	// 001 - 40MHz (or Xemu specified custom speed)
 			case 3:	// 011 -		-- "" --
 			case 7:	// 111 -		-- "" --
 				cpu_cycles_per_scanline = cpu_cycles_per_scanline_for_fast_mode;
 				strcpy(emulator_speed_title, fast_mhz_in_string);
+				cpu65_set_ce_timing(1);
 				break;
 		}
 		DEBUG("SPEED: CPU speed is set to %s" NL, emulator_speed_title);
