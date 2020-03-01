@@ -33,13 +33,14 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xep128.h"
+
+#ifdef CONFIG_EPNET_SUPPORT
+
 #include "epnet.h"
 #include "cpu.h"
 #include "xemu/emutools_socketapi.h"
 #include <SDL.h>
 #include <unistd.h>
-
-#ifdef CONFIG_EPNET_SUPPORT
 
 #define direct_mode_epnet_shift 0
 #define IS_DIRECT_MODE() (!(mr1&1))
