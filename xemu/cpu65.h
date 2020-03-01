@@ -85,6 +85,9 @@ extern struct cpu65_st CPU65;
 
 #ifdef MEGA65
 extern int  cpu_linear_memory_addressing_is_enabled;
+#endif
+
+#ifdef CPU65_65CE02_6502NMOS_TIMING_EMULATION
 extern void cpu65_set_ce_timing ( int is_ce );
 #endif
 //extern int cpu_multi_step_stop_trigger;
