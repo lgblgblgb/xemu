@@ -81,7 +81,7 @@ struct mfat_part_st mfat_partitions[4];
 static int mfat_read_DEVICE_blk ( Uint32 block, void *buf )
 {
 	if (block >= disk.blocks) {
-		fprintf(stderr, "Host FS: reading outside of the device\n");
+		FATDEBUGPRINT("FATFS: WARNING: Host FS: reading outside of the device" NL);
 		return -1;
 	}
 	return disk.reader(block, buf);
@@ -89,7 +89,7 @@ static int mfat_read_DEVICE_blk ( Uint32 block, void *buf )
 static int mfat_write_DEVICE_blk ( Uint32 block, void *buf )
 {
 	if (block >= disk.blocks) {
-		fprintf(stderr, "Host FS: writing outside of the device\n");
+		FATDEBUGPRINT("FATFS: WARNING: Host FS: writing outside of the device" NL);
 		return -1;
 	}
 	return disk.writer(block, buf);
@@ -98,11 +98,11 @@ static int mfat_write_DEVICE_blk ( Uint32 block, void *buf )
 static int mfat_read_part_blk ( Uint32 block, void *buf )
 {
 	if (disk.part < 0) {
-		fprintf(stderr, "read partition block: invalid partition is selected\n");
+		FATDEBUGPRINT("FATFS: WARNING: read partition block: invalid partition is selected" NL);
 		return -1;
 	}
 	if (block >= mfat_partitions[disk.part].blocks) {
-		fprintf(stderr, "read partition block: trying to read block outside of partition!\n");
+		FATDEBUGPRINT("FATFS: WARNING: read partition block: trying to read block outside of partition!" NL);
 		return -1;
 	}
 	return mfat_read_DEVICE_blk(block + mfat_partitions[disk.part].first_block, buf);
@@ -110,11 +110,11 @@ static int mfat_read_part_blk ( Uint32 block, void *buf )
 static int mfat_write_part_blk ( Uint32 block, void *buf )
 {
 	if (disk.part < 0) {
-		fprintf(stderr, "write partition block: invalid partition is selected\n");
+		FATDEBUGPRINT("FATFS: WARNING: write partition block: invalid partition is selected" NL);
 		return -1;
 	}
 	if (block >= mfat_partitions[disk.part].blocks) {
-		fprintf(stderr, "write partition block: trying to read block outside of partition!\n");
+		FATDEBUGPRINT("FATFS: WARNING: write partition block: trying to read block outside of partition!" NL);
 		return -1;
 	}
 	return mfat_write_DEVICE_blk(block + mfat_partitions[disk.part].first_block, buf);
@@ -124,11 +124,11 @@ static int mfat_read_cluster ( Uint32 cluster, Uint32 block_in_cluster, void *bu
 {
 	cluster &= 0x0FFFFFFFU;	// some well known fact, that FAT32 is actually FAT28, and the highest 4 bits should not be used!
 	if (cluster < 2 || cluster >= mfat_partitions[disk.part].clusters) {
-		fprintf(stderr, "read cluster: invalid cluster number %d\n", cluster);
+		FATDEBUGPRINT("FATFS: WARNING: read cluster: invalid cluster number %d" NL, cluster);
 		return -1;
 	}
 	if (block_in_cluster >= mfat_partitions[disk.part].cluster_size_in_blocks) {
-		fprintf(stderr, "read cluster: invalid in-cluster-block data %d\n", block_in_cluster);
+		FATDEBUGPRINT("FATFS: WARNING: read cluster: invalid in-cluster-block data %d" NL, block_in_cluster);
 		return -1;
 	}
 	return mfat_read_part_blk(cluster * mfat_partitions[disk.part].cluster_size_in_blocks + mfat_partitions[disk.part].data_area_fake_ofs + block_in_cluster, buf);
@@ -137,11 +137,11 @@ static int mfat_write_cluster ( Uint32 cluster, Uint32 block_in_cluster, void *b
 {
 	cluster &= 0x0FFFFFFFU;	// some well known fact, that FAT32 is actually FAT28, and the highest 4 bits should not be used!
 	if (cluster < 2 || cluster >= mfat_partitions[disk.part].clusters) {
-		fprintf(stderr, "write cluster: invalid cluster number %d\n", cluster);
+		FATDEBUGPRINT("FATFS: WARNING: write cluster: invalid cluster number %d" NL, cluster);
 		return -1;
 	}
 	if (block_in_cluster >= mfat_partitions[disk.part].cluster_size_in_blocks) {
-		fprintf(stderr, "write cluster: invalid in-cluster-block data %d\n", block_in_cluster);
+		FATDEBUGPRINT("FATFS: WARNING: write cluster: invalid in-cluster-block data %d" NL, block_in_cluster);
 		return -1;
 	}
 	return mfat_write_part_blk(cluster * mfat_partitions[disk.part].cluster_size_in_blocks + mfat_partitions[disk.part].data_area_fake_ofs + block_in_cluster, buf);
@@ -188,7 +188,7 @@ static Uint32 mfat_read_fat_chain ( Uint32 cluster )
 	Uint32 block;
 	cluster &= 0x0FFFFFFFU;	// some well known fact, that FAT32 is actually FAT28, and the highest 4 bits should not be used!
 	if (cluster < 2 || cluster >= mfat_partitions[disk.part].clusters) {
-		fprintf(stderr, "read fat: invalid cluster number %d\n", cluster);
+		FATDEBUGPRINT("FATFS: WARNING: read fat: invalid cluster number %d" NL, cluster);
 		return 1;
 	}
 	Uint32 cluster_in = cluster;
@@ -199,11 +199,11 @@ static Uint32 mfat_read_fat_chain ( Uint32 cluster )
 		if (mfat_read_part_blk(block, fat_cache.buf))
 			return 1;
 		fat_cache.block = block;
-		printf("UNCACHED block: %d\n", block);
+		FATDEBUG("FATFS: UNCACHED block: %d" NL, block);
 	} else
-		printf("COOL, fat block is cached for %d\n", block);
+		FATDEBUG("FATFS: COOL, fat block is cached for %d" NL, block);
 	cluster = AS_DWORD(fat_cache.buf, fat_cache.ofs) & 0x0FFFFFFFU;
-	printf("DEBUG: mfat_read_chain: got cluster: $%08X\n", AS_DWORD(fat_cache.buf, fat_cache.ofs));
+	FATDEBUG("FATFS: DEBUG: mfat_read_chain: got cluster: $%08X" NL, AS_DWORD(fat_cache.buf, fat_cache.ofs));
 	// In theory there is some "official" end-of-chain marker, but in reality it seems anything which is outside of normal
 	// cluster number on the FS "should" be considered as end-of-chain marker.
 	// That's actually great, we should not worry here what is the "EOC" marker, and just say this:
@@ -216,7 +216,7 @@ static Uint32 mfat_read_fat_chain ( Uint32 cluster )
 		return 0;
 	}
 	if (cluster == cluster_in) {
-		FATDEBUGPRINT("FAT32FS: ERROR: cluster %u refers itself!" NL, cluster);
+		FATDEBUGPRINT("FATFS: ERROR: cluster %u refers itself!" NL, cluster);
 		return 0;	// serious problem, cluster refeers to itself???? We just handle the problem as it would be EOC as well ...
 	}
 	return cluster;
@@ -279,13 +279,13 @@ Uint32 mfat_allocate_linear_fat_chunk ( Uint32 size )
 	if (!size)
 		return 0;	// error
 	Uint32 cluster_byte_size = mfat_partitions[disk.part].cluster_size_in_blocks * 512;
-	printf("%s() is about seeking for free linear chunk in FAT for %u bytes size object" NL, __func__, size);
+	FATDEBUG("FATFS: DEBUG: %s() is about seeking for free linear chunk in FAT for %u bytes size object" NL, __func__, size);
 	// OK, so now, size is the needed number of clusters to allocate
 	// start from cluster 2, the first data cluster, to try with (though probably that's root dir, so won't be free, but anyway, for strange situations ...)
 	for (Uint32 cluster = 2, first = 0, len = 0, seq = 0; cluster < mfat_partitions[disk.part].clusters; cluster++) {
-		DEBUGPRINT("FAT32FS: considering cluster %u" NL, cluster);
+		DEBUGPRINT("FATFS: considering cluster %u" NL, cluster);
 		Uint32 next = mfat_read_fat_chain(cluster);
-		DEBUGPRINT("FAT32FS: %u cluster's result in FAT: %u" NL, cluster, next);
+		DEBUGPRINT("FATFS: %u cluster's result in FAT: %u" NL, cluster, next);
 		if (next == 1)
 			return 0;	// error!
 		if (next == 0 && cluster_was_free) {	// cluster is free
@@ -298,7 +298,7 @@ Uint32 mfat_allocate_linear_fat_chunk ( Uint32 size )
 				seq++;
 			}
 			if (len >= size) {	// we found it :)
-				printf("%s() founds %u sized free linear chunk in FAT at cluster %u" NL, __func__, size, first);
+				FATDEBUG("FATFS: DEBUG: %s() founds %u sized free linear chunk in FAT at cluster %u" NL, __func__, size, first);
 				for (Uint32 a = 0; a < seq; a++) {
 					if (mfat_write_fat_chain(first + a, a != seq - 1 ? first + a + 1 : 0)) {	// 0 is end-of-chain marker in my implementation
 						// In case of an error, we try to FREE what we've did ...
@@ -314,7 +314,7 @@ Uint32 mfat_allocate_linear_fat_chunk ( Uint32 size )
 		} else			// cluster is not free
 			first = 0;
 	}
-	printf("%s() could not found %d sized free linear chunk in FAT ..." NL, __func__, size);
+	FATDEBUG("FATFS: DEBUG: %s() could not found %d sized free linear chunk in FAT ..." NL, __func__, size);
 	return 0;	// not found :(
 }
 
@@ -368,7 +368,7 @@ int mfat_init_mbr ( void )
 		) {
 			mfat_partitions[a].valid = 1;
 		}
-		printf("Part#%d: %08X - %08X (size=%08X), type = %02X, valid=%d size=%d Mbytes\n",
+		FATDEBUG("FATFS: Part#%d: %08X - %08X (size=%08X), type = %02X, valid=%d size=%d Mbytes" NL,
 			a,
 			mfat_partitions[a].first_block,
 			mfat_partitions[a].last_block,
@@ -387,14 +387,14 @@ int mfat_init_mbr ( void )
 static void hexdump ( Uint8 *p, int lines, const char *title )
 {
 	if (title)
-		printf("*** %s\n", title);
+		FATDEBUG("*** %s" NL, title);
 	for (int b = 0 ; b < lines ; b ++) {
-		printf("%03X  ", b * 32);
+		FATDEBUG("%03X  ", b * 32);
 		for (int a = 0; a < 32; a++)
-			printf("%02X ", p[a]);
+			FATDEBUG("%02X ", p[a]);
 		for (int a = 0; a < 32; a++)
-			printf("%c", p[a] >=32 && p[a] < 127 ? p[a] : '?');
-		puts("");
+			FATDEBUG("%c", p[a] >=32 && p[a] < 127 ? p[a] : '?');
+		FATDEBUG(NL);
 		p += 32;
 	}
 }
@@ -421,28 +421,28 @@ int mfat_use_part ( int part )
 	Uint8 cache[512];
 	if (mfat_read_part_blk(0, cache))
 		goto error;
-	printf("Bytes per logical sector: %d\n", AS_WORD(cache,0xB));
+	FATDEBUG("FATFS: INFO: Bytes per logical sector: %d" NL, AS_WORD(cache,0xB));
 	if (AS_WORD(cache, 0xB) != 512) {
-		fprintf(stderr, "Only 512 bytes / logical sector is supported!\n");
+		FATDEBUGPRINT("FATFS: WARNING: Only 512 bytes / logical sector is supported!" NL);
 		goto error;
 	}
-	printf("Logical sectors per cluster: %d (cluster size = %d bytes)\n", cache[0xD], cache[0xD] * 512);
+	FATDEBUG("FATFS: INFO: Logical sectors per cluster: %d (cluster size = %d bytes)" NL, cache[0xD], cache[0xD] * 512);
 	if (cache[0xD] == 0) {	// FIXME: better check, should be some non-zero & power of two ...
-		fprintf(stderr, "Invalid logical sectors per cluster information!\n");
+		FATDEBUGPRINT("FATFS: WARNING: Invalid logical sectors per cluster information!" NL);
 		goto error;
 	}
 	mfat_partitions[part].cluster_size_in_blocks = cache[0xD];
-	printf("Reserved logical sectors: %d\n", AS_WORD(cache, 0xE));
-	printf("FAT copies: %d\n", cache[0x10]);
+	FATDEBUG("FATFS: INFO: Reserved logical sectors: %d" NL, AS_WORD(cache, 0xE));
+	FATDEBUG("FATFS: INFO: FAT copies: %d" NL, cache[0x10]);
 	if (cache[0x10] != 2) {
-		fprintf(stderr, "Invalid number of FAT copies!\n");
+		FATDEBUGPRINT("FATFS: WARNING: Invalid number of FAT copies!" NL);
 		goto error;
 	}
-	printf("Logical sectors by FAT: %d\n", AS_DWORD(cache, 0x24));
-	printf("Cluster of ROOT dir: %d\n", AS_DWORD(cache, 0x2C));
+	FATDEBUG("FATFS: INFO: Logical sectors by FAT: %d" NL, AS_DWORD(cache, 0x24));
+	FATDEBUG("FATFS: INFO: Cluster of ROOT dir: %d" NL, AS_DWORD(cache, 0x2C));
 	mfat_partitions[part].root_dir_cluster = AS_DWORD(cache, 0x2C);
 
-	printf("FS information sector at block: %d\n", AS_WORD(cache, 0x30));
+	FATDEBUG("FATFS: INFO: FS information sector at block: %d" NL, AS_WORD(cache, 0x30));
 	mfat_partitions[part].fs_info_block_number = AS_WORD(cache, 0x30);
 
 
@@ -450,21 +450,21 @@ int mfat_use_part ( int part )
 	mfat_partitions[part].fat2_start = AS_WORD(cache, 0xE) + AS_DWORD(cache, 0x24);
 	Uint32 a                         = AS_WORD(cache, 0xE) + AS_DWORD(cache, 0x24) * 2;
 	mfat_partitions[part].clusters = ((mfat_partitions[part].blocks - a) / mfat_partitions[part].cluster_size_in_blocks) + 2;
-	printf("Number of clusters CALCULATED (incl. 0,1): %d\n", mfat_partitions[part].clusters);
-	printf("Number of clusters from FAT size: %d\n", AS_DWORD(cache, 0x24) * 128);	// FIXME: decide what number of clusters data is valid [obviously, the smaller value of both ...]
+	FATDEBUG("FATFS: INFO: Number of clusters CALCULATED (incl. 0,1): %d" NL, mfat_partitions[part].clusters);
+	FATDEBUG("FATFS: INFO: Number of clusters from FAT size: %d" NL, AS_DWORD(cache, 0x24) * 128);	// FIXME: decide what number of clusters data is valid [obviously, the smaller value of both ...]
 
 	mfat_partitions[part].data_area_fake_ofs = a - (mfat_partitions[part].cluster_size_in_blocks * 2);
 
 
 	if (mfat_read_part_blk(mfat_partitions[part].fat1_start, cache))
 		goto error;
-	printf("FAT1 marks #0: $%08X\n", AS_DWORD(cache, 0));
+	FATDEBUG("FATFS: INFO: FAT1 marks #0: $%08X" NL, AS_DWORD(cache, 0));
 	mfat_partitions[part].eoc_marker = AS_DWORD(cache, 0);
-	printf("FAT1 marks #1: $%08X\n", AS_DWORD(cache, 4));
+	FATDEBUG("FATFS: INFO: FAT1 marks #1: $%08X" NL, AS_DWORD(cache, 4));
 	if (mfat_read_part_blk(mfat_partitions[part].fat2_start, cache))
 		goto error;
-	printf("FAT2 marks #0: $%08X\n", AS_DWORD(cache, 0));
-	printf("FAT2 marks #1: $%08X\n", AS_DWORD(cache, 4));
+	FATDEBUG("FATFS: INFO: FAT2 marks #0: $%08X" NL, AS_DWORD(cache, 0));
+	FATDEBUG("FATFS: INFO: FAT2 marks #1: $%08X" NL, AS_DWORD(cache, 4));
 	//if (mfat_read_
 	//luster(mfat_partitions[part].root_dir_cluster, 0, cache))
 	//	goto error;
@@ -473,15 +473,15 @@ int mfat_use_part ( int part )
 	do {
 		for (int b = 0; b < mfat_partitions[part].cluster_size_in_blocks; b++)
 			if (mfat_read_cluster(a, b, cache)) {
-				printf("Error following the root directory!\n");
+				FATDEBUGPRINT("FATFS: Error following the root directory!" NL);
 				goto error;
 			} else {
-				printf("Root directory, cluster=%d/block=%d\n", a, b);
+				FATDEBUG("FATFS: INFO: Root directory, cluster=%d/block=%d" NL, a, b);
 				hexdump(cache, 16, NULL);
 				for (int c = 0; c < 512; c += 32) {
 					if (cache[c] >= 32 && cache[c] != 0xE5 && (cache[c + 0xB] & 8)) {
 						cache[c + 0xB] = 0;
-						printf("VOLUME is: \"%s\"\n", cache + c);
+						FATDEBUG("FATFS: INFO: VOLUME is: \"%s\"" NL, cache + c);
 					}
 				}
 			}
@@ -498,18 +498,18 @@ int mfat_use_part ( int part )
 		if (mfat_read_part_blk(mfat_partitions[part].fs_info_block_number, cache))
 			goto error;
 		hexdump(cache, 16, "FS information sector");
-		printf("FS info signature @0=$%08X @1E4=$%08X @1FC=$%08X\n",
+		FATDEBUG("FATFS: INFO: FS info signature @0=$%08X @1E4=$%08X @1FC=$%08X" NL,
 				AS_DWORD(cache, 0), AS_DWORD(cache, 0x1E4), AS_DWORD(cache, 0x1FC)
 		);
 		if (AS_DWORD(cache, 0) != 0x41615252 || AS_DWORD(cache, 0x1E4) != 0x61417272 || AS_DWORD(cache, 0x1FC) != 0xAA550000U) {
-			printf("*** BAD FS info sector signature(s)\n");
+			FATDEBUGPRINT("FATFS: *** BAD FS info sector signature(s)" NL);
 			goto error;
 		}
 	} else {
-		printf("No FS information sector!\n");
+		FATDEBUGPRINT("FATFS: No FS information sector!" NL);
 		goto error;
 	}
-	printf("GOOD, FS seems to be intact! :-)\n");
+	FATDEBUGPRINT("FATFS: GOOD, FS seems to be intact! :-)" NL);
 	mfat_partitions[part].fs_validated = 1;
 	return 0;
 error:
@@ -604,7 +604,7 @@ int mfat_read_stream ( mfat_stream_t *p, void *buf, int size )
 			stream_cache.cluster_block = p->in_cluster_block;
 			stream_cache.part = disk.part;
 		} else
-			printf("WOW, data block has been cached for cluster %d, block %d within cluster\n", stream_cache.cluster, stream_cache.cluster_block);
+			FATDEBUG("FATFS: INFO: WOW, data block has been cached for cluster %d, block %d within cluster" NL, stream_cache.cluster, stream_cache.cluster_block);
 		int piece = 512 - p->in_block_pos;
 		if (size < piece)
 			piece = size;
@@ -661,7 +661,7 @@ int mfat_write_stream ( mfat_stream_t *p, void *buf, int size )
 			cached_cluster = p->cluster;
 			cached_cluster_block = p->in_cluster_block;
 		} else
-			printf("WOW, data block has been cached for cluster %d, block %d within cluster\n", cached_cluster, cached_cluster_block);
+			FATDEBUG("WOW, data block has been cached for cluster %d, block %d within cluster" NL, cached_cluster, cached_cluster_block);
 		int piece = 512 - p->in_block_pos;
 		if (size < piece)
 			piece = size;
@@ -718,14 +718,14 @@ int mfat_read_directory ( mfat_dirent_t *p, int type_filter )
 		memcpy(&dir_cur_item_stream, &p->stream, sizeof(mfat_stream_t));
 		int ret = mfat_read_stream(&p->stream, buf, 32);
 		if (ret <= 0) {
-			printf("%s getting ret %d\n", __func__, ret);
+			FATDEBUG("FATFS: INFO: %s getting ret %d" NL, __func__, ret);
 			return ret;
 		}
 		if (ret != 32) {
-			FATAL("FATFS: dirent read 32 is not 32\n");
+			FATAL("FATFS: dirent read 32 is not 32" NL);
 		}
 		if (buf[0] == 0) {		// marks end of directory, thus returning with no entry found at this point
-			printf("%s end of stream\n", __func__);
+			FATDEBUG("FATFS: INFO: %s end of stream" NL, __func__);
 			p->stream.eof = 1;
 			return 0;
 		}
@@ -790,14 +790,14 @@ int mfat_search_in_directory ( mfat_dirent_t *p, const char *name, int type_filt
 	for (;;) {
 		int ret = mfat_read_directory(p, type_filter);
 		if (ret == 1) {
-			printf("%s considering file [%s] as [%s]\n", __func__, p->name, name ? normalized_search_name : "<first>");
+			FATDEBUG("FATFS: INFO: %s considering file [%s] as [%s]" NL, __func__, p->name, name ? normalized_search_name : "<first>");
 			// FIXME: probably, later we want to allow joker characters?
 			if (!name)
 				return 1;
 			if (!strcmp(p->name, normalized_search_name))
 				return 1;
 		} else {
-			printf("%s returns because of ret being %d\n", __func__, ret);
+			FATDEBUG("FATFS: INFO: %s returns because of ret being %d" NL, __func__, ret);
 			return ret;
 		}
 	}
@@ -995,7 +995,7 @@ int main ( int argc, char **argv )
 	// static const char default_fn[] = "/home/lgb/.local/share/xemu-lgb/mega65/mega65.img";
 	static const char default_fn[] = "hyppo.disk";
 	const char *fn = (argc > 1) ? argv[1] : default_fn;
-	printf("Disk image: %s\n", fn);
+	FATDEBUG("Disk image: %s" NL, fn);
 	fd = open(fn, O_RDONLY);
 	if (fd < 0) {
 		perror("Open disk image");
@@ -1008,30 +1008,30 @@ int main ( int argc, char **argv )
 		return 1;
 	}
 	if (devsize & 511) {
-		fprintf(stderr, "Host size error: size is not 512 byte aligned\n");
+		FATDEBUGPRINT("FATFS: WARNING: Host size error: size is not 512 byte aligned" NL);
 		close(fd);
 		return 1;
 	}
 	if (devsize < 16*1024*1024) {
-		fprintf(stderr, "Host size error: image is too small (<16Mbytes)\n");
+		FATDEBUGPRINT("FATFS: WARNING: Host size error: image is too small (<16Mbytes)" NL);
 		close(fd);
 		return 1;
 	}
 	devsize >>= 9;
 	if (devsize > 0x2000000) {
-		fprintf(stderr, "Host size error: image is too large (>16Gbytes)\n");
+		FATDEBUGPRINT("FATFS: WARNING: Host size error: image is too large (>16Gbytes)" NL);
 		close(fd);
 		return 1;
 	}
 	mfat_init( raw_reader, NULL, devsize );
 	int part = mfat_init_mbr();
 	if (part < 0) {
-		fprintf(stderr, "No partition could be detected in MBR for usage\n");
+		FATDEBUGPRINT("FATFS: WARNING: No partition could be detected in MBR for usage" NL);
 		close(fd);
 		return 1;
 	}
 	if (mfat_use_part(part)) {
-		fprintf(stderr, "Cannot make partition #%d to be selected\n", part);
+		FATDEBUGPRINT("FATFS: WARNING: Cannot make partition #%d to be selected" NL, part);
 		close(fd);
 		return 1;
 	}
@@ -1043,26 +1043,26 @@ int main ( int argc, char **argv )
 	int ret;
 	int fragmented;
 	ret = mfat_get_real_size(&dirent.stream, &fragmented);
-	printf("GET REAL SIZE = %d, fragmented = %d\n", ret, fragmented);
+	FATDEBUG("GET REAL SIZE = %d, fragmented = %d" NL, ret, fragmented);
 	ret = mfat_search_in_directory(&dirent, NULL, MFAT_FIND_VOL);
-	printf("VOLUME NAME: \"%s\"\n", ret == 1 ? dirent.fat_name : "???");
+	FATDEBUG("VOLUME NAME: \"%s\"" NL, ret == 1 ? dirent.fat_name : "???");
 	for (int x = 0; x < 2; x++) {
 		mfat_rewind_stream(&dirent.stream);
 	for (;;) {
 		int ret = mfat_read_directory(&dirent, 0xFF);
 		if (ret != 1)
 			break;
-		printf("FILE: \"%s\" size = %u cluster=%u\n", dirent.name, dirent.size, dirent.cluster);
+		FATDEBUG("FILE: \"%s\" size = %u cluster=%u" NL, dirent.name, dirent.size, dirent.cluster);
 	}
 	}
 	// SEARCH TEST
 	ret = mfat_search_in_directory(&dirent, "FOOD", 0xFF);
-	printf("SEARCH FOR FOOD: %d\n", ret);
+	FATDEBUG("SEARCH FOR FOOD: %d" NL, ret);
 	if (!ret) {
 		ret = mfat_search_in_directory(&dirent, "MEGA65.ROM", 0xFF);
-		printf("RESULT of searching file : %d\n", ret);
+		FATDEBUG("RESULT of searching file : %d" NL, ret);
 		ret = mfat_search_in_directory(&dirent, "MEGA65.ROM", 0xFF);
-		printf("RESULT of searching file (AGAIN!): %d\n", ret);
+		FATDEBUG("RESULT of searching file (AGAIN!): %d" NL, ret);
 	}
 	close(fd);
 	puts("WOW :-)");
