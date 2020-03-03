@@ -25,7 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "input.h"
 #ifndef NO_SCREENSHOT
 #ifdef CONFIG_USE_LODEPNG
-#	include "lodepng.h"
+#	include "xemu/lodepng.h"
 #else
 #	include "png.h"
 #endif

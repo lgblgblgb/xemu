@@ -14,6 +14,10 @@
 #define NO_CONSOLE
 #endif
 
+#ifndef __EMSCRIPTEN__
+#define CONFIG_USE_LODEPNG
+#endif
+
 #ifdef HAVE_SOCKET_OS_API
 #define HAVE_XEMU_SOCKET_API
 #endif

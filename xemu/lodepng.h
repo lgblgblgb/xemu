@@ -23,6 +23,7 @@ freely, subject to the following restrictions:
     distribution.
 */
 
+#ifdef CONFIG_USE_LODEPNG
 #ifndef LODEPNG_H
 #define LODEPNG_H
 
@@ -1556,3 +1557,5 @@ Account: lode dot vandevenne.
 
 Copyright (c) 2005-2015 Lode Vandevenne
 */
+
+#endif
