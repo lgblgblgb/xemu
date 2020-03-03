@@ -43,6 +43,29 @@ void xemugui_cb_quit ( const struct menu_st *m, int *query )
 		UI_CB_QUIT();
 }
 
+void xemugui_cb_show_info_window_text ( const struct menu_st *m, int *query )
+{
+	if (!query)
+		INFO_WINDOW("%s", (const char*)m->user_data);
+}
+
+void xemugui_cb_about_window ( const struct menu_st *m, int *query )
+{
+	if (!query) {
+		INFO_WINDOW(
+			"This software is part of the Xemu project: https://github.com/lgblgblgb/xemu\n"
+			"CREATED: %s at %s\n"
+			"CREATED: %s for %s\n"
+			"VERSION: %s\n"
+			"EMULATE: %s (%s): %s"
+			,
+			XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT, XEMU_BUILDINFO_CC, XEMU_ARCH_NAME,
+			XEMU_BUILDINFO_GIT,
+			TARGET_DESC, TARGET_NAME, XEMU_BUILDINFO_TARGET
+		);
+	}
+}
+
 void xemugui_cb_call_quit_if_sure ( const struct menu_st *m, int *query )
 {
 	if (!query && ARE_YOU_SURE(str_are_you_sure_to_exit, i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
