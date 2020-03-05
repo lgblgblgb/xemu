@@ -43,6 +43,37 @@ void xemugui_cb_quit ( const struct menu_st *m, int *query )
 		UI_CB_QUIT();
 }
 
+void xemugui_cb_show_info_window_text ( const struct menu_st *m, int *query )
+{
+	if (!query)
+		INFO_WINDOW("%s", (const char*)m->user_data);
+}
+
+void xemugui_cb_about_window ( const struct menu_st *m, int *query )
+{
+	if (!query) {
+		INFO_WINDOW(
+			"Xemu/%s %s\n"
+			"%s\n"
+			"Compiled by: %s at %s\n"
+			"Built with: %s for %s\n"
+			"\n"
+			"Copyright (C)" COPYRIGHT_YEARS " Gábor Lénárt (aka LGB) lgb@lgb.hu http://lgb.hu/\n"
+			"This software is part of the Xemu project: https://github.com/lgblgblgb/xemu\n"
+			"\n"
+			"This software is a GNU/GPL version 2 (or later) software.\n"
+			"<http://gnu.org/licenses/gpl.html>\n"
+			"This is free software; you are free to change and redistribute it.\n"
+			"There is NO WARRANTY, to the extent permitted by law."
+			,
+			TARGET_DESC, XEMU_BUILDINFO_CDATE,
+			XEMU_BUILDINFO_GIT,
+			XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT,
+			XEMU_BUILDINFO_CC, XEMU_ARCH_NAME
+		);
+	}
+}
+
 void xemugui_cb_call_quit_if_sure ( const struct menu_st *m, int *query )
 {
 	if (!query && ARE_YOU_SURE(str_are_you_sure_to_exit, i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))

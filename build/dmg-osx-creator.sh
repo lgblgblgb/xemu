@@ -6,7 +6,8 @@
 # -------------------------------------------------
 
 BUNDLE="yes"
-TIMESTAMP="`date '+%Y%m%d%H%M%S'`"
+#TIMESTAMP="`date '+%Y%m%d%H%M%S'`"
+TIMESTAMP="`cat build/objs/cdate.data`"
 
 echo "*** *** DMG begin: $0 @ `date` *** ***"
 
