@@ -25,7 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 const char *XEMU_BUILDINFO_CC  = CC_TYPE " " __VERSION__ " " ARCH_BITS_AS_TEXT ENDIAN_NAME;
 
 const char emulators_disclaimer[] =
-	"LICENSE: Copyright (C)2016-2020 Gábor Lénárt (aka LGB) lgb@lgb.hu http://lgb.hu/" NL
+	"LICENSE: Copyright (C)" COPYRIGHT_YEARS " Gábor Lénárt (aka LGB) lgb@lgb.hu http://lgb.hu/" NL
 	"LICENSE: This software is a GNU/GPL version 2 (or later) software." NL
 	"LICENSE: <http://gnu.org/licenses/gpl.html>" NL
 	"LICENSE: This is free software; you are free to change and redistribute it." NL

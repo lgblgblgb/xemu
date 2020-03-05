@@ -53,15 +53,23 @@ void xemugui_cb_about_window ( const struct menu_st *m, int *query )
 {
 	if (!query) {
 		INFO_WINDOW(
+			"Xemu/%s %s\n"
+			"%s\n"
+			"Compiled by: %s at %s\n"
+			"Built with: %s for %s\n"
+			"\n"
+			"Copyright (C)" COPYRIGHT_YEARS " Gábor Lénárt (aka LGB) lgb@lgb.hu http://lgb.hu/\n"
 			"This software is part of the Xemu project: https://github.com/lgblgblgb/xemu\n"
-			"CREATED: %s at %s\n"
-			"CREATED: %s for %s\n"
-			"VERSION: %s\n"
-			"EMULATE: %s (%s): %s"
+			"\n"
+			"This software is a GNU/GPL version 2 (or later) software.\n"
+			"<http://gnu.org/licenses/gpl.html>\n"
+			"This is free software; you are free to change and redistribute it.\n"
+			"There is NO WARRANTY, to the extent permitted by law."
 			,
-			XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT, XEMU_BUILDINFO_CC, XEMU_ARCH_NAME,
+			TARGET_DESC, XEMU_BUILDINFO_CDATE,
 			XEMU_BUILDINFO_GIT,
-			TARGET_DESC, TARGET_NAME, XEMU_BUILDINFO_TARGET
+			XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT,
+			XEMU_BUILDINFO_CC, XEMU_ARCH_NAME
 		);
 	}
 }

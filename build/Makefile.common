@@ -111,6 +111,9 @@ $(PRG): $(OBJS) $(DEPALL)
 	@echo "const char *XEMU_BUILDINFO_AT  = \"`date`\";" >> $(DEPFILEPREFIX)-buildinfo.c
 	@echo "const char *XEMU_BUILDINFO_GIT = \"`git config --get remote.origin.url` `git rev-parse --abbrev-ref HEAD` `git rev-parse HEAD`\";" >> $(DEPFILEPREFIX)-buildinfo.c
 	@echo "const char *XEMU_BUILDINFO_TARGET = \"$(PRG_TARGET) ($(PRG)) for $(TARGET) on \" XEMU_ARCH_NAME \" ($(ARCH)) using $(CC)\";" >> $(DEPFILEPREFIX)-buildinfo.c
+	@git log -1 --format=%cd --date=format:%Y%m%d%H%M%S > $(TOPDIR)/build/objs/cdate.data
+	@echo "Commit date we're building ($(TOPDIR)/build/objs/cdate.data): `cat $(TOPDIR)/build/objs/cdate.data`"
+	@echo "const char *XEMU_BUILDINFO_CDATE = \"`cat $(TOPDIR)/build/objs/cdate.data`\";" >> $(DEPFILEPREFIX)-buildinfo.c
 	$(CC) $(CFLAGS) -c -o $(DEPFILEPREFIX)-buildinfo.o $(DEPFILEPREFIX)-buildinfo.c
 	$(CC) -o $(PRG) $(OBJS) $(DEPFILEPREFIX)-buildinfo.o $(LDFLAGS)
 
