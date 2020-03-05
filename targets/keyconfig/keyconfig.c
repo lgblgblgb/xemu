@@ -316,9 +316,19 @@ static double construct_keyboard_row ( double x, double y, double x_step, int wi
 
 static void construct_mega_keyboard ( void )
 {
-	construct_keyboard_row(100, 114, 48.6, 26, 26, "Q\1W\1E\1R\1T\1Y\1U\1I\1O\1P");
-	construct_keyboard_row(111, 158, 48.6, 26, 26, "A\1S\1D\1F\1G\1H\1J\1K\1L");
-	construct_keyboard_row(136, 202, 48.6, 26, 26, "Z\1X\1C\1V\1B\1N\1M\1<\n,\1>\n.\1?\n/");
+	// top row (function keys, etc)
+	construct_keyboard_row( 28          ,   4, 48.5, 26, 30, "stop");
+	construct_keyboard_row( 28 +  2*48.5,   4, 48.5, 26, 30, "esc\1alt\1lock\1no.sc");
+	construct_keyboard_row( 28 +  7*48.5,   4, 48.5, 26, 30, "F1\1F3\1F5\1F7");
+	construct_keyboard_row( 28 + 12*48.5,   4, 48.5, 26, 30, "F9\1F11\1F13\1help");
+	// kind of number row
+	construct_keyboard_row( 28,  68, 48.5, 26, 30, "<-\1" "1\1" "2\1" "3\1" "4\1" "5\1" "6\1" "7\1" "8\1" "9\1" "0\1+\1-\1pnd\1clr\1DEL");
+	// Q-W-E-R-T-Y
+	construct_keyboard_row(100, 114, 48.5, 26, 26, "Q\1W\1E\1R\1T\1Y\1U\1I\1O\1P\1a\1b\1c");
+	// A-S-D-F
+	construct_keyboard_row( 15, 159, 48.5, 26, 26, "ctrl\1lck\1A\1S\1D\1F\1G\1H\1J\1K\1L\1d\1e\1f");
+	// Z-X-C
+	construct_keyboard_row(136, 202, 48.5, 26, 26, "Z\1X\1C\1V\1B\1N\1M\1<\n,\1>\n.\1?\n/");
 }
 
 
