@@ -40,7 +40,7 @@ void xemu_dump_version ( FILE *fp, const char *slogan )
 		fprintf(fp, "**** %s ****" NL, slogan);
 	fprintf(fp, "This software is part of the Xemu project: https://github.com/lgblgblgb/xemu" NL);
 	fprintf(fp, "CREATED: %s at %s" NL "CREATED: %s for %s" NL, XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT, XEMU_BUILDINFO_CC, XEMU_ARCH_NAME);
-	fprintf(fp, "VERSION: %s" NL, XEMU_BUILDINFO_GIT);
+	fprintf(fp, "VERSION: %s %s" NL, XEMU_BUILDINFO_GIT, XEMU_BUILDINFO_CDATE);
 	fprintf(fp, "EMULATE: %s (%s): %s" NL, TARGET_DESC, TARGET_NAME, XEMU_BUILDINFO_TARGET);
 	fprintf(fp, "%s" NL, emulators_disclaimer);
 }
