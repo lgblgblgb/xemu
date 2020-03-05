@@ -7,7 +7,7 @@ DEPENDENCY="libsdl2-2.0-0 (>= 2.0.4), libc6 (>= 2.15), libreadline7 (>= 7.0), li
 AUTHOR="Gábor Lénárt <lgblgblgb@gmail.com>"
 WEBSITE="https://github.com/lgblgblgb/xemu/wiki"
 BUGSITE="https://github.com/lgblgblgb/xemu/issues"
-VERSION="`date '+%Y%m%d%H%M%S'`"
+#VERSION="`date '+%Y%m%d%H%M%S'`"
 ROOT=".dist/${PROJECT}_$VERSION"
 ARCH=`dpkg --print-architecture`
 DEB="${PROJECT}_current_$ARCH.deb"
@@ -18,6 +18,8 @@ BINDIR="$ROOT$BINDIRREAL"
 DATADIR="$ROOT$DATADIRREAL"
 
 cd `dirname $0` || exit 1
+
+VERSION="`cat ../build/objs/cdate.data`"
 
 echo "Current directory: `pwd`"
 echo "Build architecture: $ARCH"
