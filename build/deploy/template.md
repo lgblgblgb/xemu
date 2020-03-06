@@ -4,7 +4,7 @@ This is the **binary** distribution of Xemu for **%ARCH%**. For the source code,
 information and instructions, wiki, issue page, etc, please visit
 https://github.com/lgblgblgb/xemu
 
-IFNOTMASTER:This is from the **%BRANCH% branch**, for regular usage you "should" use **master**.
+IFNOTMASTER:This is from the **%BRANCH% branch** (see below "MASTER"), for regular usage you "should" use **master**.
 IFNOTMASTER:
 IFNOTMASTER:## Binary versions for **MASTER** (what regular users may prefer):
 IFNOTMASTER:
