@@ -148,7 +148,6 @@ matrix:
           packages:
             - create-dmg
             - sdl2
-          update: true
       before_script:
         - set +e
         - uname -a ; pwd ; df -h ; id -a
