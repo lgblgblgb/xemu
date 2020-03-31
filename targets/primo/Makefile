@@ -23,8 +23,8 @@ EMU_DESCRIPTION	= Primo
 
 CFLAGS_TARGET_xprimo	=
 SRCS_TARGET_xprimo	= primo.c
-SRCS_COMMON_xprimo	= emutools.c emutools_hid.c z80.c z80_dasm.c emutools_config.c emutools_files.c
-CONFIG_CFLAGS_TARGET_xprimo	= sdl2
-CONFIG_LDFLAGS_TARGET_xprimo	= sdl2
+SRCS_COMMON_xprimo	= emutools.c emutools_hid.c z80.c z80_dasm.c emutools_config.c emutools_files.c emutools_gui.c
+CONFIG_CFLAGS_TARGET_xprimo	= sdl2|gtk3
+CONFIG_LDFLAGS_TARGET_xprimo	= sdl2|gtk3
 
 include ../../build/Makefile.common
