@@ -1,0 +1,24 @@
+<map id="targets/recpm/cpmfs.c" name="targets/recpm/cpmfs.c">
+<area shape="rect" id="node1" title=" " alt="" coords="494,5,647,32"/>
+<area shape="rect" id="node2" href="$emutools_8h.html" title=" " alt="" coords="93,80,216,107"/>
+<area shape="rect" id="node10" title=" " alt="" coords="221,155,286,181"/>
+<area shape="rect" id="node11" href="$cpmfs_8h.html" title=" " alt="" coords="291,80,360,107"/>
+<area shape="rect" id="node12" href="$hardware_8h.html" title=" " alt="" coords="385,80,471,107"/>
+<area shape="rect" id="node17" href="$bdos_8h.html" title=" " alt="" coords="496,80,557,107"/>
+<area shape="rect" id="node18" title=" " alt="" coords="582,80,647,107"/>
+<area shape="rect" id="node19" title=" " alt="" coords="672,80,763,107"/>
+<area shape="rect" id="node20" title=" " alt="" coords="787,80,867,107"/>
+<area shape="rect" id="node21" title=" " alt="" coords="891,80,959,107"/>
+<area shape="rect" id="node22" href="$recpm_2console_8h.html" title=" " alt="" coords="983,80,1062,107"/>
+<area shape="rect" id="node3" title=" " alt="" coords="87,155,145,181"/>
+<area shape="rect" id="node4" href="$emutools__basicdefs_8h.html" title=" " alt="" coords="118,304,303,331"/>
+<area shape="rect" id="node5" title=" " alt="" coords="5,379,67,405"/>
+<area shape="rect" id="node6" title=" " alt="" coords="91,379,155,405"/>
+<area shape="rect" id="node7" title=" " alt="" coords="179,379,243,405"/>
+<area shape="rect" id="node8" title=" " alt="" coords="267,379,365,405"/>
+<area shape="rect" id="node9" title=" " alt="" coords="389,379,493,405"/>
+<area shape="rect" id="node13" href="$z80_8h.html" title=" " alt="" coords="251,229,341,256"/>
+<area shape="rect" id="node15" href="$z80__dasm_8h.html" title=" " alt="" coords="363,155,493,181"/>
+<area shape="rect" id="node14" href="$z80ex_8h.html" title=" " alt="" coords="342,304,485,331"/>
+<area shape="rect" id="node16" href="$z80ex__dasm_8h.html" title=" " alt="" coords="366,229,549,256"/>
+</map>

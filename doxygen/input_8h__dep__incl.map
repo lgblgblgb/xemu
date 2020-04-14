@@ -1,0 +1,9 @@
+<map id="targets/ep128/input.h" name="targets/ep128/input.h">
+<area shape="rect" id="node1" title=" " alt="" coords="470,5,614,32"/>
+<area shape="rect" id="node2" href="$cpu_8c.html" title=" " alt="" coords="5,80,143,107"/>
+<area shape="rect" id="node3" href="$emu__monitor_8c.html" title=" " alt="" coords="167,80,357,107"/>
+<area shape="rect" id="node4" href="$input_8c.html" title=" " alt="" coords="382,80,526,107"/>
+<area shape="rect" id="node5" href="$joystick_8c.html" title=" " alt="" coords="551,80,712,107"/>
+<area shape="rect" id="node6" href="$main_8c.html" title=" " alt="" coords="737,80,881,107"/>
+<area shape="rect" id="node7" href="$screen_8c.html" title=" " alt="" coords="905,80,1059,107"/>
+</map>

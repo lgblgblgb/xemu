@@ -1,0 +1,9 @@
+<map id="targets/ep128/emu_rom_interface.h" name="targets/ep128/emu_rom_interface.h">
+<area shape="rect" id="node1" title=" " alt="" coords="468,5,627,47"/>
+<area shape="rect" id="node2" href="$cpu_8c.html" title=" " alt="" coords="5,102,143,129"/>
+<area shape="rect" id="node3" href="$emu__monitor_8c.html" title=" " alt="" coords="167,102,357,129"/>
+<area shape="rect" id="node4" href="$emu__rom__interface_8c.html" title=" " alt="" coords="381,95,540,136"/>
+<area shape="rect" id="node5" href="$fileio_8c.html" title=" " alt="" coords="564,102,707,129"/>
+<area shape="rect" id="node6" href="$main_8c.html" title=" " alt="" coords="731,102,875,129"/>
+<area shape="rect" id="node7" href="$roms_8c.html" title=" " alt="" coords="900,102,1045,129"/>
+</map>

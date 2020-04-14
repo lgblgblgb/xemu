@@ -1,0 +1,11 @@
+<map id="targets/mega65/mega65.h" name="targets/mega65/mega65.h">
+<area shape="rect" id="node1" title=" " alt="" coords="671,5,844,32"/>
+<area shape="rect" id="node2" href="$hypervisor_8c.html" title=" " alt="" coords="5,87,192,114"/>
+<area shape="rect" id="node3" href="$mega65_2input__devices_8c.html" title=" " alt="" coords="216,80,360,121"/>
+<area shape="rect" id="node4" href="$mega65_8c.html" title=" " alt="" coords="384,87,557,114"/>
+<area shape="rect" id="node5" href="$memory__mapper_8c.html" title=" " alt="" coords="581,80,744,121"/>
+<area shape="rect" id="node6" href="$mega65_2sdcard_8c.html" title=" " alt="" coords="769,87,935,114"/>
+<area shape="rect" id="node7" href="$uart__monitor_8c.html" title=" " alt="" coords="960,80,1099,121"/>
+<area shape="rect" id="node8" href="$mega65_2ui_8c.html" title=" " alt="" coords="1123,87,1261,114"/>
+<area shape="rect" id="node9" href="$vic4_8c.html" title=" " alt="" coords="1285,87,1435,114"/>
+</map>

@@ -1,0 +1,20 @@
+<map id="dave_reset" name="dave_reset">
+<area shape="rect" id="node1" title=" " alt="" coords="5,360,92,387"/>
+<area shape="rect" id="node2" href="$cpu_8c.html#a4db05dba39e1012c087cdf800b065b9f" title=" " alt="" coords="140,360,260,387"/>
+<area shape="rect" id="node3" href="$apu_8c.html#aa6f52b6178b023f3a5f639c610c20c1f" title=" " alt="" coords="323,5,466,32"/>
+<area shape="rect" id="node4" href="$apu_8c.html#a8151482dea50be0cdd32b01bc419fd4d" title=" " alt="" coords="339,56,450,83"/>
+<area shape="rect" id="node5" href="$dave_8c.html#a6dbe4fc4c9e9d8c43b2ead26de7cb192" title=" " alt="" coords="309,107,480,133"/>
+<area shape="rect" id="node6" href="$dave_8c.html#a3f2802f3237923b628803bdf6c3006d1" title=" " alt="" coords="308,157,481,184"/>
+<area shape="rect" id="node8" href="$input_8c.html#af82fa4e8a84126c46a67531977c694f7" title=" " alt="" coords="311,208,478,235"/>
+<area shape="rect" id="node9" href="$primoemu_8c.html#a0a1b3d4630e0dfecb12454bfb0405121" title=" " alt="" coords="345,309,444,336"/>
+<area shape="rect" id="node10" href="$primoemu_8c.html#ada3b17d875c882e71ec8b425118ceb83" title=" " alt="" coords="550,259,657,285"/>
+<area shape="rect" id="node11" href="$zxemu_8c.html#a86a6d0406cef290c054668d3117f9f9e" title=" " alt="" coords="550,309,657,336"/>
+<area shape="rect" id="node12" href="$printer_8c.html#ad7a047941b732f9d267818425fc0c587" title=" " alt="" coords="330,411,459,453"/>
+<area shape="rect" id="node13" href="$printer_8c.html#a173ad03be837cb94fcf6e3142f24fcf0" title=" " alt="" coords="323,477,467,504"/>
+<area shape="rect" id="node14" href="$rtc_8c.html#ae4842900a0896b177b89dbc0601a71fb" title=" " alt="" coords="351,528,438,555"/>
+<area shape="rect" id="node15" href="$rtc_8c.html#ab2c783721c2988213b28273cd26a7cc1" title=" " alt="" coords="346,579,443,605"/>
+<area shape="rect" id="node16" href="$exdos__wd_8c.html#ae0eec9a2fc949e64102fb1d2117522da" title=" " alt="" coords="325,629,464,656"/>
+<area shape="rect" id="node17" href="$exdos__wd_8c.html#aa6f6aa8f6fd0b34c48430ef67c83c3bc" title=" " alt="" coords="319,680,471,707"/>
+<area shape="rect" id="node18" href="$exdos__wd_8c.html#a2b1681d1aa2308ad3eba041fc55907b7" title=" " alt="" coords="341,731,448,757"/>
+<area shape="rect" id="node7" href="$printer_8c.html#a0a63aa047a49e7b6b362867086c0739a" title=" " alt="" coords="529,157,677,184"/>
+</map>

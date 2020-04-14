@@ -1,0 +1,11 @@
+<map id="c64_get_joy_state" name="c64_get_joy_state">
+<area shape="rect" id="node1" title=" " alt="" coords="5,183,133,209"/>
+<area shape="rect" id="node2" href="$emutools__hid_8c.html#a7f11c4faf7f2aa0c61994036e2291e32" title=" " alt="" coords="191,5,357,32"/>
+<area shape="rect" id="node3" href="$emutools__hid_8c.html#a57313aa832d640b85058a3a86dbdb530" title=" " alt="" coords="193,56,355,83"/>
+<area shape="rect" id="node4" href="$emutools__hid_8c.html#af321535183d5249a3fa8b49a8cc41520" title=" " alt="" coords="200,107,348,133"/>
+<area shape="rect" id="node5" href="$emutools__hid_8c.html#a5b0e79e19751ee2658bccb1102a1ea6a" title=" " alt="" coords="197,157,351,184"/>
+<area shape="rect" id="node6" href="$emutools__hid_8c.html#af11c4dd214d01be9452f432f67d2e46e" title=" " alt="" coords="202,208,346,235"/>
+<area shape="rect" id="node7" href="$emutools__hid_8c.html#a0dac9085c1ce4e7b1e10fc0b19011efb" title=" " alt="" coords="181,259,367,285"/>
+<area shape="rect" id="node8" href="$emutools__hid_8c.html#a6249418ea847a44dc344b937df182829" title=" " alt="" coords="194,310,354,351"/>
+<area shape="rect" id="node9" href="$emutools_8c.html#a6a7bb619fc1681c2164d52c4459f2448" title=" " alt="" coords="219,376,329,403"/>
+</map>

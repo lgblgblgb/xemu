@@ -1,0 +1,13 @@
+<map id="targets/ep128/configuration.h" name="targets/ep128/configuration.h">
+<area shape="rect" id="node1" title=" " alt="" coords="879,5,1069,32"/>
+<area shape="rect" id="node2" href="$configuration_8c.html" title=" " alt="" coords="5,87,196,114"/>
+<area shape="rect" id="node3" href="$emu__monitor_8c.html" title=" " alt="" coords="220,87,411,114"/>
+<area shape="rect" id="node4" href="$emu__rom__interface_8c.html" title=" " alt="" coords="435,80,593,121"/>
+<area shape="rect" id="node5" href="$exdos__wd_8c.html" title=" " alt="" coords="617,87,792,114"/>
+<area shape="rect" id="node6" href="$main_8c.html" title=" " alt="" coords="817,87,961,114"/>
+<area shape="rect" id="node7" href="$printer_8c.html" title=" " alt="" coords="985,87,1136,114"/>
+<area shape="rect" id="node8" href="$roms_8c.html" title=" " alt="" coords="1160,87,1305,114"/>
+<area shape="rect" id="node9" href="$screen_8c.html" title=" " alt="" coords="1330,87,1485,114"/>
+<area shape="rect" id="node10" href="$ep128_2sdext_8c.html" title=" " alt="" coords="1509,87,1657,114"/>
+<area shape="rect" id="node11" href="$snapshot_8c.html" title=" " alt="" coords="1681,87,1851,114"/>
+</map>

@@ -1,0 +1,4 @@
+<map id="hid_read_joystick_button" name="hid_read_joystick_button">
+<area shape="rect" id="node1" title=" " alt="" coords="181,5,348,32"/>
+<area shape="rect" id="node2" href="$c64__kbd__mapping_8h.html#a080af370107d43fb688f98ac65e2f8db" title=" " alt="" coords="5,5,133,32"/>
+</map>

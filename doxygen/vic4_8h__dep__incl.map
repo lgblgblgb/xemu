@@ -1,0 +1,8 @@
+<map id="targets/mega65/vic4.h" name="targets/mega65/vic4.h">
+<area shape="rect" id="node1" title=" " alt="" coords="438,5,589,32"/>
+<area shape="rect" id="node2" href="$hypervisor_8c.html" title=" " alt="" coords="5,87,192,114"/>
+<area shape="rect" id="node3" href="$io__mapper_8c.html" title=" " alt="" coords="216,87,403,114"/>
+<area shape="rect" id="node4" href="$mega65_8c.html" title=" " alt="" coords="427,87,600,114"/>
+<area shape="rect" id="node5" href="$memory__mapper_8c.html" title=" " alt="" coords="624,80,787,121"/>
+<area shape="rect" id="node6" href="$vic4_8c.html" title=" " alt="" coords="811,87,962,114"/>
+</map>

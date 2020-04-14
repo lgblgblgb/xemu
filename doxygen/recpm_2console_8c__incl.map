@@ -1,0 +1,21 @@
+<map id="targets/recpm/console.c" name="targets/recpm/console.c">
+<area shape="rect" id="node1" title=" " alt="" coords="372,5,535,32"/>
+<area shape="rect" id="node2" href="$emutools_8h.html" title=" " alt="" coords="43,80,165,107"/>
+<area shape="rect" id="node11" href="$emutools__hid_8h.html" title=" " alt="" coords="189,80,336,107"/>
+<area shape="rect" id="node12" href="$recpm_2console_8h.html" title=" " alt="" coords="361,80,439,107"/>
+<area shape="rect" id="node13" href="$hardware_8h.html" title=" " alt="" coords="463,80,550,107"/>
+<area shape="rect" id="node18" title=" " alt="" coords="574,80,639,107"/>
+<area shape="rect" id="node19" href="$vgafonts_8c.html" title=" " alt="" coords="663,80,782,107"/>
+<area shape="rect" id="node3" title=" " alt="" coords="41,155,100,181"/>
+<area shape="rect" id="node4" href="$emutools__basicdefs_8h.html" title=" " alt="" coords="118,304,303,331"/>
+<area shape="rect" id="node10" title=" " alt="" coords="175,155,241,181"/>
+<area shape="rect" id="node5" title=" " alt="" coords="5,379,67,405"/>
+<area shape="rect" id="node6" title=" " alt="" coords="91,379,155,405"/>
+<area shape="rect" id="node7" title=" " alt="" coords="179,379,243,405"/>
+<area shape="rect" id="node8" title=" " alt="" coords="267,379,365,405"/>
+<area shape="rect" id="node9" title=" " alt="" coords="389,379,493,405"/>
+<area shape="rect" id="node14" href="$z80_8h.html" title=" " alt="" coords="329,229,420,256"/>
+<area shape="rect" id="node16" href="$z80__dasm_8h.html" title=" " alt="" coords="442,155,571,181"/>
+<area shape="rect" id="node15" href="$z80ex_8h.html" title=" " alt="" coords="365,304,507,331"/>
+<area shape="rect" id="node17" href="$z80ex__dasm_8h.html" title=" " alt="" coords="445,229,627,256"/>
+</map>
