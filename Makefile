@@ -74,4 +74,8 @@ publish:
 	$(MAKE) -C build/bin dist
 	@echo "*** You should not use this target, this is only for distributing binaries on the site of the author!"
 
+doxygen:
+	test -f build/objs/xemu-48x48.png || convert build/xemu-48x48.xpm build/objs/xemu-48x48.png
+	doxygen build/Doxyfile
+
 .PHONY: all all-arch clean all-clean roms distclean dep all-dep deb nsi publish
