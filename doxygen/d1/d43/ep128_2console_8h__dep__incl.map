@@ -1,7 +1,0 @@
-<map id="targets/ep128/console.h" name="targets/ep128/console.h">
-<area shape="rect" id="node1" title=" " alt="" coords="320,5,481,32"/>
-<area shape="rect" id="node2" href="$d4/d96/configuration_8c.html" title=" " alt="" coords="5,80,196,107"/>
-<area shape="rect" id="node3" href="$d6/d30/ep128_2console_8c.html" title=" " alt="" coords="220,80,381,107"/>
-<area shape="rect" id="node4" href="$d6/d7b/emu__monitor_8c.html" title=" " alt="" coords="405,80,596,107"/>
-<area shape="rect" id="node5" href="$d0/d29/main_8c.html" title=" " alt="" coords="621,80,765,107"/>
-</map>

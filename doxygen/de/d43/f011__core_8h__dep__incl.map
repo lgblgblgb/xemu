@@ -1,8 +1,0 @@
-<map id="xemu/f011_core.h" name="xemu/f011_core.h">
-<area shape="rect" id="node1" title=" " alt="" coords="455,5,581,32"/>
-<area shape="rect" id="node2" href="$d5/df6/commodore__65_8c.html" title=" " alt="" coords="5,80,196,107"/>
-<area shape="rect" id="node3" href="$d5/df7/io__mapper_8c.html" title=" " alt="" coords="221,80,407,107"/>
-<area shape="rect" id="node4" href="$d4/d02/mega65_8c.html" title=" " alt="" coords="431,80,605,107"/>
-<area shape="rect" id="node5" href="$d5/dad/mega65_2sdcard_8c.html" title=" " alt="" coords="629,80,796,107"/>
-<area shape="rect" id="node6" href="$db/da0/f011__core_8c.html" title=" " alt="" coords="820,80,947,107"/>
-</map>

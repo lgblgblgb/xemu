@@ -1,8 +1,0 @@
-<map id="targets/mega65/sdcard.h" name="targets/mega65/sdcard.h">
-<area shape="rect" id="node1" title=" " alt="" coords="411,5,578,32"/>
-<area shape="rect" id="node2" href="$d5/df7/io__mapper_8c.html" title=" " alt="" coords="5,87,192,114"/>
-<area shape="rect" id="node3" href="$d4/d02/mega65_8c.html" title=" " alt="" coords="216,87,389,114"/>
-<area shape="rect" id="node4" href="$d5/d2e/memory__mapper_8c.html" title=" " alt="" coords="413,80,576,121"/>
-<area shape="rect" id="node5" href="$d5/dad/mega65_2sdcard_8c.html" title=" " alt="" coords="601,87,767,114"/>
-<area shape="rect" id="node6" href="$d4/d3a/mega65_2ui_8c.html" title=" " alt="" coords="791,87,929,114"/>
-</map>

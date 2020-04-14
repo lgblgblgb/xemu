@@ -1,8 +1,0 @@
-<map id="reset_mega65_asked" name="reset_mega65_asked">
-<area shape="rect" id="node1" title=" " alt="" coords="5,31,152,57"/>
-<area shape="rect" id="node2" href="$d8/d3c/emutools_8c.html#a573b2815660bd971ee061419ec4c7d03" title=" " alt="" coords="200,5,331,32"/>
-<area shape="rect" id="node3" href="$d4/d02/mega65_8c.html#a8575a3520290658a3e5df57738fc9c9b" title=" " alt="" coords="213,56,317,83"/>
-<area shape="rect" id="node4" href="$d1/d93/ethernet65_8c.html#a51a2368126e7b75e8dfe74af8266514b" title=" " alt="" coords="417,5,508,32"/>
-<area shape="rect" id="node5" href="$d4/d02/mega65_8c.html#aa008455eab85d2916b4f3655eca27e79" title=" " alt="" coords="393,56,532,83"/>
-<area shape="rect" id="node6" href="$d5/d2e/memory__mapper_8c.html#aaefbada2fa5343dd4fef3e12f0837b29" title=" " alt="" coords="379,107,547,149"/>
-</map>

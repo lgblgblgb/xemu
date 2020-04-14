@@ -1,8 +1,0 @@
-<map id="targets/mega65/memory_mapper.h" name="targets/mega65/memory_mapper.h">
-<area shape="rect" id="node1" title=" " alt="" coords="432,5,595,47"/>
-<area shape="rect" id="node2" href="$dc/dde/hypervisor_8c.html" title=" " alt="" coords="5,102,192,129"/>
-<area shape="rect" id="node3" href="$d5/df7/io__mapper_8c.html" title=" " alt="" coords="216,102,403,129"/>
-<area shape="rect" id="node4" href="$d4/d02/mega65_8c.html" title=" " alt="" coords="427,102,600,129"/>
-<area shape="rect" id="node5" href="$d5/d2e/memory__mapper_8c.html" title=" " alt="" coords="624,95,787,136"/>
-<area shape="rect" id="node6" href="$dd/dec/vic4_8c.html" title=" " alt="" coords="811,102,962,129"/>
-</map>
