@@ -68,14 +68,20 @@ nsi:
 	build/nsi-build-native.sh win64 `build/system-config win64 sdl2 dll`
 
 publish:
+	@echo "*** You should not use this target, this is only for distributing binaries on the site of the author!"
 	$(MAKE)
 	$(MAKE) deb
 	$(MAKE) nsi
 	$(MAKE) -C build/bin dist
-	@echo "*** You should not use this target, this is only for distributing binaries on the site of the author!"
 
-doxygen:
-	test -f build/objs/xemu-48x48.png || convert build/xemu-48x48.xpm build/objs/xemu-48x48.png
+build/objs/xemu-48x48.png: build/xemu-48x48.xpm
+	convert $< $@
+
+doxygen: build/objs/xemu-48x48.png
 	doxygen build/Doxyfile
+
+doxypublish:
+	@echo "*** You should not use this target, this is only for distributing binaries on the site of the author!"
+	rsync -av --delete build/doc/doxygen/html/ lgb:www/doxygen-projects/xemu/
 
 .PHONY: all all-arch clean all-clean roms distclean dep all-dep deb nsi publish

@@ -13,12 +13,16 @@ generated Doxygen documentation.
 * [Data structures index](classes.html)
 * [Source files list](files.html)
 
+# TODO
+
+Now let's decorate the source with comments, Doxygen to use :)
+
 # Generating the documentation
 
 You can create/update it from UNIX using the source tree of Xemu:
 
     make doxygen
 
-The result will be available in directory `doc/doxygen`. Currently
-only `html` output is generated. You can modify settings via file
-`build/Doxyfile`.
+The result will be available in directory `buld/doc/doxygen`. Currently
+only `html` output is generated. You can modify settings used by Doxygen
+via file `build/Doxyfile`.
