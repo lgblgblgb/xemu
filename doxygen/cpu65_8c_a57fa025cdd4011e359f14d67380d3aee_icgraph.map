@@ -1,8 +1,0 @@
-<map id="cpu65_get_pf" name="cpu65_get_pf">
-<area shape="rect" id="node1" title=" " alt="" coords="561,68,661,95"/>
-<area shape="rect" id="node2" href="$hypervisor_8h.html#ae8878fc2b4b198235e454708d0cd3d53" title=" " alt="" coords="383,43,501,69"/>
-<area shape="rect" id="node6" href="$mega65_8h.html#a23574f8f503f8e20710351b7705ce15f" title=" " alt="" coords="371,93,513,120"/>
-<area shape="rect" id="node3" href="$hypervisor_8h.html#af2206c9e13027f1c824d47fa192add65" title=" " alt="" coords="156,5,323,32"/>
-<area shape="rect" id="node4" href="$io__mapper_8h.html#ae1582ca88ae1ef0f75bc0cb8833d8b72" title=" " alt="" coords="206,80,273,107"/>
-<area shape="rect" id="node5" href="$io__mapper_8c.html#aea8c9d18d8288cefb7b7e441f2700a87" title=" " alt="" coords="5,80,108,107"/>
-</map>

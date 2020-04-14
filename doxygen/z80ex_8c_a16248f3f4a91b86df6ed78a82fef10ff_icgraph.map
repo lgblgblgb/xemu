@@ -1,6 +1,0 @@
-<map id="z80ex_reset" name="z80ex_reset">
-<area shape="rect" id="node1" title=" " alt="" coords="255,31,348,57"/>
-<area shape="rect" id="node2" href="$cpu_8h.html#ae1dfa6596ab12913617dde6121362b0b" title=" " alt="" coords="127,5,205,32"/>
-<area shape="rect" id="node4" href="$z80ex_8h.html#ad67f4b317f046f9145c102184ba5b81b" title=" " alt="" coords="125,56,207,83"/>
-<area shape="rect" id="node3" href="$cpu_8h.html#a73ccc56acc9e978e81244ccce7ae9d02" title=" " alt="" coords="5,5,77,32"/>
-</map>

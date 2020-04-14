@@ -1,6 +1,0 @@
-<map id="targets/ep128/joystick.h" name="targets/ep128/joystick.h">
-<area shape="rect" id="node1" title=" " alt="" coords="174,5,335,32"/>
-<area shape="rect" id="node2" href="$input_8c.html" title=" " alt="" coords="5,80,149,107"/>
-<area shape="rect" id="node3" href="$joystick_8c.html" title=" " alt="" coords="174,80,335,107"/>
-<area shape="rect" id="node4" href="$main_8c.html" title=" " alt="" coords="360,80,504,107"/>
-</map>

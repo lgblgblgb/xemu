@@ -1,8 +1,0 @@
-<map id="targets/recpm/bdos.h" name="targets/recpm/bdos.h">
-<area shape="rect" id="node1" title=" " alt="" coords="345,5,491,32"/>
-<area shape="rect" id="node2" href="$bdos_8c.html" title=" " alt="" coords="5,80,151,107"/>
-<area shape="rect" id="node3" href="$bios_8c.html" title=" " alt="" coords="175,80,317,107"/>
-<area shape="rect" id="node4" href="$cpmfs_8c.html" title=" " alt="" coords="341,80,495,107"/>
-<area shape="rect" id="node5" href="$hardware_8c.html" title=" " alt="" coords="519,80,690,107"/>
-<area shape="rect" id="node6" href="$recpm_8c.html" title=" " alt="" coords="715,80,868,107"/>
-</map>

@@ -1,7 +1,0 @@
-<map id="targets/ep128/printer.h" name="targets/ep128/printer.h">
-<area shape="rect" id="node1" title=" " alt="" coords="248,5,399,32"/>
-<area shape="rect" id="node2" href="$cpu_8c.html" title=" " alt="" coords="5,80,143,107"/>
-<area shape="rect" id="node3" href="$dave_8c.html" title=" " alt="" coords="167,80,311,107"/>
-<area shape="rect" id="node4" href="$main_8c.html" title=" " alt="" coords="335,80,479,107"/>
-<area shape="rect" id="node5" href="$printer_8c.html" title=" " alt="" coords="504,80,655,107"/>
-</map>

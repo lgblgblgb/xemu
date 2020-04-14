@@ -1,7 +1,0 @@
-<map id="xemu/via65c22.h" name="xemu/via65c22.h">
-<area shape="rect" id="node1" title=" " alt="" coords="317,5,438,32"/>
-<area shape="rect" id="node2" href="$commodore__lcd_8c.html" title=" " alt="" coords="5,80,168,121"/>
-<area shape="rect" id="node3" href="$commodore__vic20_8c.html" title=" " alt="" coords="192,80,368,121"/>
-<area shape="rect" id="node4" href="$commander__x16_8c.html" title=" " alt="" coords="393,80,559,121"/>
-<area shape="rect" id="node5" href="$via65c22_8c.html" title=" " alt="" coords="583,87,705,114"/>
-</map>

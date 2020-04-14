@@ -1,0 +1,19 @@
+<map id="io_write" name="io_write">
+<area shape="rect" id="node1" title=" " alt="" coords="5,309,72,336"/>
+<area shape="rect" id="node2" href="$da/d70/f018__core_8c.html#a1466dfb8ea35e3617e56c36715af3f63" title=" " alt="" coords="160,5,267,32"/>
+<area shape="rect" id="node3" href="$d1/d93/ethernet65_8c.html#ab082798ecb32cad3c8b72f78f491fe6b" title=" " alt="" coords="156,56,271,83"/>
+<area shape="rect" id="node4" href="$db/da0/f011__core_8c.html#a05abd995bf1551a2af4ae30345415352" title=" " alt="" coords="163,107,263,133"/>
+<area shape="rect" id="node5" href="$d3/d97/mega65_2input__devices_8c.html#a2315580a2274087b08ec892208df3973" title=" " alt="" coords="141,157,286,184"/>
+<area shape="rect" id="node6" href="$dc/dde/hypervisor_8c.html#ae5ebfecd553bb6e962bccdbfc62eea7c" title=" " alt="" coords="120,208,307,235"/>
+<area shape="rect" id="node7" href="$dc/dde/hypervisor_8c.html#ae8878fc2b4b198235e454708d0cd3d53" title=" " alt="" coords="154,259,273,285"/>
+<area shape="rect" id="node9" href="$dc/dde/hypervisor_8c.html#a733e8b818fab258b6ff97321d55212a6" title=" " alt="" coords="153,309,273,336"/>
+<area shape="rect" id="node11" href="$dc/dde/hypervisor_8c.html#ac78d2c235fae9e5fe5ab528c20714d6d" title=" " alt="" coords="128,361,299,402"/>
+<area shape="rect" id="node12" href="$d5/dad/mega65_2sdcard_8c.html#a36194933446142010dbfd753689d9175" title=" " alt="" coords="140,427,287,453"/>
+<area shape="rect" id="node13" href="$df/d8c/sid_8c.html#afaffb5bbf6193cfe96bd75e0f3966a00" title=" " alt="" coords="164,477,263,504"/>
+<area shape="rect" id="node14" href="$d2/d92/vic3_8c.html#a568668d2f2ad011a162f0bfd1e6214ef" title=" " alt="" coords="137,528,289,555"/>
+<area shape="rect" id="node15" href="$dd/dec/vic4_8c.html#ac196f695941ecd5cfef1e7322e660944" title=" " alt="" coords="137,579,289,605"/>
+<area shape="rect" id="node17" href="$dd/dec/vic4_8c.html#aa6a23b7d3a2ef9ce423733d6d05bcee3" title=" " alt="" coords="164,629,263,656"/>
+<area shape="rect" id="node8" href="$d5/d21/cpu65_8c.html#a57fa025cdd4011e359f14d67380d3aee" title=" " alt="" coords="381,259,481,285"/>
+<area shape="rect" id="node10" href="$d5/d21/cpu65_8c.html#aa350c549485e9090df220cf2f65de63a" title=" " alt="" coords="381,309,481,336"/>
+<area shape="rect" id="node16" href="$dd/dec/vic4_8c.html#a568668d2f2ad011a162f0bfd1e6214ef" title=" " alt="" coords="355,579,507,605"/>
+</map>

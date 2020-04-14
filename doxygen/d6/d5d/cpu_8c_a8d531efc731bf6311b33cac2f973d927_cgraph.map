@@ -1,0 +1,13 @@
+<map id="z80ex_pread_cb" name="z80ex_pread_cb">
+<area shape="rect" id="node1" title=" " alt="" coords="5,233,123,260"/>
+<area shape="rect" id="node2" href="$d3/d50/apu_8c.html#a0396bf5208978fbe13cade2511ca98a4" title=" " alt="" coords="195,5,302,32"/>
+<area shape="rect" id="node3" href="$d3/d50/apu_8c.html#abb685834d466dbd06169bacdddb430ff" title=" " alt="" coords="189,56,308,83"/>
+<area shape="rect" id="node4" href="$db/d40/nick_8c.html#a8891e77fe64a45dd3f7761bde5b43ec5" title=" " alt="" coords="183,107,314,133"/>
+<area shape="rect" id="node5" href="$dd/d24/primoemu_8c.html#abce0a3f23e1927ca6e671bfa925e37d4" title=" " alt="" coords="197,157,300,184"/>
+<area shape="rect" id="node6" href="$d1/d06/input_8c.html#a38a4d3ac176d8ff2c5d1c49245d5350e" title=" " alt="" coords="173,208,324,235"/>
+<area shape="rect" id="node7" href="$d4/dcc/rtc_8c.html#a89ab8a536599f0f8ef19421f86a79ed2" title=" " alt="" coords="201,259,296,285"/>
+<area shape="rect" id="node8" href="$dd/dde/exdos__wd_8c.html#a3f0d67a55fcbaa5866a06b172b0158c7" title=" " alt="" coords="197,309,300,336"/>
+<area shape="rect" id="node9" href="$dd/dde/exdos__wd_8c.html#a7b825dec0c82b9620a5a083c6c1475ce" title=" " alt="" coords="171,360,327,387"/>
+<area shape="rect" id="node10" href="$dd/dde/exdos__wd_8c.html#a53aa74eed004505288d00cd7c2aae7c8" title=" " alt="" coords="191,411,306,437"/>
+<area shape="rect" id="node11" href="$dc/df7/zxemu_8c.html#a50ed1be0ec595c3ea922a3aaa6c6894b" title=" " alt="" coords="190,461,307,488"/>
+</map>

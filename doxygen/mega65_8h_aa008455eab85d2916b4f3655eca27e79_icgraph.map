@@ -1,7 +1,0 @@
-<map id="machine_set_speed" name="machine_set_speed">
-<area shape="rect" id="node1" title=" " alt="" coords="416,31,555,57"/>
-<area shape="rect" id="node2" href="$memory__mapper_8h.html#a601f74b42de308c11f8cd097bb546baa" title=" " alt="" coords="200,5,368,32"/>
-<area shape="rect" id="node4" href="$mega65_8h.html#a8575a3520290658a3e5df57738fc9c9b" title=" " alt="" coords="232,56,336,83"/>
-<area shape="rect" id="node3" href="$memory__mapper_8c.html#a3a9b9319eb691b054e1113c87f45e356" title=" " alt="" coords="12,5,145,32"/>
-<area shape="rect" id="node5" href="$mega65_8h.html#a31038b35df512fd92b5b00874c06c574" title=" " alt="" coords="5,56,152,83"/>
-</map>

@@ -1,9 +1,0 @@
-<map id="targets/recpm/hardware.h" name="targets/recpm/hardware.h">
-<area shape="rect" id="node1" title=" " alt="" coords="427,5,598,32"/>
-<area shape="rect" id="node2" href="$bdos_8c.html" title=" " alt="" coords="5,80,151,107"/>
-<area shape="rect" id="node3" href="$bios_8c.html" title=" " alt="" coords="175,80,317,107"/>
-<area shape="rect" id="node4" href="$recpm_2console_8c.html" title=" " alt="" coords="341,80,503,107"/>
-<area shape="rect" id="node5" href="$cpmfs_8c.html" title=" " alt="" coords="528,80,681,107"/>
-<area shape="rect" id="node6" href="$hardware_8c.html" title=" " alt="" coords="706,80,877,107"/>
-<area shape="rect" id="node7" href="$recpm_8c.html" title=" " alt="" coords="901,80,1055,107"/>
-</map>

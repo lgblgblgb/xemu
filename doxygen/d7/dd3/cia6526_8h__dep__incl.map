@@ -1,0 +1,13 @@
+<map id="xemu/cia6526.h" name="xemu/cia6526.h">
+<area shape="rect" id="node1" title=" " alt="" coords="419,5,533,32"/>
+<area shape="rect" id="node2" href="$d5/df6/commodore__65_8c.html" title=" " alt="" coords="73,87,263,114"/>
+<area shape="rect" id="node3" href="$d8/d25/commodore__geos_8c.html" title=" " alt="" coords="288,80,461,121"/>
+<area shape="rect" id="node4" href="$de/d18/io__mapper_8h.html" title=" " alt="" coords="485,87,672,114"/>
+<area shape="rect" id="node11" href="$d8/d56/cia6526_8c.html" title=" " alt="" coords="696,87,811,114"/>
+<area shape="rect" id="node5" href="$dc/dde/hypervisor_8c.html" title=" " alt="" coords="5,177,192,203"/>
+<area shape="rect" id="node6" href="$d3/d97/mega65_2input__devices_8c.html" title=" " alt="" coords="216,169,360,211"/>
+<area shape="rect" id="node7" href="$d5/df7/io__mapper_8c.html" title=" " alt="" coords="384,177,571,203"/>
+<area shape="rect" id="node8" href="$d4/d02/mega65_8c.html" title=" " alt="" coords="595,177,768,203"/>
+<area shape="rect" id="node9" href="$d5/d2e/memory__mapper_8c.html" title=" " alt="" coords="792,169,955,211"/>
+<area shape="rect" id="node10" href="$d5/dad/mega65_2sdcard_8c.html" title=" " alt="" coords="979,177,1146,203"/>
+</map>
