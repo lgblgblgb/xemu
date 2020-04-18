@@ -1,0 +1,326 @@
+#!/bin/bash
+## This file is part of the Xemu project: https://github.com/lgblgblgb/xemu
+## Collection of various emulators of some 8 bits machines using SDL2 library.
+##
+## Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+#
+# This program is free software; you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation; either version 2 of the License, or
+# (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with this program; if not, write to the Free Software
+# Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
+
+echo "*** Running xemu-configure ***"
+
+echo -n "Specified C compiler to use: "
+if [ "$CC" = "" ]; then
+	echo "UNSPECIFIED"
+	echo "Error, no CC variable passed to the $0 script" >&2
+	exit 1
+fi
+echo $CC
+echo -n "Specified make ARCH to use: "
+if [ "$ARCH" = "" ]; then
+	echo "UNSPECIFIED"
+	echo "Error, no ARCH variable passed to the $0 script" >&2
+	exit 1
+fi
+echo $ARCH
+
+SRC="build/objs/configure--script--$ARCH--test.c"
+COUT="build/objs/configure--script--$ARCH--test.out"
+CERR="build/objs/configure--script--$ARCH--test.err"
+OBJ="build/objs/configure--script--$ARCH--test.o"
+
+OUTPUT_MAKEFILE="build/configure-$ARCH.make"
+OUTPUT_HEADERFILE="build/configure-$ARCH.h"
+
+function failed
+{
+	echo "ERROR"
+	echo "*** Error message ***" >&2
+	cat $CERR >&2
+	rm -f $SRC $COUT $CERR $OBJ $OUTPUT_MAKEFILE $OUTPUT_HEADERFILE
+	exit 1
+}
+
+echo "Temporary files: $SRC $COUT $CERR $OBJ"
+echo "Final files: $OUTPUT_MAKEFILE $OUTPUT_HEADERFILE"
+echo "Current directory: `pwd`"
+echo "Configure executable: $0"
+echo -n "Getting project root absolute path ... "
+cd `dirname $0` || exit 1
+cd .. || exit 1
+PROJECT_ROOT="`pwd`"
+echo "$PROJECT_ROOT"
+
+rm -f $SRC $COUT $CERR $OBJ $OUTPUT_MAKEFILE $OUTPUT_HEADERFILE || exit 1
+touch $SRC $COUT $CERR $OBJ $OUTPUT_MAKEFILE $OUTPUT_HEADERFILE || exit 1
+echo "#include \"xemu/arch-sys.h\"" >> $OUTPUT_HEADERFILE
+
+BUILD_OS="`uname 2>$CERR`"
+echo "Build system: $BUILD_OS"
+if [ "$BUILD_OS" = "" ]; then
+	echo "ERROR: uname command has no answer" >&2
+	cat $CERR
+	exit 1
+fi
+echo "#define XEMU_BUILD_OS \"$BUILD_OS\"" >> $OUTPUT_HEADERFILE
+
+echo -n "Test if $CC can create object file ... "
+echo "int main ( void ) { return 0; }" > $SRC
+rm -f $OBJ
+$CC -o $OBJ -c $SRC > $COUT 2> $CERR || failed
+if [ ! -f $OBJ ]; then
+	echo "NO"
+	echo "Cannot found object file generated" >&2
+	exit 1
+fi
+echo "OK"
+#file $OBJ
+
+echo "Compiler version: `$CC --version | head -n 1`"
+
+CFLAGS="-std=gnu11 -Wall"
+
+echo -n "Test if $CC accepts flags $CFLAGS ... "
+$CC $CFLAGS -o $OBJ -c $SRC > $COUT 2> $CERR || failed
+echo "OK"
+
+echo -n "Test if $CC accepts flags $CFLAGS -Ofast ... "
+$CC $CFLAGS -Ofast -o $OBJ -c $SRC > $COUT 2> $CERR
+ret=$?
+if [ "$ret" = "0" ]; then
+	echo "OK"
+	CFLAGS="$CFLAGS -Ofast"
+else
+	echo "NO"
+	CFLAGS="$CFLAGS -O3"
+	echo -n "Test if $CC accepts flags $CFLAGS ... "
+	$CC $CFLAGS -o $OBJ -c $SRC > $COUT 2> $CERR || failed
+	echo "OK"
+fi
+
+echo "CFLAGS: $CFLAGS"
+
+echo -n "Test if $CC can create executable ... "
+echo "int main ( void ) { return 0; }" > $SRC
+rm -f $OBJ
+$CC $CFLAGS -o $OBJ $SRC > $COUT 2> $CERR || failed
+if [ ! -f $OBJ ]; then
+	echo "NO"
+	echo "Cannot find output file generated" >&2
+	exit 1
+fi
+echo "OK"
+#file $OBJ
+
+
+echo -n "Test if $CC knowns -falign-loops flag ... "
+$CC -falign-loops=16 -o $OBJ -c $SRC > $COUT 2> $CERR || failed
+# TODO
+if test -s $CERR ; then
+	echo "NO"
+else
+	echo "YES"
+fi
+
+
+echo -n "Test for including xemu low level header ... "
+cat > $SRC <<EOF
+#define XEMU_NO_TARGET
+#include "xemu/arch-sys.h"
+#include <stdio.h>
+
+#ifdef	XEMU_ARCH_UNIX
+#	define	IS_UNIX		"Y"
+#else
+#	define	IS_UNIX		"N"
+#endif
+#ifdef	XEMU_ARCH_WIN
+#	define	IS_WIN		"Y"
+#else
+#	define	IS_WIN		"N"
+#endif
+#ifdef	XEMU_ARCH_WIN32
+#	define	IS_WIN32	"Y"
+#else
+#	define	IS_WIN32	"N"
+#endif
+#ifdef	XEMU_ARCH_WIN64
+#	define	IS_WIN64	"Y"
+#else
+#	define	IS_WIN64	"N"
+#endif
+#ifdef	XEMU_ARCH_OSX
+#	define	IS_OSX		"Y"
+#else
+#	define	IS_OSX		"N"
+#endif
+#ifdef	XEMU_ARCH_LINUX
+#	define	IS_LINUX	"Y"
+#else
+#	define	IS_LINUX	"N"
+#endif
+#ifdef	XEMU_ARCH_HTML
+#	define	IS_HTML		"Y"
+#else
+#	define	IS_HTML		"N"
+#endif
+
+// Do *NOT* modify these (not even a single space!!!), the configure script will extract the result from this after running the C preprocessor!
+const char *xemu_SYSTEM = XEMU_ARCH_NAME;
+const char *xemu_IS_UNIX = IS_UNIX;
+const char *xemu_IS_WIN = IS_WIN;
+const char *xemu_IS_WIN32 = IS_WIN32;
+const char *xemu_IS_WIN64 = IS_WIN64;
+const char *xemu_IS_OSX	= IS_OSX;
+const char *xemu_IS_LINUX = IS_LINUX;
+const char *xemu_IS_HTML = IS_HTML;
+
+int main ( void ) {
+	// This is not used at all. Just for testing linkage to see if we have printf()
+	printf("Your system is: %s\n", xemu_SYSTEM);
+	return 0;
+}
+EOF
+$CC $CFLAGS -o $OBJ -I$PROJECT_ROOT -c $SRC > $COUT 2> $CERR || failed
+echo "OK"
+
+echo -n "Test preprocessor function ... "
+$CC $CFLAGS -E -I$PROJECT_ROOT -c $SRC > $COUT 2> $CERR || failed
+echo "OK"
+
+for a in SYSTEM IS_UNIX IS_WIN IS_WIN32 IS_WIN64 IS_OSX IS_LINUX IS_HTML ; do
+	echo -n "Check target $a ... "
+	b=`sed -n "s/^const char \*xemu_$a = \"//p" $COUT | cut -f1 -d'"'`
+	echo $b
+	if [ "$a" = "SYSTEM" ]; then
+		if [ "$b" = "" ]; then
+			echo "Bad answer"
+			exit 1
+		fi
+	else
+		if [ "$b" != "Y" -a "$b" != "N" ]; then
+			echo "Bad answer"
+			exit 1
+		fi
+	fi
+	eval TARGET_$a=$b
+done
+
+if [ $TARGET_IS_UNIX = Y ]; then
+	# UNIX-kind systems should have socket API, also without any additional libraries involved
+	echo "#define XEMU_HAS_SOCKET_API" >> $OUTPUT_HEADERFILE
+	echo "SOCKET_LIBS =" >> $OUTPUT_MAKEFILE
+elif [ $TARGET_IS_WIN = Y ]; then
+	# Windows also has socket API (through winsock) but needs wsock32 to be linked against then
+	echo "#define XEMU_HAS_SOCKET_API" >> $OUTPUT_HEADERFILE
+	echo "SOCKET_LIBS = -lwsock32" >> $OUTPUT_MAKEFILE
+fi
+
+# -------------------------------------
+# SDL2: an essential component to have!
+# -------------------------------------
+
+
+if [ $TARGET_IS_HTML = Y ]; then
+	SDL2_CONFIG="emscripten-builtin"
+	SDL2_CFLAGS="-s USE_SDL=2"
+	SDL2_LIBS="-s USE_SDL=2"
+else
+	if [ "$SDL2_CONFIG" = "" ]; then
+		if [ $TARGET_IS_WIN32 = Y ]; then
+			SDL2_CONFIG_TRIES="i686-w64-mingw32-sdl2-config sdl2-config"
+		elif [ $TARGET_IS_WIN64 = Y ]; then
+			SDL2_CONFIG_TRIES="x86_64-w64-mingw32-sdl2-config sdl2-config"
+		else
+			SDL2_CONFIG_TRIES="sdl2-config /usr/local/bin/sdl2-config"
+		fi
+		echo "Trying to use these sdl2-config invocations (guesser's defaults): $SDL2_CONFIG_TRIES"
+	else
+		SDL2_CONFIG_TRIES="$SDL2_CONFIG"
+		echo "Trying to use user specified sdl2-config: $SDL2_CONFIG_TRIES"
+	fi
+	SDL2_CONFIG=""
+	for a in $SDL2_CONFIG_TRIES ; do
+		echo -n "Checking sdl2-config script as \"$a\" ... "
+		SDL2_VERSION="`$a --version 2> $CERR`"
+		r0=$?
+		SDL2_PREFIX="`$a --prefix 2> $CERR`"
+		r1=$?
+		SDL2_CFLAGS="`$a --cflags 2> $CERR`"
+		r2=$?
+		SDL2_LIBS="`$a --libs 2> $CERR`"
+		r3=$?
+		if [ \
+			"$r0" = "0" -a "$r1" = "0" -a "$r2" = "0" -a "$r3" = "0" -a \
+			"$SDL2_VERSION" != "" -a "$SDL2_PREFIX" != "" -a "$SDL2_CFLAGS" != "" -a "$SDL2_LIBS" != "" \
+		]; then
+			SDL2_CONFIG=$a
+			echo "seems to work"
+			break
+		else
+			echo "does NOT work, `cat $CERR`"
+		fi
+	done
+	if [ "$SDL2_CONFIG" = "" ]; then
+		echo "ERROR: could not find working sdl2-config" >&2
+		exit 1
+	fi
+fi
+echo "#define XEMU_HAS_SDL2" >> $OUTPUT_HEADERFILE
+echo "SDL2_CFLAGS = $SDL2_CFLAGS" >> $OUTPUT_MAKEFILE
+echo "SDL2_LIBS = $SDL2_LIBS" >> $OUTPUT_MAKEFILE
+
+SDL_REQVER0=2
+SDL_REQVER1=0
+SDL_REQVER2=4
+
+cat >> $OUTPUT_HEADERFILE <<EOF
+#define SDL_REQVER0 $SDL_REQVER0
+#define SDL_REQVER1 $SDL_REQVER1
+#define SDL_REQVER2 $SDL_REQVER2
+EOF
+
+#cat $OUTPUT_HEADERFILE
+
+echo -n "Trying to compile something against SDL2 ... "
+cat > $SRC <<EOF
+#define XEMU_NO_TARGET
+#include "$OUTPUT_HEADERFILE"
+#include <SDL.h>
+#if !SDL_VERSION_ATLEAST(SDL_REQVER0, SDL_REQVER1, SDL_REQVER2)
+#	error "Your SDL seems to be too old! At least SDL2 version $SDL_REQVER0.$SDL_REQVER1.$SDL_REQVER2 is needed!"
+#endif
+int main ( int argc, char **argv ) {
+	return SDL_Init(SDL_INIT_EVERYTHING);
+}
+EOF
+exe="$CC $CFLAGS $SDL2_CFLAGS -o $OBJ -I$PROJECT_ROOT $SRC $SDL2_LIBS"
+#echo $exe
+$exe > $COUT 2> $CERR || failed
+#$CC $CFLAGS $SDL2_CFLAGS -o $OBJ -I$PROJECT_ROOT $SRC $SDL2_LIBS > $COUT 2> $CERR || failed
+echo "OK"
+
+# Math library ... needed for UNIX-kind OSes
+
+if [ $TARGET_IS_UNIX = Y ]; then
+	MATH_LIBS="-lm"
+else
+	MATH_LIBS=""
+fi
+echo "MATH_LIBS = $MATH_LIBS" >> $OUTPUT_MAKEFILE
+
+# Last lines!
+
+echo "#define XEMU_CONFIGURATION_IS_COMPLETED" >> $OUTPUT_HEADERFILE
+exit 0

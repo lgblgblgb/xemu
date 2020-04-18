@@ -39,3 +39,6 @@
 *.res
 *.data
 *.png
+*.tmp
+*.err
+*.out
