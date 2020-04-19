@@ -454,7 +454,7 @@ EOF
 	else
 		echo "NO"
 		echo "!! Test compilation failed with $L1 $L2"
-		#cat $CERR
+		cat $CERR
 	fi
 done
 
