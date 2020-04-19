@@ -35,12 +35,12 @@ if [ "$ARCH" = "" ]; then
 fi
 echo $ARCH
 
-SRC="build/objs/configure--script--$ARCH--test.c"
+ SRC="build/objs/configure--script--$ARCH--test.c"
 COUT="build/objs/configure--script--$ARCH--test.out"
 CERR="build/objs/configure--script--$ARCH--test.err"
-OBJ="build/objs/configure--script--$ARCH--test.o"
+ OBJ="build/objs/configure--script--$ARCH--test.o"
 
-OUTPUT_MAKEFILE="build/configure/config-$ARCH.make"
+  OUTPUT_MAKEFILE="build/configure/config-$ARCH.make"
 OUTPUT_HEADERFILE="build/configure/config-$ARCH.h"
 
 function finalexit
@@ -127,24 +127,24 @@ echo "OK"
 
 echo -n "Test $CC flag support"
 for a in \
-	    FALIGN_LOOPS_SUPPORTED_BY_CC:-falign-loops=16 \
-	FALIGN_FUNCTIONS_SUPPORTED_BY_CC:-falign-functions=16 \
+	    FALIGN_LOOPS_SUPPORTED_BY_CC:-falign-loops=16: \
+	FALIGN_FUNCTIONS_SUPPORTED_BY_CC:-falign-functions=16: \
 	      FNO_COMMON_SUPPORTED_BY_CC:-fno-common:essential \
-	      FFAST_MATH_SUPPORTED_BY_CC:-ffast-math \
-	           OFAST_SUPPORTED_BY_CC:-Ofast \
+	      FFAST_MATH_SUPPORTED_BY_CC:-ffast-math: \
+	           OFAST_SUPPORTED_BY_CC:-Ofast: \
 	              O3_SUPPORTED_BY_CC:-O3:essential \
-	       STD_GNU11_SUPPORTED_BY_CC:-std=gnu11 \
+	       STD_GNU11_SUPPORTED_BY_CC:-std=gnu11: \
 	         STD_C11_SUPPORTED_BY_CC:-std=c11:essential \
-	            PIPE_SUPPORTED_BY_CC:-pipe
+	            PIPE_SUPPORTED_BY_CC:-pipe:
 do
 	b="`echo $a | cut -f1 -d:`"
 	c="`echo $a | cut -f2 -d:`"
 	d="`echo $c | cut -f3 -d:`"
 	echo -n " ... $c "
 	rm -f $OBJ
-	$CC -Wall $c -o $OBJ -c $SRC > $COUT 2> $CERR
+	$CC $c -o $OBJ -c $SRC > $COUT 2> $CERR
 	ret=$?
-	if [ "$ret" != "0" -o -s $CERR -o ! -f $OBJ ]; then
+	if [ "$ret" != "0" -o -s $CERR -o ! -s $OBJ ]; then
 		echo -n "[NO]"
 		if [ "$d" = "essential" ]; then
 			echo
@@ -255,23 +255,27 @@ echo -n "Test preprocessor function ... "
 $CC $CFLAGS -E -I$PROJECT_ROOT -c $SRC > $COUT 2> $CERR || failed
 echo "OK"
 
+echo -n "Analyzing compilation target:"
 for a in SYSTEM IS_UNIX IS_WIN IS_WIN32 IS_WIN64 IS_OSX IS_LINUX IS_HTML ; do
-	echo -n "Check target $a ... "
+	echo -n " $a="
 	b=`sed -n "s/^const char \*xemu_$a = \"//p" $COUT | cut -f1 -d'"'`
-	echo $b
+	echo -n $b
 	if [ "$a" = "SYSTEM" ]; then
 		if [ "$b" = "" ]; then
-			echo "Bad answer"
+			echo "??"
+			echo "Bad answer" >&2
 			finalexit
 		fi
 	else
 		if [ "$b" != "Y" -a "$b" != "N" ]; then
-			echo "Bad answer"
+			echo "??"
+			echo "Bad answer" >&2
 			finalexit
 		fi
 	fi
 	eval TARGET_$a=$b
 done
+echo
 
 
 ###############################
@@ -342,10 +346,26 @@ else
 		echo "ERROR: could not find working sdl2-config" >&2
 		finalexit
 	fi
+	if [ $TARGET_IS_WIN = Y ]; then
+		if [ "$SDL2_DLL" = "" ]; then
+			SDL2_DLL="$SDL2_PREFIX/bin/SDL2.dll"
+		fi
+		echo -n "Check if SDL2 DLL can be found as $SDL2_DLL ... "
+		if [ -s $SDL2_DLL ]; then
+			echo "OK"
+		else
+			echo "ERROR"
+			echo "SDL2.dll cannot be found as expected" >&2
+			finalexit
+		fi
+	else
+		SDL2_DLL=""
+	fi
 fi
 echo "#define XEMU_HAS_SDL2" >> $OUTPUT_HEADERFILE
-echo "SDL2_CFLAGS = $SDL2_CFLAGS" >> $OUTPUT_MAKEFILE
-echo "SDL2_LIBS = $SDL2_LIBS" >> $OUTPUT_MAKEFILE
+echo "SDL2_CFLAGS=$SDL2_CFLAGS" >> $OUTPUT_MAKEFILE
+echo "SDL2_LIBS=$SDL2_LIBS" >> $OUTPUT_MAKEFILE
+echo "SDL2_DLL=$SDL2_DLL" >> $OUTPUT_MAKEFILE
 SDL_REQVER0=2
 SDL_REQVER1=0
 SDL_REQVER2=4
@@ -370,6 +390,89 @@ exe="$CC $CFLAGS $SDL2_CFLAGS -o $OBJ -I$PROJECT_ROOT $SRC $SDL2_LIBS"
 $exe > $COUT 2> $CERR || failed
 #$CC $CFLAGS $SDL2_CFLAGS -o $OBJ -I$PROJECT_ROOT $SRC $SDL2_LIBS > $COUT 2> $CERR || failed
 echo "OK"
+
+
+####################################
+# PKG-CONFIG based optional stuffs #
+####################################
+
+
+if [ "$PKG_CONFIG" = "" ]; then
+	PKG_CONFIG="pkg-config"
+fi
+for a in \
+	"GTK3:gtk+-3.0:#include <gtk/gtk.h>:gtk_init_check(NULL,NULL)" \
+	"READLINE:readline:#include <readline.h>:printf(\"%p\", readline(\"prompt\"))"
+do
+	name="`echo $a | cut -f1 -d:`"
+	id="`  echo $a | cut -f2 -d:`"
+	glob="`echo $a | cut -f3 -d:`"
+	inc="` echo $a | cut -f4 -d:`"
+	if [ $TARGET_IS_OSX = Y -a "$name" = "READLINE" ]; then
+		# Override libreadline madness with Mac's internal libedit also called readline. Or WTF :-O
+		# OSX is really an alien stuff .......
+		echo -n "Overriding libreadline on Mac for system default ... "
+		L1="-I/usr/include/readline"
+		L2="-lreadline"
+	else
+		echo -n "Checking for $name (via $PKG_CONFIG [--cflags-only-I|--libs] $id) ... "
+		"$PKG_CONFIG" --cflags-only-I $id > $COUT 2> $CERR
+		ret=$?
+		if [ "$ret" != "0" -o -s $CERR -o ! -s $COUT ]; then
+			echo "NO"
+			cat $CERR
+			continue
+		fi
+		L1="`cat $COUT`"
+		"$PKG_CONFIG" --libs $id > $COUT 2> $CERR
+		ret=$?
+		if [ "$ret" != "0" -o -s $CERR -o ! -s $COUT ]; then
+			echo "NO"
+			cat $CERR
+			continue
+		fi
+		L2="`cat $COUT`"
+	fi
+	cat > $SRC <<EOF
+#include <stdio.h>
+$glob
+int main ( void ) {
+	$inc ;
+	return 0;
+}
+EOF
+	exe="$CC $CFLAGS $L1 -o $OBJ $SRC $L2"
+	$exe > $COUT 2> $CERR
+	ret=$?
+	if [ "$ret" = "0" -a -s $OBJ ]; then
+		echo "YES"
+		#eval ${name}_CFLAGS="$L1"
+		#eval ${name}_LIBS="$L2"
+		echo "${name}_CFLAGS = $L1" >> $OUTPUT_MAKEFILE
+		echo "${name}_LIBS = $L2" >> $OUTPUT_MAKEFILE
+		echo "#define XEMU_HAS_$name" >> $OUTPUT_HEADERFILE
+	else
+		echo "NO"
+		echo "!! Test compilation failed with $L1 $L2"
+		#cat $CERR
+	fi
+done
+
+
+#################################################
+# Windows target: try to locate windres utility #
+#################################################
+
+
+# Now only a given name is used ...
+if [ $TARGET_IS_WIN = Y -a "$WINDRES" != "" ]; then
+	echo "Will use windres as specified: $WINDRES"
+	echo "WINDRES = $WINDRES" >> $OUTPUT_MAKEFILE
+	#WINDRES_TRY="$WINDRES"
+	#for a in "$WINDRES_TRY" x86_64-w64-mingw32-windres i686-w64-mingw32-windres windres ; do
+	#	$a build/windres.rc -O coff -o $OBJ
+	#done
+fi
 
 
 ##############################################
@@ -401,4 +504,5 @@ cat >> $OUTPUT_HEADERFILE <<EOF
 #undef XEMU_CONFIGURATION_PENDING
 #define XEMU_CONFIGURATION_COMPLETED
 EOF
+echo "*** configuration is done ***"
 exit 0

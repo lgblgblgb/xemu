@@ -25,11 +25,11 @@ ARCH			= native
 TOPDIR			= ../..
 
 config:
-	CC=$(CC) ARCH=$(ARCH) bash $(TOPDIR)/build/configure/configure
+	CC="$(CC)" WINDRES="$(WINDRES)" ARCH=$(ARCH) bash $(TOPDIR)/build/configure/configure
 $(TOPDIR)/build/configure/config-$(ARCH).h:
-	CC=$(CC) ARCH=$(ARCH) bash $(TOPDIR)/build/configure/configure
+	CC="$(CC)" WINDRES="$(WINDRES)" ARCH=$(ARCH) bash $(TOPDIR)/build/configure/configure
 $(TOPDIR)/build/configure/config-$(ARCH).make:
-	CC=$(CC) ARCH=$(ARCH) bash $(TOPDIR)/build/configure/configure
+	CC="$(CC)" WINDRES="$(WINDRES)" ARCH=$(ARCH) bash $(TOPDIR)/build/configure/configure
 
 include $(TOPDIR)/build/Makefile.$(ARCH)
 include $(TOPDIR)/build/configure/config-$(ARCH).make
