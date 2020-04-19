@@ -33,7 +33,9 @@ all-html:
 	for t in $(TARGETS) ; do egrep -q '^#\s*define\s+CONFIG_EMSCRIPTEN_OK\s*$$' targets/$$t/xemu-target.h && make -C targets/$$t ARCH=html ; done
 
 clean:
+	rm -f build/configure/config-$(ARCH).h build/configure/config-$(ARCH).make
 	for t in $(TARGETS) ; do $(MAKE) -C targets/$$t ARCH=$(ARCH) clean || exit 1 ; done
+	rm -f build/configure/config-$(ARCH).h build/configure/config-$(ARCH).make
 
 strip:
 	for t in $(TARGETS) ; do $(MAKE) -C targets/$$t ARCH=$(ARCH) strip || exit 1 ; done
@@ -74,14 +76,18 @@ publish:
 	$(MAKE) nsi
 	$(MAKE) -C build/bin dist
 
-build/objs/xemu-48x48.png: build/xemu-48x48.xpm
+build/objs/xemu-48x48.png: build/xemu-48x48.xpm Makefile
 	convert $< $@
-
-doxygen: build/objs/xemu-48x48.png
-	doxygen build/Doxyfile
-
+build/objs/Doxyfile.tmp: build/Doxyfile Makefile
+	sed "s/%PROJECT_NUMBER%/`git rev-parse --abbrev-ref HEAD` `git rev-parse HEAD` @ `date`/g" < $< > $@
+doxygen: build/objs/xemu-48x48.png build/objs/Doxyfile.tmp Makefile
+	doxygen build/objs/Doxyfile.tmp
 doxypublish:
 	@echo "*** You should not use this target, this is only for distributing binaries on the site of the author!"
+	test -f build/doc/doxygen/html/index.html || $(MAKE) doxygen
 	rsync -av --delete build/doc/doxygen/html/ lgb:www/doxygen-projects/xemu/
 
-.PHONY: all all-arch clean all-clean roms distclean dep all-dep deb nsi publish
+config:
+	ARCH=$(ARCH) $(MAKE) -C build/configure
+
+.PHONY: all all-arch clean all-clean roms distclean dep all-dep deb nsi publish doxygen doxypublish config

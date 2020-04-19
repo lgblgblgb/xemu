@@ -51,14 +51,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	ifndef	TARGET_OS_MAC
 #		error	"Unknown Apple platform (TARGET_OS_MAC is not defined by TargetConditionals.h)"
 #	endif
-#	define	XEMU_ARCH_NATIVE
 #	define	XEMU_ARCH_OSX
 #	define	XEMU_ARCH_MAC
 #	define	XEMU_ARCH_UNIX
 #	define	XEMU_ARCH_NAME	"osx"
 #	define	XEMU_SLEEP_IS_NANOSLEEP
 #elif	defined(__unix__) || defined(__unix) || defined(__linux__) || defined(__linux)
-#	define	XEMU_ARCH_NATIVE
 #	define	XEMU_ARCH_UNIX
 #	if	defined(__linux__) || defined(__linux)
 #		define	XEMU_ARCH_LINUX
@@ -78,11 +76,4 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #if defined(XEMU_ARCH_UNIX) && !defined(_XOPEN_SOURCE)
 #	define	_XOPEN_SOURCE	700
-#endif
-
-#ifndef XEMU_NO_TARGET
-#	include "xemu-target.h"
-#	if defined(XEMU_ARCH_HTML) && !defined(CONFIG_EMSCRIPTEN_OK)
-#		error "Sorry, emscripten is not yet validated for this sub-project (CONFIG_EMSCRIPTEN_OK is not defined in xemu-target.h) ..."
-#	endif
 #endif

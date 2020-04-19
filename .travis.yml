@@ -37,7 +37,7 @@ matrix:
       before_script:
         - set +e
         - uname -a ; lsb_release -a || true ; hostname ; pwd ; df -h ; id -a
-        - hostname ; sudo hostname lgb || true ; hostname
+        - hostname
         - set -e
         - sdl2-config --version --prefix --cflags --libs --static-libs
         - pkg-config --cflags-only-I --libs gtk+-3.0
@@ -99,7 +99,7 @@ matrix:
         - set +e
         - uname -a ; pwd ; df -h ; id -a
         - set -e
-        - hostname ; sudo hostname lgb || true ; hostname
+        - hostname
         - build/install-cross-win-mingw-sdl-on-linux.sh /usr/bin
         - set +e
         - ps auxwwww || true
@@ -154,7 +154,7 @@ matrix:
       before_script:
         - set +e
         - uname -a ; pwd ; df -h ; id -a
-        - hostname ; sudo hostname lgb || true ; hostname
+        - hostname
         - set -e
         - sdl2-config --version --prefix --cflags --libs --static-libs
         - set +e

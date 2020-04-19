@@ -25,14 +25,14 @@ ARCH			= native
 TOPDIR			= ../..
 
 config:
-	CC=$(CC) ARCH=$(ARCH) bash $(TOPDIR)/build/configure
-$(TOPDIR)/build/configure-$(ARCH).h:
-	CC=$(CC) ARCH=$(ARCH) bash $(TOPDIR)/build/configure
-$(TOPDIR)/build/configure-$(ARCH).make:
-	CC=$(CC) ARCH=$(ARCH) bash $(TOPDIR)/build/configure
+	CC=$(CC) ARCH=$(ARCH) bash $(TOPDIR)/build/configure/configure
+$(TOPDIR)/build/configure/config-$(ARCH).h:
+	CC=$(CC) ARCH=$(ARCH) bash $(TOPDIR)/build/configure/configure
+$(TOPDIR)/build/configure/config-$(ARCH).make:
+	CC=$(CC) ARCH=$(ARCH) bash $(TOPDIR)/build/configure/configure
 
 include $(TOPDIR)/build/Makefile.$(ARCH)
-include $(TOPDIR)/build/configure-$(ARCH).make
+include $(TOPDIR)/build/configure/config-$(ARCH).make
 
 # Remove -flto (link time optimization) if you have problems
 # If you want to compile with -g option, also *DELETE* the -flto, both of them together known to be problematic!
@@ -53,13 +53,13 @@ CFLAGS_WITHOUT_DEBUG	= $(CFLAGS_ARCH) $(CFLAGS_TARGET) -I. -I$(TOPDIR)
 ifeq ($(NATIVE), yes)
 CFLAGS_WITHOUT_DEBUG	+= -mtune=native -march=native
 endif
-PRE_CFLAGS		= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG) -DXEMU_MAKE_ARCH=$(ARCH) -DXEMU_MAKE_ARCH_NAME=\"$(ARCH)\" -include build/configure-$(ARCH).h
+PRE_CFLAGS		= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG) -DXEMU_MAKE_ARCH=$(ARCH) -DXEMU_MAKE_ARCH_NAME=\"$(ARCH)\" -include build/configure/config-$(ARCH).h
 PRE_LDFLAGS		= $(DEBUG) $(LDFLAGS_ARCH)
 COMMONOBJPREFIX		= $(TOPDIR)/build/objs/c-$(ARCH)-$(TARGET)-$(PRG_TARGET)--
 TARGETOBJPREFIX		= $(TOPDIR)/build/objs/t-$(ARCH)-$(TARGET)-$(PRG_TARGET)--
 DEPFILEPREFIX		= $(TOPDIR)/build/objs/m-$(ARCH)-$(TARGET)-$(PRG_TARGET)--make
 DEPFILE			= $(DEPFILEPREFIX).depend
-DEPALL_BUILDFILES	= Makefile.common Makefile.$(ARCH) system-config-settings.txt system-config configure-$(ARCH).h configure-$(ARCH).make
+DEPALL_BUILDFILES	= Makefile.common Makefile.$(ARCH) system-config-settings.txt system-config configure/config-$(ARCH).h configure/config-$(ARCH).make
 DEPALL			= Makefile $(addprefix $(TOPDIR)/build/, $(DEPALL_BUILDFILES))
 TARGETOBJS		= $(addprefix $(TARGETOBJPREFIX), $(notdir $(SRCS_TARGET:.c=.o)))
 COMMONOBJS		= $(addprefix $(COMMONOBJPREFIX), $(notdir $(SRCS_COMMON:.c=.o)))
@@ -145,7 +145,7 @@ $(DEPFILE): $(DEPALL) $(SRCS)
 	rm -f $(DEPFILEPREFIX)-target-pre.depend $(DEPFILEPREFIX)-common-pre.depend
 
 clean:
-	rm -f $(TOPDIR)/build/objs/?-$(ARCH)-$(TARGET)-* $(PRG) $(TOPDIR)/build/configure-$(ARCH).*
+	rm -f $(TOPDIR)/build/objs/?-$(ARCH)-$(TARGET)-* $(PRG) $(TOPDIR)/build/configure/config-$(ARCH).*
 
 .PHONY: clean all strip dep do-all run xemu-info config
 

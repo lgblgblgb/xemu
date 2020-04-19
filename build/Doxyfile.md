@@ -15,7 +15,7 @@ generated Doxygen documentation.
 
 # TODO
 
-Now let's decorate the source with comments, Doxygen to use :)
+Now let's decorate the source with comments what Doxygen _can_ use to get fancier doc ... :)
 
 # Generating the documentation
 
