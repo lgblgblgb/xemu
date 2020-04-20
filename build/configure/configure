@@ -479,8 +479,10 @@ EOF
 	for dir in \
 		/usr/include \
 		/usr/include/readline \
+		/usr/include/editline \
 		/usr/local/include \
-		/usr/local/include/readline
+		/usr/local/include/readline \
+		/usr/local/include/editline
 	do
 		echo -n "Checking readline usability \"manually\" at $dir ... "
 		$CC -I$dir $SRC -o $OBJ -lreadline > $COUT 2> $CERR
@@ -498,10 +500,18 @@ EOF
 		fi
 	done
 fi
-if [ "$HAS_READLINE" != "Y" ]; then
-	find / -name readline.h
-	find / -name history.h
-	find / -name readline
+if [ $TARGET_IS_OSX = Y ]; then
+	echo ">>> Searching for readline <<<"
+	find /usr -name "readline.h" -ls 2>/dev/null
+	find /usr -name "history.h" -ls 2>/dev/null
+	find /usr -name "readline" -ls 2>/dev/null
+	find /usr -name "readline*dylib*" -ls 2>/dev/null
+	find /usr -name "readline*.so*" -ls 2>/dev/null
+	find /usr -name "readline*.a*" -ls 2>/dev/null
+	find /usr -name "libreadline*dylib*" -ls 2>/dev/null
+	find /usr -name "libreadline*.so*" -ls 2>/dev/null
+	find /usr -name "libreadline*.a*" -ls 2>/dev/null
+	echo ">>> End of search for readline <<<"
 fi
 
 
