@@ -400,9 +400,9 @@ echo "OK"
 if [ "$PKG_CONFIG" = "" ]; then
 	PKG_CONFIG="pkg-config"
 fi
+# "READLINE:readline:#include <readline.h>:printf(\"%p\", readline(\"prompt\"))"
 for a in \
-	"GTK3:gtk+-3.0:#include <gtk/gtk.h>:gtk_init_check(NULL,NULL)" \
-	"READLINE:readline:#include <readline.h>:printf(\"%p\", readline(\"prompt\"))"
+	"GTK3:gtk+-3.0:#include <gtk/gtk.h>:gtk_init_check(NULL,NULL)"
 do
 	name="`echo $a | cut -f1 -d:`"
 	id="`  echo $a | cut -f2 -d:`"
@@ -465,60 +465,27 @@ done
 ########################################################################################################
 
 
-if [ "$HAS_READLINE" != "Y" ]; then
-	cat > $SRC <<EOF
+cat > $SRC <<EOF
 #include <stdio.h>
-#include <readline.h>
-#include <history.h>
+#include <readline/readline.h>
+#include <readline/history.h>
 int main ( void ) {
-	char *p = readline("Nope ");
+	char *p = readline(">");
 	add_history(p);
 	return 0;
 }
 EOF
-	for dir in \
-		/usr/include \
-		/usr/include/readline \
-		/usr/include/editline \
-		/usr/local/include \
-		/usr/local/include/readline \
-		/usr/local/include/editline \
-		/usr/local/opt/readline
-	do
-		echo -n "Checking readline usability \"manually\" at $dir ... "
-		rm -f $OBJ
-		$CC -I$dir $SRC -o $OBJ -lreadline > $COUT 2> $CERR
-		ret=$?
-		if [ "$ret" = "0" -a -s $OBJ ]; then
-			echo "OK"
-			echo "READLINE_CFLAGS=-I$dir" >> $OUTPUT_MAKEFILE
-			echo "READLINE_LIBS=-lreadline" >> $OUTPUT_MAKEFILE
-			echo "#define XEMU_HAS_READLINE" >> $OUTPUT_HEADERFILE
-			HAS_READLINE=Y
-			break
-		else
-			echo "NO"
-			cat $CERR
-		fi
-	done
-fi
-if [ $TARGET_IS_OSX = Y ]; then
-	echo ">>> Searching for readline <<<"
-	ls -lad /usr /Library /Applications /lib /opt
-	for a in /usr /Library /Applications /lib /opt ; do
-		find $a -name "readline.h" -ls 2>/dev/null
-		find $a -name "history.h" -ls 2>/dev/null
-		find $a -name "readline" -ls 2>/dev/null
-		find $a -name "editline" -ls 2>/dev/null
-		find $a -name "readline*dylib*" -ls 2>/dev/null
-		find $a -name "readline*.so*" -ls 2>/dev/null
-		find $a -name "readline*.a*" -ls 2>/dev/null
-		find $a -name "libreadline*dylib*" -ls 2>/dev/null
-		find $a -name "libreadline*.so*" -ls 2>/dev/null
-		find $a -name "libreadline*.a*" -ls 2>/dev/null
-		find $a -name "libedit*" -ls 2>/dev/null
-		echo ">>> End of search for readline <<<"
-	done
+echo -n "Checking libreadline usability ... "
+$CC $SRC -o $OBJ -lreadline > $COUT 2> $CERR
+ret=$?
+if [ "$ret" = "0" -a -s $OBJ ]; then
+	echo "OK"
+	echo "READLINE_CFLAGS=" >> $OUTPUT_MAKEFILE
+	echo "READLINE_LIBS=-lreadline" >> $OUTPUT_MAKEFILE
+	echo "#define XEMU_HAS_READLINE" >> $OUTPUT_HEADERFILE
+	HAS_READLINE=Y
+else
+	echo "NO"
 fi
 
 
