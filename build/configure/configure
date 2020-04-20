@@ -482,7 +482,7 @@ EOF
 		/usr/include/editline \
 		/usr/local/include \
 		/usr/local/include/readline \
-		/usr/local/include/editline
+		/usr/local/include/editline \
 		/usr/local/opt/readline
 	do
 		echo -n "Checking readline usability \"manually\" at $dir ... "
