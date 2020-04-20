@@ -24,19 +24,13 @@ all:
 ARCH			= native
 TOPDIR			= ../..
 
-#config:
-#	CC="$(CC)" WINDRES="$(WINDRES)" ARCH=$(ARCH) bash $(TOPDIR)/build/configure/configure
-#$(TOPDIR)/build/configure/config-$(ARCH).h:
-#	CC="$(CC)" WINDRES="$(WINDRES)" ARCH=$(ARCH) bash $(TOPDIR)/build/configure/configure
-#$(TOPDIR)/build/configure/config-$(ARCH).make:
-#	CC="$(CC)" WINDRES="$(WINDRES)" ARCH=$(ARCH) bash $(TOPDIR)/build/configure/configure
 
-config $(TOPDIR)/build/configure/config-$(ARCH).h $(TOPDIR)/build/configure/config-$(ARCH).make:
+$(TOPDIR)/build/configure/config-$(ARCH).h $(TOPDIR)/build/configure/config-$(ARCH).make:
 	if [ ! -s $(TOPDIR)/build/configure/config-$(ARCH).h -o ! -s $(TOPDIR)/build/configure/config-$(ARCH).make ]; then CC="$(CC)" WINDRES="$(WINDRES)" ARCH=$(ARCH) bash $(TOPDIR)/build/configure/configure ; fi
 
-reconfig:
+config:
 	rm -f $(TOPDIR)/build/configure/config-$(ARCH).h $(TOPDIR)/build/configure/config-$(ARCH).make
-	#CC="$(CC)" WINDRES="$(WINDRES)" ARCH=$(ARCH) bash $(TOPDIR)/build/configure/configure
+	$(MAKE) $(TOPDIR)/build/configure/config-$(ARCH).h
 
 include $(TOPDIR)/build/Makefile.$(ARCH)
 include $(TOPDIR)/build/configure/config-$(ARCH).make
@@ -154,7 +148,7 @@ $(DEPFILE): $(DEPALL) $(SRCS)
 clean:
 	rm -f $(TOPDIR)/build/objs/?-$(ARCH)-$(TARGET)-* $(PRG) $(TOPDIR)/build/configure/config-$(ARCH).*
 
-.PHONY: clean all strip dep do-all run xemu-info config reconfig
+.PHONY: clean all strip dep do-all run xemu-info config
 
 ifneq ($(wildcard $(DEPFILE)),)
 include $(DEPFILE)

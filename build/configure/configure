@@ -498,6 +498,11 @@ EOF
 		fi
 	done
 fi
+if [ "$HAS_READLINE" != "Y" ]; then
+	find / -name readline.h
+	find / -name history.h
+	find / -name readline
+fi
 
 
 #################################################
