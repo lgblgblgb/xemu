@@ -483,8 +483,10 @@ EOF
 		/usr/local/include \
 		/usr/local/include/readline \
 		/usr/local/include/editline
+		/usr/local/opt/readline
 	do
 		echo -n "Checking readline usability \"manually\" at $dir ... "
+		rm -f $OBJ
 		$CC -I$dir $SRC -o $OBJ -lreadline > $COUT 2> $CERR
 		ret=$?
 		if [ "$ret" = "0" -a -s $OBJ ]; then
@@ -502,16 +504,21 @@ EOF
 fi
 if [ $TARGET_IS_OSX = Y ]; then
 	echo ">>> Searching for readline <<<"
-	find /usr -name "readline.h" -ls 2>/dev/null
-	find /usr -name "history.h" -ls 2>/dev/null
-	find /usr -name "readline" -ls 2>/dev/null
-	find /usr -name "readline*dylib*" -ls 2>/dev/null
-	find /usr -name "readline*.so*" -ls 2>/dev/null
-	find /usr -name "readline*.a*" -ls 2>/dev/null
-	find /usr -name "libreadline*dylib*" -ls 2>/dev/null
-	find /usr -name "libreadline*.so*" -ls 2>/dev/null
-	find /usr -name "libreadline*.a*" -ls 2>/dev/null
-	echo ">>> End of search for readline <<<"
+	ls -lad /usr /Library /Applications /lib /opt
+	for a in /usr /Library /Applications /lib /opt ; do
+		find $a -name "readline.h" -ls 2>/dev/null
+		find $a -name "history.h" -ls 2>/dev/null
+		find $a -name "readline" -ls 2>/dev/null
+		find $a -name "editline" -ls 2>/dev/null
+		find $a -name "readline*dylib*" -ls 2>/dev/null
+		find $a -name "readline*.so*" -ls 2>/dev/null
+		find $a -name "readline*.a*" -ls 2>/dev/null
+		find $a -name "libreadline*dylib*" -ls 2>/dev/null
+		find $a -name "libreadline*.so*" -ls 2>/dev/null
+		find $a -name "libreadline*.a*" -ls 2>/dev/null
+		find $a -name "libedit*" -ls 2>/dev/null
+		echo ">>> End of search for readline <<<"
+	done
 fi
 
 
