@@ -448,6 +448,7 @@ EOF
 		echo "YES"
 		#eval ${name}_CFLAGS="$L1"
 		#eval ${name}_LIBS="$L2"
+		eval HAS_${name}=Y
 		echo "${name}_CFLAGS = $L1" >> $OUTPUT_MAKEFILE
 		echo "${name}_LIBS = $L2" >> $OUTPUT_MAKEFILE
 		echo "#define XEMU_HAS_$name" >> $OUTPUT_HEADERFILE
@@ -457,6 +458,46 @@ EOF
 		cat $CERR
 	fi
 done
+
+
+########################################################################################################
+# libreadline seems to be problematic and does not use pkg-config and/or cannot be worked on macos ... #
+########################################################################################################
+
+
+if [ "$HAS_READLINE" != "Y" ]; then
+	cat > $SRC <<EOF
+#include <stdio.h>
+#include <readline.h>
+#include <history.h>
+int main ( void ) {
+	char *p = readline("Nope ");
+	add_history(p);
+	return 0;
+}
+EOF
+	for dir in \
+		/usr/include \
+		/usr/include/readline \
+		/usr/local/include \
+		/usr/local/include/readline
+	do
+		echo -n "Checking readline usability \"manually\" at $dir ... "
+		$CC -I$dir $SRC -o $OBJ -lreadline > $COUT 2> $CERR
+		ret=$?
+		if [ "$ret" = "0" -a -s $OBJ ]; then
+			echo "OK"
+			echo "READLINE_CFLAGS=-I$dir" >> $OUTPUT_MAKEFILE
+			echo "READLINE_LIBS=-lreadline" >> $OUTPUT_MAKEFILE
+			echo "#define XEMU_HAS_READLINE" >> $OUTPUT_HEADERFILE
+			HAS_READLINE=Y
+			break
+		else
+			echo "NO"
+			cat $CERR
+		fi
+	done
+fi
 
 
 #################################################
