@@ -34,12 +34,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <ctype.h>
 #include <string.h>
 
-#include <SDL.h>
+#include "xemu/emutools.h"
 
 #include "commodore_geos.h"
 #include "xemu/cpu65.h"
 #include "geos.h"
-#include "xemu/emutools.h"
 #include "xemu/emutools_files.h"
 
 
