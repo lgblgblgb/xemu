@@ -638,7 +638,8 @@ static void emulation_loop ( void )
 			cycles -= cpu_cycles_per_scanline;
 			cia_tick(&cia1, 64);
 			cia_tick(&cia2, 64);
-			if (scanline == 312) {
+			int scan_limit = VIC_SCANLINES << ( (!double_scanlines) & 1);
+			if (scanline == scan_limit) {
 				//DEBUG("VIC3: new frame!" NL);
 				frameskip = !frameskip;
 				scanline = 0;
@@ -724,12 +725,13 @@ int main ( int argc, char **argv )
 		DEBUGPRINT("WARNING: *** NEW M65 HACK MODE ACTIVATED ***" NL);
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	window_title_info_addon = emulator_speed_title;
+	double_scanlines = 1;
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
-		SCREEN_WIDTH, SCREEN_HEIGHT * 2,// logical size (used with keeping aspect ratio by the SDL render stuffs)
-		SCREEN_WIDTH, SCREEN_HEIGHT * 2,// window size
+		SCREEN_WIDTH, SCREEN_HEIGHT,// logical size (used with keeping aspect ratio by the SDL render stuffs)
+		SCREEN_WIDTH, SCREEN_HEIGHT,// window size
 		SCREEN_FORMAT,			// pixel format
 		0,				// we have *NO* pre-defined colours as with more simple machines (too many we need). we want to do this ourselves!
 		NULL,				// -- "" --
