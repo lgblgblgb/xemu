@@ -52,7 +52,7 @@ int vic2_16k_bank;			// VIC-2 modes' 16K BANK address within 64K (NOT the tradit
 static Uint8 *sprite_pointers;		// Pointer to sprite pointers :)
 static Uint8 *sprite_bank;
 int vic3_blink_phase;			// blinking attribute helper, state.
-static Uint8 raster_colours[512];
+static Uint8 raster_colours[1024];
 Uint8 c128_d030_reg;			// C128-like register can be only accessed in VIC-II mode but not in others, quite special!
 
 int vic_vidp_legacy = 1, vic_chrp_legacy = 1, vic_sprp_legacy = 1;
@@ -308,8 +308,14 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_3_4(0x31):
 			vic_registers[0x31] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
 			machine_set_speed(0);
+			if (data & 8) {
+				DEBUG("VIC3: V400 Mode enabled EXPERIMENTAL");
+				double_scanlines = 0;
+			} else {
+				double_scanlines = 1;
+			}
 			if ((data & 15) && warn_ctrl_b_lo) {
-				INFO_WINDOW("VIC3 control-B register V400, H1280, MONO and INT features are not emulated yet!");
+				INFO_WINDOW("VIC3 control-B register H1280, MONO and INT features are not emulated yet!");
 				warn_ctrl_b_lo = 0;
 			}
 			return;				// since we DID the write, it's OK to return here and not using "break"
@@ -544,6 +550,7 @@ static inline Uint8 *vic2_get_chargen_pointer ( void )
    No support for MCM and ECM!  */
 static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 {
+	int v400_enabled = (vic_registers[0x31] & 8) >> 3;
 	Uint32 bg;
 	Uint8 *vidp, *colp = colour_ram;
 	int x = 0, y = 0, xlim, ylim, charline = 0;
@@ -552,14 +559,14 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 	int scanline = 0;
 	if (vic_registers[0x31] & 128) { // check H640 bit: 80 column mode?
 		xlim = 79;
-		ylim = 24;
+		ylim = 24 << v400_enabled;
 		// Note: VIC2 sees ROM at some addresses thing is not emulated yet for other thing than chargen memory!
 		// Note: according to the specification bit 4 has no effect in 80 columns mode!
 		vidp = main_ram + ((vic_registers[0x18] & 0xE0) << 6) + vic2_16k_bank;
 		sprite_pointers = vidp + 2040;
 	} else {
 		xlim = 39;
-		ylim = 24;
+		ylim = 24 << v400_enabled;
 		// Note: VIC2 sees ROM at some addresses thing is not emulated yet for other thing than chargen memory!
 		vidp = main_ram + ((vic_registers[0x18] & 0xF0) << 6) + vic2_16k_bank;
 		sprite_pointers = vidp + 1016;

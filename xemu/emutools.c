@@ -63,6 +63,7 @@ char *window_title_custom_addon = NULL;
 char *window_title_info_addon = NULL;
 Uint32 *sdl_pixel_buffer = NULL;
 int texture_x_size_in_bytes;
+int texture_width, texture_height;
 int emu_is_fullscreen = 0;
 static int win_xsize, win_ysize;
 char *sdl_pref_dir = NULL, *sdl_base_dir = NULL, *sdl_inst_dir = NULL;
@@ -80,6 +81,7 @@ FILE *debug_fp = NULL;
 int chatty_xemu = 1;
 int sdl_default_win_x_size;
 int sdl_default_win_y_size;
+int double_scanlines = 0;
 
 static int osd_enabled = 0, osd_available = 0, osd_xsize, osd_ysize, osd_fade_dec, osd_fade_end, osd_alpha_last;
 int osd_status = 0;
@@ -587,6 +589,8 @@ int xemu_post_init (
 	);
 	sdl_default_win_x_size = win_x_size;
 	sdl_default_win_y_size = win_y_size;
+	texture_width = texture_x_size;
+	texture_height = texture_y_size;
 	DEBUGPRINT("SDL window native pixel format: %s" NL, SDL_GetPixelFormatName(SDL_GetWindowPixelFormat(sdl_win)));
 	if (!sdl_win) {
 		ERROR_WINDOW("Cannot create SDL window: %s", SDL_GetError());
@@ -627,6 +631,7 @@ int xemu_post_init (
 		ERROR_WINDOW("Cannot create SDL texture: %s", SDL_GetError());
 		return 1;
 	}
+
 	texture_x_size_in_bytes = texture_x_size * 4;
 	sdl_winid = SDL_GetWindowID(sdl_win);
 	/* Intitialize palette from given RGB components */
@@ -779,7 +784,14 @@ void xemu_update_screen ( void )
 		SDL_UnlockTexture(sdl_tex);
 	//if (seconds_timer_trigger)
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
-	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);
+	
+	SDL_Rect rc;
+	rc.w = texture_width;
+	rc.h = double_scanlines ? texture_height * 2 : texture_height;
+	rc.x = 0;
+	rc.y = 0;
+
+	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, &rc);
 	if (osd_status) {
 		if (osd_status < OSD_STATIC)
 			osd_status -= osd_fade_dec;

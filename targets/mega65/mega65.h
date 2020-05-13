@@ -41,7 +41,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define USE_LOCKED_TEXTURE	1
 #define RENDER_SCALE_QUALITY	1
 #define SCREEN_WIDTH		640
-#define SCREEN_HEIGHT		200
+#define SCREEN_HEIGHT	400  
+
+#define VIC_SCANLINES   312
 
 // Default fast clock of M65, in MHz (can be overriden with CLI switch)
 #define MEGA65_DEFAULT_FAST_CLOCK	40
