@@ -24,7 +24,7 @@ EMU_DESCRIPTION	= ReCPM
 CFLAGS_TARGET_xrecpm	=
 SRCS_TARGET_xrecpm	= recpm.c hardware.c console.c bios.c bdos.c cpmfs.c
 SRCS_COMMON_xrecpm	= emutools.c emutools_hid.c z80.c z80_dasm.c emutools_config.c emutools_files.c
-CONFIG_CFLAGS_TARGET_xrecpm	= sdl2
-CONFIG_LDFLAGS_TARGET_xrecpm	= sdl2
+CFLAGS_TARGET_xrecpm	= $(SDL2_CFLAGS)
+LDFLAGS_TARGET_xrecpm	= $(SDL2_LIBS)
 
 include ../../build/Makefile.common

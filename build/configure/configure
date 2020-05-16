@@ -1,4 +1,4 @@
-#!/bin/bash
+#!/bin/sh
 ## This file is part of the Xemu project: https://github.com/lgblgblgb/xemu
 ## Collection of various emulators of some 8 bits machines using SDL2 library.
 ##
@@ -20,20 +20,160 @@
 
 echo "*** Running xemu-configure ***"
 
-echo -n "Specified C compiler to use: "
-if [ "$CC" = "" ]; then
-	echo "UNSPECIFIED"
-	echo "Error, no CC variable passed to the $0 script" >&2
+###########################################################
+# Check some basic common UNIX utilities if work, we need #
+###########################################################
+
+if [ "`echo "testSTRSTRing" | sed -n 's/STR/RTS/gp'`" != "testRTSRTSing" ]; then
+	echo "FATAL: UNIX utility 'sed' does not seem to work or cannot be found" >&2
 	exit 1
 fi
-echo $CC
+if [ \
+	"`echo ez=az=amaz | cut -f1 -d=`" != "ez" -o \
+	"`echo ez=az=amaz | cut -f2- -d=`" != "az=amaz" -o \
+	"`echo ezaz | cut -f1 -d=`" != "ezaz" -o \
+	"`echo ezaz | cut -f2- -d=`" != "ezaz" \
+]; then
+	echo "FATAL: UNIX utility 'cut' does not seem to work or cannot be found" >&2
+	exit 1
+fi
+if [ "`dirname /something`" != "/" ]; then
+	echo "FATAL: UNIX utility 'dirname' does not seem to work or cannot be found" >&2
+	exit 1
+fi
+if [ "`pwd`" = "" ]; then
+	echo "FATAL: UNIX utility 'pwd' does not seem to work or cannot be found" >&2
+	exit 1
+fi
+if [ "`uname -a`" = "" ]; then
+	echo "FATAL: UNIX utility 'uname' does not seem to work or cannot be found" >&2
+	exit 1
+fi
+if [ "`date`" = "" ]; then
+	echo "FATAL: UNIX utility 'date' does not seem to work or cannot be found" >&2
+	exit 1
+fi
+
+#####################################################
+# Evaluate given parameters to the configure script #
+#####################################################
+
+ARCH=""
+CC=""
+WINDRES=""
+SDL2_CONFIG=""
+PKG_CONFIG=""
+while [ "$1" != "" ] ; do
+	var="`echo $1 | cut -f1 -d=`"
+	val="`echo $1 | cut -f2- -d=`"
+	case "$var" in
+		"--arch")
+			ARCH=$val
+			;;
+		"--with-cc")
+			CC=$val
+			;;
+		"--with-windres")
+			WINDRES=$val
+			;;
+		"--with-sdl2")
+			SDL2_CONFIG=$val
+			;;
+		"--with-pkg-config")
+			PKG_CONFIG=$val
+			;;
+		"--help")
+			cat <<EOF
+
+Usage:
+
+	--arch=ARCH-NAME	Set make architecture name, COMPULSORY.
+				Unless cross-compile, you should say: native
+				Other common values: win32 and win64 and
+				html (for Emscripten html/JS output)
+
+	--with-cc=CC		Sets the name (or path+name) of the C compiler.
+				Must be a compiler understanding gcc style
+				options (eg: gcc, clang), for Windows, MingW is
+				needed (Xemu uses POSIX functions implemented
+				by MingW even when targeted for Windows, to
+				reduce the windows-madness) running on eg Linux
+				(even in WSL) or natively on Windows, eg MSYS2.
+
+	--with-windres=WINDRES	Sets the name (or path+name) of the WINDRES
+				compiler. Only make sense if cross compile for
+				Windows or native target is Windows.
+
+	--with-sdl2=CFG-SCRIPT	Sets the name (or path+name) of the sdl2-config
+				script to be used. It must be at least SDL
+				2.0.4.
+
+	--with-pkg-config=PKG	Sets the name (or path+name) of the pkg-config
+				script used to find GTK3 for compilation.
+				Note: on Mac and Windows, GTK is not needed for
+				GUI, the native GUI API will be used on those.
+				Though you can force also compile GTK3 if you
+				use this parameter with working GTK3 installed.
+
+In case of missing --with... options defaults are used for the given "ARCH"
+selected by the --arch=... option. Note, that you need to "pair" some settings,
+like windres and cc should be both the same mingw and architecture (ie 32 or
+64 bit) also the SDL2's config script given.
+EOF
+			exit 1
+			;;
+		*)
+			echo "ERROR: Unknown command line directive: $var" >&2
+			echo "To get help, use --help"
+			exit 1
+			;;
+	esac
+	if [ "$val" = "$var" -o "$val" = "" ]; then
+		echo "ERROR: Empty parameter for argument $var" >&2
+		exit 1
+	fi
+	shift
+done
+
+#########################################
+# Check "ARCH" and set _default_ values #
+#########################################
+
 echo -n "Specified make ARCH to use: "
-if [ "$ARCH" = "" ]; then
+if [ "$ARCH" = "native" ]; then
+	echo "$ARCH (intended for native target)"
+	CC_default=cc
+	WINDRES_default=windres
+	SDL2_CONFIG_default=sdl2-config
+elif [ "$ARCH" = "win32" ]; then
+	echo "$ARCH (intended for WIN32 cross-compilation on UNIX)"
+	CC_default=i686-w64-mingw32-gcc
+	WINDRES_default=i686-w64-mingw32-windres
+	SDL2_CONFIG_default=i686-w64-mingw32-sdl2-config
+elif [ "$ARCH" = "win64" ]; then
+	echo "$ARCH (intended for WIN64 cross-compilation on UNIX)"
+	CC_default=x86_64-w64-mingw32-gcc
+	WINDRES_default=x86_64-w64-mingw32-windres
+	SDL2_CONFIG_default=x86_64-w64-mingw32-sdl2-config
+elif [ "$ARCH" = "html" ]; then
+	echo "$ARCH (intended for HTML/JS cross-compilation on UNIX)"
+	CC_default=emcc
+	WINDRES_default=
+	SDL2_CONFIG_default=internal
+elif [ "$ARCH" = "" ]; then
 	echo "UNSPECIFIED"
-	echo "Error, no ARCH variable passed to the $0 script" >&2
+	echo "Error, no ARCH variable passed to the $0 script. Do not forget to use the --arch=... parameter." >&2
+	exit 1
+else
+	echo "UNKNOWN"
+	echo "Error, unknown ARCH ($ARCH) was specified to the $0 script" >&2
 	exit 1
 fi
-echo $ARCH
+PKG_CONFIG_default=pkg-config
+
+##########################################################################
+# Work out our current directory, project root, temporary & result files #
+##########################################################################
 
  SRC="build/objs/configure--script--$ARCH--test.c"
 COUT="build/objs/configure--script--$ARCH--test.out"
@@ -43,15 +183,13 @@ CERR="build/objs/configure--script--$ARCH--test.err"
   OUTPUT_MAKEFILE="build/configure/config-$ARCH.make"
 OUTPUT_HEADERFILE="build/configure/config-$ARCH.h"
 
-function finalexit
-{
+finalexit() {
 	rm -f $SRC $COUT $CERR $OBJ $OUTPUT_MAKEFILE $OUTPUT_HEADERFILE
-	echo "*** xemu-configure has FAILED ***"
+	echo "*** xemu-configure has FAILED ***" >&2
 	exit 1
 }
 
-function failed
-{
+failed() {
 	echo "ERROR"
 	echo "*** Error message ***" >&2
 	cat $CERR >&2
@@ -67,15 +205,55 @@ echo -n "Getting project root absolute path ... "
 cd `dirname $0` || finalexit
 cd .. || finalexit
 cd .. || finalexit
+if [ ! -s build/configure/configure ]; then
+	echo "Cannot found myself" >&2
+	finalexit
+fi
 PROJECT_ROOT="`pwd`"
 echo "$PROJECT_ROOT"
 if [ ! -d "$PROJECT_ROOT" ]; then
-	echo "Could not determine project root." 2>&1
+	echo "Could not determine project root." >&2
 	finalexit
 fi
 
 rm -f $SRC $COUT $CERR $OBJ $OUTPUT_MAKEFILE $OUTPUT_HEADERFILE || finalexit
 touch $SRC $COUT $CERR $OBJ $OUTPUT_MAKEFILE $OUTPUT_HEADERFILE || finalexit
+
+############################################################
+# Use defaults, if no option is given for certain settings #
+############################################################
+
+if [ "$CC" = "" ]; then
+	CC=$CC_default
+	echo "Setting CC to default: $CC"
+else
+	echo "Using specified CC: $CC"
+fi
+if [ "$WINDRES" = "" ]; then
+	WINDRES=$WINDRES_default
+	echo "Setting WINDRES to default: $WINDRES"
+else
+	echo "Using specified WINDRES: $WINDRES"
+fi
+if [ "$SDL2_CONFIG" = "" ]; then
+	SDL2_CONFIG=$SDL2_CONFIG_default
+	echo "Setting SDL2_CONFIG to default: $SDL2_CONFIG"
+else
+	echo "Using specified SDL2_CONFIG: $SDL2_CONFIG"
+fi
+if [ "$PKG_CONFIG" = "" ] ;then
+	PKG_CONFIG_GIVEN=N
+	PKG_CONFIG=$PKG_CONFIG_default
+	echo "Setting PKG_CONFIG to default: $PKG_CONFIG"
+else
+	PKG_CONFIG_GIVEN=Y
+	echo "Using specified PKG_CONFIG: $PKG_CONFIG"
+fi
+
+#######################################
+# Start to construct our output files #
+#######################################
+
 cat >> $OUTPUT_HEADERFILE <<EOF
 /* This file is generated by xemu-configure. Do not edit by hand! */
 #ifdef XEMU_LOW_LEVEL_CONFIG_H_INCLUDED
@@ -96,21 +274,28 @@ if [ "$BUILD_OS" = "" ]; then
 fi
 echo "#define XEMU_BUILD_OS \"$BUILD_OS\"" >> $OUTPUT_HEADERFILE
 
-echo -n "Test if $CC can create object file ... "
+#####################################
+# Very basic test of the C compiler #
+#####################################
+
 echo "int main ( void ) { return 0; }" > $SRC
+echo -n "Test if $CC can create object file ... "
 rm -f $OBJ
-$CC -Wall -o $OBJ -c $SRC > $COUT 2> $CERR || failed
-if [ ! -f $OBJ ]; then
+$CC -Wall -o $OBJ -c $SRC > $COUT 2> $CERR
+ret=$?
+if [ "$ret" != "0" -o ! -s $OBJ ]; then
 	echo "NO"
-	echo "Cannot found object file generated" >&2
+	echo "Error message was:"
+	cat $CERR | sed 's/^/> /g' >&2
+	echo "Cannot found object file generated or compilation failed or $CC cannot be found" >&2
 	finalexit
+else
+	echo "OK"
 fi
-echo "OK"
 
 echo "Compiler version: `$CC --version | head -n 1`"
 
 echo -n "Test if $CC can create executable ... "
-echo "int main ( void ) { return 0; }" > $SRC
 rm -f $OBJ
 $CC -Wall -o $OBJ $SRC > $COUT 2> $CERR || failed
 if [ ! -f $OBJ ]; then
@@ -120,11 +305,11 @@ if [ ! -f $OBJ ]; then
 fi
 echo "OK"
 
+echo "CONFIG_CC=$CC" >> $OUTPUT_MAKEFILE
 
 ##############################
 # Test compiler flag support #
 ##############################
-
 
 echo -n "Test $CC flag support"
 for a in \
@@ -139,7 +324,8 @@ for a in \
 	         STD_C11_SUPPORTED_BY_CC:-std=c11:essential \
 	            PIPE_SUPPORTED_BY_CC:-pipe: \
   		      O0_SUPPORTED_BY_CC:-O0: \
-		       G_SUPPORTED_BY_CC:-g:
+		       G_SUPPORTED_BY_CC:-g: \
+		    FLTO_SUPPORTED_BY_CC:-flto
 do
 	b="`echo $a | cut -f1 -d:`"
 	c="`echo $a | cut -f2 -d:`"
@@ -167,6 +353,11 @@ echo
 CFLAGS="-Wall -fno-common "
 CFLAGS_OPT=""
 CFLAGS_DEBUG=""
+CFLAGS_LINK="-fno-common "
+if [ $FLTO_SUPPORTED_BY_CC = Y ]; then
+	CFLAGS_OPT="$CFLAGS_OPT-flto "
+	CFLAGS_LINK="$CFLAGS_LINK-flto "
+fi
 if [ $O0_SUPPORTED_BY_CC = Y ]; then
 	CFLAGS_DEBUG="$CFLAGS_DEBUG-O0 "
 fi
@@ -201,6 +392,11 @@ echo "Common $CC debug flags to be used: $CFLAGS_DEBUG"
 echo "CONFIG_CFLAGS=$CFLAGS" >> $OUTPUT_MAKEFILE
 echo "CONFIG_CFLAGS_OPT=$CFLAGS_OPT" >> $OUTPUT_MAKEFILE
 echo "CONFIG_CFLAGS_DEBUG=$CFLAGS_DEBUG" >> $OUTPUT_MAKEFILE
+echo "CONFIG_CFLAGS_LINK=$CFLAGS_LINK" >> $OUTPUT_MAKEFILE
+echo "#define XEMU_MAKE_ARCH native" >> $OUTPUT_HEADERFILE
+echo "#define XEMU_MAKE_ARCH_NAME \"native\"" >> $OUTPUT_HEADERFILE
+echo "#define _CONFIG_DATE \"`date`\"" >> $OUTPUT_HEADERFILE
+echo "#define _CONFIG_OS \"`uname -a`\"" >> $OUTPUT_HEADERFILE
 
 
 ################################################################################################################
@@ -324,43 +520,25 @@ if [ $TARGET_IS_HTML = Y ]; then
 	SDL2_CFLAGS="-s USE_SDL=2"
 	SDL2_LIBS="-s USE_SDL=2"
 else
-	if [ "$SDL2_CONFIG" = "" ]; then
-		if [ $TARGET_IS_WIN32 = Y ]; then
-			SDL2_CONFIG_TRIES="i686-w64-mingw32-sdl2-config sdl2-config"
-		elif [ $TARGET_IS_WIN64 = Y ]; then
-			SDL2_CONFIG_TRIES="x86_64-w64-mingw32-sdl2-config sdl2-config"
-		else
-			SDL2_CONFIG_TRIES="sdl2-config /usr/local/bin/sdl2-config"
-		fi
-		echo "Trying to use these sdl2-config invocations (guesser's defaults): $SDL2_CONFIG_TRIES"
+	echo -n "Checking sdl2-config script as \"$SDL2_CONFIG\" ... "
+	SDL2_VERSION="`$SDL2_CONFIG --version 2> $CERR`"
+	r0=$?
+	SDL2_PREFIX="`$SDL2_CONFIG --prefix 2> $CERR`"
+	r1=$?
+	SDL2_CFLAGS="`$SDL2_CONFIG --cflags 2> $CERR`"
+	r2=$?
+	SDL2_LIBS="`$SDL2_CONFIG --libs 2> $CERR`"
+	r3=$?
+	if [ \
+		"$r0" = "0" -a "$r1" = "0" -a "$r2" = "0" -a "$r3" = "0" -a \
+		"$SDL2_VERSION" != "" -a "$SDL2_PREFIX" != "" -a "$SDL2_CFLAGS" != "" -a "$SDL2_LIBS" != "" \
+	]; then
+		SDL2_CONFIG=$a
+		echo "seems to work"
+		echo "Detected SDL2 version ... $SDL2_VERSION"
+		break
 	else
-		SDL2_CONFIG_TRIES="$SDL2_CONFIG"
-		echo "Trying to use user specified sdl2-config: $SDL2_CONFIG_TRIES"
-	fi
-	SDL2_CONFIG=""
-	for a in $SDL2_CONFIG_TRIES ; do
-		echo -n "Checking sdl2-config script as \"$a\" ... "
-		SDL2_VERSION="`$a --version 2> $CERR`"
-		r0=$?
-		SDL2_PREFIX="`$a --prefix 2> $CERR`"
-		r1=$?
-		SDL2_CFLAGS="`$a --cflags 2> $CERR`"
-		r2=$?
-		SDL2_LIBS="`$a --libs 2> $CERR`"
-		r3=$?
-		if [ \
-			"$r0" = "0" -a "$r1" = "0" -a "$r2" = "0" -a "$r3" = "0" -a \
-			"$SDL2_VERSION" != "" -a "$SDL2_PREFIX" != "" -a "$SDL2_CFLAGS" != "" -a "$SDL2_LIBS" != "" \
-		]; then
-			SDL2_CONFIG=$a
-			echo "seems to work"
-			break
-		else
-			echo "does NOT work, `cat $CERR`"
-		fi
-	done
-	if [ "$SDL2_CONFIG" = "" ]; then
-		echo "ERROR: could not find working sdl2-config" >&2
+		echo "does NOT work, `cat $CERR`"
 		finalexit
 	fi
 	if [ $TARGET_IS_WIN = Y ]; then
@@ -408,15 +586,10 @@ $exe > $COUT 2> $CERR || failed
 #$CC $CFLAGS $SDL2_CFLAGS -o $OBJ -I$PROJECT_ROOT $SRC $SDL2_LIBS > $COUT 2> $CERR || failed
 echo "OK"
 
-
 ####################################
 # PKG-CONFIG based optional stuffs #
 ####################################
 
-
-if [ "$PKG_CONFIG" = "" ]; then
-	PKG_CONFIG="pkg-config"
-fi
 # "READLINE:readline:#include <readline.h>:printf(\"%p\", readline(\"prompt\"))"
 for a in \
 	"GTK3:gtk+-3.0:#include <gtk/gtk.h>:gtk_init_check(NULL,NULL)"
@@ -425,6 +598,18 @@ do
 	id="`  echo $a | cut -f2 -d:`"
 	glob="`echo $a | cut -f3 -d:`"
 	inc="` echo $a | cut -f4 -d:`"
+	if [ $name = GTK3 -a $PKG_CONFIG_GIVEN = N -a $TARGET_IS_OSX = Y ]; then
+		echo "Skipping $name check with $PKG_CONFIG for OSX target, since no PKG_CONFIG was user forced."
+		continue
+	fi
+	if [ $name = GTK3 -a $PKG_CONFIG_GIVEN = N -a $TARGET_IS_WIN = Y ]; then
+		echo "Skipping $name check with $PKG_CONFIG for WIN targets, since no PKG_CONFIG was user forced. "
+		continue
+	fi
+	if [ $TARGET_IS_HTML = Y ]; then
+		echo "Skipping $name check with $PKG_CONFIG for HTML target"
+		continue
+	fi
 	if [ $TARGET_IS_OSX = Y -a "$name" = "READLINE" ]; then
 		# Override libreadline madness with Mac's internal libedit also called readline. Or WTF :-O
 		# OSX is really an alien stuff .......
@@ -529,20 +714,40 @@ echo "XEMUGUI_CFLAGS=$XEMUGUI_CFLAGS" >> $OUTPUT_MAKEFILE
 echo "XEMUGUI_LIBS=$XEMUGUI_LIBS" >> $OUTPUT_MAKEFILE
 
 
-#################################################
-# Windows target: try to locate windres utility #
-#################################################
+#########################################
+# Windows target: check windres utility #
+#########################################
 
-
-# Now only a given name is used ... (and surely, only if target is windows)
-# TODO: detect windres somehow ... On native windows (MSYS) it has different, etc.
 if [ $TARGET_IS_WIN = Y -a "$WINDRES" != "" ]; then
-	echo "Will use windres as specified: $WINDRES"
-	echo "WINDRES=$WINDRES" >> $OUTPUT_MAKEFILE
-	#WINDRES_TRY="$WINDRES"
-	#for a in "$WINDRES_TRY" x86_64-w64-mingw32-windres i686-w64-mingw32-windres windres ; do
-	#	$a build/windres.rc -O coff -o $OBJ
-	#done
+	cat > $SRC <<EOF
+#include <winver.h>
+1 VERSIONINFO
+BEGIN
+BLOCK "StringFileInfo"
+BEGIN
+BLOCK "040904E4"
+BEGIN
+VALUE "ProductName", "xemu"
+END
+END
+END
+EOF
+	echo -n "Testing $WINDRES ... "
+	$WINDRES $SRC -J rc -O coff -o $OBJ 2> $CERR || WINDRES=""
+	if [ "$WINDRES" = "" ]; then
+		echo "FAILED"
+		cat $CERR >&2
+	else
+		echo "OK"
+	fi
+else
+	WINDRES=
+fi
+echo "CONFIG_WINDRES=$WINDRES" >> $OUTPUT_MAKEFILE
+if [ "$WINDRES" = "" ]; then
+	echo "CONFIG_HAS_WINDRES=no" >> $OUTPUT_MAKEFILE
+else
+	echo "CONFIG_HAS_WINDRES=yes" >> $OUTPUT_MAKEFILE
 fi
 
 

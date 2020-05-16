@@ -81,7 +81,7 @@ void xemugui_cb_call_quit_if_sure ( const struct menu_st *m, int *query )
 }
 
 
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 void xemugui_cb_sysconsole ( const struct menu_st *m, int *query )
 {
 	if (query) {

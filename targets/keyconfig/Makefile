@@ -24,7 +24,7 @@ EMU_DESCRIPTION	= "Keyboard Layout Configurator"
 CFLAGS_TARGET_xkeyconfig	=
 SRCS_TARGET_xkeyconfig		= keyconfig.c
 SRCS_COMMON_xkeyconfig		= emutools.c
-CONFIG_CFLAGS_TARGET_xkeyconfig	= sdl2
-CONFIG_LDFLAGS_TARGET_xkeyconfig= sdl2
+CFLAGS_TARGET_xkeyconfig	= $(SDL2_CFLAGS)
+LDFLAGS_TARGET_xkeyconfig	= $(SDL2_LIBS)
 
 include ../../build/Makefile.common

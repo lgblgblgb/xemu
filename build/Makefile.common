@@ -24,43 +24,24 @@ all:
 ARCH			= native
 TOPDIR			= ../..
 
-
 $(TOPDIR)/build/configure/config-$(ARCH).h $(TOPDIR)/build/configure/config-$(ARCH).make:
-	if [ ! -s $(TOPDIR)/build/configure/config-$(ARCH).h -o ! -s $(TOPDIR)/build/configure/config-$(ARCH).make ]; then CC="$(CC)" WINDRES="$(WINDRES)" ARCH=$(ARCH) bash $(TOPDIR)/build/configure/configure ; fi
-
+	if [ ! -s $(TOPDIR)/build/configure/config-$(ARCH).h -o ! -s $(TOPDIR)/build/configure/config-$(ARCH).make ]; then sh $(TOPDIR)/build/configure/configure --arch=$(ARCH) ; fi
 config:
 	rm -f $(TOPDIR)/build/configure/config-$(ARCH).h $(TOPDIR)/build/configure/config-$(ARCH).make
-	$(MAKE) $(TOPDIR)/build/configure/config-$(ARCH).h
+	if [ ! -s $(TOPDIR)/build/configure/config-$(ARCH).h -o ! -s $(TOPDIR)/build/configure/config-$(ARCH).make ]; then sh $(TOPDIR)/build/configure/configure --arch=$(ARCH) ; fi
 
-include $(TOPDIR)/build/Makefile.$(ARCH)
 include $(TOPDIR)/build/configure/config-$(ARCH).make
 
-# Remove -flto (link time optimization) if you have problems
-# If you want to compile with -g option, also *DELETE* the -flto, both of them together known to be problematic!
-DEBUG			=
-
-# Resolve syms from target specific Makefile which includes this one, based on the $PRG_TARGET (for multi make target emu targets ...)
-CFLAGS_TARGET		= $(CFLAGS_TARGET_$(PRG_TARGET))
 SRCS_TARGET		= $(SRCS_TARGET_$(PRG_TARGET))
 SRCS_COMMON		= $(SRCS_COMMON_$(PRG_TARGET)) emutools_buildinfo.c
-CONFIG_CFLAGS_TARGET	= $(CONFIG_CFLAGS_TARGET_$(PRG_TARGET))
-CONFIG_LDFLAGS_TARGET	= $(CONFIG_LDFLAGS_TARGET_$(PRG_TARGET))
-LDFLAGS_TARGET		= $(LDFLAGS_TARGET_$(PRG_TARGET))
-# ----
 PRG_TOP_REL		= build/bin/$(PRG_TARGET).$(ARCH)
 PRG			= $(TOPDIR)/$(PRG_TOP_REL)
 COMMONDIR		= $(TOPDIR)/xemu
-CFLAGS_WITHOUT_DEBUG	= $(CFLAGS_ARCH) $(CFLAGS_TARGET) -I. -I$(TOPDIR)
-ifeq ($(NATIVE), yes)
-CFLAGS_WITHOUT_DEBUG	+= -mtune=native -march=native
-endif
-PRE_CFLAGS		= $(DEBUG) $(CFLAGS_WITHOUT_DEBUG) -DXEMU_MAKE_ARCH=$(ARCH) -DXEMU_MAKE_ARCH_NAME=\"$(ARCH)\" -include build/configure/config-$(ARCH).h
-PRE_LDFLAGS		= $(DEBUG) $(LDFLAGS_ARCH)
 COMMONOBJPREFIX		= $(TOPDIR)/build/objs/c-$(ARCH)-$(TARGET)-$(PRG_TARGET)--
 TARGETOBJPREFIX		= $(TOPDIR)/build/objs/t-$(ARCH)-$(TARGET)-$(PRG_TARGET)--
 DEPFILEPREFIX		= $(TOPDIR)/build/objs/m-$(ARCH)-$(TARGET)-$(PRG_TARGET)--make
 DEPFILE			= $(DEPFILEPREFIX).depend
-DEPALL_BUILDFILES	= Makefile.common Makefile.$(ARCH) system-config-settings.txt system-config configure/config-$(ARCH).h configure/config-$(ARCH).make
+DEPALL_BUILDFILES	= Makefile.common configure/config-$(ARCH).h configure/config-$(ARCH).make
 DEPALL			= Makefile $(addprefix $(TOPDIR)/build/, $(DEPALL_BUILDFILES))
 TARGETOBJS		= $(addprefix $(TARGETOBJPREFIX), $(notdir $(SRCS_TARGET:.c=.o)))
 COMMONOBJS		= $(addprefix $(COMMONOBJPREFIX), $(notdir $(SRCS_COMMON:.c=.o)))
@@ -68,22 +49,39 @@ SRCS_COMMON_PREFIXED	= $(addprefix $(COMMONDIR)/, $(SRCS_COMMON))
 SRCS_TARGET_PREFIXED	= $(SRCS_TARGET)
 SRCS			= $(SRCS_COMMON_PREFIXED) $(SRCS_TARGET_PREFIXED)
 OBJS			= $(TARGETOBJS) $(COMMONOBJS)
-ASMOUT			= no
 
-ifdef WINDRES
+ASMOUT			= no
+DEBUG			= no
+
+CFLAGS_TARGET		= $(CFLAGS_TARGET_$(PRG_TARGET))
+LDFLAGS_TARGET		= $(LDFLAGS_TARGET_$(PRG_TARGET))
+
+ifeq ($(DEBUG), yes)
+CFLAGS_OPT		= $(CONFIG_CFLAGS_DEBUG)
+CONFIG_CFLAGS_LINK	+= -g
+else
+CFLAGS_OPT		= $(CONFIG_CFLAGS_OPT)
+endif
+
+ifeq ($(NATIVE), yes)
+CFLAGS_OPT		+= -mtune=native -march=native
+endif
+
+CFLAGS			= $(CONFIG_CFLAGS) $(CFLAGS_OPT) $(CFLAGS_TARGET) -I. -I$(TOPDIR) -include build/configure/config-$(ARCH).h
+LDFLAGS			= $(CONFIG_CFLAGS_LINK) $(LDFLAGS_TARGET)
+
+
+ifeq ($(CONFIG_HAS_WINDRES), yes)
 WINDRES_SRC	= $(TOPDIR)/build/windres.rc
 WINDRES_OBJ	= $(COMMONOBJPREFIX)windres.res
 OBJS		+= $(WINDRES_OBJ)
-$(WINDRES_OBJ): $(WINDRES_SRC) $(TOPDIR)/build/xemu.ico
-	$(WINDRES) $< -O coff -o $@
+$(WINDRES_OBJ): $(WINDRES_SRC) $(TOPDIR)/build/xemu.ico $(DEPALL)
+	$(CONFIG_WINDRES) $< -O coff -o $@
 endif
 
 $(TOPDIR)/build/xemu.ico:
 	convert $(TOPDIR)/build/xemu-48x48.xpm $@
 
-# System configuration ...
-CFLAGS	= $(strip $(subst ::CFLAGS::, $(shell $(TOPDIR)/build/system-config $(ARCH) "$(CONFIG_CFLAGS_TARGET)" cflags ), $(PRE_CFLAGS)))
-LDFLAGS	= $(strip $(subst ::LDFLAGS::, $(shell $(TOPDIR)/build/system-config $(ARCH) "$(CONFIG_LDFLAGS_TARGET)" ldflags ), $(PRE_LDFLAGS)))
 
 do-all:
 	$(MAKE) $(DEPFILE)
@@ -95,37 +93,38 @@ xemu-info:
 	@echo "Architecture: $(ARCH)"
 	@echo "Target: $(TARGET)"
 	@echo "Program name target: $(PRG_TARGET)"
-	@echo "Compiler: $(CC)"
+	@echo "Compiler: $(CONFIG_CC)"
 	@echo "Compiler flags: $(CFLAGS)"
+	@echo "Windres: $(CONFIG_WINDRES)"
 	@echo "Linking flags: $(LDFLAGS)"
-	@echo "Requested configuration for CFLAGS: $(CONFIG_CFLAGS_TARGET)"
-	@echo "Requested configuration for LDFLAGS: $(CONFIG_LDFLAGS_TARGET)"
+	@echo "Requested configuration for CFLAGS: $(CFLAGS_TARGET)"
+	@echo "Requested configuration for LDFLAGS: $(LDFLAGS_TARGET)"
 	@echo "Xemu-framework needed sources: $(SRCS_COMMON)"
 	@echo "Target-specific needed sources: $(SRCS_TARGET)"
 	@echo "Dependecy file created: $(DEPFILE)"
 
 $(TARGETOBJPREFIX)%.o: %.c $(DEPALL)
 ifeq ($(ASMOUT), yes)
-	$(CC) $(CFLAGS) -Wa,-adhln -masm=intel -g -c -o /dev/null $< > $(@:.o=.s)
+	$(CONFIG_CC) $(CFLAGS) -Wa,-adhln -masm=intel -g -c -o /dev/null $< > $(@:.o=.s)
 endif
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CONFIG_CC) $(CFLAGS) -c -o $@ $<
 
 $(COMMONOBJPREFIX)%.o: $(COMMONDIR)/%.c $(DEPALL)
 ifeq ($(ASMOUT), yes)
-	$(CC) $(CFLAGS) -Wa,-adhln -masm=intel -g -c -o /dev/null $< > $(@:.o=.s)
+	$(CONFIG_CC) $(CFLAGS) -Wa,-adhln -masm=intel -g -c -o /dev/null $< > $(@:.o=.s)
 endif
-	$(CC) $(CFLAGS) -c -o $@ $<
+	$(CONFIG_CC) $(CFLAGS) -c -o $@ $<
 
 $(PRG): $(OBJS) $(DEPALL)
 	@echo "const char *XEMU_BUILDINFO_ON  = \"`whoami`@`uname -n` on `uname -s` `uname -r`\";" > $(DEPFILEPREFIX)-buildinfo.c
 	@echo "const char *XEMU_BUILDINFO_AT  = \"`date`\";" >> $(DEPFILEPREFIX)-buildinfo.c
 	@echo "const char *XEMU_BUILDINFO_GIT = \"`git config --get remote.origin.url` `git rev-parse --abbrev-ref HEAD` `git rev-parse HEAD`\";" >> $(DEPFILEPREFIX)-buildinfo.c
-	@echo "const char *XEMU_BUILDINFO_TARGET = \"$(PRG_TARGET) ($(PRG)) for $(TARGET) on \" XEMU_ARCH_NAME \" ($(ARCH)) using $(CC)\";" >> $(DEPFILEPREFIX)-buildinfo.c
+	@echo "const char *XEMU_BUILDINFO_TARGET = \"$(PRG_TARGET) ($(PRG)) for $(TARGET) on \" XEMU_ARCH_NAME \" ($(ARCH)) using $(CONFIG_CC)\";" >> $(DEPFILEPREFIX)-buildinfo.c
 	@git log -1 --format=%cd --date=format:%Y%m%d%H%M%S > $(TOPDIR)/build/objs/cdate.data
 	@echo "*** Commit date we're building ($(TOPDIR)/build/objs/cdate.data): `cat $(TOPDIR)/build/objs/cdate.data`"
 	@echo "const char *XEMU_BUILDINFO_CDATE = \"`cat $(TOPDIR)/build/objs/cdate.data`\";" >> $(DEPFILEPREFIX)-buildinfo.c
-	$(CC) $(CFLAGS) -c -o $(DEPFILEPREFIX)-buildinfo.o $(DEPFILEPREFIX)-buildinfo.c
-	$(CC) -o $(PRG) $(OBJS) $(DEPFILEPREFIX)-buildinfo.o $(LDFLAGS)
+	$(CONFIG_CC) $(CFLAGS) -c -o $(DEPFILEPREFIX)-buildinfo.o $(DEPFILEPREFIX)-buildinfo.c
+	$(CONFIG_CC) -o $(PRG) $(OBJS) $(DEPFILEPREFIX)-buildinfo.o $(LDFLAGS)
 
 run:	$(PRG)
 	cd $(TOPDIR) && XEMU_DEBUG_FILE=debug.log $(PRG_TOP_REL)
@@ -138,15 +137,15 @@ dep:
 	$(MAKE) $(DEPFILE)
 
 $(DEPFILE): $(DEPALL) $(SRCS)
-	$(CC) -MM $(CFLAGS) $(SRCS_TARGET_PREFIXED) > $(DEPFILEPREFIX)-target-pre.depend
+	$(CONFIG_CC) -MM $(CFLAGS) $(SRCS_TARGET_PREFIXED) > $(DEPFILEPREFIX)-target-pre.depend
 	awk '/^[^.:\t ]+\.o:/ { print "$(TARGETOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-target-pre.depend > $(DEPFILEPREFIX)-target.depend
-	$(CC) -MM $(CFLAGS) $(SRCS_COMMON_PREFIXED) > $(DEPFILEPREFIX)-common-pre.depend
+	$(CONFIG_CC) -MM $(CFLAGS) $(SRCS_COMMON_PREFIXED) > $(DEPFILEPREFIX)-common-pre.depend
 	awk '/^[^.:\t ]+\.o:/ { print "$(COMMONOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-common-pre.depend > $(DEPFILEPREFIX)-common.depend
 	cat $(DEPFILEPREFIX)-target.depend $(DEPFILEPREFIX)-common.depend > $@
 	rm -f $(DEPFILEPREFIX)-target-pre.depend $(DEPFILEPREFIX)-common-pre.depend
 
 clean:
-	rm -f $(TOPDIR)/build/objs/?-$(ARCH)-$(TARGET)-* $(PRG) $(TOPDIR)/build/configure/config-$(ARCH).*
+	rm -f $(TOPDIR)/build/objs/?-$(ARCH)-$(TARGET)-* $(PRG)
 
 .PHONY: clean all strip dep do-all run xemu-info config
 

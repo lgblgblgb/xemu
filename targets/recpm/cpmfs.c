@@ -58,7 +58,7 @@ static struct {
 int current_drive;
 
 
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 #define realpath(r,a) _fullpath(a,r,PATH_MAX)
 #endif
 

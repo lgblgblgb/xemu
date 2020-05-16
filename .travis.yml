@@ -162,7 +162,7 @@ matrix:
         - uptime
       script:
         - set -e
-        - make -j 2 ARCH=osx
+        - make -j 2
         - set +e
         - for a in build/bin/*.osx ; do build/mangle_dylib_osx.sh $a ; strip $a ; done
         - build/bin/xmega65.osx --help || true

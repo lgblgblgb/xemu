@@ -463,8 +463,9 @@ int main (int argc, char *argv[])
 	"files");
 	if (screen_init())
 		return 1;
-	if (xepgui_init(NULL))
-		return 1;
+	//if (xepgui_init(NULL))
+	//	return 1;
+	xepgui_init(NULL);	// allow to fail (do not exit if it fails). Some targets may not have X running
 	audio_init(config_getopt_int("audio"));
 	z80ex_init();
 	set_ep_cpu(CPU_Z80);

@@ -54,7 +54,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define CONFIG_USE_LODEPNG
 #define CONFIG_EXDOS_SUPPORT
-#ifdef	HAVE_SOCKET_OS_API
+#ifdef	XEMU_HAS_SOCKET_API
 #	define CONFIG_EPNET_SUPPORT
 #	define EPNET_IO_BASE		0x90
 #endif

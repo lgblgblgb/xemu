@@ -23,8 +23,8 @@ EMU_DESCRIPTION	= Mega 65
 CFLAGS_TARGET_xmega65	=
 SRCS_TARGET_xmega65	= mega65.c sdcard.c uart_monitor.c hypervisor.c m65_snapshot.c memory_mapper.c io_mapper.c vic4.c ethernet65.c input_devices.c memcontent.c ui.c fat32.c sdcontent.c
 SRCS_COMMON_xmega65	= emutools.c cpu65.c cia6526.c emutools_hid.c sid.c f011_core.c f018_core.c c64_kbd_mapping.c emutools_config.c emutools_snapshot.c emutools_files.c emutools_umon.c ethertap.c d81access.c emutools_gui.c basic_text.c
-CONFIG_CFLAGS_TARGET_xmega65	= sdl2|math|socketapi|gtk3
-CONFIG_LDFLAGS_TARGET_xmega65	= sdl2|math|socketapi|gtk3
+CFLAGS_TARGET_xmega65	= $(SDL2_CFLAGS) $(MATH_CFLAGS) $(SOCKET_CFLAGS) $(XEMUGUI_CFLAGS)
+LDFLAGS_TARGET_xmega65	= $(SDL2_LIBS) $(MATH_LIBS) $(SOCKET_LIBS) $(XEMUGUI_LIBS)
 
 MEGA65_CORE = ../../../mega65-core
 

@@ -24,7 +24,7 @@ EMU_DESCRIPTION	= Commander X16
 CFLAGS_TARGET_xcx16	=
 SRCS_TARGET_xcx16	= commander_x16.c vera.c input_devices.c sdcard.c
 SRCS_COMMON_xcx16	= emutools.c cpu65.c via65c22.c emutools_hid.c emutools_config.c emutools_files.c
-CONFIG_CFLAGS_TARGET_xcx16	= sdl2
-CONFIG_LDFLAGS_TARGET_xcx16	= sdl2
+CFLAGS_TARGET_xcx16	= $(SDL2_CFLAGS)
+LDFLAGS_TARGET_xcx16	= $(SDL2_LIBS)
 
 include ../../build/Makefile.common
