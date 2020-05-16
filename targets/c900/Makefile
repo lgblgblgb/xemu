@@ -22,7 +22,6 @@ TARGET		= c900
 PRG_TARGET	= xc900
 EMU_DESCRIPTION	= Commodore 900
 
-CFLAGS_TARGET_xc900	=
 SRCS_TARGET_xc900	= commodore_900.c z8k1.c z8010.c
 SRCS_COMMON_xc900	= emutools.c emutools_config.c emutools_files.c
 CFLAGS_TARGET_xc900	= $(SDL2_CFLAGS) $(MATH_CFLAGS)

@@ -21,7 +21,6 @@ TARGET		= zxspect
 PRG_TARGET	= xzxspect
 EMU_DESCRIPTION	= ZX Spectrum
 
-CFLAGS_TARGET_$(PRG_TARGET)	=
 SRCS_TARGET_$(PRG_TARGET)	= spectrum.c
 SRCS_COMMON_$(PRG_TARGET)	= emutools.c emutools_hid.c z80.c emutools_config.c emutools_files.c
 CFLAGS_TARGET_$(PRG_TARGET)	= $(SDL2_CFLAGS)

@@ -112,7 +112,7 @@ Mac: https://brew.sh/
 
 Xemu should build with command:
 
-    make ARCH=osx
+    make
 
 #### Raspberry Pi
 
@@ -165,11 +165,6 @@ targets automatically) a given emulator (let's say MEGA65):
 
 Here, command `ls -l` is only for get a list of available targets (ie.
 the emulators included in the Xemu project).
-
-Note: in case of MacOS, you may get tons of warning of invalid options
-during the compilation. This is harmless, and it's the sign of using
-CLANG for real with the command name `gcc`. To avoid them, instead of
-using plain `make`, use this: `make ARCH=osx`.
 
 ### Run the binary
 
@@ -224,11 +219,11 @@ one command executed:
 
 Build the native Windows executables by issuing:
 
-    make ARCH=nativewin
+    make
 
-You can find the executables, with `.nativewin` extension, in the `build/bin`
-directory. Surely, you can (and maybe you want) rename that to have extension
-`.exe`.
+You can find the executables, with `.native` extension, in the `build/bin`
+directory. Surely, you can (and maybe you want) rename files to have extension
+`.exe` instead.
 
 #### Alternative method (Cross-compilation)
 

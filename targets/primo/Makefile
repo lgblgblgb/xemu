@@ -23,7 +23,6 @@ EMU_DESCRIPTION	= Primo
 
 SRCS_TARGET_xprimo	= primo.c
 SRCS_COMMON_xprimo	= emutools.c emutools_hid.c z80.c z80_dasm.c emutools_config.c emutools_files.c emutools_gui.c
-
 CFLAGS_TARGET_xprimo	= $(SDL2_CFLAGS) $(XEMUGUI_CFLAGS)
 LDFLAGS_TARGET_xprimo	= $(SDL2_LIBS) $(XEMUGUI_LIBS)
 

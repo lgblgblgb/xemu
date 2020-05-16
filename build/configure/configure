@@ -536,7 +536,6 @@ else
 		SDL2_CONFIG=$a
 		echo "seems to work"
 		echo "Detected SDL2 version ... $SDL2_VERSION"
-		break
 	else
 		echo "does NOT work, `cat $CERR`"
 		finalexit
