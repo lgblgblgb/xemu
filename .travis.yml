@@ -164,10 +164,10 @@ matrix:
         - set -e
         - make -j 2
         - set +e
-        - for a in build/bin/*.osx ; do build/mangle_dylib_osx.sh $a ; strip $a ; done
-        - build/bin/xmega65.osx --help || true
+        - for a in build/bin/*.native ; do build/mangle_dylib_osx.sh $a ; strip $a ; done
+        - build/bin/xmega65.native --help || true
         - cp README.md LICENSE build/bin/
-        - build/zipper.sh build/bin xemu-binaries-osx.zip build/bin/*.dylib build/bin/*.osx README.md LICENSE
+        - build/zipper.sh build/bin xemu-binaries-osx.zip build/bin/*.dylib build/bin/*.native README.md LICENSE
         - cp build/bin/xemu-binaries-osx.zip .
         - uptime ; pwd ; ls -l
       before_deploy:

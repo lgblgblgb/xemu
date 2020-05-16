@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/bin/bash
 ## This file is part of the Xemu project: https://github.com/lgblgblgb/xemu
 ## Collection of various emulators of some 8 bits machines using SDL2 library.
 ##

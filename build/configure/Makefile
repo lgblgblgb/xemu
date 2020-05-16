@@ -1,2 +1,2 @@
 all:
-	./configure --arch=$(ARCH)
+	bash ./configure --arch=$(ARCH)

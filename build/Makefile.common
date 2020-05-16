@@ -25,10 +25,10 @@ ARCH			= native
 TOPDIR			= ../..
 
 $(TOPDIR)/build/configure/config-$(ARCH).h $(TOPDIR)/build/configure/config-$(ARCH).make:
-	if [ ! -s $(TOPDIR)/build/configure/config-$(ARCH).h -o ! -s $(TOPDIR)/build/configure/config-$(ARCH).make ]; then sh $(TOPDIR)/build/configure/configure --arch=$(ARCH) ; fi
+	if [ ! -s $(TOPDIR)/build/configure/config-$(ARCH).h -o ! -s $(TOPDIR)/build/configure/config-$(ARCH).make ]; then bash $(TOPDIR)/build/configure/configure --arch=$(ARCH) ; fi
 config:
 	rm -f $(TOPDIR)/build/configure/config-$(ARCH).h $(TOPDIR)/build/configure/config-$(ARCH).make
-	if [ ! -s $(TOPDIR)/build/configure/config-$(ARCH).h -o ! -s $(TOPDIR)/build/configure/config-$(ARCH).make ]; then sh $(TOPDIR)/build/configure/configure --arch=$(ARCH) ; fi
+	if [ ! -s $(TOPDIR)/build/configure/config-$(ARCH).h -o ! -s $(TOPDIR)/build/configure/config-$(ARCH).make ]; then bash $(TOPDIR)/build/configure/configure --arch=$(ARCH) ; fi
 
 include $(TOPDIR)/build/configure/config-$(ARCH).make
 
