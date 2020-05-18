@@ -373,8 +373,9 @@ int screen_init ( void )
 	SDL_VERSION(&sdl_wminfo.version);
 #ifndef __EMSCRIPTEN__
 	if (!SDL_GetWindowWMInfo(sdl_win, &sdl_wminfo)) {
-		ERROR_WINDOW("Cannot issue WMInfo call: %s", SDL_GetError());
-		return 1;
+		// ERROR_WINDOW("Cannot issue WMInfo call: %s", SDL_GetError());
+		// return 1;
+		DEBUGPRINT("UI: warning WMInfo call falied: %s", SDL_GetError());
 	}
 #endif
 	SDL_SetWindowMinimumSize(sdl_win, SCREEN_WIDTH, SCREEN_HEIGHT * 2);

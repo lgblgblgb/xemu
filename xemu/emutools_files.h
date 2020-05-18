@@ -42,6 +42,7 @@ extern void *xemu_load_buffer_p;
 extern char  xemu_load_filepath[PATH_MAX];
 
 extern int     xemu_load_file ( const char *filename, void *store_to, int min_size, int max_size, const char *cry );
+extern int     xemu_save_file ( const char *filename, void *data, int size, const char *cry );
 extern int     xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_back );
 extern ssize_t xemu_safe_read ( int fd, void *buffer, size_t length );
 extern ssize_t xemu_safe_write ( int fd, const void *buffer, size_t length );

@@ -18,10 +18,10 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
-TARGETS = c65 cvic20 clcd cgeos ep128 mega65 primo tvc
-ARCHS	= native win32 win64 osx
+TARGETS	= c65 cvic20 clcd cgeos ep128 mega65 primo tvc
+ARCHS	= native win32 win64
 
-ARCH = native
+ARCH	= native
 
 all:
 	for t in $(TARGETS) ; do $(MAKE) -C targets/$$t || exit 1 ; done
