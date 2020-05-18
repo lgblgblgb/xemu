@@ -25,7 +25,6 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-
 #include "xemu/emutools.h"
 #include "mega65.h"
 #include "xemu/cpu65.h"
@@ -152,6 +151,8 @@ void vic_init ( void )
 	}
 	c128_d030_reg = 0xFE;	// this may be set to 2MHz in the previous step, so be sure to set to FF here, BUT FIX: bit 0 should be inverted!!
 	machine_set_speed(0);
+	vic4_interpret_legacy_mode_registers();
+
 	DEBUG("VIC4: has been initialized." NL);
 }
 
@@ -539,15 +540,122 @@ static inline Uint8 *vic2_get_chargen_pointer ( void )
 	}
 }
 
+static void vic4_calc_modeline_parameters()
+{
+	text_height_200 = 400;
+ 	text_height_400 = 400;
+  	chargen_y_scale_200 = 2;
+  	chargen_y_scale_400 = 1;
+  	//chargen_y_pixels 
+  	top_borders_height_200 = SCREEN_HEIGHT - text_height_200;
+  	top_borders_height_400 = SCREEN_HEIGHT - text_height_200;
+  	single_top_border_200 = top_borders_height_200 >> 1;
+  	single_top_border_400 = top_borders_height_400 >> 1;
+}
+
+static void vic4_interpret_legacy_mode_registers()
+{
+	// See https://github.com/MEGA65/mega65-core/blob/257d78aa6a21638cb0120fd34bc0e6ab11adfd7c/src/vhdl/viciv.vhdl#L1277
+
+	const vsync_delay_drive = 0;
+	if (REG_CSEL) // 40-columns? 
+	{
+		if (!REG_H640)
+		{
+			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER;
+			border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER;
+			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL));
+		}
+		else //80-col mode
+		{
+			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER;
+			border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER + 1;
+			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - 1);
+		}
+	}
+	else // 38-columns
+	{ 
+		if (!REG_H640) 
+		{
+			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER + 14;
+			border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER - 18;
+			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL));
+		}
+		else //78-col mode
+		{
+			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER + 15;
+			border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER - 18;
+			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - 1);
+		}
+	}
+
+	if (REG_H640)
+	{
+		VIRTUAL_ROW_WIDTH = 40;
+		REG_CHRCOUNT = 40;
+	}
+	else 
+	{
+		VIRTUAL_ROW_WIDTH = 80;
+		REG_CHRCOUNT = 80;
+	}
+
+	if (!REG_V400) // Standard mode (200-lines)
+	{
+		if (REG_RSEL) // 25-row
+		{
+			SET_BORDER_Y_TOP(RASTER_CORRECTION + single_top_border_200 + vsync_delay_drive);
+			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT - single_top_border_200 + vsync_delay_drive);
+		}
+		else
+		{
+			SET_BORDER_Y_TOP(RASTER_CORRECTION + single_top_border_200 + vsync_delay_drive + 8);
+			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT + vsync_delay_drive - single_top_border_200 - 8);
+		}
+
+		SET_CHARGEN_Y_START(RASTER_CORRECTION + single_top_border_200 + vsync_delay_drive - 6 + REG_VIC2_YSCROLL * 2);
+	}
+	else // V400
+	{
+		if (REG_RSEL) // 25-line+V400
+		{
+			SET_BORDER_Y_TOP(RASTER_CORRECTION + single_top_border_400 + vsync_delay_drive);
+			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT - single_top_border_400 + vsync_delay_drive);
+		}
+		else
+		{
+			SET_BORDER_Y_TOP(RASTER_CORRECTION + single_top_border_400 + vsync_delay_drive + 8);
+			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT + vsync_delay_drive - single_top_border_400 - 8);
+		}
+
+		SET_CHARGEN_Y_START(RASTER_CORRECTION + single_top_border_400 + vsync_delay_drive - 6 + REG_VIC2_YSCROLL * 2);
+	}
+
+	SET_VIC2_SPRPTRADR(REG_D018_SCREEN_ADDR * 1024 + (REG_H640 | REG_V400 ? 0x7F8 : 0x3F8));
+	SET_COLORRAM_BASE(0);
+}
 
 //#define BG_FOR_Y(y) vic_registers[0x21]
 #define BG_FOR_Y(y) raster_colours[(y) + 50]
 
+int vic4_render_scanline() 
+{
+	if (scanline == PHYS_RASTER_COUNT)
+	{
+		scanline = 0;
+		return 1;
+	}
+	
+	// End of raster
+	// https://github.com/MEGA65/mega65-core/blob/257d78aa6a21638cb0120fd34bc0e6ab11adfd7c/src/vhdl/viciv.vhdl#L2930
 
+	scanline++;
+	return 0;
+}
 
 /* At-frame-at-once (thus incorrect implementation) renderer for H640 (80 column)
    and "normal" (40 column) text VIC modes. Hardware attributes are not supported!
-   No support for MCM and ECM!  */
+   No support for MCM and ECM!  
 static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 {
 	int v400_enabled = (vic_registers[0x31] & 8) >> 3;
@@ -810,7 +918,7 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
    * This is a simple, after-the-rendered-frame render-sprites one-by-one algorithm
    * This also requires to give up direct rendering if a sprite is enabled
    * Very ugly, quick&dirty hack, not so optimal either, even without the other mentioned bugs ...
-*/
+
 static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 *p, int tail )
 {
 	int sprite_y = vic_registers[sprite_no * 2 + 1] - SPRITE_Y_START_SCREEN;
@@ -865,7 +973,7 @@ static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 
    * No sprite-sprite collision detection
    * This is a simple, after-the-rendered-frame render-sprites one-by-one algorithm
    * Very ugly, quick&dirty hack, not so optimal either, even without the other mentioned bugs ...
-*/
+
 static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 *p, int tail )
 {
 	Uint32 colours[4];
@@ -941,7 +1049,7 @@ static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 
    80 columns mode, though, ECM, MCM, hardware attributes are not supported),
    VIC2 legacy HIRES mode (MCM is not supported), or bitplane modes (V400,
    H1280, odd scanning/interlace is not supported). Sprites, screen positioning,
-   etc is not supported */
+   etc is not supported 
 void vic_render_screen ( void )
 {
 	int tail_sdl;
