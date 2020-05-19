@@ -480,7 +480,7 @@ static void update_emulator ( void )
 	uartmon_update();
 #endif
 	// Screen rendering: begin
-	vic_render_scanline();
+	vic4_render_scanline();
 	// Screen rendering: end
 	//xemu_timekeeping_delay(40000);
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
@@ -638,7 +638,7 @@ static void emulation_loop ( void )
 			cycles -= cpu_cycles_per_scanline;
 			cia_tick(&cia1, 64);
 			cia_tick(&cia2, 64);
-			int scan_limit = PAL_MAX_RASTER << ( (!double_scanlines) & 1);
+			int scan_limit = 312 << ( (!double_scanlines) & 1);
 			if (scanline == scan_limit) {
 				//DEBUG("VIC3: new frame!" NL);
 				frameskip = !frameskip;

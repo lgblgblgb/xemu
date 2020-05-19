@@ -35,28 +35,44 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 static const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
-static Uint32 rgb_palette[4096];	// all the C65 palette, 4096 colours (SDL pixel format related form)
-static Uint32 vic3_palette[0x100];	// VIC3 palette in SDL pixel format related form (can be written into the texture directly to be rendered)
+static Uint32 rgb_palette[4096];		// all the C65 palette, 4096 colours (SDL pixel format related form)
+static Uint32 vic3_palette[0x100];		// VIC3 palette in SDL pixel format related form (can be written into the texture directly to be rendered)
 static Uint32 vic3_rom_palette[0x100];	// the "ROM" palette, for C64 colours (with some ticks, ie colours above 15 are the same as the "normal" programmable palette)
-static Uint32 *palette;			// the selected palette ...
+static Uint32 *palette;					// the selected palette ...
 static Uint8 vic3_palette_nibbles[0x300];
-Uint8 vic_registers[0x80];		// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
-int vic_iomode;				// VIC2/VIC3/VIC4 mode
-int force_fast;				// POKE 0,64 and 0,65 trick ...
-int scanline;				// current scan line number
+Uint8 vic_registers[0x80];				// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
+int vic_iomode;							// VIC2/VIC3/VIC4 mode
+int force_fast;							// POKE 0,64 and 0,65 trick ...
+int scanline;							// current scan line number
 int cpu_cycles_per_scanline;
-static int compare_raster;		// raster compare (9 bits width) data
-static int interrupt_status;		// Interrupt status of VIC
-int vic2_16k_bank;			// VIC-2 modes' 16K BANK address within 64K (NOT the traditional naming of banks with 0,1,2,3)
-static Uint8 *sprite_pointers;		// Pointer to sprite pointers :)
+static int compare_raster;				// raster compare (9 bits width) data
+static int interrupt_status;			// Interrupt status of VIC
+int vic2_16k_bank;						// VIC-2 modes' 16K BANK address within 64K (NOT the traditional naming of banks with 0,1,2,3)
+static Uint8 *sprite_pointers;			// Pointer to sprite pointers :)
 static Uint8 *sprite_bank;
-int vic3_blink_phase;			// blinking attribute helper, state.
+int vic3_blink_phase;					// blinking attribute helper, state.
 static Uint8 raster_colours[1024];
-Uint8 c128_d030_reg;			// C128-like register can be only accessed in VIC-II mode but not in others, quite special!
-
+Uint8 c128_d030_reg;					// C128-like register can be only accessed in VIC-II mode but not in others, quite special!
+static int vic_raster_buffer[2 * 1024]; // 16-bit x 1KiB internal buffer where VIC-IV renders the next scanline.
 int vic_vidp_legacy = 1, vic_chrp_legacy = 1, vic_sprp_legacy = 1;
 
 static int warn_sprites = 0, warn_ctrl_b_lo = 1;
+
+// VIC-IV Modeline Parameters
+// ----------------------------------------------------
+static int text_height_200 = 0;
+static int text_height_400 = 0;
+static int text_height = 0;
+static int chargen_y_scale_200= 0;
+static int chargen_y_scale_400= 0;
+static int chargen_y_pixels= 0;
+static int top_borders_height_200= 0;
+static int top_borders_height_400= 0;
+static int single_top_border_200= 0;
+static int single_top_border_400= 0;
+static int border_x_left= 0;
+static int border_x_right= 0;
+
 
 #if 0
 // UGLY: decides to use VIC-II/III method (val!=0), or the VIC-IV "precise address" selection (val == 0)
@@ -151,6 +167,7 @@ void vic_init ( void )
 	}
 	c128_d030_reg = 0xFE;	// this may be set to 2MHz in the previous step, so be sure to set to FF here, BUT FIX: bit 0 should be inverted!!
 	machine_set_speed(0);
+	vic4_calc_modeline_parameters();
 	vic4_interpret_legacy_mode_registers();
 
 	DEBUG("VIC4: has been initialized." NL);
@@ -540,7 +557,7 @@ static inline Uint8 *vic2_get_chargen_pointer ( void )
 	}
 }
 
-static void vic4_calc_modeline_parameters()
+void vic4_calc_modeline_parameters()
 {
 	text_height_200 = 400;
  	text_height_400 = 400;
@@ -553,7 +570,7 @@ static void vic4_calc_modeline_parameters()
   	single_top_border_400 = top_borders_height_400 >> 1;
 }
 
-static void vic4_interpret_legacy_mode_registers()
+void vic4_interpret_legacy_mode_registers()
 {
 	// See https://github.com/MEGA65/mega65-core/blob/257d78aa6a21638cb0120fd34bc0e6ab11adfd7c/src/vhdl/viciv.vhdl#L1277
 
@@ -591,12 +608,12 @@ static void vic4_interpret_legacy_mode_registers()
 
 	if (REG_H640)
 	{
-		VIRTUAL_ROW_WIDTH = 40;
+		SET_VIRTUAL_ROW_WIDTH(40);
 		REG_CHRCOUNT = 40;
 	}
 	else 
 	{
-		VIRTUAL_ROW_WIDTH = 80;
+		SET_VIRTUAL_ROW_WIDTH(80);
 		REG_CHRCOUNT = 80;
 	}
 

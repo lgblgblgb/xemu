@@ -33,6 +33,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 // Register defines 
 // ----------------------------------------------------
+// _Un  suffix indicates upper n bits of register
+//
 #define REG_D018_SCREEN_ADDR (vic_registers[0x18] >> 4)
 #define REG_H640            (vic_registers[0x31] & 128)
 #define REG_V400            (vic_registers[0x31] & 8)
@@ -41,19 +43,19 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_VIC2_XSCROLL    (vic_registers[0x16] & 7)
 #define REG_VIC2_YSCROLL    (vic_registers[0x11] & 7)
 #define REG_TBRDPOS         (vic_registers[0x48])
-#define REG_TBRDPOS_MSB     (vic_registers[0x49] & 7)
+#define REG_TBRDPOS_U4      (vic_registers[0x49] & 0xF)
 #define REG_BBRDPOS         (vic_registers[0x4A])
-#define REG_BBRDPOS_MSB     (vic_registers[0x4B] & 7)
+#define REG_BBRDPOS_U4      (vic_registers[0x4B] & 0xF)
 #define REG_TEXTXPOS        (vic_registers[0x4C])
-#define REG_TEXTXPOS_MSB    (vic_registers[0x4D] & 7)
+#define REG_TEXTXPOS_U4     (vic_registers[0x4D] & 0xF)
 #define REG_TEXTYPOS        (vic_registers[0x4E])
-#define REG_TEXTYPOS_MSB    (vic_registers[0x4F] & 7)
+#define REG_TEXTYPOS_U4     (vic_registers[0x4F] & 0xF)
 #define REG_CHRXSCL         (vic_registers[0x5A])
 #define REG_CHRYSCL         (vic_registers[0x5B])
 #define REG_SIDBDRWD        (vic_registers[0x5C])
-#define REG_SIDBDRWD_MSB    (vic_registers[0x5D] & 0x3F)
-#define REG_CHARSTEP_MSB    (vic_registers[0x58])
-#define REG_CHARSTEP_LSB    (vic_registers[0x59])
+#define REG_SIDBDRWD_U5     (vic_registers[0x5D] & 0x3F)
+#define REG_CHARSTEP        (vic_registers[0x58])
+#define REG_CHARSTEP_U8     (vic_registers[0x59])
 #define REG_CHRCOUNT        (vic_registers[0x5E])
 #define REG_SCRNPTR_BYTE0   (vic_registers[0x60])
 #define REG_SCRNPTR_BYTE1   (vic_registers[0x61])
@@ -64,43 +66,43 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_VIC2_SPRPTRADR_BYTE0 (vic_registers[0x6C])
 #define REG_VIC2_SPRPTRADR_BYTE1 (vic_registers[0x6D])
 #define REG_VIC2_SPRPTRADR_BYTE2 (vic_registers[0x6E])
+#define REG_PALNTSC         (vic_registers[0x6f] & 0x80)
 
-
-// Helper macros
+// Helper macros for accessing multi-byte registers
+// and other similar functionality for convenience
 // -----------------------------------------------------
-#define PHYS_RASTER_COUNT   (vic_registers[0x6f] & 0x80 ? NSTC_PHYSICAL_RASTERS : PAL_PHYSICAL_RASTERS)
-#define SINGLE_SIDE_BORDER  (((int)REG_SIDBDRWD_MSB << 8) | REG_SIDBDRWD)
-#define BORDER_Y_TOP        (((int)REG_TBRDPOS_MSB << 8)  | REG_TBRDPOS)
-#define BORDER_Y_BOTTOM     (((int)REG_BBRDPOS_MSB << 8)  | REG_BBRDPOS)
-#define SET_BORDER_Y_TOP(x)    REG_TBRDPOS_MSB = (x) & 0xFF00; \
-                               REG_TBRDPOS = (x) & 0x00FF;
-#define SET_BORDER_Y_BOTTOM(x) REG_BBRDPOS_MSB = (x) & 0xFF00; \
-                               REG_BBRDPOS = (x) & 0x00FF;
-#define SET_CHARGEN_X_START(x) REG_TEXTXPOS_MSB = (x) & 0xFF00; \
-                               REG_TEXTXPOS = (x) & 0x00FF;
-#define SET_CHARGEN_Y_START(x) REG_TEXTYPOS_MSB = (x) & 0xFF00; \
-                               REG_TEXTYPOS = (x) & 0x00FF;
-#define SET_VIC2_SPRPTRADR(x)  REG_VIC2_SPRPTRADR_BYTE2 = (x) & 0xFF0000; \ 
-                               REG_VIC2_SPRPTRADR_BYTE1 = (x) & 0xFF00; \
-                               REG_VIC2_SPRPTRADR_BYTE0 = (x) & 0xFF; 
-#define SET_COLORRAM_BASE(x)   REG_COLPTR_MSB = (x) & 0xFF00; \
-                               REG_COLPTR = (x) & 0x00FF;
-#define VIRTUAL_ROW_WIDTH   ((int)REG_CHARSTEP_MSB << 8) | REG_CHARSTEP_LSB;
+#define PHYS_RASTER_COUNT   (REG_PALNTSC ? NTSC_PHYSICAL_RASTERS : PAL_PHYSICAL_RASTERS)
+#define SINGLE_SIDE_BORDER  (((int)REG_SIDBDRWD_U5 << 8) | REG_SIDBDRWD)
+#define BORDER_Y_TOP        (((int)REG_TBRDPOS_U4 << 8)  | REG_TBRDPOS)
+#define BORDER_Y_BOTTOM     (((int)REG_BBRDPOS_U4 << 8)  | REG_BBRDPOS)
 
-// VIC-IV Modeline Parameters
-// ----------------------------------------------------
-extern int     text_height_200;
-extern int 	   text_height_400;
-extern int  	text_height;
-extern int  	chargen_y_scale_200;
-extern int  	chargen_y_scale_400;
-extern int  	chargen_y_pixels;
-extern int  	top_borders_height_200;
-extern int  	top_borders_height_400;
-extern int  	single_top_border_200;
-extern int  	single_top_border_400; 
-extern int     border_x_left;
-extern int     border_x_right;
+// Multi-byte register write helpers
+// ---------------------------------------------------
+
+#define SET_12BIT_REG(x,basereg) vic_registers[(basereg+1)] |= (Uint8) ((((Uint16)(x)) & 0xF00) >> 8); \
+                                 vic_registers[(basereg)] = (Uint8) ((Uint16)(x)) & 0x00FF;
+#define SET_16BIT_REG(x,basereg) vic_registers[(basereg+1)] |= ((Uint16)(x)) & 0xFF00; \
+                                 vic_registers[(basereg)]= ((Uint16)(x)) & 0x00FF;
+// 12-bit registers
+
+                                 
+#define SET_BORDER_Y_TOP(x)    SET_12BIT_REG(REG_TBRDPOS, (x))
+#define SET_BORDER_Y_BOTTOM(x) SET_12BIT_REG(REG_BBRDPOS, (x))
+#define SET_CHARGEN_X_START(x) SET_12BIT_REG(REG_TEXTXPOS, (x))
+#define SET_CHARGEN_Y_START(x) SET_12BIT_REG(REG_TEXTYPOS, (x))
+
+//16-bit registers
+
+#define SET_COLORRAM_BASE(x)       SET_16BIT_REG(REG_COLPTR,(x))
+#define SET_VIRTUAL_ROW_WIDTH(x)   SET_16BIT_REG(REG_CHARSTEP,(x))
+
+// 24-bit registers                               
+
+#define SET_VIC2_SPRPTRADR(x)  REG_VIC2_SPRPTRADR_BYTE2 = ((Uint32)(x)) & 0xFF0000; \
+                               REG_VIC2_SPRPTRADR_BYTE1 = ((Uint32)(x)) & 0xFF00; \
+                               REG_VIC2_SPRPTRADR_BYTE0 = ((Uint32)(x)) & 0xFF;
+
+
 
 // Current state
 // -------------
@@ -122,8 +124,10 @@ extern Uint8 vic_read_reg  ( unsigned int addr );
 extern void  vic3_write_palette_reg ( int num, Uint8 data );
 extern void  vic4_write_palette_reg ( int num, Uint8 data );
 //extern void  vic_render_screen ( void );
-extern int   vic_render_scanline ( void );
+extern int   vic4_render_scanline ( void );
 extern void  vic3_check_raster_interrupt ( void );
+extern void  vic4_interpret_legacy_mode_registers();
+extern void  vic4_calc_modeline_parameters();
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 #include "xemu/emutools_snapshot.h"
