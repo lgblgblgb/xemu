@@ -50,8 +50,8 @@ mkdir .dmg .dmg/bin || exit 1
 
 if [ "$BUNDLE" = "yes" ]; then
 	dylink=""
-	for a in build/bin/*.osx ; do
-		b="`basename $a .osx`"
+	for a in build/bin/*.native ; do
+		b="`basename $a .native`"
 		mkdir -p .dmg/$b.app/Contents/{Frameworks,MacOS,Resources}
 		cp $a .dmg/$b.app/Contents/MacOS/$b
 		if [ "$dylink" = "" ]; then
@@ -96,8 +96,8 @@ if [ "$BUNDLE" = "yes" ]; then
 	done
 else
 	cp build/bin/*.dylib .dmg/
-	for a in build/bin/*.osx ; do
-		b=".dmg/`basename $a .osx`"
+	for a in build/bin/*.native ; do
+		b=".dmg/`basename $a .native`"
 		echo "Copying OSX binary $a -> $b"
 		cp -a $a $b
 	done

@@ -1,7 +1,7 @@
 ## Collection of *simple* emulators of some 8 bits machines using SDL2 library,
 ## including the Commodore LCD and Commodore 65 too.
 ##
-## Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,10 +21,9 @@ TARGET		= clcd
 PRG_TARGET	= xclcd
 EMU_DESCRIPTION	= Commodore LCD
 
-CFLAGS_TARGET_xclcd	=
 SRCS_TARGET_xclcd	= commodore_lcd.c
 SRCS_COMMON_xclcd	= emutools.c cpu65.c via65c22.c emutools_hid.c emutools_config.c emutools_files.c
-CONFIG_CFLAGS_TARGET_xclcd	= sdl2
-CONFIG_LDFLAGS_TARGET_xclcd	= sdl2
+CFLAGS_TARGET_xclcd	= $(SDL2_CFLAGS)
+LDFLAGS_TARGET_xclcd	= $(SDL2_LIBS)
 
 include ../../build/Makefile.common

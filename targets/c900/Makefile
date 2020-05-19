@@ -2,7 +2,7 @@
 ## including the Commodore LCD and Commodore 65 too. This is now a try to
 ## emulate the Z8001 based Commodore 900 :-O I said, "a try" ...
 ##
-## Copyright (C)2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -22,10 +22,9 @@ TARGET		= c900
 PRG_TARGET	= xc900
 EMU_DESCRIPTION	= Commodore 900
 
-CFLAGS_TARGET_xc900	=
 SRCS_TARGET_xc900	= commodore_900.c z8k1.c z8010.c
 SRCS_COMMON_xc900	= emutools.c emutools_config.c emutools_files.c
-CONFIG_CFLAGS_TARGET_xc900	= sdl2|math
-CONFIG_LDFLAGS_TARGET_xc900	= sdl2|math
+CFLAGS_TARGET_xc900	= $(SDL2_CFLAGS) $(MATH_CFLAGS)
+LDFLAGS_TARGET_xc900	= $(SDL2_LIBS) $(MATH_LIBS)
 
 include ../../build/Makefile.common

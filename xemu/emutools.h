@@ -23,6 +23,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_COMMON_EMUTOOLS_H_INCLUDED
 #define XEMU_COMMON_EMUTOOLS_H_INCLUDED
 
+#ifdef XEMU_ARCH_OSX
+// It seems SDL2 on OSX produces LOTS of warning because of usage 'memset_pattern4'.
+// It seems SDL2 has a bug not including header string.h which is the place where that function is defined on OSX.
+// Let's try to fix that, by manually including string.h here ...
+#include <string.h>
+#endif
 #include <SDL.h>
 #include "xemu/emutools_basicdefs.h"
 

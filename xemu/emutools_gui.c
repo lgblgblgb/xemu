@@ -26,7 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 int is_xemugui_ok = 0;
 
 
-#if defined(HAVE_GTK3) || defined(XEMU_ARCH_MAC) || defined(XEMU_ARCH_WIN)
+#if defined(XEMU_HAS_GTK3) || defined(XEMU_ARCH_MAC) || defined(XEMU_ARCH_WIN)
 static void store_dir_from_file_selection ( char *store_dir, const char *filename, int dialog_mode )
 {
 	if (store_dir && (dialog_mode & XEMUGUI_FSEL_FLAG_STORE_DIR)) {
@@ -58,7 +58,7 @@ struct xemugui_descriptor_st {
 	int	(*popup)( const struct menu_st desc[] );
 };
 
-#if defined(HAVE_GTK3)
+#if defined(XEMU_HAS_GTK3)
 #	include "xemu/gui/gtk.c"
 #elif defined(XEMU_ARCH_MAC)
 #	include "xemu/gui/osx.c"
@@ -77,7 +77,7 @@ static const struct xemugui_descriptor_st *xemugui_descriptor_list[] = {
 #if defined (XEMU_ARCH_WIN)
 	&xemuwingui_descriptor,
 #endif
-#if defined(HAVE_GTK3)
+#if defined(XEMU_HAS_GTK3)
 	&xemugtkgui_descriptor,
 #endif
 //	&xemuosdgui_descriptor,
