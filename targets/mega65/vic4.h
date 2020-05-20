@@ -54,9 +54,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_CHRYSCL         (vic_registers[0x5B])
 #define REG_SIDBDRWD        (vic_registers[0x5C])
 #define REG_SIDBDRWD_U5     (vic_registers[0x5D] & 0x3F)
-#define REG_CHARSTEP        (vic_registers[0x58])
-#define REG_CHARSTEP_U8     (vic_registers[0x59])
-#define REG_CHRCOUNT        (vic_registers[0x5E])
+#define REG_HOTREG          (vic_registers[0x5D] & 0x80)
+#define REG_CHARSTEP        vic_registers[0x58]
+#define REG_CHARSTEP_U8     vic_registers[0x59]
+#define REG_CHRCOUNT        vic_registers[0x5E]
 #define REG_SCRNPTR_BYTE0   (vic_registers[0x60])
 #define REG_SCRNPTR_BYTE1   (vic_registers[0x61])
 #define REG_SCRNPTR_BYTE2   (vic_registers[0x62])
@@ -72,24 +73,26 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // and other similar functionality for convenience
 // -----------------------------------------------------
 #define PHYS_RASTER_COUNT   (REG_PALNTSC ? NTSC_PHYSICAL_RASTERS : PAL_PHYSICAL_RASTERS)
-#define SINGLE_SIDE_BORDER  (((int)REG_SIDBDRWD_U5 << 8) | REG_SIDBDRWD)
-#define BORDER_Y_TOP        (((int)REG_TBRDPOS_U4 << 8)  | REG_TBRDPOS)
-#define BORDER_Y_BOTTOM     (((int)REG_BBRDPOS_U4 << 8)  | REG_BBRDPOS)
+#define SINGLE_SIDE_BORDER  (((Uint16)REG_SIDBDRWD) | (REG_SIDBDRWD_U5) << 8)
+#define BORDER_Y_TOP        (((Uint16)REG_TBRDPOS) | (REG_TBRDPOS_U4) << 8)
+#define BORDER_Y_BOTTOM     (((Uint16)REG_BBRDPOS) | (REG_BBRDPOS_U4) << 8)
+#define CHARGEN_Y_START     (((Uint16)REG_TEXTYPOS) | (REG_TEXTYPOS_U4) << 8)
+#define CHARGEN_X_START     (((Uint16)REG_TEXTXPOS) | (REG_TEXTXPOS_U4) << 8)
 
 // Multi-byte register write helpers
 // ---------------------------------------------------
 
-#define SET_12BIT_REG(x,basereg) vic_registers[(basereg+1)] |= (Uint8) ((((Uint16)(x)) & 0xF00) >> 8); \
+#define SET_12BIT_REG(basereg,x) vic_registers[(basereg+1)] |= (Uint8) ((((Uint16)(x)) & 0xF00) >> 8); \
                                  vic_registers[(basereg)] = (Uint8) ((Uint16)(x)) & 0x00FF;
-#define SET_16BIT_REG(x,basereg) vic_registers[(basereg+1)] |= ((Uint16)(x)) & 0xFF00; \
+#define SET_16BIT_REG(basereg,x) vic_registers[(basereg+1)] |= ((Uint16)(x)) & 0xFF00; \
                                  vic_registers[(basereg)]= ((Uint16)(x)) & 0x00FF;
 // 12-bit registers
 
                                  
-#define SET_BORDER_Y_TOP(x)    SET_12BIT_REG(REG_TBRDPOS, (x))
-#define SET_BORDER_Y_BOTTOM(x) SET_12BIT_REG(REG_BBRDPOS, (x))
-#define SET_CHARGEN_X_START(x) SET_12BIT_REG(REG_TEXTXPOS, (x))
-#define SET_CHARGEN_Y_START(x) SET_12BIT_REG(REG_TEXTYPOS, (x))
+#define SET_BORDER_Y_TOP(x)    SET_12BIT_REG(0x48, (x))
+#define SET_BORDER_Y_BOTTOM(x) SET_12BIT_REG(0x4A, (x))
+#define SET_CHARGEN_X_START(x) SET_12BIT_REG(0x4C, (x))
+#define SET_CHARGEN_Y_START(x) SET_12BIT_REG(0x4E, (x))
 
 //16-bit registers
 
@@ -126,8 +129,7 @@ extern void  vic4_write_palette_reg ( int num, Uint8 data );
 //extern void  vic_render_screen ( void );
 extern int   vic4_render_scanline ( void );
 extern void  vic3_check_raster_interrupt ( void );
-extern void  vic4_interpret_legacy_mode_registers();
-extern void  vic4_calc_modeline_parameters();
+extern void  vic4_open_frame_access();
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 #include "xemu/emutools_snapshot.h"

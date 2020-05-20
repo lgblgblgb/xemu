@@ -35,6 +35,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 static const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
+// (SDL) target texture rendering pointers
+static Uint32 *pixel;			// pixel pointer to the rendering target (one pixel: 32 bit)
+static Uint32 *pixel_end, *pixel_start;	// points to the end and start of the buffer
+
+
 static Uint32 rgb_palette[4096];		// all the C65 palette, 4096 colours (SDL pixel format related form)
 static Uint32 vic3_palette[0x100];		// VIC3 palette in SDL pixel format related form (can be written into the texture directly to be rendered)
 static Uint32 vic3_rom_palette[0x100];	// the "ROM" palette, for C64 colours (with some ticks, ie colours above 15 are the same as the "normal" programmable palette)
@@ -54,25 +59,28 @@ int vic3_blink_phase;					// blinking attribute helper, state.
 static Uint8 raster_colours[1024];
 Uint8 c128_d030_reg;					// C128-like register can be only accessed in VIC-II mode but not in others, quite special!
 static int vic_raster_buffer[2 * 1024]; // 16-bit x 1KiB internal buffer where VIC-IV renders the next scanline.
+static int vic_hotreg_touched = 0; 		// If any "legacy" registers were touched
+static int vic4_sideborder_touched = 0;  // If side-border register were touched
+static int border_x_left= 0;			 // Side border left 
+static int border_x_right= 0;			 // Side border right
+
 int vic_vidp_legacy = 1, vic_chrp_legacy = 1, vic_sprp_legacy = 1;
+
+
 
 static int warn_sprites = 0, warn_ctrl_b_lo = 1;
 
 // VIC-IV Modeline Parameters
 // ----------------------------------------------------
-static int text_height_200 = 0;
-static int text_height_400 = 0;
-static int text_height = 0;
-static int chargen_y_scale_200= 0;
-static int chargen_y_scale_400= 0;
-static int chargen_y_pixels= 0;
-static int top_borders_height_200= 0;
-static int top_borders_height_400= 0;
-static int single_top_border_200= 0;
-static int single_top_border_400= 0;
-static int border_x_left= 0;
-static int border_x_right= 0;
-
+const int text_height_200 = 400;
+const int text_height_400 = 400;
+const int chargen_y_scale_200 = 2;
+const int chargen_y_scale_400 = 1;
+const int chargen_y_pixels= 0;
+const int top_borders_height_200 = SCREEN_HEIGHT - text_height_200;
+const int top_borders_height_400=  SCREEN_HEIGHT - text_height_200;
+const int single_top_border_200 = top_borders_height_200 >> 1;
+const int single_top_border_400 = top_borders_height_400 >> 1;
 
 #if 0
 // UGLY: decides to use VIC-II/III method (val!=0), or the VIC-IV "precise address" selection (val == 0)
@@ -167,13 +175,17 @@ void vic_init ( void )
 	}
 	c128_d030_reg = 0xFE;	// this may be set to 2MHz in the previous step, so be sure to set to FF here, BUT FIX: bit 0 should be inverted!!
 	machine_set_speed(0);
-	vic4_calc_modeline_parameters();
-	vic4_interpret_legacy_mode_registers();
-
 	DEBUG("VIC4: has been initialized." NL);
 }
 
-
+void vic4_open_frame_access()
+{
+	int tail_sdl;
+	pixel = pixel_start = xemu_start_pixel_buffer_access(&tail_sdl);
+	pixel_end = pixel + (SCREEN_WIDTH * SCREEN_HEIGHT);
+	if (tail_sdl)
+		FATAL("tail_sdl is not zero!");
+}
 
 static void vic3_interrupt_checker ( void )
 {
@@ -195,8 +207,6 @@ static void vic3_interrupt_checker ( void )
 	}
 }
 
-
-
 void vic3_check_raster_interrupt ( void )
 {
 	raster_colours[scanline] = vic_registers[0x21];	// ugly hack to make some kind of raster-bars visible :-/
@@ -205,6 +215,107 @@ void vic3_check_raster_interrupt ( void )
 	else
 		interrupt_status &= 0xFE;
 	vic3_interrupt_checker();
+}
+
+static void vic4_update_sideborder_dimensions()
+{
+	if (REG_CSEL) // 40-columns?
+	{
+		border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER;
+
+		if (!REG_H640)
+		{
+			border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER;
+		}
+		else //80-col mode
+		{
+			border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER + 1;
+		}
+	}
+	else // 38-columns
+	{
+		border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER - 18;
+
+		if (!REG_H640)
+		{
+			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER + 14;
+		}
+		else //78-col mode
+		{
+			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER + 15;
+		}
+	}
+}
+
+static void vic4_interpret_legacy_mode_registers()
+{
+	// See https://github.com/MEGA65/mega65-core/blob/257d78aa6a21638cb0120fd34bc0e6ab11adfd7c/src/vhdl/viciv.vhdl#L1277
+
+	const int vsync_delay_drive = 0;
+
+	vic4_update_sideborder_dimensions();
+
+	if (REG_CSEL) // 40-columns? 
+	{
+		if (!REG_H640) 
+		{
+			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL));
+		}
+		else //80-col mode
+		{
+			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - 1);
+		}
+	}
+	else // 38-columns
+	{ 
+		if (!REG_H640) 
+		{
+			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL));
+		}
+		else //78-col mode
+		{
+			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - 1);
+		}
+	}
+
+	REG_CHRCOUNT = REG_H640 ? 80 : 40;
+	SET_VIRTUAL_ROW_WIDTH( (REG_H640) ? 80 : 40);
+
+	if (!REG_V400) // Standard mode (200-lines)
+	{
+		if (REG_RSEL) // 25-row
+		{
+			SET_BORDER_Y_TOP(RASTER_CORRECTION + single_top_border_200 + vsync_delay_drive);
+			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT - single_top_border_200 + vsync_delay_drive);
+		}
+		else
+		{
+			SET_BORDER_Y_TOP(RASTER_CORRECTION + single_top_border_200 + vsync_delay_drive + 8);
+			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT + vsync_delay_drive - single_top_border_200 - 8);
+		}
+
+		SET_CHARGEN_Y_START(RASTER_CORRECTION + single_top_border_200 + vsync_delay_drive - 6 + REG_VIC2_YSCROLL * 2);
+	}
+	else // V400
+	{
+		if (REG_RSEL) // 25-line+V400
+		{
+			SET_BORDER_Y_TOP(RASTER_CORRECTION + single_top_border_400 + vsync_delay_drive);
+			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT - single_top_border_400 + vsync_delay_drive);
+		}
+		else
+		{
+			SET_BORDER_Y_TOP(RASTER_CORRECTION + single_top_border_400 + vsync_delay_drive + 8);
+			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT + vsync_delay_drive - single_top_border_400 - 8);
+		}
+
+		SET_CHARGEN_Y_START(RASTER_CORRECTION + single_top_border_400 + vsync_delay_drive - 6 + REG_VIC2_YSCROLL * 2);
+	}
+
+	SET_VIC2_SPRPTRADR(REG_D018_SCREEN_ADDR * 1024 + (REG_H640 | REG_V400 ? 0x7F8 : 0x3F8));
+	SET_COLORRAM_BASE(0);
+	DEBUGPRINT("VIC4: vic4_interpret_legacy_mode_registers(): border yt=%d,yb=%d,xl=%d,xr=%d,textxpos=%d, textypos=%d" NL, 
+		BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START);
 }
 
 
@@ -231,10 +342,17 @@ static const char vic_registers_internal_mode_names[] = {'4', '3', '2'};
 #define CASE_VIC_ALL(n) CASE_VIC_2(n): CASE_VIC_3(n): CASE_VIC_4(n)
 #define CASE_VIC_3_4(n) CASE_VIC_3(n): CASE_VIC_4(n)
 
+/* - If HOTREG register is enabled, VICIV will trigger recalculation of border and such on next raster,
+     on any "legacy" register write. For the VIC-IV such "hot" registers are:
 
+	  -- @IO:C64 $D011 VIC-II control register
+	  -- @IO:C64 $D016 VIC-II control register
+	  -- @IO:C64 $D018 VIC-II RAM addresses
+	  -- @IO:C65 $D031 VIC-III Control Register B
+*/
 void vic_write_reg ( unsigned int addr, Uint8 data )
 {
-	DEBUG("VIC%c: write reg $%02X (internally $%03X) with data $%02X" NL, XEMU_LIKELY(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, data);
+	//DEBUGPRINT("VIC%c: write reg $%02X (internally $%03X) with data $%02X" NL, XEMU_LIKELY(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, data);
 	// IMPORTANT NOTE: writing of vic_registers[] happens only *AFTER* this switch/case construct! This means if you need to do this before, you must do it manually at the right "case"!!!!
 	// if you do so, you can even use "return" instead of "break" to save the then-redundant write of the register
 	switch (addr) {
@@ -245,6 +363,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_ALL(0x11):
 			compare_raster = (compare_raster & 0xFF) | ((data & 0x80) << 1);
 			DEBUG("VIC: compare raster is now %d" NL, compare_raster);
+			vic_hotreg_touched = 1;
 			break;
 		CASE_VIC_ALL(0x12):
 			compare_raster = (compare_raster & 0xFF00) | data;
@@ -254,6 +373,8 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			return;		// FIXME: writing light-pen registers?????
 		CASE_VIC_ALL(0x15):	// sprite enabled
 		CASE_VIC_ALL(0x16):	// control-reg#2, we allow write even if non-used bits here
+			vic_hotreg_touched = 1;
+			break;
 		CASE_VIC_ALL(0x17):	// sprite-Y expansion
 			break;
 		CASE_VIC_ALL(0x18):	// memory pointers
@@ -270,6 +391,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 				DEBUGPRINT("VIC4: compatibility sprite pointer address mode" NL);
 			}
 			data &= 0xFE;
+			vic_hotreg_touched = 1;
 			break;
 		CASE_VIC_ALL(0x19):
 			interrupt_status = interrupt_status & (~data) & 0xF;
@@ -336,6 +458,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 				INFO_WINDOW("VIC3 control-B register H1280, MONO and INT features are not emulated yet!");
 				warn_ctrl_b_lo = 0;
 			}
+			vic_hotreg_touched = 1;
 			return;				// since we DID the write, it's OK to return here and not using "break"
 		CASE_VIC_3_4(0x32): CASE_VIC_3_4(0x33): CASE_VIC_3_4(0x34): CASE_VIC_3_4(0x35): CASE_VIC_3_4(0x36): CASE_VIC_3_4(0x37): CASE_VIC_3_4(0x38):
 		CASE_VIC_3_4(0x39): CASE_VIC_3_4(0x3A): CASE_VIC_3_4(0x3B): CASE_VIC_3_4(0x3C): CASE_VIC_3_4(0x3D): CASE_VIC_3_4(0x3E): CASE_VIC_3_4(0x3F):
@@ -350,8 +473,14 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			vic_registers[0x54] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
 			machine_set_speed(0);
 			return;				// since we DID the write, it's OK to return here and not using "break"
-		CASE_VIC_4(0x55): CASE_VIC_4(0x56): CASE_VIC_4(0x57): CASE_VIC_4(0x58): CASE_VIC_4(0x59): CASE_VIC_4(0x5A): CASE_VIC_4(0x5B): CASE_VIC_4(0x5C):
-		CASE_VIC_4(0x5D): CASE_VIC_4(0x5E): CASE_VIC_4(0x5F): /*CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):*/ CASE_VIC_4(0x64):
+		CASE_VIC_4(0x55): CASE_VIC_4(0x56): CASE_VIC_4(0x57): CASE_VIC_4(0x58): CASE_VIC_4(0x59): CASE_VIC_4(0x5A): CASE_VIC_4(0x5B): 
+			break;
+		CASE_VIC_4(0x5C):
+		CASE_VIC_4(0x5D): 
+			vic4_sideborder_touched = 1;
+			break;		
+		
+		CASE_VIC_4(0x5E): CASE_VIC_4(0x5F): /*CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):*/ CASE_VIC_4(0x64):
 		CASE_VIC_4(0x65): CASE_VIC_4(0x66): CASE_VIC_4(0x67): /*CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):*/ CASE_VIC_4(0x6B): /*CASE_VIC_4(0x6C):
 		CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):*/ CASE_VIC_4(0x6F): CASE_VIC_4(0x70): CASE_VIC_4(0x71): CASE_VIC_4(0x72): CASE_VIC_4(0x73): CASE_VIC_4(0x74):
 		CASE_VIC_4(0x75): CASE_VIC_4(0x76): CASE_VIC_4(0x77): CASE_VIC_4(0x78): CASE_VIC_4(0x79): CASE_VIC_4(0x7A): CASE_VIC_4(0x7B): CASE_VIC_4(0x7C):
@@ -557,107 +686,37 @@ static inline Uint8 *vic2_get_chargen_pointer ( void )
 	}
 }
 
-void vic4_calc_modeline_parameters()
-{
-	text_height_200 = 400;
- 	text_height_400 = 400;
-  	chargen_y_scale_200 = 2;
-  	chargen_y_scale_400 = 1;
-  	//chargen_y_pixels 
-  	top_borders_height_200 = SCREEN_HEIGHT - text_height_200;
-  	top_borders_height_400 = SCREEN_HEIGHT - text_height_200;
-  	single_top_border_200 = top_borders_height_200 >> 1;
-  	single_top_border_400 = top_borders_height_400 >> 1;
-}
-
-void vic4_interpret_legacy_mode_registers()
-{
-	// See https://github.com/MEGA65/mega65-core/blob/257d78aa6a21638cb0120fd34bc0e6ab11adfd7c/src/vhdl/viciv.vhdl#L1277
-
-	const vsync_delay_drive = 0;
-	if (REG_CSEL) // 40-columns? 
-	{
-		if (!REG_H640)
-		{
-			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER;
-			border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER;
-			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL));
-		}
-		else //80-col mode
-		{
-			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER;
-			border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER + 1;
-			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - 1);
-		}
-	}
-	else // 38-columns
-	{ 
-		if (!REG_H640) 
-		{
-			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER + 14;
-			border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER - 18;
-			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL));
-		}
-		else //78-col mode
-		{
-			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER + 15;
-			border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER - 18;
-			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - 1);
-		}
-	}
-
-	if (REG_H640)
-	{
-		SET_VIRTUAL_ROW_WIDTH(40);
-		REG_CHRCOUNT = 40;
-	}
-	else 
-	{
-		SET_VIRTUAL_ROW_WIDTH(80);
-		REG_CHRCOUNT = 80;
-	}
-
-	if (!REG_V400) // Standard mode (200-lines)
-	{
-		if (REG_RSEL) // 25-row
-		{
-			SET_BORDER_Y_TOP(RASTER_CORRECTION + single_top_border_200 + vsync_delay_drive);
-			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT - single_top_border_200 + vsync_delay_drive);
-		}
-		else
-		{
-			SET_BORDER_Y_TOP(RASTER_CORRECTION + single_top_border_200 + vsync_delay_drive + 8);
-			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT + vsync_delay_drive - single_top_border_200 - 8);
-		}
-
-		SET_CHARGEN_Y_START(RASTER_CORRECTION + single_top_border_200 + vsync_delay_drive - 6 + REG_VIC2_YSCROLL * 2);
-	}
-	else // V400
-	{
-		if (REG_RSEL) // 25-line+V400
-		{
-			SET_BORDER_Y_TOP(RASTER_CORRECTION + single_top_border_400 + vsync_delay_drive);
-			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT - single_top_border_400 + vsync_delay_drive);
-		}
-		else
-		{
-			SET_BORDER_Y_TOP(RASTER_CORRECTION + single_top_border_400 + vsync_delay_drive + 8);
-			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT + vsync_delay_drive - single_top_border_400 - 8);
-		}
-
-		SET_CHARGEN_Y_START(RASTER_CORRECTION + single_top_border_400 + vsync_delay_drive - 6 + REG_VIC2_YSCROLL * 2);
-	}
-
-	SET_VIC2_SPRPTRADR(REG_D018_SCREEN_ADDR * 1024 + (REG_H640 | REG_V400 ? 0x7F8 : 0x3F8));
-	SET_COLORRAM_BASE(0);
-}
 
 //#define BG_FOR_Y(y) vic_registers[0x21]
 #define BG_FOR_Y(y) raster_colours[(y) + 50]
 
 int vic4_render_scanline() 
 {
-	if (scanline == PHYS_RASTER_COUNT)
+	if (vic_iomode == VIC4_IOMODE)
+	{
+		if (vic_hotreg_touched && REG_HOTREG)
+		{
+			vic4_interpret_legacy_mode_registers();
+			vic_hotreg_touched = 0;
+			vic4_sideborder_touched = 0;
+		}
+
+		if (vic4_sideborder_touched)
+		{
+			vic4_update_sideborder_dimensions();
+			vic4_sideborder_touched = 0;
+		}
+	}
+
+	// if (scanline < BORDER_Y_TOP) // V-BLANK
+	// {
+	// 	scanline++;
+	// }
+
+	for (int i = 0; i < SCREEN_WIDTH; i++)
+		pixel[(scanline * SCREEN_WIDTH) + i] = RGB(15,15,15);
+
+	if (scanline == 311)
 	{
 		scanline = 0;
 		return 1;
