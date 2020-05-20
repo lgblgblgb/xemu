@@ -470,6 +470,7 @@ void reset_mega65_asked ( void )
 
 static void update_emulator ( void )
 {
+	xemu_update_screen();
 	hid_handle_all_sdl_events();
 	xemugui_iteration();
 	nmi_set(IS_RESTORE_PRESSED(), 2);	// Custom handling of the restore key ...
@@ -479,10 +480,8 @@ static void update_emulator ( void )
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_update();
 #endif
-	// Screen rendering: begin
-	vic4_render_scanline();
-	// Screen rendering: end
-	//xemu_timekeeping_delay(40000);
+
+	xemu_timekeeping_delay(40000);
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
 	if (seconds_timer_trigger) {
 		struct tm *t = xemu_get_localtime();
@@ -581,6 +580,8 @@ static int cycles, frameskip;
 
 static void emulation_loop ( void )
 {
+	vic4_open_frame_access();
+
 	for (;;) {
 		while (XEMU_UNLIKELY(paused)) {	// paused special mode, ie tracing support, or something ...
 			if (XEMU_UNLIKELY(dma_status))
@@ -633,29 +634,32 @@ static void emulation_loop ( void )
 #endif
 		);	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
 		if (cycles >= cpu_cycles_per_scanline) {
-			scanline++;
+			//scanline++;
 			//DEBUG("VIC3: new scanline (%d)!" NL, scanline);
 			cycles -= cpu_cycles_per_scanline;
 			cia_tick(&cia1, 64);
 			cia_tick(&cia2, 64);
-			int scan_limit = 312 << ( (!double_scanlines) & 1);
-			if (scanline == scan_limit) {
-				//DEBUG("VIC3: new frame!" NL);
-				frameskip = !frameskip;
-				scanline = 0;
-				if (!frameskip)	// well, let's only render every full frames (~ie 25Hz)
-					update_emulator();
-				sid1.sFrameCount++;
-				sid2.sFrameCount++;
-				frame_counter++;
-				if (frame_counter == 25) {
-					frame_counter = 0;
-					vic3_blink_phase = !vic3_blink_phase;
-				}
-				frames_total_counter++;
-				if (!frameskip)	// FIXME: do this better!!!!!!
-					return;
+			if (vic4_render_scanline()) {
+				update_emulator();
 			}
+			// int scan_limit = 312 << ( (!double_scanlines) & 1);
+			// if (scanline == scan_limit) {
+			// 	//DEBUG("VIC3: new frame!" NL);
+			// 	frameskip = !frameskip;
+			// 	scanline = 0;
+			// 	if (!frameskip)	// well, let's only render every full frames (~ie 25Hz)
+			// 		update_emulator();
+			// 	sid1.sFrameCount++;
+			// 	sid2.sFrameCount++;
+			// 	frame_counter++;
+			// 	if (frame_counter == 25) {
+			// 		frame_counter = 0;
+			// 		vic3_blink_phase = !vic3_blink_phase;
+			// 	}
+			// 	frames_total_counter++;
+			// 	if (!frameskip)	// FIXME: do this better!!!!!!
+			// 		return;
+			// }
 			//DEBUG("RASTER=%d COMPARE=%d" NL,scanline,compare_raster);
 			//vic_interrupt();
 			vic3_check_raster_interrupt();

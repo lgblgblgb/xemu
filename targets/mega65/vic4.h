@@ -36,6 +36,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // _Un  suffix indicates upper n bits of register
 //
 #define REG_D018_SCREEN_ADDR (vic_registers[0x18] >> 4)
+#define REG_BORDER_COLOR    vic_registers[0x20]
+#define REG_SCREEN_COLOR    vic_registers[0x21]
 #define REG_H640            (vic_registers[0x31] & 128)
 #define REG_V400            (vic_registers[0x31] & 8)
 #define REG_RSEL            (vic_registers[0x16] & 8)

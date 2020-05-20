@@ -785,13 +785,13 @@ void xemu_update_screen ( void )
 	//if (seconds_timer_trigger)
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
 	
-	SDL_Rect rc;
-	rc.w = texture_width;
-	rc.h = double_scanlines ? texture_height * 2 : texture_height;
-	rc.x = 0;
-	rc.y = 0;
+	// SDL_Rect rc;
+	// rc.w = texture_width;
+	// rc.h = double_scanlines ? texture_height * 2 : texture_height;
+	// rc.x = 0;
+	// rc.y = 0;
 
-	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, &rc);
+	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);
 	if (osd_status) {
 		if (osd_status < OSD_STATIC)
 			osd_status -= osd_fade_dec;

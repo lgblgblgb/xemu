@@ -63,6 +63,7 @@ static int vic_hotreg_touched = 0; 		// If any "legacy" registers were touched
 static int vic4_sideborder_touched = 0;  // If side-border register were touched
 static int border_x_left= 0;			 // Side border left 
 static int border_x_right= 0;			 // Side border right
+static int xcounter = 0, ycounter = 0;   // video counters
 
 int vic_vidp_legacy = 1, vic_chrp_legacy = 1, vic_sprp_legacy = 1;
 
@@ -450,9 +451,9 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			machine_set_speed(0);
 			if (data & 8) {
 				DEBUG("VIC3: V400 Mode enabled EXPERIMENTAL");
-				double_scanlines = 0;
+				//double_scanlines = 0;
 			} else {
-				double_scanlines = 1;
+				//double_scanlines = 1;
 			}
 			if ((data & 15) && warn_ctrl_b_lo) {
 				INFO_WINDOW("VIC3 control-B register H1280, MONO and INT features are not emulated yet!");
@@ -686,12 +687,13 @@ static inline Uint8 *vic2_get_chargen_pointer ( void )
 	}
 }
 
-
-//#define BG_FOR_Y(y) vic_registers[0x21]
-#define BG_FOR_Y(y) raster_colours[(y) + 50]
-
 int vic4_render_scanline() 
 {
+	// Work this first. DO NOT OPTIMIZE EARLY.
+
+	xcounter = 0;
+	static Uint32 pixel_color;
+	static Uint8  pixel_alpha;
 	if (vic_iomode == VIC4_IOMODE)
 	{
 		if (vic_hotreg_touched && REG_HOTREG)
@@ -708,16 +710,32 @@ int vic4_render_scanline()
 		}
 	}
 
+	while (xcounter < SCREEN_WIDTH)
+	{
+		if (xcounter < border_x_left || xcounter >= border_x_right || ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM)
+		{			
+			pixel_color = vic3_rom_palette[REG_BORDER_COLOR & 0xF];
+			pixel_alpha = 255;
+		}
+		else 
+		{
+			// Draw raster buffer
+
+			pixel_color = vic3_rom_palette[REG_SCREEN_COLOR & 0xF];
+		}
+		
+		pixel[(scanline * SCREEN_WIDTH) + xcounter] = pixel_color;
+		xcounter++;
+	}
+
 	// if (scanline < BORDER_Y_TOP) // V-BLANK
 	// {
 	// 	scanline++;
 	// }
 
-	for (int i = 0; i < SCREEN_WIDTH; i++)
-		pixel[(scanline * SCREEN_WIDTH) + i] = RGB(15,15,15);
-
-	if (scanline == 311)
+	if (scanline == SCREEN_HEIGHT - 1)
 	{
+		ycounter = 0;
 		scanline = 0;
 		return 1;
 	}
@@ -726,6 +744,7 @@ int vic4_render_scanline()
 	// https://github.com/MEGA65/mega65-core/blob/257d78aa6a21638cb0120fd34bc0e6ab11adfd7c/src/vhdl/viciv.vhdl#L2930
 
 	scanline++;
+	ycounter++;
 	return 0;
 }
 
