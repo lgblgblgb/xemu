@@ -283,6 +283,12 @@ static int detect_compressed_image ( int fd )
 #endif
 
 
+Uint32 sdcard_get_size ( void )
+{
+	return sdcard_size_in_blocks;
+}
+
+
 int sdcard_init ( const char *fn, const char *extd81fn, int virtsd_flag )
 {
 	char fnbuf[PATH_MAX + 1];
