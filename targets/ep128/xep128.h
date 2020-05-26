@@ -1,5 +1,5 @@
 /* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    http://xep128.lgb.hu/
 
 This program is free software; you can redistribute it and/or modify
@@ -16,8 +16,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEP128_XEP128_H_INCLUDED
-#define __XEP128_XEP128_H_INCLUDED
+#ifndef XEMU_EP128_XEP128_H_INCLUDED
+#define XEMU_EP128_XEP128_H_INCLUDED
 
 #include "xemu/emutools_basicdefs.h"
 
@@ -38,7 +38,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* the old: */
 
-
 #include <stdio.h>
 #include <SDL_types.h>
 #include <SDL_messagebox.h>
@@ -49,17 +48,17 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define DESCRIPTION		"Enterprise-128 Emulator"
 #define WINDOW_TITLE		"Xep128"
-#define VERSION			"0.3"
-#define COPYRIGHT		"(C)2015,2016 LGB Gabor Lenart"
+#define VERSION			"0.4"
+#define COPYRIGHT		"(C)2015,2016,2020 LGB Gabor Lenart"
 #define PROJECT_PAGE		"http://xep128.lgb.hu/"
-
-
 
 #define CONFIG_USE_LODEPNG
 #define CONFIG_EXDOS_SUPPORT
-#define CONFIG_W5300_SUPPORT
+#ifdef	XEMU_HAS_SOCKET_API
+#	define CONFIG_EPNET_SUPPORT
+#	define EPNET_IO_BASE		0x90
+#endif
 #define DEFAULT_CPU_CLOCK	4000000
-
 
 #define COMBINED_ROM_FN		"combined.rom"
 #define SDCARD_IMG_FN		"sdcard.img"

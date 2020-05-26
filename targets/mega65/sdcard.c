@@ -327,7 +327,7 @@ retry:
 		if (err == ENOENT && !strcmp(fn, SDCARD_NAME)) {
 			unsigned int r = QUESTION_WINDOW("No|128M|256M|512M|1G|2G", "Default SDCARD image does not exist.\nWould you like me to create one for you?");
 			if (r) {
-				int r2 = xemu_create_empty_image(fnbuf, (1U << (r + 26U)));
+				int r2 = xemu_create_sparse_file(fnbuf, (1U << (r + 26U)));
 				if (r2)
 					ERROR_WINDOW("Couldn't create: %s", strerror(r2));
 				else

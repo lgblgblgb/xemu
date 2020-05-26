@@ -415,23 +415,29 @@ void xemuexec_open_native_file_browser ( char *dir )
 
 
 
-/* Open a file, returning a file descriptor, or negative value in case of failure.
- * Input parameters:
- *	filename: name of the file
+/** Open a file (probably with special search paths, see below), returning a file descriptor, or negative value in case of failure.
+ *
+ * Central part of file handling in Xemu.
+ *
+ * @param *filename
+ *	name of the file
  *		- if it begins with '@' the file is meant to relative to the SDL preferences directory (ie: @thisisit.rom, no need for dirsep!)
  *		- if it begins with '#' the file is meant for 'data directory' which is probed then multiple places, depends on the OS as well
  *		  - Note: in this case, if installer is enabled and file not found, Xemu can try to download the file. For this, see above the "installer" part of this source
  *		- otherwise it's simply a file name, passed as-is
- *	mode: actually the flags parameter for open (O_RDONLY, etc)
+ * @param mode
+ *	actually the flags parameter for open (O_RDONLY, etc)
  *		- O_BINARY is used automatically in case of Windows, no need to specify as input data
  *		- you can even use creating file effect with the right value here
- *	*mode2: pointer to an int, secondary open mode set
+ * @param *mode2
+ *	pointer to an int, secondary open mode set
  *		- if it's NULL pointer, it won't be used ever
  *		- if it's not NULL, open() is also tried with the pointed flags for open() after trying (and failed!) open() with the 'mode' par
  *		- if mode2 pointer is not NULL, the pointed value will be zeroed by this func, if NOT *mode2 is used with successfull open
  *		- the reason for this madness: opening a disk image which neads to be read/write access, but also works for read-only, however
  *		  then the caller needs to know if the disk emulation is about r/w or ro only ...
- *	*filepath_back: if not null, actually tried path will be placed here (even in case of non-successfull call, ie retval is negative)
+ * @param *filepath_back
+ *	if not null, actually tried path will be placed here (even in case of non-successfull call, ie retval is negative)
  *		- in case of multiple-path tries (# prefix) the first (so the most relevant, hopefully) is passed back
  *		- note: if no prefix (@ and #) the filename will be returned as is, even if didn't hold absolute path (only relative) or no path as all (both: relative to cwd)!
  *
@@ -589,6 +595,40 @@ int xemu_safe_open_with_mode ( const char *fn, int flags, int mode )
 }
 
 
+int xemu_save_file ( const char *filename_in, void *data, int size, const char *cry )
+{
+	static const char temp_end[] = ".TMP";
+	char filename[PATH_MAX];
+	char filename_real[PATH_MAX];
+	strcpy(filename, filename_in);
+	strcat(filename, temp_end);
+	int fd = xemu_open_file(filename, O_WRONLY | O_TRUNC | O_CREAT, NULL, filename_real);
+	if (fd < 0) {
+		if (cry)
+			ERROR_WINDOW("%s\nCannot create file: %s\n%s", cry, filename, strerror(errno));
+		return -1;
+	}
+	if (xemu_safe_write(fd, data, size) != size) {
+		if (cry)
+			ERROR_WINDOW("%s\nCannot write %d bytes into file: %s\n%s", cry, size, filename_real, strerror(errno));
+		close(fd);
+		unlink(filename_real);
+		return -1;
+	}
+	close(fd);
+	char filename_real2[PATH_MAX];
+	strcpy(filename_real2, filename_real);
+	filename_real2[strlen(filename_real2) - strlen(temp_end)] = 0;
+	if (rename(filename_real, filename_real2)) {
+		if (cry)
+			ERROR_WINDOW("%s\nCannot rename file %s to %s\n%s", cry, filename_real, filename_real2, strerror(errno));
+		unlink(filename_real);
+		return -1;
+	}
+	return 0;
+}
+
+
 /* Loads a file, probably ROM image etc. It uses xemu_open_file() - see above - for opening it.
  * Return value:
  * 	- non-negative: given mumber of bytes loaded
@@ -604,8 +644,7 @@ int xemu_safe_open_with_mode ( const char *fn, int flags, int mode )
  */
 int xemu_load_file ( const char *filename, void *store_to, int min_size, int max_size, const char *cry )
 {
-	int fd;
-	fd = xemu_open_file(filename, O_RDONLY, NULL, xemu_load_filepath);
+	int fd = xemu_open_file(filename, O_RDONLY, NULL, xemu_load_filepath);
 	if (fd < 0) {
 		if (cry) {
 			ERROR_WINDOW("Cannot open file requested by %s: %s\nTried as: %s\n%s%s", filename, strerror(errno), xemu_load_filepath,
@@ -656,7 +695,7 @@ int xemu_load_file ( const char *filename, void *store_to, int min_size, int max
 }
 
 
-int xemu_create_empty_image ( const char *os_path, unsigned int size )
+int xemu_create_sparse_file ( const char *os_path, Uint64 size )
 {
 	int err = 0, fd;
 	unsigned char zero = 0;

@@ -4,14 +4,14 @@ This is the **binary** distribution of Xemu for **%ARCH%**. For the source code,
 information and instructions, wiki, issue page, etc, please visit
 https://github.com/lgblgblgb/xemu
 
-This is from the **%BRANCH% branch**, for regular usage you should use **master**.
-
-## Binary versions for **MASTER**:
-
-* Windows 32/64 bit binaries: https://github.com/lgblgblgb/xemu-binaries/tree/binary-windows-master
-* MacOS binaries: https://github.com/lgblgblgb/xemu-binaries/tree/binary-osx-master
-* Ubuntu Linux DEB packages: https://github.com/lgblgblgb/xemu-binaries/tree/binary-linux-master
-
+IFNOTMASTER:This is from the **%BRANCH% branch** (see below "MASTER"), for regular usage you "should" use **master**.
+IFNOTMASTER:
+IFNOTMASTER:## Binary versions for **MASTER** (what regular users may prefer):
+IFNOTMASTER:
+IFNOTMASTER:* Windows 32/64 bit binaries: https://github.com/lgblgblgb/xemu-binaries/tree/binary-windows-master
+IFNOTMASTER:* MacOS binaries: https://github.com/lgblgblgb/xemu-binaries/tree/binary-osx-master
+IFNOTMASTER:* Ubuntu Linux DEB packages: https://github.com/lgblgblgb/xemu-binaries/tree/binary-linux-master
+IFNOTMASTER:
 ## Binary versions for **%BRANCH%**:
 
 * Windows 32/64 bit binaries: https://github.com/lgblgblgb/xemu-binaries/tree/binary-windows-%BRANCH%

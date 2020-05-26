@@ -42,13 +42,14 @@ extern void *xemu_load_buffer_p;
 extern char  xemu_load_filepath[PATH_MAX];
 
 extern int     xemu_load_file ( const char *filename, void *store_to, int min_size, int max_size, const char *cry );
+extern int     xemu_save_file ( const char *filename, void *data, int size, const char *cry );
 extern int     xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_back );
 extern ssize_t xemu_safe_read ( int fd, void *buffer, size_t length );
 extern ssize_t xemu_safe_write ( int fd, const void *buffer, size_t length );
 extern int     xemu_safe_close ( int fd );
 extern off_t   xemu_safe_file_size_by_fd ( int fd );
 extern off_t   xemu_safe_file_size_by_name ( const char *name );
-extern int     xemu_create_empty_image ( const char *os_path, unsigned int size );
+extern int     xemu_create_sparse_file ( const char *os_path, Uint64 size );
 
 #if defined(HAVE_XEMU_INSTALLER) && !defined(HAVE_XEMU_EXEC_API)
 #define HAVE_XEMU_EXEC_API
