@@ -2,7 +2,7 @@
  * Z80Ex, ZILoG Z80 CPU emulator.
  *
  * by Pigmaker57 aka boo_boo [pigmaker57@kahoh57.info]
- * modified by Gabor Lenart LGB [lgblgblgb@gmail.com] for Xep128
+ * modified by Gabor Lenart LGB [lgblgblgb@gmail.com] for Xep128 and Xemu
  *
  * contains some code from the FUSE project (http://fuse-emulator.sourceforge.net)
  * Released under GNU GPL v2
