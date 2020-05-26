@@ -31,7 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifdef XEMU_BUILD
 #	include "xemu/emutools.h"
 #	include "xemu/emutools_files.h"
-#	define FATDEBUG		DEBUG
+#	define FATDEBUG		DEBUGPRINT
 #	define FATDEBUGPRINT	DEBUGPRINT
 #else
 #	define NL		"\n"
@@ -160,7 +160,7 @@ static struct {
 
 
 
-static int mfat_flush_fat_cache ( void )
+int mfat_flush_fat_cache ( void )
 {
 	if (fat_cache.dirty) {
 		if (mfat_write_part_blk(fat_cache.block, fat_cache.buf))
@@ -282,10 +282,10 @@ Uint32 mfat_allocate_linear_fat_chunk ( Uint32 size )
 	FATDEBUG("FATFS: DEBUG: %s() is about seeking for free linear chunk in FAT for %u bytes size object" NL, __func__, size);
 	// OK, so now, size is the needed number of clusters to allocate
 	// start from cluster 2, the first data cluster, to try with (though probably that's root dir, so won't be free, but anyway, for strange situations ...)
-	for (Uint32 cluster = 2, first = 0, len = 0, seq = 0; cluster < mfat_partitions[disk.part].clusters; cluster++) {
-		DEBUGPRINT("FATFS: considering cluster %u" NL, cluster);
+	for (Uint32 cluster = mfat_partitions[disk.part].root_dir_cluster + 1, first = 0, len = 0, seq = 0; cluster < mfat_partitions[disk.part].clusters; cluster++) {
+		DEBUG("FATFS: considering cluster %u" NL, cluster);
 		Uint32 next = mfat_read_fat_chain(cluster);
-		DEBUGPRINT("FATFS: %u cluster's result in FAT: %u" NL, cluster, next);
+		DEBUG("FATFS: %u cluster's result in FAT: %u" NL, cluster, next);
 		if (next == 1)
 			return 0;	// error!
 		if (next == 0 && cluster_was_free) {	// cluster is free
@@ -483,12 +483,15 @@ int mfat_use_part ( int part )
 						cache[c + 0xB] = 0;
 						FATDEBUG("FATFS: INFO: VOLUME is: \"%s\"" NL, cache + c);
 					}
+					if (cache[c] == 0)
+						goto end_of_directory;
 				}
 			}
 		a = mfat_read_fat_chain(a);
 		if (a == 1)
 			goto error;
 	} while (a);
+end_of_directory:
 
 	// just for fun ...
 	//for (a = 2; a < mfat_partitions[part].
@@ -863,6 +866,7 @@ Uint32 mfat_overwrite_file_with_direct_linear_device_block_write ( mfat_dirent_t
 	// RETURN VALUE:
 	// just calculate a DEVICE dependent block offset of the cluster.
 	// Now it's the caller responsibility to simply copy anything (do NOT exceed the specified size this function was called with!)
+	FATDEBUG("FAT32: allocated cluster chain from cluster %u for file %s" NL, dirent->cluster, name);
 	return dirent->cluster * mfat_partitions[disk.part].cluster_size_in_blocks + mfat_partitions[disk.part].data_area_fake_ofs + mfat_partitions[disk.part].first_block;
 }
 

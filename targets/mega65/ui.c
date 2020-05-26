@@ -123,8 +123,10 @@ static void ui_format_sdcard ( void )
 		,
 		0
 	)) {
-		sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_FORCE_FDISK);
+		if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_FORCE_FDISK))
+			INFO_WINDOW("You SD-card file has been partitioned/formatted\nMEGA65 emulation is about to RESET now!");
 	}
+	reset_mega65();
 }
 
 
@@ -183,7 +185,13 @@ static void ui_update_sdcard ( void )
 		return;
 	}
 	// Call the updater :)
-	sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES);
+	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES))
+		INFO_WINDOW(
+			"System files on your SD-card image seems to be updated successfully.\n"
+			"Next time you may need this function, you can use MEGA65.ROM which is a backup copy of your selected ROM.\n"
+			"MEGA65 emulation is about to RESET now!"
+		);
+	reset_mega65();
 }
 
 
