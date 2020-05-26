@@ -170,13 +170,14 @@ static void cia2_setint_cb ( int level )
 
 
 static void cia2_out_a ( Uint8 data )
-{
-	vic2_16k_bank = ((~(data | (~cia2.DDRA))) & 3) << 14;
-	vic_vidp_legacy = 1;
-	vic_chrp_legacy = 1;
-	vic_sprp_legacy = 1;
-	// TODO FIXME: add sprites pointers!
-	DEBUG("VIC2: 16K BANK is set to $%04X (CIA mask=$%02X)" NL, vic2_16k_bank, cia2.DDRA);
+{   
+	if (REG_HOTREG && !REG_CRAM2K)
+	{
+		REG_SCRNPTR_B1 = (~data << 6) | (REG_SCRNPTR_B1 & 63);
+		REG_CHARPTR_B1 = (~data << 6) | (REG_CHARPTR_B1 & 63);
+		REG_SPRPTRADR_B1  = (~data << 6) | (REG_SPRPTRADR_B1 & 63);
+	}
+	DEBUG("VIC2: Wrote to $DD00: %d" NL, data);
 }
 
 
@@ -641,6 +642,7 @@ static void emulation_loop ( void )
 			cia_tick(&cia2, 64);
 			if (vic4_render_scanline()) {
 				update_emulator();
+				return;
 			}
 			// int scan_limit = 312 << ( (!double_scanlines) & 1);
 			// if (scanline == scan_limit) {

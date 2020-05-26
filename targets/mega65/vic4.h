@@ -30,20 +30,29 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define PAL_PHYSICAL_RASTERS  624
 #define FRAME_H_FRONT         16
 #define RASTER_CORRECTION     4
+#define DISPLAY_FETCH_START   719
 
 // Register defines 
+// 
+// Ref: 
+// https://github.com/MEGA65/mega65-core/blob/138-hdmi-audio-27mhz/iomap.txt
 // ----------------------------------------------------
 // _Un  suffix indicates upper n bits of register
 //
-#define REG_D018_SCREEN_ADDR (vic_registers[0x18] >> 4)
+#define REG_EBM             (vic_registers[0x11] & 0x40)
+#define REG_MCM             (vic_registers[0x16] & 0x10)
+#define REG_BMM             (vic_registers[0x11] & 0x20)
 #define REG_BORDER_COLOR    vic_registers[0x20]
 #define REG_SCREEN_COLOR    vic_registers[0x21]
 #define REG_H640            (vic_registers[0x31] & 128)
 #define REG_V400            (vic_registers[0x31] & 8)
+#define REG_VICIII_ATTRIBS  (vic_registers[0x31] & 0x20)
 #define REG_RSEL            (vic_registers[0x16] & 8)
 #define REG_CSEL            (vic_registers[0x11] & 8)
+#define REG_DISPLAYENABLE   (vic_registers[0x11] & 0x10)
 #define REG_VIC2_XSCROLL    (vic_registers[0x16] & 7)
 #define REG_VIC2_YSCROLL    (vic_registers[0x11] & 7)
+#define REG_CRAM2K          (vic_registers[0x30] & 1)
 #define REG_TBRDPOS         (vic_registers[0x48])
 #define REG_TBRDPOS_U4      (vic_registers[0x49] & 0xF)
 #define REG_BBRDPOS         (vic_registers[0x4A])
@@ -52,6 +61,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_TEXTXPOS_U4     (vic_registers[0x4D] & 0xF)
 #define REG_TEXTYPOS        (vic_registers[0x4E])
 #define REG_TEXTYPOS_U4     (vic_registers[0x4F] & 0xF)
+#define REG_16BITCHARSET    (vic_registers[0x54] & 1)
 #define REG_CHRXSCL         (vic_registers[0x5A])
 #define REG_CHRYSCL         (vic_registers[0x5B])
 #define REG_SIDBDRWD        (vic_registers[0x5C])
@@ -59,17 +69,25 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_HOTREG          (vic_registers[0x5D] & 0x80)
 #define REG_CHARSTEP        vic_registers[0x58]
 #define REG_CHARSTEP_U8     vic_registers[0x59]
+#define REG_CHARXSCALE      vic_registers[0x5A]
 #define REG_CHRCOUNT        vic_registers[0x5E]
-#define REG_SCRNPTR_BYTE0   (vic_registers[0x60])
-#define REG_SCRNPTR_BYTE1   (vic_registers[0x61])
-#define REG_SCRNPTR_BYTE2   (vic_registers[0x62])
-#define REG_SCRNPTR_BYTE3   (vic_registers[0x63])
-#define REG_COLPTR          (vic_registers[0x64])
-#define REG_COLPTR_MSB      (vic_registers[0x65])
-#define REG_VIC2_SPRPTRADR_BYTE0 (vic_registers[0x6C])
-#define REG_VIC2_SPRPTRADR_BYTE1 (vic_registers[0x6D])
-#define REG_VIC2_SPRPTRADR_BYTE2 (vic_registers[0x6E])
+#define REG_SCRNPTR_B0      vic_registers[0x60]
+#define REG_SCRNPTR_B1      vic_registers[0x61]
+#define REG_SCRNPTR_B2      vic_registers[0x62]
+#define REG_SCRNPTR_B3      vic_registers[0x63]
+#define REG_COLPTR          vic_registers[0x64]
+#define REG_COLPTR_MSB      vic_registers[0x65]
+#define REG_CHARPTR_B0      vic_registers[0x68]
+#define REG_CHARPTR_B1      vic_registers[0x69]
+#define REG_CHARPTR_B2      vic_registers[0x6A]
+#define REG_SPRPTRADR_B0    vic_registers[0x6C]
+#define REG_SPRPTRADR_B1    vic_registers[0x6D]
+#define REG_SPRPTRADR_B2    vic_registers[0x6E]
+#define REG_SCREEN_ROWS     vic_registers[0x7B]
 #define REG_PALNTSC         (vic_registers[0x6f] & 0x80)
+#define REG_PAL_RED_BASE    (vic_registers[0x100])
+#define REG_PAL_GREEN_BASE  (vic_registers[0x200])
+#define REG_PAL_BLUE_BASE   (vic_registers[0x300])
 
 // Helper macros for accessing multi-byte registers
 // and other similar functionality for convenience
@@ -80,6 +98,19 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define BORDER_Y_BOTTOM     (((Uint16)REG_BBRDPOS) | (REG_BBRDPOS_U4) << 8)
 #define CHARGEN_Y_START     (((Uint16)REG_TEXTYPOS) | (REG_TEXTYPOS_U4) << 8)
 #define CHARGEN_X_START     (((Uint16)REG_TEXTXPOS) | (REG_TEXTXPOS_U4) << 8)
+#define SCREEN_RAM_ADDR_VIC  (REG_SCREEN_ADDR * 1024)
+#define SCREEN_ADDR          ((Uint32)REG_SCRNPTR_B0 | (REG_SCRNPTR_B1<<8) | (REG_SCRNPTR_B2 <<16))
+#define CHARSET_ADDR         ((Uint32)REG_CHARPTR_B0 | (REG_CHARPTR_B1<<8) | (REG_CHARPTR_B2 <<16))
+#define COLOR_RAM_ADDR       ((((Uint16)REG_COLPTR) | (REG_COLPTR_MSB) << 8) + 0xFF80000)
+#define IS_PAL_MODE          (REG_PALNTSC ^ 0x80)
+#define SCREEN_STEP          (((Uint16)REG_CHARSTEP) | (REG_CHARSTEP_U8) << 8)
+
+// "Super-Extended character attributes" (see https://github.com/MEGA65/mega65-core/blob/master/docs/viciv-modes.md)
+// cw is color-word (16-bit from Color RAM). chw is character-word (16bit from Screen RAM)
+#define SXA_TRIM_RIGHT_BITS012(chw) ((chw) >> 13)
+#define SXA_TRIM_RIGHT_BIT3(cw)    ((cw) & 0x0400)
+#define SXA_4BIT_PER_PIXEL(cw)     ((cw) & 0x0800)
+
 
 // Multi-byte register write helpers
 // ---------------------------------------------------
@@ -101,14 +132,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SET_COLORRAM_BASE(x)       SET_16BIT_REG(REG_COLPTR,(x))
 #define SET_VIRTUAL_ROW_WIDTH(x)   SET_16BIT_REG(REG_CHARSTEP,(x))
 
-// 24-bit registers                               
-
-#define SET_VIC2_SPRPTRADR(x)  REG_VIC2_SPRPTRADR_BYTE2 = ((Uint32)(x)) & 0xFF0000; \
-                               REG_VIC2_SPRPTRADR_BYTE1 = ((Uint32)(x)) & 0xFF00; \
-                               REG_VIC2_SPRPTRADR_BYTE0 = ((Uint32)(x)) & 0xFF;
-
-
-
+// 24-bit registers     
 // Current state
 // -------------
 

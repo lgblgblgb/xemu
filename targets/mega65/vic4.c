@@ -36,19 +36,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
 // (SDL) target texture rendering pointers
-static Uint32 *pixel;			// pixel pointer to the rendering target (one pixel: 32 bit)
+static Uint32 *current_pixel;			// current_pixel pointer to the rendering target (one current_pixel: 32 bit)
 static Uint32 *pixel_end, *pixel_start;	// points to the end and start of the buffer
 
 
-static Uint32 rgb_palette[4096];		// all the C65 palette, 4096 colours (SDL pixel format related form)
-static Uint32 vic3_palette[0x100];		// VIC3 palette in SDL pixel format related form (can be written into the texture directly to be rendered)
+static Uint32 rgb_palette[4096];		// all the C65 palette, 4096 colours (SDL current_pixel format related form)
+static Uint32 vic3_palette[0x100];		// VIC3 palette in SDL current_pixel format related form (can be written into the texture directly to be rendered)
 static Uint32 vic3_rom_palette[0x100];	// the "ROM" palette, for C64 colours (with some ticks, ie colours above 15 are the same as the "normal" programmable palette)
 static Uint32 *palette;					// the selected palette ...
 static Uint8 vic3_palette_nibbles[0x300];
 Uint8 vic_registers[0x80];				// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
 int vic_iomode;							// VIC2/VIC3/VIC4 mode
 int force_fast;							// POKE 0,64 and 0,65 trick ...
-int scanline;							// current scan line number
 int cpu_cycles_per_scanline;
 static int compare_raster;				// raster compare (9 bits width) data
 static int interrupt_status;			// Interrupt status of VIC
@@ -58,14 +57,19 @@ static Uint8 *sprite_bank;
 int vic3_blink_phase;					// blinking attribute helper, state.
 static Uint8 raster_colours[1024];
 Uint8 c128_d030_reg;					// C128-like register can be only accessed in VIC-II mode but not in others, quite special!
-static int vic_raster_buffer[2 * 1024]; // 16-bit x 1KiB internal buffer where VIC-IV renders the next scanline.
+static Uint8 reg_d018_screen_addr = 0;     // Legacy VIC-II $D018 screen address
+static Uint32 vic_raster_buffer[1024];     // 18-bit x 1KiB internal buffer where VIC-IV renders the next scanline.
+										   // Bits 0-7: current_pixel color, 8: 1 if foreground current_pixel, 9-16: current_pixel alpha, 17 unused,
+										   // of course we should ignore/mask out the 18..31 bits.
 static int vic_hotreg_touched = 0; 		// If any "legacy" registers were touched
 static int vic4_sideborder_touched = 0;  // If side-border register were touched
 static int border_x_left= 0;			 // Side border left 
 static int border_x_right= 0;			 // Side border right
 static int xcounter = 0, ycounter = 0;   // video counters
+static Uint8* screen_ram_current_ptr = NULL;
+static Uint8* colour_ram_current_ptr = NULL;
+static Uint32* raster_buffer_current_ptr = NULL;
 
-int vic_vidp_legacy = 1, vic_chrp_legacy = 1, vic_sprp_legacy = 1;
 
 
 
@@ -141,7 +145,6 @@ void vic_init ( void )
 	vic_iomode = VIC2_IOMODE;
 	interrupt_status = 0;
 	palette = vic3_rom_palette;
-	scanline = 0;
 	compare_raster = 0;
 	for (i = 0; i < 0x100; i++) {	// Initiailize all palette registers to zero, initially, to have something ...
 		if (i < sizeof vic_registers)
@@ -176,14 +179,20 @@ void vic_init ( void )
 	}
 	c128_d030_reg = 0xFE;	// this may be set to 2MHz in the previous step, so be sure to set to FF here, BUT FIX: bit 0 should be inverted!!
 	machine_set_speed(0);
+	
+	// Initialize raster buffer contents and bookkeeping info
+	memset(vic_raster_buffer, 0, sizeof(vic_raster_buffer));
+	screen_ram_current_ptr = main_ram + SCREEN_ADDR;
+	colour_ram_current_ptr = colour_ram;
+
 	DEBUG("VIC4: has been initialized." NL);
 }
 
 void vic4_open_frame_access()
 {
 	int tail_sdl;
-	pixel = pixel_start = xemu_start_pixel_buffer_access(&tail_sdl);
-	pixel_end = pixel + (SCREEN_WIDTH * SCREEN_HEIGHT);
+	current_pixel = pixel_start = xemu_start_pixel_buffer_access(&tail_sdl);
+	pixel_end = current_pixel + (SCREEN_WIDTH * SCREEN_HEIGHT);
 	if (tail_sdl)
 		FATAL("tail_sdl is not zero!");
 }
@@ -210,8 +219,8 @@ static void vic3_interrupt_checker ( void )
 
 void vic3_check_raster_interrupt ( void )
 {
-	raster_colours[scanline] = vic_registers[0x21];	// ugly hack to make some kind of raster-bars visible :-/
-	if (scanline == compare_raster)
+	//raster_colours[scanline] = vic_registers[0x21];	// ugly hack to make some kind of raster-bars visible :-/
+	if (ycounter == compare_raster)
 		interrupt_status |= 1;
 	else
 		interrupt_status &= 0xFE;
@@ -279,9 +288,6 @@ static void vic4_interpret_legacy_mode_registers()
 		}
 	}
 
-	REG_CHRCOUNT = REG_H640 ? 80 : 40;
-	SET_VIRTUAL_ROW_WIDTH( (REG_H640) ? 80 : 40);
-
 	if (!REG_V400) // Standard mode (200-lines)
 	{
 		if (REG_RSEL) // 25-row
@@ -313,10 +319,19 @@ static void vic4_interpret_legacy_mode_registers()
 		SET_CHARGEN_Y_START(RASTER_CORRECTION + single_top_border_400 + vsync_delay_drive - 6 + REG_VIC2_YSCROLL * 2);
 	}
 
-	SET_VIC2_SPRPTRADR(REG_D018_SCREEN_ADDR * 1024 + (REG_H640 | REG_V400 ? 0x7F8 : 0x3F8));
+	REG_CHRCOUNT = REG_H640 ? 80 : 40;
+	SET_VIRTUAL_ROW_WIDTH( (REG_H640) ? 80 : 40);
+	REG_SCRNPTR_B1 = REG_H640 ? (reg_d018_screen_addr << 2) : ((reg_d018_screen_addr & 14) << 2);
+	REG_SCRNPTR_B0 = 0;
+	REG_SPRPTRADR_B0 = 0xF8;
+	REG_SPRPTRADR_B1 = reg_d018_screen_addr << 2;
+	REG_SPRPTRADR_B1 |= (1 | (REG_H640 | REG_V400 ? 4 : 0));
+
 	SET_COLORRAM_BASE(0);
-	DEBUGPRINT("VIC4: vic4_interpret_legacy_mode_registers(): border yt=%d,yb=%d,xl=%d,xr=%d,textxpos=%d, textypos=%d" NL, 
-		BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START);
+	DEBUGPRINT("VIC4: vic4_interpret_legacy_mode_registers(): chrcount=%d,border yt=%d,yb=%d,xl=%d,xr=%d,textxpos=%d,textypos=%d,"
+	          "screen_ram=$%06x,charset=$%06x,sprites=XXX color_ram_base=XXX" NL, REG_CHRCOUNT,
+		BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START,
+		SCREEN_ADDR, CHARSET_ADDR);
 }
 
 
@@ -378,21 +393,17 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;
 		CASE_VIC_ALL(0x17):	// sprite-Y expansion
 			break;
-		CASE_VIC_ALL(0x18):	// memory pointers
-			if (!vic_vidp_legacy) {
-				vic_vidp_legacy = 1;
-				DEBUGPRINT("VIC4: compatibility screen address mode" NL);
-			}
-			if (!vic_chrp_legacy) {
-				vic_chrp_legacy = 1;
-				DEBUGPRINT("VIC4: compatibility character address mode" NL);
-			}
-			if (!vic_sprp_legacy) {
-				vic_sprp_legacy = 1;
-				DEBUGPRINT("VIC4: compatibility sprite pointer address mode" NL);
-			}
-			data &= 0xFE;
-			vic_hotreg_touched = 1;
+		CASE_VIC_ALL(0x18):	// memory pointers.
+			// Real $D018 does not get written in VIC-IV.
+			// (and reads are mapped to extended registers!)
+			// So we just store the D018 Legacy Screen Address to be referenced elsewhere.
+			//
+			DEBUGPRINT("WRITE 0x18: $%02x" NL , data);
+			REG_CHARPTR_B1 = (data & 14) << 2;
+			REG_CHARPTR_B0 = 0;
+			REG_SCRNPTR_B2 &= 0xF0;
+			reg_d018_screen_addr = (data & 0xF0) >> 4;
+			vic_hotreg_touched = 1;  
 			break;
 		CASE_VIC_ALL(0x19):
 			interrupt_status = interrupt_status & (~data) & 0xF;
@@ -488,22 +499,22 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x7D): CASE_VIC_4(0x7E): CASE_VIC_4(0x7F):
 			break;
 		CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):
-			if (vic_vidp_legacy) {
-				vic_vidp_legacy = 0;
-				DEBUGPRINT("VIC4: precise video address mode" NL);
-			}
+			// if (vic_vidp_legacy) {
+			// 	vic_vidp_legacy = 0;
+			// 	DEBUGPRINT("VIC4: precise video address mode" NL);
+			// }
 			break;
 		CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):
-			if (vic_chrp_legacy) {
-				vic_chrp_legacy = 0;
-				DEBUGPRINT("VIC4: precise character address mode" NL);
-			}
+			// if (vic_chrp_legacy) {
+			// 	vic_chrp_legacy = 0;
+			// 	DEBUGPRINT("VIC4: precise character address mode" NL);
+			// }
 			break;
 		CASE_VIC_4(0x6C): CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):
-			if (vic_sprp_legacy) {
-				vic_sprp_legacy = 0;
-				DEBUGPRINT("VIC4: precise sprite pointer address mode" NL);
-			}
+			// if (vic_sprp_legacy) {
+			// 	vic_sprp_legacy = 0;
+			// 	DEBUGPRINT("VIC4: precise sprite pointer address mode" NL);
+			// }
 			break;
 		/* --- NON-EXISTING REGISTERS --- */
 		CASE_VIC_2(0x31): CASE_VIC_2(0x32): CASE_VIC_2(0x33): CASE_VIC_2(0x34): CASE_VIC_2(0x35): CASE_VIC_2(0x36): CASE_VIC_2(0x37): CASE_VIC_2(0x38):
@@ -537,10 +548,10 @@ Uint8 vic_read_reg ( int unsigned addr )
 		CASE_VIC_ALL(0x10):
 			break;		// Sprite coordinates
 		CASE_VIC_ALL(0x11):
-			result = (result & 0x7F) | ((scanline & 0x100) >> 1);
+			result = (result & 0x7F) | ((ycounter & 0x100) >> 1);
 			break;
 		CASE_VIC_ALL(0x12):
-			result = scanline & 0xFF;
+			result = ycounter & 0xFF;
 			break;
 		CASE_VIC_ALL(0x13): CASE_VIC_ALL(0x14):
 			break;		// light-pen registers
@@ -552,7 +563,9 @@ Uint8 vic_read_reg ( int unsigned addr )
 		CASE_VIC_ALL(0x17):	// sprite-Y expansion
 			break;
 		CASE_VIC_ALL(0x18):	// memory pointers
-			result |= 1;
+			// Always mapped to VIC-IV extended "precise" registers
+			result = ((REG_SCRNPTR_B1 & 60) << 2) | ((REG_CHARPTR_B1 & 60) >> 2);
+			DEBUGPRINT("READ 0x81: $%02x" NL, result);
 			break;
 		CASE_VIC_ALL(0x19):
 			result = interrupt_status | (64 + 32 + 16);
@@ -631,7 +644,6 @@ Uint8 vic_read_reg ( int unsigned addr )
 			FATAL("Xemu: invalid VIC internal register numbering on read: $%X", addr);
 	}
 	DEBUG("VIC%c: read reg $%02X (internally $%03X) with result $%02X" NL, XEMU_LIKELY(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, result);
-	vic_registers[0x51]++; 	//ugly hack, MEGAWAT wants this to change or what?!
 	return result;
 }
 
@@ -687,64 +699,151 @@ static inline Uint8 *vic2_get_chargen_pointer ( void )
 	}
 }
 
-int vic4_render_scanline() 
+static inline Uint32 get_charset_effective_addr()
 {
-	// Work this first. DO NOT OPTIMIZE EARLY.
-
-	xcounter = 0;
-	static Uint32 pixel_color;
-	static Uint8  pixel_alpha;
-	if (vic_iomode == VIC4_IOMODE)
+	// cache this? 
+	switch (CHARSET_ADDR)
 	{
-		if (vic_hotreg_touched && REG_HOTREG)
-		{
-			vic4_interpret_legacy_mode_registers();
-			vic_hotreg_touched = 0;
-			vic4_sideborder_touched = 0;
-		}
-
-		if (vic4_sideborder_touched)
-		{
-			vic4_update_sideborder_dimensions();
-			vic4_sideborder_touched = 0;
-		}
+	case 0x1000:
+		return 0x2D000;
+	case 0x9000:
+		return 0x3D000;
+	case 0x1800:
+		return 0x2D800;
+	case 0x9800:
+		return 0x3D800;
+	
+	default:
+		DEBUGPRINT("VIC4: WARNING get_charset_effective_addr: unknown register content: $%08X" NL, CHARSET_ADDR );
 	}
+	return CHARSET_ADDR;
+}
 
-	while (xcounter < SCREEN_WIDTH)
-	{
-		if (xcounter < border_x_left || xcounter >= border_x_right || ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM)
-		{			
-			pixel_color = vic3_rom_palette[REG_BORDER_COLOR & 0xF];
-			pixel_alpha = 255;
-		}
-		else 
-		{
-			// Draw raster buffer
-
-			pixel_color = vic3_rom_palette[REG_SCREEN_COLOR & 0xF];
-		}
+// Raster buffer bookkeeping
+static int char_row = 0, video_matrix_row = 0;
+static void vic4_visible_area_raster()
+{
+	const float x_step = (REG_CHARXSCALE / 120.0f) / (REG_H640 ? 1 : 2); /* Cache this */
 		
-		pixel[(scanline * SCREEN_WIDTH) + xcounter] = pixel_color;
+	Uint8 char_bgcolor = REG_SCREEN_COLOR;
+	Uint8* colour_ram_row_start = colour_ram_current_ptr;
+	Uint8* screen_ram_row_start = screen_ram_current_ptr;
+	int char_col = 0;
+
+	// Charset x-displacement
+	for (int i = 0; i < (CHARGEN_X_START - border_x_left); ++i)
+	{
+		*(current_pixel++) = vic3_rom_palette[char_bgcolor];
 		xcounter++;
 	}
 
-	// if (scanline < BORDER_Y_TOP) // V-BLANK
-	// {
-	// 	scanline++;
-	// }
-
-	if (scanline == SCREEN_HEIGHT - 1)
+	while (xcounter < border_x_right)
 	{
+		Uint16 char_value = *(screen_ram_current_ptr++);
+		char_value |= REG_16BITCHARSET ? (*(screen_ram_current_ptr++) << 8) : 0;
+		Uint16 color_data = *(colour_ram_current_ptr++);
+		color_data |= REG_16BITCHARSET ? (*(colour_ram_current_ptr++) << 8) : 0;
+		// if (REG_EBM)
+		// {
+
+		// }
+		// else 
+		// {
+
+		// }
+		
+		Uint16 char_id = char_value & 0x1FFF; // Screen RAM 13-bits for up to 8192 characters
+		Uint16 foreground_color = color_data & 0xF;
+		// int r, g, b;
+
+		// Calculate character-width
+
+		Uint8 glyph_width_deduct = SXA_TRIM_RIGHT_BITS012(char_id) + (SXA_TRIM_RIGHT_BIT3(char_id) ? 8 : 0);
+		Uint8 glyph_width = (SXA_4BIT_PER_PIXEL(color_data) ? 16 : 8) - glyph_width_deduct;
+		Uint8* char_row_data = main_ram +  get_charset_effective_addr() + (char_id * 8) + char_row;
+
+		for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += x_step)
+		{
+			Uint32 pixel_color = (*char_row_data & (0x80 >> (int)cx)) ? vic3_rom_palette[foreground_color] : vic3_rom_palette[char_bgcolor];
+			*(current_pixel++) = pixel_color;
+			xcounter++;
+		}
+		
+		char_col++;
+	}
+
+	if (++char_row > 7)
+	{
+		char_row = 0;
+	}
+	else
+	{
+		colour_ram_current_ptr = colour_ram_row_start;
+		screen_ram_current_ptr = screen_ram_row_start;
+	}
+}
+
+int vic4_render_scanline() 
+{
+	// Work this first. DO NOT OPTIMIZE EARLY.
+	xcounter = 0;
+	
+	// "Double-scan hack"
+	if (!REG_V400 && (ycounter & 1))
+	{
+		for (int i = 0; i < SCREEN_WIDTH; i++)
+		{
+			*(current_pixel++) = *(current_pixel - SCREEN_WIDTH); 
+		}
+	}
+	else
+	{
+		if (REG_HOTREG)
+		{
+			if (vic_hotreg_touched)
+			{
+				vic4_interpret_legacy_mode_registers();
+				vic_hotreg_touched = 0;
+				vic4_sideborder_touched = 0;
+			}
+
+			if (vic4_sideborder_touched)
+			{
+				vic4_update_sideborder_dimensions();
+				vic4_sideborder_touched = 0;
+			}
+		}
+
+		while (xcounter < SCREEN_WIDTH)
+		{
+			if (xcounter < border_x_left ||
+				xcounter >= border_x_right ||
+				ycounter < BORDER_Y_TOP ||
+				ycounter >= BORDER_Y_BOTTOM ||
+				!REG_DISPLAYENABLE)
+			{
+				*(current_pixel++) = vic3_rom_palette[REG_BORDER_COLOR & 0xF];
+				++xcounter;
+			}
+			else
+			{
+				vic4_visible_area_raster();
+			}
+		}
+	}
+	ycounter++;
+
+	// End of frame?
+	if (ycounter == SCREEN_HEIGHT - 1)
+	{
+		// setup next frame fetch.
+		current_pixel = pixel_start;
+		screen_ram_current_ptr = main_ram + SCREEN_ADDR;
+		colour_ram_current_ptr = colour_ram;
 		ycounter = 0;
-		scanline = 0;
 		return 1;
 	}
-	
-	// End of raster
-	// https://github.com/MEGA65/mega65-core/blob/257d78aa6a21638cb0120fd34bc0e6ab11adfd7c/src/vhdl/viciv.vhdl#L2930
 
-	scanline++;
-	ycounter++;
 	return 0;
 }
 
@@ -781,7 +880,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 	if (!vic_sprp_legacy) {
 		sprite_pointers = main_ram + ((vic_registers[0x6C] | (vic_registers[0x6D] << 8) | (vic_registers[0x6E] << 16)) & ((512 << 10) - 1));
 	}
-	// Target SDL pixel related format for the background colour
+	// Target SDL current_pixel related format for the background colour
 	bg = palette[BG_FOR_Y(0)];
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_text");
 	for (;;) {
