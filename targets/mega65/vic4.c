@@ -38,8 +38,6 @@ static const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 // (SDL) target texture rendering pointers
 static Uint32 *current_pixel;			// current_pixel pointer to the rendering target (one current_pixel: 32 bit)
 static Uint32 *pixel_end, *pixel_start;	// points to the end and start of the buffer
-
-
 static Uint32 rgb_palette[4096];		// all the C65 palette, 4096 colours (SDL current_pixel format related form)
 static Uint32 vic3_palette[0x100];		// VIC3 palette in SDL current_pixel format related form (can be written into the texture directly to be rendered)
 static Uint32 vic3_rom_palette[0x100];	// the "ROM" palette, for C64 colours (with some ticks, ie colours above 15 are the same as the "normal" programmable palette)
@@ -58,9 +56,6 @@ int vic3_blink_phase;					// blinking attribute helper, state.
 static Uint8 raster_colours[1024];
 Uint8 c128_d030_reg;					// C128-like register can be only accessed in VIC-II mode but not in others, quite special!
 static Uint8 reg_d018_screen_addr = 0;     // Legacy VIC-II $D018 screen address
-static Uint32 vic_raster_buffer[1024];     // 18-bit x 1KiB internal buffer where VIC-IV renders the next scanline.
-										   // Bits 0-7: current_pixel color, 8: 1 if foreground current_pixel, 9-16: current_pixel alpha, 17 unused,
-										   // of course we should ignore/mask out the 18..31 bits.
 static int vic_hotreg_touched = 0; 		// If any "legacy" registers were touched
 static int vic4_sideborder_touched = 0;  // If side-border register were touched
 static int border_x_left= 0;			 // Side border left 
@@ -69,9 +64,7 @@ static int xcounter = 0, ycounter = 0;   // video counters
 static Uint8* screen_ram_current_ptr = NULL;
 static Uint8* colour_ram_current_ptr = NULL;
 static Uint32* raster_buffer_current_ptr = NULL;
-
-
-
+extern int user_scanlines_setting;
 
 static int warn_sprites = 0, warn_ctrl_b_lo = 1;
 
@@ -180,8 +173,6 @@ void vic_init ( void )
 	c128_d030_reg = 0xFE;	// this may be set to 2MHz in the previous step, so be sure to set to FF here, BUT FIX: bit 0 should be inverted!!
 	machine_set_speed(0);
 	
-	// Initialize raster buffer contents and bookkeeping info
-	memset(vic_raster_buffer, 0, sizeof(vic_raster_buffer));
 	screen_ram_current_ptr = main_ram + SCREEN_ADDR;
 	colour_ram_current_ptr = colour_ram;
 
@@ -321,7 +312,8 @@ static void vic4_interpret_legacy_mode_registers()
 
 	REG_CHRCOUNT = REG_H640 ? 80 : 40;
 	SET_VIRTUAL_ROW_WIDTH( (REG_H640) ? 80 : 40);
-	REG_SCRNPTR_B1 = REG_H640 ? (reg_d018_screen_addr << 2) : ((reg_d018_screen_addr & 14) << 2);
+	REG_SCRNPTR_B1 &= 0xC0;
+	REG_SCRNPTR_B1 |= REG_H640 ?  ((reg_d018_screen_addr & 14) << 2) : (reg_d018_screen_addr << 2);
 	REG_SCRNPTR_B0 = 0;
 	REG_SPRPTRADR_B0 = 0xF8;
 	REG_SPRPTRADR_B1 = reg_d018_screen_addr << 2;
@@ -462,9 +454,6 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			machine_set_speed(0);
 			if (data & 8) {
 				DEBUG("VIC3: V400 Mode enabled EXPERIMENTAL");
-				//double_scanlines = 0;
-			} else {
-				//double_scanlines = 1;
 			}
 			if ((data & 15) && warn_ctrl_b_lo) {
 				INFO_WINDOW("VIC3 control-B register H1280, MONO and INT features are not emulated yet!");
@@ -499,22 +488,10 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x7D): CASE_VIC_4(0x7E): CASE_VIC_4(0x7F):
 			break;
 		CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):
-			// if (vic_vidp_legacy) {
-			// 	vic_vidp_legacy = 0;
-			// 	DEBUGPRINT("VIC4: precise video address mode" NL);
-			// }
 			break;
 		CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):
-			// if (vic_chrp_legacy) {
-			// 	vic_chrp_legacy = 0;
-			// 	DEBUGPRINT("VIC4: precise character address mode" NL);
-			// }
 			break;
 		CASE_VIC_4(0x6C): CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):
-			// if (vic_sprp_legacy) {
-			// 	vic_sprp_legacy = 0;
-			// 	DEBUGPRINT("VIC4: precise sprite pointer address mode" NL);
-			// }
 			break;
 		/* --- NON-EXISTING REGISTERS --- */
 		CASE_VIC_2(0x31): CASE_VIC_2(0x32): CASE_VIC_2(0x33): CASE_VIC_2(0x34): CASE_VIC_2(0x35): CASE_VIC_2(0x36): CASE_VIC_2(0x37): CASE_VIC_2(0x38):
@@ -712,9 +689,6 @@ static inline Uint32 get_charset_effective_addr()
 		return 0x2D800;
 	case 0x9800:
 		return 0x3D800;
-	
-	default:
-		DEBUGPRINT("VIC4: WARNING get_charset_effective_addr: unknown register content: $%08X" NL, CHARSET_ADDR );
 	}
 	return CHARSET_ADDR;
 }
@@ -793,7 +767,7 @@ int vic4_render_scanline()
 	{
 		for (int i = 0; i < SCREEN_WIDTH; i++)
 		{
-			*(current_pixel++) = *(current_pixel - SCREEN_WIDTH); 
+			*(current_pixel++) = user_scanlines_setting ? 0 : *(current_pixel - SCREEN_WIDTH) ;
 		}
 	}
 	else
@@ -834,7 +808,7 @@ int vic4_render_scanline()
 	ycounter++;
 
 	// End of frame?
-	if (ycounter == SCREEN_HEIGHT - 1)
+	if (ycounter == SCREEN_HEIGHT)
 	{
 		// setup next frame fetch.
 		current_pixel = pixel_start;

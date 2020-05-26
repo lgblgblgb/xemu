@@ -113,10 +113,17 @@ static void ui_save_basic_as_text ( void )
 #endif
 
 
+static const struct menu_st menu_scanlines[] = {
+	{ "On",    XEMUGUI_MENUID_CALLABLE, xemugui_cb_scanlines, (void*)1 },
+	{ "Off", XEMUGUI_MENUID_CALLABLE,   xemugui_cb_scanlines, (void*)0 },
+	{ NULL }
+};
+
 static const struct menu_st menu_display[] = {
 	{ "Fullscreen",    XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)0 },
 	{ "Window - 100%", XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)1 },
 	{ "Window - 200%", XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)2 },
+	{ "Scanlines",	   XEMUGUI_MENUID_SUBMENU,	menu_scanlines, NULL },
 	{ NULL }
 };
 

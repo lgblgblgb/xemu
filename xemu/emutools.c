@@ -81,7 +81,7 @@ FILE *debug_fp = NULL;
 int chatty_xemu = 1;
 int sdl_default_win_x_size;
 int sdl_default_win_y_size;
-int double_scanlines = 0;
+int user_scanlines_setting = 0;
 
 static int osd_enabled = 0, osd_available = 0, osd_xsize, osd_ysize, osd_fade_dec, osd_fade_end, osd_alpha_last;
 int osd_status = 0;
@@ -261,6 +261,11 @@ void xemu_set_screen_mode ( int setting )
 		SDL_SetWindowSize(sdl_win, sdl_default_win_x_size * setting, sdl_default_win_y_size * setting);
 	}
 	SDL_RaiseWindow(sdl_win);
+}
+
+void xemu_set_scanlines( int setting )
+{
+	user_scanlines_setting = setting;
 }
 
 
@@ -784,12 +789,6 @@ void xemu_update_screen ( void )
 		SDL_UnlockTexture(sdl_tex);
 	//if (seconds_timer_trigger)
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
-	
-	// SDL_Rect rc;
-	// rc.w = texture_width;
-	// rc.h = double_scanlines ? texture_height * 2 : texture_height;
-	// rc.x = 0;
-	// rc.y = 0;
 
 	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);
 	if (osd_status) {

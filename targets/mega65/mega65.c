@@ -731,7 +731,6 @@ int main ( int argc, char **argv )
 		DEBUGPRINT("WARNING: *** NEW M65 HACK MODE ACTIVATED ***" NL);
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	window_title_info_addon = emulator_speed_title;
-	double_scanlines = 1;
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
 		1,				// resizable window

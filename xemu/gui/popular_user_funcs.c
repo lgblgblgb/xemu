@@ -107,3 +107,20 @@ void xemugui_cb_windowsize ( const struct menu_st *m, int *query )
 #endif
 	xemu_set_screen_mode(mode_spec);
 }
+
+
+void xemugui_cb_scanlines ( const struct menu_st *m, int *query )
+{
+	int mode_spec = (int)(uintptr_t)m->user_data;
+#if 0
+	static int last_mode = 0;
+	if (query) {
+		if (mode_spec == last_mode)
+			*query |= XEMUGUI_MENUFLAG_ACTIVE_RADIO;
+		return;
+	}
+	last_mode =  mode_spec;
+#endif
+	xemu_set_scanlines(mode_spec);
+}
+
