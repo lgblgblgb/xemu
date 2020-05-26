@@ -1,11 +1,12 @@
 #!/bin/bash
 # A very lame NSIS installer stuff, Windows/NSI expert is wanted ...
-# (C)2018,2019 LGB Gabor Lenart
+# (C)2018-2020 LGB Gabor Lenart
 
 cd `dirname $0` || exit 1
 echo "$0: current directory: `pwd`"
 
-dll="`./system-config $1 sdl2 dll`"
+#dll="`./system-config $1 sdl2 dll`"
+dll="`sed -n 's/^SDL2_DLL[\t ]*=[\t ]*//p' < configure/config-$1.make`"
 
 if [ "$dll" = "" -o ! -s "$dll" ]; then
 	echo "Bad DLL for arch=$1: $dll" >&2

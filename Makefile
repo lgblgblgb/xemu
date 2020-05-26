@@ -66,8 +66,8 @@ deb:
 nsi:
 	rm -f build/bin/*.[dD][lL][lL] build/bin/*.[eE][xX][eE]
 	for t in $(TARGETS) ; do for a in win32 win64 ; do $(MAKE) -C targets/$$t ARCH=$$a || exit 1 ; done ; done
-	build/nsi-build-native.sh win32 `build/system-config win32 sdl2 dll`
-	build/nsi-build-native.sh win64 `build/system-config win64 sdl2 dll`
+	build/nsi-build-native.sh win32
+	build/nsi-build-native.sh win64
 
 publish:
 	@echo "*** You should not use this target, this is only for distributing binaries on the site of the author!"
