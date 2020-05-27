@@ -232,7 +232,7 @@ static int mfat_write_fat_chain ( Uint32 cluster, Uint32 next )
 	if (next >= mfat_partitions[disk.part].clusters)
 		return 1;
 	else if (next == 0)
-		next = 0x0FFFFFFFU;
+		next = mfat_partitions[disk.part].eoc_marker;	// 0x0FFFFFFFU;
 	else if (next == 1)
 		next = 0;
 	// first we want to READ ... it also flushes possible previous cached dirty block
@@ -283,9 +283,8 @@ Uint32 mfat_allocate_linear_fat_chunk ( Uint32 size )
 	// OK, so now, size is the needed number of clusters to allocate
 	// start from cluster 2, the first data cluster, to try with (though probably that's root dir, so won't be free, but anyway, for strange situations ...)
 	for (Uint32 cluster = mfat_partitions[disk.part].root_dir_cluster + 1, first = 0, len = 0, seq = 0; cluster < mfat_partitions[disk.part].clusters; cluster++) {
-		DEBUG("FATFS: considering cluster %u" NL, cluster);
 		Uint32 next = mfat_read_fat_chain(cluster);
-		DEBUG("FATFS: %u cluster's result in FAT: %u" NL, cluster, next);
+		FATDEBUG("FATFS: %u cluster's result in FAT: %u" NL, cluster, next);
 		if (next == 1)
 			return 0;	// error!
 		if (next == 0 && cluster_was_free) {	// cluster is free
@@ -460,6 +459,9 @@ int mfat_use_part ( int part )
 		goto error;
 	FATDEBUG("FATFS: INFO: FAT1 marks #0: $%08X" NL, AS_DWORD(cache, 0));
 	mfat_partitions[part].eoc_marker = AS_DWORD(cache, 0);
+	if ((mfat_partitions[part].eoc_marker & 0x0FFFFFFFU) < 0x0FFFFFF8U)
+		mfat_partitions[part].eoc_marker = 0x0FFFFFF8U;
+	FATDEBUG("FATFS: EOC marker will be: %X" NL, mfat_partitions[part].eoc_marker);
 	FATDEBUG("FATFS: INFO: FAT1 marks #1: $%08X" NL, AS_DWORD(cache, 4));
 	if (mfat_read_part_blk(mfat_partitions[part].fat2_start, cache))
 		goto error;
@@ -764,12 +766,12 @@ int mfat_read_directory ( mfat_dirent_t *p, int type_filter )
 	p->size = AS_DWORD(buf, 0x1C);
 	p->type = buf[0xB];
 	struct tm time;
-	time.tm_sec   = (AS_WORD(buf, 0x0E) &  31) <<  1;
-	time.tm_min   = (AS_WORD(buf, 0x0E) >>  5) &  63;
-	time.tm_hour  = (AS_WORD(buf, 0x0E) >> 11) &  31;
-	time.tm_mday  =  AS_WORD(buf, 0x10)        &  31;
-	time.tm_mon   = (AS_WORD(buf, 0x10) >>  5) &  15;
-	time.tm_year  = (AS_WORD(buf, 0x10) >>  9) +  80;
+	time.tm_sec   = (AS_WORD(buf, 0x16) &  31) <<  1;
+	time.tm_min   = (AS_WORD(buf, 0x16) >>  5) &  63;
+	time.tm_hour  = (AS_WORD(buf, 0x16) >> 11) &  31;
+	time.tm_mday  =  AS_WORD(buf, 0x18)        &  31;
+	time.tm_mon   = (AS_WORD(buf, 0x18) >>  5) &  15;
+	time.tm_year  = (AS_WORD(buf, 0x18) >>  9) +  80;
 	time.tm_wday  = 0;
 	time.tm_yday  = 0;
 	time.tm_isdst = -1;
@@ -859,7 +861,17 @@ Uint32 mfat_overwrite_file_with_direct_linear_device_block_write ( mfat_dirent_t
 	p[0x1E] = (size >> 16) & 0xFF;
 	p[0x1F] = (size >> 24) & 0xFF;
 	p[0x0B] = 0;	// file type
-	// TODO: file date as well!
+	time_t ts = time(NULL);
+	if (ts) {
+		struct tm *tm = localtime(&ts);
+		if (tm) {
+			p[0x16] = (tm->tm_sec >> 1) + ((tm->tm_min & 0xF) << 5);
+			p[0x17] = (tm->tm_min >> 3) + (tm->tm_hour << 3);
+			p[0x18] = tm->tm_mday + (((tm->tm_mon + 1) & 7) << 5);
+			p[0x19] = ((tm->tm_mon + 1) >> 3) + ((tm->tm_year - 80) << 1);
+			memcpy(p + 0x0E, p + 0x16, 4);
+		}
+	}
 	if (mfat_write_cluster(stream_cache.cluster, stream_cache.cluster_block, stream_cache.buf)) {
 		return 0;	// ERROR
 	}
