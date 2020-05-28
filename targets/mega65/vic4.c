@@ -319,11 +319,17 @@ static void vic4_interpret_legacy_mode_registers()
 	REG_SPRPTRADR_B1 = reg_d018_screen_addr << 2;
 	REG_SPRPTRADR_B1 |= (1 | (REG_H640 | REG_V400 ? 4 : 0));
 
+	REG_SPRPTR_B0 = 0xF8;
+	REG_SPRPTR_B1 &= 0xC0;
+	REG_SPRPTR_B1 |= (reg_d018_screen_addr << 2) | 0x3;
+	if (REG_H640 | REG_V400)
+		REG_SPRPTR_B1 |= 4;
+
 	SET_COLORRAM_BASE(0);
 	DEBUGPRINT("VIC4: vic4_interpret_legacy_mode_registers(): chrcount=%d,border yt=%d,yb=%d,xl=%d,xr=%d,textxpos=%d,textypos=%d,"
-	          "screen_ram=$%06x,charset=$%06x,sprites=XXX color_ram_base=XXX" NL, REG_CHRCOUNT,
+	          "screen_ram=$%06x,charset=$%06x,sprite=$%06x" NL, REG_CHRCOUNT,
 		BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START,
-		SCREEN_ADDR, CHARSET_ADDR);
+		SCREEN_ADDR, CHARSET_ADDR, SPRITE_ADDR);
 }
 
 
