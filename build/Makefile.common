@@ -90,7 +90,7 @@ do-all:
 
 xemu-info:
 	@echo "-------------------------------------------"
-	@echo "Architecture: $(ARCH)"
+	@echo "Make architecture: $(ARCH)"
 	@echo "Target: $(TARGET)"
 	@echo "Program name target: $(PRG_TARGET)"
 	@echo "Compiler: $(CONFIG_CC)"
@@ -137,12 +137,8 @@ dep:
 	$(MAKE) $(DEPFILE)
 
 $(DEPFILE): $(DEPALL) $(SRCS)
-	$(CONFIG_CC) -MM $(CFLAGS) $(SRCS_TARGET_PREFIXED) > $(DEPFILEPREFIX)-target-pre.depend
-	awk '/^[^.:\t ]+\.o:/ { print "$(TARGETOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-target-pre.depend > $(DEPFILEPREFIX)-target.depend
-	$(CONFIG_CC) -MM $(CFLAGS) $(SRCS_COMMON_PREFIXED) > $(DEPFILEPREFIX)-common-pre.depend
-	awk '/^[^.:\t ]+\.o:/ { print "$(COMMONOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-common-pre.depend > $(DEPFILEPREFIX)-common.depend
-	cat $(DEPFILEPREFIX)-target.depend $(DEPFILEPREFIX)-common.depend > $@
-	rm -f $(DEPFILEPREFIX)-target-pre.depend $(DEPFILEPREFIX)-common-pre.depend
+	rm -f $(DEPFILEPREFIX)-target-pre.depend $(DEPFILEPREFIX)-common-pre.depend $(DEPFILEPREFIX)-target.depend $(DEPFILEPREFIX)-common.depend
+	if [ "$(CONFIG_CC)" != "" -a -s "$(TOPDIR)/build/configure/config-$(ARCH).make" ]; then $(CONFIG_CC) -MM $(CFLAGS) $(SRCS_TARGET_PREFIXED) > $(DEPFILEPREFIX)-target-pre.depend && awk '/^[^.:\t ]+\.o:/ { print "$(TARGETOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-target-pre.depend > $(DEPFILEPREFIX)-target.depend && $(CONFIG_CC) -MM $(CFLAGS) $(SRCS_COMMON_PREFIXED) > $(DEPFILEPREFIX)-common-pre.depend && awk '/^[^.:\t ]+\.o:/ { print "$(COMMONOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-common-pre.depend > $(DEPFILEPREFIX)-common.depend && cat $(DEPFILEPREFIX)-target.depend $(DEPFILEPREFIX)-common.depend > $@ && rm -f $(DEPFILEPREFIX)-target-pre.depend $(DEPFILEPREFIX)-common-pre.depend ; else echo "*** Ignoring dependency creation, no configuration exists yet" ; fi
 
 clean:
 	rm -f $(TOPDIR)/build/objs/?-$(ARCH)-$(TARGET)-* $(PRG)
