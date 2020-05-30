@@ -30,7 +30,9 @@ config:
 	rm -f $(TOPDIR)/build/configure/config-$(ARCH).h $(TOPDIR)/build/configure/config-$(ARCH).make
 	if [ ! -s $(TOPDIR)/build/configure/config-$(ARCH).h -o ! -s $(TOPDIR)/build/configure/config-$(ARCH).make ]; then bash $(TOPDIR)/build/configure/configure --arch=$(ARCH) ; fi
 
+ifneq ($(wildcard $(TOPDIR)/build/configure/config-$(ARCH).make),)
 include $(TOPDIR)/build/configure/config-$(ARCH).make
+endif
 
 SRCS_TARGET		= $(SRCS_TARGET_$(PRG_TARGET))
 SRCS_COMMON		= $(SRCS_COMMON_$(PRG_TARGET)) emutools_buildinfo.c
