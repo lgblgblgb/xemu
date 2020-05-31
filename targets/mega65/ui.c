@@ -24,6 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_files.h"
 #include "xemu/d81access.h"
 #include "sdcard.h"
+#include "sdcontent.h"
 
 
 //#if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_GUI)
@@ -112,6 +113,85 @@ static void ui_save_basic_as_text ( void )
 }
 #endif
 
+static void ui_format_sdcard ( void )
+{
+	if (ARE_YOU_SURE(
+		"Formatting your SD-card image file will cause ALL your data,\n"
+		"system files (etc!) to be lost, forever!\n"
+		"Are you sure to continue this self-desctruction sequence? :)"
+		,
+		0
+	)) {
+		if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_FORCE_FDISK))
+			INFO_WINDOW("You SD-card file has been partitioned/formatted\nMEGA65 emulation is about to RESET now!");
+	}
+	reset_mega65();
+}
+
+static void ui_update_sdcard ( void )
+{
+	char fnbuf[PATH_MAX + 1];
+	static char dir[PATH_MAX + 1] = "";
+	if (!*dir)
+		strcpy(dir, sdl_pref_dir);
+	// Select ROM image
+	if (xemugui_file_selector(
+		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		"Select your ROM image",
+		dir,
+		fnbuf,
+		sizeof fnbuf
+	)) {
+		WARNING_WINDOW("Cannot update: you haven't selected a ROM image");
+		return;
+	}
+	// Load selected ROM image into memory, also checks the size!
+	if (xemu_load_file(fnbuf, NULL, 0x20000, 0x20000, "Cannot begin image update, bad C65/M65 ROM image has been selected!") != 0x20000)
+		return;
+	// Copy file to the pref'dir (if not the same as the selected file)
+	char fnbuf_target[PATH_MAX];
+	strcpy(fnbuf_target, sdl_pref_dir);
+	strcpy(fnbuf_target + strlen(sdl_pref_dir), MEGA65_ROM_NAME);
+	if (strcmp(fnbuf_target, MEGA65_ROM_NAME)) {
+		DEBUGPRINT("Backing up ROM image %s to %s" NL, fnbuf, fnbuf_target);
+		if (xemu_save_file(
+			fnbuf_target,
+			xemu_load_buffer_p,
+			0x20000,
+			"Cannot save the selected ROM file for the updater"
+		)) {
+			free(xemu_load_buffer_p);
+			xemu_load_buffer_p = NULL;
+			return;
+		}
+	}
+	// Generate character ROM from the ROM image
+	Uint8 char_rom[CHAR_ROM_SIZE];
+	memcpy(char_rom, xemu_load_buffer_p + 0xD000, 0x1000);
+	if (CHAR_ROM_SIZE >= 0x2000)
+		memcpy(char_rom + 0x1000, xemu_load_buffer_p + 0x1D000, 0x1000);
+	free(xemu_load_buffer_p);
+	xemu_load_buffer_p = NULL;
+	// And store our character ROM!
+	strcpy(fnbuf_target + strlen(sdl_pref_dir), CHAR_ROM_NAME);
+	if (xemu_save_file(
+		fnbuf_target,
+		char_rom,
+		CHAR_ROM_SIZE,
+		"Cannot save the extracted CHAR ROM file for the updater"
+	)) {
+		return;
+	}
+	// Call the updater :)
+	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES))
+		INFO_WINDOW(
+			"System files on your SD-card image seems to be updated successfully.\n"
+			"Next time you may need this function, you can use MEGA65.ROM which is a backup copy of your selected ROM.\n"
+			"MEGA65 emulation is about to RESET now!"
+		);
+	reset_mega65();
+}
+
 
 static const struct menu_st menu_scanlines[] = {
 	{ "On",    XEMUGUI_MENUID_CALLABLE, xemugui_cb_scanlines, (void*)1 },
@@ -119,17 +199,22 @@ static const struct menu_st menu_scanlines[] = {
 	{ NULL }
 };
 
+
 static const struct menu_st menu_display[] = {
-	{ "Fullscreen",    XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)0 },
-	{ "Window - 100%", XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)1 },
-	{ "Window - 200%", XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)2 },
+	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)0 },
+	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)1 },
+	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)2 },
 	{ "Scanlines",	   XEMUGUI_MENUID_SUBMENU,	menu_scanlines, NULL },
 	{ NULL }
 };
-
-
+static const struct menu_st menu_sdcard[] = {
+	{ "Re-format SD image",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_format_sdcard },
+	{ "Update files on SD image",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_update_sdcard },
+	{ NULL }
+};
 static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		menu_display, NULL },
+	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		menu_sdcard, NULL },
 	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_mega65_asked },
 	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
 #ifdef BASIC_TEXT_SUPPORT

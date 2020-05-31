@@ -28,14 +28,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SD_ST_BUSY1	0x02
 #define SD_ST_BUSY0	0x01
 
-extern int   sdcard_init           ( const char *fn, const char *extd81fn, int virtsd_flag );
-extern void  sdcard_write_register ( int reg, Uint8 data );
-extern Uint8 sdcard_read_register  ( int reg  );
+extern int    sdcard_init           ( const char *fn, const char *extd81fn, int virtsd_flag );
+extern Uint32 sdcard_get_size       ( void );
+extern void   sdcard_write_register ( int reg, Uint8 data );
+extern Uint8  sdcard_read_register  ( int reg  );
 
-extern int   sdcard_read_block     ( Uint32 block, Uint8 *buffer );
-extern int   sdcard_write_block    ( Uint32 block, Uint8 *buffer );
+extern int    sdcard_read_block     ( Uint32 block, Uint8 *buffer );
+extern int    sdcard_write_block    ( Uint32 block, Uint8 *buffer );
 
-extern int   mount_external_d81    ( const char *name, int force_ro );
+extern int    mount_external_d81    ( const char *name, int force_ro );
 
 #define SD_BUFFER_POS 0x0E00
 #define FD_BUFFER_POS 0x0C00

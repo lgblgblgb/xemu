@@ -47,7 +47,11 @@ static mfat_dirent_t sd_rootdirent;
 
 
 // From mega65-fdisk
-static const Uint8 fat_bytes[12] = {0xf8,0xff,0xff,0x0f,0xff,0xff,0xff,0x0f,0xf8,0xff,0xff,0x0f};
+static const Uint8 fat_bytes[12] = {
+	0xf8,0xff,0xff,0x0f,
+	0xff,0xff,0xff,0x0f,
+	0xf8,0xff,0xff,0x0f
+};
 static const Uint8 dir_bytes[15] = {0x08,0x00,0x00,0x53,0xae,0x93,0x4a,0x93,0x4a,0x00,0x00,0x53,0xae,0x93,0x4a};
 static const Uint8 default_volume_name[11]	= "M.E.G.A.65!";
 static const char  default_disk_image[]		= "mega65.d81";	// must be lower case
@@ -178,9 +182,10 @@ static int mkfs_fat32 ( Uint32 start_block, Uint32 number_of_blocks )
 {
 	DEBUGPRINT("SDCARD: FAT32FS: creating file system between sectors $%X-$%X, $%X sectors (%uK) in size" NL, start_block, start_block + number_of_blocks - 1, number_of_blocks, number_of_blocks >> 11);
 	// *** Let's do some calculations. According to mega65-fdisk, as usual in these mkfs parts :)
-	Uint8  sectors_per_cluster = 8; // 4Kbyte clusters
-	Uint32 reserved_sectors = 1024 * 1024 / 512;
-	Uint32 fat_available_sectors = number_of_blocks - reserved_sectors;
+	const Uint8  sectors_per_cluster = 8; // 4Kbyte clusters
+	//Uint32 reserved_sectors = 1024 * 1024 / 512;
+	const Uint32 reserved_sectors = boot_bytes[0xE] + (boot_bytes[0xF] << 8);
+	const Uint32 fat_available_sectors = number_of_blocks - reserved_sectors;
 	Uint32 fs_clusters = fat_available_sectors / sectors_per_cluster;
 	Uint32 fat_sectors = fs_clusters/(512 / 4);
 	if (fs_clusters % (512 / 4))
@@ -211,25 +216,28 @@ static int mkfs_fat32 ( Uint32 start_block, Uint32 number_of_blocks )
 	//for (int i = 0; i < 4; i++)
 	//	block[0x24 + i] = (fat_sectors      >> (i * 8)) & 0xff;
 	block_uint32(0x24, fat_sectors);
+	//block_uint16(0x0e, reserved_sectors);
 	block[510] = 0x55;	// boot signature
 	block[511] = 0xaa;	// boot signature
 	WRITE_BLOCK(start_block);	// write boot sector
 	WRITE_BLOCK(start_block + 6);	// write backup boot sector (the very same, with @ +6 sector)
 	// *** Create FAT FS information sector
 	ZERO_BUFFER();
-	block[0] = 0x52;
+	block[0] = 0x52;	// four "magic" bytes
 	block[1] = 0x52;
 	block[2] = 0x61;
 	block[3] = 0x41;
-	block[0x1e4] = 0x72;
+	block[0x1e4] = 0x72;	// four another "mgic" bytes
 	block[0x1e5] = 0x72;
 	block[0x1e6] = 0x41;
 	block[0x1e7] = 0x61;
 	//for(int i = 0; i < 4; i++)	// Number of free clusters
 	//	block[0x1e8 + i] = ((fs_clusters - 3) >> (i * 8)) & 0xff;
-	block_uint32(0x1e8, fs_clusters - 3);
+	//block_uint32(0x1e8, fs_clusters - 3);
+	block_uint32(0x1e8, 0xFFFFFFFFU);	// according to some documents, this must be set to FFFFFFFF if not used
 	// First free cluster = 2
-	block[0x1ec] = 0x02 + 1;	// OSX newfs/fsck puts 3 here instead?
+	//block[0x1ec] = 0x02 + 1;	// OSX newfs/fsck puts 3 here instead?
+	block_uint32(0x1ec, 0xFFFFFFFFU);	// according to some documents, this must be set to FFFFFFFF if not used
 	// Boot sector signature
 	block[510] = 0x55;
 	block[511] = 0xaa;
@@ -450,6 +458,7 @@ static int update_sdcard_file ( const char *on_card_name, int options, const cha
 	}
 	if (fd >= 0)
 		close(fd);
+	mfat_flush_fat_cache();
 	return 0;
 error_on_maybe_sys_file:
 	if ((options & SDCONTENT_SYS_FILE))
@@ -462,6 +471,7 @@ error_on_maybe_sys_file:
 error:
 	if (fd >= 0)
 		close(fd);
+	mfat_flush_fat_cache();
 	return -1;
 }
 
@@ -503,6 +513,7 @@ static int update_from_directory ( const char *dirname, int options )
 	}
 	int ret = errno;
 	closedir(dir);
+	mfat_flush_fat_cache();
 	return ret;
 }
 
@@ -634,6 +645,7 @@ int sdcontent_handle ( Uint32 size_in_blocks, const char *update_dir_path, int o
 	if (options) {
 		if (our_data_partition < 0)
 			FATAL("System file update/check requested, but format/FS was not validated!");
+		mfat_flush_fat_cache();
 		//update_from_directory(system_files_directory, options);
 		char rom_path[PATH_MAX];
 		snprintf(rom_path, sizeof rom_path, "%s%s", sdl_pref_dir, MEGA65_ROM_NAME);

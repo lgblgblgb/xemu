@@ -110,6 +110,7 @@ static const struct menu_st menu_main[] = {
 #ifdef XEMU_ARCH_WIN
 	{ "System console", XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK, xemugui_cb_sysconsole, NULL },
 #endif
+	{ "About", XEMUGUI_MENUID_CALLABLE, xemugui_cb_about_window, NULL },
 	{ "Quit", XEMUGUI_MENUID_CALLABLE, xemugui_cb_call_quit_if_sure, NULL },
 	{ NULL }
 };
