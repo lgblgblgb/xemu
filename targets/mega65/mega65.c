@@ -175,9 +175,9 @@ static void cia2_out_a ( Uint8 data )
 	{
 		REG_SCRNPTR_B1 = (~data << 6) | (REG_SCRNPTR_B1 & 63);
 		REG_CHARPTR_B1 = (~data << 6) | (REG_CHARPTR_B1 & 63);
-		REG_SPRPTRADR_B1  = (~data << 6) | (REG_SPRPTRADR_B1 & 63);
+		REG_SPRPTR_B1  = (~data << 6) | (REG_SPRPTR_B1 & 63);
 	}
-	DEBUG("VIC2: Wrote to $DD00: %d" NL, data);
+	DEBUG("VIC2: Wrote to $DD00: $%08x" NL, data);
 }
 
 

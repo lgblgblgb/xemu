@@ -38,6 +38,7 @@ static const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 // (SDL) target texture rendering pointers
 static Uint32 *current_pixel;			// current_pixel pointer to the rendering target (one current_pixel: 32 bit)
 static Uint32 *pixel_end, *pixel_start;	// points to the end and start of the buffer
+static Uint32 *pixel_raster_start;		// first pixel of current raster
 static Uint32 rgb_palette[4096];		// all the C65 palette, 4096 colours (SDL current_pixel format related form)
 static Uint32 vic3_palette[0x100];		// VIC3 palette in SDL current_pixel format related form (can be written into the texture directly to be rendered)
 static Uint32 vic3_rom_palette[0x100];	// the "ROM" palette, for C64 colours (with some ticks, ie colours above 15 are the same as the "normal" programmable palette)
@@ -50,12 +51,9 @@ int cpu_cycles_per_scanline;
 static int compare_raster;				// raster compare (9 bits width) data
 static int interrupt_status;			// Interrupt status of VIC
 int vic2_16k_bank;						// VIC-2 modes' 16K BANK address within 64K (NOT the traditional naming of banks with 0,1,2,3)
-static Uint8 *sprite_pointers;			// Pointer to sprite pointers :)
-static Uint8 *sprite_bank;
 int vic3_blink_phase;					// blinking attribute helper, state.
-static Uint8 raster_colours[1024];
 Uint8 c128_d030_reg;					// C128-like register can be only accessed in VIC-II mode but not in others, quite special!
-static Uint8 reg_d018_screen_addr = 0;     // Legacy VIC-II $D018 screen address
+static Uint8 reg_d018_screen_addr = 0;     // Legacy VIC-II $D018 screen address register
 static int vic_hotreg_touched = 0; 		// If any "legacy" registers were touched
 static int vic4_sideborder_touched = 0;  // If side-border register were touched
 static int border_x_left= 0;			 // Side border left 
@@ -63,10 +61,9 @@ static int border_x_right= 0;			 // Side border right
 static int xcounter = 0, ycounter = 0;   // video counters
 static Uint8* screen_ram_current_ptr = NULL;
 static Uint8* colour_ram_current_ptr = NULL;
-static Uint32* raster_buffer_current_ptr = NULL;
 extern int user_scanlines_setting;
 
-static int warn_sprites = 0, warn_ctrl_b_lo = 1;
+static int warn_ctrl_b_lo = 1;
 
 // VIC-IV Modeline Parameters
 // ----------------------------------------------------
@@ -312,12 +309,10 @@ static void vic4_interpret_legacy_mode_registers()
 
 	REG_CHRCOUNT = REG_H640 ? 80 : 40;
 	SET_VIRTUAL_ROW_WIDTH( (REG_H640) ? 80 : 40);
+	
 	REG_SCRNPTR_B1 &= 0xC0;
 	REG_SCRNPTR_B1 |= REG_H640 ?  ((reg_d018_screen_addr & 14) << 2) : (reg_d018_screen_addr << 2);
 	REG_SCRNPTR_B0 = 0;
-	REG_SPRPTRADR_B0 = 0xF8;
-	REG_SPRPTRADR_B1 = reg_d018_screen_addr << 2;
-	REG_SPRPTRADR_B1 |= (1 | (REG_H640 | REG_V400 ? 4 : 0));
 
 	REG_SPRPTR_B0 = 0xF8;
 	REG_SPRPTR_B1 &= 0xC0;
@@ -329,7 +324,7 @@ static void vic4_interpret_legacy_mode_registers()
 	DEBUGPRINT("VIC4: vic4_interpret_legacy_mode_registers(): chrcount=%d,border yt=%d,yb=%d,xl=%d,xr=%d,textxpos=%d,textypos=%d,"
 	          "screen_ram=$%06x,charset=$%06x,sprite=$%06x" NL, REG_CHRCOUNT,
 		BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START,
-		SCREEN_ADDR, CHARSET_ADDR, SPRITE_ADDR);
+		SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
 }
 
 
@@ -664,24 +659,6 @@ void vic4_write_palette_reg ( int num, Uint8 data )
 	vic3_write_palette_reg(num, data);	// TODO: now only call the VIC-3 solution, which is not so correct for M65/VIC-4
 }
 
-
-static inline Uint8 *vic2_get_chargen_pointer ( void )
-{
-	if (vic_chrp_legacy) {
-		int offs = (vic_registers[0x18] & 14) << 10;	// character generator address address within the current VIC2 bank
-		//int crom = vic_registers[0x30] & 64;
-		//DEBUG("VIC2: chargen: BANK=%04X OFS=%04X CROM=%d" NL, vic2_16k_bank, offs, crom);
-		if ((vic2_16k_bank == 0x0000 || vic2_16k_bank == 0x8000) && (offs == 0x1000 || offs == 0x1800)) {  // check if chargen info is in ROM
-			// In case of Mega65, fetching char-info from ROM means to access the "WOM"
-			// FIXME: what should I do with bit 6 of VIC-III register $30 ["CROM"] ?!
-			return char_wom + offs - 0x1000;
-		} else
-			return main_ram + vic2_16k_bank + offs;
-	} else {
-		return main_ram + ((vic_registers[0x68] | (vic_registers[0x69] << 8) | (vic_registers[0x6A] << 16)) & ((512 << 10) - 1));
-	}
-}
-
 static inline Uint32 get_charset_effective_addr()
 {
 	// cache this? 
@@ -700,15 +677,16 @@ static inline Uint32 get_charset_effective_addr()
 }
 
 // Raster buffer bookkeeping
-static int char_row = 0, video_matrix_row = 0;
+static int char_row = 0;
+
 static void vic4_visible_area_raster()
 {
+	Uint8 bg_pixel_state[1024]; // See FOREGROUND_PIXEL and BACKGROUND_PIXEL constants
 	const float x_step = (REG_CHARXSCALE / 120.0f) / (REG_H640 ? 1 : 2); /* Cache this */
 		
 	Uint8 char_bgcolor = REG_SCREEN_COLOR;
 	Uint8* colour_ram_row_start = colour_ram_current_ptr;
 	Uint8* screen_ram_row_start = screen_ram_current_ptr;
-	int char_col = 0;
 
 	// Charset x-displacement
 	for (int i = 0; i < (CHARGEN_X_START - border_x_left); ++i)
@@ -744,12 +722,11 @@ static void vic4_visible_area_raster()
 
 		for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += x_step)
 		{
-			Uint32 pixel_color = (*char_row_data & (0x80 >> (int)cx)) ? vic3_rom_palette[foreground_color] : vic3_rom_palette[char_bgcolor];
+						const Uint8 char_pixel = (*char_row_data & (0x80 >> (int)cx));
+			Uint32 pixel_color = char_pixel ? vic3_rom_palette[foreground_color] : vic3_rom_palette[char_bgcolor];
 			*(current_pixel++) = pixel_color;
-			xcounter++;
+			bg_pixel_state[xcounter++] = char_pixel ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
 		}
-		
-		char_col++;
 	}
 
 	if (++char_row > 7)
@@ -761,19 +738,75 @@ static void vic4_visible_area_raster()
 		colour_ram_current_ptr = colour_ram_row_start;
 		screen_ram_current_ptr = screen_ram_row_start;
 	}
+
+	// Fetch and sequence sprites.
+	// 
+	// NOTE about Text/Bitmap Graphics Background/foreground semantics:
+	// In multicolor mode (MCM=1), the bit combinations “00” and “01” belong to the background
+	// and “10” and “11” to the foreground whereas in standard mode (MCM=0), 
+	// cleared pixels belong to the background and set pixels to the foreground.
+	//
+	for (int sprnum = 7; sprnum >= 0; --sprnum)
+	{
+		if (REG_SPRITE_ENABLE & (1 << sprnum))
+		{
+			Uint8* sprite_data_pointer;
+			if (REG_SPRPTR_B2 & 0x80) // 8 or 16-bit pointer address?
+			{
+				// 16-bit sprite pointers, allowing sprites to be sourced from
+				// anywhere in first 4MB of chip RAM 
+				//sprite_data = main_ram + ();
+			}
+			else 
+			{
+				// "VIC-II type" 8-bit pointers
+				sprite_data_pointer = main_ram + SPRITE_POINTER_ADDR + sprnum;
+			}
+
+			Uint8* sprite_data = main_ram + 64 * (*sprite_data_pointer);
+			int sprite_row_in_raster = ycounter - SPRITE_POS_Y(sprnum);
+
+			DEBUGPRINT("sprite_data_pointer $%08x SPRITE_POS_Y = %d SPRITE_POS_X = %d" NL, sprite_data_pointer, SPRITE_POS_Y(sprnum), SPRITE_POS_X(sprnum)); 
+
+			// Draw 3-byte row 
+			if (sprite_row_in_raster >=0 && sprite_row_in_raster < 20)
+			{
+				// High-res mode.
+				Uint8* row_data = sprite_data + 3 * sprite_row_in_raster;
+				int xpos = SPRITE_POS_X(sprnum);
+				for (int byte = 0; byte < 3; ++byte) 
+				{	
+					for (int xbit = 0; xbit < 8; ++xbit) // gcc/clang are happily unrolling this with -Ofast
+					{
+						const Uint8 pixel = *row_data & (0x80 >> xbit);
+						if (pixel && (!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[xpos] != FOREGROUND_PIXEL)))
+						{
+							*(pixel_raster_start + xpos) = vic3_rom_palette[SPRITE_COLOR(sprnum)];	
+						}
+						xpos++;
+					}				
+					row_data++; 
+				}
+			}
+		}
+	}
+
+
+
 }
 
 int vic4_render_scanline() 
 {
 	// Work this first. DO NOT OPTIMIZE EARLY.
 	xcounter = 0;
+	pixel_raster_start = current_pixel;
 	
 	// "Double-scan hack"
 	if (!REG_V400 && (ycounter & 1))
 	{
-		for (int i = 0; i < SCREEN_WIDTH; i++)
+		for (int i = 0; i < SCREEN_WIDTH; i++, current_pixel++)
 		{
-			*(current_pixel++) = user_scanlines_setting ? 0 : *(current_pixel - SCREEN_WIDTH) ;
+			*current_pixel = user_scanlines_setting ? 0 : *(current_pixel - SCREEN_WIDTH) ;
 		}
 	}
 	else

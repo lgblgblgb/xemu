@@ -42,6 +42,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_EBM             (vic_registers[0x11] & 0x40)
 #define REG_MCM             (vic_registers[0x16] & 0x10)
 #define REG_BMM             (vic_registers[0x11] & 0x20)
+#define REG_SPRITE_ENABLE   vic_registers[0x15]
 #define REG_BORDER_COLOR    vic_registers[0x20]
 #define REG_SCREEN_COLOR    vic_registers[0x21]
 #define REG_H640            (vic_registers[0x31] & 128)
@@ -80,9 +81,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_CHARPTR_B0      vic_registers[0x68]
 #define REG_CHARPTR_B1      vic_registers[0x69]
 #define REG_CHARPTR_B2      vic_registers[0x6A]
-#define REG_SPRPTRADR_B0    vic_registers[0x6C]
-#define REG_SPRPTRADR_B1    vic_registers[0x6D]
-#define REG_SPRPTRADR_B2    vic_registers[0x6E]
+#define REG_SPRPTR_B0       vic_registers[0x6C]
+#define REG_SPRPTR_B1       vic_registers[0x6D]
+#define REG_SPRPTR_B2       vic_registers[0x6E]
 #define REG_SCREEN_ROWS     vic_registers[0x7B]
 #define REG_PALNTSC         (vic_registers[0x6f] & 0x80)
 #define REG_PAL_RED_BASE    (vic_registers[0x100])
@@ -101,9 +102,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_RAM_ADDR_VIC  (REG_SCREEN_ADDR * 1024)
 #define SCREEN_ADDR          ((Uint32)REG_SCRNPTR_B0 | (REG_SCRNPTR_B1<<8) | (REG_SCRNPTR_B2 <<16))
 #define CHARSET_ADDR         ((Uint32)REG_CHARPTR_B0 | (REG_CHARPTR_B1<<8) | (REG_CHARPTR_B2 <<16))
+#define SPRITE_POINTER_ADDR  ((Uint32)REG_SPRPTR_B0  | (REG_SPRPTR_B1<<8)  | (REG_SPRPTR_B2 <<16))
 #define COLOR_RAM_ADDR       ((((Uint16)REG_COLPTR) | (REG_COLPTR_MSB) << 8) + 0xFF80000)
 #define IS_PAL_MODE          (REG_PALNTSC ^ 0x80)
 #define SCREEN_STEP          (((Uint16)REG_CHARSTEP) | (REG_CHARSTEP_U8) << 8)
+#define SPRITE_POS_Y(n)      (vic_registers[1 + (n)*2])
+#define SPRITE_POS_X(n)      ((Uint16)vic_registers[(n)*2]) | ( (vic_registers[0x10] & ((n) + 1)) >> ( (n)-1))
+#define SPRITE_COLOR(n)      (vic_registers[0x27+(n)] & 0xF)
+#define SPRITE_IS_BACK(n)    (vic_registers[0x1B] & (1 << (n)))
 
 // "Super-Extended character attributes" (see https://github.com/MEGA65/mega65-core/blob/master/docs/viciv-modes.md)
 // cw is color-word (16-bit from Color RAM). chw is character-word (16bit from Screen RAM)
@@ -132,7 +138,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SET_COLORRAM_BASE(x)       SET_16BIT_REG(REG_COLPTR,(x))
 #define SET_VIRTUAL_ROW_WIDTH(x)   SET_16BIT_REG(REG_CHARSTEP,(x))
 
-// 24-bit registers     
+// Pixel foreground/background indicator for aiding in sprite rendering
+#define FOREGROUND_PIXEL 1
+#define BACKGROUND_PIXEL 0
+
 // Current state
 // -------------
 
