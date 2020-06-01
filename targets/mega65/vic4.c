@@ -383,6 +383,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_ALL(0x13): CASE_VIC_ALL(0x14):
 			return;		// FIXME: writing light-pen registers?????
 		CASE_VIC_ALL(0x15):	// sprite enabled
+			break;
 		CASE_VIC_ALL(0x16):	// control-reg#2, we allow write even if non-used bits here
 			vic_hotreg_touched = 1;
 			break;
@@ -728,9 +729,12 @@ static void vic4_do_sprites()
 				for (int xbit = 0; xbit < 8; ++xbit) // gcc/clang are happily unrolling this with -Ofast
 				{
 					const Uint8 pixel = *row_data & (0x80 >> xbit);
-					for (int p = 0; p < xscale; ++p, ++x_display_pos)
+					for (int p = 0; p < xscale && x_display_pos < border_x_right; ++p, ++x_display_pos)
 					{
-						if (pixel && (!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)))
+						if (x_display_pos >= border_x_left && 
+						    pixel && 
+							(!SPRITE_IS_BACK(sprnum) || 
+							(SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)))
 						{
 							*(pixel_raster_start + x_display_pos) = vic3_rom_palette[SPRITE_COLOR(sprnum)];
 						}
