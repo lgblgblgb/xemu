@@ -49,6 +49,7 @@ int vic_iomode;							// VIC2/VIC3/VIC4 mode
 int force_fast;							// POKE 0,64 and 0,65 trick ...
 int cpu_cycles_per_scanline;
 static int compare_raster;				// raster compare (9 bits width) data
+static int logical_raster = 0;
 static int interrupt_status;			// Interrupt status of VIC
 int vic2_16k_bank;						// VIC-2 modes' 16K BANK address within 64K (NOT the traditional naming of banks with 0,1,2,3)
 int vic3_blink_phase;					// blinking attribute helper, state.
@@ -722,7 +723,7 @@ static void vic4_visible_area_raster()
 
 		for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += x_step)
 		{
-						const Uint8 char_pixel = (*char_row_data & (0x80 >> (int)cx));
+			const Uint8 char_pixel = (*char_row_data & (0x80 >> (int)cx));
 			Uint32 pixel_color = char_pixel ? vic3_rom_palette[foreground_color] : vic3_rom_palette[char_bgcolor];
 			*(current_pixel++) = pixel_color;
 			bg_pixel_state[xcounter++] = char_pixel ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
@@ -764,35 +765,35 @@ static void vic4_visible_area_raster()
 			}
 
 			Uint8* sprite_data = main_ram + 64 * (*sprite_data_pointer);
-			int sprite_row_in_raster = ycounter - SPRITE_POS_Y(sprnum);
+			int sprite_row_in_raster = logical_raster - SPRITE_POS_Y(sprnum);
 
-			DEBUGPRINT("sprite_data_pointer $%08x SPRITE_POS_Y = %d SPRITE_POS_X = %d" NL, sprite_data_pointer, SPRITE_POS_Y(sprnum), SPRITE_POS_X(sprnum)); 
+			//DEBUGPRINT("sprite_data_pointer $%08x SPRITE_POS_Y = %d SPRITE_POS_X = %d, row_in_raster=%d  logical_raster=%d" NL, sprite_data_pointer, SPRITE_POS_Y(sprnum), SPRITE_POS_X(sprnum), sprite_row_in_raster, logical_raster); 
 
 			// Draw 3-byte row 
-			if (sprite_row_in_raster >=0 && sprite_row_in_raster < 20)
+			if (sprite_row_in_raster >=0 && sprite_row_in_raster < 21)
 			{
 				// High-res mode.
 				Uint8* row_data = sprite_data + 3 * sprite_row_in_raster;
 				int xpos = SPRITE_POS_X(sprnum);
+				int xscale = (REG_H640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
 				for (int byte = 0; byte < 3; ++byte) 
 				{	
 					for (int xbit = 0; xbit < 8; ++xbit) // gcc/clang are happily unrolling this with -Ofast
 					{
 						const Uint8 pixel = *row_data & (0x80 >> xbit);
-						if (pixel && (!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[xpos] != FOREGROUND_PIXEL)))
+						for (int p = 0; p < xscale; ++p, ++xpos)
 						{
-							*(pixel_raster_start + xpos) = vic3_rom_palette[SPRITE_COLOR(sprnum)];	
+							if (pixel && (!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[xpos] != FOREGROUND_PIXEL)))
+							{
+								*(pixel_raster_start + xpos) = vic3_rom_palette[SPRITE_COLOR(sprnum)];
+							}
 						}
-						xpos++;
 					}				
 					row_data++; 
 				}
 			}
 		}
 	}
-
-
-
 }
 
 int vic4_render_scanline() 
@@ -800,6 +801,9 @@ int vic4_render_scanline()
 	// Work this first. DO NOT OPTIMIZE EARLY.
 	xcounter = 0;
 	pixel_raster_start = current_pixel;
+
+	SET_PHYSICAL_RASTER(ycounter);
+	logical_raster = ycounter >> (REG_V400 ? 0 : 1);
 	
 	// "Double-scan hack"
 	if (!REG_V400 && (ycounter & 1))

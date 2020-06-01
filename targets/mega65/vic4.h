@@ -110,6 +110,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_POS_X(n)      ((Uint16)vic_registers[(n)*2]) | ( (vic_registers[0x10] & ((n) + 1)) >> ( (n)-1))
 #define SPRITE_COLOR(n)      (vic_registers[0x27+(n)] & 0xF)
 #define SPRITE_IS_BACK(n)    (vic_registers[0x1B] & (1 << (n)))
+#define SPRITE_HORZ_2X(n)    (vic_registers[0x1D] & (1 << (n)))
+#define SPRITE_VERT_2X(n)    (vic_registers[0x17] & (1 << (n)))
 
 // "Super-Extended character attributes" (see https://github.com/MEGA65/mega65-core/blob/master/docs/viciv-modes.md)
 // cw is color-word (16-bit from Color RAM). chw is character-word (16bit from Screen RAM)
@@ -120,11 +122,17 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 // Multi-byte register write helpers
 // ---------------------------------------------------
-
+#define SET_11BIT_REG(basereg,x) vic_registers[(basereg+1)] |= (Uint8) ((((Uint16)(x)) & 0x700) >> 8); \
+                                 vic_registers[(basereg)] = (Uint8) ((Uint16)(x)) & 0x00FF;
 #define SET_12BIT_REG(basereg,x) vic_registers[(basereg+1)] |= (Uint8) ((((Uint16)(x)) & 0xF00) >> 8); \
                                  vic_registers[(basereg)] = (Uint8) ((Uint16)(x)) & 0x00FF;
 #define SET_16BIT_REG(basereg,x) vic_registers[(basereg+1)] |= ((Uint16)(x)) & 0xFF00; \
                                  vic_registers[(basereg)]= ((Uint16)(x)) & 0x00FF;
+
+// 11-bit registers
+
+#define SET_PHYSICAL_RASTER(x) SET_11BIT_REG(0x52, (x))
+
 // 12-bit registers
 
                                  
@@ -132,6 +140,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SET_BORDER_Y_BOTTOM(x) SET_12BIT_REG(0x4A, (x))
 #define SET_CHARGEN_X_START(x) SET_12BIT_REG(0x4C, (x))
 #define SET_CHARGEN_Y_START(x) SET_12BIT_REG(0x4E, (x))
+
+
 
 //16-bit registers
 
