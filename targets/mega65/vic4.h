@@ -1,6 +1,7 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2020 Hernán Di Pietro <hernan.di.pietro@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,6 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifndef __XEMU_MEGA65_VIC4_H_INCLUDED
 #define __XEMU_MEGA65_VIC4_H_INCLUDED
+#include <SDL_types.h>
 
 #define VIC2_IOMODE	0
 #define VIC3_IOMODE	1
@@ -151,6 +153,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // Pixel foreground/background indicator for aiding in sprite rendering
 #define FOREGROUND_PIXEL 1
 #define BACKGROUND_PIXEL 0
+
+// Review this! (VIC-II values)
+#define SPRITE_X_BASE_COORD   24
+#define SPRITE_Y_BASE_COORD   50
+#define SPRITE_X_UPPER_COORD  250
+#define SPRITE_Y_UPPER_COORD  344
 
 // Current state
 // -------------

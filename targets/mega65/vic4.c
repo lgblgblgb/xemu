@@ -1,6 +1,7 @@
 /* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2020 Hernán Di Pietro <hernan.di.pietro@gmail.com>
 
    This is the VIC-IV "emulation". Currently it does one-frame-at-once
    kind of horrible work, and only a subset of VIC2 and VIC3 knowledge
@@ -679,10 +680,68 @@ static inline Uint32 get_charset_effective_addr()
 
 // Raster buffer bookkeeping
 static int char_row = 0;
+static Uint8 bg_pixel_state[1024]; // See FOREGROUND_PIXEL and BACKGROUND_PIXEL constants
+
+static void vic4_do_sprites()
+{
+	// Fetch and sequence sprites.
+	// 
+	// NOTE about Text/Bitmap Graphics Background/foreground semantics:
+	// In multicolor mode (MCM=1), the bit combinations “00” and “01” belong to the background
+	// and “10” and “11” to the foreground whereas in standard mode (MCM=0), 
+	// cleared pixels belong to the background and set pixels to the foreground.
+	//
+	for (int sprnum = 7; sprnum >= 0; --sprnum)
+	{
+		int xpos = (SPRITE_POS_X(sprnum) - SPRITE_X_BASE_COORD) * (REG_H640 ? 1 : 2) + border_x_left + 1;
+		int ypos = (SPRITE_POS_Y(sprnum) - SPRITE_Y_BASE_COORD) * (REG_V400 ? 1 : 2) + BORDER_Y_TOP;
+		int sprite_row_in_raster = logical_raster - ypos;
+		if (SPRITE_VERT_2X(sprnum))
+			sprite_row_in_raster = sprite_row_in_raster >> 1;
+
+		if ((REG_SPRITE_ENABLE & (1 << sprnum)) &&
+			(sprite_row_in_raster >= 0 && sprite_row_in_raster < 21) )
+		{
+			Uint8 *sprite_data_pointer;
+			if (REG_SPRPTR_B2 & 0x80) // 8 or 16-bit pointer address?
+			{
+				// 16-bit sprite pointers, allowing sprites to be sourced from
+				// anywhere in first 4MB of chip RAM
+				//sprite_data = main_ram + ();
+			}
+			else
+			{
+				// "VIC-II type" 8-bit pointers
+				sprite_data_pointer = main_ram + SPRITE_POINTER_ADDR + sprnum;
+			}
+
+			Uint8 *sprite_data = main_ram + 64 * (*sprite_data_pointer);
+
+			//DEBUGPRINT("sprite_data_pointer $%08x SPRITE_POS_Y = %d SPRITE_POS_X = %d, row_in_raster=%d  logical_raster=%d" NL, sprite_data_pointer, SPRITE_POS_Y(sprnum), SPRITE_POS_X(sprnum), sprite_row_in_raster, logical_raster);
+			// High-res mode.
+			Uint8 *row_data = sprite_data + 3 * sprite_row_in_raster;
+			int xscale = (REG_H640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
+			for (int byte = 0; byte < 3; ++byte)
+			{
+				for (int xbit = 0; xbit < 8; ++xbit) // gcc/clang are happily unrolling this with -Ofast
+				{
+					const Uint8 pixel = *row_data & (0x80 >> xbit);
+					for (int p = 0; p < xscale; ++p, ++xpos)
+					{
+						if (pixel && (!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[xpos] != FOREGROUND_PIXEL)))
+						{
+							*(pixel_raster_start + xpos) = vic3_rom_palette[SPRITE_COLOR(sprnum)];
+						}
+					}
+				}
+				row_data++;
+			}
+		}
+	}
+}
 
 static void vic4_visible_area_raster()
 {
-	Uint8 bg_pixel_state[1024]; // See FOREGROUND_PIXEL and BACKGROUND_PIXEL constants
 	const float x_step = (REG_CHARXSCALE / 120.0f) / (REG_H640 ? 1 : 2); /* Cache this */
 		
 	Uint8 char_bgcolor = REG_SCREEN_COLOR;
@@ -740,60 +799,7 @@ static void vic4_visible_area_raster()
 		screen_ram_current_ptr = screen_ram_row_start;
 	}
 
-	// Fetch and sequence sprites.
-	// 
-	// NOTE about Text/Bitmap Graphics Background/foreground semantics:
-	// In multicolor mode (MCM=1), the bit combinations “00” and “01” belong to the background
-	// and “10” and “11” to the foreground whereas in standard mode (MCM=0), 
-	// cleared pixels belong to the background and set pixels to the foreground.
-	//
-	for (int sprnum = 7; sprnum >= 0; --sprnum)
-	{
-		if (REG_SPRITE_ENABLE & (1 << sprnum))
-		{
-			Uint8* sprite_data_pointer;
-			if (REG_SPRPTR_B2 & 0x80) // 8 or 16-bit pointer address?
-			{
-				// 16-bit sprite pointers, allowing sprites to be sourced from
-				// anywhere in first 4MB of chip RAM 
-				//sprite_data = main_ram + ();
-			}
-			else 
-			{
-				// "VIC-II type" 8-bit pointers
-				sprite_data_pointer = main_ram + SPRITE_POINTER_ADDR + sprnum;
-			}
-
-			Uint8* sprite_data = main_ram + 64 * (*sprite_data_pointer);
-			int sprite_row_in_raster = logical_raster - SPRITE_POS_Y(sprnum);
-
-			//DEBUGPRINT("sprite_data_pointer $%08x SPRITE_POS_Y = %d SPRITE_POS_X = %d, row_in_raster=%d  logical_raster=%d" NL, sprite_data_pointer, SPRITE_POS_Y(sprnum), SPRITE_POS_X(sprnum), sprite_row_in_raster, logical_raster); 
-
-			// Draw 3-byte row 
-			if (sprite_row_in_raster >=0 && sprite_row_in_raster < 21)
-			{
-				// High-res mode.
-				Uint8* row_data = sprite_data + 3 * sprite_row_in_raster;
-				int xpos = SPRITE_POS_X(sprnum);
-				int xscale = (REG_H640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
-				for (int byte = 0; byte < 3; ++byte) 
-				{	
-					for (int xbit = 0; xbit < 8; ++xbit) // gcc/clang are happily unrolling this with -Ofast
-					{
-						const Uint8 pixel = *row_data & (0x80 >> xbit);
-						for (int p = 0; p < xscale; ++p, ++xpos)
-						{
-							if (pixel && (!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[xpos] != FOREGROUND_PIXEL)))
-							{
-								*(pixel_raster_start + xpos) = vic3_rom_palette[SPRITE_COLOR(sprnum)];
-							}
-						}
-					}				
-					row_data++; 
-				}
-			}
-		}
-	}
+	vic4_do_sprites();
 }
 
 int vic4_render_scanline() 
