@@ -693,9 +693,11 @@ static void vic4_do_sprites()
 	//
 	for (int sprnum = 7; sprnum >= 0; --sprnum)
 	{
-		int xpos = (SPRITE_POS_X(sprnum) - SPRITE_X_BASE_COORD) * (REG_H640 ? 1 : 2) + border_x_left + 1;
-		int ypos = (SPRITE_POS_Y(sprnum) - SPRITE_Y_BASE_COORD) * (REG_V400 ? 1 : 2) + BORDER_Y_TOP;
-		int sprite_row_in_raster = logical_raster - ypos;
+		//DEBUGPRINT("x_d_pos = %d + ((%d - %d) * %d)" NL, border_x_left, SPRITE_POS_X(sprnum), SPRITE_X_BASE_COORD, REG_H640 ? 1 : 2);
+		int x_display_pos = border_x_left + ((SPRITE_POS_X(sprnum) - SPRITE_X_BASE_COORD) * (REG_H640 ? 1 : 2)); // in display units
+		int y_logical_pos = SPRITE_POS_Y(sprnum) - SPRITE_Y_BASE_COORD +(BORDER_Y_TOP / (REG_V400 ? 1 : 2)); // in logical units
+
+		int sprite_row_in_raster = logical_raster - y_logical_pos;
 		if (SPRITE_VERT_2X(sprnum))
 			sprite_row_in_raster = sprite_row_in_raster >> 1;
 
@@ -726,11 +728,11 @@ static void vic4_do_sprites()
 				for (int xbit = 0; xbit < 8; ++xbit) // gcc/clang are happily unrolling this with -Ofast
 				{
 					const Uint8 pixel = *row_data & (0x80 >> xbit);
-					for (int p = 0; p < xscale; ++p, ++xpos)
+					for (int p = 0; p < xscale; ++p, ++x_display_pos)
 					{
-						if (pixel && (!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[xpos] != FOREGROUND_PIXEL)))
+						if (pixel && (!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)))
 						{
-							*(pixel_raster_start + xpos) = vic3_rom_palette[SPRITE_COLOR(sprnum)];
+							*(pixel_raster_start + x_display_pos) = vic3_rom_palette[SPRITE_COLOR(sprnum)];
 						}
 					}
 				}

@@ -109,7 +109,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define IS_PAL_MODE          (REG_PALNTSC ^ 0x80)
 #define SCREEN_STEP          (((Uint16)REG_CHARSTEP) | (REG_CHARSTEP_U8) << 8)
 #define SPRITE_POS_Y(n)      (vic_registers[1 + (n)*2])
-#define SPRITE_POS_X(n)      ((Uint16)vic_registers[(n)*2]) | ( (vic_registers[0x10] & ((n) + 1)) >> ( (n)-1))
+#define SPRITE_POS_X(n)      (((Uint16)vic_registers[(n)*2]) | ( (vic_registers[0x10] & ((n) + 1)) >> ( (n)-1)))
 #define SPRITE_COLOR(n)      (vic_registers[0x27+(n)] & 0xF)
 #define SPRITE_IS_BACK(n)    (vic_registers[0x1B] & (1 << (n)))
 #define SPRITE_HORZ_2X(n)    (vic_registers[0x1D] & (1 << (n)))
