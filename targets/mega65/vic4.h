@@ -111,9 +111,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_POS_Y(n)      (vic_registers[1 + (n)*2])
 #define SPRITE_POS_X(n)      (((Uint16)vic_registers[(n)*2]) | ( (vic_registers[0x10] & (1 << (n)) ? 0x100 : 0)))
 #define SPRITE_COLOR(n)      (vic_registers[0x27+(n)] & 0xF)
+#define SPRITE_MULTICOLOR_1  (vic_registers[0x25] & 0xF)
+#define SPRITE_MULTICOLOR_2  (vic_registers[0x26] & 0xF)
 #define SPRITE_IS_BACK(n)    (vic_registers[0x1B] & (1 << (n)))
 #define SPRITE_HORZ_2X(n)    (vic_registers[0x1D] & (1 << (n)))
 #define SPRITE_VERT_2X(n)    (vic_registers[0x17] & (1 << (n)))
+#define SPRITE_MULTICOLOR(n) (vic_registers[0x1C] & (1 << (n)))
+
+
+
 
 // "Super-Extended character attributes" (see https://github.com/MEGA65/mega65-core/blob/master/docs/viciv-modes.md)
 // cw is color-word (16-bit from Color RAM). chw is character-word (16bit from Screen RAM)

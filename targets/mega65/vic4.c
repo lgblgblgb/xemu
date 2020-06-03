@@ -683,6 +683,71 @@ static inline Uint32 get_charset_effective_addr()
 static int char_row = 0;
 static Uint8 bg_pixel_state[1024]; // See FOREGROUND_PIXEL and BACKGROUND_PIXEL constants
 
+static void vic4_draw_sprite_row_multicolor(int sprnum, int x_display_pos, Uint8* row_data_ptr, int xscale)
+{
+	for (int byte = 0; byte < 3; ++byte)
+	{
+		for (int xbit = 0; xbit < 8; xbit += 2)
+		{
+			const Uint8 p0 = *row_data_ptr & (0x80 >> xbit);
+			const Uint8 p1 = *row_data_ptr & (0x40 >> xbit);
+			
+			Uint8 pixel; // TODO: See generated code -- aim for "no branching"
+			if (!p0 && !p1) 
+				pixel = 0;
+			else if (!p0 && p1)
+				pixel = SPRITE_MULTICOLOR_1;
+			else if (p0 && !p1)
+				pixel = SPRITE_COLOR(sprnum);
+			else 
+				pixel = SPRITE_MULTICOLOR_2;
+
+			for (int p = 0; p < xscale && x_display_pos < border_x_right; ++p, x_display_pos += 2)
+			{
+				if (pixel)
+				{
+					if (x_display_pos >= border_x_left &&
+						(!SPRITE_IS_BACK(sprnum) ||
+						 (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)))
+					{
+						*(pixel_raster_start + x_display_pos) = vic3_rom_palette[pixel];
+					}
+
+					if (x_display_pos+1 >= border_x_left &&
+						(!SPRITE_IS_BACK(sprnum) ||
+						 (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos + 1] != FOREGROUND_PIXEL)))
+					{
+						*(pixel_raster_start + x_display_pos + 1) = vic3_rom_palette[pixel];
+					}
+				}
+			}
+		}
+		row_data_ptr++;
+	}
+}
+
+static void vic4_draw_sprite_row_mono(int sprnum, int x_display_pos, Uint8 *row_data_ptr, int xscale)
+{
+	for (int byte = 0; byte < 3; ++byte)
+	{
+		for (int xbit = 0; xbit < 8; ++xbit)
+		{
+			const Uint8 pixel = *row_data_ptr & (0x80 >> xbit);
+			for (int p = 0; p < xscale && x_display_pos < border_x_right; ++p, ++x_display_pos)
+			{
+				if (x_display_pos >= border_x_left &&
+					pixel &&
+					(!SPRITE_IS_BACK(sprnum) ||
+					 (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)))
+				{
+					*(pixel_raster_start + x_display_pos) = vic3_rom_palette[SPRITE_COLOR(sprnum)];
+				}
+			}
+		}
+		row_data_ptr++;
+	}
+}
+
 static void vic4_do_sprites()
 {
 	// Fetch and sequence sprites.
@@ -694,7 +759,6 @@ static void vic4_do_sprites()
 	//
 	for (int sprnum = 7; sprnum >= 0; --sprnum)
 	{
-		//DEBUGPRINT("x_d_pos = %d + ((%d - %d) * %d)" NL, border_x_left, SPRITE_POS_X(sprnum), SPRITE_X_BASE_COORD, REG_H640 ? 1 : 2);
 		int x_display_pos = border_x_left + ((SPRITE_POS_X(sprnum) - SPRITE_X_BASE_COORD) * (REG_H640 ? 1 : 2)); // in display units
 		int y_logical_pos = SPRITE_POS_Y(sprnum) - SPRITE_Y_BASE_COORD +(BORDER_Y_TOP / (REG_V400 ? 1 : 2)); // in logical units
 
@@ -719,29 +783,12 @@ static void vic4_do_sprites()
 			}
 
 			Uint8 *sprite_data = main_ram + 64 * (*sprite_data_pointer);
-
-			//DEBUGPRINT("sprite_data_pointer $%08x SPRITE_POS_Y = %d SPRITE_POS_X = %d, row_in_raster=%d  logical_raster=%d" NL, sprite_data_pointer, SPRITE_POS_Y(sprnum), SPRITE_POS_X(sprnum), sprite_row_in_raster, logical_raster);
-			// High-res mode.
 			Uint8 *row_data = sprite_data + 3 * sprite_row_in_raster;
 			int xscale = (REG_H640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
-			for (int byte = 0; byte < 3; ++byte)
-			{
-				for (int xbit = 0; xbit < 8; ++xbit) // gcc/clang are happily unrolling this with -Ofast
-				{
-					const Uint8 pixel = *row_data & (0x80 >> xbit);
-					for (int p = 0; p < xscale && x_display_pos < border_x_right; ++p, ++x_display_pos)
-					{
-						if (x_display_pos >= border_x_left && 
-						    pixel && 
-							(!SPRITE_IS_BACK(sprnum) || 
-							(SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)))
-						{
-							*(pixel_raster_start + x_display_pos) = vic3_rom_palette[SPRITE_COLOR(sprnum)];
-						}
-					}
-				}
-				row_data++;
-			}
+			if (SPRITE_MULTICOLOR(sprnum))
+				vic4_draw_sprite_row_multicolor(sprnum, x_display_pos, row_data, xscale);
+			else
+				vic4_draw_sprite_row_mono(sprnum, x_display_pos, row_data, xscale);
 		}
 	}
 }
