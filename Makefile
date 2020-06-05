@@ -24,13 +24,13 @@ ARCHS	= native win32 win64
 ARCH	= native
 
 all:
-	for t in $(TARGETS) ; do $(MAKE) -C targets/$$t || exit 1 ; done
+	for t in $(TARGETS) ; do $(MAKE) -C targets/$$t RELEASE=$(RELEASE) || exit 1 ; done
 
 all-arch:
-	for t in $(TARGETS) ; do for a in $(ARCHS) ; do $(MAKE) -C targets/$$t ARCH=$$a || exit 1 ; done ; done
+	for t in $(TARGETS) ; do for a in $(ARCHS) ; do $(MAKE) -C targets/$$t ARCH=$$a RELEASE=$(RELEASE) || exit 1 ; done ; done
 
 all-html:
-	for t in $(TARGETS) ; do egrep -q '^#\s*define\s+CONFIG_EMSCRIPTEN_OK\s*$$' targets/$$t/xemu-target.h && make -C targets/$$t ARCH=html ; done
+	for t in $(TARGETS) ; do egrep -q '^#\s*define\s+CONFIG_EMSCRIPTEN_OK\s*$$' targets/$$t/xemu-target.h && make -C targets/$$t ARCH=html RELEASE=$(RELEASE) ; done
 
 clean:
 	rm -f build/configure/config-$(ARCH).h build/configure/config-$(ARCH).make
@@ -65,7 +65,7 @@ deb:
 
 nsi:
 	rm -f build/bin/*.[dD][lL][lL] build/bin/*.[eE][xX][eE]
-	for t in $(TARGETS) ; do for a in win32 win64 ; do $(MAKE) -C targets/$$t ARCH=$$a || exit 1 ; done ; done
+	for t in $(TARGETS) ; do for a in win32 win64 ; do $(MAKE) -C targets/$$t ARCH=$$a RELEASE=$(RELEASE) || exit 1 ; done ; done
 	build/nsi-build-native.sh win32
 	build/nsi-build-native.sh win64
 

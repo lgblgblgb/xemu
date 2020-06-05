@@ -30,7 +30,11 @@ config:
 	rm -f $(TOPDIR)/build/configure/config-$(ARCH).h $(TOPDIR)/build/configure/config-$(ARCH).make
 	if [ ! -s $(TOPDIR)/build/configure/config-$(ARCH).h -o ! -s $(TOPDIR)/build/configure/config-$(ARCH).make ]; then bash $(TOPDIR)/build/configure/configure --arch=$(ARCH) ; fi
 
+# -- Unfortunately I have to comment out ifneq/endif, as it causes to run configure
+# -- twice in parallel :-O I have no idea why ... FIXME
+#ifneq ($(wildcard $(TOPDIR)/build/configure/config-$(ARCH).make),)
 include $(TOPDIR)/build/configure/config-$(ARCH).make
+#endif
 
 SRCS_TARGET		= $(SRCS_TARGET_$(PRG_TARGET))
 SRCS_COMMON		= $(SRCS_COMMON_$(PRG_TARGET)) emutools_buildinfo.c
@@ -52,6 +56,7 @@ OBJS			= $(TARGETOBJS) $(COMMONOBJS)
 
 ASMOUT			= no
 DEBUG			= no
+RELEASE			= no
 
 CFLAGS_TARGET		= $(CFLAGS_TARGET_$(PRG_TARGET))
 LDFLAGS_TARGET		= $(LDFLAGS_TARGET_$(PRG_TARGET))
@@ -62,9 +67,12 @@ CONFIG_CFLAGS_LINK	+= -g
 else
 CFLAGS_OPT		= $(CONFIG_CFLAGS_OPT)
 endif
-
 ifeq ($(NATIVE), yes)
 CFLAGS_OPT		+= -mtune=native -march=native
+endif
+ifeq ($(RELEASE), yes)
+CFLAGS_OPT		+= $(CONFIG_CFLAGS_OPT_RELEASE) -DXEMU_RELEASE_BUILD
+CONFIG_CFLAGS_LINK	+= $(CONFIG_CFLAGS_OPT_RELEASE)
 endif
 
 CFLAGS			= $(CONFIG_CFLAGS) $(CFLAGS_OPT) $(CFLAGS_TARGET) -I. -I$(TOPDIR) -include build/configure/config-$(ARCH).h
@@ -90,7 +98,7 @@ do-all:
 
 xemu-info:
 	@echo "-------------------------------------------"
-	@echo "Architecture: $(ARCH)"
+	@echo "Make architecture: $(ARCH)"
 	@echo "Target: $(TARGET)"
 	@echo "Program name target: $(PRG_TARGET)"
 	@echo "Compiler: $(CONFIG_CC)"
@@ -137,12 +145,8 @@ dep:
 	$(MAKE) $(DEPFILE)
 
 $(DEPFILE): $(DEPALL) $(SRCS)
-	$(CONFIG_CC) -MM $(CFLAGS) $(SRCS_TARGET_PREFIXED) > $(DEPFILEPREFIX)-target-pre.depend
-	awk '/^[^.:\t ]+\.o:/ { print "$(TARGETOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-target-pre.depend > $(DEPFILEPREFIX)-target.depend
-	$(CONFIG_CC) -MM $(CFLAGS) $(SRCS_COMMON_PREFIXED) > $(DEPFILEPREFIX)-common-pre.depend
-	awk '/^[^.:\t ]+\.o:/ { print "$(COMMONOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-common-pre.depend > $(DEPFILEPREFIX)-common.depend
-	cat $(DEPFILEPREFIX)-target.depend $(DEPFILEPREFIX)-common.depend > $@
-	rm -f $(DEPFILEPREFIX)-target-pre.depend $(DEPFILEPREFIX)-common-pre.depend
+	rm -f $(DEPFILEPREFIX)-target-pre.depend $(DEPFILEPREFIX)-common-pre.depend $(DEPFILEPREFIX)-target.depend $(DEPFILEPREFIX)-common.depend
+	if [ "$(CONFIG_CC)" != "" -a -s "$(TOPDIR)/build/configure/config-$(ARCH).make" ]; then $(CONFIG_CC) -MM $(CFLAGS) $(SRCS_TARGET_PREFIXED) > $(DEPFILEPREFIX)-target-pre.depend && awk '/^[^.:\t ]+\.o:/ { print "$(TARGETOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-target-pre.depend > $(DEPFILEPREFIX)-target.depend && $(CONFIG_CC) -MM $(CFLAGS) $(SRCS_COMMON_PREFIXED) > $(DEPFILEPREFIX)-common-pre.depend && awk '/^[^.:\t ]+\.o:/ { print "$(COMMONOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-common-pre.depend > $(DEPFILEPREFIX)-common.depend && cat $(DEPFILEPREFIX)-target.depend $(DEPFILEPREFIX)-common.depend > $@ && rm -f $(DEPFILEPREFIX)-target-pre.depend $(DEPFILEPREFIX)-common-pre.depend ; else echo "*** Ignoring dependency creation, no configuration exists yet" ; fi
 
 clean:
 	rm -f $(TOPDIR)/build/objs/?-$(ARCH)-$(TARGET)-* $(PRG)

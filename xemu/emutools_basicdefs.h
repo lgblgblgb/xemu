@@ -31,6 +31,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define USE_REGPARM
 
+// In case of RELEASE build, we don't support debugging (ie write detailed log file),
+// since it introduces some overhead in form of many if's at critical places, even
+// if it's not used.
+#ifdef XEMU_RELEASE_BUILD
+#define DISABLE_DEBUG
+#endif
+
 #ifndef XEMU_DISABLE_SDL
 #ifndef XEMU_HAS_SDL2
 #error  "We require SDL2, but XEMU_HAS_SDL2 was not defined: SDL2 cannot be detected?"
