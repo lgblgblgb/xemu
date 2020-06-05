@@ -136,7 +136,11 @@ I received the idea to be able to run Xemu as a "bare-metal" project on
 Raspberry Pi for example. "Bare metal" means that it does not run an OS but
 uses the hardware directly, ie, Xemu needs to be booted instead of an OS.
 Surely, it's a kind of exciting route for me, but unfortunately I don't have
-too much time to play with this idea :(
+too much time to play with this idea :( One idea, that there're frameworks
+for these purposes. The other: some of the emulations within the Xemu
+project (ie MEGA65) is very "pricy" to emulate, and may not run smooth
+(real-time) even on the newest Raspberry Pi 4 ... However exactly this
+problem can drive me to have more optimizations :)
 
 ### Clone source respository
 

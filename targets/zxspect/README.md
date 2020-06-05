@@ -49,5 +49,5 @@ Support for ULAplus is planned, though I should learn first, how the
 original ULA works exactly at T-state precision. :-)
 
 One of the reason of this project, that I have the crazy goal to try
-to write a ZX Spectrum emulator for Mega-65 (!!) even if it cannot be
+to write a ZX Spectrum emulator for MEGA65 (!!) even if it cannot be
 cycle exact, well, far from it.

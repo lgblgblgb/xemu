@@ -1,4 +1,4 @@
-/* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
+/* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
@@ -74,7 +74,7 @@ void cpu65_illegal_opcode_callback ( void )
 void machine_set_speed ( int verbose )
 {
 	int speed_wanted;
-	// TODO: Mega65 speed is not handled yet. Reasons: too slow emulation for average PC, and the complete control of speed, ie lack of C128-fast (2MHz mode,
+	// TODO: MEGA65 speed is not handled yet. Reasons: too slow emulation for average PC, and the complete control of speed, ie lack of C128-fast (2MHz mode,
 	// because of incomplete VIC register I/O handling).
 	// Actually the rule would be something like that (this comment is here by intent, for later implementation FIXME TODO), some VHDL draft only:
 	// cpu_speed := vicii_2mhz&viciii_fast&viciv_fast
@@ -317,7 +317,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	load_memory_preinit_cache(1, "loadc000", "C000 utilities", c000_init_image, sizeof c000_init_image);
 	if (load_memory_preinit_cache(0, "kickup", "M65 kickstart", meminitdata_kickstart, MEMINITDATA_KICKSTART_SIZE)  != MEMINITDATA_KICKSTART_SIZE)
 		hypervisor_debug_invalidate("no kickup is loaded, built-in one does not have debug info");
-	// *** Initializes memory subsystem of Mega65 emulation itself
+	// *** Initializes memory subsystem of MEGA65 emulation itself
 	memory_init();
 	// fill the actual M65 memory areas with values managed by load_memory_preinit_cache() calls
 	// This is a separated step, to be able to call refill_memory_from_preinit_cache() later as well, in case of a "deep reset" functionality is needed for Xemu (not just CPU/hw reset),
@@ -325,7 +325,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	refill_memory_from_preinit_cache();
 	// *** Image file for SDCARD support
 	if (sdcard_init(xemucfg_get_str("sdimg"), xemucfg_get_str("8"), xemucfg_get_bool("virtsd")) < 0)
-		FATAL("Cannot find SD-card image (which is a must for Mega65 emulation): %s", xemucfg_get_str("sdimg"));
+		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", xemucfg_get_str("sdimg"));
 	// *** Initialize VIC4
 	vic_init();
 	// *** CIAs
@@ -665,7 +665,7 @@ static void emulation_loop ( void )
 
 int main ( int argc, char **argv )
 {
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The Incomplete Mega-65 emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Incomplete MEGA65 emulator from LGB");
 	xemucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
 	xemucfg_define_num_option("dmarev", 0x100, "DMA revision (0/1=F018A/B +256=autochange, +512=modulo, you always wants +256!)");
 	xemucfg_define_num_option("fastclock", MEGA65_DEFAULT_FAST_CLOCK, "Clock of M65 fast mode (in MHz)");
@@ -741,7 +741,7 @@ int main ( int argc, char **argv )
 		return 1;
 	osd_init_with_defaults();
 	xemugui_init(xemucfg_get_str("gui"));
-	// Initialize Mega65
+	// Initialize MEGA65
 	mega65_init(
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
 		AUDIO_SAMPLE_FREQ		// sound mix freq

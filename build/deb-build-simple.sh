@@ -71,7 +71,7 @@ Installed-Size: $SIZE
 Description: Collection of software emulations of some (mainly 8 bit) computers.
   X-Emulators (Xemu) is a kind of collection of software emulators
   targeting various computers, including the quite rare Commodore LCD
-  and Commodore 65 as well. On-going work will provide Mega-65
+  and Commodore 65 as well. On-going work will provide MEGA65
   emulation too. Xemu uses SDL2, and can run on Linux/UNIX, Windows
   and OSX, also there is the possibility to use it within a web-browser
   with the help of the Emscripten compiler.
