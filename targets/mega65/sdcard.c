@@ -1,4 +1,4 @@
-/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+/* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
@@ -283,6 +283,12 @@ static int detect_compressed_image ( int fd )
 #endif
 
 
+Uint32 sdcard_get_size ( void )
+{
+	return sdcard_size_in_blocks;
+}
+
+
 int sdcard_init ( const char *fn, const char *extd81fn, int virtsd_flag )
 {
 	char fnbuf[PATH_MAX + 1];
@@ -321,17 +327,26 @@ retry:
 	sd_is_read_only = O_RDONLY;
 	sdfd = xemu_open_file(fn, O_RDWR, &sd_is_read_only, fnbuf);
 	if (sdfd < 0) {
-		int err = errno;
-		ERROR_WINDOW("Cannot open SD-card image %s, SD-card access won't work! ERROR: %s", fnbuf, strerror(err));
+		int r = errno;
+		ERROR_WINDOW("Cannot open SD-card image %s, SD-card access won't work! ERROR: %s", fnbuf, strerror(r));
 		DEBUG("SDCARD: cannot open image %s" NL, fn);
-		if (err == ENOENT && !strcmp(fn, SDCARD_NAME)) {
-			unsigned int r = QUESTION_WINDOW("No|128M|256M|512M|1G|2G", "Default SDCARD image does not exist.\nWould you like me to create one for you?");
+		if (r == ENOENT && !strcmp(fn, SDCARD_NAME)) {
+			r = QUESTION_WINDOW(
+				"No, thank you, I give up :(|Yes, create it for me :)"
+				,
+				"Default SDCARD image does not exist. Would you like me to create one for you?\n"
+				"Note: it will be a 4Gbytes long file, since this is the minimal size for an SDHC card,\n"
+				"what MEGA65 needs. Do not worry, it's a 'sparse' file on most modern OSes which does\n"
+				"not takes as much disk space as its displayed size suggests.\n"
+				"This is unavoidable to emulate something uses an SDHC-card."
+			);
 			if (r) {
-				int r2 = xemu_create_sparse_file(fnbuf, (1U << (r + 26U)));
-				if (r2)
-					ERROR_WINDOW("Couldn't create: %s", strerror(r2));
-				else
+				r = xemu_create_sparse_file(fnbuf, 4294967296UL);
+				if (r) {
+					ERROR_WINDOW("Couldn't create: %s", strerror(r));
+				} else {
 					goto retry;
+				}
 			}
 		}
 	} else {
@@ -378,9 +393,7 @@ retry:
 	}
 	if (sdfd >= 0) {
 		DEBUGPRINT("SDCARD: card init done, size=%u Mbytes, virtsd_flag=%d" NL, sdcard_size_in_blocks >> 11, virtsd_flag);
-#ifdef SD_CONTENT_SUPPORT_DANGEROUS
-		sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_ASK_FDISK | SDCONTENT_ASK_FILES);
-#endif
+		//sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_ASK_FDISK | SDCONTENT_ASK_FILES);
 	}
 	return sdfd;
 }
