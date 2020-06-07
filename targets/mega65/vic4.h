@@ -27,11 +27,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define VIC4_IOMODE	3
 
 #define SCREEN_WIDTH		      800
-#define SCREEN_HEIGHT	      600
+#define SCREEN_HEIGHT_NTSC    506
+#define SCREEN_HEIGHT_PAL     603
+//#define SCREEN_HEIGHT	      SCREEN_HEIGHT_PAL
 #define NTSC_PHYSICAL_RASTERS 526
 #define PAL_PHYSICAL_RASTERS  624
-#define FRAME_H_FRONT         16
-#define RASTER_CORRECTION     4
+#define SCREEN_HEIGHT	      624
+#define FRAME_H_FRONT         0
+#define RASTER_CORRECTION     3
 #define DISPLAY_FETCH_START   719
 
 // Register defines 
@@ -92,6 +95,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_PAL_GREEN_BASE  (vic_registers[0x200])
 #define REG_PAL_BLUE_BASE   (vic_registers[0x300])
 
+
 // Helper macros for accessing multi-byte registers
 // and other similar functionality for convenience
 // -----------------------------------------------------
@@ -130,11 +134,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 // Multi-byte register write helpers
 // ---------------------------------------------------
-#define SET_11BIT_REG(basereg,x) vic_registers[(basereg+1)] |= (Uint8) ((((Uint16)(x)) & 0x700) >> 8); \
+#define SET_11BIT_REG(basereg,x) vic_registers[(basereg+1)] = (Uint8) ((((Uint16)(x)) & 0x700) >> 8); \
                                  vic_registers[(basereg)] = (Uint8) ((Uint16)(x)) & 0x00FF;
-#define SET_12BIT_REG(basereg,x) vic_registers[(basereg+1)] |= (Uint8) ((((Uint16)(x)) & 0xF00) >> 8); \
+#define SET_12BIT_REG(basereg,x) vic_registers[(basereg+1)] = (Uint8) ((((Uint16)(x)) & 0xF00) >> 8); \
                                  vic_registers[(basereg)] = (Uint8) ((Uint16)(x)) & 0x00FF;
-#define SET_16BIT_REG(basereg,x) vic_registers[(basereg+1)] |= ((Uint16)(x)) & 0xFF00; \
+#define SET_16BIT_REG(basereg,x) vic_registers[(basereg+1)] = ((Uint16)(x)) & 0xFF00; \
                                  vic_registers[(basereg)]= ((Uint16)(x)) & 0x00FF;
 
 // 11-bit registers

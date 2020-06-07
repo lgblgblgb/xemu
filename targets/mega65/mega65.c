@@ -641,6 +641,8 @@ static void emulation_loop ( void )
 			cia_tick(&cia1, 64);
 			cia_tick(&cia2, 64);
 			if (vic4_render_scanline()) {
+				sid1.sFrameCount++;
+				sid2.sFrameCount++;
 				update_emulator();
 				return;
 			}
@@ -651,8 +653,7 @@ static void emulation_loop ( void )
 			// 	scanline = 0;
 			// 	if (!frameskip)	// well, let's only render every full frames (~ie 25Hz)
 			// 		update_emulator();
-			// 	sid1.sFrameCount++;
-			// 	sid2.sFrameCount++;
+
 			// 	frame_counter++;
 			// 	if (frame_counter == 25) {
 			// 		frame_counter = 0;
@@ -664,7 +665,6 @@ static void emulation_loop ( void )
 			// }
 			//DEBUG("RASTER=%d COMPARE=%d" NL,scanline,compare_raster);
 			//vic_interrupt();
-			vic3_check_raster_interrupt();
 		}
 	}
 }
