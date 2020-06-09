@@ -180,9 +180,8 @@ static void ui_update_sdcard ( void )
 	}
 	// Generate character ROM from the ROM image
 	Uint8 char_rom[CHAR_ROM_SIZE];
-	memcpy(char_rom, xemu_load_buffer_p + 0xD000, 0x1000);
-	if (CHAR_ROM_SIZE >= 0x2000)
-		memcpy(char_rom + 0x1000, xemu_load_buffer_p + 0x1D000, 0x1000);
+	memcpy(char_rom + 0x0000, xemu_load_buffer_p + 0xD000, 0x1000);
+	memcpy(char_rom + 0x1000, xemu_load_buffer_p + 0x9000, 0x1000);
 	free(xemu_load_buffer_p);
 	xemu_load_buffer_p = NULL;
 	// And store our character ROM!

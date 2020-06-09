@@ -30,7 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define MEGA65_ROM_NAME		"MEGA65.ROM"
 #define MEGA65_ROM_SIZE		0x20000
 #define CHAR_ROM_NAME		"CHARROM.ROM"
-#define CHAR_ROM_SIZE		0x1000
+#define CHAR_ROM_SIZE		0x2000
 
 // You may want to disable audio emulation since it can disturb non-real-time emulation
 #define AUDIO_EMULATION
