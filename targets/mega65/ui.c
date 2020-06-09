@@ -26,6 +26,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sdcard.h"
 #include "sdcontent.h"
 
+#define		HELP_URL	"https://github.com/lgblgblgb/xemu/wiki/MEGA65-help"
+
 
 //#if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_GUI)
 
@@ -80,6 +82,15 @@ static void ui_attach_d81_by_browsing ( void )
 static void ui_native_os_file_browser ( void )
 {
 	xemuexec_open_native_file_browser(sdl_pref_dir);
+}
+
+
+static void ui_online_help ( void )
+{
+	if (ARE_YOU_SURE("Shall I open a web browser instance with the help for you?", 0))
+		xemuexec_open_native_file_browser(HELP_URL);
+	else
+		INFO_WINDOW("Help request was cancelled by you");
 }
 
 
@@ -219,6 +230,7 @@ static const struct menu_st menu_main[] = {
 #ifdef XEMU_ARCH_WIN
 	{ "System console", XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK, xemugui_cb_sysconsole, NULL },
 #endif
+	{ "Help (online)", XEMUGUI_MENUID_CALLABLE, xemugui_cb_call_user_data, ui_online_help },
 	{ "About", XEMUGUI_MENUID_CALLABLE, xemugui_cb_about_window, NULL },
 	{ "Quit", XEMUGUI_MENUID_CALLABLE, xemugui_cb_call_quit_if_sure, NULL },
 	{ NULL }
