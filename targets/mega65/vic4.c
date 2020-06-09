@@ -332,7 +332,7 @@ static void vic4_interpret_legacy_mode_registers()
 
 	SET_COLORRAM_BASE(0);
 	DEBUGPRINT("VIC4: vic4_interpret_legacy_mode_registers(): vicii_first_raster=%d,chrcount=%d,border yt=%d,yb=%d,xl=%d,xr=%d,textxpos=%d,textypos=%d,"
-	          "screen_ram=$%06x,charset=$%06x,sprite=$%06x" NL, vicii_first_raster, REG_CHRCOUNT,
+	          "screen_ram=$%06x,charset/bitmap=$%06x,sprite=$%06x" NL, vicii_first_raster, REG_CHRCOUNT,
 		BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START,
 		SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
 }
@@ -380,6 +380,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_ALL(0x10):
 			break;		// Sprite coordinates: simple write the VIC reg in all I/O modes.
 		CASE_VIC_ALL(0x11):
+			DEBUGPRINT("WRITE 0xD011: $%02x" NL, data);
 			compare_raster = (compare_raster & 0xFF) | ((data & 0x80) << 1);
 			DEBUG("VIC: compare raster is now %d" NL, compare_raster);
 			vic_hotreg_touched = 1;
@@ -393,6 +394,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_ALL(0x15):	// sprite enabled
 			break;
 		CASE_VIC_ALL(0x16):	// control-reg#2, we allow write even if non-used bits here
+			DEBUGPRINT("WRITE 0xD016: $%02x" NL, data);
 			vic_hotreg_touched = 1;
 			break;
 		CASE_VIC_ALL(0x17):	// sprite-Y expansion
@@ -403,7 +405,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			// Reads are mapped to extended registers.
 			// So we just store the D018 Legacy Screen Address to be referenced elsewhere.
 			//
-			DEBUGPRINT("WRITE 0x18: $%02x" NL , data);
+			DEBUGPRINT("WRITE 0xD018: $%02x" NL , data);
 			REG_CHARPTR_B1 = (data & 14) << 2;
 			REG_CHARPTR_B0 = 0;
 			REG_SCRNPTR_B2 &= 0xF0;
@@ -790,19 +792,7 @@ static void vic4_do_sprites()
 		if ((REG_SPRITE_ENABLE & (1 << sprnum)) &&
 			(sprite_row_in_raster >= 0 && sprite_row_in_raster < 21) )
 		{
-			Uint8 *sprite_data_pointer;
-			if (REG_SPRPTR_B2 & 0x80) // 8 or 16-bit pointer address?
-			{
-				// 16-bit sprite pointers, allowing sprites to be sourced from
-				// anywhere in first 4MB of chip RAM
-				//sprite_data = main_ram + ();
-			}
-			else
-			{
-				// "VIC-II type" 8-bit pointers
-				sprite_data_pointer = main_ram + SPRITE_POINTER_ADDR + sprnum;
-			}
-
+			Uint8 *sprite_data_pointer =  main_ram + SPRITE_POINTER_ADDR + sprnum;
 			Uint8 *sprite_data = main_ram + 64 * (*sprite_data_pointer);
 			Uint8 *row_data = sprite_data + 3 * sprite_row_in_raster;
 			int xscale = (REG_H640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
@@ -814,20 +804,44 @@ static void vic4_do_sprites()
 	}
 }
 
-static void vic4_render_bitmap_hires_raster()
+static void vic4_render_mono_char_row(Uint8 *char_row_data, int glyph_width, Uint8 bg_color, Uint8 fg_color)
 {
-	Uint8* screen_ram_row_start = screen_ram_current_ptr;
-
-
-	while (xcounter < border_x_right)
+	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step)
 	{
-		Uint16 color_data = *(screen_ram_current_ptr++);
-		Uint8 char_bgcolor = color_data >> 4;
-		Uint8 char_fgcolor = color_data & 0xF;
-
+		const Uint8 char_pixel = (*char_row_data & (0x80 >> (int)cx));
+		Uint32 pixel_color = char_pixel ? vic3_rom_palette[fg_color] : vic3_rom_palette[bg_color];
+		*(current_pixel++) = pixel_color;
+		bg_pixel_state[xcounter++] = char_pixel ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
 	}
 }
 
+static void vic4_render_bitmap_hires_raster()
+{
+	Uint8 char_x = 0;
+	Uint8* screen_ram_row_start = screen_ram_current_ptr;
+	
+	while (xcounter < border_x_right)
+	{
+		if (display_row > 25) { //FIX THIS: get from registers
+			*(current_pixel++) = vic3_rom_palette[REG_BORDER_COLOR];
+			xcounter++;
+			continue;
+		}
+
+		Uint8 color_data = *(screen_ram_current_ptr++);
+		Uint8 char_fgcolor = color_data >> 4;
+		Uint8 char_bgcolor = color_data & 0xF;
+		Uint8* char_row_data = main_ram + VIC2_BITMAP_ADDR + display_row * 320 + 8 *char_x++  + char_row;
+		vic4_render_mono_char_row(char_row_data, 8, char_bgcolor, char_fgcolor);
+	}
+	if (++char_row > 7)
+	{
+		char_row = 0;
+		display_row++;
+	}
+	else
+		screen_ram_current_ptr = screen_ram_row_start;
+}
 
 static void vic4_render_textmode_raster()
 {
@@ -844,9 +858,8 @@ static void vic4_render_textmode_raster()
 
 	while (xcounter < border_x_right)
 	{
-		//DEBUGPRINT("display_row %d", display_row);
-		if (display_row > 25) {
-			*(current_pixel++) = vic3_rom_palette[2];
+		if (display_row > 25) { // FIX: get from registers.
+			*(current_pixel++) = vic3_rom_palette[REG_BORDER_COLOR];
 			xcounter++;
 			continue;
 		}
@@ -865,14 +878,7 @@ static void vic4_render_textmode_raster()
 		Uint8 glyph_width_deduct = SXA_TRIM_RIGHT_BITS012(char_id) + (SXA_TRIM_RIGHT_BIT3(char_id) ? 8 : 0);
 		Uint8 glyph_width = (SXA_4BIT_PER_PIXEL(color_data) ? 16 : 8) - glyph_width_deduct;
 		Uint8* char_row_data = main_ram +  get_charset_effective_addr() + (char_id * 8) + char_row;
-		
-		for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step)
-		{
-			const Uint8 char_pixel = (*char_row_data & (0x80 >> (int)cx));
-			Uint32 pixel_color = char_pixel ? vic3_rom_palette[char_fgcolor] : vic3_rom_palette[char_bgcolor];
-			*(current_pixel++) = pixel_color;
-			bg_pixel_state[xcounter++] = char_pixel ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
-		}
+		vic4_render_mono_char_row(char_row_data, glyph_width, char_bgcolor, char_fgcolor);
 	}
 
 	if (++char_row > 7)
@@ -935,12 +941,16 @@ int vic4_render_scanline()
 			while (xcounter++ < border_x_left)
 				*(current_pixel++) = vic3_rom_palette[REG_BORDER_COLOR & 0xF];
 
-			vic4_render_textmode_raster();
+			// Cache this and avoid branching ;)
+			if (TEXT_MODE)
+				vic4_render_textmode_raster();
+			else if (REG_BMM)
+				vic4_render_bitmap_hires_raster();
 
 			while (xcounter++ <= SCREEN_WIDTH)
 				*(current_pixel++) = vic3_rom_palette[REG_BORDER_COLOR & 0xF];
 
-			//vic4_do_sprites();
+			vic4_do_sprites();
 		}
 	}
 	ycounter++;

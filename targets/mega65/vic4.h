@@ -108,6 +108,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_RAM_ADDR_VIC  (REG_SCREEN_ADDR * 1024)
 #define SCREEN_ADDR          ((Uint32)REG_SCRNPTR_B0 | (REG_SCRNPTR_B1<<8) | (REG_SCRNPTR_B2 <<16))
 #define CHARSET_ADDR         ((Uint32)REG_CHARPTR_B0 | (REG_CHARPTR_B1<<8) | (REG_CHARPTR_B2 <<16))
+#define VIC2_BITMAP_ADDR     ((Uint32)REG_CHARPTR_B0 | (REG_CHARPTR_B1<<8) | (REG_CHARPTR_B2 <<16))
 #define SPRITE_POINTER_ADDR  ((Uint32)REG_SPRPTR_B0  | (REG_SPRPTR_B1<<8)  | (REG_SPRPTR_B2 <<16))
 #define COLOR_RAM_ADDR       ((((Uint16)REG_COLPTR) | (REG_COLPTR_MSB) << 8) + 0xFF80000)
 #define IS_PAL_MODE          (REG_PALNTSC ^ 0x80)
@@ -121,9 +122,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_HORZ_2X(n)    (vic_registers[0x1D] & (1 << (n)))
 #define SPRITE_VERT_2X(n)    (vic_registers[0x17] & (1 << (n)))
 #define SPRITE_MULTICOLOR(n) (vic_registers[0x1C] & (1 << (n)))
-
-
-
+#define TEXT_MODE            (!REG_BMM)
+#define HIRES_BITMAP_MODE    (REG_BMM & !REG_MCM & !REG_EBM)
+#define MULTICOLOR_BITMAP_MODE (REG_BMM & REG_MCM & !REG_EBM)
 
 // "Super-Extended character attributes" (see https://github.com/MEGA65/mega65-core/blob/master/docs/viciv-modes.md)
 // cw is color-word (16-bit from Color RAM). chw is character-word (16bit from Screen RAM)

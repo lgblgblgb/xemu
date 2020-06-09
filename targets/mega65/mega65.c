@@ -173,9 +173,9 @@ static void cia2_out_a ( Uint8 data )
 {   
 	if (REG_HOTREG && !REG_CRAM2K)
 	{
-		REG_SCRNPTR_B1 = (~data << 6) | (REG_SCRNPTR_B1 & 63);
-		REG_CHARPTR_B1 = (~data << 6) | (REG_CHARPTR_B1 & 63);
-		REG_SPRPTR_B1  = (~data << 6) | (REG_SPRPTR_B1 & 63);
+		REG_SCRNPTR_B1 = (~data << 6) | (REG_SCRNPTR_B1 & 0x3F);
+		REG_CHARPTR_B1 = (~data << 6) | (REG_CHARPTR_B1 & 0x3F);
+		REG_SPRPTR_B1  = (~data << 6) | (REG_SPRPTR_B1 & 0x3F);
 	}
 	DEBUG("VIC2: Wrote to $DD00: $%08x" NL, data);
 }
