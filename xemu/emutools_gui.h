@@ -61,15 +61,18 @@ extern int  xemugui_init		( const char *name );
 extern void xemugui_shutdown		( void );
 extern int  xemugui_iteration		( void );
 extern int  xemugui_file_selector	( int dialog_mode, const char *dialog_title, char *default_dir, char *selected, int path_max_size );
+
 extern int  xemugui_popup		( const struct menu_st desc[] );
 
-extern void xemugui_cb_call_user_data ( const struct menu_st *m, int *query );
-extern void xemugui_cb_call_user_data_if_sure ( const struct menu_st *m, int *query );
-extern void xemugui_cb_quit ( const struct menu_st *m, int *query );
-extern void xemugui_cb_call_quit_if_sure ( const struct menu_st *m, int *query );
+extern void xemugui_cb_call_user_data		( const struct menu_st *m, int *query );
+extern void xemugui_cb_call_user_data_if_sure	( const struct menu_st *m, int *query );
+extern void xemugui_cb_quit			( const struct menu_st *m, int *query );
+extern void xemugui_cb_call_quit_if_sure	( const struct menu_st *m, int *query );
+extern void xemugui_cb_show_info_window_text	( const struct menu_st *m, int *query );
+extern void xemugui_cb_about_window		( const struct menu_st *m, int *query );
 #ifdef XEMU_ARCH_WIN
-extern void xemugui_cb_sysconsole ( const struct menu_st *m, int *query );
+extern void xemugui_cb_sysconsole		( const struct menu_st *m, int *query );
 #endif
-extern void xemugui_cb_windowsize ( const struct menu_st *m, int *query );
+extern void xemugui_cb_windowsize		( const struct menu_st *m, int *query );
 
 #endif

@@ -42,8 +42,8 @@ void console_monitor_ready ( void ) {
 #include <io.h>
 #include <fcntl.h>
 #else
-#ifndef HAVE_READLINE
-#error "We need libreadline for this target/platform, but HAVE_READLINE is not defined. Maybe libreadline cannot be detected?"
+#ifndef XEMU_HAS_READLINE
+#error "We need libreadline for this target/platform, but XEMU_HAS_READLINE is not defined. Maybe libreadline cannot be detected?"
 #endif
 #include <readline/readline.h>
 #include <readline/history.h>

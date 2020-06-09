@@ -117,6 +117,8 @@ static int xemugtkgui_file_selector ( int dialog_mode, const char *dialog_title,
 		g_free(filename);
 	}
 	gtk_widget_destroy(dialog);
+	while (gtk_events_pending())
+		gtk_main_iteration();
 	xemu_drop_events();
 	_gtkgui_active = 2;
 	return res != GTK_RESPONSE_ACCEPT;

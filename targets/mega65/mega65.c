@@ -1,4 +1,4 @@
-/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+/* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
@@ -53,7 +53,9 @@ static int frame_counter;
 static int   paused = 0, paused_old = 0;
 static int   breakpoint_pc = -1;
 static int   trace_step_trigger = 0;
+#ifdef HAS_UARTMON_SUPPORT
 static void (*m65mon_callback)(void) = NULL;
+#endif
 static const char emulator_paused_title[] = "TRACE/PAUSE";
 static char emulator_speed_title[] = "????MHz";
 static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
@@ -72,7 +74,7 @@ void cpu65_illegal_opcode_callback ( void )
 void machine_set_speed ( int verbose )
 {
 	int speed_wanted;
-	// TODO: Mega65 speed is not handled yet. Reasons: too slow emulation for average PC, and the complete control of speed, ie lack of C128-fast (2MHz mode,
+	// TODO: MEGA65 speed is not handled yet. Reasons: too slow emulation for average PC, and the complete control of speed, ie lack of C128-fast (2MHz mode,
 	// because of incomplete VIC register I/O handling).
 	// Actually the rule would be something like that (this comment is here by intent, for later implementation FIXME TODO), some VHDL draft only:
 	// cpu_speed := vicii_2mhz&viciii_fast&viciv_fast
@@ -87,9 +89,10 @@ void machine_set_speed ( int verbose )
 	//	return;
 	if (verbose)
 		DEBUGPRINT("SPEED: in_hypervisor=%d force_fast=%d c128_fast=%d, c65_fast=%d m65_fast=%d" NL,
-			in_hypervisor, force_fast, (c128_d030_reg & 1) ^ 1, vic_registers[0x31] & 64, vic_registers[0x54] & 64
+			in_hypervisor, force_fast, (c128_d030_reg & 1), vic_registers[0x31] & 64, vic_registers[0x54] & 64
 	);
-	speed_wanted = (in_hypervisor || force_fast) ? 7 : (((c128_d030_reg & 1) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
+	// ^1 at c128... because it was inverted :-O --> FIXME: this is ugly workaround, the switch statement should be re-organized
+	speed_wanted = (in_hypervisor || force_fast) ? 7 : ((((c128_d030_reg & 1) ^ 1) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
 	if (speed_wanted != speed_current) {
 		speed_current = speed_wanted;
 		switch (speed_wanted) {
@@ -97,21 +100,25 @@ void machine_set_speed ( int verbose )
 			case 5:	// 101 - 1MHz
 				cpu_cycles_per_scanline = CPU_C64_CYCLES_PER_SCANLINE;
 				strcpy(emulator_speed_title, "1MHz");
+				cpu65_set_ce_timing(0);
 				break;
 			case 0:	// 000 - 2MHz
 				cpu_cycles_per_scanline = CPU_C128_CYCLES_PER_SCANLINE;
 				strcpy(emulator_speed_title, "2MHz");
+				cpu65_set_ce_timing(0);
 				break;
 			case 2:	// 010 - 3.5MHz
 			case 6:	// 110 - 3.5MHz
 				cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
 				strcpy(emulator_speed_title, "3.5MHz");
+				cpu65_set_ce_timing(1);
 				break;
-			case 1:	// 001 - 50MHz (or Xemu specified custom speed)
+			case 1:	// 001 - 40MHz (or Xemu specified custom speed)
 			case 3:	// 011 -		-- "" --
 			case 7:	// 111 -		-- "" --
 				cpu_cycles_per_scanline = cpu_cycles_per_scanline_for_fast_mode;
 				strcpy(emulator_speed_title, fast_mhz_in_string);
+				cpu65_set_ce_timing(1);
 				break;
 		}
 		DEBUG("SPEED: CPU speed is set to %s" NL, emulator_speed_title);
@@ -310,7 +317,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	load_memory_preinit_cache(1, "loadc000", "C000 utilities", c000_init_image, sizeof c000_init_image);
 	if (load_memory_preinit_cache(0, "kickup", "M65 kickstart", meminitdata_kickstart, MEMINITDATA_KICKSTART_SIZE)  != MEMINITDATA_KICKSTART_SIZE)
 		hypervisor_debug_invalidate("no kickup is loaded, built-in one does not have debug info");
-	// *** Initializes memory subsystem of Mega65 emulation itself
+	// *** Initializes memory subsystem of MEGA65 emulation itself
 	memory_init();
 	// fill the actual M65 memory areas with values managed by load_memory_preinit_cache() calls
 	// This is a separated step, to be able to call refill_memory_from_preinit_cache() later as well, in case of a "deep reset" functionality is needed for Xemu (not just CPU/hw reset),
@@ -318,7 +325,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	refill_memory_from_preinit_cache();
 	// *** Image file for SDCARD support
 	if (sdcard_init(xemucfg_get_str("sdimg"), xemucfg_get_str("8"), xemucfg_get_bool("virtsd")) < 0)
-		FATAL("Cannot find SD-card image (which is a must for Mega65 emulation): %s", xemucfg_get_str("sdimg"));
+		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", xemucfg_get_str("sdimg"));
 	// *** Initialize VIC4
 	vic_init();
 	// *** CIAs
@@ -372,8 +379,8 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		ERROR_WINDOW("Cannot open audio device!");
 #endif
 	//
-#ifdef UARTMON_SOCKET
-	uartmon_init(UARTMON_SOCKET);
+#ifdef HAS_UARTMON_SUPPORT
+	uartmon_init(xemucfg_get_str("uartmon"));
 #endif
 	fast_mhz = xemucfg_get_num("fastclock");
 	if (fast_mhz < 3 || fast_mhz > 200) {
@@ -426,7 +433,7 @@ static void shutdown_callback ( void )
 		DEBUGPRINT("Memory state is dumped into %s" DIRSEP_STR "%s" NL, getcwd(NULL, PATH_MAX), MEMDUMP_FILE);
 	}
 #endif
-#ifdef UARTMON_SOCKET
+#ifdef HAS_UARTMON_SUPPORT
 	uartmon_close();
 #endif
 	DEBUG("Execution has been stopped at PC=$%04X" NL, cpu65.pc);
@@ -451,9 +458,15 @@ void reset_mega65 ( void )
 	nmi_level = 0;
 	D6XX_registers[0x7E] = xemucfg_get_num("kicked");
 	hypervisor_start_machine();
-	DEBUG("RESET!" NL);
+	DEBUGPRINT("SYSTEM RESET." NL);
 }
 
+
+void reset_mega65_asked ( void )
+{
+	if (ARE_YOU_SURE("Are you sure to HARD RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
+		reset_mega65();
+}
 
 static void update_emulator ( void )
 {
@@ -463,7 +476,7 @@ static void update_emulator ( void )
 	// this part is used to trigger 'RESTORE trap' with long press on RESTORE.
 	// see input_devices.c for more information
 	kbd_trigger_restore_trap();
-#ifdef UARTMON_SOCKET
+#ifdef HAS_UARTMON_SUPPORT
 	uartmon_update();
 #endif
 	// Screen rendering: begin
@@ -479,7 +492,7 @@ static void update_emulator ( void )
 }
 
 
-
+#ifdef HAS_UARTMON_SUPPORT
 void m65mon_show_regs ( void )
 {
 	Uint8 pf = cpu65_get_pf();
@@ -562,6 +575,7 @@ void m65mon_breakpoint ( int brk )
 	else
 		cpu_cycles_per_step = 0;
 }
+#endif
 
 static int cycles, frameskip;
 
@@ -571,11 +585,13 @@ static void emulation_loop ( void )
 		while (XEMU_UNLIKELY(paused)) {	// paused special mode, ie tracing support, or something ...
 			if (XEMU_UNLIKELY(dma_status))
 				break;		// if DMA is pending, do not allow monitor/etc features
+#ifdef HAS_UARTMON_SUPPORT
 			if (m65mon_callback) {	// delayed uart monitor command should be finished ...
 				m65mon_callback();
 				m65mon_callback = NULL;
 				uartmon_finish_command();
 			}
+#endif
 			// we still need to feed our emulator with update events ... It also slows this pause-busy-loop down to every full frames (~25Hz)
 			// note, that it messes timing up a bit here, as there is update_emulator() calls later in the "normal" code as well
 			// this can be a bug, but real-time emulation is not so much an issue if you eg doing trace of your code ...
@@ -649,7 +665,7 @@ static void emulation_loop ( void )
 
 int main ( int argc, char **argv )
 {
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The Incomplete Mega-65 emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Incomplete MEGA65 emulator from LGB");
 	xemucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
 	xemucfg_define_num_option("dmarev", 0x100, "DMA revision (0/1=F018A/B +256=autochange, +512=modulo, you always wants +256!)");
 	xemucfg_define_num_option("fastclock", MEGA65_DEFAULT_FAST_CLOCK, "Clock of M65 fast mode (in MHz)");
@@ -683,6 +699,9 @@ int main ( int argc, char **argv )
 #ifdef HAVE_XEMU_UMON
 	xemucfg_define_num_option("umon", 0, "TCP-based dual mode (http / text) monitor port number [NOT YET WORKING]");
 #endif
+#ifdef HAS_UARTMON_SUPPORT
+	xemucfg_define_str_option("uartmon", NULL, "Sets the name for named unix-domain socket for uartmon, otherwise disabled");
+#endif
 #ifdef HAVE_XEMU_INSTALLER
 	xemucfg_define_str_option("installer", NULL, "Sets a download-specification descriptor file for auto-downloading data files");
 #endif
@@ -693,8 +712,10 @@ int main ( int argc, char **argv )
 #ifdef HID_KBD_MAP_CFG_SUPPORT
 	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
 #endif
+	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
+	i_am_sure_override = xemucfg_get_bool("besure");
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(xemucfg_get_str("installer"));
 #endif
@@ -720,7 +741,7 @@ int main ( int argc, char **argv )
 		return 1;
 	osd_init_with_defaults();
 	xemugui_init(xemucfg_get_str("gui"));
-	// Initialize Mega65
+	// Initialize MEGA65
 	mega65_init(
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
 		AUDIO_SAMPLE_FREQ		// sound mix freq

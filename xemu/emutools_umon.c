@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
 *  SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-*  and some Mega-65 features as well.
-*  Copyright (C)2017-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+*  and MEGA65 as well.
+*  Copyright (C)2017-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 *  NOTE: I AM NOT a windows programmer, not even a user ...
 *  These are my best tries with winsock to be usable also on the win32/64 platform ...
@@ -29,7 +29,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 static char _xemunet_strerror_buffer[1024];
 
-#ifndef _WIN32
+#ifndef XEMU_ARCH_WIN
 
 #include <unistd.h>
 #include <sys/socket.h>

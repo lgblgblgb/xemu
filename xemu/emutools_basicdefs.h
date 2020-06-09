@@ -1,6 +1,6 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and some Mega-65 features as well.
+   and MEGA65 as well.
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
@@ -23,21 +23,30 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_COMMON_EMUTOOLS_BASICDEFS_H_INCLUDED
 #define XEMU_COMMON_EMUTOOLS_BASICDEFS_H_INCLUDED
 
+#define COPYRIGHT_YEARS "2016-2020"
+
 #include <stdio.h>
 #include <limits.h>
 #include <stdlib.h>
 
 #define USE_REGPARM
 
+// In case of RELEASE build, we don't support debugging (ie write detailed log file),
+// since it introduces some overhead in form of many if's at critical places, even
+// if it's not used.
+#ifdef XEMU_RELEASE_BUILD
+#define DISABLE_DEBUG
+#endif
+
 #ifndef XEMU_DISABLE_SDL
-#ifndef HAVE_SDL2
-#error  "We require SDL2, but HAVE_SDL2 was not defined: SDL2 cannot be detected?"
+#ifndef XEMU_HAS_SDL2
+#error  "We require SDL2, but XEMU_HAS_SDL2 was not defined: SDL2 cannot be detected?"
 #endif
 #include <SDL_types.h>
 #include <SDL_endian.h>
 #else
-#ifdef HAVE_SDL2
-#error "This build does not want SDL2, but HAVE_SDL2 was specified?"
+#ifdef XEMU_HAS_SDL2
+#error "This build does not want SDL2, but XEMU_HAS_SDL2 was specified?"
 #endif
 #include <stdint.h>
 typedef int8_t Sint8;
@@ -67,7 +76,7 @@ typedef uint64_t Uint64;
 #endif /* __linux__ */
 #endif
 
-#if UINTPTR_MAX == 0xffffffff
+#if UINTPTR_MAX == 0xffffffffU
 #	define ARCH_32BIT
 #	define ARCH_BITS 32
 #	define ARCH_BITS_AS_TEXT "32"
@@ -223,7 +232,9 @@ static inline int xemu_byte_order_test ( void )
 #define XEMUEXIT(n)	exit(n)
 #endif
 
-extern const char *XEMU_BUILDINFO_ON, *XEMU_BUILDINFO_AT, *XEMU_BUILDINFO_GIT, *XEMU_BUILDINFO_CC, *XEMU_BUILDINFO_TARGET;
+#define BOOLEAN_VALUE(n)	(!!(n))
+
+extern const char *XEMU_BUILDINFO_ON, *XEMU_BUILDINFO_AT, *XEMU_BUILDINFO_GIT, *XEMU_BUILDINFO_CC, *XEMU_BUILDINFO_TARGET, *XEMU_BUILDINFO_CDATE;
 extern const char emulators_disclaimer[];
 extern void xemu_dump_version ( FILE *fp, const char *slogan );
 

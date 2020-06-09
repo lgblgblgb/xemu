@@ -31,13 +31,13 @@ The manual and changelog are in the header file "lodepng.h"
 */
 
 
-#ifdef NO_SCREENSHOT
-#warning "Screenshot with LodePNG is disabled by configuration."
-#else
-#include "xep128.h"
+//#ifdef NO_SCREENSHOT
+//#warning "Screenshot with LodePNG is disabled by configuration."
+//#else
+//#include "xep128.h"
 #ifdef CONFIG_USE_LODEPNG
 
-#include "lodepng.h"
+#include "xemu/lodepng.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -5918,5 +5918,4 @@ const char* lodepng_error_text(unsigned code)
 #endif /*LODEPNG_COMPILE_ERROR_TEXT*/
 
 
-#endif
 #endif

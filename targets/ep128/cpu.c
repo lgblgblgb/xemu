@@ -1,5 +1,5 @@
 /* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015,2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    http://xep128.lgb.hu/
 
 This program is free software; you can redistribute it and/or modify
@@ -27,7 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "printer.h"
 #include "zxemu.h"
 #include "primoemu.h"
-#include "w5300.h"
+#include "epnet.h"
 #include "roms.h"
 #include "input.h"
 #include "emu_rom_interface.h"
@@ -304,13 +304,26 @@ Z80EX_BYTE z80ex_pread_cb(Z80EX_WORD port16) {
 	if (port < primo_on)
 		return primo_read_io(port);
 	switch (port) {
-#ifdef CONFIG_W5300_SUPPORT
-		case W5300_IO_BASE + 0: return w5300_read_mr0();
-		case W5300_IO_BASE + 1: return w5300_read_mr1();
-		case W5300_IO_BASE + 2: return w5300_read_idm_ar0();
-		case W5300_IO_BASE + 3: return w5300_read_idm_ar1();
-		case W5300_IO_BASE + 4: return w5300_read_idm_dr0();
-		case W5300_IO_BASE + 5: return w5300_read_idm_dr1();
+#ifdef CONFIG_EPNET_SUPPORT
+		case EPNET_IO_BASE + 0x0:
+		case EPNET_IO_BASE + 0x1:
+		case EPNET_IO_BASE + 0x2:
+		case EPNET_IO_BASE + 0x3:
+		case EPNET_IO_BASE + 0x4:
+		case EPNET_IO_BASE + 0x5:
+		case EPNET_IO_BASE + 0x6:
+		case EPNET_IO_BASE + 0x7:
+			return epnet_read_cpu_port(port - EPNET_IO_BASE);
+		case EPNET_IO_BASE + 0x8:
+		case EPNET_IO_BASE + 0x9:
+		case EPNET_IO_BASE + 0xA:
+		case EPNET_IO_BASE + 0xB:
+		case EPNET_IO_BASE + 0xC:
+		case EPNET_IO_BASE + 0xD:
+		case EPNET_IO_BASE + 0xE:
+		case EPNET_IO_BASE + 0xF:
+			// return epnet_cf_read_cpu_port(port - EPNET_IO_BASE - 8);
+			return 0xFF;
 #endif
 		/* EXDOS/WD registers */
 #ifdef CONFIG_EXDOS_SUPPORT
@@ -364,7 +377,7 @@ Z80EX_BYTE z80ex_pread_cb(Z80EX_WORD port16) {
 		case 0xFE:
 			return zxemu_read_ula(IO16_HI_BYTE(port16));
 	}
-	DEBUG("IO: READ: unhandled port %02Xh read" NL, port);
+	DEBUGPRINT("IO: READ: unhandled port %02Xh read" NL, port);
 	return 0xFF;
 	//return ports[port];
 }
@@ -390,13 +403,27 @@ void z80ex_pwrite_cb(Z80EX_WORD port16, Z80EX_BYTE value) {
 	ports[port] = value;
 	//DEBUG("IO: WRITE: OUT (%02Xh),%02Xh" NL, port, value);
 	switch (port) {
-#ifdef CONFIG_W5300_SUPPORT
-		case W5300_IO_BASE + 0: w5300_write_mr0(value); break;
-		case W5300_IO_BASE + 1: w5300_write_mr1(value); break;
-		case W5300_IO_BASE + 2: w5300_write_idm_ar0(value); break;
-		case W5300_IO_BASE + 3: w5300_write_idm_ar1(value); break;
-		case W5300_IO_BASE + 4: w5300_write_idm_dr0(value); break;
-		case W5300_IO_BASE + 5: w5300_write_idm_dr1(value); break;
+#ifdef CONFIG_EPNET_SUPPORT
+		case EPNET_IO_BASE + 0x0:
+		case EPNET_IO_BASE + 0x1:
+		case EPNET_IO_BASE + 0x2:
+		case EPNET_IO_BASE + 0x3:
+		case EPNET_IO_BASE + 0x4:
+		case EPNET_IO_BASE + 0x5:
+		case EPNET_IO_BASE + 0x6:
+		case EPNET_IO_BASE + 0x7:
+			epnet_write_cpu_port(port - EPNET_IO_BASE, value);
+			break;
+		case EPNET_IO_BASE + 0x8:
+		case EPNET_IO_BASE + 0x9:
+		case EPNET_IO_BASE + 0xA:
+		case EPNET_IO_BASE + 0xB:
+		case EPNET_IO_BASE + 0xC:
+		case EPNET_IO_BASE + 0xD:
+		case EPNET_IO_BASE + 0xE:
+		case EPNET_IO_BASE + 0xF:
+			//epnet_cf_write_cpu_port(port - EPNET_IO_BASE - 8, value);
+			break;
 #endif
 		/* EXDOS/WD registers */
 #ifdef CONFIG_EXDOS_SUPPORT
@@ -533,7 +560,7 @@ void z80ex_pwrite_cb(Z80EX_WORD port16, Z80EX_BYTE value) {
 			zxemu_write_ula(IO16_HI_BYTE(port16), value);
 			break;
 		default:
-			DEBUG("IO: WRITE: unhandled port %02Xh write with data %02Xh" NL, port, value);
+			DEBUGPRINT("IO: WRITE: unhandled port %02Xh write with data %02Xh" NL, port, value);
 			break;
 	}
 }

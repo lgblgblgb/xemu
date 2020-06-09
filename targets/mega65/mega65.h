@@ -1,4 +1,4 @@
-/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+/* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
@@ -34,8 +34,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 // You may want to disable audio emulation since it can disturb non-real-time emulation
 #define AUDIO_EMULATION
-
-#define UARTMON_SOCKET		"uart.sock"
 
 /* Do *NOT* modify these, as other parts of the emulator currently depends on these values ...
    You can try RENDER_SCALE_QUALITY though with values 0, 1, 2 */
@@ -74,6 +72,7 @@ extern void m65mon_breakpoint ( int brk );
 extern void machine_set_speed ( int verbose );
 
 extern void reset_mega65      ( void );
+extern void reset_mega65_asked( void );
 
 extern int  refill_c65_rom_from_preinit_cache ( void );
 

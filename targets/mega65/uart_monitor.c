@@ -1,6 +1,6 @@
-/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+/* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,19 +20,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "uart_monitor.h"
 
-int  umon_write_size;
-int  umon_send_ok;
-char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
-
-#if defined(_WIN32) || defined(__EMSCRIPTEN__)
-#warning "Platform does not support UMON"
+#if !defined(HAS_UARTMON_SUPPORT)
 // Windows is not supported currently, as it does not have POSIX-standard socket interface (?).
 // Also, it's pointless for emscripten, for sure.
-int  uartmon_init   ( const char *fn ) { return 1; }
-void uartmon_update ( void ) {}
-void uartmon_close  ( void ) {}
-void uartmon_finish_command ( void ) {}
+#warning "Platform does not support UMON"
 #else
 
 
@@ -46,8 +38,12 @@ void uartmon_finish_command ( void ) {}
 #include <string.h>
 #include <limits.h>
 
+int  umon_write_size;
+int  umon_send_ok;
+char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
-static int  sock_server, sock_client;
+static int  sock_server = -1;
+static int  sock_client;
 static int  umon_write_pos, umon_read_pos;
 static int  umon_echo;
 static char umon_read_buffer [0x1000];
@@ -227,6 +223,10 @@ int uartmon_init ( const char *fn )
 	struct sockaddr_un sock_st;
 	int sock;
 	sock_server = -1;
+	if (!fn || !*fn) {
+		DEBUGPRINT("UARTMON: disabled, no name is specified to bind to." NL);
+		return 0;
+	}
 	sock = socket(AF_UNIX, SOCK_STREAM, 0);
 	if (sock < 0) {
 		ERROR_WINDOW("Cannot create named socket %s, UART monitor cannot be used: %s\n", fn, strerror(errno));

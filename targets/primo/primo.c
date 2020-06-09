@@ -1,7 +1,7 @@
 /* Test-case for a very simple Primo (a Hungarian U880 - Z80
    compatible clone CPU - based 8 bit computer) emulator.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    NOTE: Primo's CPU is U880, but for the simplicity I still call it Z80, as
    it's [unlicensed] clone anyway.
@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_files.h"
 #include "xemu/emutools_hid.h"
 #include "xemu/emutools_config.h"
-// #include "xemu/emutools_nativegui.h"
+#include "xemu/emutools_gui.h"
 #include "xemu/z80.h"
 #include "xemu/z80_dasm.h"
 #include "primo.h"
@@ -53,6 +53,9 @@ static int primo_screen = 0;
 static int nmi_enabled = 0;
 static int nmi_status = 0;
 static void (*renderer)(void);
+
+static int primo_model_set;
+static const char *primo_model_set_str;
 
 static const char *pri_name;
 
@@ -436,12 +439,6 @@ static  void render_primo_c_screen ( void )
 
 
 
-// HID needs this to be defined, it's up to the emulator if it uses or not ...
-int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
-{
-        return 0;
-}
-
 
 void emu_quit_callback ( void )
 {
@@ -497,14 +494,14 @@ static int pri_apply ( Uint8 *data, int size, int wet_run )
 
 
 
-static int pri_load ( const char *file_name )
+static int pri_load ( const char *file_name, int wet_run )
 {
 	if (!file_name || !*file_name)
 		return -1;
 	int file_size = xemu_load_file(file_name, NULL, 10, 0xC000, "Cannot open/use PRI file");
 	if (file_size < 0)
 		return file_size;
-	int ret = pri_apply(xemu_load_buffer_p, file_size, 1);
+	int ret = pri_apply(xemu_load_buffer_p, file_size, wet_run);
 	free(xemu_load_buffer_p);
 	return ret;
 }
@@ -587,7 +584,7 @@ static void emulation_loop ( void )
 			if (emu_loop_notification & EMU_LOOP_LOAD_NOTIFY) {	// Notification for checking PC to trigger PRI loading!
 				if (Z80_PC == ROM_Z80_PC_LOAD_TRIGGER) {
 					emu_loop_notification &= ~EMU_LOOP_LOAD_NOTIFY;	// clear notification, it's done
-					int ret = pri_load(pri_name);
+					int ret = pri_load(pri_name, 1);
 					if (ret > 0) {
 						DEBUGPRINT("PRI: loaded, Z80 PC change $%04X -> $%04X" NL, Z80_PC, ret);
 						Z80_PC = ret;
@@ -641,6 +638,7 @@ static void emulation_loop ( void )
 	}
 	renderer();
 	hid_handle_all_sdl_events();
+	xemugui_iteration();
 	xemu_timekeeping_delay((Uint64)(1000000L * (Uint64)(all_cycles_spent - all_cycles_old) / (Uint64)cpu_clock));
 }
 
@@ -740,9 +738,120 @@ static int set_model ( const char *model_id, int do_load_rom )
 		default:
 			FATAL("Unknown primo model ID #%d", id);
 	}
+	primo_model_set = id;
+	primo_model_set_str = model_ids[id];
 	return 0;
 }
 
+static void primo_reset ( void )
+{
+	emu_loop_notification &= ~EMU_LOOP_NMI_NOTIFY;
+	emu_loop_notification &= ~EMU_LOOP_LOAD_NOTIFY;
+	z80ex_reset();
+}
+
+
+
+static void ui_native_os_file_browser ( void )
+{
+	xemuexec_open_native_file_browser(sdl_pref_dir);
+}
+
+static void ui_cb_set_model ( const struct menu_st *m, int *query )
+{
+#if 0
+	if (query) {
+		if (!strcasecmp(m->user_data, primo_model_set_str))
+			*query |= XEMUGUI_MENUFLAG_ACTIVE_RADIO;
+		return;
+	}
+#endif
+	if (!set_model(m->user_data, 1))
+		primo_reset();
+}
+
+static void ui_load_pri ( void )
+{
+	static char fnbuf[PATH_MAX] = "";
+	static char dir[PATH_MAX] = "";
+	if (!xemugui_file_selector(
+		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		"Select PRI file to load",
+		dir,
+		fnbuf,
+		sizeof fnbuf
+	)) {
+		if (pri_load(fnbuf, 0) > 0) {
+			primo_reset();
+			emu_loop_notification |= EMU_LOOP_LOAD_NOTIFY;
+			pri_name = fnbuf;
+		}
+	}
+}
+
+static void primo_reset_asked ( void )
+{
+	if (ARE_YOU_SURE("Are you sure to HARD RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
+		primo_reset();
+}
+
+static void ui_cb_set_cpu_clock ( const struct menu_st *m, int *query )
+{
+	if (!query)
+		set_cpu_hz((int)(uintptr_t)m->user_data);
+}
+
+
+static const struct menu_st menu_cpu_clock[] = {
+	{ "2.5MHz (default)",		XEMUGUI_MENUID_CALLABLE,	ui_cb_set_cpu_clock,		(void*)2500000	},
+	{ "3.5MHz",			XEMUGUI_MENUID_CALLABLE,	ui_cb_set_cpu_clock,		(void*)3500000	},
+	{ "7MHz",			XEMUGUI_MENUID_CALLABLE,	ui_cb_set_cpu_clock,		(void*)7000000	},
+	{ NULL }
+};
+static const struct menu_st menu_models[] = {
+	{ "A32",			XEMUGUI_MENUID_CALLABLE,	ui_cb_set_model,		"A32"	},
+	{ "A48",			XEMUGUI_MENUID_CALLABLE,	ui_cb_set_model,		"A48"	},
+	{ "A64",			XEMUGUI_MENUID_CALLABLE,	ui_cb_set_model,		"A64"	},
+	{ "B32",			XEMUGUI_MENUID_CALLABLE,	ui_cb_set_model,		"B32"	},
+	{ "B48",			XEMUGUI_MENUID_CALLABLE,	ui_cb_set_model,		"B48"	},
+	{ "B64",			XEMUGUI_MENUID_CALLABLE,	ui_cb_set_model,		"B64"	},
+	{ "C",				XEMUGUI_MENUID_CALLABLE,	ui_cb_set_model,		"C"	},
+	{ NULL }
+};
+static const struct menu_st menu_display[] = {
+	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize,		(void*)0	},
+	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize,		(void*)1	},
+	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize,		(void*)2	},
+	{ NULL }
+};
+static const struct menu_st menu_main[] = {
+	{ "Display",			XEMUGUI_MENUID_SUBMENU,		menu_display,			NULL },
+	{ "Set Primo model",		XEMUGUI_MENUID_SUBMENU,		menu_models,			NULL },
+	{ "CPU clock",			XEMUGUI_MENUID_SUBMENU,		menu_cpu_clock,			NULL },
+	{ "Reset Primo",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	primo_reset_asked },
+	{ "Load PRI file",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	ui_load_pri	},
+	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	ui_native_os_file_browser },
+#ifdef XEMU_ARCH_WIN
+	{ "System console",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_sysconsole,		NULL },
+#endif
+	{ "About",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_about_window,	NULL },
+	{ "Quit",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_quit_if_sure,	NULL },
+	{ NULL }
+};
+
+
+// HID needs this to be defined, it's up to the emulator if it uses or not ...
+int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
+{
+	if (!pressed && pos == -2 && key == 0 && handled == SDL_BUTTON_RIGHT) {
+		DEBUGGUI("UI: handler has been called." NL);
+		if (xemugui_popup(menu_main)) {
+			DEBUGPRINT("UI: oops, POPUP does not worked :(" NL);
+		}
+	}
+        return 0;
+}
 
 
 
@@ -757,9 +866,11 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
 	xemucfg_define_switch_option("disasm", "Disassemble every CPU step (uber-spammy, uber-slow!)");
 	xemucfg_define_str_option("model", "b64", "Set Primo model: a32, a48, a64, b32, b48, b64, c");
+	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
+	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
-	// xemunativegui_init();
+	i_am_sure_override = xemucfg_get_bool("besure");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
@@ -785,6 +896,7 @@ int main ( int argc, char **argv )
 		SDL_ENABLE		// enable joystick HID events
 	);
 	osd_init_with_defaults();
+	xemugui_init(xemucfg_get_str("gui"));
 	SDL_AudioSpec audio_want, audio_have;
 	SDL_memset(&audio_want, 0, sizeof audio_want);
 	audio_want.freq = AUDIO_SAMPLING_FREQ;

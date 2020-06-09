@@ -1,4 +1,4 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 / Mega-65 emulator,
+/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 / MEGA65 emulator,
    within the Xemu project.
    Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 

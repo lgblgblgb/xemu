@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and some Mega-65 features as well.
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   and MEGA65 as well.
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 | For more information about "cpu65" please also read comments in file cpu65.c |
 
@@ -19,8 +19,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_COMMON_CPU65_H_INCLUDED
-#define __XEMU_COMMON_CPU65_H_INCLUDED
+#ifndef XEMU_COMMON_CPU65_H_INCLUDED
+#define XEMU_COMMON_CPU65_H_INCLUDED
 
 #define CPU65_PF_N 0x80
 #define CPU65_PF_V 0x40
@@ -84,7 +84,11 @@ struct cpu65_st {
 extern struct cpu65_st CPU65;
 
 #ifdef MEGA65
-extern int cpu_linear_memory_addressing_is_enabled;
+extern int  cpu_linear_memory_addressing_is_enabled;
+#endif
+
+#ifdef CPU65_65CE02_6502NMOS_TIMING_EMULATION
+extern void cpu65_set_ce_timing ( int is_ce );
 #endif
 //extern int cpu_multi_step_stop_trigger;
 

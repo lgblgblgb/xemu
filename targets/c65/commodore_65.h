@@ -1,5 +1,5 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
-   Copyright (C)2016,2017,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,8 +15,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_COMMODORE_65_H_INCLUDED
-#define __XEMU_COMMODORE_65_H_INCLUDED
+#ifndef XEMU_COMMODORE65_COMMODORE_65_H_INCLUDED
+#define XEMU_COMMODORE65_COMMODORE_65_H_INCLUDED
 
 /* Do *NOT* modify these, as other parts of the emulator currently depends on these values ...
    You can try RENDER_SCALE_QUALITY though with values 0, 1, 2 */
@@ -55,5 +55,6 @@ extern void  io_write ( int addr, Uint8 data );
 extern void  write_phys_mem ( int addr, Uint8 data );
 extern Uint8 read_phys_mem  ( int addr );
 extern void  c65_reset ( void );
+extern void  c65_reset_asked ( void );
 
 #endif

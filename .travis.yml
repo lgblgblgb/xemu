@@ -7,6 +7,7 @@ matrix:
     - name: Linux native compilation
       os: linux
       addons:
+        hostname: lgb
         apt:
           packages:
             - alien
@@ -36,23 +37,24 @@ matrix:
       before_script:
         - set +e
         - uname -a ; lsb_release -a || true ; hostname ; pwd ; df -h ; id -a
-        - hostname ; sudo hostname lgb || true ; hostname
+        - hostname
         - set -e
         - sdl2-config --version --prefix --cflags --libs --static-libs
         - pkg-config --cflags-only-I --libs gtk+-3.0
         - set +e
+        - ps auxwwww || true
         - uptime
       script:
         - set -e
-        - make -j 2
+        - make -j 2 RELEASE=yes
         - set +e
         - for a in build/bin/*.native ; do strip $a ; ls -l $a ; done
         - set -e
-        - make deb
+        - make RELEASE=yes deb
         - set +e
         - cp build/bin/*.deb build/bin/*.rpm . || true
-        - build/bin/xc65.native --help || true
-        - ldd build/bin/xc65.native
+        - build/bin/xmega65.native --help || true
+        - ldd build/bin/xmega65.native
         - uptime ; pwd ; ls -l
       before_deploy:
         - build/deploy/before-deploy.sh xemu-deploy Linux
@@ -61,7 +63,7 @@ matrix:
         local_dir: xemu-deploy
         skip_cleanup: true
         github_token: $GHDEPLOYKEY2
-        keep_history: true
+        keep_history: false
         repo: lgblgblgb/xemu-binaries
         target_branch: binary-linux-$TRAVIS_BRANCH
         email: lgblgblgb@gmail.com
@@ -75,6 +77,7 @@ matrix:
     - name: Windows cross-compilation on Linux
       os: linux
       addons:
+        hostname: lgb
         apt:
           packages:
             - binutils-mingw-w64-i686
@@ -96,13 +99,14 @@ matrix:
         - set +e
         - uname -a ; pwd ; df -h ; id -a
         - set -e
-        - hostname ; sudo hostname lgb || true ; hostname
+        - hostname
         - build/install-cross-win-mingw-sdl-on-linux.sh /usr/bin
         - set +e
+        - ps auxwwww || true
         - uptime
       script:
         - set -e
-        - make -j 2 ARCH=win64
+        - make -j 2 ARCH=win64 RELEASE=yes
         - set +e
         - for a in build/bin/*.win64 ; do x86_64-w64-mingw32-strip $a ; ls -l $a ; done
         - cp README.md LICENSE `x86_64-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
@@ -111,7 +115,7 @@ matrix:
         - build/nsi-build-native.sh win64 `build/system-config win64 sdl2 dll` || true
         - cp build/bin/install-xemu-win64.exe . || true
         - set -e
-        - make -j 2 ARCH=win32
+        - make -j 2 ARCH=win32 RELEASE=yes
         - set +e
         - for a in build/bin/*.win32 ; do i686-w64-mingw32-strip $a ; ls -l $a ; done
         - cp README.md LICENSE `i686-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
@@ -127,7 +131,7 @@ matrix:
         local_dir: xemu-deploy
         skip_cleanup: true
         github_token: $GHDEPLOYKEY2
-        keep_history: true
+        keep_history: false
         repo: lgblgblgb/xemu-binaries
         target_branch: binary-windows-$TRAVIS_BRANCH
         email: lgblgblgb@gmail.com
@@ -142,6 +146,7 @@ matrix:
       os: osx
       osx_image: xcode11
       addons:
+        hostname: lgb
         homebrew:
           packages:
             - create-dmg
@@ -149,19 +154,20 @@ matrix:
       before_script:
         - set +e
         - uname -a ; pwd ; df -h ; id -a
-        - hostname ; sudo hostname lgb || true ; hostname
+        - hostname
         - set -e
         - sdl2-config --version --prefix --cflags --libs --static-libs
         - set +e
+        - ps auxwwww || true
         - uptime
       script:
         - set -e
-        - make -j 2 ARCH=osx
+        - make -j 2 RELEASE=yes
         - set +e
-        - for a in build/bin/*.osx ; do build/mangle_dylib_osx.sh $a ; strip $a ; done
-        - build/bin/xc65.osx --help || true
+        - for a in build/bin/*.native ; do build/mangle_dylib_osx.sh $a ; strip $a ; done
+        - build/bin/xmega65.native --help || true
         - cp README.md LICENSE build/bin/
-        - build/zipper.sh build/bin xemu-binaries-osx.zip build/bin/*.dylib build/bin/*.osx README.md LICENSE
+        - build/zipper.sh build/bin xemu-binaries-osx.zip build/bin/*.dylib build/bin/*.native README.md LICENSE
         - cp build/bin/xemu-binaries-osx.zip .
         - uptime ; pwd ; ls -l
       before_deploy:
@@ -172,7 +178,7 @@ matrix:
         local_dir: xemu-deploy
         skip_cleanup: true
         github_token: $GHDEPLOYKEY2
-        keep_history: true
+        keep_history: false
         repo: lgblgblgb/xemu-binaries
         target_branch: binary-osx-$TRAVIS_BRANCH
         email: lgblgblgb@gmail.com

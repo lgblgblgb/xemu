@@ -1,6 +1,6 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and some Mega-65 features as well.
+   and MEGA65 as well.
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
@@ -23,6 +23,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_COMMON_EMUTOOLS_H_INCLUDED
 #define XEMU_COMMON_EMUTOOLS_H_INCLUDED
 
+#ifdef XEMU_ARCH_OSX
+// It seems SDL2 on OSX produces LOTS of warning because of usage 'memset_pattern4'.
+// It seems SDL2 has a bug not including header string.h which is the place where that function is defined on OSX.
+// Let's try to fix that, by manually including string.h here ...
+#include <string.h>
+#endif
 #include <SDL.h>
 #include "xemu/emutools_basicdefs.h"
 
@@ -34,6 +40,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #else
 #define MSG_POPUP_WINDOW(sdlflag, title, msg, win) SDL_ShowSimpleMessageBox(sdlflag, title, msg, win)
 #define INSTALL_DIRECTORY_ENTRY_NAME "default-files"
+#endif
+
+#ifdef XEMU_ARCH_MAC
+extern int macos_gui_started;
 #endif
 
 #define APP_ORG "xemu-lgb"
@@ -50,10 +60,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern void sysconsole_open   ( void );
 extern void sysconsole_close  ( const char *waitmsg );
 extern int  sysconsole_toggle ( int set );
-#ifdef HAVE_XEMU_SOCKET_API
-extern int  xemu_use_sockapi  ( void );
-extern void xemu_free_sockapi ( void );
-#endif
 
 // You should define this in your emulator, most probably with resetting the keyboard matrix
 // Purpose: emulator windows my cause the emulator does not get the key event normally, thus some keys "seems to be stucked"
@@ -105,9 +111,14 @@ static XEMU_INLINE int CHECK_SNPRINTF( int ret, int limit )
 extern int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg );
 #define QUESTION_WINDOW(items, msg) _sdl_emu_secured_modal_box_(items, msg)
 
-static inline int ARE_YOU_SURE ( const char *s ) {
-	return (QUESTION_WINDOW("YES|NO", (s != NULL && *s != '\0') ? s : "Are you sure?") == 0);
-}
+extern int i_am_sure_override;
+extern const char *str_are_you_sure_to_exit;
+
+#define ARE_YOU_SURE_OVERRIDE		1
+#define ARE_YOU_SURE_DEFAULT_YES	2
+#define ARE_YOU_SURE_DEFAULT_NO		4
+
+extern int ARE_YOU_SURE ( const char *s, int flags );
 
 extern char *sdl_window_title;
 extern char *window_title_custom_addon;
@@ -163,6 +174,9 @@ extern void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int tex
 extern Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail );
 extern void xemu_update_screen ( void );
 
+extern int  osd_status;
+extern const Uint16 font_16x16[];
+
 extern int  osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_entries, int fade_dec, int fade_end );
 extern int  osd_init_with_defaults ( void );
 extern void osd_clear ( void );
@@ -193,5 +207,29 @@ extern void osd_write_string ( int x, int y, const char *s );
 	osd_on(OSD_FADE_START); \
 } while(0)
 
+#include <dirent.h>
+#ifdef XEMU_ARCH_WIN
+	typedef _WDIR XDIR;
+	extern int   xemu_winos_utf8_to_wchar ( wchar_t *restrict o, const char *restrict i, size_t size );
+	extern int   xemu_os_open   ( const char *fn, int flags );
+	extern int   xemu_os_creat  ( const char *fn, int flags, int pmode );
+	extern FILE *xemu_os_fopen  ( const char *restrict fn, const char *restrict mode );
+	extern int   xemu_os_unlink ( const char *fn );
+	extern int   xemu_os_mkdir  ( const char *fn, const int mode );
+	extern XDIR *xemu_os_opendir ( const char *fn );
+	extern struct dirent *xemu_os_readdir ( XDIR *dirp, struct dirent *entry );
+	extern int   xemu_os_closedir ( XDIR *dir );
+#else
+	typedef	DIR	XDIR;
+#	define	xemu_os_open			open
+#	define	xemu_os_creat			creat
+#	define	xemu_os_fopen			fopen
+#	define	xemu_os_unlink			unlink
+#	define	xemu_os_mkdir			mkdir
+#	define	xemu_os_opendir			opendir
+#	define	xemu_os_readdir(dirp,not_used)	readdir(dirp)
+#	define	xemu_os_closedir 		closedir
+#endif
+#define	xemu_os_close	close
 
 #endif
