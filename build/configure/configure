@@ -205,14 +205,18 @@ echo -n "Getting project root absolute path ... "
 cd `dirname $0` || finalexit
 cd .. || finalexit
 cd .. || finalexit
-if [ ! -s build/configure/configure ]; then
-	echo "Cannot found myself" >&2
-	finalexit
-fi
 PROJECT_ROOT="`pwd`"
 echo "$PROJECT_ROOT"
-if [ ! -d "$PROJECT_ROOT" ]; then
-	echo "Could not determine project root." >&2
+#if [ ! -d "$PROJECT_ROOT" ]; then
+#	echo "Could not determine project root." >&2
+#	finalexit
+#fi
+if [ ! -s build/configure/configure ]; then
+	echo "Cannot find myself" >&2
+	finalexit
+fi
+if [ ! -d build/objs ]; then
+	echo "Cannot found the objs directory" >&2
 	finalexit
 fi
 
@@ -464,11 +468,11 @@ int main ( void ) {
 	return 0;
 }
 EOF
-$CC $CFLAGS -o $OBJ -I$PROJECT_ROOT -c $SRC > $COUT 2> $CERR || failed
+$CC $CFLAGS -o $OBJ -I. -c $SRC > $COUT 2> $CERR || failed
 echo "OK"
 
 echo -n "Test preprocessor function ... "
-$CC $CFLAGS -E -I$PROJECT_ROOT -c $SRC > $COUT 2> $CERR || failed
+$CC $CFLAGS -E -I. -c $SRC > $COUT 2> $CERR || failed
 echo "OK"
 
 echo -n "Analyzing compilation target:"
@@ -582,10 +586,10 @@ int main ( int argc, char **argv ) {
 	return SDL_Init(SDL_INIT_EVERYTHING);
 }
 EOF
-exe="$CC $CFLAGS $SDL2_CFLAGS -o $OBJ -I$PROJECT_ROOT $SRC $SDL2_LIBS"
+exe="$CC $CFLAGS $SDL2_CFLAGS -o $OBJ -I. $SRC $SDL2_LIBS"
 #echo $exe
 $exe > $COUT 2> $CERR || failed
-#$CC $CFLAGS $SDL2_CFLAGS -o $OBJ -I$PROJECT_ROOT $SRC $SDL2_LIBS > $COUT 2> $CERR || failed
+#$CC $CFLAGS $SDL2_CFLAGS -o $OBJ -I. $SRC $SDL2_LIBS > $COUT 2> $CERR || failed
 echo "OK"
 
 ####################################
