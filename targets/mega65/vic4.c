@@ -722,7 +722,7 @@ static void vic4_draw_sprite_row_multicolor(int sprnum, int x_display_pos, Uint8
 				pixel = SPRITE_MULTICOLOR_1;
 			else if (p0 && !p1)
 				pixel = SPRITE_COLOR(sprnum);
-			else 
+			else if (p0 && p1)
 				pixel = SPRITE_MULTICOLOR_2;
 
 			for (int p = 0; p < xscale && x_display_pos < border_x_right; ++p, x_display_pos += 2)
@@ -812,6 +812,58 @@ static void vic4_render_mono_char_row(Uint8 *char_row_data, int glyph_width, Uin
 		Uint32 pixel_color = char_pixel ? vic3_rom_palette[fg_color] : vic3_rom_palette[bg_color];
 		*(current_pixel++) = pixel_color;
 		bg_pixel_state[xcounter++] = char_pixel ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
+	}
+}
+
+static void vic4_render_multicolor_char_row(const Uint8 *char_row_data, int glyph_width)
+{
+	const Uint8 color_source[4] = {
+		REG_SCREEN_COLOR,			   //00
+		*screen_ram_current_ptr >> 4,  //01
+		*screen_ram_current_ptr & 0xF, //10
+		*colour_ram_current_ptr & 0xF  //11
+	};
+
+	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step)
+	{
+		const Uint8 bitsel =  2 * (int)(cx / 2);
+		const Uint8 bit_pair = (*char_row_data & (0x80 >> bitsel)) >> (6-bitsel) | (*char_row_data & (0x40 >> bitsel)) >> (6-bitsel);
+		
+		Uint8 pixel = color_source[bit_pair];
+		const Uint8 layer = bit_pair & 2 ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
+		*(current_pixel++) = vic3_rom_palette[pixel];;
+		bg_pixel_state[xcounter++] = layer;
+	}
+}
+
+static void vic4_render_bitmap_mcm_raster()
+{
+	Uint8 char_x = 0;
+	Uint8* screen_ram_row_start = screen_ram_current_ptr;
+	Uint8* colour_ram_row_start = colour_ram_current_ptr;
+	
+	while (xcounter < border_x_right)
+	{
+		if (display_row > 25) { //FIX THIS: get from registers
+			*(current_pixel++) = vic3_rom_palette[REG_BORDER_COLOR];
+			xcounter++;
+			continue;
+		}
+		
+		Uint8* char_row_data = main_ram + VIC2_BITMAP_ADDR + display_row * 320 + 8 *char_x++  + char_row;
+		vic4_render_multicolor_char_row(char_row_data, 8);
+		screen_ram_current_ptr++;
+		colour_ram_current_ptr++;
+	}
+	if (++char_row > 7)
+	{
+		char_row = 0;
+		display_row++;
+	}
+	else
+	{
+		screen_ram_current_ptr = screen_ram_row_start;
+		colour_ram_current_ptr = colour_ram_row_start;
 	}
 }
 
@@ -941,11 +993,17 @@ int vic4_render_scanline()
 			while (xcounter++ < border_x_left)
 				*(current_pixel++) = vic3_rom_palette[REG_BORDER_COLOR & 0xF];
 
-			// Cache this and avoid branching ;)
+			// Cache this, use a function call and avoid branching !
+
 			if (TEXT_MODE)
 				vic4_render_textmode_raster();
 			else if (REG_BMM)
-				vic4_render_bitmap_hires_raster();
+			{
+				if (REG_MCM)
+					vic4_render_bitmap_mcm_raster();
+				else
+					vic4_render_bitmap_hires_raster();
+			}
 
 			while (xcounter++ <= SCREEN_WIDTH)
 				*(current_pixel++) = vic3_rom_palette[REG_BORDER_COLOR & 0xF];
