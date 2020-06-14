@@ -56,7 +56,7 @@ static int compare_raster;				// raster compare (9 bits width) data
 static int logical_raster = 0;
 static int interrupt_status;			// Interrupt status of VIC
 int vic2_16k_bank;						// VIC-2 modes' 16K BANK address within 64K (NOT the traditional naming of banks with 0,1,2,3)
-int vic3_blink_phase;					// blinking attribute helper, state.
+static int vic4_blink_phase = 0;		// blinking attribute helper, state.
 Uint8 c128_d030_reg;					// C128-like register can be only accessed in VIC-II mode but not in others, quite special!
 static Uint8 reg_d018_screen_addr = 0;     // Legacy VIC-II $D018 screen address register
 static int vic_hotreg_touched = 0; 		// If any "legacy" registers were touched
@@ -64,6 +64,7 @@ static int vic4_sideborder_touched = 0;  // If side-border register were touched
 static int border_x_left= 0;			 // Side border left 
 static int border_x_right= 0;			 // Side border right
 static int xcounter = 0, ycounter = 0;   // video counters
+static int frame_counter = 0;
 static int vicii_first_raster = 0;
 static int char_row = 0, display_row = 0;
 static Uint8 bg_pixel_state[1024]; // See FOREGROUND_PIXEL and BACKGROUND_PIXEL constants
@@ -804,26 +805,32 @@ static void vic4_do_sprites()
 	}
 }
 
-static void vic4_render_mono_char_row(Uint8 *char_row_data, int glyph_width, Uint8 bg_color, Uint8 fg_color)
+static void vic4_render_mono_char_row(Uint8 *char_row_data, int glyph_width, Uint8 bg_color, Uint8 fg_color, Uint8 vic3attr)
 {
+	Uint8 char_byte = *char_row_data;
+	if (vic3attr)
+	{
+		if (char_row == 7 && VIC3_ATTR_UNDERLINE(vic3attr))
+			char_byte = 0xFF;
+
+		if (VIC3_ATTR_BLINK(vic3attr) & vic4_blink_phase)
+			char_byte = 0;
+		
+		if (VIC3_ATTR_REVERSE(vic3attr))
+			char_byte = ~char_byte;
+	}
+
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step)
 	{
-		const Uint8 char_pixel = (*char_row_data & (0x80 >> (int)cx));
+		const Uint8 char_pixel = (char_byte & (0x80 >> (int)cx));
 		Uint32 pixel_color = char_pixel ? vic3_rom_palette[fg_color] : vic3_rom_palette[bg_color];
 		*(current_pixel++) = pixel_color;
 		bg_pixel_state[xcounter++] = char_pixel ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
 	}
 }
 
-static void vic4_render_multicolor_char_row(const Uint8 *char_row_data, int glyph_width)
+static void vic4_render_multicolor_char_row(const Uint8 *char_row_data, int glyph_width, const Uint8 color_source[4])
 {
-	const Uint8 color_source[4] = {
-		REG_SCREEN_COLOR,			   //00
-		*screen_ram_current_ptr >> 4,  //01
-		*screen_ram_current_ptr & 0xF, //10
-		*colour_ram_current_ptr & 0xF  //11
-	};
-
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step)
 	{
 		const Uint8 bitsel =  2 * (int)(cx / 2);
@@ -831,7 +838,7 @@ static void vic4_render_multicolor_char_row(const Uint8 *char_row_data, int glyp
 		
 		Uint8 pixel = color_source[bit_pair];
 		const Uint8 layer = bit_pair & 2 ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
-		*(current_pixel++) = vic3_rom_palette[pixel];;
+		*(current_pixel++) = vic3_rom_palette[pixel];
 		bg_pixel_state[xcounter++] = layer;
 	}
 }
@@ -851,7 +858,15 @@ static void vic4_render_bitmap_mcm_raster()
 		}
 		
 		Uint8* char_row_data = main_ram + VIC2_BITMAP_ADDR + display_row * 320 + 8 *char_x++  + char_row;
-		vic4_render_multicolor_char_row(char_row_data, 8);
+		
+		const Uint8 color_source[4] = {
+			REG_SCREEN_COLOR,			   //00
+			*screen_ram_current_ptr >> 4,  //01
+			*screen_ram_current_ptr & 0xF, //10
+			*colour_ram_current_ptr & 0xF  //11
+		};
+
+		vic4_render_multicolor_char_row(char_row_data, 8, color_source);
 		screen_ram_current_ptr++;
 		colour_ram_current_ptr++;
 	}
@@ -884,7 +899,7 @@ static void vic4_render_bitmap_hires_raster()
 		Uint8 char_fgcolor = color_data >> 4;
 		Uint8 char_bgcolor = color_data & 0xF;
 		Uint8* char_row_data = main_ram + VIC2_BITMAP_ADDR + display_row * 320 + 8 *char_x++  + char_row;
-		vic4_render_mono_char_row(char_row_data, 8, char_bgcolor, char_fgcolor);
+		vic4_render_mono_char_row(char_row_data, 8, char_bgcolor, char_fgcolor, 0);
 	}
 	if (++char_row > 7)
 	{
@@ -893,6 +908,60 @@ static void vic4_render_bitmap_hires_raster()
 	}
 	else
 		screen_ram_current_ptr = screen_ram_row_start;
+}
+
+static void vic4_render_textmode_mcm_raster()
+{
+	Uint8 char_x = 0;
+	Uint8* screen_ram_row_start = screen_ram_current_ptr;
+	Uint8* colour_ram_row_start = colour_ram_current_ptr;
+	
+	while (xcounter < border_x_right)
+	{
+		if (display_row > 25) { //FIX THIS: get from registers
+			*(current_pixel++) = vic3_rom_palette[REG_BORDER_COLOR];
+			xcounter++;
+			continue;
+		}
+		Uint16 char_value = *(screen_ram_current_ptr++);
+		char_value |= REG_16BITCHARSET ? (*(screen_ram_current_ptr++) << 8) : 0;
+		Uint16 color_data = *(colour_ram_current_ptr++);
+		color_data |= REG_16BITCHARSET ? ( (color_data << 8) | *(colour_ram_current_ptr++))  : 0;
+		
+		Uint16 char_id = char_value & 0x1FFF; // Screen RAM 13-bits for up to 8192 characters
+		Uint16 char_fgcolor = color_data & 0xF;
+
+		Uint8 glyph_width_deduct = SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(char_value) ? 8 : 0);
+		Uint8 glyph_width = (SXA_4BIT_PER_PIXEL(color_data) ? 16 : 8) - glyph_width_deduct;
+		Uint8* char_row_data = main_ram + get_charset_effective_addr() + (char_id * 8)  + char_row;
+		Uint8 vic3_attr = REG_VICIII_ATTRIBS ? (color_data >> 4) : 0;
+
+		if (char_fgcolor & 8)
+		{
+			const Uint8 color_source[4] = {
+				REG_SCREEN_COLOR, //00
+				REG_MULTICOLOR_1, //01
+				REG_MULTICOLOR_2, //10
+				char_fgcolor & 7  //11
+			};
+			vic4_render_multicolor_char_row(char_row_data, glyph_width, color_source);
+		}
+		else 
+		{
+			Uint8 char_bgcolor = REG_SCREEN_COLOR;
+			vic4_render_mono_char_row(char_row_data, glyph_width, char_bgcolor, char_fgcolor, vic3_attr);
+		}
+	}
+	if (++char_row > 7)
+	{
+		char_row = 0;
+		display_row++;
+	}
+	else
+	{
+		screen_ram_current_ptr = screen_ram_row_start;
+		colour_ram_current_ptr = colour_ram_row_start;
+	}
 }
 
 static void vic4_render_textmode_raster()
@@ -916,21 +985,22 @@ static void vic4_render_textmode_raster()
 			continue;
 		}
 
-		//assert(screen_ram_current_ptr <= main_ram + SCREEN_ADDR + 2000);
 		Uint16 char_value = *(screen_ram_current_ptr++);
 		char_value |= REG_16BITCHARSET ? (*(screen_ram_current_ptr++) << 8) : 0;
 		Uint16 color_data = *(colour_ram_current_ptr++);
-		color_data |= REG_16BITCHARSET ? (*(colour_ram_current_ptr++) << 8) : 0;
+		color_data |= REG_16BITCHARSET ? ( (color_data << 8) | *(colour_ram_current_ptr++))  : 0;
 		
 		Uint16 char_id = char_value & 0x1FFF; // Screen RAM 13-bits for up to 8192 characters
 		Uint16 char_fgcolor = color_data & 0xF;
 
+		Uint8 vic3_attr = REG_VICIII_ATTRIBS ? (color_data >> 4) : 0;
+
 		// Calculate character-width
 
-		Uint8 glyph_width_deduct = SXA_TRIM_RIGHT_BITS012(char_id) + (SXA_TRIM_RIGHT_BIT3(char_id) ? 8 : 0);
+		Uint8 glyph_width_deduct = SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(char_value) ? 8 : 0);
 		Uint8 glyph_width = (SXA_4BIT_PER_PIXEL(color_data) ? 16 : 8) - glyph_width_deduct;
 		Uint8* char_row_data = main_ram +  get_charset_effective_addr() + (char_id * 8) + char_row;
-		vic4_render_mono_char_row(char_row_data, glyph_width, char_bgcolor, char_fgcolor);
+		vic4_render_mono_char_row(char_row_data, glyph_width, char_bgcolor, char_fgcolor, vic3_attr);
 	}
 
 	if (++char_row > 7)
@@ -996,7 +1066,12 @@ int vic4_render_scanline()
 			// Cache this, use a function call and avoid branching !
 
 			if (TEXT_MODE)
-				vic4_render_textmode_raster();
+			{
+				if (REG_MCM)
+					vic4_render_textmode_mcm_raster();
+				else
+					vic4_render_textmode_raster();
+			}
 			else if (REG_BMM)
 			{
 				if (REG_MCM)
@@ -1021,6 +1096,12 @@ int vic4_render_scanline()
 		screen_ram_current_ptr = main_ram + SCREEN_ADDR;
 		colour_ram_current_ptr = colour_ram;
 		ycounter = 0;
+		frame_counter++;
+		if (frame_counter == VIC4_BLINK_INTERVAL)
+		{
+			frame_counter = 0;
+			vic4_blink_phase = !vic4_blink_phase;
+		}
 		return 1;
 	}
 

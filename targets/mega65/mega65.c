@@ -654,11 +654,7 @@ static void emulation_loop ( void )
 			// 	if (!frameskip)	// well, let's only render every full frames (~ie 25Hz)
 			// 		update_emulator();
 
-			// 	frame_counter++;
-			// 	if (frame_counter == 25) {
-			// 		frame_counter = 0;
-			// 		vic3_blink_phase = !vic3_blink_phase;
-			// 	}
+		
 			// 	frames_total_counter++;
 			// 	if (!frameskip)	// FIXME: do this better!!!!!!
 			// 		return;
@@ -788,8 +784,6 @@ int main ( int argc, char **argv )
 #endif
 	cycles = 0;
 	frameskip = 0;
-	frame_counter = 0;
-	vic3_blink_phase = 0;
 	if (audio) {
 		DEBUGPRINT("AUDIO: start" NL);
 		SDL_PauseAudioDevice(audio, 0);

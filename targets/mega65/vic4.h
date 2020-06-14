@@ -36,6 +36,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define FRAME_H_FRONT         0
 #define RASTER_CORRECTION     3
 #define DISPLAY_FETCH_START   719
+#define VIC4_BLINK_INTERVAL   25
 
 // Register defines 
 // 
@@ -50,6 +51,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_SPRITE_ENABLE   vic_registers[0x15]
 #define REG_BORDER_COLOR    vic_registers[0x20]
 #define REG_SCREEN_COLOR    vic_registers[0x21]
+#define REG_MULTICOLOR_1    vic_registers[0x22]
+#define REG_MULTICOLOR_2    vic_registers[0x23]
+#define REG_MULTICOLOR_3    vic_registers[0x24]
 #define REG_H640            (vic_registers[0x31] & 128)
 #define REG_V400            (vic_registers[0x31] & 8)
 #define REG_VICIII_ATTRIBS  (vic_registers[0x31] & 0x20)
@@ -125,6 +129,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define TEXT_MODE            (!REG_BMM)
 #define HIRES_BITMAP_MODE    (REG_BMM & !REG_MCM & !REG_EBM)
 #define MULTICOLOR_BITMAP_MODE (REG_BMM & REG_MCM & !REG_EBM)
+#define VIC3_ATTR_BLINK(c)       ((c) & 0x1)
+#define VIC3_ATTR_REVERSE(c)     ((c) & 0x2)     
+#define VIC3_ATTR_BOLD(c)        ((c) & 0x4)
+#define VIC3_ATTR_UNDERLINE(c)   ((c) & 0x8)
 
 // "Super-Extended character attributes" (see https://github.com/MEGA65/mega65-core/blob/master/docs/viciv-modes.md)
 // cw is color-word (16-bit from Color RAM). chw is character-word (16bit from Screen RAM)
@@ -179,7 +187,6 @@ extern int   scanline;
 extern Uint8 vic_registers[];
 extern int   cpu_cycles_per_scanline;
 extern int   vic2_16k_bank;
-extern int   vic3_blink_phase;
 extern int   force_fast;
 extern Uint8 c128_d030_reg;
 
