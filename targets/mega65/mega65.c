@@ -49,7 +49,6 @@ unsigned int frames_total_counter = 0;
 
 static int fast_mhz, cpu_cycles_per_scanline_for_fast_mode, speed_current;
 static char fast_mhz_in_string[8];
-static int frame_counter;
 static int   paused = 0, paused_old = 0;
 static int   breakpoint_pc = -1;
 static int   trace_step_trigger = 0;

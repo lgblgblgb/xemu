@@ -29,10 +29,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_WIDTH		      800
 #define SCREEN_HEIGHT_NTSC    506
 #define SCREEN_HEIGHT_PAL     603
-//#define SCREEN_HEIGHT	      SCREEN_HEIGHT_PAL
+#define SCREEN_HEIGHT	      SCREEN_HEIGHT_PAL
 #define NTSC_PHYSICAL_RASTERS 526
 #define PAL_PHYSICAL_RASTERS  624
-#define SCREEN_HEIGHT	      624
 #define FRAME_H_FRONT         0
 #define RASTER_CORRECTION     3
 #define DISPLAY_FETCH_START   719

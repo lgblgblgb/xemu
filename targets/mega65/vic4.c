@@ -876,7 +876,8 @@ static void vic4_render_char_raster()
 	
 	while (xcounter < border_x_right)
 	{
-		if (display_row > 25) { // FIX: get from registers.
+		if (display_row > 25 || char_x >= REG_CHRCOUNT) { // FIX: get display_row from registers.
+			(*current_pixel++) = vic3_rom_palette[REG_SCREEN_COLOR];
 			xcounter++;
 			continue;
 		}
@@ -903,7 +904,7 @@ static void vic4_render_char_raster()
 		Uint8* char_row_data = NULL;
 		if (REG_BMM)
 		{
-			char_row_data = row_data_base_addr + display_row * 320 + 8 * char_x++  + char_row;
+			char_row_data = row_data_base_addr + display_row * 320 + 8 * char_x  + char_row;
 		}
 		else
 		{
@@ -953,6 +954,8 @@ static void vic4_render_char_raster()
 				vic4_render_mono_char_row(char_row_data, glyph_width, char_value & 0xF, char_value >> 4, vic3_attr);
 			}
 		}
+
+		char_x++;
 	}
 
 	if (++char_row > 7)
@@ -960,11 +963,11 @@ static void vic4_render_char_raster()
 		char_row = 0;
 		display_row++;
 	}
-	// else
-	// {
-	// 	colour_ram_current_ptr -= REG_CHRCOUNT;
-	// 	screen_ram_current_ptr -= REG_CHRCOUNT;
-	// }
+
+	// If characters cells do not fill the entire raster, e.g due to
+	// applying trimming, fill the remaining scanline with background color
+
+
 
 }
 
