@@ -866,8 +866,8 @@ static void vic4_render_multicolor_char_row(const Uint8 *char_row_data, int glyp
 static void vic4_render_char_raster()
 {
 	int char_x = 0;
-	Uint8* colour_ram_row_start = colour_ram_current_ptr;
-	Uint8* screen_ram_row_start = screen_ram_current_ptr;
+	colour_ram_current_ptr = colour_ram + (display_row * REG_CHRCOUNT);
+	screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row * REG_CHRCOUNT);
 	const Uint8* row_data_base_addr = main_ram + (REG_BMM ?  VIC2_BITMAP_ADDR : get_charset_effective_addr());
 
 	// Charset x-displacement
@@ -960,11 +960,11 @@ static void vic4_render_char_raster()
 		char_row = 0;
 		display_row++;
 	}
-	else
-	{
-		colour_ram_current_ptr = colour_ram_row_start;
-		screen_ram_current_ptr = screen_ram_row_start;
-	}
+	// else
+	// {
+	// 	colour_ram_current_ptr -= REG_CHRCOUNT;
+	// 	screen_ram_current_ptr -= REG_CHRCOUNT;
+	// }
 
 }
 
