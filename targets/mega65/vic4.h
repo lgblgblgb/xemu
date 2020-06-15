@@ -72,6 +72,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_TEXTYPOS        (vic_registers[0x4E])
 #define REG_TEXTYPOS_U4     (vic_registers[0x4F] & 0xF)
 #define REG_16BITCHARSET    (vic_registers[0x54] & 1)
+#define REG_FCLRLO          (vic_registers[0x54] & 2)
+#define REG_FCLRHI          (vic_registers[0x54] & 4)
 #define REG_CHRXSCL         (vic_registers[0x5A])
 #define REG_CHRYSCL         (vic_registers[0x5B])
 #define REG_SIDBDRWD        (vic_registers[0x5C])
@@ -133,6 +135,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define VIC3_ATTR_REVERSE(c)     ((c) & 0x2)     
 #define VIC3_ATTR_BOLD(c)        ((c) & 0x4)
 #define VIC3_ATTR_UNDERLINE(c)   ((c) & 0x8)
+#define CHAR_IS256_COLOR(ch)     (REG_FCLRLO && (ch) < 0x100) || (REG_FCLRHI && (ch) > 0x0FF)
 
 // "Super-Extended character attributes" (see https://github.com/MEGA65/mega65-core/blob/master/docs/viciv-modes.md)
 // cw is color-word (16-bit from Color RAM). chw is character-word (16bit from Screen RAM)
