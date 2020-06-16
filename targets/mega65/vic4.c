@@ -125,7 +125,46 @@ static inline void PIXEL_POINTER_FINAL_ASSERT ( Uint32 *p )
 #	define PIXEL_POINTER_FINAL_ASSERT(p)
 #endif
 
+// Lookup-based bit reversal.  (TODO: Move this to a proper file)
 
+static inline Uint8 reverse_byte(unsigned char x)
+{
+    static const Uint8 table[] = {
+        0x00, 0x80, 0x40, 0xc0, 0x20, 0xa0, 0x60, 0xe0, //0
+        0x10, 0x90, 0x50, 0xd0, 0x30, 0xb0, 0x70, 0xf0, //8
+        0x08, 0x88, 0x48, 0xc8, 0x28, 0xa8, 0x68, 0xe8, //16
+        0x18, 0x98, 0x58, 0xd8, 0x38, 0xb8, 0x78, 0xf8, //24
+        0x04, 0x84, 0x44, 0xc4, 0x24, 0xa4, 0x64, 0xe4, //32
+        0x14, 0x94, 0x54, 0xd4, 0x34, 0xb4, 0x74, 0xf4, //40
+        0x0c, 0x8c, 0x4c, 0xcc, 0x2c, 0xac, 0x6c, 0xec, //48
+        0x1c, 0x9c, 0x5c, 0xdc, 0x3c, 0xbc, 0x7c, 0xfc, //56
+        0x02, 0x82, 0x42, 0xc2, 0x22, 0xa2, 0x62, 0xe2, //64
+        0x12, 0x92, 0x52, 0xd2, 0x32, 0xb2, 0x72, 0xf2, //72
+        0x0a, 0x8a, 0x4a, 0xca, 0x2a, 0xaa, 0x6a, 0xea, //80
+        0x1a, 0x9a, 0x5a, 0xda, 0x3a, 0xba, 0x7a, 0xfa, //88
+        0x06, 0x86, 0x46, 0xc6, 0x26, 0xa6, 0x66, 0xe6, //96
+        0x16, 0x96, 0x56, 0xd6, 0x36, 0xb6, 0x76, 0xf6, //104
+        0x0e, 0x8e, 0x4e, 0xce, 0x2e, 0xae, 0x6e, 0xee, //112
+        0x1e, 0x9e, 0x5e, 0xde, 0x3e, 0xbe, 0x7e, 0xfe, //120
+        0x01, 0x81, 0x41, 0xc1, 0x21, 0xa1, 0x61, 0xe1, //128
+        0x11, 0x91, 0x51, 0xd1, 0x31, 0xb1, 0x71, 0xf1,
+        0x09, 0x89, 0x49, 0xc9, 0x29, 0xa9, 0x69, 0xe9,
+        0x19, 0x99, 0x59, 0xd9, 0x39, 0xb9, 0x79, 0xf9,
+        0x05, 0x85, 0x45, 0xc5, 0x25, 0xa5, 0x65, 0xe5,
+        0x15, 0x95, 0x55, 0xd5, 0x35, 0xb5, 0x75, 0xf5,
+        0x0d, 0x8d, 0x4d, 0xcd, 0x2d, 0xad, 0x6d, 0xed,
+        0x1d, 0x9d, 0x5d, 0xdd, 0x3d, 0xbd, 0x7d, 0xfd,
+        0x03, 0x83, 0x43, 0xc3, 0x23, 0xa3, 0x63, 0xe3,
+        0x13, 0x93, 0x53, 0xd3, 0x33, 0xb3, 0x73, 0xf3,
+        0x0b, 0x8b, 0x4b, 0xcb, 0x2b, 0xab, 0x6b, 0xeb,
+        0x1b, 0x9b, 0x5b, 0xdb, 0x3b, 0xbb, 0x7b, 0xfb,
+        0x07, 0x87, 0x47, 0xc7, 0x27, 0xa7, 0x67, 0xe7,
+        0x17, 0x97, 0x57, 0xd7, 0x37, 0xb7, 0x77, 0xf7,
+        0x0f, 0x8f, 0x4f, 0xcf, 0x2f, 0xaf, 0x6f, 0xef,
+        0x1f, 0x9f, 0x5f, 0xdf, 0x3f, 0xbf, 0x7f, 0xff,
+    };
+    return table[x];
+}
 
 
 void vic_init ( void )
@@ -803,18 +842,20 @@ static void vic4_do_sprites()
 	}
 }
 
-static void vic4_render_mono_char_row(Uint8 *char_row_data, int glyph_width, Uint8 bg_color, Uint8 fg_color, int vic3attr)
+// Render a monochrome character cell row
+// flip = 00 Dont flip, 01 = flip vertical, 10 = flip horizontal, 11 = flip both
+
+static void vic4_render_mono_char_row(Uint8 char_byte, int glyph_width, Uint8 bg_color, Uint8 fg_color, Uint8 vic3attr)
 {
-	Uint8 char_byte = *char_row_data;
 	if (vic3attr)
-	{
+	{		
 		if (char_row == 7 && VIC3_ATTR_UNDERLINE(vic3attr))
 			char_byte = 0xFF;
 
 		if (VIC3_ATTR_REVERSE(vic3attr))
 			char_byte = ~char_byte;
 
-		if (VIC3_ATTR_BLINK(vic3attr) && vic4_blink_phase)
+		if (VIC3_ATTR_BLINK(vic3attr) && vic4_blink_phase) 
 			char_byte = VIC3_ATTR_REVERSE(vic3attr) ? ~char_byte : 0;
 		
 		if (VIC3_ATTR_BOLD(vic3attr))
@@ -822,7 +863,7 @@ static void vic4_render_mono_char_row(Uint8 *char_row_data, int glyph_width, Uin
 			fg_color |= 0x10;
 		}
 	}
-
+	
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step)
 	{
 		const Uint8 char_pixel = (char_byte & (0x80 >> (int)cx));
@@ -832,12 +873,12 @@ static void vic4_render_mono_char_row(Uint8 *char_row_data, int glyph_width, Uin
 	}
 }
 
-static void vic4_render_multicolor_char_row(const Uint8 *char_row_data, int glyph_width, const Uint8 color_source[4])
+static void vic4_render_multicolor_char_row(Uint8 char_byte, int glyph_width, const Uint8 color_source[4])
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step)
 	{
 		const Uint8 bitsel =  2 * (int)(cx / 2);
-		const Uint8 bit_pair = (*char_row_data & (0x80 >> bitsel)) >> (6-bitsel) | (*char_row_data & (0x40 >> bitsel)) >> (6-bitsel);
+		const Uint8 bit_pair = (char_byte & (0x80 >> bitsel)) >> (6-bitsel) | (char_byte & (0x40 >> bitsel)) >> (6-bitsel);
 		
 		Uint8 pixel = color_source[bit_pair];
 		const Uint8 layer = bit_pair & 2 ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
@@ -883,11 +924,14 @@ static void vic4_render_char_raster()
 		}
 
 		Uint16 color_data = *(colour_ram_current_ptr++);
-		color_data |= REG_16BITCHARSET ? ( (color_data << 8) | *(colour_ram_current_ptr++))  : 0;
-
 		Uint16 char_value = *(screen_ram_current_ptr++);
-		char_value |= REG_16BITCHARSET ? (*(screen_ram_current_ptr++) << 8) : 0;
 
+		if (REG_16BITCHARSET)
+		{
+			color_data = (color_data << 8) | (*(colour_ram_current_ptr++));
+			char_value = char_value | (*(screen_ram_current_ptr++) << 8);
+		}
+		
 		// Background and foreground colors
 
 		const Uint8 char_fgcolor = color_data & 0xF; 
@@ -901,15 +945,23 @@ static void vic4_render_char_raster()
 		Uint8 glyph_width = (SXA_4BIT_PER_PIXEL(color_data) ? 16 : 8) - glyph_width_deduct;
 
 		// Default fetch from char mode.
-		Uint8* char_row_data = NULL;
+		Uint8 char_byte;
+		int sel_char_row = char_row;
+		
+		if (SXA_VERTICAL_FLIP(color_data))
+			sel_char_row = 7 - char_row;
+
 		if (REG_BMM)
 		{
-			char_row_data = row_data_base_addr + display_row * 320 + 8 * char_x  + char_row;
+			char_byte = *(row_data_base_addr + display_row * 320 + 8 * char_x  + sel_char_row);
 		}
 		else
 		{
-			char_row_data = row_data_base_addr + (char_id * 8) + char_row;
+			char_byte = *(row_data_base_addr + (char_id * 8) + sel_char_row);
 		}
+		
+		if (SXA_HORIZONTAL_FLIP(color_data))
+			char_byte = reverse_byte(char_byte);
 
 		// Render character cell row
 				
@@ -930,7 +982,7 @@ static void vic4_render_char_raster()
 					char_value & 0xF, 	//10
 					color_data & 0xF  	//11
 				};
-				vic4_render_multicolor_char_row(char_row_data, glyph_width, color_source);
+				vic4_render_multicolor_char_row(char_byte, glyph_width, color_source);
 			}
 			else
 			{
@@ -940,18 +992,18 @@ static void vic4_render_char_raster()
 					REG_MULTICOLOR_2, //10
 					char_fgcolor & 7  //11
 				};
-				vic4_render_multicolor_char_row(char_row_data, glyph_width, color_source);
+				vic4_render_multicolor_char_row(char_byte, glyph_width, color_source);
 			}
 		}
 		else // Single color character
 		{
 			if (!REG_BMM)
 			{
-				vic4_render_mono_char_row(char_row_data, glyph_width, char_bgcolor, char_fgcolor, vic3_attr);
+				vic4_render_mono_char_row(char_byte, glyph_width, char_bgcolor, char_fgcolor, vic3_attr);
 			}
 			else
 			{
-				vic4_render_mono_char_row(char_row_data, glyph_width, char_value & 0xF, char_value >> 4, vic3_attr);
+				vic4_render_mono_char_row(char_byte, glyph_width, char_value & 0xF, char_value >> 4, vic3_attr );
 			}
 		}
 
@@ -963,12 +1015,6 @@ static void vic4_render_char_raster()
 		char_row = 0;
 		display_row++;
 	}
-
-	// If characters cells do not fill the entire raster, e.g due to
-	// applying trimming, fill the remaining scanline with background color
-
-
-
 }
 
 int vic4_render_scanline() 

@@ -137,10 +137,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define CHAR_IS256_COLOR(ch)     (REG_FCLRLO && (ch) < 0x100) || (REG_FCLRHI && (ch) > 0x0FF)
 
 // "Super-Extended character attributes" (see https://github.com/MEGA65/mega65-core/blob/master/docs/viciv-modes.md)
-// cw is color-word (16-bit from Color RAM). chw is character-word (16bit from Screen RAM)
-#define SXA_TRIM_RIGHT_BITS012(chw) ((chw) >> 13)
-#define SXA_TRIM_RIGHT_BIT3(cw)    ((cw) & 0x0400)
+// cw is color-word (16-bit from Color RAM). sw is screen-ram-word (16bit from Screen RAM)
+#define SXA_TRIM_RIGHT_BITS012(sw) ((sw) >> 13)
+#define SXA_VERTICAL_FLIP(cw)      ((cw) & 0x8000)
+#define SXA_HORIZONTAL_FLIP(cw)    ((cw) & 0x4000)
+#define SXA_ALPHA_BLEND(cw)        ((cw) & 0x2000)
+#define SXA_GOTO_X(cw)             ((cw) & 0x1000)
 #define SXA_4BIT_PER_PIXEL(cw)     ((cw) & 0x0800)
+#define SXA_TRIM_RIGHT_BIT3(cw)    ((cw) & 0x0400)
+#define SXA_TRIM_TOP_BOTTOM(cw)    ((cw) & 0x0300) >> 8)
 
 
 // Multi-byte register write helpers
