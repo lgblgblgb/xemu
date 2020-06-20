@@ -1,7 +1,0 @@
-Downloadable stuffs.
-
-sd-card-image-for-xemu-xmega65.img.gz:
-
-  Download, ungzip it, and put into the rom/ directory with the name of mega65.img. The Xemu's M65 emulation can use it then
-  for the emulated SD-card. WARNING: this image is not suitable for a real M65, the bitstream file it contains just a zero
-  byte file!
