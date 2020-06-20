@@ -61,6 +61,7 @@ static char emulator_speed_title[] = "????MHz";
 static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 
 static int force_external_rom = 0;
+static int force_upload_fonts = 0;
 
 
 void cpu65_illegal_opcode_callback ( void )
@@ -259,13 +260,22 @@ static void refill_memory_from_preinit_cache ( void )
 
 int refill_c65_rom_from_preinit_cache ( void )
 {
+	int ret;
 	if (force_external_rom) {
+		DEBUGPRINT("ROM: forcing re-apply of ROM image" NL);
 		memcpy(main_ram + 0x20000, rom_init_image, sizeof rom_init_image);
 		// memcpy(char_wom, rom_init_image + 0xD000, sizeof char_wom);	// also fill char-WOM [FIXME: do we really want this?!]
 		// The 128K ROM image is actually holds the reset bector at the lower 64K, ie C65 would start in "C64 mode" for real, just it switches into C65 mode then ...
-		return rom_init_image[0xFFFC] | (rom_init_image[0xFFFD] << 8);	// pass back new reset vector
-	} else
-		return -1; // no refill force external rom policy ...
+		ret = rom_init_image[0xFFFC] | (rom_init_image[0xFFFD] << 8);	// pass back new reset vector
+	} else {
+		ret = -1; // no refill force external rom policy ...
+	}
+	if (force_upload_fonts) {
+		DEBUGPRINT("ROM: forcing upload font definitions from ROM area to WOM" NL);
+		memcpy(char_wom + 0x0000, main_ram + 0x2D000, 0x1000);
+		memcpy(char_wom + 0x1000, main_ram + 0x29000, 0x1000);
+	}
+	return ret;
 }
 
 
@@ -312,6 +322,7 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		DEBUGPRINT("MEM: forcing external ROM usage (hypervisor leave memory re-fill policy)" NL);
 	else if (xemucfg_get_bool("forcerom"))
 		ERROR_WINDOW("-forcerom is ignored, because no -loadrom <filename> option was used, or it was not a succesfull load operation at least");
+	force_upload_fonts = xemucfg_get_bool("fontrefresh");
 	load_memory_preinit_cache(0, "loadcram", "CRAM utilities", meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
 	load_memory_preinit_cache(0, "loadbanner", "M65 logo", meminitdata_banner, MEMINITDATA_BANNER_SIZE);
 	load_memory_preinit_cache(1, "loadc000", "C000 utilities", c000_init_image, sizeof c000_init_image);
@@ -681,6 +692,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("loadcram", NULL, "Load initial content (32K) into the colour RAM");
 	xemucfg_define_str_option("loadrom", NULL, "Preload C65 ROM image (you may need the -forcerom option to prevent KickStart to re-load from SD)");
 	xemucfg_define_switch_option("forcerom", "Re-fill 'ROM' from external source on start-up, requires option -loadrom <filename>");
+	xemucfg_define_switch_option("fontrefresh", "Upload character ROM from the loaded ROM image");
 	xemucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used (also see the -virtsd option!)");
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	xemucfg_define_switch_option("virtsd", "Interpret -sdimg option as a DIRECTORY to be fed onto the FAT32FS and use virtual-in-memory disk storage.");
