@@ -139,6 +139,7 @@ static void setmem28 ( char *param, int addr )
 
 static void execute_command ( char *cmd )
 {
+	int bank;
 	int par1;
 	char *p = cmd;
 	while (*p)
@@ -171,13 +172,29 @@ static void execute_command ( char *cmd )
 			break;
 		case 'm':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
-			int bank = par1 >> 16;
+			bank = par1 >> 16;
 			if (cmd && check_end_of_command(cmd, 1))
 			{
 				if (bank == 0x777)
 					m65mon_dumpmem16(par1);
 				else
 					m65mon_dumpmem28(par1);
+			}
+			break;
+		case 'M':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
+			bank = par1 >> 16;
+			if (cmd && check_end_of_command(cmd, 1))
+			{
+				for (int k = 0; k < 32; k++)
+				{
+					if (bank == 0x777)
+						m65mon_dumpmem16(par1);
+					else
+						m65mon_dumpmem28(par1);
+					par1 += 16;
+					umon_printf("\n");
+				}
 			}
 			break;
 		case 's':
