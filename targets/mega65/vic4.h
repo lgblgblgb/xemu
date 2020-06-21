@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,8 +16,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_MEGA65_VIC4_H_INCLUDED
-#define __XEMU_MEGA65_VIC4_H_INCLUDED
+#ifndef XEMU_MEGA65_VIC4_H_INCLUDED
+#define XEMU_MEGA65_VIC4_H_INCLUDED
 
 #define VIC2_IOMODE	0
 #define VIC3_IOMODE	1
@@ -38,8 +38,6 @@ extern int   vic_vidp_legacy, vic_chrp_legacy, vic_sprp_legacy;
 extern void  vic_init ( void );
 extern void  vic_write_reg ( unsigned int addr, Uint8 data );
 extern Uint8 vic_read_reg  ( unsigned int addr );
-extern void  vic3_write_palette_reg ( int num, Uint8 data );
-extern void  vic4_write_palette_reg ( int num, Uint8 data );
 extern void  vic_render_screen ( void );
 extern void  vic3_check_raster_interrupt ( void );
 
