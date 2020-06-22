@@ -139,21 +139,6 @@ static void ui_format_sdcard ( void )
 	reset_mega65();
 }
 
-static void ui_format_sdcard ( void )
-{
-	if (ARE_YOU_SURE(
-		"Formatting your SD-card image file will cause ALL your data,\n"
-		"system files (etc!) to be lost, forever!\n"
-		"Are you sure to continue this self-desctruction sequence? :)"
-		,
-		0
-	)) {
-		if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_FORCE_FDISK))
-			INFO_WINDOW("You SD-card file has been partitioned/formatted\nMEGA65 emulation is about to RESET now!");
-	}
-	reset_mega65();
-}
-
 
 static void ui_update_sdcard ( void )
 {

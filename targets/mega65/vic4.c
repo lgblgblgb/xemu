@@ -682,30 +682,30 @@ Uint8 vic_read_reg ( int unsigned addr )
 
 
 // "num" is 0-$ff for red, $100-$1ff for green and $200-$2ff for blue nibbles
-void vic3_write_palette_reg ( int num, Uint8 data )
-{
-	vic3_palette_nibbles[num] = data & 15;
-	// recalculate the given RGB entry based on the new data as well
-	vic3_palette[num & 0xFF] = RGB(
-		vic3_palette_nibbles[ num & 0xFF],
-		vic3_palette_nibbles[(num & 0xFF) | 0x100],
-		vic3_palette_nibbles[(num & 0xFF) | 0x200]
-	);
-	// Also, update the "ROM based" palette struct, BUT only colours above 15,
-	// since the lower 16 are "ROM based"! This is only a trick to be able
-	// to have full 256 colours for ROMPAL sel and without that too!
-	// The low 16 colours are the one which are ROM based for real, that's why
-	// we don't want to update them here!
-	if ((num & 0xF0))
-		vic3_rom_palette[num & 0xFF] = vic3_palette[num & 0xFF];
-}
+// void vic3_write_palette_reg ( int num, Uint8 data )
+// {
+// 	vic3_palette_nibbles[num] = data & 15;
+// 	// recalculate the given RGB entry based on the new data as well
+// 	vic3_palette[num & 0xFF] = RGB(
+// 		vic3_palette_nibbles[ num & 0xFF],
+// 		vic3_palette_nibbles[(num & 0xFF) | 0x100],
+// 		vic3_palette_nibbles[(num & 0xFF) | 0x200]
+// 	);
+// 	// Also, update the "ROM based" palette struct, BUT only colours above 15,
+// 	// since the lower 16 are "ROM based"! This is only a trick to be able
+// 	// to have full 256 colours for ROMPAL sel and without that too!
+// 	// The low 16 colours are the one which are ROM based for real, that's why
+// 	// we don't want to update them here!
+// 	if ((num & 0xF0))
+// 		vic3_rom_palette[num & 0xFF] = vic3_palette[num & 0xFF];
+// }
 
-// TODO: for VIC-4 mode, the palette registers are 8 bit, reversed nibble order to be compatible with C65
-// however, yet I don't support it, so only 4 bits can be used still by colour channel :(
-void vic4_write_palette_reg ( int num, Uint8 data )
-{
-	vic3_write_palette_reg(num, data);	// TODO: now only call the VIC-3 solution, which is not so correct for M65/VIC-4
-}
+// // TODO: for VIC-4 mode, the palette registers are 8 bit, reversed nibble order to be compatible with C65
+// // however, yet I don't support it, so only 4 bits can be used still by colour channel :(
+// void vic4_write_palette_reg ( int num, Uint8 data )
+// {
+// 	vic3_write_palette_reg(num, data);	// TODO: now only call the VIC-3 solution, which is not so correct for M65/VIC-4
+// }
 
 static inline Uint32 get_charset_effective_addr()
 {
@@ -740,7 +740,7 @@ static void vic4_draw_sprite_row_16color(int sprnum, int x_display_pos, Uint8* r
 					(!SPRITE_IS_BACK(sprnum) ||
 					 (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)))
 				{
-					*(pixel_raster_start + x_display_pos) = vic3_rom_palette[c0];
+					*(pixel_raster_start + x_display_pos) = spritepalette[c0];
 				}
 			}
 
@@ -750,7 +750,7 @@ static void vic4_draw_sprite_row_16color(int sprnum, int x_display_pos, Uint8* r
 					(!SPRITE_IS_BACK(sprnum) ||
 					 (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos + 1] != FOREGROUND_PIXEL)))
 				{
-					*(pixel_raster_start + x_display_pos + 1) = vic3_rom_palette[c1];
+					*(pixel_raster_start + x_display_pos + 1) = spritepalette[c1];
 				}
 			}
 		}
@@ -782,14 +782,14 @@ static void vic4_draw_sprite_row_multicolor(int sprnum, int x_display_pos, Uint8
 						(!SPRITE_IS_BACK(sprnum) ||
 						 (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)))
 					{
-						*(pixel_raster_start + x_display_pos) = vic3_rom_palette[pixel];
+						*(pixel_raster_start + x_display_pos) = spritepalette[pixel];
 					}
 
 					if (x_display_pos+1 >= border_x_left &&
 						(!SPRITE_IS_BACK(sprnum) ||
 						 (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos + 1] != FOREGROUND_PIXEL)))
 					{
-						*(pixel_raster_start + x_display_pos + 1) = vic3_rom_palette[pixel];
+						*(pixel_raster_start + x_display_pos + 1) = spritepalette[pixel];
 					}
 				}
 			}
@@ -812,7 +812,7 @@ static void vic4_draw_sprite_row_mono(int sprnum, int x_display_pos, Uint8 *row_
 					(!SPRITE_IS_BACK(sprnum) ||
 					 (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)))
 				{
-					*(pixel_raster_start + x_display_pos) = vic3_rom_palette[SPRITE_COLOR(sprnum)];
+					*(pixel_raster_start + x_display_pos) = spritepalette[SPRITE_COLOR(sprnum)];
 				}
 			}
 		}
@@ -882,7 +882,7 @@ static void vic4_render_mono_char_row(Uint8 char_byte, int glyph_width, Uint8 bg
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step)
 	{
 		const Uint8 char_pixel = (char_byte & (0x80 >> (int)cx));
-		Uint32 pixel_color = char_pixel ? vic3_rom_palette[fg_color] : vic3_rom_palette[bg_color];
+		Uint32 pixel_color = char_pixel ? palette[fg_color] : palette[bg_color];
 		*(current_pixel++) = pixel_color;
 		bg_pixel_state[xcounter++] = char_pixel ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
 	}
@@ -897,7 +897,7 @@ static void vic4_render_multicolor_char_row(Uint8 char_byte, int glyph_width, co
 		
 		Uint8 pixel = color_source[bit_pair];
 		const Uint8 layer = bit_pair & 2 ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
-		*(current_pixel++) = vic3_rom_palette[pixel];
+		*(current_pixel++) = palette[pixel];
 		bg_pixel_state[xcounter++] = layer;
 	}
 }
@@ -933,7 +933,7 @@ static void vic4_render_char_raster()
 	while (xcounter < border_x_right)
 	{
 		if (display_row > 25 || char_x >= REG_CHRCOUNT) { // FIX: get display_row from registers.
-			(*current_pixel++) = vic3_rom_palette[REG_SCREEN_COLOR];
+			(*current_pixel++) = palette[REG_SCREEN_COLOR];
 			xcounter++;
 			continue;
 		}
@@ -1073,19 +1073,19 @@ int vic4_render_scanline()
 		if (ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM || !REG_DISPLAYENABLE)
 		{
 			for (int i = 0; i < SCREEN_WIDTH; ++i)
-				*(current_pixel++) = vic3_rom_palette[REG_BORDER_COLOR & 0xF];
+				*(current_pixel++) = palette[REG_BORDER_COLOR & 0xF];
 		}
 		else
 		{
 			while (xcounter++ < border_x_left)
-				*(current_pixel++) = vic3_rom_palette[REG_BORDER_COLOR & 0xF];
+				*(current_pixel++) = palette[REG_BORDER_COLOR & 0xF];
 
 			// Cache this, use a function call and avoid branching !
 
 			vic4_render_char_raster();
 
 			while (xcounter++ <= SCREEN_WIDTH)
-				*(current_pixel++) = vic3_rom_palette[REG_BORDER_COLOR & 0xF];
+				*(current_pixel++) = palette[REG_BORDER_COLOR & 0xF];
 
 			vic4_do_sprites();
 		}
