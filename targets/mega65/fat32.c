@@ -1,4 +1,4 @@
-/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+/* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
@@ -31,7 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifdef XEMU_BUILD
 #	include "xemu/emutools.h"
 #	include "xemu/emutools_files.h"
-#	define FATDEBUG		DEBUGPRINT
+#	define FATDEBUG		DEBUG
 #	define FATDEBUGPRINT	DEBUGPRINT
 #else
 #	define NL		"\n"

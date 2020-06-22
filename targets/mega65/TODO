@@ -1,6 +1,6 @@
 This is a work-in-progress, for internal use TODO file only!
 
-TODO list for Mega-65 shorter term (m65mem branch lifetime, mostly done already btw):
+TODO list for MEGA65 shorter term (m65mem branch lifetime, mostly done already btw):
 
 * Write new memory handling [DONE]
 * Again: try different solutions for best performance within similar constraints? [PENDING]
@@ -54,7 +54,7 @@ SMALLER [?] misc TODOs in the future:
 * Xemu's external D81 mount: do not ask to do, if it's logically from a command line switch
 * Xemu's external D81 mount: allow some hack to mount external/internal from SYS49152 mounter
 * M65 similar FDC r/w control "LED" on the screen corner?
-* C65/M65 too: check Mega-65 kbd layout on PS/2 keyboard, and implement similar with Xemu!
+* C65/M65 too: check MEGA65 kbd layout on PS/2 keyboard, and implement similar with Xemu!
 * Build SD-card image for the user, if needed files are in place at least for that
 * Installer mode: allow to download needed files, ROM images, etc after asking the user if it's OK to do
 * ALL/XEMU: config file support (in theory, the framework is there ...)

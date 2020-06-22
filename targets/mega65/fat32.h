@@ -1,4 +1,4 @@
-/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+/* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
@@ -78,6 +78,5 @@ extern int    mfat_search_in_directory ( mfat_dirent_t *p, const char *name, int
 extern void   mfat_open_rootdir ( mfat_stream_t *p );
 extern Uint32 mfat_get_real_size ( mfat_stream_t *p, int *fragmented );
 extern Uint32 mfat_overwrite_file_with_direct_linear_device_block_write ( mfat_dirent_t *dirent, const char *name, Uint32 size );
-extern int    mfat_flush_fat_cache ( void );
 
 #endif

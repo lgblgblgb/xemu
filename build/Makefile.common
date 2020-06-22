@@ -56,6 +56,7 @@ OBJS			= $(TARGETOBJS) $(COMMONOBJS)
 
 ASMOUT			= no
 DEBUG			= no
+RELEASE			= no
 
 CFLAGS_TARGET		= $(CFLAGS_TARGET_$(PRG_TARGET))
 LDFLAGS_TARGET		= $(LDFLAGS_TARGET_$(PRG_TARGET))
@@ -66,9 +67,12 @@ CONFIG_CFLAGS_LINK	+= -g
 else
 CFLAGS_OPT		= $(CONFIG_CFLAGS_OPT)
 endif
-
 ifeq ($(NATIVE), yes)
 CFLAGS_OPT		+= -mtune=native -march=native
+endif
+ifeq ($(RELEASE), yes)
+CFLAGS_OPT		+= $(CONFIG_CFLAGS_OPT_RELEASE) -DXEMU_RELEASE_BUILD
+CONFIG_CFLAGS_LINK	+= $(CONFIG_CFLAGS_OPT_RELEASE)
 endif
 
 CFLAGS			= $(CONFIG_CFLAGS) $(CFLAGS_OPT) $(CFLAGS_TARGET) -I. -I$(TOPDIR) -include build/configure/config-$(ARCH).h
@@ -124,7 +128,7 @@ $(PRG): $(OBJS) $(DEPALL)
 	@echo "const char *XEMU_BUILDINFO_AT  = \"`date`\";" >> $(DEPFILEPREFIX)-buildinfo.c
 	@echo "const char *XEMU_BUILDINFO_GIT = \"`git config --get remote.origin.url` `git rev-parse --abbrev-ref HEAD` `git rev-parse HEAD`\";" >> $(DEPFILEPREFIX)-buildinfo.c
 	@echo "const char *XEMU_BUILDINFO_TARGET = \"$(PRG_TARGET) ($(PRG)) for $(TARGET) on \" XEMU_ARCH_NAME \" ($(ARCH)) using $(CONFIG_CC)\";" >> $(DEPFILEPREFIX)-buildinfo.c
-	@git log -1 --format=%cd --date=format:%Y%m%d%H%M%S > $(TOPDIR)/build/objs/cdate.data
+	@git log -1 --format=%cd --date=format:%Y%m%d%H%M%S > $(TOPDIR)/build/objs/cdate.data || date '+%Y%m%d%H%M%S' > $(TOPDIR)/build/objs/cdate.data
 	@echo "*** Commit date we're building ($(TOPDIR)/build/objs/cdate.data): `cat $(TOPDIR)/build/objs/cdate.data`"
 	@echo "const char *XEMU_BUILDINFO_CDATE = \"`cat $(TOPDIR)/build/objs/cdate.data`\";" >> $(DEPFILEPREFIX)-buildinfo.c
 	$(CONFIG_CC) $(CFLAGS) -c -o $(DEPFILEPREFIX)-buildinfo.o $(DEPFILEPREFIX)-buildinfo.c

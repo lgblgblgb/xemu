@@ -1,4 +1,4 @@
-/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+/* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Copyright (C)2020 Hernán Di Pietro <hernan.di.pietro@gmail.com>
@@ -30,12 +30,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "xemu/cpu65.h"
 #include "vic4.h"
+#include "vic4_palette.h"
 #include "memory_mapper.h"
 #include <assert.h>
 
 extern int in_hypervisor;
 
-#define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
+//#define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
 
 static const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
@@ -43,14 +44,15 @@ static const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 static Uint32 *current_pixel;			// current_pixel pointer to the rendering target (one current_pixel: 32 bit)
 static Uint32 *pixel_end, *pixel_start;	// points to the end and start of the buffer
 static Uint32 *pixel_raster_start;		// first pixel of current raster
-static Uint32 rgb_palette[4096];		// all the C65 palette, 4096 colours (SDL current_pixel format related form)
-static Uint32 vic3_palette[0x100];		// VIC3 palette in SDL current_pixel format related form (can be written into the texture directly to be rendered)
-static Uint32 vic3_rom_palette[0x100];	// the "ROM" palette, for C64 colours (with some ticks, ie colours above 15 are the same as the "normal" programmable palette)
-static Uint32 *palette;					// the selected palette ...
-static Uint8 vic3_palette_nibbles[0x300];
 Uint8 vic_registers[0x80];				// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
 int vic_iomode;							// VIC2/VIC3/VIC4 mode
 int force_fast;							// POKE 0,64 and 0,65 trick ...
+
+
+Uint8 vic_registers[0x80];		// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
+int vic_iomode;				// VIC2/VIC3/VIC4 mode
+int force_fast;				// POKE 0,64 and 0,65 trick ...
+int scanline;				// current scan line number
 int cpu_cycles_per_scanline;
 static int compare_raster;				// raster compare (9 bits width) data
 static int logical_raster = 0;
@@ -169,47 +171,17 @@ static inline Uint8 reverse_byte(unsigned char x)
 
 void vic_init ( void )
 {
-	int r, g, b, i;
-	// *** Init 4096 element palette with RGB components for faster access later on palette register changes (avoid SDL calls to convert)
-	// TODO: for M65 mode, where a colour component is 8 bit, this is kind of problematic though :(
-	for (r = 0, i = 0; r < 16; r++)
-		for (g = 0; g < 16; g++)
-			for (b = 0; b < 16; b++)
-				rgb_palette[i++] = SDL_MapRGBA(sdl_pix_fmt, r * 17, g * 17, b * 17, 0xFF); // 15*17=255, last arg 0xFF: alpha channel for SDL
+	vic4_init_palette();
 	force_fast = 0;
 	// *** Init VIC3 registers and palette
 	vic_iomode = VIC2_IOMODE;
 	interrupt_status = 0;
-	palette = vic3_rom_palette;
+	// FIXME: add ROM palette by default? What is ROM palette on MEGA65?
+	scanline = 0;
 	compare_raster = 0;
-	for (i = 0; i < 0x100; i++) {	// Initiailize all palette registers to zero, initially, to have something ...
-		if (i < sizeof vic_registers)
-			vic_registers[i] = 0;	// Also the VIC registers ...
-		vic3_rom_palette[i] = vic3_palette[i] = rgb_palette[0];
-		vic3_palette_nibbles[i] = 0;
-		vic3_palette_nibbles[i + 0x100] = 0;
-		vic3_palette_nibbles[i + 0x200] = 0;
-	}
-	// *** the ROM palette "fixed" colours
-	vic3_rom_palette[ 0] = RGB( 0,  0,  0);	// black
-	vic3_rom_palette[ 1] = RGB(15, 15, 15);	// white
-	vic3_rom_palette[ 2] = RGB(15,  0,  0);	// red
-	vic3_rom_palette[ 3] = RGB( 0, 15, 15);	// cyan
-	vic3_rom_palette[ 4] = RGB(15,  0, 15);	// magenta
-	vic3_rom_palette[ 5] = RGB( 0, 15,  0);	// green
-	vic3_rom_palette[ 6] = RGB( 0,  0, 15);	// blue
-	vic3_rom_palette[ 7] = RGB(15, 15,  0);	// yellow
-	vic3_rom_palette[ 8] = RGB(15,  6,  0);	// orange
-	vic3_rom_palette[ 9] = RGB(10,  4,  0);	// brown
-	vic3_rom_palette[10] = RGB(15,  7,  7);	// pink
-	vic3_rom_palette[11] = RGB( 5,  5,  5);	// dark grey
-	vic3_rom_palette[12] = RGB( 8,  8,  8);	// medium grey
-	vic3_rom_palette[13] = RGB( 9, 15,  9);	// light green
-	vic3_rom_palette[14] = RGB( 9,  9, 15);	// light blue
-	vic3_rom_palette[15] = RGB(11, 11, 11);	// light grey
 	// *** Just a check to try all possible regs (in VIC2,VIC3 and VIC4 modes), it should not panic ...
 	// It may also sets/initializes some internal variables sets by register writes, which would cause a crash on screen rendering without prior setup!
-	for (i = 0; i < 0x140; i++) {
+	for (int i = 0; i < 0x140; i++) {
 		vic_write_reg(i, 0);
 		(void)vic_read_reg(i);
 	}
@@ -500,7 +472,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		/* --- NO MORE VIC-II REGS FROM HERE --- */
 		CASE_VIC_3_4(0x30):
 			memory_set_vic3_rom_mapping(data);
-			palette = (data & 4) ? vic3_palette : vic3_rom_palette;
+			//palette = (data & 4) ? vic3_palette : vic3_rom_palette;	// FIXME / TODO ROM palette? What is ROM palette on MEGA65?!
 			break;
 		CASE_VIC_3_4(0x31):
 			vic_registers[0x31] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
@@ -542,7 +514,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		
 		CASE_VIC_4(0x5E): CASE_VIC_4(0x5F): /*CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):*/ CASE_VIC_4(0x64):
 		CASE_VIC_4(0x65): CASE_VIC_4(0x66): CASE_VIC_4(0x67): /*CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):*/ CASE_VIC_4(0x6B): /*CASE_VIC_4(0x6C):
-		CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):*/ CASE_VIC_4(0x6F): CASE_VIC_4(0x70): CASE_VIC_4(0x71): CASE_VIC_4(0x72): CASE_VIC_4(0x73): CASE_VIC_4(0x74):
+		CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):*/ CASE_VIC_4(0x6F): /*CASE_VIC_4(0x70):*/ CASE_VIC_4(0x71): CASE_VIC_4(0x72): CASE_VIC_4(0x73): CASE_VIC_4(0x74):
 		CASE_VIC_4(0x75): CASE_VIC_4(0x76): CASE_VIC_4(0x77): CASE_VIC_4(0x78): CASE_VIC_4(0x79): CASE_VIC_4(0x7A): CASE_VIC_4(0x7B): CASE_VIC_4(0x7C):
 		CASE_VIC_4(0x7D): CASE_VIC_4(0x7E): CASE_VIC_4(0x7F):
 			break;
@@ -556,6 +528,13 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			vicii_first_raster  = data & 0x1F;
 			if (!in_hypervisor)
 				vic4_sideborder_touched = 1;
+			break;
+		CASE_VIC_4(0x70):
+			// VIC-IV palette selection register
+			palette       = ((data & 0x03) << 8) + vic_palettes;
+			spritepalette = ((data & 0x0C) << 6) + vic_palettes;
+			altpalette    = ((data & 0x30) << 4) + vic_palettes;
+			palregaccofs  = ((data & 0xC0) << 2);
 			break;
 		/* --- NON-EXISTING REGISTERS --- */
 		CASE_VIC_2(0x31): CASE_VIC_2(0x32): CASE_VIC_2(0x33): CASE_VIC_2(0x34): CASE_VIC_2(0x35): CASE_VIC_2(0x36): CASE_VIC_2(0x37): CASE_VIC_2(0x38):
@@ -1141,7 +1120,7 @@ int vic4_render_scanline()
 #include <string.h>
 
 #define SNAPSHOT_VIC4_BLOCK_VERSION	2
-#define SNAPSHOT_VIC4_BLOCK_SIZE	0x400
+#define SNAPSHOT_VIC4_BLOCK_SIZE	(0x100 + ((NO_OF_PALETTE_REGS) * 3))
 
 int vic4_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
@@ -1155,8 +1134,10 @@ int vic4_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, st
 	for (a = 0; a < 0x80; a++)
 		vic_write_reg(a, buffer[a + 0x80]);
 	c128_d030_reg = buffer[0x7F];
-	for (a = 0; a < 0x300; a++)
-		vic3_write_palette_reg(a, buffer[a + 0x100]);	// TODO: save VIC4 style stuffs, but it doesn't exist yet ...
+	memcpy(vic_palette_bytes_red,   buffer + 0x100                         , NO_OF_PALETTE_REGS);
+	memcpy(vic_palette_bytes_green, buffer + 0x100 +     NO_OF_PALETTE_REGS, NO_OF_PALETTE_REGS);
+	memcpy(vic_palette_bytes_blue,  buffer + 0x100 + 2 * NO_OF_PALETTE_REGS, NO_OF_PALETTE_REGS);
+	vic4_revalidate_all_palette();
 	vic_iomode = buffer[0];
 	DEBUG("SNAP: VIC: changing I/O mode to %d(%s)" NL, vic_iomode, iomode_names[vic_iomode]);
 	interrupt_status = (int)P_AS_BE32(buffer + 1);
@@ -1173,7 +1154,9 @@ int vic4_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	/* saving state ... */
 	memcpy(buffer + 0x80,  vic_registers, 0x80);		//  $80 bytes
 	buffer[0x7F] = c128_d030_reg;
-	memcpy(buffer + 0x100, vic3_palette_nibbles, 0x300);	// $300 bytes
+	memcpy(buffer + 0x100                         , vic_palette_bytes_red,   NO_OF_PALETTE_REGS);
+	memcpy(buffer + 0x100 +     NO_OF_PALETTE_REGS, vic_palette_bytes_green, NO_OF_PALETTE_REGS);
+	memcpy(buffer + 0x100 + 2 * NO_OF_PALETTE_REGS, vic_palette_bytes_blue,  NO_OF_PALETTE_REGS);
 	buffer[0] = vic_iomode;
 	U32_AS_BE(buffer + 1, interrupt_status);
 	return xemusnap_write_sub_block(buffer, sizeof buffer);

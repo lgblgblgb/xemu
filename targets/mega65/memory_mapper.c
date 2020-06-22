@@ -1,4 +1,4 @@
-/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+/* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2017-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
@@ -63,7 +63,7 @@ Uint8 main_ram[512 << 10];
 // the chip-RAM. Also, the first 1 or 2K can be seen in the C64-style I/O area too, at $D800
 Uint8 colour_ram[0x8000];
 // Write-Only memory (WOM) for character fetch when it would be the ROM (on C64 eg)
-Uint8 char_wom[0x1000];
+Uint8 char_wom[0x2000];
 // 16K of hypervisor RAM, can be only seen in hypervisor mode.
 Uint8 hypervisor_ram[0x4000];
 // 127Mbytes of slow-RAM. Would be the DDR memory on M65/Nexys4
@@ -303,7 +303,7 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 	// full colour RAM
 	{ 0xFF80000, 0xFF87FFF, colour_ram_reader, colour_ram_writer },		// full colour RAM (32K)
 	{ 0xFFF8000, 0xFFFBFFF, hypervisor_ram_reader, hypervisor_ram_writer },	// 16KB Kickstart/hypervisor ROM
-	{ 0xFF7E000, 0xFF7EFFF, dummy_reader, char_wom_writer },		// Character "WriteOnlyMemory"
+	{ 0xFF7E000, 0xFF7FFFF, dummy_reader, char_wom_writer },		// Character "WriteOnlyMemory"
 	{ 0xFFDE800, 0xFFDEFFF, eth_buffer_reader, eth_buffer_writer },		// ethernet RX/TX buffer, NOTE: the same address, reading is always the RX_read, writing is always TX_write
 	{ 0xFFD6000, 0xFFD6FFF, disk_buffers_reader, disk_buffers_writer },	// disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space" [??]
 	{ 0xFFD7000, 0xFFD70FF, i2c_io_reader, i2c_io_writer },			// I2C devices

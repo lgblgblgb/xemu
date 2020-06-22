@@ -1,4 +1,4 @@
-/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+/* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
@@ -25,6 +25,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/d81access.h"
 #include "sdcard.h"
 #include "sdcontent.h"
+
+#define		HELP_URL	"https://github.com/lgblgblgb/xemu/wiki/MEGA65-help"
 
 
 //#if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_GUI)
@@ -83,6 +85,15 @@ static void ui_native_os_file_browser ( void )
 }
 
 
+static void ui_online_help ( void )
+{
+	if (ARE_YOU_SURE("Shall I open a web browser instance with the help for you?", 0))
+		xemuexec_open_native_file_browser(HELP_URL);
+	else
+		INFO_WINDOW("Help request was cancelled by you");
+}
+
+
 #ifdef BASIC_TEXT_SUPPORT
 #include "xemu/basic_text.h"
 #include "memory_mapper.h"
@@ -128,6 +139,22 @@ static void ui_format_sdcard ( void )
 	reset_mega65();
 }
 
+static void ui_format_sdcard ( void )
+{
+	if (ARE_YOU_SURE(
+		"Formatting your SD-card image file will cause ALL your data,\n"
+		"system files (etc!) to be lost, forever!\n"
+		"Are you sure to continue this self-desctruction sequence? :)"
+		,
+		0
+	)) {
+		if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_FORCE_FDISK))
+			INFO_WINDOW("You SD-card file has been partitioned/formatted\nMEGA65 emulation is about to RESET now!");
+	}
+	reset_mega65();
+}
+
+
 static void ui_update_sdcard ( void )
 {
 	char fnbuf[PATH_MAX + 1];
@@ -167,9 +194,8 @@ static void ui_update_sdcard ( void )
 	}
 	// Generate character ROM from the ROM image
 	Uint8 char_rom[CHAR_ROM_SIZE];
-	memcpy(char_rom, xemu_load_buffer_p + 0xD000, 0x1000);
-	if (CHAR_ROM_SIZE >= 0x2000)
-		memcpy(char_rom + 0x1000, xemu_load_buffer_p + 0x1D000, 0x1000);
+	memcpy(char_rom + 0x0000, xemu_load_buffer_p + 0xD000, 0x1000);
+	memcpy(char_rom + 0x1000, xemu_load_buffer_p + 0x9000, 0x1000);
 	free(xemu_load_buffer_p);
 	xemu_load_buffer_p = NULL;
 	// And store our character ROM!
@@ -224,6 +250,7 @@ static const struct menu_st menu_main[] = {
 #ifdef XEMU_ARCH_WIN
 	{ "System console", XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK, xemugui_cb_sysconsole, NULL },
 #endif
+	{ "Help (online)", XEMUGUI_MENUID_CALLABLE, xemugui_cb_call_user_data, ui_online_help },
 	{ "About", XEMUGUI_MENUID_CALLABLE, xemugui_cb_about_window, NULL },
 	{ "Quit", XEMUGUI_MENUID_CALLABLE, xemugui_cb_call_quit_if_sure, NULL },
 	{ NULL }

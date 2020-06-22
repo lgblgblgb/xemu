@@ -27,13 +27,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef _DEFAULT_SOURCE
 #	define	_DEFAULT_SOURCE
 #endif
-#if defined(XEMU_ARCH_UNIX) && !defined(_XOPEN_SOURCE)
-#	define	_XOPEN_SOURCE	700
-#endif
-#if defined(XEMU_ARCH_WIN) && !defined(_USE_MATH_DEFINES)
-	// It seems, some (?) versions of Windows requires _USE_MATH_DEFINES to be defined to define some math constants by math.h
-#	define	_USE_MATH_DEFINES
-#endif
 //#ifdef __STRICT_ANSI__
 //#	undef __STRICT_ANSI__
 //#endif
@@ -82,3 +75,21 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #else
 #	error	"Unknown target OS architecture."
 #endif
+
+#if defined(XEMU_ARCH_UNIX) && !defined(_XOPEN_SOURCE)
+#	define	_XOPEN_SOURCE	700
+#endif
+
+#if defined(XEMU_ARCH_WIN) && !defined(_USE_MATH_DEFINES)
+	// It seems, some (?) versions of Windows requires _USE_MATH_DEFINES to be defined to define some math constants by math.h
+#	define	_USE_MATH_DEFINES
+#endif
+
+// It seems Mingw on windows defaults to 32 bit off_t which causes problems, even on win64
+// In theory this _FILE_OFFSET_BITS should work for UNIX as well (though maybe that's default there since ages?)
+// Mingw "should" support this since 2011 or so ... Thus in nutshell: use this trick to enable large file support
+// in general, regardless of the OS, UNIX-like or Windows. Hopefully it will work.
+#ifdef	_FILE_OFFSET_BITS
+#	undef	_FILE_OFFSET_BITS
+#endif
+#define	_FILE_OFFSET_BITS	64
