@@ -2,14 +2,8 @@
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
-   This is the VIC-IV "emulation". Currently it does one-frame-at-once
-   kind of horrible work, and only a subset of VIC2 and VIC3 knowledge
-   is implemented, with some light VIC-IV features, to be able to "boot"
-   of Mega-65 with standard configuration (kickstart, SD-card).
-   Some of the missing features (VIC-2/3): hardware attributes,
-   DAT, sprites, screen positioning, H1280 mode, V400 mode, interlace,
-   chroma killer, VIC2 MCM, ECM, 38/24 columns mode, border.
-   VIC-4: almost everything :(
+   MEGA65 palette handling for VIC-IV with compatibility for C65 style
+   VIC-III palette.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -35,17 +29,17 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 Uint8  vic_palette_bytes_red  [NO_OF_PALETTE_REGS];
 Uint8  vic_palette_bytes_green[NO_OF_PALETTE_REGS];
 Uint8  vic_palette_bytes_blue [NO_OF_PALETTE_REGS];
-static Uint32 vic_palettes[NO_OF_PALETTE_REGS];	// SDL texture format compatible entries of all the four palettes of the MEGA65
+Uint32 vic_palettes[NO_OF_PALETTE_REGS];	// SDL texture format compatible entries of all the four palettes of the MEGA65
 Uint32 *palette = vic_palettes;	// the current used palette for video/text (points into vic_palettes)
 Uint32 *spritepalette = vic_palettes;	// the current used palette for sprites (points into vic_palettes)
 Uint32 *altpalette = vic_palettes;
 static struct {
-	Uint32 red_shift, red_mask, red_revmask;
+	Uint32 red_shift,   red_mask,   red_revmask;
 	Uint32 green_shift, green_mask, green_revmask;
-	Uint32 blue_shift, blue_mask, blue_revmask;
+	Uint32 blue_shift,  blue_mask,  blue_revmask;
 	Uint32 alpha_shift, alpha_mask, alpha_revmask;
 } sdlpalinfo;
-
+unsigned int palregaccofs;
 
 
 static XEMU_INLINE Uint32 swap_nibbles ( Uint8 i )
@@ -65,8 +59,6 @@ void vic4_revalidate_all_palette ( void )
 }
 
 
-
-
 void vic4_init_palette ( void )
 {
 	sdlpalinfo.red_shift     = sdl_pix_fmt->Rshift;
@@ -81,6 +73,7 @@ void vic4_init_palette ( void )
 	sdlpalinfo.alpha_shift   = sdl_pix_fmt->Ashift;
 	sdlpalinfo.alpha_mask    = 0xFFU << sdlpalinfo.alpha_shift;
 	sdlpalinfo.alpha_revmask = ~sdlpalinfo.alpha_mask;
+	// Only for checking, this should never happen:
 	if (
 		sdlpalinfo.red_mask   != sdl_pix_fmt->Rmask ||
 		sdlpalinfo.green_mask != sdl_pix_fmt->Gmask ||
@@ -88,6 +81,9 @@ void vic4_init_palette ( void )
 		sdlpalinfo.alpha_mask != sdl_pix_fmt->Amask
 	)
 		FATAL("SDL palette problem!");
+#ifdef DO_INIT_PALETTE
+	// DO_INIT_PALETTE: I would say, we don't need to initialize palette,
+	// since Hyppo will do it. So DO_INIT_PALETTE is currently not defined.
 	static const Uint8 def_pal[] = {
 		 0,  0,  0,	// black
 		15, 15, 15,	// white
@@ -113,31 +109,39 @@ void vic4_init_palette ( void )
 		if (j == 16 * 3)
 			j = 0;
 	}
+#else
+	for (int i = 0; i < NO_OF_PALETTE_REGS; i++) {
+		vic_palette_bytes_red[i] = 0;
+		vic_palette_bytes_green[i] = 0;
+		vic_palette_bytes_blue[i] = 0;
+	}
+#endif
 	vic4_revalidate_all_palette();
 	palette = vic_palettes;	// the current used palette for video/text (points into vic_palettes)
 	spritepalette = vic_palettes;	// the current used palette for sprites (points into vic_palettes)
 	altpalette = vic_palettes;
+	palregaccofs = 0;
 }
 
 
 
 void vic4_write_palette_reg_red ( unsigned int num, Uint8 data )
 {
-	num = (num & 0xFF) + ((vic_registers[0x70] & 0xC0) << 2);
+	num = (num & 0xFF) + palregaccofs;
 	vic_palette_bytes_red[num] = data;
 	vic_palettes[num] = (vic_palettes[num] & sdlpalinfo.red_revmask) | ((swap_nibbles(data & 0xEF)) << sdlpalinfo.red_shift);
 }
 
 void vic4_write_palette_reg_green ( unsigned int num, Uint8 data )
 {
-	num = (num & 0xFF) + ((vic_registers[0x70] & 0xC0) << 2);
+	num = (num & 0xFF) + palregaccofs;
 	vic_palette_bytes_green[num] = data;
 	vic_palettes[num] = (vic_palettes[num] & sdlpalinfo.green_revmask) | (swap_nibbles(data) << sdlpalinfo.green_shift);
 }
 
 void vic4_write_palette_reg_blue  ( unsigned int num, Uint8 data )
 {
-	num = (num & 0xFF) + ((vic_registers[0x70] & 0xC0) << 2);
+	num = (num & 0xFF) + palregaccofs;
 	vic_palette_bytes_blue[num] = data;
 	vic_palettes[num] = (vic_palettes[num] & sdlpalinfo.blue_revmask) | (swap_nibbles(data) << sdlpalinfo.blue_shift);
 }
@@ -159,15 +163,15 @@ void vic3_write_palette_reg_blue  ( unsigned int num, Uint8 data )
 
 Uint8 vic4_read_palette_reg_red ( unsigned int num )
 {
-	return vic_palette_bytes_red[num + ((vic_registers[0x70] & 0xC0) << 2)];
+	return vic_palette_bytes_red[(num & 0xFF) + palregaccofs];
 }
 
 Uint8 vic4_read_palette_reg_green ( unsigned int num )
 {
-	return vic_palette_bytes_green[num + ((vic_registers[0x70] & 0xC0) << 2)];
+	return vic_palette_bytes_green[(num & 0xFF) + palregaccofs];
 }
 
 Uint8 vic4_read_palette_reg_blue ( unsigned int num )
 {
-	return vic_palette_bytes_blue[num + ((vic_registers[0x70] & 0xC0) << 2)];
+	return vic_palette_bytes_blue[(num & 0xFF) + palregaccofs];
 }

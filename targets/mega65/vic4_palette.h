@@ -24,10 +24,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern Uint8  vic_palette_bytes_red  [NO_OF_PALETTE_REGS];
 extern Uint8  vic_palette_bytes_green[NO_OF_PALETTE_REGS];
 extern Uint8  vic_palette_bytes_blue [NO_OF_PALETTE_REGS];
+extern Uint32 vic_palettes[NO_OF_PALETTE_REGS];
 
 extern Uint32 *palette;		// the current used palette for video/text (points into vic_palettes)
 extern Uint32 *spritepalette;	// the current used palette for sprites (points into vic_palettes)
 extern Uint32 *altpalette;
+extern unsigned int palregaccofs;
 
 extern void  vic3_write_palette_reg_red   ( unsigned int num, Uint8 data );
 extern void  vic3_write_palette_reg_green ( unsigned int num, Uint8 data );
@@ -40,6 +42,6 @@ extern Uint8 vic4_read_palette_reg_green  ( unsigned int num );
 extern Uint8 vic4_read_palette_reg_blue   ( unsigned int num );
 
 extern void  vic4_init_palette ( void );
-extern void vic4_revalidate_all_palette ( void );
+extern void  vic4_revalidate_all_palette ( void );
 
 #endif
