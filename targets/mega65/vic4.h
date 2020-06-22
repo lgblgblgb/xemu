@@ -127,6 +127,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_HORZ_2X(n)    (vic_registers[0x1D] & (1 << (n)))
 #define SPRITE_VERT_2X(n)    (vic_registers[0x17] & (1 << (n)))
 #define SPRITE_MULTICOLOR(n) (vic_registers[0x1C] & (1 << (n)))
+#define SPRITE_16COLOR(n)    (vic_registers[0x6B] & (1 << (n)))
+
 #define TEXT_MODE            (!REG_BMM)
 #define HIRES_BITMAP_MODE    (REG_BMM & !REG_MCM & !REG_EBM)
 #define MULTICOLOR_BITMAP_MODE (REG_BMM & REG_MCM & !REG_EBM)

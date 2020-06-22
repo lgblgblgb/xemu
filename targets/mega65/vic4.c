@@ -745,6 +745,38 @@ static inline Uint32 get_charset_effective_addr()
 	return CHARSET_ADDR;
 }
 
+static void vic4_draw_sprite_row_16color(int sprnum, int x_display_pos, Uint8* row_data_ptr, int xscale)
+{
+	const Uint8 trans_color = SPRITE_COLOR(sprnum);
+	for (int byte = 0; byte < 8; ++byte)
+	{
+		const Uint8 c0 = (*row_data_ptr + byte) >> 4;
+		const Uint8 c1 = (*row_data_ptr + byte) & 0xF;
+
+		for (int p = 0; p < xscale && x_display_pos < border_x_right; ++p, x_display_pos += 2)
+		{
+			if (trans_color != c0)
+			{
+				if (x_display_pos >= border_x_left &&
+					(!SPRITE_IS_BACK(sprnum) ||
+					 (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)))
+				{
+					*(pixel_raster_start + x_display_pos) = vic3_rom_palette[c0];
+				}
+			}
+
+			if (trans_color != c1)
+			{
+				if (x_display_pos + 1 >= border_x_left &&
+					(!SPRITE_IS_BACK(sprnum) ||
+					 (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos + 1] != FOREGROUND_PIXEL)))
+				{
+					*(pixel_raster_start + x_display_pos + 1) = vic3_rom_palette[c1];
+				}
+			}
+		}
+	}
+}
 
 static void vic4_draw_sprite_row_multicolor(int sprnum, int x_display_pos, Uint8* row_data_ptr, int xscale)
 {
@@ -830,11 +862,15 @@ static void vic4_do_sprites()
 		if ((REG_SPRITE_ENABLE & (1 << sprnum)) &&
 			(sprite_row_in_raster >= 0 && sprite_row_in_raster < 21) )
 		{
+			int widthBytes = SPRITE_16COLOR(sprnum) ? 8 : 3;
+			int totalBytes = SPRITE_16COLOR(sprnum) ? 168 : 64;
 			Uint8 *sprite_data_pointer =  main_ram + SPRITE_POINTER_ADDR + sprnum;
-			Uint8 *sprite_data = main_ram + 64 * (*sprite_data_pointer);
-			Uint8 *row_data = sprite_data + 3 * sprite_row_in_raster;
+			Uint8 *sprite_data = main_ram + totalBytes * (*sprite_data_pointer);
+			Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
 			int xscale = (REG_H640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
-			if (SPRITE_MULTICOLOR(sprnum))
+			if (SPRITE_16COLOR(sprnum))
+				vic4_draw_sprite_row_16color(sprnum, x_display_pos, row_data, xscale);
+			else if (SPRITE_MULTICOLOR(sprnum))
 				vic4_draw_sprite_row_multicolor(sprnum, x_display_pos, row_data, xscale);
 			else
 				vic4_draw_sprite_row_mono(sprnum, x_display_pos, row_data, xscale);
