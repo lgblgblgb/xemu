@@ -902,6 +902,17 @@ static void vic4_render_multicolor_char_row(Uint8 char_byte, int glyph_width, co
 	}
 }
 
+// 8-bytes per row
+static void vic4_render_fullcolor_char_row(const Uint8* char_row, int glyph_width)
+{
+	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step)
+	{
+		Uint32 pixel_color = palette[char_row[(int)cx]];
+		*(current_pixel++) = pixel_color;
+		bg_pixel_state[xcounter++] = pixel_color ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
+	}
+}
+
 //
 //
 // The character rendering engine. Most features are shared between
@@ -923,7 +934,7 @@ static void vic4_render_char_raster()
 {
 	int char_x = 0;
 	colour_ram_current_ptr = colour_ram + (display_row * REG_CHRCOUNT);
-	screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row * REG_CHRCOUNT);
+	screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row * REG_CHRCOUNT << REG_16BITCHARSET);
 	const Uint8* row_data_base_addr = main_ram + (REG_BMM ?  VIC2_BITMAP_ADDR : get_charset_effective_addr());
 
 	// Charset x-displacement
@@ -986,6 +997,7 @@ static void vic4_render_char_raster()
 		}
 		else if (CHAR_IS256_COLOR(char_id)) // 256-color character
 		{
+			vic4_render_fullcolor_char_row(main_ram + (((char_id * 64) + (sel_char_row * 8) ) & 0x7FFFF), 8);
 		}
 		else if ((REG_MCM && (char_fgcolor & 8)) || (REG_MCM && REG_BMM)) // Multicolor character
 		{
