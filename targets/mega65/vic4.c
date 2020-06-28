@@ -1037,6 +1037,7 @@ int vic4_render_scanline()
 	// Work this first. DO NOT OPTIMIZE EARLY.
 
 	xcounter = 0;
+	current_pixel = pixel_start + ycounter * SCREEN_WIDTH;
 	pixel_raster_start = current_pixel;
 
 	SET_PHYSICAL_RASTER(ycounter);
@@ -1079,8 +1080,6 @@ int vic4_render_scanline()
 		{
 			while (xcounter++ < border_x_left)
 				*(current_pixel++) = palette[REG_BORDER_COLOR & 0xF];
-
-			// Cache this, use a function call and avoid branching !
 
 			vic4_render_char_raster();
 
