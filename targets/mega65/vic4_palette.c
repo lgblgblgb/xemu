@@ -42,9 +42,9 @@ static struct {
 unsigned int palregaccofs;
 
 
-static XEMU_INLINE Uint32 swap_nibbles ( Uint8 i )
+static XEMU_INLINE Uint8 swap_nibbles ( Uint8 i )
 {
-	return ((i & 0x0FU) << 4) | ((i & 0xF0U) >> 4);
+	return ((i & 0x0F) << 4) | ((i & 0xF0) >> 4);
 }
 
 
