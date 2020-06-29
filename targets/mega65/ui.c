@@ -25,6 +25,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/d81access.h"
 #include "sdcard.h"
 #include "sdcontent.h"
+#include "xemu/emutools_hid.h"
+#include "xemu/c64_kbd_mapping.h"
 
 #define		HELP_URL	"https://github.com/lgblgblgb/xemu/wiki/MEGA65-help"
 
@@ -205,6 +207,21 @@ static void ui_update_sdcard ( void )
 }
 
 
+static void reset_into_utility_menu ( void )
+{
+	reset_mega65_asked();
+	hid_set_autoreleased_key(ALT_KEY_POS);
+	KBD_PRESS_KEY(ALT_KEY_POS);
+}
+
+static void reset_into_c64_mode ( void )
+{
+	reset_mega65_asked();
+	hid_set_autoreleased_key(0x75);
+	KBD_PRESS_KEY(0x75);	// "MEGA" key is pressed for C64 mode
+
+}
+
 
 static const struct menu_st menu_display[] = {
 	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)0 },
@@ -217,10 +234,16 @@ static const struct menu_st menu_sdcard[] = {
 	{ "Update files on SD image",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_update_sdcard },
 	{ NULL }
 };
+static const struct menu_st menu_reset[] = {
+	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_mega65_asked },
+	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu },
+	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode },
+	{ NULL }
+};
 static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		menu_display, NULL },
-	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		menu_sdcard, NULL },
-	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_mega65_asked },
+	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		menu_sdcard,  NULL },
+	{ "Reset",			XEMUGUI_MENUID_SUBMENU,		menu_reset,   NULL },
 	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
 #ifdef BASIC_TEXT_SUPPORT
 	{ "Save BASIC as text",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_save_basic_as_text },
