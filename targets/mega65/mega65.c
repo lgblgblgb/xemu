@@ -39,6 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "memcontent.h"
 #include "xemu/emutools_gui.h"
 #include "audio65.h"
+#include "inject.h"
 
 
 static int nmi_level;			// please read the comment at nmi_set() below
@@ -609,6 +610,8 @@ static void emulation_loop ( void )
 			cia_tick(&cia1, 64);
 			cia_tick(&cia2, 64);
 			if (scanline == 312) {
+				if (XEMU_UNLIKELY(inject_ready_check_status))
+					inject_ready_check_do();
 				//DEBUG("VIC3: new frame!" NL);
 				frameskip = !frameskip;
 				scanline = 0;
@@ -650,6 +653,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("loadc000", NULL, "Load initial memory content at $C000 (usually disk mounter)");
 	xemucfg_define_str_option("loadcram", NULL, "Load initial content (32K) into the colour RAM");
 	xemucfg_define_str_option("loadrom", NULL, "Preload C65 ROM image (you may need the -forcerom option to prevent KickStart to re-load from SD)");
+	xemucfg_define_str_option("prg", NULL, "Load a PRG file directly into the memory");
 	xemucfg_define_switch_option("forcerom", "Re-fill 'ROM' from external source on start-up, requires option -loadrom <filename>");
 	xemucfg_define_switch_option("fontrefresh", "Upload character ROM from the loaded ROM image");
 	xemucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used (also see the -virtsd option!)");
@@ -742,6 +746,8 @@ int main ( int argc, char **argv )
 			ERROR_WINDOW("UMON: Invalid TCP port: %d", port);
 	}
 #endif
+	if (xemucfg_get_str("prg"))
+		inject_register_prg(xemucfg_get_str("prg"));
 #ifdef FAKE_TYPING_SUPPORT
 	if (xemucfg_get_bool("go64")) {
 		if (xemucfg_get_bool("autoload"))
