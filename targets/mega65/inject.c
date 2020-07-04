@@ -49,28 +49,44 @@ static XEMU_INLINE int get_screen_width ( void )
 }
 
 
+static void _cbm_screen_write ( Uint8 *p, const char *s )
+{
+	while (*s) {
+		if (*s == '@')
+			*p++ = 0;
+		else if (*s >= 'a' && *s <= 'z')
+			*p++ = *s - 'a' + 1;
+		else if (*s >= 'A' && *s <= 'Z')
+			*p++ = *s - 'A' + 1;
+		else
+			*p++ = *s;
+		s++;
+	}
+}
+
+
+#define CBM_SCREEN_PRINTF(scrp, ...)	do {	\
+	char __buffer__[80];			\
+	sprintf(__buffer__, ##__VA_ARGS__);	\
+	_cbm_screen_write(scrp, __buffer__);	\
+	} while (0)
+
+
 static void prg_inject_callback ( void *unused )
 {
 	DEBUGPRINT("INJECT: hit 'READY.' trigger, about to inject %d bytes from $%04X." NL, prg.size, prg.load_addr);
 	memcpy(main_ram + prg.load_addr, prg.stream, prg.size);
 	clear_emu_events();	// clear keyboard & co state, ie for C64 mode, probably had MEGA key pressed still
+	CBM_SCREEN_PRINTF(under_ready_p - get_screen_width() + 7, "<$%04X-$%04X,%d bytes>", prg.load_addr, prg.load_addr + prg.size - 1, prg.size);
 	if (prg.run_it) {
 		// If program was detected as BASIC (by load-addr) we want to auto-RUN it
-		static const Uint8 run_command[] = {
-			0x20,			// SPACE (cursor is problematic to inject character "under" it!)
-			0x3F,			// ? (for PRINT)
-			0x22, 0x00, 0x22, ':',	// "@":
-			0x12, 0x15, 0x0E, ':'	// RUN:
-		};
-		memcpy(under_ready_p, run_command, sizeof run_command);
+		CBM_SCREEN_PRINTF(under_ready_p, " ?\"@\":RUN:");
 		KBD_PRESS_KEY(0x01);	// press RETURN
 		under_ready_p[get_screen_width()] = 0x20;	// be sure no "@" (screen code 0) at the trigger position
 		inject_ready_check_status = 100;	// go into special mode, to see "@" character printed by PRINT, to release RETURN by that trigger
 	} else {
 		// In this case we DO NOT press RETURN for user, as maybe the SYS addr is different, or user does not want this at all!
-		char sys_command[16];
-		sprintf(sys_command, "\40\23\31\23\40%d:", prg.load_addr);
-		memcpy(under_ready_p, sys_command, strlen(sys_command));
+		CBM_SCREEN_PRINTF(under_ready_p, " SYS %d:REM **YOU CAN PRESS RETURN**", prg.load_addr);
 	}
 	free(prg.stream);
 }
