@@ -23,6 +23,6 @@ extern int inject_ready_check_status;
 
 extern void inject_ready_check_do        ( void );
 extern int  inject_register_ready_status ( const char *debug_msg, void (*callback)(void*), void *userdata );
-extern int  inject_register_prg          ( const char *prg_file );
+extern int  inject_register_prg          ( const char *prg_file, int prg_mode );
 
 #endif
