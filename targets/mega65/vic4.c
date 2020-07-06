@@ -410,7 +410,6 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_ALL(0x17):	// sprite-Y expansion
 			break;
 		CASE_VIC_ALL(0x18):	// memory pointers.
-			// Real $D018 does not get written in VIC-IV  here. 
 			// (See vic4_interpret_legacy_mode_registers () for later REG_SCRNPTR_ adjustments)
 			// Reads are mapped to extended registers.
 			// So we just store the D018 Legacy Screen Address to be referenced elsewhere.
@@ -421,7 +420,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			REG_SCRNPTR_B2 &= 0xF0;
 			reg_d018_screen_addr = (data & 0xF0) >> 4;
 			vic_hotreg_touched = 1;  
-			return;
+			break;
 		CASE_VIC_ALL(0x19):
 			interrupt_status = interrupt_status & (~data) & 0xF;
 			vic4_interrupt_checker();
@@ -466,6 +465,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			} while(0);
 			break;
 		CASE_VIC_2(0x30):	// this register is _SPECIAL_, and exists only in VIC-II (C64) I/O mode: C128-style "2MHz fast" mode ...
+			DEBUGPRINT("WRITE 0xD030: $%02x" NL, data);
 			c128_d030_reg = data;
 			machine_set_speed(0);
 			return;		// it IS important to have return here, since it's not a "real" VIC-4 mode register's view in another mode!!
@@ -509,17 +509,22 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;
 		CASE_VIC_4(0x5C):
 		CASE_VIC_4(0x5D): 
+			DEBUGPRINT("WRITE 0xD05D: $%02x" NL, data);
 			vic4_sideborder_touched = 1;
 			break;		
 		
-		CASE_VIC_4(0x5E): CASE_VIC_4(0x5F): /*CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):*/ CASE_VIC_4(0x64):
+		CASE_VIC_4(0x5E): 
+		CASE_VIC_4(0x5F): 
+		CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):
+			DEBUGPRINT("WRITE 0xD0%02x: $%02x" NL, addr, data);
+			break;
+		CASE_VIC_4(0x64):
 		CASE_VIC_4(0x65): CASE_VIC_4(0x66): CASE_VIC_4(0x67): /*CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):*/ CASE_VIC_4(0x6B): /*CASE_VIC_4(0x6C):
 		CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):*/ CASE_VIC_4(0x6F): /*CASE_VIC_4(0x70):*/ CASE_VIC_4(0x71): CASE_VIC_4(0x72): CASE_VIC_4(0x73): CASE_VIC_4(0x74):
 		CASE_VIC_4(0x75): CASE_VIC_4(0x76): CASE_VIC_4(0x77): CASE_VIC_4(0x78): CASE_VIC_4(0x79): CASE_VIC_4(0x7A): CASE_VIC_4(0x7B): CASE_VIC_4(0x7C):
 		CASE_VIC_4(0x7D): CASE_VIC_4(0x7E): CASE_VIC_4(0x7F):
 			break;
-		CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):
-			break;
+
 		CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):
 			break;
 		CASE_VIC_4(0x6C): CASE_VIC_4(0x6D): 
@@ -555,6 +560,21 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			FATAL("Xemu: invalid VIC internal register numbering on write: $%X", addr);
 	}
 	vic_registers[addr & 0x7F] = data;
+	if (REG_HOTREG)
+	{
+		if (vic_hotreg_touched)
+		{
+			vic4_interpret_legacy_mode_registers();
+			vic_hotreg_touched = 0;
+			vic4_sideborder_touched = 0;
+		}
+
+		if (vic4_sideborder_touched)
+		{
+			vic4_update_sideborder_dimensions();
+			vic4_sideborder_touched = 0;
+		}
+	}
 }
 
 
@@ -584,8 +604,8 @@ Uint8 vic_read_reg ( int unsigned addr )
 			break;
 		CASE_VIC_ALL(0x18):	// memory pointers
 			// Always mapped to VIC-IV extended "precise" registers
-			result = ((REG_SCRNPTR_B1 & 60) << 2) | ((REG_CHARPTR_B1 & 60) >> 2);
-			DEBUGPRINT("READ 0x81: $%02x" NL, result);
+			// result = ((REG_SCRNPTR_B1 & 60) << 2) | ((REG_CHARPTR_B1 & 60) >> 2);
+			// DEBUGPRINT("READ 0x81: $%02x" NL, result);
 			break;
 		CASE_VIC_ALL(0x19):
 			result = interrupt_status | (64 + 32 + 16);
@@ -1065,22 +1085,7 @@ int vic4_render_scanline()
 	}
 	else
 	{
-		if (REG_HOTREG)
-		{
-			if (vic_hotreg_touched)
-			{
-				vic4_interpret_legacy_mode_registers();
-				vic_hotreg_touched = 0;
-				vic4_sideborder_touched = 0;
-			}
-
-			if (vic4_sideborder_touched)
-			{
-				vic4_update_sideborder_dimensions();
-				vic4_sideborder_touched = 0;
-			}
-		}
-
+		
 		// Top and bottom borders
 
 		if (ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM || !REG_DISPLAYENABLE)
