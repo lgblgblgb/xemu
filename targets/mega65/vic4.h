@@ -24,6 +24,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define VIC_BAD_IOMODE	2
 #define VIC4_IOMODE	3
 
+#define USE_HOTREGS	(vic_registers[0x5D] & 0x80)
+
 extern int   vic_iomode;
 extern int   scanline;
 extern Uint8 vic_registers[];
