@@ -42,9 +42,9 @@ static struct {
 unsigned int palregaccofs;
 
 
-static XEMU_INLINE Uint32 swap_nibbles ( Uint8 i )
+static XEMU_INLINE Uint8 swap_nibbles ( Uint8 i )
 {
-	return ((i & 0x0FU) << 4) | ((i & 0xF0U) >> 4);
+	return ((i & 0x0F) << 4) | ((i & 0xF0) >> 4);
 }
 
 
@@ -102,18 +102,16 @@ void vic4_init_palette ( void )
 		 9,  9, 15,	// light blue
 		11, 11, 11	// light grey
 	};
-	for (int i = 0, j = 0; i < NO_OF_PALETTE_REGS; i++) {
-		vic_palette_bytes_red[i]   = (def_pal[j++] * 17) & 0xEF;
-		vic_palette_bytes_green[i] =  def_pal[j++] * 17;
-		vic_palette_bytes_blue[i]  =  def_pal[j++] * 17;
-		if (j == 16 * 3)
-			j = 0;
+	for (int i = 0; i < NO_OF_PALETTE_REGS; i++) {
+		vic_palette_bytes_red[i]   = (def_pal[(i & 0xF) * 3 + 0] * 17) & 0xEF;
+		vic_palette_bytes_green[i] =  def_pal[(i & 0xF) * 3 + 1] * 17;
+		vic_palette_bytes_blue[i]  =  def_pal[(i & 0xF) * 3 + 2] * 17;
 	}
 #else
 	for (int i = 0; i < NO_OF_PALETTE_REGS; i++) {
-		vic_palette_bytes_red[i] = 0;
+		vic_palette_bytes_red  [i] = 0;
 		vic_palette_bytes_green[i] = 0;
-		vic_palette_bytes_blue[i] = 0;
+		vic_palette_bytes_blue [i] = 0;
 	}
 #endif
 	vic4_revalidate_all_palette();
@@ -130,6 +128,10 @@ void vic4_write_palette_reg_red ( unsigned int num, Uint8 data )
 	num = (num & 0xFF) + palregaccofs;
 	vic_palette_bytes_red[num] = data;
 	vic_palettes[num] = (vic_palettes[num] & sdlpalinfo.red_revmask) | ((swap_nibbles(data & 0xEF)) << sdlpalinfo.red_shift);
+	if (num >= 0x300 && num <= 0x30F) 	// first 16 entries of bank #3 forms the "ROM palette" of C65
+		vic_palettes[num + 0x100] = vic_palettes[num];
+	if (num >= 0x10 && num <= 0xFF)		// rest of the entires of bank #0, also the "ROM palette" emulation stuff
+		vic_palettes[num + 0x400] = vic_palettes[num];
 }
 
 void vic4_write_palette_reg_green ( unsigned int num, Uint8 data )
@@ -137,6 +139,10 @@ void vic4_write_palette_reg_green ( unsigned int num, Uint8 data )
 	num = (num & 0xFF) + palregaccofs;
 	vic_palette_bytes_green[num] = data;
 	vic_palettes[num] = (vic_palettes[num] & sdlpalinfo.green_revmask) | (swap_nibbles(data) << sdlpalinfo.green_shift);
+	if (num >= 0x300 && num <= 0x30F)
+		vic_palettes[num + 0x100] = vic_palettes[num];
+	if (num >= 0x10 && num <= 0xFF)
+		vic_palettes[num + 0x400] = vic_palettes[num];
 }
 
 void vic4_write_palette_reg_blue  ( unsigned int num, Uint8 data )
@@ -144,6 +150,10 @@ void vic4_write_palette_reg_blue  ( unsigned int num, Uint8 data )
 	num = (num & 0xFF) + palregaccofs;
 	vic_palette_bytes_blue[num] = data;
 	vic_palettes[num] = (vic_palettes[num] & sdlpalinfo.blue_revmask) | (swap_nibbles(data) << sdlpalinfo.blue_shift);
+	if (num >= 0x300 && num <= 0x30F)
+		vic_palettes[num + 0x100] = vic_palettes[num];
+	if (num >= 0x10 && num <= 0xFF)
+		vic_palettes[num + 0x400] = vic_palettes[num];
 }
 
 void vic3_write_palette_reg_red   ( unsigned int num, Uint8 data )
@@ -174,4 +184,25 @@ Uint8 vic4_read_palette_reg_green ( unsigned int num )
 Uint8 vic4_read_palette_reg_blue ( unsigned int num )
 {
 	return vic_palette_bytes_blue[(num & 0xFF) + palregaccofs];
+}
+
+void check_if_rom_palette ( int rom_pal )
+{
+	if (rom_pal) {	// ROM palette turned on ...
+		// ... but some pointers points to bank#0: then set to our emulated rom bank
+		if (palette == vic_palettes)
+			palette = vic_palettes + 0x400;
+		if (spritepalette == vic_palettes)
+			spritepalette = vic_palettes + 0x400;
+		if (altpalette == vic_palettes)
+			altpalette = vic_palettes + 0x400;
+	} else {	// ROM palette turned off
+		// the opposite as the previous things ...
+		if (palette == vic_palettes + 0x400)
+			palette = vic_palettes;
+		if (spritepalette == vic_palettes + 0x400)
+			spritepalette = vic_palettes;
+		if (altpalette == vic_palettes + 0x400)
+			altpalette = vic_palettes;
+	}
 }

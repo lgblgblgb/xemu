@@ -16,18 +16,17 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef XEMU_MEGA65_IO_MAPPER_H_INCLUDED
-#define XEMU_MEGA65_IO_MAPPER_H_INCLUDED
+#ifndef XEMU_MEGA65_AUDIO65_H_INCLUDED
+#define XEMU_MEGA65_AUDIO65_H_INCLUDED
 
-#include "xemu/cia6526.h"
+#include "xemu/sid.h"
 
-extern Uint8 io_read  ( unsigned int addr );
-extern void  io_write ( unsigned int addr, Uint8 data );
+// You may want to disable audio emulation since it can disturb non-real-time emulation
+#define AUDIO_EMULATION
 
-extern Uint8  D6XX_registers[0x100];
-extern Uint8  D7XX[0x100];			// FIXME: newhack!
-extern int    fpga_switches;
-extern struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
-extern int    port_d607;			// ugly hack for C65 extended keys ...
+extern struct SidEmulation sid1, sid2;
+extern SDL_AudioDeviceID audio;
+
+extern void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq );
 
 #endif

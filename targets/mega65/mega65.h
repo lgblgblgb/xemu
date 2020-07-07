@@ -32,9 +32,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define CHAR_ROM_NAME		"CHARROM.ROM"
 #define CHAR_ROM_SIZE		0x2000
 
-// You may want to disable audio emulation since it can disturb non-real-time emulation
-#define AUDIO_EMULATION
-
 /* Do *NOT* modify these, as other parts of the emulator currently depends on these values ...
    You can try RENDER_SCALE_QUALITY though with values 0, 1, 2 */
 #define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888

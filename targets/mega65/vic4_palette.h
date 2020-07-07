@@ -19,7 +19,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_MEGA65_VIC4_PALETTE_H_INCLUDED
 #define XEMU_MEGA65_VIC4_PALETTE_H_INCLUDED
 
-#define NO_OF_PALETTE_REGS	0x400
+// 256 entries of 4 banks + 256 entries of one extra bank for ROM palette emulation
+#define NO_OF_PALETTE_REGS	0x500
 
 extern Uint8  vic_palette_bytes_red  [NO_OF_PALETTE_REGS];
 extern Uint8  vic_palette_bytes_green[NO_OF_PALETTE_REGS];
@@ -43,5 +44,6 @@ extern Uint8 vic4_read_palette_reg_blue   ( unsigned int num );
 
 extern void  vic4_init_palette ( void );
 extern void  vic4_revalidate_all_palette ( void );
+extern void  check_if_rom_palette ( int rom_pal );
 
 #endif

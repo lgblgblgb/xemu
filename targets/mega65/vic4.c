@@ -49,7 +49,7 @@ int vic_iomode;							// VIC2/VIC3/VIC4 mode
 int force_fast;							// POKE 0,64 and 0,65 trick ...
 
 
-Uint8 vic_registers[0x80];		// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
+Uint8 vic_registers[0x80];		// VIC-4 registers
 int vic_iomode;				// VIC2/VIC3/VIC4 mode
 int force_fast;				// POKE 0,64 and 0,65 trick ...
 int scanline;				// current scan line number
@@ -181,7 +181,7 @@ void vic_init ( void )
 	compare_raster = 0;
 	// *** Just a check to try all possible regs (in VIC2,VIC3 and VIC4 modes), it should not panic ...
 	// It may also sets/initializes some internal variables sets by register writes, which would cause a crash on screen rendering without prior setup!
-	for (int i = 0; i < 0x140; i++) {
+	for (int i = 0; i < 0x140; i++) {	// $140=the last $40 register for VIC-2 mode, when we have fewer ones
 		vic_write_reg(i, 0);
 		(void)vic_read_reg(i);
 	}
@@ -472,7 +472,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		/* --- NO MORE VIC-II REGS FROM HERE --- */
 		CASE_VIC_3_4(0x30):
 			memory_set_vic3_rom_mapping(data);
-			//palette = (data & 4) ? vic3_palette : vic3_rom_palette;	// FIXME / TODO ROM palette? What is ROM palette on MEGA65?!
+			check_if_rom_palette(data & 4);
 			break;
 		CASE_VIC_3_4(0x31):
 			vic_registers[0x31] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
@@ -534,12 +534,12 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			if (!in_hypervisor)
 				vic4_sideborder_touched = 1;
 			break;
-		CASE_VIC_4(0x70):
-			// VIC-IV palette selection register
-			palette       = ((data & 0x03) << 8) + vic_palettes;
-			spritepalette = ((data & 0x0C) << 6) + vic_palettes;
-			altpalette    = ((data & 0x30) << 4) + vic_palettes;
-			palregaccofs  = ((data & 0xC0) << 2);
+		CASE_VIC_4(0x70):	// VIC-IV palette selection register
+			palette		= ((data & 0x03) << 8) + vic_palettes;
+			spritepalette	= ((data & 0x0C) << 6) + vic_palettes;
+			altpalette	= ((data & 0x30) << 4) + vic_palettes;
+			palregaccofs	= ((data & 0xC0) << 2);
+			check_if_rom_palette(vic_registers[0x30] & 4);
 			break;
 		/* --- NON-EXISTING REGISTERS --- */
 		CASE_VIC_2(0x31): CASE_VIC_2(0x32): CASE_VIC_2(0x33): CASE_VIC_2(0x34): CASE_VIC_2(0x35): CASE_VIC_2(0x36): CASE_VIC_2(0x37): CASE_VIC_2(0x38):

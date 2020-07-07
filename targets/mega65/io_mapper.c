@@ -30,13 +30,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "hypervisor.h"
 #include "ethernet65.h"
 #include "input_devices.h"
+#include "audio65.h"
 
 
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
 Uint8  D6XX_registers[0x100];		// mega65 specific D6XX range, excluding the UART part (not used here!)
 Uint8  D7XX[0x100];			// FIXME: hack for future M65 stuffs like ALU! FIXME: no snapshot on these!
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
-struct SidEmulation sid1, sid2;		// the two SIDs
 static int mouse_x = 0, mouse_y = 0;	// for our primitive C1351 mouse emulation
 int    cpu_linear_memory_addressing_is_enabled = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;

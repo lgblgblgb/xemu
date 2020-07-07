@@ -53,6 +53,13 @@ static SDL_Joystick *joysticks[MAX_JOYSTICKS];
 static Uint8 virtual_shift_pos = 0;
 static struct KeyMappingUsed key_map[0x100];
 static const struct KeyMappingDefault *key_map_default;
+static int release_this_key_on_first_event = -1;
+
+
+void hid_set_autoreleased_key ( int key )
+{
+	release_this_key_on_first_event = key;
+}
 
 
 int hid_key_event ( SDL_Scancode key, int pressed )
@@ -61,6 +68,10 @@ int hid_key_event ( SDL_Scancode key, int pressed )
 	//OSD(-1, -1, "Key %s <%s>", pressed ? "press  " : "release", SDL_GetScancodeName(key));
 	while (map->pos >= 0) {
 		if (map->scan == key) {
+			if (XEMU_UNLIKELY(release_this_key_on_first_event > 0)) {
+				KBD_RELEASE_KEY(release_this_key_on_first_event);
+				release_this_key_on_first_event = -1;
+			}
 			if (map->pos > 0xFF) {	// special emulator key!
 				switch (map->pos) {	// handle "built-in" events, if emulator target uses them at all ...
 					case XEMU_EVENT_EXIT:
