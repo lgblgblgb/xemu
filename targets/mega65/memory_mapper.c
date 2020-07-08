@@ -40,7 +40,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "cpu_custom_functions.h"
 
 //#define DEBUGMEM DEBUG
-
+#define SLOW_RAM_SUPPORT 1
 
 // 512K is the max "main" RAM. Currently only 384K is used by M65
 Uint8 main_ram[512 << 10];
