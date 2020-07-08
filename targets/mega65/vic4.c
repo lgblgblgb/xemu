@@ -475,18 +475,24 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			check_if_rom_palette(data & 4);
 			break;
 		CASE_VIC_3_4(0x31):
+			// (!) NOTE:
+			// According to Paul,  speed change should trigger "HOTREG" touched notification but no VIC legacy register "interpret"
+			// So probably we need a separate (cpu_speed_hotreg) var?
+			//
+			if ( (vic_registers[0x31]  & 0xBF) ^ (data & 0xBF) )
+			{
+				vic_hotreg_touched = 1;
+			}
+
 			vic_registers[0x31] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
 			machine_set_speed(0);
-			if (data & 8) {
-				DEBUG("VIC3: V400 Mode enabled EXPERIMENTAL");
-			}
 			if ((data & 15) && warn_ctrl_b_lo) {
 				INFO_WINDOW("VIC3 control-B register H1280, MONO and INT features are not emulated yet!");
 				warn_ctrl_b_lo = 0;
 			}
 			calculate_char_x_step();
-			vic_hotreg_touched = 1;
-			return;				// since we DID the write, it's OK to return here and not using "break"
+			break;				//We did the write, but we need to trigger vichot_reg if should
+
 		CASE_VIC_3_4(0x32): CASE_VIC_3_4(0x33): CASE_VIC_3_4(0x34): CASE_VIC_3_4(0x35): CASE_VIC_3_4(0x36): CASE_VIC_3_4(0x37): CASE_VIC_3_4(0x38):
 		CASE_VIC_3_4(0x39): CASE_VIC_3_4(0x3A): CASE_VIC_3_4(0x3B): CASE_VIC_3_4(0x3C): CASE_VIC_3_4(0x3D): CASE_VIC_3_4(0x3E): CASE_VIC_3_4(0x3F):
 		CASE_VIC_3_4(0x40): CASE_VIC_3_4(0x41): CASE_VIC_3_4(0x42): CASE_VIC_3_4(0x43): CASE_VIC_3_4(0x44): CASE_VIC_3_4(0x45): CASE_VIC_3_4(0x46):
@@ -508,6 +514,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x5B): 
 			break;
 		CASE_VIC_4(0x5C):
+			break;
 		CASE_VIC_4(0x5D): 
 			DEBUGPRINT("WRITE 0xD05D: $%02x" NL, data);
 			vic4_sideborder_touched = 1;
@@ -515,6 +522,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		
 		CASE_VIC_4(0x5E): 
 		CASE_VIC_4(0x5F): 
+			break;
 		CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):
 			DEBUGPRINT("WRITE 0xD0%02x: $%02x" NL, addr, data);
 			break;
@@ -564,6 +572,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 	{
 		if (vic_hotreg_touched)
 		{
+			DEBUGPRINT("vic_hotreg_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
 			vic4_interpret_legacy_mode_registers();
 			vic_hotreg_touched = 0;
 			vic4_sideborder_touched = 0;
@@ -571,6 +580,8 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 
 		if (vic4_sideborder_touched)
 		{
+			DEBUGPRINT("vic4_sideborder_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
+			
 			vic4_update_sideborder_dimensions();
 			vic4_sideborder_touched = 0;
 		}
@@ -1081,7 +1092,7 @@ int vic4_render_scanline()
 	if (!REG_V400 && (ycounter & 1))
 	{
 		for (int i = 0; i < SCREEN_WIDTH; i++, current_pixel++)
-			*current_pixel = user_scanlines_setting ? 0 : *(current_pixel - SCREEN_WIDTH) ;
+			*current_pixel = /* user_scanlines_setting ? 0 : */ *(current_pixel - SCREEN_WIDTH) ;
 	}
 	else
 	{
