@@ -390,10 +390,12 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_ALL(0x10):
 			break;		// Sprite coordinates: simple write the VIC reg in all I/O modes.
 		CASE_VIC_ALL(0x11):
-			DEBUGPRINT("WRITE 0xD011: $%02x" NL, data);
+			if (vic_registers[0x11] ^ data)
+			{
+				vic_hotreg_touched = 1;
+			}
 			compare_raster = (compare_raster & 0xFF) | ((data & 0x80) << 1);
 			DEBUG("VIC: compare raster is now %d" NL, compare_raster);
-			vic_hotreg_touched = 1;
 			break;
 		CASE_VIC_ALL(0x12):
 			compare_raster = (compare_raster & 0xFF00) | data;
@@ -404,8 +406,10 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_ALL(0x15):	// sprite enabled
 			break;
 		CASE_VIC_ALL(0x16):	// control-reg#2, we allow write even if non-used bits here
-			DEBUGPRINT("WRITE 0xD016: $%02x" NL, data);
-			vic_hotreg_touched = 1;
+			if (vic_registers[0x16] ^ data)
+			{
+				vic_hotreg_touched = 1;
+			}
 			break;
 		CASE_VIC_ALL(0x17):	// sprite-Y expansion
 			break;
@@ -414,12 +418,14 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			// Reads are mapped to extended registers.
 			// So we just store the D018 Legacy Screen Address to be referenced elsewhere.
 			//
-			DEBUGPRINT("WRITE 0xD018: $%02x" NL , data);
-			REG_CHARPTR_B1 = (data & 14) << 2;
-			REG_CHARPTR_B0 = 0;
-			REG_SCRNPTR_B2 &= 0xF0;
-			reg_d018_screen_addr = (data & 0xF0) >> 4;
-			vic_hotreg_touched = 1;  
+			if (vic_registers[0x18] ^ data)
+			{
+				REG_CHARPTR_B1 = (data & 14) << 2;
+				REG_CHARPTR_B0 = 0;
+				REG_SCRNPTR_B2 &= 0xF0;
+				reg_d018_screen_addr = (data & 0xF0) >> 4;
+				vic_hotreg_touched = 1;
+			}
 			break;
 		CASE_VIC_ALL(0x19):
 			interrupt_status = interrupt_status & (~data) & 0xF;
