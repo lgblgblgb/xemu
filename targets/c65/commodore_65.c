@@ -1,5 +1,5 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
-   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -819,11 +819,10 @@ static void update_emulator ( void )
 	nmi_set(IS_RESTORE_PRESSED(), 2); // Custom handling of the restore key ...
 	xemu_timekeeping_delay(40000);
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
-	if (seconds_timer_trigger) {
-		struct tm *t = xemu_get_localtime();
-		cia_ugly_tod_updater(&cia1, t);
-		cia_ugly_tod_updater(&cia2, t);
-	}
+	const struct tm *t = xemu_get_localtime();
+	const Uint8 sec10th = xemu_get_microseconds() / 100000;
+	cia_ugly_tod_updater(&cia1, t, sec10th);
+	cia_ugly_tod_updater(&cia2, t, sec10th);
 }
 
 
