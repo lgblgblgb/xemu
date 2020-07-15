@@ -457,9 +457,9 @@ static void update_emulator ( void )
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
 //	if (seconds_timer_trigger) {
 	const struct tm *t = xemu_get_localtime();
-	const Uint8 sec10th = xemu_get_microseconds() / 100000;
-	cia_ugly_tod_updater(&cia1, t, sec10th);
-	cia_ugly_tod_updater(&cia2, t, sec10th);
+	const Uint8 sec10ths = xemu_get_microseconds() / 100000;
+	cia_ugly_tod_updater(&cia1, t, sec10ths);
+	cia_ugly_tod_updater(&cia2, t, sec10ths);
 //	}
 }
 
