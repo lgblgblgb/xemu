@@ -149,7 +149,13 @@ static inline int get_elapsed_time ( Uint64 t_old, Uint64 *t_new, struct timeval
 
 struct tm *xemu_get_localtime ( void )
 {
+#ifdef XEMU_ARCH_WIN64
+	// Fix a potentional issue with Windows 64 bit ...
+	const time_t temp = unix_time_tv.tv_sec;
+	return localtime(&temp);
+#else
 	return localtime(&unix_time_tv.tv_sec);
+#endif
 }
 
 
