@@ -1,7 +1,7 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    I/O decoding part (used by memory_mapper.h and DMA mainly)
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_hid.h"
 //#include "xemu/cpu65.h"
 #include "vic4.h"
+#include "vic4_palette.h"
 #include "sdcard.h"
 #include "hypervisor.h"
 #include "ethernet65.h"
@@ -123,10 +124,13 @@ Uint8 io_read ( unsigned int addr )
 		case 0x11:	// $D100-$D1FF ~ C65 I/O mode
 		case 0x12:	// $D200-$D2FF ~ C65 I/O mode
 		case 0x13:	// $D300-$D3FF ~ C65 I/O mode
+			return 0xFF;	// FIXME: AFAIK C65 does not allow to read palette register back, however M65 I/O mode does allow (?)
 		case 0x31:	// $D100-$D1FF ~ M65 I/O mode
+			return vic4_read_palette_reg_red(addr);	// function takes care using only 8 low bits of addr, no need to do here
 		case 0x32:	// $D200-$D2FF ~ M65 I/O mode
+			return vic4_read_palette_reg_green(addr);
 		case 0x33:	// $D300-$D3FF ~ M65 I/O mode
-			return 0xFF;	// FIXME: check, if applies: palette register entries are write-only, in both of C65 and M65 modes??
+			return vic4_read_palette_reg_blue(addr);
 		/* ------------------------------------------------ */
 		/* $D400-$D7FF: SID, SID+UART+DMA, SID+UART+DMA+M65 */
 		/* ------------------------------------------------ */
@@ -314,14 +318,22 @@ void io_write ( unsigned int addr, Uint8 data )
 			}
 			RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("RAM expansion controller");
 		case 0x11:	// $D100-$D1FF ~ C65 I/O mode
+			vic3_write_palette_reg_red(addr, data);		// function takes care using only 8 low bits of addr, no need to do here
+			return;
 		case 0x12:	// $D200-$D2FF ~ C65 I/O mode
+			vic3_write_palette_reg_green(addr, data);
+			return;
 		case 0x13:	// $D300-$D3FF ~ C65 I/O mode
-			vic3_write_palette_reg(addr - 0x1100, data);
+			vic3_write_palette_reg_blue(addr, data);
 			return;
 		case 0x31:	// $D100-$D1FF ~ M65 I/O mode
+			vic4_write_palette_reg_red(addr, data);
+			return;
 		case 0x32:	// $D200-$D2FF ~ M65 I/O mode
+			vic4_write_palette_reg_green(addr, data);
+			return;
 		case 0x33:	// $D300-$D3FF ~ M65 I/O mode
-			vic4_write_palette_reg(addr - 0x3100, data);
+			vic4_write_palette_reg_blue(addr, data);
 			return;
 		/* ------------------------------------------------ */
 		/* $D400-$D7FF: SID, SID+UART+DMA, SID+UART+DMA+M65 */
