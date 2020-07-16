@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/d81access.h"
 #include "sdcard.h"
 #include "sdcontent.h"
+#include "inject.h"
 
 #define		HELP_URL	"https://github.com/lgblgblgb/xemu/wiki/MEGA65-help"
 
@@ -79,6 +80,24 @@ static void ui_attach_d81_by_browsing ( void )
 	))
 		attach_d81(fnbuf);
 	else
+		DEBUGPRINT("UI: file selection for D81 mount was cancalled." NL);
+}
+
+
+static void ui_run_prg_by_browsing ( void )
+{
+	char fnbuf[PATH_MAX + 1];
+	static char dir[PATH_MAX + 1] = "";
+	if (!xemugui_file_selector(
+		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		"Select PRG to directly load&run",
+		dir,
+		fnbuf,
+		sizeof fnbuf
+	)) {
+		reset_mega65();
+		inject_register_prg(fnbuf, 0);
+	} else
 		DEBUGPRINT("UI: file selection for D81 mount was cancalled." NL);
 }
 
@@ -226,6 +245,7 @@ static const struct menu_st menu_main[] = {
 	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		menu_sdcard, NULL },
 	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_mega65_asked },
 	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
+	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
 #ifdef BASIC_TEXT_SUPPORT
 	{ "Save BASIC as text",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_save_basic_as_text },
 #endif
