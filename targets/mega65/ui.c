@@ -42,7 +42,11 @@ static int attach_d81 ( const char *fn )
 			return 0;
 		}
 	} else {
-		ERROR_WINDOW("Cannot mount external D81, since Mega65 was not instructed to mount any FD access yet.");
+		ERROR_WINDOW(
+			"External D81 cannot be mounted, unless you have first setup the SD card image.\n"
+			"Please use menu at 'SD-card -> Update files on SD image' to create MEGA65.D81,\n"
+			"which can be overriden then to mount external D81 images for you"
+		);
 		return 1;
 	}
 }
