@@ -38,6 +38,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "input_devices.h"
 #include "memcontent.h"
 #include "xemu/emutools_gui.h"
+#include "inject.h"
 
 
 static SDL_AudioDeviceID audio = 0;
@@ -651,6 +652,8 @@ static void emulation_loop ( void )
 			cia_tick(&cia1, 64);
 			cia_tick(&cia2, 64);
 			if (scanline == 312) {
+				if (XEMU_UNLIKELY(inject_ready_check_status))
+					inject_ready_check_do();
 				//DEBUG("VIC3: new frame!" NL);
 				frameskip = !frameskip;
 				scanline = 0;
@@ -692,6 +695,8 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("loadc000", NULL, "Load initial memory content at $C000 (usually disk mounter)");
 	xemucfg_define_str_option("loadcram", NULL, "Load initial content (32K) into the colour RAM");
 	xemucfg_define_str_option("loadrom", NULL, "Preload C65 ROM image (you may need the -forcerom option to prevent KickStart to re-load from SD)");
+	xemucfg_define_str_option("prg", NULL, "Load a PRG file directly into the memory (/w C64/65 auto-detection on load address)");
+	xemucfg_define_num_option("prgmode", 0, "Override auto-detect option for -prg (64 or 65 for C64/C65 modes, 0 = default, auto detect)");
 	xemucfg_define_switch_option("forcerom", "Re-fill 'ROM' from external source on start-up, requires option -loadrom <filename>");
 	xemucfg_define_switch_option("fontrefresh", "Upload character ROM from the loaded ROM image");
 	xemucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used (also see the -virtsd option!)");
@@ -783,6 +788,8 @@ int main ( int argc, char **argv )
 			ERROR_WINDOW("UMON: Invalid TCP port: %d", port);
 	}
 #endif
+	if (xemucfg_get_str("prg"))
+		inject_register_prg(xemucfg_get_str("prg"), xemucfg_get_num("prgmode"));
 #ifdef FAKE_TYPING_SUPPORT
 	if (xemucfg_get_bool("go64")) {
 		if (xemucfg_get_bool("autoload"))
