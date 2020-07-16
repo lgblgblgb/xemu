@@ -39,8 +39,8 @@ static void render_dma_audio ( int channel, short *buffer, int len )
 	static double rate_counter[4] = {0,0,0,0};
 	Uint8 *chio = D7XX + 0x20 + channel * 0x10;
 	unsigned int addr = chio[0xA] + (chio[0xB] << 8) + (chio[0xC] << 16);
-	Uint16 limit = chio[0x7] + (chio[0x8] << 8);
-	double rate_step = 
+	const Uint16 limit = chio[0x7] + (chio[0x8] << 8);
+	const double rate_step =
 		(double)(chio[4] + (chio[5] << 8) + (chio[6] << 16))		// this value is added to the 24 bit counter every 40.5MHz clock, to see overflow
 		*
 		dma_audio_mixing_value;
