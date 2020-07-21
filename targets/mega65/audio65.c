@@ -18,6 +18,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
 #include "xemu/sid.h"
+#include "xemu/opl3.h"
 #include "audio65.h"
 // For D7XX (audio DMA):
 #include "io_mapper.h"
@@ -29,6 +30,7 @@ SDL_AudioDeviceID audio = 0;	// SDL audio device
 struct SidEmulation sid1, sid2;	// the two SIDs
 static int mixing_freq;		// playback sample rate (in Hz) of the emulator itself
 static double dma_audio_mixing_value;
+static opl3_chip opl3;
 
 
 
@@ -104,8 +106,8 @@ static void render_dma_audio ( int channel, short *buffer, int len )
 	}
 	// End of loop:
 	// write back address ...
-	chio[0xA] = addr & 0xFF;
-	chio[0xB] = (addr >> 8) & 0xFF;
+	chio[0xA] =  addr        & 0xFF;
+	chio[0xB] = (addr >>  8) & 0xFF;
 	chio[0xC] = (addr >> 16) & 0xFF;
 }
 
@@ -117,16 +119,17 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 #if 1
 	//DEBUG("AUDIO: audio callback, wants %d samples" NL, len);
 	len >>= 2;	// the real size if /4, since it's a stereo stream, and 2 bytes/sample, we want to render
-	short streams[6][len];	// currently. 4 dma channels + two SIDs' 1-1 channel (SID is already rendered together)
+	short streams[7][len];	// currently. 4 dma channels + two SIDs' 1-1 channel (SID is already rendered together) + 1OPL3
 	sid_render(&sid2, streams[4], len, 1);
 	sid_render(&sid1, streams[5], len, 1);
+	//OPL3_GenerateStream(&opl3, streams[6], len);
 	for (int i = 0; i < 4; i++)
 		render_dma_audio(i, streams[i], len);
 	// Now mix channels
 	for (int i = 0; i < len; i++) {
 		// mixing streams together
-		int left  = streams[0][i] + streams[1][i] + streams[4][i];
-		int right = streams[2][i] + streams[3][i] + streams[5][i];
+		int left  = streams[0][i] + streams[1][i] + streams[4][i]; // + streams[6][i];
+		int right = streams[2][i] + streams[3][i] + streams[5][i]; // + streams[6][i];
 		// do some ugly clipping ...
 		if      (left  >  0x7FFF) left  =  0x7FFF;
 		else if (left  < -0x8000) left  = -0x8000;
@@ -154,6 +157,7 @@ void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	sid_init(&sid1, sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sid2, sid_cycles_per_sec, sound_mix_freq);
 #ifdef AUDIO_EMULATION
+	OPL3_Reset(&opl3, sound_mix_freq);
 	mixing_freq = sound_mix_freq;
 	dma_audio_mixing_value =  (double)40500000.0 / (double)sound_mix_freq;	// ... but with Xemu we use a much lower sampling rate, thus compensate (will fail on samples, rate >= xemu_mixing_rate ...)
 	SDL_AudioSpec audio_want, audio_got;
