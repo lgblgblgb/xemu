@@ -28,5 +28,6 @@ extern struct SidEmulation sid1, sid2;
 extern SDL_AudioDeviceID audio;
 
 extern void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq );
+extern void audio65_opl3_write ( Uint8 reg, Uint8 data );
 
 #endif

@@ -35,7 +35,7 @@ static opl3_chip opl3;
 
 
 #ifdef AUDIO_EMULATION
-static void render_dma_audio ( int channel, short *buffer, int len )
+static inline void render_dma_audio ( int channel, short *buffer, int len )
 {
 	static short sample[4];	// current sample values of the four channels, normalized to 16 bit signed value
 	static double rate_counter[4] = {0,0,0,0};
@@ -112,6 +112,10 @@ static void render_dma_audio ( int channel, short *buffer, int len )
 }
 
 
+void audio65_opl3_write ( Uint8 reg, Uint8 data )
+{
+	OPL3_WriteReg(&opl3, reg, data);
+}
 
 
 static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
@@ -119,24 +123,24 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 #if 1
 	//DEBUG("AUDIO: audio callback, wants %d samples" NL, len);
 	len >>= 2;	// the real size if /4, since it's a stereo stream, and 2 bytes/sample, we want to render
-	short streams[7][len];	// currently. 4 dma channels + two SIDs' 1-1 channel (SID is already rendered together) + 1OPL3
-	sid_render(&sid2, streams[4], len, 1);
-	sid_render(&sid1, streams[5], len, 1);
-	//OPL3_GenerateStream(&opl3, streams[6], len);
+	short streams[7][len];	// currently. 4 dma channels + two SIDs' 1-1 channel (SID is already rendered together) + 1 for OPL3
 	for (int i = 0; i < 4; i++)
 		render_dma_audio(i, streams[i], len);
+	sid_render(&sid2, streams[4], len, 1);
+	sid_render(&sid1, streams[5], len, 1);
+	OPL3_GenerateStream(&opl3, streams[6], len, 1);
 	// Now mix channels
 	for (int i = 0; i < len; i++) {
 		// mixing streams together
-		int left  = streams[0][i] + streams[1][i] + streams[4][i]; // + streams[6][i];
-		int right = streams[2][i] + streams[3][i] + streams[5][i]; // + streams[6][i];
+		int left  = streams[0][i] + streams[1][i] + streams[4][i] + streams[6][i];
+		int right = streams[2][i] + streams[3][i] + streams[5][i] + streams[6][i];
 		// do some ugly clipping ...
 		if      (left  >  0x7FFF) left  =  0x7FFF;
 		else if (left  < -0x8000) left  = -0x8000;
 		if      (right >  0x7FFF) right =  0x7FFF;
 		else if (right < -0x8000) right = -0x8000;
-		// write the output stereo stream for SDL
-		((short*)stereo_out_stream)[i << 1] = left;
+		// write the output stereo stream for SDL (it's an interlaved left-right-left-right kind of thing)
+		((short*)stereo_out_stream)[ i << 1     ] = left;
 		((short*)stereo_out_stream)[(i << 1) + 1] = right;
 	}
 #else
