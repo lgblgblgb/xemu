@@ -68,12 +68,15 @@ static int xcounter = 0, ycounter = 0;   // video counters
 static int frame_counter = 0;
 static int vicii_first_raster = 0;
 static int char_row = 0, display_row = 0;
-static Uint8 bg_pixel_state[1024]; // See FOREGROUND_PIXEL and BACKGROUND_PIXEL constants
+static Uint8 bg_pixel_state[1024]; 		// See FOREGROUND_PIXEL and BACKGROUND_PIXEL constants
 static Uint8* screen_ram_current_ptr = NULL;
 static Uint8* colour_ram_current_ptr = NULL;
 extern int user_scanlines_setting;
 float char_x_step = 0.0;
 static int warn_ctrl_b_lo = 1;
+static int enable_bg_paint = 1;
+static int v_row_span = 1;				// How many physical text rows the current virtual row spans.
+										// If VIRTUAL_ROW_WIDTH > REG_CHRCOUNT this will be > 1.
 
 // VIC-IV Modeline Parameters
 // ----------------------------------------------------
@@ -329,7 +332,8 @@ static void vic4_interpret_legacy_mode_registers()
 
 	REG_CHRCOUNT = REG_H640 ? 80 : 40;
 	SET_VIRTUAL_ROW_WIDTH( (REG_H640) ? 80 : 40);
-	
+	v_row_span = 1;
+
 	REG_SCRNPTR_B1 &= 0xC0;
 	REG_SCRNPTR_B1 |= REG_H640 ?  ((reg_d018_screen_addr & 14) << 2) : (reg_d018_screen_addr << 2);
 	REG_SCRNPTR_B0 = 0;
@@ -341,8 +345,8 @@ static void vic4_interpret_legacy_mode_registers()
 		REG_SPRPTR_B1 |= 4;
 
 	SET_COLORRAM_BASE(0);
-	DEBUGPRINT("VIC4: vic4_interpret_legacy_mode_registers(): vicii_first_raster=%d,chrcount=%d,border yt=%d,yb=%d,xl=%d,xr=%d,textxpos=%d,textypos=%d,"
-	          "screen_ram=$%06x,charset/bitmap=$%06x,sprite=$%06x" NL, vicii_first_raster, REG_CHRCOUNT,
+	DEBUGPRINT("VIC4: chrcount=%d, virtual_row_width=%d, charscale=%d, border yt=%d, yb=%d, xl=%d, xr=%d, textxpos=%d, textypos=%d,"
+	          "screen_ram=$%06x, charset/bitmap=$%06x, sprite=$%06x" NL, REG_CHRCOUNT,VIRTUAL_ROW_WIDTH,REG_CHARXSCALE,
 		BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START,
 		SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
 }
@@ -512,21 +516,27 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			vic_registers[0x54] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
 			machine_set_speed(0);
 			return;				// since we DID the write, it's OK to return here and not using "break"
-		CASE_VIC_4(0x55): CASE_VIC_4(0x56): CASE_VIC_4(0x57): CASE_VIC_4(0x58): CASE_VIC_4(0x59): 
+		CASE_VIC_4(0x55): CASE_VIC_4(0x56): CASE_VIC_4(0x57): break; 
+		CASE_VIC_4(0x58): CASE_VIC_4(0x59): 
+			v_row_span = (int) ceilf(VIRTUAL_ROW_WIDTH / (float)REG_CHRCOUNT);
+			DEBUGPRINT("WRITE $%04x CHARSTEP: $%02x v_row_span=%d" NL, addr, data, v_row_span);
 			break;
 		CASE_VIC_4(0x5A): 
+			DEBUGPRINT("WRITE $%04x CHARXSCALE: $%02x" NL, addr, data);
 			calculate_char_x_step();
 			break;
 		CASE_VIC_4(0x5B): 
 			break;
 		CASE_VIC_4(0x5C):
-			break;
 		CASE_VIC_4(0x5D): 
-			DEBUGPRINT("WRITE 0xD05D: $%02x" NL, data);
+			DEBUGPRINT("WRITE $%04x SIDEBORDER/HOTREG: $%02x" NL, addr, data);
 			vic4_sideborder_touched = 1;
 			break;		
 		
 		CASE_VIC_4(0x5E): 
+			v_row_span = (int) ceilf(VIRTUAL_ROW_WIDTH / (float)REG_CHRCOUNT);
+			DEBUGPRINT("WRITE $%04x CHARCOUNT: $%02x v_row_span=%d" NL, addr, data, v_row_span);
+			break;
 		CASE_VIC_4(0x5F): 
 			break;
 		CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):
@@ -915,14 +925,35 @@ static void vic4_render_mono_char_row(Uint8 char_byte, int glyph_width, Uint8 bg
 			fg_color |= 0x10;
 		}
 	}
-	
-	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step)
+
+	if (enable_bg_paint)
 	{
-		const Uint8 char_pixel = (char_byte & (0x80 >> (int)cx));
-		Uint32 pixel_color = char_pixel ? palette[fg_color] : palette[bg_color];
-		*(current_pixel++) = pixel_color;
-		bg_pixel_state[xcounter++] = char_pixel ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
+		for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step)
+		{
+			const Uint8 char_pixel = (char_byte & (0x80 >> (int)cx));
+			Uint32 pixel_color = char_pixel ? palette[fg_color] : palette[bg_color];
+			*(current_pixel++) = pixel_color;
+			bg_pixel_state[xcounter++] = char_pixel ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
+		}
 	}
+	else // Horrible HACK to support MEGAMAZE that ignores background paint. 
+	{
+		for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step)
+		{
+			const Uint8 char_pixel = (char_byte & (0x80 >> (int)cx));
+			if (char_pixel)
+			{
+				*(current_pixel++) = palette[fg_color];
+				bg_pixel_state[xcounter++] = char_pixel ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
+			}
+			else
+			{
+				current_pixel++;
+				xcounter++;
+			}
+		}
+	}
+	
 }
 
 static void vic4_render_multicolor_char_row(Uint8 char_byte, int glyph_width, const Uint8 color_source[4])
@@ -941,7 +972,7 @@ static void vic4_render_multicolor_char_row(Uint8 char_byte, int glyph_width, co
 
 // 8-bytes per row
 static void vic4_render_fullcolor_char_row(const Uint8* char_row, int glyph_width)
-{
+{	
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step)
 	{
 		Uint32 pixel_color = palette[char_row[(int)cx]];
@@ -967,20 +998,25 @@ static void vic4_render_fullcolor_char_row(const Uint8* char_row, int glyph_widt
 // VIC-III Extended attributes are applied to characters if properly set, 
 // except in Multicolor modes.
 //
+static int v_row = 0;  // The char index in the logical row, which
+					   //can be > CHRCOUNT (see CHARSTEP 0xD058 0xD059 registers)
+
 static void vic4_render_char_raster()
 {
-	int char_x = 0;
-	colour_ram_current_ptr = colour_ram + (display_row * REG_CHRCOUNT);
-	screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row * REG_CHRCOUNT << REG_16BITCHARSET);
+	int line_char_index = 0;
+	enable_bg_paint = 1;
+	colour_ram_current_ptr = colour_ram + (( display_row)  * VIRTUAL_ROW_WIDTH) ; 
+	screen_ram_current_ptr = main_ram + SCREEN_ADDR + ( (display_row)  * VIRTUAL_ROW_WIDTH);
 	const Uint8* row_data_base_addr = main_ram + (REG_BMM ?  VIC2_BITMAP_ADDR : get_charset_effective_addr());
-
+	
 	// Charset x-displacement
 
 	xcounter += (CHARGEN_X_START - border_x_left);
+	const int xcounter_start = xcounter;
 	
-	while (xcounter < border_x_right)
+	while (line_char_index < REG_CHRCOUNT)
 	{
-		if (display_row > 25 || char_x >= REG_CHRCOUNT) { // FIX: get display_row from registers.
+		if (display_row > 25 ) { // FIX: get display_row from registers.
 			(*current_pixel++) = palette[REG_SCREEN_COLOR];
 			xcounter++;
 			continue;
@@ -993,6 +1029,20 @@ static void vic4_render_char_raster()
 		{
 			color_data = (color_data << 8) | (*(colour_ram_current_ptr++));
 			char_value = char_value | (*(screen_ram_current_ptr++) << 8);
+		}
+
+		if (SXA_GOTO_X(color_data))
+		{
+			current_pixel = pixel_raster_start + xcounter_start + (char_value & 0x3FF);
+			xcounter = xcounter_start + (char_value & 0x3FF);
+			line_char_index++;
+			
+			if (SXA_VERTICAL_FLIP(color_data))
+			{
+				enable_bg_paint = 0;
+			}
+
+			continue;
 		}
 		
 		// Background and foreground colors
@@ -1016,7 +1066,7 @@ static void vic4_render_char_raster()
 
 		if (REG_BMM)
 		{
-			char_byte = *(row_data_base_addr + display_row * 320 + 8 * char_x  + sel_char_row);
+			char_byte = *(row_data_base_addr + display_row * 320 + 8 * line_char_index  + sel_char_row);
 		}
 		else
 		{
@@ -1070,14 +1120,17 @@ static void vic4_render_char_raster()
 				vic4_render_mono_char_row(char_byte, glyph_width, char_value & 0xF, char_value >> 4, vic3_attr );
 			}
 		}
-
-		char_x++;
+		line_char_index++;
 	}
 
 	if (++char_row > 7)
-	{
+	{		
 		char_row = 0;
 		display_row++;
+		if ( ++v_row == v_row_span)
+		{
+			v_row = 0;
+		}
 	}
 }
 
@@ -1128,6 +1181,7 @@ int vic4_render_scanline()
 	// End of frame?
 	if (ycounter == SCREEN_HEIGHT)
 	{
+		v_row = 0;
 		display_row = 0;
 		char_row = 0;
 		screen_ram_current_ptr = main_ram + SCREEN_ADDR;
