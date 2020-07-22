@@ -35,7 +35,8 @@ static opl3_chip opl3;
 
 void audio65_opl3_write ( Uint8 reg, Uint8 data )
 {
-	OPL3_WriteReg(&opl3, reg, data);
+	//OPL3_WriteReg(&opl3, reg, data);
+	OPL3_WriteRegBuffered(&opl3, reg, data);
 }
 
 

@@ -1371,11 +1371,8 @@ void OPL3_WriteRegBuffered(opl3_chip *chip, Bit16u reg, Bit8u v)
 
 void OPL3_GenerateStream(opl3_chip *chip, Bit16s *sndptr, Bit32u numsamples, Bit32u increment )
 {
-    Bit32u i;
-
-    for(i = 0; i < numsamples; i++)
-    {
-        OPL3_GenerateResampled(chip, sndptr);
-        sndptr += increment;
-    }
+	while (numsamples--) {
+		OPL3_GenerateResampled(chip, sndptr);
+		sndptr += increment;
+	}
 }
