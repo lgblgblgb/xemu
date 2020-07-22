@@ -33,6 +33,12 @@ static double dma_audio_mixing_value;
 static opl3_chip opl3;
 
 
+void audio65_opl3_write ( Uint8 reg, Uint8 data )
+{
+	OPL3_WriteReg(&opl3, reg, data);
+}
+
+
 
 #ifdef AUDIO_EMULATION
 static inline void render_dma_audio ( int channel, short *buffer, int len )
@@ -112,12 +118,6 @@ static inline void render_dma_audio ( int channel, short *buffer, int len )
 }
 
 
-void audio65_opl3_write ( Uint8 reg, Uint8 data )
-{
-	OPL3_WriteReg(&opl3, reg, data);
-}
-
-
 static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 {
 #if 1
@@ -160,8 +160,8 @@ void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// Since there can be problem to write SID registers otherwise?
 	sid_init(&sid1, sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sid2, sid_cycles_per_sec, sound_mix_freq);
-#ifdef AUDIO_EMULATION
 	OPL3_Reset(&opl3, sound_mix_freq);
+#ifdef AUDIO_EMULATION
 	mixing_freq = sound_mix_freq;
 	dma_audio_mixing_value =  (double)40500000.0 / (double)sound_mix_freq;	// ... but with Xemu we use a much lower sampling rate, thus compensate (will fail on samples, rate >= xemu_mixing_rate ...)
 	SDL_AudioSpec audio_want, audio_got;
