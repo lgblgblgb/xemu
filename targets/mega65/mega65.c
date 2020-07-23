@@ -38,10 +38,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "input_devices.h"
 #include "memcontent.h"
 #include "xemu/emutools_gui.h"
+#include "audio65.h"
 #include "inject.h"
 
-
-static SDL_AudioDeviceID audio = 0;
 
 static int nmi_level;			// please read the comment at nmi_set() below
 
@@ -191,17 +190,6 @@ static Uint8 cia_port_in_dummy ( void )
 
 
 
-static void audio_callback(void *userdata, Uint8 *stream, int len)
-{
-	// DEBUG("AUDIO: audio callback, wants %d samples" NL, len);
-	// We use the trick, to render boths SIDs with step of 2, with a byte offset
-	// to get a stereo stream, wanted by SDL.
-	sid_render(&sid2, ((short *)(stream)) + 0, len >> 1, 2);	// SID @ left
-	sid_render(&sid1, ((short *)(stream)) + 1, len >> 1, 2);	// SID @ right
-}
-
-
-
 #ifdef XEMU_SNAPSHOT_SUPPORT
 static const char *m65_snapshot_saver_filename = NULL;
 static void m65_snapshot_saver_on_exit_callback ( void )
@@ -280,12 +268,9 @@ int refill_c65_rom_from_preinit_cache ( void )
 }
 
 
-static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
+static void mega65_init ( void )
 {
 	const char *p;
-#ifdef AUDIO_EMULATION
-	SDL_AudioSpec audio_want, audio_got;
-#endif
 	hypervisor_debug_init(xemucfg_get_str("kickuplist"), xemucfg_get_bool("hyperdebug"), xemucfg_get_bool("hyperserialascii"));
 	hid_init(
 		c64_key_map,
@@ -364,32 +349,6 @@ static void mega65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	dma_init(newhack ? DMA_FEATURE_HACK | DMA_FEATURE_DYNMODESET : xemucfg_get_num("dmarev"));
 	// Initialize FDC
 	fdc_init(disk_buffers + FD_BUFFER_POS);
-	// SIDs, plus SDL audio
-	sid_init(&sid1, sid_cycles_per_sec, sound_mix_freq);
-	sid_init(&sid2, sid_cycles_per_sec, sound_mix_freq);
-#ifdef AUDIO_EMULATION
-	SDL_memset(&audio_want, 0, sizeof(audio_want));
-	audio_want.freq = sound_mix_freq;
-	audio_want.format = AUDIO_S16SYS;	// used format by SID emulation (ie: signed short)
-	audio_want.channels = 2;		// that is: stereo, for the two SIDs
-	audio_want.samples = 1024;		// Sample size suggested (?) for the callback to render once
-	audio_want.callback = audio_callback;	// Audio render callback function, called periodically by SDL on demand
-	audio_want.userdata = NULL;		// Not used, "userdata" parameter passed to the callback by SDL
-	audio = SDL_OpenAudioDevice(NULL, 0, &audio_want, &audio_got, 0);
-	if (audio) {
-		int i;
-		for (i = 0; i < SDL_GetNumAudioDevices(0); i++)
-			DEBUG("AUDIO: audio device is #%d: %s" NL, i, SDL_GetAudioDeviceName(i, 0));
-		// Sanity check that we really got the same audio specification we wanted
-		if (audio_want.freq != audio_got.freq || audio_want.format != audio_got.format || audio_want.channels != audio_got.channels) {
-			SDL_CloseAudioDevice(audio);	// forget audio, if it's not our expected format :(
-			audio = 0;
-			ERROR_WINDOW("Audio parameter mismatches.");
-		}
-		DEBUGPRINT("AUDIO: initialized (#%d), %d Hz, %d channels, %d buffer sample size." NL, audio, audio_got.freq, audio_got.channels, audio_got.samples);
-	} else
-		ERROR_WINDOW("Cannot open audio device!");
-#endif
 	//
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_init(xemucfg_get_str("uartmon"));
@@ -760,7 +719,8 @@ int main ( int argc, char **argv )
 	osd_init_with_defaults();
 	xemugui_init(xemucfg_get_str("gui"));
 	// Initialize MEGA65
-	mega65_init(
+	mega65_init();
+	audio65_init(
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
 		AUDIO_SAMPLE_FREQ		// sound mix freq
 	);
