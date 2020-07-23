@@ -109,7 +109,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define BORDER_Y_BOTTOM     (((Uint16)REG_BBRDPOS) | (REG_BBRDPOS_U4) << 8)
 #define CHARGEN_Y_START     (((Uint16)REG_TEXTYPOS) | (REG_TEXTYPOS_U4) << 8)
 #define CHARGEN_X_START     (((Uint16)REG_TEXTXPOS) | (REG_TEXTXPOS_U4) << 8)
-#define VIRTUAL_ROW_WIDTH   (((Uint16)REG_CHARSTEP) | (REG_CHARSTEP_U8) << 8)
+#define CHARSTEP_BYTES      (((Uint16)REG_CHARSTEP) | (REG_CHARSTEP_U8) << 8)
 #define SCREEN_RAM_ADDR_VIC  (REG_SCREEN_ADDR * 1024)
 #define SCREEN_ADDR          ((Uint32)REG_SCRNPTR_B0 | (REG_SCRNPTR_B1<<8) | (REG_SCRNPTR_B2 <<16))
 #define CHARSET_ADDR         ((Uint32)REG_CHARPTR_B0 | (REG_CHARPTR_B1<<8) | (REG_CHARPTR_B2 <<16))
@@ -156,7 +156,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
                                  vic_registers[(basereg)] = (Uint8) ((Uint16)(x)) & 0x00FF;
 #define SET_12BIT_REG(basereg,x) vic_registers[((basereg)+1)] = (Uint8) ((((Uint16)(x)) & 0xF00) >> 8); \
                                  vic_registers[(basereg)] = (Uint8) ((Uint16)(x)) & 0x00FF;
-#define SET_16BIT_REG(basereg,x) vic_registers[((basereg) + 1)] = ((Uint16)(x)) & 0xFF00; \
+#define SET_16BIT_REG(basereg,x) vic_registers[((basereg) + 1)] = (Uint8) ((((Uint16)(x)) & 0xFF00) >> 8); \
                                  vic_registers[(basereg)]= ((Uint16)(x)) & 0x00FF;
 
 // 11-bit registers
@@ -174,7 +174,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 //16-bit registers
 
 #define SET_COLORRAM_BASE(x)       SET_16BIT_REG(0x64,(x))
-#define SET_VIRTUAL_ROW_WIDTH(x)   SET_16BIT_REG(0x58,(x))
+#define SET_CHARSTEP_BYTES(x)      SET_16BIT_REG(0x58,(x))
 
 // Pixel foreground/background indicator for aiding in sprite rendering
 #define FOREGROUND_PIXEL 1
