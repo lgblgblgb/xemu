@@ -330,7 +330,7 @@ static void vic4_interpret_legacy_mode_registers()
 
 	Uint8 width = REG_H640 ? 80 : 40;
 	REG_CHRCOUNT = width;
-	SET_CHARSTEP_BYTES(width * (REG_16BITCHARSET ? 2 : 1));
+	SET_CHARSTEP_BYTES(width);// * (REG_16BITCHARSET ? 2 : 1));
 
 	REG_SCRNPTR_B1 &= 0xC0;
 	REG_SCRNPTR_B1 |= REG_H640 ?  ((reg_d018_screen_addr & 14) << 2) : (reg_d018_screen_addr << 2);
@@ -1020,22 +1020,22 @@ static void vic4_render_char_raster()
 		{
 			color_data = (color_data << 8) | (*(colour_ram_current_ptr++));
 			char_value = char_value | (*(screen_ram_current_ptr++) << 8);
-		}
 
-		if (SXA_GOTO_X(color_data))
-		{
-			current_pixel = pixel_raster_start + xcounter_start + (char_value & 0x3FF);
-			xcounter = xcounter_start + (char_value & 0x3FF);
-			line_char_index++;
-			
-			if (SXA_VERTICAL_FLIP(color_data))
+			if (SXA_GOTO_X(color_data))
 			{
-				enable_bg_paint = 0;
-			}
+				current_pixel = pixel_raster_start + xcounter_start + (char_value & 0x3FF);
+				xcounter = xcounter_start + (char_value & 0x3FF);
+				line_char_index++;
 
-			continue;
+				if (SXA_VERTICAL_FLIP(color_data))
+				{
+					enable_bg_paint = 0;
+				}
+
+				continue;
+			}
 		}
-		
+
 		// Background and foreground colors
 
 		const Uint8 char_fgcolor = color_data & 0xF; 
@@ -1119,6 +1119,11 @@ static void vic4_render_char_raster()
 		char_row = 0;
 		display_row++;
 	}
+
+	// Fill screen color after chargen phase
+
+	while (xcounter++ < border_x_right)
+		*current_pixel++ = palette[REG_SCREEN_COLOR];
 }
 
 int vic4_render_scanline() 
