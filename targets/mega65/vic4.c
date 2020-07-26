@@ -999,11 +999,17 @@ static void vic4_render_char_raster()
 	screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row  * CHARSTEP_BYTES);
 	const Uint8* row_data_base_addr = main_ram + (REG_BMM ?  VIC2_BITMAP_ADDR : get_charset_effective_addr());
 	
-	// Charset x-displacement
+	// Account for Chargen X-displacement
 
+	for(Uint32* p = current_pixel; p < current_pixel + (CHARGEN_X_START - border_x_left); ++p)
+		*p = palette[REG_SCREEN_COLOR];
+
+	current_pixel +=  (CHARGEN_X_START - border_x_left);
 	xcounter += (CHARGEN_X_START - border_x_left);
 	const int xcounter_start = xcounter;
 	
+	// Chargen starts here.
+
 	while (line_char_index < REG_CHRCOUNT)
 	{
 		if (display_row > 25 ) { // FIX: get display_row from registers.
@@ -1156,15 +1162,20 @@ int vic4_render_scanline()
 		}
 		else
 		{
-			while (xcounter++ < border_x_left)
-				*(current_pixel++) = palette[REG_BORDER_COLOR & 0xF];
+			// Render visible display first and render side-borders later to cover X-displaced 
+			// character generator if needed.
+
+			xcounter += border_x_left;
+			current_pixel += border_x_left;
 
 			vic4_render_char_raster();
+			vic4_do_sprites();			
 
-			while (xcounter++ <= SCREEN_WIDTH)
-				*(current_pixel++) = palette[REG_BORDER_COLOR & 0xF];
+			for (Uint32* p = pixel_raster_start; p < pixel_raster_start + border_x_left; ++p)
+				*p = palette[REG_BORDER_COLOR & 0xF];
 
-			vic4_do_sprites();
+			for (Uint32* p = current_pixel; p < current_pixel + border_x_right; ++p)
+				*p = palette[REG_BORDER_COLOR & 0xF];
 		}
 	}
 	ycounter++;
