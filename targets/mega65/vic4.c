@@ -519,9 +519,9 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			DEBUGPRINT("WRITE $%04x CHARSTEP: $%02x" NL, addr, data);
 			break;
 		CASE_VIC_4(0x5A): 
-			DEBUGPRINT("WRITE $%04x CHARXSCALE: $%02x" NL, addr, data);
+			vic_registers[0x5A] = data;	// Write now and calculate step.
 			calculate_char_x_step();
-			break;
+			return;
 		CASE_VIC_4(0x5B): 
 			break;
 		CASE_VIC_4(0x5C):
