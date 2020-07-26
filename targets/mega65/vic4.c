@@ -758,11 +758,11 @@ static inline Uint32 get_charset_effective_addr()
 	case 0x1000:
 		return 0x2D000;
 	case 0x9000:
-		return 0x3D000;
+		return 0x29000;
 	case 0x1800:
 		return 0x2D800;
 	case 0x9800:
-		return 0x3D800;
+		return 0x29800;
 	}
 	return CHARSET_ADDR;
 }
