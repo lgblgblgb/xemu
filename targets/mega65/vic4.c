@@ -88,14 +88,6 @@ static int enable_bg_paint = 1;
 #define SINGLE_TOP_BORDER_200 	(TOP_BORDERS_HEIGHT_200 >> 1)
 #define SINGLE_TOP_BORDER_400 	(TOP_BORDERS_HEIGHT_400 >> 1)
 
-#if 0
-// UGLY: decides to use VIC-II/III method (val!=0), or the VIC-IV "precise address" selection (val == 0)
-// this is based on the idea that VIC-II compatible register writing will set that, overriding the "precise" setting if there was any, before.
-static int vic2_vidp_method = 1;
-static int vic2_chrp_method = 1;
-#endif
-
-
 //#define CHECK_PIXEL_POINTER
 
 
@@ -233,7 +225,7 @@ static void vic4_check_raster_interrupt ( void )
 	vic4_interrupt_checker();
 }
 
-inline static void calculate_char_x_step()
+inline static void vic4_calculate_char_x_step()
 {
 	char_x_step = (REG_CHARXSCALE / 120.0f) / (REG_H640 ? 1 : 2);
 }
@@ -397,11 +389,11 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 				vic_hotreg_touched = 1;
 			}
 			compare_raster = (compare_raster & 0xFF) | ((data & 0x80) << 1);
-			DEBUG("VIC: compare raster is now %d" NL, compare_raster);
+			DEBUGPRINT("VIC: compare raster is now %d" NL, compare_raster);
 			break;
 		CASE_VIC_ALL(0x12):
 			compare_raster = (compare_raster & 0xFF00) | data;
-			DEBUG("VIC: compare raster is now %d" NL, compare_raster);
+			DEBUGPRINT("VIC: compare raster is now %d" NL, compare_raster);
 			break;
 		CASE_VIC_ALL(0x13): CASE_VIC_ALL(0x14):
 			return;		// FIXME: writing light-pen registers?????
@@ -498,7 +490,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 				INFO_WINDOW("VIC3 control-B register H1280, MONO and INT features are not emulated yet!");
 				warn_ctrl_b_lo = 0;
 			}
-			calculate_char_x_step();
+			vic4_calculate_char_x_step();
 			break;				//We did the write, but we need to trigger vichot_reg if should
 
 		CASE_VIC_3_4(0x32): CASE_VIC_3_4(0x33): CASE_VIC_3_4(0x34): CASE_VIC_3_4(0x35): CASE_VIC_3_4(0x36): CASE_VIC_3_4(0x37): CASE_VIC_3_4(0x38):
@@ -507,7 +499,8 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_3_4(0x47):
 			break;
 		/* --- NO MORE VIC-III REGS FROM HERE --- */
-		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B): CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
+		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B): 
+		CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
 		CASE_VIC_4(0x50): CASE_VIC_4(0x51): CASE_VIC_4(0x52): CASE_VIC_4(0x53):
 			break;
 		CASE_VIC_4(0x54):
@@ -519,8 +512,9 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			DEBUGPRINT("WRITE $%04x CHARSTEP: $%02x" NL, addr, data);
 			break;
 		CASE_VIC_4(0x5A): 
+			//DEBUGPRINT("WRITE $%04x CHARXSCALE: $%02x" NL, addr, data);
 			vic_registers[0x5A] = data;	// Write now and calculate step.
-			calculate_char_x_step();
+			vic4_calculate_char_x_step();
 			return;
 		CASE_VIC_4(0x5B): 
 			break;
@@ -723,33 +717,6 @@ Uint8 vic_read_reg ( int unsigned addr )
 #undef CASE_VIC_ALL
 #undef CASE_VIC_3_4
 
-
-// "num" is 0-$ff for red, $100-$1ff for green and $200-$2ff for blue nibbles
-// void vic3_write_palette_reg ( int num, Uint8 data )
-// {
-// 	vic3_palette_nibbles[num] = data & 15;
-// 	// recalculate the given RGB entry based on the new data as well
-// 	vic3_palette[num & 0xFF] = RGB(
-// 		vic3_palette_nibbles[ num & 0xFF],
-// 		vic3_palette_nibbles[(num & 0xFF) | 0x100],
-// 		vic3_palette_nibbles[(num & 0xFF) | 0x200]
-// 	);
-// 	// Also, update the "ROM based" palette struct, BUT only colours above 15,
-// 	// since the lower 16 are "ROM based"! This is only a trick to be able
-// 	// to have full 256 colours for ROMPAL sel and without that too!
-// 	// The low 16 colours are the one which are ROM based for real, that's why
-// 	// we don't want to update them here!
-// 	if ((num & 0xF0))
-// 		vic3_rom_palette[num & 0xFF] = vic3_palette[num & 0xFF];
-// }
-
-// // TODO: for VIC-4 mode, the palette registers are 8 bit, reversed nibble order to be compatible with C65
-// // however, yet I don't support it, so only 4 bits can be used still by colour channel :(
-// void vic4_write_palette_reg ( int num, Uint8 data )
-// {
-// 	vic3_write_palette_reg(num, data);	// TODO: now only call the VIC-3 solution, which is not so correct for M65/VIC-4
-// }
-
 static inline Uint32 get_charset_effective_addr()
 {
 	// cache this? 
@@ -769,12 +736,14 @@ static inline Uint32 get_charset_effective_addr()
 
 static void vic4_draw_sprite_row_16color(int sprnum, int x_display_pos, Uint8* row_data_ptr, int xscale)
 {
-	for (int byte = 0; byte < 3; ++byte)
+	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
+	const int palindexbase = sprnum * 16 + 128 * (SPRITE_BITPLANE_ENABLE(sprnum) >> sprnum);
+
+	for (int byte = 0; byte < totalBytes; ++byte)
 	{
 		const Uint8 c0 = (*(row_data_ptr + byte)) >> 4;
 		const Uint8 c1 = (*(row_data_ptr + byte)) & 0xF;
-
-		for (int p = 0; p < xscale && x_display_pos < border_x_right; ++p, x_display_pos += 2)
+		for (int p = 0; p < xscale && x_display_pos < border_x_right; ++p, ++x_display_pos)
 		{
 			if (c0)
 			{
@@ -782,17 +751,20 @@ static void vic4_draw_sprite_row_16color(int sprnum, int x_display_pos, Uint8* r
 					(!SPRITE_IS_BACK(sprnum) ||
 					 (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)))
 				{
-					*(pixel_raster_start + x_display_pos) = spritepalette[c0];
+					*(pixel_raster_start + x_display_pos) = spritepalette[palindexbase + c0];
 				}
 			}
+		}
 
+		for (int p = 0; p < xscale && x_display_pos < border_x_right; ++p, ++x_display_pos)
+		{
 			if (c1)
 			{
-				if (x_display_pos + 1 >= border_x_left &&
+				if (x_display_pos >= border_x_left &&
 					(!SPRITE_IS_BACK(sprnum) ||
-					 (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos + 1] != FOREGROUND_PIXEL)))
+					 (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)))
 				{
-					*(pixel_raster_start + x_display_pos + 1) = spritepalette[c1];
+					*(pixel_raster_start + x_display_pos) = spritepalette[palindexbase + c1];
 				}
 			}
 		}
@@ -801,7 +773,8 @@ static void vic4_draw_sprite_row_16color(int sprnum, int x_display_pos, Uint8* r
 
 static void vic4_draw_sprite_row_multicolor(int sprnum, int x_display_pos, Uint8* row_data_ptr, int xscale)
 {
-	for (int byte = 0; byte < 3; ++byte)
+	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
+	for (int byte = 0; byte < totalBytes; ++byte)
 	{
 		for (int xbit = 0; xbit < 8; xbit += 2)
 		{
@@ -842,7 +815,8 @@ static void vic4_draw_sprite_row_multicolor(int sprnum, int x_display_pos, Uint8
 
 static void vic4_draw_sprite_row_mono(int sprnum, int x_display_pos, Uint8 *row_data_ptr, int xscale)
 {
-	for (int byte = 0; byte < 3; ++byte)
+	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
+	for (int byte = 0; byte < totalBytes; ++byte)
 	{
 		for (int xbit = 0; xbit < 8; ++xbit)
 		{
@@ -883,10 +857,9 @@ static void vic4_do_sprites()
 		if ((REG_SPRITE_ENABLE & (1 << sprnum)) &&
 			(sprite_row_in_raster >= 0 && sprite_row_in_raster < 21) )
 		{
-			const int widthBytes = 3;
-			const int totalBytes = 64;
+			const int widthBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 			Uint8 *sprite_data_pointer =  main_ram + SPRITE_POINTER_ADDR + sprnum;
-			Uint8 *sprite_data = main_ram + totalBytes * (*sprite_data_pointer);
+			Uint8 *sprite_data = SPRITE_16BITPOINTER ? main_ram + 64 * (*(Uint16*)sprite_data_pointer) : main_ram + 64 * (*sprite_data_pointer) ;
 			Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
 			int xscale = (REG_H640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
 			if (SPRITE_16COLOR(sprnum))
@@ -995,6 +968,12 @@ static void vic4_render_char_raster()
 {
 	int line_char_index = 0;
 	enable_bg_paint = 1;
+
+	// Account for Chargen Y-displacement
+	
+	const int display_row_adj = display_row + ((CHARGEN_Y_START - BORDER_Y_TOP) / 8);
+	const int char_row_adj = char_row + ((CHARGEN_Y_START - BORDER_Y_TOP) % 8);
+
 	colour_ram_current_ptr = colour_ram + (display_row  * CHARSTEP_BYTES); 
 	screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row  * CHARSTEP_BYTES);
 	const Uint8* row_data_base_addr = main_ram + (REG_BMM ?  VIC2_BITMAP_ADDR : get_charset_effective_addr());
@@ -1012,7 +991,7 @@ static void vic4_render_char_raster()
 
 	while (line_char_index < REG_CHRCOUNT)
 	{
-		if (display_row > 25 ) { // FIX: get display_row from registers.
+		if (display_row_adj < 0 || display_row_adj > 24 ) { // FIX: get display_row from registers.
 			(*current_pixel++) = palette[REG_SCREEN_COLOR];
 			xcounter++;
 			continue;
@@ -1055,10 +1034,10 @@ static void vic4_render_char_raster()
 
 		// Default fetch from char mode.
 		Uint8 char_byte;
-		int sel_char_row = char_row;
+		int sel_char_row = char_row_adj;
 		
 		if (SXA_VERTICAL_FLIP(color_data))
-			sel_char_row = 7 - char_row;
+			sel_char_row = 7 - char_row_adj;
 
 		if (REG_BMM)
 		{
@@ -1164,7 +1143,7 @@ int vic4_render_scanline()
 		{
 			// Render visible display first and render side-borders later to cover X-displaced 
 			// character generator if needed.
-
+			
 			xcounter += border_x_left;
 			current_pixel += border_x_left;
 

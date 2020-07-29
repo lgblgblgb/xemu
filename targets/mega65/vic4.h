@@ -62,6 +62,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_VIC2_YSCROLL    (vic_registers[0x11] & 7)
 #define REG_CRAM2K          (vic_registers[0x30] & 1)
 #define REG_TBRDPOS         (vic_registers[0x48])
+#define REG_SPRBPMEN_0_3    (vic_registers[0x49] >> 4)
+#define REG_SPRBPMEN_4_7    (vic_registers[0x4B] >> 4)
 #define REG_TBRDPOS_U4      (vic_registers[0x49] & 0xF)
 #define REG_BBRDPOS         (vic_registers[0x4A])
 #define REG_BBRDPOS_U4      (vic_registers[0x4B] & 0xF)
@@ -92,7 +94,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_CHARPTR_B2      vic_registers[0x6A]
 #define REG_SPRPTR_B0       vic_registers[0x6C]
 #define REG_SPRPTR_B1       vic_registers[0x6D]
-#define REG_SPRPTR_B2       vic_registers[0x6E]
+#define REG_SPRPTR_B2       (vic_registers[0x6E] & 0x7F)
 #define REG_SCREEN_ROWS     vic_registers[0x7B]
 #define REG_PALNTSC         (vic_registers[0x6f] & 0x80)
 #define REG_PAL_RED_BASE    (vic_registers[0x100])
@@ -128,7 +130,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_VERT_2X(n)    (vic_registers[0x17] & (1 << (n)))
 #define SPRITE_MULTICOLOR(n) (vic_registers[0x1C] & (1 << (n)))
 #define SPRITE_16COLOR(n)    (vic_registers[0x6B] & (1 << (n)))
-
+#define SPRITE_EXTWIDTH(n)   (vic_registers[0x57] & (1 << (n)))
+#define SPRITE_BITPLANE_ENABLE(n)  (((REG_SPRBPMEN_4_7) << 4 | REG_SPRBPMEN_0_3) & (1 << (n)))
+#define SPRITE_16BITPOINTER  (vic_registers[0x6D] & 0x80)
 #define TEXT_MODE            (!REG_BMM)
 #define HIRES_BITMAP_MODE    (REG_BMM & !REG_MCM & !REG_EBM)
 #define MULTICOLOR_BITMAP_MODE (REG_BMM & REG_MCM & !REG_EBM)
