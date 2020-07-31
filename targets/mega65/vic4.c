@@ -88,6 +88,8 @@ static int enable_bg_paint = 1;
 #define SINGLE_TOP_BORDER_200 	(TOP_BORDERS_HEIGHT_200 >> 1)
 #define SINGLE_TOP_BORDER_400 	(TOP_BORDERS_HEIGHT_400 >> 1)
 
+#define MAX(a,b) ((a)>(b)?(a):(b))
+
 //#define CHECK_PIXEL_POINTER
 
 
@@ -847,21 +849,25 @@ static void vic4_do_sprites()
 	//
 	for (int sprnum = 7; sprnum >= 0; --sprnum)
 	{
-		int x_display_pos = border_x_left + ((SPRITE_POS_X(sprnum) - SPRITE_X_BASE_COORD) * (REG_H640 ? 1 : 2)); // in display units
+		const int spriteHeight = SPRITE_EXTHEIGHT(sprnum) ? REG_SPRHGHT : 21;
+		int x_display_pos = border_x_left + ((SPRITE_POS_X(sprnum) - SPRITE_X_BASE_COORD) * (REG_SPR640 ? 1 : 2)); // in display units
 		int y_logical_pos = SPRITE_POS_Y(sprnum) - SPRITE_Y_BASE_COORD +(BORDER_Y_TOP / (REG_V400 ? 1 : 2)); // in logical units
 
 		int sprite_row_in_raster = logical_raster - y_logical_pos;
+		
 		if (SPRITE_VERT_2X(sprnum))
 			sprite_row_in_raster = sprite_row_in_raster >> 1;
 
 		if ((REG_SPRITE_ENABLE & (1 << sprnum)) &&
-			(sprite_row_in_raster >= 0 && sprite_row_in_raster < 21) )
+			(sprite_row_in_raster >= 0 && sprite_row_in_raster < spriteHeight) )
 		{
+			
+			//DEBUGPRINT("logical_raster %d  y_logical_pos %d  spriteHeight %d"  NL, logical_raster, y_logical_pos, spriteHeight);
 			const int widthBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 			Uint8 *sprite_data_pointer =  main_ram + SPRITE_POINTER_ADDR + sprnum;
-			Uint8 *sprite_data = SPRITE_16BITPOINTER ? main_ram + 64 * (*(Uint16*)sprite_data_pointer) : main_ram + 64 * (*sprite_data_pointer) ;
+			Uint8 *sprite_data = SPRITE_16BITPOINTER ? main_ram + 64 * (*(Uint16*)sprite_data_pointer) : main_ram + 64 * (*sprite_data_pointer);
 			Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
-			int xscale = (REG_H640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
+			int xscale = (REG_SPR640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
 			if (SPRITE_16COLOR(sprnum))
 				vic4_draw_sprite_row_16color(sprnum, x_display_pos, row_data, xscale);
 			else if (SPRITE_MULTICOLOR(sprnum))
@@ -968,12 +974,6 @@ static void vic4_render_char_raster()
 {
 	int line_char_index = 0;
 	enable_bg_paint = 1;
-
-	// Account for Chargen Y-displacement
-	
-	const int display_row_adj = display_row + ((CHARGEN_Y_START - BORDER_Y_TOP) / 8);
-	const int char_row_adj = char_row + ((CHARGEN_Y_START - BORDER_Y_TOP) % 8);
-
 	colour_ram_current_ptr = colour_ram + (display_row  * CHARSTEP_BYTES); 
 	screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row  * CHARSTEP_BYTES);
 	const Uint8* row_data_base_addr = main_ram + (REG_BMM ?  VIC2_BITMAP_ADDR : get_charset_effective_addr());
@@ -991,11 +991,11 @@ static void vic4_render_char_raster()
 
 	while (line_char_index < REG_CHRCOUNT)
 	{
-		if (display_row_adj < 0 || display_row_adj > 24 ) { // FIX: get display_row from registers.
-			(*current_pixel++) = palette[REG_SCREEN_COLOR];
-			xcounter++;
-			continue;
-		}
+		// if (display_row_adj < 0 || display_row_adj > 24 ) { // FIX: get display_row from registers.
+		// 	(*current_pixel++) = palette[REG_SCREEN_COLOR];
+		// 	xcounter++;
+		// 	continue;
+		// }
 
 		Uint16 color_data = *(colour_ram_current_ptr++);
 		Uint16 char_value = *(screen_ram_current_ptr++);
@@ -1034,10 +1034,10 @@ static void vic4_render_char_raster()
 
 		// Default fetch from char mode.
 		Uint8 char_byte;
-		int sel_char_row = char_row_adj;
+		int sel_char_row = char_row;
 		
 		if (SXA_VERTICAL_FLIP(color_data))
-			sel_char_row = 7 - char_row_adj;
+			sel_char_row = 7 - char_row;
 
 		if (REG_BMM)
 		{
