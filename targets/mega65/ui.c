@@ -245,11 +245,18 @@ static void reset_into_c64_mode ( void )
 
 }
 
+static void osd_key_debugger ( void )
+{
+	hid_show_osd_keys = !hid_show_osd_keys;
+	OSD(-1, -1, "OSD key debugger turned %s", hid_show_osd_keys ? "ON" : "OFF");	
+}
+
 
 static const struct menu_st menu_display[] = {
 	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)0 },
 	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)1 },
 	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)2 },
+	{ "OSD key debugger",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, osd_key_debugger },
 	{ NULL }
 };
 static const struct menu_st menu_sdcard[] = {

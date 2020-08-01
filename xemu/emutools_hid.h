@@ -41,6 +41,7 @@ extern void hid_keymap_from_config_file ( const char *fn );
 #endif
 
 extern Uint8 kbd_matrix[16];
+extern int   hid_show_osd_keys;
 
 #define KBD_CLEAR_MATRIX()      memset(kbd_matrix, 0xFF, sizeof kbd_matrix)
 #define KBD_PRESS_KEY(a)        kbd_matrix[(a) >> 4] &= ~(1 << ((a) & 0x7))
