@@ -133,7 +133,7 @@ static void hwa_kbd_convert_and_push ( int pos )
 
 void clear_emu_events ( void )
 {
-	DEBUGKBDHWA("KBD: HWA: reset");
+	DEBUGKBDHWA("KBD: HWA: reset" NL);
 	hid_reset_events(1);
 	hwa_kbd.modifiers = 0;
 	hwa_kbd.next = 0;

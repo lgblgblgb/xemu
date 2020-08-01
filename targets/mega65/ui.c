@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/d81access.h"
 #include "sdcard.h"
 #include "sdcontent.h"
+#include "xemu/emutools_hid.h"
 #include "inject.h"
 
 #define		HELP_URL	"https://github.com/lgblgblgb/xemu/wiki/MEGA65-help"
@@ -227,12 +228,18 @@ static void ui_update_sdcard ( void )
 	reset_mega65();
 }
 
+static void osd_key_debugger ( void )
+{
+	hid_show_osd_keys = !hid_show_osd_keys;
+	OSD(-1, -1, "OSD key debugger turned %s", hid_show_osd_keys ? "ON" : "OFF");    
+}
 
 
 static const struct menu_st menu_display[] = {
 	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)0 },
 	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)1 },
 	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)2 },
+	{ "OSD key debugger",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, osd_key_debugger },
 	{ NULL }
 };
 static const struct menu_st menu_sdcard[] = {
