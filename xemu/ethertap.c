@@ -1,6 +1,6 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and some Mega-65 features as well.
+   and MEGA65 as well.
    Copyright (C)2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -67,7 +67,8 @@ able to configure the device for itself, hmmm ...)  */
 // net/if.h is not needed in my Linux box, but it seems it is needed on older Ubuntu versions at least, so ...
 #include <net/if.h>
 // disabling linux/if.h works for Ubuntu 14.04 / GCC 6.4.0
-//#include <linux/if.h>
+// HOWEVER it seems without this, it will fail on Ubuntu 20.04. Eh, enabling it again ...
+#include <linux/if.h>
 #include <linux/if_tun.h>
 #include <errno.h>
 

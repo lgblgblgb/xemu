@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and some Mega-65 features as well.
-   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   and the MEGA65 as well.
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -53,6 +53,13 @@ static SDL_Joystick *joysticks[MAX_JOYSTICKS];
 static Uint8 virtual_shift_pos = 0;
 static struct KeyMappingUsed key_map[0x100];
 static const struct KeyMappingDefault *key_map_default;
+static int release_this_key_on_first_event = -1;
+
+
+void hid_set_autoreleased_key ( int key )
+{
+	release_this_key_on_first_event = key;
+}
 
 
 int hid_key_event ( SDL_Scancode key, int pressed )
@@ -61,10 +68,15 @@ int hid_key_event ( SDL_Scancode key, int pressed )
 	//OSD(-1, -1, "Key %s <%s>", pressed ? "press  " : "release", SDL_GetScancodeName(key));
 	while (map->pos >= 0) {
 		if (map->scan == key) {
+			if (XEMU_UNLIKELY(release_this_key_on_first_event > 0)) {
+				KBD_RELEASE_KEY(release_this_key_on_first_event);
+				release_this_key_on_first_event = -1;
+			}
 			if (map->pos > 0xFF) {	// special emulator key!
 				switch (map->pos) {	// handle "built-in" events, if emulator target uses them at all ...
 					case XEMU_EVENT_EXIT:
-						exit(0);
+						if (ARE_YOU_SURE(str_are_you_sure_to_exit, i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
+							exit(0);
 						break;
 					case XEMU_EVENT_FAKE_JOY_UP:
 						if (pressed) hid_state |= JOYSTATE_UP;     else hid_state &= ~JOYSTATE_UP;
@@ -462,10 +474,12 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 			break;
 #endif
 		case SDL_QUIT:
+			if (ARE_YOU_SURE(str_are_you_sure_to_exit, i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
 #ifdef CONFIG_QUIT_CALLBACK
-			emu_quit_callback();
+				emu_quit_callback();
 #endif
-			exit(0);
+				exit(0);
+			}
 			break;
 		case SDL_KEYUP:
 		case SDL_KEYDOWN:

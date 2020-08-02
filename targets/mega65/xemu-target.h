@@ -2,6 +2,7 @@
 #define TARGET_DESC "MEGA65"
 #define CPU_65CE02
 #define MEGA65
+#define CPU65_65CE02_6502NMOS_TIMING_EMULATION
 #define XEMU_SNAPSHOT_SUPPORT "Mega-65"
 #define CPU_STEP_MULTI_OPS
 //#define DEBUG_CPU
@@ -14,7 +15,7 @@
 #define HAVE_XEMU_EXEC_API
 
 #ifdef HAVE_SOCKET_OS_API
-#define HAVE_XEMU_SOCKET_API
+//#define HAVE_XEMU_SOCKET_API
 //#define HAVE_XEMU_UMON
 #endif
 #define HAVE_XEMU_INSTALLER
@@ -23,7 +24,7 @@
 #define CONFIG_DROPFILE_CALLBACK
 #define VIRTUAL_DISK_IMAGE_SUPPORT
 //#define BASIC_TEXT_SUPPORT
-//#define SD_CONTENT_SUPPORT
+#define SD_CONTENT_SUPPORT
 #endif
 
 /* Globally: XEMU_INLINE hints gcc to always inline a function. Using this define switches that behaviour off, defaulting to standard "inline" (as it would be without using gcc as well) */

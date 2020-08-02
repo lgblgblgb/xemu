@@ -14,7 +14,7 @@
    This emulator based on my previous try (written in C), which is based on my previous JavaScript
    based emulator, which was the world's first Commodore LCD emulator. Actually this emulator turned
    out to be Xemu with many new machines since then to be emulated, including Commodore 65 and
-   Mega 65 too.
+   MEGA65 too.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

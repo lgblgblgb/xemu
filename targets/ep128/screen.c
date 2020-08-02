@@ -25,7 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "input.h"
 #ifndef NO_SCREENSHOT
 #ifdef CONFIG_USE_LODEPNG
-#	include "lodepng.h"
+#	include "xemu/lodepng.h"
 #else
 #	include "png.h"
 #endif
@@ -373,8 +373,9 @@ int screen_init ( void )
 	SDL_VERSION(&sdl_wminfo.version);
 #ifndef __EMSCRIPTEN__
 	if (!SDL_GetWindowWMInfo(sdl_win, &sdl_wminfo)) {
-		ERROR_WINDOW("Cannot issue WMInfo call: %s", SDL_GetError());
-		return 1;
+		// ERROR_WINDOW("Cannot issue WMInfo call: %s", SDL_GetError());
+		// return 1;
+		DEBUGPRINT("UI: warning WMInfo call falied: %s", SDL_GetError());
 	}
 #endif
 	SDL_SetWindowMinimumSize(sdl_win, SCREEN_WIDTH, SCREEN_HEIGHT * 2);

@@ -1,4 +1,4 @@
-/* F018 DMA core emulation for Commodore 65 and Mega 65, part of the Xemu project.
+/* F018 DMA core emulation for Commodore 65 and MEGA65, part of the Xemu project.
    https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
@@ -351,6 +351,8 @@ int dma_update ( void )
 					default:
 						// maybe later we should keep this quiet ...
 						DEBUGPRINT("DMA: *unknown* enhanced option: $%02X @ PC=$%04X" NL, opt, cpu65.pc);
+						if ((opt & 0x80))
+							(void)DMA_READ_LIST_NEXT_BYTE();	// skip one byte for unknown option >= $80
 						break;
 				}
 			} while (opt);

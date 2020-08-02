@@ -1,7 +1,7 @@
 ## Collection of *simple* emulators of some 8 bits machines using SDL2 library.
 ## Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
 ##
-## Copyright (C)2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,10 +21,9 @@ TARGET		= zxspect
 PRG_TARGET	= xzxspect
 EMU_DESCRIPTION	= ZX Spectrum
 
-CFLAGS_TARGET_$(PRG_TARGET)		=
-SRCS_TARGET_$(PRG_TARGET)		= spectrum.c
-SRCS_COMMON_$(PRG_TARGET)		= emutools.c emutools_hid.c z80.c emutools_config.c emutools_files.c
-CONFIG_CFLAGS_TARGET_$(PRG_TARGET)	= sdl2
-CONFIG_LDFLAGS_TARGET_$(PRG_TARGET)	= sdl2
+SRCS_TARGET_$(PRG_TARGET)	= spectrum.c
+SRCS_COMMON_$(PRG_TARGET)	= emutools.c emutools_hid.c z80.c emutools_config.c emutools_files.c
+CFLAGS_TARGET_$(PRG_TARGET)	= $(SDL2_CFLAGS)
+LDFLAGS_TARGET_$(PRG_TARGET)	= $(SDL2_LIBS)
 
 include ../../build/Makefile.common

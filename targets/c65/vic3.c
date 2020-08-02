@@ -1,5 +1,5 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is the VIC3 "emulation". Currently it does scanline based rendering,
    though sprites are totally incorrect and rendered "at-once" after the
@@ -788,9 +788,11 @@ void vic3_write_reg ( int addr, Uint8 data )
 			select_renderer_func();
 			if ((data & 64)) {
 				cpu_cycles_per_scanline = FAST_CPU_CYCLES_PER_SCANLINE;
+				cpu65_set_ce_timing(1);
 				strcpy(emulator_speed_title, "3.5MHz");
 			} else {
 				cpu_cycles_per_scanline = SLOW_CPU_CYCLES_PER_SCANLINE;
+				cpu65_set_ce_timing(0);
 				strcpy(emulator_speed_title, "1MHz");
 			}
 			if ((data & 15) && warn_ctrl_b_lo) {

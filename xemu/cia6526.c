@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and some Mega-65 features as well.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   and MEGA65 as well.
+   Copyright (C)2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is a *VERY* lame CIA 6526 emulation, lacks of TOD, mostly to SDR stuff, timing,
    and other problems as well ... Hopefully enough for C65 to boot, what is its only reason ...
@@ -269,14 +269,21 @@ void cia_write ( struct Cia6526 *cia, int addr, Uint8 data )
 }
 
 
-void cia_ugly_tod_updater ( struct Cia6526 *cia, struct tm *t )
+static XEMU_INLINE Uint8 to_bdc_byte ( Uint8 b )
+{
+	return ((b / 10) << 4) + (b % 10);
+}
+
+
+
+void cia_ugly_tod_updater ( struct Cia6526 *cia, const struct tm *t, Uint8 sec10 )
 {
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
 	// FIXME: of course, that's simple crazy, not in sync with emu, no "stopping" clock on read, no setting etc ...
-	cia->tod[0] = 0;
-	cia->tod[1] = ((t->tm_sec / 10) << 4)  | (t->tm_sec % 10);
-	cia->tod[2] = ((t->tm_min / 10) << 4)  | (t->tm_min % 10);
-	cia->tod[3] = ((t->tm_hour / 10) << 4) | (t->tm_hour % 10);
+	cia->tod[0] = to_bdc_byte(sec10);
+	cia->tod[1] = to_bdc_byte(t->tm_sec);
+	cia->tod[2] = to_bdc_byte(t->tm_min);
+	cia->tod[3] = to_bdc_byte(t->tm_hour);
 }
 
 

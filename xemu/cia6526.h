@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and some Mega-65 features as well.
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   and MEGA65 as well.
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 /* Based on an even more ugly JavaScript version, also from me
  * -----------------------------------------------------------
  * Quick&dirty 6526 CIA emulation
- * (C)2013 LGB Gabor Lenart
+ * (C)2013,2020 LGB Gabor Lenart
  * Note: this is not an exact nor complete emulation!
  * The only goal is to support what Commodore 64/65(?) uses even
  * implemented incorrectly (not cycle exact, simplified, ignored
@@ -30,8 +30,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  *      http://www.c64-wiki.com/index.php/CIA
  */
 
-#ifndef __XEMU_COMMON_CIA6526_H_INCLUDED
-#define __XEMU_COMMON_CIA6526_H_INCLUDED
+#ifndef XEMU_COMMON_CIA6526_H_INCLUDED
+#define XEMU_COMMON_CIA6526_H_INCLUDED
 
 #include "xemu/emutools_snapshot.h"
 #include <time.h>
@@ -52,8 +52,8 @@ struct Cia6526 {
 	Uint8 CRA, CRB;
 	Uint8 ICRmask, ICRdata;
 	Uint8 SDR;
-	int tod[4];
-	int todAlarm[4];
+	Uint8 tod[4];
+	Uint8 todAlarm[4];
 	int regWritten[16];
 };
 
@@ -73,7 +73,7 @@ extern void  cia_write(struct Cia6526 *cia, int addr, Uint8 data);
 extern Uint8 cia_read (struct Cia6526 *cia, int addr);
 extern void  cia_tick (struct Cia6526 *cia, int ticks);
 extern void  cia_dump_state ( struct Cia6526 *cia );
-extern void  cia_ugly_tod_updater ( struct Cia6526 *cia, struct tm *t ) ;
+extern void  cia_ugly_tod_updater ( struct Cia6526 *cia, const struct tm *t, Uint8 sec10 ) ;
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 extern int cia_snapshot_load_state ( const struct xemu_snapshot_definition_st *def , struct xemu_snapshot_block_st *block );

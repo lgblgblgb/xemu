@@ -1,7 +1,7 @@
 ## Collection of *simple* emulators of some 8 bits machines using SDL2 library,
 ## including the Commodore LCD and Commodore 65 too.
 ##
-## Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -21,10 +21,9 @@ TARGET		= tvc
 PRG_TARGET	= xtvc
 EMU_DESCRIPTION	= Videoton TV Computer
 
-CFLAGS_TARGET_xtvc	=
 SRCS_TARGET_xtvc	= tvc.c tvc_keymatrix.c sdext.c
 SRCS_COMMON_xtvc	= emutools.c emutools_hid.c emutools_config.c z80.c emutools_files.c
-CONFIG_CFLAGS_TARGET_xtvc	= sdl2
-CONFIG_LDFLAGS_TARGET_xtvc	= sdl2
+CFLAGS_TARGET_xtvc	= $(SDL2_CFLAGS)
+LDFLAGS_TARGET_xtvc	= $(SDL2_LIBS)
 
 include ../../build/Makefile.common

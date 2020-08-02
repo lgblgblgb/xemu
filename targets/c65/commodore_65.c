@@ -1,5 +1,5 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
-   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -756,6 +756,12 @@ static void shutdown_callback ( void )
 }
 
 
+void c65_reset_asked ( void )
+{
+	if (ARE_YOU_SURE("Are you sure to HARD RESET your Commodore-65?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
+		c65_reset();
+}
+
 void c65_reset ( void )
 {
 	memory[0] = memory[1] = 0xFF;
@@ -775,7 +781,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
 	if (pressed) {
 		if (key == SDL_SCANCODE_F10) {	// reset
-			c65_reset();
+			c65_reset_asked();
 		} else if (key == SDL_SCANCODE_KP_ENTER) {
 			c64_toggle_joy_emu();
 		} else if (key == SDL_SCANCODE_LSHIFT) {
@@ -813,11 +819,10 @@ static void update_emulator ( void )
 	nmi_set(IS_RESTORE_PRESSED(), 2); // Custom handling of the restore key ...
 	xemu_timekeeping_delay(40000);
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
-	if (seconds_timer_trigger) {
-		struct tm *t = xemu_get_localtime();
-		cia_ugly_tod_updater(&cia1, t);
-		cia_ugly_tod_updater(&cia2, t);
-	}
+	const struct tm *t = xemu_get_localtime();
+	const Uint8 sec10ths = xemu_get_microseconds() / 100000;
+	cia_ugly_tod_updater(&cia1, t, sec10ths);
+	cia_ugly_tod_updater(&cia2, t, sec10ths);
 }
 
 
@@ -882,8 +887,10 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
 #endif
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
+	i_am_sure_override = xemucfg_get_bool("besure");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	window_title_info_addon = emulator_speed_title;
         if (xemu_post_init(

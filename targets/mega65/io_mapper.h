@@ -1,6 +1,6 @@
-/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+/* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,11 +16,10 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_MEGA65_IO_MAPPER_H_INCLUDED
-#define __XEMU_MEGA65_IO_MAPPER_H_INCLUDED
+#ifndef XEMU_MEGA65_IO_MAPPER_H_INCLUDED
+#define XEMU_MEGA65_IO_MAPPER_H_INCLUDED
 
 #include "xemu/cia6526.h"
-#include "xemu/sid.h"
 
 extern Uint8 io_read  ( unsigned int addr );
 extern void  io_write ( unsigned int addr, Uint8 data );
@@ -29,7 +28,6 @@ extern Uint8  D6XX_registers[0x100];
 extern Uint8  D7XX[0x100];			// FIXME: newhack!
 extern int    fpga_switches;
 extern struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
-extern struct SidEmulation sid1, sid2;		// the two SIDs
 extern int    port_d607;			// ugly hack for C65 extended keys ...
 
 #endif

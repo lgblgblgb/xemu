@@ -1,4 +1,4 @@
-/* A work-in-progess Mega-65 (Commodore-65 clone origins) emulator
+/* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2017-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
@@ -40,7 +40,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "cpu_custom_functions.h"
 
 //#define DEBUGMEM DEBUG
-
+#define SLOW_RAM_SUPPORT 1
 
 // 512K is the max "main" RAM. Currently only 384K is used by M65
 Uint8 main_ram[512 << 10];
@@ -63,22 +63,11 @@ Uint8 main_ram[512 << 10];
 // the chip-RAM. Also, the first 1 or 2K can be seen in the C64-style I/O area too, at $D800
 Uint8 colour_ram[0x8000];
 // Write-Only memory (WOM) for character fetch when it would be the ROM (on C64 eg)
-Uint8 char_wom[0x1000];
+Uint8 char_wom[0x2000];
 // 16K of hypervisor RAM, can be only seen in hypervisor mode.
 Uint8 hypervisor_ram[0x4000];
-// 127Mbytes of slow-RAM. Would be the DDR memory on M65/Nexys4
-#ifdef SLOW_RAM_SUPPORT
-Uint8 slow_ram[127 << 20];
-#endif
-
-#define HYPER_RAM_SUPPORT
-#define HYPER_RAM_SIZE		(128 << 20)
-#define HYPER_RAM_START		0x100000
-#define HYPER_RAM_END 		(HYPER_RAM_START + HYPER_RAM_SIZE - 1)
-
-#ifdef HYPER_RAM_SUPPORT
-Uint8 hyper_ram[HYPER_RAM_SIZE];
-#endif
+#define SLOW_RAM_SIZE (8 << 20)
+Uint8 slow_ram[SLOW_RAM_SIZE];
 
 
 struct m65_memory_map_st {
@@ -205,28 +194,10 @@ DEFINE_WRITER(char_wom_writer) {	// Note: there is NO read for this, as it's wri
 	char_wom[GET_WRITER_OFFSET()] = data;
 }
 DEFINE_READER(slow_ram_reader) {
-#ifdef SLOW_RAM_SUPPORT
 	return slow_ram[GET_READER_OFFSET()];
-#else
-	return 0xFF;
-#endif
 }
 DEFINE_WRITER(slow_ram_writer) {
-#ifdef SLOW_RAM_SUPPORT
 	slow_ram[GET_WRITER_OFFSET()] = data;
-#endif
-}
-DEFINE_READER(hyper_ram_reader) {
-#ifdef HYPER_RAM_SUPPORT
-	return hyper_ram[GET_READER_OFFSET()];
-#else
-	return 0xFF;
-#endif
-}
-DEFINE_WRITER(hyper_ram_writer) {
-#ifdef HYPER_RAM_SUPPORT
-	hyper_ram[GET_WRITER_OFFSET()] = data;
-#endif
 }
 DEFINE_READER(invalid_mem_reader) {
 	if (XEMU_LIKELY(skip_unhandled_mem))
@@ -303,13 +274,14 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 	// full colour RAM
 	{ 0xFF80000, 0xFF87FFF, colour_ram_reader, colour_ram_writer },		// full colour RAM (32K)
 	{ 0xFFF8000, 0xFFFBFFF, hypervisor_ram_reader, hypervisor_ram_writer },	// 16KB Kickstart/hypervisor ROM
-	{ 0xFF7E000, 0xFF7EFFF, dummy_reader, char_wom_writer },		// Character "WriteOnlyMemory"
+	{ 0xFF7E000, 0xFF7FFFF, dummy_reader, char_wom_writer },		// Character "WriteOnlyMemory"
 	{ 0xFFDE800, 0xFFDEFFF, eth_buffer_reader, eth_buffer_writer },		// ethernet RX/TX buffer, NOTE: the same address, reading is always the RX_read, writing is always TX_write
 	{ 0xFFD6000, 0xFFD6FFF, disk_buffers_reader, disk_buffers_writer },	// disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space" [??]
 	{ 0xFFD7000, 0xFFD70FF, i2c_io_reader, i2c_io_writer },			// I2C devices
-	{ 0x8000000, 0xFEFFFFF, slow_ram_reader, slow_ram_writer },		// 127Mbytes of "slow RAM" (Nexys4 DDR2 RAM)
+	{ 0x8000000, 0x8000000 + SLOW_RAM_SIZE - 1, slow_ram_reader, slow_ram_writer },		// "slow RAM" also called "hyper RAM" (not to be confused with hypervisor RAM!)
+	{ 0x8000000 + SLOW_RAM_SIZE, 0xFDFFFFF, dummy_reader, dummy_writer },			// ununsed big part of the "slow RAM" or so ...
+	{ 0x4000000, 0x7FFFFFF, dummy_reader, dummy_writer },		// slow RAM memory area, not exactly known what it's for, let's define as "dummy"
 	{ 0x60000, 0xFFFFF, dummy_reader, dummy_writer },			// upper "unused" area of C65 (!) memory map. It seems C65 ROMs want it (Expansion RAM?) so we define as unused.
-	{ HYPER_RAM_START, HYPER_RAM_END, hyper_ram_reader, hyper_ram_writer },
 	// the last entry *MUST* include the all possible addressing space to "catch" undecoded memory area accesses!!
 	{ 0, 0xFFFFFFF, invalid_mem_reader, invalid_mem_writer },
 	// even after the last entry :-) to filter out programming bugs, catch all possible even not valid M65 physical address space acceses ...

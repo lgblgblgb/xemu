@@ -23,6 +23,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef	_ISOC11_SOURCE
 #	define	_ISOC11_SOURCE
 #endif
+// We need this otherwise stupid things happen like M_E is not defined by math.h, grrr.
+#ifndef _DEFAULT_SOURCE
+#	define	_DEFAULT_SOURCE
+#endif
+//#ifdef __STRICT_ANSI__
+//#	undef __STRICT_ANSI__
+//#endif
 
 // Generic stuff to signal we're inside XEMU build
 // Useful for multi-purpose sources, can be also compiled out-of-source-tree, and stuff like that ...
@@ -51,14 +58,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	ifndef	TARGET_OS_MAC
 #		error	"Unknown Apple platform (TARGET_OS_MAC is not defined by TargetConditionals.h)"
 #	endif
-#	define	XEMU_ARCH_NATIVE
 #	define	XEMU_ARCH_OSX
 #	define	XEMU_ARCH_MAC
 #	define	XEMU_ARCH_UNIX
 #	define	XEMU_ARCH_NAME	"osx"
 #	define	XEMU_SLEEP_IS_NANOSLEEP
 #elif	defined(__unix__) || defined(__unix) || defined(__linux__) || defined(__linux)
-#	define	XEMU_ARCH_NATIVE
 #	define	XEMU_ARCH_UNIX
 #	if	defined(__linux__) || defined(__linux)
 #		define	XEMU_ARCH_LINUX
@@ -71,9 +76,20 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	error	"Unknown target OS architecture."
 #endif
 
-#ifndef XEMU_NO_TARGET
-#	include "xemu-target.h"
-#	if defined(XEMU_ARCH_HTML) && !defined(CONFIG_EMSCRIPTEN_OK)
-#		error "Sorry, emscripten is not yet validated for this sub-project (CONFIG_EMSCRIPTEN_OK is not defined in xemu-target.h) ..."
-#	endif
+#if defined(XEMU_ARCH_UNIX) && !defined(_XOPEN_SOURCE)
+#	define	_XOPEN_SOURCE	700
 #endif
+
+#if defined(XEMU_ARCH_WIN) && !defined(_USE_MATH_DEFINES)
+	// It seems, some (?) versions of Windows requires _USE_MATH_DEFINES to be defined to define some math constants by math.h
+#	define	_USE_MATH_DEFINES
+#endif
+
+// It seems Mingw on windows defaults to 32 bit off_t which causes problems, even on win64
+// In theory this _FILE_OFFSET_BITS should work for UNIX as well (though maybe that's default there since ages?)
+// Mingw "should" support this since 2011 or so ... Thus in nutshell: use this trick to enable large file support
+// in general, regardless of the OS, UNIX-like or Windows. Hopefully it will work.
+#ifdef	_FILE_OFFSET_BITS
+#	undef	_FILE_OFFSET_BITS
+#endif
+#define	_FILE_OFFSET_BITS	64

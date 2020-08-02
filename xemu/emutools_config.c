@@ -1,7 +1,7 @@
 /* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and some Mega-65 features as well.
-   Copyright (C)2016,2017,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   and the MEGA65 as well.
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -250,8 +250,18 @@ int xemucfg_parse_config_file ( const char *filename_in, int open_can_fail )
 
 static int xemucfg_parse_commandline ( int argc, char **argv, const char *only_this )
 {
+	// Skip arg-0, which is program name ...
 	argc--;
 	argv++;
+#ifdef XEMU_ARCH_MAC
+	// Oh no, another MacOS miss-feature :-O it seems Finder passes a strange parameter to EVERY app it starts!!
+	// Skip that, otherwise the user will experience an error box about unknown option and Xemu exits ...
+	if (argc && !strncmp(argv[0], "-psn_", 5)) {
+		argc--;
+		argv++;
+		macos_gui_started = 1;
+	}
+#endif
 	while (argc) {
 		struct xemutools_config_st *o;
 		if (*argv[0] != '/' && *argv[0] != '-')
@@ -358,7 +368,7 @@ int xemucfg_get_num ( const char *optname )
 
 int xemucfg_get_bool ( const char *optname )
 {
-	return (int)(intptr_t)(search_option_query(optname, OPT_BOOL)->value);
+	return BOOLEAN_VALUE((int)(intptr_t)(search_option_query(optname, OPT_BOOL)->value));
 }
 
 

@@ -1,6 +1,7 @@
 #define TARGET_NAME "c65"
 #define TARGET_DESC "Commodore 65"
 #define CPU_65CE02
+#define CPU65_65CE02_6502NMOS_TIMING_EMULATION
 #define XEMU_SNAPSHOT_SUPPORT "Commodore-65"
 #define CPU_STEP_MULTI_OPS
 #define CPU65 cpu65

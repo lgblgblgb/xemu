@@ -7,6 +7,7 @@ matrix:
     - name: Linux native compilation
       os: linux
       addons:
+        hostname: lgb
         apt:
           packages:
             - alien
@@ -36,23 +37,24 @@ matrix:
       before_script:
         - set +e
         - uname -a ; lsb_release -a || true ; hostname ; pwd ; df -h ; id -a
-        - hostname ; sudo hostname lgb || true ; hostname
+        - hostname
         - set -e
         - sdl2-config --version --prefix --cflags --libs --static-libs
         - pkg-config --cflags-only-I --libs gtk+-3.0
         - set +e
+        - ps auxwwww || true
         - uptime
       script:
         - set -e
-        - make -j 2
+        - make -j 2 RELEASE=yes
         - set +e
         - for a in build/bin/*.native ; do strip $a ; ls -l $a ; done
         - set -e
-        - make deb
+        - make RELEASE=yes deb
         - set +e
         - cp build/bin/*.deb build/bin/*.rpm . || true
-        - build/bin/xc65.native --help || true
-        - ldd build/bin/xc65.native
+        - build/bin/xmega65.native --help || true
+        - ldd build/bin/xmega65.native
         - uptime ; pwd ; ls -l
       before_deploy:
         - build/deploy/before-deploy.sh xemu-deploy Linux
@@ -61,16 +63,21 @@ matrix:
         local_dir: xemu-deploy
         skip_cleanup: true
         github_token: $GHDEPLOYKEY2
-        keep_history: true
-        target_branch: binary-native
-        email: lgb@lgb.hu
-        name: Gabor Lenart LGB
+        keep_history: false
+        repo: lgblgblgb/xemu-binaries
+        target_branch: binary-linux-$TRAVIS_BRANCH
+        email: lgblgblgb@gmail.com
+        name: Gábor Lénárt aka. LGB
         verbose: false
         on:
-          branch: risky-disky
+          branch:
+            - master
+            - dev
+            - vic
     - name: Windows cross-compilation on Linux
       os: linux
       addons:
+        hostname: lgb
         apt:
           packages:
             - binutils-mingw-w64-i686
@@ -82,6 +89,7 @@ matrix:
             - gcc-mingw-w64-i686
             - gcc-mingw-w64-x86-64
             - make
+            - nsis
             - sed
             - tar
             - vim-common
@@ -90,38 +98,31 @@ matrix:
       before_script:
         - set +e
         - uname -a ; pwd ; df -h ; id -a
-        - hostname ; sudo hostname lgb || true ; hostname
         - set -e
-        - SDL_WIN_URL_OLDER="https://github.com/lgblgblgb/xep128/raw/gh-pages/files/sdl204-win-crosstools.tar.bz2"
-        - SDL_WIN_URL="https://github.com/lgblgblgb/xemu/raw/gh-pages/files/sdl-2.0.10-win-mingw-crosstools-on-linux-installed.tar.bz2"
-        - sudo mkdir -p /usr/local/cross-tools
-        - rm -f /tmp/sdl-win.tar.bz2
-        - wget -q -O /tmp/sdl-win.tar.bz2 --no-check-certificate $SDL_WIN_URL
-        - ls -l /tmp/sdl-win.tar.bz2
-        - sudo tar xfvj /tmp/sdl-win.tar.bz2 -C /usr/local/cross-tools/
-        - find /usr/local/cross-tools/ -ls
-        - rm -f /tmp/sdl-win.tar.bz2
-        - sudo ln -s /usr/local/cross-tools/i686-w64-mingw32/bin/sdl2-config /usr/bin/i686-w64-mingw32-sdl2-config
-        - i686-w64-mingw32-sdl2-config --version --prefix --cflags --libs --static-libs
-        - sudo ln -s /usr/local/cross-tools/x86_64-w64-mingw32/bin/sdl2-config /usr/bin/x86_64-w64-mingw32-sdl2-config
-        - x86_64-w64-mingw32-sdl2-config --version --prefix --cflags --libs --static-libs
+        - hostname
+        - build/install-cross-win-mingw-sdl-on-linux.sh /usr/bin
         - set +e
+        - ps auxwwww || true
         - uptime
       script:
         - set -e
-        - make -j 2 ARCH=win64
+        - make -j 2 ARCH=win64 RELEASE=yes
         - set +e
         - for a in build/bin/*.win64 ; do x86_64-w64-mingw32-strip $a ; ls -l $a ; done
         - cp README.md LICENSE `x86_64-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
         - build/zipper.sh build/bin xemu-binaries-win64.zip build/bin/*.dll build/bin/*.win64 README.md LICENSE
         - cp build/bin/xemu-binaries-win64.zip .
+        - build/nsi-build-native.sh win64 `build/system-config win64 sdl2 dll` || true
+        - cp build/bin/install-xemu-win64.exe . || true
         - set -e
-        - make -j 2 ARCH=win32
+        - make -j 2 ARCH=win32 RELEASE=yes
         - set +e
         - for a in build/bin/*.win32 ; do i686-w64-mingw32-strip $a ; ls -l $a ; done
         - cp README.md LICENSE `i686-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
         - build/zipper.sh build/bin xemu-binaries-win32.zip build/bin/*.dll build/bin/*.win32 README.md LICENSE
         - cp build/bin/xemu-binaries-win32.zip .
+        - build/nsi-build-native.sh win32 `build/system-config win32 sdl2 dll` || true
+        - cp build/bin/install-xemu-win32.exe . || true
         - uptime ; pwd ; ls -l
       before_deploy:
         - build/deploy/before-deploy.sh xemu-deploy Windows
@@ -130,52 +131,64 @@ matrix:
         local_dir: xemu-deploy
         skip_cleanup: true
         github_token: $GHDEPLOYKEY2
-        keep_history: true
-        target_branch: binary-windows
-        email: lgb@lgb.hu
-        name: Gabor Lenart LGB
+        keep_history: false
+        repo: lgblgblgb/xemu-binaries
+        target_branch: binary-windows-$TRAVIS_BRANCH
+        email: lgblgblgb@gmail.com
+        name: Gábor Lénárt aka. LGB
         verbose: false
         on:
-          branch: risky-disky
+          branch:
+            - master
+            - dev
+            - vic
     - name: MacOS native compilation
       os: osx
       osx_image: xcode11
       addons:
+        hostname: lgb
         homebrew:
           packages:
+            - create-dmg
             - sdl2
       before_script:
         - set +e
         - uname -a ; pwd ; df -h ; id -a
-        - hostname ; sudo hostname lgb || true ; hostname
+        - hostname
         - set -e
         - sdl2-config --version --prefix --cflags --libs --static-libs
         - set +e
+        - ps auxwwww || true
         - uptime
       script:
         - set -e
-        - make -j 2 ARCH=osx
+        - make -j 2 RELEASE=yes
         - set +e
-        - for a in build/bin/*.osx ; do build/mangle_dylib_osx.sh $a ; strip $a ; done
-        - build/bin/xc65.osx --help || true
+        - for a in build/bin/*.native ; do build/mangle_dylib_osx.sh $a ; strip $a ; done
+        - build/bin/xmega65.native --help || true
         - cp README.md LICENSE build/bin/
-        - build/zipper.sh build/bin xemu-binaries-osx.zip build/bin/*.dylib build/bin/*.osx README.md LICENSE
+        - build/zipper.sh build/bin xemu-binaries-osx.zip build/bin/*.dylib build/bin/*.native README.md LICENSE
         - cp build/bin/xemu-binaries-osx.zip .
         - uptime ; pwd ; ls -l
       before_deploy:
+        - build/dmg-osx-creator.sh
         - build/deploy/before-deploy.sh xemu-deploy MacOS
       deploy:
         provider: pages
         local_dir: xemu-deploy
         skip_cleanup: true
         github_token: $GHDEPLOYKEY2
-        keep_history: true
-        target_branch: binary-osx
-        email: lgb@lgb.hu
-        name: Gabor Lenart LGB
+        keep_history: false
+        repo: lgblgblgb/xemu-binaries
+        target_branch: binary-osx-$TRAVIS_BRANCH
+        email: lgblgblgb@gmail.com
+        name: Gábor Lénárt aka. LGB
         verbose: false
         on:
-          branch: risky-disky
+          branch:
+            - master
+            - dev
+            - vic
 
 env:
   global:

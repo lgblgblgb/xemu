@@ -7,7 +7,7 @@ DEPENDENCY="libsdl2-2.0-0 (>= 2.0.4), libc6 (>= 2.15), libreadline7 (>= 7.0), li
 AUTHOR="Gábor Lénárt <lgblgblgb@gmail.com>"
 WEBSITE="https://github.com/lgblgblgb/xemu/wiki"
 BUGSITE="https://github.com/lgblgblgb/xemu/issues"
-VERSION="`date '+%Y%m%d%H%M%S'`"
+#VERSION="`date '+%Y%m%d%H%M%S'`"
 ROOT=".dist/${PROJECT}_$VERSION"
 ARCH=`dpkg --print-architecture`
 DEB="${PROJECT}_current_$ARCH.deb"
@@ -18,6 +18,8 @@ BINDIR="$ROOT$BINDIRREAL"
 DATADIR="$ROOT$DATADIRREAL"
 
 cd `dirname $0` || exit 1
+
+VERSION="`cat ../build/objs/cdate.data`"
 
 echo "Current directory: `pwd`"
 echo "Build architecture: $ARCH"
@@ -69,7 +71,7 @@ Installed-Size: $SIZE
 Description: Collection of software emulations of some (mainly 8 bit) computers.
   X-Emulators (Xemu) is a kind of collection of software emulators
   targeting various computers, including the quite rare Commodore LCD
-  and Commodore 65 as well. On-going work will provide Mega-65
+  and Commodore 65 as well. On-going work will provide MEGA65
   emulation too. Xemu uses SDL2, and can run on Linux/UNIX, Windows
   and OSX, also there is the possibility to use it within a web-browser
   with the help of the Emscripten compiler.
