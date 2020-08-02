@@ -331,8 +331,7 @@ static void vic4_interpret_legacy_mode_registers()
 	REG_SCRNPTR_B0 = 0;
 
 	REG_SPRPTR_B0 = 0xF8;
-	REG_SPRPTR_B1 &= 0xC0;
-	REG_SPRPTR_B1 |= (reg_d018_screen_addr << 2) | 0x3;
+	REG_SPRPTR_B1 = (reg_d018_screen_addr << 2) | 0x3;
 	if (REG_H640 | REG_V400)
 		REG_SPRPTR_B1 |= 4;
 
@@ -861,11 +860,11 @@ static void vic4_do_sprites()
 		if ((REG_SPRITE_ENABLE & (1 << sprnum)) &&
 			(sprite_row_in_raster >= 0 && sprite_row_in_raster < spriteHeight) )
 		{
-			
-			//DEBUGPRINT("logical_raster %d  y_logical_pos %d  spriteHeight %d"  NL, logical_raster, y_logical_pos, spriteHeight);
 			const int widthBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
-			Uint8 *sprite_data_pointer =  main_ram + SPRITE_POINTER_ADDR + sprnum;
-			Uint8 *sprite_data = SPRITE_16BITPOINTER ? main_ram + 64 * (*(Uint16*)sprite_data_pointer) : main_ram + 64 * (*sprite_data_pointer);
+			Uint8 *sprite_data_pointer =  main_ram + SPRITE_POINTER_ADDR + sprnum * ((SPRITE_16BITPOINTER >> 7) + 1);
+			Uint8 *sprite_data = SPRITE_16BITPOINTER ? 
+				  main_ram + 64 * ( ((*sprite_data_pointer) << 8) + (*(sprite_data_pointer + 1))) 
+				: main_ram + 64 * (*sprite_data_pointer);
 			Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
 			int xscale = (REG_SPR640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
 			if (SPRITE_16COLOR(sprnum))
