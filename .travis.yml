@@ -74,6 +74,7 @@ matrix:
             - master
             - dev
             - vic
+            - hmw
     - name: Windows cross-compilation on Linux
       os: linux
       addons:
@@ -142,6 +143,7 @@ matrix:
             - master
             - dev
             - vic
+            - hmw
     - name: MacOS native compilation
       os: osx
       osx_image: xcode11
@@ -189,6 +191,7 @@ matrix:
             - master
             - dev
             - vic
+            - hmw
 
 env:
   global:
