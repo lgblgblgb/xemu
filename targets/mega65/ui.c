@@ -232,16 +232,18 @@ static void ui_update_sdcard ( void )
 
 static void reset_into_utility_menu ( void )
 {
-	reset_mega65_asked();
-	hid_set_autoreleased_key(ALT_KEY_POS);
-	KBD_PRESS_KEY(ALT_KEY_POS);
+	if (reset_mega65_asked()) {
+		hid_set_autoreleased_key(ALT_KEY_POS);
+		KBD_PRESS_KEY(ALT_KEY_POS);
+	}
 }
 
 static void reset_into_c64_mode ( void )
 {
-	reset_mega65_asked();
-	hid_set_autoreleased_key(0x75);
-	KBD_PRESS_KEY(0x75);	// "MEGA" key is pressed for C64 mode
+	if (reset_mega65_asked()) {
+		hid_set_autoreleased_key(0x75);
+		KBD_PRESS_KEY(0x75);	// "MEGA" key is pressed for C64 mode
+	}
 
 }
 

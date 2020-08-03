@@ -433,10 +433,13 @@ void reset_mega65 ( void )
 }
 
 
-void reset_mega65_asked ( void )
+int reset_mega65_asked ( void )
 {
-	if (ARE_YOU_SURE("Are you sure to HARD RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
+	if (ARE_YOU_SURE("Are you sure to HARD RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
 		reset_mega65();
+		return 1;
+	} else
+		return 0;
 }
 
 static void update_emulator ( void )
