@@ -210,12 +210,8 @@ void inject_ready_check_do ( void )
 			DEBUGPRINT("INJECT: clearing keyboard status on '@' trigger." NL);
 		}
 	} else if (inject_ready_check_status > 10) {
-		if (is_ready_on_screen()) {
-			inject_ready_check_status = 0;	// turn off "ready check" mode, we're done!
-			inject_ready_callback(inject_ready_userdata);
-		} else {
-			inject_ready_check_status = 1;	// unknown problem, let's restart the process of waiting READY. ...
-		}
+		inject_ready_check_status = 0;	// turn off "ready check" mode, we have our READY.
+		inject_ready_callback(inject_ready_userdata);	// callback is activated now
 	} else
 		inject_ready_check_status++;		// we're "let's wait some time after READY." phase
 }
