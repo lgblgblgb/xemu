@@ -574,6 +574,43 @@ static int system_files_directory_check ( const char *dir_name, int policy )
 #endif
 
 
+static const char xemu_sdcard_info_block_id[] = "XemuInfoBlock_PleaseDoNotDeleteOrModifyThanks";
+
+
+int sdcontent_check_xemu_signature ( void )
+{
+	Uint8 buffer[512];
+	int ret;
+	if (sdcard_read_block(XEMU_INFO_SDCARD_BLOCK_NO, buffer)) {
+		ret = -1;
+		goto end;
+	}
+	const int r = strlen(xemu_sdcard_info_block_id) + 1;
+	if (memcmp(xemu_sdcard_info_block_id, buffer, r)) {
+		ret = 0;
+		goto end;
+	}
+	ret = (int)(Uint32)(buffer[r] + (buffer[r + 1] << 8) + (buffer[r + 2] << 16) + (buffer[r + 3] << 24));
+end:
+	DEBUGPRINT("SDCARD: check Xemu signature (@block %d): disk=%d this_xemu=%d" NL, XEMU_INFO_SDCARD_BLOCK_NO, ret, MEMCONTENT_VERSION_ID);
+	return ret;
+}
+
+
+static int sdcontent_put_xemu_signature ( void )
+{
+	Uint8 buffer[512];
+	memset(buffer, 0, sizeof buffer);
+	strcpy((char*)buffer, xemu_sdcard_info_block_id);
+	const int r = strlen(xemu_sdcard_info_block_id) + 1;
+	buffer[r + 0] = ((MEMCONTENT_VERSION_ID)      ) & 0xFF;
+	buffer[r + 1] = ((MEMCONTENT_VERSION_ID) >>  8) & 0xFF;
+	buffer[r + 2] = ((MEMCONTENT_VERSION_ID) >> 16) & 0xFF;
+	buffer[r + 3] = ((MEMCONTENT_VERSION_ID) >> 24) & 0xFF;
+	return sdcard_write_block(XEMU_INFO_SDCARD_BLOCK_NO, buffer);
+}
+
+
 // This function must be called after initializing SDcard, so it's safe for use to call sdcard_read_block() and sdcard_write_block()
 int sdcontent_handle ( Uint32 size_in_blocks, const char *update_dir_path, int options )
 {
@@ -645,19 +682,24 @@ int sdcontent_handle ( Uint32 size_in_blocks, const char *update_dir_path, int o
 		//update_from_directory(system_files_directory, options);
 		char rom_path[PATH_MAX];
 		snprintf(rom_path, sizeof rom_path, "%s%s", sdl_pref_dir, MEGA65_ROM_NAME);
-		update_sdcard_file(MEGA65_ROM_NAME,	options | SDCONTENT_SYS_FILE,	rom_path,				-MEGA65_ROM_SIZE);
+		int r = 0;
+		r |= update_sdcard_file(MEGA65_ROM_NAME,	options | SDCONTENT_SYS_FILE,	rom_path,				-MEGA65_ROM_SIZE);
 		snprintf(rom_path, sizeof rom_path, "%s%s", sdl_pref_dir, CHAR_ROM_NAME);
-		update_sdcard_file(CHAR_ROM_NAME,	options | SDCONTENT_SYS_FILE,	rom_path,				-CHAR_ROM_SIZE);
-		update_sdcard_file("BANNER.M65",	options,			(const char*)meminitdata_banner,	MEMINITDATA_BANNER_SIZE);
-		update_sdcard_file("FREEZER.M65",	options,			(const char*)meminitdata_freezer,	MEMINITDATA_FREEZER_SIZE);
+		r |= update_sdcard_file(CHAR_ROM_NAME,		options | SDCONTENT_SYS_FILE,	rom_path,				-CHAR_ROM_SIZE);
+		r |= update_sdcard_file("BANNER.M65",		options,			(const char*)meminitdata_banner,	MEMINITDATA_BANNER_SIZE);
+		r |= update_sdcard_file("FREEZER.M65",		options,			(const char*)meminitdata_freezer,	MEMINITDATA_FREEZER_SIZE);
 		char *d81 = xemu_malloc(D81_SIZE);
 		memset(d81, 0, D81_SIZE);
 		memcpy(d81 + 0x61800, d81_at_61800, sizeof d81_at_61800);
 		memcpy(d81 + 0x61900, d81_at_61900, sizeof d81_at_61900);
-		update_sdcard_file(default_disk_image,	options,			d81,					D81_SIZE);
+		r |= update_sdcard_file(default_disk_image,	options,			d81,					D81_SIZE);
 		strcpy(d81, xemu_external_d81_signature);
-		update_sdcard_file(xemu_disk_image,	options,			d81,					D81_SIZE);
+		r |= update_sdcard_file(xemu_disk_image,	options,			d81,					D81_SIZE);
 		free(d81);
+		if (r)
+			ERROR_WINDOW("Some error occured while updating your SD-card image file!");
+		else
+			sdcontent_put_xemu_signature();
 	}
 	/* ---- ROUND#3: update user specified files (if any) ---- */
 	if (update_dir_path) {
