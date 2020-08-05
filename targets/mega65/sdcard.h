@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SD_ST_EXT_BUS	0x80
 #define SD_ST_ERROR	0x40
 #define SD_ST_FSM_ERROR	0x20
-// 0x10 was the SDHC bit, but now Mega65 does not support non-SDHC cards!
+// 0x10 was the SDHC bit, but now MEGA65 does not support non-SDHC cards!
 #define SD_ST_MAPPED	0x08
 #define SD_ST_RESET	0x04
 #define SD_ST_BUSY1	0x02

@@ -39,9 +39,9 @@ recreatememcontent:
 	rm -f memcontent.c.tmp
 	echo "/* !THIS IS A GENERATED FILE! DO NOT EDIT!" >> memcontent.c.tmp
 	echo " * Instead, say 'make recreatememcontent' to re-generate this file" >> memcontent.c.tmp
-	echo " * Binary data from Mega65 project. Please note, that Mega65 is" >> memcontent.c.tmp
+	echo " * Binary data from MEGA65 project. Please note, that MEGA65 is" >> memcontent.c.tmp
 	echo " * an open source, GNU/GPL project, like Xemu. Thus, it's valid" >> memcontent.c.tmp
-	echo " * to use binaries as it's from the compiled version of Mega65" >> memcontent.c.tmp
+	echo " * to use binaries as it's from the compiled version of MEGA65" >> memcontent.c.tmp
 	echo " * which is available in source form at https://github.com/MEGA65/mega65-core */" >> memcontent.c.tmp
 	echo '#include "xemu/emutools.h"' >> memcontent.c.tmp
 	echo '#include "memcontent.h"' >> memcontent.c.tmp

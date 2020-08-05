@@ -277,7 +277,7 @@ DEFINE_WRITER(i2c_io_writer) {
 	// now just ignore [no I2C devices]
 }
 
-// Memory layout table for Mega-65
+// Memory layout table for MEGA65
 // Please note, that for optimization considerations, it should be organized in a way
 // to have most common entries first, for faster hit in most cases.
 static const struct m65_memory_map_st m65_memory_map[] = {

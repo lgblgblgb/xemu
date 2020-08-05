@@ -5,7 +5,7 @@
    This is the VIC-IV "emulation". Currently it does one-frame-at-once
    kind of horrible work, and only a subset of VIC2 and VIC3 knowledge
    is implemented, with some light VIC-IV features, to be able to "boot"
-   of Mega-65 with standard configuration (kickstart, SD-card).
+   of MEGA65 with standard configuration (kickstart, SD-card).
    Some of the missing features (VIC-2/3): hardware attributes,
    DAT, sprites, screen positioning, H1280 mode, V400 mode, interlace,
    chroma killer, VIC2 MCM, ECM, 38/24 columns mode, border.
@@ -476,7 +476,7 @@ static inline Uint8 *vic2_get_chargen_pointer ( void )
 		//int crom = vic_registers[0x30] & 64;
 		//DEBUG("VIC2: chargen: BANK=%04X OFS=%04X CROM=%d" NL, vic2_16k_bank, offs, crom);
 		if ((vic2_16k_bank == 0x0000 || vic2_16k_bank == 0x8000) && (offs == 0x1000 || offs == 0x1800)) {  // check if chargen info is in ROM
-			// In case of Mega65, fetching char-info from ROM means to access the "WOM"
+			// In case of MEGA65, fetching char-info from ROM means to access the "WOM"
 			// FIXME: what should I do with bit 6 of VIC-III register $30 ["CROM"] ?!
 			return char_wom + offs - 0x1000;
 		} else
@@ -501,7 +501,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 	Uint8 *vidp, *colp = colour_ram;
 	int x = 0, y = 0, xlim, ylim, charline = 0;
 	Uint8 *chrg = vic2_get_chargen_pointer();
-	int inc_p = (vic_registers[0x54] & 1) ? 2 : 1;	// VIC-IV (Mega-65) 16 bit text mode?
+	int inc_p = (vic_registers[0x54] & 1) ? 2 : 1;	// VIC-IV (MEGA65) 16 bit text mode?
 	int scanline = 0;
 	if (vic_registers[0x31] & 128) { // check H640 bit: 80 column mode?
 		xlim = 79;

@@ -159,7 +159,7 @@ Uint8 io_read ( unsigned int addr )
 			addr &= 0xFF;
 			if (addr < 9)
 				RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);	// FIXME: UART is not yet supported!
-			if (addr >= 0x80 && addr <= 0x93)	// SDcard controller etc of Mega65
+			if (addr >= 0x80 && addr <= 0x93)	// SDcard controller etc of MEGA65
 				return sdcard_read_register(addr - 0x80);
 			if ((addr & 0xF0) == 0xE0)
 				return eth65_read_reg(addr);
@@ -185,7 +185,7 @@ Uint8 io_read ( unsigned int addr )
 				case 0x11:				// modifier keys on kbd being used
 					return hwa_kbd_get_modifiers();
 				default:
-					DEBUG("MEGA65: reading Mega65 specific I/O @ $D6%02X result is $%02X" NL, addr, D6XX_registers[addr]);
+					DEBUG("MEGA65: reading MEGA65 specific I/O @ $D6%02X result is $%02X" NL, addr, D6XX_registers[addr]);
 					return D6XX_registers[addr];
 			}
 		case 0x17:	// $D700-$D7FF ~ C65 I/O mode
@@ -370,7 +370,7 @@ void io_write ( unsigned int addr, Uint8 data )
 				} else
 					RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");	// FIXME: UART is not yet supported!
 			}
-			if (addr >= 0x80 && addr <= 0x93) {			// SDcard controller etc of Mega65
+			if (addr >= 0x80 && addr <= 0x93) {			// SDcard controller etc of MEGA65
 				sdcard_write_register(addr - 0x80, data);
 				return;
 			}

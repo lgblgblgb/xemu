@@ -50,7 +50,7 @@ Uint8 dma_status;
 Uint8 dma_registers[16];		// The four DMA registers (with last values written by the CPU)
 int   dma_chip_revision;		// revision of DMA chip
 #ifdef MEGA65
-int   dma_chip_revision_is_dynamic;	// allowed to change DMA chip revision (normally yes) by Mega65
+int   dma_chip_revision_is_dynamic;	// allowed to change DMA chip revision (normally yes) by MEGA65
 int   dma_chip_revision_override;
 #endif
 int   dma_chip_initial_revision;
@@ -88,16 +88,16 @@ static struct {
 /* END HACK */
 
 
-// In case of Mega65 we should support fractional steps (1 byte for fraction). We do this to have
+// In case of MEGA65 we should support fractional steps (1 byte for fraction). We do this to have
 // common code base with C65 emulator's DMA to have a single variable for source (source_addr) and
 // target (target_addr) "within the megabyte" variable, but in case of C65 it's the "clean" address,
-// while in case of Mega-65, the lower 8 bits are the fraction. This macro is used to reference the
-// integer part only, in case of C65 it's simply as-is, for Mega65, it's skipping the low 8 bits, ie
+// while in case of MEGA65, the lower 8 bits are the fraction. This macro is used to reference the
+// integer part only, in case of C65 it's simply as-is, for MEGA65, it's skipping the low 8 bits, ie
 // shifting data to the right by 8. Note, that since within a megabyte DMA can operate only, 32 bits
 // are more than enough even this way (20 bits + 8 bits = 28 bits, even signed 32 bit int type is
 // suitable).
 // DMA_*_SKIP_RATE macros just gives the step rate (always positive). In case of C65, it's of course
-// fixed to be 1 ('hold' is not handled this way). For Mega65, we use (see the source fix-point
+// fixed to be 1 ('hold' is not handled this way). For MEGA65, we use (see the source fix-point
 // arithmetic description above!) the actual M65 DMA registers for those settings.
 // DMA_ADDR_FRACT_PART() is used only in debug functions to log
 #ifdef MEGA65
@@ -116,10 +116,10 @@ static struct {
 
 // source and target DMA "channels":
 static struct {
-	int addr;	// address of the current operation. On Mega65 it's a fixed-point math value, on C65 it's a pure number
+	int addr;	// address of the current operation. On MEGA65 it's a fixed-point math value, on C65 it's a pure number
 	int base;	// base address for "addr", always a "pure" number! On M65 it also contains the "megabyte selection"
 	int mask;	// mask value to handle warp around etc, eg 0xFFFF for 64K, 0xFFF for 4K (I/O)
-	int step;	// step value, zero(HOLD)/negative/positive. On Mega65, this is a fixed point arithmetic value!!
+	int step;	// step value, zero(HOLD)/negative/positive. On MEGA65, this is a fixed point arithmetic value!!
 	int is_modulo;	// modulo mode, if it's not zero
 	int is_io;	// channel access I/O instead of memory, if it's not zero
 } source, target;
@@ -202,7 +202,7 @@ static XEMU_INLINE void mix_next ( void )
 
 void dma_write_reg ( int addr, Uint8 data )
 {
-	// DUNNO about DMAgic too much. It's merely guessing from my own ROM assembly tries, C65gs/Mega65 VHDL, and my ideas :)
+	// DUNNO about DMAgic too much. It's merely guessing from my own ROM assembly tries, C65gs/MEGA65 VHDL, and my ideas :)
 	// The following condition is commented out for now. FIXME: how it is handled for real?!
 	//if (vic_iomode != VIC4_IOMODE)
 	//	addr &= 3;
@@ -220,10 +220,10 @@ void dma_write_reg ( int addr, Uint8 data )
 	dma_registers[addr] = data;
 	hack.enhanced_dma = 0;
 	switch (addr) {
-		case 0x2:	// for compatibility with C65, Mega65 here resets the MB part of the DMA list address
+		case 0x2:	// for compatibility with C65, MEGA65 here resets the MB part of the DMA list address
 			dma_registers[4] = 0;	// this is the "MB" part of the DMA list address (hopefully ...)
 			break;
-		case 0xE:	// Set low order bits of DMA list address, without starting (Mega65 feature, but without VIC4 new mode, this reg will never addressed here anyway)
+		case 0xE:	// Set low order bits of DMA list address, without starting (MEGA65 feature, but without VIC4 new mode, this reg will never addressed here anyway)
 			dma_registers[0] = data;
 			break;
 		case 5:
@@ -361,7 +361,7 @@ int dma_update ( void )
 		// command == -1 signals the situation, that the (next) DMA command should be read!
 		// This part is highly incorrect, ie fetching so many bytes in one step only of dma_update()
 #ifdef MEGA65
-		// set DMA revision based on register #3 bit 0, this is a Mega65 feature
+		// set DMA revision based on register #3 bit 0, this is a MEGA65 feature
 		if (dma_chip_revision_override >= 0) {
 			DEBUG("DMA: changing DMA revision by enhanced list %d -> %d" NL, dma_chip_revision, dma_chip_revision_override);
 			dma_chip_revision = dma_chip_revision_override;
@@ -374,7 +374,7 @@ int dma_update ( void )
 			}
 		}
 #endif
-		// NOTE: in case of Mega65: DMA_READ_LIST_NEXT_BYTE() uses the "megabyte" part already (taken from reg#4, in case if that reg is written)
+		// NOTE: in case of MEGA65: DMA_READ_LIST_NEXT_BYTE() uses the "megabyte" part already (taken from reg#4, in case if that reg is written)
 		command            = DMA_READ_LIST_NEXT_BYTE();
 		dma_op             = (enum dma_op_types)(command & 3);
 		modulo.col_limit   = DMA_READ_LIST_NEXT_BYTE();
@@ -391,7 +391,7 @@ int dma_update ( void )
 		else
 			subcommand = 0;	// just make gcc happy not to generate warning later
 #ifdef MEGA65
-		// On Mega65, modulo is used as a fixed point arithmetic value
+		// On MEGA65, modulo is used as a fixed point arithmetic value
 		modulo.value       = DMA_READ_LIST_NEXT_BYTE() <<  8;
 		modulo.value      |= DMA_READ_LIST_NEXT_BYTE() << 16;
 #else
@@ -586,7 +586,7 @@ int dma_update ( void )
 				hack.enhanced_dma = 0;
 			}
 			dma_chip_revision_override = -1;
-			// Mega65: reset fractional step registers to the default at the end! (it seems M65 does this, by reading its VHDL source)
+			// MEGA65: reset fractional step registers to the default at the end! (it seems M65 does this, by reading its VHDL source)
 			// Note, this is the old DMA behaviour not connected to the "hack" ...
 			dma_registers[0x08] = 0;	// source skip rate, fraction part
 			dma_registers[0x09] = 1;	// source skip rate, integer part

@@ -367,7 +367,7 @@ static int fdisk ( Uint32 device_size )
 	block[0x1cc] = (usr_part_sects >> 16) & 0xff;
 	block[0x1cd] = (usr_part_sects >> 24) & 0xff;
 	// The 'system' area/partition
-	block[0x1d2] = 0x41;				// partition type, Mega-65 system partition
+	block[0x1d2] = 0x41;				// partition type, MEGA65 system partition
 	block[0x1d6] = (sys_part_start      ) & 0xff;	// LBA start of our sys-area
 	block[0x1d7] = (sys_part_start >>  8) & 0xff;
 	block[0x1d8] = (sys_part_start >> 16) & 0xff;
@@ -405,7 +405,7 @@ static int fdisk ( Uint32 device_size )
   Notes:
 	Currently policy: if file already existed on the image, we will reuse the FAT chain, _IF_ it's not fragmented and would fit.
 	If the FAT chain is not long enough (ie, the size of the new file wouldn't fit in terms of number of clusters) we rather
-	create a NEW fat chain, and free old one. This is because it's easier to do so, and some Mega65 features (disk images) needs
+	create a NEW fat chain, and free old one. This is because it's easier to do so, and some MEGA65 features (disk images) needs
 	strictly UNFRAGMENTED state anyway.
 */
 static int update_sdcard_file ( const char *on_card_name, int options, const char *fn_or_data, int size_to_install )
@@ -462,7 +462,7 @@ static int update_sdcard_file ( const char *on_card_name, int options, const cha
 error_on_maybe_sys_file:
 	if ((options & SDCONTENT_SYS_FILE))
 		ERROR_WINDOW(
-			"This file is a must for Xemu/Mega65, however it's under\n"
+			"This file is a must for Xemu/MEGA65, however it's under\n"
 			"copyright by their respective owners.\n"
 			"It's totally the user's responsibility to get/use/own/handle this file!\n%s",
 			fn_or_data
@@ -636,7 +636,7 @@ int sdcontent_handle ( Uint32 size_in_blocks, const char *update_dir_path, int o
 		// would be unusable anyway that we can judge it as being subject of fdisk/format.
 		if (has_block_nonzero_byte(block)) {
 			// Though data partition is the first one created by THIS .c source, older existing
-			// images formatted with Mega65's util itself has it as the second. Thus we just
+			// images formatted with MEGA65's util itself has it as the second. Thus we just
 			// hear mfat_init_mbr()'s response, which gives us back the first VALID FAT32 partition,
 			// or -1 if fails to find any.
 			int part = mfat_init_mbr();

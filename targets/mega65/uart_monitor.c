@@ -154,7 +154,7 @@ static void execute_command ( char *cmd )
 		case 'H':
 		case '?':
 			if (check_end_of_command(cmd, 1))
-				umon_printf("Xemu/Mega65 Serial Monitor\r\nWarning: not 100%% compatible with UART monitor of a *real* Mega65 ...");
+				umon_printf("Xemu/MEGA65 Serial Monitor\r\nWarning: not 100%% compatible with UART monitor of a *real* MEGA65 ...");
 			break;
 		case 'r':
 		case 'R':
