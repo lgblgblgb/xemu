@@ -520,9 +520,14 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x5B): 
 			break;
 		CASE_VIC_4(0x5C):
+			vic4_sideborder_touched = 1;
+			break;
+
 		CASE_VIC_4(0x5D): 
 			DEBUGPRINT("WRITE $%04x SIDEBORDER/HOTREG: $%02x" NL, addr, data);
-			vic4_sideborder_touched = 1;
+
+			if((vic_registers[0x5D] & 0x1F) ^ (data & 0x1F))  // sideborder MSB (0..5) modified ? 
+				vic4_sideborder_touched = 1;
 			break;		
 		
 		CASE_VIC_4(0x5E): 
@@ -535,16 +540,16 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;
 		CASE_VIC_4(0x64):
 		CASE_VIC_4(0x65): CASE_VIC_4(0x66): CASE_VIC_4(0x67): /*CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):*/ CASE_VIC_4(0x6B): /*CASE_VIC_4(0x6C):
-		CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):*/ CASE_VIC_4(0x6F): /*CASE_VIC_4(0x70):*/ CASE_VIC_4(0x71): CASE_VIC_4(0x72): CASE_VIC_4(0x73): CASE_VIC_4(0x74):
+		CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):*//*CASE_VIC_4(0x70):*/ CASE_VIC_4(0x71): CASE_VIC_4(0x72): CASE_VIC_4(0x73): CASE_VIC_4(0x74):
 		CASE_VIC_4(0x75): CASE_VIC_4(0x76): CASE_VIC_4(0x77): CASE_VIC_4(0x78): CASE_VIC_4(0x79): CASE_VIC_4(0x7A): CASE_VIC_4(0x7B): CASE_VIC_4(0x7C):
 		CASE_VIC_4(0x7D): CASE_VIC_4(0x7E): CASE_VIC_4(0x7F):
 			break;
 
 		CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):
 			break;
-		CASE_VIC_4(0x6C): CASE_VIC_4(0x6D): 
+		CASE_VIC_4(0x6C): CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):
 			break;
-		CASE_VIC_4(0x6E):
+		CASE_VIC_4(0x6F):
 			vicii_first_raster  = data & 0x1F;
 			if (!in_hypervisor)
 				vic4_sideborder_touched = 1;
@@ -990,12 +995,6 @@ static void vic4_render_char_raster()
 
 	while (line_char_index < REG_CHRCOUNT)
 	{
-		// if (display_row_adj < 0 || display_row_adj > 24 ) { // FIX: get display_row from registers.
-		// 	(*current_pixel++) = palette[REG_SCREEN_COLOR];
-		// 	xcounter++;
-		// 	continue;
-		// }
-
 		Uint16 color_data = *(colour_ram_current_ptr++);
 		Uint16 char_value = *(screen_ram_current_ptr++);
 
