@@ -474,11 +474,9 @@ void memory_init ( void )
 	memory_set_vic3_rom_mapping(0);
 	memory_set_do_map();
 	// Initiailize memory content with something ...
-	memset(main_ram, 0xFF, sizeof main_ram);
-	memset(colour_ram, 0xFF, sizeof colour_ram);
-#ifdef SLOW_RAM_SUPPORT
-	memset(slow_ram, 0xFF, sizeof slow_ram);
-#endif
+	memset(main_ram,   0x00, sizeof main_ram);
+	memset(colour_ram, 0x00, sizeof colour_ram);
+	memset(slow_ram,   0xFF, sizeof slow_ram);
 	DEBUG("MEM: End of memory initiailization" NL);
 }
 
