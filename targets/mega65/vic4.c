@@ -560,7 +560,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 
 			for (int i = 0; i < 8; ++i) {
 				const Uint8 *sprite_data_pointer =  main_ram + SPRITE_POINTER_ADDR + i * ((SPRITE_16BITPOINTER >> 7) + 1);
-				const Uint32 dataptr = SPRITE_16BITPOINTER ? 64 * ( ((*sprite_data_pointer) << 8) + (*(sprite_data_pointer + 1))) : 64 * (*sprite_data_pointer);
+				const Uint32 dataptr = SPRITE_16BITPOINTER ? 64 * ( ((*(sprite_data_pointer+1) << 8)) + (*(sprite_data_pointer))) : 64 * (*sprite_data_pointer);
 				DEBUGPRINT("Sprite #%d data @ $%08X %s" NL , i, dataptr, dataptr > 384*1024 ? "!!! OUT OF 384K main RAM !!!" : "");
 			}
 
@@ -885,7 +885,7 @@ static void vic4_do_sprites()
 				const int widthBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 				const Uint8 *sprite_data_pointer =  main_ram + SPRITE_POINTER_ADDR + sprnum * ((SPRITE_16BITPOINTER >> 7) + 1);
 				const Uint32 sprite_data_addr = SPRITE_16BITPOINTER ? 
-					64 * ( ((*sprite_data_pointer) << 8) + (*(sprite_data_pointer + 1))) 
+					64 * ((*(sprite_data_pointer + 1) << 8) | (*sprite_data_pointer))
 					: 64 * (*sprite_data_pointer);
 
 				if (sprite_data_addr > 384*1024)
