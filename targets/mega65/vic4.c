@@ -325,15 +325,18 @@ static void vic4_interpret_legacy_mode_registers()
 	Uint8 width = REG_H640 ? 80 : 40;
 	REG_CHRCOUNT = width;
 	SET_CHARSTEP_BYTES(width);// * (REG_16BITCHARSET ? 2 : 1));
-
+	
+	REG_SCRNPTR_B0 = 0;
 	REG_SCRNPTR_B1 &= 0xC0;
 	REG_SCRNPTR_B1 |= REG_H640 ?  ((reg_d018_screen_addr & 14) << 2) : (reg_d018_screen_addr << 2);
-	REG_SCRNPTR_B0 = 0;
+	REG_SCRNPTR_B2 = 0;
+	vic_registers[0x63] &= 0b11110000;
 
 	REG_SPRPTR_B0 = 0xF8;
 	REG_SPRPTR_B1 = (reg_d018_screen_addr << 2) | 0x3;
 	if (REG_H640 | REG_V400)
 		REG_SPRPTR_B1 |= 4;
+	vic_registers[0x6E] &= 128;
 
 	SET_COLORRAM_BASE(0);
 	DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charscale=%d, border yt=%d, yb=%d, xl=%d, xr=%d, textxpos=%d, textypos=%d,"
@@ -548,6 +551,19 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):
 			break;
 		CASE_VIC_4(0x6C): CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):
+			vic_registers[addr & 0x7F] = data;
+			if (SPRITE_POINTER_ADDR > 384*1024) {
+				DEBUGPRINT("WARNING !!! : SPRITE_POINTER_ADDR at $%08X exceeds 384K chip RAM!!!!  Current behavior is undefined." NL, SPRITE_POINTER_ADDR);
+			}
+
+			DEBUGPRINT("SPRPTRADR/SPRPTRBNK Modified. Sprite Data Pointers now: " NL);
+
+			for (int i = 0; i < 8; ++i) {
+				const Uint8 *sprite_data_pointer =  main_ram + SPRITE_POINTER_ADDR + i * ((SPRITE_16BITPOINTER >> 7) + 1);
+				const Uint32 dataptr = SPRITE_16BITPOINTER ? 64 * ( ((*sprite_data_pointer) << 8) + (*(sprite_data_pointer + 1))) : 64 * (*sprite_data_pointer);
+				DEBUGPRINT("Sprite #%d data @ $%08X %s" NL , i, dataptr, dataptr > 384*1024 ? "!!! OUT OF 384K main RAM !!!" : "");
+			}
+
 			break;
 		CASE_VIC_4(0x6F):
 			vicii_first_raster  = data & 0x1F;
@@ -853,31 +869,40 @@ static void vic4_do_sprites()
 	//
 	for (int sprnum = 7; sprnum >= 0; --sprnum)
 	{
-		const int spriteHeight = SPRITE_EXTHEIGHT(sprnum) ? REG_SPRHGHT : 21;
-		int x_display_pos = border_x_left + ((SPRITE_POS_X(sprnum) - SPRITE_X_BASE_COORD) * (REG_SPR640 ? 1 : 2)); // in display units
-		int y_logical_pos = SPRITE_POS_Y(sprnum) - SPRITE_Y_BASE_COORD +(BORDER_Y_TOP / (REG_V400 ? 1 : 2)); // in logical units
+		if (REG_SPRITE_ENABLE & (1 << sprnum))
+		{ 
+			const int spriteHeight = SPRITE_EXTHEIGHT(sprnum) ? REG_SPRHGHT : 21;
+			int x_display_pos = border_x_left + ((SPRITE_POS_X(sprnum) - SPRITE_X_BASE_COORD) * (REG_SPR640 ? 1 : 2)); // in display units
+			int y_logical_pos = SPRITE_POS_Y(sprnum) - SPRITE_Y_BASE_COORD +(BORDER_Y_TOP / (REG_V400 ? 1 : 2)); // in logical units
 
-		int sprite_row_in_raster = logical_raster - y_logical_pos;
-		
-		if (SPRITE_VERT_2X(sprnum))
-			sprite_row_in_raster = sprite_row_in_raster >> 1;
+			int sprite_row_in_raster = logical_raster - y_logical_pos;
+			
+			if (SPRITE_VERT_2X(sprnum))
+				sprite_row_in_raster = sprite_row_in_raster >> 1;
 
-		if ((REG_SPRITE_ENABLE & (1 << sprnum)) &&
-			(sprite_row_in_raster >= 0 && sprite_row_in_raster < spriteHeight) )
-		{
-			const int widthBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
-			Uint8 *sprite_data_pointer =  main_ram + SPRITE_POINTER_ADDR + sprnum * ((SPRITE_16BITPOINTER >> 7) + 1);
-			Uint8 *sprite_data = SPRITE_16BITPOINTER ? 
-				  main_ram + 64 * ( ((*sprite_data_pointer) << 8) + (*(sprite_data_pointer + 1))) 
-				: main_ram + 64 * (*sprite_data_pointer);
-			Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
-			int xscale = (REG_SPR640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
-			if (SPRITE_16COLOR(sprnum))
-				vic4_draw_sprite_row_16color(sprnum, x_display_pos, row_data, xscale);
-			else if (SPRITE_MULTICOLOR(sprnum))
-				vic4_draw_sprite_row_multicolor(sprnum, x_display_pos, row_data, xscale);
-			else
-				vic4_draw_sprite_row_mono(sprnum, x_display_pos, row_data, xscale);
+			if (sprite_row_in_raster >= 0 && sprite_row_in_raster < spriteHeight) 
+			{
+				const int widthBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
+				const Uint8 *sprite_data_pointer =  main_ram + SPRITE_POINTER_ADDR + sprnum * ((SPRITE_16BITPOINTER >> 7) + 1);
+				const Uint32 sprite_data_addr = SPRITE_16BITPOINTER ? 
+					64 * ( ((*sprite_data_pointer) << 8) + (*(sprite_data_pointer + 1))) 
+					: 64 * (*sprite_data_pointer);
+
+				if (sprite_data_addr > 384*1024)
+				{
+					DEBUGPRINT("Sprite %d data at $%08X (out of 384K chip RAM!) -- Behaviour is undefined!" NL, sprnum, sprite_data_addr);
+				}
+
+				const Uint8 *sprite_data = main_ram + sprite_data_addr;
+				Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
+				int xscale = (REG_SPR640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
+				if (SPRITE_16COLOR(sprnum))
+					vic4_draw_sprite_row_16color(sprnum, x_display_pos, row_data, xscale);
+				else if (SPRITE_MULTICOLOR(sprnum))
+					vic4_draw_sprite_row_multicolor(sprnum, x_display_pos, row_data, xscale);
+				else
+					vic4_draw_sprite_row_mono(sprnum, x_display_pos, row_data, xscale);
+			}
 		}
 	}
 }

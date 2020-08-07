@@ -88,7 +88,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_SCRNPTR_B0      vic_registers[0x60]
 #define REG_SCRNPTR_B1      vic_registers[0x61]
 #define REG_SCRNPTR_B2      vic_registers[0x62]
-#define REG_SCRNPTR_B3      vic_registers[0x63]
+#define REG_SCRNPTR_B3      (vic_registers[0x63] & 0xF)
 #define REG_COLPTR          vic_registers[0x64]
 #define REG_COLPTR_MSB      vic_registers[0x65]
 #define REG_CHARPTR_B0      vic_registers[0x68]
@@ -115,7 +115,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define CHARGEN_X_START     (((Uint16)REG_TEXTXPOS) | (REG_TEXTXPOS_U4) << 8)
 #define CHARSTEP_BYTES      (((Uint16)REG_CHARSTEP) | (REG_CHARSTEP_U8) << 8)
 #define SCREEN_RAM_ADDR_VIC  (REG_SCREEN_ADDR * 1024)
-#define SCREEN_ADDR          ((Uint32)REG_SCRNPTR_B0 | (REG_SCRNPTR_B1<<8) | (REG_SCRNPTR_B2 <<16))
+#define SCREEN_ADDR          ((Uint32)REG_SCRNPTR_B0 | (REG_SCRNPTR_B1<<8) | (REG_SCRNPTR_B2 <<16) | (REG_SCRNPTR_B3 << 24))
 #define CHARSET_ADDR         ((Uint32)REG_CHARPTR_B0 | (REG_CHARPTR_B1<<8) | (REG_CHARPTR_B2 <<16))
 #define VIC2_BITMAP_ADDR     ((Uint32)REG_CHARPTR_B0 | (REG_CHARPTR_B1<<8) | (REG_CHARPTR_B2 <<16))
 #define SPRITE_POINTER_ADDR  ((Uint32)REG_SPRPTR_B0  | (REG_SPRPTR_B1<<8)  | (REG_SPRPTR_B2 <<16))
