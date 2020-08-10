@@ -49,10 +49,10 @@ int vic_iomode;							// VIC2/VIC3/VIC4 mode
 int force_fast;							// POKE 0,64 and 0,65 trick ...
 
 
-Uint8 vic_registers[0x80];		// VIC-4 registers
-int vic_iomode;				// VIC2/VIC3/VIC4 mode
-int force_fast;				// POKE 0,64 and 0,65 trick ...
-int scanline;				// current scan line number
+Uint8 vic_registers[0x80];				// VIC-4 registers
+int vic_iomode;							// VIC2/VIC3/VIC4 mode
+int force_fast;							// POKE 0,64 and 0,65 trick ...
+int scanline;							// current scan line number
 int cpu_cycles_per_scanline;
 static int compare_raster;				// raster compare (9 bits width) data
 static int logical_raster = 0;
@@ -75,6 +75,7 @@ extern int user_scanlines_setting;
 float char_x_step = 0.0;
 static int warn_ctrl_b_lo = 1;
 static int enable_bg_paint = 1;
+static int display_row_count = 0;
 
 // VIC-IV Modeline Parameters
 // ----------------------------------------------------
@@ -297,11 +298,13 @@ static void vic4_interpret_legacy_mode_registers()
 		{
 			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster));
 			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT - SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster) - 1);
+			display_row_count = 25;
 		}
 		else
 		{
 			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster) + 8);
 			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT - (2 * vicii_first_raster) - SINGLE_TOP_BORDER_200 - 7);
+			display_row_count = 24;
 		}
 
 		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 + (2 * vicii_first_raster) - 6 + REG_VIC2_YSCROLL * 2);
@@ -312,11 +315,13 @@ static void vic4_interpret_legacy_mode_registers()
 		{
 			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster));
 			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT - SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 1);
+			display_row_count = 25*2;
 		}
 		else
 		{
 			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) + 8);
 			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT - (2 * vicii_first_raster) - SINGLE_TOP_BORDER_200 - 7);
+			display_row_count = 24*2;
 		}
 
 		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 + (2 * vicii_first_raster) - 6 + (REG_VIC2_YSCROLL * 2));
@@ -325,15 +330,18 @@ static void vic4_interpret_legacy_mode_registers()
 	Uint8 width = REG_H640 ? 80 : 40;
 	REG_CHRCOUNT = width;
 	SET_CHARSTEP_BYTES(width);// * (REG_16BITCHARSET ? 2 : 1));
-
+	
+	REG_SCRNPTR_B0 = 0;
 	REG_SCRNPTR_B1 &= 0xC0;
 	REG_SCRNPTR_B1 |= REG_H640 ?  ((reg_d018_screen_addr & 14) << 2) : (reg_d018_screen_addr << 2);
-	REG_SCRNPTR_B0 = 0;
+	REG_SCRNPTR_B2 = 0;
+	vic_registers[0x63] &= 0b11110000;
 
 	REG_SPRPTR_B0 = 0xF8;
 	REG_SPRPTR_B1 = (reg_d018_screen_addr << 2) | 0x3;
 	if (REG_H640 | REG_V400)
 		REG_SPRPTR_B1 |= 4;
+	vic_registers[0x6E] &= 128;
 
 	SET_COLORRAM_BASE(0);
 	DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charscale=%d, border yt=%d, yb=%d, xl=%d, xr=%d, textxpos=%d, textypos=%d,"
@@ -520,9 +528,14 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x5B): 
 			break;
 		CASE_VIC_4(0x5C):
+			vic4_sideborder_touched = 1;
+			break;
+
 		CASE_VIC_4(0x5D): 
 			DEBUGPRINT("WRITE $%04x SIDEBORDER/HOTREG: $%02x" NL, addr, data);
-			vic4_sideborder_touched = 1;
+
+			if((vic_registers[0x5D] & 0x1F) ^ (data & 0x1F))  // sideborder MSB (0..5) modified ? 
+				vic4_sideborder_touched = 1;
 			break;		
 		
 		CASE_VIC_4(0x5E): 
@@ -535,16 +548,29 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;
 		CASE_VIC_4(0x64):
 		CASE_VIC_4(0x65): CASE_VIC_4(0x66): CASE_VIC_4(0x67): /*CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):*/ CASE_VIC_4(0x6B): /*CASE_VIC_4(0x6C):
-		CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):*/ CASE_VIC_4(0x6F): /*CASE_VIC_4(0x70):*/ CASE_VIC_4(0x71): CASE_VIC_4(0x72): CASE_VIC_4(0x73): CASE_VIC_4(0x74):
+		CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):*//*CASE_VIC_4(0x70):*/ CASE_VIC_4(0x71): CASE_VIC_4(0x72): CASE_VIC_4(0x73): CASE_VIC_4(0x74):
 		CASE_VIC_4(0x75): CASE_VIC_4(0x76): CASE_VIC_4(0x77): CASE_VIC_4(0x78): CASE_VIC_4(0x79): CASE_VIC_4(0x7A): CASE_VIC_4(0x7B): CASE_VIC_4(0x7C):
 		CASE_VIC_4(0x7D): CASE_VIC_4(0x7E): CASE_VIC_4(0x7F):
 			break;
 
 		CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):
 			break;
-		CASE_VIC_4(0x6C): CASE_VIC_4(0x6D): 
+		CASE_VIC_4(0x6C): CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):
+			vic_registers[addr & 0x7F] = data;
+			if (SPRITE_POINTER_ADDR > 384*1024) {
+				DEBUGPRINT("WARNING !!! : SPRITE_POINTER_ADDR at $%08X exceeds 384K chip RAM!!!!  Current behavior is undefined." NL, SPRITE_POINTER_ADDR);
+			}
+
+			DEBUGPRINT("SPRPTRADR/SPRPTRBNK Modified. Sprite Data Pointers now: " NL);
+
+			for (int i = 0; i < 8; ++i) {
+				const Uint8 *sprite_data_pointer =  main_ram + SPRITE_POINTER_ADDR + i * ((SPRITE_16BITPOINTER >> 7) + 1);
+				const Uint32 dataptr = SPRITE_16BITPOINTER ? 64 * ( ((*(sprite_data_pointer+1) << 8)) + (*(sprite_data_pointer))) : 64 * (*sprite_data_pointer);
+				DEBUGPRINT("Sprite #%d data @ $%08X %s" NL , i, dataptr, dataptr > 384*1024 ? "!!! OUT OF 384K main RAM !!!" : "");
+			}
+
 			break;
-		CASE_VIC_4(0x6E):
+		CASE_VIC_4(0x6F):
 			vicii_first_raster  = data & 0x1F;
 			if (!in_hypervisor)
 				vic4_sideborder_touched = 1;
@@ -848,31 +874,40 @@ static void vic4_do_sprites()
 	//
 	for (int sprnum = 7; sprnum >= 0; --sprnum)
 	{
-		const int spriteHeight = SPRITE_EXTHEIGHT(sprnum) ? REG_SPRHGHT : 21;
-		int x_display_pos = border_x_left + ((SPRITE_POS_X(sprnum) - SPRITE_X_BASE_COORD) * (REG_SPR640 ? 1 : 2)); // in display units
-		int y_logical_pos = SPRITE_POS_Y(sprnum) - SPRITE_Y_BASE_COORD +(BORDER_Y_TOP / (REG_V400 ? 1 : 2)); // in logical units
+		if (REG_SPRITE_ENABLE & (1 << sprnum))
+		{ 
+			const int spriteHeight = SPRITE_EXTHEIGHT(sprnum) ? REG_SPRHGHT : 21;
+			int x_display_pos = border_x_left + ((SPRITE_POS_X(sprnum) - SPRITE_X_BASE_COORD) * (REG_SPR640 ? 1 : 2)); // in display units
+			int y_logical_pos = SPRITE_POS_Y(sprnum) - SPRITE_Y_BASE_COORD +(BORDER_Y_TOP / (REG_V400 ? 1 : 2)); // in logical units
 
-		int sprite_row_in_raster = logical_raster - y_logical_pos;
-		
-		if (SPRITE_VERT_2X(sprnum))
-			sprite_row_in_raster = sprite_row_in_raster >> 1;
+			int sprite_row_in_raster = logical_raster - y_logical_pos;
+			
+			if (SPRITE_VERT_2X(sprnum))
+				sprite_row_in_raster = sprite_row_in_raster >> 1;
 
-		if ((REG_SPRITE_ENABLE & (1 << sprnum)) &&
-			(sprite_row_in_raster >= 0 && sprite_row_in_raster < spriteHeight) )
-		{
-			const int widthBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
-			Uint8 *sprite_data_pointer =  main_ram + SPRITE_POINTER_ADDR + sprnum * ((SPRITE_16BITPOINTER >> 7) + 1);
-			Uint8 *sprite_data = SPRITE_16BITPOINTER ? 
-				  main_ram + 64 * ( ((*sprite_data_pointer) << 8) + (*(sprite_data_pointer + 1))) 
-				: main_ram + 64 * (*sprite_data_pointer);
-			Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
-			int xscale = (REG_SPR640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
-			if (SPRITE_16COLOR(sprnum))
-				vic4_draw_sprite_row_16color(sprnum, x_display_pos, row_data, xscale);
-			else if (SPRITE_MULTICOLOR(sprnum))
-				vic4_draw_sprite_row_multicolor(sprnum, x_display_pos, row_data, xscale);
-			else
-				vic4_draw_sprite_row_mono(sprnum, x_display_pos, row_data, xscale);
+			if (sprite_row_in_raster >= 0 && sprite_row_in_raster < spriteHeight) 
+			{
+				const int widthBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
+				const Uint8 *sprite_data_pointer =  main_ram + SPRITE_POINTER_ADDR + sprnum * ((SPRITE_16BITPOINTER >> 7) + 1);
+				const Uint32 sprite_data_addr = SPRITE_16BITPOINTER ? 
+					64 * ((*(sprite_data_pointer + 1) << 8) | (*sprite_data_pointer))
+					: 64 * (*sprite_data_pointer);
+
+				if (sprite_data_addr > 384*1024)
+				{
+					DEBUGPRINT("Sprite %d data at $%08X (out of 384K chip RAM!) -- Behaviour is undefined!" NL, sprnum, sprite_data_addr);
+				}
+
+				const Uint8 *sprite_data = main_ram + sprite_data_addr;
+				Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
+				int xscale = (REG_SPR640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
+				if (SPRITE_16COLOR(sprnum))
+					vic4_draw_sprite_row_16color(sprnum, x_display_pos, row_data, xscale);
+				else if (SPRITE_MULTICOLOR(sprnum))
+					vic4_draw_sprite_row_multicolor(sprnum, x_display_pos, row_data, xscale);
+				else
+					vic4_draw_sprite_row_mono(sprnum, x_display_pos, row_data, xscale);
+			}
 		}
 	}
 }
@@ -973,128 +1008,132 @@ static void vic4_render_char_raster()
 {
 	int line_char_index = 0;
 	enable_bg_paint = 1;
-	colour_ram_current_ptr = colour_ram + (display_row  * CHARSTEP_BYTES); 
-	screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row  * CHARSTEP_BYTES);
-	const Uint8* row_data_base_addr = main_ram + (REG_BMM ?  VIC2_BITMAP_ADDR : get_charset_effective_addr());
-	
-	// Account for Chargen X-displacement
 
-	for(Uint32* p = current_pixel; p < current_pixel + (CHARGEN_X_START - border_x_left); ++p)
-		*p = palette[REG_SCREEN_COLOR];
+	// Account for negative Y-displacement (positive is taken into account in outer-loop)
 
-	current_pixel +=  (CHARGEN_X_START - border_x_left);
-	xcounter += (CHARGEN_X_START - border_x_left);
-	const int xcounter_start = xcounter;
-	
-	// Chargen starts here.
+	const int row_offset = (BORDER_Y_TOP - CHARGEN_Y_START) / 8;
+	const int adj_display_row = row_offset + display_row;
 
-	while (line_char_index < REG_CHRCOUNT)
+	if (adj_display_row >= 0 && adj_display_row < display_row_count)
 	{
-		// if (display_row_adj < 0 || display_row_adj > 24 ) { // FIX: get display_row from registers.
-		// 	(*current_pixel++) = palette[REG_SCREEN_COLOR];
-		// 	xcounter++;
-		// 	continue;
-		// }
+		const int char_row_offset = (BORDER_Y_TOP - CHARGEN_Y_START) % 8;
+		colour_ram_current_ptr = colour_ram + (adj_display_row  * CHARSTEP_BYTES); 
+		screen_ram_current_ptr = main_ram + SCREEN_ADDR + (adj_display_row  * CHARSTEP_BYTES);
+		const Uint8* row_data_base_addr = main_ram + (REG_BMM ?  VIC2_BITMAP_ADDR : get_charset_effective_addr());
+		
+		// Account for Chargen X-displacement
 
-		Uint16 color_data = *(colour_ram_current_ptr++);
-		Uint16 char_value = *(screen_ram_current_ptr++);
+		for(Uint32* p = current_pixel; p < current_pixel + (CHARGEN_X_START - border_x_left); ++p)
+			*p = palette[REG_SCREEN_COLOR];
 
-		if (REG_16BITCHARSET)
+		current_pixel +=  (CHARGEN_X_START - border_x_left);
+		xcounter += (CHARGEN_X_START - border_x_left);
+		const int xcounter_start = xcounter;
+		
+		// Chargen starts here.
+
+		while (line_char_index < REG_CHRCOUNT)
 		{
-			color_data = (color_data << 8) | (*(colour_ram_current_ptr++));
-			char_value = char_value | (*(screen_ram_current_ptr++) << 8);
+			Uint16 color_data = *(colour_ram_current_ptr++);
+			Uint16 char_value = *(screen_ram_current_ptr++);
 
-			if (SXA_GOTO_X(color_data))
+			if (REG_16BITCHARSET)
 			{
-				current_pixel = pixel_raster_start + xcounter_start + (char_value & 0x3FF);
-				xcounter = xcounter_start + (char_value & 0x3FF);
-				line_char_index++;
+				color_data = (color_data << 8) | (*(colour_ram_current_ptr++));
+				char_value = char_value | (*(screen_ram_current_ptr++) << 8);
 
-				if (SXA_VERTICAL_FLIP(color_data))
+				if (SXA_GOTO_X(color_data))
 				{
-					enable_bg_paint = 0;
+					current_pixel = pixel_raster_start + xcounter_start + (char_value & 0x3FF);
+					xcounter = xcounter_start + (char_value & 0x3FF);
+					line_char_index++;
+
+					if (SXA_VERTICAL_FLIP(color_data))
+					{
+						enable_bg_paint = 0;
+					}
+
+					continue;
 				}
-
-				continue;
 			}
-		}
 
-		// Background and foreground colors
+			// Background and foreground colors
 
-		const Uint8 char_fgcolor = color_data & 0xF; 
-		const Uint8 vic3_attr = REG_VICIII_ATTRIBS && !REG_MCM ? (color_data >> 4) : 0;
-		const Uint16 char_id = REG_EBM ? (char_value & 0x3f) : char_value & 0x1fff; // up to 8192 characters (13-bit)
-		const Uint8 char_bgcolor = REG_EBM ? vic_registers[0x21 + ((char_value >> 6) & 3)] : REG_SCREEN_COLOR;
+			const Uint8 char_fgcolor = color_data & 0xF; 
+			const Uint8 vic3_attr = REG_VICIII_ATTRIBS && !REG_MCM ? (color_data >> 4) : 0;
+			const Uint16 char_id = REG_EBM ? (char_value & 0x3f) : char_value & 0x1fff; // up to 8192 characters (13-bit)
+			const Uint8 char_bgcolor = REG_EBM ? vic_registers[0x21 + ((char_value >> 6) & 3)] : REG_SCREEN_COLOR;
 
-		// Calculate character-width
+			// Calculate character-width
 
-		Uint8 glyph_width_deduct = SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(char_value) ? 8 : 0);
-		Uint8 glyph_width = (SXA_4BIT_PER_PIXEL(color_data) ? 16 : 8) - glyph_width_deduct;
+			Uint8 glyph_width_deduct = SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(char_value) ? 8 : 0);
+			Uint8 glyph_width = (SXA_4BIT_PER_PIXEL(color_data) ? 16 : 8) - glyph_width_deduct;
 
-		// Default fetch from char mode.
-		Uint8 char_byte;
-		int sel_char_row = char_row;
-		
-		if (SXA_VERTICAL_FLIP(color_data))
-			sel_char_row = 7 - char_row;
+			// Default fetch from char mode.
+			Uint8 char_byte;
+			int sel_char_row = char_row + char_row_offset;
+			
+			if (SXA_VERTICAL_FLIP(color_data))
+				sel_char_row = 7 - char_row + char_row_offset;
 
-		if (REG_BMM)
-		{
-			char_byte = *(row_data_base_addr + display_row * 320 + 8 * line_char_index  + sel_char_row);
-		}
-		else
-		{
-			char_byte = *(row_data_base_addr + (char_id * 8) + sel_char_row);
-		}
-		
-		if (SXA_HORIZONTAL_FLIP(color_data))
-			char_byte = reverse_byte(char_byte);
-
-		// Render character cell row
-				
-		if (SXA_4BIT_PER_PIXEL(color_data)) // 16-color character
-		{
-
-		}
-		else if (CHAR_IS256_COLOR(char_id)) // 256-color character
-		{
-			vic4_render_fullcolor_char_row(main_ram + (((char_id * 64) + (sel_char_row * 8) ) & 0x7FFFF), 8);
-		}
-		else if ((REG_MCM && (char_fgcolor & 8)) || (REG_MCM && REG_BMM)) // Multicolor character
-		{
 			if (REG_BMM)
 			{
-				const Uint8 color_source[4] = {
-					REG_SCREEN_COLOR,	//00
-					char_value >> 4,  	//01
-					char_value & 0xF, 	//10
-					color_data & 0xF  	//11
-				};
-				vic4_render_multicolor_char_row(char_byte, glyph_width, color_source);
+				char_byte = *(row_data_base_addr + display_row * 320 + 8 * line_char_index  + sel_char_row);
 			}
 			else
 			{
-				const Uint8 color_source[4] = {
-					REG_SCREEN_COLOR, //00
-					REG_MULTICOLOR_1, //01
-					REG_MULTICOLOR_2, //10
-					char_fgcolor & 7  //11
-				};
-				vic4_render_multicolor_char_row(char_byte, glyph_width, color_source);
+				char_byte = *(row_data_base_addr + (char_id * 8) + sel_char_row);
 			}
-		}
-		else // Single color character
-		{
-			if (!REG_BMM)
+			
+			if (SXA_HORIZONTAL_FLIP(color_data))
+				char_byte = reverse_byte(char_byte);
+
+			// Render character cell row
+					
+			if (SXA_4BIT_PER_PIXEL(color_data)) // 16-color character
 			{
-				vic4_render_mono_char_row(char_byte, glyph_width, char_bgcolor, char_fgcolor, vic3_attr);
+
 			}
-			else
+			else if (CHAR_IS256_COLOR(char_id)) // 256-color character
 			{
-				vic4_render_mono_char_row(char_byte, glyph_width, char_value & 0xF, char_value >> 4, vic3_attr );
+				vic4_render_fullcolor_char_row(main_ram + (((char_id * 64) + (sel_char_row * 8) ) & 0x7FFFF), 8);
 			}
+			else if ((REG_MCM && (char_fgcolor & 8)) || (REG_MCM && REG_BMM)) // Multicolor character
+			{
+				if (REG_BMM)
+				{
+					const Uint8 color_source[4] = {
+						REG_SCREEN_COLOR,	//00
+						char_value >> 4,  	//01
+						char_value & 0xF, 	//10
+						color_data & 0xF  	//11
+					};
+					vic4_render_multicolor_char_row(char_byte, glyph_width, color_source);
+				}
+				else
+				{
+					const Uint8 color_source[4] = {
+						REG_SCREEN_COLOR, //00
+						REG_MULTICOLOR_1, //01
+						REG_MULTICOLOR_2, //10
+						char_fgcolor & 7  //11
+					};
+					vic4_render_multicolor_char_row(char_byte, glyph_width, color_source);
+				}
+			}
+			else // Single color character
+			{
+				if (!REG_BMM)
+				{
+					vic4_render_mono_char_row(char_byte, glyph_width, char_bgcolor, char_fgcolor, vic3_attr);
+				}
+				else
+				{
+					vic4_render_mono_char_row(char_byte, glyph_width, char_value & 0xF, char_value >> 4, vic3_attr );
+				}
+			}
+			line_char_index++;
 		}
-		line_char_index++;
 	}
 
 	if (++char_row > 7)
@@ -1130,7 +1169,6 @@ int vic4_render_scanline()
 	}
 	else
 	{
-		
 		// Top and bottom borders
 
 		if (ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM || !REG_DISPLAYENABLE)
