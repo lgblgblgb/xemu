@@ -275,7 +275,7 @@ void xemu_set_screen_mode ( int setting )
 		xemu_set_full_screen(1);
 	} else {
 		xemu_set_full_screen(0);
-		SDL_SetWindowSize(sdl_win, sdl_default_win_x_size * setting, sdl_default_win_y_size * setting);
+		SDL_SetWindowSize(sdl_win, viewport.w * setting, viewport.h * setting);
 	}
 	SDL_RaiseWindow(sdl_win);
 }
