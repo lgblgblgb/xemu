@@ -606,32 +606,17 @@ static void emulation_loop ( void )
 #endif
 		);	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
 		if (cycles >= cpu_cycles_per_scanline) {
-			//scanline++;
-			//DEBUG("VIC3: new scanline (%d)!" NL, scanline);
 			cycles -= cpu_cycles_per_scanline;
 			cia_tick(&cia1, 64);
 			cia_tick(&cia2, 64);
 			if (vic4_render_scanline()) {
+				if (XEMU_UNLIKELY(inject_ready_check_status))
+					inject_ready_check_do();
 				sid1.sFrameCount++;
 				sid2.sFrameCount++;
 				update_emulator();
 				return;
 			}
-			// int scan_limit = 312 << ( (!double_scanlines) & 1);
-			// if (scanline == scan_limit) {
-			// 	//DEBUG("VIC3: new frame!" NL);
-			// 	frameskip = !frameskip;
-			// 	scanline = 0;
-			// 	if (!frameskip)	// well, let's only render every full frames (~ie 25Hz)
-			// 		update_emulator();
-
-		
-			// 	frames_total_counter++;
-			// 	if (!frameskip)	// FIXME: do this better!!!!!!
-			// 		return;
-			// }
-			//DEBUG("RASTER=%d COMPARE=%d" NL,scanline,compare_raster);
-			//vic_interrupt();
 		}
 	}
 }
@@ -645,6 +630,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_num_option("fastclock", MEGA65_DEFAULT_FAST_CLOCK, "Clock of M65 fast mode (in MHz)");
 	xemucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA-board switches turned ON");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
+	xemucfg_define_switch_option("fullborders", "Show non-clipped display borders");
 	xemucfg_define_switch_option("hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode");
 	xemucfg_define_switch_option("hyperserialascii", "Convert PETSCII/ASCII hypervisor serial debug output to ASCII upper-case");
 	xemucfg_define_num_option("kicked", 0x0, "Answer to KickStart upgrade (128=ask user in a pop-up window)");
