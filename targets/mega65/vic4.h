@@ -41,10 +41,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_HEIGHT_VISIBLE_PAL     576
 #define PHYSICAL_RASTERS_NTSC         526
 #define PHYSICAL_RASTERS_PAL          624
-
-#define FRAME_H_FRONT                  0
-#define RASTER_CORRECTION              3
-#define VIC4_BLINK_INTERVAL            25
+#define NTSC_RATIO                    PHYSICAL_RASTERS_NTSC / float(SCREEN_WIDTH)
+#define PAL_RATIO                     PHYSICAL_RASTERS_PAL  / float(SCREEN_WIDTH)
+#define FRAME_H_FRONT                 0
+#define RASTER_CORRECTION             3
+#define VIC4_BLINK_INTERVAL           25
 
 // Register defines 
 // 

@@ -89,6 +89,7 @@ int osd_status = 0;
 static Uint32 osd_colours[16], *osd_pixels = NULL, osd_colour_fg, osd_colour_bg;
 static SDL_Texture *sdl_osdtex = NULL;
 static SDL_bool grabbed_mouse = SDL_FALSE, grabbed_mouse_saved = SDL_FALSE;
+static SDL_Rect viewport, * pViewport = NULL;
 
 #if !SDL_VERSION_ATLEAST(2, 0, 4)
 #error "At least SDL version 2.0.4 is needed!"
@@ -655,27 +656,6 @@ int xemu_post_init (
 		return 1;
 	}
 
-// 	viewport.x = 0;
-// 	viewport.y = 0;
-// 	viewport.w = texture_width;
-// 	viewport.h = texture_height;
-	
-// #ifdef MEGA65
-//  	if (!xemucfg_get_bool("fullborders"))
-//  	{
-// 		const float ratio = texture_width / (float) texture_height;
-		
-// 		viewport.x = 40;
-// 		viewport.y = 60;
-// 		viewport.h = texture_height - viewport.y * 2;
-// 		viewport.w = texture_width - viewport.x * 2;
-
-// 		DEBUGPRINT("ratio=%.3f x=%d y=%d w=%d h=%d" NL, ratio, viewport.x, viewport.y, viewport.w, viewport.h);
-//  	}	
-// 	SDL_RenderSetLogicalSize(sdl_ren, viewport.w, viewport.h);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
-// 	SDL_SetWindowSize(sdl_win, viewport.w, viewport.h);
-// #endif	
-
 	texture_x_size_in_bytes = texture_x_size * 4;
 	sdl_winid = SDL_GetWindowID(sdl_win);
 	/* Intitialize palette from given RGB components */
@@ -704,6 +684,7 @@ int xemu_post_init (
 }
 
 
+
 int xemu_change_display_mode(
 	int texture_x_size, int texture_y_size,	// raw size of texture (in pixels)
 	int logical_x_size, int logical_y_size,	// "logical" size in pixels, ie to correct aspect ratio, etc, can be the as texture of course, if it's OK ...
@@ -725,6 +706,24 @@ int xemu_change_display_mode(
 	return 0;
 }
 
+void xemu_set_viewport(int left, int top, int right, int bottom, int adjust_window_size) 
+{
+	viewport.x = left;
+	viewport.y = top;
+	viewport.h = bottom - top;
+	viewport.w = right - left;
+	pViewport = &viewport;
+ 			
+	SDL_RenderSetLogicalSize(sdl_ren, viewport.w, viewport.h);	
+	if (adjust_window_size) {
+		SDL_SetWindowSize(sdl_win, viewport.w, viewport.h);
+	}
+}
+
+void xemu_clear_viewport()
+{
+	pViewport = NULL;
+}
 
 int xemu_set_icon_from_xpm ( char *xpm[] )
 {
@@ -850,7 +849,7 @@ void xemu_update_screen ( void )
 	//if (seconds_timer_trigger)
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
 
-	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);
+	SDL_RenderCopy(sdl_ren, sdl_tex, pViewport, NULL);
 	if (osd_status) {
 		if (osd_status < OSD_STATIC)
 			osd_status -= osd_fade_dec;

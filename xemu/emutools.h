@@ -177,6 +177,8 @@ extern int xemu_change_display_mode(
 	Uint32 pixel_format,
 	int locked_texture_update
 );
+extern void xemu_set_viewport(int left, int top, int right, int bottom, int adjust_window_size);
+extern void xemu_clear_viewport();
 extern int xemu_set_icon_from_xpm ( char *xpm[] );
 extern void xemu_timekeeping_start ( void );
 extern void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_size );

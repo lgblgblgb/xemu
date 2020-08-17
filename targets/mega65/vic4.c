@@ -18,6 +18,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
+#include "xemu/emutools_config.h"
 #include "mega65.h"
 #include "xemu/cpu65.h"
 #include "vic4.h"
@@ -168,7 +169,6 @@ void vic_init ( void )
 	// *** Init VIC3 registers and palette
 	vic_iomode = VIC2_IOMODE;
 	interrupt_status = 0;
-	// FIXME: add ROM palette by default? What is ROM palette on MEGA65?
 	scanline = 0;
 	compare_raster = 0;
 	// *** Just a check to try all possible regs (in VIC2,VIC3 and VIC4 modes), it should not panic ...
@@ -196,6 +196,9 @@ void vic4_switch_display_mode(int ntsc)
 		SCREEN_WIDTH, SCREEN_HEIGHT,// window size
 		SCREEN_FORMAT,
 		USE_LOCKED_TEXTURE);
+
+	if(!xemucfg_get_bool("fullborders"))
+		xemu_set_viewport(48, 32, SCREEN_WIDTH - 48, SCREEN_HEIGHT, 1);
 
 	vic4_open_frame_access();
 }
@@ -799,7 +802,7 @@ static inline Uint32 get_charset_effective_addr()
 	return CHARSET_ADDR;
 }
 
-static void vic4_draw_sprite_row_16color(int sprnum, int x_display_pos, Uint8* row_data_ptr, int xscale)
+static void vic4_draw_sprite_row_16color(int sprnum, int x_display_pos, const Uint8* row_data_ptr, int xscale)
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const int palindexbase = sprnum * 16 + 128 * (SPRITE_BITPLANE_ENABLE(sprnum) >> sprnum);
@@ -836,7 +839,7 @@ static void vic4_draw_sprite_row_16color(int sprnum, int x_display_pos, Uint8* r
 	}
 }
 
-static void vic4_draw_sprite_row_multicolor(int sprnum, int x_display_pos, Uint8* row_data_ptr, int xscale)
+static void vic4_draw_sprite_row_multicolor(int sprnum, int x_display_pos, const Uint8* row_data_ptr, int xscale)
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	for (int byte = 0; byte < totalBytes; ++byte)
@@ -878,7 +881,7 @@ static void vic4_draw_sprite_row_multicolor(int sprnum, int x_display_pos, Uint8
 	}
 }
 
-static void vic4_draw_sprite_row_mono(int sprnum, int x_display_pos, Uint8 *row_data_ptr, int xscale)
+static void vic4_draw_sprite_row_mono(int sprnum, int x_display_pos, const Uint8 *row_data_ptr, int xscale)
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	for (int byte = 0; byte < totalBytes; ++byte)
@@ -937,7 +940,7 @@ static void vic4_do_sprites()
 				// }
 
 				const Uint8 *sprite_data = main_ram + sprite_data_addr;
-				Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
+				const Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
 				int xscale = (REG_SPR640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
 				if (SPRITE_16COLOR(sprnum))
 					vic4_draw_sprite_row_16color(sprnum, x_display_pos, row_data, xscale);
