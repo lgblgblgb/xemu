@@ -62,7 +62,6 @@ static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, bu
 static int force_external_rom = 0;
 static int force_upload_fonts = 0;
 
-
 void cpu65_illegal_opcode_callback ( void )
 {
 	// FIXME: implement this, it won't be ever seen now, as not even switch to 6502 NMOS persona is done yet ...
@@ -462,7 +461,6 @@ static void update_emulator ( void )
 //	}
 }
 
-
 #ifdef HAS_UARTMON_SUPPORT
 void m65mon_show_regs ( void )
 {
@@ -690,7 +688,7 @@ int main ( int argc, char **argv )
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
 		1,				// resizable window
-		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
+		SCREEN_WIDTH, PHYSICAL_RASTERS_DEFAULT,	// texture sizes
 		SCREEN_WIDTH, SCREEN_HEIGHT,// logical size (used with keeping aspect ratio by the SDL render stuffs)
 		SCREEN_WIDTH, SCREEN_HEIGHT,// window size
 		SCREEN_FORMAT,			// pixel format

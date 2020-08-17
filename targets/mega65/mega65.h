@@ -36,7 +36,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
    You can try RENDER_SCALE_QUALITY though with values 0, 1, 2 */
 #define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888
 #define USE_LOCKED_TEXTURE	1
-#define RENDER_SCALE_QUALITY	1
+#define RENDER_SCALE_QUALITY	2
 
 
 // Default fast clock of M65, in MHz (can be overriden with CLI switch)

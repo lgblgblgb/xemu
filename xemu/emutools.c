@@ -90,9 +90,6 @@ static Uint32 osd_colours[16], *osd_pixels = NULL, osd_colour_fg, osd_colour_bg;
 static SDL_Texture *sdl_osdtex = NULL;
 static SDL_bool grabbed_mouse = SDL_FALSE, grabbed_mouse_saved = SDL_FALSE;
 
-SDL_Rect viewport = {0,0,0,0};
-
-
 #if !SDL_VERSION_ATLEAST(2, 0, 4)
 #error "At least SDL version 2.0.4 is needed!"
 #endif
@@ -275,7 +272,7 @@ void xemu_set_screen_mode ( int setting )
 		xemu_set_full_screen(1);
 	} else {
 		xemu_set_full_screen(0);
-		SDL_SetWindowSize(sdl_win, viewport.w * setting, viewport.h * setting);
+		//SDL_SetWindowSize(sdl_win, viewport.w * setting, viewport.h * setting);
 	}
 	SDL_RaiseWindow(sdl_win);
 }
@@ -647,32 +644,37 @@ int xemu_post_init (
 			DEBUGPRINT("%c%s", a ? ' ' : '(', SDL_GetPixelFormatName(ren_info.texture_formats[a]));
 		DEBUGPRINT(")" NL);
 	}
+
+	// (!) Quality hint needs to be active before CreateTexture to be in effect.
+	snprintf(render_scale_quality_s, 2, "%d", render_scale_quality);
+	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, render_scale_quality_s);		// render scale quality 0, 1, 2
+	SDL_RenderSetLogicalSize(sdl_ren, logical_x_size, logical_y_size);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
 	sdl_tex = SDL_CreateTexture(sdl_ren, pixel_format, SDL_TEXTUREACCESS_STREAMING, texture_x_size, texture_y_size);
 	if (!sdl_tex) {
 		ERROR_WINDOW("Cannot create SDL texture: %s", SDL_GetError());
 		return 1;
 	}
 
-	viewport.x = 0;
-	viewport.y = 0;
-	viewport.w = texture_width;
-	viewport.h = texture_height;
+// 	viewport.x = 0;
+// 	viewport.y = 0;
+// 	viewport.w = texture_width;
+// 	viewport.h = texture_height;
 	
-#ifdef MEGA65
- 	if (!xemucfg_get_bool("fullborders"))
- 	{
-		const float ratio = texture_width / (float) texture_height;
+// #ifdef MEGA65
+//  	if (!xemucfg_get_bool("fullborders"))
+//  	{
+// 		const float ratio = texture_width / (float) texture_height;
 		
-		viewport.x = 40;
-		viewport.y = 60;
-		viewport.h = texture_height - viewport.y * 2;
-		viewport.w = texture_width - viewport.x * 2;
+// 		viewport.x = 40;
+// 		viewport.y = 60;
+// 		viewport.h = texture_height - viewport.y * 2;
+// 		viewport.w = texture_width - viewport.x * 2;
 
-		DEBUGPRINT("ratio=%.3f x=%d y=%d w=%d h=%d" NL, ratio, viewport.x, viewport.y, viewport.w, viewport.h);
- 	}	
-	SDL_RenderSetLogicalSize(sdl_ren, viewport.w, viewport.h);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
-	SDL_SetWindowSize(sdl_win, viewport.w, viewport.h);
-#endif	
+// 		DEBUGPRINT("ratio=%.3f x=%d y=%d w=%d h=%d" NL, ratio, viewport.x, viewport.y, viewport.w, viewport.h);
+//  	}	
+// 	SDL_RenderSetLogicalSize(sdl_ren, viewport.w, viewport.h);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
+// 	SDL_SetWindowSize(sdl_win, viewport.w, viewport.h);
+// #endif	
 
 	texture_x_size_in_bytes = texture_x_size * 4;
 	sdl_winid = SDL_GetWindowID(sdl_win);
@@ -682,8 +684,7 @@ int xemu_post_init (
 	while (n_colours--)
 		store_palette[n_colours] = SDL_MapRGBA(sdl_pix_fmt, colours[n_colours * 3], colours[n_colours * 3 + 1], colours[n_colours * 3 + 2], 0xFF);
 	/* SDL hints */
-	snprintf(render_scale_quality_s, 2, "%d", render_scale_quality);
-	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, render_scale_quality_s);		// render scale quality 0, 1, 2
+	
 	SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_PING, "0");				// disable WM ping, SDL dialog boxes makes WMs things emu is dead (?)
 	SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0");					// disable vsync aligned screen rendering
 #ifdef XEMU_ARCH_WIN
@@ -699,6 +700,28 @@ int xemu_post_init (
 	if (chatty_xemu)
 		printf(NL);
 	xemu_set_icon_from_xpm(favicon_xpm);
+	return 0;
+}
+
+
+int xemu_change_display_mode(
+	int texture_x_size, int texture_y_size,	// raw size of texture (in pixels)
+	int logical_x_size, int logical_y_size,	// "logical" size in pixels, ie to correct aspect ratio, etc, can be the as texture of course, if it's OK ...
+	int win_x_size, int win_y_size,		// default window size, in pixels [note: if logical/texture size combo does not match in ratio with this, black stripes you will see ...]
+	Uint32 pixel_format,
+	int locked_texture_update
+) {
+	SDL_DestroyTexture(sdl_tex);
+	SDL_RenderSetLogicalSize(sdl_ren, logical_x_size, logical_y_size);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
+	sdl_tex = SDL_CreateTexture(sdl_ren, pixel_format, SDL_TEXTUREACCESS_STREAMING, texture_x_size, texture_y_size);
+	if (!sdl_tex) {
+		ERROR_WINDOW("Cannot re-create SDL texture: %s", SDL_GetError());
+		return 1;
+	}
+	texture_x_size_in_bytes = texture_x_size * 4;
+	if (!locked_texture_update)
+		sdl_pixel_buffer = xemu_malloc_ALIGNED(texture_x_size_in_bytes * texture_y_size);
+	xemu_render_dummy_frame(black_colour, texture_x_size, texture_y_size);
 	return 0;
 }
 
@@ -827,7 +850,7 @@ void xemu_update_screen ( void )
 	//if (seconds_timer_trigger)
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
 
-	SDL_RenderCopy(sdl_ren, sdl_tex, &viewport, NULL);
+	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);
 	if (osd_status) {
 		if (osd_status < OSD_STATIC)
 			osd_status -= osd_fade_dec;

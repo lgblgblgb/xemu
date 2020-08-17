@@ -25,16 +25,26 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define VIC_BAD_IOMODE	2
 #define VIC4_IOMODE	3
 
-#define SCREEN_WIDTH		      800
-#define SCREEN_HEIGHT_NTSC    506
-#define SCREEN_HEIGHT_PAL     603
-#define SCREEN_HEIGHT	      SCREEN_HEIGHT_PAL
-#define NTSC_PHYSICAL_RASTERS 526
-#define PAL_PHYSICAL_RASTERS  624
-#define FRAME_H_FRONT         0
-#define RASTER_CORRECTION     3
-#define DISPLAY_FETCH_START   719
-#define VIC4_BLINK_INTERVAL   25
+//
+// Output window is fixed at 800x600 to support MegaPHONE, PAL-MEGA65
+// and NTSC_MEGA65 modes. Internally, the VIC-IV chip draws 800-pixel
+// wide buffers and traverses up to 526/624 physical rasters, as we do here.  
+// The user can select a clipped borders view (called "normal borders") which shows 
+// the real visible resolution of PAL (720x576) or NSTC(720x480).
+//
+
+#define SCREEN_WIDTH		              800
+#define SCREEN_HEIGHT                 600
+#define PHYSICAL_RASTERS_DEFAULT      PHYSICAL_RASTERS_NTSC
+#define SCREEN_HEIGHT_VISIBLE_DEFAULT SCREEN_HEIGHT_VISIBLE_NTSC
+#define SCREEN_HEIGHT_VISIBLE_NTSC    480
+#define SCREEN_HEIGHT_VISIBLE_PAL     576
+#define PHYSICAL_RASTERS_NTSC         526
+#define PHYSICAL_RASTERS_PAL          624
+
+#define FRAME_H_FRONT                  0
+#define RASTER_CORRECTION              3
+#define VIC4_BLINK_INTERVAL            25
 
 // Register defines 
 // 

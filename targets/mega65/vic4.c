@@ -3,15 +3,6 @@
    Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Copyright (C)2020 Hernán Di Pietro <hernan.di.pietro@gmail.com>
 
-   This is the VIC-IV "emulation". Currently it does one-frame-at-once
-   kind of horrible work, and only a subset of VIC2 and VIC3 knowledge
-   is implemented, with some light VIC-IV features, to be able to "boot"
-   of Mega-65 with standard configuration (kickstart, SD-card).
-   Some of the missing features (VIC-2/3): hardware attributes,
-   DAT, sprites, screen positioning, H1280 mode, V400 mode, interlace,
-   chroma killer, VIC2 MCM, ECM, 38/24 columns mode, border.
-   VIC-4: almost everything :(
-
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or
@@ -66,7 +57,7 @@ static int border_x_left= 0;			 // Side border left
 static int border_x_right= 0;			 // Side border right
 static int xcounter = 0, ycounter = 0;   // video counters
 static int frame_counter = 0;
-static int vicii_first_raster = 0;
+
 static int char_row = 0, display_row = 0;
 static Uint8 bg_pixel_state[1024]; 		// See FOREGROUND_PIXEL and BACKGROUND_PIXEL constants
 static Uint8* screen_ram_current_ptr = NULL;
@@ -77,15 +68,20 @@ static int warn_ctrl_b_lo = 1;
 static int enable_bg_paint = 1;
 static int display_row_count = 0;
 
+static int max_rasters = PHYSICAL_RASTERS_DEFAULT;
+static int visible_area_height = SCREEN_HEIGHT_VISIBLE_DEFAULT;
+static int vicii_first_raster = 7;	// Default for NTSC
+
 // VIC-IV Modeline Parameters
 // ----------------------------------------------------
+#define DISPLAY_HEIGHT			((max_rasters-1)-20)
 #define TEXT_HEIGHT_200  		400
 #define TEXT_HEIGHT_400  		400
 #define CHARGEN_Y_SCALE_200 	2
 #define CHARGEN_Y_SCALE_400 	1
 #define chargen_y_pixels 		0
-#define TOP_BORDERS_HEIGHT_200 	(SCREEN_HEIGHT - TEXT_HEIGHT_200)
-#define TOP_BORDERS_HEIGHT_400 	(SCREEN_HEIGHT - TEXT_HEIGHT_400)
+#define TOP_BORDERS_HEIGHT_200 	(DISPLAY_HEIGHT - TEXT_HEIGHT_200)
+#define TOP_BORDERS_HEIGHT_400 	(DISPLAY_HEIGHT - TEXT_HEIGHT_400)
 #define SINGLE_TOP_BORDER_200 	(TOP_BORDERS_HEIGHT_200 >> 1)
 #define SINGLE_TOP_BORDER_400 	(TOP_BORDERS_HEIGHT_400 >> 1)
 
@@ -190,11 +186,26 @@ void vic_init ( void )
 	DEBUG("VIC4: has been initialized." NL);
 }
 
+
+// This function allows to switch between NTSC/PAL on-the-fly (NTSC = 1. PAL = 0)
+void vic4_switch_display_mode(int ntsc)
+{
+	DEBUGPRINT("VIC: switch_display_mode NTSC=%d" NL, ntsc);
+	xemu_change_display_mode(SCREEN_WIDTH, ntsc ? PHYSICAL_RASTERS_NTSC : PHYSICAL_RASTERS_PAL,	// texture sizes
+		SCREEN_WIDTH, SCREEN_HEIGHT,// logical size (used with keeping aspect ratio by the SDL render stuffs)
+		SCREEN_WIDTH, SCREEN_HEIGHT,// window size
+		SCREEN_FORMAT,
+		USE_LOCKED_TEXTURE);
+
+	vic4_open_frame_access();
+}
+
+
 void vic4_open_frame_access()
 {
 	int tail_sdl;
 	current_pixel = pixel_start = xemu_start_pixel_buffer_access(&tail_sdl);
-	pixel_end = current_pixel + (SCREEN_WIDTH * SCREEN_HEIGHT);
+	pixel_end = current_pixel + (SCREEN_WIDTH * max_rasters);
 	if (tail_sdl)
 		FATAL("tail_sdl is not zero!");
 }
@@ -231,6 +242,14 @@ static void vic4_check_raster_interrupt ( void )
 inline static void vic4_calculate_char_x_step()
 {
 	char_x_step = (REG_CHARXSCALE / 120.0f) / (REG_H640 ? 1 : 2);
+}
+
+static void vic4_reset_display_counters()
+{
+	xcounter = 0;
+	display_row = 0;
+	char_row = 0;
+	ycounter = 0;
 }
 
 static void vic4_update_sideborder_dimensions()
@@ -297,34 +316,34 @@ static void vic4_interpret_legacy_mode_registers()
 		if (REG_RSEL) // 25-row
 		{
 			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster));
-			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT - SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster) - 1);
+			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster) - 1);
 			display_row_count = 25;
 		}
 		else
 		{
 			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster) + 8);
-			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT - (2 * vicii_first_raster) - SINGLE_TOP_BORDER_200 - 7);
+			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - (2 * vicii_first_raster) - SINGLE_TOP_BORDER_200 - 7);
 			display_row_count = 24;
 		}
 
-		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 + (2 * vicii_first_raster) - 6 + REG_VIC2_YSCROLL * 2);
+		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster) - 6 + REG_VIC2_YSCROLL * 2);
 	}
 	else // V400
 	{
 		if (REG_RSEL) // 25-line+V400
 		{
 			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster));
-			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT - SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 1);
+			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 1);
 			display_row_count = 25*2;
 		}
 		else
 		{
 			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) + 8);
-			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + SCREEN_HEIGHT - (2 * vicii_first_raster) - SINGLE_TOP_BORDER_200 - 7);
+			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - (2 * vicii_first_raster) - SINGLE_TOP_BORDER_200 - 7);
 			display_row_count = 24*2;
 		}
 
-		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 + (2 * vicii_first_raster) - 6 + (REG_VIC2_YSCROLL * 2));
+		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 6 + (REG_VIC2_YSCROLL * 2));
 	}
 
 	Uint8 width = REG_H640 ? 80 : 40;
@@ -344,9 +363,10 @@ static void vic4_interpret_legacy_mode_registers()
 	vic_registers[0x6E] &= 128;
 
 	SET_COLORRAM_BASE(0);
-	DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charscale=%d, border yt=%d, yb=%d, xl=%d, xr=%d, textxpos=%d, textypos=%d,"
+	DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charscale=%d, vic_ii_first_raster=%d, "
+	          "border yt=%d, yb=%d, xl=%d, xr=%d, textxpos=%d, textypos=%d,"
 	          "screen_ram=$%06x, charset/bitmap=$%06x, sprite=$%06x" NL, REG_16BITCHARSET ,   REG_CHRCOUNT,CHARSTEP_BYTES,REG_CHARXSCALE,
-		BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START,
+		vicii_first_raster, BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START,
 		SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
 }
 
@@ -474,7 +494,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			} while(0);
 			break;
 		CASE_VIC_2(0x30):	// this register is _SPECIAL_, and exists only in VIC-II (C64) I/O mode: C128-style "2MHz fast" mode ...
-			DEBUGPRINT("WRITE 0xD030: $%02x" NL, data);
+			DEBUGPRINT("VIC: Write 0xD030: $%02x" NL, data);
 			c128_d030_reg = data;
 			machine_set_speed(0);
 			return;		// it IS important to have return here, since it's not a "real" VIC-4 mode register's view in another mode!!
@@ -518,7 +538,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			return;				// since we DID the write, it's OK to return here and not using "break"
 		CASE_VIC_4(0x55): CASE_VIC_4(0x56): CASE_VIC_4(0x57): break; 
 		CASE_VIC_4(0x58): CASE_VIC_4(0x59): 
-			DEBUGPRINT("WRITE $%04x CHARSTEP: $%02x" NL, addr, data);
+			DEBUGPRINT("VIC: Write $%04x CHARSTEP: $%02x" NL, addr, data);
 			break;
 		CASE_VIC_4(0x5A): 
 			//DEBUGPRINT("WRITE $%04x CHARXSCALE: $%02x" NL, addr, data);
@@ -532,19 +552,19 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;
 
 		CASE_VIC_4(0x5D): 
-			DEBUGPRINT("WRITE $%04x SIDEBORDER/HOTREG: $%02x" NL, addr, data);
+			DEBUGPRINT("VIC: Write $%04x SIDEBORDER/HOTREG: $%02x" NL, addr, data);
 
 			if((vic_registers[0x5D] & 0x1F) ^ (data & 0x1F))  // sideborder MSB (0..5) modified ? 
 				vic4_sideborder_touched = 1;
 			break;		
 		
 		CASE_VIC_4(0x5E): 
-			DEBUGPRINT("WRITE $%04x CHARCOUNT: $%02x" NL, addr, data);
+			DEBUGPRINT("VIC: Write $%04x CHARCOUNT: $%02x" NL, addr, data);
 			break;
 		CASE_VIC_4(0x5F): 
 			break;
 		CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):
-			DEBUGPRINT("WRITE 0xD0%02x: $%02x" NL, addr, data);
+			DEBUGPRINT("VIC: Write 0xD0%02x: $%02x" NL, addr, data);
 			break;
 		CASE_VIC_4(0x64):
 		CASE_VIC_4(0x65): CASE_VIC_4(0x66): CASE_VIC_4(0x67): /*CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):*/ CASE_VIC_4(0x6B): /*CASE_VIC_4(0x6C):
@@ -557,24 +577,42 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;
 		CASE_VIC_4(0x6C): CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):
 			vic_registers[addr & 0x7F] = data;
-			if (SPRITE_POINTER_ADDR > 384*1024) {
-				DEBUGPRINT("WARNING !!! : SPRITE_POINTER_ADDR at $%08X exceeds 384K chip RAM!!!!  Current behavior is undefined." NL, SPRITE_POINTER_ADDR);
-			}
+			// if (SPRITE_POINTER_ADDR > 384*1024) {
+			// 	DEBUGPRINT("WARNING !!! : SPRITE_POINTER_ADDR at $%08X exceeds 384K chip RAM!!!!  Current behavior is undefined." NL, SPRITE_POINTER_ADDR);
+			// }
 
-			DEBUGPRINT("SPRPTRADR/SPRPTRBNK Modified. Sprite Data Pointers now: " NL);
+			// DEBUGPRINT("SPRPTRADR/SPRPTRBNK Modified. Sprite Data Pointers now: " NL);
 
-			for (int i = 0; i < 8; ++i) {
-				const Uint8 *sprite_data_pointer =  main_ram + SPRITE_POINTER_ADDR + i * ((SPRITE_16BITPOINTER >> 7) + 1);
-				const Uint32 dataptr = SPRITE_16BITPOINTER ? 64 * ( ((*(sprite_data_pointer+1) << 8)) + (*(sprite_data_pointer))) : 64 * (*sprite_data_pointer);
-				DEBUGPRINT("Sprite #%d data @ $%08X %s" NL , i, dataptr, dataptr > 384*1024 ? "!!! OUT OF 384K main RAM !!!" : "");
-			}
+			// for (int i = 0; i < 8; ++i) {
+			// 	const Uint8 *sprite_data_pointer =  main_ram + SPRITE_POINTER_ADDR + i * ((SPRITE_16BITPOINTER >> 7) + 1);
+			// 	const Uint32 dataptr = SPRITE_16BITPOINTER ? 64 * ( ((*(sprite_data_pointer+1) << 8)) + (*(sprite_data_pointer))) : 64 * (*sprite_data_pointer);
+			// 	DEBUGPRINT("Sprite #%d data @ $%08X %s" NL , i, dataptr, dataptr > 384*1024 ? "!!! OUT OF 384K main RAM !!!" : "");
+			// }
 
 			break;
 		CASE_VIC_4(0x6F):
-			vicii_first_raster  = data & 0x1F;
+			// Trigger video mode change.
+
+			max_rasters = data & 0x80 ? PHYSICAL_RASTERS_NTSC : PHYSICAL_RASTERS_PAL;
+			visible_area_height = data & 0x80 ? SCREEN_HEIGHT_VISIBLE_NTSC : SCREEN_HEIGHT_VISIBLE_PAL;
+			
+			if ((vic_registers[0x6F] & 0x80) ^ (data & 0x80))
+			{
+				// Change video mode
+				vic4_reset_display_counters();
+				vic4_switch_display_mode(data & 0x80);
+			}
+		
+			vicii_first_raster = data & 0x1F;
+
 			if (!in_hypervisor)
+			{
 				vic4_sideborder_touched = 1;
-			break;
+				vic4_interpret_legacy_mode_registers();
+			}
+
+			break;			
+
 		CASE_VIC_4(0x70):	// VIC-IV palette selection register
 			palette		= ((data & 0x03) << 8) + vic_palettes;
 			spritepalette	= ((data & 0x0C) << 6) + vic_palettes;
@@ -605,7 +643,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 	{
 		if (vic_hotreg_touched)
 		{
-			DEBUGPRINT("vic_hotreg_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
+			DEBUGPRINT("VIC: vic_hotreg_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
 			vic4_interpret_legacy_mode_registers();
 			vic_hotreg_touched = 0;
 			vic4_sideborder_touched = 0;
@@ -613,7 +651,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 
 		if (vic4_sideborder_touched)
 		{
-			DEBUGPRINT("vic4_sideborder_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
+			DEBUGPRINT("VIC: vic4_sideborder_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
 			
 			vic4_update_sideborder_dimensions();
 			vic4_sideborder_touched = 0;
@@ -893,10 +931,10 @@ static void vic4_do_sprites()
 					64 * ((*(sprite_data_pointer + 1) << 8) | (*sprite_data_pointer))
 					: 64 * (*sprite_data_pointer);
 
-				if (sprite_data_addr > 384*1024)
-				{
-					DEBUGPRINT("Sprite %d data at $%08X (out of 384K chip RAM!) -- Behaviour is undefined!" NL, sprnum, sprite_data_addr);
-				}
+				// if (sprite_data_addr > 384*1024)
+				// {
+				// 	DEBUGPRINT("VIC: Sprite %d data at $%08X (out of 384K chip RAM!) -- Behaviour is undefined!" NL, sprnum, sprite_data_addr);
+				// }
 
 				const Uint8 *sprite_data = main_ram + sprite_data_addr;
 				Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
@@ -1169,6 +1207,7 @@ int vic4_render_scanline()
 	}
 	else
 	{
+		
 		// Top and bottom borders
 
 		if (ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM || !REG_DISPLAYENABLE)
@@ -1178,32 +1217,31 @@ int vic4_render_scanline()
 		}
 		else
 		{
-			// Render visible display first and render side-borders later to cover X-displaced 
+			// Render visible display first and render side-borders later to cover X-displaced
 			// character generator if needed.
-			
+
 			xcounter += border_x_left;
 			current_pixel += border_x_left;
 
 			vic4_render_char_raster();
-			vic4_do_sprites();			
+			vic4_do_sprites();
 
-			for (Uint32* p = pixel_raster_start; p < pixel_raster_start + border_x_left; ++p)
+			for (Uint32 *p = pixel_raster_start; p < pixel_raster_start + border_x_left; ++p)
 				*p = palette[REG_BORDER_COLOR & 0xF];
 
-			for (Uint32* p = current_pixel; p < current_pixel + border_x_right; ++p)
+			for (Uint32 *p = current_pixel; p < current_pixel + border_x_right; ++p)
 				*p = palette[REG_BORDER_COLOR & 0xF];
 		}
 	}
 	ycounter++;
-	
+
 	// End of frame?
-	if (ycounter == SCREEN_HEIGHT)
+	if (ycounter == max_rasters)    
 	{
-		display_row = 0;
-		char_row = 0;
+		vic4_reset_display_counters();
+		
 		screen_ram_current_ptr = main_ram + SCREEN_ADDR;
 		colour_ram_current_ptr = colour_ram;
-		ycounter = 0;
 		frame_counter++;
 		if (frame_counter == VIC4_BLINK_INTERVAL)
 		{
