@@ -143,7 +143,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_VERT_2X(n)    (vic_registers[0x17] & (1 << (n)))
 #define SPRITE_MULTICOLOR(n) (vic_registers[0x1C] & (1 << (n)))
 #define SPRITE_16COLOR(n)    (vic_registers[0x6B] & (1 << (n)))
-#define SPRITE_EXTWIDTH(n)   (vic_registers[0x57] & (1 << (n)))
+#define SPRITE_EXTWIDTH(n)   (SPRITE_16COLOR(n) | (vic_registers[0x57] & (1 << (n))))
 #define SPRITE_EXTHEIGHT(n)  (vic_registers[0x55] & (1 << (n)))
 #define SPRITE_BITPLANE_ENABLE(n)  (((REG_SPRBPMEN_4_7) << 4 | REG_SPRBPMEN_0_3) & (1 << (n)))
 #define SPRITE_16BITPOINTER  (vic_registers[0x6E] & 0x80)
