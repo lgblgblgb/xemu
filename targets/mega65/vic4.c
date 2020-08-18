@@ -365,6 +365,9 @@ static void vic4_interpret_legacy_mode_registers()
 		REG_SPRPTR_B1 |= 4;
 	vic_registers[0x6E] &= 128;
 
+	REG_SPRPTR_B1  = (~last_dd00_bits << 6) | (REG_SPRPTR_B1 & 0x3F);
+	REG_SCRNPTR_B1 = (~last_dd00_bits << 6) | (REG_SCRNPTR_B1 & 0x3F);
+	
 	SET_COLORRAM_BASE(0);
 	DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charscale=%d, vic_ii_first_raster=%d, "
 	          "border yt=%d, yb=%d, xl=%d, xr=%d, textxpos=%d, textypos=%d,"
@@ -449,6 +452,8 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 				REG_CHARPTR_B1 = (data & 14) << 2;
 				REG_CHARPTR_B0 = 0;
 				REG_SCRNPTR_B2 &= 0xF0;
+				REG_SCRNPTR_B1 = (~last_dd00_bits << 6) | (REG_SCRNPTR_B1 & 0x3F);
+				REG_CHARPTR_B1 = (~last_dd00_bits << 6) | (REG_CHARPTR_B1 & 0x3F);
 				reg_d018_screen_addr = (data & 0xF0) >> 4;
 				vic_hotreg_touched = 1;
 			}
@@ -932,13 +937,9 @@ static void vic4_do_sprites()
 				const Uint8 *sprite_data_pointer =  main_ram + SPRITE_POINTER_ADDR + sprnum * ((SPRITE_16BITPOINTER >> 7) + 1);
 				const Uint32 sprite_data_addr = SPRITE_16BITPOINTER ? 
 					64 * ((*(sprite_data_pointer + 1) << 8) | (*sprite_data_pointer))
-					: 64 * (*sprite_data_pointer);
+					: ((64 * (*sprite_data_pointer)) | ( ((~last_dd00_bits) & 0x3)) << 14);
 
-				// if (sprite_data_addr > 384*1024)
-				// {
-				// 	DEBUGPRINT("VIC: Sprite %d data at $%08X (out of 384K chip RAM!) -- Behaviour is undefined!" NL, sprnum, sprite_data_addr);
-				// }
-
+				DEBUGPRINT("VIC: Sprite %d data at $%08X " NL, sprnum, sprite_data_addr);
 				const Uint8 *sprite_data = main_ram + sprite_data_addr;
 				const Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
 				int xscale = (REG_SPR640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
