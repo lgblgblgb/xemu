@@ -25,16 +25,27 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define VIC_BAD_IOMODE	2
 #define VIC4_IOMODE	3
 
-#define SCREEN_WIDTH		      800
-#define SCREEN_HEIGHT_NTSC    506
-#define SCREEN_HEIGHT_PAL     603
-#define SCREEN_HEIGHT	      SCREEN_HEIGHT_PAL
-#define NTSC_PHYSICAL_RASTERS 526
-#define PAL_PHYSICAL_RASTERS  624
-#define FRAME_H_FRONT         0
-#define RASTER_CORRECTION     3
-#define DISPLAY_FETCH_START   719
-#define VIC4_BLINK_INTERVAL   25
+//
+// Output window is fixed at 800x600 to support MegaPHONE, PAL-MEGA65
+// and NTSC_MEGA65 modes. Internally, the VIC-IV chip draws 800-pixel
+// wide buffers and traverses up to 526/624 physical rasters, as we do here.  
+// The user can select a clipped borders view (called "normal borders") which shows 
+// the real visible resolution of PAL (720x576) or NSTC(720x480).
+//
+
+#define SCREEN_WIDTH		              800
+#define SCREEN_HEIGHT                 600
+#define PHYSICAL_RASTERS_DEFAULT      PHYSICAL_RASTERS_NTSC
+#define SCREEN_HEIGHT_VISIBLE_DEFAULT SCREEN_HEIGHT_VISIBLE_NTSC
+#define SCREEN_HEIGHT_VISIBLE_NTSC    480
+#define SCREEN_HEIGHT_VISIBLE_PAL     576
+#define PHYSICAL_RASTERS_NTSC         526
+#define PHYSICAL_RASTERS_PAL          624
+#define NTSC_RATIO                    PHYSICAL_RASTERS_NTSC / float(SCREEN_WIDTH)
+#define PAL_RATIO                     PHYSICAL_RASTERS_PAL  / float(SCREEN_WIDTH)
+#define FRAME_H_FRONT                 0
+#define RASTER_CORRECTION             3
+#define VIC4_BLINK_INTERVAL           25
 
 // Register defines 
 // 
@@ -71,6 +82,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_TEXTXPOS_U4     (vic_registers[0x4D] & 0xF)
 #define REG_TEXTYPOS        (vic_registers[0x4E])
 #define REG_TEXTYPOS_U4     (vic_registers[0x4F] & 0xF)
+#define REG_XPOS            (vic_registers[0x51])
+#define REG_XPOS_U6         (vic_registers[0x50] & 0x3F)
 #define REG_16BITCHARSET    (vic_registers[0x54] & 1)
 #define REG_FCLRLO          (vic_registers[0x54] & 2)
 #define REG_FCLRHI          (vic_registers[0x54] & 4)
@@ -132,7 +145,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_VERT_2X(n)    (vic_registers[0x17] & (1 << (n)))
 #define SPRITE_MULTICOLOR(n) (vic_registers[0x1C] & (1 << (n)))
 #define SPRITE_16COLOR(n)    (vic_registers[0x6B] & (1 << (n)))
-#define SPRITE_EXTWIDTH(n)   (vic_registers[0x57] & (1 << (n)))
+#define SPRITE_EXTWIDTH(n)   (SPRITE_16COLOR(n) | (vic_registers[0x57] & (1 << (n))))
 #define SPRITE_EXTHEIGHT(n)  (vic_registers[0x55] & (1 << (n)))
 #define SPRITE_BITPLANE_ENABLE(n)  (((REG_SPRBPMEN_4_7) << 4 | REG_SPRBPMEN_0_3) & (1 << (n)))
 #define SPRITE_16BITPOINTER  (vic_registers[0x6E] & 0x80)
@@ -163,12 +176,17 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
                                  vic_registers[(basereg)] = (Uint8) ((Uint16)(x)) & 0x00FF;
 #define SET_12BIT_REG(basereg,x) vic_registers[((basereg)+1)] = (Uint8) ((((Uint16)(x)) & 0xF00) >> 8); \
                                  vic_registers[(basereg)] = (Uint8) ((Uint16)(x)) & 0x00FF;
+#define SET_14BIT_REG(basereg,x) vic_registers[((basereg)+1)] = (Uint8) ((((Uint16)(x)) & 0x3F00) >> 8); \
+                                 vic_registers[(basereg)] = (Uint8) ((Uint16)(x)) & 0x00FF;      
+#define SET_14BIT_REGI(basereg,x) vic_registers[(basereg)] = (Uint8) ((((Uint16)(x)) & 0x3F00) >> 8); \
+                                  vic_registers[((basereg)+1)] = (Uint8) ((Uint16)(x)) & 0x00FF;                           
 #define SET_16BIT_REG(basereg,x) vic_registers[((basereg) + 1)] = (Uint8) ((((Uint16)(x)) & 0xFF00) >> 8); \
                                  vic_registers[(basereg)]= ((Uint16)(x)) & 0x00FF;
 
 // 11-bit registers
 
 #define SET_PHYSICAL_RASTER(x) SET_11BIT_REG(0x52, (x))
+#define SET_RASTER_XPOS(x)     SET_14BIT_REGI(0x50, (x))
 
 // 12-bit registers
 

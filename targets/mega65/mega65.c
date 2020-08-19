@@ -62,6 +62,7 @@ static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, bu
 static int force_external_rom = 0;
 static int force_upload_fonts = 0;
 
+Uint8 last_dd00_bits = 3; // Bank 0 
 
 void cpu65_illegal_opcode_callback ( void )
 {
@@ -173,11 +174,18 @@ static void cia2_out_a ( Uint8 data )
 {   
 	if (REG_HOTREG && !REG_CRAM2K)
 	{
+		// Bank select
+
+		data &= (cia2.DDRA & 3); // Mask bank bits through CIA DDR register bits
+
 		REG_SCRNPTR_B1 = (~data << 6) | (REG_SCRNPTR_B1 & 0x3F);
 		REG_CHARPTR_B1 = (~data << 6) | (REG_CHARPTR_B1 & 0x3F);
 		REG_SPRPTR_B1  = (~data << 6) | (REG_SPRPTR_B1 & 0x3F);
+
+		last_dd00_bits = data;
+		DEBUGPRINT("VIC2: (hotreg)Wrote to $DD00: $%02x screen=$%08x char=$%08x spr=$%08x" NL, data, SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
 	}
-	DEBUG("VIC2: Wrote to $DD00: $%08x" NL, data);
+
 }
 
 
@@ -462,7 +470,6 @@ static void update_emulator ( void )
 //	}
 }
 
-
 #ifdef HAS_UARTMON_SUPPORT
 void m65mon_show_regs ( void )
 {
@@ -690,7 +697,7 @@ int main ( int argc, char **argv )
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
 		1,				// resizable window
-		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
+		SCREEN_WIDTH, PHYSICAL_RASTERS_DEFAULT,	// texture sizes
 		SCREEN_WIDTH, SCREEN_HEIGHT,// logical size (used with keeping aspect ratio by the SDL render stuffs)
 		SCREEN_WIDTH, SCREEN_HEIGHT,// window size
 		SCREEN_FORMAT,			// pixel format
