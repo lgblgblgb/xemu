@@ -82,6 +82,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_TEXTXPOS_U4     (vic_registers[0x4D] & 0xF)
 #define REG_TEXTYPOS        (vic_registers[0x4E])
 #define REG_TEXTYPOS_U4     (vic_registers[0x4F] & 0xF)
+#define REG_XPOS            (vic_registers[0x51])
+#define REG_XPOS_U6         (vic_registers[0x50] & 0x3F)
 #define REG_16BITCHARSET    (vic_registers[0x54] & 1)
 #define REG_FCLRLO          (vic_registers[0x54] & 2)
 #define REG_FCLRHI          (vic_registers[0x54] & 4)
@@ -174,12 +176,17 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
                                  vic_registers[(basereg)] = (Uint8) ((Uint16)(x)) & 0x00FF;
 #define SET_12BIT_REG(basereg,x) vic_registers[((basereg)+1)] = (Uint8) ((((Uint16)(x)) & 0xF00) >> 8); \
                                  vic_registers[(basereg)] = (Uint8) ((Uint16)(x)) & 0x00FF;
+#define SET_14BIT_REG(basereg,x) vic_registers[((basereg)+1)] = (Uint8) ((((Uint16)(x)) & 0x3F00) >> 8); \
+                                 vic_registers[(basereg)] = (Uint8) ((Uint16)(x)) & 0x00FF;      
+#define SET_14BIT_REGI(basereg,x) vic_registers[(basereg)] = (Uint8) ((((Uint16)(x)) & 0x3F00) >> 8); \
+                                  vic_registers[((basereg)+1)] = (Uint8) ((Uint16)(x)) & 0x00FF;                           
 #define SET_16BIT_REG(basereg,x) vic_registers[((basereg) + 1)] = (Uint8) ((((Uint16)(x)) & 0xFF00) >> 8); \
                                  vic_registers[(basereg)]= ((Uint16)(x)) & 0x00FF;
 
 // 11-bit registers
 
 #define SET_PHYSICAL_RASTER(x) SET_11BIT_REG(0x52, (x))
+#define SET_RASTER_XPOS(x)     SET_14BIT_REGI(0x50, (x))
 
 // 12-bit registers
 

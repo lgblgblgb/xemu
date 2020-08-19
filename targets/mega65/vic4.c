@@ -693,6 +693,7 @@ Uint8 vic_read_reg ( int unsigned addr )
 		CASE_VIC_ALL(0x17):	// sprite-Y expansion
 			break;
 		CASE_VIC_ALL(0x18):	// memory pointers
+			result |= 1;
 			// Always mapped to VIC-IV extended "precise" registers
 			// result = ((REG_SCRNPTR_B1 & 60) << 2) | ((REG_CHARPTR_B1 & 60) >> 2);
 			// DEBUGPRINT("READ 0x81: $%02x" NL, result);
@@ -943,10 +944,10 @@ static void vic4_do_sprites()
 				const Uint8 *sprite_data = main_ram + sprite_data_addr;
 				const Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
 				int xscale = (REG_SPR640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
-				if (SPRITE_16COLOR(sprnum))
-					vic4_draw_sprite_row_16color(sprnum, x_display_pos, row_data, xscale);
-				else if (SPRITE_MULTICOLOR(sprnum))
+				if (SPRITE_MULTICOLOR(sprnum))
 					vic4_draw_sprite_row_multicolor(sprnum, x_display_pos, row_data, xscale);
+				else if (SPRITE_16COLOR(sprnum))
+					vic4_draw_sprite_row_16color(sprnum, x_display_pos, row_data, xscale);
 				else
 					vic4_draw_sprite_row_mono(sprnum, x_display_pos, row_data, xscale);
 			}
