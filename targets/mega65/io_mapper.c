@@ -184,6 +184,8 @@ Uint8 io_read ( unsigned int addr )
 					return hwa_kbd_get_last();
 				case 0x11:				// modifier keys on kbd being used
 					return hwa_kbd_get_modifiers();
+				case 0x29:
+					return 0x03;			// MEGA65 model: PCB rev 3
 				default:
 					DEBUG("MEGA65: reading MEGA65 specific I/O @ $D6%02X result is $%02X" NL, addr, D6XX_registers[addr]);
 					return D6XX_registers[addr];

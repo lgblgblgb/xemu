@@ -524,7 +524,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 	if (!vic_sprp_legacy) {
 		sprite_pointers = main_ram + ((vic_registers[0x6C] | (vic_registers[0x6D] << 8) | (vic_registers[0x6E] << 16)) & ((512 << 10) - 1));
 	}
-	//DEBUGPRINT("VIC4: vidp = %u, vic_vidp_legacy=%d" NL, (unsigned int)(vidp - main_ram), vic_vidp_legacy);
+	//DEBUGPRINT("VIC4: vidp = $%X, vic_vidp_legacy=%X" NL, (unsigned int)(vidp - main_ram), vic_vidp_legacy);
 	// Target SDL pixel related format for the background colour
 	bg = palette[BG_FOR_Y(0)];
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_text");

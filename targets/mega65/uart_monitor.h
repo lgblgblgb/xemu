@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #if !defined(XEMU_ARCH_WIN) && !defined(XEMU_ARCH_HTML)
 #define HAS_UARTMON_SUPPORT
 
-#define SYNTAX_ERROR "?SYNTAX ERROR  "
+#define UMON_SYNTAX_ERROR "?SYNTAX ERROR  "
 
 #define UMON_WRITE_BUFFER_SIZE	0x4000
 #define umon_printf(...)	umon_write_size += sprintf(umon_write_buffer + umon_write_size, __VA_ARGS__)

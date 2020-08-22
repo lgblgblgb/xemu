@@ -59,7 +59,7 @@ static char *parse_hex_arg ( char *p, int *val, int min, int max )
 		p++;
 	*val = -1;
 	if (!*p) {
-		umon_printf(SYNTAX_ERROR "unexpected end of command (no parameter)");
+		umon_printf(UMON_SYNTAX_ERROR "unexpected end of command (no parameter)");
 		return NULL;
 	}
 	for (r = 0;;) {
@@ -72,14 +72,14 @@ static char *parse_hex_arg ( char *p, int *val, int min, int max )
 		else if (*p == 32 || *p == 0)
 			break;
 		else {
-			umon_printf(SYNTAX_ERROR "invalid data as hex digit '%c'", *p);
+			umon_printf(UMON_SYNTAX_ERROR "invalid data as hex digit '%c'", *p);
 			return NULL;
 		}
 		p++;
 	}
 	*val = r;
 	if (r < min || r > max) {
-		umon_printf(SYNTAX_ERROR "command parameter's value is outside of the allowed range for this command %X (%X...%X)", r, min, max);
+		umon_printf(UMON_SYNTAX_ERROR "command parameter's value is outside of the allowed range for this command %X (%X...%X)", r, min, max);
 		return NULL;
 	}
 	return p;
@@ -93,7 +93,7 @@ static int check_end_of_command ( char *p, int error_out )
 		p++;
 	if (*p) {
 		if (error_out)
-			umon_printf(SYNTAX_ERROR "unexpected command parameter");
+			umon_printf(UMON_SYNTAX_ERROR "unexpected command parameter");
 		return 0;
 	}
 	return 1;
@@ -141,7 +141,7 @@ static void execute_command ( char *cmd )
 		else if (*p == 8)
 			memmove(p - 1, p + 1, strlen(p + 1) + 1);
 		else if (*p > 127 || *p < 32) {
-			umon_printf(SYNTAX_ERROR "invalid character in the command (ASCII=%d)", *p);
+			umon_printf(UMON_SYNTAX_ERROR "invalid character in the command (ASCII=%d)", *p);
 			return;
 		} else
 			p++;
@@ -196,7 +196,7 @@ static void execute_command ( char *cmd )
 			m65mon_empty_command(); // emulator can use it, if it wants
 			break;
 		default:
-			umon_printf(SYNTAX_ERROR "unknown (or not implemented) command '%c'", cmd[-1]);
+			umon_printf(UMON_SYNTAX_ERROR "unknown (or not implemented) command '%c'", cmd[-1]);
 			break;
 	}
 }

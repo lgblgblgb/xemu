@@ -208,17 +208,41 @@ DEFINE_WRITER(slow_ram_writer) {
 	slow_ram[GET_WRITER_OFFSET()] = data;
 }
 DEFINE_READER(invalid_mem_reader) {
-	if (XEMU_LIKELY(skip_unhandled_mem))
-		DEBUGPRINT("WARNING: Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, GET_READER_OFFSET(), cpu65.pc);
-	else
-		FATAL("Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, GET_READER_OFFSET(), cpu65.pc);
+	char msg[128];
+	sprintf(msg, "Unhandled memory read operation for linear address $%X (PC=$%04X)", GET_READER_OFFSET(), cpu65.pc);
+	if (skip_unhandled_mem <= 1)
+		skip_unhandled_mem = QUESTION_WINDOW("EXIT|Ignore now|Ignore all|Silent ignore all", msg);
+	switch (skip_unhandled_mem) {
+		case 0:
+			FATAL("Exit on request after illegal memory access");
+			break;
+		case 1:
+		case 2:
+			DEBUGPRINT("WARNING: %s" NL, msg);
+			break;
+		default:
+			DEBUG("WARNING: %s" NL, msg);
+			break;
+	}
 	return 0xFF;
 }
 DEFINE_WRITER(invalid_mem_writer) {
-	if (XEMU_LIKELY(skip_unhandled_mem))
-		DEBUGPRINT("WARNING: Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, GET_WRITER_OFFSET(), data, cpu65.pc);
-	else
-		FATAL("Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, GET_WRITER_OFFSET(), data, cpu65.pc);
+	char msg[128];
+	sprintf(msg, "Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)", GET_WRITER_OFFSET(), data, cpu65.pc);
+	if (skip_unhandled_mem <= 1)
+		skip_unhandled_mem = QUESTION_WINDOW("EXIT|Ignore now|Ignore all|Silent ignore all", msg);
+	switch (skip_unhandled_mem) {
+		case 0:
+			FATAL("Exit on request after illegal memory access");
+			break;
+		case 1:
+		case 2:
+			DEBUGPRINT("WARNING: %s" NL, msg);
+			break;
+		default:
+			DEBUG("WARNING: %s" NL, msg);
+			break;
+	}
 }
 DEFINE_READER(fatal_mem_reader) {
 	FATAL("Unhandled physical memory mapping on read map. Xemu software bug?");
