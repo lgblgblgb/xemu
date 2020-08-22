@@ -1,11 +1,12 @@
 #!/bin/bash
 # A very lame binary-level DEB package builder ... :-/
-# (C)2016-2019 LGB Gabor Lenart
+# Part of the Xemu project: https://github.com/lgblgblgb/xemu
+# (C)2016-2020 LGB Gabor Lenart
 
 PROJECT="xemu"
-DEPENDENCY="libsdl2-2.0-0 (>= 2.0.4), libc6 (>= 2.15), libreadline7 (>= 7.0), libgtk-3-0 (>= 3.18), wget"
+DEPENDENCY="libsdl2-2.0-0 (>= 2.0.4), libc6 (>= 2.15), `dpkg -s libreadline-dev | grep ^Depends: | grep -o 'libreadline[0-9][0-9]*'`, libgtk-3-0 (>= 3.18), wget"
 AUTHOR="Gábor Lénárt <lgblgblgb@gmail.com>"
-WEBSITE="https://github.com/lgblgblgb/xemu/wiki"
+WEBSITE="https://github.com/lgblgblgb/xemu"
 BUGSITE="https://github.com/lgblgblgb/xemu/issues"
 #VERSION="`date '+%Y%m%d%H%M%S'`"
 ROOT=".dist/${PROJECT}_$VERSION"
@@ -70,11 +71,10 @@ Maintainer: $AUTHOR
 Installed-Size: $SIZE
 Description: Collection of software emulations of some (mainly 8 bit) computers.
   X-Emulators (Xemu) is a kind of collection of software emulators
-  targeting various computers, including the quite rare Commodore LCD
-  and Commodore 65 as well. On-going work will provide MEGA65
-  emulation too. Xemu uses SDL2, and can run on Linux/UNIX, Windows
-  and OSX, also there is the possibility to use it within a web-browser
-  with the help of the Emscripten compiler.
+  targeting various computers, including the quite rare Commodore LCD,
+  Commodore 65, and MEGA65 as well. Xemu uses SDL2, and can run on Linux/UNIX,
+  Windows and MacOS, also there is the limited possibility to use it within a
+  web-browser with the help of the Emscripten compiler.
 Homepage: $WEBSITE
 Bugs: $BUGSITE
 Original-Maintainer: $AUTHOR" > $ROOT/DEBIAN/control
