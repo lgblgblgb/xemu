@@ -233,7 +233,7 @@ static void vic4_interrupt_checker ( void )
 	}
 }
 
-static void vic4_check_raster_interrupt ( void )
+void vic4_check_raster_interrupt ( void )
 {
 	if (logical_raster == compare_raster)
 		interrupt_status |= 1;
@@ -367,6 +367,7 @@ static void vic4_interpret_legacy_mode_registers()
 
 	REG_SPRPTR_B1  = (~last_dd00_bits << 6) | (REG_SPRPTR_B1 & 0x3F);
 	REG_SCRNPTR_B1 = (~last_dd00_bits << 6) | (REG_SCRNPTR_B1 & 0x3F);
+	REG_CHARPTR_B1 = (~last_dd00_bits << 6) | (REG_CHARPTR_B1 & 0x3F);
 	
 	SET_COLORRAM_BASE(0);
 	DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charscale=%d, vic_ii_first_raster=%d, "
@@ -449,14 +450,15 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			//
 			if (vic_registers[0x18] ^ data)
 			{
+				REG_CHARPTR_B2 = 0;
 				REG_CHARPTR_B1 = (data & 14) << 2;
 				REG_CHARPTR_B0 = 0;
 				REG_SCRNPTR_B2 &= 0xF0;
-				REG_SCRNPTR_B1 = (~last_dd00_bits << 6) | (REG_SCRNPTR_B1 & 0x3F);
-				REG_CHARPTR_B1 = (~last_dd00_bits << 6) | (REG_CHARPTR_B1 & 0x3F);
 				reg_d018_screen_addr = (data & 0xF0) >> 4;
 				vic_hotreg_touched = 1;
 			}
+			
+			data &= 0xFE;
 			break;
 		CASE_VIC_ALL(0x19):
 			interrupt_status = interrupt_status & (~data) & 0xF;
@@ -538,7 +540,10 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		/* --- NO MORE VIC-III REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B): 
 		CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
-		CASE_VIC_4(0x50): CASE_VIC_4(0x51): CASE_VIC_4(0x52): CASE_VIC_4(0x53):
+			break;
+		CASE_VIC_4(0x50): CASE_VIC_4(0x51): 
+			return; // Writing to XPOS register is no-op
+		CASE_VIC_4(0x52): CASE_VIC_4(0x53):
 			break;
 		CASE_VIC_4(0x54):
 			vic_registers[0x54] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
@@ -572,7 +577,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x5F): 
 			break;
 		CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):
-			DEBUGPRINT("VIC: Write 0xD0%02x: $%02x" NL, addr, data);
+			DEBUGPRINT("VIC: Write SCREENADDR byte 0xD0%02x: $%02x" NL, addr, data);
 			break;
 		CASE_VIC_4(0x64):
 		CASE_VIC_4(0x65): CASE_VIC_4(0x66): CASE_VIC_4(0x67): /*CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):*/ CASE_VIC_4(0x6B): /*CASE_VIC_4(0x6C):
@@ -743,7 +748,12 @@ Uint8 vic_read_reg ( int unsigned addr )
 			break;
 		/* --- NO MORE VIC-III REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B): CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
-		CASE_VIC_4(0x50): CASE_VIC_4(0x51): CASE_VIC_4(0x52): CASE_VIC_4(0x53):
+		CASE_VIC_4(0x50): 
+			break;
+		CASE_VIC_4(0x51):
+			result = vic_registers[0x51]++;
+			break;
+		CASE_VIC_4(0x52): CASE_VIC_4(0x53):
 			break;
 		CASE_VIC_4(0x54):
 			break;
