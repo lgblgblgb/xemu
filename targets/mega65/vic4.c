@@ -1070,7 +1070,7 @@ static void vic4_render_char_raster()
 	if (adj_display_row >= 0 && adj_display_row < display_row_count)
 	{
 		const int char_row_offset = (BORDER_Y_TOP - CHARGEN_Y_START) % 8;
-		colour_ram_current_ptr = colour_ram + (adj_display_row  * CHARSTEP_BYTES); 
+		colour_ram_current_ptr = colour_ram + COLOUR_RAM_OFFSET + (adj_display_row  * CHARSTEP_BYTES); 
 		screen_ram_current_ptr = main_ram + SCREEN_ADDR + (adj_display_row  * CHARSTEP_BYTES);
 		const Uint8* row_data_base_addr = main_ram + (REG_BMM ?  VIC2_BITMAP_ADDR : get_charset_effective_addr());
 		
@@ -1256,7 +1256,7 @@ int vic4_render_scanline()
 		vic4_reset_display_counters();
 		
 		screen_ram_current_ptr = main_ram + SCREEN_ADDR;
-		colour_ram_current_ptr = colour_ram;
+		colour_ram_current_ptr = colour_ram + COLOUR_RAM_OFFSET;
 		frame_counter++;
 		if (frame_counter == VIC4_BLINK_INTERVAL)
 		{
