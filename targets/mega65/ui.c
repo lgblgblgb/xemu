@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_hid.h"
 #include "xemu/c64_kbd_mapping.h"
 #include "inject.h"
+#include "input_devices.h"
 
 #define		HELP_URL	"https://github.com/lgblgblgb/xemu/wiki/MEGA65-help"
 
@@ -233,8 +234,7 @@ static void ui_update_sdcard ( void )
 static void reset_into_utility_menu ( void )
 {
 	if (reset_mega65_asked()) {
-		hid_set_autoreleased_key(ALT_KEY_POS);
-		KBD_PRESS_KEY(ALT_KEY_POS);
+		hwa_kbd_fake_key(0x20);
 	}
 }
 
