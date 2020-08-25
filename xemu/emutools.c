@@ -91,6 +91,10 @@ static SDL_Texture *sdl_osdtex = NULL;
 static SDL_bool grabbed_mouse = SDL_FALSE, grabbed_mouse_saved = SDL_FALSE;
 static SDL_Rect viewport, * pViewport = NULL;
 
+// Benchmarking 
+static unsigned int samples = 0;
+static int td_em_pct_sum = 0, td_em_pct_max = 0, td_em_pct_min = 9999999;
+
 #if !SDL_VERSION_ATLEAST(2, 0, 4)
 #error "At least SDL version 2.0.4 is needed!"
 #endif
@@ -273,7 +277,6 @@ void xemu_set_screen_mode ( int setting )
 		xemu_set_full_screen(1);
 	} else {
 		xemu_set_full_screen(0);
-		//SDL_SetWindowSize(sdl_win, viewport.w * setting, viewport.h * setting);
 	}
 	SDL_RaiseWindow(sdl_win);
 }
@@ -354,15 +357,23 @@ void xemu_timekeeping_delay ( int td_em )
 	td = get_elapsed_time(et_new, &et_old, &unix_time_tv);
 	seconds_timer_trigger = (unix_time_tv.tv_sec != old_unix_time);
 	if (seconds_timer_trigger) {
+		const int td_em_pct = td_em_ALL ? (td_pc_ALL * 100 / td_em_ALL) : -1;
 		snprintf(window_title_buffer_end, 32, "  [%d%% %d%%] %s %s",
 			((td_em_ALL < td_pc_ALL) && td_pc_ALL) ? td_em_ALL * 100 / td_pc_ALL : 100,
-			td_em_ALL ? (td_pc_ALL * 100 / td_em_ALL) : -1,
+			td_em_pct,
 			window_title_custom_addon ? window_title_custom_addon : "running",
 			window_title_info_addon ? window_title_info_addon : ""
 		);
 		SDL_SetWindowTitle(sdl_win, window_title_buffer);
 		td_pc_ALL = td_pc;
 		td_em_ALL = td_em;
+		if (td_em_pct >= td_em_pct_max)
+			td_em_pct_max = td_em_pct;
+		if (td_em_pct < td_em_pct_min)
+			td_em_pct_min = td_em_pct;
+
+		td_em_pct_sum += td_em_pct;
+		samples++;
 	} else {
 		td_pc_ALL += td_pc;
 		td_em_ALL += td_em;
@@ -403,6 +414,11 @@ static void shutdown_emulator ( void )
 		fclose(debug_fp);
 		debug_fp = NULL;
 	}
+	DEBUGPRINT(NL "-----------------------------------------------------------------------" NL
+	              "Performance Stats " NL 
+				  "CPU Time    Samples: %d   Min: %d   Max: %d   Avg: %.2f" NL
+				  "-----------------------------------------------------------------------" NL NL , 
+				  samples, td_em_pct_min, td_em_pct_max, td_em_pct_sum / (double)samples);
 	DEBUGPRINT(NL "XEMU: good by(T)e." NL);
 }
 
