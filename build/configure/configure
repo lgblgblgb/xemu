@@ -20,6 +20,8 @@
 
 echo "*** Running xemu-configure ***"
 
+MACOS_VERSION_MIN=10.5
+
 ###########################################################
 # Check some basic common UNIX utilities if work, we need #
 ###########################################################
@@ -329,7 +331,8 @@ for a in \
 	            PIPE_SUPPORTED_BY_CC:-pipe: \
   		      O0_SUPPORTED_BY_CC:-O0: \
 		       G_SUPPORTED_BY_CC:-g: \
-		    FLTO_SUPPORTED_BY_CC:-flto
+		    FLTO_SUPPORTED_BY_CC:-flto \
+	     MACOSVERMIN_SUPPORTED_BY_CC:-mmacosx-version-min=$MACOS_VERSION_MIN
 do
 	b="`echo $a | cut -f1 -d:`"
 	c="`echo $a | cut -f2 -d:`"
@@ -392,16 +395,8 @@ fi
 if [ $FALIGN_FUNCTIONS_SUPPORTED_BY_CC = Y ]; then
 	CFLAGS_OPT="$CFLAGS_OPT-falign-functions=16 "
 fi
-echo "Common $CC flags to be used: $CFLAGS"
-echo "Common $CC optimization flags to be used: $CFLAGS_OPT"
-echo "Common $CC debug flags to be used: $CFLAGS_DEBUG"
-echo "CONFIG_CFLAGS=$CFLAGS" >> $OUTPUT_MAKEFILE
-echo "CONFIG_CFLAGS_OPT=$CFLAGS_OPT" >> $OUTPUT_MAKEFILE
-echo "CONFIG_CFLAGS_DEBUG=$CFLAGS_DEBUG" >> $OUTPUT_MAKEFILE
-echo "CONFIG_CFLAGS_LINK=$CFLAGS_LINK" >> $OUTPUT_MAKEFILE
-echo "CONFIG_CFLAGS_OPT_RELEASE=$CFLAGS_OPT_RELEASE" >> $OUTPUT_MAKEFILE
-echo "#define XEMU_MAKE_ARCH native" >> $OUTPUT_HEADERFILE
-echo "#define XEMU_MAKE_ARCH_NAME \"native\"" >> $OUTPUT_HEADERFILE
+echo "#define XEMU_MAKE_ARCH $ARCH" >> $OUTPUT_HEADERFILE
+echo "#define XEMU_MAKE_ARCH_NAME \"$ARCH\"" >> $OUTPUT_HEADERFILE
 echo "#define _CONFIG_DATE \"`date`\"" >> $OUTPUT_HEADERFILE
 echo "#define _CONFIG_OS \"`uname -a`\"" >> $OUTPUT_HEADERFILE
 
@@ -720,6 +715,14 @@ echo "XEMUGUI_CFLAGS=$XEMUGUI_CFLAGS" >> $OUTPUT_MAKEFILE
 echo "XEMUGUI_LIBS=$XEMUGUI_LIBS" >> $OUTPUT_MAKEFILE
 
 
+################
+# MACOS target #
+################
+
+if [ $TARGET_IS_OSX = Y -a $MACOSVERMIN_SUPPORTED_BY_CC = Y ]; then
+	CFLAGS="$CFLAGS-mmacosx-version-min=$MACOS_VERSION_MIN "
+fi
+
 #########################################
 # Windows target: check windres utility #
 #########################################
@@ -770,11 +773,22 @@ fi
 echo "MATH_LIBS=$MATH_LIBS" >> $OUTPUT_MAKEFILE
 echo "MATH_CFLAGS=" >> $OUTPUT_MAKEFILE
 
+########################################
+# Result of accumulated generic cflags #
+########################################
+
+echo "Common $CC flags to be used: $CFLAGS"
+echo "Common $CC optimization flags to be used: $CFLAGS_OPT"
+echo "Common $CC debug flags to be used: $CFLAGS_DEBUG"
+echo "CONFIG_CFLAGS=$CFLAGS" >> $OUTPUT_MAKEFILE
+echo "CONFIG_CFLAGS_OPT=$CFLAGS_OPT" >> $OUTPUT_MAKEFILE
+echo "CONFIG_CFLAGS_DEBUG=$CFLAGS_DEBUG" >> $OUTPUT_MAKEFILE
+echo "CONFIG_CFLAGS_LINK=$CFLAGS_LINK" >> $OUTPUT_MAKEFILE
+echo "CONFIG_CFLAGS_OPT_RELEASE=$CFLAGS_OPT_RELEASE" >> $OUTPUT_MAKEFILE
 
 ######################################################################## 
 # Must be the end of this script, do not put anything after this part! #
 ########################################################################
-
 
 cat >> $OUTPUT_HEADERFILE <<EOF
 #ifndef XEMU_NO_TARGET
