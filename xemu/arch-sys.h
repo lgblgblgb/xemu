@@ -63,8 +63,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define	XEMU_ARCH_UNIX
 #	define	XEMU_ARCH_NAME	"osx"
 #	define	XEMU_SLEEP_IS_NANOSLEEP
-// #	include <stddef.h>
-//	void memset_pattern4(void *__b, const void *__pattern4, size_t __len);
 #elif	defined(__unix__) || defined(__unix) || defined(__linux__) || defined(__linux)
 #	define	XEMU_ARCH_UNIX
 #	if	defined(__linux__) || defined(__linux)
@@ -95,3 +93,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	undef	_FILE_OFFSET_BITS
 #endif
 #define	_FILE_OFFSET_BITS	64
+
+#ifdef XEMU_ARCH_OSX
+	// MacOS and/or SDL bug: even if this prototype is in string.h system header in MacOS,
+	// somehow it does not work even if string.h _IS_ included. So I have to create my
+	// own prototype for this function here :-O For the prototype, we also need the stddef.h
+	// though, for the "size_t".
+#	include <stddef.h>
+	void memset_pattern4(void *__b, const void *__pattern4, size_t __len);
+#endif
