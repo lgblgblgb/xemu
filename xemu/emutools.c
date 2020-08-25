@@ -447,6 +447,14 @@ static char *GetHackedPrefDir ( const char *base_path, const char *name )
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan )
 {
 #ifdef XEMU_ARCH_UNIX
+#ifndef XEMU_DO_NOT_DISALLOW_ROOT
+	// Some check to disallow dangerous things (running Xemu as user/group root)
+	if (getuid() == 0 || geteuid() == 0)
+		FATAL("Xemu must not be run as user root");
+	if (getgid() == 0 || getegid() == 0)
+		FATAL("Xemu must not be run as group root");
+#endif
+	// ignore SIGHUP, eg closing the terminal Xemu was started from ...
 	signal(SIGHUP, SIG_IGN);	// ignore SIGHUP, eg closing the terminal Xemu was started from ...
 #endif
 #ifdef XEMU_ARCH_HTML
