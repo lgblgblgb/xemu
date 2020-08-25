@@ -63,8 +63,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define	XEMU_ARCH_UNIX
 #	define	XEMU_ARCH_NAME	"osx"
 #	define	XEMU_SLEEP_IS_NANOSLEEP
-#	include <stddef.h>
-	void memset_pattern4(void *__b, const void *__pattern4, size_t __len);
+// #	include <stddef.h>
+//	void memset_pattern4(void *__b, const void *__pattern4, size_t __len);
 #elif	defined(__unix__) || defined(__unix) || defined(__linux__) || defined(__linux)
 #	define	XEMU_ARCH_UNIX
 #	if	defined(__linux__) || defined(__linux)
