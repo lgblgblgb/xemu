@@ -20,7 +20,7 @@
 
 echo "*** Running xemu-configure ***"
 
-MACOS_VERSION_MIN=10.5
+MACOS_VERSION_MIN=10.6
 
 ###########################################################
 # Check some basic common UNIX utilities if work, we need #
