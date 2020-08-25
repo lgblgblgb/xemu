@@ -28,6 +28,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // It seems SDL2 has a bug not including header string.h which is the place where that function is defined on OSX.
 // Let's try to fix that, by manually including string.h here ...
 #include <string.h>
+// void memset_pattern4(void *__b, const void *__pattern4, size_t __len) __attribute__((availability(macosx,introduced=10.5)));
+void memset_pattern4(void *__b, const void *__pattern4, size_t __len);
 #endif
 #include <SDL.h>
 #include "xemu/emutools_basicdefs.h"
