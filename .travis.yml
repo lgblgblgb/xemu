@@ -156,6 +156,7 @@ matrix:
         - uname -a ; pwd ; df -h ; id -a
         - hostname
         - set -e
+        - echo "#include <string.h>" | gcc -E -
         - sdl2-config --version --prefix --cflags --libs --static-libs
         - set +e
         - ps auxwwww || true
