@@ -65,7 +65,6 @@ static Uint8* screen_ram_current_ptr = NULL;
 static Uint8* colour_ram_current_ptr = NULL;
 extern int user_scanlines_setting;
 float char_x_step = 0.0;
-static int warn_ctrl_b_lo = 1;
 static int enable_bg_paint = 1;
 static int display_row_count = 0;
 
@@ -526,10 +525,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 
 			vic_registers[0x31] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
 			machine_set_speed(0);
-			if ((data & 15) && warn_ctrl_b_lo) {
-				INFO_WINDOW("VIC3 control-B register H1280, MONO and INT features are not emulated yet!");
-				warn_ctrl_b_lo = 0;
-			}
+		
 			vic4_calculate_char_x_step();
 			break;				//We did the write, but we need to trigger vichot_reg if should
 
