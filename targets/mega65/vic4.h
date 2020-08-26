@@ -20,6 +20,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_MEGA65_VIC4_H_INCLUDED
 #define XEMU_MEGA65_VIC4_H_INCLUDED
 
+#include <SDL_types.h>
+
 #define VIC2_IOMODE	0
 #define VIC3_IOMODE	1
 #define VIC_BAD_IOMODE	2
@@ -84,6 +86,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_TEXTYPOS_U4     (vic_registers[0x4F] & 0xF)
 #define REG_XPOS            (vic_registers[0x51])
 #define REG_XPOS_U6         (vic_registers[0x50] & 0x3F)
+#define REG_FNRST           (vic_registers[0x53] & 0x80)
 #define REG_16BITCHARSET    (vic_registers[0x54] & 1)
 #define REG_FCLRLO          (vic_registers[0x54] & 2)
 #define REG_FCLRHI          (vic_registers[0x54] & 4)
@@ -132,8 +135,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define CHARSET_ADDR         ((Uint32)REG_CHARPTR_B0 | (REG_CHARPTR_B1<<8) | (REG_CHARPTR_B2 <<16))
 #define VIC2_BITMAP_ADDR     ((Uint32)REG_CHARPTR_B0 | (REG_CHARPTR_B1<<8) | (REG_CHARPTR_B2 <<16))
 #define SPRITE_POINTER_ADDR  ((Uint32)REG_SPRPTR_B0  | (REG_SPRPTR_B1<<8)  | (REG_SPRPTR_B2 <<16))
-#define COLOR_RAM_ADDR       ((((Uint16)REG_COLPTR) | (REG_COLPTR_MSB) << 8) + 0xFF80000)
-#define IS_PAL_MODE          (REG_PALNTSC ^ 0x80)
+#define COLOUR_RAM_OFFSET    ((((Uint16)REG_COLPTR) | (REG_COLPTR_MSB) << 8))
+#define IS_NTSC_MODE           (REG_PALNTSC ^ 0x80)
 #define SCREEN_STEP          (((Uint16)REG_CHARSTEP) | (REG_CHARSTEP_U8) << 8)
 #define SPRITE_POS_Y(n)      (vic_registers[1 + (n)*2])
 #define SPRITE_POS_X(n)      (((Uint16)vic_registers[(n)*2]) | ( (vic_registers[0x10] & (1 << (n)) ? 0x100 : 0)))
@@ -228,7 +231,6 @@ extern void  vic_init ( void );
 extern void  vic_write_reg ( unsigned int addr, Uint8 data );
 extern Uint8 vic_read_reg  ( unsigned int addr );
 extern int   vic4_render_scanline ( void );
-extern void  vic3_check_raster_interrupt ( void );
 extern void  vic4_open_frame_access();
 
 #ifdef XEMU_SNAPSHOT_SUPPORT

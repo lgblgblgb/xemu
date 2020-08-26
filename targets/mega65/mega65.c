@@ -183,7 +183,7 @@ static void cia2_out_a ( Uint8 data )
 		REG_SPRPTR_B1  = (~data << 6) | (REG_SPRPTR_B1 & 0x3F);
 
 		last_dd00_bits = data;
-		DEBUGPRINT("VIC2: (hotreg)Wrote to $DD00: $%02x screen=$%08x char=$%08x spr=$%08x" NL, data, SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
+		//DEBUGPRINT("VIC2: (hotreg)Wrote to $DD00: $%02x screen=$%08x char=$%08x spr=$%08x" NL, data, SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
 	}
 
 }
@@ -460,7 +460,7 @@ static void update_emulator ( void )
 	uartmon_update();
 #endif
 
-	xemu_timekeeping_delay(40000);
+	xemu_timekeeping_delay(REG_PALNTSC ? 16667 : 20000);
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
 //	if (seconds_timer_trigger) {
 	const struct tm *t = xemu_get_localtime();
@@ -614,8 +614,8 @@ static void emulation_loop ( void )
 		);	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
 		if (cycles >= cpu_cycles_per_scanline) {
 			cycles -= cpu_cycles_per_scanline;
-			cia_tick(&cia1, 64);
-			cia_tick(&cia2, 64);
+			cia_tick(&cia1, 32); // This is 32 cycles per physical raster (= ~64 ticks per VIC-II raster)
+			cia_tick(&cia2, 32);
 			if (vic4_render_scanline()) {
 				if (XEMU_UNLIKELY(inject_ready_check_status))
 					inject_ready_check_do();

@@ -233,12 +233,13 @@ static void vic4_interrupt_checker ( void )
 	}
 }
 
-static void vic4_check_raster_interrupt ( void )
+static void vic4_check_raster_interrupt(int nraster)
 {
-	if (logical_raster == compare_raster)
+	if (nraster == compare_raster)
 		interrupt_status |= 1;
 	else
 		interrupt_status &= 0xFE;
+
 	vic4_interrupt_checker();
 }
 
@@ -367,13 +368,14 @@ static void vic4_interpret_legacy_mode_registers()
 
 	REG_SPRPTR_B1  = (~last_dd00_bits << 6) | (REG_SPRPTR_B1 & 0x3F);
 	REG_SCRNPTR_B1 = (~last_dd00_bits << 6) | (REG_SCRNPTR_B1 & 0x3F);
+	REG_CHARPTR_B1 = (~last_dd00_bits << 6) | (REG_CHARPTR_B1 & 0x3F);
 	
 	SET_COLORRAM_BASE(0);
-	DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charscale=%d, vic_ii_first_raster=%d, "
-	          "border yt=%d, yb=%d, xl=%d, xr=%d, textxpos=%d, textypos=%d,"
-	          "screen_ram=$%06x, charset/bitmap=$%06x, sprite=$%06x" NL, REG_16BITCHARSET ,   REG_CHRCOUNT,CHARSTEP_BYTES,REG_CHARXSCALE,
-		vicii_first_raster, BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START,
-		SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
+	// DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charscale=%d, vic_ii_first_raster=%d, ras_src=%d,"
+	//           "border yt=%d, yb=%d, xl=%d, xr=%d, textxpos=%d, textypos=%d,"
+	//           "screen_ram=$%06x, charset/bitmap=$%06x, sprite=$%06x" NL, REG_16BITCHARSET ,   REG_CHRCOUNT,CHARSTEP_BYTES,REG_CHARXSCALE,
+	// 	vicii_first_raster, REG_FNRST, BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START,
+	// 	SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
 }
 
 
@@ -449,14 +451,15 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			//
 			if (vic_registers[0x18] ^ data)
 			{
+				REG_CHARPTR_B2 = 0;
 				REG_CHARPTR_B1 = (data & 14) << 2;
 				REG_CHARPTR_B0 = 0;
 				REG_SCRNPTR_B2 &= 0xF0;
-				REG_SCRNPTR_B1 = (~last_dd00_bits << 6) | (REG_SCRNPTR_B1 & 0x3F);
-				REG_CHARPTR_B1 = (~last_dd00_bits << 6) | (REG_CHARPTR_B1 & 0x3F);
 				reg_d018_screen_addr = (data & 0xF0) >> 4;
 				vic_hotreg_touched = 1;
 			}
+			
+			data &= 0xFE;
 			break;
 		CASE_VIC_ALL(0x19):
 			interrupt_status = interrupt_status & (~data) & 0xF;
@@ -538,7 +541,10 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		/* --- NO MORE VIC-III REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B): 
 		CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
-		CASE_VIC_4(0x50): CASE_VIC_4(0x51): CASE_VIC_4(0x52): CASE_VIC_4(0x53):
+			break;
+		CASE_VIC_4(0x50): CASE_VIC_4(0x51): 
+			return; // Writing to XPOS register is no-op
+		CASE_VIC_4(0x52): CASE_VIC_4(0x53):
 			break;
 		CASE_VIC_4(0x54):
 			vic_registers[0x54] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
@@ -572,7 +578,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x5F): 
 			break;
 		CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):
-			DEBUGPRINT("VIC: Write 0xD0%02x: $%02x" NL, addr, data);
+			DEBUGPRINT("VIC: Write SCREENADDR byte 0xD0%02x: $%02x" NL, addr, data);
 			break;
 		CASE_VIC_4(0x64):
 		CASE_VIC_4(0x65): CASE_VIC_4(0x66): CASE_VIC_4(0x67): /*CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):*/ CASE_VIC_4(0x6B): /*CASE_VIC_4(0x6C):
@@ -651,7 +657,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 	{
 		if (vic_hotreg_touched)
 		{
-			DEBUGPRINT("VIC: vic_hotreg_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
+			//DEBUGPRINT("VIC: vic_hotreg_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
 			vic4_interpret_legacy_mode_registers();
 			vic_hotreg_touched = 0;
 			vic4_sideborder_touched = 0;
@@ -659,7 +665,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 
 		if (vic4_sideborder_touched)
 		{
-			DEBUGPRINT("VIC: vic4_sideborder_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
+			//DEBUGPRINT("VIC: vic4_sideborder_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
 			
 			vic4_update_sideborder_dimensions();
 			vic4_sideborder_touched = 0;
@@ -743,7 +749,12 @@ Uint8 vic_read_reg ( int unsigned addr )
 			break;
 		/* --- NO MORE VIC-III REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B): CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
-		CASE_VIC_4(0x50): CASE_VIC_4(0x51): CASE_VIC_4(0x52): CASE_VIC_4(0x53):
+		CASE_VIC_4(0x50): 
+			break;
+		CASE_VIC_4(0x51):
+			result = vic_registers[0x51]++;
+			break;
+		CASE_VIC_4(0x52): CASE_VIC_4(0x53):
 			break;
 		CASE_VIC_4(0x54):
 			break;
@@ -1060,7 +1071,7 @@ static void vic4_render_char_raster()
 	if (adj_display_row >= 0 && adj_display_row < display_row_count)
 	{
 		const int char_row_offset = (BORDER_Y_TOP - CHARGEN_Y_START) % 8;
-		colour_ram_current_ptr = colour_ram + (adj_display_row  * CHARSTEP_BYTES); 
+		colour_ram_current_ptr = colour_ram + COLOUR_RAM_OFFSET + (adj_display_row  * CHARSTEP_BYTES); 
 		screen_ram_current_ptr = main_ram + SCREEN_ADDR + (adj_display_row  * CHARSTEP_BYTES);
 		const Uint8* row_data_base_addr = main_ram + (REG_BMM ?  VIC2_BITMAP_ADDR : get_charset_effective_addr());
 		
@@ -1202,7 +1213,8 @@ int vic4_render_scanline()
 	SET_PHYSICAL_RASTER(ycounter);
 	logical_raster = ycounter >> (REG_V400 ? 0 : 1);
 
-	vic4_check_raster_interrupt();
+	if (!(ycounter & 1)) // VIC-II raster source: We shall check FNRST ? 
+		vic4_check_raster_interrupt(logical_raster);
 
 	// "Double-scan hack"
 	if (!REG_V400 && (ycounter & 1))
@@ -1246,7 +1258,7 @@ int vic4_render_scanline()
 		vic4_reset_display_counters();
 		
 		screen_ram_current_ptr = main_ram + SCREEN_ADDR;
-		colour_ram_current_ptr = colour_ram;
+		colour_ram_current_ptr = colour_ram + COLOUR_RAM_OFFSET;
 		frame_counter++;
 		if (frame_counter == VIC4_BLINK_INTERVAL)
 		{
