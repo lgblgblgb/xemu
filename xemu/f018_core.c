@@ -313,7 +313,7 @@ int dma_update ( void )
 						// flow onto the next 'case'!!
 					case 0x06:
 					case 0x07:
-						DEBUGPRINT("DMA: enhanced DMA transparency is not supported yet (option=$%02X) @ PC=$%04X" NL, opt, cpu65.pc);
+						//DEBUGPRINT("DMA: enhanced DMA transparency is not supported yet (option=$%02X) @ PC=$%04X" NL, opt, cpu65.pc);
 						break;
 					case 0x0A:
 						dma_chip_revision_override = 0;
@@ -350,7 +350,7 @@ int dma_update ( void )
 						break;
 					default:
 						// maybe later we should keep this quiet ...
-						DEBUGPRINT("DMA: *unknown* enhanced option: $%02X @ PC=$%04X" NL, opt, cpu65.pc);
+						//DEBUGPRINT("DMA: *unknown* enhanced option: $%02X @ PC=$%04X" NL, opt, cpu65.pc);
 						if ((opt & 0x80))
 							(void)DMA_READ_LIST_NEXT_BYTE();	// skip one byte for unknown option >= $80
 						break;
