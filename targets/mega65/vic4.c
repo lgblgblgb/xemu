@@ -233,12 +233,13 @@ static void vic4_interrupt_checker ( void )
 	}
 }
 
-void vic4_check_raster_interrupt ( void )
+static void vic4_check_raster_interrupt(int nraster)
 {
-	if (logical_raster == compare_raster)
+	if (nraster == compare_raster)
 		interrupt_status |= 1;
 	else
 		interrupt_status &= 0xFE;
+
 	vic4_interrupt_checker();
 }
 
@@ -370,11 +371,11 @@ static void vic4_interpret_legacy_mode_registers()
 	REG_CHARPTR_B1 = (~last_dd00_bits << 6) | (REG_CHARPTR_B1 & 0x3F);
 	
 	SET_COLORRAM_BASE(0);
-	DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charscale=%d, vic_ii_first_raster=%d, "
-	          "border yt=%d, yb=%d, xl=%d, xr=%d, textxpos=%d, textypos=%d,"
-	          "screen_ram=$%06x, charset/bitmap=$%06x, sprite=$%06x" NL, REG_16BITCHARSET ,   REG_CHRCOUNT,CHARSTEP_BYTES,REG_CHARXSCALE,
-		vicii_first_raster, BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START,
-		SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
+	// DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charscale=%d, vic_ii_first_raster=%d, ras_src=%d,"
+	//           "border yt=%d, yb=%d, xl=%d, xr=%d, textxpos=%d, textypos=%d,"
+	//           "screen_ram=$%06x, charset/bitmap=$%06x, sprite=$%06x" NL, REG_16BITCHARSET ,   REG_CHRCOUNT,CHARSTEP_BYTES,REG_CHARXSCALE,
+	// 	vicii_first_raster, REG_FNRST, BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START,
+	// 	SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
 }
 
 
@@ -656,7 +657,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 	{
 		if (vic_hotreg_touched)
 		{
-			DEBUGPRINT("VIC: vic_hotreg_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
+			//DEBUGPRINT("VIC: vic_hotreg_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
 			vic4_interpret_legacy_mode_registers();
 			vic_hotreg_touched = 0;
 			vic4_sideborder_touched = 0;
@@ -664,7 +665,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 
 		if (vic4_sideborder_touched)
 		{
-			DEBUGPRINT("VIC: vic4_sideborder_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
+			//DEBUGPRINT("VIC: vic4_sideborder_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
 			
 			vic4_update_sideborder_dimensions();
 			vic4_sideborder_touched = 0;
@@ -1212,7 +1213,8 @@ int vic4_render_scanline()
 	SET_PHYSICAL_RASTER(ycounter);
 	logical_raster = ycounter >> (REG_V400 ? 0 : 1);
 
-	vic4_check_raster_interrupt();
+	if (!(ycounter & 1)) // VIC-II raster source: We shall check FNRST ? 
+		vic4_check_raster_interrupt(logical_raster);
 
 	// "Double-scan hack"
 	if (!REG_V400 && (ycounter & 1))
