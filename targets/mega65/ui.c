@@ -250,7 +250,7 @@ static void reset_into_c64_mode ( void )
 static void osd_key_debugger ( void )
 {
 	hid_show_osd_keys = !hid_show_osd_keys;
-	OSD(-1, -1, "OSD key debugger turned %s", hid_show_osd_keys ? "ON" : "OFF");	
+	OSD(-1, -1, "OSD key debugger turned %s", hid_show_osd_keys ? "ON" : "OFF");
 }
 
 
