@@ -5,7 +5,8 @@
 [![Download](https://img.shields.io/badge/download-master-%236060FF)](https://github.com/lgblgblgb/xemu-binaries/blob/master/README.md)
 [![License: GPL-2.0](https://img.shields.io/github/license/lgblgblgb/xemu.svg)](./LICENSE)
 [![Contributors](https://img.shields.io/github/contributors/lgblgblgb/xemu.svg)](https://github.com/lgblgblgb/xemu/graphs/contributors)
-[![GitHub last commit (branch)](https://img.shields.io/github/last-commit/lgblgblgb/xemu/dev)](https://github.com/lgblgblgb/xemu/tree/dev)
+[![GitHub last commit (dev)](https://img.shields.io/github/last-commit/lgblgblgb/xemu/dev?label=Last%20commit%20DEV)](https://github.com/lgblgblgb/xemu/wiki/ReleaseLogDEVEL)
+[![GitHub last commit (master)](https://img.shields.io/github/last-commit/lgblgblgb/xemu/master?label=Last%20commit%20MASTER)](https://github.com/lgblgblgb/xemu/wiki/ReleaseLog)
 
 Emulators running on Linux/Unix/Windows/OSX of various (mainly 8 bit) machines,
 including the Commodore LCD and Commodore 65 and MEGA65 as well.

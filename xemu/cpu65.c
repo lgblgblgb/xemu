@@ -8,7 +8,7 @@
    Quite confusing comment section even at the beginning, from this point ...
 
    | This file tries to implement a 65C02, 65CE02 (as the form used in 4510 in C65,
-   | also with its extension in the Mega65) and the NMOS 6502. This is kinda buggy
+   | also with its extension in the MEGA65) and the NMOS 6502. This is kinda buggy
    | overal-behavioural emulation, ie there is some on-going tries for correct number
    | of cycles execution, but not for in-opcode timing.
    |
@@ -20,7 +20,7 @@
    |
    | * Unimplemented illegal NMOS opcodes
    | * Incorrect timings in many cases
-   | * Future plan to support NMOS CPU persona for Mega65 in C64 mode
+   | * Future plan to support NMOS CPU persona for MEGA65 in C64 mode
    | * At many cases, emulation should be tested for correct opcode emulation behaviour
 
 This program is free software; you can redistribute it and/or modify
@@ -151,7 +151,7 @@ struct cpu65_st CPU65;
 /* Three possible behaviour in term of operating mode:
    * NMOS 6502 CPU core only (CPU_6502_NMOS_ONLY is defined)
    * 65C02/65CE02 mode only (real 65CE02 - Commodore 65 - or 65C02 - Commodore LCD) depending to CPU_65CE02 defined or not
-   * Mega65, having NMOS persona _AS_WELL_ (CPU_65CE02 and MEGA65 macros are defined) */
+   * MEGA65, having NMOS persona _AS_WELL_ (CPU_65CE02 and MEGA65 macros are defined) */
 
 #ifdef CPU_6502_NMOS_ONLY
 /* NMOS CPU mode only, for emulators like VIC-20, etc. We define IS_CPU_NMOS as a constant 1, hopefully the C compiler is smart enough
@@ -163,13 +163,13 @@ struct cpu65_st CPU65;
 #define HAS_NMOS_BUG_BCD		1
 #else
 #ifdef MEGA65
-/* Mega65 supports NMOS CPU persona as well, however the main performance bottleneck is more like the 50MHz 4510 mode, thus it's hinted as "unlikely" for the C compiler */
+/* MEGA65 supports NMOS CPU persona as well, however the main performance bottleneck is more like the 50MHz 4510 mode, thus it's hinted as "unlikely" for the C compiler */
 #define	IS_CPU_NMOS			XEMU_UNLIKELY(CPU65.nmos_mode)
 #define	NMOS_JAM_OPCODE()		cpu65_illegal_opcode_callback()
 #define HAS_NMOS_BUG_JMP_INDIRECT	M65_CPU_ALWAYS_BUG_JMP_INDIRECT || (M65_CPU_NMOS_ONLY_BUG_JMP_INDIRECT && CPU65.nmos_mode)
 #define HAS_NMOS_BUG_NO_PFD_RES_ON_INT	M65_CPU_ALWAYS_BUG_NO_RESET_PFD_ON_INT || (M65_CPU_NMOS_ONLY_BUG_NO_RESET_PFD_ON_INT && CPU65.nmos_mode)
 //#define HAS_NMOS_BUG_BCD		M65_CPU_ALWAYS_BUG_BCD || (M65_CPU_NMOS_ONLY_BUG_BCD && CPU65.nmos_mode)
-// Note: it seems Mega65 is special, and would have the 6502-semantic of BCD even in native, etc mode!! This is NOT true for C65, for example!
+// Note: it seems MEGA65 is special, and would have the 6502-semantic of BCD even in native, etc mode!! This is NOT true for C65, for example!
 #define HAS_NMOS_BUG_BCD		1
 #else
 /* 65C02 mode, eg for Commodore LCD or 65CE02 mode for Commodore 65 (based on the macro of CPU_65CE02). We define IS_CPU_NMOS as a constant 0, hopefully the C compiler is smart enough

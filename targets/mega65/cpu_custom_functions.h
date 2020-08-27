@@ -94,7 +94,7 @@ CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR void  cpu65_write_paged_callback ( Uint8 p
 // It has no inpact in case of normal RAM, but it *does* with an I/O register in some cases!
 // CMOS line of 65xx (probably 65CE02 as well?) seems not write twice, but read twice.
 // However this leads to incompatibilities, as some software used the RMW behavour by intent.
-// Thus Mega65 fixed the problem to "restore" the old way of RMW behaviour.
+// Thus MEGA65 fixed the problem to "restore" the old way of RMW behaviour.
 // I also follow this path here, even if it's *NOT* what 65CE02 would do actually!
 CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR void  cpu65_write_rmw_callback ( Uint16 addr, Uint8 old_data, Uint8 new_data ) {
 	cpu_rmw_old_data = old_data;

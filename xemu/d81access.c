@@ -132,7 +132,7 @@ static void d81access_attach_fd_internal ( int fd, off_t offset, int mode )
 
 // this is used to attach external (to the d81access ...) file descriptor, not handled here to be opened as D81
 // it's the caller's responsibility that it's really an FD for a D81 image in size etc enough for that!
-// One example for this function to be used for: Mega65, on-SDCARD "mounted" D81, where the "master" fd is used
+// One example for this function to be used for: MEGA65, on-SDCARD "mounted" D81, where the "master" fd is used
 // to access the D81 inside, managed by the caller!
 void d81access_attach_fd ( int fd, off_t offset, int mode )
 {

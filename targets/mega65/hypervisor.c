@@ -189,7 +189,7 @@ void hypervisor_enter ( int trapno )
 }
 
 
-// Actual (CPU level opcode execution) emulation of Mega65 should start with calling this function (surely after initialization of every subsystems etc).
+// Actual (CPU level opcode execution) emulation of MEGA65 should start with calling this function (surely after initialization of every subsystems etc).
 void hypervisor_start_machine ( void )
 {
 	in_hypervisor = 0;
