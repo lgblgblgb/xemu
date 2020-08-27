@@ -74,6 +74,7 @@ matrix:
             - master
             - dev
             - vic
+            - hmw
     - name: Windows cross-compilation on Linux
       os: linux
       addons:
@@ -142,6 +143,7 @@ matrix:
             - master
             - dev
             - vic
+            - hmw
     - name: MacOS native compilation
       os: osx
       osx_image: xcode11
@@ -156,7 +158,6 @@ matrix:
         - uname -a ; pwd ; df -h ; id -a
         - hostname
         - set -e
-        - echo "#include <string.h>" | gcc -E -
         - sdl2-config --version --prefix --cflags --libs --static-libs
         - set +e
         - ps auxwwww || true
@@ -190,6 +191,7 @@ matrix:
             - master
             - dev
             - vic
+            - hmw
 
 env:
   global:

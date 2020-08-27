@@ -792,7 +792,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 		} else if (key == SDL_SCANCODE_RSHIFT) {
 			shift_status |= 2;
 		}
-		if (shift_status == 3 && set_mouse_grab(SDL_FALSE)) {
+		if (shift_status == 3 && set_mouse_grab(SDL_FALSE, 0)) {
 			DEBUGPRINT("UI: mouse grab cancelled" NL);
 		}
 	} else {
@@ -801,7 +801,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 		} else if (key == SDL_SCANCODE_RSHIFT) {
 			shift_status &= 1;
 		} else if (pos == -2 && key == 0) {	// special case pos = -2, key = 0, handled = mouse button (which?) and release event!
-			if (handled == SDL_BUTTON_LEFT && set_mouse_grab(SDL_TRUE)) {
+			if (handled == SDL_BUTTON_LEFT && set_mouse_grab(SDL_TRUE, 0)) {
 				OSD(-1, -1, "Mouse grab activated. Press\nboth SHIFTs together to cancel.");
 				DEBUGPRINT("UI: mouse grab activated" NL);
 			}
@@ -873,6 +873,7 @@ int main ( int argc, char **argv )
 	//int cycles;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unusable Commodore 65 emulator from LGB");
 	xemucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
+	xemucfg_define_switch_option("allowmousegrab", "Allow auto mouse grab with left-click");
 	xemucfg_define_switch_option("d81ro", "Force read-only status for image specified with -8 option");
 	xemucfg_define_num_option("dmarev", 2, "Revision of the DMAgic chip (0/1=F018A/B, 2=rom_auto, +512=modulo))");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
@@ -894,6 +895,7 @@ int main ( int argc, char **argv )
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	i_am_sure_override = xemucfg_get_bool("besure");
+	allow_mouse_grab = xemucfg_get_bool("allowmousegrab");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	window_title_info_addon = emulator_speed_title;
         if (xemu_post_init(
