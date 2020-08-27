@@ -59,8 +59,6 @@ Uint8 c128_d030_reg;			// C128-like register can be only accessed in VIC-II mode
 
 int vic_vidp_legacy = 1, vic_chrp_legacy = 1, vic_sprp_legacy = 1;
 
-static int warn_sprites = 0, warn_ctrl_b_lo = 1;
-
 #if 0
 // UGLY: decides to use VIC-II/III method (val!=0), or the VIC-IV "precise address" selection (val == 0)
 // this is based on the idea that VIC-II compatible register writing will set that, overriding the "precise" setting if there was any, before.
@@ -281,10 +279,6 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_3_4(0x31):
 			vic_registers[0x31] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
 			machine_set_speed(0);
-			if ((data & 15) && warn_ctrl_b_lo) {
-				INFO_WINDOW("VIC3 control-B register V400, H1280, MONO and INT features are not emulated yet!");
-				warn_ctrl_b_lo = 0;
-			}
 			return;				// since we DID the write, it's OK to return here and not using "break"
 		CASE_VIC_3_4(0x32): CASE_VIC_3_4(0x33): CASE_VIC_3_4(0x34): CASE_VIC_3_4(0x35): CASE_VIC_3_4(0x36): CASE_VIC_3_4(0x37): CASE_VIC_3_4(0x38):
 		CASE_VIC_3_4(0x39): CASE_VIC_3_4(0x3A): CASE_VIC_3_4(0x3B): CASE_VIC_3_4(0x3C): CASE_VIC_3_4(0x3D): CASE_VIC_3_4(0x3E): CASE_VIC_3_4(0x3F):
@@ -905,12 +899,11 @@ void vic_render_screen ( void )
 			vic2_render_screen_text(p_sdl, tail_sdl);
 	}
 	if (sprites) {	// Render sprites. VERY BAD. We ignore sprite priority as well (cannot be behind the background)
-		int a;
-		if (warn_sprites) {
-			INFO_WINDOW("WARNING: Sprite emulation is really bad! (enabled_mask=$%02X)", sprites);
-			warn_sprites = 0;
-		}
-		for (a = 7; a >= 0; a--) {
+		//if (warn_sprites) {
+		//	INFO_WINDOW("WARNING: Sprite emulation is really bad! (enabled_mask=$%02X)", sprites);
+		//	warn_sprites = 0;
+		//}
+		for (int a = 7; a >= 0; a--) {
 			int mask = 1 << a;
 			if ((sprites & mask))
 				render_sprite(a, mask, sprite_bank + (sprite_pointers[a] << 6), p_sdl, tail_sdl);	// sprite_pointers are set by the renderer functions above!
