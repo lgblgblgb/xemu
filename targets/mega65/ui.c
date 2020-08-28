@@ -253,12 +253,24 @@ static void osd_key_debugger ( void )
 	OSD(-1, -1, "OSD key debugger turned %s", hid_show_osd_keys ? "ON" : "OFF");
 }
 
+static void enable_mouse_grab ( void )
+{
+	if (!allow_mouse_grab) {
+		allow_mouse_grab = 1;
+		OSD(-1, -1, "ENABLED. Left click to activate!");
+	}
+}
+
+
+/**** MENU SYSTEM ****/
+
 
 static const struct menu_st menu_display[] = {
 	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)0 },
 	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)1 },
 	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)2 },
 	{ "OSD key debugger",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, osd_key_debugger },
+	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, enable_mouse_grab },
 	{ NULL }
 };
 static const struct menu_st menu_sdcard[] = {
