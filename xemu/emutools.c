@@ -1,4 +1,4 @@
-/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
+/* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and MEGA65 as well.
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
@@ -75,6 +75,8 @@ static char *window_title_buffer, *window_title_buffer_end;
 static struct timeval unix_time_tv;
 static Uint64 et_old;
 static int td_balancer, td_em_ALL, td_pc_ALL;
+static Uint64 td_stat_counter = 0, td_stat_sum = 0;
+static int td_stat_min = INT_MAX, td_stat_max = INT_MIN;
 int sysconsole_is_open = 0;
 FILE *debug_fp = NULL;
 int chatty_xemu = 1;
@@ -361,7 +363,19 @@ void xemu_timekeeping_delay ( int td_em )
 		td_pc_ALL += td_pc;
 		td_em_ALL += td_em;
 	}
-	if (td < 0) return; // invalid, sleep was about for _minus_ time? eh, give me that time machine, dude! :)
+	// Some statistics
+	if (td_em_ALL) {
+		int stat = td_pc_ALL * 100 / td_em_ALL;
+		td_stat_counter++;
+		td_stat_sum += stat;
+		if (stat > td_stat_max)
+			td_stat_max = stat;
+		if (stat < td_stat_min)
+			td_stat_min = stat;
+	}
+	// Check: invalid, sleep was about for _minus_ time? eh, give me that time machine, dude! :)
+	if (td < 0)
+		return;
 	// Balancing real and wanted sleep time on long run
 	// Insane big values are forgotten, maybe emulator was stopped, or something like that
 	td_balancer -= td;
@@ -397,7 +411,13 @@ static void shutdown_emulator ( void )
 		fclose(debug_fp);
 		debug_fp = NULL;
 	}
-	DEBUGPRINT(NL "XEMU: good by(T)e." NL);
+	if (td_stat_counter) {
+		DEBUGPRINT(NL "TIMING: Xemu CPU usage: avg=%.2f%%, min=%d%%, max=%d%% (%u counts)" NL,
+			td_stat_sum / (double)td_stat_counter, td_stat_min, td_stat_max,
+			(unsigned int)td_stat_counter
+		);
+	}
+	DEBUGPRINT("XEMU: good by(T)e." NL);
 }
 
 
@@ -579,7 +599,7 @@ int xemu_post_init (
 	if (xemu_init_sdl())	// it is possible that is has been already called, but it's not a problem
 		return 1;
 	shutdown_user_function = shutdown_callback;
-	DEBUGPRINT("Timing: sleep = %s, query = %s" NL, __SLEEP_METHOD_DESC, __TIMING_METHOD_DESC);
+	DEBUGPRINT("TIMING: sleep = %s, query = %s" NL, __SLEEP_METHOD_DESC, __TIMING_METHOD_DESC);
 	DEBUGPRINT("SDL preferences directory: %s" NL, sdl_pref_dir);
 	DEBUG("SDL install directory: %s" NL, sdl_inst_dir);
 	DEBUG("SDL base directory: %s" NL, sdl_base_dir);

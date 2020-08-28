@@ -1,4 +1,4 @@
-/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
+/* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and MEGA65 as well.
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
