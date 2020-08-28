@@ -37,7 +37,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 extern int sdcontent_handle ( Uint32 size_in_blocks, const char *update_dir_path, int options );
+extern int sdcontent_check_xemu_signature ( void );
 
+
+#define XEMU_INFO_SDCARD_BLOCK_NO	2
 
 #endif
 #endif

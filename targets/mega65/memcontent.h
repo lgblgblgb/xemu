@@ -19,6 +19,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_MEGA65_MEMCONTENT_H_INCLUDED
 #define XEMU_MEGA65_MEMCONTENT_H_INCLUDED
 
+// This must be incremented by ONE every time, when memcontent.c changes, or even
+// if sdcontent.c is changed in a way to write new files, new content, or whatever
+// to the SD-card as part of the "update system files" process.
+#define MEMCONTENT_VERSION_ID		1
+
+
 #define MEMINITDATA_KICKSTART_SIZE	0x4000
 #define MEMINITDATA_CHRWOM_SIZE		0x1000
 #define MEMINITDATA_CRAMUTILS_SIZE	0x8000

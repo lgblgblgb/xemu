@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 #include "io_mapper.h"
 #include "sdcontent.h"
+#include "memcontent.h"
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -70,6 +71,8 @@ static Uint8	sd_fill_buffer[512];	// Only used by the sd fill mode write command
 static char	external_d81[PATH_MAX + 1];
 
 const char	xemu_external_d81_signature[] = "\xFF\xFE<{[(XemuExternalDiskMagic)]}>";
+
+Uint8 sd_reg9;
 
 
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
@@ -252,10 +255,10 @@ static void sdcard_shutdown ( void )
 
 static void sdcard_set_external_d81_name ( const char *name )
 {
-	if (!name || !*name)
+	if (name == NULL || strlen(name) >= sizeof(external_d81))
 		*external_d81 = 0;
 	else
-		strncpy(external_d81, name, sizeof external_d81);
+		strcpy(external_d81, name);
 }
 
 
@@ -394,6 +397,19 @@ retry:
 	if (sdfd >= 0) {
 		DEBUGPRINT("SDCARD: card init done, size=%u Mbytes, virtsd_flag=%d" NL, sdcard_size_in_blocks >> 11, virtsd_flag);
 		//sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_ASK_FDISK | SDCONTENT_ASK_FILES);
+	}
+	if (!virtsd_flag) {
+		static const char msg[] = " on the SD-card image.\nPlease use UI menu: SD-card -> Update files";
+		int r = sdcontent_check_xemu_signature();
+		if (r < 0) {
+			ERROR_WINDOW("Warning! Cannot read SD-card to get Xemu signature!");
+		} else if (r == 0) {
+			INFO_WINDOW("Cannot find Xemu's signature%s", msg);
+		} else if (r < MEMCONTENT_VERSION_ID) {
+			INFO_WINDOW("Xemu's singature is too old%s to upgrade", msg);
+		} else if (r > MEMCONTENT_VERSION_ID) {
+			INFO_WINDOW("Xemu's signature is too new%s to DOWNgrade", msg);
+		}
 	}
 	return sdfd;
 }
@@ -773,7 +789,10 @@ void sdcard_write_register ( int reg, Uint8 data )
 			if (sd_fill_value != sd_fill_buffer[0])
 				memset(sd_fill_buffer, sd_fill_value, 512);
 			break;
-		// FIXME: bit7 of reg9 is buffer select?! WHAT is THAT?! [f011sd_buffer_select]  btw, bit2 seems to be some "handshake" stuff ...
+		case 0x09:
+			sd_reg9 = data;
+			// FIXME: bit7 of reg9 is buffer select?! WHAT is THAT?! [f011sd_buffer_select]  btw, bit2 seems to be some "handshake" stuff ...
+			break;
 		case 0xB:
 			sdcard_mount_d81(data);
 			break;
@@ -808,8 +827,12 @@ Uint8 sdcard_read_register ( int reg )
 		case 8:	// SDcard read bytes low byte
 			data = sdcard_bytes_read & 0xFF;
 			break;
-		case 9:	// SDcard read bytes hi byte
+		case 9:
+			return sd_reg9;
+#if 0
+			// SDcard read bytes hi byte
 			data = sdcard_bytes_read >> 8;
+#endif
 			break;
 		default:
 			data = D6XX_registers[reg + 0x80];
