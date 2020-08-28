@@ -789,7 +789,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 		} else if (key == SDL_SCANCODE_RSHIFT) {
 			shift_status |= 2;
 		}
-		if (shift_status == 3 && set_mouse_grab(SDL_FALSE)) {
+		if (shift_status == 3 && set_mouse_grab(SDL_FALSE, 0)) {
 			DEBUGPRINT("UI: mouse grab cancelled" NL);
 		}
 	} else {
@@ -798,7 +798,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 		} else if (key == SDL_SCANCODE_RSHIFT) {
 			shift_status &= 1;
 		} else if (pos == -2 && key == 0) {	// special case pos = -2, key = 0, handled = mouse button (which?) and release event!
-			if (handled == SDL_BUTTON_LEFT && set_mouse_grab(SDL_TRUE)) {
+			if (handled == SDL_BUTTON_LEFT && set_mouse_grab(SDL_TRUE, 0)) {
 				OSD(-1, -1, "Mouse grab activated. Press\nboth SHIFTs together to cancel.");
 				DEBUGPRINT("UI: mouse grab activated" NL);
 			}

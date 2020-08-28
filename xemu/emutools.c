@@ -86,16 +86,18 @@ int osd_status = 0;
 static Uint32 osd_colours[16], *osd_pixels = NULL, osd_colour_fg, osd_colour_bg;
 static SDL_Texture *sdl_osdtex = NULL;
 static SDL_bool grabbed_mouse = SDL_FALSE, grabbed_mouse_saved = SDL_FALSE;
-
+int allow_mouse_grab = 1;
 
 #if !SDL_VERSION_ATLEAST(2, 0, 4)
 #error "At least SDL version 2.0.4 is needed!"
 #endif
 
 
-int set_mouse_grab ( SDL_bool state )
+int set_mouse_grab ( SDL_bool state, int force_allow )
 {
-	if (state != grabbed_mouse) {
+	if (state && (!allow_mouse_grab || force_allow))
+		return 0;
+	else if (state != grabbed_mouse) {
 		grabbed_mouse = state;
 		SDL_SetRelativeMouseMode(state);
 		SDL_SetWindowGrab(sdl_win, state);
@@ -114,13 +116,13 @@ SDL_bool is_mouse_grab ( void )
 void save_mouse_grab ( void )
 {
 	grabbed_mouse_saved = grabbed_mouse;
-	set_mouse_grab(SDL_FALSE);
+	set_mouse_grab(SDL_FALSE, 1);
 }
 
 
 void restore_mouse_grab ( void )
 {
-	set_mouse_grab(grabbed_mouse_saved);
+	set_mouse_grab(grabbed_mouse_saved, 1);
 }
 
 
@@ -447,6 +449,14 @@ static char *GetHackedPrefDir ( const char *base_path, const char *name )
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan )
 {
 #ifdef XEMU_ARCH_UNIX
+#ifndef XEMU_DO_NOT_DISALLOW_ROOT
+	// Some check to disallow dangerous things (running Xemu as user/group root)
+	if (getuid() == 0 || geteuid() == 0)
+		FATAL("Xemu must not be run as user root");
+	if (getgid() == 0 || getegid() == 0)
+		FATAL("Xemu must not be run as group root");
+#endif
+	// ignore SIGHUP, eg closing the terminal Xemu was started from ...
 	signal(SIGHUP, SIG_IGN);	// ignore SIGHUP, eg closing the terminal Xemu was started from ...
 #endif
 #ifdef XEMU_ARCH_HTML

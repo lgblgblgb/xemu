@@ -61,10 +61,12 @@ extern void clear_emu_events ( void );
 
 extern void xemu_drop_events ( void );
 
-extern int  set_mouse_grab ( SDL_bool state );
+extern int  set_mouse_grab ( SDL_bool state, int force_allow );
 extern SDL_bool is_mouse_grab ( void );
 extern void save_mouse_grab ( void );
 extern void restore_mouse_grab ( void );
+
+extern int allow_mouse_grab;
 
 static XEMU_INLINE int CHECK_SNPRINTF( int ret, int limit )
 {
