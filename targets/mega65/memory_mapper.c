@@ -208,17 +208,41 @@ DEFINE_WRITER(slow_ram_writer) {
 	slow_ram[GET_WRITER_OFFSET()] = data;
 }
 DEFINE_READER(invalid_mem_reader) {
-	if (XEMU_LIKELY(skip_unhandled_mem))
-		DEBUGPRINT("WARNING: Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, GET_READER_OFFSET(), cpu65.pc);
-	else
-		FATAL("Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, GET_READER_OFFSET(), cpu65.pc);
+	char msg[128];
+	sprintf(msg, "Unhandled memory read operation for linear address $%X (PC=$%04X)", GET_READER_OFFSET(), cpu65.pc);
+	if (skip_unhandled_mem <= 1)
+		skip_unhandled_mem = QUESTION_WINDOW("EXIT|Ignore now|Ignore all|Silent ignore all", msg);
+	switch (skip_unhandled_mem) {
+		case 0:
+			FATAL("Exit on request after illegal memory access");
+			break;
+		case 1:
+		case 2:
+			DEBUGPRINT("WARNING: %s" NL, msg);
+			break;
+		default:
+			DEBUG("WARNING: %s" NL, msg);
+			break;
+	}
 	return 0xFF;
 }
 DEFINE_WRITER(invalid_mem_writer) {
-	if (XEMU_LIKELY(skip_unhandled_mem))
-		DEBUGPRINT("WARNING: Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, GET_WRITER_OFFSET(), data, cpu65.pc);
-	else
-		FATAL("Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, GET_WRITER_OFFSET(), data, cpu65.pc);
+	char msg[128];
+	sprintf(msg, "Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)", GET_WRITER_OFFSET(), data, cpu65.pc);
+	if (skip_unhandled_mem <= 1)
+		skip_unhandled_mem = QUESTION_WINDOW("EXIT|Ignore now|Ignore all|Silent ignore all", msg);
+	switch (skip_unhandled_mem) {
+		case 0:
+			FATAL("Exit on request after illegal memory access");
+			break;
+		case 1:
+		case 2:
+			DEBUGPRINT("WARNING: %s" NL, msg);
+			break;
+		default:
+			DEBUG("WARNING: %s" NL, msg);
+			break;
+	}
 }
 DEFINE_READER(fatal_mem_reader) {
 	FATAL("Unhandled physical memory mapping on read map. Xemu software bug?");
@@ -277,7 +301,7 @@ DEFINE_WRITER(i2c_io_writer) {
 	// now just ignore [no I2C devices]
 }
 
-// Memory layout table for Mega-65
+// Memory layout table for MEGA65
 // Please note, that for optimization considerations, it should be organized in a way
 // to have most common entries first, for faster hit in most cases.
 static const struct m65_memory_map_st m65_memory_map[] = {
@@ -474,11 +498,9 @@ void memory_init ( void )
 	memory_set_vic3_rom_mapping(0);
 	memory_set_do_map();
 	// Initiailize memory content with something ...
-	memset(main_ram, 0xFF, sizeof main_ram);
-	memset(colour_ram, 0xFF, sizeof colour_ram);
-#ifdef SLOW_RAM_SUPPORT
-	memset(slow_ram, 0xFF, sizeof slow_ram);
-#endif
+	memset(main_ram,   0x00, sizeof main_ram);
+	memset(colour_ram, 0x00, sizeof colour_ram);
+	memset(slow_ram,   0xFF, sizeof slow_ram);
 	DEBUG("MEM: End of memory initiailization" NL);
 }
 
