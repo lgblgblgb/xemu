@@ -104,7 +104,7 @@ else
 fi
 
 cp README.md .dmg/README-XEMU.md
-cp LICENSE .dmg/
+cp LICENSE AUTHORS .dmg/
 echo "For generic information on Xemu please read: README-XEMU.md
 For version informations on this very DMG: THIS_VERSION.txt
 For license/copyright information: LICENSE
