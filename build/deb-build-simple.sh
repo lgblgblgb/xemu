@@ -56,8 +56,10 @@ echo "(C) $AUTHOR" > $ROOT/usr/share/doc/$PROJECT/copyright
 echo "$WEBSITE" >> $ROOT/usr/share/doc/$PROJECT/copyright
 echo >> $ROOT/usr/share/doc/$PROJECT/copyright
 cat ../LICENSE >> $ROOT/usr/share/doc/$PROJECT/copyright
+cat ../AUTHORS >> $ROOT/usr/share/doc/$PROJECT/AUTHORS
 
-awk -vromdir=$DATADIRREAL/ 'BEGIN { print "#!/bin/sh" ; print "mkdir -p " romdir " || exit $?" } END { print "exit 0" } NF == 3 && $1 ~ /^[a-zA-Z0-9]/ { print "test -s " romdir $1 " || { rm -f " romdir $1 ".tmp && wget -O " romdir $1 ".tmp " $2 " && mv " romdir $1 ".tmp " romdir $1 "; } || exit $?" }' ../rom/rom-fetch-list.txt > $BINDIR/xemu-download-data
+# I disable this, since it seems it's a legality problem to ship the package with a helper inside which downloads ROM images copyrighted by some angry companies ...
+## awk -vromdir=$DATADIRREAL/ 'BEGIN { print "#!/bin/sh" ; print "mkdir -p " romdir " || exit $?" } END { print "exit 0" } NF == 3 && $1 ~ /^[a-zA-Z0-9]/ { print "test -s " romdir $1 " || { rm -f " romdir $1 ".tmp && wget -O " romdir $1 ".tmp " $2 " && mv " romdir $1 ".tmp " romdir $1 "; } || exit $?" }' ../rom/rom-fetch-list.txt > $BINDIR/xemu-download-data
 
 SIZE="`find $ROOT -type f -exec stat -c '%s' {} \; | awk '{ s += $1 } END { print int(s / 1024) }'`"
 

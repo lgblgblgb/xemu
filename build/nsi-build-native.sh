@@ -18,11 +18,12 @@ zipfile="xemu-$1-binaries.zip"
 echo "$0: target installer: $installer"
 echo "$0: target ZIP file:  $zipfile"
 echo "$0: using DLL:        $dll"
-zipcmd="`basename $dll` README.txt LICENSE.txt"
+zipcmd="`basename $dll` README.txt LICENSE.txt AUTHORS.txt"
 
 cp -a "$dll" bin/ || exit 1
 cp -a ../LICENSE bin/LICENSE.txt || exit 1
 cp -a ../README.md bin/README.txt || exit 1
+cp -a ../AUTHORS bin/AUTHORS.txt || exit 1
 
 size=`stat -c '%s' "$dll"`
 
