@@ -32,6 +32,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "c65_snapshot.h"
 #include "xemu/emutools_gui.h"
 #include "ui.h"
+#include "inject.h"
 
 
 
@@ -846,7 +847,9 @@ static void emulation_loop ( void )
 			cia_tick(&cia1, 64);
 			cia_tick(&cia2, 64);
 			cycles -= cpu_cycles_per_scanline;
-			if (vic3_render_scanline()) {
+			if (XEMU_UNLIKELY(vic3_render_scanline())) {
+				if (XEMU_UNLIKELY(inject_ready_check_status))
+					inject_ready_check_do();
 				if (frameskip) {
 					frameskip = 0;
 					hostfs_flush_all();
@@ -886,6 +889,8 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("go64", "Go into C64 mode after start");
 	xemucfg_define_switch_option("autoload", "Load and start the first program from disk");
 #endif
+	xemucfg_define_str_option("prg", NULL, "Load a PRG file directly into the memory (/w C64/65 auto-detection on load address)");
+	xemucfg_define_num_option("prgmode", 0, "Override auto-detect option for -prg (64 or 65 for C64/C65 modes, 0 = default, auto detect)");
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
 	xemucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
@@ -920,7 +925,8 @@ int main ( int argc, char **argv )
 	);
 	osd_init_with_defaults();
 	xemugui_init(xemucfg_get_str("gui"));
-	// Start!!
+	if (xemucfg_get_str("prg"))
+		inject_register_prg(xemucfg_get_str("prg"), xemucfg_get_num("prgmode"));
 #ifdef FAKE_TYPING_SUPPORT
 	if (xemucfg_get_bool("go64")) {
 		if (xemucfg_get_bool("autoload"))

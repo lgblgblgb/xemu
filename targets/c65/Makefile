@@ -22,7 +22,7 @@ PRG_TARGET	= xc65
 EMU_DESCRIPTION	= Commodore 65
 
 CFLAGS_TARGET_xc65	=
-SRCS_TARGET_xc65	= commodore_65.c vic3.c c65_snapshot.c ui.c
+SRCS_TARGET_xc65	= commodore_65.c vic3.c c65_snapshot.c ui.c inject.c
 SRCS_COMMON_xc65	= emutools.c cpu65.c cia6526.c sid.c f011_core.c f018_core.c c64_kbd_mapping.c emutools_hid.c cbmhostfs.c emutools_config.c emutools_snapshot.c emutools_files.c d81access.c emutools_gui.c
 CFLAGS_TARGET_xc65	= $(SDL2_CFLAGS) $(MATH_CFLAGS) $(SOCKET_CFLAGS) $(XEMUGUI_CFLAGS)
 LDFLAGS_TARGET_xc65	= $(SDL2_LIBS) $(MATH_LIBS) $(SOCKET_LIBS) $(XEMUGUI_LIBS)

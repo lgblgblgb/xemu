@@ -101,7 +101,7 @@ static void ui_run_prg_by_browsing ( void )
 		reset_mega65();
 		inject_register_prg(fnbuf, 0);
 	} else
-		DEBUGPRINT("UI: file selection for D81 mount was cancalled." NL);
+		DEBUGPRINT("UI: file selection for PRG injection was cancalled." NL);
 }
 
 
