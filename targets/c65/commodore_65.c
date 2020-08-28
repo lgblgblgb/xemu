@@ -756,10 +756,13 @@ static void shutdown_callback ( void )
 }
 
 
-void c65_reset_asked ( void )
+int c65_reset_asked ( void )
 {
-	if (ARE_YOU_SURE("Are you sure to HARD RESET your Commodore-65?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
+	if (ARE_YOU_SURE("Are you sure to HARD RESET your Commodore-65?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
 		c65_reset();
+		return 1;
+	} else
+		return 0;
 }
 
 void c65_reset ( void )
@@ -870,6 +873,7 @@ int main ( int argc, char **argv )
 	//int cycles;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unusable Commodore 65 emulator from LGB");
 	xemucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
+	xemucfg_define_switch_option("allowmousegrab", "Allow auto mouse grab with left-click");
 	xemucfg_define_switch_option("d81ro", "Force read-only status for image specified with -8 option");
 	xemucfg_define_num_option("dmarev", 2, "Revision of the DMAgic chip (0/1=F018A/B, 2=rom_auto, +512=modulo))");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
@@ -891,6 +895,7 @@ int main ( int argc, char **argv )
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	i_am_sure_override = xemucfg_get_bool("besure");
+	allow_mouse_grab = xemucfg_get_bool("allowmousegrab");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	window_title_info_addon = emulator_speed_title;
         if (xemu_post_init(

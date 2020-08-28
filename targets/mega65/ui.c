@@ -26,7 +26,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sdcard.h"
 #include "sdcontent.h"
 #include "xemu/emutools_hid.h"
+#include "xemu/c64_kbd_mapping.h"
 #include "inject.h"
+#include "input_devices.h"
 
 #define		HELP_URL	"https://github.com/lgblgblgb/xemu/wiki/MEGA65-help"
 
@@ -228,11 +230,39 @@ static void ui_update_sdcard ( void )
 	reset_mega65();
 }
 
+
+static void reset_into_utility_menu ( void )
+{
+	if (reset_mega65_asked()) {
+		hwa_kbd_fake_key(0x20);
+	}
+}
+
+static void reset_into_c64_mode ( void )
+{
+	if (reset_mega65_asked()) {
+		hid_set_autoreleased_key(0x75);
+		KBD_PRESS_KEY(0x75);	// "MEGA" key is pressed for C64 mode
+	}
+
+}
+
 static void osd_key_debugger ( void )
 {
 	hid_show_osd_keys = !hid_show_osd_keys;
-	OSD(-1, -1, "OSD key debugger turned %s", hid_show_osd_keys ? "ON" : "OFF");    
+	OSD(-1, -1, "OSD key debugger turned %s", hid_show_osd_keys ? "ON" : "OFF");
 }
+
+static void enable_mouse_grab ( void )
+{
+	if (!allow_mouse_grab) {
+		allow_mouse_grab = 1;
+		OSD(-1, -1, "ENABLED. Left click to activate!");
+	}
+}
+
+
+/**** MENU SYSTEM ****/
 
 
 static const struct menu_st menu_display[] = {
@@ -240,6 +270,7 @@ static const struct menu_st menu_display[] = {
 	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)1 },
 	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)2 },
 	{ "OSD key debugger",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, osd_key_debugger },
+	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, enable_mouse_grab },
 	{ NULL }
 };
 static const struct menu_st menu_sdcard[] = {
@@ -247,10 +278,16 @@ static const struct menu_st menu_sdcard[] = {
 	{ "Update files on SD image",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_update_sdcard },
 	{ NULL }
 };
+static const struct menu_st menu_reset[] = {
+	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_mega65_asked },
+	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu },
+	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode },
+	{ NULL }
+};
 static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		menu_display, NULL },
-	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		menu_sdcard, NULL },
-	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_mega65_asked },
+	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		menu_sdcard,  NULL },
+	{ "Reset",			XEMUGUI_MENUID_SUBMENU,		menu_reset,   NULL },
 	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
 #ifdef BASIC_TEXT_SUPPORT

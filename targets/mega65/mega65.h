@@ -69,7 +69,7 @@ extern void m65mon_breakpoint ( int brk );
 extern void machine_set_speed ( int verbose );
 
 extern void reset_mega65      ( void );
-extern void reset_mega65_asked( void );
+extern int  reset_mega65_asked( void );
 
 extern int  refill_c65_rom_from_preinit_cache ( void );
 

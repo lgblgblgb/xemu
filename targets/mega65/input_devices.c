@@ -78,6 +78,13 @@ static struct {
 static int restore_is_held = 0;
 
 
+void hwa_kbd_fake_key ( Uint8 k )
+{
+	hwa_kbd.next = 0;
+	hwa_kbd.last = k;
+}
+
+
 /* used by actual I/O function to read $D610 */
 Uint8 hwa_kbd_get_last ( void )
 {

@@ -27,6 +27,7 @@ extern int   emu_callback_key  ( int pos, SDL_Scancode key, int pressed, int han
 extern Uint8 hwa_kbd_get_last      ( void );
 extern Uint8 hwa_kbd_get_modifiers ( void );
 extern void  hwa_kbd_move_next     ( void );
+extern void  hwa_kbd_fake_key      ( Uint8 k );
 
 extern void  kbd_trigger_restore_trap ( void );
 
