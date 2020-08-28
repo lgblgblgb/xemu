@@ -45,6 +45,8 @@ static XEMU_INLINE int get_screen_width ( void )
 {
 	// C65 $D031.7 VIC-III:H640 Enable C64 640 horizontal pixels / 80 column mode
 	// Used to determine if C64 or C65 "power-on" screen
+	// TODO: this should be revised in the future, as MEGA65 can other means have
+	// different screens!!!
 	return (vic_registers[0x31] & 0x80) ? 80 : 40;
 }
 
@@ -181,6 +183,8 @@ static int is_ready_on_screen ( void )
 {
 	static const Uint8 ready[] = { 0x12, 0x05, 0x01, 0x04, 0x19, 0x2E };
 	int width = get_screen_width();
+	// TODO: this should be revised in the future, as MEGA65 can other means have
+	// different screen starting addresses, and not even dependent on the 40/80 column mode!!!
 	int start = (width == 80) ? 2048 : 1024;
 	// Check every lines of the screen (not the "0th" line, because we need "READY." in the previous line!)
 	// NOTE: I cannot rely on exact position as different ROMs can have different line position for the "READY." text!
@@ -210,12 +214,8 @@ void inject_ready_check_do ( void )
 			DEBUGPRINT("INJECT: clearing keyboard status on '@' trigger." NL);
 		}
 	} else if (inject_ready_check_status > 10) {
-		if (is_ready_on_screen()) {
-			inject_ready_check_status = 0;	// turn off "ready check" mode, we're done!
-			inject_ready_callback(inject_ready_userdata);
-		} else {
-			inject_ready_check_status = 1;	// unknown problem, let's restart the process of waiting READY. ...
-		}
+		inject_ready_check_status = 0;	// turn off "ready check" mode, we have our READY.
+		inject_ready_callback(inject_ready_userdata);	// callback is activated now
 	} else
 		inject_ready_check_status++;		// we're "let's wait some time after READY." phase
 }
