@@ -562,6 +562,15 @@ int xemu_init_sdl ( void )
 			SDL_Has3DNow(),SDL_HasAVX(),SDL_HasAVX2(),SDL_HasAltiVec(),SDL_HasMMX(),SDL_HasRDTSC(),SDL_HasSSE(),SDL_HasSSE2(),SDL_HasSSE3(),SDL_HasSSE41(),SDL_HasSSE42(),
 			SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver()
 		);
+#ifdef XEMU_ARCH_WIN
+#	define SDL_VER_MISMATCH_WARN_STR "Xemu was not compiled with the linked DLL.\nPlease upgrade your DLL too"
+#elif XEMU_ARCH_OSX
+#	define SDL_VER_MISMATCH_WARN_STR "Xemu was not compuled with the linked dynlib.\nPlease upgrade your dynlib too"
+#endif
+#ifdef SDL_VER_MISMATCH_WARN_STR
+	if (sdlver_compiled.major != sdlver_linked.major || sdlver_compiled.minor != sdlver_linked.minor || sdlver_compiled.patch != sdlver_linked.patch)
+		WARNING_WINDOW(SDL_VER_MISMATCH_WARN_STR);
+#endif
 	return 0;
 }
 
