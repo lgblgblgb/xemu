@@ -364,13 +364,13 @@ void xemu_timekeeping_delay ( int td_em )
 		td_em_ALL += td_em;
 	}
 	// Some statistics
-	if (td_em_ALL) {
+	if (td_em_ALL > 0 && td_pc_ALL > 0) {
 		int stat = td_pc_ALL * 100 / td_em_ALL;
 		td_stat_counter++;
 		td_stat_sum += stat;
 		if (stat > td_stat_max)
 			td_stat_max = stat;
-		if (stat < td_stat_min)
+		if (stat < td_stat_min && stat)
 			td_stat_min = stat;
 	}
 	// Check: invalid, sleep was about for _minus_ time? eh, give me that time machine, dude! :)
@@ -407,17 +407,17 @@ static void shutdown_emulator ( void )
 	xemusock_uninit();
 #endif
 	SDL_Quit();
-	if (debug_fp) {
-		fclose(debug_fp);
-		debug_fp = NULL;
-	}
 	if (td_stat_counter) {
 		DEBUGPRINT(NL "TIMING: Xemu CPU usage: avg=%.2f%%, min=%d%%, max=%d%% (%u counts)" NL,
-			td_stat_sum / (double)td_stat_counter, td_stat_min, td_stat_max,
+			td_stat_sum / (double)td_stat_counter, td_stat_min == INT_MAX ? 0 : td_stat_min, td_stat_max,
 			(unsigned int)td_stat_counter
 		);
 	}
 	DEBUGPRINT("XEMU: good by(T)e." NL);
+	if (debug_fp) {
+		fclose(debug_fp);
+		debug_fp = NULL;
+	}
 }
 
 
@@ -1030,13 +1030,17 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 	int buttonid;
 	SDL_MessageBoxButtonData buttons[16];
 	SDL_MessageBoxData messageboxdata = {
-		SDL_MESSAGEBOX_WARNING, /* .flags */
-		sdl_win, /* .window */
-		default_window_title, /* .title */
-		msg, /* .message */
-		0,      /* number of buttons, will be updated! */
+		SDL_MESSAGEBOX_WARNING	// .flags
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+		| SDL_MESSAGEBOX_BUTTONS_LEFT_TO_RIGHT
+#endif
+		,
+		sdl_win,		// .window
+		default_window_title,	// .title
+		msg,			// .message
+		0,			// number of buttons, will be updated!
 		buttons,
-		NULL    // &colorScheme
+		NULL			// &colorScheme
 	};
 	if (!SDL_WasInit(0))
 		FATAL("Calling _sdl_emu_secured_modal_box_() without non-zero SDL_Init() before!");
@@ -1181,8 +1185,8 @@ static CHAR sysconsole_getch( void )
 	if (!h)	// console cannot be accessed or WTF?
 		return 0;
 	DWORD cc, mode_saved;
-	GetConsoleMode (h, &mode_saved);
-	SetConsoleMode (h, mode_saved & ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT));
+	GetConsoleMode(h, &mode_saved);
+	SetConsoleMode(h, mode_saved & ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT));
 	TCHAR c = 0;
 	ReadConsole(h, &c, 1, &cc, NULL);
 	SetConsoleMode(h, mode_saved);
