@@ -1,4 +1,5 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
+/* Test-case for simple, work-in-progress Commodore 65 emulator.
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -735,23 +736,21 @@ void cpu65_write_rmw_callback ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 
 static void shutdown_callback ( void )
 {
-#ifdef MEMDUMP_FILE
-	FILE *f;
-#endif
 	int a;
 	for (a = 0; a < 0x40; a++)
 		DEBUG("VIC-3 register $%02X is %02X" NL, a, vic3_registers[a]);
 	cia_dump_state (&cia1);
 	cia_dump_state (&cia2);
-#ifdef MEMDUMP_FILE
-	// Dump memory, so some can inspect the result (low 128K, RAM only)
-	f = fopen(MEMDUMP_FILE, "wb");
-	if (f) {
-		fwrite(memory, 1, 0x20000, f);
-		fclose(f);
-		DEBUG("Memory is dumped into " MEMDUMP_FILE NL);
+	const char *p = xemucfg_get_str("dumpmem");
+	if (p) {
+		// Dump memory, so some can inspect the result (low 128K, RAM only)
+		FILE *f = fopen(p, "wb");
+		if (f) {
+			fwrite(memory, 1, 0x20000, f);
+			fclose(f);
+			DEBUGPRINT("MEM: Memory has been dumped into file: %s" NL, p);
+		}
 	}
-#endif
 	printf("Scanline render info = \"%s\"" NL, scanline_render_debug_info);
 	DEBUG("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu65.pc, addr_trans_rd[cpu65.pc >> 12] + cpu65.pc);
 }
@@ -885,6 +884,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("rom", "#c65-system.rom", "Override system ROM path to be loaded");
 	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
 	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
+	xemucfg_define_str_option("dumpmem", NULL, "Save memory content on exit");
 #ifdef FAKE_TYPING_SUPPORT
 	xemucfg_define_switch_option("go64", "Go into C64 mode after start");
 	xemucfg_define_switch_option("autoload", "Load and start the first program from disk");
