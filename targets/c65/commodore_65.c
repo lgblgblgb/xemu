@@ -751,7 +751,10 @@ static void shutdown_callback ( void )
 			DEBUGPRINT("MEM: Memory has been dumped into file: %s" NL, p);
 		}
 	}
-	printf("Scanline render info = \"%s\"" NL, scanline_render_debug_info);
+	DEBUGPRINT("Scanline render info = \"%s\"" NL, scanline_render_debug_info);
+	DEBUGPRINT("VIC3: D011=$%02X D018=$%02X D030=$%02X D031=$%02X" NL,
+		vic3_registers[0x11], vic3_registers[0x18], vic3_registers[0x30], vic3_registers[0x31]
+	);
 	DEBUG("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu65.pc, addr_trans_rd[cpu65.pc >> 12] + cpu65.pc);
 }
 
@@ -992,7 +995,7 @@ int c65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 int c65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
 	apply_memory_config();
-	printf("SNAP: loaded (finalize-callback!)." NL);
+	DEBUGPRINT("SNAP: loaded (finalize-callback!)." NL);
 	return 0;
 }
 #endif

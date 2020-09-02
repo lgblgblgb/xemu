@@ -1,5 +1,6 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* Test-case for a simple, work-in-progress Commodore 65 emulator.
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

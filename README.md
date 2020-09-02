@@ -14,7 +14,8 @@ including the Commodore LCD and Commodore 65 and MEGA65 as well.
 Written by (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 Source repository: https://github.com/lgblgblgb/xemu
 
-Xemu also contains code wasn't written by me. Please read file AUTHORS
+Xemu also contains code wasn't written by me (sources I use from others,
+or direct contributors to this project). Please read file AUTHORS
 
 Xemu is licensed under the terms of GNU/GPL v2, for more information please
 read file LICENSE. You can find the source on github, see above.
