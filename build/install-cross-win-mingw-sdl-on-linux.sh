@@ -9,7 +9,8 @@ if [ "$1" = "" ]; then
 fi
 
 #SDL_WIN_URL="https://github.com/lgblgblgb/xep128/raw/gh-pages/files/sdl204-win-crosstools.tar.bz2"
-SDL_WIN_URL="https://github.com/lgblgblgb/xemu/raw/gh-pages/files/sdl-2.0.10-win-mingw-crosstools-on-linux-installed.tar.bz2"
+#SDL_WIN_URL="https://github.com/lgblgblgb/xemu/raw/gh-pages/files/sdl-2.0.10-win-mingw-crosstools-on-linux-installed.tar.bz2"
+SDL_WIN_URL="https://github.com/lgblgblgb/xemu/raw/gh-pages/files/sdl-2.0.12-win-mingw-crosstools-on-linux-installed.tar.bz2"
 
 # DO NOT modify CROSS_ROOT! It won't work, as it depends on the download tarball how it was that installed!!!
 CROSS_ROOT="/usr/local/cross-tools"
