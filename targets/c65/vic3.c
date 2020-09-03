@@ -720,7 +720,13 @@ void vic3_select_bank ( int bank )
 }
 
 
-
+static XEMU_INLINE int get_dat_addr ( int bpn )
+{
+	int x = vic3_registers[0x3C];
+	int y = vic3_registers[0x3D] + ((x << 1) & 0x100);
+	x &= 0x7F;
+	return (x << 3) + (y & 7) + (IS_H640 ? bitplane_addr_640[bpn] + (y >> 3) * 640 : bitplane_addr_320[bpn] + (y >> 3) * 320);
+}
 
 
 // Caller should give only 0-$3F or 0-$7F addresses
@@ -811,6 +817,17 @@ void vic3_write_reg ( int addr, Uint8 data )
 			bitplane_addr_320[addr - 0x33] = ((data & 14) << 12) + (addr & 1 ? 0 : 0x10000);
 			bitplane_addr_640[addr - 0x33] = ((data & 12) << 12) + (addr & 1 ? 0 : 0x10000);
 			break;
+		case 0x40:
+		case 0x41:
+		case 0x42:
+		case 0x43:
+		case 0x44:
+		case 0x45:
+		case 0x46:
+		case 0x47:
+			// Write data through VIC-III DAT
+			memory[get_dat_addr(addr - 0x40)] = data;
+			break;
 		default:
 			if (addr >= 0x20 && addr < 0x2F)
 				data &= 15;
@@ -847,6 +864,17 @@ Uint8 vic3_read_reg ( int addr )
 			break;
 		case 0x18:
 			result = vic3_registers[addr] | 1;		// unused bit [TODO: also on VIC3?]
+			break;
+		case 0x40:
+		case 0x41:
+		case 0x42:
+		case 0x43:
+		case 0x44:
+		case 0x45:
+		case 0x46:
+		case 0x47:
+			// Read data through VIC-III DAT
+			result = memory[get_dat_addr(addr - 0x40)];
 			break;
 		default:
 			result = vic3_registers[addr];
