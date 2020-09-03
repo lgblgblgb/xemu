@@ -1,4 +1,5 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
+/* Test-case for simple, work-in-progress Commodore 65 emulator.
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -32,6 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "c65_snapshot.h"
 #include "xemu/emutools_gui.h"
 #include "ui.h"
+#include "inject.h"
 
 
 
@@ -734,24 +736,25 @@ void cpu65_write_rmw_callback ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 
 static void shutdown_callback ( void )
 {
-#ifdef MEMDUMP_FILE
-	FILE *f;
-#endif
 	int a;
 	for (a = 0; a < 0x40; a++)
 		DEBUG("VIC-3 register $%02X is %02X" NL, a, vic3_registers[a]);
 	cia_dump_state (&cia1);
 	cia_dump_state (&cia2);
-#ifdef MEMDUMP_FILE
-	// Dump memory, so some can inspect the result (low 128K, RAM only)
-	f = fopen(MEMDUMP_FILE, "wb");
-	if (f) {
-		fwrite(memory, 1, 0x20000, f);
-		fclose(f);
-		DEBUG("Memory is dumped into " MEMDUMP_FILE NL);
+	const char *p = xemucfg_get_str("dumpmem");
+	if (p) {
+		// Dump memory, so some can inspect the result (low 128K, RAM only)
+		FILE *f = fopen(p, "wb");
+		if (f) {
+			fwrite(memory, 1, 0x20000, f);
+			fclose(f);
+			DEBUGPRINT("MEM: Memory has been dumped into file: %s" NL, p);
+		}
 	}
-#endif
-	printf("Scanline render info = \"%s\"" NL, scanline_render_debug_info);
+	DEBUGPRINT("Scanline render info = \"%s\"" NL, scanline_render_debug_info);
+	DEBUGPRINT("VIC3: D011=$%02X D018=$%02X D030=$%02X D031=$%02X" NL,
+		vic3_registers[0x11], vic3_registers[0x18], vic3_registers[0x30], vic3_registers[0x31]
+	);
 	DEBUG("Execution has been stopped at PC=$%04X [$%05X]" NL, cpu65.pc, addr_trans_rd[cpu65.pc >> 12] + cpu65.pc);
 }
 
@@ -846,7 +849,9 @@ static void emulation_loop ( void )
 			cia_tick(&cia1, 64);
 			cia_tick(&cia2, 64);
 			cycles -= cpu_cycles_per_scanline;
-			if (vic3_render_scanline()) {
+			if (XEMU_UNLIKELY(vic3_render_scanline())) {
+				if (XEMU_UNLIKELY(inject_ready_check_status))
+					inject_ready_check_do();
 				if (frameskip) {
 					frameskip = 0;
 					hostfs_flush_all();
@@ -882,10 +887,13 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("rom", "#c65-system.rom", "Override system ROM path to be loaded");
 	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
 	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
+	xemucfg_define_str_option("dumpmem", NULL, "Save memory content on exit");
 #ifdef FAKE_TYPING_SUPPORT
 	xemucfg_define_switch_option("go64", "Go into C64 mode after start");
 	xemucfg_define_switch_option("autoload", "Load and start the first program from disk");
 #endif
+	xemucfg_define_str_option("prg", NULL, "Load a PRG file directly into the memory (/w C64/65 auto-detection on load address)");
+	xemucfg_define_num_option("prgmode", 0, "Override auto-detect option for -prg (64 or 65 for C64/C65 modes, 0 = default, auto detect)");
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
 	xemucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
@@ -920,7 +928,8 @@ int main ( int argc, char **argv )
 	);
 	osd_init_with_defaults();
 	xemugui_init(xemucfg_get_str("gui"));
-	// Start!!
+	if (xemucfg_get_str("prg"))
+		inject_register_prg(xemucfg_get_str("prg"), xemucfg_get_num("prgmode"));
 #ifdef FAKE_TYPING_SUPPORT
 	if (xemucfg_get_bool("go64")) {
 		if (xemucfg_get_bool("autoload"))
@@ -986,7 +995,7 @@ int c65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 int c65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
 	apply_memory_config();
-	printf("SNAP: loaded (finalize-callback!)." NL);
+	DEBUGPRINT("SNAP: loaded (finalize-callback!)." NL);
 	return 0;
 }
 #endif
