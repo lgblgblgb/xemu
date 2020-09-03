@@ -16,8 +16,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef XEMU_COMMODORE65_COMMODORE_65_H_INCLUDED
-#define XEMU_COMMODORE65_COMMODORE_65_H_INCLUDED
+#ifndef XEMU_C65_COMMODORE_65_H_INCLUDED
+#define XEMU_C65_COMMODORE_65_H_INCLUDED
 
 /* Do *NOT* modify these, as other parts of the emulator currently depends on these values ...
    You can try RENDER_SCALE_QUALITY though with values 0, 1, 2 */

@@ -563,9 +563,9 @@ int xemu_init_sdl ( void )
 			SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver()
 		);
 #if defined(XEMU_ARCH_WIN)
-#	define SDL_VER_MISMATCH_WARN_STR "Xemu was not compiled with the linked DLL.\nPlease upgrade your DLL too"
+#	define SDL_VER_MISMATCH_WARN_STR "Xemu was not compiled with the linked DLL for SDL.\nPlease upgrade your DLL too, not just Xemu binary."
 #elif defined(XEMU_ARCH_OSX)
-#	define SDL_VER_MISMATCH_WARN_STR "Xemu was not compuled with the linked dynlib.\nPlease upgrade your dynlib too"
+#	define SDL_VER_MISMATCH_WARN_STR "Xemu was not compuled with the linked dylib for SDL.\nPlease upgrade your dylib too, not just Xemu binary."
 #endif
 #ifdef SDL_VER_MISMATCH_WARN_STR
 	if (sdlver_compiled.major != sdlver_linked.major || sdlver_compiled.minor != sdlver_linked.minor || sdlver_compiled.patch != sdlver_linked.patch)

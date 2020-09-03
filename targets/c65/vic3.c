@@ -719,16 +719,12 @@ void vic3_select_bank ( int bank )
 }
 
 
-static inline int get_dat_addr ( int bpn )
+static XEMU_INLINE int get_dat_addr ( int bpn )
 {
 	int x = vic3_registers[0x3C];
 	int y = vic3_registers[0x3D] + ((x << 1) & 0x100);
 	x &= 0x7F;
-	if (IS_H640) {
-		return bitplane_addr_640[bpn] + (y >> 3) * 640 + (x << 3) + (y & 7);
-	} else {
-		return bitplane_addr_320[bpn] + (y >> 3) * 320 + (x << 3) + (y & 7);
-	}
+	return (x << 3) + (y & 7) + (IS_H640 ? bitplane_addr_640[bpn] + (y >> 3) * 640 : bitplane_addr_320[bpn] + (y >> 3) * 320);
 }
 
 
