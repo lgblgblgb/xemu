@@ -1,4 +1,4 @@
-/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
+/* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and MEGA65 as well.
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
@@ -75,6 +75,8 @@ static char *window_title_buffer, *window_title_buffer_end;
 static struct timeval unix_time_tv;
 static Uint64 et_old;
 static int td_balancer, td_em_ALL, td_pc_ALL;
+static Uint64 td_stat_counter = 0, td_stat_sum = 0;
+static int td_stat_min = INT_MAX, td_stat_max = INT_MIN;
 int sysconsole_is_open = 0;
 FILE *debug_fp = NULL;
 int chatty_xemu = 1;
@@ -361,7 +363,19 @@ void xemu_timekeeping_delay ( int td_em )
 		td_pc_ALL += td_pc;
 		td_em_ALL += td_em;
 	}
-	if (td < 0) return; // invalid, sleep was about for _minus_ time? eh, give me that time machine, dude! :)
+	// Some statistics
+	if (td_em_ALL > 0 && td_pc_ALL > 0) {
+		int stat = td_pc_ALL * 100 / td_em_ALL;
+		td_stat_counter++;
+		td_stat_sum += stat;
+		if (stat > td_stat_max)
+			td_stat_max = stat;
+		if (stat < td_stat_min && stat)
+			td_stat_min = stat;
+	}
+	// Check: invalid, sleep was about for _minus_ time? eh, give me that time machine, dude! :)
+	if (td < 0)
+		return;
 	// Balancing real and wanted sleep time on long run
 	// Insane big values are forgotten, maybe emulator was stopped, or something like that
 	td_balancer -= td;
@@ -393,11 +407,17 @@ static void shutdown_emulator ( void )
 	xemusock_uninit();
 #endif
 	SDL_Quit();
+	if (td_stat_counter) {
+		DEBUGPRINT(NL "TIMING: Xemu CPU usage: avg=%.2f%%, min=%d%%, max=%d%% (%u counts)" NL,
+			td_stat_sum / (double)td_stat_counter, td_stat_min == INT_MAX ? 0 : td_stat_min, td_stat_max,
+			(unsigned int)td_stat_counter
+		);
+	}
+	DEBUGPRINT("XEMU: good by(T)e." NL);
 	if (debug_fp) {
 		fclose(debug_fp);
 		debug_fp = NULL;
 	}
-	DEBUGPRINT(NL "XEMU: good by(T)e." NL);
 }
 
 
@@ -542,6 +562,15 @@ int xemu_init_sdl ( void )
 			SDL_Has3DNow(),SDL_HasAVX(),SDL_HasAVX2(),SDL_HasAltiVec(),SDL_HasMMX(),SDL_HasRDTSC(),SDL_HasSSE(),SDL_HasSSE2(),SDL_HasSSE3(),SDL_HasSSE41(),SDL_HasSSE42(),
 			SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver()
 		);
+#if defined(XEMU_ARCH_WIN)
+#	define SDL_VER_MISMATCH_WARN_STR "Xemu was not compiled with the linked DLL for SDL.\nPlease upgrade your DLL too, not just Xemu binary."
+#elif defined(XEMU_ARCH_OSX)
+#	define SDL_VER_MISMATCH_WARN_STR "Xemu was not compuled with the linked dylib for SDL.\nPlease upgrade your dylib too, not just Xemu binary."
+#endif
+#ifdef SDL_VER_MISMATCH_WARN_STR
+	if (sdlver_compiled.major != sdlver_linked.major || sdlver_compiled.minor != sdlver_linked.minor || sdlver_compiled.patch != sdlver_linked.patch)
+		WARNING_WINDOW(SDL_VER_MISMATCH_WARN_STR);
+#endif
 	return 0;
 }
 
@@ -579,7 +608,7 @@ int xemu_post_init (
 	if (xemu_init_sdl())	// it is possible that is has been already called, but it's not a problem
 		return 1;
 	shutdown_user_function = shutdown_callback;
-	DEBUGPRINT("Timing: sleep = %s, query = %s" NL, __SLEEP_METHOD_DESC, __TIMING_METHOD_DESC);
+	DEBUGPRINT("TIMING: sleep = %s, query = %s" NL, __SLEEP_METHOD_DESC, __TIMING_METHOD_DESC);
 	DEBUGPRINT("SDL preferences directory: %s" NL, sdl_pref_dir);
 	DEBUG("SDL install directory: %s" NL, sdl_inst_dir);
 	DEBUG("SDL base directory: %s" NL, sdl_base_dir);
@@ -1010,13 +1039,17 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 	int buttonid;
 	SDL_MessageBoxButtonData buttons[16];
 	SDL_MessageBoxData messageboxdata = {
-		SDL_MESSAGEBOX_WARNING, /* .flags */
-		sdl_win, /* .window */
-		default_window_title, /* .title */
-		msg, /* .message */
-		0,      /* number of buttons, will be updated! */
+		SDL_MESSAGEBOX_WARNING	// .flags
+#if SDL_VERSION_ATLEAST(2, 0, 12)
+		| SDL_MESSAGEBOX_BUTTONS_LEFT_TO_RIGHT
+#endif
+		,
+		sdl_win,		// .window
+		default_window_title,	// .title
+		msg,			// .message
+		0,			// number of buttons, will be updated!
 		buttons,
-		NULL    // &colorScheme
+		NULL			// &colorScheme
 	};
 	if (!SDL_WasInit(0))
 		FATAL("Calling _sdl_emu_secured_modal_box_() without non-zero SDL_Init() before!");
@@ -1161,8 +1194,8 @@ static CHAR sysconsole_getch( void )
 	if (!h)	// console cannot be accessed or WTF?
 		return 0;
 	DWORD cc, mode_saved;
-	GetConsoleMode (h, &mode_saved);
-	SetConsoleMode (h, mode_saved & ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT));
+	GetConsoleMode(h, &mode_saved);
+	SetConsoleMode(h, mode_saved & ~(ENABLE_LINE_INPUT | ENABLE_ECHO_INPUT));
 	TCHAR c = 0;
 	ReadConsole(h, &c, 1, &cc, NULL);
 	SetConsoleMode(h, mode_saved);
