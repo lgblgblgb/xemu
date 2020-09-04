@@ -40,7 +40,8 @@ struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 static int mouse_x = 0, mouse_y = 0;	// for our primitive C1351 mouse emulation
 int    cpu_linear_memory_addressing_is_enabled = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;
-int port_d607 = 0xFF;	// ugly hack to be able to read extra char row of C65
+int port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65
+int mega65_model = 0xFF;		// 0xFF = Xemu, 0x03 = MEGA65 PCB rev 3
 
 
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
@@ -185,7 +186,7 @@ Uint8 io_read ( unsigned int addr )
 				case 0x11:				// modifier keys on kbd being used
 					return hwa_kbd_get_modifiers();
 				case 0x29:
-					return 0x03;			// MEGA65 model: PCB rev 3
+					return mega65_model;		// MEGA65 model
 				default:
 					DEBUG("MEGA65: reading MEGA65 specific I/O @ $D6%02X result is $%02X" NL, addr, D6XX_registers[addr]);
 					return D6XX_registers[addr];

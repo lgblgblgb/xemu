@@ -647,6 +647,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("allowmousegrab", "Allow auto mouse grab with left-click");
 	xemucfg_define_num_option("dmarev", 0x100, "DMA revision (0/1=F018A/B +256=autochange, +512=modulo, you always wants +256!)");
 	xemucfg_define_num_option("fastclock", MEGA65_DEFAULT_FAST_CLOCK, "Clock of M65 fast mode (in MHz)");
+	xemucfg_define_num_option("model", 255, "Emulated MEGA65 model (255=custom/Xemu)");
 	xemucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA-board switches turned ON");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	xemucfg_define_switch_option("hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode");
@@ -697,6 +698,8 @@ int main ( int argc, char **argv )
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	i_am_sure_override = xemucfg_get_bool("besure");
+	mega65_model = xemucfg_get_num("model");
+	DEBUGPRINT("XEMU: emulated MEGA65 model ID: %d" NL, mega65_model);
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(xemucfg_get_str("installer"));
 #endif
