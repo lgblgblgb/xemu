@@ -607,7 +607,7 @@ int cpu65_step (
 #endif
 	)) {
 #ifdef DEBUG_CPU
-		DEBUG("CPU: servint IRQ on IRQ level at PC $%04X" NL, CPU65.pc);
+		DEBUG("CPU: serving IRQ on IRQ level at PC $%04X" NL, CPU65.pc);
 #endif
 		pushWord(CPU65.pc);
 		push(cpu65_get_pf());	// no CPU65_PF_B is pushed!

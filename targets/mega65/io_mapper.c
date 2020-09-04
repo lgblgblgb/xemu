@@ -41,7 +41,7 @@ static int mouse_x = 0, mouse_y = 0;	// for our primitive C1351 mouse emulation
 int    cpu_linear_memory_addressing_is_enabled = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;
 int port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65
-int mega65_model = 0xFF;		// 0xFF = Xemu, 0x03 = MEGA65 PCB rev 3
+int mega65_model = 0xFF;		// $FF = Xemu/others, 1/2/3 = MEGA65 PCB rev 1/2/3, $40=nexys4, $41=nexys4ddr, $42=nexys4ddr-widget, $FD=wukong, $FE=simulation
 
 
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \

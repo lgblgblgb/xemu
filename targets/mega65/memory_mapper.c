@@ -214,7 +214,7 @@ DEFINE_READER(invalid_mem_reader) {
 		skip_unhandled_mem = QUESTION_WINDOW("EXIT|Ignore now|Ignore all|Silent ignore all", msg);
 	switch (skip_unhandled_mem) {
 		case 0:
-			FATAL("Exit on request after illegal memory access");
+			XEMUEXIT(1);
 			break;
 		case 1:
 		case 2:
