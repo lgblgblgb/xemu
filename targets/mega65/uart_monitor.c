@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #warning "Platform does not support UMON"
 #else
 
+#include "xemu/emutools_socketapi.h"
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -38,12 +39,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <string.h>
 #include <limits.h>
 
+#include <netinet/in.h>
+#include <netdb.h>
+
 int  umon_write_size;
 int  umon_send_ok;
 char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
-static int  sock_server = -1;
-static int  sock_client;
+static xemusock_socket_t sock_server = -1;
+static xemusock_socket_t sock_client;
 static int  umon_write_pos, umon_read_pos;
 static int  umon_echo;
 static char umon_read_buffer [0x1000];
@@ -100,33 +104,27 @@ static int check_end_of_command ( char *p, int error_out )
 }
 
 
-static void setmem28(char *param, int addr)
+static void setmem28 ( char *param, int addr )
 {
-	addr &= 0xFFFFFFF;
-  Uint8* vals = NULL;
-  char* orig_param = param;
-  int cnt = 0;
-  int val;
-
-  // get param count
-  while (param && !check_end_of_command(param, 0))
-  {
-    param = parse_hex_arg(param, &val, 0, 0xFF); 
-    cnt++;
-  }
-
-  vals = calloc(cnt, sizeof(Uint8));
-  param = orig_param;
-
-  int idx = 0;
-  while (param && !check_end_of_command(param, 0))
-  {
-    param = parse_hex_arg(param, &val, 0, 0xFF);
-    vals[idx++] = (Uint8)val;
-  }
-
-  m65mon_setmem28(addr, cnt, vals);
-  free(vals);
+	//Uint8* vals = NULL;
+	char *orig_param = param;
+	int cnt = 0;
+	// get param count
+	while (param && !check_end_of_command(param, 0)) {
+		int val;
+		param = parse_hex_arg(param, &val, 0, 0xFF);
+		cnt++;
+	}
+	//vals = calloc(cnt, sizeof(Uint8));
+	Uint8 vals[cnt];
+	param = orig_param;
+	for (int idx = 0; idx < cnt; idx++) {
+		int val;
+		(void)parse_hex_arg(param, &val, 0, 0xFF);
+		vals[idx] = (Uint8)val;
+	}
+	m65mon_setmem28(addr & 0xFFFFFFF, cnt, vals);
+	//free(vals);
 }
 
 static void execute_command ( char *cmd )
@@ -140,7 +138,7 @@ static void execute_command ( char *cmd )
 			*(p++) = 32;
 		else if (*p == 8)
 			memmove(p - 1, p + 1, strlen(p + 1) + 1);
-		else if (*p > 127 || *p < 32) {
+		else if ((unsigned char)*p > 127 || (unsigned char)*p < 32) {
 			umon_printf(UMON_SYNTAX_ERROR "invalid character in the command (ASCII=%d)", *p);
 			return;
 		} else
@@ -206,48 +204,79 @@ static void execute_command ( char *cmd )
 /* ------------------------- SOCKET HANDLING, etc ------------------------- */
 
 
-static int set_nonblock ( int fd )
-{
-	int flags = fcntl(fd, F_GETFL, 0);
-	if (flags == -1)
-		return 1;
-	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK))
-		return 1;
-	return 0;
-}
+//static int set_nonblock ( int fd )
+//{
+//	int flags = fcntl(fd, F_GETFL, 0);
+//	if (flags == -1)
+//		return 1;
+//	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK))
+//		return 1;
+//	return 0;
+//}
 
 
 
 int uartmon_init ( const char *fn )
 {
-	struct sockaddr_un sock_st;
-	int sock;
+	int xerr;
+	xemusock_socket_t sock;
 	sock_server = -1;
 	if (!fn || !*fn) {
 		DEBUGPRINT("UARTMON: disabled, no name is specified to bind to." NL);
 		return 0;
 	}
-	sock = socket(AF_UNIX, SOCK_STREAM, 0);
-	if (sock < 0) {
-		ERROR_WINDOW("Cannot create named socket %s, UART monitor cannot be used: %s\n", fn, strerror(errno));
+	if (xemusock_init("Cannot initialize network"))
 		return 1;
-	}
-	sock_st.sun_family = AF_UNIX;
-	strcpy(sock_st.sun_path, fn);
-	unlink(sock_st.sun_path);
-	if (bind(sock, (struct sockaddr*)&sock_st, sizeof(struct sockaddr_un))) {
-		ERROR_WINDOW("Cannot bind named socket %s, UART monitor cannot be used: %s\n", fn, strerror(errno));
-		close(sock);
+	if (fn[0] == ':') {
+		int port = atoi(fn + 1);
+		if (port < 1024 || port > 65535) {
+			ERROR_WINDOW("uartmon: invalid port specification %d (1024-65535 is allowd) from string %s", port, fn);
+			return 1;
+		}
+		struct sockaddr_in sock_st;
+		sock = xemusock_create_for_inet(1, 0, &xerr);
+		if (sock == XS_INVALID_SOCKET) {
+			ERROR_WINDOW("Cannot create TCP socket: %s", xemusock_strerror(xerr));
+			return 1;
+		}
+		//sock = socket(AF_INET, SOCK_STREAM, 0);
+		sock_st.sin_family = AF_INET;
+		sock_st.sin_addr.s_addr = htonl(INADDR_ANY);
+		sock_st.sin_port = htons(port);
+		if (bind(sock, (struct sockaddr*)&sock_st, sizeof(struct sockaddr_in))) {
+			ERROR_WINDOW("Cannot bind TCP socket %d, UART monitor cannot be used: %s", port, strerror(errno));
+			xemusock_close(sock, NULL);
+			return 1;
+		}
+	} else {
+#ifdef XEMU_ARCH_WIN
+		ERROR_WINDOW("On Windows, you must use TCP/IP sockets, so uartmon parameter must be in form of :n (n=port number to bind to)");
 		return 1;
+#else
+		struct sockaddr_un sock_st;
+		sock = socket(AF_UNIX, SOCK_STREAM, 0);
+		if (sock < 0) {
+			ERROR_WINDOW("Cannot create named socket %s, UART monitor cannot be used: %s", fn, strerror(errno));
+			return 1;
+		}
+		sock_st.sun_family = AF_UNIX;
+		strcpy(sock_st.sun_path, fn);
+		unlink(sock_st.sun_path);
+		if (bind(sock, (struct sockaddr*)&sock_st, sizeof(struct sockaddr_un))) {
+			ERROR_WINDOW("Cannot bind named socket %s, UART monitor cannot be used: %s", fn, strerror(errno));
+			xemusock_close(sock, NULL);
+			return 1;
+		}
+#endif
 	}
 	if (listen(sock, 5)) {
-		ERROR_WINDOW("Cannot listen with named socket %s, UART monitor cannot be used: %s\n", fn, strerror(errno));
-		close(sock);
+		ERROR_WINDOW("Cannot listen socket %s, UART monitor cannot be used: %s", fn, strerror(errno));
+		xemusock_close(sock, NULL);
 		return 1;
 	}
-	if (set_nonblock(sock)) {
-		ERROR_WINDOW("Cannot set named socket %s into non-blocking mode, UART monitor cannot be used: %s\n", fn, strerror(errno));
-		close(sock);
+	if (xemusock_set_nonblocking(sock, 1, &xerr)) {
+		ERROR_WINDOW("Cannot set socket %s into non-blocking mode, UART monitor cannot be used: %s", fn, xemusock_strerror(xerr));
+		xemusock_close(sock, NULL);
 		return 1;
 	}
 	DEBUG("UARTMON: monitor is listening on socket %s" NL, fn);
@@ -263,9 +292,9 @@ int uartmon_init ( const char *fn )
 void uartmon_close  ( void )
 {
 	if (sock_server >= 0) {
-		close(sock_server);
+		xemusock_close(sock_server, NULL);
 		if (sock_client >= 0)
-			close(sock_client);
+			xemusock_close(sock_client, NULL);
 	}
 	sock_server = -1;
 }
@@ -309,8 +338,8 @@ void uartmon_update ( void )
 				ret >= 0 ? "OK" : strerror(errno)
 			);
 		if (ret >= 0) {
-			if (set_nonblock(ret)) {
-				close(ret);
+			if (xemusock_set_nonblocking(ret, 1, NULL)) {
+				xemusock_close(ret, NULL);
 			} else {
 				sock_client = ret;	// "publish" new client socket
 				// Reset reading/writing information
@@ -334,7 +363,7 @@ void uartmon_update ( void )
 				ret, ret < 0 ? strerror(errno) : "OK"
 			);
 		if (ret == 0) { // client socket closed
-			close(sock_client);
+			xemusock_close(sock_client, NULL);
 			sock_client = -1;
 			DEBUGPRINT("UARTMON: connection closed by peer while writing" NL);
 			return;
@@ -358,7 +387,7 @@ void uartmon_update ( void )
 			ret, ret < 0 ? strerror(errno) : "OK"
 		);
 	if (ret == 0) { // client socket closed
-		close(sock_client);
+		xemusock_close(sock_client, NULL);
 		sock_client = -1;
 		DEBUGPRINT("UARTMON: connection closed by peer while reading" NL);
 		return;

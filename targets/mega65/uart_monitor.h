@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMU_MEGA65_UART_MONITOR_H_INCLUDED
 
 #if !defined(XEMU_ARCH_WIN) && !defined(XEMU_ARCH_HTML)
+//#ifdef XEMU_HAS_SOCKET_API
 #define HAS_UARTMON_SUPPORT
 
 #define UMON_SYNTAX_ERROR "?SYNTAX ERROR  "

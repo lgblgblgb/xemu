@@ -37,6 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	include <arpa/inet.h>
 #	include <sys/socket.h>
 #	include <netinet/in.h>
+#	include <errno.h>
 	typedef	int			xemusock_socket_t;
 	typedef	socklen_t		xemusock_socklen_t;
 #	define	XSEAGAIN		EAGAIN
