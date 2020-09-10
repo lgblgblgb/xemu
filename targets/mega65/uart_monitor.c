@@ -46,7 +46,10 @@ int  umon_write_size;
 int  umon_send_ok;
 char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
-static xemusock_socket_t sock_server = -1;
+#define UNCONNECTED	XS_INVALID_SOCKET
+
+
+static xemusock_socket_t sock_server = UNCONNECTED;
 static xemusock_socket_t sock_client;
 static int  umon_write_pos, umon_read_pos;
 static int  umon_echo;
@@ -169,10 +172,10 @@ static void execute_command ( char *cmd )
 			if (cmd && check_end_of_command(cmd, 1))
 				m65mon_dumpmem28(par1);
 			break;
-    case 's':
-      cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
-      setmem28(cmd, par1);
-      break;
+		case 's':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
+			setmem28(cmd, par1);
+			break;
 		case 't':
 			if (!*cmd)
 				m65mon_do_trace();
@@ -220,13 +223,15 @@ int uartmon_init ( const char *fn )
 {
 	int xerr;
 	xemusock_socket_t sock;
-	sock_server = -1;
+	sock_server = UNCONNECTED;
 	if (!fn || !*fn) {
 		DEBUGPRINT("UARTMON: disabled, no name is specified to bind to." NL);
 		return 0;
 	}
-	if (xemusock_init("Cannot initialize network"))
+	if (xemusock_init(NULL)) {
+		ERROR_WINDOW("Cannot initialize network, uart_mon is not availbale on TCP socket");
 		return 1;
+	}
 	if (fn[0] == ':') {
 		int port = atoi(fn + 1);
 		if (port < 1024 || port > 65535) {
@@ -234,12 +239,12 @@ int uartmon_init ( const char *fn )
 			return 1;
 		}
 		struct sockaddr_in sock_st;
+		//sock = socket(AF_INET, SOCK_STREAM, 0);
 		sock = xemusock_create_for_inet(1, 0, &xerr);
 		if (sock == XS_INVALID_SOCKET) {
 			ERROR_WINDOW("Cannot create TCP socket: %s", xemusock_strerror(xerr));
 			return 1;
 		}
-		//sock = socket(AF_INET, SOCK_STREAM, 0);
 		sock_st.sin_family = AF_INET;
 		sock_st.sin_addr.s_addr = htonl(INADDR_ANY);
 		sock_st.sin_port = htons(port);
@@ -249,8 +254,8 @@ int uartmon_init ( const char *fn )
 			return 1;
 		}
 	} else {
-#ifdef XEMU_ARCH_WIN
-		ERROR_WINDOW("On Windows, you must use TCP/IP sockets, so uartmon parameter must be in form of :n (n=port number to bind to)");
+#if !defined(XEMU_ARCH_UNIX)
+		ERROR_WINDOW("On non-UNIX systems, you must use TCP/IP sockets, so uartmon parameter must be in form of :n (n=port number to bind to)");
 		return 1;
 #else
 		struct sockaddr_un sock_st;
@@ -280,7 +285,7 @@ int uartmon_init ( const char *fn )
 		return 1;
 	}
 	DEBUG("UARTMON: monitor is listening on socket %s" NL, fn);
-	sock_client = -1;	// no client connection yet
+	sock_client = UNCONNECTED;	// no client connection yet
 	sock_server = sock;	// now set the socket
 	umon_echo = 1;
 	umon_send_ok = 1;
@@ -296,7 +301,7 @@ void uartmon_close  ( void )
 		if (sock_client >= 0)
 			xemusock_close(sock_client, NULL);
 	}
-	sock_server = -1;
+	sock_server = UNCONNECTED;
 }
 
 
@@ -325,7 +330,7 @@ void uartmon_update ( void )
 {
 	int ret;
 	// If there is no server socket, we can't do anything!
-	if (sock_server < 0)
+	if (sock_server == UNCONNECTED)
 		return;
 	// Try to accept new connection, if not yet have one (we handle only *ONE* connection!!!!)
 	if (sock_client < 0) {
@@ -350,7 +355,7 @@ void uartmon_update ( void )
 		}
 	}
 	// If no established connection, return
-	if (sock_client < 0)
+	if (sock_client == UNCONNECTED)
 		return;
 	// If there is data to write, try to write
 	if (umon_write_size) {
@@ -364,7 +369,7 @@ void uartmon_update ( void )
 			);
 		if (ret == 0) { // client socket closed
 			xemusock_close(sock_client, NULL);
-			sock_client = -1;
+			sock_client = UNCONNECTED;
 			DEBUGPRINT("UARTMON: connection closed by peer while writing" NL);
 			return;
 		}
@@ -388,7 +393,7 @@ void uartmon_update ( void )
 		);
 	if (ret == 0) { // client socket closed
 		xemusock_close(sock_client, NULL);
-		sock_client = -1;
+		sock_client = UNCONNECTED;
 		DEBUGPRINT("UARTMON: connection closed by peer while reading" NL);
 		return;
 	}
