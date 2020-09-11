@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2017,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -29,19 +29,19 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools_socketapi.h"
 
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
-#include <errno.h>
-#include <unistd.h>
+//#include <sys/types.h>
+//#include <sys/stat.h>
+//#include <fcntl.h>
+//#include <errno.h>
 #include <string.h>
-#include <limits.h>
+//#include <limits.h>
 
 #ifndef XEMU_ARCH_WIN
+#include <unistd.h>
 #include <sys/un.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <netdb.h>
+//#include <sys/socket.h>
+//#include <netinet/in.h>
+//#include <netdb.h>
 #endif
 
 int  umon_write_size;
@@ -233,7 +233,10 @@ int uartmon_init ( const char *fn )
 {
 	int xerr;
 	xemusock_socket_t sock;
-	sock_server = UNCONNECTED;	// default starting value: server socket is unavailable
+	if (sock_server != UNCONNECTED) {
+		ERROR_WINDOW("UARTMON: already activated");
+		return 1;
+	}
 	if (!fn || !*fn) {
 		DEBUGPRINT("UARTMON: disabled, no name is specified to bind to." NL);
 		return 0;
@@ -256,6 +259,14 @@ int uartmon_init ( const char *fn )
 			ERROR_WINDOW("Cannot create TCP socket: %s", xemusock_strerror(xerr));
 			return 1;
 		}
+#ifdef XEMU_ARCH_WIN
+		const BOOL on = 1;
+#else
+		const int on = 1;
+#endif
+		if (xemusock_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof on, &xerr)) {
+			ERROR_WINDOW("UARTMON: setsockopt for SO_REUSEADDR failed with %s", xemusock_strerror(xerr));
+		}
 		sock_st.sin_family = AF_INET;
 		sock_st.sin_addr.s_addr = htonl(INADDR_ANY);
 		sock_st.sin_port = htons(port);
@@ -266,7 +277,7 @@ int uartmon_init ( const char *fn )
 		}
 	} else {
 #if !defined(XEMU_ARCH_UNIX)
-		ERROR_WINDOW("On non-UNIX systems, you must use TCP/IP sockets, so uartmon parameter must be in form of :n (n=port number to bind to)");
+		ERROR_WINDOW("On non-UNIX systems, you must use TCP/IP sockets, so uartmon parameter must be in form of :n (n=port number to bind to)\nUARTMON is not available because of bad syntax.");
 		return 1;
 #else
 		// This is UNIX specific code (UNIX named socket) thus it's OK not use Xemu socket API calls here
@@ -344,7 +355,7 @@ void uartmon_update ( void )
 	if (sock_server == UNCONNECTED)
 		return;
 	// Try to accept new connection, if not yet have one (we handle only *ONE* connection!!!!)
-	if (sock_client < 0) {
+	if (sock_client == UNCONNECTED) {
 		//struct sockaddr_un sock_st;
 		xemusock_socklen_t len = sock_len;
 		union {
@@ -354,14 +365,16 @@ void uartmon_update ( void )
 			struct sockaddr_in in;
 		} sock_st;
 		xemusock_socket_t ret_sock = xemusock_accept(sock_server, (struct sockaddr *)&sock_st, &len, &xerr);
-		if (ret_sock != XS_INVALID_SOCKET || !xemusock_should_repeat_from_error(xerr))
+		if (ret_sock != XS_INVALID_SOCKET || (ret_sock == XS_INVALID_SOCKET && !xemusock_should_repeat_from_error(xerr)))
 			DEBUG("UARTMON: accept()=" PRINTF_SOCK " error=%s" NL,
 				ret_sock,
 				ret_sock != XS_INVALID_SOCKET ? "OK" : xemusock_strerror(xerr)
 			);
 		if (ret_sock != XS_INVALID_SOCKET) {
-			if (xemusock_set_nonblocking(ret_sock, 1, NULL)) {
+			if (xemusock_set_nonblocking(ret_sock, 1, &xerr)) {
+				DEBUGPRINT("UARTMON: error, cannot make socket non-blocking %s", xemusock_strerror(xerr));
 				xemusock_close(ret_sock, NULL);
+				return;
 			} else {
 				sock_client = ret_sock;	// "publish" new client socket
 				// Reset reading/writing information

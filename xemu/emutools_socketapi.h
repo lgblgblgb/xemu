@@ -72,6 +72,7 @@ extern int  xemusock_recv		( xemusock_socket_t sock, void *buffer, int length, i
 extern int  xemusock_recvfrom		( xemusock_socket_t sock, void *buffer, int length, struct sockaddr_in *servaddr, int *xerrno );
 extern int  xemusock_bind		( xemusock_socket_t sock, struct sockaddr *addr, xemusock_socklen_t addrlen, int *xerrno );
 extern int  xemusock_listen		( xemusock_socket_t sock, int backlog, int *xerrno );
+extern int  xemusock_setsockopt		( xemusock_socket_t sock, int level, int option, const void *value, int len, int *xerrno );
 extern xemusock_socket_t xemusock_accept		( xemusock_socket_t sock, struct sockaddr *addr, xemusock_socklen_t *addrlen, int *xerrno );
 extern xemusock_socket_t xemusock_create_for_inet	( int is_tcp, int is_nonblock, int *xerrno );
 

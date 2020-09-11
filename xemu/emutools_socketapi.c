@@ -350,6 +350,17 @@ xemusock_socket_t xemusock_accept ( xemusock_socket_t sock, struct sockaddr *add
 }
 
 
+int xemusock_setsockopt ( xemusock_socket_t sock, int level, int option, const void *value, int len, int *xerrno )
+{
+	if (setsockopt(sock, level, option, (const char*)value, len)) {
+		if (xerrno)
+			*xerrno = SOCK_ERR();
+		return -1;
+	} else
+		return 0;
+}
+
+
 int xemusock_select_1 ( xemusock_socket_t sock, int usec, int what )
 {
 	for (;;) {

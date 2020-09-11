@@ -254,7 +254,7 @@ void hid_keymap_from_config_file ( const char *fn )
 void hid_init ( const struct KeyMappingDefault *key_map_in, Uint8 virtual_shift_pos_in, int joy_enable )
 {
 	if (!key_map_in) {
-		DEBUGPRINT("HID: warning, hid_init() was called key_map_in=NULL" NL);
+		DEBUGPRINT("HID: warning, hid_init() was called key_map_in=NULL. This seems to be a FreeBSD specific bug, as far as I can tell from experience." NL);
 		return;
 	}
 	int a;
