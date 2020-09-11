@@ -127,7 +127,7 @@ static int _winsock_init_status = 1;	// 1 = todo, 0 = was OK, -1 = error!
 
 int xemusock_init ( char *msg )
 {
-	*msg = '\0';
+	//*msg = '\0'; // WTF it was?!
 	if (_winsock_init_status <= 0)
 		return _winsock_init_status;
 #ifdef XEMU_ARCH_WIN
@@ -312,6 +312,41 @@ int xemusock_recv ( xemusock_socket_t sock, void *buffer, int length, int *xerrn
 		return -1;
 	} else
 		return ret;
+}
+
+
+int xemusock_bind ( xemusock_socket_t sock, struct sockaddr *addr, xemusock_socklen_t addrlen, int *xerrno )
+{
+	int ret = bind(sock, addr, addrlen);
+	if (ret) {
+		if (xerrno)
+			*xerrno = SOCK_ERR();
+		return -1;
+	} else
+		return 0;
+}
+
+
+int xemusock_listen ( xemusock_socket_t sock, int backlog, int *xerrno )
+{
+	int ret = listen(sock, backlog);
+	if (ret) {
+		if (xerrno)
+			*xerrno = SOCK_ERR();
+		return -1;
+	} else
+		return 0;
+}
+
+
+xemusock_socket_t xemusock_accept ( xemusock_socket_t sock, struct sockaddr *addr, xemusock_socklen_t *addrlen, int *xerrno )
+{
+	xemusock_socket_t ret = accept(sock, addr, addrlen);
+	if (ret == XS_INVALID_SOCKET) {
+		if (xerrno)
+			*xerrno = SOCK_ERR();
+	}
+	return ret;
 }
 
 

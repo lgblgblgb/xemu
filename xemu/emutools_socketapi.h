@@ -70,7 +70,10 @@ extern int  xemusock_send		( xemusock_socket_t sock, const void *buffer, int len
 extern int  xemusock_sendto		( xemusock_socket_t sock, const void *buffer, int length, struct sockaddr_in *servaddr, int *xerrno );
 extern int  xemusock_recv		( xemusock_socket_t sock, void *buffer, int length, int *xerrno );
 extern int  xemusock_recvfrom		( xemusock_socket_t sock, void *buffer, int length, struct sockaddr_in *servaddr, int *xerrno );
-extern xemusock_socket_t xemusock_create_for_inet ( int is_tcp, int is_nonblock, int *xerrno );
+extern int  xemusock_bind		( xemusock_socket_t sock, struct sockaddr *addr, xemusock_socklen_t addrlen, int *xerrno );
+extern int  xemusock_listen		( xemusock_socket_t sock, int backlog, int *xerrno );
+extern xemusock_socket_t xemusock_accept		( xemusock_socket_t sock, struct sockaddr *addr, xemusock_socklen_t *addrlen, int *xerrno );
+extern xemusock_socket_t xemusock_create_for_inet	( int is_tcp, int is_nonblock, int *xerrno );
 
 static inline int xemusock_should_repeat_from_error ( int err ) {
 	return (err == XSEAGAIN || err == XSEWOULDBLOCK || err == XSEINPROGRESS || err == XSEINTR || err == XSEALREADY);
