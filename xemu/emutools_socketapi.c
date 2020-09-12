@@ -171,12 +171,20 @@ void xemusock_uninit ( void )
 }
 
 
-void xemusock_fill_servaddr_for_inet ( struct sockaddr_in *servaddr, unsigned int ip_netlong, int port )
+void xemusock_fill_servaddr_for_inet_ip_netlong ( struct sockaddr_in *servaddr, unsigned int ip_netlong, int port )
 {
 	memset(servaddr, 0, sizeof(struct sockaddr_in));
+	if (ip_netlong == 0)
+		ip_netlong = INADDR_ANY;
 	servaddr->sin_addr.s_addr = ip_netlong;
 	servaddr->sin_port = htons(port);
 	servaddr->sin_family = AF_INET;
+}
+
+
+void xemusock_fill_servaddr_for_inet_ip_native ( struct sockaddr_in *servaddr, unsigned int ip_native, int port )
+{
+	xemusock_fill_servaddr_for_inet_ip_netlong(servaddr, htonl(ip_native), port);
 }
 
 
@@ -358,6 +366,17 @@ int xemusock_setsockopt ( xemusock_socket_t sock, int level, int option, const v
 		return -1;
 	} else
 		return 0;
+}
+
+
+int xemusock_setsockopt_reuseaddr ( xemusock_socket_t sock, int *xerrno )
+{
+#ifdef XEMU_ARCH_WIN
+	static const BOOL on = 1;
+#else
+	static const int on = 1;
+#endif
+	return xemusock_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof on, xerrno);
 }
 
 

@@ -376,7 +376,7 @@ static void write_reg ( int addr, Uint8 data )
 								}
 								wsockets[sn].mode = 1;
 								wregs[sn_base + 9] = 0x13;	// SOCK_INIT status, telling that socket is open in TCP mode
-								xemusock_fill_servaddr_for_inet(
+								xemusock_fill_servaddr_for_inet_ip_netlong(
 									&wsockets[sn].servaddr,
 									xemusock_ipv4_netoctetarray_to_netlong(wregs + sn_base + 0x14),	// pointer to IP address bytes
 									(wregs[sn_base + 0x12] << 8) | wregs[sn_base + 0x13]	// port number
@@ -393,7 +393,7 @@ static void write_reg ( int addr, Uint8 data )
 									xemusock_close(wsockets[sn].sock, NULL);
 									wsockets[sn].sock = XS_INVALID_SOCKET;
 								}
-								xemusock_fill_servaddr_for_inet(
+								xemusock_fill_servaddr_for_inet_ip_netlong(
 									&wsockets[sn].servaddr,
 									xemusock_ipv4_netoctetarray_to_netlong(wregs + sn_base + 0x14),	// pointer to IP address bytes
 									(wregs[sn_base + 0x12] << 8) | wregs[sn_base + 0x13]	// port number

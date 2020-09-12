@@ -4,7 +4,7 @@ X-Emulators - aka "Xemu" - (C)2016-2020 LGB Gábor Lénárt lgblgblgb@gmail.com
 
 Major direct contributors of the project:
 
-  * Hernán Di Pietro <hernan.di.pietro@gmail.com>
+  * Hernán Di Pietro <hernan.di.pietro@gmail.com> (MacOS GUI code, MEGA65 VIC-IV refinements)
 
 Other than my (or "our", see about contributors) own work, Xemu uses:
 

@@ -59,7 +59,7 @@ char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
 static xemusock_socket_t  sock_server = UNCONNECTED;
 static xemusock_socklen_t sock_len;
-static xemusock_socket_t  sock_client;
+static xemusock_socket_t  sock_client = UNCONNECTED;
 
 static int  umon_write_pos, umon_read_pos;
 static int  umon_echo;
@@ -259,17 +259,13 @@ int uartmon_init ( const char *fn )
 			ERROR_WINDOW("Cannot create TCP socket: %s", xemusock_strerror(xerr));
 			return 1;
 		}
-#ifdef XEMU_ARCH_WIN
-		const BOOL on = 1;
-#else
-		const int on = 1;
-#endif
-		if (xemusock_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof on, &xerr)) {
+		if (xemusock_setsockopt_reuseaddr(sock, &xerr)) {
 			ERROR_WINDOW("UARTMON: setsockopt for SO_REUSEADDR failed with %s", xemusock_strerror(xerr));
 		}
-		sock_st.sin_family = AF_INET;
-		sock_st.sin_addr.s_addr = htonl(INADDR_ANY);
-		sock_st.sin_port = htons(port);
+		//sock_st.sin_family = AF_INET;
+		//sock_st.sin_addr.s_addr = htonl(INADDR_ANY);
+		//sock_st.sin_port = htons(port);
+		xemusock_fill_servaddr_for_inet_ip_native(&sock_st, 0, port);
 		if (xemusock_bind(sock, (struct sockaddr*)&sock_st, sock_len, &xerr)) {
 			ERROR_WINDOW("Cannot bind TCP socket %d, UART monitor cannot be used: %s", port, xemusock_strerror(xerr));
 			xemusock_close(sock, NULL);
@@ -280,7 +276,8 @@ int uartmon_init ( const char *fn )
 		ERROR_WINDOW("On non-UNIX systems, you must use TCP/IP sockets, so uartmon parameter must be in form of :n (n=port number to bind to)\nUARTMON is not available because of bad syntax.");
 		return 1;
 #else
-		// This is UNIX specific code (UNIX named socket) thus it's OK not use Xemu socket API calls here
+		// This is UNIX specific code (UNIX named socket) thus it's OK not use Xemu socket API calls here.
+		// Note: on longer term, we want to drop this, and allow only TCP sockets to be more unified and simple.
 		struct sockaddr_un sock_st;
 		sock_len = sizeof(struct sockaddr_un);
 		sock = socket(AF_UNIX, SOCK_STREAM, 0);
