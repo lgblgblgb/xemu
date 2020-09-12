@@ -224,9 +224,7 @@ int uartmon_init ( const char *fn )
 	static char fn_stored[PATH_MAX] = "";
 	int xerr;
 	xemusock_socket_t sock;
-	if (!fn || !*fn[0])
-		return 1;
-	if (*fn_stored[0]) {
+	if (*fn_stored) {
 		ERROR_WINDOW("UARTMON: already activated on %s", fn_stored);
 		return 1;
 	}
