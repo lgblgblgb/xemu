@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -302,6 +302,7 @@ void hypervisor_debug_invalidate ( const char *reason )
 
 void hypervisor_debug ( void )
 {
+	static int do_execution_range_check = 1;
 	if (!in_hypervisor)
 		return;
 	// TODO: better hypervisor upgrade check, maybe with checking the exact range kickstart uses for upgrade outside of the "normal" hypervisor mem range
@@ -309,13 +310,23 @@ void hypervisor_debug ( void )
 		DEBUG("HYPERVISOR-DEBUG: allowed to run outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu65.pc);
 		return;
 	}
-	if (XEMU_UNLIKELY((cpu65.pc & 0xC000) != 0x8000)) {
+	if (XEMU_UNLIKELY((cpu65.pc & 0xC000) != 0x8000 && do_execution_range_check)) {
 		DEBUG("HYPERVISOR-DEBUG: execution outside of the hypervisor memory, PC = $%04X" NL, cpu65.pc);
-		ERROR_WINDOW("Hypervisor fatal error: execution outside of the hypervisor memory, PC=$%04X SP=$%04X", cpu65.pc, cpu65.sphi | cpu65.s);
-		if (QUESTION_WINDOW("Reset|Exit Xemu", "What to do now?"))
-			XEMUEXIT(1);
-		else
-			hypervisor_start_machine();
+		char msg[128];
+		sprintf(msg, "Hypervisor fatal error: execution outside of the hypervisor memory, PC=$%04X SP=$%04X", cpu65.pc, cpu65.sphi | cpu65.s);
+		switch (QUESTION_WINDOW("Reset|Exit Xemu|Ignore now|Ingore all", msg)) {
+			case 0:
+				hypervisor_start_machine();
+				break;
+			case 1:
+				XEMUEXIT(1);
+				break;
+			case 2:
+				break;
+			case 3:
+				do_execution_range_check = 0;
+				break;
+		}
 		return;
 	}
 	if (!resolver_ok) {

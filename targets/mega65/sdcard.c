@@ -527,10 +527,31 @@ int sdcard_write_block ( Uint32 block, Uint8 *buffer )
  * */
 static void sdcard_block_io ( Uint32 block, int is_write )
 {
+	static int protect_important_blocks = 1;
 	DEBUG("SDCARD: %s block #%u @ PC=$%04X" NL,
 		is_write ? "writing" : "reading",
 		block, cpu65.pc
 	);
+	if (XEMU_UNLIKELY(is_write && (block == 0 || block == XEMU_INFO_SDCARD_BLOCK_NO) && sdfd >= 0 && protect_important_blocks)) {
+		if (protect_important_blocks == 2) {
+			goto error;
+		} else {
+			char msg[128];
+			sprintf(msg, "Program tries to overwrite SD sector #%d!\nUnless you fdisk/format you card, it's not something you want.", block);
+			switch (QUESTION_WINDOW("Reject this|Reject all|Allow this|Allow all", msg)) {
+				case 0:
+					goto error;
+				case 1:
+					protect_important_blocks = 2;
+					goto error;
+				case 2:
+					break;
+				case 3:
+					protect_important_blocks = 0;
+					break;
+			}
+		}
+	}
 	if (XEMU_UNLIKELY(sd_status & SD_ST_EXT_BUS)) {
 		DEBUGPRINT("SDCARD: bus #1 is empty" NL);
 		// FIXME: what kind of error we should create here?????
@@ -541,6 +562,7 @@ static void sdcard_block_io ( Uint32 block, int is_write )
 	Uint8 *buffer = get_buffer_memory(is_write);
 	int ret = is_write ? sdcard_write_block(block, buffer) : sdcard_read_block(block, buffer);
 	if (ret || !sdhc_mode) {
+	error:
 		sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR; // | SD_ST_BUSY1 | SD_ST_BUSY0;
 			sd_status |= SD_ST_BUSY1 | SD_ST_BUSY0;
 			//KEEP_BUSY(1);
