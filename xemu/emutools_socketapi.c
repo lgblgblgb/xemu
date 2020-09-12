@@ -127,7 +127,7 @@ static int _winsock_init_status = 1;	// 1 = todo, 0 = was OK, -1 = error!
 
 int xemusock_init ( char *msg )
 {
-	*msg = '\0';
+	//*msg = '\0'; // WTF it was?!
 	if (_winsock_init_status <= 0)
 		return _winsock_init_status;
 #ifdef XEMU_ARCH_WIN
@@ -171,12 +171,20 @@ void xemusock_uninit ( void )
 }
 
 
-void xemusock_fill_servaddr_for_inet ( struct sockaddr_in *servaddr, unsigned int ip_netlong, int port )
+void xemusock_fill_servaddr_for_inet_ip_netlong ( struct sockaddr_in *servaddr, unsigned int ip_netlong, int port )
 {
 	memset(servaddr, 0, sizeof(struct sockaddr_in));
+	if (ip_netlong == 0)
+		ip_netlong = INADDR_ANY;
 	servaddr->sin_addr.s_addr = ip_netlong;
 	servaddr->sin_port = htons(port);
 	servaddr->sin_family = AF_INET;
+}
+
+
+void xemusock_fill_servaddr_for_inet_ip_native ( struct sockaddr_in *servaddr, unsigned int ip_native, int port )
+{
+	xemusock_fill_servaddr_for_inet_ip_netlong(servaddr, htonl(ip_native), port);
 }
 
 
@@ -312,6 +320,63 @@ int xemusock_recv ( xemusock_socket_t sock, void *buffer, int length, int *xerrn
 		return -1;
 	} else
 		return ret;
+}
+
+
+int xemusock_bind ( xemusock_socket_t sock, struct sockaddr *addr, xemusock_socklen_t addrlen, int *xerrno )
+{
+	int ret = bind(sock, addr, addrlen);
+	if (ret) {
+		if (xerrno)
+			*xerrno = SOCK_ERR();
+		return -1;
+	} else
+		return 0;
+}
+
+
+int xemusock_listen ( xemusock_socket_t sock, int backlog, int *xerrno )
+{
+	int ret = listen(sock, backlog);
+	if (ret) {
+		if (xerrno)
+			*xerrno = SOCK_ERR();
+		return -1;
+	} else
+		return 0;
+}
+
+
+xemusock_socket_t xemusock_accept ( xemusock_socket_t sock, struct sockaddr *addr, xemusock_socklen_t *addrlen, int *xerrno )
+{
+	xemusock_socket_t ret = accept(sock, addr, addrlen);
+	if (ret == XS_INVALID_SOCKET) {
+		if (xerrno)
+			*xerrno = SOCK_ERR();
+	}
+	return ret;
+}
+
+
+int xemusock_setsockopt ( xemusock_socket_t sock, int level, int option, const void *value, int len, int *xerrno )
+{
+	if (setsockopt(sock, level, option, (const char*)value, len)) {
+		if (xerrno)
+			*xerrno = SOCK_ERR();
+		return -1;
+	} else
+		return 0;
+}
+
+
+int xemusock_setsockopt_reuseaddr ( xemusock_socket_t sock, int *xerrno )
+{
+#ifdef XEMU_ARCH_WIN
+	static const BOOL on = 1;
+#else
+	static const int on = 1;
+#endif
+	return xemusock_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof on, xerrno);
 }
 
 

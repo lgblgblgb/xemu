@@ -527,13 +527,13 @@ void m65mon_do_trace ( void )
 		m65mon_callback = m65mon_show_regs; // register callback
 		trace_step_trigger = 1;	// trigger one step
 	} else {
-		umon_printf(SYNTAX_ERROR "trace can be used only in trace mode");
+		umon_printf(UMON_SYNTAX_ERROR "trace can be used only in trace mode");
 	}
 }
 
 void m65mon_do_trace_c ( void )
 {
-	umon_printf(SYNTAX_ERROR "command 'tc' is not implemented yet");
+	umon_printf(UMON_SYNTAX_ERROR "command 'tc' is not implemented yet");
 }
 
 void m65mon_empty_command ( void )

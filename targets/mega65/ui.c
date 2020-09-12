@@ -29,6 +29,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/c64_kbd_mapping.h"
 #include "inject.h"
 #include "input_devices.h"
+#include "uart_monitor.h"
 
 #define		HELP_URL	"https://github.com/lgblgblgb/xemu/wiki/MEGA65-help"
 
@@ -101,7 +102,7 @@ static void ui_run_prg_by_browsing ( void )
 		reset_mega65();
 		inject_register_prg(fnbuf, 0);
 	} else
-		DEBUGPRINT("UI: file selection for D81 mount was cancalled." NL);
+		DEBUGPRINT("UI: file selection for PRG injection was cancalled." NL);
 }
 
 
@@ -262,6 +263,15 @@ static void enable_mouse_grab ( void )
 }
 
 
+#ifdef HAS_UARTMON_SUPPORT
+static void ui_start_umon ( void )
+{
+	if (!uartmon_init(UMON_DEFAULT_PORT))
+		INFO_WINDOW("UART monitor has been starton on " UMON_DEFAULT_PORT);
+}
+#endif
+
+
 /**** MENU SYSTEM ****/
 
 
@@ -296,6 +306,9 @@ static const struct menu_st menu_main[] = {
 	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_native_os_file_browser },
 #ifdef XEMU_ARCH_WIN
 	{ "System console", XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK, xemugui_cb_sysconsole, NULL },
+#endif
+#ifdef HAS_UARTMON_SUPPORT
+	{ "Start umon on " UMON_DEFAULT_PORT, XEMUGUI_MENUID_CALLABLE,  xemugui_cb_call_user_data, ui_start_umon },
 #endif
 	{ "Help (online)", XEMUGUI_MENUID_CALLABLE, xemugui_cb_call_user_data, ui_online_help },
 	{ "About", XEMUGUI_MENUID_CALLABLE, xemugui_cb_about_window, NULL },
