@@ -218,25 +218,20 @@ static void execute_command ( char *cmd )
 /* ------------------------- SOCKET HANDLING, etc ------------------------- */
 
 
-//static int set_nonblock ( int fd )
-//{
-//	int flags = fcntl(fd, F_GETFL, 0);
-//	if (flags == -1)
-//		return 1;
-//	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK))
-//		return 1;
-//	return 0;
-//}
-
 
 int uartmon_init ( const char *fn )
 {
+	static char fn_stored[PATH_MAX] = "";
 	int xerr;
 	xemusock_socket_t sock;
-	if (sock_server != UNCONNECTED) {
-		ERROR_WINDOW("UARTMON: already activated");
+	if (!fn || !*fn[0])
+		return 1;
+	if (*fn_stored[0]) {
+		ERROR_WINDOW("UARTMON: already activated on %s", fn_stored);
 		return 1;
 	}
+	sock_server = UNCONNECTED;
+	sock_client = UNCONNECTED;
 	if (!fn || !*fn) {
 		DEBUGPRINT("UARTMON: disabled, no name is specified to bind to." NL);
 		return 0;
@@ -310,6 +305,7 @@ int uartmon_init ( const char *fn )
 	sock_server = sock;		// now set the server socket visible outside of this function too
 	umon_echo = 1;
 	umon_send_ok = 1;
+	strcpy(fn_stored, fn);
 	return 0;
 }
 

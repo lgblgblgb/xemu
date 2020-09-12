@@ -25,6 +25,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define UMON_SYNTAX_ERROR "?SYNTAX ERROR  "
 
+#define UMON_DEFAULT_PORT ":4510"
+
 #define UMON_WRITE_BUFFER_SIZE	0x4000
 #define umon_printf(...)	umon_write_size += sprintf(umon_write_buffer + umon_write_size, __VA_ARGS__)
 
