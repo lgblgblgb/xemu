@@ -419,7 +419,13 @@ Uint8 vic_read_reg ( int unsigned addr )
 			break;
 		/* --- NO MORE VIC-III REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B): CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
-		CASE_VIC_4(0x50): CASE_VIC_4(0x51): CASE_VIC_4(0x52): CASE_VIC_4(0x53):
+		CASE_VIC_4(0x50): CASE_VIC_4(0x51):
+			break;
+		CASE_VIC_4(0x52):
+			result = (scanline << 1) & 0xFF;	// hack: report phys raster always double of vic-II raster
+			break;
+		CASE_VIC_4(0x53):
+			result = ((scanline << 1) >> 8) & 7;
 			break;
 		CASE_VIC_4(0x54):
 			break;
