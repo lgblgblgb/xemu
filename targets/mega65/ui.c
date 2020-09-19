@@ -236,6 +236,7 @@ static void reset_into_utility_menu ( void )
 {
 	if (reset_mega65_asked()) {
 		hwa_kbd_fake_key(0x20);
+		KBD_RELEASE_KEY(0x75);
 	}
 }
 
@@ -246,6 +247,14 @@ static void reset_into_c64_mode ( void )
 		KBD_PRESS_KEY(0x75);	// "MEGA" key is pressed for C64 mode
 	}
 
+}
+
+static void reset_into_c65_mode ( void )
+{
+	if (reset_mega65_asked()) {
+		KBD_RELEASE_KEY(0x75);
+		hwa_kbd_fake_key(0);
+	}
 }
 
 static void osd_key_debugger ( void )
@@ -289,9 +298,9 @@ static const struct menu_st menu_sdcard[] = {
 	{ NULL }
 };
 static const struct menu_st menu_reset[] = {
-	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_mega65_asked },
+	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode     },
 	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu },
-	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode },
+	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode     },
 	{ NULL }
 };
 static const struct menu_st menu_main[] = {
