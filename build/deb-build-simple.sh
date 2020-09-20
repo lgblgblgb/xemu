@@ -24,6 +24,7 @@ VERSION="`cat ../build/objs/cdate.data`"
 
 echo "Current directory: `pwd`"
 echo "Build architecture: $ARCH"
+echo "Version: $VERSION"
 
 rm -fr .dist || exit 1
 
