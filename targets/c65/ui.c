@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_gui.h"
 #include "xemu/emutools_files.h"
 #include "xemu/d81access.h"
+#include "xemu/emutools_hid.h"
 #include "commodore_65.h"
 
 
@@ -94,10 +95,18 @@ static void ui_native_os_file_browser ( void )
 #endif
 
 
+static void osd_key_debugger ( void )
+{
+	hid_show_osd_keys = !hid_show_osd_keys;
+	OSD(-1, -1, "OSD key debugger turned %s", hid_show_osd_keys ? "ON" : "OFF");
+}
+
+
 static const struct menu_st menu_display[] = {
-	{ "Fullscreen",    XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)0 },
-	{ "Window - 100%", XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)1 },
-	{ "Window - 200%", XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)2 },
+	{ "Fullscreen",    	XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)0 },
+	{ "Window - 100%", 	XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)1 },
+	{ "Window - 200%", 	XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)2 },
+	{ "OSD key debugger",	XEMUGUI_MENUID_CALLABLE, xemugui_cb_call_user_data, osd_key_debugger },
 	{ NULL }
 };
 

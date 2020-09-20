@@ -33,6 +33,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 Uint8 kbd_matrix[16];		// keyboard matrix state, 16 * 8 bits at max currently (not compulsory to use all positions!)
+int hid_show_osd_keys = 0;
+
 static int mouse_delta_x;
 static int mouse_delta_y;
 static unsigned int hid_state;
@@ -58,7 +60,8 @@ static const struct KeyMappingDefault *key_map_default;
 int hid_key_event ( SDL_Scancode key, int pressed )
 {
 	const struct KeyMappingUsed *map = key_map;
-	//OSD(-1, -1, "Key %s <%s>", pressed ? "press  " : "release", SDL_GetScancodeName(key));
+	if (hid_show_osd_keys)
+		OSD(-1, -1, "Key %s <%s>", pressed ? "press  " : "release", SDL_GetScancodeName(key));
 	while (map->pos >= 0) {
 		if (map->scan == key) {
 			if (map->pos > 0xFF) {	// special emulator key!

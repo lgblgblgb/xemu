@@ -73,7 +73,7 @@ matrix:
           branch:
             - master
             - dev
-            - risky-disky
+            - vic
     - name: Windows cross-compilation on Linux
       os: linux
       addons:
@@ -141,7 +141,7 @@ matrix:
           branch:
             - master
             - dev
-            - risky-disky
+            - vic
     - name: MacOS native compilation
       os: osx
       osx_image: xcode11
@@ -188,7 +188,7 @@ matrix:
           branch:
             - master
             - dev
-            - risky-disky
+            - vic
 
 env:
   global:
