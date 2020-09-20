@@ -16,18 +16,13 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef XEMU_MEGA65_IO_MAPPER_H_INCLUDED
-#define XEMU_MEGA65_IO_MAPPER_H_INCLUDED
+#ifndef XEMU_MEGA65_INJECT_H_INCLUDED
+#define XEMU_MEGA65_INJECT_H_INCLUDED
 
-#include "xemu/cia6526.h"
+extern int inject_ready_check_status;
 
-extern Uint8 io_read  ( unsigned int addr );
-extern void  io_write ( unsigned int addr, Uint8 data );
-
-extern Uint8  D6XX_registers[0x100];
-extern Uint8  D7XX[0x100];			// FIXME: newhack!
-extern int    fpga_switches;
-extern struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
-extern int    port_d607;			// ugly hack for C65 extended keys ...
+extern void inject_ready_check_do        ( void );
+extern int  inject_register_ready_status ( const char *debug_msg, void (*callback)(void*), void *userdata );
+extern int  inject_register_prg          ( const char *prg_file, int prg_mode );
 
 #endif

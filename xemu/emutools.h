@@ -135,6 +135,7 @@ extern int sdl_default_win_x_size, sdl_default_win_y_size;
 extern int xemu_init_debug ( const char *fn );
 extern time_t xemu_get_unixtime ( void );
 extern struct tm *xemu_get_localtime ( void );
+extern unsigned int xemu_get_microseconds ( void );
 extern void *xemu_malloc ( size_t size );
 extern void *xemu_realloc ( void *p, size_t size );
 

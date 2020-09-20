@@ -72,7 +72,7 @@ static void (*shutdown_user_function)(void) = NULL;
 int seconds_timer_trigger;
 SDL_version sdlver_compiled, sdlver_linked;
 static char *window_title_buffer, *window_title_buffer_end;
-static time_t unix_time;
+static struct timeval unix_time_tv;
 static Uint64 et_old;
 static int td_balancer, td_em_ALL, td_pc_ALL;
 int sysconsole_is_open = 0;
@@ -124,20 +124,22 @@ void restore_mouse_grab ( void )
 }
 
 
-static inline int get_elapsed_time ( Uint64 t_old, Uint64 *t_new, time_t *store_unix_time )
+static inline int get_elapsed_time ( Uint64 t_old, Uint64 *t_new, struct timeval *store_time )
 {
 #ifdef XEMU_OLD_TIMING
 #define __TIMING_METHOD_DESC "gettimeofday"
 	struct timeval tv;
 	gettimeofday(&tv, NULL);
-	if (store_unix_time)
-		*store_unix_time = tv.tv_sec;
+	if (store_time) {
+		store_time->tv_sec = tv.tv_sec;
+		store_time->tv_usec = tv.tv_usec;
+	}
 	*t_new = tv.tv_sec * 1000000UL + tv.tv_usec;
 	return *t_new - t_old;
 #else
 #define __TIMING_METHOD_DESC "SDL_GetPerformanceCounter"
-	if (store_unix_time)
-		*store_unix_time = time(NULL);
+	if (store_time)
+		gettimeofday(store_time, NULL);
 	*t_new = SDL_GetPerformanceCounter();
 	return 1000000UL * (*t_new - t_old) / SDL_GetPerformanceFrequency();
 #endif
@@ -147,13 +149,25 @@ static inline int get_elapsed_time ( Uint64 t_old, Uint64 *t_new, time_t *store_
 
 struct tm *xemu_get_localtime ( void )
 {
-	return localtime(&unix_time);
+#ifdef XEMU_ARCH_WIN64
+	// Fix a potentional issue with Windows 64 bit ...
+	const time_t temp = unix_time_tv.tv_sec;
+	return localtime(&temp);
+#else
+	return localtime(&unix_time_tv.tv_sec);
+#endif
 }
 
 
 time_t xemu_get_unixtime ( void )
 {
-	return unix_time;
+	return unix_time_tv.tv_sec;
+}
+
+
+unsigned int xemu_get_microseconds ( void )
+{
+	return unix_time_tv.tv_usec;
 }
 
 
@@ -316,7 +330,7 @@ static inline void do_sleep ( int td )
 void xemu_timekeeping_delay ( int td_em )
 {
 	int td, td_pc;
-	time_t old_unix_time = unix_time;
+	time_t old_unix_time = unix_time_tv.tv_sec;
 	Uint64 et_new;
 	td_pc = get_elapsed_time(et_old, &et_new, NULL);	// get realtime since last call in microseconds
 	if (td_pc < 0) return; // time goes backwards? maybe time was modified on the host computer. Skip this delay cycle
@@ -329,8 +343,8 @@ void xemu_timekeeping_delay ( int td_em )
 	 * also this will get the starter time for the next frame
 	 */
 	// calculate real time slept
-	td = get_elapsed_time(et_new, &et_old, &unix_time);
-	seconds_timer_trigger = (unix_time != old_unix_time);
+	td = get_elapsed_time(et_new, &et_old, &unix_time_tv);
+	seconds_timer_trigger = (unix_time_tv.tv_sec != old_unix_time);
 	if (seconds_timer_trigger) {
 		snprintf(window_title_buffer_end, 32, "  [%d%% %d%%] %s %s",
 			((td_em_ALL < td_pc_ALL) && td_pc_ALL) ? td_em_ALL * 100 / td_pc_ALL : 100,
@@ -714,7 +728,7 @@ int xemu_set_icon_from_xpm ( char *xpm[] )
 // this is just for the time keeping stuff, to avoid very insane values (ie, years since the last update for the first call ...)
 void xemu_timekeeping_start ( void )
 {
-	(void)get_elapsed_time(0, &et_old, &unix_time);
+	(void)get_elapsed_time(0, &et_old, &unix_time_tv);
 	td_balancer = 0;
 	td_em_ALL = 0;
 	td_pc_ALL = 0;
