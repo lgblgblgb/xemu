@@ -38,6 +38,8 @@ extern void  memory_debug_write_cpu_addr  ( Uint16 addr, Uint8 data );
 extern int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
 extern int rom_protect, skip_unhandled_mem;
 extern Uint8 main_ram[512 << 10], colour_ram[0x8000], char_wom[0x2000], hypervisor_ram[0x4000];
+extern Uint8 nvram[64];
+extern Uint8 mega65_uuid[8];
 //extern Uint8 chip_ram[SIZEOF_CHIP_RAM], fast_ram[SIZEOF_FAST_RAM];
 // Ugly hack for more RAM!
 //#define chip_ram  (main_ram + 0)

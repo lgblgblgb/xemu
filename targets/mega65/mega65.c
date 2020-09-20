@@ -63,6 +63,9 @@ static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, bu
 static int force_external_rom = 0;
 static int force_upload_fonts = 0;
 
+static Uint8 nvram_original[sizeof nvram];
+static int uuid_must_be_saved = 0;
+
 
 void cpu65_illegal_opcode_callback ( void )
 {
@@ -316,6 +319,24 @@ static void mega65_init ( void )
 		hypervisor_debug_invalidate("no kickup is loaded, built-in one does not have debug info");
 	// *** Initializes memory subsystem of MEGA65 emulation itself
 	memory_init();
+	// Load contents of NVRAM.
+	// Also store as "nvram_original" so we can sense on shutdown of the emu, if we need to up-date the on-disk version
+	// If we fail to load it (does not exist?) it will be written out anyway on exit.
+	if (xemu_load_file(NVRAM_FILE_NAME, nvram, sizeof nvram, sizeof nvram, "Cannot load NVRAM state. Maybe first run of Xemu?\nOn next Xemu run, it should have been corrected though automatically!\nSo no need to worry.") == sizeof nvram) {
+		memcpy(nvram_original, nvram, sizeof nvram);
+	} else {
+		// could not load from disk. Initialize to soma values.
+		// Alsa, set nvram and nvram_original being different, so exit handler will sense the situation and save it.
+		memset(nvram, 0, sizeof nvram);
+		memset(nvram_original, 0xAA, sizeof nvram);
+	}
+	// We generate (if does not exist) an UUID for ourself. It can be read back via the 'UUID' registers.
+	if (xemu_load_file(UUID_FILE_NAME, mega65_uuid, sizeof mega65_uuid, sizeof mega65_uuid, NULL) != sizeof mega65_uuid) {
+		for (int a = 0; a < sizeof mega65_uuid; a++) {
+			mega65_uuid[a] = rand();
+		}
+		uuid_must_be_saved = 1;
+	}
 	// fill the actual M65 memory areas with values managed by load_memory_preinit_cache() calls
 	// This is a separated step, to be able to call refill_memory_from_preinit_cache() later as well, in case of a "deep reset" functionality is needed for Xemu (not just CPU/hw reset),
 	// without restarting Xemu for that purpose.
@@ -387,9 +408,18 @@ static void mega65_init ( void )
 
 static void shutdown_callback ( void )
 {
-	int a;
+	// Write out NVRAM if changed!
+	if (memcmp(nvram, nvram_original, sizeof(nvram))) {
+		DEBUGPRINT("NVRAM: changed, writing out on exit." NL);
+		xemu_save_file(NVRAM_FILE_NAME, nvram, sizeof nvram, "Cannot save changed NVRAM state! NVRAM changes will be lost!");
+	}
+	if (uuid_must_be_saved) {
+		uuid_must_be_saved = 0;
+		DEBUGPRINT("UUID: must be saved." NL);
+		xemu_save_file(UUID_FILE_NAME, mega65_uuid, sizeof mega65_uuid, NULL);
+	}
 	eth65_shutdown();
-	for (a = 0; a < 0x40; a++)
+	for (int a = 0; a < 0x40; a++)
 		DEBUG("VIC-3 register $%02X is %02X" NL, a, vic_registers[a]);
 	cia_dump_state (&cia1);
 	cia_dump_state (&cia2);
@@ -642,6 +672,7 @@ static void emulation_loop ( void )
 
 int main ( int argc, char **argv )
 {
+	srand(time(NULL));	// TODO: maybe move this into the core framework (also rand() usages, not just this init part ...)
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Incomplete MEGA65 emulator from LGB");
 	xemucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
 	xemucfg_define_switch_option("allowmousegrab", "Allow auto mouse grab with left-click");

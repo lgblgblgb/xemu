@@ -67,6 +67,10 @@ Uint8 colour_ram[0x8000];
 Uint8 char_wom[0x2000];
 // 16K of hypervisor RAM, can be only seen in hypervisor mode.
 Uint8 hypervisor_ram[0x4000];
+// 64 bytes of NVRAM
+Uint8 nvram[64];
+// 8 bytes of UUID
+Uint8 mega65_uuid[8];
 
 #define SLOW_RAM_SIZE (8 << 20)
 Uint8 slow_ram[SLOW_RAM_SIZE];
@@ -295,10 +299,42 @@ DEFINE_WRITER(disk_buffers_writer) {
 #endif
 }
 DEFINE_READER(i2c_io_reader) {
-	return 0;	// now just ignore, and give ZERO as answer [no I2C devices]
+	int addr = GET_READER_OFFSET();
+	Uint8 data = 0x00;	// initial value, if nothing match (unknown I2C to Xemu?)
+	switch (addr) {
+		case 0x100:	// 8 bytes of UUID (64 bit value)
+		case 0x101:
+		case 0x102:
+		case 0x103:
+		case 0x104:
+		case 0x105:
+		case 0x106:
+		case 0x107:	// this is still the UUID, but the last byte is used for version info (varies on reading)
+			data = mega65_uuid[addr & 7];
+			break;
+		case 0x110:	// RTC: seconds BCD
+		case 0x111:	// RTC: minutes BCD
+		case 0x112:	// RTC: hours BCD
+		case 0x113:	// RTC: day of month BCD
+		case 0x114:	// RTC: month BCD
+		case 0x115:	// RTC: year BCD
+			data = 0x01;
+			break;
+		default:
+			if (addr > 0x140 && addr <= 0x17F)
+				data = nvram[addr - 0x140];
+			break;
+	}
+	return data;
 }
 DEFINE_WRITER(i2c_io_writer) {
-	// now just ignore [no I2C devices]
+	int addr = GET_WRITER_OFFSET();
+	switch (addr) {
+		default:
+			if (addr > 0x140 && addr <= 0x17F)
+				nvram[addr - 0x140] = data;
+			break;
+	}
 }
 
 // Memory layout table for MEGA65
