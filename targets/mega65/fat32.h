@@ -71,6 +71,7 @@ extern void   mfat_init     ( mfat_io_callback_func_t reader, mfat_io_callback_f
 extern int    mfat_init_mbr ( void     );
 extern int    mfat_use_part ( int part );
 
+extern int    mfat_flush_fat_cache ( void );
 extern int    mfat_normalize_name ( char *d, const char *s );
 extern int    mfat_fatize_name    ( char *d, const char *s );
 extern int    mfat_read_directory ( mfat_dirent_t *p, int type_filter );
