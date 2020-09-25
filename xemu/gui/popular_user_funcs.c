@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -84,10 +84,9 @@ void xemugui_cb_call_quit_if_sure ( const struct menu_st *m, int *query )
 #ifdef XEMU_ARCH_WIN
 void xemugui_cb_sysconsole ( const struct menu_st *m, int *query )
 {
-	if (query) {
-		if (sysconsole_is_open)
-			*query |= XEMUGUI_MENUFLAG_CHECKED;
-	} else
+	if (query)
+		*query |= (sysconsole_is_open ? XEMUGUI_MENUFLAG_CHECKED : XEMUGUI_MENUFLAG_UNCHECKED);
+	else
 		sysconsole_toggle(-1);
 }
 #endif

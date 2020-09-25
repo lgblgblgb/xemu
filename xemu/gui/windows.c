@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -67,8 +67,18 @@ static int xemuwingui_file_selector ( int dialog_mode, const char *dialog_title,
 	ofn.nMaxFileTitle = 0;
 	ofn.lpstrInitialDir = default_dir ? default_dir : NULL;
 	ofn.lpstrTitle = dialog_title;
-	ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_EXPLORER | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
-	res = !GetOpenFileName(&ofn);
+	switch (dialog_mode & 3) {
+		case XEMUGUI_FSEL_OPEN:
+			ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST   | OFN_EXPLORER | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+			res = !GetOpenFileName(&ofn);
+			break;
+		case XEMUGUI_FSEL_SAVE:
+			ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_EXPLORER | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+			res = !GetSaveFileName(&ofn);
+			break;
+		default:
+			FATAL("Bad dialog_mode in file selector");
+	}
 	if (res) {
 		int err = CommDlgExtendedError();
 		*selected = '\0';

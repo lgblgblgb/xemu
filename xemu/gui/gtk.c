@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -85,6 +85,24 @@ static void xemugtkgui_shutdown ( void )
 }
 
 
+static GtkFileChooserConfirmation xemugtkgui_confirm_overwrite ( GtkFileChooser *chooser, gpointer data )
+{
+#if 0
+	const char *uri = gtk_file_chooser_get_uri(chooser);
+	DEBUGPRINT("GUI: confirmation requested for: %s" NL, uri);
+#endif
+	return GTK_FILE_CHOOSER_CONFIRMATION_CONFIRM;   // use the default dialog
+#if 0
+	if (is_uri_read_only(uri)) {
+		if (user_wants_to_replace_read_only_file(uri))
+			return GTK_FILE_CHOOSER_CONFIRMATION_ACCEPT_FILENAME;
+		else
+			return GTK_FILE_CHOOSER_CONFIRMATION_SELECT_AGAIN;
+	} else
+		return GTK_FILE_CHOOSER_CONFIRMATION_CONFIRM;	// use the default dialog
+#endif
+}
+
 
 // Currently it's a "blocking" implemtation, unlike to pop-up menu
 static int xemugtkgui_file_selector ( int dialog_mode, const char *dialog_title, char *default_dir, char *selected, int path_max_size )
@@ -92,19 +110,37 @@ static int xemugtkgui_file_selector ( int dialog_mode, const char *dialog_title,
 	if (!is_xemugui_ok)
 		return  1;
 	_gtkgui_active = 1;
-	GtkFileChooserAction action = GTK_FILE_CHOOSER_ACTION_OPEN;
-	GtkWidget *dialog = gtk_file_chooser_dialog_new(dialog_title,
+	const char *button_text;
+	GtkFileChooserAction action;
+	switch (dialog_mode & 3) {
+		case XEMUGUI_FSEL_OPEN:
+			action = GTK_FILE_CHOOSER_ACTION_OPEN;
+			button_text = "_Open";
+			break;
+		case XEMUGUI_FSEL_SAVE:
+			action = GTK_FILE_CHOOSER_ACTION_SAVE;
+			button_text = "_Save";
+			break;
+		default:
+			FATAL("Invalid mode for UI selector: %d", dialog_mode & 3);
+	}
+	GtkWidget *dialog = gtk_file_chooser_dialog_new(
+		dialog_title,
 		NULL, // parent window! We have NO GTK parent window, and it seems GTK is lame, that dumps warning, but we can't avoid this ...
 		action,
 		"_Cancel",
 		GTK_RESPONSE_CANCEL,
-		"_Open",
+		button_text,
 		GTK_RESPONSE_ACCEPT,
 		NULL
 	);
 	if (default_dir)
 		gtk_file_chooser_set_current_folder(GTK_FILE_CHOOSER(dialog), default_dir);
 	*selected = '\0';
+	if ((dialog_mode & 3) == XEMUGUI_FSEL_SAVE) {
+		gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog), TRUE);
+		g_signal_connect(dialog, "confirm-overwrite", G_CALLBACK(xemugtkgui_confirm_overwrite), NULL);
+	}
 	gint res = gtk_dialog_run(GTK_DIALOG(dialog));
 	if (res == GTK_RESPONSE_ACCEPT) {
 		char *filename;
@@ -179,7 +215,11 @@ static GtkWidget *_gtkgui_recursive_menu_builder ( const struct menu_st desc[] )
 					DEBUGGUI("GUI: query-back for \"%s\"" NL, desc[a].name);
 					((xemugui_callback_t)(desc[a].handler))(&desc[a], &type);
 				}
-				item = gtk_menu_item_new_with_label(desc[a].name);
+				if ((type & (XEMUGUI_MENUFLAG_CHECKED | XEMUGUI_MENUFLAG_UNCHECKED))) {
+					item = gtk_check_menu_item_new_with_label(desc[a].name);
+					gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), (type & XEMUGUI_MENUFLAG_CHECKED));
+				} else
+					item = gtk_menu_item_new_with_label(desc[a].name);
 				if (!item)
 					goto PROBLEM;
 				gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
@@ -191,8 +231,17 @@ static GtkWidget *_gtkgui_recursive_menu_builder ( const struct menu_st desc[] )
 				);
 				break;
 		}
-		if (item)
+		if (item) {
 			gtk_widget_show(item);
+			if ((type & XEMUGUI_MENUFLAG_SEPARATOR)) {
+				// if a menu item is flagged with separator, then a separator must be added to, after the given item
+				item = gtk_separator_menu_item_new();
+				if (!item)
+					goto PROBLEM;
+				gtk_widget_show(item);
+				gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
+			}
+		}
 	}
 	gtk_widget_show(menu);
 	return menu;
