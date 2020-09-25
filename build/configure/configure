@@ -141,6 +141,7 @@ done
 # Check "ARCH" and set _default_ values #
 #########################################
 
+STRIP_default=strip
 echo -n "Specified make ARCH to use: "
 if [ "$ARCH" = "native" ]; then
 	echo "$ARCH (intended for native target)"
@@ -152,16 +153,19 @@ elif [ "$ARCH" = "win32" ]; then
 	CC_default=i686-w64-mingw32-gcc
 	WINDRES_default=i686-w64-mingw32-windres
 	SDL2_CONFIG_default=i686-w64-mingw32-sdl2-config
+	STRIP_default=i686-w64-mingw32-strip
 elif [ "$ARCH" = "win64" ]; then
 	echo "$ARCH (intended for WIN64 cross-compilation on UNIX)"
 	CC_default=x86_64-w64-mingw32-gcc
 	WINDRES_default=x86_64-w64-mingw32-windres
 	SDL2_CONFIG_default=x86_64-w64-mingw32-sdl2-config
+	STRIP_default=x86_64-w64-mingw32-strip
 elif [ "$ARCH" = "html" ]; then
 	echo "$ARCH (intended for HTML/JS cross-compilation on UNIX)"
 	CC_default=emcc
 	WINDRES_default=
 	SDL2_CONFIG_default=internal
+	STRIP_default=strip-is-not-supported-for-this-arch
 elif [ "$ARCH" = "" ]; then
 	echo "UNSPECIFIED"
 	echo "Error, no ARCH variable passed to the $0 script. Do not forget to use the --arch=... parameter." >&2
@@ -312,6 +316,7 @@ fi
 echo "OK"
 
 echo "CONFIG_CC=$CC" >> $OUTPUT_MAKEFILE
+echo "CONFIG_STRIP=$STRIP_default" >> $OUTPUT_MAKEFILE
 
 ##############################
 # Test compiler flag support #
@@ -789,6 +794,16 @@ echo "CONFIG_CFLAGS_OPT_RELEASE=$CFLAGS_OPT_RELEASE" >> $OUTPUT_MAKEFILE
 ######################################################################## 
 # Must be the end of this script, do not put anything after this part! #
 ########################################################################
+
+if [ $TARGET_IS_UNIX = Y ]; then
+	echo "TARGET_IS_UNIX = yes" >> $OUTPUT_MAKEFILE
+fi
+if [ $TARGET_IS_WIN = Y ]; then
+	echo "TARGET_IS_WIN = yes" >> $OUTPUT_MAKEFILE
+fi
+if [ $TARGET_IS_OSX = Y ]; then
+	echo "TARGET_IS_OSX = yes" >> $OUTPUT_MAKEFILE
+fi
 
 cat >> $OUTPUT_HEADERFILE <<EOF
 #ifndef XEMU_NO_TARGET

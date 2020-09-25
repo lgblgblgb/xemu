@@ -24,6 +24,8 @@ all:
 ARCH			= native
 TOPDIR			= ../..
 
+INSTALL_BINDIR		= /usr/local/bin
+
 $(TOPDIR)/build/configure/config-$(ARCH).h $(TOPDIR)/build/configure/config-$(ARCH).make:
 	if [ ! -s $(TOPDIR)/build/configure/config-$(ARCH).h -o ! -s $(TOPDIR)/build/configure/config-$(ARCH).make ]; then bash $(TOPDIR)/build/configure/configure --arch=$(ARCH) ; fi
 config:
@@ -110,6 +112,7 @@ xemu-info:
 	@echo "Xemu-framework needed sources: $(SRCS_COMMON)"
 	@echo "Target-specific needed sources: $(SRCS_TARGET)"
 	@echo "Dependecy file created: $(DEPFILE)"
+	@echo "Executable: $(PRG)"
 
 $(TARGETOBJPREFIX)%.o: %.c $(DEPALL)
 ifeq ($(ASMOUT), yes)
@@ -138,7 +141,16 @@ run:	$(PRG)
 	cd $(TOPDIR) && XEMU_DEBUG_FILE=debug.log $(PRG_TOP_REL)
 
 strip: $(PRG)
-	$(STRIP) $(PRG)
+	$(CONFIG_STRIP) $(PRG)
+
+install:
+	@echo "Checking if target is UNIX ..."
+	test TARGET_IS_UNIX_$(TARGET_IS_UNIX) = TARGET_IS_UNIX_yes || exit 1
+	$(MAKE) $(PRG)
+	strip $(PRG)
+	mkdir -p $(INSTALL_BINDIR)
+	cp $(PRG) "$(INSTALL_BINDIR)/xemu-`basename $(PRG) .$(ARCH)`"
+	ls -l "$(INSTALL_BINDIR)/xemu-`basename $(PRG) .$(ARCH)`"
 
 dep:
 	rm -f $(DEPFILE)
@@ -151,7 +163,7 @@ $(DEPFILE): $(DEPALL) $(SRCS)
 clean:
 	rm -f $(TOPDIR)/build/objs/?-$(ARCH)-$(TARGET)-* $(PRG)
 
-.PHONY: clean all strip dep do-all run xemu-info config
+.PHONY: clean all strip dep do-all run xemu-info config install
 
 ifneq ($(wildcard $(DEPFILE)),)
 include $(DEPFILE)

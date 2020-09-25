@@ -26,6 +26,10 @@ ARCH	= native
 all:
 	for t in $(TARGETS) ; do $(MAKE) -C targets/$$t RELEASE=$(RELEASE) || exit 1 ; done
 
+install:
+	$(MAKE) all
+	for t in $(TARGETS) ; do $(MAKE) -C targets/$$t RELEASE=$(RELEASE) install || exit 1 ; done
+
 all-arch:
 	for t in $(TARGETS) ; do for a in $(ARCHS) ; do $(MAKE) -C targets/$$t ARCH=$$a RELEASE=$(RELEASE) || exit 1 ; done ; done
 
@@ -90,4 +94,4 @@ doxypublish:
 config:
 	ARCH=$(ARCH) $(MAKE) -C build/configure
 
-.PHONY: all all-arch clean all-clean roms distclean dep all-dep deb nsi publish doxygen doxypublish config
+.PHONY: all all-arch clean all-clean roms distclean dep all-dep deb nsi publish doxygen doxypublish config install
