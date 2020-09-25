@@ -71,6 +71,8 @@ Uint8 hypervisor_ram[0x4000];
 Uint8 nvram[64];
 // 8 bytes of UUID
 Uint8 mega65_uuid[8];
+// RTC registers
+Uint8 rtc_regs[6];
 
 #define SLOW_RAM_SIZE (8 << 20)
 Uint8 slow_ram[SLOW_RAM_SIZE];
@@ -309,7 +311,7 @@ DEFINE_READER(i2c_io_reader) {
 		case 0x104:
 		case 0x105:
 		case 0x106:
-		case 0x107:	// this is still the UUID, but the last byte is used for version info (varies on reading)
+		case 0x107:
 			data = mega65_uuid[addr & 7];
 			break;
 		case 0x110:	// RTC: seconds BCD
@@ -318,7 +320,7 @@ DEFINE_READER(i2c_io_reader) {
 		case 0x113:	// RTC: day of month BCD
 		case 0x114:	// RTC: month BCD
 		case 0x115:	// RTC: year BCD
-			data = 0x01;
+			data = rtc_regs[addr - 0x110];
 			break;
 		default:
 			if (addr > 0x140 && addr <= 0x17F)

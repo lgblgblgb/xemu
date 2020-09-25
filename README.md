@@ -31,7 +31,7 @@ the wiki section of the project, here**:
 
 https://github.com/lgblgblgb/xemu/wiki
 
-## Most quick start (Xemu running in your web browser!)
+## Quickest start (Xemu running in your web browser!)
 
 Just visit this page:
 

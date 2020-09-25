@@ -66,6 +66,10 @@ static int force_upload_fonts = 0;
 static Uint8 nvram_original[sizeof nvram];
 static int uuid_must_be_saved = 0;
 
+static int rtc_hour_offset = 0;
+
+
+
 
 void cpu65_illegal_opcode_callback ( void )
 {
@@ -472,6 +476,7 @@ int reset_mega65_asked ( void )
 		return 0;
 }
 
+
 static void update_emulator ( void )
 {
 	hid_handle_all_sdl_events();
@@ -491,8 +496,16 @@ static void update_emulator ( void )
 //	if (seconds_timer_trigger) {
 	const struct tm *t = xemu_get_localtime();
 	const Uint8 sec10ths = xemu_get_microseconds() / 100000;
-	cia_ugly_tod_updater(&cia1, t, sec10ths);
-	cia_ugly_tod_updater(&cia2, t, sec10ths);
+	// UPDATE CIA TODs:
+	cia_ugly_tod_updater(&cia1, t, sec10ths, rtc_hour_offset);
+	cia_ugly_tod_updater(&cia2, t, sec10ths, rtc_hour_offset);
+	// UPDATE the RTC too:
+	rtc_regs[0] = XEMU_BYTE_TO_BCD(t->tm_sec);	// seconds
+	rtc_regs[1] = XEMU_BYTE_TO_BCD(t->tm_min);	// minutes
+	rtc_regs[2] = xemu_hour_to_bcd12h(t->tm_hour, rtc_hour_offset);	// hours
+	rtc_regs[3] = XEMU_BYTE_TO_BCD(t->tm_mday);	// day of mounth
+	rtc_regs[4] = XEMU_BYTE_TO_BCD(t->tm_mon) + 1;	// month
+	rtc_regs[5] = XEMU_BYTE_TO_BCD(t->tm_year - 100);	// year
 //	}
 }
 
@@ -695,6 +708,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("forcerom", "Re-fill 'ROM' from external source on start-up, requires option -loadrom <filename>");
 	xemucfg_define_switch_option("fontrefresh", "Upload character ROM from the loaded ROM image");
 	xemucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used (also see the -virtsd option!)");
+	xemucfg_define_num_option("rtchofs", 0, "RTC (and CIA TOD) default offset to real-time (mostly for testing!)");
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	xemucfg_define_switch_option("virtsd", "Interpret -sdimg option as a DIRECTORY to be fed onto the FAT32FS and use virtual-in-memory disk storage.");
 #endif
@@ -763,6 +777,7 @@ int main ( int argc, char **argv )
 		AUDIO_SAMPLE_FREQ		// sound mix freq
 	);
 	allow_mouse_grab = xemucfg_get_bool("allowmousegrab");
+	rtc_hour_offset = xemucfg_get_num("rtchofs");
 	skip_unhandled_mem = xemucfg_get_bool("skipunhandledmem");
 	DEBUGPRINT("MEM: UNHANDLED memory policy: %d" NL, skip_unhandled_mem);
 	if (skip_unhandled_mem)
