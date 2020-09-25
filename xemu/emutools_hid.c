@@ -253,6 +253,10 @@ void hid_keymap_from_config_file ( const char *fn )
 
 void hid_init ( const struct KeyMappingDefault *key_map_in, Uint8 virtual_shift_pos_in, int joy_enable )
 {
+	if (!key_map_in) {
+		DEBUGPRINT("HID: warning, hid_init() was called key_map_in=NULL. This seems to be a FreeBSD specific bug, as far as I can tell from experience." NL);
+		return;
+	}
 	int a;
 #ifdef HID_KBD_MAP_CFG_SUPPORT
 	char kbdcfg[8192];
@@ -269,7 +273,7 @@ void hid_init ( const struct KeyMappingDefault *key_map_in, Uint8 virtual_shift_
 		"# EMU-KEY-NAME strings starting with XEMU- are special Xemu related 'hot keys'" NL
 		NL
 		,
-		KEYMAP_USER_FILENAME + 1
+		(KEYMAP_USER_FILENAME) + 1
 	);
 #endif
 	for (a = 0;;) {
