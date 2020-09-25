@@ -280,8 +280,17 @@ static void enable_mouse_grab ( const struct menu_st *m, int *query )
 
 
 #ifdef HAS_UARTMON_SUPPORT
-static void ui_start_umon ( void )
+static void ui_start_umon ( const struct menu_st *m, int *query )
 {
+	int is_active = uartmon_is_active();
+	if (query) {
+		*query |= is_active ? XEMUGUI_MENUFLAG_CHECKED : XEMUGUI_MENUFLAG_UNCHECKED;
+		return;
+	}
+	if (is_active) {
+		INFO_WINDOW("UART monitor is already active.\nCurrently it's not supported to stop it.");
+		return;
+	}
 	if (!uartmon_init(UMON_DEFAULT_PORT))
 		INFO_WINDOW("UART monitor has been starton on " UMON_DEFAULT_PORT);
 }
@@ -309,9 +318,9 @@ static void ui_dump_memory ( void )
 static const struct menu_st menu_display[] = {
 	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)0 },
 	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)1 },
-	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE|
+	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize, (void*)2 },
-	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE|
+	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	enable_mouse_grab, NULL },
 	{ NULL }
 };
@@ -329,9 +338,10 @@ static const struct menu_st menu_reset[] = {
 static const struct menu_st menu_debug[] = {
 #ifdef HAS_UARTMON_SUPPORT
 	{ "Start umon on " UMON_DEFAULT_PORT,
-					XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_start_umon },
+					XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_start_umon, NULL },
 #endif
-	{ "OSD key debugger",		XEMUGUI_MENUID_CALLABLE|
+	{ "OSD key debugger",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	osd_key_debugger, NULL },
 	{ "Dump memory info file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_memory },
 	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_native_os_file_browser },

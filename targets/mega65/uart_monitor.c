@@ -218,6 +218,11 @@ static void execute_command ( char *cmd )
 /* ------------------------- SOCKET HANDLING, etc ------------------------- */
 
 
+int uartmon_is_active ( void )
+{
+	return sock_server != UNCONNECTED;
+}
+
 
 int uartmon_init ( const char *fn )
 {
