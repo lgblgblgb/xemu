@@ -45,11 +45,10 @@ MEGA65).
 
 ## Quick start (using pre-built binaries)
 
-**Plese note, that binaries on some older site of mine (especially on bintray.com,
-and xemu-dist.lgb.hu) can be OUTDATED. Currently to download up-to-date,
-ready-to-use Xemu binaries, you should go here:**
+**Download page**: https://github.lgb.hu/xemu/
 
-https://github.lgb.hu/xemu/
+Plese note, that binaries on some older site, which are seriously old. Please,
+aways visit github.lgb.hu/xemu/
 
 Or, if you'are more an insider-oriented to see various builds from branches,
 additional information, etc, you can go here (the same as above, but instead
