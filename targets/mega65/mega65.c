@@ -405,9 +405,15 @@ static void mega65_init ( void )
 }
 
 
-#include <unistd.h>
-
-
+int dump_memory ( const char *fn )
+{
+	if (fn && *fn) {
+		DEBUGPRINT("MEM: Dumping memory into file: %s" NL, fn);
+		return xemu_save_file(fn, main_ram, (128 + 256) * 1024, "Cannot dump memory into file");
+	} else {
+		return 0;
+	}
+}
 
 
 static void shutdown_callback ( void )
@@ -427,16 +433,8 @@ static void shutdown_callback ( void )
 		DEBUG("VIC-3 register $%02X is %02X" NL, a, vic_registers[a]);
 	cia_dump_state (&cia1);
 	cia_dump_state (&cia2);
-#if defined(MEMDUMP_FILE) && !defined(__EMSCRIPTEN__)
-	// Dump hypervisor memory to a file, so you can check it after exit.
-	FILE *f = fopen(MEMDUMP_FILE, "wb");
-	if (f) {
-		fwrite(main_ram,		1, 0x20000 - 2048, f);
-		fwrite(colour_ram,		1, 2048, f);
-		fwrite(main_ram + 0x20000,	1, 0x40000, f);
-		fclose(f);
-		DEBUGPRINT("Memory state is dumped into %s" DIRSEP_STR "%s" NL, getcwd(NULL, PATH_MAX), MEMDUMP_FILE);
-	}
+#if !defined(XEMU_ARCH_HTML)
+	(void)dump_memory(xemucfg_get_str("dumpmem"));
 #endif
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_close();
@@ -709,6 +707,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("fontrefresh", "Upload character ROM from the loaded ROM image");
 	xemucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used (also see the -virtsd option!)");
 	xemucfg_define_num_option("rtchofs", 0, "RTC (and CIA TOD) default offset to real-time (mostly for testing!)");
+	xemucfg_define_str_option("dumpmem", NULL, "Save memory content on exit");
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	xemucfg_define_switch_option("virtsd", "Interpret -sdimg option as a DIRECTORY to be fed onto the FAT32FS and use virtual-in-memory disk storage.");
 #endif

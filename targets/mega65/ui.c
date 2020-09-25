@@ -263,11 +263,17 @@ static void osd_key_debugger ( void )
 	OSD(-1, -1, "OSD key debugger turned %s", hid_show_osd_keys ? "ON" : "OFF");
 }
 
-static void enable_mouse_grab ( void )
+static void enable_mouse_grab ( const struct menu_st *m, int *query )
 {
+	if (query) {
+		*query |= allow_mouse_grab ? XEMUGUI_MENUFLAG_CHECKED : XEMUGUI_MENUFLAG_UNCHECKED;
+		return;
+	}
 	if (!allow_mouse_grab) {
 		allow_mouse_grab = 1;
 		OSD(-1, -1, "ENABLED. Left click to activate!");
+	} else {
+		allow_mouse_grab = 0;
 	}
 }
 
@@ -280,6 +286,21 @@ static void ui_start_umon ( void )
 }
 #endif
 
+static void ui_dump_memory ( void )
+{
+	char fnbuf[PATH_MAX + 1];
+	static char dir[PATH_MAX + 1] = "";
+	if (!xemugui_file_selector(
+		XEMUGUI_FSEL_SAVE | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		"Dump memory content into file",
+		dir,
+		fnbuf,
+		sizeof fnbuf
+	)) {
+		dump_memory(fnbuf);
+	}
+}
+
 
 /**** MENU SYSTEM ****/
 
@@ -287,9 +308,10 @@ static void ui_start_umon ( void )
 static const struct menu_st menu_display[] = {
 	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)0 },
 	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)1 },
-	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)2 },
-	{ "OSD key debugger",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, osd_key_debugger },
-	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, enable_mouse_grab },
+	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE|
+					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize, (void*)2 },
+	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE|
+					XEMUGUI_MENUFLAG_QUERYBACK,	enable_mouse_grab },
 	{ NULL }
 };
 static const struct menu_st menu_sdcard[] = {
@@ -303,10 +325,20 @@ static const struct menu_st menu_reset[] = {
 	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode     },
 	{ NULL }
 };
+static const struct menu_st menu_debug[] = {
+#ifdef HAS_UARTMON_SUPPORT
+	{ "Start umon on " UMON_DEFAULT_PORT,
+					XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_start_umon },
+#endif
+	{ "OSD key debugger",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, osd_key_debugger },
+	{ "Dump memory info file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_memory },
+	{ NULL }
+};
 static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		menu_display, NULL },
 	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		menu_sdcard,  NULL },
 	{ "Reset",			XEMUGUI_MENUID_SUBMENU,		menu_reset,   NULL },
+	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		menu_debug,   NULL },
 	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
 #ifdef BASIC_TEXT_SUPPORT
@@ -314,14 +346,12 @@ static const struct menu_st menu_main[] = {
 #endif
 	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_native_os_file_browser },
 #ifdef XEMU_ARCH_WIN
-	{ "System console", XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK, xemugui_cb_sysconsole, NULL },
+	{ "System console",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_sysconsole, NULL },
 #endif
-#ifdef HAS_UARTMON_SUPPORT
-	{ "Start umon on " UMON_DEFAULT_PORT, XEMUGUI_MENUID_CALLABLE,  xemugui_cb_call_user_data, ui_start_umon },
-#endif
-	{ "Help (online)", XEMUGUI_MENUID_CALLABLE, xemugui_cb_call_user_data, ui_online_help },
-	{ "About", XEMUGUI_MENUID_CALLABLE, xemugui_cb_about_window, NULL },
-	{ "Quit", XEMUGUI_MENUID_CALLABLE, xemugui_cb_call_quit_if_sure, NULL },
+	{ "Help (online)",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_online_help },
+	{ "About",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_about_window, NULL },
+	{ "Quit",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_quit_if_sure, NULL },
 	{ NULL }
 };
 
