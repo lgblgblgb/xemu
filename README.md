@@ -47,8 +47,8 @@ MEGA65).
 
 **Download page**: https://github.lgb.hu/xemu/
 
-Plese note, that binaries on some older site, which are seriously old. Please,
-aways visit github.lgb.hu/xemu/
+There are binaries on some other sites, which are seriously old. Please,
+always visit github.lgb.hu/xemu/ for download!
 
 Or, if you'are more an insider-oriented to see various builds from branches,
 additional information, etc, you can go here (the same as above, but instead
