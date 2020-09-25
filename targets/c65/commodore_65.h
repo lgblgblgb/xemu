@@ -52,5 +52,6 @@ extern void  write_phys_mem ( int addr, Uint8 data );
 extern Uint8 read_phys_mem  ( int addr );
 extern void  c65_reset ( void );
 extern int   c65_reset_asked ( void );
+extern int   dump_memory ( const char *fn );
 
 #endif

@@ -733,6 +733,16 @@ void cpu65_write_rmw_callback ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 }
 
 
+int dump_memory ( const char *fn )
+{
+        if (fn && *fn) {
+                DEBUGPRINT("MEM: Dumping memory into file: %s" NL, fn);
+                return xemu_save_file(fn, memory, 0x20000, "Cannot dump memory into file");
+        } else {
+                return 0;
+        }
+}
+
 
 static void shutdown_callback ( void )
 {
@@ -741,16 +751,9 @@ static void shutdown_callback ( void )
 		DEBUG("VIC-3 register $%02X is %02X" NL, a, vic3_registers[a]);
 	cia_dump_state (&cia1);
 	cia_dump_state (&cia2);
-	const char *p = xemucfg_get_str("dumpmem");
-	if (p) {
-		// Dump memory, so some can inspect the result (low 128K, RAM only)
-		FILE *f = fopen(p, "wb");
-		if (f) {
-			fwrite(memory, 1, 0x20000, f);
-			fclose(f);
-			DEBUGPRINT("MEM: Memory has been dumped into file: %s" NL, p);
-		}
-	}
+#if !defined(XEMU_ARCH_HTML)
+	(void)dump_memory(xemucfg_get_str("dumpmem"));
+#endif
 	DEBUGPRINT("Scanline render info = \"%s\"" NL, scanline_render_debug_info);
 	DEBUGPRINT("VIC3: D011=$%02X D018=$%02X D030=$%02X D031=$%02X" NL,
 		vic3_registers[0x11], vic3_registers[0x18], vic3_registers[0x30], vic3_registers[0x31]
