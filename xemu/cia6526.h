@@ -73,7 +73,7 @@ extern void  cia_write(struct Cia6526 *cia, int addr, Uint8 data);
 extern Uint8 cia_read (struct Cia6526 *cia, int addr);
 extern void  cia_tick (struct Cia6526 *cia, int ticks);
 extern void  cia_dump_state ( struct Cia6526 *cia );
-extern void  cia_ugly_tod_updater ( struct Cia6526 *cia, const struct tm *t, Uint8 sec10 ) ;
+extern void  cia_ugly_tod_updater ( struct Cia6526 *cia, const struct tm *t, Uint8 sec10, int hour_offset );
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 extern int cia_snapshot_load_state ( const struct xemu_snapshot_definition_st *def , struct xemu_snapshot_block_st *block );

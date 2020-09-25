@@ -67,6 +67,12 @@ Uint8 colour_ram[0x8000];
 Uint8 char_wom[0x2000];
 // 16K of hypervisor RAM, can be only seen in hypervisor mode.
 Uint8 hypervisor_ram[0x4000];
+// 64 bytes of NVRAM
+Uint8 nvram[64];
+// 8 bytes of UUID
+Uint8 mega65_uuid[8];
+// RTC registers
+Uint8 rtc_regs[6];
 
 #define SLOW_RAM_SIZE (8 << 20)
 Uint8 slow_ram[SLOW_RAM_SIZE];
@@ -214,7 +220,7 @@ DEFINE_READER(invalid_mem_reader) {
 		skip_unhandled_mem = QUESTION_WINDOW("EXIT|Ignore now|Ignore all|Silent ignore all", msg);
 	switch (skip_unhandled_mem) {
 		case 0:
-			FATAL("Exit on request after illegal memory access");
+			XEMUEXIT(1);
 			break;
 		case 1:
 		case 2:
@@ -295,10 +301,42 @@ DEFINE_WRITER(disk_buffers_writer) {
 #endif
 }
 DEFINE_READER(i2c_io_reader) {
-	return 0;	// now just ignore, and give ZERO as answer [no I2C devices]
+	int addr = GET_READER_OFFSET();
+	Uint8 data = 0x00;	// initial value, if nothing match (unknown I2C to Xemu?)
+	switch (addr) {
+		case 0x100:	// 8 bytes of UUID (64 bit value)
+		case 0x101:
+		case 0x102:
+		case 0x103:
+		case 0x104:
+		case 0x105:
+		case 0x106:
+		case 0x107:
+			data = mega65_uuid[addr & 7];
+			break;
+		case 0x110:	// RTC: seconds BCD
+		case 0x111:	// RTC: minutes BCD
+		case 0x112:	// RTC: hours BCD
+		case 0x113:	// RTC: day of month BCD
+		case 0x114:	// RTC: month BCD
+		case 0x115:	// RTC: year BCD
+			data = rtc_regs[addr - 0x110];
+			break;
+		default:
+			if (addr > 0x140 && addr <= 0x17F)
+				data = nvram[addr - 0x140];
+			break;
+	}
+	return data;
 }
 DEFINE_WRITER(i2c_io_writer) {
-	// now just ignore [no I2C devices]
+	int addr = GET_WRITER_OFFSET();
+	switch (addr) {
+		default:
+			if (addr > 0x140 && addr <= 0x17F)
+				nvram[addr - 0x140] = data;
+			break;
+	}
 }
 
 // Memory layout table for MEGA65
@@ -323,7 +361,7 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 	{ 0xFF7E000, 0xFF7FFFF, dummy_reader, char_wom_writer },		// Character "WriteOnlyMemory"
 	{ 0xFFDE800, 0xFFDEFFF, eth_buffer_reader, eth_buffer_writer },		// ethernet RX/TX buffer, NOTE: the same address, reading is always the RX_read, writing is always TX_write
 	{ 0xFFD6000, 0xFFD6FFF, disk_buffers_reader, disk_buffers_writer },	// disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space" [??]
-	{ 0xFFD7000, 0xFFD70FF, i2c_io_reader, i2c_io_writer },			// I2C devices
+	{ 0xFFD7000, 0xFFD7FFF, i2c_io_reader, i2c_io_writer },			// I2C devices
 	{ 0x8000000, 0x8000000 + SLOW_RAM_SIZE - 1, slow_ram_reader, slow_ram_writer },		// "slow RAM" also called "hyper RAM" (not to be confused with hypervisor RAM!)
 	{ 0x8000000 + SLOW_RAM_SIZE, 0xFDFFFFF, dummy_reader, dummy_writer },			// ununsed big part of the "slow RAM" or so ...
 	{ 0x4000000, 0x7FFFFFF, dummy_reader, dummy_writer },		// slow RAM memory area, not exactly known what it's for, let's define as "dummy"

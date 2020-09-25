@@ -175,6 +175,21 @@ unsigned int xemu_get_microseconds ( void )
 }
 
 
+Uint8 xemu_hour_to_bcd12h ( Uint8 hours, int hour_offset )
+{
+	// hour offset is only an ugly hack to shift hour for testing! The value can be negative too, and over/under-flow of the 0-23 hours range
+	hours = abs((int)hours + hour_offset) % 24;
+	if (hours == 0)
+		return 0x12;                                // 00:mm -> 12:mmAM for HH = 0      (0x12 is BCD representation of 12)
+	else if (hours < 12)
+		return XEMU_BYTE_TO_BCD(hours);             // HH:mm -> HH:mmAM for 0 < HH < 12
+	else if (hours == 12)
+		return 0x12 + 0x80;                         // 12:mm -> 12:mmPM for HH = 12     (0x80 is PM flag, 0x12 is BCD representation of 12)
+	else
+		return XEMU_BYTE_TO_BCD(hours - 12) + 0x80; // HH:mm -> HH:mmPM for HH > 12     (0x80 is PM flag)
+}
+
+
 void *xemu_malloc ( size_t size )
 {
 	void *p = malloc(size);

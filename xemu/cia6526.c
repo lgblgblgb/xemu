@@ -34,7 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  */
 
 
-#include "xemu/emutools_basicdefs.h"
+#include "xemu/emutools.h"
 #include "xemu/cia6526.h"
 
 
@@ -269,21 +269,14 @@ void cia_write ( struct Cia6526 *cia, int addr, Uint8 data )
 }
 
 
-static XEMU_INLINE Uint8 to_bdc_byte ( Uint8 b )
-{
-	return ((b / 10) << 4) + (b % 10);
-}
-
-
-
-void cia_ugly_tod_updater ( struct Cia6526 *cia, const struct tm *t, Uint8 sec10 )
+void cia_ugly_tod_updater ( struct Cia6526 *cia, const struct tm *t, Uint8 sec10, int hour_offset )
 {
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
 	// FIXME: of course, that's simple crazy, not in sync with emu, no "stopping" clock on read, no setting etc ...
-	cia->tod[0] = to_bdc_byte(sec10);
-	cia->tod[1] = to_bdc_byte(t->tm_sec);
-	cia->tod[2] = to_bdc_byte(t->tm_min);
-	cia->tod[3] = to_bdc_byte(t->tm_hour);
+	cia->tod[0] = sec10;
+	cia->tod[1] = XEMU_BYTE_TO_BCD(t->tm_sec);
+	cia->tod[2] = XEMU_BYTE_TO_BCD(t->tm_min);
+	cia->tod[3] = xemu_hour_to_bcd12h(t->tm_hour, hour_offset);
 }
 
 

@@ -238,4 +238,8 @@ extern const char *XEMU_BUILDINFO_ON, *XEMU_BUILDINFO_AT, *XEMU_BUILDINFO_GIT, *
 extern const char emulators_disclaimer[];
 extern void xemu_dump_version ( FILE *fp, const char *slogan );
 
+static XEMU_INLINE unsigned char XEMU_BYTE_TO_BCD ( unsigned char b ) {
+	return ((b / 10) << 4) + (b % 10);
+}
+
 #endif
