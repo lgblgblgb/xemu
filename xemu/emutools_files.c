@@ -1,4 +1,4 @@
-/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
+/* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and MEGA65 as well.
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
@@ -619,6 +619,10 @@ int xemu_save_file ( const char *filename_in, void *data, int size, const char *
 	char filename_real2[PATH_MAX];
 	strcpy(filename_real2, filename_real);
 	filename_real2[strlen(filename_real2) - strlen(temp_end)] = 0;
+	DEBUGPRINT("FILE: renaming file: %s -> %s" NL, filename_real, filename_real2);
+#ifdef XEMU_ARCH_WIN
+	unlink(filename_real2);	// it seems windows does not allow to rename "onto" an existing file. So delete the target first ...
+#endif
 	if (rename(filename_real, filename_real2)) {
 		if (cry)
 			ERROR_WINDOW("%s\nCannot rename file %s to %s\n%s", cry, filename_real, filename_real2, strerror(errno));
