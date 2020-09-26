@@ -148,6 +148,20 @@ static void ui_dump_memory ( void )
 	}
 }
 
+static void reset_into_c64_mode ( void )
+{
+	if (c65_reset_asked()) {
+		hid_set_autoreleased_key(0x75);
+		KBD_PRESS_KEY(0x75);	// C= key is pressed for C64 mode
+	}
+}
+
+static void reset_into_c65_mode ( void )
+{
+	if (c65_reset_asked()) {
+		KBD_RELEASE_KEY(0x75);
+	}
+}
 
 /**** MENU SYSTEM ****/
 
@@ -168,10 +182,15 @@ static const struct menu_st menu_debug[] = {
 	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_native_os_file_browser },
 	{ NULL }
 };
+static const struct menu_st menu_reset[] = {
+	{ "Reset C65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode },
+	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode },
+	{ NULL }
+};
 static const struct menu_st menu_main[] = {
-	{ "Display",			XEMUGUI_MENUID_SUBMENU,		(xemugui_callback_t)menu_display, NULL },
-	{ "Reset C65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, c65_reset_asked },
-	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		(xemugui_callback_t)menu_debug, NULL },
+	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
+	{ "Reset", 	 		XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
+	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
 	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
 #ifdef XEMU_ARCH_WIN

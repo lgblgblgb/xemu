@@ -87,20 +87,7 @@ static void xemugtkgui_shutdown ( void )
 
 static GtkFileChooserConfirmation xemugtkgui_confirm_overwrite ( GtkFileChooser *chooser, gpointer data )
 {
-#if 0
-	const char *uri = gtk_file_chooser_get_uri(chooser);
-	DEBUGPRINT("GUI: confirmation requested for: %s" NL, uri);
-#endif
 	return GTK_FILE_CHOOSER_CONFIRMATION_CONFIRM;   // use the default dialog
-#if 0
-	if (is_uri_read_only(uri)) {
-		if (user_wants_to_replace_read_only_file(uri))
-			return GTK_FILE_CHOOSER_CONFIRMATION_ACCEPT_FILENAME;
-		else
-			return GTK_FILE_CHOOSER_CONFIRMATION_SELECT_AGAIN;
-	} else
-		return GTK_FILE_CHOOSER_CONFIRMATION_CONFIRM;	// use the default dialog
-#endif
 }
 
 
@@ -187,14 +174,19 @@ static void _gtkgui_callback ( const struct menu_st *item )
 static GtkWidget *_gtkgui_recursive_menu_builder ( const struct menu_st desc[] )
 {
 	if (xemugtkmenu.num_of_menus >= XEMUGUI_MAX_SUBMENUS) {
-		ERROR_WINDOW("Too much submenus");
+		DEBUGPRINT("GUI: Too many submenus (max=%d)" NL, XEMUGUI_MAX_SUBMENUS);
 		goto PROBLEM;
 	}
 	GtkWidget *menu = gtk_menu_new();
 	xemugtkmenu.menus[xemugtkmenu.num_of_menus++] = menu;
 	for (int a = 0; desc[a].name; a++) {
-		if (!desc[a].handler || !desc[a].name) {
-			DEBUGPRINT("GUI: invalid meny entry found, skipping it" NL);
+		// Some sanity checks:
+		if (
+			((desc[a].type & 0xFF) != XEMUGUI_MENUID_SUBMENU && !desc[a].handler) ||
+			((desc[a].type & 0xFF) == XEMUGUI_MENUID_SUBMENU && (desc[a].handler  || !desc[a].user_data)) ||
+			!desc[a].name
+		) {
+			DEBUGPRINT("GUI: invalid menu entry found, skipping it" NL);
 			continue;
 		}
 		GtkWidget *item = NULL;
@@ -205,7 +197,8 @@ static GtkWidget *_gtkgui_recursive_menu_builder ( const struct menu_st desc[] )
 				if (!item)
 					goto PROBLEM;
 				gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
-				GtkWidget *submenu = _gtkgui_recursive_menu_builder((void*)desc[a].handler);	// who does not like recursion, seriously? :-)
+				// submenus use the user_data as the submenu menu_st struct pointer!
+				GtkWidget *submenu = _gtkgui_recursive_menu_builder(desc[a].user_data);	// who does not like recursion, seriously? :-)
 				if (!submenu)
 					goto PROBLEM;
 				gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), submenu);
@@ -229,6 +222,9 @@ static GtkWidget *_gtkgui_recursive_menu_builder ( const struct menu_st desc[] )
 					G_CALLBACK(_gtkgui_callback),
 					(gpointer)&desc[a]
 				);
+				break;
+			default:
+				DEBUGPRINT("GUI: invalid menu item type: %d" NL, type & 0xFF);
 				break;
 		}
 		if (item) {

@@ -46,7 +46,12 @@ static id _xemumacgui_r_menu_builder(const struct menu_st desc[])
 	id ui_menu = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSMenu"), sel_registerName("new"));
 	((void (*) (id, SEL)) objc_msgSend)(ui_menu, sel_registerName("autorelease"));
 	for (int i = 0; desc[i].name; i++) {
-		if (!desc[i].handler || !desc[i].name) {
+		// Some sanity checks:
+		if (
+			((desc[a].type & 0xFF) != XEMUGUI_MENUID_SUBMENU && !desc[a].handler) ||
+			((desc[a].type & 0xFF) == XEMUGUI_MENUID_SUBMENU && (desc[a].handler  || !desc[a].user_data)) ||
+			!desc[a].name
+		) {
 			DEBUGPRINT("GUI: invalid meny entry found, skipping it" NL);
 			continue;
 		}
@@ -63,7 +68,8 @@ static id _xemumacgui_r_menu_builder(const struct menu_st desc[])
 		((void (*) (id, SEL, id))objc_msgSend)(menu_item, sel_registerName("setRepresentedObject:"), menu_object);
 		((void (*) (id, SEL, id))objc_msgSend)(ui_menu, sel_registerName("addItem:"), menu_item);
 		if (desc[i].type == XEMUGUI_MENUID_SUBMENU) {
-			id sub_menu = _xemumacgui_r_menu_builder((void*)desc[i].handler);
+			// submenus use the user_data as the submenu menu_st struct pointer!
+			id sub_menu = _xemumacgui_r_menu_builder(desc[i].user_data);
 			((void (*) (id, SEL, id, id))objc_msgSend)(ui_menu, sel_registerName("setSubmenu:forItem:"), sub_menu, menu_item);
 		}
 	}

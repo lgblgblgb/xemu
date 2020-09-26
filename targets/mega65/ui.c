@@ -348,10 +348,10 @@ static const struct menu_st menu_debug[] = {
 	{ NULL }
 };
 static const struct menu_st menu_main[] = {
-	{ "Display",			XEMUGUI_MENUID_SUBMENU,		(xemugui_callback_t)menu_display, NULL },
-	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		(xemugui_callback_t)menu_sdcard,  NULL },
-	{ "Reset",			XEMUGUI_MENUID_SUBMENU,		(xemugui_callback_t)menu_reset,   NULL },
-	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		(xemugui_callback_t)menu_debug,   NULL },
+	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
+	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
+	{ "Reset",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
+	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
 	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
 #ifdef BASIC_TEXT_SUPPORT

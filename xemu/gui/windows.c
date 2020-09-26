@@ -108,7 +108,12 @@ static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[] )
 	int radio_begin = xemuwinmenu.num_of_items;
 	int radio_active = xemuwinmenu.num_of_items; // radio active is a kinda odd name, but never mind ...
 	for (int a = 0; desc[a].name; a++) {
-		if (!desc[a].handler || !desc[a].name) {
+		// Some sanity checks:
+		if (
+			((desc[a].type & 0xFF) != XEMUGUI_MENUID_SUBMENU && !desc[a].handler) ||
+			((desc[a].type & 0xFF) == XEMUGUI_MENUID_SUBMENU && (desc[a].handler  || !desc[a].user_data)) ||
+			!desc[a].name
+		) {
 			DEBUGPRINT("GUI: invalid meny entry found, skipping it" NL);
 			continue;
 		}
@@ -117,7 +122,8 @@ static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[] )
 		int ret = 1, type = desc[a].type;
 		switch (type & 0xFF) {
 			case XEMUGUI_MENUID_SUBMENU: {
-				HMENU submenu = _wingui_recursive_menu_builder((void*)desc[a].handler);	// that's a prime example for using recursion :)
+				// submenus use the user_data as the submenu menu_st struct pointer!
+				HMENU submenu = _wingui_recursive_menu_builder(desc[a].user_data);	// that's a prime example for using recursion :)
 				if (!submenu)
 					goto PROBLEM;
 				ret = AppendMenu(menu, MF_POPUP, (UINT_PTR)submenu, desc[a].name);
@@ -135,6 +141,7 @@ static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[] )
 				ret = AppendMenu(menu, MF_STRING, ++xemuwinmenu.num_of_items, desc[a].name);
 				break;
 			default:
+				DEBUGPRINT("GUI: invalid menu item type: %d" NL, type & 0xFF);
 				break;
 		}
 		if (!ret) {

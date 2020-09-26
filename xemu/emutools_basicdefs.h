@@ -242,4 +242,7 @@ static XEMU_INLINE unsigned char XEMU_BYTE_TO_BCD ( unsigned char b ) {
 	return ((b / 10) << 4) + (b % 10);
 }
 
+#define VOIDPTR_TO_INT(x)	((int)(intptr_t)(void*)(x))
+#define VOIDPTR_TO_UINT(x)	((unsigned int)(uintptr_t)(void*)(x))
+
 #endif
