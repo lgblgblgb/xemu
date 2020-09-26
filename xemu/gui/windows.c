@@ -117,7 +117,7 @@ static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[] )
 		int ret = 1, type = desc[a].type;
 		switch (type & 0xFF) {
 			case XEMUGUI_MENUID_SUBMENU: {
-				HMENU submenu = _wingui_recursive_menu_builder(desc[a].handler);	// that's a prime example for using recursion :)
+				HMENU submenu = _wingui_recursive_menu_builder((void*)desc[a].handler);	// that's a prime example for using recursion :)
 				if (!submenu)
 					goto PROBLEM;
 				ret = AppendMenu(menu, MF_POPUP, (UINT_PTR)submenu, desc[a].name);

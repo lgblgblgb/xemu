@@ -825,9 +825,9 @@ static const struct menu_st menu_display[] = {
 	{ NULL }
 };
 static const struct menu_st menu_main[] = {
-	{ "Display",			XEMUGUI_MENUID_SUBMENU,		menu_display,			NULL },
-	{ "Set Primo model",		XEMUGUI_MENUID_SUBMENU,		menu_models,			NULL },
-	{ "CPU clock",			XEMUGUI_MENUID_SUBMENU,		menu_cpu_clock,			NULL },
+	{ "Display",			XEMUGUI_MENUID_SUBMENU,		(xemugui_callback_t)menu_display,	NULL },
+	{ "Set Primo model",		XEMUGUI_MENUID_SUBMENU,		(xemugui_callback_t)menu_models,	NULL },
+	{ "CPU clock",			XEMUGUI_MENUID_SUBMENU,		(xemugui_callback_t)menu_cpu_clock,	NULL },
 	{ "Reset Primo",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	primo_reset_asked },
 	{ "Load PRI file",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	ui_load_pri	},
 	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	ui_native_os_file_browser },

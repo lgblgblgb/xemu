@@ -205,7 +205,7 @@ static GtkWidget *_gtkgui_recursive_menu_builder ( const struct menu_st desc[] )
 				if (!item)
 					goto PROBLEM;
 				gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
-				GtkWidget *submenu = _gtkgui_recursive_menu_builder(desc[a].handler);	// who does not like recursion, seriously? :-)
+				GtkWidget *submenu = _gtkgui_recursive_menu_builder((void*)desc[a].handler);	// who does not like recursion, seriously? :-)
 				if (!submenu)
 					goto PROBLEM;
 				gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), submenu);

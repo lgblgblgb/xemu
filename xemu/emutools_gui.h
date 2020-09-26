@@ -47,14 +47,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMUGUI_MAX_ITEMS		900
 #endif
 
+
+struct menu_st;
+
+typedef void (*xemugui_callback_t)(const struct menu_st *desc, int *query);
+
 struct menu_st {
 	const char *name;
 	int type;
-	const void *handler;
+	//const void *handler;
+	const xemugui_callback_t handler;
 	const void *user_data;
 };
-
-typedef void (*xemugui_callback_t)(const struct menu_st *desc, int *query);
 
 extern int is_xemungui_ok;
 

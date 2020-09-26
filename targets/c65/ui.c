@@ -169,9 +169,9 @@ static const struct menu_st menu_debug[] = {
 	{ NULL }
 };
 static const struct menu_st menu_main[] = {
-	{ "Display",			XEMUGUI_MENUID_SUBMENU,		menu_display, NULL },
+	{ "Display",			XEMUGUI_MENUID_SUBMENU,		(xemugui_callback_t)menu_display, NULL },
 	{ "Reset C65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, c65_reset_asked },
-	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		menu_debug, NULL },
+	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		(xemugui_callback_t)menu_debug, NULL },
 	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
 #ifdef XEMU_ARCH_WIN

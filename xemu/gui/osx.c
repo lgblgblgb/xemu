@@ -63,7 +63,7 @@ static id _xemumacgui_r_menu_builder(const struct menu_st desc[])
 		((void (*) (id, SEL, id))objc_msgSend)(menu_item, sel_registerName("setRepresentedObject:"), menu_object);
 		((void (*) (id, SEL, id))objc_msgSend)(ui_menu, sel_registerName("addItem:"), menu_item);
 		if (desc[i].type == XEMUGUI_MENUID_SUBMENU) {
-			id sub_menu = _xemumacgui_r_menu_builder(desc[i].handler);
+			id sub_menu = _xemumacgui_r_menu_builder((void*)desc[i].handler);
 			((void (*) (id, SEL, id, id))objc_msgSend)(ui_menu, sel_registerName("setSubmenu:forItem:"), sub_menu, menu_item);
 		}
 	}
