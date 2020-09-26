@@ -48,9 +48,9 @@ static id _xemumacgui_r_menu_builder(const struct menu_st desc[])
 	for (int i = 0; desc[i].name; i++) {
 		// Some sanity checks:
 		if (
-			((desc[a].type & 0xFF) != XEMUGUI_MENUID_SUBMENU && !desc[a].handler) ||
-			((desc[a].type & 0xFF) == XEMUGUI_MENUID_SUBMENU && (desc[a].handler  || !desc[a].user_data)) ||
-			!desc[a].name
+			((desc[i].type & 0xFF) != XEMUGUI_MENUID_SUBMENU && !desc[i].handler) ||
+			((desc[i].type & 0xFF) == XEMUGUI_MENUID_SUBMENU && (desc[i].handler  || !desc[i].user_data)) ||
+			!desc[i].name
 		) {
 			DEBUGPRINT("GUI: invalid meny entry found, skipping it" NL);
 			continue;
