@@ -345,15 +345,15 @@ void hid_joystick_device_event ( int which , int is_attach )
 		if (joysticks[which])
 			hid_joystick_device_event(which, 0);
 		joysticks[which] = SDL_JoystickOpen(which);
-		if (joysticks[which]) {
-			INFO_WINDOW("HID: joystick device #%d \"%s\" has been added." NL, which, SDL_JoystickName(joysticks[which]));
-		} else
-			DEBUG("HID: joystick device #%d problem, cannot be opened on 'add' event: %s." NL, which, SDL_GetError());
+		if (joysticks[which])
+			DEBUGPRINT("HID: joystick device #%d \"%s\" has been added." NL, which, SDL_JoystickName(joysticks[which]));
+		else
+			DEBUGPRINT("HID: joystick device #%d problem, cannot be opened on 'add' event: %s." NL, which, SDL_GetError());
 	} else {
 		if (joysticks[which]) {
 			SDL_JoystickClose(joysticks[which]);
 			joysticks[which] = NULL;
-			DEBUG("HID: joystick device #%d has been removed." NL, which);
+			DEBUGPRINT("HID: joystick device #%d has been removed." NL, which);
 			// This is needed to avoid "stuck" joystick state if removed in that state ...
 			hid_state &= ~(JOYSTATE_UP | JOYSTATE_DOWN | JOYSTATE_LEFT | JOYSTATE_RIGHT | JOYSTATE_BUTTON);
 		}
