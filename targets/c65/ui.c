@@ -112,22 +112,17 @@ static void ui_native_os_file_browser ( void )
 }
 
 
+
 static void osd_key_debugger ( const struct menu_st *m, int *query )
 {
-	if (query) {
-		*query |= hid_show_osd_keys ? XEMUGUI_MENUFLAG_CHECKED : XEMUGUI_MENUFLAG_UNCHECKED;
-		return;
-	}
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, hid_show_osd_keys);
 	hid_show_osd_keys = !hid_show_osd_keys;
-	OSD(-1, -1, "OSD key debugger turned %s", hid_show_osd_keys ? "ON" : "OFF");
+	OSD(-1, -1, "OSD key debugger has been %sABLED", hid_show_osd_keys ? "EN" : "DIS");
 }
 
 static void enable_mouse_grab ( const struct menu_st *m, int *query )
 {
-	if (query) {
-		*query |= allow_mouse_grab ? XEMUGUI_MENUFLAG_CHECKED : XEMUGUI_MENUFLAG_UNCHECKED;
-		return;
-	}
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, allow_mouse_grab);
 	allow_mouse_grab = !allow_mouse_grab;
 	if (allow_mouse_grab)
 		OSD(-1, -1, "ENABLED. Left click to activate!");
@@ -163,6 +158,18 @@ static void reset_into_c65_mode ( void )
 	}
 }
 
+
+#if 0
+static void ui_set_scale_filtering ( const struct menu_st *m, int *query )
+{
+	static char enabled[2] = "0";
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, (enabled[0] & 1));
+	enabled[0] ^= 1;
+	SDL_SetHint("SDL_HINT_RENDER_SCALE_QUALITY", enabled);
+}
+#endif
+
+
 /**** MENU SYSTEM ****/
 
 
@@ -173,6 +180,8 @@ static const struct menu_st menu_display[] = {
 					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize, (void*)2 },
 	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	enable_mouse_grab, NULL },
+//	{ "Enable scale filtering",	XEMUGUI_MENUID_CALLABLE |
+//					XEMUGUI_MENUFLAG_QUERYBACK,	ui_set_scale_filtering, NULL },
 	{ NULL }
 };
 static const struct menu_st menu_debug[] = {

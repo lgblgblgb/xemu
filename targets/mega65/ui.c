@@ -259,20 +259,14 @@ static void reset_into_c65_mode ( void )
 
 static void osd_key_debugger ( const struct menu_st *m, int *query )
 {
-	if (query) {
-		*query |= hid_show_osd_keys ? XEMUGUI_MENUFLAG_CHECKED : XEMUGUI_MENUFLAG_UNCHECKED;
-		return;
-	}
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, hid_show_osd_keys);
 	hid_show_osd_keys = !hid_show_osd_keys;
-	OSD(-1, -1, "OSD key debugger turned %s", hid_show_osd_keys ? "ON" : "OFF");
+	OSD(-1, -1, "OSD key debugger has been %sABLED", hid_show_osd_keys ? "EN" : "DOS");
 }
 
 static void enable_mouse_grab ( const struct menu_st *m, int *query )
 {
-	if (query) {
-		*query |= allow_mouse_grab ? XEMUGUI_MENUFLAG_CHECKED : XEMUGUI_MENUFLAG_UNCHECKED;
-		return;
-	}
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, allow_mouse_grab);
 	allow_mouse_grab = !allow_mouse_grab;
 	if (allow_mouse_grab)
 		OSD(-1, -1, "ENABLED. Left click to activate!");
@@ -283,10 +277,7 @@ static void enable_mouse_grab ( const struct menu_st *m, int *query )
 static void ui_start_umon ( const struct menu_st *m, int *query )
 {
 	int is_active = uartmon_is_active();
-	if (query) {
-		*query |= is_active ? XEMUGUI_MENUFLAG_CHECKED : XEMUGUI_MENUFLAG_UNCHECKED;
-		return;
-	}
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, is_active);
 	if (is_active) {
 		INFO_WINDOW("UART monitor is already active.\nCurrently it's not supported to stop it.");
 		return;

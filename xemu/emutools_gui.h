@@ -48,6 +48,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 
 
+#define XEMUGUI_RETURN_CHECKED_ON_QUERY(query,status) \
+	do { if (query) { \
+		*query |= (status) ? XEMUGUI_MENUFLAG_CHECKED : XEMUGUI_MENUFLAG_UNCHECKED; \
+		return; \
+	} } while (0)
+
 struct menu_st;
 
 typedef void (*xemugui_callback_t)(const struct menu_st *desc, int *query);
@@ -55,7 +61,6 @@ typedef void (*xemugui_callback_t)(const struct menu_st *desc, int *query);
 struct menu_st {
 	const char *name;
 	int type;
-	//const void *handler;
 	const xemugui_callback_t handler;
 	const void *user_data;
 };

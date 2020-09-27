@@ -97,6 +97,7 @@ static struct {
 static int beeper;
 static Uint64 beeper_last_changed;
 static SDL_AudioDeviceID audio;
+static int audio_enabled = 1;
 
 
 
@@ -174,7 +175,7 @@ void z80ex_pwrite_cb ( Z80EX_WORD port16, Z80EX_BYTE value )
 			static int rounding_error = 0;
 			Uint64 no_of_samples = (rounding_error + all_cycles_spent - beeper_last_changed) / cpu_clocks_per_audio_sample;
 			rounding_error       = (rounding_error + all_cycles_spent - beeper_last_changed) % cpu_clocks_per_audio_sample;
-			if (no_of_samples <= AUDIO_PULSE_SAMPLES_MAX_PASS && no_of_samples > 0 && audio) {
+			if (no_of_samples <= AUDIO_PULSE_SAMPLES_MAX_PASS && no_of_samples > 0 && audio && audio_enabled) {
 				Uint8 samples[no_of_samples];
 				memset(samples, value & 16 ? 0x80 + VOLUME8 : 0x80 - VOLUME8, no_of_samples);
 				int ret = SDL_QueueAudio(audio, samples, no_of_samples);	// last param are (number of) BYTES not samles. But we use 1 byte/samle audio ...
@@ -182,8 +183,8 @@ void z80ex_pwrite_cb ( Z80EX_WORD port16, Z80EX_BYTE value )
 					DEBUGPRINT("AUDIO: DATA: ERROR: %s" NL, SDL_GetError());
 				else
 					DEBUG("AUDIO: DATA: queued" NL);
-			} else
-				DEBUG("AUDIO: DATA: rejected! samples=%d" NL, (int)no_of_samples);
+			} /* else
+				DEBUG("AUDIO: DATA: rejected! samples=%d" NL, (int)no_of_samples); */
 			beeper = value & 16;
 			beeper_last_changed = all_cycles_spent;
 		}
@@ -778,10 +779,7 @@ static void ui_native_os_file_browser ( void )
 
 static void ui_cb_set_model ( const struct menu_st *m, int *query )
 {
-	if (query) {
-		*query |= !strcasecmp(m->user_data, primo_model_set_str) ? XEMUGUI_MENUFLAG_CHECKED : XEMUGUI_MENUFLAG_UNCHECKED;
-		return;
-	}
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, !strcasecmp(m->user_data, primo_model_set_str));
 	if (!set_model(m->user_data, 1))
 		primo_reset();
 }
@@ -809,20 +807,47 @@ static void ui_load_pri ( void )
 
 static void primo_reset_asked ( void )
 {
-	if (ARE_YOU_SURE("Are you sure to HARD RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
+	if (ARE_YOU_SURE("Are you sure to HARD RESET your Primo?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
 		primo_reset();
 }
 
 
 static void ui_cb_set_cpu_clock ( const struct menu_st *m, int *query )
 {
-	if (query) {
-		*query |= (VOIDPTR_TO_INT(m->user_data) == cpu_clock_wanted) ? XEMUGUI_MENUFLAG_CHECKED : XEMUGUI_MENUFLAG_UNCHECKED;
-		return;
-	}
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == cpu_clock_wanted);
 	set_cpu_hz(VOIDPTR_TO_INT(m->user_data));
 }
 
+
+static void ui_sound ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, audio_enabled);
+	if (!audio) {
+		ERROR_WINDOW("Cannot enable audio.");
+		return;
+	}
+	audio_enabled = !audio_enabled;
+}
+
+
+static void ui_osd_key_debugger ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, hid_show_osd_keys);
+	hid_show_osd_keys = !hid_show_osd_keys;
+	OSD(-1, -1, "OSD key debugger has been %sABLED", hid_show_osd_keys ? "EN" : "DIS");
+}
+
+
+#if 0
+static void ui_set_scale_filtering ( const struct menu_st *m, int *query )
+{
+	static char enabled[2] = "0";
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, enabled[0] == '1');
+	enabled[0] ^= 1;
+	if (SDL_SetHint("SDL_HINT_RENDER_SCALE_QUALITY", enabled) != SDL_TRUE)
+		ERROR_WINDOW("Cannot set scaling to %s: %s", enabled, SDL_GetError());
+}
+#endif
 
 
 static const struct menu_st menu_cpu_clock[] = {
@@ -854,7 +879,12 @@ static const struct menu_st menu_models[] = {
 static const struct menu_st menu_display[] = {
 	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize,		(void*)0	},
 	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize,		(void*)1	},
-	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize,		(void*)2	},
+	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize,		(void*)2	},
+//	{ "Enable scale filtering",	XEMUGUI_MENUID_CALLABLE |
+//					XEMUGUI_MENUFLAG_QUERYBACK,	ui_set_scale_filtering,		NULL		},
+	{ "Enable OSD kbd debug",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_osd_key_debugger,		NULL		},
 	{ NULL }
 };
 static const struct menu_st menu_main[] = {
@@ -868,6 +898,8 @@ static const struct menu_st menu_main[] = {
 	{ "System console",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_sysconsole,		NULL },
 #endif
+	{ "Sound emulation",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_sound,			NULL },
 	{ "About",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_about_window,	NULL },
 	{ "Quit",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_quit_if_sure,	NULL },
 	{ NULL }

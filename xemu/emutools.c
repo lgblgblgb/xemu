@@ -932,8 +932,8 @@ int osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_entries, 
 int osd_init_with_defaults ( void )
 {
 	const Uint8 palette[] = {
-		0x00, 0x00, 0xFF, 0xFF,
-		0xFF, 0xFF, 0xFF, 0xFF
+		0xC0, 0x40, 0x40, 0xFF,
+		0xFF, 0xFF, 0x00, 0xFF
 	};
 	return osd_init(
 		OSD_TEXTURE_X_SIZE, OSD_TEXTURE_Y_SIZE,

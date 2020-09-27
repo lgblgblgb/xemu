@@ -114,7 +114,7 @@ static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[] )
 			((desc[a].type & 0xFF) == XEMUGUI_MENUID_SUBMENU && (desc[a].handler  || !desc[a].user_data)) ||
 			!desc[a].name
 		) {
-			DEBUGPRINT("GUI: invalid meny entry found, skipping it" NL);
+			DEBUGPRINT("GUI: invalid menu entry found, skipping it" NL);
 			continue;
 		}
 		if (xemuwinmenu.num_of_items >= XEMUGUI_MAX_ITEMS)
