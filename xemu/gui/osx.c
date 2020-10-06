@@ -158,5 +158,6 @@ static const struct xemugui_descriptor_st xemuosxgui_descriptor = {
 	NULL,
 	NULL,
 	xemuosxgui_file_selector,
-	xemuosxgui_popup
+	xemuosxgui_popup,
+	NULL
 };

@@ -348,6 +348,54 @@ static int xemugtkgui_popup ( const struct menu_st desc[] )
 }
 
 
+static int  _xemugtkgui_info_window_response;
+static void _xemugtkgui_info_window_response_cb (GtkDialog *dialog, gint response, gpointer user_data)
+{
+	_xemugtkgui_info_window_response = response;
+}
+static int xemugtkgui_info_window ( GtkMessageType msg_class, const char *msg, const char *msg2 )
+{
+	GtkWidget* dialog = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, msg_class, GTK_BUTTONS_OK, "%s", msg);
+	if (msg2 && *msg2)
+		gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog), "%s", msg2);
+	g_signal_connect_swapped(dialog, "response", G_CALLBACK(_xemugtkgui_info_window_response_cb), NULL);
+	_xemugtkgui_info_window_response = 0;
+	gtk_widget_show(dialog);
+	while (!_xemugtkgui_info_window_response) {
+		xemugtkgui_iteration();
+		xemu_drop_events();
+		usleep(100);
+	}
+	gtk_widget_destroy(dialog);
+	xemugtkgui_iteration();
+	return 0;
+}
+static int xemugtkgui_info ( int sdl_class, const char *msg )
+{
+	GtkMessageType msg_class;
+	const char *title;
+	switch (sdl_class) {
+		case SDL_MESSAGEBOX_INFORMATION:
+			title = "Xemu";
+			msg_class = GTK_MESSAGE_INFO;
+			break;
+		case SDL_MESSAGEBOX_WARNING:
+			title = "Xemu warning";
+			msg_class = GTK_MESSAGE_WARNING;
+			break;
+		case SDL_MESSAGEBOX_ERROR:
+			title = "Xemu error";
+			msg_class = GTK_MESSAGE_ERROR;
+			break;
+		default:
+			title = "Xemu ???";
+			msg_class = GTK_MESSAGE_OTHER;
+			break;
+	}
+	return xemugtkgui_info_window(msg_class, title, msg);
+}
+
+
 
 static const struct xemugui_descriptor_st xemugtkgui_descriptor = {
 	"gtk",						// name
@@ -356,5 +404,6 @@ static const struct xemugui_descriptor_st xemugtkgui_descriptor = {
 	xemugtkgui_shutdown,
 	xemugtkgui_iteration,	
 	xemugtkgui_file_selector,	
-	xemugtkgui_popup
+	xemugtkgui_popup,
+	xemugtkgui_info
 };

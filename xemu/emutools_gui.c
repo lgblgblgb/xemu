@@ -56,6 +56,7 @@ struct xemugui_descriptor_st {
 	int	(*iteration)(void);
 	int	(*file_selector)( int dialog_mode, const char *dialog_title, char *default_dir, char *selected, int path_max_size );
 	int	(*popup)( const struct menu_st desc[] );
+	int	(*info)(int sdl_class, const char *msg);
 };
 
 #if defined(XEMU_HAS_GTK3)
@@ -140,6 +141,14 @@ int xemugui_popup ( const struct menu_st desc[] )
 {
 	if (current_gui && current_gui->popup)
 		return current_gui->popup(desc);
+	else
+		return 1;
+}
+
+int xemugui_info ( int sdl_class, const char *msg )
+{
+	if (current_gui && current_gui->info)
+		return current_gui->info(sdl_class, msg);
 	else
 		return 1;
 }

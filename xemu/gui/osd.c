@@ -22,9 +22,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static const struct xemugui_descriptor_st xemuosdgui_descriptor = {
 	"osd",						// name
 	"Not implemented yet using Xemu's OSD layer for GUI ...",		// desc
-	NULL,						// init
-	NULL,						// shutdown
-	NULL,						// iteration
-	NULL,						// file_selector
-	NULL						// popup
+	NULL,		// init
+	NULL,		// shutdown
+	NULL,		// iteration
+	NULL,		// file_selector
+	NULL,		// popup
+	NULL		// info window
 };

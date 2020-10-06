@@ -252,5 +252,6 @@ static const struct xemugui_descriptor_st xemuwingui_descriptor = {
 	NULL,						// shutdown (we don't need shutdown for windows?)
 	NULL,						// iteration (we don't need iteration for windows?)
 	xemuwingui_file_selector,
-	xemuwingui_popup
+	xemuwingui_popup,
+	NULL
 };

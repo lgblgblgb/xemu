@@ -26,5 +26,6 @@ static const struct xemugui_descriptor_st xemunullgui_descriptor = {
 	NULL,						// shutdown
 	NULL,						// iteration
 	NULL,						// file_selector
-	NULL						// xemugtkgui
+	NULL,						// xemugtkgui
+	NULL
 };

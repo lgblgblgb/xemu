@@ -261,7 +261,7 @@ static void osd_key_debugger ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, hid_show_osd_keys);
 	hid_show_osd_keys = !hid_show_osd_keys;
-	OSD(-1, -1, "OSD key debugger has been %sABLED", hid_show_osd_keys ? "EN" : "DOS");
+	OSD(-1, -1, "OSD key debugger has been %sABLED", hid_show_osd_keys ? "EN" : "DIS");
 }
 
 static void enable_mouse_grab ( const struct menu_st *m, int *query )

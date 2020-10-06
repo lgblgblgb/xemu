@@ -73,6 +73,7 @@ extern int  xemugui_iteration		( void );
 extern int  xemugui_file_selector	( int dialog_mode, const char *dialog_title, char *default_dir, char *selected, int path_max_size );
 
 extern int  xemugui_popup		( const struct menu_st desc[] );
+extern int  xemugui_info                ( int sdl_class, const char *msg );
 
 extern void xemugui_cb_call_user_data		( const struct menu_st *m, int *query );
 extern void xemugui_cb_call_user_data_if_sure	( const struct menu_st *m, int *query );
