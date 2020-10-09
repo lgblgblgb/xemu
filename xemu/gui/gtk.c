@@ -54,6 +54,8 @@ static int xemugtkgui_iteration ( void )
 
 static void xemugtkgui_shutdown ( void );
 
+static int SDL_ShowSimpleMessageBox_xemuguigtk ( Uint32 flags, const char *title, const char *message, SDL_Window *window );
+
 static int xemugtkgui_init ( void )
 {
 	is_xemugui_ok = 0;
@@ -68,8 +70,12 @@ static int xemugtkgui_init ( void )
 	xemugtkmenu.num_of_menus = 0;
 	_gtkgui_active = 2;
 	int n = xemugtkgui_iteration();
-	DEBUGGUI("GUI: GTK3 initialized, %d iterations." NL, n);	// consume possible pending (if any?) GTK stuffs after initialization - maybe not needed at all?
+	DEBUGPRINT("GUI: GTK3 initialized, %d iterations." NL, n);	// consume possible pending (if any?) GTK stuffs after initialization - maybe not needed at all?
 	atexit(xemugtkgui_shutdown);
+#ifndef XEMU_NO_SDL_DIALOG_OVERRIDE
+	// override callback for SDL_ShowSimpleMessageBox_custom to be implemented by GTK, from this point
+	SDL_ShowSimpleMessageBox_custom = SDL_ShowSimpleMessageBox_xemuguigtk;
+#endif
 	return 0;
 }
 
@@ -356,18 +362,22 @@ static void _xemugtkgui_info_window_response_cb (GtkDialog *dialog, gint respons
 static int xemugtkgui_info_window ( GtkMessageType msg_class, const char *msg, const char *msg2 )
 {
 	GtkWidget* dialog = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, msg_class, GTK_BUTTONS_OK, "%s", msg);
+	if (!dialog)
+		return 1;
 	if (msg2 && *msg2)
 		gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog), "%s", msg2);
 	g_signal_connect_swapped(dialog, "response", G_CALLBACK(_xemugtkgui_info_window_response_cb), NULL);
 	_xemugtkgui_info_window_response = 0;
 	gtk_widget_show(dialog);
 	while (!_xemugtkgui_info_window_response) {
-		xemugtkgui_iteration();
+		while (gtk_events_pending())
+			gtk_main_iteration();
+		usleep(10000);
 		xemu_drop_events();
-		usleep(100);
 	}
 	gtk_widget_destroy(dialog);
-	xemugtkgui_iteration();
+	while (gtk_events_pending())
+		gtk_main_iteration();
 	return 0;
 }
 static int xemugtkgui_info ( int sdl_class, const char *msg )
@@ -395,7 +405,22 @@ static int xemugtkgui_info ( int sdl_class, const char *msg )
 	return xemugtkgui_info_window(msg_class, title, msg);
 }
 
-
+#ifndef XEMU_NO_SDL_DIALOG_OVERRIDE
+static int SDL_ShowSimpleMessageBox_xemuguigtk ( Uint32 flags, const char *title, const char *message, SDL_Window *window )
+{
+	if (is_xemugui_ok) {
+		if (!xemugtkgui_info(flags, message))
+			return 0;
+		else
+			DEBUGPRINT("GUI: SDL_ShowSimpleMessageBox_xemuguigtk() has problems, reverting to SDL_ShowSimpleMessageBox()" NL);
+	} else
+		DEBUGPRINT("GUI: not initialized yet, SDL_ShowSimpleMessageBox_xemuguigtk() reverts to SDL_ShowSimpleMessageBox()" NL);
+	if (!SDL_ShowSimpleMessageBox(flags, title, message, window))
+		return 0;
+	DEBUGPRINT("GUI: SDL_ShowSimpleMessageBox() error: %s" NL, SDL_GetError());
+	return -1;
+}
+#endif
 
 static const struct xemugui_descriptor_st xemugtkgui_descriptor = {
 	"gtk",						// name

@@ -19,3 +19,6 @@
 #endif
 
 #define CONFIG_EMSCRIPTEN_OK
+
+// EP128 is not well integrated into Xemu framework, we need this:
+#define XEMU_NO_SDL_DIALOG_OVERRIDE

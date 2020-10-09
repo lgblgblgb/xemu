@@ -38,6 +38,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/osd_font_16x16.c"
 
+#ifndef XEMU_NO_SDL_DIALOG_OVERRIDE
+int (*SDL_ShowSimpleMessageBox_custom)(Uint32, const char*, const char*, SDL_Window* ) = SDL_ShowSimpleMessageBox;
+#endif
+
 #ifdef XEMU_ARCH_MAC
 int macos_gui_started = 0;
 #endif

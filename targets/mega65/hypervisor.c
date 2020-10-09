@@ -246,7 +246,7 @@ void hypervisor_leave ( void )
 			);
 			cpu65.pc = new_pc;
 		} else
-			DEBUGPRINT("MEM: no force ROM re-apply policy was requested" NL);
+			DEBUGPRINT("MEM: no forced ROM re-apply policy was requested" NL);
 		dma_init_set_rev(xemucfg_get_num("dmarev"), main_ram + 0x20000 + 0x16);
 	}
 	if (XEMU_UNLIKELY(hypervisor_queued_trap >= 0)) {
