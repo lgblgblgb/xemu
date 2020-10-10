@@ -112,7 +112,7 @@ static int xemuosxgui_popup ( const struct menu_st desc[] )
 static int xemuosxgui_file_selector ( int dialog_mode, const char *dialog_title, char *default_dir, char *selected, int path_max_size )
 {
 	switch (dialog_mode & 3) {
-		case XEMUGUI_FSEL_OPEN:
+		case XEMUGUI_FSEL_OPEN:	// that's OK, this is till now the only implemented mode on MacOS -> TODO
 			break;
 		case XEMUGUI_FSEL_SAVE:
 			ERROR_WINDOW("Sorry, save functionality is not yet implemented in the MacOS port!");
@@ -152,12 +152,12 @@ static int xemuosxgui_file_selector ( int dialog_mode, const char *dialog_title,
 
 
 static const struct xemugui_descriptor_st xemuosxgui_descriptor = {
-	"macos",					// name
-	"macOS native API Xemu UI implementation",	// desc
-	xemuosxgui_init,
-	NULL,
-	NULL,
-	xemuosxgui_file_selector,
-	xemuosxgui_popup,
-	NULL
+	.name		= "macos",
+	.description	= "MacOS native API Xemu UI implementation",
+	.init		= xemuosxgui_init,
+	.shutdown	= NULL,
+	.iteration	= NULL,
+	.file_selector	= xemuosxgui_file_selector,
+	.popup		= xemuosxgui_popup,
+	.info		= NULL
 };

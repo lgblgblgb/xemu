@@ -246,12 +246,12 @@ static int xemuwingui_popup ( const struct menu_st desc[] )
 
 
 static const struct xemugui_descriptor_st xemuwingui_descriptor = {
-	"windows",					// name
-	"Windows API based Xemu UI implementation",	// desc
-	xemuwingui_init,
-	NULL,						// shutdown (we don't need shutdown for windows?)
-	NULL,						// iteration (we don't need iteration for windows?)
-	xemuwingui_file_selector,
-	xemuwingui_popup,
-	NULL
+	.name		= "windows",
+	.description	= "Windows API based Xemu UI implementation",
+	.init		= xemuwingui_init,
+	.shutdown	= NULL,	// we don't need shutdown for windows?
+	.iteration	= NULL,	// we don't need iteration for windows?
+	.file_selector	= xemuwingui_file_selector,
+	.popup		= xemuwingui_popup,
+	.info		= NULL
 };

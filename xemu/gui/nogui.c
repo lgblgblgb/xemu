@@ -20,12 +20,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 static const struct xemugui_descriptor_st xemunullgui_descriptor = {
-	"none",						// name
-	"Not using GUI - the null GUI :)",		// desc
-	NULL,						// init
-	NULL,						// shutdown
-	NULL,						// iteration
-	NULL,						// file_selector
-	NULL,						// xemugtkgui
-	NULL
+	.name		= "none",
+	.description	= "Not using GUI - the null GUI :)",
+	.init		= NULL,
+	.shutdown	= NULL,
+	.iteration	= NULL,
+	.file_selector	= NULL,
+	.popup		= NULL,
+	.info		= NULL
 };

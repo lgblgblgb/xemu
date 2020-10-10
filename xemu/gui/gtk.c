@@ -18,6 +18,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* ------------------ LINUX/UNIX STUFFS based on GTK --------------- */
 
+
+/* Note: this whole stuff is very confusing. This is because GTK makes it very
+   hard to be used as some 'aux lib' and not the main heart of the project.
+   so many dirty things must be played, and even this way you'll get stupid
+   GTK messages even during run-time, like dialog boxes without parent, sure
+   I have NO parent, why it is so important to tell (as parent window is SDL
+   not GTK ..) */
+
 #include <gtk/gtk.h>
 
 #define USE_OLD_GTK_POPUP
@@ -91,11 +99,44 @@ static void xemugtkgui_shutdown ( void )
 }
 
 
-static GtkFileChooserConfirmation xemugtkgui_confirm_overwrite ( GtkFileChooser *chooser, gpointer data )
-{
-	return GTK_FILE_CHOOSER_CONFIRMATION_CONFIRM;   // use the default dialog
+static int _gtkgui_bgtask_running_want = 0;
+static int _gtkgui_bgtask_running_status = 0;
+static int _gtkgui_bgtask_callback ( void *unused ) {
+	// This is the whole point of this g_timeout_add callback:
+	// to have something receives SDL (!!) events while GTK is blocking,
+	// thus like X11 Window System would not yell about our main SDL app being dead ...
+	xemu_drop_events();
+	if (_gtkgui_bgtask_running_want) {
+		_gtkgui_bgtask_running_status = 1;
+		DEBUGPRINT("GUI: bgtask is active" NL);
+		return TRUE;
+	} else {
+		_gtkgui_bgtask_running_status = 0;
+		DEBUGPRINT("GUI: bgtask is inactive" NL);
+		return FALSE;	// returning FALSE will cause GTK/GLIB to remove the callback of g_timeout_add()
+	}
+}
+static void _gtkgui_bgtask_set ( void ) {
+	if (_gtkgui_bgtask_running_want)
+		return;
+	_gtkgui_bgtask_running_want = 1;
+	_gtkgui_bgtask_running_status = 1;
+	g_timeout_add(100, _gtkgui_bgtask_callback, NULL);	// set callback, first arg: 1/1000th of seconds
+}
+static void _gtkgui_bgtask_clear ( void ) {
+	if (!_gtkgui_bgtask_running_want)
+		return;
+	_gtkgui_bgtask_running_want = 0;
+	while (_gtkgui_bgtask_running_status || gtk_events_pending()) {
+		gtk_main_iteration();
+		usleep(10000);
+	}
 }
 
+
+static GtkFileChooserConfirmation xemugtkgui_confirm_overwrite ( GtkFileChooser *chooser, gpointer data ) {
+	return GTK_FILE_CHOOSER_CONFIRMATION_CONFIRM;   // use the default dialog
+}
 
 // Currently it's a "blocking" implemtation, unlike to pop-up menu
 static int xemugtkgui_file_selector ( int dialog_mode, const char *dialog_title, char *default_dir, char *selected, int path_max_size )
@@ -134,7 +175,9 @@ static int xemugtkgui_file_selector ( int dialog_mode, const char *dialog_title,
 		gtk_file_chooser_set_do_overwrite_confirmation(GTK_FILE_CHOOSER(dialog), TRUE);
 		g_signal_connect(dialog, "confirm-overwrite", G_CALLBACK(xemugtkgui_confirm_overwrite), NULL);
 	}
+	_gtkgui_bgtask_set();
 	gint res = gtk_dialog_run(GTK_DIALOG(dialog));
+	_gtkgui_bgtask_clear();
 	if (res == GTK_RESPONSE_ACCEPT) {
 		char *filename;
 		filename = gtk_file_chooser_get_filename(GTK_FILE_CHOOSER(dialog));
@@ -152,6 +195,8 @@ static int xemugtkgui_file_selector ( int dialog_mode, const char *dialog_title,
 	_gtkgui_active = 2;
 	return res != GTK_RESPONSE_ACCEPT;
 }
+
+
 
 
 static void _gtkgui_destroy_menu ( void )
@@ -283,6 +328,8 @@ static void _gtkgui_disappear ( const char *signal_name )
 #include <SDL_syswm.h>
 static GdkWindow *super_ugly_gtk_hack ( void )
 {
+	if (!sdl_win)
+		return NULL;
 	SDL_SysWMinfo info;
 	SDL_VERSION(&info.version);
 	SDL_GetWindowWMInfo(sdl_win, &info);
@@ -301,7 +348,7 @@ static GdkWindow *super_ugly_gtk_hack ( void )
 		gdisp,
 		info.info.x11.window
 	);
-	DEBUGGUI("GUI: gwin = %p" NL, gwin);
+	DEBUGPRINT("GUI: gwin = %p" NL, gwin);
 	return gwin;
 }
 #endif
@@ -354,11 +401,12 @@ static int xemugtkgui_popup ( const struct menu_st desc[] )
 }
 
 
+#if 0
 static int  _xemugtkgui_info_window_response;
-static void _xemugtkgui_info_window_response_cb (GtkDialog *dialog, gint response, gpointer user_data)
-{
+static void _xemugtkgui_info_window_response_cb (GtkDialog *dialog, gint response, gpointer user_data) {
 	_xemugtkgui_info_window_response = response;
 }
+#endif
 static int xemugtkgui_info_window ( GtkMessageType msg_class, const char *msg, const char *msg2 )
 {
 	GtkWidget* dialog = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, msg_class, GTK_BUTTONS_OK, "%s", msg);
@@ -366,6 +414,10 @@ static int xemugtkgui_info_window ( GtkMessageType msg_class, const char *msg, c
 		return 1;
 	if (msg2 && *msg2)
 		gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog), "%s", msg2);
+	_gtkgui_bgtask_set();
+	gtk_dialog_run(GTK_DIALOG(dialog));
+	_gtkgui_bgtask_clear();
+#if 0
 	g_signal_connect_swapped(dialog, "response", G_CALLBACK(_xemugtkgui_info_window_response_cb), NULL);
 	_xemugtkgui_info_window_response = 0;
 	gtk_widget_show(dialog);
@@ -375,6 +427,7 @@ static int xemugtkgui_info_window ( GtkMessageType msg_class, const char *msg, c
 		usleep(10000);
 		xemu_drop_events();
 	}
+#endif
 	gtk_widget_destroy(dialog);
 	while (gtk_events_pending())
 		gtk_main_iteration();
@@ -423,12 +476,12 @@ static int SDL_ShowSimpleMessageBox_xemuguigtk ( Uint32 flags, const char *title
 #endif
 
 static const struct xemugui_descriptor_st xemugtkgui_descriptor = {
-	"gtk",						// name
-	"GTK3 based Xemu UI implementation",		// desc
-	xemugtkgui_init,
-	xemugtkgui_shutdown,
-	xemugtkgui_iteration,	
-	xemugtkgui_file_selector,	
-	xemugtkgui_popup,
-	xemugtkgui_info
+	.name		= "gtk",
+	.description	= "GTK3 based Xemu UI implementation",
+	.init		= xemugtkgui_init,
+	.shutdown	= xemugtkgui_shutdown,
+	.iteration	= xemugtkgui_iteration,
+	.file_selector	= xemugtkgui_file_selector,
+	.popup		= xemugtkgui_popup,
+	.info		= xemugtkgui_info
 };
