@@ -1,6 +1,6 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2015-2017,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,7 +18,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #include "xep128.h"
-#include "main.h"
+#include "enterprise128.h"
 #include "dave.h"
 #include "nick.h"
 #include "configuration.h"
@@ -39,7 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "rtc.h"
 #include "fileio.h"
 #include "xemu/z80.h"
-#include "gui.h"
+#include "xemu/emutools_gui.h"
 #include "snapshot.h"
 
 #include <string.h>
@@ -366,7 +366,7 @@ static void __emu_one_frame(int rasters, int frameskip)
 		}
 	if (!frameskip)
 		screen_present_frame(ep_pixels);	// this should be after the event handler, as eg screenshot function needs locked texture state if this feature is used at all
-	xepgui_iteration();
+	xemugui_iteration();
 	monitor_process_queued();
 	emu_timekeeping_delay((1000000.0 * rasters * 57.0) / (double)NICK_SLOTS_PER_SEC);
 }
@@ -463,9 +463,9 @@ int main (int argc, char *argv[])
 	"files");
 	if (screen_init())
 		return 1;
-	//if (xepgui_init(NULL))
+	//if (xemugui_init(NULL))
 	//	return 1;
-	xepgui_init(NULL);	// allow to fail (do not exit if it fails). Some targets may not have X running
+	xemugui_init(NULL);	// allow to fail (do not exit if it fails). Some targets may not have X running
 	audio_init(config_getopt_int("audio"));
 	z80ex_init();
 	set_ep_cpu(CPU_Z80);

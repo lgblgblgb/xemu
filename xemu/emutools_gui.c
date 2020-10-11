@@ -16,9 +16,17 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 // FIXME: very ugly hack for ep128 emulator which uses its own implemtnation of things still ...
-#ifndef DO_NOT_INCLUDE_EMUTOOLS
+#ifdef EMUTOOLS_GUI_INCLUDE_HACK
+#include EMUTOOLS_GUI_INCLUDE_HACK
+#else
 #include "xemu/emutools.h"
 #endif
+
+//#ifndef DO_NOT_INCLUDE_EMUTOOLS
+//#include "xemu/emutools.h"
+//#else
+//#include "xemu/emutools_basicdefs.h"
+//#endif
 
 #include "xemu/emutools_gui.h"
 #include <string.h>
@@ -44,7 +52,7 @@ static void store_dir_from_file_selection ( char *store_dir, const char *filenam
 #endif
 
 // FIXME: ugly hack again, see above ...
-#ifndef DO_NOT_INCLUDE_EMUTOOLS
+#ifndef EMUTOOLS_GUI_INCLUDE_HACK
 #include "xemu/gui/popular_user_funcs.c"
 #endif
 

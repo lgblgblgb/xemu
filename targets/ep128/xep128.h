@@ -1,6 +1,6 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2015-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMU_EP128_XEP128_H_INCLUDED
 
 #include "xemu/emutools_basicdefs.h"
+#include <SDL.h>
 
 #define VARALIGN	MAXALIGNED
 #define	XEPEXIT(n)	XEMUEXIT(n)
@@ -49,7 +50,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define DESCRIPTION		"Enterprise-128 Emulator"
 #define WINDOW_TITLE		"Xep128"
 #define VERSION			"0.4"
-#define COPYRIGHT		"(C)2015,2016,2020 LGB Gabor Lenart"
+#define COPYRIGHT		"(C)2014-2016,2020 LGB Gabor Lenart"
 #define PROJECT_PAGE		"http://xep128.lgb.hu/"
 
 #define CONFIG_USE_LODEPNG
@@ -69,6 +70,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 //#define ERRSTR()		sys_errlist[errno]
 #define ERRSTR()		strerror(errno)
 
+// ugly hack till better Xemu integration
+extern void sdl_burn_events ( void );
+#define xemu_drop_events sdl_burn_events
+extern SDL_Window *sdl_win;
+// end of ugly hack.
 
 extern FILE *debug_fp;
 #if 0

@@ -4,7 +4,7 @@ This is an on-going effort to try to integrate my (separeted) Xep128 project
 into Xemu. Note: this emulation target in Xemu is highly different from others,
 ie doing many things on its own. This will change slowly however.
 
-Original (not so much maintained in the future) repository:
+Original (not maintained any more, just for archive purposes!) repository:
 
 https://github.com/lgblgblgb/xep128
 

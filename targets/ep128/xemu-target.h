@@ -22,3 +22,7 @@
 
 // EP128 is not well integrated into Xemu framework, we need this:
 #define XEMU_NO_SDL_DIALOG_OVERRIDE
+// FIXME: very ugly hack, EP128 emulator sill uses its own things, we have to deal with ...
+//#define DO_NOT_INCLUDE_EMUTOOLS
+
+#define EMUTOOLS_GUI_INCLUDE_HACK "xep128.h"
