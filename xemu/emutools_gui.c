@@ -15,12 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-// FIXME: very ugly hack for ep128 emulator which uses its own implemtnation of things still ...
-#ifdef EMUTOOLS_GUI_INCLUDE_HACK
-#	include EMUTOOLS_GUI_INCLUDE_HACK
-#else
-#	include "xemu/emutools.h"
-#endif
+#include "xemu/emutools.h"
 #include "xemu/emutools_gui.h"
 #include <string.h>
 
@@ -44,10 +39,7 @@ static void store_dir_from_file_selection ( char *store_dir, const char *filenam
 }
 #endif
 
-// FIXME: ugly hack again, see above ...
-#ifndef EMUTOOLS_GUI_INCLUDE_HACK
-#	include "xemu/gui/popular_user_funcs.c"
-#endif
+#include "xemu/gui/popular_user_funcs.c"
 
 struct xemugui_descriptor_st {
 	const char *name;
