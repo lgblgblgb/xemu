@@ -207,8 +207,7 @@ int ep_init_ram ( void )
 				DEBUGPRINT("CONFIG: MEM: %s" NL, dbuf);
 				strcat(dbuf, "\n");
 				s = mem_desc ? strlen(mem_desc) : 0;
-				mem_desc = realloc(mem_desc, s + strlen(dbuf) + 256);
-				CHECK_MALLOC(mem_desc);
+				mem_desc = xemu_realloc(mem_desc, s + strlen(dbuf) + 256);
 				if (!s)
 					*mem_desc = '\0';
 				strcat(mem_desc, dbuf);

@@ -27,7 +27,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "configuration.h"
 #include "emu_rom_interface.h"
 #include "fileio.h"
-#include "screen.h"
 #include "console.h"
 #include "nick.h"
 #include "input.h"
@@ -521,7 +520,7 @@ static void cmd_lpt ( void )
 static void cmd_pause ( void )
 {
 	paused = !paused;
-	OSD("Emulation %s", paused ? "paused" : "resumed");
+	OSD(-1, -1, "Emulation %s", paused ? "paused" : "resumed");
 }
 
 
@@ -556,6 +555,7 @@ static void cmd_sdl ( void )
 			MPRINTF("Display #%d %dx%dpx @ %dHz %i bpp (%s)\n", a, display.w, display.h, display.refresh_rate,
 				SDL_BITSPERPIXEL(display.format), SDL_GetPixelFormatName(display.format)
 			);
+#if 0
 	switch (sdl_wminfo.subsystem) {
 		default:
 		case SDL_SYSWM_UNKNOWN:
@@ -578,6 +578,10 @@ static void cmd_sdl ( void )
 		subsystem,
 		sdl_wminfo.subsystem
 	);
+#else
+	subsystem = "FIXME";
+	MPRINTF(WINDOW_TITLE " is FIXME");
+#endif
 }
 
 
@@ -605,12 +609,12 @@ static void cmd_cd ( void )
 		char *r_scwd = getcwd(cwd_old, PATH_MAX);	// Save working directory
 		int r;
 		if (chdir(fileio_cwd))	// set old FILE: dir
-			r = chdir(DIRSEP);
+			r = chdir(DIRSEP_STR);
 		r_cd = chdir(arg);	// do the CD - maybe relative - to the old one
 		if (!r_cd) {
 			if (getcwd(fileio_cwd, PATH_MAX)) { // store result directory as new FILE: dir
-				if (fileio_cwd[strlen(fileio_cwd) - 1] != DIRSEP[0])
-					strcat(fileio_cwd, DIRSEP);
+				if (fileio_cwd[strlen(fileio_cwd) - 1] != DIRSEP_STR[0])
+					strcat(fileio_cwd, DIRSEP_STR);
 			}
 		}
 		if (!r_scwd)
@@ -644,7 +648,7 @@ static void cmd_dir ( void )
 		struct stat st;
 		if (entry->d_name[0] == '.')
 			continue;
-		if (CHECK_SNPRINTF(snprintf(fn, sizeof fn, "%s%s%s", fileio_cwd, DIRSEP, entry->d_name), sizeof fn))
+		if (CHECK_SNPRINTF(snprintf(fn, sizeof fn, "%s%s%s", fileio_cwd, DIRSEP_STR, entry->d_name), sizeof fn))
 			continue;
 		if (!stat(fn, &st)) {
 			char size_info[10];

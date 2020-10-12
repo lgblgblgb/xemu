@@ -131,8 +131,7 @@ int roms_load ( void )
 				return -1;
 			}
 			DEBUG("CONFIG: ROM: ... file path is %s" NL, path);
-			rom_name_tab[seg] = SDL_strdup(path);
-			CHECK_MALLOC(rom_name_tab[seg]);
+			rom_name_tab[seg] = xemu_strdup(path);
 			for (;;) {
 				int ret;
 				// Note: lseg overflow is not needed to be tested, as VRAM marks will stop reading of ROM image in the worst case ...

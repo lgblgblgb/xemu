@@ -25,7 +25,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sdext.h"
 #include "exdos_wd.h"
 #include "roms.h"
-#include "screen.h"
 #include "input.h"
 #include "cpu.h"
 #include "primoemu.h"
@@ -50,24 +49,23 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <unistd.h>
 
 
-static Uint32 *ep_pixels;
+//static Uint32 *ep_pixels;
 static const int _cpu_speeds[4] = { 4000000, 6000000, 7120000, 10000000 };
 static int _cpu_speed_index = 0;
 static int guarded_exit = 0;
 static unsigned int ticks;
 int paused = 0;
 static int cpu_cycles_for_dave_sync = 0;
-static int td_balancer;
-static Uint64 et_start, et_end;
-static int td_em_ALL = 0, td_pc_ALL = 0, td_count_ALL = 0;
+//static int td_balancer;
+//static Uint64 et_start, et_end;
+//static int td_em_ALL = 0, td_pc_ALL = 0, td_count_ALL = 0;
 static double balancer;
 static double SCALER;
 static int sram_ready = 0;
 time_t unix_time;
 
-int chatty_xemu = 1;	// needed by the ugly mix of old Xep128 solutions and newer Xemu headers :-O
 
-
+#if 0
 /* Ugly indeed, but it seems some architecture/OS does not support "standard"
    aligned allocations or give strange error codes ... Note: this one only
    works, if you don't want to free() the result pointer!! */
@@ -82,10 +80,10 @@ void *alloc_xep_aligned_mem ( size_t size )
 	return p;
 #endif
 }
+#endif
 
 
-
-void shutdown_sdl(void)
+static void shutdown_callback(void)
 {
 	if (guarded_exit) {
 		audio_close();
@@ -100,153 +98,23 @@ void shutdown_sdl(void)
 			sram_save_all_segments();
 		DEBUGPRINT("Shutdown callback, return." NL);
 	}
-	if (sdl_win) {
-#ifdef __EMSCRIPTEN__
-		// This is used, because window title would remain as Emu would run after exit, which is not the case ...
-		SDL_SetWindowTitle(sdl_win, WINDOW_TITLE " v" VERSION " - EXITED");
-#endif
-		SDL_DestroyWindow(sdl_win);
-	}
 	console_close_window_on_exit();
-	/* last stuff! */
-	if (debug_fp) {
-		DEBUGPRINT("Closing debug messages log file on exit." NL);
-		fclose(debug_fp);
-		debug_fp = NULL;
-	}
-	SDL_Quit();
 }
 
 
 
-static int get_elapsed_time ( Uint64 t_old, Uint64 *t_new, time_t *store_unix_time )
+
+
+
+
+
+
+
+void clear_emu_events ( void )
 {
-#ifdef XEMU_OLD_TIMING
-#define __TIMING_METHOD_DESC "gettimeofday"
-	struct timeval tv;
-	gettimeofday(&tv, NULL);
-	if (store_unix_time)
-		*store_unix_time = tv.tv_sec;
-	*t_new = tv.tv_sec * 1000000UL + tv.tv_usec;
-	return *t_new - t_old;
-#else
-#define __TIMING_METHOD_DESC "SDL_GetPerformanceCounter"
-	if (store_unix_time)
-		*store_unix_time = time(NULL);
-	*t_new = SDL_GetPerformanceCounter();
-	return 1000000 * (*t_new - t_old) / SDL_GetPerformanceFrequency();
-#endif
+	//hid_reset_events(1);
 }
 
-
-
-static inline void emu_sleep ( int td )
-{
-	if (td <= 0)
-		return;
-#ifdef __EMSCRIPTEN__
-#define __SLEEP_METHOD_DESC "emscripten_set_main_loop_timing"
-	// If too short period of sleep (not enough for 1ms), give some time for browser to run
-	// to avoid the "stop the script" warning or so ...
-	// For Js, it's not really a sleep what name would mean for function (emu_sleep) but
-	// rather then a setTimeout value for the handler
-	emscripten_set_main_loop_timing(EM_TIMING_SETTIMEOUT, td > 999 ? td / 1000 : 1);
-#elif defined(XEMU_SLEEP_IS_SDL_DELAY)
-#define __SLEEP_METHOD_DESC "SDL_Delay"
-	SDL_Delay(td / 1000);
-#elif defined(XEMU_SLEEP_IS_USLEEP)
-#define __SLEEP_METHOD_DESC "usleep"
-	usleep(td);
-#else
-#define __SLEEP_METHOD_DESC "nanosleep"
-	struct timespec req, rem;
-	td *= 1000;
-	req.tv_sec  = td / 1000000000UL;
-	req.tv_nsec = td % 1000000000UL;
-	for (;;) {
-		if (nanosleep(&req, &rem)) {
-			if (errno == EINTR) {
-				req.tv_sec = rem.tv_sec;
-				req.tv_nsec = rem.tv_nsec;
-			} else {
-				ERROR_WINDOW("Nanosleep() returned with unhandlable error");
-				return;
-			}
-		} else
-			return;
-	}
-#endif
-}
-
-
-
-static void emu_timekeeping_check ( void )
-{
-	// check how much time we slept, initiated by last call of emu_timekeeping_delay()
-	// we also store current UT in "unix_time" to be used by emulator (ie, RTC emulation)
-	int td = get_elapsed_time(et_end, &et_start, &unix_time);
-	if (td >= 0)			// td should be greater than zero or sleep was about for _minus_ time? eh, give me that time machine, dude! :)
-		td_balancer -= td;	// time-difference balancer, decrease with time slept
-	else
-		DEBUG("TIMING: negative amount of time spent for sleeping?!" NL);
-	rtc_update_trigger = 1;
-}
-
-
-
-
-/* This is the emulation timing stuff
- * Should be called at the END of the emulation loop.
- * Input parameter: microseconds needed for the "real" (emulated) computer to do our loop 
- * This function also does the sleep itself */
-static void emu_timekeeping_delay ( int td_em )
-{
-	int td, td_pc = get_elapsed_time(et_start, &et_end, NULL);	// the time was needed for our emulation loop
-	if (td_pc < 0) {
-		DEBUG("TIMING: negative amount of time spent for an emulation loop?!" NL);
-		td = 0;
-	} else
-		td = td_em - td_pc; // the time difference (+X = PC is faster - real time EP emulation, -X = EP is faster - real time EP emulation is not possible)
-	DEBUG("DELAY: pc=%d em=%d sleep=%d" NL, td_pc, td_em, td);
-	/* for reporting only: BEGIN */
-	td_em_ALL += td_em;
-	td_pc_ALL += td_pc;
-	if (td_count_ALL == 50) {
-		char buf[256];
-		//DEBUG("STAT: count = %d, EM = %d, PC = %d, usage = %f%" NL, td_count_ALL, td_em_ALL, td_pc_ALL, 100.0 * (double)td_pc_ALL / (double)td_em_ALL);
-		snprintf(buf, sizeof buf, "%s [%.2fMHz ~ %d%%]%s", WINDOW_TITLE " v" VERSION " ",
-			CPU_CLOCK / 1000000.0,
-			td_em_ALL ? (td_pc_ALL * 100 / td_em_ALL) : -1,
-			paused ? " PAUSED" : ""
-		);
-		SDL_SetWindowTitle(sdl_win, buf);
-		td_count_ALL = 0;
-		td_pc_ALL = 0;
-		td_em_ALL = 0;
-	} else
-		td_count_ALL++;
-	/* for reporting only: END */
-	td_balancer += td;
-	/* insane time-diff balancer values ... */
-	if (td_balancer >  1000000 || td_balancer < -1000000)
-		td_balancer = 0;
-	DEBUG("Balancer = %d" NL, td_balancer);
-	// Should be the last, as with Emscripten, it's not a real sleep, but the settimeout JS stuff ...
-	emu_sleep(td_balancer);
-}
-
-
-
-
-/* Should be started on each time, emulation is started/resumed (ie after any delay in emulation like pause, etc)
- * You DO NOT need this during the active emulation loop! */
-void emu_timekeeping_start ( void )
-{
-	(void)get_elapsed_time(0, &et_start, &unix_time);
-	et_end = et_start;
-	td_balancer = 0;
-	rtc_update_trigger = 1;
-}
 
 
 
@@ -266,7 +134,7 @@ int set_cpu_clock ( int hz )
 int set_cpu_clock_with_osd ( int hz )
 {
 	hz = set_cpu_clock(hz);
-	OSD("CPU speed: %.2f MHz", hz / 1000000.0);
+	OSD(-1, -1, "CPU speed: %.2f MHz", hz / 1000000.0);
 	return hz;
 }
 
@@ -288,6 +156,7 @@ static void __emu_one_frame(int rasters, int frameskip)
 	SDL_Event e;
 	while (SDL_PollEvent(&e) != 0)
 		switch (e.type) {
+#if 0
 			case SDL_WINDOWEVENT:
 				if (!is_fullscreen && e.window.event == SDL_WINDOWEVENT_RESIZED) {
 					DEBUG("UI: Window is resized to %d x %d" NL,
@@ -297,6 +166,7 @@ static void __emu_one_frame(int rasters, int frameskip)
 					screen_window_resized(e.window.data1, e.window.data2);
 				}
 				break;
+#endif
 			case SDL_QUIT:
 				if (QUESTION_WINDOW("?No|!Yes", "Are you sure to exit?") == 1)
 					XEMUEXIT(0);
@@ -305,21 +175,23 @@ static void __emu_one_frame(int rasters, int frameskip)
 			case SDL_KEYUP:
 				if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0)) {
 					int code = emu_kbd(e.key.keysym, e.key.state == SDL_PRESSED);
-					if (code == 0xF9)		// // OSD REPLAY, default key GRAVE
-						osd_replay(e.key.state == SDL_PRESSED ? 0 : OSD_FADE_START);
-					else if (code && e.key.state == SDL_PRESSED)
+					//if (code == 0xF9)		// // OSD REPLAY, default key GRAVE
+					//	osd_replay(e.key.state == SDL_PRESSED ? 0 : OSD_FADE_START);
+					//else
+					if (code && e.key.state == SDL_PRESSED)
 						switch(code) {
 #ifndef __EMSCRIPTEN__
 							case 0xFF:	// FULLSCREEN toogle, default key F11
-								screen_set_fullscreen(!is_fullscreen);
+								//screen_set_fullscreen(!is_fullscreen);
+								xemu_set_full_screen(-1);
 								break;
 							case 0xFE:	// EXIT, default key F9
 								if (QUESTION_WINDOW("?No|!Yes", "Are you sure to exit?") == 1)
 									XEMUEXIT(0);
 								break;
-							case 0xFD:	// SCREENSHOT, default key F10
-								screen_shot(ep_pixels, current_directory, "screenshot-*.png");
-								break;
+							//case 0xFD:	// SCREENSHOT, default key F10
+							//	screen_shot(ep_pixels, current_directory, "screenshot-*.png");
+							//	break;
 #endif
 							case 0xFC:	// RESET, default key PAUSE
 								if (e.key.keysym.mod & (KMOD_LSHIFT | KMOD_RSHIFT)) {
@@ -364,11 +236,13 @@ static void __emu_one_frame(int rasters, int frameskip)
 				joy_sdl_event(&e);
 				break;
 		}
-	if (!frameskip)
-		screen_present_frame(ep_pixels);	// this should be after the event handler, as eg screenshot function needs locked texture state if this feature is used at all
+	if (!frameskip) {
+		//screen_present_frame(ep_pixels);	// this should be after the event handler, as eg screenshot function needs locked texture state if this feature is used at all
+		xemu_update_screen();
+	}
 	xemugui_iteration();
 	monitor_process_queued();
-	emu_timekeeping_delay((1000000.0 * rasters * 57.0) / (double)NICK_SLOTS_PER_SEC);
+	xemu_timekeeping_delay((1000000.0 * rasters * 57.0) / (double)NICK_SLOTS_PER_SEC);
 }
 
 
@@ -376,7 +250,8 @@ static void __emu_one_frame(int rasters, int frameskip)
 
 static void xep128_emulation ( void )
 {
-	emu_timekeeping_check();
+	//emu_timekeeping_check();
+	rtc_update_trigger = 1;
 	for (;;) {
 		int t;
 		if (XEMU_UNLIKELY(paused && !z80ex.prefix)) {
@@ -431,19 +306,22 @@ static void xep128_emulation ( void )
 
 int main (int argc, char *argv[])
 {
-	const char *snapshot;
-	atexit(shutdown_sdl);
-	if (SDL_Init(
-#ifdef __EMSCRIPTEN__
-		// It seems there is an issue with emscripten SDL2: SDL_Init does not work if TIMER and/or HAPTIC is tried to be intialized or just "EVERYTHING" is used!!
-		SDL_INIT_EVERYTHING & ~(SDL_INIT_TIMER | SDL_INIT_HAPTIC)
-#else
-		SDL_INIT_EVERYTHING
-#endif
-	) != 0) {
-		ERROR_WINDOW("Fatal SDL initialization problem: %s", SDL_GetError());
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Enterprise-128 \"old XEP128 within the Xemu project now\" emulator from LGB");
+	if (xemu_post_init(
+		TARGET_DESC APP_DESC_APPEND,	// window title
+		1,				// resizable window
+		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
+		SCREEN_WIDTH, SCREEN_HEIGHT * 2,// logical size (used with keeping aspect ratio by the SDL render stuffs)
+		SCREEN_WIDTH, SCREEN_HEIGHT * 2,// window size
+		SCREEN_FORMAT,			// pixel format
+		0,				// we have *NO* pre-defined colours as with more simple machines (too many we need). we want to do this ourselves!
+		NULL,				// -- "" --
+		NULL,				// -- "" --
+		RENDER_SCALE_QUALITY,		// render scaling quality
+		USE_LOCKED_TEXTURE,		// 1 = locked texture access
+		shutdown_callback		// registered shutdown function
+	))
 		return 1;
-	}
 	if (config_init(argc, argv)) {
 #ifdef __EMSCRIPTEN__
 		ERROR_WINDOW("Error with config parsing. Please check the (javascript) console of your browser to learn about the error.");
@@ -451,9 +329,9 @@ int main (int argc, char *argv[])
 		return 1;
 	}
 	guarded_exit = 1;	// turn on guarded exit, with custom de-init stuffs
-	DEBUGPRINT("EMU: sleeping = \"%s\", timing = \"%s\"" NL,
-		__SLEEP_METHOD_DESC, __TIMING_METHOD_DESC
-	);
+	//DEBUGPRINT("EMU: sleeping = \"%s\", timing = \"%s\"" NL,
+	//	__SLEEP_METHOD_DESC, __TIMING_METHOD_DESC
+	//);
 	fileio_init(
 #ifdef __EMSCRIPTEN__
 		"/",
@@ -461,18 +339,17 @@ int main (int argc, char *argv[])
 		app_pref_path,
 #endif
 	"files");
-	if (screen_init())
-		return 1;
+	//if (screen_init())
+	//	return 1;
 	//if (xemugui_init(NULL))
 	//	return 1;
 	xemugui_init(NULL);	// allow to fail (do not exit if it fails). Some targets may not have X running
 	audio_init(config_getopt_int("audio"));
 	z80ex_init();
 	set_ep_cpu(CPU_Z80);
-	ep_pixels = nick_init();
-	if (ep_pixels == NULL)
+	if (nick_init())
 		return 1;
-	snapshot = config_getopt_str("snapshot");
+	const char *snapshot = config_getopt_str("snapshot");
 	if (strcmp(snapshot, "none")) {
 		if (ep128snap_load(snapshot))
 			snapshot = NULL;
@@ -502,26 +379,21 @@ int main (int argc, char *argv[])
 	ticks = SDL_GetTicks();
 	balancer = 0;
 	set_cpu_clock(DEFAULT_CPU_CLOCK);
-	emu_timekeeping_start();
 	audio_start();
 	if (config_getopt_int("fullscreen"))
-		screen_set_fullscreen(1);
+		xemu_set_full_screen(1);
 	DEBUGPRINT(NL "EMU: entering into main emulation loop" NL);
 	sram_ready = 1;
 	if (strcmp(config_getopt_str("primo"), "none") && !snapshot) {
 		// TODO: da stuff ...
 		primo_emulator_execute();
-		OSD("Primo Emulator Mode");
+		OSD(-1, -1, "Primo Emulator Mode");
 	}
 	if (snapshot)
 		ep128snap_set_cpu_and_io();
 	console_monitor_ready();	// OK to run monitor on console now!
-#ifdef __EMSCRIPTEN__
-	emscripten_set_main_loop(xep128_emulation, 50, 1);
-#else
-	for (;;)
-		xep128_emulation();
-#endif
-	printf("EXITING FROM main()?!" NL);
+	xemu_timekeeping_start();
+	// emscripten_set_main_loop(xep128_emulation, 50, 1);
+	XEMU_MAIN_LOOP(xep128_emulation, 50, 1);
 	return 0;
 }

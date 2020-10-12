@@ -83,8 +83,7 @@ static struct configSetting_st *config = NULL;
 static int config_size = 0;
 char *app_pref_path, *app_base_path;
 char current_directory[PATH_MAX + 1];
-SDL_version sdlver_compiled, sdlver_linked;
-FILE *debug_fp = NULL;
+//SDL_version sdlver_compiled, sdlver_linked;
 
 
 
@@ -127,9 +126,9 @@ FILE *open_emu_file ( const char *name, const char *mode, char *pathbuffer )
 	FILE *f;
 	// try to detect absolute path, Win32 related part tries to detect the possibility of X:\... syntax
 	if (
-		name[0] == DIRSEP[0]
+		name[0] == DIRSEP_STR[0]
 #ifdef _WIN32
-		|| (strlen(name) > 3 && name[1] == ':' && name[2] == DIRSEP[0])
+		|| (strlen(name) > 3 && name[1] == ':' && name[2] == DIRSEP_STR[0])
 #endif
 	) {
 		prefixes[0] = "";
@@ -205,14 +204,12 @@ int config_set ( const char *name, int subopt, const char *value )
 	if (st) {
 		free(st->value);
 	} else {
-		config = realloc(config, (config_size + 1) * sizeof(struct configOption_st));
-		CHECK_MALLOC(config);
+		config = xemu_realloc(config, (config_size + 1) * sizeof(struct configOption_st));
 		st = config + (config_size++);
 		st->opt = opt;
 		st->subopt = subopt;
 	}
-	st->value = strdup(value);
-	CHECK_MALLOC(st->value);
+	st->value = xemu_strdup(value);
 	return 0;
 }
 
@@ -513,7 +510,7 @@ static int get_path_info ( void )
 	}
 #endif
 	/* Check for pref dir override file in the same directory where executable is (base path) */
-	snprintf(buffer, sizeof buffer, "%s%cxep128.dir", app_base_path, DIRSEP[0]);
+	snprintf(buffer, sizeof buffer, "%s%cxep128.dir", app_base_path, DIRSEP_STR[0]);
 	f = fopen(buffer, "r");
 	if (f) {
 		char *p = fgets(buffer, sizeof buffer, f);
@@ -554,7 +551,7 @@ static int get_path_info ( void )
 		ERROR_WINDOW("Cannot query current directory: %s", ERRSTR());
 		return 1;
 	}
-	strcat(current_directory, DIRSEP);
+	strcat(current_directory, DIRSEP_STR);
 	return 0;
 }
 

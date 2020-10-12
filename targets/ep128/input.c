@@ -20,7 +20,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "input.h"
 #include "dave.h"
 #include "keyboard_mapping.h"
-#include "screen.h"
 #include "joystick.h"
 
 #include <SDL.h>
@@ -216,7 +215,7 @@ void emu_mouse_button ( Uint8 sdl_button, int press )
 	}
 	if (sdl_button == SDL_BUTTON_LEFT && press && mouse_grab == 0) {
 		//emu_osd_msg("Mouse grab. Press ESC to exit.");
-		screen_grab(SDL_TRUE);
+		set_mouse_grab(SDL_TRUE, 0);
 		mouse_grab = 1;
 		mouse_reset_button();
 	}
@@ -335,7 +334,7 @@ Uint8 read_control_port_bits ( void )
 	if (control_port_emu_mode != mouse_ok + joy1_ok) {
 		static const char *m[] = { "joystick", "Mouse", "dual (K-col)" };
 		control_port_emu_mode = mouse_ok + joy1_ok;
-		OSD("Control port: %s mode", m[control_port_emu_mode - 1 ]);
+		OSD(-1, -1, "Control port: %s mode", m[control_port_emu_mode - 1 ]);
 	}
 	switch (kbd_selector) {
 		/* joystick-1 or mouse related */
@@ -420,10 +419,10 @@ int mouse_setup ( int cfg )
 int emu_kbd(SDL_Keysym sym, int press)
 {
 	if (show_keys && press)
-		OSD("SDL scancode is \"%s\" (%d)", SDL_GetScancodeName(sym.scancode), sym.scancode);
+		OSD(-1, -1, "SDL scancode is \"%s\" (%d)", SDL_GetScancodeName(sym.scancode), sym.scancode);
 	if (mouse_grab && sym.scancode == SDL_SCANCODE_ESCAPE && press) {
 		mouse_grab = 0;
-		screen_grab(SDL_FALSE);
+		set_mouse_grab(SDL_FALSE, 0);
 	} else {
 		const struct keyMappingTable_st *ke = keymap_resolve_event(sym);
 		if (ke) {

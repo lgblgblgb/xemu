@@ -140,8 +140,7 @@ static void keymap_set_key ( SDL_Scancode code, int posep )
 		p++;
 	}
 	if (!n) {
-		keyMappingTable = realloc(keyMappingTable, (keyMappingTableSize + 1) * sizeof(struct keyMappingTable_st));
-		CHECK_MALLOC(keyMappingTable);
+		keyMappingTable = xemu_realloc(keyMappingTable, (keyMappingTableSize + 1) * sizeof(struct keyMappingTable_st));
 		p = keyMappingTable + (keyMappingTableSize++);
 		p->code = code;
 	}

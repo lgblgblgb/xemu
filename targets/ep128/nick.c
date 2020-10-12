@@ -19,7 +19,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xep128.h"
 #include "nick.h"
-#include "screen.h"
 #include "cpu.h"
 #include "dave.h"
 
@@ -85,25 +84,31 @@ static int nick_addressing_init ( Uint32 *pixels_buffer, int line_size )
 }
 
 
+// Ugly hack to access Xemu's framework for only non-locked texture :-O
+extern Uint32 *sdl_pixel_buffer;
 
-Uint32 *nick_init ( void )
+int nick_init ( void )
 {
 	int a;
-	Uint32 *buf = alloc_xep_aligned_mem(SCREEN_WIDTH * SCREEN_HEIGHT * 4);
+#if 0
+	Uint32 *buf = xemu_malloc_ALIGNED(SCREEN_WIDTH * SCREEN_HEIGHT * 4);
 	if (buf == NULL) {
 		ERROR_WINDOW("Cannot allocate memory for screen buffer.");
 		return NULL;
 	}
+#else
+	Uint32 *buf = sdl_pixel_buffer;
+#endif
 	pixels = NULL; // no previous state of buffer before the next function
 	if (nick_addressing_init(buf, SCREEN_WIDTH))
-		return NULL;
+		return 1;
 	for (a = 0; a < 256; a++) {
 		// RGB colours for the target screen
 		int r, g, b;
 		r = (((a << 2) & 4) | ((a >> 2) & 2) | ((a >> 6) & 1)) * 255 / 7;
 		g = (((a << 1) & 4) | ((a >> 3) & 2) | ((a >> 7) & 1)) * 255 / 7;
 		b = (                 ((a >> 1) & 2) | ((a >> 5) & 1)) * 255 / 3;
-		full_palette[a] = SDL_MapRGBA(sdl_pixel_format, r, g, b, 0xFF);
+		full_palette[a] = SDL_MapRGBA(sdl_pix_fmt, r, g, b, 0xFF);
 		//full_palette[a] = (0xFF << 24) | (r << 16) | (g << 8) | b;
 		//DEBUG("PAL#%d = (%d,%d,%d) = %d" NL, a, r, g, b, full_palette[a]);
 		// this is translation table for  4 colour modes
@@ -129,7 +134,7 @@ Uint32 *nick_init ( void )
 	vsync = 0;
 	vram = memory + 0x3F0000;
 	DEBUG("NICK: initialized." NL);
-	return buf;
+	return 0;
 }
 
 
@@ -547,8 +552,7 @@ char *nick_dump_lpt ( const char *newline_seq )
 			_cm_names[(vram[a + 1] >> 5) & 3],
 			newline_seq
 		);
-		p = realloc(p, p ? strlen(p) + strlen(buffer) + 256 : strlen(buffer) + 256);
-		CHECK_MALLOC(p);
+		p = xemu_realloc(p, p ? strlen(p) + strlen(buffer) + 256 : strlen(buffer) + 256);
 		if (a == lpt_set)
 			*p = '\0';
 		strcat(p, buffer);

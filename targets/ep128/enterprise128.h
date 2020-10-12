@@ -19,7 +19,26 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_EP128_MAIN_H_INCLUDED
 #define XEMU_EP128_MAIN_H_INCLUDED
 
-extern void *alloc_xep_aligned_mem ( size_t size );
+#define SCREEN_WIDTH    736
+#define SCREEN_HEIGHT   288
+#ifdef __EMSCRIPTEN__
+//#define SCREEN_FORMAT SDL_PIXELFORMAT_ABGR8888
+#define SCREEN_FORMAT   SDL_PIXELFORMAT_ARGB8888
+#else
+#define SCREEN_FORMAT   SDL_PIXELFORMAT_ARGB8888
+#endif
+
+// !!! currently ep128 emu does NOT work if you modify this !!!
+#define USE_LOCKED_TEXTURE	0
+
+#define RENDER_SCALE_QUALITY	1
+
+
+//#define OSD_FADE_START  300
+//#define OSD_FADE_STOP   0x80
+//#define OSD_FADE_DEC    3
+
+//extern void *alloc_xep_aligned_mem ( size_t size );
 extern void emu_one_frame(int rasters, int frameskip);
 extern int  set_cpu_clock ( int hz );
 

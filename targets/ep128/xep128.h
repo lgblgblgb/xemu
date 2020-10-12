@@ -19,13 +19,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_EP128_XEP128_H_INCLUDED
 #define XEMU_EP128_XEP128_H_INCLUDED
 
-#include "xemu/emutools_basicdefs.h"
-#include <SDL.h>
+#include "xemu/emutools.h"
 
 #define VARALIGN	MAXALIGNED
-#define	XEPEXIT(n)	XEMUEXIT(n)
+//#define	XEPEXIT(n)	XEMUEXIT(n)
 
-#define	DIRSEP		DIRSEP_STR
+//#define	DIRSEP		DIRSEP_STR
 
 
 /* Ugly hack: now override DATADIR to the old Xep128 defaults for legacy Xep128 users.
@@ -71,12 +70,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define ERRSTR()		strerror(errno)
 
 // ugly hack till better Xemu integration
-extern void sdl_burn_events ( void );
-#define xemu_drop_events sdl_burn_events
-extern SDL_Window *sdl_win;
+//extern void sdl_burn_events ( void );
+//#define xemu_drop_events sdl_burn_events
+//extern SDL_Window *sdl_win;
 // end of ugly hack.
 
-extern FILE *debug_fp;
+//extern FILE *debug_fp;
 #if 0
 #ifdef DISABLE_DEBUG
 #define DEBUG(...)
@@ -93,7 +92,8 @@ extern FILE *debug_fp;
 #endif
 #endif
 
-static inline int CHECK_SNPRINTF( int ret, int limit )
+#if 0
+static inline int CHECK_SNPRINTF_OFF( int ret, int limit )
 {
 	if (ret < 0 || ret >= limit - 1) {
 		fprintf(stderr, "SNPRINTF-ERROR: too long string or other error (ret=%d) ..." NL, ret);
@@ -102,8 +102,8 @@ static inline int CHECK_SNPRINTF( int ret, int limit )
 	return 0;
 }
 
-extern void osd_notification ( const char *s );
-#define OSD(...) do { \
+//extern void osd_notification ( const char *s );
+#define OSD_OFF(...) do { \
 	char _buf_for_win_msg_[4096]; \
 	CHECK_SNPRINTF(snprintf(_buf_for_win_msg_, sizeof _buf_for_win_msg_, __VA_ARGS__), sizeof _buf_for_win_msg_); \
 	DEBUGPRINT("OSD: %s" NL, _buf_for_win_msg_); \
@@ -111,25 +111,26 @@ extern void osd_notification ( const char *s );
 } while(0)
 
 extern int _sdl_emu_secured_message_box_ ( Uint32 sdlflag, const char *msg );
-#define _REPORT_WINDOW_(sdlflag, str, ...) do { \
+#define _REPORT_WINDOW_OFF(sdlflag, str, ...) do { \
 	char _buf_for_win_msg_[4096]; \
 	CHECK_SNPRINTF(snprintf(_buf_for_win_msg_, sizeof _buf_for_win_msg_, __VA_ARGS__), sizeof _buf_for_win_msg_); \
 	DEBUGPRINT(str ": %s" NL, _buf_for_win_msg_); \
 	_sdl_emu_secured_message_box_(sdlflag, _buf_for_win_msg_); \
 } while(0)
-#define INFO_WINDOW(...)	_REPORT_WINDOW_(SDL_MESSAGEBOX_INFORMATION, "INFO", __VA_ARGS__)
-#define WARNING_WINDOW(...)	_REPORT_WINDOW_(SDL_MESSAGEBOX_WARNING, "WARNING", __VA_ARGS__)
-#define ERROR_WINDOW(...)	_REPORT_WINDOW_(SDL_MESSAGEBOX_ERROR, "ERROR", __VA_ARGS__)
-#define FATAL(...)		do { ERROR_WINDOW(__VA_ARGS__); XEPEXIT(1); } while(0)
+#define INFO_WINDOW_OFF(...)	_REPORT_WINDOW_(SDL_MESSAGEBOX_INFORMATION, "INFO", __VA_ARGS__)
+#define WARNING_WINDOW_OFF(...)	_REPORT_WINDOW_(SDL_MESSAGEBOX_WARNING, "WARNING", __VA_ARGS__)
+#define ERROR_WINDOW_OFF(...)	_REPORT_WINDOW_(SDL_MESSAGEBOX_ERROR, "ERROR", __VA_ARGS__)
+#define FATAL_OFF(...)		do { ERROR_WINDOW(__VA_ARGS__); XEPEXIT(1); } while(0)
 
 #define CHECK_MALLOC(p)		do {	\
 	if (!p) FATAL("Memory allocation error. Not enough memory?");	\
 } while(0)
+#endif
 
-extern int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg );
-#define QUESTION_WINDOW(items, msg) _sdl_emu_secured_modal_box_(items, msg)
+//extern int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg );
+//#define QUESTION_WINDOW(items, msg) _sdl_emu_secured_modal_box_(items, msg)
 
-//#define ERRSTR() sys_errlist[errno]
-#define ERRSTR() strerror(errno)
+////#define ERRSTR() sys_errlist[errno]
+//#define ERRSTR() strerror(errno)
 
 #endif

@@ -25,14 +25,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 extern int vsync;
 
-extern Uint32 *nick_init ( void );
-extern Uint8  nick_get_last_byte ( void );
-extern void   nick_set_border ( Uint8 bcol );
-extern void   nick_set_bias ( Uint8 value );
-extern void   nick_set_lptl ( Uint8 value );
-extern void   nick_set_lpth ( Uint8 value );
-extern void   nick_set_frameskip ( int val );
-extern char   *nick_dump_lpt ( const char *newline_seq );
-extern void   nick_render_slot ( void );
+extern int   nick_init ( void );
+extern Uint8 nick_get_last_byte ( void );
+extern void  nick_set_border ( Uint8 bcol );
+extern void  nick_set_bias ( Uint8 value );
+extern void  nick_set_lptl ( Uint8 value );
+extern void  nick_set_lpth ( Uint8 value );
+extern void  nick_set_frameskip ( int val );
+extern char  *nick_dump_lpt ( const char *newline_seq );
+extern void  nick_render_slot ( void );
 
 #endif

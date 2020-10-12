@@ -220,7 +220,7 @@ static void set_axis_state ( int joy_id, Uint32 axis, int value, int virtual )
 		BIT_TO_SET  (joysticks[joy_id].axisn, axis_mask);
 	}
 	if (show_keys && (oldp != joysticks[joy_id].axisp || oldn != joysticks[joy_id].axisn))
-		OSD("PC joystick #%d axis %d [%c %c]\nmask=%X value=%d virtual=%c",
+		OSD(-1, -1, "PC joystick #%d axis %d [%c %c]\nmask=%X value=%d virtual=%c",
 			joy_id,
 			axis,
 			(joysticks[joy_id].axisn & axis_mask) ? '-' : ' ',
@@ -245,7 +245,7 @@ static void set_button_state ( int joy_id, Uint32 button, int value )
 	else
 		BIT_TO_RESET(joysticks[joy_id].button, button_mask);
 	if (show_keys && old != joysticks[joy_id].button)
-		OSD("PC joystick #%d button %d\n%s", joy_id, button, value ? "pressed" : "released");
+		OSD(-1, -1, "PC joystick #%d button %d\n%s", joy_id, button, value ? "pressed" : "released");
 }
 
 
@@ -301,7 +301,7 @@ static void joy_detach ( int joy_id )
 	SDL_JoystickClose(joysticks[joy_id].joy);
 	joysticks[joy_id].joy = NULL;
 	joysticks[joy_id].haptic = NULL;
-	OSD("Joy detached #%d", joy_id);
+	OSD(-1, -1, "Joy detached #%d", joy_id);
 	joysticks[joy_id].button = joysticks[joy_id].axisp = joysticks[joy_id].axisn = 0;	// don't leave state in a "stucked" situation!
 }
 
@@ -370,7 +370,7 @@ static void joy_attach ( int joy_id )
 		joysticks[joy_id].num_of_hats,
 		joysticks[joy_id].guid_str
 	);
-	OSD("Joy attached:\n#%d %s", joy_id, joysticks[joy_id].name);
+	OSD(-1, -1, "Joy attached:\n#%d %s", joy_id, joysticks[joy_id].name);
 	joysticks[joy_id].num_of_axes_orig = joysticks[joy_id].num_of_axes;
 	joysticks[joy_id].num_of_axes += joysticks[joy_id].num_of_hats * 2;
 #ifdef USE_NEW_CFG

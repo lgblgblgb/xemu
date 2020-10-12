@@ -59,8 +59,8 @@ void fileio_init ( const char *dir, const char *subdir )
 		strcpy(fileio_cwd, dir);
 		if (subdir) {
 			strcat(fileio_cwd, subdir);
-			if (subdir[strlen(subdir) - 1] != DIRSEP[0])
-				strcat(fileio_cwd, DIRSEP);
+			if (subdir[strlen(subdir) - 1] != DIRSEP_STR[0])
+				strcat(fileio_cwd, DIRSEP_STR);
 		}
 		DEBUGPRINT("FILEIO: base directory is: %s" NL, fileio_cwd);
 		mkdir(fileio_cwd
@@ -127,7 +127,7 @@ static int open_host_file ( const char *dirname, const char *filename, int creat
 			int ret;
 			char buffer[PATH_MAX + 1];
 			closedir(dir);
-			if (CHECK_SNPRINTF(snprintf(buffer, sizeof buffer, "%s%s%s", dirname, DIRSEP, entry->d_name), sizeof buffer))
+			if (CHECK_SNPRINTF(snprintf(buffer, sizeof buffer, "%s%s%s", dirname, DIRSEP_STR, entry->d_name), sizeof buffer))
 				return -1;
 			DEBUGPRINT("FILEIO: opening file \"%s\"" NL, buffer);
 			ret = open(buffer, mode | O_BINARY, 0666);
@@ -145,7 +145,7 @@ static int open_host_file ( const char *dirname, const char *filename, int creat
 	if (create) {
 		int ret;
 		char buffer[PATH_MAX + 1];
-		if (CHECK_SNPRINTF(snprintf(buffer, sizeof buffer, "%s%s%s", dirname, DIRSEP, filename), sizeof buffer))
+		if (CHECK_SNPRINTF(snprintf(buffer, sizeof buffer, "%s%s%s", dirname, DIRSEP_STR, filename), sizeof buffer))
 			return -1;
 		ret = open(buffer, mode | O_BINARY, 0666);
 		if (ret < 0) {
