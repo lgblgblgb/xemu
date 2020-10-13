@@ -17,11 +17,11 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "enterprise128.h"
 #include "console.h"
 #include "emu_monitor.h"
 
-#include <SDL.h>
 
 #ifdef NO_CONSOLE
 int console_is_open = 0;

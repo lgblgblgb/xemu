@@ -17,13 +17,14 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "enterprise128.h"
 #include "configuration.h"
 #include "console.h"
 #include "keyboard_mapping.h"
 
-#include <SDL.h>
 #include <unistd.h>
+#include <errno.h>
 #ifdef __EMSCRIPTEN__
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -126,9 +127,9 @@ FILE *open_emu_file ( const char *name, const char *mode, char *pathbuffer )
 	FILE *f;
 	// try to detect absolute path, Win32 related part tries to detect the possibility of X:\... syntax
 	if (
-		name[0] == DIRSEP_STR[0]
+		name[0] == DIRSEP_CHR
 #ifdef _WIN32
-		|| (strlen(name) > 3 && name[1] == ':' && name[2] == DIRSEP_STR[0])
+		|| (strlen(name) > 3 && name[1] == ':' && name[2] == DIRSEP_CHR)
 #endif
 	) {
 		prefixes[0] = "";
@@ -469,12 +470,6 @@ static void save_sample_config ( const char *name )
 
 
 
-#if !SDL_VERSION_ATLEAST(2, 0, 4)
-#	error "We need SDL2 version 2.0.4 at least!"
-#endif
-
-
-
 int is_help_request_option ( const char *opt )
 {
 	char c = *(opt++);
@@ -510,7 +505,7 @@ static int get_path_info ( void )
 	}
 #endif
 	/* Check for pref dir override file in the same directory where executable is (base path) */
-	snprintf(buffer, sizeof buffer, "%s%cxep128.dir", app_base_path, DIRSEP_STR[0]);
+	snprintf(buffer, sizeof buffer, "%s%cxep128.dir", app_base_path, DIRSEP_CHR);
 	f = fopen(buffer, "r");
 	if (f) {
 		char *p = fgets(buffer, sizeof buffer, f);

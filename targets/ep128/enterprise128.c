@@ -17,7 +17,9 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "xemu/z80.h"
+#include "xemu/emutools_gui.h"
 #include "enterprise128.h"
 #include "dave.h"
 #include "nick.h"
@@ -37,13 +39,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "emu_monitor.h"
 #include "rtc.h"
 #include "fileio.h"
-#include "xemu/z80.h"
-#include "xemu/emutools_gui.h"
 #include "snapshot.h"
 
 #include <string.h>
 #include <stdlib.h>
-#include <SDL.h>
 #include <sys/time.h>
 #include <time.h>
 #include <unistd.h>
@@ -382,7 +381,6 @@ int main (int argc, char *argv[])
 	audio_start();
 	if (config_getopt_int("fullscreen"))
 		xemu_set_full_screen(1);
-	DEBUGPRINT(NL "EMU: entering into main emulation loop" NL);
 	sram_ready = 1;
 	if (strcmp(config_getopt_str("primo"), "none") && !snapshot) {
 		// TODO: da stuff ...
@@ -393,6 +391,7 @@ int main (int argc, char *argv[])
 		ep128snap_set_cpu_and_io();
 	console_monitor_ready();	// OK to run monitor on console now!
 	xemu_timekeeping_start();
+	DEBUGPRINT(NL "EMU: entering into main emulation loop" NL);
 	// emscripten_set_main_loop(xep128_emulation, 50, 1);
 	XEMU_MAIN_LOOP(xep128_emulation, 50, 1);
 	return 0;

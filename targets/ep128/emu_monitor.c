@@ -18,7 +18,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define XEP128_NEED_SDL_WMINFO
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "enterprise128.h"
 #include "emu_monitor.h"
 #include "xemu/../rom/ep128/xep_rom_syms.h"
 #include "xemu/z80_dasm.h"
@@ -34,10 +35,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "dave.h"
 #include "sdext.h"
 
-#include "enterprise128.h"
-
-#include <SDL.h>
-#include <SDL_syswm.h>
+//#include <SDL_syswm.h>
 
 #ifdef _WIN32
 #include <sysinfoapi.h>
@@ -613,7 +611,7 @@ static void cmd_cd ( void )
 		r_cd = chdir(arg);	// do the CD - maybe relative - to the old one
 		if (!r_cd) {
 			if (getcwd(fileio_cwd, PATH_MAX)) { // store result directory as new FILE: dir
-				if (fileio_cwd[strlen(fileio_cwd) - 1] != DIRSEP_STR[0])
+				if (fileio_cwd[strlen(fileio_cwd) - 1] != DIRSEP_CHR)
 					strcat(fileio_cwd, DIRSEP_STR);
 			}
 		}

@@ -24,12 +24,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 	http://www.mouser.com/ds/2/380/spansion%20inc_am29f400b_eol_21505e8-329620.pdf
 */
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "enterprise128.h"
 #include "sdext.h"
 #include "cpu.h"
 #include "configuration.h"
-
 #include <unistd.h>
+#include <errno.h>
 
 #ifndef CONFIG_SDEXT_SUPPORT
 #warning "SDEXT support is disabled by configuration."

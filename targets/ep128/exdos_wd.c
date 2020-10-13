@@ -17,7 +17,8 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "enterprise128.h"
 
 #ifdef CONFIG_EXDOS_SUPPORT
 
@@ -25,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "configuration.h"
 #include <unistd.h>
 #include <sys/types.h>
+#include <errno.h>
 
 // Set the value to DEBUGPRINT to always print to the stdout as well,
 // and DEBUG to use only the debug file (if it's requested at all).

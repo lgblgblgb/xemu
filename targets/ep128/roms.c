@@ -16,11 +16,13 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "enterprise128.h"
 #include "roms.h"
 #include "cpu.h"
 #include "configuration.h"
 #include "emu_rom_interface.h"
+#include <errno.h>
 
 
 static const Uint8 xep_rom_image[] = {

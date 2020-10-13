@@ -16,12 +16,13 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "xemu/emutools_gui.h"
+#include "enterprise128.h"
 #include "fileio.h"
 #include "xemu/z80.h"
 #include "cpu.h"
 #include "emu_rom_interface.h"
-#include "xemu/emutools_gui.h"
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -30,6 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <dirent.h>
 #include <fcntl.h>
 #include <ctype.h>
+#include <errno.h>
 
 #define EXOS_USER_SEGMAP_P (0X3FFFFC + memory)
 #define HOST_OS_STR "Host OS "
@@ -59,7 +61,7 @@ void fileio_init ( const char *dir, const char *subdir )
 		strcpy(fileio_cwd, dir);
 		if (subdir) {
 			strcat(fileio_cwd, subdir);
-			if (subdir[strlen(subdir) - 1] != DIRSEP_STR[0])
+			if (subdir[strlen(subdir) - 1] != DIRSEP_CHR)
 				strcat(fileio_cwd, DIRSEP_STR);
 		}
 		DEBUGPRINT("FILEIO: base directory is: %s" NL, fileio_cwd);

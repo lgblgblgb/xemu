@@ -17,12 +17,11 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "enterprise128.h"
 #include "nick.h"
 #include "cpu.h"
 #include "dave.h"
-
-#include "enterprise128.h"
 
 
 /*
@@ -31,7 +30,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  * border colour, reading LPB, setting BIAS register) and use
  * those values instead of conversion all the time.
  */
-
 
 
 static Uint16 lpt_a, lpt_set, ld1, ld2;
