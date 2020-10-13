@@ -37,7 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 //#include <SDL_syswm.h>
 
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 #include <sysinfoapi.h>
 #endif
 
@@ -384,13 +384,13 @@ static void cmd_cpu ( void ) {
 static void cmd_emu ( void )
 {
 	char buf[1024];
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 
 	DWORD siz = sizeof buf;
 #endif
 	//SDL_VERSION(&sdlver_c);
 	//SDL_GetVersion(&sdlver_l);
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 	//GetUserName(buf, &siz);
 	GetComputerNameEx(ComputerNamePhysicalNetBIOS, buf, &siz);
 #define OS_KIND "Win32"
@@ -403,7 +403,7 @@ static void cmd_emu ( void )
 		"Drivers: %s %s\n"
 		"SDL c/l: %d.%d.%d %d.%d.%d\n"
 		"Base path: %s\nPref path: %s\nStart dir: %s\nSD img: %s [%dM]\n",
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 		getenv("USERNAME"),
 #else
 		getenv("USER"),
@@ -418,7 +418,7 @@ static void cmd_emu ( void )
 		"<not-supported>", 0
 #endif
 	);
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 	// This assumes, that the "JS booter" sets these ENV variables ...
 	MPRINTF("Browser: %s\n", getenv("XEMU_EN_BROWSER"));
 	MPRINTF("Origin: %s\n", getenv("XEMU_EN_ORIGIN"));
@@ -776,7 +776,7 @@ void monitor_process_queued ( void )
 	if (is_queued_command) {
 		char buffer[8192];
 		monitor_execute(queued_command, 2, buffer, sizeof buffer, NL);
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 		EM_ASM_INT({
 			Module.Xemu.getFromMonitor(Pointer_stringify($0));
 		}, buffer);

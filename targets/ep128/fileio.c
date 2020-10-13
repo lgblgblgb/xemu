@@ -66,7 +66,7 @@ void fileio_init ( const char *dir, const char *subdir )
 		}
 		DEBUGPRINT("FILEIO: base directory is: %s" NL, fileio_cwd);
 		mkdir(fileio_cwd
-#ifndef _WIN32
+#ifndef XEMU_ARCH_WIN
 			, 0777
 #endif
 		);

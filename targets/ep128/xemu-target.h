@@ -10,11 +10,11 @@
 #define Z80EX_ED_TRAPPING_SUPPORT
 #define Z80EX_CALLBACK_PROTOTYPE extern
 #define CONFIG_SDEXT_SUPPORT
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 #define NO_CONSOLE
 #endif
 
-#ifndef __EMSCRIPTEN__
+#ifndef XEMU_ARCH_HTML
 #define CONFIG_USE_LODEPNG
 #endif
 

@@ -25,7 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include <unistd.h>
 #include <errno.h>
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 #include <sys/types.h>
 #include <sys/stat.h>
 #endif
@@ -97,7 +97,7 @@ static const char *disclaimer =
 
 void forget_emu_file ( const char *path )
 {
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 	DEBUGPRINT("FILE: trying to delete file \"%s\" as used only once, return code: %d" NL,
 		path,
 		unlink(path)
@@ -111,13 +111,13 @@ FILE *open_emu_file ( const char *name, const char *mode, char *pathbuffer )
 	const char *name_used = name;
 	const char *policy = "guessing";
 	const char *prefixes[] = {
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 		"/files/",
 #else
 		current_directory,	// try in the current directory first
 		app_pref_path,		// try at pref path (user writable area)
 		app_base_path,		// try at base path (where executable is)
-#ifndef _WIN32
+#ifndef XEMU_ARCH_WIN
 		DATADIR "/",		// try in the DATADIR, it makes sense on UNIX like sys
 #endif
 #endif
@@ -128,7 +128,7 @@ FILE *open_emu_file ( const char *name, const char *mode, char *pathbuffer )
 	// try to detect absolute path, Win32 related part tries to detect the possibility of X:\... syntax
 	if (
 		name[0] == DIRSEP_CHR
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 		|| (strlen(name) > 3 && name[1] == ':' && name[2] == DIRSEP_CHR)
 #endif
 	) {
@@ -136,7 +136,7 @@ FILE *open_emu_file ( const char *name, const char *mode, char *pathbuffer )
 		prefixes[1] = NULL;
 		policy = "absolute";
 	} else if (name[0] == '@') {		// @ means user preference directory related path names
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 		prefixes[0] = "/files/";
 #else
 		prefixes[0] = app_pref_path;
@@ -448,7 +448,7 @@ static void dump_config ( FILE *fp )
 
 static void save_sample_config ( const char *name )
 {
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 	DEBUGPRINT("CONFIG: no configuration is saved in case of emscripten." NL);
 #else
 	char path[PATH_MAX + 1];
@@ -495,7 +495,7 @@ static int get_path_info ( void )
 	char buffer[PATH_MAX + 1];
 	app_pref_path = NULL;	// to signal that it's not got yet
 	/* Get base path (where executable is */
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 	app_base_path = strdup("/files/");
 #else
 	app_base_path = SDL_GetBasePath();
@@ -527,7 +527,7 @@ static int get_path_info ( void )
 	if (app_pref_path) {
 		printf("CONFIG: Overriding pref path to: %s" NL, app_pref_path);
 	} else {
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 		app_pref_path = strdup("/files/");
 #else
 		app_pref_path = SDL_GetPrefPath("nemesys.lgb", "xep128");
@@ -538,7 +538,7 @@ static int get_path_info ( void )
 #endif
 	}
 	/* Get current directory */
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 	mkdir("/files", 0777);
 	chdir("/files");
 #endif
@@ -562,10 +562,10 @@ int config_init ( int argc, char **argv )
 	int default_config = 1;
 	int testparsing = 0;
 	argc--; argv++;
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 	exe = strdup("/files/emscripten-virtual-executable");
 #endif
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 	console_open_window();
 #endif
 	SDL_VERSION(&sdlver_compiled);
@@ -609,7 +609,7 @@ int config_init ( int argc, char **argv )
 	/* SDL path info block printout */
 	DEBUGPRINT("PATH: SDL base path: %s" NL, app_base_path);
 	DEBUGPRINT("PATH: SDL pref path: %s" NL, app_pref_path);
-#ifndef _WIN32
+#ifndef XEMU_ARCH_WIN
 	DEBUGPRINT("PATH: data directory: %s/" NL, DATADIR);
 #endif
 	DEBUGPRINT("PATH: Current directory: %s" NL NL, current_directory);
@@ -626,7 +626,7 @@ int config_init ( int argc, char **argv )
 			opt++;
 		}
 		printf(NL "%s" NL, disclaimer);
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 		if (!console_is_open)
 			ERROR_WINDOW("Could not dump help, since console couldn't be allocated.");
 #endif
@@ -700,7 +700,7 @@ int config_init ( int argc, char **argv )
 	}
 	DEBUG("CONFIG: End of configuration step." NL NL);
 	/* Close console, unless user requested it with the -console option */
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 	if (!config_getopt_int("console"))
 		console_close_window();
 #else

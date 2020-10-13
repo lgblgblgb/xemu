@@ -43,7 +43,7 @@ extern time_t unix_time;
 #ifdef DATADIR
 #undef DATADIR
 #endif
-#ifndef _WIN32
+#ifndef XEMU_ARCH_WIN
 #define DATADIR		"/usr/local/lib/xep128"
 #endif
 

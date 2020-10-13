@@ -18,8 +18,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #include "xemu/emutools.h"
-#include "xemu/z80.h"
 #include "xemu/emutools_gui.h"
+#include "xemu/z80.h"
 #include "enterprise128.h"
 #include "dave.h"
 #include "nick.h"
@@ -71,7 +71,7 @@ time_t unix_time;
 void *alloc_xep_aligned_mem ( size_t size )
 {
 	// it seems _mm_malloc() is quite standard at least on gcc, mingw, clang ... so let's try to use it
-#if defined(__EMSCRIPTEN__) || defined(__arm__)
+#if defined(XEMU_ARCH_HTML) || defined(__arm__)
 	return SDL_malloc(size);
 #else
 	void *p = _mm_malloc(size, __BIGGEST_ALIGNMENT__);
@@ -179,7 +179,7 @@ static void __emu_one_frame(int rasters, int frameskip)
 					//else
 					if (code && e.key.state == SDL_PRESSED)
 						switch(code) {
-#ifndef __EMSCRIPTEN__
+#ifndef XEMU_ARCH_HTML
 							case 0xFF:	// FULLSCREEN toogle, default key F11
 								//screen_set_fullscreen(!is_fullscreen);
 								xemu_set_full_screen(-1);
@@ -321,8 +321,10 @@ int main (int argc, char *argv[])
 		shutdown_callback		// registered shutdown function
 	))
 		return 1;
+	xemugui_init(NULL);	// allow to fail (do not exit if it fails). Some targets may not have X running
+	osd_init_with_defaults();
 	if (config_init(argc, argv)) {
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 		ERROR_WINDOW("Error with config parsing. Please check the (javascript) console of your browser to learn about the error.");
 #endif
 		return 1;
@@ -332,7 +334,7 @@ int main (int argc, char *argv[])
 	//	__SLEEP_METHOD_DESC, __TIMING_METHOD_DESC
 	//);
 	fileio_init(
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 		"/",
 #else
 		app_pref_path,
@@ -340,9 +342,6 @@ int main (int argc, char *argv[])
 	"files");
 	//if (screen_init())
 	//	return 1;
-	//if (xemugui_init(NULL))
-	//	return 1;
-	xemugui_init(NULL);	// allow to fail (do not exit if it fails). Some targets may not have X running
 	audio_init(config_getopt_int("audio"));
 	z80ex_init();
 	set_ep_cpu(CPU_Z80);

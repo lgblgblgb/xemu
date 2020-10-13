@@ -36,7 +36,7 @@ void console_monitor_ready ( void ) {
 #else
 
 
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 #include <windows.h>
 #include <stdio.h>
 #include <io.h>
@@ -70,7 +70,7 @@ static int console_monitor_thread ( void *ptr )
 	printf("Welcome to " WINDOW_TITLE " monitor. Use \"help\" for help" NL);
 	while (monitor_running) {
 		char *p;
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 		char buffer[256];
 		printf(WINDOW_TITLE "> ");
 		p = fgets(buffer, sizeof buffer, stdin);
@@ -83,7 +83,7 @@ static int console_monitor_thread ( void *ptr )
 			// Queue the command!
 			while (monitor_queue_command(p) && monitor_running)
 				SDL_Delay(10);	// avoid flooding the CPU in case of not processed-yet command in the "queue" buffer
-#ifndef _WIN32
+#ifndef XEMU_ARCH_WIN
 			if (p[0])
 				add_history(p);
 			free(p);
@@ -134,7 +134,7 @@ static int monitor_stop ( void )
 
 void console_open_window ( void )
 {
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 	int hConHandle;
 	HANDLE lStdHandle;
 	CONSOLE_SCREEN_BUFFER_INFO coninfo;
@@ -191,7 +191,7 @@ void console_close_window ( void )
 	if (!console_is_open)
 		return;
 	monitor_stop();
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 	if (!FreeConsole())
 		ERROR_WINDOW("Cannot release windows console!");
 	else
@@ -205,7 +205,7 @@ void console_close_window ( void )
 
 void console_close_window_on_exit ( void )
 {
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 	if (console_is_open && !monitor_stop())
 		INFO_WINDOW("Click to close console window");
 #else
