@@ -654,7 +654,7 @@ int config_init ( int argc, char **argv )
 			config_set_internal(opt->name, -1, opt->defval);
 		opt++;
 	}
-	config_set_internal("rom", 0, COMBINED_ROM_FN);	// set default "combined" ROM image set (from segment 0, starting with EXOS)
+	config_set_internal("rom", 0, DEFAULT_ROM_FN);	// set default "combined" ROM image set (from segment 0, starting with EXOS)
 	/* Default values for the keyboard follows ... */
 	keymap_preinit_config_internal();
 	/* check if we have written sample config file, if there is not, let's create one */

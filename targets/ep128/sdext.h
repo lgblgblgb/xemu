@@ -23,7 +23,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SDEXT_CART_ENABLER_ON	0x10000
 #define SDEXT_CART_ENABLER_OFF	1
 
-extern void  sdext_init ( void );
+extern int   sdext_init ( const char *img_fn );
+extern void  sdext_shutdown ( void );
 extern Uint8 sdext_read_cart ( Uint16 addr );
 extern void  sdext_write_cart ( Uint16 addr, Uint8 data );
 extern void  sdext_clear_ram ( void );

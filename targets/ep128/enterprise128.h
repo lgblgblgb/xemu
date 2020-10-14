@@ -33,7 +33,7 @@ extern int  set_cpu_clock ( int hz );
 extern int paused;
 extern time_t unix_time;
 
-
+#define SRAM_BACKUP_FILE_FORMAT	"@sram-%02X.seg"
 
 #define VARALIGN	MAXALIGNED
 
@@ -63,8 +63,8 @@ extern time_t unix_time;
 #endif
 #define DEFAULT_CPU_CLOCK	4000000
 
-#define COMBINED_ROM_FN		"combined.rom"
-#define SDCARD_IMG_FN		"sdcard.img"
+#define DEFAULT_ROM_FN		"@combined.rom"
+#define SDCARD_IMG_FN		"@sdcard.img"
 #define PRINT_OUT_FN		"@print.out"
 #define DEFAULT_CONFIG_FILE	"@config"
 #define DEFAULT_CONFIG_SAMPLE_FILE "@config-sample"

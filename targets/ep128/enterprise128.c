@@ -84,6 +84,7 @@ void *alloc_xep_aligned_mem ( size_t size )
 
 static void shutdown_callback(void)
 {
+	sdext_shutdown();
 	if (guarded_exit) {
 		audio_close();
 		printer_close();
@@ -365,7 +366,7 @@ int main (int argc, char *argv[])
 	joy_sdl_event(NULL); // this simply inits joy layer ...
 #ifdef CONFIG_SDEXT_SUPPORT
 	if (!snapshot)
-		sdext_init();
+		sdext_init(config_getopt_str("sdimg"));
 #endif
 #ifdef CONFIG_EXDOS_SUPPORT
 	wd_exdos_reset();
