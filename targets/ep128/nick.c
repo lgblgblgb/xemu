@@ -87,20 +87,11 @@ extern Uint32 *sdl_pixel_buffer;
 
 int nick_init ( void )
 {
-	int a;
-#if 0
-	Uint32 *buf = xemu_malloc_ALIGNED(SCREEN_WIDTH * SCREEN_HEIGHT * 4);
-	if (buf == NULL) {
-		ERROR_WINDOW("Cannot allocate memory for screen buffer.");
-		return NULL;
-	}
-#else
 	Uint32 *buf = sdl_pixel_buffer;
-#endif
 	pixels = NULL; // no previous state of buffer before the next function
 	if (nick_addressing_init(buf, SCREEN_WIDTH))
 		return 1;
-	for (a = 0; a < 256; a++) {
+	for (int a = 0; a < 256; a++) {
 		// RGB colours for the target screen
 		int r, g, b;
 		r = (((a << 2) & 4) | ((a >> 2) & 2) | ((a >> 6) & 1)) * 255 / 7;

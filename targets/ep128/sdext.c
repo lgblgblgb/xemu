@@ -369,48 +369,6 @@ int sdext_init ( const char *img_fn )
 			}
 		}
 	}
-#if 0
-	sdf = open_emu_file(img_fn, "rb", sdimg_path); // open in read-only mode, to get the path
-	if (sdf) {
-		fclose(sdf);
-		sdf = fopen(sdimg_path, "r+b");
-		if (sdf) {
-			DEBUGPRINT("SDEXT: SD image file is re-open in read/write mode, good (fd=%d)." NL, fileno(sdf));
-		} else {
-			sdf = fopen(sdimg_path, "rb");
-			DEBUGPRINT("SDEXT: SD image cannot be re-open in read-write mode, using read-only access (fd=%d)." NL, fileno(sdf));
-		}
-	}
-	// if we couldn't open image _AND_ it was the default ...
-	if (!sdf && !strcmp(img_fn, SDCARD_IMG_FN)) {
-		int r = QUESTION_WINDOW("?Exit|!Continue without SD card|Create empty image", "Cannot open default SD card image file.");
-		if (r == 0)
-			XEMUEXIT(0);
-		else if (r == 2) {	// create an empty image
-			char pathbuffer[PATH_MAX + 1];
-			snprintf(sdimg_path, PATH_MAX, "%s%s.tmp", app_pref_path, SDCARD_IMG_FN[0] == '@' ? SDCARD_IMG_FN + 1 : SDCARD_IMG_FN);
-			sdf = open_emu_file(sdimg_path, "wb", pathbuffer);
-			if (!sdf) {
-				ERROR_WINDOW("Cannot create empty image: %s", ERRSTR());
-				goto try_to_open_image;
-			}
-			r = decompress_vhd(empty_vhd_image, fileno(sdf));
-			if (r) {
-				ERROR_WINDOW("Error decompressing empty image: %s",  ERRSTR());
-				fclose(sdf);
-				unlink(sdimg_path);
-				goto try_to_open_image;
-			}
-			fclose(sdf);
-			pathbuffer[strlen(pathbuffer) - 4] = 0;
-			if (rename(sdimg_path, pathbuffer))
-				ERROR_WINDOW("Rename of created temp file error: %s", ERRSTR());
-			else
-				INFO_WINDOW("Empty image file has been created: %s", pathbuffer);
-			goto try_to_open_image;	// loop again, now with successfully created image we will have better chance :)
-		}
-	}
-#endif
 	if (sdfd < 0) {
 		WARNING_WINDOW("SD card image file \"%s\" cannot be open: %s. You can use Xep128 but SD card access won't work!", sdimg_path, ERRSTR());
 		*sdimg_path = 0;

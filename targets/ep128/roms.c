@@ -18,12 +18,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
 #include "xemu/emutools_files.h"
+#include "xemu/emutools_config.h"
 #include "enterprise128.h"
 #include "roms.h"
 #include "cpu.h"
-#include "configuration.h"
 #include "emu_rom_interface.h"
 #include <errno.h>
+#include <string.h>
 
 
 static const Uint8 xep_rom_image[] = {
@@ -34,7 +35,30 @@ int xep_rom_addr;
 const char *rom_name_tab[0x100];
 static int reloading = 0;	// allows to re-load ROM config run-time, this non-zero after the first call of roms_load()
 
+#define ROM_REQUEST_LIST_MAX_SIZE 32
+static struct {
+	Uint8 seg;
+	const char *fn;
+} rom_request_list[ROM_REQUEST_LIST_MAX_SIZE];
+static int rom_request_list_size = 0;
 
+
+const char *rom_parse_opt_cb ( struct xemutools_config_st *opt, const char *optname, const char *optvalue )
+{
+	DEBUGPRINT("PARSE_ROM: opt=%p optname=%s optvalue=%s" NL, opt, optname, optvalue);
+	optname = strchr(optname, '@');
+	if (optname == NULL)
+		return "rom option should specify segment, ie: rom@XX (XX=hex)";
+	int seg;
+	if (sscanf(optname + 1, "%02x", &seg) != 1 || seg < 0 || seg >= 0xFC)
+		return "rom@XX option does not specify valid segment";
+	if (rom_request_list_size == ROM_REQUEST_LIST_MAX_SIZE)
+		return "too many -rom options!";
+	rom_request_list[rom_request_list_size].seg = seg;
+	rom_request_list[rom_request_list_size].fn  = xemu_strdup(optvalue);
+	rom_request_list_size++;
+	return NULL;
+}
 
 int sram_save_segment ( int seg )
 {
@@ -59,14 +83,57 @@ int sram_save_all_segments ( void )
 	return ret;
 }
 
+
+static int load_rom_image ( int seg, const char *fn )
+{
+	if (seg < 0 || seg >= 0xFC)
+		FATAL("Invalid ROM segment: %02Xh", seg);
+	if (!fn || !*fn)
+		FATAL("Invalid ROM name: NULL or empty string for segment #%02Xh", seg);
+	int size = xemu_load_file(fn, NULL, 0x4000, 0x400000 - 0x10000, "Cannot open/load requested ROM");
+	if (size <= 0) {
+		if (!strcmp(fn, DEFAULT_ROM_FN) && seg == 0) { // this should be the auto-install functionality, with downloading stuff? TODO
+		}
+		return -1;
+	}
+	if ((size & 0x3FFF)) {
+		ERROR_WINDOW("BAD ROM image \"%s\": length is not multiple of 16Kbytes!", xemu_load_filepath);
+		free(xemu_load_buffer_p);
+		return -1;
+	}
+	size >>= 14;	// size in segments from this point
+	// Note: no need to check overflow of the loaded ROM, as if it would hit VRAM, it's not UNUSED_SEGMENT ...
+	for (int i = seg; i < seg + size; i++) {
+		if (memory_segment_map[i] != UNUSED_SEGMENT) {
+			ERROR_WINDOW("ERROR while loading ROM to segment #%02Xh: segment is already in use\n%s", i, xemu_load_filepath);
+			free(xemu_load_buffer_p);
+			return -1;
+		}
+	}
+	memcpy(memory + (seg << 14), xemu_load_buffer_p, size << 14);
+	free(xemu_load_buffer_p);
+	rom_name_tab[seg] = xemu_strdup(xemu_load_filepath);
+	for (int i = seg; i < seg + size; i++) {
+		// check if ROM image contains XEP128_ROM segment signature, if so, try to use XEP ROM from here
+		if (!memcmp(memory + (i << 14), "XEP__ROM", 8) && xep_rom_seg == -1) {
+			xep_rom_seg = i;
+			memory_segment_map[i] = XEPROM_SEGMENT;
+		} else
+			memory_segment_map[i] = ROM_SEGMENT;
+	}
+	return 0;
+}
+
+
+
 /* This function also re-initializes the whole memory! Do not call it after you defined RAM for the system, but only before! */
 int roms_load ( void )
 {
-	int seg, last = 0;
+	//int seg, last = 0;
 	//char path[PATH_MAX + 1];
 	if (reloading)	// in case of already defined (reloading) memory model, we want to back our SRAM segments up - if any at all ...
 		sram_save_all_segments();
-	for (seg = 0; seg < 0x100; seg++ ) {
+	for (int seg = 0; seg < 0x100; seg++ ) {
 		memory_segment_map[seg] = (seg >= 0xFC ? VRAM_SEGMENT : UNUSED_SEGMENT);	// 64K VRAM is default, you cannot override that!
 		if (reloading && rom_name_tab[seg])
 			free((void*)rom_name_tab[seg]); // already defined (reloading) situation, we want to free used memory as well
@@ -75,73 +142,35 @@ int roms_load ( void )
 	reloading = 1;	// set reloading flag, in next invocation of roms_load(), it will be done in config reload mode!
 	memset(memory, 0xFF, 0x400000);
 	xep_rom_seg = -1;
-	for (seg = 0; seg < 0x100; seg++ ) {
-		void *option = config_getopt("rom", seg, NULL);
-		if (option) {
-			const char *name;
-			int lseg = seg;
-			config_getopt_pointed(option, &name);
-			if (!strcasecmp(name, "XEP") && seg) {
-				if (memory_segment_map[seg] == UNUSED_SEGMENT) {
-					DEBUG("CONFIG: ROM: segment %02Xh assigned to internal XEP ROM" NL, seg);
-					xep_rom_seg = seg;
-					memory_segment_map[seg] = XEPROM_SEGMENT;
-				} else
-					ERROR_WINDOW("XEP ROM forced segment assignment cannot be done since segment %02X is not unused", seg);
-				continue;
-			}
-			DEBUG("CONFIG: ROM: segment %02Xh file %s" NL, seg, name);
-			int size = xemu_load_file(name, NULL, 0x4000, 0x400000 - 0x10000, "Cannot open/load requested ROM");
-			if (size <= 0) {
-				if (!strcmp(name, DEFAULT_ROM_FN)) { // this should be the auto-install functionality, with downloading stuff?
-				}
-				return -1;
-			}
-			if ((size & 0x3FFF)) {
-				ERROR_WINDOW("BAD ROM image \"%s\": length is not multiple of 16Kbytes!", xemu_load_filepath);
-				return -1;
-			}
-			DEBUG("CONFIG: ROM: ... file path is %s size: %Xh." NL, xemu_load_filepath, size);
-			size >>= 14;
-			//if (rom_name_tab[seg])
-			//	free((void*)rom_name_tab[seg]);
-			rom_name_tab[seg] = xemu_strdup(xemu_load_filepath);
-			Uint8 *buffer = xemu_load_buffer_p;
-			for (;;) {
-				// Note: lseg overflow is not needed to be tested, as VRAM marks will stop reading of ROM image in the worst case ...
-				if (memory_segment_map[lseg] != UNUSED_SEGMENT) {
-					free(xemu_load_buffer_p);
-					forget_emu_file(xemu_load_filepath);
-					ERROR_WINDOW("While reading ROM image \"%s\" into segment %02Xh: already used segment (\"%s\")!", xemu_load_filepath, lseg, memory_segment_map[lseg]);
-					return -1;
-				}
-				memcpy(memory + (lseg << 14), buffer, 0x4000);
-				buffer += 0x4000;
-				// check if ROM image contains XEP128_ROM segment signature, if so, try to use XEP ROM from here
-				if (!memcmp(memory + (lseg << 14), "XEP__ROM", 8) && xep_rom_seg == -1) {
-					xep_rom_seg = lseg;
-					memory_segment_map[lseg] = XEPROM_SEGMENT;
-				} else
-					memory_segment_map[lseg] = ROM_SEGMENT;
-				if (lseg > last)
-					last = lseg;
-				if (!--size)
-					break;
-				lseg++;
-			}
-			free(xemu_load_buffer_p);
-			forget_emu_file(xemu_load_filepath);
-		} else if (!seg) {
-			ERROR_WINDOW("Fatal ROM image error: No ROM defined for segment 00h, no EXOS is requested!");
-			return -1;
-		}
+	// Load requested list at cmdline+cfgfile parser step
+	for (int i = 0; i < rom_request_list_size; i++) {
+		load_rom_image(rom_request_list[i].seg, rom_request_list[i].fn);
+		free((void*)rom_request_list[i].fn);
 	}
+	if (memory_segment_map[0] == UNUSED_SEGMENT) {
+		// no valid config (no ROM in segment zero), try to load default
+		if (rom_request_list_size) {
+			// only warn user if there WAS any list, otherwise it's just annoying ...
+			ERROR_WINDOW("No EXOS ROM image in segment 0!\nForcing the default one, if exists ...");
+		}
+		if (load_rom_image(0, DEFAULT_ROM_FN))
+			return 1;
+	}
+	rom_request_list_size = 0;
 	/* XEP ROM: guess where to place it, or disable it ... */
-	if (config_getopt_int("xeprom")) {
+	if (!xemucfg_get_bool("noxeprom")) {
 		// XEP ROM is enabled with 'xeprom' directive
 		if (xep_rom_seg == -1) {	// not assigned manually, try to find a place for it ...
-			xep_rom_seg = last + 1;	// ... with simply using the segment after the last used ROM segment
-			DEBUGPRINT("CONFIG: ROM: automatic XEP ROM image placer selected segment is %02Xh" NL, xep_rom_seg);
+			for (int seg = 0; seg < 0xFC; seg++) {
+				if (memory_segment_map[seg] == UNUSED_SEGMENT) {
+					xep_rom_seg = seg;
+					break;
+				}
+			}
+			if (xep_rom_seg != -1)
+				DEBUGPRINT("CONFIG: ROM: automatic XEP ROM image placer selected segment is %02Xh" NL, xep_rom_seg);
+			else
+				DEBUGPRINT("CONFIG: ROM: could not find place for XEP ROM ..." NL);
 		}
 	} else {
 		// XEP ROM is disabled (with 'xeprom' directive), _IF_ it was not assigned manually
@@ -157,8 +186,8 @@ int roms_load ( void )
 			memset(memory + xep_rom_addr, 0, 0x4000);
 			memcpy(memory + xep_rom_addr, xep_rom_image, sizeof xep_rom_image);
 			memory_segment_map[xep_rom_seg] = XEPROM_SEGMENT;
-			xep_set_default_device_name(NULL);
 			DEBUGPRINT("CONFIG: ROM: XEP internal ROM image has been installed in segment %02Xh" NL, xep_rom_seg);
+			xep_set_default_device_name(NULL);
 		} else {
 			DEBUGPRINT("CONFIG: ROM: XEP internal ROM image CANNOT be installed because segment %02Xh is used!!" NL, xep_rom_seg);
 			ERROR_WINDOW("XEP internal ROM image cannot be installed.\nXep128 will work, but no XEP feature will be available.");
@@ -166,5 +195,6 @@ int roms_load ( void )
 		}
 	} else
 		xep_rom_seg = -1;
+	DEBUGPRINT("CONFIG: ROM init end." NL);
 	return 0;
 }

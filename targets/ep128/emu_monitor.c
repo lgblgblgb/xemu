@@ -19,13 +19,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEP128_NEED_SDL_WMINFO
 
 #include "xemu/emutools.h"
+#include "xemu/emutools_config.h"
 #include "enterprise128.h"
 #include "emu_monitor.h"
-#include "xemu/../rom/ep128/xep_rom_syms.h"
+#include "rom/ep128/xep_rom_syms.h"
 #include "xemu/z80_dasm.h"
 #include "cpu.h"
 #include "z180.h"
-#include "configuration.h"
 #include "emu_rom_interface.h"
 #include "fileio.h"
 #include "console.h"
@@ -411,7 +411,7 @@ static void cmd_emu ( void )
 		buf, OS_KIND, SDL_GetPlatform(), SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver(),
 		sdlver_compiled.major, sdlver_compiled.minor, sdlver_compiled.patch,
 		sdlver_linked.major, sdlver_linked.minor, sdlver_linked.patch,
-		app_base_path, app_pref_path, current_directory,
+		sdl_base_dir, sdl_pref_dir, "TODO",
 #ifdef CONFIG_SDEXT_SUPPORT
 		sdimg_path, (int)(sd_card_size >> 20)
 #else

@@ -19,10 +19,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_EP128_ROMS_H_INCLUDED
 #define XEMU_EP128_ROMS_H_INCLUDED
 
+#include "xemu/emutools_config.h"
+
 extern int sram_save_segment ( int seg );
 extern int sram_load_segment ( int seg );
 extern int sram_save_all_segments ( void );
 extern int roms_load ( void );
+extern const char *rom_parse_opt_cb ( struct xemutools_config_st *opt, const char *optname, const char *optvalue );
 
 extern int xep_rom_seg, xep_rom_addr;
 extern const char *rom_name_tab[0x100];

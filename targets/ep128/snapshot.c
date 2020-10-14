@@ -18,11 +18,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #include "xemu/emutools.h"
+#include "xemu/emutools_files.h"
 #include "enterprise128.h"
 #include "snapshot.h"
-#include "configuration.h"
 #include "cpu.h"
 #include "roms.h"
+#include <fcntl.h>
 
 
 
@@ -69,9 +70,17 @@ int ep128snap_load ( const char *fn )
 	long snapsize;
 	int pos;
 	char pathbuffer[PATH_MAX + 1];
-	FILE *f = open_emu_file(fn, "rb", pathbuffer);
-	if (!f) {
+	int fd = xemu_open_file(fn, O_RDONLY, NULL, pathbuffer);
+//	FILE *f = open_emu_file(fn, "rb", pathbuffer);
+//	FIXME: move these from the f* functions ...
+	if (fd < 0) {
 		ERROR_WINDOW("Cannot open requestes snapshot file: %s", fn);
+		return 1;
+	}
+	FILE *f = fdopen(fd, "rb");
+	if (f == NULL) {
+		ERROR_WINDOW("Cannot open requestes snapshot file: %s", fn);
+		close(fd);
 		return 1;
 	}
 	if (fseek(f, 0, SEEK_END)) {

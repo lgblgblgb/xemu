@@ -17,6 +17,7 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
+#include "xemu/emutools_config.h"
 #include "enterprise128.h"
 #include "emu_rom_interface.h"
 #include "xemu/../rom/ep128/xep_rom_syms.h"
@@ -24,7 +25,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "cpu.h"
 #include "roms.h"
 #include "emu_monitor.h"
-#include "configuration.h"
 #include "fileio.h"
 
 #include <unistd.h>
@@ -95,8 +95,8 @@ void xep_set_default_device_name ( const char *name )
 {
 	int l;
 	if (!name)
-		name = config_getopt_str("ddn");
-	if (!strcasecmp(name, "none"))
+		name = xemucfg_get_str("ddn");
+	if (!name)
 		name = "";
 	l = strlen(name);
 	if (l < 16) {
@@ -208,7 +208,7 @@ void xep_rom_trap ( Uint16 pc, Uint8 opcode )
 		case xepsym_trap_on_system_init:
 			exos_version = Z80_B;	// store EXOS version number we got ...
 			memcpy(exos_info, memory + ((xepsym_exos_info_struct & 0x3FFF) | (xep_rom_seg << 14)), 8);
-			if (config_getopt_int("skiplogo")) {
+			if (xemucfg_get_bool("skiplogo")) {
 				DEBUG("XEP: skiplogo option requested logo skip, etting EXOS variable 0xBFEF to 1 on system init ROM call" NL);
 				EXOS_BYTE(0xBFEF) = 1; // use this, to skip Enterprise logo when it would come :-)
 			}

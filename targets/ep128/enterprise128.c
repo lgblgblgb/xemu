@@ -18,12 +18,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #include "xemu/emutools.h"
+#include "xemu/emutools_config.h"
 #include "xemu/emutools_gui.h"
 #include "xemu/z80.h"
 #include "enterprise128.h"
 #include "dave.h"
 #include "nick.h"
-#include "configuration.h"
 #include "sdext.h"
 #include "exdos_wd.h"
 #include "roms.h"
@@ -31,6 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "cpu.h"
 #include "primoemu.h"
 #include "emu_rom_interface.h"
+#include "keyboard_mapping.h"
 #include "epnet.h"
 #include "zxemu.h"
 #include "printer.h"
@@ -51,7 +52,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 //static Uint32 *ep_pixels;
 static const int _cpu_speeds[4] = { 4000000, 6000000, 7120000, 10000000 };
 static int _cpu_speed_index = 0;
-static int guarded_exit = 0;
 static unsigned int ticks;
 int paused = 0;
 static int cpu_cycles_for_dave_sync = 0;
@@ -62,42 +62,25 @@ static double balancer;
 static double SCALER;
 static int sram_ready = 0;
 time_t unix_time;
+static char emulator_speed_title[32] = "";
 
 
-#if 0
-/* Ugly indeed, but it seems some architecture/OS does not support "standard"
-   aligned allocations or give strange error codes ... Note: this one only
-   works, if you don't want to free() the result pointer!! */
-void *alloc_xep_aligned_mem ( size_t size )
-{
-	// it seems _mm_malloc() is quite standard at least on gcc, mingw, clang ... so let's try to use it
-#if defined(XEMU_ARCH_HTML) || defined(__arm__)
-	return SDL_malloc(size);
-#else
-	void *p = _mm_malloc(size, __BIGGEST_ALIGNMENT__);
-	DEBUG("ALIGNED-ALLOC: base_pointer=%p size=%d alignment=%d" NL, p, (int)size, __BIGGEST_ALIGNMENT__);
-	return p;
-#endif
-}
-#endif
 
 
 static void shutdown_callback(void)
 {
 	sdext_shutdown();
-	if (guarded_exit) {
-		audio_close();
-		printer_close();
+	audio_close();
+	printer_close();
 #ifdef CONFIG_EPNET_SUPPORT
-		epnet_uninit();
+	epnet_uninit();
 #endif
 #ifdef CONFIG_EXDOS_SUPPORT
-		wd_detach_disk_image();
+	wd_detach_disk_image();
 #endif
-		if (sram_ready)
-			sram_save_all_segments();
-		DEBUGPRINT("Shutdown callback, return." NL);
-	}
+	if (sram_ready)
+		sram_save_all_segments();
+	DEBUGPRINT("Shutdown callback, return." NL);
 	console_close_window_on_exit();
 }
 
@@ -126,6 +109,7 @@ int set_cpu_clock ( int hz )
 	SCALER = (double)NICK_SLOTS_PER_SEC / (double)CPU_CLOCK;
 	DEBUG("CPU: clock = %d scaler = %f" NL, CPU_CLOCK, SCALER);
 	dave_set_clock();
+	sprintf(emulator_speed_title, "%.2fMHz", hz / 1000000.0);
 	return hz;
 }
 
@@ -302,11 +286,33 @@ static void xep128_emulation ( void )
 
 
 
-
-
 int main (int argc, char *argv[])
 {
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Enterprise-128 \"old XEP128 within the Xemu project now\" emulator from LGB");
+	xemucfg_define_switch_option("audio", "Enable (buggy) audio output");
+	xemucfg_define_switch_option("syscon", "Keep console window open + monitor prompt");
+	//{ DEBUGFILE_OPT,CONFITEM_STR,	"none",		0, "Enable debug messages written to a specified file" },
+	xemucfg_define_str_option("ddn", NULL, "Default device name (none = not to set)");
+	xemucfg_define_str_option("filedir", "@files", "Default directory for FILE: device");
+	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
+	xemucfg_define_num_option("mousemode",	1, "Set mouse mode, 1-3 = J-column 2,4,8 bytes and 4-6 the same for K-column");
+	xemucfg_define_switch_option("primo", "Start in Primo emulator mode");
+	xemucfg_define_str_option("printfile", PRINT_OUT_FN, "Printing into this file");
+	xemucfg_define_str_option("ram", "128", "RAM size in Kbytes (decimal) or segment specification(s) prefixed with @ in hex (VRAM is always assumed), like: @C0-CF,E0,E3-E7");
+	xemucfg_define_proc_option("rom", rom_parse_opt_cb, "ROM image, format is \"rom@xx=filename\" (xx=start segment in hex), use rom@00 for EXOS or combined ROM set");
+	xemucfg_define_str_option("sdimg", SDCARD_IMG_FN, "SD-card disk image (VHD) file name/path");
+	xemucfg_define_str_option("sdl", NULL, "Sets SDL specific option(s) including rendering related stuffs");
+	xemucfg_define_switch_option("skiplogo", "Disables Enterprise logo on start-up via XEP ROM");
+	xemucfg_define_str_option("snapshot", NULL, "Load and use ep128emu snapshot");
+	xemucfg_define_str_option("wdimg", NULL, "EXDOS WD disk image file name/path");
+	xemucfg_define_switch_option("noxeprom", "Disables XEP internal ROM");
+	//{ "epkey",	CONFITEM_STR,	NULL,		1, "Define a given EP/emu key, format epkey@xy=SDLname, where x/y are row/col in hex or spec code (ie screenshot, etc)." },
+	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
+	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
+	if (xemucfg_parse_all(argc, argv))
+		return 1;
+	i_am_sure_override = xemucfg_get_bool("besure");
+	window_title_info_addon = emulator_speed_title;
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
 		1,				// resizable window
@@ -322,55 +328,43 @@ int main (int argc, char *argv[])
 		shutdown_callback		// registered shutdown function
 	))
 		return 1;
-	xemugui_init(NULL);	// allow to fail (do not exit if it fails). Some targets may not have X running
+	xemugui_init(xemucfg_get_str("gui"));	// allow to fail (do not exit if it fails). Some targets may not have X running
 	osd_init_with_defaults();
-	if (config_init(argc, argv)) {
-#ifdef XEMU_ARCH_HTML
-		ERROR_WINDOW("Error with config parsing. Please check the (javascript) console of your browser to learn about the error.");
-#endif
-		return 1;
-	}
-	guarded_exit = 1;	// turn on guarded exit, with custom de-init stuffs
-	//DEBUGPRINT("EMU: sleeping = \"%s\", timing = \"%s\"" NL,
-	//	__SLEEP_METHOD_DESC, __TIMING_METHOD_DESC
-	//);
+	keymap_preinit_config_internal();
 	fileio_init(
 #ifdef XEMU_ARCH_HTML
 		"/",
 #else
-		app_pref_path,
+		sdl_pref_dir,
 #endif
 	"files");
-	//if (screen_init())
-	//	return 1;
-	audio_init(config_getopt_int("audio"));
+	audio_init(xemucfg_get_bool("audio"));
 	z80ex_init();
 	set_ep_cpu(CPU_Z80);
 	if (nick_init())
 		return 1;
-	const char *snapshot = config_getopt_str("snapshot");
-	if (strcmp(snapshot, "none")) {
+	const char *snapshot = xemucfg_get_str("snapshot");
+	if (snapshot) {
 		if (ep128snap_load(snapshot))
 			snapshot = NULL;
 	} else
-		snapshot = NULL;
 	if (!snapshot) {
 		if (roms_load())
 			return 1;
 		primo_rom_seg = primo_search_rom();
-		ep_set_ram_config(config_getopt_str("ram"));
+		ep_set_ram_config(xemucfg_get_str("ram"));
 	}
-	mouse_setup(config_getopt_int("mousemode"));
+	mouse_setup(xemucfg_get_num("mousemode"));
 	ep_reset();
 	kbd_matrix_reset();
 	joy_sdl_event(NULL); // this simply inits joy layer ...
 #ifdef CONFIG_SDEXT_SUPPORT
 	if (!snapshot)
-		sdext_init(config_getopt_str("sdimg"));
+		sdext_init(xemucfg_get_str("sdimg"));
 #endif
 #ifdef CONFIG_EXDOS_SUPPORT
 	wd_exdos_reset();
-	wd_attach_disk_image(config_getopt_str("wdimg"));
+	wd_attach_disk_image(xemucfg_get_str("wdimg"));
 #endif
 #ifdef CONFIG_EPNET_SUPPORT
 	epnet_init(NULL);
@@ -379,16 +373,25 @@ int main (int argc, char *argv[])
 	balancer = 0;
 	set_cpu_clock(DEFAULT_CPU_CLOCK);
 	audio_start();
-	if (config_getopt_int("fullscreen"))
-		xemu_set_full_screen(1);
+	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
 	sram_ready = 1;
-	if (strcmp(config_getopt_str("primo"), "none") && !snapshot) {
+	if (xemucfg_get_bool("primo") && !snapshot) {
 		// TODO: da stuff ...
-		primo_emulator_execute();
-		OSD(-1, -1, "Primo Emulator Mode");
+		if (primo_rom_seg != -1) {
+			primo_emulator_execute();
+			OSD(-1, -1, "Primo Emulator Mode");
+		} else
+			ERROR_WINDOW("Primo mode was requested, but PRIMO ROM was not loaded.\nRefusing Primo mode");
 	}
 	if (snapshot)
 		ep128snap_set_cpu_and_io();
+#ifdef XEMU_ARCH_WIN
+	if (!xemucfg_get_bool("syscon"))
+		console_close_window();
+#else
+	if (xemucfg_get_bool("syscon"))
+		console_open_window();	// on non-windows, it only will mark console as open for monitor to be used ..
+#endif
 	console_monitor_ready();	// OK to run monitor on console now!
 	xemu_timekeeping_start();
 	DEBUGPRINT(NL "EMU: entering into main emulation loop" NL);

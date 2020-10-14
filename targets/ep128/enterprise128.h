@@ -63,7 +63,7 @@ extern time_t unix_time;
 #endif
 #define DEFAULT_CPU_CLOCK	4000000
 
-#define DEFAULT_ROM_FN		"@combined.rom"
+#define DEFAULT_ROM_FN		"@exos.rom"
 #define SDCARD_IMG_FN		"@sdcard.img"
 #define PRINT_OUT_FN		"@print.out"
 #define DEFAULT_CONFIG_FILE	"@config"

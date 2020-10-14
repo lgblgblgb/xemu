@@ -680,11 +680,13 @@ static void epnet_shutdown ( int restart )
 
 void epnet_uninit ( void )
 {
-	epnet_shutdown(0);
-	//xemu_free_sockapi();
-	xemusock_uninit();
-	w5300_does_work = 0;
-	DEBUGPRINT("EPNET: uninit" NL);
+	if (w5300_does_work) {
+		epnet_shutdown(0);
+		//xemu_free_sockapi();
+		xemusock_uninit();
+		w5300_does_work = 0;
+		DEBUGPRINT("EPNET: uninit" NL);
+	}
 }
 
 Uint8 epnet_read_cpu_port ( unsigned int port )

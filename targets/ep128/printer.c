@@ -17,14 +17,16 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
+#include "xemu/emutools_files.h"
+#include "xemu/emutools_config.h"
 #include "enterprise128.h"
 #include "printer.h"
 #include "dave.h"
-#include "configuration.h"
 #include <errno.h>
+#include <fcntl.h>
 
 
-static FILE *fp = NULL;
+static int fp = -1;
 static int fp_to_open = 1;
 
 #define BUFFER_SIZE 1024
@@ -42,11 +44,12 @@ static int old_strobe_level = 0;
 
 static void write_printer_buffer ( void )
 {
-	if (buffer_pos && fp != NULL) {
-		if (fwrite(buffer, buffer_pos, 1, fp) != 1) {
+	if (buffer_pos && fp >= 0) {
+		if (xemu_safe_write(fp, buffer, buffer_pos) != buffer_pos) {
+		//if (fwrite(buffer, buffer_pos, 1, fp) != 1) {
 			WARNING_WINDOW("Cannot write printer output: %s\nFurther printer I/O has been disabled.", ERRSTR());
-			fclose(fp);
-			fp = NULL;
+			close(fp);
+			fp = -1;
 		}
 	}
 	buffer_pos = 0;
@@ -56,12 +59,12 @@ static void write_printer_buffer ( void )
 
 void printer_close ( void )
 {
-	if (fp) {
+	if (fp >= 0) {
 		write_printer_buffer();
-		fclose(fp);
+		close(fp);
 		DEBUG("Closing printer output file." NL);
 		fp_to_open = 1;
-		fp = NULL;
+		fp = -1;
 	}
 }
 
@@ -90,17 +93,18 @@ static void send_data_to_printer ( Uint8 data )
 {
 	//DEBUG("PRINTER GOT DATA: %d" NL, data);
 	if (fp_to_open) {
-		const char *printfile = config_getopt_str("printfile");
+		const char *printfile = xemucfg_get_str("printfile");
 		char path[PATH_MAX + 1];
-		fp = open_emu_file(printfile, "ab", path);
-		if (fp == NULL)
+		//fp = open_emu_file(printfile, "ab", path);
+		fp = xemu_open_file(printfile, O_WRONLY | O_APPEND | O_CREAT, NULL, path);
+		if (fp < 0)
 			WARNING_WINDOW("Cannot create/append printer output file \"%s\": %s.\nYou can use Xep128 but printer output will not be logged!", path, ERRSTR());
 		else
 			INFO_WINDOW("Printer event, file \"%s\" has been opened for the output.", path);
 		fp_to_open = 0;
 		buffer_pos = 0;
 	}
-	if (fp != NULL) {
+	if (fp >= 0) {
 		buffer[buffer_pos++] = data;
 		if (buffer_pos == BUFFER_SIZE)
 			write_printer_buffer();
