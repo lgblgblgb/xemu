@@ -286,6 +286,13 @@ static void xep128_emulation ( void )
 
 
 
+static const char *rom_parse_opt_cb ( struct xemutools_config_st *unused, const char *optname, const char *optvalue )
+{
+	return rom_parse_opt(optname, optvalue);
+}
+
+
+
 int main (int argc, char *argv[])
 {
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Enterprise-128 \"old XEP128 within the Xemu project now\" emulator from LGB");

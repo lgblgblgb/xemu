@@ -43,16 +43,25 @@ static struct {
 static int rom_request_list_size = 0;
 
 
-const char *rom_parse_opt_cb ( struct xemutools_config_st *opt, const char *optname, const char *optvalue )
+const char *rom_parse_opt ( const char *optname, const char *optvalue )
 {
-	DEBUGPRINT("PARSE_ROM: opt=%p optname=%s optvalue=%s" NL, opt, optname, optvalue);
-	optname = strchr(optname, '@');
-	if (optname == NULL)
+	//DEBUGPRINT("PARSE_ROM: optname=%s optvalue=%s" NL, optname, optvalue);
+	const char *p = strchr(optname, '@');
+	if (p == NULL)
 		return "rom option should specify segment, ie: rom@XX (XX=hex)";
-	int seg;
-	if (sscanf(optname + 1, "%02x", &seg) != 1 || seg < 0 || seg >= 0xFC)
-		return "rom@XX option does not specify valid segment";
-	if (rom_request_list_size == ROM_REQUEST_LIST_MAX_SIZE)
+	int seg = 0;
+	while (*p) {
+		if ((*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f'))
+			seg = (seg << 4) + (*p & 0xF) + 9;
+		else if (*p >= '0' && *p <= '9')
+			seg = (seg << 4) + *p - '0';
+		else
+			return "Invalid HEX value character after rom@ in the option name";
+		if (seg >= 0xFC)
+			return "Invalid segment specified after the rom@ option";
+		p++;
+	}	
+	if (rom_request_list_size >= ROM_REQUEST_LIST_MAX_SIZE)
 		return "too many -rom options!";
 	rom_request_list[rom_request_list_size].seg = seg;
 	rom_request_list[rom_request_list_size].fn  = xemu_strdup(optvalue);
@@ -147,14 +156,24 @@ int roms_load ( void )
 		load_rom_image(rom_request_list[i].seg, rom_request_list[i].fn);
 		free((void*)rom_request_list[i].fn);
 	}
+	if (memory_segment_map[0] != ROM_SEGMENT && memory_segment_map[0] != UNUSED_SEGMENT) {
+		ERROR_WINDOW("Invalid config, segment zero must be ROM");
+		return 1;
+	}
 	if (memory_segment_map[0] == UNUSED_SEGMENT) {
-		// no valid config (no ROM in segment zero), try to load default
+		// no valid config (no ROM in segment zero)
 		if (rom_request_list_size) {
-			// only warn user if there WAS any list, otherwise it's just annoying ...
-			ERROR_WINDOW("No EXOS ROM image in segment 0!\nForcing the default one, if exists ...");
+			// if there was some ROM config (rom_request_list_size is non-zero) then it's
+			// a fatal error resulted this bad configuration!
+			ERROR_WINDOW("Invalid config: No ROM image was defined for segment 0!");
+			return 1;
 		}
+		// ... though if there was no ROM config, some defaults should be nice to try,
+		// so here it is:
+		DEBUGPRINT("CONFIG: ROM: no ROM was defined by user. Trying the default one for segment 0: %s" NL, DEFAULT_ROM_FN);
 		if (load_rom_image(0, DEFAULT_ROM_FN))
 			return 1;
+		// ... if it also fails, end of game.
 	}
 	rom_request_list_size = 0;
 	/* XEP ROM: guess where to place it, or disable it ... */
