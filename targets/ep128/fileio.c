@@ -204,7 +204,7 @@ void fileio_func_open_or_create_channel ( int create )
 		else
 			r = xemugui_file_selector(
 				XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
-				WINDOW_TITLE " - Select file for opening via FILE: device",
+				"Select file for opening via FILE: device",
 				fileio_cwd,
 				fnbuf,
 				sizeof fnbuf

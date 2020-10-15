@@ -26,6 +26,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define USE_LOCKED_TEXTURE	0
 #define RENDER_SCALE_QUALITY	1
 
+#define DEFAULT_ROM_FN		"#exos.rom"
+#define SDCARD_IMG_FN		"@sdcard.img"
+#define PRINT_OUT_FN		"@print.out"
+#define SRAM_BACKUP_FILE_FORMAT	"@sram-%02X.seg"
+
+#define DEFAULT_CPU_CLOCK	4000000
+
+// Used at various places to name the emulator (in prompts, etc)
+#define XEP128_NAME		"XEMU::Xep128"
 
 extern void emu_one_frame ( int rasters, int frameskip);
 extern int  set_cpu_clock ( int hz );
@@ -33,41 +42,14 @@ extern int  set_cpu_clock ( int hz );
 extern int paused;
 extern time_t unix_time;
 
-#define SRAM_BACKUP_FILE_FORMAT	"@sram-%02X.seg"
-
-#define VARALIGN	MAXALIGNED
-
-
-/* Ugly hack: now override DATADIR to the old Xep128 defaults for legacy Xep128 users.
-   This must be changed some time though ... */
-#ifdef DATADIR
-#undef DATADIR
-#endif
-#ifndef XEMU_ARCH_WIN
-#define DATADIR		"/usr/local/lib/xep128"
-#endif
-
-/* the old: */
-
-#define DESCRIPTION		"Enterprise-128 Emulator"
-#define WINDOW_TITLE		"Xep128"
-#define VERSION			"0.4"
-#define COPYRIGHT		"(C)2014-2016,2020 LGB Gabor Lenart"
-#define PROJECT_PAGE		"http://xep128.lgb.hu/"
+#define VARALIGN		MAXALIGNED
 
 #define CONFIG_USE_LODEPNG
 #define CONFIG_EXDOS_SUPPORT
 #ifdef	XEMU_HAS_SOCKET_API
 #	define CONFIG_EPNET_SUPPORT
-#	define EPNET_IO_BASE		0x90
+#	define EPNET_IO_BASE	0x90
 #endif
-#define DEFAULT_CPU_CLOCK	4000000
-
-#define DEFAULT_ROM_FN		"@exos.rom"
-#define SDCARD_IMG_FN		"@sdcard.img"
-#define PRINT_OUT_FN		"@print.out"
-#define DEFAULT_CONFIG_FILE	"@config"
-#define DEFAULT_CONFIG_SAMPLE_FILE "@config-sample"
 
 #define ERRSTR()		strerror(errno)
 

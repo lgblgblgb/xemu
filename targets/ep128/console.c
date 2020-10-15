@@ -37,16 +37,16 @@ void console_monitor_ready ( void ) {
 
 
 #ifdef XEMU_ARCH_WIN
-#include <windows.h>
-#include <stdio.h>
-#include <io.h>
-#include <fcntl.h>
+#	include <windows.h>
+#	include <stdio.h>
+#	include <io.h>
+#	include <fcntl.h>
 #else
-#ifndef XEMU_HAS_READLINE
-#error "We need libreadline for this target/platform, but XEMU_HAS_READLINE is not defined. Maybe libreadline cannot be detected?"
-#endif
-#include <readline/readline.h>
-#include <readline/history.h>
+#	ifndef XEMU_HAS_READLINE
+#		error "We need libreadline for this target/platform, but XEMU_HAS_READLINE is not defined. Maybe libreadline cannot be detected?"
+#	endif
+#	include <readline/readline.h>
+#	include <readline/history.h>
 #endif
 
 #define USE_MONITOR	1
@@ -67,15 +67,15 @@ static SDL_Thread *mont = NULL;
    no idea about Windows ... */
 static int console_monitor_thread ( void *ptr )
 {
-	printf("Welcome to " WINDOW_TITLE " monitor. Use \"help\" for help" NL);
+	printf("Welcome to " XEP128_NAME " monitor. Use \"help\" for help" NL);
 	while (monitor_running) {
 		char *p;
 #ifdef XEMU_ARCH_WIN
 		char buffer[256];
-		printf(WINDOW_TITLE "> ");
+		printf(XEP128_NAME "> ");
 		p = fgets(buffer, sizeof buffer, stdin);
 #else
-		p = readline(WINDOW_TITLE "> ");
+		p = readline(XEP128_NAME "> ");
 #endif
 		if (p == NULL) {
 			SDL_Delay(10);	// avoid flooding the CPU in case of I/O problem for fgets ...
@@ -105,7 +105,7 @@ static void monitor_start ( void )
 		return;
 	DEBUGPRINT("MONITOR: start" NL);
 	monitor_running = 1;
-	mont = SDL_CreateThread(console_monitor_thread, WINDOW_TITLE " monitor", NULL);
+	mont = SDL_CreateThread(console_monitor_thread, XEP128_NAME " monitor", NULL);
 	if (mont == NULL)
 		monitor_running = 0;
 }
@@ -134,6 +134,8 @@ static int monitor_stop ( void )
 
 void console_open_window ( void )
 {
+	sysconsole_open();
+#if 0
 #ifdef XEMU_ARCH_WIN
 	int hConHandle;
 	HANDLE lStdHandle;
@@ -147,7 +149,7 @@ void console_open_window ( void )
 		ERROR_WINDOW("Cannot allocate windows console!");
 		return;
 	}
-	SetConsoleTitle(WINDOW_TITLE " console");
+	SetConsoleTitle(XEP128_NAME " console");
 	// set the screen buffer to be big enough to let us scroll text
 	GetConsoleScreenBufferInfo(GetStdHandle(STD_OUTPUT_HANDLE), &coninfo);
 	coninfo.dwSize.Y = 1024;
@@ -180,8 +182,11 @@ void console_open_window ( void )
 	SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT);
 	DEBUGPRINT("WINDOWS: console is open" NL);
 #endif
-	console_is_open = 1;
-	monitor_start();
+#endif
+	if (sysconsole_is_open) {
+		console_is_open = 1;
+		monitor_start();
+	}
 }
 
 
@@ -191,6 +196,10 @@ void console_close_window ( void )
 	if (!console_is_open)
 		return;
 	monitor_stop();
+	sysconsole_close(NULL);
+	if (!sysconsole_is_open)
+		console_is_open = 0;
+#if 0
 #ifdef XEMU_ARCH_WIN
 	if (!FreeConsole())
 		ERROR_WINDOW("Cannot release windows console!");
@@ -198,6 +207,7 @@ void console_close_window ( void )
 		console_is_open = 0;
 #else
 	console_is_open = 0;
+#endif
 #endif
 }
 

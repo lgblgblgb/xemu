@@ -56,7 +56,6 @@ struct commands_st {
 	void (*handler)(void);
 };
 
-static const char SHORT_HELP[] = "XEP   version " VERSION "  (Xep128 EMU)\n";
 static const char TOO_LONG_OUTPUT_BUFFER[] = " ...%s*** Too long output%s";
 static const char *_dave_ws_descrs[4] = {
 	"all", "M1", "no", "no"
@@ -384,6 +383,9 @@ static void cmd_cpu ( void ) {
 static void cmd_emu ( void )
 {
 	char buf[1024];
+	char wd[PATH_MAX + 1];
+	if (!getcwd(wd, sizeof wd))
+		strcpy(wd, "???");
 #ifdef XEMU_ARCH_WIN
 
 	DWORD siz = sizeof buf;
@@ -411,7 +413,7 @@ static void cmd_emu ( void )
 		buf, OS_KIND, SDL_GetPlatform(), SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver(),
 		sdlver_compiled.major, sdlver_compiled.minor, sdlver_compiled.patch,
 		sdlver_linked.major, sdlver_linked.minor, sdlver_linked.patch,
-		sdl_base_dir, sdl_pref_dir, "TODO",
+		sdl_base_dir, sdl_pref_dir, wd,
 #ifdef CONFIG_SDEXT_SUPPORT
 		sdimg_path, (int)(sd_card_size >> 20)
 #else
@@ -490,7 +492,7 @@ static void cmd_close ( void )
 
 static void cmd_romname ( void )
 {
-	MPRINTF("%s", SHORT_HELP);
+	MPRINTF("XEP   version %s\n", XEMU_BUILDINFO_CDATE);
 }
 
 
@@ -553,33 +555,23 @@ static void cmd_sdl ( void )
 			MPRINTF("Display #%d %dx%dpx @ %dHz %i bpp (%s)\n", a, display.w, display.h, display.refresh_rate,
 				SDL_BITSPERPIXEL(display.format), SDL_GetPixelFormatName(display.format)
 			);
-#if 0
-	switch (sdl_wminfo.subsystem) {
-		default:
-		case SDL_SYSWM_UNKNOWN:
-			subsystem = "Unknown System";
-			break;
-		case SDL_SYSWM_WINDOWS:	subsystem = "Microsoft Windows(TM)";	break;
-		case SDL_SYSWM_X11:	subsystem = "X Window System";		break;
-		case SDL_SYSWM_WINRT:	subsystem = "WinRT";			break;
-		case SDL_SYSWM_DIRECTFB:subsystem = "DirectFB";			break;
-		case SDL_SYSWM_COCOA:	subsystem = "Apple OS X";		break;
-		case SDL_SYSWM_UIKIT:	subsystem = "UIKit";			break;
-		case SDL_SYSWM_WAYLAND:	subsystem = "Wayland";			break;
-		case SDL_SYSWM_MIR:	subsystem = "Mir";			break;
-		case SDL_SYSWM_ANDROID:	subsystem = "Android";			break;
-	}
-	MPRINTF(WINDOW_TITLE " is running with SDL version %d.%d.%d on %s (id=%d)\n",
-		(int)sdl_wminfo.version.major,
-		(int)sdl_wminfo.version.minor,
-		(int)sdl_wminfo.version.patch,
-		subsystem,
-		sdl_wminfo.subsystem
-	);
+#if defined(XEMU_ARCH_OSX)
+	subsystem = "MacOS";
+#elif defined(XEMU_ARCH_WIN)
+	subsystem = "Windows";
+#elif defined(XEMU_ARCH_HTML)
+	subsystem = "Web-browser";
+#elif defined(XEMU_ARCH_LINUX)
+	subsystem = "Linux";
 #else
-	subsystem = "FIXME";
-	MPRINTF(WINDOW_TITLE " is FIXME");
+	subsystem = "UNIX";
 #endif
+	MPRINTF(XEP128_NAME " is running with SDL version %d.%d.%d on %s\n",
+		(int)sdlver_linked.major,
+		(int)sdlver_linked.minor,
+		(int)sdlver_linked.patch,
+		subsystem
+	);
 }
 
 
@@ -716,8 +708,8 @@ static void cmd_help ( void ) {
 		}
 		MPRINTF("*** No help/command found '%s'%s", arg, help_for_all_desc);
 	} else {
-	        MPRINTF("Helper ROM: %s%s %s %s\nBuilt on: %s\n%s\nGIT: %s\nCompiler: %s %s\n\nCommands:",
-			SHORT_HELP, WINDOW_TITLE, VERSION, COPYRIGHT,
+	        MPRINTF("Helper ROM: %s %s %s\nBuilt on: %s\n%s\nGIT: %s\nCompiler: %s %s\n\nCommands:",
+			XEP128_NAME, XEMU_BUILDINFO_CDATE, COPYRIGHT_YEARS " LGB",
 			XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT, XEMU_BUILDINFO_GIT, CC_TYPE, XEMU_BUILDINFO_CC
 		);
 		while (cmds->name) {
