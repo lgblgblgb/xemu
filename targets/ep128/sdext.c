@@ -418,7 +418,7 @@ static void _block_read ( void )
 	_buffer[1] = 0xFE; // data token
 	//ret = fread(_buffer + 2, 1, 512, sdf);
 	ret = read(sdfd, _buffer + 2, 512);
-	SD_DEBUG("SDEXT: REGIO: fread retval = %d" NL, ret);
+	SD_DEBUG("SDEXT: REGIO: read retval = %d" NL, ret);
 	(void)ret;
 	_buffer[512 + 2] = 0; // CRC
 	_buffer[512 + 3] = 0; // CRC

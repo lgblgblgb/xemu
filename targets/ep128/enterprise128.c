@@ -96,6 +96,8 @@ static void shutdown_callback(void)
 void clear_emu_events ( void )
 {
 	//hid_reset_events(1);
+	kbd_matrix_reset();	// also reset the keyboard matrix as it seems some keys can be detected "stucked" ...
+	mouse_reset_button();	// ... and also the mouse buttons :)
 }
 
 
@@ -400,6 +402,7 @@ int main (int argc, char *argv[])
 		console_open_window();	// on non-windows, it only will mark console as open for monitor to be used ..
 #endif
 	console_monitor_ready();	// OK to run monitor on console now!
+	clear_emu_events();
 	xemu_timekeeping_start();
 	DEBUGPRINT(NL "EMU: entering into main emulation loop" NL);
 	// emscripten_set_main_loop(xep128_emulation, 50, 1);

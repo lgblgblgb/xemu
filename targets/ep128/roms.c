@@ -47,22 +47,22 @@ const char *rom_parse_opt ( const char *optname, const char *optvalue )
 {
 	//DEBUGPRINT("PARSE_ROM: optname=%s optvalue=%s" NL, optname, optvalue);
 	const char *p = strchr(optname, '@');
-	if (p == NULL)
+	if (!p || !p[1])
 		return "rom option should specify segment, ie: rom@XX (XX=hex)";
 	int seg = 0;
-	while (*p) {
+	while (*++p) {
 		if ((*p >= 'A' && *p <= 'F') || (*p >= 'a' && *p <= 'f'))
 			seg = (seg << 4) + (*p & 0xF) + 9;
 		else if (*p >= '0' && *p <= '9')
 			seg = (seg << 4) + *p - '0';
-		else
+		else {
 			return "Invalid HEX value character after rom@ in the option name";
+		}
 		if (seg >= 0xFC)
 			return "Invalid segment specified after the rom@ option";
-		p++;
-	}	
+	}
 	if (rom_request_list_size >= ROM_REQUEST_LIST_MAX_SIZE)
-		return "too many -rom options!";
+		return "too many rom options!";
 	rom_request_list[rom_request_list_size].seg = seg;
 	rom_request_list[rom_request_list_size].fn  = xemu_strdup(optvalue);
 	rom_request_list_size++;
