@@ -31,7 +31,7 @@ int stop_emulation = 0;
 
 int cpu_cycles = 0;
 int cpu_cycles_per_frame;
-int cpu_mhz;
+double cpu_mhz;
 int trace;
 
 enum ed_trap_types {

@@ -23,8 +23,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define CONFIG_FILE_MAX_SIZE	0x10000
 #define CONFIG_VALUE_MAX_LENGTH	256
 
+#define CONFIG_FILE_TEMPL_NAME	"@%s-template.cfg"
+#define CONFIG_FILE_USE_NAME	"@%s-default.cfg"
+
 enum xemutools_option_type {
-	OPT_STR, OPT_BOOL, OPT_NUM, OPT_NO, OPT_PROC
+	OPT_STR, OPT_BOOL, OPT_NUM, OPT_FLOAT, OPT_NO, OPT_PROC
 };
 
 struct xemutools_config_st;
@@ -41,18 +44,23 @@ struct xemutools_config_st {
 #define EMUCFG_PARSER_CALLBACK(name) EMUCFG_PARSER_CALLBACK_RET_TYPE name ( EMUCFG_PARSER_CALLBACK_ARG_LIST )
 typedef EMUCFG_PARSER_CALLBACK_RET_TYPE (*xemucfg_parser_callback_func_t)( EMUCFG_PARSER_CALLBACK_ARG_LIST );
 
-extern void xemucfg_define_option        ( const char *optname, enum xemutools_option_type type, void *defval, const char *help );
+//extern void xemucfg_define_option        ( const char *optname, enum xemutools_option_type type, void *defval, const char *help );
 extern void xemucfg_define_bool_option   ( const char *optname, int defval, const char *help );
 extern void xemucfg_define_str_option    ( const char *optname, const char *defval, const char *help );
 extern void xemucfg_define_num_option    ( const char *optname, int defval, const char *help );
-extern void xemucfg_define_proc_option   ( const char *optname, xemucfg_parser_callback_func_t defval, const char *help );
+extern void xemucfg_define_float_option  ( const char *optname, double defval, const char *help );
+extern void xemucfg_define_proc_option   ( const char *optname, xemucfg_parser_callback_func_t cb, const char *help );
 extern void xemucfg_define_switch_option ( const char *optname, const char *help );
 
 extern int  xemucfg_has_option ( const char *name );
 extern int  xemucfg_parse_all ( int argc, char **argv );
+extern int  xemucfg_save_config_file ( const char *filename, const char *initial_part, const char *cry );
+
 extern const char *xemucfg_get_str ( const char *optname );
 extern int  xemucfg_get_num ( const char *optname );
+extern double xemucfg_get_float ( const char *optname );
 extern int  xemucfg_get_bool ( const char *optname );
+
 
 extern int  xemucfg_integer_list_from_string ( const char *value, int *result, int maxitems, const char *delims );
 

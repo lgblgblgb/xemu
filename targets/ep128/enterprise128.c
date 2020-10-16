@@ -105,8 +105,14 @@ void clear_emu_events ( void )
 
 int set_cpu_clock ( int hz )
 {
-	if (hz <  1000000) hz =  1000000;
-	if (hz > 12000000) hz = 12000000;
+	if (hz <  1000000) {
+		ERROR_WINDOW("Invalid CPU clock (too slow) %.2fMHz, using 1MHz instead.", hz / 1000000.0);
+		hz =  1000000;
+	}
+	if (hz > 12000000) {
+		ERROR_WINDOW("Invalid CPU clock (too fast) %.2fMHz, using 12MHz instead.", hz / 1000000.0);
+		hz = 12000000;
+	}
 	CPU_CLOCK = hz;
 	SCALER = (double)NICK_SLOTS_PER_SEC / (double)CPU_CLOCK;
 	DEBUG("CPU: clock = %d scaler = %f" NL, CPU_CLOCK, SCALER);
@@ -302,6 +308,7 @@ int main (int argc, char *argv[])
 	xemucfg_define_switch_option("syscon", "Keep console window open + monitor prompt");
 	//{ DEBUGFILE_OPT,CONFITEM_STR,	"none",		0, "Enable debug messages written to a specified file" },
 	xemucfg_define_str_option("ddn", NULL, "Default device name (none = not to set)");
+	xemucfg_define_float_option("clock", (double)DEFAULT_CPU_CLOCK, "Z80 clock in MHz");
 	xemucfg_define_str_option("filedir", "@files", "Default directory for FILE: device");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	xemucfg_define_num_option("mousemode",	1, "Set mouse mode, 1-3 = J-column 2,4,8 bytes and 4-6 the same for K-column");
@@ -380,7 +387,7 @@ int main (int argc, char *argv[])
 #endif
 	ticks = SDL_GetTicks();
 	balancer = 0;
-	set_cpu_clock(DEFAULT_CPU_CLOCK);
+	set_cpu_clock((int)(xemucfg_get_float("clock") * 1000000.0));
 	audio_start();
 	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
 	sram_ready = 1;

@@ -80,6 +80,18 @@ static int get_guarded_cfg_num ( const char *optname, int min, int max )
 	} else
 		return ret;
 }
+static double get_guarded_cfg_double ( const char *optname, double min, double max )
+{
+	double ret = xemucfg_get_float(optname);
+	if (ret < min) {
+		ERROR_WINDOW("BADNUM: too low value (%f) for option \"%s\", the minimum is %f, applying that, instead." NL, ret, optname, min);
+		return min;
+	} else if (ret > max) {
+		ERROR_WINDOW("BADNUM: too high value (%f) for option \"%s\", the maximum is %f, applying that, instead." NL, ret, optname, max);
+		return max;
+	} else
+		return ret;
+}
 
 
 void rc_shutdown_callback ( void )
@@ -143,8 +155,8 @@ int main ( int argc, char **argv )
 	xemucfg_define_num_option("width", 80, "Terminal width in character columns");
 	xemucfg_define_num_option("height", 25, "Terminal height in character rows");
 	xemucfg_define_num_option("zoom", 100, "Zoom the window by the given percentage (50%-200%)");
-	xemucfg_define_num_option("clock", 4, "Select Z80 clock speed in MHz");
-	xemucfg_define_num_option("baudcrystal", 1718, "Crystal frequency for the UART chip in KHz (NOT MHz!)");
+	xemucfg_define_float_option("clock", 4, "Select Z80 clock speed in MHz");
+	xemucfg_define_float_option("baudcrystal", 1.718, "Crystal frequency for the UART chip in MHz");
 	xemucfg_define_num_option("baudrate", 56400, "Initial serial baudrate (may be modified if no exact match with -baudcrystal)");
 	xemucfg_define_str_option("load", NULL, "Load and run program from $8000 directly");
 	xemucfg_define_str_option("rom", default_rom_fn, "Load ROM from $0000 (use file name '-' for built-in one)");
@@ -165,13 +177,13 @@ int main ( int argc, char **argv )
 		return 1;
 	osd_init_with_defaults();
 	clear_emu_events();	// also resets the keyboard
-	cpu_mhz = get_guarded_cfg_num("clock", 1, 33);
-	cpu_cycles_per_frame = (1000000 * cpu_mhz) / FRAME_RATE;
+	cpu_mhz = get_guarded_cfg_double("clock", 1.0, 33.0);
+	cpu_cycles_per_frame = (1000000.0 * cpu_mhz) / (double)FRAME_RATE;
 	uart_init(
-		get_guarded_cfg_num("baudcrystal", 1000, 8000) * 1000,
+		(int)(get_guarded_cfg_double("baudcrystal", 1.0, 8.0) * 1000000.0),
 		get_guarded_cfg_num("baudrate", 30, 500000)
 	);
-	DEBUGPRINT("Z80: setting CPU speed to %dMHz, %d CPU cycles per refresh-rate (=%dHz)" NL, cpu_mhz, cpu_cycles_per_frame, FRAME_RATE);
+	DEBUGPRINT("Z80: setting CPU speed to %.2fMHz, %d CPU cycles per refresh-rate (=%dHz)" NL, cpu_mhz, cpu_cycles_per_frame, FRAME_RATE);
 	z80ex_init();
 	if (!xemucfg_get_bool("syscon"))
 		sysconsole_close(NULL);

@@ -31,7 +31,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define PRINT_OUT_FN		"@print.out"
 #define SRAM_BACKUP_FILE_FORMAT	"@sram-%02X.seg"
 
-#define DEFAULT_CPU_CLOCK	4000000
+// In MHz
+#define DEFAULT_CPU_CLOCK	4
 
 // Used at various places to name the emulator (in prompts, etc)
 #define XEP128_NAME		"XEMU::Xep128"

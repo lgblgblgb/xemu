@@ -361,7 +361,7 @@ static void cmd_cpu ( void ) {
 			if (clk < 1000000 || clk > 12000000)
 				MPRINTF("*** Unknown CPU type to set or it's not a clock value either (1-12 is OK in MHz): %s\n", arg);
 			else {
-				INFO_WINDOW("Setting CPU clock to %.2fMhz",
+				INFO_WINDOW("Setting CPU clock to %.2fMHz",
 					set_cpu_clock(clk) / 1000000.0
 				);
 			}

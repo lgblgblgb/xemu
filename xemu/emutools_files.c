@@ -462,10 +462,10 @@ int xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_
 		sprintf(paths[max_paths++], "%srom" DIRSEP_STR "%s", sdl_base_dir, filename + 1);
 		sprintf(paths[max_paths++], "%s%s", sdl_base_dir, filename + 1);
 #ifndef XEMU_ARCH_WIN
-		sprintf(paths[max_paths++], "/usr/local/share/xemu/%s", filename + 1);
-		sprintf(paths[max_paths++], "/usr/local/lib/xemu/%s", filename + 1);
-		sprintf(paths[max_paths++], "/usr/share/xemu/%s", filename + 1);
-		sprintf(paths[max_paths++], "/usr/lib/xemu/%s", filename + 1);
+		sprintf(paths[max_paths++], UNIX_DATADIR_0 "/%s", filename + 1);
+		sprintf(paths[max_paths++], UNIX_DATADIR_1 "/%s", filename + 1);
+		sprintf(paths[max_paths++], UNIX_DATADIR_2 "/%s", filename + 1);
+		sprintf(paths[max_paths++], UNIX_DATADIR_3 "/%s", filename + 1);
 #endif
 #ifdef HAVE_XEMU_INSTALLER
 		sprintf(paths[max_paths++], "%s%s%s", installer_marker_prefix, sdl_inst_dir, filename + 1);

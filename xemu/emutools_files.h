@@ -74,4 +74,11 @@ extern void xemuexec_open_native_file_browser ( char *dir );
 extern void xemu_set_installer ( const char *filename );
 #endif
 
+#ifndef XEMU_ARCH_WIN
+#	define UNIX_DATADIR_0 "/usr/local/share/xemu"
+#	define UNIX_DATADIR_1 "/usr/local/lib/xemu"
+#	define UNIX_DATADIR_2 "/usr/share/xemu"
+#	define UNIX_DATADIR_3 "/usr/lib/xemu"
+#endif
+
 #endif

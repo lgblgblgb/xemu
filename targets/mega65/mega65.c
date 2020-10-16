@@ -47,8 +47,8 @@ static int nmi_level;			// please read the comment at nmi_set() below
 int newhack = 0;
 unsigned int frames_total_counter = 0;
 
-static int fast_mhz, cpu_cycles_per_scanline_for_fast_mode, speed_current;
-static char fast_mhz_in_string[8];
+static int  cpu_cycles_per_scanline_for_fast_mode, speed_current;
+static char fast_mhz_in_string[16];
 static int frame_counter;
 static int   paused = 0, paused_old = 0;
 static int   breakpoint_pc = -1;
@@ -57,7 +57,7 @@ static int   trace_step_trigger = 0;
 static void (*m65mon_callback)(void) = NULL;
 #endif
 static const char emulator_paused_title[] = "TRACE/PAUSE";
-static char emulator_speed_title[] = "????MHz";
+static char emulator_speed_title[64] = "?MHz";
 static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 
 static int force_external_rom = 0;
@@ -378,14 +378,14 @@ static void mega65_init ( void )
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_init(xemucfg_get_str("uartmon"));
 #endif
-	fast_mhz = xemucfg_get_num("fastclock");
+	double fast_mhz = xemucfg_get_float("fastclock");
 	if (fast_mhz < 3 || fast_mhz > 200) {
-		ERROR_WINDOW("Fast clock given by -fastclock switch must be between 3...200MHz. Bad value, defaulting to %dMHz", MEGA65_DEFAULT_FAST_CLOCK);
+		ERROR_WINDOW("Fast clock given by -fastclock switch must be between 3...200MHz. Bad value, defaulting to %.2fMHz", MEGA65_DEFAULT_FAST_CLOCK);
 		fast_mhz = MEGA65_DEFAULT_FAST_CLOCK;
 	}
-	sprintf(fast_mhz_in_string, "%dMHz", fast_mhz);
+	sprintf(fast_mhz_in_string, "%.2fMHz", fast_mhz);
 	cpu_cycles_per_scanline_for_fast_mode = 64 * fast_mhz;
-	DEBUGPRINT("SPEED: fast clock is set to %dMHz, %d CPU cycles per scanline." NL, fast_mhz, cpu_cycles_per_scanline_for_fast_mode);
+	DEBUGPRINT("SPEED: fast clock is set to %.2fMHz, %d CPU cycles per scanline." NL, fast_mhz, cpu_cycles_per_scanline_for_fast_mode);
 	cpu65_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
 	rom_protect = 0;
 	hypervisor_start_machine();
@@ -688,7 +688,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
 	xemucfg_define_switch_option("allowmousegrab", "Allow auto mouse grab with left-click");
 	xemucfg_define_num_option("dmarev", 0x100, "DMA revision (0/1=F018A/B +256=autochange, +512=modulo, you always wants +256!)");
-	xemucfg_define_num_option("fastclock", MEGA65_DEFAULT_FAST_CLOCK, "Clock of M65 fast mode (in MHz)");
+	xemucfg_define_float_option("fastclock", MEGA65_DEFAULT_FAST_CLOCK, "Clock of M65 fast mode (in MHz)");
 	xemucfg_define_num_option("model", 255, "Emulated MEGA65 model (255=custom/Xemu)");
 	xemucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA-board switches turned ON");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");

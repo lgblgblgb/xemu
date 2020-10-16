@@ -74,7 +74,19 @@ void xemucfg_define_option ( const char *optname, enum xemutools_option_type typ
 	}
 	entry->name = xemu_strdup(optname);
 	entry->type = type;
-	entry->value = (defval && type == OPT_STR) ? xemu_strdup(defval) : defval;
+	switch (type) {
+		case OPT_FLOAT:
+			entry->value = xemu_malloc(sizeof(double));
+			*(double*)(entry->value) = *(double*)defval;
+			break;
+		case OPT_STR:
+			entry->value = (defval != NULL) ? xemu_strdup(defval) : NULL;
+			break;
+		default:
+			entry->value = defval;
+			break;
+	}
+	//entry->value = (defval && type == OPT_STR) ? xemu_strdup(defval) : defval;
 	entry->help = help;
 }
 
@@ -88,8 +100,11 @@ void xemucfg_define_str_option    ( const char *optname, const char *defval, con
 void xemucfg_define_num_option    ( const char *optname, int defval, const char *help ) {
 	xemucfg_define_option(optname, OPT_NUM, (void*)(intptr_t)defval, help);
 }
-void xemucfg_define_proc_option   ( const char *optname, xemucfg_parser_callback_func_t defval, const char *help ) {
-	xemucfg_define_option(optname, OPT_PROC, (void*)defval, help);
+void xemucfg_define_float_option  ( const char *optname, double defval, const char *help ) {
+	xemucfg_define_option(optname, OPT_FLOAT, &defval, help);
+}
+void xemucfg_define_proc_option   ( const char *optname, xemucfg_parser_callback_func_t cb, const char *help ) {
+	xemucfg_define_option(optname, OPT_PROC, (void*)cb, help);
 }
 void xemucfg_define_switch_option ( const char *optname, const char *help ) {
 	xemucfg_define_option(optname, OPT_NO, (void*)(intptr_t)0, help);
@@ -121,7 +136,8 @@ static void dump_help ( void )
 		switch (p->type) {
 			case OPT_NO: t = "NO ARG"; break;
 			case OPT_BOOL: t = "bool"; break;
-			case OPT_NUM: t = "num"; break;
+			case OPT_NUM: t = "int-num"; break;
+			case OPT_FLOAT: t = "float-num"; break;
 			case OPT_STR: t = "str"; break;
 			case OPT_PROC: t = "spec"; break;
 		}
@@ -136,17 +152,132 @@ static void dump_help ( void )
 
 static const char *set_boolean_value ( const char *str, void **set_this )
 {
-	if (!strcasecmp(str, "yes") || !strcasecmp(str, "on") || !strcmp(str, "1")) {
+	if (!strcasecmp(str, "yes") || !strcasecmp(str, "on") || !strcmp(str, "1") || !strcasecmp(str, "true")) {
 		*set_this = (void*)1;
 		return NULL;
 	}
-	if (!strcasecmp(str, "no") || !strcasecmp(str, "off") || !strcmp(str, "0")) {
+	if (!strcasecmp(str, "no") || !strcasecmp(str, "off") || !strcmp(str, "0") || !strcasecmp(str, "false")) {
 		*set_this = (void*)0;
 		return NULL;
 	}
 	return "needs a boolean parameter (0/1 or off/on or no/yes)";
 }
 
+
+int xemucfg_save_config_file ( const char *filename, const char *initial_part, const char *cry )
+{
+	struct xemutools_config_st *cfg = config_head;
+	char *out = xemu_strdup(initial_part ? initial_part : "");
+	while (cfg) {
+		char buffer[256 + PATH_MAX];
+		int r = 0;	// sigh, gcc is stupid, it must be set, even if it see all cases are handled later ...
+		switch (cfg->type) {
+			case OPT_STR:
+				r = snprintf(buffer, sizeof buffer, NL "## %s" NL "## (string param)" NL "%s%s = %s" NL,
+					cfg->help,
+					cfg->value ? "" : "#",
+					cfg->name,
+					cfg->value ? (const char *)cfg->value : ""
+				);
+				break;
+			case OPT_NO:
+				r = snprintf(buffer, sizeof buffer, NL "## %s" NL "## (no param at all, use the option only)" NL "%s%s" NL,
+					cfg->help,
+					cfg->value ? "" : "#",
+					cfg->name
+				);
+				break;
+			case OPT_BOOL:
+				r = snprintf(buffer, sizeof buffer, NL "## %s" NL "## (boolean param)" NL "%s = %s" NL,
+					cfg->help,
+					cfg->name,
+					(int)(intptr_t)cfg->value ? "yes" : "no"
+				);
+				break;
+			case OPT_NUM:
+				r = snprintf(buffer, sizeof buffer, NL "## %s" NL "## (integer param)" NL "%s = %d" NL,
+					cfg->help,
+					cfg->name,
+					(int)(intptr_t)cfg->value
+				);
+				break;
+			case OPT_FLOAT:
+				r = snprintf(buffer, sizeof buffer, NL "## %s" NL "## (real-num param)" NL "%s = %f" NL,
+					cfg->help,
+					cfg->name,
+					*(double*)cfg->value
+				);
+				break;
+			case OPT_PROC:
+				r = snprintf(buffer, sizeof buffer, NL "## %s" NL "## (SPECIAL)" NL "#%s" NL,
+					cfg->help,
+					cfg->name
+				);
+				break;
+		}
+		if (r >= sizeof(buffer) - 1) {
+			free(out);
+			FATAL("Too large result for dumping config option '%s'!" NL, cfg->name);
+		}
+		out = xemu_realloc(out, strlen(out) + strlen(buffer) + 1);
+		strcpy(out + strlen(out), buffer);
+		cfg = cfg->next;
+	}
+	if (strlen(out) > CONFIG_FILE_MAX_SIZE) {
+		free(out);
+		FATAL("Too large config file generated in %s", __func__);
+	}
+	int ret = out[0] ? xemu_save_file(filename, out, strlen(out), cry) : 0;
+	free(out);
+	return ret;
+}
+
+
+static int save_config_template ( void )
+{
+	static int already_saved = 0;
+	if (already_saved) {
+		return 0;
+	} else {
+		char fn[PATH_MAX];
+		char templ[4096];
+		already_saved = 1;
+		sprintf(fn, CONFIG_FILE_TEMPL_NAME, xemu_app_name);
+		sprintf(templ,
+			"# Config template for XEMU/%s %s (%s)" NL
+			"# ----" NL
+			"# DO NOT EDIT THIS FILE - THIS WILL BE OVERWRITTEN" NL
+			"# Instead copy this file to a custom name and edit that, if needed." NL
+			"# This file is never read back, only written out as template / reference." NL
+			"# ----" NL
+			"# Rules: basically option = value syntax." NL
+			"# 'switch' options does not have value, so you mustn't write the '= value' part." NL
+			"# Option values expecting file names can start with letters '@' or '#'." NL
+			"# In case of '@' the rest of the filename/path is interpreted as relative to the" NL
+			"# preferences directory. In case of '#', the rest of the filename/path will be searched" NL
+			"# at some common places (including the preferences directory, but also in the same directory" NL
+			"# as the binary is, or in case of UNIX-like OS, even the common data directory)" NL
+			"# ----" NL
+			"# SDL preference directory for this installation: %s" NL
+			"# Binary base directory when generating this file: %s" NL
+#ifndef XEMU_ARCH_WIN
+			"# Also common search directories:" NL
+			"# " UNIX_DATADIR_0 NL
+			"# " UNIX_DATADIR_1 NL
+			"# " UNIX_DATADIR_2 NL
+			"# " UNIX_DATADIR_3 NL
+#endif
+			"# ----" NL NL NL,
+			/* args */
+			xemu_app_name,
+			XEMU_BUILDINFO_CDATE,
+			XEMU_ARCH_NAME,
+			sdl_pref_dir,
+			sdl_base_dir
+		);
+		return xemucfg_save_config_file(fn, templ, NULL);
+	}
+}
 
 
 int xemucfg_parse_config_file ( const char *filename_in, int open_can_fail )
@@ -227,6 +358,9 @@ int xemucfg_parse_config_file ( const char *filename_in, int open_can_fail )
 				case OPT_NUM:
 					o->value = (void*)(intptr_t)atoi(p1);
 					break;
+				case OPT_FLOAT:
+					*(double*)(o->value) = atof(p1);
+					break;
 				case OPT_NO:
 					if (p1)
 						FATAL("Config file (%s) error at line %d: keyword '%s' DOES NOT require any value, but '%s' is detected.", xemu_load_filepath, lineno, p, p1);
@@ -235,7 +369,7 @@ int xemucfg_parse_config_file ( const char *filename_in, int open_can_fail )
 				case OPT_PROC:
 					s = (*(xemucfg_parser_callback_func_t)(o->value))(o, p, p1);
 					if (s)
-						FATAL("Config file (%s) error at line %d: keyword's '%s' parameter '%s' is invalid: %s", xemu_load_filepath, lineno, p, p1, s);
+						FATAL("Config file (%s) error at line %d: keyword '%s' is invalid: %s", xemu_load_filepath, lineno, p, s);
 					break;
 			}
 		}
@@ -250,6 +384,7 @@ int xemucfg_parse_config_file ( const char *filename_in, int open_can_fail )
 
 static int xemucfg_parse_commandline ( int argc, char **argv, const char *only_this )
 {
+	save_config_template();
 	// Skip arg-0, which is program name ...
 	argc--;
 	argv++;
@@ -306,10 +441,13 @@ static int xemucfg_parse_commandline ( int argc, char **argv, const char *only_t
 				case OPT_NUM:
 					o->value = (void*)(intptr_t)atoi(*argv);
 					break;
+				case OPT_FLOAT:
+					*(double*)(o->value) = atof(*argv);
+					break;
 				case OPT_PROC:
 					s = (*(xemucfg_parser_callback_func_t)(o->value))(o, argv[-1] + 1, *argv);
 					if (s)
-						OPT_ERROR_CMDLINE("Option's '%s' parameter '%s' is invalid: %s", argv[-1], *argv, s);
+						OPT_ERROR_CMDLINE("Option '%s' is invalid: %s", argv[-1], s);
 					break;
 				case OPT_NO:
 					break;	// make GCC happy to handle all cases ...
@@ -329,7 +467,7 @@ int xemucfg_parse_all ( int argc, char **argv )
 	char cfgfn[PATH_MAX];
 	if (xemucfg_parse_commandline(argc, argv, "help"))
 		return 1;
-	sprintf(cfgfn, "@%s-default.cfg", xemu_app_name);
+	sprintf(cfgfn, CONFIG_FILE_USE_NAME, xemu_app_name);
 	if (xemucfg_parse_config_file(cfgfn, 1))
 		DEBUGPRINT("CFG: Default config file %s cannot be used" NL, cfgfn);
 	else
@@ -369,6 +507,11 @@ int xemucfg_get_num ( const char *optname )
 int xemucfg_get_bool ( const char *optname )
 {
 	return BOOLEAN_VALUE((int)(intptr_t)(search_option_query(optname, OPT_BOOL)->value));
+}
+
+double xemucfg_get_float ( const char *optname )
+{
+	return *(double*)(search_option_query(optname, OPT_FLOAT)->value);
 }
 
 

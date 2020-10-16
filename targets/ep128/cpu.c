@@ -531,7 +531,7 @@ void z80ex_pwrite_cb(Z80EX_WORD port16, Z80EX_BYTE value) {
 				mem_ws_m1  = 0;
 			}
 			dave_set_clock();
-			DEBUG("DAVE: BF register is written -> W_ALL=%d W_M1=%d CLOCK=%dMhz" NL, mem_ws_all, mem_ws_m1, (value & 2) ? 12 : 8);
+			DEBUG("DAVE: BF register is written -> W_ALL=%d W_M1=%d CLOCK=%dMHz" NL, mem_ws_all, mem_ws_m1, (value & 2) ? 12 : 8);
 			break;
 		/* NICK registers */
 		case 0x80: case 0x84: case 0x88: case 0x8C:
