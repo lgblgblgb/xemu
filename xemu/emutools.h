@@ -134,6 +134,7 @@ extern char *sdl_pref_dir, *sdl_base_dir, *sdl_inst_dir;
 extern int sysconsole_is_open;
 extern int sdl_default_win_x_size, sdl_default_win_y_size;
 extern SDL_version sdlver_compiled, sdlver_linked;
+extern Uint32 *xemu_frame_pixel_access_p;
 
 extern int xemu_init_debug ( const char *fn );
 extern time_t xemu_get_unixtime ( void );

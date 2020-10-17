@@ -158,6 +158,12 @@ static void reset_into_c65_mode ( void )
 	}
 }
 
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+static void ui_screenshot ( void )
+{
+	register_screenshot_request = 1;
+}
+#endif
 
 #if 0
 static void ui_set_scale_filtering ( const struct menu_st *m, int *query )
@@ -202,6 +208,9 @@ static const struct menu_st menu_main[] = {
 	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
 	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_screenshot },
+#endif
 #ifdef XEMU_ARCH_WIN
 	{ "System console",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_sysconsole, NULL },

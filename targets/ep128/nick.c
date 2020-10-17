@@ -88,15 +88,15 @@ extern Uint32 *sdl_pixel_buffer;
 
 void screenshot ( void )
 {
-	// const char *fn, int zoom_width, int zoom_height, Uint32 *source_pixels, int source_width, int source_height );
-	xemu_screenshot_png(
-		"/tmp/screenshot.png",
+	if (!xemu_screenshot_png(
+		"@", "screenshot.png",
 		1,
 		2,
-		sdl_pixel_buffer,
+		NULL,	// Allow function to figure it out ;)
 		SCREEN_WIDTH,
 		SCREEN_HEIGHT
-	);
+	))
+		OSD(-1, -1, "Screenshot has been taken");
 }
 
 

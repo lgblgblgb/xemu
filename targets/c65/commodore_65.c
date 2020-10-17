@@ -820,8 +820,33 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 }
 
 
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+int register_screenshot_request = 0;
+static inline void do_pending_screenshot ( void )
+{
+	if (!register_screenshot_request)
+		return;
+	register_screenshot_request = 0;
+	if (!xemu_screenshot_png(
+		"@", "screenshot.png",
+		1,
+		2,
+		NULL,	// allow function to figure it out ;)
+		SCREEN_WIDTH,
+		SCREEN_HEIGHT
+	))
+		OSD(-1, -1, "Screenshot has been taken");
+}
+#endif
+
+
 static void update_emulator ( void )
 {
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+	// DO call this _RIGHT BEFORE_ xemu_update_screen() otherwise the texture
+	// does not exist anymore OR not the full frame is rendered yet for screenshot!
+	do_pending_screenshot();
+#endif
 	xemu_update_screen();
 	hid_handle_all_sdl_events();
 	xemugui_iteration();

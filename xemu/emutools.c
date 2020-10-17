@@ -66,6 +66,7 @@ char *sdl_window_title = (char*)default_window_title;
 char *window_title_custom_addon = NULL;
 char *window_title_info_addon = NULL;
 Uint32 *sdl_pixel_buffer = NULL;
+Uint32 *xemu_frame_pixel_access_p = NULL;
 int texture_x_size_in_bytes;
 int emu_is_fullscreen = 0;
 static int win_xsize, win_ysize;
@@ -717,8 +718,9 @@ int xemu_post_init (
 	SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");			// 1 = do minimize the SDL_Window if it loses key focus when in fullscreen mode
 	SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");				// 1 = enable screen saver
 	/* texture access / buffer */
-	if (!locked_texture_update)
+	if (!locked_texture_update) {
 		sdl_pixel_buffer = xemu_malloc_ALIGNED(texture_x_size_in_bytes * texture_y_size);
+	}
 	// play a single frame game, to set a consistent colour (all black ...) for the emulator. Also, it reveals possible errors with rendering
 	xemu_render_dummy_frame(black_colour, texture_x_size, texture_y_size);
 	if (chatty_xemu)
@@ -822,6 +824,7 @@ Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail )
 {
 	if (sdl_pixel_buffer) {
 		*texture_tail = 0;		// using non-locked texture access, "tail" is always zero
+		xemu_frame_pixel_access_p = sdl_pixel_buffer;
 		return sdl_pixel_buffer;	// using non-locked texture access, return with the malloc'ed buffer
 	} else {
 		int pitch;
@@ -834,6 +837,7 @@ Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail )
 		if (pitch < 0)
 			FATAL("Negative pitch value got for the texture size!");
 		*texture_tail = (pitch >> 2);
+		xemu_frame_pixel_access_p = pixels;
 		return pixels;
 	}
 }
@@ -845,10 +849,12 @@ Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail )
    texture method! */
 void xemu_update_screen ( void )
 {
-	if (sdl_pixel_buffer)
+	if (sdl_pixel_buffer) {
 		SDL_UpdateTexture(sdl_tex, NULL, sdl_pixel_buffer, texture_x_size_in_bytes);
-	else
+	} else {
 		SDL_UnlockTexture(sdl_tex);
+		xemu_frame_pixel_access_p = NULL;	// not valid anymore!
+	}
 	//if (seconds_timer_trigger)
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
 	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);

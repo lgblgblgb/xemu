@@ -616,6 +616,7 @@ int xemu_save_file ( const char *filename_in, void *data, int size, const char *
 		return -1;
 	}
 	close(fd);
+	DEBUGPRINT("FILE: %d bytes saved into file: %s" NL, size, filename);
 	char filename_real2[PATH_MAX];
 	strcpy(filename_real2, filename_real);
 	filename_real2[strlen(filename_real2) - strlen(temp_end)] = 0;
@@ -731,11 +732,19 @@ error:
 #include "xemu/lodepng.h"
 // TODO: use libpng in Linux, smaller binary (on windows I wouldn't introduce another DLL dependency though ...)
 // NOTE: you must call this function before the final rendering of course, thus source_pixels has a full rendered frame already ;)
-int xemu_screenshot_png ( const char *fn, int zoom_width, int zoom_height, Uint32 *source_pixels, int source_width, int source_height )
+// NOTE: ... however, it must be called BEFORE xemu_update_screen() otherwise the texture access may not be valid anymore and crash occures
+// source_pixels CAN be null. In this case though, Xemu framework tries to use the right pointer based on locked texture or non-locked mode.
+int xemu_screenshot_png ( const char *path, const char *fn, int zoom_width, int zoom_height, Uint32 *source_pixels, int source_width, int source_height )
 {
 	int target_width = source_width * zoom_width;
 	int target_height = source_height * zoom_height;
 	int malloc_size = target_width * target_height * 3;
+	if (!source_pixels) {
+		// No source_pixels was given ...
+		source_pixels = xemu_frame_pixel_access_p;
+		if (!source_pixels)	// not ready to access?
+			return -1;
+	}
 	Uint8 *target_pixels = malloc(malloc_size);
 	if (!target_pixels) {
 		ERROR_WINDOW("Not enough memory for taking a screenshot :(\n(could not allocate %d bytes of memory)", malloc_size);
@@ -764,15 +773,26 @@ int xemu_screenshot_png ( const char *fn, int zoom_width, int zoom_height, Uint3
 	size_t png_size = 0;
 	//unsigned lodepng_encode24(unsigned char** out, size_t* outsize,
         //                const unsigned char* image, unsigned w, unsigned h);
-	unsigned lret = lodepng_encode24(&png_stream, &png_size, target_pixels, target_width, target_height);
-	DEBUGPRINT("lodePNG returned: %u" NL, lret);
+	int ret = lodepng_encode24(&png_stream, &png_size, target_pixels, target_width, target_height);
+	if (ret) {
+		ERROR_WINDOW("Screenshot problem: loadPNG encode returned with error %u", (unsigned)ret);
+		free(target_pixels);
+		if (png_stream)
+			free(png_stream);
+		return -1;
+	}
 	free(target_pixels);
 	if (!png_stream || !png_size) {
 		ERROR_WINDOW("Screenshot problem: lodePNG returned invalid memory/size");
 		return -1;
 	}
 	// Now save the result.
-	int ret = xemu_save_file(fn, png_stream, png_size, "Cannot save PNG");
+	char filename[PATH_MAX];
+	if (path)
+		sprintf(filename, "%s%c%s", path, DIRSEP_CHR, fn);
+	else
+		strcpy(filename, fn);
+	ret = xemu_save_file(filename, png_stream, png_size, "Cannot save PNG");
 	free(png_stream);
 	return ret;
 }

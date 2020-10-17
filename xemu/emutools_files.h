@@ -76,7 +76,7 @@ extern void xemu_set_installer ( const char *filename );
 
 #if defined(XEMU_USE_LODEPNG) && defined(XEMU_FILES_SCREENSHOT_SUPPORT)
 // NOTE: you must call this function before the final rendering of course, thus source_pixels has a full rendered frame already ;)
-extern int xemu_screenshot_png ( const char *fn, int zoom_width, int zoom_height, Uint32 *source_pixels, int source_width, int source_height );
+extern int xemu_screenshot_png ( const char *path, const char *fn, int zoom_width, int zoom_height, Uint32 *source_pixels, int source_width, int source_height );
 #endif
 
 #ifndef XEMU_ARCH_WIN
