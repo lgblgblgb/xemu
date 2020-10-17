@@ -76,5 +76,6 @@ extern int  refill_c65_rom_from_preinit_cache ( void );
 
 extern int newhack;
 extern unsigned int frames_total_counter;
+extern int register_screenshot_request;
 
 #endif

@@ -83,9 +83,6 @@ static int nick_addressing_init ( Uint32 *pixels_buffer, int line_size )
 }
 
 
-// Ugly hack to access Xemu's framework for only non-locked texture :-O
-extern Uint32 *sdl_pixel_buffer;
-
 void screenshot ( void )
 {
 	if (!xemu_screenshot_png(
@@ -102,7 +99,7 @@ void screenshot ( void )
 
 int nick_init ( void )
 {
-	Uint32 *buf = sdl_pixel_buffer;
+	Uint32 *buf = xemu_frame_pixel_access_p;	// sdl_pixel_buffer
 	pixels = NULL; // no previous state of buffer before the next function
 	if (nick_addressing_init(buf, SCREEN_WIDTH))
 		return 1;

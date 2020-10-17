@@ -67,7 +67,7 @@ static Uint8 nvram_original[sizeof nvram];
 static int uuid_must_be_saved = 0;
 
 static int rtc_hour_offset = 0;
-
+int register_screenshot_request = 0;
 
 
 

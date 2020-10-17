@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #include "xemu/emutools.h"
+#include "xemu/emutools_files.h"
 #include "mega65.h"
 #include "xemu/cpu65.h"
 #include "vic4.h"
@@ -915,6 +916,22 @@ void vic_render_screen ( void )
 				render_sprite(a, mask, sprite_bank + (sprite_pointers[a] << 6), p_sdl, tail_sdl);	// sprite_pointers are set by the renderer functions above!
 		}
 	}
+
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+	// Screenshot
+	if (XEMU_UNLIKELY(register_screenshot_request)) {
+		register_screenshot_request = 0;
+		if (!xemu_screenshot_png(
+			"@", "screenshot.png",
+			1,
+			2,
+			NULL,	// allow function to figure it out ;)
+			SCREEN_WIDTH,
+			SCREEN_HEIGHT
+		))
+			OSD(-1, -1, "Screenshot has been taken");
+	}
+#endif
 	xemu_update_screen();
 }
 
