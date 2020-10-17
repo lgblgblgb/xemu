@@ -20,6 +20,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "hardware.h"
 #include "fake_rom.h"
 #include "console.h"
+#include "uart.h"
+
 
 
 static inline void start_shell ( const char *reason, int code )
@@ -66,6 +68,7 @@ static void api_call ( Uint8 sysnum )
 
 void xrcrom_rst ( int n )
 {
+	console_io_traffic = 0;
 	switch (n) {
 		case 0:	// RST 00
 			conputs("RESET, Xemu/RC2014 internal ROM\r\n(C)2020 LGB Gabor Lenart, part of the Xemu project.\r\n");
@@ -86,7 +89,8 @@ void xrcrom_rst ( int n )
 			start_shell("UNKNOWN rst handler", n);
 			break;
 	}
-
+	io_cycles = console_io_traffic * cpu_cycles_per_uart_transfer;
+	DEBUGPRINT("TIMING: %d I/O cycles" NL, io_cycles);
 }
 
 

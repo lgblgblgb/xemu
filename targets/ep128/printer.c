@@ -26,8 +26,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <fcntl.h>
 
 
-static int fp = -1;
-static int fp_to_open = 1;
+static int printer_fd = -1;
+static int fd_to_open = 1;
 
 #define BUFFER_SIZE 1024
 #define COVOX_ACTIVATION_LIMIT 0x100
@@ -44,12 +44,12 @@ static int old_strobe_level = 0;
 
 static void write_printer_buffer ( void )
 {
-	if (buffer_pos && fp >= 0) {
-		if (xemu_safe_write(fp, buffer, buffer_pos) != buffer_pos) {
+	if (buffer_pos && printer_fd >= 0) {
+		if (xemu_safe_write(printer_fd, buffer, buffer_pos) != buffer_pos) {
 		//if (fwrite(buffer, buffer_pos, 1, fp) != 1) {
 			WARNING_WINDOW("Cannot write printer output: %s\nFurther printer I/O has been disabled.", ERRSTR());
-			close(fp);
-			fp = -1;
+			close(printer_fd);
+			printer_fd = -1;
 		}
 	}
 	buffer_pos = 0;
@@ -59,12 +59,12 @@ static void write_printer_buffer ( void )
 
 void printer_close ( void )
 {
-	if (fp >= 0) {
+	if (printer_fd >= 0) {
 		write_printer_buffer();
-		close(fp);
+		close(printer_fd);
 		DEBUG("Closing printer output file." NL);
-		fp_to_open = 1;
-		fp = -1;
+		fd_to_open = 1;
+		printer_fd = -1;
 	}
 }
 
@@ -92,19 +92,19 @@ void printer_port_set_data ( Uint8 data )
 static void send_data_to_printer ( Uint8 data )
 {
 	//DEBUG("PRINTER GOT DATA: %d" NL, data);
-	if (fp_to_open) {
+	if (fd_to_open) {
 		const char *printfile = xemucfg_get_str("printfile");
 		char path[PATH_MAX + 1];
 		//fp = open_emu_file(printfile, "ab", path);
-		fp = xemu_open_file(printfile, O_WRONLY | O_APPEND | O_CREAT, NULL, path);
-		if (fp < 0)
+		printer_fd = xemu_open_file(printfile, O_WRONLY | O_APPEND | O_CREAT, NULL, path);
+		if (printer_fd < 0)
 			WARNING_WINDOW("Cannot create/append printer output file \"%s\": %s.\nYou can use Xep128 but printer output will not be logged!", path, ERRSTR());
 		else
 			INFO_WINDOW("Printer event, file \"%s\" has been opened for the output.", path);
-		fp_to_open = 0;
+		fd_to_open = 0;
 		buffer_pos = 0;
 	}
-	if (fp >= 0) {
+	if (printer_fd >= 0) {
 		buffer[buffer_pos++] = data;
 		if (buffer_pos == BUFFER_SIZE)
 			write_printer_buffer();

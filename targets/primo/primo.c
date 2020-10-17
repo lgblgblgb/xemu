@@ -519,10 +519,6 @@ static void set_title_model_details ( void )
 
 static int set_cpu_hz ( int hz )
 {
-	if (hz < 1000000)
-		hz = 1000000;
-	else if (hz > 8000000)
-		hz = 8000000;
 	cpu_clock_wanted = hz;
 	cpu_clocks_per_scanline = (hz / PAL_LINE_FREQ) & ~1;	// 15625 Hz = 312.5 * 50, PAL "scanline frequency", how many Z80 cycles we need for that. Also make it to an even number
 	cpu_clock = cpu_clocks_per_scanline * PAL_LINE_FREQ;	// to reflect the possible situation when it's not a precise divider above
@@ -534,22 +530,6 @@ static int set_cpu_hz ( int hz )
 	set_title_model_details();
 	return cpu_clock;
 }
-
-
-static int set_cpu_clock_from_string ( const char *s )
-{
-	char *end;
-	double result = strtod(s, &end);
-	//DEBUGPRINT("RESULT=%f end=%p" NL, result, end);
-	if (result < 1.0 || result > 8.0 || !end || *end) {
-		ERROR_WINDOW("Cannot interpret the -clock option you specified. Defaulting to %.2f MHz", DEFAULT_CPU_CLOCK / 1000000.0);
-		return set_cpu_hz(DEFAULT_CPU_CLOCK);
-	} else
-		return set_cpu_hz(result * 1000000);
-}
-
-
-
 
 
 static void emulation_loop ( void )
@@ -924,7 +904,7 @@ int main ( int argc, char **argv )
 {
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unknown Primo emulator from LGB");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	xemucfg_define_str_option("clock", "2.5", "Selects CPU frequency (1.00-8.00 in MHz)");
+	xemucfg_define_float_option("clock", (double)DEFAULT_CPU_CLOCK / 1000000.0, "Selects CPU frequency (1.00-16.00 in MHz)");
 	xemucfg_define_str_option("rom", NULL, "Select ROM to use");
 	xemucfg_define_str_option("exprom", NULL, "ROM expansion file selector (max 32K size)");
 	xemucfg_define_str_option("pri", NULL, "Loads a PRI file");
@@ -1004,7 +984,8 @@ int main ( int argc, char **argv )
 	joy.clock = 0;
 	joy.last_clocked = 0;
 	//set_cpu_hz(DEFAULT_CPU_CLOCK);
-	set_cpu_clock_from_string(xemucfg_get_str("clock"));
+	set_cpu_hz((int)(xemucfg_get_ranged_float("clock", 1.0, 16.0) * 1000000.0));
+	//set_cpu_hz((int)(xemucfg_get_float("clock") * 1000000.0));
 	pri_name = xemucfg_get_str("pri");
 	scanline = 0;
 	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));

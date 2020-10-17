@@ -492,26 +492,41 @@ static struct xemutools_config_st *search_option_query ( const char *name, enum 
 }
 
 
-const char *xemucfg_get_str ( const char *optname )
-{
+const char *xemucfg_get_str ( const char *optname ) {
 	return (const char*)(search_option_query(optname, OPT_STR)->value);
 }
-
-
-int xemucfg_get_num ( const char *optname )
-{
+int xemucfg_get_num ( const char *optname ) {
 	return (int)(intptr_t)(search_option_query(optname, OPT_NUM)->value);
 }
-
-
-int xemucfg_get_bool ( const char *optname )
-{
+int xemucfg_get_ranged_num ( const char *optname, int min, int max ) {
+	int ret = xemucfg_get_num(optname);
+	if (ret < min) {
+		WARNING_WINDOW("Bad value (%d) for option '%s': must not be smaller than %d.\nUsing the minimal value.", ret, optname, min);
+		ret = min;
+	}
+	if (ret > max) {
+		WARNING_WINDOW("Bad value (%d) for option '%s': must not be larger than %d.\nUsing the maximal value.", ret, optname, max);
+		ret = max;
+	}
+	return ret;
+}
+int xemucfg_get_bool ( const char *optname ) {
 	return BOOLEAN_VALUE((int)(intptr_t)(search_option_query(optname, OPT_BOOL)->value));
 }
-
-double xemucfg_get_float ( const char *optname )
-{
+double xemucfg_get_float ( const char *optname ) {
 	return *(double*)(search_option_query(optname, OPT_FLOAT)->value);
+}
+double xemucfg_get_ranged_float ( const char *optname, double min, double max ) {
+	double ret = xemucfg_get_float(optname);
+	if (ret < min) {
+		WARNING_WINDOW("Bad value (%f) for option '%s': must not be smaller than %f.\nUsing the minimal value.", ret, optname, min);
+		ret = min;
+	}
+	if (ret > max) {
+		WARNING_WINDOW("Bad value (%f) for option '%s': must not be larger than %f.\nUsing the maximal value.", ret, optname, max);
+		ret = max;
+	}
+	return ret;
 }
 
 

@@ -34,5 +34,6 @@ extern void  nick_set_lpth ( Uint8 value );
 extern void  nick_set_frameskip ( int val );
 extern char  *nick_dump_lpt ( const char *newline_seq );
 extern void  nick_render_slot ( void );
+extern void  screenshot ( void );
 
 #endif

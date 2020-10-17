@@ -19,6 +19,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_RC2014_UART_H_INCLUDED
 #define XEMU_RC2014_UART_H_INCLUDED
 
-extern void uart_init ( int baud_rate_hz, int baud_rate );
+extern void uart_init ( int baud_crystal_hz, int baud_rate, int cpu_hz );
+
+extern int cpu_cycles_per_uart_transfer;
 
 #endif

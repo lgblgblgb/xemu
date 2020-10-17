@@ -43,11 +43,14 @@ static void emulation_loop ( void )
 				z80_custom_disasm(Z80_PC, disasm_buffer, sizeof disasm_buffer);
 				if (*disasm_buffer)
 					puts(disasm_buffer);
-				cpu_cycles += z80ex_step();
+				io_cycles = 0;
+				cpu_cycles += z80ex_step() + io_cycles;
 			}
 		} else {
-			while (cpu_cycles < cpu_cycles_per_frame)
-				cpu_cycles += z80ex_step();
+			while (cpu_cycles < cpu_cycles_per_frame) {
+				io_cycles = 0;
+				cpu_cycles += z80ex_step() + io_cycles;
+			}
 		}
 		cpu_cycles -= cpu_cycles_per_frame;
 #if 0
@@ -64,33 +67,6 @@ static void emulation_loop ( void )
 	console_cursor_blink(5);
 	console_iteration();
 	xemu_timekeeping_delay(1000000 / FRAME_RATE);
-}
-
-
-
-static int get_guarded_cfg_num ( const char *optname, int min, int max )
-{
-	int ret = xemucfg_get_num(optname);
-	if (ret < min) {
-		ERROR_WINDOW("BADNUM: too low value (%d) for option \"%s\", the minimum is %d, applying that, instead." NL, ret, optname, min);
-		return min;
-	} else if (ret > max) {
-		ERROR_WINDOW("BADNUM: too high value (%d) for option \"%s\", the maximum is %d, applying that, instead." NL, ret, optname, max);
-		return max;
-	} else
-		return ret;
-}
-static double get_guarded_cfg_double ( const char *optname, double min, double max )
-{
-	double ret = xemucfg_get_float(optname);
-	if (ret < min) {
-		ERROR_WINDOW("BADNUM: too low value (%f) for option \"%s\", the minimum is %f, applying that, instead." NL, ret, optname, min);
-		return min;
-	} else if (ret > max) {
-		ERROR_WINDOW("BADNUM: too high value (%f) for option \"%s\", the maximum is %f, applying that, instead." NL, ret, optname, max);
-		return max;
-	} else
-		return ret;
 }
 
 
@@ -168,20 +144,21 @@ int main ( int argc, char **argv )
 	trace = xemucfg_get_bool("trace");
 	memset(memory, 0xFF, sizeof memory);
 	if (console_init(
-		get_guarded_cfg_num("width",  38, 120),
-		get_guarded_cfg_num("height", 20,  60),
-		get_guarded_cfg_num("zoom",   50, 200),
+		xemucfg_get_ranged_num("width",  38, 120),
+		xemucfg_get_ranged_num("height", 20,  60),
+		xemucfg_get_ranged_num("zoom",   50, 200),
 		NULL,
 		NULL
 	))
 		return 1;
 	osd_init_with_defaults();
 	clear_emu_events();	// also resets the keyboard
-	cpu_mhz = get_guarded_cfg_double("clock", 1.0, 33.0);
+	double cpu_mhz = xemucfg_get_ranged_float("clock", 1.0, 33.0);
 	cpu_cycles_per_frame = (1000000.0 * cpu_mhz) / (double)FRAME_RATE;
 	uart_init(
-		(int)(get_guarded_cfg_double("baudcrystal", 1.0, 8.0) * 1000000.0),
-		get_guarded_cfg_num("baudrate", 30, 500000)
+		(int)(xemucfg_get_ranged_float("baudcrystal", 1.0, 8.0) * 1000000.0),
+		xemucfg_get_ranged_num("baudrate", 30, 500000),
+		(int)(cpu_mhz * 1000000.0)
 	);
 	DEBUGPRINT("Z80: setting CPU speed to %.2fMHz, %d CPU cycles per refresh-rate (=%dHz)" NL, cpu_mhz, cpu_cycles_per_frame, FRAME_RATE);
 	z80ex_init();

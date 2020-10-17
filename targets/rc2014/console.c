@@ -63,6 +63,7 @@ static Uint8 kbd_queue[16];
 static int   kbd_queue_len;
 static int   kbd_waiting = 0;	// just an indicator [different cursor if we sense console input waiting from program]
 static int   input_waiting;
+int console_io_traffic = 0;
 
 
 
@@ -133,6 +134,7 @@ void console_output ( Uint8 data )
 	// All output should make cursor phase 'shown' to avoid blinking during longer changes (ie, moving cursor around)
 	cursor.phase = 1;
 	cursor.phase_counter = 0;
+	console_io_traffic++;
 }
 
 void conputs ( const char *s )
@@ -158,6 +160,7 @@ int console_input ( void )
 		int ret = kbd_queue[0];
 		if (--kbd_queue_len)
 			memmove(kbd_queue, kbd_queue + 1, kbd_queue_len);
+		console_io_traffic++;
 		return ret;
 	} else {
 		input_waiting = 1;

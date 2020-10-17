@@ -41,4 +41,6 @@ extern int  console_init ( int width, int height, int zoom_percent, Uint8 *video
 
 extern void rc_shutdown_callback ( void );
 
+extern int  console_io_traffic;
+
 #endif

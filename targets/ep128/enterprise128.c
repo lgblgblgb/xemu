@@ -105,14 +105,6 @@ void clear_emu_events ( void )
 
 int set_cpu_clock ( int hz )
 {
-	if (hz <  1000000) {
-		ERROR_WINDOW("Invalid CPU clock (too slow) %.2fMHz, using 1MHz instead.", hz / 1000000.0);
-		hz =  1000000;
-	}
-	if (hz > 12000000) {
-		ERROR_WINDOW("Invalid CPU clock (too fast) %.2fMHz, using 12MHz instead.", hz / 1000000.0);
-		hz = 12000000;
-	}
 	CPU_CLOCK = hz;
 	SCALER = (double)NICK_SLOTS_PER_SEC / (double)CPU_CLOCK;
 	DEBUG("CPU: clock = %d scaler = %f" NL, CPU_CLOCK, SCALER);
@@ -181,9 +173,10 @@ static void __emu_one_frame(int rasters, int frameskip)
 								if (QUESTION_WINDOW("?No|!Yes", "Are you sure to exit?") == 1)
 									XEMUEXIT(0);
 								break;
-							//case 0xFD:	// SCREENSHOT, default key F10
-							//	screen_shot(ep_pixels, current_directory, "screenshot-*.png");
-							//	break;
+							case 0xFD:	// SCREENSHOT, default key F10
+								//screen_shot(ep_pixels, current_directory, "screenshot-*.png");
+								screenshot();
+								break;
 #endif
 							case 0xFC:	// RESET, default key PAUSE
 								if (e.key.keysym.mod & (KMOD_LSHIFT | KMOD_RSHIFT)) {
@@ -387,7 +380,7 @@ int main (int argc, char *argv[])
 #endif
 	ticks = SDL_GetTicks();
 	balancer = 0;
-	set_cpu_clock((int)(xemucfg_get_float("clock") * 1000000.0));
+	set_cpu_clock((int)(xemucfg_get_ranged_float("clock", 1.0, 12.0) * 1000000.0));
 	audio_start();
 	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
 	sram_ready = 1;

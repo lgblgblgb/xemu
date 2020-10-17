@@ -18,6 +18,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #include "xemu/emutools.h"
+#include "xemu/emutools_files.h"
 #include "enterprise128.h"
 #include "nick.h"
 #include "cpu.h"
@@ -84,6 +85,20 @@ static int nick_addressing_init ( Uint32 *pixels_buffer, int line_size )
 
 // Ugly hack to access Xemu's framework for only non-locked texture :-O
 extern Uint32 *sdl_pixel_buffer;
+
+void screenshot ( void )
+{
+	// const char *fn, int zoom_width, int zoom_height, Uint32 *source_pixels, int source_width, int source_height );
+	xemu_screenshot_png(
+		"/tmp/screenshot.png",
+		1,
+		2,
+		sdl_pixel_buffer,
+		SCREEN_WIDTH,
+		SCREEN_HEIGHT
+	);
+}
+
 
 int nick_init ( void )
 {

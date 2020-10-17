@@ -15,7 +15,8 @@
 #endif
 
 #ifndef XEMU_ARCH_HTML
-#define CONFIG_USE_LODEPNG
+#define XEMU_USE_LODEPNG
+#define XEMU_FILES_SCREENSHOT_SUPPORT
 #endif
 
 #define CONFIG_EMSCRIPTEN_OK

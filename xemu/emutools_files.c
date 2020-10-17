@@ -725,3 +725,55 @@ error:
 	unlink(os_path);
 	return err ? err : -1;
 }
+
+
+#if defined(XEMU_USE_LODEPNG) && defined(XEMU_FILES_SCREENSHOT_SUPPORT)
+#include "xemu/lodepng.h"
+// TODO: use libpng in Linux, smaller binary (on windows I wouldn't introduce another DLL dependency though ...)
+// NOTE: you must call this function before the final rendering of course, thus source_pixels has a full rendered frame already ;)
+int xemu_screenshot_png ( const char *fn, int zoom_width, int zoom_height, Uint32 *source_pixels, int source_width, int source_height )
+{
+	int target_width = source_width * zoom_width;
+	int target_height = source_height * zoom_height;
+	int malloc_size = target_width * target_height * 3;
+	Uint8 *target_pixels = malloc(malloc_size);
+	if (!target_pixels) {
+		ERROR_WINDOW("Not enough memory for taking a screenshot :(\n(could not allocate %d bytes of memory)", malloc_size);
+		return -1;
+	}
+	Uint8 *t = target_pixels;
+	for (int i = 0; i < target_width * target_height; i++) {
+		// Sampling pixel in the source
+		// Kinda lame algorith, but it is not needed to be very fast and real-time operation, just
+		// to create a screenshot on user's request.
+		Uint32 pixel = source_pixels[(
+			(i % target_width) / zoom_width
+		) + (
+			((i / target_width) / zoom_height) * source_width
+		)];
+		// Generate LodePNG compatible RGB stuff
+		// (note, this is maybe possible with simple SDL functions to convert a whole texture
+		// and/or surface without a madness-loop like this, but at least we know this works,
+		// and OK for any kind of endianness). Also lodePNG has 32 bit input encoder, though
+		// it's unknown for me, if RGB byte order can be altered. And also the scaling ...
+		*t++ = (pixel & sdl_pix_fmt->Rmask) >> sdl_pix_fmt->Rshift << sdl_pix_fmt->Rloss;
+		*t++ = (pixel & sdl_pix_fmt->Gmask) >> sdl_pix_fmt->Gshift << sdl_pix_fmt->Gloss;
+		*t++ = (pixel & sdl_pix_fmt->Bmask) >> sdl_pix_fmt->Bshift << sdl_pix_fmt->Bloss;
+	}
+	Uint8 *png_stream = NULL;
+	size_t png_size = 0;
+	//unsigned lodepng_encode24(unsigned char** out, size_t* outsize,
+        //                const unsigned char* image, unsigned w, unsigned h);
+	unsigned lret = lodepng_encode24(&png_stream, &png_size, target_pixels, target_width, target_height);
+	DEBUGPRINT("lodePNG returned: %u" NL, lret);
+	free(target_pixels);
+	if (!png_stream || !png_size) {
+		ERROR_WINDOW("Screenshot problem: lodePNG returned invalid memory/size");
+		return -1;
+	}
+	// Now save the result.
+	int ret = xemu_save_file(fn, png_stream, png_size, "Cannot save PNG");
+	free(png_stream);
+	return ret;
+}
+#endif

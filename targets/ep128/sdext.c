@@ -76,7 +76,6 @@ static int writing;
 static int delay_answer;
 static void (*ans_callback)(void);
 
-//static FILE *sdf;
 static int sdfd =  -1;
 static Uint8 _buffer[1024];
 off_t sd_card_size = 0;

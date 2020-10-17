@@ -56,11 +56,12 @@ extern int  xemucfg_has_option ( const char *name );
 extern int  xemucfg_parse_all ( int argc, char **argv );
 extern int  xemucfg_save_config_file ( const char *filename, const char *initial_part, const char *cry );
 
-extern const char *xemucfg_get_str ( const char *optname );
-extern int  xemucfg_get_num ( const char *optname );
-extern double xemucfg_get_float ( const char *optname );
-extern int  xemucfg_get_bool ( const char *optname );
-
+extern const char *xemucfg_get_str          ( const char *optname );
+extern int         xemucfg_get_num          ( const char *optname );
+extern double      xemucfg_get_float        ( const char *optname );
+extern int         xemucfg_get_bool         ( const char *optname );
+extern int         xemucfg_get_ranged_num   ( const char *optname, int    min, int    max );
+extern double      xemucfg_get_ranged_float ( const char *optname, double min, double max );
 
 extern int  xemucfg_integer_list_from_string ( const char *value, int *result, int maxitems, const char *delims );
 

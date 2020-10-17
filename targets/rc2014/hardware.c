@@ -31,8 +31,8 @@ int stop_emulation = 0;
 
 int cpu_cycles = 0;
 int cpu_cycles_per_frame;
-double cpu_mhz;
 int trace;
+int io_cycles;
 
 enum ed_trap_types {
 	ED_TRAP_RESET = 0xBC, ED_TRAP_SERVICE_BEGIN, ED_TRAP_SERVICE_RUN, ED_TRAP_RST_08, ED_TRAP_RST_10,

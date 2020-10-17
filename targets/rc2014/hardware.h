@@ -23,12 +23,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/z80_dasm.h"
 
 extern int   emu_cost_cycles, emu_cost_usecs, stop_emulation, trace, cpu_cycles, cpu_cycles_per_frame;
-extern double cpu_mhz;
 extern Uint8 memory[0x10000];
 extern Uint8 modded[0x10000];
 extern void  emu_mem_write ( int addr, int data );
 extern int   emu_mem_read  ( int addr );
 extern int   z80_custom_disasm ( int addr, char *buf, int buf_size );
 extern void  use_internal_rom ( int yes );
+
+extern int   io_cycles;
 
 #endif
