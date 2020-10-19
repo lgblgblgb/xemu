@@ -62,7 +62,10 @@ static int xemugtkgui_iteration ( void )
 
 static void xemugtkgui_shutdown ( void );
 
+#ifndef XEMU_NO_SDL_DIALOG_OVERRIDE
 static int SDL_ShowSimpleMessageBox_xemuguigtk ( Uint32 flags, const char *title, const char *message, SDL_Window *window );
+static int SDL_ShowMessageBox_xemuguigtk ( const SDL_MessageBoxData* messageboxdata, int *buttonid );
+#endif
 
 static int xemugtkgui_init ( void )
 {
@@ -83,6 +86,7 @@ static int xemugtkgui_init ( void )
 #ifndef XEMU_NO_SDL_DIALOG_OVERRIDE
 	// override callback for SDL_ShowSimpleMessageBox_custom to be implemented by GTK, from this point
 	SDL_ShowSimpleMessageBox_custom = SDL_ShowSimpleMessageBox_xemuguigtk;
+	SDL_ShowMessageBox_custom = SDL_ShowMessageBox_xemuguigtk;
 #endif
 	return 0;
 }
@@ -105,7 +109,10 @@ static int _gtkgui_bgtask_callback ( void *unused ) {
 	// This is the whole point of this g_timeout_add callback:
 	// to have something receives SDL (!!) events while GTK is blocking,
 	// thus like X11 Window System would not yell about our main SDL app being dead ...
-	xemu_drop_events();
+	//xemu_drop_events();
+	SDL_Event event;
+	while (SDL_PollEvent(&event))
+		;
 	if (_gtkgui_bgtask_running_want) {
 		_gtkgui_bgtask_running_status = 1;
 		DEBUGPRINT("GUI: bgtask is active" NL);
@@ -131,7 +138,9 @@ static void _gtkgui_bgtask_clear ( void ) {
 		gtk_main_iteration();
 		usleep(10000);
 	}
+	//xemu_drop_events();
 }
+
 
 
 static GtkFileChooserConfirmation xemugtkgui_confirm_overwrite ( GtkFileChooser *chooser, gpointer data ) {
@@ -472,6 +481,42 @@ static int SDL_ShowSimpleMessageBox_xemuguigtk ( Uint32 flags, const char *title
 		return 0;
 	DEBUGPRINT("GUI: SDL_ShowSimpleMessageBox() error: %s" NL, SDL_GetError());
 	return -1;
+}
+static int SDL_ShowMessageBox_xemuguigtk ( const SDL_MessageBoxData *box, int *buttonid )
+{
+	if (!is_xemugui_ok) {
+		DEBUGPRINT("GUI: not initialized yet, SDL_ShowMessageBox_xemuguigtk() reverts to SDL_ShowMessageBox()" NL);
+		goto sdl;
+	}
+	GtkWidget *dialog = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, "%s", "Xemu question");
+	gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog), "%s", box->message);
+	gtk_window_set_focus(GTK_WINDOW(dialog), NULL);
+	int escape_default = -1;
+	GtkWidget *return_default_button = NULL;
+	for (int a = 0; a < box->numbuttons; a++) {
+		GtkWidget *button = gtk_dialog_add_button(GTK_DIALOG(dialog), box->buttons[a].text, a);
+		if ((box->buttons[a].flags & SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT))
+			escape_default = a;
+		if ((box->buttons[a].flags & SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT) || !a)
+			return_default_button = button;
+	}
+	gtk_widget_set_can_default(return_default_button, TRUE);
+	gtk_window_set_default(GTK_WINDOW(dialog), return_default_button);
+	_gtkgui_bgtask_set();
+	gint res = gtk_dialog_run(GTK_DIALOG(dialog));
+	_gtkgui_bgtask_clear();
+	gtk_widget_destroy(dialog);
+	DEBUGPRINT("GUI: GTK RES = %d" NL, res);
+	if (res < 0) {
+		res = escape_default >= 0 ? escape_default : 0;
+	}
+	while (gtk_events_pending())
+		gtk_main_iteration();
+	//xemu_drop_events();
+	*buttonid = res;
+	return 0;
+sdl:
+	return SDL_ShowMessageBox(box, buttonid);
 }
 #endif
 

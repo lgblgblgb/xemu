@@ -28,8 +28,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifndef XEMU_NO_SDL_DIALOG_OVERRIDE
 extern int (*SDL_ShowSimpleMessageBox_custom)(Uint32, const char*, const char*, SDL_Window* );
+extern int (*SDL_ShowMessageBox_custom)(const SDL_MessageBoxData*, int* );
 #else
 #define SDL_ShowSimpleMessageBox_custom SDL_ShowSimpleMessageBox
+#define SDL_ShowMessageBox_custom	SDL_ShowMessageBox
 #endif
 
 #ifdef XEMU_ARCH_HTML

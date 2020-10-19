@@ -40,6 +40,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifndef XEMU_NO_SDL_DIALOG_OVERRIDE
 int (*SDL_ShowSimpleMessageBox_custom)(Uint32, const char*, const char*, SDL_Window* ) = SDL_ShowSimpleMessageBox;
+int (*SDL_ShowMessageBox_custom)(const SDL_MessageBoxData*, int* ) = SDL_ShowMessageBox;
 #endif
 
 #ifdef XEMU_ARCH_MAC
@@ -1113,9 +1114,9 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 		items = p + 1;
 	}
 	save_mouse_grab();
-	SDL_ShowMessageBox(&messageboxdata, &buttonid);
-	clear_emu_events();
+	SDL_ShowMessageBox_custom(&messageboxdata, &buttonid);
 	xemu_drop_events();
+	clear_emu_events();
 	SDL_RaiseWindow(sdl_win);
 	restore_mouse_grab();
 	xemu_timekeeping_start();
