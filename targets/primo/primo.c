@@ -325,6 +325,25 @@ static void set_border_geometry ( int xres, int yres )
 }
 
 
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+static int register_screenshot_request = 0;
+static inline void do_pending_screenshot ( void )
+{
+	if (!register_screenshot_request)
+		return;
+	register_screenshot_request = 0;
+	if (!xemu_screenshot_png(
+		NULL, NULL,
+		2,
+		2,
+		NULL,	// allow function to figure it out ;)
+		SCREEN_WIDTH,
+		SCREEN_HEIGHT
+	))
+		OSD(-1, -1, "Screenshot has been taken");
+}
+#endif
+
 
 // ABSOLUTELY LAME implementation!
 // We render the screen "at once" :-O
@@ -354,6 +373,9 @@ static void render_primo_bw_screen ( void )
 			*pix++ = primo_palette[0];
 		pix += tail;
 	}
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+	do_pending_screenshot();
+#endif
 	xemu_update_screen();
 }
 
@@ -436,6 +458,9 @@ static  void render_primo_c_screen ( void )
 			*pix++ = primo_palette[0];
 		pix += tail;
 	}
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+	do_pending_screenshot();
+#endif
 	xemu_update_screen();
 }
 
@@ -829,6 +854,12 @@ static void ui_set_scale_filtering ( const struct menu_st *m, int *query )
 }
 #endif
 
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+static void ui_screenshot ( void )
+{
+	register_screenshot_request = 1;
+}
+#endif
 
 static const struct menu_st menu_cpu_clock[] = {
 	{ "2.5MHz (default)",		XEMUGUI_MENUID_CALLABLE |
@@ -874,6 +905,9 @@ static const struct menu_st menu_main[] = {
 	{ "Reset Primo",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	primo_reset_asked         },
 	{ "Load PRI file",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	ui_load_pri	          },
 	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	ui_native_os_file_browser },
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	ui_screenshot	},
+#endif
 #ifdef XEMU_ARCH_WIN
 	{ "System console",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_sysconsole,		NULL },

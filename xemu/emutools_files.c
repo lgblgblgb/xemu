@@ -788,10 +788,20 @@ int xemu_screenshot_png ( const char *path, const char *fn, int zoom_width, int 
 	}
 	// Now save the result.
 	char filename[PATH_MAX];
-	if (path)
-		sprintf(filename, "%s%c%s", path, DIRSEP_CHR, fn);
-	else
-		strcpy(filename, fn);
+	if (!path && !fn) {
+		static int screenshot_number = 0;
+		// if no path and fn, it means auto-generated and in default screenshot directory
+		sprintf(filename, "%s%s", sdl_pref_dir, "screenshots");
+		MKDIR(filename);
+		sprintf(filename + strlen(filename), DIRSEP_STR "screenshot-%d.png", screenshot_number++);
+	} else {
+		if (!fn)
+			FATAL("Invalid %s mode", __func__);
+		if (path)
+			sprintf(filename, "%s%c%s", path, DIRSEP_CHR, fn);
+		else
+			strcpy(filename, fn);
+	}
 	ret = xemu_save_file(filename, png_stream, png_size, "Cannot save PNG");
 	free(png_stream);
 	return ret;

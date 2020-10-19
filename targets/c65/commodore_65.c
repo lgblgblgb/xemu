@@ -828,7 +828,7 @@ static inline void do_pending_screenshot ( void )
 		return;
 	register_screenshot_request = 0;
 	if (!xemu_screenshot_png(
-		"@", "screenshot.png",
+		NULL, NULL,
 		1,
 		2,
 		NULL,	// allow function to figure it out ;)
