@@ -422,7 +422,7 @@ static void _block_read ( void )
 
 
 
-/* SPI is a read/write in once stuff. We have only a single function ... 
+/* SPI is a read/write in once stuff. We have only a single function ...
  * _write_b is the data value to put on MOSI
  * _read_b is the data read from MISO without spending _ANY_ SPI time to do shifting!
  * This is not a real thing, but easier to code this way.
@@ -766,7 +766,7 @@ Uint8 sdext_read_cart ( Uint16 addr )
 		return old;
 	} else
 		switch (addr & 3) {
-			case 0: 
+			case 0:
 				// regular read (not HS) only gives the last shifted-in data, that's all!
 				SD_DEBUG("SDEXT: REGIO: R: DATA: SPI data register regular read %02X" NL, _read_b);
 				return _read_b;

@@ -366,8 +366,8 @@ static void _render_invalid ( void )
 }
 
 
-static void _render_attrib_2 ( void ) 
-{ 
+static void _render_attrib_2 ( void )
+{
 	if (!visible) {
 		ld1++;
 		ld2++;

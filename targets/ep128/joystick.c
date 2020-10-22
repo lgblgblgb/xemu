@@ -206,7 +206,7 @@ static void set_axis_state ( int joy_id, Uint32 axis, int value, int virtual )
 	if (virtual)
 		axis = joysticks[joy_id].num_of_axes_orig + axis * 2 + virtual - 1;
 	axis_mask = 1U << axis;
-	oldp = joysticks[joy_id].axisp; 
+	oldp = joysticks[joy_id].axisp;
 	oldn = joysticks[joy_id].axisn;
 	if (value > AXIS_LIMIT_HIGH) {
 		BIT_TO_SET  (joysticks[joy_id].axisp, axis_mask);

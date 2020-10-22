@@ -7,7 +7,7 @@
  * Released under GNU GPL v2
  *
  */
- 
+
 #include <stdlib.h>
 #include <string.h>
 #ifndef __USE_ISOC99
@@ -15,7 +15,7 @@
 #endif
 #include <stdio.h>
 #include <stdarg.h>
- 
+
 #define __Z80EX_SELF_INCLUDE
 #include "xemu/z80ex/z80ex_dasm.h"
 
@@ -122,7 +122,7 @@ int z80ex_dasm(char *output, int output_size, unsigned flags, int *t_states, int
 	{	
 		const char *mpos;
 		int arglen;
-		Z80EX_BYTE hi,lo; 
+		Z80EX_BYTE hi,lo;
 		char *outpos=output;
 		
 		for(mpos=(dasm->mnemonic); *mpos && out_len < output_size; mpos++)

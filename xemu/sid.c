@@ -114,7 +114,7 @@ static inline unsigned char get_bit(unsigned long val, unsigned char b)
 
 
 
-// poor man's lookup table for combined pulse/triangle waveform (this table does not 
+// poor man's lookup table for combined pulse/triangle waveform (this table does not
 // lead to correct results but it is better that nothing for songs like Kentilla.sid)
 // feel free to come up with a better impl!
 // FIXME: this table was created by sampling kentilla output.. i.e. it already reflects the envelope

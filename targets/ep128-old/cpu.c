@@ -276,7 +276,7 @@ void z80ex_mwrite_cb(Z80EX_WORD addr, Z80EX_BYTE value) {
 			zxemu_attribute_memory_write(phys & 0xFFFF, value);
 		return;
 	}
-	if (mem_ws_all) 
+	if (mem_ws_all)
 		z80ex_w_states(mem_wait_states);
 	//if (phys >= ram_start)
 	if (is_ram_seg[phys >> 14])

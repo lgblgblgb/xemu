@@ -58,10 +58,10 @@ static const Uint8 matrix_alt_to_ascii[MAT2ASC_TAB_SIZE]    ={0x00,0x00,0x00,0x0
 static const Uint8 *matrix_to_ascii_table_selector[32] = {
 	matrix_normal_to_ascii,  matrix_shift_to_ascii,   matrix_shift_to_ascii,   matrix_shift_to_ascii,
 	matrix_control_to_ascii, matrix_control_to_ascii, matrix_control_to_ascii, matrix_control_to_ascii,
-	matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,	// CBM key has priority
-	matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,	// CBM key has priority
-	matrix_alt_to_ascii,     matrix_alt_to_ascii,     matrix_alt_to_ascii,     matrix_alt_to_ascii,     
-	matrix_alt_to_ascii,     matrix_alt_to_ascii,     matrix_alt_to_ascii,     matrix_alt_to_ascii,     
+	matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,		// CBM key has priority
+	matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,		// CBM key has priority
+	matrix_alt_to_ascii,     matrix_alt_to_ascii,     matrix_alt_to_ascii,     matrix_alt_to_ascii,
+	matrix_alt_to_ascii,     matrix_alt_to_ascii,     matrix_alt_to_ascii,     matrix_alt_to_ascii,
 	matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,
 	matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii
 };

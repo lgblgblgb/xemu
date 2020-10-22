@@ -34,7 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 //#define DEBUG_HOSTFS	DEBUG
 
 
-/* 
+/*
 
 Future plans to have some KERNAL-DOS-access-alike functions to make easy to patch ROM
 to use HostFS instead of DOS/IEC/whatever routines for a given device number.

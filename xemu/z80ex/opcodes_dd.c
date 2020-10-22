@@ -867,5 +867,5 @@ static const z80ex_opcode_fn opcodes_dd[0x100] = {
  NULL          , NULL          , NULL          , NULL          ,
  NULL          , NULL          , NULL          , NULL          ,
  NULL          , op_DD_0xf9    , NULL          , NULL          ,
- NULL          , NULL          , NULL          , NULL          
+ NULL          , NULL          , NULL          , NULL
 };

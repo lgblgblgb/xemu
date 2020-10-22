@@ -174,7 +174,7 @@ for using outside of certain opcode execution)*/
 #else
 /*Z80EX_OPSTEP_FAST_AND_ROUGH*/
 
-#define T_WAIT_UNTIL(t_state) {z80ex.tstate = t_state; z80ex.op_tstate = t_state;} 
+#define T_WAIT_UNTIL(t_state) {z80ex.tstate = t_state; z80ex.op_tstate = t_state;}
 
 #define TSTATES(amount) {z80ex.tstate += amount;}
 

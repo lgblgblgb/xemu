@@ -54,7 +54,7 @@ static Uint8 mouse_buffer[] = {
 
 #define WATCHDOG_USEC(n) (n / 64)
 
-/* Values can be used in mouse modes, buttons[] array to map PC mouse buttons to EP related mouse buttons 
+/* Values can be used in mouse modes, buttons[] array to map PC mouse buttons to EP related mouse buttons
    The first two are mapped then according to the button*_mask of the mode struct.
    The EX buttons instructs setting the button status in mouse buffer directly at byte 3, lower nibble
 */

@@ -410,8 +410,8 @@ static void dump_config ( FILE *fp )
 	struct configSetting_st *st = config;
 	int n = config_size;
 	/* header */
-	fprintf(fp, 
-		"# Xep128 default built-in configuration as a sample / template file." NL 
+	fprintf(fp,
+		"# Xep128 default built-in configuration as a sample / template file." NL
 		"# Feel free to customize for your needs, and rename to config to be loaded automatically." NL
 		"# Delete this _template_ file (not the one renamed as config) Xep128 to allow to re-create" NL
 		"# in case of some new options with a new version." NL NL

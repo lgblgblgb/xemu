@@ -27,16 +27,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  *
  * (C)2014 Gábor Lénárt LGB http://ep.lgb.hu/jsep/
  * Part of my JavaScript based Enterprise-128 emulator ("JSep" aka "webemu").
- * Am9511 "APU" FPU emulation, somewhat (ehhh, a lot!) incorrect 
- * 
+ * Am9511 "APU" FPU emulation, somewhat (ehhh, a lot!) incorrect
+ *
  * Thanks to Povi for testing APU support.
- * 
+ *
  * http://www.hartetechnologies.com/manuals/AMD/AMD%209511%20FPU.pdf
  * http://www.joelowens.org/z80/am9511algorithms.pdf
  * http://www.joelowens.org/z80/am9511fpmanual.pdf
- * 
+ *
  * Major problems with my emulation:
- * 
+ *
  * Precision: converts data between APU formats and JS numeric, real Am9511 may give a sightly different results in case of floats.
  * Timing: uses constant timings, real APU varies execution times depending on the operands.
  * Stack content: real APU destroys some elements in case of some OPS other than TOS. This is not emulated.
@@ -262,7 +262,7 @@ static void _apu_copy(int from, int to) {
 }
 
 
-/* Note, call of this function should be AFTER calling _apu_push* functions as those may set overflow flag we want to keep as cleared here ... 
+/* Note, call of this function should be AFTER calling _apu_push* functions as those may set overflow flag we want to keep as cleared here ...
  * I am still not sure about the difference of overflow and underflow, also not the over-/underflow and carry. For the second problem:
  * it's said that the maximal (or minimal value) can be extended by the carry flag, so there are three cases basically: a number can
  * be represented without overflow and carry, the number can be represented as carry to be thought of the extension of the result,

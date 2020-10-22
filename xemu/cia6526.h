@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  * Note: this is not an exact nor complete emulation!
  * The only goal is to support what Commodore 64/65(?) uses even
  * implemented incorrectly (not cycle exact, simplified, ignored
- * conditions, etc). 
+ * conditions, etc).
  * Some doc:
  *      http://archive.6502.org/datasheets/mos_6526_cia.pdf
  *      http://www.c64-wiki.com/index.php/CIA

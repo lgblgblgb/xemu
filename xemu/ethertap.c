@@ -197,7 +197,7 @@ int xemu_tuntap_select ( int flags, int timeout_usecs )
 /* dev_in: device name to attach too, if it's zero sized string or NULL,
    the kernel will allocate a new name,
    but for that Xemu needs network admin capability (typically being 'root')
-   which is not so much a good idea! 
+   which is not so much a good idea!
    dev_out: a large enough buffer where name will be written back to. If it's
    NULL pointer, it won't be used.
    dev_out_size: size of dev_out buffer storage

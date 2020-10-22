@@ -29,7 +29,7 @@ output - text buffer to write disassembly to
 output_size - length of the text buffer
 flags - output format settings, or 0 for defaults
 t_states  - will be set to T-states of the instruction
-t_states2 - for branching commands: T-states when PC is changed, for other commands: 0 
+t_states2 - for branching commands: T-states when PC is changed, for other commands: 0
 readbyte_cb - callback function for reading byte at given adress
 addr - adress of the first byte of the instruction to disassemble
 user_data - will be passed to readbyte_cb callback

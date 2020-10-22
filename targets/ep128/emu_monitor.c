@@ -117,7 +117,7 @@ static char *get_mon_arg ( int limitrangecode )
 	char *r;
 	while (*input_p && *input_p <= 32)
 		input_p++;
-	if (!*input_p) 
+	if (!*input_p)
 		return NULL;		// no argument left
 	r = input_p;			// remember position of first printable character ...
 	while (*input_p >= limitrangecode)
