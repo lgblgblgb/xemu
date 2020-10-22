@@ -115,11 +115,11 @@ static int _gtkgui_bgtask_callback ( void *unused ) {
 		;
 	if (_gtkgui_bgtask_running_want) {
 		_gtkgui_bgtask_running_status = 1;
-		DEBUGPRINT("GUI: bgtask is active" NL);
+		DEBUGGUI("GUI: bgtask is active" NL);
 		return TRUE;
 	} else {
 		_gtkgui_bgtask_running_status = 0;
-		DEBUGPRINT("GUI: bgtask is inactive" NL);
+		DEBUGGUI("GUI: bgtask is inactive" NL);
 		return FALSE;	// returning FALSE will cause GTK/GLIB to remove the callback of g_timeout_add()
 	}
 }
@@ -488,27 +488,37 @@ static int SDL_ShowMessageBox_xemuguigtk ( const SDL_MessageBoxData *box, int *b
 		DEBUGPRINT("GUI: not initialized yet, SDL_ShowMessageBox_xemuguigtk() reverts to SDL_ShowMessageBox()" NL);
 		goto sdl;
 	}
+	if (XEMU_UNLIKELY(box->numbuttons < 1))
+		FATAL("Less than one button for %s?!", __func__);
 	GtkWidget *dialog = gtk_message_dialog_new(NULL, GTK_DIALOG_MODAL, GTK_MESSAGE_QUESTION, GTK_BUTTONS_NONE, "%s", "Xemu question");
 	gtk_message_dialog_format_secondary_text(GTK_MESSAGE_DIALOG(dialog), "%s", box->message);
 	gtk_window_set_focus(GTK_WINDOW(dialog), NULL);
-	int escape_default = -1;
+	int escape_default_value = -1;
 	GtkWidget *return_default_button = NULL;
 	for (int a = 0; a < box->numbuttons; a++) {
 		GtkWidget *button = gtk_dialog_add_button(GTK_DIALOG(dialog), box->buttons[a].text, a);
-		if ((box->buttons[a].flags & SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT))
-			escape_default = a;
-		if ((box->buttons[a].flags & SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT) || !a)
+		if ((box->buttons[a].flags & SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT) || escape_default_value < 0)
+			escape_default_value = a;
+		if ((box->buttons[a].flags & SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT) || !return_default_button)
 			return_default_button = button;
 	}
+#if 0
+	for (int a = 0; a < 10; a++) {
+		char name[10];
+		sprintf(name, "Element-%d", a);
+		gtk_dialog_add_button(GTK_DIALOG(dialog), name, box->numbuttons + a);
+	}
+#endif
 	gtk_widget_set_can_default(return_default_button, TRUE);
 	gtk_window_set_default(GTK_WINDOW(dialog), return_default_button);
 	_gtkgui_bgtask_set();
 	gint res = gtk_dialog_run(GTK_DIALOG(dialog));
 	_gtkgui_bgtask_clear();
 	gtk_widget_destroy(dialog);
-	DEBUGPRINT("GUI: GTK RES = %d" NL, res);
+	//DEBUGPRINT("GUI: GTK RES = %d" NL, res);
 	if (res < 0) {
-		res = escape_default >= 0 ? escape_default : 0;
+		// FIXME: not all negative error codes mean escape the dialog box, maybe only -4? what about the others??
+		res = escape_default_value;
 	}
 	while (gtk_events_pending())
 		gtk_main_iteration();

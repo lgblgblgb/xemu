@@ -199,7 +199,7 @@ Uint8 xemu_hour_to_bcd12h ( Uint8 hours, int hour_offset )
 void *xemu_malloc ( size_t size )
 {
 	void *p = malloc(size);
-	if (!p)
+	if (XEMU_UNLIKELY(!p))
 		FATAL("Cannot allocate %d bytes of memory.", (int)size);
 	return p;
 }
@@ -208,7 +208,7 @@ void *xemu_malloc ( size_t size )
 void *xemu_realloc ( void *p, size_t size )
 {
 	p = realloc(p, size);
-	if (!p)
+	if (XEMU_UNLIKELY(!p))
 		FATAL("Cannot re-allocate %d bytes of memory.", (int)size);
 	return p;
 }
@@ -233,7 +233,7 @@ void *xemu_malloc_ALIGNED ( size_t size )
 char *xemu_strdup ( const char *s )
 {
 	char *p = strdup(s);
-	if (!p)
+	if (XEMU_UNLIKELY(!p))
 		FATAL("Cannot allocate memory for strdup()");
 	return p;
 }
@@ -802,9 +802,8 @@ void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_
 {
 	int tail;
 	Uint32 *pp = xemu_start_pixel_buffer_access(&tail);
-	int x, y;
-	for (y = 0; y < texture_y_size; y++) {
-		for (x = 0; x < texture_x_size; x++)
+	for (int y = 0; y < texture_y_size; y++) {
+		for (int x = 0; x < texture_x_size; x++)
 			*(pp++) = colour;
 		pp += tail;
 	}
@@ -899,7 +898,6 @@ void osd_update ()
 
 int osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_entries, int fade_dec, int fade_end )
 {
-	int a;
 	// start with disabled state, so we can abort our init process without need to disable this
 	osd_status = 0;
 	osd_enabled = 0;
@@ -927,7 +925,7 @@ int osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_entries, 
 	osd_ysize = ysize;
 	osd_fade_dec = fade_dec;
 	osd_fade_end = fade_end;
-	for (a = 0; a < palette_entries; a++)
+	for (int a = 0; a < palette_entries; a++)
 		osd_colours[a] = SDL_MapRGBA(sdl_pix_fmt, palette[a << 2], palette[(a << 2) + 1], palette[(a << 2) + 2], palette[(a << 2) + 3]);
 	osd_enabled = 1;	// great, everything is OK, we can set enabled state!
 	osd_available = 1;

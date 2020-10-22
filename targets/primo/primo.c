@@ -666,7 +666,7 @@ void emu_dropfile_callback ( const char *fn )
 	if (strlen(fn) >= sizeof fn_storage)
 		return;
 	if (choice != 1)
-		choice = QUESTION_WINDOW("Load as PRI now|Load as PRI always|Cancel for now", "What should I do with dropped file?");
+		choice = QUESTION_WINDOW("Load as PRI now|Load as PRI always|Cancel for now", "What should I do with the dropped file?");
 	if (choice > 1)
 		return;
 	emu_loop_notification |= EMU_LOOP_LOAD_NOTIFY;
