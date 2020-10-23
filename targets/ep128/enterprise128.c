@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "xemu/emutools_config.h"
 #include "xemu/emutools_gui.h"
+#include "xemu/emutools_hid.h"
 #include "xemu/z80.h"
 #include "enterprise128.h"
 #include "dave.h"
@@ -31,11 +32,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "cpu.h"
 #include "primoemu.h"
 #include "emu_rom_interface.h"
-#include "keyboard_mapping.h"
 #include "epnet.h"
 #include "zxemu.h"
 #include "printer.h"
-#include "joystick.h"
 #include "console.h"
 #include "emu_monitor.h"
 #include "rtc.h"
@@ -137,6 +136,8 @@ void emu_one_frame(int rasters, int frameskip)
 
 static void __emu_one_frame(int rasters, int frameskip)
 {
+	hid_handle_all_sdl_events();
+#if 0
 	SDL_Event e;
 	while (SDL_PollEvent(&e) != 0)
 		switch (e.type) {
@@ -152,7 +153,7 @@ static void __emu_one_frame(int rasters, int frameskip)
 				break;
 #endif
 			case SDL_QUIT:
-				if (QUESTION_WINDOW("?No|!Yes", "Are you sure to exit?") == 1)
+				if (ARE_YOU_SURE(str_are_you_sure_to_exit, i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
 					XEMUEXIT(0);
 				return;
 			case SDL_KEYDOWN:
@@ -170,7 +171,7 @@ static void __emu_one_frame(int rasters, int frameskip)
 								xemu_set_full_screen(-1);
 								break;
 							case 0xFE:	// EXIT, default key F9
-								if (QUESTION_WINDOW("?No|!Yes", "Are you sure to exit?") == 1)
+								if (ARE_YOU_SURE(str_are_you_sure_to_exit, i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
 									XEMUEXIT(0);
 								break;
 							case 0xFD:	// SCREENSHOT, default key F10
@@ -221,6 +222,7 @@ static void __emu_one_frame(int rasters, int frameskip)
 				joy_sdl_event(&e);
 				break;
 		}
+#endif
 	if (!frameskip) {
 		//screen_present_frame(ep_pixels);	// this should be after the event handler, as eg screenshot function needs locked texture state if this feature is used at all
 		xemu_update_screen();
@@ -338,8 +340,12 @@ int main (int argc, char *argv[])
 	))
 		return 1;
 	xemugui_init(xemucfg_get_str("gui"));	// allow to fail (do not exit if it fails). Some targets may not have X running
+	hid_init(
+		ep128_key_map,
+		VIRTUAL_SHIFT_POS,
+		SDL_ENABLE		// joystick events
+	);
 	osd_init_with_defaults();
-	keymap_preinit_config_internal();
 	fileio_init(
 #ifdef XEMU_ARCH_HTML
 		"/",
@@ -365,8 +371,7 @@ int main (int argc, char *argv[])
 	}
 	mouse_setup(xemucfg_get_num("mousemode"));
 	ep_reset();
-	kbd_matrix_reset();
-	joy_sdl_event(NULL); // this simply inits joy layer ...
+	clear_emu_events();
 #ifdef CONFIG_SDEXT_SUPPORT
 	if (!snapshot)
 		sdext_init(xemucfg_get_str("sdimg"));

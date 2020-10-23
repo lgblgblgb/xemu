@@ -19,7 +19,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_EP128_INPUT_H_INCLUDED
 #define XEMU_EP128_INPUT_H_INCLUDED
 
-#include <SDL_keyboard.h>
+//#include <SDL_keyboard.h>
+#include <xemu/emutools_hid.h>
 
 #define JOY_SCAN_FIRE1  0
 #define JOY_SCAN_UP     1
@@ -28,6 +29,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define JOY_SCAN_RIGHT  4
 #define JOY_SCAN_FIRE2  5
 #define JOY_SCAN_FIRE3  6
+
+#define VIRTUAL_SHIFT_POS	0x07
+
+extern const struct KeyMappingDefault ep128_key_map[];
 
 extern int   mouse_grab, show_keys, mouse_mode;
 

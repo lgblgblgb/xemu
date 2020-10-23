@@ -18,6 +18,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #include "xemu/emutools.h"
+#include "xemu/emutools_hid.h"
 #include "enterprise128.h"
 #include "dave.h"
 #include "primoemu.h"
@@ -26,7 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 Uint8 dave_int_read;
-Uint8 kbd_matrix[16]; // the "real" EP kbd matrix only uses the first 10 bytes though
+//Uint8 kbd_matrix[16]; // the "real" EP kbd matrix only uses the first 10 bytes though
 static Uint8 dave_int_write;
 static int cnt_1hz, cnt_50hz, cnt_31khz, cnt_1khz, cnt_tg0, cnt_tg1, cnt_tg2;
 static int cnt_load_tg0, cnt_load_tg1, cnt_load_tg2;

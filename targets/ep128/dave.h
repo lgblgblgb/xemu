@@ -25,7 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 extern int audio_source;
 extern Uint8 dave_int_read;
-extern Uint8 kbd_matrix[16];
+//extern Uint8 kbd_matrix[16];
 extern int kbd_selector, cpu_cycles_per_dave_tick, mem_wait_states;
 
 extern void audio_init ( int enable );
