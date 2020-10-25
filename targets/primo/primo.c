@@ -776,12 +776,6 @@ static void primo_reset ( void )
 }
 
 
-static void ui_native_os_file_browser ( void )
-{
-	xemuexec_open_native_file_browser(sdl_pref_dir);
-}
-
-
 static void ui_cb_set_model ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, !strcasecmp(m->user_data, primo_model_set_str));
@@ -832,14 +826,6 @@ static void ui_sound ( const struct menu_st *m, int *query )
 		return;
 	}
 	audio_enabled = !audio_enabled;
-}
-
-
-static void ui_osd_key_debugger ( const struct menu_st *m, int *query )
-{
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, hid_show_osd_keys);
-	hid_show_osd_keys = !hid_show_osd_keys;
-	OSD(-1, -1, "OSD key debugger has been %sABLED", hid_show_osd_keys ? "EN" : "DIS");
 }
 
 
@@ -895,7 +881,7 @@ static const struct menu_st menu_display[] = {
 //	{ "Enable scale filtering",	XEMUGUI_MENUID_CALLABLE |
 //					XEMUGUI_MENUFLAG_QUERYBACK,	ui_set_scale_filtering,		NULL		},
 	{ "Enable OSD kbd debug",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_osd_key_debugger,		NULL		},
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger,	NULL		},
 	{ NULL }
 };
 static const struct menu_st menu_main[] = {
@@ -904,7 +890,7 @@ static const struct menu_st menu_main[] = {
 	{ "CPU clock",			XEMUGUI_MENUID_SUBMENU,		NULL,				menu_cpu_clock },
 	{ "Reset Primo",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	primo_reset_asked         },
 	{ "Load PRI file",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	ui_load_pri	          },
-	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	ui_native_os_file_browser },
+	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_native_os_prefdir_browser, NULL },
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	ui_screenshot	},
 #endif

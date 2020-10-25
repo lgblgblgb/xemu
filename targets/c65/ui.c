@@ -105,29 +105,6 @@ static void ui_run_prg_by_browsing ( void )
 		DEBUGPRINT("UI: file selection for PRG injection was cancalled." NL);
 }
 
-
-static void ui_native_os_file_browser ( void )
-{
-	xemuexec_open_native_file_browser(sdl_pref_dir);
-}
-
-
-
-static void osd_key_debugger ( const struct menu_st *m, int *query )
-{
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, hid_show_osd_keys);
-	hid_show_osd_keys = !hid_show_osd_keys;
-	OSD(-1, -1, "OSD key debugger has been %sABLED", hid_show_osd_keys ? "EN" : "DIS");
-}
-
-static void enable_mouse_grab ( const struct menu_st *m, int *query )
-{
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, allow_mouse_grab);
-	allow_mouse_grab = !allow_mouse_grab;
-	if (allow_mouse_grab)
-		OSD(-1, -1, "ENABLED. Left click to activate!");
-}
-
 static void ui_dump_memory ( void )
 {
 	char fnbuf[PATH_MAX + 1];
@@ -185,16 +162,16 @@ static const struct menu_st menu_display[] = {
 	{ "Window - 200%", 		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize, (void*)2 },
 	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	enable_mouse_grab, NULL },
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
 //	{ "Enable scale filtering",	XEMUGUI_MENUID_CALLABLE |
 //					XEMUGUI_MENUFLAG_QUERYBACK,	ui_set_scale_filtering, NULL },
 	{ NULL }
 };
 static const struct menu_st menu_debug[] = {
 	{ "OSD key debugger",		XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	osd_key_debugger, NULL },
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
 	{ "Dump memory info file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_memory },
-	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_native_os_file_browser },
+	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_native_os_prefdir_browser, NULL },
 	{ NULL }
 };
 static const struct menu_st menu_reset[] = {
