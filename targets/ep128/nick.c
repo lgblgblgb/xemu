@@ -86,7 +86,7 @@ static int nick_addressing_init ( Uint32 *pixels_buffer, int line_size )
 void screenshot ( void )
 {
 	if (!xemu_screenshot_png(
-		"@", "screenshot.png",
+		NULL, NULL,
 		1,
 		2,
 		NULL,	// Allow function to figure it out ;)

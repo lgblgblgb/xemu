@@ -65,13 +65,12 @@ struct menu_st {
 	const void *user_data;
 };
 
-extern int is_xemungui_ok;
+extern int  is_xemungui_ok;
 
 extern int  xemugui_init		( const char *name );
 extern void xemugui_shutdown		( void );
 extern int  xemugui_iteration		( void );
 extern int  xemugui_file_selector	( int dialog_mode, const char *dialog_title, char *default_dir, char *selected, int path_max_size );
-
 extern int  xemugui_popup		( const struct menu_st desc[] );
 extern int  xemugui_info                ( int sdl_class, const char *msg );
 
@@ -85,5 +84,11 @@ extern void xemugui_cb_about_window		( const struct menu_st *m, int *query );
 extern void xemugui_cb_sysconsole		( const struct menu_st *m, int *query );
 #endif
 extern void xemugui_cb_windowsize		( const struct menu_st *m, int *query );
+
+#ifdef HAVE_XEMU_EXEC_API
+extern void xemugui_cb_native_os_prefdir_browser( const struct menu_st *m, int *query );
+#endif
+extern void xemugui_cb_osd_key_debugger		( const struct menu_st *m, int *query );
+extern void xemugui_cb_set_mouse_grab		( const struct menu_st *m, int *query );
 
 #endif

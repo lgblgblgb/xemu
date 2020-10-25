@@ -43,8 +43,6 @@ extern int  set_cpu_clock ( int hz );
 extern int paused;
 extern time_t unix_time;
 
-#define VARALIGN		MAXALIGNED
-
 #define CONFIG_USE_LODEPNG
 #define CONFIG_EXDOS_SUPPORT
 #ifdef	XEMU_HAS_SOCKET_API

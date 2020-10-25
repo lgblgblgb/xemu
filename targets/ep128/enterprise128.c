@@ -22,7 +22,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_gui.h"
 #include "xemu/emutools_hid.h"
 #include "xemu/z80.h"
+
 #include "enterprise128.h"
+
 #include "dave.h"
 #include "nick.h"
 #include "sdext.h"
@@ -48,9 +50,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 //static Uint32 *ep_pixels;
-static const int _cpu_speeds[4] = { 4000000, 6000000, 7120000, 10000000 };
-static int _cpu_speed_index = 0;
-static unsigned int ticks;
+//static const int _cpu_speeds[4] = { 4000000, 6000000, 7120000, 10000000 };
+//static int _cpu_speed_index = 0;
+//static unsigned int ticks;
 int paused = 0;
 static int cpu_cycles_for_dave_sync = 0;
 //static int td_balancer;
@@ -382,7 +384,7 @@ int main (int argc, char *argv[])
 #ifdef CONFIG_EPNET_SUPPORT
 	epnet_init(NULL);
 #endif
-	ticks = SDL_GetTicks();
+	//ticks = SDL_GetTicks();
 	balancer = 0;
 	set_cpu_clock((int)(xemucfg_get_ranged_float("clock", 1.0, 12.0) * 1000000.0));
 	audio_start();

@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_hid.h"
 #include "enterprise128.h"
 #include "dave.h"
+#include "ui.h"
 
 #include "input_devices.h"
 
@@ -544,14 +545,8 @@ int emu_kbd(SDL_Keysym sym, int press)
 // HID needs this to be defined, it's up to the emulator if it uses or not ...
 int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
-#if 0
-	if (!pressed && pos == -2 && key == 0 && handled == SDL_BUTTON_RIGHT) {
-		DEBUGGUI("UI: handler has been called." NL);
-		if (xemugui_popup(menu_main)) {
-			DEBUGPRINT("UI: oops, POPUP does not worked :(" NL);
-		}
-	}
-#endif
+	if (!pressed && pos == -2 && key == 0 && handled == SDL_BUTTON_RIGHT)
+		ui_enter();
 	return 0;
 }
 

@@ -106,3 +106,28 @@ void xemugui_cb_windowsize ( const struct menu_st *m, int *query )
 #endif
 	xemu_set_screen_mode(mode_spec);
 }
+
+#ifdef HAVE_XEMU_EXEC_API
+#include "xemu/emutools_files.h"
+void xemugui_cb_native_os_prefdir_browser ( const struct menu_st *m, int *query )
+{
+	if (!query)
+		xemuexec_open_native_file_browser(sdl_pref_dir);
+}
+#endif
+
+#include "xemu/emutools_hid.h"
+void xemugui_cb_osd_key_debugger ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, hid_show_osd_keys);
+	hid_show_osd_keys = !hid_show_osd_keys;
+	OSD(-1, -1, "OSD key debugger has been %sABLED", hid_show_osd_keys ? "EN" : "DIS");
+}
+ 
+void xemugui_cb_set_mouse_grab ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, allow_mouse_grab);
+	allow_mouse_grab = !allow_mouse_grab;
+	if (allow_mouse_grab)
+		OSD(-1, -1, "ENABLED. Left click to activate!");
+}
