@@ -24,4 +24,9 @@ extern void monitor_process_queued ( void );
 extern int  monitor_queue_used ( void );
 extern int  monitor_queue_command ( char *buffer );
 
+extern void console_close_window ( void );
+extern void console_close_window_on_exit ( void );
+extern void console_open_window ( void );
+extern void console_monitor_ready ( void );
+
 #endif

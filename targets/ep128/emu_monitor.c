@@ -28,9 +28,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "z180.h"
 #include "emu_rom_interface.h"
 #include "fileio.h"
-#include "console.h"
 #include "nick.h"
-#include "input.h"
+#include "input_devices.h"
 #include "primoemu.h"
 #include "dave.h"
 #include "sdext.h"
@@ -797,3 +796,146 @@ int monitor_queue_command ( char *buffer )
 	return 0;
 }
 
+// EX console.c !!!!
+
+#ifdef NO_CONSOLE
+//int console_is_open = 0;
+void console_close_window ( void ) {
+}
+void console_close_window_on_exit ( void ) {
+}
+void console_open_window ( void ) {
+}
+void console_monitor_ready ( void ) {
+}
+#else
+
+
+#ifdef XEMU_ARCH_WIN
+//#	include <windows.h>
+//#	include <stdio.h>
+//#	include <io.h>
+//#	include <fcntl.h>
+#else
+#	ifndef XEMU_HAS_READLINE
+#		error "We need libreadline for this target/platform, but XEMU_HAS_READLINE is not defined. Maybe libreadline cannot be detected?"
+#	endif
+#	include <readline/readline.h>
+#	include <readline/history.h>
+#endif
+
+#define USE_MONITOR	1
+
+//int console_is_open = 0;
+static int ok_for_monitor = 0;
+static volatile int monitor_running = 0;
+static SDL_Thread *mont = NULL;
+
+
+/* Monitor thread waits for console input and enqueues the request.
+   The thread is NOT executes the command itself! Even the answer
+   is printed by the main thread already!
+   Honestly, I was lazy, this may be also implemented in the main
+   main thread, with select() based scheme / async I/O on UNIX, but I have
+   no idea about Windows ... */
+static int console_monitor_thread ( void *ptr )
+{
+	printf("Welcome to " XEP128_NAME " monitor. Use \"help\" for help" NL);
+	while (monitor_running) {
+		char *p;
+#ifdef XEMU_ARCH_WIN
+		char buffer[256];
+		printf(XEP128_NAME "> ");
+		p = fgets(buffer, sizeof buffer, stdin);
+#else
+		p = readline(XEP128_NAME "> ");
+#endif
+		if (p == NULL) {
+			SDL_Delay(10);	// avoid flooding the CPU in case of I/O problem for fgets ...
+		} else {
+			// Queue the command!
+			while (monitor_queue_command(p) && monitor_running)
+				SDL_Delay(10);	// avoid flooding the CPU in case of not processed-yet command in the "queue" buffer
+#ifndef XEMU_ARCH_WIN
+			if (p[0])
+				add_history(p);
+			free(p);
+#endif
+			// Wait for command completed
+			while (monitor_queue_used() && monitor_running)
+				SDL_Delay(10);	// avoid flooding the CPU while waiting for command being processed and answered on the console
+		}
+	}
+	DEBUGPRINT("MONITOR: thread is about to exit" NL);
+	return 0;
+}
+
+
+static void monitor_start ( void )
+{
+	if (!ok_for_monitor || !sysconsole_is_open || monitor_running || !USE_MONITOR)
+		return;
+	DEBUGPRINT("MONITOR: start" NL);
+	monitor_running = 1;
+	mont = SDL_CreateThread(console_monitor_thread, XEP128_NAME " monitor", NULL);
+	if (mont == NULL)
+		monitor_running = 0;
+}
+
+
+static int monitor_stop ( void )
+{
+	int ret;
+	if (!monitor_running)
+		return 0;
+	DEBUGPRINT("MONITOR: stop" NL);
+	monitor_running = 0;
+	if (mont != NULL) {
+		printf(NL NL "*** PRESS ENTER TO EXIT ***" NL);
+		// Though Info window here is overkill, I am still interested why it causes a segfault when I've tried ...
+		//INFO_WINDOW("Monitor runs on console. You must press ENTER there to continue");
+		SDL_WaitThread(mont, &ret);
+		mont = NULL;
+		DEBUGPRINT("MONITOR: thread joined, status code is %d" NL, ret);
+	}
+	return 1;
+}
+
+
+void console_open_window ( void )
+{
+	sysconsole_open();
+	if (sysconsole_is_open)
+		monitor_start();
+	else
+		DEBUGPRINT("MONITOR: won't start monitor since sysconsole is still not open" NL);
+}
+
+
+void console_close_window ( void )
+{
+	if (!sysconsole_is_open)
+		return;
+	monitor_stop();
+	sysconsole_close(NULL);
+}
+
+
+void console_close_window_on_exit ( void )
+{
+#ifdef XEMU_ARCH_WIN
+	if (sysconsole_is_open && !monitor_stop())
+		INFO_WINDOW("Click to close console window");
+#else
+	monitor_stop();
+#endif
+	console_close_window();
+}
+
+
+void console_monitor_ready ( void )
+{
+	ok_for_monitor = 1;
+	monitor_start();
+}
+#endif

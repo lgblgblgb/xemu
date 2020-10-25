@@ -19,9 +19,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "xemu/emutools_hid.h"
 #include "enterprise128.h"
-#include "input.h"
 #include "dave.h"
 
+#include "input_devices.h"
 
 static int move_dx, move_dy, nibble_counter;
 int mouse_grab = 0;

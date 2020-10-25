@@ -31,7 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "primoemu.h"
 #include "epnet.h"
 #include "roms.h"
-#include "input.h"
+#include "input_devices.h"
 #include "emu_rom_interface.h"
 #include "sdext.h"
 #include "exdos_wd.h"
