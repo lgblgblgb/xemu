@@ -27,31 +27,26 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "nick.h"
 #include "cpu.h"
 #include "exdos_wd.h"
+#include "primoemu.h"
+#include "emu_monitor.h"
 
 
 static void ui_hard_reset ( void )
 {
+	if (primo_on)
+		primo_emulator_exit();
 	ep_reset();
+	ep_clear_ram();
 }
 
 
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 static void ui_screenshot ( void )
 {
-//	register_screenshot_request = 1;
 	screenshot();
 }
 #endif
 
-#if 0
-static void ui_set_scale_filtering ( const struct menu_st *m, int *query )
-{
-	static char enabled[2] = "0";
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, (enabled[0] & 1));
-	enabled[0] ^= 1;
-	SDL_SetHint("SDL_HINT_RENDER_SCALE_QUALITY", enabled);
-}
-#endif
 
 #ifdef CONFIG_EXDOS_SUPPORT
 static void ui_attach_disk ( void )
@@ -72,7 +67,26 @@ static void ui_attach_disk ( void )
 #endif
 
 
+static void ui_cb_cpuclock ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, CPU_CLOCK == VOIDPTR_TO_INT(m->user_data));
+	set_cpu_clock_with_osd(VOIDPTR_TO_INT(m->user_data));
+}
+
+
+static void ui_cb_monitor ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, monitor_check());
+	if (monitor_check())
+		monitor_stop();
+	else
+		monitor_start();
+}
+
+
+
 /**** MENU SYSTEM ****/
+
 
 
 static const struct menu_st menu_display[] = {
@@ -82,33 +96,42 @@ static const struct menu_st menu_display[] = {
 					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize, (void*)2 },
 	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
-//	{ "Enable scale filtering",	XEMUGUI_MENUID_CALLABLE |
-//					XEMUGUI_MENUFLAG_QUERYBACK,	ui_set_scale_filtering, NULL },
 	{ NULL }
 };
 static const struct menu_st menu_debug[] = {
 	{ "OSD key debugger",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
-//	{ "Dump memory info file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_memory },
+	{ "Monitor prompt",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_monitor, NULL },
 	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_native_os_prefdir_browser, NULL },
 	{ NULL }
 };
 static const struct menu_st menu_reset[] = {
-//	{ "Reset C65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode },
-//	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode },
 	{ "Reset",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ep_reset },
 	{ "Hard reset",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_hard_reset },
 	{ NULL }
 };
+static const struct menu_st menu_cpuclock[] = {
+	{ "4.00 MHz",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_cpuclock, (void*)4000000 },
+	{ "6.00 MHz",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_cpuclock, (void*)6000000 },
+	{ "7.12 MHz",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_cpuclock, (void*)7120000 },
+	{ "8.00 MHz",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_cpuclock, (void*)8000000 },
+	{ "10.00 MHz",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_cpuclock, (void*)10000000 },
+	{ NULL }
+};
 static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
+	{ "CPU clock",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_cpuclock },
 	{ "Reset", 	 		XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
 	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
 #ifdef CONFIG_EXDOS_SUPPORT
 	{ "Attach floppy",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_disk },
 #endif
-//	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
-//	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_screenshot },
 #endif

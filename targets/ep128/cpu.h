@@ -31,6 +31,7 @@ extern void  xep_rom_write_support ( int towrite );
 extern void  set_ep_cpu ( int type );
 extern int   ep_set_ram_config ( const char *spec );
 extern int   ep_init_ram ( void );
+extern void  ep_clear_ram ( void );
 extern Uint8 read_cpu_byte ( Uint16 addr );
 extern Uint8 read_cpu_byte_by_segmap ( Uint16 addr, Uint8 *segmap );
 extern void  write_cpu_byte_by_segmap ( Uint16 addr, Uint8 *segmap, Uint8 data );

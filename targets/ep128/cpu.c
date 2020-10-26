@@ -183,6 +183,13 @@ int ep_set_ram_config ( const char *spec )
 }
 
 
+void ep_clear_ram ( void )
+{
+	for (int a = 0; a < 0x100; a++)
+		if (memory_segment_map[a] == RAM_SEGMENT || memory_segment_map[a] == VRAM_SEGMENT)
+			memset(memory + (a << 14), 0xFF, 0x4000);
+}
+
 
 int ep_init_ram ( void )
 {

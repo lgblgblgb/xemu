@@ -485,7 +485,8 @@ static void cmd_showkeys ( void )
 
 static void cmd_close ( void )
 {
-	console_close_window();
+	monitor_stop();
+	sysconsole_close(NULL);
 }
 
 
@@ -659,31 +660,31 @@ static void cmd_dir ( void )
 static void cmd_help ( void );
 
 static const struct commands_st commands[] = {
-	{ "AUDIO",	"", 3, "Tries to turn lame audio emulation", cmd_audio },
-	{ "CD",		"", 3, "Host OS directory change/query for FILE:", cmd_cd },
-	{ "CLOSE",	"", 3, "Close console/monitor window", cmd_close },
-	{ "CPU",	"", 3, "Set/query CPU type/clock", cmd_cpu },
-	{ "DDN",	"", 1, "Set default device name via EXOS 19", cmd_ddn },
-	{ "DIR",	"", 3, "Directory listing from host OS for FILE:", cmd_dir },
+	{ "AUDIO",	"",  3, "Tries to turn lame audio emulation", cmd_audio },
+	{ "CD",		"",  3, "Host OS directory change/query for FILE:", cmd_cd },
+	{ "CLOSE",	"",  3, "Close console/monitor window", cmd_close },
+	{ "CPU",	"",  3, "Set/query CPU type/clock", cmd_cpu },
+	{ "DDN",	"",  1, "Set default device name via EXOS 19", cmd_ddn },
+	{ "DIR",	"",  3, "Directory listing from host OS for FILE:", cmd_dir },
 	{ "DISASM",	"D", 3, "Disassembly memory", cmd_disasm },
-	{ "EMU",	"", 3, "Emulation info", cmd_emu },
-	{ "EXIT",	"", 3, "Exit Xep128", cmd_exit },
-	{ "EXOS",	"", 3, "EXOS information", cmd_exos },
+	{ "EMU",	"",  3, "Emulation info", cmd_emu },
+	{ "EXIT",	"",  3, "Exit Xep128", cmd_exit },
+	{ "EXOS",	"",  3, "EXOS information", cmd_exos },
 	{ "HELP",	"?", 3, "Guess, what ;-)", cmd_help },
-	{ "LPT",	"", 3, "Shows LPT (can be long!)", cmd_lpt },
+	{ "LPT",	"",  3, "Shows LPT (can be long!)", cmd_lpt },
 	{ "MEMDUMP",	"M", 3, "Memory dump", cmd_memdump },
-	{ "MOUSE",	"", 3, "Configure or query mouse mode", cmd_mouse },
-	{ "PAUSE",	"", 2, "Pause/resume emulation", cmd_pause },
-	{ "PORTS",	"", 3, "I/O port values (written)", cmd_ports },
-	{ "PRIMO",	"", 3, "Primo emulation", cmd_primo },
-	{ "RAM",	"", 3, "Set RAM size/report", cmd_ram },
+	{ "MOUSE",	"",  3, "Configure or query mouse mode", cmd_mouse },
+	{ "PAUSE",	"",  2, "Pause/resume emulation", cmd_pause },
+	{ "PORTS",	"",  3, "I/O port values (written)", cmd_ports },
+	{ "PRIMO",	"",  3, "Primo emulation", cmd_primo },
+	{ "RAM",	"",  3, "Set RAM size/report", cmd_ram },
 	{ "REGS",	"R", 3, "Show Z80 registers", cmd_registers },
-	{ "ROMNAME",	"", 3, "ROM id string", cmd_romname },
-	{ "SDL",        "", 3,  "Get SDL related info", cmd_sdl },
-	{ "SETDATE",	"", 1, "Set EXOS time/date by emulator" , cmd_setdate },
-	{ "SHOWKEYS",	"", 3, "Show/hide PC/SDL key symbols", cmd_showkeys },
-	{ "TESTARGS",   "", 3, "Just for testing monitor statement parsing, not so useful for others", cmd_testargs },
-	{ NULL,		NULL, 0, NULL, NULL }
+	{ "ROMNAME",	"",  3, "ROM id string", cmd_romname },
+	{ "SDL",        "",  3,  "Get SDL related info", cmd_sdl },
+	{ "SETDATE",	"",  1, "Set EXOS time/date by emulator" , cmd_setdate },
+	{ "SHOWKEYS",	"",  3, "Show/hide PC/SDL key symbols", cmd_showkeys },
+	{ "TESTARGS",   "",  3, "Just for testing monitor statement parsing, not so useful for others", cmd_testargs },
+	{ NULL,		NULL,0, NULL, NULL }
 };
 static const char help_for_all_desc[] = "\nFor help on all comamnds: (:XEP) HELP\n";
 
@@ -826,8 +827,6 @@ void console_monitor_ready ( void ) {
 
 #define USE_MONITOR	1
 
-//int console_is_open = 0;
-static int ok_for_monitor = 0;
 static volatile int monitor_running = 0;
 static SDL_Thread *mont = NULL;
 
@@ -871,24 +870,36 @@ static int console_monitor_thread ( void *ptr )
 }
 
 
-static void monitor_start ( void )
+int monitor_start ( void )
 {
-	if (!ok_for_monitor || !sysconsole_is_open || monitor_running || !USE_MONITOR)
-		return;
-	DEBUGPRINT("MONITOR: start" NL);
+	if (monitor_running || !USE_MONITOR)
+		return 0;
+	sysconsole_open();	// make sure we have system console so we can run the monitor on something ...
+	if (!sysconsole_is_open) {
+		ERROR_WINDOW("Cannot get system console to run monitor program on");
+		return 1;		// could not open system console?
+	}
+	DEBUGPRINT("MONITOR: starting" NL);
 	monitor_running = 1;
 	mont = SDL_CreateThread(console_monitor_thread, XEP128_NAME " monitor", NULL);
 	if (mont == NULL)
 		monitor_running = 0;
+	return 0;
 }
 
 
-static int monitor_stop ( void )
+int monitor_check ( void )
+{
+	return (mont != NULL);
+}
+
+
+int monitor_stop ( void )
 {
 	int ret;
 	if (!monitor_running)
 		return 0;
-	DEBUGPRINT("MONITOR: stop" NL);
+	DEBUGPRINT("MONITOR: stopping" NL);
 	monitor_running = 0;
 	if (mont != NULL) {
 		printf(NL NL "*** PRESS ENTER TO EXIT ***" NL);
@@ -901,41 +912,4 @@ static int monitor_stop ( void )
 	return 1;
 }
 
-
-void console_open_window ( void )
-{
-	sysconsole_open();
-	if (sysconsole_is_open)
-		monitor_start();
-	else
-		DEBUGPRINT("MONITOR: won't start monitor since sysconsole is still not open" NL);
-}
-
-
-void console_close_window ( void )
-{
-	if (!sysconsole_is_open)
-		return;
-	monitor_stop();
-	sysconsole_close(NULL);
-}
-
-
-void console_close_window_on_exit ( void )
-{
-#ifdef XEMU_ARCH_WIN
-	if (sysconsole_is_open && !monitor_stop())
-		INFO_WINDOW("Click to close console window");
-#else
-	monitor_stop();
-#endif
-	console_close_window();
-}
-
-
-void console_monitor_ready ( void )
-{
-	ok_for_monitor = 1;
-	monitor_start();
-}
 #endif

@@ -49,15 +49,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <unistd.h>
 
 
-//static Uint32 *ep_pixels;
-//static const int _cpu_speeds[4] = { 4000000, 6000000, 7120000, 10000000 };
-//static int _cpu_speed_index = 0;
-//static unsigned int ticks;
 int paused = 0;
 static int cpu_cycles_for_dave_sync = 0;
-//static int td_balancer;
-//static Uint64 et_start, et_end;
-//static int td_em_ALL = 0, td_pc_ALL = 0, td_count_ALL = 0;
 static double balancer;
 static double SCALER;
 static int sram_ready = 0;
@@ -69,6 +62,7 @@ static char emulator_speed_title[32] = "";
 
 static void shutdown_callback(void)
 {
+	monitor_stop();
 	sdext_shutdown();
 	audio_close();
 	printer_close();
@@ -81,16 +75,7 @@ static void shutdown_callback(void)
 	if (sram_ready)
 		sram_save_all_segments();
 	DEBUGPRINT("Shutdown callback, return." NL);
-	console_close_window_on_exit();
 }
-
-
-
-
-
-
-
-
 
 
 void clear_emu_events ( void )
@@ -99,8 +84,6 @@ void clear_emu_events ( void )
 	kbd_matrix_reset();	// also reset the keyboard matrix as it seems some keys can be detected "stucked" ...
 	mouse_reset_button();	// ... and also the mouse buttons :)
 }
-
-
 
 
 int set_cpu_clock ( int hz )
@@ -114,14 +97,12 @@ int set_cpu_clock ( int hz )
 }
 
 
-
 int set_cpu_clock_with_osd ( int hz )
 {
 	hz = set_cpu_clock(hz);
 	OSD(-1, -1, "CPU speed: %.2f MHz", hz / 1000000.0);
 	return hz;
 }
-
 
 
 // called by nick.c
@@ -138,92 +119,6 @@ void emu_one_frame(int rasters, int frameskip)
 static void __emu_one_frame(int rasters, int frameskip)
 {
 	hid_handle_all_sdl_events();
-#if 0
-	SDL_Event e;
-	while (SDL_PollEvent(&e) != 0)
-		switch (e.type) {
-#if 0
-			case SDL_WINDOWEVENT:
-				if (!is_fullscreen && e.window.event == SDL_WINDOWEVENT_RESIZED) {
-					DEBUG("UI: Window is resized to %d x %d" NL,
-						e.window.data1,
-						e.window.data2
-					);
-					screen_window_resized(e.window.data1, e.window.data2);
-				}
-				break;
-#endif
-			case SDL_QUIT:
-				if (ARE_YOU_SURE(str_are_you_sure_to_exit, i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
-					XEMUEXIT(0);
-				return;
-			case SDL_KEYDOWN:
-			case SDL_KEYUP:
-				if (e.key.repeat == 0 && (e.key.windowID == sdl_winid || e.key.windowID == 0)) {
-					int code = emu_kbd(e.key.keysym, e.key.state == SDL_PRESSED);
-					//if (code == 0xF9)		// // OSD REPLAY, default key GRAVE
-					//	osd_replay(e.key.state == SDL_PRESSED ? 0 : OSD_FADE_START);
-					//else
-					if (code && e.key.state == SDL_PRESSED)
-						switch(code) {
-#ifndef XEMU_ARCH_HTML
-							case 0xFF:	// FULLSCREEN toogle, default key F11
-								//screen_set_fullscreen(!is_fullscreen);
-								xemu_set_full_screen(-1);
-								break;
-							case 0xFE:	// EXIT, default key F9
-								if (ARE_YOU_SURE(str_are_you_sure_to_exit, i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
-									XEMUEXIT(0);
-								break;
-							case 0xFD:	// SCREENSHOT, default key F10
-								//screen_shot(ep_pixels, current_directory, "screenshot-*.png");
-								screenshot();
-								break;
-#endif
-							case 0xFC:	// RESET, default key PAUSE
-								if (e.key.keysym.mod & (KMOD_LSHIFT | KMOD_RSHIFT)) {
-									zxemu_on = 0;
-									(void)ep_init_ram();
-								}
-								ep_reset();
-								break;
-							case 0xFB:	// DOWNGRADE CPU SPEED, default key PAGE DOWN
-								if (_cpu_speed_index)
-									set_cpu_clock_with_osd(_cpu_speeds[-- _cpu_speed_index]);
-								break;
-							case 0xFA:	// UPGRADE CPU SPEED, default key PAGE UP
-								if (_cpu_speed_index < 3)
-									set_cpu_clock_with_osd(_cpu_speeds[++ _cpu_speed_index]);
-								break;
-							case 0xF8:	// CONSOLE, key pad minus
-								if (!console_is_open)
-									console_open_window();
-								break;
-						}
-				} else if (e.key.repeat == 0)
-					DEBUG("UI: NOT HANDLED KEY EVENT: repeat = %d windowid = %d [our win = %d]" NL, e.key.repeat, e.key.windowID, sdl_winid);
-				break;
-			case SDL_MOUSEMOTION:
-				if (e.motion.windowID == sdl_winid)
-					emu_mouse_motion(e.motion.xrel, e.motion.yrel);
-				break;
-			case SDL_MOUSEWHEEL:
-				if (e.wheel.windowID == sdl_winid)
-					emu_mouse_wheel(
-						e.wheel.x, e.wheel.y,
-						e.wheel.direction == SDL_MOUSEWHEEL_FLIPPED
-					);
-				break;
-			case SDL_MOUSEBUTTONDOWN:
-			case SDL_MOUSEBUTTONUP:
-				if (e.button.windowID == sdl_winid)
-					emu_mouse_button(e.button.button, e.button.state == SDL_PRESSED);
-				break;
-			default:
-				joy_sdl_event(&e);
-				break;
-		}
-#endif
 	if (!frameskip) {
 		//screen_present_frame(ep_pixels);	// this should be after the event handler, as eg screenshot function needs locked texture state if this feature is used at all
 		xemu_update_screen();
@@ -232,8 +127,6 @@ static void __emu_one_frame(int rasters, int frameskip)
 	monitor_process_queued();
 	xemu_timekeeping_delay((1000000.0 * rasters * 57.0) / (double)NICK_SLOTS_PER_SEC);
 }
-
-
 
 
 static void xep128_emulation ( void )
@@ -289,7 +182,6 @@ static void xep128_emulation ( void )
 }
 
 
-
 static const char *rom_parse_opt_cb ( struct xemutools_config_st *unused, const char *optname, const char *optvalue )
 {
 	return rom_parse_opt(optname, optvalue);
@@ -301,7 +193,7 @@ int main (int argc, char *argv[])
 {
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Enterprise-128 \"old XEP128 within the Xemu project now\" emulator from LGB");
 	xemucfg_define_switch_option("audio", "Enable (buggy) audio output");
-	xemucfg_define_switch_option("syscon", "Keep console window open + monitor prompt");
+	xemucfg_define_switch_option("syscon", "Keep console window open (Windows-specific)");
 	//{ DEBUGFILE_OPT,CONFITEM_STR,	"none",		0, "Enable debug messages written to a specified file" },
 	xemucfg_define_str_option("ddn", NULL, "Default device name (none = not to set)");
 	xemucfg_define_float_option("clock", (double)DEFAULT_CPU_CLOCK, "Z80 clock in MHz");
@@ -320,6 +212,7 @@ int main (int argc, char *argv[])
 	xemucfg_define_switch_option("noxeprom", "Disables XEP internal ROM");
 	//{ "epkey",	CONFITEM_STR,	NULL,		1, "Define a given EP/emu key, format epkey@xy=SDLname, where x/y are row/col in hex or spec code (ie screenshot, etc)." },
 	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
+	xemucfg_define_switch_option("monitor", "Start monitor on console");
 	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
@@ -363,7 +256,7 @@ int main (int argc, char *argv[])
 	if (snapshot) {
 		if (ep128snap_load(snapshot))
 			snapshot = NULL;
-	} else
+	} // else
 	if (!snapshot) {
 		if (roms_load())
 			return 1;
@@ -384,14 +277,12 @@ int main (int argc, char *argv[])
 #ifdef CONFIG_EPNET_SUPPORT
 	epnet_init(NULL);
 #endif
-	//ticks = SDL_GetTicks();
 	balancer = 0;
 	set_cpu_clock((int)(xemucfg_get_ranged_float("clock", 1.0, 12.0) * 1000000.0));
 	audio_start();
 	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
 	sram_ready = 1;
 	if (xemucfg_get_bool("primo") && !snapshot) {
-		// TODO: da stuff ...
 		if (primo_rom_seg != -1) {
 			primo_emulator_execute();
 			OSD(-1, -1, "Primo Emulator Mode");
@@ -400,14 +291,10 @@ int main (int argc, char *argv[])
 	}
 	if (snapshot)
 		ep128snap_set_cpu_and_io();
-#ifdef XEMU_ARCH_WIN
-	if (!xemucfg_get_bool("syscon"))
-		console_close_window();
-#else
-	if (xemucfg_get_bool("syscon"))
-		console_open_window();	// on non-windows, it only will mark console as open for monitor to be used ..
-#endif
-	console_monitor_ready();	// OK to run monitor on console now!
+	if (!xemucfg_get_bool("syscon") && !xemucfg_get_bool("monitor"))
+		sysconsole_close(NULL);
+	if (xemucfg_get_bool("monitor"))
+		monitor_start();
 	clear_emu_events();
 	xemu_timekeeping_start();
 	DEBUGPRINT(NL "EMU: entering into main emulation loop" NL);

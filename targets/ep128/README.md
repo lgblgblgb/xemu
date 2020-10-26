@@ -4,6 +4,11 @@ This is an on-going effort to try to integrate my (separeted) Xep128 project
 into Xemu. Note: this emulation target in Xemu is highly different from others,
 ie doing many things on its own. This will change slowly however.
 
+Xep128 was my first "more complex" standalone emulator project, and many solutions
+of Xemu was based on Xep128, through with intensive rewrite. So interestingly though
+Xep128 can be treated as father of Xemu, it's hard to integrate back, because keeping
+separatly evolving Xemu for a long time.
+
 Original (not maintained any more, just for archive purposes!) repository:
 
 https://github.com/lgblgblgb/xep128

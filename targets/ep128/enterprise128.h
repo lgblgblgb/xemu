@@ -40,6 +40,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern void emu_one_frame ( int rasters, int frameskip);
 extern int  set_cpu_clock ( int hz );
 
+extern int set_cpu_clock          ( int hz );
+extern int set_cpu_clock_with_osd ( int hz );
+
 extern int paused;
 extern time_t unix_time;
 
