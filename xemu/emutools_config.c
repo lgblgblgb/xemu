@@ -461,6 +461,7 @@ static int xemucfg_parse_commandline ( int argc, char **argv, const char *only_t
 			argv++;
 		}
 	}
+	DEBUGPRINT("CFG: CLI parsing done (%s)" NL, only_this ? only_this : "ALL options");
 	if (template_string && template_needs_to_be_saved) {
 		char fn[PATH_MAX+1];
 		sprintf(fn, CONFIG_FILE_TEMPL_NAME, xemu_app_name);

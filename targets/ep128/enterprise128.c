@@ -50,6 +50,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 int paused = 0;
+int register_screenshot_request = 0;
 static int cpu_cycles_for_dave_sync = 0;
 static double balancer;
 static double SCALER;
@@ -120,6 +121,12 @@ static void __emu_one_frame(int rasters, int frameskip)
 {
 	hid_handle_all_sdl_events();
 	if (!frameskip) {
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+		if (XEMU_UNLIKELY(register_screenshot_request)) {
+			register_screenshot_request = 0;
+			screenshot();
+		}
+#endif
 		//screen_present_frame(ep_pixels);	// this should be after the event handler, as eg screenshot function needs locked texture state if this feature is used at all
 		xemu_update_screen();
 	}

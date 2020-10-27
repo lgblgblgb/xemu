@@ -829,23 +829,6 @@ static void ui_sound ( const struct menu_st *m, int *query )
 }
 
 
-#if 0
-static void ui_set_scale_filtering ( const struct menu_st *m, int *query )
-{
-	static char enabled[2] = "0";
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, enabled[0] == '1');
-	enabled[0] ^= 1;
-	if (SDL_SetHint("SDL_HINT_RENDER_SCALE_QUALITY", enabled) != SDL_TRUE)
-		ERROR_WINDOW("Cannot set scaling to %s: %s", enabled, SDL_GetError());
-}
-#endif
-
-#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
-static void ui_screenshot ( void )
-{
-	register_screenshot_request = 1;
-}
-#endif
 
 static const struct menu_st menu_cpu_clock[] = {
 	{ "2.5MHz (default)",		XEMUGUI_MENUID_CALLABLE |
@@ -878,8 +861,6 @@ static const struct menu_st menu_display[] = {
 	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize,		(void*)1	},
 	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize,		(void*)2	},
-//	{ "Enable scale filtering",	XEMUGUI_MENUID_CALLABLE |
-//					XEMUGUI_MENUFLAG_QUERYBACK,	ui_set_scale_filtering,		NULL		},
 	{ "Enable OSD kbd debug",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger,	NULL		},
 	{ NULL }
@@ -892,7 +873,7 @@ static const struct menu_st menu_main[] = {
 	{ "Load PRI file",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	ui_load_pri	          },
 	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_native_os_prefdir_browser, NULL },
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
-	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	ui_screenshot	},
+	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one,	&register_screenshot_request },
 #endif
 #ifdef XEMU_ARCH_WIN
 	{ "System console",		XEMUGUI_MENUID_CALLABLE |

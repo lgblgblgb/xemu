@@ -131,3 +131,9 @@ void xemugui_cb_set_mouse_grab ( const struct menu_st *m, int *query )
 	if (allow_mouse_grab)
 		OSD(-1, -1, "ENABLED. Left click to activate!");
 }
+
+void xemugui_cb_set_integer_to_one ( const struct menu_st *m, int *query )
+{
+	if (!query)
+		*(int*)(m->user_data) = 1;
+}

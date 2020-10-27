@@ -42,14 +42,6 @@ static void ui_hard_reset ( void )
 }
 
 
-#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
-static void ui_screenshot ( void )
-{
-	screenshot();
-}
-#endif
-
-
 #ifdef CONFIG_EXDOS_SUPPORT
 static void ui_attach_disk ( void )
 {
@@ -147,7 +139,7 @@ static const struct menu_st menu_main[] = {
 	{ "Attach floppy",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_disk },
 #endif
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
-	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_screenshot },
+	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &register_screenshot_request },
 #endif
 	{ "Sound emulation",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_sound, NULL },

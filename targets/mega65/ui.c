@@ -277,13 +277,6 @@ static void ui_dump_memory ( void )
 	}
 }
 
-#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
-static void ui_screenshot ( void )
-{
-	register_screenshot_request = 1;
-}
-#endif
-
 
 /**** MENU SYSTEM ****/
 
@@ -331,7 +324,7 @@ static const struct menu_st menu_main[] = {
 	{ "Save BASIC as text",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_save_basic_as_text },
 #endif
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
-	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_screenshot },
+	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &register_screenshot_request },
 #endif
 #ifdef XEMU_ARCH_WIN
 	{ "System console",		XEMUGUI_MENUID_CALLABLE |

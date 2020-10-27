@@ -44,6 +44,7 @@ extern int set_cpu_clock          ( int hz );
 extern int set_cpu_clock_with_osd ( int hz );
 
 extern int paused;
+extern int register_screenshot_request;
 extern time_t unix_time;
 
 #define CONFIG_USE_LODEPNG

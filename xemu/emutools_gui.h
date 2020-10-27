@@ -90,5 +90,6 @@ extern void xemugui_cb_native_os_prefdir_browser( const struct menu_st *m, int *
 #endif
 extern void xemugui_cb_osd_key_debugger		( const struct menu_st *m, int *query );
 extern void xemugui_cb_set_mouse_grab		( const struct menu_st *m, int *query );
+extern void xemugui_cb_set_integer_to_one	( const struct menu_st *m, int *query );
 
 #endif
