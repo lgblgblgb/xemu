@@ -269,4 +269,3 @@ void xep_rom_trap ( Uint16 pc, Uint8 opcode )
 			break;
 	}
 }
-

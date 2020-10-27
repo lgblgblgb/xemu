@@ -122,4 +122,3 @@ Uint8 rtc_read_reg(void)
 	DEBUG("RTC: reading register %02X, result will be: %02X" NL, i, cmos_ram[i]);
 	return cmos_ram[i];
 }
-

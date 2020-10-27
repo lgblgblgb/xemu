@@ -84,4 +84,3 @@ void zxemu_attribute_memory_write ( Uint16 address, Uint8 data )
 	zxemu_nmi();
 	DEBUG("ZXEMU: attrib-mem trap at %04Xh" NL, address);
 }
-

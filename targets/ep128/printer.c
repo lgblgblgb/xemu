@@ -141,4 +141,3 @@ void printer_disable_covox ( void )
 		DEBUG("PRINTER: COVOX: covox mode has been disabled on emulator event." NL);
 	}
 }
-

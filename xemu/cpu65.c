@@ -1,6 +1,4 @@
-/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
-   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and MEGA65 as well.
+/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    THIS IS AN UGLY PIECE OF SOURCE REALLY.
@@ -90,8 +88,21 @@ struct cpu65_st CPU65;
 // That is, you can interpret bit 0 of PREFIX signal to test if there is NOP prefix, and bit 1 for NEG NEG, both bits
 // for NEG NEG NOP, other higher bits MUST be excluded (see PREFIX_NEG alone, below!)
 #define PREFIX_NEG_NEG_NOP	3
-// Note: NEG itself is not a prefix, but needed as a stage to get to NEG_NEG if the second NEG appears as well then
+// Note: NEG itself is not a prefix, but needed as a stage to get to NEG_NEG if the second NEG appears after
 #define PREFIX_NEG		4
+static XEMU_INLINE Uint32 AXYZ_GET ( void ) {
+	return (Uint32)CPU65.a | ((Uint32)CPU65.x << 8) | ((Uint32)CPU65.y << 16) | ((Uint32)CPU65.z << 24);
+}
+static XEMU_INLINE void   AXYZ_SET ( Uint32 val ) {
+	CPU65.a =  val        & 0xFF;
+	CPU65.x = (val >>  8) & 0xFF;
+	CPU65.y = (val >> 16) & 0xFF;
+	CPU65.z = (val >> 24);
+}
+static XEMU_INLINE Uint32 LONG_PTR16_GET ( Uint16 ptr16 ) {
+}
+static XEMU_INLINE Uint32 LONG_PTR32_GET ( Uint8 zp_ptr ) {
+}
 #endif
 
 
@@ -247,7 +258,7 @@ static XEMU_INLINE Uint8 pop ( void )
 }
 #else
 #define push(data) writeByte(((Uint8)(CPU65.s--)) | SP_HI, data)
-#define pop() readByte(((Uint8)(++CPU65.s)) | SP_HI)
+#define pop()       readByte(((Uint8)(++CPU65.s)) | SP_HI)
 #endif
 
 static XEMU_INLINE void  pushWord(Uint16 data) { push(data >> 8); push(data & 0xFF); }
@@ -337,6 +348,7 @@ static XEMU_INLINE void SET_NZ(Uint8 st) {
 	CPU65.pf_nz = (st & CPU65_PF_N) | VALUE_TO_PF_ZERO(st);
 #endif
 }
+
 #ifdef CPU_65CE02
 static XEMU_INLINE void SET_NZ16(Uint16 st) {
 #ifdef CPU65_DISCRETE_PF_NZ
@@ -347,6 +359,19 @@ static XEMU_INLINE void SET_NZ16(Uint16 st) {
 #endif
 }
 #endif
+
+#ifdef MEGA65
+#define BIT31 0x80000000U
+static XEMU_INLINE void SET_NZ32(Uint32 st) {
+#ifdef CPU65_DISCRETE_PF_NZ
+	CPU65.pf_n = st & BIT31;
+	CPU65.pf_z = !st;
+#else
+	CPU65.pf_nz = ((st & BIT31) >> 24) | VALUE_TO_PF_ZERO(st);
+#endif
+}
+#endif
+
 
 #define _imm() (CPU65.pc++)
 static XEMU_INLINE Uint16 _abs() {
@@ -571,12 +596,99 @@ static XEMU_INLINE void _ROL(int addr) {
 	SET_NZ(t);
 	if (addr == -1) CPU65.a = t; else writeByteTwice(addr, o, t);
 }
+#ifdef MEGA65
+static XEMU_INLINE Uint32 _INQ ( Uint32 q ) {
+	q++;
+	SET_NZ32(q);
+	return q;
+}
+static XEMU_INLINE Uint32 _DEQ ( Uint32 q ) {
+	q--;
+	SET_NZ32(q);
+	return q;
+}
+static XEMU_INLINE Uint32 _RORQ ( Uint32 q ) {
+	// TODO: check implementation
+	Uint32 pf_c_new = q & 1;
+	q >>= 1;
+	if (CPU65.pf_c) q |= BIT31;
+	CPU65.pf_c = pf_c_new;
+	SET_NZ32(q);
+	return q;
+}
+static XEMU_INLINE Uint32 _ROLQ ( Uint32 q ) {
+	// TODO: check implementation
+	Uint32 pf_c_new = q & BIT31;
+	q <<= 1;
+	if (CPU65.pf_c) q |= 1;
+	CPU65.pf_c = pf_c_new;
+	SET_NZ32(q);
+	return q;
+}
+static XEMU_INLINE void _ORQ ( Uint32 q ) {	// Always operates on the 32 bit accu.
+	q = AXYZ_GET() | q;
+	SET_NZ32(q);
+	AXYZ_SET(q);
+}
+static XEMU_INLINE void _ANDQ ( Uint32 q ) {	// Always operates on the 32 bit accu.
+	q = AXYZ_GET() & q;
+	SET_NZ32(q);
+	AXYZ_SET(q);
+}
+static XEMU_INLINE void _EORQ ( Uint32 q ) {	// Always operates on the 32 bit accu.
+	q = AXYZ_GET() ^ q;
+	SET_NZ32(q);
+	AXYZ_SET(q);
+}
+static XEMU_INLINE void _BITQ ( Uint32 q ) {	// Always operates on the 32 bit accu.
+	Uint32 acc = AXYZ_GET();
+	CPU65.pf_v = q & (BIT31 >> 1);	// OK, what should it be for 32 bit? TODO: I guess its bit 30 then instead of bit 6 (what it's when normal BIT)
+#ifdef CPU65_DISCRETE_PF_NZ
+	CPU65.pf_n = q & BIT31;
+	CPU65.pf_z = (!(q & acc));
+#else
+	CPU65.pf_nz = ((q & BIT31) >> 24) | VALUE_TO_PF_ZERO(q & acc);
+#endif
+}
+static XEMU_INLINE void _CMPQ ( Uint32 q ) {	// Always operates on the 32 bit accu.
+	Uint32 acc = AXYZ_GET();
+	SET_NZ32((Uint32)(acc - q));
+	CPU65.pf_c = (acc >= q);	// TODO: checkit
+}
+static XEMU_INLINE Uint32 _ASLQ ( Uint32 q ) {
+	CPU65.pf_c = (q & BIT31);
+	q <<= 1;
+	SET_NZ32(q);
+	return q;
+}
+static XEMU_INLINE Uint32 _ASRQ ( Uint32 q ) {
+	CPU65.pf_c = (q & 1);
+	q = (q & BIT31) | (q >> 1);
+	SET_NZ32(q);
+	return q;
+}
+static XEMU_INLINE Uint32 _LSRQ ( Uint32 q ) {
+	CPU65.pf_c = (q & 1);
+	q >>= 1;
+	SET_NZ32(q);
+	return q;
+}
+// TODO / FIXME ?? What happens if NEG NEG NOP prefix is tried to be applied on an opcode only supports NEG NEG?
+// Whole prefix sequence is ignored, or it will be treated as NEG NEG only (thus the "NOP part" of prefix is ignored only)?
+#define IS_NEG_NEG_OP()	XEMU_UNLIKELY(CPU65.prefix == PREFIX_NEG_NEG)
+#endif
 
+
+/* ------------------------------------------------------------------------ *
+ *                    CPU EMULATION, OPCODE DECODING + RUN                  *
+ * ------------------------------------------------------------------------ */
 
 
 int cpu65_step (
 #ifdef CPU_STEP_MULTI_OPS
 	int run_for_cycles
+#else
+	void
 #endif
 ) {
 #ifdef CPU_STEP_MULTI_OPS
@@ -792,7 +904,12 @@ int cpu65_step (
 			break;
 	case 0x1A:	/* INA Accumulator */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
-			SET_NZ(++CPU65.a);
+#ifdef MEGA65
+				if (IS_NEG_NEG_OP())
+					AXYZ_SET(_INQ(AXYZ_GET()));	// MEGA65-OP: INQ
+				else
+#endif
+					SET_NZ(++CPU65.a);
 			}
 			break;
 	case 0x1B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: INZ */
@@ -954,7 +1071,12 @@ int cpu65_step (
 			break;
 	case 0x3A:	/* DEA Accumulator */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
-			SET_NZ(--CPU65.a);
+#ifdef MEGA65
+				if (IS_NEG_NEG_OP())
+					AXYZ_SET(_DEQ(AXYZ_GET()));	// MEGA65-OP: DEQ
+				else
+#endif
+					SET_NZ(--CPU65.a);
 			}
 			break;
 	case 0x3B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: DEZ */
@@ -993,7 +1115,7 @@ int cpu65_step (
 #ifdef CPU_65CE02
 			/* NEG on 65CE02/4510 and MEGA65 as well, of course */
 #ifdef MEGA65
-			if (XEMU_UNLIKELY(cpu_mega65_opcodes)) {
+			if (XEMU_LIKELY(cpu_mega65_opcodes)) {
 				if (CPU65.prefix == PREFIX_NEG || CPU65.prefix == PREFIX_NEG_NEG) {
 					OPC_65CE02("NEG-NEG");
 					CPU65.prefix = PREFIX_NEG_NEG;
@@ -1873,7 +1995,8 @@ int cpu65_step (
 	case 0xEA:	/* NOP, 65CE02: it's not special, but in C65 (4510) it is (EOM). It's up the emulator though (in the the second case) ... */
 #ifdef CPU_65CE02
 #ifdef MEGA65
-			if (XEMU_UNLIKELY(cpu_mega65_opcodes)) {
+			if (XEMU_LIKELY(cpu_mega65_opcodes)) {
+				OPC_65CE02("EOM");
 				cpu65_do_nop_callback();	// MEGA65 will execute the "EOM" as well !!! since it does not know it WILL be a prefix or no.
 				if (CPU65.prefix == PREFIX_NEG_NEG) {
 					OPC_65CE02("NEG-NEG-NOP");

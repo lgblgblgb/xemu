@@ -634,4 +634,3 @@ void ep_reset ( void )
 	primo_switch(0);
 	nmi_pending = 0;
 }
-

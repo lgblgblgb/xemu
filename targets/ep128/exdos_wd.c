@@ -325,4 +325,3 @@ void wd_set_exdos_control ( Uint8 value )
 #else
 #warning "EXDOS/WD support is not compiled in / not ready"
 #endif
-

@@ -1,10 +1,8 @@
-/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
-*  SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-*  and MEGA65 as well.
-*  Copyright (C)2017-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2017-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
-*  NOTE: I AM NOT a windows programmer, not even a user ...
-*  These are my best tries with winsock to be usable also on the win32/64 platform ...
+!!  NOTE: I AM NOT a windows programmer, not even a user ...
+!!  These are my best tries with winsock to be usable also on the win32/64 platform ...
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
