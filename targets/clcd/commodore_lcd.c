@@ -511,7 +511,7 @@ static void load_program_for_inject ( const char *file_name, int new_address )
 }
 
 
-static void update_title ( void )
+static void update_addon_title ( void )
 {
 	sprintf(emulator_addon_title, "(%dMHz, %dK RAM)", cpu_mhz, ram_size >> 10);
 }
@@ -520,7 +520,8 @@ static void update_title ( void )
 static void set_ram_size ( int kbytes )
 {
 	ram_size = kbytes << 10;
-	update_title();
+	DEBUGPRINT("MEM: RAM size is set to %dKbytes." NL, kbytes);
+	update_addon_title();
 }
 
 static void set_cpu_speed ( int mhz )
@@ -528,7 +529,7 @@ static void set_cpu_speed ( int mhz )
 	cpu_mhz = mhz;
 	cpu_cycles_per_tv_frame = mhz * 1000000 / 25;
 	DEBUGPRINT("CPU: setting CPU to %dMHz, %d CPU cycles per full 1/25sec frame." NL, mhz, cpu_cycles_per_tv_frame);
-	update_title();
+	update_addon_title();
 }
 
 
@@ -560,6 +561,20 @@ static void emulation_loop ( void )
 
 
 
+static void ui_cb_clock_mhz ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, cpu_mhz == VOIDPTR_TO_INT(m->user_data));
+	if (VOIDPTR_TO_INT(m->user_data) != cpu_mhz)
+		set_cpu_speed(VOIDPTR_TO_INT(m->user_data));
+}
+static void ui_cb_ramsize ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, (ram_size >> 10) == VOIDPTR_TO_INT(m->user_data));
+	if (VOIDPTR_TO_INT(m->user_data) != (ram_size >> 10) && ARE_YOU_SURE("This will RESET your machine!", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
+		set_ram_size(VOIDPTR_TO_INT(m->user_data));
+		cpu65_reset();
+	}
+}
 static const struct menu_st menu_display[] = {
 	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)0 },
 	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)1 },
@@ -567,8 +582,30 @@ static const struct menu_st menu_display[] = {
 					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize, (void*)2 },
         { NULL }
 };
+static const struct menu_st menu_clock[] = {
+	{ "1MHz",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_clock_mhz, (void*)1 },
+	{ "2MHz",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_clock_mhz, (void*)2 },
+	{ "4MHz",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_clock_mhz, (void*)4 },
+	{ NULL }
+};
+static const struct menu_st menu_ramsize[] = {
+	{ " 32K",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_ramsize, (void*)32  },
+	{ " 64K",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_ramsize, (void*)64  },
+	{ " 96K",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_ramsize, (void*)96  },
+	{ "128K",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_ramsize, (void*)128 },
+	{ NULL }
+};
 static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
+	{ "CPU clock speed",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_clock },
+	{ "RAM size",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_ramsize },
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &register_screenshot_request },
 #endif
@@ -579,6 +616,7 @@ static const struct menu_st menu_main[] = {
 #ifdef HAVE_XEMU_EXEC_API
 	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_native_os_prefdir_browser, NULL },
 #endif
+	{ "Reset",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data_if_sure, cpu65_reset },
 	{ "About",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_about_window, NULL },
 	{ "Quit",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_quit_if_sure, NULL },
 	{ NULL }

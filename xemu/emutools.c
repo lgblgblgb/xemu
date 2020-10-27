@@ -421,13 +421,15 @@ static void shutdown_emulator ( void )
 	DEBUG("XEMU: Shutdown callback function has been called." NL);
 	if (shutdown_user_function)
 		shutdown_user_function();
-	if (sdl_win)
+	if (sdl_win) {
 		SDL_DestroyWindow(sdl_win);
+		sdl_win = NULL;
+	}
 	atexit_callback_for_console();
 #ifdef HAVE_XEMU_SOCKET_API
 	xemusock_uninit();
 #endif
-	SDL_Quit();
+	//SDL_Quit();
 	if (td_stat_counter) {
 		DEBUGPRINT(NL "TIMING: Xemu CPU usage: avg=%.2f%%, min=%d%%, max=%d%% (%u counts)" NL,
 			td_stat_sum / (double)td_stat_counter, td_stat_min == INT_MAX ? 0 : td_stat_min, td_stat_max,
@@ -439,6 +441,9 @@ static void shutdown_emulator ( void )
 		fclose(debug_fp);
 		debug_fp = NULL;
 	}
+	// It seems, calling SQL_Quit() at least on Windows causes "segfault".
+	// Not sure why, but to be safe, I just skip calling it :(
+	//SDL_Quit();
 }
 
 
