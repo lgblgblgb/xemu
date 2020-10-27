@@ -41,6 +41,7 @@ int audio_source = AUDIO_SOURCE_DAVE;
 
 
 static SDL_AudioDeviceID audio = 0;
+static int audio_stopped = 0;
 static SDL_AudioSpec audio_spec;
 #define AUDIO_BUFFER_SIZE 0x4000
 static Uint8 audio_buffer[AUDIO_BUFFER_SIZE];
@@ -113,19 +114,28 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 }
 
 
+int is_audio_emulation_active ( void )
+{
+	return (audio != 0 && !audio_stopped);
+}
+
 
 void audio_start ( void )
 {
-	if (audio)
+	if (audio) {
 		SDL_PauseAudioDevice(audio, 0);
+		audio_stopped = 0;
+	}
 }
 
 
 
 void audio_stop ( void )
 {
-	if (audio)
+	if (audio) {
 		SDL_PauseAudioDevice(audio, 1);
+		audio_stopped = 1;
+	}
 }
 
 
@@ -142,8 +152,11 @@ void audio_close ( void )
 
 void audio_init ( int enable )
 {
+	if (audio)
+		return;
 	SDL_AudioSpec want;
-	if (!enable) return;
+	if (!enable)
+		return;
 	SDL_memset(&want, 0, sizeof(want));
 	want.freq = 41666;
 	want.format = AUDIO_U8;
@@ -159,8 +172,9 @@ void audio_init ( int enable )
 		ERROR_WINDOW("Bad audio parameters (w/h freq=%d/%d, fmt=%d/%d, chans=%d/%d, smpls=%d/%d, cannot use sound",
 			want.freq, audio_spec.freq, want.format, audio_spec.format, want.channels, audio_spec.channels, want.samples, audio_spec.samples
 		);
-	} else
+	} else {
 		audio_stop();	// still stopped ... must be audio_start()'ed by the caller
+	}
 }
 
 

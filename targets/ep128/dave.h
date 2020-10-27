@@ -32,6 +32,7 @@ extern void audio_init ( int enable );
 extern void audio_start ( void );
 extern void audio_stop ( void );
 extern void audio_close ( void );
+extern int  is_audio_emulation_active ( void );
 
 extern void dave_set_clock ( void );
 extern void kbd_matrix_reset ( void );

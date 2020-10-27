@@ -1,4 +1,5 @@
-/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -29,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "exdos_wd.h"
 #include "primoemu.h"
 #include "emu_monitor.h"
+#include "dave.h"
 
 
 static void ui_hard_reset ( void )
@@ -84,6 +86,18 @@ static void ui_cb_monitor ( const struct menu_st *m, int *query )
 }
 
 
+static void ui_cb_sound ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, is_audio_emulation_active());
+	if (is_audio_emulation_active())
+		audio_stop();
+	else {
+		audio_init(1);	// function itself will check if there was an init already, so not worrying here ...
+		audio_start();
+	}
+}
+
+
 
 /**** MENU SYSTEM ****/
 
@@ -135,6 +149,8 @@ static const struct menu_st menu_main[] = {
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_screenshot },
 #endif
+	{ "Sound emulation",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_sound, NULL },
 #ifdef XEMU_ARCH_WIN
 	{ "System console",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_sysconsole, NULL },
