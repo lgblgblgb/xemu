@@ -15,6 +15,7 @@ mkdir -p $TARGET
 cp * $TARGET/ || true
 rm $TARGET/Makefile
 cp README.md $TARGET/README-XEMU.md
+cat build/objs/cdate.data > $TARGET/versioninfo
 
 (
 	if [ "$TRAVIS_BRANCH" = "master" ]; then
