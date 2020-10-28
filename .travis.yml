@@ -46,11 +46,11 @@ matrix:
         - uptime
       script:
         - set -e
-        - make -j 2 RELEASE=yes
+        - make -j 2 RELEASE=yes OFFICIALBUILD=yes
         - set +e
         - for a in build/bin/*.native ; do strip $a ; ls -l $a ; done
         - set -e
-        - make RELEASE=yes deb
+        - make RELEASE=yes OFFICIALBUILD=yes deb
         - set +e
         - cp build/bin/*.deb build/bin/*.rpm . || true
         - build/bin/xmega65.native --help || true
@@ -107,7 +107,7 @@ matrix:
         - uptime
       script:
         - set -e
-        - make -j 2 ARCH=win64 RELEASE=yes
+        - make -j 2 ARCH=win64 RELEASE=yes OFFICIALBUILD=yes
         - set +e
         - for a in build/bin/*.win64 ; do x86_64-w64-mingw32-strip $a ; ls -l $a ; done
         - cp README.md LICENSE AUTHORS `x86_64-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
@@ -116,7 +116,7 @@ matrix:
         - build/nsi-build-native.sh win64 `build/system-config win64 sdl2 dll` || true
         - cp build/bin/install-xemu-win64.exe . || true
         - set -e
-        - make -j 2 ARCH=win32 RELEASE=yes
+        - make -j 2 ARCH=win32 RELEASE=yes OFFICIALBUILD=yes
         - set +e
         - for a in build/bin/*.win32 ; do i686-w64-mingw32-strip $a ; ls -l $a ; done
         - cp README.md LICENSE AUTHORS `i686-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
@@ -164,7 +164,7 @@ matrix:
         - uptime
       script:
         - set -e
-        - make -j 2 RELEASE=yes
+        - make -j 2 RELEASE=yes OFFICIALBUILD=yes
         - set +e
         - for a in build/bin/*.native ; do build/mangle_dylib_osx.sh $a ; strip $a ; done
         - build/bin/xmega65.native --help || true
