@@ -729,7 +729,9 @@ error:
 
 
 #if defined(XEMU_USE_LODEPNG) && defined(XEMU_FILES_SCREENSHOT_SUPPORT)
+char xemu_screenshot_full_path[PATH_MAX+1];
 #include "xemu/lodepng.h"
+#include <time.h>
 // TODO: use libpng in Linux, smaller binary (on windows I wouldn't introduce another DLL dependency though ...)
 // NOTE: you must call this function before the final rendering of course, thus source_pixels has a full rendered frame already ;)
 // NOTE: ... however, it must be called BEFORE xemu_update_screen() otherwise the texture access may not be valid anymore and crash occures
@@ -738,19 +740,19 @@ int xemu_screenshot_png ( const char *path, const char *fn, int zoom_width, int 
 {
 	int target_width = source_width * zoom_width;
 	int target_height = source_height * zoom_height;
-	int malloc_size = target_width * target_height * 3;
 	if (!source_pixels) {
 		// No source_pixels was given ...
 		source_pixels = xemu_frame_pixel_access_p;
-		if (!source_pixels)	// not ready to access?
+		if (!source_pixels) {	// not ready to access?
+			DEBUGPRINT("SCREENSHOT: FAILED: No opened frame with source_pixels=NULL" NL);
 			return -1;
+		}
 	}
-	Uint8 *target_pixels = malloc(malloc_size);
+	Uint8 *target_pixels = malloc(target_width * target_height * 3);
 	if (!target_pixels) {
-		ERROR_WINDOW("Not enough memory for taking a screenshot :(\n(could not allocate %d bytes of memory)", malloc_size);
+		ERROR_WINDOW("Not enough memory for taking a screenshot :(\n(could not allocate %d bytes of memory)", target_width * target_height * 3);
 		return -1;
 	}
-	Uint8 *t = target_pixels;
 	for (int i = 0; i < target_width * target_height; i++) {
 		// Sampling pixel in the source
 		// Kinda lame algorith, but it is not needed to be very fast and real-time operation, just
@@ -765,45 +767,55 @@ int xemu_screenshot_png ( const char *path, const char *fn, int zoom_width, int 
 		// and/or surface without a madness-loop like this, but at least we know this works,
 		// and OK for any kind of endianness). Also lodePNG has 32 bit input encoder, though
 		// it's unknown for me, if RGB byte order can be altered. And also the scaling ...
-		*t++ = (pixel & sdl_pix_fmt->Rmask) >> sdl_pix_fmt->Rshift << sdl_pix_fmt->Rloss;
-		*t++ = (pixel & sdl_pix_fmt->Gmask) >> sdl_pix_fmt->Gshift << sdl_pix_fmt->Gloss;
-		*t++ = (pixel & sdl_pix_fmt->Bmask) >> sdl_pix_fmt->Bshift << sdl_pix_fmt->Bloss;
+		target_pixels[i * 3 + 0] = (pixel & sdl_pix_fmt->Rmask) >> sdl_pix_fmt->Rshift << sdl_pix_fmt->Rloss;
+		target_pixels[i * 3 + 1] = (pixel & sdl_pix_fmt->Gmask) >> sdl_pix_fmt->Gshift << sdl_pix_fmt->Gloss;
+		target_pixels[i * 3 + 2] = (pixel & sdl_pix_fmt->Bmask) >> sdl_pix_fmt->Bshift << sdl_pix_fmt->Bloss;
 	}
 	Uint8 *png_stream = NULL;
 	size_t png_size = 0;
 	//unsigned lodepng_encode24(unsigned char** out, size_t* outsize,
         //                const unsigned char* image, unsigned w, unsigned h);
 	int ret = lodepng_encode24(&png_stream, &png_size, target_pixels, target_width, target_height);
+	free(target_pixels);
 	if (ret) {
 		ERROR_WINDOW("Screenshot problem: loadPNG encode returned with error %u", (unsigned)ret);
-		free(target_pixels);
 		if (png_stream)
 			free(png_stream);
 		return -1;
 	}
-	free(target_pixels);
 	if (!png_stream || !png_size) {
+		if (png_stream)
+			free(png_stream);
 		ERROR_WINDOW("Screenshot problem: lodePNG returned invalid memory/size");
 		return -1;
 	}
 	// Now save the result.
-	char filename[PATH_MAX];
 	if (!path && !fn) {
-		static int screenshot_number = 0;
 		// if no path and fn, it means auto-generated and in default screenshot directory
-		sprintf(filename, "%s%s", sdl_pref_dir, "screenshots");
-		MKDIR(filename);
-		sprintf(filename + strlen(filename), DIRSEP_STR "screenshot-%d.png", screenshot_number++);
+		sprintf(xemu_screenshot_full_path, "%s%s", sdl_pref_dir, "screenshots");
+		MKDIR(xemu_screenshot_full_path);
+		time_t ut = time(NULL);
+		struct tm *t = localtime(&ut);
+		sprintf(
+			xemu_screenshot_full_path + strlen(xemu_screenshot_full_path),
+			DIRSEP_STR "screenshot-%04d%02d%02d-%02d%02d%02d.png",
+			t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec
+		);
 	} else {
 		if (!fn)
 			FATAL("Invalid %s mode", __func__);
 		if (path)
-			sprintf(filename, "%s%c%s", path, DIRSEP_CHR, fn);
+			sprintf(xemu_screenshot_full_path, "%s%c%s", path, DIRSEP_CHR, fn);
 		else
-			strcpy(filename, fn);
+			strcpy(xemu_screenshot_full_path, fn);
 	}
-	ret = xemu_save_file(filename, png_stream, png_size, "Cannot save PNG");
+	ret = xemu_save_file(xemu_screenshot_full_path, png_stream, png_size, "Cannot save screenshot PNG");
 	free(png_stream);
+	if (!ret)
+		DEBUGPRINT(
+			"SCREENSHOT: (%dx%d -> %dx%d) successfully saved as %s" NL,
+			source_width, source_height, target_width, target_height, xemu_screenshot_full_path
+		);
 	return ret;
 }
 #endif

@@ -928,8 +928,11 @@ void vic_render_screen ( void )
 			NULL,	// allow function to figure it out ;)
 			SCREEN_WIDTH,
 			SCREEN_HEIGHT
-		))
-			OSD(-1, -1, "Screenshot has been taken");
+		)) {
+			const char *p = strrchr(xemu_screenshot_full_path, DIRSEP_CHR);
+			if (p)
+				OSD(-1, -1, "%s", p + 1);
+		}
 	}
 #endif
 	xemu_update_screen();
