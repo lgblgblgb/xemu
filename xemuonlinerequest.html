@@ -1,8 +1,9 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
   <head>
     <meta charset='utf-8'>
     <meta http-equiv="X-UA-Compatible" content="chrome=1">
+    <base href="http://github.lgb.hu/xemu/" target="_blank">
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
     <link href='https://fonts.googleapis.com/css?family=Architects+Daughter' rel='stylesheet' type='text/css'>
     <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
@@ -16,7 +17,21 @@
     <title>Xemu Download Page</title>
   </head>
 
-  <body>
+  <body onLoad="main()">
+
+	<span id="JSwarningContainer" style="display: block;">
+		<p align="center"><b>You must enable JavaScript to be able to use this page. Or your browser is too ancient to understand modern (ES6 or greater) JavaScript code ...
+		<br><br>
+		It's also possible that you only need to wait a bit at this point :)</b></p>
+	</span>
+
+	<!-- <span id="jsErrorContainer" style="display: none; font-weight: bold; text-color: red;">
+		<p align="center">JS ERROR!</p>
+	</span> -->
+
+	<span id="mainContainer" style="display: none;">
+
+
     <header>
       <div class="inner">
         <h1>Xemu</h1>
@@ -28,58 +43,28 @@
     <div id="content-wrapper">
       <div class="inner clearfix">
         <section id="main-content">
-          <h1>
-<a id="x-emulators" class="anchor" href="#x-emulators" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>Xemu Download Page</h1>
 
-<p>Emulators running on Linux/Unix/Windows/MacOS of various (mainly 8 bit) machines,
-including the Commodore LCD, Commodore 65 and MEGA65 as well.</p>
+<h1>
+	<a id="x-emulators" class="anchor" href="#x-emulators" aria-hidden="true"><span aria-hidden="true" class="octicon octicon-link"></span></a>
+	Xemu on-line
+</h1>
 
-<p><a href="https://github.com/lgblgblgb/xemu">https://github.com/lgblgblgb/xemu/</a></p>
+<h2>Version information</h2>
 
-          <h2>Choose your download desire</h2>
-          
- <ul><li><a href="https://github.com/lgblgblgb/xemu/">Xemu gitbub repository (source code, documents, wiki, issue page, ...)</a></li>
-          </ul>   
-          
-          <h3>More stable ("master" branch)</h3>  
-<ul>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-linux-master/xemu_current_amd64.deb">Ubuntu Linux 18.04 64-bit DEB package</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-linux-master/xemu-current-1.x86_64.rpm">Fake RPM package alien-coverted from DEB (may not work on ANY RPM distro!)</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-osx-master/Xemu-Installer.dmg">MacOS DMG file</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-osx-master/xemu-binaries-osx.zip">Zipped MacOS binaries</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-master/install-xemu-win64.exe">Installer for 64-bit Windows</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-master/install-xemu-win32.exe">Installer for 32-bit Windows</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-master/xemu-binaries-win64.zip">Zipped 64-bit Windows binaries</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-master/xemu-binaries-win32.zip">Zipped 32-bit Windows binaries</a></li>
-<li><img src="https://img.shields.io/github/last-commit/lgblgblgb/xemu/master?label=Last%20commit%20MASTER"> - <b><a href="https://github.com/lgblgblgb/xemu/wiki/ReleaseLog">Release log</a></b></li>
-</ul>
-          <h3>More experimental / unstable ("dev" branch)</h3>
+<p>This page was requested by <span id="myOfficialContainer">???</span> Xemu build target <span id="myTargetContainer">???</span> version <span id="myVersionContainer">???</span> on platform <span id="myPlatformContainer">???</span> from branch <span id="myBranchContainer">???</span> commit <span id="myCommitIdContainer">???</span> in repository <span id="myRepoURLContainer">???</span>.</p>
 
-<ul>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-linux-dev/xemu_current_amd64.deb">Ubuntu Linux 20.04 x86 64-bit DEB package</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-linux-dev/xemu-current-1.x86_64.rpm">Fake RPM package alien-coverted from DEB (may not work on ANY RPM distro!)</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-osx-dev/Xemu-Installer.dmg">MacOS DMG file</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-osx-dev/xemu-binaries-osx.zip">Zipped MacOS binaries</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-dev/install-xemu-win64.exe">Installer for 64-bit Windows</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-dev/install-xemu-win32.exe">Installer for 32-bit Windows</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-dev/xemu-binaries-win64.zip">Zipped 64-bit Windows binaries</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-dev/xemu-binaries-win32.zip">Zipped 32-bit Windows binaries</a></li>
-<li><img src="https://img.shields.io/github/last-commit/lgblgblgb/xemu/dev?label=Last%20commit%20DEV"></li>
-</ul>
-  
-          <h3>Hérnan's <i><u>experimental</u></i> VIC-IV branch for MEGA65</h3>
+<p>Xemu update checker status: <span id="versionCheckContainer"></span></p>
 
-<ul>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-linux-hmw/xemu_current_amd64.deb">Ubuntu Linux 20.04 x86 64-bit DEB package</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-linux-hmw/xemu-current-1.x86_64.rpm">Fake RPM package alien-coverted from DEB (may not work on ANY RPM distro!)</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-osx-hmw/Xemu-Installer.dmg">MacOS DMG file</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-osx-hmw/xemu-binaries-osx.zip">Zipped MacOS binaries</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-hmw/install-xemu-win64.exe">Installer for 64-bit Windows</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-hmw/install-xemu-win32.exe">Installer for 32-bit Windows</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-hmw/xemu-binaries-win64.zip">Zipped 64-bit Windows binaries</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-hmw/xemu-binaries-win32.zip">Zipped 32-bit Windows binaries</a></li>
-<li><img src="https://img.shields.io/github/last-commit/lgblgblgb/xemu/hmw?label=Last%20import%20from%20Hérnan"></li>
-</ul>   
+<span id="pageAgeWarningContainer"><p style="font-weight: bold; color: red; display: none; text-align: center;">
+This page was requested a long time ago. Version information may changed since then.
+Please use Xemu's UI context menu to re-request this page!
+<p></span>
+
+<h2>HELP</h2>
+
+
+<!-- end of custom stuff -->
+
         </section>
 
         <aside id="sidebar">
@@ -111,12 +96,121 @@ including the Commodore LCD, Commodore 65 and MEGA65 as well.</p>
       </div>
     </div>
 
-  
-  </body>
+
+</span><!-- mainContainer -->  
+</body>
+
+
+<script>
+"use strict";
+function setSpan ( name, value )
+{
+	if (typeof(value) !== "string") {
+		//document.getElementById("jsErrorContainer").style.display = "block";
+		throw("Undefined value given for updating span " + name);
+	}
+	let e = document.getElementById(name);
+	e.innerHTML = value;
+	e.style = "color: blue; font-weight: bold; border-bottom: dashed black 1px;";
+}
+
+function main ()
+{
+	if (self != top) {
+		console.log("Frame protection activated ...");
+		top.location = self.location;
+	}
+	let vars = {};
+	for (const p of (new URLSearchParams(window.location.search)).get("xemuonlinehelprequesttoken").split("\u0002")[0].split("\u0001")) {
+		if (p[0] !== '=' && p[1] === '=') {
+			vars[p[0]] = (p[0] === "b" ? p.substring(2).split(" ") : p.substring(2));
+		}
+	}
+	console.log(vars);
+
+	setSpan("myBranchContainer",	vars["b"][1]);
+	setSpan("myVersionContainer",	vars["v"]);
+	setSpan("myPlatformContainer",	vars["p"]);
+	setSpan("myTargetContainer",	vars["t"]);
+	setSpan("myOfficialContainer",	(vars["o"] === "1" ? "official" : "custom"));
+	setSpan("myCommitIdContainer",	vars["b"][2]);
+	setSpan("myRepoURLContainer",	vars["b"][0]);
+
+	const version = parseInt(vars["v"]);
+	if (("" + version) !== vars["v"] || version < 20000000000000 || version > 29990000000000 )
+		throw("Version check problem, v parameter (" + vars["v"] + ") was invalid!");
+
+	const now = Date.now() / 1000;
+	const reqTime = parseInt(vars["u"]);
+	const hoursSince = (now - reqTime) / 3600;
+	console.log("Page request age: " + hoursSince);
+	
+	if (Math.abs(hoursSince) >= 24.0) {
+		document.getElementById("pageAgeWarningContainer").style.display = "block";
+	}
+
+	if (vars["o"] === "1" || true) {
+		let branch = vars["b"][1];
+		let platform = vars["p"];
+		if (platform === "win32" || platform === "win64")
+			platform = "win";
+		if (platform === "mac" || platform === "macos")
+			platform = "osx";
+		const VER_URL = "https://raw.githubusercontent.com/lgblgblgb/xemu-binaries/binary-" + platform + "-" + branch + "/versioninfo?timeid=" + now;
+		console.log("Checking for new version by fetching " + VER_URL);
+		let ajax = new XMLHttpRequest();
+		ajax.updateElement = document.getElementById("versionCheckContainer");
+		ajax.updateElement.innerHTML = "Check in progress ...";
+		ajax.yourVersion = version;
+		ajax.yourBranch = branch;
+		ajax.onreadystatechange = function() {
+			if (this.readyState == 4) {
+				let style = this.updateElement.style;
+				let result;
+				if (this.status == 200) {
+					console.log("Got result with 200 (OK) answer: " + this.responseText);
+					let latest = parseInt(this.responseText);
+					let length_ok = (("" + latest).length === ("" + ajax.yourVersion).length);
+					console.log("Latest version is " + latest + " your version is " + ajax.yourVersion);
+					if (length_ok) {
+						if (latest == ajax.yourVersion) {
+							result = "Great, you have the latest version in branch " + this.yourBranch;
+							style.color = "green";
+						} else if (latest > ajax.yourVersion) {
+							result = "There is newer (" + latest + ") version available in branch " + this.yourBranch + "!";
+							style.color = "red";
+						} else {
+							result = "Wow, you have newer version than the latest (" + latest + ")?! :-O";
+							style.color = "red";
+						}
+					} else {
+						console.log("Bad version length got!");
+						result = "Invalid version response from the download site!";
+						style.color = "red";
+					}
+				} else {
+					console.log("Result problem, response is not 200 (OK) but: " + this.status);
+					result = "Cannot get current version at the download-site (error " + this.status + ")";
+					style.color = "red";
+				}
+				style.fontWeight = "bold";
+				style.borderBottom = "1px black dashed";
+				this.updateElement.innerHTML = result;
+			}
+		};
+		ajax.open("GET", VER_URL, true);
+		ajax.send();
+	} else {
+		let e = document.getElementById("versionCheckContainer");
+		e.innerHTML = "Only for Xemu binary distributions downloaded from the official site can use the update checker!";
+		e.style.color = "red";
+		e.style.fontWeight = "bold";
+		e.style.borderBottom = "1px black dashed";
+	}
+
+	document.getElementById("JSwarningContainer").style.display = "none";
+	document.getElementById("mainContainer").style.display = "block";
+	console.log("Page visibility is turned ON");
+}
+</script>
 </html>
-
-
-
-
-
-
