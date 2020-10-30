@@ -22,7 +22,9 @@
 	<span id="JSwarningContainer" style="display: block;">
 		<p align="center"><b>You must enable JavaScript to be able to use this page. Or your browser is too ancient to understand modern (ES6 or greater) JavaScript code ...
 		<br><br>
-		It's also possible that you only need to wait a bit at this point :)</b></p>
+		You'll also get this message if you try to visit the page at your own, without using Xemu's context menu to visit.
+		<br><br>
+		Finally, it's also possible that you only need to wait a bit at this point :)</b></p>
 	</span>
 
 	<!-- <span id="jsErrorContainer" style="display: none; font-weight: bold; text-color: red;">
@@ -58,7 +60,7 @@
 <span id="pageAgeWarningContainer"><p style="font-weight: bold; color: red; display: none; text-align: center;">
 This page was requested a long time ago. Version information may changed since then.
 Please use Xemu's UI context menu to re-request this page!
-<p></span>
+</p></span>
 
 <h2>HELP</h2>
 
@@ -82,9 +84,9 @@ Please use Xemu's UI context menu to re-request this page!
             Wiki
           </a>
 
-          <p class="repo-owner"><a href="https://github.com/lgblgblgb/xemu"></a>maintained by <a href="https://github.com/lgblgblgb">Gabor Lenart (LGB)</a></p>
+          <p class="repo-owner"><a href="https://github.com/lgblgblgb/xemu"></a>Xemu was written and this page is maintained by <a href="https://github.com/lgblgblgb">Gabor Lenart (LGB)</a>.</p>
 
-	  <p><i>this page uses the Architect theme by <a href="https://twitter.com/jasonlong">Jason Long</a></i></p>
+	  <p><i>I use the Architect theme by <a href="https://twitter.com/jasonlong">Jason Long</a>.</i></p>
         </aside>
       </div>
     </div>
@@ -111,12 +113,19 @@ function setSpan ( name, value )
 
 function main ()
 {
+	const request_token = (new URLSearchParams(window.location.search)).get("xemuonlinehelprequesttoken");
+	if (typeof(request_token) != "string") {
+		console.log("No Xemu request GET parameter found ...");
+		top.location = "index.html";
+		return;
+	}
 	if (self != top) {
 		console.log("Frame protection activated ...");
 		top.location = self.location;
+		return;
 	}
 	let vars = {};
-	for (const p of (new URLSearchParams(window.location.search)).get("xemuonlinehelprequesttoken").split("\u0002")[0].split("\u0001")) {
+	for (const p of request_token.split("\u0002")[0].split("\u0001")) {
 		if (p[0] !== '=' && p[1] === '=') {
 			vars[p[0]] = (p[0] === "b" ? p.substring(2).split(" ") : p.substring(2));
 		}
@@ -131,9 +140,14 @@ function main ()
 	setSpan("myCommitIdContainer",	vars["b"][2]);
 	setSpan("myRepoURLContainer",	vars["b"][0]);
 
+	const target = vars["t"];
+
 	const version = parseInt(vars["v"]);
-	if (("" + version) !== vars["v"] || version < 20000000000000 || version > 29990000000000 )
+	if (("" + version) !== vars["v"] || version < 20000000000000 || version > 29990000000000 ) {
+		document.getElementById("JSwarningContainer").innerHTML = "Haha!";
 		throw("Version check problem, v parameter (" + vars["v"] + ") was invalid!");
+		return;
+	}
 
 	const now = Date.now() / 1000;
 	const reqTime = parseInt(vars["u"]);
@@ -141,6 +155,7 @@ function main ()
 	console.log("Page request age: " + hoursSince);
 
 	if (Math.abs(hoursSince) >= 24.0) {
+		console.log("Too old (based on age)!");
 		document.getElementById("pageAgeWarningContainer").style.display = "block";
 	}
 
