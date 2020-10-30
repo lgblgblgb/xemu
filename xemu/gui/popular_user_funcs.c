@@ -119,6 +119,46 @@ void xemugui_cb_native_os_prefdir_browser ( const struct menu_st *m, int *query 
 	if (!query)
 		xemuexec_open_native_file_browser(sdl_pref_dir);
 }
+static void _open_url ( char *url )
+{
+	if (ARE_YOU_SURE("Can I open a web browser instance to be able to serve your request?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
+		xemuexec_open_native_file_browser(url);
+}
+void xemugui_cb_web_url ( const struct menu_st *m, int *query )
+{
+	if (!query)
+		_open_url((char*)m->user_data);
+}
+//#define XEMU_ONLINE_HELP_HANDLER_URL	"http://lgb.hu/xemu.php"
+//#define XEMU_ONLINE_HELP_HANDLER_URL	"https://github.lgb.hu/xemu/xemuonlinerequest.html"
+#define XEMU_ONLINE_HELP_HANDLER_URL	"https://lgblgblgb.github.io/xemu/xemuonlinerequest.html"
+#define XEMU_ONLINE_HELP_GET_VAR	"xemuonlinehelprequesttoken"
+#include <time.h>
+void xemugui_cb_web_help_main ( const struct menu_st *m, int *query )
+{
+	if (query)
+		return;
+	char params[256];
+	sprintf(params, "o=%d\001v=%s\001b=%s\001t=%s\001p=%s\001u=" PRINTF_LLD,
+		XEMU_OFFICIAL_BUILD_BOOL,		// o=%d (official build?)
+		XEMU_BUILDINFO_CDATE,			// v=%s (version data)
+		XEMU_BUILDINFO_GIT,			// b=%s (build info)
+		TARGET_NAME,				// t=%s (target name)
+		XEMU_ARCH_NAME,				// p=%s (platform name)
+		(long long int)time(NULL)		// u=%d (uts)
+	);
+	char *p = params;
+	int sum = 0;
+	while (*p)
+		sum += *p++;
+	sprintf(p, "\002C=%d", sum);
+	char url[1024];
+	sprintf(url, "%s?%s=", XEMU_ONLINE_HELP_HANDLER_URL, XEMU_ONLINE_HELP_GET_VAR);
+	p = params;
+	while (*p)
+		sprintf(url + strlen(url), "%%%02X", (unsigned char)*p++);
+	_open_url(url);
+}
 #endif
 
 #include "xemu/emutools_hid.h"

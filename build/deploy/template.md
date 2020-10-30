@@ -1,6 +1,6 @@
 # X-Emulators ~ "Xemu" / Binary distribution
 
-This is the **binary** distribution of Xemu for **%ARCH%**. For the source code, further
+This is the **binary** distribution of Xemu (**%VERSION%**) for **%ARCH%**. For the source code, further
 information and instructions, wiki, issue page, etc, please visit
 https://github.com/lgblgblgb/xemu
 

@@ -23,7 +23,7 @@ cat build/objs/cdate.data > $TARGET/versioninfo
 	else
 		SED_RULE=""
 	fi
-	sed "s/%ARCH%/$ARCH/" < build/deploy/template.md | sed "s/%BRANCH%/$TRAVIS_BRANCH/" | sed "s/^IFNOTMASTER:$SED_RULE//"
+	sed "s/%ARCH%/$ARCH/" < build/deploy/template.md | sed "s/%BRANCH%/$TRAVIS_BRANCH/" | sed "s/^IFNOTMASTER:$SED_RULE//" | sed "s/%VERSION%/`cat $TARGET/versioninfo`/"
 	echo "* **BUILD_COMMIT = https://github.com/$TRAVIS_REPO_SLUG/commit/$TRAVIS_COMMIT**"
 	echo "* **BUILD_DATE = `date`**"
 	echo "* **BUILD_GIT_REMOTE = `git config --get remote.origin.url` (branch: $TRAVIS_BRANCH)**"

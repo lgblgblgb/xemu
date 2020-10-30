@@ -31,7 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "input_devices.h"
 #include "uart_monitor.h"
 
-#define		HELP_URL	"https://github.com/lgblgblgb/xemu/wiki/MEGA65-help"
+//#define		HELP_URL	"https://github.com/lgblgblgb/xemu/wiki/MEGA65-help"
 
 
 //#if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_GUI)
@@ -102,15 +102,6 @@ static void ui_run_prg_by_browsing ( void )
 	} else
 		DEBUGPRINT("UI: file selection for PRG injection was cancalled." NL);
 }
-
-static void ui_online_help ( void )
-{
-	if (ARE_YOU_SURE("Shall I open a web browser instance with the help for you?", 0))
-		xemuexec_open_native_file_browser(HELP_URL);
-	else
-		INFO_WINDOW("Help request was cancelled by you");
-}
-
 
 #ifdef BASIC_TEXT_SUPPORT
 #include "xemu/basic_text.h"
@@ -310,7 +301,9 @@ static const struct menu_st menu_debug[] = {
 	{ "OSD key debugger",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
 	{ "Dump memory info file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_memory },
+#ifdef HAVE_XEMU_EXEC_API
 	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_native_os_prefdir_browser, NULL },
+#endif
 	{ NULL }
 };
 static const struct menu_st menu_main[] = {
@@ -330,7 +323,10 @@ static const struct menu_st menu_main[] = {
 	{ "System console",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_sysconsole, NULL },
 #endif
-	{ "Help (online)",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_online_help },
+#ifdef HAVE_XEMU_EXEC_API
+	//{ "Help (online)",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_web_url, HELP_URL },
+	{ "Help (online)",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_web_help_main, NULL },
+#endif
 	{ "About",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_about_window, NULL },
 	{ "Quit",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_quit_if_sure, NULL },
 	{ NULL }
