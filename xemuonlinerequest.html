@@ -15,6 +15,7 @@
     <![endif]-->
 
     <title>Xemu Download Page</title>
+    <link rel="shortcut icon" type="image/png" href="xemu-icon.png">
   </head>
 
   <body onLoad="main()">
@@ -139,8 +140,6 @@ function main ()
 	setSpan("myOfficialContainer",	(vars["o"] === "1" ? "official" : "custom"));
 	setSpan("myCommitIdContainer",	vars["b"][2]);
 	setSpan("myRepoURLContainer",	vars["b"][0]);
-
-	const target = vars["t"];
 
 	const version = parseInt(vars["v"]);
 	if (("" + version) !== vars["v"] || version < 20000000000000 || version > 29990000000000 ) {
