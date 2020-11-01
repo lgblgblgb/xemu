@@ -15,7 +15,7 @@
     <![endif]-->
 
     <title>Xemu Download Page</title>
-    <link rel="shortcut icon" type="image/png" href="xemu-icon.png">
+    <link rel="shortcut icon" type="image/png" href="favico.png">
   </head>
 
   <body onLoad="main()">
@@ -54,16 +54,20 @@
 
 <h2>Version information</h2>
 
-<p>This page was requested by <span id="myOfficialContainer">???</span> Xemu build target <span id="myTargetContainer">???</span> version <span id="myVersionContainer">???</span> on platform <span id="myPlatformContainer">???</span> from branch <span id="myBranchContainer">???</span> commit <span id="myCommitIdContainer">???</span> in repository <span id="myRepoURLContainer">???</span>.</p>
+<p>This page was requested by <span id="myOfficialContainer">???</span> Xemu build target <span id="myTargetContainer">???</span> version <span id="myVersionContainer">???</span> on platform <span id="myPlatformContainer">???</span> from branch <span id="myBranchContainer">???</span> commit <span id="myCommitIdContainer">???</span> in repository <span id="myRepoURLContainer">???</span>
+(<a href="#" target="_new" id="commit-link">LINK</a>).
+</p>
 
 <p>Xemu update checker status: <span id="versionCheckContainer"></span></p>
 
-<span id="pageAgeWarningContainer"><p style="font-weight: bold; color: red; display: none; text-align: center;">
-This page was requested a long time ago. Version information may changed since then.
+<span id="pageAgeWarningContainer" style="display: none"><p style="font-weight: bold; color: red; text-align: center;">
+This page was requested at least several hours ago. Version/token information may has changed since then.
 Please use Xemu's UI context menu to re-request this page!
 </p></span>
 
-<h2>HELP</h2>
+<h2>Help resources</h2>
+
+<span id="helpContainer"></span>
 
 
 <!-- end of custom stuff -->
@@ -85,7 +89,7 @@ Please use Xemu's UI context menu to re-request this page!
             Wiki
           </a>
 
-          <p class="repo-owner"><a href="https://github.com/lgblgblgb/xemu"></a>Xemu was written and this page is maintained by <a href="https://github.com/lgblgblgb">Gabor Lenart (LGB)</a>.</p>
+          <p class="repo-owner"><a href="https://github.com/lgblgblgb/xemu"></a>Author of Xemu &amp; maintainer of this page: <a href="https://github.com/lgblgblgb">Gabor Lenart (LGB)</a>.</p>
 
 	  <p><i>I use the Architect theme by <a href="https://twitter.com/jasonlong">Jason Long</a>.</i></p>
         </aside>
@@ -98,9 +102,12 @@ Please use Xemu's UI context menu to re-request this page!
 
 
 <script>
+
 "use strict";
+
 // (C)2020 Gabor Lenart LGB
 // Part of the Xemu project.
+
 function setSpan ( name, value )
 {
 	if (typeof(value) !== "string") {
@@ -112,13 +119,32 @@ function setSpan ( name, value )
 	e.style = "color: blue; font-weight: bold; border-bottom: dashed black 1px;";
 }
 
+function showPage ( custom_content )
+{
+	document.getElementById("JSwarningContainer").style.display = "none";
+	let e = document.getElementById("mainContainer");
+	e.style.display = "block";
+	if (custom_content)
+		e.innerHTML = custom_content;
+	console.log("Page visibility is turned ON" + (custom_content ? ": " + custom_content : ""));
+}
+
+function redirect ( url, alert_msg )
+{
+	showPage("About redirecting (please wait!) to: " + url);
+	if (alert_msg)
+		window.alert(alert_msg);
+	self.location = url;
+
+}
+
 function main ()
 {
+	const unofficial_build_version_check = true;
 	const request_token = (new URLSearchParams(window.location.search)).get("xemuonlinehelprequesttoken");
 	if (typeof(request_token) != "string") {
 		console.log("No Xemu request GET parameter found ...");
-		top.location = "index.html";
-		return;
+		return redirect("index.html", "This page should not be visited by your browser\nbut using Xemu's help menu.");
 	}
 	if (self != top) {
 		console.log("Frame protection activated ...");
@@ -126,7 +152,14 @@ function main ()
 		return;
 	}
 	let vars = {};
-	for (const p of request_token.split("\u0002")[0].split("\u0001")) {
+	const request = request_token.split("\u0002");
+	/*let need_digest = await sha1(request[0]);
+	if (need_digest == request[1]) {
+		console.log("Good, checksum is OK!");
+	} else {
+		console.log("Bad, checksum is NOT OK!! expected='" + need_digest + "', got='" + request[1] + "'");
+	}*/
+	for (const p of request[0].split("\u0001")) {
 		if (p[0] !== '=' && p[1] === '=') {
 			vars[p[0]] = (p[0] === "b" ? p.substring(2).split(" ") : p.substring(2));
 		}
@@ -141,11 +174,24 @@ function main ()
 	setSpan("myCommitIdContainer",	vars["b"][2]);
 	setSpan("myRepoURLContainer",	vars["b"][0]);
 
-	const version = parseInt(vars["v"]);
+	document.getElementById("commit-link").href = vars["b"][0].replace(/\.git$/, "") + "/commit/" + vars["b"][2];
+
+	const command = vars["x"];
+	if (command === "downloadmega65book")
+		return redirect(
+			"https://mega.scryptos.com/sharefolder-link/MEGA/MEGA65+filehost/Docs/MEGA65-Book_draft.pdf",
+			"Redirecting for downloading MEGA65-book.\nYou may need to accept terms and conditions though,\nat the download site."
+		);
+	if (command.includes("://"))
+		return redirect(vars["x"], "");
+	if (command == "downloadpage")
+		return redirect("index.html", "");
+
+	let version = parseInt(vars["v"]);
 	if (("" + version) !== vars["v"] || version < 20000000000000 || version > 29990000000000 ) {
-		document.getElementById("JSwarningContainer").innerHTML = "Haha!";
-		throw("Version check problem, v parameter (" + vars["v"] + ") was invalid!");
-		return;
+		console.log("Bad version number!");
+		window.alert("Invalid version number got! Result is non-sense.");
+		version = 0;
 	}
 
 	const now = Date.now() / 1000;
@@ -158,9 +204,9 @@ function main ()
 		document.getElementById("pageAgeWarningContainer").style.display = "block";
 	}
 
-	if (vars["o"] === "1" || true) {
-		let branch = vars["b"][1];
-		let platform = vars["p"];
+	if (version && (vars["o"] === "1" || unofficial_build_version_check)) {
+		let branch = vars["b"][1].toLowerCase();
+		let platform = vars["p"].toLowerCase();
 		if (platform === "win32" || platform === "win64" || platform == "win")
 			platform = "windows";
 		if (platform === "mac" || platform === "macos")
@@ -217,9 +263,12 @@ function main ()
 		e.style.borderBottom = "1px black dashed";
 	}
 
-	document.getElementById("JSwarningContainer").style.display = "none";
-	document.getElementById("mainContainer").style.display = "block";
-	console.log("Page visibility is turned ON");
+	let help = [];
+	let target = vars["target"];
+	help.push("<a href='index.html?showversions=" + version + "&amp;timeid=" + now + "'>Xemu builds download page</a>");
+
+	document.getElementById("helpContainer").innerHTML = "<ul><li>" + help.join("</li><li>") + "</li></ul>";
+	showPage();
 }
 </script>
 </html>

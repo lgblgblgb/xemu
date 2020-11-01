@@ -15,10 +15,10 @@
     <![endif]-->
 
     <title>Xemu Download Page</title>
-    <link rel="shortcut icon" type="image/png" href="xemu-icon.png">
+    <link rel="shortcut icon" type="image/png" href="favico.png">
   </head>
 
-  <body>
+  <body onload="boot('verfetchactivator')">
     <header>
       <div class="inner">
         <h1>Xemu</h1>
@@ -41,7 +41,7 @@ including the Commodore LCD, Commodore 65 and MEGA65 as well.</p>
           <h2>Choose your download desire</h2>
 
           <ul><li><a href="https://github.com/lgblgblgb/xemu/">Xemu github repository (source code, documents, wiki, issue page, ...)</a></li>
-	  <li><a href="#" onclick="return main(this);">TURN ON version fethcing (in-page function)</a></li>
+	  <li><a href="#" onclick="return main(this);" id="verfetchactivator">TURN ON version fethcing (in-page function)</a></li>
           </ul>
 
           <h3>More stable ("master" branch)</h3>
@@ -117,7 +117,7 @@ including the Commodore LCD, Commodore 65 and MEGA65 as well.</p>
             Issues
           </a>
 
-          <p class="repo-owner"><a href="https://github.com/lgblgblgb/xemu"></a>Xemu was written and this page is maintained by <a href="https://github.com/lgblgblgb">Gabor Lenart (LGB)</a>.</p>
+          <p class="repo-owner"><a href="https://github.com/lgblgblgb/xemu"></a>Author of Xemu &amp; maintainer of this page: <a href="https://github.com/lgblgblgb">Gabor Lenart (LGB)</a>.</p>
 
 	  <p><i>I use the Architect theme by <a href="https://twitter.com/jasonlong">Jason Long</a>.</i></p>
         </aside>
@@ -137,7 +137,7 @@ including the Commodore LCD, Commodore 65 and MEGA65 as well.</p>
 "use strict";
 // (C)2020 Gabor Lenart LGB
 // Part of the Xemu project.
-function decorator (head, response)
+function decorator (head, response, userver)
 {
 	//console.log("Decorating links with " + response + " for " + head);
 	for (const a of document.getElementsByTagName("a")) {
@@ -167,10 +167,10 @@ function main ( enabler )
 					if (this.readyState == 4) {
 						if (this.status == 200) {
 							console.log("Could fetch version info for " + id + " " + parseInt(this.response) + " :)");
-							decorator(LINK_HEAD_CHECK_FOR + id + "/", parseInt(this.response));
+							decorator(LINK_HEAD_CHECK_FOR + id + "/", parseInt(this.response), enabler.yourXemuVersion);
 						} else {
 							console.log("Could not fetch version info for " + id + " getting error " + this.status + " :(");
-							decorator(LINK_HEAD_CHECK_FOR + id + "/", "latest");
+							decorator(LINK_HEAD_CHECK_FOR + id + "/", "latest", 0);
 						}
 					}
 				};
@@ -186,6 +186,31 @@ function main ( enabler )
 	}
 	//console.log(registered);
 	return false;
+}
+function boot ( element_id )
+{
+	let e = document.getElementById(element_id);
+	if (!e) {
+		return;
+	}
+	let param = (new URLSearchParams(window.location.search)).get("showversions");
+	if (param) {
+		param = parseInt(param);
+		if (param < 20000000000000 || param > 29990000000000) {
+			param = 0;
+		}
+	} else {
+		param = 0;
+	}
+	let ptime = parseInt((new URLSearchParams(window.location.search)).get("timeid"));
+	if (param && (isNaN(ptime) || (Math.abs((Date.now() / 1000) - ptime) > 360))) {
+		top.location = "index.html";
+		return;
+	}
+	e.yourXemuVersion = param;
+	if (param) {
+		main(e);
+	}
 }
 </script>
 </html>
