@@ -1,6 +1,4 @@
-/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
-   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and MEGA65 as well.
+/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
@@ -241,5 +239,8 @@ extern void xemu_dump_version ( FILE *fp, const char *slogan );
 static XEMU_INLINE unsigned char XEMU_BYTE_TO_BCD ( unsigned char b ) {
 	return ((b / 10) << 4) + (b % 10);
 }
+
+#define VOIDPTR_TO_INT(x)	((int)(intptr_t)(void*)(x))
+#define VOIDPTR_TO_UINT(x)	((unsigned int)(uintptr_t)(void*)(x))
 
 #endif

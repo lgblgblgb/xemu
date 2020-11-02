@@ -2,7 +2,7 @@
 
 [![Build Status](https://api.travis-ci.org/lgblgblgb/xemu.svg?branch=master)](https://travis-ci.org/lgblgblgb/xemu)
 [![Gitter](https://badges.gitter.im/lgblgblgb/xemu.svg)](https://gitter.im/lgblgblgb/xemu)
-[![Download](https://img.shields.io/badge/download-master-%236060FF)](https://github.com/lgblgblgb/xemu-binaries/blob/master/README.md)
+[![Download](https://img.shields.io/badge/download-binaries-%236060FF)](https://github.lgb.hu/xemu)
 [![License: GPL-2.0](https://img.shields.io/github/license/lgblgblgb/xemu.svg)](./LICENSE)
 [![Contributors](https://img.shields.io/github/contributors/lgblgblgb/xemu.svg)](https://github.com/lgblgblgb/xemu/graphs/contributors)
 [![GitHub last commit (dev)](https://img.shields.io/github/last-commit/lgblgblgb/xemu/dev?label=Last%20commit%20DEV)](https://github.com/lgblgblgb/xemu/wiki/ReleaseLogDEVEL)
@@ -14,7 +14,8 @@ including the Commodore LCD and Commodore 65 and MEGA65 as well.
 Written by (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 Source repository: https://github.com/lgblgblgb/xemu
 
-Xemu also contains code wasn't written by me. Please read file AUTHORS
+Xemu also contains code wasn't written by me (sources I use from others,
+or direct contributors to this project). Please read file AUTHORS
 
 Xemu is licensed under the terms of GNU/GPL v2, for more information please
 read file LICENSE. You can find the source on github, see above.
@@ -30,7 +31,7 @@ the wiki section of the project, here**:
 
 https://github.com/lgblgblgb/xemu/wiki
 
-## Most quick start (Xemu running in your web browser!)
+## Quickest start (Xemu running in your web browser!)
 
 Just visit this page:
 
@@ -44,11 +45,10 @@ MEGA65).
 
 ## Quick start (using pre-built binaries)
 
-**Plese note, that binaries on some older site of mine (especially on bintray.com,
-and xemu-dist.lgb.hu) can be OUTDATED. Currently to download up-to-date,
-ready-to-use Xemu binaries, you should go here:**
+**Download page**: https://github.lgb.hu/xemu/
 
-https://github.lgb.hu/xemu/
+There are binaries on some other sites, which are seriously old. Please,
+always visit github.lgb.hu/xemu/ for download!
 
 Or, if you'are more an insider-oriented to see various builds from branches,
 additional information, etc, you can go here (the same as above, but instead
