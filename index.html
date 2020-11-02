@@ -22,7 +22,7 @@
     <header>
       <div class="inner">
         <h1>Xemu</h1>
-        <h2>Collection of emulators, written by me.</h2>
+	<h2>Collection of emulators, written by me<sup>*</sup>.</h2>
         <a href="https://github.com/lgblgblgb/xemu" class="button"><small>View project on</small> GitHub</a>
       </div>
     </header>
@@ -117,9 +117,8 @@ including the Commodore LCD, Commodore 65 and MEGA65 as well.</p>
             Issues
           </a>
 
-          <p class="repo-owner"><a href="https://github.com/lgblgblgb/xemu"></a>Author of Xemu &amp; maintainer of this page: <a href="https://github.com/lgblgblgb">Gabor Lenart (LGB)</a>.</p>
-
-	  <p><i>I use the Architect theme by <a href="https://twitter.com/jasonlong">Jason Long</a>.</i></p>
+	  <p class="repo-owner"><sup><b>*</b></sup> author of <a href="https://github.com/lgblgblgb/xemu">Xemu</a> &amp; maintainer of this page: <a href="https://github.com/lgblgblgb">Gábor Lénárt (LGB)</a>.</p>
+	  <p><i>theme: "Architect" by <a href="https://twitter.com/jasonlong">Jason Long</a></i></p>
         </aside>
       </div>
     </div>
@@ -170,11 +169,11 @@ function main ( enabler )
 							decorator(LINK_HEAD_CHECK_FOR + id + "/", parseInt(this.response), enabler.yourXemuVersion);
 						} else {
 							console.log("Could not fetch version info for " + id + " getting error " + this.status + " :(");
-							decorator(LINK_HEAD_CHECK_FOR + id + "/", "latest", 0);
+							decorator(LINK_HEAD_CHECK_FOR + id + "/", "no-info", 0);
 						}
 					}
 				};
-				ajax.open("GET", LINK_HEAD_VER_INFO + id + "/versioninfo?timeid=" + now);
+				ajax.open("GET", LINK_HEAD_VER_INFO + id + "/versioninfo?timeid=" + now, true);
 				console.log("Initiating version info fetch for " + id + " ...");
 				ajax.send();
 			} else {

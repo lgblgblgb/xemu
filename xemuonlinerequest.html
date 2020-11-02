@@ -38,7 +38,7 @@
     <header>
       <div class="inner">
         <h1>Xemu</h1>
-        <h2>Collection of emulators, written by me.</h2>
+	<h2>Collection of emulators, written by me<sup>*</sup>.</h2>
         <a href="https://github.com/lgblgblgb/xemu" class="button"><small>View project on</small> GitHub</a>
       </div>
     </header>
@@ -89,9 +89,8 @@ Please use Xemu's UI context menu to re-request this page!
             Wiki
           </a>
 
-          <p class="repo-owner"><a href="https://github.com/lgblgblgb/xemu"></a>Author of Xemu &amp; maintainer of this page: <a href="https://github.com/lgblgblgb">Gabor Lenart (LGB)</a>.</p>
-
-	  <p><i>I use the Architect theme by <a href="https://twitter.com/jasonlong">Jason Long</a>.</i></p>
+	  <p class="repo-owner"><sup><b>*</b></sup> author of <a href="https://github.com/lgblgblgb/xemu">Xemu</a> &amp; maintainer of this page: <a href="https://github.com/lgblgblgb">Gábor Lénárt (LGB)</a>.</p>
+	  <p><i>theme: "Architect" by <a href="https://twitter.com/jasonlong">Jason Long</a></i></p>
         </aside>
       </div>
     </div>
@@ -141,6 +140,10 @@ function redirect ( url, alert_msg )
 function main ()
 {
 	const unofficial_build_version_check = true;
+	const mega65_help_url = "https://github.com/lgblgblgb/xemu/wiki/MEGA65-help";
+	const c65_help_url = "https://github.com/lgblgblgb/xemu/wiki/C65-help";
+	const mega65_book_pdf_url = "https://mega.scryptos.com/sharefolder-link/MEGA/MEGA65+filehost/Docs/MEGA65-Book_draft.pdf";
+
 	const request_token = (new URLSearchParams(window.location.search)).get("xemuonlinehelprequesttoken");
 	if (typeof(request_token) != "string") {
 		console.log("No Xemu request GET parameter found ...");
@@ -179,7 +182,7 @@ function main ()
 	const command = vars["x"];
 	if (command === "downloadmega65book")
 		return redirect(
-			"https://mega.scryptos.com/sharefolder-link/MEGA/MEGA65+filehost/Docs/MEGA65-Book_draft.pdf",
+			mega65_book_pdf_url,
 			"Redirecting for downloading MEGA65-book.\nYou may need to accept terms and conditions though,\nat the download site."
 		);
 	if (command.includes("://"))
@@ -264,9 +267,20 @@ function main ()
 	}
 
 	let help = [];
-	let target = vars["target"];
+	const target = vars["target"];
 	help.push("<a href='index.html?showversions=" + version + "&amp;timeid=" + now + "'>Xemu builds download page</a>");
-
+	if (target === "mega65") {
+		if (command === "help")
+			return redirect(mega65_help_url, "");
+		help.push("<a target='_new' href='" + mega65_help_url + "'><b>Xemu MEGA65 help page</b></a>");
+		help.push("<a target='_new' href='https://mega65.org'>The MEGA65 project</a>");
+		help.push("<a target='_new' href='https://www.forum64.de/index.php?board/457-mega65/'>MEGA65 forum</a>");
+		help.push("<a target='_new' href='https://github.com/MEGA65'>MEGA65 github repositories</a>");
+	} else if (target === "c65") {
+		if (command === "help")
+			return redirect(c65_help_url, "");
+		help.push("<a target='_new' href='" + c65_help_url + "'><b>Xemu C65 help page</b></a>");
+	}
 	document.getElementById("helpContainer").innerHTML = "<ul><li>" + help.join("</li><li>") + "</li></ul>";
 	showPage();
 }
