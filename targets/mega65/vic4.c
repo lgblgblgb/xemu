@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #include "xemu/emutools.h"
+#include "xemu/emutools_files.h"
 #include "mega65.h"
 #include "xemu/cpu65.h"
 #include "vic4.h"
@@ -419,7 +420,13 @@ Uint8 vic_read_reg ( int unsigned addr )
 			break;
 		/* --- NO MORE VIC-III REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B): CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
-		CASE_VIC_4(0x50): CASE_VIC_4(0x51): CASE_VIC_4(0x52): CASE_VIC_4(0x53):
+		CASE_VIC_4(0x50): CASE_VIC_4(0x51):
+			break;
+		CASE_VIC_4(0x52):
+			result = (scanline << 1) & 0xFF;	// hack: report phys raster always double of vic-II raster
+			break;
+		CASE_VIC_4(0x53):
+			result = ((scanline << 1) >> 8) & 7;
 			break;
 		CASE_VIC_4(0x54):
 			break;
@@ -909,6 +916,25 @@ void vic_render_screen ( void )
 				render_sprite(a, mask, sprite_bank + (sprite_pointers[a] << 6), p_sdl, tail_sdl);	// sprite_pointers are set by the renderer functions above!
 		}
 	}
+
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+	// Screenshot
+	if (XEMU_UNLIKELY(register_screenshot_request)) {
+		register_screenshot_request = 0;
+		if (!xemu_screenshot_png(
+			NULL, NULL,
+			1,
+			2,
+			NULL,	// allow function to figure it out ;)
+			SCREEN_WIDTH,
+			SCREEN_HEIGHT
+		)) {
+			const char *p = strrchr(xemu_screenshot_full_path, DIRSEP_CHR);
+			if (p)
+				OSD(-1, -1, "%s", p + 1);
+		}
+	}
+#endif
 	xemu_update_screen();
 }
 
