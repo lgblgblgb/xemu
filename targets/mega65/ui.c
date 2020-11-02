@@ -31,10 +31,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "input_devices.h"
 #include "uart_monitor.h"
 
-//#define		HELP_URL	"https://github.com/lgblgblgb/xemu/wiki/MEGA65-help"
-
-
-//#if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_GUI)
 
 static int attach_d81 ( const char *fn )
 {
