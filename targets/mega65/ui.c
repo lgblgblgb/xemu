@@ -260,7 +260,7 @@ static void ui_dump_memory ( void )
 		fnbuf,
 		sizeof fnbuf
 	)) {
-		//dump_memory(fnbuf);
+		dump_memory(fnbuf);
 	}
 }
 

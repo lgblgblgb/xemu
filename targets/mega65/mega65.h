@@ -44,7 +44,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_HEIGHT		200
 
 // Default fast clock of M65, in MHz (can be overriden with CLI switch)
-#define MEGA65_DEFAULT_FAST_CLOCK	40
+#define MEGA65_DEFAULT_FAST_CLOCK	40.0
 
 // Needed CPU cycles for a (PAL) scanline for a given mode.
 // For "fast clock", it's calculated, see MEGA65_DEFAULT_FAST_CLOCK
@@ -54,10 +54,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define SID_CYCLES_PER_SEC	1000000
 #define AUDIO_SAMPLE_FREQ	44100
-
-// If defined, a file name string must be used.
-// Then hypervisor memory content will be written into this file on exit.
-#define MEMDUMP_FILE		"dump.mem"
 
 extern void m65mon_show_regs ( void );
 extern void m65mon_dumpmem16 ( Uint16 addr );
@@ -74,9 +70,12 @@ extern void machine_set_speed ( int verbose );
 extern void reset_mega65      ( void );
 extern int  reset_mega65_asked( void );
 
+extern int  dump_memory       ( const char *fn );
+
 extern int  refill_c65_rom_from_preinit_cache ( void );
 
 extern int newhack;
 extern unsigned int frames_total_counter;
+extern int register_screenshot_request;
 
 #endif
