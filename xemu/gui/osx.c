@@ -31,7 +31,7 @@ static const unsigned long NSFileHandlingPanelCancelButton = 0;
 // New Apple SDKs objc_msgSend prototype changed to *force* callers
 // to cast to proper types!. So this is ugly and verbose, but works.
 
-static void _xemumacgui_menu_action_handler(id self, SEL selector, id sender)
+static void _xemumacgui_menu_action_handler ( id self, SEL selector, id sender )
 {
 	id menu_obj =  ((id (*) (id, SEL)) objc_msgSend)(sender, sel_registerName("representedObject"));
 	const struct menu_st* menu_item = (const struct menu_st*) ((id (*) (id, SEL)) objc_msgSend)(menu_obj, sel_registerName("pointerValue"));
@@ -41,12 +41,18 @@ static void _xemumacgui_menu_action_handler(id self, SEL selector, id sender)
 	}
 }
 
-static id _xemumacgui_r_menu_builder(const struct menu_st desc[])
+
+static id _xemumacgui_r_menu_builder ( const struct menu_st desc[] )
 {
 	id ui_menu = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSMenu"), sel_registerName("new"));
 	((void (*) (id, SEL)) objc_msgSend)(ui_menu, sel_registerName("autorelease"));
 	for (int i = 0; desc[i].name; i++) {
-		if (!desc[i].handler || !desc[i].name) {
+		// Some sanity checks:
+		if (
+			((desc[i].type & 0xFF) != XEMUGUI_MENUID_SUBMENU && !desc[i].handler) ||
+			((desc[i].type & 0xFF) == XEMUGUI_MENUID_SUBMENU && (desc[i].handler  || !desc[i].user_data)) ||
+			!desc[i].name
+		) {
 			DEBUGPRINT("GUI: invalid meny entry found, skipping it" NL);
 			continue;
 		}
@@ -63,14 +69,16 @@ static id _xemumacgui_r_menu_builder(const struct menu_st desc[])
 		((void (*) (id, SEL, id))objc_msgSend)(menu_item, sel_registerName("setRepresentedObject:"), menu_object);
 		((void (*) (id, SEL, id))objc_msgSend)(ui_menu, sel_registerName("addItem:"), menu_item);
 		if (desc[i].type == XEMUGUI_MENUID_SUBMENU) {
-			id sub_menu = _xemumacgui_r_menu_builder(desc[i].handler);
+			// submenus use the user_data as the submenu menu_st struct pointer!
+			id sub_menu = _xemumacgui_r_menu_builder(desc[i].user_data);
 			((void (*) (id, SEL, id, id))objc_msgSend)(ui_menu, sel_registerName("setSubmenu:forItem:"), sub_menu, menu_item);
 		}
 	}
 	return ui_menu;
 }
 
-static int xemuosxgui_init(void)
+
+static int xemuosxgui_init ( void )
 {
 	DEBUGPRINT("GUI: macOS Cocoa initialization" NL);
 	auto_release_pool = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSAutoreleasePool"), sel_registerName("new"));
@@ -81,7 +89,8 @@ static int xemuosxgui_init(void)
 	return 0;
 }
 
-static int xemuosxgui_popup(const struct menu_st desc[])
+
+static int xemuosxgui_popup ( const struct menu_st desc[] )
 {
 	// If the SDL window is not active, make this right-click to do application activation.
 	if ( ! (((id(*)(id,SEL))objc_msgSend) (application, sel_registerName("mainWindow")))) {
@@ -100,8 +109,18 @@ static int xemuosxgui_popup(const struct menu_st desc[])
 	return 0;
 }
 
-static int xemuosxgui_file_selector(int dialog_mode, const char *dialog_title, char *default_dir, char *selected, int path_max_size )
+static int xemuosxgui_file_selector ( int dialog_mode, const char *dialog_title, char *default_dir, char *selected, int path_max_size )
 {
+	switch (dialog_mode & 3) {
+		case XEMUGUI_FSEL_OPEN:	// that's OK, this is till now the only implemented mode on MacOS -> TODO
+			break;
+		case XEMUGUI_FSEL_SAVE:
+			ERROR_WINDOW("Sorry, save functionality is not yet implemented in the MacOS port!");
+			return 1;
+		default:
+			FATAL("Invalid mode for UI selector: %d", dialog_mode & 3);
+			return 1;
+	}
 	*selected = '\0';
 	id open_panel = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSOpenPanel"), sel_registerName("openPanel"));
 	((void (*) (id, SEL)) objc_msgSend)(open_panel, sel_registerName("autorelease"));
@@ -131,12 +150,14 @@ static int xemuosxgui_file_selector(int dialog_mode, const char *dialog_title, c
 	return 1;
 }
 
+
 static const struct xemugui_descriptor_st xemuosxgui_descriptor = {
-	"macos",					// name
-	"macOS native API Xemu UI implementation",	// desc
-	xemuosxgui_init,
-	NULL,
-	NULL,
-	xemuosxgui_file_selector,
-	xemuosxgui_popup
+	.name		= "macos",
+	.description	= "MacOS native API Xemu UI implementation",
+	.init		= xemuosxgui_init,
+	.shutdown	= NULL,
+	.iteration	= NULL,
+	.file_selector	= xemuosxgui_file_selector,
+	.popup		= xemuosxgui_popup,
+	.info		= NULL
 };

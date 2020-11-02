@@ -15,11 +15,7 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-// FIXME: very ugly hack for ep128 emulator which uses its own implemtnation of things still ...
-#ifndef DO_NOT_INCLUDE_EMUTOOLS
 #include "xemu/emutools.h"
-#endif
-
 #include "xemu/emutools_gui.h"
 #include <string.h>
 
@@ -43,10 +39,7 @@ static void store_dir_from_file_selection ( char *store_dir, const char *filenam
 }
 #endif
 
-// FIXME: ugly hack again, see above ...
-#ifndef DO_NOT_INCLUDE_EMUTOOLS
 #include "xemu/gui/popular_user_funcs.c"
-#endif
 
 struct xemugui_descriptor_st {
 	const char *name;
@@ -56,6 +49,7 @@ struct xemugui_descriptor_st {
 	int	(*iteration)(void);
 	int	(*file_selector)( int dialog_mode, const char *dialog_title, char *default_dir, char *selected, int path_max_size );
 	int	(*popup)( const struct menu_st desc[] );
+	int	(*info)(int sdl_class, const char *msg);
 };
 
 #if defined(XEMU_HAS_GTK3)
@@ -140,6 +134,14 @@ int xemugui_popup ( const struct menu_st desc[] )
 {
 	if (current_gui && current_gui->popup)
 		return current_gui->popup(desc);
+	else
+		return 1;
+}
+
+int xemugui_info ( int sdl_class, const char *msg )
+{
+	if (current_gui && current_gui->info)
+		return current_gui->info(sdl_class, msg);
 	else
 		return 1;
 }

@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -67,8 +67,18 @@ static int xemuwingui_file_selector ( int dialog_mode, const char *dialog_title,
 	ofn.nMaxFileTitle = 0;
 	ofn.lpstrInitialDir = default_dir ? default_dir : NULL;
 	ofn.lpstrTitle = dialog_title;
-	ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST | OFN_EXPLORER | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
-	res = !GetOpenFileName(&ofn);
+	switch (dialog_mode & 3) {
+		case XEMUGUI_FSEL_OPEN:
+			ofn.Flags = OFN_PATHMUSTEXIST | OFN_FILEMUSTEXIST   | OFN_EXPLORER | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+			res = !GetOpenFileName(&ofn);
+			break;
+		case XEMUGUI_FSEL_SAVE:
+			ofn.Flags = OFN_PATHMUSTEXIST | OFN_OVERWRITEPROMPT | OFN_EXPLORER | OFN_HIDEREADONLY | OFN_NOCHANGEDIR;
+			res = !GetSaveFileName(&ofn);
+			break;
+		default:
+			FATAL("Bad dialog_mode in file selector");
+	}
 	if (res) {
 		int err = CommDlgExtendedError();
 		*selected = '\0';
@@ -98,8 +108,13 @@ static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[] )
 	int radio_begin = xemuwinmenu.num_of_items;
 	int radio_active = xemuwinmenu.num_of_items; // radio active is a kinda odd name, but never mind ...
 	for (int a = 0; desc[a].name; a++) {
-		if (!desc[a].handler || !desc[a].name) {
-			DEBUGPRINT("GUI: invalid meny entry found, skipping it" NL);
+		// Some sanity checks:
+		if (
+			((desc[a].type & 0xFF) != XEMUGUI_MENUID_SUBMENU && !desc[a].handler) ||
+			((desc[a].type & 0xFF) == XEMUGUI_MENUID_SUBMENU && (desc[a].handler  || !desc[a].user_data)) ||
+			!desc[a].name
+		) {
+			DEBUGPRINT("GUI: invalid menu entry found, skipping it" NL);
 			continue;
 		}
 		if (xemuwinmenu.num_of_items >= XEMUGUI_MAX_ITEMS)
@@ -107,7 +122,8 @@ static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[] )
 		int ret = 1, type = desc[a].type;
 		switch (type & 0xFF) {
 			case XEMUGUI_MENUID_SUBMENU: {
-				HMENU submenu = _wingui_recursive_menu_builder(desc[a].handler);	// that's a prime example for using recursion :)
+				// submenus use the user_data as the submenu menu_st struct pointer!
+				HMENU submenu = _wingui_recursive_menu_builder(desc[a].user_data);	// that's a prime example for using recursion :)
 				if (!submenu)
 					goto PROBLEM;
 				ret = AppendMenu(menu, MF_POPUP, (UINT_PTR)submenu, desc[a].name);
@@ -125,6 +141,7 @@ static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[] )
 				ret = AppendMenu(menu, MF_STRING, ++xemuwinmenu.num_of_items, desc[a].name);
 				break;
 			default:
+				DEBUGPRINT("GUI: invalid menu item type: %d" NL, type & 0xFF);
 				break;
 		}
 		if (!ret) {
@@ -229,11 +246,12 @@ static int xemuwingui_popup ( const struct menu_st desc[] )
 
 
 static const struct xemugui_descriptor_st xemuwingui_descriptor = {
-	"windows",					// name
-	"Windows API based Xemu UI implementation",	// desc
-	xemuwingui_init,
-	NULL,						// shutdown (we don't need shutdown for windows?)
-	NULL,						// iteration (we don't need iteration for windows?)
-	xemuwingui_file_selector,
-	xemuwingui_popup
+	.name		= "windows",
+	.description	= "Windows API based Xemu UI implementation",
+	.init		= xemuwingui_init,
+	.shutdown	= NULL,	// we don't need shutdown for windows?
+	.iteration	= NULL,	// we don't need iteration for windows?
+	.file_selector	= xemuwingui_file_selector,
+	.popup		= xemuwingui_popup,
+	.info		= NULL
 };

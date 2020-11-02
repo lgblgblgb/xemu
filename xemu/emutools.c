@@ -38,6 +38,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/osd_font_16x16.c"
 
+#ifndef XEMU_NO_SDL_DIALOG_OVERRIDE
+int (*SDL_ShowSimpleMessageBox_custom)(Uint32, const char*, const char*, SDL_Window* ) = SDL_ShowSimpleMessageBox;
+int (*SDL_ShowMessageBox_custom)(const SDL_MessageBoxData*, int* ) = SDL_ShowMessageBox;
+#endif
+
 #ifdef XEMU_ARCH_MAC
 int macos_gui_started = 0;
 #endif
@@ -62,6 +67,7 @@ char *sdl_window_title = (char*)default_window_title;
 char *window_title_custom_addon = NULL;
 char *window_title_info_addon = NULL;
 Uint32 *sdl_pixel_buffer = NULL;
+Uint32 *xemu_frame_pixel_access_p = NULL;
 int texture_x_size_in_bytes;
 int emu_is_fullscreen = 0;
 static int win_xsize, win_ysize;
@@ -193,7 +199,7 @@ Uint8 xemu_hour_to_bcd12h ( Uint8 hours, int hour_offset )
 void *xemu_malloc ( size_t size )
 {
 	void *p = malloc(size);
-	if (!p)
+	if (XEMU_UNLIKELY(!p))
 		FATAL("Cannot allocate %d bytes of memory.", (int)size);
 	return p;
 }
@@ -202,7 +208,7 @@ void *xemu_malloc ( size_t size )
 void *xemu_realloc ( void *p, size_t size )
 {
 	p = realloc(p, size);
-	if (!p)
+	if (XEMU_UNLIKELY(!p))
 		FATAL("Cannot re-allocate %d bytes of memory.", (int)size);
 	return p;
 }
@@ -227,7 +233,7 @@ void *xemu_malloc_ALIGNED ( size_t size )
 char *xemu_strdup ( const char *s )
 {
 	char *p = strdup(s);
-	if (!p)
+	if (XEMU_UNLIKELY(!p))
 		FATAL("Cannot allocate memory for strdup()");
 	return p;
 }
@@ -365,7 +371,7 @@ void xemu_timekeeping_delay ( int td_em )
 	td = get_elapsed_time(et_new, &et_old, &unix_time_tv);
 	seconds_timer_trigger = (unix_time_tv.tv_sec != old_unix_time);
 	if (seconds_timer_trigger) {
-		snprintf(window_title_buffer_end, 32, "  [%d%% %d%%] %s %s",
+		snprintf(window_title_buffer_end, 64, "  [%d%% %d%%] %s %s",
 			((td_em_ALL < td_pc_ALL) && td_pc_ALL) ? td_em_ALL * 100 / td_pc_ALL : 100,
 			td_em_ALL ? (td_pc_ALL * 100 / td_em_ALL) : -1,
 			window_title_custom_addon ? window_title_custom_addon : "running",
@@ -415,13 +421,15 @@ static void shutdown_emulator ( void )
 	DEBUG("XEMU: Shutdown callback function has been called." NL);
 	if (shutdown_user_function)
 		shutdown_user_function();
-	if (sdl_win)
+	if (sdl_win) {
 		SDL_DestroyWindow(sdl_win);
+		sdl_win = NULL;
+	}
 	atexit_callback_for_console();
 #ifdef HAVE_XEMU_SOCKET_API
 	xemusock_uninit();
 #endif
-	SDL_Quit();
+	//SDL_Quit();
 	if (td_stat_counter) {
 		DEBUGPRINT(NL "TIMING: Xemu CPU usage: avg=%.2f%%, min=%d%%, max=%d%% (%u counts)" NL,
 			td_stat_sum / (double)td_stat_counter, td_stat_min == INT_MAX ? 0 : td_stat_min, td_stat_max,
@@ -433,6 +441,9 @@ static void shutdown_emulator ( void )
 		fclose(debug_fp);
 		debug_fp = NULL;
 	}
+	// It seems, calling SQL_Quit() at least on Windows causes "segfault".
+	// Not sure why, but to be safe, I just skip calling it :(
+	//SDL_Quit();
 }
 
 
@@ -713,8 +724,9 @@ int xemu_post_init (
 	SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");			// 1 = do minimize the SDL_Window if it loses key focus when in fullscreen mode
 	SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");				// 1 = enable screen saver
 	/* texture access / buffer */
-	if (!locked_texture_update)
+	if (!locked_texture_update) {
 		sdl_pixel_buffer = xemu_malloc_ALIGNED(texture_x_size_in_bytes * texture_y_size);
+	}
 	// play a single frame game, to set a consistent colour (all black ...) for the emulator. Also, it reveals possible errors with rendering
 	xemu_render_dummy_frame(black_colour, texture_x_size, texture_y_size);
 	if (chatty_xemu)
@@ -795,9 +807,8 @@ void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_
 {
 	int tail;
 	Uint32 *pp = xemu_start_pixel_buffer_access(&tail);
-	int x, y;
-	for (y = 0; y < texture_y_size; y++) {
-		for (x = 0; x < texture_x_size; x++)
+	for (int y = 0; y < texture_y_size; y++) {
+		for (int x = 0; x < texture_x_size; x++)
 			*(pp++) = colour;
 		pp += tail;
 	}
@@ -818,6 +829,7 @@ Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail )
 {
 	if (sdl_pixel_buffer) {
 		*texture_tail = 0;		// using non-locked texture access, "tail" is always zero
+		xemu_frame_pixel_access_p = sdl_pixel_buffer;
 		return sdl_pixel_buffer;	// using non-locked texture access, return with the malloc'ed buffer
 	} else {
 		int pitch;
@@ -830,6 +842,7 @@ Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail )
 		if (pitch < 0)
 			FATAL("Negative pitch value got for the texture size!");
 		*texture_tail = (pitch >> 2);
+		xemu_frame_pixel_access_p = pixels;
 		return pixels;
 	}
 }
@@ -841,10 +854,12 @@ Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail )
    texture method! */
 void xemu_update_screen ( void )
 {
-	if (sdl_pixel_buffer)
+	if (sdl_pixel_buffer) {
 		SDL_UpdateTexture(sdl_tex, NULL, sdl_pixel_buffer, texture_x_size_in_bytes);
-	else
+	} else {
 		SDL_UnlockTexture(sdl_tex);
+		xemu_frame_pixel_access_p = NULL;	// not valid anymore!
+	}
 	//if (seconds_timer_trigger)
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
 	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);
@@ -888,7 +903,6 @@ void osd_update ()
 
 int osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_entries, int fade_dec, int fade_end )
 {
-	int a;
 	// start with disabled state, so we can abort our init process without need to disable this
 	osd_status = 0;
 	osd_enabled = 0;
@@ -916,7 +930,7 @@ int osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_entries, 
 	osd_ysize = ysize;
 	osd_fade_dec = fade_dec;
 	osd_fade_end = fade_end;
-	for (a = 0; a < palette_entries; a++)
+	for (int a = 0; a < palette_entries; a++)
 		osd_colours[a] = SDL_MapRGBA(sdl_pix_fmt, palette[a << 2], palette[(a << 2) + 1], palette[(a << 2) + 2], palette[(a << 2) + 3]);
 	osd_enabled = 1;	// great, everything is OK, we can set enabled state!
 	osd_available = 1;
@@ -932,8 +946,8 @@ int osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_entries, 
 int osd_init_with_defaults ( void )
 {
 	const Uint8 palette[] = {
-		0, 0, 0, 0x80,		// black with alpha channel 0x80
-		0xFF,0xFF,0xFF,0xFF	// white
+		0xC0, 0x40, 0x40, 0xFF,
+		0xFF, 0xFF, 0x00, 0xFF
 	};
 	return osd_init(
 		OSD_TEXTURE_X_SIZE, OSD_TEXTURE_Y_SIZE,
@@ -1103,9 +1117,9 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 		items = p + 1;
 	}
 	save_mouse_grab();
-	SDL_ShowMessageBox(&messageboxdata, &buttonid);
-	clear_emu_events();
+	SDL_ShowMessageBox_custom(&messageboxdata, &buttonid);
 	xemu_drop_events();
+	clear_emu_events();
 	SDL_RaiseWindow(sdl_win);
 	restore_mouse_grab();
 	xemu_timekeeping_start();

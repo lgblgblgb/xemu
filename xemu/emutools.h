@@ -26,13 +26,21 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <SDL.h>
 #include "xemu/emutools_basicdefs.h"
 
+#ifndef XEMU_NO_SDL_DIALOG_OVERRIDE
+extern int (*SDL_ShowSimpleMessageBox_custom)(Uint32, const char*, const char*, SDL_Window* );
+extern int (*SDL_ShowMessageBox_custom)(const SDL_MessageBoxData*, int* );
+#else
+#define SDL_ShowSimpleMessageBox_custom SDL_ShowSimpleMessageBox
+#define SDL_ShowMessageBox_custom	SDL_ShowMessageBox
+#endif
+
 #ifdef XEMU_ARCH_HTML
 #include <emscripten.h>
 #define EMSCRIPTEN_SDL_BASE_DIR "/files/"
 #define MSG_POPUP_WINDOW(sdlflag, title, msg, win) \
 	do { if (1 || sdlflag == SDL_MESSAGEBOX_ERROR) { EM_ASM_INT({ window.alert(Pointer_stringify($0)); }, msg); } } while(0)
 #else
-#define MSG_POPUP_WINDOW(sdlflag, title, msg, win) SDL_ShowSimpleMessageBox(sdlflag, title, msg, win)
+#define MSG_POPUP_WINDOW(sdlflag, title, msg, win) SDL_ShowSimpleMessageBox_custom(sdlflag, title, msg, win)
 #define INSTALL_DIRECTORY_ENTRY_NAME "default-files"
 #endif
 
@@ -127,6 +135,8 @@ extern int seconds_timer_trigger;
 extern char *sdl_pref_dir, *sdl_base_dir, *sdl_inst_dir;
 extern int sysconsole_is_open;
 extern int sdl_default_win_x_size, sdl_default_win_y_size;
+extern SDL_version sdlver_compiled, sdlver_linked;
+extern Uint32 *xemu_frame_pixel_access_p;
 
 extern int xemu_init_debug ( const char *fn );
 extern time_t xemu_get_unixtime ( void );

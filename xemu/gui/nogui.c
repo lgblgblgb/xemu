@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,12 +20,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 static const struct xemugui_descriptor_st xemunullgui_descriptor = {
-	"none",						// name
-	"Not using GUI - the null GUI :)",		// desc
-	NULL,						// init
-	NULL,						// shutdown
-	NULL,						// iteration
-	NULL,						// file_selector
-	NULL						// xemugtkgui
+	.name		= "none",
+	.description	= "Not using GUI - the null GUI :)",
+	.init		= NULL,
+	.shutdown	= NULL,
+	.iteration	= NULL,
+	.file_selector	= NULL,
+	.popup		= NULL,
+	.info		= NULL
 };
-
