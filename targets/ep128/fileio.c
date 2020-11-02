@@ -1,6 +1,6 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016,2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
+/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2015-2016,2019-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,12 +16,13 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "xemu/emutools_gui.h"
+#include "enterprise128.h"
 #include "fileio.h"
 #include "xemu/z80.h"
 #include "cpu.h"
 #include "emu_rom_interface.h"
-#include "gui.h"
 
 #include <sys/stat.h>
 #include <sys/types.h>
@@ -30,6 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <dirent.h>
 #include <fcntl.h>
 #include <ctype.h>
+#include <errno.h>
 
 #define EXOS_USER_SEGMAP_P (0X3FFFFC + memory)
 #define HOST_OS_STR "Host OS "
@@ -59,12 +61,12 @@ void fileio_init ( const char *dir, const char *subdir )
 		strcpy(fileio_cwd, dir);
 		if (subdir) {
 			strcat(fileio_cwd, subdir);
-			if (subdir[strlen(subdir) - 1] != DIRSEP[0])
-				strcat(fileio_cwd, DIRSEP);
+			if (subdir[strlen(subdir) - 1] != DIRSEP_CHR)
+				strcat(fileio_cwd, DIRSEP_STR);
 		}
 		DEBUGPRINT("FILEIO: base directory is: %s" NL, fileio_cwd);
 		mkdir(fileio_cwd
-#ifndef _WIN32
+#ifndef XEMU_ARCH_WIN
 			, 0777
 #endif
 		);
@@ -127,7 +129,7 @@ static int open_host_file ( const char *dirname, const char *filename, int creat
 			int ret;
 			char buffer[PATH_MAX + 1];
 			closedir(dir);
-			if (CHECK_SNPRINTF(snprintf(buffer, sizeof buffer, "%s%s%s", dirname, DIRSEP, entry->d_name), sizeof buffer))
+			if (CHECK_SNPRINTF(snprintf(buffer, sizeof buffer, "%s%s%s", dirname, DIRSEP_STR, entry->d_name), sizeof buffer))
 				return -1;
 			DEBUGPRINT("FILEIO: opening file \"%s\"" NL, buffer);
 			ret = open(buffer, mode | O_BINARY, 0666);
@@ -145,7 +147,7 @@ static int open_host_file ( const char *dirname, const char *filename, int creat
 	if (create) {
 		int ret;
 		char buffer[PATH_MAX + 1];
-		if (CHECK_SNPRINTF(snprintf(buffer, sizeof buffer, "%s%s%s", dirname, DIRSEP, filename), sizeof buffer))
+		if (CHECK_SNPRINTF(snprintf(buffer, sizeof buffer, "%s%s%s", dirname, DIRSEP_STR, filename), sizeof buffer))
 			return -1;
 		ret = open(buffer, mode | O_BINARY, 0666);
 		if (ret < 0) {
@@ -200,9 +202,9 @@ void fileio_func_open_or_create_channel ( int create )
 		if (create)
 			r = -1;	// GUI for create is not yet supported ...
 		else
-			r = xepgui_file_selector(
-				XEPGUI_FSEL_OPEN | XEPGUI_FSEL_FLAG_STORE_DIR,
-				WINDOW_TITLE " - Select file for opening via FILE: device",
+			r = xemugui_file_selector(
+				XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
+				"Select file for opening via FILE: device",
 				fileio_cwd,
 				fnbuf,
 				sizeof fnbuf

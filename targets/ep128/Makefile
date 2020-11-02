@@ -26,8 +26,8 @@ TARGET		= ep128
 PRG_TARGET	= xep128
 EMU_DESCRIPTION	= Enterprise 128
 
-SRCS_TARGET_xep128	= screen.c main.c cpu.c z180.c nick.c dave.c input.c exdos_wd.c sdext.c rtc.c printer.c zxemu.c primoemu.c emu_rom_interface.c epnet.c apu.c keyboard_mapping.c configuration.c roms.c console.c emu_monitor.c joystick.c fileio.c gui.c snapshot.c
-SRCS_COMMON_xep128	= z80.c z80_dasm.c emutools_socketapi.c lodepng.c
+SRCS_TARGET_xep128	= enterprise128.c cpu.c z180.c nick.c dave.c input_devices.c exdos_wd.c sdext.c rtc.c printer.c zxemu.c primoemu.c emu_rom_interface.c epnet.c apu.c roms.c emu_monitor.c fileio.c snapshot.c ui.c
+SRCS_COMMON_xep128	= emutools.c emutools_files.c emutools_config.c emutools_gui.c emutools_hid.c z80.c z80_dasm.c emutools_socketapi.c lodepng.c
 CFLAGS_TARGET_xep128	= $(SDL2_CFLAGS) $(MATH_CFLAGS) $(SOCKET_CFLAGS) $(XEMUGUI_CFLAGS) $(READLINE_CFLAGS)
 LDFLAGS_TARGET_xep128	= $(SDL2_LIBS) $(MATH_LIBS) $(SOCKET_LIBS) $(XEMUGUI_LIBS) $(READLINE_LIBS)
 

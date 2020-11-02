@@ -1,6 +1,6 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
+/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2015-2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    Partial Wiznet W5300 emulation, using the host OS (which runs the emulator)
    TCP/IP API. Thus, many of the W5300 features won't work, or limited, like:
@@ -32,14 +32,14 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "enterprise128.h"
 
 #ifdef CONFIG_EPNET_SUPPORT
 
 #include "epnet.h"
 #include "cpu.h"
 #include "xemu/emutools_socketapi.h"
-#include <SDL.h>
 #include <unistd.h>
 
 #define direct_mode_epnet_shift 0
@@ -680,11 +680,13 @@ static void epnet_shutdown ( int restart )
 
 void epnet_uninit ( void )
 {
-	epnet_shutdown(0);
-	//xemu_free_sockapi();
-	xemusock_uninit();
-	w5300_does_work = 0;
-	DEBUGPRINT("EPNET: uninit" NL);
+	if (w5300_does_work) {
+		epnet_shutdown(0);
+		//xemu_free_sockapi();
+		xemusock_uninit();
+		w5300_does_work = 0;
+		DEBUGPRINT("EPNET: uninit" NL);
+	}
 }
 
 Uint8 epnet_read_cpu_port ( unsigned int port )

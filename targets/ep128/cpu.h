@@ -1,6 +1,6 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
+/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2015-2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -31,6 +31,7 @@ extern void  xep_rom_write_support ( int towrite );
 extern void  set_ep_cpu ( int type );
 extern int   ep_set_ram_config ( const char *spec );
 extern int   ep_init_ram ( void );
+extern void  ep_clear_ram ( void );
 extern Uint8 read_cpu_byte ( Uint16 addr );
 extern Uint8 read_cpu_byte_by_segmap ( Uint16 addr, Uint8 *segmap );
 extern void  write_cpu_byte_by_segmap ( Uint16 addr, Uint8 *segmap, Uint8 data );

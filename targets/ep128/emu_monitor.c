@@ -1,6 +1,6 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
+/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2015-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,29 +18,25 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define XEP128_NEED_SDL_WMINFO
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "xemu/emutools_config.h"
+#include "enterprise128.h"
 #include "emu_monitor.h"
-#include "xemu/../rom/ep128/xep_rom_syms.h"
+#include "rom/ep128/xep_rom_syms.h"
 #include "xemu/z80_dasm.h"
 #include "cpu.h"
 #include "z180.h"
-#include "configuration.h"
 #include "emu_rom_interface.h"
 #include "fileio.h"
-#include "screen.h"
-#include "console.h"
 #include "nick.h"
-#include "input.h"
+#include "input_devices.h"
 #include "primoemu.h"
 #include "dave.h"
 #include "sdext.h"
 
-#include "main.h"
+//#include <SDL_syswm.h>
 
-#include <SDL.h>
-#include <SDL_syswm.h>
-
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 #include <sysinfoapi.h>
 #endif
 
@@ -59,7 +55,6 @@ struct commands_st {
 	void (*handler)(void);
 };
 
-static const char SHORT_HELP[] = "XEP   version " VERSION "  (Xep128 EMU)\n";
 static const char TOO_LONG_OUTPUT_BUFFER[] = " ...%s*** Too long output%s";
 static const char *_dave_ws_descrs[4] = {
 	"all", "M1", "no", "no"
@@ -121,7 +116,7 @@ static char *get_mon_arg ( int limitrangecode )
 	char *r;
 	while (*input_p && *input_p <= 32)
 		input_p++;
-	if (!*input_p) 
+	if (!*input_p)
 		return NULL;		// no argument left
 	r = input_p;			// remember position of first printable character ...
 	while (*input_p >= limitrangecode)
@@ -365,7 +360,7 @@ static void cmd_cpu ( void ) {
 			if (clk < 1000000 || clk > 12000000)
 				MPRINTF("*** Unknown CPU type to set or it's not a clock value either (1-12 is OK in MHz): %s\n", arg);
 			else {
-				INFO_WINDOW("Setting CPU clock to %.2fMhz",
+				INFO_WINDOW("Setting CPU clock to %.2fMHz",
 					set_cpu_clock(clk) / 1000000.0
 				);
 			}
@@ -387,13 +382,16 @@ static void cmd_cpu ( void ) {
 static void cmd_emu ( void )
 {
 	char buf[1024];
-#ifdef _WIN32
+	char wd[PATH_MAX + 1];
+	if (!getcwd(wd, sizeof wd))
+		strcpy(wd, "???");
+#ifdef XEMU_ARCH_WIN
 
 	DWORD siz = sizeof buf;
 #endif
 	//SDL_VERSION(&sdlver_c);
 	//SDL_GetVersion(&sdlver_l);
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 	//GetUserName(buf, &siz);
 	GetComputerNameEx(ComputerNamePhysicalNetBIOS, buf, &siz);
 #define OS_KIND "Win32"
@@ -406,7 +404,7 @@ static void cmd_emu ( void )
 		"Drivers: %s %s\n"
 		"SDL c/l: %d.%d.%d %d.%d.%d\n"
 		"Base path: %s\nPref path: %s\nStart dir: %s\nSD img: %s [%dM]\n",
-#ifdef _WIN32
+#ifdef XEMU_ARCH_WIN
 		getenv("USERNAME"),
 #else
 		getenv("USER"),
@@ -414,14 +412,14 @@ static void cmd_emu ( void )
 		buf, OS_KIND, SDL_GetPlatform(), SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver(),
 		sdlver_compiled.major, sdlver_compiled.minor, sdlver_compiled.patch,
 		sdlver_linked.major, sdlver_linked.minor, sdlver_linked.patch,
-		app_base_path, app_pref_path, current_directory,
+		sdl_base_dir, sdl_pref_dir, wd,
 #ifdef CONFIG_SDEXT_SUPPORT
 		sdimg_path, (int)(sd_card_size >> 20)
 #else
 		"<not-supported>", 0
 #endif
 	);
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 	// This assumes, that the "JS booter" sets these ENV variables ...
 	MPRINTF("Browser: %s\n", getenv("XEMU_EN_BROWSER"));
 	MPRINTF("Origin: %s\n", getenv("XEMU_EN_ORIGIN"));
@@ -487,13 +485,14 @@ static void cmd_showkeys ( void )
 
 static void cmd_close ( void )
 {
-	console_close_window();
+	monitor_stop();
+	sysconsole_close(NULL);
 }
 
 
 static void cmd_romname ( void )
 {
-	MPRINTF("%s", SHORT_HELP);
+	MPRINTF("XEP   version %s\n", XEMU_BUILDINFO_CDATE);
 }
 
 
@@ -521,7 +520,7 @@ static void cmd_lpt ( void )
 static void cmd_pause ( void )
 {
 	paused = !paused;
-	OSD("Emulation %s", paused ? "paused" : "resumed");
+	OSD(-1, -1, "Emulation %s", paused ? "paused" : "resumed");
 }
 
 
@@ -556,27 +555,22 @@ static void cmd_sdl ( void )
 			MPRINTF("Display #%d %dx%dpx @ %dHz %i bpp (%s)\n", a, display.w, display.h, display.refresh_rate,
 				SDL_BITSPERPIXEL(display.format), SDL_GetPixelFormatName(display.format)
 			);
-	switch (sdl_wminfo.subsystem) {
-		default:
-		case SDL_SYSWM_UNKNOWN:
-			subsystem = "Unknown System";
-			break;
-		case SDL_SYSWM_WINDOWS:	subsystem = "Microsoft Windows(TM)";	break;
-		case SDL_SYSWM_X11:	subsystem = "X Window System";		break;
-		case SDL_SYSWM_WINRT:	subsystem = "WinRT";			break;
-		case SDL_SYSWM_DIRECTFB:subsystem = "DirectFB";			break;
-		case SDL_SYSWM_COCOA:	subsystem = "Apple OS X";		break;
-		case SDL_SYSWM_UIKIT:	subsystem = "UIKit";			break;
-		case SDL_SYSWM_WAYLAND:	subsystem = "Wayland";			break;
-		case SDL_SYSWM_MIR:	subsystem = "Mir";			break;
-		case SDL_SYSWM_ANDROID:	subsystem = "Android";			break;
-	}
-	MPRINTF(WINDOW_TITLE " is running with SDL version %d.%d.%d on %s (id=%d)\n",
-		(int)sdl_wminfo.version.major,
-		(int)sdl_wminfo.version.minor,
-		(int)sdl_wminfo.version.patch,
-		subsystem,
-		sdl_wminfo.subsystem
+#if defined(XEMU_ARCH_OSX)
+	subsystem = "MacOS";
+#elif defined(XEMU_ARCH_WIN)
+	subsystem = "Windows";
+#elif defined(XEMU_ARCH_HTML)
+	subsystem = "Web-browser";
+#elif defined(XEMU_ARCH_LINUX)
+	subsystem = "Linux";
+#else
+	subsystem = "UNIX";
+#endif
+	MPRINTF(XEP128_NAME " is running with SDL version %d.%d.%d on %s\n",
+		(int)sdlver_linked.major,
+		(int)sdlver_linked.minor,
+		(int)sdlver_linked.patch,
+		subsystem
 	);
 }
 
@@ -605,12 +599,12 @@ static void cmd_cd ( void )
 		char *r_scwd = getcwd(cwd_old, PATH_MAX);	// Save working directory
 		int r;
 		if (chdir(fileio_cwd))	// set old FILE: dir
-			r = chdir(DIRSEP);
+			r = chdir(DIRSEP_STR);
 		r_cd = chdir(arg);	// do the CD - maybe relative - to the old one
 		if (!r_cd) {
 			if (getcwd(fileio_cwd, PATH_MAX)) { // store result directory as new FILE: dir
-				if (fileio_cwd[strlen(fileio_cwd) - 1] != DIRSEP[0])
-					strcat(fileio_cwd, DIRSEP);
+				if (fileio_cwd[strlen(fileio_cwd) - 1] != DIRSEP_CHR)
+					strcat(fileio_cwd, DIRSEP_STR);
 			}
 		}
 		if (!r_scwd)
@@ -644,7 +638,7 @@ static void cmd_dir ( void )
 		struct stat st;
 		if (entry->d_name[0] == '.')
 			continue;
-		if (CHECK_SNPRINTF(snprintf(fn, sizeof fn, "%s%s%s", fileio_cwd, DIRSEP, entry->d_name), sizeof fn))
+		if (CHECK_SNPRINTF(snprintf(fn, sizeof fn, "%s%s%s", fileio_cwd, DIRSEP_STR, entry->d_name), sizeof fn))
 			continue;
 		if (!stat(fn, &st)) {
 			char size_info[10];
@@ -666,31 +660,31 @@ static void cmd_dir ( void )
 static void cmd_help ( void );
 
 static const struct commands_st commands[] = {
-	{ "AUDIO",	"", 3, "Tries to turn lame audio emulation", cmd_audio },
-	{ "CD",		"", 3, "Host OS directory change/query for FILE:", cmd_cd },
-	{ "CLOSE",	"", 3, "Close console/monitor window", cmd_close },
-	{ "CPU",	"", 3, "Set/query CPU type/clock", cmd_cpu },
-	{ "DDN",	"", 1, "Set default device name via EXOS 19", cmd_ddn },
-	{ "DIR",	"", 3, "Directory listing from host OS for FILE:", cmd_dir },
+	{ "AUDIO",	"",  3, "Tries to turn lame audio emulation", cmd_audio },
+	{ "CD",		"",  3, "Host OS directory change/query for FILE:", cmd_cd },
+	{ "CLOSE",	"",  3, "Close console/monitor window", cmd_close },
+	{ "CPU",	"",  3, "Set/query CPU type/clock", cmd_cpu },
+	{ "DDN",	"",  1, "Set default device name via EXOS 19", cmd_ddn },
+	{ "DIR",	"",  3, "Directory listing from host OS for FILE:", cmd_dir },
 	{ "DISASM",	"D", 3, "Disassembly memory", cmd_disasm },
-	{ "EMU",	"", 3, "Emulation info", cmd_emu },
-	{ "EXIT",	"", 3, "Exit Xep128", cmd_exit },
-	{ "EXOS",	"", 3, "EXOS information", cmd_exos },
+	{ "EMU",	"",  3, "Emulation info", cmd_emu },
+	{ "EXIT",	"",  3, "Exit Xep128", cmd_exit },
+	{ "EXOS",	"",  3, "EXOS information", cmd_exos },
 	{ "HELP",	"?", 3, "Guess, what ;-)", cmd_help },
-	{ "LPT",	"", 3, "Shows LPT (can be long!)", cmd_lpt },
+	{ "LPT",	"",  3, "Shows LPT (can be long!)", cmd_lpt },
 	{ "MEMDUMP",	"M", 3, "Memory dump", cmd_memdump },
-	{ "MOUSE",	"", 3, "Configure or query mouse mode", cmd_mouse },
-	{ "PAUSE",	"", 2, "Pause/resume emulation", cmd_pause },
-	{ "PORTS",	"", 3, "I/O port values (written)", cmd_ports },
-	{ "PRIMO",	"", 3, "Primo emulation", cmd_primo },
-	{ "RAM",	"", 3, "Set RAM size/report", cmd_ram },
+	{ "MOUSE",	"",  3, "Configure or query mouse mode", cmd_mouse },
+	{ "PAUSE",	"",  2, "Pause/resume emulation", cmd_pause },
+	{ "PORTS",	"",  3, "I/O port values (written)", cmd_ports },
+	{ "PRIMO",	"",  3, "Primo emulation", cmd_primo },
+	{ "RAM",	"",  3, "Set RAM size/report", cmd_ram },
 	{ "REGS",	"R", 3, "Show Z80 registers", cmd_registers },
-	{ "ROMNAME",	"", 3, "ROM id string", cmd_romname },
-	{ "SDL",        "", 3,  "Get SDL related info", cmd_sdl },
-	{ "SETDATE",	"", 1, "Set EXOS time/date by emulator" , cmd_setdate },
-	{ "SHOWKEYS",	"", 3, "Show/hide PC/SDL key symbols", cmd_showkeys },
-	{ "TESTARGS",   "", 3, "Just for testing monitor statement parsing, not so useful for others", cmd_testargs },
-	{ NULL,		NULL, 0, NULL, NULL }
+	{ "ROMNAME",	"",  3, "ROM id string", cmd_romname },
+	{ "SDL",        "",  3,  "Get SDL related info", cmd_sdl },
+	{ "SETDATE",	"",  1, "Set EXOS time/date by emulator" , cmd_setdate },
+	{ "SHOWKEYS",	"",  3, "Show/hide PC/SDL key symbols", cmd_showkeys },
+	{ "TESTARGS",   "",  3, "Just for testing monitor statement parsing, not so useful for others", cmd_testargs },
+	{ NULL,		NULL,0, NULL, NULL }
 };
 static const char help_for_all_desc[] = "\nFor help on all comamnds: (:XEP) HELP\n";
 
@@ -714,8 +708,8 @@ static void cmd_help ( void ) {
 		}
 		MPRINTF("*** No help/command found '%s'%s", arg, help_for_all_desc);
 	} else {
-	        MPRINTF("Helper ROM: %s%s %s %s\nBuilt on: %s\n%s\nGIT: %s\nCompiler: %s %s\n\nCommands:",
-			SHORT_HELP, WINDOW_TITLE, VERSION, COPYRIGHT,
+	        MPRINTF("Helper ROM: %s %s %s\nBuilt on: %s\n%s\nGIT: %s\nCompiler: %s %s\n\nCommands:",
+			XEP128_NAME, XEMU_BUILDINFO_CDATE, COPYRIGHT_YEARS " LGB",
 			XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT, XEMU_BUILDINFO_GIT, CC_TYPE, XEMU_BUILDINFO_CC
 		);
 		while (cmds->name) {
@@ -774,7 +768,7 @@ void monitor_process_queued ( void )
 	if (is_queued_command) {
 		char buffer[8192];
 		monitor_execute(queued_command, 2, buffer, sizeof buffer, NL);
-#ifdef __EMSCRIPTEN__
+#ifdef XEMU_ARCH_HTML
 		EM_ASM_INT({
 			Module.Xemu.getFromMonitor(Pointer_stringify($0));
 		}, buffer);
@@ -803,3 +797,119 @@ int monitor_queue_command ( char *buffer )
 	return 0;
 }
 
+// EX console.c !!!!
+
+#ifdef NO_CONSOLE
+//int console_is_open = 0;
+void console_close_window ( void ) {
+}
+void console_close_window_on_exit ( void ) {
+}
+void console_open_window ( void ) {
+}
+void console_monitor_ready ( void ) {
+}
+#else
+
+
+#ifdef XEMU_ARCH_WIN
+//#	include <windows.h>
+//#	include <stdio.h>
+//#	include <io.h>
+//#	include <fcntl.h>
+#else
+#	ifndef XEMU_HAS_READLINE
+#		error "We need libreadline for this target/platform, but XEMU_HAS_READLINE is not defined. Maybe libreadline cannot be detected?"
+#	endif
+#	include <readline/readline.h>
+#	include <readline/history.h>
+#endif
+
+#define USE_MONITOR	1
+
+static volatile int monitor_running = 0;
+static SDL_Thread *mont = NULL;
+
+
+/* Monitor thread waits for console input and enqueues the request.
+   The thread is NOT executes the command itself! Even the answer
+   is printed by the main thread already!
+   Honestly, I was lazy, this may be also implemented in the main
+   main thread, with select() based scheme / async I/O on UNIX, but I have
+   no idea about Windows ... */
+static int console_monitor_thread ( void *ptr )
+{
+	printf("Welcome to " XEP128_NAME " monitor. Use \"help\" for help" NL);
+	while (monitor_running) {
+		char *p;
+#ifdef XEMU_ARCH_WIN
+		char buffer[256];
+		printf(XEP128_NAME "> ");
+		p = fgets(buffer, sizeof buffer, stdin);
+#else
+		p = readline(XEP128_NAME "> ");
+#endif
+		if (p == NULL) {
+			SDL_Delay(10);	// avoid flooding the CPU in case of I/O problem for fgets ...
+		} else {
+			// Queue the command!
+			while (monitor_queue_command(p) && monitor_running)
+				SDL_Delay(10);	// avoid flooding the CPU in case of not processed-yet command in the "queue" buffer
+#ifndef XEMU_ARCH_WIN
+			if (p[0])
+				add_history(p);
+			free(p);
+#endif
+			// Wait for command completed
+			while (monitor_queue_used() && monitor_running)
+				SDL_Delay(10);	// avoid flooding the CPU while waiting for command being processed and answered on the console
+		}
+	}
+	DEBUGPRINT("MONITOR: thread is about to exit" NL);
+	return 0;
+}
+
+
+int monitor_start ( void )
+{
+	if (monitor_running || !USE_MONITOR)
+		return 0;
+	sysconsole_open();	// make sure we have system console so we can run the monitor on something ...
+	if (!sysconsole_is_open) {
+		ERROR_WINDOW("Cannot get system console to run monitor program on");
+		return 1;		// could not open system console?
+	}
+	DEBUGPRINT("MONITOR: starting" NL);
+	monitor_running = 1;
+	mont = SDL_CreateThread(console_monitor_thread, XEP128_NAME " monitor", NULL);
+	if (mont == NULL)
+		monitor_running = 0;
+	return 0;
+}
+
+
+int monitor_check ( void )
+{
+	return (mont != NULL);
+}
+
+
+int monitor_stop ( void )
+{
+	int ret;
+	if (!monitor_running)
+		return 0;
+	DEBUGPRINT("MONITOR: stopping" NL);
+	monitor_running = 0;
+	if (mont != NULL) {
+		printf(NL NL "*** PRESS ENTER TO EXIT ***" NL);
+		// Though Info window here is overkill, I am still interested why it causes a segfault when I've tried ...
+		//INFO_WINDOW("Monitor runs on console. You must press ENTER there to continue");
+		SDL_WaitThread(mont, &ret);
+		mont = NULL;
+		DEBUGPRINT("MONITOR: thread joined, status code is %d" NL, ret);
+	}
+	return 1;
+}
+
+#endif

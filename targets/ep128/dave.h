@@ -1,6 +1,6 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
+/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2015-2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,8 +16,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEP128_DAVE_H_INCLUDED
-#define __XEP128_DAVE_H_INCLUDED
+#ifndef XEMU_EP128_DAVE_H_INCLUDED
+#define XEMU_EP128_DAVE_H_INCLUDED
 
 #define AUDIO_SOURCE_DAVE		0
 #define AUDIO_SOURCE_PRINTER_COVOX	1
@@ -25,13 +25,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 extern int audio_source;
 extern Uint8 dave_int_read;
-extern Uint8 kbd_matrix[16];
+//extern Uint8 kbd_matrix[16];
 extern int kbd_selector, cpu_cycles_per_dave_tick, mem_wait_states;
 
 extern void audio_init ( int enable );
 extern void audio_start ( void );
 extern void audio_stop ( void );
 extern void audio_close ( void );
+extern int  is_audio_emulation_active ( void );
 
 extern void dave_set_clock ( void );
 extern void kbd_matrix_reset ( void );

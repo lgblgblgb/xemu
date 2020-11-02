@@ -1,6 +1,6 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
+/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2015-2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -17,7 +17,9 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "xemu/emutools_hid.h"
+#include "enterprise128.h"
 #include "cpu.h"
 #include "apu.h"
 #include "z180.h"
@@ -29,7 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "primoemu.h"
 #include "epnet.h"
 #include "roms.h"
-#include "input.h"
+#include "input_devices.h"
 #include "emu_rom_interface.h"
 #include "sdext.h"
 #include "exdos_wd.h"
@@ -181,6 +183,13 @@ int ep_set_ram_config ( const char *spec )
 }
 
 
+void ep_clear_ram ( void )
+{
+	for (int a = 0; a < 0x100; a++)
+		if (memory_segment_map[a] == RAM_SEGMENT || memory_segment_map[a] == VRAM_SEGMENT)
+			memset(memory + (a << 14), 0xFF, 0x4000);
+}
+
 
 int ep_init_ram ( void )
 {
@@ -207,8 +216,7 @@ int ep_init_ram ( void )
 				DEBUGPRINT("CONFIG: MEM: %s" NL, dbuf);
 				strcat(dbuf, "\n");
 				s = mem_desc ? strlen(mem_desc) : 0;
-				mem_desc = realloc(mem_desc, s + strlen(dbuf) + 256);
-				CHECK_MALLOC(mem_desc);
+				mem_desc = xemu_realloc(mem_desc, s + strlen(dbuf) + 256);
 				if (!s)
 					*mem_desc = '\0';
 				strcat(mem_desc, dbuf);
@@ -276,7 +284,7 @@ void z80ex_mwrite_cb(Z80EX_WORD addr, Z80EX_BYTE value) {
 			zxemu_attribute_memory_write(phys & 0xFFFF, value);
 		return;
 	}
-	if (mem_ws_all) 
+	if (mem_ws_all)
 		z80ex_w_states(mem_wait_states);
 	//if (phys >= ram_start)
 	if (is_ram_seg[phys >> 14])
@@ -531,7 +539,7 @@ void z80ex_pwrite_cb(Z80EX_WORD port16, Z80EX_BYTE value) {
 				mem_ws_m1  = 0;
 			}
 			dave_set_clock();
-			DEBUG("DAVE: BF register is written -> W_ALL=%d W_M1=%d CLOCK=%dMhz" NL, mem_ws_all, mem_ws_m1, (value & 2) ? 12 : 8);
+			DEBUG("DAVE: BF register is written -> W_ALL=%d W_M1=%d CLOCK=%dMHz" NL, mem_ws_all, mem_ws_m1, (value & 2) ? 12 : 8);
 			break;
 		/* NICK registers */
 		case 0x80: case 0x84: case 0x88: case 0x8C:
@@ -626,4 +634,3 @@ void ep_reset ( void )
 	primo_switch(0);
 	nmi_pending = 0;
 }
-
