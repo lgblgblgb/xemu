@@ -1,6 +1,4 @@
-/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
-   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and MEGA65 as well.
+/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -197,7 +195,7 @@ int xemu_tuntap_select ( int flags, int timeout_usecs )
 /* dev_in: device name to attach too, if it's zero sized string or NULL,
    the kernel will allocate a new name,
    but for that Xemu needs network admin capability (typically being 'root')
-   which is not so much a good idea! 
+   which is not so much a good idea!
    dev_out: a large enough buffer where name will be written back to. If it's
    NULL pointer, it won't be used.
    dev_out_size: size of dev_out buffer storage

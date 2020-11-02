@@ -42,9 +42,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 */
 
 
-#define DEBUGDMA(...)   DEBUG(__VA_ARGS__)
-//#define DEBUGDMA(...) DEBUGPRINT(__VA_ARGS__)
+//#define DO_DEBUG_DMA
 
+#ifdef DO_DEBUG_DMA
+#	define DEBUGDMA(...) DEBUGPRINT(__VA_ARGS__)
+#else
+#	define DEBUGDMA(...)   DEBUG(__VA_ARGS__)
+#endif
 
 Uint8 dma_status;
 Uint8 dma_registers[16];		// The four DMA registers (with last values written by the CPU)
@@ -149,8 +153,19 @@ static struct {
 // Unlike the functions above, DMA list read is always memory (not I/O)
 // Also the "step" is always one. So it's a bit special case ... even on M65 we don't use fixed point math here, just pure number
 // FIXME: I guess here, that reading DMA list also warps within a 64K area
+#ifndef DO_DEBUG_DMA
 #define DMA_READ_LIST_NEXT_BYTE()	DMA_LIST_READER_FUNC(((list_addr++) & 0xFFFF) | list_base)
+#else
+static int dma_list_entry_pos = 0;
 
+static Uint8 DMA_READ_LIST_NEXT_BYTE ( void )
+{
+	int addr = ((list_addr++) & 0xFFFF) | list_base;
+	Uint8 data = DMA_LIST_READER_FUNC(addr);
+	DEBUGPRINT("DMA: reading DMA (rev#%d) list from $%08X ($%02X) [#%d]: $%02X" NL, dma_chip_revision, addr, (list_addr-1) & 0xFFFF, dma_list_entry_pos++, data);
+	return data;
+}
+#endif
 
 
 static XEMU_INLINE void copy_next ( void )
@@ -375,6 +390,9 @@ int dma_update ( void )
 		}
 #endif
 		// NOTE: in case of MEGA65: DMA_READ_LIST_NEXT_BYTE() uses the "megabyte" part already (taken from reg#4, in case if that reg is written)
+#ifdef DO_DEBUG_DMA
+		dma_list_entry_pos = 0;
+#endif
 		command            = DMA_READ_LIST_NEXT_BYTE();
 		dma_op             = (enum dma_op_types)(command & 3);
 		modulo.col_limit   = DMA_READ_LIST_NEXT_BYTE();

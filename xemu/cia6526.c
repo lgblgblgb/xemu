@@ -1,6 +1,4 @@
-/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
-   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and MEGA65 as well.
+/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is a *VERY* lame CIA 6526 emulation, lacks of TOD, mostly to SDR stuff, timing,
@@ -27,7 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  * Note: this is not an exact nor complete emulation!
  * The only goal is to support what Commodore 64/65(?) uses even
  * implemented incorrectly (not cycle exact, simplified, ignored
- * conditions, etc). 
+ * conditions, etc).
  * Some doc:
  *      http://archive.6502.org/datasheets/mos_6526_cia.pdf
  *      http://www.c64-wiki.com/index.php/CIA
