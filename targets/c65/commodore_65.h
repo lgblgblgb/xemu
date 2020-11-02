@@ -44,6 +44,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 extern Uint8 memory[0x100000];
 extern char emulator_speed_title[];
+extern int register_screenshot_request;
 
 extern void  apply_memory_config ( void );
 extern Uint8 io_read  ( int addr );
@@ -52,5 +53,6 @@ extern void  write_phys_mem ( int addr, Uint8 data );
 extern Uint8 read_phys_mem  ( int addr );
 extern void  c65_reset ( void );
 extern int   c65_reset_asked ( void );
+extern int   dump_memory ( const char *fn );
 
 #endif

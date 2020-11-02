@@ -733,6 +733,16 @@ void cpu65_write_rmw_callback ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 }
 
 
+int dump_memory ( const char *fn )
+{
+        if (fn && *fn) {
+                DEBUGPRINT("MEM: Dumping memory into file: %s" NL, fn);
+                return xemu_save_file(fn, memory, 0x20000, "Cannot dump memory into file");
+        } else {
+                return 0;
+        }
+}
+
 
 static void shutdown_callback ( void )
 {
@@ -741,16 +751,9 @@ static void shutdown_callback ( void )
 		DEBUG("VIC-3 register $%02X is %02X" NL, a, vic3_registers[a]);
 	cia_dump_state (&cia1);
 	cia_dump_state (&cia2);
-	const char *p = xemucfg_get_str("dumpmem");
-	if (p) {
-		// Dump memory, so some can inspect the result (low 128K, RAM only)
-		FILE *f = fopen(p, "wb");
-		if (f) {
-			fwrite(memory, 1, 0x20000, f);
-			fclose(f);
-			DEBUGPRINT("MEM: Memory has been dumped into file: %s" NL, p);
-		}
-	}
+#if !defined(XEMU_ARCH_HTML)
+	(void)dump_memory(xemucfg_get_str("dumpmem"));
+#endif
 	DEBUGPRINT("Scanline render info = \"%s\"" NL, scanline_render_debug_info);
 	DEBUGPRINT("VIC3: D011=$%02X D018=$%02X D030=$%02X D031=$%02X" NL,
 		vic3_registers[0x11], vic3_registers[0x18], vic3_registers[0x30], vic3_registers[0x31]
@@ -817,8 +820,36 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 }
 
 
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+int register_screenshot_request = 0;
+static inline void do_pending_screenshot ( void )
+{
+	if (!register_screenshot_request)
+		return;
+	register_screenshot_request = 0;
+	if (!xemu_screenshot_png(
+		NULL, NULL,
+		1,
+		2,
+		NULL,	// allow function to figure it out ;)
+		SCREEN_WIDTH,
+		SCREEN_HEIGHT
+	)) {
+		const char *p = strrchr(xemu_screenshot_full_path, DIRSEP_CHR);
+		if (p)
+			OSD(-1, -1, "%s", p + 1);
+	}
+}
+#endif
+
+
 static void update_emulator ( void )
 {
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+	// DO call this _RIGHT BEFORE_ xemu_update_screen() otherwise the texture
+	// does not exist anymore OR not the full frame is rendered yet for screenshot!
+	do_pending_screenshot();
+#endif
 	xemu_update_screen();
 	hid_handle_all_sdl_events();
 	xemugui_iteration();

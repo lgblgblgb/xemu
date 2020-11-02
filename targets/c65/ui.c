@@ -105,55 +105,91 @@ static void ui_run_prg_by_browsing ( void )
 		DEBUGPRINT("UI: file selection for PRG injection was cancalled." NL);
 }
 
-
-
-#if 0
-static void ui_native_os_file_browser ( void )
+static void ui_dump_memory ( void )
 {
-	xemuexec_open_native_file_browser(sdl_pref_dir);
-}
-#endif
-
-
-static void osd_key_debugger ( void )
-{
-	hid_show_osd_keys = !hid_show_osd_keys;
-	OSD(-1, -1, "OSD key debugger turned %s", hid_show_osd_keys ? "ON" : "OFF");
-}
-
-static void enable_mouse_grab ( void )
-{
-	if (!allow_mouse_grab) {
-		allow_mouse_grab = 1;
-		OSD(-1, -1, "ENABLED. Left click to activate!");
+	char fnbuf[PATH_MAX + 1];
+	static char dir[PATH_MAX + 1] = "";
+	if (!xemugui_file_selector(
+		XEMUGUI_FSEL_SAVE | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		"Dump memory content into file",
+		dir,
+		fnbuf,
+		sizeof fnbuf
+	)) {
+		dump_memory(fnbuf);
 	}
 }
+
+static void reset_into_c64_mode ( void )
+{
+	if (c65_reset_asked()) {
+		hid_set_autoreleased_key(0x75);
+		KBD_PRESS_KEY(0x75);	// C= key is pressed for C64 mode
+	}
+}
+
+static void reset_into_c65_mode ( void )
+{
+	if (c65_reset_asked()) {
+		KBD_RELEASE_KEY(0x75);
+	}
+}
+
+#if 0
+static void ui_set_scale_filtering ( const struct menu_st *m, int *query )
+{
+	static char enabled[2] = "0";
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, (enabled[0] & 1));
+	enabled[0] ^= 1;
+	SDL_SetHint("SDL_HINT_RENDER_SCALE_QUALITY", enabled);
+}
+#endif
 
 
 /**** MENU SYSTEM ****/
 
 
 static const struct menu_st menu_display[] = {
-	{ "Fullscreen",    	XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)0 },
-	{ "Window - 100%", 	XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)1 },
-	{ "Window - 200%", 	XEMUGUI_MENUID_CALLABLE, xemugui_cb_windowsize, (void*)2 },
-	{ "OSD key debugger",	XEMUGUI_MENUID_CALLABLE, xemugui_cb_call_user_data, osd_key_debugger },
-	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, enable_mouse_grab },
+	{ "Fullscreen",    		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)0 },
+	{ "Window - 100%", 		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)1 },
+	{ "Window - 200%", 		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize, (void*)2 },
+	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
+//	{ "Enable scale filtering",	XEMUGUI_MENUID_CALLABLE |
+//					XEMUGUI_MENUFLAG_QUERYBACK,	ui_set_scale_filtering, NULL },
 	{ NULL }
 };
-
-
+static const struct menu_st menu_debug[] = {
+	{ "OSD key debugger",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
+	{ "Dump memory info file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_memory },
+	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_native_os_prefdir_browser, NULL },
+	{ NULL }
+};
+static const struct menu_st menu_reset[] = {
+	{ "Reset C65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode },
+	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode },
+	{ NULL }
+};
 static const struct menu_st menu_main[] = {
-	{ "Display",			XEMUGUI_MENUID_SUBMENU,		menu_display, NULL },
-	{ "Reset C65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, c65_reset_asked },
+	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
+	{ "Reset", 	 		XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
+	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
 	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
-//	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_native_os_file_browser },
-#ifdef XEMU_ARCH_WIN
-	{ "System console", XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK, xemugui_cb_sysconsole, NULL },
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &register_screenshot_request },
 #endif
-	{ "About", XEMUGUI_MENUID_CALLABLE, xemugui_cb_about_window, NULL },
-	{ "Quit", XEMUGUI_MENUID_CALLABLE, xemugui_cb_call_quit_if_sure, NULL },
+#ifdef XEMU_ARCH_WIN
+	{ "System console",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_sysconsole, NULL },
+#endif
+	{ "About",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_about_window, NULL },
+#ifdef HAVE_XEMU_EXEC_API
+	{ "Help (on-line)",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_web_help_main, NULL },
+#endif
+	{ "Quit",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_quit_if_sure, NULL },
 	{ NULL }
 };
 
