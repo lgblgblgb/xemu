@@ -3,8 +3,8 @@ LodePNG version 20150418
 
 Copyright (c) 2005-2015 Lode Vandevenne
 
-!! Xep128 WARNING: this is not the original distribution of LodePNG,
-!! some lighter modifications have been done!
+!! XEMU WARNING: this is not the original distribution of LodePNG,
+!! some lighter modifications have been done! - LGB
 
 This software is provided 'as-is', without any express or implied
 warranty. In no event will the authors be held liable for any damages
@@ -31,11 +31,7 @@ The manual and changelog are in the header file "lodepng.h"
 */
 
 
-//#ifdef NO_SCREENSHOT
-//#warning "Screenshot with LodePNG is disabled by configuration."
-//#else
-//#include "xep128.h"
-#ifdef CONFIG_USE_LODEPNG
+#ifdef XEMU_USE_LODEPNG
 
 #include "xemu/lodepng.h"
 
