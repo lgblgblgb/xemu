@@ -236,7 +236,7 @@ else returns T-states taken by last opcode executed*/
 #define z80ex_op_tstate() z80ex.tstate
 
 /*generate <w_states> Wait-states. (T-state callback will be called <w_states> times, when defined).
-should be used to simulate WAIT signal or disabled CLK*/ 
+should be used to simulate WAIT signal or disabled CLK*/
 extern void z80ex_w_states(unsigned w_states);
 
 /*spend one T-state doing nothing (often IO devices cannot handle data request on

@@ -2312,5 +2312,5 @@ static const z80ex_opcode_fn opcodes_base[0x100] = {
  op_0xf0       , op_0xf1       , op_0xf2       , op_0xf3       ,
  op_0xf4       , op_0xf5       , op_0xf6       , op_0xf7       ,
  op_0xf8       , op_0xf9       , op_0xfa       , op_0xfb       ,
- op_0xfc       , op_p_FD       , op_0xfe       , op_0xff       
+ op_0xfc       , op_p_FD       , op_0xfe       , op_0xff
 };

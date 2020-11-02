@@ -3,12 +3,12 @@
 - z80ex_get_version() was fixed to return the correct version string
 
 19.01.2013 - 1.1.20rev1
-- fixed library version mismatch between Makefile and CMakeLists.txt 
+- fixed library version mismatch between Makefile and CMakeLists.txt
 	(thanks to John Paul Adrian Glaubitz)
 
 02.01.2013 - 1.1.20
 - cleanup of included build documentation
-- email adress change 
+- email adress change
 
 01.09.2012
 - TOOLS_PREFIX Makefile option, useful for cross-compiling [Stewart Kay]
@@ -72,8 +72,8 @@
 
 18.02.2006
 - fixed undocumented flag effects for BIT n,(IX+d)
-- undocumented flag effects implemented for block I/O operations 
-- undocumented internal register MEMPTR emulation (incomplete, more info needed) 
+- undocumented flag effects implemented for block I/O operations
+- undocumented internal register MEMPTR emulation (incomplete, more info needed)
 
 16.02.2006
 - fixed sized data types declaration for MSVC (thanks to SMT)

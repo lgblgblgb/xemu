@@ -205,7 +205,7 @@ int z80ex_nmi(void)
 	/*IFF2=IFF1;*/ /* contrary to zilog z80 docs, IFF2 is not modified on NMI. proved by Slava Tretiak aka restorer */
 	IFF1 = 0;
 
-	TSTATES(5); 
+	TSTATES(5);
 	
 	z80ex_mwrite_cb(--SP, z80ex.pc.b.h); /* PUSH PC -- high byte */
 	TSTATES(3);
@@ -273,7 +273,7 @@ int z80ex_int(void)
 			break;
 		
 		case IM1:
-			R++; 
+			R++;
 			TSTATES(2); /* two extra wait-states */
 			/* An RST 38h is executed, no matter what value is put on the bus or what
 			value the I register has. 13 t-states (2 extra + 11 for RST). */
@@ -281,7 +281,7 @@ int z80ex_int(void)
 			break;
 		
 		case IM2:
-			R++; 
+			R++;
 			/* takes 19 clock periods to complete (seven to fetch the
 			lower eight bits from the interrupting device, six to save the program
 			counter, and six to obtain the jump address) */
