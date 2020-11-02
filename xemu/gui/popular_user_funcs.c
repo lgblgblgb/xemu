@@ -119,45 +119,51 @@ void xemugui_cb_native_os_prefdir_browser ( const struct menu_st *m, int *query 
 	if (!query)
 		xemuexec_open_native_file_browser(sdl_pref_dir);
 }
-static void _open_url ( char *url )
+static void _open_url ( const char *url_in, const char *par_list[] )
 {
-	if (ARE_YOU_SURE("Can I open a web browser instance to be able to serve your request?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
-		xemuexec_open_native_file_browser(url);
+	if (ARE_YOU_SURE("Can I open a web browser instance/window/tab to be able to serve your request?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
+		char buffer[2048];
+		char *b = buffer + sprintf(buffer, "%s", url_in);
+		for (int i = 0; par_list && par_list[i]; i++)
+			if (!(i & 1))
+				b += sprintf(b, "%c%s", !i ? '?' : '&', par_list[i]);
+			else {
+				*b++ = '=';
+				const char *u = par_list[i];
+				while (*u)
+					if ((*u >= 'a' && *u <= 'z') || (*u >= '0' && *u <= '9') || (*u >= 'A' && *u <= 'Z'))
+						*b++ = *u++;
+					else
+						b += sprintf(b, "%%%02X", (unsigned char)(*u++));
+			}
+		*b = '\0';
+		DEBUGPRINT("BROWSER: requesting web resource to open: %s" NL, buffer);
+		xemuexec_open_native_file_browser(buffer);
+	}
 }
 void xemugui_cb_web_url ( const struct menu_st *m, int *query )
 {
 	if (!query)
-		_open_url((char*)m->user_data);
+		_open_url((char*)m->user_data, NULL);
 }
-//#define XEMU_ONLINE_HELP_HANDLER_URL	"http://lgb.hu/xemu.php"
-//#define XEMU_ONLINE_HELP_HANDLER_URL	"https://github.lgb.hu/xemu/xemuonlinerequest.html"
-#define XEMU_ONLINE_HELP_HANDLER_URL	"https://lgblgblgb.github.io/xemu/xemuonlinerequest.html"
-#define XEMU_ONLINE_HELP_GET_VAR	"xemuonlinehelprequesttoken"
 #include <time.h>
+#include "xemu/online_resources.h"
 void xemugui_cb_web_help_main ( const struct menu_st *m, int *query )
 {
 	if (query)
 		return;
-	char params[256];
-	sprintf(params, "o=%d\001v=%s\001b=%s\001t=%s\001p=%s\001u=" PRINTF_LLD,
+	char par[512];
+	sprintf(par, "o=%d\001v=%s\001b=%s\001t=%s\001p=%s\001u=" PRINTF_LLD "\001x=%s\002chk",	// normal param list MUST end with \002 for future extension!
 		XEMU_OFFICIAL_BUILD_BOOL,		// o=%d (official build?)
 		XEMU_BUILDINFO_CDATE,			// v=%s (version data)
 		XEMU_BUILDINFO_GIT,			// b=%s (build info)
 		TARGET_NAME,				// t=%s (target name)
 		XEMU_ARCH_NAME,				// p=%s (platform name)
-		(long long int)time(NULL)		// u=%d (uts)
+		(long long int)time(NULL),		// u=%d (uts)
+		m->user_data != NULL ? (const char*)(m->user_data) : "null"	// x=%s (user defined command)
 	);
-	char *p = params;
-	int sum = 0;
-	while (*p)
-		sum += *p++;
-	sprintf(p, "\002C=%d", sum);
-	char url[1024];
-	sprintf(url, "%s?%s=", XEMU_ONLINE_HELP_HANDLER_URL, XEMU_ONLINE_HELP_GET_VAR);
-	p = params;
-	while (*p)
-		sprintf(url + strlen(url), "%%%02X", (unsigned char)*p++);
-	_open_url(url);
+	const char *par_list[] = { XEMU_ONLINE_HELP_GET_VAR, par, NULL };
+	_open_url(XEMU_ONLINE_HELP_HANDLER_URL, par_list);
 }
 #endif
 
