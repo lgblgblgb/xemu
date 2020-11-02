@@ -62,6 +62,7 @@ static const char *pri_name;
 static int cpu_clocks_per_scanline;
 static int cpu_clocks_per_audio_sample;
 static int cpu_clock;
+static int cpu_clock_wanted;
 static int scanline;
 static Uint64 all_cycles_spent;
 
@@ -96,6 +97,7 @@ static struct {
 static int beeper;
 static Uint64 beeper_last_changed;
 static SDL_AudioDeviceID audio;
+static int audio_enabled = 1;
 
 
 
@@ -173,7 +175,7 @@ void z80ex_pwrite_cb ( Z80EX_WORD port16, Z80EX_BYTE value )
 			static int rounding_error = 0;
 			Uint64 no_of_samples = (rounding_error + all_cycles_spent - beeper_last_changed) / cpu_clocks_per_audio_sample;
 			rounding_error       = (rounding_error + all_cycles_spent - beeper_last_changed) % cpu_clocks_per_audio_sample;
-			if (no_of_samples <= AUDIO_PULSE_SAMPLES_MAX_PASS && no_of_samples > 0 && audio) {
+			if (no_of_samples <= AUDIO_PULSE_SAMPLES_MAX_PASS && no_of_samples > 0 && audio && audio_enabled) {
 				Uint8 samples[no_of_samples];
 				memset(samples, value & 16 ? 0x80 + VOLUME8 : 0x80 - VOLUME8, no_of_samples);
 				int ret = SDL_QueueAudio(audio, samples, no_of_samples);	// last param are (number of) BYTES not samles. But we use 1 byte/samle audio ...
@@ -181,8 +183,8 @@ void z80ex_pwrite_cb ( Z80EX_WORD port16, Z80EX_BYTE value )
 					DEBUGPRINT("AUDIO: DATA: ERROR: %s" NL, SDL_GetError());
 				else
 					DEBUG("AUDIO: DATA: queued" NL);
-			} else
-				DEBUG("AUDIO: DATA: rejected! samples=%d" NL, (int)no_of_samples);
+			} /* else
+				DEBUG("AUDIO: DATA: rejected! samples=%d" NL, (int)no_of_samples); */
 			beeper = value & 16;
 			beeper_last_changed = all_cycles_spent;
 		}
@@ -323,6 +325,28 @@ static void set_border_geometry ( int xres, int yres )
 }
 
 
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+static int register_screenshot_request = 0;
+static inline void do_pending_screenshot ( void )
+{
+	if (!register_screenshot_request)
+		return;
+	register_screenshot_request = 0;
+	if (!xemu_screenshot_png(
+		NULL, NULL,
+		2,
+		2,
+		NULL,	// allow function to figure it out ;)
+		SCREEN_WIDTH,
+		SCREEN_HEIGHT
+	)) {
+		const char *p = strrchr(xemu_screenshot_full_path, DIRSEP_CHR);
+		if (p)
+			OSD(-1, -1, "%s", p + 1);
+	}
+}
+#endif
+
 
 // ABSOLUTELY LAME implementation!
 // We render the screen "at once" :-O
@@ -352,6 +376,9 @@ static void render_primo_bw_screen ( void )
 			*pix++ = primo_palette[0];
 		pix += tail;
 	}
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+	do_pending_screenshot();
+#endif
 	xemu_update_screen();
 }
 
@@ -434,6 +461,9 @@ static  void render_primo_c_screen ( void )
 			*pix++ = primo_palette[0];
 		pix += tail;
 	}
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+	do_pending_screenshot();
+#endif
 	xemu_update_screen();
 }
 
@@ -507,13 +537,17 @@ static int pri_load ( const char *file_name, int wet_run )
 }
 
 
+static void set_title_model_details ( void )
+{
+	static char title_str_id[64];
+	sprintf(title_str_id, "(model %s, %.2fMHz)", primo_model_set_str, (float)cpu_clock / 1000000.0);
+	window_title_info_addon = title_str_id;
+}
+
 
 static int set_cpu_hz ( int hz )
 {
-	if (hz < 1000000)
-		hz = 1000000;
-	else if (hz > 8000000)
-		hz = 8000000;
+	cpu_clock_wanted = hz;
 	cpu_clocks_per_scanline = (hz / PAL_LINE_FREQ) & ~1;	// 15625 Hz = 312.5 * 50, PAL "scanline frequency", how many Z80 cycles we need for that. Also make it to an even number
 	cpu_clock = cpu_clocks_per_scanline * PAL_LINE_FREQ;	// to reflect the possible situation when it's not a precise divider above
 	DEBUGPRINT("CLOCK: CPU: clock speed set to %.2f MHz (%d CPU cycles per scanline)" NL, cpu_clock / 1000000.0, cpu_clocks_per_scanline);
@@ -521,24 +555,9 @@ static int set_cpu_hz ( int hz )
 	DEBUGPRINT("CLOCK: JOY: clocking timeout is %d microseconds, %d CPU cycles" NL, JOY_CLOCKING_TIMEOUT_MICROSECS, (int)joy.clocking_timeout);
 	cpu_clocks_per_audio_sample = cpu_clock / AUDIO_SAMPLING_FREQ;
 	DEBUGPRINT("CLOCK: AUDIO: %d CPU clocks per audio sample at sampling frequency of %d Hz" NL, cpu_clocks_per_audio_sample, AUDIO_SAMPLING_FREQ);
+	set_title_model_details();
 	return cpu_clock;
 }
-
-
-static int set_cpu_clock_from_string ( const char *s )
-{
-	char *end;
-	double result = strtod(s, &end);
-	//DEBUGPRINT("RESULT=%f end=%p" NL, result, end);
-	if (result < 1.0 || result > 8.0 || !end || *end) {
-		ERROR_WINDOW("Cannot interpret the -clock option you specified. Defaulting to %.2f MHz", DEFAULT_CPU_CLOCK / 1000000.0);
-		return set_cpu_hz(DEFAULT_CPU_CLOCK);
-	} else
-		return set_cpu_hz(result * 1000000);
-}
-
-
-
 
 
 static void emulation_loop ( void )
@@ -650,7 +669,7 @@ void emu_dropfile_callback ( const char *fn )
 	if (strlen(fn) >= sizeof fn_storage)
 		return;
 	if (choice != 1)
-		choice = QUESTION_WINDOW("Load as PRI now|Load as PRI always|Cancel for now", "What should I do with dropped file?");
+		choice = QUESTION_WINDOW("Load as PRI now|Load as PRI always|Cancel for now", "What should I do with the dropped file?");
 	if (choice > 1)
 		return;
 	emu_loop_notification |= EMU_LOOP_LOAD_NOTIFY;
@@ -668,19 +687,27 @@ void emu_dropfile_callback ( const char *fn )
 }
 
 
+static const char primo_model_name_0[] = "A32";
+static const char primo_model_name_1[] = "A48";
+static const char primo_model_name_2[] = "A64";
+static const char primo_model_name_3[] = "B32";
+static const char primo_model_name_4[] = "B48";
+static const char primo_model_name_5[] = "B64";
+static const char primo_model_name_6[] = "C";
+static const char *primo_model_names[] = { primo_model_name_0, primo_model_name_1, primo_model_name_2, primo_model_name_3, primo_model_name_4, primo_model_name_5, primo_model_name_6, NULL };
+
 
 static int set_model ( const char *model_id, int do_load_rom )
 {
-	static const char *model_ids[] = { "a32", "a48", "a64", "b32", "b48", "b64", "c", NULL };
 	int id = 0;
-	while (model_ids[id] && strcasecmp(model_id, model_ids[id]))
+	while (primo_model_names[id] && strcasecmp(model_id, primo_model_names[id]))
 		id++;
-	if (!model_ids[id]) {
+	if (!primo_model_names[id]) {
 		ERROR_WINDOW("Unknown Primo model requested: %s", model_id);
 		return -1;
 	}
 	char model_desc[16];
-	sprintf(model_desc, "Primo-%c%s", toupper(model_ids[id][0]), model_ids[id] + 1);
+	sprintf(model_desc, "Primo-%c%s", toupper(primo_model_names[id][0]), primo_model_names[id] + 1);
 	DEBUGPRINT("PRIMO: trying to initialize to model: %s" NL, model_desc);
 	if (do_load_rom) {
 		if (xemucfg_get_str("rom")) {
@@ -690,7 +717,7 @@ static int set_model ( const char *model_id, int do_load_rom )
 		} else {
 			char rom_file[64];
 			char rom_err[128];
-			sprintf(rom_file, "#primo-%s.rom", model_ids[id]);
+			sprintf(rom_file, "#primo-%c%s.rom", tolower(primo_model_names[id][0]), primo_model_names[id] + 1);
 			sprintf(rom_err, "Cannot load default %s ROM file.\nYou can try to force one with the -rom CLI option.", model_desc);
 			DEBUGPRINT("ROM: trying to load model dependent default ROM file" NL);
 			if (xemu_load_file(rom_file, memory.main, 0x4000, 0x4000, rom_err) < 0)
@@ -739,7 +766,8 @@ static int set_model ( const char *model_id, int do_load_rom )
 			FATAL("Unknown primo model ID #%d", id);
 	}
 	primo_model_set = id;
-	primo_model_set_str = model_ids[id];
+	primo_model_set_str = primo_model_names[id];
+	set_title_model_details();
 	return 0;
 }
 
@@ -751,24 +779,13 @@ static void primo_reset ( void )
 }
 
 
-
-static void ui_native_os_file_browser ( void )
-{
-	xemuexec_open_native_file_browser(sdl_pref_dir);
-}
-
 static void ui_cb_set_model ( const struct menu_st *m, int *query )
 {
-#if 0
-	if (query) {
-		if (!strcasecmp(m->user_data, primo_model_set_str))
-			*query |= XEMUGUI_MENUFLAG_ACTIVE_RADIO;
-		return;
-	}
-#endif
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, !strcasecmp(m->user_data, primo_model_set_str));
 	if (!set_model(m->user_data, 1))
 		primo_reset();
 }
+
 
 static void ui_load_pri ( void )
 {
@@ -789,53 +806,88 @@ static void ui_load_pri ( void )
 	}
 }
 
+
 static void primo_reset_asked ( void )
 {
-	if (ARE_YOU_SURE("Are you sure to HARD RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
+	if (ARE_YOU_SURE("Are you sure to HARD RESET your Primo?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
 		primo_reset();
 }
 
+
 static void ui_cb_set_cpu_clock ( const struct menu_st *m, int *query )
 {
-	if (!query)
-		set_cpu_hz((int)(uintptr_t)m->user_data);
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == cpu_clock_wanted);
+	set_cpu_hz(VOIDPTR_TO_INT(m->user_data));
 }
 
 
+static void ui_sound ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, audio_enabled);
+	if (!audio) {
+		ERROR_WINDOW("Cannot enable audio.");
+		return;
+	}
+	audio_enabled = !audio_enabled;
+}
+
+
+
 static const struct menu_st menu_cpu_clock[] = {
-	{ "2.5MHz (default)",		XEMUGUI_MENUID_CALLABLE,	ui_cb_set_cpu_clock,		(void*)2500000	},
-	{ "3.5MHz",			XEMUGUI_MENUID_CALLABLE,	ui_cb_set_cpu_clock,		(void*)3500000	},
-	{ "7MHz",			XEMUGUI_MENUID_CALLABLE,	ui_cb_set_cpu_clock,		(void*)7000000	},
+	{ "2.5MHz (default)",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_set_cpu_clock,		(void*)2500000	},
+	{ "3.5MHz",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_set_cpu_clock,		(void*)3500000	},
+	{ "7MHz",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_set_cpu_clock,		(void*)7000000	},
 	{ NULL }
 };
 static const struct menu_st menu_models[] = {
-	{ "A32",			XEMUGUI_MENUID_CALLABLE,	ui_cb_set_model,		"A32"	},
-	{ "A48",			XEMUGUI_MENUID_CALLABLE,	ui_cb_set_model,		"A48"	},
-	{ "A64",			XEMUGUI_MENUID_CALLABLE,	ui_cb_set_model,		"A64"	},
-	{ "B32",			XEMUGUI_MENUID_CALLABLE,	ui_cb_set_model,		"B32"	},
-	{ "B48",			XEMUGUI_MENUID_CALLABLE,	ui_cb_set_model,		"B48"	},
-	{ "B64",			XEMUGUI_MENUID_CALLABLE,	ui_cb_set_model,		"B64"	},
-	{ "C",				XEMUGUI_MENUID_CALLABLE,	ui_cb_set_model,		"C"	},
+	{ primo_model_name_0,		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_set_model,		primo_model_name_0	},
+	{ primo_model_name_1,		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_set_model,		primo_model_name_1	},
+	{ primo_model_name_2,		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_set_model,		primo_model_name_2	},
+	{ primo_model_name_3,		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_set_model,		primo_model_name_3	},
+	{ primo_model_name_4,		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_set_model,		primo_model_name_4	},
+	{ primo_model_name_5,		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_set_model,		primo_model_name_5	},
+	{ primo_model_name_6,		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_set_model,		primo_model_name_6	},
 	{ NULL }
 };
 static const struct menu_st menu_display[] = {
 	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize,		(void*)0	},
 	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize,		(void*)1	},
-	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize,		(void*)2	},
+	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize,		(void*)2	},
+	{ "Enable OSD kbd debug",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger,	NULL		},
 	{ NULL }
 };
 static const struct menu_st menu_main[] = {
-	{ "Display",			XEMUGUI_MENUID_SUBMENU,		menu_display,			NULL },
-	{ "Set Primo model",		XEMUGUI_MENUID_SUBMENU,		menu_models,			NULL },
-	{ "CPU clock",			XEMUGUI_MENUID_SUBMENU,		menu_cpu_clock,			NULL },
-	{ "Reset Primo",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	primo_reset_asked },
-	{ "Load PRI file",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	ui_load_pri	},
-	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	ui_native_os_file_browser },
+	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL,				menu_display   },
+	{ "Set Primo model",		XEMUGUI_MENUID_SUBMENU,		NULL,				menu_models    },
+	{ "CPU clock",			XEMUGUI_MENUID_SUBMENU,		NULL,				menu_cpu_clock },
+	{ "Reset Primo",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	primo_reset_asked         },
+	{ "Load PRI file",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data,	ui_load_pri	          },
+	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_native_os_prefdir_browser, NULL },
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one,	&register_screenshot_request },
+#endif
 #ifdef XEMU_ARCH_WIN
 	{ "System console",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_sysconsole,		NULL },
 #endif
+	{ "Sound emulation",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_sound,			NULL },
 	{ "About",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_about_window,	NULL },
+#ifdef HAVE_XEMU_EXEC_API
+	{ "Help (on-line)",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_web_help_main,	NULL },
+#endif
 	{ "Quit",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_quit_if_sure,	NULL },
 	{ NULL }
 };
@@ -859,7 +911,7 @@ int main ( int argc, char **argv )
 {
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unknown Primo emulator from LGB");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	xemucfg_define_str_option("clock", "2.5", "Selects CPU frequency (1.00-8.00 in MHz)");
+	xemucfg_define_float_option("clock", (double)DEFAULT_CPU_CLOCK / 1000000.0, "Selects CPU frequency (1.00-16.00 in MHz)");
 	xemucfg_define_str_option("rom", NULL, "Select ROM to use");
 	xemucfg_define_str_option("exprom", NULL, "ROM expansion file selector (max 32K size)");
 	xemucfg_define_str_option("pri", NULL, "Loads a PRI file");
@@ -939,7 +991,8 @@ int main ( int argc, char **argv )
 	joy.clock = 0;
 	joy.last_clocked = 0;
 	//set_cpu_hz(DEFAULT_CPU_CLOCK);
-	set_cpu_clock_from_string(xemucfg_get_str("clock"));
+	set_cpu_hz((int)(xemucfg_get_ranged_float("clock", 1.0, 16.0) * 1000000.0));
+	//set_cpu_hz((int)(xemucfg_get_float("clock") * 1000000.0));
 	pri_name = xemucfg_get_str("pri");
 	scanline = 0;
 	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
