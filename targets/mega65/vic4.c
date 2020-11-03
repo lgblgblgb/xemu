@@ -28,8 +28,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 extern int in_hypervisor;
 
-//#define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
-
 static const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
 // (SDL) target texture rendering pointers
@@ -39,8 +37,6 @@ static Uint32 *pixel_raster_start;		// first pixel of current raster
 Uint8 vic_registers[0x80];				// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
 int vic_iomode;							// VIC2/VIC3/VIC4 mode
 int force_fast;							// POKE 0,64 and 0,65 trick ...
-
-
 Uint8 vic_registers[0x80];				// VIC-4 registers
 int vic_iomode;							// VIC2/VIC3/VIC4 mode
 int force_fast;							// POKE 0,64 and 0,65 trick ...
@@ -58,7 +54,6 @@ static int border_x_left= 0;			 // Side border left
 static int border_x_right= 0;			 // Side border right
 static int xcounter = 0, ycounter = 0;   // video counters
 static int frame_counter = 0;
-
 static int char_row = 0, display_row = 0;
 static Uint8 bg_pixel_state[1024]; 		// See FOREGROUND_PIXEL and BACKGROUND_PIXEL constants
 static Uint8* screen_ram_current_ptr = NULL;
@@ -67,10 +62,13 @@ extern int user_scanlines_setting;
 float char_x_step = 0.0;
 static int enable_bg_paint = 1;
 static int display_row_count = 0;
-
 static int max_rasters = PHYSICAL_RASTERS_DEFAULT;
 static int visible_area_height = SCREEN_HEIGHT_VISIBLE_DEFAULT;
 static int vicii_first_raster = 7;	// Default for NTSC
+
+void vic4_render_char_raster();
+void vic4_render_bitplane_raster();
+static void (* vic4_raster_renderer_path)(void) = &vic4_render_char_raster;
 
 // VIC-IV Modeline Parameters
 // ----------------------------------------------------
@@ -370,11 +368,11 @@ static void vic4_interpret_legacy_mode_registers()
 	REG_CHARPTR_B1 = (~last_dd00_bits << 6) | (REG_CHARPTR_B1 & 0x3F);
 	
 	SET_COLORRAM_BASE(0);
-	// DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charscale=%d, vic_ii_first_raster=%d, ras_src=%d,"
-	//           "border yt=%d, yb=%d, xl=%d, xr=%d, textxpos=%d, textypos=%d,"
-	//           "screen_ram=$%06x, charset/bitmap=$%06x, sprite=$%06x" NL, REG_16BITCHARSET ,   REG_CHRCOUNT,CHARSTEP_BYTES,REG_CHARXSCALE,
-	// 	vicii_first_raster, REG_FNRST, BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START,
-	// 	SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
+	DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charscale=%d, vic_ii_first_raster=%d, ras_src=%d,"
+	          "border yt=%d, yb=%d, xl=%d, xr=%d, textxpos=%d, textypos=%d,"
+	          "screen_ram=$%06x, charset/bitmap=$%06x, sprite=$%06x" NL, REG_16BITCHARSET ,   REG_CHRCOUNT,CHARSTEP_BYTES,REG_CHARXSCALE,
+		vicii_first_raster, REG_FNRST, BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START,
+		SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
 }
 
 
@@ -523,6 +521,8 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 				vic_hotreg_touched = 1;
 			}
 
+			vic4_raster_renderer_path = ( (data & 0x10) == 0)  ? vic4_render_char_raster : vic4_render_bitplane_raster;
+			
 			vic_registers[0x31] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
 			machine_set_speed(0);
 		
@@ -1035,6 +1035,73 @@ static void vic4_render_fullcolor_char_row(const Uint8* char_row, int glyph_widt
 	}
 }
 
+// Render a bitplane-mode character cell row
+//
+static void vic4_render_bitplane_char_row(Uint8* bp_base[8], int glyph_width)
+{
+	const Uint8 bpe_mask = vic_registers[0x32] & (REG_H640 ? 15 : 255);
+	const Uint8 bp_comp = vic_registers[0x3B]; 
+
+	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step)
+	{
+		const Uint8 bitsel = 0x80 >> ((int)cx);
+		const Uint32 pixel_color = palette[
+			((((*bp_base[0] & bitsel) ? 1 : 0) | 
+			((*bp_base[1] & bitsel) ? 2 : 0) |
+			((*bp_base[2] & bitsel) ? 4 : 0) |
+			((*bp_base[3] & bitsel) ? 8 : 0) |
+			((*bp_base[4] & bitsel) ? 16 : 0) |
+			((*bp_base[5] & bitsel) ? 32 : 0) |
+			((*bp_base[6] & bitsel) ? 64 : 0) |
+			((*bp_base[7] & bitsel) ? 128 : 0)) & bpe_mask) ^ bp_comp];
+		*(current_pixel++) = pixel_color;
+		bg_pixel_state[xcounter++] = *bp_base[2] & bitsel ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
+	}
+}
+
+void vic4_render_bitplane_raster()
+{
+	Uint8* bp_base[8];
+	
+	// Get Bitplane source addresses
+	/* TODO: Cache the following reads & EA calculation */
+
+	const Uint32 offset = display_row * REG_CHRCOUNT * 8 + char_row ;
+	bp_base[0] = main_ram + ((vic_registers[0x33] & (REG_H640 ? 12 : 14)) << 12) + offset;
+	bp_base[1] = main_ram + ((vic_registers[0x34] & (REG_H640 ? 12 : 14)) << 12) + 0x10000 + offset;
+	bp_base[2] = main_ram + ((vic_registers[0x35] & (REG_H640 ? 12 : 14)) << 12) + offset;
+	bp_base[3] = main_ram + ((vic_registers[0x36] & (REG_H640 ? 12 : 14)) << 12) + 0x10000 + offset;
+	bp_base[4] = main_ram + ((vic_registers[0x37] & (REG_H640 ? 12 : 14)) << 12) + offset;
+	bp_base[5] = main_ram + ((vic_registers[0x38] & (REG_H640 ? 12 : 14)) << 12) + 0x10000 + offset;
+	bp_base[6] = main_ram + ((vic_registers[0x39] & (REG_H640 ? 12 : 14)) << 12) + offset;
+	bp_base[7] = main_ram + ((vic_registers[0x3A] & (REG_H640 ? 12 : 14)) << 12) + 0x10000 + offset;
+
+	int line_char_index = 0;				
+	while(line_char_index < REG_CHRCOUNT)
+	{
+		vic4_render_bitplane_char_row(bp_base, 8);
+		bp_base[0] += 8;
+		bp_base[1] += 8;
+		bp_base[2] += 8;
+		bp_base[3] += 8;
+		bp_base[4] += 8;
+		bp_base[5] += 8;
+		bp_base[6] += 8;
+		bp_base[7] += 8;
+		line_char_index++;
+	}
+
+	if (++char_row > 7)
+	{		
+		char_row = 0;
+		display_row++;
+	}
+
+	while (xcounter++ < border_x_right)
+		*current_pixel++ = palette[REG_SCREEN_COLOR];
+	
+}
+
 //
 //
 // The character rendering engine. Most features are shared between
@@ -1053,8 +1120,7 @@ static void vic4_render_fullcolor_char_row(const Uint8* char_row, int glyph_widt
 // except in Multicolor modes.
 //
 
-
-static void vic4_render_char_raster()
+void vic4_render_char_raster()
 {
 	int line_char_index = 0;
 	enable_bg_paint = 1;
@@ -1236,7 +1302,7 @@ int vic4_render_scanline()
 			xcounter += border_x_left;
 			current_pixel += border_x_left;
 
-			vic4_render_char_raster();
+			vic4_raster_renderer_path();
 			vic4_do_sprites();
 
 			for (Uint32 *p = pixel_raster_start; p < pixel_raster_start + border_x_left; ++p)
