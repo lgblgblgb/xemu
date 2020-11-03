@@ -169,15 +169,16 @@ static void execute_command ( char *cmd )
 			if (check_end_of_command(cmd, 1))
 				m65mon_show_regs();
 			break;
-		case 'd':
-			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
-			if (cmd && check_end_of_command(cmd, 1))
-				m65mon_dumpmem16(par1);
-			break;
 		case 'm':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
+			int bank = par1 >> 16;
 			if (cmd && check_end_of_command(cmd, 1))
-				m65mon_dumpmem28(par1);
+			{
+				if (bank == 0x777)
+					m65mon_dumpmem16(par1);
+				else
+					m65mon_dumpmem28(par1);
+			}
 			break;
 		case 's':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);

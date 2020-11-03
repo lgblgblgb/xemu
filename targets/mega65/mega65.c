@@ -534,18 +534,18 @@ void m65mon_show_regs ( void )
 void m65mon_dumpmem16 ( Uint16 addr )
 {
 	int n = 16;
-	umon_printf(":000%04X", addr);
+	umon_printf(":000%04X:", addr);
 	while (n--)
-		umon_printf(" %02X", cpu65_read_callback(addr++));
+		umon_printf("%02X", cpu65_read_callback(addr++));
 }
 
 void m65mon_dumpmem28 ( int addr )
 {
 	int n = 16;
 	addr &= 0xFFFFFFF;
-	umon_printf(":%07X", addr);
+	umon_printf(":%07X:", addr);
 	while (n--)
-		umon_printf(" %02X", memory_debug_read_phys_addr(addr++));
+		umon_printf("%02X", memory_debug_read_phys_addr(addr++));
 }
 
 void m65mon_setmem28( int addr, int cnt, Uint8* vals )
