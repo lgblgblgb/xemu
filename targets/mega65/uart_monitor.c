@@ -119,7 +119,6 @@ static int check_end_of_command ( char *p, int error_out )
 
 static void setmem28 ( char *param, int addr )
 {
-	//Uint8* vals = NULL;
 	char *orig_param = param;
 	int cnt = 0;
 	// get param count
@@ -128,16 +127,13 @@ static void setmem28 ( char *param, int addr )
 		param = parse_hex_arg(param, &val, 0, 0xFF);
 		cnt++;
 	}
-	//vals = calloc(cnt, sizeof(Uint8));
-	Uint8 vals[cnt];
 	param = orig_param;
 	for (int idx = 0; idx < cnt; idx++) {
 		int val;
-		(void)parse_hex_arg(param, &val, 0, 0xFF);
-		vals[idx] = (Uint8)val;
+		param = parse_hex_arg(param, &val, 0, 0xFF);
+		m65mon_setmem28(addr & 0xFFFFFFF, 1, (Uint8*)&val);
+		addr++;
 	}
-	m65mon_setmem28(addr & 0xFFFFFFF, cnt, vals);
-	//free(vals);
 }
 
 
