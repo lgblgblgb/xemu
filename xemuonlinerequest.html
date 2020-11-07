@@ -1,24 +1,43 @@
 <!DOCTYPE html>
 <html lang="en">
   <head>
-    <meta charset='utf-8'>
+    <meta charset="utf-8">
     <meta http-equiv="X-UA-Compatible" content="chrome=1">
     <!-- <base href="http://github.lgb.hu/xemu/" target="_blank"> -->
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
     <!-- <link href='https://fonts.googleapis.com/css?family=Architects+Daughter' rel='stylesheet' type='text/css'> -->
-    <link href='stylesheets/ArchitectsDaughterRegular.css?family=Architects+Daughter' rel='stylesheet' type='text/css'>
+    <link rel="stylesheet" type="text/css" href="stylesheets/ArchitectsDaughterRegular.css?family=Architects+Daughter">
     <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
     <link rel="stylesheet" type="text/css" href="stylesheets/github-light.css" media="screen">
     <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print">
+    <link rel="shortcut icon" type="image/png" href="images/xemu-favicon.png">
 
     <!--[if lt IE 9]>
     <script src="//html5shiv.googlecode.com/svn/trunk/html5.js"></script>
     <![endif]-->
 
     <title>Xemu Download Page</title>
-    <link rel="shortcut icon" type="image/png" href="favico.png">
   </head>
-
+  <script>
+	"use strict";
+	const unofficial_build_version_check = false;
+	const redirectors = {
+		"mega65-help-url":			"https://github.com/lgblgblgb/xemu/wiki/MEGA65-help",
+		"mega65-downloadmega65book-url":	"https://mega.scryptos.com/sharefolder-link/MEGA/MEGA65+filehost/Docs/MEGA65-Book_draft.pdf",
+		"mega65-downloadmega65book-warning":	"Redirecting for downloading MEGA65-book.\nYou may need to accept terms and conditions though,\nat the download site.",
+		"c65-help-url":				"https://github.com/lgblgblgb/xemu/wiki/C65-help",
+	};
+	const target_links = {
+		"mega65": [
+			[ "https://mega65.org", "The MEGA65 project" ],
+			[ "https://www.forum64.de/index.php?board/457-mega65/", "MEGA65 forum" ],
+			[ "https://github.com/MEGA65", "MEGA65 github repositories" ],
+		],
+		"ep128": [
+			[ "https://enterpriseforever.com/", "Enterprise-128 forum" ],
+		],
+	};
+  </script>
   <body onLoad="main()">
 
 	<span id="JSwarningContainer" style="display: block;">
@@ -140,12 +159,6 @@ function redirect ( url, alert_msg )
 
 function main ()
 {
-	const unofficial_build_version_check = true;
-
-	const mega65_help_url = "https://github.com/lgblgblgb/xemu/wiki/MEGA65-help";
-	const c65_help_url = "https://github.com/lgblgblgb/xemu/wiki/C65-help";
-	const mega65_book_pdf_url = "https://mega.scryptos.com/sharefolder-link/MEGA/MEGA65+filehost/Docs/MEGA65-Book_draft.pdf";
-
 	const request_token = (new URLSearchParams(window.location.search)).get("xemuonlinehelprequesttoken");
 	if (typeof(request_token) != "string") {
 		console.log("No Xemu request GET parameter found ...");
@@ -174,7 +187,7 @@ function main ()
 	setSpan("myBranchContainer",	vars["b"][1]);
 	setSpan("myVersionContainer",	vars["v"]);
 	setSpan("myPlatformContainer",	vars["p"]);
-	setSpan("myTargetContainer",	vars["t"]);
+	setSpan("myTargetContainer",	vars["t"] + " (" + vars["T"] + ")");
 	setSpan("myOfficialContainer",	(vars["o"] === "1" ? "official" : "custom"));
 	setSpan("myCommitIdContainer",	vars["b"][2]);
 	setSpan("myRepoURLContainer",	vars["b"][0]);
@@ -183,11 +196,11 @@ function main ()
 	document.getElementById("commit-link").href = vars["b"][0].replace(/\.git$/, "") + "/commit/" + vars["b"][2];
 
 	const command = vars["x"];
-	if (command === "downloadmega65book")
+	/* if (command === "downloadmega65book")
 		return redirect(
 			mega65_book_pdf_url,
 			"Redirecting for downloading MEGA65-book.\nYou may need to accept terms and conditions though,\nat the download site."
-		);
+		); */
 	if (command.includes("://"))
 		return redirect(vars["x"], "");
 
@@ -209,6 +222,14 @@ function main ()
 	if (Math.abs(hoursSince) >= 24.0) {
 		console.log("Too old (based on age)!");
 		document.getElementById("pageAgeWarningContainer").style.display = "block";
+	}
+
+	const target = vars["t"];
+	if (redirectors[target + "-" + command + "-url"]) {
+		return redirect(
+			redirectors[target + "-" + command + "-url"],
+			redirectors[target + "-" + command + "-warning"]
+		);
 	}
 
 	if (version && (vars["o"] === "1" || unofficial_build_version_check)) {
@@ -271,21 +292,15 @@ function main ()
 	}
 
 	let help = [];
-	const target = vars["t"];
+	if (redirectors[target + "-help-url"]) {
+		let target_desc = vars["T"] ? "Xemu::" + vars["T"] : "Xemu";
+		help.push("<a target='_new' href='" + redirectors[target + "-help-url"] + "'><b>" + target_desc + "Help page</b></a>");
+	}
 	help.push("<a href='index.html?showversions=" + version + "&amp;timeid=" + now + "'>Xemu builds download page</a>");
-	if (target === "mega65") {
-		if (command === "help")
-			return redirect(mega65_help_url, "");
-		help.push("<a target='_new' href='" + mega65_help_url + "'><b>Xemu::MEGA65 help page</b></a>");
-		help.push("<a target='_new' href='https://mega65.org'>The MEGA65 project</a>");
-		help.push("<a target='_new' href='https://www.forum64.de/index.php?board/457-mega65/'>MEGA65 forum</a>");
-		help.push("<a target='_new' href='https://github.com/MEGA65'>MEGA65 github repositories</a>");
-	} else if (target === "c65") {
-		if (command === "help")
-			return redirect(c65_help_url, "");
-		help.push("<a target='_new' href='" + c65_help_url + "'><b>Xemu::C65 help page</b></a>");
-	} else if (target === "ep128") {
-		help.push("<a target='_new' href='https://enterpriseforever.com/'>Enterprise-128 forum</a>");
+	if (target_links[target]) {
+		for (let a of target_links[target]) {
+			help.push("<a target='_new' href='" + a[0] + "'>" + a[1] + "</a>");
+		}
 	}
 	document.getElementById("helpContainer").innerHTML = "<ul><li>" + help.join("</li><li>") + "</li></ul>";
 	showPage();
