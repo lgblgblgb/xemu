@@ -5,7 +5,8 @@
     <meta http-equiv="X-UA-Compatible" content="chrome=1">
     <!-- <base href="http://github.lgb.hu/xemu/" target="_blank"> -->
     <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-    <link href='https://fonts.googleapis.com/css?family=Architects+Daughter' rel='stylesheet' type='text/css'>
+    <!-- <link href='https://fonts.googleapis.com/css?family=Architects+Daughter' rel='stylesheet' type='text/css'> -->
+    <link href='stylesheets/ArchitectsDaughterRegular.css?family=Architects+Daughter' rel='stylesheet' type='text/css'>
     <link rel="stylesheet" type="text/css" href="stylesheets/stylesheet.css" media="screen">
     <link rel="stylesheet" type="text/css" href="stylesheets/github-light.css" media="screen">
     <link rel="stylesheet" type="text/css" href="stylesheets/print.css" media="print">
@@ -25,7 +26,7 @@
 		<br><br>
 		You'll also get this message if you try to visit the page at your own, without using Xemu's context menu to visit.
 		<br><br>
-		Finally, it's also possible that you only need to wait a bit at this point :)</b></p>
+		<span style="color: red">Finally, it's also possible that you only need to <u>wait a bit</u> at this point</span> :)</b></p>
 	</span>
 
 	<!-- <span id="jsErrorContainer" style="display: none; font-weight: bold; text-color: red;">
@@ -65,7 +66,7 @@ This page was requested at least several hours ago. Version/token information ma
 Please use Xemu's UI context menu to re-request this page!
 </p></span>
 
-<h2>Help resources</h2>
+<h2>Help resources<span id="resNameContainer"></span></h2>
 
 <span id="helpContainer"></span>
 
@@ -130,7 +131,7 @@ function showPage ( custom_content )
 
 function redirect ( url, alert_msg )
 {
-	showPage("About redirecting (please wait!) to: " + url);
+	showPage("About redirecting (<b style='color: red'>please wait!</b>) to: " + url);
 	if (alert_msg)
 		window.alert(alert_msg);
 	self.location = url;
@@ -140,6 +141,7 @@ function redirect ( url, alert_msg )
 function main ()
 {
 	const unofficial_build_version_check = true;
+
 	const mega65_help_url = "https://github.com/lgblgblgb/xemu/wiki/MEGA65-help";
 	const c65_help_url = "https://github.com/lgblgblgb/xemu/wiki/C65-help";
 	const mega65_book_pdf_url = "https://mega.scryptos.com/sharefolder-link/MEGA/MEGA65+filehost/Docs/MEGA65-Book_draft.pdf";
@@ -176,6 +178,7 @@ function main ()
 	setSpan("myOfficialContainer",	(vars["o"] === "1" ? "official" : "custom"));
 	setSpan("myCommitIdContainer",	vars["b"][2]);
 	setSpan("myRepoURLContainer",	vars["b"][0]);
+	document.getElementById("resNameContainer").innerHTML = " for " + "Xemu::" + vars["t"];
 
 	document.getElementById("commit-link").href = vars["b"][0].replace(/\.git$/, "") + "/commit/" + vars["b"][2];
 
@@ -187,8 +190,6 @@ function main ()
 		);
 	if (command.includes("://"))
 		return redirect(vars["x"], "");
-	if (command == "downloadpage")
-		return redirect("index.html", "");
 
 	let version = parseInt(vars["v"]);
 	if (("" + version) !== vars["v"] || version < 20000000000000 || version > 29990000000000 ) {
@@ -200,7 +201,10 @@ function main ()
 	const now = Date.now() / 1000;
 	const reqTime = parseInt(vars["u"]);
 	const hoursSince = (now - reqTime) / 3600;
-	console.log("Page request age: " + hoursSince);
+	console.log("Page request age: " + hoursSince + " hours.");
+
+	if (command == "downloadpage")
+		return redirect("index.html?showversions=" + version + "&amp;timeid=" + now, "");
 
 	if (Math.abs(hoursSince) >= 24.0) {
 		console.log("Too old (based on age)!");
@@ -272,14 +276,16 @@ function main ()
 	if (target === "mega65") {
 		if (command === "help")
 			return redirect(mega65_help_url, "");
-		help.push("<a target='_new' href='" + mega65_help_url + "'><b>Xemu MEGA65 help page</b></a>");
+		help.push("<a target='_new' href='" + mega65_help_url + "'><b>Xemu::MEGA65 help page</b></a>");
 		help.push("<a target='_new' href='https://mega65.org'>The MEGA65 project</a>");
 		help.push("<a target='_new' href='https://www.forum64.de/index.php?board/457-mega65/'>MEGA65 forum</a>");
 		help.push("<a target='_new' href='https://github.com/MEGA65'>MEGA65 github repositories</a>");
 	} else if (target === "c65") {
 		if (command === "help")
 			return redirect(c65_help_url, "");
-		help.push("<a target='_new' href='" + c65_help_url + "'><b>Xemu C65 help page</b></a>");
+		help.push("<a target='_new' href='" + c65_help_url + "'><b>Xemu::C65 help page</b></a>");
+	} else if (target === "ep128") {
+		help.push("<a target='_new' href='https://enterpriseforever.com/'>Enterprise-128 forum</a>");
 	}
 	document.getElementById("helpContainer").innerHTML = "<ul><li>" + help.join("</li><li>") + "</li></ul>";
 	showPage();

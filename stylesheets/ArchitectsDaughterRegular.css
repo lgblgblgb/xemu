@@ -1,0 +1,6 @@
+@font-face {
+  font-family: 'Architects Daughter';
+  font-style: normal;
+  font-weight: 400;
+  src: local('Architects Daughter Regular'), local('ArchitectsDaughter-Regular'), url(stylesheets/ArchitectsDaughterRegular.ttf) format('truetype');
+}
