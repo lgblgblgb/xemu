@@ -20,18 +20,17 @@
   </head>
   <script>
 	"use strict";
-	const unofficial_build_version_check = false;
-	const redirectors = {
-		"mega65-help-url":			"https://github.com/lgblgblgb/xemu/wiki/MEGA65-help",
-		"mega65-downloadmega65book-url":	"https://mega.scryptos.com/sharefolder-link/MEGA/MEGA65+filehost/Docs/MEGA65-Book_draft.pdf",
-		"mega65-downloadmega65book-warning":	"Redirecting for downloading MEGA65-book.\nYou may need to accept terms and conditions though,\nat the download site.",
-		"c65-help-url":				"https://github.com/lgblgblgb/xemu/wiki/C65-help",
-	};
-	const target_links = {
+	const xemu_target_links = {
 		"mega65": [
+			[ "https://github.com/lgblgblgb/xemu/wiki/MEGA65-help", "Xemu::MEGA65 help page", "help" ],
 			[ "https://mega65.org", "The MEGA65 project" ],
+			[ "https://mega.scryptos.com/sharefolder-link/MEGA/MEGA65+filehost/Docs/MEGA65-Book_draft.pdf", "MEGA65 official book", "downloadmega65book",
+				"Redirecting for downloading MEGA65-book.\nYou may need to accept terms and conditions though,\nat the download site." ],
 			[ "https://www.forum64.de/index.php?board/457-mega65/", "MEGA65 forum" ],
 			[ "https://github.com/MEGA65", "MEGA65 github repositories" ],
+		],
+		"c65": [
+			[ "https://github.com/lgblgblgb/xemu/wiki/C65-help", "Xemu::C65 help page", "help" ],
 		],
 		"ep128": [
 			[ "https://enterpriseforever.com/", "Enterprise-128 forum" ],
@@ -169,20 +168,14 @@ function main ()
 		top.location = self.location;
 		return;
 	}
+
 	let vars = {};
 	const request = request_token.split("\u0002");
-	/*let need_digest = await sha1(request[0]);
-	if (need_digest == request[1]) {
-		console.log("Good, checksum is OK!");
-	} else {
-		console.log("Bad, checksum is NOT OK!! expected='" + need_digest + "', got='" + request[1] + "'");
-	}*/
 	for (const p of request[0].split("\u0001")) {
 		if (p[0] !== '=' && p[1] === '=') {
 			vars[p[0]] = (p[0] === "b" ? p.substring(2).split(" ") : p.substring(2));
 		}
 	}
-	console.log(vars);
 
 	setSpan("myBranchContainer",	vars["b"][1]);
 	setSpan("myVersionContainer",	vars["v"]);
@@ -196,11 +189,7 @@ function main ()
 	document.getElementById("commit-link").href = vars["b"][0].replace(/\.git$/, "") + "/commit/" + vars["b"][2];
 
 	const command = vars["x"];
-	/* if (command === "downloadmega65book")
-		return redirect(
-			mega65_book_pdf_url,
-			"Redirecting for downloading MEGA65-book.\nYou may need to accept terms and conditions though,\nat the download site."
-		); */
+
 	if (command.includes("://"))
 		return redirect(vars["x"], "");
 
@@ -225,14 +214,19 @@ function main ()
 	}
 
 	const target = vars["t"];
-	if (redirectors[target + "-" + command + "-url"]) {
-		return redirect(
-			redirectors[target + "-" + command + "-url"],
-			redirectors[target + "-" + command + "-warning"]
-		);
+	let help = {};
+	help.push("<a href='index.html?showversions=" + version + "&amp;timeid=" + now + "'>Xemu builds download page</a>");
+	if (xemu_target_links[target]) {
+		for (let a of xemu_target_links[target]) {
+			if (a[2] === "help")
+				a[1] = "<b>" + a[1] + "</b>";
+			help.push("<a target='_new' href='" + a[0] + "'>" + a[1] + "</a>");
+			if (command === a[2])
+				return redirect(a[0], a[3]);
+		}
 	}
 
-	if (version && (vars["o"] === "1" || unofficial_build_version_check)) {
+	if (version && (vars["o"] === "1")) {
 		let branch = vars["b"][1].toLowerCase();
 		let platform = vars["p"].toLowerCase();
 		if (platform === "win32" || platform === "win64" || platform == "win")
@@ -291,18 +285,8 @@ function main ()
 		e.style.borderBottom = "1px black dashed";
 	}
 
-	let help = [];
-	if (redirectors[target + "-help-url"]) {
-		let target_desc = vars["T"] ? "Xemu::" + vars["T"] : "Xemu";
-		help.push("<a target='_new' href='" + redirectors[target + "-help-url"] + "'><b>" + target_desc + "Help page</b></a>");
-	}
-	help.push("<a href='index.html?showversions=" + version + "&amp;timeid=" + now + "'>Xemu builds download page</a>");
-	if (target_links[target]) {
-		for (let a of target_links[target]) {
-			help.push("<a target='_new' href='" + a[0] + "'>" + a[1] + "</a>");
-		}
-	}
-	document.getElementById("helpContainer").innerHTML = "<ul><li>" + help.join("</li><li>") + "</li></ul>";
+	help = "<ul><li>" + help.join("</li><li>") + "</li></ul>";
+	document.getElementById("helpContainer").innerHTML = help;
 	showPage();
 }
 </script>
