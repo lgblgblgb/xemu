@@ -167,7 +167,7 @@ function redirect ( raw_url, alert_msg )
 {
 	if (alert_msg)
 		window.alert(alert_msg);
-	url = htmlEntities(raw_url);
+	let url = htmlEntities(raw_url);
 	showPage("<p>About redirecting (<b style='color: red'>please wait!</b>) to: <a href='" + url + "'>" + url + "</a><p>" +
 		"<p><i>If redirection does not work even after a while, you can try to click on the URL above.</i></p>");
 	self.location = raw_url;
