@@ -21,6 +21,12 @@
   <script>
 	"use strict";
 	const xemu_target_links = {
+		/* format: key = architecture short name, provided by Xemu
+		   individual array elements:
+		   0th: URL, compulsory
+		   1st: hypertext name (will be surrounded by <b>...</b> automatically if command is "help", compulsory
+		   2nd: command: if Xemu's supplied command match this then automatically redirect will be peformed to URL, optional
+		   3rd: warning, in case of automatical redirect, this warning will be issued in the form of an "alert box", optional */
 		"mega65": [
 			[ "https://github.com/lgblgblgb/xemu/wiki/MEGA65-help", "Xemu::MEGA65 help page", "help" ],
 			[ "https://mega65.org", "The MEGA65 project" ],
@@ -147,12 +153,24 @@ function showPage ( custom_content )
 	console.log("Page visibility is turned ON" + (custom_content ? ": " + custom_content : ""));
 }
 
-function redirect ( url, alert_msg )
+function htmlEntities ( s )
 {
-	showPage("About redirecting (<b style='color: red'>please wait!</b>) to: " + url);
+	s = s.replaceAll("&", "&amp;");
+	s = s.replaceAll("<", "&lt;");
+	s = s.replaceAll(">", "&gt;");
+	s = s.replaceAll("'", "&apos;");
+	s = s.replaceAll('"', "&quot;");
+	return s;
+}
+
+function redirect ( raw_url, alert_msg )
+{
 	if (alert_msg)
 		window.alert(alert_msg);
-	self.location = url;
+	url = htmlEntities(raw_url);
+	showPage("<p>About redirecting (<b style='color: red'>please wait!</b>) to: <a href='" + url + "'>" + url + "</a><p>" +
+		"<p><i>If redirection does not work even after a while, you can try to click on the URL above.</i></p>");
+	self.location = raw_url;
 
 }
 
@@ -206,7 +224,7 @@ function main ()
 	console.log("Page request age: " + hoursSince + " hours.");
 
 	if (command == "downloadpage")
-		return redirect("index.html?showversions=" + version + "&amp;timeid=" + now, "");
+		return redirect("index.html?showversions=" + version + "&timeid=" + now, "");
 
 	if (Math.abs(hoursSince) >= 24.0) {
 		console.log("Too old (based on age)!");
@@ -215,24 +233,26 @@ function main ()
 
 	const target = vars["t"];
 	let help = [];
-	help.push("<a href='index.html?showversions=" + version + "&amp;timeid=" + now + "'>Xemu builds download page</a>");
+	help.push("<a href='index.html?showversions=" + version + "&amp;timeid=" + now + "'>Xemu ready-to-use builds download page</a>");
 	if (xemu_target_links[target]) {
 		for (let a of xemu_target_links[target]) {
-			if (a[2] === "help")
-				a[1] = "<b>" + a[1] + "</b>";
-			help.push("<a target='_new' href='" + a[0] + "'>" + a[1] + "</a>");
+			const link_text = ((a[2] === "help") ? ("<b>" + htmlEntities(a[1]) + "</b>") : htmlEntities(a[1]));
+			help.push("<a target='_new' href='" + htmlEntities(a[0]) + "'>" + link_text + "</a>");
 			if (command === a[2])
 				return redirect(a[0], a[3]);
 		}
 	}
 
 	if (version && (vars["o"] === "1")) {
-		let branch = vars["b"][1].toLowerCase();
-		let platform = vars["p"].toLowerCase();
-		if (platform === "win32" || platform === "win64" || platform == "win")
+		const branch = vars["b"][1].toLowerCase();
+		const platform_raw = vars["p"].toLowerCase();
+		let platform;
+		if (["win32", "win64", "win", "windows"].includes(platform_raw))
 			platform = "windows";
-		if (platform === "mac" || platform === "macos")
+		else if (["mac", "macos", "macosx", "osx", "macintosh"].includes(platform_raw))
 			platform = "osx";
+		else
+			platform = platform_raw;
 		const VER_URL = "https://raw.githubusercontent.com/lgblgblgb/xemu-binaries/binary-" + platform + "-" + branch + "/versioninfo?timeid=" + now;
 		console.log("Checking for new version by fetching " + VER_URL);
 		let ajax = new XMLHttpRequest();
