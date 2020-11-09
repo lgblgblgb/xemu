@@ -27,6 +27,8 @@
 #define SD_CONTENT_SUPPORT
 #endif
 
+//#define TRACE_NEXT_SUPPORT
+
 /* Globally: XEMU_INLINE hints gcc to always inline a function. Using this define switches that behaviour off, defaulting to standard "inline" (as it would be without using gcc as well) */
 //#define DO_NOT_FORCE_INLINE
 
