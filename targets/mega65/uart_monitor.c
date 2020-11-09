@@ -119,7 +119,6 @@ static int check_end_of_command ( char *p, int error_out )
 
 static void setmem28 ( char *param, int addr )
 {
-	//Uint8* vals = NULL;
 	char *orig_param = param;
 	int cnt = 0;
 	// get param count
@@ -128,21 +127,19 @@ static void setmem28 ( char *param, int addr )
 		param = parse_hex_arg(param, &val, 0, 0xFF);
 		cnt++;
 	}
-	//vals = calloc(cnt, sizeof(Uint8));
-	Uint8 vals[cnt];
 	param = orig_param;
 	for (int idx = 0; idx < cnt; idx++) {
 		int val;
-		(void)parse_hex_arg(param, &val, 0, 0xFF);
-		vals[idx] = (Uint8)val;
+		param = parse_hex_arg(param, &val, 0, 0xFF);
+		m65mon_setmem28(addr & 0xFFFFFFF, 1, (Uint8*)&val);
+		addr++;
 	}
-	m65mon_setmem28(addr & 0xFFFFFFF, cnt, vals);
-	//free(vals);
 }
 
 
 static void execute_command ( char *cmd )
 {
+	int bank;
 	int par1;
 	char *p = cmd;
 	while (*p)
@@ -173,15 +170,32 @@ static void execute_command ( char *cmd )
 			if (check_end_of_command(cmd, 1))
 				m65mon_show_regs();
 			break;
-		case 'd':
-			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
-			if (cmd && check_end_of_command(cmd, 1))
-				m65mon_dumpmem16(par1);
-			break;
 		case 'm':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
+			bank = par1 >> 16;
 			if (cmd && check_end_of_command(cmd, 1))
-				m65mon_dumpmem28(par1);
+			{
+				if (bank == 0x777)
+					m65mon_dumpmem16(par1);
+				else
+					m65mon_dumpmem28(par1);
+			}
+			break;
+		case 'M':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
+			bank = par1 >> 16;
+			if (cmd && check_end_of_command(cmd, 1))
+			{
+				for (int k = 0; k < 32; k++)
+				{
+					if (bank == 0x777)
+						m65mon_dumpmem16(par1);
+					else
+						m65mon_dumpmem28(par1);
+					par1 += 16;
+					umon_printf("\n");
+				}
+			}
 			break;
 		case 's':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
@@ -203,6 +217,9 @@ static void execute_command ( char *cmd )
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
 			if (cmd && check_end_of_command(cmd, 1))
 				m65mon_breakpoint(par1);
+			break;
+		case 'N':
+			m65mon_next_command();
 			break;
 		case 0:
 			m65mon_empty_command();	// emulator can use this, if it wants
