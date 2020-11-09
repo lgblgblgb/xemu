@@ -76,12 +76,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	error	"Unknown target OS architecture."
 #endif
 
-#ifdef XEMU_OFFICIAL_BUILD
-#	define	XEMU_OFFICIAL_BUILD_BOOL	1
-#else
-#	define	XEMU_OFFICIAL_BUILD_BOOL	0
-#endif
-
 #if defined(XEMU_ARCH_UNIX) && !defined(_XOPEN_SOURCE)
 #	define	_XOPEN_SOURCE	700
 #endif

@@ -68,11 +68,7 @@ void xemugui_cb_about_window ( const struct menu_st *m, int *query )
 			,
 			TARGET_DESC, XEMU_BUILDINFO_CDATE,
 			XEMU_BUILDINFO_GIT,
-#ifdef XEMU_OFFICIAL_BUILD
-			"official-build",
-#else
-			"unknown-build",
-#endif
+			xemu_is_official_build() ? "official-build" : "custom-build",
 			XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT,
 			XEMU_BUILDINFO_CC, XEMU_ARCH_NAME
 		);
@@ -153,13 +149,14 @@ void xemugui_cb_web_help_main ( const struct menu_st *m, int *query )
 	if (query)
 		return;
 	char par[512];
-	sprintf(par, "o=%d\001v=%s\001b=%s\001t=%s\001p=%s\001u=" PRINTF_LLD "\001x=%s\002chk",	// normal param list MUST end with \002 for future extension!
-		XEMU_OFFICIAL_BUILD_BOOL,		// o=%d (official build?)
-		XEMU_BUILDINFO_CDATE,			// v=%s (version data)
+	sprintf(par, "o=%d\001v=%s\001b=%s\001t=%s\001T=%s\001p=%s\001u=" PRINTF_LLD "\001x=%s\002chk",	// normal param list MUST end with \002 for future extension!
+		xemu_is_official_build(),		// o=%d (official build?)
+		XEMU_BUILDINFO_CDATE,			// v=%s (version data - formed from commit date actually)
 		XEMU_BUILDINFO_GIT,			// b=%s (build info)
 		TARGET_NAME,				// t=%s (target name)
+		TARGET_DESC,				// T=%s (target description)
 		XEMU_ARCH_NAME,				// p=%s (platform name)
-		(long long int)time(NULL),		// u=%d (uts)
+		(long long int)time(NULL),		// u=%d (uts of the current time)
 		m->user_data != NULL ? (const char*)(m->user_data) : "null"	// x=%s (user defined command)
 	);
 	const char *par_list[] = { XEMU_ONLINE_HELP_GET_VAR, par, NULL };
