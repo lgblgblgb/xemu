@@ -29,17 +29,26 @@
 		   3rd: warning, in case of automatical redirect, this warning will be issued in the form of an "alert box", optional */
 		"mega65": [
 			[ "https://github.com/lgblgblgb/xemu/wiki/MEGA65-help", "Xemu::MEGA65 help page", "help" ],
-			[ "https://mega65.org", "The MEGA65 project" ],
+			[ "https://mega65.org", "The MEGA65 project", "project" ],
 			[ "https://mega.scryptos.com/sharefolder-link/MEGA/MEGA65+filehost/Docs/MEGA65-Book_draft.pdf", "MEGA65 official book", "downloadmega65book",
 				"Redirecting for downloading MEGA65-book.\nYou may need to accept terms and conditions though,\nat the download site." ],
-			[ "https://www.forum64.de/index.php?board/457-mega65/", "MEGA65 forum" ],
-			[ "https://github.com/MEGA65", "MEGA65 github repositories" ],
+			[ "https://www.forum64.de/index.php?board/457-mega65/", "MEGA65 forum", "forum" ],
+			[ "https://github.com/MEGA65", "MEGA65 github repositories", "repo" ],
 		],
 		"c65": [
-			[ "https://github.com/lgblgblgb/xemu/wiki/C65-help", "Xemu::C65 help page", "help" ],
+			[ "https://github.com/lgblgblgb/xemu/wiki/C65-help", "Xemu::Commodore-65 help page", "help" ],
 		],
 		"ep128": [
+			[ "https://github.com/lgblgblgb/xemu/wiki/EP128-help", "Xemu::Enterprise-128 help page", "help" ],
 			[ "https://enterpriseforever.com/", "Enterprise-128 forum" ],
+		],
+		"clcd": [
+			[ "https://github.com/lgblgblgb/xemu/wiki/CLCD-help", "Xemu::Commodore-LCD help page", "help" ],
+			[ "http://commodore-lcd.lgb.hu/", "LGB's (so my) Commodore-LCD pages", "lgb" ],
+		],
+		"primo": [
+			[ "https://github.com/lgblgblgb/xemu/wiki/PRIMO-help", "Xemu::Primo help page", "help" ],
+			[ "https://translate.google.com/translate?hl=&sl=auto&tl=en&u=http%3A%2F%2Fprimo.homeserver.hu%2F", "Primo pages", "pages" ],
 		],
 	};
   </script>
@@ -167,7 +176,7 @@ function redirect ( raw_url, alert_msg )
 {
 	if (alert_msg)
 		window.alert(alert_msg);
-	let url = htmlEntities(raw_url);
+	const url = htmlEntities(raw_url);
 	showPage("<p>About redirecting (<b style='color: red'>please wait!</b>) to: <a href='" + url + "'>" + url + "</a><p>" +
 		"<p><i>If redirection does not work even after a while, you can try to click on the URL above.</i></p>");
 	self.location = raw_url;
@@ -179,7 +188,7 @@ function main ()
 	const request_token = (new URLSearchParams(window.location.search)).get("xemuonlinehelprequesttoken");
 	if (typeof(request_token) != "string") {
 		console.log("No Xemu request GET parameter found ...");
-		return redirect("index.html", "This page should not be visited by your browser\nbut using Xemu's help menu.");
+		return redirect("index.html", "This page should not be visited by your browser directly\nbut using Xemu's context help menu.");
 	}
 	if (self != top) {
 		console.log("Frame protection activated ...");
@@ -235,7 +244,7 @@ function main ()
 	let help = [];
 	help.push("<a href='index.html?showversions=" + version + "&amp;timeid=" + now + "'>Xemu ready-to-use builds download page</a>");
 	if (xemu_target_links[target]) {
-		for (let a of xemu_target_links[target]) {
+		for (const a of xemu_target_links[target]) {
 			const link_text = ((a[2] === "help") ? ("<b>" + htmlEntities(a[1]) + "</b>") : htmlEntities(a[1]));
 			help.push("<a target='_new' href='" + htmlEntities(a[0]) + "'>" + link_text + "</a>");
 			if (command === a[2])
