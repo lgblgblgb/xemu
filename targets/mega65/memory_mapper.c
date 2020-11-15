@@ -23,10 +23,17 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 #include "hypervisor.h"
 
+#define VIC3_ROM_MASK_8000	0x08
+#define VIC3_ROM_MASK_A000	0x10
+#define VIC3_ROM_MASK_C000	0x20
+#define VIC3_ROM_MASK_E000	0x80
+
+
+
 // if defined, C64 style unmapped slots are filled for the whole area, not just the on-demand reference
 // in theory it can cause better performance (fewer resolve events) at the cost though to have
 // more time to do it, even if it's not needed. So it's question of balance which performs better in practice.
-#define MEMDEC_FILL_WHOLE_UNMAPPED_AREAS
+#define DO_FULL_LEGACY_MAPPINGS
 // If defined, scanning the decoder table is bi-directional. If undefined, only upwards scan is done,
 // and if the intial linear address is below the current supplied one, the upwards-scan is done from
 // beginning of the table, rather than downwards step-by-step one (opposite of the upwards process)
@@ -44,13 +51,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 //#define MEMORY_IGNORED_PATTERN		0xFF
 
 int skip_unhandled_mem = 0;
-int rom_protect;
+int rom_protect = 0;
+int legacy_io_is_mapped = 0;
 unsigned int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
 
 Uint8 main_ram[MAIN_RAM_SIZE];
 Uint8 slow_ram[SLOW_RAM_SIZE];
 Uint8 hypervisor_ram[HYPERVISOR_RAM_SIZE];
 Uint8 colour_ram[COLOUR_RAM_SIZE];
+Uint8 c64_colour_ram[2048];	// some trick to speed up C64-style "4 bit colour RAM" access. For more information check comments at colour_ram_head_writer() [inc. the fact why 2K when it's C64 ...]
 Uint8 black_hole[0x100];	// memory area functions as "no write here" (just swallows everything)
 Uint8 white_hole[0x100];	// memory area functions as "no read here" (source some fixed value)
 Uint8 cpu_io_port[2];		// C64-style "CPU I/O port" @ addr 0 and 1 (which is part of VIC-III on C65, but this fact does not matter too much for us now)
@@ -68,7 +77,8 @@ Uint8 cpu_io_port[2];		// C64-style "CPU I/O port" @ addr 0 and 1 (which is part
 enum memdec_pol_en {
 	MEMDEC_NORMAL_POLICY,
 	MEMDEC_ROM_POLICY,
-	MEMDEC_HYPERVISOR_POLICY
+	MEMDEC_HYPERVISOR_POLICY,
+	MEMDEC_IOREGION_POLICY
 };
 
 typedef Uint8 rd_f_t(unsigned int slot, unsigned int addr);
@@ -83,6 +93,7 @@ struct linear_access_decoder_st {
 	enum	memdec_pol_en policy;	// memory page setup policy
 };
 
+#define INVALIDATED_MEMORY_CHANNEL	1	// since info must be 256 byte aligned, thus having 1 (not aligned) signals that it's invalid
 Uint32 memory_channel_last_usage[MAX_MEMORY_CHANNELS];
 const struct linear_access_decoder_st *memory_channel_last_dectab_p[MAX_MEMORY_CHANNELS];
 
@@ -126,6 +137,26 @@ static inline void cpu_write ( const Uint16 addr, const Uint8 data )
 		mem_wr_func_p[slot](slot, addr, data);
 }
 
+int cpu_rmw_old_data = -1;
+
+static inline void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
+{
+	const unsigned int slot = addr >> 8;
+	if (XEMU_LIKELY(mem_wr_data_p[slot]))
+		*(mem_wr_data_p[slot] + addr) = new_data;
+	else {
+		// RMW functions exploits the fact that original MOS 65xx CPUs did write old
+		// data first and then new data. C65 does not do this, but C64 does. To
+		// avoid one major incompatibility between C64 and C65, MEGA65 reintroduced
+		// this feature. We emulate this behaviour with this function. However on memory
+		// accesses it does not matter (see the 'if' case above), with callbacks it may
+		// be important, thus we set cpu_rmw_old_data variable (so it's not -1!), the
+		// give target callback can use this information to realize the desired behaviour!
+		cpu_rmw_old_data = old_data;
+		mem_wr_func_p[slot](slot, addr, new_data);
+		cpu_rmw_old_data = -1;
+	}
+}
 
 
 void memory_invalidate_mapper ( unsigned int start_slot, unsigned int slots );
@@ -178,16 +209,19 @@ static void update_cpu_io_port ( int update_mapper )
 			// Not even mentioning the VIC-III ROM mapping checking and then the complexity of checking if it's not in hypervisor mode when it does not apply ... :-O
 			// OK, enough talking, let's try to use at least some logic here, even if it's not the full picture ...
 			if ((changed & C64_BASIC_VISIBLE)  && !(map_mask & 0x20)) {
-				memory_invalidate_mapper(0xA0, 0x20);
+				memory_invalidate_mapper(0xA0, 0xBF);
 				//dectab_last_p[0xA] = decoder_table;
 				//dectab_last_p[0xB] = decoder_table;
 			}
 			if ((changed & C64_D000_MASK)      && !(map_mask & 0x40)) {
-				memory_invalidate_mapper(0xD0, 0x10);
+				memory_invalidate_mapper(0xD0, 0xDF);
+				// since we've just invalidated $DXXX area, no legacy I/O is mapped (yet)
+				// later it maybe can be refined
+				legacy_io_is_mapped = 0;
 				//dectab_last_p[0xD] = decoder_table;
 			}
 			if ((changed & C64_KERNAL_VISIBLE) && !(map_mask & 0x80)) {
-				memory_invalidate_mapper(0xE0, 0x20);
+				memory_invalidate_mapper(0xE0, 0xFF);
 				//dectab_last_p[0xE] = decoder_table;
 				//dectab_last_p[0xF] = decoder_table;
 			}
@@ -246,7 +280,7 @@ static void colour_ram_head_writer ( unsigned int slot, unsigned int addr, Uint8
 
 static void undecoded_interaction ( const Uint32 addr, const char *op_type )
 {
-#ifdef	XEMU_RELEASE_BUILD
+#ifdef	DISABLE_DEBUG
 	if (XEMU_LIKELY(skip_unhandled_mem == 3))
 		return;
 #endif
@@ -320,7 +354,7 @@ static const struct linear_access_decoder_st decoder_table[] = {
 #ifndef XEMU_RELEASE_BUILD
 // Sanity check to catch errors in the table construction
 // Will be disabled in release builds, assuming it was run once before for testing in non-release builds :)
-static const char *check_decoder_table ( void )
+static inline const char *check_decoder_table ( void )
 {
 	const struct linear_access_decoder_st *p = decoder_table;
 	const struct linear_access_decoder_st *e = (struct linear_access_decoder_st*)((Uint8*)decoder_table + sizeof(decoder_table)) - 1;
@@ -404,7 +438,7 @@ static const struct linear_access_decoder_st *linear_memory_access_decoder ( con
 #endif
 	while (lin > p->end)
 		p++;
-	mem_p_p[slot] = p;
+	//mem_p_p[slot] = p;
 	mem_rd_ofs[slot] = lin - p->begin;
 	mem_wr_ofs[slot] = lin - p->begin;
 	// At this point we found or desired table entry at pointer "p".
@@ -441,12 +475,63 @@ static const struct linear_access_decoder_st *linear_memory_access_decoder ( con
 				mem_wr_data_p[slot] = black_hole - slot_ofs;
 			}
 			break;
+		case MEMDEC_IOREGION_POLICY:
+			// Special policy to map I/O. It would took too much space in the decoding table slowing down its scanning
+			// So it's better to do this way, also it helps to have common things with the legacy based I/O mapping at $D000
+			// to some extent at least.
+			TODO();
+			break;
 		default:
 			XEMU_UNREACHABLE();
 	}
 	return p;
 }
 
+// Helper function for CPU memory mapper: MAP a C64-style ROM stuff
+// It's clear from "slot" which ROM (chargen/basic/kernal) so no need to specify. Also for RAM which is always the logical slot.
+// Also note, that CPU based slots are used a way that CPU address is ADDED to the mapping.
+// Together with linear_memory_access_decoder() these helpers are the only ones used by CPU mappings at all (which is logical,
+// since these are CPU based memory mapping controls).
+static XEMU_INLINE void c64_map_rom_XXXX ( unsigned int slot )
+{
+	mem_rd_data_p[slot] = main_ram + 0x20000;	// offset in C65 ROM for the C64 stuff, and cpu_addr is also added, so it can be this fixed!!
+	mem_wr_data_p[slot] = main_ram;			// writing a ROM in case of C64-mapped ROM situation will result on writing RAM instead!	
+}
+#define c64_map_rom_A000 c64_map_rom_XXXX
+#define c64_map_rom_D000 c64_map_rom_XXXX
+#define c64_map_rom_E000 c64_map_rom_XXXX
+static XEMU_INLINE void c65_map_rom_C000 ( unsigned int slot )
+{
+	mem_rd_data_p[slot] = main_ram + 0x20000;
+	mem_wr_data_p[slot] = rom_protect ? black_hole - (slot << 8) : main_ram + 0x20000;
+}
+static XEMU_INLINE void c65_map_rom_XXXX ( unsigned int slot )
+{
+	mem_rd_data_p[slot] = main_ram + 0x30000;
+	mem_wr_data_p[slot] = rom_protect ? black_hole - (slot << 8) : main_ram + 0x30000;
+}
+#define c65_map_rom_8000 c65_map_rom_XXXX
+#define c65_map_rom_A000 c65_map_rom_XXXX
+#define c65_map_rom_C000 c65_map_rom_C000
+#define c65_map_rom_E000 c65_map_rom_XXXX
+static XEMU_INLINE void c6x_map_ram ( unsigned int slot )
+{
+	mem_rd_data_p[slot] = main_ram;
+	// We must be aware of slot 0 "problem" (CPU port needs special attention)
+	if (XEMU_LIKELY(slot)) {
+		mem_wr_data_p[slot] = main_ram;
+	} else {
+		mem_wr_data_p[slot] = NULL;
+		mem_wr_func_p[slot] = zero_page_writer;
+	}
+}
+static XEMU_INLINE void map_legacy_io ( unsigned slot )
+{
+	mem_rd_data_p[slot] = NULL;
+	mem_wr_data_p[slot] = NULL;
+	mem_rd_func_p[slot] = legacy_io_slot_rd[io_mode][slot - 0xD0];
+	mem_wr_func_p[slot] = legacy_io_slot_wr[io_mode][slot - 0xD0];
+}
 
 
 // Decoding memory access issued by the CPU.
@@ -459,13 +544,13 @@ static const struct linear_access_decoder_st *linear_memory_access_decoder ( con
 // scope of this function! [they are for linear memory accessing, done by DMA, linear CPU addressing and debugger]
 static void cpu_memory_access_decoder ( unsigned int slot )
 {
-#	ifdef MEMDEC_FILL_WHOLE_UNMAPPED_AREAS
-#		define FILL_WHOLE_UNMAPPED_AREA(first_slot,last_slot) for (slot=first_slot;slot<=last_slot;slot++)
+#	ifdef DO_FULL_LEGACY_MAPPINGS
+#		define DO_LEGACY_MAPPING(first_slot,last_slot,helper)	do { for (int i = first_slot; i <= last_slot; i++) helper(i); } while (0)
 #	else
-#		define FILL_WHOLE_UNMAPPED_AREA(first_slot,last_slot)
+#		define DO_LEGACY_MAPPING(first_slot,last_slot,helper)	helper(slot)
 #	endif
-#	define MEM_DEC_MAPPED_LO() dectab_last_p[page4k] = linear_memory_access_decoder(map_megabyte_low  + ((map_offset_low  + (slot << 8)) & 0xFFF00), slot, dectab_last_p[page4k]);
-#	define MEM_DEC_MAPPED_HI() dectab_last_p[page4k] = linear_memory_access_decoder(map_megabyte_high + ((map_offset_high + (slot << 8)) & 0xFFF00), slot, dectab_last_p[page4k]);
+#	define DO_MAP_LO() dectab_last_p[page4k] = linear_memory_access_decoder(map_megabyte_low  + ((map_offset_low  + (slot << 8)) & 0xFFF00), slot, dectab_last_p[page4k])
+#	define DO_MAP_HI() dectab_last_p[page4k] = linear_memory_access_decoder(map_megabyte_high + ((map_offset_high + (slot << 8)) & 0xFFF00), slot, dectab_last_p[page4k])
 	static const struct linear_access_decoder_st *dectab_last_p[16] = {
 		decoder_table, decoder_table, decoder_table, decoder_table,
 		decoder_table, decoder_table, decoder_table, decoder_table,
@@ -480,83 +565,100 @@ static void cpu_memory_access_decoder ( unsigned int slot )
 		case 0x0:	// $0000-$0FFF of low region
 		case 0x1:	// $1000-$1FFF of low region
 			if ((map_mask & 0x01)) {
-				MEM_DEC_MAPPED_LO();
+				DO_MAP_LO();
 			} else {
-				FILL_WHOLE_UNMAPPED_AREA(0, 0x1F) {
-					mem_rd_data_p[slot] = main_ram;
-					mem_wr_data_p[slot] = XEMU_LIKELY(slot) ? main_ram : NULL;
-					mem_wr_func_p[slot] = zero_page_writer;	// though it will be only called if mem_wr_data_p is NULL
-				}
+				DO_LEGACY_MAPPING(0x00, 0x1F, c6x_map_ram);
 			}
 			break;
 		case 0x2:	// $2000-$2FFF of low region
 		case 0x3:	// $3000-$3FFF of low region
 			if ((map_mask & 0x02)) {
-				MEM_DEC_MAPPED_LO();
+				DO_MAP_LO();
 			} else {
-				FILL_WHOLE_UNMAPPED_AREA(0x20, 0x3F) {
-					mem_rd_data_p[slot] = main_ram;
-					mem_wr_data_p[slot] = main_ram;
-				}
+				DO_LEGACY_MAPPING(0x20, 0x3F, c6x_map_ram);
 			}
 			break;
 		case 0x4:	// $4000-$4FFF of low region
 		case 0x5:	// $5000-$5FFF of low region
 			if ((map_mask & 0x04)) {
-				MEM_DEC_MAPPED_LO();
+				DO_MAP_LO();
 			} else {
-				FILL_WHOLE_UNMAPPED_AREA(0x40, 0x5F) {
-					mem_rd_data_p[slot] = main_ram;
-					mem_wr_data_p[slot] = main_ram;
-				}
+				DO_LEGACY_MAPPING(0x40, 0x5F, c6x_map_ram);
 			}
 			break;
 		case 0x6:	// $6000-$6FFF of low region
 		case 0x7:	// $7000-$7FFF of low region
 			if ((map_mask & 0x08)) {
-				MEM_DEC_MAPPED_LO();
+				DO_MAP_LO();
 			} else {
-				MEM_DEC_UNMAPPED(slot);
+				DO_LEGACY_MAPPING(0x60, 0x7F, c6x_map_ram);
 			}
 			break;
 		case 0x8:	// $8000-$8FFF of high region
 		case 0x9:	// $9000-$9FFF of high region
-			if ((map_mask & 0x10)) {
-				MEM_DEC_MAPPED_HI();
+			if ((vic_registers[0x30] & VIC3_ROM_MASK_8000) && (!in_hypervisor)) {
+				DO_LEGACY_MAPPING(0x80, 0x9F, c65_map_rom_8000);
+			} else	if ((map_mask & 0x10)) {
+				DO_MAP_HI();
 			} else {
-				MEM_DEC_UNMAPPED(slot);
+				DO_LEGACY_MAPPING(0x80, 0x9F, c6x_map_ram);
 			}
 			break;
 		case 0xA:	// $A000-$AFFF of high region
 		case 0xB:	// $B000-$BFFF of high region
-			if ((map_mask & 0x20)) {
-				MEM_DEC_MAPPED_HI();
+			if ((vic_registers[0x30] & VIC3_ROM_MASK_A000) && (!in_hypervisor)) {
+				DO_LEGACY_MAPPING(0xA0, 0xBF, c65_map_rom_A000);
+			} else if ((map_mask & 0x20)) {
+				DO_MAP_HI();
+			} else if ((c64_memlayout & C64_BASIC_VISIBLE)) {
+				DO_LEGACY_MAPPING(0xA0, 0xBF, c64_map_rom_A000);
 			} else {
-				MEM_DEC_UNMAPPED(slot);
+				DO_LEGACY_MAPPING(0xA0, 0xBF, c6x_map_ram);
 			}
 			break;
 		case 0xC:	// $C000-$CFFF of high region
+			if ((vic_registers[0x30] & VIC3_ROM_MASK_C000) && (!in_hypervisor)) {
+				// Beware, VIC3 C000 ROM mapping is the only one which is 4K in length and not 8K
+				DO_LEGACY_MAPPING(0xC0, 0xCF, c65_map_rom_C000);
+			} else if ((map_mask & 0x40)) {
+				DO_MAP_HI();
+			} else {
+				DO_LEGACY_MAPPING(0xC0, 0xCF, c6x_map_ram);
+			}
+			break;
 		case 0xD:	// $D000-$DFFF of high region
 			if ((map_mask & 0x40)) {
-				MEM_DEC_MAPPED_HI();
+				DO_MAP_HI();
+				legacy_io_is_mapped = 0;
+			} else if ((c64_memlayout & C64_D000_CHARGEN_VISIBLE)) {
+				DO_LEGACY_MAPPING(0xD0, 0xDF, c64_map_rom_D000);
+				legacy_io_is_mapped = 0;
+			} else if ((c64_memlayout & C64_D000_IO_VISIBLE)) {
+				DO_LEGACY_MAPPING(0xD0, 0xDF, map_legacy_io);
+				legacy_io_is_mapped = 1;
 			} else {
-				MEM_DEC_UNMAPPED(slot);
+				DO_LEGACY_MAPPING(0xD0, 0xDF, c6x_map_ram);
+				legacy_io_is_mapped = 0;
 			}
 			break;
 		case 0xE:	// $E000-$EFFF of high region
 		case 0xF:	// $F000-$FFFF of high region
-			if ((map_mask & 0x80)) {
-				MEM_DEC_MAPPED_HI();
+			if ((vic_registers[0x30] & VIC3_ROM_MASK_E000) && (!in_hypervisor)) {
+				DO_LEGACY_MAPPING(0xE0, 0xFF, c65_map_rom_E000);
+			} else if ((map_mask & 0x80)) {
+				DO_MAP_HI();
+			} else if ((c64_memlayout & C64_KERNAL_VISIBLE)) {
+				DO_LEGACY_MAPPING(0xE0, 0xFF, c64_map_rom_E000);
 			} else {
-				MEM_DEC_UNMAPPED(slot);
+				DO_LEGACY_MAPPING(0xE0, 0xFF, c6x_map_ram);
 			}
 			break;
 		default:
 			XEMU_UNREACHABLE();
 	}
-#undef	MEM_DEC_MAPPED_LO
-#undef	MEM_DEC_MAPPED_HI
-#undef	FILL_WHOLE_UNMAPPED_AREA
+#undef	DO_MAP_LO
+#undef	DO_MAP_HI
+#undef	DO_LEGACY_MAPPING
 }
 
 
@@ -587,9 +689,9 @@ static void memory_resolver_writer ( unsigned int slot, Uint16 addr, Uint8 data 
 // This is the invalidate function, which invalidates certain slots.
 // Must be called every time memory mapping, memory area handling, etc changes.
 // See comment at memory_resolver functions above for further comments.
-void memory_invalidate_mapper ( unsigned int start_slot, unsigned int slots )
+void memory_invalidate_mapper ( unsigned int start_slot, unsigned int last_slot )
 {
-	while (slots--) {
+	while (start_slot <= last_slot) {
 		mem_rd_data_p[start_slot] = NULL;
 		mem_rd_func_p[start_slot] = memory_resolver_reader;
 		mem_wr_data_p[start_slot] = NULL;
@@ -602,7 +704,7 @@ void memory_invalidate_mapper ( unsigned int start_slot, unsigned int slots )
 void memory_invalidate_channels ( void )
 {
 	for (int a = 0; a < MAX_MEMORY_CHANNELS; a++) {
-		memory_channel_last_usage[a] = 1;	// we do this, since it must be 256 byte aligned, thus having 1 (not aligned) signals that it's invalid
+		memory_channel_last_usage[a] = INVALIDATED_MEMORY_CHANNEL;
 		memory_channel_last_dectab_p[a] = decoder_table;
 	}
 }
@@ -610,8 +712,9 @@ void memory_invalidate_channels ( void )
 
 void memory_invalidate_mapper_all ( void )
 {
-	memory_invalidate_mapper(0, 0x100);
+	memory_invalidate_mapper(0, 0xFF);
 	memory_invalidate_channels();
+	legacy_io_is_mapped = 0;
 }
 
 
@@ -627,5 +730,10 @@ void memory_init ( void )
 	memory_invalidate_mapper_all();
 	memset(white_hole, sizeof white_hole, MEMORY_UNDECODED_PATTERN);
 	memset(main_ram, MAIN_RAM_SIZE, MEMORY_INIT_PATTERN);
-	last_table_pointer = .....;
+	// Ensure that all the colou-RAM tricks (to be faster to be emulated) have consistent state
+	// FIXME: this should be done on snapshot loading as well!
+	for (int a = 0; a < 2048; a++) {
+		main_ram[0x1F800 + a] = colour_ram[a];
+		c64_colour_ram[a] = (colour_ram[a] & 0x0F) | 0xF0;
+	}
 }
