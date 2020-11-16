@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 #include "hypervisor.h"
 
+// Bit masks in VIC-III register 0x30 for VIC-III-style ROM mappings
 #define VIC3_ROM_MASK_8000	0x08
 #define VIC3_ROM_MASK_A000	0x10
 #define VIC3_ROM_MASK_C000	0x20
@@ -38,6 +39,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // and if the intial linear address is below the current supplied one, the upwards-scan is done from
 // beginning of the table, rather than downwards step-by-step one (opposite of the upwards process)
 #define MEMDEC_BIDIRECTIONAL_TABLE_SCAN
+// If defined, on MAP opcodes, mapper tables are only partly invalidated based on the actual change.
+// In theory it makes faster, however, the actual checks are costy, so maybe this is the opposite!
+// Also, it's more complex to do, there can be bugs.
+#define MAP_OPCODE_PARTIAL_INVALIDATION_ON_MAPPINGS
 
 #define MAIN_RAM_SIZE		((256+128)<<10)
 #define SLOW_RAM_SIZE		(8<<20)
@@ -54,6 +59,9 @@ int skip_unhandled_mem = 0;
 int rom_protect = 0;
 int legacy_io_is_mapped = 0;
 unsigned int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
+#ifdef MAP_OPCODE_PARTIAL_INVALIDATION_ON_MAPPINGS
+static unsigned int map_fulladdr_low, map_fulladdr_high;
+#endif
 
 Uint8 main_ram[MAIN_RAM_SIZE];
 Uint8 slow_ram[SLOW_RAM_SIZE];
@@ -61,7 +69,8 @@ Uint8 hypervisor_ram[HYPERVISOR_RAM_SIZE];
 Uint8 colour_ram[COLOUR_RAM_SIZE];
 Uint8 c64_colour_ram[2048];	// some trick to speed up C64-style "4 bit colour RAM" access. For more information check comments at colour_ram_head_writer() [inc. the fact why 2K when it's C64 ...]
 Uint8 black_hole[0x100];	// memory area functions as "no write here" (just swallows everything)
-Uint8 white_hole[0x100];	// memory area functions as "no read here" (source some fixed value)
+Uint8 white_hole_00[0x100];	// memory area functions as "no read here" (source some fixed value)
+Uint8 white_hole_FF[0x100];
 Uint8 cpu_io_port[2];		// C64-style "CPU I/O port" @ addr 0 and 1 (which is part of VIC-III on C65, but this fact does not matter too much for us now)
 
 
@@ -96,6 +105,8 @@ struct linear_access_decoder_st {
 #define INVALIDATED_MEMORY_CHANNEL	1	// since info must be 256 byte aligned, thus having 1 (not aligned) signals that it's invalid
 Uint32 memory_channel_last_usage[MAX_MEMORY_CHANNELS];
 const struct linear_access_decoder_st *memory_channel_last_dectab_p[MAX_MEMORY_CHANNELS];
+
+//static int invalidated_8k[8] = {1, 1, 1, 1, 1, 1, 1, 1};
 
 Uint8  *mem_rd_data_p[MAX_MEMORY_CHANNELS + 0x100];
 Uint8  *mem_wr_data_p[MAX_MEMORY_CHANNELS + 0x100];
@@ -243,7 +254,7 @@ static void zero_page_writer ( unsigned int slot, unsigned int addr, Uint8 data 
 		main_ram[addr & 0xFF] = data;
 	} else {
 		addr &= 1;
-		if (!addr && (data & 0xFE) == 64) {
+		if (XEMU_UNLIKELY((data & 0xFE) == 64 && addr == 0)) {
 			// special meaning: turn on/off force-fast mode (for values 64 and 65)
 			data &= 1;	// the lowest bit makes the difference between 64 and 65
 			if (XEMU_LIKELY(force_fast != data)) {
@@ -324,7 +335,7 @@ static void undecoded_writer ( const unsigned int slot, const unsigned int addr,
 #define DEFINE_UNDECODED_AREA(begin,end) \
 	{ begin, end, NULL, undecoded_reader, NULL, undecoded_writer }
 #define DEFINE_IGNORED_AREA(begin, end) \
-	{ begin, end, white_hole, NULL, black_hole, NULL }
+	{ begin, end, white_hole_FF, NULL, black_hole, NULL }
 static const struct linear_access_decoder_st decoder_table[] = {
 	// the first two bytes of the memory space if CPU I/O port (sadly! as it means complications and performance loss to emulate), which
 	// needs special care! That's the reason having a separated entry for this 256-byte page ...
@@ -471,7 +482,7 @@ static const struct linear_access_decoder_st *linear_memory_access_decoder ( con
 			} else {
 				// FIXME: maybe better approach to use the CB method, thus having information about
 				// the try to access hypervisor memory from non-hypervisor mode.
-				mem_rd_data_p[slot] = white_hole - slot_ofs;
+				mem_rd_data_p[slot] = white_hole_FF - slot_ofs;
 				mem_wr_data_p[slot] = black_hole - slot_ofs;
 			}
 			break;
@@ -492,6 +503,14 @@ static const struct linear_access_decoder_st *linear_memory_access_decoder ( con
 // Also note, that CPU based slots are used a way that CPU address is ADDED to the mapping.
 // Together with linear_memory_access_decoder() these helpers are the only ones used by CPU mappings at all (which is logical,
 // since these are CPU based memory mapping controls).
+// Rules:
+//   8K(32 slots) C65 VIC-III ROM mapping ($8000) from $38000
+//   8K(32 slots) C65 VIC-III ROM mapping ($A000) from $3A000
+//   4K(16 slots) C65 VIC-III ROM mapping ($C000) from $2C000 [C65 "interface ROM"]
+//   8K(32 slots) C65 VIC-III ROM mapping ($E000) from $3E000 [C65 KERNAL]
+//   8K(32 slots) C64 CPU I/O ROM mapping ($A000) from $2A000 [C64 BASIC]
+//   4K(16 slots) C64 CPU I/O ROM mapping ($D000) from $2D000 [C64 CHARGEN]
+//   8K(32 slots) C64 CPU I/O ROM mapping ($E000) from $2E000 [C64 KERNAL]
 static XEMU_INLINE void c64_map_rom_XXXX ( unsigned int slot )
 {
 	mem_rd_data_p[slot] = main_ram + 0x20000;	// offset in C65 ROM for the C64 stuff, and cpu_addr is also added, so it can be this fixed!!
@@ -517,7 +536,7 @@ static XEMU_INLINE void c65_map_rom_XXXX ( unsigned int slot )
 static XEMU_INLINE void c6x_map_ram ( unsigned int slot )
 {
 	mem_rd_data_p[slot] = main_ram;
-	// We must be aware of slot 0 "problem" (CPU port needs special attention)
+	// We must be aware of slot 0 "problem" (CPU port needs special attention in case of writing at least)
 	if (XEMU_LIKELY(slot)) {
 		mem_wr_data_p[slot] = main_ram;
 	} else {
@@ -525,12 +544,12 @@ static XEMU_INLINE void c6x_map_ram ( unsigned int slot )
 		mem_wr_func_p[slot] = zero_page_writer;
 	}
 }
-static XEMU_INLINE void map_legacy_io ( unsigned slot )
+static XEMU_INLINE void map_legacy_io ( unsigned int slot )
 {
 	mem_rd_data_p[slot] = NULL;
 	mem_wr_data_p[slot] = NULL;
-	mem_rd_func_p[slot] = legacy_io_slot_rd[io_mode][slot - 0xD0];
-	mem_wr_func_p[slot] = legacy_io_slot_wr[io_mode][slot - 0xD0];
+	mem_rd_func_p[slot] = legacy_io_readers_tab[vicio_mode][slot & 0x0F];
+	mem_wr_func_p[slot] = legacy_io_writers_tab[vicio_mode][slot & 0x0F];
 }
 
 
@@ -561,6 +580,7 @@ static void cpu_memory_access_decoder ( unsigned int slot )
 	// Yes, MAP opcode works by 8K, but some memory areas are 4K only (like I/O space, or some VIC-III mapping)
 	// As input argument is "slot" (256 bytes long pages), we need to shift right by 4 (ie, divide further by 16)
 	const unsigned int page4k = slot >> 4;
+	//invalidated_8k[page4k >> 1] = 0;
 	switch (page4k) {
 		case 0x0:	// $0000-$0FFF of low region
 		case 0x1:	// $1000-$1FFF of low region
@@ -594,6 +614,7 @@ static void cpu_memory_access_decoder ( unsigned int slot )
 				DO_LEGACY_MAPPING(0x60, 0x7F, c6x_map_ram);
 			}
 			break;
+		/* ---- HIGH REGION FOLLOWS, MAP now uses the high offset! ---- */
 		case 0x8:	// $8000-$8FFF of high region
 		case 0x9:	// $9000-$9FFF of high region
 			if ((vic_registers[0x30] & VIC3_ROM_MASK_8000) && (!in_hypervisor)) {
@@ -691,11 +712,13 @@ static void memory_resolver_writer ( unsigned int slot, Uint16 addr, Uint8 data 
 // See comment at memory_resolver functions above for further comments.
 void memory_invalidate_mapper ( unsigned int start_slot, unsigned int last_slot )
 {
+	DEBUG("MAPPER: invalidating CPU mappings on slots $%02X-$%02X" NL, start_slot, last_slot);
 	while (start_slot <= last_slot) {
 		mem_rd_data_p[start_slot] = NULL;
 		mem_rd_func_p[start_slot] = memory_resolver_reader;
 		mem_wr_data_p[start_slot] = NULL;
 		mem_wr_func_p[start_slot] = memory_resolver_writer;
+		//invalidated_8k[start_slot >> 5] = 1;
 		start_slot++;
 	}
 }
@@ -703,6 +726,7 @@ void memory_invalidate_mapper ( unsigned int start_slot, unsigned int last_slot 
 
 void memory_invalidate_channels ( void )
 {
+	DEBUG("MAPPER: invalidating memory channels" NL);
 	for (int a = 0; a < MAX_MEMORY_CHANNELS; a++) {
 		memory_channel_last_usage[a] = INVALIDATED_MEMORY_CHANNEL;
 		memory_channel_last_dectab_p[a] = decoder_table;
@@ -728,12 +752,80 @@ void memory_init ( void )
 		FATAL("MEMDEC table sanity check failure: %s", p);
 #endif
 	memory_invalidate_mapper_all();
-	memset(white_hole, sizeof white_hole, MEMORY_UNDECODED_PATTERN);
-	memset(main_ram, MAIN_RAM_SIZE, MEMORY_INIT_PATTERN);
+	memset(white_hole_00, 0x00, sizeof white_hole_00);
+	memset(white_hole_FF, 0xFF, sizeof white_hole_FF);
+	memset(main_ram, BRAM_INIT_PATTERN, MAIN_RAM_SIZE);
+	memset(colour_ram, BRAM_INIT_PATTERN, COLOUR_RAM_SIZE);
 	// Ensure that all the colou-RAM tricks (to be faster to be emulated) have consistent state
 	// FIXME: this should be done on snapshot loading as well!
 	for (int a = 0; a < 2048; a++) {
 		main_ram[0x1F800 + a] = colour_ram[a];
 		c64_colour_ram[a] = (colour_ram[a] & 0x0F) | 0xF0;
 	}
+}
+
+
+// This implements the MAP opcode, ie "AUG" in case of 65CE02, which was re-defined to "MAP" in C65's CPU
+// M65's extension to select "MB" (ie: megabyte slice, which wraps within!) is supported as well
+void cpu65_do_aug_callback ( void )
+{
+	/*   7       6       5       4       3       2       1       0    BIT
+	+-------+-------+-------+-------+-------+-------+-------+-------+
+	| LOWER | LOWER | LOWER | LOWER | LOWER | LOWER | LOWER | LOWER | A
+	| OFF15 | OFF14 | OFF13 | OFF12 | OFF11 | OFF10 | OFF9  | OFF8  |
+	+-------+-------+-------+-------+-------+-------+-------+-------+
+	| MAP   | MAP   | MAP   | MAP   | LOWER | LOWER | LOWER | LOWER | X
+	| BLK3  | BLK2  | BLK1  | BLK0  | OFF19 | OFF18 | OFF17 | OFF16 |
+	+-------+-------+-------+-------+-------+-------+-------+-------+
+	| UPPER | UPPER | UPPER | UPPER | UPPER | UPPER | UPPER | UPPER | Y
+	| OFF15 | OFF14 | OFF13 | OFF12 | OFF11 | OFF10 | OFF9  | OFF8  |
+	+-------+-------+-------+-------+-------+-------+-------+-------+
+	| MAP   | MAP   | MAP   | MAP   | UPPER | UPPER | UPPER | UPPER | Z
+	| BLK7  | BLK6  | BLK5  | BLK4  | OFF19 | OFF18 | OFF17 | OFF16 |
+	+-------+-------+-------+-------+-------+-------+-------+-------+
+	-- C65GS extension: Set the MegaByte register for low and high mobies
+	-- so that we can address all 256MB of RAM.
+	if reg_x = x"0f" then
+		reg_mb_low <= reg_a;
+	end if;
+	if reg_z = x"0f" then
+		reg_mb_high <= reg_y;
+	end if; */
+#ifdef MAP_OPCODE_PARTIAL_INVALIDATION_ON_MAPPINGS
+	const unsigned int old_map_mask = map_mask;
+	const unsigned int old_map_fulladdr_low = map_fulladdr_low;
+	const unsigned int old_map_fulladdr_high = map_fulladdr_high;
+#endif
+	cpu65.cpu_inhibit_interrupts = 1;	// disable interrupts till the next "EOM" (ie: NOP) opcode
+	DEBUG("CPU: MAP opcode, input A=$%02X X=$%02X Y=$%02X Z=$%02X" NL, cpu65.a, cpu65.x, cpu65.y, cpu65.z);
+	map_offset_low  = (cpu65.a <<   8) | ((cpu65.x & 15) << 16);	// offset of lower half (blocks 0-3)
+	map_offset_high = (cpu65.y <<   8) | ((cpu65.z & 15) << 16);	// offset of higher half (blocks 4-7)
+	map_mask        = (cpu65.z & 0xF0) | ( cpu65.x >> 4);		// "is mapped" mask for blocks (1 bit for each)
+	// M65 specific "MB" (megabyte) selector "mode":
+	if (cpu65.x == 0x0F)
+		map_megabyte_low  = (int)cpu65.a << 20;
+	if (cpu65.z == 0x0F)
+		map_megabyte_high = (int)cpu65.y << 20;
+	DEBUG("MEM: applying new memory configuration because of MAP CPU opcode" NL);
+	DEBUG("LOW -OFFSET = $%03X, MB = $%02X" NL, map_offset_low , map_megabyte_low  >> 20);
+	DEBUG("HIGH-OFFSET = $%03X, MB = $%02X" NL, map_offset_high, map_megabyte_high >> 20);
+	DEBUG("MASK        = $%02X" NL, map_mask);
+#ifdef MAP_OPCODE_PARTIAL_INVALIDATION_ON_MAPPINGS
+	// FIXME: maybe this logic is OVERKILL and really does not worth to check so much to avoid invalidation and much "thinner" condition can be OK too.
+	// However it's important it's OK to invalidate memory more than needed, but it's a SERIOUS problem if a memory region is NOT invalidated which should be!!
+	map_fulladdr_low  = map_megabyte_low  | map_offset_low;
+	map_fulladdr_high = map_megabyte_high | map_offset_high;
+	if (/*!invalidated_8k[0] &&*/ (((map_fulladdr_low  != old_map_fulladdr_low ) && (map_mask & 0x01)) || ((map_mask ^ old_map_mask) & 0x01))) memory_invalidate_mapper(0x00, 0x1F);
+	if (/*!invalidated_8k[1] &&*/ (((map_fulladdr_low  != old_map_fulladdr_low ) && (map_mask & 0x02)) || ((map_mask ^ old_map_mask) & 0x02))) memory_invalidate_mapper(0x20, 0x3F);
+	if (/*!invalidated_8k[2] &&*/ (((map_fulladdr_low  != old_map_fulladdr_low ) && (map_mask & 0x04)) || ((map_mask ^ old_map_mask) & 0x04))) memory_invalidate_mapper(0x40, 0x5F);
+	if (/*!invalidated_8k[3] &&*/ (((map_fulladdr_low  != old_map_fulladdr_low ) && (map_mask & 0x08)) || ((map_mask ^ old_map_mask) & 0x08))) memory_invalidate_mapper(0x60, 0x7F);
+	if (/*!invalidated_8k[4] &&*/ (((map_fulladdr_high != old_map_fulladdr_high) && (map_mask & 0x10)) || ((map_mask ^ old_map_mask) & 0x10))) memory_invalidate_mapper(0x80, 0x9F);
+	if (/*!invalidated_8k[5] &&*/ (((map_fulladdr_high != old_map_fulladdr_high) && (map_mask & 0x20)) || ((map_mask ^ old_map_mask) & 0x20))) memory_invalidate_mapper(0xA0, 0xBF);
+	if (/*!invalidated_8k[6] &&*/ (((map_fulladdr_high != old_map_fulladdr_high) && (map_mask & 0x40)) || ((map_mask ^ old_map_mask) & 0x40))) { memory_invalidate_mapper(0xC0, 0xDF); legacy_io_is_mapped = 0; }
+	if (/*!invalidated_8k[7] &&*/ (((map_fulladdr_high != old_map_fulladdr_high) && (map_mask & 0x80)) || ((map_mask ^ old_map_mask) & 0x80))) memory_invalidate_mapper(0xE0, 0xFF);
+#else
+	// We don't use memory_invalidate_mapper_all, since direct linear memory channels can remain.
+	memory_invalidate_mapper(0x00, 0xFF);
+	legacy_io_is_mapped = 0;
+#endif
 }
