@@ -1,5 +1,15 @@
 This is a work-in-progress, for internal use TODO file only!
 
+TODO list for "mem" MEGA65 branch:
+
+* finish memory_mapper.c
+* integrate I/O in a preliminary way
+* intergate I/O in a better way
+* hypervisor leave/enter modification
+* ROM protection change modification
+* CPU memory callbacks
+* DMA memory callbacks
+
 TODO list for MEGA65 shorter term (m65mem branch lifetime, mostly done already btw):
 
 * Write new memory handling [DONE]
@@ -34,8 +44,8 @@ SMALLER [?] misc TODOs in the future:
 * 65xx emulation in general: CPU optimization idea: paged read/write primitives (this means eg ZP aka. BP related opcodes can be optimized a very little in general ...)
 * M65: rom protect and things like linear addressing enable now cannot be changed in a sane way, revise this, also should be allowed for hypervisor only via some regs?
 * M65: $D6XX registers over UART: better decoding, check if hypervisor mode, whatever
-* C65/M65: implement UART, at least for extended keys ...
-* M65: ethernet emulation? if possible (maybe not in host-independent way ...)
+* C65/M65: implement UART, at least for extended keys ... [DONE for extended keys, in an ugly way]
+* M65: ethernet emulation? if possible (maybe not in host-independent way ...) [replanning, current solution is out of sync of M65 and thread-safety issues as well]
 * C65/M65: REC (Ram Expansion Controller) emulation?
 * Allow kbd scanning work in the oppsite way too (C65 material too), generic "c64-style" HID common source material [DONE]
 * Import some C65 changes, OSD tries, and C1531 mouse emulation [DONE]
@@ -55,22 +65,22 @@ SMALLER [?] misc TODOs in the future:
 * Xemu's external D81 mount: allow some hack to mount external/internal from SYS49152 mounter
 * M65 similar FDC r/w control "LED" on the screen corner?
 * C65/M65 too: check MEGA65 kbd layout on PS/2 keyboard, and implement similar with Xemu!
-* Build SD-card image for the user, if needed files are in place at least for that
-* Installer mode: allow to download needed files, ROM images, etc after asking the user if it's OK to do
-* ALL/XEMU: config file support (in theory, the framework is there ...)
-* ALL/XEMU: OSD menu possibility at least
+* M65: Build SD-card image for the user, if needed files are in place at least for that [DONE]
+* Installer mode: allow to download needed files, ROM images, etc after asking the user if it's OK to do [questionable:legal_problems]
+* ALL/XEMU: config file support (in theory, the framework is there ...) [DONE]
+* ALL/XEMU: OSD menu possibility at least [planning]
 * ALL/XEMU: windows console handling (Windows sucks, it needs re-open console to be able to see stdout/stderr, braindead Microsoft programmers ... ehm) [DONE in m65mem-nondependent branch?]
 * ALL/XEMU: on UNIX-like OS, link preferences directory to $HOME/.xemu for some comfort
-* ALL/XEMU: platform-native file dialog functions, used by some OSD menu stuff, ie loading snapshot, attaching another disk image, etc
+* ALL/XEMU: platform-native file dialog functions, used by some OSD menu stuff, ie loading snapshot, attaching another disk image, etc [DONE]
 * M65: check the speed impact of having data pointers in memory_mapper and CPU emulation directly where it is possible at least
 * Optimize CPU emulation at some points (ie paged read/write, flag tuning for NZ bits, more optimized IRQ check)
-* M65: allow 8 bit info per colour channel in palette registers in VIC-IV I/O mode
+* M65: allow 8 bit info per colour channel in palette registers in VIC-IV I/O mode [DONE]
 * M65: memory mapper description for areas (for later provider for advanced monitor/debug features)
 * M65: CPU FAR CALL/JUMP stuff (is it implemented in VHDL at all?)
-* ALL/XEMU: rewrite file load/handle/etc function in emulator, and that guessing file location madness, it's really ugly :(
+* ALL/XEMU: rewrite file load/handle/etc function in emulator, and that guessing file location madness, it's really ugly :( [DONE]
 * M65: "integer math unit" if it's every implemented
 * M65: check for other things missed in the global memory map, not emulated yet
-* Exiting mouse grab mode shouldn't be ESC, as it also mapped as a key on most targets and also emited ...
+* Exiting mouse grab mode shouldn't be ESC, as it also mapped as a key on most targets and also emited ... [DONE]
 
 Projects:
 

@@ -56,12 +56,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 //#define MEMORY_IGNORED_PATTERN		0xFF
 
 int skip_unhandled_mem = 0;
-int rom_protect = 0;
+int rom_protect = 0;	// this can be changed only in hypervisor mode!
 int legacy_io_is_mapped = 0;
-unsigned int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
-#ifdef MAP_OPCODE_PARTIAL_INVALIDATION_ON_MAPPINGS
-static unsigned int map_fulladdr_low, map_fulladdr_high;
-#endif
+unsigned int map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
+Uint8 map_mask;
 
 Uint8 main_ram[MAIN_RAM_SIZE];
 Uint8 slow_ram[SLOW_RAM_SIZE];
@@ -108,6 +106,8 @@ const struct linear_access_decoder_st *memory_channel_last_dectab_p[MAX_MEMORY_C
 
 //static int invalidated_8k[8] = {1, 1, 1, 1, 1, 1, 1, 1};
 
+// ❤️  <--- just testing a cool comment ;)
+
 Uint8  *mem_rd_data_p[MAX_MEMORY_CHANNELS + 0x100];
 Uint8  *mem_wr_data_p[MAX_MEMORY_CHANNELS + 0x100];
 rd_f_t *mem_rd_func_p[MAX_MEMORY_CHANNELS + 0x100];
@@ -138,6 +138,70 @@ static inline Uint8 cpu_read ( const Uint16 addr )
 	else
 		return mem_rd_func_p[slot](slot, addr);
 }
+
+
+Uint32 cpu_read_qbyte ( Uint16 addr )
+{
+	unsigned int slot = addr >> 8;
+#if 0
+	if (XEMU_LIKELY((addr & 0xFF) <= 0xFC)) {
+		// if 4 byte long read does not cross 256-byte long pade boundaries, this process can be optimized
+		if (XEMU_LIKELY(mem_rd_data_p[slot])) {
+			const Uint8 *p = mem_rd_data_p[slot] + addr;
+			return
+				p[0] + (p[1] << 8) + (p[2] << 16) + (p[3] << 24);
+		} else {
+			rd_f_t *p = mem_rd_func_p[slot];
+			return
+				(p(slot, addr    )      ) +
+				(p(slot, addr + 1) <<  8) +
+				(p(slot, addr + 2) << 16) +
+				(p(slot, addr + 3) << 24) ;
+		}
+	}
+#endif
+	Uint32 data = (XEMU_LIKELY(mem_rd_data_p[slot]) ? *(mem_rd_data_p[slot] + addr) : mem_rd_func_p[slot](slot, addr));
+	slot = (++addr) >> 8;
+	data       += (XEMU_LIKELY(mem_rd_data_p[slot]) ? *(mem_rd_data_p[slot] + addr) : mem_rd_func_p[slot](slot, addr)) <<  8;
+	slot = (++addr) >> 8;
+	data       += (XEMU_LIKELY(mem_rd_data_p[slot]) ? *(mem_rd_data_p[slot] + addr) : mem_rd_func_p[slot](slot, addr)) << 16;
+	slot = (++addr) >> 8;
+	data       += (XEMU_LIKELY(mem_rd_data_p[slot]) ? *(mem_rd_data_p[slot] + addr) : mem_rd_func_p[slot](slot, addr)) << 24;
+	return data;
+}
+
+
+void cpu_write_qbyte ( Uint16 addr, const Uint32 data )
+{
+	unsigned int slot = addr >> 8;
+#if 0
+	if (XEMU_LIKELY((addr & 0xFF) <= 0xFC)) {
+		// if 4 byte long write does not cross 256-byte long pade boundaries, this process can be optimized
+		if (XEMU_LIKELY(mem_wr_data_p[slot])) {
+			Uint8 *p = mem_wr_data_p[slot] + addr;
+			p[0] = data;
+			p[1] = data >>  8;
+			p[2] = data >> 16;
+			p[3] = data >> 24;
+		} else {
+			wr_f_t *p = mem_wr_func_p[slot];
+			p(slot, addr    , data      );
+			p(slot, addr + 1, data >>  8);
+			p(slot, addr + 2, data >> 16);
+			p(slot, addr + 3, data >> 24);
+		}
+		return;
+	}
+#endif
+	if (XEMU_LIKELY(mem_wr_data_p[slot])) *(mem_wr_data_p[slot] + addr) = data      ; else mem_wr_func_p[slot](slot, addr, data      );
+	slot = (++addr) >> 8;
+	if (XEMU_LIKELY(mem_wr_data_p[slot])) *(mem_wr_data_p[slot] + addr) = data >>  8; else mem_wr_func_p[slot](slot, addr, data >>  8);
+	slot = (++addr) >> 8;
+	if (XEMU_LIKELY(mem_wr_data_p[slot])) *(mem_wr_data_p[slot] + addr) = data >> 16; else mem_wr_func_p[slot](slot, addr, data >> 16);
+	slot = (++addr) >> 8;
+	if (XEMU_LIKELY(mem_wr_data_p[slot])) *(mem_wr_data_p[slot] + addr) = data >> 24; else mem_wr_func_p[slot](slot, addr, data >> 24);
+}
+
 
 static inline void cpu_write ( const Uint16 addr, const Uint8 data )
 {
@@ -170,7 +234,7 @@ static inline void cpu_write_rmw ( Uint16 addr, Uint8 old_data, Uint8 new_data )
 }
 
 
-void memory_invalidate_mapper ( unsigned int start_slot, unsigned int slots );
+void memory_invalidate_mapper ( unsigned int start_slot, unsigned int last_slot );
 
 
 // The first three must shared the first two bits of values, and no other stuff can be within! (that's the reason of "jump" in sequence)
@@ -253,7 +317,7 @@ static void zero_page_writer ( unsigned int slot, unsigned int addr, Uint8 data 
 		// the most likely case: not touching the the CPU data/ddr I/O port, normal memory access
 		main_ram[addr & 0xFF] = data;
 	} else {
-		addr &= 1;
+		addr &= 1;	// now we have either 0 or 1 as address
 		if (XEMU_UNLIKELY((data & 0xFE) == 64 && addr == 0)) {
 			// special meaning: turn on/off force-fast mode (for values 64 and 65)
 			data &= 1;	// the lowest bit makes the difference between 64 and 65
@@ -548,8 +612,8 @@ static XEMU_INLINE void map_legacy_io ( unsigned int slot )
 {
 	mem_rd_data_p[slot] = NULL;
 	mem_wr_data_p[slot] = NULL;
-	mem_rd_func_p[slot] = legacy_io_readers_tab[vicio_mode][slot & 0x0F];
-	mem_wr_func_p[slot] = legacy_io_writers_tab[vicio_mode][slot & 0x0F];
+	mem_rd_func_p[slot] = legacy_io_readers_tab[vic_iomode][slot & 0x0F];
+	mem_wr_func_p[slot] = legacy_io_writers_tab[vic_iomode][slot & 0x0F];
 }
 
 
@@ -694,13 +758,13 @@ static void cpu_memory_access_decoder ( unsigned int slot )
 // the invalidation function) which if hit, first it fills the particular
 // slot (for later reference into the same slot) and also serve the memory
 // request.
-static Uint8 memory_resolver_reader ( unsigned int slot, Uint16 addr )
+static Uint8 memory_resolver_reader ( unsigned int slot, unsigned int addr )
 {
 	cpu_memory_access_decoder(slot);
 	return cpu_read(addr);
 }
 
-static void memory_resolver_writer ( unsigned int slot, Uint16 addr, Uint8 data )
+static void memory_resolver_writer ( unsigned int slot, unsigned int addr, Uint8 data )
 {
 	cpu_memory_access_decoder(slot);
 	cpu_write(addr, data);
@@ -792,9 +856,9 @@ void cpu65_do_aug_callback ( void )
 		reg_mb_high <= reg_y;
 	end if; */
 #ifdef MAP_OPCODE_PARTIAL_INVALIDATION_ON_MAPPINGS
-	const unsigned int old_map_mask = map_mask;
-	const unsigned int old_map_fulladdr_low = map_fulladdr_low;
-	const unsigned int old_map_fulladdr_high = map_fulladdr_high;
+	const unsigned int old_map_fulladdr_low  = map_megabyte_low  + map_offset_low ;
+	const unsigned int old_map_fulladdr_high = map_megabyte_high + map_offset_high;
+	Uint8 changed_bits_map_mask = map_mask;
 #endif
 	cpu65.cpu_inhibit_interrupts = 1;	// disable interrupts till the next "EOM" (ie: NOP) opcode
 	DEBUG("CPU: MAP opcode, input A=$%02X X=$%02X Y=$%02X Z=$%02X" NL, cpu65.a, cpu65.x, cpu65.y, cpu65.z);
@@ -813,19 +877,50 @@ void cpu65_do_aug_callback ( void )
 #ifdef MAP_OPCODE_PARTIAL_INVALIDATION_ON_MAPPINGS
 	// FIXME: maybe this logic is OVERKILL and really does not worth to check so much to avoid invalidation and much "thinner" condition can be OK too.
 	// However it's important it's OK to invalidate memory more than needed, but it's a SERIOUS problem if a memory region is NOT invalidated which should be!!
-	map_fulladdr_low  = map_megabyte_low  | map_offset_low;
-	map_fulladdr_high = map_megabyte_high | map_offset_high;
-	if (/*!invalidated_8k[0] &&*/ (((map_fulladdr_low  != old_map_fulladdr_low ) && (map_mask & 0x01)) || ((map_mask ^ old_map_mask) & 0x01))) memory_invalidate_mapper(0x00, 0x1F);
-	if (/*!invalidated_8k[1] &&*/ (((map_fulladdr_low  != old_map_fulladdr_low ) && (map_mask & 0x02)) || ((map_mask ^ old_map_mask) & 0x02))) memory_invalidate_mapper(0x20, 0x3F);
-	if (/*!invalidated_8k[2] &&*/ (((map_fulladdr_low  != old_map_fulladdr_low ) && (map_mask & 0x04)) || ((map_mask ^ old_map_mask) & 0x04))) memory_invalidate_mapper(0x40, 0x5F);
-	if (/*!invalidated_8k[3] &&*/ (((map_fulladdr_low  != old_map_fulladdr_low ) && (map_mask & 0x08)) || ((map_mask ^ old_map_mask) & 0x08))) memory_invalidate_mapper(0x60, 0x7F);
-	if (/*!invalidated_8k[4] &&*/ (((map_fulladdr_high != old_map_fulladdr_high) && (map_mask & 0x10)) || ((map_mask ^ old_map_mask) & 0x10))) memory_invalidate_mapper(0x80, 0x9F);
-	if (/*!invalidated_8k[5] &&*/ (((map_fulladdr_high != old_map_fulladdr_high) && (map_mask & 0x20)) || ((map_mask ^ old_map_mask) & 0x20))) memory_invalidate_mapper(0xA0, 0xBF);
-	if (/*!invalidated_8k[6] &&*/ (((map_fulladdr_high != old_map_fulladdr_high) && (map_mask & 0x40)) || ((map_mask ^ old_map_mask) & 0x40))) { memory_invalidate_mapper(0xC0, 0xDF); legacy_io_is_mapped = 0; }
-	if (/*!invalidated_8k[7] &&*/ (((map_fulladdr_high != old_map_fulladdr_high) && (map_mask & 0x80)) || ((map_mask ^ old_map_mask) & 0x80))) memory_invalidate_mapper(0xE0, 0xFF);
+	changed_bits_map_mask ^= map_mask;
+	int is_map_offs_changed = ((map_megabyte_low  + map_offset_low ) != old_map_fulladdr_low );
+	if (/*!invalidated_8k[0] &&*/ ((is_map_offs_changed && (map_mask & 0x01)) || (changed_bits_map_mask & 0x01))) memory_invalidate_mapper(0x00, 0x1F);
+	if (/*!invalidated_8k[1] &&*/ ((is_map_offs_changed && (map_mask & 0x02)) || (changed_bits_map_mask & 0x02))) memory_invalidate_mapper(0x20, 0x3F);
+	if (/*!invalidated_8k[2] &&*/ ((is_map_offs_changed && (map_mask & 0x04)) || (changed_bits_map_mask & 0x04))) memory_invalidate_mapper(0x40, 0x5F);
+	if (/*!invalidated_8k[3] &&*/ ((is_map_offs_changed && (map_mask & 0x08)) || (changed_bits_map_mask & 0x08))) memory_invalidate_mapper(0x60, 0x7F);
+	is_map_offs_changed     = ((map_megabyte_high + map_offset_high) != old_map_fulladdr_high);
+	if (/*!invalidated_8k[4] &&*/ ((is_map_offs_changed && (map_mask & 0x10)) || (changed_bits_map_mask & 0x10))) memory_invalidate_mapper(0x80, 0x9F);
+	if (/*!invalidated_8k[5] &&*/ ((is_map_offs_changed && (map_mask & 0x20)) || (changed_bits_map_mask & 0x20))) memory_invalidate_mapper(0xA0, 0xBF);
+	if (/*!invalidated_8k[6] &&*/ ((is_map_offs_changed && (map_mask & 0x40)) || (changed_bits_map_mask & 0x40))) { memory_invalidate_mapper(0xC0, 0xDF); legacy_io_is_mapped = 0; }
+	if (/*!invalidated_8k[7] &&*/ ((is_map_offs_changed && (map_mask & 0x80)) || (changed_bits_map_mask & 0x80))) memory_invalidate_mapper(0xE0, 0xFF);
 #else
 	// We don't use memory_invalidate_mapper_all, since direct linear memory channels can remain.
 	memory_invalidate_mapper(0x00, 0xFF);
 	legacy_io_is_mapped = 0;
 #endif
+}
+
+
+// *** Implements the EOM opcode of 4510, called by the 65CE02 emulator
+void cpu65_do_nop_callback ( void )
+{
+	if (cpu65.cpu_inhibit_interrupts) {
+		cpu65.cpu_inhibit_interrupts = 0;
+		DEBUG("CPU: EOM, interrupts were disabled because of MAP till the EOM" NL);
+	} else
+		DEBUG("CPU: NOP not treated as EOM (no MAP before)" NL);
+}
+
+
+void memory_set_vic3_rom_mapping ( Uint8 cfg )
+{
+	static Uint8 old_cfg = 0;
+	cfg = XEMU_UNLIKELY(in_hypervisor) ? 0 : cfg & (VIC3_ROM_MASK_8000 | VIC3_ROM_MASK_A000 | VIC3_ROM_MASK_C000 | VIC3_ROM_MASK_E000);
+	Uint8 cfg_changed = old_cfg ^ cfg;
+	if (!cfg_changed)
+		return;
+	old_cfg = cfg;
+	if ((cfg_changed & VIC3_ROM_MASK_8000))
+		memory_invalidate_mapper(0x80, 0x9F);
+	if ((cfg_changed & VIC3_ROM_MASK_A000))
+		memory_invalidate_mapper(0xA0, 0xBF);
+	if ((cfg_changed & VIC3_ROM_MASK_C000))
+		memory_invalidate_mapper(0xC0, 0xCF);
+	if ((cfg_changed & VIC3_ROM_MASK_E000))
+		memory_invalidate_mapper(0xE0, 0xFF);
 }
