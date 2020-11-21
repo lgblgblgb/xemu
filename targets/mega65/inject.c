@@ -81,6 +81,9 @@ static void prg_inject_callback ( void *unused )
 	clear_emu_events();	// clear keyboard & co state, ie for C64 mode, probably had MEGA key pressed still
 	CBM_SCREEN_PRINTF(under_ready_p - get_screen_width() + 7, "<$%04X-$%04X,%d bytes>", prg.load_addr, prg.load_addr + prg.size - 1, prg.size);
 	if (prg.run_it) {
+		// We must modify BASIC pointers ... Important to know the C64/C65 differences!
+		main_ram[0x2D] =  prg.size + prg.load_addr;
+		main_ram[0x2E] = (prg.size + prg.load_addr) >> 8;
 		// If program was detected as BASIC (by load-addr) we want to auto-RUN it
 		CBM_SCREEN_PRINTF(under_ready_p, " ?\"@\":RUN:");
 		KBD_PRESS_KEY(0x01);	// press RETURN
@@ -208,10 +211,13 @@ void inject_ready_check_do ( void )
 			inject_ready_check_status = 2;
 	} else if (inject_ready_check_status == 100) {	// special mode ...
 		// This is used to check the @ char printed by our tricky RUN line to see it's time to release RETURN (or just simply clear all the keyboard)
-		if (under_ready_p[get_screen_width()] == 0x00) {
+		Uint8 *p = under_ready_p + get_screen_width();
+		if (*p == 0x00) {
 			inject_ready_check_status = 0;
 			clear_emu_events();		// reset keyboard state & co
 			DEBUGPRINT("INJECT: clearing keyboard status on '@' trigger." NL);
+			*p = ' ';
+			CBM_SCREEN_PRINTF(under_ready_p, "RUN:      ");
 		}
 	} else if (inject_ready_check_status > 10) {
 		inject_ready_check_status = 0;	// turn off "ready check" mode, we have our READY.
