@@ -135,7 +135,7 @@ static void ui_format_sdcard ( void )
 	if (ARE_YOU_SURE(
 		"Formatting your SD-card image file will cause ALL your data,\n"
 		"system files (etc!) to be lost, forever!\n"
-		"Are you sure to continue this self-desctruction sequence? :)"
+		"Are you sure to continue this self-destruction sequence? :)"
 		,
 		0
 	)) {
