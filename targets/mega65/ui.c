@@ -79,7 +79,7 @@ static void ui_attach_d81_by_browsing ( void )
 	))
 		attach_d81(fnbuf);
 	else
-		DEBUGPRINT("UI: file selection for D81 mount was cancalled." NL);
+		DEBUGPRINT("UI: file selection for D81 mount was cancelled." NL);
 }
 
 static void ui_run_prg_by_browsing ( void )
@@ -96,7 +96,7 @@ static void ui_run_prg_by_browsing ( void )
 		reset_mega65();
 		inject_register_prg(fnbuf, 0);
 	} else
-		DEBUGPRINT("UI: file selection for PRG injection was cancalled." NL);
+		DEBUGPRINT("UI: file selection for PRG injection was cancelled." NL);
 }
 
 #ifdef BASIC_TEXT_SUPPORT
@@ -140,7 +140,7 @@ static void ui_format_sdcard ( void )
 		0
 	)) {
 		if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_FORCE_FDISK))
-			INFO_WINDOW("You SD-card file has been partitioned/formatted\nMEGA65 emulation is about to RESET now!");
+			INFO_WINDOW("Your SD-card file has been partitioned/formatted\nMEGA65 emulation is about to RESET now!");
 	}
 	reset_mega65();
 }
