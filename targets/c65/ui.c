@@ -83,7 +83,7 @@ static void ui_attach_d81_by_browsing ( void )
 	))
 		attach_d81(fnbuf);
 	else
-		DEBUGPRINT("UI: file selection for D81 mount was cancalled." NL);
+		DEBUGPRINT("UI: file selection for D81 mount was cancelled." NL);
 }
 #endif
 
@@ -102,7 +102,7 @@ static void ui_run_prg_by_browsing ( void )
 		c65_reset();
 		inject_register_prg(fnbuf, 0);
 	} else
-		DEBUGPRINT("UI: file selection for PRG injection was cancalled." NL);
+		DEBUGPRINT("UI: file selection for PRG injection was cancelled." NL);
 }
 
 static void ui_dump_memory ( void )
