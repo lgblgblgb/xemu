@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "memory_mapper.h"
 #include "vic4.h"
 #include "xemu/emutools_hid.h"
+#include "xemu/f011_core.h"
 
 #define C64_BASIC_LOAD_ADDR	0x0801
 #define C65_BASIC_LOAD_ADDR	0x2001
@@ -77,6 +78,7 @@ static void _cbm_screen_write ( Uint8 *p, const char *s )
 static void prg_inject_callback ( void *unused )
 {
 	DEBUGPRINT("INJECT: hit 'READY.' trigger, about to inject %d bytes from $%04X." NL, prg.size, prg.load_addr);
+	fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);
 	memcpy(main_ram + prg.load_addr, prg.stream, prg.size);
 	clear_emu_events();	// clear keyboard & co state, ie for C64 mode, probably had MEGA key pressed still
 	CBM_SCREEN_PRINTF(under_ready_p - get_screen_width() + 7, "<$%04X-$%04X,%d bytes>", prg.load_addr, prg.load_addr + prg.size - 1, prg.size);
@@ -91,17 +93,24 @@ static void prg_inject_callback ( void *unused )
 		inject_ready_check_status = 100;	// go into special mode, to see "@" character printed by PRINT, to release RETURN by that trigger
 	} else {
 		// In this case we DO NOT press RETURN for user, as maybe the SYS addr is different, or user does not want this at all!
-		CBM_SCREEN_PRINTF(under_ready_p, " SYS %d:REM **YOU CAN PRESS RETURN**", prg.load_addr);
+		CBM_SCREEN_PRINTF(under_ready_p, " SYS%d:REM **YOU CAN PRESS RETURN**", prg.load_addr);
 	}
 	free(prg.stream);
+}
+
+
+static void allow_disk_access_callback ( void *unused )
+{
+	DEBUGPRINT("INJECT: re-enable disk access on READY. prompt" NL);
+	fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);
 }
 
 
 int inject_register_ready_status ( const char *debug_msg, void (*callback)(void*), void *userdata )
 {
 	if (inject_ready_check_status) {
-		DEBUGPRINT("ERROR: INJECT: cannot register 'READY.' event, already having one in progress!" NL);
-		return 1;
+		DEBUGPRINT("WARNING: INJECT: cannot register 'READY.' event, already having one in progress!" NL);
+		//return 1;
 	}
 	DEBUGPRINT("INJECT: registering 'READY.' event: %s" NL, debug_msg);
 	inject_ready_userdata = userdata;
@@ -109,6 +118,14 @@ int inject_register_ready_status ( const char *debug_msg, void (*callback)(void*
 	inject_ready_check_status = 1;
 	memset(main_ram + 1024, 0, 1024 * 3);	// be sure, no READY. can be seen already on the screen
 	return 0;
+}
+
+
+void inject_register_allow_disk_access ( void )
+{
+	fdc_allow_disk_access(FDC_DENY_DISK_ACCESS);	// deny now!
+	// register event for the READY. prompt for re-enable
+	inject_register_ready_status("Disk access re-enabled", allow_disk_access_callback, NULL);
 }
 
 
@@ -123,6 +140,7 @@ int inject_register_prg ( const char *prg_fn, int prg_mode )
 	prg.load_addr = prg.stream[0] + (prg.stream[1] << 8);
 	prg.size -= 2;
 	memmove(prg.stream, prg.stream + 2, prg.size);
+	// TODO: needs to be fixed to check ROM boundary (or eg from addr zero)
 	if (prg.load_addr + prg.size > 0xFFFF) {
 		ERROR_WINDOW("Program to be injected is too large (%d bytes, load address: $%04X)\nFile: %s",
 			prg.size,
@@ -172,6 +190,7 @@ int inject_register_prg ( const char *prg_fn, int prg_mode )
 		KBD_PRESS_KEY(0x75);	// "MEGA" key is hold down for C64 mode
 	if (inject_register_ready_status("PRG memory injection", prg_inject_callback, NULL)) // prg inject does not use the userdata ...
 		goto error;
+	fdc_allow_disk_access(FDC_DENY_DISK_ACCESS);	// deny now, to avoid problem on PRG load while autoboot disk is mounted
 	return 0;
 error:
 	if (prg.stream) {
@@ -184,7 +203,7 @@ error:
 
 static int is_ready_on_screen ( void )
 {
-	static const Uint8 ready[] = { 0x12, 0x05, 0x01, 0x04, 0x19, 0x2E };
+	static const Uint8 ready[] = { 0x12, 0x05, 0x01, 0x04, 0x19, 0x2E };	// "READY." in screen codes
 	int width = get_screen_width();
 	// TODO: this should be revised in the future, as MEGA65 can other means have
 	// different screen starting addresses, and not even dependent on the 40/80 column mode!!!
@@ -216,8 +235,8 @@ void inject_ready_check_do ( void )
 			inject_ready_check_status = 0;
 			clear_emu_events();		// reset keyboard state & co
 			DEBUGPRINT("INJECT: clearing keyboard status on '@' trigger." NL);
-			*p = ' ';
-			CBM_SCREEN_PRINTF(under_ready_p, "RUN:      ");
+			memset(under_ready_p, ' ', 10);
+			CBM_SCREEN_PRINTF(p, "RUN:");
 		}
 	} else if (inject_ready_check_status > 10) {
 		inject_ready_check_status = 0;	// turn off "ready check" mode, we have our READY.

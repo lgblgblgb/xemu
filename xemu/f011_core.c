@@ -1,6 +1,6 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 / MEGA65 emulator,
    within the Xemu project. F011 FDC core implementation.
-   Copyright (C)2016,2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2018-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,25 +16,20 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-
-/* !!!!!!!!!!!!!!!!!!!
-   FDC F011 emulation is still a big mess, with bugs, and unplemented features.
-   It gives you only read only access currently, and important features like SWAP
-   bit is not handled at all. The first goal is to be usable with "DIR" and "LOAD"
-   commands on the C65, nothing too much more */
+/* !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+   !! FDC F011 emulation is still a big mess, with bugs, and unplemented features.    !!
+   !! It gives you only read only access currently, and important features like SWAP  !!
+   !! bit is not handled at all. The first goal is to be usable with "DIR" and "LOAD" !!
+   !! commands on the C65, nothing too much more                                      !!
+   !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */
 
 
 #include "xemu/emutools.h"
 #include "xemu/f011_core.h"
 #include "xemu/cpu65.h"
 
-
-
-
-
 // #define DEBUG_FOR_PAUL
 // #define SOME_DEBUG
-
 
 static Uint8 head_track;		// "physical" track, ie, what is the head is positioned at currently
 static int   head_side;
@@ -57,6 +52,7 @@ static int   warn_swap_bit = 1;
 static void  execute_command ( void );
 
 static int   have_disk, have_write;
+static int   allowed_disk = FDC_ALLOW_DISK_ACCESS;	// provides a way to TEMPORARLY reject disk access (eg: avoid autoboot)
 
 
 
@@ -81,8 +77,14 @@ void fdc_init ( Uint8 *cache_set )
 	drive = 0;
 	fdc_set_disk(0, 0);
 	status_b &= 0x7F;	// at this point we don't want disk changed signal (bit 7) yet
+	allowed_disk = FDC_ALLOW_DISK_ACCESS;
 }
 
+
+void fdc_allow_disk_access ( int in )
+{
+	allowed_disk = in;
+}
 
 
 void fdc_set_disk ( int in_have_disk, int in_have_write )
@@ -103,6 +105,7 @@ void fdc_set_disk ( int in_have_disk, int in_have_write )
 	} else {
 		status_a &= ~2;
 	}
+	//allowed_disk = FDC_ALLOW_DISK_ACCESS; // FIXME: maybe should be deleted, as causes to revokation of access to be dismissed on calling this function!
 }
 
 
@@ -131,7 +134,7 @@ static int calc_offset ( const char *opdesc )
 static void read_sector ( void )
 {
 	int error;
-	if (have_disk) {
+	if (have_disk && allowed_disk == FDC_ALLOW_DISK_ACCESS) {
 		int offset = calc_offset("reading");
 		error = (offset < 0);
 		if (!error) {
@@ -151,7 +154,7 @@ static void read_sector ( void )
 	} else {
 		error = 1;
 		DEBUG("FDC: no disk in drive" NL);
-		if (warn_disk) {
+		if (warn_disk && allowed_disk == FDC_ALLOW_DISK_ACCESS) {
 			INFO_WINDOW("No disk image was given or can be loaded!");
 			warn_disk = 0;
 		}
@@ -164,6 +167,8 @@ static void read_sector ( void )
 		status_b |= 128 | 32 ;  // RDREQ, RUN to set! (important: ROM waits for RDREQ to be high after issued read operation, also we must clear it SOME time later ...)
 		status_a &= ~32;  // clear EQ, missing this in general freezes DOS as it usually does not expect to have EQ set even before the first data read [??]
 	}
+	if (allowed_disk == FDC_DENY_DISK_ACCESS_ONCE)
+		allowed_disk = FDC_ALLOW_DISK_ACCESS;
 }
 
 
@@ -173,7 +178,7 @@ static void read_sector ( void )
 static void write_sector ( void )
 {
 	int error;
-	if (have_disk && have_write) {
+	if (have_disk && allowed_disk == FDC_ALLOW_DISK_ACCESS && have_write) {
 		int offset = calc_offset("writing");
 		error = (offset < 0);
 		if (!error) {
@@ -192,7 +197,7 @@ static void write_sector ( void )
 	} else {
 		error = 1;
 		DEBUG("FDC: no disk in drive or write protected" NL);
-		if (warn_disk) {
+		if (warn_disk && allowed_disk == FDC_ALLOW_DISK_ACCESS) {
 			INFO_WINDOW("No disk image was given or can be loaded or write protected disk!");
 			warn_disk = 0;
 		}
@@ -205,6 +210,8 @@ static void write_sector ( void )
 		status_b |= 64 | 32 ;  // WTREQ, RUN to set!
 		status_a &= ~32;  // clear EQ, missing this in general freezes DOS as it usually does not expect to have EQ set even before the first data read [??]
 	}
+	if (allowed_disk == FDC_DENY_DISK_ACCESS_ONCE)
+		allowed_disk = FDC_ALLOW_DISK_ACCESS;
 }
 
 

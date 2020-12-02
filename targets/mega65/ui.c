@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "inject.h"
 #include "input_devices.h"
 #include "uart_monitor.h"
+#include "xemu/f011_core.h"
 
 
 static int attach_d81 ( const char *fn )
@@ -81,6 +82,13 @@ static void ui_attach_d81_by_browsing ( void )
 	else
 		DEBUGPRINT("UI: file selection for D81 mount was cancelled." NL);
 }
+
+
+static void ui_detach_d81 ( void )
+{
+	forget_external_d81();
+}
+
 
 static void ui_run_prg_by_browsing ( void )
 {
@@ -221,6 +229,9 @@ static void reset_into_utility_menu ( void )
 static void reset_into_c64_mode ( void )
 {
 	if (reset_mega65_asked()) {
+		// we need this, because autoboot disk image would bypass the "go to C64 mode" on 'Commodore key' feature
+		// this call will deny disk access, and re-enable on the READY. state.
+		inject_register_allow_disk_access();
 		hid_set_autoreleased_key(0x75);
 		KBD_PRESS_KEY(0x75);	// "MEGA" key is pressed for C64 mode
 	}
@@ -230,6 +241,15 @@ static void reset_into_c64_mode ( void )
 static void reset_into_c65_mode ( void )
 {
 	if (reset_mega65_asked()) {
+		KBD_RELEASE_KEY(0x75);
+		hwa_kbd_fake_key(0);
+	}
+}
+
+static void reset_into_c65_mode_noboot ( void )
+{
+	if (reset_mega65_asked()) {
+		inject_register_allow_disk_access();
 		KBD_RELEASE_KEY(0x75);
 		hwa_kbd_fake_key(0);
 	}
@@ -283,9 +303,10 @@ static const struct menu_st menu_sdcard[] = {
 	{ NULL }
 };
 static const struct menu_st menu_reset[] = {
-	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode     },
-	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu },
-	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode     },
+	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode        },
+	{ "Reset M65 without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot },
+	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu    },
+	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode        },
 	{ NULL }
 };
 static const struct menu_st menu_debug[] = {
@@ -309,12 +330,17 @@ static const struct menu_st menu_help[] = {
 	{ NULL }
 };
 #endif
+static const struct menu_st menu_d81[] = {
+	{ "Attach user D81",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
+	{ "Use internal D81",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_detach_d81 },
+	{ NULL }
+};
 static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
 	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
+	{ "FD disk",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_d81     },
 	{ "Reset",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
 	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
-	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
 #ifdef BASIC_TEXT_SUPPORT
 	{ "Save BASIC as text",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_save_basic_as_text },

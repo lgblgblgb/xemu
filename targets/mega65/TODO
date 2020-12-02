@@ -3,6 +3,7 @@ This is a work-in-progress, for internal use TODO file only!
 TODO list for MEGA65 shorter term (m65mem branch lifetime, mostly done already btw):
 
 * Write new memory handling [DONE]
+* Write even newer memory handling
 * Again: try different solutions for best performance within similar constraints? [PENDING]
 * Make new memory handling work ... [DONE?]
 * ... test it!
@@ -64,13 +65,13 @@ SMALLER [?] misc TODOs in the future:
 * ALL/XEMU: platform-native file dialog functions, used by some OSD menu stuff, ie loading snapshot, attaching another disk image, etc
 * M65: check the speed impact of having data pointers in memory_mapper and CPU emulation directly where it is possible at least
 * Optimize CPU emulation at some points (ie paged read/write, flag tuning for NZ bits, more optimized IRQ check)
-* M65: allow 8 bit info per colour channel in palette registers in VIC-IV I/O mode
+* M65: allow 8 bit info per colour channel in palette registers in VIC-IV I/O mode [DONE]
 * M65: memory mapper description for areas (for later provider for advanced monitor/debug features)
 * M65: CPU FAR CALL/JUMP stuff (is it implemented in VHDL at all?)
 * ALL/XEMU: rewrite file load/handle/etc function in emulator, and that guessing file location madness, it's really ugly :(
 * M65: "integer math unit" if it's every implemented
 * M65: check for other things missed in the global memory map, not emulated yet
-* Exiting mouse grab mode shouldn't be ESC, as it also mapped as a key on most targets and also emited ...
+* Exiting mouse grab mode shouldn't be ESC, as it also mapped as a key on most targets and also emited ... [DONE]
 
 Projects:
 
