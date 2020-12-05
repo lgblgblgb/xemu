@@ -30,8 +30,9 @@
 		"mega65": [
 			[ "https://github.com/lgblgblgb/xemu/wiki/MEGA65-help", "Xemu::MEGA65 help page", "help" ],
 			[ "https://mega65.org", "The MEGA65 project", "project" ],
-			[ "https://mega.scryptos.com/sharefolder-link/MEGA/MEGA65+filehost/Docs/MEGA65-Book_draft.pdf", "MEGA65 official book", "downloadmega65book",
-				"Redirecting for downloading MEGA65-book.\nYou may need to accept terms and conditions though,\nat the download site." ],
+			/*[ "https://mega.scryptos.com/sharefolder-link/MEGA/MEGA65+filehost/Docs/MEGA65-Book_draft.pdf", "MEGA65 official book", "downloadmega65book",
+				"Redirecting for downloading MEGA65-book.\nYou may need to accept terms and conditions though,\nat the download site." ],*/
+			[ "https://files.mega65.org/news/MEGA65-User-Guide.pdf", "MEGA65 official book", "downloadmega65book" ],
 			[ "https://www.forum64.de/index.php?board/457-mega65/", "MEGA65 forum", "forum" ],
 			[ "https://github.com/MEGA65", "MEGA65 github repositories", "repo" ],
 		],
@@ -174,8 +175,10 @@ function htmlEntities ( s )
 
 function redirect ( raw_url, alert_msg )
 {
-	if (alert_msg)
+	if (alert_msg) {
+		document.getElementById("JSwarningContainer").innerHTML = "Redirecting ...";
 		window.alert(alert_msg);
+	}
 	const url = htmlEntities(raw_url);
 	showPage("<p>About redirecting (<b style='color: red'>please wait!</b>) to: <a href='" + url + "'>" + url + "</a><p>" +
 		"<p><i>If redirection does not work even after a while, you can try to click on the URL above.</i></p>");
