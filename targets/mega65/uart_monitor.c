@@ -157,7 +157,7 @@ static void execute_command ( char *cmd )
 	p--;
 	while (p >= cmd && *p <= 32)
 		*(p--) = 0;
-	DEBUG("UARTMON: command got \"%s\" (%d bytes)." NL, cmd, (int)strlen(cmd));
+	printf("UARTMON: command got \"%s\" (%d bytes)." NL, cmd, (int)strlen(cmd));
 	switch (*(cmd++)) {
 		case 'h':
 		case 'H':
@@ -322,7 +322,7 @@ int uartmon_init ( const char *fn )
 		xemusock_close(sock, NULL);
 		return 1;
 	}
-	DEBUG("UARTMON: monitor is listening on socket %s" NL, fn);
+	printf("UARTMON: monitor is listening on socket %s" NL, fn);
 	sock_client = UNCONNECTED;	// no client connection yet
 	sock_server = sock;		// now set the server socket visible outside of this function too
 	umon_echo = 1;
@@ -359,80 +359,104 @@ void uartmon_finish_command ( void )
 	umon_echo = 1;
 }
 
+void echo_command(char* command, int ret);
 
-// Non-blocky I/O for UART monitor emulation.
-// Note: you need to call it "quite often" or it will be terrible slow ...
-// From emulator main update, aka etc 25Hz rate should be Okey ...
-void uartmon_update ( void )
+int connect_unix_socket(void)
+{
+	int xerr;
+  //struct sockaddr_un sock_st;
+  xemusock_socklen_t len = sock_len;
+  union {
+#ifdef XEMU_ARCH_UNIX
+    struct sockaddr_un un;
+#endif
+    struct sockaddr_in in;
+  } sock_st;
+  xemusock_socket_t ret_sock = xemusock_accept(sock_server, (struct sockaddr *)&sock_st, &len, &xerr);
+  if (ret_sock != XS_INVALID_SOCKET || (ret_sock == XS_INVALID_SOCKET && !xemusock_should_repeat_from_error(xerr)))
+    printf("UARTMON: accept()=" PRINTF_SOCK " error=%s" NL,
+      ret_sock,
+      ret_sock != XS_INVALID_SOCKET ? "OK" : xemusock_strerror(xerr)
+    );
+  if (ret_sock != XS_INVALID_SOCKET) {
+    if (xemusock_set_nonblocking(ret_sock, 1, &xerr)) {
+      DEBUGPRINT("UARTMON: error, cannot make socket non-blocking %s", xemusock_strerror(xerr));
+      xemusock_close(ret_sock, NULL);
+      return 0;
+    } else {
+      sock_client = ret_sock;	// "publish" new client socket
+      // Reset reading/writing information
+      umon_write_size = 0;
+      umon_read_pos = 0;
+      DEBUGPRINT("UARTMON: new connection established on socket " PRINTF_SOCK NL, sock_client);
+      return 1;
+    }
+  }
+  return 0;
+}
+
+int write_to_socket(void)
 {
 	int xerr, ret;
-	// If there is no server socket, we can't do anything!
-	if (sock_server == UNCONNECTED)
-		return;
-	// Try to accept new connection, if not yet have one (we handle only *ONE* connection!!!!)
-	if (sock_client == UNCONNECTED) {
-		//struct sockaddr_un sock_st;
-		xemusock_socklen_t len = sock_len;
-		union {
-#ifdef XEMU_ARCH_UNIX
-			struct sockaddr_un un;
-#endif
-			struct sockaddr_in in;
-		} sock_st;
-		xemusock_socket_t ret_sock = xemusock_accept(sock_server, (struct sockaddr *)&sock_st, &len, &xerr);
-		if (ret_sock != XS_INVALID_SOCKET || (ret_sock == XS_INVALID_SOCKET && !xemusock_should_repeat_from_error(xerr)))
-			DEBUG("UARTMON: accept()=" PRINTF_SOCK " error=%s" NL,
-				ret_sock,
-				ret_sock != XS_INVALID_SOCKET ? "OK" : xemusock_strerror(xerr)
-			);
-		if (ret_sock != XS_INVALID_SOCKET) {
-			if (xemusock_set_nonblocking(ret_sock, 1, &xerr)) {
-				DEBUGPRINT("UARTMON: error, cannot make socket non-blocking %s", xemusock_strerror(xerr));
-				xemusock_close(ret_sock, NULL);
-				return;
-			} else {
-				sock_client = ret_sock;	// "publish" new client socket
-				// Reset reading/writing information
-				umon_write_size = 0;
-				umon_read_pos = 0;
-				DEBUGPRINT("UARTMON: new connection established on socket " PRINTF_SOCK NL, sock_client);
-			}
-		}
-	}
-	// If no established connection, return
-	if (sock_client == UNCONNECTED)
-		return;
-	// If there is data to write, try to write
-	if (umon_write_size) {
-		if (!umon_send_ok)
-			return;
-		ret = xemusock_send(sock_client, umon_write_buffer + umon_write_pos, umon_write_size, &xerr);
-		if (ret != XS_SOCKET_ERROR || (ret == XS_SOCKET_ERROR && !xemusock_should_repeat_from_error(xerr)))
-			DEBUG("UARTMON: write(" PRINTF_SOCK ",buffer+%d,%d)=%d (%s)" NL,
-				sock_client, umon_write_pos, umon_write_size,
-				ret, ret == XS_SOCKET_ERROR ? xemusock_strerror(xerr) : "OK"
-			);
-		if (ret == 0) { // client socket closed
-			xemusock_close(sock_client, NULL);
-			sock_client = UNCONNECTED;
-			DEBUGPRINT("UARTMON: connection closed by peer while writing" NL);
-			return;
-		}
-		if (ret > 0) {
-			//debug_buffer_slice(umon_write_buffer + umon_write_pos, ret);
-			umon_write_pos += ret;
-			umon_write_size -= ret;
-			if (umon_write_size < 0)
-				FATAL("FATAL: negative umon_write_size!");
-		}
-		if (umon_write_size)
-			return;	// if we still have bytes to write, return and leave the work for the next update
-	}
-	umon_write_pos = 0;
-	// Try to read data
+
+  if (!umon_send_ok)
+    return 0;
+  ret = xemusock_send(sock_client, umon_write_buffer + umon_write_pos, umon_write_size, &xerr);
+  if (ret != XS_SOCKET_ERROR || (ret == XS_SOCKET_ERROR && !xemusock_should_repeat_from_error(xerr)))
+    printf("UARTMON: write(" PRINTF_SOCK ",buffer+%d,%d)=%d (%s)" NL,
+      sock_client, umon_write_pos, umon_write_size,
+      ret, ret == XS_SOCKET_ERROR ? xemusock_strerror(xerr) : "OK"
+    );
+  if (ret == 0) { // client socket closed
+    xemusock_close(sock_client, NULL);
+    sock_client = UNCONNECTED;
+    DEBUGPRINT("UARTMON: connection closed by peer while writing" NL);
+    return 0;
+  }
+  if (ret > 0) {
+    //debug_buffer_slice(umon_write_buffer + umon_write_pos, ret);
+    umon_write_pos += ret;
+    umon_write_size -= ret;
+    if (umon_write_size < 0)
+      FATAL("FATAL: negative umon_write_size!");
+  }
+  if (umon_write_size)
+    return 0;	// if we still have bytes to write, return and leave the work for the next update
+
+  return 1;
+}
+
+// had to create my own strtok() equivalent that would tokenise on *either* '\r' or '\n'
+char * find_next_cmd(char *loc)
+{
+  static char * locptr=0;
+
+  if (loc != NULL)
+    locptr = loc;
+
+  loc = locptr;
+
+  char *p = loc;
+  // assure that looking forward into this string, we locate a '\r' or '\n'
+  while (*p != 0)
+  {
+    if (*p == '\r' || *p == '\n')
+    {
+      locptr = p+1;
+      return loc;
+    }
+    p++;
+  }
+
+  return 0;
+}
+
+void read_from_socket(void)
+{
+	int xerr, ret;
 	ret = xemusock_recv(sock_client, umon_read_buffer + umon_read_pos, sizeof(umon_read_buffer) - umon_read_pos - 1, &xerr);
 	if (ret != XS_SOCKET_ERROR || (ret == XS_SOCKET_ERROR && !xemusock_should_repeat_from_error(xerr)))
-		DEBUG("UARTMON: read(" PRINTF_SOCK ",buffer+%d,%d)=%d (%s)" NL,
+		printf("UARTMON: read(" PRINTF_SOCK ",buffer+%d,%d)=%d (%s)" NL,
 			sock_client, umon_read_pos, (int)sizeof(umon_read_buffer) - umon_read_pos - 1,
 			ret, ret == XS_SOCKET_ERROR ? xemusock_strerror(xerr) : "OK"
 		);
@@ -443,37 +467,82 @@ void uartmon_update ( void )
 		return;
 	}
 	if (ret > 0) {
-		/* ECHO: provide echo for the client */
-		if (umon_echo) {
-			char*p = umon_read_buffer + umon_read_pos;
-			int n = ret;
-			while (n--)
-				if (*p != 13 && *p != 10) {
-					umon_write_buffer[umon_write_size++] = *(p++);
-				} else {
-					umon_echo = 0; // setting to zero avoids more input to echo, and also signs a complete command
-					*p = 0; // terminate string in read buffer
-					break;
-				}
-		}
-		/* ECHO: end */
-		umon_read_pos += ret;
-		umon_read_buffer[umon_read_pos] = 0;
-		//debug_buffer(umon_read_buffer);
-		if (!umon_echo || sizeof(umon_read_buffer) - umon_read_pos - 1 == 0) {
-			umon_read_buffer[sizeof(umon_read_buffer) - 1] = 0; // just in case of a "mega long command" with filled rx buffer ...
-			umon_write_buffer[umon_write_size++] = '\r';
-			umon_write_buffer[umon_write_size++] = '\n';
-			umon_send_ok = 1;	// by default, command is finished after the execute_command()
-			execute_command(umon_read_buffer);	// Execute our command!
-			// command may delay (like with trace) the finish of the command with
-			// setting umon_send_ok to zero. In this case, some need to call
-			// uartmon_finish_command() some time otherwise the monitor connection
-			// will just hang!
-			if (umon_send_ok)
-				uartmon_finish_command();
-		}
+
+    // assure a null terminator at end of data
+    umon_read_buffer[ret] = 0;
+
+    /* There may be multiple commands within the buffer. If so, handle them all, one by one */
+    printf("RECEIVED: %s\n", umon_read_buffer);
+
+    char *p = find_next_cmd(umon_read_buffer);
+    while (p)
+    {
+      umon_echo = 1;
+      echo_command(p, ret);
+
+      //debug_buffer(umon_read_buffer);
+      if (!umon_echo || sizeof(umon_read_buffer) - umon_read_pos - 1 == 0) {
+        umon_read_buffer[sizeof(umon_read_buffer) - 1] = 0; // just in case of a "mega long command" with filled rx buffer ...
+        umon_write_buffer[umon_write_size++] = '\r';
+        umon_write_buffer[umon_write_size++] = '\n';
+        umon_send_ok = 1;	// by default, command is finished after the execute_command()
+        execute_command(p);	// Execute our command!
+        // command may delay (like with trace) the finish of the command with
+        // setting umon_send_ok to zero. In this case, some need to call
+        // uartmon_finish_command() some time otherwise the monitor connection
+        // will just hang!
+        if (umon_send_ok)
+          uartmon_finish_command();
+      }
+
+      p = find_next_cmd(NULL); // prepare to read next command on next iteration (if there is one)
+    }
 	}
 }
 
+
+// Non-blocky I/O for UART monitor emulation.
+// Note: you need to call it "quite often" or it will be terrible slow ...
+// From emulator main update, aka etc 25Hz rate should be Okey ...
+void uartmon_update ( void )
+{
+	// If there is no server socket, we can't do anything!
+	if (sock_server == UNCONNECTED)
+		return;
+
+	// Try to accept new connection, if not yet have one (we handle only *ONE* connection!!!!)
+	if (sock_client == UNCONNECTED) {
+    if (!connect_unix_socket())
+      return;
+	}
+
+	// If no established connection, return
+	if (sock_client == UNCONNECTED)
+		return;
+
+	// If there is data to write, try to write
+	if (umon_write_size) {
+    if (!write_to_socket())
+      return;
+	}
+
+	umon_write_pos = 0;
+
+	// Try to read data
+  read_from_socket();
+}
+
+void echo_command(char* command, int ret)
+{
+  /* ECHO: provide echo for the client */
+  if (umon_echo) {
+    char*p = command + umon_read_pos;
+    int n = ret;
+    while (*p != 0 && *p != '\r' && *p != '\n') {
+      umon_write_buffer[umon_write_size++] = *(p++);
+    }
+    umon_echo = 0; // setting to zero avoids more input to echo, and also signs a complete command
+    *p = 0; // terminate string in read buffer
+  }
+}
 #endif
