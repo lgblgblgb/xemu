@@ -84,8 +84,13 @@ static void prg_inject_callback ( void *unused )
 	CBM_SCREEN_PRINTF(under_ready_p - get_screen_width() + 7, "<$%04X-$%04X,%d bytes>", prg.load_addr, prg.load_addr + prg.size - 1, prg.size);
 	if (prg.run_it) {
 		// We must modify BASIC pointers ... Important to know the C64/C65 differences!
-		main_ram[0x2D] =  prg.size + prg.load_addr;
-		main_ram[0x2E] = (prg.size + prg.load_addr) >> 8;
+		if (prg.c64_mode) {
+			main_ram[0x2D] =  prg.size + prg.load_addr;
+			main_ram[0x2E] = (prg.size + prg.load_addr) >> 8;
+		} else {
+			main_ram[0xAE] =  prg.size + prg.load_addr;
+			main_ram[0xAF] = (prg.size + prg.load_addr) >> 8;
+		}
 		// If program was detected as BASIC (by load-addr) we want to auto-RUN it
 		CBM_SCREEN_PRINTF(under_ready_p, " ?\"@\":RUN:");
 		KBD_PRESS_KEY(0x01);	// press RETURN
