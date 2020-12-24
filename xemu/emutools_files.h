@@ -30,10 +30,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifdef	XEMU_ARCH_WIN
 #	define FILE_BROWSER	"explorer"
+#	define WEB_BROWSER	"start"
 #elif	defined(XEMU_ARCH_MAC)
 #	define FILE_BROWSER	"open"
+#	define WEB_BROWSER	"open"
 #else
 #	define FILE_BROWSER	"xdg-open"
+#	define WEB_BROWSER	"xdg-open"
 #endif
 
 #define OFF_T_ERROR ((off_t)-1)

@@ -209,6 +209,9 @@ void xemuexec_open_native_file_browser ( char *dir )
 #ifdef HAVE_XEMU_EXEC_API
 	static xemuexec_process_t fbp = XEMUEXEC_NULL_PROCESS_ID;
 	char *args[] = {FILE_BROWSER, dir, NULL};
+	if (!strncasecmp(dir, "ftp://", 6) || !strncasecmp(dir, "http://", 7) || !strncasecmp(dir, "https://", 8)) {
+		args[0] = WEB_BROWSER;
+	}
 	if (fbp != XEMUEXEC_NULL_PROCESS_ID) {
 		int w = xemuexec_check_status(fbp, 0);
 		DEBUGPRINT("EXEC: FILEBROWSER: previous file browser process (" PRINTF_LLD ") status was: %d" NL, (unsigned long long int)(uintptr_t)fbp, w);
