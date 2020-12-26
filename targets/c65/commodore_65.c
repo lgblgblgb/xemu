@@ -911,6 +911,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
 	xemucfg_define_switch_option("allowmousegrab", "Allow auto mouse grab with left-click");
 	xemucfg_define_switch_option("d81ro", "Force read-only status for image specified with -8 option");
+	xemucfg_define_switch_option("driveled", "Render drive LED at the top right corner of the screen");
 	xemucfg_define_num_option("dmarev", 2, "Revision of the DMAgic chip (0/1=F018A/B, 2=rom_auto, +512=modulo))");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	xemucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
@@ -933,6 +934,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
+	show_drive_led = xemucfg_get_bool("driveled");
 	i_am_sure_override = xemucfg_get_bool("besure");
 	allow_mouse_grab = xemucfg_get_bool("allowmousegrab");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */

@@ -43,4 +43,6 @@ extern int fdc_snapshot_load_state ( const struct xemu_snapshot_definition_st *d
 extern int fdc_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
 #endif
 
+extern int f011_motor, f011_led;
+
 #endif
