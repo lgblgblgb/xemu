@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "commodore_65.h"
 #include "vic3.h"
 #include "xemu/emutools_hid.h"
+#include "xemu/f011_core.h"
 
 #define C64_BASIC_LOAD_ADDR	0x0801
 #define C65_BASIC_LOAD_ADDR	0x2001
@@ -77,6 +78,7 @@ static void _cbm_screen_write ( Uint8 *p, const char *s )
 static void prg_inject_callback ( void *unused )
 {
 	DEBUGPRINT("INJECT: hit 'READY.' trigger, about to inject %d bytes from $%04X." NL, prg.size, prg.load_addr);
+	fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);
 	memcpy(memory + prg.load_addr, prg.stream, prg.size);
 	clear_emu_events();	// clear keyboard & co state, ie for C64 mode, probably had MEGA key pressed still
 	CBM_SCREEN_PRINTF(under_ready_p - get_screen_width() + 7, "<$%04X-$%04X,%d bytes>", prg.load_addr, prg.load_addr + prg.size - 1, prg.size);
@@ -102,6 +104,13 @@ static void prg_inject_callback ( void *unused )
 }
 
 
+static void allow_disk_access_callback ( void *unused )
+{
+	DEBUGPRINT("INJECT: re-enable disk access on READY. prompt" NL);
+	fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);
+}
+
+
 int inject_register_ready_status ( const char *debug_msg, void (*callback)(void*), void *userdata )
 {
 	if (inject_ready_check_status) {
@@ -114,6 +123,14 @@ int inject_register_ready_status ( const char *debug_msg, void (*callback)(void*
 	inject_ready_check_status = 1;
 	memset(memory + 1024, 0, 1024 * 3);	// be sure, no READY. can be seen already on the screen
 	return 0;
+}
+
+
+void inject_register_allow_disk_access ( void )
+{
+	fdc_allow_disk_access(FDC_DENY_DISK_ACCESS);	// deny now!
+	// register event for the READY. prompt for re-enable
+	inject_register_ready_status("Disk access re-enabled", allow_disk_access_callback, NULL);
 }
 
 
@@ -178,6 +195,7 @@ int inject_register_prg ( const char *prg_fn, int prg_mode )
 		KBD_PRESS_KEY(0x75);	// "MEGA" key is hold down for C64 mode
 	if (inject_register_ready_status("PRG memory injection", prg_inject_callback, NULL)) // prg inject does not use the userdata ...
 		goto error;
+	fdc_allow_disk_access(FDC_DENY_DISK_ACCESS);	// deny now, to avoid problem on PRG load while autoboot disk is mounted
 	return 0;
 error:
 	if (prg.stream) {
