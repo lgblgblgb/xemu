@@ -142,6 +142,7 @@ static void execute_command ( char *cmd )
 	int bank;
 	int par1;
 	char *p = cmd;
+  printf("execute_command(%s)\n", cmd);
 	while (*p)
 		if (p == cmd && (*cmd == 32 || *cmd == '\t' || *cmd == 8))
 			cmd = ++p;
@@ -415,6 +416,16 @@ int write_to_socket(void)
   }
   if (ret > 0) {
     //debug_buffer_slice(umon_write_buffer + umon_write_pos, ret);
+    printf("SENT: ");
+    int i = 0;
+    while(umon_write_buffer[umon_write_pos+i] != 0 && i < ret)
+    {
+      int pos = umon_write_pos + i;
+      if (umon_write_buffer[pos]>=' ') printf("%c",umon_write_buffer[pos]); else printf("[$%02X]",umon_write_buffer[pos]);
+      i++;
+    }
+    printf("\n");
+
     umon_write_pos += ret;
     umon_write_size -= ret;
     if (umon_write_size < 0)
@@ -426,10 +437,16 @@ int write_to_socket(void)
   return 1;
 }
 
+static char * locptr=0;
+
+int is_received_string_fully_parsed(int ret)
+{
+  return locptr == &umon_read_buffer[umon_read_pos+ret];
+}
+
 // had to create my own strtok() equivalent that would tokenise on *either* '\r' or '\n'
 char * find_next_cmd(char *loc)
 {
-  static char * locptr=0;
 
   if (loc != NULL)
     locptr = loc;
@@ -469,14 +486,28 @@ void read_from_socket(void)
 	if (ret > 0) {
 
     // assure a null terminator at end of data
-    umon_read_buffer[ret] = 0;
+    umon_read_buffer[umon_read_pos+ret] = 0;
 
     /* There may be multiple commands within the buffer. If so, handle them all, one by one */
-    printf("RECEIVED: %s\n", umon_read_buffer);
+    printf("RECEIVED: ");
+    int i = 0;
+    while(umon_read_buffer[umon_read_pos+i] != 0)
+    {
+      int pos = umon_read_pos + i;
+      if (umon_read_buffer[pos]>=' ') printf("%c",umon_read_buffer[pos]); else printf("[$%02X]",umon_read_buffer[pos]);
+      i++;
+    }
+    printf("\n");
+ 
+    char *p;
+    if (umon_read_pos == 0)
+      p = find_next_cmd(umon_read_buffer);
+    else
+      p = find_next_cmd(NULL);
 
-    char *p = find_next_cmd(umon_read_buffer);
     while (p)
     {
+      printf("find_next_cmd p = %08X\n", p);
       umon_echo = 1;
       echo_command(p, ret);
 
@@ -491,11 +522,18 @@ void read_from_socket(void)
         // setting umon_send_ok to zero. In this case, some need to call
         // uartmon_finish_command() some time otherwise the monitor connection
         // will just hang!
-        if (umon_send_ok)
-          uartmon_finish_command();
       }
 
       p = find_next_cmd(NULL); // prepare to read next command on next iteration (if there is one)
+    }
+
+    // only finish command if we geniunely found a carriage return as the last character
+    if (is_received_string_fully_parsed(ret))
+      uartmon_finish_command();
+    else
+    {
+      umon_read_pos += ret;
+      umon_read_buffer[umon_read_pos] = 0;
     }
 	}
 }
@@ -536,8 +574,7 @@ void echo_command(char* command, int ret)
 {
   /* ECHO: provide echo for the client */
   if (umon_echo) {
-    char*p = command + umon_read_pos;
-    int n = ret;
+    char*p = command;
     while (*p != 0 && *p != '\r' && *p != '\n') {
       umon_write_buffer[umon_write_size++] = *(p++);
     }
