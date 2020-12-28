@@ -551,6 +551,11 @@ void m65mon_dumpmem28 ( int addr )
 		umon_printf("%02X", memory_debug_read_phys_addr(addr++));
 }
 
+void m65mon_setmem16( int addr, Uint8 val )
+{
+  cpu65_write_callback(addr, val);
+}
+
 void m65mon_setmem28( int addr, int cnt, Uint8* vals )
 {
   for (int k = 0; k < cnt; k++)
