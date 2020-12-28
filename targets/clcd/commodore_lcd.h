@@ -28,6 +28,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define RENDER_SCALE_QUALITY	1
 
 #define ROM_HACK_COLD_START
-#define ROM_HACK_NEW_ROM_SEARCHING
+//#define ROM_HACK_NEW_ROM_SEARCHING
 
 #endif
