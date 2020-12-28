@@ -237,6 +237,7 @@ void hypervisor_leave ( void )
 	memory_set_vic3_rom_mapping(vic_registers[0x30]);	// restore possible active VIC-III mapping
 	memory_set_do_map();	// restore mapping ...
 	if (XEMU_UNLIKELY(first_hypervisor_leave)) {
+		DEBUGPRINT("HYPERVISOR: first return after RESET." NL);
 		first_hypervisor_leave = 0;
 		int new_pc = refill_c65_rom_from_preinit_cache();	// this function should decide then, if it's really a (forced) thing to do ...
 		if (new_pc >= 0) {

@@ -31,6 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "input_devices.h"
 #include "uart_monitor.h"
 #include "xemu/f011_core.h"
+#include "vic4.h"
 
 
 static int attach_d81 ( const char *fn )
@@ -67,8 +68,11 @@ void emu_dropfile_callback ( const char *fn )
 }
 #endif
 
-static void ui_attach_d81_by_browsing ( void )
+
+static void ui_attach_d81 ( const struct menu_st *m, int *query )
 {
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
+	//ui_attach_d81_by_browsing();
 	char fnbuf[PATH_MAX + 1];
 	static char dir[PATH_MAX + 1] = "";
 	if (!xemugui_file_selector(
@@ -84,8 +88,9 @@ static void ui_attach_d81_by_browsing ( void )
 }
 
 
-static void ui_detach_d81 ( void )
+static void ui_detach_d81 ( const struct menu_st *m, int *query )
 {
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
 	forget_external_d81();
 }
 
@@ -96,7 +101,7 @@ static void ui_run_prg_by_browsing ( void )
 	static char dir[PATH_MAX + 1] = "";
 	if (!xemugui_file_selector(
 		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
-		"Select PRG to directly load&run",
+		"Select PRG to directly load and run",
 		dir,
 		fnbuf,
 		sizeof fnbuf
@@ -261,7 +266,7 @@ static void ui_start_umon ( const struct menu_st *m, int *query )
 	int is_active = uartmon_is_active();
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, is_active);
 	if (is_active) {
-		INFO_WINDOW("UART monitor is already active.\nCurrently it's not supported to stop it.");
+		INFO_WINDOW("UART monitor is already active.\nCurrently stopping it is not supported.");
 		return;
 	}
 	if (!uartmon_init(UMON_DEFAULT_PORT))
@@ -284,6 +289,12 @@ static void ui_dump_memory ( void )
 	}
 }
 
+static void ui_cb_show_drive_led ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, show_drive_led);
+	show_drive_led = !show_drive_led;
+}
+
 
 /**** MENU SYSTEM ****/
 
@@ -295,6 +306,8 @@ static const struct menu_st menu_display[] = {
 					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize, (void*)2 },
 	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
+	{ "Show drive LED",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_show_drive_led, NULL },
 	{ NULL }
 };
 static const struct menu_st menu_sdcard[] = {
@@ -331,14 +344,16 @@ static const struct menu_st menu_help[] = {
 };
 #endif
 static const struct menu_st menu_d81[] = {
-	{ "Attach user D81",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
-	{ "Use internal D81",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_detach_d81 },
+	{ "Attach user D81",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_attach_d81, NULL },
+	{ "Use internal D81",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_detach_d81, NULL },
 	{ NULL }
 };
 static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
 	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
-	{ "FD disk",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_d81     },
+	{ "FD D81",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_d81     },
 	{ "Reset",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
 	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },

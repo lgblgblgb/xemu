@@ -726,6 +726,7 @@ int main ( int argc, char **argv )
 	srand(time(NULL));	// TODO: maybe move this into the core framework (also rand() usages, not just this init part ...)
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Incomplete MEGA65 emulator from LGB");
 	xemucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
+	xemucfg_define_switch_option("driveled", "Render drive LED at the top right corner of the screen");
 	xemucfg_define_switch_option("allowmousegrab", "Allow auto mouse grab with left-click");
 	xemucfg_define_num_option("dmarev", 0x100, "DMA revision (0/1=F018A/B +256=autochange, +512=modulo, you always wants +256!)");
 	xemucfg_define_float_option("fastclock", MEGA65_DEFAULT_FAST_CLOCK, "Clock of M65 fast mode (in MHz)");
@@ -781,6 +782,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
+	show_drive_led = xemucfg_get_bool("driveled");
 	i_am_sure_override = xemucfg_get_bool("besure");
 	mega65_model = xemucfg_get_num("model");
 	DEBUGPRINT("XEMU: emulated MEGA65 model ID: %d" NL, mega65_model);

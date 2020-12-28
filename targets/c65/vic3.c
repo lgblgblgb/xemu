@@ -561,20 +561,10 @@ static void sprite_renderer ( void );
 
 static inline void drive_led_renderer ( void )
 {
-	static unsigned int blink_counter = 0;
-	blink_counter++;
-#if 0
-	static int status_old = 0;
-	int status_new = f011_led | f011_motor;
-	if (status_old != status_new) {
-		DEBUGPRINT("FDC: changed motor/LED status: $%02X->$%02X" NL, status_old, status_new);
-		status_old = status_new;
-	}
-#endif
-	if (show_drive_led && ((!f011_led && f011_motor) || (f011_led && (blink_counter & 16))))
+	if (show_drive_led && fdc_get_led_state(16))
 		for (int y = 0; y < 8; y++)
 			for (int x = 0; x < 8; x++)
-				*(pixel_start + (SCREEN_WIDTH) - 8 + x + y * (SCREEN_WIDTH)) = x > 1 && x < 7 && y > 1 && y < 7 ? red_colour : black_colour;
+				*(pixel_start + (SCREEN_WIDTH) - 10 + x + (y + 2) * (SCREEN_WIDTH)) = x > 1 && x < 7 && y > 1 && y < 7 ? red_colour : black_colour;
 }
 
 

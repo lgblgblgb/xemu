@@ -32,6 +32,7 @@ extern Uint8 fdc_read_reg  ( int addr );
 extern void  fdc_init      ( Uint8 *cache_set );
 extern void  fdc_set_disk  ( int in_have_disk, int in_have_write );
 extern void  fdc_allow_disk_access ( int in );
+extern int   fdc_get_led_state ( int blink_inc );
 
 /* must defined by the user */
 extern int   fdc_cb_rd_sec ( Uint8 *buffer, int offset );
@@ -42,7 +43,5 @@ extern int   fdc_cb_wr_sec ( Uint8 *buffer, int offset );
 extern int fdc_snapshot_load_state ( const struct xemu_snapshot_definition_st *def , struct xemu_snapshot_block_st *block );
 extern int fdc_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
 #endif
-
-extern int f011_motor, f011_led;
 
 #endif

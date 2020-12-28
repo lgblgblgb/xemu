@@ -54,8 +54,6 @@ static void  execute_command ( void );
 static int   have_disk, have_write;
 static int   allowed_disk = FDC_ALLOW_DISK_ACCESS;	// provides a way to TEMPORARLY reject disk access (eg: avoid autoboot)
 
-int f011_motor, f011_led;
-
 
 
 void fdc_init ( Uint8 *cache_set )
@@ -80,6 +78,16 @@ void fdc_init ( Uint8 *cache_set )
 	fdc_set_disk(0, 0);
 	status_b &= 0x7F;	// at this point we don't want disk changed signal (bit 7) yet
 	allowed_disk = FDC_ALLOW_DISK_ACCESS;
+}
+
+
+int fdc_get_led_state ( int blink_inc )
+{
+	static unsigned int blink_counter = 0;
+	int f011_motor = control & 32;
+	int f011_led = control & 64;
+	blink_counter += blink_inc;
+	return (!f011_led && f011_motor) || (f011_led && (blink_counter & 0x100));
 }
 
 
@@ -259,8 +267,6 @@ void fdc_write_reg ( int addr, Uint8 data )
 				swap_mask = 0x100;
 			} else
 				swap_mask = 0;
-			f011_motor = data & 32;
-			f011_led = data & 64;
 			break;
 		case 1:
 			// FIXME: I still don't what happens if a running operation (ie BUSY) is in progress and new command is tried to be given to the F011 FDC

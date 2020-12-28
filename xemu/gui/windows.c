@@ -1,4 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   ~/xemu/gui/windows.c: UI implementation for Windows of Xemu's UI abstraction layer
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify

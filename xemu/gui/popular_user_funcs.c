@@ -1,4 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   ~/xemu/gui/popular_user_funcs.c: popular/common functions for Xemu's UI abstraction
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -176,8 +177,11 @@ void xemugui_cb_set_mouse_grab ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, allow_mouse_grab);
 	allow_mouse_grab = !allow_mouse_grab;
-	if (allow_mouse_grab)
-		OSD(-1, -1, "ENABLED. Left click to activate!");
+	static int first_warning = 1;
+	if (allow_mouse_grab && first_warning) {
+		first_warning = 0;
+		INFO_WINDOW("Mouse grab mode has been enabled.\nLeft click into the emulator window to initiate.\nPress both SHIFTs together to cancel.");
+	}
 }
 
 void xemugui_cb_set_integer_to_one ( const struct menu_st *m, int *query )
