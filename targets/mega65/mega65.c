@@ -564,6 +564,11 @@ void m65mon_setmem28( int addr, int cnt, Uint8* vals )
   }
 }
 
+void m65mon_setpc(int addr)
+{
+  cpu65.pc = addr;
+}
+
 void m65mon_set_trace ( int m )
 {
 	paused = m;
