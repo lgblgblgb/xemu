@@ -210,6 +210,10 @@ static void execute_command ( char *cmd )
       cmd = parse_hex_arg(cmd, &loadcmdcurraddr, 0, 0xFFFF);
       cmd = parse_hex_arg(cmd, &loadcmdendaddr, 0, 0xFFFF);
       break;
+    case 'g':
+      cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
+      m65mon_setpc(par1);
+      break;
 		case 't':
 			if (!*cmd)
 				m65mon_do_trace();

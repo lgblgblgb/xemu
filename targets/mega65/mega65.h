@@ -54,6 +54,7 @@ extern void m65mon_dumpmem16 ( Uint16 addr );
 extern void m65mon_dumpmem28 ( int addr );
 extern void m65mon_setmem16( int addr, Uint8 val );
 extern void m65mon_setmem28  ( int addr, int cnt, Uint8* vals );
+extern void m65mon_setpc(int addr);
 extern void m65mon_set_trace ( int m );
 extern void m65mon_do_trace  ( void );
 #ifdef TRACE_NEXT_SUPPORT
