@@ -58,7 +58,7 @@ static id _xemumacgui_r_menu_builder ( const struct menu_st desc[], const char *
 				(type & 0xFF) != XEMUGUI_MENUID_CALLABLE
 			)
 		) {
-			DEBUGPRINT("GUI: invalid meny entry found, skipping it (item #%d of menu \"%s\")" NL, i, parent_name);
+			DEBUGPRINT("GUI: invalid meny entry found, skipping it (item #%d of menu \"%s\")" NL, a, parent_name);
 			continue;
 		}
 		// Queryback feature, markes entries are called on menu-build time to be able to modify themselves dynamically (ie, on/off options depending current state)

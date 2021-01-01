@@ -5,7 +5,7 @@
 OK, seriously, some key points though:
 
 * Clearly, any help is welcome!
-* Please read this file, and **DELETE** it from the actual PR is github
+* Please read this file, and **DELETE** it from the actual PR if github
 offers when doing the PR itself at the _end_, and before that, read
 further here ...
 * Please open an issue ticket first
@@ -59,7 +59,7 @@ Source code sample showing other key points as well, without further blah-blah:
             return a;
     }
 
-### Key points:
+### Key points about formatting
 
 Still, the blah-blah:
 
