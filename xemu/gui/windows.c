@@ -187,7 +187,7 @@ static HMENU _wingui_create_popup_menu ( const struct menu_st desc[] )
 {
 	_wingui_destroy_menu();
 	xemuwinmenu.problem = 0;
-	HMENU menu = _wingui_recursive_menu_builder(desc, "<ROOT>");
+	HMENU menu = _wingui_recursive_menu_builder(desc, XEMUGUI_MAINMENU_NAME);
 	if (!menu || xemuwinmenu.problem) {
 		_wingui_destroy_menu();
 		return NULL;

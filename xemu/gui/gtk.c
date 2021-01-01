@@ -312,7 +312,7 @@ static GtkWidget *_gtkgui_create_menu ( const struct menu_st desc[] )
 {
 	_gtkgui_destroy_menu();
 	xemugtkmenu.problem = 0;
-	GtkWidget *menu = _gtkgui_recursive_menu_builder(desc, "<ROOT>");
+	GtkWidget *menu = _gtkgui_recursive_menu_builder(desc, XEMUGUI_MAINMENU_NAME);
 	if (!menu || xemugtkmenu.problem) {
 		_gtkgui_destroy_menu();
 		return NULL;

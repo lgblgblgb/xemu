@@ -119,9 +119,9 @@ static int xemuosxgui_popup ( const struct menu_st desc[] )
 		((void(*)(id,SEL,BOOL))objc_msgSend) (application, sel_registerName("activateIgnoringOtherApps:"), YES);
 		return 0;
 	}
-	id ui_menu = _xemumacgui_r_menu_builder(desc, "<ROOT>");
+	id ui_menu = _xemumacgui_r_menu_builder(desc, XEMUGUI_MAINMENU_NAME);
 	if (!ui_menu) {
-		DEBUGPRINT("GUI: Error building menu");
+		DEBUGPRINT("GUI: Error building menu" NL);
 		return 1;
 	}
 	NSPoint mouse_location = ((NSPoint (*) (Class, SEL)) objc_msgSend)
@@ -162,7 +162,7 @@ static int xemuosxgui_file_selector ( int dialog_mode, const char *dialog_title,
 	id panel_result = ((id (*) (id, SEL)) objc_msgSend)(open_panel, sel_registerName("runModal"));
 	((void (*) (id, SEL)) objc_msgSend)(main_window, sel_registerName("makeKeyWindow")); // Ensure focus returns to Xemu window.
 	if ((unsigned long)panel_result == NSFileHandlingPanelOKButton) {
-		DEBUGPRINT("GUI: macOS panel OK button pressed" NL );
+		DEBUGPRINT("GUI: macOS panel OK button pressed" NL);
 		id url_array = ((id (*) (id, SEL)) objc_msgSend)(open_panel, sel_registerName("URLs"));
 		id filename_url = ((id (*) (id, SEL, int)) objc_msgSend)(url_array, sel_registerName("objectAtIndex:"), 0);
 		const char* filename = (const char*)((id (*) (id, SEL)) objc_msgSend)(filename_url, sel_registerName("fileSystemRepresentation"));
