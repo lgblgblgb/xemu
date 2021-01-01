@@ -33,6 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "vic4.h"
 #include "vic4_palette.h"
 #include "memory_mapper.h"
+#include "xemu/f011_core.h"
 
 //#define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
 
@@ -57,6 +58,8 @@ static Uint8 *sprite_bank;
 int vic3_blink_phase;			// blinking attribute helper, state.
 static Uint8 raster_colours[512];
 Uint8 c128_d030_reg;			// C128-like register can be only accessed in VIC-II mode but not in others, quite special!
+int show_drive_led;
+static Uint32 black_colour, red_colour;	// needed for drive LED
 
 int vic_vidp_legacy = 1, vic_chrp_legacy = 1, vic_sprp_legacy = 1;
 
@@ -105,6 +108,10 @@ static inline void PIXEL_POINTER_FINAL_ASSERT ( Uint32 *p )
 
 void vic_init ( void )
 {
+	// Needed to render "drive LED" feature
+	red_colour   = SDL_MapRGBA(sdl_pix_fmt, 0xFF, 0x00, 0x00, 0xFF);
+	black_colour = SDL_MapRGBA(sdl_pix_fmt, 0x00, 0x00, 0x00, 0xFF);
+	// Init VIC4 palette
 	vic4_init_palette();
 	force_fast = 0;
 	// *** Init VIC3 registers and palette
@@ -698,7 +705,7 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
 		xlim = 39;
 		sprite_pointers = bp[2] + 0x1FF8;	// FIXME: just guessing
 	}
-        DEBUG("VIC3: bitplanes: enable_mask=$%02X comp_mask=$%02X H640=%d" NL,
+	DEBUG("VIC3: bitplanes: enable_mask=$%02X comp_mask=$%02X H640=%d" NL,
 		bpe, vic_registers[0x3B], h640 ? 1 : 0
 	);
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic3_render_screen_bpm");
@@ -916,7 +923,6 @@ void vic_render_screen ( void )
 				render_sprite(a, mask, sprite_bank + (sprite_pointers[a] << 6), p_sdl, tail_sdl);	// sprite_pointers are set by the renderer functions above!
 		}
 	}
-
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	// Screenshot
 	if (XEMU_UNLIKELY(register_screenshot_request)) {
@@ -935,6 +941,10 @@ void vic_render_screen ( void )
 		}
 	}
 #endif
+	if (show_drive_led && fdc_get_led_state(16))
+		for (int y = 0; y < 8; y++)
+			for (int x = 0; x < 8; x++)
+				*(p_sdl + (SCREEN_WIDTH) - 10 + x + (y + 2) * (SCREEN_WIDTH)) = x > 1 && x < 7 && y > 1 && y < 7 ? red_colour : black_colour;
 	xemu_update_screen();
 }
 
