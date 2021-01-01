@@ -38,7 +38,7 @@ Uint8  D6XX_registers[0x100];		// mega65 specific D6XX range, excluding the UART
 Uint8  D7XX[0x100];			// FIXME: hack for future M65 stuffs like ALU! FIXME: no snapshot on these!
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 static int mouse_x = 0, mouse_y = 0;	// for our primitive C1351 mouse emulation
-int    cpu_linear_memory_addressing_is_enabled = 0;	// used by the CPU emu as well!
+int    cpu_mega65_opcodes = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;
 int port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65
 int mega65_model = 0xFF;		// $FF = Xemu/others, 1/2/3 = MEGA65 PCB rev 1/2/3, $40=nexys4, $41=nexys4ddr, $42=nexys4ddr-widget, $FD=wukong, $FE=simulation
@@ -423,9 +423,9 @@ void io_write ( unsigned int addr, Uint8 data )
 					return;
 				case 0x7D:
 					DEBUG("MEGA65: features set as $%02X" NL, data);
-					if ((data & 2) != cpu_linear_memory_addressing_is_enabled) {
-						DEBUG("MEGA65: 32-bit linear addressing opcodes have been turned %s." NL, data & 2 ? "ON" : "OFF");
-						cpu_linear_memory_addressing_is_enabled = data & 2;
+					if ((data & 2) != cpu_mega65_opcodes) {
+						DEBUG("MEGA65: enhanced opcodes have been turned %s." NL, data & 2 ? "ON" : "OFF");
+						cpu_mega65_opcodes = data & 2;
 					}
 					if ((data & 4) != rom_protect) {
 						DEBUG("MEGA65: ROM protection has been turned %s." NL, data & 4 ? "ON" : "OFF");

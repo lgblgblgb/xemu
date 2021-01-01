@@ -54,7 +54,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifdef DEBUG_CPU
 #include "xemu/cpu65ce02_disasm_tables.c"
-//#include "cpu65ce02_disasm.c
 #endif
 
 
@@ -81,9 +80,31 @@ struct cpu65_st CPU65;
 
 
 #ifdef MEGA65
-//#warning "Compiling for MEGA65, hacky stuff!"
-#define IS_FLAT32_DATA_OP() XEMU_UNLIKELY(CPU65.previous_op == 0xEA && cpu_linear_memory_addressing_is_enabled)
+#define PREFIX_NOTHING		0
+#define PREFIX_NOP		1
+#define PREFIX_NEG_NEG		2
+// Note: it's important to tell here, that NEG NEG NOP prefix still can mean only NOP, in case of a GS opcode
+// does not support the NEG NEG NOP but does the NOP. If there is any of those ...
+// That is, you can interpret bit 0 of PREFIX signal to test if there is NOP prefix, and bit 1 for NEG NEG, both bits
+// for NEG NEG NOP, other higher bits MUST be excluded (see PREFIX_NEG alone, below!)
+#define PREFIX_NEG_NEG_NOP	3
+// Note: NEG itself is not a prefix, but needed as a stage to get to NEG_NEG if the second NEG appears after
+#define PREFIX_NEG		4
+static XEMU_INLINE Uint32 AXYZ_GET ( void ) {
+	return (Uint32)CPU65.a | ((Uint32)CPU65.x << 8) | ((Uint32)CPU65.y << 16) | ((Uint32)CPU65.z << 24);
+}
+static XEMU_INLINE void   AXYZ_SET ( Uint32 val ) {
+	CPU65.a =  val        & 0xFF;
+	CPU65.x = (val >>  8) & 0xFF;
+	CPU65.y = (val >> 16) & 0xFF;
+	CPU65.z = (val >> 24);
+}
+static XEMU_INLINE Uint32 LONG_PTR16_GET ( Uint16 ptr16 ) {
+}
+static XEMU_INLINE Uint32 LONG_PTR32_GET ( Uint8 zp_ptr ) {
+}
 #endif
+
 
 #ifdef CPU_65CE02
 #	ifdef DEBUG_CPU
@@ -105,6 +126,8 @@ struct cpu65_st CPU65;
 		// static const Uint8 opcycles_fast_mode[0x100] = TIMINGS_65CE02_;
 		static const Uint8 opcycles_fast_mode[0x100] = TIMINGS_65CE02;
 		static const Uint8 *opcycles = opcycles_fast_mode;
+		// FIXME: this must be extended to support three different modes, one additional for MEGA65 native speed!
+		// as regular 65CE02 opcodes can be LONGER at native MEGA65 fast mode than on 65CE02!!!!!
 		void cpu65_set_ce_timing ( int is_ce ) {
 			opcycles = is_ce ? opcycles_fast_mode : opcycles_slow_mode;
 		}
@@ -235,7 +258,7 @@ static XEMU_INLINE Uint8 pop ( void )
 }
 #else
 #define push(data) writeByte(((Uint8)(CPU65.s--)) | SP_HI, data)
-#define pop() readByte(((Uint8)(++CPU65.s)) | SP_HI)
+#define pop()       readByte(((Uint8)(++CPU65.s)) | SP_HI)
 #endif
 
 static XEMU_INLINE void  pushWord(Uint16 data) { push(data >> 8); push(data & 0xFF); }
@@ -307,8 +330,7 @@ void cpu65_reset() {
 #endif
 #ifdef MEGA65
 	CPU65.nmos_mode = 0;
-	CPU65.previous_op = 0;
-	CPU65.neg_neg_prefix = 0;
+	CPU65.prefix = PREFIX_NOTHING;
 #endif
 	CPU65.pc = readWord(0xFFFC);
 	DEBUGPRINT("CPU[" CPU_TYPE "]: RESET, PC=%04X, BCD_behaviour=%s" NL,
@@ -326,6 +348,7 @@ static XEMU_INLINE void SET_NZ(Uint8 st) {
 	CPU65.pf_nz = (st & CPU65_PF_N) | VALUE_TO_PF_ZERO(st);
 #endif
 }
+
 #ifdef CPU_65CE02
 static XEMU_INLINE void SET_NZ16(Uint16 st) {
 #ifdef CPU65_DISCRETE_PF_NZ
@@ -336,6 +359,19 @@ static XEMU_INLINE void SET_NZ16(Uint16 st) {
 #endif
 }
 #endif
+
+#ifdef MEGA65
+#define BIT31 0x80000000U
+static XEMU_INLINE void SET_NZ32(Uint32 st) {
+#ifdef CPU65_DISCRETE_PF_NZ
+	CPU65.pf_n = st & BIT31;
+	CPU65.pf_z = !st;
+#else
+	CPU65.pf_nz = ((st & BIT31) >> 24) | VALUE_TO_PF_ZERO(st);
+#endif
+}
+#endif
+
 
 #define _imm() (CPU65.pc++)
 static XEMU_INLINE Uint16 _abs() {
@@ -560,12 +596,99 @@ static XEMU_INLINE void _ROL(int addr) {
 	SET_NZ(t);
 	if (addr == -1) CPU65.a = t; else writeByteTwice(addr, o, t);
 }
+#ifdef MEGA65
+static XEMU_INLINE Uint32 _INQ ( Uint32 q ) {
+	q++;
+	SET_NZ32(q);
+	return q;
+}
+static XEMU_INLINE Uint32 _DEQ ( Uint32 q ) {
+	q--;
+	SET_NZ32(q);
+	return q;
+}
+static XEMU_INLINE Uint32 _RORQ ( Uint32 q ) {
+	// TODO: check implementation
+	Uint32 pf_c_new = q & 1;
+	q >>= 1;
+	if (CPU65.pf_c) q |= BIT31;
+	CPU65.pf_c = pf_c_new;
+	SET_NZ32(q);
+	return q;
+}
+static XEMU_INLINE Uint32 _ROLQ ( Uint32 q ) {
+	// TODO: check implementation
+	Uint32 pf_c_new = q & BIT31;
+	q <<= 1;
+	if (CPU65.pf_c) q |= 1;
+	CPU65.pf_c = pf_c_new;
+	SET_NZ32(q);
+	return q;
+}
+static XEMU_INLINE void _ORQ ( Uint32 q ) {	// Always operates on the 32 bit accu.
+	q = AXYZ_GET() | q;
+	SET_NZ32(q);
+	AXYZ_SET(q);
+}
+static XEMU_INLINE void _ANDQ ( Uint32 q ) {	// Always operates on the 32 bit accu.
+	q = AXYZ_GET() & q;
+	SET_NZ32(q);
+	AXYZ_SET(q);
+}
+static XEMU_INLINE void _EORQ ( Uint32 q ) {	// Always operates on the 32 bit accu.
+	q = AXYZ_GET() ^ q;
+	SET_NZ32(q);
+	AXYZ_SET(q);
+}
+static XEMU_INLINE void _BITQ ( Uint32 q ) {	// Always operates on the 32 bit accu.
+	Uint32 acc = AXYZ_GET();
+	CPU65.pf_v = q & (BIT31 >> 1);	// OK, what should it be for 32 bit? TODO: I guess its bit 30 then instead of bit 6 (what it's when normal BIT)
+#ifdef CPU65_DISCRETE_PF_NZ
+	CPU65.pf_n = q & BIT31;
+	CPU65.pf_z = (!(q & acc));
+#else
+	CPU65.pf_nz = ((q & BIT31) >> 24) | VALUE_TO_PF_ZERO(q & acc);
+#endif
+}
+static XEMU_INLINE void _CMPQ ( Uint32 q ) {	// Always operates on the 32 bit accu.
+	Uint32 acc = AXYZ_GET();
+	SET_NZ32((Uint32)(acc - q));
+	CPU65.pf_c = (acc >= q);	// TODO: checkit
+}
+static XEMU_INLINE Uint32 _ASLQ ( Uint32 q ) {
+	CPU65.pf_c = (q & BIT31);
+	q <<= 1;
+	SET_NZ32(q);
+	return q;
+}
+static XEMU_INLINE Uint32 _ASRQ ( Uint32 q ) {
+	CPU65.pf_c = (q & 1);
+	q = (q & BIT31) | (q >> 1);
+	SET_NZ32(q);
+	return q;
+}
+static XEMU_INLINE Uint32 _LSRQ ( Uint32 q ) {
+	CPU65.pf_c = (q & 1);
+	q >>= 1;
+	SET_NZ32(q);
+	return q;
+}
+// TODO / FIXME ?? What happens if NEG NEG NOP prefix is tried to be applied on an opcode only supports NEG NEG?
+// Whole prefix sequence is ignored, or it will be treated as NEG NEG only (thus the "NOP part" of prefix is ignored only)?
+#define IS_NEG_NEG_OP()	XEMU_UNLIKELY(CPU65.prefix == PREFIX_NEG_NEG)
+#endif
 
+
+/* ------------------------------------------------------------------------ *
+ *                    CPU EMULATION, OPCODE DECODING + RUN                  *
+ * ------------------------------------------------------------------------ */
 
 
 int cpu65_step (
 #ifdef CPU_STEP_MULTI_OPS
 	int run_for_cycles
+#else
+	void
 #endif
 ) {
 #ifdef CPU_STEP_MULTI_OPS
@@ -605,7 +728,7 @@ int cpu65_step (
 #endif
 	)) {
 #ifdef DEBUG_CPU
-		DEBUG("CPU: servint IRQ on IRQ level at PC $%04X" NL, CPU65.pc);
+		DEBUG("CPU: serving IRQ on IRQ level at PC $%04X" NL, CPU65.pc);
 #endif
 		pushWord(CPU65.pc);
 		push(cpu65_get_pf());	// no CPU65_PF_B is pushed!
@@ -623,9 +746,6 @@ int cpu65_step (
 #ifdef DEBUG_CPU
 	if (CPU65.pc == 0)
 		DEBUG("CPU: WARN: PC at zero!" NL);
-#endif
-#ifdef MEGA65
-	CPU65.previous_op = CPU65.op;
 #endif
 	CPU65.op = readByte(CPU65.pc++);
 #ifdef DEBUG_CPU
@@ -741,7 +861,7 @@ int cpu65_step (
 	case 0x12:	/* ORA (Zero_Page) or (ZP),Z on 65CE02 */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-			if (IS_FLAT32_DATA_OP())
+			if (CPU65.prefix == PREFIX_NOP)
 				SET_NZ(A_OP(|,readFlatAddressedByte()));
 			else
 #endif
@@ -784,7 +904,12 @@ int cpu65_step (
 			break;
 	case 0x1A:	/* INA Accumulator */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
-			SET_NZ(++CPU65.a);
+#ifdef MEGA65
+				if (IS_NEG_NEG_OP())
+					AXYZ_SET(_INQ(AXYZ_GET()));	// MEGA65-OP: INQ
+				else
+#endif
+					SET_NZ(++CPU65.a);
 			}
 			break;
 	case 0x1B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: INZ */
@@ -902,7 +1027,7 @@ int cpu65_step (
 	case 0x32:	/* 65C02: AND (Zero_Page), 65CE02: AND (ZP),Z */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-			if (IS_FLAT32_DATA_OP())
+			if (CPU65.prefix == PREFIX_NOP)
 				SET_NZ(A_OP(&,readFlatAddressedByte()));
 			else
 #endif
@@ -946,7 +1071,12 @@ int cpu65_step (
 			break;
 	case 0x3A:	/* DEA Accumulator */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
-			SET_NZ(--CPU65.a);
+#ifdef MEGA65
+				if (IS_NEG_NEG_OP())
+					AXYZ_SET(_DEQ(AXYZ_GET()));	// MEGA65-OP: DEQ
+				else
+#endif
+					SET_NZ(--CPU65.a);
 			}
 			break;
 	case 0x3B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: DEZ */
@@ -983,15 +1113,21 @@ int cpu65_step (
 	case 0x42:	/* 65C02: NOP imm (non-std NOP with addr mode), 65CE02: NEG */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
+			/* NEG on 65CE02/4510 and MEGA65 as well, of course */
 #ifdef MEGA65
-			if (XEMU_UNLIKELY(CPU65.previous_op == 0x42)) {
-				CPU65.neg_neg_prefix = 1;
+			if (XEMU_LIKELY(cpu_mega65_opcodes)) {
+				if (CPU65.prefix == PREFIX_NEG || CPU65.prefix == PREFIX_NEG_NEG) {
+					OPC_65CE02("NEG-NEG");
+					CPU65.prefix = PREFIX_NEG_NEG;
+				} else {
+					CPU65.prefix = PREFIX_NEG;
+				}
 				// 65GS02 extension for "32 bit opcodes" (not to be confused with 32 bit addressing ...)
 				// we continue with NEG execution though, since it restores the original A then also the NZ
 				// flags, so no need to remember what was the NZ flags and A values before the first NEG :)
-				OPC_65CE02("NEG-NEG");
+				// But we still need to execute the NEG as well, even if it's a "prefix"!
 				SET_NZ(CPU65.a = -CPU65.a);
-				goto do_not_reset_neg_neg_prefix;
+				goto do_not_clear_prefix;
 			}
 #endif
 			OPC_65CE02("NEG");
@@ -1074,7 +1210,7 @@ int cpu65_step (
 	case 0x52:	/* EOR (Zero_Page) or (ZP),Z on 65CE02 */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-			if (IS_FLAT32_DATA_OP())
+			if (CPU65.prefix == PREFIX_NOP)
 				SET_NZ(A_OP(^,readFlatAddressedByte()));
 			else
 #endif
@@ -1250,7 +1386,7 @@ int cpu65_step (
 	case 0x72:	/* 0x72 ADC (Zero_Page) or (ZP),Z on 65CE02 */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-			if (IS_FLAT32_DATA_OP())
+			if (CPU65.prefix == PREFIX_NOP)
 				_ADC(readFlatAddressedByte());
 			else
 #endif
@@ -1404,7 +1540,7 @@ int cpu65_step (
 	case 0x92:	/* STA (Zero_Page) or (ZP),Z on 65CE02 */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-			if (IS_FLAT32_DATA_OP())
+			if (CPU65.prefix == PREFIX_NOP)
 				writeFlatAddressedByte(CPU65.a);
 			else
 #endif
@@ -1541,7 +1677,7 @@ int cpu65_step (
 	case 0xB2:	/* LDA (Zero_Page) or (ZP),Z on 65CE02 */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-			if (IS_FLAT32_DATA_OP())
+			if (CPU65.prefix == PREFIX_NOP)
 				SET_NZ(CPU65.a = readFlatAddressedByte());
 			else
 #endif
@@ -1707,7 +1843,7 @@ int cpu65_step (
 	case 0xD2:	/* CMP (Zero_Page) or (ZP),Z on 65CE02 */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-			if (IS_FLAT32_DATA_OP())	// NOTE: this was not mentioned in Paul's blog-post, but this op should have this property as well, IMHO!
+			if (CPU65.prefix == PREFIX_NOP)	// NOTE: this was not mentioned in Paul's blog-post, but this op should have this property as well, IMHO!
 				_CMP(CPU65.a, readFlatAddressedByte());
 			else
 #endif
@@ -1859,9 +1995,17 @@ int cpu65_step (
 	case 0xEA:	/* NOP, 65CE02: it's not special, but in C65 (4510) it is (EOM). It's up the emulator though (in the the second case) ... */
 #ifdef CPU_65CE02
 #ifdef MEGA65
-			if (XEMU_UNLIKELY(CPU65.neg_neg_prefix)) {
-				OPC_65CE02("NEG-NEG-NOP");
-				goto do_not_reset_neg_neg_prefix;	// FIXME: NEG NEG NOP sequence, should we treat ALSO as EOM that NOP and execute the nop callback above in that case?
+			if (XEMU_LIKELY(cpu_mega65_opcodes)) {
+				OPC_65CE02("EOM");
+				cpu65_do_nop_callback();	// MEGA65 will execute the "EOM" as well !!! since it does not know it WILL be a prefix or no.
+				if (CPU65.prefix == PREFIX_NEG_NEG) {
+					OPC_65CE02("NEG-NEG-NOP");
+					CPU65.prefix = PREFIX_NEG_NEG_NOP;
+				} else {
+					OPC_65CE02("NOP");
+					CPU65.prefix = PREFIX_NOP;
+				}
+				goto do_not_clear_prefix;
 			}
 #endif
 			OPC_65CE02("EOM");
@@ -1914,7 +2058,7 @@ int cpu65_step (
 	case 0xF2:	/* SBC (Zero_Page) or (ZP),Z on 65CE02 */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-			if (IS_FLAT32_DATA_OP())
+			if (CPU65.prefix == PREFIX_NOP)
 				_SBC(readFlatAddressedByte());
 			else
 #endif
@@ -2013,8 +2157,9 @@ int cpu65_step (
 			break;
 	}
 #ifdef MEGA65
-	CPU65.neg_neg_prefix = 0;
-do_not_reset_neg_neg_prefix:
+	// this with the label too, must be after the opcode big switch/case stuff!!!!
+	CPU65.prefix = PREFIX_NOTHING;
+do_not_clear_prefix:
 #endif
 #ifdef CPU_STEP_MULTI_OPS
 	all_cycles += CPU65.op_cycles;

@@ -53,9 +53,8 @@ struct cpu65_st {
 	Uint8 s;
 	Uint8 op;
 #ifdef MEGA65
-	Uint8 previous_op;
 	int nmos_mode;
-	int neg_neg_prefix;
+	int prefix;
 #endif
 #ifdef CPU_65CE02
 	Uint8 z;
@@ -82,7 +81,7 @@ struct cpu65_st {
 extern struct cpu65_st CPU65;
 
 #ifdef MEGA65
-extern int  cpu_linear_memory_addressing_is_enabled;
+extern int  cpu_mega65_opcodes;
 #endif
 
 #ifdef CPU65_65CE02_6502NMOS_TIMING_EMULATION
