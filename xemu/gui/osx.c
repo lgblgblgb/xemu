@@ -43,6 +43,7 @@ static void _xemumacgui_menu_action_handler ( id self, SEL selector, id sender )
 }
 
 
+// TODO: separator line after menu item, checked/unchecked status for menu items
 static id _xemumacgui_r_menu_builder ( const struct menu_st desc[], const char *parent_name )
 {
 	id ui_menu = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSMenu"), sel_registerName("new"));
@@ -54,11 +55,11 @@ static id _xemumacgui_r_menu_builder ( const struct menu_st desc[], const char *
 			((type & 0xFF) != XEMUGUI_MENUID_SUBMENU && !desc[a].handler) ||
 			((type & 0xFF) == XEMUGUI_MENUID_SUBMENU && (desc[a].handler  || !desc[a].user_data)) ||
 			!desc[a].name || (
-			 	(type & 0xFF) != XEMUGUI_MENUID_SUBMENU &&
+				(type & 0xFF) != XEMUGUI_MENUID_SUBMENU &&
 				(type & 0xFF) != XEMUGUI_MENUID_CALLABLE
 			)
 		) {
-			DEBUGPRINT("GUI: invalid meny entry found, skipping it (item #%d of menu \"%s\")" NL, a, parent_name);
+			DEBUGPRINT("GUI: invalid menu entry found, skipping it (item #%d of menu \"%s\")" NL, a, parent_name);
 			continue;
 		}
 		// Queryback feature, markes entries are called on menu-build time to be able to modify themselves dynamically (ie, on/off options depending current state)
@@ -136,6 +137,7 @@ static int xemuosxgui_file_selector ( int dialog_mode, const char *dialog_title,
 		case XEMUGUI_FSEL_OPEN:	// that's OK, this is till now the only implemented mode on MacOS -> TODO
 			break;
 		case XEMUGUI_FSEL_SAVE:
+			// TODO: must be implemented, Windows and GTK UI already know this!
 			ERROR_WINDOW("Sorry, save functionality is not yet implemented in the MacOS port!");
 			return 1;
 		default:
