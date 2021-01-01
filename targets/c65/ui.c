@@ -24,6 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_hid.h"
 #include "commodore_65.h"
 #include "inject.h"
+#include "vic3.h"
 
 
 //#if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_GUI)
@@ -83,7 +84,7 @@ static void ui_attach_d81_by_browsing ( void )
 	))
 		attach_d81(fnbuf);
 	else
-		DEBUGPRINT("UI: file selection for D81 mount was cancalled." NL);
+		DEBUGPRINT("UI: file selection for D81 mount was cancelled." NL);
 }
 #endif
 
@@ -102,7 +103,7 @@ static void ui_run_prg_by_browsing ( void )
 		c65_reset();
 		inject_register_prg(fnbuf, 0);
 	} else
-		DEBUGPRINT("UI: file selection for PRG injection was cancalled." NL);
+		DEBUGPRINT("UI: file selection for PRG injection was cancelled." NL);
 }
 
 static void ui_dump_memory ( void )
@@ -123,6 +124,9 @@ static void ui_dump_memory ( void )
 static void reset_into_c64_mode ( void )
 {
 	if (c65_reset_asked()) {
+		// we need this, because autoboot disk image would bypass the "go to C64 mode" on 'Commodore key' feature
+		// this call will deny disk access, and re-enable on the READY. state.
+		inject_register_allow_disk_access();
 		hid_set_autoreleased_key(0x75);
 		KBD_PRESS_KEY(0x75);	// C= key is pressed for C64 mode
 	}
@@ -131,6 +135,14 @@ static void reset_into_c64_mode ( void )
 static void reset_into_c65_mode ( void )
 {
 	if (c65_reset_asked()) {
+		KBD_RELEASE_KEY(0x75);
+	}
+}
+
+static void reset_into_c65_mode_noboot ( void )
+{
+	if (c65_reset_asked()) {
+		inject_register_allow_disk_access();
 		KBD_RELEASE_KEY(0x75);
 	}
 }
@@ -145,6 +157,13 @@ static void ui_set_scale_filtering ( const struct menu_st *m, int *query )
 }
 #endif
 
+static void ui_cb_show_drive_led ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, show_drive_led);
+	show_drive_led = !show_drive_led;
+}
+
+
 
 /**** MENU SYSTEM ****/
 
@@ -158,6 +177,8 @@ static const struct menu_st menu_display[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
 //	{ "Enable scale filtering",	XEMUGUI_MENUID_CALLABLE |
 //					XEMUGUI_MENUFLAG_QUERYBACK,	ui_set_scale_filtering, NULL },
+	{ "Show drive LED",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_show_drive_led, NULL },
 	{ NULL }
 };
 static const struct menu_st menu_debug[] = {
@@ -169,6 +190,7 @@ static const struct menu_st menu_debug[] = {
 };
 static const struct menu_st menu_reset[] = {
 	{ "Reset C65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode },
+	{ "Reset C65 without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot },
 	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode },
 	{ NULL }
 };
