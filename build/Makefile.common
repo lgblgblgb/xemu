@@ -133,7 +133,7 @@ endif
 $(PRG): $(OBJS) $(DEPALL)
 	@echo "const char *XEMU_BUILDINFO_ON  = \"`whoami`@`uname -n` on `uname -s` `uname -r`\";" > $(DEPFILEPREFIX)-buildinfo.c
 	@echo "const char *XEMU_BUILDINFO_AT  = \"`date`\";" >> $(DEPFILEPREFIX)-buildinfo.c
-	@echo "const char *XEMU_BUILDINFO_GIT = \"`git config --get remote.origin.url` `git rev-parse --abbrev-ref HEAD` `git rev-parse HEAD`\";" >> $(DEPFILEPREFIX)-buildinfo.c
+	@echo "const char *XEMU_BUILDINFO_GIT = \"`git config --get remote.origin.url` `git branch | awk 'BEGIN { s = "UNKNOWN" } $$1 = "*" { s = $$2 } END { print s }'` `git rev-parse HEAD`\";" >> $(DEPFILEPREFIX)-buildinfo.c
 	@echo "const char *XEMU_BUILDINFO_TARGET = \"$(PRG_TARGET) ($(PRG)) for $(TARGET) on \" XEMU_ARCH_NAME \" ($(ARCH)) using $(CONFIG_CC)\";" >> $(DEPFILEPREFIX)-buildinfo.c
 	@git log -1 --format=%cd --date=format:%Y%m%d%H%M%S > $(TOPDIR)/build/objs/cdate.data || date '+%Y%m%d%H%M%S' > $(TOPDIR)/build/objs/cdate.data
 	@echo "*** Commit date we're building ($(TOPDIR)/build/objs/cdate.data): `cat $(TOPDIR)/build/objs/cdate.data`"
