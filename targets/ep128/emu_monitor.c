@@ -660,7 +660,7 @@ static void cmd_dir ( void )
 static void cmd_help ( void );
 
 static const struct commands_st commands[] = {
-	{ "AUDIO",	"",  3, "Tries to turn lame audio emulation", cmd_audio },
+	{ "AUDIO",	"",  3, "Tries to turn crude audio emulation", cmd_audio },
 	{ "CD",		"",  3, "Host OS directory change/query for FILE:", cmd_cd },
 	{ "CLOSE",	"",  3, "Close console/monitor window", cmd_close },
 	{ "CPU",	"",  3, "Set/query CPU type/clock", cmd_cpu },

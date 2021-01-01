@@ -1072,6 +1072,8 @@ static void render_one_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uin
    renderer for sprites. */
 static void sprite_renderer ( void )
 {
+#if 0
+	// DEBUG code for K2 demo!!!
 	static const char search_this[] = "SYMMEK";
 	for (int a = 0; a < 128000; a++) {
 		int d1 = memory[a + 0] - search_this[5];
@@ -1084,7 +1086,7 @@ static void sprite_renderer ( void )
 			DEBUGPRINT("YAY-FOUND: $%05X first-char: $%02X D018=$%02X D031=$%02X" NL, a, memory[a], vic3_registers[0x18], vic3_registers[0x31]);
 		}
 	}
-
+#endif
 
 	int sprites_enabled = vic3_registers[0x15];
 	if (sprites_enabled) {	// Render sprites. VERY BAD. We ignore sprite priority as well (cannot be behind the background)
@@ -1112,9 +1114,14 @@ static void sprite_renderer ( void )
 				sprite_bank = vicptr_bank16k;
 			}
 		}
+		if (IS_BPM) {
+			// I am really not sure if it's true for bitplane mode ... Just for testing, overriding the things above if bitplane mode is used
+			sprite_pointers = memory + 0x07f8;	// I would guess $107f8 or $10ff8
+			sprite_bank = memory;
+		}
+#if 0
 		// TEST ONLY: BEGIN
-		sprite_pointers = memory + 0x07f8;	// I would guess $107f8 or $10ff8
-		sprite_bank = memory;
+		// DEBUG code
 		DEBUGPRINT("YAY-FOUND: sprite pointers are: %02X %02X %02X %02X %02X %02X %02X %02X" NL,
 			sprite_pointers[0],
 			sprite_pointers[1],
@@ -1126,6 +1133,7 @@ static void sprite_renderer ( void )
 			sprite_pointers[7]
 		);
 		// TEST ONLY: END
+#endif
 		for (int a = 7; a >= 0; a--) {
 			int mask = 1 << a;
 			if ((sprites_enabled & mask))

@@ -72,6 +72,7 @@ matrix:
         on:
           branch:
             - master
+            - next
             - dev
             - vic
             - hmw
@@ -141,6 +142,7 @@ matrix:
         on:
           branch:
             - master
+            - next
             - dev
             - vic
             - hmw
@@ -189,6 +191,7 @@ matrix:
         on:
           branch:
             - master
+            - next
             - dev
             - vic
             - hmw

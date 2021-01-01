@@ -203,7 +203,6 @@ static void vic2_interrupt_checker ( void )
 
 void vic2_check_raster_interrupt ( void )
 {
-	// I'm lame even with VIC2 knowledge it seems
 	// C65 seems to use raster interrupt to generate the usual periodic IRQ
 	// (which was done with CIA on C64) in raster line 511. However as
 	// raster line 511 can never be true, I really don't know what to do.

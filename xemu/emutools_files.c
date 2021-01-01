@@ -758,7 +758,7 @@ int xemu_screenshot_png ( const char *path, const char *fn, int zoom_width, int 
 	}
 	for (int i = 0; i < target_width * target_height; i++) {
 		// Sampling pixel in the source
-		// Kinda lame algorith, but it is not needed to be very fast and real-time operation, just
+		// Kinda crude algorithm, but it is not needed to be very fast and real-time operation, just
 		// to create a screenshot on user's request.
 		Uint32 pixel = source_pixels[(
 			(i % target_width) / zoom_width

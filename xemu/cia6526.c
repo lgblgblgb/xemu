@@ -1,7 +1,7 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
-   This is a *VERY* lame CIA 6526 emulation, lacks of TOD, mostly to SDR stuff, timing,
+   This is a *VERY* crude CIA 6526 emulation, lacks of TOD, mostly to SDR stuff, timing,
    and other problems as well ... Hopefully enough for C65 to boot, what is its only reason ...
 
 This program is free software; you can redistribute it and/or modify

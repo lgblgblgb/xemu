@@ -446,7 +446,7 @@ static void shutdown_emu ( void )
 	//if (keep_ram) {
 	//	xemu_save_file("@memory_saved.bin", memory, ram_size, "Cannot save memory content :(");
 	//}
-	printf("Shutting down ...\n");
+	DEBUGPRINT("Shutting down ..." NL);
 }
 
 
@@ -455,19 +455,19 @@ static void rom_list ( void )
 	//const char *defprg = xemucfg_get_str("defprg");
 	for (int addr = 0x20000; addr < 0x40000; addr += 0x4000) {
 		if (!memcmp(memory + addr + 8, "Commodore LCD", 13)) {
-			printf("ROM directory entry point @ $%05X\n", addr);
+			DEBUGPRINT("ROM directory entry point @ $%05X" NL, addr);
 			int pos = addr + 13 + 8;
 			while (memory[pos]) {
 				char name[256];
 				memcpy(name, memory + pos + 6, memory[pos] - 6);
 				name[memory[pos] - 6] = 0;
-				printf("\t($%02X $%02X $%02X) START=$%04X : \"%s\"\n",
+				DEBUGPRINT("\t($%02X $%02X $%02X) START=$%04X : \"%s\"" NL,
 					memory[pos + 1], memory[pos + 2], memory[pos + 3],
 					memory[pos + 4] | (memory[pos + 5] <<8),
 					name
 				);
 				//if (defprg && !strcasecmp(name, defprg)) {
-				//	printf("\tFOUND!!!!!\n");
+				//	DEBUGPRINT("\tFOUND!!!!!" NL);
 				//	memory[pos + 1] |= 0x20;
 				//	memory[pos + 1] = 0x20;
 				//} else if (defprg) {
