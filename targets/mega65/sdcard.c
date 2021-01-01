@@ -60,7 +60,6 @@ static int	compressed_block;
 #endif
 static int	sd_is_read_only;
 int		fd_mounted;
-static int	first_mount = 1;
 #ifdef USE_KEEP_BUSY
 static int	keep_busy = 0;
 #endif
@@ -734,8 +733,8 @@ int mount_external_d81 ( const char *name, int force_ro )
 
 static int mount_internal_d81 ( int force_ro )
 {
-	int block = U8A_TO_U32(sd_d81_img1_start);
-	if (XEMU_UNLIKELY(block + (D81_SIZE >> 9) >= sdcard_size_in_blocks)) {
+	unsigned int block = U8A_TO_U32(sd_d81_img1_start);
+	if (XEMU_UNLIKELY(block + (D81_SIZE >> 9) >= sdcard_size_in_blocks || block <= 0)) {
 		DEBUGPRINT("SDCARD: D81: image is outside of the SD-card boundaries! Refusing to mount." NL);
 		return -1;
 	}
@@ -748,6 +747,17 @@ static int mount_internal_d81 ( int force_ro )
 }
 
 
+int forget_external_d81 ( void )
+{
+	if (fd_mounted && *external_d81) {
+		fd_mounted = !mount_internal_d81(0);
+		if (fd_mounted)
+			*external_d81 = 0;
+	}
+	return 0;
+}
+
+
 // data = D68B write
 static void sdcard_mount_d81 ( Uint8 data )
 {
@@ -756,11 +766,16 @@ static void sdcard_mount_d81 ( Uint8 data )
 		int use_d81;
 		fd_mounted = 0;
 		if (*external_d81) {	// request for external mounting
+#if 0
+			static int first_mount = 1;
 			if (first_mount) {
 				first_mount = 0;
 				use_d81 = 1;
 			} else
 				use_d81 = QUESTION_WINDOW("Use D81 from SD-card|Use external D81 image/prg file", "Hypervisor mount request, and you have defined external D81 image.");
+#else
+			use_d81 = 1;
+#endif
 		} else
 			use_d81 = 0;
 		if (!use_d81) {

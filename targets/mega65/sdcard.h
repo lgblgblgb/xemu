@@ -37,6 +37,7 @@ extern int    sdcard_read_block     ( Uint32 block, Uint8 *buffer );
 extern int    sdcard_write_block    ( Uint32 block, Uint8 *buffer );
 
 extern int    mount_external_d81    ( const char *name, int force_ro );
+extern int    forget_external_d81   ( void );
 
 #define SD_BUFFER_POS 0x0E00
 #define FD_BUFFER_POS 0x0C00
