@@ -1,6 +1,6 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    ~/xemu/gui/gtk.c: UI implementation for GTK+3 of Xemu's UI abstraction layer
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -232,7 +232,7 @@ static void _gtkgui_callback ( const struct menu_st *item )
 }
 
 
-static GtkWidget *_gtkgui_recursive_menu_builder ( const struct menu_st desc[] )
+static GtkWidget *_gtkgui_recursive_menu_builder ( const struct menu_st desc[], const char *parent_name)
 {
 	if (xemugtkmenu.num_of_menus >= XEMUGUI_MAX_SUBMENUS) {
 		DEBUGPRINT("GUI: Too many submenus (max=%d)" NL, XEMUGUI_MAX_SUBMENUS);
@@ -241,17 +241,17 @@ static GtkWidget *_gtkgui_recursive_menu_builder ( const struct menu_st desc[] )
 	GtkWidget *menu = gtk_menu_new();
 	xemugtkmenu.menus[xemugtkmenu.num_of_menus++] = menu;
 	for (int a = 0; desc[a].name; a++) {
+		int type = desc[a].type;
 		// Some sanity checks:
 		if (
-			((desc[a].type & 0xFF) != XEMUGUI_MENUID_SUBMENU && !desc[a].handler) ||
-			((desc[a].type & 0xFF) == XEMUGUI_MENUID_SUBMENU && (desc[a].handler  || !desc[a].user_data)) ||
+			((type & 0xFF) != XEMUGUI_MENUID_SUBMENU && !desc[a].handler) ||
+			((type & 0xFF) == XEMUGUI_MENUID_SUBMENU && (desc[a].handler  || !desc[a].user_data)) ||
 			!desc[a].name
 		) {
-			DEBUGPRINT("GUI: invalid menu entry found, skipping it" NL);
+			DEBUGPRINT("GUI: invalid menu entry found, skipping it (item #%d of menu \"%s\")" NL, a, parent_name);
 			continue;
 		}
 		GtkWidget *item = NULL;
-		int type = desc[a].type;
 		switch (type & 0xFF) {
 			case XEMUGUI_MENUID_SUBMENU:
 				item = gtk_menu_item_new_with_label(desc[a].name);
@@ -259,7 +259,7 @@ static GtkWidget *_gtkgui_recursive_menu_builder ( const struct menu_st desc[] )
 					goto PROBLEM;
 				gtk_menu_shell_append(GTK_MENU_SHELL(menu), item);
 				// submenus use the user_data as the submenu menu_st struct pointer!
-				GtkWidget *submenu = _gtkgui_recursive_menu_builder(desc[a].user_data);	// who does not like recursion, seriously? :-)
+				GtkWidget *submenu = _gtkgui_recursive_menu_builder(desc[a].user_data, desc[a].name);	// who does not like recursion, seriously? :-)
 				if (!submenu)
 					goto PROBLEM;
 				gtk_menu_item_set_submenu(GTK_MENU_ITEM(item), submenu);
@@ -312,7 +312,7 @@ static GtkWidget *_gtkgui_create_menu ( const struct menu_st desc[] )
 {
 	_gtkgui_destroy_menu();
 	xemugtkmenu.problem = 0;
-	GtkWidget *menu = _gtkgui_recursive_menu_builder(desc);
+	GtkWidget *menu = _gtkgui_recursive_menu_builder(desc, "<ROOT>");
 	if (!menu || xemugtkmenu.problem) {
 		_gtkgui_destroy_menu();
 		return NULL;

@@ -43,35 +43,55 @@ static void _xemumacgui_menu_action_handler ( id self, SEL selector, id sender )
 }
 
 
-static id _xemumacgui_r_menu_builder ( const struct menu_st desc[] )
+static id _xemumacgui_r_menu_builder ( const struct menu_st desc[], const char *parent_name )
 {
 	id ui_menu = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSMenu"), sel_registerName("new"));
 	((void (*) (id, SEL)) objc_msgSend)(ui_menu, sel_registerName("autorelease"));
-	for (int i = 0; desc[i].name; i++) {
+	for (int a = 0; desc[a].name; a++) {
+		int type = desc[a].type;
 		// Some sanity checks:
 		if (
-			((desc[i].type & 0xFF) != XEMUGUI_MENUID_SUBMENU && !desc[i].handler) ||
-			((desc[i].type & 0xFF) == XEMUGUI_MENUID_SUBMENU && (desc[i].handler  || !desc[i].user_data)) ||
-			!desc[i].name
+			((type & 0xFF) != XEMUGUI_MENUID_SUBMENU && !desc[a].handler) ||
+			((type & 0xFF) == XEMUGUI_MENUID_SUBMENU && (desc[a].handler  || !desc[a].user_data)) ||
+			!desc[a].name || (
+			 	(type & 0xFF) != XEMUGUI_MENUID_SUBMENU &&
+				(type & 0xFF) != XEMUGUI_MENUID_CALLABLE
+			)
 		) {
-			DEBUGPRINT("GUI: invalid meny entry found, skipping it" NL);
+			DEBUGPRINT("GUI: invalid meny entry found, skipping it (item #%d of menu \"%s\")" NL, i, parent_name);
 			continue;
+		}
+		// Queryback feature, markes entries are called on menu-build time to be able to modify themselves dynamically (ie, on/off options depending current state)
+		if ((type & 0xFF) == XEMUGUI_MENUID_CALLABLE && (type & XEMUGUI_MENUFLAG_QUERYBACK)) {
+			DEBUGGUI("GUI: query-back for \"%s\"" NL, desc[a].name);
+			((xemugui_callback_t)(desc[a].handler))(&desc[a], &type);
 		}
 		id menu_item = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSMenuItem"), sel_registerName("alloc"));
 		((void (*) (id, SEL)) objc_msgSend)(menu_item, sel_registerName("autorelease"));
-		id str_name = ((id (*) (Class, SEL, const char*)) objc_msgSend)(objc_getClass("NSString"),
-			sel_registerName("stringWithUTF8String:"), desc[i].name);
-		id str_key =  ((id (*) (Class, SEL, const char*)) objc_msgSend)(objc_getClass("NSString"),
-			sel_registerName("stringWithUTF8String:"), "");
-		((void (*) (id, SEL, id, SEL, id))objc_msgSend)(menu_item, sel_registerName("initWithTitle:action:keyEquivalent:"),
-			str_name, sel_registerName("menuActionHandler"), str_key);
+		id str_name = ((id (*) (Class, SEL, const char*)) objc_msgSend)(
+			objc_getClass("NSString"),
+			sel_registerName("stringWithUTF8String:"),
+			desc[a].name
+		);
+		id str_key =  ((id (*) (Class, SEL, const char*)) objc_msgSend)(
+			objc_getClass("NSString"),
+			sel_registerName("stringWithUTF8String:"),
+			""
+		);
+		((void (*) (id, SEL, id, SEL, id))objc_msgSend)(
+			menu_item,
+			sel_registerName("initWithTitle:action:keyEquivalent:"),
+			str_name,
+			sel_registerName("menuActionHandler"),
+			str_key
+		);
 		((void (*) (id, SEL, BOOL)) objc_msgSend)(menu_item, sel_registerName("setEnabled:"), YES);
-		id menu_object = ((id (*) (Class, SEL, id)) objc_msgSend) (objc_getClass("NSValue"), sel_registerName("valueWithPointer:"),(id) &desc[i]);
+		id menu_object = ((id (*) (Class, SEL, id)) objc_msgSend) (objc_getClass("NSValue"), sel_registerName("valueWithPointer:"),(id) &desc[a]);
 		((void (*) (id, SEL, id))objc_msgSend)(menu_item, sel_registerName("setRepresentedObject:"), menu_object);
 		((void (*) (id, SEL, id))objc_msgSend)(ui_menu, sel_registerName("addItem:"), menu_item);
-		if (desc[i].type == XEMUGUI_MENUID_SUBMENU) {
+		if ((type & 0xFF) == XEMUGUI_MENUID_SUBMENU) {
 			// submenus use the user_data as the submenu menu_st struct pointer!
-			id sub_menu = _xemumacgui_r_menu_builder(desc[i].user_data);
+			id sub_menu = _xemumacgui_r_menu_builder(desc[a].user_data, desc[a].name);
 			((void (*) (id, SEL, id, id))objc_msgSend)(ui_menu, sel_registerName("setSubmenu:forItem:"), sub_menu, menu_item);
 		}
 	}
@@ -98,7 +118,7 @@ static int xemuosxgui_popup ( const struct menu_st desc[] )
 		((void(*)(id,SEL,BOOL))objc_msgSend) (application, sel_registerName("activateIgnoringOtherApps:"), YES);
 		return 0;
 	}
-	id ui_menu = _xemumacgui_r_menu_builder(desc);
+	id ui_menu = _xemumacgui_r_menu_builder(desc, "<ROOT>");
 	if (!ui_menu) {
 		DEBUGPRINT("GUI: Error building menu");
 		return 1;
