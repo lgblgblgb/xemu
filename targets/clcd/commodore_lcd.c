@@ -68,6 +68,7 @@ static Uint8 keysel;
 static Uint8 rtc_regs[16];
 static int rtc_sel = 0;
 static int ram_size;
+static int keep_ram;
 
 static struct {
 	int phase;
@@ -433,6 +434,7 @@ static void update_emulator ( void )
 
 static void shutdown_emu ( void )
 {
+#if 0
 #ifndef __EMSCRIPTEN__
 	FILE *f = fopen("memory.dump", "wb");
 	if (f) {
@@ -440,7 +442,11 @@ static void shutdown_emu ( void )
 		fclose(f);
 	}
 #endif
-	printf("Shutting down ...\n");
+#endif
+	//if (keep_ram) {
+	//	xemu_save_file("@memory_saved.bin", memory, ram_size, "Cannot save memory content :(");
+	//}
+	DEBUGPRINT("Shutting down ..." NL);
 }
 
 
@@ -449,19 +455,19 @@ static void rom_list ( void )
 	//const char *defprg = xemucfg_get_str("defprg");
 	for (int addr = 0x20000; addr < 0x40000; addr += 0x4000) {
 		if (!memcmp(memory + addr + 8, "Commodore LCD", 13)) {
-			printf("ROM directory entry point @ $%05X\n", addr);
+			DEBUGPRINT("ROM directory entry point @ $%05X" NL, addr);
 			int pos = addr + 13 + 8;
 			while (memory[pos]) {
 				char name[256];
 				memcpy(name, memory + pos + 6, memory[pos] - 6);
 				name[memory[pos] - 6] = 0;
-				printf("\t($%02X $%02X $%02X) START=$%04X : \"%s\"\n",
+				DEBUGPRINT("\t($%02X $%02X $%02X) START=$%04X : \"%s\"" NL,
 					memory[pos + 1], memory[pos + 2], memory[pos + 3],
 					memory[pos + 4] | (memory[pos + 5] <<8),
 					name
 				);
 				//if (defprg && !strcasecmp(name, defprg)) {
-				//	printf("\tFOUND!!!!!\n");
+				//	DEBUGPRINT("\tFOUND!!!!!" NL);
 				//	memory[pos + 1] |= 0x20;
 				//	memory[pos + 1] = 0x20;
 				//} else if (defprg) {
@@ -618,6 +624,9 @@ static const struct menu_st menu_main[] = {
 #endif
 	{ "Reset",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data_if_sure, cpu65_reset },
 	{ "About",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_about_window, NULL },
+#ifdef HAVE_XEMU_EXEC_API
+	{ "Help (on-line)",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_web_help_main, NULL },
+#endif
 	{ "Quit",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_quit_if_sure, NULL },
 	{ NULL }
 };
@@ -636,6 +645,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("rom104", "#clcd-u104.rom", "Selects 'U104' ROM to use");
 	xemucfg_define_str_option("rom105", "#clcd-u105.rom", "Selects 'U105' ROM to use");
 	xemucfg_define_str_option("romchr", "#clcd-chargen.rom", "Selects character ROM to use");
+	xemucfg_define_switch_option("keepram", "Deactivate ROM patch for clear RAM and also save/restore RAM");
 	//xemucfg_define_str_option("defprg", NULL, "Selects the ROM-program to set default to");
 	xemucfg_define_str_option("prg", NULL, "Inject BASIC program on entering to BASIC");
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
@@ -644,6 +654,7 @@ int main ( int argc, char **argv )
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	i_am_sure_override = xemucfg_get_bool("besure");
+	keep_ram = xemucfg_get_bool("keepram");
 	set_cpu_speed(xemucfg_get_ranged_num("clock", 1, 16));
 	set_ram_size(xemucfg_get_ranged_num("ram", 32, 128));
 	DEBUGPRINT("CFG: ram size is %d bytes." NL, ram_size);
@@ -682,10 +693,15 @@ int main ( int argc, char **argv )
 		return 1;
 	// Ugly hacks :-( <patching ROM>
 #ifdef ROM_HACK_COLD_START
-	// this ROM patching is needed, as Commodore LCD seems not to work to well with "not intact" SRAM content (ie: it has battery powered SRAM even when "switched off")
-	DEBUG("ROM HACK: cold start condition" NL);
-	memory[0x385BB] = 0xEA;
-	memory[0x385BC] = 0xEA;
+	if (!keep_ram) {
+		// this ROM patching is needed, as Commodore LCD seems not to work to well with "not intact" SRAM content (ie: it has battery powered SRAM even when "switched off")
+		DEBUGPRINT("ROM-HACK: forcing cold start condition with ROM patching!" NL);
+		memory[0x385BB] = 0xEA;
+		memory[0x385BC] = 0xEA;
+	} else {
+		DEBUGPRINT("ROM-HACK: SKIP cold start condition forcing!" NL);
+		xemu_load_file("@memory_saved.bin", memory, ram_size, ram_size, "Cannot load memory content!");
+	}
 #endif
 #ifdef ROM_HACK_NEW_ROM_SEARCHING
 	// this ROM hack modifies the ROM signature searching bytes so we can squeeze extra menu points of the main screen!
@@ -719,6 +735,7 @@ int main ( int argc, char **argv )
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	update_rtc();			// this will use time-keeping stuff as well, so initially let's do after the function call above
 	viacyc = 0;
+	// FIXME: add here the "OK to save ROM state" ...
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;
 }
