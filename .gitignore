@@ -9,3 +9,4 @@ debug.log
 /dist.zip
 /.dist
 /.pending
+.vscode
