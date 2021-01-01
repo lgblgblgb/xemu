@@ -208,9 +208,15 @@ void xemuexec_open_native_file_browser ( char *dir )
 {
 #ifdef HAVE_XEMU_EXEC_API
 	static xemuexec_process_t fbp = XEMUEXEC_NULL_PROCESS_ID;
-	char *args[] = {FILE_BROWSER, dir, NULL};
+	if (!strncasecmp(dir, "file://", 7))
+		dir += 7;
+	char *args[] = { FILE_BROWSER, dir, NULL, NULL };
 	if (!strncasecmp(dir, "ftp://", 6) || !strncasecmp(dir, "http://", 7) || !strncasecmp(dir, "https://", 8)) {
 		args[0] = WEB_BROWSER;
+#ifdef XEMU_ARCH_WIN
+		args[1] = "";
+		args[2] = dir;
+#endif
 	}
 	if (fbp != XEMUEXEC_NULL_PROCESS_ID) {
 		int w = xemuexec_check_status(fbp, 0);
