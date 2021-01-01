@@ -5,7 +5,7 @@
  * Written from the technical manual of the Z8000 released by Zilog by me,
  * so it can be very ugly, strange and incorrect code, especially, because
  * Z8000 is a new thing me, first try to even get to know it ... 
- * In many cases, the source is about the most "lame" solution, far from being
+ * In many cases, the source is about the most crude solution, far from being
  * optimized. Also, Z8K though being 16 bit CPU, the internal emu struct is 8 bit
  * based mainly to simplify things and not to be confused with different byte order
  * between Z8K and emu host or similar issues.

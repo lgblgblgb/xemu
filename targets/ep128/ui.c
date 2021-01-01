@@ -56,7 +56,7 @@ static void ui_attach_disk ( void )
 	))
 		wd_attach_disk_image(fnbuf);
 	else
-		DEBUGPRINT("UI: file selection for floppy mount was cancalled." NL);
+		DEBUGPRINT("UI: file selection for floppy mount was cancelled." NL);
 }
 #endif
 

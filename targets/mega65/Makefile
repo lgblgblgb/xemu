@@ -43,23 +43,29 @@ recreatememcontent:
 	echo " * an open source, GNU/GPL project, like Xemu. Thus, it's valid" >> memcontent.c.tmp
 	echo " * to use binaries as it's from the compiled version of MEGA65" >> memcontent.c.tmp
 	echo " * which is available in source form at https://github.com/MEGA65/mega65-core */" >> memcontent.c.tmp
+	cp memcontent.c.tmp memcontent_sizes.h.tmp
 	echo '#include "xemu/emutools.h"' >> memcontent.c.tmp
 	echo '#include "memcontent.h"' >> memcontent.c.tmp
 	echo "Uint8 meminitdata_kickstart[MEMINITDATA_KICKSTART_SIZE] = {" >> memcontent.c.tmp
 	../../build/bin2values.py $(MEGA65_CORE)/bin/HICKUP.M65 - >> memcontent.c.tmp
+	../../build/filesizedefine.py MEMINITDATA_KICKSTART_SIZE $(MEGA65_CORE)/bin/HICKUP.M65 >> memcontent_sizes.h.tmp
 	echo "};" >> memcontent.c.tmp
 	echo "Uint8 meminitdata_chrwom[MEMINITDATA_CHRWOM_SIZE] = {" >> memcontent.c.tmp
 	gawk '/^[\t ]*[xX]"/ { $$0 = toupper($$0); gsub("X\"","0x",$$0); gsub("\"","",$$0); print "\t" $$0 }' < $(MEGA65_CORE)/src/vhdl/charrom.vhdl >> memcontent.c.tmp
 	echo "};" >> memcontent.c.tmp
+	@echo "*** $(MEGA65_CORE)/bin/COLOURRAM.BIN as meminitdata_cramutils / MEMINITDATA_CRAMUTILS_SIZE ***"
 	echo "Uint8 meminitdata_cramutils[MEMINITDATA_CRAMUTILS_SIZE] = {" >> memcontent.c.tmp
 	../../build/bin2values.py $(MEGA65_CORE)/bin/COLOURRAM.BIN - >> memcontent.c.tmp
+	../../build/filesizedefine.py MEMINITDATA_CRAMUTILS_SIZE $(MEGA65_CORE)/bin/COLOURRAM.BIN >> memcontent_sizes.h.tmp
 	echo "};" >> memcontent.c.tmp
 	echo "Uint8 meminitdata_banner[MEMINITDATA_BANNER_SIZE] = {" >> memcontent.c.tmp
 	../../build/bin2values.py $(MEGA65_CORE)/sdcard-files/BANNER.M65 - >> memcontent.c.tmp
+	../../build/filesizedefine.py MEMINITDATA_BANNER_SIZE $(MEGA65_CORE)/sdcard-files/BANNER.M65 >> memcontent_sizes.h.tmp
 	echo "};" >> memcontent.c.tmp
 	echo "Uint8 meminitdata_freezer[] = {" >> memcontent.c.tmp
 	../../build/bin2values.py $(MEGA65_CORE)/sdcard-files/FREEZER.M65 - >> memcontent.c.tmp
+	../../build/filesizedefine.py MEMINITDATA_FIXME_SIZE $(MEGA65_CORE)/sdcard-files/FREEZER.M65 >> memcontent_sizes.h.tmp
 	echo "};" >> memcontent.c.tmp
 	echo "const int meminitdata_freezer_size = sizeof(meminitdata_freezer);" >> memcontent.c.tmp
 	cp memcontent.c memcontent.c.BAK
-	@echo "*** OK. Please rename memcontent.c.tmp to memcontent.c to really apply these changes, then re-compile the emulator ***"
+	@echo "*** OK. Please rename memcontent.c.tmp to memcontent.c and memcontent_sizes.h.tmp to memcontent_sizes.h to really apply these changes, then re-compile the emulator ***"

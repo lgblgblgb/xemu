@@ -33,7 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 	* FIXME: there is no IRQ generated currently for the CPU! So only polling method is used.
 	  the problem is not as trivial to solve as it seems, since a *thread* can affect IRQs
 	  also updated by the main CPU emulator thread ... With using locking for all of these,
-          would result in quite slow emulation :(
+	  would result in quite slow emulation :(
 	* FIXME: it uses thread, and it's horrible code!! there are tons of race conditions, etc ...
 	It's not so nice work to use threads, but it would be hard to do otherwise, sadly.
 	* FIXME FIXME FIXME: No support for snapshotting ...
@@ -153,7 +153,7 @@ static SDL_Thread *thread_id = NULL;
 
 static XEMU_INLINE int ethernet_rx_processor ( void )
 {
-        Uint8 rx_temp_buffer[0x800];
+	Uint8 rx_temp_buffer[0x800];
 	int ethertype, ret;
 	ret = xemu_tuntap_read(rx_temp_buffer, 6 + 6 + 2, sizeof rx_temp_buffer);
 	if (ret == -2) {

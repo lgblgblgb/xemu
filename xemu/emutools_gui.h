@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -47,6 +47,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMUGUI_MAX_ITEMS		900
 #endif
 
+#ifndef XEMUGUI_MAINMENU_NAME
+#define XEMUGUI_MAINMENU_NAME "Main Menu"
+#endif
 
 #define XEMUGUI_RETURN_CHECKED_ON_QUERY(query,status) \
 	do { if (query) { \

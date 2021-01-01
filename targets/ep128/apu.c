@@ -160,7 +160,7 @@ static void _apu_push_fix32(Sint64 data) {
 /* Foreword for FLOAT handling: I use natural float (well, double ...)
  * numberic format of C, using pop/push APU functions to convert from/to.
  * This is kinda messy, and not bit-exact emulation of Am9511.
- * Even my lame push/pop functions can be done much better!!
+ * Even my crude push/pop functions can be done much better!!
  */
 
 

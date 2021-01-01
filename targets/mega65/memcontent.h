@@ -24,6 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // to the SD-card as part of the "update system files" process.
 #define MEMCONTENT_VERSION_ID		1
 
+#include "memcontent_sizes.h"
 
 #define MEMINITDATA_KICKSTART_SIZE	0x4000
 #define MEMINITDATA_CHRWOM_SIZE		0x1000
