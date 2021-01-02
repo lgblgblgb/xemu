@@ -1,0 +1,14 @@
+#!/bin/bash
+echo "*** git symbolic-ref HEAD"
+git symbolic-ref HEAD
+echo "*** git branch"
+git branch
+echo "*** git symbolic-ref --short HEAD"
+git symbolic-ref --short HEAD
+echo "*** git rev-parse --abbrev-ref HEAD"
+git rev-parse --abbrev-ref HEAD
+echo "*** git branch --show-current"
+git branch --show-current
+echo "*** cat .git/HEAD"
+cat .git/HEAD
+exit 0
