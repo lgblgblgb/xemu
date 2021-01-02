@@ -207,8 +207,9 @@ static void execute_command ( char *cmd )
 			break;
     case 'l':
       loadcmdflag = 1;
-      cmd = parse_hex_arg(cmd, &loadcmdcurraddr, 0, 0xFFFF);
+      cmd = parse_hex_arg(cmd, &loadcmdcurraddr, 0, 0xFFFFFFF);
       cmd = parse_hex_arg(cmd, &loadcmdendaddr, 0, 0xFFFF);
+      loadcmdendaddr += (loadcmdcurraddr & 0xFFF0000);
       break;
     case 'g':
       cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
@@ -501,7 +502,7 @@ int read_loadcmd_data(char* buff, int count)
 
   while (count != 0)
   {
-    m65mon_setmem16(loadcmdcurraddr, *p);
+    m65mon_setmem28(loadcmdcurraddr, 1, p);
     loadcmdcurraddr++;
     p++;
     count--;
