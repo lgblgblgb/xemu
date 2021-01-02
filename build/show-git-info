@@ -1,14 +1,25 @@
 #!/bin/bash
-echo "*** git symbolic-ref HEAD"
-git symbolic-ref HEAD
-echo "*** git branch"
-git branch
-echo "*** git symbolic-ref --short HEAD"
-git symbolic-ref --short HEAD
-echo "*** git rev-parse --abbrev-ref HEAD"
-git rev-parse --abbrev-ref HEAD
-echo "*** git branch --show-current"
-git branch --show-current
-echo "*** cat .git/HEAD"
-cat .git/HEAD
+
+remote=`git config --get remote.origin.url`
+
+if [ "$TRAVIS_BRANCH" = "" ]; then
+	branch=`git branch | awk 'BEGIN { s = "UNKNOWN" } $1 = "*" { s = $2 } END { print s }'`
+	if [ "$branch" = "" ]; then
+		branch="unknown_branch"
+	fi
+else
+	branch="$TRAVIS_BRANCH"
+fi
+
+if [ "$TRAVIS_COMMIT" = "" ]; then
+	commit=`git rev-parse HEAD`
+	if [ "$commit" = "" ]; then
+		commit="unknown_commit_id"
+	fi
+else
+	commit="$TRAVIS_COMMIT"
+fi
+
+echo "$remote $branch $commit"
+
 exit 0

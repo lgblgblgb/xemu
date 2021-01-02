@@ -30,7 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifdef	XEMU_ARCH_WIN
 #	define FILE_BROWSER	"explorer"
-	/* Fow windows, we use 'cmd /c start' for web browser, but it needs spacial care because of
+	/* Fow windows, we use 'cmd /c start' as web browser, but it needs special care because of
 	 * being not a single string as executable. Thus WEB_BROWSER for Windows is handled in
 	 * code, in emutools_files.c */
 #elif	defined(XEMU_ARCH_MAC)
