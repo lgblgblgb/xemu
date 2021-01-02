@@ -408,6 +408,16 @@ int connect_unix_socket(void)
   return 0;
 }
 
+void write_hypervisor_byte(char byte)
+{
+  if (!umon_send_ok)
+    return;
+
+  int ret, xerr;
+
+  ret = xemusock_send(sock_client, &byte, 1, &xerr);
+}
+
 int write_to_socket(void)
 {
 	int xerr, ret;
