@@ -44,6 +44,12 @@ matrix:
         - set +e
         - ps auxwwww || true
         - uptime
+        - git symbolic-ref HEAD
+        - git branch
+        - git symbolic-ref --short HEAD
+        - git rev-parse --abbrev-ref HEAD
+        - git branch --show-current
+        - cat .git/HEAD
       script:
         - set -e
         - make -j 2 RELEASE=yes OFFICIALBUILD=yes
@@ -106,6 +112,12 @@ matrix:
         - set +e
         - ps auxwwww || true
         - uptime
+        - git symbolic-ref HEAD
+        - git branch
+        - git symbolic-ref --short HEAD
+        - git rev-parse --abbrev-ref HEAD
+        - git branch --show-current
+        - cat .git/HEAD
       script:
         - set -e
         - make -j 2 ARCH=win64 RELEASE=yes OFFICIALBUILD=yes
@@ -164,6 +176,12 @@ matrix:
         - set +e
         - ps auxwwww || true
         - uptime
+        - git symbolic-ref HEAD
+        - git branch
+        - git symbolic-ref --short HEAD
+        - git rev-parse --abbrev-ref HEAD
+        - git branch --show-current
+        - cat .git/HEAD
       script:
         - set -e
         - make -j 2 RELEASE=yes OFFICIALBUILD=yes
