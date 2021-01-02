@@ -44,6 +44,7 @@ matrix:
         - set +e
         - ps auxwwww || true
         - uptime
+        - build/show-git-info
       script:
         - set -e
         - make -j 2 RELEASE=yes OFFICIALBUILD=yes
@@ -106,6 +107,7 @@ matrix:
         - set +e
         - ps auxwwww || true
         - uptime
+        - build/show-git-info
       script:
         - set -e
         - make -j 2 ARCH=win64 RELEASE=yes OFFICIALBUILD=yes
@@ -164,6 +166,7 @@ matrix:
         - set +e
         - ps auxwwww || true
         - uptime
+        - build/show-git-info
       script:
         - set -e
         - make -j 2 RELEASE=yes OFFICIALBUILD=yes
