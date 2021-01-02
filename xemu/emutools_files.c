@@ -208,6 +208,8 @@ void xemuexec_open_native_file_browser ( char *dir )
 {
 #ifdef HAVE_XEMU_EXEC_API
 	static xemuexec_process_t fbp = XEMUEXEC_NULL_PROCESS_ID;
+	while (*dir == ' ' || *dir == '\t')
+		dir++;
 	if (!strncasecmp(dir, "file://", 7))
 		dir += 7;
 	char *args[] = {
