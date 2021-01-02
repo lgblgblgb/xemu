@@ -1,7 +1,7 @@
 /* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and MEGA65 as well.
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -208,7 +208,28 @@ void xemuexec_open_native_file_browser ( char *dir )
 {
 #ifdef HAVE_XEMU_EXEC_API
 	static xemuexec_process_t fbp = XEMUEXEC_NULL_PROCESS_ID;
-	char *args[] = {FILE_BROWSER, dir, NULL};
+	while (*dir == ' ' || *dir == '\t')
+		dir++;
+	if (!strncasecmp(dir, "file://", 7))
+		dir += 7;
+	char *args[] = {
+		FILE_BROWSER, dir, NULL
+#ifdef XEMU_ARCH_WIN
+		,
+		NULL,
+		NULL
+#endif
+	};
+	if (!strncasecmp(dir, "ftp://", 6) || !strncasecmp(dir, "http://", 7) || !strncasecmp(dir, "https://", 8)) {
+#ifdef XEMU_ARCH_WIN
+		args[0] = "cmd";
+		args[1] = "/c";
+		args[2] = "start";
+		args[3] = dir;
+#else
+		args[0] = WEB_BROWSER;
+#endif
+	}
 	if (fbp != XEMUEXEC_NULL_PROCESS_ID) {
 		int w = xemuexec_check_status(fbp, 0);
 		DEBUGPRINT("EXEC: FILEBROWSER: previous file browser process (" PRINTF_LLD ") status was: %d" NL, (unsigned long long int)(uintptr_t)fbp, w);
