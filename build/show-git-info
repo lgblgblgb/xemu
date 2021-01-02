@@ -1,6 +1,9 @@
 #!/bin/bash
 
 remote=`git config --get remote.origin.url`
+if [ "$remote" = "" ]; then
+	remote="unknown_remote"
+fi
 
 if [ "$TRAVIS_BRANCH" = "" ]; then
 	branch=`git branch | awk 'BEGIN { s = "UNKNOWN" } $1 = "*" { s = $2 } END { print s }'`
