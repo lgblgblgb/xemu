@@ -299,13 +299,14 @@ void hypervisor_leave ( void )
 	}
 }
 
-
+void write_hypervisor_byte(char byte);
 
 void hypervisor_serial_monitor_push_char ( Uint8 chr )
 {
 	if (hypervisor_monout_p >= hypervisor_monout - 1 + sizeof hypervisor_monout)
 		return;
 	int flush = (chr == 0x0A || chr == 0x0D || chr == 0x8A || chr == 0x8D);
+	write_hypervisor_byte(chr);
 	if (hypervisor_monout_p == hypervisor_monout && flush)
 		return;
 	if (flush) {
