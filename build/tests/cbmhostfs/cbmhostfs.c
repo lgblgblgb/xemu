@@ -138,7 +138,7 @@ int main ( void )
 		putchar(buffer[n++]);
 	}
 	putchar('\n');
-	
+
 	printf("Closing file\n");
 	hostfs_close(2);
 

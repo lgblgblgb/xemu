@@ -243,7 +243,7 @@ void vic2_write_reg ( int addr, Uint8 data )
 			vic2_registers[0x1A] &= 15;
 			break;
 	}
-}	
+}
 
 
 
@@ -594,7 +594,7 @@ static void geosemu_init ( void )
 	vic2_16k_bank = 0;
 	scanline = 0;
 	vic2_interrupt_status = 0;
-	compare_raster = 0; 
+	compare_raster = 0;
 	// *** CIAs
 	cia_init(&cia1, "CIA-1",
 		NULL,			// callback: OUTA

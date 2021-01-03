@@ -240,7 +240,6 @@ int xemu_tuntap_alloc ( const char *dev_in, char *dev_out, int dev_out_size, uns
 		if (strlen(ifr.ifr_name) >= dev_out_size) {
 			close(fd);
 			return -1;
-			
 		} else
 			strcpy(dev_out, ifr.ifr_name);
 	}

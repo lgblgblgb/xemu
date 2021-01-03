@@ -387,7 +387,7 @@ static void execute_command ( void )
 					status_a |= 1;	// track 0 flag
 				DEBUG("FDC: head position = %d" NL, head_track);
 			}
-			break;	
+			break;
 		case 0x18:	// head step in
 			if (head_track < 128)
 				head_track++;

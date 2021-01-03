@@ -127,7 +127,7 @@ void *xemuexec_run ( char *const args[] )
 	//st->si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
 	st->si.hStdError = (HANDLE)_open_osfhandle(_fileno(stderr), _O_TEXT);
 	st->si.hStdOutput = (HANDLE)_open_osfhandle(_fileno(stdout), _O_TEXT);
-		//_open_osfhandle((INT_PTR)_fileno(stdout), _O_TEXT);	
+		//_open_osfhandle((INT_PTR)_fileno(stdout), _O_TEXT);
 		//GetStdHandle(STD_OUTPUT_HANDLE);
 	//st->si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
 	st->si.hStdInput = (HANDLE)_get_osfhandle(fileno(stdin));
