@@ -780,6 +780,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
 #endif
 	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
+	xemucfg_define_num_option("renderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)");
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	show_drive_led = xemucfg_get_bool("driveled");
@@ -804,7 +805,7 @@ int main ( int argc, char **argv )
 		0,				// we have *NO* pre-defined colours as with more simple machines (too many we need). we want to do this ourselves!
 		NULL,				// -- "" --
 		NULL,				// -- "" --
-		RENDER_SCALE_QUALITY,		// render scaling quality
+		xemucfg_get_num("renderquality") & 3,	// render scaling quality
 		USE_LOCKED_TEXTURE,		// 1 = locked texture access
 		shutdown_callback		// registered shutdown function
 	))
