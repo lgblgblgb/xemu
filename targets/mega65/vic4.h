@@ -38,6 +38,8 @@ extern int   show_drive_led;
 
 extern int   vic_vidp_legacy, vic_chrp_legacy, vic_sprp_legacy;
 
+extern const char *iomode_names[4];
+
 extern void  vic_init ( void );
 extern void  vic_write_reg ( unsigned int addr, Uint8 data );
 extern Uint8 vic_read_reg  ( unsigned int addr );

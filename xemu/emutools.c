@@ -416,6 +416,42 @@ static void atexit_callback_for_console ( void )
 }
 
 
+#ifdef XEMU_ARCH_UNIX
+#include <sys/utsname.h>
+void xemu_get_uname_string ( char *buf, unsigned int size )
+{
+	struct utsname uts;
+	uname(&uts);
+	snprintf(buf, size, "%s %s %s %s %s",
+		uts.sysname, uts.nodename,
+		uts.release, uts.version, uts.machine
+	);
+}
+#else
+void xemu_get_uname_string ( char *buf, unsigned int size )
+{
+	snprintf(buf, size, XEMU_ARCH_NAME " (no uname syscall for further info)");
+}
+#endif
+
+
+void xemu_get_timing_stat_string ( char *buf, unsigned int size )
+{
+	if (td_stat_counter) {
+		Uint32 ticks = SDL_GetTicks() / 1000;
+		snprintf(buf, size,
+			"avg=%.2f%%, min=%d%%, max=%d%% (%u counts), uptime=%02d:%02d",
+			td_stat_sum / (double)td_stat_counter,
+			td_stat_min == INT_MAX ? 0 : td_stat_min,
+			td_stat_max,
+			(unsigned int)td_stat_counter,
+			ticks / 60, ticks % 60
+		);
+	} else
+		snprintf(buf, size, "Currently unavailable");
+}
+
+
 static void shutdown_emulator ( void )
 {
 	DEBUG("XEMU: Shutdown callback function has been called." NL);
@@ -430,13 +466,9 @@ static void shutdown_emulator ( void )
 	xemusock_uninit();
 #endif
 	//SDL_Quit();
-	if (td_stat_counter) {
-		DEBUGPRINT(NL "TIMING: Xemu CPU usage: avg=%.2f%%, min=%d%%, max=%d%% (%u counts)" NL,
-			td_stat_sum / (double)td_stat_counter, td_stat_min == INT_MAX ? 0 : td_stat_min, td_stat_max,
-			(unsigned int)td_stat_counter
-		);
-	}
-	DEBUGPRINT("XEMU: good by(T)e." NL);
+	char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
+	xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
+	DEBUGPRINT(NL "TIMING: Xemu CPU usage: %s" NL "XEMU: good by(T)e." NL, td_stat_str);
 	if (debug_fp) {
 		fclose(debug_fp);
 		debug_fp = NULL;
@@ -601,8 +633,6 @@ int xemu_init_sdl ( void )
 }
 
 
-
-
 /* Return value: 0 = ok, otherwise: ERROR, caller must exit, and can't use any other functionality, otherwise crash would happen.*/
 int xemu_post_init (
 	const char *window_title,		// title of our window
@@ -620,7 +650,6 @@ int xemu_post_init (
 ) {
 #	include "build/xemu-48x48.xpm"
 	SDL_RendererInfo ren_info;
-	char render_scale_quality_s[2];
 	int a;
 	if (!debug_fp)
 		xemu_init_debug(getenv("XEMU_DEBUG_FILE"));
@@ -630,7 +659,13 @@ int xemu_post_init (
 		FATAL("xemu_pre_init() hasn't been called yet!");
 	if (xemu_byte_order_test()) {
 		ERROR_WINDOW("Byte order test failed!!");
-		return 1;}
+		return 1;
+	}
+#ifdef SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR
+	// Disallow disabling compositing (of KDE, for example)
+	// Maybe needed before SDL_Init(), so it's here before calling xemu_init_sdl()
+	SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
+#endif
 	if (xemu_init_sdl())	// it is possible that is has been already called, but it's not a problem
 		return 1;
 	shutdown_user_function = shutdown_callback;
@@ -657,6 +692,34 @@ int xemu_post_init (
 		}
 	} while (0);
 #endif
+	/* SDL hints */
+	// Moved here (instead of near the end of this func) since some of hints needed to be given
+	// rearly (like SDL_HINT_RENDER_SCALE_QUALITY before creating texture?)
+#if defined(SDL_HINT_THREAD_STACK_SIZE) && defined(XEMU_THREAD_STACK_SIZE)
+	// string as positive number: use stack size, zero: use thread backend default (glibc usually gives 8Mb, other maybe small!)
+	// Leave that to user, if XEMU_THREAD_STACK_SIZE is defined, it will be set.
+	SDL_SetHint(SDL_HINT_THREAD_STACK_SIZE, STRINGIFY(XEMU_THREAD_STACK_SIZE));
+#endif
+#ifdef SDL_HINT_RENDER_SCALE_QUALITY
+	const char render_scale_quality_s[2] = { '0' + (render_scale_quality & 3), '\0' };
+	SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, render_scale_quality_s, SDL_HINT_OVERRIDE);		// render scale quality 0, 1, 2
+#endif
+#ifdef SDL_HINT_VIDEO_X11_NET_WM_PING
+	SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_PING, "0");				// disable WM ping, SDL dialog boxes makes WMs things emu is dead (?)
+#endif
+#ifdef SDL_HINT_RENDER_VSYNC
+	SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0");					// disable vsync aligned screen rendering
+#endif
+#ifdef SDL_HINT_WINDOWS_NO_CLOSE_ON_ALT_F4
+	SDL_SetHint(SDL_HINT_WINDOWS_NO_CLOSE_ON_ALT_F4, "1");				// 1 = disable ALT-F4 close on Windows
+#endif
+#ifdef SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS
+	SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");			// 1 = do minimize the SDL_Window if it loses key focus when in fullscreen mode
+#endif
+#ifdef SDL_HINT_VIDEO_ALLOW_SCREENSAVER
+	SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");				// 1 = enable screen saver
+#endif
+	/* end of SDL hints section */
 	sdl_window_title = xemu_strdup(window_title);
 	sdl_win = SDL_CreateWindow(
 		window_title,
@@ -713,16 +776,6 @@ int xemu_post_init (
 	black_colour = SDL_MapRGBA(sdl_pix_fmt, 0, 0, 0, 0xFF);	// used to initialize pixel buffer
 	while (n_colours--)
 		store_palette[n_colours] = SDL_MapRGBA(sdl_pix_fmt, colours[n_colours * 3], colours[n_colours * 3 + 1], colours[n_colours * 3 + 2], 0xFF);
-	/* SDL hints */
-	snprintf(render_scale_quality_s, 2, "%d", render_scale_quality);
-	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, render_scale_quality_s);		// render scale quality 0, 1, 2
-	SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_PING, "0");				// disable WM ping, SDL dialog boxes makes WMs things emu is dead (?)
-	SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0");					// disable vsync aligned screen rendering
-#ifdef XEMU_ARCH_WIN
-	SDL_SetHint(SDL_HINT_WINDOWS_NO_CLOSE_ON_ALT_F4, "1");				// 1 = disable ALT-F4 close on Windows
-#endif
-	SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");			// 1 = do minimize the SDL_Window if it loses key focus when in fullscreen mode
-	SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");				// 1 = enable screen saver
 	/* texture access / buffer */
 	if (!locked_texture_update) {
 		sdl_pixel_buffer = xemu_malloc_ALIGNED(texture_x_size_in_bytes * texture_y_size);

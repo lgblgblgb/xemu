@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_FORMAT		SDL_PIXELFORMAT_ARGB8888
 // !!! currently ep128 emu does NOT work if you modify this !!!
 #define USE_LOCKED_TEXTURE	0
-#define RENDER_SCALE_QUALITY	1
+#define RENDER_SCALE_QUALITY	0
 
 #define DEFAULT_ROM_FN		"#exos.rom"
 #define SDCARD_IMG_FN		"@sdcard.img"
