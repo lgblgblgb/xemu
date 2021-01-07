@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "commodore_65.h"
 #include "inject.h"
 #include "vic3.h"
+#include "xemu/f018_core.h"
 
 
 //#if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_GUI)
@@ -163,6 +164,29 @@ static void ui_cb_show_drive_led ( const struct menu_st *m, int *query )
 	show_drive_led = !show_drive_led;
 }
 
+static void ui_emu_info ( void )
+{
+	char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
+	xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
+	char uname_str[100];
+	xemu_get_uname_string(uname_str, sizeof uname_str);
+	INFO_WINDOW(
+		"DMA chip current revision: %d (F018 rev-%s)\n"
+		"ROM version detected: %d%s\n"
+		//"C64 'CPU' I/O port (low 3 bits): DDR=%d OUT=%d\n"
+		"Current VIC I/O mode: %s\n"
+		"\n"
+		"Xemu host CPU usage so far: %s\n"
+		"Xemu's host OS: %s"
+		,
+		dma_chip_revision, dma_chip_revision ? "B, new" : "A, old",
+		rom_date, rom_date > 0 ? "" : " (unknown or bad ROM signature)",
+		//memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
+		vic_new_mode ? "VIC-III" : "VIC-II",
+		td_stat_str,
+		uname_str
+	);
+}
 
 
 /**** MENU SYSTEM ****/
@@ -207,6 +231,7 @@ static const struct menu_st menu_main[] = {
 	{ "System console",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_sysconsole, NULL },
 #endif
+	{ "Emulation state info",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_emu_info },
 	{ "About",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_about_window, NULL },
 #ifdef HAVE_XEMU_EXEC_API
 	{ "Help (on-line)",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_web_help_main, NULL },

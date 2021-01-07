@@ -37,7 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 //#define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
 
-static const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
+const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
 //static Uint32 rgb_palette[4096];	// all the C65 palette, 4096 colours (SDL pixel format related form)
 //static Uint32 vic3_palette[0x100];	// VIC3 palette in SDL pixel format related form (can be written into the texture directly to be rendered)
