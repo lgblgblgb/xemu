@@ -846,7 +846,7 @@ void vic3_write_reg ( int addr, Uint8 data )
 			break;
 	}
 	vic3_registers[addr] = data;
-}	
+}
 
 
 

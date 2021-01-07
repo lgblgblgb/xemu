@@ -47,7 +47,7 @@ void z80ex_mwrite_cb ( Z80EX_WORD addr, Z80EX_BYTE value )
 		FATAL("Tampering system memory addr=$%04X PC=$%04X" NL, addr, Z80_PC);
 	}
 	//if (addr >= bdos_entry_addr)
-	
+
 	memory[addr] = value;
 	modded[addr] = 1;
 }

@@ -218,7 +218,7 @@ static void _render_pixel_2 ( void )
 		pixels += 16;
 	} else {
 		int j;
-		for (j = 0; j < 2; j ++) {	
+		for (j = 0; j < 2; j ++) {
 			int a, ps;
 			Uint8 data = NICK_READ(ld1++);
 			if (msbalt && (data & 128)) {
@@ -428,8 +428,6 @@ static void _render_pixel_16 ( void ) // TODO
 		trans = col16trans + (NICK_READ(ld1++) << 1);
 		pixels[ 8] = pixels[ 9] = pixels[10] = pixels[11] = palette[trans[0]];
 		pixels[12] = pixels[13] = pixels[14] = pixels[15] = palette[trans[1]];
-		
-		
 	}
 	pixels += 16;
 }
@@ -443,7 +441,7 @@ static void _render_lpixel_16 ( void ) // TODO
 		pixels[ 0] = pixels[ 1] = pixels[ 2] = pixels[ 3] =
 		pixels[ 4] = pixels[ 5] = pixels[ 6] = pixels[ 7] = palette[trans[0]];
 		pixels[ 8] = pixels[ 9] = pixels[10] = pixels[11] =
-		pixels[12] = pixels[13] = pixels[14] = pixels[15] = palette[trans[1]];		
+		pixels[12] = pixels[13] = pixels[14] = pixels[15] = palette[trans[1]];
 	}
 	pixels += 16;
 }

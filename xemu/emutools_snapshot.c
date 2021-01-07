@@ -56,7 +56,7 @@ void xemusnap_init ( const struct xemu_snapshot_definition_st *def )
 	snapdef = def;
 	emu_ident = xemu_malloc(strlen(XEMU_SNAPSHOT_SUPPORT) + strlen(framework_ident) + 8);
 	sprintf(emu_ident, "Ident:%s:%s", framework_ident, XEMU_SNAPSHOT_SUPPORT);
-	atexit(xemusnap_close);	
+	atexit(xemusnap_close);
 }
 
 
