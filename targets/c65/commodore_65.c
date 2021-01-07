@@ -340,7 +340,7 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	// *** Initialize DMA
-	dma_init(xemucfg_get_num("dmarev") & 0xFF00);				// initial DMA revision will be zero ...
+	dma_init(xemucfg_get_num("dmarev"));
 	// *** Load ROM image
 	if (c65_load_rom(xemucfg_get_str("rom"), xemucfg_get_num("dmarev")))	// ... but this overrides the DMA revision!
 		XEMUEXIT(1);
@@ -932,6 +932,9 @@ int main ( int argc, char **argv )
 #endif
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
 	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
+#ifdef SDL_HINT_RENDER_SCALE_QUALITY
+	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)");
+#endif
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	show_drive_led = xemucfg_get_bool("driveled");
@@ -949,7 +952,11 @@ int main ( int argc, char **argv )
 		0,				// we have *NO* pre-defined colours as with more simple machines (too many we need). we want to do this ourselves!
 		NULL,				// -- "" --
 		NULL,				// -- "" --
+#ifdef SDL_HINT_RENDER_SCALE_QUALITY
+		xemucfg_get_ranged_num("sdlrenderquality", 0, 2),	// render scaling quality
+#else
 		RENDER_SCALE_QUALITY,		// render scaling quality
+#endif
 		USE_LOCKED_TEXTURE,		// 1 = locked texture access
 		shutdown_callback		// registered shutdown function
 	))

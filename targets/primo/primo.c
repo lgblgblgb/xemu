@@ -920,6 +920,9 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("model", "b64", "Set Primo model: a32, a48, a64, b32, b48, b64, c");
 	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
 	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
+#ifdef SDL_HINT_RENDER_SCALE_QUALITY
+	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)");
+#endif
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	i_am_sure_override = xemucfg_get_bool("besure");
@@ -934,7 +937,11 @@ int main ( int argc, char **argv )
 		0,			// Prepare for colour primo, we have many colours, we want to generate at our own, later
 		NULL,			// -- "" --
 		NULL,			// -- "" --
+#ifdef SDL_HINT_RENDER_SCALE_QUALITY
+		xemucfg_get_ranged_num("sdlrenderquality", 0, 2),	// render scaling quality
+#else
 		RENDER_SCALE_QUALITY,	// render scaling quality
+#endif
 		USE_LOCKED_TEXTURE,	// 1 = locked texture access
 		NULL			// no emulator specific shutdown function
 	))

@@ -25,7 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888
 
 #define USE_LOCKED_TEXTURE	1
-#define RENDER_SCALE_QUALITY	1
+#define RENDER_SCALE_QUALITY	0
 
 #define ROM_HACK_COLD_START
 //#define ROM_HACK_NEW_ROM_SEARCHING
