@@ -1,6 +1,6 @@
 /* Test-case for simple, work-in-progress Commodore 65 emulator.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -46,6 +46,8 @@ static int nmi_level;			// please read the comment at nmi_set() below
 static int mouse_x = 0;
 static int mouse_y = 0;
 static int shift_status = 0;
+
+char current_rom_filepath[PATH_MAX];
 
 Uint8 disk_cache[512];			// internal memory of the F011 disk controller
 
@@ -281,12 +283,12 @@ int fdc_cb_wr_sec ( Uint8 *buffer, int d81_offset ) {
 }
 
 
-static int c65_load_rom ( const char *fn, unsigned int dma_rev )
+int c65_load_rom ( const char *fn, unsigned int dma_rev )
 {
-	if (xemu_load_file(fn, memory + 0x20000, 0x20000, 0x20000, "Cannot load C65 ROM, which is needed for the emulation") != 0x20000)
+	if (xemu_load_file(fn, memory + 0x20000, 0x20000, 0x20000, strcmp(fn, DEFAULT_ROM_FILE) ? "Cannot load specified C65 ROM" : "Cannot load the default C65 ROM") != 0x20000)
 		return -1;
-	if ((dma_rev & 0xFF) == 2)
-		dma_init_set_rev(dma_rev, memory + 0x20000 + 0x16);
+	strcpy(current_rom_filepath, xemu_load_filepath);
+	dma_init_set_rev(dma_rev, memory + 0x20000 + 0x16);
 	return 0;
 }
 
@@ -916,7 +918,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	xemucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
 	//xemucfg_define_switch_option("noaudio", "Disable audio");
-	xemucfg_define_str_option("rom", "#c65-system.rom", "Override system ROM path to be loaded");
+	xemucfg_define_str_option("rom", DEFAULT_ROM_FILE, "Override system ROM path to be loaded");
 	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
 	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
 	xemucfg_define_str_option("dumpmem", NULL, "Save memory content on exit");

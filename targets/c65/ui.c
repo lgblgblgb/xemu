@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "inject.h"
 #include "vic3.h"
 #include "xemu/f018_core.h"
+#include "xemu/emutools_config.h"
 
 
 //#if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_GUI)
@@ -107,6 +108,7 @@ static void ui_run_prg_by_browsing ( void )
 		DEBUGPRINT("UI: file selection for PRG injection was cancelled." NL);
 }
 
+
 static void ui_dump_memory ( void )
 {
 	char fnbuf[PATH_MAX + 1];
@@ -173,6 +175,7 @@ static void ui_emu_info ( void )
 	INFO_WINDOW(
 		"DMA chip current revision: %d (F018 rev-%s)\n"
 		"ROM version detected: %d%s\n"
+		"Current ROM: %s\n"
 		//"C64 'CPU' I/O port (low 3 bits): DDR=%d OUT=%d\n"
 		"Current VIC I/O mode: %s\n"
 		"\n"
@@ -181,11 +184,34 @@ static void ui_emu_info ( void )
 		,
 		dma_chip_revision, dma_chip_revision ? "B, new" : "A, old",
 		rom_date, rom_date > 0 ? "" : " (unknown or bad ROM signature)",
+		current_rom_filepath,
 		//memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
 		vic_new_mode ? "VIC-III" : "VIC-II",
 		td_stat_str,
 		uname_str
 	);
+}
+
+
+static void ui_load_rom_by_browsing ( void )
+{
+	char fnbuf[PATH_MAX + 1];
+	static char dir[PATH_MAX + 1] = "";
+	if (xemugui_file_selector(
+		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		"Select ROM to attach",
+		dir,
+		fnbuf,
+		sizeof fnbuf
+	)) {
+		DEBUGPRINT("UI: file selection for loading ROM was cancelled." NL);
+		return;
+	}
+	if (c65_reset_asked()) {
+		KBD_RELEASE_KEY(0x75);
+		c65_load_rom(fnbuf, xemucfg_get_num("dmarev"));
+	} else
+		ERROR_WINDOW("Reset has been disallowed, you've rejected to load the selected ROM");
 }
 
 
@@ -213,9 +239,9 @@ static const struct menu_st menu_debug[] = {
 	{ NULL }
 };
 static const struct menu_st menu_reset[] = {
-	{ "Reset C65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode },
+	{ "Reset C65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode        },
 	{ "Reset C65 without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot },
-	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode },
+	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode        },
 	{ NULL }
 };
 static const struct menu_st menu_main[] = {
@@ -223,7 +249,8 @@ static const struct menu_st menu_main[] = {
 	{ "Reset", 	 		XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
 	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
 	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
-	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
+	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing    },
+	{ "Load custom ROM",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_load_rom_by_browsing   },
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &register_screenshot_request },
 #endif

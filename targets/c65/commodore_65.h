@@ -1,6 +1,6 @@
 /* Test-case for simple, work-in-progress Commodore 65 emulator.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -31,6 +31,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SID_CYCLES_PER_SEC	1000000
 #define AUDIO_SAMPLE_FREQ	44100
 
+#define DEFAULT_ROM_FILE	"#c65-system.rom"
+
 // Note: this is a hack, maybe not standard! No REC (Ram Expansion Controller) emulation is involved here ...
 // it's merely just that the upper 512K of the 1Mbyte addressing space is "free" and can be handled (maybe in a non standard way!) as RAM too ...
 // It may cause incompatibilities (ie: real REC would allow VIC3 to access REC as well, I think ... It's not the case here. And it's just one example I know about)
@@ -45,6 +47,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern Uint8 memory[0x100000];
 extern char emulator_speed_title[];
 extern int register_screenshot_request;
+extern char current_rom_filepath[];
 
 extern void  apply_memory_config ( void );
 extern Uint8 io_read  ( int addr );
@@ -54,5 +57,6 @@ extern Uint8 read_phys_mem  ( int addr );
 extern void  c65_reset ( void );
 extern int   c65_reset_asked ( void );
 extern int   dump_memory ( const char *fn );
+extern int   c65_load_rom ( const char *fn, unsigned int dma_rev );
 
 #endif
