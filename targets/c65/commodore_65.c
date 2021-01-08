@@ -47,6 +47,8 @@ static int mouse_x = 0;
 static int mouse_y = 0;
 static int shift_status = 0;
 
+char current_rom_filepath[PATH_MAX];
+
 Uint8 disk_cache[512];			// internal memory of the F011 disk controller
 
 
@@ -281,12 +283,12 @@ int fdc_cb_wr_sec ( Uint8 *buffer, int d81_offset ) {
 }
 
 
-static int c65_load_rom ( const char *fn, unsigned int dma_rev )
+int c65_load_rom ( const char *fn, unsigned int dma_rev )
 {
-	if (xemu_load_file(fn, memory + 0x20000, 0x20000, 0x20000, "Cannot load C65 ROM, which is needed for the emulation") != 0x20000)
+	if (xemu_load_file(fn, memory + 0x20000, 0x20000, 0x20000, strcmp(fn, DEFAULT_ROM_FILE) ? "Cannot load specified C65 ROM" : "Cannot load the default C65 ROM") != 0x20000)
 		return -1;
-	if ((dma_rev & 0xFF) == 2)
-		dma_init_set_rev(dma_rev, memory + 0x20000 + 0x16);
+	strcpy(current_rom_filepath, xemu_load_filepath);
+	dma_init_set_rev(dma_rev, memory + 0x20000 + 0x16);
 	return 0;
 }
 
@@ -340,7 +342,7 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	// *** Initialize DMA
-	dma_init(xemucfg_get_num("dmarev") & 0xFF00);				// initial DMA revision will be zero ...
+	dma_init(xemucfg_get_num("dmarev"));
 	// *** Load ROM image
 	if (c65_load_rom(xemucfg_get_str("rom"), xemucfg_get_num("dmarev")))	// ... but this overrides the DMA revision!
 		XEMUEXIT(1);
@@ -916,7 +918,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
 	xemucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
 	//xemucfg_define_switch_option("noaudio", "Disable audio");
-	xemucfg_define_str_option("rom", "#c65-system.rom", "Override system ROM path to be loaded");
+	xemucfg_define_str_option("rom", DEFAULT_ROM_FILE, "Override system ROM path to be loaded");
 	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
 	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
 	xemucfg_define_str_option("dumpmem", NULL, "Save memory content on exit");

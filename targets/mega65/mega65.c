@@ -375,7 +375,7 @@ static void mega65_init ( void )
 	);
 	cia2.DDRA = 3; // Ugly workaround ... I think, SD-card setup "CRAM UTIL" (or better: the kickstart) should set this by its own. Maybe Xemu bug, maybe not?
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
-	dma_init(newhack ? DMA_FEATURE_HACK | DMA_FEATURE_DYNMODESET : xemucfg_get_num("dmarev"));
+	dma_init(newhack ? DMA_FEATURE_HACK | DMA_FEATURE_DYNMODESET | xemucfg_get_num("dmarev") : xemucfg_get_num("dmarev"));
 	// Initialize FDC
 	fdc_init(disk_buffers + FD_BUFFER_POS);
 	//
@@ -728,7 +728,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
 	xemucfg_define_switch_option("driveled", "Render drive LED at the top right corner of the screen");
 	xemucfg_define_switch_option("allowmousegrab", "Allow auto mouse grab with left-click");
-	xemucfg_define_num_option("dmarev", 0x100, "DMA revision (0/1=F018A/B +256=autochange, +512=modulo, you always wants +256!)");
+	xemucfg_define_num_option("dmarev", 2 + 0x100, "DMA revision (0/1/2=F018A/B/auto +256=autochange, +512=modulo, you always wants +256!)");
 	xemucfg_define_float_option("fastclock", MEGA65_DEFAULT_FAST_CLOCK, "Clock of M65 fast mode (in MHz)");
 	xemucfg_define_num_option("model", 255, "Emulated MEGA65 model (255=custom/Xemu)");
 	xemucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA-board switches turned ON");

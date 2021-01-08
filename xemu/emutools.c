@@ -416,6 +416,42 @@ static void atexit_callback_for_console ( void )
 }
 
 
+#ifdef XEMU_ARCH_UNIX
+#include <sys/utsname.h>
+void xemu_get_uname_string ( char *buf, unsigned int size )
+{
+	struct utsname uts;
+	uname(&uts);
+	snprintf(buf, size, "%s %s %s %s %s",
+		uts.sysname, uts.nodename,
+		uts.release, uts.version, uts.machine
+	);
+}
+#else
+void xemu_get_uname_string ( char *buf, unsigned int size )
+{
+	snprintf(buf, size, XEMU_ARCH_NAME " (no uname syscall for further info)");
+}
+#endif
+
+
+void xemu_get_timing_stat_string ( char *buf, unsigned int size )
+{
+	if (td_stat_counter) {
+		Uint32 ticks = SDL_GetTicks() / 1000;
+		snprintf(buf, size,
+			"avg=%.2f%%, min=%d%%, max=%d%% (%u counts), uptime=%02d:%02d",
+			td_stat_sum / (double)td_stat_counter,
+			td_stat_min == INT_MAX ? 0 : td_stat_min,
+			td_stat_max,
+			(unsigned int)td_stat_counter,
+			ticks / 60, ticks % 60
+		);
+	} else
+		snprintf(buf, size, "Currently unavailable");
+}
+
+
 static void shutdown_emulator ( void )
 {
 	DEBUG("XEMU: Shutdown callback function has been called." NL);
@@ -430,13 +466,9 @@ static void shutdown_emulator ( void )
 	xemusock_uninit();
 #endif
 	//SDL_Quit();
-	if (td_stat_counter) {
-		DEBUGPRINT(NL "TIMING: Xemu CPU usage: avg=%.2f%%, min=%d%%, max=%d%% (%u counts)" NL,
-			td_stat_sum / (double)td_stat_counter, td_stat_min == INT_MAX ? 0 : td_stat_min, td_stat_max,
-			(unsigned int)td_stat_counter
-		);
-	}
-	DEBUGPRINT("XEMU: good by(T)e." NL);
+	char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
+	xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
+	DEBUGPRINT(NL "TIMING: Xemu CPU usage: %s" NL "XEMU: good by(T)e." NL, td_stat_str);
 	if (debug_fp) {
 		fclose(debug_fp);
 		debug_fp = NULL;
@@ -599,8 +631,6 @@ int xemu_init_sdl ( void )
 #endif
 	return 0;
 }
-
-
 
 
 /* Return value: 0 = ok, otherwise: ERROR, caller must exit, and can't use any other functionality, otherwise crash would happen.*/
