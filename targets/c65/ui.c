@@ -150,16 +150,6 @@ static void reset_into_c65_mode_noboot ( void )
 	}
 }
 
-#if 0
-static void ui_set_scale_filtering ( const struct menu_st *m, int *query )
-{
-	static char enabled[2] = "0";
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, (enabled[0] & 1));
-	enabled[0] ^= 1;
-	SDL_SetHint("SDL_HINT_RENDER_SCALE_QUALITY", enabled);
-}
-#endif
-
 static void ui_cb_show_drive_led ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, show_drive_led);
@@ -193,6 +183,26 @@ static void ui_emu_info ( void )
 }
 
 
+// TODO: maybe we want to move these functions to somewhere else from this UI specific file ui.c
+// It may can help to make ui.c xemucfg independent, btw.
+static void load_and_use_rom ( const char *fn )
+{
+	if (c65_reset_asked()) {
+		KBD_RELEASE_KEY(0x75);
+		c65_load_rom(fn, xemucfg_get_num("dmarev"));
+	} else
+		ERROR_WINDOW("Reset has been disallowed, thus you've rejected to load and use the selected ROM");
+}
+static void ui_load_rom_default ( void )
+{
+	load_and_use_rom(DEFAULT_ROM_FILE);
+}
+static void ui_load_rom_specified ( void )
+{
+	load_and_use_rom(xemucfg_get_str("rom"));
+}
+
+
 static void ui_load_rom_by_browsing ( void )
 {
 	char fnbuf[PATH_MAX + 1];
@@ -203,15 +213,10 @@ static void ui_load_rom_by_browsing ( void )
 		dir,
 		fnbuf,
 		sizeof fnbuf
-	)) {
+	))
 		DEBUGPRINT("UI: file selection for loading ROM was cancelled." NL);
-		return;
-	}
-	if (c65_reset_asked()) {
-		KBD_RELEASE_KEY(0x75);
-		c65_load_rom(fnbuf, xemucfg_get_num("dmarev"));
-	} else
-		ERROR_WINDOW("Reset has been disallowed, you've rejected to load the selected ROM");
+	else
+		load_and_use_rom(fnbuf);
 }
 
 
@@ -244,13 +249,19 @@ static const struct menu_st menu_reset[] = {
 	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode        },
 	{ NULL }
 };
+static const struct menu_st menu_rom[] = {
+	{ "Load custom ROM",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_load_rom_by_browsing   },
+	{ "Load CLI specified ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_load_rom_specified     },
+	{ "Load Xemu default ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_load_rom_default       },
+	{ NULL }
+};
 static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
 	{ "Reset", 	 		XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
 	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
+	{ "ROM",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_rom     },
 	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing    },
-	{ "Load custom ROM",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_load_rom_by_browsing   },
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &register_screenshot_request },
 #endif
