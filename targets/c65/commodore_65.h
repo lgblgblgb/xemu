@@ -1,6 +1,6 @@
 /* Test-case for simple, work-in-progress Commodore 65 emulator.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
    You can try RENDER_SCALE_QUALITY though with values 0, 1, 2 */
 #define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888
 #define USE_LOCKED_TEXTURE	1
-#define RENDER_SCALE_QUALITY	1
+#define RENDER_SCALE_QUALITY	0
 
 #define FAST_CPU_CYCLES_PER_SCANLINE	227
 #define SLOW_CPU_CYCLES_PER_SCANLINE	64

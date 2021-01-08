@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2015-2017,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2017,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -218,6 +218,9 @@ int main (int argc, char *argv[])
 	xemucfg_define_str_option("wdimg", NULL, "EXDOS WD disk image file name/path");
 	xemucfg_define_switch_option("noxeprom", "Disables XEP internal ROM");
 	//{ "epkey",	CONFITEM_STR,	NULL,		1, "Define a given EP/emu key, format epkey@xy=SDLname, where x/y are row/col in hex or spec code (ie screenshot, etc)." },
+#ifdef SDL_HINT_RENDER_SCALE_QUALITY
+	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)");
+#endif
 	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
 	xemucfg_define_switch_option("monitor", "Start monitor on console");
 	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
@@ -235,7 +238,11 @@ int main (int argc, char *argv[])
 		0,				// we have *NO* pre-defined colours as with more simple machines (too many we need). we want to do this ourselves!
 		NULL,				// -- "" --
 		NULL,				// -- "" --
+#ifdef SDL_HINT_RENDER_SCALE_QUALITY
+		xemucfg_get_ranged_num("sdlrenderquality", 0, 2),	// render scaling quality
+#else
 		RENDER_SCALE_QUALITY,		// render scaling quality
+#endif
 		USE_LOCKED_TEXTURE,		// 1 = locked texture access
 		shutdown_callback		// registered shutdown function
 	))

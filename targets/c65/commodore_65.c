@@ -1,6 +1,6 @@
 /* Test-case for simple, work-in-progress Commodore 65 emulator.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -932,6 +932,9 @@ int main ( int argc, char **argv )
 #endif
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
 	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
+#ifdef SDL_HINT_RENDER_SCALE_QUALITY
+	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)");
+#endif
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	show_drive_led = xemucfg_get_bool("driveled");
@@ -949,7 +952,11 @@ int main ( int argc, char **argv )
 		0,				// we have *NO* pre-defined colours as with more simple machines (too many we need). we want to do this ourselves!
 		NULL,				// -- "" --
 		NULL,				// -- "" --
+#ifdef SDL_HINT_RENDER_SCALE_QUALITY
+		xemucfg_get_ranged_num("sdlrenderquality", 0, 2),	// render scaling quality
+#else
 		RENDER_SCALE_QUALITY,		// render scaling quality
+#endif
 		USE_LOCKED_TEXTURE,		// 1 = locked texture access
 		shutdown_callback		// registered shutdown function
 	))

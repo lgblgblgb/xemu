@@ -1,5 +1,5 @@
 /* Commodore LCD emulator (son of my world's first working Commodore LCD emulator)
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Part of the Xemu project: https://github.com/lgblgblgb/xemu
 
    This is an ongoing work to rewrite my old Commodore LCD emulator:
@@ -651,6 +651,9 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
 	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
 	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
+#ifdef SDL_HINT_RENDER_SCALE_QUALITY
+	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)");
+#endif
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	i_am_sure_override = xemucfg_get_bool("besure");
@@ -669,7 +672,11 @@ int main ( int argc, char **argv )
 		2,			// we have 2 colours :)
 		init_lcd_palette_rgb,	// initialize palette from this constant array
 		lcd_palette,		// initialize palette into this stuff
+#ifdef SDL_HINT_RENDER_SCALE_QUALITY
+		xemucfg_get_ranged_num("sdlrenderquality", 0, 2),	// render scaling quality
+#else
 		RENDER_SCALE_QUALITY,	// render scaling quality
+#endif
 		USE_LOCKED_TEXTURE,	// 1 = locked texture access
 		shutdown_emu		// no emulator specific shutdown function
 	))

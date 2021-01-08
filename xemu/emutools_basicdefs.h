@@ -244,4 +244,8 @@ static XEMU_INLINE unsigned char XEMU_BYTE_TO_BCD ( unsigned char b ) {
 #define VOIDPTR_TO_INT(x)	((int)(intptr_t)(void*)(x))
 #define VOIDPTR_TO_UINT(x)	((unsigned int)(uintptr_t)(void*)(x))
 
+// Stringification
+#define TO_STR_LEVEL1_(x)	#x			// stringification argument
+#define STRINGIFY(x)		TO_STR_LEVEL1_(x)	// level of indirection to be able to expand argument given as macros
+
 #endif
