@@ -1,5 +1,5 @@
 /* Commodore LCD emulator (son of my world's first working Commodore LCD emulator)
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Part of the Xemu project: https://github.com/lgblgblgb/xemu
 
    This is an ongoing work to rewrite my old Commodore LCD emulator:

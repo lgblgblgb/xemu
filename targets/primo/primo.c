@@ -1,7 +1,7 @@
 /* Test-case for a very simple Primo (a Hungarian U880 - Z80
    compatible clone CPU - based 8 bit computer) emulator.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    NOTE: Primo's CPU is U880, but for the simplicity I still call it Z80, as
    it's [unlicensed] clone anyway.

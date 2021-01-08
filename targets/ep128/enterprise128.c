@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2015-2017,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2017,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
