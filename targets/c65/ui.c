@@ -230,8 +230,6 @@ static const struct menu_st menu_display[] = {
 					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize, (void*)2 },
 	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
-//	{ "Enable scale filtering",	XEMUGUI_MENUID_CALLABLE |
-//					XEMUGUI_MENUFLAG_QUERYBACK,	ui_set_scale_filtering, NULL },
 	{ "Show drive LED",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_show_drive_led, NULL },
 	{ NULL }
