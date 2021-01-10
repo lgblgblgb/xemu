@@ -150,7 +150,7 @@ extern unsigned int xemu_get_microseconds ( void );
 extern void *xemu_malloc ( size_t size );
 extern void *xemu_realloc ( void *p, size_t size );
 
-#if !defined(__EMSCRIPTEN__) && !defined(__arm__)
+#if !defined(XEMU_ARCH_HTML) && !defined(__arm__) && !defined(__arm64__)
 #define HAVE_MM_MALLOC
 #endif
 

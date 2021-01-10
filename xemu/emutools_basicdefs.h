@@ -167,6 +167,7 @@ extern int chatty_xemu;
 
 #ifndef __BIGGEST_ALIGNMENT__
 #define __BIGGEST_ALIGNMENT__	16
+#define XEMU_MISSING_BIGGEST_ALIGNMENT_WORKAROUND
 #endif
 #define ALIGNED(n) __attribute__ ((aligned (n)))
 #define MAXALIGNED ALIGNED(__BIGGEST_ALIGNMENT__)

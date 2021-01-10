@@ -36,6 +36,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	include "xemu/emutools_socketapi.h"
 #endif
 
+#ifdef XEMU_MISSING_BIGGEST_ALIGNMENT_WORKAROUND
+#	warning "System did not define __BIGGEST_ALIGNMENT__ Xemu assumes some default value."
+#endif
+
 #include "xemu/osd_font_16x16.c"
 
 #ifndef XEMU_NO_SDL_DIALOG_OVERRIDE
@@ -223,6 +227,10 @@ void *xemu_malloc_ALIGNED ( size_t size )
 	// it seems _mm_malloc() is quite standard at least on gcc, mingw, clang ... so let's try to use it
 	void *p = _mm_malloc(size, __BIGGEST_ALIGNMENT__);
 	DEBUG("ALIGNED-ALLOC: base_pointer=%p size=%d alignment=%d" NL, p, (int)size, __BIGGEST_ALIGNMENT__);
+	if (p == NULL) {
+		WARNING_WINDOW("_mm_malloc() failed, errno=%d\nDefaulting to malloc()", errno);
+		return xemu_malloc(size);
+	}
 	return p;
 }
 #else
@@ -609,14 +617,19 @@ int xemu_init_sdl ( void )
         SDL_GetVersion(&sdlver_linked);
 	if (chatty_xemu)
 		printf( "SDL version: (%s) compiled with %d.%d.%d, used with %d.%d.%d on platform %s" NL
-			"SDL system info: %d bits %s, %d cores, l1_line=%d, RAM=%dMbytes, CPU features: "
+			"SDL system info: %d bits %s, %d cores, l1_line=%d, RAM=%dMbytes, max_alignment=%d%s, CPU features: "
 			"3DNow=%d AVX=%d AVX2=%d AltiVec=%d MMX=%d RDTSC=%d SSE=%d SSE2=%d SSE3=%d SSE41=%d SSE42=%d" NL
 			"SDL drivers: video = %s, audio = %s" NL,
 			SDL_GetRevision(),
 			sdlver_compiled.major, sdlver_compiled.minor, sdlver_compiled.patch,
 			sdlver_linked.major, sdlver_linked.minor, sdlver_linked.patch,
 			SDL_GetPlatform(),
-			ARCH_BITS, ENDIAN_NAME, SDL_GetCPUCount(), SDL_GetCPUCacheLineSize(), SDL_GetSystemRAM(),
+			ARCH_BITS, ENDIAN_NAME, SDL_GetCPUCount(), SDL_GetCPUCacheLineSize(), SDL_GetSystemRAM(), __BIGGEST_ALIGNMENT__,
+#ifdef XEMU_MISSING_BIGGEST_ALIGNMENT_WORKAROUND
+			" (set-by-Xemu)",
+#else
+			"",
+#endif
 			SDL_Has3DNow(),SDL_HasAVX(),SDL_HasAVX2(),SDL_HasAltiVec(),SDL_HasMMX(),SDL_HasRDTSC(),SDL_HasSSE(),SDL_HasSSE2(),SDL_HasSSE3(),SDL_HasSSE41(),SDL_HasSSE42(),
 			SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver()
 		);
@@ -777,9 +790,8 @@ int xemu_post_init (
 	while (n_colours--)
 		store_palette[n_colours] = SDL_MapRGBA(sdl_pix_fmt, colours[n_colours * 3], colours[n_colours * 3 + 1], colours[n_colours * 3 + 2], 0xFF);
 	/* texture access / buffer */
-	if (!locked_texture_update) {
+	if (!locked_texture_update)
 		sdl_pixel_buffer = xemu_malloc_ALIGNED(texture_x_size_in_bytes * texture_y_size);
-	}
 	// play a single frame game, to set a consistent colour (all black ...) for the emulator. Also, it reveals possible errors with rendering
 	xemu_render_dummy_frame(black_colour, texture_x_size, texture_y_size);
 	if (chatty_xemu)
