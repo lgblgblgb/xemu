@@ -17,10 +17,6 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifdef XEMU_ARCH_WIN
-#include <malloc.h>
-#endif
-
 #include "xemu/emutools.h"
 
 #include <string.h>
@@ -41,7 +37,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 
 #include "xemu/osd_font_16x16.c"
-#include <stdlib.h>
 
 #ifndef XEMU_NO_SDL_DIALOG_OVERRIDE
 int (*SDL_ShowSimpleMessageBox_custom)(Uint32, const char*, const char*, SDL_Window* ) = SDL_ShowSimpleMessageBox;
@@ -219,34 +214,20 @@ void *xemu_realloc ( void *p, size_t size )
 }
 
 
-#ifdef XEMU_BIGGEST_ALIGNMENT_WORKAROUND
-#warning "__BIGGEST_ALIGNMENT__ was not system defined, using Xemu defined value!"
+#ifdef HAVE_MM_MALLOC
+#ifdef XEMU_ARCH_WIN
+extern void *_mm_malloc ( size_t size, size_t alignment );	// it seems mingw/win has issue not to define this properly ... FIXME? Ugly windows, always the problems ...
 #endif
 void *xemu_malloc_ALIGNED ( size_t size )
 {
-#if defined(XEMU_ARCH_WIN)
-	void *p = _aligned_malloc(size, __BIGGEST_ALIGNMENT__);
-	DEBUG("ALIGNED-ALLOC[WIN]: base_pointer=%p size=%d alignment=%d" NL, p, (int)size, __BIGGEST_ALIGNMENT__);
-	if (!p) {
-		ERROR_WINDOW("WIN: _aligned_malloc() failed, failing back to regular malloc()");
-		return xemu_malloc(size);
-	}
-	INFO_WINDOW("WIN: Great, _aligned_malloc() worked :) :)");
+	// it seems _mm_malloc() is quite standard at least on gcc, mingw, clang ... so let's try to use it
+	void *p = _mm_malloc(size, __BIGGEST_ALIGNMENT__);
+	DEBUG("ALIGNED-ALLOC: base_pointer=%p size=%d alignment=%d" NL, p, (int)size, __BIGGEST_ALIGNMENT__);
 	return p;
-#elif defined(XEMU_ARCH_UNIX)
-	void *p = aligned_alloc(__BIGGEST_ALIGNMENT__, size);
-	DEBUG("ALIGNED-ALLOC[UNIX]: base_pointer=%p size=%d alignment=%d" NL, p, (int)size, __BIGGEST_ALIGNMENT__);
-	if (!p) {
-		ERROR_WINDOW("UNIX: aligned_alloc() failed, failing back to regular malloc()");
-		return xemu_malloc(size);
-	}
-	INFO_WINDOW("UNIX: Great, aligned_alloc() worked :) :)");
-	return p;
-#else
-#warning "No aligned malloc functionality for this target, using plain malloc() instead ..."
-	return xemu_malloc(size);
-#endif
 }
+#else
+#warning "No _mm_malloc() for this architecture ..."
+#endif
 
 
 char *xemu_strdup ( const char *s )

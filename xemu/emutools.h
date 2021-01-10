@@ -149,7 +149,16 @@ extern Uint8 xemu_hour_to_bcd12h ( Uint8 hours, int hour_offset );
 extern unsigned int xemu_get_microseconds ( void );
 extern void *xemu_malloc ( size_t size );
 extern void *xemu_realloc ( void *p, size_t size );
+
+#if !defined(__EMSCRIPTEN__) && !defined(__arm__)
+#define HAVE_MM_MALLOC
+#endif
+
+#ifdef HAVE_MM_MALLOC
 extern void *xemu_malloc_ALIGNED ( size_t size );
+#else
+#define xemu_malloc_ALIGNED xemu_malloc
+#endif
 
 extern char *xemu_strdup ( const char *s );
 extern void xemu_set_full_screen ( int setting );
