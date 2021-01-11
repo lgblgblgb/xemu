@@ -35,6 +35,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // Useful for multi-purpose sources, can be also compiled out-of-source-tree, and stuff like that ...
 #define	XEMU_BUILD
 
+#if	defined(__arm64__) || defined(__arm64) || defined(__aarch64__) || defined(__aarch64) || defined(__arm64e__) || defined(__arm64e) || defined(__aarch64e__) || defined(__aarch64e)
+#	define	XEMU_CPU_ARM
+#	define	XEMU_CPU_ARM64
+#	if defined(__arm64e__) || defined(__arm64e)
+		// thus should be refined later, how Apple M1 is called himself, in terms of __arm* and similar macros to check for it, TODO
+#		define XEMU_CPU_ARM_APPLE
+#	endif
+#elif	defined(__arm__) || defined(__arm32__) || defined(__arm) || defined(__arm32) || defined(__aarch__) || defined(__aarch) || defined(__aarch32__) || defined(__aarch32)
+#	define	XEMU_CPU_ARM
+#	define	XEMU_CPU_ARM32
+#endif
+
 #ifdef	__EMSCRIPTEN__
 #	define	XEMU_ARCH_HTML
 #	define	XEMU_ARCH_NAME	"html"
@@ -63,6 +75,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define	XEMU_ARCH_UNIX
 #	define	XEMU_ARCH_NAME	"osx"
 #	define	XEMU_SLEEP_IS_NANOSLEEP
+#	ifdef	XEMU_CPU_ARM
+#		define	XEMU_ARCH_MAC_ARM
+#	endif
 #elif	defined(__unix__) || defined(__unix) || defined(__linux__) || defined(__linux)
 #	define	XEMU_ARCH_UNIX
 #	if	defined(__linux__) || defined(__linux)

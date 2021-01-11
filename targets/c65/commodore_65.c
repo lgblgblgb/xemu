@@ -264,21 +264,21 @@ static void c65_snapshot_saver_on_exit_callback ( void )
 
 
 // define the callback, d81access call this, we can dispatch the change in FDC config to the F011 core emulation this way, automatically
-void d81access_cb_chgmode ( int mode ) {
+void d81access_cb_chgmode ( int which, int mode ) {
 	int have_disk = ((mode & 0xFF) != D81ACCESS_EMPTY);
 	int can_write = (!(mode & D81ACCESS_RO));
-	DEBUGPRINT("C65FDC: configuring F011 FDC with have_disk=%d, can_write=%d" NL, have_disk, can_write);
-	fdc_set_disk(have_disk, can_write);
+	DEBUGPRINT("C65FDC: configuring F011 FDC drive #%d with have_disk=%d, can_write=%d" NL, which, have_disk, can_write);
+	fdc_set_disk(which, have_disk, can_write);
 }
 // Here we implement F011 core's callbacks using d81access (and yes, F011 uses 512 bytes long sectors for real)
-int fdc_cb_rd_sec ( Uint8 *buffer, int d81_offset ) {
-	int ret = d81access_read_sect(buffer, d81_offset, 512);
-	DEBUG("C65FDC: D81: reading sector at d81_offset=%d, return value=%d" NL, d81_offset, ret);
+int fdc_cb_rd_sec ( int drive, Uint8 *buffer, int d81_offset ) {
+	int ret = d81access_read_sect(drive, buffer, d81_offset, 512);
+	DEBUG("C65FDC: D81: reading sector at d81_offset=%d on drive #%d, return value=%d" NL, d81_offset, drive, ret);
 	return ret;
 }
-int fdc_cb_wr_sec ( Uint8 *buffer, int d81_offset ) {
-	int ret = d81access_write_sect(buffer, d81_offset, 512);
-	DEBUG("C65FDC: D81: writing sector at d81_offset=%d, return value=%d" NL, d81_offset, ret);
+int fdc_cb_wr_sec ( int drive, Uint8 *buffer, int d81_offset ) {
+	int ret = d81access_write_sect(drive, buffer, d81_offset, 512);
+	DEBUG("C65FDC: D81: writing sector at d81_offset=%d on drive #%d, return value=%d" NL, d81_offset, drive, ret);
 	return ret;
 }
 
@@ -350,8 +350,8 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	fdc_init(disk_cache);
 	// Initialize D81 access abstraction for FDC
 	d81access_init();
-	atexit(d81access_close);
-	d81access_attach_fsobj(xemucfg_get_str("8"), D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (xemucfg_get_bool("d81ro") ? D81ACCESS_RO : 0));
+	atexit(d81access_close_all);
+	d81access_attach_fsobj(0, xemucfg_get_str("8"), D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (xemucfg_get_bool("d81ro") ? D81ACCESS_RO : 0));
 	// SIDs, plus SDL audio
 	sid_init(&sids[0], sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sids[1], sid_cycles_per_sec, sound_mix_freq);

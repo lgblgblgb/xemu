@@ -1,6 +1,6 @@
 /* Various D81 access method for F011 core, for Xemu / C65 and M65 emulators.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -38,8 +38,10 @@ static struct {
 	int	prg_blk_last_size;
 	d81access_rd_cb_t read_cb;
 	d81access_wr_cb_t write_cb;
-} d81;
+} d81[8];
 static int enable_mode_transient_callback = -1;
+
+#define CURRENT_D81 0
 
 
 #define IS_RO(p)	(!!((p) & D81ACCESS_RO))
@@ -68,65 +70,76 @@ void d81access_init ( void )
 	if (enable_mode_transient_callback != -1)
 		FATAL("d81access_init(): trying to re-run d81access_init()?!");
 	enable_mode_transient_callback = 1;
-	d81.fd = -1;
-	d81.dir = NULL;
-	d81.start_at = 0;
-	d81.mode = D81ACCESS_EMPTY;
-	d81access_cb_chgmode(d81.mode);
+	for (int i = 0; i < 8; i++) {
+		d81[i].fd = -1;
+		d81[i].dir = NULL;
+		d81[i].start_at = 0;
+		d81[i].mode = D81ACCESS_EMPTY;
+		d81access_cb_chgmode(i, d81[i].mode);
+	}
 }
 
 
-int d81access_get_mode ( void )
+int d81access_get_mode ( int which )
 {
-	return d81.mode;
+	return d81[which & 7].mode;
 }
 
 
-void d81access_close ( void )
+void d81access_close ( int which )
 {
-	if (d81.fd >= 0) {
-		if (IS_AUTOCLOSE(d81.mode)) {
-			close(d81.fd);
-			DEBUGPRINT("D81: previous file descriptor (%d) closed because of auto-close policy" NL, d81.fd);
+	which &= 7;
+	if (d81[which].fd >= 0) {
+		if (IS_AUTOCLOSE(d81[which].mode)) {
+			close(d81[which].fd);
+			DEBUGPRINT("D81: previous file descriptor (%d) closed because of auto-close policy" NL, d81[which].fd);
 		} else
-			DEBUGPRINT("D81: previous file descriptor (%d) is NOT closed, because marked as non-autoclose!" NL, d81.fd);
-		d81.fd = -1;
+			DEBUGPRINT("D81: previous file descriptor (%d) is NOT closed, because marked as non-autoclose!" NL, d81[which].fd);
+		d81[which].fd = -1;
 	}
-	if (d81.dir) {
-		closedir(d81.dir);
+	if (d81[which].dir) {
+		closedir(d81[which].dir);
 		DEBUGPRINT("D81: previous directory access closed" NL);
-		d81.dir = NULL;
+		d81[which].dir = NULL;
 	}
-	d81.mode = D81ACCESS_EMPTY;
-	d81.start_at = 0;
+	d81[which].mode = D81ACCESS_EMPTY;
+	d81[which].start_at = 0;
 	if (enable_mode_transient_callback)
-		d81access_cb_chgmode(d81.mode);
+		d81access_cb_chgmode(which, d81[which].mode);
 }
 
 
-static void d81access_close_internal ( void )
+void d81access_close_all ( void )
+{
+	for (int i = 0; i < 8; i++)
+		d81access_close(i);
+}
+
+
+static void d81access_close_internal ( int which )
 {
 	enable_mode_transient_callback = 0;
-	d81access_close();
+	d81access_close(which);
 	enable_mode_transient_callback = 1;
 }
 
 
-static void d81access_attach_fd_internal ( int fd, off_t offset, int mode )
+static void d81access_attach_fd_internal ( int which, int fd, off_t offset, int mode )
 {
+	which &= 7;
 	if (fd < 0)
 		FATAL("d81access_attach_fd_internal() tries to attach invalid fd");
-	d81access_close_internal();
+	d81access_close_internal(which);
 	if (HAS_DISK(mode)) {
-		d81.fd = fd;
-		d81.mode = mode;
+		d81[which].fd = fd;
+		d81[which].mode = mode;
 		DEBUGPRINT("D81: fd %d has been attached with " PRINTF_LLD " offset, read_only = %d, autoclose = %d" NL, fd, (long long)offset, IS_RO(mode), IS_AUTOCLOSE(mode));
 	} else {
 		DEBUGPRINT("D81: using empty access (no disk in drive) by request" NL);
-		d81.mode = D81ACCESS_EMPTY;
+		d81[which].mode = D81ACCESS_EMPTY;
 	}
-	d81.start_at = offset;
-	d81access_cb_chgmode(d81.mode);
+	d81[which].start_at = offset;
+	d81access_cb_chgmode(which, d81[which].mode);
 }
 
 
@@ -134,32 +147,34 @@ static void d81access_attach_fd_internal ( int fd, off_t offset, int mode )
 // it's the caller's responsibility that it's really an FD for a D81 image in size etc enough for that!
 // One example for this function to be used for: MEGA65, on-SDCARD "mounted" D81, where the "master" fd is used
 // to access the D81 inside, managed by the caller!
-void d81access_attach_fd ( int fd, off_t offset, int mode )
+void d81access_attach_fd ( int which, int fd, off_t offset, int mode )
 {
 	int check_mode = mode & 0xFF;
 	if (check_mode != D81ACCESS_IMG && check_mode != D81ACCESS_EMPTY)
 		FATAL("d81access_attach_fd() mode low bits must have D81ACCESS_IMG or D81ACCESS_EMPTY");
-	d81access_attach_fd_internal(fd, offset, mode);
+	d81access_attach_fd_internal(which & 7, fd, offset, mode);
 }
 
 
 // Attach callbacks instead of handling requests in this source
-void d81access_attach_cb ( off_t offset, d81access_rd_cb_t rd_callback, d81access_wr_cb_t wr_callback )
+void d81access_attach_cb ( int which, off_t offset, d81access_rd_cb_t rd_callback, d81access_wr_cb_t wr_callback )
 {
-	d81access_close_internal();
-	d81.mode = D81ACCESS_CALLBACKS;
+	which &= 7;
+	d81access_close_internal(which);
+	d81[which].mode = D81ACCESS_CALLBACKS;
 	if (!wr_callback)
-		d81.mode |= D81ACCESS_RO;
-	d81.read_cb = rd_callback;
-	d81.write_cb = wr_callback;
-	d81.start_at = offset;
+		d81[which].mode |= D81ACCESS_RO;
+	d81[which].read_cb = rd_callback;
+	d81[which].write_cb = wr_callback;
+	d81[which].start_at = offset;
 	DEBUGPRINT("D81: attaching D81 via provided callbacks, read=%p, write=%p" NL, rd_callback, wr_callback);
-	d81access_cb_chgmode(d81.mode);
+	d81access_cb_chgmode(which, d81[which].mode);
 }
 
 
-int d81access_attach_fsobj ( const char *fn, int mode )
+int d81access_attach_fsobj ( int which, const char *fn, int mode )
 {
+	which &= 7;
 	if (!fn || !*fn) {
 		DEBUGPRINT("D81: attach file request with empty file name, not using FS based disk attachment." NL);
 		return -1;
@@ -173,11 +188,11 @@ int d81access_attach_fsobj ( const char *fn, int mode )
 		DIR *dir = opendir(fn);
 		if (dir) {
 			// It seems we could open the "raw" object as directory
-			d81access_close_internal();
-			d81.dir = dir;
-			d81.mode = D81ACCESS_DIR | D81ACCESS_RO | D81ACCESS_AUTOCLOSE;	// TODO? directory access is always read only currently ...
+			d81access_close_internal(which);
+			d81[which].dir = dir;
+			d81[which].mode = D81ACCESS_DIR | D81ACCESS_RO | D81ACCESS_AUTOCLOSE;	// TODO? directory access is always read only currently ...
 			DEBUGPRINT("D81: file system object \"%s\" opened as a directory." NL, fn);
-			d81access_cb_chgmode(d81.mode);
+			d81access_cb_chgmode(which, d81[which].mode);
 			return 0;
 		} else if (errno != ENOTDIR && errno != ENOENT) {
 			ERROR_WINDOW("D81: cannot open directory %s for virtual D81 mode: %s", fn, strerror(errno));
@@ -209,14 +224,14 @@ int d81access_attach_fsobj ( const char *fn, int mode )
 	// Check if it's a PRG-file mode, based on the "sane" size of such a file ...
 	if (size >= PRG_MIN_SIZE && size <= PRG_MAX_SIZE) {
 		if (mode & D81ACCESS_PRG) {
-			d81access_attach_fd_internal(fd, 0, D81ACCESS_PRG | D81ACCESS_AUTOCLOSE | D81ACCESS_RO);
-			d81.prg_size = size;	// store real size of the object
-			d81.prg_blk_size = size / 254;
-			d81.prg_blk_last_size = size % 254;
-			if (d81.prg_blk_last_size)
-				d81.prg_blk_size++;
+			d81access_attach_fd_internal(which, fd, 0, D81ACCESS_PRG | D81ACCESS_AUTOCLOSE | D81ACCESS_RO);
+			d81[which].prg_size = size;	// store real size of the object
+			d81[which].prg_blk_size = size / 254;
+			d81[which].prg_blk_last_size = size % 254;
+			if (d81[which].prg_blk_last_size)
+				d81[which].prg_blk_size++;
 			else
-				d81.prg_blk_last_size = 254;
+				d81[which].prg_blk_last_size = 254;
 			return 0;
 		} else {
 			close(fd);
@@ -232,7 +247,7 @@ int d81access_attach_fsobj ( const char *fn, int mode )
 	// Only the possibility left that it's a D81 image
 	if (size == D81_SIZE) {
 		// candidate for the "normal" D81 as being used
-		d81access_attach_fd_internal(fd, 0, D81ACCESS_IMG | D81ACCESS_AUTOCLOSE | ro);
+		d81access_attach_fd_internal(which, fd, 0, D81ACCESS_IMG | D81ACCESS_AUTOCLOSE | ro);
 		return 0;
 	}
 	close(fd);
@@ -274,12 +289,13 @@ int d81access_attach_fsobj ( const char *fn, int mode )
 
 
 
-static int file_io_op ( int is_write, int d81_offset, Uint8 *buffer, int size )
+static int file_io_op ( int which, int is_write, int d81_offset, Uint8 *buffer, int size )
 {
-	off_t offset = d81.start_at + (off_t)d81_offset;
-	if (lseek(d81.fd, offset, SEEK_SET) != offset)
+	which &= 7;
+	off_t offset = d81[which].start_at + (off_t)d81_offset;
+	if (lseek(d81[which].fd, offset, SEEK_SET) != offset)
 		FATAL("D81: SEEK: seek host-OS failure: %s", strerror(errno));
-	int ret = is_write ? xemu_safe_write(d81.fd, buffer, size) : xemu_safe_read(d81.fd, buffer, size);
+	int ret = is_write ? xemu_safe_write(d81[which].fd, buffer, size) : xemu_safe_read(d81[which].fd, buffer, size);
 	if (ret >= 0)
 		return ret;
 	FATAL("D81: %s: host-OS error: %s", is_write ? "WRITE" : "READ", strerror(errno));
@@ -337,8 +353,9 @@ static int diskimage_write_block ( Uint8 *io_buffer, Uint8 *addr_buffer, int add
 #endif
 
 
-static int read_prg ( Uint8 *buffer, int d81_offset, int number_of_logical_sectors )
+static int read_prg ( int which, Uint8 *buffer, int d81_offset, int number_of_logical_sectors )
 {
+	which &= 7;
 	// just pre-zero buffer, so we don't need to take care on this at various code points with possible partly filled output
 	memset(buffer, 0, 512);
 	// disk organization at CBM-DOS level is 256 byte sector based, though FDC F011 itself is 512 bytes sectored stuff
@@ -363,21 +380,21 @@ static int read_prg ( Uint8 *buffer, int d81_offset, int number_of_logical_secto
 			buffer[3] = 0x01;	// starts on track-1
 			// starts on sector-0 of track-1, 0 is already set
 			memcpy(buffer + 5, vdsk_file_name, 16);
-			buffer[0x1E] = d81.prg_blk_size & 0xFF;
-			buffer[0x1F] = d81.prg_blk_size >> 8;
+			buffer[0x1E] = d81[which].prg_blk_size & 0xFF;
+			buffer[0x1F] = d81[which].prg_blk_size >> 8;
 		} else {		// what we want to handle at all yet, is the file itself, which starts at the very beginning at our 'virtual' disk
 			int block = d81_offset >> 8;	// calculate the block from offset
-			if (block < d81.prg_blk_size) {	// so it seems, we need to do something here at last, disk area belongs to our file!
+			if (block < d81[which].prg_blk_size) {	// so it seems, we need to do something here at last, disk area belongs to our file!
 				int reqsize, ret;
-				if (block == d81.prg_blk_size -1) {   // last block of file
-					reqsize = d81.prg_blk_last_size;
+				if (block == d81[which].prg_blk_size -1) {   // last block of file
+					reqsize = d81[which].prg_blk_last_size;
 					buffer[1] = 0xFF;	// offs 0 is already 0
 				} else {				// not the last block, we must resolve the track/sector info of the next block
 					reqsize = 254;
 					buffer[0] = ((block + 1) / 40) + 1;
 					buffer[1] = (block + 1) % 40;
 				}
-				ret = file_io_op(0, block * 254, buffer + 2, reqsize);
+				ret = file_io_op(which, 0, block * 254, buffer + 2, reqsize);
 				DEBUGPRINT("D81VIRTUAL: ... data block, block number %d, next_track = $%02X next_sector = $%02X" NL, block, buffer[0], buffer[1]);
 #if 0
 				if (host_seek_to(NULL, block * 254, "reading[PRG81VIRT@HOST]", d81_is_prg + 512, d81fd) < 0)
@@ -403,40 +420,41 @@ static void check_io_req_params ( int d81_offset, int sector_size )
 }
 
 
-int d81access_read_sect  ( Uint8 *buffer, int d81_offset, int sector_size )
+int d81access_read_sect  ( int which, Uint8 *buffer, int d81_offset, int sector_size )
 {
+	which &= 7;
 	check_io_req_params(d81_offset, sector_size);
-	switch (d81.mode & 0xFF) {
+	switch (d81[which].mode & 0xFF) {
 		case D81ACCESS_EMPTY:
 			return -1;
 		case D81ACCESS_IMG:
-			if (file_io_op(0, d81_offset, buffer, sector_size) == sector_size)
+			if (file_io_op(which, 0, d81_offset, buffer, sector_size) == sector_size)
 				return 0;
 			else
 				return -1;
 		case D81ACCESS_PRG:
-			return read_prg(buffer, d81_offset, sector_size >> 8);
+			return read_prg(which, buffer, d81_offset, sector_size >> 8);
 		case D81ACCESS_DIR:
 			FATAL("DIR access method is not yet implemented in Xemu, sorry :-(");
 		case D81ACCESS_CALLBACKS:
-			return d81.read_cb(buffer, d81.start_at + d81_offset, sector_size);
+			return d81[which].read_cb(which, buffer, d81[which].start_at + d81_offset, sector_size);
 		default:
-			FATAL("d81access_read_sect(): invalid d81.mode & 0xFF");
+			FATAL("d81access_read_sect(): invalid d81[%d].mode & 0xFF", which);
 	}
 	return -1;
 }
 
 
-int d81access_write_sect ( Uint8 *buffer, int d81_offset, int sector_size )
+int d81access_write_sect ( int which, Uint8 *buffer, int d81_offset, int sector_size )
 {
 	check_io_req_params(d81_offset, sector_size);
-	if (IS_RO(d81.mode))
+	if (IS_RO(d81[which].mode))
 		return -1;
-	switch (d81.mode & 0xFF) {
+	switch (d81[which].mode & 0xFF) {
 		case D81ACCESS_EMPTY:
 			return -1;
 		case D81ACCESS_IMG:
-			if (file_io_op(1, d81_offset, buffer, sector_size) == sector_size)
+			if (file_io_op(which, 1, d81_offset, buffer, sector_size) == sector_size)
 				return 0;
 			else
 				return -1;
@@ -444,9 +462,9 @@ int d81access_write_sect ( Uint8 *buffer, int d81_offset, int sector_size )
 		case D81ACCESS_DIR:
 			return -1;	// currently, these are all read-only, even if caller forgets that and try :-O
 		case D81ACCESS_CALLBACKS:
-			return (d81.write_cb ? d81.write_cb(buffer, d81.start_at + d81_offset, sector_size) : -1);
+			return (d81[which].write_cb ? d81[which].write_cb(which, buffer, d81[which].start_at + d81_offset, sector_size) : -1);
 		default:
-			FATAL("d81access_write_sect(): invalid d81.mode & 0xFF");
+			FATAL("d81access_write_sect(): invalid d81[%d].mode & 0xFF", which);
 	}
 	return -1;
 }

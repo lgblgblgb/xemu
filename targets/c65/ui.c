@@ -53,7 +53,7 @@ static int attach_d81 ( const char *fn )
 static int attach_d81 ( const char *fn )
 {
 	if (fn && *fn)
-		return d81access_attach_fsobj(fn, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE);
+		return d81access_attach_fsobj(0, fn, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE);
 	return -1;
 }
 

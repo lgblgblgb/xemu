@@ -1,6 +1,6 @@
 /* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 / MEGA65 emulator,
    within the Xemu project. F011 FDC core implementation.
-   Copyright (C)2016,2018-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2018-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -34,7 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static Uint8 head_track;		// "physical" track, ie, what is the head is positioned at currently
 static int   head_side;
 static Uint8 track, sector, side;	// parameters given for an operation ("find"), if track is not the same as head_track, you won't find your sector on that track probably ...
-static Uint8 control, status_a, status_b;
+static Uint8 control;
 static Uint8 cmd;
 static int   curcmd;
 static Uint8 dskclock, step;
@@ -43,7 +43,6 @@ static int   drive;
 static Uint8 *cache;			// 512 bytes cache FDC will use. This is a real 512byte RAM attached to the FDC controller for buffered operations on the C65
 static int   cache_p_cpu;		// cache pointer if CPU accesses the FDC buffer cache. 0 ... 511!
 static int   cache_p_fdc;		// cache pointer if FDC accesses the FDC buffer cache. 0 ... 511!
-//static int   disk_fd;			// disk image file descriptor (if disk_fd < 0 ----> no disk image, ie "no disk inserted" is emulated)
 static int   swap_mask = 0;
 
 static int   warn_disk = 1;
@@ -51,8 +50,12 @@ static int   warn_swap_bit = 1;
 
 static void  execute_command ( void );
 
-static int   have_disk, have_write;
 static int   allowed_disk = FDC_ALLOW_DISK_ACCESS;	// provides a way to TEMPORARLY reject disk access (eg: avoid autoboot)
+
+static struct {
+	Uint8 status_a, status_b;
+	int have_disk, have_write;
+} drives[8];
 
 
 
@@ -63,8 +66,6 @@ void fdc_init ( Uint8 *cache_set )
 	head_track = 0;
 	head_side = 0;
 	control = 0;
-	status_a = 0;
-	status_b = 0;
 	track = 0;
 	sector = 0;
 	side = 0;
@@ -75,8 +76,12 @@ void fdc_init ( Uint8 *cache_set )
 	cache_p_cpu = 0;
 	cache_p_fdc = 0;
 	drive = 0;
-	fdc_set_disk(0, 0);
-	status_b &= 0x7F;	// at this point we don't want disk changed signal (bit 7) yet
+	for (int i = 0; i < 8; i++) {
+		drives[i].status_a = 0;
+		drives[i].status_b = 0;
+		fdc_set_disk(i, 0, 0);
+		drives[i].status_b &= 0x7F;	// at this point we don't want disk changed signal (bit 7) yet
+	}
 	allowed_disk = FDC_ALLOW_DISK_ACCESS;
 }
 
@@ -97,23 +102,23 @@ void fdc_allow_disk_access ( int in )
 }
 
 
-void fdc_set_disk ( int in_have_disk, int in_have_write )
+void fdc_set_disk ( int drive, int in_have_disk, int in_have_write )
 {
-	have_disk  = in_have_disk;
-	have_write = in_have_write;
-	DEBUG("FDC: init: set have_disk=%d, have_write=%d" NL, have_disk, have_write);
-	status_b |= 0x80;	// disk changed signal is set, since the purpose of this function is to set new disk
-	if (have_disk) {
-		status_a |= 1;	// on track-0
-		status_b |= 8;	// disk inserted
+	drives[drive].have_disk  = in_have_disk;
+	drives[drive].have_write = in_have_write;
+	DEBUG("FDC: init: set drives[drive].have_disk=%d, drives[drive].have_write=%d" NL, in_have_disk, in_have_write);
+	drives[drive].status_b |= 0x80;	// disk changed signal is set, since the purpose of this function is to set new disk
+	if (drives[drive].have_disk) {
+		drives[drive].status_a |= 1;	// on track-0
+		drives[drive].status_b |= 8;	// disk inserted
 	} else {
-		status_a &= ~1;
-		status_b &= ~8;
+		drives[drive].status_a &= ~1;
+		drives[drive].status_b &= ~8;
 	}
-	if (!have_write) {
-		status_a |= 2;	// write protect flag, read-only mode
+	if (!drives[drive].have_write) {
+		drives[drive].status_a |= 2;	// write protect flag, read-only mode
 	} else {
-		status_a &= ~2;
+		drives[drive].status_a &= ~2;
 	}
 	//allowed_disk = FDC_ALLOW_DISK_ACCESS; // FIXME: maybe should be deleted, as causes to revokation of access to be dismissed on calling this function!
 }
@@ -123,13 +128,13 @@ void fdc_set_disk ( int in_have_disk, int in_have_write )
 static int calc_offset ( const char *opdesc )
 {
 	int offset;
-	DEBUG("FDC: %s sector track=%d sector=%d side=%d @ PC=$%04X" NL, opdesc, track, sector, side, cpu65.old_pc);
+	DEBUG("FDC: %s sector drive=%d track=%d sector=%d side=%d @ PC=$%04X" NL, opdesc, drive, track, sector, side, cpu65.old_pc);
 	// FIXME: no checking of input parameters, can be insane values
 	// FIXME: no check for desired track/side and the currently selected/seeked, what should be!
 	// FIXME: whatever :)
 	offset = 40 * (track - 0) * 256 + (sector - 1) * 512 + side * 20 * 256; // somewhat experimental value, it was after I figured out how that should work :-P
 	if (offset < 0 || offset > D81_SIZE - 512 || (offset & 511)) {
-		DEBUG("FDC: invalid D81 offset %d" NL, offset);
+		DEBUG("FDC: invalid D81 offset %d on drive %d" NL, offset, drive);
 		return -1;
 	}
 	return offset;
@@ -144,12 +149,12 @@ static int calc_offset ( const char *opdesc )
 static void read_sector ( void )
 {
 	int error;
-	if (have_disk && allowed_disk == FDC_ALLOW_DISK_ACCESS) {
+	if (drives[drive].have_disk && allowed_disk == FDC_ALLOW_DISK_ACCESS) {
 		int offset = calc_offset("reading");
 		error = (offset < 0);
 		if (!error) {
 			Uint8 read_buffer[512];
-			error = fdc_cb_rd_sec(read_buffer, offset);
+			error = fdc_cb_rd_sec(drive, read_buffer, offset);
 			if (error)
 				DEBUG("FDC: sector read-callback returned with error!" NL);
 			else {
@@ -170,12 +175,12 @@ static void read_sector ( void )
 		}
 	}
 	if (error) {
-		status_a |= 16; // record not found ...
-		status_b &= 15; // RDREQ/WTREQ/RUN/GATE off
+		drives[drive].status_a |= 16; // record not found ...
+		drives[drive].status_b &= 15; // RDREQ/WTREQ/RUN/GATE off
 	} else {
-		status_a |= 64; // DRQ, for buffered reads indicates that FDC accessed the buffer last (DRQ should be cleared by CPU reads, set by FDC access)
-		status_b |= 128 | 32 ;  // RDREQ, RUN to set! (important: ROM waits for RDREQ to be high after issued read operation, also we must clear it SOME time later ...)
-		status_a &= ~32;  // clear EQ, missing this in general freezes DOS as it usually does not expect to have EQ set even before the first data read [??]
+		drives[drive].status_a |= 64; // DRQ, for buffered reads indicates that FDC accessed the buffer last (DRQ should be cleared by CPU reads, set by FDC access)
+		drives[drive].status_b |= 128 | 32 ;  // RDREQ, RUN to set! (important: ROM waits for RDREQ to be high after issued read operation, also we must clear it SOME time later ...)
+		drives[drive].status_a &= ~32;  // clear EQ, missing this in general freezes DOS as it usually does not expect to have EQ set even before the first data read [??]
 	}
 	if (allowed_disk == FDC_DENY_DISK_ACCESS_ONCE)
 		allowed_disk = FDC_ALLOW_DISK_ACCESS;
@@ -188,7 +193,7 @@ static void read_sector ( void )
 static void write_sector ( void )
 {
 	int error;
-	if (have_disk && allowed_disk == FDC_ALLOW_DISK_ACCESS && have_write) {
+	if (drives[drive].have_disk && allowed_disk == FDC_ALLOW_DISK_ACCESS && drives[drive].have_write) {
 		int offset = calc_offset("writing");
 		error = (offset < 0);
 		if (!error) {
@@ -198,7 +203,7 @@ static void write_sector ( void )
 				write_buffer[n] = cache[cache_p_fdc];
 				cache_p_fdc = (cache_p_fdc + 1) & 511;
 			}
-			error = fdc_cb_wr_sec(write_buffer, offset);
+			error = fdc_cb_wr_sec(drive, write_buffer, offset);
 			if (error)
 				DEBUG("FDC: sector write-callback returned with error!" NL);
 			else
@@ -213,12 +218,12 @@ static void write_sector ( void )
 		}
 	}
 	if (error) {
-		status_a |= 16; // record not found ...
-		status_b &= 15; // RDREQ/WTREQ/RUN/GATE off
+		drives[drive].status_a |= 16; // record not found ...
+		drives[drive].status_b &= 15; // RDREQ/WTREQ/RUN/GATE off
 	} else {
-		status_a |= 64; // DRQ, for buffered reads indicates that FDC accessed the buffer last (DRQ should be cleared by CPU reads, set by FDC access)
-		status_b |= 64 | 32 ;  // WTREQ, RUN to set!
-		status_a &= ~32;  // clear EQ, missing this in general freezes DOS as it usually does not expect to have EQ set even before the first data read [??]
+		drives[drive].status_a |= 64; // DRQ, for buffered reads indicates that FDC accessed the buffer last (DRQ should be cleared by CPU reads, set by FDC access)
+		drives[drive].status_b |= 64 | 32 ;  // WTREQ, RUN to set!
+		drives[drive].status_a &= ~32;  // clear EQ, missing this in general freezes DOS as it usually does not expect to have EQ set even before the first data read [??]
 	}
 	if (allowed_disk == FDC_DENY_DISK_ACCESS_ONCE)
 		allowed_disk = FDC_ALLOW_DISK_ACCESS;
@@ -239,25 +244,29 @@ void fdc_write_reg ( int addr, Uint8 data )
 	switch (addr) {
 		case 0:
 #if 0
-			if (status_a & 128) {
+			if (drives[drive].status_a & 128) {
 				DEBUG("FDC: WARN: trying to write control register ($%02X) while FDC is busy." NL, data);
 				return;
 			}
 #endif
 			control = data;
-			status_a |= 128;	// writing control register also causes to set the BUSY flag for some time ...
 			if (curcmd == -1)
 				curcmd = 0x100;		// "virtual" command, by writing the control register
+			if (drive != (data & 7))
+				DEBUGPRINT("FDC: changing active drive from %d to %d" NL, drive, data & 7);
 			drive = data & 7;	// drive selection
+			drives[drive].status_a |= 128;	// writing control register also causes to set the BUSY flag for some time ... FIXME: is this corresponding to the NEW selected drive / only / too?!
 			head_side = (data >> 3) & 1;
-			if ((status_b & 0x80) && drive) {
-				status_b &= 0x7F;	// clearing disk change signal (not correct implementation, as it needs only if the given drive deselected!)
+			if ((drives[drive].status_b & 0x80) && drive) {
+				drives[drive].status_b &= 0x7F;	// clearing disk change signal (not correct implementation, as it needs only if the given drive deselected!)
 				DEBUG("FDC: disk change signal was cleared on drive selection (drive: %d)" NL, drive);
 			}
+#if 0
 			if (drive)
 				DEBUG("FDC: WARN: not drive-0 is selected: %d!" NL, drive);
 			else
 				DEBUG("FDC: great, drive-0 is selected" NL);
+#endif
 			if (data & 16) {
 				DEBUG("FDC: WARN: SWAP bit emulation is experimental!" NL);
 				if (warn_swap_bit) {
@@ -271,16 +280,17 @@ void fdc_write_reg ( int addr, Uint8 data )
 		case 1:
 			// FIXME: I still don't what happens if a running operation (ie BUSY) is in progress and new command is tried to be given to the F011 FDC
 			DEBUG("FDC: command=$%02X (lower bits: $%X)" NL, data & 0xF8, data & 7);
-			if ((status_a & 128) && ((data & 0xF8))) {	// if BUSY, and command is not the cancel command ..
+			if ((drives[drive].status_a & 128) && ((data & 0xF8))) {	// if BUSY, and command is not the cancel command ..
 				DEBUG("FDC: WARN: trying to issue another command ($%02X) while the previous ($%02X) is running." NL, data, cmd);
 				return;
 			}
 			cmd = data;
 			curcmd = data;
-			status_a |= 128; 	// simulate busy status ...
-			status_b &= 255 - 2;	// turn IRQ flag OFF
-			status_a &= 255 - (4 + 8 + 16);	// turn RNF/CRC/LOST flags OFF
-			status_b &= 255 - (128 + 64);	// also turn RDREQ and WRREQ OFF [IS THIS REALLY NEEDED?]
+			// Random assortment of odd operations (can be joined together, to it's more easy to play with them this way ...)
+			drives[drive].status_a |= 128; 	// simulate busy status ...
+			drives[drive].status_b &= 255 - 2;	// turn IRQ flag OFF
+			drives[drive].status_a &= 255 - (4 + 8 + 16);	// turn RNF/CRC/LOST flags OFF
+			drives[drive].status_b &= 255 - (128 + 64);	// also turn RDREQ and WRREQ OFF [IS THIS REALLY NEEDED?]
 			break;
 		case 4:
 			track = data;
@@ -293,17 +303,17 @@ void fdc_write_reg ( int addr, Uint8 data )
 			break;
 		case 7:
 			// FIXME: this algorithm do not "enforce" the internals of F011, just if the software comply the rules otherwise ......
-			status_a &= ~64;	// clear DRQ
-			//status_b &= 127; 	// turn RDREQ off after the first access, this is somewhat incorrect :-P
-			if (status_a & 32)	// if EQ was already set and another byte passed ---> LOST
-				status_a |= 4;	// LOST!!!! but probably incorrect, since no new read is done by FDC since then just "wrapping" the read data, LOST remains till next command!
+			drives[drive].status_a &= ~64;	// clear DRQ
+			//drives[drive].status_b &= 127; 	// turn RDREQ off after the first access, this is somewhat incorrect :-P
+			if (drives[drive].status_a & 32)	// if EQ was already set and another byte passed ---> LOST
+				drives[drive].status_a |= 4;	// LOST!!!! but probably incorrect, since no new read is done by FDC since then just "wrapping" the read data, LOST remains till next command!
 			cache[cache_p_cpu ^ swap_mask] = data;
 			cache_p_cpu = (cache_p_cpu + 1) & 511;
 			// always check EQ-situation _after_ the operation! Since initially they are same and it won't be loved by C65 DOS at all, honoured with a freeze
 			if (cache_p_cpu == cache_p_fdc)
-				status_a |=  32;	// turn EQ on
+				drives[drive].status_a |=  32;	// turn EQ on
 			else
-				status_a &= ~32;	// turn EQ off
+				drives[drive].status_a &= ~32;	// turn EQ off
 			break;
 		// TODO: write DATA register (7) [only for writing it is needed anyway]
 		case 8:
@@ -313,7 +323,7 @@ void fdc_write_reg ( int addr, Uint8 data )
 			step = data;
 			break;
 	}
-	if (status_a & 128) {
+	if (drives[drive].status_a & 128) {
 		emulate_busy = 10;
 		execute_command();	// do it NOW!!!! With this setting now: there is no even BUSY state, everything happens within one OPC... seems to work still. Real F011 won't do this surely
 	}
@@ -332,10 +342,15 @@ static void execute_command ( void )
 #ifdef DEBUG_FOR_PAUL
 	printf("PAUL: issuing FDC command $%02X pointer was %d" NL, cmd, cache_p_cpu);
 #endif
-	status_a &= 127;	// turn BUSY flag OFF
-	status_b |= 2;		// turn IRQ flag ON
-	if (control & 128)
-		INFO_WINDOW("Sorry, FDC-IRQ is not supported yet, by FDC emulation!");
+	drives[drive].status_a &= 127;	// turn BUSY flag OFF
+	drives[drive].status_b |= 2;		// turn IRQ flag ON
+	if (control & 128) {
+		static int warn = 1;
+		if (warn) {
+			warn = 0;
+			INFO_WINDOW("Sorry, FDC-IRQ is not supported yet, by FDC emulation!");
+		}
+	}
 	if (curcmd < 0)
 		return;	// no cmd was given?!
 	if (curcmd > 0xFF)
@@ -345,12 +360,12 @@ static void execute_command ( void )
 #endif
 	switch (cmd & 0xF8) {	// high 5 bits of the command ...
 		case 0x40:	// read sector
-			//status_a |= 16;		// record not found for testing ...
-			status_b |= 128;	// RDREQ: if it's not here, you won't get a READY. prompt!
-			//status_b |= 32;		// RUN?!
-			status_a |= 64;		// set DRQ
-			status_a &= (255 - 32); // clear EQ
-			//status_a |= 32; // set EQ?!
+			//drives[drive].status_a |= 16;		// record not found for testing ...
+			drives[drive].status_b |= 128;	// RDREQ: if it's not here, you won't get a READY. prompt!
+			//drives[drive].status_b |= 32;		// RUN?!
+			drives[drive].status_a |= 64;		// set DRQ
+			drives[drive].status_a &= (255 - 32); // clear EQ
+			//drives[drive].status_a |= 32; // set EQ?!
 			//cache_p_cpu = cache_p_fdc;	// yayy .... If it's not here we can't get READY. prompt!!
 			read_sector();
 			//cache_p_drive = (cache_p_drive + BLOCK_SIZE) & 511;
@@ -363,9 +378,9 @@ static void execute_command ( void )
 			);
 			break;
 		case 0x80:	// write sector
-			if (!(status_a & 2)) {	// if not write protected ....
-				status_a |= 64;         // set DRQ
-				status_a &= (255 - 32); // clear EQ
+			if (!(drives[drive].status_a & 2)) {	// if not write protected ....
+				drives[drive].status_a |= 64;         // set DRQ
+				drives[drive].status_a &= (255 - 32); // clear EQ
 				write_sector();
 #ifdef SOME_DEBUG
 				printf("WRITE: cache_p_cpu=%d / cache_p_fdc=%d drive_selected=%d" NL, cache_p_cpu, cache_p_fdc, drive);
@@ -384,7 +399,7 @@ static void execute_command ( void )
 				if (head_track)
 					head_track--;
 				if (!head_track)
-					status_a |= 1;	// track 0 flag
+					drives[drive].status_a |= 1;	// track 0 flag
 				DEBUG("FDC: head position = %d" NL, head_track);
 			}
 			break;
@@ -392,11 +407,11 @@ static void execute_command ( void )
 			if (head_track < 128)
 				head_track++;
 			DEBUG("FDC: head position = %d" NL, head_track);
-			status_a &= 0xFE;	// track 0 flag off
+			drives[drive].status_a &= 0xFE;	// track 0 flag off
 			break;
 		case 0x20:	// motor spin up
 			control |= 32;
-			status_a |= 16; // according to the specification, RNF bit should be set at the end of the operation
+			drives[drive].status_a |= 16; // according to the specification, RNF bit should be set at the end of the operation
 			break;
 		case 0x00:	// cancel running command?? NOTE: also if low bit is 1: clear pointer!
 			// Note: there was a typo in my previous versions ... to have break HERE! So pointer reset never executed actually ...... :-@
@@ -409,15 +424,15 @@ static void execute_command ( void )
 				cache_p_cpu = 0;
 				cache_p_fdc = 0;
 				DEBUG("FDC: WARN: resetting cache pointers" NL);
-				//status_a |= 32; // turn EQ on
-				status_a &= 255 - 64; // turn DRQ off
-				status_b &= 127;      // turn RDREQ off
+				//drives[drive].status_a |= 32; // turn EQ on
+				drives[drive].status_a &= 255 - 64; // turn DRQ off
+				drives[drive].status_b &= 127;      // turn RDREQ off
 
 			}
 			break;
 		default:
 			DEBUG("FDC: WARN: unknown comand: $%02X" NL, cmd);
-			//status_a &= 127; // well, not a valid command, revoke busy status ...
+			//drives[drive].status_a &= 127; // well, not a valid command, revoke busy status ...
 			break;
 	}
 	curcmd = -1;
@@ -439,7 +454,7 @@ Uint8 fdc_read_reg  ( int addr )
 	/* Emulate BUSY timing, with a very bad manner: ie, decrement a counter on each register read to give some time to wait.
 	   FIXME: not sure if it's needed and what happen if C65 DOS gots "instant" operations done without BUSY ever set ... Not a real happening, but it can be with my primitive emulation :)
 	   Won't work if DOS is IRQ driven ... */
-	if (status_a & 128) {	// check the BUSY flag
+	if (drives[drive].status_a & 128) {	// check the BUSY flag
 		// Note: this is may not used at all, check the end of write reg func!
 		if (emulate_busy > 0)
 			emulate_busy--;
@@ -447,7 +462,7 @@ Uint8 fdc_read_reg  ( int addr )
 #ifdef SOME_DEBUG
 			printf("Delayed command execution!!!" NL);
 #endif
-			execute_command();	// execute the command only now for real ... (it will also turn BUSY flag - bit 7 - OFF in status_a)
+			execute_command();	// execute the command only now for real ... (it will also turn BUSY flag - bit 7 - OFF in drives[drive].status_a)
 		}
 	}
 	switch (addr) {
@@ -458,13 +473,13 @@ Uint8 fdc_read_reg  ( int addr )
 			result = cmd;
 			break;
 		case 2:	// STATUS register A
-			result = drive ? 0 : status_a;	// FIXME: Not sure: if no drive 0 is selected, other status is shown, ie every drives should have their own statuses?
-			//result = status_a;
+			result = drive ? 0 : drives[drive].status_a;	// FIXME: Not sure: if no drive 0 is selected, other status is shown, ie every drives should have their own statuses?
+			//result = drives[drive].status_a;
 			break;
 		case 3: // STATUS register B
-			result = drive ? 0 : status_b;	// FIXME: Not sure: if no drive 0 is selected, other status is shown, ie every drives should have their own statuses?
-			//result = status_b;
-			status_b &= ~64;	// turn WTREQ off, as it seems CPU noticed with reading this register, that is was the case for a while. Somewhat incorrect implementation ... :-/
+			result = drive ? 0 : drives[drive].status_b;	// FIXME: Not sure: if no drive 0 is selected, other status is shown, ie every drives should have their own statuses?
+			//result = drives[drive].status_b;
+			drives[drive].status_b &= ~64;	// turn WTREQ off, as it seems CPU noticed with reading this register, that is was the case for a while. Somewhat incorrect implementation ... :-/
 			break;
 		case 4:
 			result = track;
@@ -477,17 +492,17 @@ Uint8 fdc_read_reg  ( int addr )
 			break;
 		case 7:
 			// FIXME: this algorithm do not "enforce" the internals of F011, just if the software comply the rules otherwise ......
-			status_a &= ~64;	// clear DRQ
-			status_b &= 127; 	// turn RDREQ off after the first access, this is somewhat incorrect :-P
-			if (status_a & 32)	// if EQ was already set and another byte passed ---> LOST
-				status_a |= 4;	// LOST!!!! but probably incorrect, since no new read is done by FDC since then just "wrapping" the read data, LOST remains till next command!
+			drives[drive].status_a &= ~64;	// clear DRQ
+			drives[drive].status_b &= 127; 	// turn RDREQ off after the first access, this is somewhat incorrect :-P
+			if (drives[drive].status_a & 32)	// if EQ was already set and another byte passed ---> LOST
+				drives[drive].status_a |= 4;	// LOST!!!! but probably incorrect, since no new read is done by FDC since then just "wrapping" the read data, LOST remains till next command!
 			result = cache[cache_p_cpu ^ swap_mask];
 			cache_p_cpu = (cache_p_cpu + 1) & 511;
 			// always check EQ-situation _after_ the operation! Since initially they are same and it won't be loved by C65 DOS at all, honoured with a freeze
 			if (cache_p_cpu == cache_p_fdc)
-				status_a |=  32;	// turn EQ on
+				drives[drive].status_a |=  32;	// turn EQ on
 			else
-				status_a &= ~32;	// turn EQ off
+				drives[drive].status_a &= ~32;	// turn EQ off
 			break;
 		case 8:
 			result = dskclock;
@@ -526,6 +541,8 @@ Uint8 fdc_read_reg  ( int addr )
 #define SNAPSHOT_FDC_BLOCK_SIZE		(0x100 + CACHE_SIZE)
 #endif
 
+// FIXME: as usual, snapshots are unmaintained seriously :( Just one thing: support of multiple drives ........
+
 int fdc_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
 	Uint8 buffer[SNAPSHOT_FDC_BLOCK_SIZE];
@@ -542,15 +559,15 @@ int fdc_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, str
 	cache_p_cpu = P_AS_BE32(buffer + 16);
 	cache_p_fdc = P_AS_BE32(buffer + 20);
 	swap_mask = P_AS_BE32(buffer + 24);
-	have_disk = P_AS_BE32(buffer + 28);
-	have_write = P_AS_BE32(buffer + 32);
+	drives[drive].have_disk = P_AS_BE32(buffer + 28);
+	drives[drive].have_write = P_AS_BE32(buffer + 32);
 	head_track = buffer[128];
 	track = buffer[129];
 	sector = buffer[130];
 	side = buffer[131];
 	control = buffer[132];
-	status_a = buffer[133];
-	status_b = buffer[134];
+	drives[drive].status_a = buffer[133];
+	drives[drive].status_b = buffer[134];
 	cmd = buffer[135];
 	dskclock = buffer[136];
 	step = buffer[137];
@@ -575,15 +592,15 @@ int fdc_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	U32_AS_BE(buffer + 16, cache_p_cpu);
 	U32_AS_BE(buffer + 20, cache_p_fdc);
 	U32_AS_BE(buffer + 24, swap_mask);
-	U32_AS_BE(buffer + 28, have_disk);
-	U32_AS_BE(buffer + 32, have_write);
+	U32_AS_BE(buffer + 28, drives[drive].have_disk);
+	U32_AS_BE(buffer + 32, drives[drive].have_write);
 	buffer[128] = head_track;
 	buffer[129] = track;
 	buffer[130] = sector;
 	buffer[131] = side;
 	buffer[132] = control;
-	buffer[133] = status_a;
-	buffer[134] = status_b;
+	buffer[133] = drives[drive].status_a;
+	buffer[134] = drives[drive].status_b;
 	buffer[135] = cmd;
 	buffer[136] = dskclock;
 	buffer[137] = step;
