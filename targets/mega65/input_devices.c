@@ -122,6 +122,14 @@ static void hwa_kbd_convert_and_push ( int pos )
 	// Xemu has a design to have key positions stored in row/col as low/high nible of a byte
 	// normalize this here, to have a linear index
 	int i = ((pos & 0xF0) >> 1) | (pos & 7);
+	// BEGIN HACK: this should fix the problem that Xemu has disjoint space for std C64 keys, and extra C65 keys ...
+	if (i >= (C65_KEYBOARD_EXTRA_POS) && i < (C65_KEYBOARD_EXTRA_POS + 8)) {
+		i = i - (C65_KEYBOARD_EXTRA_POS) + 64;
+	} else if (i > 63) {
+		DEBUGKBDHWA("KBD: HWA: NOT storing key (outside of translation table) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, pos, i, cpu65.pc);
+		return;
+	}
+	// END HACK (please note that maybe matrix construction should be modified instead, AND the later conditions to check are now meaningless more or less ...)
 	if (i < MAT2ASC_TAB_SIZE) {
 		int ascii = matrix_to_ascii_table_selector[hwa_kbd.modifiers & 0x1F][i];
 		if (ascii) {
