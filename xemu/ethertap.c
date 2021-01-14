@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2018,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -207,10 +207,12 @@ int xemu_tuntap_select ( int flags, int timeout_usecs )
 
 int xemu_tuntap_alloc ( const char *dev_in, char *dev_out, int dev_out_size, unsigned int flags )
 {
-	struct ifreq ifr;
-	int fd, err;
 	if (tuntap_fd >= 0)
 		return tuntap_fd;
+	if (dev_in && strlen(dev_in) > IFNAMSIZ - 1)
+		return -1;
+	struct ifreq ifr;
+	int fd, err;
 	nonblocking = 0;
 	memset(&ifr, 0, sizeof(ifr));
 	ifr.ifr_flags = 0;

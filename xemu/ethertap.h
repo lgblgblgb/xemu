@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2018,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2018,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,8 +15,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_COMMON_ETHERTAP_H_INCLUDED
-#define __XEMU_COMMON_ETHERTAP_H_INCLUDED
+#ifndef XEMU_COMMON_ETHERTAP_H_INCLUDED
+#define XEMU_COMMON_ETHERTAP_H_INCLUDED
 #ifdef HAVE_ETHERTAP
 
 #include "xemu/emutools_basicdefs.h"
