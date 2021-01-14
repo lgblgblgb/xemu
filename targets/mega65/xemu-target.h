@@ -43,7 +43,9 @@
 #define M65_CPU_NMOS_ONLY_BUG_BCD			1
 
 // Currently only Linux-TAP device is supported to have emulated ethernet controller
-#ifdef XEMU_ARCH_LINUX
+// Also it seems ARM Raspbian/etc does have problem with ethertap, so let's not allow
+// ethertap for ARM CPU, it's faulty there!
+#if defined(XEMU_ARCH_LINUX) && !defined(XEMU_CPU_ARM)
 #define HAVE_ETHERTAP
 #endif
 
