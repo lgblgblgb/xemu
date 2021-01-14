@@ -229,7 +229,7 @@ int xemu_tuntap_alloc ( const char *dev_in, char *dev_out, int dev_out_size, uns
 	if ((fd = open(CLONE_TUNTAP_NAME, O_RDWR)) < 0)
 		return fd;
 	if (dev_in && *dev_in)
-		strncpy(ifr.ifr_name, dev_in, IFNAMSIZ);
+		strncpy(ifr.ifr_name, dev_in, IFNAMSIZ - 1);
 	else
 		ifr.ifr_name[0] = 0;
 	if ((err = ioctl(fd, TUNSETIFF, (void *) &ifr)) < 0) {
