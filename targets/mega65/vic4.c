@@ -313,10 +313,12 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x75): CASE_VIC_4(0x76): CASE_VIC_4(0x77): CASE_VIC_4(0x78): CASE_VIC_4(0x79): CASE_VIC_4(0x7A): CASE_VIC_4(0x7B):
 			break;
 		CASE_VIC_4(0x7C):
-			if ((data & 7) <= 4)
-				vic_bitplane_starting_bank_p = main_ram + ((data & 7) << 16);
-			else
-				WARNING_WINDOW("VIC-IV bitplane bank tried to set over 4. Refused to do so.");
+			if ((data & 7) <= 2) {
+				// The lower 3 bits of $7C set's the number of "128K slice" of the main RAM to be used with bitplanes
+				vic_bitplane_starting_bank_p = main_ram + ((data & 7) << 17);
+				DEBUG("VIC4: bitmap bank offset is $%X" NL, (unsigned int)(vic_bitplane_starting_bank_p - main_ram));
+			} else
+				WARNING_WINDOW("VIC-IV bitplane selection 128K-bank tried to set over 2.\nRefused to do so.");
 			break;
 		CASE_VIC_4(0x7D): CASE_VIC_4(0x7E): CASE_VIC_4(0x7F):
 			break;
