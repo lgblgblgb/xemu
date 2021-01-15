@@ -46,6 +46,7 @@ static int nmi_level;			// please read the comment at nmi_set() below
 static int mouse_x = 0;
 static int mouse_y = 0;
 static int shift_status = 0;
+static int report_d81access_cb_chgmode = 0;
 
 char current_rom_filepath[PATH_MAX];
 
@@ -267,18 +268,19 @@ static void c65_snapshot_saver_on_exit_callback ( void )
 void d81access_cb_chgmode ( int which, int mode ) {
 	int have_disk = ((mode & 0xFF) != D81ACCESS_EMPTY);
 	int can_write = (!(mode & D81ACCESS_RO));
-	DEBUGPRINT("C65FDC: configuring F011 FDC drive #%d with have_disk=%d, can_write=%d" NL, which, have_disk, can_write);
+	if (report_d81access_cb_chgmode)
+		DEBUGPRINT("C65FDC: configuring F011 FDC drive #%d with have_disk=%d, can_write=%d" NL, which, have_disk, can_write);
 	fdc_set_disk(which, have_disk, can_write);
 }
 // Here we implement F011 core's callbacks using d81access (and yes, F011 uses 512 bytes long sectors for real)
 int fdc_cb_rd_sec ( int drive, Uint8 *buffer, int d81_offset ) {
 	int ret = d81access_read_sect(drive, buffer, d81_offset, 512);
-	DEBUG("C65FDC: D81: reading sector at d81_offset=%d on drive #%d, return value=%d" NL, d81_offset, drive, ret);
+	DEBUGPRINT("C65FDC: D81: reading sector at d81_offset=%d on drive #%d, return value=%d" NL, d81_offset, drive, ret);
 	return ret;
 }
 int fdc_cb_wr_sec ( int drive, Uint8 *buffer, int d81_offset ) {
 	int ret = d81access_write_sect(drive, buffer, d81_offset, 512);
-	DEBUG("C65FDC: D81: writing sector at d81_offset=%d on drive #%d, return value=%d" NL, d81_offset, drive, ret);
+	DEBUGPRINT("C65FDC: D81: writing sector at d81_offset=%d on drive #%d, return value=%d" NL, d81_offset, drive, ret);
 	return ret;
 }
 
@@ -350,8 +352,10 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	fdc_init(disk_cache);
 	// Initialize D81 access abstraction for FDC
 	d81access_init();
+	report_d81access_cb_chgmode = 1;
 	atexit(d81access_close_all);
 	d81access_attach_fsobj(0, xemucfg_get_str("8"), D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (xemucfg_get_bool("d81ro") ? D81ACCESS_RO : 0));
+	d81access_attach_fsobj(1, xemucfg_get_str("9"), D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (xemucfg_get_bool("d81ro") ? D81ACCESS_RO : 0));
 	// SIDs, plus SDL audio
 	sid_init(&sids[0], sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sids[1], sid_cycles_per_sec, sound_mix_freq);
@@ -910,7 +914,8 @@ int main ( int argc, char **argv )
 {
 	//int cycles;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unusable Commodore 65 emulator from LGB");
-	xemucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached");
+	xemucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached as drive#0");
+	xemucfg_define_str_option("9", NULL, "Path of the D81 disk image to be attached as drive#1");
 	xemucfg_define_switch_option("allowmousegrab", "Allow auto mouse grab with left-click");
 	xemucfg_define_switch_option("d81ro", "Force read-only status for image specified with -8 option");
 	xemucfg_define_switch_option("driveled", "Render drive LED at the top right corner of the screen");

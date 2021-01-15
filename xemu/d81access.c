@@ -133,7 +133,7 @@ static void d81access_attach_fd_internal ( int which, int fd, off_t offset, int 
 	if (HAS_DISK(mode)) {
 		d81[which].fd = fd;
 		d81[which].mode = mode;
-		DEBUGPRINT("D81: fd %d has been attached with " PRINTF_LLD " offset, read_only = %d, autoclose = %d" NL, fd, (long long)offset, IS_RO(mode), IS_AUTOCLOSE(mode));
+		DEBUGPRINT("D81: fd %d has been attached to #%d with " PRINTF_LLD " offset, read_only = %d, autoclose = %d" NL, fd, which, (long long)offset, IS_RO(mode), IS_AUTOCLOSE(mode));
 	} else {
 		DEBUGPRINT("D81: using empty access (no disk in drive) by request" NL);
 		d81[which].mode = D81ACCESS_EMPTY;
@@ -447,6 +447,7 @@ int d81access_read_sect  ( int which, Uint8 *buffer, int d81_offset, int sector_
 
 int d81access_write_sect ( int which, Uint8 *buffer, int d81_offset, int sector_size )
 {
+	which &= 7;
 	check_io_req_params(d81_offset, sector_size);
 	if (IS_RO(d81[which].mode))
 		return -1;
