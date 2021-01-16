@@ -135,6 +135,7 @@ typedef uint64_t Uint64;
 #	define DIRSEP_STR	"/"
 #	define DIRSEP_CHR	'/'
 #	define NL		"\n"
+#	define NL_LENGTH	1
 #	define PRINTF_LLD	"%lld"
 #	define PRINTF_LLU	"%llu"
 #	define MKDIR(__n)	mkdir((__n), 0777)
@@ -142,6 +143,7 @@ typedef uint64_t Uint64;
 #	define DIRSEP_STR	"\\"
 #	define DIRSEP_CHR	'\\'
 #	define NL		"\r\n"
+#	define NL_LENGTH	2
 #	define PRINTF_LLD	"%I64d"
 #	define PRINTF_LLU	"%I64u"
 #	define MKDIR(__n)	mkdir(__n)
