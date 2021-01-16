@@ -325,12 +325,17 @@ static void ui_emu_info ( void )
 #define DUMP_SCR_CODE()	t += sprintf(t, "{$%02X}", c)
 static void ui_put_screen_text_into_paste_buffer ( void )
 {
-	int lowercase = 0;
+	int columns = (vic_registers[0x31] & 0x80) ? 80 : 40;	// auto detect 40 or 80 column screen mode
+	int lowercase = (vic_registers[0x18] & 2);		// auto-detect lower(+upper)/upper(+gx) font by selected address chargen addr ...
+	Uint8 *v = main_ram + (					// auto-detect start address; FIXME: only works in bank-0 (default!) for now
+			columns == 40 ?
+				(vic_registers[0x18] & 0xF0) << 6
+			:
+				(vic_registers[0x18] & 0xE0) << 6
+	);
 	char text[8192], *t = text;
-	Uint8 *v = main_ram + 2048;
-	// TODO! auto-detect screen mode (40/80col), address, lower/upper case mode!
 	for (int y = 0; y < 25; y++) {
-		for (int x = 0; x < 80; x++) {
+		for (int x = 0; x < columns; x++) {
 			if (t - text > sizeof(text) - 10) {
 				ERROR_WINDOW("Sorry, ASCII converted screen does not fit into the output buffer");
 				return;
