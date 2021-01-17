@@ -383,16 +383,23 @@ int xemu_basic_to_text ( Uint8 *output, int output_size, const Uint8 *prg, int r
 
 
 #define DUMP_SCR_CODE()	t += sprintf(t, "{$%02X}", c)
-char *xemu_cbm_screen_to_text ( char *buffer, int buffer_size, Uint8 *v, int cols, int rows, int lowercase )
+char *xemu_cbm_screen_to_text ( char *buffer, int buffer_size, const Uint8 *v, int cols, int rows, int lowercase )
 {
+	static const char *rvs_msgs[] = { "{RVS-OFF}", "{RVS-ON}" };
 	char *t = buffer;
 	for (int y = 0; y < rows; y++) {
+		int rvs = 0;
 		for (int x = 0; x < cols; x++) {
-			if (t - buffer > buffer_size - 10) {
+			if (XEMU_UNLIKELY(t - buffer > buffer_size - 16)) {
 				ERROR_WINDOW("Sorry, ASCII converted screen does not fit into the output buffer");
 				return NULL;
 			}
-			Uint8 c = (*v++) & 127;	// "&127" part: ugly hack, we can't convert inverse attribute ...
+			Uint8 c = (*v++);
+			if (XEMU_UNLIKELY((c & 0x80) != rvs)) {
+				rvs = (c & 0x80);
+				t = xemu_strcpy_special(t, rvs_msgs[!!rvs]);
+			}
+			c &= 0x7F;		// we can't convert reverse visually per chars, so let's forget the upper bit
 			if (c == 0) {
 				*t++ = '@';
 			} else if (c < 27) {
@@ -420,19 +427,21 @@ char *xemu_cbm_screen_to_text ( char *buffer, int buffer_size, Uint8 *v, int col
 				DUMP_SCR_CODE();
 			}
 		}
-		while (t > buffer && t[-1] == ' ')
-			t--;
-		memcpy(t, NL, NL_LENGTH);
-		t += NL_LENGTH;
+		if (XEMU_UNLIKELY(rvs))
+			t = xemu_strcpy_special(t, rvs_msgs[0]);
+		else
+			while (t > buffer && t[-1] == ' ')	// remove trailing spaces
+				t--;
+		t = xemu_strcpy_special(t, NL);	// put a newline
 	}
 	// remove empty lines from the end of our capture
 	while (t > buffer && (t[-1] == '\r' || t[-1] == '\n'))
 		t--;
 	strcpy(t, NL);	// still, a final newline. THIS ALSO CLOSES OUR STRING with '\0'!!!!!
 	// remove empty lines from the beginning of our capture
-	t = buffer;
-	while (*t == '\r' || *t == '\n')
-		t++;
-	return t;
+	while (*buffer == '\r' || *buffer == '\n')
+		buffer++;
+	// return our result!
+	return buffer;
 }
 #undef DUMP_SCR_CODE
