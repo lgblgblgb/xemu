@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "vic3.h"
 #include "xemu/f018_core.h"
 #include "xemu/emutools_config.h"
+#include "xemu/basic_text.h"
 
 
 //#if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_GUI)
@@ -220,6 +221,29 @@ static void ui_load_rom_by_browsing ( void )
 }
 
 
+static void ui_put_screen_text_into_paste_buffer ( void )
+{
+	char text[8192];
+	char *result = xemu_cbm_screen_to_text(
+		text,
+		sizeof text,
+		memory + ((vic3_registers[0x31] & 0x80) ? (vic3_registers[0x18] & 0xE0) << 6 : (vic3_registers[0x18] & 0xF0) << 6),	// pointer to screen RAM, try to audo-tected: FIXME: works only in bank0!
+		(vic3_registers[0x31] & 0x80) ? 80 : 40,		// number of columns, try to auto-detect it
+		25,						// number of rows
+		(vic3_registers[0x18] & 2)			// lowercase font? try to auto-detect by checking selected address chargen addr, LSB
+	);
+	if (result == NULL)
+		return;
+	if (*result) {
+		if (SDL_SetClipboardText(result))
+			ERROR_WINDOW("Cannot insert text into the OS paste buffer: %s", SDL_GetError());
+		else
+			OSD(-1, -1, "Copied to OS paste buffer.");
+	} else
+		INFO_WINDOW("Screen is empty, nothing to capture.");
+}
+
+
 /**** MENU SYSTEM ****/
 
 
@@ -232,6 +256,10 @@ static const struct menu_st menu_display[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
 	{ "Show drive LED",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_show_drive_led, NULL },
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &register_screenshot_request },
+#endif
+	{ "Screen to OS paste buffer",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_screen_text_into_paste_buffer },
 	{ NULL }
 };
 static const struct menu_st menu_debug[] = {
@@ -260,9 +288,6 @@ static const struct menu_st menu_main[] = {
 	{ "ROM",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_rom     },
 	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing    },
-#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
-	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &register_screenshot_request },
-#endif
 #ifdef XEMU_ARCH_WIN
 	{ "System console",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_sysconsole, NULL },
