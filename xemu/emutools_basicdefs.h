@@ -244,6 +244,16 @@ static XEMU_INLINE unsigned char XEMU_BYTE_TO_BCD ( unsigned char b ) {
 	return ((b / 10) << 4) + (b % 10);
 }
 
+// this function is similar to strcpy() however:
+// * it does not copy the final '\0'
+// * it returns with the _updated_ 'target' pointer, not the original!
+static inline void *xemu_strcpy_special ( void *target, const void *source )
+{
+	while (*(char *)source)
+		*(char *)target++ = *(char *)source++;
+	return target;
+}
+
 #define VOIDPTR_TO_INT(x)	((int)(intptr_t)(void*)(x))
 #define VOIDPTR_TO_UINT(x)	((unsigned int)(uintptr_t)(void*)(x))
 
