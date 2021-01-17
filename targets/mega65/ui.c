@@ -322,6 +322,78 @@ static void ui_emu_info ( void )
 }
 
 
+#define DUMP_SCR_CODE()	t += sprintf(t, "{$%02X}", c)
+static void ui_put_screen_text_into_paste_buffer ( void )
+{
+	int columns = (vic_registers[0x31] & 0x80) ? 80 : 40;	// auto detect 40 or 80 column screen mode
+	int lowercase = (vic_registers[0x18] & 2);		// auto-detect lower(+upper)/upper(+gx) font by selected address chargen addr ...
+	Uint8 *v = main_ram + (					// auto-detect start address; FIXME: only works in bank-0 (default!) for now
+			columns == 40 ?
+				(vic_registers[0x18] & 0xF0) << 6
+			:
+				(vic_registers[0x18] & 0xE0) << 6
+	);
+	char text[8192], *t = text;
+	for (int y = 0; y < 25; y++) {
+		for (int x = 0; x < columns; x++) {
+			if (t - text > sizeof(text) - 10) {
+				ERROR_WINDOW("Sorry, ASCII converted screen does not fit into the output buffer");
+				return;
+			}
+			Uint8 c = (*v++) & 127;	// "&127" part: ugly hack, we can't convert inverse attribute ...
+			if (c == 0) {
+				*t++ = '@';
+			} else if (c < 27) {
+				*t++ = c + (lowercase ? 'a' : 'A') - 1;
+			} else if (c == 27) {
+				*t++ = '[';
+			} else if (c == 28) {	// pound
+				DUMP_SCR_CODE();
+			} else if (c == 29) {
+				*t++ = ']';
+			} else if (c == 30) {	// up arrow
+				DUMP_SCR_CODE();
+			} else if (c == 31) {	// left arrow
+				DUMP_SCR_CODE();
+			} else if (c < 64) {	// space, signs, numbers ... identical position :D :D
+				*t++ = c;
+			} else if (c == 64) {	// "bold minus" like entity ...
+				DUMP_SCR_CODE();
+			} else if (c < 91) {	// symbols, or capital letters (the 2nd: if in lower-case charset mode!)
+				if (lowercase)
+					*t++ = c - 65 + 'A';
+				else
+					t += sprintf(t, "{%c}", c - 65 + 'A');
+			} else {
+				DUMP_SCR_CODE();
+			}
+		}
+		while (t > text && t[-1] == ' ')
+			t--;
+		memcpy(t, NL, NL_LENGTH);
+		t += NL_LENGTH;
+	}
+	// remove empty lines from the end of our capture
+	while (t > text && (t[-1] == '\r' || t[-1] == '\n'))
+		t--;
+	strcpy(t, NL);	// still, a final newline. THIS ALSO CLOSES OUR STRING with '\0'!!!!!
+	// remove empty lines from the beginning of our capture
+	t = text;
+	while (*t == '\r' || *t == '\n')
+		t++;
+	if (*t) {
+		if (SDL_SetClipboardText(t))
+			ERROR_WINDOW("Cannot insert text into the OS paste buffer: %s", SDL_GetError());
+		else
+			OSD(-1, -1, "Copied to OS paste buffer.");
+	} else
+		INFO_WINDOW("Screen is empty, nothing to capture.");
+}
+#undef DUMP_SCR_CODE
+
+
+
+
 /**** MENU SYSTEM ****/
 
 
@@ -334,6 +406,10 @@ static const struct menu_st menu_display[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
 	{ "Show drive LED",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_show_drive_led, NULL },
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &register_screenshot_request },
+#endif
+	{ "Screen to OS paste buffer",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_screen_text_into_paste_buffer },
 	{ NULL }
 };
 static const struct menu_st menu_sdcard[] = {
@@ -357,6 +433,7 @@ static const struct menu_st menu_debug[] = {
 	{ "OSD key debugger",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
 	{ "Dump memory info file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_memory },
+	{ "Emulation state info",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_emu_info },
 	{ NULL }
 };
 #ifdef HAVE_XEMU_EXEC_API
@@ -386,14 +463,10 @@ static const struct menu_st menu_main[] = {
 #ifdef BASIC_TEXT_SUPPORT
 	{ "Save BASIC as text",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_save_basic_as_text },
 #endif
-#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
-	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &register_screenshot_request },
-#endif
 #ifdef XEMU_ARCH_WIN
 	{ "System console",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_sysconsole, NULL },
 #endif
-	{ "Emulation state info",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_emu_info },
 #ifdef HAVE_XEMU_EXEC_API
 	{ "Help (online)",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_help },
 #endif
