@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -37,7 +37,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
    keyboard matrix */
 
 /* These values are from matrix_to_ascii.vhdl in mega65-core project */
+/* Some explanation is at the comments of function hwa_kbd_convert_and_push() */
 
+// 64 possibility of C64 keys (ie, the 8*8 matrix) + 8 extra C65 keys = 72
 #define MAT2ASC_TAB_SIZE	72
 
 static const Uint8 matrix_normal_to_ascii[MAT2ASC_TAB_SIZE] ={0x14,0x0D,0x1d,0xf7,0xf1,0xf3,0xf5,0x11,0x33,0x77,0x61,0x34,0x7a,0x73,0x65,0x00,0x35,0x72,0x64,0x36,0x63,0x66,0x74,0x78,0x37,0x79,0x67,0x38,0x62,0x68,0x75,0x76,0x39,0x69,0x6a,0x30,0x6d,0x6b,0x6f,0x6e,0x2b,0x70,0x6c,0x2d,0x2e,0x3a,0x40,0x2c,0x00,0x2a,0x3b,0x13,0x00,0x3d,0x00,0x2f,0x31,0x5f,0x00,0x32,0x20,0x00,0x71,0x03,0x00,0x09,0x00,0x00,0xf9,0xfb,0xfd,0x1b};
@@ -116,24 +118,44 @@ void hwa_kbd_move_next ( void )
 #define CHR_EQU(i) ((i >= 32 && i < 127) ? (char)i : '?')
 
 
-/* basically the opposite as kbd_get_last() but this one used internally only */
+/* basically the opposite as kbd_get_last() but this one used internally only
+ * This is called by emu_callback_key() which is called by emutools_hid.c on key events.
+ * Purpose: convert keypress into MEGA65 hardware accelerated keyboard scanner's ASCII
+ * (which is basically ASCII, though with "invented" codes for the non-printable char keys (like F1 or RUN/STOP).
+ * Notions of variable names:
+ *   - pos: emutools_hid.c related "position" info (of the key), non-linear, see the comments at the fist "if" at its two branches
+ *   - scan: MEGA65 "scan code" (also 'table index' to index within the matrix2ascii tables): 0-63 nornal "c64 keys" (64 possibilities, 8*8 matrix), 64-71 "c65 extra keys" (8 possibilities)
+ *   - ascii: the result ASCII value (with the mentioned "invented" codes included)
+ */
 static void hwa_kbd_convert_and_push ( int pos )
 {
-	// Xemu has a design to have key positions stored in row/col as low/high nible of a byte
-	// normalize this here, to have a linear index
-	int i = ((pos & 0xF0) >> 1) | (pos & 7);
-	if (i < MAT2ASC_TAB_SIZE) {
-		int ascii = matrix_to_ascii_table_selector[hwa_kbd.modifiers & 0x1F][i];
-		if (ascii) {
-			if (!hwa_kbd.next) {
-				DEBUGKBDHWA("KBD: HWA: storing key $%02X '%c' from kbd pos $%02X and table index $%02X at PC=$%04X" NL, ascii, CHR_EQU(ascii), pos, i, cpu65.pc);
-				hwa_kbd.next = ascii;
-			} else
-				DEBUGKBDHWA("KBD: HWA: NOT storing key (already waiting) $%02X '%c' from kbd pos $%02X and table index $%02X at PC=$%04X" NL, ascii, CHR_EQU(ascii), pos, i, cpu65.pc);
+	int scan;
+	if (pos >= (C65_KEYBOARD_EXTRA_POS) && pos < ((C65_KEYBOARD_EXTRA_POS) + 8)) {
+		// Ugly hack: this should fix the problem that Xemu has disjoint space for std C64 and extra C65 keys ...
+		scan = pos - (C65_KEYBOARD_EXTRA_POS) + 64;
+		DEBUGKBDHWA("KBD: HWA: PUSH: doing C65 extra key translation from kbd pos $%02X to table index $%02X ..." NL, pos, scan);
+	} else {
+		// this is the normal case (ie, no special extra C65 key, but among the regular C64 ones):
+		// Xemu has a design to have key positions stored in row/col as low/high nybble of a byte
+		// normalize this here, to have a linear index.
+		// Note, that "extra C65 keys" are kinda handled as a hack, see above.
+		scan = ((pos & 0xF0) >> 1) | (pos & 7);
+		if (scan > 63) {
+			DEBUGKBDHWA("KBD: HWA: PUSH: NOT storing key (outside of translation table) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, pos, scan, cpu65.pc);
+			return;
+		}
+	}
+	// Now, convert scan code to MEGA65 ASCII value, using one of the conversion tables selected by the actual used modifier key(s)
+	// Size of conversion table is 72 (64+8, C64keys+C65keys). This is already checked above, so it must be ok to do so without any further boundary checks
+	int ascii = matrix_to_ascii_table_selector[hwa_kbd.modifiers & 0x1F][scan];
+	if (ascii) {
+		if (!hwa_kbd.next) {
+			DEBUGKBDHWA("KBD: HWA: PUSH: storing key $%02X '%c' from kbd pos $%02X and table index $%02X at PC=$%04X" NL, ascii, CHR_EQU(ascii), pos, scan, cpu65.pc);
+			hwa_kbd.next = ascii;
 		} else
-			DEBUGKBDHWA("KBD: HWA: NOT storing key (zero in translation table) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, pos, i, cpu65.pc);
+			DEBUGKBDHWA("KBD: HWA: PUSH: NOT storing key (already waiting) $%02X '%c' from kbd pos $%02X and table index $%02X at PC=$%04X" NL, ascii, CHR_EQU(ascii), pos, scan, cpu65.pc);
 	} else
-		DEBUGKBDHWA("KBD: HWA: NOT storing key (outside of translation table) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, pos, i, cpu65.pc);
+		DEBUGKBDHWA("KBD: HWA: PUSH: NOT storing key (zero in translation table) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, pos, scan, cpu65.pc);
 }
 
 
