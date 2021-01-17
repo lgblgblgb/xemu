@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is the VIC-IV "emulation". Currently it does one-frame-at-once
    kind of horrible work, and only a subset of VIC2 and VIC3 knowledge
@@ -55,6 +55,7 @@ static int interrupt_status;		// Interrupt status of VIC
 int vic2_16k_bank;			// VIC-2 modes' 16K BANK address within 64K (NOT the traditional naming of banks with 0,1,2,3)
 static Uint8 *sprite_pointers;		// Pointer to sprite pointers :)
 static Uint8 *sprite_bank;
+static Uint8 *vic_bitplane_starting_bank_p = main_ram;
 int vic3_blink_phase;			// blinking attribute helper, state.
 static Uint8 raster_colours[512];
 Uint8 c128_d030_reg;			// C128-like register can be only accessed in VIC-II mode but not in others, quite special!
@@ -104,6 +105,20 @@ static inline void PIXEL_POINTER_FINAL_ASSERT ( Uint32 *p )
 #endif
 
 
+void vic_reset ( void )
+{
+	vic2_16k_bank = 0;
+	vic_iomode = VIC2_IOMODE;
+	interrupt_status = 0;
+	compare_raster = 0;
+	// *** Just a check to try all possible regs (in VIC2,VIC3 and VIC4 modes), it should not panic ...
+	// It may also sets/initializes some internal variables sets by register writes, which would cause a crash on screen rendering without prior setup!
+	for (int i = 0; i < 0x140; i++) {
+		vic_write_reg(i, 0);
+		(void)vic_read_reg(i);
+	}
+}
+
 
 
 void vic_init ( void )
@@ -114,19 +129,9 @@ void vic_init ( void )
 	// Init VIC4 palette
 	vic4_init_palette();
 	force_fast = 0;
-	// *** Init VIC3 registers and palette
-	vic2_16k_bank = 0;
-	vic_iomode = VIC2_IOMODE;
-	interrupt_status = 0;
-	// FIXME: add ROM palette by default? What is ROM palette on MEGA65?
+	// *** Init VIC4 registers
 	scanline = 0;
-	compare_raster = 0;
-	// *** Just a check to try all possible regs (in VIC2,VIC3 and VIC4 modes), it should not panic ...
-	// It may also sets/initializes some internal variables sets by register writes, which would cause a crash on screen rendering without prior setup!
-	for (int i = 0; i < 0x140; i++) {	// $140=the last $40 register for VIC-2 mode, when we have fewer ones
-		vic_write_reg(i, 0);
-		(void)vic_read_reg(i);
-	}
+	vic_reset();
 	c128_d030_reg = 0xFE;	// this may be set to 2MHz in the previous step, so be sure to set to FF here, BUT FIX: bit 0 should be inverted!!
 	machine_set_speed(0);
 	//vic_registers[0x30] = 4;	// ROM palette?
@@ -305,7 +310,16 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x5D): CASE_VIC_4(0x5E): CASE_VIC_4(0x5F): /*CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):*/ CASE_VIC_4(0x64):
 		CASE_VIC_4(0x65): CASE_VIC_4(0x66): CASE_VIC_4(0x67): /*CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):*/ CASE_VIC_4(0x6B): /*CASE_VIC_4(0x6C):
 		CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):*/ CASE_VIC_4(0x6F): /*CASE_VIC_4(0x70):*/ CASE_VIC_4(0x71): CASE_VIC_4(0x72): CASE_VIC_4(0x73): CASE_VIC_4(0x74):
-		CASE_VIC_4(0x75): CASE_VIC_4(0x76): CASE_VIC_4(0x77): CASE_VIC_4(0x78): CASE_VIC_4(0x79): CASE_VIC_4(0x7A): CASE_VIC_4(0x7B): CASE_VIC_4(0x7C):
+		CASE_VIC_4(0x75): CASE_VIC_4(0x76): CASE_VIC_4(0x77): CASE_VIC_4(0x78): CASE_VIC_4(0x79): CASE_VIC_4(0x7A): CASE_VIC_4(0x7B):
+			break;
+		CASE_VIC_4(0x7C):
+			if ((data & 7) <= 2) {
+				// The lower 3 bits of $7C set's the number of "128K slice" of the main RAM to be used with bitplanes
+				vic_bitplane_starting_bank_p = main_ram + ((data & 7) << 17);
+				DEBUG("VIC4: bitmap bank offset is $%X" NL, (unsigned int)(vic_bitplane_starting_bank_p - main_ram));
+			} else
+				WARNING_WINDOW("VIC-IV bitplane selection 128K-bank tried to set over 2.\nRefused to do so.");
+			break;
 		CASE_VIC_4(0x7D): CASE_VIC_4(0x7E): CASE_VIC_4(0x7F):
 			break;
 		CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):
@@ -688,14 +702,14 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
 	int bitpos = 128, charline = 0, offset = 0;
 	int xlim, x = 0, y = 0, h640 = (vic_registers[0x31] & 128);
 	Uint8 bpe, *bp[8];
-	bp[0] = main_ram + ((vic_registers[0x33] & (h640 ? 12 : 14)) << 12);
-	bp[1] = main_ram + ((vic_registers[0x34] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[2] = main_ram + ((vic_registers[0x35] & (h640 ? 12 : 14)) << 12);
-	bp[3] = main_ram + ((vic_registers[0x36] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[4] = main_ram + ((vic_registers[0x37] & (h640 ? 12 : 14)) << 12);
-	bp[5] = main_ram + ((vic_registers[0x38] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[6] = main_ram + ((vic_registers[0x39] & (h640 ? 12 : 14)) << 12);
-	bp[7] = main_ram + ((vic_registers[0x3A] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[0] = vic_bitplane_starting_bank_p + ((vic_registers[0x33] & (h640 ? 12 : 14)) << 12);
+	bp[1] = vic_bitplane_starting_bank_p + ((vic_registers[0x34] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[2] = vic_bitplane_starting_bank_p + ((vic_registers[0x35] & (h640 ? 12 : 14)) << 12);
+	bp[3] = vic_bitplane_starting_bank_p + ((vic_registers[0x36] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[4] = vic_bitplane_starting_bank_p + ((vic_registers[0x37] & (h640 ? 12 : 14)) << 12);
+	bp[5] = vic_bitplane_starting_bank_p + ((vic_registers[0x38] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[6] = vic_bitplane_starting_bank_p + ((vic_registers[0x39] & (h640 ? 12 : 14)) << 12);
+	bp[7] = vic_bitplane_starting_bank_p + ((vic_registers[0x3A] & (h640 ? 12 : 14)) << 12) + 0x10000;
 	bpe = vic_registers[0x32];	// bit planes enabled mask
 	if (h640) {
 		bpe &= 15;		// it seems, with H640, only 4 bitplanes can be used (on lower 4 ones)
