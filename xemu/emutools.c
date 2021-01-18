@@ -39,8 +39,24 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifdef XEMU_MISSING_BIGGEST_ALIGNMENT_WORKAROUND
 #	warning "System did not define __BIGGEST_ALIGNMENT__ Xemu assumes some default value."
 #endif
+#ifdef XEMU_OVERSIZED_BIGGEST_ALIGNMENT_WORKAROUND
+#	warning "System deifned __BIGGEST_ALIGNMENT__ just too big Xemu will use a smaller default."
+#endif
+#ifdef XEMU_CPU_ARM
+#	warning "Compiling for ARM CPU. Some features of Xemu won't be avaialble because of usual limits of OSes (MacOS, Linux) on the ARM architecture."
+#	ifdef XEMU_ARCH_OSX
+#		warning "WOW! Are you on Apple M1?! Call me now!"
+#	endif
+#endif
 
 #include "xemu/osd_font_16x16.c"
+
+#ifdef XEMU_ARCH_WIN
+#include <windows.h>
+#include <stdio.h>
+#include <io.h>
+#include <fcntl.h>
+#endif
 
 #ifndef XEMU_NO_SDL_DIALOG_OVERRIDE
 int (*SDL_ShowSimpleMessageBox_custom)(Uint32, const char*, const char*, SDL_Window* ) = SDL_ShowSimpleMessageBox;
@@ -218,6 +234,19 @@ void *xemu_realloc ( void *p, size_t size )
 }
 
 
+void *_xemu_malloc_ALIGNED_emulated ( size_t size )
+{
+	void *p = xemu_malloc(size + __BIGGEST_ALIGNMENT__);
+	unsigned int reminder = (unsigned int)((uintptr_t)p % (uintptr_t)__BIGGEST_ALIGNMENT__);
+	DEBUG("ALIGNED-ALLOC: using malloc(): base_pointer=%p size=%d need_alignment_of=%d reminder=%d" NL, p, (int)size, __BIGGEST_ALIGNMENT__, reminder);
+	if (reminder) {
+		void *p_old = p;
+		p += __BIGGEST_ALIGNMENT__ - reminder;
+		DEBUGPRINT("ALIGNED-ALLOC: malloc() alignment-workaround: correcting alignment %p -> %p (reminder: %u, need_alignment_of: %u)" NL, p_old, p, reminder, __BIGGEST_ALIGNMENT__);
+	} else
+		DEBUG("ALIGNED-ALLOC: malloc() alignment-workaround: alignment was OK already" NL);
+	return p;
+}
 #ifdef HAVE_MM_MALLOC
 #ifdef XEMU_ARCH_WIN
 extern void *_mm_malloc ( size_t size, size_t alignment );	// it seems mingw/win has issue not to define this properly ... FIXME? Ugly windows, always the problems ...
@@ -225,11 +254,12 @@ extern void *_mm_malloc ( size_t size, size_t alignment );	// it seems mingw/win
 void *xemu_malloc_ALIGNED ( size_t size )
 {
 	// it seems _mm_malloc() is quite standard at least on gcc, mingw, clang ... so let's try to use it
+	// unfortunately even the C11 standard (!) for this does not seem to work on Windows neither on Mac :(
 	void *p = _mm_malloc(size, __BIGGEST_ALIGNMENT__);
-	DEBUG("ALIGNED-ALLOC: base_pointer=%p size=%d alignment=%d" NL, p, (int)size, __BIGGEST_ALIGNMENT__);
+	DEBUG("ALIGNED-ALLOC: using _mm_malloc(): base_pointer=%p size=%d alignment=%d" NL, p, (int)size, __BIGGEST_ALIGNMENT__);
 	if (p == NULL) {
-		WARNING_WINDOW("_mm_malloc() failed, errno=%d\nDefaulting to malloc()", errno);
-		return xemu_malloc(size);
+		DEBUGPRINT("ALIGNED-ALLOC: _mm_malloc() failed, errno=%d[%s] ... defaulting to malloc()" NL, errno, strerror(errno));
+		return _xemu_malloc_ALIGNED_emulated(size);
 	}
 	return p;
 }
@@ -544,6 +574,30 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 #endif
 	// ignore SIGHUP, eg closing the terminal Xemu was started from ...
 	signal(SIGHUP, SIG_IGN);	// ignore SIGHUP, eg closing the terminal Xemu was started from ...
+#endif
+#if 0
+	// This core is currently commented out, since I guess it would casue problems for many users
+	// Unfortunately Windows is not secure by nature (or better say, by user habits, that most
+	// user uses their system as administrator all the time ... when it would be desired to use
+	// administrator user only, if adminstration task is needed much like the habit in UNIX-like
+	// systems)
+#if defined(XEMU_ARCH_WIN) && !defined(XEMU_DO_NOT_DISALLOW_ROOT)
+	BOOL fRet = FALSE;
+	HANDLE hToken = NULL;
+	if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+		TOKEN_ELEVATION Elevation;
+		DWORD cbSize = sizeof(TOKEN_ELEVATION);
+		if (GetTokenInformation(hToken, TokenElevation, &Elevation, sizeof(Elevation), &cbSize)) {
+			fRet = Elevation.TokenIsElevated;
+		}
+	}
+	if (hToken) {
+		CloseHandle(hToken);
+	}
+	if (fRet) {
+		WARNING_WINDOW("Do not run Xemu with administrator rights!\nXemu is not OS security audited and can access network, filesystem, etc.\nIt can be easily used to exploit your system.\nAs always, never run anything as adminstrator, unless you really need to\nadministrate your OS, as the name suggest!");
+	}
+#endif
 #endif
 #ifdef XEMU_ARCH_HTML
 	if (chatty_xemu)
@@ -984,13 +1038,16 @@ int osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_entries, 
 		sdl_osdtex = NULL;
 		return 1;
 	}
-	osd_pixels = malloc(xsize * ysize * 4);
+	osd_pixels = xemu_malloc_ALIGNED(xsize * ysize * 4);
+#if 0
+	// FIXME: this is useless as xemu_malloc_ALIGNED() will fail if cannot allocate memory ...
 	if (!osd_pixels) {
 		ERROR_WINDOW("Not enough memory to allocate texture, OSD won't be available");
 		SDL_DestroyTexture(sdl_osdtex);
 		sdl_osdtex = NULL;
 		return 1;
 	}
+#endif
 	osd_xsize = xsize;
 	osd_ysize = ysize;
 	osd_fade_dec = fade_dec;
@@ -1192,16 +1249,6 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 }
 
 
-#ifdef XEMU_ARCH_WIN
-
-/* for windows console madness */
-
-#include <windows.h>
-#include <stdio.h>
-#include <io.h>
-#include <fcntl.h>
-
-#endif
 
 /* Note, Windows has some braindead idea about console, ie even the standard stdout/stderr/stdin does not work with
    a GUI application. We have to dance a bit, to fool Windows to do what is SHOULD according the standard to be used
