@@ -174,6 +174,25 @@ void vic3_check_raster_interrupt ( void )
 }
 
 
+// FIXME: preliminary DAT support. For real, these should be mostly calculated at writing
+// DAT X/Y registers, bitplane selection registers etc (also true for the actual renderer!),
+// would give much better emulator performace. Though for now, that's a naive preliminary
+// way to support DAT at all!
+static XEMU_INLINE Uint8 *get_dat_addr ( unsigned int bpn )
+{
+	unsigned int x = vic_registers[0x3C];
+	unsigned int y = vic_registers[0x3D] + ((x << 1) & 0x100);
+	unsigned int h640 = (vic_registers[0x31] & 128);
+	x &= 0x7F;
+	//DEBUGPRINT("VIC-IV: DAT: accessing DAT for bitplane #%u at X,Y of %u,%u in H%u mode" NL, bpn, x, y, h640 ? 640 : 320);
+	return
+		vic_bitplane_starting_bank_p +					// MEGA65 feature (WANNABE feature!) to support relocatable bitplane bank by the DAT! (this also a pointer, not an integer!)
+		((vic_registers[0x33 + bpn] & (h640 ? 12 : 14)) << 12) +	// bitplane address
+		((bpn & 1) ? 0x10000 : 0) +					// odd/even bitplane selection
+		(((y >> 3) * (h640 ? 640 : 320)) + (x << 3) + (y & 7))		// position within the bitplane given by the X/Y info
+	;
+}
+
 /* DESIGN of vic_read_reg() and vic_write_reg() functions:
    addr = 00-7F, VIC-IV registers 00-7F (ALWAYS, regardless of current I/O mode!)
    addr = 80-FF, VIC-III registers 00-7F (ALWAYS, regardless of current I/O mode!) [though for VIC-III, many registers are ignored after the last one]
@@ -295,8 +314,11 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			return;				// since we DID the write, it's OK to return here and not using "break"
 		CASE_VIC_3_4(0x32): CASE_VIC_3_4(0x33): CASE_VIC_3_4(0x34): CASE_VIC_3_4(0x35): CASE_VIC_3_4(0x36): CASE_VIC_3_4(0x37): CASE_VIC_3_4(0x38):
 		CASE_VIC_3_4(0x39): CASE_VIC_3_4(0x3A): CASE_VIC_3_4(0x3B): CASE_VIC_3_4(0x3C): CASE_VIC_3_4(0x3D): CASE_VIC_3_4(0x3E): CASE_VIC_3_4(0x3F):
+			break;
+		// DAT read/write bitplanes port
 		CASE_VIC_3_4(0x40): CASE_VIC_3_4(0x41): CASE_VIC_3_4(0x42): CASE_VIC_3_4(0x43): CASE_VIC_3_4(0x44): CASE_VIC_3_4(0x45): CASE_VIC_3_4(0x46):
 		CASE_VIC_3_4(0x47):
+			*get_dat_addr(addr & 7) = data;	// write pixels via the DAT!
 			break;
 		/* --- NO MORE VIC-III REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B): CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
@@ -436,8 +458,11 @@ Uint8 vic_read_reg ( int unsigned addr )
 			break;
 		CASE_VIC_3_4(0x32): CASE_VIC_3_4(0x33): CASE_VIC_3_4(0x34): CASE_VIC_3_4(0x35): CASE_VIC_3_4(0x36): CASE_VIC_3_4(0x37): CASE_VIC_3_4(0x38):
 		CASE_VIC_3_4(0x39): CASE_VIC_3_4(0x3A): CASE_VIC_3_4(0x3B): CASE_VIC_3_4(0x3C): CASE_VIC_3_4(0x3D): CASE_VIC_3_4(0x3E): CASE_VIC_3_4(0x3F):
+			break;
+		// DAT read/write bitplanes port
 		CASE_VIC_3_4(0x40): CASE_VIC_3_4(0x41): CASE_VIC_3_4(0x42): CASE_VIC_3_4(0x43): CASE_VIC_3_4(0x44): CASE_VIC_3_4(0x45): CASE_VIC_3_4(0x46):
 		CASE_VIC_3_4(0x47):
+			result = *get_dat_addr(addr & 7);	// read pixels via the DAT!
 			break;
 		/* --- NO MORE VIC-III REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B): CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
