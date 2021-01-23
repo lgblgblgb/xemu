@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -70,6 +70,7 @@ void xemucfg_define_option ( const char *optname, enum xemutools_option_type typ
 
 		}
 	}
+	entry->dereferenced = 0;
 	entry->name = xemu_strdup(optname);
 	entry->type = type;
 	switch (type) {
@@ -92,20 +93,44 @@ void xemucfg_define_option ( const char *optname, enum xemutools_option_type typ
 void xemucfg_define_bool_option   ( const char *optname, int defval, const char *help ) {
 	xemucfg_define_option(optname, OPT_BOOL, (void*)(intptr_t)(defval ? 1 : 0), help);
 }
+void xemucfg_define_bool_option_multi ( const struct xemutools_configdef_bool_st p[] ) {
+	for (int i = 0; p[i].optname; i++)
+		xemucfg_define_bool_option(p[i].optname, p[i].defval, p[i].help);
+}
 void xemucfg_define_str_option    ( const char *optname, const char *defval, const char *help ) {
 	xemucfg_define_option(optname, OPT_STR, (void*)defval, help);
+}
+void xemucfg_define_str_option_multi ( const struct xemutools_configdef_str_st p[] ) {
+	for (int i = 0; p[i].optname; i++)
+		xemucfg_define_str_option(p[i].optname, p[i].defval, p[i].help);
 }
 void xemucfg_define_num_option    ( const char *optname, int defval, const char *help ) {
 	xemucfg_define_option(optname, OPT_NUM, (void*)(intptr_t)defval, help);
 }
+void xemucfg_define_num_option_multi ( const struct xemutools_configdef_num_st p[] ) {
+	for (int i = 0; p[i].optname; i++)
+		xemucfg_define_num_option(p[i].optname, p[i].defval, p[i].help);
+}
 void xemucfg_define_float_option  ( const char *optname, double defval, const char *help ) {
 	xemucfg_define_option(optname, OPT_FLOAT, &defval, help);
+}
+void xemucfg_define_float_option_multi ( const struct xemutools_configdef_float_st p[] ) {
+	for (int i = 0; p[i].optname; i++)
+		xemucfg_define_float_option(p[i].optname, p[i].defval, p[i].help);
 }
 void xemucfg_define_proc_option   ( const char *optname, xemucfg_parser_callback_func_t cb, const char *help ) {
 	xemucfg_define_option(optname, OPT_PROC, (void*)cb, help);
 }
+void xemucfg_define_proc_option_multi ( const struct xemutools_configdef_proc_st p[] ) {
+	for (int i = 0; p[i].optname; i++)
+		xemucfg_define_proc_option(p[i].optname, p[i].cb, p[i].help);
+}
 void xemucfg_define_switch_option ( const char *optname, const char *help ) {
 	xemucfg_define_option(optname, OPT_NO, (void*)(intptr_t)0, help);
+}
+void xemucfg_define_switch_option_multi ( const struct xemutools_configdef_switch_st p[] ) {
+	for (int i = 0; p[i].optname; i++)
+		xemucfg_define_switch_option(p[i].optname, p[i].help);
 }
 
 
@@ -132,12 +157,12 @@ static void dump_help ( void )
 	while (p) {
 		const char *t = "";
 		switch (p->type) {
-			case OPT_NO: t = "NO ARG"; break;
-			case OPT_BOOL: t = "bool"; break;
-			case OPT_NUM: t = "int-num"; break;
-			case OPT_FLOAT: t = "float-num"; break;
-			case OPT_STR: t = "str"; break;
-			case OPT_PROC: t = "spec"; break;
+			case OPT_NO:	t = "NO ARG";	break;
+			case OPT_BOOL:	t = "bool";	break;
+			case OPT_NUM:	t = "int-num";	break;
+			case OPT_FLOAT:	t = "float-num";break;
+			case OPT_STR:	t = "str";	break;
+			case OPT_PROC:	t = "spec";	break;
 		}
 		printf("-%-16s  (%s) %s" NL, p->name, t, p->help ? p->help : "(no help is available)");
 		p = p->next;
@@ -483,7 +508,10 @@ int xemucfg_parse_all ( int argc, char **argv )
 		DEBUGPRINT("CFG: Default config file %s cannot be used" NL, cfgfn);
 	else
 		DEBUGPRINT("CFG: Default config file %s has been used" NL, cfgfn);
-	return xemucfg_parse_commandline(argc, argv, NULL);
+	int ret = xemucfg_parse_commandline(argc, argv, NULL);
+	if (!ret)
+		atexit(xemucfg_print_not_dereferenced_items);
+	return ret;
 }
 
 
@@ -492,13 +520,44 @@ int xemucfg_has_option ( const char *name )
 	return (search_option(name) != NULL);
 }
 
+
+static int get_not_dereferenced_items ( int to_print )
+{
+	struct xemutools_config_st *p = config_head;
+	int cnt = 0;
+	if (to_print)
+		DEBUGPRINT("CFG: not dereferenced config items:");
+	while (p) {
+		if (!p->dereferenced) {
+			cnt++;
+			if (to_print)
+				DEBUGPRINT(" %s", p->name);
+		}/* else
+			DEBUGPRINT("Nice, %s has been dereferenced %d times" NL, p->name, p->dereferenced);*/
+		p = p->next;
+	}
+	if (to_print)
+		DEBUGPRINT(" (%d items)" NL, cnt);
+	return cnt;
+}
+
+
+void xemucfg_print_not_dereferenced_items ( void )
+{
+	if (get_not_dereferenced_items(0))
+		get_not_dereferenced_items(1);
+}
+
+
 static struct xemutools_config_st *search_option_query ( const char *name, enum xemutools_option_type type )
 {
 	struct xemutools_config_st *p = search_option(name);
 	if (!p)
 		FATAL("Internal ConfigDB error: not defined option '%s' is queried inside Xemu!", name);
-	if (p->type == type || (p->type == OPT_NO && type == OPT_BOOL))
+	if (p->type == type || (p->type == OPT_NO && type == OPT_BOOL)) {
+		p->dereferenced++;
 		return p;
+	}
 	FATAL("Internal ConfigDB error: queried option '%s' with different type as defined inside Xemu!", name);
 }
 
