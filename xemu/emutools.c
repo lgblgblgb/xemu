@@ -715,6 +715,7 @@ int xemu_post_init (
 	int locked_texture_update,		// use locked texture method [non zero], or malloc'ed stuff [zero]. NOTE: locked access doesn't allow to _READ_ pixels and you must fill ALL pixels!
 	void (*shutdown_callback)(void)		// callback function called on exit (can be nULL to not have any emulator specific stuff)
 ) {
+	srand(time(NULL));
 #	include "build/xemu-48x48.xpm"
 	SDL_RendererInfo ren_info;
 	int a;
