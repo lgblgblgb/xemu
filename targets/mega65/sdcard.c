@@ -334,7 +334,7 @@ retry:
 		DEBUG("SDCARD: cannot open image %s" NL, fn);
 		if (r == ENOENT && !strcmp(fn, SDCARD_NAME)) {
 			r = QUESTION_WINDOW(
-				"No, thank you, I give up :(|Yes, create it for me :)"
+				"No|Yes"
 				,
 				"Default SDCARD image does not exist. Would you like me to create one for you?\n"
 				"Note: it will be a 4Gbytes long file, since this is the minimal size for an SDHC card,\n"
@@ -347,6 +347,15 @@ retry:
 				if (r) {
 					ERROR_WINDOW("Couldn't create: %s", strerror(r));
 				} else {
+					INFO_WINDOW(
+						"Great! Further preparation process:\n"
+						"Please make sure, you have the C65 ROM on your computer.\n"
+						"Right click into the emulator window will display the emulator menu.\n"
+						"Use SD-card->format option, then SD-card->update.\n"
+						"The second step will ask you for the C65 ROM.\n"
+						"Note, you're not forced to use the in-emulator-screen\n"
+						"formatter, this method is probably more simple."
+					);
 					goto retry;
 				}
 			}
