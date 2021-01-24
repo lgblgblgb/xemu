@@ -18,7 +18,7 @@ fi
 
 if [ "$TRAVIS_BRANCH" = "" ]; then
 	if [ "$GITHUB_REF" = "" ]; then
-		branch=`git branch | awk 'BEGIN { s = "UNKNOWN" } $1 = "*" { s = $2 } END { print s }'`
+		branch=`git branch | awk 'BEGIN { s = "UNKNOWN" } $1 == "*" { s = $2 } END { print s }'`
 	else
 		branch="`echo $GITHUB_REF | awk -F/ '{ print $NF }'`"
 	fi
