@@ -225,6 +225,24 @@ static void kbd_trigger_alttab_trap ( void )
 }
 
 
+/* BEGIN HACK */
+// Super ugly way to implement key repeats with the hardware accelerated ASCII based keyboard scanner.
+// Since rest of Xemu, the kbd-matrix emulation want to actually DISABLE any repeated key events to
+// come ... For this trick, xemu-target.h must contain: #define CONFIG_KBD_ALSO_RAW_SDL_CALLBACK
+// TODO: this whole mess of the HID must be resolved some day in a much nicer way. Not only this
+// problem but in general (like decoding 'hotkeys' of emulator here in this file and things
+// like that ...)
+static SDL_Scancode last_scancode_seen = SDL_SCANCODE_UNKNOWN;
+static int last_poscode_seen = 0;
+
+void emu_callback_key_raw_sdl ( SDL_KeyboardEvent *ev )
+{
+	if (ev->repeat && ev->state == SDL_PRESSED && ev->keysym.scancode == last_scancode_seen) {
+		hwa_kbd_convert_and_push(last_poscode_seen);
+	}
+}
+/* END HACK */
+
 // Called by emutools_hid!!! to handle special private keys assigned to this emulator
 int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
@@ -255,8 +273,12 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 		if (pos == RESTORE_KEY_POS)
 			restore_is_held = 1;
 	        // Check to be sure, some special Xemu internal stuffs uses kbd matrix positions does not exist for real
-		if (pos >= 0 && pos < 0x100)
+		if (pos >= 0 && pos < 0x100) {
 			hwa_kbd_convert_and_push(pos);
+			// See the "HACK" above about key repeating ...
+			last_scancode_seen = key;
+			last_poscode_seen = pos;
+		}
 		// Also check for special, emulator-related hot-keys
 		if (key == SDL_SCANCODE_F10) {
 			reset_mega65_asked();
