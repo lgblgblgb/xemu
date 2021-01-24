@@ -724,7 +724,6 @@ static void emulation_loop ( void )
 
 int main ( int argc, char **argv )
 {
-	srand(time(NULL));	// TODO: maybe move this into the core framework (also rand() usages, not just this init part ...)
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Incomplete MEGA65 emulator from LGB");
 	xemucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
 	xemucfg_define_switch_option("driveled", "Render drive LED at the top right corner of the screen");

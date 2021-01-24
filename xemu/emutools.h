@@ -157,8 +157,13 @@ extern void *xemu_realloc ( void *p, size_t size );
 #ifdef HAVE_MM_MALLOC
 extern void *xemu_malloc_ALIGNED ( size_t size );
 #else
-#define xemu_malloc_ALIGNED xemu_malloc
+extern void *_xemu_malloc_ALIGNED_emulated ( size_t size );
+#define xemu_malloc_ALIGNED _xemu_malloc_ALIGNED_emulated
 #endif
+
+extern const char EMPTY_STR[];
+extern const int ZERO_INT;
+extern const int ONE_INT;
 
 extern char *xemu_strdup ( const char *s );
 extern void xemu_set_full_screen ( int setting );
