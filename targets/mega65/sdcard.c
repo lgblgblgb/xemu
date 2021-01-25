@@ -293,6 +293,7 @@ Uint32 sdcard_get_size ( void )
 
 int sdcard_init ( const char *fn, const char *extd81fn, int virtsd_flag )
 {
+	int just_created_image_file =  0;	// will signal to format image automatically for the user (if set, by default it's clear, here)
 	char fnbuf[PATH_MAX + 1];
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	if (virtsd_flag) {
@@ -345,17 +346,9 @@ retry:
 			if (r) {
 				r = xemu_create_sparse_file(fnbuf, 4294967296UL);
 				if (r) {
-					ERROR_WINDOW("Couldn't create: %s", strerror(r));
+					ERROR_WINDOW("Couldn't create SD-card image file (hint: do you have enough space?)\nError message was: %s", strerror(r));
 				} else {
-					INFO_WINDOW(
-						"Great! Further preparation process:\n"
-						"Please make sure, you have the C65 ROM on your computer.\n"
-						"Right click into the emulator window will display the emulator menu.\n"
-						"Use SD-card->format option, then SD-card->update.\n"
-						"The second step will ask you for the C65 ROM.\n"
-						"Note, you're not forced to use the in-emulator-screen\n"
-						"formatter, this method is probably more simple."
-					);
+					just_created_image_file = 1;	// signal the rest of the code, that we have a brand new image file, which can be safely auto-formatted even w/o asking the user
 					goto retry;
 				}
 			}
@@ -405,9 +398,15 @@ retry:
 	if (sdfd >= 0) {
 		DEBUGPRINT("SDCARD: card init done, size=%u Mbytes, virtsd_flag=%d" NL, sdcard_size_in_blocks >> 11, virtsd_flag);
 		//sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_ASK_FDISK | SDCONTENT_ASK_FILES);
+		if (just_created_image_file) {
+			just_created_image_file = 0;
+			// Just created SD-card image file by Xemu itself! So it's nice if we format it for the user at this point!
+			if (!sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_FORCE_FDISK))
+				INFO_WINDOW("Your just created SD-card image file has\nbeen auto-fdisk/format'ed by Xemu. Great :).");
+		}
 	}
-	if (!virtsd_flag) {
-		static const char msg[] = " on the SD-card image.\nPlease use UI menu: SD-card -> Update files";
+	if (!virtsd_flag && sdfd >= 0) {
+		static const char msg[] = " on the SD-card image.\nPlease use UI menu: SD-card -> Update files ...\nUI can be accessed with right mouse click into the emulator window.";
 		int r = sdcontent_check_xemu_signature();
 		if (r < 0) {
 			ERROR_WINDOW("Warning! Cannot read SD-card to get Xemu signature!");
