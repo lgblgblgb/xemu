@@ -139,8 +139,19 @@ Please use Xemu's UI context menu to re-request this page!
 
 "use strict";
 
-// (C)2020 Gabor Lenart LGB
+// (C)2020-2021 Gabor Lenart LGB
 // Part of the Xemu project.
+
+
+function pulsing ( em_name )
+{
+	let em = document.getElementById(em_name);
+	let val = 0;
+	function doit () {
+	}
+	if (em != null)
+		doit();
+}
 
 function setSpan ( name, value )
 {

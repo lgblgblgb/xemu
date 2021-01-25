@@ -157,6 +157,7 @@ function decorator (head, response, userver)
 		}
 	}
 }
+const LINK_HEAD_CHECK_FOR = "https://github.com/lgblgblgb/xemu-binaries/raw/";
 function main ( enabler )
 {
 	if (enabler.mainAlreadyDone) {
@@ -165,7 +166,6 @@ function main ( enabler )
 	}
 	enabler.mainAlreadyDone = true;
 	const LINK_HEAD_VER_INFO = "https://raw.githubusercontent.com/lgblgblgb/xemu-binaries/";
-	const LINK_HEAD_CHECK_FOR = "https://github.com/lgblgblgb/xemu-binaries/raw/";
 	const now =  Date.now() / 1000;
 	let registered = [];
 	for (const a of document.getElementsByTagName("a")) {
@@ -200,6 +200,23 @@ function main ( enabler )
 }
 function boot ( element_id )
 {
+	for (let a of document.getElementsByTagName("a")) {
+		if (a.href.startsWith(LINK_HEAD_CHECK_FOR)) {
+			let warnings = [];
+			if (a.href.endsWith(".deb"))
+				warnings.push("deb");
+			if (a.href.endsWith(".rpm"))
+				warnings.push("rpm");
+			if (a.href.includes("-osx-"))
+				warnings.push("macos");
+			if (a.href.includes("win32"))
+				warnings.push("win32");
+			if ((a.href.includes("win32") || a.href.includes("win64")) && a.href.includes("/install"))
+				warnings.push("nsis");
+			if (warnings.length)
+				a.setAttribute("onclick", "return downloadWarnings(['" + warnings.join("','") + "'])");
+		}
+	}
 	let e = document.getElementById(element_id);
 	if (!e) {
 		return;
@@ -222,6 +239,59 @@ function boot ( element_id )
 	if (param) {
 		main(e);
 	}
+}
+function myConfirm ( msg )
+{
+	return window.confirm(msg);
+}
+function downloadWarnings ( w )
+{
+	console.log("downloadWarnings called with ", w);
+	/* if (w.includes("deb") && !myConfirm(
+	))
+		return false;*/
+	if (w.includes("rpm") && !myConfirm(
+		"This is probably a usless RPM package! It's made with directly converting\n" +
+		"DEB package into RPM. Thus probably, this RPM won't work on any of the real\n" +
+		"RPM based Linux distributions because of dependency issues.\n\n" +
+		"Click OK to continue download, or CANCEL to forget it"
+	))
+		return false;
+	if (w.includes("macos") && !myConfirm(
+		"This is an x86 (ie: intel) MacOS build. Currently there is not even a plan\n" +
+		"to have official builds for Apple M1 (this is a free, hobby project ...). Though\n" +
+		"you can run x86 binaries even on M1 based Macs with Rosetta. Alternatively,\n" +
+		"you can try to build the project on M1 by yourself (for advanced users only!)\n\n" +
+		"Click OK to continue the download with the x86 (intel) binary, or CANCEL not to do it."
+	))
+		return false;
+	if (w.includes("win32") && !myConfirm(
+		"This is the 32 bit version of the build, intended for 32 bit Windows!!\n\n" +
+		"If you are really sure you have only (quite unlikely!) 32 bit version\n" +
+		"and not the 64 bit of Windows OS, click OK to proceed.\n" +
+		"Otherwise click CANCEL and select the 64 bit version instead (recommended!)."
+	))
+		return false;
+	if (w.includes("nsis")) {
+		if (myConfirm(
+			"Windows installer uses NSIS (Nullsoft Scriptable Install System).\n"+
+			"There's a known problem with some antivirus software, that NSIS installers\n" +
+			"can be detected as virus or trojan. This is almost certainly a mis-dectection.\n" +
+			"Since the author of this software would not like users to worry, there is\n" +
+			"a two question confirmation here signaling the honesty about this issue.\n\n" +
+			"First question: if you would like to get more information on this virus/trojan\n" +
+			"mis-detection topic, please click OK (will open a new tab/window with further\n" +
+			"information), otherwise click CANCEL to skip this information step."
+		))
+			window.open("https://nsis.sourceforge.io/NSIS_False_Positives");
+		return myConfirm(
+			"Second question: knowing all of these, do you want to proceed to the\n" +
+			"actual download (click OK). Otherwise click CANCEL (you can still use the\n" +
+			"ZIP version, by the way). Oh, and thanks for your patience :)"
+		);
+
+	}
+	return true;
 }
 </script>
 </html>
