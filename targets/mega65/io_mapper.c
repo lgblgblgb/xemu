@@ -1,7 +1,7 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    I/O decoding part (used by memory_mapper.h and DMA mainly)
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -51,7 +51,6 @@ static const char *xemu_query_interface_p = NULL;
 static int         xemu_query_gate = 0;
 
 
-
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
 	do { DEBUG("IO: NOT IMPLEMENTED read (emulator lacks feature), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
 	return fb; } while (0)
@@ -59,35 +58,46 @@ static int         xemu_query_gate = 0;
 	do { DEBUG("IO: NOT IMPLEMENTED write (emulator lacks feature), %s $%04X with data $%02X" NL, func, addr, data); \
 	return; } while(0)
 
-// Address of the "big" multiplier within the $D7XX area (byte only)
-#define BIGMULT_ADDR	0x70
-
-
 
 static void update_hw_multiplier ( void )
 {
-	D7XX[BIGMULT_ADDR + 3] &= 0x01;
-	D7XX[BIGMULT_ADDR + 6] &= 0x03;
-	D7XX[BIGMULT_ADDR + 7] =  0x00;
-	register Uint64 result = (Uint64)(
-		((Uint32) D7XX[BIGMULT_ADDR + 0]      ) |
-		((Uint32) D7XX[BIGMULT_ADDR + 1] <<  8) |
-		((Uint32) D7XX[BIGMULT_ADDR + 2] << 16) |
-		((Uint32) D7XX[BIGMULT_ADDR + 3] << 24)
-	) * (Uint64)(
-		((Uint32) D7XX[BIGMULT_ADDR + 4]      ) |
-		((Uint32) D7XX[BIGMULT_ADDR + 5] <<  8) |
-		((Uint32) D7XX[BIGMULT_ADDR + 6] << 16) |
-		((Uint32) D7XX[BIGMULT_ADDR + 7] << 24)
+	Uint32 input_a = (Uint64)(
+		((Uint32) D7XX[0x70]      ) |
+		((Uint32) D7XX[0x71] <<  8) |
+		((Uint32) D7XX[0x72] << 16) |
+		((Uint32) D7XX[0x73] << 24)
 	);
-	D7XX[BIGMULT_ADDR + 0x8] = (result      ) & 0xFF;
-	D7XX[BIGMULT_ADDR + 0x9] = (result >>  8) & 0xFF;
-	D7XX[BIGMULT_ADDR + 0xA] = (result >> 16) & 0xFF;
-	D7XX[BIGMULT_ADDR + 0xB] = (result >> 24) & 0xFF;
-	D7XX[BIGMULT_ADDR + 0xC] = (result >> 32) & 0xFF;
-	D7XX[BIGMULT_ADDR + 0xD] = (result >> 40) & 0xFF;
-	D7XX[BIGMULT_ADDR + 0xE] = 0;
-	D7XX[BIGMULT_ADDR + 0xF] = 0;
+	Uint32 input_b = (Uint64)(
+		((Uint32) D7XX[0x74]      ) |
+		((Uint32) D7XX[0x75] <<  8) |
+		((Uint32) D7XX[0x76] << 16) |
+		((Uint32) D7XX[0x77] << 24)
+	);
+	if (XEMU_LIKELY(input_b)) {
+		// We really don't want to divide by zero.
+		// It seems the policy on MEGA65 is not change the result
+		// registers AT ALL, if you try to divide by zero.
+		// So we only check if input_b != 0 and do the thing here then!
+		Uint32 div_quotient = input_a / input_b;
+		Uint32 div_reminder = input_a % input_b;
+		D7XX[0x68] = (div_reminder      ) & 0xFF;
+		D7XX[0x69] = (div_reminder >>  8) & 0xFF;
+		D7XX[0x6A] = (div_reminder >> 16) & 0xFF;
+		D7XX[0x6B] = (div_reminder >> 24) & 0xFF;
+		D7XX[0x6C] = (div_quotient      ) & 0xFF;
+		D7XX[0x6D] = (div_quotient >>  8) & 0xFF;
+		D7XX[0x6E] = (div_quotient >> 16) & 0xFF;
+		D7XX[0x6F] = (div_quotient >> 24) & 0xFF;
+	}
+	Uint64 mult_result = (Uint64)input_a * (Uint64)input_b;
+	D7XX[0x78] = (mult_result      ) & 0xFF;
+	D7XX[0x79] = (mult_result >>  8) & 0xFF;
+	D7XX[0x7A] = (mult_result >> 16) & 0xFF;
+	D7XX[0x7B] = (mult_result >> 24) & 0xFF;
+	D7XX[0x7C] = (mult_result >> 32) & 0xFF;
+	D7XX[0x7D] = (mult_result >> 40) & 0xFF;
+	D7XX[0x7E] = (mult_result >> 48) & 0xFF;
+	D7XX[0x7F] = (mult_result >> 56) & 0xFF;
 	bigmult_valid_result = 1;
 }
 
@@ -232,6 +242,7 @@ Uint8 io_read ( unsigned int addr )
 			addr &= 0xFF;
 			if (addr < 16)
 				return dma_read_reg(addr & 0xF);
+			// ;) FIXME this is LAZY not to decode if we need to update bigmult at all ;-P
 			if (XEMU_UNLIKELY(!bigmult_valid_result))
 				update_hw_multiplier();
 			return D7XX[addr];
@@ -471,7 +482,8 @@ void io_write ( unsigned int addr, Uint8 data )
 			addr &= 0xFF;
 			if (addr < 16)
 				dma_write_reg(addr & 0xF, data);
-			else if (XEMU_UNLIKELY((addr & 0xF0) == BIGMULT_ADDR))
+			//else if (XEMU_UNLIKELY((addr & 0xF0) == BIGMULT_ADDR))
+			else if (addr >= 0x68 && addr <= 0x7F)
 				bigmult_valid_result = 0;
 			D7XX[addr] = data;
 			return;
