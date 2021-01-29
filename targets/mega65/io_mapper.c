@@ -203,6 +203,8 @@ Uint8 io_read ( unsigned int addr )
 					return hwa_kbd_get_last();
 				case 0x11:				// modifier keys on kbd being used
 					return hwa_kbd_get_modifiers();
+				case 0x13:				// $D613: direct access to the kbd matrix, read selected row (set by writing $D614), bit 0 = key pressed
+					return kbd_directscan_query(D6XX_registers[0x14]);	// for further explanations please see this function in input_devices.c
 				case 0x29:
 					return mega65_model;		// MEGA65 model
 				case 0x32: // D632-D635: FPGA firmware ID
