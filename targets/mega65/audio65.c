@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -27,10 +27,17 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 SDL_AudioDeviceID audio = 0;	// SDL audio device
+
+int stereo_separation = AUDIO_DEFAULT_SEPARATION;
+int audio_volume      = AUDIO_DEFAULT_VOLUME;
+
+static int stereo_separation_orig = 100;
+static int stereo_separation_other = 0;
 struct SidEmulation sid1, sid2;	// the two SIDs
 static int mixing_freq;		// playback sample rate (in Hz) of the emulator itself
 static double dma_audio_mixing_value;
 static opl3_chip opl3;
+
 
 
 void audio65_opl3_write ( Uint8 reg, Uint8 data )
@@ -119,6 +126,36 @@ static inline void render_dma_audio ( int channel, short *buffer, int len )
 }
 
 
+void audio_set_stereo_parameters ( int vol, int sep )
+{
+	if (sep == AUDIO_UNCHANGED_SEPARATION) {
+		sep = stereo_separation;
+	} else {
+		if (sep > 100)
+			sep = 100;
+		else if (sep < -100)
+			sep = -100;
+		stereo_separation = sep;
+	}
+	if (vol == AUDIO_UNCHANGED_VOLUME) {
+		vol = audio_volume;
+	} else {
+		if (vol > 100)
+			vol = 100;
+		else if (vol < 0)
+			vol = 0;
+		audio_volume = vol;
+	}
+	//sep = ((sep + 100) * 0x100) / 200;
+	sep = (sep + 100) / 2;
+	//sep = (sep + 100) * 0x100 / 200;
+	stereo_separation_orig  = (sep * vol) / 100;
+	stereo_separation_other = ((100 - sep) * vol) / 100;
+	DEBUGPRINT("AUDIO: volume is set to %d%%, stereo separation is %d%% [component-A is %d, component-B is %d]" NL, audio_volume, stereo_separation, stereo_separation_orig, stereo_separation_other);
+}
+
+
+
 static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 {
 #if 1
@@ -133,8 +170,17 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 	// Now mix channels
 	for (int i = 0; i < len; i++) {
 		// mixing streams together
-		int left  = streams[0][i] + streams[1][i] + streams[4][i] + streams[6][i];
-		int right = streams[2][i] + streams[3][i] + streams[5][i] + streams[6][i];
+		int orig_left  = (int)streams[0][i] + (int)streams[1][i] + (int)streams[4][i] + (int)streams[6][i];
+		int orig_right = (int)streams[2][i] + (int)streams[3][i] + (int)streams[5][i] + (int)streams[6][i];
+#if 1
+		// channel stereo separation (including inversion) + volume handling
+		int left  = ((orig_left  * stereo_separation_orig) / 100) + ((orig_right * stereo_separation_other) / 100);
+		int right = ((orig_right * stereo_separation_orig) / 100) + ((orig_left  * stereo_separation_other) / 100);
+#else
+		int left = orig_left;
+		int right = orig_right;
+#endif
+		//DEBUGPRINT("left=%d right=%d ", left, right);
 		// do some ugly clipping ...
 		if      (left  >  0x7FFF) left  =  0x7FFF;
 		else if (left  < -0x8000) left  = -0x8000;
@@ -155,7 +201,7 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 #endif
 
 
-void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq )
+void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int separation )
 {
 	// We always initialize SIDs, even if no audio emulation is compiled in
 	// Since there can be problem to write SID registers otherwise?
@@ -186,6 +232,7 @@ void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		DEBUGPRINT("AUDIO: initialized (#%d), %d Hz, %d channels, %d buffer sample size." NL, audio, audio_got.freq, audio_got.channels, audio_got.samples);
 	} else
 		ERROR_WINDOW("Cannot open audio device!");
+	audio_set_stereo_parameters(volume, separation);
 #else
 	DEBUGPRINT("AUDIO: has been disabled at compilation time." NL);
 #endif

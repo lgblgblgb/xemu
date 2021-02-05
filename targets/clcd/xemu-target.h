@@ -10,3 +10,4 @@
 #endif
 
 #define CONFIG_EMSCRIPTEN_OK
+#define XEMU_CONFIGDB_SUPPORT

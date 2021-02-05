@@ -1,5 +1,6 @@
 /* Test-case for a very simple Primo (a Hungarian U880 - Z80
    compatible clone CPU - based 8 bit computer) emulator.
+
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
@@ -57,8 +58,6 @@ static void (*renderer)(void);
 static int primo_model_set;
 static const char *primo_model_set_str;
 
-static const char *pri_name;
-
 static int cpu_clocks_per_scanline;
 static int cpu_clocks_per_audio_sample;
 static int cpu_clock;
@@ -98,6 +97,16 @@ static int beeper;
 static Uint64 beeper_last_changed;
 static SDL_AudioDeviceID audio;
 static int audio_enabled = 1;
+
+static struct {
+	int	sdlrenderquality, fullscreen, syscon,disasm;
+	double	clock_mhz;
+	char	*model_name;
+	char	*rom_fn;
+	char	*pri_name;
+	char	*exprom_fn;
+	char	*gui_selection;
+} configdb;
 
 
 
@@ -603,7 +612,7 @@ static void emulation_loop ( void )
 			if (emu_loop_notification & EMU_LOOP_LOAD_NOTIFY) {	// Notification for checking PC to trigger PRI loading!
 				if (Z80_PC == ROM_Z80_PC_LOAD_TRIGGER) {
 					emu_loop_notification &= ~EMU_LOOP_LOAD_NOTIFY;	// clear notification, it's done
-					int ret = pri_load(pri_name, 1);
+					int ret = pri_load(configdb.pri_name, 1);
 					if (ret > 0) {
 						DEBUGPRINT("PRI: loaded, Z80 PC change $%04X -> $%04X" NL, Z80_PC, ret);
 						Z80_PC = ret;
@@ -664,18 +673,17 @@ static void emulation_loop ( void )
 
 void emu_dropfile_callback ( const char *fn )
 {
-	static char fn_storage[PATH_MAX];
 	static int choice = 0;
-	if (strlen(fn) >= sizeof fn_storage)
-		return;
 	if (choice != 1)
 		choice = QUESTION_WINDOW("Load as PRI now|Load as PRI always|Cancel for now", "What should I do with the dropped file?");
 	if (choice > 1)
 		return;
 	emu_loop_notification |= EMU_LOOP_LOAD_NOTIFY;
 	emu_loop_notification &= ~EMU_LOOP_NMI_NOTIFY;
-	strcpy(fn_storage, fn);
-	pri_name = fn_storage;
+	//static char fn_storage[PATH_MAX];
+	//strcpy(fn_storage, fn);
+	//pri_name = fn_storage;
+	xemucfg_set_str(&configdb.pri_name, fn);
 	primo_screen = 0;
 	nmi_status = 0;
 	vblank = VBLANK_OFF;
@@ -710,9 +718,9 @@ static int set_model ( const char *model_id, int do_load_rom )
 	sprintf(model_desc, "Primo-%c%s", toupper(primo_model_names[id][0]), primo_model_names[id] + 1);
 	DEBUGPRINT("PRIMO: trying to initialize to model: %s" NL, model_desc);
 	if (do_load_rom) {
-		if (xemucfg_get_str("rom")) {
+		if (configdb.rom_fn) {
 			DEBUGPRINT("ROM: trying to load forced (by config) ROM, regardless of the selected model" NL);
-			if (xemu_load_file(xemucfg_get_str("rom"), memory.main, 0x4000, 0x4000, "This is the selected primo ROM. Without it, Xemu won't work.\nInstall it, or use -rom CLI switch to specify another path.") < 0)
+			if (xemu_load_file(configdb.rom_fn, memory.main, 0x4000, 0x4000, "This is the selected primo ROM. Without it, Xemu won't work.\nInstall it, or use -rom CLI switch to specify another path.") < 0)
 				return -1;
 		} else {
 			char rom_file[64];
@@ -801,7 +809,8 @@ static void ui_load_pri ( void )
 		if (pri_load(fnbuf, 0) > 0) {
 			primo_reset();
 			emu_loop_notification |= EMU_LOOP_LOAD_NOTIFY;
-			pri_name = fnbuf;
+			//pri_name = fnbuf;
+			xemucfg_set_str(&configdb.pri_name, fnbuf);
 		}
 	}
 }
@@ -907,25 +916,28 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 
 
 
+
+
 int main ( int argc, char **argv )
 {
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unknown Primo emulator from LGB");
-	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	xemucfg_define_float_option("clock", (double)DEFAULT_CPU_CLOCK / 1000000.0, "Selects CPU frequency (1.00-16.00 in MHz)");
-	xemucfg_define_str_option("rom", NULL, "Select ROM to use");
-	xemucfg_define_str_option("exprom", NULL, "ROM expansion file selector (max 32K size)");
-	xemucfg_define_str_option("pri", NULL, "Loads a PRI file");
-	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	xemucfg_define_switch_option("disasm", "Disassemble every CPU step (uber-spammy, uber-slow!)");
-	xemucfg_define_str_option("model", "b64", "Set Primo model: a32, a48, a64, b32, b48, b64, c");
-	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
-	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
-#ifdef SDL_HINT_RENDER_SCALE_QUALITY
-	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)");
-#endif
+	XEMUCFG_DEFINE_STR_OPTIONS(
+		{ "rom", NULL, "Select ROM to use", &configdb.rom_fn },
+		{ "exprom", NULL, "ROM expansion file selector (max 32K size)", &configdb.exprom_fn },
+		{ "pri", NULL, "Loads a PRI file", &configdb.pri_name },
+		{ "model", "b64", "Set Primo model: a32, a48, a64, b32, b48, b64, c", &configdb.model_name },
+		{ "gui", NULL, "Select GUI type for usage. Specify some insane str to get a list", &configdb.gui_selection }
+	);
+	XEMUCFG_DEFINE_SWITCH_OPTIONS(
+		{ "fullscreen", "Start in fullscreen mode", &configdb.fullscreen },
+		{ "syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon },
+		{ "disasm", "Disassemble every CPU step (uber-spammy, uber-slow!)", &configdb.disasm },
+		{ "besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override }
+	);
+	xemucfg_define_float_option("clock", (double)DEFAULT_CPU_CLOCK / 1000000.0, "Selects CPU frequency (1.00-16.00 in MHz)", &configdb.clock_mhz, 1.0, 16.0);
+	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2);
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
-	i_am_sure_override = xemucfg_get_bool("besure");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
@@ -937,11 +949,7 @@ int main ( int argc, char **argv )
 		0,			// Prepare for colour primo, we have many colours, we want to generate at our own, later
 		NULL,			// -- "" --
 		NULL,			// -- "" --
-#ifdef SDL_HINT_RENDER_SCALE_QUALITY
-		xemucfg_get_ranged_num("sdlrenderquality", 0, 2),	// render scaling quality
-#else
-		RENDER_SCALE_QUALITY,	// render scaling quality
-#endif
+		configdb.sdlrenderquality,// render scaling quality
 		USE_LOCKED_TEXTURE,	// 1 = locked texture access
 		NULL			// no emulator specific shutdown function
 	))
@@ -955,7 +963,7 @@ int main ( int argc, char **argv )
 		SDL_ENABLE		// enable joystick HID events
 	);
 	osd_init_with_defaults();
-	xemugui_init(xemucfg_get_str("gui"));
+	xemugui_init(configdb.gui_selection);
 	SDL_AudioSpec audio_want, audio_have;
 	SDL_memset(&audio_want, 0, sizeof audio_want);
 	audio_want.freq = AUDIO_SAMPLING_FREQ;
@@ -983,12 +991,12 @@ int main ( int argc, char **argv )
 	//	SCREEN_WIDTH, SCREEN_HEIGHT,
 	//	border_top, border_bottom, border_left, border_right
 	//);
-	if (set_model(xemucfg_get_str("model"), 1))
+	if (set_model(configdb.model_name, 1))
 		FATAL("Bad Primo model specified and/or ROM not found (more details: the previous message)");
 	//if (xemu_load_file(xemucfg_get_str("rom"), memory.main, 0x4000, 0x4000, "This is the selected primo ROM. Without it, Xemu won't work.\nInstall it, or use -rom CLI switch to specify another path.") < 0)
 	//	return 1;
-	if (xemucfg_get_str("exprom"))
-		xemu_load_file(xemucfg_get_str("exprom"), memory.exprom, 1, sizeof memory.exprom, "Invalid selected expansion ROM");
+	if (configdb.exprom_fn)
+		xemu_load_file(configdb.exprom_fn, memory.exprom, 1, sizeof memory.exprom, "Invalid selected expansion ROM");
 	// Continue with initializing ...
 	clear_emu_events();	// also resets the keyboard
 	z80ex_init();
@@ -998,18 +1006,17 @@ int main ( int argc, char **argv )
 	joy.clock = 0;
 	joy.last_clocked = 0;
 	//set_cpu_hz(DEFAULT_CPU_CLOCK);
-	set_cpu_hz((int)(xemucfg_get_ranged_float("clock", 1.0, 16.0) * 1000000.0));
+	set_cpu_hz((int)(configdb.clock_mhz * 1000000.0));
 	//set_cpu_hz((int)(xemucfg_get_float("clock") * 1000000.0));
-	pri_name = xemucfg_get_str("pri");
 	scanline = 0;
-	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
-	if (!xemucfg_get_bool("syscon"))
+	xemu_set_full_screen(configdb.fullscreen);
+	if (!configdb.syscon)
 		sysconsole_close(NULL);
 	emu_loop_notification = 0;
 	all_cycles_spent = 0;
-	if (pri_name)
+	if (configdb.pri_name)
 		emu_loop_notification |= EMU_LOOP_LOAD_NOTIFY;
-	if (xemucfg_get_bool("disasm"))
+	if (configdb.disasm)
 		emu_loop_notification |= EMU_LOOP_DISASM_NOTIFY;
 	SDL_PauseAudioDevice(audio, 0);
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation

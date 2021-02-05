@@ -1,4 +1,7 @@
-/* This is an odd emulator, emulating a Commodore 64 like machine only for the
+/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+
+   This is an odd emulator, emulating a Commodore 64 like machine only for the
    level needed for a special version of GEOS to be able to run on it.
    You should have a really special one with own disk drive etc, since there
    is no hardware support for drive emulation etc, but it's built in the emulator
@@ -12,8 +15,6 @@
    screen anymore, but the GEOS functions mean to be targeted a "modern UI toolkit",
    ie GTK, so a dozens years old (unmodified) GEOS app would be able to run on a PC
    with modern look and feel, ie anti-aliased fonts, whatever ...
-   ---------------------------------------------------------------------------------
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    ---------------------------------------------------------------------------------
 
 This program is free software; you can redistribute it and/or modify

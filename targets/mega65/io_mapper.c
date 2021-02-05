@@ -1,7 +1,7 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    I/O decoding part (used by memory_mapper.h and DMA mainly)
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -31,6 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "ethernet65.h"
 #include "input_devices.h"
 #include "audio65.h"
+#include "configdb.h"
 
 
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
@@ -41,7 +42,6 @@ static int mouse_x = 0, mouse_y = 0;	// for our primitive C1351 mouse emulation
 int    cpu_mega65_opcodes = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;
 int port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65
-int mega65_model = 0xFF;		// $FF = Xemu/others, 1/2/3 = MEGA65 PCB rev 1/2/3, $40=nexys4, $41=nexys4ddr, $42=nexys4ddr-widget, $FD=wukong, $FE=simulation
 
 
 static const Uint8 fpga_firmware_version[] = { 'X','e','m','u' };
@@ -194,7 +194,7 @@ Uint8 io_read ( unsigned int addr )
 				case 0x11:				// modifier keys on kbd being used
 					return hwa_kbd_get_modifiers();
 				case 0x29:
-					return mega65_model;		// MEGA65 model
+					return configdb.mega65_model;		// MEGA65 model
 				case 0x32: // D632-D635: FPGA firmware ID
 				case 0x33:
 				case 0x34:

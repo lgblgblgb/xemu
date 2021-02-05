@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -489,9 +489,6 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 		case SDL_KEYUP:
 		case SDL_KEYDOWN:
 			if (
-#ifndef CONFIG_KBD_ALSO_REPEATS
-				event->key.repeat == 0 &&
-#endif
 				event->key.keysym.scancode != SDL_SCANCODE_UNKNOWN
 #ifdef CONFIG_KBD_SELECT_FOCUS
 				&& (event->key.windowID == sdl_winid || event->key.windowID == 0)
@@ -504,9 +501,14 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 #endif
 			) {
 #ifdef CONFIG_KBD_ALSO_RAW_SDL_CALLBACK
+				// Note: if this one is requested, it is fired even on key repeats, while the normal
+				// HID callback may NOT!
 				emu_callback_key_raw_sdl(&event->key);
 #endif
-				hid_key_event(event->key.keysym.scancode, event->key.state == SDL_PRESSED);
+#ifndef CONFIG_KBD_ALSO_REPEATS
+				if (event->key.repeat == 0)
+#endif
+					hid_key_event(event->key.keysym.scancode, event->key.state == SDL_PRESSED);
 			}
 			break;
 		case SDL_JOYDEVICEADDED:

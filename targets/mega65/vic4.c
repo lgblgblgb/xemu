@@ -34,6 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "vic4_palette.h"
 #include "memory_mapper.h"
 #include "xemu/f011_core.h"
+#include "configdb.h"
 
 //#define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
 
@@ -59,7 +60,6 @@ static Uint8 *vic_bitplane_starting_bank_p = main_ram;
 int vic3_blink_phase;			// blinking attribute helper, state.
 static Uint8 raster_colours[512];
 Uint8 c128_d030_reg;			// C128-like register can be only accessed in VIC-II mode but not in others, quite special!
-int show_drive_led;
 static Uint32 black_colour, red_colour;	// needed for drive LED
 
 int vic_vidp_legacy = 1, vic_chrp_legacy = 1, vic_sprp_legacy = 1;
@@ -980,7 +980,7 @@ void vic_render_screen ( void )
 		}
 	}
 #endif
-	if (show_drive_led && fdc_get_led_state(16))
+	if (configdb.show_drive_led && fdc_get_led_state(16))
 		for (int y = 0; y < 8; y++)
 			for (int x = 0; x < 8; x++)
 				*(p_sdl + (SCREEN_WIDTH) - 10 + x + (y + 2) * (SCREEN_WIDTH)) = x > 1 && x < 7 && y > 1 && y < 7 ? red_colour : black_colour;

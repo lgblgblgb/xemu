@@ -26,8 +26,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "inject.h"
 #include "vic3.h"
 #include "xemu/f018_core.h"
-#include "xemu/emutools_config.h"
 #include "xemu/basic_text.h"
+#include "configdb.h"
 
 
 //#if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_GUI)
@@ -190,7 +190,7 @@ static void load_and_use_rom ( const char *fn )
 {
 	if (c65_reset_asked()) {
 		KBD_RELEASE_KEY(0x75);
-		c65_load_rom(fn, xemucfg_get_num("dmarev"));
+		c65_load_rom(fn, configdb.dmarev);
 	} else
 		ERROR_WINDOW("Reset has been disallowed, thus you've rejected to load and use the selected ROM");
 }
@@ -200,7 +200,7 @@ static void ui_load_rom_default ( void )
 }
 static void ui_load_rom_specified ( void )
 {
-	load_and_use_rom(xemucfg_get_str("rom"));
+	load_and_use_rom(configdb.rom);
 }
 
 

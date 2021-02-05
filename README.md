@@ -31,6 +31,52 @@ the wiki section of the project, here**:
 
 https://github.com/lgblgblgb/xemu/wiki
 
+## Emulators within the Xemu project
+
+### List of emulators which can be useful:
+
+* **MEGA65**: Emulation of the modern reincarnation of the Commodore 65 with
+  many-many enhancements and new features: https://mega65.org/
+* **Commodore 65**: Emulation of Commodore's final, never finished 8 bit machine,
+  quite rare, and expensive to buy.
+* **Commodore LCD**: Emulation of Commodore's portable LCD based computer, never
+  released, about 4-5 units estimated to exist (much more rare than the
+  Commodore 65, and not possible to get one). I've created the first working
+  emulation of this machine ever. This emulator within Xemu is a refactored
+  version of that emulator of mine.
+* **Enterprise 128**: Emulation of a not so well known but neat, versatile, Z80
+  based computer with very unique features among 8 bit systems, both in
+  hardware and software solutions.
+* **Videoton TV Computer** ("TVC"): Emulation of a Hungarian computer.
+* **Primo**: Emulation of a simple but neat Hungarian computer.
+
+### Not so much useful, unfinished and/or obsoleted but in theory can be compiled and started:
+
+* **Commander X16**: The 8-bit guy's "dream" computer, 65C02 based, not compatible
+  with existing micros. This emulator is old, buggy, missing features, and
+  cannot use modern ROMs for the X16 any more. Please note, this emulator is
+  **nothing** to do with the official X16 emulator, it's just my fun project to
+  emulate X16 by my own, from its documentation only.
+* **Commodore VIC20**: Somewhat barebone emulation of the VIC20, no sound, no
+  storage medium emulation (tape or disk) ...
+* **Commodore GEOS**: This was an unfinished experiment of mine. The intent was
+  creating a very rudimentary C64 emulation just enough to run GEOS, and
+  trying to experiment with custom modifications on GEOS this way, or even
+  creating a free GEOS re-implementation later.
+
+### Absolutely not working, not useable or even cannot be compiled:
+
+* **Commodore 900**: Commodore's never released Z8000 based Coherent UNIX based
+  machine. Currently it does nothing, work-in-progress (on the longer term!).
+* **ZX Spectrum + clones**: Currently unusable, my intent was to emulate the
+  original Speccy to learn about it more in this way, and add some "advanced
+  clones" kind of features later, like ULAplus, and who knows what else.
+* **RC2014**: Z80 based generic "SBC" emulation under the name of RC2014 but will
+  include emulation of several simple projects, just I found the name "RC2014"
+  cool enough to use this name for this emulator.
+* **reCPM**: Another dead project from me (at least in this form): the goal is to
+  create a free CP/M compatible OS with the needed hardware (Z80) emulated as well.
+
 ## Quickest start (Xemu running in your web browser!)
 
 Just visit this page:
@@ -189,7 +235,7 @@ For building binary (exe) for Windows, you still need a UNIX-like environment
 (in theory WSL - Windows Subsystem for Linux - should be enough)  for the
 compilation, with cross-compiler and SDL2 MinGW cross platform suite installed.
 
-#### MSYS2 native build
+#### MSYS2 native build on Windows for Windows
 
 Note: this is probably the easier method for a Windows user, however this is
 _not the method we use to build official_ binaries for Windows.
@@ -228,7 +274,7 @@ You can find the executables, with `.native` extension, in the `build/bin`
 directory. Surely, you can (and maybe you want) rename files to have extension
 `.exe` instead.
 
-#### Alternative method (Cross-compilation)
+#### Alternative methodi, cross-compilation on Linux for Windows
 
 Note: this is the _official method we use to build official binaries for Windows_.
 

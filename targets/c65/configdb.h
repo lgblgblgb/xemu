@@ -1,4 +1,4 @@
-/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+/* Test-case for simple, work-in-progress Commodore 65 emulator.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
@@ -16,9 +16,19 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef XEMU_EP128_UI_H_INCLUDED
-#define XEMU_EP128_UI_H_INCLUDED
+#ifndef XEMU_C65_CONFIGDB_H_INCLUDED
+#define XEMU_C65_CONFIGDB_H_INCLUDED
 
-extern void ui_enter ( void );
+struct configdb_st {          
+        char    *disk8, *disk9;
+        char    *hostfsdir, *rom, *keymap, *gui, *dumpmem;
+        char    *snapload, *snapsave, *prg;
+        int     d81ro, fullscreen, go64, autoload, syscon;
+        int     sdlrenderquality, dmarev, prgmode;
+};
+
+extern struct configdb_st configdb;
+
+extern void configdb_define_emulator_options ( void );
 
 #endif

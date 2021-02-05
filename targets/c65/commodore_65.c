@@ -1,4 +1,5 @@
 /* Test-case for simple, work-in-progress Commodore 65 emulator.
+
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
@@ -34,7 +35,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_gui.h"
 #include "ui.h"
 #include "inject.h"
-
+#include "configdb.h"
 
 
 static SDL_AudioDeviceID audio = 0;
@@ -251,15 +252,14 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
-static const char *c65_snapshot_saver_filename = NULL;
 static void c65_snapshot_saver_on_exit_callback ( void )
 {
-	if (!c65_snapshot_saver_filename)
+	if (!configdb.snapsave)
 		return;
-	if (xemusnap_save(c65_snapshot_saver_filename))
-		ERROR_WINDOW("Could not save snapshot \"%s\": %s", c65_snapshot_saver_filename, xemusnap_error_buffer);
+	if (xemusnap_save(configdb.snapsave))
+		ERROR_WINDOW("Could not save snapshot \"%s\": %s", configdb.snapsave, xemusnap_error_buffer);
 	else
-		INFO_WINDOW("Snapshot has been saved to \"%s\".", c65_snapshot_saver_filename);
+		INFO_WINDOW("Snapshot has been saved to \"%s\".", configdb.snapsave);
 }
 #endif
 
@@ -298,7 +298,7 @@ int c65_load_rom ( const char *fn, unsigned int dma_rev )
 
 static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 {
-	const char *p;
+	//const char *p;
 	SDL_AudioSpec audio_want, audio_got;
 	hid_init(
 		c64_key_map,
@@ -306,14 +306,13 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		SDL_ENABLE		// joy HID events enabled
 	);
 #ifdef HID_KBD_MAP_CFG_SUPPORT
-	hid_keymap_from_config_file(xemucfg_get_str("keymap"));
+	hid_keymap_from_config_file(configdb.keymap);
 #endif
 	joystick_emu = 1;
 	nmi_level = 0;
 	// *** host-FS
-	p = xemucfg_get_str("hostfsdir");
-	if (p)
-		hostfs_init(p, NULL);
+	if (configdb.hostfsdir)
+		hostfs_init(configdb.hostfsdir, NULL);
 	else
 		hostfs_init(sdl_pref_dir, "hostfs");
 	// *** Init memory space
@@ -344,9 +343,9 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	// *** Initialize DMA
-	dma_init(xemucfg_get_num("dmarev"));
+	dma_init(configdb.dmarev);
 	// *** Load ROM image
-	if (c65_load_rom(xemucfg_get_str("rom"), xemucfg_get_num("dmarev")))	// ... but this overrides the DMA revision!
+	if (c65_load_rom(configdb.rom, configdb.dmarev))	// ... but this overrides the DMA revision!
 		XEMUEXIT(1);
 	// Initialize FDC
 	fdc_init(disk_cache);
@@ -354,8 +353,8 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	d81access_init();
 	report_d81access_cb_chgmode = 1;
 	atexit(d81access_close_all);
-	d81access_attach_fsobj(0, xemucfg_get_str("8"), D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (xemucfg_get_bool("d81ro") ? D81ACCESS_RO : 0));
-	d81access_attach_fsobj(1, xemucfg_get_str("9"), D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (xemucfg_get_bool("d81ro") ? D81ACCESS_RO : 0));
+	d81access_attach_fsobj(0, configdb.disk8, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (configdb.d81ro ? D81ACCESS_RO : 0));
+	d81access_attach_fsobj(1, configdb.disk9, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (configdb.d81ro ? D81ACCESS_RO : 0));
 	// SIDs, plus SDL audio
 	sid_init(&sids[0], sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sids[1], sid_cycles_per_sec, sound_mix_freq);
@@ -386,12 +385,10 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// *** Snapshot init and loading etc should be the LAST!!!! (at least the load must be last to have initiated machine state, xemusnap_init() can be called earlier too)
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemusnap_init(c65_snapshot_definition);
-	p = xemucfg_get_str("snapload");
-	if (p) {
-		if (xemusnap_load(p))
-			FATAL("Couldn't load snapshot \"%s\": %s", p, xemusnap_error_buffer);
+	if (configdb.snapload) {
+		if (xemusnap_load(configdb.snapload))
+			FATAL("Couldn't load snapshot \"%s\": %s", configdb.snapload, xemusnap_error_buffer);
 	}
-	c65_snapshot_saver_filename = xemucfg_get_str("snapsave");
 	atexit(c65_snapshot_saver_on_exit_callback);
 #endif
 }
@@ -758,7 +755,7 @@ static void shutdown_callback ( void )
 	cia_dump_state (&cia1);
 	cia_dump_state (&cia2);
 #if !defined(XEMU_ARCH_HTML)
-	(void)dump_memory(xemucfg_get_str("dumpmem"));
+	(void)dump_memory(configdb.dumpmem);
 #endif
 	DEBUGPRINT("Scanline render info = \"%s\"" NL, scanline_render_debug_info);
 	DEBUGPRINT("VIC3: D011=$%02X D018=$%02X D030=$%02X D031=$%02X" NL,
@@ -914,39 +911,9 @@ int main ( int argc, char **argv )
 {
 	//int cycles;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unusable Commodore 65 emulator from LGB");
-	xemucfg_define_str_option("8", NULL, "Path of the D81 disk image to be attached as drive#0");
-	xemucfg_define_str_option("9", NULL, "Path of the D81 disk image to be attached as drive#1");
-	xemucfg_define_switch_option("allowmousegrab", "Allow auto mouse grab with left-click");
-	xemucfg_define_switch_option("d81ro", "Force read-only status for image specified with -8 option");
-	xemucfg_define_switch_option("driveled", "Render drive LED at the top right corner of the screen");
-	xemucfg_define_num_option("dmarev", 2, "Revision of the DMAgic chip (0/1=F018A/B, 2=rom_auto, +512=modulo))");
-	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	xemucfg_define_str_option("hostfsdir", NULL, "Path of the directory to be used as Host-FS base");
-	//xemucfg_define_switch_option("noaudio", "Disable audio");
-	xemucfg_define_str_option("rom", DEFAULT_ROM_FILE, "Override system ROM path to be loaded");
-	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
-	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
-	xemucfg_define_str_option("dumpmem", NULL, "Save memory content on exit");
-#ifdef FAKE_TYPING_SUPPORT
-	xemucfg_define_switch_option("go64", "Go into C64 mode after start");
-	xemucfg_define_switch_option("autoload", "Load and start the first program from disk");
-#endif
-	xemucfg_define_str_option("prg", NULL, "Load a PRG file directly into the memory (/w C64/65 auto-detection on load address)");
-	xemucfg_define_num_option("prgmode", 0, "Override auto-detect option for -prg (64 or 65 for C64/C65 modes, 0 = default, auto detect)");
-#ifdef XEMU_SNAPSHOT_SUPPORT
-	xemucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
-	xemucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
-#endif
-	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
-#ifdef SDL_HINT_RENDER_SCALE_QUALITY
-	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)");
-#endif
+	configdb_define_emulator_options();
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
-	show_drive_led = xemucfg_get_bool("driveled");
-	i_am_sure_override = xemucfg_get_bool("besure");
-	allow_mouse_grab = xemucfg_get_bool("allowmousegrab");
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	window_title_info_addon = emulator_speed_title;
         if (xemu_post_init(
@@ -959,11 +926,7 @@ int main ( int argc, char **argv )
 		0,				// we have *NO* pre-defined colours as with more simple machines (too many we need). we want to do this ourselves!
 		NULL,				// -- "" --
 		NULL,				// -- "" --
-#ifdef SDL_HINT_RENDER_SCALE_QUALITY
-		xemucfg_get_ranged_num("sdlrenderquality", 0, 2),	// render scaling quality
-#else
-		RENDER_SCALE_QUALITY,		// render scaling quality
-#endif
+		configdb.sdlrenderquality,	// render scaling quality
 		USE_LOCKED_TEXTURE,		// 1 = locked texture access
 		shutdown_callback		// registered shutdown function
 	))
@@ -974,23 +937,23 @@ int main ( int argc, char **argv )
 		AUDIO_SAMPLE_FREQ		// sound mix freq
 	);
 	osd_init_with_defaults();
-	xemugui_init(xemucfg_get_str("gui"));
-	if (xemucfg_get_str("prg"))
-		inject_register_prg(xemucfg_get_str("prg"), xemucfg_get_num("prgmode"));
+	xemugui_init(configdb.gui);
+	if (configdb.prg)
+		inject_register_prg(configdb.prg, configdb.prgmode);
 #ifdef FAKE_TYPING_SUPPORT
-	if (xemucfg_get_bool("go64")) {
-		if (xemucfg_get_bool("autoload"))
+	if (configdb.go64) {
+		if (configdb.autoload)
 			c64_register_fake_typing(fake_typing_for_load64);
 		else
 			c64_register_fake_typing(fake_typing_for_go64);
-	} else if (xemucfg_get_bool("autoload"))
+	} else if (configdb.autoload)
 		c64_register_fake_typing(fake_typing_for_load65);
 #endif
 	cycles = 0;
 	if (audio)
 		SDL_PauseAudioDevice(audio, 0);
-	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
-	if (!xemucfg_get_bool("syscon"))
+	xemu_set_full_screen(configdb.fullscreen);
+	if (!configdb.syscon)
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);

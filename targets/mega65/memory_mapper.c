@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2017-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2017-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -143,7 +143,7 @@ static Uint8 cpu_io_port[2];
 int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
 static int map_marker_low, map_marker_high;
 int rom_protect;
-int skip_unhandled_mem;
+int skip_unhandled_mem = 0;
 
 
 #define DEFINE_READER(name) static Uint8 name ( MEMORY_HANDLERS_ADDR_TYPE )
@@ -527,7 +527,7 @@ void memory_init ( void )
 	map_megabyte_high = 0;
 	map_marker_low =  MAP_MARKER_DUMMY_OFFSET;
 	map_marker_high = MAP_MARKER_DUMMY_OFFSET;
-	skip_unhandled_mem = 0;
+	//skip_unhandled_mem = 0;
 	for (a = 0; a < 9; a++)
 		applied_memcfg[a] = MAP_MARKER_DUMMY_OFFSET - 1;
 	// Setting up the default memory configuration for M65 at least!

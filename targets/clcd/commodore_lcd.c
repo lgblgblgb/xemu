@@ -68,7 +68,6 @@ static Uint8 keysel;
 static Uint8 rtc_regs[16];
 static int rtc_sel = 0;
 static int ram_size;
-static int keep_ram;
 
 static struct {
 	int phase;
@@ -484,7 +483,7 @@ static void rom_list ( void )
 static void load_program_for_inject ( const char *file_name, int new_address )
 {
 	prg_inject.phase = 0;
-	if (!file_name || !*file_name)
+	if (!file_name)
 		return;
 	memset(prg_inject.data, 0, sizeof prg_inject.data);
 	prg_inject.size = xemu_load_file(file_name, prg_inject.data, 8, sizeof(prg_inject.data) - 4, "Cannot load program");
@@ -632,48 +631,71 @@ static const struct menu_st menu_main[] = {
 };
 
 
+static struct {
+	int fullscreen_requested, syscon, keep_ram;
+	int zoom;
+	int sdlrenderquality;
+	int ram_size_kbytes;
+	int clock_mhz;
+	char *rom102_fn;
+	char *rom103_fn;
+	char *rom104_fn;
+	char *rom105_fn;
+	char *romchr_fn;
+	char *prg_inject_fn;
+	char *gui_selection;
+} configdb;
+
 
 
 int main ( int argc, char **argv )
 {
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The world's first Commodore LCD emulator from LGB");
-	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	xemucfg_define_num_option("ram", 128, "Sets RAM size in KBytes (32-128)");
-	xemucfg_define_num_option("clock", 1, "Sets CPU speed in MHz (integer only), 1-16");
-	xemucfg_define_str_option("rom102", "#clcd-u102.rom", "Selects 'U102' ROM to use");
-	xemucfg_define_str_option("rom103", "#clcd-u103.rom", "Selects 'U103' ROM to use");
-	xemucfg_define_str_option("rom104", "#clcd-u104.rom", "Selects 'U104' ROM to use");
-	xemucfg_define_str_option("rom105", "#clcd-u105.rom", "Selects 'U105' ROM to use");
-	xemucfg_define_str_option("romchr", "#clcd-chargen.rom", "Selects character ROM to use");
-	xemucfg_define_switch_option("keepram", "Deactivate ROM patch for clear RAM and also save/restore RAM");
-	//xemucfg_define_str_option("defprg", NULL, "Selects the ROM-program to set default to");
-	xemucfg_define_str_option("prg", NULL, "Inject BASIC program on entering to BASIC");
-	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
-	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
+	XEMUCFG_DEFINE_SWITCH_OPTIONS(
+		{ "fullscreen", "Start in fullscreen mode", &configdb.fullscreen_requested },
+		{ "keepram", "Deactivate ROM patch for clear RAM and also save/restore RAM", &configdb.keep_ram },
+		{ "syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon },
+		{ "besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override }
+	);
+	XEMUCFG_DEFINE_NUM_OPTIONS(
 #ifdef SDL_HINT_RENDER_SCALE_QUALITY
-	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)");
+		{ "sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2 },
 #endif
+		{ "zoom", 1, "Window zoom value (1-4)", &configdb.zoom, 1, 4 },
+		{ "ram", 128, "Sets RAM size in KBytes (32-128)", &configdb.ram_size_kbytes, 32, 128 },
+		{ "clock", 1, "Sets CPU speed in MHz (integer only) 1-16", &configdb.clock_mhz, 1, 16 }
+	);
+	XEMUCFG_DEFINE_STR_OPTIONS(
+		{ "rom102", "#clcd-u102.rom", "Selects 'U102' ROM to use", &configdb.rom102_fn },
+		{ "rom103", "#clcd-u103.rom", "Selects 'U103' ROM to use", &configdb.rom103_fn },
+		{ "rom104", "#clcd-u104.rom", "Selects 'U104' ROM to use", &configdb.rom104_fn },
+		{ "rom105", "#clcd-u105.rom", "Selects 'U105' ROM to use", &configdb.rom105_fn },
+		{ "romchr", "#clcd-chargen.rom", "Selects character ROM to use", &configdb.romchr_fn },
+		//{ "defprg", NULL, "Selects the ROM-program to set default to", &configdb.defprg },
+		{ "prg", NULL, "Inject BASIC program on entering to BASIC", &configdb.prg_inject_fn },
+		{ "gui", NULL, "Select GUI type for usage. Specify some insane str to get a list", &configdb.gui_selection }
+	);
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
-	i_am_sure_override = xemucfg_get_bool("besure");
-	keep_ram = xemucfg_get_bool("keepram");
-	set_cpu_speed(xemucfg_get_ranged_num("clock", 1, 16));
-	set_ram_size(xemucfg_get_ranged_num("ram", 32, 128));
-	DEBUGPRINT("CFG: ram size is %d bytes." NL, ram_size);
+	//xemucfg_limit_num(&configdb.sdlrenderquality, 0, 2);
+	//xemucfg_limit_num(&configdb.clock_mhz, 1, 16);
+	//xemucfg_limit_num(&configdb.ram_size_kbytes, 32, 128);
+	set_cpu_speed(configdb.clock_mhz);
+	set_ram_size(configdb.ram_size_kbytes);
+	DEBUGPRINT("CFG: ram size is %d Kbytes." NL, ram_size);
 	window_title_info_addon = emulator_addon_title;
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// logical size (same as texture for now ...)
-		SCREEN_WIDTH * SCREEN_DEFAULT_ZOOM, SCREEN_HEIGHT * SCREEN_DEFAULT_ZOOM,	// window size
+		SCREEN_WIDTH * SCREEN_DEFAULT_ZOOM * configdb.zoom, SCREEN_HEIGHT * SCREEN_DEFAULT_ZOOM * configdb.zoom,	// window size
 		SCREEN_FORMAT,		// pixel format
 		2,			// we have 2 colours :)
 		init_lcd_palette_rgb,	// initialize palette from this constant array
 		lcd_palette,		// initialize palette into this stuff
 #ifdef SDL_HINT_RENDER_SCALE_QUALITY
-		xemucfg_get_ranged_num("sdlrenderquality", 0, 2),	// render scaling quality
+		configdb.sdlrenderquality,// render scaling quality
 #else
 		RENDER_SCALE_QUALITY,	// render scaling quality
 #endif
@@ -682,7 +704,7 @@ int main ( int argc, char **argv )
 	))
 		return 1;
 	osd_init_with_defaults();
-	xemugui_init(xemucfg_get_str("gui"));	// allow to fail (do not exit if it fails). Some targets may not have X running
+	xemugui_init(configdb.gui_selection);	// allow to fail (do not exit if it fails). Some targets may not have X running
 	hid_init(
 		lcd_key_map,
 		VIRTUAL_SHIFT_POS,
@@ -691,16 +713,16 @@ int main ( int argc, char **argv )
 	memset(memory, 0xFF, sizeof memory);
 	memset(charrom, 0xFF, sizeof charrom);
 	if (
-		xemu_load_file(xemucfg_get_str("rom102"), memory + 0x38000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
-		xemu_load_file(xemucfg_get_str("rom103"), memory + 0x30000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
-		xemu_load_file(xemucfg_get_str("rom104"), memory + 0x28000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
-		xemu_load_file(xemucfg_get_str("rom105"), memory + 0x20000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
-		xemu_load_file(xemucfg_get_str("romchr"), charrom,          0x1000, 0x1000, rom_fatal_msg) < 0
+		xemu_load_file(configdb.rom102_fn, memory + 0x38000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
+		xemu_load_file(configdb.rom103_fn, memory + 0x30000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
+		xemu_load_file(configdb.rom104_fn, memory + 0x28000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
+		xemu_load_file(configdb.rom105_fn, memory + 0x20000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
+		xemu_load_file(configdb.romchr_fn, charrom,          0x1000, 0x1000, rom_fatal_msg) < 0
 	)
 		return 1;
 	// Ugly hacks :-( <patching ROM>
 #ifdef ROM_HACK_COLD_START
-	if (!keep_ram) {
+	if (!configdb.keep_ram) {
 		// this ROM patching is needed, as Commodore LCD seems not to work to well with "not intact" SRAM content (ie: it has battery powered SRAM even when "switched off")
 		DEBUGPRINT("ROM-HACK: forcing cold start condition with ROM patching!" NL);
 		memory[0x385BB] = 0xEA;
@@ -724,7 +746,7 @@ int main ( int argc, char **argv )
 	xemu_load_file("#clcd-u105-parasite.rom", memory + 0x26800, 32, 0x8000 - 0x6800, NULL);
 	xemu_load_file("#clcd-u104-parasite.rom", memory + 0x2E800, 32, 0x8000 - 0x6800, NULL);
 #endif
-	load_program_for_inject(xemucfg_get_str("prg"), 0x1001);
+	load_program_for_inject(configdb.prg_inject_fn, 0x1001);
 	rom_list();
 	/* init CPU */
 	cpu65_reset();	// we must do this after loading KERNAL at least, since PC is fetched from reset vector here!
@@ -736,8 +758,8 @@ int main ( int argc, char **argv )
 	keysel = 0;
 	/* --- START EMULATION --- */
 	cycles = 0;
-	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
-	if (!xemucfg_get_bool("syscon"))
+	xemu_set_full_screen(configdb.fullscreen_requested);
+	if (!configdb.syscon)
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	update_rtc();			// this will use time-keeping stuff as well, so initially let's do after the function call above

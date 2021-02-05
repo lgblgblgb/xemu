@@ -52,11 +52,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/osd_font_16x16.c"
 
 #ifdef XEMU_ARCH_WIN
-#include <windows.h>
-#include <stdio.h>
-#include <io.h>
-#include <fcntl.h>
+#	include <windows.h>
+#	include <stdio.h>
+#	include <io.h>
+#	include <fcntl.h>
 #endif
+//#ifdef XEMU_CONFIGDB_SUPPORT
+//#	include "xemu/emutools_config.h"
+//#endif
+
+const char EMPTY_STR[] = "";
+const int ZERO_INT = 0;
+const int ONE_INT = 1;
 
 #ifndef XEMU_NO_SDL_DIALOG_OVERRIDE
 int (*SDL_ShowSimpleMessageBox_custom)(Uint32, const char*, const char*, SDL_Window* ) = SDL_ShowSimpleMessageBox;
@@ -646,6 +653,11 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 #endif
 	xemu_app_org = xemu_strdup(app_organization);
 	xemu_app_name = xemu_strdup(app_name);
+#ifdef XEMU_CONFIGDB_SUPPORT
+	// If configDB support is compiled in, we can define some common options, should apply for ALL emulators.
+	// This way, it's not needed to define those in all of the emulator targets ...
+	// TODO: it's an unfinished project here ...
+#endif
 }
 
 
@@ -715,7 +727,7 @@ int xemu_post_init (
 	int locked_texture_update,		// use locked texture method [non zero], or malloc'ed stuff [zero]. NOTE: locked access doesn't allow to _READ_ pixels and you must fill ALL pixels!
 	void (*shutdown_callback)(void)		// callback function called on exit (can be nULL to not have any emulator specific stuff)
 ) {
-	srand(time(NULL));
+	srand((unsigned int)time(NULL));
 #	include "build/xemu-48x48.xpm"
 	SDL_RendererInfo ren_info;
 	int a;

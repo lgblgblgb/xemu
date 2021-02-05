@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -24,10 +24,17 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // You may want to disable audio emulation since it can disturb non-real-time emulation
 #define AUDIO_EMULATION
 
+#define AUDIO_DEFAULT_SEPARATION	100
+#define AUDIO_DEFAULT_VOLUME		100
+#define AUDIO_UNCHANGED_SEPARATION	-1000
+#define AUDIO_UNCHANGED_VOLUME		-1000
+
 extern struct SidEmulation sid1, sid2;
 extern SDL_AudioDeviceID audio;
+extern int stereo_separation;
 
-extern void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq );
+extern void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int separation );
 extern void audio65_opl3_write ( Uint8 reg, Uint8 data );
+extern void audio_set_stereo_parameters ( int vol, int sep );
 
 #endif

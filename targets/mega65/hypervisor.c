@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "memory_mapper.h"
 #include "io_mapper.h"
 #include "xemu/emutools_config.h"
+#include "configdb.h"
 
 #include <sys/types.h>
 #include <fcntl.h>
@@ -248,7 +249,7 @@ void hypervisor_leave ( void )
 			cpu65.pc = new_pc;
 		} else
 			DEBUGPRINT("MEM: no forced ROM re-apply policy was requested" NL);
-		dma_init_set_rev(xemucfg_get_num("dmarev"), main_ram + 0x20000 + 0x16);
+		dma_init_set_rev(configdb.dmarev, main_ram + 0x20000 + 0x16);
 	}
 	if (XEMU_UNLIKELY(hypervisor_queued_trap >= 0)) {
 		// Not so much used currently ...
