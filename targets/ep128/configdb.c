@@ -23,6 +23,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "roms.h"
 #include "enterprise128.h"
 
+/* Important WARNING:
+ * This is a trap! If you have something here with '#ifdef', it's quite possible that the macro is
+ * not defined here, but defined elsewhere, thus the emulator sees totally different structs for
+ * real but the problem is hidden! That is, be very careful at configdb_st (the type definition
+ * itself also at the usage!) that should be only dependent on macros defined in xemu-target.h,
+ * since that header file is always included by the build system, at command line level. */
 
 static const char *rom_parse_opt_cb ( struct xemutools_config_st *unused, const char *optname, const char *optvalue )
 {

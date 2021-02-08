@@ -1,5 +1,7 @@
-/* Preliminary Commander X16 emulation ...
-   Copyright (C)2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+ 
+   Preliminary Commander X16 emulation ...
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,8 +17,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_LOCAL_COMMANDER_X16_H_INCLUDED
-#define __XEMU_LOCAL_COMMANDER_X16_H_INCLUDED
+#ifndef XEMU_COMMANDER_X16_COMMANDER_X16_H_INCLUDED
+#define XEMU_COMMANDER_X16_COMMANDER_X16_H_INCLUDED
 
 #define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888
 

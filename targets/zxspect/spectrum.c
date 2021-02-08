@@ -1,7 +1,7 @@
 /* Learning material to get to know ZX Spectrum (I never had that machine ...)
    by trying to write an emulator :-O
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2017,2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -315,13 +315,21 @@ static void open_new_frame ( void )
 }
 
 
+static struct {
+	int	syscon, fullscreen;
+	char	*rom;
+	int	sdlrenderquality;
+} configdb;
+
 
 
 int main ( int argc, char **argv )
 {
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The learner's ZX Spectrum emulator from LGB (the learner)");
-	xemucfg_define_str_option("rom", ROM_NAME, "Path and filename for ROM to be loaded");
-	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+	xemucfg_define_str_option("rom", ROM_NAME, "Path and filename for ROM to be loaded", &configdb.rom);
+	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode", &configdb.fullscreen);
+	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon);
+	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2);
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
@@ -335,7 +343,7 @@ int main ( int argc, char **argv )
 		16,				// we have 16 colours
 		init_ula_palette_rgb,		// initialize palette from this constant array
 		ula_palette,			// initialize palette into this stuff
-		RENDER_SCALE_QUALITY,		// render scaling quality
+		configdb.sdlrenderquality,	// render scaling quality
 		USE_LOCKED_TEXTURE,		// 1 = locked texture access
 		NULL				// no emulator specific shutdown function
 	))
@@ -348,7 +356,7 @@ int main ( int argc, char **argv )
 	init_ula_tables();
 	/* Intialize memory and load ROMs */
 	memset(memory, 0xFF, sizeof memory);
-	if (xemu_load_file(xemucfg_get_str("rom"), memory, 0x4000, 0x4000, "Selected ROM image cannot be loaded. Without it, Xemu won't work.\nPlease install it, or use the CLI switch -rom to specify one.") < 0)
+	if (xemu_load_file(configdb.rom, memory, 0x4000, 0x4000, "Selected ROM image cannot be loaded. Without it, Xemu won't work.\nPlease install it, or use the CLI switch -rom to specify one.") < 0)
 		return 1;
 	// Continue with initializing ...
 	clear_emu_events();	// also resets the keyboard
@@ -359,8 +367,9 @@ int main ( int argc, char **argv )
 	scanline = 0;
 	flash_state = 0xFF;
 	frame_counter = 0;
-	if (!xemucfg_get_bool("syscon"))
+	if (!configdb.syscon)
 		sysconsole_close(NULL);
+	xemu_set_full_screen(configdb.fullscreen);
 	open_new_frame();		// open new frame at the very first time, the rest of frames handled below, during the emulation
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	for (;;) { // our emulation loop ...

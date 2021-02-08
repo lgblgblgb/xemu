@@ -1,11 +1,4 @@
-## Collection of *simple* emulators of some 8 bits machines using SDL2 library,
-## including the Commodore LCD and Commodore 65 too.
-##
-## This is my Xep128 (Enterprise-128 emulator) being ported to the Xemu project.
-## Still it's mainly do many things on its own, unlike any other targets in the
-## Xemu projects. Though, the build system and Z80 emulation core (Z80ex) is
-## from Xemu now!
-##
+## Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
 ## Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify

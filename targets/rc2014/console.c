@@ -1,6 +1,6 @@
 /* RC2014 and generic Z80 SBC emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2020,2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -276,7 +276,7 @@ void emu_callback_key_textinput_sdl  ( SDL_TextInputEvent   *ev )
 }
 
 
-int console_init ( int width, int height, int zoom_percent, Uint8 *video_mapped, Uint8 *color_mapped )
+int console_init ( int width, int height, int zoom_percent, Uint8 *video_mapped, Uint8 *color_mapped, int sdlrenderquality )
 {
 	int screen_width = width * 9;
 	int screen_height = height * FONT_HEIGHT;
@@ -296,7 +296,7 @@ int console_init ( int width, int height, int zoom_percent, Uint8 *video_mapped,
 		16,				// we have 16 colours
 		console_colors,			// initialize palette from this constant array
 		palette,			// initialize palette into this stuff
-		RENDER_SCALE_QUALITY,		// render scaling quality
+		sdlrenderquality,		// render scaling quality
 		USE_LOCKED_TEXTURE,		// 1 = locked texture access
 		rc_shutdown_callback		// shutdown function
 	))

@@ -1,6 +1,6 @@
 /* Re-CP/M: CP/M-like own implementation + Z80 emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2019,2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -67,21 +67,6 @@ static void emulation_loop ( void )
 }
 
 
-
-static int get_guarded_cfg_num ( const char *optname, int min, int max )
-{
-	int ret = xemucfg_get_num(optname);
-	if (ret < min) {
-		DEBUGPRINT("BADNUM: too low value (%d) for option \"%s\", the minimum is %d, applying that, instead." NL, ret, optname, min);
-		return min;
-	} else if (ret > max) {
-		DEBUGPRINT("BADNUM: too high value (%d) for option \"%s\", the maximum is %d, applying that, instead." NL, ret, optname, max);
-		return max;
-	} else
-		return ret;
-}
-
-
 void recpm_shutdown_callback ( void )
 {
 	DEBUGPRINT("%s() is here!" NL, __func__);
@@ -135,33 +120,42 @@ static int load ( const char *fn )
 }
 
 
+static struct {
+	int	fullscreen, syscon;
+	int	term_width, term_height, zoom;
+	int	baud;
+	int	mapvideo;
+	char	*load;
+} configdb;
+
 
 int main ( int argc, char **argv )
 {
 	int memtop = 0x10000;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "Re-CP/M");
-	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	xemucfg_define_num_option("width", 80, "Terminal width in character columns");
-	xemucfg_define_num_option("height", 25, "Terminal height in character rows");
-	xemucfg_define_num_option("zoom", 100, "Zoom the window by the given percentage (50%-200%)");
-	xemucfg_define_num_option("cpmsize", 64, "Size of the CP/M system");
-	xemucfg_define_num_option("clock", 4, "Rough Z80 emulation speed in MHz with 'emulation cost'");
-	xemucfg_define_num_option("baud", 0, "Emulate serial terminal with about the given baud rate [0=disable]");
-	xemucfg_define_str_option("load", NULL, "Load and run a CP/M program");
-	xemucfg_define_switch_option("trace", "Trace the program, VERY spammy!");
-	xemucfg_define_switch_option("mapvideo", "Map video+colour RAM into the end of addr space");
+	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode", &configdb.fullscreen);
+	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)", &configdb.fullscreen);
+	xemucfg_define_num_option("width", 80, "Terminal width in character columns", &configdb.term_width, 38, 160);
+	xemucfg_define_num_option("height", 25, "Terminal height in character rows", &configdb.term_height, 20, 60);
+	xemucfg_define_num_option("zoom", 100, "Zoom the window by the given percentage (50%-200%)", &configdb.zoom, 50, 200);
+	//xemucfg_define_num_option("cpmsize", 64, "Size of the CP/M system");
+	xemucfg_define_num_option("clock", 4, "Rough Z80 emulation speed in MHz with 'emulation cost'", &cpu_mhz, 1, 33);
+	xemucfg_define_num_option("baud", 0, "Emulate serial terminal with about the given baud rate [0=disable]", &configdb.baud, 0, 1000000);
+	xemucfg_define_str_option("load", NULL, "Load and run a CP/M program", &configdb.load);
+	xemucfg_define_switch_option("trace", "Trace the program, VERY spammy!", &trace);
+	xemucfg_define_switch_option("mapvideo", "Map video+colour RAM into the end of addr space", &configdb.mapvideo);
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
-	trace = xemucfg_get_bool("trace");
+	if (configdb.baud && configdb.baud < 300)
+		configdb.baud = 300;
 	memset(memory, 0, sizeof memory);
 	memset(modded, 0, sizeof modded);
 	if (console_init(
-		get_guarded_cfg_num("width",  38, 160),
-		get_guarded_cfg_num("height", 20,  60),
-		get_guarded_cfg_num("zoom",   50, 200),
-		xemucfg_get_bool("mapvideo") ? &memtop : NULL,
-		xemucfg_get_num("baud") > 0 ? get_guarded_cfg_num("baud", 300, 1000000) : 0
+		configdb.term_width,
+		configdb.term_height,
+		configdb.zoom,
+		configdb.mapvideo ? &memtop : NULL,
+		configdb.baud
 	))
 		return 1;
 	memtop &= ~0xFF;
@@ -172,18 +166,17 @@ int main ( int argc, char **argv )
 	osd_init_with_defaults();
 	/* Intialize memory and load ROMs */
 	clear_emu_events();	// also resets the keyboard
-	cpu_mhz = get_guarded_cfg_num("clock", 1, 33);
 	cpu_cycles_per_frame = (1000000 * cpu_mhz) / FRAME_RATE;
 	DEBUGPRINT("Z80: setting CPU speed to %dMHz, %d CPU cycles per refresh-rate (=%dHz)" NL, cpu_mhz, cpu_cycles_per_frame, FRAME_RATE);
 	z80ex_init();
-	if (!xemucfg_get_bool("syscon"))
+	if (!configdb.syscon)
 		sysconsole_close(NULL);
 	Z80_PC = 0;
 	Z80_SP = 0x100;
-	if (load(xemucfg_get_str("load")))
+	if (load(configdb.load))
 		return 1;
 	conputs("re-CP/M\r\n");
-	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
+	xemu_set_full_screen(configdb.fullscreen);
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	XEMU_MAIN_LOOP(emulation_loop, FRAME_RATE, 1);
 	return 0;

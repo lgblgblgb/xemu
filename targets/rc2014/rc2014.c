@@ -1,6 +1,6 @@
 /* RC2014 and generic Z80 SBC emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -28,6 +28,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define FRAME_RATE	25
 
 static const char default_rom_fn[] = "#rc2014.rom";
+
+static struct {
+	int	fullscreen, syscon;
+	int	term_width, term_height;
+	int	zoom;
+	double	cpu_mhz;
+	char	*load;
+	char	*rom;
+	double	baudcrystal;
+	int	baudrate;
+	int	sdlrenderquality;
+} configdb;
 
 
 
@@ -123,60 +135,61 @@ static int load_prg ( const char *fn )
 
 
 
+
 int main ( int argc, char **argv )
 {
 	xemu_pre_init(APP_ORG, TARGET_NAME, "Generic, simple RC2014 SBC emulation from LGB");
-	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	xemucfg_define_num_option("width", 80, "Terminal width in character columns");
-	xemucfg_define_num_option("height", 25, "Terminal height in character rows");
-	xemucfg_define_num_option("zoom", 100, "Zoom the window by the given percentage (50%-200%)");
-	xemucfg_define_float_option("clock", 4, "Select Z80 clock speed in MHz");
-	xemucfg_define_float_option("baudcrystal", 1.718, "Crystal frequency for the UART chip in MHz");
-	xemucfg_define_num_option("baudrate", 56400, "Initial serial baudrate (may be modified if no exact match with -baudcrystal)");
-	xemucfg_define_str_option("load", NULL, "Load and run program from $8000 directly");
-	xemucfg_define_str_option("rom", default_rom_fn, "Load ROM from $0000 (use file name '-' for built-in one)");
-	xemucfg_define_switch_option("trace", "Trace the program, VERY spammy!");
-	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
+	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode", &configdb.fullscreen);
+	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon);
+	xemucfg_define_num_option("width", 80, "Terminal width in character columns", &configdb.term_width, 38, 120);
+	xemucfg_define_num_option("height", 25, "Terminal height in character rows", &configdb.term_height, 20, 60);
+	xemucfg_define_num_option("zoom", 100, "Zoom the window by the given percentage (50%-200%)", &configdb.zoom, 50, 200);
+	xemucfg_define_float_option("clock", 4, "Select Z80 clock speed in MHz", &configdb.cpu_mhz, 1.0, 33.0);
+	xemucfg_define_float_option("baudcrystal", 1.718, "Crystal frequency for the UART chip in MHz", &configdb.baudcrystal, 1.0, 8.0);
+	xemucfg_define_num_option("baudrate", 56400, "Initial serial baudrate (may be modified if no exact match with -baudcrystal)", &configdb.baudrate, 30, 500000);
+	xemucfg_define_str_option("load", NULL, "Load and run program from $8000 directly", &configdb.load);
+	xemucfg_define_str_option("rom", default_rom_fn, "Load ROM from $0000 (use file name '-' for built-in one)", &configdb.rom);
+	xemucfg_define_switch_option("trace", "Trace the program, VERY spammy!", &trace);
+	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override);
+	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2);
+
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
-	i_am_sure_override = xemucfg_get_bool("besure");
-	trace = xemucfg_get_bool("trace");
 	memset(memory, 0xFF, sizeof memory);
 	if (console_init(
-		xemucfg_get_ranged_num("width",  38, 120),
-		xemucfg_get_ranged_num("height", 20,  60),
-		xemucfg_get_ranged_num("zoom",   50, 200),
+		configdb.term_width,
+		configdb.term_height,
+		configdb.zoom,
 		NULL,
-		NULL
+		NULL,
+		configdb.sdlrenderquality
 	))
 		return 1;
 	osd_init_with_defaults();
 	clear_emu_events();	// also resets the keyboard
-	double cpu_mhz = xemucfg_get_ranged_float("clock", 1.0, 33.0);
-	cpu_cycles_per_frame = (1000000.0 * cpu_mhz) / (double)FRAME_RATE;
+	cpu_cycles_per_frame = (1000000.0 * configdb.cpu_mhz) / (double)FRAME_RATE;
 	uart_init(
-		(int)(xemucfg_get_ranged_float("baudcrystal", 1.0, 8.0) * 1000000.0),
-		xemucfg_get_ranged_num("baudrate", 30, 500000),
-		(int)(cpu_mhz * 1000000.0)
+		(int)(configdb.baudcrystal * 1000000.0),
+		configdb.baudrate,
+		(int)(configdb.cpu_mhz * 1000000.0)
 	);
-	DEBUGPRINT("Z80: setting CPU speed to %.2fMHz, %d CPU cycles per refresh-rate (=%dHz)" NL, cpu_mhz, cpu_cycles_per_frame, FRAME_RATE);
+	DEBUGPRINT("Z80: setting CPU speed to %.2fMHz, %d CPU cycles per refresh-rate (=%dHz)" NL, configdb.cpu_mhz, cpu_cycles_per_frame, FRAME_RATE);
 	z80ex_init();
-	if (!xemucfg_get_bool("syscon"))
+	if (!configdb.syscon)
 		sysconsole_close(NULL);
 	z80ex_reset();
 	Z80_SP = 0xFFFF;
-	if (load_rom(xemucfg_get_str("rom"))) {
-		if (strcmp(xemucfg_get_str("rom"), default_rom_fn))
+	if (load_rom(configdb.rom)) {
+		if (strcmp(configdb.rom, default_rom_fn))
 			return 1;
 		else {
 			DEBUGPRINT("ROM: default ROM could not be loaded. Using simple, built-in one." NL);
 			use_internal_rom(1);
 		}
 	}
-	if (load_prg(xemucfg_get_str("load")))
+	if (load_prg(configdb.load))
 		return 1;
-	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
+	xemu_set_full_screen(configdb.fullscreen);
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	XEMU_MAIN_LOOP(emulation_loop, FRAME_RATE, 1);
 	return 0;

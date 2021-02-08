@@ -61,9 +61,8 @@ void xemucfg_set_str ( char **ptr, const char *value )
 // Warning! No check, be sure to call this ONLY if "p" has really p->type == XEMUCFG_OPT_STR!
 static int is_str_opt_default ( struct xemutools_config_st *p )
 {
-	if (*p->opt_str.pp == NULL) {
+	if (*p->opt_str.pp == NULL)
 		return p->opt_str.defval == NULL ? 1 : 0;
-	}
 	if (p->opt_str.defval == NULL)
 		return 0;
 	return !strcmp(*p->opt_str.pp, p->opt_str.defval);
@@ -610,8 +609,8 @@ int xemucfg_parse_config_file ( const char *filename_in, const char *open_fail_m
 				ERROR_WINDOW("Config file (%s) error at line %d:\nkeyword '%s' is unknown.", xemu_load_filepath, lineno, p);
 				return 1;
 			}
-			if (o->type == XEMUCFG_OPT_BOOL && !p1)	// Only for bool type: no parameter is allowed, and means "1" (true)
-				p1 = "1";
+			if (o->type == XEMUCFG_OPT_BOOL && !p1)	// Only for bool type, special case: if there is no parameter it means "1" (true)
+				p1 = "1";			// ... though let the common case parser to intepret the textual presentation to our desired value
 			else if (!p1) {
 				ERROR_WINDOW("Config file (%s) error at line %d:\nkeyword '%s' requires a value.", xemu_load_filepath, lineno, p);
 				return 1;
