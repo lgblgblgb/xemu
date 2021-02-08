@@ -79,6 +79,6 @@ struct configdb_st {
 
 extern struct configdb_st configdb;
 
-extern void configdb_define_emulator_options ( void );
+extern void configdb_define_emulator_options ( size_t size );
 
 #endif

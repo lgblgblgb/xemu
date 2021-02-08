@@ -99,7 +99,7 @@ static SDL_AudioDeviceID audio;
 static int audio_enabled = 1;
 
 static struct {
-	int	sdlrenderquality, fullscreen, syscon,disasm;
+	int	sdlrenderquality, fullscreen, syscon, disasm;
 	double	clock_mhz;
 	char	*model_name;
 	char	*rom_fn;
@@ -680,9 +680,6 @@ void emu_dropfile_callback ( const char *fn )
 		return;
 	emu_loop_notification |= EMU_LOOP_LOAD_NOTIFY;
 	emu_loop_notification &= ~EMU_LOOP_NMI_NOTIFY;
-	//static char fn_storage[PATH_MAX];
-	//strcpy(fn_storage, fn);
-	//pri_name = fn_storage;
 	xemucfg_set_str(&configdb.pri_name, fn);
 	primo_screen = 0;
 	nmi_status = 0;
@@ -690,7 +687,7 @@ void emu_dropfile_callback ( const char *fn )
 	memory.rd_p[0] = memory.main;
 	memory.wr_p[0] = memory.wrwaste;
 	z80ex_reset();
-	OSD(-1, -1, "File has been dropped!");
+	OSD(-1, -1, "File has been dropped");
 	//DEBUGPRINT("DROPFILE: %s" NL, fn);
 }
 
@@ -809,7 +806,6 @@ static void ui_load_pri ( void )
 		if (pri_load(fnbuf, 0) > 0) {
 			primo_reset();
 			emu_loop_notification |= EMU_LOOP_LOAD_NOTIFY;
-			//pri_name = fnbuf;
 			xemucfg_set_str(&configdb.pri_name, fnbuf);
 		}
 	}

@@ -74,13 +74,11 @@ int register_screenshot_request = 0;
 
 
 
-
 void cpu65_illegal_opcode_callback ( void )
 {
 	// FIXME: implement this, it won't be ever seen now, as not even switch to 6502 NMOS persona is done yet ...
 	FATAL("Internal error: 6502 NMOS persona is not supported yet.");
 }
-
 
 
 void machine_set_speed ( int verbose )
@@ -140,7 +138,6 @@ void machine_set_speed ( int verbose )
 }
 
 
-
 static void cia1_setint_cb ( int level )
 {
 	DEBUG("%s: IRQ level changed to %d" NL, cia1.name, level);
@@ -174,7 +171,6 @@ static inline void nmi_set ( int level, int mask )
 }
 
 
-
 static void cia2_setint_cb ( int level )
 {
 	nmi_set(level, 1);
@@ -192,13 +188,11 @@ static void cia2_out_a ( Uint8 data )
 }
 
 
-
 // Just for easier test to have a given port value for CIA input ports
 static Uint8 cia_port_in_dummy ( void )
 {
 	return 0xFF;
 }
-
 
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
@@ -212,7 +206,6 @@ static void m65_snapshot_saver_on_exit_callback ( void )
 		INFO_WINDOW("Snapshot has been saved to \"%s\".", configdb.snapsave);
 }
 #endif
-
 
 
 static int load_memory_preinit_cache ( int to_prezero, const char *config_name, const char *fn, const char *description, Uint8 *memory_pointer, int size )
@@ -714,9 +707,10 @@ static void emulation_loop ( void )
 int main ( int argc, char **argv )
 {
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Incomplete MEGA65 emulator from LGB");
-	configdb_define_emulator_options();
+	configdb_define_emulator_options(sizeof configdb);
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
+	// xemucfg_dump_db("After returning from xemucfg_parse_all in main()");
 	DEBUGPRINT("XEMU: emulated MEGA65 model ID: %d" NL, configdb.mega65_model);
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(configdb.installer);

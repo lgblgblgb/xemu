@@ -51,7 +51,6 @@ static const char *xemu_query_interface_p = NULL;
 static int         xemu_query_gate = 0;
 
 
-
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
 	do { DEBUG("IO: NOT IMPLEMENTED read (emulator lacks feature), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
 	return fb; } while (0)

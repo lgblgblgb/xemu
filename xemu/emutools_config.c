@@ -37,6 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 static struct xemutools_config_st *config_head = NULL;
 static struct xemutools_config_st *config_current;
+
 static int configdb_finalized = 0;	// no new option can be defined if it's set to non-zero (after first use of any parse functionality)
 
 static const char CONFIGDB_ERROR_MSG[] = "Xemu internal ConfigDB error:";
@@ -45,9 +46,11 @@ static const char CONFIGDB_ERROR_MSG[] = "Xemu internal ConfigDB error:";
 void xemucfg_set_str ( char **ptr, const char *value )
 {
 	if (value) {
-		size_t len = strlen(value) + 1;
-		*ptr = xemu_realloc(*ptr, len);
-		memcpy(*ptr, value, len);
+		size_t len = strlen(value);
+		*ptr = xemu_realloc(*ptr, len + 1);	// need space for '\0' at the end of the string as well
+		if (len)
+			memcpy(*ptr, value, len);	// probably memcpy() with len == 0 is not problematic, but who knows on some architectures ...
+		(*ptr)[len] = '\0';
 	} else if (*ptr) {
 		free(*ptr);
 		*ptr = NULL;
@@ -79,17 +82,7 @@ static const char *set_option_value ( struct xemutools_config_st *p, const void 
 	double f;
 	switch (p->type) {
 		case XEMUCFG_OPT_STR:
-			// remove leading " if any (by moving the pointer ...)
-			if (value && *(const char*)value == '"')
-				value++;
-			// Set it now
 			xemucfg_set_str(p->opt_str.pp, value);
-			if (value) {
-				// remove trailing " if any
-				i = strlen(value) - 1;
-				if (i >= 0 && ((const char*)value)[i] == '"')
-					*p->opt_str.pp[i] = '\0';
-			}
 			break;
 		case XEMUCFG_OPT_NUM:
 			i = *(int*)value;
@@ -297,9 +290,9 @@ static void define_new_option ( const char *optname, enum xemutools_option_type 
 	static const char no_help[] = "(no help)";
 	config_current->name = optname;
 	config_current->type = type;
-	config_current->opt_ANY.p = storage;
 	config_current->help = (help && *help) ? help : no_help;
 	config_current->flags = 0;
+	config_current->opt_ANY.p = storage;
 	if (type == XEMUCFG_OPT_STR)
 		*config_current->opt_str.pp = NULL;
 }
@@ -617,9 +610,25 @@ int xemucfg_parse_config_file ( const char *filename_in, const char *open_fail_m
 				ERROR_WINDOW("Config file (%s) error at line %d:\nkeyword '%s' is unknown.", xemu_load_filepath, lineno, p);
 				return 1;
 			}
-			if (!p1) {
+			if (o->type == XEMUCFG_OPT_BOOL && !p1)	// Only for bool type: no parameter is allowed, and means "1" (true)
+				p1 = "1";
+			else if (!p1) {
 				ERROR_WINDOW("Config file (%s) error at line %d:\nkeyword '%s' requires a value.", xemu_load_filepath, lineno, p);
 				return 1;
+			}
+			if (o->type == XEMUCFG_OPT_STR) {
+				// Special rules applies only for STR type params and only in config files
+				if (!strcmp(p1, "<NULL>"))	// to force a NULL pointer (more like a debug feature!!)
+					p1 = NULL;
+				else {
+					// remove heading " char - if there is one (by moving the pointer itself)
+					if (*p1 == '"')
+						p1++;
+					// remove trailing " char - if there is one
+					size_t i = strlen(p1);
+					if (i && p1[i - 1] == '"')
+						p1[i - 1] = '\0';
+				}
 			}
 			s = set_option_value_from_string(o, p1, p);
 			if (s) {
@@ -785,6 +794,34 @@ int xemucfg_integer_list_from_string ( const char *value, int *result, int maxit
 	}
 	return num;
 }
+
+
+#ifndef XEMU_RELEASE_BUILD
+void xemucfg_dump_db ( const char *msg )
+{
+	DEBUGPRINT("CFG: --- test dump of ConfigDB follows: %s" NL, msg ? msg : "<no-info>");
+	for (struct xemutools_config_st *p = config_head; p != NULL; p = p->next) {
+		switch (p->type) {
+			case XEMUCFG_OPT_STR:
+				DEBUGPRINT("CFG: %s %p %p %s [%s]" NL, p->name, p->opt_str.pp, *p->opt_str.pp, *p->opt_str.pp, p->help);
+				break;
+			case XEMUCFG_OPT_BOOL:
+				DEBUGPRINT("CFG: %s %p %d [%s]" NL, p->name, p->opt_bool.p, *p->opt_bool.p, p->help);
+				break;
+			case XEMUCFG_OPT_NUM:
+				DEBUGPRINT("CFG: %s %p %d [%s]" NL, p->name, p->opt_num.p, *p->opt_num.p, p->help);
+				break;
+			case XEMUCFG_OPT_FLOAT:
+				DEBUGPRINT("CFG: %s %p %f [%s]" NL, p->name, p->opt_float.p, *p->opt_float.p, p->help);
+				break;
+			case XEMUCFG_OPT_PROC:
+				DEBUGPRINT("CFG: %s %p [%s]" NL, p->name, p->opt_proc.p, p->help);
+				break;
+		}
+	}
+	DEBUGPRINT("CFG: --- end of dump." NL);
+}
+#endif
 
 // XEMU_CONFIGDB_SUPPORT
 #endif
