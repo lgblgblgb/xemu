@@ -78,7 +78,7 @@ matrix:
             - vic
             - hmw
       after_deploy:
-            - build/deploy/discord-webhook.sh success "Ubuntu Linux DEB" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
+            - build/deploy/discord-webhook.sh success "Ubuntu Linux DEB" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,hmw,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
     - name: Windows cross-compilation on Linux
       os: linux
       addons:
@@ -152,7 +152,7 @@ matrix:
             - vic
             - hmw
       after_deploy:
-            - build/deploy/discord-webhook.sh success "Windows" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
+            - build/deploy/discord-webhook.sh success "Windows" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,hmw,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
     - name: MacOS native compilation
       os: osx
       osx_image: xcode11
@@ -205,7 +205,7 @@ matrix:
             - hmw
             - discord
       after_deploy:
-            - build/deploy/discord-webhook.sh success "MacOS(x86)" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
+            - build/deploy/discord-webhook.sh success "MacOS(x86)" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,hmw,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
 
 env:
   global:

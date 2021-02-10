@@ -90,6 +90,8 @@ static void prg_inject_callback ( void *unused )
 		} else {
 			memory[0xAE] =  prg.size + prg.load_addr;
 			memory[0xAF] = (prg.size + prg.load_addr) >> 8;
+			memory[0x82] =  prg.size + prg.load_addr;
+			memory[0x83] = (prg.size + prg.load_addr) >> 8;
 		}
 		// If program was detected as BASIC (by load-addr) we want to auto-RUN it
 		CBM_SCREEN_PRINTF(under_ready_p, " ?\"@\":RUN:");

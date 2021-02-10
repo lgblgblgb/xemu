@@ -242,8 +242,10 @@ Uint8 io_read ( unsigned int addr )
 		case 0x37:	// $D700-$D7FF ~ M65 I/O mode
 			// FIXME: this is probably very bad! I guess DMA does not decode for every 16 addresses ... Proposed fix is here:
 			addr &= 0xFF;
-			if (addr < 16)
+			if (addr < 15)		// FIXME!!!! 0x0F was part of DMA reg array, but it seems now used by divisor busy stuff??
 				return dma_read_reg(addr & 0xF);
+			if (addr == 0x0F)
+				return 0;	// FIXME: D70F bit 7 = 32/32 bits divisor busy flag, bit 6 = 32*32 mult busy flag. We're never busy, so the zero. But the OTHER bits??? Any purpose of those??
 			// ;) FIXME this is LAZY not to decode if we need to update bigmult at all ;-P
 			if (XEMU_UNLIKELY(!bigmult_valid_result))
 				update_hw_multiplier();
