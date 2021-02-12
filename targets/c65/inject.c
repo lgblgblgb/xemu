@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -103,6 +103,7 @@ static void prg_inject_callback ( void *unused )
 		CBM_SCREEN_PRINTF(under_ready_p, " SYS%d:REM **YOU CAN PRESS RETURN**", prg.load_addr);
 	}
 	free(prg.stream);
+	prg.stream = NULL;
 }
 
 
@@ -208,9 +209,11 @@ error:
 }
 
 
+static const Uint8 ready_msg[] = { 0x12, 0x05, 0x01, 0x04, 0x19, 0x2E };	// "READY." in screen codes
+
+
 static int is_ready_on_screen ( void )
 {
-	static const Uint8 ready[] = { 0x12, 0x05, 0x01, 0x04, 0x19, 0x2E };	// "READY." in screen codes
 	int width = get_screen_width();
 	// TODO: this should be revised in the future, as MEGA65 can other means have
 	// different screen starting addresses, and not even dependent on the 40/80 column mode!!!
@@ -221,7 +224,7 @@ static int is_ready_on_screen ( void )
 		// We need this pointer later, to "fake" a command on the screen
 		under_ready_p = memory + start + i * width;
 		// 0XA0 -> cursor is shown, and the READY. in the previous line
-		if (*under_ready_p == 0xA0 && !memcmp(under_ready_p - width, ready, sizeof ready))
+		if (*under_ready_p == 0xA0 && !memcmp(under_ready_p - width, ready_msg, sizeof ready_msg))
 			return 1;
 	}
 	return 0;
@@ -237,13 +240,13 @@ void inject_ready_check_do ( void )
 			inject_ready_check_status = 2;
 	} else if (inject_ready_check_status == 100) {	// special mode ...
 		// This is used to check the @ char printed by our tricky RUN line to see it's time to release RETURN (or just simply clear all the keyboard)
-		Uint8 *p = under_ready_p + get_screen_width();
-		if (*p == 0x00) {
+		// Also check for 'READY.' if it's still there, run program running maybe cleared the screen and we'll miss '@'!
+		// TODO: this logic is too error-proon! Consider for some timing only, ie wait some frames after virtually pressing RETURN then release it.
+		int width = get_screen_width();
+		if (under_ready_p[width] == 0x00 || memcmp(under_ready_p - width, ready_msg, sizeof ready_msg)) {
 			inject_ready_check_status = 0;
 			clear_emu_events();		// reset keyboard state & co
 			DEBUGPRINT("INJECT: clearing keyboard status on '@' trigger." NL);
-			memset(under_ready_p, ' ', 10);
-			CBM_SCREEN_PRINTF(p, "RUN:");
 		}
 	} else if (inject_ready_check_status > 10) {
 		inject_ready_check_status = 0;	// turn off "ready check" mode, we have our READY.
