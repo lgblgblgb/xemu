@@ -52,11 +52,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/osd_font_16x16.c"
 
 #ifdef XEMU_ARCH_WIN
-#include <windows.h>
-#include <stdio.h>
-#include <io.h>
-#include <fcntl.h>
+#	include <windows.h>
+#	include <stdio.h>
+#	include <io.h>
+#	include <fcntl.h>
 #endif
+//#ifdef XEMU_CONFIGDB_SUPPORT
+//#	include "xemu/emutools_config.h"
+//#endif
 
 const char EMPTY_STR[] = "";
 const int ZERO_INT = 0;
@@ -557,13 +560,38 @@ static char *GetHackedPrefDir ( const char *base_path, const char *name )
 	if (fd < 0)
 		return NULL;
 	close(fd);
-	char *p = SDL_malloc(strlen(path) + 1);
-	if (!p)
-		return NULL;
-	strcpy(p, path);
-	return p;
+	return xemu_strdup(path);
 }
 #endif
+
+
+// "First time user" check. We use SDL file functions here only, to be implementation independent (ie, no need for emutools_files.c ...)
+int xemu_is_first_time_user ( void )
+{
+	static int is_first_time_user = -1;
+	if (is_first_time_user >= 0)
+		return is_first_time_user;
+	char fn[PATH_MAX];
+	snprintf(fn, sizeof fn, "%s%s", sdl_pref_dir, "notfirsttimeuser.txt");
+	SDL_RWops *file = SDL_RWFromFile(fn, "rb");
+	if (file) {
+		SDL_RWclose(file);
+		is_first_time_user = 0;	// not first time user
+		return is_first_time_user;
+	}
+	// First time user, it seems, since we don't have our file
+	// Thus write the "signal file" so next time, it won't be first time ... ;) Confusing sentence ...
+	file = SDL_RWFromFile(fn, "wb");
+	if (!file) {
+		ERROR_WINDOW("Xemu cannot write the preferences directory!\nFile: %s\nError: %s", fn, SDL_GetError());
+		return 0;	// pretend not first time user, since there is some serious problem already ... leave our static variable as is, also!!
+	}
+	static const char message[] = "DO NOT DELETE. Xemu uses this file to tell, if Xemu has been already run on this system at all.";
+	SDL_RWwrite(file, message, strlen(message), 1);	// Nah, we simply do not check if write worked ...
+	SDL_RWclose(file);
+	is_first_time_user = 1;
+	return is_first_time_user;	// first time user detected!!
+}
 
 
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan )
@@ -650,6 +678,11 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 #endif
 	xemu_app_org = xemu_strdup(app_organization);
 	xemu_app_name = xemu_strdup(app_name);
+#ifdef XEMU_CONFIGDB_SUPPORT
+	// If configDB support is compiled in, we can define some common options, should apply for ALL emulators.
+	// This way, it's not needed to define those in all of the emulator targets ...
+	// TODO: it's an unfinished project here ...
+#endif
 }
 
 

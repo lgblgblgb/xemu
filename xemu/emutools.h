@@ -150,6 +150,8 @@ extern unsigned int xemu_get_microseconds ( void );
 extern void *xemu_malloc ( size_t size );
 extern void *xemu_realloc ( void *p, size_t size );
 
+extern int xemu_is_first_time_user ( void );
+
 #if !defined(XEMU_ARCH_HTML) && !defined(XEMU_CPU_ARM)
 #define HAVE_MM_MALLOC
 #endif

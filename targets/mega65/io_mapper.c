@@ -31,6 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "ethernet65.h"
 #include "input_devices.h"
 #include "audio65.h"
+#include "configdb.h"
 
 
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
@@ -41,7 +42,6 @@ static int mouse_x = 0, mouse_y = 0;	// for our primitive C1351 mouse emulation
 int    cpu_mega65_opcodes = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;
 int port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65
-int mega65_model = 0xFF;		// $FF = Xemu/others, 1/2/3 = MEGA65 PCB rev 1/2/3, $40=nexys4, $41=nexys4ddr, $42=nexys4ddr-widget, $FD=wukong, $FE=simulation
 
 
 static const Uint8 fpga_firmware_version[] = { 'X','e','m','u' };
@@ -206,7 +206,7 @@ Uint8 io_read ( unsigned int addr )
 				case 0x13:				// $D613: direct access to the kbd matrix, read selected row (set by writing $D614), bit 0 = key pressed
 					return kbd_directscan_query(D6XX_registers[0x14]);	// for further explanations please see this function in input_devices.c
 				case 0x29:
-					return mega65_model;		// MEGA65 model
+					return configdb.mega65_model;		// MEGA65 model
 				case 0x32: // D632-D635: FPGA firmware ID
 				case 0x33:
 				case 0x34:

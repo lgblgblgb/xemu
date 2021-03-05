@@ -1,6 +1,6 @@
 /* RC2014 and generic Z80 SBC emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2020,2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -37,7 +37,7 @@ extern int  console_status ( void );
 extern int  console_input ( void );
 extern void console_cursor_blink ( int delay );
 extern void console_iteration ( void );
-extern int  console_init ( int width, int height, int zoom_percent, Uint8 *video_mapped, Uint8 *color_mapped );
+extern int  console_init ( int width, int height, int zoom_percent, Uint8 *video_mapped, Uint8 *color_mapped, int sdlrenderquality );
 
 extern void rc_shutdown_callback ( void );
 

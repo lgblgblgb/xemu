@@ -29,6 +29,5 @@ extern Uint8  D7XX[0x100];			// FIXME: newhack!
 extern int    fpga_switches;
 extern struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 extern int    port_d607;			// ugly hack for C65 extended keys ...
-extern int    mega65_model;
 
 #endif

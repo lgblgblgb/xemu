@@ -1,7 +1,7 @@
 /* Learning material to get to know ZX Spectrum (I never had that machine ...)
    by trying to write an emulator :-O
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2017,2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -17,8 +17,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_ZXSPECT_SPECTRUM_H_INCLUDED
-#define __XEMU_ZXSPECT_SPECTRUM_H_INCLUDED
+#ifndef XEMU_ZXSPECT_SPECTRUM_H_INCLUDED
+#define XEMU_ZXSPECT_SPECTRUM_H_INCLUDED
 
 #define ROM_NAME		"#zxspect48.rom"
 #define SCREEN_FORMAT		SDL_PIXELFORMAT_ARGB8888

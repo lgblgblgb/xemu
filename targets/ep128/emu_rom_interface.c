@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2015-2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2016,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "roms.h"
 #include "emu_monitor.h"
 #include "fileio.h"
+#include "configdb.h"
 
 #include <unistd.h>
 #include <time.h>
@@ -95,7 +96,7 @@ void xep_set_default_device_name ( const char *name )
 {
 	int l;
 	if (!name)
-		name = xemucfg_get_str("ddn");
+		name = configdb.ddn;
 	if (!name)
 		name = "";
 	l = strlen(name);
@@ -208,9 +209,9 @@ void xep_rom_trap ( Uint16 pc, Uint8 opcode )
 		case xepsym_trap_on_system_init:
 			exos_version = Z80_B;	// store EXOS version number we got ...
 			memcpy(exos_info, memory + ((xepsym_exos_info_struct & 0x3FFF) | (xep_rom_seg << 14)), 8);
-			if (xemucfg_get_bool("skiplogo")) {
+			if (configdb.skiplogo) {
 				DEBUG("XEP: skiplogo option requested logo skip, etting EXOS variable 0xBFEF to 1 on system init ROM call" NL);
-				EXOS_BYTE(0xBFEF) = 1; // use this, to skip Enterprise logo when it would come :-)
+				EXOS_BYTE(0xBFEF) = 1; // use this, to skip Enterprise logo when it arrives :-)
 			}
 			break;
 		default:

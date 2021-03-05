@@ -1,4 +1,7 @@
-/* This is an odd emulator, emulating a Commodore 64 like machine only for the
+/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+
+   This is an odd emulator, emulating a Commodore 64 like machine only for the
    level needed for a special version of GEOS to be able to run on it.
    You should have a really special one with own disk drive etc, since there
    is no hardware support for drive emulation etc, but it's built in the emulator
@@ -12,8 +15,6 @@
    screen anymore, but the GEOS functions mean to be targeted a "modern UI toolkit",
    ie GTK, so a dozens years old (unmodified) GEOS app would be able to run on a PC
    with modern look and feel, ie anti-aliased fonts, whatever ...
-   ---------------------------------------------------------------------------------
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    ---------------------------------------------------------------------------------
 
 This program is free software; you can redistribute it and/or modify
@@ -143,6 +144,12 @@ static const Uint8 init_vic2_palette_rgb[16 * 3] = {	// VIC2 palette given by RG
 	0x78, 0x6a, 0xbd,
 	0x9f, 0x9f, 0x9f
 };
+
+static struct {
+	int	fullscreen, syscon;
+	int	sdlrenderquality;
+	char	*geosimg, *geoskernal, *drive, *rombasic, *romchar, *romkernal;
+} configdb;
 
 #define CHECK_PIXEL_POINTER
 
@@ -579,9 +586,9 @@ static void geosemu_init ( void )
 	cpu_port_write(1, CPU_PORT_DEFAULT_VALUE1);
 	// *** Load ROM image
 	if (
-		xemu_load_file(xemucfg_get_str("rombasic"),  memory + BASIC_ROM_OFFSET,  8192, 8192, rom_fatal_msg) < 0 ||
-		xemu_load_file(xemucfg_get_str("romkernal"), memory + KERNAL_ROM_OFFSET, 8192, 8192, rom_fatal_msg) < 0 ||
-		xemu_load_file(xemucfg_get_str("romchar"),   memory + CHAR_ROM_OFFSET,   4096, 4096, rom_fatal_msg) < 0
+		xemu_load_file(configdb.rombasic,  memory + BASIC_ROM_OFFSET,  8192, 8192, rom_fatal_msg) < 0 ||
+		xemu_load_file(configdb.romkernal, memory + KERNAL_ROM_OFFSET, 8192, 8192, rom_fatal_msg) < 0 ||
+		xemu_load_file(configdb.romchar,   memory + CHAR_ROM_OFFSET,   4096, 4096, rom_fatal_msg) < 0
 	)
 		XEMUEXIT(1);
 	// *** Patching ROM for custom GEOS loader
@@ -686,7 +693,7 @@ int cpu65_trap_callback ( Uint8 opcode )
 		cpu65.pc = memory[0x300] | (memory[0x301] << 8);
 		return 1;
 	}
-	if (!geos_load_kernal(xemucfg_get_str("geoskernal"))) {
+	if (!geos_load_kernal(configdb.geoskernal)) {
 		geos_loaded = 2;	// GEOS was OK!!!!
 		return 1;	// if no error, return with '1' (as not zero) to signal CPU emulator that trap should not be executed
 	}
@@ -787,19 +794,19 @@ static void update_emulator ( void )
 
 
 
-
 int main ( int argc, char **argv )
 {
 	int cycles, frameskip;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unexplained Commodore GEOS emulator from LGB");
-	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	xemucfg_define_str_option("geosimg", NULL, "Select GEOS disk image to use (NOT USED YET!)");
-	xemucfg_define_str_option("geoskernal", "#geos-kernal.bin", "Select GEOS KERNAL to use");
-	xemucfg_define_str_option("drive", NULL, "Path/name of a D81 GEOS will see as the disk drive");
-	xemucfg_define_str_option("rombasic", "#c64-basic.rom", "Select BASIC ROM to use");
-	xemucfg_define_str_option("romchar", "#c64-chargen.rom", "Select CHARACTER ROM to use");
-	xemucfg_define_str_option("romkernal", "#c64-kernal.rom", "Select KERNAL ROM to use");
-	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
+	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode", &configdb.fullscreen);
+	xemucfg_define_str_option("geosimg", NULL, "Select GEOS disk image to use (NOT USED YET!)", &configdb.geosimg);
+	xemucfg_define_str_option("geoskernal", "#geos-kernal.bin", "Select GEOS KERNAL to use", &configdb.geoskernal);
+	xemucfg_define_str_option("drive", NULL, "Path/name of a D81 GEOS will see as the disk drive", &configdb.drive);
+	xemucfg_define_str_option("rombasic", "#c64-basic.rom", "Select BASIC ROM to use", &configdb.rombasic);
+	xemucfg_define_str_option("romchar", "#c64-chargen.rom", "Select CHARACTER ROM to use", &configdb.romchar);
+	xemucfg_define_str_option("romkernal", "#c64-kernal.rom", "Select KERNAL ROM to use", &configdb.romkernal);
+	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon);
+	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2);
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
@@ -813,7 +820,7 @@ int main ( int argc, char **argv )
 		16,				// we have 16 colours
 		init_vic2_palette_rgb,		// initialize palette from this constant array
 		palette,			// initialize palette into this stuff
-		RENDER_SCALE_QUALITY,		// render scaling quality
+		configdb.sdlrenderquality,	// render scaling quality
 		USE_LOCKED_TEXTURE,		// 1 = locked texture access
 		shutdown_callback		// registered shutdown function
 	))
@@ -822,8 +829,8 @@ int main ( int argc, char **argv )
 	geosemu_init();
 	cycles = 0;
 	frameskip = 0;
-	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
-	if (!xemucfg_get_bool("syscon"))
+	xemu_set_full_screen(configdb.fullscreen);
+	if (!configdb.syscon)
 		sysconsole_close(NULL);
 	// Start!!
 	xemu_timekeeping_start();

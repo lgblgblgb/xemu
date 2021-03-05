@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -93,7 +93,11 @@ static inline void render_dma_audio ( int channel, short *buffer, int len )
 						XEMU_UNREACHABLE();
 				}
 				// TODO: use unsigned_read, convert signed<->unsigned stuff, etc ....
+				// NOTE: the read above to 'unsigned_read' can be still signed, we just read as unsigned 16 bit uniform data
+				// so we can transform here to the output needs (that is: signed 16 bit). It's based on MEGA65's audio DMA
+				// setting: is it fed by unsigned or signed samples?
 				sample[channel] = unsigned_read - 0x8000;
+				sample[channel] = unsigned_read;
 				sample[channel] = (sample[channel] * chio[9]) / 0xFF;	// volume control (reg9, max volume $FF)
 			}
 			if (XEMU_UNLIKELY((addr & 0xFFFF) == limit)) {
@@ -122,7 +126,7 @@ static inline void render_dma_audio ( int channel, short *buffer, int len )
 static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 {
 #if 1
-	//DEBUG("AUDIO: audio callback, wants %d samples" NL, len);
+	//DEBUGPRINT("AUDIO: audio callback, wants %d samples" NL, len);
 	len >>= 2;	// the real size if /4, since it's a stereo stream, and 2 bytes/sample, we want to render
 	short streams[7][len];	// currently. 4 dma channels + two SIDs' 1-1 channel (SID is already rendered together) + 1 for OPL3
 	for (int i = 0; i < 4; i++)
@@ -168,7 +172,7 @@ void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	SDL_AudioSpec audio_want, audio_got;
 	SDL_memset(&audio_want, 0, sizeof(audio_want));
 	audio_want.freq = sound_mix_freq;
-	audio_want.format = AUDIO_S16SYS;	// used format by SID emulation (ie: signed short)
+	audio_want.format = AUDIO_S16SYS;	// used format by SID emulation (ie: signed short, with host byte order)
 	audio_want.channels = 2;		// that is: stereo, for the two SIDs
 	audio_want.samples = 1024;		// Sample size suggested (?) for the callback to render once
 	audio_want.callback = audio_callback;	// Audio render callback function, called periodically by SDL on demand

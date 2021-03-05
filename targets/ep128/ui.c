@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -53,9 +53,9 @@ static void ui_attach_disk ( void )
 		dir,
 		fnbuf,
 		sizeof fnbuf
-	))
+	)) {
 		wd_attach_disk_image(fnbuf);
-	else
+	} else
 		DEBUGPRINT("UI: file selection for floppy mount was cancelled." NL);
 }
 #endif

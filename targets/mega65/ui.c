@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -31,10 +31,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "input_devices.h"
 #include "uart_monitor.h"
 #include "xemu/f011_core.h"
-#include "vic4.h"
 #include "xemu/f018_core.h"
 #include "memory_mapper.h"
 #include "xemu/basic_text.h"
+#include "vic4.h"
+#include "configdb.h"
 
 
 static int attach_d81 ( const char *fn )
@@ -291,8 +292,8 @@ static void ui_dump_memory ( void )
 
 static void ui_cb_show_drive_led ( const struct menu_st *m, int *query )
 {
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, show_drive_led);
-	show_drive_led = !show_drive_led;
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, configdb.show_drive_led);
+	configdb.show_drive_led = !configdb.show_drive_led;
 }
 
 static void ui_emu_info ( void )

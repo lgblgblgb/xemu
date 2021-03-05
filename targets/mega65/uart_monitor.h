@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,9 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_MEGA65_UART_MONITOR_H_INCLUDED
 #define XEMU_MEGA65_UART_MONITOR_H_INCLUDED
 
-#ifdef XEMU_HAS_SOCKET_API
-
-#define HAS_UARTMON_SUPPORT
+#ifdef HAS_UARTMON_SUPPORT
 
 #define UMON_SYNTAX_ERROR "?SYNTAX ERROR  "
 

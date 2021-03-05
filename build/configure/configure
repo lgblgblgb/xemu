@@ -791,7 +791,7 @@ echo "CONFIG_CFLAGS_DEBUG=$CFLAGS_DEBUG" >> $OUTPUT_MAKEFILE
 echo "CONFIG_CFLAGS_LINK=$CFLAGS_LINK" >> $OUTPUT_MAKEFILE
 echo "CONFIG_CFLAGS_OPT_RELEASE=$CFLAGS_OPT_RELEASE" >> $OUTPUT_MAKEFILE
 
-######################################################################## 
+########################################################################
 # Must be the end of this script, do not put anything after this part! #
 ########################################################################
 
