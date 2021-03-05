@@ -1,4 +1,4 @@
-X-Emulators - aka "Xemu" - (C)2016-2020 LGB Gábor Lénárt lgblgblgb@gmail.com
+X-Emulators - aka "Xemu" - (C)2016-2021 LGB Gábor Lénárt lgblgblgb@gmail.com
 
 [ Xemu is licensed under the terms of GNU/GPL v2, for more information please read file LICENSE ]
 
@@ -21,3 +21,5 @@ Help from other people (maybe not a full list, sorry about that), I would like t
   * Hernán Di Pietro: other than being a direct contributor, also helped in testing Xemu, sharing his
     opinion and suggestions, and things like these
   * Snoopy on Forum64: for many tests (C65/MEGA65), bug reports
+  * Gurce: his works on the m65dbg and some fixes on Xemu/MEGA65's "uart monitor" interface
+  * BitShifter: ...

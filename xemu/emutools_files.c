@@ -27,6 +27,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <errno.h>
 
 
+#ifdef XEMU_ARCH_WIN
+#include <windows.h>
+#endif
+
+
 void *xemu_load_buffer_p;
 char  xemu_load_filepath[PATH_MAX];
 
@@ -81,7 +86,6 @@ int xemuexec_check_status ( pid_t pid, int wait )
 }
 
 #else
-#include <windows.h>
 #include <tchar.h>
 
 /* I'm not a Windows programmer not even a user ... By inpsecting MSDN articles, I am not sure, what needs
@@ -721,14 +725,27 @@ int xemu_load_file ( const char *filename, void *store_to, int min_size, int max
 }
 
 
-int xemu_create_sparse_file ( const char *os_path, Uint64 size )
+int xemu_create_large_empty_file ( const char *os_path, Uint64 size, int is_sparse )
 {
-	int err = 0, fd;
-	unsigned char zero = 0;
-	fd = open(os_path, O_BINARY | O_RDWR | O_CREAT, 0600);
+	int error;
+	int fd = open(os_path, O_BINARY | O_RDWR | O_CREAT | O_TRUNC, 0600);
 	if (fd < 0)
 		goto error;
+#ifdef XEMU_ARCH_WIN
+	if (is_sparse) {
+		DWORD dwTemp;
+		if (DeviceIoControl((HANDLE)_get_osfhandle(fd), FSCTL_SET_SPARSE, NULL, 0, NULL, 0, &dwTemp, NULL) == 0) {
+			ERROR_WINDOW("Cannot set file as sparse file!\nWindows error #" PRINTF_LLU "\nIt's not a fatal problem, though the file will take much more space than usual", (unsigned long long int)GetLastError());
+			goto error;
+		} else
+			DEBUGPRINT("WINDOWS: file has been made sparse, lpBytesReturned=" PRINTF_LLU NL, (unsigned long long int)dwTemp);
+	} else
+		DEBUGPRINT("WINDOWS: not using sparse file ..." NL);
+#else
+	is_sparse = 0;	// on non-Windows architectures we simply don't deal with sparse, that's the default!
+#endif
 	if (size > 0) {
+		static const Uint8 zero = 0;
 		size--;
 		if (lseek(fd, size, SEEK_SET) != size)
 			goto error;
@@ -737,15 +754,18 @@ int xemu_create_sparse_file ( const char *os_path, Uint64 size )
 		if (lseek(fd, -1, SEEK_CUR) != size)
 			goto error;
 	}
-	if (close(fd))
-		goto error;
-	return 0;
+	if (!close(fd))
+		return 0;
 error:
-	err = errno;
-	if (fd >= 0)
+	error = errno;
+	if (error >= 0)
+		error = -9999;
+	if (fd >= 0) {
 		close(fd);
-	unlink(os_path);
-	return err ? err : -1;
+		unlink(os_path);
+	}
+	// If request for sparse file and open itself succeeded, try again without sparse ...
+	return (is_sparse && fd >= 0) ? xemu_create_large_empty_file(os_path, size, 0) : error;
 }
 
 

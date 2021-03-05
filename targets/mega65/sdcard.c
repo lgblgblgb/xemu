@@ -348,7 +348,7 @@ retry:
 				"This is unavoidable to emulate something uses an SDHC-card."
 			);
 			if (r) {
-				r = xemu_create_sparse_file(fnbuf, 4294967296UL);
+				r = xemu_create_large_empty_file(fnbuf, 4294967296UL, 1);
 				if (r) {
 					ERROR_WINDOW("Couldn't create SD-card image file (hint: do you have enough space?)\nError message was: %s", strerror(r));
 				} else {
