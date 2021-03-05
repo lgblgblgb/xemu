@@ -264,7 +264,7 @@ Restart the prompt if needed, and finish installing remaining packages with:
 Now we can install the GCC compiler and required packages to build xemu with
 one command executed:
 
-    pacman -S make mingw-w64-x86_64-toolchain mingw-w64-x86_64-SDL2 
+    pacman -S make mingw-w64-x86_64-toolchain mingw-w64-x86_64-SDL2
 
 Build the native Windows executables by issuing:
 

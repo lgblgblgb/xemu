@@ -26,12 +26,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  * itself also at the usage!) that should be only dependent on macros defined in xemu-target.h,
  * since that header file is always included by the build system, at command line level. */
 
-struct configdb_st {          
-        char    *disk8, *disk9;
-        char    *hostfsdir, *rom, *keymap, *gui, *dumpmem;
-        char    *snapload, *snapsave, *prg;
-        int     d81ro, fullscreen, go64, autoload, syscon;
-        int     sdlrenderquality, dmarev, prgmode;
+struct configdb_st {
+	char	*disk8, *disk9;
+	char	*hostfsdir, *rom, *keymap, *gui, *dumpmem;
+	char	*snapload, *snapsave, *prg;
+	int	d81ro, fullscreen, go64, autoload, syscon;
+	int	sdlrenderquality, dmarev, prgmode;
 };
 
 extern struct configdb_st configdb;

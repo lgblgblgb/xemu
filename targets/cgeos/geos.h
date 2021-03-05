@@ -1,6 +1,6 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   
+
    This is an odd emulator, emulating a Commodore 64 like machine only for the
    level needed for a special version of GEOS to be able to run on it.
 
