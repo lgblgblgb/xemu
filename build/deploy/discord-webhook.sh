@@ -10,6 +10,7 @@ BOT_NAME="XEMU Builder"
 BOT_NAME_FUNNY="XEMU (body-)Builder"
 #BOT_AVATAR="https://travis-ci.org/images/logos/TravisCI-Mascot-1.png"
 BOT_AVATAR="https://lgblgblgb.github.io/xemu/images/xemu-48x48.png"
+AUTHOR_DISCORD_ID="731142195851034704"
 
 echo "[DISCORD] Starting ${BOT_NAME} discord trigger with parameter $1 in directory `pwd` on host `hostname`"
 
@@ -95,7 +96,7 @@ if [ "$TRAVIS_REPO_SLUG" == "" ]; then
 fi
 # ---------------------------------------------------------------------------------------------
 XEMU_VERSION="$XEMU_VERSION/$TRAVIS_BRANCH"
-echo "[DISCORD] current branch is ${TRAVIS_BRANCH}"
+echo "[DISCORD] current branch is ${TRAVIS_BRANCH} commit is ${TRAVIS_COMMIT} XEMU version is ${XEMU_VERSION}"
 # ---------------------------------------------------------------------------------------------
 # End of madness
 
@@ -141,7 +142,9 @@ if [ "$TRAVIS_BRANCH" == "master" ]; then
 elif [ "$TRAVIS_BRANCH" == "next" ]; then
 	MSG="${MSG}This is next/**to-be-stable** with possible problems (branch: **${TRAVIS_BRANCH}**) build, so _you have been warned_, but you're more than welcome if you want to _help testing Xemu by using this branch_."
 elif [ "$TRAVIS_BRANCH" == "dev" ]; then
-	MSG="${MSG}This is **development** (branch: **${TRAVIS_BRANCH}**) build, it may ~~overclock and kill your robot vacuum cleaner~~ _won't work at all_."
+	MSG="${MSG}This is **development** (branch: **${TRAVIS_BRANCH}**) build, it may ~~overclock your robot vacuum cleaner while trying to upgrade it into the Skynet~~ _won't work at all_."
+elif [ "$TRAVIS_BRANCH" == "hmw" ]; then
+	MSG="${MSG}This is **VIC-IV experimental** (branch: **${TRAVIS_BRANCH}**) build, it may ~~cause The Burn of all the VIC-IVs in the visible universe~~ _have problems, and lacks of other features of the other branches_."
 else
 	MSG="${MSG}This is \\\"**secret**\\\" not-for-general-use (branch: **${TRAVIS_BRANCH}**) build, ~~you don't want to even know about~~ _you want to be **extremely** careful with_."
 fi
@@ -151,38 +154,48 @@ if [ "$TRAVIS_JOB_WEB_URL" != "" ]; then
 	MSG="$MSG and the [build log](<${TRAVIS_JOB_WEB_URL}>)"
 fi
 MSG="${MSG}, built by ${BUILDER_CI}-CI"
-MSG="${MSG}. :calendar: _${BOT_NAME_FUNNY} @ ${TIMESTAMP}_"
+MSG="${MSG}. :calendar: _${BOT_NAME_FUNNY} on behalf of <@${AUTHOR_DISCORD_ID}> at ${TIMESTAMP}_"
 
 
-WEBHOOK_DATA='{
-	"username": "'$BOT_NAME'",
-	"avatar_url": "'$BOT_AVATAR'",
-	"content": "'$MSG'"
-}'
+WEBHOOK_DATA='{ "username": "'$BOT_NAME'", "avatar_url": "'$BOT_AVATAR'", "content": "'$MSG'" }'
 
 #echo $WEBHOOK_DATA
 #exit 0
 
-for ARG in "$@"; do
+USER_AGENT="TravisCI-Webhook"
+CONTENT_TYPE="Content-Type:application/json"
+X_AUTHOR="X-Author:Xemu"
+
+
+for ARG in $@ ; do
 	VALID_BRANCHES="$(echo "$ARG" | cut -d':' -f1)"
 	WEBHOOK_URL_VAR="$(echo "$ARG" | cut -d':' -f2)"
-	echo "LGB allow-list=(${VALID_BRANCHES}) var-name=(${WEBHOOK_URL_VAR})"
-	if [ "$VALID_BRANCHES" == "" -o "$WEBHOOK_URL_VAR" == "" -o "${!WEBHOOK_URL_VAR}" == "" -o "$WEBHOOK_URL_VAR" == "$VALID_BRANCHES" ]; then
-		echo "[DISCORD] ERROR: invalid specification for branch(es):webhook_url_var part. Skipping this one."
+	#echo "LGB allow-list=(${VALID_BRANCHES}) var-name=(${WEBHOOK_URL_VAR})"
+	if [ "$VALID_BRANCHES" == "" -o "$WEBHOOK_URL_VAR" == "" -o "$WEBHOOK_URL_VAR" == "$VALID_BRANCHES" ]; then
+		echo "[DISCORD] [${ARG}] ERROR: invalid specification for branch(es):webhook_url_var part. Skipping."
 		continue
 	fi
 	if [ "$VALID_BRANCHES" == "ANY" ]; then
-		echo "[DISCORD] 'ANY' was specified for branch-list, treating as an always OK, not checking branch now."
+		echo "[DISCORD] [${ARG}] 'ANY' was specified for branch-list, treating as an always OK, not checking branch now."
 	else
 		if ! echo ",$VALID_BRANCHES," | grep -q ",$TRAVIS_BRANCH," ; then
-			echo "[DISCORD] REJECT: This branch (${TRAVIS_BRANCH}) was not in the allow-list (${VALID_BRANCHES}) for this WEBHOOK (${WEBHOOK_URL_VAR})."
+			echo "[DISCORD] [${ARG}] REJECT: This branch (${TRAVIS_BRANCH}) was not in the allow-list (${VALID_BRANCHES}) for this WEBHOOK (${WEBHOOK_URL_VAR})."
 			continue
 		fi
-		echo "[DISCORD] branch (${TRAVIS_BRANCH}) was accepted according the allow-list (${VALID_BRANCHES})"
+		echo "[DISCORD] [${ARG}] branch (${TRAVIS_BRANCH}) was accepted according the allow-list (${VALID_BRANCHES})"
 	fi
-	echo "[DISCORD] Triggering Discord's webhook ${WEBHOOK_URL_VAR} for branch ${TRAVIS_BRANCH} according to list of ${VALID_BRANCHES} ..."
-	(curl --fail --progress-bar -A "TravisCI-Webhook" -H Content-Type:application/json -H X-Author:Xemu -d "${WEBHOOK_DATA//	/ }" "${!WEBHOOK_URL_VAR}" \
-	&& echo -e "[DISCORD] Successfully sent :-) The end.") || echo -e "[DISCORD] Unable to send :-( The end."
+	echo "[DISCORD] [${ARG}] Triggering Discord's webhook ${WEBHOOK_URL_VAR} for branch ${TRAVIS_BRANCH} according to list of ${VALID_BRANCHES} ..."
+	# Dear reader! Surely, /etc/lgb/discord-webhooks.txt is on my own computer for testing :) So you can stop trying to spy on that somewhere :)
+	THE_URL="$(grep "^${WEBHOOK_URL_VAR}=" /etc/lgb/discord-webhooks.txt 2>/dev/null | tail -1 | cut -d'=' -f2-)"
+	if [ "$THE_URL" == "" ]; then
+		THE_URL="${!WEBHOOK_URL_VAR}"
+	fi
+	if [ "$THE_URL" != "" ]; then
+		( curl --fail --progress-bar -A "${USER_AGENT}" -H "${CONTENT_TYPE}" -H "${X_AUTHOR}" -d "${WEBHOOK_DATA}" "${THE_URL}" && echo "[DISCORD] [${ARG}] Successfully sent :-)" ) || echo "[DISCORD] [${ARG}] ERROR: Unable to send :-("
+	else
+		echo "[DISCORD] [${ARG}] ERROR: Variable ${WEBHOOK_URL_VAR} cannot be found"
+	fi
+	THE_URL=""
 done
 
 exit 0
