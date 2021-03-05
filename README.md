@@ -274,7 +274,7 @@ You can find the executables, with `.native` extension, in the `build/bin`
 directory. Surely, you can (and maybe you want) rename files to have extension
 `.exe` instead.
 
-#### Alternative methodi, cross-compilation on Linux for Windows
+#### Alternative method, cross-compilation on Linux for Windows
 
 Note: this is the _official method we use to build official binaries for Windows_.
 

@@ -560,13 +560,38 @@ static char *GetHackedPrefDir ( const char *base_path, const char *name )
 	if (fd < 0)
 		return NULL;
 	close(fd);
-	char *p = SDL_malloc(strlen(path) + 1);
-	if (!p)
-		return NULL;
-	strcpy(p, path);
-	return p;
+	return xemu_strdup(path);
 }
 #endif
+
+
+// "First time user" check. We use SDL file functions here only, to be implementation independent (ie, no need for emutools_files.c ...)
+int xemu_is_first_time_user ( void )
+{
+	static int is_first_time_user = -1;
+	if (is_first_time_user >= 0)
+		return is_first_time_user;
+	char fn[PATH_MAX];
+	snprintf(fn, sizeof fn, "%s%s", sdl_pref_dir, "notfirsttimeuser.txt");
+	SDL_RWops *file = SDL_RWFromFile(fn, "rb");
+	if (file) {
+		SDL_RWclose(file);
+		is_first_time_user = 0;	// not first time user
+		return is_first_time_user;
+	}
+	// First time user, it seems, since we don't have our file
+	// Thus write the "signal file" so next time, it won't be first time ... ;) Confusing sentence ...
+	file = SDL_RWFromFile(fn, "wb");
+	if (!file) {
+		ERROR_WINDOW("Xemu cannot write the preferences directory!\nFile: %s\nError: %s", fn, SDL_GetError());
+		return 0;	// pretend not first time user, since there is some serious problem already ... leave our static variable as is, also!!
+	}
+	static const char message[] = "DO NOT DELETE. Xemu uses this file to tell, if Xemu has been already run on this system at all.";
+	SDL_RWwrite(file, message, strlen(message), 1);	// Nah, we simply do not check if write worked ...
+	SDL_RWclose(file);
+	is_first_time_user = 1;
+	return is_first_time_user;	// first time user detected!!
+}
 
 
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan )

@@ -29,6 +29,8 @@ extern Uint8 hwa_kbd_get_modifiers ( void );
 extern void  hwa_kbd_move_next     ( void );
 extern void  hwa_kbd_fake_key      ( Uint8 k );
 
+extern Uint8 kbd_directscan_query  ( Uint8 row );
+
 extern void  kbd_trigger_restore_trap ( void );
 
 #endif

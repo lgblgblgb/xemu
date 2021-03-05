@@ -159,6 +159,21 @@ static void hwa_kbd_convert_and_push ( int pos )
 }
 
 
+// MEGA65's own way to do keyboard matrix scan. The theory is very similar to the C64 style
+// (via CIA ports) scan, however the differenced/benefits:
+// * no joystick interference on the keyboard
+// * C65 extra keys are part of the main matrix
+// * row selection is a simple number not mask of rows (that can be a "con" too if you want to check multiple rows at once?)
+Uint8 kbd_directscan_query ( Uint8 row )
+{
+	if (row > 8)	// FIXME: what happens in this case?
+		return 0xFF;
+	if (row == 8)	// this is the "extra" row of the "C65 keys"
+		return kbd_matrix[(C65_KEYBOARD_EXTRA_POS) >> 4];
+	// Otherwise the normal "C64-style" matrix is used.
+	return kbd_matrix[row];
+}
+
 
 void clear_emu_events ( void )
 {
