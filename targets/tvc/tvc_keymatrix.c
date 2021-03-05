@@ -1,7 +1,8 @@
 /* Test-case for a very simple and inaccurate Videoton TV computer
-   (a Z80 based 8 bit computer) emulator using SDL2 library.
+   (a Z80 based 8 bit computer) emulator.
 
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2015-2017,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This emulator is HIGHLY inaccurate and unusable.
 

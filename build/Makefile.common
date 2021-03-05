@@ -1,5 +1,5 @@
 ## Collection of emulators of some 8 bits machines using SDL2 library,
-## including the Commodore LCD and Commodore 65 and the MEGA65 too.
+## including the MEGA65, Commodore LCD and Commodore 65.
 ##
 ## Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
@@ -60,6 +60,7 @@ ASMOUT			= no
 DEBUG			= no
 RELEASE			= no
 OFFICIALBUILD		= no
+SUPERPICKY		= no
 
 CFLAGS_TARGET		= $(CFLAGS_TARGET_$(PRG_TARGET))
 LDFLAGS_TARGET		= $(LDFLAGS_TARGET_$(PRG_TARGET))
@@ -80,10 +81,12 @@ endif
 ifeq ($(OFFICIALBUILD), yes)
 CFLAGS_OPT		+= -DXEMU_OFFICIAL_BUILD
 endif
+ifeq ($(SUPERPICKY), yes)
+CONFIG_CFLAGS		+= $(CONFIG_CFLAGS_SUPERPICKY)
+endif
 
 CFLAGS			= $(CONFIG_CFLAGS) $(CFLAGS_OPT) $(CFLAGS_TARGET) -I. -I$(TOPDIR) -include build/configure/config-$(ARCH).h
 LDFLAGS			= $(CONFIG_CFLAGS_LINK) $(LDFLAGS_TARGET)
-
 
 ifeq ($(CONFIG_HAS_WINDRES), yes)
 WINDRES_SRC	= $(TOPDIR)/build/windres.rc
