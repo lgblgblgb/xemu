@@ -40,8 +40,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888
 #define USE_LOCKED_TEXTURE	1
 #define RENDER_SCALE_QUALITY	0
-#define SCREEN_WIDTH		640
-#define SCREEN_HEIGHT		200
 
 // Default fast clock of M65, in MHz (can be overriden with CLI switch)
 #define MEGA65_DEFAULT_FAST_CLOCK	40.0
@@ -78,7 +76,8 @@ extern int  dump_memory       ( const char *fn );
 extern int  refill_c65_rom_from_preinit_cache ( void );
 
 extern int newhack;
-extern unsigned int frames_total_counter;
+// extern unsigned int frames_total_counter;	XXX remove this
 extern int register_screenshot_request;
+extern Uint8 last_dd00_bits;
 
 #endif

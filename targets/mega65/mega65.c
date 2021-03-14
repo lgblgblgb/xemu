@@ -46,11 +46,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static int nmi_level;			// please read the comment at nmi_set() below
 
 int newhack = 0;
-unsigned int frames_total_counter = 0;
+//unsigned int frames_total_counter = 0;	// XXX remove this
 
 static int  cpu_cycles_per_scanline_for_fast_mode, speed_current;
 static char fast_mhz_in_string[16];
-static int frame_counter;
+//static int frame_counter;		// XXX remove this
 static int   paused = 0, paused_old = 0;
 static int   breakpoint_pc = -1;
 #ifdef TRACE_NEXT_SUPPORT
@@ -71,6 +71,8 @@ static Uint8 nvram_original[sizeof nvram];
 static int uuid_must_be_saved = 0;
 
 int register_screenshot_request = 0;
+
+Uint8 last_dd00_bits = 3;		// Bank 0
 
 
 
@@ -179,12 +181,26 @@ static void cia2_setint_cb ( int level )
 
 static void cia2_out_a ( Uint8 data )
 {
+	// XXX  My code
+#if 0
 	vic2_16k_bank = ((~(data | (~cia2.DDRA))) & 3) << 14;
 	vic_vidp_legacy = 1;
 	vic_chrp_legacy = 1;
 	vic_sprp_legacy = 1;
 	// TODO FIXME: add sprites pointers!
 	DEBUG("VIC2: 16K BANK is set to $%04X (CIA mask=$%02X)" NL, vic2_16k_bank, cia2.DDRA);
+#endif
+	// Code from HMW, XXX FIXME
+	// Note, I have removed the REG_CRAM2K since it's not possible to hit this callback anyways if CIA is "covered" by colour RAM
+	if (REG_HOTREG) {
+		// Bank select
+		data &= (cia2.DDRA & 3); // Mask bank bits through CIA DDR register bits
+		REG_SCRNPTR_B1 = (~data << 6) | (REG_SCRNPTR_B1 & 0x3F);
+		REG_CHARPTR_B1 = (~data << 6) | (REG_CHARPTR_B1 & 0x3F);
+		REG_SPRPTR_B1  = (~data << 6) | (REG_SPRPTR_B1 & 0x3F);
+		last_dd00_bits = data;
+		//DEBUGPRINT("VIC2: (hotreg)Wrote to $DD00: $%02x screen=$%08x char=$%08x spr=$%08x" NL, data, SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
+	}
 }
 
 
@@ -473,10 +489,10 @@ static void update_emulator ( void )
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_update();
 #endif
-	// Screen rendering: begin
-	vic_render_screen();
-	// Screen rendering: end
-	xemu_timekeeping_delay(40000);
+	// Screen updating, final phase
+	vic4_close_frame_access();
+	// Let's sleep ...
+	xemu_timekeeping_delay(videostd_frametime);
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
 //	if (seconds_timer_trigger) {
 	const struct tm *t = xemu_get_localtime();
@@ -601,10 +617,11 @@ void m65mon_breakpoint ( int brk )
 }
 #endif
 
-static int cycles, frameskip;
+static int cycles;  // XXX: remove his: frameskip;
 
 static void emulation_loop ( void )
 {
+	vic4_open_frame_access();
 	for (;;) {
 #ifdef TRACE_NEXT_SUPPORT
 		if (trace_next_trigger == 2) {
@@ -672,11 +689,19 @@ static void emulation_loop ( void )
 #endif
 		);	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
 		if (cycles >= cpu_cycles_per_scanline) {
-			scanline++;
-			//DEBUG("VIC3: new scanline (%d)!" NL, scanline);
 			cycles -= cpu_cycles_per_scanline;
 			cia_tick(&cia1, 64);
 			cia_tick(&cia2, 64);
+			if (vic4_render_scanline()) {
+				if (XEMU_UNLIKELY(inject_ready_check_status))
+					inject_ready_check_do();
+				sid1.sFrameCount++;
+				sid2.sFrameCount++;
+				update_emulator();
+				return;
+			}
+			// XXX remove this, from the pre-Hernan code
+#if 0
 			if (scanline == 312) {
 				if (XEMU_UNLIKELY(inject_ready_check_status))
 					inject_ready_check_do();
@@ -690,7 +715,7 @@ static void emulation_loop ( void )
 				frame_counter++;
 				if (frame_counter == 25) {
 					frame_counter = 0;
-					vic3_blink_phase = !vic3_blink_phase;
+					//vic3_blink_phase = !vic3_blink_phase; XXX remove this
 				}
 				frames_total_counter++;
 				if (!frameskip)	// FIXME: do this better!!!!!!
@@ -699,6 +724,7 @@ static void emulation_loop ( void )
 			//DEBUG("RASTER=%d COMPARE=%d" NL,scanline,compare_raster);
 			//vic_interrupt();
 			vic3_check_raster_interrupt();
+#endif
 		}
 	}
 }
@@ -724,8 +750,8 @@ int main ( int argc, char **argv )
 		TARGET_DESC APP_DESC_APPEND,	// window title
 		1,				// resizable window
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
-		SCREEN_WIDTH, SCREEN_HEIGHT * 2,// logical size (used with keeping aspect ratio by the SDL render stuffs)
-		SCREEN_WIDTH, SCREEN_HEIGHT * 2,// window size
+		SCREEN_WIDTH, SCREEN_HEIGHT,	// logical size (used with keeping aspect ratio by the SDL render stuffs)
+		SCREEN_WIDTH, SCREEN_HEIGHT,	// window size
 		SCREEN_FORMAT,			// pixel format
 		0,				// we have *NO* pre-defined colours as with more simple machines (too many we need). we want to do this ourselves!
 		NULL,				// -- "" --
@@ -784,9 +810,9 @@ int main ( int argc, char **argv )
 		c64_register_fake_typing(fake_typing_for_load65);
 #endif
 	cycles = 0;
-	frameskip = 0;
-	frame_counter = 0;
-	vic3_blink_phase = 0;
+	//frameskip = 0;	XXX remove this
+	//frame_counter = 0;	XXX remove this
+	//vic3_blink_phase = 0; XXX remove this
 	if (audio) {
 		DEBUGPRINT("AUDIO: start" NL);
 		SDL_PauseAudioDevice(audio, 0);
