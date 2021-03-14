@@ -2,7 +2,7 @@
 ## This file is part of the Xemu project: https://github.com/lgblgblgb/xemu
 ## Collection of various emulators of some 8 bits machines using SDL2 library.
 ##
-## Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -65,6 +65,7 @@ CC=""
 WINDRES=""
 SDL2_CONFIG=""
 PKG_CONFIG=""
+CFLAGS_USER="$val"
 while [ "$1" != "" ] ; do
 	var="`echo $1 | cut -f1 -d=`"
 	val="`echo $1 | cut -f2- -d=`"
@@ -84,6 +85,9 @@ while [ "$1" != "" ] ; do
 		"--with-pkg-config")
 			PKG_CONFIG=$val
 			;;
+		"--with-cflags")
+			CFLAGS_USER="$val"
+			;;
 		"--help")
 			cat <<EOF
 
@@ -101,6 +105,8 @@ Usage:
 				by MingW even when targeted for Windows, to
 				reduce the windows-madness) running on eg Linux
 				(even in WSL) or natively on Windows, eg MSYS2.
+
+	--with-cflags=...	Sets some CFLAGS to be used on compilation.
 
 	--with-windres=WINDRES	Sets the name (or path+name) of the WINDRES
 				compiler. Only make sense if cross compile for
@@ -291,7 +297,7 @@ echo "#define XEMU_BUILD_OS \"$BUILD_OS\"" >> $OUTPUT_HEADERFILE
 echo "int main ( void ) { return 0; }" > $SRC
 echo -n "Test if $CC can create object file ... "
 rm -f $OBJ
-$CC -Wall -o $OBJ -c $SRC > $COUT 2> $CERR
+$CC $CFLAGS_USER -Wall -o $OBJ -c $SRC > $COUT 2> $CERR
 ret=$?
 if [ "$ret" != "0" -o ! -s $OBJ ]; then
 	echo "NO"
@@ -328,6 +334,8 @@ for a in \
 	FALIGN_FUNCTIONS_SUPPORTED_BY_CC:-falign-functions=16: \
 	      FNO_COMMON_SUPPORTED_BY_CC:-fno-common:essential \
 	            WALL_SUPPORTED_BY_CC:-Wall:essential \
+		  WEXTRA_SUPPORTED_BY_CC:-Wextra: \
+	     WEVERYTHING_SUPPORTED_BY_CC:-Weverything: \
 	      FFAST_MATH_SUPPORTED_BY_CC:-ffast-math: \
 	           OFAST_SUPPORTED_BY_CC:-Ofast: \
 	              O3_SUPPORTED_BY_CC:-O3:essential \
@@ -362,7 +370,8 @@ do
 	fi
 done
 echo
-CFLAGS="-Wall -fno-common "
+CFLAGS="-Wall -fno-common $CFLAGS_USER "
+CFLAGS_SUPERPICKY=""
 CFLAGS_OPT=""
 CFLAGS_DEBUG=""
 CFLAGS_LINK="-fno-common "
@@ -399,6 +408,12 @@ if [ $FALIGN_LOOPS_SUPPORTED_BY_CC = Y ]; then
 fi
 if [ $FALIGN_FUNCTIONS_SUPPORTED_BY_CC = Y ]; then
 	CFLAGS_OPT="$CFLAGS_OPT-falign-functions=16 "
+fi
+if [ $WEXTRA_SUPPORTED_BY_CC = Y ]; then
+	CFLAGS_SUPERPICKY="$CFLAGS_SUPERPICKY-Wextra "
+fi
+if [ $WEVERYTHING_SUPPORTED_BY_CC = Y ]; then
+	CFLAGS_SUPERPICKY="$CFLAGS_SUPERPICKY-Weverything "
 fi
 echo "#define XEMU_MAKE_ARCH $ARCH" >> $OUTPUT_HEADERFILE
 echo "#define XEMU_MAKE_ARCH_NAME \"$ARCH\"" >> $OUTPUT_HEADERFILE
@@ -783,9 +798,11 @@ echo "MATH_CFLAGS=" >> $OUTPUT_MAKEFILE
 ########################################
 
 echo "Common $CC flags to be used: $CFLAGS"
+echo "Common $CC 'superpicky' flags can be used: $CFLAGS_SUPERPICKY"
 echo "Common $CC optimization flags to be used: $CFLAGS_OPT"
 echo "Common $CC debug flags to be used: $CFLAGS_DEBUG"
 echo "CONFIG_CFLAGS=$CFLAGS" >> $OUTPUT_MAKEFILE
+echo "CONFIG_CFLAGS_SUPERPICKY=$CFLAGS_SUPERPICKY" >> $OUTPUT_MAKEFILE
 echo "CONFIG_CFLAGS_OPT=$CFLAGS_OPT" >> $OUTPUT_MAKEFILE
 echo "CONFIG_CFLAGS_DEBUG=$CFLAGS_DEBUG" >> $OUTPUT_MAKEFILE
 echo "CONFIG_CFLAGS_LINK=$CFLAGS_LINK" >> $OUTPUT_MAKEFILE

@@ -34,6 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/f018_core.h"
 #include "memory_mapper.h"
 #include "xemu/basic_text.h"
+#include "audio65.h"
 #include "vic4.h"
 #include "configdb.h"
 
@@ -344,6 +345,11 @@ static void ui_put_screen_text_into_paste_buffer ( void )
 }
 
 
+static void ui_cb_mono_downmix ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == stereo_separation);
+	audio_set_stereo_parameters(AUDIO_UNCHANGED_VOLUME, VOIDPTR_TO_INT(m->user_data));
+}
 
 
 /**** MENU SYSTEM ****/
@@ -405,8 +411,34 @@ static const struct menu_st menu_d81[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_detach_d81, NULL },
 	{ NULL }
 };
+static const struct menu_st menu_audio[] = {
+	{ "Hard stereo separation",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) 100 },
+	{ "Mono downmix 80%",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)  80 },
+	{ "Mono downmix 60%",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)  60 },
+	{ "Mono downmix 40%",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)  40 },
+	{ "Mono downmix 20%",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)  20 },
+	{ "Mono downmix",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)   0 },
+	{ "Mono downmix -20%",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) -20 },
+	{ "Mono downmix -40%",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) -40 },
+	{ "Mono downmix -60%",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) -60 },
+	{ "Mono downmix -80%",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) -80 },
+	{ "Hard stereo - reserved",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)-100 },
+	{ NULL }
+};
 static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
+	{ "Audio",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio   },
 	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
 	{ "FD D81",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_d81     },
 	{ "Reset",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },

@@ -741,7 +741,9 @@ int main ( int argc, char **argv )
 	mega65_init();
 	audio65_init(
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
-		AUDIO_SAMPLE_FREQ		// sound mix freq
+		AUDIO_SAMPLE_FREQ,		// sound mix freq
+		configdb.mastervolume,
+		configdb.stereoseparation
 	);
 	DEBUGPRINT("MEM: UNHANDLED memory policy: %d" NL, configdb.skip_unhandled_mem);
 	if (configdb.skip_unhandled_mem)
