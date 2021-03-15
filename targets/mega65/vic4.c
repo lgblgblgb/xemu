@@ -160,7 +160,6 @@ static const Uint8 reverse_byte_table[] = {
 
 void vic_reset ( void )
 {
-	//vic2_16k_bank = 0;	XXX remove this
 	vic_iomode = VIC2_IOMODE;
 	interrupt_status = 0;
 	compare_raster = 0;
@@ -181,7 +180,6 @@ void vic_init ( void )
 	// Init VIC4 stuffs
 	vic4_init_palette();
 	force_fast = 0;
-	// scanline = 0;	// XXX remove this
 	vic_reset();
 	c128_d030_reg = 0xFE;	// this may be set to 2MHz in the previous step, so be sure to set to FF here, BUT FIX: bit 0 should be inverted!!
 	machine_set_speed(0);
@@ -189,27 +187,6 @@ void vic_init ( void )
 	colour_ram_current_ptr = colour_ram;
 	DEBUG("VIC4: has been initialized." NL);
 }
-
-
-// TODO: XXX remove this (even the #if 0 block), just stays here now to remember to
-// have some viewport setting stuff implemented, but NOT this way!
-#if 0
-// This function allows to switch between NTSC/PAL on-the-fly (NTSC = 1. PAL = 0)
-void vic4_switch_display_mode(int ntsc)
-{
-	DEBUGPRINT("VIC: switch_display_mode NTSC=%d" NL, ntsc);
-	xemu_change_display_mode(SCREEN_WIDTH, ntsc ? PHYSICAL_RASTERS_NTSC : PHYSICAL_RASTERS_PAL,	// texture sizes
-		SCREEN_WIDTH, SCREEN_HEIGHT,	// logical size (used with keeping aspect ratio by the SDL render stuffs)
-		SCREEN_WIDTH, SCREEN_HEIGHT,	// window size
-		SCREEN_FORMAT,
-		USE_LOCKED_TEXTURE
-	);
-	if(!xemucfg_get_bool("fullborders"))
-		xemu_set_viewport(48, 32, SCREEN_WIDTH - 48, SCREEN_HEIGHT, 1);
-	vic4_open_frame_access();
-}
-#endif
-
 
 
 // Pair of vic4_open_frame_access() and the place when screen is updated at SDL level, finally.
@@ -273,7 +250,7 @@ void vic4_open_frame_access()
 		}
 		DEBUGPRINT("VIC: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime);
 		videostd_name = new_name;
-		xemu_set_viewport(48, 32, SCREEN_WIDTH - 48, visible_area_height - 1);
+		xemu_set_viewport(48, 32, SCREEN_WIDTH - 48, visible_area_height - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
 	}
 	// FIXME: do we need this here? Ie, should this always bound to video mode change (only at frame boundary!) or not ...
 #if 0
@@ -862,6 +839,7 @@ Uint8 vic_read_reg ( int unsigned addr )
 #undef CASE_VIC_4
 #undef CASE_VIC_ALL
 #undef CASE_VIC_3_4
+
 
 static inline Uint32 get_charset_effective_addr()
 {

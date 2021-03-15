@@ -739,7 +739,7 @@ int xemu_init_sdl ( void )
 }
 
 
-void xemu_set_viewport ( unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2 )
+void xemu_set_viewport ( unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, unsigned int flags )
 {
 	if (XEMU_UNLIKELY(x1 == 0 && y1 == 0 && x2 == 0 && y2 == 0)) {
 		sdl_viewport_ptr = NULL;
@@ -758,6 +758,8 @@ void xemu_set_viewport ( unsigned int x1, unsigned int y1, unsigned int x2, unsi
 			sdl_viewport.h = y2 - y1 + 1;
 		}
 	}
+	if ((flags & XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE))
+		SDL_RenderSetLogicalSize(sdl_ren, sdl_viewport.w, sdl_viewport.h);
 }
 
 
@@ -908,7 +910,7 @@ int xemu_post_init (
 	SDL_RenderSetLogicalSize(sdl_ren, logical_x_size, logical_y_size);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
 	sdl_texture_x_size = texture_x_size;
 	sdl_texture_y_size = texture_y_size;
-	xemu_set_viewport(0, 0, 0, 0);
+	xemu_set_viewport(0, 0, 0, 0, 0);
 	sdl_tex = SDL_CreateTexture(sdl_ren, pixel_format, SDL_TEXTUREACCESS_STREAMING, texture_x_size, texture_y_size);
 	if (!sdl_tex) {
 		ERROR_WINDOW("Cannot create SDL texture: %s", SDL_GetError());

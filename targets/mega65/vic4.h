@@ -241,8 +241,6 @@ extern int   videostd_frametime;
 extern int   videostd_changed;
 extern float videostd_1mhz_cycles_per_scanline;
 
-//extern int   user_scanlines_setting;	XXX remove this
-
 extern int   vic_vidp_legacy, vic_chrp_legacy, vic_sprp_legacy;
 
 extern const char *iomode_names[4];
