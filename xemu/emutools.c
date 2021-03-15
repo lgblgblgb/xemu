@@ -115,6 +115,8 @@ FILE *debug_fp = NULL;
 int chatty_xemu = 1;
 int sdl_default_win_x_size;
 int sdl_default_win_y_size;
+static SDL_Rect sdl_viewport, *sdl_viewport_ptr = NULL;
+static unsigned int sdl_texture_x_size, sdl_texture_y_size;
 
 static int osd_enabled = 0, osd_available = 0, osd_xsize, osd_ysize, osd_fade_dec, osd_fade_end, osd_alpha_last;
 int osd_status = 0;
@@ -737,6 +739,18 @@ int xemu_init_sdl ( void )
 }
 
 
+void xemu_set_viewport ( unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2 )
+{
+	if (XEMU_UNLIKELY(x1 > x2 || y1 > y2 || x2 >= sdl_texture_x_size || y2 >= sdl_texture_y_size))
+		FATAL("Invalid xemu_set_viewport(%d,%d,%d,%d) for texture (%d x %d)", x1, y1, x2, y2, sdl_texture_x_size, sdl_texture_y_size);
+	sdl_viewport.x = x1;
+	sdl_viewport.y = y1;
+	sdl_viewport.w = x2 - x1 + 1;
+	sdl_viewport.h = y2 - y1 + 1;
+	sdl_viewport_ptr = &sdl_viewport;
+}
+
+
 /* Return value: 0 = ok, otherwise: ERROR, caller must exit, and can't use any other functionality, otherwise crash would happen.*/
 int xemu_post_init (
 	const char *window_title,		// title of our window
@@ -869,6 +883,9 @@ int xemu_post_init (
 		DEBUGPRINT(")" NL);
 	}
 	SDL_RenderSetLogicalSize(sdl_ren, logical_x_size, logical_y_size);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
+	sdl_viewport_ptr = NULL;
+	sdl_texture_x_size = texture_x_size;
+	sdl_texture_y_size = texture_y_size;
 	sdl_tex = SDL_CreateTexture(sdl_ren, pixel_format, SDL_TEXTUREACCESS_STREAMING, texture_x_size, texture_y_size);
 	if (!sdl_tex) {
 		ERROR_WINDOW("Cannot create SDL texture: %s", SDL_GetError());
@@ -1019,7 +1036,7 @@ void xemu_update_screen ( void )
 	}
 	//if (seconds_timer_trigger)
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
-	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);
+	SDL_RenderCopy(sdl_ren, sdl_tex, sdl_viewport_ptr, NULL);
 	if (osd_status) {
 		if (osd_status < OSD_STATIC)
 			osd_status -= osd_fade_dec;

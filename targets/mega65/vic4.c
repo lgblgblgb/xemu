@@ -261,6 +261,8 @@ void vic4_open_frame_access()
 		}
 		DEBUGPRINT("VIC: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime);
 		videostd_name = new_name;
+		//xemu_set_viewport(48, 32, SCREEN_WIDTH - 48, SCREEN_HEIGHT - 1);
+		xemu_set_viewport(48, 32, SCREEN_WIDTH - 48, visible_area_height - 1);
 	}
 	// FIXME: do we need this here? Ie, should this always bound to video mode change (only at frame boundary!) or not ...
 #if 0
