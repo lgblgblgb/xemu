@@ -46,9 +46,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 // Needed CPU cycles for a (PAL) scanline for a given mode.
 // For "fast clock", it's calculated, see MEGA65_DEFAULT_FAST_CLOCK
-#define CPU_C65_CYCLES_PER_SCANLINE	227
-#define CPU_C128_CYCLES_PER_SCANLINE	128
-#define CPU_C64_CYCLES_PER_SCANLINE	64
+#define CPU_C65_CYCLES_PER_SCANLINE	113
+#define CPU_C128_CYCLES_PER_SCANLINE	64
+#define CPU_C64_CYCLES_PER_SCANLINE	32
 
 #define SID_CYCLES_PER_SEC	1000000
 #define AUDIO_SAMPLE_FREQ	44100

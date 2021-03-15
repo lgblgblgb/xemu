@@ -46,23 +46,21 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static int nmi_level;			// please read the comment at nmi_set() below
 
 int newhack = 0;
-//unsigned int frames_total_counter = 0;	// XXX remove this
 
-static int  cpu_cycles_per_scanline_for_fast_mode, speed_current;
-static char fast_mhz_in_string[16];
-//static int frame_counter;		// XXX remove this
-static int   paused = 0, paused_old = 0;
-static int   breakpoint_pc = -1;
+static int cpu_cycles_per_scanline_for_fast_mode, speed_current;
+static int paused = 0, paused_old = 0;
+static int breakpoint_pc = -1;
 #ifdef TRACE_NEXT_SUPPORT
-static int   orig_sp = 0;
-static int   trace_next_trigger = 0;
+static int orig_sp = 0;
+static int trace_next_trigger = 0;
 #endif
-static int   trace_step_trigger = 0;
+static int trace_step_trigger = 0;
 #ifdef HAS_UARTMON_SUPPORT
 static void (*m65mon_callback)(void) = NULL;
 #endif
 static const char emulator_paused_title[] = "TRACE/PAUSE";
 static char emulator_speed_title[64] = "";
+static char fast_mhz_in_string[16] = "";
 static const char *cpu_clock_speed_strs[4] = { "1MHz", "2MHz", "3.5MHz", fast_mhz_in_string };
 static int cpu_clock_speed_str_index = 0;
 static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
@@ -388,7 +386,7 @@ static void mega65_init ( void )
 	uartmon_init(configdb.uartmon);
 #endif
 	sprintf(fast_mhz_in_string, "%.2fMHz", configdb.fast_mhz);
-	cpu_cycles_per_scanline_for_fast_mode = 64 * configdb.fast_mhz;
+	cpu_cycles_per_scanline_for_fast_mode = 32 * configdb.fast_mhz;
 	DEBUGPRINT("SPEED: fast clock is set to %.2fMHz, %d CPU cycles per scanline." NL, configdb.fast_mhz, cpu_cycles_per_scanline_for_fast_mode);
 	cpu65_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
 	rom_protect = 0;
@@ -624,10 +622,10 @@ void m65mon_breakpoint ( int brk )
 }
 #endif
 
-static int cycles;  // XXX: remove his: frameskip;
 
 static void emulation_loop ( void )
 {
+	static int cycles = 0;	// used for "balance" CPU cycles per scanline, must be static!
 	vic4_open_frame_access();
 	for (;;) {
 #ifdef TRACE_NEXT_SUPPORT
@@ -697,7 +695,7 @@ static void emulation_loop ( void )
 		);	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
 		if (cycles >= cpu_cycles_per_scanline) {
 			cycles -= cpu_cycles_per_scanline;
-			cia_tick(&cia1, 32);	// FIXME: why 32?????? why fixed?????
+			cia_tick(&cia1, 32);	// FIXME: why 32?????? why fixed????? what should be the CIA "tick" frequency for real? Is it dependent on NTSC/PAL?
 			cia_tick(&cia2, 32);
 			if (XEMU_UNLIKELY(vic4_render_scanline()))
 				break;	// break the (main, "for") loop, if frame is over!
@@ -786,10 +784,6 @@ int main ( int argc, char **argv )
 	} else if (configdb.autoload)
 		c64_register_fake_typing(fake_typing_for_load65);
 #endif
-	cycles = 0;
-	//frameskip = 0;	XXX remove this
-	//frame_counter = 0;	XXX remove this
-	//vic3_blink_phase = 0; XXX remove this
 	if (audio) {
 		DEBUGPRINT("AUDIO: start" NL);
 		SDL_PauseAudioDevice(audio, 0);
@@ -798,6 +792,7 @@ int main ( int argc, char **argv )
 	if (!configdb.syscon)
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();
+	// FIXME: for emscripten (anyway it does not work too much currently) there should be 50 or 60 (PAL/NTSC) instead of (fixed, and wrong!) 25!!!!!!
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;
 }
