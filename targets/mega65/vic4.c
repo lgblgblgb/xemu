@@ -25,6 +25,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "memory_mapper.h"
 #include "hypervisor.h"
 #include "configdb.h"
+#include "xemu/f011_core.h"
+
 
 const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
@@ -218,6 +220,16 @@ void vic4_close_frame_access()
 	// but vic4_close_frame_access() will be a place for more work in the future.
 	// TODO: port "drive LED", and "screenshot" at last!
 	// reference: in the next branch do: git diff de5948b5a23f7cff296749b84b840a9ca28c48e1 .
+	
+	// Render "drive LED" if it was requested at all
+	if (configdb.show_drive_led && fdc_get_led_state(16)) {
+		unsigned int x_origin, y_origin;
+		xemu_get_viewport(NULL, &y_origin, &x_origin, NULL);
+		for (unsigned int y = 0; y < 8; y++)
+			for (unsigned int x = 0; x < 8; x++)
+				*(pixel_start + x_origin - 10 + x + (y + 2 + y_origin) * (SCREEN_WIDTH)) = (x > 1 && x < 7 && y > 1 && y < 7) ? red_colour : black_colour;
+	}
+	// FINALLY ....
 	xemu_update_screen();
 }
 
@@ -261,7 +273,6 @@ void vic4_open_frame_access()
 		}
 		DEBUGPRINT("VIC: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime);
 		videostd_name = new_name;
-		//xemu_set_viewport(48, 32, SCREEN_WIDTH - 48, SCREEN_HEIGHT - 1);
 		xemu_set_viewport(48, 32, SCREEN_WIDTH - 48, visible_area_height - 1);
 	}
 	// FIXME: do we need this here? Ie, should this always bound to video mode change (only at frame boundary!) or not ...

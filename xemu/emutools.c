@@ -741,13 +741,36 @@ int xemu_init_sdl ( void )
 
 void xemu_set_viewport ( unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2 )
 {
-	if (XEMU_UNLIKELY(x1 > x2 || y1 > y2 || x2 >= sdl_texture_x_size || y2 >= sdl_texture_y_size))
-		FATAL("Invalid xemu_set_viewport(%d,%d,%d,%d) for texture (%d x %d)", x1, y1, x2, y2, sdl_texture_x_size, sdl_texture_y_size);
-	sdl_viewport.x = x1;
-	sdl_viewport.y = y1;
-	sdl_viewport.w = x2 - x1 + 1;
-	sdl_viewport.h = y2 - y1 + 1;
-	sdl_viewport_ptr = &sdl_viewport;
+	if (XEMU_UNLIKELY(x1 == 0 && y1 == 0 && x2 == 0 && y2 == 0)) {
+		sdl_viewport_ptr = NULL;
+		sdl_viewport.x = 0;
+		sdl_viewport.y = 0;
+		sdl_viewport.w = sdl_texture_x_size;
+		sdl_viewport.h = sdl_texture_y_size;
+	} else {
+		if (XEMU_UNLIKELY(x1 > x2 || y1 > y2 || x1 >= sdl_texture_x_size || y1 >= sdl_texture_y_size || x2 >= sdl_texture_x_size || y2 >= sdl_texture_y_size))
+			FATAL("Invalid xemu_set_viewport(%d,%d,%d,%d) for texture (%d x %d)", x1, y1, x2, y2, sdl_texture_x_size, sdl_texture_y_size);
+		else {
+			sdl_viewport_ptr = &sdl_viewport;
+			sdl_viewport.x = x1;
+			sdl_viewport.y = y1;
+			sdl_viewport.w = x2 - x1 + 1;
+			sdl_viewport.h = y2 - y1 + 1;
+		}
+	}
+}
+
+
+void xemu_get_viewport ( unsigned int *x1, unsigned int *y1, unsigned int *x2, unsigned int *y2 )
+{
+	if (x1)
+		*x1 = sdl_viewport.x;
+	if (y1)
+		*y1 = sdl_viewport.y;
+	if (x2)
+		*x2 = sdl_viewport.x + sdl_viewport.w - 1;
+	if (y2)
+		*y2 = sdl_viewport.y + sdl_viewport.h - 1;
 }
 
 
@@ -883,9 +906,9 @@ int xemu_post_init (
 		DEBUGPRINT(")" NL);
 	}
 	SDL_RenderSetLogicalSize(sdl_ren, logical_x_size, logical_y_size);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
-	sdl_viewport_ptr = NULL;
 	sdl_texture_x_size = texture_x_size;
 	sdl_texture_y_size = texture_y_size;
+	xemu_set_viewport(0, 0, 0, 0);
 	sdl_tex = SDL_CreateTexture(sdl_ren, pixel_format, SDL_TEXTUREACCESS_STREAMING, texture_x_size, texture_y_size);
 	if (!sdl_tex) {
 		ERROR_WINDOW("Cannot create SDL texture: %s", SDL_GetError());
