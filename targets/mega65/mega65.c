@@ -47,7 +47,7 @@ static int nmi_level;			// please read the comment at nmi_set() below
 
 int newhack = 0;
 
-static int cpu_cycles_per_scanline_for_fast_mode, speed_current;
+static int speed_current = -1;
 static int paused = 0, paused_old = 0;
 static int breakpoint_pc = -1;
 #ifdef TRACE_NEXT_SUPPORT
@@ -62,7 +62,8 @@ static const char emulator_paused_title[] = "TRACE/PAUSE";
 static char emulator_speed_title[64] = "";
 static char fast_mhz_in_string[16] = "";
 static const char *cpu_clock_speed_strs[4] = { "1MHz", "2MHz", "3.5MHz", fast_mhz_in_string };
-static int cpu_clock_speed_str_index = 0;
+static unsigned int cpu_clock_speed_str_index = 0;
+static unsigned int cpu_cycles_per_scanline;
 static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 
 static int force_external_rom = 0;
@@ -106,32 +107,34 @@ void machine_set_speed ( int verbose )
 	if (speed_wanted != speed_current) {
 		speed_current = speed_wanted;
 		switch (speed_wanted) {
+			// NOTE: videostd_1mhz_cycles_per_scanline is set by vic4.c and also includes the video standard
 			case 4:	// 100 - 1MHz
 			case 5:	// 101 - 1MHz
-				cpu_cycles_per_scanline = CPU_C64_CYCLES_PER_SCANLINE;
+				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C64_MHZ_CLOCK));
 				cpu_clock_speed_str_index = 0;
 				cpu65_set_ce_timing(0);
 				break;
 			case 0:	// 000 - 2MHz
-				cpu_cycles_per_scanline = CPU_C128_CYCLES_PER_SCANLINE;
+				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C128_MHZ_CLOCK));
 				cpu_clock_speed_str_index = 1;
 				cpu65_set_ce_timing(0);
 				break;
 			case 2:	// 010 - 3.5MHz
 			case 6:	// 110 - 3.5MHz
-				cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
+				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C65_MHZ_CLOCK));
 				cpu_clock_speed_str_index = 2;
 				cpu65_set_ce_timing(1);
 				break;
 			case 1:	// 001 - 40MHz (or Xemu specified custom speed)
 			case 3:	// 011 -		-- "" --
 			case 7:	// 111 -		-- "" --
-				cpu_cycles_per_scanline = cpu_cycles_per_scanline_for_fast_mode;
+				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(configdb.fast_mhz));
 				cpu_clock_speed_str_index = 3;
 				cpu65_set_ce_timing(1);
 				break;
 		}
-		DEBUG("SPEED: CPU speed is set to %s" NL, emulator_speed_title);
+		// XXX use only DEBUG() here!
+		DEBUGPRINT("SPEED: CPU speed is set to %s, cycles per scanline: %d (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_strs[cpu_clock_speed_str_index], cpu_cycles_per_scanline, videostd_1mhz_cycles_per_scanline);
 		if (cpu_cycles_per_step > 1)	// if in trace mode, do not set this!
 			cpu_cycles_per_step = cpu_cycles_per_scanline;
 	}
@@ -386,8 +389,7 @@ static void mega65_init ( void )
 	uartmon_init(configdb.uartmon);
 #endif
 	sprintf(fast_mhz_in_string, "%.2fMHz", configdb.fast_mhz);
-	cpu_cycles_per_scanline_for_fast_mode = 32 * configdb.fast_mhz;
-	DEBUGPRINT("SPEED: fast clock is set to %.2fMHz, %d CPU cycles per scanline." NL, configdb.fast_mhz, cpu_cycles_per_scanline_for_fast_mode);
+	DEBUGPRINT("SPEED: fast clock is set to %.2fMHz." NL, configdb.fast_mhz);
 	cpu65_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
 	rom_protect = 0;
 	hypervisor_start_machine();
@@ -627,6 +629,15 @@ static void emulation_loop ( void )
 {
 	static int cycles = 0;	// used for "balance" CPU cycles per scanline, must be static!
 	vic4_open_frame_access();
+	//DEBUGPRINT("cpu_cycles_per_scanline=%d" NL, cpu_cycles_per_scanline);	// XXX remove this
+	if (XEMU_UNLIKELY(videostd_changed)) {
+		// video standard (PAL/NTSC) affects the "CPU cycles per scanline" variable, which is used in this main emulation loop below.
+		// thus, if vic-4 emulation set videostd_changed, we should react with enforce a re-calibration.
+		// videostd_changed is set by vic4_open_frame_access() in vic4.c, thus we do here right after calling it.
+		videostd_changed = 0;
+		speed_current = -1;	// to enforce recalculation timing in machine_set_speed()
+		machine_set_speed(0);
+	}
 	for (;;) {
 #ifdef TRACE_NEXT_SUPPORT
 		if (trace_next_trigger == 2) {

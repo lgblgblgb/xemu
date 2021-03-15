@@ -233,12 +233,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern int   vic_iomode;
 //extern int   scanline;
 extern Uint8 vic_registers[];
-extern int   cpu_cycles_per_scanline;
 extern int   force_fast;
 extern Uint8 c128_d030_reg;
 
 extern const char *videostd_name;
 extern int   videostd_frametime;
+extern int   videostd_changed;
+extern float videostd_1mhz_cycles_per_scanline;
 
 //extern int   user_scanlines_setting;	XXX remove this
 

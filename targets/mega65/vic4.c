@@ -35,8 +35,6 @@ static Uint32 *pixel_raster_start;				// first pixel of current raster
 Uint8 vic_registers[0x80];					// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
 int vic_iomode;							// VIC2/VIC3/VIC4 mode
 int force_fast;							// POKE 0,64 and 0,65 trick ...
-//int scanline;							// current scan line number	XXX do we need this? remove???????
-int cpu_cycles_per_scanline;
 static int compare_raster;					// raster compare (9 bits width) data
 static int logical_raster = 0;
 static int interrupt_status;					// Interrupt status of VIC
@@ -53,8 +51,7 @@ static int char_row = 0, display_row = 0;
 static Uint8 bg_pixel_state[1024];				// See FOREGROUND_PIXEL and BACKGROUND_PIXEL constants
 static Uint8* screen_ram_current_ptr = NULL;
 static Uint8* colour_ram_current_ptr = NULL;
-//int user_scanlines_setting = 0;		// XXX remove this
-float char_x_step = 0.0;
+static float char_x_step = 0.0;
 static int enable_bg_paint = 1;
 static int display_row_count = 0;
 static int max_rasters = PHYSICAL_RASTERS_DEFAULT;
@@ -67,6 +64,8 @@ static Uint32 red_colour, black_colour;		// used by "drive LED" stuff
 Uint8 videostd_id = 0xFF;			// 0=PAL, 1=NTSC [give some insane value by default to force the change at the fist frame after starting Xemu]
 const char *videostd_name = "<UNDEF>";		// PAL or NTSC, however initially is not yet set
 int videostd_frametime = NTSC_FRAME_TIME;	// time in microseconds for a frame to produce
+float videostd_1mhz_cycles_per_scanline = 30.0;	// have *some* value to jumpstart emulation, it will be overriden sooner or later
+int videostd_changed = 0;
 static const char NTSC_STD_NAME[] = "NTSC";
 static const char PAL_STD_NAME[] = "PAL";
 
@@ -241,32 +240,27 @@ void vic4_open_frame_access()
 	if (XEMU_UNLIKELY(new_mode != videostd_id)) {
 		// We have video mode change!
 		videostd_id = new_mode;
+		// signal that video standard has been changed, it's handled in the main emulation stuff then (reacted with recalculated timing change, and such)
+		// ... including the task of resetting this signal variable!
+		videostd_changed = 1;
 		const char *new_name;
-		float cycles_at_1mhz;	// 1MHz CPU cycles equalient of a scanline time
 		if (videostd_id) {
 			// --- NTSC ---
 			new_name = NTSC_STD_NAME;
 			videostd_frametime = NTSC_FRAME_TIME;
-			cycles_at_1mhz = 1000000.0 / NTSC_LINE_FREQ;
+			videostd_1mhz_cycles_per_scanline = 1000000.0 / (float)(NTSC_LINE_FREQ);
 			max_rasters = PHYSICAL_RASTERS_NTSC;
 			visible_area_height = SCREEN_HEIGHT_VISIBLE_NTSC;
 		} else {
 			// --- PAL ---
 			new_name = PAL_STD_NAME;
 			videostd_frametime = PAL_FRAME_TIME;
-			cycles_at_1mhz = 1000000.0 / PAL_LINE_FREQ;
+			videostd_1mhz_cycles_per_scanline = 1000000.0 / (float)(PAL_LINE_FREQ);
 			max_rasters = PHYSICAL_RASTERS_PAL;
 			visible_area_height = SCREEN_HEIGHT_VISIBLE_PAL;
 		}
-		DEBUGPRINT("VIC: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec)" NL, videostd_name, new_name, cycles_at_1mhz, videostd_frametime);
+		DEBUGPRINT("VIC: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime);
 		videostd_name = new_name;
-#if 0
-		// TODO: recalculate cpu_cycles/line "constants" for each CPU speed modes (1, 2, 3.5, ~40 MHz)
-		cpu_cycles_per_line_c64  = (int)roundf(cycles_at_1mhz);
-		cpu_cycles_per_line_c128 = (int)roundf(cycles_at_1mhz * 2.0);
-		cpu_cycles_per_line_c65  = (int)roundf(cycles_at_1mhz * 3.5);
-		cpu_cycles_per_line_m65  = (int)roundf(cycles_at_1mhz * 40.0);	// FIXME: configdb.fastclock for newer Xemu! This is BAD since it can be other than 40!!!!
-#endif
 	}
 	// FIXME: do we need this here? Ie, should this always bound to video mode change (only at frame boundary!) or not ...
 #if 0

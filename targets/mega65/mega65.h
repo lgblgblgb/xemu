@@ -35,20 +35,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define CHAR_ROM_NAME		"CHARROM.ROM"
 #define CHAR_ROM_SIZE		0x2000
 
-/* Do *NOT* modify these, as other parts of the emulator currently depends on these values ...
-   You can try RENDER_SCALE_QUALITY though with values 0, 1, 2 */
+// Do *NOT* modify these, as other parts of the emulator currently depends on these values ...
 #define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888
 #define USE_LOCKED_TEXTURE	1
 #define RENDER_SCALE_QUALITY	0
 
+#define C64_MHZ_CLOCK		1.0
+#define C128_MHZ_CLOCK		2.0
+#define C65_MHZ_CLOCK		3.5
 // Default fast clock of M65, in MHz (can be overriden with CLI switch)
-#define MEGA65_DEFAULT_FAST_CLOCK	40.0
-
-// Needed CPU cycles for a (PAL) scanline for a given mode.
-// For "fast clock", it's calculated, see MEGA65_DEFAULT_FAST_CLOCK
-#define CPU_C65_CYCLES_PER_SCANLINE	113
-#define CPU_C128_CYCLES_PER_SCANLINE	64
-#define CPU_C64_CYCLES_PER_SCANLINE	32
+#define M65_DEFAULT_FAST_CLOCK	40.0
 
 #define SID_CYCLES_PER_SEC	1000000
 #define AUDIO_SAMPLE_FREQ	44100
