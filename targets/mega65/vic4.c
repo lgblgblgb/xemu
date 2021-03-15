@@ -214,7 +214,7 @@ void vic4_switch_display_mode(int ntsc)
 // Do NOT call this function from vic4.c! It must be used by the emulator's main loop!
 void vic4_close_frame_access()
 {
-	// TODO: it looks lame to have a function just to call this other,
+	// TODO: it looks lame to have a function just to call another one,
 	// but vic4_close_frame_access() will be a place for more work in the future.
 	// TODO: port "drive LED", and "screenshot" at last!
 	// reference: in the next branch do: git diff de5948b5a23f7cff296749b84b840a9ca28c48e1 .

@@ -104,8 +104,10 @@ void machine_set_speed ( int verbose )
 	);
 	// ^1 at c128... because it was inverted :-O --> FIXME: this is ugly workaround, the switch statement should be re-organized
 	speed_wanted = (in_hypervisor || force_fast) ? 7 : ((((c128_d030_reg & 1) ^ 1) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
-	if (speed_wanted != speed_current) {
+	// videostd_changed: we also want to force recalulation if PAL/NTSC change happened, even if the speed setting remains the same!
+	if (speed_wanted != speed_current || videostd_changed) {
 		speed_current = speed_wanted;
+		videostd_changed = 0;
 		switch (speed_wanted) {
 			// NOTE: videostd_1mhz_cycles_per_scanline is set by vic4.c and also includes the video standard
 			case 4:	// 100 - 1MHz
@@ -629,15 +631,11 @@ static void emulation_loop ( void )
 {
 	static int cycles = 0;	// used for "balance" CPU cycles per scanline, must be static!
 	vic4_open_frame_access();
-	//DEBUGPRINT("cpu_cycles_per_scanline=%d" NL, cpu_cycles_per_scanline);	// XXX remove this
-	if (XEMU_UNLIKELY(videostd_changed)) {
-		// video standard (PAL/NTSC) affects the "CPU cycles per scanline" variable, which is used in this main emulation loop below.
-		// thus, if vic-4 emulation set videostd_changed, we should react with enforce a re-calibration.
-		// videostd_changed is set by vic4_open_frame_access() in vic4.c, thus we do here right after calling it.
-		videostd_changed = 0;
-		speed_current = -1;	// to enforce recalculation timing in machine_set_speed()
-		machine_set_speed(0);
-	}
+	// video standard (PAL/NTSC) affects the "CPU cycles per scanline" variable, which is used in this main emulation loop below.
+	// thus, if vic-4 emulation set videostd_changed, we should react with enforce a re-calibration.
+	// videostd_changed is set by vic4_open_frame_access() in vic4.c, thus we do here right after calling it.
+	// machine_set_speed() will react to videostd_changed flag, so it's just enough to call it from here
+	machine_set_speed(0);
 	for (;;) {
 #ifdef TRACE_NEXT_SUPPORT
 		if (trace_next_trigger == 2) {
