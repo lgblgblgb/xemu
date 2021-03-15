@@ -18,13 +18,13 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
-#include "xemu/emutools_config.h"
 #include "mega65.h"
 #include "xemu/cpu65.h"
 #include "vic4.h"
 #include "vic4_palette.h"
 #include "memory_mapper.h"
 #include "hypervisor.h"
+#include "configdb.h"
 
 const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
@@ -237,7 +237,7 @@ void vic4_open_frame_access()
 	// Though it can be changed any time, this kind of information really only can be applied
 	// at frame level. Thus we check here, if during the previous frame there was change
 	// and apply the video mode set for our just started new frame.
-	Uint8 new_mode = !!(vic_registers[0x6F] & 0x80);
+	Uint8 new_mode = (configdb.force_videostd >= 0) ? configdb.force_videostd : !!(vic_registers[0x6F] & 0x80);
 	if (XEMU_UNLIKELY(new_mode != videostd_id)) {
 		// We have video mode change!
 		videostd_id = new_mode;

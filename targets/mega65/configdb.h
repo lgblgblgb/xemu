@@ -57,6 +57,7 @@ struct configdb_st {
 	char	*keymap;
 #endif
 	char	*selectedgui;
+	int	force_videostd;
 	int	show_drive_led;
 	int	hyperdebug;
 	int	hyperserialascii;
