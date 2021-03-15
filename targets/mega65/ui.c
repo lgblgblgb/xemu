@@ -307,7 +307,7 @@ static void ui_emu_info ( void )
 		"DMA chip current revision: %d (F018 rev-%s)\n"
 		"ROM version detected: %d%s\n"
 		"C64 'CPU' I/O port (low 3 bits): DDR=%d OUT=%d\n"
-		"Current VIC I/O mode: %s, hot registers are %s\n"
+		"Current VIC and I/O mode: %s %s, hot registers are %s\n"
 		"\n"
 		"Xemu host CPU usage so far: %s\n"
 		"Xemu's host OS: %s"
@@ -315,7 +315,7 @@ static void ui_emu_info ( void )
 		dma_chip_revision, dma_chip_revision ? "B, new" : "A, old",
 		rom_date, rom_date > 0 ? "" : " (unknown or bad ROM signature)",
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
-		vic_iomode < 4 ? iomode_names[vic_iomode] : "?INVALID?", (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
+		vic_iomode < 4 ? iomode_names[vic_iomode] : "?INVALID?", videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
 		td_stat_str,
 		uname_str
 	);

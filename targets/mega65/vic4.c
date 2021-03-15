@@ -35,7 +35,7 @@ static Uint32 *pixel_raster_start;				// first pixel of current raster
 Uint8 vic_registers[0x80];					// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
 int vic_iomode;							// VIC2/VIC3/VIC4 mode
 int force_fast;							// POKE 0,64 and 0,65 trick ...
-//int scanline;							// current scan line number
+//int scanline;							// current scan line number	XXX do we need this? remove???????
 int cpu_cycles_per_scanline;
 static int compare_raster;					// raster compare (9 bits width) data
 static int logical_raster = 0;
@@ -53,7 +53,7 @@ static int char_row = 0, display_row = 0;
 static Uint8 bg_pixel_state[1024];				// See FOREGROUND_PIXEL and BACKGROUND_PIXEL constants
 static Uint8* screen_ram_current_ptr = NULL;
 static Uint8* colour_ram_current_ptr = NULL;
-int user_scanlines_setting = 0;
+//int user_scanlines_setting = 0;		// XXX remove this
 float char_x_step = 0.0;
 static int enable_bg_paint = 1;
 static int display_row_count = 0;
@@ -190,7 +190,7 @@ void vic_init ( void )
 }
 
 
-// TODO: remove this (even the #if 0 block), just stays here now to remember to
+// TODO: XXX remove this (even the #if 0 block), just stays here now to remember to
 // have some viewport setting stuff implemented, but NOT this way!
 #if 0
 // This function allows to switch between NTSC/PAL on-the-fly (NTSC = 1. PAL = 0)
@@ -212,6 +212,7 @@ void vic4_switch_display_mode(int ntsc)
 
 
 // Pair of vic4_open_frame_access() and the place when screen is updated at SDL level, finally.
+// Do NOT call this function from vic4.c! It must be used by the emulator's main loop!
 void vic4_close_frame_access()
 {
 	// TODO: it looks lame to have a function just to call this other,
@@ -224,6 +225,7 @@ void vic4_close_frame_access()
 
 // Must be called before using the texture at all, otherwise crash will happen, or nothing at all.
 // Access must be closed with vic4_close_frame_access().
+// Do NOT call this function from vic4.c! It must be used by the emulator's main loop!
 void vic4_open_frame_access()
 {
 	int tail_sdl;

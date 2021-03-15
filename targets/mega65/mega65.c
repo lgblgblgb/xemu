@@ -62,7 +62,9 @@ static int   trace_step_trigger = 0;
 static void (*m65mon_callback)(void) = NULL;
 #endif
 static const char emulator_paused_title[] = "TRACE/PAUSE";
-static char emulator_speed_title[64] = "?MHz";
+static char emulator_speed_title[64] = "";
+static const char *cpu_clock_speed_strs[4] = { "1MHz", "2MHz", "3.5MHz", fast_mhz_in_string };
+static int cpu_clock_speed_str_index = 0;
 static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 
 static int force_external_rom = 0;
@@ -86,8 +88,6 @@ void cpu65_illegal_opcode_callback ( void )
 void machine_set_speed ( int verbose )
 {
 	int speed_wanted;
-	// TODO: MEGA65 speed is not handled yet. Reasons: too slow emulation for average PC, and the complete control of speed, ie lack of C128-fast (2MHz mode,
-	// because of incomplete VIC register I/O handling).
 	// Actually the rule would be something like that (this comment is here by intent, for later implementation FIXME TODO), some VHDL draft only:
 	// cpu_speed := vicii_2mhz&viciii_fast&viciv_fast
 	// if hypervisor_mode='0' and ((speed_gate='1') and (force_fast='0')) then -- LGB: vicii_2mhz seems to be a low-active signal?
@@ -111,25 +111,25 @@ void machine_set_speed ( int verbose )
 			case 4:	// 100 - 1MHz
 			case 5:	// 101 - 1MHz
 				cpu_cycles_per_scanline = CPU_C64_CYCLES_PER_SCANLINE;
-				strcpy(emulator_speed_title, "1MHz");
+				cpu_clock_speed_str_index = 0;
 				cpu65_set_ce_timing(0);
 				break;
 			case 0:	// 000 - 2MHz
 				cpu_cycles_per_scanline = CPU_C128_CYCLES_PER_SCANLINE;
-				strcpy(emulator_speed_title, "2MHz");
+				cpu_clock_speed_str_index = 1;
 				cpu65_set_ce_timing(0);
 				break;
 			case 2:	// 010 - 3.5MHz
 			case 6:	// 110 - 3.5MHz
 				cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
-				strcpy(emulator_speed_title, "3.5MHz");
+				cpu_clock_speed_str_index = 2;
 				cpu65_set_ce_timing(1);
 				break;
 			case 1:	// 001 - 40MHz (or Xemu specified custom speed)
 			case 3:	// 011 -		-- "" --
 			case 7:	// 111 -		-- "" --
 				cpu_cycles_per_scanline = cpu_cycles_per_scanline_for_fast_mode;
-				strcpy(emulator_speed_title, fast_mhz_in_string);
+				cpu_clock_speed_str_index = 3;
 				cpu65_set_ce_timing(1);
 				break;
 		}
@@ -480,6 +480,13 @@ int reset_mega65_asked ( void )
 
 static void update_emulator ( void )
 {
+	if (XEMU_UNLIKELY(inject_ready_check_status))
+		inject_ready_check_do();
+	sid1.sFrameCount++;
+	sid2.sFrameCount++;
+	strcpy(emulator_speed_title, cpu_clock_speed_strs[cpu_clock_speed_str_index]);
+	strcat(emulator_speed_title, " ");
+	strcat(emulator_speed_title, videostd_name);
 	hid_handle_all_sdl_events();
 	xemugui_iteration();
 	nmi_set(IS_RESTORE_PRESSED(), 2);	// Custom handling of the restore key ...
@@ -690,43 +697,13 @@ static void emulation_loop ( void )
 		);	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
 		if (cycles >= cpu_cycles_per_scanline) {
 			cycles -= cpu_cycles_per_scanline;
-			cia_tick(&cia1, 64);
-			cia_tick(&cia2, 64);
-			if (vic4_render_scanline()) {
-				if (XEMU_UNLIKELY(inject_ready_check_status))
-					inject_ready_check_do();
-				sid1.sFrameCount++;
-				sid2.sFrameCount++;
-				update_emulator();
-				return;
-			}
-			// XXX remove this, from the pre-Hernan code
-#if 0
-			if (scanline == 312) {
-				if (XEMU_UNLIKELY(inject_ready_check_status))
-					inject_ready_check_do();
-				//DEBUG("VIC3: new frame!" NL);
-				frameskip = !frameskip;
-				scanline = 0;
-				if (!frameskip)	// well, let's only render every full frames (~ie 25Hz)
-					update_emulator();
-				sid1.sFrameCount++;
-				sid2.sFrameCount++;
-				frame_counter++;
-				if (frame_counter == 25) {
-					frame_counter = 0;
-					//vic3_blink_phase = !vic3_blink_phase; XXX remove this
-				}
-				frames_total_counter++;
-				if (!frameskip)	// FIXME: do this better!!!!!!
-					return;
-			}
-			//DEBUG("RASTER=%d COMPARE=%d" NL,scanline,compare_raster);
-			//vic_interrupt();
-			vic3_check_raster_interrupt();
-#endif
+			cia_tick(&cia1, 32);	// FIXME: why 32?????? why fixed?????
+			cia_tick(&cia2, 32);
+			if (XEMU_UNLIKELY(vic4_render_scanline()))
+				break;	// break the (main, "for") loop, if frame is over!
 		}
 	}
+	update_emulator();
 }
 
 
