@@ -360,6 +360,7 @@ static void ui_video_standard ( const struct menu_st *m, int *query )
 		reg |= 0x80;
 	else
 		reg &= 0x7F;
+	configdb.force_videostd = -1;	// turn off possible CLI/config dictated force video mode, otherwise it won't work to change video standard ...
 	vic_write_reg(0x6F, reg);
 }
 

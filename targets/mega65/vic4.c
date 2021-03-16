@@ -200,7 +200,7 @@ void vic4_close_frame_access()
 	
 	// Render "drive LED" if it was requested at all
 	if (configdb.show_drive_led && fdc_get_led_state(16)) {
-		unsigned int x_origin, y_origin;
+		unsigned int x_origin, y_origin;	// top right corner of the viewport
 		xemu_get_viewport(NULL, &y_origin, &x_origin, NULL);
 		for (unsigned int y = 0; y < 8; y++)
 			for (unsigned int x = 0; x < 8; x++)
