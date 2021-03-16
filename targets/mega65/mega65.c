@@ -482,6 +482,7 @@ int reset_mega65_asked ( void )
 
 static void update_emulator ( void )
 {
+	// XXX: some things has been moved here from the main loop, however update_emulator is called from other places as well, FIXME check if it causes problems or not!
 	if (XEMU_UNLIKELY(inject_ready_check_status))
 		inject_ready_check_do();
 	sid1.sFrameCount++;
@@ -662,9 +663,10 @@ static void emulation_loop ( void )
 				uartmon_finish_command();
 			}
 #endif
-			// we still need to feed our emulator with update events ... It also slows this pause-busy-loop down to every full frames (~25Hz)
+			// we still need to feed our emulator with update events ... It also slows this pause-busy-loop down to every full frames (~25Hz) <--- XXX totally inaccurate now!
 			// note, that it messes timing up a bit here, as there is update_emulator() calls later in the "normal" code as well
 			// this can be a bug, but real-time emulation is not so much an issue if you eg doing trace of your code ...
+			// XXX it's maybe a problem to call this!!! update_emulator() is called here which closes frame but no no reopen then ... FIXME: handle this somehow!
 			update_emulator();
 			if (trace_step_trigger) {
 				// if monitor trigges a step, break the pause loop, however we will get back the control on the next

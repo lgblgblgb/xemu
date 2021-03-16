@@ -1,6 +1,5 @@
-/* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing
-   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and MEGA65 as well.
+/* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
+   8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
    Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -391,7 +390,6 @@ static inline void do_sleep ( int td )
 }
 
 
-
 /* Should be called regularly (eg on each screen global update), this function
    tries to keep the emulation speed near to real-time of the emulated machine.
    It's assumed that this function is called at least at every 0.1 sec or even
@@ -454,7 +452,6 @@ void xemu_timekeeping_delay ( int td_em )
 		td_balancer = 0;
 	}
 }
-
 
 
 static void atexit_callback_for_console ( void )
@@ -748,9 +745,9 @@ void xemu_set_viewport ( unsigned int x1, unsigned int y1, unsigned int x2, unsi
 		sdl_viewport.w = sdl_texture_x_size;
 		sdl_viewport.h = sdl_texture_y_size;
 	} else {
-		if (XEMU_UNLIKELY(x1 > x2 || y1 > y2 || x1 >= sdl_texture_x_size || y1 >= sdl_texture_y_size || x2 >= sdl_texture_x_size || y2 >= sdl_texture_y_size))
+		if (XEMU_UNLIKELY(x1 > x2 || y1 > y2 || x1 >= sdl_texture_x_size || y1 >= sdl_texture_y_size || x2 >= sdl_texture_x_size || y2 >= sdl_texture_y_size)) {
 			FATAL("Invalid xemu_set_viewport(%d,%d,%d,%d) for texture (%d x %d)", x1, y1, x2, y2, sdl_texture_x_size, sdl_texture_y_size);
-		else {
+		} else {
 			sdl_viewport_ptr = &sdl_viewport;
 			sdl_viewport.x = x1;
 			sdl_viewport.y = y1;
@@ -758,8 +755,12 @@ void xemu_set_viewport ( unsigned int x1, unsigned int y1, unsigned int x2, unsi
 			sdl_viewport.h = y2 - y1 + 1;
 		}
 	}
-	if ((flags & XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE))
+	if ((flags & XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE)) {
 		SDL_RenderSetLogicalSize(sdl_ren, sdl_viewport.w, sdl_viewport.h);
+		// XXX this should be not handled this way
+		sdl_default_win_x_size = sdl_viewport.w;
+		sdl_default_win_y_size = sdl_viewport.h;
+	}
 }
 
 
@@ -1001,7 +1002,6 @@ void xemu_timekeeping_start ( void )
 }
 
 
-
 void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_size )
 {
 	int tail;
@@ -1014,7 +1014,6 @@ void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_
 	seconds_timer_trigger = 1;
 	xemu_update_screen();
 }
-
 
 
 /* You *MUST* call this _ONCE_ before any access of pixels of the rendering target

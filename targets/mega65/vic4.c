@@ -34,7 +34,7 @@ const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 static Uint32 *current_pixel;					// current_pixel pointer to the rendering target (one current_pixel: 32 bit)
 static Uint32 *pixel_end, *pixel_start;				// points to the end and start of the buffer
 static Uint32 *pixel_raster_start;				// first pixel of current raster
-Uint8 vic_registers[0x80];					// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
+Uint8 vic_registers[0x80];					// VIC-4 registers
 int vic_iomode;							// VIC2/VIC3/VIC4 mode
 int force_fast;							// POKE 0,64 and 0,65 trick ...
 static int compare_raster;					// raster compare (9 bits width) data

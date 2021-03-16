@@ -352,14 +352,34 @@ static void ui_cb_mono_downmix ( const struct menu_st *m, int *query )
 }
 
 
+static void ui_video_standard ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == videostd_id);
+	Uint8 reg = vic_read_reg(0x6F);
+	if (m->user_data)
+		reg |= 0x80;
+	else
+		reg &= 0x7F;
+	vic_write_reg(0x6F, reg);
+}
+
+
 /**** MENU SYSTEM ****/
 
 
+static const struct menu_st menu_video_standard[] = {
+	{ "PAL",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_video_standard, (void*)0 },
+	{ "NTSC",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_video_standard, (void*)1 },
+	{ NULL }
+};
 static const struct menu_st menu_display[] = {
 	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)0 },
 	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)1 },
 	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize, (void*)2 },
+	{ "Video standard",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_video_standard },
 	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
 	{ "Show drive LED",		XEMUGUI_MENUID_CALLABLE |
