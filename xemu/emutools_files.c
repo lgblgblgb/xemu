@@ -1,6 +1,5 @@
-/* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing
-   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and MEGA65 as well.
+/* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
+ * 8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
    Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -777,7 +776,7 @@ char xemu_screenshot_full_path[PATH_MAX+1];
 // NOTE: you must call this function before the final rendering of course, thus source_pixels has a full rendered frame already ;)
 // NOTE: ... however, it must be called BEFORE xemu_update_screen() otherwise the texture access may not be valid anymore and crash occures
 // source_pixels CAN be null. In this case though, Xemu framework tries to use the right pointer based on locked texture or non-locked mode.
-int xemu_screenshot_png ( const char *path, const char *fn, int zoom_width, int zoom_height, Uint32 *source_pixels, int source_width, int source_height )
+int xemu_screenshot_png ( const char *path, const char *fn, unsigned int zoom_width, unsigned int zoom_height, Uint32 *source_pixels, unsigned int source_width, unsigned int source_height, unsigned int source_texture_width )
 {
 	int target_width = source_width * zoom_width;
 	int target_height = source_height * zoom_height;
@@ -801,7 +800,7 @@ int xemu_screenshot_png ( const char *path, const char *fn, int zoom_width, int 
 		Uint32 pixel = source_pixels[(
 			(i % target_width) / zoom_width
 		) + (
-			((i / target_width) / zoom_height) * source_width
+			((i / target_width) / zoom_height) * source_texture_width
 		)];
 		// Generate LodePNG compatible RGB stuff
 		// (note, this is maybe possible with simple SDL functions to convert a whole texture

@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "hypervisor.h"
 #include "configdb.h"
 #include "xemu/f011_core.h"
+#include "xemu/emutools_files.h"
 
 
 const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
@@ -193,11 +194,26 @@ void vic_init ( void )
 // Do NOT call this function from vic4.c! It must be used by the emulator's main loop!
 void vic4_close_frame_access()
 {
-	// TODO: it looks lame to have a function just to call another one,
-	// but vic4_close_frame_access() will be a place for more work in the future.
-	// TODO: port "drive LED", and "screenshot" at last!
-	// reference: in the next branch do: git diff de5948b5a23f7cff296749b84b840a9ca28c48e1 .
-	
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+	// Screenshot
+	if (XEMU_UNLIKELY(register_screenshot_request)) {
+		unsigned int x1, y1, x2, y2;
+		xemu_get_viewport(&x1, &y1, &x2, &y2);
+		register_screenshot_request = 0;
+		if (!xemu_screenshot_png(
+			NULL, NULL,
+			1, 1,		// no ratio/zoom correction is applied
+			pixel_start + y1 * SCREEN_WIDTH + x1,	// pixel pointer corresponding to the top left corner of the viewport
+			x2 - x1 + 1,	// width
+			y2 - y1 + 1,	// height
+			SCREEN_WIDTH	// full width (ie, width of the texture)
+		)) {
+			const char *p = strrchr(xemu_screenshot_full_path, DIRSEP_CHR);
+			if (p)
+				OSD(-1, -1, "%s", p + 1);
+		}
+	}
+#endif
 	// Render "drive LED" if it was requested at all
 	if (configdb.show_drive_led && fdc_get_led_state(16)) {
 		unsigned int x_origin, y_origin;	// top right corner of the viewport

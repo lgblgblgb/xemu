@@ -91,7 +91,8 @@ void screenshot ( void )
 		2,
 		NULL,	// Allow function to figure it out ;)
 		SCREEN_WIDTH,
-		SCREEN_HEIGHT
+		SCREEN_HEIGHT,
+		SCREEN_WIDTH
 	)) {
 		const char *p = strrchr(xemu_screenshot_full_path, DIRSEP_CHR);
 		if (p)

@@ -136,7 +136,7 @@ void machine_set_speed ( int verbose )
 				break;
 		}
 		// XXX use only DEBUG() here!
-		DEBUGPRINT("SPEED: CPU speed is set to %s, cycles per scanline: %d (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_strs[cpu_clock_speed_str_index], cpu_cycles_per_scanline, videostd_1mhz_cycles_per_scanline);
+		DEBUGPRINT("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_strs[cpu_clock_speed_str_index], cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
 		if (cpu_cycles_per_step > 1)	// if in trace mode, do not set this!
 			cpu_cycles_per_step = cpu_cycles_per_scanline;
 	}
@@ -480,47 +480,6 @@ int reset_mega65_asked ( void )
 }
 
 
-static void update_emulator ( void )
-{
-	// XXX: some things has been moved here from the main loop, however update_emulator is called from other places as well, FIXME check if it causes problems or not!
-	if (XEMU_UNLIKELY(inject_ready_check_status))
-		inject_ready_check_do();
-	sid1.sFrameCount++;
-	sid2.sFrameCount++;
-	strcpy(emulator_speed_title, cpu_clock_speed_strs[cpu_clock_speed_str_index]);
-	strcat(emulator_speed_title, " ");
-	strcat(emulator_speed_title, videostd_name);
-	hid_handle_all_sdl_events();
-	xemugui_iteration();
-	nmi_set(IS_RESTORE_PRESSED(), 2);	// Custom handling of the restore key ...
-	// this part is used to trigger 'RESTORE trap' with long press on RESTORE.
-	// see input_devices.c for more information
-	kbd_trigger_restore_trap();
-#ifdef HAS_UARTMON_SUPPORT
-	uartmon_update();
-#endif
-	// Screen updating, final phase
-	vic4_close_frame_access();
-	// Let's sleep ...
-	xemu_timekeeping_delay(videostd_frametime);
-	// Ugly CIA trick to maintain realtime TOD in CIAs :)
-//	if (seconds_timer_trigger) {
-	const struct tm *t = xemu_get_localtime();
-	const Uint8 sec10ths = xemu_get_microseconds() / 100000;
-	// UPDATE CIA TODs:
-	cia_ugly_tod_updater(&cia1, t, sec10ths, configdb.rtc_hour_offset);
-	cia_ugly_tod_updater(&cia2, t, sec10ths, configdb.rtc_hour_offset);
-	// UPDATE the RTC too:
-	rtc_regs[0] = XEMU_BYTE_TO_BCD(t->tm_sec);	// seconds
-	rtc_regs[1] = XEMU_BYTE_TO_BCD(t->tm_min);	// minutes
-	rtc_regs[2] = xemu_hour_to_bcd12h(t->tm_hour, configdb.rtc_hour_offset);	// hours
-	rtc_regs[3] = XEMU_BYTE_TO_BCD(t->tm_mday);	// day of mounth
-	rtc_regs[4] = XEMU_BYTE_TO_BCD(t->tm_mon) + 1;	// month
-	rtc_regs[5] = XEMU_BYTE_TO_BCD(t->tm_year - 100);	// year
-//	}
-}
-
-
 #ifdef HAS_UARTMON_SUPPORT
 void m65mon_show_regs ( void )
 {
@@ -626,6 +585,48 @@ void m65mon_breakpoint ( int brk )
 		cpu_cycles_per_step = 0;
 }
 #endif
+
+
+static void update_emulator ( void )
+{
+	vic4_close_frame_access();
+	// XXX: some things has been moved here from the main loop, however update_emulator is called from other places as well, FIXME check if it causes problems or not!
+	if (XEMU_UNLIKELY(inject_ready_check_status))
+		inject_ready_check_do();
+	sid1.sFrameCount++;
+	sid2.sFrameCount++;
+	strcpy(emulator_speed_title, cpu_clock_speed_strs[cpu_clock_speed_str_index]);
+	strcat(emulator_speed_title, " ");
+	strcat(emulator_speed_title, videostd_name);
+	hid_handle_all_sdl_events();
+	xemugui_iteration();
+	nmi_set(IS_RESTORE_PRESSED(), 2);	// Custom handling of the restore key ...
+	// this part is used to trigger 'RESTORE trap' with long press on RESTORE.
+	// see input_devices.c for more information
+	kbd_trigger_restore_trap();
+#ifdef HAS_UARTMON_SUPPORT
+	uartmon_update();
+#endif
+	// Screen updating, final phase
+	//vic4_close_frame_access();
+	// Let's sleep ...
+	xemu_timekeeping_delay(videostd_frametime);
+	// Ugly CIA trick to maintain realtime TOD in CIAs :)
+//	if (seconds_timer_trigger) {
+	const struct tm *t = xemu_get_localtime();
+	const Uint8 sec10ths = xemu_get_microseconds() / 100000;
+	// UPDATE CIA TODs:
+	cia_ugly_tod_updater(&cia1, t, sec10ths, configdb.rtc_hour_offset);
+	cia_ugly_tod_updater(&cia2, t, sec10ths, configdb.rtc_hour_offset);
+	// UPDATE the RTC too:
+	rtc_regs[0] = XEMU_BYTE_TO_BCD(t->tm_sec);	// seconds
+	rtc_regs[1] = XEMU_BYTE_TO_BCD(t->tm_min);	// minutes
+	rtc_regs[2] = xemu_hour_to_bcd12h(t->tm_hour, configdb.rtc_hour_offset);	// hours
+	rtc_regs[3] = XEMU_BYTE_TO_BCD(t->tm_mday);	// day of mounth
+	rtc_regs[4] = XEMU_BYTE_TO_BCD(t->tm_mon) + 1;	// month
+	rtc_regs[5] = XEMU_BYTE_TO_BCD(t->tm_year - 100);	// year
+//	}
+}
 
 
 static void emulation_loop ( void )
