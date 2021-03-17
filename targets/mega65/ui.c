@@ -369,7 +369,7 @@ static void ui_cb_fullborders ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, configdb.fullborders);
 	configdb.fullborders = !configdb.fullborders;
-	// XXX TODO: this changes the setting but does not activate it! That's a TODO to really do it so!!
+	vic_readjust_sdl_viewport = 1;		// To force readjust viewport on the next frame open.
 }
 
 

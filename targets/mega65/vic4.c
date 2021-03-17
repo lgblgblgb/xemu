@@ -71,6 +71,7 @@ float videostd_1mhz_cycles_per_scanline = 30.0;	// have *some* value to jumpstar
 int videostd_changed = 0;
 static const char NTSC_STD_NAME[] = "NTSC";
 static const char PAL_STD_NAME[] = "PAL";
+int vic_readjust_sdl_viewport = 0;
 
 void vic4_render_char_raster();
 void vic4_render_bitplane_raster();
@@ -266,8 +267,12 @@ void vic4_open_frame_access()
 		}
 		DEBUGPRINT("VIC: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec, max raster is %d, visible area height is %d)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime, max_rasters, visible_area_height);
 		videostd_name = new_name;
+		vic_readjust_sdl_viewport = 1;
+	}
+	if (XEMU_UNLIKELY(vic_readjust_sdl_viewport)) {
+		vic_readjust_sdl_viewport = 0;
 		if (configdb.fullborders)	// XXX FIXME what should be the correct values for full borders and without that?!
-			xemu_set_viewport(48, 0, SCREEN_WIDTH - 48, visible_area_height - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
+			xemu_set_viewport(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
 		else
 			xemu_set_viewport(48, 0, SCREEN_WIDTH - 48, visible_area_height - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
 	}

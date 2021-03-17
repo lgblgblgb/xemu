@@ -241,6 +241,7 @@ extern int   videostd_frametime;
 extern int   videostd_changed;
 extern Uint8 videostd_id;
 extern float videostd_1mhz_cycles_per_scanline;
+extern int   vic_readjust_sdl_viewport;
 
 extern int   vic_vidp_legacy, vic_chrp_legacy, vic_sprp_legacy;
 
