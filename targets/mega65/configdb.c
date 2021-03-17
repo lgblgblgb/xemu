@@ -85,6 +85,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon },
 	{ "besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override },
 	{ "skipunhandledmem", "Do not even ask on unhandled memory access (hides problems!!)", &configdb.skip_unhandled_mem },
+	{ "fullborders", "Show non-clipped display borders", &configdb.fullborders },
 	{ NULL }
 };
 

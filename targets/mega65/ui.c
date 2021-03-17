@@ -365,6 +365,15 @@ static void ui_video_standard ( const struct menu_st *m, int *query )
 }
 
 
+static void ui_cb_fullborders ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, configdb.fullborders);
+	configdb.fullborders = !configdb.fullborders;
+	// XXX TODO: this changes the setting but does not activate it! That's a TODO to really do it so!!
+}
+
+
+
 /**** MENU SYSTEM ****/
 
 
@@ -375,12 +384,18 @@ static const struct menu_st menu_video_standard[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_video_standard, (void*)1 },
 	{ NULL }
 };
-static const struct menu_st menu_display[] = {
+static const struct menu_st menu_window_size[] = {
 	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)0 },
 	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)1 },
 	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize, (void*)2 },
+	{ NULL }
+};
+static const struct menu_st menu_display[] = {
+	{ "Window size / fullscreen",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_window_size },
 	{ "Video standard",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_video_standard },
+	{ "Show full borders",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_fullborders, NULL },
 	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
 	{ "Show drive LED",		XEMUGUI_MENUID_CALLABLE |

@@ -264,9 +264,12 @@ void vic4_open_frame_access()
 			max_rasters = PHYSICAL_RASTERS_PAL;
 			visible_area_height = SCREEN_HEIGHT_VISIBLE_PAL;
 		}
-		DEBUGPRINT("VIC: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime);
+		DEBUGPRINT("VIC: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec, max raster is %d, visible area height is %d)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime, max_rasters, visible_area_height);
 		videostd_name = new_name;
-		xemu_set_viewport(48, 32, SCREEN_WIDTH - 48, visible_area_height - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
+		if (configdb.fullborders)	// XXX FIXME what should be the correct values for full borders and without that?!
+			xemu_set_viewport(48, 0, SCREEN_WIDTH - 48, visible_area_height - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
+		else
+			xemu_set_viewport(48, 0, SCREEN_WIDTH - 48, visible_area_height - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
 	}
 	// FIXME: do we need this here? Ie, should this always bound to video mode change (only at frame boundary!) or not ...
 #if 0

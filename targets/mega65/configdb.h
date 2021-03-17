@@ -58,6 +58,7 @@ struct configdb_st {
 #endif
 	char	*selectedgui;
 	int	force_videostd;
+	int	fullborders;
 	int	show_drive_led;
 	int	hyperdebug;
 	int	hyperserialascii;
