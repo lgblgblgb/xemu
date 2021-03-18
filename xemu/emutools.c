@@ -740,12 +740,14 @@ int xemu_init_sdl ( void )
 
 void xemu_window_snap_to_optimal_size ( int forced )
 {
+	// XXX TODO check if fullscreen state is active?
+	// though it must be checked if it's needed at all (ie: SDL is OK with resizing window in fullscreen mode without any effect BEFORE switcing back from fullscreen)
+	static Uint32 last_resize = 0;
+	Uint32 now = 0;
 	if (!forced && sdl_viewport_changed && follow_win_size) {
-		static Uint32 last = 0;
-		Uint32 now = SDL_GetTicks();
-		if (now - last >= 1000) {
-			last = now;
-			sdl_viewport_changed = 1;
+		now = SDL_GetTicks();
+		if (now - last_resize >= 1000) {
+			sdl_viewport_changed = 0;
 			forced = 1;
 		}
 	}
@@ -758,12 +760,17 @@ void xemu_window_snap_to_optimal_size ( int forced )
 	if (rat2 > rat)
 		rat = rat2;
 	rat = roundf(rat);
+	// XXX TODO: check if window is not larger than the screen itself
 	if (rat < 1)
 		rat = 1;
-	int w2 = rat * sdl_viewport.w;
-	int h2 = rat * sdl_viewport.h;
-	if (w != w2 || h != h2)
+	const int w2 = rat * sdl_viewport.w;
+	const int h2 = rat * sdl_viewport.h;
+	if (w != w2 || h != h2) {
+		last_resize = now;
 		SDL_SetWindowSize(sdl_win, w2, h2);
+		DEBUGPRINT("SDL: auto-resizing window to %d x %d (zoom got: %d)" NL, w2, h2, (int)rat);
+	} else
+		DEBUGPRINT("SDL: no auto-resizing was needed (same size)" NL);
 }
 
 
