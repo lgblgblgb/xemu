@@ -142,11 +142,12 @@ extern SDL_version sdlver_compiled, sdlver_linked;
 extern Uint32 *xemu_frame_pixel_access_p;
 
 #define XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE	1
-#define XEMU_VIEWPORT_MAY_ADJUST_WINDOW_SIZE	2
-#define XEMU_VIEWPORT_FORCE_ADJUST_WINDOW_SIZE	4
+#define XEMU_VIEWPORT_WIN_SIZE_FOLLOW_LOGICAL	2
 
 extern void xemu_set_viewport ( unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, unsigned int flags );
 extern void xemu_get_viewport ( unsigned int *x1, unsigned int *y1, unsigned int *x2, unsigned int *y2 );
+
+extern void xemu_window_snap_to_optimal_size ( int forced );
 
 extern int xemu_init_debug ( const char *fn );
 extern time_t xemu_get_unixtime ( void );

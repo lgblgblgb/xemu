@@ -71,7 +71,7 @@ static int force_external_rom = 0;
 static Uint8 nvram_original[sizeof nvram];
 static int uuid_must_be_saved = 0;
 
-int register_screenshot_request = 0;
+int registered_screenshot_request = 0;
 
 Uint8 last_dd00_bits = 3;		// Bank 0
 
@@ -632,6 +632,7 @@ static void update_emulator ( void )
 static void emulation_loop ( void )
 {
 	static int cycles = 0;	// used for "balance" CPU cycles per scanline, must be static!
+	xemu_window_snap_to_optimal_size(0);
 	vic4_open_frame_access();
 	// video standard (PAL/NTSC) affects the "CPU cycles per scanline" variable, which is used in this main emulation loop below.
 	// thus, if vic-4 emulation set videostd_changed, we should react with enforce a re-calibration.

@@ -67,7 +67,7 @@ static Uint32 red_colour, black_colour;		// used by "drive LED" stuff
 Uint8 videostd_id = 0xFF;			// 0=PAL, 1=NTSC [give some insane value by default to force the change at the fist frame after starting Xemu]
 const char *videostd_name = "<UNDEF>";		// PAL or NTSC, however initially is not yet set
 int videostd_frametime = NTSC_FRAME_TIME;	// time in microseconds for a frame to produce
-float videostd_1mhz_cycles_per_scanline = 30.0;	// have *some* value to jumpstart emulation, it will be overriden sooner or later
+float videostd_1mhz_cycles_per_scanline = 32.0;	// have *some* value to jumpstart emulation, it will be overriden sooner or later XXX FIXME: why it does not work with zero value when it's overriden anyway?!?!
 int videostd_changed = 0;
 static const char NTSC_STD_NAME[] = "NTSC";
 static const char PAL_STD_NAME[] = "PAL";
@@ -197,10 +197,10 @@ void vic4_close_frame_access()
 {
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	// Screenshot
-	if (XEMU_UNLIKELY(register_screenshot_request)) {
+	if (XEMU_UNLIKELY(registered_screenshot_request)) {
 		unsigned int x1, y1, x2, y2;
 		xemu_get_viewport(&x1, &y1, &x2, &y2);
-		register_screenshot_request = 0;
+		registered_screenshot_request = 0;
 		if (!xemu_screenshot_png(
 			NULL, NULL,
 			1, 1,		// no ratio/zoom correction is applied
@@ -269,10 +269,12 @@ void vic4_open_frame_access()
 		videostd_name = new_name;
 		vic_readjust_sdl_viewport = 1;
 	}
+	// handle this via vic_readjust_sdl_viewport variable (not directly above) so external stuff (like UI) can also
+	// force to adjust viewport, not just the PAL/NTSC change itself (ie: fullborder/clipped border change)
 	if (XEMU_UNLIKELY(vic_readjust_sdl_viewport)) {
 		vic_readjust_sdl_viewport = 0;
 		if (configdb.fullborders)	// XXX FIXME what should be the correct values for full borders and without that?!
-			xemu_set_viewport(0, 0, SCREEN_WIDTH - 1, SCREEN_HEIGHT - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
+			xemu_set_viewport(0, 0, SCREEN_WIDTH - 1, max_rasters - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
 		else
 			xemu_set_viewport(48, 0, SCREEN_WIDTH - 48, visible_area_height - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
 	}
@@ -962,8 +964,7 @@ static void vic4_draw_sprite_row_mono ( int sprnum, int x_display_pos, const Uin
 			const Uint8 pixel = *row_data_ptr & (0x80 >> xbit);
 			for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
 				if (
-					x_display_pos >= border_x_left &&
-					pixel && (
+					x_display_pos >= border_x_left && pixel && (
 						!SPRITE_IS_BACK(sprnum) ||
 						(SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)
 					)
@@ -985,7 +986,7 @@ static void vic4_do_sprites()
 	// In multicolor mode (MCM=1), the bit combinations "00" and "01" belong to the background
 	// and "10" and "11" to the foreground whereas in standard mode (MCM=0),
 	// cleared pixels belong to the background and set pixels to the foreground.
-	for (int sprnum = 7; sprnum >= 0; --sprnum) {
+	for (int sprnum = 7; sprnum >= 0; sprnum--) {
 		if (REG_SPRITE_ENABLE & (1 << sprnum)) {
 			const int spriteHeight = SPRITE_EXTHEIGHT(sprnum) ? REG_SPRHGHT : 21;
 			int x_display_pos = border_x_left + ((SPRITE_POS_X(sprnum) - SPRITE_X_BASE_COORD) * (REG_SPR640 ? 1 : 2));	// in display units

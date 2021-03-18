@@ -71,6 +71,10 @@ CONFIG_CFLAGS_LINK	+= -g
 else
 CFLAGS_OPT		= $(CONFIG_CFLAGS_OPT)
 endif
+ifeq ($(GPROF), yes)
+CFLAGS_OPT		+= -pg
+CONFIG_CFLAGS_LINK	+= -pg
+endif
 ifeq ($(NATIVE), yes)
 CFLAGS_OPT		+= -mtune=native -march=native
 endif

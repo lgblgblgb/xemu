@@ -123,6 +123,8 @@ static Uint32 osd_colours[16], *osd_pixels = NULL, osd_colour_fg, osd_colour_bg;
 static SDL_Texture *sdl_osdtex = NULL;
 static SDL_bool grabbed_mouse = SDL_FALSE, grabbed_mouse_saved = SDL_FALSE;
 int allow_mouse_grab = 1;
+static int sdl_viewport_changed;
+static int follow_win_size;
 
 #if !SDL_VERSION_ATLEAST(2, 0, 4)
 #error "At least SDL version 2.0.4 is needed!"
@@ -736,6 +738,35 @@ int xemu_init_sdl ( void )
 }
 
 
+void xemu_window_snap_to_optimal_size ( int forced )
+{
+	if (!forced && sdl_viewport_changed && follow_win_size) {
+		static Uint32 last = 0;
+		Uint32 now = SDL_GetTicks();
+		if (now - last >= 1000) {
+			last = now;
+			sdl_viewport_changed = 1;
+			forced = 1;
+		}
+	}
+	if (!forced)
+		return;
+	int w, h;
+	SDL_GetWindowSize(sdl_win, &w, &h);
+	float rat = (float)w / (float)sdl_viewport.w;
+	const float rat2 = (float)h / (float)sdl_viewport.h;
+	if (rat2 > rat)
+		rat = rat2;
+	rat = roundf(rat);
+	if (rat < 1)
+		rat = 1;
+	int w2 = rat * sdl_viewport.w;
+	int h2 = rat * sdl_viewport.h;
+	if (w != w2 || h != h2)
+		SDL_SetWindowSize(sdl_win, w2, h2);
+}
+
+
 void xemu_set_viewport ( unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, unsigned int flags )
 {
 	if (XEMU_UNLIKELY(x1 == 0 && y1 == 0 && x2 == 0 && y2 == 0)) {
@@ -755,11 +786,16 @@ void xemu_set_viewport ( unsigned int x1, unsigned int y1, unsigned int x2, unsi
 			sdl_viewport.h = y2 - y1 + 1;
 		}
 	}
+	sdl_viewport_changed = 1;
+	follow_win_size = 0;
 	if ((flags & XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE)) {
 		SDL_RenderSetLogicalSize(sdl_ren, sdl_viewport.w, sdl_viewport.h);
 		// XXX this should be not handled this way
 		sdl_default_win_x_size = sdl_viewport.w;
 		sdl_default_win_y_size = sdl_viewport.h;
+		//if ((flags & XEMU_VIEWPORT_WIN_SIZE_FOLLOW_LOGICAL))
+		//XXX remove this XEMU_VIEWPORT_WIN_SIZE_FOLLOW_LOGICAL then!
+		follow_win_size = 1;
 	}
 }
 

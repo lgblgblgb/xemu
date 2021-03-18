@@ -361,7 +361,7 @@ static void ui_video_standard ( const struct menu_st *m, int *query )
 	else
 		reg &= 0x7F;
 	configdb.force_videostd = -1;	// turn off possible CLI/config dictated force video mode, otherwise it won't work to change video standard ...
-	vic_write_reg(0x6F, reg);
+	vic_write_reg(0x6F, reg);	// write VIC-IV register to trigger the stuff
 }
 
 
@@ -371,7 +371,6 @@ static void ui_cb_fullborders ( const struct menu_st *m, int *query )
 	configdb.fullborders = !configdb.fullborders;
 	vic_readjust_sdl_viewport = 1;		// To force readjust viewport on the next frame open.
 }
-
 
 
 /**** MENU SYSTEM ****/
@@ -387,8 +386,7 @@ static const struct menu_st menu_video_standard[] = {
 static const struct menu_st menu_window_size[] = {
 	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)0 },
 	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)1 },
-	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize, (void*)2 },
+	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)2 },
 	{ NULL }
 };
 static const struct menu_st menu_display[] = {
@@ -399,9 +397,10 @@ static const struct menu_st menu_display[] = {
 	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
 	{ "Show drive LED",		XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_show_drive_led, NULL },
+					XEMUGUI_MENUFLAG_QUERYBACK |
+					XEMUGUI_MENUFLAG_SEPARATOR,	ui_cb_show_drive_led, NULL },
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
-	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &register_screenshot_request },
+	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &registered_screenshot_request },
 #endif
 	{ "Screen to OS paste buffer",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_screen_text_into_paste_buffer },
 	{ NULL }
@@ -447,7 +446,7 @@ static const struct menu_st menu_d81[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_detach_d81, NULL },
 	{ NULL }
 };
-static const struct menu_st menu_audio[] = {
+static const struct menu_st menu_audio_stereo[] = {
 	{ "Hard stereo separation",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) 100 },
 	{ "Mono downmix 80%",		XEMUGUI_MENUID_CALLABLE |
@@ -474,7 +473,7 @@ static const struct menu_st menu_audio[] = {
 };
 static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
-	{ "Audio",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio   },
+	{ "Audio",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_stereo },
 	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
 	{ "FD D81",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_d81     },
 	{ "Reset",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },

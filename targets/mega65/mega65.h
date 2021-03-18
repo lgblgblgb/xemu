@@ -72,7 +72,7 @@ extern int  dump_memory       ( const char *fn );
 extern int  refill_c65_rom_from_preinit_cache ( void );
 
 extern int newhack;
-extern int register_screenshot_request;
+extern int registered_screenshot_request;
 extern Uint8 last_dd00_bits;
 
 #endif
