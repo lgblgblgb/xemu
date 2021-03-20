@@ -73,8 +73,8 @@ static const char NTSC_STD_NAME[] = "NTSC";
 static const char PAL_STD_NAME[] = "PAL";
 int vic_readjust_sdl_viewport = 0;
 
-void vic4_render_char_raster();
-void vic4_render_bitplane_raster();
+void vic4_render_char_raster(void);
+void vic4_render_bitplane_raster(void);
 static void (*vic4_raster_renderer_path)(void) = &vic4_render_char_raster;
 
 // VIC-IV Modeline Parameters
@@ -174,6 +174,15 @@ void vic_reset ( void )
 }
 
 
+static void vic4_reset_display_counters ( void )
+{
+	xcounter = 0;
+	display_row = 0;
+	char_row = 0;
+	ycounter = 0;
+}
+
+
 void vic_init ( void )
 {
 	// Needed to render "drive LED" feature
@@ -187,13 +196,14 @@ void vic_init ( void )
 	machine_set_speed(0);
 	screen_ram_current_ptr = main_ram + SCREEN_ADDR;
 	colour_ram_current_ptr = colour_ram;
+	vic4_reset_display_counters();
 	DEBUG("VIC4: has been initialized." NL);
 }
 
 
 // Pair of vic4_open_frame_access() and the place when screen is updated at SDL level, finally.
 // Do NOT call this function from vic4.c! It must be used by the emulator's main loop!
-void vic4_close_frame_access()
+void vic4_close_frame_access ( void )
 {
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	// Screenshot
@@ -231,7 +241,7 @@ void vic4_close_frame_access()
 // Must be called before using the texture at all, otherwise crash will happen, or nothing at all.
 // Access must be closed with vic4_close_frame_access().
 // Do NOT call this function from vic4.c! It must be used by the emulator's main loop!
-void vic4_open_frame_access()
+void vic4_open_frame_access ( void )
 {
 	int tail_sdl;
 	current_pixel = pixel_start = xemu_start_pixel_buffer_access(&tail_sdl);
@@ -310,7 +320,7 @@ static void vic4_interrupt_checker ( void )
 }
 
 
-static void vic4_check_raster_interrupt(int nraster)
+static void vic4_check_raster_interrupt ( int nraster )
 {
 	if (nraster == compare_raster)
 		interrupt_status |= 1;
@@ -320,22 +330,13 @@ static void vic4_check_raster_interrupt(int nraster)
 }
 
 
-inline static void vic4_calculate_char_x_step()
+inline static void vic4_calculate_char_x_step ( void )
 {
 	char_x_step = (REG_CHARXSCALE / 120.0f) / (REG_H640 ? 1 : 2);
 }
 
 
-static void vic4_reset_display_counters()
-{
-	xcounter = 0;
-	display_row = 0;
-	char_row = 0;
-	ycounter = 0;
-}
-
-
-static void vic4_update_sideborder_dimensions()
+static void vic4_update_sideborder_dimensions ( void )
 {
 	if (REG_CSEL) {	// 40-columns?
 		border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER;
@@ -353,7 +354,7 @@ static void vic4_update_sideborder_dimensions()
 }
 
 
-static void vic4_interpret_legacy_mode_registers()
+static void vic4_interpret_legacy_mode_registers ( void )
 {
 	// See https://github.com/MEGA65/mega65-core/blob/257d78aa6a21638cb0120fd34bc0e6ab11adfd7c/src/vhdl/viciv.vhdl#L1277
 	vic4_update_sideborder_dimensions();
@@ -735,7 +736,6 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 }
 
 
-
 Uint8 vic_read_reg ( int unsigned addr )
 {
 	Uint8 result = vic_registers[addr & 0x7F];	// read the answer by default (mostly this will be), allow to override/modify in the switch construct if needed
@@ -867,7 +867,7 @@ Uint8 vic_read_reg ( int unsigned addr )
 #undef CASE_VIC_3_4
 
 
-static inline Uint32 get_charset_effective_addr()
+static inline Uint32 get_charset_effective_addr ( void )
 {
 	// cache this?
 	switch (CHARSET_ADDR) {
@@ -978,7 +978,7 @@ static void vic4_draw_sprite_row_mono ( int sprnum, int x_display_pos, const Uin
 }
 
 
-static void vic4_do_sprites()
+static void vic4_do_sprites ( void )
 {
 	// Fetch and sequence sprites.
 	//
@@ -1104,7 +1104,7 @@ static void vic4_render_bitplane_char_row ( Uint8* bp_base[8], int glyph_width )
 }
 
 
-void vic4_render_bitplane_raster()
+void vic4_render_bitplane_raster ( void )
 {
 	Uint8* bp_base[8];
 	// Get Bitplane source addresses
@@ -1154,7 +1154,7 @@ void vic4_render_bitplane_raster()
 //
 // VIC-III Extended attributes are applied to characters if properly set,
 // except in Multicolor modes.
-void vic4_render_char_raster()
+void vic4_render_char_raster ( void )
 {
 	int line_char_index = 0;
 	enable_bg_paint = 1;
@@ -1249,7 +1249,7 @@ void vic4_render_char_raster()
 }
 
 
-int vic4_render_scanline()
+int vic4_render_scanline ( void )
 {
 	// Work this first. DO NOT OPTIMIZE EARLY.
 

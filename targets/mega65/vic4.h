@@ -39,7 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // the real visible resolution of PAL (720x576) or NSTC(720x480).
 
 #define SCREEN_WIDTH			800
-#define SCREEN_HEIGHT			600
+#define SCREEN_HEIGHT			625
 #define PHYSICAL_RASTERS_DEFAULT	PHYSICAL_RASTERS_NTSC
 #define SCREEN_HEIGHT_VISIBLE_DEFAULT	SCREEN_HEIGHT_VISIBLE_NTSC
 #define SCREEN_HEIGHT_VISIBLE_NTSC	480
@@ -252,8 +252,8 @@ extern void  vic_reset ( void );
 extern void  vic_write_reg ( unsigned int addr, Uint8 data );
 extern Uint8 vic_read_reg  ( unsigned int addr );
 extern int   vic4_render_scanline ( void );
-extern void  vic4_open_frame_access();
-extern void  vic4_close_frame_access();
+extern void  vic4_open_frame_access ( void );
+extern void  vic4_close_frame_access (void );
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 #include "xemu/emutools_snapshot.h"
