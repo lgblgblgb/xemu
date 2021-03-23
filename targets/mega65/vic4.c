@@ -238,6 +238,101 @@ void vic4_close_frame_access ( void )
 }
 
 
+static void vic4_update_sideborder_dimensions ( void )
+{
+	if (REG_CSEL) {	// 40-columns?
+		border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER;
+		if (!REG_H640)
+			border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER - 1;
+		else	// 80-col mode
+			border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER;
+	} else {	// 38-columns
+		border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER - 18;
+		if (!REG_H640)
+			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER + 14;
+		else	// 78-col mode
+			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER + 15;
+	}
+}
+
+static void vic4_update_vertical_borders( void )
+{
+	if (REG_CSEL) {	// 40-columns?
+		if (!REG_H640)
+			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL));
+		else	// 80-col mode
+			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - 2);
+	} else {	// 38-columns
+		if (!REG_H640)
+			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL));
+		else	// 78-col mode
+			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - 2);
+	}
+	if (!REG_V400) {	// Standard mode (200-lines)
+		if (REG_RSEL) {	// 25-row
+			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster));
+			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster) - 1);
+			display_row_count = 25;
+		} else {
+			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster) + 8);
+			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - (2 * vicii_first_raster) - SINGLE_TOP_BORDER_200 - 7);
+			display_row_count = 24;
+		}
+		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster) - 6 + REG_VIC2_YSCROLL * 2);
+	} else {		// V400
+		if (REG_RSEL) {	// 25-line+V400
+			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster));
+			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 1);
+			display_row_count = 25*2;
+		} else {
+			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) + 8);
+			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - (2 * vicii_first_raster) - SINGLE_TOP_BORDER_200 - 7);
+			display_row_count = 24*2;
+		}
+		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 6 + (REG_VIC2_YSCROLL * 2));
+	}
+}
+
+static void vic4_interpret_legacy_mode_registers ( void )
+{
+	// See https://github.com/MEGA65/mega65-core/blob/257d78aa6a21638cb0120fd34bc0e6ab11adfd7c/src/vhdl/viciv.vhdl#L1277
+	vic4_update_sideborder_dimensions();
+	vic4_update_vertical_borders();
+
+	Uint8 width = REG_H640 ? 80 : 40;
+	REG_CHRCOUNT = width;
+	SET_CHARSTEP_BYTES(width);// * (REG_16BITCHARSET ? 2 : 1));
+
+	REG_SCRNPTR_B0 = 0;
+	REG_SCRNPTR_B1 &= 0xC0;
+	REG_SCRNPTR_B1 |= REG_H640 ? ((reg_d018_screen_addr & 14) << 2) : (reg_d018_screen_addr << 2);
+	REG_SCRNPTR_B2 = 0;
+	vic_registers[0x63] &= 0b11110000;
+
+	REG_SPRPTR_B0 = 0xF8;
+	REG_SPRPTR_B1 = (reg_d018_screen_addr << 2) | 0x3;
+	if (REG_H640 | REG_V400)
+		REG_SPRPTR_B1 |= 4;
+	vic_registers[0x6E] &= 128;
+
+	REG_SPRPTR_B1  = (~last_dd00_bits << 6) | (REG_SPRPTR_B1 & 0x3F);
+	REG_SCRNPTR_B1 = (~last_dd00_bits << 6) | (REG_SCRNPTR_B1 & 0x3F);
+	REG_CHARPTR_B1 = (~last_dd00_bits << 6) | (REG_CHARPTR_B1 & 0x3F);
+
+	SET_COLORRAM_BASE(0);
+	DEBUGPRINT(
+		"VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charscale=%d, vic_ii_first_raster=%d, ras_src=%d, "
+		"border yt=%d, yb=%d, xl=%d, xr=%d, textxpos=%d, textypos=%d, "
+		"screen_ram=$%06x, charset/bitmap=$%06x, sprite=$%06x" NL,
+		REG_16BITCHARSET, REG_CHRCOUNT, CHARSTEP_BYTES, REG_CHARXSCALE,
+		vicii_first_raster, REG_FNRST, BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START,
+		SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR
+	);
+}
+
+
+
+
 // Must be called before using the texture at all, otherwise crash will happen, or nothing at all.
 // Access must be closed with vic4_close_frame_access().
 // Do NOT call this function from vic4.c! It must be used by the emulator's main loop!
@@ -267,6 +362,7 @@ void vic4_open_frame_access ( void )
 			videostd_1mhz_cycles_per_scanline = 1000000.0 / (float)(NTSC_LINE_FREQ);
 			max_rasters = PHYSICAL_RASTERS_NTSC;
 			visible_area_height = SCREEN_HEIGHT_VISIBLE_NTSC;
+			vicii_first_raster = 7;
 		} else {
 			// --- PAL ---
 			new_name = PAL_STD_NAME;
@@ -274,6 +370,7 @@ void vic4_open_frame_access ( void )
 			videostd_1mhz_cycles_per_scanline = 1000000.0 / (float)(PAL_LINE_FREQ);
 			max_rasters = PHYSICAL_RASTERS_PAL;
 			visible_area_height = SCREEN_HEIGHT_VISIBLE_PAL;
+			vicii_first_raster = 0;
 		}
 		DEBUGPRINT("VIC: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec, max raster is %d, visible area height is %d)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime, max_rasters, visible_area_height);
 		videostd_name = new_name;
@@ -288,14 +385,12 @@ void vic4_open_frame_access ( void )
 		else
 			xemu_set_viewport(48, 0, SCREEN_WIDTH - 48, visible_area_height - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
 	}
-	// FIXME: do we need this here? Ie, should this always bound to video mode change (only at frame boundary!) or not ...
-#if 0
+	
 	vicii_first_raster = vic_registers[0x6F] & 0x1F;
 	if (!in_hypervisor) {
-		vic4_sideborder_touched = 1;
-		vic4_interpret_legacy_mode_registers();
+		vic4_update_sideborder_dimensions();
+		vic4_update_vertical_borders();
 	}
-#endif
 }
 
 
@@ -333,94 +428,6 @@ static void vic4_check_raster_interrupt ( int nraster )
 inline static void vic4_calculate_char_x_step ( void )
 {
 	char_x_step = (REG_CHARXSCALE / 120.0f) / (REG_H640 ? 1 : 2);
-}
-
-
-static void vic4_update_sideborder_dimensions ( void )
-{
-	if (REG_CSEL) {	// 40-columns?
-		border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER;
-		if (!REG_H640)
-			border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER - 1;
-		else	// 80-col mode
-			border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER;
-	} else {	// 38-columns
-		border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER - 18;
-		if (!REG_H640)
-			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER + 14;
-		else	// 78-col mode
-			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER + 15;
-	}
-}
-
-
-static void vic4_interpret_legacy_mode_registers ( void )
-{
-	// See https://github.com/MEGA65/mega65-core/blob/257d78aa6a21638cb0120fd34bc0e6ab11adfd7c/src/vhdl/viciv.vhdl#L1277
-	vic4_update_sideborder_dimensions();
-	if (REG_CSEL) {	// 40-columns?
-		if (!REG_H640)
-			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL));
-		else	// 80-col mode
-			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - 2);
-	} else {	// 38-columns
-		if (!REG_H640)
-			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL));
-		else	// 78-col mode
-			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - 2);
-	}
-	if (!REG_V400) {	// Standard mode (200-lines)
-		if (REG_RSEL) {	// 25-row
-			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster));
-			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster) - 1);
-			display_row_count = 25;
-		} else {
-			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster) + 8);
-			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - (2 * vicii_first_raster) - SINGLE_TOP_BORDER_200 - 7);
-			display_row_count = 24;
-		}
-		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster) - 6 + REG_VIC2_YSCROLL * 2);
-	} else {		// V400
-		if (REG_RSEL) {	// 25-line+V400
-			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster));
-			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 1);
-			display_row_count = 25*2;
-		} else {
-			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) + 8);
-			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - (2 * vicii_first_raster) - SINGLE_TOP_BORDER_200 - 7);
-			display_row_count = 24*2;
-		}
-		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 6 + (REG_VIC2_YSCROLL * 2));
-	}
-	Uint8 width = REG_H640 ? 80 : 40;
-	REG_CHRCOUNT = width;
-	SET_CHARSTEP_BYTES(width);// * (REG_16BITCHARSET ? 2 : 1));
-
-	REG_SCRNPTR_B0 = 0;
-	REG_SCRNPTR_B1 &= 0xC0;
-	REG_SCRNPTR_B1 |= REG_H640 ? ((reg_d018_screen_addr & 14) << 2) : (reg_d018_screen_addr << 2);
-	REG_SCRNPTR_B2 = 0;
-	vic_registers[0x63] &= 0b11110000;
-
-	REG_SPRPTR_B0 = 0xF8;
-	REG_SPRPTR_B1 = (reg_d018_screen_addr << 2) | 0x3;
-	if (REG_H640 | REG_V400)
-		REG_SPRPTR_B1 |= 4;
-	vic_registers[0x6E] &= 128;
-
-	REG_SPRPTR_B1  = (~last_dd00_bits << 6) | (REG_SPRPTR_B1 & 0x3F);
-	REG_SCRNPTR_B1 = (~last_dd00_bits << 6) | (REG_SCRNPTR_B1 & 0x3F);
-	REG_CHARPTR_B1 = (~last_dd00_bits << 6) | (REG_CHARPTR_B1 & 0x3F);
-
-	SET_COLORRAM_BASE(0);
-	DEBUGPRINT(
-		"VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charscale=%d, vic_ii_first_raster=%d, ras_src=%d, "
-		"border yt=%d, yb=%d, xl=%d, xr=%d, textxpos=%d, textypos=%d, "
-		"screen_ram=$%06x, charset/bitmap=$%06x, sprite=$%06x" NL,
-		REG_16BITCHARSET, REG_CHRCOUNT, CHARSTEP_BYTES, REG_CHARXSCALE,
-		vicii_first_raster, REG_FNRST, BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START,
-		SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR
-	);
 }
 
 
@@ -663,27 +670,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 
 			break;
 		CASE_VIC_4(0x6F):
-#if 0
-			// Trigger video mode change.
-			// LGB: this must be handled at opening new frame and NOT here.
-			// though I am still in doubts, what parts should be still handled
-			// here anyway, like this lines after #endif, see below
-			max_rasters = data & 0x80 ? PHYSICAL_RASTERS_NTSC : PHYSICAL_RASTERS_PAL;
-			visible_area_height = data & 0x80 ? SCREEN_HEIGHT_VISIBLE_NTSC : SCREEN_HEIGHT_VISIBLE_PAL;
-
-			if ((vic_registers[0x6F] & 0x80) ^ (data & 0x80)) {
-				// Change video mode
-				vic4_reset_display_counters();
-				vic4_switch_display_mode(data & 0x80);
-			}
-#endif
-			vicii_first_raster = data & 0x1F;
-
-			if (!in_hypervisor) {
-				vic4_sideborder_touched = 1;
-				vic4_interpret_legacy_mode_registers();
-			}
-
+			// We trigger video setup at next frame.
 			break;
 
 		CASE_VIC_4(0x70):	// VIC-IV palette selection register
