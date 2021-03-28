@@ -31,7 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 #include "hypervisor.h"
 #include "vic4.h"
-#include "xemu/f018_core.h"
+#include "dma65.h"
 #include "ethernet65.h"
 #include "audio65.h"
 #include "sdcard.h"
