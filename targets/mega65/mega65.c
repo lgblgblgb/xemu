@@ -737,10 +737,10 @@ int main ( int argc, char **argv )
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
 		1,				// resizable window
-		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
-		SCREEN_WIDTH, SCREEN_HEIGHT,	// logical size (used with keeping aspect ratio by the SDL render stuffs)
-		SCREEN_WIDTH, SCREEN_HEIGHT,	// window size
-		SCREEN_FORMAT,			// pixel format
+		TEXTURE_WIDTH, TEXTURE_HEIGHT,	// texture sizes
+		TEXTURE_WIDTH, TEXTURE_HEIGHT,	// logical size (used with keeping aspect ratio by the SDL render stuffs)
+		TEXTURE_WIDTH, TEXTURE_HEIGHT,	// window size
+		TEXTURE_FORMAT,			// pixel format
 		0,				// we have *NO* pre-defined colours as with more simple machines (too many we need). we want to do this ourselves!
 		NULL,				// -- "" --
 		NULL,				// -- "" --
