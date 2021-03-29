@@ -1,6 +1,6 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 / MEGA65 emulator,
-   within the Xemu project. F011 FDC core implementation.
-   Copyright (C)2016,2018-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* F011 FDC (used by Commodore 65 and MEGA65) emulation.
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMU_COMMON_F011_CORE_H_INCLUDED
 
 #ifndef D81_SIZE
-#define D81_SIZE 819200
+#define D81_SIZE			819200
 #endif
 
 #define FDC_DENY_DISK_ACCESS		0
