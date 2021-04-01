@@ -31,7 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "input_devices.h"
 #include "uart_monitor.h"
 #include "xemu/f011_core.h"
-#include "xemu/f018_core.h"
+#include "dma65.h"
 #include "memory_mapper.h"
 #include "xemu/basic_text.h"
 #include "audio65.h"

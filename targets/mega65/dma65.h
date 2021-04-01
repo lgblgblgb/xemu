@@ -1,5 +1,5 @@
-/* F018 DMA core emulation for Commodore 65 and MEGA65, part of the Xemu project.
-   https://github.com/lgblgblgb/xemu
+/* F018 DMA core emulation for MEGA65
+   Part of the Xemu project.  https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -16,16 +16,14 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef XEMU_COMMON_F018_CORE_H_INCLUDED
-#define XEMU_COMMON_F018_CORE_H_INCLUDED
+#ifndef XEMU_MEGA65_DMA_H_INCLUDED
+#define XEMU_MEGA65_DMA_H_INCLUDED
 
 /* Feature bit masks for dma_init(): */
 
 #define DMA_FEATURE_DYNMODESET	0x100
 #define DMA_FEATURE_MODULO	0x200
-#ifdef MEGA65
 #define DMA_FEATURE_HACK	0x400
-#endif
 
 /* Variables */
 

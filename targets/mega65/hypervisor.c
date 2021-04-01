@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "hypervisor.h"
 #include "xemu/cpu65.h"
 #include "vic4.h"
-#include "xemu/f018_core.h"
+#include "dma65.h"
 #include "memory_mapper.h"
 #include "io_mapper.h"
 #include "xemu/emutools_config.h"

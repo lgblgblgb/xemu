@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "xemu/cpu65.h"
 #include "xemu/f011_core.h"
-#include "xemu/f018_core.h"
+#include "dma65.h"
 #include "xemu/emutools_hid.h"
 #include "vic4.h"
 #include "sdcard.h"
