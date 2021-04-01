@@ -25,7 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "commodore_65.h"
 #include "inject.h"
 #include "vic3.h"
-#include "xemu/f018_core.h"
+#include "dma65.h"
 #include "xemu/basic_text.h"
 #include "configdb.h"
 
