@@ -383,7 +383,7 @@ int xemu_basic_to_text ( Uint8 *output, int output_size, const Uint8 *prg, int r
 
 
 #define DUMP_SCR_CODE()	t += sprintf(t, "{$%02X}", c)
-char *xemu_cbm_screen_to_text ( char *buffer, int buffer_size, const Uint8 *v, int cols, int rows, int lowercase )
+char *xemu_cbm_screen_to_text ( char *buffer, const int buffer_size, const Uint8 *v, const int cols, const int rows, const int lowercase )
 {
 	static const char *rvs_msgs[] = { "{RVS-OFF}", "{RVS-ON}" };
 	char *t = buffer;
@@ -445,3 +445,38 @@ char *xemu_cbm_screen_to_text ( char *buffer, int buffer_size, const Uint8 *v, i
 	return buffer;
 }
 #undef DUMP_SCR_CODE
+
+
+int xemu_cbm_text_to_screen ( Uint8 *v, const int cols, const int rows, const char *buffer, const int lowercase )
+{
+	const Uint8 *start = v;
+	const Uint8 *end   = v + (cols * rows);
+	char ch_prev, ch = 0;
+	v += cols;	// do not use the first line, we expect use may have the cursor there
+	while (*buffer && v < end) {
+		ch_prev = ch;
+		ch = *buffer++;
+		if (ch == '\n' || ch == '\r') {
+			if ((ch_prev == '\n' || ch_prev == '\r') && ch_prev != ch) {
+				ch_prev = 0;
+				continue;	// \r\n or other multi-ctrl-char sequence for line break
+			}
+			// new line
+			while ((v - start) % cols)
+				*v++ = 32;
+			continue;
+		}
+		if (ch == '\t')	// space (also TAB is rendered as space for now ...)
+			ch = 32;
+		else if (ch == '@')
+			ch = 0;
+		else if (ch >= 97 && ch <= 122)	// 'a' ... 'z'
+			ch -= 97 - 1;
+		else if ((signed char)ch < 32)
+			continue;
+		*v++ = ch;
+	}
+	while (v < end && ((v - start) % cols))
+		*v++ = 32;
+	return 0;
+}

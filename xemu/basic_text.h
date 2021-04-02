@@ -24,6 +24,7 @@ extern int xemu_basic_to_text_malloc ( Uint8 **buffer, int output_super_limit, c
 extern int xemu_basic_to_text ( Uint8 *output, int output_size, const Uint8 *prg, int real_addr, const Uint8 *prg_limit, int basic_dialect, int flags );
 #endif
 
-extern char *xemu_cbm_screen_to_text ( char *buffer, int buffer_size, const Uint8 *v, int cols, int rows, int lowercase );
+extern char *xemu_cbm_screen_to_text ( char *buffer, const int buffer_size, const Uint8 *v, const int cols, const int rows, const int lowercase );
+extern int   xemu_cbm_text_to_screen ( Uint8 *v, const int cols, const int rows, const char *buffer, const int lowercase );
 
 #endif
