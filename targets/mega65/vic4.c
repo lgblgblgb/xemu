@@ -214,10 +214,10 @@ void vic4_close_frame_access ( void )
 		if (!xemu_screenshot_png(
 			NULL, NULL,
 			1, 1,		// no ratio/zoom correction is applied
-			pixel_start + y1 * SCREEN_WIDTH + x1,	// pixel pointer corresponding to the top left corner of the viewport
+			pixel_start + y1 * TEXTURE_WIDTH + x1,	// pixel pointer corresponding to the top left corner of the viewport
 			x2 - x1 + 1,	// width
 			y2 - y1 + 1,	// height
-			SCREEN_WIDTH	// full width (ie, width of the texture)
+			TEXTURE_WIDTH	// full width (ie, width of the texture)
 		)) {
 			const char *p = strrchr(xemu_screenshot_full_path, DIRSEP_CHR);
 			if (p)
@@ -231,7 +231,7 @@ void vic4_close_frame_access ( void )
 		xemu_get_viewport(NULL, &y_origin, &x_origin, NULL);
 		for (unsigned int y = 0; y < 8; y++)
 			for (unsigned int x = 0; x < 8; x++)
-				*(pixel_start + x_origin - 10 + x + (y + 2 + y_origin) * (SCREEN_WIDTH)) = (x > 1 && x < 7 && y > 1 && y < 7) ? red_colour : black_colour;
+				*(pixel_start + x_origin - 10 + x + (y + 2 + y_origin) * (TEXTURE_WIDTH)) = (x > 1 && x < 7 && y > 1 && y < 7) ? red_colour : black_colour;
 	}
 	// FINALLY ....
 	xemu_update_screen();
@@ -339,7 +339,7 @@ void vic4_open_frame_access ( void )
 {
 	int tail_sdl;
 	current_pixel = pixel_start = xemu_start_pixel_buffer_access(&tail_sdl);
-	pixel_end = current_pixel + (SCREEN_WIDTH * max_rasters);
+	pixel_end = current_pixel + (TEXTURE_WIDTH * max_rasters);
 	if (tail_sdl)
 		FATAL("tail_sdl is not zero!");
 	// Now check the video mode: NTSC or PAL
@@ -385,9 +385,9 @@ void vic4_open_frame_access ( void )
 	if (XEMU_UNLIKELY(vic_readjust_sdl_viewport)) {
 		vic_readjust_sdl_viewport = 0;
 		if (configdb.fullborders)	// XXX FIXME what should be the correct values for full borders and without that?!
-			xemu_set_viewport(0, 0, SCREEN_WIDTH - 1, max_rasters - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
+			xemu_set_viewport(0, 0, TEXTURE_WIDTH - 1, max_rasters - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
 		else
-			xemu_set_viewport(48, 0, SCREEN_WIDTH - 48, visible_area_height - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
+			xemu_set_viewport(48, 0, TEXTURE_WIDTH - 48, visible_area_height - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
 	}
 }
 
@@ -1239,7 +1239,7 @@ int vic4_render_scanline ( void )
 	// Work this first. DO NOT OPTIMIZE EARLY.
 
 	xcounter = 0;
-	current_pixel = pixel_start + ycounter * SCREEN_WIDTH;
+	current_pixel = pixel_start + ycounter * TEXTURE_WIDTH;
 	pixel_raster_start = current_pixel;
 
 	SET_PHYSICAL_RASTER(ycounter);
@@ -1249,12 +1249,12 @@ int vic4_render_scanline ( void )
 		vic4_check_raster_interrupt(logical_raster);
 	// "Double-scan hack"
 	if (!REG_V400 && (ycounter & 1)) {
-		for (int i = 0; i < SCREEN_WIDTH; i++, current_pixel++)
-			*current_pixel = /* user_scanlines_setting ? 0 : */ *(current_pixel - SCREEN_WIDTH) ;
+		for (int i = 0; i < TEXTURE_WIDTH; i++, current_pixel++)
+			*current_pixel = /* user_scanlines_setting ? 0 : */ *(current_pixel - TEXTURE_WIDTH) ;
 	} else {
 		// Top and bottom borders
 		if (ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM || !REG_DISPLAYENABLE) {
-			for (int i = 0; i < SCREEN_WIDTH; i++)
+			for (int i = 0; i < TEXTURE_WIDTH; i++)
 				*(current_pixel++) = palette[REG_BORDER_COLOR];
 		}
 		if (ycounter >= CHARGEN_Y_START && ycounter < BORDER_Y_BOTTOM) {
@@ -1270,7 +1270,7 @@ int vic4_render_scanline ( void )
 		if (ycounter >= BORDER_Y_TOP && ycounter < CHARGEN_Y_START) {
 			while (xcounter++ < border_x_right)
 				*current_pixel++ = palette[REG_SCREEN_COLOR];
-			// for (int i = 0; i < SCREEN_WIDTH - border_x_right; i++, current_pixel++)
+			// for (int i = 0; i < TEXTURE_WIDTH - border_x_right; i++, current_pixel++)
 			//	*current_pixel = palette[REG_SCREEN_COLOR];
 		}
 		for (Uint32 *p = pixel_raster_start; p < pixel_raster_start + border_x_left; p++)

@@ -36,9 +36,11 @@ static void _xemumacgui_menu_action_handler ( id self, SEL selector, id sender )
 {
 	id menu_obj =  ((id (*) (id, SEL)) objc_msgSend)(sender, sel_registerName("representedObject"));
 	const struct menu_st* menu_item = (const struct menu_st*) ((id (*) (id, SEL)) objc_msgSend)(menu_obj, sel_registerName("pointerValue"));
-	if (menu_item && menu_item->type == XEMUGUI_MENUID_CALLABLE) {
+	if (menu_item && ((menu_item->type & 0xFF) == XEMUGUI_MENUID_CALLABLE)) {
 		DEBUGPRINT("GUI: menu point \"%s\" has been activated." NL,  menu_item->name);
 		((xemugui_callback_t)(menu_item->handler))(menu_item, NULL);
+	} else {
+		DEBUGPRINT("GUI: menu point is NOT activated in action handler! menu_item=%p menu_item->type=%d" NL, menu_item, menu_item ? menu_item->type : -1 );
 	}
 }
 

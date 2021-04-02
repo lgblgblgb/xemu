@@ -38,16 +38,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // The user can select a clipped borders view (called "normal borders") which shows
 // the real visible resolution of PAL (720x576) or NSTC(720x480).
 
-#define SCREEN_WIDTH			800
-#define SCREEN_HEIGHT			625
+#define TEXTURE_WIDTH			800
+#define TEXTURE_HEIGHT			625
+
 #define PHYSICAL_RASTERS_DEFAULT	PHYSICAL_RASTERS_NTSC
 #define SCREEN_HEIGHT_VISIBLE_DEFAULT	SCREEN_HEIGHT_VISIBLE_NTSC
 #define SCREEN_HEIGHT_VISIBLE_NTSC	480
 #define SCREEN_HEIGHT_VISIBLE_PAL	576
 #define PHYSICAL_RASTERS_NTSC		526
 #define PHYSICAL_RASTERS_PAL		624
-#define NTSC_RATIO			(PHYSICAL_RASTERS_NTSC / float(SCREEN_WIDTH))
-#define PAL_RATIO			(PHYSICAL_RASTERS_PAL  / float(SCREEN_WIDTH))
 #define FRAME_H_FRONT			0
 #define RASTER_CORRECTION		3
 #define VIC4_BLINK_INTERVAL		25
