@@ -487,7 +487,8 @@ static void update_emulator ( void )
 	// UPDATE the RTC too:
 	rtc_regs[0] = XEMU_BYTE_TO_BCD(t->tm_sec);	// seconds
 	rtc_regs[1] = XEMU_BYTE_TO_BCD(t->tm_min);	// minutes
-	rtc_regs[2] = xemu_hour_to_bcd12h(t->tm_hour, configdb.rtc_hour_offset);	// hours
+	//rtc_regs[2] = xemu_hour_to_bcd12h(t->tm_hour, configdb.rtc_hour_offset);	// hours
+	rtc_regs[2] = XEMU_BYTE_TO_BCD((t->tm_hour + configdb.rtc_hour_offset + 24) % 24) | 0x80;	// hours (24H format, bit 7 always set)
 	rtc_regs[3] = XEMU_BYTE_TO_BCD(t->tm_mday);	// day of mounth
 	rtc_regs[4] = XEMU_BYTE_TO_BCD(t->tm_mon) + 1;	// month
 	rtc_regs[5] = XEMU_BYTE_TO_BCD(t->tm_year - 100);	// year
