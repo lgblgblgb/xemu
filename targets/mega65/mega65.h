@@ -44,7 +44,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_HEIGHT		200
 
 // Default fast clock of M65, in MHz (can be overriden with CLI switch)
-#define MEGA65_DEFAULT_FAST_CLOCK	40.0
+#define MEGA65_DEFAULT_FAST_CLOCK	40.5
 
 // Needed CPU cycles for a (PAL) scanline for a given mode.
 // For "fast clock", it's calculated, see MEGA65_DEFAULT_FAST_CLOCK
