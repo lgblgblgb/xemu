@@ -551,6 +551,8 @@ int dma_update ( void )
 			dma_registers[0x09] = 1;	// source skip rate, integer part
 			dma_registers[0x0A] = 0;	// target skip rate, fraction part
 			dma_registers[0x0B] = 1;	// target skip rate, integer part
+			dma_registers[5] = 0;		// set back to megabyte selection zero for source
+			dma_registers[6] = 0;		// set back to megabyte selection zero for target
 		}
 	}
 	in_dma_update = 0;
