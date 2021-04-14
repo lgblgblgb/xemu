@@ -345,6 +345,32 @@ static void ui_put_screen_text_into_paste_buffer ( void )
 }
 
 
+static void ui_put_paste_buffer_into_screen_text ( void )
+{
+	char *t = SDL_GetClipboardText();
+	if (t == NULL)
+		goto no_clipboard;
+	char *t2 = t;
+	while (*t2 && (*t2 == '\t' || *t2 == '\r' || *t2 == '\n' || *t2 == ' '))
+		t2++;
+	if (!*t2)
+		goto no_clipboard;
+	xemu_cbm_text_to_screen(
+		main_ram + ((vic_registers[0x31] & 0x80) ? (vic_registers[0x18] & 0xE0) << 6 : (vic_registers[0x18] & 0xF0) << 6),	// pointer to screen RAM, try to audo-tected: FIXME: works only in bank0!
+		(vic_registers[0x31] & 0x80) ? 80 : 40,		// number of columns, try to auto-detect it
+		25,						// number of rows
+		t2,						// text buffer as input
+		(vic_registers[0x18] & 2)			// lowercase font? try to auto-detect by checking selected address chargen addr, LSB
+	);
+	SDL_free(t);
+	return;
+no_clipboard:
+	if (t)
+		SDL_free(t);
+	ERROR_WINDOW("Clipboard query error, or clipboard was empty");
+}
+
+
 static void ui_cb_mono_downmix ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == stereo_separation);
@@ -403,6 +429,7 @@ static const struct menu_st menu_display[] = {
 	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &registered_screenshot_request },
 #endif
 	{ "Screen to OS paste buffer",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_screen_text_into_paste_buffer },
+	{ "OS paste buffer to screen",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_paste_buffer_into_screen_text },
 	{ NULL }
 };
 static const struct menu_st menu_sdcard[] = {

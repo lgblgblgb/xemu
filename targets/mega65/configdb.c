@@ -106,7 +106,7 @@ static const struct xemutools_configdef_num_st num_options[] = {
 };
 
 static const struct xemutools_configdef_float_st float_options[] = {
-	{ "fastclock", M65_DEFAULT_FAST_CLOCK, "Clock of M65 fast mode (in MHz)", &configdb.fast_mhz, 4.0, 200.0 },
+	{ "fastclock", MEGA65_DEFAULT_FAST_CLOCK, "Clock of M65 fast mode (in MHz)", &configdb.fast_mhz, 4.0, 200.0 },
 	{ NULL }
 };
 
