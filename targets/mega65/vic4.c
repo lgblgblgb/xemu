@@ -1063,6 +1063,22 @@ static void vic4_render_fullcolor_char_row ( const Uint8* char_row, int glyph_wi
 }
 
 
+// 16-color (Nybl) mode (4-bit per pixel / 16 pixel wide characters)
+static void vic4_render_16color_char_row ( const Uint8* char_row, int glyph_width ) 
+{
+	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
+		Uint8 char_data = char_row[((int)cx) / 2];
+		if (((int)cx) & 1)
+			char_data >>= 4;
+		else
+			char_data &= 0xf;
+		Uint32 pixel_color = palette[char_data];
+		*(current_pixel++) = pixel_color;
+		bg_pixel_state[xcounter++] = pixel_color ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
+	}
+}
+
+
 // Render a bitplane-mode character cell row
 static void vic4_render_bitplane_char_row ( Uint8* bp_base[8], int glyph_width )
 {
@@ -1194,7 +1210,7 @@ void vic4_render_char_raster ( void )
 				char_byte = reverse_byte_table[char_byte];	// LGB: I killed the function, and type-conv, as char_byte is byte, OK to index as-is
 			// Render character cell row
 			if (SXA_4BIT_PER_PIXEL(color_data)) {	// 16-color character
-				// FIXME: TODO??
+				vic4_render_16color_char_row(main_ram + (((char_id * 64) + (sel_char_row * 8) ) & 0x7FFFF), glyph_width);
 			} else if (CHAR_IS256_COLOR(char_id)) {	// 256-color character
 				vic4_render_fullcolor_char_row(main_ram + (((char_id * 64) + (sel_char_row * 8) ) & 0x7FFFF), 8);
 			} else if ((REG_MCM && (char_fgcolor & 8)) || (REG_MCM && REG_BMM)) {	// Multicolor character
