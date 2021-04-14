@@ -243,11 +243,11 @@ static void vic4_update_sideborder_dimensions ( void )
 	if (REG_CSEL) {	// 40-columns?
 		border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER;
 		if (!REG_H640)
-			border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER - 1;
+			border_x_right = FRAME_H_FRONT + TEXTURE_WIDTH - SINGLE_SIDE_BORDER - 1;
 		else	// 80-col mode
-			border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER;
+			border_x_right = FRAME_H_FRONT + TEXTURE_WIDTH - SINGLE_SIDE_BORDER;
 	} else {	// 38-columns
-		border_x_right = FRAME_H_FRONT + SCREEN_WIDTH - SINGLE_SIDE_BORDER - 18;
+		border_x_right = FRAME_H_FRONT + TEXTURE_WIDTH - SINGLE_SIDE_BORDER - 18;
 		if (!REG_H640)
 			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER + 14;
 		else	// 78-col mode
@@ -292,7 +292,7 @@ static void vic4_update_vertical_borders( void )
 			display_row_count = 24*2;
 		}
 		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 6 + (REG_VIC2_YSCROLL * 2));
-	}
+	}	
 	DEBUGPRINT("VIC4: set border top=%d, bottom=%d, textypos=%d, display_row_count=%d vic_ii_first_raster=%d" NL, BORDER_Y_TOP, BORDER_Y_BOTTOM, 
 		CHARGEN_Y_START, display_row_count, vicii_first_raster);
 }
