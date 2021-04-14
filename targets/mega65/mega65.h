@@ -44,7 +44,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define C128_MHZ_CLOCK		2.0
 #define C65_MHZ_CLOCK		3.5
 // Default fast clock of M65, in MHz (can be overriden with CLI switch)
-#define M65_DEFAULT_FAST_CLOCK	40.0
+#define MEGA65_DEFAULT_FAST_CLOCK	40.5
 
 #define SID_CYCLES_PER_SEC	1000000
 #define AUDIO_SAMPLE_FREQ	44100

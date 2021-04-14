@@ -759,7 +759,7 @@ void xemu_window_snap_to_optimal_size ( int forced )
 	const float rat2 = (float)h / (float)sdl_viewport.h;
 	if (rat2 > rat)
 		rat = rat2;
-	rat = roundf(rat);
+	rat = roundf(rat);	// XXX TODO: depends on math.h mingw warning!
 	// XXX TODO: check if window is not larger than the screen itself
 	if (rat < 1)
 		rat = 1;
