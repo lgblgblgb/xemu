@@ -292,7 +292,7 @@ static void vic4_update_vertical_borders( void )
 			display_row_count = 24*2;
 		}
 		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 6 + (REG_VIC2_YSCROLL * 2));
-	}
+	}	
 	DEBUGPRINT("VIC4: set border top=%d, bottom=%d, textypos=%d, display_row_count=%d vic_ii_first_raster=%d" NL, BORDER_Y_TOP, BORDER_Y_BOTTOM, 
 		CHARGEN_Y_START, display_row_count, vicii_first_raster);
 }
