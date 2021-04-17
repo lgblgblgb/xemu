@@ -48,7 +48,6 @@ const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
 Uint8 vic_registers[0x80];		// VIC-4 registers
 int vic_iomode;				// VIC2/VIC3/VIC4 mode
-int force_fast;				// POKE 0,64 and 0,65 trick ...
 int scanline;				// current scan line number
 int cpu_cycles_per_scanline;
 static int compare_raster;		// raster compare (9 bits width) data
@@ -128,7 +127,6 @@ void vic_init ( void )
 	black_colour = SDL_MapRGBA(sdl_pix_fmt, 0x00, 0x00, 0x00, 0xFF);
 	// Init VIC4 palette
 	vic4_init_palette();
-	force_fast = 0;
 	// *** Init VIC4 registers
 	scanline = 0;
 	vic_reset();

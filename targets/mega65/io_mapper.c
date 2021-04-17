@@ -446,7 +446,6 @@ void io_write ( unsigned int addr, Uint8 data )
 						DEBUG("MEGA65: ROM protection has been turned %s." NL, data & 4 ? "ON" : "OFF");
 						rom_protect = data & 4;
 					}
-					force_fast = data & 16;
 					return;
 				case 0x7E:
 					D6XX_registers[0x7E] = 0xFF;	// iomap.txt: "Hypervisor already-upgraded bit (sets permanently)"

@@ -32,7 +32,6 @@ extern Uint8 vic_registers[];
 extern int   cpu_cycles_per_scanline;
 extern int   vic2_16k_bank;
 extern int   vic3_blink_phase;
-extern int   force_fast;
 extern Uint8 c128_d030_reg;
 
 extern int   vic_vidp_legacy, vic_chrp_legacy, vic_sprp_legacy;
