@@ -134,11 +134,24 @@ int xemugui_file_selector ( int dialog_mode, const char *dialog_title, char *def
 
 int xemugui_popup ( const struct menu_st desc[] )
 {
-	if (current_gui && current_gui->popup)
-		return current_gui->popup(desc);
-	else
+	if (!current_gui) {
+		ERROR_WINDOW("GUI hasn't been initialized yet, cannot pop menu.");
 		return 1;
+	}
+	if (!current_gui->popup) {
+#ifndef GUI_HAS_POPUP
+		ERROR_WINDOW("GUI support is not compiled for this Xemu build for any GUI backend which can pop menu");
+		return 1;
+#endif
+		if (current_gui == &xemunullgui_descriptor)
+			ERROR_WINDOW("The 'none' GUI is used. It does not support popping menu");
+		else
+			ERROR_WINDOW("Current GUI backend (%s) does not support popping menu", current_gui->name);
+		return 1;
+	}
+	return current_gui->popup(desc);
 }
+
 
 int xemugui_info ( int sdl_class, const char *msg )
 {

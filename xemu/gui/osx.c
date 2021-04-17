@@ -28,6 +28,10 @@ static id application;
 static const unsigned long NSFileHandlingPanelOKButton = 1;
 static const unsigned long NSFileHandlingPanelCancelButton = 0;
 
+#ifndef GUI_HAS_POPUP
+#define GUI_HAS_POPUP
+#endif
+
 // (!)
 // New Apple SDKs objc_msgSend prototype changed to *force* callers
 // to cast to proper types!. So this is ugly and verbose, but works.

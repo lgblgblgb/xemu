@@ -22,6 +22,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <windows.h>
 #include <SDL_syswm.h>
 
+#ifndef GUI_HAS_POPUP
+#define GUI_HAS_POPUP
+#endif
+
 static struct {
 	int num_of_hmenus;
 	int num_of_items;

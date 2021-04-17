@@ -41,6 +41,10 @@ static struct {
 } xemugtkmenu;
 
 
+#ifndef GUI_HAS_POPUP
+#define GUI_HAS_POPUP
+#endif
+
 static int xemugtkgui_iteration ( void )
 {
 	if (XEMU_UNLIKELY(_gtkgui_active && is_xemugui_ok)) {
