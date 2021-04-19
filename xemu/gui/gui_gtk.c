@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   ~/xemu/gui/gtk.c: UI implementation for GTK+3 of Xemu's UI abstraction layer
+   ~/xemu/gui/gui_gtk.c: UI implementation for GTK+3 of Xemu's UI abstraction layer
    Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify

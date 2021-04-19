@@ -1,6 +1,7 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   ~/xemu/gui/osx.c: UI implementation for MacOS of Xemu's UI abstraction layer
+   ~/xemu/gui/gui_osx.c: UI implementation for MacOS of Xemu's UI abstraction layer
    Copyright (C)2020 Hernán Di Pietro <hernan.di.pietro@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by

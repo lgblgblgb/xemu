@@ -193,38 +193,9 @@ extern void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int tex
 extern Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail );
 extern void xemu_update_screen ( void );
 
-extern int  osd_status;
-extern const Uint16 font_16x16[];
-
-extern int  osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_entries, int fade_dec, int fade_end );
-extern int  osd_init_with_defaults ( void );
-extern void osd_clear ( void );
-extern void osd_update ( void );
-extern void osd_on ( int value );
-extern void osd_off ( void );
-extern void osd_global_enable ( int status );
-extern void osd_set_colours ( int fg_index, int bg_index );
-extern void osd_write_char ( int x, int y, char ch );
-extern void osd_write_string ( int x, int y, const char *s );
-
-#define OSD_STATIC		0x1000
-#define OSD_FADE_START		300
-#define OSD_FADE_DEC_VAL	5
-#define OSD_FADE_END_VAL	0x20
-
-#define OSD_TEXTURE_X_SIZE	640
-#define OSD_TEXTURE_Y_SIZE	200
-
-
-#define OSD(x, y, ...) do { \
-	char _buf_for_msg_[4096]; \
-	CHECK_SNPRINTF(snprintf(_buf_for_msg_, sizeof _buf_for_msg_, __VA_ARGS__), sizeof _buf_for_msg_); \
-	fprintf(stderr, "OSD: %s" NL, _buf_for_msg_); \
-	osd_clear(); \
-	osd_write_string(x, y, _buf_for_msg_); \
-	osd_update(); \
-	osd_on(OSD_FADE_START); \
-} while(0)
+#ifdef XEMU_OSD_SUPPORT
+#include "xemu/gui/osd.h"
+#endif
 
 #include <dirent.h>
 #ifdef XEMU_ARCH_WIN

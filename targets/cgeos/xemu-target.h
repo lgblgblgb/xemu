@@ -4,3 +4,4 @@
 #define CPU65 cpu65
 #define CPU_6502_NMOS_ONLY
 #define XEMU_CONFIGDB_SUPPORT
+#define XEMU_OSD_SUPPORT

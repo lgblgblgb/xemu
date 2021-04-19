@@ -53,14 +53,14 @@ struct xemugui_descriptor_st {
 };
 
 #if defined(XEMU_HAS_GTK3)
-#	include "xemu/gui/gtk.c"
+#	include "xemu/gui/gui_gtk.c"
 #elif defined(XEMU_ARCH_MAC)
-#	include "xemu/gui/osx.c"
+#	include "xemu/gui/gui_osx.c"
 #elif defined(XEMU_ARCH_WIN)
-#	include "xemu/gui/windows.c"
+#	include "xemu/gui/gui_win.c"
 #endif
-#include "xemu/gui/nogui.c"
-#include "xemu/gui/osd.c"
+#include "xemu/gui/gui_nogui.c"
+#include "xemu/gui/gui_osd.c"
 
 static const struct xemugui_descriptor_st *current_gui = NULL;
 
