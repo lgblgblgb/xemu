@@ -41,7 +41,7 @@ struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 static int mouse_x = 0, mouse_y = 0;	// for our primitive C1351 mouse emulation
 int    cpu_mega65_opcodes = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;
-int port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65
+int port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65 keyboard
 
 
 static const Uint8 fpga_firmware_version[] = { 'X','e','m','u' };
@@ -59,46 +59,29 @@ static int         xemu_query_gate = 0;
 	return; } while(0)
 
 
-static void update_hw_multiplier ( void )
+static XEMU_INLINE void update_hw_multiplier ( void )
 {
-	Uint32 input_a = (Uint64)(
-		((Uint32) D7XX[0x70]      ) |
-		((Uint32) D7XX[0x71] <<  8) |
-		((Uint32) D7XX[0x72] << 16) |
-		((Uint32) D7XX[0x73] << 24)
-	);
-	Uint32 input_b = (Uint64)(
-		((Uint32) D7XX[0x74]      ) |
-		((Uint32) D7XX[0x75] <<  8) |
-		((Uint32) D7XX[0x76] << 16) |
-		((Uint32) D7XX[0x77] << 24)
-	);
-	if (XEMU_LIKELY(input_b)) {
-		// We really don't want to divide by zero.
-		// It seems the policy on MEGA65 is not change the result
-		// registers AT ALL, if you try to divide by zero.
-		// So we only check if input_b != 0 and do the thing here then!
-		Uint32 div_quotient = input_a / input_b;
-		Uint32 div_reminder = input_a % input_b;
-		D7XX[0x68] = (div_reminder      ) & 0xFF;
-		D7XX[0x69] = (div_reminder >>  8) & 0xFF;
-		D7XX[0x6A] = (div_reminder >> 16) & 0xFF;
-		D7XX[0x6B] = (div_reminder >> 24) & 0xFF;
-		D7XX[0x6C] = (div_quotient      ) & 0xFF;
-		D7XX[0x6D] = (div_quotient >>  8) & 0xFF;
-		D7XX[0x6E] = (div_quotient >> 16) & 0xFF;
-		D7XX[0x6F] = (div_quotient >> 24) & 0xFF;
-	}
-	Uint64 mult_result = (Uint64)input_a * (Uint64)input_b;
-	D7XX[0x78] = (mult_result      ) & 0xFF;
-	D7XX[0x79] = (mult_result >>  8) & 0xFF;
-	D7XX[0x7A] = (mult_result >> 16) & 0xFF;
-	D7XX[0x7B] = (mult_result >> 24) & 0xFF;
-	D7XX[0x7C] = (mult_result >> 32) & 0xFF;
-	D7XX[0x7D] = (mult_result >> 40) & 0xFF;
-	D7XX[0x7E] = (mult_result >> 48) & 0xFF;
-	D7XX[0x7F] = (mult_result >> 56) & 0xFF;
+	register const Uint32 input_a = xemu_u8p_to_u32le(D7XX + 0x70);
+	register const Uint32 input_b = xemu_u8p_to_u32le(D7XX + 0x74);
+	// Set flag to valid, so we don't relculate each time
+	// (this variable is used to avoid calling this function if no change was
+	// done on input_a and input_b)
 	bigmult_valid_result = 1;
+	// --- Do the product, multiplication ---
+	xemu_u64le_to_u8p(D7XX + 0x78, (Uint64)input_a * (Uint64)input_b);
+	// --- Do the quotient, divide ---
+	// ... but we really don't want to divide by zero, so let's test this
+	if (XEMU_LIKELY(input_b)) {
+		// input_b is non-zero, it's OK to divide
+		xemu_u64le_to_u8p(D7XX + 0x68, (Uint64)((Uint64)input_a << 32) / (Uint64)input_b);
+	} else {
+		// If we divide by zero, according to the VHDL,
+		// we set all bits to '1' in the result, that is $FF
+		// for all registers of div output. Probably it can be
+		// interpreted as some kind of "fixed point infinity"
+		// or just a measure of error with this special answer.
+		memset(D7XX + 0x68, 0xFF, 8);
+	}
 }
 
 

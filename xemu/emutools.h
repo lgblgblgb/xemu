@@ -193,6 +193,38 @@ extern void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int tex
 extern Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail );
 extern void xemu_update_screen ( void );
 
+
+static XEMU_INLINE Uint16 xemu_u8p_to_u16le ( const Uint8 *const p ) {
+	return p[0] | (p[1] << 8);
+}
+static XEMU_INLINE Uint32 xemu_u8p_to_u32le ( const Uint8 *const p ) {
+	return p[0] | (p[1] << 8) | (p[2] << 16) | (p[3] << 24);
+}
+static XEMU_INLINE Uint64 xemu_u8p_to_u64le ( const Uint8 *const p ) {
+	return (Uint64)p[0] | ((Uint64)p[1] << 8) | ((Uint64)p[2] << 16) | ((Uint64)p[3] << 24) | ((Uint64)p[4] << 32) | ((Uint64)p[5] << 40) | ((Uint64)p[6] << 48) | ((Uint64)p[7] << 56);
+}
+static XEMU_INLINE void xemu_u16le_to_u8p ( Uint8 *const p, const Uint16 data ) {
+	p[0] = (data      ) & 0xFF;
+	p[1] = (data >>  8) & 0xFF;
+}
+static XEMU_INLINE void xemu_u32le_to_u8p ( Uint8 *const p, const Uint32 data ) {
+	p[0] = (data      ) & 0xFF;
+	p[1] = (data >>  8) & 0xFF;
+	p[2] = (data >> 16) & 0xFF;
+	p[3] = (data >> 24) & 0xFF;
+}
+static XEMU_INLINE void xemu_u64le_to_u8p ( Uint8 *const p, const Uint64 data ) {
+	p[0] = (data      ) & 0xFF;
+	p[1] = (data >>  8) & 0xFF;
+	p[2] = (data >> 16) & 0xFF;
+	p[3] = (data >> 24) & 0xFF;
+	p[4] = (data >> 32) & 0xFF;
+	p[5] = (data >> 40) & 0xFF;
+	p[6] = (data >> 48) & 0xFF;
+	p[7] = (data >> 56) & 0xFF;
+}
+
+
 #ifdef XEMU_OSD_SUPPORT
 #include "xemu/gui/osd.h"
 #endif
