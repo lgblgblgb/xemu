@@ -37,7 +37,6 @@ static Uint32 *pixel_end, *pixel_start;				// points to the end and start of the
 static Uint32 *pixel_raster_start;				// first pixel of current raster
 Uint8 vic_registers[0x80];					// VIC-4 registers
 int vic_iomode;							// VIC2/VIC3/VIC4 mode
-int force_fast;							// POKE 0,64 and 0,65 trick ...
 static int compare_raster;					// raster compare (9 bits width) data
 static int logical_raster = 0;
 static int interrupt_status;					// Interrupt status of VIC
@@ -190,7 +189,6 @@ void vic_init ( void )
 	black_colour = SDL_MapRGBA(sdl_pix_fmt, 0x00, 0x00, 0x00, 0xFF);
 	// Init VIC4 stuffs
 	vic4_init_palette();
-	force_fast = 0;
 	vic_reset();
 	c128_d030_reg = 0xFE;	// this may be set to 2MHz in the previous step, so be sure to set to FF here, BUT FIX: bit 0 should be inverted!!
 	machine_set_speed(0);

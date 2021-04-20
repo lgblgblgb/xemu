@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  * implemented incorrectly (not cycle exact, simplified, ignored
  * conditions, etc).
  * Some doc:
- *      http://archive.6502.org/datasheets/mos_6526_cia.pdf
+ *      http://archive.6502.org/datasheets/mos_6526_cia_recreated.pdf
  *      http://www.c64-wiki.com/index.php/CIA
  */
 

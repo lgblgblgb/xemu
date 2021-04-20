@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   ~/xemu/gui/windows.c: UI implementation for Windows of Xemu's UI abstraction layer
+   ~/xemu/gui/gui_win.c: UI implementation for Windows of Xemu's UI abstraction layer
    Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -21,6 +21,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include <windows.h>
 #include <SDL_syswm.h>
+
+#ifndef GUI_HAS_POPUP
+#define GUI_HAS_POPUP
+#endif
 
 static struct {
 	int num_of_hmenus;

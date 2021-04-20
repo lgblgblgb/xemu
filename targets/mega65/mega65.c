@@ -100,10 +100,10 @@ void machine_set_speed ( int verbose )
 	//	return;
 	if (verbose)
 		DEBUGPRINT("SPEED: in_hypervisor=%d force_fast=%d c128_fast=%d, c65_fast=%d m65_fast=%d" NL,
-			in_hypervisor, force_fast, (c128_d030_reg & 1), vic_registers[0x31] & 64, vic_registers[0x54] & 64
+			in_hypervisor, D6XX_registers[0x7D] & 16, (c128_d030_reg & 1), vic_registers[0x31] & 64, vic_registers[0x54] & 64
 	);
 	// ^1 at c128... because it was inverted :-O --> FIXME: this is ugly workaround, the switch statement should be re-organized
-	speed_wanted = (in_hypervisor || force_fast) ? 7 : ((((c128_d030_reg & 1) ^ 1) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
+	speed_wanted = (in_hypervisor || (D6XX_registers[0x7D] & 16)) ? 7 : ((((c128_d030_reg & 1) ^ 1) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
 	// videostd_changed: we also want to force recalulation if PAL/NTSC change happened, even if the speed setting remains the same!
 	if (speed_wanted != speed_current || videostd_changed) {
 		speed_current = speed_wanted;
@@ -451,7 +451,7 @@ static void shutdown_callback ( void )
 void reset_mega65 ( void )
 {
 	eth65_reset();
-	force_fast = 0;	// FIXME: other default speed controls on reset?
+	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0xFF;
 	machine_set_speed(0);
 	memory_set_cpu_io_port_ddr_and_data(0xFF, 0xFF);
@@ -820,8 +820,6 @@ int main ( int argc, char **argv )
 #define SNAPSHOT_M65_BLOCK_VERSION	2
 #define SNAPSHOT_M65_BLOCK_SIZE		(0x100 + sizeof(D6XX_registers) + sizeof(D7XX))
 
-static int force_fast_loaded;
-
 
 int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {
@@ -845,7 +843,7 @@ int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, 
 	in_hypervisor = (int)P_AS_BE32(buffer + 16);	// sets hypervisor state from snapshot (hypervisor/userspace)
 	map_megabyte_low = (int)P_AS_BE32(buffer + 20);
 	map_megabyte_high = (int)P_AS_BE32(buffer + 24);
-	force_fast_loaded = (int)P_AS_BE32(buffer + 28);	// activated in m65emu_snapshot_loading_finalize() as force_fast can be set at multiple places through loading snapshot!
+	//force_fast_loaded = (int)P_AS_BE32(buffer + 28);	// activated in m65emu_snapshot_loading_finalize() as force_fast can be set at multiple places through loading snapshot!
 	// +32 is free for 4 bytes now ... can be used later
 	memory_set_cpu_io_port_ddr_and_data(buffer[36], buffer[37]);
 	return 0;
@@ -866,7 +864,7 @@ int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	U32_AS_BE(buffer + 16, in_hypervisor);
 	U32_AS_BE(buffer + 20, map_megabyte_low);
 	U32_AS_BE(buffer + 24, map_megabyte_high);
-	U32_AS_BE(buffer + 28, force_fast);	// see notes on this at load_state and finalize stuff!
+	//U32_AS_BE(buffer + 28, force_fast);	// see notes on this at load_state and finalize stuff!
 	// +32 is free for 4 bytes now ... can be used later
 	buffer[36] = memory_get_cpu_io_port(0);
 	buffer[37] = memory_get_cpu_io_port(1);
@@ -881,7 +879,7 @@ int m65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st 
 	DEBUGPRINT("SNAP: loaded (finalize-callback: begin)" NL);
 	memory_set_vic3_rom_mapping(vic_registers[0x30]);
 	memory_set_do_map();
-	force_fast = force_fast_loaded;	// force_fast is handled through different places, so we must have a "finalize" construct and saved separately to have the actual effect ...
+	//force_fast = force_fast_loaded;	// force_fast is handled through different places, so we must have a "finalize" construct and saved separately to have the actual effect ...
 	machine_set_speed(1);
 	DEBUGPRINT("SNAP: loaded (finalize-callback: end)" NL);
 	OSD(-1, -1, "Snapshot has been loaded.");

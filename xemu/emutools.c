@@ -48,8 +48,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	endif
 #endif
 
-#include "xemu/osd_font_16x16.c"
-
 #ifdef XEMU_ARCH_WIN
 #	include <windows.h>
 #	include <stdio.h>
@@ -117,10 +115,6 @@ int sdl_default_win_y_size;
 static SDL_Rect sdl_viewport, *sdl_viewport_ptr = NULL;
 static unsigned int sdl_texture_x_size, sdl_texture_y_size;
 
-static int osd_enabled = 0, osd_available = 0, osd_xsize, osd_ysize, osd_fade_dec, osd_fade_end, osd_alpha_last;
-int osd_status = 0;
-static Uint32 osd_colours[16], *osd_pixels = NULL, osd_colour_fg, osd_colour_bg;
-static SDL_Texture *sdl_osdtex = NULL;
 static SDL_bool grabbed_mouse = SDL_FALSE, grabbed_mouse_saved = SDL_FALSE;
 int allow_mouse_grab = 1;
 static int sdl_viewport_changed;
@@ -128,6 +122,10 @@ static int follow_win_size;
 
 #if !SDL_VERSION_ATLEAST(2, 0, 4)
 #error "At least SDL version 2.0.4 is needed!"
+#endif
+
+#ifdef XEMU_OSD_SUPPORT
+#include "xemu/gui/osd.c"
 #endif
 
 
@@ -512,9 +510,11 @@ static void shutdown_emulator ( void )
 	xemusock_uninit();
 #endif
 	//SDL_Quit();
-	char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
-	xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
-	DEBUGPRINT(NL "TIMING: Xemu CPU usage: %s" NL "XEMU: good by(T)e." NL, td_stat_str);
+	if (td_stat_counter) {
+		char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
+		xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
+		DEBUGPRINT(NL "TIMING: Xemu CPU usage: %s" NL "XEMU: good by(T)e." NL, td_stat_str);
+	}
 	if (debug_fp) {
 		fclose(debug_fp);
 		debug_fp = NULL;
@@ -768,7 +768,7 @@ void xemu_window_snap_to_optimal_size ( int forced )
 	if (w != w2 || h != h2) {
 		last_resize = now;
 		SDL_SetWindowSize(sdl_win, w2, h2);
-		DEBUGPRINT("SDL: auto-resizing window to %d x %d (zoom got: %d)" NL, w2, h2, (int)rat);
+		DEBUGPRINT("SDL: auto-resizing window to %d x %d (zoom level approximated: %d)" NL, w2, h2, (int)rat);
 	} else
 		DEBUGPRINT("SDL: no auto-resizing was needed (same size)" NL);
 }
@@ -1104,187 +1104,10 @@ void xemu_update_screen ( void )
 	//if (seconds_timer_trigger)
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
 	SDL_RenderCopy(sdl_ren, sdl_tex, sdl_viewport_ptr, NULL);
-	if (osd_status) {
-		if (osd_status < OSD_STATIC)
-			osd_status -= osd_fade_dec;
-		if (osd_status <= osd_fade_end) {
-			DEBUG("OSD: end of fade at %d" NL, osd_status);
-			osd_status = 0;
-			osd_alpha_last = 0;
-		} else {
-			int alpha = osd_status > 0xFF ? 0xFF : osd_status;
-			if (alpha != osd_alpha_last) {
-				osd_alpha_last = alpha;
-				SDL_SetTextureAlphaMod(sdl_osdtex, alpha);
-			}
-			SDL_RenderCopy(sdl_ren, sdl_osdtex, NULL, NULL);
-		}
-	}
-	SDL_RenderPresent(sdl_ren);
-}
-
-
-void osd_clear ( void )
-{
-	if (osd_enabled) {
-		DEBUG("OSD: osd_clear() called." NL);
-		memset(osd_pixels, 0, osd_xsize * osd_ysize * 4);
-	}
-}
-
-
-void osd_update ()
-{
-	if (osd_enabled) {
-		DEBUG("OSD: osd_update() called." NL);
-                SDL_UpdateTexture(sdl_osdtex, NULL, osd_pixels, osd_xsize * sizeof (Uint32));
-	}
-}
-
-
-int osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_entries, int fade_dec, int fade_end )
-{
-	// start with disabled state, so we can abort our init process without need to disable this
-	osd_status = 0;
-	osd_enabled = 0;
-	if (sdl_osdtex || osd_pixels)
-		FATAL("Calling osd_init() multiple times?");
-	sdl_osdtex = SDL_CreateTexture(sdl_ren, sdl_pix_fmt->format, SDL_TEXTUREACCESS_STREAMING, xsize, ysize);
-	if (!sdl_osdtex) {
-		ERROR_WINDOW("Error with SDL_CreateTexture(), OSD won't be available: %s", SDL_GetError());
-		return 1;
-	}
-	if (SDL_SetTextureBlendMode(sdl_osdtex, SDL_BLENDMODE_BLEND)) {
-		ERROR_WINDOW("Error with SDL_SetTextureBlendMode(), OSD won't be available: %s", SDL_GetError());
-		SDL_DestroyTexture(sdl_osdtex);
-		sdl_osdtex = NULL;
-		return 1;
-	}
-	osd_pixels = xemu_malloc_ALIGNED(xsize * ysize * 4);
-#if 0
-	// FIXME: this is useless as xemu_malloc_ALIGNED() will fail if cannot allocate memory ...
-	if (!osd_pixels) {
-		ERROR_WINDOW("Not enough memory to allocate texture, OSD won't be available");
-		SDL_DestroyTexture(sdl_osdtex);
-		sdl_osdtex = NULL;
-		return 1;
-	}
+#ifdef XEMU_OSD_SUPPORT
+	_osd_render();
 #endif
-	osd_xsize = xsize;
-	osd_ysize = ysize;
-	osd_fade_dec = fade_dec;
-	osd_fade_end = fade_end;
-	for (int a = 0; a < palette_entries; a++)
-		osd_colours[a] = SDL_MapRGBA(sdl_pix_fmt, palette[a << 2], palette[(a << 2) + 1], palette[(a << 2) + 2], palette[(a << 2) + 3]);
-	osd_enabled = 1;	// great, everything is OK, we can set enabled state!
-	osd_available = 1;
-	osd_clear();
-	osd_update();
-	osd_set_colours(1, 0);
-	DEBUG("OSD: init: %dx%d pixels, %d palette entries, %d fade_dec, %d fade_end" NL, xsize, ysize, palette_entries, fade_dec, fade_end);
-	return 0;
-}
-
-
-
-int osd_init_with_defaults ( void )
-{
-	const Uint8 palette[] = {
-		0xC0, 0x40, 0x40, 0xFF,
-		0xFF, 0xFF, 0x00, 0xFF
-	};
-	return osd_init(
-		OSD_TEXTURE_X_SIZE, OSD_TEXTURE_Y_SIZE,
-		palette,
-		sizeof(palette) >> 2,
-		OSD_FADE_DEC_VAL,
-		OSD_FADE_END_VAL
-	);
-}
-
-
-void osd_on ( int value )
-{
-	if (osd_enabled) {
-		osd_alpha_last = 0;	// force alphamod to set on next screen update
-		osd_status = value;
-		DEBUG("OSD: osd_on(%d) called." NL, value);
-	}
-}
-
-
-void osd_off ( void )
-{
-	osd_status = 0;
-	DEBUG("OSD: osd_off() called." NL);
-}
-
-
-void osd_global_enable ( int status )
-{
-	osd_enabled = (status && osd_available);
-	osd_alpha_last = -1;
-	osd_status = 0;
-	DEBUG("OSD: osd_global_enable(%d), result of status = %d" NL, status, osd_enabled);
-}
-
-
-void osd_set_colours ( int fg_index, int bg_index )
-{
-	osd_colour_fg = osd_colours[fg_index];
-	osd_colour_bg = osd_colours[bg_index];
-	DEBUG("OSD: osd_set_colours(%d,%d) called." NL, fg_index, bg_index);
-}
-
-
-void osd_write_char ( int x, int y, char ch )
-{
-	int row;
-	const Uint16 *s;
-	int warn = 1;
-	Uint32 *d = osd_pixels + y * osd_xsize + x;
-	Uint32 *e = osd_pixels + osd_xsize * osd_ysize;
-	if ((signed char)ch < 32)	// also for >127 chars, since they're negative in 2-complements 8 bit type
-		ch = '?';
-	s = font_16x16 + (((unsigned char)ch - 32) << 4);
-	for (row = 0; row < 16; row++) {
-		Uint16 mask = 0x8000;
-		do {
-			if (XEMU_LIKELY(d >= osd_pixels && d < e))
-				*d = *s & mask ? osd_colour_fg : osd_colour_bg;
-			else if (warn) {
-				warn = 0;
-				DEBUG("OSD: ERROR: out of OSD dimensions for char %c at starting point %d:%d" NL, ch, x, y);
-			}
-			d++;
-			mask >>= 1;
-		} while (mask);
-		s++;
-		d += osd_xsize - 16;
-	}
-}
-
-
-void osd_write_string ( int x, int y, const char *s )
-{
-	if (y < 0)	// negative y: standard place for misc. notifications
-		y = osd_ysize / 2;
-	for (;;) {
-		int len = 0, xt;
-		if (!*s)
-			break;
-		while (s[len] && s[len] != '\n')
-			len++;
-		xt = (x < 0) ? ((osd_xsize - len * 16) / 2) : x;	// request for centered? (if x < 0)
-		while (len--) {
-			osd_write_char(xt, y, *s);
-			s++;
-			xt += 16;
-		}
-		y += 16;
-		if (*s == '\n')
-			s++;
-	}
+	SDL_RenderPresent(sdl_ren);
 }
 
 
