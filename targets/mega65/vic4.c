@@ -290,8 +290,8 @@ static void vic4_update_vertical_borders( void )
 			display_row_count = 24*2;
 		}
 		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 6 + (REG_VIC2_YSCROLL * 2));
-	}	
-	DEBUGPRINT("VIC4: set border top=%d, bottom=%d, textypos=%d, display_row_count=%d vic_ii_first_raster=%d" NL, BORDER_Y_TOP, BORDER_Y_BOTTOM, 
+	}
+	DEBUGPRINT("VIC4: set border top=%d, bottom=%d, textypos=%d, display_row_count=%d vic_ii_first_raster=%d" NL, BORDER_Y_TOP, BORDER_Y_BOTTOM,
 		CHARGEN_Y_START, display_row_count, vicii_first_raster);
 }
 
@@ -325,7 +325,7 @@ static void vic4_interpret_legacy_mode_registers ( void )
 	SET_COLORRAM_BASE(0);
 	DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charxscale=%d, ras_src=%d "
 		"screen_ram=$%06x, charset/bitmap=$%06x, sprite=$%06x" NL,
-		REG_16BITCHARSET, REG_CHRCOUNT, CHARSTEP_BYTES, REG_CHARXSCALE, 
+		REG_16BITCHARSET, REG_CHRCOUNT, CHARSTEP_BYTES, REG_CHARXSCALE,
 		REG_FNRST, SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
 }
 
@@ -1062,7 +1062,7 @@ static void vic4_render_fullcolor_char_row ( const Uint8* char_row, int glyph_wi
 
 
 // 16-color (Nybl) mode (4-bit per pixel / 16 pixel wide characters)
-static void vic4_render_16color_char_row ( const Uint8* char_row, int glyph_width ) 
+static void vic4_render_16color_char_row ( const Uint8* char_row, int glyph_width )
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		Uint8 char_data = char_row[((int)cx) / 2];
