@@ -1,6 +1,5 @@
-/* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing
-   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and MEGA65 as well.
+/* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
+   8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
    Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -124,6 +123,7 @@ int allow_mouse_grab = 1;
 #ifdef XEMU_OSD_SUPPORT
 #include "xemu/gui/osd.c"
 #endif
+
 
 int set_mouse_grab ( SDL_bool state, int force_allow )
 {
@@ -386,7 +386,6 @@ static inline void do_sleep ( int td )
 }
 
 
-
 /* Should be called regularly (eg on each screen global update), this function
    tries to keep the emulation speed near to real-time of the emulated machine.
    It's assumed that this function is called at least at every 0.1 sec or even
@@ -451,7 +450,6 @@ void xemu_timekeeping_delay ( int td_em )
 }
 
 
-
 static void atexit_callback_for_console ( void )
 {
 	sysconsole_close("Please review the console content (if you need it) before exiting!");
@@ -508,9 +506,11 @@ static void shutdown_emulator ( void )
 	xemusock_uninit();
 #endif
 	//SDL_Quit();
-	char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
-	xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
-	DEBUGPRINT(NL "TIMING: Xemu CPU usage: %s" NL "XEMU: good by(T)e." NL, td_stat_str);
+	if (td_stat_counter) {
+		char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
+		xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
+		DEBUGPRINT(NL "TIMING: Xemu CPU usage: %s" NL "XEMU: good by(T)e." NL, td_stat_str);
+	}
 	if (debug_fp) {
 		fclose(debug_fp);
 		debug_fp = NULL;
@@ -956,7 +956,6 @@ void xemu_timekeeping_start ( void )
 }
 
 
-
 void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_size )
 {
 	int tail;
@@ -969,7 +968,6 @@ void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_
 	seconds_timer_trigger = 1;
 	xemu_update_screen();
 }
-
 
 
 /* You *MUST* call this _ONCE_ before any access of pixels of the rendering target

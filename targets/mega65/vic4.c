@@ -874,8 +874,8 @@ static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 
 		colours[1] = VIC_REG_COLOUR(0x25);
 		colours[3] = VIC_REG_COLOUR(0x26);
 	}
-	p += SCREEN_WIDTH * (sprite_y + TOP_BORDER_SIZE) + LEFT_BORDER_SIZE;
-	for (y = sprite_y; y < lim_y; y += (expand_y ? 2 : 1), p += SCREEN_WIDTH * (expand_y ? 2 : 1))
+	p += TEXTURE_WIDTH * (sprite_y + TOP_BORDER_SIZE) + LEFT_BORDER_SIZE;
+	for (y = sprite_y; y < lim_y; y += (expand_y ? 2 : 1), p += TEXTURE_WIDTH * (expand_y ? 2 : 1))
 		if (y < 0 || y >= 200)
 			data += 3;	// skip one line (three bytes) of sprite data if outside of screen
 		else {
@@ -888,13 +888,13 @@ static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 
 							if (x >= 0 && x < 640) {
 								p[x] = p[x + 1] = p[x + 2] = p[x + 3] = col;
 								if (expand_y && y < 200)
-									p[x + SCREEN_WIDTH] = p[x + SCREEN_WIDTH + 1] = p[x + SCREEN_WIDTH + 2] = p[x + SCREEN_WIDTH + 3] = col;
+									p[x + TEXTURE_WIDTH] = p[x + TEXTURE_WIDTH + 1] = p[x + TEXTURE_WIDTH + 2] = p[x + TEXTURE_WIDTH + 3] = col;
 							}
 							x += 4;
 							if (expand_x && x >= 0 && x < 640) {
 								p[x] = p[x + 1] = p[x + 2] = p[x + 3] = col;
 								if (expand_y && y < 200)
-									p[x + SCREEN_WIDTH] = p[x + SCREEN_WIDTH + 1] = p[x + SCREEN_WIDTH + 2] = p[x + SCREEN_WIDTH + 3] = col;
+									p[x + TEXTURE_WIDTH] = p[x + TEXTURE_WIDTH + 1] = p[x + TEXTURE_WIDTH + 2] = p[x + TEXTURE_WIDTH + 3] = col;
 								x += 4;
 							}
 						} else
@@ -906,13 +906,13 @@ static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 
 							if (x >= 0 && x < 640) {
 								p[x] = p[x + 1] = colours[2];
 								if (expand_y && y < 200)
-									p[x + SCREEN_WIDTH] = p[x + SCREEN_WIDTH + 1] = colours[2];
+									p[x + TEXTURE_WIDTH] = p[x + TEXTURE_WIDTH + 1] = colours[2];
 							}
 							x += 2;
 							if (expand_x && x >= 0 && x < 640) {
 								p[x] = p[x + 1] = colours[2];
 								if (expand_y && y < 200)
-									p[x + SCREEN_WIDTH] = p[x + SCREEN_WIDTH + 1] = colours[2];
+									p[x + TEXTURE_WIDTH] = p[x + TEXTURE_WIDTH + 1] = colours[2];
 								x += 2;
 							}
 						} else
@@ -969,8 +969,9 @@ void vic_render_screen ( void )
 			1,
 			2,
 			NULL,	// allow function to figure it out ;)
-			SCREEN_WIDTH,
-			SCREEN_HEIGHT
+			TEXTURE_WIDTH,
+			TEXTURE_HEIGHT,
+			TEXTURE_WIDTH
 		)) {
 			const char *p = strrchr(xemu_screenshot_full_path, DIRSEP_CHR);
 			if (p)
@@ -981,7 +982,7 @@ void vic_render_screen ( void )
 	if (configdb.show_drive_led && fdc_get_led_state(16))
 		for (int y = 0; y < 8; y++)
 			for (int x = 0; x < 8; x++)
-				*(p_sdl + (SCREEN_WIDTH) - 10 + x + (y + 2) * (SCREEN_WIDTH)) = x > 1 && x < 7 && y > 1 && y < 7 ? red_colour : black_colour;
+				*(p_sdl + (TEXTURE_WIDTH) - 10 + x + (y + 2) * (TEXTURE_WIDTH)) = x > 1 && x < 7 && y > 1 && y < 7 ? red_colour : black_colour;
 	xemu_update_screen();
 }
 

@@ -37,11 +37,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 /* Do *NOT* modify these, as other parts of the emulator currently depends on these values ...
    You can try RENDER_SCALE_QUALITY though with values 0, 1, 2 */
-#define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888
+#define TEXTURE_FORMAT		SDL_PIXELFORMAT_ARGB8888
 #define USE_LOCKED_TEXTURE	1
 #define RENDER_SCALE_QUALITY	0
-#define SCREEN_WIDTH		640
-#define SCREEN_HEIGHT		200
+#define TEXTURE_WIDTH		640
+#define TEXTURE_HEIGHT		200
 
 // Default fast clock of M65, in MHz (can be overriden with CLI switch)
 #define MEGA65_DEFAULT_FAST_CLOCK	40.5

@@ -352,7 +352,8 @@ static void render_screen ( void )
 			SCREEN_DEFAULT_ZOOM,
 			NULL,	// Allow function to figure it out ;)
 			SCREEN_WIDTH,
-			SCREEN_HEIGHT
+			SCREEN_HEIGHT,
+			SCREEN_WIDTH
 		))
 			OSD(-1, -1, "Screenshot has been taken");
 	}

@@ -6,6 +6,7 @@
 [![License: GPL-2.0](https://img.shields.io/github/license/lgblgblgb/xemu.svg)](./LICENSE)
 [![Contributors](https://img.shields.io/github/contributors/lgblgblgb/xemu.svg)](https://github.com/lgblgblgb/xemu/graphs/contributors)
 [![GitHub last commit (dev)](https://img.shields.io/github/last-commit/lgblgblgb/xemu/dev?label=Last%20commit%20DEV)](https://github.com/lgblgblgb/xemu/wiki/ReleaseLogDEVEL)
+[![GitHub last commit (next)](https://img.shields.io/github/last-commit/lgblgblgb/xemu/next?label=Last%20commit%20NEXT)](https://github.com/lgblgblgb/xemu/wiki/ReleaseLogNEXT)
 [![GitHub last commit (master)](https://img.shields.io/github/last-commit/lgblgblgb/xemu/master?label=Last%20commit%20MASTER)](https://github.com/lgblgblgb/xemu/wiki/ReleaseLog)
 
 Emulators running on Linux/Unix/Windows/OSX of various (mainly 8 bit) machines,
@@ -146,6 +147,10 @@ For more information: https://github.com/lgblgblgb/xemu/wiki/Source
 
     sudo apt update
     sudo apt install git build-essential libsdl2-dev libgtk-3-dev libreadline-dev
+
+Note for Linux compilation (other UNIX'es as well) in general: **GTK3 development
+libraries must be installed, if Xemu's build system cannot detect it, you won't
+have any menu system support, though compilation will suceeded without that!**
 
 #### Example for MacOS
 

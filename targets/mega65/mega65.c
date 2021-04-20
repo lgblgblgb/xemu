@@ -84,8 +84,6 @@ void cpu65_illegal_opcode_callback ( void )
 void machine_set_speed ( int verbose )
 {
 	int speed_wanted;
-	// TODO: MEGA65 speed is not handled yet. Reasons: too slow emulation for average PC, and the complete control of speed, ie lack of C128-fast (2MHz mode,
-	// because of incomplete VIC register I/O handling).
 	// Actually the rule would be something like that (this comment is here by intent, for later implementation FIXME TODO), some VHDL draft only:
 	// cpu_speed := vicii_2mhz&viciii_fast&viciv_fast
 	// if hypervisor_mode='0' and ((speed_gate='1') and (force_fast='0')) then -- LGB: vicii_2mhz seems to be a low-active signal?
@@ -724,10 +722,10 @@ int main ( int argc, char **argv )
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
 		1,				// resizable window
-		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
-		SCREEN_WIDTH, SCREEN_HEIGHT * 2,// logical size (used with keeping aspect ratio by the SDL render stuffs)
-		SCREEN_WIDTH, SCREEN_HEIGHT * 2,// window size
-		SCREEN_FORMAT,			// pixel format
+		TEXTURE_WIDTH, TEXTURE_HEIGHT,	// texture sizes
+		TEXTURE_WIDTH, TEXTURE_HEIGHT * 2,// logical size (used with keeping aspect ratio by the SDL render stuffs)
+		TEXTURE_WIDTH, TEXTURE_HEIGHT * 2,// window size
+		TEXTURE_FORMAT,			// pixel format
 		0,				// we have *NO* pre-defined colours as with more simple machines (too many we need). we want to do this ourselves!
 		NULL,				// -- "" --
 		NULL,				// -- "" --
