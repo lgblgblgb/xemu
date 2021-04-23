@@ -361,9 +361,9 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			}
 			break;
 		CASE_VIC_4(0x70):	// VIC-IV palette selection register
-			palette		= ((data & 0x03) << 8) + vic_palettes;
+			altpalette	= ((data & 0x03) << 8) + vic_palettes;
 			spritepalette	= ((data & 0x0C) << 6) + vic_palettes;
-			altpalette	= ((data & 0x30) << 4) + vic_palettes;
+			palette		= ((data & 0x30) << 4) + vic_palettes;
 			palregaccofs	= ((data & 0xC0) << 2);
 			check_if_rom_palette(vic_registers[0x30] & 4);
 			break;
