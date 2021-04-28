@@ -134,6 +134,46 @@ int hypervisor_queued_enter ( int trapno )
 }
 
 
+// Very same as hypervisor_enter() - actually it calls that
+// **BUT** we check here, if next opcode is NOP.
+// it should be, as on real hardware this is a relability problem.
+// (sometimes one byte is skipped on execution after a trap caused by writing D640-D67F)
+void hypervisor_enter_via_write_trap ( int trapno )
+{
+	if (XEMU_UNLIKELY(dma_is_in_use())) {
+		static int do_warn = 1;
+		if (do_warn) {
+			WARNING_WINDOW("DMA operation would trigger hypervisor trap.\nThis is totally ignored!\nThere will be no future warning before you restart Xemu");
+			do_warn = 0;
+		}
+		return;
+	}
+	static int do_nop_check = 1;
+	if (do_nop_check) {
+		// FIXME: for real there should be a memory reading function independent to the one used by the CPU, since
+		// this has some side effects to just fetch a byte to check something, which is otherwise used normally to fetch CPU opcodes and such
+		Uint8 skipped_byte = cpu65_read_callback(cpu65.pc);
+		if (XEMU_UNLIKELY(skipped_byte != 0xEA)) {	// $EA = opcode of NOP
+			char msg[256];
+			snprintf(msg, sizeof msg,
+				"Writing hypervisor trap $%02X must be followed by NOP\n"
+				"but found opcode $%02X at PC=$%04X\n\n"
+				"This will cause problems on a real MEGA65!"
+				,
+				0xD640 + trapno, skipped_byte, cpu65.pc
+			);
+			if (QUESTION_WINDOW(
+				"Ignore now|Ignore all",
+				msg
+			)) {
+				do_nop_check = 0;
+				INFO_WINDOW("There will be no further warnings on this issue\nuntil you restart Xemu");
+			}
+		}
+	}
+	hypervisor_enter(trapno);
+}
+
 
 void hypervisor_enter ( int trapno )
 {

@@ -264,6 +264,11 @@ void dma_write_reg ( int addr, Uint8 data )
 }
 
 
+int dma_is_in_use ( void )
+{
+	return in_dma_update;
+}
+
 
 /* Main emulation loop should call this function regularly, if dma_status is not zero.
    This way we have 'real' DMA, ie works while the rest of the machine is emulated too.
