@@ -393,7 +393,7 @@ void io_write ( unsigned int addr, Uint8 data )
 			if (!in_hypervisor && addr >= 0x40 && addr <= 0x7F) {
 				// In user mode, writing to $D640-$D67F (in VIC4 iomode) causes to enter hypervisor mode with
 				// the trap number given by the offset in this range
-				hypervisor_enter(addr & 0x3F);
+				hypervisor_enter_via_write_trap(addr & 0x3F);
 				return;
 			}
 			D6XX_registers[addr] = data;	// I guess, the actual write won't happens if it was trapped, so I moved this to here after the previous "if"

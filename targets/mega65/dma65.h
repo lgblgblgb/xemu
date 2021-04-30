@@ -41,6 +41,7 @@ extern void  dma_init_set_rev	( unsigned int revision, Uint8 *rom_ver_signature 
 extern void  dma_reset		( void );
 extern int   dma_update		( void );
 extern int   dma_update_multi_steps ( int do_for_cycles );
+extern int   dma_is_in_use      ( void );
 
 extern void  detect_rom_date    ( Uint8 *p );
 

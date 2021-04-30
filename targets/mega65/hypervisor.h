@@ -29,6 +29,7 @@ extern int  hypervisor_debug_init ( const char *fn, int hypervisor_debug, int us
 extern void hypervisor_debug ( void );
 
 extern void hypervisor_enter ( int trapno );
+extern void hypervisor_enter_via_write_trap ( int trapno );
 extern int  hypervisor_queued_enter ( int trapno );
 extern void hypervisor_start_machine ( void );
 extern void hypervisor_leave ( void );
