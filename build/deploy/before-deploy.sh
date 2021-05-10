@@ -1,5 +1,5 @@
 #!/bin/bash
-# (C)2020 Gabor Lenart LGB lgblgblgb@gmail.com
+# (C)2020,2021 Gabor Lenart LGB lgblgblgb@gmail.com
 
 if [ "$1" = "" -o "$2" = "" ]; then
 	echo "Bad usage."
@@ -14,7 +14,7 @@ ARCH="$2"
 mkdir -p $TARGET
 cp * $TARGET/ || true
 rm $TARGET/Makefile
-cp README.md $TARGET/README-XEMU.md
+cat README.md > $TARGET/README-XEMU.md
 cat build/objs/cdate.data > $TARGET/versioninfo
 
 (
@@ -39,8 +39,50 @@ cat build/objs/cdate.data > $TARGET/versioninfo
 ) > $TARGET/README.md
 
 cd $TARGET
+
+# These renames are needed, as the download page needs a constant file name, while deb/rpm
+# package names varies with each version. So if rename them. This can be run with any deployment,
+# in case eg windows, it won't find any deb/rpm files for sure.
+# Rename DEB if any ...
+b="xemu_current_amd64.deb"
+for a in *.deb ; do
+	if [ -f "$a" ]; then
+		echo "Found DEB: $a -> $b"
+		if [ "$b" = "" ]; then
+			echo "ERROR, another DEB found?" >&2
+			exit 1
+		fi
+		mv "$a" "$b"
+		chmod 644 "$b"
+		b=""
+	fi
+done
+if [ "$b" != "" ]; then
+	echo "No DEB found (not a Linux build?)"
+fi
+# Rename RPM if any ...
+b="xemu-current-1.x86_64.rpm"
+for a in *.rpm ; do
+	if [ -f "$a" ]; then
+		echo "Found RPM: $a -> $b"
+		if [ "$b" = "" ]; then
+			echo "ERROR, another RPM found?" >&2
+			exit 1
+		fi
+		mv "$a" "$b"
+		chmod 644 "$b"
+		b=""
+	fi
+done
+if [ "$b" != "" ]; then
+	echo "No RPM found (not a Linux build?)"
+fi
+
 md5sum * > ../MD5
+echo "Checksums:"
+cat ../MD5
+mv ../MD5 .
+
 cd ..
-mv MD5 $TARGET/
 
 exit 0
