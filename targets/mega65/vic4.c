@@ -652,18 +652,6 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;
 		CASE_VIC_4(0x6C): CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):
 			vic_registers[addr & 0x7F] = data;
-			// if (SPRITE_POINTER_ADDR > 384*1024) {
-			// 	DEBUGPRINT("WARNING !!! : SPRITE_POINTER_ADDR at $%08X exceeds 384K chip RAM!!!! Current behavior is undefined." NL, SPRITE_POINTER_ADDR);
-			// }
-
-			// DEBUGPRINT("SPRPTRADR/SPRPTRBNK Modified. Sprite Data Pointers now: " NL);
-
-			// for (int i = 0; i < 8; i++) {
-			// 	const Uint8 *sprite_data_pointer = main_ram + SPRITE_POINTER_ADDR + i * ((SPRITE_16BITPOINTER >> 7) + 1);
-			// 	const Uint32 dataptr = SPRITE_16BITPOINTER ? 64 * ( ((*(sprite_data_pointer+1) << 8)) + (*(sprite_data_pointer))) : 64 * (*sprite_data_pointer);
-			// 	DEBUGPRINT("Sprite #%d data @ $%08X %s" NL , i, dataptr, dataptr > 384*1024 ? "!!! OUT OF 384K main RAM !!!" : "");
-			// }
-
 			break;
 		CASE_VIC_4(0x6F):
 			// We trigger video setup at next frame.
@@ -982,7 +970,9 @@ static void vic4_do_sprites ( void )
 
 			if (sprite_row_in_raster >= 0 && sprite_row_in_raster < spriteHeight) {
 				const int widthBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
-				const Uint8 *sprite_data_pointer = main_ram + SPRITE_POINTER_ADDR + sprnum * ((SPRITE_16BITPOINTER >> 7) + 1);
+				// Mask-out bits 0-3, 23-19 if SPRPTR16 enabled
+				const Uint32 sprite_pointer_addr = SPRITE_16BITPOINTER ? (SPRITE_POINTER_ADDR & 0x8FFFF0) : SPRITE_POINTER_ADDR;
+				const Uint8 *sprite_data_pointer = main_ram + sprite_pointer_addr + sprnum * ((SPRITE_16BITPOINTER >> 7) + 1);
 				const Uint32 sprite_data_addr = SPRITE_16BITPOINTER ?
 					64 * ((*(sprite_data_pointer + 1) << 8) | (*sprite_data_pointer))
 					: ((64 * (*sprite_data_pointer)) | ( ((~last_dd00_bits) & 0x3)) << 14);
