@@ -39,6 +39,7 @@ include $(TOPDIR)/build/configure/config-$(ARCH).make
 #endif
 
 IS_TTY			= $(shell tty >/dev/null 2>/dev/null && echo yes || echo no)
+SHELL			= bash
 
 SRCS_TARGET		= $(SRCS_TARGET_$(PRG_TARGET))
 SRCS_COMMON		= $(SRCS_COMMON_$(PRG_TARGET)) emutools_buildinfo.c
@@ -97,13 +98,14 @@ else
 PROGRESS_MARKER_START = "["
 PROGRESS_MARKER_END   = "] "
 endif
+ECHO_BIN = "/bin/echo"
 
 ifeq ($(CONFIG_HAS_WINDRES), yes)
 WINDRES_SRC	= $(TOPDIR)/build/windres.rc
 WINDRES_OBJ	= $(COMMONOBJPREFIX)windres.res
 OBJS		+= $(WINDRES_OBJ)
 $(WINDRES_OBJ): $(WINDRES_SRC) $(TOPDIR)/build/xemu.ico $(DEPALL)
-	@echo -n "$(PROGRESS_MARKER_START)WINDRES: $<$(PROGRESS_MARKER_END)"
+	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)WINDRES: $<$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	$(CONFIG_WINDRES) $< -O coff -o $@
 endif
 
@@ -120,6 +122,7 @@ xemu-info:
 	@echo "-------------------------------------------"
 	@echo "Make architecture: $(ARCH)"
 	@echo "Target: $(TARGET)"
+	@echo "Shell: $(SHELL)"
 	@echo "Program name target: $(PRG_TARGET)"
 	@echo "Compiler: $(CONFIG_CC)"
 	@echo "Compiler flags: $(CFLAGS)"
@@ -135,18 +138,18 @@ xemu-info:
 
 $(TARGETOBJPREFIX)%.o: %.c $(DEPALL)
 ifeq ($(ASMOUT), yes)
-	@echo -n "$(PROGRESS_MARKER_START)ASMOUT: $<$(PROGRESS_MARKER_END)"
+	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)ASMOUT: $<$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	$(CONFIG_CC) $(CFLAGS) -Wa,-adhln -masm=intel -g -c -o /dev/null $< > $(@:.o=.s)
 endif
-	@echo -n "$(PROGRESS_MARKER_START)COMPILING: $<$(PROGRESS_MARKER_END)"
+	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)COMPILING: $<$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	$(CONFIG_CC) $(CFLAGS) -c -o $@ $<
 
 $(COMMONOBJPREFIX)%.o: $(COMMONDIR)/%.c $(DEPALL)
 ifeq ($(ASMOUT), yes)
-	@echo -n "$(PROGRESS_MARKER_START)ASMOUT: $<$(PROGRESS_MARKER_END)"
+	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)ASMOUT: $<$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	$(CONFIG_CC) $(CFLAGS) -Wa,-adhln -masm=intel -g -c -o /dev/null $< > $(@:.o=.s)
 endif
-	@echo -n "$(PROGRESS_MARKER_START)COMPILING: $<$(PROGRESS_MARKER_END)"
+	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)COMPILING: $<$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	$(CONFIG_CC) $(CFLAGS) -c -o $@ $<
 
 $(PRG): $(OBJS) $(DEPALL)
@@ -158,9 +161,9 @@ $(PRG): $(OBJS) $(DEPALL)
 	@git log -1 --format=%cd --date=format:%Y%m%d%H%M%S > $(TOPDIR)/build/objs/cdate.data || date '+%Y%m%d%H%M%S' > $(TOPDIR)/build/objs/cdate.data
 	@echo "$(PROGRESS_MARKER_START)Commit date we're building ($(TOPDIR)/build/objs/cdate.data): `cat $(TOPDIR)/build/objs/cdate.data`$(PROGRESS_MARKER_END)"
 	@echo "const char *XEMU_BUILDINFO_CDATE = \"`cat $(TOPDIR)/build/objs/cdate.data`\";" >> $(DEPFILEPREFIX)-buildinfo.c
-	@echo -n "$(PROGRESS_MARKER_START)COMPILING: $(DEPFILEPREFIX)-buildinfo.c$(PROGRESS_MARKER_END)"
+	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)COMPILING: $(DEPFILEPREFIX)-buildinfo.c$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	$(CONFIG_CC) $(CFLAGS) -c -o $(DEPFILEPREFIX)-buildinfo.o $(DEPFILEPREFIX)-buildinfo.c
-	@echo -n "$(PROGRESS_MARKER_START)LINKING: $(PRG)$(PROGRESS_MARKER_END)"
+	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)LINKING: $(PRG)$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	$(CONFIG_CC) -o $(PRG) $(OBJS) $(DEPFILEPREFIX)-buildinfo.o $(LDFLAGS)
 
 run:	$(PRG)
@@ -184,7 +187,7 @@ dep:
 	$(MAKE) $(DEPFILE)
 
 $(DEPFILE): $(DEPALL) $(SRCS)
-	@echo -n "$(PROGRESS_MARKER_START)DEPENDENCY: $@$(PROGRESS_MARKER_END)"
+	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)DEPENDENCY: $@$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	rm -f $(DEPFILEPREFIX)-target-pre.depend $(DEPFILEPREFIX)-common-pre.depend $(DEPFILEPREFIX)-target.depend $(DEPFILEPREFIX)-common.depend
 	if [ "$(CONFIG_CC)" != "" -a -s "$(TOPDIR)/build/configure/config-$(ARCH).make" ]; then $(CONFIG_CC) -MM $(CFLAGS) $(SRCS_TARGET_PREFIXED) > $(DEPFILEPREFIX)-target-pre.depend && awk '/^[^.:\t ]+\.o:/ { print "$(TARGETOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-target-pre.depend > $(DEPFILEPREFIX)-target.depend && $(CONFIG_CC) -MM $(CFLAGS) $(SRCS_COMMON_PREFIXED) > $(DEPFILEPREFIX)-common-pre.depend && awk '/^[^.:\t ]+\.o:/ { print "$(COMMONOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-common-pre.depend > $(DEPFILEPREFIX)-common.depend && cat $(DEPFILEPREFIX)-target.depend $(DEPFILEPREFIX)-common.depend > $@ && rm -f $(DEPFILEPREFIX)-target-pre.depend $(DEPFILEPREFIX)-common-pre.depend ; else echo "*** Ignoring dependency creation, no configuration exists yet" ; fi
 

@@ -186,10 +186,27 @@ static void cia2_out_a ( Uint8 data )
 }
 
 
-// Just for easier test to have a given port value for CIA input ports
-static Uint8 cia_port_in_dummy ( void )
+static Uint8 cia2_in_a ( void )
 {
-	return 0xFF;
+	// CIA for real seems to always read their input pins on reading the data
+	// register, even if it's output. However VIC bank for example should be
+	// readable back this way. Trying to implement here something at least
+	// resembling a real situation, also taking account the DATA and CLK lines
+	// of the IEC bus has input and output too with inverter gates. Though note,
+	// IEC bus otherwise is not emulated by Xemu yet.
+	return (cia2.PRA & 0x3F) | ((~cia2.PRA << 2) & 0xC0);
+}
+
+
+static Uint8 cia2_in_b ( void )
+{
+	// Some kind of ad-hoc stuff, allow to read back data out register if the
+	// port bit is output, otherwise (input) give bit '1', by virtually
+	// emulation a pull-up as its kind. It seems to be needed, as some C65 ROMs
+	// actually has check for some user port lines and doing "interesting"
+	// things (mostly crashing ...) when something sensed as grounded.
+	// It was a kind of hw debug feature for early C65 ROMs.
+	return cia2.PRB | ~cia2.DDRB;
 }
 
 
@@ -355,8 +372,8 @@ static void mega65_init ( void )
 		cia2_out_a,		// callback: OUTA
 		NULL,			// callback: OUTB
 		NULL,			// callback: OUTSR
-		cia_port_in_dummy,	// callback: INA
-		NULL,			// callback: INB
+		cia2_in_a,		// callback: INA
+		cia2_in_b,		// callback: INB
 		NULL,			// callback: INSR
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
