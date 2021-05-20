@@ -179,9 +179,6 @@ static void execute_command ( char *cmd )
 			bank = par1 >> 16;
 			if (cmd && check_end_of_command(cmd, 1))
 			{
-				if (bank == 0x777)
-					m65mon_dumpmem16(par1);
-				else
 					m65mon_dumpmem28(par1);
 			}
 			break;
@@ -509,6 +506,7 @@ int read_loadcmd_data(char* buff, int count)
     if (loadcmdcurraddr == loadcmdendaddr)
     {
       loadcmdflag = 0;
+      uartmon_finish_command();
       break;
     }
   }
