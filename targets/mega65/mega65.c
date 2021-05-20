@@ -564,7 +564,7 @@ void m65mon_do_next ( void )
 void m65mon_do_trace ( void )
 {
 	if (paused) {
-		umon_send_ok = 0; // delay command execution!
+		set_umon_send_ok(0); // delay command execution!
 		m65mon_callback = m65mon_show_regs; // register callback
 		trace_step_trigger = 1;	// trigger one step
 	} else {
@@ -676,7 +676,7 @@ static void emulation_loop ( void )
 			if (m65mon_callback) {	// delayed uart monitor command should be finished ...
 				m65mon_callback();
 				m65mon_callback = NULL;
-				uartmon_finish_command();
+				uartmons_finish_command();
 			}
 #endif
 			// we still need to feed our emulator with update events ... It also slows this pause-busy-loop down to every full frames (~25Hz) <--- XXX totally inaccurate now!
