@@ -44,9 +44,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 //#include <netdb.h>
 #endif
 
-int  umon_write_size;
-int  umon_send_ok;
-char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
 #define UNCONNECTED	XS_INVALID_SOCKET
 
@@ -56,18 +53,44 @@ char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 #	define PRINTF_SOCK	"%d"
 #endif
 
+typedef struct
+{
+  int  umon_write_size;
+  int  umon_send_ok;
+  char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
-static xemusock_socket_t  sock_server = UNCONNECTED;
-static xemusock_socklen_t sock_len;
-static xemusock_socket_t  sock_client = UNCONNECTED;
+  xemusock_socket_t  sock_server;
+  xemusock_socklen_t sock_len;
+  xemusock_socket_t  sock_client;
 
-static int  umon_write_pos, umon_read_pos;
-static int  umon_echo;
-static char umon_read_buffer [0x1000];
+  int  umon_write_pos, umon_read_pos;
+  int  umon_echo;
+  char umon_read_buffer[0x1000];
 
-static int loadcmdflag = 0;
-static int loadcmdcurraddr = 0;
-static int loadcmdendaddr = 0;
+  int loadcmdflag;
+  int loadcmdcurraddr;
+  int loadcmdendaddr;
+
+  char * locptr;
+} comms_details_type;
+
+#define MAXPORTS  2
+
+static comms_details_type comdet[MAXPORTS] =
+{
+  [0].sock_server = UNCONNECTED,
+  [0].sock_client = UNCONNECTED,
+  [0].loadcmdflag = 0,
+  [0].loadcmdcurraddr = 0,
+  [0].loadcmdendaddr = 0,
+  [0].locptr = 0,
+  [1].sock_server = UNCONNECTED,
+  [1].sock_client = UNCONNECTED,
+  [1].loadcmdflag = 0,
+  [1].loadcmdcurraddr = 0,
+  [1].loadcmdendaddr = 0,
+  [1].locptr = 0
+};
 
 // WARNING: This source is pretty ugly, ie not so much check of overflow of the output (write) buffer.
 
@@ -140,7 +163,7 @@ static void setmem28 ( char *param, int addr )
 }
 
 
-static void execute_command ( char *cmd )
+static void execute_command ( comms_details_type *cd, char *cmd )
 {
 	int bank;
 	int par1;
@@ -203,10 +226,10 @@ static void execute_command ( char *cmd )
 			setmem28(cmd, par1);
 			break;
     case 'l':
-      loadcmdflag = 1;
-      cmd = parse_hex_arg(cmd, &loadcmdcurraddr, 0, 0xFFFFFFF);
-      cmd = parse_hex_arg(cmd, &loadcmdendaddr, 0, 0xFFFF);
-      loadcmdendaddr += (loadcmdcurraddr & 0xFFF0000);
+      cd->loadcmdflag = 1;
+      cmd = parse_hex_arg(cmd, &cd->loadcmdcurraddr, 0, 0xFFFFFFF);
+      cmd = parse_hex_arg(cmd, &cd->loadcmdendaddr, 0, 0xFFFF);
+      cd->loadcmdendaddr += (cd->loadcmdcurraddr & 0xFFF0000);
       break;
     case 'g':
       cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
@@ -250,7 +273,11 @@ static void execute_command ( char *cmd )
 
 int uartmon_is_active ( void )
 {
-	return sock_server != UNCONNECTED;
+  for (int idx = 0; idx < MAXPORTS; idx++)
+    if (comdet[idx].sock_server != UNCONNECTED)
+      return 1;
+
+  return 0;
 }
 
 
@@ -263,8 +290,11 @@ int uartmon_init ( const char *fn )
 		ERROR_WINDOW("UARTMON: already activated on %s", fn_stored);
 		return 1;
 	}
-	sock_server = UNCONNECTED;
-	sock_client = UNCONNECTED;
+	for (int idx = 0; idx < MAXPORTS; idx++)
+	{
+    comdet[idx].sock_server = UNCONNECTED;
+    comdet[idx].sock_client = UNCONNECTED;
+	}
 	if (!fn || !*fn) {
 		DEBUGPRINT("UARTMON: disabled, no name is specified to bind to." NL);
 		return 0;
@@ -273,117 +303,130 @@ int uartmon_init ( const char *fn )
 		ERROR_WINDOW("Cannot initialize network, uart_mon won't be availbale");
 		return 1;
 	}
-	if (fn[0] == ':') {
-		int port = atoi(fn + 1);
-		if (port < 1024 || port > 65535) {
-			ERROR_WINDOW("uartmon: invalid port specification %d (1024-65535 is allowed) from string %s", port, fn);
-			return 1;
-		}
-		struct sockaddr_in sock_st;
-		sock_len = sizeof(struct sockaddr_in);
-		//sock = socket(AF_INET, SOCK_STREAM, 0);
-		sock = xemusock_create_for_inet(XEMUSOCK_TCP, XEMUSOCK_BLOCKING, &xerr);
-		if (sock == XS_INVALID_SOCKET) {
-			ERROR_WINDOW("Cannot create TCP socket: %s", xemusock_strerror(xerr));
-			return 1;
-		}
-		if (xemusock_setsockopt_reuseaddr(sock, &xerr)) {
-			ERROR_WINDOW("UARTMON: setsockopt for SO_REUSEADDR failed with %s", xemusock_strerror(xerr));
-		}
-		//sock_st.sin_family = AF_INET;
-		//sock_st.sin_addr.s_addr = htonl(INADDR_ANY);
-		//sock_st.sin_port = htons(port);
-		xemusock_fill_servaddr_for_inet_ip_native(&sock_st, 0, port);
-		if (xemusock_bind(sock, (struct sockaddr*)&sock_st, sock_len, &xerr)) {
-			ERROR_WINDOW("Cannot bind TCP socket %d, UART monitor cannot be used: %s", port, xemusock_strerror(xerr));
-			xemusock_close(sock, NULL);
-			return 1;
-		}
-	} else {
+  for (int idx = 0; idx < MAXPORTS; idx++)
+  {
+    if (fn[0] == ':') {
+      int port = atoi(fn + 1);
+      if (port < 1024 || port > 65535) {
+        ERROR_WINDOW("uartmon: invalid port specification %d (1024-65535 is allowed) from string %s", port, fn);
+        return 1;
+      }
+      struct sockaddr_in sock_st;
+      comdet[idx].sock_len = sizeof(struct sockaddr_in);
+      //sock = socket(AF_INET, SOCK_STREAM, 0);
+
+      sock = xemusock_create_for_inet(XEMUSOCK_TCP, XEMUSOCK_BLOCKING, &xerr);
+      if (sock == XS_INVALID_SOCKET) {
+        ERROR_WINDOW("Cannot create TCP socket: %s", xemusock_strerror(xerr));
+        return 1;
+      }
+      if (xemusock_setsockopt_reuseaddr(sock, &xerr)) {
+        ERROR_WINDOW("UARTMON: setsockopt for SO_REUSEADDR failed with %s", xemusock_strerror(xerr));
+      }
+      //sock_st.sin_family = AF_INET;
+      //sock_st.sin_addr.s_addr = htonl(INADDR_ANY);
+      //sock_st.sin_port = htons(curport);
+      xemusock_fill_servaddr_for_inet_ip_native(&sock_st, 0, port+idx);
+      if (xemusock_bind(sock, (struct sockaddr*)&sock_st, comdet[idx].sock_len, &xerr)) {
+        ERROR_WINDOW("Cannot bind TCP socket %d, UART monitor cannot be used: %s", port+idx, xemusock_strerror(xerr));
+        xemusock_close(sock, NULL);
+        return 1;
+      }
+    } else {
 #if !defined(XEMU_ARCH_UNIX)
-		ERROR_WINDOW("On non-UNIX systems, you must use TCP/IP sockets, so uartmon parameter must be in form of :n (n=port number to bind to)\nUARTMON is not available because of bad syntax.");
-		return 1;
+      ERROR_WINDOW("On non-UNIX systems, you must use TCP/IP sockets, so uartmon parameter must be in form of :n (n=port number to bind to)\nUARTMON is not available because of bad syntax.");
+      return 1;
 #else
-		// This is UNIX specific code (UNIX named socket) thus it's OK not use Xemu socket API calls here.
-		// Note: on longer term, we want to drop this, and allow only TCP sockets to be more unified and simple.
-		struct sockaddr_un sock_st;
-		sock_len = sizeof(struct sockaddr_un);
-		sock = socket(AF_UNIX, SOCK_STREAM, 0);
-		if (sock < 0) {
-			ERROR_WINDOW("Cannot create named socket %s, UART monitor cannot be used: %s", fn, strerror(errno));
-			return 1;
-		}
-		sock_st.sun_family = AF_UNIX;
-		strcpy(sock_st.sun_path, fn);
-		unlink(sock_st.sun_path);
-		if (bind(sock, (struct sockaddr*)&sock_st, sock_len)) {
-			ERROR_WINDOW("Cannot bind named socket %s, UART monitor cannot be used: %s", fn, strerror(errno));
-			xemusock_close(sock, NULL);
-			return 1;
-		}
+      // This is UNIX specific code (UNIX named socket) thus it's OK not use Xemu socket API calls here.
+      // Note: on longer term, we want to drop this, and allow only TCP sockets to be more unified and simple.
+      struct sockaddr_un sock_st;
+      sock_len = sizeof(struct sockaddr_un);
+      sock = socket(AF_UNIX, SOCK_STREAM, 0);
+      if (sock < 0) {
+        ERROR_WINDOW("Cannot create named socket %s, UART monitor cannot be used: %s", fn, strerror(errno));
+        return 1;
+      }
+      sock_st.sun_family = AF_UNIX;
+      strcpy(sock_st.sun_path, fn);
+      unlink(sock_st.sun_path);
+      if (bind(sock, (struct sockaddr*)&sock_st, sock_len)) {
+        ERROR_WINDOW("Cannot bind named socket %s, UART monitor cannot be used: %s", fn, strerror(errno));
+        xemusock_close(sock, NULL);
+        return 1;
+      }
 #endif
-	}
-	if (xemusock_listen(sock, 5, &xerr)) {
-		ERROR_WINDOW("Cannot listen socket %s, UART monitor cannot be used: %s", fn, xemusock_strerror(xerr));
-		xemusock_close(sock, NULL);
-		return 1;
-	}
-	if (xemusock_set_nonblocking(sock, XEMUSOCK_NONBLOCKING, &xerr)) {
-		ERROR_WINDOW("Cannot set socket %s into non-blocking mode, UART monitor cannot be used: %s", fn, xemusock_strerror(xerr));
-		xemusock_close(sock, NULL);
-		return 1;
-	}
-	printf("UARTMON: monitor is listening on socket %s" NL, fn);
-	sock_client = UNCONNECTED;	// no client connection yet
-	sock_server = sock;		// now set the server socket visible outside of this function too
-	umon_echo = 1;
-	umon_send_ok = 1;
-	strcpy(fn_stored, fn);
+    }
+    if (xemusock_listen(sock, 5, &xerr)) {
+      ERROR_WINDOW("Cannot listen socket %s, UART monitor cannot be used: %s", fn, xemusock_strerror(xerr));
+      xemusock_close(sock, NULL);
+      return 1;
+    }
+    if (xemusock_set_nonblocking(sock, XEMUSOCK_NONBLOCKING, &xerr)) {
+      ERROR_WINDOW("Cannot set socket %s into non-blocking mode, UART monitor cannot be used: %s", fn, xemusock_strerror(xerr));
+      xemusock_close(sock, NULL);
+      return 1;
+    }
+    printf("UARTMON: monitor is listening on socket %s" NL, fn);
+    comdet[idx].sock_client = UNCONNECTED;	// no client connection yet
+    comdet[idx].sock_server = sock;		// now set the server socket visible outside of this function too
+    comdet[idx].umon_echo = 1;
+    comdet[idx].umon_send_ok = 1;
+    strcpy(fn_stored, fn);
+  }
 	return 0;
 }
 
 
 void uartmon_close  ( void )
 {
-	if (sock_server != UNCONNECTED) {
-		xemusock_close(sock_server, NULL);
-		sock_server = UNCONNECTED;
-	}
-	if (sock_client != UNCONNECTED) {
-		xemusock_close(sock_client, NULL);
-		sock_client = UNCONNECTED;
-	}
+  for (int idx = 0; idx < MAXPORTS; idx++)
+  {
+    if (comdet[idx].sock_server != UNCONNECTED) {
+      xemusock_close(comdet[idx].sock_server, NULL);
+      comdet[idx].sock_server = UNCONNECTED;
+    }
+    if (comdet[idx].sock_client != UNCONNECTED) {
+      xemusock_close(comdet[idx].sock_client, NULL);
+      comdet[idx].sock_client = UNCONNECTED;
+    }
+  }
 }
 
-
-void uartmon_finish_command ( void )
+void uartmon_finish_command ( comms_details_type *cd )
 {
-	umon_send_ok = 1;
-	if (umon_write_buffer[umon_write_size - 1] != '\n') {
+	cd->umon_send_ok = 1;
+	if (cd->umon_write_buffer[cd->umon_write_size - 1] != '\n') {
 		// if generated message wasn't closed with CRLF (well, only LF is checked), we do so here
-		umon_write_buffer[umon_write_size++] = '\r';
-		umon_write_buffer[umon_write_size++] = '\n';
+		cd->umon_write_buffer[cd->umon_write_size++] = '\r';
+		cd->umon_write_buffer[cd->umon_write_size++] = '\n';
 	}
 	// umon_trigger_end_of_answer = 1;
-	umon_write_buffer[umon_write_size++] = '.';	// add the 'dot prompt'! (m65dbg seems to check LF + dot for end of the answer)
-	umon_read_pos = 0;
-	umon_echo = 1;
+	cd->umon_write_buffer[cd->umon_write_size++] = '.';	// add the 'dot prompt'! (m65dbg seems to check LF + dot for end of the answer)
+	cd->umon_read_pos = 0;
+	cd->umon_echo = 1;
 }
 
-void echo_command(char* command, int ret);
+void uartmons_finish_command (void)
+{
+  for (int idx = 0; idx < MAXPORTS; idx++)
+    if (comdet[idx].sock_server != UNCONNECTED)
+      uartmon_finish_command(&comdet[idx]);
+}
 
-int connect_unix_socket(void)
+void echo_command(comms_details_type* cd, char* command, int ret);
+
+int connect_unix_socket(comms_details_type *cd)
 {
 	int xerr;
   //struct sockaddr_un sock_st;
-  xemusock_socklen_t len = sock_len;
+  xemusock_socklen_t len = cd->sock_len;
   union {
 #ifdef XEMU_ARCH_UNIX
     struct sockaddr_un un;
 #endif
     struct sockaddr_in in;
   } sock_st;
-  xemusock_socket_t ret_sock = xemusock_accept(sock_server, (struct sockaddr *)&sock_st, &len, &xerr);
+  xemusock_socket_t ret_sock = xemusock_accept(cd->sock_server, (struct sockaddr *)&sock_st, &len, &xerr);
   if (ret_sock != XS_INVALID_SOCKET || (ret_sock == XS_INVALID_SOCKET && !xemusock_should_repeat_from_error(xerr)))
     printf("UARTMON: accept()=" PRINTF_SOCK " error=%s" NL,
       ret_sock,
@@ -395,42 +438,58 @@ int connect_unix_socket(void)
       xemusock_close(ret_sock, NULL);
       return 0;
     } else {
-      sock_client = ret_sock;	// "publish" new client socket
+      cd->sock_client = ret_sock;	// "publish" new client socket
       // Reset reading/writing information
-      umon_write_size = 0;
-      umon_read_pos = 0;
-      DEBUGPRINT("UARTMON: new connection established on socket " PRINTF_SOCK NL, sock_client);
+      cd->umon_write_size = 0;
+      cd->umon_read_pos = 0;
+      DEBUGPRINT("UARTMON: new connection established on socket " PRINTF_SOCK NL, cd->sock_client);
       return 1;
     }
   }
   return 0;
 }
 
-void write_hypervisor_byte(char byte)
+void umon_printf(const char* format, ...)
 {
-  if (!umon_send_ok)
-    return;
+  va_list args;
+  va_start(args, format);
+  for (int idx = 0; idx < MAXPORTS; idx++)
+    if (comdet[idx].sock_server != UNCONNECTED)
+      comdet[idx].umon_write_size += vsprintf(comdet[idx].umon_write_buffer + comdet[idx].umon_write_size, format, args);
 
-  int ret, xerr;
-
-  ret = xemusock_send(sock_client, &byte, 1, &xerr);
+  va_end(args);
 }
 
-int write_to_socket(void)
+void write_hypervisor_byte(char byte)
+{
+  for (int idx = 0; idx < MAXPORTS; idx++)
+    if (comdet[idx].sock_server != UNCONNECTED)
+    {
+      //DEBUGPRINT("UARTMON: write_hypervisor(%d) - umon_send_ok=%d\n", byte, umon_send_ok);
+      if (!comdet[idx].umon_send_ok)
+        continue;
+
+      int ret, xerr;
+
+      ret = xemusock_send(comdet[idx].sock_client, &byte, 1, &xerr);
+    }
+}
+
+int write_to_socket(comms_details_type *cd)
 {
 	int xerr, ret;
 
-  if (!umon_send_ok)
+  if (!cd->umon_send_ok)
     return 0;
-  ret = xemusock_send(sock_client, umon_write_buffer + umon_write_pos, umon_write_size, &xerr);
+  ret = xemusock_send(cd->sock_client, cd->umon_write_buffer + cd->umon_write_pos, cd->umon_write_size, &xerr);
   if (ret != XS_SOCKET_ERROR || (ret == XS_SOCKET_ERROR && !xemusock_should_repeat_from_error(xerr)))
     printf("UARTMON: write(" PRINTF_SOCK ",buffer+%d,%d)=%d (%s)" NL,
-      sock_client, umon_write_pos, umon_write_size,
+      cd->sock_client, cd->umon_write_pos, cd->umon_write_size,
       ret, ret == XS_SOCKET_ERROR ? xemusock_strerror(xerr) : "OK"
     );
 	if (ret == 0 || xerr == 10054 /*ECONNRESET*/ || xerr == 10053 /*ECONNABORTED*/) { // client socket closed
-    xemusock_close(sock_client, NULL);
-    sock_client = UNCONNECTED;
+    xemusock_close(cd->sock_client, NULL);
+    cd->sock_client = UNCONNECTED;
     DEBUGPRINT("UARTMON: connection closed by peer while writing" NL);
     return 0;
   }
@@ -438,45 +497,43 @@ int write_to_socket(void)
     //debug_buffer_slice(umon_write_buffer + umon_write_pos, ret);
     printf("SENT: ");
     int i = 0;
-    while(umon_write_buffer[umon_write_pos+i] != 0 && i < ret)
+    while(cd->umon_write_buffer[cd->umon_write_pos+i] != 0 && i < ret)
     {
-      int pos = umon_write_pos + i;
-      if (umon_write_buffer[pos]>=' ') printf("%c",umon_write_buffer[pos]); else printf("[$%02X]",umon_write_buffer[pos]);
+      int pos = cd->umon_write_pos + i;
+      if (cd->umon_write_buffer[pos]>=' ') printf("%c",cd->umon_write_buffer[pos]); else printf("[$%02X]",cd->umon_write_buffer[pos]);
       i++;
     }
     printf("\n");
 
-    umon_write_pos += ret;
-    umon_write_size -= ret;
-    if (umon_write_size < 0)
+    cd->umon_write_pos += ret;
+    cd->umon_write_size -= ret;
+    if (cd->umon_write_size < 0)
       FATAL("FATAL: negative umon_write_size!");
   }
-  if (umon_write_size)
+  if (cd->umon_write_size)
     return 0;	// if we still have bytes to write, return and leave the work for the next update
 
   return 1;
 }
 
-static char * locptr=0;
-
-int is_received_string_fully_parsed(int ret)
+int is_received_string_fully_parsed(comms_details_type* cd, int ret)
 {
-  return locptr == &umon_read_buffer[umon_read_pos+ret];
+  return cd->locptr == &cd->umon_read_buffer[cd->umon_read_pos+ret];
 }
 
-int get_unparsed_bytes_remaining_count(int ret)
+int get_unparsed_bytes_remaining_count(comms_details_type* cd, int ret)
 {
-  return (int)(&umon_read_buffer[umon_read_pos+ret] - locptr);
+  return (int)(&cd->umon_read_buffer[cd->umon_read_pos+ret] - cd->locptr);
 }
 
 // had to create my own strtok() equivalent that would tokenise on *either* '\r' or '\n'
-char * find_next_cmd(char *loc)
+char * find_next_cmd(comms_details_type* cd, char *loc)
 {
 
   if (loc != NULL)
-    locptr = loc;
+    cd->locptr = loc;
 
-  loc = locptr;
+  loc = cd->locptr;
 
   char *p = loc;
   // assure that looking forward into this string, we locate a '\r' or '\n'
@@ -484,7 +541,7 @@ char * find_next_cmd(char *loc)
   {
     if (*p == '\r' || *p == '\n')
     {
-      locptr = p+1;
+      cd->locptr = p+1;
       return loc;
     }
     p++;
@@ -493,20 +550,20 @@ char * find_next_cmd(char *loc)
   return 0;
 }
 
-int read_loadcmd_data(char* buff, int count)
+int read_loadcmd_data(comms_details_type *cd, char* buff, int count)
 {
   char *p = buff;
 
   while (count != 0)
   {
-    m65mon_setmem28(loadcmdcurraddr, 1, p);
-    loadcmdcurraddr++;
+    m65mon_setmem28(cd->loadcmdcurraddr, 1, p);
+    cd->loadcmdcurraddr++;
     p++;
     count--;
-    if (loadcmdcurraddr == loadcmdendaddr)
+    if (cd->loadcmdcurraddr == cd->loadcmdendaddr)
     {
-      loadcmdflag = 0;
-      uartmon_finish_command();
+      cd->loadcmdflag = 0;
+      uartmon_finish_command(cd);
       break;
     }
   }
@@ -516,93 +573,95 @@ int read_loadcmd_data(char* buff, int count)
 
 // return: 1=we loaded stuff into memory
 //         0=we didn't
-int check_loadcmd(char* buff, int ret)
+int check_loadcmd(comms_details_type* cd, char* buff, int ret)
 {
-  if (loadcmdflag)
+  if (cd->loadcmdflag)
   {
-    int remaining = read_loadcmd_data(buff, ret);
+    int remaining = read_loadcmd_data(cd, buff, ret);
     // TODO: I should probably see if there is a command immediately after this, but for now, I'll assume there isn't.
+    // NOTE2: Yes, this is critical, I need to fix this for tools like mega65_ftp, as the pump out commands very fast
+    // (especially as xemu comms is so fast compared to real hardware)
     return 1;
   }
 
   return 0;
 }
 
-void read_from_socket(void)
+void read_from_socket(comms_details_type *cd)
 {
 	int xerr, ret;
-	ret = xemusock_recv(sock_client, umon_read_buffer + umon_read_pos, sizeof(umon_read_buffer) - umon_read_pos - 1, &xerr);
+	ret = xemusock_recv(cd->sock_client, cd->umon_read_buffer + cd->umon_read_pos, sizeof(cd->umon_read_buffer) - cd->umon_read_pos - 1, &xerr);
 	if (ret != XS_SOCKET_ERROR || (ret == XS_SOCKET_ERROR && !xemusock_should_repeat_from_error(xerr)))
 		printf("UARTMON: read(" PRINTF_SOCK ",buffer+%d,%d)=%d (%s)" NL,
-			sock_client, umon_read_pos, (int)sizeof(umon_read_buffer) - umon_read_pos - 1,
+			cd->sock_client, cd->umon_read_pos, (int)sizeof(cd->umon_read_buffer) - cd->umon_read_pos - 1,
 			ret, ret == XS_SOCKET_ERROR ? xemusock_strerror(xerr) : "OK"
 		);
 	if (ret == 0 || xerr == 10054 /*ECONNRESET*/ || xerr == 10053 /*ECONNABORTED*/) { // client socket closed
-		xemusock_close(sock_client, NULL);
-		sock_client = UNCONNECTED;
+		xemusock_close(cd->sock_client, NULL);
+		cd->sock_client = UNCONNECTED;
 		DEBUGPRINT("UARTMON: connection closed by peer while reading" NL);
 		return;
 	}
 	if (ret > 0) {
 
     // assure a null terminator at end of data
-    umon_read_buffer[umon_read_pos+ret] = 0;
+    cd->umon_read_buffer[cd->umon_read_pos+ret] = 0;
 
     /* There may be multiple commands within the buffer. If so, handle them all, one by one */
     printf("RECEIVED: ");
     int i = 0;
-    while(umon_read_buffer[umon_read_pos+i] != 0)
+    while(cd->umon_read_buffer[cd->umon_read_pos+i] != 0)
     {
-      int pos = umon_read_pos + i;
-      if (umon_read_buffer[pos]>=' ') printf("%c",umon_read_buffer[pos]); else printf("[$%02X]",umon_read_buffer[pos]);
+      int pos = cd->umon_read_pos + i;
+      if (cd->umon_read_buffer[pos]>=' ') printf("%c",cd->umon_read_buffer[pos]); else printf("[$%02X]",cd->umon_read_buffer[pos]);
       i++;
     }
     printf("\n");
  
-    if (check_loadcmd(&umon_read_buffer[umon_read_pos], ret))
+    if (check_loadcmd(cd, &cd->umon_read_buffer[cd->umon_read_pos], ret))
       return;
 
     char *p;
-    if (umon_read_pos == 0)
-      p = find_next_cmd(umon_read_buffer);
+    if (cd->umon_read_pos == 0)
+      p = find_next_cmd(cd, cd->umon_read_buffer);
     else
-      p = find_next_cmd(NULL);
+      p = find_next_cmd(cd, NULL);
 
     while (p)
     {
       printf("find_next_cmd p = %08X\n", (unsigned int)p);
-      umon_echo = 1;
-      echo_command(p, ret);
+      cd->umon_echo = 1;
+      echo_command(cd, p, ret);
 
       //debug_buffer(umon_read_buffer);
-      if (!umon_echo || sizeof(umon_read_buffer) - umon_read_pos - 1 == 0) {
-        umon_read_buffer[sizeof(umon_read_buffer) - 1] = 0; // just in case of a "mega long command" with filled rx buffer ...
-        umon_write_buffer[umon_write_size++] = '\r';
-        umon_write_buffer[umon_write_size++] = '\n';
-        umon_send_ok = 1;	// by default, command is finished after the execute_command()
-        execute_command(p);	// Execute our command!
+      if (!cd->umon_echo || sizeof(cd->umon_read_buffer) - cd->umon_read_pos - 1 == 0) {
+        cd->umon_read_buffer[sizeof(cd->umon_read_buffer) - 1] = 0; // just in case of a "mega long command" with filled rx buffer ...
+        cd->umon_write_buffer[cd->umon_write_size++] = '\r'; // mega65_ftp seemed to prefer only '\n' (it choked on '\r')
+        cd->umon_write_buffer[cd->umon_write_size++] = '\n';
+        cd->umon_send_ok = 1;	// by default, command is finished after the execute_command()
+        execute_command(cd, p);	// Execute our command!
         // command may delay (like with trace) the finish of the command with
         // setting umon_send_ok to zero. In this case, some need to call
         // uartmon_finish_command() some time otherwise the monitor connection
         // will just hang!
       }
 
-      if (check_loadcmd(locptr, get_unparsed_bytes_remaining_count(ret)))
+      if (check_loadcmd(cd, cd->locptr, get_unparsed_bytes_remaining_count(cd, ret)))
       {
-        umon_read_pos = 0;
-        umon_read_buffer[umon_read_pos] = 0;
+        cd->umon_read_pos = 0;
+        cd->umon_read_buffer[cd->umon_read_pos] = 0;
         return;
       }
-      p = find_next_cmd(NULL); // prepare to read next command on next iteration (if there is one)
+      p = find_next_cmd(cd, NULL); // prepare to read next command on next iteration (if there is one)
     }
 
     // only finish command if we geniunely found a carriage return as the last character
-    if (is_received_string_fully_parsed(ret))
-      uartmon_finish_command();
+    if (is_received_string_fully_parsed(cd, ret))
+      uartmon_finish_command(cd);
     else
     {
-      umon_read_pos += ret;
-      umon_read_buffer[umon_read_pos] = 0;
+      cd->umon_read_pos += ret;
+      cd->umon_read_buffer[cd->umon_read_pos] = 0;
     }
 	}
 }
@@ -613,42 +672,53 @@ void read_from_socket(void)
 // From emulator main update, aka etc 25Hz rate should be Okey ...
 void uartmon_update ( void )
 {
-	// If there is no server socket, we can't do anything!
-	if (sock_server == UNCONNECTED)
-		return;
+  for (int idx = 0; idx < MAXPORTS; idx++)
+  {
+    comms_details_type* cd = &comdet[idx];
+    // If there is no server socket, we can't do anything!
+    if (cd->sock_server == UNCONNECTED)
+      continue;
 
-	// Try to accept new connection, if not yet have one (we handle only *ONE* connection!!!!)
-	if (sock_client == UNCONNECTED) {
-    if (!connect_unix_socket())
-      return;
-	}
+    // Try to accept new connection, if not yet have one (we handle only *ONE* connection!!!!)
+    if (cd->sock_client == UNCONNECTED) {
+      if (!connect_unix_socket(cd))
+        continue;
+    }
 
-	// If no established connection, return
-	if (sock_client == UNCONNECTED)
-		return;
+    // If no established connection, return
+    if (cd->sock_client == UNCONNECTED)
+      continue;
 
-	// If there is data to write, try to write
-	if (umon_write_size) {
-    if (!write_to_socket())
-      return;
-	}
+    // If there is data to write, try to write
+    if (cd->umon_write_size) {
+      if (!write_to_socket(cd))
+        continue;
+    }
 
-	umon_write_pos = 0;
+    cd->umon_write_pos = 0;
 
-	// Try to read data
-  read_from_socket();
+    // Try to read data
+    read_from_socket(cd);
+  }
 }
 
-void echo_command(char* command, int ret)
+void echo_command(comms_details_type* cd, char* command, int ret)
 {
   /* ECHO: provide echo for the client */
-  if (umon_echo) {
+  if (cd->umon_echo) {
     char*p = command;
     while (*p != 0 && *p != '\r' && *p != '\n') {
-      umon_write_buffer[umon_write_size++] = *(p++);
+      cd->umon_write_buffer[cd->umon_write_size++] = *(p++);
     }
-    umon_echo = 0; // setting to zero avoids more input to echo, and also signs a complete command
+    cd->umon_echo = 0; // setting to zero avoids more input to echo, and also signs a complete command
     *p = 0; // terminate string in read buffer
   }
+}
+
+void set_umon_send_ok(int val)
+{
+  for (int idx = 0; idx < MAXPORTS; idx++)
+    if (comdet[idx].sock_server != UNCONNECTED)
+      comdet[idx].umon_send_ok = val;
 }
 #endif
