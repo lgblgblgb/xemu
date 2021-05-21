@@ -613,7 +613,7 @@ void read_from_socket(comms_details_type *cd)
     while(cd->umon_read_buffer[cd->umon_read_pos+i] != 0)
     {
       int pos = cd->umon_read_pos + i;
-      if (cd->umon_read_buffer[pos]>=' ') printf("%c",cd->umon_read_buffer[pos]); else printf("[$%02X]",cd->umon_read_buffer[pos]);
+      if (cd->umon_read_buffer[pos]>=' ') printf("%c",cd->umon_read_buffer[pos]); else printf("[$%02X]",(unsigned char)cd->umon_read_buffer[pos]);
       i++;
     }
     printf("\n");
