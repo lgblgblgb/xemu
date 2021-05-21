@@ -278,7 +278,7 @@ void hypervisor_leave ( void )
 	memory_set_vic3_rom_mapping(vic_registers[0x30]);	// restore possible active VIC-III mapping
 	memory_set_do_map();	// restore mapping ...
 	if (XEMU_UNLIKELY(first_hypervisor_leave)) {
-		DEBUGPRINT("HYPERVISOR: first return after RESET." NL);
+		DEBUGPRINT("HYPERVISOR: first return after RESET, start of processing workarounds." NL);
 		first_hypervisor_leave = 0;
 		int new_pc = refill_c65_rom_from_preinit_cache();	// this function should decide then, if it's really a (forced) thing to do ...
 		if (new_pc >= 0) {
@@ -290,6 +290,14 @@ void hypervisor_leave ( void )
 		} else
 			DEBUGPRINT("MEM: no forced ROM re-apply policy was requested" NL);
 		dma_init_set_rev(configdb.dmarev, main_ram + 0x20000 + 0x16);
+		if (configdb.init_videostd >= 0) {
+			DEBUGPRINT("VIC: setting %s mode as initial-default based on request" NL, configdb.init_videostd ? "NTSC" : "PAL");
+			if (configdb.init_videostd)
+				vic_registers[0x6F] |= 0x80;
+			else
+				vic_registers[0x6F] &= 0x7F;
+		}
+		DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 	}
 	if (XEMU_UNLIKELY(hypervisor_queued_trap >= 0)) {
 		// Not so much used currently ...

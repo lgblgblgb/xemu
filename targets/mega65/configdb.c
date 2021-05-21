@@ -101,7 +101,9 @@ static const struct xemutools_configdef_num_st num_options[] = {
 	{ "sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2 },
 	{ "stereoseparation", AUDIO_DEFAULT_SEPARATION, "Audio stereo separation; 100(original) ... 0(mono) ... -100(reversed-channels); default: " STRINGIFY(AUDIO_DEFAULT_SEPARATION), &configdb.stereoseparation, -100, 100 },
 	{ "mastervolume", AUDIO_DEFAULT_VOLUME, "Audio emulation mixing final volume (100=unchanged ... 0=silence); default: " STRINGIFY(AUDIO_DEFAULT_VOLUME), &configdb.mastervolume, 0, 100 },
-	{ "videostd", -1, "Force video standard (0 = PAL, 1 = NTSC, -1 = default switchable by VIC-IV)", &configdb.force_videostd, -1, 1 },
+	{ "forcevideostd", -1, "Force video standard (0 = PAL, 1 = NTSC, -1 = default switchable by VIC-IV)", &configdb.force_videostd, -1, 1 },
+	// FIXME: as a workaround, I set this to "0" PAL, as newer MEGA65's default is this. HOWEVER this should be not handled this way but using a newer Hyppo!
+	{ "initvideostd", 0, "Use given video standard as the startup one (0 = PAL, 1 = NTSC, -1 = Hyppo default)", &configdb.init_videostd, -1, 1 },
 	{ NULL }
 };
 
