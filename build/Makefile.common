@@ -38,6 +38,9 @@ config:
 include $(TOPDIR)/build/configure/config-$(ARCH).make
 #endif
 
+IS_TTY			= $(shell tty >/dev/null 2>/dev/null && echo yes || echo no)
+SHELL			= bash
+
 SRCS_TARGET		= $(SRCS_TARGET_$(PRG_TARGET))
 SRCS_COMMON		= $(SRCS_COMMON_$(PRG_TARGET)) emutools_buildinfo.c
 PRG_TOP_REL		= build/bin/$(PRG_TARGET).$(ARCH)
@@ -71,10 +74,6 @@ CONFIG_CFLAGS_LINK	+= -g
 else
 CFLAGS_OPT		= $(CONFIG_CFLAGS_OPT)
 endif
-ifeq ($(GPROF), yes)
-CFLAGS_OPT		+= -pg
-CONFIG_CFLAGS_LINK	+= -pg
-endif
 ifeq ($(NATIVE), yes)
 CFLAGS_OPT		+= -mtune=native -march=native
 endif
@@ -92,11 +91,21 @@ endif
 CFLAGS			= $(CONFIG_CFLAGS) $(CFLAGS_OPT) $(CFLAGS_TARGET) -I. -I$(TOPDIR) -include build/configure/config-$(ARCH).h
 LDFLAGS			= $(CONFIG_CFLAGS_LINK) $(LDFLAGS_TARGET)
 
+ifeq ($(IS_TTY), yes)
+PROGRESS_MARKER_START = "`cat $(TOPDIR)/build/compilation-mark-start-seq.ansi`"
+PROGRESS_MARKER_END   = "`cat $(TOPDIR)/build/compilation-mark-end-seq.ansi`"
+else
+PROGRESS_MARKER_START = "["
+PROGRESS_MARKER_END   = "] "
+endif
+ECHO_BIN = "/bin/echo"
+
 ifeq ($(CONFIG_HAS_WINDRES), yes)
 WINDRES_SRC	= $(TOPDIR)/build/windres.rc
 WINDRES_OBJ	= $(COMMONOBJPREFIX)windres.res
 OBJS		+= $(WINDRES_OBJ)
 $(WINDRES_OBJ): $(WINDRES_SRC) $(TOPDIR)/build/xemu.ico $(DEPALL)
+	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)WINDRES: $<$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	$(CONFIG_WINDRES) $< -O coff -o $@
 endif
 
@@ -113,6 +122,7 @@ xemu-info:
 	@echo "-------------------------------------------"
 	@echo "Make architecture: $(ARCH)"
 	@echo "Target: $(TARGET)"
+	@echo "Shell: $(SHELL)"
 	@echo "Program name target: $(PRG_TARGET)"
 	@echo "Compiler: $(CONFIG_CC)"
 	@echo "Compiler flags: $(CFLAGS)"
@@ -125,27 +135,35 @@ xemu-info:
 	@echo "Dependecy file created: $(DEPFILE)"
 	@echo "Executable: $(PRG)"
 
+
 $(TARGETOBJPREFIX)%.o: %.c $(DEPALL)
 ifeq ($(ASMOUT), yes)
+	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)ASMOUT: $<$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	$(CONFIG_CC) $(CFLAGS) -Wa,-adhln -masm=intel -g -c -o /dev/null $< > $(@:.o=.s)
 endif
+	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)COMPILING: $<$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	$(CONFIG_CC) $(CFLAGS) -c -o $@ $<
 
 $(COMMONOBJPREFIX)%.o: $(COMMONDIR)/%.c $(DEPALL)
 ifeq ($(ASMOUT), yes)
+	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)ASMOUT: $<$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	$(CONFIG_CC) $(CFLAGS) -Wa,-adhln -masm=intel -g -c -o /dev/null $< > $(@:.o=.s)
 endif
+	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)COMPILING: $<$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	$(CONFIG_CC) $(CFLAGS) -c -o $@ $<
 
 $(PRG): $(OBJS) $(DEPALL)
+	@echo "$(PROGRESS_MARKER_START)CONSTRUCTING: $(DEPFILEPREFIX)-buildinfo.c$(PROGRESS_MARKER_END)"
 	@echo "const char *XEMU_BUILDINFO_ON  = \"`whoami`@`uname -n` on `uname -s` `uname -r`\";" > $(DEPFILEPREFIX)-buildinfo.c
 	@echo "const char *XEMU_BUILDINFO_AT  = \"`date`\";" >> $(DEPFILEPREFIX)-buildinfo.c
 	@echo "const char *XEMU_BUILDINFO_GIT = \"`bash $(TOPDIR)/build/show-git-info`\";" >> $(DEPFILEPREFIX)-buildinfo.c
 	@echo "const char *XEMU_BUILDINFO_TARGET = \"$(PRG_TARGET) ($(PRG)) for $(TARGET) on \" XEMU_ARCH_NAME \" ($(ARCH)) using $(CONFIG_CC)\";" >> $(DEPFILEPREFIX)-buildinfo.c
 	@git log -1 --format=%cd --date=format:%Y%m%d%H%M%S > $(TOPDIR)/build/objs/cdate.data || date '+%Y%m%d%H%M%S' > $(TOPDIR)/build/objs/cdate.data
-	@echo "*** Commit date we're building ($(TOPDIR)/build/objs/cdate.data): `cat $(TOPDIR)/build/objs/cdate.data`"
+	@echo "$(PROGRESS_MARKER_START)Commit date we're building ($(TOPDIR)/build/objs/cdate.data): `cat $(TOPDIR)/build/objs/cdate.data`$(PROGRESS_MARKER_END)"
 	@echo "const char *XEMU_BUILDINFO_CDATE = \"`cat $(TOPDIR)/build/objs/cdate.data`\";" >> $(DEPFILEPREFIX)-buildinfo.c
+	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)COMPILING: $(DEPFILEPREFIX)-buildinfo.c$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	$(CONFIG_CC) $(CFLAGS) -c -o $(DEPFILEPREFIX)-buildinfo.o $(DEPFILEPREFIX)-buildinfo.c
+	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)LINKING: $(PRG)$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	$(CONFIG_CC) -o $(PRG) $(OBJS) $(DEPFILEPREFIX)-buildinfo.o $(LDFLAGS)
 
 run:	$(PRG)
@@ -159,6 +177,7 @@ install:
 	test TARGET_IS_UNIX_$(TARGET_IS_UNIX) = TARGET_IS_UNIX_yes || exit 1
 	$(MAKE) $(PRG)
 	strip $(PRG)
+	@echo "$(PROGRESS_MARKER_START)INSTALLING: $(PRG) -> $(INSTALL_BINDIR)/xemu-`basename $(PRG) .$(ARCH)`$(PROGRESS_MARKER_END)"
 	mkdir -p $(INSTALL_BINDIR)
 	cp $(PRG) "$(INSTALL_BINDIR)/xemu-`basename $(PRG) .$(ARCH)`"
 	ls -l "$(INSTALL_BINDIR)/xemu-`basename $(PRG) .$(ARCH)`"
@@ -168,6 +187,7 @@ dep:
 	$(MAKE) $(DEPFILE)
 
 $(DEPFILE): $(DEPALL) $(SRCS)
+	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)DEPENDENCY: $@$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	rm -f $(DEPFILEPREFIX)-target-pre.depend $(DEPFILEPREFIX)-common-pre.depend $(DEPFILEPREFIX)-target.depend $(DEPFILEPREFIX)-common.depend
 	if [ "$(CONFIG_CC)" != "" -a -s "$(TOPDIR)/build/configure/config-$(ARCH).make" ]; then $(CONFIG_CC) -MM $(CFLAGS) $(SRCS_TARGET_PREFIXED) > $(DEPFILEPREFIX)-target-pre.depend && awk '/^[^.:\t ]+\.o:/ { print "$(TARGETOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-target-pre.depend > $(DEPFILEPREFIX)-target.depend && $(CONFIG_CC) -MM $(CFLAGS) $(SRCS_COMMON_PREFIXED) > $(DEPFILEPREFIX)-common-pre.depend && awk '/^[^.:\t ]+\.o:/ { print "$(COMMONOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-common-pre.depend > $(DEPFILEPREFIX)-common.depend && cat $(DEPFILEPREFIX)-target.depend $(DEPFILEPREFIX)-common.depend > $@ && rm -f $(DEPFILEPREFIX)-target-pre.depend $(DEPFILEPREFIX)-common-pre.depend ; else echo "*** Ignoring dependency creation, no configuration exists yet" ; fi
 

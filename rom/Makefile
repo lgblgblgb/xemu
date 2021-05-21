@@ -1,6 +1,6 @@
 ## XEmu: collection of simple emulators
 ##
-## Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
