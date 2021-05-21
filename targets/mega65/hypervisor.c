@@ -304,7 +304,13 @@ void write_hypervisor_byte(char byte);
 void hypervisor_serial_monitor_push_char ( Uint8 chr )
 {
 	if (hypervisor_monout_p >= hypervisor_monout - 1 + sizeof hypervisor_monout)
-		return;
+	{
+	  // NOTE: For long mega65_ftp actions like 'get MYDISK.D81`, a lot of
+	  // serial chars will be sent that are raw binary, and there's a good chance
+	  // it could overflow the 'hypervisor_monout' buffer.
+	  // So in such cases, I'll simply empty hypervisor_monout.
+	  hypervisor_monout_p = hypervisor_monout;
+	}
 	int flush = (chr == 0x0A || chr == 0x0D || chr == 0x8A || chr == 0x8D);
 	write_hypervisor_byte(chr);
 	if (hypervisor_monout_p == hypervisor_monout && flush)
