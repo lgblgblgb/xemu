@@ -516,12 +516,15 @@ void m65mon_show_regs ( void )
 {
 	Uint8 pf = cpu65_get_pf();
 	umon_printf(
+		"\r\n"
 		"PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
-		",%08X %02X %02X %02X %02X %02X %04X "		// register banned message and things from PC to SP
+		"%04X %02X %02X %02X %02X %02X %04X "		// register banned message and things from PC to SP
 		"%04X %04X %02X       %02X %02X "		// from MAPL to P
 		"%c%c%c%c%c%c%c%c ",				// P-FLAGS
 		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z, cpu65.bphi >> 8, cpu65.sphi | cpu65.s,
-		map_offset_low >> 8, map_offset_high >> 8, cpu65.op,
+		((map_mask & 0xf0) << 8) | (map_offset_low >> 8),
+		((map_mask & 0x0f) << 12)  | (map_offset_high >> 8),
+		cpu65.op,
 		pf, 0,	// flags
 		(pf & CPU65_PF_N) ? 'N' : '-',
 		(pf & CPU65_PF_V) ? 'V' : '-',
