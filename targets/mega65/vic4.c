@@ -61,6 +61,7 @@ static int visible_area_height = SCREEN_HEIGHT_VISIBLE_DEFAULT;
 static int vicii_first_raster = 7;				// Default for NTSC
 static Uint8 *bitplane_bank_p = main_ram;
 static Uint32 red_colour, black_colour;		// used by "drive LED" stuff
+static Uint8 vic_pixel_readback_result[4];
 
 // --- these things are altered by vic4_open_frame_access() ONLY at every fame ONLY based on PAL or NTSC selection
 Uint8 videostd_id = 0xFF;			// 0=PAL, 1=NTSC [give some insane value by default to force the change at the fist frame after starting Xemu]
@@ -170,6 +171,11 @@ void vic_reset ( void )
 		vic_write_reg(i, 0);
 		(void)vic_read_reg(i);
 	}
+	// to deactivate the pixel readback crosshair by default, ie X/Y pos that never meet
+	// it seems these values are used by mega65-core VHDL as well
+	vic_registers[0x7D] = 0xFE;
+	vic_registers[0x7E] = 0xFE;
+	vic_registers[0x7F] = 0xFF;
 }
 
 
@@ -184,6 +190,7 @@ static void vic4_reset_display_counters ( void )
 
 void vic_init ( void )
 {
+	vic_pixel_readback_result[0] = 0xFF;	// "hyperram access count" or what, not so much emulated
 	// Needed to render "drive LED" feature
 	red_colour   = SDL_MapRGBA(sdl_pix_fmt, 0xFF, 0x00, 0x00, 0xFF);
 	black_colour = SDL_MapRGBA(sdl_pix_fmt, 0x00, 0x00, 0x00, 0xFF);
@@ -199,10 +206,40 @@ void vic_init ( void )
 }
 
 
+// Pixel-read back feature of MEGA65
+static XEMU_INLINE void pixel_readback ( void )
+{
+	const int pix_readback_x = vic_registers[0x7D] | ((vic_registers[0x7F] & 0x0F) << 8);
+	const int pix_readback_y = vic_registers[0x7E] | ((vic_registers[0x7F] & 0xF0) << 4);
+	if (XEMU_UNLIKELY(pix_readback_y < max_rasters && pix_readback_x < TEXTURE_WIDTH)) {
+		const Uint32 texpixcol = xemu_frame_pixel_access_p[TEXTURE_WIDTH * pix_readback_y + pix_readback_x];
+		// the array will be used on reading $D70D indexed by the top two bits of $D07C, element "0" is "hyperram access count" and not handled here
+		// FIXME Warning: this code assumes that R/G/B SDL components are exactly 8 bit
+		vic_pixel_readback_result[1] = (texpixcol >> sdl_pix_fmt->Rshift) & 0xFF;	// red channel
+		vic_pixel_readback_result[2] = (texpixcol >> sdl_pix_fmt->Gshift) & 0xFF;	// green channel
+		vic_pixel_readback_result[3] = (texpixcol >> sdl_pix_fmt->Bshift) & 0xFF;	// blue channel
+		// draw red coloured cross-hair
+		for (int a = 0; a < TEXTURE_WIDTH; a++)
+			if (XEMU_LIKELY(a != pix_readback_x))
+				xemu_frame_pixel_access_p[TEXTURE_WIDTH * pix_readback_y + a] = red_colour;
+		for (int a = 0; a < max_rasters; a++)
+			if (XEMU_LIKELY(a != pix_readback_y))
+				xemu_frame_pixel_access_p[TEXTURE_WIDTH * a + pix_readback_x] = red_colour;
+	} else {
+		// Not sure what to do in this case.
+		vic_pixel_readback_result[1] = 0xFF;
+		vic_pixel_readback_result[2] = 0xFF;
+		vic_pixel_readback_result[3] = 0xFF;
+	}
+}
+
+
 // Pair of vic4_open_frame_access() and the place when screen is updated at SDL level, finally.
 // Do NOT call this function from vic4.c! It must be used by the emulator's main loop!
 void vic4_close_frame_access ( void )
 {
+	// Pixel-read back feature of MEGA65
+	pixel_readback();
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	// Screenshot
 	if (XEMU_UNLIKELY(registered_screenshot_request)) {
@@ -799,12 +836,14 @@ Uint8 vic_read_reg ( int unsigned addr )
 		CASE_VIC_4(0x6D):
 			break;
 		CASE_VIC_4(0x6E):
-
 			break;
-
 		CASE_VIC_4(0x6F): CASE_VIC_4(0x70): CASE_VIC_4(0x71): CASE_VIC_4(0x72): CASE_VIC_4(0x73): CASE_VIC_4(0x74):
 		CASE_VIC_4(0x75): CASE_VIC_4(0x76): CASE_VIC_4(0x77): CASE_VIC_4(0x78): CASE_VIC_4(0x79): CASE_VIC_4(0x7A): CASE_VIC_4(0x7B): CASE_VIC_4(0x7C):
-		CASE_VIC_4(0x7D): CASE_VIC_4(0x7E): CASE_VIC_4(0x7F):
+			break;
+		CASE_VIC_4(0x7D):
+			result = vic_pixel_readback_result[vic_registers[0x7C] >> 6];
+			break;
+		CASE_VIC_4(0x7E): CASE_VIC_4(0x7F):
 			break;
 		/* --- NON-EXISTING REGISTERS --- */
 		CASE_VIC_2(0x31): CASE_VIC_2(0x32): CASE_VIC_2(0x33): CASE_VIC_2(0x34): CASE_VIC_2(0x35): CASE_VIC_2(0x36): CASE_VIC_2(0x37): CASE_VIC_2(0x38):
