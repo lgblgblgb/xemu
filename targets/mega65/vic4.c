@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "configdb.h"
 #include "xemu/f011_core.h"
 #include "xemu/emutools_files.h"
+#include "io_mapper.h"
 
 
 const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
@@ -172,9 +173,8 @@ void vic_reset ( void )
 		(void)vic_read_reg(i);
 	}
 	// to deactivate the pixel readback crosshair by default, ie X/Y pos that never meet
-	// it seems these values are used by mega65-core VHDL as well
-	vic_registers[0x7D] = 0xFE;
-	vic_registers[0x7E] = 0xFE;
+	vic_registers[0x7D] = 0xFF;
+	vic_registers[0x7E] = 0xFF;
 	vic_registers[0x7F] = 0xFF;
 }
 
@@ -209,6 +209,7 @@ void vic_init ( void )
 // Pixel-read back feature of MEGA65
 static XEMU_INLINE void pixel_readback ( void )
 {
+	// FIXME: this is surely wrong, and we should not use texture coords directly. We must fix this somehow (offsets?)
 	const int pix_readback_x = vic_registers[0x7D] | ((vic_registers[0x7F] & 0x0F) << 8);
 	const int pix_readback_y = vic_registers[0x7E] | ((vic_registers[0x7F] & 0xF0) << 4);
 	if (XEMU_UNLIKELY(pix_readback_y < max_rasters && pix_readback_x < TEXTURE_WIDTH)) {
@@ -225,11 +226,6 @@ static XEMU_INLINE void pixel_readback ( void )
 		for (int a = 0; a < max_rasters; a++)
 			if (XEMU_LIKELY(a != pix_readback_y))
 				xemu_frame_pixel_access_p[TEXTURE_WIDTH * a + pix_readback_x] = red_colour;
-	} else {
-		// Not sure what to do in this case.
-		vic_pixel_readback_result[1] = 0xFF;
-		vic_pixel_readback_result[2] = 0xFF;
-		vic_pixel_readback_result[3] = 0xFF;
 	}
 }
 
@@ -270,6 +266,7 @@ void vic4_close_frame_access ( void )
 	}
 	// FINALLY ....
 	xemu_update_screen();
+	D7XX[0xFA]++;	// D7FA: elapsed number of frames counter
 }
 
 
