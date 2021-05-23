@@ -608,7 +608,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		/* --- NO MORE VIC-II REGS FROM HERE --- */
 		CASE_VIC_3_4(0x30):
 			memory_set_vic3_rom_mapping(data);
-			check_if_rom_palette(data & 4);
+			check_if_rom_palette(!(data & 4));
 			break;
 		CASE_VIC_3_4(0x31):
 			// (!) NOTE:
@@ -696,7 +696,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			spritepalette	= ((data & 0x0C) << 6) + vic_palettes;
 			palette		= ((data & 0x30) << 4) + vic_palettes;
 			palregaccofs	= ((data & 0xC0) << 2);
-			check_if_rom_palette(vic_registers[0x30] & 4);
+			check_if_rom_palette(!(vic_registers[0x30] & 4));
 			break;
 		CASE_VIC_4(0x7C):
 			if ((data & 7) <= 2) {
