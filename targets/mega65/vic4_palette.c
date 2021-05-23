@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    MEGA65 palette handling for VIC-IV with compatibility for C65 style
    VIC-III palette.
@@ -103,9 +103,9 @@ void vic4_init_palette ( void )
 		11, 11, 11	// light grey
 	};
 	for (int i = 0; i < NO_OF_PALETTE_REGS; i++) {
-		vic_palette_bytes_red[i]   = (def_pal[(i & 0xF) * 3 + 0] * 17) & 0xEF;
-		vic_palette_bytes_green[i] =  def_pal[(i & 0xF) * 3 + 1] * 17;
-		vic_palette_bytes_blue[i]  =  def_pal[(i & 0xF) * 3 + 2] * 17;
+		vic_palette_bytes_red[i]   = (def_pal[(i & 0xF) * 3 + 0] * 16) & 0xEF;
+		vic_palette_bytes_green[i] =  def_pal[(i & 0xF) * 3 + 1] * 16;
+		vic_palette_bytes_blue[i]  =  def_pal[(i & 0xF) * 3 + 2] * 16;
 	}
 #else
 	for (int i = 0; i < NO_OF_PALETTE_REGS; i++) {
@@ -158,17 +158,20 @@ void vic4_write_palette_reg_blue  ( unsigned int num, Uint8 data )
 
 void vic3_write_palette_reg_red   ( unsigned int num, Uint8 data )
 {
-	vic4_write_palette_reg_red  (num, (((data & 0xF) * 17) & 0xEF) | (data & 0x10));
+	//vic4_write_palette_reg_red  (num, (((data & 0xF) * 17) & 0xEF) | (data & 0x10));
+	vic4_write_palette_reg_red(num, data & 0x1F);
 }
 
 void vic3_write_palette_reg_green ( unsigned int num, Uint8 data )
 {
-	vic4_write_palette_reg_green(num, (data & 0xF) * 17);
+	//vic4_write_palette_reg_green(num, (data & 0xF) * 17);
+	vic4_write_palette_reg_green(num, data & 0xF);
 }
 
 void vic3_write_palette_reg_blue  ( unsigned int num, Uint8 data )
 {
-	vic4_write_palette_reg_blue (num, (data & 0xF) * 17);
+	//vic4_write_palette_reg_blue (num, (data & 0xF) * 17);
+	vic4_write_palette_reg_blue (num, data & 0xF);
 }
 
 Uint8 vic4_read_palette_reg_red ( unsigned int num )
