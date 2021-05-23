@@ -210,9 +210,9 @@ void vic_init ( void )
 static XEMU_INLINE void pixel_readback ( void )
 {
 	// FIXME: this is surely wrong, and we should not use texture coords directly. We must fix this somehow (offsets?)
-	const int pix_readback_x = vic_registers[0x7D] | ((vic_registers[0x7F] & 0x0F) << 8);
+	const int pix_readback_x = (vic_registers[0x7D] | ((vic_registers[0x7F] & 0x0F) << 8)) - 8 + 2;
 	const int pix_readback_y = vic_registers[0x7E] | ((vic_registers[0x7F] & 0xF0) << 4);
-	if (XEMU_UNLIKELY(pix_readback_y < max_rasters && pix_readback_x < TEXTURE_WIDTH)) {
+	if (XEMU_UNLIKELY(pix_readback_y >= 0 && pix_readback_x >= 0 && pix_readback_y < max_rasters && pix_readback_x < TEXTURE_WIDTH)) {
 		const Uint32 texpixcol = xemu_frame_pixel_access_p[TEXTURE_WIDTH * pix_readback_y + pix_readback_x];
 		// the array will be used on reading $D70D indexed by the top two bits of $D07C, element "0" is "hyperram access count" and not handled here
 		// FIXME Warning: this code assumes that R/G/B SDL components are exactly 8 bit
@@ -220,12 +220,14 @@ static XEMU_INLINE void pixel_readback ( void )
 		vic_pixel_readback_result[2] = (texpixcol >> sdl_pix_fmt->Gshift) & 0xFF;	// green channel
 		vic_pixel_readback_result[3] = (texpixcol >> sdl_pix_fmt->Bshift) & 0xFF;	// blue channel
 		// draw red coloured cross-hair
+		Uint32 *p = xemu_frame_pixel_access_p + TEXTURE_WIDTH * pix_readback_y;
 		for (int a = 0; a < TEXTURE_WIDTH; a++)
-			if (XEMU_LIKELY(a != pix_readback_x))
-				xemu_frame_pixel_access_p[TEXTURE_WIDTH * pix_readback_y + a] = red_colour;
-		for (int a = 0; a < max_rasters; a++)
-			if (XEMU_LIKELY(a != pix_readback_y))
-				xemu_frame_pixel_access_p[TEXTURE_WIDTH * a + pix_readback_x] = red_colour;
+			*p++ = red_colour;
+		p = xemu_frame_pixel_access_p + pix_readback_x;
+		for (int a = 0; a < max_rasters; a++) {
+			*p = red_colour;
+			p+= TEXTURE_WIDTH;
+		}
 	}
 }
 
