@@ -206,7 +206,7 @@ void vic_init ( void )
 }
 
 
-// Pixel-read back feature of MEGA65
+// Debug pixel-read back feature of MEGA65
 static XEMU_INLINE void pixel_readback ( void )
 {
 	// FIXME: this is surely wrong, and we should not use texture coords directly. We must fix this somehow (offsets?)
@@ -236,7 +236,7 @@ static XEMU_INLINE void pixel_readback ( void )
 // Do NOT call this function from vic4.c! It must be used by the emulator's main loop!
 void vic4_close_frame_access ( void )
 {
-	// Pixel-read back feature of MEGA65
+	// Debug pixel-read back feature of MEGA65
 	pixel_readback();
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	// Screenshot
@@ -897,11 +897,12 @@ static void vic4_draw_sprite_row_16color( int sprnum, int x_display_pos, const U
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const int palindexbase = sprnum * 16 + 128 * (SPRITE_BITPLANE_ENABLE(sprnum) >> sprnum);
+	const Uint8 transparent_pal_index = vic_registers[sprnum + 0x27] & 0xF;	// LGB: in 16 colour sprite mode, sprite colour register gives the transparent colour
 	for (int byte = 0; byte < totalBytes; byte++) {
 		const Uint8 c0 = (*(row_data_ptr + byte)) >> 4;
 		const Uint8 c1 = (*(row_data_ptr + byte)) & 0xF;
 		for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
-			if (c0) {
+			if (c0 != transparent_pal_index) {
 				if (
 					x_display_pos >= border_x_left && (
 						!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)
@@ -912,7 +913,7 @@ static void vic4_draw_sprite_row_16color( int sprnum, int x_display_pos, const U
 			}
 		}
 		for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
-			if (c1) {
+			if (c1 != transparent_pal_index) {
 				if (
 					x_display_pos >= border_x_left && (
 						!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)
@@ -1071,7 +1072,7 @@ static void vic4_render_multicolor_char_row ( Uint8 char_byte, int glyph_width, 
 		const Uint8 bit_pair = (char_byte & (0x80 >> bitsel)) >> (6-bitsel) | (char_byte & (0x40 >> bitsel)) >> (6-bitsel);
 
 		Uint8 pixel = color_source[bit_pair];
-		const Uint8 layer = bit_pair & 2 ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
+		const Uint8 layer = (bit_pair & 2) ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
 		*(current_pixel++) = palette[pixel];
 		bg_pixel_state[xcounter++] = layer;
 	}
@@ -1082,9 +1083,9 @@ static void vic4_render_multicolor_char_row ( Uint8 char_byte, int glyph_width, 
 static void vic4_render_fullcolor_char_row ( const Uint8* char_row, int glyph_width )
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
-		Uint32 pixel_color = palette[char_row[(int)cx]];
-		*(current_pixel++) = pixel_color;
-		bg_pixel_state[xcounter++] = pixel_color ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
+		const Uint8 char_data = char_row[(int)cx];
+		*(current_pixel++) = palette[char_data];
+		bg_pixel_state[xcounter++] = char_data ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
 	}
 }
 
@@ -1098,9 +1099,8 @@ static void vic4_render_16color_char_row ( const Uint8* char_row, int glyph_widt
 			char_data >>= 4;
 		else
 			char_data &= 0xf;
-		Uint32 pixel_color = palette[char_data];
-		*(current_pixel++) = pixel_color;
-		bg_pixel_state[xcounter++] = pixel_color ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
+		*(current_pixel++) = palette[char_data];
+		bg_pixel_state[xcounter++] = char_data ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
 	}
 }
 
@@ -1126,7 +1126,7 @@ static void vic4_render_bitplane_char_row ( Uint8* bp_base[8], int glyph_width )
 			) & bpe_mask) ^ bp_comp
 		];
 		*(current_pixel++) = pixel_color;
-		bg_pixel_state[xcounter++] = *bp_base[2] & bitsel ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
+		bg_pixel_state[xcounter++] = (*bp_base[2] & bitsel) ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
 	}
 }
 
