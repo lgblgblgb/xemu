@@ -897,12 +897,12 @@ static void vic4_draw_sprite_row_16color( int sprnum, int x_display_pos, const U
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const int palindexbase = sprnum * 16 + 128 * (SPRITE_BITPLANE_ENABLE(sprnum) >> sprnum);
-	const Uint8 transparent_pal_index = vic_registers[sprnum + 0x27] & 0xF;	// LGB: in 16 colour sprite mode, sprite colour register gives the transparent colour
+	const Uint8 transparency_palette_index = SPRITE_COLOR(sprnum);	// LGB: in 16 colour sprite mode, sprite colour register gives the transparent colour index
 	for (int byte = 0; byte < totalBytes; byte++) {
 		const Uint8 c0 = (*(row_data_ptr + byte)) >> 4;
 		const Uint8 c1 = (*(row_data_ptr + byte)) & 0xF;
 		for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
-			if (c0 != transparent_pal_index) {
+			if (c0 != transparency_palette_index) {
 				if (
 					x_display_pos >= border_x_left && (
 						!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)
@@ -913,7 +913,7 @@ static void vic4_draw_sprite_row_16color( int sprnum, int x_display_pos, const U
 			}
 		}
 		for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
-			if (c1 != transparent_pal_index) {
+			if (c1 != transparency_palette_index) {
 				if (
 					x_display_pos >= border_x_left && (
 						!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)
@@ -969,6 +969,7 @@ static void vic4_draw_sprite_row_multicolor ( int sprnum, int x_display_pos, con
 static void vic4_draw_sprite_row_mono ( int sprnum, int x_display_pos, const Uint8 *row_data_ptr, int xscale )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
+	const Uint32 sprite_color_pixel_on = spritepalette[SPRITE_COLOR(sprnum)];	// FIXME? are we really limited for the first 16 colours here done by SPRITE_COLOUR() macro (ie, & 0xF) ??
 	for (int byte = 0; byte < totalBytes; byte++) {
 		for (int xbit = 0; xbit < 8; xbit++) {
 			const Uint8 pixel = *row_data_ptr & (0x80 >> xbit);
@@ -979,7 +980,7 @@ static void vic4_draw_sprite_row_mono ( int sprnum, int x_display_pos, const Uin
 						(SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)
 					)
 				) {
-					*(pixel_raster_start + x_display_pos) = spritepalette[SPRITE_COLOR(sprnum)];
+					*(pixel_raster_start + x_display_pos) = sprite_color_pixel_on;
 				}
 			}
 		}
