@@ -51,7 +51,7 @@ static int border_x_right= 0;			 		// Side border right
 static int xcounter = 0, ycounter = 0;				// video counters
 static int frame_counter = 0;
 static int char_row = 0, display_row = 0;
-static Uint8 bg_pixel_state[1024];				// See FOREGROUND_PIXEL and BACKGROUND_PIXEL constants
+static Uint8 is_fg[1024];					// this cache helps in sprite rendering, zero means background state, other value: foreground
 static Uint8* screen_ram_current_ptr = NULL;
 static Uint8* colour_ram_current_ptr = NULL;
 static float char_x_step = 0.0;
@@ -75,8 +75,8 @@ static const char NTSC_STD_NAME[] = "NTSC";
 static const char PAL_STD_NAME[] = "PAL";
 int vic_readjust_sdl_viewport = 0;
 
-void vic4_render_char_raster(void);
-void vic4_render_bitplane_raster(void);
+static void vic4_render_char_raster(void);
+static void vic4_render_bitplane_raster(void);
 static void (*vic4_raster_renderer_path)(void) = &vic4_render_char_raster;
 
 // VIC-IV Modeline Parameters
@@ -909,26 +909,16 @@ static void vic4_draw_sprite_row_16color( int sprnum, int x_display_pos, const U
 		const Uint8 c0 = (*(row_data_ptr + byte)) >> 4;
 		const Uint8 c1 = (*(row_data_ptr + byte)) & 0xF;
 		for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
-			if (c0 != transparency_palette_index) {
-				if (
-					x_display_pos >= border_x_left && (
-						!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)
-					)
-				) {
-					*(pixel_raster_start + x_display_pos) = spritepalette[palindexbase + c0];
-				}
-			}
+			if (c0 != transparency_palette_index && x_display_pos >= border_x_left && (
+				!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
+			))
+				*(pixel_raster_start + x_display_pos) = spritepalette[palindexbase + c0];
 		}
 		for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
-			if (c1 != transparency_palette_index) {
-				if (
-					x_display_pos >= border_x_left && (
-						!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)
-					)
-				) {
-					*(pixel_raster_start + x_display_pos) = spritepalette[palindexbase + c1];
-				}
-			}
+			if (c1 != transparency_palette_index && x_display_pos >= border_x_left && (
+				!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
+			))
+				*(pixel_raster_start + x_display_pos) = spritepalette[palindexbase + c1];
 		}
 	}
 }
@@ -937,20 +927,20 @@ static void vic4_draw_sprite_row_16color( int sprnum, int x_display_pos, const U
 static void vic4_draw_sprite_row_multicolor ( int sprnum, int x_display_pos, const Uint8* row_data_ptr, int xscale )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
-	const Uint8 mcm_spr_pal_indices[3] = { SPRITE_MULTICOLOR_1, SPRITE_COLOR(sprnum), SPRITE_MULTICOLOR_2 };
+	const Uint8 mcm_spr_pal_indices[4] = { 0, SPRITE_MULTICOLOR_1, SPRITE_COLOR(sprnum), SPRITE_MULTICOLOR_2 };	// entry zero is not used
 	for (int byte = 0; byte < totalBytes; byte++) {
 		const Uint8 row_data = *row_data_ptr++;
 		for (int shift = 6; shift >= 0; shift -= 2) {
 			const int mcm_pixel_value = (row_data >> shift) & 3;
-			if (mcm_pixel_value) {
-				Uint32 sdl_pixel = spritepalette[mcm_spr_pal_indices[mcm_pixel_value - 1]];
-				for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos += 2) {
+			const Uint32 sdl_pixel = spritepalette[mcm_spr_pal_indices[mcm_pixel_value]];
+			for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos += 2) {
+				if (mcm_pixel_value) {
 					if (x_display_pos >= border_x_left && (
-							!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)
+						!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
 					))
 						*(pixel_raster_start + x_display_pos) = sdl_pixel;
 					if (x_display_pos + 1 >= border_x_left && (
-							!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos + 1] != FOREGROUND_PIXEL)
+						!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos + 1])
 					))
 						*(pixel_raster_start + x_display_pos + 1) = sdl_pixel;
 				}
@@ -963,19 +953,16 @@ static void vic4_draw_sprite_row_multicolor ( int sprnum, int x_display_pos, con
 static void vic4_draw_sprite_row_mono ( int sprnum, int x_display_pos, const Uint8 *row_data_ptr, int xscale )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
-	const Uint32 sprite_color_pixel_on = spritepalette[SPRITE_COLOR(sprnum)];
+	const Uint32 sdl_pixel = spritepalette[SPRITE_COLOR(sprnum)];
 	for (int byte = 0; byte < totalBytes; byte++) {
 		for (int xbit = 0; xbit < 8; xbit++) {
-			const Uint8 pixel = *row_data_ptr & (0x80 >> xbit);
+			const Uint8 sprite_bit = *row_data_ptr & (0x80 >> xbit);
 			for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
-				if (
-					x_display_pos >= border_x_left && pixel && (
-						!SPRITE_IS_BACK(sprnum) ||
-						(SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)
-					)
-				) {
-					*(pixel_raster_start + x_display_pos) = sprite_color_pixel_on;
-				}
+				if (x_display_pos >= border_x_left && sprite_bit && (
+					!SPRITE_IS_BACK(sprnum) ||
+					(SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
+				))
+					*(pixel_raster_start + x_display_pos) = sdl_pixel;
 			}
 		}
 		row_data_ptr++;
@@ -1046,7 +1033,7 @@ static void vic4_render_mono_char_row ( Uint8 char_byte, int glyph_width, Uint8 
 			const Uint8 char_pixel = (char_byte & (0x80 >> (int)cx));
 			Uint32 pixel_color = char_pixel ? palette[fg_color] : palette[bg_color];
 			*(current_pixel++) = pixel_color;
-			bg_pixel_state[xcounter++] = char_pixel ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
+			is_fg[xcounter++] = char_pixel;
 		}
 	} else {	// HACK!! to support MEGAMAZE GOTOX+VFLIP bits that ignore the background paint until next raster.
 		for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
@@ -1054,7 +1041,7 @@ static void vic4_render_mono_char_row ( Uint8 char_byte, int glyph_width, Uint8 
 			if (char_pixel)
 				*current_pixel = palette[fg_color];
 			current_pixel++;
-			bg_pixel_state[xcounter++] = char_pixel ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
+			is_fg[xcounter++] = char_pixel;
 		}
 	}
 }
@@ -1065,11 +1052,8 @@ static void vic4_render_multicolor_char_row ( Uint8 char_byte, int glyph_width, 
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		const Uint8 bitsel = 2 * (int)(cx / 2);
 		const Uint8 bit_pair = (char_byte & (0x80 >> bitsel)) >> (6-bitsel) | (char_byte & (0x40 >> bitsel)) >> (6-bitsel);
-
-		Uint8 pixel = color_source[bit_pair];
-		const Uint8 layer = (bit_pair & 2) ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
-		*(current_pixel++) = palette[pixel];
-		bg_pixel_state[xcounter++] = layer;
+		*(current_pixel++) = palette[color_source[bit_pair]];
+		is_fg[xcounter++] = (bit_pair & 2);
 	}
 }
 
@@ -1080,7 +1064,7 @@ static void vic4_render_fullcolor_char_row ( const Uint8* char_row, int glyph_wi
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		const Uint8 char_data = char_row[(int)cx];
 		*(current_pixel++) = palette[char_data];
-		bg_pixel_state[xcounter++] = char_data ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
+		is_fg[xcounter++] = char_data;
 	}
 }
 
@@ -1095,7 +1079,7 @@ static void vic4_render_16color_char_row ( const Uint8* char_row, int glyph_widt
 		else
 			char_data &= 0xf;
 		*(current_pixel++) = palette[char_data];
-		bg_pixel_state[xcounter++] = char_data ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
+		is_fg[xcounter++] = char_data;
 	}
 }
 
@@ -1121,12 +1105,12 @@ static void vic4_render_bitplane_char_row ( Uint8* bp_base[8], int glyph_width )
 			) & bpe_mask) ^ bp_comp
 		];
 		*(current_pixel++) = pixel_color;
-		bg_pixel_state[xcounter++] = (*bp_base[2] & bitsel) ? FOREGROUND_PIXEL : BACKGROUND_PIXEL;
+		is_fg[xcounter++] = (*bp_base[2] & bitsel);
 	}
 }
 
 
-void vic4_render_bitplane_raster ( void )
+static void vic4_render_bitplane_raster ( void )
 {
 	Uint8* bp_base[8];
 	// Get Bitplane source addresses
@@ -1176,7 +1160,7 @@ void vic4_render_bitplane_raster ( void )
 //
 // VIC-III Extended attributes are applied to characters if properly set,
 // except in Multicolor modes.
-void vic4_render_char_raster ( void )
+static void vic4_render_char_raster ( void )
 {
 	int line_char_index = 0;
 	enable_bg_paint = 1;

@@ -216,11 +216,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SET_COLORRAM_BASE(x)		SET_16BIT_REG(0x64,(x))
 #define SET_CHARSTEP_BYTES(x)		SET_16BIT_REG(0x58,(x))
 
-// Pixel foreground/background indicator for aiding in sprite rendering
-
-#define FOREGROUND_PIXEL		1
-#define BACKGROUND_PIXEL		0
-
 // Review this! (VIC-II values)
 
 #define SPRITE_X_BASE_COORD		24
