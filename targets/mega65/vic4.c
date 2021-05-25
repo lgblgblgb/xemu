@@ -937,41 +937,25 @@ static void vic4_draw_sprite_row_16color( int sprnum, int x_display_pos, const U
 static void vic4_draw_sprite_row_multicolor ( int sprnum, int x_display_pos, const Uint8* row_data_ptr, int xscale )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
-	//const Uint32 sprite_colors[3] = { SPRITE_COLOR(sprnum), SPRITE_MULTICOLOR_1, SPRITE_MULTICOLOR_2 };
+	const Uint8 mcm_spr_pal_indices[3] = { SPRITE_MULTICOLOR_1, SPRITE_COLOR(sprnum), SPRITE_MULTICOLOR_2 };
 	for (int byte = 0; byte < totalBytes; byte++) {
-		for (int xbit = 0; xbit < 8; xbit += 2) {
-			const Uint8 p0 = *row_data_ptr & (0x80 >> xbit);
-			const Uint8 p1 = *row_data_ptr & (0x40 >> xbit);
-			Uint8 pixel = 0;	// TODO: See generated code -- use lookup instead of branch?
-			if (!p0 && p1)
-				pixel = SPRITE_MULTICOLOR_1;
-			else if (p0 && !p1)
-				pixel = SPRITE_COLOR(sprnum);
-			else if (p0 && p1)
-				pixel = SPRITE_MULTICOLOR_2;
-
-			for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos += 2) {
-				// FIXME: this is wrong, as not index 0 is transparent, but p0/p1 bit combination (IMHO). and pixel can be still zero is sprite colour is palette entry zero,
-				// which then mistakenly won't be rendered!
-				if (pixel) {
-					if (
-						x_display_pos >= border_x_left && (
+		const Uint8 row_data = *row_data_ptr++;
+		for (int shift = 6; shift >= 0; shift -= 2) {
+			const int mcm_pixel_value = (row_data >> shift) & 3;
+			if (mcm_pixel_value) {
+				Uint32 sdl_pixel = spritepalette[mcm_spr_pal_indices[mcm_pixel_value - 1]];
+				for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos += 2) {
+					if (x_display_pos >= border_x_left && (
 							!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)
-						)
-					) {
-						*(pixel_raster_start + x_display_pos) = spritepalette[pixel];
-					}
-
-					if (x_display_pos+1 >= border_x_left && (
+					))
+						*(pixel_raster_start + x_display_pos) = sdl_pixel;
+					if (x_display_pos + 1 >= border_x_left && (
 							!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos + 1] != FOREGROUND_PIXEL)
-						)
-					) {
-						*(pixel_raster_start + x_display_pos + 1) = spritepalette[pixel];
-					}
+					))
+						*(pixel_raster_start + x_display_pos + 1) = sdl_pixel;
 				}
 			}
 		}
-		row_data_ptr++;
 	}
 }
 
@@ -979,7 +963,7 @@ static void vic4_draw_sprite_row_multicolor ( int sprnum, int x_display_pos, con
 static void vic4_draw_sprite_row_mono ( int sprnum, int x_display_pos, const Uint8 *row_data_ptr, int xscale )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
-	const Uint32 sprite_color_pixel_on = spritepalette[SPRITE_COLOR(sprnum)];	// FIXME? are we really limited for the first 16 colours here done by SPRITE_COLOUR() macro (ie, & 0xF) ??
+	const Uint32 sprite_color_pixel_on = spritepalette[SPRITE_COLOR(sprnum)];
 	for (int byte = 0; byte < totalBytes; byte++) {
 		for (int xbit = 0; xbit < 8; xbit++) {
 			const Uint8 pixel = *row_data_ptr & (0x80 >> xbit);
