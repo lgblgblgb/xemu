@@ -63,6 +63,7 @@ static int vicii_first_raster = 7;				// Default for NTSC
 static Uint8 *bitplane_bank_p = main_ram;
 static Uint32 red_colour, black_colour;		// used by "drive LED" stuff
 static Uint8 vic_pixel_readback_result[4];
+static Uint8 vic_color_register_mask = 0xFF;
 
 // --- these things are altered by vic4_open_frame_access() ONLY at every fame ONLY based on PAL or NTSC selection
 Uint8 videostd_id = 0xFF;			// 0=PAL, 1=NTSC [give some insane value by default to force the change at the fist frame after starting Xemu]
@@ -590,12 +591,16 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_ALL(0x2F):	// the KEY register, it must be handled in ALL VIC modes, to be able to set VIC I/O mode
 			do {
 				int vic_new_iomode;
-				if (data == 0x96 && vic_registers[0x2F] == 0xA5)
+				if (data == 0x96 && vic_registers[0x2F] == 0xA5) {
 					vic_new_iomode = VIC3_IOMODE;
-				else if (data == 0x53 && vic_registers[0x2F] == 0x47)
+					vic_color_register_mask = 0xFF;
+				} else if (data == 0x53 && vic_registers[0x2F] == 0x47) {
 					vic_new_iomode = VIC4_IOMODE;
-				else
+					vic_color_register_mask = 0xFF;
+				} else {
 					vic_new_iomode = VIC2_IOMODE;
+					vic_color_register_mask = 0x0F;
+				}
 				if (vic_new_iomode != vic_iomode) {
 					DEBUG("VIC: changing I/O mode %d(%s) -> %d(%s)" NL, vic_iomode, iomode_names[vic_iomode], vic_new_iomode, iomode_names[vic_new_iomode]);
 					vic_iomode = vic_new_iomode;
@@ -897,7 +902,9 @@ static void vic4_draw_sprite_row_16color( int sprnum, int x_display_pos, const U
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const int palindexbase = sprnum * 16 + 128 * (SPRITE_BITPLANE_ENABLE(sprnum) >> sprnum);
-	const Uint8 transparency_palette_index = SPRITE_COLOR(sprnum);	// LGB: in 16 colour sprite mode, sprite colour register gives the transparent colour index
+	// LGB: in 16 colour sprite mode, sprite colour register gives the transparent colour index
+	// We always use the lower 4 bit only at this very specific case, that's the reason for SPRITE_COLOR_4BIT() macro and not SPRITE_COLOR() [which can be 4/8 bit depending on curretn VIC mode)
+	const Uint8 transparency_palette_index = SPRITE_COLOR_4BIT(sprnum);
 	for (int byte = 0; byte < totalBytes; byte++) {
 		const Uint8 c0 = (*(row_data_ptr + byte)) >> 4;
 		const Uint8 c1 = (*(row_data_ptr + byte)) & 0xF;
@@ -930,6 +937,7 @@ static void vic4_draw_sprite_row_16color( int sprnum, int x_display_pos, const U
 static void vic4_draw_sprite_row_multicolor ( int sprnum, int x_display_pos, const Uint8* row_data_ptr, int xscale )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
+	//const Uint32 sprite_colors[3] = { SPRITE_COLOR(sprnum), SPRITE_MULTICOLOR_1, SPRITE_MULTICOLOR_2 };
 	for (int byte = 0; byte < totalBytes; byte++) {
 		for (int xbit = 0; xbit < 8; xbit += 2) {
 			const Uint8 p0 = *row_data_ptr & (0x80 >> xbit);
@@ -943,6 +951,8 @@ static void vic4_draw_sprite_row_multicolor ( int sprnum, int x_display_pos, con
 				pixel = SPRITE_MULTICOLOR_2;
 
 			for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos += 2) {
+				// FIXME: this is wrong, as not index 0 is transparent, but p0/p1 bit combination (IMHO). and pixel can be still zero is sprite colour is palette entry zero,
+				// which then mistakenly won't be rendered!
 				if (pixel) {
 					if (
 						x_display_pos >= border_x_left && (
@@ -1190,6 +1200,7 @@ void vic4_render_char_raster ( void )
 	if (display_row >= 0 && display_row < display_row_count) {
 		colour_ram_current_ptr = colour_ram + COLOUR_RAM_OFFSET + (display_row * CHARSTEP_BYTES);
 		screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row * CHARSTEP_BYTES);
+		// FIXME: this is incorrect, see issue: https://github.com/lgblgblgb/xemu/issues/263
 		const Uint8 *row_data_base_addr = main_ram + (REG_BMM ? VIC2_BITMAP_ADDR : get_charset_effective_addr());
 		// Account for Chargen X-displacement
 		for (Uint32 *p = current_pixel; p < current_pixel + (CHARGEN_X_START - border_x_left); p++)
