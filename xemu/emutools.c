@@ -1290,6 +1290,18 @@ static CHAR sysconsole_getch( void )
 #endif
 
 
+#ifdef XEMU_ARCH_WIN
+static int file_handle_redirect ( const char *target, const char *symname, const char *mode, FILE *handle )
+{
+	if (!freopen(target, mode, handle)) {
+		ERROR_WINDOW("Failed to redirect [%s] to \"%s\"\n%s", symname, target, strerror(errno));
+		return 1;
+	}
+	return 0;
+}
+#endif
+
+
 void sysconsole_close ( const char *waitmsg )
 {
 	if (!sysconsole_is_open)
@@ -1302,6 +1314,14 @@ void sysconsole_close ( const char *waitmsg )
 		while (sysconsole_getch() != 32)
 			;
 	}
+	// redirect std file handled to "NUL" to avoid strange issues after closing the console, like corrupting
+	// other files (for unknown reasons) by further I/O after FreeConsole() ...
+	if (
+		file_handle_redirect(NULL_DEVICE, "stderr", "w", stderr) ||
+		file_handle_redirect(NULL_DEVICE, "stdout", "w", stdout) ||
+		file_handle_redirect(NULL_DEVICE, "stdin",  "r", stdin )
+	)
+		return;	// we want to be sure to abort closing console, if redirection didn't worked for some reason!!
 	if (!FreeConsole()) {
 		if (!waitmsg)
 			ERROR_WINDOW("Cannot release windows console!");
