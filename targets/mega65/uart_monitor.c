@@ -210,7 +210,7 @@ static void execute_command ( comms_details_type *cd, char *cmd )
 			bank = par1 >> 16;
 			if (cmd && check_end_of_command(cmd, 1))
 			{
-				for (int k = 0; k < 32; k++)
+				for (int k = 0; k < 16; k++)
 				{
 					if (bank == 0x777)
 						m65mon_dumpmem16(par1);
