@@ -520,7 +520,8 @@ void m65mon_show_regs ( void )
 		"PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
 		"%04X %02X %02X %02X %02X %02X %04X "		// register banned message and things from PC to SP
 		"%04X %04X %02X       %02X %02X "		// from MAPL to P
-		"%c%c%c%c%c%c%c%c ",				// P-FLAGS
+		"%c%c%c%c%c%c%c%c \r\n"				// P-FLAGS
+		",0777%04X\r\n", // TODO: single line of disassembly
 		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z, cpu65.bphi >> 8, cpu65.sphi | cpu65.s,
 		((map_mask & 0xf0) << 8) | (map_offset_low >> 8),
 		((map_mask & 0x0f) << 12)  | (map_offset_high >> 8),
@@ -533,7 +534,8 @@ void m65mon_show_regs ( void )
 		(pf & CPU65_PF_D) ? 'D' : '-',
 		(pf & CPU65_PF_I) ? 'I' : '-',
 		(pf & CPU65_PF_Z) ? 'Z' : '-',
-		(pf & CPU65_PF_C) ? 'C' : '-'
+		(pf & CPU65_PF_C) ? 'C' : '-',
+		cpu65.pc
 	);
 }
 
@@ -696,6 +698,7 @@ static void emulation_loop ( void )
 		}
 		if (XEMU_UNLIKELY(breakpoint_pc == cpu65.pc)) {
 			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu65.pc);
+			m65mon_show_regs();
 			paused = 1;
 		}
 		cycles += XEMU_UNLIKELY(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
