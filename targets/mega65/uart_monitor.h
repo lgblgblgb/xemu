@@ -25,7 +25,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define UMON_DEFAULT_PORT ":4510"
 
-#define UMON_WRITE_BUFFER_SIZE	0x4000
+// seems as though m65.c actions like fetch_ram(0xFFF8000, 0x4000, hyppo_data)
+// cause a lot of umon_writes to accumulate quickly, so head to increase this buffer
+#define UMON_WRITE_BUFFER_SIZE	0x10000
 
 extern void umon_printf(const char* format, ...);
 

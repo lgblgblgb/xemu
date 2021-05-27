@@ -402,6 +402,8 @@ void uartmon_finish_command ( comms_details_type *cd )
 	}
 	// umon_trigger_end_of_answer = 1;
 	cd->umon_write_buffer[cd->umon_write_size++] = '.';	// add the 'dot prompt'! (m65dbg seems to check LF + dot for end of the answer)
+	cd->umon_write_buffer[cd->umon_write_size++] = '\r';  // I can't seem to see the dot over tcp unless I add a CRLF...
+	cd->umon_write_buffer[cd->umon_write_size++] = '\n';
 	cd->umon_read_pos = 0;
 	cd->umon_echo = 1;
 }
