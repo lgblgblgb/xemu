@@ -881,23 +881,6 @@ Uint8 vic_read_reg ( int unsigned addr )
 #undef CASE_VIC_3_4
 
 
-static inline Uint32 get_charset_effective_addr ( void )
-{
-	// cache this?
-	switch (CHARSET_ADDR) {
-		case 0x1000:
-			return 0x2D000;
-		case 0x9000:
-			return 0x29000;
-		case 0x1800:
-			return 0x2D800;
-		case 0x9800:
-			return 0x29800;
-	}
-	return CHARSET_ADDR;
-}
-
-
 static void vic4_draw_sprite_row_16color( int sprnum, int x_display_pos, const Uint8* row_data_ptr, int xscale )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
@@ -1085,7 +1068,7 @@ static void vic4_render_16color_char_row ( const Uint8* char_row, int glyph_widt
 
 
 // Render a bitplane-mode character cell row
-static void vic4_render_bitplane_char_row ( Uint8* bp_base[8], int glyph_width )
+static XEMU_INLINE void vic4_render_bitplane_char_row ( Uint8* bp_base[8], int glyph_width )
 {
 	const Uint8 bpe_mask = vic_registers[0x32] & (REG_H640 ? 15 : 255);
 	const Uint8 bp_comp = vic_registers[0x3B];
@@ -1125,7 +1108,7 @@ static void vic4_render_bitplane_raster ( void )
 	bp_base[6] = bitplane_bank_p + ((vic_registers[0x39] & (REG_H640 ? 12 : 14)) << 12) + offset;
 	bp_base[7] = bitplane_bank_p + ((vic_registers[0x3A] & (REG_H640 ? 12 : 14)) << 12) + 0x10000 + offset;
 	int line_char_index = 0;
-	while(line_char_index < REG_CHRCOUNT) {
+	while (line_char_index < REG_CHRCOUNT) {
 		vic4_render_bitplane_char_row(bp_base, 8);
 		bp_base[0] += 8;
 		bp_base[1] += 8;
@@ -1143,6 +1126,21 @@ static void vic4_render_bitplane_raster ( void )
 	}
 	while (xcounter++ < border_x_right)
 		*current_pixel++ = palette[REG_SCREEN_COLOR];
+}
+
+
+// TODO: make this register-write time event rather than calling by the scanline renderer again and again ...
+static XEMU_INLINE Uint8 *get_charset_effective_addr ( void )
+{
+	//const Uint8 *row_data_base_addr = main_ram + (REG_BMM ? VIC2_BITMAP_ADDR : get_charset_effective_addr());
+	int addr = VIC2_BITMAP_ADDR;
+	if (!REG_BMM && (addr == 0x1000 || addr == 0x9000 || addr == 0x1800 || addr == 0x9800))
+		return char_wom + (addr & 0xFFF);
+	// FIXME XXX this is a fixed constant for checking.
+	if (XEMU_UNLIKELY(addr >= 0x60000))	// this is valid since we still have got some extra unused RAM left to go beyond actual RAM while bulding the frame
+		return main_ram + 0x60000;	// give some unused ram array of emulaton, thus whatever high value set by user as ADDR, won't overflow during the frame
+	else
+		return main_ram + addr;
 }
 
 
@@ -1164,12 +1162,10 @@ static void vic4_render_char_raster ( void )
 {
 	int line_char_index = 0;
 	enable_bg_paint = 1;
-
 	if (display_row >= 0 && display_row < display_row_count) {
 		colour_ram_current_ptr = colour_ram + COLOUR_RAM_OFFSET + (display_row * CHARSTEP_BYTES);
 		screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row * CHARSTEP_BYTES);
-		// FIXME: this is incorrect, see issue: https://github.com/lgblgblgb/xemu/issues/263
-		const Uint8 *row_data_base_addr = main_ram + (REG_BMM ? VIC2_BITMAP_ADDR : get_charset_effective_addr());
+		const Uint8 *row_data_base_addr = get_charset_effective_addr();
 		// Account for Chargen X-displacement
 		for (Uint32 *p = current_pixel; p < current_pixel + (CHARGEN_X_START - border_x_left); p++)
 			*p = palette[REG_SCREEN_COLOR];
