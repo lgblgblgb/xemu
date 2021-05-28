@@ -578,16 +578,14 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_2(0x28): CASE_VIC_2(0x29): CASE_VIC_2(0x2A): CASE_VIC_2(0x2B): CASE_VIC_2(0x2C): CASE_VIC_2(0x2D): CASE_VIC_2(0x2E):
 			data &= 0xF;	// colour-related registers are 4 bit only for VIC-II
 			break;
+		// Colour registers of VIC seems to be always 8 in VIC-III. It's may be in conflict with c65manual.txt
+		// But anyway, this seems to be MEGA65's way.
+		// Previously this was "gated" with D031.5, however that was not correct!
 		CASE_VIC_3(0x20): CASE_VIC_3(0x21): CASE_VIC_3(0x22): CASE_VIC_3(0x23): CASE_VIC_3(0x24): CASE_VIC_3(0x25): CASE_VIC_3(0x26): CASE_VIC_3(0x27):
 		CASE_VIC_3(0x28): CASE_VIC_3(0x29): CASE_VIC_3(0x2A): CASE_VIC_3(0x2B): CASE_VIC_3(0x2C): CASE_VIC_3(0x2D): CASE_VIC_3(0x2E):
-			// FIXME TODO IS VIC-III also 4 bit only for colour regs?! according to c65manual.txt it seems! However according to M65's implementation it seems not ...
-			// It seems, M65 policy for this VIC-III feature is: enable 8 bit colour entires if D031.5 is set (also extended attributes)
-			if (!(vic_registers[0x31] & 32))
-				data &= 0xF;
-			break;
 		CASE_VIC_4(0x20): CASE_VIC_4(0x21): CASE_VIC_4(0x22): CASE_VIC_4(0x23): CASE_VIC_4(0x24): CASE_VIC_4(0x25): CASE_VIC_4(0x26): CASE_VIC_4(0x27):
 		CASE_VIC_4(0x28): CASE_VIC_4(0x29): CASE_VIC_4(0x2A): CASE_VIC_4(0x2B): CASE_VIC_4(0x2C): CASE_VIC_4(0x2D): CASE_VIC_4(0x2E):
-			break;		// colour-related registers are full 8 bit for VIC-IV
+			break;		// colour-related registers are full 8 bit for VIC-IV and VIC-III
 		CASE_VIC_ALL(0x2F):	// the KEY register, it must be handled in ALL VIC modes, to be able to set VIC I/O mode
 			do {
 				int vic_new_iomode;
@@ -793,18 +791,14 @@ Uint8 vic_read_reg ( int unsigned addr )
 			break;
 		CASE_VIC_2(0x20): CASE_VIC_2(0x21): CASE_VIC_2(0x22): CASE_VIC_2(0x23): CASE_VIC_2(0x24): CASE_VIC_2(0x25): CASE_VIC_2(0x26): CASE_VIC_2(0x27):
 		CASE_VIC_2(0x28): CASE_VIC_2(0x29): CASE_VIC_2(0x2A): CASE_VIC_2(0x2B): CASE_VIC_2(0x2C): CASE_VIC_2(0x2D): CASE_VIC_2(0x2E):
+			// XXX check this!!! I'm not sure if MEGA65 really does this, even though on C64, unused top 4 bits are read as '1'!
 			result |= 0xF0;	// colour-related registers are 4 bit only for VIC-II
 			break;
 		CASE_VIC_3(0x20): CASE_VIC_3(0x21): CASE_VIC_3(0x22): CASE_VIC_3(0x23): CASE_VIC_3(0x24): CASE_VIC_3(0x25): CASE_VIC_3(0x26): CASE_VIC_3(0x27):
 		CASE_VIC_3(0x28): CASE_VIC_3(0x29): CASE_VIC_3(0x2A): CASE_VIC_3(0x2B): CASE_VIC_3(0x2C): CASE_VIC_3(0x2D): CASE_VIC_3(0x2E):
-			// FIXME TODO IS VIC-III also 4 bit only for colour regs?! according to c65manual.txt it seems! However according to M65's implementation it seems not ...
-			// It seems, M65 policy for this VIC-III feature is: enable 8 bit colour entires if D031.5 is set (also extended attributes)
-			if (!(vic_registers[0x31] & 32))
-				result |= 0xF0;
-			break;
 		CASE_VIC_4(0x20): CASE_VIC_4(0x21): CASE_VIC_4(0x22): CASE_VIC_4(0x23): CASE_VIC_4(0x24): CASE_VIC_4(0x25): CASE_VIC_4(0x26): CASE_VIC_4(0x27):
 		CASE_VIC_4(0x28): CASE_VIC_4(0x29): CASE_VIC_4(0x2A): CASE_VIC_4(0x2B): CASE_VIC_4(0x2C): CASE_VIC_4(0x2D): CASE_VIC_4(0x2E):
-			break;		// colour-related registers are full 8 bit for VIC-IV
+			break;		// colour-related registers are full 8 bit for VIC-IV and VIC-III
 		CASE_VIC_ALL(0x2F):	// the KEY register
 			break;
 		CASE_VIC_2(0x30):	// this register is _SPECIAL_, and exists only in VIC-II (C64) I/O mode: C128-style "2MHz fast" mode ...
