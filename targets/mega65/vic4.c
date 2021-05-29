@@ -91,40 +91,8 @@ static void (*vic4_raster_renderer_path)(void) = &vic4_render_char_raster;
 #define TOP_BORDERS_HEIGHT_400		(DISPLAY_HEIGHT - TEXT_HEIGHT_400)
 #define SINGLE_TOP_BORDER_200		(TOP_BORDERS_HEIGHT_200 >> 1)
 #define SINGLE_TOP_BORDER_400		(TOP_BORDERS_HEIGHT_400 >> 1)
+// TODO: move as many things as possible from vic4.h to here which is only used by vic4.c to avoid confusions ...
 
-//#define MAX(a,b) ((a)>(b)?(a):(b))
-
-//#define CHECK_PIXEL_POINTER
-
-
-#ifdef CHECK_PIXEL_POINTER
-/* Temporary hack to be used in renders. Asserts out-of-texture accesses */
-static Uint32 *pixel_pointer_check_base;
-static Uint32 *pixel_pointer_check_end;
-static const char *pixel_pointer_check_modn;
-static inline void PIXEL_POINTER_CHECK_INIT( Uint32 *base, int tail, const char *module )
-{
-	pixel_pointer_check_base = base;
-	pixel_pointer_check_end  = base + (640 + tail) * 200;
-	pixel_pointer_check_modn = module;
-}
-static inline void PIXEL_POINTER_CHECK_ASSERT ( Uint32 *p )
-{
-	if (p < pixel_pointer_check_base)
-		FATAL("FATAL ASSERT: accessing texture (%p) under the base limit (%p).\nIn program module: %s", p, pixel_pointer_check_base, pixel_pointer_check_modn);
-	if (p >= pixel_pointer_check_end)
-		FATAL("FATAL ASSERT: accessing texture (%p) above the upper limit (%p).\nIn program module: %s", p, pixel_pointer_check_end, pixel_pointer_check_modn);
-}
-static inline void PIXEL_POINTER_FINAL_ASSERT ( Uint32 *p )
-{
-	if (p != pixel_pointer_check_end)
-		FATAL("FATAL ASSERT: final texture pointer (%p) is not the same as the desired one (%p),\nIn program module %s", p, pixel_pointer_check_end, pixel_pointer_check_modn);
-}
-#else
-#	define PIXEL_POINTER_CHECK_INIT(base,tail,mod)
-#	define PIXEL_POINTER_CHECK_ASSERT(p)
-#	define PIXEL_POINTER_FINAL_ASSERT(p)
-#endif
 
 static const Uint8 reverse_byte_table[] = {
 	0x00, 0x80, 0x40, 0xc0, 0x20, 0xa0, 0x60, 0xe0,	//0
