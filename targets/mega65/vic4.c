@@ -34,14 +34,14 @@ const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
 // (SDL) target texture rendering pointers
 static Uint32 *current_pixel;					// current_pixel pointer to the rendering target (one current_pixel: 32 bit)
-static Uint32 *pixel_end, *pixel_start;				// points to the end and start of the buffer
+static Uint32 *pixel_start;					// points to the end and start of the buffer
 static Uint32 *pixel_raster_start;				// first pixel of current raster
 Uint8 vic_registers[0x80];					// VIC-4 registers
 int vic_iomode;							// VIC2/VIC3/VIC4 mode
 static int compare_raster;					// raster compare (9 bits width) data
 static int logical_raster = 0;
 static int interrupt_status;					// Interrupt status of VIC
-static int vic4_blink_phase = 0;				// blinking attribute helper, state.
+static int blink_phase = 0;					// blinking attribute helper, state.
 Uint8 c128_d030_reg;						// C128-like register can be only accessed in VIC-II mode but not in others, quite special!
 static Uint8 reg_d018_screen_addr = 0;				// Legacy VIC-II $D018 screen address register
 static int vic_hotreg_touched = 0;				// If any "legacy" registers were touched
@@ -49,11 +49,8 @@ static int vic4_sideborder_touched = 0;				// If side-border register were touch
 static int border_x_left= 0;			 		// Side border left
 static int border_x_right= 0;			 		// Side border right
 static int xcounter = 0, ycounter = 0;				// video counters
-static int frame_counter = 0;
 static int char_row = 0, display_row = 0;
-static Uint8 is_fg[1024];					// this cache helps in sprite rendering, zero means background state, other value: foreground
-static Uint8* screen_ram_current_ptr = NULL;
-static Uint8* colour_ram_current_ptr = NULL;
+static Uint8 is_fg[1024];					// this cache helps in sprite rendering, zero means background state, other value: foreground FIXME: how long this should be? really 1024?
 static float char_x_step = 0.0;
 static int enable_bg_paint = 1;
 static int display_row_count = 0;
@@ -61,7 +58,8 @@ static int max_rasters = PHYSICAL_RASTERS_DEFAULT;
 static int visible_area_height = SCREEN_HEIGHT_VISIBLE_DEFAULT;
 static int vicii_first_raster = 7;				// Default for NTSC
 static Uint8 *bitplane_bank_p = main_ram;
-static Uint32 red_colour, black_colour;		// used by "drive LED" stuff
+static Uint8 *bitplane_p[8];
+static Uint32 red_colour, black_colour;				// used by "drive LED", and cross-hair (only the red) for debug pixel read
 static Uint8 vic_pixel_readback_result[4];
 static Uint8 vic_color_register_mask = 0xFF;
 
@@ -69,7 +67,7 @@ static Uint8 vic_color_register_mask = 0xFF;
 Uint8 videostd_id = 0xFF;			// 0=PAL, 1=NTSC [give some insane value by default to force the change at the fist frame after starting Xemu]
 const char *videostd_name = "<UNDEF>";		// PAL or NTSC, however initially is not yet set
 int videostd_frametime = NTSC_FRAME_TIME;	// time in microseconds for a frame to produce
-float videostd_1mhz_cycles_per_scanline = 32.0;	// have *some* value to jumpstart emulation, it will be overriden sooner or later XXX FIXME: why it does not work with zero value when it's overriden anyway?!?!
+float videostd_1mhz_cycles_per_scanline = 32.0;	// have some value to jumpstart emulation, it will be overriden sooner or later XXX FIXME: why it does not work with zero value when it's overriden anyway?!
 int videostd_changed = 0;
 static const char NTSC_STD_NAME[] = "NTSC";
 static const char PAL_STD_NAME[] = "PAL";
@@ -148,7 +146,7 @@ void vic_reset ( void )
 }
 
 
-static void vic4_reset_display_counters ( void )
+static inline void vic4_reset_display_counters ( void )
 {
 	xcounter = 0;
 	display_row = 0;
@@ -168,8 +166,6 @@ void vic_init ( void )
 	vic_reset();
 	c128_d030_reg = 0xFE;	// this may be set to 2MHz in the previous step, so be sure to set to FF here, BUT FIX: bit 0 should be inverted!!
 	machine_set_speed(0);
-	screen_ram_current_ptr = main_ram + SCREEN_ADDR;
-	colour_ram_current_ptr = colour_ram;
 	vic4_reset_display_counters();
 	DEBUG("VIC4: has been initialized." NL);
 }
@@ -342,8 +338,7 @@ void vic4_open_frame_access ( void )
 {
 	int tail_sdl;
 	current_pixel = pixel_start = xemu_start_pixel_buffer_access(&tail_sdl);
-	pixel_end = current_pixel + (TEXTURE_WIDTH * max_rasters);
-	if (tail_sdl)
+	if (XEMU_UNLIKELY(tail_sdl))
 		FATAL("tail_sdl is not zero!");
 	// Now check the video mode: NTSC or PAL
 	// Though it can be changed any time, this kind of information really only can be applied
@@ -379,6 +374,8 @@ void vic4_open_frame_access ( void )
 		vic_readjust_sdl_viewport = 1;
 		vicii_first_raster = vic_registers[0x6F] & 0x1F;
 		if (!in_hypervisor) {
+			// FIXME: later it can be a problem that a very brief transition to hypervisor mode and back (ie a quick trap) may be triggered within a single frame without
+			// ever hitting this point (?!)
 			vic4_update_sideborder_dimensions();
 			vic4_update_vertical_borders();
 		}
@@ -968,7 +965,7 @@ static void vic4_render_mono_char_row ( Uint8 char_byte, int glyph_width, Uint8 
 			char_byte = 0xFF;
 		if (VIC3_ATTR_REVERSE(vic3attr))
 			char_byte = ~char_byte;
-		if (VIC3_ATTR_BLINK(vic3attr) && vic4_blink_phase)
+		if (VIC3_ATTR_BLINK(vic3attr) && blink_phase)
 			char_byte = VIC3_ATTR_REVERSE(vic3attr) ? ~char_byte : 0;
 		if (VIC3_ATTR_BOLD(vic3attr))
 			fg_color |= 0x10;
@@ -992,7 +989,7 @@ static void vic4_render_mono_char_row ( Uint8 char_byte, int glyph_width, Uint8 
 }
 
 
-static void vic4_render_multicolor_char_row ( Uint8 char_byte, int glyph_width, const Uint8 color_source[4] )
+static void vic4_render_multicolor_char_row ( const Uint8 char_byte, const int glyph_width, const Uint8 color_source[4] )
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		const Uint8 bitsel = 2 * (int)(cx / 2);
@@ -1004,7 +1001,7 @@ static void vic4_render_multicolor_char_row ( Uint8 char_byte, int glyph_width, 
 
 
 // 8-bytes per row
-static void vic4_render_fullcolor_char_row ( const Uint8* char_row, int glyph_width )
+static void vic4_render_fullcolor_char_row ( const Uint8* char_row, const int glyph_width )
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		const Uint8 char_data = char_row[(int)cx];
@@ -1015,7 +1012,7 @@ static void vic4_render_fullcolor_char_row ( const Uint8* char_row, int glyph_wi
 
 
 // 16-color (Nybl) mode (4-bit per pixel / 16 pixel wide characters)
-static void vic4_render_16color_char_row ( const Uint8* char_row, int glyph_width )
+static void vic4_render_16color_char_row ( const Uint8* char_row, const int glyph_width )
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		Uint8 char_data = char_row[((int)cx) / 2];
@@ -1029,57 +1026,54 @@ static void vic4_render_16color_char_row ( const Uint8* char_row, int glyph_widt
 }
 
 
+static XEMU_INLINE void set_bitplane_pointers ( void )
+{
+	// Get Bitplane source addresses
+	/* TODO: Cache the following reads & EA calculation */
+	bitplane_p[0] = bitplane_bank_p + ((vic_registers[0x33] & (REG_H640 ? 12 : 14)) << 12);
+	bitplane_p[1] = bitplane_bank_p + ((vic_registers[0x34] & (REG_H640 ? 12 : 14)) << 12) + 0x10000;
+	bitplane_p[2] = bitplane_bank_p + ((vic_registers[0x35] & (REG_H640 ? 12 : 14)) << 12);
+	bitplane_p[3] = bitplane_bank_p + ((vic_registers[0x36] & (REG_H640 ? 12 : 14)) << 12) + 0x10000;
+	bitplane_p[4] = bitplane_bank_p + ((vic_registers[0x37] & (REG_H640 ? 12 : 14)) << 12);
+	bitplane_p[5] = bitplane_bank_p + ((vic_registers[0x38] & (REG_H640 ? 12 : 14)) << 12) + 0x10000;
+	bitplane_p[6] = bitplane_bank_p + ((vic_registers[0x39] & (REG_H640 ? 12 : 14)) << 12);
+	bitplane_p[7] = bitplane_bank_p + ((vic_registers[0x3A] & (REG_H640 ? 12 : 14)) << 12) + 0x10000;
+}
+
+
 // Render a bitplane-mode character cell row
-static XEMU_INLINE void vic4_render_bitplane_char_row ( Uint8* bp_base[8], int glyph_width )
+static XEMU_INLINE void vic4_render_bitplane_char_row ( const Uint32 offset, const int glyph_width )
 {
 	const Uint8 bpe_mask = vic_registers[0x32] & (REG_H640 ? 15 : 255);
-	const Uint8 bp_comp = vic_registers[0x3B];
-
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		const Uint8 bitsel = 0x80 >> ((int)cx);
-		const Uint32 pixel_color = palette[
+		*(current_pixel++) = palette[
 			((
-				((*bp_base[0] & bitsel) ?   1 : 0) |
-				((*bp_base[1] & bitsel) ?   2 : 0) |
-				((*bp_base[2] & bitsel) ?   4 : 0) |
-				((*bp_base[3] & bitsel) ?   8 : 0) |
-				((*bp_base[4] & bitsel) ?  16 : 0) |
-				((*bp_base[5] & bitsel) ?  32 : 0) |
-				((*bp_base[6] & bitsel) ?  64 : 0) |
-				((*bp_base[7] & bitsel) ? 128 : 0)
-			) & bpe_mask) ^ bp_comp
+				((*(bitplane_p[0] + offset) & bitsel) ?   1 : 0) |
+				((*(bitplane_p[1] + offset) & bitsel) ?   2 : 0) |
+				((*(bitplane_p[2] + offset) & bitsel) ?   4 : 0) |
+				((*(bitplane_p[3] + offset) & bitsel) ?   8 : 0) |
+				((*(bitplane_p[4] + offset) & bitsel) ?  16 : 0) |
+				((*(bitplane_p[5] + offset) & bitsel) ?  32 : 0) |
+				((*(bitplane_p[6] + offset) & bitsel) ?  64 : 0) |
+				((*(bitplane_p[7] + offset) & bitsel) ? 128 : 0)
+			) & bpe_mask) ^ vic_registers[0x3B]
 		];
-		*(current_pixel++) = pixel_color;
-		is_fg[xcounter++] = (*bp_base[2] & bitsel);
+		is_fg[xcounter++] = (*(bitplane_p[2] + offset) & bitsel);
 	}
 }
 
 
 static void vic4_render_bitplane_raster ( void )
 {
-	Uint8* bp_base[8];
-	// Get Bitplane source addresses
-	/* TODO: Cache the following reads & EA calculation */
-	const Uint32 offset = display_row * REG_CHRCOUNT * 8 + char_row ;
-	bp_base[0] = bitplane_bank_p + ((vic_registers[0x33] & (REG_H640 ? 12 : 14)) << 12) + offset;
-	bp_base[1] = bitplane_bank_p + ((vic_registers[0x34] & (REG_H640 ? 12 : 14)) << 12) + 0x10000 + offset;
-	bp_base[2] = bitplane_bank_p + ((vic_registers[0x35] & (REG_H640 ? 12 : 14)) << 12) + offset;
-	bp_base[3] = bitplane_bank_p + ((vic_registers[0x36] & (REG_H640 ? 12 : 14)) << 12) + 0x10000 + offset;
-	bp_base[4] = bitplane_bank_p + ((vic_registers[0x37] & (REG_H640 ? 12 : 14)) << 12) + offset;
-	bp_base[5] = bitplane_bank_p + ((vic_registers[0x38] & (REG_H640 ? 12 : 14)) << 12) + 0x10000 + offset;
-	bp_base[6] = bitplane_bank_p + ((vic_registers[0x39] & (REG_H640 ? 12 : 14)) << 12) + offset;
-	bp_base[7] = bitplane_bank_p + ((vic_registers[0x3A] & (REG_H640 ? 12 : 14)) << 12) + 0x10000 + offset;
+	// FIXME: do not call this function here, but from actual register writes only
+	// which can affect the result of this function!!
+	set_bitplane_pointers();
+	Uint32 offset = display_row * REG_CHRCOUNT * 8 + char_row ;
 	int line_char_index = 0;
 	while (line_char_index < REG_CHRCOUNT) {
-		vic4_render_bitplane_char_row(bp_base, 8);
-		bp_base[0] += 8;
-		bp_base[1] += 8;
-		bp_base[2] += 8;
-		bp_base[3] += 8;
-		bp_base[4] += 8;
-		bp_base[5] += 8;
-		bp_base[6] += 8;
-		bp_base[7] += 8;
+		vic4_render_bitplane_char_row(offset, 8);
+		offset += 8;
 		line_char_index++;
 	}
 	if (++char_row > 7) {
@@ -1099,7 +1093,7 @@ static XEMU_INLINE Uint8 *get_charset_effective_addr ( void )
 	if (!REG_BMM && (addr == 0x1000 || addr == 0x9000 || addr == 0x1800 || addr == 0x9800))
 		return char_wom + (addr & 0xFFF);
 	// FIXME XXX this is a fixed constant for checking.
-	if (XEMU_UNLIKELY(addr >= 0x60000))	// this is valid since we still have got some extra unused RAM left to go beyond actual RAM while bulding the frame
+	if (XEMU_UNLIKELY(addr > 0x60000))	// this is valid since we still have got some extra unused RAM left to go beyond actual RAM while bulding the frame
 		return main_ram + 0x60000;	// give some unused ram array of emulaton, thus whatever high value set by user as ADDR, won't overflow during the frame
 	else
 		return main_ram + addr;
@@ -1125,8 +1119,8 @@ static void vic4_render_char_raster ( void )
 	int line_char_index = 0;
 	enable_bg_paint = 1;
 	if (display_row >= 0 && display_row < display_row_count) {
-		colour_ram_current_ptr = colour_ram + COLOUR_RAM_OFFSET + (display_row * CHARSTEP_BYTES);
-		screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row * CHARSTEP_BYTES);
+		Uint8 *colour_ram_current_ptr = colour_ram + COLOUR_RAM_OFFSET + (display_row * CHARSTEP_BYTES);
+		Uint8 *screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row * CHARSTEP_BYTES);
 		const Uint8 *row_data_base_addr = get_charset_effective_addr();
 		// Account for Chargen X-displacement
 		for (Uint32 *p = current_pixel; p < current_pixel + (CHARGEN_X_START - border_x_left); p++)
@@ -1183,7 +1177,7 @@ static void vic4_render_char_raster ( void )
 						REG_SCREEN_COLOR,	// 00
 						char_value >> 4,	// 01
 						char_value & 0xF,	// 10
-						color_data & 0xF	// 11
+						color_data & 0xF	// 11 - FIXME: is this &0xF always? ie what about 256 colours, does not apply here EVER?
 					};
 					vic4_render_multicolor_char_row(char_byte, glyph_width, color_source);
 				} else {
@@ -1261,13 +1255,12 @@ int vic4_render_scanline ( void )
 	ycounter++;
 	// End of frame?
 	if (ycounter == max_rasters) {
+		static int blink_frame_counter = 0;
 		vic4_reset_display_counters();
-		screen_ram_current_ptr = main_ram + SCREEN_ADDR;
-		colour_ram_current_ptr = colour_ram + COLOUR_RAM_OFFSET;
-		frame_counter++;
-		if (frame_counter == VIC4_BLINK_INTERVAL) {
-			frame_counter = 0;
-			vic4_blink_phase = !vic4_blink_phase;
+		blink_frame_counter++;
+		if (blink_frame_counter == VIC4_BLINK_INTERVAL) {
+			blink_frame_counter = 0;
+			blink_phase = !blink_phase;
 		}
 		return 1;
 	}
