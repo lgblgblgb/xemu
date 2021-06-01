@@ -989,7 +989,7 @@ static void vic4_render_mono_char_row ( Uint8 char_byte, int glyph_width, Uint8 
 }
 
 
-static void vic4_render_multicolor_char_row ( const Uint8 char_byte, const int glyph_width, const Uint8 color_source[4] )
+static inline void vic4_render_multicolor_char_row ( const Uint8 char_byte, const int glyph_width, const Uint8 color_source[4] )
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		const Uint8 bitsel = 2 * (int)(cx / 2);
@@ -1001,7 +1001,7 @@ static void vic4_render_multicolor_char_row ( const Uint8 char_byte, const int g
 
 
 // 8-bytes per row
-static void vic4_render_fullcolor_char_row ( const Uint8* char_row, const int glyph_width )
+static inline void vic4_render_fullcolor_char_row ( const Uint8* char_row, const int glyph_width )
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		const Uint8 char_data = char_row[(int)cx];
@@ -1012,7 +1012,7 @@ static void vic4_render_fullcolor_char_row ( const Uint8* char_row, const int gl
 
 
 // 16-color (Nybl) mode (4-bit per pixel / 16 pixel wide characters)
-static void vic4_render_16color_char_row ( const Uint8* char_row, const int glyph_width )
+static inline void vic4_render_16color_char_row ( const Uint8* char_row, const int glyph_width )
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		Uint8 char_data = char_row[((int)cx) / 2];
@@ -1030,14 +1030,17 @@ static XEMU_INLINE void set_bitplane_pointers ( void )
 {
 	// Get Bitplane source addresses
 	/* TODO: Cache the following reads & EA calculation */
-	bitplane_p[0] = bitplane_bank_p + ((vic_registers[0x33] & (REG_H640 ? 12 : 14)) << 12);
-	bitplane_p[1] = bitplane_bank_p + ((vic_registers[0x34] & (REG_H640 ? 12 : 14)) << 12) + 0x10000;
-	bitplane_p[2] = bitplane_bank_p + ((vic_registers[0x35] & (REG_H640 ? 12 : 14)) << 12);
-	bitplane_p[3] = bitplane_bank_p + ((vic_registers[0x36] & (REG_H640 ? 12 : 14)) << 12) + 0x10000;
-	bitplane_p[4] = bitplane_bank_p + ((vic_registers[0x37] & (REG_H640 ? 12 : 14)) << 12);
-	bitplane_p[5] = bitplane_bank_p + ((vic_registers[0x38] & (REG_H640 ? 12 : 14)) << 12) + 0x10000;
-	bitplane_p[6] = bitplane_bank_p + ((vic_registers[0x39] & (REG_H640 ? 12 : 14)) << 12);
-	bitplane_p[7] = bitplane_bank_p + ((vic_registers[0x3A] & (REG_H640 ? 12 : 14)) << 12) + 0x10000;
+	const int and_mask = (REG_H640 ? 12 : 14);
+	//for (int i = 0; i < 8; i++)
+	//	bitplane_p[i] = bitplane_bank_p + ((vic_registers[0x33 + i] & and_mask) << 12) + ((i & 1) << 16);
+	bitplane_p[0] = bitplane_bank_p + ((vic_registers[0x33] & and_mask) << 12);
+	bitplane_p[1] = bitplane_bank_p + ((vic_registers[0x34] & and_mask) << 12) + 0x10000;
+	bitplane_p[2] = bitplane_bank_p + ((vic_registers[0x35] & and_mask) << 12);
+	bitplane_p[3] = bitplane_bank_p + ((vic_registers[0x36] & and_mask) << 12) + 0x10000;
+	bitplane_p[4] = bitplane_bank_p + ((vic_registers[0x37] & and_mask) << 12);
+	bitplane_p[5] = bitplane_bank_p + ((vic_registers[0x38] & and_mask) << 12) + 0x10000;
+	bitplane_p[6] = bitplane_bank_p + ((vic_registers[0x39] & and_mask) << 12);
+	bitplane_p[7] = bitplane_bank_p + ((vic_registers[0x3A] & and_mask) << 12) + 0x10000;
 }
 
 
@@ -1047,16 +1050,15 @@ static XEMU_INLINE void vic4_render_bitplane_char_row ( const Uint32 offset, con
 	const Uint8 bpe_mask = vic_registers[0x32] & (REG_H640 ? 15 : 255);
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		const Uint8 bitsel = 0x80 >> ((int)cx);
-		*(current_pixel++) = palette[
-			((
-				((*(bitplane_p[0] + offset) & bitsel) ?   1 : 0) |
-				((*(bitplane_p[1] + offset) & bitsel) ?   2 : 0) |
-				((*(bitplane_p[2] + offset) & bitsel) ?   4 : 0) |
-				((*(bitplane_p[3] + offset) & bitsel) ?   8 : 0) |
-				((*(bitplane_p[4] + offset) & bitsel) ?  16 : 0) |
-				((*(bitplane_p[5] + offset) & bitsel) ?  32 : 0) |
-				((*(bitplane_p[6] + offset) & bitsel) ?  64 : 0) |
-				((*(bitplane_p[7] + offset) & bitsel) ? 128 : 0)
+		*(current_pixel++) = palette[((			// Do not try this at home ...
+			((*(bitplane_p[0] + offset) & bitsel) ?   1 : 0) |
+			((*(bitplane_p[1] + offset) & bitsel) ?   2 : 0) |
+			((*(bitplane_p[2] + offset) & bitsel) ?   4 : 0) |
+			((*(bitplane_p[3] + offset) & bitsel) ?   8 : 0) |
+			((*(bitplane_p[4] + offset) & bitsel) ?  16 : 0) |
+			((*(bitplane_p[5] + offset) & bitsel) ?  32 : 0) |
+			((*(bitplane_p[6] + offset) & bitsel) ?  64 : 0) |
+			((*(bitplane_p[7] + offset) & bitsel) ? 128 : 0)
 			) & bpe_mask) ^ vic_registers[0x3B]
 		];
 		is_fg[xcounter++] = (*(bitplane_p[2] + offset) & bitsel);
