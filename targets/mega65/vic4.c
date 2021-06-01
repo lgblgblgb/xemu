@@ -1012,7 +1012,7 @@ static inline void vic4_render_fullcolor_char_row ( const Uint8* char_row, const
 
 
 // 16-color (Nybl) mode (4-bit per pixel / 16 pixel wide characters)
-static XEMU_INLINE void vic4_render_16color_char_row ( const Uint8* char_row, const int glyph_width, const Uint8 bg_color, const int palette_offset )
+static XEMU_INLINE void vic4_render_16color_char_row ( const Uint8* char_row, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 *palette16 )
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		Uint8 char_data = char_row[((int)cx) / 2];
@@ -1020,14 +1020,12 @@ static XEMU_INLINE void vic4_render_16color_char_row ( const Uint8* char_row, co
 			char_data >>= 4;
 		else
 			char_data &= 0xf;
-		// FIXME: this is really costy, originally it was only: *current_pixel++ = palette[char_data];
-		if (XEMU_LIKELY(enable_bg_paint))
-			*current_pixel = palette[char_data ? char_data + palette_offset : bg_color];
-		else if (char_data)
-			*current_pixel = palette[char_data + palette_offset];
-		current_pixel++;
-		// END of FIXME
 		is_fg[xcounter++] = char_data;
+		if (char_data)
+			*current_pixel = palette16[char_data];
+		else if (enable_bg_paint)
+			*current_pixel = bg_sdl_color;
+		current_pixel++;
 	}
 }
 
@@ -1176,7 +1174,7 @@ static void vic4_render_char_raster ( void )
 				char_byte = reverse_byte_table[char_byte];	// LGB: I killed the function, and type-conv, as char_byte is byte, OK to index as-is
 			// Render character cell row
 			if (SXA_4BIT_PER_PIXEL(color_data)) {	// 16-color character
-				vic4_render_16color_char_row(main_ram + (((char_id * 64) + (sel_char_row * 8) ) & 0x7FFFF), glyph_width, char_bgcolor, color_data & 0xF0);
+				vic4_render_16color_char_row(main_ram + (((char_id * 64) + (sel_char_row * 8) ) & 0x7FFFF), glyph_width, palette[char_bgcolor], palette + (color_data & 0xF0));
 			} else if (CHAR_IS256_COLOR(char_id)) {	// 256-color character
 				vic4_render_fullcolor_char_row(main_ram + (((char_id * 64) + (sel_char_row * 8) ) & 0x7FFFF), 8);
 			} else if ((REG_MCM && (char_fgcolor & 8)) || (REG_MCM && REG_BMM)) {	// Multicolor character
