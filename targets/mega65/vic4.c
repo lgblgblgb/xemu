@@ -840,7 +840,7 @@ Uint8 vic_read_reg ( int unsigned addr )
 #undef CASE_VIC_3_4
 
 
-static void vic4_draw_sprite_row_16color( int sprnum, int x_display_pos, const Uint8* row_data_ptr, int xscale )
+static XEMU_INLINE void vic4_draw_sprite_row_16color( int sprnum, int x_display_pos, const Uint8* row_data_ptr, int xscale )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const int palindexbase = sprnum * 16 + 128 * (SPRITE_BITPLANE_ENABLE(sprnum) >> sprnum);
@@ -866,7 +866,7 @@ static void vic4_draw_sprite_row_16color( int sprnum, int x_display_pos, const U
 }
 
 
-static void vic4_draw_sprite_row_multicolor ( int sprnum, int x_display_pos, const Uint8* row_data_ptr, int xscale )
+static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( int sprnum, int x_display_pos, const Uint8* row_data_ptr, int xscale )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const Uint8 mcm_spr_pal_indices[4] = { 0, SPRITE_MULTICOLOR_1, SPRITE_COLOR(sprnum), SPRITE_MULTICOLOR_2 };	// entry zero is not used
@@ -892,7 +892,7 @@ static void vic4_draw_sprite_row_multicolor ( int sprnum, int x_display_pos, con
 }
 
 
-static void vic4_draw_sprite_row_mono ( int sprnum, int x_display_pos, const Uint8 *row_data_ptr, int xscale )
+static XEMU_INLINE void vic4_draw_sprite_row_mono ( int sprnum, int x_display_pos, const Uint8 *row_data_ptr, int xscale )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const Uint32 sdl_pixel = spritepalette[SPRITE_COLOR(sprnum)];
@@ -912,7 +912,7 @@ static void vic4_draw_sprite_row_mono ( int sprnum, int x_display_pos, const Uin
 }
 
 
-static void vic4_do_sprites ( void )
+static XEMU_INLINE void vic4_do_sprites ( void )
 {
 	// Fetch and sequence sprites.
 	//
@@ -1096,6 +1096,9 @@ static XEMU_INLINE Uint8 *get_charset_effective_addr ( void )
 {
 	//const Uint8 *row_data_base_addr = main_ram + (REG_BMM ? VIC2_BITMAP_ADDR : get_charset_effective_addr());
 	int addr = VIC2_BITMAP_ADDR;
+	// Note: in theory on C65 there is a bit for choose between two charsets (rather than only lower/upper case)
+	// See: https://github.com/lgblgblgb/xemu/issues/213
+	// However it seems even MEGA65 does not support this.
 	if (!REG_BMM && (addr == 0x1000 || addr == 0x9000 || addr == 0x1800 || addr == 0x9800))
 		return char_wom + (addr & 0xFFF);
 	// FIXME XXX this is a fixed constant for checking.
@@ -1144,8 +1147,9 @@ static void vic4_render_char_raster ( void )
 				char_value = char_value | (*(screen_ram_current_ptr++) << 8);
 
 				if (SXA_GOTO_X(color_data)) {
-					current_pixel = pixel_raster_start + xcounter_start + (char_value & 0x3FF);
-					xcounter = xcounter_start + (char_value & 0x3FF);
+					// FIXME: I am not sure if it cannot cause out-of-bound access later with some extreme "GOTOX" in H320 mode
+					xcounter = xcounter_start + (char_value & 0x3FF) * (REG_H640 ? 1 : 2);
+					current_pixel = pixel_raster_start + xcounter;
 					line_char_index++;
 
 					if (SXA_VERTICAL_FLIP(color_data))
@@ -1167,7 +1171,7 @@ static void vic4_render_char_raster ( void )
 			if (SXA_VERTICAL_FLIP(color_data))
 				sel_char_row = 7 - char_row;
 			if (REG_BMM)
-				char_byte = *(row_data_base_addr + display_row * 320 + 8 * line_char_index + sel_char_row);
+				char_byte = *(row_data_base_addr + display_row * 320 + 8 * line_char_index + sel_char_row); // this is BAD I guess assuming 320 pixel, can be anything ... (?)
 			else
 				char_byte = *(row_data_base_addr + (char_id * 8) + sel_char_row);
 			if (SXA_HORIZONTAL_FLIP(color_data))
@@ -1261,8 +1265,8 @@ int vic4_render_scanline ( void )
 	ycounter++;
 	// End of frame?
 	if (ycounter == max_rasters) {
-		static int blink_frame_counter = 0;
 		vic4_reset_display_counters();
+		static int blink_frame_counter = 0;
 		blink_frame_counter++;
 		if (blink_frame_counter == VIC4_BLINK_INTERVAL) {
 			blink_frame_counter = 0;
