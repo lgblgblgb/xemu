@@ -1012,14 +1012,23 @@ static inline void vic4_render_fullcolor_char_row ( const Uint8* char_row, const
 
 
 // 16-color (Nybl) mode (4-bit per pixel / 16 pixel wide characters)
-static XEMU_INLINE void vic4_render_16color_char_row ( const Uint8* char_row, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 *palette16 )
+static XEMU_INLINE void vic4_render_16color_char_row ( const Uint8* char_row, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 *palette16, const int hflip )
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
-		Uint8 char_data = char_row[((int)cx) / 2];
-		if (((int)cx) & 1)
-			char_data >>= 4;
-		else
-			char_data &= 0xf;
+		Uint8 char_data;
+		if (XEMU_LIKELY(!hflip)) {
+			char_data = char_row[((int)cx) / 2];
+			if (((int)cx) & 1)
+				char_data >>= 4;
+			else
+				char_data &= 0xf;
+		} else {
+			char_data = char_row[glyph_width / 2 - 1 - (((int)cx) / 2)];
+			if (((int)cx) & 1)
+				char_data &= 0xf;
+			else
+				char_data >>= 4;
+		}
 		is_fg[xcounter++] = char_data;
 		if (char_data)
 			*current_pixel = palette16[char_data];
@@ -1179,7 +1188,7 @@ static void vic4_render_char_raster ( void )
 				char_byte = reverse_byte_table[char_byte];	// LGB: I killed the function, and type-conv, as char_byte is byte, OK to index as-is
 			// Render character cell row
 			if (SXA_4BIT_PER_PIXEL(color_data)) {	// 16-color character
-				vic4_render_16color_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), glyph_width, palette[char_bgcolor], palette + (color_data & 0xF0));
+				vic4_render_16color_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), glyph_width, palette[char_bgcolor], palette + (color_data & 0xF0), SXA_HORIZONTAL_FLIP(color_data));
 			} else if (CHAR_IS256_COLOR(char_id)) {	// 256-color character
 				vic4_render_fullcolor_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), 8);
 			} else if ((REG_MCM && (char_fgcolor & 8)) || (REG_MCM && REG_BMM)) {	// Multicolor character
