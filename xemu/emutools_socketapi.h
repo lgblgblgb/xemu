@@ -29,6 +29,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define	XSEINPROGRESS		WSAEINPROGRESS
 #	define	XSEALREADY		WSAEALREADY
 #	define	XSEINTR			WSAEINTR
+#	define	XSECONNRESET		WSAECONNRESET
+#	define	XSECONNABORTED		WSAECONNABORTED
 #	define	XS_INVALID_SOCKET	INVALID_SOCKET
 #	define	XS_SOCKET_ERROR		SOCKET_ERROR
 #	define	SHUT_RDWR		SD_BOTH
@@ -45,6 +47,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define	XSEINPROGRESS		EINPROGRESS
 #	define	XSEALREADY		EALREADY
 #	define	XSEINTR			EINTR
+#	define	XSECONNRESET		ECONNRESET
+#	define	XSECONNABORTED		ECONNABORTED
 #	define	XS_INVALID_SOCKET	-1
 #	define	XS_SOCKET_ERROR		-1
 #	define	xemusock_strerror(_n)	strerror(_n)
