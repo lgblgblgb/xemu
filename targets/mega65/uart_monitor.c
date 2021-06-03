@@ -488,7 +488,7 @@ int write_to_socket(comms_details_type *cd)
       cd->sock_client, cd->umon_write_pos, cd->umon_write_size,
       ret, ret == XS_SOCKET_ERROR ? xemusock_strerror(xerr) : "OK"
     );
-	if (ret == 0 || xerr == 10054 /*ECONNRESET*/ || xerr == 10053 /*ECONNABORTED*/) { // client socket closed
+	if (ret == 0 || xerr == XSECONNRESET || xerr == XSECONNABORTED) { // client socket closed
     xemusock_close(cd->sock_client, NULL);
     cd->sock_client = UNCONNECTED;
     DEBUGPRINT("UARTMON: connection closed by peer while writing" NL);
@@ -587,7 +587,7 @@ void read_from_socket(comms_details_type *cd)
 			cd->sock_client, cd->umon_read_pos, (int)sizeof(cd->umon_read_buffer) - cd->umon_read_pos - 1,
 			ret, ret == XS_SOCKET_ERROR ? xemusock_strerror(xerr) : "OK"
 		);
-	if (ret == 0 || xerr == 10054 /*ECONNRESET*/ || xerr == 10053 /*ECONNABORTED*/) { // client socket closed
+	if (ret == 0 || xerr == XSECONNRESET || xerr == XSECONNABORTED) { // client socket closed
 		xemusock_close(cd->sock_client, NULL);
 		cd->sock_client = UNCONNECTED;
 		DEBUGPRINT("UARTMON: connection closed by peer while reading" NL);
