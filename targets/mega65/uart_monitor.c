@@ -336,10 +336,12 @@ int uartmon_init ( const char *fn )
       ERROR_WINDOW("On non-UNIX systems, you must use TCP/IP sockets, so uartmon parameter must be in form of :n (n=port number to bind to)\nUARTMON is not available because of bad syntax.");
       return 1;
 #else
+      if (idx != 0) // just open one socket for unix
+        continue;
       // This is UNIX specific code (UNIX named socket) thus it's OK not use Xemu socket API calls here.
       // Note: on longer term, we want to drop this, and allow only TCP sockets to be more unified and simple.
       struct sockaddr_un sock_st;
-      sock_len = sizeof(struct sockaddr_un);
+      comdet[idx].sock_len = sizeof(struct sockaddr_un);
       sock = socket(AF_UNIX, SOCK_STREAM, 0);
       if (sock < 0) {
         ERROR_WINDOW("Cannot create named socket %s, UART monitor cannot be used: %s", fn, strerror(errno));
@@ -470,9 +472,9 @@ void write_hypervisor_byte(char byte)
       if (!comdet[idx].umon_send_ok)
         continue;
 
-      int ret, xerr;
+      int xerr;
 
-      ret = xemusock_send(comdet[idx].sock_client, &byte, 1, &xerr);
+      xemusock_send(comdet[idx].sock_client, &byte, 1, &xerr);
     }
 }
 
@@ -483,12 +485,13 @@ int write_to_socket(comms_details_type *cd)
   if (!cd->umon_send_ok)
     return 0;
   ret = xemusock_send(cd->sock_client, cd->umon_write_buffer + cd->umon_write_pos, cd->umon_write_size, &xerr);
-  if (ret != XS_SOCKET_ERROR || (ret == XS_SOCKET_ERROR && !xemusock_should_repeat_from_error(xerr)))
+  if (ret != XS_SOCKET_ERROR || (ret == XS_SOCKET_ERROR && !xemusock_should_repeat_from_error(xerr))) {
     DEBUG("UARTMON: write(" PRINTF_SOCK ",buffer+%d,%d)=%d (%s)" NL,
       cd->sock_client, cd->umon_write_pos, cd->umon_write_size,
       ret, ret == XS_SOCKET_ERROR ? xemusock_strerror(xerr) : "OK"
     );
-	if (ret == 0 || xerr == XSECONNRESET || xerr == XSECONNABORTED) { // client socket closed
+  }
+  if (ret == 0 || xerr == XSECONNRESET || xerr == XSECONNABORTED) { // client socket closed
     xemusock_close(cd->sock_client, NULL);
     cd->sock_client = UNCONNECTED;
     DEBUGPRINT("UARTMON: connection closed by peer while writing" NL);
@@ -547,7 +550,7 @@ int read_loadcmd_data(comms_details_type *cd, char* buff, int count)
 
   while (count != 0)
   {
-    m65mon_setmem28(cd->loadcmdcurraddr, 1, p);
+    m65mon_setmem28(cd->loadcmdcurraddr, 1, (Uint8*)p);
     cd->loadcmdcurraddr++;
     p++;
     count--;
