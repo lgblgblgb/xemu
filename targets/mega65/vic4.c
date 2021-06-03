@@ -1001,11 +1001,17 @@ static inline void vic4_render_multicolor_char_row ( const Uint8 char_byte, cons
 
 
 // 8-bytes per row
-static inline void vic4_render_fullcolor_char_row ( const Uint8* char_row, const int glyph_width )
+static XEMU_INLINE void vic4_render_fullcolor_char_row ( const Uint8* char_row, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 fg_sdl_color, const int hflip )
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
-		const Uint8 char_data = char_row[(int)cx];
-		*(current_pixel++) = palette[char_data];
+		const Uint8 char_data = char_row[XEMU_LIKELY(!hflip) ? (int)cx : glyph_width - 1 - (int)cx];
+		if (char_data == 0xFF)
+			*current_pixel = fg_sdl_color;
+		else if (char_data)
+			*current_pixel = palette[char_data];
+		else if (enable_bg_paint)
+			*current_pixel = bg_sdl_color;
+		current_pixel++;
 		is_fg[xcounter++] = char_data;
 	}
 }
@@ -1190,7 +1196,9 @@ static void vic4_render_char_raster ( void )
 			if (SXA_4BIT_PER_PIXEL(color_data)) {	// 16-color character
 				vic4_render_16color_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), glyph_width, palette[char_bgcolor], palette + (color_data & 0xF0), SXA_HORIZONTAL_FLIP(color_data));
 			} else if (CHAR_IS256_COLOR(char_id)) {	// 256-color character
-				vic4_render_fullcolor_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), 8);
+				// fgcolor in case of FCM should mean colour index $FF
+				// TODO: check if the passed palette[char_fgcolor] is correct or another index should be used for that $FF colour stuff
+				vic4_render_fullcolor_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), 8, palette[char_bgcolor], palette[char_fgcolor], SXA_HORIZONTAL_FLIP(color_data));
 			} else if ((REG_MCM && (char_fgcolor & 8)) || (REG_MCM && REG_BMM)) {	// Multicolor character
 				if (REG_BMM) {
 					const Uint8 color_source[4] = {
@@ -1213,7 +1221,7 @@ static void vic4_render_char_raster ( void )
 				if (!REG_BMM)
 					vic4_render_mono_char_row(char_byte, glyph_width, char_bgcolor, char_fgcolor, vic3_attr);
 				else
-					vic4_render_mono_char_row(char_byte, glyph_width, char_value & 0xF, char_value >> 4, vic3_attr );
+					vic4_render_mono_char_row(char_byte, glyph_width, char_value & 0xF, char_value >> 4, vic3_attr);
 			}
 			line_char_index++;
 		}
