@@ -350,7 +350,7 @@ int uartmon_init ( const char *fn )
       sock_st.sun_family = AF_UNIX;
       strcpy(sock_st.sun_path, fn);
       unlink(sock_st.sun_path);
-      if (bind(sock, (struct sockaddr*)&sock_st, sock_len)) {
+      if (bind(sock, (struct sockaddr*)&sock_st, comdet[idx].sock_len)) {
         ERROR_WINDOW("Cannot bind named socket %s, UART monitor cannot be used: %s", fn, strerror(errno));
         xemusock_close(sock, NULL);
         return 1;
