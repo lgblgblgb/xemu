@@ -958,9 +958,9 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 
 // Render a monochrome character cell row
 // flip = 00 Dont flip, 01 = flip vertical, 10 = flip horizontal, 11 = flip both
-static void vic4_render_mono_char_row ( Uint8 char_byte, int glyph_width, Uint8 bg_color, Uint8 fg_color, Uint8 vic3attr )
+static XEMU_INLINE void vic4_render_mono_char_row ( Uint8 char_byte, const int glyph_width, const Uint8 bg_color, Uint8 fg_color, const Uint8 vic3attr )
 {
-	if (vic3attr) {
+	if (XEMU_UNLIKELY(vic3attr)) {
 		if (char_row == 7 && VIC3_ATTR_UNDERLINE(vic3attr))
 			char_byte = 0xFF;
 		if (VIC3_ATTR_REVERSE(vic3attr))
@@ -970,7 +970,7 @@ static void vic4_render_mono_char_row ( Uint8 char_byte, int glyph_width, Uint8 
 		if (VIC3_ATTR_BOLD(vic3attr))
 			fg_color |= 0x10;
 	}
-	if (enable_bg_paint) {
+	if (XEMU_LIKELY(enable_bg_paint)) {
 		for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 			const Uint8 char_pixel = (char_byte & (0x80 >> (int)cx));
 			Uint32 pixel_color = char_pixel ? palette[fg_color] : palette[bg_color];
@@ -989,12 +989,14 @@ static void vic4_render_mono_char_row ( Uint8 char_byte, int glyph_width, Uint8 
 }
 
 
-static inline void vic4_render_multicolor_char_row ( const Uint8 char_byte, const int glyph_width, const Uint8 color_source[4] )
+static XEMU_INLINE void vic4_render_multicolor_char_row ( const Uint8 char_byte, const int glyph_width, const Uint8 color_source[4] )
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		const Uint8 bitsel = 2 * (int)(cx / 2);
 		const Uint8 bit_pair = (char_byte & (0x80 >> bitsel)) >> (6-bitsel) | (char_byte & (0x40 >> bitsel)) >> (6-bitsel);
-		*(current_pixel++) = palette[color_source[bit_pair]];
+		if (XEMU_LIKELY(bit_pair || enable_bg_paint))
+			*current_pixel = palette[color_source[bit_pair]];
+		current_pixel++;
 		is_fg[xcounter++] = (bit_pair & 2);
 	}
 }
@@ -1007,9 +1009,9 @@ static XEMU_INLINE void vic4_render_fullcolor_char_row ( const Uint8* char_row, 
 		const Uint8 char_data = char_row[XEMU_LIKELY(!hflip) ? (int)cx : glyph_width - 1 - (int)cx];
 		if (char_data == 0xFF)
 			*current_pixel = fg_sdl_color;
-		else if (char_data)
+		else if (XEMU_LIKELY(char_data))
 			*current_pixel = palette[char_data];
-		else if (enable_bg_paint)
+		else if (XEMU_LIKELY(enable_bg_paint))
 			*current_pixel = bg_sdl_color;
 		current_pixel++;
 		is_fg[xcounter++] = char_data;
@@ -1114,6 +1116,7 @@ static XEMU_INLINE Uint8 *get_charset_effective_addr ( void )
 	// Note: in theory on C65 there is a bit for choose between two charsets (rather than only lower/upper case)
 	// See: https://github.com/lgblgblgb/xemu/issues/213
 	// However it seems even MEGA65 does not support this.
+	// FIXME: how we can be sure, there won't be any out-of-bound access for the relative small WOM then?
 	if (!REG_BMM && (addr == 0x1000 || addr == 0x9000 || addr == 0x1800 || addr == 0x9800))
 		return char_wom + (addr & 0xFFF);
 	// FIXME XXX this is a fixed constant for checking.
@@ -1142,10 +1145,10 @@ static void vic4_render_char_raster ( void )
 {
 	int line_char_index = 0;
 	enable_bg_paint = 1;
+	const Uint8 *row_data_base_addr = get_charset_effective_addr();	// FIXME: is it OK that I moved here, before the loop?
 	if (display_row >= 0 && display_row < display_row_count) {
 		Uint8 *colour_ram_current_ptr = colour_ram + COLOUR_RAM_OFFSET + (display_row * CHARSTEP_BYTES);
 		Uint8 *screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row * CHARSTEP_BYTES);
-		const Uint8 *row_data_base_addr = get_charset_effective_addr();
 		// Account for Chargen X-displacement
 		for (Uint32 *p = current_pixel; p < current_pixel + (CHARGEN_X_START - border_x_left); p++)
 			*p = palette[REG_SCREEN_COLOR];
@@ -1157,14 +1160,12 @@ static void vic4_render_char_raster ( void )
 		while (line_char_index < REG_CHRCOUNT) {
 			Uint16 color_data = *(colour_ram_current_ptr++);
 			Uint16 char_value = *(screen_ram_current_ptr++);
-
 			if (REG_16BITCHARSET) {
 				color_data = (color_data << 8) | (*(colour_ram_current_ptr++));
 				char_value = char_value | (*(screen_ram_current_ptr++) << 8);
-
-				if (SXA_GOTO_X(color_data)) {
-					// FIXME: I am not sure if it cannot cause out-of-bound access later with some extreme "GOTOX" in H320 mode
-					xcounter = xcounter_start + (char_value & 0x3FF) * (REG_H640 ? 1 : 2);
+				if (XEMU_UNLIKELY(SXA_GOTO_X(color_data))) {
+					// FIXME: I am not sure if it cannot cause out-of-bound access later in some cases, somewhere, caused by GOTOX stuff before
+					xcounter = xcounter_start + ((char_value << (REG_H640 ? 0 : 1)) & 0x3FF);
 					current_pixel = pixel_raster_start + xcounter;
 					line_char_index++;
 					char_fetch_offset = char_value >> 13;
@@ -1175,53 +1176,63 @@ static void vic4_render_char_raster ( void )
 			}
 			// Background and foreground colors
 			const Uint8 char_fgcolor = color_data & 0xF;
-			const Uint8 vic3_attr = REG_VICIII_ATTRIBS && !REG_MCM ? (color_data >> 4) : 0;
 			const Uint16 char_id = REG_EBM ? (char_value & 0x3f) : char_value & 0x1fff; // up to 8192 characters (13-bit)
 			const Uint8 char_bgcolor = REG_EBM ? vic_registers[0x21 + ((char_value >> 6) & 3)] : REG_SCREEN_COLOR;
 			// Calculate character-width
 			Uint8 glyph_width_deduct = SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(char_value) ? 8 : 0);
 			Uint8 glyph_width = (SXA_4BIT_PER_PIXEL(color_data) ? 16 : 8) - glyph_width_deduct;
 			// Default fetch from char mode.
-			Uint8 char_byte;
 			int sel_char_row = char_row;
-			if (SXA_VERTICAL_FLIP(color_data))
+			if (XEMU_UNLIKELY(SXA_VERTICAL_FLIP(color_data)))
 				sel_char_row = 7 - char_row;
-			if (REG_BMM)
-				char_byte = *(row_data_base_addr + display_row * 320 + 8 * line_char_index + sel_char_row); // this is BAD I guess assuming 320 pixel, can be anything ... (?)
-			else
-				char_byte = *(row_data_base_addr + (char_id * 8) + sel_char_row);
-			if (SXA_HORIZONTAL_FLIP(color_data))
-				char_byte = reverse_byte_table[char_byte];	// LGB: I killed the function, and type-conv, as char_byte is byte, OK to index as-is
 			// Render character cell row
 			if (SXA_4BIT_PER_PIXEL(color_data)) {	// 16-color character
 				vic4_render_16color_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), glyph_width, palette[char_bgcolor], palette + (color_data & 0xF0), SXA_HORIZONTAL_FLIP(color_data));
 			} else if (CHAR_IS256_COLOR(char_id)) {	// 256-color character
 				// fgcolor in case of FCM should mean colour index $FF
-				// TODO: check if the passed palette[char_fgcolor] is correct or another index should be used for that $FF colour stuff
+				// FIXME: check if the passed palette[char_fgcolor] is correct or another index should be used for that $FF colour stuff
 				vic4_render_fullcolor_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), 8, palette[char_bgcolor], palette[char_fgcolor], SXA_HORIZONTAL_FLIP(color_data));
 			} else if ((REG_MCM && (char_fgcolor & 8)) || (REG_MCM && REG_BMM)) {	// Multicolor character
+				// using static vars: faster in a rapid loop like this, no need to re-adjust stack pointer all the time to allocate space and this way using constant memory address
+				// also, as an optimization, later, some value can be re-used and not always initialized here, when in reality VIC
+				// registers in current Xemu cannot change within a scanline anyway (ie, scanline precision based emulation/rendering)
+				static Uint8 color_source_mcm[4];
+				Uint8 char_byte;
+				color_source_mcm[0] = REG_SCREEN_COLOR;
 				if (REG_BMM) {
-					const Uint8 color_source[4] = {
-						REG_SCREEN_COLOR,	// 00
-						char_value >> 4,	// 01
-						char_value & 0xF,	// 10
-						color_data & 0xF	// 11 - FIXME: is this &0xF always? ie what about 256 colours, does not apply here EVER?
-					};
-					vic4_render_multicolor_char_row(char_byte, glyph_width, color_source);
+					// value 00 is common /w or w/o BMM so not initialized here
+					color_source_mcm[1] = char_value >> 4;	// 01
+					color_source_mcm[2] = char_value & 0xF;	// 10
+					color_source_mcm[3] = color_data & 0xF;	// 11
+					char_byte = *(row_data_base_addr + display_row * 320 + 8 * line_char_index + sel_char_row); // this is BAD I guess assuming 320 pixel, can be anything ... (?)
 				} else {
-					const Uint8 color_source[4] = {
-						REG_SCREEN_COLOR,	// 00
-						REG_MULTICOLOR_1,	// 01
-						REG_MULTICOLOR_2,	// 10
-						char_fgcolor & 7	// 11
-					};
-					vic4_render_multicolor_char_row(char_byte, glyph_width, color_source);
+					// value 00 is common /w or w/o BMM so not initialized here
+					color_source_mcm[1] = REG_MULTICOLOR_1;	// 01
+					color_source_mcm[2] = REG_MULTICOLOR_2;	// 10
+					color_source_mcm[3] = char_fgcolor & 7;	// 11
+					char_byte = *(row_data_base_addr + (char_id * 8) + sel_char_row);
 				}
+				// FIXME: is this really a thing to have FLIP in bitmap mode AS WELL?!
+				// FIXME: also this is WRONG, MCM data cannot be reversed with this table!!
+				if (XEMU_UNLIKELY(SXA_HORIZONTAL_FLIP(color_data)))
+					char_byte = reverse_byte_table[char_byte];
+				vic4_render_multicolor_char_row(char_byte, glyph_width, color_source_mcm);
 			} else {	// Single color character
-				if (!REG_BMM)
-					vic4_render_mono_char_row(char_byte, glyph_width, char_bgcolor, char_fgcolor, vic3_attr);
-				else
-					vic4_render_mono_char_row(char_byte, glyph_width, char_value & 0xF, char_value >> 4, vic3_attr);
+				Uint8 char_byte, char_bgcolor_now, char_fgcolor_now;
+				if (!REG_BMM) {
+					char_bgcolor_now = char_bgcolor;
+					char_fgcolor_now = char_fgcolor;
+					char_byte = *(row_data_base_addr + (char_id * 8) + sel_char_row);
+				} else {
+					char_bgcolor_now = char_value & 0xF;
+					char_fgcolor_now = char_value >> 4;
+					char_byte = *(row_data_base_addr + display_row * 320 + 8 * line_char_index + sel_char_row); // this is BAD I guess assuming 320 pixel, can be anything ... (?)
+				}
+				// FIXME: is this really a thing to have FLIP in bitmap mode AS WELL?!
+				if (XEMU_UNLIKELY(SXA_HORIZONTAL_FLIP(color_data)))
+					char_byte = reverse_byte_table[char_byte];
+				// FIXME: do vic3 attributes work with bitmap mode as well???
+				vic4_render_mono_char_row(char_byte, glyph_width, char_bgcolor_now, char_fgcolor_now, (REG_VICIII_ATTRIBS && !REG_MCM) ? (color_data >> 4) : 0);
 			}
 			line_char_index++;
 		}
