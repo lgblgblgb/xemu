@@ -202,9 +202,14 @@ including the Commodore LCD, Commodore 65 and MEGA65 as well.</p>
 // Part of the Xemu project.
 function showAllBranches()
 {
-	for (const a of document.getElementsByTagName("span")) {
+	for (let a of document.getElementsByTagName("span")) {
 		if (a.id.startsWith("branch-")) {
 			a.style.display = "block";
+		}
+	}
+	for (let a of document.getElementsByTagName("a")) {
+		if (a.parentElement.tagName == "LI" && (a.href.endsWith("-win32.exe") || a.href.endsWith("-win32.zip"))) {
+			a.parentElement.style.display = "";
 		}
 	}
 	return false;
@@ -262,6 +267,9 @@ function main ( enabler )
 function boot ( element_id )
 {
 	for (let a of document.getElementsByTagName("a")) {
+		if (a.parentElement.tagName == "LI" && (a.href.endsWith("-win32.exe") || a.href.endsWith("-win32.zip"))) {
+			a.parentElement.style.display = "none";
+		}
 		if (a.href.startsWith(LINK_HEAD_CHECK_FOR)) {
 			let warnings = [];
 			if (a.href.endsWith(".deb"))
