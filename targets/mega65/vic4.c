@@ -158,7 +158,7 @@ static inline void vic4_reset_display_counters ( void )
 void vic_init ( void )
 {
 	vic_pixel_readback_result[0] = 0xFF;	// "hyperram access count" or what, not so much emulated
-	// Needed to render "drive LED" feature
+	// Needed to render "drive LED" feature + debug pixel-read back cross-hair (only the red colour)
 	red_colour   = SDL_MapRGBA(sdl_pix_fmt, 0xFF, 0x00, 0x00, 0xFF);
 	black_colour = SDL_MapRGBA(sdl_pix_fmt, 0x00, 0x00, 0x00, 0xFF);
 	// Init VIC4 stuffs
@@ -843,8 +843,10 @@ Uint8 vic_read_reg ( int unsigned addr )
 static XEMU_INLINE void vic4_draw_sprite_row_16color( int sprnum, int x_display_pos, const Uint8* row_data_ptr, int xscale )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
-	const int palindexbase = sprnum * 16 + 128 * (SPRITE_BITPLANE_ENABLE(sprnum) >> sprnum);
-	// LGB: in 16 colour sprite mode, sprite colour register gives the transparent colour index
+	//const int palindexbase = sprnum * 16 + 128 * (SPRITE_BITPLANE_ENABLE(sprnum) >> sprnum);
+	// pal16 is a pointer corrected by "palindexbase" already, so ready to be indexed with the 4 bit (16) colour
+	const Uint32 *pal16 = spritepalette + (sprnum * 16 + 128 * (SPRITE_BITPLANE_ENABLE(sprnum) >> sprnum));
+	// in 16 colour sprite mode, sprite colour register gives the transparent colour index
 	// We always use the lower 4 bit only at this very specific case, that's the reason for SPRITE_COLOR_4BIT() macro and not SPRITE_COLOR() [which can be 4/8 bit depending on curretn VIC mode)
 	const Uint8 transparency_palette_index = SPRITE_COLOR_4BIT(sprnum);
 	for (int byte = 0; byte < totalBytes; byte++) {
@@ -854,13 +856,13 @@ static XEMU_INLINE void vic4_draw_sprite_row_16color( int sprnum, int x_display_
 			if (c0 != transparency_palette_index && x_display_pos >= border_x_left && (
 				!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
 			))
-				*(pixel_raster_start + x_display_pos) = spritepalette[palindexbase + c0];
+				*(pixel_raster_start + x_display_pos) = pal16[c0];
 		}
 		for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
 			if (c1 != transparency_palette_index && x_display_pos >= border_x_left && (
 				!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
 			))
-				*(pixel_raster_start + x_display_pos) = spritepalette[palindexbase + c1];
+				*(pixel_raster_start + x_display_pos) = pal16[c1];
 		}
 	}
 }
@@ -970,18 +972,19 @@ static XEMU_INLINE void vic4_render_mono_char_row ( Uint8 char_byte, const int g
 		if (VIC3_ATTR_BOLD(vic3attr))
 			fg_color |= 0x10;
 	}
+	const Uint32 sdl_fg_color = palette[fg_color];
 	if (XEMU_LIKELY(enable_bg_paint)) {
+		const Uint32 sdl_bg_color = palette[bg_color];
 		for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 			const Uint8 char_pixel = (char_byte & (0x80 >> (int)cx));
-			Uint32 pixel_color = char_pixel ? palette[fg_color] : palette[bg_color];
-			*(current_pixel++) = pixel_color;
+			*(current_pixel++) = char_pixel ? sdl_fg_color : sdl_bg_color;
 			is_fg[xcounter++] = char_pixel;
 		}
-	} else {	// HACK!! to support MEGAMAZE GOTOX+VFLIP bits that ignore the background paint until next raster.
+	} else {
 		for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 			const Uint8 char_pixel = (char_byte & (0x80 >> (int)cx));
 			if (char_pixel)
-				*current_pixel = palette[fg_color];
+				*current_pixel = sdl_fg_color;
 			current_pixel++;
 			is_fg[xcounter++] = char_pixel;
 		}
@@ -1261,9 +1264,13 @@ int vic4_render_scanline ( void )
 	if (!(ycounter & 1)) // VIC-II raster source: We shall check FNRST ?
 		vic4_check_raster_interrupt(logical_raster);
 	// "Double-scan hack"
+	// FIXME: is this really correct? ie even sprites cannot be set to Y pos finer than V200 or ...
+	// ... having resolution finer than V200 with some "VIC-IV magic"?
 	if (!REG_V400 && (ycounter & 1)) {
-		for (int i = 0; i < TEXTURE_WIDTH; i++, current_pixel++)
-			*current_pixel = /* user_scanlines_setting ? 0 : */ *(current_pixel - TEXTURE_WIDTH) ;
+		//for (int i = 0; i < TEXTURE_WIDTH; i++, current_pixel++)
+		//	*current_pixel = /* user_scanlines_setting ? 0 : */ *(current_pixel - TEXTURE_WIDTH);
+		memcpy(current_pixel, current_pixel - TEXTURE_WIDTH, TEXTURE_WIDTH * 4);
+		current_pixel += TEXTURE_WIDTH;
 	} else {
 		// Top and bottom borders
 		if (ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM || !REG_DISPLAYENABLE) {
