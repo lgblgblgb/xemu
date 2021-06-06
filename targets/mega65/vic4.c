@@ -50,7 +50,9 @@ static int border_x_left= 0;			 		// Side border left
 static int border_x_right= 0;			 		// Side border right
 static int xcounter = 0, ycounter = 0;				// video counters
 static int char_row = 0, display_row = 0;
-static Uint8 is_fg[1024];					// this cache helps in sprite rendering, zero means background state, other value: foreground FIXME: how long this should be? really 1024?
+// FIXME: really, it's 2048 now, since in H320, GOTOX value is multiplied with 2 and may overflow this array even if it's not so much used this way, we want avoid crash ...
+// FIXME: should be rethought!!!!
+static Uint8 is_fg[2048];					// this cache helps in sprite rendering, zero means background state, other value: foreground
 static float char_x_step = 0.0;
 static int enable_bg_paint = 1;
 //static int display_row_count = 0;
@@ -1169,7 +1171,7 @@ static void vic4_render_char_raster ( void )
 				char_value = char_value | (*(screen_ram_current_ptr++) << 8);
 				if (XEMU_UNLIKELY(SXA_GOTO_X(color_data))) {
 					// FIXME: I am not sure if it cannot cause out-of-bound access later in some cases, somewhere, caused by GOTOX stuff before
-					xcounter = xcounter_start + ((char_value << (REG_H640 ? 0 : 1)) & 0x3FF);
+					xcounter = xcounter_start + ((char_value & 0x3FF) << (REG_H640 ? 0 : 1));
 					current_pixel = pixel_raster_start + xcounter;
 					line_char_index++;
 					char_fetch_offset = char_value >> 13;
