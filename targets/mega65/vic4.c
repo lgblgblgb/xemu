@@ -53,7 +53,8 @@ static int char_row = 0, display_row = 0;
 static Uint8 is_fg[1024];					// this cache helps in sprite rendering, zero means background state, other value: foreground FIXME: how long this should be? really 1024?
 static float char_x_step = 0.0;
 static int enable_bg_paint = 1;
-static int display_row_count = 0;
+//static int display_row_count = 0;
+#define display_row_count vic_registers[0x7B]
 static int max_rasters = PHYSICAL_RASTERS_DEFAULT;
 static int visible_area_height = SCREEN_HEIGHT_VISIBLE_DEFAULT;
 static int vicii_first_raster = 7;				// Default for NTSC
