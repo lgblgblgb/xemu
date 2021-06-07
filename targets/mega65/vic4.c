@@ -853,22 +853,24 @@ static XEMU_INLINE void vic4_draw_sprite_row_16color( int sprnum, int x_display_
 	// in 16 colour sprite mode, sprite colour register gives the transparent colour index
 	// We always use the lower 4 bit only at this very specific case, that's the reason for SPRITE_COLOR_4BIT() macro and not SPRITE_COLOR() [which can be 4/8 bit depending on curretn VIC mode)
 	const Uint8 transparency_palette_index = SPRITE_COLOR_4BIT(sprnum);
-	for (int byte = 0; byte < totalBytes; byte++) {
-		const Uint8 c0 = (*(row_data_ptr + byte)) >> 4;
-		const Uint8 c1 = (*(row_data_ptr + byte)) & 0xF;
-		for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
-			if (c0 != transparency_palette_index && x_display_pos >= border_x_left && (
-				!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
-			))
-				*(pixel_raster_start + x_display_pos) = pal16[c0];
+	do {
+		for (int byte = 0; byte < totalBytes; byte++) {
+			const Uint8 c0 = (*(row_data_ptr + byte)) >> 4;
+			const Uint8 c1 = (*(row_data_ptr + byte)) & 0xF;
+			for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
+				if (c0 != transparency_palette_index && x_display_pos >= border_x_left && (
+					!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
+				))
+					*(pixel_raster_start + x_display_pos) = pal16[c0];
+			}
+			for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
+				if (c1 != transparency_palette_index && x_display_pos >= border_x_left && (
+					!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
+				))
+					*(pixel_raster_start + x_display_pos) = pal16[c1];
+			}
 		}
-		for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
-			if (c1 != transparency_palette_index && x_display_pos >= border_x_left && (
-				!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
-			))
-				*(pixel_raster_start + x_display_pos) = pal16[c1];
-		}
-	}
+	} while ((REG_SPRTILEN & (1 << sprnum)) && x_display_pos < border_x_right);
 }
 
 
