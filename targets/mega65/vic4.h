@@ -171,6 +171,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SXA_GOTO_X(cw)			((cw) & 0x1000)
 #define SXA_4BIT_PER_PIXEL(cw)		((cw) & 0x0800)
 #define SXA_TRIM_RIGHT_BIT3(cw)		((cw) & 0x0400)
+#define SXA_ATTR_BOLD(cw)		((cw) & 0x0040)
+#define SXA_ATTR_REVERSE(cw)		((cw) & 0x0020)
 //FIXME: this last one was bad, and also, seems to be not used?
 //#define SXA_TRIM_TOP_BOTTOM(cw)	(((cw) & 0x0300) >> 8)
 
