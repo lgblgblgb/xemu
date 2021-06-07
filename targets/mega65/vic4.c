@@ -65,6 +65,7 @@ static Uint8 *bitplane_p[8];
 static Uint32 red_colour, black_colour;				// used by "drive LED", and cross-hair (only the red) for debug pixel read
 static Uint8 vic_pixel_readback_result[4];
 static Uint8 vic_color_register_mask = 0xFF;
+static Uint32 *used_palette;					// normally the same value as "palette" from vic4_palette.c but GOTOX RRB token can modify this! So this should be used
 
 // --- these things are altered by vic4_open_frame_access() ONLY at every fame ONLY based on PAL or NTSC selection
 Uint8 videostd_id = 0xFF;			// 0=PAL, 1=NTSC [give some insane value by default to force the change at the fist frame after starting Xemu]
@@ -975,9 +976,9 @@ static XEMU_INLINE void vic4_render_mono_char_row ( Uint8 char_byte, const int g
 		if (VIC3_ATTR_BOLD(vic3attr))
 			fg_color |= 0x10;
 	}
-	const Uint32 sdl_fg_color = palette[fg_color];
+	const Uint32 sdl_fg_color = used_palette[fg_color];
 	if (XEMU_LIKELY(enable_bg_paint)) {
-		const Uint32 sdl_bg_color = palette[bg_color];
+		const Uint32 sdl_bg_color = used_palette[bg_color];
 		for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 			const Uint8 char_pixel = (char_byte & (0x80 >> (int)cx));
 			*(current_pixel++) = char_pixel ? sdl_fg_color : sdl_bg_color;
@@ -1001,7 +1002,7 @@ static XEMU_INLINE void vic4_render_multicolor_char_row ( const Uint8 char_byte,
 		const Uint8 bitsel = 2 * (int)(cx / 2);
 		const Uint8 bit_pair = (char_byte & (0x80 >> bitsel)) >> (6-bitsel) | (char_byte & (0x40 >> bitsel)) >> (6-bitsel);
 		if (XEMU_LIKELY(bit_pair || enable_bg_paint))
-			*current_pixel = palette[color_source[bit_pair]];
+			*current_pixel = used_palette[color_source[bit_pair]];
 		current_pixel++;
 		is_fg[xcounter++] = (bit_pair & 2);
 	}
@@ -1016,7 +1017,7 @@ static XEMU_INLINE void vic4_render_fullcolor_char_row ( const Uint8* char_row, 
 		if (char_data == 0xFF)
 			*current_pixel = fg_sdl_color;
 		else if (XEMU_LIKELY(char_data))
-			*current_pixel = palette[char_data];
+			*current_pixel = used_palette[char_data];
 		else if (XEMU_LIKELY(enable_bg_paint))
 			*current_pixel = bg_sdl_color;
 		current_pixel++;
@@ -1162,7 +1163,6 @@ static void vic4_render_char_raster ( void )
 		xcounter += (CHARGEN_X_START - border_x_left);
 		const int xcounter_start = xcounter;
 		Uint8 char_fetch_offset = 0;
-		int ncm_alt_palette = 0;
 		// Chargen starts here.
 		while (line_char_index < REG_CHRCOUNT) {
 			Uint16 color_data = *(colour_ram_current_ptr++);
@@ -1171,17 +1171,34 @@ static void vic4_render_char_raster ( void )
 				color_data = (color_data << 8) | (*(colour_ram_current_ptr++));
 				char_value = char_value | (*(screen_ram_current_ptr++) << 8);
 				if (XEMU_UNLIKELY(SXA_GOTO_X(color_data))) {
-					// FIXME: I am not sure if it cannot cause out-of-bound access later in some cases, somewhere, caused by GOTOX stuff before
-					xcounter = xcounter_start + ((char_value & 0x3FF) << (REG_H640 ? 0 : 1));
+					// Start of the GOTOX functionality implementation, tricky one.
+					xcounter = (char_value & 0x3FF);	// first, extract the goto to X value as an usigned number
+					if (REG_H640) {
+						if (0x3FF - xcounter < xcounter_start)
+							xcounter = xcounter_start - (0x3FF - xcounter);
+						else
+							xcounter += xcounter_start;
+					} else {
+						xcounter <<= 1;	// multiply by 2, if !H640 (as the pixel is double width for lower resolution)
+						if (0x7FE - xcounter < xcounter_start)
+							xcounter = xcounter_start - (0x7FE - xcounter);
+						else
+							xcounter += xcounter_start;
+					}
+					if (xcounter > TEXTURE_WIDTH)
+						xcounter = TEXTURE_WIDTH;
+					//// FIXME: I am not sure if it cannot cause out-of-bound access later in some cases, somewhere, caused by GOTOX stuff before
+					//xcounter = xcounter_start + ((char_value & 0x3FF) << (REG_H640 ? 0 : 1));
+					//DEBUGPRINT("xcounter_start = %d" NL, xcounter_start);
 					current_pixel = pixel_raster_start + xcounter;
 					line_char_index++;
 					char_fetch_offset = char_value >> 13;
 					if (SXA_VERTICAL_FLIP(color_data))
 						enable_bg_paint = 0;
 					if (SXA_ATTR_BOLD(color_data) && SXA_ATTR_REVERSE(color_data) && !REG_VICIII_ATTRIBS)
-						ncm_alt_palette = 1;
-					else 
-					    ncm_alt_palette = 0;
+						used_palette = altpalette;	// use the alternate palette from now in the scanline
+					else
+						used_palette = palette;		// we do this as well, since there can be "double GOTOX" so we want back to "original" palette ...
 					continue;
 				}
 			}
@@ -1198,11 +1215,11 @@ static void vic4_render_char_raster ( void )
 				sel_char_row = 7 - char_row;
 			// Render character cell row
 			if (SXA_4BIT_PER_PIXEL(color_data)) {	// 16-color character
-				vic4_render_16color_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), glyph_width, palette[char_bgcolor], (ncm_alt_palette ? altpalette : palette) + (color_data & 0xF0), SXA_HORIZONTAL_FLIP(color_data));
+				vic4_render_16color_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), glyph_width, used_palette[char_bgcolor], used_palette + (color_data & 0xF0), SXA_HORIZONTAL_FLIP(color_data));
 			} else if (CHAR_IS256_COLOR(char_id)) {	// 256-color character
 				// fgcolor in case of FCM should mean colour index $FF
 				// FIXME: check if the passed palette[char_fgcolor] is correct or another index should be used for that $FF colour stuff
-				vic4_render_fullcolor_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), 8, palette[char_bgcolor], palette[char_fgcolor], SXA_HORIZONTAL_FLIP(color_data));
+				vic4_render_fullcolor_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), 8, used_palette[char_bgcolor], used_palette[char_fgcolor], SXA_HORIZONTAL_FLIP(color_data));
 			} else if ((REG_MCM && (char_fgcolor & 8)) || (REG_MCM && REG_BMM)) {	// Multicolor character
 				// using static vars: faster in a rapid loop like this, no need to re-adjust stack pointer all the time to allocate space and this way using constant memory address
 				// also, as an optimization, later, some value can be re-used and not always initialized here, when in reality VIC
@@ -1262,6 +1279,7 @@ int vic4_render_scanline ( void )
 {
 	// Work this first. DO NOT OPTIMIZE EARLY.
 
+	used_palette = palette;	// may be overriden later by GOTOX token!
 	xcounter = 0;
 	current_pixel = pixel_start + ycounter * TEXTURE_WIDTH;
 	pixel_raster_start = current_pixel;
@@ -1295,6 +1313,7 @@ int vic4_render_scanline ( void )
 			vic4_do_sprites();
 		}
 		// Paint screen color if positive y-offset (CHARGEN_Y_START > BORDER_Y_TOP)
+		// FIXME: in case of changed palette by GOTOX, maybe this must be dependent on bg_paint to use the new palette or the old??
 		if (ycounter >= BORDER_Y_TOP && ycounter < CHARGEN_Y_START) {
 			while (xcounter++ < border_x_right)
 				*current_pixel++ = palette[REG_SCREEN_COLOR];
