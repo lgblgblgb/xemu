@@ -1,6 +1,6 @@
 /* Various D81 access method for F011 core, for Xemu / C65 and M65 emulators.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2018,2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -24,7 +24,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 
 #define PRG_MIN_SIZE		16
-#define PRG_MAX_SIZE		38000
+
+#ifdef	PRG_MAX_SIZE_OVERRIDE
+#define PRG_MAX_SIZE		PRG_MAX_SIZE_OVERRIDE
+#else
+#define PRG_MAX_SIZE		0xD700
+#endif
 
 #define D81ACCESS_EMPTY		0
 #define D81ACCESS_IMG		1
