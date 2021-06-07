@@ -67,9 +67,15 @@ static int attach_d81 ( const char *fn )
 #ifdef CONFIG_DROPFILE_CALLBACK
 void emu_dropfile_callback ( const char *fn )
 {
-	DEBUGGUI("UI: drop event, file: %s" NL, fn);
-	if (ARE_YOU_SURE("Shall I try to mount the dropped file as D81 for you?", 0))
-		attach_d81(fn);
+	switch (QUESTION_WINDOW("Cancel|Mount as D81|Run/inject as PRG", "What to do with the dropped file?")) {
+		case 1:
+			attach_d81(fn);
+			break;
+		case 2:
+			reset_mega65();
+			inject_register_prg(fn, 0);
+			break;
+	}
 }
 #endif
 
@@ -410,6 +416,15 @@ static const struct menu_st menu_video_standard[] = {
 	{ NULL }
 };
 static const struct menu_st menu_window_size[] = {
+	// TODO: unfinished work, see: https://github.com/lgblgblgb/xemu/issues/246
+#if 0
+	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_windowsize, (void*)0 },
+	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_windowsize, (void*)1 },
+	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_windowsize, (void*)2 },
+#endif
 	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)0 },
 	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)1 },
 	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)2 },
