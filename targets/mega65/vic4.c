@@ -1171,8 +1171,25 @@ static void vic4_render_char_raster ( void )
 				color_data = (color_data << 8) | (*(colour_ram_current_ptr++));
 				char_value = char_value | (*(screen_ram_current_ptr++) << 8);
 				if (XEMU_UNLIKELY(SXA_GOTO_X(color_data))) {
-					// FIXME: I am not sure if it cannot cause out-of-bound access later in some cases, somewhere, caused by GOTOX stuff before
-					xcounter = xcounter_start + ((char_value & 0x3FF) << (REG_H640 ? 0 : 1));
+					// Start of the GOTOX functionality implementation, tricky one.
+					xcounter = (char_value & 0x3FF);	// first, extract the goto to X value as an usigned number
+					if (REG_H640) {
+						if (0x3FF - xcounter < xcounter_start)
+							xcounter = xcounter_start - (0x3FF - xcounter);
+						else
+							xcounter += xcounter_start;
+					} else {
+						xcounter <<= 1;	// multiply by 2, if !H640 (as the pixel is double width for lower resolution)
+						if (0x7FE - xcounter < xcounter_start)
+							xcounter = xcounter_start - (0x7FE - xcounter);
+						else
+							xcounter += xcounter_start;
+					}
+					if (xcounter > TEXTURE_WIDTH)
+						xcounter = TEXTURE_WIDTH;
+					//// FIXME: I am not sure if it cannot cause out-of-bound access later in some cases, somewhere, caused by GOTOX stuff before
+					//xcounter = xcounter_start + ((char_value & 0x3FF) << (REG_H640 ? 0 : 1));
+					//DEBUGPRINT("xcounter_start = %d" NL, xcounter_start);
 					current_pixel = pixel_raster_start + xcounter;
 					line_char_index++;
 					char_fetch_offset = char_value >> 13;
