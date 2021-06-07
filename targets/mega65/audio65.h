@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // You may want to disable audio emulation since it can disturb non-real-time emulation
 #define AUDIO_EMULATION
 
-#define AUDIO_DEFAULT_SEPARATION	100
+#define AUDIO_DEFAULT_SEPARATION	60
 #define AUDIO_DEFAULT_VOLUME		100
 #define AUDIO_UNCHANGED_SEPARATION	-1000
 #define AUDIO_UNCHANGED_VOLUME		-1000
