@@ -1162,6 +1162,7 @@ static void vic4_render_char_raster ( void )
 		xcounter += (CHARGEN_X_START - border_x_left);
 		const int xcounter_start = xcounter;
 		Uint8 char_fetch_offset = 0;
+		int ncm_alt_palette = 0;
 		// Chargen starts here.
 		while (line_char_index < REG_CHRCOUNT) {
 			Uint16 color_data = *(colour_ram_current_ptr++);
@@ -1177,6 +1178,10 @@ static void vic4_render_char_raster ( void )
 					char_fetch_offset = char_value >> 13;
 					if (SXA_VERTICAL_FLIP(color_data))
 						enable_bg_paint = 0;
+					if (SXA_ATTR_BOLD(color_data) && SXA_ATTR_REVERSE(color_data) && !REG_VICIII_ATTRIBS)
+						ncm_alt_palette = 1;
+					else 
+					    ncm_alt_palette = 0;
 					continue;
 				}
 			}
@@ -1193,7 +1198,7 @@ static void vic4_render_char_raster ( void )
 				sel_char_row = 7 - char_row;
 			// Render character cell row
 			if (SXA_4BIT_PER_PIXEL(color_data)) {	// 16-color character
-				vic4_render_16color_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), glyph_width, palette[char_bgcolor], palette + (color_data & 0xF0), SXA_HORIZONTAL_FLIP(color_data));
+				vic4_render_16color_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), glyph_width, palette[char_bgcolor], (ncm_alt_palette ? altpalette : palette) + (color_data & 0xF0), SXA_HORIZONTAL_FLIP(color_data));
 			} else if (CHAR_IS256_COLOR(char_id)) {	// 256-color character
 				// fgcolor in case of FCM should mean colour index $FF
 				// FIXME: check if the passed palette[char_fgcolor] is correct or another index should be used for that $FF colour stuff
