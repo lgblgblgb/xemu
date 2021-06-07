@@ -59,10 +59,10 @@ int   dma_chip_initial_revision;
 int   rom_date = 0;
 // Hacky stuff:
 // low byte: the transparent byte value
-// high(er) byte(s): zero = transprent mode is used, other = no DMA transparency is in used
+// bit 8: zero = transprent mode is used, 1 = no DMA transparency is in used
 // This is done this way to have a single 'if' to check both of enabled transparency and the transparent value,
 // since the value (being 8 bit) to be written would never match values > $FF
-static unsigned int dma_transparency = 0x100;	// no DMA transparency by default
+static unsigned int dma_transparency;
 
 
 enum dma_op_types {
@@ -331,11 +331,11 @@ int dma_update ( void )
 				DEBUGDMA("DMA: enhanced option byte $%02X read" NL, opt);
 				cycles++;
 				switch (opt) {
-					case 0x06:	// enable transparency
-						dma_transparency &= 0xFF;
-						break;
-					case 0x07:	// disable transparency
+					case 0x06:	// disable transparency
 						dma_transparency |= 0x100;
+						break;
+					case 0x07:	// enable transparency
+						dma_transparency &= 0xFF;
 						break;
 					case 0x0A:
 						dma_chip_revision_override = 0;
@@ -368,7 +368,7 @@ int dma_update ( void )
 						cycles++;
 						break;
 					case 0x86:	// byte value to be treated as "transparent" (ie: skip writing that data), if enabled
-						dma_transparency = (dma_transparency & ~0xFF) | DMA_READ_LIST_NEXT_BYTE();
+						dma_transparency = (dma_transparency & 0x100) | (unsigned int)DMA_READ_LIST_NEXT_BYTE();
 						cycles++;
 						break;
 					case 0x00:
@@ -377,8 +377,10 @@ int dma_update ( void )
 					default:
 						// maybe later we should keep this quiet ...
 						DEBUGPRINT("DMA: *unknown* enhanced option: $%02X @ PC=$%04X" NL, opt, cpu65.pc);
-						if ((opt & 0x80))
+						if ((opt & 0x80)) {
 							(void)DMA_READ_LIST_NEXT_BYTE();	// skip one byte for unknown option >= $80
+							cycles++;
+						}
 						break;
 				}
 			} while (opt);
