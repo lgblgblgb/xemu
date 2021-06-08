@@ -1174,31 +1174,32 @@ static void vic4_render_char_raster ( void )
 				color_data = (color_data << 8) | (*(colour_ram_current_ptr++));
 				char_value = char_value | (*(screen_ram_current_ptr++) << 8);
 				if (XEMU_UNLIKELY(SXA_GOTO_X(color_data))) {
-					// Start of the GOTOX re-positioning functionality implementation, tricky one.
-					xcounter = (char_value & 0x3FF);	// first, extract the goto to X value as an usigned number
+					// ---- Start of the GOTOX re-positioning functionality implementation, tricky one ----
+					xcounter = (char_value & 0x3FF);	// first, extract the goto 'X' value as an usigned number
+					// Check the given value as "signed" as well, decide if it's "negative" or not
 					if (REG_H640) {
 						// Interpret as a "negative" value compared to xcounter_start if it would fit into the real range of 0-xcounter_start,
 						// otherwise interpret that as a positive offset compared to xcounter_start
-						if (0x3FF - xcounter < xcounter_start)
-							xcounter = xcounter_start - (0x3FF - xcounter);
+						if (0x400 - xcounter <= xcounter_start)
+							xcounter = xcounter_start - (0x400 - xcounter);
 						else
 							xcounter += xcounter_start;
 					} else {
 						xcounter <<= 1;	// multiply by 2, if !H640 (as the pixel is double width for lower resolution)
-						if (0x7FE - xcounter < xcounter_start)
-							xcounter = xcounter_start - (0x7FE - xcounter);
+						if (0x800 - xcounter <= xcounter_start)
+							xcounter = xcounter_start - (0x800 - xcounter);
 						else
 							xcounter += xcounter_start;
 					}
 					// The ugly: too large goto X values may cause out-of-bound access on eg is_fg buffer. Thus, if the result is larger than
 					// the width of the SDL texture, it won't be seen anyway, so we "clamp" it for the NEXT raster as an ugly solution, which
 					// will be overwritten anyway on rendering in the next raster. This way we don't need checking of out-of-bound access (faster
-					// code).
+					// code) _everywhere_ ...
 					if (xcounter > TEXTURE_WIDTH)
 						xcounter = TEXTURE_WIDTH;
 					// Align current_pixel pointer according the calculated xcounter "horror show" above
 					current_pixel = pixel_raster_start + xcounter;
-					// End of the GOTOX re-positioning functionality implementation
+					// ---- End of the GOTOX re-positioning functionality implementation ----
 					line_char_index++;
 					char_fetch_offset = char_value >> 13;
 					if (SXA_VERTICAL_FLIP(color_data))
