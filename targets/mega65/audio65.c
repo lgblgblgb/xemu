@@ -33,7 +33,7 @@ int audio_volume      = AUDIO_DEFAULT_VOLUME;
 
 static int stereo_separation_orig = 100;
 static int stereo_separation_other = 0;
-struct SidEmulation sid1, sid2;	// the two SIDs
+struct SidEmulation sid[4];
 static int mixing_freq;		// playback sample rate (in Hz) of the emulator itself
 static double dma_audio_mixing_value;
 static opl3_chip opl3;
@@ -164,17 +164,19 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 #if 1
 	//DEBUGPRINT("AUDIO: audio callback, wants %d samples" NL, len);
 	len >>= 2;	// the real size if /4, since it's a stereo stream, and 2 bytes/sample, we want to render
-	short streams[7][len];	// currently. 4 dma channels + two SIDs' 1-1 channel (SID is already rendered together) + 1 for OPL3
+	short streams[9][len];	// currently. 4 dma channels + 4 SIDs + 1 for OPL3
 	for (int i = 0; i < 4; i++)
 		render_dma_audio(i, streams[i], len);
-	sid_render(&sid2, streams[4], len, 1);
-	sid_render(&sid1, streams[5], len, 1);
-	OPL3_GenerateStream(&opl3, streams[6], len, 1);
+	sid_render(&sid[0], streams[4], len, 1);	// $D400 - left
+	sid_render(&sid[1], streams[5], len, 1);	// $D420 - left
+	sid_render(&sid[2], streams[6], len, 1);	// $D440 - right
+	sid_render(&sid[3], streams[7], len, 1);	// $D460 - right
+	OPL3_GenerateStream(&opl3, streams[8], len, 1);
 	// Now mix channels
 	for (int i = 0; i < len; i++) {
 		// mixing streams together
-		int orig_left  = (int)streams[0][i] + (int)streams[1][i] + (int)streams[4][i] + (int)streams[6][i];
-		int orig_right = (int)streams[2][i] + (int)streams[3][i] + (int)streams[5][i] + (int)streams[6][i];
+		int orig_left  = (int)streams[0][i] + (int)streams[1][i] + (int)streams[4][i] + (int)streams[5][i] + (int)streams[8][i];
+		int orig_right = (int)streams[2][i] + (int)streams[3][i] + (int)streams[6][i] + (int)streams[7][i] + (int)streams[8][i];
 #if 1
 		// channel stereo separation (including inversion) + volume handling
 		int left  = ((orig_left  * stereo_separation_orig) / 100) + ((orig_right * stereo_separation_other) / 100);
@@ -196,8 +198,8 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 	// DEBUG("AUDIO: audio callback, wants %d samples" NL, len);
 	// We use the trick, to render boths SIDs with step of 2, with a byte offset
 	// to get a stereo stream, wanted by SDL.
-	sid_render(&sid2, ((short *)(stereo_out_stream)) + 0, len >> 1, 2);	// SID @ left
-	sid_render(&sid1, ((short *)(stereo_out_stream)) + 1, len >> 1, 2);	// SID @ right
+	//sid_render(&sid2, ((short *)(stereo_out_stream)) + 0, len >> 1, 2);	// SID @ left
+	//sid_render(&sid1, ((short *)(stereo_out_stream)) + 1, len >> 1, 2);	// SID @ right
 #endif
 }
 #endif
@@ -207,8 +209,10 @@ void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int 
 {
 	// We always initialize SIDs, even if no audio emulation is compiled in
 	// Since there can be problem to write SID registers otherwise?
-	sid_init(&sid1, sid_cycles_per_sec, sound_mix_freq);
-	sid_init(&sid2, sid_cycles_per_sec, sound_mix_freq);
+	sid_init(&sid[0], sid_cycles_per_sec, sound_mix_freq);
+	sid_init(&sid[1], sid_cycles_per_sec, sound_mix_freq);
+	sid_init(&sid[2], sid_cycles_per_sec, sound_mix_freq);
+	sid_init(&sid[3], sid_cycles_per_sec, sound_mix_freq);
 	OPL3_Reset(&opl3, sound_mix_freq);
 #ifdef AUDIO_EMULATION
 	mixing_freq = sound_mix_freq;

@@ -380,7 +380,9 @@ void io_write ( unsigned int addr, Uint8 data )
 		case 0x15:	// $D500-$D5FF ~ C65 I/O mode
 		case 0x34:	// $D400-$D4FF ~ M65 I/O mode
 		case 0x35:	// $D500-$D5FF ~ M65 I/O mode
-			sid_write_reg(addr & 0x40 ? &sid2 : &sid1, addr & 31, data);
+			//sid_write_reg(addr & 0x40 ? &sid[1] : &sid[0], addr & 31, data);
+			//DEBUGPRINT("SID #%d reg#%02X data=%02X" NL, (addr >> 5) & 3, addr & 0x1F, data);
+			sid_write_reg(&sid[(addr >> 5) & 3], addr & 0x1F, data);
 			return;
 		case 0x16:	// $D600-$D6FF ~ C65 I/O mode
 			if ((addr & 0xFF) == 0x07) {

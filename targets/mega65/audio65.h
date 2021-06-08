@@ -29,7 +29,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define AUDIO_UNCHANGED_SEPARATION	-1000
 #define AUDIO_UNCHANGED_VOLUME		-1000
 
-extern struct SidEmulation sid1, sid2;
+extern struct SidEmulation sid[4];
 extern SDL_AudioDeviceID audio;
 extern int stereo_separation;
 

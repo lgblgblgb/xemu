@@ -610,8 +610,10 @@ static void update_emulator ( void )
 	// XXX: some things has been moved here from the main loop, however update_emulator is called from other places as well, FIXME check if it causes problems or not!
 	if (XEMU_UNLIKELY(inject_ready_check_status))
 		inject_ready_check_do();
-	sid1.sFrameCount++;
-	sid2.sFrameCount++;
+	sid[0].sFrameCount++;
+	sid[1].sFrameCount++;
+	sid[2].sFrameCount++;
+	sid[3].sFrameCount++;
 	strcpy(emulator_speed_title, cpu_clock_speed_strs[cpu_clock_speed_str_index]);
 	strcat(emulator_speed_title, " ");
 	strcat(emulator_speed_title, videostd_name);
