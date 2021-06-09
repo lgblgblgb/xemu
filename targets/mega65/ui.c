@@ -417,8 +417,8 @@ static void ui_cb_toggle_int_inverted ( const struct menu_st *m, int *query )
 static void ui_cb_sids_enabled ( const struct menu_st *m, int *query )
 {
 	int mask = VOIDPTR_TO_INT(m->user_data);
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, (enabled_sids & mask));
-	enabled_sids ^= mask;
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, (configdb.sidmask & mask));
+	configdb.sidmask ^= mask;
 }
 
 

@@ -39,7 +39,6 @@ SDL_AudioDeviceID audio = 0;	// SDL audio device
 
 int stereo_separation = AUDIO_DEFAULT_SEPARATION;
 int audio_volume      = AUDIO_DEFAULT_VOLUME;
-int enabled_sids	= 0xF;
 
 static int stereo_separation_orig = 100;
 static int stereo_separation_other = 0;
@@ -245,7 +244,7 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 		render_dma_audio(i, streams[i], len);
 	// SIDs: #0 $D400 - left,  #1 $D420 - left, #2 $D440 - right, #3 $D460 - right
 	for (int i = 0; i < 4; i++) {
-		if (XEMU_UNLIKELY(!(enabled_sids & (1 << i)))) {
+		if (XEMU_UNLIKELY(!(configdb.sidmask & (1 << i)))) {
 			memset(streams[4 + i], 0, len * 4);
 			continue;
 		}

@@ -88,6 +88,7 @@ struct configdb_st {
 	double	fast_mhz;
 	int	nosound;
 	int	noopl3;
+	int	sidmask;
 };
 
 extern struct configdb_st configdb;

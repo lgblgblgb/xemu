@@ -106,6 +106,7 @@ static const struct xemutools_configdef_num_st num_options[] = {
 	{ "forcevideostd", -1, "Force video standard (0 = PAL, 1 = NTSC, -1 = default switchable by VIC-IV)", &configdb.force_videostd, -1, 1 },
 	// FIXME: as a workaround, I set this to "0" PAL, as newer MEGA65's default is this. HOWEVER this should be not handled this way but using a newer Hyppo!
 	{ "initvideostd", 0, "Use given video standard as the startup one (0 = PAL, 1 = NTSC, -1 = Hyppo default)", &configdb.init_videostd, -1, 1 },
+	{ "sidmask", 15, "Enabled SIDs of the four, in form of a bitmask", &configdb.sidmask, 0, 15 },
 	{ NULL }
 };
 
