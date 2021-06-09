@@ -158,13 +158,21 @@ void audio_set_stereo_parameters ( int vol, int sep )
 }
 
 
+#define AUDIO_BUFFER_SAMPLES_MAX	1024
+
 
 static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 {
 #if 1
+	len >>= 2;	// the size in *SAMPLES* (not in bytes) is /4, since it's a stereo stream, and 2 bytes/sample, we want to render
 	//DEBUGPRINT("AUDIO: audio callback, wants %d samples" NL, len);
-	len >>= 2;	// the real size if /4, since it's a stereo stream, and 2 bytes/sample, we want to render
-	short streams[9][len];	// currently. 4 dma channels + 4 SIDs + 1 for OPL3
+	//short streams[9][len];	// currently. 4 dma channels + 4 SIDs + 1 for OPL3
+	static short streams[9][AUDIO_BUFFER_SAMPLES_MAX];
+	if (len > AUDIO_BUFFER_SAMPLES_MAX) {
+		len = AUDIO_BUFFER_SAMPLES_MAX;
+		DEBUGPRINT("AUDIO: ERROR, SDL wants more samples (%d) than buffer size (%d)!" NL, len, AUDIO_BUFFER_SAMPLES_MAX);
+	}
+	//DEBUGPRINT("p=%p 0=%p 1=%p, 2=%p, 3=%p, 4=%p, 5=%p, 6=%p, 7=%p, 8=%p" NL, streams, streams[0], streams[1], streams[2], streams[3], streams[4], streams[5], streams[6], streams[7], streams[8]);
 	for (int i = 0; i < 4; i++)
 		render_dma_audio(i, streams[i], len);
 	sid_render(&sid[0], streams[4], len, 1);	// $D400 - left
@@ -175,8 +183,8 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 	// Now mix channels
 	for (int i = 0; i < len; i++) {
 		// mixing streams together
-		int orig_left  = (int)streams[0][i] + (int)streams[1][i] + (int)streams[4][i] + (int)streams[5][i] + (int)streams[8][i];
-		int orig_right = (int)streams[2][i] + (int)streams[3][i] + (int)streams[6][i] + (int)streams[7][i] + (int)streams[8][i];
+		const int orig_left  = (int)streams[0][i] + (int)streams[1][i] + (int)streams[4][i] + (int)streams[5][i] + (int)streams[8][i];
+		const int orig_right = (int)streams[2][i] + (int)streams[3][i] + (int)streams[6][i] + (int)streams[7][i] + (int)streams[8][i];
 #if 1
 		// channel stereo separation (including inversion) + volume handling
 		int left  = ((orig_left  * stereo_separation_orig) / 100) + ((orig_right * stereo_separation_other) / 100);
@@ -236,6 +244,9 @@ void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int 
 			ERROR_WINDOW("Audio parameter mismatches.");
 		}
 		DEBUGPRINT("AUDIO: initialized (#%d), %d Hz, %d channels, %d buffer sample size." NL, audio, audio_got.freq, audio_got.channels, audio_got.samples);
+		//if (audio) {
+		//	DEBUGPRINT("AUDIO: !!!!!!!!!!! sample size = %d" NL, audio_got.samples);
+		//}
 	} else
 		ERROR_WINDOW("Cannot open audio device!");
 	audio_set_stereo_parameters(volume, separation);
