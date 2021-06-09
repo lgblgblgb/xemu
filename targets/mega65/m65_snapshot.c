@@ -32,6 +32,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/f011_core.h"
 #include "m65_snapshot.h"
 #include "memory_mapper.h"
+#define NEED_SID_STRUCT_DEFINED
 #include "audio65.h"
 #include "io_mapper.h"
 #include <string.h>

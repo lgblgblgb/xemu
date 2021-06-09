@@ -16,14 +16,23 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
+#define SID_USES_LOCK
+#define OPL_USES_LOCK
+
+
 #include "xemu/emutools.h"
 #include "xemu/sid.h"
 #include "xemu/opl3.h"
+#define NEED_SID_STRUCT_DEFINED
 #include "audio65.h"
 // For D7XX (audio DMA):
 #include "io_mapper.h"
 // For accessing memory (audio DMA):
 #include "memory_mapper.h"
+
+
+//#define DEBUG_AUDIO_LOCKS(...) DEBUGPRINT(__VA_ARGS__)
+#define DEBUG_AUDIO_LOCKS(...)
 
 
 SDL_AudioDeviceID audio = 0;	// SDL audio device
@@ -34,16 +43,63 @@ int audio_volume      = AUDIO_DEFAULT_VOLUME;
 static int stereo_separation_orig = 100;
 static int stereo_separation_other = 0;
 struct SidEmulation sid[4];
-static int mixing_freq;		// playback sample rate (in Hz) of the emulator itself
+static int system_sound_mix_freq;		// playback sample rate (in Hz) of the emulator itself
+static int system_sid_cycles_per_sec;
 static double dma_audio_mixing_value;
 static opl3_chip opl3;
+#ifdef OPL_USES_LOCK
+static SDL_SpinLock opl3_lock;
+#endif
 
+
+
+void audio65_sid_write ( const int addr, const Uint8 data )
+{
+	// SIDs are separated by $20 bytes from each others, 4 SIDs (0-3)
+	const int instance = (addr >> 5) & 3;
+#ifdef SID_USES_LOCK
+	DEBUG_AUDIO_LOCKS("WRITER: Waiting for SID#%d lock ... (%d)" NL, instance, sid[instance].spinlock);
+	SDL_AtomicLock(&sid[instance].spinlock);
+	DEBUG_AUDIO_LOCKS("WRITER: Got SID#%d lock (%d)" NL, instance, sid[instance].spinlock);
+#endif
+	sid_write_reg(&sid[instance], addr & 0x1F, data);
+#ifdef SID_USES_LOCK
+	SDL_AtomicUnlock(&sid[instance].spinlock);
+	DEBUG_AUDIO_LOCKS("WRITER: Released SID#%d lock (%d)" NL, instance, sid[instance].spinlock);
+#endif
+}
 
 
 void audio65_opl3_write ( Uint8 reg, Uint8 data )
 {
+#ifdef OPL_USES_LOCK
+	DEBUG_AUDIO_LOCKS("WRITER: Waiting for OPL3 lock ... (%d)" NL, opl3_lock);
+	SDL_AtomicLock(&opl3_lock);
+	DEBUG_AUDIO_LOCKS("WRITER: Got OPL3 lock (%d)" NL, opl3_lock);
+#endif
 	//OPL3_WriteReg(&opl3, reg, data);
 	OPL3_WriteRegBuffered(&opl3, reg, data);
+#ifdef OPL_USES_LOCK
+	SDL_AtomicUnlock(&opl3_lock);
+	DEBUG_AUDIO_LOCKS("WRITER: Released OPL3 lock (%d)" NL, opl3_lock);
+#endif
+}
+
+
+void audio65_sid_inc_framecount ( void )
+{
+	for (int i = 0; i < 4; i++) {
+#ifdef SID_USES_LOCK
+		DEBUG_AUDIO_LOCKS("INCER: Waiting for SID#%d lock ... (%d)" NL, i, sid[i].spinlock);
+		SDL_AtomicLock(&sid[i].spinlock);
+		DEBUG_AUDIO_LOCKS("INCER: Got SID#%d lock (%d)" NL, i, sid[i].spinlock);
+#endif
+		sid[i].sFrameCount++;
+#ifdef SID_USES_LOCK
+		SDL_AtomicUnlock(&sid[i].spinlock);
+		DEBUG_AUDIO_LOCKS("WRITER: Released SID#%d lock (%d)" NL, i, sid[i].spinlock);
+#endif
+	}
 }
 
 
@@ -165,7 +221,7 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 {
 #if 1
 	len >>= 2;	// the size in *SAMPLES* (not in bytes) is /4, since it's a stereo stream, and 2 bytes/sample, we want to render
-	//DEBUGPRINT("AUDIO: audio callback, wants %d samples" NL, len);
+	//DEBUGPRINT("AUDIO: audio callback, wants %d samples to be rendered" NL, len);
 	//short streams[9][len];	// currently. 4 dma channels + 4 SIDs + 1 for OPL3
 	static short streams[9][AUDIO_BUFFER_SAMPLES_MAX];
 	if (len > AUDIO_BUFFER_SAMPLES_MAX) {
@@ -175,11 +231,35 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 	//DEBUGPRINT("p=%p 0=%p 1=%p, 2=%p, 3=%p, 4=%p, 5=%p, 6=%p, 7=%p, 8=%p" NL, streams, streams[0], streams[1], streams[2], streams[3], streams[4], streams[5], streams[6], streams[7], streams[8]);
 	for (int i = 0; i < 4; i++)
 		render_dma_audio(i, streams[i], len);
-	sid_render(&sid[0], streams[4], len, 1);	// $D400 - left
-	sid_render(&sid[1], streams[5], len, 1);	// $D420 - left
-	sid_render(&sid[2], streams[6], len, 1);	// $D440 - right
-	sid_render(&sid[3], streams[7], len, 1);	// $D460 - right
+	// SIDs: #0 $D400 - left,  #1 $D420 - left, #2 $D440 - right, #3 $D460 - right
+	for (int i = 0; i < 4; i++) {
+#ifdef SID_USES_LOCK
+		DEBUG_AUDIO_LOCKS("RENDER: Waiting for SID lock #%d (%d)" NL, i, sid[i].spinlock);
+		SDL_AtomicLock(&sid[i].spinlock);
+		DEBUG_AUDIO_LOCKS("RENDER: Got SID lock #%d (%d)" NL, i, sid[i].spinlock);
+#endif
+		sid_render(&sid[i], streams[4 + i], len, 1);
+#ifdef SID_USES_LOCK
+		SDL_AtomicUnlock(&sid[i].spinlock);
+		DEBUG_AUDIO_LOCKS("RENDER: Released SID lock #%d (%d)" NL, i, sid[i].spinlock);
+#endif
+	}
+	//sid_render(&sid[0], streams[4], len, 1);	// $D400 - left
+	//sid_render(&sid[1], streams[5], len, 1);	// $D420 - left
+	//sid_render(&sid[2], streams[6], len, 1);	// $D440 - right
+	//sid_render(&sid[3], streams[7], len, 1);	// $D460 - right
+	//DEBUGPRINT("before OPL buffer will be %d, len requested: %d" NL, (int)(streams[8] - streams[0]), len);
+#ifdef OPL_USES_LOCK
+	DEBUG_AUDIO_LOCKS("RENDER: Waiting for OPL3 lock ... (%d)" NL, opl3_lock);
+	SDL_AtomicLock(&opl3_lock);
+	DEBUG_AUDIO_LOCKS("RENDER: Got OPL3 lock (%d)" NL, opl3_lock);
+#endif
 	OPL3_GenerateStream(&opl3, streams[8], len, 1);
+#ifdef OPL_USES_LOCK
+	SDL_AtomicUnlock(&opl3_lock);
+	DEBUG_AUDIO_LOCKS("RENDER: Released OPL3 lock (%d)" NL, opl3_lock);
+#endif
+	//DEBUGPRINT("after OPL" NL);
 	// Now mix channels
 	for (int i = 0; i < len; i++) {
 		// mixing streams together
@@ -209,28 +289,42 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 	//sid_render(&sid2, ((short *)(stereo_out_stream)) + 0, len >> 1, 2);	// SID @ left
 	//sid_render(&sid1, ((short *)(stereo_out_stream)) + 1, len >> 1, 2);	// SID @ right
 #endif
+	//DEBUGPRINT("AUDIO: END OF SDL AUDIO THREAD" NL);
 }
 #endif
 
 
+void audio65_reset ( void )
+{
+	// We always initialize SIDs/OPL, even if no audio emulation is compiled in
+	// Since there can be problem to write SID registers otherwise?
+	sid_init(&sid[0], system_sid_cycles_per_sec, system_sound_mix_freq);
+	sid_init(&sid[1], system_sid_cycles_per_sec, system_sound_mix_freq);
+	sid_init(&sid[2], system_sid_cycles_per_sec, system_sound_mix_freq);
+	sid_init(&sid[3], system_sid_cycles_per_sec, system_sound_mix_freq);
+	OPL3_Reset(&opl3, system_sound_mix_freq);
+	DEBUGPRINT("AUDIO: reset for 4 SIDs (%d cycles per sec) and 1 OPL3 chip for %dHz sampling rate." NL, system_sid_cycles_per_sec, system_sound_mix_freq);
+#if 0
+	SDL_AtomicUnlock(&opl3_lock);
+	for (int i = 0; i < 4; i++)
+		SDL_AtomicUnlock(&sid_locks[i]);
+#endif
+}
+
+
 void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int separation )
 {
-	// We always initialize SIDs, even if no audio emulation is compiled in
-	// Since there can be problem to write SID registers otherwise?
-	sid_init(&sid[0], sid_cycles_per_sec, sound_mix_freq);
-	sid_init(&sid[1], sid_cycles_per_sec, sound_mix_freq);
-	sid_init(&sid[2], sid_cycles_per_sec, sound_mix_freq);
-	sid_init(&sid[3], sid_cycles_per_sec, sound_mix_freq);
-	OPL3_Reset(&opl3, sound_mix_freq);
+	system_sound_mix_freq = sound_mix_freq;
+	system_sid_cycles_per_sec = sid_cycles_per_sec;
+	audio65_reset();
 #ifdef AUDIO_EMULATION
-	mixing_freq = sound_mix_freq;
 	dma_audio_mixing_value =  (double)40500000.0 / (double)sound_mix_freq;	// ... but with Xemu we use a much lower sampling rate, thus compensate (will fail on samples, rate >= xemu_mixing_rate ...)
 	SDL_AudioSpec audio_want, audio_got;
 	SDL_memset(&audio_want, 0, sizeof(audio_want));
 	audio_want.freq = sound_mix_freq;
-	audio_want.format = AUDIO_S16SYS;	// used format by SID emulation (ie: signed short)
+	audio_want.format = AUDIO_S16SYS;	// used format by SID emulation (ie: signed short, with native endianness)
 	audio_want.channels = 2;		// that is: stereo, for the two SIDs
-	audio_want.samples = 1024;		// Sample size suggested (?) for the callback to render once
+	audio_want.samples = AUDIO_BUFFER_SAMPLES_MAX;		// Sample size suggested (?) for the callback to render once
 	audio_want.callback = audio_callback;	// Audio render callback function, called periodically by SDL on demand
 	audio_want.userdata = NULL;		// Not used, "userdata" parameter passed to the callback by SDL
 	audio = SDL_OpenAudioDevice(NULL, 0, &audio_want, &audio_got, 0);
