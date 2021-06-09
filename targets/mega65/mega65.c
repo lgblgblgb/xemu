@@ -814,7 +814,7 @@ int main ( int argc, char **argv )
 	} else if (configdb.autoload)
 		c64_register_fake_typing(fake_typing_for_load65);
 #endif
-	if (audio) {
+	if (audio && !configdb.nosound) {
 		DEBUGPRINT("AUDIO: start" NL);
 		SDL_PauseAudioDevice(audio, 0);
 	}

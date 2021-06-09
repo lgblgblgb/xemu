@@ -86,6 +86,7 @@ struct configdb_st {
 	int	stereoseparation;
 	int	mastervolume;
 	double	fast_mhz;
+	int	nosound;
 };
 
 extern struct configdb_st configdb;
