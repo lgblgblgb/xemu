@@ -87,6 +87,7 @@ struct configdb_st {
 	int	mastervolume;
 	double	fast_mhz;
 	int	nosound;
+	int	noopl3;
 };
 
 extern struct configdb_st configdb;

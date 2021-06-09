@@ -87,6 +87,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "skipunhandledmem", "Do not even ask on unhandled memory access (hides problems!!)", &configdb.skip_unhandled_mem },
 	{ "fullborders", "Show non-clipped display borders", &configdb.fullborders },
 	{ "nosound", "Disables audio emulation", &configdb.nosound },
+	{ "noopl3", "Disables OPL3 emulation", &configdb.noopl3 },
 	{ NULL }
 };
 

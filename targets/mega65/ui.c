@@ -405,6 +405,23 @@ static void ui_cb_fullborders ( const struct menu_st *m, int *query )
 }
 
 
+// FIXME: should be renamed with better name ;)
+// FIXME: should be moved into the core
+static void ui_cb_toggle_int_inverted ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, !*(int*)m->user_data);
+	*(int*)m->user_data = !*(int*)m->user_data;
+}
+
+
+static void ui_cb_sids_enabled ( const struct menu_st *m, int *query )
+{
+	int mask = VOIDPTR_TO_INT(m->user_data);
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, (enabled_sids & mask));
+	enabled_sids ^= mask;
+}
+
+
 /**** MENU SYSTEM ****/
 
 
@@ -517,10 +534,30 @@ static const struct menu_st menu_audio_stereo[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)-100 },
 	{ NULL }
 };
+static const struct menu_st menu_audio_sids[] = {
+	{ "SID @ $D400",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_sids_enabled, (void*)1 },
+	{ "SID @ $D420",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_sids_enabled, (void*)2 },
+	{ "SID @ $D440",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_sids_enabled, (void*)4 },
+	{ "SID @ SD460",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_sids_enabled, (void*)8 },
+	{ NULL }
+};
+static const struct menu_st menu_audio[] = {
+	{ "Audio output",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_toggle_int_inverted, (void*)&configdb.nosound },
+	{ "OPL3 emulation",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_toggle_int_inverted, (void*)&configdb.noopl3 },
+	{ "Emulated SIDs",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_sids   },
+	{ "Stereo separation",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_stereo },
+	{ NULL }
+};
 static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
 	{ "Input devices",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_inputdevices },
-	{ "Audio",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_stereo },
+	{ "Audio",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio   },
 	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
 	{ "FD D81",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_d81     },
 	{ "Reset",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },

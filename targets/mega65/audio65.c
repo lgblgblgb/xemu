@@ -29,7 +29,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "io_mapper.h"
 // For accessing memory (audio DMA):
 #include "memory_mapper.h"
-
+#include "configdb.h"
 
 //#define DEBUG_AUDIO_LOCKS(...) DEBUGPRINT(__VA_ARGS__)
 #define DEBUG_AUDIO_LOCKS(...)
@@ -39,6 +39,7 @@ SDL_AudioDeviceID audio = 0;	// SDL audio device
 
 int stereo_separation = AUDIO_DEFAULT_SEPARATION;
 int audio_volume      = AUDIO_DEFAULT_VOLUME;
+int enabled_sids	= 0xF;
 
 static int stereo_separation_orig = 100;
 static int stereo_separation_other = 0;
@@ -72,6 +73,8 @@ void audio65_sid_write ( const int addr, const Uint8 data )
 
 void audio65_opl3_write ( Uint8 reg, Uint8 data )
 {
+	if (configdb.noopl3)
+		return;
 #ifdef OPL_USES_LOCK
 	DEBUG_AUDIO_LOCKS("WRITER: Waiting for OPL3 lock ... (%d)" NL, opl3_lock);
 	SDL_AtomicLock(&opl3_lock);
@@ -215,15 +218,24 @@ void audio_set_stereo_parameters ( int vol, int sep )
 
 
 #define AUDIO_BUFFER_SAMPLES_MAX	1024
+static Sint16 streams[9][AUDIO_BUFFER_SAMPLES_MAX];
 
 
 static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 {
-#if 1
+	static int nosound_previous = -1;
+	if (XEMU_UNLIKELY(nosound_previous != configdb.nosound)) {
+		nosound_previous = configdb.nosound;
+		DEBUGPRINT("AUDIO: callback switches to %s mode." NL, configdb.nosound ? "silent" : "working");
+	}
+	if (configdb.nosound) {
+		// Render silence ...
+		memset(stereo_out_stream, 0, len);
+		return;
+	}
 	len >>= 2;	// the size in *SAMPLES* (not in bytes) is /4, since it's a stereo stream, and 2 bytes/sample, we want to render
 	//DEBUGPRINT("AUDIO: audio callback, wants %d samples to be rendered" NL, len);
 	//short streams[9][len];	// currently. 4 dma channels + 4 SIDs + 1 for OPL3
-	static short streams[9][AUDIO_BUFFER_SAMPLES_MAX];
 	if (len > AUDIO_BUFFER_SAMPLES_MAX) {
 		len = AUDIO_BUFFER_SAMPLES_MAX;
 		DEBUGPRINT("AUDIO: ERROR, SDL wants more samples (%d) than buffer size (%d)!" NL, len, AUDIO_BUFFER_SAMPLES_MAX);
@@ -233,6 +245,10 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 		render_dma_audio(i, streams[i], len);
 	// SIDs: #0 $D400 - left,  #1 $D420 - left, #2 $D440 - right, #3 $D460 - right
 	for (int i = 0; i < 4; i++) {
+		if (XEMU_UNLIKELY(!(enabled_sids & (1 << i)))) {
+			memset(streams[4 + i], 0, len * 4);
+			continue;
+		}
 #ifdef SID_USES_LOCK
 		DEBUG_AUDIO_LOCKS("RENDER: Waiting for SID lock #%d (%d)" NL, i, sid[i].spinlock);
 		SDL_AtomicLock(&sid[i].spinlock);
@@ -248,18 +264,22 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 	//sid_render(&sid[1], streams[5], len, 1);	// $D420 - left
 	//sid_render(&sid[2], streams[6], len, 1);	// $D440 - right
 	//sid_render(&sid[3], streams[7], len, 1);	// $D460 - right
-	//DEBUGPRINT("before OPL buffer will be %d, len requested: %d" NL, (int)(streams[8] - streams[0]), len);
+	if (XEMU_LIKELY(!configdb.noopl3)) {
+		//DEBUGPRINT("before OPL buffer will be %d, len requested: %d" NL, (int)(streams[8] - streams[0]), len);
 #ifdef OPL_USES_LOCK
-	DEBUG_AUDIO_LOCKS("RENDER: Waiting for OPL3 lock ... (%d)" NL, opl3_lock);
-	SDL_AtomicLock(&opl3_lock);
-	DEBUG_AUDIO_LOCKS("RENDER: Got OPL3 lock (%d)" NL, opl3_lock);
+		DEBUG_AUDIO_LOCKS("RENDER: Waiting for OPL3 lock ... (%d)" NL, opl3_lock);
+		SDL_AtomicLock(&opl3_lock);
+		DEBUG_AUDIO_LOCKS("RENDER: Got OPL3 lock (%d)" NL, opl3_lock);
 #endif
-	OPL3_GenerateStream(&opl3, streams[8], len, 1);
+		OPL3_GenerateStream(&opl3, streams[8], len, 1);
 #ifdef OPL_USES_LOCK
-	SDL_AtomicUnlock(&opl3_lock);
-	DEBUG_AUDIO_LOCKS("RENDER: Released OPL3 lock (%d)" NL, opl3_lock);
+		SDL_AtomicUnlock(&opl3_lock);
+		DEBUG_AUDIO_LOCKS("RENDER: Released OPL3 lock (%d)" NL, opl3_lock);
 #endif
-	//DEBUGPRINT("after OPL" NL);
+		//DEBUGPRINT("after OPL" NL);
+	} else {
+		memset(streams[8], 0, len * 4);
+	}
 	// Now mix channels
 	for (int i = 0; i < len; i++) {
 		// mixing streams together
@@ -282,13 +302,6 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 		((short*)stereo_out_stream)[ i << 1     ] = left;
 		((short*)stereo_out_stream)[(i << 1) + 1] = right;
 	}
-#else
-	// DEBUG("AUDIO: audio callback, wants %d samples" NL, len);
-	// We use the trick, to render boths SIDs with step of 2, with a byte offset
-	// to get a stereo stream, wanted by SDL.
-	//sid_render(&sid2, ((short *)(stereo_out_stream)) + 0, len >> 1, 2);	// SID @ left
-	//sid_render(&sid1, ((short *)(stereo_out_stream)) + 1, len >> 1, 2);	// SID @ right
-#endif
 	//DEBUGPRINT("AUDIO: END OF SDL AUDIO THREAD" NL);
 }
 #endif
