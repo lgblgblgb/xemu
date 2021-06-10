@@ -218,13 +218,14 @@ void audio_set_stereo_parameters ( int vol, int sep )
 // 4 channel for audio DMA, 4 channel for SIDs (each SIDs are pre-mixed to one channel by sid.c), 1 OPL3 channel (OPL3 is pre-mixed to one channel in opl3.c)
 #define MIXED_CHANNELS			9
 
-static Sint16 streams[MIXED_CHANNELS][AUDIO_BUFFER_SAMPLES_MAX];
-//static Sint16 streams[(MIXED_CHANNELS) * (AUDIO_BUFFER_SAMPLES_MAX)];
-#define STREAM_CHANNEL(n)		((n) * AUDIO_BUFFER_SAMPLES_MAX)
+#define STREAMS(n)			(streams + ((n) * (AUDIO_BUFFER_SAMPLES_MAX)))
+#define STREAMS_SAMPLE(n,d)		((int)(STREAMS(n)[d]))
 
 
 static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 {
+	//static Sint16 streams[MIXED_CHANNELS][AUDIO_BUFFER_SAMPLES_MAX];
+	static Sint16 streams[(MIXED_CHANNELS) * (AUDIO_BUFFER_SAMPLES_MAX)];
 	static volatile int in_progress = 0;
 	if (XEMU_UNLIKELY(in_progress)) {
 		DEBUGPRINT("AUDIO: Error, overlapping audio callback calls!" NL);
@@ -249,14 +250,23 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 		len = AUDIO_BUFFER_SAMPLES_MAX;
 		DEBUGPRINT("AUDIO: ERROR, SDL wants more samples (%d) than buffer size (%d)!" NL, len, AUDIO_BUFFER_SAMPLES_MAX);
 	}
+#if 0
+	static int do_p_stat = 1;
+	if (do_p_stat) {
+		do_p_stat = 0;
+		DEBUGPRINT(NL "streams=%p streams[0]=%p, &streams[0][0]=%p (streams[1] - streams[0])=%d (&streams[1][0] - &streams[0][0])=%d" NL NL,
+			streams, streams[0], &streams[0][0], (int)(streams[1] - streams[0]), (int)(&streams[2][0] - &streams[1][0])
+		);
+	}
+#endif
 	//DEBUGPRINT("p=%p 0=%p 1=%p, 2=%p, 3=%p, 4=%p, 5=%p, 6=%p, 7=%p, 8=%p" NL, streams, streams[0], streams[1], streams[2], streams[3], streams[4], streams[5], streams[6], streams[7], streams[8]);
 	for (int i = 0; i < 4; i++)
-		render_dma_audio(i, streams[i], len);
+		render_dma_audio(i, STREAMS(i), len);
 	// SIDs: #0 $D400 - left,  #1 $D420 - left, #2 $D440 - right, #3 $D460 - right
 	for (int i = 0; i < 4; i++) {
 		if (XEMU_UNLIKELY(!(configdb.sidmask & (1 << i)))) {
 			// *2 here, since a stream at this level is MONO, but 16 bit
-			memset(streams[4 + i], 0, len * 2);
+			memset(STREAMS(4 + i), 0, len * 2);
 			continue;
 		}
 #ifdef SID_USES_LOCK
@@ -264,7 +274,7 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 		SDL_AtomicLock(&sid[i].spinlock);
 		DEBUG_AUDIO_LOCKS("RENDER: Got SID lock #%d (%d)" NL, i, sid[i].spinlock);
 #endif
-		sid_render(&sid[i], streams[4 + i], len, 1);
+		sid_render(&sid[i], STREAMS(4 + i), len, 1);
 #ifdef SID_USES_LOCK
 		SDL_AtomicUnlock(&sid[i].spinlock);
 		DEBUG_AUDIO_LOCKS("RENDER: Released SID lock #%d (%d)" NL, i, sid[i].spinlock);
@@ -281,20 +291,20 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 		SDL_AtomicLock(&opl3_lock);
 		DEBUG_AUDIO_LOCKS("RENDER: Got OPL3 lock (%d)" NL, opl3_lock);
 #endif
-		OPL3_GenerateStream(&opl3, streams[8], len, 1);
+		OPL3_GenerateStream(&opl3, STREAMS(8), len, 1);
 #ifdef OPL_USES_LOCK
 		SDL_AtomicUnlock(&opl3_lock);
 		DEBUG_AUDIO_LOCKS("RENDER: Released OPL3 lock (%d)" NL, opl3_lock);
 #endif
 		//DEBUGPRINT("after OPL" NL);
 	} else {
-		memset(streams[8], 0, len * 2);
+		memset(STREAMS(8), 0, len * 2);
 	}
 	// Now mix channels
 	for (int i = 0; i < len; i++) {
 		// mixing streams together
-		const int orig_left  = (int)streams[0][i] + (int)streams[1][i] + (int)streams[4][i] + (int)streams[5][i] + (int)streams[8][i];
-		const int orig_right = (int)streams[2][i] + (int)streams[3][i] + (int)streams[6][i] + (int)streams[7][i] + (int)streams[8][i];
+		const int orig_left  = STREAMS_SAMPLE(0, i) + STREAMS_SAMPLE(1, i) + STREAMS_SAMPLE(4, i) + STREAMS_SAMPLE(5, i) + STREAMS_SAMPLE(8, i);
+		const int orig_right = STREAMS_SAMPLE(2, i) + STREAMS_SAMPLE(3, i) + STREAMS_SAMPLE(6, i) + STREAMS_SAMPLE(7, i) + STREAMS_SAMPLE(8, i);
 #if 1
 		// channel stereo separation (including inversion) + volume handling
 		int left  = ((orig_left  * stereo_separation_orig) / 100) + ((orig_right * stereo_separation_other) / 100);
