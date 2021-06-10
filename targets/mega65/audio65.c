@@ -239,7 +239,7 @@ void audio_set_stereo_parameters ( int vol, int sep )
 
 #define AUDIO_BUFFER_SAMPLES_MAX	1024
 // 4 channel for audio DMA, 4 channel for SIDs (each SIDs are pre-mixed to one channel by sid.c), 1 OPL3 channel (OPL3 is pre-mixed to one channel in opl3.c)
-#define MIXED_CHANNELS			9
+#define MIXED_CHANNELS			99
 
 #define STREAMS(n)			(streams + ((n) * (AUDIO_BUFFER_SAMPLES_MAX)))
 #define STREAMS_SAMPLE(n,d)		((int)(STREAMS(n)[d]))
@@ -283,17 +283,18 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 	// Render samples for the OPL3 emulation
 	if (XEMU_LIKELY(!configdb.noopl3)) {
 		LOCK_OPL("RENDER");
-		OPL3_GenerateStream(&opl3, STREAMS(8), len, 1);
+		OPL3_GenerateStream(&opl3, STREAMS(8), STREAMS(9), len, 1, 1);
 		UNLOCK_OPL("RENDER");
 	} else {
 		memset(STREAMS(8), 0, len * sizeof(Sint16));
+		memset(STREAMS(9), 0, len * sizeof(Sint16));
 	}
 	// Now mix the result ...
 	for (int i = 0; i < len; i++) {
 		// mixing streams together
-		// Currently: put the first two SIDS to the left, the second two to the right, same for DMA audio channels, and put OPL3 to the middle
+		// Currently: put the first two SIDS to the left, the second two to the right, same for DMA audio channels, and OPL3 seems to need 2 channel
 		const register int orig_left  = STREAMS_SAMPLE(0, i) + STREAMS_SAMPLE(1, i) + STREAMS_SAMPLE(4, i) + STREAMS_SAMPLE(5, i) + STREAMS_SAMPLE(8, i);
-		const register int orig_right = STREAMS_SAMPLE(2, i) + STREAMS_SAMPLE(3, i) + STREAMS_SAMPLE(6, i) + STREAMS_SAMPLE(7, i) + STREAMS_SAMPLE(8, i);
+		const register int orig_right = STREAMS_SAMPLE(2, i) + STREAMS_SAMPLE(3, i) + STREAMS_SAMPLE(6, i) + STREAMS_SAMPLE(7, i) + STREAMS_SAMPLE(9, i);
 #if 1
 		// channel stereo separation (including inversion) + volume handling
 		int left  = ((orig_left  * stereo_separation_orig) / 100) + ((orig_right * stereo_separation_other) / 100);
@@ -310,6 +311,10 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 		// write the output stereo stream for SDL (it's an interlaved left-right-left-right kind of thing)
 		((short*)stereo_out_stream)[ i << 1     ] = left;
 		((short*)stereo_out_stream)[(i << 1) + 1] = right;
+	}
+	for (short *p = STREAMS(10); p < STREAMS(MIXED_CHANNELS); p++) {
+		if (*p)
+			DEBUGPRINT("AUDIO BUFFER CORRUPTION AT OFFSET: %d" NL, (int)(p - STREAMS(0)));
 	}
 }
 #endif

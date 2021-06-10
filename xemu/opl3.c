@@ -1179,7 +1179,7 @@ void OPL3_Generate(opl3_chip *chip, Bit16s *buf)
     chip->writebuf_samplecnt++;
 }
 
-void OPL3_GenerateResampled(opl3_chip *chip, Bit16s *buf)
+void OPL3_GenerateResampled(opl3_chip *chip, Bit16s *buf1, Bit16s *buf2)
 {
     while (chip->samplecnt >= chip->rateratio)
     {
@@ -1188,9 +1188,9 @@ void OPL3_GenerateResampled(opl3_chip *chip, Bit16s *buf)
         OPL3_Generate(chip, chip->samples);
         chip->samplecnt -= chip->rateratio;
     }
-    buf[0] = (Bit16s)((chip->oldsamples[0] * (chip->rateratio - chip->samplecnt)
+    buf1[0] = (Bit16s)((chip->oldsamples[0] * (chip->rateratio - chip->samplecnt)
                      + chip->samples[0] * chip->samplecnt) / chip->rateratio);
-    buf[1] = (Bit16s)((chip->oldsamples[1] * (chip->rateratio - chip->samplecnt)
+    buf2[0] = (Bit16s)((chip->oldsamples[1] * (chip->rateratio - chip->samplecnt)
                      + chip->samples[1] * chip->samplecnt) / chip->rateratio);
     chip->samplecnt += 1 << RSM_FRAC;
 }
@@ -1369,10 +1369,12 @@ void OPL3_WriteRegBuffered(opl3_chip *chip, Bit16u reg, Bit8u v)
     chip->writebuf_last = (chip->writebuf_last + 1) % OPL_WRITEBUF_SIZE;
 }
 
-void OPL3_GenerateStream(opl3_chip *chip, Bit16s *sndptr, Bit32u numsamples, Bit32u increment )
+void OPL3_GenerateStream(opl3_chip *chip, Bit16s *sndptr1, Bit16s *sndptr2, Bit32u numsamples, Bit32u increment1, Bit32u increment2 )
 {
-	while (numsamples--) {
-		OPL3_GenerateResampled(chip, sndptr);
-		sndptr += increment;
+	while (numsamples) {
+		numsamples--;
+		OPL3_GenerateResampled(chip, sndptr1, sndptr2);
+		sndptr1 += increment1;
+		sndptr2 += increment2;
 	}
 }
