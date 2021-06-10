@@ -215,7 +215,12 @@ void audio_set_stereo_parameters ( int vol, int sep )
 
 
 #define AUDIO_BUFFER_SAMPLES_MAX	1024
-static Sint16 streams[9][AUDIO_BUFFER_SAMPLES_MAX];
+// 4 channel for audio DMA, 4 channel for SIDs (each SIDs are pre-mixed to one channel by sid.c), 1 OPL3 channel (OPL3 is pre-mixed to one channel in opl3.c)
+#define MIXED_CHANNELS			9
+
+static Sint16 streams[MIXED_CHANNELS][AUDIO_BUFFER_SAMPLES_MAX];
+//static Sint16 streams[(MIXED_CHANNELS) * (AUDIO_BUFFER_SAMPLES_MAX)];
+#define STREAM_CHANNEL(n)		((n) * AUDIO_BUFFER_SAMPLES_MAX)
 
 
 static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
@@ -236,6 +241,7 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 		memset(stereo_out_stream, 0, len);
 		goto END;
 	}
+	//DEBUGPRINT("AUDIO: audio callback, wants %d bytes to be rendered" NL, len);
 	len >>= 2;	// the size in *SAMPLES* (not in bytes) is /4, since it's a stereo stream, and 2 bytes/sample, we want to render
 	//DEBUGPRINT("AUDIO: audio callback, wants %d samples to be rendered" NL, len);
 	//short streams[9][len];	// currently. 4 dma channels + 4 SIDs + 1 for OPL3
@@ -249,7 +255,8 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 	// SIDs: #0 $D400 - left,  #1 $D420 - left, #2 $D440 - right, #3 $D460 - right
 	for (int i = 0; i < 4; i++) {
 		if (XEMU_UNLIKELY(!(configdb.sidmask & (1 << i)))) {
-			memset(streams[4 + i], 0, len * 4);
+			// *2 here, since a stream at this level is MONO, but 16 bit
+			memset(streams[4 + i], 0, len * 2);
 			continue;
 		}
 #ifdef SID_USES_LOCK
@@ -281,7 +288,7 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 #endif
 		//DEBUGPRINT("after OPL" NL);
 	} else {
-		memset(streams[8], 0, len * 4);
+		memset(streams[8], 0, len * 2);
 	}
 	// Now mix channels
 	for (int i = 0; i < len; i++) {
