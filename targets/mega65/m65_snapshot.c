@@ -18,6 +18,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 
+#define NEED_SID_H
+
 #include "xemu/emutools.h"
 #include "xemu/emutools_snapshot.h"
 #include "xemu/emutools_config.h"
@@ -25,14 +27,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 #include "xemu/cia6526.h"
 #include "vic4.h"
-#include "xemu/sid.h"
 #include "dma65.h"
 #include "hypervisor.h"
 #include "sdcard.h"
 #include "xemu/f011_core.h"
 #include "m65_snapshot.h"
 #include "memory_mapper.h"
-#define NEED_SID_STRUCT_DEFINED
 #include "audio65.h"
 #include "io_mapper.h"
 #include <string.h>

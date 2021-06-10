@@ -18,12 +18,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define SID_USES_LOCK
 #define OPL_USES_LOCK
-
+#define NEED_SID_H
 
 #include "xemu/emutools.h"
-#include "xemu/sid.h"
 #include "xemu/opl3.h"
-#define NEED_SID_STRUCT_DEFINED
 #include "audio65.h"
 // For D7XX (audio DMA):
 #include "io_mapper.h"

@@ -19,7 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_MEGA65_AUDIO65_H_INCLUDED
 #define XEMU_MEGA65_AUDIO65_H_INCLUDED
 
-#ifdef NEED_SID_STRUCT_DEFINED
+#ifdef NEED_SID_H
 #include "xemu/sid.h"
 extern struct SidEmulation sid[4];
 #endif
