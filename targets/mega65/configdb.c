@@ -88,6 +88,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "fullborders", "Show non-clipped display borders", &configdb.fullborders },
 	{ "nosound", "Disables audio emulation", &configdb.nosound },
 	{ "noopl3", "Disables OPL3 emulation", &configdb.noopl3 },
+	{ "audioresetworkaround", "Disables audio during reset (workaround)", &configdb.audioresetworkaround },
 	{ NULL }
 };
 

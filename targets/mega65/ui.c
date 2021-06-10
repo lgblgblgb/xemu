@@ -297,11 +297,6 @@ static void ui_dump_memory ( void )
 	}
 }
 
-static void ui_cb_show_drive_led ( const struct menu_st *m, int *query )
-{
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, configdb.show_drive_led);
-	configdb.show_drive_led = !configdb.show_drive_led;
-}
 
 static void ui_emu_info ( void )
 {
@@ -414,9 +409,18 @@ static void ui_cb_toggle_int_inverted ( const struct menu_st *m, int *query )
 }
 
 
+// FIXME: should be renamed with better name ;)
+// FIXME: should be moved into the core
+static void ui_cb_toggle_int ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, *(int*)m->user_data);
+	*(int*)m->user_data = !*(int*)m->user_data;
+}
+
+
 static void ui_cb_sids_enabled ( const struct menu_st *m, int *query )
 {
-	int mask = VOIDPTR_TO_INT(m->user_data);
+	const int mask = VOIDPTR_TO_INT(m->user_data);
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, (configdb.sidmask & mask));
 	configdb.sidmask ^= mask;
 }
@@ -454,7 +458,7 @@ static const struct menu_st menu_display[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_fullborders, NULL },
 	{ "Show drive LED",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK |
-					XEMUGUI_MENUFLAG_SEPARATOR,	ui_cb_show_drive_led, NULL },
+					XEMUGUI_MENUFLAG_SEPARATOR,	ui_cb_toggle_int, (void*)&configdb.show_drive_led },
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &registered_screenshot_request },
 #endif

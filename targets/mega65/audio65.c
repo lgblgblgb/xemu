@@ -33,7 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define DEBUG_AUDIO_LOCKS(...)
 
 
-SDL_AudioDeviceID audio = 0;	// SDL audio device
+static SDL_AudioDeviceID audio = 0;	// SDL audio device
 
 int stereo_separation = AUDIO_DEFAULT_SEPARATION;
 int audio_volume      = AUDIO_DEFAULT_VOLUME;
@@ -220,6 +220,12 @@ static Sint16 streams[9][AUDIO_BUFFER_SAMPLES_MAX];
 
 static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 {
+	static volatile int in_progress = 0;
+	if (XEMU_UNLIKELY(in_progress)) {
+		DEBUGPRINT("AUDIO: Error, overlapping audio callback calls!" NL);
+		return;
+	}
+	in_progress = 1;
 	static int nosound_previous = -1;
 	if (XEMU_UNLIKELY(nosound_previous != configdb.nosound)) {
 		nosound_previous = configdb.nosound;
@@ -228,7 +234,7 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 	if (configdb.nosound) {
 		// Render silence ...
 		memset(stereo_out_stream, 0, len);
-		return;
+		goto END;
 	}
 	len >>= 2;	// the size in *SAMPLES* (not in bytes) is /4, since it's a stereo stream, and 2 bytes/sample, we want to render
 	//DEBUGPRINT("AUDIO: audio callback, wants %d samples to be rendered" NL, len);
@@ -300,6 +306,8 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 		((short*)stereo_out_stream)[(i << 1) + 1] = right;
 	}
 	//DEBUGPRINT("AUDIO: END OF SDL AUDIO THREAD" NL);
+END:
+	in_progress = 0;
 }
 #endif
 
@@ -322,8 +330,29 @@ void audio65_reset ( void )
 }
 
 
+void audio65_start ( void )
+{
+	static volatile int started = 0;
+	if (started) {
+		ERROR_WINDOW("Trying to restart audio??\nRefuseing to do so!!");
+		return;
+	}
+	started = 1;
+	if (!audio)
+		return;
+	DEBUGPRINT("AUDIO: start mixing." NL);
+	SDL_PauseAudioDevice(audio, 0);
+}
+
+
 void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int separation )
 {
+	static volatile int initialized = 0;
+	if (initialized) {
+		ERROR_WINDOW("Trying to reinitialize audio??\nRefusing to do so!!");
+		return;
+	}
+	initialized = 1;
 	system_sound_mix_freq = sound_mix_freq;
 	system_sid_cycles_per_sec = sid_cycles_per_sec;
 	audio65_reset();
@@ -337,6 +366,8 @@ void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int 
 	audio_want.samples = AUDIO_BUFFER_SAMPLES_MAX;		// Sample size suggested (?) for the callback to render once
 	audio_want.callback = audio_callback;	// Audio render callback function, called periodically by SDL on demand
 	audio_want.userdata = NULL;		// Not used, "userdata" parameter passed to the callback by SDL
+	if (audio)
+		ERROR_WINDOW("audio was not zero before calling SDL_OpenAudioDevice!");
 	audio = SDL_OpenAudioDevice(NULL, 0, &audio_want, &audio_got, 0);
 	if (audio) {
 		for (int i = 0; i < SDL_GetNumAudioDevices(0); i++)

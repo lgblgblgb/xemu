@@ -467,6 +467,10 @@ static void shutdown_callback ( void )
 
 void reset_mega65 ( void )
 {
+	if (!configdb.nosound && configdb.audioresetworkaround) {
+		configdb.nosound = 1;
+		hypervisor_to_enable_audio = 1;
+	}
 	eth65_reset();
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0xFF;
@@ -483,7 +487,7 @@ void reset_mega65 ( void )
 	nmi_level = 0;
 	D6XX_registers[0x7E] = configdb.kicked;
 	hypervisor_start_machine();
-	DEBUGPRINT("SYSTEM RESET." NL);
+	DEBUGPRINT("SYSTEM: RESET" NL);
 }
 
 
@@ -814,10 +818,7 @@ int main ( int argc, char **argv )
 	} else if (configdb.autoload)
 		c64_register_fake_typing(fake_typing_for_load65);
 #endif
-	if (audio) {
-		DEBUGPRINT("AUDIO: start mixing." NL);
-		SDL_PauseAudioDevice(audio, 0);
-	}
+	audio65_start();
 	xemu_set_full_screen(configdb.fullscreen_requested);
 	if (!configdb.syscon)
 		sysconsole_close(NULL);
