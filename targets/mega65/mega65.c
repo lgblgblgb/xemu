@@ -467,7 +467,7 @@ static void shutdown_callback ( void )
 
 void reset_mega65 ( void )
 {
-	if (!configdb.nosound && configdb.audioresetworkaround) {
+	if (!configdb.nosound && configdb.audioresetbug) {
 		configdb.nosound = 1;
 		hypervisor_to_enable_audio = 1;
 	}

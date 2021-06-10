@@ -86,9 +86,9 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override },
 	{ "skipunhandledmem", "Do not even ask on unhandled memory access (hides problems!!)", &configdb.skip_unhandled_mem },
 	{ "fullborders", "Show non-clipped display borders", &configdb.fullborders },
-	{ "nosound", "Disables audio emulation", &configdb.nosound },
+	{ "nosound", "Disables audio output generation", &configdb.nosound },
 	{ "noopl3", "Disables OPL3 emulation", &configdb.noopl3 },
-	{ "audioresetworkaround", "Disables audio during reset (workaround)", &configdb.audioresetworkaround },
+	{ "audioresetbug", "Disables audio during reset (workaround)", &configdb.audioresetbug },
 	{ NULL }
 };
 
