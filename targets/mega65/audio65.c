@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SID_USES_LOCK
 #define OPL_USES_LOCK
 #define NEED_SID_H
+#define CORRUPTION_DEBUG
 
 #include "xemu/emutools.h"
 #include "xemu/opl3.h"
@@ -127,9 +128,9 @@ void audio65_sid_inc_framecount ( void )
 
 
 #ifdef AUDIO_EMULATION
-static inline void render_dma_audio ( int channel, short *buffer, int len )
+static inline void render_dma_audio ( int channel, Sint16 *buffer, int len )
 {
-	static short sample[4];	// current sample values of the four channels, normalized to 16 bit signed value
+	static Sint16 sample[4];	// current sample values of the four channels, normalized to 16 bit signed value
 	static double rate_counter[4] = {0,0,0,0};
 	Uint8 *chio = D7XX + 0x20 + channel * 0x10;
 	unsigned int addr = chio[0xA] + (chio[0xB] << 8) + (chio[0xC] << 16);
@@ -238,17 +239,23 @@ void audio_set_stereo_parameters ( int vol, int sep )
 
 
 #define AUDIO_BUFFER_SAMPLES_MAX	1024
-// 4 channel for audio DMA, 4 channel for SIDs (each SIDs are pre-mixed to one channel by sid.c), 1 OPL3 channel (OPL3 is pre-mixed to one channel in opl3.c)
-#define MIXED_CHANNELS			99
+// 10 channels, consist of: 4 channel for audio DMA, 4 channel for SIDs (each SIDs are pre-mixed to one channel by sid.c), 2 OPL3 channel (OPL3 is pre-mixed into two channels in opl3.c)
+#define MIXED_CHANNELS			10
 
+#ifdef CORRUPTION_DEBUG
+#	define	EXTRA_STREAM_CHANNELS	99
+#else
+#	define	EXTRA_STREAM_CHANNELS	0
+#endif
+
+#define	STREAMS_SIZE_ALL		(((MIXED_CHANNELS) + (EXTRA_STREAM_CHANNELS)) * (AUDIO_BUFFER_SAMPLES_MAX))
 #define STREAMS(n)			(streams + ((n) * (AUDIO_BUFFER_SAMPLES_MAX)))
 #define STREAMS_SAMPLE(n,d)		((int)(STREAMS(n)[d]))
 
 
 static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 {
-	//static Sint16 streams[MIXED_CHANNELS][AUDIO_BUFFER_SAMPLES_MAX];
-	static Sint16 streams[(MIXED_CHANNELS) * (AUDIO_BUFFER_SAMPLES_MAX)];
+	static Sint16 streams[STREAMS_SIZE_ALL];
 	static int nosound_previous = -1;
 	if (XEMU_UNLIKELY(nosound_previous != configdb.nosound)) {
 		nosound_previous = configdb.nosound;
@@ -290,7 +297,7 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 		memset(STREAMS(9), 0, len * sizeof(Sint16));
 	}
 	// Now mix the result ...
-	for (int i = 0; i < len; i++) {
+	for (int i = 0, j = 0; i < len; i++) {
 		// mixing streams together
 		// Currently: put the first two SIDS to the left, the second two to the right, same for DMA audio channels, and OPL3 seems to need 2 channel
 		const register int orig_left  = STREAMS_SAMPLE(0, i) + STREAMS_SAMPLE(1, i) + STREAMS_SAMPLE(4, i) + STREAMS_SAMPLE(5, i) + STREAMS_SAMPLE(8, i);
@@ -309,13 +316,16 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 		if      (right >  0x7FFF) right =  0x7FFF;
 		else if (right < -0x8000) right = -0x8000;
 		// write the output stereo stream for SDL (it's an interlaved left-right-left-right kind of thing)
-		((short*)stereo_out_stream)[ i << 1     ] = left;
-		((short*)stereo_out_stream)[(i << 1) + 1] = right;
+		((Sint16*)stereo_out_stream)[j++] = left;
+		((Sint16*)stereo_out_stream)[j++] = right;
 	}
-	for (short *p = STREAMS(10); p < STREAMS(MIXED_CHANNELS); p++) {
+#ifdef CORRUPTION_DEBUG
+#	warning "You have CORRUPTION_DEBUG enabled"
+	for (Sint16 *p = STREAMS(MIXED_CHANNELS); p < streams + STREAMS_SIZE_ALL; p++) {
 		if (*p)
 			DEBUGPRINT("AUDIO BUFFER CORRUPTION AT OFFSET: %d" NL, (int)(p - STREAMS(0)));
 	}
+#endif
 }
 #endif
 

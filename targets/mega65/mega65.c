@@ -467,7 +467,7 @@ static void shutdown_callback ( void )
 
 void reset_mega65 ( void )
 {
-	if (!configdb.nosound && configdb.audioresetbug) {
+	if (!configdb.nosound && configdb.soundresetbug) {
 		configdb.nosound = 1;
 		hypervisor_to_enable_audio = 1;
 	}
@@ -741,7 +741,7 @@ static void emulation_loop ( void )
 
 int main ( int argc, char **argv )
 {
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The Incomplete MEGA65 emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Evolving MEGA65 emulator from LGB");
 	configdb_define_emulator_options(sizeof configdb);
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
