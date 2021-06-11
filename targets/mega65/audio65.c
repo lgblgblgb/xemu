@@ -330,6 +330,19 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 #endif
 
 
+
+void audio65_clear_regs ( void )
+{
+	// OPL and SIDs lock are implemented by the ..._write() function, no need to take care here
+	for (int i = 0; i < 0x100; i++)
+		audio65_opl3_write(i, 0);
+	for (int i = 0; i < NUMBER_OF_SIDS * 0x20; i++)
+		audio65_sid_write(i << i, 0);
+	memset(D7XX + 0x20, 0, 0x40);	// DMA audio related registers
+	DEBUGPRINT("AUDIO: clearing audio related registers." NL);
+}
+
+
 void audio65_reset ( void )
 {
 	// We always initialize SIDs/OPL, even if no audio emulation is compiled in
@@ -343,6 +356,7 @@ void audio65_reset ( void )
 	OPL3_Reset(&opl3, system_sound_mix_freq);
 	UNLOCK_OPL("RESET");
 	DEBUGPRINT("AUDIO: reset for %d SIDs (%d cycles per sec) and 1 OPL3 chip for %dHz sampling rate." NL, NUMBER_OF_SIDS, system_sid_cycles_per_sec, system_sound_mix_freq);
+	audio65_clear_regs();
 }
 
 

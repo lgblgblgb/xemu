@@ -38,6 +38,7 @@ extern int stereo_separation;
 
 extern void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int separation );
 extern void audio65_reset ( void );
+extern void audio65_clear_regs ( void );
 extern void audio65_start ( void );
 extern void audio65_opl3_write ( Uint8 reg, Uint8 data );
 extern void audio65_sid_write ( const int addr, const Uint8 data );
