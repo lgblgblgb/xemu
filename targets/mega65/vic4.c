@@ -30,6 +30,20 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "io_mapper.h"
 
 
+#define SPRITE_SPRITE_COLLISION
+#define SPRITE_FG_COLLISION
+
+
+#ifdef	XEMU_RELEASE_BUILD
+#	ifdef		SPRITE_SPRITE_COLLISION
+#		undef	SPRITE_SPRITE_COLLISION
+#	endif
+#	ifdef		SPRITE_FG_COLLISION
+#		undef	SPRITE_FG_COLLISION
+#	endif
+#endif
+
+
 const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
 // (SDL) target texture rendering pointers
@@ -53,6 +67,9 @@ static int char_row = 0, display_row = 0;
 // FIXME: really, it's 2048 now, since in H320, GOTOX value is multiplied with 2 and may overflow this array even if it's not so much used this way, we want avoid crash ...
 // FIXME: should be rethought!!!!
 static Uint8 is_fg[2048];					// this cache helps in sprite rendering, zero means background state, other value: foreground
+#ifdef SPRITE_SPRITE_COLLISION
+static Uint8 is_sprite[1024];
+#endif
 static float char_x_step = 0.0;
 static int enable_bg_paint = 1;
 //static int display_row_count = 0;
@@ -757,6 +774,7 @@ Uint8 vic_read_reg ( int unsigned addr )
 		CASE_VIC_ALL(0x1E):	// sprite-sprite collision
 		CASE_VIC_ALL(0x1F):	// sprite-data collision
 			vic_registers[addr & 0x7F] = 0;	// 1E and 1F registers are cleared on read!
+			// FIXME: needs to re-check interrupts!
 			break;
 		CASE_VIC_2(0x20): CASE_VIC_2(0x21): CASE_VIC_2(0x22): CASE_VIC_2(0x23): CASE_VIC_2(0x24): CASE_VIC_2(0x25): CASE_VIC_2(0x26): CASE_VIC_2(0x27):
 		CASE_VIC_2(0x28): CASE_VIC_2(0x29): CASE_VIC_2(0x2A): CASE_VIC_2(0x2B): CASE_VIC_2(0x2C): CASE_VIC_2(0x2D): CASE_VIC_2(0x2E):
@@ -836,7 +854,6 @@ Uint8 vic_read_reg ( int unsigned addr )
 	return result;
 }
 
-
 #undef CASE_VIC_2
 #undef CASE_VIC_3
 #undef CASE_VIC_4
@@ -844,7 +861,36 @@ Uint8 vic_read_reg ( int unsigned addr )
 #undef CASE_VIC_3_4
 
 
-static XEMU_INLINE void vic4_draw_sprite_row_16color( const int sprnum, int x_display_pos, const Uint8* row_data_ptr, const int xscale, const int do_tiling )
+
+#ifdef	SPRITE_SPRITE_COLLISION
+#	warning "Sprite-sprite collision is an experimental feature (SPRITE_SPRITE_COLLISION is defined)!"
+#	define DO_SPRITE_SPRITE_COLLISION(pos,cond) do {	\
+		if (cond) {					\
+			const Uint8 sp = is_sprite[pos];	\
+			is_sprite[pos] = sp | sprbmask;		\
+			if (sp) 				\
+				vic_registers[0x1E] |= sp | sprbmask;	\
+		}						\
+	} while (0)
+#else
+	// dummy macro for the case when SPRITE_SPRITE_COLLISION was not requested
+#	define DO_SPRITE_SPRITE_COLLISION(pos,cond)
+#endif
+
+
+#ifdef	SPRITE_FG_COLLISION
+#	warning "Sprite-foreground collision is an experimental feature (SPRITE_FG_COLLISION is defined)!"
+#	define DO_SPRITE_FG_COLLISION(pos,cond) do {		\
+		if (is_fg[pos] && (cond))			\
+			vic_registers[0x1F] |= sprbmask;	\
+	} while (0)
+#else
+	// dummy macro for the case when SPRITE_FG_COLLISION was not requested
+#	define DO_SPRITE_FG_COLLISION(pos,cond)
+#endif
+
+
+static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_display_pos, const Uint8* row_data_ptr, const int xscale, const int do_tiling )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	//const int palindexbase = sprnum * 16 + 128 * (SPRITE_BITPLANE_ENABLE(sprnum) >> sprnum);
@@ -853,6 +899,7 @@ static XEMU_INLINE void vic4_draw_sprite_row_16color( const int sprnum, int x_di
 	// in 16 colour sprite mode, sprite colour register gives the transparent colour index
 	// We always use the lower 4 bit only at this very specific case, that's the reason for SPRITE_COLOR_4BIT() macro and not SPRITE_COLOR() [which can be 4/8 bit depending on curretn VIC mode)
 	const Uint8 transparency_palette_index = SPRITE_COLOR_4BIT(sprnum);
+	const Uint8 sprbmask = 1 << sprnum;
 	do {
 		for (int byte = 0; byte < totalBytes; byte++) {
 			const Uint8 c0 = (*(row_data_ptr + byte)) >> 4;
@@ -860,14 +907,20 @@ static XEMU_INLINE void vic4_draw_sprite_row_16color( const int sprnum, int x_di
 			for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
 				if (c0 != transparency_palette_index && x_display_pos >= border_x_left && (
 					!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
-				))
+				)) {
 					*(pixel_raster_start + x_display_pos) = pal16[c0];
+					DO_SPRITE_SPRITE_COLLISION(x_display_pos, 1);
+					DO_SPRITE_FG_COLLISION(x_display_pos, 1);
+				}
 			}
 			for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
 				if (c1 != transparency_palette_index && x_display_pos >= border_x_left && (
 					!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
-				))
+				)) {
 					*(pixel_raster_start + x_display_pos) = pal16[c1];
+					DO_SPRITE_SPRITE_COLLISION(x_display_pos, 1);
+					DO_SPRITE_FG_COLLISION(x_display_pos, 1);
+				}
 			}
 		}
 	} while (XEMU_UNLIKELY(do_tiling && x_display_pos < border_x_right));
@@ -878,6 +931,7 @@ static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( int sprnum, int x_disp
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const Uint8 mcm_spr_pal_indices[4] = { 0, SPRITE_MULTICOLOR_1, SPRITE_COLOR(sprnum), SPRITE_MULTICOLOR_2 };	// entry zero is not used
+	const Uint8 sprbmask = 1 << sprnum;
 	for (int byte = 0; byte < totalBytes; byte++) {
 		const Uint8 row_data = *row_data_ptr++;
 		for (int shift = 6; shift >= 0; shift -= 2) {
@@ -887,12 +941,18 @@ static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( int sprnum, int x_disp
 				if (mcm_pixel_value) {
 					if (x_display_pos >= border_x_left && (
 						!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
-					))
+					)) {
 						*(pixel_raster_start + x_display_pos) = sdl_pixel;
+						DO_SPRITE_SPRITE_COLLISION(x_display_pos, mcm_pixel_value & 2);
+						DO_SPRITE_FG_COLLISION(x_display_pos, mcm_pixel_value & 2);
+					}
 					if (x_display_pos + 1 >= border_x_left && (
 						!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos + 1])
-					))
+					)) {
 						*(pixel_raster_start + x_display_pos + 1) = sdl_pixel;
+						DO_SPRITE_SPRITE_COLLISION(x_display_pos + 1, mcm_pixel_value & 2);
+						DO_SPRITE_FG_COLLISION(x_display_pos + 1, mcm_pixel_value & 2);
+					}
 				}
 			}
 		}
@@ -904,6 +964,7 @@ static XEMU_INLINE void vic4_draw_sprite_row_mono ( int sprnum, int x_display_po
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const Uint32 sdl_pixel = spritepalette[SPRITE_COLOR(sprnum)];
+	const Uint8 sprbmask = 1 << sprnum;
 	for (int byte = 0; byte < totalBytes; byte++) {
 		for (int xbit = 0; xbit < 8; xbit++) {
 			const Uint8 sprite_bit = *row_data_ptr & (0x80 >> xbit);
@@ -911,8 +972,11 @@ static XEMU_INLINE void vic4_draw_sprite_row_mono ( int sprnum, int x_display_po
 				if (x_display_pos >= border_x_left && sprite_bit && (
 					!SPRITE_IS_BACK(sprnum) ||
 					(SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
-				))
+				)) {
 					*(pixel_raster_start + x_display_pos) = sdl_pixel;
+					DO_SPRITE_SPRITE_COLLISION(x_display_pos, 1);
+					DO_SPRITE_FG_COLLISION(x_display_pos, 1);
+				}
 			}
 		}
 		row_data_ptr++;
@@ -1319,6 +1383,9 @@ int vic4_render_scanline ( void )
 			xcounter += border_x_left;
 			current_pixel += border_x_left;
 			vic4_raster_renderer_path();
+#			ifdef SPRITE_SPRITE_COLLISION
+			memset(is_sprite, 0, sizeof is_sprite);
+#			endif
 			vic4_do_sprites();
 		}
 		// Paint screen color if positive y-offset (CHARGEN_Y_START > BORDER_Y_TOP)
