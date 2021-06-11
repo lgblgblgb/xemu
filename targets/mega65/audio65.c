@@ -19,7 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SID_USES_LOCK
 #define OPL_USES_LOCK
 #define NEED_SID_H
-#define CORRUPTION_DEBUG
+//#define CORRUPTION_DEBUG
 
 #include "xemu/emutools.h"
 #include "xemu/opl3.h"
