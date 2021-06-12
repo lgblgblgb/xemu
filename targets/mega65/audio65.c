@@ -169,7 +169,7 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 		render_dma_audio(i, streams[i], len);
 	sid_render(&sid2, streams[4], len, 1);
 	sid_render(&sid1, streams[5], len, 1);
-	OPL3_GenerateStream(&opl3, streams[6], len, 1);
+	OPL3_GenerateStream(&opl3, streams[6], streams[6], len, 1, 1);	// OPL3 emulation useses STEREO output (two streams), however now we just overwrite one channel twice as a work-around
 	// Now mix channels
 	for (int i = 0; i < len; i++) {
 		// mixing streams together
