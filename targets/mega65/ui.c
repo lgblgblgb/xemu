@@ -392,8 +392,6 @@ static const struct menu_st menu_display[] = {
 	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)1 },
 	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize, (void*)2 },
-	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
 	{ "Show drive LED",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_show_drive_led, NULL },
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
@@ -415,14 +413,20 @@ static const struct menu_st menu_reset[] = {
 	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode        },
 	{ NULL }
 };
+static const struct menu_st menu_inputdevices[] = {
+	{ "Swap emulated joystick port",XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, input_toggle_joy_emu },
+	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
+	{ "Use OSD key debugger",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
+	{ NULL }
+};
 static const struct menu_st menu_debug[] = {
 #ifdef HAS_UARTMON_SUPPORT
 	{ "Start umon on " UMON_DEFAULT_PORT,
 					XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_start_umon, NULL },
 #endif
-	{ "OSD key debugger",		XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
 	{ "Dump memory info file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_memory },
 	{ "Emulation state info",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_emu_info },
 	{ NULL }
@@ -471,6 +475,7 @@ static const struct menu_st menu_audio[] = {
 };
 static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
+	{ "Input devices",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_inputdevices },
 	{ "Audio",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio   },
 	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
 	{ "FD D81",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_d81     },

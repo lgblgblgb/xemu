@@ -185,6 +185,13 @@ void clear_emu_events ( void )
 }
 
 
+void input_toggle_joy_emu ( void )
+{
+	c64_toggle_joy_emu();
+	OSD(-1, -1, "Joystick emulation on port #%d", joystick_emu);
+}
+
+
 Uint8 cia1_in_b ( void )
 {
 #ifdef FAKE_TYPING_SUPPORT
@@ -298,8 +305,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 		if (key == SDL_SCANCODE_F10) {
 			reset_mega65_asked();
 		} else if (key == SDL_SCANCODE_KP_ENTER) {
-			c64_toggle_joy_emu();
-			OSD(-1, -1, "Joystick emulation on port #%d", joystick_emu);
+			input_toggle_joy_emu();
 		} else if (((hwa_kbd.modifiers & (MODKEY_LSHIFT | MODKEY_RSHIFT)) == (MODKEY_LSHIFT | MODKEY_RSHIFT)) && set_mouse_grab(SDL_FALSE, 0)) {
 			DEBUGPRINT("UI: mouse grab cancelled" NL);
 		}
