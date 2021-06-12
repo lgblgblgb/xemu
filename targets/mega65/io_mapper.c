@@ -190,6 +190,9 @@ Uint8 io_read ( unsigned int addr )
 					return kbd_directscan_query(D6XX_registers[0x14]);	// for further explanations please see this function in input_devices.c
 				case 0x29:
 					return configdb.mega65_model;		// MEGA65 model
+				case 0x0F:
+					// D60F bit 5, real hardware (1), emulation (0), other bits are not emulated yet by Xemu, so I give simply zero
+					return 0;
 				case 0x32: // D632-D635: FPGA firmware ID
 				case 0x33:
 				case 0x34:

@@ -164,6 +164,9 @@ void vic_reset ( void )
 	vic_registers[0x7D] = 0xFF;
 	vic_registers[0x7E] = 0xFF;
 	vic_registers[0x7F] = 0xFF;
+	// turn off possible remained sprite collision info
+	vic_registers[0x1E] = 0;
+	vic_registers[0x1F] = 0;
 }
 
 

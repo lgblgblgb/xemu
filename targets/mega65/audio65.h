@@ -35,6 +35,7 @@ extern struct SidEmulation sid[NUMBER_OF_SIDS];
 #define AUDIO_UNCHANGED_VOLUME		-1000
 
 extern int stereo_separation;
+extern int audio_volume;
 
 extern void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int separation );
 extern void audio65_reset ( void );
