@@ -720,8 +720,7 @@ static void emulation_loop ( void )
 				scanline = 0;
 				if (!frameskip)	// well, let's only render every full frames (~ie 25Hz)
 					update_emulator();
-				sid1.sFrameCount++;
-				sid2.sFrameCount++;
+				audio65_sid_inc_framecount();
 				frame_counter++;
 				if (frame_counter == 25) {
 					frame_counter = 0;
@@ -822,10 +821,7 @@ int main ( int argc, char **argv )
 	frameskip = 0;
 	frame_counter = 0;
 	vic3_blink_phase = 0;
-	if (audio) {
-		DEBUGPRINT("AUDIO: start" NL);
-		SDL_PauseAudioDevice(audio, 0);
-	}
+	audio65_start();
 	xemu_set_full_screen(configdb.fullscreen_requested);
 	if (!configdb.syscon)
 		sysconsole_close(NULL);
