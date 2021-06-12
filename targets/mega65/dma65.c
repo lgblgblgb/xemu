@@ -57,6 +57,12 @@ int   dma_chip_revision_is_dynamic;	// allowed to change DMA chip revision (norm
 int   dma_chip_revision_override;
 int   dma_chip_initial_revision;
 int   rom_date = 0;
+// Hacky stuff:
+// low byte: the transparent byte value
+// bit 8: zero = transprent mode is used, 1 = no DMA transparency is in used
+// This is done this way to have a single 'if' to check both of enabled transparency and the transparent value,
+// since the value (being 8 bit) to be written would never match values > $FF
+static unsigned int dma_transparency;
 
 
 enum dma_op_types {
@@ -127,6 +133,9 @@ static struct {
 
 #define DMA_READ_SOURCE()	(XEMU_UNLIKELY(source.is_io) ? DMA_SOURCE_IOREADER_FUNC(DMA_ADDRESSING(source)) : DMA_SOURCE_MEMREADER_FUNC(DMA_ADDRESSING(source)))
 #define DMA_READ_TARGET()	(XEMU_UNLIKELY(target.is_io) ? DMA_TARGET_IOREADER_FUNC(DMA_ADDRESSING(target)) : DMA_TARGET_MEMREADER_FUNC(DMA_ADDRESSING(target)))
+
+
+#if 0
 #define DMA_WRITE_SOURCE(data)	do { \
 					if (XEMU_UNLIKELY(source.is_io)) \
 						DMA_SOURCE_IOWRITER_FUNC(DMA_ADDRESSING(source), data); \
@@ -139,6 +148,27 @@ static struct {
 					else \
 						DMA_TARGET_MEMWRITER_FUNC(DMA_ADDRESSING(target), data); \
 				} while (0)
+#endif
+
+static XEMU_INLINE void DMA_WRITE_SOURCE ( Uint8 data )
+{
+	if (XEMU_LIKELY((unsigned int)data != dma_transparency)) {
+		if (XEMU_UNLIKELY(source.is_io))
+			DMA_SOURCE_IOWRITER_FUNC(DMA_ADDRESSING(source), data);
+		else
+			DMA_SOURCE_MEMWRITER_FUNC(DMA_ADDRESSING(source), data);
+	}
+}
+
+static XEMU_INLINE void DMA_WRITE_TARGET ( Uint8 data )
+{
+	if (XEMU_LIKELY((unsigned int)data != dma_transparency)) {
+		if (XEMU_UNLIKELY(target.is_io))
+			DMA_SOURCE_IOWRITER_FUNC(DMA_ADDRESSING(target), data);
+		else
+			DMA_SOURCE_MEMWRITER_FUNC(DMA_ADDRESSING(target), data);
+	}
+}
 
 // Unlike the functions above, DMA list read is always memory (not I/O)
 // Also the "step" is always one. So it's a bit special case ... even on M65 we don't use fixed point math here, just pure number
@@ -301,13 +331,11 @@ int dma_update ( void )
 				DEBUGDMA("DMA: enhanced option byte $%02X read" NL, opt);
 				cycles++;
 				switch (opt) {
-					case 0x86:	// not supported yet
-						list_addr++;	// skip the parameter too
-						cycles++;
-						// flow onto the next 'case'!!
-					case 0x06:
-					case 0x07:
-						DEBUGPRINT("DMA: enhanced DMA transparency is not supported yet (option=$%02X) @ PC=$%04X" NL, opt, cpu65.pc);
+					case 0x06:	// disable transparency
+						dma_transparency |= 0x100;
+						break;
+					case 0x07:	// enable transparency
+						dma_transparency &= 0xFF;
 						break;
 					case 0x0A:
 						dma_chip_revision_override = 0;
@@ -339,14 +367,20 @@ int dma_update ( void )
 						dma_registers[0x0B] = DMA_READ_LIST_NEXT_BYTE();
 						cycles++;
 						break;
+					case 0x86:	// byte value to be treated as "transparent" (ie: skip writing that data), if enabled
+						dma_transparency = (dma_transparency & 0x100) | (unsigned int)DMA_READ_LIST_NEXT_BYTE();
+						cycles++;
+						break;
 					case 0x00:
 						DEBUGDMA("DMA: end of enhanced options" NL);
 						break;
 					default:
 						// maybe later we should keep this quiet ...
 						DEBUGPRINT("DMA: *unknown* enhanced option: $%02X @ PC=$%04X" NL, opt, cpu65.pc);
-						if ((opt & 0x80))
+						if ((opt & 0x80)) {
 							(void)DMA_READ_LIST_NEXT_BYTE();	// skip one byte for unknown option >= $80
+							cycles++;
+						}
 						break;
 				}
 			} while (opt);
@@ -558,6 +592,7 @@ int dma_update ( void )
 			dma_registers[0x0B] = 1;	// target skip rate, integer part
 			dma_registers[5] = 0;		// set back to megabyte selection zero for source
 			dma_registers[6] = 0;		// set back to megabyte selection zero for target
+			dma_transparency = 0x100;	// no DMA transparency by default
 		}
 	}
 	in_dma_update = 0;
@@ -667,6 +702,7 @@ void dma_reset ( void )
 	dma_registers[0x09] = 1;	// fixpoint math source step integer part (1), fractional (reg#8) is already zero by memset() above
 	dma_registers[0x0B] = 1;	// fixpoint math target step integer part (1), fractional (reg#A) is already zero by memset() above
 	dma_chip_revision_override = -1;
+	dma_transparency = 0x100;	// disable transparency by default
 }
 
 
