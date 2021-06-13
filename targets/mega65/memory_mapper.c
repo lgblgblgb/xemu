@@ -74,7 +74,6 @@ Uint8 mega65_uuid[8];
 // RTC registers
 Uint8 rtc_regs[6];
 
-#define SLOW_RAM_SIZE (8 << 20)
 Uint8 slow_ram[SLOW_RAM_SIZE];
 
 

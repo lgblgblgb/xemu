@@ -67,6 +67,7 @@ static int attach_d81 ( const char *fn )
 #ifdef CONFIG_DROPFILE_CALLBACK
 void emu_dropfile_callback ( const char *fn )
 {
+	DEBUGGUI("UI: file drop event, file: %s" NL, fn);
 	switch (QUESTION_WINDOW("Cancel|Mount as D81|Run/inject as PRG", "What to do with the dropped file?")) {
 		case 1:
 			attach_d81(fn);
@@ -282,14 +283,16 @@ static void ui_start_umon ( const struct menu_st *m, int *query )
 }
 #endif
 
+
+static char last_used_dump_directory[PATH_MAX + 1] = "";
+
 static void ui_dump_memory ( void )
 {
 	char fnbuf[PATH_MAX + 1];
-	static char dir[PATH_MAX + 1] = "";
 	if (!xemugui_file_selector(
 		XEMUGUI_FSEL_SAVE | XEMUGUI_FSEL_FLAG_STORE_DIR,
-		"Dump memory content into file",
-		dir,
+		"Dump main memory content into file",
+		last_used_dump_directory,
 		fnbuf,
 		sizeof fnbuf
 	)) {
@@ -297,6 +300,19 @@ static void ui_dump_memory ( void )
 	}
 }
 
+static void ui_dump_hyperram ( void )
+{
+	char fnbuf[PATH_MAX + 1];
+	if (!xemugui_file_selector(
+		XEMUGUI_FSEL_SAVE | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		"Dump hyperRAM content into file",
+		last_used_dump_directory,
+		fnbuf,
+		sizeof fnbuf
+	)) {
+		xemu_save_file(fnbuf, slow_ram, SLOW_RAM_SIZE, "Cannot dump hyperRAM content into file");
+	}
+}
 
 static void ui_emu_info ( void )
 {
@@ -486,11 +502,14 @@ static const struct menu_st menu_reset[] = {
 	{ NULL }
 };
 static const struct menu_st menu_inputdevices[] = {
-	{ "Swap emulated joystick port",XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, input_toggle_joy_emu },
 	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
 	{ "Use OSD key debugger",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
+	{ "Swap emulated joystick port",XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, input_toggle_joy_emu },
+#if 0
+	{ "Devices as joy port 2 (vs 1)",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_joy_devices },
+#endif
 	{ NULL }
 };
 static const struct menu_st menu_debug[] = {
@@ -499,7 +518,8 @@ static const struct menu_st menu_debug[] = {
 					XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_start_umon, NULL },
 #endif
-	{ "Dump memory info file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_memory },
+	{ "Dump main memory info file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_memory },
+	{ "Dump hyperRAM into file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_hyperram },
 	{ "Emulation state info",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_emu_info },
 	{ NULL }
 };
@@ -523,23 +543,23 @@ static const struct menu_st menu_d81[] = {
 static const struct menu_st menu_audio_stereo[] = {
 	{ "Hard stereo separation",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) 100 },
-	{ "Mono downmix 80%",		XEMUGUI_MENUID_CALLABLE |
+	{ "Stereo separation 80%",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)  80 },
-	{ "Mono downmix 60%",		XEMUGUI_MENUID_CALLABLE |
+	{ "Stereo separation 60%",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)  60 },
-	{ "Mono downmix 40%",		XEMUGUI_MENUID_CALLABLE |
+	{ "Stereo separation 40%",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)  40 },
-	{ "Mono downmix 20%",		XEMUGUI_MENUID_CALLABLE |
+	{ "Stereo separation 20%",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)  20 },
-	{ "Mono downmix",		XEMUGUI_MENUID_CALLABLE |
+	{ "Full mono downmix (0%)",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)   0 },
-	{ "Mono downmix -20%",		XEMUGUI_MENUID_CALLABLE |
+	{ "Stereo separation -20%",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) -20 },
-	{ "Mono downmix -40%",		XEMUGUI_MENUID_CALLABLE |
+	{ "Stereo separation -40%",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) -40 },
-	{ "Mono downmix -60%",		XEMUGUI_MENUID_CALLABLE |
+	{ "Stereo separation -60%",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) -60 },
-	{ "Mono downmix -80%",		XEMUGUI_MENUID_CALLABLE |
+	{ "Stereo separation -80%",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) -80 },
 	{ "Hard stereo - reserved",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)-100 },
