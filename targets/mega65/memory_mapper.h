@@ -41,6 +41,8 @@ extern Uint8 main_ram[512 << 10], colour_ram[0x8000], char_wom[0x2000], hypervis
 extern Uint8 nvram[64];
 extern Uint8 mega65_uuid[8];
 extern Uint8 rtc_regs[6];
+#define SLOW_RAM_SIZE (8 << 20)
+extern Uint8 slow_ram[SLOW_RAM_SIZE];
 //extern Uint8 chip_ram[SIZEOF_CHIP_RAM], fast_ram[SIZEOF_FAST_RAM];
 // Ugly hack for more RAM!
 //#define chip_ram  (main_ram + 0)
