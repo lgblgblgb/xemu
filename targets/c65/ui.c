@@ -66,9 +66,19 @@ static int attach_d81 ( const char *fn )
 #ifdef CONFIG_DROPFILE_CALLBACK
 void emu_dropfile_callback ( const char *fn )
 {
-	DEBUGGUI("UI: drop event, file: %s" NL, fn);
-	if (ARE_YOU_SURE("Shall I try to mount the dropped file as D81 for you?"))
-		attach_d81(fn);
+	DEBUGGUI("UI: file drop event, file: %s" NL, fn);
+	switch (QUESTION_WINDOW("Cancel|Mount as D81|Run/inject as PRG|Load as ROM", "What to do with the dropped file?")) {
+		case 1:
+			attach_d81(fn);
+			break;
+		case 2:
+			c65_reset();
+			inject_register_prg(fn, 0);
+			break;
+		case 3:
+			load_and_use_rom(fn);
+			break;
+	}
 }
 #endif
 
