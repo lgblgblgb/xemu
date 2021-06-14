@@ -875,6 +875,9 @@ Uint8 vic_read_reg ( int unsigned addr )
 				vic_registers[0x1E] |= sp | sprbmask;	\
 		}						\
 	} while (0)
+#ifndef	SPRITE_ANY_COLLISION
+#define	SPRITE_ANY_COLLISION
+#endif
 #else
 	// dummy macro for the case when SPRITE_SPRITE_COLLISION was not requested
 #	define DO_SPRITE_SPRITE_COLLISION(pos,cond)
@@ -887,6 +890,9 @@ Uint8 vic_read_reg ( int unsigned addr )
 		if (is_fg[pos] && (cond))			\
 			vic_registers[0x1F] |= sprbmask;	\
 	} while (0)
+#ifndef	SPRITE_ANY_COLLISION
+#define	SPRITE_ANY_COLLISION
+#endif
 #else
 	// dummy macro for the case when SPRITE_FG_COLLISION was not requested
 #	define DO_SPRITE_FG_COLLISION(pos,cond)
@@ -902,7 +908,9 @@ static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_d
 	// in 16 colour sprite mode, sprite colour register gives the transparent colour index
 	// We always use the lower 4 bit only at this very specific case, that's the reason for SPRITE_COLOR_4BIT() macro and not SPRITE_COLOR() [which can be 4/8 bit depending on curretn VIC mode)
 	const Uint8 transparency_palette_index = SPRITE_COLOR_4BIT(sprnum);
+#	ifdef SPRITE_ANY_COLLISION
 	const Uint8 sprbmask = 1 << sprnum;
+#	endif
 	do {
 		for (int byte = 0; byte < totalBytes; byte++) {
 			const Uint8 c0 = (*(row_data_ptr + byte)) >> 4;
@@ -934,7 +942,9 @@ static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( int sprnum, int x_disp
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const Uint8 mcm_spr_pal_indices[4] = { 0, SPRITE_MULTICOLOR_1, SPRITE_COLOR(sprnum), SPRITE_MULTICOLOR_2 };	// entry zero is not used
+#	ifdef SPRITE_ANY_COLLISION
 	const Uint8 sprbmask = 1 << sprnum;
+#	endif
 	for (int byte = 0; byte < totalBytes; byte++) {
 		const Uint8 row_data = *row_data_ptr++;
 		for (int shift = 6; shift >= 0; shift -= 2) {
@@ -967,7 +977,9 @@ static XEMU_INLINE void vic4_draw_sprite_row_mono ( int sprnum, int x_display_po
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const Uint32 sdl_pixel = spritepalette[SPRITE_COLOR(sprnum)];
+#	ifdef SPRITE_ANY_COLLISION
 	const Uint8 sprbmask = 1 << sprnum;
+#	endif
 	for (int byte = 0; byte < totalBytes; byte++) {
 		for (int xbit = 0; xbit < 8; xbit++) {
 			const Uint8 sprite_bit = *row_data_ptr & (0x80 >> xbit);

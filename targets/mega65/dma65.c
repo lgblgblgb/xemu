@@ -129,6 +129,12 @@ static struct {
 } modulo;
 
 
+// On C65, DMA cannot cross 64K boundaries, so the right mask is 0xFFFF
+// On MEGA65 it seems to be 1Mbyte, thus the mask should be 0xFFFFF
+// No idea about the list mask, which is not the normal dma read/write ops,
+// but reading the DMA listself only.
+#define MEM_LIST_MASK	0xFFFF
+#define MEM_ADDR_MASK	0xFFFFF
 
 
 #define DMA_READ_SOURCE()	(XEMU_UNLIKELY(source.is_io) ? DMA_SOURCE_IOREADER_FUNC(DMA_ADDRESSING(source)) : DMA_SOURCE_MEMREADER_FUNC(DMA_ADDRESSING(source)))
@@ -174,15 +180,15 @@ static XEMU_INLINE void DMA_WRITE_TARGET ( Uint8 data )
 // Also the "step" is always one. So it's a bit special case ... even on M65 we don't use fixed point math here, just pure number
 // FIXME: I guess here, that reading DMA list also warps within a 64K area
 #ifndef DO_DEBUG_DMA
-#define DMA_READ_LIST_NEXT_BYTE()	DMA_LIST_READER_FUNC(((list_addr++) & 0xFFFF) | list_base)
+#define DMA_READ_LIST_NEXT_BYTE()	DMA_LIST_READER_FUNC(((list_addr++) & MEM_LIST_MASK) | list_base)
 #else
 static int dma_list_entry_pos = 0;
 
 static Uint8 DMA_READ_LIST_NEXT_BYTE ( void )
 {
-	int addr = ((list_addr++) & 0xFFFF) | list_base;
+	int addr = ((list_addr++) & MEM_LIST_MASK) | list_base;
 	Uint8 data = DMA_LIST_READER_FUNC(addr);
-	DEBUGPRINT("DMA: reading DMA (rev#%d) list from $%08X ($%02X) [#%d]: $%02X" NL, dma_chip_revision, addr, (list_addr-1) & 0xFFFF, dma_list_entry_pos++, data);
+	DEBUGPRINT("DMA: reading DMA (rev#%d) list from $%08X ($%02X) [#%d]: $%02X" NL, dma_chip_revision, addr, (list_addr-1) & MEM_LIST_MASK, dma_list_entry_pos++, data);
 	return data;
 }
 #endif
@@ -488,7 +494,7 @@ int dma_update ( void )
 			source.base	= 0;				// in case of I/O, base is not interpreted in Xemu (uses pure numbers 0-$FFF, no $DXXX, not even M65-spec mapping), and must be zero ...
 			source.addr	= (source.addr & 0xFFF) << 8;	// for M65, it is fixed-point arithmetic
 		} else {
-			source.mask	= 0xFFFF;			// warp around within 64K. I am still not sure, it happens with DMA on 64K or 1M. M65 VHDL does 64K, so I switched that too.
+			source.mask	= MEM_ADDR_MASK;		// in case of memory (not I/O) access, we have again a mask, see at "MEM_ADDR_MASK" for more explanation
 			// base selection for M65
 			// M65 has an "mbyte part" register for source (and target too)
 			// however, with F018B there are 3 bits over 1Mbyte as well, and it seems M65 (see VHDL code) add these together then. Interesting.
@@ -504,7 +510,7 @@ int dma_update ( void )
 			target.base	= 0;
 			target.addr	= (target.addr & 0xFFF) << 8;
 		} else {
-			target.mask	= 0xFFFF;
+			target.mask	= MEM_ADDR_MASK;
 			if (dma_chip_revision)
 			    target.base = (target.addr & 0x0F0000) | (((dma_registers[6] << 20) + (target.addr & 0x700000)) & 0xFF00000);
 			else
