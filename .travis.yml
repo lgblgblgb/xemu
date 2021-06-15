@@ -35,11 +35,11 @@ matrix:
             - zip
       compiler: gcc
       before_script:
-        - echo "127.126.125.124 lgb" | sudo tee -a /etc/hosts 2>/dev/null
+        - echo "127.126.125.124 lgb" | sudo tee -a /etc/hosts 2>/dev/null || true
+        - cat /etc/hosts || true
+        - hostname
         - set +e
         - uname -a ; lsb_release -a || true ; hostname ; pwd ; df -h ; id -a
-        - hostname
-        - cat /etc/hosts || true
         - set -e
         - sdl2-config --version --prefix --cflags --libs --static-libs
         - pkg-config --cflags-only-I --libs gtk+-3.0
@@ -105,12 +105,12 @@ matrix:
             - wget
             - zip
       before_script:
-        - echo "127.126.125.124 lgb" | sudo tee -a /etc/hosts 2>/dev/null
+        - echo "127.126.125.124 lgb" | sudo tee -a /etc/hosts 2>/dev/null || true
+        - cat /etc/hosts || true
+        - hostname
         - set +e
         - uname -a ; pwd ; df -h ; id -a
         - set -e
-        - hostname
-        - cat /etc/hosts || true
         - build/install-cross-win-mingw-sdl-on-linux.sh /usr/bin
         - set +e
         - ps auxwwww || true
@@ -169,11 +169,11 @@ matrix:
             - create-dmg
             - sdl2
       before_script:
-        - echo "127.126.125.124 lgb" | sudo tee -a /etc/hosts 2>/dev/null
+        - echo "127.126.125.124 lgb" | sudo tee -a /etc/hosts 2>/dev/null || true
+        - cat /etc/hosts || true
+        - hostname
         - set +e
         - uname -a ; pwd ; df -h ; id -a
-        - hostname
-        - cat /etc/hosts || true
         - set -e
         - sdl2-config --version --prefix --cflags --libs --static-libs
         - set +e
