@@ -731,7 +731,7 @@ static int on_sd_fdc_write_block_cb ( int which, void *buffer, off_t offset, int
 }
 
 
-int mount_external_d81 ( const char *name, int force_ro )
+int mount_external_d81 ( int drive, const char *name, int force_ro )
 {
 	// Let fsobj func guess the "name" being image, a program file, or an FS directory
 	// In addition, pass AUTOCLOSE parameter, as it will be managed by d81access subsys, not sdcard level!
@@ -745,7 +745,7 @@ int mount_external_d81 ( const char *name, int force_ro )
 }
 
 
-static int mount_internal_d81 ( int force_ro )
+static int mount_internal_d81 ( int drive, int force_ro )
 {
 	unsigned int block = U8A_TO_U32(sd_d81_img1_start);
 	if (XEMU_UNLIKELY(block + (D81_SIZE >> 9) >= sdcard_size_in_blocks || block <= 0)) {

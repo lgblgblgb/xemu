@@ -37,7 +37,7 @@ void configdb_define_emulator_options ( void )
 {
 	XEMUCFG_DEFINE_STR_OPTIONS(
 		{ "8", NULL, "Path of the D81 disk image to be attached as drive#0", &configdb.disk8 },
-//		{ "9", NULL, "Path of the D81 disk image to be attached as drive#1", &configdb.disk9 },
+		{ "9", NULL, "Path of the D81 disk image to be attached as drive#1", &configdb.disk9 },
 		{ "hostfsdir", NULL, "Path of the directory to be used as Host-FS base", &configdb.hostfsdir },
 		{ "rom", DEFAULT_ROM_FILE, "Override system ROM path to be loaded", &configdb.rom },
 		{ "keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used", &configdb.keymap },

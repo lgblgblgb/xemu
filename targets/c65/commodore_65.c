@@ -38,8 +38,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "configdb.h"
 
 
-#define CURRENT_D81	0
-
 static SDL_AudioDeviceID audio = 0;
 
 Uint8 memory[0x100000];			// 65CE02 MAP'able address space
@@ -324,7 +322,7 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 #ifdef HID_KBD_MAP_CFG_SUPPORT
 	hid_keymap_from_config_file(configdb.keymap);
 #endif
-	joystick_emu = 1;
+	joystick_emu = 2;		// use port-2 by default
 	nmi_level = 0;
 	// *** host-FS
 	if (configdb.hostfsdir)
@@ -368,7 +366,8 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// Initialize D81 access abstraction for FDC
 	d81access_init();
 	atexit(d81access_close_all);
-	d81access_attach_fsobj(CURRENT_D81, configdb.disk8, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (configdb.d81ro ? D81ACCESS_RO : 0));
+	d81access_attach_fsobj(0, configdb.disk8, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (configdb.d81ro ? D81ACCESS_RO : 0));
+	d81access_attach_fsobj(1, configdb.disk9, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (configdb.d81ro ? D81ACCESS_RO : 0));
 	// SIDs, plus SDL audio
 	sid_init(&sids[0], sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sids[1], sid_cycles_per_sec, sound_mix_freq);
