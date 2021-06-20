@@ -286,17 +286,17 @@ void d81access_cb_chgmode ( int which, int mode ) {
 	int can_write = (!(mode & D81ACCESS_RO));
 	if (which < 2)
 		DEBUGPRINT("C65FDC: configuring F011 FDC (#%d) with have_disk=%d, can_write=%d" NL, which, have_disk, can_write);
-	fdc_set_disk(have_disk, can_write);
+	fdc_set_disk(which, have_disk, can_write);
 }
 // Here we implement F011 core's callbacks using d81access (and yes, F011 uses 512 bytes long sectors for real)
-int fdc_cb_rd_sec ( Uint8 *buffer, int d81_offset ) {
-	int ret = d81access_read_sect(CURRENT_D81, buffer, d81_offset, 512);
-	DEBUG("C65FDC: D81: reading sector (drive #%d) at d81_offset=%d, return value=%d" NL, CURRENT_D81, d81_offset, ret);
+int fdc_cb_rd_sec ( int which, Uint8 *buffer, int d81_offset ) {
+	int ret = d81access_read_sect(which, buffer, d81_offset, 512);
+	DEBUG("C65FDC: D81: reading sector (drive #%d) at d81_offset=%d, return value=%d" NL, which, d81_offset, ret);
 	return ret;
 }
-int fdc_cb_wr_sec ( Uint8 *buffer, int d81_offset ) {
-	int ret = d81access_write_sect(CURRENT_D81, buffer, d81_offset, 512);
-	DEBUG("C65FDC: D81: writing sector (drive #%d) at d81_offset=%d, return value=%d" NL, CURRENT_D81, d81_offset, ret);
+int fdc_cb_wr_sec ( int which, Uint8 *buffer, int d81_offset ) {
+	int ret = d81access_write_sect(which, buffer, d81_offset, 512);
+	DEBUG("C65FDC: D81: writing sector (drive #%d) at d81_offset=%d, return value=%d" NL, which, d81_offset, ret);
 	return ret;
 }
 
