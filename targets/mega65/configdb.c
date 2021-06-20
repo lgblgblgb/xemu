@@ -36,7 +36,8 @@ struct configdb_st configdb;
 
 
 static const struct xemutools_configdef_str_st str_options[] = {
-	{ "8",		NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)", &configdb.disk8 },
+	{ "8",		NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image) on drive 8", &configdb.disk8 },
+	{ "9",		NULL, "Path of ALWAYS EXTERNAL D81 disk image on drive 9", &configdb.disk9 },
 	{ "fpga",	NULL, "Comma separated list of FPGA-board switches turned ON", &configdb.fpga },
 	{ "kickup",	NULL, "Override path of external KickStart to be used", &configdb.kickup },
 	{ "kickuplist",	NULL, "Set path of symbol list file for external KickStart", &configdb.kickuplist },
