@@ -1,5 +1,6 @@
 /* Test-case for a very simple and inaccurate Commodore VIC-20 emulator using SDL2 library.
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,8 +16,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __LGB_COMMODORE_VIC20_H_INCLUDED
-#define __LGB_COMMODORE_VIC20_H_INCLUDED
+#ifndef XEMU_CVIC20_COMMODORE_VIC20_H_INCLUDED
+#define XEMU_CVIC20_COMMODORE_VIC20_H_INCLUDED
 
 #define SCREEN_DEFAULT_ZOOM     4
 #define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888
@@ -26,7 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REAL_CPU_SPEED		1108404
 
 #define USE_LOCKED_TEXTURE	1
-#define RENDER_SCALE_QUALITY	2
+#define RENDER_SCALE_QUALITY	0
 
 #define EMU_ROM_NAME		"#vic20-emulator-tool.rom"
 #define EMU_ROM_VERSION		0

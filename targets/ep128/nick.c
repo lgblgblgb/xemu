@@ -1,6 +1,6 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
+/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2015-2017,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -17,13 +17,12 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "xemu/emutools_files.h"
+#include "enterprise128.h"
 #include "nick.h"
-#include "screen.h"
 #include "cpu.h"
 #include "dave.h"
-
-#include "main.h"
 
 
 /*
@@ -32,7 +31,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  * border colour, reading LPB, setting BIAS register) and use
  * those values instead of conversion all the time.
  */
-
 
 
 static Uint16 lpt_a, lpt_set, ld1, ld2;
@@ -85,25 +83,37 @@ static int nick_addressing_init ( Uint32 *pixels_buffer, int line_size )
 }
 
 
-
-Uint32 *nick_init ( void )
+void screenshot ( void )
 {
-	int a;
-	Uint32 *buf = alloc_xep_aligned_mem(SCREEN_WIDTH * SCREEN_HEIGHT * 4);
-	if (buf == NULL) {
-		ERROR_WINDOW("Cannot allocate memory for screen buffer.");
-		return NULL;
+	if (!xemu_screenshot_png(
+		NULL, NULL,
+		1,
+		2,
+		NULL,	// Allow function to figure it out ;)
+		SCREEN_WIDTH,
+		SCREEN_HEIGHT,
+		SCREEN_WIDTH
+	)) {
+		const char *p = strrchr(xemu_screenshot_full_path, DIRSEP_CHR);
+		if (p)
+			OSD(-1, -1, "%s", p + 1);
 	}
+}
+
+
+int nick_init ( void )
+{
+	Uint32 *buf = xemu_frame_pixel_access_p;	// sdl_pixel_buffer
 	pixels = NULL; // no previous state of buffer before the next function
 	if (nick_addressing_init(buf, SCREEN_WIDTH))
-		return NULL;
-	for (a = 0; a < 256; a++) {
+		return 1;
+	for (int a = 0; a < 256; a++) {
 		// RGB colours for the target screen
 		int r, g, b;
 		r = (((a << 2) & 4) | ((a >> 2) & 2) | ((a >> 6) & 1)) * 255 / 7;
 		g = (((a << 1) & 4) | ((a >> 3) & 2) | ((a >> 7) & 1)) * 255 / 7;
 		b = (                 ((a >> 1) & 2) | ((a >> 5) & 1)) * 255 / 3;
-		full_palette[a] = SDL_MapRGBA(sdl_pixel_format, r, g, b, 0xFF);
+		full_palette[a] = SDL_MapRGBA(sdl_pix_fmt, r, g, b, 0xFF);
 		//full_palette[a] = (0xFF << 24) | (r << 16) | (g << 8) | b;
 		//DEBUG("PAL#%d = (%d,%d,%d) = %d" NL, a, r, g, b, full_palette[a]);
 		// this is translation table for  4 colour modes
@@ -129,7 +139,7 @@ Uint32 *nick_init ( void )
 	vsync = 0;
 	vram = memory + 0x3F0000;
 	DEBUG("NICK: initialized." NL);
-	return buf;
+	return 0;
 }
 
 
@@ -218,7 +228,7 @@ static void _render_pixel_2 ( void )
 		pixels += 16;
 	} else {
 		int j;
-		for (j = 0; j < 2; j ++) {	
+		for (j = 0; j < 2; j ++) {
 			int a, ps;
 			Uint8 data = NICK_READ(ld1++);
 			if (msbalt && (data & 128)) {
@@ -360,8 +370,8 @@ static void _render_invalid ( void )
 }
 
 
-static void _render_attrib_2 ( void ) 
-{ 
+static void _render_attrib_2 ( void )
+{
 	if (!visible) {
 		ld1++;
 		ld2++;
@@ -428,8 +438,6 @@ static void _render_pixel_16 ( void ) // TODO
 		trans = col16trans + (NICK_READ(ld1++) << 1);
 		pixels[ 8] = pixels[ 9] = pixels[10] = pixels[11] = palette[trans[0]];
 		pixels[12] = pixels[13] = pixels[14] = pixels[15] = palette[trans[1]];
-		
-		
 	}
 	pixels += 16;
 }
@@ -443,7 +451,7 @@ static void _render_lpixel_16 ( void ) // TODO
 		pixels[ 0] = pixels[ 1] = pixels[ 2] = pixels[ 3] =
 		pixels[ 4] = pixels[ 5] = pixels[ 6] = pixels[ 7] = palette[trans[0]];
 		pixels[ 8] = pixels[ 9] = pixels[10] = pixels[11] =
-		pixels[12] = pixels[13] = pixels[14] = pixels[15] = palette[trans[1]];		
+		pixels[12] = pixels[13] = pixels[14] = pixels[15] = palette[trans[1]];
 	}
 	pixels += 16;
 }
@@ -547,8 +555,7 @@ char *nick_dump_lpt ( const char *newline_seq )
 			_cm_names[(vram[a + 1] >> 5) & 3],
 			newline_seq
 		);
-		p = realloc(p, p ? strlen(p) + strlen(buffer) + 256 : strlen(buffer) + 256);
-		CHECK_MALLOC(p);
+		p = xemu_realloc(p, p ? strlen(p) + strlen(buffer) + 256 : strlen(buffer) + 256);
 		if (a == lpt_set)
 			*p = '\0';
 		strcat(p, buffer);

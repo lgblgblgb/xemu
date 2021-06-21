@@ -197,7 +197,7 @@ static void emu_timekeeping_check ( void )
 
 /* This is the emulation timing stuff
  * Should be called at the END of the emulation loop.
- * Input parameter: microseconds needed for the "real" (emulated) computer to do our loop 
+ * Input parameter: microseconds needed for the "real" (emulated) computer to do our loop
  * This function also does the sleep itself */
 static void emu_timekeeping_delay ( int td_em )
 {

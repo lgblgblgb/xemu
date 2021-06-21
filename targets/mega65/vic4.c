@@ -1,11 +1,11 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is the VIC-IV "emulation". Currently it does one-frame-at-once
    kind of horrible work, and only a subset of VIC2 and VIC3 knowledge
    is implemented, with some light VIC-IV features, to be able to "boot"
-   of Mega-65 with standard configuration (kickstart, SD-card).
+   of MEGA65 with standard configuration (kickstart, SD-card).
    Some of the missing features (VIC-2/3): hardware attributes,
    DAT, sprites, screen positioning, H1280 mode, V400 mode, interlace,
    chroma killer, VIC2 MCM, ECM, 38/24 columns mode, border.
@@ -27,15 +27,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #include "xemu/emutools.h"
+#include "xemu/emutools_files.h"
 #include "mega65.h"
 #include "xemu/cpu65.h"
 #include "vic4.h"
 #include "vic4_palette.h"
 #include "memory_mapper.h"
+#include "xemu/f011_core.h"
+#include "configdb.h"
 
 //#define RGB(r,g,b) rgb_palette[((r) << 8) | ((g) << 4) | (b)]
 
-static const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
+const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
 //static Uint32 rgb_palette[4096];	// all the C65 palette, 4096 colours (SDL pixel format related form)
 //static Uint32 vic3_palette[0x100];	// VIC3 palette in SDL pixel format related form (can be written into the texture directly to be rendered)
@@ -45,7 +48,6 @@ static const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
 Uint8 vic_registers[0x80];		// VIC-4 registers
 int vic_iomode;				// VIC2/VIC3/VIC4 mode
-int force_fast;				// POKE 0,64 and 0,65 trick ...
 int scanline;				// current scan line number
 int cpu_cycles_per_scanline;
 static int compare_raster;		// raster compare (9 bits width) data
@@ -53,13 +55,13 @@ static int interrupt_status;		// Interrupt status of VIC
 int vic2_16k_bank;			// VIC-2 modes' 16K BANK address within 64K (NOT the traditional naming of banks with 0,1,2,3)
 static Uint8 *sprite_pointers;		// Pointer to sprite pointers :)
 static Uint8 *sprite_bank;
+static Uint8 *vic_bitplane_starting_bank_p = main_ram;
 int vic3_blink_phase;			// blinking attribute helper, state.
 static Uint8 raster_colours[512];
 Uint8 c128_d030_reg;			// C128-like register can be only accessed in VIC-II mode but not in others, quite special!
+static Uint32 black_colour, red_colour;	// needed for drive LED
 
 int vic_vidp_legacy = 1, vic_chrp_legacy = 1, vic_sprp_legacy = 1;
-
-static int warn_sprites = 0, warn_ctrl_b_lo = 1;
 
 #if 0
 // UGLY: decides to use VIC-II/III method (val!=0), or the VIC-IV "precise address" selection (val == 0)
@@ -102,25 +104,32 @@ static inline void PIXEL_POINTER_FINAL_ASSERT ( Uint32 *p )
 #endif
 
 
+void vic_reset ( void )
+{
+	vic2_16k_bank = 0;
+	vic_iomode = VIC2_IOMODE;
+	interrupt_status = 0;
+	compare_raster = 0;
+	// *** Just a check to try all possible regs (in VIC2,VIC3 and VIC4 modes), it should not panic ...
+	// It may also sets/initializes some internal variables sets by register writes, which would cause a crash on screen rendering without prior setup!
+	for (int i = 0; i < 0x140; i++) {
+		vic_write_reg(i, 0);
+		(void)vic_read_reg(i);
+	}
+}
+
 
 
 void vic_init ( void )
 {
+	// Needed to render "drive LED" feature
+	red_colour   = SDL_MapRGBA(sdl_pix_fmt, 0xFF, 0x00, 0x00, 0xFF);
+	black_colour = SDL_MapRGBA(sdl_pix_fmt, 0x00, 0x00, 0x00, 0xFF);
+	// Init VIC4 palette
 	vic4_init_palette();
-	force_fast = 0;
-	// *** Init VIC3 registers and palette
-	vic2_16k_bank = 0;
-	vic_iomode = VIC2_IOMODE;
-	interrupt_status = 0;
-	// FIXME: add ROM palette by default? What is ROM palette on MEGA65?
+	// *** Init VIC4 registers
 	scanline = 0;
-	compare_raster = 0;
-	// *** Just a check to try all possible regs (in VIC2,VIC3 and VIC4 modes), it should not panic ...
-	// It may also sets/initializes some internal variables sets by register writes, which would cause a crash on screen rendering without prior setup!
-	for (int i = 0; i < 0x140; i++) {	// $140=the last $40 register for VIC-2 mode, when we have fewer ones
-		vic_write_reg(i, 0);
-		(void)vic_read_reg(i);
-	}
+	vic_reset();
 	c128_d030_reg = 0xFE;	// this may be set to 2MHz in the previous step, so be sure to set to FF here, BUT FIX: bit 0 should be inverted!!
 	machine_set_speed(0);
 	//vic_registers[0x30] = 4;	// ROM palette?
@@ -162,6 +171,25 @@ void vic3_check_raster_interrupt ( void )
 	vic3_interrupt_checker();
 }
 
+
+// FIXME: preliminary DAT support. For real, these should be mostly calculated at writing
+// DAT X/Y registers, bitplane selection registers etc (also true for the actual renderer!),
+// would give much better emulator performace. Though for now, that's a naive preliminary
+// way to support DAT at all!
+static XEMU_INLINE Uint8 *get_dat_addr ( unsigned int bpn )
+{
+	unsigned int x = vic_registers[0x3C];
+	unsigned int y = vic_registers[0x3D] + ((x << 1) & 0x100);
+	unsigned int h640 = (vic_registers[0x31] & 128);
+	x &= 0x7F;
+	//DEBUGPRINT("VIC-IV: DAT: accessing DAT for bitplane #%u at X,Y of %u,%u in H%u mode" NL, bpn, x, y, h640 ? 640 : 320);
+	return
+		vic_bitplane_starting_bank_p +					// MEGA65 feature (WANNABE feature!) to support relocatable bitplane bank by the DAT! (this also a pointer, not an integer!)
+		((vic_registers[0x33 + bpn] & (h640 ? 12 : 14)) << 12) +	// bitplane address
+		((bpn & 1) ? 0x10000 : 0) +					// odd/even bitplane selection
+		(((y >> 3) * (h640 ? 640 : 320)) + (x << 3) + (y & 7))		// position within the bitplane given by the X/Y info
+	;
+}
 
 /* DESIGN of vic_read_reg() and vic_write_reg() functions:
    addr = 00-7F, VIC-IV registers 00-7F (ALWAYS, regardless of current I/O mode!)
@@ -281,15 +309,14 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_3_4(0x31):
 			vic_registers[0x31] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
 			machine_set_speed(0);
-			if ((data & 15) && warn_ctrl_b_lo) {
-				INFO_WINDOW("VIC3 control-B register V400, H1280, MONO and INT features are not emulated yet!");
-				warn_ctrl_b_lo = 0;
-			}
 			return;				// since we DID the write, it's OK to return here and not using "break"
 		CASE_VIC_3_4(0x32): CASE_VIC_3_4(0x33): CASE_VIC_3_4(0x34): CASE_VIC_3_4(0x35): CASE_VIC_3_4(0x36): CASE_VIC_3_4(0x37): CASE_VIC_3_4(0x38):
 		CASE_VIC_3_4(0x39): CASE_VIC_3_4(0x3A): CASE_VIC_3_4(0x3B): CASE_VIC_3_4(0x3C): CASE_VIC_3_4(0x3D): CASE_VIC_3_4(0x3E): CASE_VIC_3_4(0x3F):
+			break;
+		// DAT read/write bitplanes port
 		CASE_VIC_3_4(0x40): CASE_VIC_3_4(0x41): CASE_VIC_3_4(0x42): CASE_VIC_3_4(0x43): CASE_VIC_3_4(0x44): CASE_VIC_3_4(0x45): CASE_VIC_3_4(0x46):
 		CASE_VIC_3_4(0x47):
+			*get_dat_addr(addr & 7) = data;	// write pixels via the DAT!
 			break;
 		/* --- NO MORE VIC-III REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B): CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
@@ -303,7 +330,16 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x5D): CASE_VIC_4(0x5E): CASE_VIC_4(0x5F): /*CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):*/ CASE_VIC_4(0x64):
 		CASE_VIC_4(0x65): CASE_VIC_4(0x66): CASE_VIC_4(0x67): /*CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):*/ CASE_VIC_4(0x6B): /*CASE_VIC_4(0x6C):
 		CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):*/ CASE_VIC_4(0x6F): /*CASE_VIC_4(0x70):*/ CASE_VIC_4(0x71): CASE_VIC_4(0x72): CASE_VIC_4(0x73): CASE_VIC_4(0x74):
-		CASE_VIC_4(0x75): CASE_VIC_4(0x76): CASE_VIC_4(0x77): CASE_VIC_4(0x78): CASE_VIC_4(0x79): CASE_VIC_4(0x7A): CASE_VIC_4(0x7B): CASE_VIC_4(0x7C):
+		CASE_VIC_4(0x75): CASE_VIC_4(0x76): CASE_VIC_4(0x77): CASE_VIC_4(0x78): CASE_VIC_4(0x79): CASE_VIC_4(0x7A): CASE_VIC_4(0x7B):
+			break;
+		CASE_VIC_4(0x7C):
+			if ((data & 7) <= 2) {
+				// The lower 3 bits of $7C set's the number of "128K slice" of the main RAM to be used with bitplanes
+				vic_bitplane_starting_bank_p = main_ram + ((data & 7) << 17);
+				DEBUG("VIC4: bitmap bank offset is $%X" NL, (unsigned int)(vic_bitplane_starting_bank_p - main_ram));
+			} else
+				WARNING_WINDOW("VIC-IV bitplane selection 128K-bank tried to set over 2.\nRefused to do so.");
+			break;
 		CASE_VIC_4(0x7D): CASE_VIC_4(0x7E): CASE_VIC_4(0x7F):
 			break;
 		CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):
@@ -325,9 +361,9 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			}
 			break;
 		CASE_VIC_4(0x70):	// VIC-IV palette selection register
-			palette		= ((data & 0x03) << 8) + vic_palettes;
+			altpalette	= ((data & 0x03) << 8) + vic_palettes;
 			spritepalette	= ((data & 0x0C) << 6) + vic_palettes;
-			altpalette	= ((data & 0x30) << 4) + vic_palettes;
+			palette		= ((data & 0x30) << 4) + vic_palettes;
 			palregaccofs	= ((data & 0xC0) << 2);
 			check_if_rom_palette(vic_registers[0x30] & 4);
 			break;
@@ -420,12 +456,21 @@ Uint8 vic_read_reg ( int unsigned addr )
 			break;
 		CASE_VIC_3_4(0x32): CASE_VIC_3_4(0x33): CASE_VIC_3_4(0x34): CASE_VIC_3_4(0x35): CASE_VIC_3_4(0x36): CASE_VIC_3_4(0x37): CASE_VIC_3_4(0x38):
 		CASE_VIC_3_4(0x39): CASE_VIC_3_4(0x3A): CASE_VIC_3_4(0x3B): CASE_VIC_3_4(0x3C): CASE_VIC_3_4(0x3D): CASE_VIC_3_4(0x3E): CASE_VIC_3_4(0x3F):
+			break;
+		// DAT read/write bitplanes port
 		CASE_VIC_3_4(0x40): CASE_VIC_3_4(0x41): CASE_VIC_3_4(0x42): CASE_VIC_3_4(0x43): CASE_VIC_3_4(0x44): CASE_VIC_3_4(0x45): CASE_VIC_3_4(0x46):
 		CASE_VIC_3_4(0x47):
+			result = *get_dat_addr(addr & 7);	// read pixels via the DAT!
 			break;
 		/* --- NO MORE VIC-III REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B): CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
-		CASE_VIC_4(0x50): CASE_VIC_4(0x51): CASE_VIC_4(0x52): CASE_VIC_4(0x53):
+		CASE_VIC_4(0x50): CASE_VIC_4(0x51):
+			break;
+		CASE_VIC_4(0x52):
+			result = (scanline << 1) & 0xFF;	// hack: report phys raster always double of vic-II raster
+			break;
+		CASE_VIC_4(0x53):
+			result = ((scanline << 1) >> 8) & 7;
 			break;
 		CASE_VIC_4(0x54):
 			break;
@@ -476,7 +521,7 @@ static inline Uint8 *vic2_get_chargen_pointer ( void )
 		//int crom = vic_registers[0x30] & 64;
 		//DEBUG("VIC2: chargen: BANK=%04X OFS=%04X CROM=%d" NL, vic2_16k_bank, offs, crom);
 		if ((vic2_16k_bank == 0x0000 || vic2_16k_bank == 0x8000) && (offs == 0x1000 || offs == 0x1800)) {  // check if chargen info is in ROM
-			// In case of Mega65, fetching char-info from ROM means to access the "WOM"
+			// In case of MEGA65, fetching char-info from ROM means to access the "WOM"
 			// FIXME: what should I do with bit 6 of VIC-III register $30 ["CROM"] ?!
 			return char_wom + offs - 0x1000;
 		} else
@@ -501,7 +546,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 	Uint8 *vidp, *colp = colour_ram;
 	int x = 0, y = 0, xlim, ylim, charline = 0;
 	Uint8 *chrg = vic2_get_chargen_pointer();
-	int inc_p = (vic_registers[0x54] & 1) ? 2 : 1;	// VIC-IV (Mega-65) 16 bit text mode?
+	int inc_p = (vic_registers[0x54] & 1) ? 2 : 1;	// VIC-IV (MEGA65) 16 bit text mode?
 	int scanline = 0;
 	if (vic_registers[0x31] & 128) { // check H640 bit: 80 column mode?
 		xlim = 79;
@@ -524,7 +569,7 @@ static inline void vic2_render_screen_text ( Uint32 *p, int tail )
 	if (!vic_sprp_legacy) {
 		sprite_pointers = main_ram + ((vic_registers[0x6C] | (vic_registers[0x6D] << 8) | (vic_registers[0x6E] << 16)) & ((512 << 10) - 1));
 	}
-	//DEBUGPRINT("VIC4: vidp = %u, vic_vidp_legacy=%d" NL, (unsigned int)(vidp - main_ram), vic_vidp_legacy);
+	//DEBUGPRINT("VIC4: vidp = $%X, vic_vidp_legacy=%X" NL, (unsigned int)(vidp - main_ram), vic_vidp_legacy);
 	// Target SDL pixel related format for the background colour
 	bg = palette[BG_FOR_Y(0)];
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic2_render_screen_text");
@@ -680,14 +725,14 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
 	int bitpos = 128, charline = 0, offset = 0;
 	int xlim, x = 0, y = 0, h640 = (vic_registers[0x31] & 128);
 	Uint8 bpe, *bp[8];
-	bp[0] = main_ram + ((vic_registers[0x33] & (h640 ? 12 : 14)) << 12);
-	bp[1] = main_ram + ((vic_registers[0x34] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[2] = main_ram + ((vic_registers[0x35] & (h640 ? 12 : 14)) << 12);
-	bp[3] = main_ram + ((vic_registers[0x36] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[4] = main_ram + ((vic_registers[0x37] & (h640 ? 12 : 14)) << 12);
-	bp[5] = main_ram + ((vic_registers[0x38] & (h640 ? 12 : 14)) << 12) + 0x10000;
-	bp[6] = main_ram + ((vic_registers[0x39] & (h640 ? 12 : 14)) << 12);
-	bp[7] = main_ram + ((vic_registers[0x3A] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[0] = vic_bitplane_starting_bank_p + ((vic_registers[0x33] & (h640 ? 12 : 14)) << 12);
+	bp[1] = vic_bitplane_starting_bank_p + ((vic_registers[0x34] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[2] = vic_bitplane_starting_bank_p + ((vic_registers[0x35] & (h640 ? 12 : 14)) << 12);
+	bp[3] = vic_bitplane_starting_bank_p + ((vic_registers[0x36] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[4] = vic_bitplane_starting_bank_p + ((vic_registers[0x37] & (h640 ? 12 : 14)) << 12);
+	bp[5] = vic_bitplane_starting_bank_p + ((vic_registers[0x38] & (h640 ? 12 : 14)) << 12) + 0x10000;
+	bp[6] = vic_bitplane_starting_bank_p + ((vic_registers[0x39] & (h640 ? 12 : 14)) << 12);
+	bp[7] = vic_bitplane_starting_bank_p + ((vic_registers[0x3A] & (h640 ? 12 : 14)) << 12) + 0x10000;
 	bpe = vic_registers[0x32];	// bit planes enabled mask
 	if (h640) {
 		bpe &= 15;		// it seems, with H640, only 4 bitplanes can be used (on lower 4 ones)
@@ -697,7 +742,7 @@ static inline void vic3_render_screen_bpm ( Uint32 *p, int tail )
 		xlim = 39;
 		sprite_pointers = bp[2] + 0x1FF8;	// FIXME: just guessing
 	}
-        DEBUG("VIC3: bitplanes: enable_mask=$%02X comp_mask=$%02X H640=%d" NL,
+	DEBUG("VIC3: bitplanes: enable_mask=$%02X comp_mask=$%02X H640=%d" NL,
 		bpe, vic_registers[0x3B], h640 ? 1 : 0
 	);
 	PIXEL_POINTER_CHECK_INIT(p, tail, "vic3_render_screen_bpm");
@@ -829,8 +874,8 @@ static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 
 		colours[1] = VIC_REG_COLOUR(0x25);
 		colours[3] = VIC_REG_COLOUR(0x26);
 	}
-	p += SCREEN_WIDTH * (sprite_y + TOP_BORDER_SIZE) + LEFT_BORDER_SIZE;
-	for (y = sprite_y; y < lim_y; y += (expand_y ? 2 : 1), p += SCREEN_WIDTH * (expand_y ? 2 : 1))
+	p += TEXTURE_WIDTH * (sprite_y + TOP_BORDER_SIZE) + LEFT_BORDER_SIZE;
+	for (y = sprite_y; y < lim_y; y += (expand_y ? 2 : 1), p += TEXTURE_WIDTH * (expand_y ? 2 : 1))
 		if (y < 0 || y >= 200)
 			data += 3;	// skip one line (three bytes) of sprite data if outside of screen
 		else {
@@ -843,13 +888,13 @@ static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 
 							if (x >= 0 && x < 640) {
 								p[x] = p[x + 1] = p[x + 2] = p[x + 3] = col;
 								if (expand_y && y < 200)
-									p[x + SCREEN_WIDTH] = p[x + SCREEN_WIDTH + 1] = p[x + SCREEN_WIDTH + 2] = p[x + SCREEN_WIDTH + 3] = col;
+									p[x + TEXTURE_WIDTH] = p[x + TEXTURE_WIDTH + 1] = p[x + TEXTURE_WIDTH + 2] = p[x + TEXTURE_WIDTH + 3] = col;
 							}
 							x += 4;
 							if (expand_x && x >= 0 && x < 640) {
 								p[x] = p[x + 1] = p[x + 2] = p[x + 3] = col;
 								if (expand_y && y < 200)
-									p[x + SCREEN_WIDTH] = p[x + SCREEN_WIDTH + 1] = p[x + SCREEN_WIDTH + 2] = p[x + SCREEN_WIDTH + 3] = col;
+									p[x + TEXTURE_WIDTH] = p[x + TEXTURE_WIDTH + 1] = p[x + TEXTURE_WIDTH + 2] = p[x + TEXTURE_WIDTH + 3] = col;
 								x += 4;
 							}
 						} else
@@ -861,13 +906,13 @@ static void render_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uint32 
 							if (x >= 0 && x < 640) {
 								p[x] = p[x + 1] = colours[2];
 								if (expand_y && y < 200)
-									p[x + SCREEN_WIDTH] = p[x + SCREEN_WIDTH + 1] = colours[2];
+									p[x + TEXTURE_WIDTH] = p[x + TEXTURE_WIDTH + 1] = colours[2];
 							}
 							x += 2;
 							if (expand_x && x >= 0 && x < 640) {
 								p[x] = p[x + 1] = colours[2];
 								if (expand_y && y < 200)
-									p[x + SCREEN_WIDTH] = p[x + SCREEN_WIDTH + 1] = colours[2];
+									p[x + TEXTURE_WIDTH] = p[x + TEXTURE_WIDTH + 1] = colours[2];
 								x += 2;
 							}
 						} else
@@ -905,17 +950,39 @@ void vic_render_screen ( void )
 			vic2_render_screen_text(p_sdl, tail_sdl);
 	}
 	if (sprites) {	// Render sprites. VERY BAD. We ignore sprite priority as well (cannot be behind the background)
-		int a;
-		if (warn_sprites) {
-			INFO_WINDOW("WARNING: Sprite emulation is really bad! (enabled_mask=$%02X)", sprites);
-			warn_sprites = 0;
-		}
-		for (a = 7; a >= 0; a--) {
+		//if (warn_sprites) {
+		//	INFO_WINDOW("WARNING: Sprite emulation is really bad! (enabled_mask=$%02X)", sprites);
+		//	warn_sprites = 0;
+		//}
+		for (int a = 7; a >= 0; a--) {
 			int mask = 1 << a;
 			if ((sprites & mask))
 				render_sprite(a, mask, sprite_bank + (sprite_pointers[a] << 6), p_sdl, tail_sdl);	// sprite_pointers are set by the renderer functions above!
 		}
 	}
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+	// Screenshot
+	if (XEMU_UNLIKELY(register_screenshot_request)) {
+		register_screenshot_request = 0;
+		if (!xemu_screenshot_png(
+			NULL, NULL,
+			1,
+			2,
+			NULL,	// allow function to figure it out ;)
+			TEXTURE_WIDTH,
+			TEXTURE_HEIGHT,
+			TEXTURE_WIDTH
+		)) {
+			const char *p = strrchr(xemu_screenshot_full_path, DIRSEP_CHR);
+			if (p)
+				OSD(-1, -1, "%s", p + 1);
+		}
+	}
+#endif
+	if (configdb.show_drive_led && fdc_get_led_state(16))
+		for (int y = 0; y < 8; y++)
+			for (int x = 0; x < 8; x++)
+				*(p_sdl + (TEXTURE_WIDTH) - 10 + x + (y + 2) * (TEXTURE_WIDTH)) = x > 1 && x < 7 && y > 1 && y < 7 ? red_colour : black_colour;
 	xemu_update_screen();
 }
 

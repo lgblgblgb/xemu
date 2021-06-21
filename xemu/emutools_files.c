@@ -1,7 +1,6 @@
-/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
-   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and MEGA65 as well.
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
+ * 8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -25,6 +24,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <stdlib.h>
 #include <limits.h>
 #include <errno.h>
+
+
+#ifdef XEMU_ARCH_WIN
+#include <windows.h>
+#endif
 
 
 void *xemu_load_buffer_p;
@@ -81,7 +85,6 @@ int xemuexec_check_status ( pid_t pid, int wait )
 }
 
 #else
-#include <windows.h>
 #include <tchar.h>
 
 /* I'm not a Windows programmer not even a user ... By inpsecting MSDN articles, I am not sure, what needs
@@ -127,7 +130,7 @@ void *xemuexec_run ( char *const args[] )
 	//st->si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
 	st->si.hStdError = (HANDLE)_open_osfhandle(_fileno(stderr), _O_TEXT);
 	st->si.hStdOutput = (HANDLE)_open_osfhandle(_fileno(stdout), _O_TEXT);
-		//_open_osfhandle((INT_PTR)_fileno(stdout), _O_TEXT);	
+		//_open_osfhandle((INT_PTR)_fileno(stdout), _O_TEXT);
 		//GetStdHandle(STD_OUTPUT_HANDLE);
 	//st->si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
 	st->si.hStdInput = (HANDLE)_get_osfhandle(fileno(stdin));
@@ -208,7 +211,28 @@ void xemuexec_open_native_file_browser ( char *dir )
 {
 #ifdef HAVE_XEMU_EXEC_API
 	static xemuexec_process_t fbp = XEMUEXEC_NULL_PROCESS_ID;
-	char *args[] = {FILE_BROWSER, dir, NULL};
+	while (*dir == ' ' || *dir == '\t')
+		dir++;
+	if (!strncasecmp(dir, "file://", 7))
+		dir += 7;
+	char *args[] = {
+		FILE_BROWSER, dir, NULL
+#ifdef XEMU_ARCH_WIN
+		,
+		NULL,
+		NULL
+#endif
+	};
+	if (!strncasecmp(dir, "ftp://", 6) || !strncasecmp(dir, "http://", 7) || !strncasecmp(dir, "https://", 8)) {
+#ifdef XEMU_ARCH_WIN
+		args[0] = "cmd";
+		args[1] = "/c";
+		args[2] = "start";
+		args[3] = dir;
+#else
+		args[0] = WEB_BROWSER;
+#endif
+	}
 	if (fbp != XEMUEXEC_NULL_PROCESS_ID) {
 		int w = xemuexec_check_status(fbp, 0);
 		DEBUGPRINT("EXEC: FILEBROWSER: previous file browser process (" PRINTF_LLD ") status was: %d" NL, (unsigned long long int)(uintptr_t)fbp, w);
@@ -462,10 +486,10 @@ int xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_
 		sprintf(paths[max_paths++], "%srom" DIRSEP_STR "%s", sdl_base_dir, filename + 1);
 		sprintf(paths[max_paths++], "%s%s", sdl_base_dir, filename + 1);
 #ifndef XEMU_ARCH_WIN
-		sprintf(paths[max_paths++], "/usr/local/share/xemu/%s", filename + 1);
-		sprintf(paths[max_paths++], "/usr/local/lib/xemu/%s", filename + 1);
-		sprintf(paths[max_paths++], "/usr/share/xemu/%s", filename + 1);
-		sprintf(paths[max_paths++], "/usr/lib/xemu/%s", filename + 1);
+		sprintf(paths[max_paths++], UNIX_DATADIR_0 "/%s", filename + 1);
+		sprintf(paths[max_paths++], UNIX_DATADIR_1 "/%s", filename + 1);
+		sprintf(paths[max_paths++], UNIX_DATADIR_2 "/%s", filename + 1);
+		sprintf(paths[max_paths++], UNIX_DATADIR_3 "/%s", filename + 1);
 #endif
 #ifdef HAVE_XEMU_INSTALLER
 		sprintf(paths[max_paths++], "%s%s%s", installer_marker_prefix, sdl_inst_dir, filename + 1);
@@ -616,9 +640,14 @@ int xemu_save_file ( const char *filename_in, void *data, int size, const char *
 		return -1;
 	}
 	close(fd);
+	DEBUGPRINT("FILE: %d bytes saved into file: %s" NL, size, filename);
 	char filename_real2[PATH_MAX];
 	strcpy(filename_real2, filename_real);
 	filename_real2[strlen(filename_real2) - strlen(temp_end)] = 0;
+	DEBUGPRINT("FILE: renaming file: %s -> %s" NL, filename_real, filename_real2);
+#ifdef XEMU_ARCH_WIN
+	unlink(filename_real2);	// it seems windows does not allow to rename "onto" an existing file. So delete the target first ...
+#endif
 	if (rename(filename_real, filename_real2)) {
 		if (cry)
 			ERROR_WINDOW("%s\nCannot rename file %s to %s\n%s", cry, filename_real, filename_real2, strerror(errno));
@@ -695,14 +724,27 @@ int xemu_load_file ( const char *filename, void *store_to, int min_size, int max
 }
 
 
-int xemu_create_sparse_file ( const char *os_path, Uint64 size )
+int xemu_create_large_empty_file ( const char *os_path, Uint64 size, int is_sparse )
 {
-	int err = 0, fd;
-	unsigned char zero = 0;
-	fd = open(os_path, O_BINARY | O_RDWR | O_CREAT, 0600);
+	int error;
+	int fd = open(os_path, O_BINARY | O_RDWR | O_CREAT | O_TRUNC, 0600);
 	if (fd < 0)
 		goto error;
+#ifdef XEMU_ARCH_WIN
+	if (is_sparse) {
+		DWORD dwTemp;
+		if (DeviceIoControl((HANDLE)_get_osfhandle(fd), FSCTL_SET_SPARSE, NULL, 0, NULL, 0, &dwTemp, NULL) == 0) {
+			ERROR_WINDOW("Cannot set file as sparse file!\nWindows error #" PRINTF_LLU "\nIt's not a fatal problem, though the file will take much more space than usual", (unsigned long long int)GetLastError());
+			goto error;
+		} else
+			DEBUGPRINT("WINDOWS: file has been made sparse, lpBytesReturned=" PRINTF_LLU NL, (unsigned long long int)dwTemp);
+	} else
+		DEBUGPRINT("WINDOWS: not using sparse file ..." NL);
+#else
+	is_sparse = 0;	// on non-Windows architectures we simply don't deal with sparse, that's the default!
+#endif
 	if (size > 0) {
+		static const Uint8 zero = 0;
 		size--;
 		if (lseek(fd, size, SEEK_SET) != size)
 			goto error;
@@ -711,13 +753,109 @@ int xemu_create_sparse_file ( const char *os_path, Uint64 size )
 		if (lseek(fd, -1, SEEK_CUR) != size)
 			goto error;
 	}
-	if (close(fd))
-		goto error;
-	return 0;
+	if (!close(fd))
+		return 0;
 error:
-	err = errno;
-	if (fd >= 0)
+	error = errno;
+	if (error >= 0)
+		error = -9999;
+	if (fd >= 0) {
 		close(fd);
-	unlink(os_path);
-	return err ? err : -1;
+		unlink(os_path);
+	}
+	// If request for sparse file and open itself succeeded, try again without sparse ...
+	return (is_sparse && fd >= 0) ? xemu_create_large_empty_file(os_path, size, 0) : error;
 }
+
+
+#if defined(XEMU_USE_LODEPNG) && defined(XEMU_FILES_SCREENSHOT_SUPPORT)
+char xemu_screenshot_full_path[PATH_MAX+1];
+#include "xemu/lodepng.h"
+#include <time.h>
+// TODO: use libpng in Linux, smaller binary (on windows I wouldn't introduce another DLL dependency though ...)
+// NOTE: you must call this function before the final rendering of course, thus source_pixels has a full rendered frame already ;)
+// NOTE: ... however, it must be called BEFORE xemu_update_screen() otherwise the texture access may not be valid anymore and crash occures
+// source_pixels CAN be null. In this case though, Xemu framework tries to use the right pointer based on locked texture or non-locked mode.
+int xemu_screenshot_png ( const char *path, const char *fn, unsigned int zoom_width, unsigned int zoom_height, Uint32 *source_pixels, unsigned int source_width, unsigned int source_height, unsigned int source_texture_width )
+{
+	int target_width = source_width * zoom_width;
+	int target_height = source_height * zoom_height;
+	if (!source_pixels) {
+		// No source_pixels was given ...
+		source_pixels = xemu_frame_pixel_access_p;
+		if (!source_pixels) {	// not ready to access?
+			DEBUGPRINT("SCREENSHOT: FAILED: No opened frame with source_pixels=NULL" NL);
+			return -1;
+		}
+	}
+	Uint8 *target_pixels = malloc(target_width * target_height * 3);
+	if (!target_pixels) {
+		ERROR_WINDOW("Not enough memory for taking a screenshot :(\n(could not allocate %d bytes of memory)", target_width * target_height * 3);
+		return -1;
+	}
+	for (int i = 0; i < target_width * target_height; i++) {
+		// Sampling pixel in the source
+		// Kinda crude algorithm, but it is not needed to be very fast and real-time operation, just
+		// to create a screenshot on user's request.
+		Uint32 pixel = source_pixels[(
+			(i % target_width) / zoom_width
+		) + (
+			((i / target_width) / zoom_height) * source_texture_width
+		)];
+		// Generate LodePNG compatible RGB stuff
+		// (note, this is maybe possible with simple SDL functions to convert a whole texture
+		// and/or surface without a madness-loop like this, but at least we know this works,
+		// and OK for any kind of endianness). Also lodePNG has 32 bit input encoder, though
+		// it's unknown for me, if RGB byte order can be altered. And also the scaling ...
+		target_pixels[i * 3 + 0] = (pixel & sdl_pix_fmt->Rmask) >> sdl_pix_fmt->Rshift << sdl_pix_fmt->Rloss;
+		target_pixels[i * 3 + 1] = (pixel & sdl_pix_fmt->Gmask) >> sdl_pix_fmt->Gshift << sdl_pix_fmt->Gloss;
+		target_pixels[i * 3 + 2] = (pixel & sdl_pix_fmt->Bmask) >> sdl_pix_fmt->Bshift << sdl_pix_fmt->Bloss;
+	}
+	Uint8 *png_stream = NULL;
+	size_t png_size = 0;
+	//unsigned lodepng_encode24(unsigned char** out, size_t* outsize,
+        //                const unsigned char* image, unsigned w, unsigned h);
+	int ret = lodepng_encode24(&png_stream, &png_size, target_pixels, target_width, target_height);
+	free(target_pixels);
+	if (ret) {
+		ERROR_WINDOW("Screenshot problem: loadPNG encode returned with error %u", (unsigned)ret);
+		if (png_stream)
+			free(png_stream);
+		return -1;
+	}
+	if (!png_stream || !png_size) {
+		if (png_stream)
+			free(png_stream);
+		ERROR_WINDOW("Screenshot problem: lodePNG returned invalid memory/size");
+		return -1;
+	}
+	// Now save the result.
+	if (!path && !fn) {
+		// if no path and fn, it means auto-generated and in default screenshot directory
+		sprintf(xemu_screenshot_full_path, "%s%s", sdl_pref_dir, "screenshots");
+		MKDIR(xemu_screenshot_full_path);
+		time_t ut = time(NULL);
+		struct tm *t = localtime(&ut);
+		sprintf(
+			xemu_screenshot_full_path + strlen(xemu_screenshot_full_path),
+			DIRSEP_STR "screenshot-%04d%02d%02d-%02d%02d%02d.png",
+			t->tm_year + 1900, t->tm_mon + 1, t->tm_mday, t->tm_hour, t->tm_min, t->tm_sec
+		);
+	} else {
+		if (!fn)
+			FATAL("Invalid %s mode", __func__);
+		if (path)
+			sprintf(xemu_screenshot_full_path, "%s%c%s", path, DIRSEP_CHR, fn);
+		else
+			strcpy(xemu_screenshot_full_path, fn);
+	}
+	ret = xemu_save_file(xemu_screenshot_full_path, png_stream, png_size, "Cannot save screenshot PNG");
+	free(png_stream);
+	if (!ret)
+		DEBUGPRINT(
+			"SCREENSHOT: (%dx%d -> %dx%d) successfully saved as %s" NL,
+			source_width, source_height, target_width, target_height, xemu_screenshot_full_path
+		);
+	return ret;
+}
+#endif

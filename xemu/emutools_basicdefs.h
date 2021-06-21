@@ -1,7 +1,5 @@
-/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
-   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and MEGA65 as well.
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -23,7 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_COMMON_EMUTOOLS_BASICDEFS_H_INCLUDED
 #define XEMU_COMMON_EMUTOOLS_BASICDEFS_H_INCLUDED
 
-#define COPYRIGHT_YEARS "2016-2020"
+#define COPYRIGHT_YEARS "2016-2021"
 
 #include <stdio.h>
 #include <limits.h>
@@ -137,16 +135,20 @@ typedef uint64_t Uint64;
 #	define DIRSEP_STR	"/"
 #	define DIRSEP_CHR	'/'
 #	define NL		"\n"
+#	define NL_LENGTH	1
 #	define PRINTF_LLD	"%lld"
 #	define PRINTF_LLU	"%llu"
 #	define MKDIR(__n)	mkdir((__n), 0777)
+#	define NULL_DEVICE	"/dev/null"
 #else
 #	define DIRSEP_STR	"\\"
 #	define DIRSEP_CHR	'\\'
 #	define NL		"\r\n"
+#	define NL_LENGTH	2
 #	define PRINTF_LLD	"%I64d"
 #	define PRINTF_LLU	"%I64u"
 #	define MKDIR(__n)	mkdir(__n)
+#	define NULL_DEVICE	"NUL:"
 #endif
 
 extern FILE *debug_fp;
@@ -168,8 +170,14 @@ extern int chatty_xemu;
 #endif
 
 #ifndef __BIGGEST_ALIGNMENT__
-#define __BIGGEST_ALIGNMENT__	16
+#	define __BIGGEST_ALIGNMENT__	16
+#	define XEMU_MISSING_BIGGEST_ALIGNMENT_WORKAROUND
+#elif __BIGGEST_ALIGNMENT__ > 256
+#	undef __BIGGEST_ALIGNMENT__
+#	define __BIGGEST_ALIGNMENT__ 256
+#	define XEMU_OVERSIZED_BIGGEST_ALIGNMENT_WORKAROUND
 #endif
+
 #define ALIGNED(n) __attribute__ ((aligned (n)))
 #define MAXALIGNED ALIGNED(__BIGGEST_ALIGNMENT__)
 
@@ -237,5 +245,27 @@ static inline int xemu_byte_order_test ( void )
 extern const char *XEMU_BUILDINFO_ON, *XEMU_BUILDINFO_AT, *XEMU_BUILDINFO_GIT, *XEMU_BUILDINFO_CC, *XEMU_BUILDINFO_TARGET, *XEMU_BUILDINFO_CDATE;
 extern const char emulators_disclaimer[];
 extern void xemu_dump_version ( FILE *fp, const char *slogan );
+extern int xemu_is_official_build ( void );
+
+static XEMU_INLINE unsigned char XEMU_BYTE_TO_BCD ( unsigned char b ) {
+	return ((b / 10) << 4) + (b % 10);
+}
+
+// this function is similar to strcpy() however:
+// * it does not copy the final '\0'
+// * it returns with the _updated_ 'target' pointer, not the original!
+static inline void *xemu_strcpy_special ( void *target, const void *source )
+{
+	while (*(char *)source)
+		*(char *)target++ = *(char *)source++;
+	return target;
+}
+
+#define VOIDPTR_TO_INT(x)	((int)(intptr_t)(void*)(x))
+#define VOIDPTR_TO_UINT(x)	((unsigned int)(uintptr_t)(void*)(x))
+
+// Stringification
+#define TO_STR_LEVEL1_(x)	#x			// stringification argument
+#define STRINGIFY(x)		TO_STR_LEVEL1_(x)	// level of indirection to be able to expand argument given as macros
 
 #endif

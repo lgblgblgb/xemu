@@ -1,6 +1,6 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
+/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2015-2016,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,16 +16,19 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "xemu/emutools_files.h"
+#include "xemu/emutools_config.h"
+#include "enterprise128.h"
 #include "printer.h"
 #include "dave.h"
-#include "configuration.h"
+#include "configdb.h"
+#include <errno.h>
+#include <fcntl.h>
 
-#include "main.h"
 
-
-static FILE *fp = NULL;
-static int fp_to_open = 1;
+static int printer_fd = -1;
+static int fd_to_open = 1;
 
 #define BUFFER_SIZE 1024
 #define COVOX_ACTIVATION_LIMIT 0x100
@@ -40,14 +43,14 @@ static int old_strobe_level = 0;
 
 
 
-
 static void write_printer_buffer ( void )
 {
-	if (buffer_pos && fp != NULL) {
-		if (fwrite(buffer, buffer_pos, 1, fp) != 1) {
+	if (buffer_pos && printer_fd >= 0) {
+		if (xemu_safe_write(printer_fd, buffer, buffer_pos) != buffer_pos) {
+		//if (fwrite(buffer, buffer_pos, 1, fp) != 1) {
 			WARNING_WINDOW("Cannot write printer output: %s\nFurther printer I/O has been disabled.", ERRSTR());
-			fclose(fp);
-			fp = NULL;
+			close(printer_fd);
+			printer_fd = -1;
 		}
 	}
 	buffer_pos = 0;
@@ -57,12 +60,12 @@ static void write_printer_buffer ( void )
 
 void printer_close ( void )
 {
-	if (fp) {
+	if (printer_fd >= 0) {
 		write_printer_buffer();
-		fclose(fp);
+		close(printer_fd);
 		DEBUG("Closing printer output file." NL);
-		fp_to_open = 1;
-		fp = NULL;
+		fd_to_open = 1;
+		printer_fd = -1;
 	}
 }
 
@@ -90,18 +93,18 @@ void printer_port_set_data ( Uint8 data )
 static void send_data_to_printer ( Uint8 data )
 {
 	//DEBUG("PRINTER GOT DATA: %d" NL, data);
-	if (fp_to_open) {
-		const char *printfile = config_getopt_str("printfile");
+	if (fd_to_open) {
 		char path[PATH_MAX + 1];
-		fp = open_emu_file(printfile, "ab", path);
-		if (fp == NULL)
+		//fp = open_emu_file(printfile, "ab", path);
+		printer_fd = xemu_open_file(configdb.printfile, O_WRONLY | O_APPEND | O_CREAT, NULL, path);
+		if (printer_fd < 0)
 			WARNING_WINDOW("Cannot create/append printer output file \"%s\": %s.\nYou can use Xep128 but printer output will not be logged!", path, ERRSTR());
 		else
 			INFO_WINDOW("Printer event, file \"%s\" has been opened for the output.", path);
-		fp_to_open = 0;
+		fd_to_open = 0;
 		buffer_pos = 0;
 	}
-	if (fp != NULL) {
+	if (printer_fd >= 0) {
 		buffer[buffer_pos++] = data;
 		if (buffer_pos == BUFFER_SIZE)
 			write_printer_buffer();
@@ -138,4 +141,3 @@ void printer_disable_covox ( void )
 		DEBUG("PRINTER: COVOX: covox mode has been disabled on emulator event." NL);
 	}
 }
-

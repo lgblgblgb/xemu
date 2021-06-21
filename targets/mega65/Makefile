@@ -1,6 +1,6 @@
 ## A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
 ## Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-## Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,8 +20,8 @@ TARGET		= mega65
 PRG_TARGET	= xmega65
 EMU_DESCRIPTION	= MEGA65
 
-SRCS_TARGET_xmega65	= mega65.c sdcard.c uart_monitor.c hypervisor.c m65_snapshot.c memory_mapper.c io_mapper.c vic4.c vic4_palette.c ethernet65.c input_devices.c memcontent.c ui.c fat32.c sdcontent.c audio65.c inject.c
-SRCS_COMMON_xmega65	= emutools.c cpu65.c cia6526.c emutools_hid.c sid.c f011_core.c f018_core.c c64_kbd_mapping.c emutools_config.c emutools_snapshot.c emutools_files.c emutools_umon.c ethertap.c d81access.c emutools_gui.c basic_text.c opl3.c
+SRCS_TARGET_xmega65	= configdb.c mega65.c sdcard.c uart_monitor.c hypervisor.c m65_snapshot.c memory_mapper.c io_mapper.c vic4.c vic4_palette.c ethernet65.c input_devices.c memcontent.c ui.c fat32.c sdcontent.c audio65.c inject.c dma65.c
+SRCS_COMMON_xmega65	= emutools.c cpu65.c cia6526.c emutools_hid.c sid.c f011_core.c c64_kbd_mapping.c emutools_config.c emutools_snapshot.c emutools_files.c emutools_umon.c emutools_socketapi.c ethertap.c d81access.c emutools_gui.c basic_text.c opl3.c lodepng.c
 CFLAGS_TARGET_xmega65	= $(SDL2_CFLAGS) $(MATH_CFLAGS) $(SOCKET_CFLAGS) $(XEMUGUI_CFLAGS)
 LDFLAGS_TARGET_xmega65	= $(SDL2_LIBS) $(MATH_LIBS) $(SOCKET_LIBS) $(XEMUGUI_LIBS)
 
@@ -39,27 +39,33 @@ recreatememcontent:
 	rm -f memcontent.c.tmp
 	echo "/* !THIS IS A GENERATED FILE! DO NOT EDIT!" >> memcontent.c.tmp
 	echo " * Instead, say 'make recreatememcontent' to re-generate this file" >> memcontent.c.tmp
-	echo " * Binary data from Mega65 project. Please note, that Mega65 is" >> memcontent.c.tmp
+	echo " * Binary data from MEGA65 project. Please note, that MEGA65 is" >> memcontent.c.tmp
 	echo " * an open source, GNU/GPL project, like Xemu. Thus, it's valid" >> memcontent.c.tmp
-	echo " * to use binaries as it's from the compiled version of Mega65" >> memcontent.c.tmp
+	echo " * to use binaries as it's from the compiled version of MEGA65" >> memcontent.c.tmp
 	echo " * which is available in source form at https://github.com/MEGA65/mega65-core */" >> memcontent.c.tmp
+	cp memcontent.c.tmp memcontent_sizes.h.tmp
 	echo '#include "xemu/emutools.h"' >> memcontent.c.tmp
 	echo '#include "memcontent.h"' >> memcontent.c.tmp
 	echo "Uint8 meminitdata_kickstart[MEMINITDATA_KICKSTART_SIZE] = {" >> memcontent.c.tmp
 	../../build/bin2values.py $(MEGA65_CORE)/bin/HICKUP.M65 - >> memcontent.c.tmp
+	../../build/filesizedefine.py MEMINITDATA_KICKSTART_SIZE $(MEGA65_CORE)/bin/HICKUP.M65 >> memcontent_sizes.h.tmp
 	echo "};" >> memcontent.c.tmp
 	echo "Uint8 meminitdata_chrwom[MEMINITDATA_CHRWOM_SIZE] = {" >> memcontent.c.tmp
 	gawk '/^[\t ]*[xX]"/ { $$0 = toupper($$0); gsub("X\"","0x",$$0); gsub("\"","",$$0); print "\t" $$0 }' < $(MEGA65_CORE)/src/vhdl/charrom.vhdl >> memcontent.c.tmp
 	echo "};" >> memcontent.c.tmp
+	@echo "*** $(MEGA65_CORE)/bin/COLOURRAM.BIN as meminitdata_cramutils / MEMINITDATA_CRAMUTILS_SIZE ***"
 	echo "Uint8 meminitdata_cramutils[MEMINITDATA_CRAMUTILS_SIZE] = {" >> memcontent.c.tmp
 	../../build/bin2values.py $(MEGA65_CORE)/bin/COLOURRAM.BIN - >> memcontent.c.tmp
+	../../build/filesizedefine.py MEMINITDATA_CRAMUTILS_SIZE $(MEGA65_CORE)/bin/COLOURRAM.BIN >> memcontent_sizes.h.tmp
 	echo "};" >> memcontent.c.tmp
 	echo "Uint8 meminitdata_banner[MEMINITDATA_BANNER_SIZE] = {" >> memcontent.c.tmp
 	../../build/bin2values.py $(MEGA65_CORE)/sdcard-files/BANNER.M65 - >> memcontent.c.tmp
+	../../build/filesizedefine.py MEMINITDATA_BANNER_SIZE $(MEGA65_CORE)/sdcard-files/BANNER.M65 >> memcontent_sizes.h.tmp
 	echo "};" >> memcontent.c.tmp
 	echo "Uint8 meminitdata_freezer[] = {" >> memcontent.c.tmp
 	../../build/bin2values.py $(MEGA65_CORE)/sdcard-files/FREEZER.M65 - >> memcontent.c.tmp
+	../../build/filesizedefine.py MEMINITDATA_FIXME_SIZE $(MEGA65_CORE)/sdcard-files/FREEZER.M65 >> memcontent_sizes.h.tmp
 	echo "};" >> memcontent.c.tmp
 	echo "const int meminitdata_freezer_size = sizeof(meminitdata_freezer);" >> memcontent.c.tmp
 	cp memcontent.c memcontent.c.BAK
-	@echo "*** OK. Please rename memcontent.c.tmp to memcontent.c to really apply these changes, then re-compile the emulator ***"
+	@echo "*** OK. Please rename memcontent.c.tmp to memcontent.c and memcontent_sizes.h.tmp to memcontent_sizes.h to really apply these changes, then re-compile the emulator ***"

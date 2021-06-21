@@ -23,7 +23,7 @@ freely, subject to the following restrictions:
     distribution.
 */
 
-#ifdef CONFIG_USE_LODEPNG
+#ifdef XEMU_USE_LODEPNG
 #ifndef LODEPNG_H
 #define LODEPNG_H
 

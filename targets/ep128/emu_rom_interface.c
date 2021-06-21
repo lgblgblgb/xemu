@@ -1,6 +1,6 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
+/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2015-2016,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,17 +16,17 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "xemu/emutools_config.h"
+#include "enterprise128.h"
 #include "emu_rom_interface.h"
 #include "xemu/../rom/ep128/xep_rom_syms.h"
 #include "xemu/z80.h"
 #include "cpu.h"
 #include "roms.h"
 #include "emu_monitor.h"
-#include "configuration.h"
 #include "fileio.h"
-
-#include "main.h"
+#include "configdb.h"
 
 #include <unistd.h>
 #include <time.h>
@@ -96,8 +96,8 @@ void xep_set_default_device_name ( const char *name )
 {
 	int l;
 	if (!name)
-		name = config_getopt_str("ddn");
-	if (!strcasecmp(name, "none"))
+		name = configdb.ddn;
+	if (!name)
 		name = "";
 	l = strlen(name);
 	if (l < 16) {
@@ -209,9 +209,9 @@ void xep_rom_trap ( Uint16 pc, Uint8 opcode )
 		case xepsym_trap_on_system_init:
 			exos_version = Z80_B;	// store EXOS version number we got ...
 			memcpy(exos_info, memory + ((xepsym_exos_info_struct & 0x3FFF) | (xep_rom_seg << 14)), 8);
-			if (config_getopt_int("skiplogo")) {
+			if (configdb.skiplogo) {
 				DEBUG("XEP: skiplogo option requested logo skip, etting EXOS variable 0xBFEF to 1 on system init ROM call" NL);
-				EXOS_BYTE(0xBFEF) = 1; // use this, to skip Enterprise logo when it would come :-)
+				EXOS_BYTE(0xBFEF) = 1; // use this, to skip Enterprise logo when it arrives :-)
 			}
 			break;
 		default:
@@ -270,4 +270,3 @@ void xep_rom_trap ( Uint16 pc, Uint8 opcode )
 			break;
 	}
 }
-

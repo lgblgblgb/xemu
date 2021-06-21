@@ -1,7 +1,7 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    I/O decoding part (used by memory_mapper.h and DMA mainly)
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "io_mapper.h"
 #include "memory_mapper.h"
 #include "xemu/f011_core.h"
-#include "xemu/f018_core.h"
+#include "dma65.h"
 #include "xemu/emutools_hid.h"
 //#include "xemu/cpu65.h"
 #include "vic4.h"
@@ -31,6 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "ethernet65.h"
 #include "input_devices.h"
 #include "audio65.h"
+#include "configdb.h"
 
 
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
@@ -38,9 +39,16 @@ Uint8  D6XX_registers[0x100];		// mega65 specific D6XX range, excluding the UART
 Uint8  D7XX[0x100];			// FIXME: hack for future M65 stuffs like ALU! FIXME: no snapshot on these!
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 static int mouse_x = 0, mouse_y = 0;	// for our primitive C1351 mouse emulation
-int    cpu_linear_memory_addressing_is_enabled = 0;	// used by the CPU emu as well!
+int    cpu_mega65_opcodes = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;
-int port_d607 = 0xFF;	// ugly hack to be able to read extra char row of C65
+int port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65 keyboard
+
+
+static const Uint8 fpga_firmware_version[] = { 'X','e','m','u' };
+static const Uint8 cpld_firmware_version[] = { 'N','o','w','!' };
+#define xemu_query_interface_str XEMU_BUILDINFO_CDATE
+static const char *xemu_query_interface_p = NULL;
+static int         xemu_query_gate = 0;
 
 
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
@@ -50,36 +58,30 @@ int port_d607 = 0xFF;	// ugly hack to be able to read extra char row of C65
 	do { DEBUG("IO: NOT IMPLEMENTED write (emulator lacks feature), %s $%04X with data $%02X" NL, func, addr, data); \
 	return; } while(0)
 
-// Address of the "big" multiplier within the $D7XX area (byte only)
-#define BIGMULT_ADDR	0x70
 
-
-
-static void update_hw_multiplier ( void )
+static XEMU_INLINE void update_hw_multiplier ( void )
 {
-	D7XX[BIGMULT_ADDR + 3] &= 0x01;
-	D7XX[BIGMULT_ADDR + 6] &= 0x03;
-	D7XX[BIGMULT_ADDR + 7] =  0x00;
-	register Uint64 result = (Uint64)(
-		((Uint32) D7XX[BIGMULT_ADDR + 0]      ) |
-		((Uint32) D7XX[BIGMULT_ADDR + 1] <<  8) |
-		((Uint32) D7XX[BIGMULT_ADDR + 2] << 16) |
-		((Uint32) D7XX[BIGMULT_ADDR + 3] << 24)
-	) * (Uint64)(
-		((Uint32) D7XX[BIGMULT_ADDR + 4]      ) |
-		((Uint32) D7XX[BIGMULT_ADDR + 5] <<  8) |
-		((Uint32) D7XX[BIGMULT_ADDR + 6] << 16) |
-		((Uint32) D7XX[BIGMULT_ADDR + 7] << 24)
-	);
-	D7XX[BIGMULT_ADDR + 0x8] = (result      ) & 0xFF;
-	D7XX[BIGMULT_ADDR + 0x9] = (result >>  8) & 0xFF;
-	D7XX[BIGMULT_ADDR + 0xA] = (result >> 16) & 0xFF;
-	D7XX[BIGMULT_ADDR + 0xB] = (result >> 24) & 0xFF;
-	D7XX[BIGMULT_ADDR + 0xC] = (result >> 32) & 0xFF;
-	D7XX[BIGMULT_ADDR + 0xD] = (result >> 40) & 0xFF;
-	D7XX[BIGMULT_ADDR + 0xE] = 0;
-	D7XX[BIGMULT_ADDR + 0xF] = 0;
+	register const Uint32 input_a = xemu_u8p_to_u32le(D7XX + 0x70);
+	register const Uint32 input_b = xemu_u8p_to_u32le(D7XX + 0x74);
+	// Set flag to valid, so we don't relculate each time
+	// (this variable is used to avoid calling this function if no change was
+	// done on input_a and input_b)
 	bigmult_valid_result = 1;
+	// --- Do the product, multiplication ---
+	xemu_u64le_to_u8p(D7XX + 0x78, (Uint64)input_a * (Uint64)input_b);
+	// --- Do the quotient, divide ---
+	// ... but we really don't want to divide by zero, so let's test this
+	if (XEMU_LIKELY(input_b)) {
+		// input_b is non-zero, it's OK to divide
+		xemu_u64le_to_u8p(D7XX + 0x68, (Uint64)((Uint64)input_a << 32) / (Uint64)input_b);
+	} else {
+		// If we divide by zero, according to the VHDL,
+		// we set all bits to '1' in the result, that is $FF
+		// for all registers of div output. Probably it can be
+		// interpreted as some kind of "fixed point infinity"
+		// or just a measure of error with this special answer.
+		memset(D7XX + 0x68, 0xFF, 8);
+	}
 }
 
 
@@ -159,7 +161,7 @@ Uint8 io_read ( unsigned int addr )
 			addr &= 0xFF;
 			if (addr < 9)
 				RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);	// FIXME: UART is not yet supported!
-			if (addr >= 0x80 && addr <= 0x93)	// SDcard controller etc of Mega65
+			if (addr >= 0x80 && addr <= 0x93)	// SDcard controller etc of MEGA65
 				return sdcard_read_register(addr - 0x80);
 			if ((addr & 0xF0) == 0xE0)
 				return eth65_read_reg(addr);
@@ -184,8 +186,40 @@ Uint8 io_read ( unsigned int addr )
 					return hwa_kbd_get_last();
 				case 0x11:				// modifier keys on kbd being used
 					return hwa_kbd_get_modifiers();
+				case 0x13:				// $D613: direct access to the kbd matrix, read selected row (set by writing $D614), bit 0 = key pressed
+					return kbd_directscan_query(D6XX_registers[0x14]);	// for further explanations please see this function in input_devices.c
+				case 0x29:
+					return configdb.mega65_model;		// MEGA65 model
+				case 0x0F:
+					// D60F bit 5, real hardware (1), emulation (0), other bits are not emulated yet by Xemu, so I give simply zero
+					return 0;
+				case 0x32: // D632-D635: FPGA firmware ID
+				case 0x33:
+				case 0x34:
+				case 0x35:
+					if (xemu_query_gate == 0xF) {
+						Uint8 data = *xemu_query_interface_p;
+						//if (!data)
+						//	xemu_query_gate = 0;
+						return data;
+					} else {
+						return fpga_firmware_version[addr - 0x32];
+					}
+				case 0x2C: // D62C-D62F: CPLD firmware ID
+				case 0x2D:
+				case 0x2E:
+				case 0x2F:
+					if (xemu_query_gate == 0xF) {
+						Uint8 data = *xemu_query_interface_p++;
+						if (!data) {
+							xemu_query_gate = 0;
+						}
+						return data;
+					} else {
+						return cpld_firmware_version[addr - 0x2C];
+					}
 				default:
-					DEBUG("MEGA65: reading Mega65 specific I/O @ $D6%02X result is $%02X" NL, addr, D6XX_registers[addr]);
+					DEBUG("MEGA65: reading MEGA65 specific I/O @ $D6%02X result is $%02X" NL, addr, D6XX_registers[addr]);
 					return D6XX_registers[addr];
 			}
 		case 0x17:	// $D700-$D7FF ~ C65 I/O mode
@@ -194,8 +228,11 @@ Uint8 io_read ( unsigned int addr )
 		case 0x37:	// $D700-$D7FF ~ M65 I/O mode
 			// FIXME: this is probably very bad! I guess DMA does not decode for every 16 addresses ... Proposed fix is here:
 			addr &= 0xFF;
-			if (addr < 16)
+			if (addr < 15)		// FIXME!!!! 0x0F was part of DMA reg array, but it seems now used by divisor busy stuff??
 				return dma_read_reg(addr & 0xF);
+			if (addr == 0x0F)
+				return 0;	// FIXME: D70F bit 7 = 32/32 bits divisor busy flag, bit 6 = 32*32 mult busy flag. We're never busy, so the zero. But the OTHER bits??? Any purpose of those??
+			// ;) FIXME this is LAZY not to decode if we need to update bigmult at all ;-P
 			if (XEMU_UNLIKELY(!bigmult_valid_result))
 				update_hw_multiplier();
 			return D7XX[addr];
@@ -346,7 +383,7 @@ void io_write ( unsigned int addr, Uint8 data )
 		case 0x15:	// $D500-$D5FF ~ C65 I/O mode
 		case 0x34:	// $D400-$D4FF ~ M65 I/O mode
 		case 0x35:	// $D500-$D5FF ~ M65 I/O mode
-			sid_write_reg(addr & 0x40 ? &sid2 : &sid1, addr & 31, data);
+			audio65_sid_write(addr, data);	// We need full addr, audio65_sid_write will decide the SID instance from that!
 			return;
 		case 0x16:	// $D600-$D6FF ~ C65 I/O mode
 			if ((addr & 0xFF) == 0x07) {
@@ -359,7 +396,7 @@ void io_write ( unsigned int addr, Uint8 data )
 			if (!in_hypervisor && addr >= 0x40 && addr <= 0x7F) {
 				// In user mode, writing to $D640-$D67F (in VIC4 iomode) causes to enter hypervisor mode with
 				// the trap number given by the offset in this range
-				hypervisor_enter(addr & 0x3F);
+				hypervisor_enter_via_write_trap(addr & 0x3F);
 				return;
 			}
 			D6XX_registers[addr] = data;	// I guess, the actual write won't happens if it was trapped, so I moved this to here after the previous "if"
@@ -370,7 +407,7 @@ void io_write ( unsigned int addr, Uint8 data )
 				} else
 					RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");	// FIXME: UART is not yet supported!
 			}
-			if (addr >= 0x80 && addr <= 0x93) {			// SDcard controller etc of Mega65
+			if (addr >= 0x80 && addr <= 0x93) {			// SDcard controller etc of MEGA65
 				sdcard_write_register(addr - 0x80, data);
 				return;
 			}
@@ -387,15 +424,14 @@ void io_write ( unsigned int addr, Uint8 data )
 					return;
 				case 0x7D:
 					DEBUG("MEGA65: features set as $%02X" NL, data);
-					if ((data & 2) != cpu_linear_memory_addressing_is_enabled) {
-						DEBUG("MEGA65: 32-bit linear addressing opcodes have been turned %s." NL, data & 2 ? "ON" : "OFF");
-						cpu_linear_memory_addressing_is_enabled = data & 2;
+					if ((data & 2) != cpu_mega65_opcodes) {
+						DEBUG("MEGA65: enhanced opcodes have been turned %s." NL, data & 2 ? "ON" : "OFF");
+						cpu_mega65_opcodes = data & 2;
 					}
 					if ((data & 4) != rom_protect) {
 						DEBUG("MEGA65: ROM protection has been turned %s." NL, data & 4 ? "ON" : "OFF");
 						rom_protect = data & 4;
 					}
-					force_fast = data & 16;
 					return;
 				case 0x7E:
 					D6XX_registers[0x7E] = 0xFF;	// iomap.txt: "Hypervisor already-upgraded bit (sets permanently)"
@@ -404,6 +440,22 @@ void io_write ( unsigned int addr, Uint8 data )
 					return;
 				case 0x7F:	// hypervisor leave
 					hypervisor_leave();	// 0x67F is also handled on enter's state, so it will be executed only in_hypervisor mode, which is what I want
+					return;
+				case 0x32:
+				case 0x33:
+				case 0x34:
+				case 0x35:
+					if (data == (cpld_firmware_version[addr - 0x32] ^ fpga_firmware_version[addr - 0x32])) {
+						DEBUG("QUERY: before gating: %X" NL, xemu_query_gate);
+						xemu_query_gate |= (1 << (addr - 0x32));
+						if (xemu_query_gate == 0xF)
+							xemu_query_interface_p = xemu_query_interface_str;
+					} else {
+						xemu_query_gate = 0;
+					}
+					DEBUG("QUERY: $D6%02X reg written with data %02X excepted %02X gate is %1X ptr is %p" NL,
+							addr, data, cpld_firmware_version[addr - 0x32] ^ fpga_firmware_version[addr - 0x32],
+							xemu_query_gate, xemu_query_interface_p);
 					return;
 				default:
 					DEBUG("MEGA65: this I/O port is not emulated in Xemu yet: $D6%02X (tried to be written with $%02X)" NL, addr, data);
@@ -419,7 +471,8 @@ void io_write ( unsigned int addr, Uint8 data )
 			addr &= 0xFF;
 			if (addr < 16)
 				dma_write_reg(addr & 0xF, data);
-			else if (XEMU_UNLIKELY((addr & 0xF0) == BIGMULT_ADDR))
+			//else if (XEMU_UNLIKELY((addr & 0xF0) == BIGMULT_ADDR))
+			else if (addr >= 0x68 && addr <= 0x7F)
 				bigmult_valid_result = 0;
 			D7XX[addr] = data;
 			return;

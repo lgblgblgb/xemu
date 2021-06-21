@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,22 +19,24 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_MEGA65_UART_MONITOR_H_INCLUDED
 #define XEMU_MEGA65_UART_MONITOR_H_INCLUDED
 
-#if !defined(XEMU_ARCH_WIN) && !defined(XEMU_ARCH_HTML)
-#define HAS_UARTMON_SUPPORT
+#ifdef HAS_UARTMON_SUPPORT
 
-#define SYNTAX_ERROR "?SYNTAX ERROR  "
+#define UMON_SYNTAX_ERROR "?SYNTAX ERROR  "
 
-#define UMON_WRITE_BUFFER_SIZE	0x4000
-#define umon_printf(...)	umon_write_size += sprintf(umon_write_buffer + umon_write_size, __VA_ARGS__)
+#define UMON_DEFAULT_PORT ":4510"
 
-extern int  umon_write_size;
-extern int  umon_send_ok;
-extern char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
+// seems as though m65.c actions like fetch_ram(0xFFF8000, 0x4000, hyppo_data)
+// cause a lot of umon_writes to accumulate quickly, so had to increase this buffer
+#define UMON_WRITE_BUFFER_SIZE	0x10000
+
+extern void umon_printf(const char* format, ...);
 
 extern int  uartmon_init   ( const char *fn );
+extern int  uartmon_is_active ( void );
 extern void uartmon_update ( void );
 extern void uartmon_close  ( void );
-extern void uartmon_finish_command ( void );
+extern void uartmons_finish_command ( void );
+extern void set_umon_send_ok(int val);
 
 #endif
 

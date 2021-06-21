@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "xemu/basic_text.h"
 
-#ifdef BASIC_TEXT_SUPPORT
+#ifdef CBM_BASIC_TEXT_SUPPORT
 
 // This table is from VICE (utility petcat), though with a heavy edited form, current
 // no multiple BASIC versions etc, just straight BASIC 10 ...
@@ -380,3 +380,103 @@ int xemu_basic_to_text ( Uint8 *output, int output_size, const Uint8 *prg, int r
 }
 
 #endif
+
+
+#define DUMP_SCR_CODE()	t += sprintf(t, "{$%02X}", c)
+char *xemu_cbm_screen_to_text ( char *buffer, const int buffer_size, const Uint8 *v, const int cols, const int rows, const int lowercase )
+{
+	static const char *rvs_msgs[] = { "{RVS-OFF}", "{RVS-ON}" };
+	char *t = buffer;
+	for (int y = 0; y < rows; y++) {
+		int rvs = 0;
+		for (int x = 0; x < cols; x++) {
+			if (XEMU_UNLIKELY(t - buffer > buffer_size - 16)) {
+				ERROR_WINDOW("Sorry, ASCII converted screen does not fit into the output buffer");
+				return NULL;
+			}
+			Uint8 c = (*v++);
+			if (XEMU_UNLIKELY((c & 0x80) != rvs)) {
+				rvs = (c & 0x80);
+				t = xemu_strcpy_special(t, rvs_msgs[!!rvs]);
+			}
+			c &= 0x7F;		// we can't convert reverse visually per chars, so let's forget the upper bit
+			if (c == 0) {
+				*t++ = '@';
+			} else if (c < 27) {
+				*t++ = c + (lowercase ? 'a' : 'A') - 1;
+			} else if (c == 27) {
+				*t++ = '[';
+			} else if (c == 28) {	// pound
+				DUMP_SCR_CODE();
+			} else if (c == 29) {
+				*t++ = ']';
+			} else if (c == 30) {	// up arrow
+				DUMP_SCR_CODE();
+			} else if (c == 31) {	// left arrow
+				DUMP_SCR_CODE();
+			} else if (c < 64) {	// space, signs, numbers ... identical position :D :D
+				*t++ = c;
+			} else if (c == 64) {	// "bold minus" like entity ...
+				DUMP_SCR_CODE();
+			} else if (c < 91) {	// symbols, or capital letters (the 2nd: if in lower-case charset mode!)
+				if (lowercase)
+					*t++ = c - 65 + 'A';
+				else
+					t += sprintf(t, "{%c}", c - 65 + 'A');
+			} else {
+				DUMP_SCR_CODE();
+			}
+		}
+		if (XEMU_UNLIKELY(rvs))
+			t = xemu_strcpy_special(t, rvs_msgs[0]);
+		else
+			while (t > buffer && t[-1] == ' ')	// remove trailing spaces
+				t--;
+		t = xemu_strcpy_special(t, NL);	// put a newline
+	}
+	// remove empty lines from the end of our capture
+	while (t > buffer && (t[-1] == '\r' || t[-1] == '\n'))
+		t--;
+	strcpy(t, NL);	// still, a final newline. THIS ALSO CLOSES OUR STRING with '\0'!!!!!
+	// remove empty lines from the beginning of our capture
+	while (*buffer == '\r' || *buffer == '\n')
+		buffer++;
+	// return our result!
+	return buffer;
+}
+#undef DUMP_SCR_CODE
+
+
+int xemu_cbm_text_to_screen ( Uint8 *v, const int cols, const int rows, const char *buffer, const int lowercase )
+{
+	const Uint8 *start = v;
+	const Uint8 *end   = v + (cols * rows);
+	char ch_prev, ch = 0;
+	v += cols;	// do not use the first line, we expect use may have the cursor there
+	while (*buffer && v < end) {
+		ch_prev = ch;
+		ch = *buffer++;
+		if (ch == '\n' || ch == '\r') {
+			if ((ch_prev == '\n' || ch_prev == '\r') && ch_prev != ch) {
+				ch_prev = 0;
+				continue;	// \r\n or other multi-ctrl-char sequence for line break
+			}
+			// new line
+			while ((v - start) % cols)
+				*v++ = 32;
+			continue;
+		}
+		if (ch == '\t')	// space (also TAB is rendered as space for now ...)
+			ch = 32;
+		else if (ch == '@')
+			ch = 0;
+		else if (ch >= 97 && ch <= 122)	// 'a' ... 'z'
+			ch -= 97 - 1;
+		else if ((signed char)ch < 32)
+			continue;
+		*v++ = ch;
+	}
+	while (v < end && ((v - start) % cols))
+		*v++ = 32;
+	return 0;
+}

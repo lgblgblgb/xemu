@@ -1,6 +1,4 @@
-/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
-   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and MEGA65 as well.
+/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
@@ -32,6 +30,18 @@ const char emulators_disclaimer[] =
 	"LICENSE: There is NO WARRANTY, to the extent permitted by law." NL
 ;
 
+int xemu_is_official_build ( void )
+{
+#ifdef XEMU_OFFICIAL_BUILD
+	return 1;
+#else
+	static int is_official = -1;
+	if (is_official < 0)
+		is_official = !!getenv("XEMU_OFFICIAL_BUILD");
+	return is_official;
+#endif
+}
+
 void xemu_dump_version ( FILE *fp, const char *slogan )
 {
 	if (!fp)
@@ -40,7 +50,7 @@ void xemu_dump_version ( FILE *fp, const char *slogan )
 		fprintf(fp, "**** %s ****" NL, slogan);
 	fprintf(fp, "This software is part of the Xemu project: https://github.com/lgblgblgb/xemu" NL);
 	fprintf(fp, "CREATED: %s at %s" NL "CREATED: %s for %s" NL, XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT, XEMU_BUILDINFO_CC, XEMU_ARCH_NAME);
-	fprintf(fp, "VERSION: %s %s" NL, XEMU_BUILDINFO_GIT, XEMU_BUILDINFO_CDATE);
+	fprintf(fp, "VERSION: %s %s %s" NL, XEMU_BUILDINFO_GIT, XEMU_BUILDINFO_CDATE, xemu_is_official_build() ? "official-build" : "custom-build");
 	fprintf(fp, "EMULATE: %s (%s): %s" NL, TARGET_DESC, TARGET_NAME, XEMU_BUILDINFO_TARGET);
 	fprintf(fp, "%s" NL, emulators_disclaimer);
 }

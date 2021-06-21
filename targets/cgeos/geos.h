@@ -1,7 +1,8 @@
-/* This is an odd emulator, emulating a Commodore 64 like machine only for the
-   level needed for a special version of GEOS to be able to run on it.
+/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   This is an odd emulator, emulating a Commodore 64 like machine only for the
+   level needed for a special version of GEOS to be able to run on it.
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -17,8 +18,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __LGB_GEOS_H_INCLUDED
-#define __LGB_GEOS_H_INCLUDED
+#ifndef XEMU_CGEOS_GEOS_H_INCLUDED
+#define XEMU_CGEOS_GEOS_H_INCLUDED
 
 
 extern Uint8 memory[];

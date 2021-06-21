@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -23,6 +23,8 @@ extern int inject_ready_check_status;
 
 extern void inject_ready_check_do        ( void );
 extern int  inject_register_ready_status ( const char *debug_msg, void (*callback)(void*), void *userdata );
+
 extern int  inject_register_prg          ( const char *prg_file, int prg_mode );
+extern void inject_register_allow_disk_access ( void );
 
 #endif

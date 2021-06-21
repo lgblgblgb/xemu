@@ -34,7 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static struct {
 	char	pattern[8 + 3 + 1];	// FCB formatted pattern [ie, the file name we search for, probbaly with '?' wildcard chars]
 	char	found[8 + 3 + 1];	// FCB formatted filename of the current found item
-	char	host_name[13];		// host OS filename found [not CP/M!], must be 8 + 3 + 1 + 1 = 
+	char	host_name[13];		// host OS filename found [not CP/M!], must be 8 + 3 + 1 + 1 =
 	char	host_path[PATH_MAX];	// host OS full-path filename found
 	int	result_is_valid;
 	int	stop_search;

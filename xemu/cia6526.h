@@ -1,7 +1,5 @@
-/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
-   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and MEGA65 as well.
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -24,9 +22,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  * Note: this is not an exact nor complete emulation!
  * The only goal is to support what Commodore 64/65(?) uses even
  * implemented incorrectly (not cycle exact, simplified, ignored
- * conditions, etc). 
+ * conditions, etc).
  * Some doc:
- *      http://archive.6502.org/datasheets/mos_6526_cia.pdf
+ *      http://archive.6502.org/datasheets/mos_6526_cia_recreated.pdf
  *      http://www.c64-wiki.com/index.php/CIA
  */
 
@@ -73,7 +71,7 @@ extern void  cia_write(struct Cia6526 *cia, int addr, Uint8 data);
 extern Uint8 cia_read (struct Cia6526 *cia, int addr);
 extern void  cia_tick (struct Cia6526 *cia, int ticks);
 extern void  cia_dump_state ( struct Cia6526 *cia );
-extern void  cia_ugly_tod_updater ( struct Cia6526 *cia, const struct tm *t, Uint8 sec10 ) ;
+extern void  cia_ugly_tod_updater ( struct Cia6526 *cia, const struct tm *t, Uint8 sec10, int hour_offset );
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 extern int cia_snapshot_load_state ( const struct xemu_snapshot_definition_st *def , struct xemu_snapshot_block_st *block );

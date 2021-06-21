@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,7 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "xemu/cpu65.h"
 #include "xemu/f011_core.h"
-#include "xemu/f018_core.h"
+#include "dma65.h"
 #include "xemu/emutools_hid.h"
 #include "vic4.h"
 #include "sdcard.h"
@@ -40,6 +40,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_gui.h"
 #include "audio65.h"
 #include "inject.h"
+#include "configdb.h"
 
 
 static int nmi_level;			// please read the comment at nmi_set() below
@@ -47,21 +48,30 @@ static int nmi_level;			// please read the comment at nmi_set() below
 int newhack = 0;
 unsigned int frames_total_counter = 0;
 
-static int fast_mhz, cpu_cycles_per_scanline_for_fast_mode, speed_current;
-static char fast_mhz_in_string[8];
+static int  cpu_cycles_per_scanline_for_fast_mode, speed_current;
+static char fast_mhz_in_string[16];
 static int frame_counter;
 static int   paused = 0, paused_old = 0;
 static int   breakpoint_pc = -1;
+#ifdef TRACE_NEXT_SUPPORT
+static int   orig_sp = 0;
+static int   trace_next_trigger = 0;
+#endif
 static int   trace_step_trigger = 0;
 #ifdef HAS_UARTMON_SUPPORT
 static void (*m65mon_callback)(void) = NULL;
 #endif
 static const char emulator_paused_title[] = "TRACE/PAUSE";
-static char emulator_speed_title[] = "????MHz";
+static char emulator_speed_title[64] = "?MHz";
 static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 
 static int force_external_rom = 0;
-static int force_upload_fonts = 0;
+
+static Uint8 nvram_original[sizeof nvram];
+static int uuid_must_be_saved = 0;
+
+int register_screenshot_request = 0;
+
 
 
 void cpu65_illegal_opcode_callback ( void )
@@ -71,12 +81,9 @@ void cpu65_illegal_opcode_callback ( void )
 }
 
 
-
 void machine_set_speed ( int verbose )
 {
 	int speed_wanted;
-	// TODO: MEGA65 speed is not handled yet. Reasons: too slow emulation for average PC, and the complete control of speed, ie lack of C128-fast (2MHz mode,
-	// because of incomplete VIC register I/O handling).
 	// Actually the rule would be something like that (this comment is here by intent, for later implementation FIXME TODO), some VHDL draft only:
 	// cpu_speed := vicii_2mhz&viciii_fast&viciv_fast
 	// if hypervisor_mode='0' and ((speed_gate='1') and (force_fast='0')) then -- LGB: vicii_2mhz seems to be a low-active signal?
@@ -90,10 +97,10 @@ void machine_set_speed ( int verbose )
 	//	return;
 	if (verbose)
 		DEBUGPRINT("SPEED: in_hypervisor=%d force_fast=%d c128_fast=%d, c65_fast=%d m65_fast=%d" NL,
-			in_hypervisor, force_fast, (c128_d030_reg & 1), vic_registers[0x31] & 64, vic_registers[0x54] & 64
+			in_hypervisor, D6XX_registers[0x7D] & 16, (c128_d030_reg & 1), vic_registers[0x31] & 64, vic_registers[0x54] & 64
 	);
 	// ^1 at c128... because it was inverted :-O --> FIXME: this is ugly workaround, the switch statement should be re-organized
-	speed_wanted = (in_hypervisor || force_fast) ? 7 : ((((c128_d030_reg & 1) ^ 1) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
+	speed_wanted = (in_hypervisor || (D6XX_registers[0x7D] & 16)) ? 7 : ((((c128_d030_reg & 1) ^ 1) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
 	if (speed_wanted != speed_current) {
 		speed_current = speed_wanted;
 		switch (speed_wanted) {
@@ -129,7 +136,6 @@ void machine_set_speed ( int verbose )
 }
 
 
-
 static void cia1_setint_cb ( int level )
 {
 	DEBUG("%s: IRQ level changed to %d" NL, cia1.name, level);
@@ -163,7 +169,6 @@ static inline void nmi_set ( int level, int mask )
 }
 
 
-
 static void cia2_setint_cb ( int level )
 {
 	nmi_set(level, 1);
@@ -181,46 +186,58 @@ static void cia2_out_a ( Uint8 data )
 }
 
 
-
-// Just for easier test to have a given port value for CIA input ports
-static Uint8 cia_port_in_dummy ( void )
+static Uint8 cia2_in_a ( void )
 {
-	return 0xFF;
+	// CIA for real seems to always read their input pins on reading the data
+	// register, even if it's output. However VIC bank for example should be
+	// readable back this way. Trying to implement here something at least
+	// resembling a real situation, also taking account the DATA and CLK lines
+	// of the IEC bus has input and output too with inverter gates. Though note,
+	// IEC bus otherwise is not emulated by Xemu yet.
+	return (cia2.PRA & 0x3F) | ((~cia2.PRA << 2) & 0xC0);
 }
 
 
+static Uint8 cia2_in_b ( void )
+{
+	// Some kind of ad-hoc stuff, allow to read back data out register if the
+	// port bit is output, otherwise (input) give bit '1', by virtually
+	// emulation a pull-up as its kind. It seems to be needed, as some C65 ROMs
+	// actually has check for some user port lines and doing "interesting"
+	// things (mostly crashing ...) when something sensed as grounded.
+	// It was a kind of hw debug feature for early C65 ROMs.
+	return cia2.PRB | ~cia2.DDRB;
+}
+
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
-static const char *m65_snapshot_saver_filename = NULL;
 static void m65_snapshot_saver_on_exit_callback ( void )
 {
-	if (!m65_snapshot_saver_filename)
+	if (!configdb.snapsave)
 		return;
-	if (xemusnap_save(m65_snapshot_saver_filename))
-		ERROR_WINDOW("Could not save snapshot \"%s\": %s", m65_snapshot_saver_filename, xemusnap_error_buffer);
+	if (xemusnap_save(configdb.snapsave))
+		ERROR_WINDOW("Could not save snapshot \"%s\": %s", configdb.snapsave, xemusnap_error_buffer);
 	else
-		INFO_WINDOW("Snapshot has been saved to \"%s\".", m65_snapshot_saver_filename);
+		INFO_WINDOW("Snapshot has been saved to \"%s\".", configdb.snapsave);
 }
 #endif
 
 
-
-static int load_memory_preinit_cache ( int to_prezero, const char *config_name, const char *description, Uint8 *memory_pointer, int size )
+static int load_memory_preinit_cache ( int to_prezero, const char *config_name, const char *fn, const char *description, Uint8 *memory_pointer, int size )
 {
-	const char *p = xemucfg_get_str(config_name);
 	if (to_prezero) {
 		DEBUGPRINT("BIN: config \"%s\" as \"%s\": pre-zero policy, clearing memory content." NL, config_name, description);
 		memset(memory_pointer, 0, size);
 	} else
 		DEBUGPRINT("BIN: config \"%s\" as \"%s\": no pre-zero policy, using some (possible) built-in default content." NL, config_name, description);
-	if (p) {
-		if (!strcmp(p, "-")) {
+	if (fn) {
+		if (!strcmp(fn, "-")) {
 			DEBUGPRINT("BIN: config \"%s\" as \"%s\": has option override policy to force and use pre-zeroed content." NL, config_name, description);
 			memset(memory_pointer, 0, size);
 			return 0;
 		} else {
-			DEBUGPRINT("BIN: config \"%s\" as \"%s\": has option override, trying to load content: \"%s\"." NL, config_name, description, p);
-			return xemu_load_file(p, memory_pointer, size, size, description);
+			DEBUGPRINT("BIN: config \"%s\" as \"%s\": has option override, trying to load content: \"%s\"." NL, config_name, description, fn);
+			return xemu_load_file(fn, memory_pointer, size, size, description);
 		}
 	} else {
 		DEBUGPRINT("BIN: config \"%s\" as \"%s\": has no option override, using the previously stated policy." NL, config_name, description);
@@ -259,7 +276,7 @@ int refill_c65_rom_from_preinit_cache ( void )
 	} else {
 		ret = -1; // no refill force external rom policy ...
 	}
-	if (force_upload_fonts) {
+	if (configdb.force_upload_fonts) {
 		DEBUGPRINT("ROM: forcing upload font definitions from ROM area to WOM" NL);
 		memcpy(char_wom + 0x0000, main_ram + 0x2D000, 0x1000);
 		memcpy(char_wom + 0x1000, main_ram + 0x29000, 0x1000);
@@ -270,21 +287,20 @@ int refill_c65_rom_from_preinit_cache ( void )
 
 static void mega65_init ( void )
 {
-	const char *p;
-	hypervisor_debug_init(xemucfg_get_str("kickuplist"), xemucfg_get_bool("hyperdebug"), xemucfg_get_bool("hyperserialascii"));
+	hypervisor_debug_init(configdb.kickuplist, configdb.hyperdebug, configdb.hyperserialascii);
 	hid_init(
 		c64_key_map,
 		VIRTUAL_SHIFT_POS,
 		SDL_ENABLE		// joy HID events enabled
 	);
 #ifdef HID_KBD_MAP_CFG_SUPPORT
-	hid_keymap_from_config_file(xemucfg_get_str("keymap"));
+	hid_keymap_from_config_file(configdb.keymap);
 #endif
-	joystick_emu = 1;
+	joystick_emu = 2;	// use joystick port #2 by default
 	nmi_level = 0;
 	// *** FPGA switches ...
 	do {
-		int switches[16], r = xemucfg_integer_list_from_string(xemucfg_get_str("fpga"), switches, 16, ",");
+		int switches[16], r = xemucfg_integer_list_from_string(configdb.fpga, switches, 16, ",");
 		if (r < 0)
 			FATAL("Too many FPGA switches specified for option 'fpga'");
 		while (r--) {
@@ -303,26 +319,43 @@ static void mega65_init ( void )
 	// project, with all sources available on-line, thus no licensing/copyright problem here.
 	// For mega65-core source, visit https://github.com/MEGA65/mega65-core
 	// For C000 utilties: mega65-core currently under reorganization, no C000 utilties are provided.
-	force_external_rom = ((load_memory_preinit_cache(1, "loadrom", "C65 ROM image", rom_init_image, sizeof rom_init_image) == (int)sizeof(rom_init_image)) && xemucfg_get_bool("forcerom"));
+	force_external_rom = ((load_memory_preinit_cache(1, "loadrom", configdb.loadrom, "C65 ROM image", rom_init_image, sizeof rom_init_image) == (int)sizeof(rom_init_image)) && configdb.forcerom);
 	if (force_external_rom)
 		DEBUGPRINT("MEM: forcing external ROM usage (hypervisor leave memory re-fill policy)" NL);
-	else if (xemucfg_get_bool("forcerom"))
+	else if (configdb.forcerom)
 		ERROR_WINDOW("-forcerom is ignored, because no -loadrom <filename> option was used, or it was not a succesfull load operation at least");
-	force_upload_fonts = xemucfg_get_bool("fontrefresh");
-	load_memory_preinit_cache(0, "loadcram", "CRAM utilities", meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
-	load_memory_preinit_cache(0, "loadbanner", "M65 logo", meminitdata_banner, MEMINITDATA_BANNER_SIZE);
-	load_memory_preinit_cache(1, "loadc000", "C000 utilities", c000_init_image, sizeof c000_init_image);
-	if (load_memory_preinit_cache(0, "kickup", "M65 kickstart", meminitdata_kickstart, MEMINITDATA_KICKSTART_SIZE)  != MEMINITDATA_KICKSTART_SIZE)
+	load_memory_preinit_cache(0, "loadcram", configdb.loadcram, "CRAM utilities", meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
+	load_memory_preinit_cache(0, "loadbanner", configdb.loadbanner, "M65 logo", meminitdata_banner, MEMINITDATA_BANNER_SIZE);
+	load_memory_preinit_cache(1, "loadc000", configdb.loadc000, "C000 utilities", c000_init_image, sizeof c000_init_image);
+	if (load_memory_preinit_cache(0, "kickup", configdb.kickup, "M65 kickstart", meminitdata_kickstart, MEMINITDATA_KICKSTART_SIZE)  != MEMINITDATA_KICKSTART_SIZE)
 		hypervisor_debug_invalidate("no kickup is loaded, built-in one does not have debug info");
 	// *** Initializes memory subsystem of MEGA65 emulation itself
 	memory_init();
+	// Load contents of NVRAM.
+	// Also store as "nvram_original" so we can sense on shutdown of the emu, if we need to up-date the on-disk version
+	// If we fail to load it (does not exist?) it will be written out anyway on exit.
+	if (xemu_load_file(NVRAM_FILE_NAME, nvram, sizeof nvram, sizeof nvram, "Cannot load NVRAM state. Maybe first run of Xemu?\nOn next Xemu run, it should have been corrected though automatically!\nSo no need to worry.") == sizeof nvram) {
+		memcpy(nvram_original, nvram, sizeof nvram);
+	} else {
+		// could not load from disk. Initialize to soma values.
+		// Alsa, set nvram and nvram_original being different, so exit handler will sense the situation and save it.
+		memset(nvram, 0, sizeof nvram);
+		memset(nvram_original, 0xAA, sizeof nvram);
+	}
+	// We generate (if does not exist) an UUID for ourself. It can be read back via the 'UUID' registers.
+	if (xemu_load_file(UUID_FILE_NAME, mega65_uuid, sizeof mega65_uuid, sizeof mega65_uuid, NULL) != sizeof mega65_uuid) {
+		for (int a = 0; a < sizeof mega65_uuid; a++) {
+			mega65_uuid[a] = rand();
+		}
+		uuid_must_be_saved = 1;
+	}
 	// fill the actual M65 memory areas with values managed by load_memory_preinit_cache() calls
 	// This is a separated step, to be able to call refill_memory_from_preinit_cache() later as well, in case of a "deep reset" functionality is needed for Xemu (not just CPU/hw reset),
 	// without restarting Xemu for that purpose.
 	refill_memory_from_preinit_cache();
 	// *** Image file for SDCARD support
-	if (sdcard_init(xemucfg_get_str("sdimg"), xemucfg_get_str("8"), xemucfg_get_bool("virtsd")) < 0)
-		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", xemucfg_get_str("sdimg"));
+	if (sdcard_init(configdb.sdimg, configdb.disk8, configdb.virtsd) < 0)
+		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
 	vic_init();
 	// *** CIAs
@@ -339,28 +372,24 @@ static void mega65_init ( void )
 		cia2_out_a,		// callback: OUTA
 		NULL,			// callback: OUTB
 		NULL,			// callback: OUTSR
-		cia_port_in_dummy,	// callback: INA
-		NULL,			// callback: INB
+		cia2_in_a,		// callback: INA
+		cia2_in_b,		// callback: INB
 		NULL,			// callback: INSR
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	cia2.DDRA = 3; // Ugly workaround ... I think, SD-card setup "CRAM UTIL" (or better: the kickstart) should set this by its own. Maybe Xemu bug, maybe not?
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
-	dma_init(newhack ? DMA_FEATURE_HACK | DMA_FEATURE_DYNMODESET : xemucfg_get_num("dmarev"));
+	dma_init(newhack ? DMA_FEATURE_HACK | DMA_FEATURE_DYNMODESET | configdb.dmarev : configdb.dmarev);
 	// Initialize FDC
 	fdc_init(disk_buffers + FD_BUFFER_POS);
 	//
+	sdcard_hack_mount_drive_9_now(configdb.disk9);
 #ifdef HAS_UARTMON_SUPPORT
-	uartmon_init(xemucfg_get_str("uartmon"));
+	uartmon_init(configdb.uartmon);
 #endif
-	fast_mhz = xemucfg_get_num("fastclock");
-	if (fast_mhz < 3 || fast_mhz > 200) {
-		ERROR_WINDOW("Fast clock given by -fastclock switch must be between 3...200MHz. Bad value, defaulting to %dMHz", MEGA65_DEFAULT_FAST_CLOCK);
-		fast_mhz = MEGA65_DEFAULT_FAST_CLOCK;
-	}
-	sprintf(fast_mhz_in_string, "%dMHz", fast_mhz);
-	cpu_cycles_per_scanline_for_fast_mode = 64 * fast_mhz;
-	DEBUGPRINT("SPEED: fast clock is set to %dMHz, %d CPU cycles per scanline." NL, fast_mhz, cpu_cycles_per_scanline_for_fast_mode);
+	sprintf(fast_mhz_in_string, "%.2fMHz", configdb.fast_mhz);
+	cpu_cycles_per_scanline_for_fast_mode = 64 * configdb.fast_mhz;
+	DEBUGPRINT("SPEED: fast clock is set to %.2fMHz, %d CPU cycles per scanline." NL, configdb.fast_mhz, cpu_cycles_per_scanline_for_fast_mode);
 	cpu65_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
 	rom_protect = 0;
 	hypervisor_start_machine();
@@ -369,40 +398,45 @@ static void mega65_init ( void )
 	DEBUG("INIT: end of initialization!" NL);
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemusnap_init(m65_snapshot_definition);
-	p = xemucfg_get_str("snapload");
-	if (p) {
-		if (xemusnap_load(p))
-			FATAL("Couldn't load snapshot \"%s\": %s", p, xemusnap_error_buffer);
+	if (configdb.snapload) {
+		if (xemusnap_load(configdb.snapload))
+			FATAL("Couldn't load snapshot \"%s\": %s", configdb.snapload, xemusnap_error_buffer);
 	}
-	m65_snapshot_saver_filename = xemucfg_get_str("snapsave");
 	atexit(m65_snapshot_saver_on_exit_callback);
 #endif
 }
 
 
-#include <unistd.h>
-
-
+int dump_memory ( const char *fn )
+{
+	if (fn && *fn) {
+		DEBUGPRINT("MEM: Dumping memory into file: %s" NL, fn);
+		return xemu_save_file(fn, main_ram, (128 + 256) * 1024, "Cannot dump memory into file");
+	} else {
+		return 0;
+	}
+}
 
 
 static void shutdown_callback ( void )
 {
-	int a;
+	// Write out NVRAM if changed!
+	if (memcmp(nvram, nvram_original, sizeof(nvram))) {
+		DEBUGPRINT("NVRAM: changed, writing out on exit." NL);
+		xemu_save_file(NVRAM_FILE_NAME, nvram, sizeof nvram, "Cannot save changed NVRAM state! NVRAM changes will be lost!");
+	}
+	if (uuid_must_be_saved) {
+		uuid_must_be_saved = 0;
+		DEBUGPRINT("UUID: must be saved." NL);
+		xemu_save_file(UUID_FILE_NAME, mega65_uuid, sizeof mega65_uuid, NULL);
+	}
 	eth65_shutdown();
-	for (a = 0; a < 0x40; a++)
+	for (int a = 0; a < 0x40; a++)
 		DEBUG("VIC-3 register $%02X is %02X" NL, a, vic_registers[a]);
 	cia_dump_state (&cia1);
 	cia_dump_state (&cia2);
-#if defined(MEMDUMP_FILE) && !defined(__EMSCRIPTEN__)
-	// Dump hypervisor memory to a file, so you can check it after exit.
-	FILE *f = fopen(MEMDUMP_FILE, "wb");
-	if (f) {
-		fwrite(main_ram,		1, 0x20000 - 2048, f);
-		fwrite(colour_ram,		1, 2048, f);
-		fwrite(main_ram + 0x20000,	1, 0x40000, f);
-		fclose(f);
-		DEBUGPRINT("Memory state is dumped into %s" DIRSEP_STR "%s" NL, getcwd(NULL, PATH_MAX), MEMDUMP_FILE);
-	}
+#if !defined(XEMU_ARCH_HTML)
+	(void)dump_memory(configdb.dumpmem);
 #endif
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_close();
@@ -415,7 +449,7 @@ static void shutdown_callback ( void )
 void reset_mega65 ( void )
 {
 	eth65_reset();
-	force_fast = 0;	// FIXME: other default speed controls on reset?
+	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0xFF;
 	machine_set_speed(0);
 	memory_set_cpu_io_port_ddr_and_data(0xFF, 0xFF);
@@ -424,20 +458,25 @@ void reset_mega65 ( void )
 	vic_registers[0x30] = 0;	// FIXME: hack! we need this, and memory_set_vic3_rom_mapping above too :(
 	memory_set_vic3_rom_mapping(0);
 	memory_set_do_map();
+	vic_reset();	// FIXME: we may need a RESET on VIC-IV what ROM would not initialize but could be used by some MEGA65-aware program? [and hyppo does not care to reset?]
 	cpu65_reset();
 	dma_reset();
 	nmi_level = 0;
-	D6XX_registers[0x7E] = xemucfg_get_num("kicked");
+	D6XX_registers[0x7E] = configdb.kicked;
 	hypervisor_start_machine();
 	DEBUGPRINT("SYSTEM RESET." NL);
 }
 
 
-void reset_mega65_asked ( void )
+int reset_mega65_asked ( void )
 {
-	if (ARE_YOU_SURE("Are you sure to HARD RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
+	if (ARE_YOU_SURE("Are you sure to HARD RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
 		reset_mega65();
+		return 1;
+	} else
+		return 0;
 }
+
 
 static void update_emulator ( void )
 {
@@ -458,8 +497,17 @@ static void update_emulator ( void )
 //	if (seconds_timer_trigger) {
 	const struct tm *t = xemu_get_localtime();
 	const Uint8 sec10ths = xemu_get_microseconds() / 100000;
-	cia_ugly_tod_updater(&cia1, t, sec10ths);
-	cia_ugly_tod_updater(&cia2, t, sec10ths);
+	// UPDATE CIA TODs:
+	cia_ugly_tod_updater(&cia1, t, sec10ths, configdb.rtc_hour_offset);
+	cia_ugly_tod_updater(&cia2, t, sec10ths, configdb.rtc_hour_offset);
+	// UPDATE the RTC too:
+	rtc_regs[0] = XEMU_BYTE_TO_BCD(t->tm_sec);	// seconds
+	rtc_regs[1] = XEMU_BYTE_TO_BCD(t->tm_min);	// minutes
+	//rtc_regs[2] = xemu_hour_to_bcd12h(t->tm_hour, configdb.rtc_hour_offset);	// hours
+	rtc_regs[2] = XEMU_BYTE_TO_BCD((t->tm_hour + configdb.rtc_hour_offset + 24) % 24) | 0x80;	// hours (24H format, bit 7 always set)
+	rtc_regs[3] = XEMU_BYTE_TO_BCD(t->tm_mday);	// day of mounth
+	rtc_regs[4] = XEMU_BYTE_TO_BCD(t->tm_mon) + 1;	// month
+	rtc_regs[5] = XEMU_BYTE_TO_BCD(t->tm_year - 100);	// year
 //	}
 }
 
@@ -469,12 +517,16 @@ void m65mon_show_regs ( void )
 {
 	Uint8 pf = cpu65_get_pf();
 	umon_printf(
+		"\r\n"
 		"PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
 		"%04X %02X %02X %02X %02X %02X %04X "		// register banned message and things from PC to SP
 		"%04X %04X %02X       %02X %02X "		// from MAPL to P
-		"%c%c%c%c%c%c%c%c ",				// P-FLAGS
+		"%c%c%c%c%c%c%c%c \r\n"				// P-FLAGS
+		",0777%04X\r\n", // TODO: single line of disassembly
 		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z, cpu65.bphi >> 8, cpu65.sphi | cpu65.s,
-		map_offset_low >> 8, map_offset_high >> 8, cpu65.op,
+		((map_mask & 0xf0) << 8) | (map_offset_low >> 8),
+		((map_mask & 0x0f) << 12)  | (map_offset_high >> 8),
+		cpu65.op,
 		pf, 0,	// flags
 		(pf & CPU65_PF_N) ? 'N' : '-',
 		(pf & CPU65_PF_V) ? 'V' : '-',
@@ -483,33 +535,47 @@ void m65mon_show_regs ( void )
 		(pf & CPU65_PF_D) ? 'D' : '-',
 		(pf & CPU65_PF_I) ? 'I' : '-',
 		(pf & CPU65_PF_Z) ? 'Z' : '-',
-		(pf & CPU65_PF_C) ? 'C' : '-'
+		(pf & CPU65_PF_C) ? 'C' : '-',
+		cpu65.pc
 	);
 }
 
 void m65mon_dumpmem16 ( Uint16 addr )
 {
 	int n = 16;
-	umon_printf(":000%04X", addr);
+	umon_printf(":000%04X:", addr);
 	while (n--)
-		umon_printf(" %02X", cpu65_read_callback(addr++));
+		umon_printf("%02X", cpu65_read_callback(addr++));
 }
 
 void m65mon_dumpmem28 ( int addr )
 {
 	int n = 16;
 	addr &= 0xFFFFFFF;
-	umon_printf(":%07X", addr);
+	umon_printf(":%08X:", addr);
 	while (n--)
-		umon_printf(" %02X", memory_debug_read_phys_addr(addr++));
+	{
+		if ( (addr >> 16) == 0x777)
+		{
+			umon_printf("%02X", cpu65_read_callback(addr & 0xffff));
+			addr++;
+		}
+		else
+			umon_printf("%02X", memory_debug_read_phys_addr(addr++));
+	}
 }
 
 void m65mon_setmem28( int addr, int cnt, Uint8* vals )
 {
-  for (int k = 0; k < cnt; k++)
-  {
-    memory_debug_write_phys_addr(addr++, vals[k]);
-  }
+	for (int k = 0; k < cnt; k++)
+	{
+		memory_debug_write_phys_addr(addr++, vals[k]);
+	}
+}
+
+void m65mon_setpc(int addr)
+{
+	cpu65.pc = addr;
 }
 
 void m65mon_set_trace ( int m )
@@ -517,22 +583,43 @@ void m65mon_set_trace ( int m )
 	paused = m;
 }
 
+#ifdef TRACE_NEXT_SUPPORT
+void m65mon_do_next ( void )
+{
+	if (paused) {
+		umon_send_ok = 0;			// delay command execution!
+		m65mon_callback = m65mon_show_regs;	// register callback
+		trace_next_trigger = 2;			// if JSR, then trigger until RTS to next_addr
+		orig_sp = cpu65.sphi | cpu65.s;
+		paused = 0;
+	} else {
+		umon_printf(UMON_SYNTAX_ERROR "trace can be used only in trace mode");
+	}
+}
+#endif
+
 void m65mon_do_trace ( void )
 {
 	if (paused) {
-		umon_send_ok = 0; // delay command execution!
+		set_umon_send_ok(0); // delay command execution!
 		m65mon_callback = m65mon_show_regs; // register callback
 		trace_step_trigger = 1;	// trigger one step
 	} else {
-		umon_printf(SYNTAX_ERROR "trace can be used only in trace mode");
+		umon_printf(UMON_SYNTAX_ERROR "trace can be used only in trace mode");
 	}
 }
 
 void m65mon_do_trace_c ( void )
 {
-	umon_printf(SYNTAX_ERROR "command 'tc' is not implemented yet");
+	umon_printf(UMON_SYNTAX_ERROR "command 'tc' is not implemented yet");
 }
-
+#ifdef TRACE_NEXT_SUPPORT
+void m65mon_next_command ( void )
+{
+	if (paused)
+		m65mon_do_next();
+}
+#endif
 void m65mon_empty_command ( void )
 {
 	if (paused)
@@ -554,6 +641,21 @@ static int cycles, frameskip;
 static void emulation_loop ( void )
 {
 	for (;;) {
+#ifdef TRACE_NEXT_SUPPORT
+		if (trace_next_trigger == 2) {
+			if (cpu65.op == 0x20) {		// was the current opcode a JSR $nnnn ? (0x20)
+				trace_next_trigger = 1;	// if so, let's loop until the stack pointer returns back, then pause
+			} else {
+				trace_next_trigger = 0;	// if the current opcode wasn't a JSR, then lets pause immediately after
+				paused = 1;
+			}
+		} else if (trace_next_trigger == 1) {	// are we presently stepping over a JSR?
+			if ((cpu65.sphi | cpu65.s) == orig_sp ) {	// did the current sp return to its original position?
+				trace_next_trigger = 0;	// if so, lets pause the emulation, as we have successfully stepped over the JSR
+				paused = 1;
+			}
+		}
+#endif
 		while (XEMU_UNLIKELY(paused)) {	// paused special mode, ie tracing support, or something ...
 			if (XEMU_UNLIKELY(dma_status))
 				break;		// if DMA is pending, do not allow monitor/etc features
@@ -561,7 +663,7 @@ static void emulation_loop ( void )
 			if (m65mon_callback) {	// delayed uart monitor command should be finished ...
 				m65mon_callback();
 				m65mon_callback = NULL;
-				uartmon_finish_command();
+				uartmons_finish_command();
 			}
 #endif
 			// we still need to feed our emulator with update events ... It also slows this pause-busy-loop down to every full frames (~25Hz)
@@ -597,6 +699,7 @@ static void emulation_loop ( void )
 		}
 		if (XEMU_UNLIKELY(breakpoint_pc == cpu65.pc)) {
 			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu65.pc);
+			m65mon_show_regs();
 			paused = 1;
 		}
 		cycles += XEMU_UNLIKELY(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
@@ -618,8 +721,7 @@ static void emulation_loop ( void )
 				scanline = 0;
 				if (!frameskip)	// well, let's only render every full frames (~ie 25Hz)
 					update_emulator();
-				sid1.sFrameCount++;
-				sid2.sFrameCount++;
+				audio65_sid_inc_framecount();
 				frame_counter++;
 				if (frame_counter == 25) {
 					frame_counter = 0;
@@ -640,63 +742,15 @@ static void emulation_loop ( void )
 int main ( int argc, char **argv )
 {
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Incomplete MEGA65 emulator from LGB");
-	xemucfg_define_str_option("8", NULL, "Path of EXTERNAL D81 disk image (not on/the SD-image)");
-	xemucfg_define_num_option("dmarev", 0x100, "DMA revision (0/1=F018A/B +256=autochange, +512=modulo, you always wants +256!)");
-	xemucfg_define_num_option("fastclock", MEGA65_DEFAULT_FAST_CLOCK, "Clock of M65 fast mode (in MHz)");
-	xemucfg_define_str_option("fpga", NULL, "Comma separated list of FPGA-board switches turned ON");
-	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	xemucfg_define_switch_option("hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode");
-	xemucfg_define_switch_option("hyperserialascii", "Convert PETSCII/ASCII hypervisor serial debug output to ASCII upper-case");
-	xemucfg_define_num_option("kicked", 0x0, "Answer to KickStart upgrade (128=ask user in a pop-up window)");
-	xemucfg_define_str_option("kickup", NULL, "Override path of external KickStart to be used");
-	xemucfg_define_str_option("kickuplist", NULL, "Set path of symbol list file for external KickStart");
-	xemucfg_define_str_option("loadbanner", NULL, "Load initial memory content for banner");
-	xemucfg_define_str_option("loadc000", NULL, "Load initial memory content at $C000 (usually disk mounter)");
-	xemucfg_define_str_option("loadcram", NULL, "Load initial content (32K) into the colour RAM");
-	xemucfg_define_str_option("loadrom", NULL, "Preload C65 ROM image (you may need the -forcerom option to prevent KickStart to re-load from SD)");
-	xemucfg_define_str_option("prg", NULL, "Load a PRG file directly into the memory (/w C64/65 auto-detection on load address)");
-	xemucfg_define_num_option("prgmode", 0, "Override auto-detect option for -prg (64 or 65 for C64/C65 modes, 0 = default, auto detect)");
-	xemucfg_define_switch_option("forcerom", "Re-fill 'ROM' from external source on start-up, requires option -loadrom <filename>");
-	xemucfg_define_switch_option("fontrefresh", "Upload character ROM from the loaded ROM image");
-	xemucfg_define_str_option("sdimg", SDCARD_NAME, "Override path of SD-image to be used (also see the -virtsd option!)");
-#ifdef VIRTUAL_DISK_IMAGE_SUPPORT
-	xemucfg_define_switch_option("virtsd", "Interpret -sdimg option as a DIRECTORY to be fed onto the FAT32FS and use virtual-in-memory disk storage.");
-#endif
-	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
-#ifdef FAKE_TYPING_SUPPORT
-	xemucfg_define_switch_option("go64", "Go into C64 mode after start (with auto-typing, can be combined with -autoload)");
-	xemucfg_define_switch_option("autoload", "Load and start the first program from disk (with auto-typing, can be combined with -go64)");
-#endif
-#ifdef XEMU_SNAPSHOT_SUPPORT
-	xemucfg_define_str_option("snapload", NULL, "Load a snapshot from the given file");
-	xemucfg_define_str_option("snapsave", NULL, "Save a snapshot into the given file before Xemu would exit");
-#endif
-	xemucfg_define_switch_option("skipunhandledmem", "Do not panic on unhandled memory access (hides problems!!)");
-	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-#ifdef HAVE_XEMU_UMON
-	xemucfg_define_num_option("umon", 0, "TCP-based dual mode (http / text) monitor port number [NOT YET WORKING]");
-#endif
-#ifdef HAS_UARTMON_SUPPORT
-	xemucfg_define_str_option("uartmon", NULL, "Sets the name for named unix-domain socket for uartmon, otherwise disabled");
-#endif
-#ifdef HAVE_XEMU_INSTALLER
-	xemucfg_define_str_option("installer", NULL, "Sets a download-specification descriptor file for auto-downloading data files");
-#endif
-#ifdef HAVE_ETHERTAP
-	xemucfg_define_str_option("ethertap", NULL, "Enable ethernet emulation, parameter is the already configured TAP device name");
-#endif
-	xemucfg_define_switch_option("nonewhack", "Disables the preliminary NEW M65 features (Xemu will fail to use built-in KS and newer external KS too!)");
-#ifdef HID_KBD_MAP_CFG_SUPPORT
-	xemucfg_define_str_option("keymap", KEYMAP_USER_FILENAME, "Set keymap configuration file to be used");
-#endif
-	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
+	configdb_define_emulator_options(sizeof configdb);
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
-	i_am_sure_override = xemucfg_get_bool("besure");
+	// xemucfg_dump_db("After returning from xemucfg_parse_all in main()");
+	DEBUGPRINT("XEMU: emulated MEGA65 model ID: %d" NL, configdb.mega65_model);
 #ifdef HAVE_XEMU_INSTALLER
-	xemu_set_installer(xemucfg_get_str("installer"));
+	xemu_set_installer(configdb.installer);
 #endif
-	newhack = !xemucfg_get_bool("nonewhack");
+	newhack = !newhack;	// hehe, the meaning is kind of inverted, but never mind ...
 	if (newhack)
 		DEBUGPRINT("WARNING: *** NEW M65 HACK MODE ACTIVATED ***" NL);
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
@@ -704,38 +758,43 @@ int main ( int argc, char **argv )
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
 		1,				// resizable window
-		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
-		SCREEN_WIDTH, SCREEN_HEIGHT * 2,// logical size (used with keeping aspect ratio by the SDL render stuffs)
-		SCREEN_WIDTH, SCREEN_HEIGHT * 2,// window size
-		SCREEN_FORMAT,			// pixel format
+		TEXTURE_WIDTH, TEXTURE_HEIGHT,	// texture sizes
+		TEXTURE_WIDTH, TEXTURE_HEIGHT * 2,// logical size (used with keeping aspect ratio by the SDL render stuffs)
+		TEXTURE_WIDTH, TEXTURE_HEIGHT * 2,// window size
+		TEXTURE_FORMAT,			// pixel format
 		0,				// we have *NO* pre-defined colours as with more simple machines (too many we need). we want to do this ourselves!
 		NULL,				// -- "" --
 		NULL,				// -- "" --
-		RENDER_SCALE_QUALITY,		// render scaling quality
+		configdb.sdlrenderquality,	// render scaling quality
 		USE_LOCKED_TEXTURE,		// 1 = locked texture access
 		shutdown_callback		// registered shutdown function
 	))
 		return 1;
 	osd_init_with_defaults();
-	xemugui_init(xemucfg_get_str("gui"));
+	xemugui_init(configdb.selectedgui);
 	// Initialize MEGA65
 	mega65_init();
 	audio65_init(
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
-		AUDIO_SAMPLE_FREQ		// sound mix freq
+		AUDIO_SAMPLE_FREQ,		// sound mix freq
+		configdb.mastervolume,
+		configdb.stereoseparation
 	);
-	skip_unhandled_mem = xemucfg_get_bool("skipunhandledmem");
-	DEBUGPRINT("MEM: UNHANDLED memory policy: %d" NL, skip_unhandled_mem);
+	DEBUGPRINT("MEM: UNHANDLED memory policy: %d" NL, configdb.skip_unhandled_mem);
+	if (configdb.skip_unhandled_mem)
+		skip_unhandled_mem = 3; // silent ignore all = 3
+	else
+		skip_unhandled_mem = 0;	// ask = 0
 	eth65_init(
 #ifdef HAVE_ETHERTAP
-		xemucfg_get_str("ethertap")
+		configdb.ethertap
 #else
 		NULL
 #endif
 	);
 #ifdef HAVE_XEMU_UMON
-	if (xemucfg_get_num("umon") != 0) {
-		int port = xemucfg_get_num("umon");
+	if (configdb.umon != 0) {
+		int port = configdb.umon;
 		int threaded;
 		if (port < 0) {
 			port = -port;
@@ -748,27 +807,24 @@ int main ( int argc, char **argv )
 			ERROR_WINDOW("UMON: Invalid TCP port: %d", port);
 	}
 #endif
-	if (xemucfg_get_str("prg"))
-		inject_register_prg(xemucfg_get_str("prg"), xemucfg_get_num("prgmode"));
+	if (configdb.prg)
+		inject_register_prg(configdb.prg, configdb.prgmode);
 #ifdef FAKE_TYPING_SUPPORT
-	if (xemucfg_get_bool("go64")) {
-		if (xemucfg_get_bool("autoload"))
+	if (configdb.go64) {
+		if (configdb.autoload)
 			c64_register_fake_typing(fake_typing_for_load64);
 		else
 			c64_register_fake_typing(fake_typing_for_go64);
-	} else if (xemucfg_get_bool("autoload"))
+	} else if (configdb.autoload)
 		c64_register_fake_typing(fake_typing_for_load65);
 #endif
 	cycles = 0;
 	frameskip = 0;
 	frame_counter = 0;
 	vic3_blink_phase = 0;
-	if (audio) {
-		DEBUGPRINT("AUDIO: start" NL);
-		SDL_PauseAudioDevice(audio, 0);
-	}
-	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
-	if (!xemucfg_get_bool("syscon"))
+	audio65_start();
+	xemu_set_full_screen(configdb.fullscreen_requested);
+	if (!configdb.syscon)
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
@@ -783,8 +839,6 @@ int main ( int argc, char **argv )
 
 #define SNAPSHOT_M65_BLOCK_VERSION	2
 #define SNAPSHOT_M65_BLOCK_SIZE		(0x100 + sizeof(D6XX_registers) + sizeof(D7XX))
-
-static int force_fast_loaded;
 
 
 int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
@@ -809,7 +863,7 @@ int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, 
 	in_hypervisor = (int)P_AS_BE32(buffer + 16);	// sets hypervisor state from snapshot (hypervisor/userspace)
 	map_megabyte_low = (int)P_AS_BE32(buffer + 20);
 	map_megabyte_high = (int)P_AS_BE32(buffer + 24);
-	force_fast_loaded = (int)P_AS_BE32(buffer + 28);	// activated in m65emu_snapshot_loading_finalize() as force_fast can be set at multiple places through loading snapshot!
+	//force_fast_loaded = (int)P_AS_BE32(buffer + 28);	// activated in m65emu_snapshot_loading_finalize() as force_fast can be set at multiple places through loading snapshot!
 	// +32 is free for 4 bytes now ... can be used later
 	memory_set_cpu_io_port_ddr_and_data(buffer[36], buffer[37]);
 	return 0;
@@ -830,7 +884,7 @@ int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	U32_AS_BE(buffer + 16, in_hypervisor);
 	U32_AS_BE(buffer + 20, map_megabyte_low);
 	U32_AS_BE(buffer + 24, map_megabyte_high);
-	U32_AS_BE(buffer + 28, force_fast);	// see notes on this at load_state and finalize stuff!
+	//U32_AS_BE(buffer + 28, force_fast);	// see notes on this at load_state and finalize stuff!
 	// +32 is free for 4 bytes now ... can be used later
 	buffer[36] = memory_get_cpu_io_port(0);
 	buffer[37] = memory_get_cpu_io_port(1);
@@ -845,7 +899,7 @@ int m65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st 
 	DEBUGPRINT("SNAP: loaded (finalize-callback: begin)" NL);
 	memory_set_vic3_rom_mapping(vic_registers[0x30]);
 	memory_set_do_map();
-	force_fast = force_fast_loaded;	// force_fast is handled through different places, so we must have a "finalize" construct and saved separately to have the actual effect ...
+	//force_fast = force_fast_loaded;	// force_fast is handled through different places, so we must have a "finalize" construct and saved separately to have the actual effect ...
 	machine_set_speed(1);
 	DEBUGPRINT("SNAP: loaded (finalize-callback: end)" NL);
 	OSD(-1, -1, "Snapshot has been loaded.");

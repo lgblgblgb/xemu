@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2017-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2017-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -31,7 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 #include "hypervisor.h"
 #include "vic4.h"
-#include "xemu/f018_core.h"
+#include "dma65.h"
 #include "ethernet65.h"
 #include "audio65.h"
 #include "sdcard.h"
@@ -67,8 +67,13 @@ Uint8 colour_ram[0x8000];
 Uint8 char_wom[0x2000];
 // 16K of hypervisor RAM, can be only seen in hypervisor mode.
 Uint8 hypervisor_ram[0x4000];
+// 64 bytes of NVRAM
+Uint8 nvram[64];
+// 8 bytes of UUID
+Uint8 mega65_uuid[8];
+// RTC registers
+Uint8 rtc_regs[6];
 
-#define SLOW_RAM_SIZE (8 << 20)
 Uint8 slow_ram[SLOW_RAM_SIZE];
 
 
@@ -137,7 +142,7 @@ static Uint8 cpu_io_port[2];
 int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
 static int map_marker_low, map_marker_high;
 int rom_protect;
-int skip_unhandled_mem;
+int skip_unhandled_mem = 0;
 
 
 #define DEFINE_READER(name) static Uint8 name ( MEMORY_HANDLERS_ADDR_TYPE )
@@ -208,17 +213,41 @@ DEFINE_WRITER(slow_ram_writer) {
 	slow_ram[GET_WRITER_OFFSET()] = data;
 }
 DEFINE_READER(invalid_mem_reader) {
-	if (XEMU_LIKELY(skip_unhandled_mem))
-		DEBUGPRINT("WARNING: Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, GET_READER_OFFSET(), cpu65.pc);
-	else
-		FATAL("Unhandled memory read operation for linear address $%X (PC=$%04X)" NL, GET_READER_OFFSET(), cpu65.pc);
+	char msg[128];
+	sprintf(msg, "Unhandled memory read operation for linear address $%X (PC=$%04X)", GET_READER_OFFSET(), cpu65.pc);
+	if (skip_unhandled_mem <= 1)
+		skip_unhandled_mem = QUESTION_WINDOW("EXIT|Ignore now|Ignore all|Silent ignore all", msg);
+	switch (skip_unhandled_mem) {
+		case 0:
+			XEMUEXIT(1);
+			break;
+		case 1:
+		case 2:
+			DEBUGPRINT("WARNING: %s" NL, msg);
+			break;
+		default:
+			DEBUG("WARNING: %s" NL, msg);
+			break;
+	}
 	return 0xFF;
 }
 DEFINE_WRITER(invalid_mem_writer) {
-	if (XEMU_LIKELY(skip_unhandled_mem))
-		DEBUGPRINT("WARNING: Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, GET_WRITER_OFFSET(), data, cpu65.pc);
-	else
-		FATAL("Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)" NL, GET_WRITER_OFFSET(), data, cpu65.pc);
+	char msg[128];
+	sprintf(msg, "Unhandled memory write operation for linear address $%X data = $%02X (PC=$%04X)", GET_WRITER_OFFSET(), data, cpu65.pc);
+	if (skip_unhandled_mem <= 1)
+		skip_unhandled_mem = QUESTION_WINDOW("EXIT|Ignore now|Ignore all|Silent ignore all", msg);
+	switch (skip_unhandled_mem) {
+		case 0:
+			FATAL("Exit on request after illegal memory access");
+			break;
+		case 1:
+		case 2:
+			DEBUGPRINT("WARNING: %s" NL, msg);
+			break;
+		default:
+			DEBUG("WARNING: %s" NL, msg);
+			break;
+	}
 }
 DEFINE_READER(fatal_mem_reader) {
 	FATAL("Unhandled physical memory mapping on read map. Xemu software bug?");
@@ -271,13 +300,45 @@ DEFINE_WRITER(disk_buffers_writer) {
 #endif
 }
 DEFINE_READER(i2c_io_reader) {
-	return 0;	// now just ignore, and give ZERO as answer [no I2C devices]
+	int addr = GET_READER_OFFSET();
+	Uint8 data = 0x00;	// initial value, if nothing match (unknown I2C to Xemu?)
+	switch (addr) {
+		case 0x100:	// 8 bytes of UUID (64 bit value)
+		case 0x101:
+		case 0x102:
+		case 0x103:
+		case 0x104:
+		case 0x105:
+		case 0x106:
+		case 0x107:
+			data = mega65_uuid[addr & 7];
+			break;
+		case 0x110:	// RTC: seconds BCD
+		case 0x111:	// RTC: minutes BCD
+		case 0x112:	// RTC: hours BCD
+		case 0x113:	// RTC: day of month BCD
+		case 0x114:	// RTC: month BCD
+		case 0x115:	// RTC: year BCD
+			data = rtc_regs[addr - 0x110];
+			break;
+		default:
+			if (addr > 0x140 && addr <= 0x17F)
+				data = nvram[addr - 0x140];
+			break;
+	}
+	return data;
 }
 DEFINE_WRITER(i2c_io_writer) {
-	// now just ignore [no I2C devices]
+	int addr = GET_WRITER_OFFSET();
+	switch (addr) {
+		default:
+			if (addr > 0x140 && addr <= 0x17F)
+				nvram[addr - 0x140] = data;
+			break;
+	}
 }
 
-// Memory layout table for Mega-65
+// Memory layout table for MEGA65
 // Please note, that for optimization considerations, it should be organized in a way
 // to have most common entries first, for faster hit in most cases.
 static const struct m65_memory_map_st m65_memory_map[] = {
@@ -299,7 +360,7 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 	{ 0xFF7E000, 0xFF7FFFF, dummy_reader, char_wom_writer },		// Character "WriteOnlyMemory"
 	{ 0xFFDE800, 0xFFDEFFF, eth_buffer_reader, eth_buffer_writer },		// ethernet RX/TX buffer, NOTE: the same address, reading is always the RX_read, writing is always TX_write
 	{ 0xFFD6000, 0xFFD6FFF, disk_buffers_reader, disk_buffers_writer },	// disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space" [??]
-	{ 0xFFD7000, 0xFFD70FF, i2c_io_reader, i2c_io_writer },			// I2C devices
+	{ 0xFFD7000, 0xFFD7FFF, i2c_io_reader, i2c_io_writer },			// I2C devices
 	{ 0x8000000, 0x8000000 + SLOW_RAM_SIZE - 1, slow_ram_reader, slow_ram_writer },		// "slow RAM" also called "hyper RAM" (not to be confused with hypervisor RAM!)
 	{ 0x8000000 + SLOW_RAM_SIZE, 0xFDFFFFF, dummy_reader, dummy_writer },			// ununsed big part of the "slow RAM" or so ...
 	{ 0x4000000, 0x7FFFFFF, dummy_reader, dummy_writer },		// slow RAM memory area, not exactly known what it's for, let's define as "dummy"
@@ -465,7 +526,7 @@ void memory_init ( void )
 	map_megabyte_high = 0;
 	map_marker_low =  MAP_MARKER_DUMMY_OFFSET;
 	map_marker_high = MAP_MARKER_DUMMY_OFFSET;
-	skip_unhandled_mem = 0;
+	//skip_unhandled_mem = 0;
 	for (a = 0; a < 9; a++)
 		applied_memcfg[a] = MAP_MARKER_DUMMY_OFFSET - 1;
 	// Setting up the default memory configuration for M65 at least!
@@ -474,11 +535,9 @@ void memory_init ( void )
 	memory_set_vic3_rom_mapping(0);
 	memory_set_do_map();
 	// Initiailize memory content with something ...
-	memset(main_ram, 0xFF, sizeof main_ram);
-	memset(colour_ram, 0xFF, sizeof colour_ram);
-#ifdef SLOW_RAM_SUPPORT
-	memset(slow_ram, 0xFF, sizeof slow_ram);
-#endif
+	memset(main_ram,   0x00, sizeof main_ram);
+	memset(colour_ram, 0x00, sizeof colour_ram);
+	memset(slow_ram,   0xFF, sizeof slow_ram);
 	DEBUG("MEM: End of memory initiailization" NL);
 }
 
@@ -685,8 +744,11 @@ void memory_set_cpu_io_port ( int addr, Uint8 value )
 {
 	if (XEMU_UNLIKELY((addr == 0) && ((value & 0xFE) == 64))) {	// M65-specific speed control stuff!
 		value &= 1;
-		if (force_fast != value) {
-			force_fast = value;
+		if (value != ((D6XX_registers[0x7D] >> 4) & 1)) {
+			if (value)
+				D6XX_registers[0x7D] |= 16;
+			else
+				D6XX_registers[0x7D] &= ~16;
 			machine_set_speed(0);
 		}
 	} else {
@@ -796,7 +858,7 @@ void cpu65_do_nop_callback ( void )
    pointers used all the time in 4510GS code. */
 
 
-static XEMU_INLINE int cpu_get_flat_addressing_mode_address ( void )
+static XEMU_INLINE int cpu_get_flat_addressing_mode_address ( int index )
 {
 	register int addr = cpu65_read_callback(cpu65.pc++);	// fetch base page address
 	// FIXME: really, BP/ZP is wrapped around in case of linear addressing and eg BP addr of $FF got?????? (I think IT SHOULD BE!)
@@ -807,19 +869,19 @@ static XEMU_INLINE int cpu_get_flat_addressing_mode_address ( void )
 		(cpu65_read_callback(cpu65.bphi | ((addr + 1) & 0xFF)) <<  8) |
 		(cpu65_read_callback(cpu65.bphi | ((addr + 2) & 0xFF)) << 16) |
 		(cpu65_read_callback(cpu65.bphi | ((addr + 3) & 0xFF)) << 24)
-	) + cpu65.z;	// I don't handle the overflow of 28 bit addr.space situation, as addr will be anyway "trimmed" later in phys_addr_decoder() issued by the user of this func
+	) + index;	// I don't handle the overflow of 28 bit addr.space situation, as addr will be anyway "trimmed" later in phys_addr_decoder() issued by the user of this func
 }
 
 Uint8 cpu65_read_linear_opcode_callback ( void )
 {
-	register int addr = cpu_get_flat_addressing_mode_address();
+	register int addr = cpu_get_flat_addressing_mode_address(cpu65.z);
 	phys_addr_decoder(addr, MEM_SLOT_CPU_32BIT, MEM_SLOT_CPU_32BIT);
 	return CALL_MEMORY_READER(MEM_SLOT_CPU_32BIT, addr);
 }
 
 void cpu65_write_linear_opcode_callback ( Uint8 data )
 {
-	register int addr = cpu_get_flat_addressing_mode_address();
+	register int addr = cpu_get_flat_addressing_mode_address(cpu65.z);
 	phys_addr_decoder(addr, MEM_SLOT_CPU_32BIT, MEM_SLOT_CPU_32BIT);
 	CALL_MEMORY_WRITER(MEM_SLOT_CPU_32BIT, addr, data);
 }
@@ -828,7 +890,7 @@ void cpu65_write_linear_opcode_callback ( Uint8 data )
 // FIXME: very ugly and very slow and maybe very buggy implementation! Should be done in a sane way in the next memory decoder version being developmented ...
 Uint32 cpu65_read_linear_long_opcode_callback ( void )
 {
-	register int addr = cpu_get_flat_addressing_mode_address();
+	register int addr = cpu_get_flat_addressing_mode_address(cpu65.z);
 	Uint32 ret = 0;
 	for (int a = 0 ;;) {
 		phys_addr_decoder(addr, MEM_SLOT_CPU_32BIT, MEM_SLOT_CPU_32BIT);
@@ -844,7 +906,7 @@ Uint32 cpu65_read_linear_long_opcode_callback ( void )
 // FIXME: very ugly and very slow and maybe very buggy implementation! Should be done in a sane way in the next memory decoder version being developmented ...
 void cpu65_write_linear_long_opcode_callback ( Uint32 data )
 {
-	register int addr = cpu_get_flat_addressing_mode_address();
+	register int addr = cpu_get_flat_addressing_mode_address(cpu65.z);
 	for (int a = 0 ;;) {
 		phys_addr_decoder(addr, MEM_SLOT_CPU_32BIT, MEM_SLOT_CPU_32BIT);
 		CALL_MEMORY_WRITER(MEM_SLOT_CPU_32BIT, addr, data & 0xFF);

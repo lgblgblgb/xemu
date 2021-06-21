@@ -4,8 +4,8 @@
  * --------------------------------------------------------------------------------------
  * Written from the technical manual of the Z8000 released by Zilog by me,
  * so it can be very ugly, strange and incorrect code, especially, because
- * Z8000 is a new thing me, first try to even get to know it ... 
- * In many cases, the source is about the most "lame" solution, far from being
+ * Z8000 is a new thing me, first try to even get to know it ...
+ * In many cases, the source is about the most crude solution, far from being
  * optimized. Also, Z8K though being 16 bit CPU, the internal emu struct is 8 bit
  * based mainly to simplify things and not to be confused with different byte order
  * between Z8K and emu host or similar issues.
@@ -199,7 +199,7 @@ static int check_cc ( int cc )
 			return F_SIGN_BOOL;
 		case 0x6:	// EQ/Z = equal or zero, test for Z=1
 			return F_ZERO_BOOL;
-		case 0x7:	// ULT/carry 
+		case 0x7:	// ULT/carry
 			return F_CARRY_BOOL;
 		case 0x8:	// T: always true!
 			return 1;
@@ -2024,7 +2024,7 @@ int z8k1_step ( int cycles_limit )
 			break;
 		default:
 			NOT_EMULATED_OPCODE_VARIANT();
-			
+
 	}
 	if (DO_EXEC)
 		cycles += 7;
@@ -2098,9 +2098,8 @@ int z8k1_step ( int cycles_limit )
 #endif
 		// ADC
 		//case 0xB5:
-			
 #if 0
-		// 0x20: 
+		// 0x20:
 		// -- or: LDB R8,#data -> though this is a longer form of the LDB with the same effect, use $CX opcodes instead! shorter in size and cycles too!
 		case 0x20:
 			if ((opc2 & 0xF0)) {

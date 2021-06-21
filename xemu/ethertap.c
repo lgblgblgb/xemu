@@ -1,7 +1,5 @@
-/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
-   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and MEGA65 as well.
-   Copyright (C)2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2018,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -197,7 +195,7 @@ int xemu_tuntap_select ( int flags, int timeout_usecs )
 /* dev_in: device name to attach too, if it's zero sized string or NULL,
    the kernel will allocate a new name,
    but for that Xemu needs network admin capability (typically being 'root')
-   which is not so much a good idea! 
+   which is not so much a good idea!
    dev_out: a large enough buffer where name will be written back to. If it's
    NULL pointer, it won't be used.
    dev_out_size: size of dev_out buffer storage
@@ -209,10 +207,12 @@ int xemu_tuntap_select ( int flags, int timeout_usecs )
 
 int xemu_tuntap_alloc ( const char *dev_in, char *dev_out, int dev_out_size, unsigned int flags )
 {
-	struct ifreq ifr;
-	int fd, err;
 	if (tuntap_fd >= 0)
 		return tuntap_fd;
+	if (dev_in && strlen(dev_in) > IFNAMSIZ - 1)
+		return -1;
+	struct ifreq ifr;
+	int fd, err;
 	nonblocking = 0;
 	memset(&ifr, 0, sizeof(ifr));
 	ifr.ifr_flags = 0;
@@ -231,7 +231,7 @@ int xemu_tuntap_alloc ( const char *dev_in, char *dev_out, int dev_out_size, uns
 	if ((fd = open(CLONE_TUNTAP_NAME, O_RDWR)) < 0)
 		return fd;
 	if (dev_in && *dev_in)
-		strncpy(ifr.ifr_name, dev_in, IFNAMSIZ);
+		strncpy(ifr.ifr_name, dev_in, IFNAMSIZ - 1);
 	else
 		ifr.ifr_name[0] = 0;
 	if ((err = ioctl(fd, TUNSETIFF, (void *) &ifr)) < 0) {
@@ -242,7 +242,6 @@ int xemu_tuntap_alloc ( const char *dev_in, char *dev_out, int dev_out_size, uns
 		if (strlen(ifr.ifr_name) >= dev_out_size) {
 			close(fd);
 			return -1;
-			
 		} else
 			strcpy(dev_out, ifr.ifr_name);
 	}

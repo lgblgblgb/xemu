@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2017-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2017-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -38,6 +38,11 @@ extern void  memory_debug_write_cpu_addr  ( Uint16 addr, Uint8 data );
 extern int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
 extern int rom_protect, skip_unhandled_mem;
 extern Uint8 main_ram[512 << 10], colour_ram[0x8000], char_wom[0x2000], hypervisor_ram[0x4000];
+extern Uint8 nvram[64];
+extern Uint8 mega65_uuid[8];
+extern Uint8 rtc_regs[6];
+#define SLOW_RAM_SIZE (8 << 20)
+extern Uint8 slow_ram[SLOW_RAM_SIZE];
 //extern Uint8 chip_ram[SIZEOF_CHIP_RAM], fast_ram[SIZEOF_FAST_RAM];
 // Ugly hack for more RAM!
 //#define chip_ram  (main_ram + 0)

@@ -6,7 +6,7 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
-    
+
     steps:
     - uses: actions/checkout@v1
     - name: Update APT database
@@ -19,8 +19,12 @@ jobs:
       run: pwd ; hostname ; sudo hostname actions.github.com || true ; sudo adduser --home `pwd` --shell /bin/bash --no-create-home --disabled-password --disabled-login --gecos "LGB builder" lgb && sudo chown -R lgb:lgb .
     - name: Show system status
       run: cat /etc/debian_version ; lsb_release -a ; yacc --version | head -n 1 ; gcc --version | head -n 1 ; g++ --version | head -n 1 ; make --version | head -n 1 ; git --version | head -n 1 ; gawk --version | head -n 1 ; bash --version | head -n 1 ; uname -a ; id -a ; echo "CWD is `pwd`" ; echo "PATH is $PATH" ; echo "Hostname is `hostname`" ; sudo lscpu || true ; sudo lspci || true ; uptime ; sudo /sbin/ip a || true ; df -h . ; ls -la .
+    - name: Show shell variables
+      run: env || true
     - name: Show native SDL2 status
       run: ls -l `which sdl2-config` || true ; sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true
+    - name: Current GIT repo in use
+      run: bash build/show-git-info
     - name: Compiling for native (Linux)
       run: sudo -u lgb make -j 2 RELEASE=yes
     - name: Installing Windows SDL2 cross-development components

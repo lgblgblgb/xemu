@@ -7,7 +7,7 @@
  * Released under GNU GPL v2
  *
  */
- 
+
 #include <stdlib.h>
 #include <string.h>
 #ifndef __USE_ISOC99
@@ -15,7 +15,7 @@
 #endif
 #include <stdio.h>
 #include <stdarg.h>
- 
+
 #define __Z80EX_SELF_INCLUDE
 #include "xemu/z80ex/z80ex_dasm.h"
 
@@ -51,14 +51,14 @@ int z80ex_dasm(char *output, int output_size, unsigned flags, int *t_states, int
 	const char *words_format=formats[1];
 	const z80ex_opc_dasm *dasm = NULL;
 	static char stmp[STMP_SIZE];
-	
+
 	if(flags & WORDS_DEC) words_format = formats[2];
 	if(flags & BYTES_DEC) bytes_format = formats[2];
-	
+
 	*output='\0';
 	*t_states=0;
 	*t_states2=0;
-	
+
 	opc = readbyte_cb(addr++);
 	bytes++;
 
@@ -78,7 +78,7 @@ int z80ex_dasm(char *output, int output_size, unsigned flags, int *t_states, int
 				disp_u = readbyte_cb(addr++);
 				next = readbyte_cb(addr++);
 				bytes+=3;
-				
+
 				dasm = (opc==0xDD)? &dasm_ddcb[next]: &dasm_fdcb[next];
 				have_disp=1;
 			}
@@ -94,7 +94,7 @@ int z80ex_dasm(char *output, int output_size, unsigned flags, int *t_states, int
 				}
 			}
 			break;
-			
+
 		case 0xED:
 			next = readbyte_cb(addr++);
 			bytes++;
@@ -106,68 +106,68 @@ int z80ex_dasm(char *output, int output_size, unsigned flags, int *t_states, int
 				dasm=NULL;
 			}
 			break;
-			
+
 		case 0xCB:
 			next = readbyte_cb(addr++);
 			bytes++;
 			dasm = &dasm_cb[next];
 			break;
-		
+
 		default:
 			dasm = &dasm_base[opc];
 			break;
 	}
-	
+
 	if(dasm!=NULL)
-	{	
+	{
 		const char *mpos;
 		int arglen;
-		Z80EX_BYTE hi,lo; 
+		Z80EX_BYTE hi,lo;
 		char *outpos=output;
-		
+
 		for(mpos=(dasm->mnemonic); *mpos && out_len < output_size; mpos++)
 		{
 			*stmp='\0';
-			
+
 			switch(*mpos)
 			{
 				case '@':
 					lo=readbyte_cb(addr++);
 					hi=readbyte_cb(addr++);
 					bytes+=2;
-				
+
 					arglen=snprintf(stmp,STMP_SIZE,words_format,(int)(lo+hi*0x100));
-				
+
 					break;
-				
+
 				case '$':
 				case '%':
 					if(!have_disp) disp_u = readbyte_cb(addr++);
 					bytes++;
-					disp = (disp_u & 0x80)? -(((~disp_u) & 0x7f)+1): disp_u;				
-					
+					disp = (disp_u & 0x80)? -(((~disp_u) & 0x7f)+1): disp_u;
+
 					if(*mpos == '$')
 						arglen=snprintf(stmp,STMP_SIZE,bytes_format,(int)disp);
 					else
 						arglen=snprintf(stmp,STMP_SIZE,words_format,(int)((Z80EX_WORD)(addr+disp)));
 
 					break;
-				
+
 				case '#':
 					lo = readbyte_cb(addr++);
 					bytes++;
-				
+
 					arglen=snprintf(stmp,STMP_SIZE,bytes_format,(int)lo);
-				
+
 					break;
-				
+
 				default:
 					*(outpos++) = *mpos;
 					out_len++;
 					arglen=0;
 					break;
 			}
-			
+
 			if(arglen)
 			{
 				if(out_len+arglen >= output_size) break;
@@ -176,15 +176,15 @@ int z80ex_dasm(char *output, int output_size, unsigned flags, int *t_states, int
 				outpos+=arglen;
 			}
 		}
-		
+
 		*outpos = '\0';
-		
+
 		*t_states+=dasm->t_states;
 		*t_states2+=dasm->t_states2;
 	}
-	
+
 	if(*t_states == *t_states2) *t_states2=0;
-	
+
 	return(bytes);
 }
 

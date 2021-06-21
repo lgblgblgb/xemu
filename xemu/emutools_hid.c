@@ -1,7 +1,5 @@
-/* Xemu - Somewhat lame emulation (running on Linux/Unix/Windows/OSX, utilizing
-   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and the MEGA65 as well.
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -55,6 +53,13 @@ static SDL_Joystick *joysticks[MAX_JOYSTICKS];
 static Uint8 virtual_shift_pos = 0;
 static struct KeyMappingUsed key_map[0x100];
 static const struct KeyMappingDefault *key_map_default;
+static int release_this_key_on_first_event = -1;
+
+
+void hid_set_autoreleased_key ( int key )
+{
+	release_this_key_on_first_event = key;
+}
 
 
 int hid_key_event ( SDL_Scancode key, int pressed )
@@ -64,6 +69,10 @@ int hid_key_event ( SDL_Scancode key, int pressed )
 		OSD(-1, -1, "Key %s <%s>", pressed ? "press  " : "release", SDL_GetScancodeName(key));
 	while (map->pos >= 0) {
 		if (map->scan == key) {
+			if (XEMU_UNLIKELY(release_this_key_on_first_event > 0)) {
+				KBD_RELEASE_KEY(release_this_key_on_first_event);
+				release_this_key_on_first_event = -1;
+			}
 			if (map->pos > 0xFF) {	// special emulator key!
 				switch (map->pos) {	// handle "built-in" events, if emulator target uses them at all ...
 					case XEMU_EVENT_EXIT:
@@ -242,6 +251,10 @@ void hid_keymap_from_config_file ( const char *fn )
 
 void hid_init ( const struct KeyMappingDefault *key_map_in, Uint8 virtual_shift_pos_in, int joy_enable )
 {
+	if (!key_map_in) {
+		DEBUGPRINT("HID: warning, hid_init() was called key_map_in=NULL. This seems to be a FreeBSD specific bug, as far as I can tell from experience." NL);
+		return;
+	}
 	int a;
 #ifdef HID_KBD_MAP_CFG_SUPPORT
 	char kbdcfg[8192];
@@ -258,7 +271,7 @@ void hid_init ( const struct KeyMappingDefault *key_map_in, Uint8 virtual_shift_
 		"# EMU-KEY-NAME strings starting with XEMU- are special Xemu related 'hot keys'" NL
 		NL
 		,
-		KEYMAP_USER_FILENAME + 1
+		(KEYMAP_USER_FILENAME) + 1
 	);
 #endif
 	for (a = 0;;) {
@@ -330,15 +343,15 @@ void hid_joystick_device_event ( int which , int is_attach )
 		if (joysticks[which])
 			hid_joystick_device_event(which, 0);
 		joysticks[which] = SDL_JoystickOpen(which);
-		if (joysticks[which]) {
-			INFO_WINDOW("HID: joystick device #%d \"%s\" has been added." NL, which, SDL_JoystickName(joysticks[which]));
-		} else
-			DEBUG("HID: joystick device #%d problem, cannot be opened on 'add' event: %s." NL, which, SDL_GetError());
+		if (joysticks[which])
+			DEBUGPRINT("HID: joystick device #%d \"%s\" has been added." NL, which, SDL_JoystickName(joysticks[which]));
+		else
+			DEBUGPRINT("HID: joystick device #%d problem, cannot be opened on 'add' event: %s." NL, which, SDL_GetError());
 	} else {
 		if (joysticks[which]) {
 			SDL_JoystickClose(joysticks[which]);
 			joysticks[which] = NULL;
-			DEBUG("HID: joystick device #%d has been removed." NL, which);
+			DEBUGPRINT("HID: joystick device #%d has been removed." NL, which);
 			// This is needed to avoid "stuck" joystick state if removed in that state ...
 			hid_state &= ~(JOYSTATE_UP | JOYSTATE_DOWN | JOYSTATE_LEFT | JOYSTATE_RIGHT | JOYSTATE_BUTTON);
 		}
@@ -476,9 +489,6 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 		case SDL_KEYUP:
 		case SDL_KEYDOWN:
 			if (
-#ifndef CONFIG_KBD_ALSO_REPEATS
-				event->key.repeat == 0 &&
-#endif
 				event->key.keysym.scancode != SDL_SCANCODE_UNKNOWN
 #ifdef CONFIG_KBD_SELECT_FOCUS
 				&& (event->key.windowID == sdl_winid || event->key.windowID == 0)
@@ -491,9 +501,14 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 #endif
 			) {
 #ifdef CONFIG_KBD_ALSO_RAW_SDL_CALLBACK
+				// Note: if this one is requested, it is fired even on key repeats, while the normal
+				// HID callback may NOT!
 				emu_callback_key_raw_sdl(&event->key);
 #endif
-				hid_key_event(event->key.keysym.scancode, event->key.state == SDL_PRESSED);
+#ifndef CONFIG_KBD_ALSO_REPEATS
+				if (event->key.repeat == 0)
+#endif
+					hid_key_event(event->key.keysym.scancode, event->key.state == SDL_PRESSED);
 			}
 			break;
 		case SDL_JOYDEVICEADDED:

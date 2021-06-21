@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,10 +22,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "hypervisor.h"
 #include "xemu/cpu65.h"
 #include "vic4.h"
-#include "xemu/f018_core.h"
+#include "dma65.h"
 #include "memory_mapper.h"
 #include "io_mapper.h"
 #include "xemu/emutools_config.h"
+#include "configdb.h"
 
 #include <sys/types.h>
 #include <fcntl.h>
@@ -133,6 +134,46 @@ int hypervisor_queued_enter ( int trapno )
 }
 
 
+// Very same as hypervisor_enter() - actually it calls that
+// **BUT** we check here, if next opcode is NOP.
+// it should be, as on real hardware this is a relability problem.
+// (sometimes one byte is skipped on execution after a trap caused by writing D640-D67F)
+void hypervisor_enter_via_write_trap ( int trapno )
+{
+	if (XEMU_UNLIKELY(dma_is_in_use())) {
+		static int do_warn = 1;
+		if (do_warn) {
+			WARNING_WINDOW("DMA operation would trigger hypervisor trap.\nThis is totally ignored!\nThere will be no future warning before you restart Xemu");
+			do_warn = 0;
+		}
+		return;
+	}
+	static int do_nop_check = 1;
+	if (do_nop_check) {
+		// FIXME: for real there should be a memory reading function independent to the one used by the CPU, since
+		// this has some side effects to just fetch a byte to check something, which is otherwise used normally to fetch CPU opcodes and such
+		const Uint8 skipped_byte = cpu65_read_callback(cpu65.pc);
+		if (XEMU_UNLIKELY(skipped_byte != 0xEA)) {	// $EA = opcode of NOP
+			char msg[256];
+			snprintf(msg, sizeof msg,
+				"Writing hypervisor trap $%02X must be followed by NOP\n"
+				"but found opcode $%02X at PC=$%04X\n\n"
+				"This will cause problems on a real MEGA65!"
+				,
+				0xD640 + trapno, skipped_byte, cpu65.pc
+			);
+			if (QUESTION_WINDOW(
+				"Ignore now|Ignore all",
+				msg
+			)) {
+				do_nop_check = 0;
+				INFO_WINDOW("There will be no further warnings on this issue\nuntil you restart Xemu");
+			}
+		}
+	}
+	hypervisor_enter(trapno);
+}
+
 
 void hypervisor_enter ( int trapno )
 {
@@ -189,7 +230,7 @@ void hypervisor_enter ( int trapno )
 }
 
 
-// Actual (CPU level opcode execution) emulation of Mega65 should start with calling this function (surely after initialization of every subsystems etc).
+// Actual (CPU level opcode execution) emulation of MEGA65 should start with calling this function (surely after initialization of every subsystems etc).
 void hypervisor_start_machine ( void )
 {
 	in_hypervisor = 0;
@@ -237,6 +278,7 @@ void hypervisor_leave ( void )
 	memory_set_vic3_rom_mapping(vic_registers[0x30]);	// restore possible active VIC-III mapping
 	memory_set_do_map();	// restore mapping ...
 	if (XEMU_UNLIKELY(first_hypervisor_leave)) {
+		DEBUGPRINT("HYPERVISOR: first return after RESET." NL);
 		first_hypervisor_leave = 0;
 		int new_pc = refill_c65_rom_from_preinit_cache();	// this function should decide then, if it's really a (forced) thing to do ...
 		if (new_pc >= 0) {
@@ -246,8 +288,8 @@ void hypervisor_leave ( void )
 			);
 			cpu65.pc = new_pc;
 		} else
-			DEBUGPRINT("MEM: no force ROM re-apply policy was requested" NL);
-		dma_init_set_rev(xemucfg_get_num("dmarev"), main_ram + 0x20000 + 0x16);
+			DEBUGPRINT("MEM: no forced ROM re-apply policy was requested" NL);
+		dma_init_set_rev(configdb.dmarev, main_ram + 0x20000 + 0x16);
 	}
 	if (XEMU_UNLIKELY(hypervisor_queued_trap >= 0)) {
 		// Not so much used currently ...
@@ -257,13 +299,20 @@ void hypervisor_leave ( void )
 	}
 }
 
-
+void write_hypervisor_byte(char byte);
 
 void hypervisor_serial_monitor_push_char ( Uint8 chr )
 {
 	if (hypervisor_monout_p >= hypervisor_monout - 1 + sizeof hypervisor_monout)
-		return;
+	{
+		// NOTE: For long mega65_ftp actions like 'get MYDISK.D81`, a lot of
+		// serial chars will be sent that are raw binary, and there's a good chance
+		// it could overflow the 'hypervisor_monout' buffer.
+		// So in such cases, I'll simply empty hypervisor_monout.
+		hypervisor_monout_p = hypervisor_monout;
+	}
 	int flush = (chr == 0x0A || chr == 0x0D || chr == 0x8A || chr == 0x8D);
+	write_hypervisor_byte(chr);
 	if (hypervisor_monout_p == hypervisor_monout && flush)
 		return;
 	if (flush) {
@@ -302,6 +351,7 @@ void hypervisor_debug_invalidate ( const char *reason )
 
 void hypervisor_debug ( void )
 {
+	static int do_execution_range_check = 1;
 	if (!in_hypervisor)
 		return;
 	// TODO: better hypervisor upgrade check, maybe with checking the exact range kickstart uses for upgrade outside of the "normal" hypervisor mem range
@@ -309,13 +359,23 @@ void hypervisor_debug ( void )
 		DEBUG("HYPERVISOR-DEBUG: allowed to run outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu65.pc);
 		return;
 	}
-	if (XEMU_UNLIKELY((cpu65.pc & 0xC000) != 0x8000)) {
+	if (XEMU_UNLIKELY((cpu65.pc & 0xC000) != 0x8000 && do_execution_range_check)) {
 		DEBUG("HYPERVISOR-DEBUG: execution outside of the hypervisor memory, PC = $%04X" NL, cpu65.pc);
-		ERROR_WINDOW("Hypervisor fatal error: execution outside of the hypervisor memory, PC=$%04X SP=$%04X", cpu65.pc, cpu65.sphi | cpu65.s);
-		if (QUESTION_WINDOW("Reset|Exit Xemu", "What to do now?"))
-			XEMUEXIT(1);
-		else
-			hypervisor_start_machine();
+		char msg[128];
+		sprintf(msg, "Hypervisor fatal error: execution outside of the hypervisor memory, PC=$%04X SP=$%04X", cpu65.pc, cpu65.sphi | cpu65.s);
+		switch (QUESTION_WINDOW("Reset|Exit Xemu|Ignore now|Ingore all", msg)) {
+			case 0:
+				hypervisor_start_machine();
+				break;
+			case 1:
+				XEMUEXIT(1);
+				break;
+			case 2:
+				break;
+			case 3:
+				do_execution_range_check = 0;
+				break;
+		}
 		return;
 	}
 	if (!resolver_ok) {

@@ -1,5 +1,6 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 emulator.
-   Copyright (C)2016,2017,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* Test-case for simple, work-in-progress Commodore 65 emulator.
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is the VIC3 "emulation". Currently it does scanline based rendering,
    though sprites are totally incorrect and rendered "at-once" after the
@@ -29,12 +30,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "commodore_65.h"
 #include "xemu/cpu65.h"
 #include "vic3.h"
+#include "xemu/f011_core.h"
 
 
 
 #define RGB(r,g,b)		rgb_palette[((r) << 8) | ((g) << 4) | (b)]
 #define COLMEMPTR		(memory + 0x1F800)
 #define IS_H640			(vic3_registers[0x31] & 0x80)
+#define IS_BPM			(vic3_registers[0x31] & 0x10)
 #define BLINK_COUNTER_INIT	25
 
 #ifdef VIC_CACHE_COLOURS
@@ -53,6 +56,8 @@ static Uint32 vic3_palette[0x100];	// VIC3 palette in SDL pixel format related f
 static Uint32 vic3_rom_palette[0x100];	// the "ROM" palette, for C64 colours (with some ticks, ie colours above 15 are the same as the "normal" programmable palette)
 static Uint32 *palette;			// the selected palette ...
 static Uint8 vic3_palette_nibbles[0x300];
+static Uint32 red_colour, black_colour;
+int show_drive_led;
 Uint8 vic3_registers[0x80];		// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
 int vic_new_mode;			// VIC3 "newVic" IO mode is activated flag
 static int scanline;			// current scan line number
@@ -84,7 +89,6 @@ static Uint8 *vicptr_bank32k;		// pointer to VIC-III 32K bank start address (onl
 static Uint8 *vicptr_bitmap_320;	// pointer to bitmap data, only used in !H640 bitmap modes
 static Uint8 *vicptr_bitmap_640;	// pointer to bitmap data, only used in H640 bitmap modes (the only one which is calculated from 32K bank!)
 static Uint8 *vicptr_idlefetch_p;	// IDLE-fetch pointer
-static Uint8 *sprite_pointers;		// points to the actual memory bytes where currently sprite pointers are
 // For bitplanes we don't use pointers, since there are just too many sources (max of 8 bitplanes)
 // Instead we use integer values, as linear memory addresses.
 static int bitplane_addr_320[8];
@@ -555,6 +559,15 @@ static void renderer_bitplane_640 ( void )
 static void sprite_renderer ( void );
 
 
+static inline void drive_led_renderer ( void )
+{
+	if (show_drive_led && fdc_get_led_state(16))
+		for (int y = 0; y < 8; y++)
+			for (int x = 0; x < 8; x++)
+				*(pixel_start + (SCREEN_WIDTH) - 10 + x + (y + 2) * (SCREEN_WIDTH)) = x > 1 && x < 7 && y > 1 && y < 7 ? red_colour : black_colour;
+}
+
+
 int vic3_render_scanline ( void )
 {
 	if (scanline < 50 - TOP_BORDER_SIZE) {
@@ -597,6 +610,7 @@ int vic3_render_scanline ( void )
 				FATAL("Renderer failure: pixel=%p != end=%p (diff=%d) height=%d", pixel, pixel_end, (int)(pixel_end - pixel), SCREEN_HEIGHT);
 			// FIXME: Highly incorrect, rendering sprites once *AFTER* the screen content ...
 			sprite_renderer();
+			drive_led_renderer();
 		} else {
 			if (XEMU_UNLIKELY(pixel != pixel_start))
 				FATAL("Renderer failure: pixel=%p != start=%p", pixel, pixel_start);
@@ -622,10 +636,8 @@ static void select_renderer_func ( void )
 	if (!IS_H640) {
 		video_counter &= 1023;
 		video_counter_inc = 40;
-		sprite_pointers = vicptr_video_40 + 0x3F8;
 	} else {
 		video_counter_inc = 80;
-		sprite_pointers = vicptr_video_80 + 0x7F8;
 	}
 	// if DEN (Display Enable) bit is zero, then you won't see anything (border colour is rendered!)
 	if (!(vic3_registers[0x11] & 0x10)) {
@@ -633,7 +645,7 @@ static void select_renderer_func ( void )
 		return;
 	}
 	// if BPM bit is set, it's bitplane mode (VIC-III)
-	if (vic3_registers[0x31] & 16) {
+	if (IS_BPM) {
 		renderer_func = IS_H640 ? renderer_bitplane_640 : renderer_bitplane_320;
 		return;
 	}
@@ -692,7 +704,7 @@ static void select_vic2_memory ( void )
 	// 24| $d018 |VM13|VM12|VM11|VM10|CB13|CB12|CB11|  - | Memory pointers
 	vicptr_video_40 = vicptr_bank16k + ((vic3_registers[0x18] & 0xF0) << 6);
 	vicptr_video_80 = vicptr_bank16k + ((vic3_registers[0x18] & 0xE0) << 6);
-	sprite_pointers = IS_H640 ? vicptr_video_80 + 0x7F8 : vicptr_video_40 + 0x3F8;
+	//sprite_pointers = IS_H640 ? vicptr_video_80 + 0x7F8 : vicptr_video_40 + 0x3F8;
 	select_chargen();
 	vicptr_bitmap_320 = vicptr_bank16k + ((vic3_registers[0x18] & 8) << 10);
 	// Interestingly, VIC-III has a notion of "32K sized bank" as well, over VIC-II but
@@ -720,7 +732,13 @@ void vic3_select_bank ( int bank )
 }
 
 
-
+static XEMU_INLINE int get_dat_addr ( int bpn )
+{
+	int x = vic3_registers[0x3C];
+	int y = vic3_registers[0x3D] + ((x << 1) & 0x100);
+	x &= 0x7F;
+	return (x << 3) + (y & 7) + (IS_H640 ? bitplane_addr_640[bpn] + (y >> 3) * 640 : bitplane_addr_320[bpn] + (y >> 3) * 320);
+}
 
 
 // Caller should give only 0-$3F or 0-$7F addresses
@@ -811,13 +829,24 @@ void vic3_write_reg ( int addr, Uint8 data )
 			bitplane_addr_320[addr - 0x33] = ((data & 14) << 12) + (addr & 1 ? 0 : 0x10000);
 			bitplane_addr_640[addr - 0x33] = ((data & 12) << 12) + (addr & 1 ? 0 : 0x10000);
 			break;
+		case 0x40:
+		case 0x41:
+		case 0x42:
+		case 0x43:
+		case 0x44:
+		case 0x45:
+		case 0x46:
+		case 0x47:
+			// Write data through VIC-III DAT
+			memory[get_dat_addr(addr - 0x40)] = data;
+			break;
 		default:
 			if (addr >= 0x20 && addr < 0x2F)
 				data &= 15;
 			break;
 	}
 	vic3_registers[addr] = data;
-}	
+}
 
 
 
@@ -847,6 +876,17 @@ Uint8 vic3_read_reg ( int addr )
 			break;
 		case 0x18:
 			result = vic3_registers[addr] | 1;		// unused bit [TODO: also on VIC3?]
+			break;
+		case 0x40:
+		case 0x41:
+		case 0x42:
+		case 0x43:
+		case 0x44:
+		case 0x45:
+		case 0x46:
+		case 0x47:
+			// Read data through VIC-III DAT
+			result = memory[get_dat_addr(addr - 0x40)];
 			break;
 		default:
 			result = vic3_registers[addr];
@@ -891,6 +931,8 @@ void vic3_init ( void )
 		for (g = 0; g < 16; g++)
 			for (b = 0; b < 16; b++)
 				rgb_palette[i++] = SDL_MapRGBA(sdl_pix_fmt, r * 17, g * 17, b * 17, 0xFF); // 15*17=255, last arg 0xFF: alpha channel for SDL
+	red_colour =   SDL_MapRGBA(sdl_pix_fmt, 0xFF, 0x00, 0x00, 0xFF);
+	black_colour = SDL_MapRGBA(sdl_pix_fmt, 0x00, 0x00, 0x00, 0xFF);
 	// *** Init VIC3 registers and palette
 	memset(scanline_render_debug_info, 0x20, sizeof scanline_render_debug_info);
 	scanline_render_debug_info[sizeof(scanline_render_debug_info) - 1] = 0;
@@ -1030,17 +1072,72 @@ static void render_one_sprite ( int sprite_no, int sprite_mask, Uint8 *data, Uin
    renderer for sprites. */
 static void sprite_renderer ( void )
 {
-	int sprites = vic3_registers[0x15];
-	if (sprites) {	// Render sprites. VERY BAD. We ignore sprite priority as well (cannot be behind the background)
-		int a;
+#if 0
+	// DEBUG code for K2 demo!!!
+	static const char search_this[] = "SYMMEK";
+	for (int a = 0; a < 128000; a++) {
+		int d1 = memory[a + 0] - search_this[5];
+		int d2 = memory[a + 1] - search_this[4];
+		int d3 = memory[a + 2] - search_this[3];
+		int d4 = memory[a + 3] - search_this[2];
+		int d5 = memory[a + 4] - search_this[1];
+		int d6 = memory[a + 5] - search_this[0];
+		if (d1 == d2 && d2 == d3 && d3 == d4 && d4 == d5 && d5 == d6) {
+			DEBUGPRINT("YAY-FOUND: $%05X first-char: $%02X D018=$%02X D031=$%02X" NL, a, memory[a], vic3_registers[0x18], vic3_registers[0x31]);
+		}
+	}
+#endif
+
+	int sprites_enabled = vic3_registers[0x15];
+	if (sprites_enabled) {	// Render sprites. VERY BAD. We ignore sprite priority as well (cannot be behind the background)
 		if (warn_sprites) {
-			INFO_WINDOW("WARNING: Sprite emulation is really bad! (enabled_mask=$%02X)", sprites);
+			INFO_WINDOW("WARNING: Sprite emulation is really bad! (enabled_mask=$%02X)", sprites_enabled);
 			warn_sprites = 0;
 		}
-		for (a = 7; a >= 0; a--) {
+		Uint8 *sprite_bank, *sprite_pointers;
+		// IT *SEEMS* (must be confirmed yet) that in bitplane mode (BPM) the sprite pointers are always
+		// (regardless of H640 bit) at end of the 2K video matrix (even that video matrix is not used in BPM ...)
+		if (IS_H640) {
+			if (IS_BPM) {
+				sprite_pointers = memory + bitplane_addr_640[2] + 0x4000 - 8;
+				sprite_bank = memory;
+			} else {
+				sprite_pointers = vicptr_video_80 + 0x7F8;
+				sprite_bank = vicptr_bank16k;
+			}
+		} else {
+			if (IS_BPM) {
+				sprite_pointers = memory + bitplane_addr_320[2] + 0x2000 - 8;
+				sprite_bank = memory;
+			} else {
+				sprite_pointers = vicptr_video_40 + 0x3F8;
+				sprite_bank = vicptr_bank16k;
+			}
+		}
+		if (IS_BPM) {
+			// I am really not sure if it's true for bitplane mode ... Just for testing, overriding the things above if bitplane mode is used
+			sprite_pointers = memory + 0x07f8;	// I would guess $107f8 or $10ff8
+			sprite_bank = memory;
+		}
+#if 0
+		// TEST ONLY: BEGIN
+		// DEBUG code
+		DEBUGPRINT("YAY-FOUND: sprite pointers are: %02X %02X %02X %02X %02X %02X %02X %02X" NL,
+			sprite_pointers[0],
+			sprite_pointers[1],
+			sprite_pointers[2],
+			sprite_pointers[3],
+			sprite_pointers[4],
+			sprite_pointers[5],
+			sprite_pointers[6],
+			sprite_pointers[7]
+		);
+		// TEST ONLY: END
+#endif
+		for (int a = 7; a >= 0; a--) {
 			int mask = 1 << a;
-			if ((sprites & mask))
-				render_one_sprite(a, mask, vicptr_bank16k + (sprite_pointers[a] << 6), pixel_start);	// sprite_pointers are set by the renderer functions above!
+			if ((sprites_enabled & mask))
+				render_one_sprite(a, mask, sprite_bank + (sprite_pointers[a] << 6), pixel_start);	// sprite_pointers are set by the renderer functions above!
 		}
 	}
 }

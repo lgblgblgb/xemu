@@ -9,3 +9,6 @@
 //#define DEBUG_CPU
 
 #define CONFIG_EMSCRIPTEN_OK
+
+#define XEMU_CONFIGDB_SUPPORT
+#define XEMU_OSD_SUPPORT

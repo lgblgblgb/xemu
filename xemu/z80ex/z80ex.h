@@ -145,7 +145,7 @@ struct _z80_cpu_context {
 	Z80EX_REGPAIR_T af_,bc_,de_,hl_;
 	Z80EX_REGPAIR_T ix,iy;
 	Z80EX_BYTE i;
-	Z80EX_WORD r;	
+	Z80EX_WORD r;
 	Z80EX_BYTE r7; /* The high bit of the R register */
 	Z80EX_REGPAIR_T sp,pc;
 	Z80EX_BYTE iff1, iff2; /*interrupt flip-flops*/
@@ -155,17 +155,17 @@ struct _z80_cpu_context {
 
 	unsigned long tstate; /*t-state clock of current/last step*/
 	unsigned char op_tstate; /*clean (without WAITs and such) t-state of currently executing instruction*/
-	
+
 	int noint_once; /*disable interrupts before next opcode?*/
 	int reset_PV_on_int; /*reset P/V flag on interrupt? (for LD A,R / LD A,I)*/
 	int doing_opcode; /*is there an opcode currently executing?*/
 	char int_vector_req; /*opcode must be fetched from IO device? (int vector read)*/
 	Z80EX_BYTE prefix;
-	
+
 #ifdef Z80EX_HAVE_TSTATE_CB_VAR
 	int tstate_cb;  /* use tstate callback? */
 #endif
-	
+
 	/*other stuff*/
 	Z80EX_REGPAIR_T tmpword;
 	Z80EX_REGPAIR_T tmpaddr;
@@ -236,7 +236,7 @@ else returns T-states taken by last opcode executed*/
 #define z80ex_op_tstate() z80ex.tstate
 
 /*generate <w_states> Wait-states. (T-state callback will be called <w_states> times, when defined).
-should be used to simulate WAIT signal or disabled CLK*/ 
+should be used to simulate WAIT signal or disabled CLK*/
 extern void z80ex_w_states(unsigned w_states);
 
 /*spend one T-state doing nothing (often IO devices cannot handle data request on

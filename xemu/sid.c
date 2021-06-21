@@ -114,7 +114,7 @@ static inline unsigned char get_bit(unsigned long val, unsigned char b)
 
 
 
-// poor man's lookup table for combined pulse/triangle waveform (this table does not 
+// poor man's lookup table for combined pulse/triangle waveform (this table does not
 // lead to correct results but it is better that nothing for songs like Kentilla.sid)
 // feel free to come up with a better impl!
 // FIXME: this table was created by sampling kentilla output.. i.e. it already reflects the envelope
@@ -658,26 +658,25 @@ void sid_init ( struct SidEmulation *sidemu, unsigned long cyclesPerSec, unsigne
 	// SID emulation (we only have a SID snapshot every 20ms to work with) during rendering our computing
 	// granularity then is 'one sample' (not 'one cpu cycle' - but around 20).. instead of still trying to simulate a
 	// 15-bit cycle-counter we may directly use a sample-counter instead (which also reduces rounding issues).
-	int i;
 #ifdef SID_USES_SAMPLE_ENV_COUNTER
 	sidemu->limit_LFSR = round(((float)0x8000)/sidemu->cyclesPerSample);	// original counter was 15-bit
-	for (i=0; i<16; i++) {
+	for (int i=0; i<16; i++) {
 		// counter must reach respective threshold before envelope value is incremented/decremented
 		sidemu->envelope_counter_period[i]= (int)round((float)(attackTimes[i]*cyclesPerSec)/1000/256/cyclesPerSample)+1;	// in samples
 		sidemu->envelope_counter_period_clck[i]= (int)round((float)(attackTimes[i]*cyclesPerSec)/1000/256)+1;				// in clocks
 	}
 #else
 	sidemu->limit_LFSR = 0x8000;	// counter 15-bit
-	for (i=0;i<16;i++) {
+	for (int i=0; i<16; i++) {
 		// counter must reach respective threshold before envelope value is incremented/decremented
 		sidemu->envelope_counter_period[i]=      (int)floor((float)(attackTimes[i]*cyclesPerSec)/1000/256)+1;	// in samples
 		sidemu->envelope_counter_period_clck[i]= (int)floor((float)(attackTimes[i]*cyclesPerSec)/1000/256)+1;	// in clocks
 	}
 #endif
 	// lookup table for decay rates
-	unsigned char from[] =  {93, 54, 26, 14,  6,  0};
-	unsigned char val[] = { 1,  2,  4,  8, 16, 30};
-	for (i= 0; i<256; i++) {
+	static const unsigned char from[] =  {93, 54, 26, 14,  6,  0};
+	static const unsigned char val[] = { 1,  2,  4,  8, 16, 30};
+	for (int i = 0; i<256; i++) {
 		unsigned char v= 1;
 		unsigned char j;
 		for (j= 0; j<6; j++) {

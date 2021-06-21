@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -32,12 +32,14 @@ extern Uint8 vic_registers[];
 extern int   cpu_cycles_per_scanline;
 extern int   vic2_16k_bank;
 extern int   vic3_blink_phase;
-extern int   force_fast;
 extern Uint8 c128_d030_reg;
 
 extern int   vic_vidp_legacy, vic_chrp_legacy, vic_sprp_legacy;
 
+extern const char *iomode_names[4];
+
 extern void  vic_init ( void );
+extern void  vic_reset ( void );
 extern void  vic_write_reg ( unsigned int addr, Uint8 data );
 extern Uint8 vic_read_reg  ( unsigned int addr );
 extern void  vic_render_screen ( void );

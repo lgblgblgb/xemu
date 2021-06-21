@@ -1,6 +1,6 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
+/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2015-2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -17,17 +17,17 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "xemu/emutools_hid.h"
+#include "enterprise128.h"
 #include "dave.h"
 #include "primoemu.h"
 #include "cpu.h"
 #include "printer.h"
 
-#include <SDL.h>
-
 
 Uint8 dave_int_read;
-Uint8 kbd_matrix[16]; // the "real" EP kbd matrix only uses the first 10 bytes though
+//Uint8 kbd_matrix[16]; // the "real" EP kbd matrix only uses the first 10 bytes though
 static Uint8 dave_int_write;
 static int cnt_1hz, cnt_50hz, cnt_31khz, cnt_1khz, cnt_tg0, cnt_tg1, cnt_tg2;
 static int cnt_load_tg0, cnt_load_tg1, cnt_load_tg2;
@@ -41,6 +41,7 @@ int audio_source = AUDIO_SOURCE_DAVE;
 
 
 static SDL_AudioDeviceID audio = 0;
+static int audio_stopped = 0;
 static SDL_AudioSpec audio_spec;
 #define AUDIO_BUFFER_SIZE 0x4000
 static Uint8 audio_buffer[AUDIO_BUFFER_SIZE];
@@ -113,19 +114,28 @@ static void audio_callback(void *userdata, Uint8 *stream, int len)
 }
 
 
+int is_audio_emulation_active ( void )
+{
+	return (audio != 0 && !audio_stopped);
+}
+
 
 void audio_start ( void )
 {
-	if (audio)
+	if (audio) {
 		SDL_PauseAudioDevice(audio, 0);
+		audio_stopped = 0;
+	}
 }
 
 
 
 void audio_stop ( void )
 {
-	if (audio)
+	if (audio) {
 		SDL_PauseAudioDevice(audio, 1);
+		audio_stopped = 1;
+	}
 }
 
 
@@ -142,8 +152,11 @@ void audio_close ( void )
 
 void audio_init ( int enable )
 {
+	if (audio)
+		return;
 	SDL_AudioSpec want;
-	if (!enable) return;
+	if (!enable)
+		return;
 	SDL_memset(&want, 0, sizeof(want));
 	want.freq = 41666;
 	want.format = AUDIO_U8;
@@ -159,8 +172,9 @@ void audio_init ( int enable )
 		ERROR_WINDOW("Bad audio parameters (w/h freq=%d/%d, fmt=%d/%d, chans=%d/%d, smpls=%d/%d, cannot use sound",
 			want.freq, audio_spec.freq, want.format, audio_spec.format, want.channels, audio_spec.channels, want.samples, audio_spec.samples
 		);
-	} else
+	} else {
 		audio_stop();	// still stopped ... must be audio_start()'ed by the caller
+	}
 }
 
 

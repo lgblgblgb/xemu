@@ -1,6 +1,6 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2014,2015,2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
+/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2014-2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,7 +16,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "enterprise128.h"
 #include "apu.h"
 #include "cpu.h"
 
@@ -26,16 +27,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  *
  * (C)2014 Gábor Lénárt LGB http://ep.lgb.hu/jsep/
  * Part of my JavaScript based Enterprise-128 emulator ("JSep" aka "webemu").
- * Am9511 "APU" FPU emulation, somewhat (ehhh, a lot!) incorrect 
- * 
+ * Am9511 "APU" FPU emulation, somewhat (ehhh, a lot!) incorrect
+ *
  * Thanks to Povi for testing APU support.
- * 
+ *
  * http://www.hartetechnologies.com/manuals/AMD/AMD%209511%20FPU.pdf
  * http://www.joelowens.org/z80/am9511algorithms.pdf
  * http://www.joelowens.org/z80/am9511fpmanual.pdf
- * 
+ *
  * Major problems with my emulation:
- * 
+ *
  * Precision: converts data between APU formats and JS numeric, real Am9511 may give a sightly different results in case of floats.
  * Timing: uses constant timings, real APU varies execution times depending on the operands.
  * Stack content: real APU destroys some elements in case of some OPS other than TOS. This is not emulated.
@@ -159,7 +160,7 @@ static void _apu_push_fix32(Sint64 data) {
 /* Foreword for FLOAT handling: I use natural float (well, double ...)
  * numberic format of C, using pop/push APU functions to convert from/to.
  * This is kinda messy, and not bit-exact emulation of Am9511.
- * Even my lame push/pop functions can be done much better!!
+ * Even my crude push/pop functions can be done much better!!
  */
 
 
@@ -261,7 +262,7 @@ static void _apu_copy(int from, int to) {
 }
 
 
-/* Note, call of this function should be AFTER calling _apu_push* functions as those may set overflow flag we want to keep as cleared here ... 
+/* Note, call of this function should be AFTER calling _apu_push* functions as those may set overflow flag we want to keep as cleared here ...
  * I am still not sure about the difference of overflow and underflow, also not the over-/underflow and carry. For the second problem:
  * it's said that the maximal (or minimal value) can be extended by the carry flag, so there are three cases basically: a number can
  * be represented without overflow and carry, the number can be represented as carry to be thought of the extension of the result,
@@ -269,7 +270,7 @@ static void _apu_copy(int from, int to) {
  * carry to be set in case of overflow, or not?
  * */
 static void _apu_carry ( Sint64 val, Sint64 limit )
-{	
+{
 	if (val >= limit * 2 || val < -limit * 2) {
 		_apu_status |= _APU_F_OVERFLOW;
 		// should carry set here????????????????
@@ -502,8 +503,7 @@ void apu_write_command ( Uint8 cmd )
 				_apu_status |= _APU_F_ZERO;
 			clocks = 18;
 			break;
-		
-		
+
 		case 0x77: // PTOS: Push stack. Duplicate NOS to TOS.
 			_apu_move(2);
 			_apu_copy(2, 0);
@@ -529,7 +529,7 @@ void apu_write_command ( Uint8 cmd )
 			_apu_sz_float();
 			clocks = 20;
 			break;
-		
+
 		case 0x78: // POPS: Pop stack. Old NOS becomes new TOS, old TOS rotates to bottom.
 			_apu_move(-2);
 			_apu_sz_fix16(); // set "sz" (S and Z status flags) by inspecting (new) TOS

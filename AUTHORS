@@ -1,14 +1,14 @@
-X-Emulators - aka "Xemu" - (C)2016-2020 LGB Gábor Lénárt lgblgblgb@gmail.com
+X-Emulators - aka "Xemu" - (C)2016-2021 LGB Gábor Lénárt lgblgblgb@gmail.com
 
 [ Xemu is licensed under the terms of GNU/GPL v2, for more information please read file LICENSE ]
 
 Major direct contributors of the project:
 
-  * Hernán Di Pietro <hernan.di.pietro@gmail.com>
+  * Hernán Di Pietro <hernan.di.pietro@gmail.com> (major works: MacOS GUI code, MEGA65 VIC-IV refinements)
 
 Other than my (or "our", see about contributors) own work, Xemu uses:
 
-  * SDL2 (externally linked, not in Xemu, but it's nice to mention)
+  * SDL2 (externally linked, not in Xemu, but it's always nice to give the credit)
   * Heavily modified (by me) Z80ex, original project: https://sourceforge.net/projects/z80ex/
   * Modified version of "WebSid" which seems to be from "TinySID for Linux": https://github.com/wothke/websid
   * LodePNG: https://lodev.org/lodepng/
@@ -18,5 +18,6 @@ Help from other people (maybe not a full list, sorry about that), I would like t
 
   * Paul Gardner-Stephen: for tons of help on answering my questions and problems with Commodore 65 and MEGA65,
     so I could start to emulate them (and also for creating GS65/MEGA65 at all, btw)
+  * Hernán Di Pietro: other than being a direct contributor, also helped in testing Xemu, sharing his
+    opinion and suggestions, and things like these
   * Snoopy on Forum64: for many tests (C65/MEGA65), bug reports
-

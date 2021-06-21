@@ -1,6 +1,6 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
+/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,16 +16,15 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "xemu/emutools_hid.h"
+#include "enterprise128.h"
 #include "primoemu.h"
 #include "xemu/z80.h"
 #include "cpu.h"
 #include "dave.h"
 #include "nick.h"
 #include "zxemu.h"
-
-#include "main.h"
-
 
 
 int primo_on = 0;
@@ -122,7 +121,7 @@ void primo_switch ( Uint8 data )
 			return;
 		primo_on = 0;
 	}
-	DEBUG("PRIMOEMU: emulation is turned %s." NL, primo_on ? "ON" : "OFF");
+	DEBUGPRINT("PRIMOEMU: emulation is turned %s." NL, primo_on ? "ON" : "OFF");
 	nmi_pending = 0;
 }
 
@@ -242,4 +241,3 @@ void primo_emulator_execute ( void )
 	set_ep_cpu(CPU_Z80);		// good old Z80 NMOS CPU is selected
 	set_cpu_clock(2500000);
 }
-

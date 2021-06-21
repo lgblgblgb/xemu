@@ -85,7 +85,7 @@ Features:
 - any number of virtual CPUs may be created
 - portable: written in pure ANSI C
 - builds as a library with simple callback-based API
-- disassembler included  
+- disassembler included
 
 
 Building and installing:

@@ -1,6 +1,6 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
+/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2015-2016,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -17,24 +17,27 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
-#include "xep128.h"
+#include "xemu/emutools.h"
+#include "xemu/emutools_files.h"
+#include "enterprise128.h"
 
 #ifdef CONFIG_EXDOS_SUPPORT
 
 #include "exdos_wd.h"
-#include "configuration.h"
+#include "configdb.h"
+
 #include <unistd.h>
 #include <sys/types.h>
+#include <errno.h>
+#include <fcntl.h>
 
 // Set the value to DEBUGPRINT to always print to the stdout as well,
 // and DEBUG to use only the debug file (if it's requested at all).
 // For production release, DEBUG is the normal behaviour.
 #define DEBUGEXDOS DEBUG
 
-static FILE *disk_fp = NULL;
 static int   disk_fd = -1;
 static Uint8 disk_buffer[512];
-char wd_img_path[PATH_MAX + 1];
 int wd_max_tracks, wd_max_sectors, wd_image_size;
 
 
@@ -90,15 +93,16 @@ static int doCRC (Uint8 *buf, int nBytes, int n)	// CRC16 hmmm Just copied from 
 }
 
 
-static int guess_geometry ( void )
+static int guess_geometry ( int fd )
 {
-	int a;
-	off_t disk_size = lseek(disk_fd, 0, SEEK_END);
-	for (a = 0; disk_formats[a][0] != -1; a++) {
-		wd_max_tracks = disk_formats[a][0];
-		wd_max_sectors = disk_formats[a][1];
-		if ((wd_max_tracks * wd_max_sectors) << 10 == disk_size) {
+	off_t disk_size = lseek(fd, 0, SEEK_END);
+	for (int a = 0; disk_formats[a][0] != -1; a++) {
+		int wd_max_tracks_new = disk_formats[a][0];
+		int wd_max_sectors_new = disk_formats[a][1];
+		if ((wd_max_tracks_new * wd_max_sectors_new) << 10 == disk_size) {
 			wd_image_size = disk_size;
+			wd_max_tracks = wd_max_tracks_new;
+			wd_max_sectors = wd_max_sectors_new;
 			DEBUGPRINT("WD: disk size is %d bytes, %d tracks, %d sectors." NL, wd_image_size, wd_max_tracks, wd_max_sectors);
 			return 0;
 		}
@@ -109,13 +113,10 @@ static int guess_geometry ( void )
 
 void wd_detach_disk_image ( void )
 {
-	if (disk_fp)
-		fclose(disk_fp);
-	if (disk_fd > -1)
+	if (disk_fd >= 0)
 		close(disk_fd);
-	disk_fp = NULL;
 	disk_fd = -1;
-	*wd_img_path = 0;
+	xemucfg_set_str(&configdb.wd_img_path, NULL);
 	readOnly = 0;
 	diskInserted = 1; // no disk inserted by default (1 means NOT)
 }
@@ -125,41 +126,42 @@ void wd_detach_disk_image ( void )
 int wd_attach_disk_image ( const char *fn )
 {
 	wd_detach_disk_image();
-	if (!strcasecmp(fn, "none")) {
+	if (!fn || !*fn) {
 		DEBUGPRINT("WD: no disk image was requested." NL);
 		return 0;
 	}
-	disk_fp = open_emu_file(fn, "rb", wd_img_path); // first, try the read-only mode
-	if (!disk_fp) {
-		ERROR_WINDOW("No EXDOS image found with name '%s'.", fn);
+	int ro = O_RDONLY;
+	char wd_img_path_new[PATH_MAX];
+	int disk_fd_new = xemu_open_file(fn, O_RDWR, &ro, wd_img_path_new);
+	if (disk_fd_new <= 0) {
+		ERROR_WINDOW("Cannot open EXDOS disk because %s\n%s", ERRSTR(), fn);
 		return 1;
+	}
+	if (ro) {
+		INFO_WINDOW("Disk image could be opened only in R/O mode\n%s", wd_img_path_new);
+		DEBUGPRINT("WD: disk image opened in R/O mode only: %s" NL, wd_img_path_new);
+		readOnly = 1;
 	} else {
-		// R/O was ok, try R/W
-		FILE *fp2 = fopen(wd_img_path, "r+b");
-		if (fp2) {
-			DEBUGPRINT("WD: disk image opened in R/W mode: %s" NL, wd_img_path);
-			fclose(disk_fp);
-			disk_fp = fp2;
-		} else {
-			readOnly = 1;
-			DEBUGPRINT("WD: disk image opened in R/O mode only: %s" NL, wd_img_path);
-		}
+		DEBUGPRINT("WD: disk image opened in R/W mode: %s" NL, wd_img_path_new);
 	}
-	disk_fd = fileno(disk_fp);
-	if (guess_geometry()) {
+	if (guess_geometry(disk_fd_new)) {
 		ERROR_WINDOW("Cannot figure the EXDOS disk image geometry out, invalid/not supported image size?");
-		wd_detach_disk_image();
+		close(disk_fd_new);
 		return 1;
 	}
-	diskInserted = 0;	// disk OK, use inserted status
-	return 1;
+	diskInserted = 0;	// disk OK, use inserted status (inverted meaning!)
+	if (disk_fd >= 0)	// close previous file descriptor, of any ...
+		close(disk_fd);
+	disk_fd = disk_fd_new;	// advertise the new FD
+	xemucfg_set_str(&configdb.wd_img_path, wd_img_path_new);	// advertise the new used floppy disk image name
+	return 0;
 }
 
 
 
 void wd_exdos_reset ( void )
 {
-	if (!disk_fp)
+	if (disk_fd < 0)
 		wd_detach_disk_image();
 	readOnly = 0;
 	wd_track = 0;
@@ -169,9 +171,9 @@ void wd_exdos_reset ( void )
 	wd_command = 0xD0; // fake last command as force interrupt
 	wd_interrupt = WDINT_OFF; // interrupt output is OFF
 	wd_DRQ = 0; // no DRQ (data request)
-	driveSel = (disk_fp != NULL); // drive is selected by default if there is disk image!
+	driveSel = (disk_fd >= 0); // drive is selected by default if there is disk image!
 	diskSide = 0;
-	diskInserted = (disk_fp == NULL) ? 1 : 0; // 0 means inserted disk, 1 means = not inserted
+	diskInserted = (disk_fd < 0) ? 1 : 0; // 0 means inserted disk, 1 means = not inserted
 	DEBUG("WD: reset" NL);
 }
 
@@ -251,7 +253,7 @@ void wd_send_command ( Uint8 value )
 	wd_command = value;
 	wd_DRQ = 0;	// reset DRQ
 	wd_interrupt = WDINT_OFF;	// reset INTERRUPT
-	DEBUGEXDOS("WD: command received: 0x%02X driveSel=%d distInserted=%d hasImage=%d" NL, value, driveSel, diskInserted, disk_fp != NULL);
+	DEBUGEXDOS("WD: command received: 0x%02X driveSel=%d distInserted=%d hasImage=%d" NL, value, driveSel, diskInserted, disk_fd >= 0);
 	switch (value >> 4) {
 		case  0: // restore (type I), seeks to track zero
 			if (driveSel) {
@@ -321,7 +323,7 @@ void wd_write_data ( Uint8 value )
 
 void wd_set_exdos_control ( Uint8 value )
 {
-	driveSel = (disk_fp != NULL) && ((value & 15) == 1);
+	driveSel = (disk_fd >= 0) && ((value & 15) == 1);
 	diskSide = (value >> 4) & 1;
 	diskInserted = driveSel ? 0 : 1;
 }
@@ -330,4 +332,3 @@ void wd_set_exdos_control ( Uint8 value )
 #else
 #warning "EXDOS/WD support is not compiled in / not ready"
 #endif
-

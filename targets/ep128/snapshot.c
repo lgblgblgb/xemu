@@ -1,6 +1,6 @@
-/* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   http://xep128.lgb.hu/
+/* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2015-2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,11 +16,14 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "xep128.h"
+
+#include "xemu/emutools.h"
+#include "xemu/emutools_files.h"
+#include "enterprise128.h"
 #include "snapshot.h"
-#include "configuration.h"
 #include "cpu.h"
 #include "roms.h"
+#include <fcntl.h>
 
 
 
@@ -67,9 +70,17 @@ int ep128snap_load ( const char *fn )
 	long snapsize;
 	int pos;
 	char pathbuffer[PATH_MAX + 1];
-	FILE *f = open_emu_file(fn, "rb", pathbuffer);
-	if (!f) {
+	int fd = xemu_open_file(fn, O_RDONLY, NULL, pathbuffer);
+//	FILE *f = open_emu_file(fn, "rb", pathbuffer);
+//	FIXME: move these from the f* functions ...
+	if (fd < 0) {
 		ERROR_WINDOW("Cannot open requestes snapshot file: %s", fn);
+		return 1;
+	}
+	FILE *f = fdopen(fd, "rb");
+	if (f == NULL) {
+		ERROR_WINDOW("Cannot open requestes snapshot file: %s", fn);
+		close(fd);
 		return 1;
 	}
 	if (fseek(f, 0, SEEK_END)) {
@@ -159,7 +170,6 @@ int ep128snap_load ( const char *fn )
 	//printf("Memory = %Xh %f" NL, block_sizes[BLOCK_MEM], (block_sizes[BLOCK_MEM] - 4) / (float)0x4002);
 
 	xep_rom_seg = -1;	// with snapshots, no XEP rom is possible :( [at least not with ep128emu snapshots too much ...]
-	
 
 	memset(memory, 0xFF, 0x400000);
 	for (pos = 0; pos < 0x100; pos++) {

@@ -1,5 +1,5 @@
-/* The Xemu project.
-   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is the Commander X16 emulation. Note: the source is overcrowded with comments by intent :)
    That it can useful for other people as well, or someone wants to contribute, etc ...
@@ -60,6 +60,13 @@ static const struct KeyMappingDefault x16_key_map[] = {
 	// **** this must be the last line: end of mapping table ****
 	{ 0, -1 }
 };
+
+static struct {
+	int	fullscreen, syscon, dumpmem, sdlrenderquality;
+	int	hiramsize, clock;
+	char	*rom;
+} configdb;
+
 
 
 
@@ -317,7 +324,7 @@ int dump_stuff ( const char *fn, void *mem, int size )
 
 static void emulator_shutdown ( void )
 {
-	if (xemucfg_get_bool("dumpmem")) {
+	if (configdb.dumpmem) {
 		vera_dump_vram("vram.dump");
 		dump_stuff("loram.dump", lo_ram, sizeof lo_ram);
 		if (hi_ram_banks)
@@ -326,16 +333,16 @@ static void emulator_shutdown ( void )
 }
 
 
-
 int main ( int argc, char **argv )
 {
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Surprising Commander X16 emulator from LGB");
-	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	xemucfg_define_str_option("rom", ROM_NAME, "Sets character ROM to use");
-	xemucfg_define_num_option("hiramsize", 2048, "Size of high-RAM in Kbytes");
-	xemucfg_define_num_option("clock", 8, "CPU frequency in MHz [1..8]");
-	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	xemucfg_define_switch_option("dumpmem", "Dump memory states on exit into files");
+	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode", &configdb.fullscreen);
+	xemucfg_define_str_option("rom", ROM_NAME, "Sets character ROM to use", &configdb.rom);
+	xemucfg_define_num_option("hiramsize", 2048, "Size of high-RAM in Kbytes", &configdb.hiramsize, 0, 2048);
+	xemucfg_define_num_option("clock", 8, "CPU frequency in MHz [1..8]", &configdb.clock, 1, 8);
+	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon);
+	xemucfg_define_switch_option("dumpmem", "Dump memory states on exit into files", &configdb.dumpmem);
+	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2 );
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
@@ -345,13 +352,13 @@ int main ( int argc, char **argv )
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// texture sizes
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// logical size
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// window size
-		SCREEN_FORMAT,		// pixel format
-		0,			// we have 16 colours
-		NULL,			// initialize palette from this constant array
-		NULL,			// initialize palette into this stuff
-		RENDER_SCALE_QUALITY,	// render scaling quality
-		USE_LOCKED_TEXTURE,	// 1 = locked texture access
-		emulator_shutdown	// shutdown function
+		SCREEN_FORMAT,			// pixel format
+		0,				// we have 16 colours
+		NULL,				// initialize palette from this constant array
+		NULL,				// initialize palette into this stuff
+		configdb.sdlrenderquality,	// render scaling quality
+		USE_LOCKED_TEXTURE,		// 1 = locked texture access
+		emulator_shutdown		// shutdown function
 	))
 		return 1;
 	hid_init(
@@ -360,10 +367,10 @@ int main ( int argc, char **argv )
 		SDL_ENABLE		// enable HID joy events
 	);
 	// --- memory initialization ---
-	init_ram(xemucfg_get_num("hiramsize"));
+	init_ram(configdb.hiramsize);
 	vera_init();
 	if (
-		load_rom(xemucfg_get_str("rom"))
+		load_rom(configdb.rom)
 	)
 		return 1;
 	// Continue with initializing ...
@@ -396,8 +403,8 @@ int main ( int argc, char **argv )
 	//via2.ORA = 0xFF;
 	//via2.ORB = 0xFF;
 	cycles = 0;
-	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
-	if (!xemucfg_get_bool("syscon"))
+	xemu_set_full_screen(configdb.fullscreen);
+	if (!configdb.syscon)
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	//vera_vsync();
