@@ -84,7 +84,7 @@ void emu_dropfile_callback ( const char *fn )
 static void ui_attach_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
-	//ui_attach_d81_by_browsing();
+	const int drive = VOIDPTR_TO_INT(m->user_data);
 	char fnbuf[PATH_MAX + 1];
 	static char dir[PATH_MAX + 1] = "";
 	if (!xemugui_file_selector(
@@ -93,10 +93,21 @@ static void ui_attach_d81 ( const struct menu_st *m, int *query )
 		dir,
 		fnbuf,
 		sizeof fnbuf
-	))
-		attach_d81(fnbuf);
-	else
+	)) {
+		// FIXME: Ugly hack.
+		// Currently, handle only drive-8 via real MEGA65 emulation ("mounting mechanism"), and use
+		// drive-9 outside of Hyppo/etc terrotiry. To correct this, a whole big project would needed,
+		// to rewrite major part of sdcard.c, adopting new Hyppo, etc ...
+		if (drive == 0) {
+			attach_d81(fnbuf);
+		} else {
+			/*int ret =*/ sdcard_hack_mount_drive_9_now(fnbuf);
+			//if (ret)
+			//      DEBUGPRINT("SDCARD: D81: couldn't mount external D81 image" NL);
+		}
+	} else {
 		DEBUGPRINT("UI: file selection for D81 mount was cancelled." NL);
+	}
 }
 
 
@@ -282,6 +293,7 @@ static void ui_start_umon ( const struct menu_st *m, int *query )
 		INFO_WINDOW("UART monitor has been starton on " UMON_DEFAULT_PORT);
 }
 #endif
+
 
 static char last_used_dump_directory[PATH_MAX + 1] = "";
 
@@ -486,10 +498,11 @@ static const struct menu_st menu_help[] = {
 };
 #endif
 static const struct menu_st menu_d81[] = {
-	{ "Attach user D81",		XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_attach_d81, NULL },
-	{ "Use internal D81",		XEMUGUI_MENUID_CALLABLE |
+	{ "Attach user D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_attach_d81, (void*)0 },
+	{ "Use internal D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_detach_d81, NULL },
+	{ "Attach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_attach_d81, (void*)1 },
 	{ NULL }
 };
 static const struct menu_st menu_audio_stereo[] = {

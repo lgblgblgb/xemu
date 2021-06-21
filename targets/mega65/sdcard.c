@@ -42,7 +42,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define KEEP_BUSY(n)
 #endif
 
-#define SD_ST_SDHC    0x10
+#define SD_ST_SDHC	0x10
+
 
 static int	sdfd;			// SD-card controller emulation, UNIX file descriptor of the open image file
 Uint8		sd_status;		// SD-status byte
@@ -219,20 +220,21 @@ static inline void virtdisk_read_block ( Uint32 block, Uint8 *buffer )
 
 
 // define the callback, d81access call this, we can dispatch the change in FDC config to the F011 core emulation this way, automatically
-void d81access_cb_chgmode ( int mode ) {
+void d81access_cb_chgmode ( int which, int mode ) {
 	int have_disk = ((mode & 0xFF) != D81ACCESS_EMPTY);
 	int can_write = (!(mode & D81ACCESS_RO));
-	DEBUGPRINT("SDCARD: configuring F011 FDC with have_disk=%d, can_write=%d" NL, have_disk, can_write);
-	fdc_set_disk(have_disk, can_write);
+	if (which < 2)
+		DEBUGPRINT("SDCARD: configuring F011 FDC (#%d) with have_disk=%d, can_write=%d" NL, which, have_disk, can_write);
+	fdc_set_disk(which, have_disk, can_write);
 }
 // Here we implement F011 core's callbacks using d81access (and yes, F011 uses 512 bytes long sectors for real)
-int fdc_cb_rd_sec ( Uint8 *buffer, int d81_offset ) {
-	int ret = d81access_read_sect(buffer, d81_offset, 512);
+int fdc_cb_rd_sec ( int which, Uint8 *buffer, int d81_offset ) {
+	int ret = d81access_read_sect(which, buffer, d81_offset, 512);
 	DEBUG("SDCARD: D81: reading sector at d81_offset=%d, return value=%d" NL, d81_offset, ret);
 	return ret;
 }
-int fdc_cb_wr_sec ( Uint8 *buffer, int d81_offset ) {
-	int ret = d81access_write_sect(buffer, d81_offset, 512);
+int fdc_cb_wr_sec ( int which, Uint8 *buffer, int d81_offset ) {
+	int ret = d81access_write_sect(which, buffer, d81_offset, 512);
 	DEBUG("SDCARD: D81: writing sector at d81_offset=%d, return value=%d" NL, d81_offset, ret);
 	return ret;
 }
@@ -241,7 +243,7 @@ int fdc_cb_wr_sec ( Uint8 *buffer, int d81_offset ) {
 
 static void sdcard_shutdown ( void )
 {
-	d81access_close();
+	d81access_close_all();
 	if (sdfd >= 0) {
 		close(sdfd);
 		sdfd = -1;
@@ -288,6 +290,15 @@ static int detect_compressed_image ( int fd )
 Uint32 sdcard_get_size ( void )
 {
 	return sdcard_size_in_blocks;
+}
+
+
+int sdcard_hack_mount_drive_9_now ( const char *disk9 )
+{
+	// FIXME: Ugly hack to support CLI forced drive-9 disk
+	// FIXME: See ui.c for explanation at function ui_attach_d81()
+	// FIXME: This function must die!
+	return d81access_attach_fsobj(1, disk9, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE);
 }
 
 
@@ -706,8 +717,11 @@ static void sdcard_command ( Uint8 cmd )
 
 
 // Note: off_t for "block" is requirement of the FDC core framework, not so much sdcard.c, where it's used as Uint32
-static int on_sd_fdc_read_block_cb ( void *buffer, off_t offset, int sector_size )
+// XXX FIXME -> which is not used!
+static int on_sd_fdc_read_block_cb ( int which, void *buffer, off_t offset, int sector_size )
 {
+	if (XEMU_UNLIKELY(which))
+		FATAL("on_sd_fdc_read_block_cb() must not be called with drive != 0");
 	if (XEMU_UNLIKELY(sector_size != 512))
 		FATAL("Invalid sector size in fdc read CB: %d" NL, sector_size);
 	if (XEMU_UNLIKELY(offset & 511))
@@ -715,8 +729,11 @@ static int on_sd_fdc_read_block_cb ( void *buffer, off_t offset, int sector_size
 	return sdcard_read_block((Uint32)(offset >> 9), buffer);
 }
 
-static int on_sd_fdc_write_block_cb ( void *buffer, off_t offset, int sector_size )
+// XXX FIXME -> which is not used!
+static int on_sd_fdc_write_block_cb ( int which, void *buffer, off_t offset, int sector_size )
 {
+	if (XEMU_UNLIKELY(which))
+		FATAL("on_sd_fdc_write_block_cb() must not be called with drive != 0");
 	if (XEMU_UNLIKELY(sector_size != 512))
 		FATAL("Invalid sector size in fdc write CB: %d" NL, sector_size);
 	if (XEMU_UNLIKELY(offset & 511))
@@ -730,7 +747,7 @@ int mount_external_d81 ( const char *name, int force_ro )
 	// Let fsobj func guess the "name" being image, a program file, or an FS directory
 	// In addition, pass AUTOCLOSE parameter, as it will be managed by d81access subsys, not sdcard level!
 	// This is the opposite situation compared to mount_internal_d81() where an sdcard.c managed FD is passed only.
-	int ret = d81access_attach_fsobj(name, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (force_ro ? D81ACCESS_RO : 0));
+	int ret = d81access_attach_fsobj(0, name, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (force_ro ? D81ACCESS_RO : 0));
 	if (!ret)
 		fd_mounted = 1;
 	else
@@ -750,7 +767,7 @@ static int mount_internal_d81 ( int force_ro )
 	//       which can be used in the future to trigger external mount with native-M65 in-emulator tools, instead of emulator controls externally (like -8 option).
 	// Do not use D81ACCESS_AUTOCLOSE here! It would cause to close the sdfd by d81access on umount, thus even our SD card image is closed!
 	// Also, let's inherit the possible read-only status of our SD image, of course.
-	d81access_attach_cb((off_t)block << 9, on_sd_fdc_read_block_cb, (sd_is_read_only || force_ro) ? NULL : on_sd_fdc_write_block_cb);
+	d81access_attach_cb(0, (off_t)block << 9, on_sd_fdc_read_block_cb, (sd_is_read_only || force_ro) ? NULL : on_sd_fdc_write_block_cb);
 	return 0;
 }
 
@@ -807,7 +824,8 @@ static void sdcard_mount_d81 ( Uint8 data )
 		if (fd_mounted)
 			DEBUGPRINT("SDCARD: D81: unmounting." NL);
 		//fdc_set_disk(0, 0);
-		d81access_close();
+		// XXX FIXME -> which should be closed at this point??????
+		d81access_close(0);
 		fd_mounted = 0;
 	}
 }

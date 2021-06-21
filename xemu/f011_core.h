@@ -30,13 +30,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern void  fdc_write_reg ( int addr, Uint8 data );
 extern Uint8 fdc_read_reg  ( int addr );
 extern void  fdc_init      ( Uint8 *cache_set );
-extern void  fdc_set_disk  ( int in_have_disk, int in_have_write );
+extern void  fdc_set_disk  ( int which, int in_have_disk, int in_have_write );
 extern void  fdc_allow_disk_access ( int in );
 extern int   fdc_get_led_state ( int blink_inc );
 
 /* must defined by the user */
-extern int   fdc_cb_rd_sec ( Uint8 *buffer, int offset );
-extern int   fdc_cb_wr_sec ( Uint8 *buffer, int offset );
+extern int   fdc_cb_rd_sec ( int which, Uint8 *buffer, int offset );
+extern int   fdc_cb_wr_sec ( int which, Uint8 *buffer, int offset );
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 #include "xemu/emutools_snapshot.h"

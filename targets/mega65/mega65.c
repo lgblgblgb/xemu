@@ -383,6 +383,7 @@ static void mega65_init ( void )
 	// Initialize FDC
 	fdc_init(disk_buffers + FD_BUFFER_POS);
 	//
+	sdcard_hack_mount_drive_9_now(configdb.disk9);
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_init(configdb.uartmon);
 #endif

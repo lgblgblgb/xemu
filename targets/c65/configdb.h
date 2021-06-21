@@ -28,7 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 struct configdb_st {
 	char	*disk8;
-	//char	*disk9;
+	char	*disk9;
 	char	*hostfsdir, *rom, *keymap, *gui, *dumpmem;
 	char	*snapload, *snapsave, *prg;
 	int	d81ro, fullscreen, go64, autoload, syscon;

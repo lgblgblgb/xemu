@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 struct configdb_st {
 	int	fullscreen_requested;
 	char	*disk8;
+	char	*disk9;
 	char	*fpga;
 	char	*kickup;
 	char	*kickuplist;
