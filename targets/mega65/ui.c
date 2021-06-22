@@ -114,7 +114,14 @@ static void ui_attach_d81 ( const struct menu_st *m, int *query )
 static void ui_detach_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
-	forget_external_d81();
+	const int drive = VOIDPTR_TO_INT(m->user_data);
+	if (drive == 0) {
+		forget_external_d81();
+	} else {
+		// Again ugly hack ...
+		// to handle drive-0 and 1 (well, 8 and 9) in comepletely different ways
+		d81access_close(1);
+	}
 }
 
 
@@ -548,8 +555,9 @@ static const struct menu_st menu_d81[] = {
 	{ "Attach user D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_attach_d81, (void*)0 },
 	{ "Use internal D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_detach_d81, NULL },
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_detach_d81, (void*)0 },
 	{ "Attach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_attach_d81, (void*)1 },
+	{ "Detach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_detach_d81, (void*)1 },
 	{ NULL }
 };
 static const struct menu_st menu_audio_stereo[] = {

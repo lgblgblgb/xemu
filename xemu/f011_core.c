@@ -462,14 +462,10 @@ Uint8 fdc_read_reg  ( int addr )
 			result = cmd;
 			break;
 		case 2:	// STATUS register A
-			//result = drive ? 0 : status_a;	// FIXME: Not sure: if no drive 0 is selected, other status is shown, ie every drives should have their own statuses?
 			result = drives[drive].status_a;
-			//result = status_a;
 			break;
 		case 3: // STATUS register B
-			//result = drive ? 0 : status_b;	// FIXME: Not sure: if no drive 0 is selected, other status is shown, ie every drives should have their own statuses?
 			result = drives[drive].status_b;
-			//result = status_b;
 			drives[drive].status_b &= ~64;	// turn WTREQ off, as it seems CPU noticed with reading this register, that is was the case for a while. Somewhat incorrect implementation ... :-/
 			break;
 		case 4:
