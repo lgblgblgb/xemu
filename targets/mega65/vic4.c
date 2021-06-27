@@ -1140,17 +1140,27 @@ static XEMU_INLINE void set_bitplane_pointers ( void )
 {
 	// Get Bitplane source addresses
 	/* TODO: Cache the following reads & EA calculation */
-	const int and_mask = (REG_H640 ? 12 : 14);
-	//for (int i = 0; i < 8; i++)
-	//	bitplane_p[i] = bitplane_bank_p + ((vic_registers[0x33 + i] & and_mask) << 12) + ((i & 1) << 16);
-	bitplane_p[0] = bitplane_bank_p + ((vic_registers[0x33] & and_mask) << 12);
-	bitplane_p[1] = bitplane_bank_p + ((vic_registers[0x34] & and_mask) << 12) + 0x10000;
-	bitplane_p[2] = bitplane_bank_p + ((vic_registers[0x35] & and_mask) << 12);
-	bitplane_p[3] = bitplane_bank_p + ((vic_registers[0x36] & and_mask) << 12) + 0x10000;
-	bitplane_p[4] = bitplane_bank_p + ((vic_registers[0x37] & and_mask) << 12);
-	bitplane_p[5] = bitplane_bank_p + ((vic_registers[0x38] & and_mask) << 12) + 0x10000;
-	bitplane_p[6] = bitplane_bank_p + ((vic_registers[0x39] & and_mask) << 12);
-	bitplane_p[7] = bitplane_bank_p + ((vic_registers[0x3A] & and_mask) << 12) + 0x10000;
+	int and_mask, bit_shifter;
+	if (REG_V400) {
+		if (!(ycounter & 1)) {
+			and_mask = (REG_H640 ? 12 : 14);
+			bit_shifter = 12;
+		} else {
+			and_mask = (REG_H640 ? 12 << 4 : 14 << 4);
+			bit_shifter = 12 - 4;
+		}
+	} else {
+		and_mask = (REG_H640 ? 12 : 14);
+		bit_shifter = 12;
+	}
+	bitplane_p[0] = bitplane_bank_p + ((vic_registers[0x33] & and_mask) << bit_shifter);
+	bitplane_p[1] = bitplane_bank_p + ((vic_registers[0x34] & and_mask) << bit_shifter) + 0x10000;
+	bitplane_p[2] = bitplane_bank_p + ((vic_registers[0x35] & and_mask) << bit_shifter);
+	bitplane_p[3] = bitplane_bank_p + ((vic_registers[0x36] & and_mask) << bit_shifter) + 0x10000;
+	bitplane_p[4] = bitplane_bank_p + ((vic_registers[0x37] & and_mask) << bit_shifter);
+	bitplane_p[5] = bitplane_bank_p + ((vic_registers[0x38] & and_mask) << bit_shifter) + 0x10000;
+	bitplane_p[6] = bitplane_bank_p + ((vic_registers[0x39] & and_mask) << bit_shifter);
+	bitplane_p[7] = bitplane_bank_p + ((vic_registers[0x3A] & and_mask) << bit_shifter) + 0x10000;
 }
 
 
@@ -1181,16 +1191,18 @@ static void vic4_render_bitplane_raster ( void )
 	// FIXME: do not call this function here, but from actual register writes only
 	// which can affect the result of this function!!
 	set_bitplane_pointers();
-	Uint32 offset = display_row * REG_CHRCOUNT * 8 + char_row ;
+	Uint32 offset = display_row * REG_CHRCOUNT * 8 + char_row;
 	int line_char_index = 0;
 	while (line_char_index < REG_CHRCOUNT) {
 		vic4_render_bitplane_char_row(offset, 8);
 		offset += 8;
 		line_char_index++;
 	}
-	if (++char_row > 7) {
-		char_row = 0;
-		display_row++;
+	if (!REG_V400 || (ycounter  & 1)) {
+		if (++char_row > 7) {
+			char_row = 0;
+			display_row++;
+		}
 	}
 	while (xcounter++ < border_x_right)
 		*current_pixel++ = palette[REG_SCREEN_COLOR];
