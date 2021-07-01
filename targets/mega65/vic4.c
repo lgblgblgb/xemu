@@ -83,6 +83,7 @@ static Uint32 red_colour, black_colour;				// used by "drive LED", and cross-hai
 static Uint8 vic_pixel_readback_result[4];
 static Uint8 vic_color_register_mask = 0xFF;
 static Uint32 *used_palette;					// normally the same value as "palette" from vic4_palette.c but GOTOX RRB token can modify this! So this should be used
+static int EFFECTIVE_V400;
 
 // --- these things are altered by vic4_open_frame_access() ONLY at every fame ONLY based on PAL or NTSC selection
 Uint8 videostd_id = 0xFF;			// 0=PAL, 1=NTSC [give some insane value by default to force the change at the fist frame after starting Xemu]
@@ -293,7 +294,7 @@ static void vic4_update_vertical_borders( void )
 		else	// 78-col mode
 			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - 2);
 	}
-	if (!REG_V400) {	// Standard mode (200-lines)
+	if (!EFFECTIVE_V400) {	// Standard mode (200-lines)
 		if (REG_RSEL) {	// 25-row
 			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster));
 			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster) - 1);
@@ -339,7 +340,7 @@ static void vic4_interpret_legacy_mode_registers ( void )
 
 	REG_SPRPTR_B0 = 0xF8;
 	REG_SPRPTR_B1 = (reg_d018_screen_addr << 2) | 0x3;
-	if (REG_H640 | REG_V400)
+	if (REG_H640 | EFFECTIVE_V400)
 		REG_SPRPTR_B1 |= 4;
 	vic_registers[0x6E] &= 128;
 
@@ -364,6 +365,9 @@ void vic4_open_frame_access ( void )
 	current_pixel = pixel_start = xemu_start_pixel_buffer_access(&tail_sdl);
 	if (XEMU_UNLIKELY(tail_sdl))
 		FATAL("tail_sdl is not zero!");
+	// The V400 hack ...
+	// V400 + Yscale=0 + Bit6 of $D051 is handled as V200 ...
+	EFFECTIVE_V400 = (REG_V400 && REG_CHRYSCL == 0 && (vic_registers[0x51] & 0x40)) ? 0 : !!REG_V400;
 	// Now check the video mode: NTSC or PAL
 	// Though it can be changed any time, this kind of information really only can be applied
 	// at frame level. Thus we check here, if during the previous frame there was change
@@ -466,7 +470,7 @@ static XEMU_INLINE Uint8 *get_dat_addr ( unsigned int bpn )
 	x &= 0x7F;
 	//DEBUGPRINT("VIC-IV: DAT: accessing DAT for bitplane #%u at X,Y of %u,%u in H%u mode" NL, bpn, x, y, h640 ? 640 : 320);
 	// In V400 modes, odd/even scanlines should be considered as well!
-	if (REG_V400) {
+	if (EFFECTIVE_V400) {
 		if ((y & 1)) {
 			and_mask = h640 ? 12 << 4 : 14 << 4;
 			bit_shifter = 12 - 4;
@@ -646,8 +650,13 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B):
 		CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
 			break;
-		CASE_VIC_4(0x50): CASE_VIC_4(0x51):
-			return; // Writing to XPOS register is no-op
+		CASE_VIC_4(0x50):
+			// Writing to XPOS register is no-op
+			return;
+		CASE_VIC_4(0x51):
+			// Writing to XPOS register (high bits) is no-op, BUT the two top bits are writable!
+			vic_registers[0x51] = (data & 0xC0) | (vic_registers[0x51] & 0x3F);
+			return;
 		CASE_VIC_4(0x52): CASE_VIC_4(0x53):
 			break;
 		CASE_VIC_4(0x54):
@@ -825,9 +834,14 @@ Uint8 vic_read_reg ( int unsigned addr )
 		/* --- NO MORE VIC-III REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B): CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
 		CASE_VIC_4(0x50):
+			// XPOS low byte
 			break;
 		CASE_VIC_4(0x51):
-			result = vic_registers[0x51]++;
+			// XPOS high bits + others
+			// FIXME XXX super ugly hack to have something XPOS register changing. (some programs wait that to be changed)
+			// Note, that bit 6 and 7 is different and not part of the XPOS info.
+			result = (result & 0xC0) | ((result + 1) & 0x3F);
+			vic_registers[0x51] = result;
 			break;
 		CASE_VIC_4(0x52): CASE_VIC_4(0x53):
 			break;
@@ -1027,7 +1041,7 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 		if (REG_SPRITE_ENABLE & (1 << sprnum)) {
 			const int spriteHeight = SPRITE_EXTHEIGHT(sprnum) ? REG_SPRHGHT : 21;
 			const int x_display_pos = border_x_left + ((SPRITE_POS_X(sprnum) - SPRITE_X_BASE_COORD) * (REG_SPR640 ? 1 : 2));	// in display units
-			const int y_logical_pos = SPRITE_POS_Y(sprnum) - SPRITE_Y_BASE_COORD +(BORDER_Y_TOP / (REG_V400 ? 1 : 2));		// in logical units
+			const int y_logical_pos = SPRITE_POS_Y(sprnum) - SPRITE_Y_BASE_COORD +(BORDER_Y_TOP / (EFFECTIVE_V400 ? 1 : 2));	// in logical units
 
 			int sprite_row_in_raster = logical_raster - y_logical_pos;
 
@@ -1156,7 +1170,7 @@ static XEMU_INLINE void set_bitplane_pointers ( void )
 	// Get Bitplane source addresses
 	/* TODO: Cache the following reads & EA calculation */
 	int and_mask, bit_shifter;
-	if (REG_V400) {
+	if (EFFECTIVE_V400) {
 		if (!(ycounter & 1)) {
 			and_mask = (REG_H640 ? 12 : 14);
 			bit_shifter = 12;
@@ -1213,7 +1227,7 @@ static void vic4_render_bitplane_raster ( void )
 		offset += 8;
 		line_char_index++;
 	}
-	if (!REG_V400 || (ycounter  & 1)) {
+	if (!EFFECTIVE_V400 || (ycounter  & 1)) {
 		if (++char_row > 7) {
 			char_row = 0;
 			display_row++;
@@ -1400,14 +1414,14 @@ int vic4_render_scanline ( void )
 	pixel_raster_start = current_pixel;
 
 	SET_PHYSICAL_RASTER(ycounter);
-	logical_raster = ycounter >> (REG_V400 ? 0 : 1);
+	logical_raster = ycounter >> (EFFECTIVE_V400 ? 0 : 1);
 
 	if (!(ycounter & 1)) // VIC-II raster source: We shall check FNRST ?
 		vic4_check_raster_interrupt(logical_raster);
 	// "Double-scan hack"
 	// FIXME: is this really correct? ie even sprites cannot be set to Y pos finer than V200 or ...
 	// ... having resolution finer than V200 with some "VIC-IV magic"?
-	if (!REG_V400 && (ycounter & 1)) {
+	if (!EFFECTIVE_V400 && (ycounter & 1)) {
 		//for (int i = 0; i < TEXTURE_WIDTH; i++, current_pixel++)
 		//	*current_pixel = /* user_scanlines_setting ? 0 : */ *(current_pixel - TEXTURE_WIDTH);
 		memcpy(current_pixel, current_pixel - TEXTURE_WIDTH, TEXTURE_WIDTH * 4);
