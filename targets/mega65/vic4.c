@@ -462,11 +462,26 @@ static XEMU_INLINE Uint8 *get_dat_addr ( unsigned int bpn )
 	unsigned int x = vic_registers[0x3C];
 	unsigned int y = vic_registers[0x3D] + ((x << 1) & 0x100);
 	unsigned int h640 = (vic_registers[0x31] & 128);
+	unsigned int and_mask, bit_shifter;
 	x &= 0x7F;
 	//DEBUGPRINT("VIC-IV: DAT: accessing DAT for bitplane #%u at X,Y of %u,%u in H%u mode" NL, bpn, x, y, h640 ? 640 : 320);
+	// In V400 modes, odd/even scanlines should be considered as well!
+	if (REG_V400) {
+		if ((y & 1)) {
+			and_mask = h640 ? 12 << 4 : 14 << 4;
+			bit_shifter = 12 - 4;
+		} else {
+			and_mask = h640 ? 12      : 14     ;
+			bit_shifter = 12;
+		}
+		y >>= 1;
+	} else {
+		and_mask = h640 ? 12 : 14;
+		bit_shifter = 12;
+	}
 	return
-		bitplane_bank_p +						// MEGA65 feature (WANNABE feature!) to support relocatable bitplane bank by the DAT! (this is a pointer, not an integer!)
-		((vic_registers[0x33 + bpn] & (h640 ? 12 : 14)) << 12) +	// bitplane address
+		bitplane_bank_p +						// MEGA65 feature to support relocatable bitplane bank by the DAT! (this is a pointer, not an integer!)
+		((vic_registers[0x33 + bpn] & and_mask) << bit_shifter) +	// bitplane address
 		((bpn & 1) ? 0x10000 : 0) +					// odd/even bitplane selection
 		(((y >> 3) * (h640 ? 640 : 320)) + (x << 3) + (y & 7))		// position within the bitplane given by the X/Y info
 	;
