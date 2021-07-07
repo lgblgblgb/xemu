@@ -82,7 +82,9 @@ SDL_Window   *sdl_win = NULL;
 SDL_Renderer *sdl_ren = NULL;
 SDL_Texture  *sdl_tex = NULL;
 SDL_PixelFormat *sdl_pix_fmt;
+static Uint32 sdl_pixel_format_id;
 static const char default_window_title[] = "XEMU";
+int register_new_texture_creation = 0;
 char *xemu_app_org = NULL, *xemu_app_name = NULL;
 #ifdef XEMU_ARCH_HTML
 static const char *emscripten_sdl_base_dir = EMSCRIPTEN_SDL_BASE_DIR;
@@ -820,6 +822,23 @@ void xemu_get_viewport ( unsigned int *x1, unsigned int *y1, unsigned int *x2, u
 }
 
 
+int xemu_create_main_texture ( void )
+{
+	DEBUGPRINT("SDL: creating main texture %d x %d" NL, sdl_texture_x_size, sdl_texture_y_size);
+	SDL_Texture *new_tex = SDL_CreateTexture(sdl_ren, sdl_pixel_format_id, SDL_TEXTUREACCESS_STREAMING, sdl_texture_x_size, sdl_texture_y_size);
+	if (!new_tex) {
+		DEBUGPRINT("SDL: cannot create main texture: %s" NL, SDL_GetError());
+		return 1;
+	}
+	if (sdl_tex) {
+		DEBUGPRINT("SDL: destroying old main texture" NL);
+		SDL_DestroyTexture(sdl_tex);
+	}
+	sdl_tex = new_tex;
+	return 0;
+}
+
+
 /* Return value: 0 = ok, otherwise: ERROR, caller must exit, and can't use any other functionality, otherwise crash would happen.*/
 int xemu_post_init (
 	const char *window_title,		// title of our window
@@ -954,12 +973,20 @@ int xemu_post_init (
 	SDL_RenderSetLogicalSize(sdl_ren, logical_x_size, logical_y_size);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
 	sdl_texture_x_size = texture_x_size;
 	sdl_texture_y_size = texture_y_size;
+	sdl_pixel_format_id = pixel_format;
 	xemu_set_viewport(0, 0, 0, 0, 0);
-	sdl_tex = SDL_CreateTexture(sdl_ren, pixel_format, SDL_TEXTUREACCESS_STREAMING, texture_x_size, texture_y_size);
+#if 0
+	sdl_tex = SDL_CreateTexture(sdl_ren, sdl_pixel_format_id, SDL_TEXTUREACCESS_STREAMING, texture_x_size, texture_y_size);
 	if (!sdl_tex) {
 		ERROR_WINDOW("Cannot create SDL texture: %s", SDL_GetError());
 		return 1;
 	}
+#else
+	if (xemu_create_main_texture()) {
+		ERROR_WINDOW("Cannot create SDL texture: %s", SDL_GetError());
+		return 1;
+	}
+#endif
 	texture_x_size_in_bytes = texture_x_size * 4;
 	sdl_winid = SDL_GetWindowID(sdl_win);
 	/* Intitialize palette from given RGB components */
@@ -1068,6 +1095,10 @@ void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_
    tail is meant in 4 bytes (ie Uint32 pointer)! */
 Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail )
 {
+	if (register_new_texture_creation) {
+		register_new_texture_creation = 0;
+		xemu_create_main_texture();
+	}
 	if (sdl_pixel_buffer) {
 		*texture_tail = 0;		// using non-locked texture access, "tail" is always zero
 		xemu_frame_pixel_access_p = sdl_pixel_buffer;

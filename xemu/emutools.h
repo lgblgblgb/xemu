@@ -138,6 +138,7 @@ extern int seconds_timer_trigger;
 extern char *sdl_pref_dir, *sdl_base_dir, *sdl_inst_dir;
 extern int sysconsole_is_open;
 extern int sdl_default_win_x_size, sdl_default_win_y_size;
+extern int register_new_texture_creation;
 extern SDL_version sdlver_compiled, sdlver_linked;
 extern Uint32 *xemu_frame_pixel_access_p;
 
@@ -194,6 +195,7 @@ extern int xemu_post_init (
         int locked_texture_update,              // use locked texture method [non zero], or malloc'ed stuff [zero]. NOTE: locked access doesn't allow to _READ_ pixels and you must fill ALL pixels!
         void (*shutdown_callback)(void)         // callback function called on exit (can be nULL to not have any emulator specific stuff)
 );
+extern int xemu_create_main_texture ( void );
 extern int xemu_set_icon_from_xpm ( char *xpm[] );
 extern void xemu_timekeeping_start ( void );
 extern void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_size );

@@ -466,6 +466,16 @@ static void ui_cb_sids_enabled ( const struct menu_st *m, int *query )
 	configdb.sidmask ^= mask;
 }
 
+static void ui_cb_render_scale_quality ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == configdb.sdlrenderquality);
+	char req_str[] = { VOIDPTR_TO_INT(m->user_data) + '0', 0 };
+	DEBUGPRINT("SDL: setting SDL_HINT_RENDER_SCALE_QUALITY to \"%s\"" NL, req_str);
+	SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, req_str, SDL_HINT_OVERRIDE);
+	configdb.sdlrenderquality = VOIDPTR_TO_INT(m->user_data);
+	register_new_texture_creation = 1;
+}
+
 
 /**** MENU SYSTEM ****/
 
@@ -492,7 +502,17 @@ static const struct menu_st menu_window_size[] = {
 	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)2 },
 	{ NULL }
 };
+static const struct menu_st menu_render_scale_quality[] = {
+	{ "Nearest pixel sampling",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_render_scale_quality, (void*)0 },
+	{ "Linear filtering",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_render_scale_quality, (void*)1 },
+	{ "Anisotropic (Direct3D only)",XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_render_scale_quality, (void*)2 },
+	{ NULL }
+};
 static const struct menu_st menu_display[] = {
+	{ "Render scale quality",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_render_scale_quality },
 	{ "Window size / fullscreen",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_window_size },
 	{ "Video standard",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_video_standard },
 	{ "Show full borders",		XEMUGUI_MENUID_CALLABLE |
