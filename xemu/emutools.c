@@ -822,7 +822,7 @@ void xemu_get_viewport ( unsigned int *x1, unsigned int *y1, unsigned int *x2, u
 }
 
 
-int xemu_create_main_texture ( void )
+static int xemu_create_main_texture ( void )
 {
 	DEBUGPRINT("SDL: creating main texture %d x %d" NL, sdl_texture_x_size, sdl_texture_y_size);
 	SDL_Texture *new_tex = SDL_CreateTexture(sdl_ren, sdl_pixel_format_id, SDL_TEXTUREACCESS_STREAMING, sdl_texture_x_size, sdl_texture_y_size);
@@ -975,18 +975,10 @@ int xemu_post_init (
 	sdl_texture_y_size = texture_y_size;
 	sdl_pixel_format_id = pixel_format;
 	xemu_set_viewport(0, 0, 0, 0, 0);
-#if 0
-	sdl_tex = SDL_CreateTexture(sdl_ren, sdl_pixel_format_id, SDL_TEXTUREACCESS_STREAMING, texture_x_size, texture_y_size);
-	if (!sdl_tex) {
-		ERROR_WINDOW("Cannot create SDL texture: %s", SDL_GetError());
-		return 1;
-	}
-#else
 	if (xemu_create_main_texture()) {
 		ERROR_WINDOW("Cannot create SDL texture: %s", SDL_GetError());
 		return 1;
 	}
-#endif
 	texture_x_size_in_bytes = texture_x_size * 4;
 	sdl_winid = SDL_GetWindowID(sdl_win);
 	/* Intitialize palette from given RGB components */

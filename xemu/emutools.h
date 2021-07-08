@@ -195,7 +195,6 @@ extern int xemu_post_init (
         int locked_texture_update,              // use locked texture method [non zero], or malloc'ed stuff [zero]. NOTE: locked access doesn't allow to _READ_ pixels and you must fill ALL pixels!
         void (*shutdown_callback)(void)         // callback function called on exit (can be nULL to not have any emulator specific stuff)
 );
-extern int xemu_create_main_texture ( void );
 extern int xemu_set_icon_from_xpm ( char *xpm[] );
 extern void xemu_timekeeping_start ( void );
 extern void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_size );

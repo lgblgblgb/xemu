@@ -470,7 +470,6 @@ static void ui_cb_render_scale_quality ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == configdb.sdlrenderquality);
 	char req_str[] = { VOIDPTR_TO_INT(m->user_data) + '0', 0 };
-	DEBUGPRINT("SDL: setting SDL_HINT_RENDER_SCALE_QUALITY to \"%s\"" NL, req_str);
 	SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, req_str, SDL_HINT_OVERRIDE);
 	configdb.sdlrenderquality = VOIDPTR_TO_INT(m->user_data);
 	register_new_texture_creation = 1;
