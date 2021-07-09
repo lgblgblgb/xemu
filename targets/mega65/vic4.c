@@ -1075,17 +1075,22 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 
 // Render a monochrome character cell row
 // flip = 00 Dont flip, 01 = flip vertical, 10 = flip horizontal, 11 = flip both
-static XEMU_INLINE void vic4_render_mono_char_row ( Uint8 char_byte, const int glyph_width, const Uint8 bg_color, Uint8 fg_color, const Uint8 vic3attr )
+static XEMU_INLINE void vic4_render_mono_char_row ( Uint8 char_byte, const int glyph_width, const Uint8 bg_color, Uint8 fg_color, Uint8 vic3attr )
 {
+	Uint32* active_palette = used_palette;
 	if (XEMU_UNLIKELY(vic3attr)) {
-		if (char_row == 7 && VIC3_ATTR_UNDERLINE(vic3attr))
-			char_byte = 0xFF;
-		if (VIC3_ATTR_REVERSE(vic3attr))
-			char_byte = ~char_byte;
-		if (VIC3_ATTR_BLINK(vic3attr) && blink_phase)
-			char_byte = VIC3_ATTR_REVERSE(vic3attr) ? ~char_byte : 0;
-		if (VIC3_ATTR_BOLD(vic3attr))
-			fg_color |= 0x10;
+		if(!VIC3_ATTR_BLINK(vic3attr) || blink_phase) {
+			if (XEMU_UNLIKELY(VIC3_ATTR_BOLD(vic3attr) && VIC3_ATTR_REVERSE(vic3attr)))
+				used_palette = altpalette;
+			else if (VIC3_ATTR_REVERSE(vic3attr))
+				char_byte = ~char_byte;
+			if (VIC3_ATTR_BOLD(vic3attr))
+				fg_color |= 0x10;
+			if (char_row == 7 && VIC3_ATTR_UNDERLINE(vic3attr))
+				char_byte = 0xFF;
+		} else if (VIC3_ATTR_BLINK(vic3attr) && vic3attr == 0x1) {
+			char_byte = 0;
+		}
 	}
 	const Uint32 sdl_fg_color = used_palette[fg_color];
 	if (XEMU_LIKELY(enable_bg_paint)) {
@@ -1104,6 +1109,7 @@ static XEMU_INLINE void vic4_render_mono_char_row ( Uint8 char_byte, const int g
 			is_fg[xcounter++] = char_pixel;
 		}
 	}
+	used_palette = active_palette;
 }
 
 

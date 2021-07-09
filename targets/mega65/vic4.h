@@ -49,7 +49,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define PHYSICAL_RASTERS_PAL		624
 #define FRAME_H_FRONT			0
 #define RASTER_CORRECTION		3
-#define VIC4_BLINK_INTERVAL		25
+#define VIC4_BLINK_INTERVAL		30
 
 // Register defines
 //
