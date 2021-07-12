@@ -31,9 +31,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifdef XEMU_ARCH_UNIX
 #	include <signal.h>
 #endif
-#ifdef HAVE_XEMU_SOCKET_API
-#	include "xemu/emutools_socketapi.h"
-#endif
 
 #ifdef XEMU_MISSING_BIGGEST_ALIGNMENT_WORKAROUND
 #	warning "System did not define __BIGGEST_ALIGNMENT__ Xemu assumes some default value."
@@ -508,9 +505,6 @@ static void shutdown_emulator ( void )
 		sdl_win = NULL;
 	}
 	atexit_callback_for_console();
-#ifdef HAVE_XEMU_SOCKET_API
-	xemusock_uninit();
-#endif
 	//SDL_Quit();
 	if (td_stat_counter) {
 		char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];

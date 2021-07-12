@@ -41,6 +41,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "audio65.h"
 #include "inject.h"
 #include "configdb.h"
+#include "xemu/emutools_socketapi.h"
 
 
 static int nmi_level;			// please read the comment at nmi_set() below
@@ -461,6 +462,12 @@ static void shutdown_callback ( void )
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_close();
 #endif
+#ifdef HAVE_XEMU_UMON
+	xumon_stop();
+#endif
+#ifdef XEMU_HAS_SOCKET_API
+	xemusock_uninit();
+#endif
 	DEBUG("Execution has been stopped at PC=$%04X" NL, cpu65.pc);
 }
 
@@ -794,19 +801,9 @@ int main ( int argc, char **argv )
 #endif
 	);
 #ifdef HAVE_XEMU_UMON
-	if (configdb.umon != 0) {
-		int port = configdb.umon;
-		int threaded;
-		if (port < 0) {
-			port = -port;
-			threaded = 0;
-		} else
-			threaded = 1;
-		if (port > 1023 && port < 65536)
-			xumon_init(port, threaded);
-		else
-			ERROR_WINDOW("UMON: Invalid TCP port: %d", port);
-	}
+	if (configdb.umon == 1)
+		configdb.umon = XUMON_DEFAULT_PORT;
+	xumon_init(configdb.umon);
 #endif
 	if (configdb.prg)
 		inject_register_prg(configdb.prg, configdb.prgmode);
