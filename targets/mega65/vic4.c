@@ -226,6 +226,7 @@ static XEMU_INLINE void pixel_readback ( void )
 // Do NOT call this function from vic4.c! It must be used by the emulator's main loop!
 void vic4_close_frame_access ( void )
 {
+	DEBUG("FRAME CLOSED" NL);
 	// Debug pixel-read back feature of MEGA65
 	pixel_readback();
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
@@ -420,7 +421,7 @@ void vic4_open_frame_access ( void )
 }
 
 
-static void vic4_interrupt_checker ( void )
+static void interrupt_checker ( void )
 {
 	int vic_irq_old = cpu65.irqLevel & 2;
 	int vic_irq_new;
@@ -441,17 +442,17 @@ static void vic4_interrupt_checker ( void )
 }
 
 
-static void vic4_check_raster_interrupt ( int nraster )
+static inline void check_raster_interrupt ( int nraster )
 {
 	if (nraster == compare_raster)
 		interrupt_status |= 1;
 	else
 		interrupt_status &= 0xFE;
-	vic4_interrupt_checker();
+	interrupt_checker();
 }
 
 
-inline static void vic4_calculate_char_x_step ( void )
+static inline void calculate_char_x_step ( void )
 {
 	char_x_step = (REG_CHARXSCALE / 120.0f) / (REG_H640 ? 1 : 2);
 }
@@ -570,7 +571,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;
 		CASE_VIC_ALL(0x19):
 			interrupt_status = interrupt_status & (~data) & 0xF;
-			vic4_interrupt_checker();
+			interrupt_checker();
 			break;
 		CASE_VIC_ALL(0x1A):
 			data &= 0xF;
@@ -635,7 +636,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			vic_registers[0x31] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
 			machine_set_speed(0);
 
-			vic4_calculate_char_x_step();
+			calculate_char_x_step();
 			break;				// we did the write, but we need to trigger vichot_reg if should
 
 		CASE_VIC_3_4(0x32): CASE_VIC_3_4(0x33): CASE_VIC_3_4(0x34): CASE_VIC_3_4(0x35): CASE_VIC_3_4(0x36): CASE_VIC_3_4(0x37): CASE_VIC_3_4(0x38):
@@ -670,7 +671,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x5A):
 			//DEBUGPRINT("WRITE $%04x CHARXSCALE: $%02x" NL, addr, data);
 			vic_registers[0x5A] = data;	// write now and calculate step
-			vic4_calculate_char_x_step();
+			calculate_char_x_step();
 			return;
 		CASE_VIC_4(0x5B):
 			break;
@@ -1422,8 +1423,9 @@ int vic4_render_scanline ( void )
 	SET_PHYSICAL_RASTER(ycounter);
 	logical_raster = ycounter >> (EFFECTIVE_V400 ? 0 : 1);
 
-	if (!(ycounter & 1)) // VIC-II raster source: We shall check FNRST ?
-		vic4_check_raster_interrupt(logical_raster);
+	// FIXME: this is probably a bad fix ... Trying to remedy that in V400, no raster interrupts seems to work ... XXX
+	if (!(ycounter & 1) || EFFECTIVE_V400) // VIC-II raster source: We shall check FNRST ?
+		check_raster_interrupt(logical_raster);
 	// "Double-scan hack"
 	// FIXME: is this really correct? ie even sprites cannot be set to Y pos finer than V200 or ...
 	// ... having resolution finer than V200 with some "VIC-IV magic"?

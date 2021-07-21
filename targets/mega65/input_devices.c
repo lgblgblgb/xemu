@@ -332,7 +332,7 @@ Uint8 get_mouse_x_via_sid ( void )
 		return 0xFF;
 	static int mouse_x = 0;
 	mouse_x = (mouse_x + hid_read_mouse_rel_x(-31, 31)) & 63;
-	DEBUGPRINT("MOUSE-X: reading X as %d" NL, mouse_x << 1);
+	DEBUG("MOUSE-X: reading X as %d" NL, mouse_x << 1);
 	return mouse_x << 1;
 }
 
@@ -343,6 +343,6 @@ Uint8 get_mouse_y_via_sid ( void )
 		return 0xFF;
 	static int mouse_y = 0;
 	mouse_y = (mouse_y - hid_read_mouse_rel_y(-31, 31)) & 63;
-	DEBUGPRINT("MOUSE-Y: reading Y as %d" NL, mouse_y << 1);
+	DEBUG("MOUSE-Y: reading Y as %d" NL, mouse_y << 1);
 	return mouse_y << 1;
 }
