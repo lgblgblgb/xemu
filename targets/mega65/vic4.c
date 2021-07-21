@@ -1249,7 +1249,7 @@ static void vic4_render_bitplane_raster ( void )
 static XEMU_INLINE Uint8 *get_charset_effective_addr ( void )
 {
 	//const Uint8 *row_data_base_addr = main_ram + (REG_BMM ? VIC2_BITMAP_ADDR : get_charset_effective_addr());
-	int addr = VIC2_BITMAP_ADDR;
+	int addr = REG_BMM ? VIC2_BITMAP_ADDR : CHARSET_ADDR;
 	// Note: in theory on C65 there is a bit for choose between two charsets (rather than only lower/upper case)
 	// See: https://github.com/lgblgblgb/xemu/issues/213
 	// However it seems even MEGA65 does not support this.
