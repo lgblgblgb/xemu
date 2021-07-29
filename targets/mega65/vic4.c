@@ -538,11 +538,11 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			if (vic_registers[0x11] ^ data)
 				vic_hotreg_touched = 1;
 			compare_raster = (compare_raster & 0xFF) | ((data & 0x80) << 1);
-			DEBUGPRINT("VIC: compare raster is now %d" NL, compare_raster);
+			DEBUG("VIC: compare raster is now %d" NL, compare_raster);
 			break;
 		CASE_VIC_ALL(0x12):
 			compare_raster = (compare_raster & 0xFF00) | data;
-			DEBUGPRINT("VIC: compare raster is now %d" NL, compare_raster);
+			DEBUG("VIC: compare raster is now %d" NL, compare_raster);
 			break;
 		CASE_VIC_ALL(0x13): CASE_VIC_ALL(0x14):
 			return;		// FIXME: writing light-pen registers?????

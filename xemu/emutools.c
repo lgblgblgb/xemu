@@ -687,16 +687,25 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 int xemu_init_sdl ( void )
 {
 #ifndef XEMU_ARCH_HTML
-	if (!SDL_WasInit(SDL_INIT_EVERYTHING)) {
+	const Uint32 XEMU_SDL_INIT_EVERYTHING =
+#if defined(XEMU_ARCH_WIN) && defined(SDL_INIT_SENSOR)
+		// FIXME: SDL or Windows has the bug that SDL_INIT_SENSOR when used, there is some "sensor manager" problem, so we left it out
+		// SDL_INIT_SENSOR was introduced somewhere in 2.0.9, however since it's a macro, it's safer not to test actual SDL version number
+		SDL_INIT_EVERYTHING & (~SDL_INIT_SENSOR);
+#warning	"Activating windows + SDL sensor init problem workaround ..."
+#else
+		SDL_INIT_EVERYTHING;
+#endif
+	if (!SDL_WasInit(XEMU_SDL_INIT_EVERYTHING)) {
 		DEBUGPRINT("SDL: no SDL subsystem initialization has been done yet, do it!" NL);
 		SDL_Quit();	// Please read the long comment at the pre-init func above to understand this SDL_Quit() here and then the SDL_Init() right below ...
 		DEBUG("SDL: before SDL init" NL);
-		if (SDL_Init(SDL_INIT_EVERYTHING)) {
+		if (SDL_Init(XEMU_SDL_INIT_EVERYTHING)) {
 			ERROR_WINDOW("Cannot initialize SDL: %s", SDL_GetError());
 			return 1;
 		}
 		DEBUG("SDL: after SDL init" NL);
-		if (!SDL_WasInit(SDL_INIT_EVERYTHING))
+		if (!SDL_WasInit(XEMU_SDL_INIT_EVERYTHING))
 			FATAL("SDL_WasInit()=0 after init??");
 	} else
 		DEBUGPRINT("SDL: no SDL subsystem initialization has been done already." NL);
@@ -1329,22 +1338,23 @@ void sysconsole_close ( const char *waitmsg )
 		// So instead of a GUI element here with a dialog box, we must rely on the console to press a key to continue ...
 		printf("\n\n*** %s\nPress SPACE to continue.", waitmsg);
 		while (sysconsole_getch() != 32)
-			;
+			SDL_Delay(1);
 	}
-	// redirect std file handled to "NUL" to avoid strange issues after closing the console, like corrupting
-	// other files (for unknown reasons) by further I/O after FreeConsole() ...
-	if (
-		file_handle_redirect(NULL_DEVICE, "stderr", "w", stderr) ||
-		file_handle_redirect(NULL_DEVICE, "stdout", "w", stdout) ||
-		file_handle_redirect(NULL_DEVICE, "stdin",  "r", stdin )
-	)
-		return;	// we want to be sure to abort closing console, if redirection didn't worked for some reason!!
 	if (!FreeConsole()) {
 		if (!waitmsg)
 			ERROR_WINDOW("Cannot release windows console!");
 	} else {
 		sysconsole_is_open = 0;
-		DEBUGPRINT("WINDOWS: console is closed" NL);
+#if 1
+		// redirect std file handled to "NUL" to avoid strange issues after closing the console, like corrupting
+		// other files (for unknown reasons) by further I/O after FreeConsole() ...
+		int ret = file_handle_redirect(NULL_DEVICE, "stderr", "w", stderr);
+		ret |=    file_handle_redirect(NULL_DEVICE, "stdout", "w", stdout);
+		ret |=    file_handle_redirect(NULL_DEVICE, "stdin",  "r", stdin );
+		DEBUG("WINDOWS: console has been closed (file_handle_redirect: %s)" NL, ret ? "ERROR" : "OK");
+#else
+		DEBUGPRINT("WINDOWS: console has been closed" NL);
+#endif
 	}
 #elif defined(XEMU_ARCH_MAC)
 	if (macos_gui_started) {
