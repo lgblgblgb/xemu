@@ -700,7 +700,7 @@ int cpu65_step (
 		&& CPU65.op_cycles != 1 && !CPU65.cpu_inhibit_interrupts
 #endif
 #ifdef MEGA65
-		&& !in_hypervisor
+		&& !in_hypervisor && CPU65.prefix == PREFIX_NOTHING
 #endif
 	)) {
 #ifdef DEBUG_CPU
@@ -724,7 +724,7 @@ int cpu65_step (
 		&& CPU65.op_cycles != 1 && !CPU65.cpu_inhibit_interrupts
 #endif
 #ifdef MEGA65
-		&& !in_hypervisor
+		&& !in_hypervisor && CPU65.prefix == PREFIX_NOTHING
 #endif
 	)) {
 #ifdef DEBUG_CPU
