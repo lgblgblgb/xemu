@@ -33,7 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_SPRITE_COLLISION
 #define SPRITE_FG_COLLISION
 
-
+#if 0
 #ifdef	XEMU_RELEASE_BUILD
 #	ifdef		SPRITE_SPRITE_COLLISION
 #		undef	SPRITE_SPRITE_COLLISION
@@ -41,6 +41,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	ifdef		SPRITE_FG_COLLISION
 #		undef	SPRITE_FG_COLLISION
 #	endif
+#endif
 #endif
 
 
