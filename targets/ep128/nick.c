@@ -470,45 +470,7 @@ static void _render_char_16 ( void ) { TODO(); }
 static void _render_char_256 ( void ) { TODO(); }
 
 
-
-
-
-static void (*_render)(void);
-static void (*render_modes[])(void) = {
-//static const void (*render_modes)(void)[] = {
-	_render_vsync,		// col-2 vsync
-	_render_pixel_2,	// col-2 pixel
-	_render_attrib_2,	// col-2 attrib
-	_render_char_2,		// col-2 ch256
-	_render_char_2,		// col-2 ch128
-	_render_char_2,		// col-2 ch64
-	_render_invalid,	// col-2 invalid
-	_render_lpixel_2,	// col-2 lpixel
-	_render_vsync,		// col-4 vsync
-	_render_pixel_4,	// col-4 pixel
-	_render_attrib_2,	// col-4 attrib  TODO
-	_render_char_4,		// col-4 ch256
-	_render_char_4,		// col-4 ch128
-	_render_char_4,		// col-4 ch64
-	_render_invalid,	// col-4 invalid
-	_render_lpixel_4,	// col-4 lpixel
-	_render_vsync,		// col-16 vsync
-	_render_pixel_16,	// col-16 pixel
-	_render_attrib_2,	// col-16 attrib   TODO
-	_render_char_16,	// col-16 ch256
-	_render_char_16,	// col-16 ch128
-	_render_char_16,	// col-16 ch64
-	_render_invalid,	// col-16 invalid
-	_render_lpixel_16,	// col-16 lpixel
-	_render_vsync,		// col-256 vsync
-	_render_pixel_256,	// col-256 pixel
-	_render_attrib_2,	// col-256 attrib  TODO
-	_render_char_256,	// col-256 ch256
-	_render_char_256,	// col-256 ch128
-	_render_char_256,	// col-256 ch64
-	_render_invalid,	// col-256 invalid
-	_render_lpixel_256	// col-256 lpixel
-};
+static int _render_selection;
 //static const int chs_for_modes[] = { 0, 0, 0, 256, 128, 64, 0, 0 };
 static const int chb_for_modes[] = { 0, 0, 0,   8,   7,  6, 0, 0 };
 
@@ -623,9 +585,9 @@ void nick_render_slot ( void )
 			if (pixels >= pixels_limit_vsync_long_force)
 				_update();
 			visible = (pixels >= pixels_limit_up && pixels < pixels_limit_bottom && (!frameskip));
-			if (XEMU_UNLIKELY((vm | ((a >> 2) & 0x18)) >= 8*4))
-				FATAL("FATAL ERROR: NICK: render funcarray bound check failure!");
-			_render = render_modes[vm | ((a >> 2) & 0x18)];
+			_render_selection = vm | ((a >> 2) & 0x18);
+			if (XEMU_UNLIKELY(_render_selection >= 8 * 4))
+				FATAL("NICK: render funcarray bound check failure!");
 			break;
 		case 1:
 			a = NICK_READ(lpt_a++);
@@ -694,8 +656,43 @@ void nick_render_slot ( void )
 					_render_vsync();
 				else
 					_render_border();
-			} else
-				_render();
+			} else {
+				switch (_render_selection) {
+					case  0: _render_vsync();	break;	// col-2 vsync
+					case  1: _render_pixel_2();	break;	// col-2 pixel
+					case  2: _render_attrib_2();	break;	// col-2 attrib
+					case  3: _render_char_2();	break;	// col-2 ch256
+					case  4: _render_char_2();	break;	// col-2 ch128
+					case  5: _render_char_2();	break;	// col-2 ch64
+					case  6: _render_invalid();	break;	// col-2 invalid
+					case  7: _render_lpixel_2();	break;	// col-2 lpixel
+					case  8: _render_vsync();	break;	// col-4 vsync
+					case  9: _render_pixel_4();	break;	// col-4 pixel
+					case 10: _render_attrib_2();	break;	// col-4 attrib	  TODO
+					case 11: _render_char_4();	break;	// col-4 ch256
+					case 12: _render_char_4();	break;	// col-4 ch128
+					case 13: _render_char_4();	break;	// col-4 ch64
+					case 14: _render_invalid();	break;	// col-4 invalid
+					case 15: _render_lpixel_4();	break;	// col-4 lpixel
+					case 16: _render_vsync();	break;	// col-16 vsync
+					case 17: _render_pixel_16();	break;	// col-16 pixel
+					case 18: _render_attrib_2();	break;	// col-16 attrib  TODO
+					case 19: _render_char_16();	break;	// col-16 ch256
+					case 20: _render_char_16();	break;	// col-16 ch128
+					case 21: _render_char_16();	break;	// col-16 ch64
+					case 22: _render_invalid();	break;	// col-16 invalid
+					case 23: _render_lpixel_16();	break;	// col-16 lpixel
+					case 24: _render_vsync();	break;	// col-256 vsync
+					case 25: _render_pixel_256();	break;	// col-256 pixel
+					case 26: _render_attrib_2();	break;	// col-256 attrib TODO
+					case 27: _render_char_256();	break;	// col-256 ch256
+					case 28: _render_char_256();	break;	// col-256 ch128
+					case 29: _render_char_256();	break;	// col-256 ch64
+					case 30: _render_invalid();	break;	// col-256 invalid
+					case 31: _render_lpixel_256();	break;	// col-256 lpixel
+					default: XEMU_UNREACHABLE();
+				}
+			}
 			break;
 		default:
 			FATAL("NICK: FATAL ERROR: invalid slot number for rendering: %d", slot);
