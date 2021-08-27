@@ -62,23 +62,34 @@ Uint32 raster_time = 1;
 #define RASTER_FORCE_VSYNC 326
 
 
-static int nick_addressing_init ( Uint32 *pixels_buffer, int line_size )
+static void nick_open_frame_access ( void )
 {
-	if (line_size < 736) {
-		ERROR_WINDOW("NICK: SDL: FATAL ERROR: target SDL surface has width (or pitch?) smaller than 736 pixels [%d]!", line_size);
+	int tail_sdl;
+	Uint32 *pixels_buffer = xemu_start_pixel_buffer_access(&tail_sdl);
+	pixels = pixels_init = pixels_buffer - RASTER_FIRST_VISIBLE * SCREEN_WIDTH;
+	if (tail_sdl)
+		FATAL("tail_sdl is not zero!");
+	pixels_limit_up = pixels_buffer;
+	pixels_limit_bottom = pixels_init + RASTER_LAST_VISIBLE * SCREEN_WIDTH;
+	pixels_limit_vsync_shortest = pixels_init + RASTER_NO_VSYNC_BEFORE * SCREEN_WIDTH;
+	pixels_limit_vsync_long_force = pixels_init + RASTER_FORCE_VSYNC * SCREEN_WIDTH;
+	//pixels_gap = line_size - SCREEN_WIDTH;
+	pixels_gap = 0;
+}
+
+
+static int nick_addressing_init ( void )
+{
+	if (SCREEN_WIDTH < 736) {
+		ERROR_WINDOW("NICK: SDL: FATAL ERROR: target SDL surface has width (or pitch?) smaller than 736 pixels [%d]!", SCREEN_WIDTH);
 		return 1;
 	}
-	if (line_size & 3) {
+	if (SCREEN_WIDTH & 3) {
 		ERROR_WINDOW("NICK: SDL: FATAL ERROR: line size bytes not 4 bytes aligned!");
 		return 1;
 	}
 	DEBUG("NICK: first visible scanline = %d, last visible scanline = %d, line pitch pixels = %d" NL, RASTER_FIRST_VISIBLE, RASTER_LAST_VISIBLE, 0);
-	pixels = pixels_init = (pixels_buffer - RASTER_FIRST_VISIBLE * line_size);
-	pixels_limit_up = pixels_buffer;
-	pixels_limit_bottom = pixels_init + RASTER_LAST_VISIBLE * line_size;
-	pixels_limit_vsync_shortest = pixels_init + RASTER_NO_VSYNC_BEFORE * line_size;
-	pixels_limit_vsync_long_force = pixels_init + RASTER_FORCE_VSYNC * line_size;
-	pixels_gap = line_size - SCREEN_WIDTH;
+	nick_open_frame_access();
 	return 0;
 }
 
@@ -103,9 +114,8 @@ void screenshot ( void )
 
 int nick_init ( void )
 {
-	Uint32 *buf = xemu_frame_pixel_access_p;	// sdl_pixel_buffer
 	pixels = NULL; // no previous state of buffer before the next function
-	if (nick_addressing_init(buf, SCREEN_WIDTH))
+	if (nick_addressing_init())
 		return 1;
 	for (int a = 0; a < 256; a++) {
 		// RGB colours for the target screen
@@ -522,8 +532,8 @@ static inline void _update ( void )
 		pixels_limit_up[100*736+400+a]=omg++;*/
 	emu_one_frame(all_rasters, frameskip);
 	all_rasters = 0;
-	pixels = pixels_init;
 	frames++;
+	nick_open_frame_access();
 }
 
 
