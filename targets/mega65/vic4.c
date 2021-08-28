@@ -33,17 +33,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_SPRITE_COLLISION
 #define SPRITE_FG_COLLISION
 
-#if 0
-#ifdef	XEMU_RELEASE_BUILD
-#	ifdef		SPRITE_SPRITE_COLLISION
-#		undef	SPRITE_SPRITE_COLLISION
-#	endif
-#	ifdef		SPRITE_FG_COLLISION
-#		undef	SPRITE_FG_COLLISION
-#	endif
-#endif
-#endif
-
 
 const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
@@ -95,10 +84,6 @@ int videostd_changed = 0;
 static const char NTSC_STD_NAME[] = "NTSC";
 static const char PAL_STD_NAME[] = "PAL";
 int vic_readjust_sdl_viewport = 0;
-
-#define VIC4_RENDER_BITPLANE_RASTER	0
-#define VIC4_RENDER_CHAR_RASTER		1
-static int vic4_raster_renderer_path = VIC4_RENDER_CHAR_RASTER;
 
 // VIC-IV Modeline Parameters
 // ----------------------------------------------------
@@ -631,7 +616,6 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			// So probably we need a separate (cpu_speed_hotreg) var?
 			if ((vic_registers[0x31] & 0xBF) ^ (data & 0xBF))
 				vic_hotreg_touched = 1;
-			vic4_raster_renderer_path = ( (data & 0x10) == 0) ? VIC4_RENDER_CHAR_RASTER : VIC4_RENDER_BITPLANE_RASTER;
 			vic_registers[0x31] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
 			machine_set_speed(0);
 			calculate_char_x_step();
@@ -1344,9 +1328,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 			Uint8 glyph_width_deduct = SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(char_value) ? 8 : 0);
 			Uint8 glyph_width = (SXA_4BIT_PER_PIXEL(color_data) ? 16 : 8) - glyph_width_deduct;
 			// Default fetch from char mode.
-			int sel_char_row = char_row;
-			if (XEMU_UNLIKELY(SXA_VERTICAL_FLIP(color_data)))
-				sel_char_row = 7 - char_row;
+			const int sel_char_row = (XEMU_UNLIKELY(SXA_VERTICAL_FLIP(color_data)) ? 7 - char_row : char_row);
 			// Render character cell row
 			if (SXA_4BIT_PER_PIXEL(color_data)) {	// 16-color character
 				vic4_render_16color_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), glyph_width, used_palette[char_bgcolor], used_palette + (color_data & 0xF0), SXA_HORIZONTAL_FLIP(color_data));
@@ -1444,7 +1426,7 @@ int vic4_render_scanline ( void )
 			// borders also if y-offset applies.
 			xcounter += border_x_left;
 			current_pixel += border_x_left;
-			if (XEMU_LIKELY(vic4_raster_renderer_path == VIC4_RENDER_CHAR_RASTER))
+			if (XEMU_LIKELY(!(vic_registers[0x31] & 0x10)))
 				vic4_render_char_raster();
 			else
 				vic4_render_bitplane_raster();
