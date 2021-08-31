@@ -100,8 +100,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_SIDBDRWD			(vic_registers[0x5C])
 #define REG_SIDBDRWD_U5			(vic_registers[0x5D] & 0x3F)
 #define REG_HOTREG			(vic_registers[0x5D] & 0x80)
-#define REG_CHARSTEP			vic_registers[0x58]
-#define REG_CHARSTEP_U8			vic_registers[0x59]
+#define REG_LINESTEP			vic_registers[0x58]
+#define REG_LINESTEP_U8			vic_registers[0x59]
 #define REG_CHARXSCALE			vic_registers[0x5A]
 #define REG_CHRCOUNT			vic_registers[0x5E]
 #define REG_SCRNPTR_B0			vic_registers[0x60]
@@ -130,7 +130,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define BORDER_Y_BOTTOM			(((Uint16)REG_BBRDPOS) | (REG_BBRDPOS_U4) << 8)
 #define CHARGEN_Y_START			(((Uint16)REG_TEXTYPOS) | (REG_TEXTYPOS_U4) << 8)
 #define CHARGEN_X_START			(((Uint16)REG_TEXTXPOS) | (REG_TEXTXPOS_U4) << 8)
-#define CHARSTEP_BYTES			(((Uint16)REG_CHARSTEP) | (REG_CHARSTEP_U8) << 8)
+#define LINESTEP_BYTES			(((Uint16)REG_LINESTEP) | (REG_LINESTEP_U8) << 8)
 //#define SCREEN_RAM_ADDR_VIC		(REG_SCREEN_ADDR * 1024)
 #define SCREEN_ADDR			((Uint32)REG_SCRNPTR_B0 | (REG_SCRNPTR_B1<<8) | (REG_SCRNPTR_B2 <<16) | (REG_SCRNPTR_B3 << 24))
 #define CHARSET_ADDR			((Uint32)REG_CHARPTR_B0 | (REG_CHARPTR_B1<<8) | (REG_CHARPTR_B2 <<16))
@@ -138,7 +138,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_POINTER_ADDR		((Uint32)REG_SPRPTR_B0  | (REG_SPRPTR_B1<<8)  | (REG_SPRPTR_B2 <<16))
 #define COLOUR_RAM_OFFSET		((((Uint16)REG_COLPTR) | (REG_COLPTR_MSB) << 8))
 //#define IS_NTSC_MODE			(videostd_id)
-//#define SCREEN_STEP			(((Uint16)REG_CHARSTEP) | (REG_CHARSTEP_U8) << 8)
+//#define SCREEN_STEP			(((Uint16)REG_LINESTEP) | (REG_LINESTEP_U8) << 8)
 #define SPRITE_POS_Y(n)			(vic_registers[1 + (n)*2])
 #define SPRITE_POS_X(n)			(((Uint16)vic_registers[(n)*2]) | ( (vic_registers[0x10] & (1 << (n)) ? 0x100 : 0)))
 #define SPRITE_COLOR(n)			(vic_registers[0x27+(n)] & vic_color_register_mask)
@@ -216,7 +216,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 //16-bit registers
 
 #define SET_COLORRAM_BASE(x)		SET_16BIT_REG(0x64,(x))
-#define SET_CHARSTEP_BYTES(x)		SET_16BIT_REG(0x58,(x))
+#define SET_LINESTEP_BYTES(x)		SET_16BIT_REG(0x58,(x))
 
 // Review this! (VIC-II values)
 
