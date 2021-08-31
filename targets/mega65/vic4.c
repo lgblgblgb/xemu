@@ -317,7 +317,7 @@ static void vic4_interpret_legacy_mode_registers ( void )
 
 	Uint8 width = REG_H640 ? 80 : 40;
 	REG_CHRCOUNT = width;
-	SET_CHARSTEP_BYTES(width);// * (REG_16BITCHARSET ? 2 : 1));
+	SET_LINESTEP_BYTES(width);// * (REG_16BITCHARSET ? 2 : 1));
 
 	REG_SCRNPTR_B0 = 0;
 	REG_SCRNPTR_B1 &= 0xC0;
@@ -336,9 +336,9 @@ static void vic4_interpret_legacy_mode_registers ( void )
 	REG_CHARPTR_B1 = (~last_dd00_bits << 6) | (REG_CHARPTR_B1 & 0x3F);
 
 	SET_COLORRAM_BASE(0);
-	DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charxscale=%d, ras_src=%d "
+	DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, linestep=%d bytes, charxscale=%d, ras_src=%d "
 		"screen_ram=$%06x, charset/bitmap=$%06x, sprite=$%06x" NL,
-		REG_16BITCHARSET, REG_CHRCOUNT, CHARSTEP_BYTES, REG_CHARXSCALE,
+		REG_16BITCHARSET, REG_CHRCOUNT, LINESTEP_BYTES, REG_CHARXSCALE,
 		REG_FNRST, SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
 }
 
@@ -648,7 +648,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			return;				// since we DID the write, it's OK to return here and not using "break"
 		CASE_VIC_4(0x55): CASE_VIC_4(0x56): CASE_VIC_4(0x57): break;
 		CASE_VIC_4(0x58): CASE_VIC_4(0x59):
-			DEBUGPRINT("VIC: Write $%04x CHARSTEP: $%02x" NL, addr, data);
+			DEBUGPRINT("VIC: Write $%04x LINESTEP: $%02x" NL, addr, data);
 			break;
 		CASE_VIC_4(0x5A):
 			//DEBUGPRINT("WRITE $%04x CHARXSCALE: $%02x" NL, addr, data);
@@ -1266,8 +1266,8 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 	enable_bg_paint = 1;
 	const Uint8 *row_data_base_addr = get_charset_effective_addr();	// FIXME: is it OK that I moved here, before the loop?
 	if (display_row >= 0 && display_row < display_row_count) {
-		Uint8 *colour_ram_current_ptr = colour_ram + COLOUR_RAM_OFFSET + (display_row * CHARSTEP_BYTES);
-		Uint8 *screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row * CHARSTEP_BYTES);
+		Uint8 *colour_ram_current_ptr = colour_ram + COLOUR_RAM_OFFSET + (display_row * LINESTEP_BYTES);
+		Uint8 *screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row * LINESTEP_BYTES);
 		// Account for Chargen X-displacement
 		for (Uint32 *p = current_pixel; p < current_pixel + (CHARGEN_X_START - border_x_left); p++)
 			*p = palette[REG_SCREEN_COLOR];
@@ -1348,7 +1348,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 					color_source_mcm[1] = char_value >> 4;	// 01
 					color_source_mcm[2] = char_value & 0xF;	// 10
 					color_source_mcm[3] = color_data & 0xF;	// 11
-					char_byte = *(row_data_base_addr + display_row * 320 + 8 * line_char_index + sel_char_row); // this is BAD I guess assuming 320 pixel, can be anything ... (?)
+					char_byte = *(row_data_base_addr + display_row * (LINESTEP_BYTES * 8) + 8 * line_char_index + sel_char_row); 
 				} else {
 					// value 00 is common /w or w/o BMM so not initialized here
 					color_source_mcm[1] = REG_MULTICOLOR_1;	// 01
@@ -1370,7 +1370,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 				} else {
 					char_bgcolor_now = char_value & 0xF;
 					char_fgcolor_now = char_value >> 4;
-					char_byte = *(row_data_base_addr + display_row * 320 + 8 * line_char_index + sel_char_row); // this is BAD I guess assuming 320 pixel, can be anything ... (?)
+					char_byte = *(row_data_base_addr + display_row * (LINESTEP_BYTES * 8) + 8 * line_char_index + sel_char_row); 
 				}
 				// FIXME: is this really a thing to have FLIP in bitmap mode AS WELL?!
 				if (XEMU_UNLIKELY(SXA_HORIZONTAL_FLIP(color_data)))
