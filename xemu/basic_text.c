@@ -470,7 +470,10 @@ int xemu_cbm_text_to_screen ( Uint8 *v, const int cols, const int rows, const ch
 			ch = 32;
 		else if (ch == '@')
 			ch = 0;
-		else if (ch >= 97 && ch <= 122)	// 'a' ... 'z'
+		else if (ch >= 65 && ch <=  90) { // 'A' ... 'Z'
+			if (!lowercase)
+				ch -= 65 - 1;
+		} else if (ch >= 97 && ch <= 122)	// 'a' ... 'z'
 			ch -= 97 - 1;
 		else if ((signed char)ch < 32)
 			continue;

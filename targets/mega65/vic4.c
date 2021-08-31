@@ -1348,7 +1348,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 					color_source_mcm[1] = char_value >> 4;	// 01
 					color_source_mcm[2] = char_value & 0xF;	// 10
 					color_source_mcm[3] = color_data & 0xF;	// 11
-					char_byte = *(row_data_base_addr + display_row * (LINESTEP_BYTES * 8) + 8 * line_char_index + sel_char_row); 
+					char_byte = *(row_data_base_addr + display_row * (LINESTEP_BYTES * 8) + 8 * line_char_index + sel_char_row);
 				} else {
 					// value 00 is common /w or w/o BMM so not initialized here
 					color_source_mcm[1] = REG_MULTICOLOR_1;	// 01
@@ -1370,7 +1370,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 				} else {
 					char_bgcolor_now = char_value & 0xF;
 					char_fgcolor_now = char_value >> 4;
-					char_byte = *(row_data_base_addr + display_row * (LINESTEP_BYTES * 8) + 8 * line_char_index + sel_char_row); 
+					char_byte = *(row_data_base_addr + display_row * (LINESTEP_BYTES * 8) + 8 * line_char_index + sel_char_row);
 				}
 				// FIXME: is this really a thing to have FLIP in bitmap mode AS WELL?!
 				if (XEMU_UNLIKELY(SXA_HORIZONTAL_FLIP(color_data)))
