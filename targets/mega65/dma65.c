@@ -664,6 +664,7 @@ void dma_init_set_rev ( unsigned int revision, Uint8 *rom_ver_signature )
 			WARNING_WINDOW("DMA revision is forced to be %d, while ROM version (%d)\nsuggested revision is %d. Using the forced revision %d.\nWarning, this may cause incorrect behaviour!", dma_chip_revision, rom_date, rom_suggested_dma_revision, dma_chip_revision);
 		DEBUGPRINT("DMA: setting chip revision to #%d based on configuration/command line request (forced). Suggested revision by ROM date: #%d" NL, dma_chip_initial_revision, rom_suggested_dma_revision);
 	}
+	dma_registers[3] = dma_chip_revision;
 }
 
 
@@ -709,6 +710,7 @@ void dma_reset ( void )
 	dma_registers[0x0B] = 1;	// fixpoint math target step integer part (1), fractional (reg#A) is already zero by memset() above
 	dma_chip_revision_override = -1;
 	dma_transparency = 0x100;	// disable transparency by default
+	dma_registers[3] = dma_chip_revision;
 }
 
 
