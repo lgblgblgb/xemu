@@ -223,12 +223,16 @@ void kbd_trigger_restore_trap ( void )
 		restore_is_held++;
 		if (restore_is_held >= 20) {
 			restore_is_held = 0;
+#ifdef FREEZER_WORKS
 			if (!in_hypervisor) {
 				DEBUGPRINT("KBD: RESTORE trap has been triggered." NL);
 				KBD_RELEASE_KEY(RESTORE_KEY_POS);
 				hypervisor_enter(TRAP_RESTORE);
 			} else
 				DEBUGPRINT("KBD: *IGNORING* RESTORE trap trigger, already in hypervisor mode!" NL);
+#else
+			WARNING_WINDOW("Long press of RESTORE would trigger FREEZER.\nHowever FREEZER is not yet implemented in Xemu :-(");
+#endif
 		}
 	}
 }
