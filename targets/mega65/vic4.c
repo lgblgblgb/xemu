@@ -1324,18 +1324,34 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 			const Uint8 char_fgcolor = color_data & 0xF;
 			const Uint16 char_id = REG_EBM ? (char_value & 0x3f) : char_value & 0x1fff; // up to 8192 characters (13-bit)
 			const Uint8 char_bgcolor = REG_EBM ? vic_registers[0x21 + ((char_value >> 6) & 3)] : REG_SCREEN_COLOR;
-			// Calculate character-width
-			Uint8 glyph_width_deduct = SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(char_value) ? 8 : 0);
-			Uint8 glyph_width = (SXA_4BIT_PER_PIXEL(color_data) ? 16 : 8) - glyph_width_deduct;
+			// Calculate character-width: the following two lines are not here any more (just kept here as reference)
+			// and moved to the calls of the coresponding renderers.
+			//Uint8 glyph_width_deduct = SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(char_value) ? 8 : 0);
+			//Uint8 glyph_width = (SXA_4BIT_PER_PIXEL(color_data) ? 16 : 8) - glyph_width_deduct;
 			// Default fetch from char mode.
 			const int sel_char_row = (XEMU_UNLIKELY(SXA_VERTICAL_FLIP(color_data)) ? 7 - char_row : char_row);
 			// Render character cell row
 			if (SXA_4BIT_PER_PIXEL(color_data)) {	// 16-color character
-				vic4_render_16color_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), glyph_width, used_palette[char_bgcolor], used_palette + (color_data & 0xF0), SXA_HORIZONTAL_FLIP(color_data));
+				// FIXME: Another World problem: see below, when "16" is used hard-coded, it works fine
+				//        ... when the usual calculation is done, it's very bad.
+				vic4_render_16color_char_row(
+					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
+					//16 - (SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(char_value) ? 8 : 0)),	// glyph_width
+					16,												// glyph_width FIXED
+					used_palette[char_bgcolor],		// bg SDL colour
+					used_palette + (color_data & 0xF0),	// palette(16) pointer
+					SXA_HORIZONTAL_FLIP(color_data)		// hflip?
+				);
 			} else if (CHAR_IS256_COLOR(char_id)) {	// 256-color character
 				// fgcolor in case of FCM should mean colour index $FF
 				// FIXME: check if the passed palette[char_fgcolor] is correct or another index should be used for that $FF colour stuff
-				vic4_render_fullcolor_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), 8, used_palette[char_bgcolor], used_palette[char_fgcolor], SXA_HORIZONTAL_FLIP(color_data));
+				vic4_render_fullcolor_char_row(
+					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
+					8,					// glyph_width, FIXME: why do we fix glyph_width to 8, cannot be anything else?
+					used_palette[char_bgcolor],		// bg SDL colour
+					used_palette[char_fgcolor],		// fg SDL colour
+					SXA_HORIZONTAL_FLIP(color_data)		// hflip?
+				);
 			} else if ((REG_MCM && (char_fgcolor & 8)) || (REG_MCM && REG_BMM)) {	// Multicolor character
 				// using static vars: faster in a rapid loop like this, no need to re-adjust stack pointer all the time to allocate space and this way using constant memory address
 				// also, as an optimization, later, some value can be re-used and not always initialized here, when in reality VIC
@@ -1360,7 +1376,11 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 				// FIXME: also this is WRONG, MCM data cannot be reversed with this table!!
 				if (XEMU_UNLIKELY(SXA_HORIZONTAL_FLIP(color_data)))
 					char_byte = reverse_byte_table[char_byte];
-				vic4_render_multicolor_char_row(char_byte, glyph_width, color_source_mcm);
+				vic4_render_multicolor_char_row(
+					char_byte,
+					8 - (SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(char_value) ? 8 : 0)), // glyph_width
+					color_source_mcm			// 4 element (legacy) MCM colour index table
+				);
 			} else {	// Single color character
 				Uint8 char_byte, char_bgcolor_now, char_fgcolor_now;
 				if (!REG_BMM) {
@@ -1376,7 +1396,13 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 				if (XEMU_UNLIKELY(SXA_HORIZONTAL_FLIP(color_data)))
 					char_byte = reverse_byte_table[char_byte];
 				// FIXME: do vic3 attributes work with bitmap mode as well???
-				vic4_render_mono_char_row(char_byte, glyph_width, char_bgcolor_now, char_fgcolor_now, (REG_VICIII_ATTRIBS && !REG_MCM) ? (color_data >> 4) : 0);
+				vic4_render_mono_char_row(
+					char_byte,
+					8 - (SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(char_value) ? 8 : 0)),	// glyph_width
+					char_bgcolor_now,			// bg colour index
+					char_fgcolor_now,			// fg colour index
+					(REG_VICIII_ATTRIBS && !REG_MCM) ? (color_data >> 4) : 0	// VIC-III hardware attribute info
+				);
 			}
 			line_char_index++;
 		}
