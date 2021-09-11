@@ -78,6 +78,7 @@ static struct {
 } hwa_kbd;
 
 static int restore_is_held = 0;
+static Uint8 virtkey_state[3] = { 0xFF, 0xFF, 0xFF };
 
 
 void hwa_kbd_fake_key ( Uint8 k )
@@ -182,6 +183,13 @@ void clear_emu_events ( void )
 	hwa_kbd.modifiers = 0;
 	hwa_kbd.next = 0;
 	hwa_kbd.last = 0;
+	for (int a = 0; a < 3; a++) {
+		if (virtkey_state[0] != 0xFF) {
+			hid_sdl_synth_key_event(virtkey_state[a], 0);
+			virtkey_state[a] = 0xFF;
+		}
+
+	}
 }
 
 
@@ -189,6 +197,25 @@ void input_toggle_joy_emu ( void )
 {
 	c64_toggle_joy_emu();
 	OSD(-1, -1, "Joystick emulation on port #%d", joystick_emu);
+}
+
+
+void virtkey ( Uint8 rno, Uint8 scancode )
+{
+	// Convert scancode to "Xemu kind of scan code" ...
+	if (scancode >= MAT2ASC_TAB_SIZE)
+		scancode = 0xFF;
+	else if (scancode < 64)
+		scancode = ((scancode & (32 + 16 + 8)) << 1) | (scancode & 7);
+	else
+		scancode += C65_KEYBOARD_EXTRA_POS - 64;
+	if (virtkey_state[rno] == scancode)
+		return;
+	if (virtkey_state[rno] != 0xFF)
+		hid_sdl_synth_key_event(virtkey_state[rno], 0);
+	virtkey_state[rno] = scancode;
+	if (scancode != 0xFF)
+		hid_sdl_synth_key_event(scancode, 1);
 }
 
 

@@ -416,6 +416,11 @@ void io_write ( unsigned int addr, Uint8 data )
 				case 0x10:	// ASCII kbd last press value to zero whatever the written data would be
 					hwa_kbd_move_next();
 					return;
+				case 0x15:
+				case 0x16:
+				case 0x17:
+					virtkey(addr - 0x15, data & 0x7F);
+					return;
 				case 0x7C:					// hypervisor serial monitor port
 					hypervisor_serial_monitor_push_char(data);
 					return;
