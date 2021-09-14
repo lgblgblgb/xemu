@@ -1324,20 +1324,14 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 			const Uint8 char_fgcolor = color_data & 0xF;
 			const Uint16 char_id = REG_EBM ? (char_value & 0x3f) : char_value & 0x1fff; // up to 8192 characters (13-bit)
 			const Uint8 char_bgcolor = REG_EBM ? vic_registers[0x21 + ((char_value >> 6) & 3)] : REG_SCREEN_COLOR;
-			// Calculate character-width: the following two lines are not here any more (just kept here as reference)
-			// and moved to the calls of the coresponding renderers.
-			//Uint8 glyph_width_deduct = SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(char_value) ? 8 : 0);
-			//Uint8 glyph_width = (SXA_4BIT_PER_PIXEL(color_data) ? 16 : 8) - glyph_width_deduct;
+			const Uint8 glyph_trim = SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(color_data) ? 8 : 0);
 			// Default fetch from char mode.
 			const int sel_char_row = (XEMU_UNLIKELY(SXA_VERTICAL_FLIP(color_data)) ? 7 - char_row : char_row);
 			// Render character cell row
 			if (SXA_4BIT_PER_PIXEL(color_data)) {	// 16-color character
-				// FIXME: Another World problem: see below, when "16" is used hard-coded, it works fine
-				//        ... when the usual calculation is done, it's very bad.
 				vic4_render_16color_char_row(
 					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
-					//16 - (SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(char_value) ? 8 : 0)),	// glyph_width
-					16,												// glyph_width FIXED
+					16 - glyph_trim,
 					used_palette[char_bgcolor],		// bg SDL colour
 					used_palette + (color_data & 0xF0),	// palette(16) pointer
 					SXA_HORIZONTAL_FLIP(color_data)		// hflip?
@@ -1347,7 +1341,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 				// FIXME: check if the passed palette[char_fgcolor] is correct or another index should be used for that $FF colour stuff
 				vic4_render_fullcolor_char_row(
 					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
-					8,					// glyph_width, FIXME: why do we fix glyph_width to 8, cannot be anything else?
+					8 - glyph_trim,
 					used_palette[char_bgcolor],		// bg SDL colour
 					used_palette[char_fgcolor],		// fg SDL colour
 					SXA_HORIZONTAL_FLIP(color_data)		// hflip?
@@ -1378,7 +1372,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 					char_byte = reverse_byte_table[char_byte];
 				vic4_render_multicolor_char_row(
 					char_byte,
-					8 - (SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(char_value) ? 8 : 0)), // glyph_width
+					8 - glyph_trim, // glyph_width
 					color_source_mcm			// 4 element (legacy) MCM colour index table
 				);
 			} else {	// Single color character
@@ -1398,7 +1392,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 				// FIXME: do vic3 attributes work with bitmap mode as well???
 				vic4_render_mono_char_row(
 					char_byte,
-					8 - (SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(char_value) ? 8 : 0)),	// glyph_width
+					8 - glyph_trim,	// glyph_width
 					char_bgcolor_now,			// bg colour index
 					char_fgcolor_now,			// fg colour index
 					(REG_VICIII_ATTRIBS && !REG_MCM) ? (color_data >> 4) : 0	// VIC-III hardware attribute info
