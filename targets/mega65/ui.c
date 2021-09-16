@@ -331,9 +331,16 @@ static void ui_emu_info ( void )
 	xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
 	char uname_str[100];
 	xemu_get_uname_string(uname_str, sizeof uname_str);
+	const char *rom_class;
+	if (rom_is_openroms && rom_date > 0)
+		rom_class = "Open-ROMs";
+	else if (!rom_is_openroms && rom_date > 0)
+		rom_class = "Closed-ROMs";
+	else
+		rom_class = "UNKNOWN";
 	INFO_WINDOW(
 		"DMA chip current revision: %d (F018 rev-%s)\n"
-		"ROM version detected: %d%s\n"
+		"ROM version detected: %d%s %s\n"
 		"C64 'CPU' I/O port (low 3 bits): DDR=%d OUT=%d\n"
 		"Current VIC I/O mode: %s, hot registers are %s\n"
 		"\n"
@@ -341,7 +348,7 @@ static void ui_emu_info ( void )
 		"Xemu's host OS: %s"
 		,
 		dma_chip_revision, dma_chip_revision ? "B, new" : "A, old",
-		rom_date, rom_date > 0 ? "" : " (unknown or bad ROM signature)",
+		rom_date, rom_date > 0 ? "" : " (unknown or bad ROM signature)", rom_class,
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
 		vic_iomode < 4 ? iomode_names[vic_iomode] : "?INVALID?", (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
 		td_stat_str,
