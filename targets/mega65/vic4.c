@@ -253,7 +253,9 @@ static void vic4_update_sideborder_dimensions ( void )
 		else	// 78-col mode
 			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER + 15;
 	}
+	DEBUGPRINT("VIC4: set border left=%d, right=%d, textxpos=%d" NL, border_x_left, border_x_right, CHARGEN_X_START);
 }
+
 
 static void vic4_update_vertical_borders( void )
 {
@@ -291,7 +293,10 @@ static void vic4_update_vertical_borders( void )
 		}
 		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 6 + (REG_VIC2_YSCROLL * 2));
 	}
+	DEBUGPRINT("VIC4: set border top=%d, bottom=%d, textypos=%d, display_row_count=%d vic_ii_first_raster=%d" NL, BORDER_Y_TOP, BORDER_Y_BOTTOM, 
+		CHARGEN_Y_START, display_row_count, vicii_first_raster);
 }
+
 
 static void vic4_interpret_legacy_mode_registers ( void )
 {
@@ -320,17 +325,11 @@ static void vic4_interpret_legacy_mode_registers ( void )
 	REG_CHARPTR_B1 = (~last_dd00_bits << 6) | (REG_CHARPTR_B1 & 0x3F);
 
 	SET_COLORRAM_BASE(0);
-	DEBUGPRINT(
-		"VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charscale=%d, vic_ii_first_raster=%d, ras_src=%d, "
-		"border yt=%d, yb=%d, xl=%d, xr=%d, textxpos=%d, textypos=%d, "
+	DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charxscale=%d, ras_src=%d "
 		"screen_ram=$%06x, charset/bitmap=$%06x, sprite=$%06x" NL,
-		REG_16BITCHARSET, REG_CHRCOUNT, CHARSTEP_BYTES, REG_CHARXSCALE,
-		vicii_first_raster, REG_FNRST, BORDER_Y_TOP, BORDER_Y_BOTTOM, border_x_left, border_x_right, CHARGEN_X_START, CHARGEN_Y_START,
-		SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR
-	);
+		REG_16BITCHARSET, REG_CHRCOUNT, CHARSTEP_BYTES, REG_CHARXSCALE, 
+		REG_FNRST, SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
 }
-
-
 
 
 // Must be called before using the texture at all, otherwise crash will happen, or nothing at all.
@@ -375,6 +374,11 @@ void vic4_open_frame_access ( void )
 		DEBUGPRINT("VIC: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec, max raster is %d, visible area height is %d)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime, max_rasters, visible_area_height);
 		videostd_name = new_name;
 		vic_readjust_sdl_viewport = 1;
+		vicii_first_raster = vic_registers[0x6F] & 0x1F;
+		if (!in_hypervisor) {
+			vic4_update_sideborder_dimensions();
+			vic4_update_vertical_borders();
+		}
 	}
 	// handle this via vic_readjust_sdl_viewport variable (not directly above) so external stuff (like UI) can also
 	// force to adjust viewport, not just the PAL/NTSC change itself (ie: fullborder/clipped border change)
@@ -384,12 +388,6 @@ void vic4_open_frame_access ( void )
 			xemu_set_viewport(0, 0, SCREEN_WIDTH - 1, max_rasters - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
 		else
 			xemu_set_viewport(48, 0, SCREEN_WIDTH - 48, visible_area_height - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
-	}
-	
-	vicii_first_raster = vic_registers[0x6F] & 0x1F;
-	if (!in_hypervisor) {
-		vic4_update_sideborder_dimensions();
-		vic4_update_vertical_borders();
 	}
 }
 
