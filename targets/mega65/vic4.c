@@ -270,6 +270,11 @@ static void vic4_update_sideborder_dimensions ( void )
 
 static void vic4_update_vertical_borders( void )
 {
+	// FIXME: it seems we need this line here! Otherwise EFFECTIVE_V400 may not reflect what
+	// it should be, if just updated in vic4_open_frame_access(). This seems to fix the OpenROMs
+	// issue that the bottom half of the screen is invisible, since the wrong condition below
+	// is taken for setting display_row_count based on V400 from EFFECTIVE_V400 ...
+	EFFECTIVE_V400 = (REG_V400 && REG_CHRYSCL == 0 && (vic_registers[0x51] & 0x40)) ? 0 : !!REG_V400;
 	if (REG_CSEL) {	// 40-columns?
 		if (!REG_H640)
 			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL));
@@ -304,8 +309,8 @@ static void vic4_update_vertical_borders( void )
 		}
 		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 6 + (REG_VIC2_YSCROLL * 2));
 	}
-	DEBUGPRINT("VIC4: set border top=%d, bottom=%d, textypos=%d, display_row_count=%d vic_ii_first_raster=%d" NL, BORDER_Y_TOP, BORDER_Y_BOTTOM,
-		CHARGEN_Y_START, display_row_count, vicii_first_raster);
+	DEBUGPRINT("VIC4: set border top=%d, bottom=%d, textypos=%d, display_row_count=%d vic_ii_first_raster=%d EFFECTIVE_V400=%d REG_V400=%d" NL, BORDER_Y_TOP, BORDER_Y_BOTTOM,
+		CHARGEN_Y_START, display_row_count, vicii_first_raster, EFFECTIVE_V400, REG_V400);
 }
 
 
@@ -323,13 +328,13 @@ static void vic4_interpret_legacy_mode_registers ( void )
 	REG_SCRNPTR_B1 &= 0xC0;
 	REG_SCRNPTR_B1 |= REG_H640 ? ((reg_d018_screen_addr & 14) << 2) : (reg_d018_screen_addr << 2);
 	REG_SCRNPTR_B2 = 0;
-	vic_registers[0x63] &= 0b11110000;
+	vic_registers[0x63] &= 0b11110000;	// clear VIC-IV precise screen addr bits 31-24 (from post bits 3-0) as it does not make sense; MEGA65 does not have enough fast RAM to use it
 
 	REG_SPRPTR_B0 = 0xF8;
 	REG_SPRPTR_B1 = (reg_d018_screen_addr << 2) | 0x3;
 	if (REG_H640 | EFFECTIVE_V400)
 		REG_SPRPTR_B1 |= 4;
-	vic_registers[0x6E] &= 128;
+	vic_registers[0x6E] &= 128;		// hmmm, clearing VIC-IV sprite pointer bits 22-16 (bits 0-6 of this reg)
 
 	REG_SPRPTR_B1  = (~last_dd00_bits << 6) | (REG_SPRPTR_B1 & 0x3F);
 	REG_SCRNPTR_B1 = (~last_dd00_bits << 6) | (REG_SCRNPTR_B1 & 0x3F);
@@ -1324,18 +1329,28 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 			const Uint8 char_fgcolor = color_data & 0xF;
 			const Uint16 char_id = REG_EBM ? (char_value & 0x3f) : char_value & 0x1fff; // up to 8192 characters (13-bit)
 			const Uint8 char_bgcolor = REG_EBM ? vic_registers[0x21 + ((char_value >> 6) & 3)] : REG_SCREEN_COLOR;
-			// Calculate character-width
-			Uint8 glyph_width_deduct = SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(char_value) ? 8 : 0);
-			Uint8 glyph_width = (SXA_4BIT_PER_PIXEL(color_data) ? 16 : 8) - glyph_width_deduct;
+			const Uint8 glyph_trim = SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(color_data) ? 8 : 0);
 			// Default fetch from char mode.
 			const int sel_char_row = (XEMU_UNLIKELY(SXA_VERTICAL_FLIP(color_data)) ? 7 - char_row : char_row);
 			// Render character cell row
 			if (SXA_4BIT_PER_PIXEL(color_data)) {	// 16-color character
-				vic4_render_16color_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), glyph_width, used_palette[char_bgcolor], used_palette + (color_data & 0xF0), SXA_HORIZONTAL_FLIP(color_data));
+				vic4_render_16color_char_row(
+					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
+					16 - glyph_trim,
+					used_palette[char_bgcolor],		// bg SDL colour
+					used_palette + (color_data & 0xF0),	// palette(16) pointer
+					SXA_HORIZONTAL_FLIP(color_data)		// hflip?
+				);
 			} else if (CHAR_IS256_COLOR(char_id)) {	// 256-color character
 				// fgcolor in case of FCM should mean colour index $FF
 				// FIXME: check if the passed palette[char_fgcolor] is correct or another index should be used for that $FF colour stuff
-				vic4_render_fullcolor_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), 8, used_palette[char_bgcolor], used_palette[char_fgcolor], SXA_HORIZONTAL_FLIP(color_data));
+				vic4_render_fullcolor_char_row(
+					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
+					8 - glyph_trim,
+					used_palette[char_bgcolor],		// bg SDL colour
+					used_palette[char_fgcolor],		// fg SDL colour
+					SXA_HORIZONTAL_FLIP(color_data)		// hflip?
+				);
 			} else if ((REG_MCM && (char_fgcolor & 8)) || (REG_MCM && REG_BMM)) {	// Multicolor character
 				// using static vars: faster in a rapid loop like this, no need to re-adjust stack pointer all the time to allocate space and this way using constant memory address
 				// also, as an optimization, later, some value can be re-used and not always initialized here, when in reality VIC
@@ -1348,7 +1363,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 					color_source_mcm[1] = char_value >> 4;	// 01
 					color_source_mcm[2] = char_value & 0xF;	// 10
 					color_source_mcm[3] = color_data & 0xF;	// 11
-					char_byte = *(row_data_base_addr + display_row * (LINESTEP_BYTES * 8) + 8 * line_char_index + sel_char_row); 
+					char_byte = *(row_data_base_addr + display_row * (LINESTEP_BYTES * 8) + 8 * line_char_index + sel_char_row);
 				} else {
 					// value 00 is common /w or w/o BMM so not initialized here
 					color_source_mcm[1] = REG_MULTICOLOR_1;	// 01
@@ -1360,7 +1375,11 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 				// FIXME: also this is WRONG, MCM data cannot be reversed with this table!!
 				if (XEMU_UNLIKELY(SXA_HORIZONTAL_FLIP(color_data)))
 					char_byte = reverse_byte_table[char_byte];
-				vic4_render_multicolor_char_row(char_byte, glyph_width, color_source_mcm);
+				vic4_render_multicolor_char_row(
+					char_byte,
+					8 - glyph_trim, // glyph_width
+					color_source_mcm			// 4 element (legacy) MCM colour index table
+				);
 			} else {	// Single color character
 				Uint8 char_byte, char_bgcolor_now, char_fgcolor_now;
 				if (!REG_BMM) {
@@ -1370,13 +1389,19 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 				} else {
 					char_bgcolor_now = char_value & 0xF;
 					char_fgcolor_now = char_value >> 4;
-					char_byte = *(row_data_base_addr + display_row * (LINESTEP_BYTES * 8) + 8 * line_char_index + sel_char_row); 
+					char_byte = *(row_data_base_addr + display_row * (LINESTEP_BYTES * 8) + 8 * line_char_index + sel_char_row);
 				}
 				// FIXME: is this really a thing to have FLIP in bitmap mode AS WELL?!
 				if (XEMU_UNLIKELY(SXA_HORIZONTAL_FLIP(color_data)))
 					char_byte = reverse_byte_table[char_byte];
 				// FIXME: do vic3 attributes work with bitmap mode as well???
-				vic4_render_mono_char_row(char_byte, glyph_width, char_bgcolor_now, char_fgcolor_now, (REG_VICIII_ATTRIBS && !REG_MCM) ? (color_data >> 4) : 0);
+				vic4_render_mono_char_row(
+					char_byte,
+					8 - glyph_trim,	// glyph_width
+					char_bgcolor_now,			// bg colour index
+					char_fgcolor_now,			// fg colour index
+					(REG_VICIII_ATTRIBS && !REG_MCM) ? (color_data >> 4) : 0	// VIC-III hardware attribute info
+				);
 			}
 			line_char_index++;
 		}
