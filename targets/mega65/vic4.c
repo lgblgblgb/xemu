@@ -34,16 +34,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_FG_COLLISION
 
 
-#ifdef	XEMU_RELEASE_BUILD
-#	ifdef		SPRITE_SPRITE_COLLISION
-#		undef	SPRITE_SPRITE_COLLISION
-#	endif
-#	ifdef		SPRITE_FG_COLLISION
-#		undef	SPRITE_FG_COLLISION
-#	endif
-#endif
-
-
 const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
 // (SDL) target texture rendering pointers
@@ -94,10 +84,6 @@ int videostd_changed = 0;
 static const char NTSC_STD_NAME[] = "NTSC";
 static const char PAL_STD_NAME[] = "PAL";
 int vic_readjust_sdl_viewport = 0;
-
-static void vic4_render_char_raster(void);
-static void vic4_render_bitplane_raster(void);
-static void (*vic4_raster_renderer_path)(void) = &vic4_render_char_raster;
 
 // VIC-IV Modeline Parameters
 // ----------------------------------------------------
@@ -538,11 +524,11 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			if (vic_registers[0x11] ^ data)
 				vic_hotreg_touched = 1;
 			compare_raster = (compare_raster & 0xFF) | ((data & 0x80) << 1);
-			DEBUGPRINT("VIC: compare raster is now %d" NL, compare_raster);
+			DEBUG("VIC: compare raster is now %d" NL, compare_raster);
 			break;
 		CASE_VIC_ALL(0x12):
 			compare_raster = (compare_raster & 0xFF00) | data;
-			DEBUGPRINT("VIC: compare raster is now %d" NL, compare_raster);
+			DEBUG("VIC: compare raster is now %d" NL, compare_raster);
 			break;
 		CASE_VIC_ALL(0x13): CASE_VIC_ALL(0x14):
 			return;		// FIXME: writing light-pen registers?????
@@ -630,12 +616,8 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			// So probably we need a separate (cpu_speed_hotreg) var?
 			if ((vic_registers[0x31] & 0xBF) ^ (data & 0xBF))
 				vic_hotreg_touched = 1;
-
-			vic4_raster_renderer_path = ( (data & 0x10) == 0) ? vic4_render_char_raster : vic4_render_bitplane_raster;
-
 			vic_registers[0x31] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
 			machine_set_speed(0);
-
 			calculate_char_x_step();
 			break;				// we did the write, but we need to trigger vichot_reg if should
 
@@ -692,7 +674,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x5F):
 			break;
 		CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):
-			DEBUGPRINT("VIC: Write SCREENADDR byte 0xD0%02x: $%02x" NL, addr, data);
+			DEBUG("VIC: Write SCREENADDR byte 0xD0%02x: $%02x" NL, addr, data);
 			break;
 		CASE_VIC_4(0x64):
 		CASE_VIC_4(0x65): CASE_VIC_4(0x66): CASE_VIC_4(0x67): /*CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):*/ CASE_VIC_4(0x6B): /*CASE_VIC_4(0x6C):
@@ -1222,7 +1204,7 @@ static XEMU_INLINE void vic4_render_bitplane_char_row ( const Uint32 offset, con
 }
 
 
-static void vic4_render_bitplane_raster ( void )
+static XEMU_INLINE void vic4_render_bitplane_raster ( void )
 {
 	// FIXME: do not call this function here, but from actual register writes only
 	// which can affect the result of this function!!
@@ -1278,7 +1260,7 @@ static XEMU_INLINE Uint8 *get_charset_effective_addr ( void )
 //
 // VIC-III Extended attributes are applied to characters if properly set,
 // except in Multicolor modes.
-static void vic4_render_char_raster ( void )
+static XEMU_INLINE void vic4_render_char_raster ( void )
 {
 	int line_char_index = 0;
 	enable_bg_paint = 1;
@@ -1346,9 +1328,7 @@ static void vic4_render_char_raster ( void )
 			Uint8 glyph_width_deduct = SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(char_value) ? 8 : 0);
 			Uint8 glyph_width = (SXA_4BIT_PER_PIXEL(color_data) ? 16 : 8) - glyph_width_deduct;
 			// Default fetch from char mode.
-			int sel_char_row = char_row;
-			if (XEMU_UNLIKELY(SXA_VERTICAL_FLIP(color_data)))
-				sel_char_row = 7 - char_row;
+			const int sel_char_row = (XEMU_UNLIKELY(SXA_VERTICAL_FLIP(color_data)) ? 7 - char_row : char_row);
 			// Render character cell row
 			if (SXA_4BIT_PER_PIXEL(color_data)) {	// 16-color character
 				vic4_render_16color_char_row(main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8) ) & 0x7FFFF), glyph_width, used_palette[char_bgcolor], used_palette + (color_data & 0xF0), SXA_HORIZONTAL_FLIP(color_data));
@@ -1446,7 +1426,10 @@ int vic4_render_scanline ( void )
 			// borders also if y-offset applies.
 			xcounter += border_x_left;
 			current_pixel += border_x_left;
-			vic4_raster_renderer_path();
+			if (XEMU_LIKELY(!(vic_registers[0x31] & 0x10)))
+				vic4_render_char_raster();
+			else
+				vic4_render_bitplane_raster();
 #			ifdef SPRITE_SPRITE_COLLISION
 			memset(is_sprite, 0, sizeof is_sprite);
 #			endif
