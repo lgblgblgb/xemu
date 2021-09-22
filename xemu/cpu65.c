@@ -212,7 +212,7 @@ static XEMU_INLINE Uint16 readWord(Uint16 addr) {
 
 
 #ifdef MEGA65
-static Uint32 readLong ( Uint16 addr ) {
+static Uint32 readQuad ( Uint16 addr ) {
 	return
 		 readByte(addr    )        |
 		(readByte(addr + 1) << 8 ) |
@@ -221,7 +221,7 @@ static Uint32 readLong ( Uint16 addr ) {
 	;
 }
 
-static void writeLong ( Uint16 addr, Uint32 data ) {
+static void writeQuad ( Uint16 addr, Uint32 data ) {
 	writeByte(addr    ,  data        & 0xFF);
 	writeByte(addr + 1, (data >>  8) & 0xFF);
 	writeByte(addr + 2, (data >> 16) & 0xFF);
@@ -700,7 +700,7 @@ int cpu65_step (
 		&& CPU65.op_cycles != 1 && !CPU65.cpu_inhibit_interrupts
 #endif
 #ifdef MEGA65
-		&& !in_hypervisor
+		&& !in_hypervisor && CPU65.prefix == PREFIX_NOTHING
 #endif
 	)) {
 #ifdef DEBUG_CPU
@@ -724,7 +724,7 @@ int cpu65_step (
 		&& CPU65.op_cycles != 1 && !CPU65.cpu_inhibit_interrupts
 #endif
 #ifdef MEGA65
-		&& !in_hypervisor
+		&& !in_hypervisor && CPU65.prefix == PREFIX_NOTHING
 #endif
 	)) {
 #ifdef DEBUG_CPU
