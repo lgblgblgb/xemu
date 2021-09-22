@@ -62,11 +62,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_MCM				(vic_registers[0x16] & 0x10)
 #define REG_BMM				(vic_registers[0x11] & 0x20)
 #define REG_SPRITE_ENABLE		vic_registers[0x15]
-#define REG_BORDER_COLOR		vic_registers[0x20]
-#define REG_SCREEN_COLOR		vic_registers[0x21]
-#define REG_MULTICOLOR_1		vic_registers[0x22]
-#define REG_MULTICOLOR_2		vic_registers[0x23]
-#define REG_MULTICOLOR_3		vic_registers[0x24]
+#define REG_BORDER_COLOR		(vic_registers[0x20] & vic_color_register_mask)
+#define REG_SCREEN_COLOR		(vic_registers[0x21] & vic_color_register_mask)
+#define REG_MULTICOLOR_1		(vic_registers[0x22] & vic_color_register_mask)
+#define REG_MULTICOLOR_2		(vic_registers[0x23] & vic_color_register_mask)
+#define REG_MULTICOLOR_3		(vic_registers[0x24] & vic_color_register_mask)
 #define REG_H640			(vic_registers[0x31] & 128)
 #define REG_V400			(vic_registers[0x31] & 8)
 #define REG_VICIII_ATTRIBS		(vic_registers[0x31] & 0x20)
@@ -140,9 +140,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_STEP			(((Uint16)REG_CHARSTEP) | (REG_CHARSTEP_U8) << 8)
 #define SPRITE_POS_Y(n)			(vic_registers[1 + (n)*2])
 #define SPRITE_POS_X(n)			(((Uint16)vic_registers[(n)*2]) | ( (vic_registers[0x10] & (1 << (n)) ? 0x100 : 0)))
-#define SPRITE_COLOR(n)			(vic_registers[0x27+(n)] & 0xF)
-#define SPRITE_MULTICOLOR_1		(vic_registers[0x25] & 0xF)
-#define SPRITE_MULTICOLOR_2		(vic_registers[0x26] & 0xF)
+#define SPRITE_COLOR(n)			(vic_registers[0x27+(n)] & vic_color_register_mask)
+#define SPRITE_COLOR_4BIT(n)		(vic_registers[0x27+(n)] & 0xF)
+#define SPRITE_MULTICOLOR_1		(vic_registers[0x25] & vic_color_register_mask)
+#define SPRITE_MULTICOLOR_2		(vic_registers[0x26] & vic_color_register_mask)
 #define SPRITE_IS_BACK(n)		(vic_registers[0x1B] & (1 << (n)))
 #define SPRITE_HORZ_2X(n)		(vic_registers[0x1D] & (1 << (n)))
 #define SPRITE_VERT_2X(n)		(vic_registers[0x17] & (1 << (n)))
@@ -217,11 +218,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SET_COLORRAM_BASE(x)		SET_16BIT_REG(0x64,(x))
 #define SET_CHARSTEP_BYTES(x)		SET_16BIT_REG(0x58,(x))
 
-// Pixel foreground/background indicator for aiding in sprite rendering
-
-#define FOREGROUND_PIXEL		1
-#define BACKGROUND_PIXEL		0
-
 // Review this! (VIC-II values)
 
 #define SPRITE_X_BASE_COORD		24
@@ -234,7 +230,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern int   vic_iomode;
 //extern int   scanline;
 extern Uint8 vic_registers[];
-extern int   force_fast;
 extern Uint8 c128_d030_reg;
 
 extern const char *videostd_name;
