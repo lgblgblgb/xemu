@@ -87,6 +87,10 @@ endif
 ifeq ($(SUPERPICKY), yes)
 CONFIG_CFLAGS		+= $(CONFIG_CFLAGS_SUPERPICKY)
 endif
+ifeq ($(STACKPROTECTOR), yes)
+CONFIG_CFLAGS		+= -fstack-protector-strong
+CONFIG_CFLAGS_LINK	+= -fstack-protector-strong
+endif
 
 CFLAGS			= $(CONFIG_CFLAGS) $(CFLAGS_OPT) $(CFLAGS_TARGET) -I. -I$(TOPDIR) -include build/configure/config-$(ARCH).h
 LDFLAGS			= $(CONFIG_CFLAGS_LINK) $(LDFLAGS_TARGET)
