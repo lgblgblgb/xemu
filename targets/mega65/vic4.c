@@ -30,6 +30,20 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "io_mapper.h"
 
 
+#define SPRITE_SPRITE_COLLISION
+#define SPRITE_FG_COLLISION
+
+
+#ifdef	XEMU_RELEASE_BUILD
+#	ifdef		SPRITE_SPRITE_COLLISION
+#		undef	SPRITE_SPRITE_COLLISION
+#	endif
+#	ifdef		SPRITE_FG_COLLISION
+#		undef	SPRITE_FG_COLLISION
+#	endif
+#endif
+
+
 const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
 // (SDL) target texture rendering pointers
@@ -53,6 +67,9 @@ static int char_row = 0, display_row = 0;
 // FIXME: really, it's 2048 now, since in H320, GOTOX value is multiplied with 2 and may overflow this array even if it's not so much used this way, we want avoid crash ...
 // FIXME: should be rethought!!!!
 static Uint8 is_fg[2048];					// this cache helps in sprite rendering, zero means background state, other value: foreground
+#ifdef SPRITE_SPRITE_COLLISION
+static Uint8 is_sprite[1024];
+#endif
 static float char_x_step = 0.0;
 static int enable_bg_paint = 1;
 //static int display_row_count = 0;
@@ -66,6 +83,7 @@ static Uint32 red_colour, black_colour;				// used by "drive LED", and cross-hai
 static Uint8 vic_pixel_readback_result[4];
 static Uint8 vic_color_register_mask = 0xFF;
 static Uint32 *used_palette;					// normally the same value as "palette" from vic4_palette.c but GOTOX RRB token can modify this! So this should be used
+static int EFFECTIVE_V400;
 
 // --- these things are altered by vic4_open_frame_access() ONLY at every fame ONLY based on PAL or NTSC selection
 Uint8 videostd_id = 0xFF;			// 0=PAL, 1=NTSC [give some insane value by default to force the change at the fist frame after starting Xemu]
@@ -147,6 +165,9 @@ void vic_reset ( void )
 	vic_registers[0x7D] = 0xFF;
 	vic_registers[0x7E] = 0xFF;
 	vic_registers[0x7F] = 0xFF;
+	// turn off possible remained sprite collision info
+	vic_registers[0x1E] = 0;
+	vic_registers[0x1F] = 0;
 }
 
 
@@ -205,6 +226,7 @@ static XEMU_INLINE void pixel_readback ( void )
 // Do NOT call this function from vic4.c! It must be used by the emulator's main loop!
 void vic4_close_frame_access ( void )
 {
+	DEBUG("FRAME CLOSED" NL);
 	// Debug pixel-read back feature of MEGA65
 	pixel_readback();
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
@@ -273,7 +295,7 @@ static void vic4_update_vertical_borders( void )
 		else	// 78-col mode
 			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - 2);
 	}
-	if (!REG_V400) {	// Standard mode (200-lines)
+	if (!EFFECTIVE_V400) {	// Standard mode (200-lines)
 		if (REG_RSEL) {	// 25-row
 			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster));
 			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster) - 1);
@@ -319,7 +341,7 @@ static void vic4_interpret_legacy_mode_registers ( void )
 
 	REG_SPRPTR_B0 = 0xF8;
 	REG_SPRPTR_B1 = (reg_d018_screen_addr << 2) | 0x3;
-	if (REG_H640 | REG_V400)
+	if (REG_H640 | EFFECTIVE_V400)
 		REG_SPRPTR_B1 |= 4;
 	vic_registers[0x6E] &= 128;
 
@@ -344,6 +366,9 @@ void vic4_open_frame_access ( void )
 	current_pixel = pixel_start = xemu_start_pixel_buffer_access(&tail_sdl);
 	if (XEMU_UNLIKELY(tail_sdl))
 		FATAL("tail_sdl is not zero!");
+	// The V400 hack ...
+	// V400 + Yscale=0 + Bit6 of $D051 is handled as V200 ...
+	EFFECTIVE_V400 = (REG_V400 && REG_CHRYSCL == 0 && (vic_registers[0x51] & 0x40)) ? 0 : !!REG_V400;
 	// Now check the video mode: NTSC or PAL
 	// Though it can be changed any time, this kind of information really only can be applied
 	// at frame level. Thus we check here, if during the previous frame there was change
@@ -396,7 +421,7 @@ void vic4_open_frame_access ( void )
 }
 
 
-static void vic4_interrupt_checker ( void )
+static void interrupt_checker ( void )
 {
 	int vic_irq_old = cpu65.irqLevel & 2;
 	int vic_irq_new;
@@ -417,17 +442,17 @@ static void vic4_interrupt_checker ( void )
 }
 
 
-static void vic4_check_raster_interrupt ( int nraster )
+static inline void check_raster_interrupt ( int nraster )
 {
 	if (nraster == compare_raster)
 		interrupt_status |= 1;
 	else
 		interrupt_status &= 0xFE;
-	vic4_interrupt_checker();
+	interrupt_checker();
 }
 
 
-inline static void vic4_calculate_char_x_step ( void )
+static inline void calculate_char_x_step ( void )
 {
 	char_x_step = (REG_CHARXSCALE / 120.0f) / (REG_H640 ? 1 : 2);
 }
@@ -442,11 +467,26 @@ static XEMU_INLINE Uint8 *get_dat_addr ( unsigned int bpn )
 	unsigned int x = vic_registers[0x3C];
 	unsigned int y = vic_registers[0x3D] + ((x << 1) & 0x100);
 	unsigned int h640 = (vic_registers[0x31] & 128);
+	unsigned int and_mask, bit_shifter;
 	x &= 0x7F;
 	//DEBUGPRINT("VIC-IV: DAT: accessing DAT for bitplane #%u at X,Y of %u,%u in H%u mode" NL, bpn, x, y, h640 ? 640 : 320);
+	// In V400 modes, odd/even scanlines should be considered as well!
+	if (EFFECTIVE_V400) {
+		if ((y & 1)) {
+			and_mask = h640 ? 12 << 4 : 14 << 4;
+			bit_shifter = 12 - 4;
+		} else {
+			and_mask = h640 ? 12      : 14     ;
+			bit_shifter = 12;
+		}
+		y >>= 1;
+	} else {
+		and_mask = h640 ? 12 : 14;
+		bit_shifter = 12;
+	}
 	return
-		bitplane_bank_p +						// MEGA65 feature (WANNABE feature!) to support relocatable bitplane bank by the DAT! (this is a pointer, not an integer!)
-		((vic_registers[0x33 + bpn] & (h640 ? 12 : 14)) << 12) +	// bitplane address
+		bitplane_bank_p +						// MEGA65 feature to support relocatable bitplane bank by the DAT! (this is a pointer, not an integer!)
+		((vic_registers[0x33 + bpn] & and_mask) << bit_shifter) +	// bitplane address
 		((bpn & 1) ? 0x10000 : 0) +					// odd/even bitplane selection
 		(((y >> 3) * (h640 ? 640 : 320)) + (x << 3) + (y & 7))		// position within the bitplane given by the X/Y info
 	;
@@ -531,7 +571,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;
 		CASE_VIC_ALL(0x19):
 			interrupt_status = interrupt_status & (~data) & 0xF;
-			vic4_interrupt_checker();
+			interrupt_checker();
 			break;
 		CASE_VIC_ALL(0x1A):
 			data &= 0xF;
@@ -596,7 +636,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			vic_registers[0x31] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
 			machine_set_speed(0);
 
-			vic4_calculate_char_x_step();
+			calculate_char_x_step();
 			break;				// we did the write, but we need to trigger vichot_reg if should
 
 		CASE_VIC_3_4(0x32): CASE_VIC_3_4(0x33): CASE_VIC_3_4(0x34): CASE_VIC_3_4(0x35): CASE_VIC_3_4(0x36): CASE_VIC_3_4(0x37): CASE_VIC_3_4(0x38):
@@ -611,8 +651,13 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B):
 		CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
 			break;
-		CASE_VIC_4(0x50): CASE_VIC_4(0x51):
-			return; // Writing to XPOS register is no-op
+		CASE_VIC_4(0x50):
+			// Writing to XPOS register is no-op
+			return;
+		CASE_VIC_4(0x51):
+			// Writing to XPOS register (high bits) is no-op, BUT the two top bits are writable!
+			vic_registers[0x51] = (data & 0xC0) | (vic_registers[0x51] & 0x3F);
+			return;
 		CASE_VIC_4(0x52): CASE_VIC_4(0x53):
 			break;
 		CASE_VIC_4(0x54):
@@ -626,7 +671,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x5A):
 			//DEBUGPRINT("WRITE $%04x CHARXSCALE: $%02x" NL, addr, data);
 			vic_registers[0x5A] = data;	// write now and calculate step
-			vic4_calculate_char_x_step();
+			calculate_char_x_step();
 			return;
 		CASE_VIC_4(0x5B):
 			break;
@@ -757,6 +802,7 @@ Uint8 vic_read_reg ( int unsigned addr )
 		CASE_VIC_ALL(0x1E):	// sprite-sprite collision
 		CASE_VIC_ALL(0x1F):	// sprite-data collision
 			vic_registers[addr & 0x7F] = 0;	// 1E and 1F registers are cleared on read!
+			// FIXME: needs to re-check interrupts!
 			break;
 		CASE_VIC_2(0x20): CASE_VIC_2(0x21): CASE_VIC_2(0x22): CASE_VIC_2(0x23): CASE_VIC_2(0x24): CASE_VIC_2(0x25): CASE_VIC_2(0x26): CASE_VIC_2(0x27):
 		CASE_VIC_2(0x28): CASE_VIC_2(0x29): CASE_VIC_2(0x2A): CASE_VIC_2(0x2B): CASE_VIC_2(0x2C): CASE_VIC_2(0x2D): CASE_VIC_2(0x2E):
@@ -789,9 +835,14 @@ Uint8 vic_read_reg ( int unsigned addr )
 		/* --- NO MORE VIC-III REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B): CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
 		CASE_VIC_4(0x50):
+			// XPOS low byte
 			break;
 		CASE_VIC_4(0x51):
-			result = vic_registers[0x51]++;
+			// XPOS high bits + others
+			// FIXME XXX super ugly hack to have something XPOS register changing. (some programs wait that to be changed)
+			// Note, that bit 6 and 7 is different and not part of the XPOS info.
+			result = (result & 0xC0) | ((result + 1) & 0x3F);
+			vic_registers[0x51] = result;
 			break;
 		CASE_VIC_4(0x52): CASE_VIC_4(0x53):
 			break;
@@ -836,7 +887,6 @@ Uint8 vic_read_reg ( int unsigned addr )
 	return result;
 }
 
-
 #undef CASE_VIC_2
 #undef CASE_VIC_3
 #undef CASE_VIC_4
@@ -844,7 +894,42 @@ Uint8 vic_read_reg ( int unsigned addr )
 #undef CASE_VIC_3_4
 
 
-static XEMU_INLINE void vic4_draw_sprite_row_16color( int sprnum, int x_display_pos, const Uint8* row_data_ptr, int xscale )
+
+#ifdef	SPRITE_SPRITE_COLLISION
+#	warning "Sprite-sprite collision is an experimental feature (SPRITE_SPRITE_COLLISION is defined)!"
+#	define DO_SPRITE_SPRITE_COLLISION(pos,cond) do {	\
+		if (cond) {					\
+			const Uint8 sp = is_sprite[pos];	\
+			is_sprite[pos] = sp | sprbmask;		\
+			if (sp) 				\
+				vic_registers[0x1E] |= sp | sprbmask;	\
+		}						\
+	} while (0)
+#ifndef	SPRITE_ANY_COLLISION
+#define	SPRITE_ANY_COLLISION
+#endif
+#else
+	// dummy macro for the case when SPRITE_SPRITE_COLLISION was not requested
+#	define DO_SPRITE_SPRITE_COLLISION(pos,cond)
+#endif
+
+
+#ifdef	SPRITE_FG_COLLISION
+#	warning "Sprite-foreground collision is an experimental feature (SPRITE_FG_COLLISION is defined)!"
+#	define DO_SPRITE_FG_COLLISION(pos,cond) do {		\
+		if (is_fg[pos] && (cond))			\
+			vic_registers[0x1F] |= sprbmask;	\
+	} while (0)
+#ifndef	SPRITE_ANY_COLLISION
+#define	SPRITE_ANY_COLLISION
+#endif
+#else
+	// dummy macro for the case when SPRITE_FG_COLLISION was not requested
+#	define DO_SPRITE_FG_COLLISION(pos,cond)
+#endif
+
+
+static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_display_pos, const Uint8* row_data_ptr, const int xscale, const int do_tiling )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	//const int palindexbase = sprnum * 16 + 128 * (SPRITE_BITPLANE_ENABLE(sprnum) >> sprnum);
@@ -853,6 +938,9 @@ static XEMU_INLINE void vic4_draw_sprite_row_16color( int sprnum, int x_display_
 	// in 16 colour sprite mode, sprite colour register gives the transparent colour index
 	// We always use the lower 4 bit only at this very specific case, that's the reason for SPRITE_COLOR_4BIT() macro and not SPRITE_COLOR() [which can be 4/8 bit depending on curretn VIC mode)
 	const Uint8 transparency_palette_index = SPRITE_COLOR_4BIT(sprnum);
+#	ifdef SPRITE_ANY_COLLISION
+	const Uint8 sprbmask = 1 << sprnum;
+#	endif
 	do {
 		for (int byte = 0; byte < totalBytes; byte++) {
 			const Uint8 c0 = (*(row_data_ptr + byte)) >> 4;
@@ -860,17 +948,23 @@ static XEMU_INLINE void vic4_draw_sprite_row_16color( int sprnum, int x_display_
 			for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
 				if (c0 != transparency_palette_index && x_display_pos >= border_x_left && (
 					!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
-				))
+				)) {
 					*(pixel_raster_start + x_display_pos) = pal16[c0];
+					DO_SPRITE_SPRITE_COLLISION(x_display_pos, 1);
+					DO_SPRITE_FG_COLLISION(x_display_pos, 1);
+				}
 			}
 			for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
 				if (c1 != transparency_palette_index && x_display_pos >= border_x_left && (
 					!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
-				))
+				)) {
 					*(pixel_raster_start + x_display_pos) = pal16[c1];
+					DO_SPRITE_SPRITE_COLLISION(x_display_pos, 1);
+					DO_SPRITE_FG_COLLISION(x_display_pos, 1);
+				}
 			}
 		}
-	} while ((REG_SPRTILEN & (1 << sprnum)) && x_display_pos < border_x_right);
+	} while (XEMU_UNLIKELY(do_tiling && x_display_pos < border_x_right));
 }
 
 
@@ -878,6 +972,9 @@ static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( int sprnum, int x_disp
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const Uint8 mcm_spr_pal_indices[4] = { 0, SPRITE_MULTICOLOR_1, SPRITE_COLOR(sprnum), SPRITE_MULTICOLOR_2 };	// entry zero is not used
+#	ifdef SPRITE_ANY_COLLISION
+	const Uint8 sprbmask = 1 << sprnum;
+#	endif
 	for (int byte = 0; byte < totalBytes; byte++) {
 		const Uint8 row_data = *row_data_ptr++;
 		for (int shift = 6; shift >= 0; shift -= 2) {
@@ -887,12 +984,18 @@ static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( int sprnum, int x_disp
 				if (mcm_pixel_value) {
 					if (x_display_pos >= border_x_left && (
 						!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
-					))
+					)) {
 						*(pixel_raster_start + x_display_pos) = sdl_pixel;
+						DO_SPRITE_SPRITE_COLLISION(x_display_pos, mcm_pixel_value & 2);
+						DO_SPRITE_FG_COLLISION(x_display_pos, mcm_pixel_value & 2);
+					}
 					if (x_display_pos + 1 >= border_x_left && (
 						!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos + 1])
-					))
+					)) {
 						*(pixel_raster_start + x_display_pos + 1) = sdl_pixel;
+						DO_SPRITE_SPRITE_COLLISION(x_display_pos + 1, mcm_pixel_value & 2);
+						DO_SPRITE_FG_COLLISION(x_display_pos + 1, mcm_pixel_value & 2);
+					}
 				}
 			}
 		}
@@ -904,6 +1007,9 @@ static XEMU_INLINE void vic4_draw_sprite_row_mono ( int sprnum, int x_display_po
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const Uint32 sdl_pixel = spritepalette[SPRITE_COLOR(sprnum)];
+#	ifdef SPRITE_ANY_COLLISION
+	const Uint8 sprbmask = 1 << sprnum;
+#	endif
 	for (int byte = 0; byte < totalBytes; byte++) {
 		for (int xbit = 0; xbit < 8; xbit++) {
 			const Uint8 sprite_bit = *row_data_ptr & (0x80 >> xbit);
@@ -911,8 +1017,11 @@ static XEMU_INLINE void vic4_draw_sprite_row_mono ( int sprnum, int x_display_po
 				if (x_display_pos >= border_x_left && sprite_bit && (
 					!SPRITE_IS_BACK(sprnum) ||
 					(SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
-				))
+				)) {
 					*(pixel_raster_start + x_display_pos) = sdl_pixel;
+					DO_SPRITE_SPRITE_COLLISION(x_display_pos, 1);
+					DO_SPRITE_FG_COLLISION(x_display_pos, 1);
+				}
 			}
 		}
 		row_data_ptr++;
@@ -928,11 +1037,12 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 	// In multicolor mode (MCM=1), the bit combinations "00" and "01" belong to the background
 	// and "10" and "11" to the foreground whereas in standard mode (MCM=0),
 	// cleared pixels belong to the background and set pixels to the foreground.
+	const int reg_tiling = REG_SPRTILEN;
 	for (int sprnum = 7; sprnum >= 0; sprnum--) {
 		if (REG_SPRITE_ENABLE & (1 << sprnum)) {
 			const int spriteHeight = SPRITE_EXTHEIGHT(sprnum) ? REG_SPRHGHT : 21;
-			int x_display_pos = border_x_left + ((SPRITE_POS_X(sprnum) - SPRITE_X_BASE_COORD) * (REG_SPR640 ? 1 : 2));	// in display units
-			int y_logical_pos = SPRITE_POS_Y(sprnum) - SPRITE_Y_BASE_COORD +(BORDER_Y_TOP / (REG_V400 ? 1 : 2));		// in logical units
+			const int x_display_pos = border_x_left + ((SPRITE_POS_X(sprnum) - SPRITE_X_BASE_COORD) * (REG_SPR640 ? 1 : 2));	// in display units
+			const int y_logical_pos = SPRITE_POS_Y(sprnum) - SPRITE_Y_BASE_COORD +(BORDER_Y_TOP / (EFFECTIVE_V400 ? 1 : 2));	// in logical units
 
 			int sprite_row_in_raster = logical_raster - y_logical_pos;
 
@@ -951,11 +1061,11 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 				//DEBUGPRINT("VIC: Sprite %d data at $%08X " NL, sprnum, sprite_data_addr);
 				const Uint8 *sprite_data = main_ram + sprite_data_addr;
 				const Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
-				int xscale = (REG_SPR640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
+				const int xscale = (REG_SPR640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
 				if (SPRITE_MULTICOLOR(sprnum))
 					vic4_draw_sprite_row_multicolor(sprnum, x_display_pos, row_data, xscale);
 				else if (SPRITE_16COLOR(sprnum))
-					vic4_draw_sprite_row_16color(sprnum, x_display_pos, row_data, xscale);
+					vic4_draw_sprite_row_16color(sprnum, x_display_pos, row_data, xscale, reg_tiling & (1 << sprnum));
 				else
 					vic4_draw_sprite_row_mono(sprnum, x_display_pos, row_data, xscale);
 			}
@@ -966,17 +1076,22 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 
 // Render a monochrome character cell row
 // flip = 00 Dont flip, 01 = flip vertical, 10 = flip horizontal, 11 = flip both
-static XEMU_INLINE void vic4_render_mono_char_row ( Uint8 char_byte, const int glyph_width, const Uint8 bg_color, Uint8 fg_color, const Uint8 vic3attr )
+static XEMU_INLINE void vic4_render_mono_char_row ( Uint8 char_byte, const int glyph_width, const Uint8 bg_color, Uint8 fg_color, Uint8 vic3attr )
 {
+	Uint32* active_palette = used_palette;
 	if (XEMU_UNLIKELY(vic3attr)) {
-		if (char_row == 7 && VIC3_ATTR_UNDERLINE(vic3attr))
-			char_byte = 0xFF;
-		if (VIC3_ATTR_REVERSE(vic3attr))
-			char_byte = ~char_byte;
-		if (VIC3_ATTR_BLINK(vic3attr) && blink_phase)
-			char_byte = VIC3_ATTR_REVERSE(vic3attr) ? ~char_byte : 0;
-		if (VIC3_ATTR_BOLD(vic3attr))
-			fg_color |= 0x10;
+		if(!VIC3_ATTR_BLINK(vic3attr) || blink_phase) {
+			if (XEMU_UNLIKELY(VIC3_ATTR_BOLD(vic3attr) && VIC3_ATTR_REVERSE(vic3attr)))
+				used_palette = altpalette;
+			else if (VIC3_ATTR_REVERSE(vic3attr))
+				char_byte = ~char_byte;
+			if (VIC3_ATTR_BOLD(vic3attr))
+				fg_color |= 0x10;
+			if (char_row == 7 && VIC3_ATTR_UNDERLINE(vic3attr))
+				char_byte = 0xFF;
+		} else if (VIC3_ATTR_BLINK(vic3attr) && vic3attr == 0x1) {
+			char_byte = 0;
+		}
 	}
 	const Uint32 sdl_fg_color = used_palette[fg_color];
 	if (XEMU_LIKELY(enable_bg_paint)) {
@@ -995,6 +1110,7 @@ static XEMU_INLINE void vic4_render_mono_char_row ( Uint8 char_byte, const int g
 			is_fg[xcounter++] = char_pixel;
 		}
 	}
+	used_palette = active_palette;
 }
 
 
@@ -1060,17 +1176,27 @@ static XEMU_INLINE void set_bitplane_pointers ( void )
 {
 	// Get Bitplane source addresses
 	/* TODO: Cache the following reads & EA calculation */
-	const int and_mask = (REG_H640 ? 12 : 14);
-	//for (int i = 0; i < 8; i++)
-	//	bitplane_p[i] = bitplane_bank_p + ((vic_registers[0x33 + i] & and_mask) << 12) + ((i & 1) << 16);
-	bitplane_p[0] = bitplane_bank_p + ((vic_registers[0x33] & and_mask) << 12);
-	bitplane_p[1] = bitplane_bank_p + ((vic_registers[0x34] & and_mask) << 12) + 0x10000;
-	bitplane_p[2] = bitplane_bank_p + ((vic_registers[0x35] & and_mask) << 12);
-	bitplane_p[3] = bitplane_bank_p + ((vic_registers[0x36] & and_mask) << 12) + 0x10000;
-	bitplane_p[4] = bitplane_bank_p + ((vic_registers[0x37] & and_mask) << 12);
-	bitplane_p[5] = bitplane_bank_p + ((vic_registers[0x38] & and_mask) << 12) + 0x10000;
-	bitplane_p[6] = bitplane_bank_p + ((vic_registers[0x39] & and_mask) << 12);
-	bitplane_p[7] = bitplane_bank_p + ((vic_registers[0x3A] & and_mask) << 12) + 0x10000;
+	int and_mask, bit_shifter;
+	if (EFFECTIVE_V400) {
+		if (!(ycounter & 1)) {
+			and_mask = (REG_H640 ? 12 : 14);
+			bit_shifter = 12;
+		} else {
+			and_mask = (REG_H640 ? 12 << 4 : 14 << 4);
+			bit_shifter = 12 - 4;
+		}
+	} else {
+		and_mask = (REG_H640 ? 12 : 14);
+		bit_shifter = 12;
+	}
+	bitplane_p[0] = bitplane_bank_p + ((vic_registers[0x33] & and_mask) << bit_shifter);
+	bitplane_p[1] = bitplane_bank_p + ((vic_registers[0x34] & and_mask) << bit_shifter) + 0x10000;
+	bitplane_p[2] = bitplane_bank_p + ((vic_registers[0x35] & and_mask) << bit_shifter);
+	bitplane_p[3] = bitplane_bank_p + ((vic_registers[0x36] & and_mask) << bit_shifter) + 0x10000;
+	bitplane_p[4] = bitplane_bank_p + ((vic_registers[0x37] & and_mask) << bit_shifter);
+	bitplane_p[5] = bitplane_bank_p + ((vic_registers[0x38] & and_mask) << bit_shifter) + 0x10000;
+	bitplane_p[6] = bitplane_bank_p + ((vic_registers[0x39] & and_mask) << bit_shifter);
+	bitplane_p[7] = bitplane_bank_p + ((vic_registers[0x3A] & and_mask) << bit_shifter) + 0x10000;
 }
 
 
@@ -1101,16 +1227,18 @@ static void vic4_render_bitplane_raster ( void )
 	// FIXME: do not call this function here, but from actual register writes only
 	// which can affect the result of this function!!
 	set_bitplane_pointers();
-	Uint32 offset = display_row * REG_CHRCOUNT * 8 + char_row ;
+	Uint32 offset = display_row * REG_CHRCOUNT * 8 + char_row;
 	int line_char_index = 0;
 	while (line_char_index < REG_CHRCOUNT) {
 		vic4_render_bitplane_char_row(offset, 8);
 		offset += 8;
 		line_char_index++;
 	}
-	if (++char_row > 7) {
-		char_row = 0;
-		display_row++;
+	if (!EFFECTIVE_V400 || (ycounter  & 1)) {
+		if (++char_row > 7) {
+			char_row = 0;
+			display_row++;
+		}
 	}
 	while (xcounter++ < border_x_right)
 		*current_pixel++ = palette[REG_SCREEN_COLOR];
@@ -1173,31 +1301,32 @@ static void vic4_render_char_raster ( void )
 				color_data = (color_data << 8) | (*(colour_ram_current_ptr++));
 				char_value = char_value | (*(screen_ram_current_ptr++) << 8);
 				if (XEMU_UNLIKELY(SXA_GOTO_X(color_data))) {
-					// Start of the GOTOX re-positioning functionality implementation, tricky one.
-					xcounter = (char_value & 0x3FF);	// first, extract the goto to X value as an usigned number
+					// ---- Start of the GOTOX re-positioning functionality implementation, tricky one ----
+					xcounter = (char_value & 0x3FF);	// first, extract the goto 'X' value as an usigned number
+					// Check the given value as "signed" as well, decide if it's "negative" or not
 					if (REG_H640) {
 						// Interpret as a "negative" value compared to xcounter_start if it would fit into the real range of 0-xcounter_start,
 						// otherwise interpret that as a positive offset compared to xcounter_start
-						if (0x3FF - xcounter < xcounter_start)
-							xcounter = xcounter_start - (0x3FF - xcounter);
+						if (0x400 - xcounter <= xcounter_start)
+							xcounter = xcounter_start - (0x400 - xcounter);
 						else
 							xcounter += xcounter_start;
 					} else {
 						xcounter <<= 1;	// multiply by 2, if !H640 (as the pixel is double width for lower resolution)
-						if (0x7FE - xcounter < xcounter_start)
-							xcounter = xcounter_start - (0x7FE - xcounter);
+						if (0x800 - xcounter <= xcounter_start)
+							xcounter = xcounter_start - (0x800 - xcounter);
 						else
 							xcounter += xcounter_start;
 					}
 					// The ugly: too large goto X values may cause out-of-bound access on eg is_fg buffer. Thus, if the result is larger than
 					// the width of the SDL texture, it won't be seen anyway, so we "clamp" it for the NEXT raster as an ugly solution, which
 					// will be overwritten anyway on rendering in the next raster. This way we don't need checking of out-of-bound access (faster
-					// code).
+					// code) _everywhere_ ...
 					if (xcounter > TEXTURE_WIDTH)
 						xcounter = TEXTURE_WIDTH;
 					// Align current_pixel pointer according the calculated xcounter "horror show" above
 					current_pixel = pixel_raster_start + xcounter;
-					// End of the GOTOX re-positioning functionality implementation
+					// ---- End of the GOTOX re-positioning functionality implementation ----
 					line_char_index++;
 					char_fetch_offset = char_value >> 13;
 					if (SXA_VERTICAL_FLIP(color_data))
@@ -1292,14 +1421,15 @@ int vic4_render_scanline ( void )
 	pixel_raster_start = current_pixel;
 
 	SET_PHYSICAL_RASTER(ycounter);
-	logical_raster = ycounter >> (REG_V400 ? 0 : 1);
+	logical_raster = ycounter >> (EFFECTIVE_V400 ? 0 : 1);
 
-	if (!(ycounter & 1)) // VIC-II raster source: We shall check FNRST ?
-		vic4_check_raster_interrupt(logical_raster);
+	// FIXME: this is probably a bad fix ... Trying to remedy that in V400, no raster interrupts seems to work ... XXX
+	if (!(ycounter & 1) || EFFECTIVE_V400) // VIC-II raster source: We shall check FNRST ?
+		check_raster_interrupt(logical_raster);
 	// "Double-scan hack"
 	// FIXME: is this really correct? ie even sprites cannot be set to Y pos finer than V200 or ...
 	// ... having resolution finer than V200 with some "VIC-IV magic"?
-	if (!REG_V400 && (ycounter & 1)) {
+	if (!EFFECTIVE_V400 && (ycounter & 1)) {
 		//for (int i = 0; i < TEXTURE_WIDTH; i++, current_pixel++)
 		//	*current_pixel = /* user_scanlines_setting ? 0 : */ *(current_pixel - TEXTURE_WIDTH);
 		memcpy(current_pixel, current_pixel - TEXTURE_WIDTH, TEXTURE_WIDTH * 4);
@@ -1317,6 +1447,9 @@ int vic4_render_scanline ( void )
 			xcounter += border_x_left;
 			current_pixel += border_x_left;
 			vic4_raster_renderer_path();
+#			ifdef SPRITE_SPRITE_COLLISION
+			memset(is_sprite, 0, sizeof is_sprite);
+#			endif
 			vic4_do_sprites();
 		}
 		// Paint screen color if positive y-offset (CHARGEN_Y_START > BORDER_Y_TOP)

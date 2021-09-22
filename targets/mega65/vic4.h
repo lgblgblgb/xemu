@@ -49,7 +49,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define PHYSICAL_RASTERS_PAL		624
 #define FRAME_H_FRONT			0
 #define RASTER_CORRECTION		3
-#define VIC4_BLINK_INTERVAL		25
+#define VIC4_BLINK_INTERVAL		30
 
 // Register defines
 //
@@ -84,7 +84,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_BBRDPOS_U4			(vic_registers[0x4B] & 0xF)
 #define REG_TEXTXPOS			(vic_registers[0x4C])
 #define REG_TEXTXPOS_U4			(vic_registers[0x4D] & 0xF)
-#define REG_SPRTILEN			((vic_registers[0x4D] & 0xF0) >> 4 | (vic_registers[0x4F] & 0xF0))
+#define REG_SPRTILEN			((vic_registers[0x4D] >> 4) | (vic_registers[0x4F] & 0xF0))
 #define REG_TEXTYPOS			(vic_registers[0x4E])
 #define REG_TEXTYPOS_U4			(vic_registers[0x4F] & 0xF)
 #define REG_XPOS			(vic_registers[0x51])
