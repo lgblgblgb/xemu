@@ -41,28 +41,30 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "audio65.h"
 #include "inject.h"
 #include "configdb.h"
+#include "xemu/emutools_socketapi.h"
 
 
 static int nmi_level;			// please read the comment at nmi_set() below
 
 int newhack = 0;
-unsigned int frames_total_counter = 0;
 
-static int  cpu_cycles_per_scanline_for_fast_mode, speed_current;
-static char fast_mhz_in_string[16];
-static int frame_counter;
-static int   paused = 0, paused_old = 0;
-static int   breakpoint_pc = -1;
+static int speed_current = -1;
+static int paused = 0, paused_old = 0;
+static int breakpoint_pc = -1;
 #ifdef TRACE_NEXT_SUPPORT
-static int   orig_sp = 0;
-static int   trace_next_trigger = 0;
+static int orig_sp = 0;
+static int trace_next_trigger = 0;
 #endif
-static int   trace_step_trigger = 0;
+static int trace_step_trigger = 0;
 #ifdef HAS_UARTMON_SUPPORT
 static void (*m65mon_callback)(void) = NULL;
 #endif
 static const char emulator_paused_title[] = "TRACE/PAUSE";
-static char emulator_speed_title[64] = "?MHz";
+static char emulator_speed_title[64] = "";
+static char fast_mhz_in_string[16] = "";
+static const char *cpu_clock_speed_strs[4] = { "1MHz", "2MHz", "3.5MHz", fast_mhz_in_string };
+static unsigned int cpu_clock_speed_str_index = 0;
+static unsigned int cpu_cycles_per_scanline;
 static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 
 static int force_external_rom = 0;
@@ -70,7 +72,9 @@ static int force_external_rom = 0;
 static Uint8 nvram_original[sizeof nvram];
 static int uuid_must_be_saved = 0;
 
-int register_screenshot_request = 0;
+int registered_screenshot_request = 0;
+
+Uint8 last_dd00_bits = 3;		// Bank 0
 
 
 
@@ -101,35 +105,39 @@ void machine_set_speed ( int verbose )
 	);
 	// ^1 at c128... because it was inverted :-O --> FIXME: this is ugly workaround, the switch statement should be re-organized
 	speed_wanted = (in_hypervisor || (D6XX_registers[0x7D] & 16)) ? 7 : ((((c128_d030_reg & 1) ^ 1) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
-	if (speed_wanted != speed_current) {
+	// videostd_changed: we also want to force recalulation if PAL/NTSC change happened, even if the speed setting remains the same!
+	if (speed_wanted != speed_current || videostd_changed) {
 		speed_current = speed_wanted;
+		videostd_changed = 0;
 		switch (speed_wanted) {
+			// NOTE: videostd_1mhz_cycles_per_scanline is set by vic4.c and also includes the video standard
 			case 4:	// 100 - 1MHz
 			case 5:	// 101 - 1MHz
-				cpu_cycles_per_scanline = CPU_C64_CYCLES_PER_SCANLINE;
-				strcpy(emulator_speed_title, "1MHz");
+				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C64_MHZ_CLOCK));
+				cpu_clock_speed_str_index = 0;
 				cpu65_set_ce_timing(0);
 				break;
 			case 0:	// 000 - 2MHz
-				cpu_cycles_per_scanline = CPU_C128_CYCLES_PER_SCANLINE;
-				strcpy(emulator_speed_title, "2MHz");
+				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C128_MHZ_CLOCK));
+				cpu_clock_speed_str_index = 1;
 				cpu65_set_ce_timing(0);
 				break;
 			case 2:	// 010 - 3.5MHz
 			case 6:	// 110 - 3.5MHz
-				cpu_cycles_per_scanline = CPU_C65_CYCLES_PER_SCANLINE;
-				strcpy(emulator_speed_title, "3.5MHz");
+				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C65_MHZ_CLOCK));
+				cpu_clock_speed_str_index = 2;
 				cpu65_set_ce_timing(1);
 				break;
 			case 1:	// 001 - 40MHz (or Xemu specified custom speed)
 			case 3:	// 011 -		-- "" --
 			case 7:	// 111 -		-- "" --
-				cpu_cycles_per_scanline = cpu_cycles_per_scanline_for_fast_mode;
-				strcpy(emulator_speed_title, fast_mhz_in_string);
+				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(configdb.fast_mhz));
+				cpu_clock_speed_str_index = 3;
 				cpu65_set_ce_timing(1);
 				break;
 		}
-		DEBUG("SPEED: CPU speed is set to %s" NL, emulator_speed_title);
+		// XXX use only DEBUG() here!
+		DEBUGPRINT("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_strs[cpu_clock_speed_str_index], cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
 		if (cpu_cycles_per_step > 1)	// if in trace mode, do not set this!
 			cpu_cycles_per_step = cpu_cycles_per_scanline;
 	}
@@ -177,12 +185,26 @@ static void cia2_setint_cb ( int level )
 
 static void cia2_out_a ( Uint8 data )
 {
+	// XXX  My code
+#if 0
 	vic2_16k_bank = ((~(data | (~cia2.DDRA))) & 3) << 14;
 	vic_vidp_legacy = 1;
 	vic_chrp_legacy = 1;
 	vic_sprp_legacy = 1;
 	// TODO FIXME: add sprites pointers!
 	DEBUG("VIC2: 16K BANK is set to $%04X (CIA mask=$%02X)" NL, vic2_16k_bank, cia2.DDRA);
+#endif
+	// Code from HMW, XXX FIXME
+	// Note, I have removed the REG_CRAM2K since it's not possible to hit this callback anyways if CIA is "covered" by colour RAM
+	if (REG_HOTREG) {
+		// Bank select
+		data &= (cia2.DDRA & 3); // Mask bank bits through CIA DDR register bits
+		REG_SCRNPTR_B1 = (~data << 6) | (REG_SCRNPTR_B1 & 0x3F);
+		REG_CHARPTR_B1 = (~data << 6) | (REG_CHARPTR_B1 & 0x3F);
+		REG_SPRPTR_B1  = (~data << 6) | (REG_SPRPTR_B1 & 0x3F);
+		last_dd00_bits = data;
+		//DEBUGPRINT("VIC2: (hotreg)Wrote to $DD00: $%02x screen=$%08x char=$%08x spr=$%08x" NL, data, SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
+	}
 }
 
 
@@ -383,13 +405,12 @@ static void mega65_init ( void )
 	// Initialize FDC
 	fdc_init(disk_buffers + FD_BUFFER_POS);
 	//
-	sdcard_hack_mount_drive_9_now(configdb.disk9);
+	sdcard_hack_mount_drive_9_now(configdb.disk9);	// FIXME: Ugly hack to support CLI forced drive-9 disk
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_init(configdb.uartmon);
 #endif
 	sprintf(fast_mhz_in_string, "%.2fMHz", configdb.fast_mhz);
-	cpu_cycles_per_scanline_for_fast_mode = 64 * configdb.fast_mhz;
-	DEBUGPRINT("SPEED: fast clock is set to %.2fMHz, %d CPU cycles per scanline." NL, configdb.fast_mhz, cpu_cycles_per_scanline_for_fast_mode);
+	DEBUGPRINT("SPEED: fast clock is set to %.2fMHz." NL, configdb.fast_mhz);
 	cpu65_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
 	rom_protect = 0;
 	hypervisor_start_machine();
@@ -441,6 +462,12 @@ static void shutdown_callback ( void )
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_close();
 #endif
+#ifdef HAVE_XEMU_UMON
+	xumon_stop();
+#endif
+#ifdef XEMU_HAS_SOCKET_API
+	xemusock_uninit();
+#endif
 	DEBUG("Execution has been stopped at PC=$%04X" NL, cpu65.pc);
 }
 
@@ -448,6 +475,10 @@ static void shutdown_callback ( void )
 
 void reset_mega65 ( void )
 {
+	if (!configdb.nosound && configdb.soundresetbug) {
+		configdb.nosound = 1;
+		hypervisor_to_enable_audio = 1;
+	}
 	eth65_reset();
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0xFF;
@@ -464,7 +495,7 @@ void reset_mega65 ( void )
 	nmi_level = 0;
 	D6XX_registers[0x7E] = configdb.kicked;
 	hypervisor_start_machine();
-	DEBUGPRINT("SYSTEM RESET." NL);
+	DEBUGPRINT("SYSTEM: RESET" NL);
 }
 
 
@@ -478,55 +509,17 @@ int reset_mega65_asked ( void )
 }
 
 
-static void update_emulator ( void )
-{
-	hid_handle_all_sdl_events();
-	xemugui_iteration();
-	nmi_set(IS_RESTORE_PRESSED(), 2);	// Custom handling of the restore key ...
-	// this part is used to trigger 'RESTORE trap' with long press on RESTORE.
-	// see input_devices.c for more information
-	kbd_trigger_restore_trap();
-#ifdef HAS_UARTMON_SUPPORT
-	uartmon_update();
-#endif
-	// Screen rendering: begin
-	vic_render_screen();
-	// Screen rendering: end
-	xemu_timekeeping_delay(40000);
-	// Ugly CIA trick to maintain realtime TOD in CIAs :)
-//	if (seconds_timer_trigger) {
-	const struct tm *t = xemu_get_localtime();
-	const Uint8 sec10ths = xemu_get_microseconds() / 100000;
-	// UPDATE CIA TODs:
-	cia_ugly_tod_updater(&cia1, t, sec10ths, configdb.rtc_hour_offset);
-	cia_ugly_tod_updater(&cia2, t, sec10ths, configdb.rtc_hour_offset);
-	// UPDATE the RTC too:
-	rtc_regs[0] = XEMU_BYTE_TO_BCD(t->tm_sec);	// seconds
-	rtc_regs[1] = XEMU_BYTE_TO_BCD(t->tm_min);	// minutes
-	//rtc_regs[2] = xemu_hour_to_bcd12h(t->tm_hour, configdb.rtc_hour_offset);	// hours
-	rtc_regs[2] = XEMU_BYTE_TO_BCD((t->tm_hour + configdb.rtc_hour_offset + 24) % 24) | 0x80;	// hours (24H format, bit 7 always set)
-	rtc_regs[3] = XEMU_BYTE_TO_BCD(t->tm_mday);	// day of mounth
-	rtc_regs[4] = XEMU_BYTE_TO_BCD(t->tm_mon) + 1;	// month
-	rtc_regs[5] = XEMU_BYTE_TO_BCD(t->tm_year - 100);	// year
-//	}
-}
-
-
 #ifdef HAS_UARTMON_SUPPORT
 void m65mon_show_regs ( void )
 {
 	Uint8 pf = cpu65_get_pf();
 	umon_printf(
-		"\r\n"
 		"PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
 		"%04X %02X %02X %02X %02X %02X %04X "		// register banned message and things from PC to SP
 		"%04X %04X %02X       %02X %02X "		// from MAPL to P
-		"%c%c%c%c%c%c%c%c \r\n"				// P-FLAGS
-		",0777%04X\r\n", // TODO: single line of disassembly
+		"%c%c%c%c%c%c%c%c ",				// P-FLAGS
 		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z, cpu65.bphi >> 8, cpu65.sphi | cpu65.s,
-		((map_mask & 0xf0) << 8) | (map_offset_low >> 8),
-		((map_mask & 0x0f) << 12)  | (map_offset_high >> 8),
-		cpu65.op,
+		map_offset_low >> 8, map_offset_high >> 8, cpu65.op,
 		pf, 0,	// flags
 		(pf & CPU65_PF_N) ? 'N' : '-',
 		(pf & CPU65_PF_V) ? 'V' : '-',
@@ -535,8 +528,7 @@ void m65mon_show_regs ( void )
 		(pf & CPU65_PF_D) ? 'D' : '-',
 		(pf & CPU65_PF_I) ? 'I' : '-',
 		(pf & CPU65_PF_Z) ? 'Z' : '-',
-		(pf & CPU65_PF_C) ? 'C' : '-',
-		cpu65.pc
+		(pf & CPU65_PF_C) ? 'C' : '-'
 	);
 }
 
@@ -552,30 +544,17 @@ void m65mon_dumpmem28 ( int addr )
 {
 	int n = 16;
 	addr &= 0xFFFFFFF;
-	umon_printf(":%08X:", addr);
+	umon_printf(":%07X:", addr);
 	while (n--)
-	{
-		if ( (addr >> 16) == 0x777)
-		{
-			umon_printf("%02X", cpu65_read_callback(addr & 0xffff));
-			addr++;
-		}
-		else
-			umon_printf("%02X", memory_debug_read_phys_addr(addr++));
-	}
+		umon_printf("%02X", memory_debug_read_phys_addr(addr++));
 }
 
 void m65mon_setmem28( int addr, int cnt, Uint8* vals )
 {
-	for (int k = 0; k < cnt; k++)
-	{
-		memory_debug_write_phys_addr(addr++, vals[k]);
-	}
-}
-
-void m65mon_setpc(int addr)
-{
-	cpu65.pc = addr;
+  for (int k = 0; k < cnt; k++)
+  {
+    memory_debug_write_phys_addr(addr++, vals[k]);
+  }
 }
 
 void m65mon_set_trace ( int m )
@@ -601,7 +580,7 @@ void m65mon_do_next ( void )
 void m65mon_do_trace ( void )
 {
 	if (paused) {
-		set_umon_send_ok(0); // delay command execution!
+		umon_send_ok = 0; // delay command execution!
 		m65mon_callback = m65mon_show_regs; // register callback
 		trace_step_trigger = 1;	// trigger one step
 	} else {
@@ -636,10 +615,59 @@ void m65mon_breakpoint ( int brk )
 }
 #endif
 
-static int cycles, frameskip;
+
+static void update_emulator ( void )
+{
+	vic4_close_frame_access();
+	// XXX: some things has been moved here from the main loop, however update_emulator is called from other places as well, FIXME check if it causes problems or not!
+	if (XEMU_UNLIKELY(inject_ready_check_status))
+		inject_ready_check_do();
+	audio65_sid_inc_framecount();
+	strcpy(emulator_speed_title, cpu_clock_speed_strs[cpu_clock_speed_str_index]);
+	strcat(emulator_speed_title, " ");
+	strcat(emulator_speed_title, videostd_name);
+	hid_handle_all_sdl_events();
+	xemugui_iteration();
+	nmi_set(IS_RESTORE_PRESSED(), 2);	// Custom handling of the restore key ...
+	// this part is used to trigger 'RESTORE trap' with long press on RESTORE.
+	// see input_devices.c for more information
+	kbd_trigger_restore_trap();
+#ifdef HAS_UARTMON_SUPPORT
+	uartmon_update();
+#endif
+	// Screen updating, final phase
+	//vic4_close_frame_access();
+	// Let's sleep ...
+	xemu_timekeeping_delay(videostd_frametime);
+	// Ugly CIA trick to maintain realtime TOD in CIAs :)
+//	if (seconds_timer_trigger) {
+	const struct tm *t = xemu_get_localtime();
+	const Uint8 sec10ths = xemu_get_microseconds() / 100000;
+	// UPDATE CIA TODs:
+	cia_ugly_tod_updater(&cia1, t, sec10ths, configdb.rtc_hour_offset);
+	cia_ugly_tod_updater(&cia2, t, sec10ths, configdb.rtc_hour_offset);
+	// UPDATE the RTC too:
+	rtc_regs[0] = XEMU_BYTE_TO_BCD(t->tm_sec);	// seconds
+	rtc_regs[1] = XEMU_BYTE_TO_BCD(t->tm_min);	// minutes
+	//rtc_regs[2] = xemu_hour_to_bcd12h(t->tm_hour, configdb.rtc_hour_offset);	// hours
+	rtc_regs[2] = XEMU_BYTE_TO_BCD((t->tm_hour + configdb.rtc_hour_offset + 24) % 24) | 0x80;	// hours (24H format, bit 7 always set)
+	rtc_regs[3] = XEMU_BYTE_TO_BCD(t->tm_mday);	// day of mounth
+	rtc_regs[4] = XEMU_BYTE_TO_BCD(t->tm_mon) + 1;	// month
+	rtc_regs[5] = XEMU_BYTE_TO_BCD(t->tm_year - 100);	// year
+//	}
+}
+
 
 static void emulation_loop ( void )
 {
+	static int cycles = 0;	// used for "balance" CPU cycles per scanline, must be static!
+	xemu_window_snap_to_optimal_size(0);
+	vic4_open_frame_access();
+	// video standard (PAL/NTSC) affects the "CPU cycles per scanline" variable, which is used in this main emulation loop below.
+	// thus, if vic-4 emulation set videostd_changed, we should react with enforce a re-calibration.
+	// videostd_changed is set by vic4_open_frame_access() in vic4.c, thus we do here right after calling it.
+	// machine_set_speed() will react to videostd_changed flag, so it's just enough to call it from here
+	machine_set_speed(0);
 	for (;;) {
 #ifdef TRACE_NEXT_SUPPORT
 		if (trace_next_trigger == 2) {
@@ -663,12 +691,13 @@ static void emulation_loop ( void )
 			if (m65mon_callback) {	// delayed uart monitor command should be finished ...
 				m65mon_callback();
 				m65mon_callback = NULL;
-				uartmons_finish_command();
+				uartmon_finish_command();
 			}
 #endif
-			// we still need to feed our emulator with update events ... It also slows this pause-busy-loop down to every full frames (~25Hz)
+			// we still need to feed our emulator with update events ... It also slows this pause-busy-loop down to every full frames (~25Hz) <--- XXX totally inaccurate now!
 			// note, that it messes timing up a bit here, as there is update_emulator() calls later in the "normal" code as well
 			// this can be a bug, but real-time emulation is not so much an issue if you eg doing trace of your code ...
+			// XXX it's maybe a problem to call this!!! update_emulator() is called here which closes frame but no no reopen then ... FIXME: handle this somehow!
 			update_emulator();
 			if (trace_step_trigger) {
 				// if monitor trigges a step, break the pause loop, however we will get back the control on the next
@@ -699,7 +728,6 @@ static void emulation_loop ( void )
 		}
 		if (XEMU_UNLIKELY(breakpoint_pc == cpu65.pc)) {
 			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu65.pc);
-			m65mon_show_regs();
 			paused = 1;
 		}
 		cycles += XEMU_UNLIKELY(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
@@ -708,40 +736,20 @@ static void emulation_loop ( void )
 #endif
 		);	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
 		if (cycles >= cpu_cycles_per_scanline) {
-			scanline++;
-			//DEBUG("VIC3: new scanline (%d)!" NL, scanline);
 			cycles -= cpu_cycles_per_scanline;
-			cia_tick(&cia1, 64);
-			cia_tick(&cia2, 64);
-			if (scanline == 312) {
-				if (XEMU_UNLIKELY(inject_ready_check_status))
-					inject_ready_check_do();
-				//DEBUG("VIC3: new frame!" NL);
-				frameskip = !frameskip;
-				scanline = 0;
-				if (!frameskip)	// well, let's only render every full frames (~ie 25Hz)
-					update_emulator();
-				audio65_sid_inc_framecount();
-				frame_counter++;
-				if (frame_counter == 25) {
-					frame_counter = 0;
-					vic3_blink_phase = !vic3_blink_phase;
-				}
-				frames_total_counter++;
-				if (!frameskip)	// FIXME: do this better!!!!!!
-					return;
-			}
-			//DEBUG("RASTER=%d COMPARE=%d" NL,scanline,compare_raster);
-			//vic_interrupt();
-			vic3_check_raster_interrupt();
+			cia_tick(&cia1, 32);	// FIXME: why 32?????? why fixed????? what should be the CIA "tick" frequency for real? Is it dependent on NTSC/PAL?
+			cia_tick(&cia2, 32);
+			if (XEMU_UNLIKELY(vic4_render_scanline()))
+				break;	// break the (main, "for") loop, if frame is over!
 		}
 	}
+	update_emulator();
 }
 
 
 int main ( int argc, char **argv )
 {
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The Incomplete MEGA65 emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Evolving MEGA65 emulator from LGB");
 	configdb_define_emulator_options(sizeof configdb);
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
@@ -759,8 +767,8 @@ int main ( int argc, char **argv )
 		TARGET_DESC APP_DESC_APPEND,	// window title
 		1,				// resizable window
 		TEXTURE_WIDTH, TEXTURE_HEIGHT,	// texture sizes
-		TEXTURE_WIDTH, TEXTURE_HEIGHT * 2,// logical size (used with keeping aspect ratio by the SDL render stuffs)
-		TEXTURE_WIDTH, TEXTURE_HEIGHT * 2,// window size
+		TEXTURE_WIDTH, TEXTURE_HEIGHT,	// logical size (used with keeping aspect ratio by the SDL render stuffs)
+		TEXTURE_WIDTH, TEXTURE_HEIGHT,	// window size
 		TEXTURE_FORMAT,			// pixel format
 		0,				// we have *NO* pre-defined colours as with more simple machines (too many we need). we want to do this ourselves!
 		NULL,				// -- "" --
@@ -793,19 +801,9 @@ int main ( int argc, char **argv )
 #endif
 	);
 #ifdef HAVE_XEMU_UMON
-	if (configdb.umon != 0) {
-		int port = configdb.umon;
-		int threaded;
-		if (port < 0) {
-			port = -port;
-			threaded = 0;
-		} else
-			threaded = 1;
-		if (port > 1023 && port < 65536)
-			xumon_init(port, threaded);
-		else
-			ERROR_WINDOW("UMON: Invalid TCP port: %d", port);
-	}
+	if (configdb.umon == 1)
+		configdb.umon = XUMON_DEFAULT_PORT;
+	xumon_init(configdb.umon);
 #endif
 	if (configdb.prg)
 		inject_register_prg(configdb.prg, configdb.prgmode);
@@ -818,15 +816,12 @@ int main ( int argc, char **argv )
 	} else if (configdb.autoload)
 		c64_register_fake_typing(fake_typing_for_load65);
 #endif
-	cycles = 0;
-	frameskip = 0;
-	frame_counter = 0;
-	vic3_blink_phase = 0;
 	audio65_start();
 	xemu_set_full_screen(configdb.fullscreen_requested);
 	if (!configdb.syscon)
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();
+	// FIXME: for emscripten (anyway it does not work too much currently) there should be 50 or 60 (PAL/NTSC) instead of (fixed, and wrong!) 25!!!!!!
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;
 }

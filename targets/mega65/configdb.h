@@ -58,6 +58,9 @@ struct configdb_st {
 	char	*keymap;
 #endif
 	char	*selectedgui;
+	int	force_videostd;
+	int	init_videostd;
+	int	fullborders;
 	int	show_drive_led;
 	int	hyperdebug;
 	int	hyperserialascii;
@@ -87,6 +90,7 @@ struct configdb_st {
 	int	nosound;
 	int	noopl3;
 	int	sidmask;
+	int	soundresetbug;
 };
 
 extern struct configdb_st configdb;
