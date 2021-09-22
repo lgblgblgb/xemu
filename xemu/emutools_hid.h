@@ -62,6 +62,8 @@ extern void emu_callback_key_raw_sdl	( SDL_KeyboardEvent *ev );
 extern void emu_callback_key_texteditng_sdl ( SDL_TextEditingEvent *ev );
 extern void emu_callback_key_textinput_sdl  ( SDL_TextInputEvent   *ev );
 
+extern void hid_sdl_synth_key_event	( int matrix_pos, int is_press );
+
 // Provided HID functions:
 extern void hid_set_autoreleased_key    ( int key );
 extern int  hid_key_event		( SDL_Scancode key, int pressed ) ;
