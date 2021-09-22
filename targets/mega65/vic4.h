@@ -38,18 +38,19 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // The user can select a clipped borders view (called "normal borders") which shows
 // the real visible resolution of PAL (720x576) or NSTC(720x480).
 
-#define TEXTURE_WIDTH			800
-#define TEXTURE_HEIGHT			625
-
+#define SCREEN_WIDTH			800
+#define SCREEN_HEIGHT			625
 #define PHYSICAL_RASTERS_DEFAULT	PHYSICAL_RASTERS_NTSC
 #define SCREEN_HEIGHT_VISIBLE_DEFAULT	SCREEN_HEIGHT_VISIBLE_NTSC
 #define SCREEN_HEIGHT_VISIBLE_NTSC	480
 #define SCREEN_HEIGHT_VISIBLE_PAL	576
 #define PHYSICAL_RASTERS_NTSC		526
 #define PHYSICAL_RASTERS_PAL		624
+#define NTSC_RATIO			(PHYSICAL_RASTERS_NTSC / float(SCREEN_WIDTH))
+#define PAL_RATIO			(PHYSICAL_RASTERS_PAL  / float(SCREEN_WIDTH))
 #define FRAME_H_FRONT			0
 #define RASTER_CORRECTION		3
-#define VIC4_BLINK_INTERVAL		30
+#define VIC4_BLINK_INTERVAL		25
 
 // Register defines
 //
@@ -62,11 +63,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_MCM				(vic_registers[0x16] & 0x10)
 #define REG_BMM				(vic_registers[0x11] & 0x20)
 #define REG_SPRITE_ENABLE		vic_registers[0x15]
-#define REG_BORDER_COLOR		(vic_registers[0x20] & vic_color_register_mask)
-#define REG_SCREEN_COLOR		(vic_registers[0x21] & vic_color_register_mask)
-#define REG_MULTICOLOR_1		(vic_registers[0x22] & vic_color_register_mask)
-#define REG_MULTICOLOR_2		(vic_registers[0x23] & vic_color_register_mask)
-//#define REG_MULTICOLOR_3		(vic_registers[0x24] & vic_color_register_mask)
+#define REG_BORDER_COLOR		vic_registers[0x20]
+#define REG_SCREEN_COLOR		vic_registers[0x21]
+#define REG_MULTICOLOR_1		vic_registers[0x22]
+#define REG_MULTICOLOR_2		vic_registers[0x23]
+#define REG_MULTICOLOR_3		vic_registers[0x24]
 #define REG_H640			(vic_registers[0x31] & 128)
 #define REG_V400			(vic_registers[0x31] & 8)
 #define REG_VICIII_ATTRIBS		(vic_registers[0x31] & 0x20)
@@ -75,7 +76,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_DISPLAYENABLE		(vic_registers[0x11] & 0x10)
 #define REG_VIC2_XSCROLL		(vic_registers[0x16] & 7)
 #define REG_VIC2_YSCROLL		(vic_registers[0x11] & 7)
-//#define REG_CRAM2K			(vic_registers[0x30] & 1)
+#define REG_CRAM2K			(vic_registers[0x30] & 1)
 #define REG_TBRDPOS			(vic_registers[0x48])
 #define REG_SPRBPMEN_0_3		(vic_registers[0x49] >> 4)
 #define REG_SPRBPMEN_4_7		(vic_registers[0x4B] >> 4)
@@ -84,24 +85,23 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_BBRDPOS_U4			(vic_registers[0x4B] & 0xF)
 #define REG_TEXTXPOS			(vic_registers[0x4C])
 #define REG_TEXTXPOS_U4			(vic_registers[0x4D] & 0xF)
-#define REG_SPRTILEN			((vic_registers[0x4D] >> 4) | (vic_registers[0x4F] & 0xF0))
 #define REG_TEXTYPOS			(vic_registers[0x4E])
 #define REG_TEXTYPOS_U4			(vic_registers[0x4F] & 0xF)
-//#define REG_XPOS			(vic_registers[0x51])
-//#define REG_XPOS_U6			(vic_registers[0x50] & 0x3F)
+#define REG_XPOS			(vic_registers[0x51])
+#define REG_XPOS_U6			(vic_registers[0x50] & 0x3F)
 #define REG_FNRST			(vic_registers[0x53] & 0x80)
 #define REG_16BITCHARSET		(vic_registers[0x54] & 1)
 #define REG_FCLRLO			(vic_registers[0x54] & 2)
 #define REG_FCLRHI			(vic_registers[0x54] & 4)
 #define REG_SPR640			(vic_registers[0x54] & 0x10)
 #define REG_SPRHGHT			(vic_registers[0x56])
-//#define REG_CHRXSCL			(vic_registers[0x5A])
+#define REG_CHRXSCL			(vic_registers[0x5A])
 #define REG_CHRYSCL			(vic_registers[0x5B])
 #define REG_SIDBDRWD			(vic_registers[0x5C])
 #define REG_SIDBDRWD_U5			(vic_registers[0x5D] & 0x3F)
 #define REG_HOTREG			(vic_registers[0x5D] & 0x80)
-#define REG_LINESTEP			vic_registers[0x58]
-#define REG_LINESTEP_U8			vic_registers[0x59]
+#define REG_CHARSTEP			vic_registers[0x58]
+#define REG_CHARSTEP_U8			vic_registers[0x59]
 #define REG_CHARXSCALE			vic_registers[0x5A]
 #define REG_CHRCOUNT			vic_registers[0x5E]
 #define REG_SCRNPTR_B0			vic_registers[0x60]
@@ -116,10 +116,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_SPRPTR_B0			vic_registers[0x6C]
 #define REG_SPRPTR_B1			vic_registers[0x6D]
 #define REG_SPRPTR_B2			(vic_registers[0x6E] & 0x7F)
-//#define REG_SCREEN_ROWS		vic_registers[0x7B]
-//#define REG_PAL_RED_BASE		(vic_registers[0x100])
-//#define REG_PAL_GREEN_BASE		(vic_registers[0x200])
-//#define REG_PAL_BLUE_BASE		(vic_registers[0x300])
+#define REG_SCREEN_ROWS			vic_registers[0x7B]
+#define REG_PAL_RED_BASE		(vic_registers[0x100])
+#define REG_PAL_GREEN_BASE		(vic_registers[0x200])
+#define REG_PAL_BLUE_BASE		(vic_registers[0x300])
 
 // Helper macros for accessing multi-byte registers
 // and other similar functionality for convenience
@@ -130,21 +130,20 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define BORDER_Y_BOTTOM			(((Uint16)REG_BBRDPOS) | (REG_BBRDPOS_U4) << 8)
 #define CHARGEN_Y_START			(((Uint16)REG_TEXTYPOS) | (REG_TEXTYPOS_U4) << 8)
 #define CHARGEN_X_START			(((Uint16)REG_TEXTXPOS) | (REG_TEXTXPOS_U4) << 8)
-#define LINESTEP_BYTES			(((Uint16)REG_LINESTEP) | (REG_LINESTEP_U8) << 8)
-//#define SCREEN_RAM_ADDR_VIC		(REG_SCREEN_ADDR * 1024)
+#define CHARSTEP_BYTES			(((Uint16)REG_CHARSTEP) | (REG_CHARSTEP_U8) << 8)
+#define SCREEN_RAM_ADDR_VIC		(REG_SCREEN_ADDR * 1024)
 #define SCREEN_ADDR			((Uint32)REG_SCRNPTR_B0 | (REG_SCRNPTR_B1<<8) | (REG_SCRNPTR_B2 <<16) | (REG_SCRNPTR_B3 << 24))
 #define CHARSET_ADDR			((Uint32)REG_CHARPTR_B0 | (REG_CHARPTR_B1<<8) | (REG_CHARPTR_B2 <<16))
-#define VIC2_BITMAP_ADDR		((CHARSET_ADDR) & 0xFFE000)
+#define VIC2_BITMAP_ADDR		((Uint32)REG_CHARPTR_B0 | (REG_CHARPTR_B1<<8) | (REG_CHARPTR_B2 <<16))
 #define SPRITE_POINTER_ADDR		((Uint32)REG_SPRPTR_B0  | (REG_SPRPTR_B1<<8)  | (REG_SPRPTR_B2 <<16))
 #define COLOUR_RAM_OFFSET		((((Uint16)REG_COLPTR) | (REG_COLPTR_MSB) << 8))
 //#define IS_NTSC_MODE			(videostd_id)
-//#define SCREEN_STEP			(((Uint16)REG_LINESTEP) | (REG_LINESTEP_U8) << 8)
+#define SCREEN_STEP			(((Uint16)REG_CHARSTEP) | (REG_CHARSTEP_U8) << 8)
 #define SPRITE_POS_Y(n)			(vic_registers[1 + (n)*2])
 #define SPRITE_POS_X(n)			(((Uint16)vic_registers[(n)*2]) | ( (vic_registers[0x10] & (1 << (n)) ? 0x100 : 0)))
-#define SPRITE_COLOR(n)			(vic_registers[0x27+(n)] & vic_color_register_mask)
-#define SPRITE_COLOR_4BIT(n)		(vic_registers[0x27+(n)] & 0xF)
-#define SPRITE_MULTICOLOR_1		(vic_registers[0x25] & vic_color_register_mask)
-#define SPRITE_MULTICOLOR_2		(vic_registers[0x26] & vic_color_register_mask)
+#define SPRITE_COLOR(n)			(vic_registers[0x27+(n)] & 0xF)
+#define SPRITE_MULTICOLOR_1		(vic_registers[0x25] & 0xF)
+#define SPRITE_MULTICOLOR_2		(vic_registers[0x26] & 0xF)
 #define SPRITE_IS_BACK(n)		(vic_registers[0x1B] & (1 << (n)))
 #define SPRITE_HORZ_2X(n)		(vic_registers[0x1D] & (1 << (n)))
 #define SPRITE_VERT_2X(n)		(vic_registers[0x17] & (1 << (n)))
@@ -154,9 +153,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_EXTHEIGHT(n)		(vic_registers[0x55] & (1 << (n)))
 #define SPRITE_BITPLANE_ENABLE(n)	(((REG_SPRBPMEN_4_7) << 4 | REG_SPRBPMEN_0_3) & (1 << (n)))
 #define SPRITE_16BITPOINTER		(vic_registers[0x6E] & 0x80)
-//#define TEXT_MODE			(!REG_BMM)
-//#define HIRES_BITMAP_MODE		(REG_BMM & !REG_MCM & !REG_EBM)
-//#define MULTICOLOR_BITMAP_MODE	(REG_BMM & REG_MCM & !REG_EBM)
+#define TEXT_MODE			(!REG_BMM)
+#define HIRES_BITMAP_MODE		(REG_BMM & !REG_MCM & !REG_EBM)
+#define MULTICOLOR_BITMAP_MODE		(REG_BMM & REG_MCM & !REG_EBM)
 #define VIC3_ATTR_BLINK(c)		((c) & 0x1)
 #define VIC3_ATTR_REVERSE(c)		((c) & 0x2)
 #define VIC3_ATTR_BOLD(c)		((c) & 0x4)
@@ -169,12 +168,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SXA_TRIM_RIGHT_BITS012(sw)	((sw) >> 13)
 #define SXA_VERTICAL_FLIP(cw)		((cw) & 0x8000)
 #define SXA_HORIZONTAL_FLIP(cw)		((cw) & 0x4000)
-//#define SXA_ALPHA_BLEND(cw)		((cw) & 0x2000)
+#define SXA_ALPHA_BLEND(cw)		((cw) & 0x2000)
 #define SXA_GOTO_X(cw)			((cw) & 0x1000)
 #define SXA_4BIT_PER_PIXEL(cw)		((cw) & 0x0800)
 #define SXA_TRIM_RIGHT_BIT3(cw)		((cw) & 0x0400)
-#define SXA_ATTR_BOLD(cw)		((cw) & 0x0040)
-#define SXA_ATTR_REVERSE(cw)		((cw) & 0x0020)
+//FIXME: this last one was bad, and also, seems to be not used?
 //#define SXA_TRIM_TOP_BOTTOM(cw)	(((cw) & 0x0300) >> 8)
 
 
@@ -192,10 +190,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 		vic_registers[((basereg)+1)] = (Uint8) ((((Uint16)(x)) & 0x3F00) >> 8); \
 		vic_registers[(basereg)] = (Uint8) ((Uint16)(x)) & 0x00FF; \
 	} while(0)
-/* #define SET_14BIT_REGI(basereg,x) do { \
+#define SET_14BIT_REGI(basereg,x) do { \
 		vic_registers[(basereg)] = (Uint8) ((((Uint16)(x)) & 0x3F00) >> 8); \
 		vic_registers[((basereg)+1)] = (Uint8) ((Uint16)(x)) & 0x00FF; \
-	} while(0) */
+	} while(0)
 #define SET_16BIT_REG(basereg,x) do { \
 		vic_registers[((basereg) + 1)] = (Uint8) ((((Uint16)(x)) & 0xFF00) >> 8); \
 		vic_registers[(basereg)]= ((Uint16)(x)) & 0x00FF; \
@@ -204,7 +202,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // 11-bit registers
 
 #define SET_PHYSICAL_RASTER(x)		SET_11BIT_REG(0x52, (x))
-//#define SET_RASTER_XPOS(x)		SET_14BIT_REGI(0x50, (x))
+#define SET_RASTER_XPOS(x)		SET_14BIT_REGI(0x50, (x))
 
 // 12-bit registers
 
@@ -216,20 +214,26 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 //16-bit registers
 
 #define SET_COLORRAM_BASE(x)		SET_16BIT_REG(0x64,(x))
-#define SET_LINESTEP_BYTES(x)		SET_16BIT_REG(0x58,(x))
+#define SET_CHARSTEP_BYTES(x)		SET_16BIT_REG(0x58,(x))
+
+// Pixel foreground/background indicator for aiding in sprite rendering
+
+#define FOREGROUND_PIXEL		1
+#define BACKGROUND_PIXEL		0
 
 // Review this! (VIC-II values)
 
 #define SPRITE_X_BASE_COORD		24
 #define SPRITE_Y_BASE_COORD		50
-//#define SPRITE_X_UPPER_COORD		250
-//#define SPRITE_Y_UPPER_COORD		344
+#define SPRITE_X_UPPER_COORD		250
+#define SPRITE_Y_UPPER_COORD		344
 
 // Current state
 
 extern int   vic_iomode;
 //extern int   scanline;
 extern Uint8 vic_registers[];
+extern int   force_fast;
 extern Uint8 c128_d030_reg;
 
 extern const char *videostd_name;

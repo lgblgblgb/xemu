@@ -18,26 +18,26 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
-#include "xemu/emutools_config.h"
 #include "mega65.h"
 #include "xemu/cpu65.h"
 #include "vic4.h"
 #include "vic4_palette.h"
 #include "memory_mapper.h"
 #include "hypervisor.h"
-//#include <assert.h>
+#include "configdb.h"
+#include "xemu/f011_core.h"
+#include "xemu/emutools_files.h"
 
-static const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
+
+const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 
 // (SDL) target texture rendering pointers
 static Uint32 *current_pixel;					// current_pixel pointer to the rendering target (one current_pixel: 32 bit)
 static Uint32 *pixel_end, *pixel_start;				// points to the end and start of the buffer
 static Uint32 *pixel_raster_start;				// first pixel of current raster
-Uint8 vic_registers[0x80];					// VIC-3 registers. It seems $47 is the last register. But to allow address the full VIC3 reg I/O space, we use $80 here
+Uint8 vic_registers[0x80];					// VIC-4 registers
 int vic_iomode;							// VIC2/VIC3/VIC4 mode
 int force_fast;							// POKE 0,64 and 0,65 trick ...
-int scanline;							// current scan line number
-int cpu_cycles_per_scanline;
 static int compare_raster;					// raster compare (9 bits width) data
 static int logical_raster = 0;
 static int interrupt_status;					// Interrupt status of VIC
@@ -54,24 +54,27 @@ static int char_row = 0, display_row = 0;
 static Uint8 bg_pixel_state[1024];				// See FOREGROUND_PIXEL and BACKGROUND_PIXEL constants
 static Uint8* screen_ram_current_ptr = NULL;
 static Uint8* colour_ram_current_ptr = NULL;
-int user_scanlines_setting = 0;
-float char_x_step = 0.0;
+static float char_x_step = 0.0;
 static int enable_bg_paint = 1;
 static int display_row_count = 0;
 static int max_rasters = PHYSICAL_RASTERS_DEFAULT;
 static int visible_area_height = SCREEN_HEIGHT_VISIBLE_DEFAULT;
 static int vicii_first_raster = 7;				// Default for NTSC
 static Uint8 *bitplane_bank_p = main_ram;
+static Uint32 red_colour, black_colour;		// used by "drive LED" stuff
 
 // --- these things are altered by vic4_open_frame_access() ONLY at every fame ONLY based on PAL or NTSC selection
 Uint8 videostd_id = 0xFF;			// 0=PAL, 1=NTSC [give some insane value by default to force the change at the fist frame after starting Xemu]
 const char *videostd_name = "<UNDEF>";		// PAL or NTSC, however initially is not yet set
 int videostd_frametime = NTSC_FRAME_TIME;	// time in microseconds for a frame to produce
+float videostd_1mhz_cycles_per_scanline = 32.0;	// have *some* value to jumpstart emulation, it will be overriden sooner or later XXX FIXME: why it does not work with zero value when it's overriden anyway?!?!
+int videostd_changed = 0;
 static const char NTSC_STD_NAME[] = "NTSC";
 static const char PAL_STD_NAME[] = "PAL";
+int vic_readjust_sdl_viewport = 0;
 
-void vic4_render_char_raster();
-void vic4_render_bitplane_raster();
+void vic4_render_char_raster(void);
+void vic4_render_bitplane_raster(void);
 static void (*vic4_raster_renderer_path)(void) = &vic4_render_char_raster;
 
 // VIC-IV Modeline Parameters
@@ -157,52 +160,88 @@ static const Uint8 reverse_byte_table[] = {
 };
 
 
-
-void vic_init ( void )
+void vic_reset ( void )
 {
-	vic4_init_palette();
-	force_fast = 0;
-	// *** Init VIC4 registers and palette
 	vic_iomode = VIC2_IOMODE;
 	interrupt_status = 0;
-	scanline = 0;
 	compare_raster = 0;
 	// *** Just a check to try all possible regs (in VIC2,VIC3 and VIC4 modes), it should not panic ...
 	// It may also sets/initializes some internal variables sets by register writes, which would cause a crash on screen rendering without prior setup!
-	for (int i = 0; i < 0x140; i++) {	// $140=the last $40 register for VIC-2 mode, when we have fewer ones
+	for (int i = 0; i < 0x140; i++) {
 		vic_write_reg(i, 0);
 		(void)vic_read_reg(i);
 	}
+}
+
+
+static void vic4_reset_display_counters ( void )
+{
+	xcounter = 0;
+	display_row = 0;
+	char_row = 0;
+	ycounter = 0;
+}
+
+
+void vic_init ( void )
+{
+	// Needed to render "drive LED" feature
+	red_colour   = SDL_MapRGBA(sdl_pix_fmt, 0xFF, 0x00, 0x00, 0xFF);
+	black_colour = SDL_MapRGBA(sdl_pix_fmt, 0x00, 0x00, 0x00, 0xFF);
+	// Init VIC4 stuffs
+	vic4_init_palette();
+	force_fast = 0;
+	vic_reset();
 	c128_d030_reg = 0xFE;	// this may be set to 2MHz in the previous step, so be sure to set to FF here, BUT FIX: bit 0 should be inverted!!
 	machine_set_speed(0);
-
 	screen_ram_current_ptr = main_ram + SCREEN_ADDR;
 	colour_ram_current_ptr = colour_ram;
-
+	vic4_reset_display_counters();
 	DEBUG("VIC4: has been initialized." NL);
 }
 
 
-#if 0
-// This function allows to switch between NTSC/PAL on-the-fly (NTSC = 1. PAL = 0)
-void vic4_switch_display_mode(int ntsc)
+// Pair of vic4_open_frame_access() and the place when screen is updated at SDL level, finally.
+// Do NOT call this function from vic4.c! It must be used by the emulator's main loop!
+void vic4_close_frame_access ( void )
 {
-	DEBUGPRINT("VIC: switch_display_mode NTSC=%d" NL, ntsc);
-	xemu_change_display_mode(SCREEN_WIDTH, ntsc ? PHYSICAL_RASTERS_NTSC : PHYSICAL_RASTERS_PAL,	// texture sizes
-		SCREEN_WIDTH, SCREEN_HEIGHT,	// logical size (used with keeping aspect ratio by the SDL render stuffs)
-		SCREEN_WIDTH, SCREEN_HEIGHT,	// window size
-		SCREEN_FORMAT,
-		USE_LOCKED_TEXTURE
-	);
-	if(!xemucfg_get_bool("fullborders"))
-		xemu_set_viewport(48, 32, SCREEN_WIDTH - 48, SCREEN_HEIGHT, 1);
-	vic4_open_frame_access();
-}
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+	// Screenshot
+	if (XEMU_UNLIKELY(registered_screenshot_request)) {
+		unsigned int x1, y1, x2, y2;
+		xemu_get_viewport(&x1, &y1, &x2, &y2);
+		registered_screenshot_request = 0;
+		if (!xemu_screenshot_png(
+			NULL, NULL,
+			1, 1,		// no ratio/zoom correction is applied
+			pixel_start + y1 * SCREEN_WIDTH + x1,	// pixel pointer corresponding to the top left corner of the viewport
+			x2 - x1 + 1,	// width
+			y2 - y1 + 1,	// height
+			SCREEN_WIDTH	// full width (ie, width of the texture)
+		)) {
+			const char *p = strrchr(xemu_screenshot_full_path, DIRSEP_CHR);
+			if (p)
+				OSD(-1, -1, "%s", p + 1);
+		}
+	}
 #endif
+	// Render "drive LED" if it was requested at all
+	if (configdb.show_drive_led && fdc_get_led_state(16)) {
+		unsigned int x_origin, y_origin;	// top right corner of the viewport
+		xemu_get_viewport(NULL, &y_origin, &x_origin, NULL);
+		for (unsigned int y = 0; y < 8; y++)
+			for (unsigned int x = 0; x < 8; x++)
+				*(pixel_start + x_origin - 10 + x + (y + 2 + y_origin) * (SCREEN_WIDTH)) = (x > 1 && x < 7 && y > 1 && y < 7) ? red_colour : black_colour;
+	}
+	// FINALLY ....
+	xemu_update_screen();
+}
 
 
-
-void vic4_open_frame_access()
+// Must be called before using the texture at all, otherwise crash will happen, or nothing at all.
+// Access must be closed with vic4_close_frame_access().
+// Do NOT call this function from vic4.c! It must be used by the emulator's main loop!
+void vic4_open_frame_access ( void )
 {
 	int tail_sdl;
 	current_pixel = pixel_start = xemu_start_pixel_buffer_access(&tail_sdl);
@@ -213,36 +252,41 @@ void vic4_open_frame_access()
 	// Though it can be changed any time, this kind of information really only can be applied
 	// at frame level. Thus we check here, if during the previous frame there was change
 	// and apply the video mode set for our just started new frame.
-	Uint8 new_mode = !!(vic_registers[0x6F] & 0x80);
+	Uint8 new_mode = (configdb.force_videostd >= 0) ? configdb.force_videostd : !!(vic_registers[0x6F] & 0x80);
 	if (XEMU_UNLIKELY(new_mode != videostd_id)) {
 		// We have video mode change!
 		videostd_id = new_mode;
+		// signal that video standard has been changed, it's handled in the main emulation stuff then (reacted with recalculated timing change, and such)
+		// ... including the task of resetting this signal variable!
+		videostd_changed = 1;
 		const char *new_name;
-		float cycles_at_1mhz;	// 1MHz CPU cycles equalient of a scanline time
 		if (videostd_id) {
 			// --- NTSC ---
 			new_name = NTSC_STD_NAME;
 			videostd_frametime = NTSC_FRAME_TIME;
-			cycles_at_1mhz = 1000000.0 / NTSC_LINE_FREQ;
+			videostd_1mhz_cycles_per_scanline = 1000000.0 / (float)(NTSC_LINE_FREQ);
 			max_rasters = PHYSICAL_RASTERS_NTSC;
 			visible_area_height = SCREEN_HEIGHT_VISIBLE_NTSC;
 		} else {
 			// --- PAL ---
 			new_name = PAL_STD_NAME;
 			videostd_frametime = PAL_FRAME_TIME;
-			cycles_at_1mhz = 1000000.0 / PAL_LINE_FREQ;
+			videostd_1mhz_cycles_per_scanline = 1000000.0 / (float)(PAL_LINE_FREQ);
 			max_rasters = PHYSICAL_RASTERS_PAL;
 			visible_area_height = SCREEN_HEIGHT_VISIBLE_PAL;
 		}
-		DEBUGPRINT("VIC: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec)" NL, videostd_name, new_name, cycles_at_1mhz, videostd_frametime);
+		DEBUGPRINT("VIC: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec, max raster is %d, visible area height is %d)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime, max_rasters, visible_area_height);
 		videostd_name = new_name;
-#if 0
-		// TODO: recalculate cpu_cycles/line "constants" for each CPU speed modes (1, 2, 3.5, ~40 MHz)
-		cpu_cycles_per_line_c64  = (int)roundf(cycles_at_1mhz);
-		cpu_cycles_per_line_c128 = (int)roundf(cycles_at_1mhz * 2.0);
-		cpu_cycles_per_line_c65  = (int)roundf(cycles_at_1mhz * 3.5);
-		cpu_cycles_per_line_m65  = (int)roundf(cycles_at_1mhz * 40.0);	// FIXME: configdb.fastclock for newer Xemu! This is BAD since it can be other than 40!!!!
-#endif
+		vic_readjust_sdl_viewport = 1;
+	}
+	// handle this via vic_readjust_sdl_viewport variable (not directly above) so external stuff (like UI) can also
+	// force to adjust viewport, not just the PAL/NTSC change itself (ie: fullborder/clipped border change)
+	if (XEMU_UNLIKELY(vic_readjust_sdl_viewport)) {
+		vic_readjust_sdl_viewport = 0;
+		if (configdb.fullborders)	// XXX FIXME what should be the correct values for full borders and without that?!
+			xemu_set_viewport(0, 0, SCREEN_WIDTH - 1, max_rasters - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
+		else
+			xemu_set_viewport(48, 0, SCREEN_WIDTH - 48, visible_area_height - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
 	}
 	// FIXME: do we need this here? Ie, should this always bound to video mode change (only at frame boundary!) or not ...
 #if 0
@@ -276,7 +320,7 @@ static void vic4_interrupt_checker ( void )
 }
 
 
-static void vic4_check_raster_interrupt(int nraster)
+static void vic4_check_raster_interrupt ( int nraster )
 {
 	if (nraster == compare_raster)
 		interrupt_status |= 1;
@@ -286,22 +330,13 @@ static void vic4_check_raster_interrupt(int nraster)
 }
 
 
-inline static void vic4_calculate_char_x_step()
+inline static void vic4_calculate_char_x_step ( void )
 {
 	char_x_step = (REG_CHARXSCALE / 120.0f) / (REG_H640 ? 1 : 2);
 }
 
 
-static void vic4_reset_display_counters()
-{
-	xcounter = 0;
-	display_row = 0;
-	char_row = 0;
-	ycounter = 0;
-}
-
-
-static void vic4_update_sideborder_dimensions()
+static void vic4_update_sideborder_dimensions ( void )
 {
 	if (REG_CSEL) {	// 40-columns?
 		border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER;
@@ -319,7 +354,7 @@ static void vic4_update_sideborder_dimensions()
 }
 
 
-static void vic4_interpret_legacy_mode_registers()
+static void vic4_interpret_legacy_mode_registers ( void )
 {
 	// See https://github.com/MEGA65/mega65-core/blob/257d78aa6a21638cb0120fd34bc0e6ab11adfd7c/src/vhdl/viciv.vhdl#L1277
 	vic4_update_sideborder_dimensions();
@@ -701,7 +736,6 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 }
 
 
-
 Uint8 vic_read_reg ( int unsigned addr )
 {
 	Uint8 result = vic_registers[addr & 0x7F];	// read the answer by default (mostly this will be), allow to override/modify in the switch construct if needed
@@ -832,7 +866,8 @@ Uint8 vic_read_reg ( int unsigned addr )
 #undef CASE_VIC_ALL
 #undef CASE_VIC_3_4
 
-static inline Uint32 get_charset_effective_addr()
+
+static inline Uint32 get_charset_effective_addr ( void )
 {
 	// cache this?
 	switch (CHARSET_ADDR) {
@@ -929,8 +964,7 @@ static void vic4_draw_sprite_row_mono ( int sprnum, int x_display_pos, const Uin
 			const Uint8 pixel = *row_data_ptr & (0x80 >> xbit);
 			for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
 				if (
-					x_display_pos >= border_x_left &&
-					pixel && (
+					x_display_pos >= border_x_left && pixel && (
 						!SPRITE_IS_BACK(sprnum) ||
 						(SPRITE_IS_BACK(sprnum) && bg_pixel_state[x_display_pos] != FOREGROUND_PIXEL)
 					)
@@ -944,7 +978,7 @@ static void vic4_draw_sprite_row_mono ( int sprnum, int x_display_pos, const Uin
 }
 
 
-static void vic4_do_sprites()
+static void vic4_do_sprites ( void )
 {
 	// Fetch and sequence sprites.
 	//
@@ -952,7 +986,7 @@ static void vic4_do_sprites()
 	// In multicolor mode (MCM=1), the bit combinations "00" and "01" belong to the background
 	// and "10" and "11" to the foreground whereas in standard mode (MCM=0),
 	// cleared pixels belong to the background and set pixels to the foreground.
-	for (int sprnum = 7; sprnum >= 0; --sprnum) {
+	for (int sprnum = 7; sprnum >= 0; sprnum--) {
 		if (REG_SPRITE_ENABLE & (1 << sprnum)) {
 			const int spriteHeight = SPRITE_EXTHEIGHT(sprnum) ? REG_SPRHGHT : 21;
 			int x_display_pos = border_x_left + ((SPRITE_POS_X(sprnum) - SPRITE_X_BASE_COORD) * (REG_SPR640 ? 1 : 2));	// in display units
@@ -1070,7 +1104,7 @@ static void vic4_render_bitplane_char_row ( Uint8* bp_base[8], int glyph_width )
 }
 
 
-void vic4_render_bitplane_raster()
+void vic4_render_bitplane_raster ( void )
 {
 	Uint8* bp_base[8];
 	// Get Bitplane source addresses
@@ -1120,7 +1154,7 @@ void vic4_render_bitplane_raster()
 //
 // VIC-III Extended attributes are applied to characters if properly set,
 // except in Multicolor modes.
-void vic4_render_char_raster()
+void vic4_render_char_raster ( void )
 {
 	int line_char_index = 0;
 	enable_bg_paint = 1;
@@ -1215,7 +1249,7 @@ void vic4_render_char_raster()
 }
 
 
-int vic4_render_scanline()
+int vic4_render_scanline ( void )
 {
 	// Work this first. DO NOT OPTIMIZE EARLY.
 
