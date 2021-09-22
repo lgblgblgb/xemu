@@ -37,7 +37,6 @@ static Uint32 *pixel_end, *pixel_start;				// points to the end and start of the
 static Uint32 *pixel_raster_start;				// first pixel of current raster
 Uint8 vic_registers[0x80];					// VIC-4 registers
 int vic_iomode;							// VIC2/VIC3/VIC4 mode
-int force_fast;							// POKE 0,64 and 0,65 trick ...
 static int compare_raster;					// raster compare (9 bits width) data
 static int logical_raster = 0;
 static int interrupt_status;					// Interrupt status of VIC
@@ -190,7 +189,6 @@ void vic_init ( void )
 	black_colour = SDL_MapRGBA(sdl_pix_fmt, 0x00, 0x00, 0x00, 0xFF);
 	// Init VIC4 stuffs
 	vic4_init_palette();
-	force_fast = 0;
 	vic_reset();
 	c128_d030_reg = 0xFE;	// this may be set to 2MHz in the previous step, so be sure to set to FF here, BUT FIX: bit 0 should be inverted!!
 	machine_set_speed(0);
@@ -292,8 +290,8 @@ static void vic4_update_vertical_borders( void )
 			display_row_count = 24*2;
 		}
 		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 6 + (REG_VIC2_YSCROLL * 2));
-	}	
-	DEBUGPRINT("VIC4: set border top=%d, bottom=%d, textypos=%d, display_row_count=%d vic_ii_first_raster=%d" NL, BORDER_Y_TOP, BORDER_Y_BOTTOM, 
+	}
+	DEBUGPRINT("VIC4: set border top=%d, bottom=%d, textypos=%d, display_row_count=%d vic_ii_first_raster=%d" NL, BORDER_Y_TOP, BORDER_Y_BOTTOM,
 		CHARGEN_Y_START, display_row_count, vicii_first_raster);
 }
 
@@ -327,7 +325,7 @@ static void vic4_interpret_legacy_mode_registers ( void )
 	SET_COLORRAM_BASE(0);
 	DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, charstep=%d bytes, charxscale=%d, ras_src=%d "
 		"screen_ram=$%06x, charset/bitmap=$%06x, sprite=$%06x" NL,
-		REG_16BITCHARSET, REG_CHRCOUNT, CHARSTEP_BYTES, REG_CHARXSCALE, 
+		REG_16BITCHARSET, REG_CHRCOUNT, CHARSTEP_BYTES, REG_CHARXSCALE,
 		REG_FNRST, SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
 }
 
@@ -672,9 +670,9 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;
 
 		CASE_VIC_4(0x70):	// VIC-IV palette selection register
-			palette		= ((data & 0x03) << 8) + vic_palettes;
+			altpalette	= ((data & 0x03) << 8) + vic_palettes;
 			spritepalette	= ((data & 0x0C) << 6) + vic_palettes;
-			altpalette	= ((data & 0x30) << 4) + vic_palettes;
+			palette		= ((data & 0x30) << 4) + vic_palettes;
 			palregaccofs	= ((data & 0xC0) << 2);
 			check_if_rom_palette(vic_registers[0x30] & 4);
 			break;
@@ -1064,7 +1062,7 @@ static void vic4_render_fullcolor_char_row ( const Uint8* char_row, int glyph_wi
 
 
 // 16-color (Nybl) mode (4-bit per pixel / 16 pixel wide characters)
-static void vic4_render_16color_char_row ( const Uint8* char_row, int glyph_width ) 
+static void vic4_render_16color_char_row ( const Uint8* char_row, int glyph_width )
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		Uint8 char_data = char_row[((int)cx) / 2];
