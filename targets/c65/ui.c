@@ -56,6 +56,12 @@ static void ui_attach_d81_by_browsing ( int drive )
 static void ui_attach_d81_by_browsing_8 ( void ) { ui_attach_d81_by_browsing(0); }
 static void ui_attach_d81_by_browsing_9 ( void ) { ui_attach_d81_by_browsing(1); }
 
+static void ui_cb_detach_d81 ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
+	d81access_close(VOIDPTR_TO_INT(m->user_data));
+}
+
 static void ui_run_prg_by_browsing ( void )
 {
 	char fnbuf[PATH_MAX + 1];
@@ -291,13 +297,19 @@ static const struct menu_st menu_rom[] = {
 	{ "Load Xemu default ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_load_rom_default       },
 	{ NULL }
 };
+static const struct menu_st menu_drives[] = {
+	{ "Attach D81 to drive 8",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing_8 },
+	{ "Detach D81 from drive 8",	XEMUGUI_MENUID_CALLABLE,	ui_cb_detach_d81, (void*)0 },
+	{ "Attach D81 to drive 9",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing_9 },
+	{ "Detach D81 from drive 9",	XEMUGUI_MENUID_CALLABLE,	ui_cb_detach_d81, (void*)1 },
+	{ NULL }
+};
 static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
 	{ "Reset", 	 		XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
 	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
 	{ "ROM",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_rom     },
-	{ "Attach D81 to drive 8",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing_8 },
-	{ "Attach D81 to drive 9",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing_9 },
+	{ "Drives / D81 images",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_drives  },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing    },
 #ifdef XEMU_ARCH_WIN
 	{ "System console",		XEMUGUI_MENUID_CALLABLE |
