@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2017,2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,15 +16,13 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_M65_SNAPSHOT_H_INCLUDED
-#define __XEMU_M65_SNAPSHOT_H_INCLUDED
+#ifndef XEMU_MEGA65_SNAPSHOT_H_INCLUDED
+#define XEMU_MEGA65_SNAPSHOT_H_INCLUDED
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 #include "xemu/emutools_snapshot.h"
 
 // From other modules ...
-extern struct Cia6526 cia1, cia2;
-extern struct SidEmulation sid1, sid2;;
 extern int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block );
 extern int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
 extern int m65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block );

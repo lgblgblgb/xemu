@@ -38,6 +38,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 int in_hypervisor;			// mega65 hypervisor mode
+int hypervisor_to_enable_audio = 0;
 
 static char debug_lines[0x4000][2][INFO_MAX_SIZE];		// I know. UGLY! and wasting memory. But this is only a HACK :)
 static int resolver_ok = 0;
@@ -152,7 +153,7 @@ void hypervisor_enter_via_write_trap ( int trapno )
 	if (do_nop_check) {
 		// FIXME: for real there should be a memory reading function independent to the one used by the CPU, since
 		// this has some side effects to just fetch a byte to check something, which is otherwise used normally to fetch CPU opcodes and such
-		const Uint8 skipped_byte = cpu65_read_callback(cpu65.pc);
+		Uint8 skipped_byte = cpu65_read_callback(cpu65.pc);
 		if (XEMU_UNLIKELY(skipped_byte != 0xEA)) {	// $EA = opcode of NOP
 			char msg[256];
 			snprintf(msg, sizeof msg,
@@ -278,7 +279,7 @@ void hypervisor_leave ( void )
 	memory_set_vic3_rom_mapping(vic_registers[0x30]);	// restore possible active VIC-III mapping
 	memory_set_do_map();	// restore mapping ...
 	if (XEMU_UNLIKELY(first_hypervisor_leave)) {
-		DEBUGPRINT("HYPERVISOR: first return after RESET." NL);
+		DEBUGPRINT("HYPERVISOR: first return after RESET, start of processing workarounds." NL);
 		first_hypervisor_leave = 0;
 		int new_pc = refill_c65_rom_from_preinit_cache();	// this function should decide then, if it's really a (forced) thing to do ...
 		if (new_pc >= 0) {
@@ -289,7 +290,20 @@ void hypervisor_leave ( void )
 			cpu65.pc = new_pc;
 		} else
 			DEBUGPRINT("MEM: no forced ROM re-apply policy was requested" NL);
-		dma_init_set_rev(configdb.dmarev, main_ram + 0x20000 + 0x16);
+		dma_init_set_rev(configdb.dmarev, main_ram + 0x20000);
+		if (configdb.init_videostd >= 0) {
+			DEBUGPRINT("VIC: setting %s mode as initial-default based on request" NL, configdb.init_videostd ? "NTSC" : "PAL");
+			if (configdb.init_videostd)
+				vic_registers[0x6F] |= 0x80;
+			else
+				vic_registers[0x6F] &= 0x7F;
+		}
+		if (hypervisor_to_enable_audio) {
+			hypervisor_to_enable_audio = 0;
+			configdb.nosound = 0;
+			DEBUGPRINT("HYPERVISOR: enabling audio (workaround)" NL);
+		}
+		DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 	}
 	if (XEMU_UNLIKELY(hypervisor_queued_trap >= 0)) {
 		// Not so much used currently ...
@@ -299,20 +313,13 @@ void hypervisor_leave ( void )
 	}
 }
 
-void write_hypervisor_byte(char byte);
+
 
 void hypervisor_serial_monitor_push_char ( Uint8 chr )
 {
 	if (hypervisor_monout_p >= hypervisor_monout - 1 + sizeof hypervisor_monout)
-	{
-		// NOTE: For long mega65_ftp actions like 'get MYDISK.D81`, a lot of
-		// serial chars will be sent that are raw binary, and there's a good chance
-		// it could overflow the 'hypervisor_monout' buffer.
-		// So in such cases, I'll simply empty hypervisor_monout.
-		hypervisor_monout_p = hypervisor_monout;
-	}
+		return;
 	int flush = (chr == 0x0A || chr == 0x0D || chr == 0x8A || chr == 0x8D);
-	write_hypervisor_byte(chr);
 	if (hypervisor_monout_p == hypervisor_monout && flush)
 		return;
 	if (flush) {

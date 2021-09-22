@@ -138,8 +138,17 @@ extern int seconds_timer_trigger;
 extern char *sdl_pref_dir, *sdl_base_dir, *sdl_inst_dir;
 extern int sysconsole_is_open;
 extern int sdl_default_win_x_size, sdl_default_win_y_size;
+extern int register_new_texture_creation;
 extern SDL_version sdlver_compiled, sdlver_linked;
 extern Uint32 *xemu_frame_pixel_access_p;
+
+#define XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE	1
+//#define XEMU_VIEWPORT_WIN_SIZE_FOLLOW_LOGICAL	2
+
+extern void xemu_set_viewport ( unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, unsigned int flags );
+extern void xemu_get_viewport ( unsigned int *x1, unsigned int *y1, unsigned int *x2, unsigned int *y2 );
+
+extern void xemu_window_snap_to_optimal_size ( int forced );
 
 extern int xemu_init_debug ( const char *fn );
 extern time_t xemu_get_unixtime ( void );

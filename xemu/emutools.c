@@ -31,9 +31,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifdef XEMU_ARCH_UNIX
 #	include <signal.h>
 #endif
-#ifdef HAVE_XEMU_SOCKET_API
-#	include "xemu/emutools_socketapi.h"
-#endif
 
 #ifdef XEMU_MISSING_BIGGEST_ALIGNMENT_WORKAROUND
 #	warning "System did not define __BIGGEST_ALIGNMENT__ Xemu assumes some default value."
@@ -82,7 +79,9 @@ SDL_Window   *sdl_win = NULL;
 SDL_Renderer *sdl_ren = NULL;
 SDL_Texture  *sdl_tex = NULL;
 SDL_PixelFormat *sdl_pix_fmt;
+static Uint32 sdl_pixel_format_id;
 static const char default_window_title[] = "XEMU";
+int register_new_texture_creation = 0;
 char *xemu_app_org = NULL, *xemu_app_name = NULL;
 #ifdef XEMU_ARCH_HTML
 static const char *emscripten_sdl_base_dir = EMSCRIPTEN_SDL_BASE_DIR;
@@ -112,9 +111,13 @@ FILE *debug_fp = NULL;
 int chatty_xemu = 1;
 int sdl_default_win_x_size;
 int sdl_default_win_y_size;
+static SDL_Rect sdl_viewport, *sdl_viewport_ptr = NULL;
+static unsigned int sdl_texture_x_size, sdl_texture_y_size;
 
 static SDL_bool grabbed_mouse = SDL_FALSE, grabbed_mouse_saved = SDL_FALSE;
 int allow_mouse_grab = 1;
+static int sdl_viewport_changed;
+static int follow_win_size;
 
 #if !SDL_VERSION_ATLEAST(2, 0, 4)
 #error "At least SDL version 2.0.4 is needed!"
@@ -502,9 +505,6 @@ static void shutdown_emulator ( void )
 		sdl_win = NULL;
 	}
 	atexit_callback_for_console();
-#ifdef HAVE_XEMU_SOCKET_API
-	xemusock_uninit();
-#endif
 	//SDL_Quit();
 	if (td_stat_counter) {
 		char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
@@ -687,16 +687,25 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 int xemu_init_sdl ( void )
 {
 #ifndef XEMU_ARCH_HTML
-	if (!SDL_WasInit(SDL_INIT_EVERYTHING)) {
+	const Uint32 XEMU_SDL_INIT_EVERYTHING =
+#if defined(XEMU_ARCH_WIN) && defined(SDL_INIT_SENSOR)
+		// FIXME: SDL or Windows has the bug that SDL_INIT_SENSOR when used, there is some "sensor manager" problem, so we left it out
+		// SDL_INIT_SENSOR was introduced somewhere in 2.0.9, however since it's a macro, it's safer not to test actual SDL version number
+		SDL_INIT_EVERYTHING & (~SDL_INIT_SENSOR);
+#warning	"Activating windows + SDL sensor init problem workaround ..."
+#else
+		SDL_INIT_EVERYTHING;
+#endif
+	if (!SDL_WasInit(XEMU_SDL_INIT_EVERYTHING)) {
 		DEBUGPRINT("SDL: no SDL subsystem initialization has been done yet, do it!" NL);
 		SDL_Quit();	// Please read the long comment at the pre-init func above to understand this SDL_Quit() here and then the SDL_Init() right below ...
 		DEBUG("SDL: before SDL init" NL);
-		if (SDL_Init(SDL_INIT_EVERYTHING)) {
+		if (SDL_Init(XEMU_SDL_INIT_EVERYTHING)) {
 			ERROR_WINDOW("Cannot initialize SDL: %s", SDL_GetError());
 			return 1;
 		}
 		DEBUG("SDL: after SDL init" NL);
-		if (!SDL_WasInit(SDL_INIT_EVERYTHING))
+		if (!SDL_WasInit(XEMU_SDL_INIT_EVERYTHING))
 			FATAL("SDL_WasInit()=0 after init??");
 	} else
 		DEBUGPRINT("SDL: no SDL subsystem initialization has been done already." NL);
@@ -730,6 +739,105 @@ int xemu_init_sdl ( void )
 	if (sdlver_compiled.major != sdlver_linked.major || sdlver_compiled.minor != sdlver_linked.minor || sdlver_compiled.patch != sdlver_linked.patch)
 		WARNING_WINDOW(SDL_VER_MISMATCH_WARN_STR);
 #endif
+	return 0;
+}
+
+
+void xemu_window_snap_to_optimal_size ( int forced )
+{
+	// XXX TODO check if fullscreen state is active?
+	// though it must be checked if it's needed at all (ie: SDL is OK with resizing window in fullscreen mode without any effect BEFORE switcing back from fullscreen)
+	static Uint32 last_resize = 0;
+	Uint32 now = 0;
+	if (!forced && sdl_viewport_changed && follow_win_size) {
+		now = SDL_GetTicks();
+		if (now - last_resize >= 1000) {
+			sdl_viewport_changed = 0;
+			forced = 1;
+		}
+	}
+	if (!forced)
+		return;
+	int w, h;
+	SDL_GetWindowSize(sdl_win, &w, &h);
+	float rat = (float)w / (float)sdl_viewport.w;
+	const float rat2 = (float)h / (float)sdl_viewport.h;
+	if (rat2 > rat)
+		rat = rat2;
+	rat = roundf(rat);	// XXX TODO: depends on math.h mingw warning!
+	// XXX TODO: check if window is not larger than the screen itself
+	if (rat < 1)
+		rat = 1;
+	const int w2 = rat * sdl_viewport.w;
+	const int h2 = rat * sdl_viewport.h;
+	if (w != w2 || h != h2) {
+		last_resize = now;
+		SDL_SetWindowSize(sdl_win, w2, h2);
+		DEBUGPRINT("SDL: auto-resizing window to %d x %d (zoom level approximated: %d)" NL, w2, h2, (int)rat);
+	} else
+		DEBUGPRINT("SDL: no auto-resizing was needed (same size)" NL);
+}
+
+
+void xemu_set_viewport ( unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, unsigned int flags )
+{
+	if (XEMU_UNLIKELY(x1 == 0 && y1 == 0 && x2 == 0 && y2 == 0)) {
+		sdl_viewport_ptr = NULL;
+		sdl_viewport.x = 0;
+		sdl_viewport.y = 0;
+		sdl_viewport.w = sdl_texture_x_size;
+		sdl_viewport.h = sdl_texture_y_size;
+	} else {
+		if (XEMU_UNLIKELY(x1 > x2 || y1 > y2 || x1 >= sdl_texture_x_size || y1 >= sdl_texture_y_size || x2 >= sdl_texture_x_size || y2 >= sdl_texture_y_size)) {
+			FATAL("Invalid xemu_set_viewport(%d,%d,%d,%d) for texture (%d x %d)", x1, y1, x2, y2, sdl_texture_x_size, sdl_texture_y_size);
+		} else {
+			sdl_viewport_ptr = &sdl_viewport;
+			sdl_viewport.x = x1;
+			sdl_viewport.y = y1;
+			sdl_viewport.w = x2 - x1 + 1;
+			sdl_viewport.h = y2 - y1 + 1;
+		}
+	}
+	sdl_viewport_changed = 1;
+	follow_win_size = 0;
+	if ((flags & XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE)) {
+		SDL_RenderSetLogicalSize(sdl_ren, sdl_viewport.w, sdl_viewport.h);
+		// XXX this should be not handled this way
+		sdl_default_win_x_size = sdl_viewport.w;
+		sdl_default_win_y_size = sdl_viewport.h;
+		//if ((flags & XEMU_VIEWPORT_WIN_SIZE_FOLLOW_LOGICAL))
+		//XXX remove this XEMU_VIEWPORT_WIN_SIZE_FOLLOW_LOGICAL then!
+		follow_win_size = 1;
+	}
+}
+
+
+void xemu_get_viewport ( unsigned int *x1, unsigned int *y1, unsigned int *x2, unsigned int *y2 )
+{
+	if (x1)
+		*x1 = sdl_viewport.x;
+	if (y1)
+		*y1 = sdl_viewport.y;
+	if (x2)
+		*x2 = sdl_viewport.x + sdl_viewport.w - 1;
+	if (y2)
+		*y2 = sdl_viewport.y + sdl_viewport.h - 1;
+}
+
+
+static int xemu_create_main_texture ( void )
+{
+	DEBUGPRINT("SDL: creating main texture %d x %d" NL, sdl_texture_x_size, sdl_texture_y_size);
+	SDL_Texture *new_tex = SDL_CreateTexture(sdl_ren, sdl_pixel_format_id, SDL_TEXTUREACCESS_STREAMING, sdl_texture_x_size, sdl_texture_y_size);
+	if (!new_tex) {
+		DEBUGPRINT("SDL: cannot create main texture: %s" NL, SDL_GetError());
+		return 1;
+	}
+	if (sdl_tex) {
+		DEBUGPRINT("SDL: destroying old main texture" NL);
+		SDL_DestroyTexture(sdl_tex);
+	}
+	sdl_tex = new_tex;
 	return 0;
 }
 
@@ -866,8 +974,11 @@ int xemu_post_init (
 		DEBUGPRINT(")" NL);
 	}
 	SDL_RenderSetLogicalSize(sdl_ren, logical_x_size, logical_y_size);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
-	sdl_tex = SDL_CreateTexture(sdl_ren, pixel_format, SDL_TEXTUREACCESS_STREAMING, texture_x_size, texture_y_size);
-	if (!sdl_tex) {
+	sdl_texture_x_size = texture_x_size;
+	sdl_texture_y_size = texture_y_size;
+	sdl_pixel_format_id = pixel_format;
+	xemu_set_viewport(0, 0, 0, 0, 0);
+	if (xemu_create_main_texture()) {
 		ERROR_WINDOW("Cannot create SDL texture: %s", SDL_GetError());
 		return 1;
 	}
@@ -979,6 +1090,10 @@ void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_
    tail is meant in 4 bytes (ie Uint32 pointer)! */
 Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail )
 {
+	if (register_new_texture_creation) {
+		register_new_texture_creation = 0;
+		xemu_create_main_texture();
+	}
 	if (sdl_pixel_buffer) {
 		*texture_tail = 0;		// using non-locked texture access, "tail" is always zero
 		xemu_frame_pixel_access_p = sdl_pixel_buffer;
@@ -1014,7 +1129,7 @@ void xemu_update_screen ( void )
 	}
 	//if (seconds_timer_trigger)
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
-	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);
+	SDL_RenderCopy(sdl_ren, sdl_tex, sdl_viewport_ptr, NULL);
 #ifdef XEMU_OSD_SUPPORT
 	_osd_render();
 #endif
@@ -1223,22 +1338,23 @@ void sysconsole_close ( const char *waitmsg )
 		// So instead of a GUI element here with a dialog box, we must rely on the console to press a key to continue ...
 		printf("\n\n*** %s\nPress SPACE to continue.", waitmsg);
 		while (sysconsole_getch() != 32)
-			;
+			SDL_Delay(1);
 	}
-	// redirect std file handled to "NUL" to avoid strange issues after closing the console, like corrupting
-	// other files (for unknown reasons) by further I/O after FreeConsole() ...
-	if (
-		file_handle_redirect(NULL_DEVICE, "stderr", "w", stderr) ||
-		file_handle_redirect(NULL_DEVICE, "stdout", "w", stdout) ||
-		file_handle_redirect(NULL_DEVICE, "stdin",  "r", stdin )
-	)
-		return;	// we want to be sure to abort closing console, if redirection didn't worked for some reason!!
 	if (!FreeConsole()) {
 		if (!waitmsg)
 			ERROR_WINDOW("Cannot release windows console!");
 	} else {
 		sysconsole_is_open = 0;
-		DEBUGPRINT("WINDOWS: console is closed" NL);
+#if 1
+		// redirect std file handled to "NUL" to avoid strange issues after closing the console, like corrupting
+		// other files (for unknown reasons) by further I/O after FreeConsole() ...
+		int ret = file_handle_redirect(NULL_DEVICE, "stderr", "w", stderr);
+		ret |=    file_handle_redirect(NULL_DEVICE, "stdout", "w", stdout);
+		ret |=    file_handle_redirect(NULL_DEVICE, "stdin",  "r", stdin );
+		DEBUG("WINDOWS: console has been closed (file_handle_redirect: %s)" NL, ret ? "ERROR" : "OK");
+#else
+		DEBUGPRINT("WINDOWS: console has been closed" NL);
+#endif
 	}
 #elif defined(XEMU_ARCH_MAC)
 	if (macos_gui_started) {

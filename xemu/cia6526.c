@@ -284,11 +284,13 @@ void cia_tick ( struct Cia6526 *cia, int ticks )
 	/* Timer A */
 	if (cia->CRA & 1) {
 		cia->TCA -= ticks;
-		if (cia->TCA < 0) {
+		if (cia->TCA <= 0) {
 			timer_a_underflow = 1;
 			DEBUG("%s timer-A expired!" NL, cia->name);
 			ICR_SET(1);
 			cia->TCA += cia->TLAL | (cia->TLAH << 8);
+			if (cia->TCA < 0)
+				cia->TCA = 0;
 			if (cia->CRA & 8)
 				cia->CRA &= 254; // one shot mode: reset bit 1 (timer stop)
 		}
@@ -299,13 +301,17 @@ void cia_tick ( struct Cia6526 *cia, int ticks )
 		if ((cia->CRB & 64)) {		// linked timers mode: timer-B counts of underflows of timer-A
 			if (timer_a_underflow)
 				cia->TCB--;
+			else
+				return;
 		} else {			// independent timer-B: works the same as timer-A
 			cia->TCB -= ticks;
 		}
-		if (cia->TCB < 0) {
+		if (cia->TCB <= 0) {
 			DEBUG("%s timer-B expired!" NL, cia->name);
 			ICR_SET(2);
 			cia->TCB += cia->TLBL | (cia->TLBH << 8);
+			if (cia->TCB < 0)
+				cia->TCB = 0;
 			if (cia->CRB & 8)
 				cia->CRB &= 254; // one shot mode: reset bit 1 (timer stop)
 		}
