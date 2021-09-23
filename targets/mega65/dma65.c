@@ -57,6 +57,7 @@ int   dma_chip_revision_is_dynamic;	// allowed to change DMA chip revision (norm
 int   dma_chip_revision_override;
 int   dma_chip_initial_revision;
 int   rom_date = 0;
+int   rom_is_openroms = 0;
 // Hacky stuff:
 // low byte: the transparent byte value
 // bit 8: zero = transprent mode is used, 1 = no DMA transparency is in used
@@ -617,41 +618,49 @@ int dma_update_multi_steps ( int do_for_cycles )
 }
 
 
-void detect_rom_date ( Uint8 *p )
+void detect_rom_date ( const Uint8 *rom )
 {
-	if (p == NULL) {
+	if (!rom) {
 		DEBUGPRINT("ROM: version check is disabled (NULL pointer), previous version info: %d" NL, rom_date);
-	} else if (p[0] == 0x56) {     // 'V'
-		rom_date = 0;
-		for (int a = 0; a < 6; a++) {
-			p++;
-			if (*p >= '0' && *p <= '9')
-				rom_date = rom_date * 10 + *p - '0';
-			else {
-				rom_date = -1;
-				DEBUGPRINT("ROM: version check failed (num-numberic character)" NL);
-				return;
-			}
-		}
-		DEBUGPRINT("ROM: version check succeeded, detected version: %d" NL, rom_date);
-	} else {
-		DEBUGPRINT("ROM: version check failed (no leading 'V')" NL);
-		rom_date = -1;
+		return;
 	}
+	rom_is_openroms = 0;
+	if (rom[0x16] == 0x56) {	// 'V' at ofs $16 for closed ROMs
+		rom += 0x16;
+	} else if (rom[0x10] == 0x4F) {	// 'O' at ofs $10 for open ROMs
+		rom += 0x10;
+		rom_is_openroms = 1;
+	} else {
+		DEBUGPRINT("ROM: version check failed (no leading 'V' or 'O' at ROM ofs $10/$16)" NL);
+		rom_date = -1;
+		return;
+	}
+	rom_date = 0;
+	for (int a = 0; a < 6; a++) {
+		rom++;
+		if (*rom >= '0' && *rom <= '9')
+			rom_date = rom_date * 10 + *rom - '0';
+		else {
+			rom_date = -1;
+			DEBUGPRINT("ROM: version check failed (num-numberic character)" NL);
+			return;
+		}
+	}
+	DEBUGPRINT("ROM: version check succeeded, detected version: %d (%s)" NL, rom_date, rom_is_openroms ? "Open-ROMs" : "Closed-ROMs");
 }
 
 
-void dma_init_set_rev ( unsigned int revision, Uint8 *rom_ver_signature )
+void dma_init_set_rev ( unsigned int revision, const Uint8 *rom )
 {
-	detect_rom_date(rom_ver_signature);
-	int rom_suggested_dma_revision = (rom_date < 900000 || rom_date > 910522);
+	detect_rom_date(rom);
+	const int rom_suggested_dma_revision = (rom_date < 900000 || rom_date > 910522 || rom_is_openroms);
 	DEBUGPRINT("ROM: version check suggests DMA revision %d" NL, rom_suggested_dma_revision);
 	revision &= 0xFF;
 	if (revision > 2) {
 		FATAL("Unknown DMA revision value tried to be set (%d)!", revision);
 	} else if (revision == 2) {
-		if (!rom_ver_signature)
-			FATAL("dma_ini_set_rev(): revision == 2 (auto-detect) but rom_ver_signature == NULL (cannot auto-detect)");
+		if (!rom)
+			FATAL("dma_ini_set_rev(): revision == 2 (auto-detect) but rom == NULL (cannot auto-detect)");
 		if (rom_date <= 0)
 			WARNING_WINDOW("ROM version cannot be detected, and DMA revision auto-detection was requested.\nDefaulting to revision %d.\nWarning, this may cause incorrect behaviour!", rom_suggested_dma_revision);
 		dma_chip_revision = rom_suggested_dma_revision;
@@ -664,6 +673,7 @@ void dma_init_set_rev ( unsigned int revision, Uint8 *rom_ver_signature )
 			WARNING_WINDOW("DMA revision is forced to be %d, while ROM version (%d)\nsuggested revision is %d. Using the forced revision %d.\nWarning, this may cause incorrect behaviour!", dma_chip_revision, rom_date, rom_suggested_dma_revision, dma_chip_revision);
 		DEBUGPRINT("DMA: setting chip revision to #%d based on configuration/command line request (forced). Suggested revision by ROM date: #%d" NL, dma_chip_initial_revision, rom_suggested_dma_revision);
 	}
+	dma_registers[3] = dma_chip_revision;
 }
 
 
@@ -709,6 +719,7 @@ void dma_reset ( void )
 	dma_registers[0x0B] = 1;	// fixpoint math target step integer part (1), fractional (reg#A) is already zero by memset() above
 	dma_chip_revision_override = -1;
 	dma_transparency = 0x100;	// disable transparency by default
+	dma_registers[3] = dma_chip_revision;
 }
 
 

@@ -25,18 +25,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define UMON_DEFAULT_PORT ":4510"
 
-// seems as though m65.c actions like fetch_ram(0xFFF8000, 0x4000, hyppo_data)
-// cause a lot of umon_writes to accumulate quickly, so had to increase this buffer
-#define UMON_WRITE_BUFFER_SIZE	0x10000
+#define UMON_WRITE_BUFFER_SIZE	0x4000
+#define umon_printf(...)	umon_write_size += sprintf(umon_write_buffer + umon_write_size, __VA_ARGS__)
 
-extern void umon_printf(const char* format, ...);
+extern int  umon_write_size;
+extern int  umon_send_ok;
+extern char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
 extern int  uartmon_init   ( const char *fn );
 extern int  uartmon_is_active ( void );
 extern void uartmon_update ( void );
 extern void uartmon_close  ( void );
-extern void uartmons_finish_command ( void );
-extern void set_umon_send_ok(int val);
+extern void uartmon_finish_command ( void );
 
 #endif
 

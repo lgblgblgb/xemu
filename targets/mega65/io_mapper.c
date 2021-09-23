@@ -22,8 +22,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "memory_mapper.h"
 #include "xemu/f011_core.h"
 #include "dma65.h"
-#include "xemu/emutools_hid.h"
-//#include "xemu/cpu65.h"
 #include "vic4.h"
 #include "vic4_palette.h"
 #include "sdcard.h"
@@ -38,7 +36,6 @@ int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set sw
 Uint8  D6XX_registers[0x100];		// mega65 specific D6XX range, excluding the UART part (not used here!)
 Uint8  D7XX[0x100];			// FIXME: hack for future M65 stuffs like ALU! FIXME: no snapshot on these!
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
-static int mouse_x = 0, mouse_y = 0;	// for our primitive C1351 mouse emulation
 int    cpu_mega65_opcodes = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;
 int port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65 keyboard
@@ -144,15 +141,9 @@ Uint8 io_read ( unsigned int addr )
 		case 0x15:	// $D500-$D5FF ~ C65 I/O mode
 		case 0x34:	// $D400-$D4FF ~ M65 I/O mode
 		case 0x35:	// $D500-$D5FF ~ M65 I/O mode
-			if (is_mouse_grab()) {		// Rudimentary C1351 mouse emulation (on SID#1) ...
-				switch (addr & 0x5F) {
-					case 0x19:
-						mouse_x = (mouse_x + hid_read_mouse_rel_x(-31, 31)) & 63;
-						return mouse_x << 1;
-					case 0x1A:
-						mouse_y = (mouse_y - hid_read_mouse_rel_y(-31, 31)) & 63;
-						return mouse_y << 1;
-				}
+			switch (addr & 0x5F) {
+				case 0x19: return get_mouse_x_via_sid();
+				case 0x1A: return get_mouse_y_via_sid();
 			}
 			return 0xFF;
 		case 0x16:	// $D600-$D6FF ~ C65 I/O mode
@@ -193,6 +184,9 @@ Uint8 io_read ( unsigned int addr )
 				case 0x0F:
 					// D60F bit 5, real hardware (1), emulation (0), other bits are not emulated yet by Xemu, so I give simply zero
 					return 0;
+				case 0x1B:
+					// D61B amiga / 1531 mouse auto-detect. FIXME XXX what value we should return at this point? :-O
+					return 0xFF;
 				case 0x32: // D632-D635: FPGA firmware ID
 				case 0x33:
 				case 0x34:
@@ -383,7 +377,10 @@ void io_write ( unsigned int addr, Uint8 data )
 		case 0x15:	// $D500-$D5FF ~ C65 I/O mode
 		case 0x34:	// $D400-$D4FF ~ M65 I/O mode
 		case 0x35:	// $D500-$D5FF ~ M65 I/O mode
-			audio65_sid_write(addr, data);	// We need full addr, audio65_sid_write will decide the SID instance from that!
+			//sid_write_reg(addr & 0x40 ? &sid[1] : &sid[0], addr & 31, data);
+			//DEBUGPRINT("SID #%d reg#%02X data=%02X" NL, (addr >> 5) & 3, addr & 0x1F, data);
+			//sid_write_reg(&sid[(addr >> 5) & 3], addr & 0x1F, data);
+			audio65_sid_write(addr, data); // We need full addr, audio65_sid_write will decide the SID instance from that!
 			return;
 		case 0x16:	// $D600-$D6FF ~ C65 I/O mode
 			if ((addr & 0xFF) == 0x07) {
@@ -418,6 +415,11 @@ void io_write ( unsigned int addr, Uint8 data )
 			switch (addr) {
 				case 0x10:	// ASCII kbd last press value to zero whatever the written data would be
 					hwa_kbd_move_next();
+					return;
+				case 0x15:
+				case 0x16:
+				case 0x17:
+					virtkey(addr - 0x15, data & 0x7F);
 					return;
 				case 0x7C:					// hypervisor serial monitor port
 					hypervisor_serial_monitor_push_char(data);

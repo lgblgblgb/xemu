@@ -86,8 +86,10 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon },
 	{ "besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override },
 	{ "skipunhandledmem", "Do not even ask on unhandled memory access (hides problems!!)", &configdb.skip_unhandled_mem },
+	{ "fullborders", "Show non-clipped display borders", &configdb.fullborders },
 	{ "nosound", "Disables audio output generation", &configdb.nosound },
 	{ "noopl3", "Disables OPL3 emulation", &configdb.noopl3 },
+	{ "soundresetbug", "Disables audio during reset (workaround)", &configdb.soundresetbug },
 	{ NULL }
 };
 
@@ -96,13 +98,16 @@ static const struct xemutools_configdef_num_st num_options[] = {
 	{ "model", 0xFF, "Emulated MEGA65 model (255=custom/Xemu)", &configdb.mega65_model, 0, 0xFF },
 	{ "kicked", 0x0, "Answer to KickStart upgrade (128=ask user in a pop-up window)", &configdb.kicked, 0, 0xFF },
 	{ "prgmode", 0, "Override auto-detect option for -prg (64 or 65 for C64/C65 modes, 0 = default, auto detect)", &configdb.prgmode, 0, 65 },
-	{ "rtchofs", 0, "RTC (and CIA TOD) default offset to real-time (mostly for testing!)", &configdb.rtc_hour_offset, -24, 24 },
+	{ "rtchofs", 0, "RTC (and CIA TOD) default hour offset to real-time -24 ... 24 (for testing!)", &configdb.rtc_hour_offset, -24, 24 },
 #ifdef HAVE_XEMU_UMON
 	{ "umon", 0, "TCP-based dual mode (http / text) monitor port number [NOT YET WORKING]", &configdb.umon, 0, 0xFFFF },
 #endif
 	{ "sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2 },
 	{ "stereoseparation", AUDIO_DEFAULT_SEPARATION, "Audio stereo separation; 100(hard-stereo) ... 0(mono) ... -100(hard-reversed-stereo); default: " STRINGIFY(AUDIO_DEFAULT_SEPARATION), &configdb.stereoseparation, -100, 100 },
 	{ "mastervolume", AUDIO_DEFAULT_VOLUME, "Audio emulation mixing final volume (100=unchanged ... 0=silence); default: " STRINGIFY(AUDIO_DEFAULT_VOLUME), &configdb.mastervolume, 0, 100 },
+	{ "forcevideostd", -1, "Force video standard (0 = PAL, 1 = NTSC, -1 = default switchable by VIC-IV)", &configdb.force_videostd, -1, 1 },
+	// FIXME: as a workaround, I set this to "0" PAL, as newer MEGA65's default is this. HOWEVER this should be not handled this way but using a newer Hyppo!
+	{ "initvideostd", 0, "Use given video standard as the startup one (0 = PAL, 1 = NTSC, -1 = Hyppo default)", &configdb.init_videostd, -1, 1 },
 	{ "sidmask", 15, "Enabled SIDs of the four, in form of a bitmask", &configdb.sidmask, 0, 15 },
 	{ NULL }
 };

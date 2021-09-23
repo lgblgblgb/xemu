@@ -34,6 +34,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "m65_snapshot.h"
 #include "memory_mapper.h"
 #include "audio65.h"
+#include "io_mapper.h"
 #include <string.h>
 
 #define M65_MEMORY_BLOCK_VERSION	1
@@ -82,8 +83,8 @@ const struct xemu_snapshot_definition_st m65_snapshot_definition[] = {
 	{ "M65",   NULL,  m65emu_snapshot_load_state, m65emu_snapshot_save_state },
 	{ "SID#1", &sid[0], sid_snapshot_load_state, sid_snapshot_save_state },
 	{ "SID#2", &sid[1], sid_snapshot_load_state, sid_snapshot_save_state },
-	{ "SID#3", &sid[2], sid_snapshot_load_state, sid_snapshot_save_state },
-	{ "SID#4", &sid[3], sid_snapshot_load_state, sid_snapshot_save_state },
+	{ "SID#3", &sid[3], sid_snapshot_load_state, sid_snapshot_save_state },
+	{ "SID#4", &sid[4], sid_snapshot_load_state, sid_snapshot_save_state },
 	{ "DMAgic", NULL, dma_snapshot_load_state, dma_snapshot_save_state },
 	{ "SDcard", NULL, sdcard_snapshot_load_state, sdcard_snapshot_save_state },
 	{ "FDC-F011", NULL, fdc_snapshot_load_state, fdc_snapshot_save_state },

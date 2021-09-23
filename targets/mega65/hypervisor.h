@@ -23,7 +23,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define TRAP_RESTORE	0x42
 #define TRAP_ALTTAB	0x43
 
-extern int   in_hypervisor;
+extern int  in_hypervisor;
+extern int  hypervisor_to_enable_audio;
 
 extern int  hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hypervisor_serial_out_asciizer );
 extern void hypervisor_debug ( void );

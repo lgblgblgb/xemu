@@ -21,12 +21,10 @@ SHELL		= sh
 AWK		= awk
 CL65		= cl65
 URL_LIST	= rom-fetch-list.txt
-#OUR_ROMS	= clcd-u104-parasite.rom vic20-emulator-tool.rom
-OUR_ROMS	= vic20-emulator-tool.rom
-#FETCH_ROMS	= vic20-basic.rom vic20-kernal.rom vic20-chargen.rom clcd-u105.rom clcd-u102.rom clcd-u104.rom clcd-u103.rom c65-system.rom c64-chargen.rom c64-kernal.rom c64-basic.rom primo-b64.rom
-#FETCH_ROMS	= $(shell awk '{ print $$1 }' $(URL_LIST))
+OUR_ROMS	= vic20-emulator-tool.rom c65-minimal-rom.rom clcd-u104-parasite.rom
+OUR_INCS	= c65-minimal-rom.cdata
 
-all: roms $(OUR_ROMS)
+all:	$(OUR_ROMS) $(OUR_INCS)
 
 clean:
 	rm -f *.o
@@ -35,10 +33,16 @@ distclean:
 	$(MAKE) clean
 	rm -f `$(AWK) 'NF == 3 && $$1 ~ /^[a-zA-Z0-9]/ { print $$1 }' < $(URL_LIST)`
 
-%.rom: %.asm
-	$(CL65) -t none --cpu 65c02 -o $@ $<
+%.rom: %.asm Makefile
+	@echo "<<< Crafting $@ >>>"
+	$(CL65) -t none -o $@ $<
+	rm -f $(<:.asm=.o)
 
-roms:
+%.cdata: %.rom Makefile
+	@echo "<<< Crafting $@ >>>"
+	cat $< | xxd -i > $@
+
+fetchroms:
 	$(AWK) 'NF == 3 && $$1 ~ /^[a-zA-Z0-9]/ { print "test -s " $$1 " || { rm -f " $$1 ".tmp && $(WGET) -O " $$1 ".tmp " $$2 " && mv " $$1 ".tmp " $$1 "; } || exit $$?" }' < $(URL_LIST) | $(SHELL)
 
-.PHONY: all clean distclean roms
+.PHONY: all clean distclean fetchroms

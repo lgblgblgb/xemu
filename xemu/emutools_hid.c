@@ -114,6 +114,26 @@ int hid_key_event ( SDL_Scancode key, int pressed )
 }
 
 
+void hid_sdl_synth_key_event ( int matrix_pos, int is_press )
+{
+	const struct KeyMappingUsed *map = key_map;
+	while (map->pos >= 0) {
+		if (map->pos == matrix_pos) {
+			SDL_Event sdlevent = {};
+			sdlevent.type = is_press ? SDL_KEYDOWN : SDL_KEYUP;
+			sdlevent.key.repeat = 0;
+			sdlevent.key.windowID = sdl_winid;
+			sdlevent.key.state = is_press ? SDL_PRESSED : SDL_RELEASED;
+			sdlevent.key.keysym.scancode = map->scan;
+			SDL_PushEvent(&sdlevent);
+			return;
+		}
+		map++;
+	}
+}
+
+
+
 // Reset all HID events.
 // Ie: it's usefull for initialization, and in the case when the emulator pops a window,
 // in this case SDL may detect the event used to ack the window causing problems. So those
