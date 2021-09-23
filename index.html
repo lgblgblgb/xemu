@@ -48,7 +48,7 @@ including - <i>but not limited to</i> - the Commodore LCD, Commodore 65 and MEGA
 <span id="branch-master">
 <h3>Stable ("master" branch) releases</h3>
 <p>
-	Very old branch currently, till <code>next</code> is merged, using this branch is not recommended.
+	The recommended branch to be used in general. Note: "stable" means the most stable I have, it does not mean bug free :)
 </p>
 <ul>
 	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-linux-master/xemu_current_amd64.deb">Ubuntu Linux 18.04 64-bit DEB package</a></li>
@@ -66,9 +66,8 @@ including - <i>but not limited to</i> - the Commodore LCD, Commodore 65 and MEGA
 <span id="branch-next">
 <h3>The 'future next stable' still unstable ("next" branch) builds</h3>
 <p>
-	The recommended branch to be used in general, <b>unless</b> if you're interested only in the MEGA65
-	emulator of the Xemu project and you want <u>the latest VIC-IV emulation improvements (then see <code>merger</code>,
-	and <i>do not use</i> this branch!)</u>.
+	The "next stable" (staging branch for stable). There can be issues, but you find newer features (and bug fixes) here,
+	though with the chance to introducing new bugs (before merging into master).
 </p>
 <ul>
 	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-linux-next/xemu_current_amd64.deb">Ubuntu Linux 20.04 64-bit DEB package</a></li>
@@ -88,7 +87,7 @@ including - <i>but not limited to</i> - the Commodore LCD, Commodore 65 and MEGA
 <p>
 	Not used frequently but for testing / developing very new concepts. May not even work or corrupt emulation
 	related files, etc. Not recommended to be used by anybody, unless you're really know what you're doing,
-	for example you're an Xemu developer.
+	for example you're an Xemu developer or you're told to try this for testing, etc.
 </p>
 <ul>
 	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-linux-dev/xemu_current_amd64.deb">Ubuntu Linux 20.04 x86 64-bit DEB package</a></li>
@@ -100,59 +99,6 @@ including - <i>but not limited to</i> - the Commodore LCD, Commodore 65 and MEGA
 	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-dev/xemu-binaries-win64.zip">Zipped 64-bit Windows binaries</a></li>
 	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-dev/xemu-binaries-win32.zip">Zipped 32-bit Windows binaries</a></li>
 	<li><img alt="" src="https://img.shields.io/github/last-commit/lgblgblgb/xemu/dev?label=Last%20commit%20DEV"></li>
-</ul>
-</span>
-
-<!--	<h3>The madness!!!!</h3>
-
-<ul>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-linux-vic/xemu_current_amd64.deb">Ubuntu Linux 20.04 x86 64-bit DEB package</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-linux-vic/xemu-current-1.x86_64.rpm">Fake RPM package alien-coverted from DEB (may not work on ANY RPM distro!)</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-osx-vic/Xemu-Installer.dmg">MacOS DMG file</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-osx-vic/xemu-binaries-osx.zip">Zipped MacOS binaries</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-vic/install-xemu-win64.exe">Installer for 64-bit Windows</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-vic/install-xemu-win32.exe">Installer for 32-bit Windows</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-vic/xemu-binaries-win64.zip">Zipped 64-bit Windows binaries</a></li>
-<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-vic/xemu-binaries-win32.zip">Zipped 32-bit Windows binaries</a></li>
-<li><img src="https://img.shields.io/github/last-commit/lgblgblgb/xemu/vic?label=Last%20commit%20MAD"></li>
-</ul> -->
-
-<span id="branch-hmw">
-<h3>Experimental MEGA65/VIC-IV emulation enchancements ("hmw" branch) builds</h3>
-<p>
-	Outdated and obsoleted branch! Please use <code>merger</code> instead, which contains
-	all these enchancements already, and even more!
-</p>
-<ul>
-	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-linux-hmw/xemu_current_amd64.deb">Ubuntu Linux 20.04 x86 64-bit DEB package</a></li>
-	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-linux-hmw/xemu-current-1.x86_64.rpm">Fake RPM package alien-coverted from DEB (may not work on ANY RPM distro!)</a></li>
-	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-osx-hmw/Xemu-Installer.dmg">MacOS DMG file</a></li>
-	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-osx-hmw/xemu-binaries-osx.zip">Zipped MacOS binaries</a></li>
-	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-hmw/install-xemu-win64.exe">Installer for 64-bit Windows</a></li>
-	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-hmw/install-xemu-win32.exe">Installer for 32-bit Windows</a></li>
-	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-hmw/xemu-binaries-win64.zip">Zipped 64-bit Windows binaries</a></li>
-	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-hmw/xemu-binaries-win32.zip">Zipped 32-bit Windows binaries</a></li>
-	<li><img src="https://img.shields.io/github/last-commit/lgblgblgb/xemu/hmw?label=Last%20import%20from%20Hérnan"></li>
-</ul>
-</span>
-
-<span id="branch-merger">
-<h3>MEGA65/VIC-IV emulation enchancements ("merger" branch) builds</h3>
-<p>
-	MEGA65/VIC-IV specific enchancements <i>work-in-progress branch</i>, but <b>still recommended</b>
-	for users mainly interested in developing for MEGA65 relying on more precise
-	VIC-IV emulation.
-</p>
-<ul>
-	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-linux-merger/xemu_current_amd64.deb">Ubuntu Linux 20.04 x86 64-bit DEB package</a></li>
-	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-linux-merger/xemu-current-1.x86_64.rpm">Fake RPM package alien-coverted from DEB (may not work on ANY RPM distro!)</a></li>
-	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-osx-merger/Xemu-Installer.dmg">MacOS DMG file</a></li>
-	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-osx-merger/xemu-binaries-osx.zip">Zipped MacOS binaries</a></li>
-	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-merger/install-xemu-win64.exe">Installer for 64-bit Windows</a></li>
-	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-merger/install-xemu-win32.exe">Installer for 32-bit Windows</a></li>
-	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-merger/xemu-binaries-win64.zip">Zipped 64-bit Windows binaries</a></li>
-	<li><a href="https://github.com/lgblgblgb/xemu-binaries/raw/binary-windows-merger/xemu-binaries-win32.zip">Zipped 32-bit Windows binaries</a></li>
-	<li><img src="https://img.shields.io/github/last-commit/lgblgblgb/xemu/merger?label=Last%20MERGER%20commit"></li>
 </ul>
 </span>
 
@@ -194,7 +140,7 @@ including - <i>but not limited to</i> - the Commodore LCD, Commodore 65 and MEGA
 	padding: 2px;
 	margin: 0px;
 }
-#branch-master, #branch-hmw, #branch-dev {
+#branch-dev {
 	display: none;
 }
 </style>
