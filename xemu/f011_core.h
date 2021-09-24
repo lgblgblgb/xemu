@@ -1,6 +1,6 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 / MEGA65 emulator,
-   within the Xemu project. F011 FDC core implementation.
-   Copyright (C)2016,2018-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* F011 FDC (used by Commodore 65 and MEGA65) emulation.
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMU_COMMON_F011_CORE_H_INCLUDED
 
 #ifndef D81_SIZE
-#define D81_SIZE 819200
+#define D81_SIZE			819200
 #endif
 
 #define FDC_DENY_DISK_ACCESS		0
@@ -30,13 +30,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern void  fdc_write_reg ( int addr, Uint8 data );
 extern Uint8 fdc_read_reg  ( int addr );
 extern void  fdc_init      ( Uint8 *cache_set );
-extern void  fdc_set_disk  ( int drive, int in_have_disk, int in_have_write );
+extern void  fdc_set_disk  ( int which, int in_have_disk, int in_have_write );
 extern void  fdc_allow_disk_access ( int in );
 extern int   fdc_get_led_state ( int blink_inc );
 
 /* must defined by the user */
-extern int   fdc_cb_rd_sec ( int drive, Uint8 *buffer, int offset );
-extern int   fdc_cb_wr_sec ( int drive, Uint8 *buffer, int offset );
+extern int   fdc_cb_rd_sec ( int which, Uint8 *buffer, int offset );
+extern int   fdc_cb_wr_sec ( int which, Uint8 *buffer, int offset );
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 #include "xemu/emutools_snapshot.h"

@@ -1,6 +1,6 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 / MEGA65 emulator,
-   within the Xemu project. F011 FDC core implementation.
-   Copyright (C)2016,2018-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* F011 FDC (used by Commodore 65 and MEGA65) emulation.
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -44,19 +44,16 @@ static Uint8 *cache;			// 512 bytes cache FDC will use. This is a real 512byte R
 static int   cache_p_cpu;		// cache pointer if CPU accesses the FDC buffer cache. 0 ... 511!
 static int   cache_p_fdc;		// cache pointer if FDC accesses the FDC buffer cache. 0 ... 511!
 static int   swap_mask = 0;
-
 static int   warn_disk = 1;
 static int   warn_swap_bit = 1;
-
-static void  execute_command ( void );
-
 static int   allowed_disk = FDC_ALLOW_DISK_ACCESS;	// provides a way to TEMPORARLY reject disk access (eg: avoid autoboot)
-
 static struct {
 	Uint8 status_a, status_b;
 	int have_disk, have_write;
 } drives[8];
 
+
+static void  execute_command ( void );
 
 
 void fdc_init ( Uint8 *cache_set )
@@ -102,23 +99,23 @@ void fdc_allow_disk_access ( int in )
 }
 
 
-void fdc_set_disk ( int drive, int in_have_disk, int in_have_write )
+void fdc_set_disk ( int which, int in_have_disk, int in_have_write )
 {
-	drives[drive].have_disk  = in_have_disk;
-	drives[drive].have_write = in_have_write;
-	DEBUG("FDC: init: set drives[drive].have_disk=%d, drives[drive].have_write=%d" NL, in_have_disk, in_have_write);
-	drives[drive].status_b |= 0x80;	// disk changed signal is set, since the purpose of this function is to set new disk
-	if (drives[drive].have_disk) {
-		drives[drive].status_a |= 1;	// on track-0
-		drives[drive].status_b |= 8;	// disk inserted
+	drives[which].have_disk  = in_have_disk;
+	drives[which].have_write = in_have_write;
+	DEBUG("FDC: init: set have_disk=%d, have_write=%d on drive %d" NL, in_have_disk, in_have_write, which);
+	drives[which].status_b |= 0x01;		// disk changed signal is set, since the purpose of this function is to set new disk
+	if (in_have_disk) {
+		drives[which].status_a |= 1;	// on track-0
+		drives[which].status_b |= 8;	// disk inserted
 	} else {
-		drives[drive].status_a &= ~1;
-		drives[drive].status_b &= ~8;
+		drives[which].status_a &= ~1;
+		drives[which].status_b &= ~8;
 	}
-	if (!drives[drive].have_write) {
-		drives[drive].status_a |= 2;	// write protect flag, read-only mode
+	if (!in_have_write) {
+		drives[which].status_a |= 2;	// write protect flag, read-only mode
 	} else {
-		drives[drive].status_a &= ~2;
+		drives[which].status_a &= ~2;
 	}
 	//allowed_disk = FDC_ALLOW_DISK_ACCESS; // FIXME: maybe should be deleted, as causes to revokation of access to be dismissed on calling this function!
 }
@@ -244,7 +241,7 @@ void fdc_write_reg ( int addr, Uint8 data )
 	switch (addr) {
 		case 0:
 #if 0
-			if (drives[drive].status_a & 128) {
+			if (status_a & 128) {
 				DEBUG("FDC: WARN: trying to write control register ($%02X) while FDC is busy." NL, data);
 				return;
 			}
@@ -252,15 +249,13 @@ void fdc_write_reg ( int addr, Uint8 data )
 			control = data;
 			if (curcmd == -1)
 				curcmd = 0x100;		// "virtual" command, by writing the control register
-			if (drive != (data & 7))
-				DEBUGPRINT("FDC: changing active drive from %d to %d" NL, drive, data & 7);
-			drive = data & 7;	// drive selection
-			drives[drive].status_a |= 128;	// writing control register also causes to set the BUSY flag for some time ... FIXME: is this corresponding to the NEW selected drive / only / too?!
-			head_side = (data >> 3) & 1;
-			if ((drives[drive].status_b & 0x80) && drive) {
-				drives[drive].status_b &= 0x7F;	// clearing disk change signal (not correct implementation, as it needs only if the given drive deselected!)
+			if (drive != (data & 7)) {	// active drive selection has been changed?
+				drive = data & 7;
 				DEBUG("FDC: disk change signal was cleared on drive selection (drive: %d)" NL, drive);
+				drives[drive].status_b &= ~0x01;	// clearing disk change signal (not correct implementation, as it needs only if the given drive deselected!)
 			}
+			drives[drive].status_a |= 128;	// writing control register also causes to set the BUSY flag for some time ... XXX FIXME: should it be done BEFORE drive selection??
+			head_side = (data >> 3) & 1;
 #if 0
 			if (drive)
 				DEBUG("FDC: WARN: not drive-0 is selected: %d!" NL, drive);
@@ -286,7 +281,6 @@ void fdc_write_reg ( int addr, Uint8 data )
 			}
 			cmd = data;
 			curcmd = data;
-			// Random assortment of odd operations (can be joined together, to it's more easy to play with them this way ...)
 			drives[drive].status_a |= 128; 	// simulate busy status ...
 			drives[drive].status_b &= 255 - 2;	// turn IRQ flag OFF
 			drives[drive].status_a &= 255 - (4 + 8 + 16);	// turn RNF/CRC/LOST flags OFF
@@ -304,7 +298,7 @@ void fdc_write_reg ( int addr, Uint8 data )
 		case 7:
 			// FIXME: this algorithm do not "enforce" the internals of F011, just if the software comply the rules otherwise ......
 			drives[drive].status_a &= ~64;	// clear DRQ
-			//drives[drive].status_b &= 127; 	// turn RDREQ off after the first access, this is somewhat incorrect :-P
+			//status_b &= 127; 	// turn RDREQ off after the first access, this is somewhat incorrect :-P
 			if (drives[drive].status_a & 32)	// if EQ was already set and another byte passed ---> LOST
 				drives[drive].status_a |= 4;	// LOST!!!! but probably incorrect, since no new read is done by FDC since then just "wrapping" the read data, LOST remains till next command!
 			cache[cache_p_cpu ^ swap_mask] = data;
@@ -343,14 +337,9 @@ static void execute_command ( void )
 	printf("PAUL: issuing FDC command $%02X pointer was %d" NL, cmd, cache_p_cpu);
 #endif
 	drives[drive].status_a &= 127;	// turn BUSY flag OFF
-	drives[drive].status_b |= 2;		// turn IRQ flag ON
-	if (control & 128) {
-		static int warn = 1;
-		if (warn) {
-			warn = 0;
-			INFO_WINDOW("Sorry, FDC-IRQ is not supported yet, by FDC emulation!");
-		}
-	}
+	drives[drive].status_b |= 2;	// turn IRQ flag ON
+	if (control & 128)
+		INFO_WINDOW("Sorry, FDC-IRQ is not supported yet, by FDC emulation!");
 	if (curcmd < 0)
 		return;	// no cmd was given?!
 	if (curcmd > 0xFF)
@@ -360,12 +349,12 @@ static void execute_command ( void )
 #endif
 	switch (cmd & 0xF8) {	// high 5 bits of the command ...
 		case 0x40:	// read sector
-			//drives[drive].status_a |= 16;		// record not found for testing ...
+			//status_a |= 16;		// record not found for testing ...
 			drives[drive].status_b |= 128;	// RDREQ: if it's not here, you won't get a READY. prompt!
-			//drives[drive].status_b |= 32;		// RUN?!
+			//status_b |= 32;		// RUN?!
 			drives[drive].status_a |= 64;		// set DRQ
 			drives[drive].status_a &= (255 - 32); // clear EQ
-			//drives[drive].status_a |= 32; // set EQ?!
+			//status_a |= 32; // set EQ?!
 			//cache_p_cpu = cache_p_fdc;	// yayy .... If it's not here we can't get READY. prompt!!
 			read_sector();
 			//cache_p_drive = (cache_p_drive + BLOCK_SIZE) & 511;
@@ -424,7 +413,7 @@ static void execute_command ( void )
 				cache_p_cpu = 0;
 				cache_p_fdc = 0;
 				DEBUG("FDC: WARN: resetting cache pointers" NL);
-				//drives[drive].status_a |= 32; // turn EQ on
+				//status_a |= 32; // turn EQ on
 				drives[drive].status_a &= 255 - 64; // turn DRQ off
 				drives[drive].status_b &= 127;      // turn RDREQ off
 
@@ -432,7 +421,7 @@ static void execute_command ( void )
 			break;
 		default:
 			DEBUG("FDC: WARN: unknown comand: $%02X" NL, cmd);
-			//drives[drive].status_a &= 127; // well, not a valid command, revoke busy status ...
+			//status_a &= 127; // well, not a valid command, revoke busy status ...
 			break;
 	}
 	curcmd = -1;
@@ -462,7 +451,7 @@ Uint8 fdc_read_reg  ( int addr )
 #ifdef SOME_DEBUG
 			printf("Delayed command execution!!!" NL);
 #endif
-			execute_command();	// execute the command only now for real ... (it will also turn BUSY flag - bit 7 - OFF in drives[drive].status_a)
+			execute_command();	// execute the command only now for real ... (it will also turn BUSY flag - bit 7 - OFF in status_a)
 		}
 	}
 	switch (addr) {
@@ -473,12 +462,10 @@ Uint8 fdc_read_reg  ( int addr )
 			result = cmd;
 			break;
 		case 2:	// STATUS register A
-			result = drive ? 0 : drives[drive].status_a;	// FIXME: Not sure: if no drive 0 is selected, other status is shown, ie every drives should have their own statuses?
-			//result = drives[drive].status_a;
+			result = drives[drive].status_a;
 			break;
 		case 3: // STATUS register B
-			result = drive ? 0 : drives[drive].status_b;	// FIXME: Not sure: if no drive 0 is selected, other status is shown, ie every drives should have their own statuses?
-			//result = drives[drive].status_b;
+			result = drives[drive].status_b;
 			drives[drive].status_b &= ~64;	// turn WTREQ off, as it seems CPU noticed with reading this register, that is was the case for a while. Somewhat incorrect implementation ... :-/
 			break;
 		case 4:
@@ -540,8 +527,6 @@ Uint8 fdc_read_reg  ( int addr )
 #define CACHE_SIZE 512
 #define SNAPSHOT_FDC_BLOCK_SIZE		(0x100 + CACHE_SIZE)
 #endif
-
-// FIXME: as usual, snapshots are unmaintained seriously :( Just one thing: support of multiple drives ........
 
 int fdc_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
 {

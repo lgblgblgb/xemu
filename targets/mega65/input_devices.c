@@ -78,6 +78,7 @@ static struct {
 } hwa_kbd;
 
 static int restore_is_held = 0;
+static Uint8 virtkey_state[3] = { 0xFF, 0xFF, 0xFF };
 
 
 void hwa_kbd_fake_key ( Uint8 k )
@@ -182,6 +183,39 @@ void clear_emu_events ( void )
 	hwa_kbd.modifiers = 0;
 	hwa_kbd.next = 0;
 	hwa_kbd.last = 0;
+	for (int a = 0; a < 3; a++) {
+		if (virtkey_state[0] != 0xFF) {
+			hid_sdl_synth_key_event(virtkey_state[a], 0);
+			virtkey_state[a] = 0xFF;
+		}
+
+	}
+}
+
+
+void input_toggle_joy_emu ( void )
+{
+	c64_toggle_joy_emu();
+	OSD(-1, -1, "Joystick emulation on port #%d", joystick_emu);
+}
+
+
+void virtkey ( Uint8 rno, Uint8 scancode )
+{
+	// Convert scancode to "Xemu kind of scan code" ...
+	if (scancode >= MAT2ASC_TAB_SIZE)
+		scancode = 0xFF;
+	else if (scancode < 64)
+		scancode = ((scancode & (32 + 16 + 8)) << 1) | (scancode & 7);
+	else
+		scancode += C65_KEYBOARD_EXTRA_POS - 64;
+	if (virtkey_state[rno] == scancode)
+		return;
+	if (virtkey_state[rno] != 0xFF)
+		hid_sdl_synth_key_event(virtkey_state[rno], 0);
+	virtkey_state[rno] = scancode;
+	if (scancode != 0xFF)
+		hid_sdl_synth_key_event(scancode, 1);
 }
 
 
@@ -216,12 +250,16 @@ void kbd_trigger_restore_trap ( void )
 		restore_is_held++;
 		if (restore_is_held >= 20) {
 			restore_is_held = 0;
+#ifdef FREEZER_WORKS
 			if (!in_hypervisor) {
 				DEBUGPRINT("KBD: RESTORE trap has been triggered." NL);
 				KBD_RELEASE_KEY(RESTORE_KEY_POS);
 				hypervisor_enter(TRAP_RESTORE);
 			} else
 				DEBUGPRINT("KBD: *IGNORING* RESTORE trap trigger, already in hypervisor mode!" NL);
+#else
+			WARNING_WINDOW("Long press of RESTORE would trigger FREEZER.\nHowever FREEZER is not yet implemented in Xemu :-(");
+#endif
 		}
 	}
 }
@@ -298,8 +336,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 		if (key == SDL_SCANCODE_F10) {
 			reset_mega65_asked();
 		} else if (key == SDL_SCANCODE_KP_ENTER) {
-			c64_toggle_joy_emu();
-			OSD(-1, -1, "Joystick emulation on port #%d", joystick_emu);
+			input_toggle_joy_emu();
 		} else if (((hwa_kbd.modifiers & (MODKEY_LSHIFT | MODKEY_RSHIFT)) == (MODKEY_LSHIFT | MODKEY_RSHIFT)) && set_mouse_grab(SDL_FALSE, 0)) {
 			DEBUGPRINT("UI: mouse grab cancelled" NL);
 		}
@@ -317,4 +354,26 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 		}
 	}
 	return 0;
+}
+
+
+Uint8 get_mouse_x_via_sid ( void )
+{
+	if (!is_mouse_grab())
+		return 0xFF;
+	static int mouse_x = 0;
+	mouse_x = (mouse_x + hid_read_mouse_rel_x(-31, 31)) & 63;
+	DEBUG("MOUSE-X: reading X as %d" NL, mouse_x << 1);
+	return mouse_x << 1;
+}
+
+
+Uint8 get_mouse_y_via_sid ( void )
+{
+	if (!is_mouse_grab())
+		return 0xFF;
+	static int mouse_y = 0;
+	mouse_y = (mouse_y - hid_read_mouse_rel_y(-31, 31)) & 63;
+	DEBUG("MOUSE-Y: reading Y as %d" NL, mouse_y << 1);
+	return mouse_y << 1;
 }

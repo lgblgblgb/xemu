@@ -31,18 +31,20 @@ extern Uint8 dma_status;
 extern Uint8 dma_registers[16];
 extern int   dma_chip_revision;
 extern int   rom_date;
+extern int   rom_is_openroms;
 
 /* Functions: */
 
 extern void  dma_write_reg	( int addr, Uint8 data );
 extern Uint8 dma_read_reg	( int reg );
 extern void  dma_init		( unsigned int revision );
-extern void  dma_init_set_rev	( unsigned int revision, Uint8 *rom_ver_signature );
+extern void  dma_init_set_rev	( unsigned int revision, const Uint8 *rom );
 extern void  dma_reset		( void );
 extern int   dma_update		( void );
 extern int   dma_update_multi_steps ( int do_for_cycles );
+extern int   dma_is_in_use      ( void );
 
-extern void  detect_rom_date    ( Uint8 *p );
+extern void  detect_rom_date    ( const Uint8 *rom );
 
 /* Things should be provided by the emulator: */
 

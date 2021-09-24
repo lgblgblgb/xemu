@@ -24,13 +24,20 @@ extern Uint8 cia1_in_b         ( void );
 extern Uint8 cia1_in_a         ( void );
 extern int   emu_callback_key  ( int pos, SDL_Scancode key, int pressed, int handled );
 
+extern void  input_toggle_joy_emu  ( void );
+
 extern Uint8 hwa_kbd_get_last      ( void );
 extern Uint8 hwa_kbd_get_modifiers ( void );
 extern void  hwa_kbd_move_next     ( void );
 extern void  hwa_kbd_fake_key      ( Uint8 k );
 
+extern void  virtkey               ( Uint8 rno, Uint8 scancode );
+
 extern Uint8 kbd_directscan_query  ( Uint8 row );
 
 extern void  kbd_trigger_restore_trap ( void );
+
+extern Uint8 get_mouse_x_via_sid ( void );
+extern Uint8 get_mouse_y_via_sid ( void );
 
 #endif

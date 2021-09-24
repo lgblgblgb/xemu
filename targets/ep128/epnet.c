@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2015-2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2016,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    Partial Wiznet W5300 emulation, using the host OS (which runs the emulator)
    TCP/IP API. Thus, many of the W5300 features won't work, or limited, like:
@@ -641,9 +641,9 @@ void epnet_init ( void (*cb)(int) )
 {
 	w5300_does_work = 0;
 	patch_rom();
-	char sockapi_error_msg[256];
-	if (xemusock_init(sockapi_error_msg)) {
-		ERROR_WINDOW("Cannot intiailize socket API:\n%s", sockapi_error_msg);
+	const char *init_status = xemusock_init();
+	if (init_status) {
+		ERROR_WINDOW("Cannot intiailize socket API:\n%s", init_status);
 		w5300_does_work = 0;
 	} else if (!start_net_thread()) {
 		w5300_does_work = 1;

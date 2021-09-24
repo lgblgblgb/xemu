@@ -22,8 +22,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "memory_mapper.h"
 #include "xemu/f011_core.h"
 #include "dma65.h"
-#include "xemu/emutools_hid.h"
-//#include "xemu/cpu65.h"
 #include "vic4.h"
 #include "vic4_palette.h"
 #include "sdcard.h"
@@ -38,10 +36,9 @@ int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set sw
 Uint8  D6XX_registers[0x100];		// mega65 specific D6XX range, excluding the UART part (not used here!)
 Uint8  D7XX[0x100];			// FIXME: hack for future M65 stuffs like ALU! FIXME: no snapshot on these!
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
-static int mouse_x = 0, mouse_y = 0;	// for our primitive C1351 mouse emulation
 int    cpu_mega65_opcodes = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;
-int port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65
+int port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65 keyboard
 
 
 static const Uint8 fpga_firmware_version[] = { 'X','e','m','u' };
@@ -59,46 +56,29 @@ static int         xemu_query_gate = 0;
 	return; } while(0)
 
 
-static void update_hw_multiplier ( void )
+static XEMU_INLINE void update_hw_multiplier ( void )
 {
-	Uint32 input_a = (Uint64)(
-		((Uint32) D7XX[0x70]      ) |
-		((Uint32) D7XX[0x71] <<  8) |
-		((Uint32) D7XX[0x72] << 16) |
-		((Uint32) D7XX[0x73] << 24)
-	);
-	Uint32 input_b = (Uint64)(
-		((Uint32) D7XX[0x74]      ) |
-		((Uint32) D7XX[0x75] <<  8) |
-		((Uint32) D7XX[0x76] << 16) |
-		((Uint32) D7XX[0x77] << 24)
-	);
-	if (XEMU_LIKELY(input_b)) {
-		// We really don't want to divide by zero.
-		// It seems the policy on MEGA65 is not change the result
-		// registers AT ALL, if you try to divide by zero.
-		// So we only check if input_b != 0 and do the thing here then!
-		Uint32 div_quotient = input_a / input_b;
-		Uint32 div_reminder = input_a % input_b;
-		D7XX[0x68] = (div_reminder      ) & 0xFF;
-		D7XX[0x69] = (div_reminder >>  8) & 0xFF;
-		D7XX[0x6A] = (div_reminder >> 16) & 0xFF;
-		D7XX[0x6B] = (div_reminder >> 24) & 0xFF;
-		D7XX[0x6C] = (div_quotient      ) & 0xFF;
-		D7XX[0x6D] = (div_quotient >>  8) & 0xFF;
-		D7XX[0x6E] = (div_quotient >> 16) & 0xFF;
-		D7XX[0x6F] = (div_quotient >> 24) & 0xFF;
-	}
-	Uint64 mult_result = (Uint64)input_a * (Uint64)input_b;
-	D7XX[0x78] = (mult_result      ) & 0xFF;
-	D7XX[0x79] = (mult_result >>  8) & 0xFF;
-	D7XX[0x7A] = (mult_result >> 16) & 0xFF;
-	D7XX[0x7B] = (mult_result >> 24) & 0xFF;
-	D7XX[0x7C] = (mult_result >> 32) & 0xFF;
-	D7XX[0x7D] = (mult_result >> 40) & 0xFF;
-	D7XX[0x7E] = (mult_result >> 48) & 0xFF;
-	D7XX[0x7F] = (mult_result >> 56) & 0xFF;
+	register const Uint32 input_a = xemu_u8p_to_u32le(D7XX + 0x70);
+	register const Uint32 input_b = xemu_u8p_to_u32le(D7XX + 0x74);
+	// Set flag to valid, so we don't relculate each time
+	// (this variable is used to avoid calling this function if no change was
+	// done on input_a and input_b)
 	bigmult_valid_result = 1;
+	// --- Do the product, multiplication ---
+	xemu_u64le_to_u8p(D7XX + 0x78, (Uint64)input_a * (Uint64)input_b);
+	// --- Do the quotient, divide ---
+	// ... but we really don't want to divide by zero, so let's test this
+	if (XEMU_LIKELY(input_b)) {
+		// input_b is non-zero, it's OK to divide
+		xemu_u64le_to_u8p(D7XX + 0x68, (Uint64)((Uint64)input_a << 32) / (Uint64)input_b);
+	} else {
+		// If we divide by zero, according to the VHDL,
+		// we set all bits to '1' in the result, that is $FF
+		// for all registers of div output. Probably it can be
+		// interpreted as some kind of "fixed point infinity"
+		// or just a measure of error with this special answer.
+		memset(D7XX + 0x68, 0xFF, 8);
+	}
 }
 
 
@@ -161,15 +141,9 @@ Uint8 io_read ( unsigned int addr )
 		case 0x15:	// $D500-$D5FF ~ C65 I/O mode
 		case 0x34:	// $D400-$D4FF ~ M65 I/O mode
 		case 0x35:	// $D500-$D5FF ~ M65 I/O mode
-			if (is_mouse_grab()) {		// Rudimentary C1351 mouse emulation (on SID#1) ...
-				switch (addr & 0x5F) {
-					case 0x19:
-						mouse_x = (mouse_x + hid_read_mouse_rel_x(-31, 31)) & 63;
-						return mouse_x << 1;
-					case 0x1A:
-						mouse_y = (mouse_y - hid_read_mouse_rel_y(-31, 31)) & 63;
-						return mouse_y << 1;
-				}
+			switch (addr & 0x5F) {
+				case 0x19: return get_mouse_x_via_sid();
+				case 0x1A: return get_mouse_y_via_sid();
 			}
 			return 0xFF;
 		case 0x16:	// $D600-$D6FF ~ C65 I/O mode
@@ -207,6 +181,12 @@ Uint8 io_read ( unsigned int addr )
 					return kbd_directscan_query(D6XX_registers[0x14]);	// for further explanations please see this function in input_devices.c
 				case 0x29:
 					return configdb.mega65_model;		// MEGA65 model
+				case 0x0F:
+					// D60F bit 5, real hardware (1), emulation (0), other bits are not emulated yet by Xemu, so I give simply zero
+					return 0;
+				case 0x1B:
+					// D61B amiga / 1531 mouse auto-detect. FIXME XXX what value we should return at this point? :-O
+					return 0xFF;
 				case 0x32: // D632-D635: FPGA firmware ID
 				case 0x33:
 				case 0x34:
@@ -397,7 +377,10 @@ void io_write ( unsigned int addr, Uint8 data )
 		case 0x15:	// $D500-$D5FF ~ C65 I/O mode
 		case 0x34:	// $D400-$D4FF ~ M65 I/O mode
 		case 0x35:	// $D500-$D5FF ~ M65 I/O mode
-			sid_write_reg(addr & 0x40 ? &sid2 : &sid1, addr & 31, data);
+			//sid_write_reg(addr & 0x40 ? &sid[1] : &sid[0], addr & 31, data);
+			//DEBUGPRINT("SID #%d reg#%02X data=%02X" NL, (addr >> 5) & 3, addr & 0x1F, data);
+			//sid_write_reg(&sid[(addr >> 5) & 3], addr & 0x1F, data);
+			audio65_sid_write(addr, data); // We need full addr, audio65_sid_write will decide the SID instance from that!
 			return;
 		case 0x16:	// $D600-$D6FF ~ C65 I/O mode
 			if ((addr & 0xFF) == 0x07) {
@@ -410,7 +393,7 @@ void io_write ( unsigned int addr, Uint8 data )
 			if (!in_hypervisor && addr >= 0x40 && addr <= 0x7F) {
 				// In user mode, writing to $D640-$D67F (in VIC4 iomode) causes to enter hypervisor mode with
 				// the trap number given by the offset in this range
-				hypervisor_enter(addr & 0x3F);
+				hypervisor_enter_via_write_trap(addr & 0x3F);
 				return;
 			}
 			D6XX_registers[addr] = data;	// I guess, the actual write won't happens if it was trapped, so I moved this to here after the previous "if"
@@ -433,6 +416,11 @@ void io_write ( unsigned int addr, Uint8 data )
 				case 0x10:	// ASCII kbd last press value to zero whatever the written data would be
 					hwa_kbd_move_next();
 					return;
+				case 0x15:
+				case 0x16:
+				case 0x17:
+					virtkey(addr - 0x15, data & 0x7F);
+					return;
 				case 0x7C:					// hypervisor serial monitor port
 					hypervisor_serial_monitor_push_char(data);
 					return;
@@ -446,7 +434,6 @@ void io_write ( unsigned int addr, Uint8 data )
 						DEBUG("MEGA65: ROM protection has been turned %s." NL, data & 4 ? "ON" : "OFF");
 						rom_protect = data & 4;
 					}
-					force_fast = data & 16;
 					return;
 				case 0x7E:
 					D6XX_registers[0x7E] = 0xFF;	// iomap.txt: "Hypervisor already-upgraded bit (sets permanently)"

@@ -258,8 +258,9 @@ int uartmon_init ( const char *fn )
 		DEBUGPRINT("UARTMON: disabled, no name is specified to bind to." NL);
 		return 0;
 	}
-	if (xemusock_init(NULL)) {
-		ERROR_WINDOW("Cannot initialize network, uart_mon won't be availbale");
+	const char *init_status = xemusock_init();
+	if (init_status) {
+		ERROR_WINDOW("Cannot initialize network, uart_mon won't be availbale\n%s", init_status);
 		return 1;
 	}
 	if (fn[0] == ':') {

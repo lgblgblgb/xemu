@@ -51,6 +51,7 @@
 #ifndef __SIDENGINE_H_IS_INCLUDED
 #define __SIDENGINE_H_IS_INCLUDED
 
+#include <SDL_atomic.h>
 
 // 0x38: supposedly DC level for MOS6581 (whereas it would be 0x80 for the "crappy new chip")
 #define SID_DC_LEVEL 0x38
@@ -144,6 +145,7 @@ struct SidEmulation {
 	unsigned char bval;
 	unsigned short wval;
 	unsigned long sLastPolledOsc;
+	SDL_SpinLock spinlock;
 };
 
 

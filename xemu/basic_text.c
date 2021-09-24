@@ -21,6 +21,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
 #include "xemu/basic_text.h"
+#include <stdlib.h>
+#include <strings.h>
+
+
 
 #ifdef CBM_BASIC_TEXT_SUPPORT
 
@@ -382,57 +386,79 @@ int xemu_basic_to_text ( Uint8 *output, int output_size, const Uint8 *prg, int r
 #endif
 
 
-#define DUMP_SCR_CODE()	t += sprintf(t, "{$%02X}", c)
-char *xemu_cbm_screen_to_text ( char *buffer, int buffer_size, const Uint8 *v, int cols, int rows, int lowercase )
+static const struct {
+	const Uint8	screen_code;
+	const char	*text;
+} conv_tab_screen[] = {
+	{ 0x00, "@"  },
+	{ 0x1B, "["  },
+	{ 0x1C, "\\" },		// pound symbol, mapped to backslash
+	{ 0x1C, "{pound}" },	// pound symbol, alternative representation
+	{ 0x1C, "£" },		// pound symbol (UTF8!)
+	{ 0x1D, "]" },
+	{ 0x1E, "^" },		// up-arrow symbol
+	{ 0x1F, "_" },		// left-arrow symbol, mapped to underscore
+	{ 0x40, "{dash}" },
+	{ 0x5E, "{pi}"   },
+	{ 0x93, "{home}" },
+	// $80-$9F
+	                                        { 0x82, "{uloff}"}, { 0x83, "{stop}" },                     { 0x85, "{wht}"  },                     { 0x87, "{bell}" },
+	                    { 0x89, "{ht}"   }, { 0x8A, "{lf}"   }, { 0x8B, "{shen}" }, { 0x8C, "{shdi}" }, { 0x8D, "{ret}"  }, { 0x8E, "{text}" }, { 0x8F, "{flon}" },
+	{ 0x90, "{f9}"   }, { 0x91, "{down}" }, { 0x92, "{rvon}" }, { 0x93, "{home}" }, { 0x94, "{del}"  }, { 0x95, "{f10}"  }, { 0x96, "{f11}"  }, { 0x97, "{f12}"  },
+	{ 0x98, "{tab}"  }, { 0x99, "{f13}"  }, { 0x9A, "{f14}"  }, { 0x9B, "{esc}"  }, { 0x9C, "{red}"  }, { 0x9D, "{right}"}, { 0x9E, "{grn}"  }, { 0x9F, "{blu}"  },
+	// $E0-$DF
+	                    { 0xE1, "{orng}" }, { 0xE2, "{ulon}" }, { 0xE3, "{run}"  }, { 0xE4, "{help}" }, { 0xE5, "{f1}"   }, { 0xE6, "{f3}"   }, { 0xE7, "{f5}"   },
+	{ 0xE8, "{f7}"   }, { 0xE9, "{f2}"   }, { 0xEA, "{f4}"   }, { 0xEB, "{f6}"   }, { 0xEC, "{f8}"   }, { 0xED, "{sret}" }, { 0xEE, "{gfx}"  }, { 0xEF, "{floff}"},
+	{ 0xD0, "{blk}"  }, { 0xD1, "{up}"   }, { 0xD2, "{rvoff}"}, { 0xD3, "{clr}"  }, { 0xD4, "{inst}" }, { 0xD5, "{brn}"  }, { 0xD6, "{lred}" }, { 0xD7, "{gry1}" },
+	{ 0xD8, "{gry2}" }, { 0xD9, "{lgrn}" }, { 0xDA, "{lblu}" }, { 0xDB, "{gry3}" }, { 0xDC, "{pur}"  }, { 0xDD, "{left}" }, { 0xDE, "{yel}"  }, { 0xDF, "{cyn}"  },
+	{ 0x00, NULL }
+};
+
+
+
+char *xemu_cbm_screen_to_text ( char *buffer, const int buffer_size, const Uint8 *v, const int cols, const int rows, const int lowercase )
 {
-	static const char *rvs_msgs[] = { "{RVS-OFF}", "{RVS-ON}" };
 	char *t = buffer;
 	for (int y = 0; y < rows; y++) {
-		int rvs = 0;
 		for (int x = 0; x < cols; x++) {
 			if (XEMU_UNLIKELY(t - buffer > buffer_size - 16)) {
 				ERROR_WINDOW("Sorry, ASCII converted screen does not fit into the output buffer");
 				return NULL;
 			}
-			Uint8 c = (*v++);
-			if (XEMU_UNLIKELY((c & 0x80) != rvs)) {
-				rvs = (c & 0x80);
-				t = xemu_strcpy_special(t, rvs_msgs[!!rvs]);
+			Uint8 c = *v++;
+			// first, check out translation table for special cases
+			for (int a = 0; conv_tab_screen[a].text; a++) {
+				if (conv_tab_screen[a].screen_code == c) {
+					t += sprintf(t, "%s", conv_tab_screen[a].text);
+					goto next_char;
+				}
 			}
-			c &= 0x7F;		// we can't convert reverse visually per chars, so let's forget the upper bit
-			if (c == 0) {
-				*t++ = '@';
-			} else if (c < 27) {
-				*t++ = c + (lowercase ? 'a' : 'A') - 1;
-			} else if (c == 27) {
-				*t++ = '[';
-			} else if (c == 28) {	// pound
-				DUMP_SCR_CODE();
-			} else if (c == 29) {
-				*t++ = ']';
-			} else if (c == 30) {	// up arrow
-				DUMP_SCR_CODE();
-			} else if (c == 31) {	// left arrow
-				DUMP_SCR_CODE();
-			} else if (c < 64) {	// space, signs, numbers ... identical position :D :D
+			//const Uint8 inv = c & 0x80;
+			//c &= 0x7F;
+			if (c >= 0x01 && c <= 0x1A) {	// Capital A-Z (in uppercase mode), a-z (in lower case mode)
+				*t++ = c - 1 + (lowercase ? 'a' : 'A');
+				continue;
+			}
+			if (c >= 0x20 && c <= 0x3F) {	// space, various common marks, numbers: at the same place as in ASCII!
 				*t++ = c;
-			} else if (c == 64) {	// "bold minus" like entity ...
-				DUMP_SCR_CODE();
-			} else if (c < 91) {	// symbols, or capital letters (the 2nd: if in lower-case charset mode!)
-				if (lowercase)
-					*t++ = c - 65 + 'A';
-				else
-					t += sprintf(t, "{%c}", c - 65 + 'A');
-			} else {
-				DUMP_SCR_CODE();
+				continue;
 			}
+			if (c >= 0x41 && c <= 0x5A) {	// Gfx chars (in uppercase mode), A-Z (in lower case mode)
+				if (lowercase)
+					*t++ = c;
+				else
+					t += sprintf(t, "{%c}", c);
+				continue;
+			}
+			// Missing policy for remaining characters, let's dump with its screen code
+			t += sprintf(t, "{$%02X}", c);
+			// well yeah, do not say anything ... C does not leave too much choice to continue from a nested loop ...
+		next_char:
+			continue;
 		}
-		if (XEMU_UNLIKELY(rvs))
-			t = xemu_strcpy_special(t, rvs_msgs[0]);
-		else
-			while (t > buffer && t[-1] == ' ')	// remove trailing spaces
-				t--;
-		t = xemu_strcpy_special(t, NL);	// put a newline
+		while (t > buffer && t[-1] == ' ')	// remove trailing spaces
+			t--;
+		t += sprintf(t, "%s", NL);	// put a newline
 	}
 	// remove empty lines from the end of our capture
 	while (t > buffer && (t[-1] == '\r' || t[-1] == '\n'))
@@ -444,4 +470,86 @@ char *xemu_cbm_screen_to_text ( char *buffer, int buffer_size, const Uint8 *v, i
 	// return our result!
 	return buffer;
 }
-#undef DUMP_SCR_CODE
+
+
+int xemu_cbm_text_to_screen ( Uint8 *v, const int cols, const int rows, const char *buffer, const int lowercase )
+{
+	const Uint8 *start = v;
+	const Uint8 *end   = v + (cols * rows);
+	char ch_prev, ch = 0;
+	v += cols;	// do not use the first line, we expect user to have the cursor there, to be safe
+	while (*buffer && v < end) {
+		ch_prev = ch;
+		// first, check out translation table for special cases
+		for (int a = 0; conv_tab_screen[a].text; a++) {
+			const int l = strlen(conv_tab_screen[a].text);
+			if (!strncmp(conv_tab_screen[a].text, buffer, l)) {
+				*v++ = conv_tab_screen[a].screen_code;
+				buffer += l;
+				ch = 0x40;	// something, which is not newline ;)
+				goto next_char;
+			}
+		}
+		// fetch next to-be-pasted ASCII character
+		ch = *buffer++;
+		// Special sequences which are NOT handled by the "conv_tab_screen" loop above
+		if (ch == '{') {
+			const char *p = strchr(buffer, '}');
+			if (!p) {
+				*v++ = 0x1B;	// just fake a '[' because ...
+				continue;	// ... closing pair of '{' is not found, ignore this character
+			}
+			const int l = (int)(p - buffer);
+			if (l == 1) {		// single char {X} case
+				*v++ = *buffer;
+			} else if (l == 3 && *buffer == '$') {
+				char *e;
+				const Uint8 h = (Uint8)strtol(buffer + 1, &e, 16);
+				if (e == p)
+					*v++ = h;
+			}
+			buffer = p + 1;		// move to the next ASCII to-be-pasted character after '}'
+			continue;
+		}
+		if (ch == '}') {		// if there is a '}' for whatever reason, translate into ']'
+			*v++ = 0x1D;
+			continue;
+		}
+		if (ch == '\n' || ch == '\r') {
+			if ((ch_prev == '\n' || ch_prev == '\r') && ch_prev != ch) {
+				ch_prev = 0;
+				continue;	// \r\n or other multi-ctrl-char sequence for line break
+			}
+			// new line
+			while ((v - start) % cols)
+				*v++ = 32;
+			continue;
+		}
+		if (ch == '\t')	{		// space (also TAB is rendered as space for now ...)
+			*v++ = 32;
+			continue;
+		}
+		if ((signed char)ch < 32)	// ignore invalid characters (as a signed byte value this is also true for >=128 unsigned ones)
+			continue;
+		if (ch >= 0x61 && ch <= 0x7A) {	// ASCII small letters
+			*v++ = ch - 0x61 + 1;
+			continue;
+		}
+		if (ch >= 0x41 && ch <= 0x5A) {	// ASCII capital letters
+			*v++ = lowercase ? ch : ch - 0x41 + 1;
+			continue;
+		}
+		if (ch >= 0x20 && ch <= 0x3F) {	// space, various common marks, numbers: at the same place as in ASCII!
+			*v++ = ch;
+			continue;
+		}
+		// The unknown stuff ... Now mark with '@'
+		DEBUGPRINT("PASTE: unknown ASCII character: %c (%d)" NL, ch, (unsigned int)ch);
+		*v++ = 0;
+	next_char:
+		continue;
+	}
+	while (v < end && ((v - start) % cols))
+		*v++ = 32;
+	return 0;
+}

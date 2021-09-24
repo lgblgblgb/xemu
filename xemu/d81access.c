@@ -41,8 +41,6 @@ static struct {
 } d81[8];
 static int enable_mode_transient_callback = -1;
 
-#define CURRENT_D81 0
-
 
 #define IS_RO(p)	(!!((p) & D81ACCESS_RO))
 #define IS_RW(p)	(!((p) & D81ACCESS_RO))
@@ -82,13 +80,12 @@ void d81access_init ( void )
 
 int d81access_get_mode ( int which )
 {
-	return d81[which & 7].mode;
+	return d81[which].mode;
 }
 
 
 void d81access_close ( int which )
 {
-	which &= 7;
 	if (d81[which].fd >= 0) {
 		if (IS_AUTOCLOSE(d81[which].mode)) {
 			close(d81[which].fd);
@@ -126,7 +123,6 @@ static void d81access_close_internal ( int which )
 
 static void d81access_attach_fd_internal ( int which, int fd, off_t offset, int mode )
 {
-	which &= 7;
 	if (fd < 0)
 		FATAL("d81access_attach_fd_internal() tries to attach invalid fd");
 	d81access_close_internal(which);
@@ -152,14 +148,13 @@ void d81access_attach_fd ( int which, int fd, off_t offset, int mode )
 	int check_mode = mode & 0xFF;
 	if (check_mode != D81ACCESS_IMG && check_mode != D81ACCESS_EMPTY)
 		FATAL("d81access_attach_fd() mode low bits must have D81ACCESS_IMG or D81ACCESS_EMPTY");
-	d81access_attach_fd_internal(which & 7, fd, offset, mode);
+	d81access_attach_fd_internal(which, fd, offset, mode);
 }
 
 
 // Attach callbacks instead of handling requests in this source
 void d81access_attach_cb ( int which, off_t offset, d81access_rd_cb_t rd_callback, d81access_wr_cb_t wr_callback )
 {
-	which &= 7;
 	d81access_close_internal(which);
 	d81[which].mode = D81ACCESS_CALLBACKS;
 	if (!wr_callback)
@@ -174,7 +169,6 @@ void d81access_attach_cb ( int which, off_t offset, d81access_rd_cb_t rd_callbac
 
 int d81access_attach_fsobj ( int which, const char *fn, int mode )
 {
-	which &= 7;
 	if (!fn || !*fn) {
 		DEBUGPRINT("D81: attach file request with empty file name, not using FS based disk attachment." NL);
 		return -1;
@@ -291,7 +285,6 @@ int d81access_attach_fsobj ( int which, const char *fn, int mode )
 
 static int file_io_op ( int which, int is_write, int d81_offset, Uint8 *buffer, int size )
 {
-	which &= 7;
 	off_t offset = d81[which].start_at + (off_t)d81_offset;
 	if (lseek(d81[which].fd, offset, SEEK_SET) != offset)
 		FATAL("D81: SEEK: seek host-OS failure: %s", strerror(errno));
@@ -355,7 +348,6 @@ static int diskimage_write_block ( Uint8 *io_buffer, Uint8 *addr_buffer, int add
 
 static int read_prg ( int which, Uint8 *buffer, int d81_offset, int number_of_logical_sectors )
 {
-	which &= 7;
 	// just pre-zero buffer, so we don't need to take care on this at various code points with possible partly filled output
 	memset(buffer, 0, 512);
 	// disk organization at CBM-DOS level is 256 byte sector based, though FDC F011 itself is 512 bytes sectored stuff
@@ -422,7 +414,6 @@ static void check_io_req_params ( int d81_offset, int sector_size )
 
 int d81access_read_sect  ( int which, Uint8 *buffer, int d81_offset, int sector_size )
 {
-	which &= 7;
 	check_io_req_params(d81_offset, sector_size);
 	switch (d81[which].mode & 0xFF) {
 		case D81ACCESS_EMPTY:
@@ -447,7 +438,6 @@ int d81access_read_sect  ( int which, Uint8 *buffer, int d81_offset, int sector_
 
 int d81access_write_sect ( int which, Uint8 *buffer, int d81_offset, int sector_size )
 {
-	which &= 7;
 	check_io_req_params(d81_offset, sector_size);
 	if (IS_RO(d81[which].mode))
 		return -1;

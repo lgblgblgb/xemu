@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2019-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2019-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -60,9 +60,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define	XEMUSOCK_NONBLOCKING	1
 
 extern int  xemusock_close	( xemusock_socket_t sock, int *xerrno );
-extern int  xemusock_init	( char *msg );
+extern const char *xemusock_init( void );
 extern void xemusock_uninit	( void );
-extern int  xemusock_select_1   ( xemusock_socket_t sock, int usec, int what );
+extern int  xemusock_select_1   ( xemusock_socket_t sock, int usec, int what, int *xerrno );
 extern void xemusock_fill_servaddr_for_inet_ip_netlong ( struct sockaddr_in *servaddr, unsigned int ip_netlong, int port );
 extern void xemusock_fill_servaddr_for_inet_ip_native  ( struct sockaddr_in *servaddr, unsigned int ip_native,  int port );
 extern int  xemusock_set_nonblocking	( xemusock_socket_t sock, int is_nonblock, int *xerrno );
@@ -71,6 +71,7 @@ extern int  xemusock_send		( xemusock_socket_t sock, const void *buffer, int len
 extern int  xemusock_sendto		( xemusock_socket_t sock, const void *buffer, int length, struct sockaddr_in *servaddr, int *xerrno );
 extern int  xemusock_recv		( xemusock_socket_t sock, void *buffer, int length, int *xerrno );
 extern int  xemusock_recvfrom		( xemusock_socket_t sock, void *buffer, int length, struct sockaddr_in *servaddr, int *xerrno );
+extern int  xemusock_shutdown           ( xemusock_socket_t sock, int *xerrno );
 extern int  xemusock_bind		( xemusock_socket_t sock, struct sockaddr *addr, xemusock_socklen_t addrlen, int *xerrno );
 extern int  xemusock_listen		( xemusock_socket_t sock, int backlog, int *xerrno );
 extern int  xemusock_setsockopt		( xemusock_socket_t sock, int level, int option, const void *value, int len, int *xerrno );

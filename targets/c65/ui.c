@@ -30,51 +30,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "configdb.h"
 
 
-//#if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_GUI)
-
-#if 0
-static int attach_d81 ( const char *fn )
-{
-	if (fd_mounted) {
-		if (mount_external_d81(fn, 0)) {
-			ERROR_WINDOW("Mount failed for some reason.");
-			return 1;
-		} else {
-			DEBUGPRINT("UI: file seems to be mounted successfully as D81: %s" NL, fn);
-			return 0;
-		}
-	} else {
-		ERROR_WINDOW("Cannot mount external D81, since Mega65 was not instructed to mount any FD access yet.");
-		return 1;
-	}
-}
-#endif
-
-
-static int attach_d81 ( const char *fn )
+static int attach_d81 ( int drive, const char *fn )
 {
 	if (fn && *fn)
-		return d81access_attach_fsobj(0, fn, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE);
+		return d81access_attach_fsobj(drive, fn, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE);
 	return -1;
 }
 
-
-// end of #if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_GUI_C)
-//#endif
-
-
-#ifdef CONFIG_DROPFILE_CALLBACK
-void emu_dropfile_callback ( const char *fn )
-{
-	DEBUGGUI("UI: drop event, file: %s" NL, fn);
-	if (ARE_YOU_SURE("Shall I try to mount the dropped file as D81 for you?"))
-		attach_d81(fn);
-}
-#endif
-
-
-#if 1
-static void ui_attach_d81_by_browsing ( void )
+static void ui_attach_d81_by_browsing ( int drive )
 {
 	char fnbuf[PATH_MAX + 1];
 	static char dir[PATH_MAX + 1] = "";
@@ -85,12 +48,19 @@ static void ui_attach_d81_by_browsing ( void )
 		fnbuf,
 		sizeof fnbuf
 	))
-		attach_d81(fnbuf);
+		attach_d81(drive, fnbuf);
 	else
 		DEBUGPRINT("UI: file selection for D81 mount was cancelled." NL);
 }
-#endif
 
+static void ui_attach_d81_by_browsing_8 ( void ) { ui_attach_d81_by_browsing(0); }
+static void ui_attach_d81_by_browsing_9 ( void ) { ui_attach_d81_by_browsing(1); }
+
+static void ui_cb_detach_d81 ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
+	d81access_close(VOIDPTR_TO_INT(m->user_data));
+}
 
 static void ui_run_prg_by_browsing ( void )
 {
@@ -108,7 +78,6 @@ static void ui_run_prg_by_browsing ( void )
 	} else
 		DEBUGPRINT("UI: file selection for PRG injection was cancelled." NL);
 }
-
 
 static void ui_dump_memory ( void )
 {
@@ -183,7 +152,6 @@ static void ui_emu_info ( void )
 	);
 }
 
-
 // TODO: maybe we want to move these functions to somewhere else from this UI specific file ui.c
 // It may can help to make ui.c xemucfg independent, btw.
 static void load_and_use_rom ( const char *fn )
@@ -203,6 +171,27 @@ static void ui_load_rom_specified ( void )
 	load_and_use_rom(configdb.rom);
 }
 
+#ifdef CONFIG_DROPFILE_CALLBACK
+void emu_dropfile_callback ( const char *fn )
+{
+	DEBUGGUI("UI: file drop event, file: %s" NL, fn);
+	switch (QUESTION_WINDOW("Cancel|D81 to drv-8|D81 to drv-9|Run as PRG|Use as ROM", "What to do with the dropped file?")) {
+		case 1:
+			attach_d81(0, fn);
+			break;
+		case 2:
+			attach_d81(1, fn);
+			break;
+		case 3:
+			c65_reset();
+			inject_register_prg(fn, 0);
+			break;
+		case 4:
+			load_and_use_rom(fn);
+			break;
+	}
+}
+#endif
 
 static void ui_load_rom_by_browsing ( void )
 {
@@ -244,6 +233,32 @@ static void ui_put_screen_text_into_paste_buffer ( void )
 }
 
 
+static void ui_put_paste_buffer_into_screen_text ( void )
+{
+	char *t = SDL_GetClipboardText();
+	if (t == NULL)
+		goto no_clipboard;
+	char *t2 = t;
+	while (*t2 && (*t2 == '\t' || *t2 == '\r' || *t2 == '\n' || *t2 == ' '))
+		t2++;
+	if (!*t2)
+		goto no_clipboard;
+	xemu_cbm_text_to_screen(
+		memory + ((vic3_registers[0x31] & 0x80) ? (vic3_registers[0x18] & 0xE0) << 6 : (vic3_registers[0x18] & 0xF0) << 6),	// pointer to screen RAM, try to audo-tected: FIXME: works only in bank0!
+		(vic3_registers[0x31] & 0x80) ? 80 : 40,		// number of columns, try to auto-detect it
+		25,						// number of rows
+		t2,						// text buffer as input
+		(vic3_registers[0x18] & 2)			// lowercase font? try to auto-detect by checking selected address chargen addr, LSB
+	);
+	SDL_free(t);
+	return;
+no_clipboard:
+	if (t)
+		SDL_free(t);
+	ERROR_WINDOW("Clipboard query error, or clipboard was empty");
+}
+
+
 /**** MENU SYSTEM ****/
 
 
@@ -260,6 +275,7 @@ static const struct menu_st menu_display[] = {
 	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &register_screenshot_request },
 #endif
 	{ "Screen to OS paste buffer",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_screen_text_into_paste_buffer },
+	{ "OS paste buffer to screen",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_paste_buffer_into_screen_text },
 	{ NULL }
 };
 static const struct menu_st menu_debug[] = {
@@ -281,12 +297,19 @@ static const struct menu_st menu_rom[] = {
 	{ "Load Xemu default ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_load_rom_default       },
 	{ NULL }
 };
+static const struct menu_st menu_drives[] = {
+	{ "Attach D81 to drive 8",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing_8 },
+	{ "Detach D81 from drive 8",	XEMUGUI_MENUID_CALLABLE,	ui_cb_detach_d81, (void*)0 },
+	{ "Attach D81 to drive 9",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing_9 },
+	{ "Detach D81 from drive 9",	XEMUGUI_MENUID_CALLABLE,	ui_cb_detach_d81, (void*)1 },
+	{ NULL }
+};
 static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
 	{ "Reset", 	 		XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
 	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
 	{ "ROM",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_rom     },
-	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_attach_d81_by_browsing },
+	{ "Drives / D81 images",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_drives  },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing    },
 #ifdef XEMU_ARCH_WIN
 	{ "System console",		XEMUGUI_MENUID_CALLABLE |

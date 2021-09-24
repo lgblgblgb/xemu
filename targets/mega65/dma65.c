@@ -57,6 +57,13 @@ int   dma_chip_revision_is_dynamic;	// allowed to change DMA chip revision (norm
 int   dma_chip_revision_override;
 int   dma_chip_initial_revision;
 int   rom_date = 0;
+int   rom_is_openroms = 0;
+// Hacky stuff:
+// low byte: the transparent byte value
+// bit 8: zero = transprent mode is used, 1 = no DMA transparency is in used
+// This is done this way to have a single 'if' to check both of enabled transparency and the transparent value,
+// since the value (being 8 bit) to be written would never match values > $FF
+static unsigned int dma_transparency;
 
 
 enum dma_op_types {
@@ -123,10 +130,19 @@ static struct {
 } modulo;
 
 
+// On C65, DMA cannot cross 64K boundaries, so the right mask is 0xFFFF
+// On MEGA65 it seems to be 1Mbyte, thus the mask should be 0xFFFFF
+// No idea about the list mask, which is not the normal dma read/write ops,
+// but reading the DMA listself only.
+#define MEM_LIST_MASK	0xFFFF
+#define MEM_ADDR_MASK	0xFFFFF
 
 
 #define DMA_READ_SOURCE()	(XEMU_UNLIKELY(source.is_io) ? DMA_SOURCE_IOREADER_FUNC(DMA_ADDRESSING(source)) : DMA_SOURCE_MEMREADER_FUNC(DMA_ADDRESSING(source)))
 #define DMA_READ_TARGET()	(XEMU_UNLIKELY(target.is_io) ? DMA_TARGET_IOREADER_FUNC(DMA_ADDRESSING(target)) : DMA_TARGET_MEMREADER_FUNC(DMA_ADDRESSING(target)))
+
+
+#if 0
 #define DMA_WRITE_SOURCE(data)	do { \
 					if (XEMU_UNLIKELY(source.is_io)) \
 						DMA_SOURCE_IOWRITER_FUNC(DMA_ADDRESSING(source), data); \
@@ -139,20 +155,41 @@ static struct {
 					else \
 						DMA_TARGET_MEMWRITER_FUNC(DMA_ADDRESSING(target), data); \
 				} while (0)
+#endif
+
+static XEMU_INLINE void DMA_WRITE_SOURCE ( Uint8 data )
+{
+	if (XEMU_LIKELY((unsigned int)data != dma_transparency)) {
+		if (XEMU_UNLIKELY(source.is_io))
+			DMA_SOURCE_IOWRITER_FUNC(DMA_ADDRESSING(source), data);
+		else
+			DMA_SOURCE_MEMWRITER_FUNC(DMA_ADDRESSING(source), data);
+	}
+}
+
+static XEMU_INLINE void DMA_WRITE_TARGET ( Uint8 data )
+{
+	if (XEMU_LIKELY((unsigned int)data != dma_transparency)) {
+		if (XEMU_UNLIKELY(target.is_io))
+			DMA_SOURCE_IOWRITER_FUNC(DMA_ADDRESSING(target), data);
+		else
+			DMA_SOURCE_MEMWRITER_FUNC(DMA_ADDRESSING(target), data);
+	}
+}
 
 // Unlike the functions above, DMA list read is always memory (not I/O)
 // Also the "step" is always one. So it's a bit special case ... even on M65 we don't use fixed point math here, just pure number
 // FIXME: I guess here, that reading DMA list also warps within a 64K area
 #ifndef DO_DEBUG_DMA
-#define DMA_READ_LIST_NEXT_BYTE()	DMA_LIST_READER_FUNC(((list_addr++) & 0xFFFF) | list_base)
+#define DMA_READ_LIST_NEXT_BYTE()	DMA_LIST_READER_FUNC(((list_addr++) & MEM_LIST_MASK) | list_base)
 #else
 static int dma_list_entry_pos = 0;
 
 static Uint8 DMA_READ_LIST_NEXT_BYTE ( void )
 {
-	int addr = ((list_addr++) & 0xFFFF) | list_base;
+	int addr = ((list_addr++) & MEM_LIST_MASK) | list_base;
 	Uint8 data = DMA_LIST_READER_FUNC(addr);
-	DEBUGPRINT("DMA: reading DMA (rev#%d) list from $%08X ($%02X) [#%d]: $%02X" NL, dma_chip_revision, addr, (list_addr-1) & 0xFFFF, dma_list_entry_pos++, data);
+	DEBUGPRINT("DMA: reading DMA (rev#%d) list from $%08X ($%02X) [#%d]: $%02X" NL, dma_chip_revision, addr, (list_addr-1) & MEM_LIST_MASK, dma_list_entry_pos++, data);
 	return data;
 }
 #endif
@@ -264,6 +301,11 @@ void dma_write_reg ( int addr, Uint8 data )
 }
 
 
+int dma_is_in_use ( void )
+{
+	return in_dma_update;
+}
+
 
 /* Main emulation loop should call this function regularly, if dma_status is not zero.
    This way we have 'real' DMA, ie works while the rest of the machine is emulated too.
@@ -296,13 +338,11 @@ int dma_update ( void )
 				DEBUGDMA("DMA: enhanced option byte $%02X read" NL, opt);
 				cycles++;
 				switch (opt) {
-					case 0x86:	// not supported yet
-						list_addr++;	// skip the parameter too
-						cycles++;
-						// flow onto the next 'case'!!
-					case 0x06:
-					case 0x07:
-						DEBUGPRINT("DMA: enhanced DMA transparency is not supported yet (option=$%02X) @ PC=$%04X" NL, opt, cpu65.pc);
+					case 0x06:	// disable transparency
+						dma_transparency |= 0x100;
+						break;
+					case 0x07:	// enable transparency
+						dma_transparency &= 0xFF;
 						break;
 					case 0x0A:
 						dma_chip_revision_override = 0;
@@ -334,14 +374,20 @@ int dma_update ( void )
 						dma_registers[0x0B] = DMA_READ_LIST_NEXT_BYTE();
 						cycles++;
 						break;
+					case 0x86:	// byte value to be treated as "transparent" (ie: skip writing that data), if enabled
+						dma_transparency = (dma_transparency & 0x100) | (unsigned int)DMA_READ_LIST_NEXT_BYTE();
+						cycles++;
+						break;
 					case 0x00:
 						DEBUGDMA("DMA: end of enhanced options" NL);
 						break;
 					default:
 						// maybe later we should keep this quiet ...
 						DEBUGPRINT("DMA: *unknown* enhanced option: $%02X @ PC=$%04X" NL, opt, cpu65.pc);
-						if ((opt & 0x80))
+						if ((opt & 0x80)) {
 							(void)DMA_READ_LIST_NEXT_BYTE();	// skip one byte for unknown option >= $80
+							cycles++;
+						}
 						break;
 				}
 			} while (opt);
@@ -449,7 +495,7 @@ int dma_update ( void )
 			source.base	= 0;				// in case of I/O, base is not interpreted in Xemu (uses pure numbers 0-$FFF, no $DXXX, not even M65-spec mapping), and must be zero ...
 			source.addr	= (source.addr & 0xFFF) << 8;	// for M65, it is fixed-point arithmetic
 		} else {
-			source.mask	= 0xFFFF;			// warp around within 64K. I am still not sure, it happens with DMA on 64K or 1M. M65 VHDL does 64K, so I switched that too.
+			source.mask	= MEM_ADDR_MASK;		// in case of memory (not I/O) access, we have again a mask, see at "MEM_ADDR_MASK" for more explanation
 			// base selection for M65
 			// M65 has an "mbyte part" register for source (and target too)
 			// however, with F018B there are 3 bits over 1Mbyte as well, and it seems M65 (see VHDL code) add these together then. Interesting.
@@ -465,7 +511,7 @@ int dma_update ( void )
 			target.base	= 0;
 			target.addr	= (target.addr & 0xFFF) << 8;
 		} else {
-			target.mask	= 0xFFFF;
+			target.mask	= MEM_ADDR_MASK;
 			if (dma_chip_revision)
 			    target.base = (target.addr & 0x0F0000) | (((dma_registers[6] << 20) + (target.addr & 0x700000)) & 0xFF00000);
 			else
@@ -551,6 +597,9 @@ int dma_update ( void )
 			dma_registers[0x09] = 1;	// source skip rate, integer part
 			dma_registers[0x0A] = 0;	// target skip rate, fraction part
 			dma_registers[0x0B] = 1;	// target skip rate, integer part
+			dma_registers[5] = 0;		// set back to megabyte selection zero for source
+			dma_registers[6] = 0;		// set back to megabyte selection zero for target
+			dma_transparency = 0x100;	// no DMA transparency by default
 		}
 	}
 	in_dma_update = 0;
@@ -569,41 +618,49 @@ int dma_update_multi_steps ( int do_for_cycles )
 }
 
 
-void detect_rom_date ( Uint8 *p )
+void detect_rom_date ( const Uint8 *rom )
 {
-	if (p == NULL) {
+	if (!rom) {
 		DEBUGPRINT("ROM: version check is disabled (NULL pointer), previous version info: %d" NL, rom_date);
-	} else if (p[0] == 0x56) {     // 'V'
-		rom_date = 0;
-		for (int a = 0; a < 6; a++) {
-			p++;
-			if (*p >= '0' && *p <= '9')
-				rom_date = rom_date * 10 + *p - '0';
-			else {
-				rom_date = -1;
-				DEBUGPRINT("ROM: version check failed (num-numberic character)" NL);
-				return;
-			}
-		}
-		DEBUGPRINT("ROM: version check succeeded, detected version: %d" NL, rom_date);
-	} else {
-		DEBUGPRINT("ROM: version check failed (no leading 'V')" NL);
-		rom_date = -1;
+		return;
 	}
+	rom_is_openroms = 0;
+	if (rom[0x16] == 0x56) {	// 'V' at ofs $16 for closed ROMs
+		rom += 0x16;
+	} else if (rom[0x10] == 0x4F) {	// 'O' at ofs $10 for open ROMs
+		rom += 0x10;
+		rom_is_openroms = 1;
+	} else {
+		DEBUGPRINT("ROM: version check failed (no leading 'V' or 'O' at ROM ofs $10/$16)" NL);
+		rom_date = -1;
+		return;
+	}
+	rom_date = 0;
+	for (int a = 0; a < 6; a++) {
+		rom++;
+		if (*rom >= '0' && *rom <= '9')
+			rom_date = rom_date * 10 + *rom - '0';
+		else {
+			rom_date = -1;
+			DEBUGPRINT("ROM: version check failed (num-numberic character)" NL);
+			return;
+		}
+	}
+	DEBUGPRINT("ROM: version check succeeded, detected version: %d (%s)" NL, rom_date, rom_is_openroms ? "Open-ROMs" : "Closed-ROMs");
 }
 
 
-void dma_init_set_rev ( unsigned int revision, Uint8 *rom_ver_signature )
+void dma_init_set_rev ( unsigned int revision, const Uint8 *rom )
 {
-	detect_rom_date(rom_ver_signature);
-	int rom_suggested_dma_revision = (rom_date < 900000 || rom_date > 910522);
+	detect_rom_date(rom);
+	const int rom_suggested_dma_revision = (rom_date < 900000 || rom_date > 910522 || rom_is_openroms);
 	DEBUGPRINT("ROM: version check suggests DMA revision %d" NL, rom_suggested_dma_revision);
 	revision &= 0xFF;
 	if (revision > 2) {
 		FATAL("Unknown DMA revision value tried to be set (%d)!", revision);
 	} else if (revision == 2) {
-		if (!rom_ver_signature)
-			FATAL("dma_ini_set_rev(): revision == 2 (auto-detect) but rom_ver_signature == NULL (cannot auto-detect)");
+		if (!rom)
+			FATAL("dma_ini_set_rev(): revision == 2 (auto-detect) but rom == NULL (cannot auto-detect)");
 		if (rom_date <= 0)
 			WARNING_WINDOW("ROM version cannot be detected, and DMA revision auto-detection was requested.\nDefaulting to revision %d.\nWarning, this may cause incorrect behaviour!", rom_suggested_dma_revision);
 		dma_chip_revision = rom_suggested_dma_revision;
@@ -616,6 +673,7 @@ void dma_init_set_rev ( unsigned int revision, Uint8 *rom_ver_signature )
 			WARNING_WINDOW("DMA revision is forced to be %d, while ROM version (%d)\nsuggested revision is %d. Using the forced revision %d.\nWarning, this may cause incorrect behaviour!", dma_chip_revision, rom_date, rom_suggested_dma_revision, dma_chip_revision);
 		DEBUGPRINT("DMA: setting chip revision to #%d based on configuration/command line request (forced). Suggested revision by ROM date: #%d" NL, dma_chip_initial_revision, rom_suggested_dma_revision);
 	}
+	dma_registers[3] = dma_chip_revision;
 }
 
 
@@ -660,6 +718,8 @@ void dma_reset ( void )
 	dma_registers[0x09] = 1;	// fixpoint math source step integer part (1), fractional (reg#8) is already zero by memset() above
 	dma_registers[0x0B] = 1;	// fixpoint math target step integer part (1), fractional (reg#A) is already zero by memset() above
 	dma_chip_revision_override = -1;
+	dma_transparency = 0x100;	// disable transparency by default
+	dma_registers[3] = dma_chip_revision;
 }
 
 

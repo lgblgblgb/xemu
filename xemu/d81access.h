@@ -24,7 +24,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 
 #define PRG_MIN_SIZE		16
-#define PRG_MAX_SIZE		38000
+
+#ifdef	PRG_MAX_SIZE_OVERRIDE
+#define PRG_MAX_SIZE		PRG_MAX_SIZE_OVERRIDE
+#else
+#define PRG_MAX_SIZE		0xD700
+#endif
 
 #define D81ACCESS_EMPTY		0
 #define D81ACCESS_IMG		1
@@ -43,10 +48,10 @@ extern void d81access_cb_chgmode   ( int which, int mode );
 extern int  d81access_read_sect    ( int which, Uint8 *buffer, int d81_offset, int sector_size );
 extern int  d81access_write_sect   ( int which, Uint8 *buffer, int d81_offset, int sector_size );
 
-extern void d81access_init         ( void );
+extern void d81access_init         ( void      );
 extern int  d81access_get_mode     ( int which );
 extern void d81access_close        ( int which );
-extern void d81access_close_all    ( void );
+extern void d81access_close_all    ( void      );
 extern void d81access_attach_fd    ( int which, int fd, off_t offset, int mode );
 extern int  d81access_attach_fsobj ( int which, const char *fn, int mode );
 extern void d81access_attach_cb	   ( int which, off_t offset, d81access_rd_cb_t rd_callback, d81access_wr_cb_t wd_callback );

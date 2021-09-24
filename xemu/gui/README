@@ -1,0 +1,19 @@
+Files in this directory are not standaline C files but are included by various
+other C files. These are for only separating things not to have some giant
+C file hard to navigate and maintain then. Indeed, it's a questionable trick.
+
+gui_*.c files are the base abstractions of GUI backends, included by
+../emutools_gui.c
+
+osd.c and osd.h are basic OSD primitives used by both of the OSD notification
+layer of Xemu, and (WIP) OSD GUI implementation. They're included by
+../emutools.c and ../emutools.h They were part of the mentioned ../ files,
+however this is a separation to make it more easy to maintain, with some
+modifications as well how it worked in the past. Please note, that these
+files are needed by basic Xemu builds as well, even without the actual
+OSD GUI, as the OSD notification feature of Xemu is not dependent of the
+GUI itself.
+
+popular_user_funcs.c is also included by ../emutools_gui.c and contains
+"popular" GUI features, so the actual emulators does not need to implement
+as their own, all the time.

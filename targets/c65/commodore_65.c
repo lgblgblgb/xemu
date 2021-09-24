@@ -47,7 +47,6 @@ static int nmi_level;			// please read the comment at nmi_set() below
 static int mouse_x = 0;
 static int mouse_y = 0;
 static int shift_status = 0;
-static int report_d81access_cb_chgmode = 0;
 
 char current_rom_filepath[PATH_MAX];
 
@@ -232,13 +231,28 @@ static void cia2_out_a ( Uint8 data )
 }
 
 
-
-// Just for easier test to have a given port value for CIA input ports
-static Uint8 cia_port_in_dummy ( void )
+static Uint8 cia2_in_a ( void )
 {
-	return 0xFF;
+	// CIA for real seems to always read their input pins on reading the data
+	// register, even if it's output. However VIC bank for example should be
+	// readable back this way. Trying to implement here something at least
+	// resembling a real situation, also taking account the DATA and CLK lines
+	// of the IEC bus has input and output too with inverter gates. Though note,
+	// IEC bus otherwise is not emulated by Xemu yet.
+	return (cia2.PRA & 0x3F) | ((~cia2.PRA << 2) & 0xC0);
 }
 
+
+static Uint8 cia2_in_b ( void )
+{
+	// Some kind of ad-hoc stuff, allow to read back data out register if the
+	// port bit is output, otherwise (input) give bit '1', by virtually
+	// emulation a pull-up as its kind. It seems to be needed, as some C65 ROMs
+	// actually has check for some user port lines and doing "interesting"
+	// things (mostly crashing ...) when something sensed as grounded.
+	// It was a kind of hw debug feature for early C65 ROMs.
+	return cia2.PRB | ~cia2.DDRB;
+}
 
 
 static void audio_callback(void *userdata, Uint8 *stream, int len)
@@ -268,19 +282,19 @@ static void c65_snapshot_saver_on_exit_callback ( void )
 void d81access_cb_chgmode ( int which, int mode ) {
 	int have_disk = ((mode & 0xFF) != D81ACCESS_EMPTY);
 	int can_write = (!(mode & D81ACCESS_RO));
-	if (report_d81access_cb_chgmode)
-		DEBUGPRINT("C65FDC: configuring F011 FDC drive #%d with have_disk=%d, can_write=%d" NL, which, have_disk, can_write);
+	if (which < 2)
+		DEBUGPRINT("C65FDC: configuring F011 FDC (#%d) with have_disk=%d, can_write=%d" NL, which, have_disk, can_write);
 	fdc_set_disk(which, have_disk, can_write);
 }
 // Here we implement F011 core's callbacks using d81access (and yes, F011 uses 512 bytes long sectors for real)
-int fdc_cb_rd_sec ( int drive, Uint8 *buffer, int d81_offset ) {
-	int ret = d81access_read_sect(drive, buffer, d81_offset, 512);
-	DEBUGPRINT("C65FDC: D81: reading sector at d81_offset=%d on drive #%d, return value=%d" NL, d81_offset, drive, ret);
+int fdc_cb_rd_sec ( int which, Uint8 *buffer, int d81_offset ) {
+	int ret = d81access_read_sect(which, buffer, d81_offset, 512);
+	DEBUG("C65FDC: D81: reading sector (drive #%d) at d81_offset=%d, return value=%d" NL, which, d81_offset, ret);
 	return ret;
 }
-int fdc_cb_wr_sec ( int drive, Uint8 *buffer, int d81_offset ) {
-	int ret = d81access_write_sect(drive, buffer, d81_offset, 512);
-	DEBUGPRINT("C65FDC: D81: writing sector at d81_offset=%d on drive #%d, return value=%d" NL, d81_offset, drive, ret);
+int fdc_cb_wr_sec ( int which, Uint8 *buffer, int d81_offset ) {
+	int ret = d81access_write_sect(which, buffer, d81_offset, 512);
+	DEBUG("C65FDC: D81: writing sector (drive #%d) at d81_offset=%d, return value=%d" NL, which, d81_offset, ret);
 	return ret;
 }
 
@@ -308,7 +322,7 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 #ifdef HID_KBD_MAP_CFG_SUPPORT
 	hid_keymap_from_config_file(configdb.keymap);
 #endif
-	joystick_emu = 1;
+	joystick_emu = 2;		// use port-2 by default
 	nmi_level = 0;
 	// *** host-FS
 	if (configdb.hostfsdir)
@@ -337,8 +351,8 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 		cia2_out_a,		// callback: OUTA ~ eg VIC-II bank
 		NULL,			// callback: OUTB
 		NULL,			// callback: OUTSR
-		cia_port_in_dummy,	// callback: INA
-		NULL,			// callback: INB
+		cia2_in_a,		// callback: INA
+		cia2_in_b,		// callback: INB
 		NULL,			// callback: INSR
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
@@ -351,7 +365,6 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	fdc_init(disk_cache);
 	// Initialize D81 access abstraction for FDC
 	d81access_init();
-	report_d81access_cb_chgmode = 1;
 	atexit(d81access_close_all);
 	d81access_attach_fsobj(0, configdb.disk8, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (configdb.d81ro ? D81ACCESS_RO : 0));
 	d81access_attach_fsobj(1, configdb.disk9, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (configdb.d81ro ? D81ACCESS_RO : 0));
@@ -836,7 +849,8 @@ static inline void do_pending_screenshot ( void )
 		2,
 		NULL,	// allow function to figure it out ;)
 		SCREEN_WIDTH,
-		SCREEN_HEIGHT
+		SCREEN_HEIGHT,
+		SCREEN_WIDTH
 	)) {
 		const char *p = strrchr(xemu_screenshot_full_path, DIRSEP_CHR);
 		if (p)

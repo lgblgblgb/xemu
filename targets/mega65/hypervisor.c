@@ -38,6 +38,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 int in_hypervisor;			// mega65 hypervisor mode
+int hypervisor_to_enable_audio = 0;
 
 static char debug_lines[0x4000][2][INFO_MAX_SIZE];		// I know. UGLY! and wasting memory. But this is only a HACK :)
 static int resolver_ok = 0;
@@ -133,6 +134,46 @@ int hypervisor_queued_enter ( int trapno )
 	}
 }
 
+
+// Very same as hypervisor_enter() - actually it calls that
+// **BUT** we check here, if next opcode is NOP.
+// it should be, as on real hardware this is a relability problem.
+// (sometimes one byte is skipped on execution after a trap caused by writing D640-D67F)
+void hypervisor_enter_via_write_trap ( int trapno )
+{
+	if (XEMU_UNLIKELY(dma_is_in_use())) {
+		static int do_warn = 1;
+		if (do_warn) {
+			WARNING_WINDOW("DMA operation would trigger hypervisor trap.\nThis is totally ignored!\nThere will be no future warning before you restart Xemu");
+			do_warn = 0;
+		}
+		return;
+	}
+	static int do_nop_check = 1;
+	if (do_nop_check) {
+		// FIXME: for real there should be a memory reading function independent to the one used by the CPU, since
+		// this has some side effects to just fetch a byte to check something, which is otherwise used normally to fetch CPU opcodes and such
+		Uint8 skipped_byte = cpu65_read_callback(cpu65.pc);
+		if (XEMU_UNLIKELY(skipped_byte != 0xEA)) {	// $EA = opcode of NOP
+			char msg[256];
+			snprintf(msg, sizeof msg,
+				"Writing hypervisor trap $%02X must be followed by NOP\n"
+				"but found opcode $%02X at PC=$%04X\n\n"
+				"This will cause problems on a real MEGA65!"
+				,
+				0xD640 + trapno, skipped_byte, cpu65.pc
+			);
+			if (QUESTION_WINDOW(
+				"Ignore now|Ignore all",
+				msg
+			)) {
+				do_nop_check = 0;
+				INFO_WINDOW("There will be no further warnings on this issue\nuntil you restart Xemu");
+			}
+		}
+	}
+	hypervisor_enter(trapno);
+}
 
 
 void hypervisor_enter ( int trapno )
@@ -238,7 +279,7 @@ void hypervisor_leave ( void )
 	memory_set_vic3_rom_mapping(vic_registers[0x30]);	// restore possible active VIC-III mapping
 	memory_set_do_map();	// restore mapping ...
 	if (XEMU_UNLIKELY(first_hypervisor_leave)) {
-		DEBUGPRINT("HYPERVISOR: first return after RESET." NL);
+		DEBUGPRINT("HYPERVISOR: first return after RESET, start of processing workarounds." NL);
 		first_hypervisor_leave = 0;
 		int new_pc = refill_c65_rom_from_preinit_cache();	// this function should decide then, if it's really a (forced) thing to do ...
 		if (new_pc >= 0) {
@@ -249,7 +290,20 @@ void hypervisor_leave ( void )
 			cpu65.pc = new_pc;
 		} else
 			DEBUGPRINT("MEM: no forced ROM re-apply policy was requested" NL);
-		dma_init_set_rev(configdb.dmarev, main_ram + 0x20000 + 0x16);
+		dma_init_set_rev(configdb.dmarev, main_ram + 0x20000);
+		if (configdb.init_videostd >= 0) {
+			DEBUGPRINT("VIC: setting %s mode as initial-default based on request" NL, configdb.init_videostd ? "NTSC" : "PAL");
+			if (configdb.init_videostd)
+				vic_registers[0x6F] |= 0x80;
+			else
+				vic_registers[0x6F] &= 0x7F;
+		}
+		if (hypervisor_to_enable_audio) {
+			hypervisor_to_enable_audio = 0;
+			configdb.nosound = 0;
+			DEBUGPRINT("HYPERVISOR: enabling audio (workaround)" NL);
+		}
+		DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 	}
 	if (XEMU_UNLIKELY(hypervisor_queued_trap >= 0)) {
 		// Not so much used currently ...

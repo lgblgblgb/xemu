@@ -139,6 +139,7 @@ typedef uint64_t Uint64;
 #	define PRINTF_LLD	"%lld"
 #	define PRINTF_LLU	"%llu"
 #	define MKDIR(__n)	mkdir((__n), 0777)
+#	define NULL_DEVICE	"/dev/null"
 #else
 #	define DIRSEP_STR	"\\"
 #	define DIRSEP_CHR	'\\'
@@ -147,6 +148,7 @@ typedef uint64_t Uint64;
 #	define PRINTF_LLD	"%I64d"
 #	define PRINTF_LLU	"%I64u"
 #	define MKDIR(__n)	mkdir(__n)
+#	define NULL_DEVICE	"NUL:"
 #endif
 
 extern FILE *debug_fp;

@@ -74,7 +74,6 @@ Uint8 mega65_uuid[8];
 // RTC registers
 Uint8 rtc_regs[6];
 
-#define SLOW_RAM_SIZE (8 << 20)
 Uint8 slow_ram[SLOW_RAM_SIZE];
 
 
@@ -745,8 +744,11 @@ void memory_set_cpu_io_port ( int addr, Uint8 value )
 {
 	if (XEMU_UNLIKELY((addr == 0) && ((value & 0xFE) == 64))) {	// M65-specific speed control stuff!
 		value &= 1;
-		if (force_fast != value) {
-			force_fast = value;
+		if (value != ((D6XX_registers[0x7D] >> 4) & 1)) {
+			if (value)
+				D6XX_registers[0x7D] |= 16;
+			else
+				D6XX_registers[0x7D] &= ~16;
 			machine_set_speed(0);
 		}
 	} else {
