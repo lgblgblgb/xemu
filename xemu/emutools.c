@@ -79,6 +79,7 @@ SDL_Window   *sdl_win = NULL;
 SDL_Renderer *sdl_ren = NULL;
 SDL_Texture  *sdl_tex = NULL;
 SDL_PixelFormat *sdl_pix_fmt;
+int sdl_on_x11 = 0, sdl_on_wayland = 0;
 static Uint32 sdl_pixel_format_id;
 static const char default_window_title[] = "XEMU";
 int register_new_texture_creation = 0;
@@ -711,7 +712,12 @@ int xemu_init_sdl ( void )
 		DEBUGPRINT("SDL: no SDL subsystem initialization has been done already." NL);
 #endif
 	SDL_VERSION(&sdlver_compiled);
-        SDL_GetVersion(&sdlver_linked);
+	SDL_GetVersion(&sdlver_linked);
+	const char *sdl_video_driver = SDL_GetCurrentVideoDriver();
+	if (!sdl_video_driver)
+		FATAL("SDL_GetCurrentVideoDriver() == NULL");
+	sdl_on_x11 = !strcasecmp(sdl_video_driver, "x11");
+	sdl_on_wayland = !strcasecmp(sdl_video_driver, "wayland");
 	if (chatty_xemu)
 		printf( "SDL version: (%s) compiled with %d.%d.%d, used with %d.%d.%d on platform %s" NL
 			"SDL system info: %d bits %s, %d cores, l1_line=%d, RAM=%dMbytes, max_alignment=%d%s, CPU features: "
@@ -728,7 +734,7 @@ int xemu_init_sdl ( void )
 			"",
 #endif
 			SDL_Has3DNow(),SDL_HasAVX(),SDL_HasAVX2(),SDL_HasAltiVec(),SDL_HasMMX(),SDL_HasRDTSC(),SDL_HasSSE(),SDL_HasSSE2(),SDL_HasSSE3(),SDL_HasSSE41(),SDL_HasSSE42(),
-			SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver()
+			sdl_video_driver, SDL_GetCurrentAudioDriver()
 		);
 #if defined(XEMU_ARCH_WIN)
 #	define SDL_VER_MISMATCH_WARN_STR "Xemu was not compiled with the linked DLL for SDL.\nPlease upgrade your DLL too, not just Xemu binary."
