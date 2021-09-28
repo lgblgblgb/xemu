@@ -38,7 +38,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 int in_hypervisor;			// mega65 hypervisor mode
-int hypervisor_to_enable_audio = 0;
 
 static char debug_lines[0x4000][2][INFO_MAX_SIZE];		// I know. UGLY! and wasting memory. But this is only a HACK :)
 static int resolver_ok = 0;
@@ -297,11 +296,6 @@ void hypervisor_leave ( void )
 				vic_registers[0x6F] |= 0x80;
 			else
 				vic_registers[0x6F] &= 0x7F;
-		}
-		if (hypervisor_to_enable_audio) {
-			hypervisor_to_enable_audio = 0;
-			configdb.nosound = 0;
-			DEBUGPRINT("HYPERVISOR: enabling audio (workaround)" NL);
 		}
 		DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 	}

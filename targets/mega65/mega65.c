@@ -475,10 +475,6 @@ static void shutdown_callback ( void )
 
 void reset_mega65 ( void )
 {
-	if (!configdb.nosound && configdb.soundresetbug) {
-		configdb.nosound = 1;
-		hypervisor_to_enable_audio = 1;
-	}
 	eth65_reset();
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0xFF;
@@ -786,7 +782,8 @@ int main ( int argc, char **argv )
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
 		AUDIO_SAMPLE_FREQ,		// sound mix freq
 		configdb.mastervolume,
-		configdb.stereoseparation
+		configdb.stereoseparation,
+		configdb.audiobuffersize
 	);
 	DEBUGPRINT("MEM: UNHANDLED memory policy: %d" NL, configdb.skip_unhandled_mem);
 	if (configdb.skip_unhandled_mem)
