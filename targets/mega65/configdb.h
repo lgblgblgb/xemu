@@ -90,7 +90,7 @@ struct configdb_st {
 	int	nosound;
 	int	noopl3;
 	int	sidmask;
-	int	soundresetbug;
+	int	audiobuffersize;
 };
 
 extern struct configdb_st configdb;
