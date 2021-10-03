@@ -206,6 +206,19 @@ static void ui_update_sdcard ( void )
 	// Load selected ROM image into memory, also checks the size!
 	if (xemu_load_file(fnbuf, NULL, 0x20000, 0x20000, "Cannot begin image update, bad C65/M65 ROM image has been selected!") != 0x20000)
 		return;
+	// Check the loaded ROM: let's warn the user if it's open-ROMs, since it seems users are often confused to think,
+	// that's the right choice for every-day usage.
+	detect_rom_date(xemu_load_buffer_p);
+	if (rom_is_openroms) {
+		WARNING_WINDOW(
+			"You've selected a ROM for update which belongs to the\n"
+			"Open-ROMs projects. Please note, that Open-ROMs are not\n"
+			"yet ready for usage by an average user! For general usage\n"
+			"currently, closed-ROMs are recommended! Open-ROMs\n"
+			"currently can be interesting for mostly developers and\n"
+			"for curious minds."
+		);
+	}
 	// Copy file to the pref'dir (if not the same as the selected file)
 	char fnbuf_target[PATH_MAX];
 	strcpy(fnbuf_target, sdl_pref_dir);
