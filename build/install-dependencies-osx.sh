@@ -104,31 +104,16 @@ if [ ! -d "$dir" ]; then
 fi
 echo "Renaming/moving directory $dir as /usr/local/lgb/create-dmg ..."
 mv "$dir" /usr/local/lgb/create-dmg || exit
+echo "Directory listing of /usr/local/lgb/create-dmg:"
+ls -l /usr/local/lgb/create-dmg/
 
-file="/usr/local/lgb/create-dmg/create-dmg"
-if [ ! -f "$file" ]; then
-	echo "ERROR: file $file does not exist" >&2
-	exit 1
-fi
-ls -l $file
-echo "Symlinking $file to /usr/local/bin/create-dmg ..."
-sudo ln -s $file /usr/local/bin/create-dmg
-ls -l /usr/local/bin/create-dmg
-
-hack="`find /usr/local/bin/create-dmg -name support`"
-echo "Ugly hack, symlinking (hopefully) directory $hack as /usr/local/bin/support"
-sudo ln -s "$hack" /usr/local/bin/support || exit 1
-ls -lad "$hack" /usr/local/bin/support
-
-echo "Chown'ing directory /usr/local/lgb to root:wheel ..."
+echo "*** Chown'ing directory /usr/local/lgb to root:wheel ..."
 # It seems on Mac, system binaries/etc should have user root AND group wheel ...
 
 sudo chown -R root:wheel /usr/local/lgb || exit 1
 ls -lad /usr/local/lgb
 
-echo "Cleaning up ..."
-
-echo "Chdir from `pwd` to $ORIGCWD ..."
+echo "**** Chdir from `pwd` to $ORIGCWD ..."
 cd "$ORIGCWD" || exit 1
 
 echo "*** $0 is finished successfully"
