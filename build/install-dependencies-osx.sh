@@ -115,6 +115,11 @@ echo "Symlinking $file to /usr/local/bin/create-dmg ..."
 sudo ln -s $file /usr/local/bin/create-dmg
 ls -l /usr/local/bin/create-dmg
 
+hack="`find /usr/local/bin/create-dmg -name support`"
+echo "Ugly hack, symlinking (hopefully) directory $hack as /usr/local/bin/support"
+sudo ln -s "$hack" /usr/local/bin/support || exit 1
+ls -lad "$hack" /usr/local/bin/support
+
 echo "Chown'ing directory /usr/local/lgb to root:wheel ..."
 # It seems on Mac, system binaries/etc should have user root AND group wheel ...
 
