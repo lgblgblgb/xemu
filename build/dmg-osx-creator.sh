@@ -1,5 +1,5 @@
 #!/bin/bash
-# (C)2020 Gabor Lenart LGB, lgblgblgb@gmail.com
+# (C)2020,2021 Gabor Lenart LGB, lgblgblgb@gmail.com
 # -------------------------------------------------
 # Requires create-dmg (eg with homebrew'ing it ...)
 # https://github.com/andreyvit/create-dmg
@@ -8,6 +8,9 @@
 BUNDLE="yes"
 #TIMESTAMP="`date '+%Y%m%d%H%M%S'`"
 TIMESTAMP="`cat build/objs/cdate.data`"
+
+PATH="$PATH:/usr/local/lgb/create-dmg"
+export PATH
 
 echo "*** *** DMG begin: $0 @ `date` *** ***"
 
