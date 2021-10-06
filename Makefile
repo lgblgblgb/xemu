@@ -46,12 +46,10 @@ strip:
 
 all-clean:
 	for t in $(TARGETS) ; do for a in $(ARCHS) ; do $(MAKE) -C targets/$$t ARCH=$$a clean || exit 1 ; done ; done
-	$(MAKE) -C rom clean
 	$(MAKE) -C build/bin clean
 
 distclean:
 	$(MAKE) all-clean
-	$(MAKE) -C rom distclean
 	$(MAKE) -C build/bin/clean
 
 dep:
@@ -59,9 +57,6 @@ dep:
 
 all-dep:
 	for t in $(TARGETS) ; do for a in $(ARCHS) ; do $(MAKE) -C targets/$$t ARCH=$$a dep || exit 1 ; done ; done
-
-roms:
-	$(MAKE) -C rom
 
 deb:
 	$(MAKE) all
@@ -94,4 +89,4 @@ doxypublish:
 config:
 	ARCH=$(ARCH) $(MAKE) -C build/configure
 
-.PHONY: all all-arch clean all-clean roms distclean dep all-dep deb nsi publish doxygen doxypublish config install
+.PHONY: all all-arch clean all-clean distclean dep all-dep deb nsi publish doxygen doxypublish config install

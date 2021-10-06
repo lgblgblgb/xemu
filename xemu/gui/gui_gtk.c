@@ -74,6 +74,16 @@ static int SDL_ShowMessageBox_xemuguigtk ( const SDL_MessageBoxData* messageboxd
 
 static int xemugtkgui_init ( void )
 {
+#ifdef XEMU_ARCH_UNIX
+	if (sdl_on_x11) {
+		// Workaround: on Wayland, it's possible that SDL uses x11, but the GUI (with GTK) would use Wayland, mixing x11 and wayland within the same app, isn't a good idea
+		// thus we try to force x11 for GTK (better say GDK as its backend) via an environment variable set here, if we detect SDL uses x11
+		static const char *gdk_backend_var_name  = "GDK_BACKEND";
+		static const char *gdk_backend_var_value = "x11";
+		DEBUGPRINT("GTK: setting environment variable  %s=%s to avoid possible GTK backend mismatch with SDL" NL, gdk_backend_var_name, gdk_backend_var_value);
+		setenv(gdk_backend_var_name, gdk_backend_var_value, 1);
+	}
+#endif
 	is_xemugui_ok = 0;
 	_gtkgui_popup_is_open = 0;
 	_gtkgui_active = 0;

@@ -21,6 +21,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define NUMBER_OF_SIDS	4
 
+#define AUDIO_BUFFER_SAMPLES_MIN	1024
+#define AUDIO_BUFFER_SAMPLES_MAX	32768
+#define AUDIO_BUFFER_SAMPLES_DEFAULT	1024
+
 #ifdef NEED_SID_H
 #include "xemu/sid.h"
 extern struct SidEmulation sid[NUMBER_OF_SIDS];
@@ -37,7 +41,7 @@ extern struct SidEmulation sid[NUMBER_OF_SIDS];
 extern int stereo_separation;
 extern int audio_volume;
 
-extern void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int separation );
+extern void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int separation, unsigned int buffer_size );
 extern void audio65_reset ( void );
 extern void audio65_clear_regs ( void );
 extern void audio65_start ( void );

@@ -1,24 +1,22 @@
-You must place ROM images here. For possible copyright reason and violation
-of free licensed software contains closed source binary blobs, you must do
-it yourself. Needed files in this directory (with exactly these names!):
+-------------------------------- WARNINGS -----------------------------------
 
-* vic20-chargen		 4K long character generator ROM image of Commodore VIC-20
-* vic20-basic		 8K long BASIC ROM image of Commodore VIC-20
-* vic20-kernal		 8K long KERNAL ROM image of Commodore VIC-20
-* clcd-u102.rom		32K long KERNAL ROM image of Commodore LCD
-* clcd-u103.rom		32K long USER APP / BASIC ROM image of Commodore LCD
-* clcd-u104.rom		32K long USER APP ROM image of Commodore LCD
-* clcd-u105.rom		32K long USER APP ROM image of Commodore LCD
+Warning! This directory is mostly interesting for Xemu developers and similar
+purposes. DO NOT do anything here, if you want only to use / compile Xemu at
+your own, but not dealing with the emulators more closely (ie, modifying
+Xemu's source itself and such).
 
-NOTE: Commodore LCD character ROM is missing! Because only _some_ Commodore LCD
-units exist, it's quite unlikely that we can get one, so emulator use some kind
-of hacky, "replacement" solution for the problem ...
+If you really want, you can have a look on file rom-fetch-list.txt if it
+helps, and download some ROMs at your own given by those URLs. But beware,
+C65 and MEGA65 ROMs - for legal reasons - are not among them.
 
-You can also use Makefile to download the needed files from Internet:
+NB: if you are interested in the MEGA65 or the C65 emulator mostly, this is
+NOT the place where you can find how to get the ROMs. It's much like an
+Amiga emulator, usually it's not so much advertised how to get an illegal
+Kickstart ROM, even not so much to include it directly!
 
-make roms
+-----------------------------------------------------------------------------
 
-(issued from the root directory of the project)
+So you have been warned. For all remaining audience here, let's continue.
 
 Some of the ROMs though are own ones (written by me) and included in the
 repository by default (even in binary form) with source. If you try to modify
@@ -38,21 +36,14 @@ clcd-u104-parasite.rom
 	it will able to locate it, and also includes in the original
 	"menu system" (the SHELL).
 
-The "make roms" command also compile the needed ROMs. Note: these ROMs are
-optional, and emulators can work without them!
+The "make" command also compile the needed ROMs/extension done by ME (not
+the copyrigthed ROMs I cannot provide!). Note: these ROMs are optional,
+and emulators can work without them!
 
-
-                   ---- ABOUT THE MEGA65 RELATED STUFFS ----
-
-
-The Mega65 emulator (well, a sub-set of Mega65 features only!) needs KICKUP.M65 file
-to manually placed into the rom/ directory. Also it needs an SD-Card image, which can
-be generated though with the command of "make mega65.img" in the rom/ directory.
-
+This needs CC65 toolchain to be installed and their tools available (ca65,
+ld65, cl65).
 
                        ---- ABOUT COMMODORE LCD ROMs ----
-
-
 
 You can select various ROM patches in commodore_lcd.h
 

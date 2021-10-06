@@ -133,6 +133,7 @@ extern char *window_title_info_addon;
 extern SDL_Window   *sdl_win;
 extern Uint32 sdl_winid;
 extern SDL_PixelFormat *sdl_pix_fmt;
+extern int sdl_on_x11, sdl_on_wayland;
 extern char *xemu_app_org, *xemu_app_name;
 extern int seconds_timer_trigger;
 extern char *sdl_pref_dir, *sdl_base_dir, *sdl_inst_dir;
@@ -232,6 +233,12 @@ static XEMU_INLINE void xemu_u64le_to_u8p ( Uint8 *const p, const Uint64 data ) 
 	p[7] = (data >> 56) & 0xFF;
 }
 
+typedef char sha1_hash_str[41];
+typedef Uint8 sha1_hash_bytes[20];
+
+extern void sha1_checksum_as_words ( Uint32 hash[5], const Uint8 *data, Uint32 size );
+extern void sha1_checksum_as_bytes ( sha1_hash_bytes hash_bytes, const Uint8 *data, Uint32 size );
+extern void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data, Uint32 size );
 
 #ifdef XEMU_OSD_SUPPORT
 #include "xemu/gui/osd.h"

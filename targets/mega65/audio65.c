@@ -238,7 +238,6 @@ void audio_set_stereo_parameters ( int vol, int sep )
 }
 
 
-#define AUDIO_BUFFER_SAMPLES_MAX	1024
 // 10 channels, consist of: 4 channel for audio DMA, 4 channel for SIDs (each SIDs are pre-mixed to one channel by sid.c), 2 OPL3 channel (OPL3 is pre-mixed into two channels in opl3.c)
 #define MIXED_CHANNELS			10
 
@@ -375,7 +374,7 @@ void audio65_start ( void )
 }
 
 
-void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int separation )
+void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int separation, unsigned int buffer_size )
 {
 	static volatile int initialized = 0;
 	if (initialized) {
@@ -396,7 +395,7 @@ void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int 
 	audio_want.freq = sound_mix_freq;
 	audio_want.format = AUDIO_S16SYS;	// used format by SID emulation (ie: signed short, with native endianness)
 	audio_want.channels = 2;		// that is: stereo, for the two SIDs
-	audio_want.samples = AUDIO_BUFFER_SAMPLES_MAX;		// Sample size suggested (?) for the callback to render once
+	audio_want.samples = buffer_size;	// Sample size suggested (?) for the callback to render once
 	audio_want.callback = audio_callback;	// Audio render callback function, called periodically by SDL on demand
 	audio_want.userdata = NULL;		// Not used, "userdata" parameter passed to the callback by SDL
 	if (audio)
@@ -406,7 +405,7 @@ void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int 
 		for (int i = 0; i < SDL_GetNumAudioDevices(0); i++)
 			DEBUG("AUDIO: audio device is #%d: %s" NL, i, SDL_GetAudioDeviceName(i, 0));
 		// Sanity check that we really got the same audio specification we wanted
-		if (audio_want.freq != audio_got.freq || audio_want.format != audio_got.format || audio_want.channels != audio_got.channels) {
+		if (audio_want.freq != audio_got.freq || audio_want.format != audio_got.format || audio_want.channels != audio_got.channels || audio_got.samples > AUDIO_BUFFER_SAMPLES_MAX) {
 			SDL_CloseAudioDevice(audio);	// forget audio, if it's not our expected format :(
 			audio = 0;
 			ERROR_WINDOW("Audio parameter mismatches.");

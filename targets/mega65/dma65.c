@@ -624,6 +624,9 @@ void detect_rom_date ( const Uint8 *rom )
 		DEBUGPRINT("ROM: version check is disabled (NULL pointer), previous version info: %d" NL, rom_date);
 		return;
 	}
+	sha1_hash_str hash_str;
+	sha1_checksum_as_string(hash_str, rom, 0x20000);
+	DEBUGPRINT("ROM: SHA1 checksum is %s" NL, hash_str);
 	rom_is_openroms = 0;
 	if (rom[0x16] == 0x56) {	// 'V' at ofs $16 for closed ROMs
 		rom += 0x16;
