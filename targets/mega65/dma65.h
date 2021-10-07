@@ -30,8 +30,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern Uint8 dma_status;
 extern Uint8 dma_registers[16];
 extern int   dma_chip_revision;
-extern int   rom_date;
-extern int   rom_is_openroms;
 
 /* Functions: */
 
@@ -43,8 +41,6 @@ extern void  dma_reset		( void );
 extern int   dma_update		( void );
 extern int   dma_update_multi_steps ( int do_for_cycles );
 extern int   dma_is_in_use      ( void );
-
-extern void  detect_rom_date    ( const Uint8 *rom );
 
 /* Things should be provided by the emulator: */
 

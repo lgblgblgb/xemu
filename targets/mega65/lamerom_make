@@ -1,0 +1,7 @@
+#!/bin/bash
+
+cl65 -t none --asm-define ROM lamerom.a65 || exit 1
+xxd -i lamerom > lamerom.c || exit 1
+ls -l lamerom.c
+make || exit 1
+

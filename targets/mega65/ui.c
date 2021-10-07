@@ -37,6 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "audio65.h"
 #include "vic4.h"
 #include "configdb.h"
+#include "rom.h"
 
 
 static int attach_d81 ( const char *fn )
@@ -208,7 +209,7 @@ static void ui_update_sdcard ( void )
 		return;
 	// Check the loaded ROM: let's warn the user if it's open-ROMs, since it seems users are often confused to think,
 	// that's the right choice for every-day usage.
-	detect_rom_date(xemu_load_buffer_p);
+	rom_detect_date(xemu_load_buffer_p);
 	if (rom_is_openroms) {
 		WARNING_WINDOW(
 			"You've selected a ROM for update which belongs to the\n"
@@ -288,6 +289,13 @@ static void reset_into_c65_mode ( void )
 	if (reset_mega65_asked()) {
 		KBD_RELEASE_KEY(0x75);
 		hwa_kbd_fake_key(0);
+	}
+}
+
+static void reset_into_xemu_stub ( void )
+{
+	if (reset_mega65_asked()) {
+		rom_is_stub = 1;
 	}
 }
 
@@ -559,10 +567,11 @@ static const struct menu_st menu_sdcard[] = {
 	{ NULL }
 };
 static const struct menu_st menu_reset[] = {
-	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode        },
-	{ "Reset M65 without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot },
-	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu    },
-	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode        },
+	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode		},
+	{ "Reset M65 without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot	},
+	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu	},
+	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode		},
+	{ "Reset into Xemu stub-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_stub		},
 	{ NULL }
 };
 static const struct menu_st menu_inputdevices[] = {
