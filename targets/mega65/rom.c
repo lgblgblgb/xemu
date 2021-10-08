@@ -26,11 +26,14 @@ int rom_date = 0;
 int rom_is_openroms = 0;
 int rom_is_stub = 0;
 
-static const char *const rom_names[] = {
-//	0		1		2		3		4
-	"Closed-ROMs",	"Open-ROMs",	"Xemu-ROMs",	"?unknown?",	"?before-boot?"
-};
-const char *rom_name = rom_names[4];
+
+static const char _rom_name_closed[]	= "Closed-ROMs";
+static const char _rom_name_open[]	= "Open-ROMs";
+static const char _rom_name_xemu[]	= "Xemu-ROMs";
+static const char _rom_name_bad[]	= "?unknown?";
+static const char _rom_name_preboot[]	= "?before-boot?";
+
+const char *rom_name = _rom_name_preboot;
 
 
 static int rom_detect_try ( const Uint8 *rom, const Uint8 rom_id )
@@ -64,26 +67,23 @@ void rom_detect_date ( const Uint8 *rom )
 	if (res_open >= 0 && res_closed <  0) {
 		rom_is_openroms = 1;
 		rom_date = res_open;
-		rom_name = rom_names[1];
+		rom_name = _rom_name_open;
 		goto ok;
 	}
 	if (res_open <  0 && res_closed >= 0) {
 		rom_is_openroms = 0;
 		rom_date = res_closed;
 		rom_is_stub = !strncmp((const char*)rom + 0x16 + 7, "Xemu", 3);
-		rom_name = rom_names[rom_is_stub ? 2 : 0];
+		rom_name = rom_is_stub ? _rom_name_xemu : _rom_name_closed;
 		goto ok;
 	}
-	if (res_open <  0 && res_closed <  0) {
-		rom_is_openroms = 0;
-		rom_date = -1;
-		rom_name = rom_names[3];
-		return;
-	}
-	ERROR_WINDOW("Serious problem: ROM can be identified both as open and closed ROM?!");
+	if (res_open <  0 && res_closed <  0)
+		DEBUGPRINT("ROM: version check failed (no leading 'V' or 'O' at ROM ofs $10/$16)" NL);
+	else
+		ERROR_WINDOW("Serious problem: ROM can be identified both as open and closed ROM?!");
 	rom_is_openroms = 0;
 	rom_date = -1;
-	rom_name = rom_names[3];
+	rom_name = _rom_name_bad;
 	return;
 ok:
 	DEBUGPRINT("ROM: %s detected with version %d" NL, rom_name, rom_date);
