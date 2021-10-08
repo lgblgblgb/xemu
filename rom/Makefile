@@ -21,8 +21,8 @@ SHELL		= sh
 AWK		= awk
 CL65		= cl65
 URL_LIST	= rom-fetch-list.txt
-OUR_ROMS	= vic20-emulator-tool.rom c65-minimal-rom.rom clcd-u104-parasite.rom
-OUR_INCS	= c65-minimal-rom.cdata
+OUR_ROMS	= vic20-emulator-tool.rom c65-minimal-rom.rom clcd-u104-parasite.rom mega65-xemu-stub-rom.rom
+OUR_INCS	= c65-minimal-rom.cdata mega65-xemu-stub-rom.cdata
 
 all:	$(OUR_ROMS) $(OUR_INCS)
 

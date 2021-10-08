@@ -39,6 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 int in_hypervisor;			// mega65 hypervisor mode
+int hypervisor_request_stub_rom = 0;
 
 static char debug_lines[0x4000][2][INFO_MAX_SIZE];		// I know. UGLY! and wasting memory. But this is only a HACK :)
 static int resolver_ok = 0;
@@ -281,9 +282,9 @@ void hypervisor_leave ( void )
 	if (XEMU_UNLIKELY(first_hypervisor_leave)) {
 		DEBUGPRINT("HYPERVISOR: first return after RESET, start of processing workarounds." NL);
 		first_hypervisor_leave = 0;
-		if (rom_is_stub) {
+		if (hypervisor_request_stub_rom) {
 			DEBUGPRINT("MEM: using stub-ROM was forced" NL);
-			rom_is_stub = 0;
+			hypervisor_request_stub_rom = 0;
 			cpu65.pc = rom_make_xemu_stub_rom(main_ram + 0x20000);
 		} else {
 			int new_pc = refill_c65_rom_from_preinit_cache();	// this function should decide then, if it's really a (forced) thing to do ...

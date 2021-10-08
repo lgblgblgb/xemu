@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMU_MEGA65_ROM_H_INCLUDED
 
 extern int rom_date;
+extern const char *rom_name;
 extern int rom_is_openroms;
 extern int rom_is_stub;
 
