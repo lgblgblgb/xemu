@@ -23,7 +23,8 @@
 ; This is only "part" of Xemu's MEGA65 stub ROM! The rest is done by
 ; emulator code itself, see rom.c in targets/mega65/ to avoid the need
 ; for the text to be maintained here, and also to warp to line sizes
-; and so on. But all the actual code is here.
+; and so on. But all the actual code is here. ASCII is used in this ROM,
+; btw. Charset is also placed by rom.c
 
 
 .SETCPU "4510"
@@ -147,7 +148,13 @@ reset:
 	LDA	#$10
 	TSB	$D011	; display is enabled at this point
 	LDA	#3
+
 	STA	$D062	; VIC-IV precise address of screen, highest byte, displaying bank3 (second 64K of the ROM)
+	STZ	$D068	; VIC-IV precise address for chargen, lowest byte (zero)
+	LDA	#$F8
+	STA	$D069	; ... middle byte
+	LDA	#2
+	STA	$D06A	; ... highest byte (bank2, where we're now with this code in ROM)
 
 	STZ	2
 	TZA
@@ -203,7 +210,8 @@ easter_egg:
 	LDZ	#0
 	STZ	$D020
 	STZ	$D021
-:	BRA	:-
+	; not yet ...
+	JMP	reset
 
 
 

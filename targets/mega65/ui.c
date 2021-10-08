@@ -255,12 +255,14 @@ static void ui_update_sdcard ( void )
 		return;
 	}
 	// Call the updater :)
-	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES))
+	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES)) {
+		//rom_clear_rom(main_ram + 0x20000);
 		INFO_WINDOW(
 			"System files on your SD-card image seems to be updated successfully.\n"
 			"Next time you may need this function, you can use MEGA65.ROM which is a backup copy of your selected ROM.\n"
 			"MEGA65 emulation is about to RESET now!"
 		);
+	}
 	reset_mega65();
 }
 

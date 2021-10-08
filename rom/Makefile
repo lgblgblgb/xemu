@@ -33,10 +33,10 @@ distclean:
 	$(MAKE) clean
 	rm -f `$(AWK) 'NF == 3 && $$1 ~ /^[a-zA-Z0-9]/ { print $$1 }' < $(URL_LIST)`
 
-%.rom: %.asm Makefile
+%.rom: %.a65 Makefile
 	@echo "<<< Crafting $@ >>>"
 	$(CL65) -t none -o $@ $<
-	rm -f $(<:.asm=.o)
+	rm -f $(<:.a65=.o)
 
 %.cdata: %.rom Makefile
 	@echo "<<< Crafting $@ >>>"

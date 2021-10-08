@@ -18,12 +18,19 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "rom.h"
 
+#define CHARACTER_SET_DEFINER_8X8 const Uint8 vga_font_8x8[2048]
+#include "xemu/vgafonts.c"
+
 
 int rom_date = 0;
 int rom_is_openroms = 0;
 int rom_is_stub = 0;
-const char *rom_name = NULL;
 
+static const char *const rom_names[] = {
+//	0		1		2		3		4
+	"Closed-ROMs",	"Open-ROMs",	"Xemu-ROMs",	"?unknown?",	"?before-boot?"
+};
+const char *rom_name = rom_names[4];
 
 
 static int rom_detect_try ( const Uint8 *rom, const Uint8 rom_id )
@@ -53,7 +60,6 @@ void rom_detect_date ( const Uint8 *rom )
 	DEBUGPRINT("ROM: SHA1 checksum is %s" NL, hash_str);
 	const int res_open   = rom_detect_try(rom + 0x10, 0x4F);	// 'O' (0x4F) at ofs $10 + followed by "rom date": open-ROMs
 	const int res_closed = rom_detect_try(rom + 0x16, 0x56);	// 'V' (0x56) at ofs $16 + followed by "rom date": closed-ROMs
-	static const char *rom_names[] = { "closed-ROMs", "open-ROMs", "xemu-ROMs", "??" };
 	rom_is_stub = 0;
 	if (res_open >= 0 && res_closed <  0) {
 		rom_is_openroms = 1;
@@ -65,7 +71,7 @@ void rom_detect_date ( const Uint8 *rom )
 		rom_is_openroms = 0;
 		rom_date = res_closed;
 		rom_is_stub = !strncmp((const char*)rom + 0x16 + 7, "Xemu", 3);
-		rom_name = rom_names[rom_is_stub ? 0 : 2];
+		rom_name = rom_names[rom_is_stub ? 2 : 0];
 		goto ok;
 	}
 	if (res_open <  0 && res_closed <  0) {
@@ -116,11 +122,17 @@ int rom_make_xemu_stub_rom ( Uint8 *rom )
 		"~The long story:~\n\n"
 
 		"This message comes from Xemu's built-in \"stub\" ROM, ready to be replaced with "
-		"some real ROM to be able to do anything useful. Unfortunately, because of legal "
+		"some real ROM to be able to do anything useful. The reason you see this running "
+		"now is the fact of lacking MEGA65.ROM file on your emulated SD-card. Once you "
+		"have a MEGA65.ROM file installed it will be used instead.\n\n"
+
+		"Unfortunately, because of legal "
 		"reasons, it's not possible to include the real ROM. MEGA65 project has an "
-		"on-going effort to write an open-source free ROM called 'open-ROMs' project, "
-		"however it's not yet ready for general usage at all. Thus you almost certainly "
-		"need the 'proprietary' ROM, often called 'closed-ROMs' project, it's an enhanced "
+		"on-going effort to write an open-source free ROM called \"~open-ROMs~\" project, "
+		"however it's not yet ready for general usage at all.\n\n"
+
+		"Thus you ~almost certainly~ "
+		"need the \"proprietary\" ROM, often called \"~closed-ROMs~\" project, it's an enhanced "
 		"and bug-fixed version of the original C65 ROM, with improved BASIC and other "
 		"MEGA65 features. However being a derivate work based on original C65 ROM, it "
 		"cannot be used without the blessing of the repspective owner of the original "
@@ -132,16 +144,19 @@ int rom_make_xemu_stub_rom ( Uint8 *rom )
 
 		"This ROM is an actual machine language code (contained by Xemu) written in "
 		"assembly. Easter egg: if you're patient enough to even read this, you may want to "
-		"try the 's' key, it won't do anything now, but may be in the future. Who knows.\n\n"
+		"try the 's' key, it won't do anything useful now (restart), but may do something "
+		"other in the future. Who knows.\n\n"
 
 		"Thanks for your patience and understanding.\n\n"
 		"- LGB (Xemu's author)\n\n"
 		"~<END OF TEXT>~"
-		"\n"	// it's important to have an '\n' at the end!
+		/* --- it's important to have an '\n' at the end! --- */
+		"\n"
 	;
 	rom_clear_rom(rom);
 	// Make a fake closed-rom version identifier Xemu to stop complain later about its missing nature
 	strcpy((char*)rom + 0x16, "V920000XemuStubROM! Part of the Xemu project.");
+	memcpy(rom + 0xF800, vga_font_8x8, sizeof vga_font_8x8);
 	// Note: we use the "C64 kernal" port of the C65 ROM since C65/MEGA65 starts in C64 mode.
 	// Fortunately it's aligned such a way as would be the real address when used as kernal ROM in C64 mode.
 	rom[0xFFFF] = rom[0xFFFD] = rom[0xFFFB] = 0xE0;	// high bytes of vectors
@@ -153,6 +168,7 @@ int rom_make_xemu_stub_rom ( Uint8 *rom )
 	const Uint8 hi_colour = 7;		// yellow
 	memset(rom + 0x10000, 0x20, 0x8000);		// default char (space)
 	memset(rom + 0x18000, normal_colour, 0x8000);	// default background colour
+	// This madness wraps the text and renders into 80 column width screen size (though without height limit)
 	const char *m = msg;
 	Uint8 colour = normal_colour;
 	int pos = 0;
@@ -176,7 +192,7 @@ int rom_make_xemu_stub_rom ( Uint8 *rom )
 			if (l + xpos > 79)
 				pos += 79 - xpos;
 		}
-		rom[0x10000 + pos] = (c >= 'a' && c <= 'z') ? c - 96 : c;
+		rom[0x10000 + pos] = c;
 		rom[0x18000 + pos] = colour;
 		pos++;
 	}

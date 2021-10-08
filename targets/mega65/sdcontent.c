@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // to get D81_SIZE
 #include "xemu/d81access.h"
 #include "xemu/emutools_files.h"
+#include "rom.h"
 
 #include "memcontent.h"
 
@@ -608,6 +609,16 @@ static int sdcontent_put_xemu_signature ( void )
 	buffer[r + 2] = ((MEMCONTENT_VERSION_ID) >> 16) & 0xFF;
 	buffer[r + 3] = ((MEMCONTENT_VERSION_ID) >> 24) & 0xFF;
 	return sdcard_write_block(XEMU_INFO_SDCARD_BLOCK_NO, buffer);
+}
+
+
+int sdcontent_write_rom_stub ( void )
+{
+	Uint8 *rom = xemu_malloc(MEGA65_ROM_SIZE);
+	rom_make_xemu_stub_rom(rom);
+	const int r = update_sdcard_file(MEGA65_ROM_NAME, SDCONTENT_SYS_FILE, (const char*)rom, MEGA65_ROM_SIZE);
+	free(rom);
+	return r;
 }
 
 
