@@ -242,8 +242,6 @@ static void ui_update_sdcard ( void )
 	Uint8 char_rom[CHAR_ROM_SIZE];
 	memcpy(char_rom + 0x0000, xemu_load_buffer_p + 0xD000, 0x1000);
 	memcpy(char_rom + 0x1000, xemu_load_buffer_p + 0x9000, 0x1000);
-	free(xemu_load_buffer_p);
-	xemu_load_buffer_p = NULL;
 	// And store our character ROM!
 	strcpy(fnbuf_target + strlen(sdl_pref_dir), CHAR_ROM_NAME);
 	if (xemu_save_file(
@@ -252,15 +250,23 @@ static void ui_update_sdcard ( void )
 		CHAR_ROM_SIZE,
 		"Cannot save the extracted CHAR ROM file for the updater"
 	)) {
+		free(xemu_load_buffer_p);
+		xemu_load_buffer_p = NULL;
 		return;
 	}
 	// Call the updater :)
-	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES))
+	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES)) {
+		// this memcpy would not be needed ideally, as hyppo should load the new ROM, but it does not do that
+		// for some unknown reason. So we just copy the newly loaded ROM into the memory here ... :-/
+		memcpy(main_ram + 0x20000, xemu_load_buffer_p, 0x20000);
 		INFO_WINDOW(
 			"System files on your SD-card image seems to be updated successfully.\n"
 			"Next time you may need this function, you can use MEGA65.ROM which is a backup copy of your selected ROM.\n"
 			"MEGA65 emulation is about to RESET now!"
 		);
+	}
+	free(xemu_load_buffer_p);
+	xemu_load_buffer_p = NULL;
 	reset_mega65();
 }
 
