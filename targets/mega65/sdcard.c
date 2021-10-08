@@ -412,8 +412,10 @@ retry:
 		if (just_created_image_file) {
 			just_created_image_file = 0;
 			// Just created SD-card image file by Xemu itself! So it's nice if we format it for the user at this point!
-			if (!sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_FORCE_FDISK))
+			if (!sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_FORCE_FDISK)) {
 				INFO_WINDOW("Your just created SD-card image file has\nbeen auto-fdisk/format'ed by Xemu. Great :).");
+				sdcontent_write_rom_stub();
+			}
 		}
 	}
 	if (!virtsd_flag && sdfd >= 0) {
