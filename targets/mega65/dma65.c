@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "dma65.h"
 #include "xemu/cpu65.h"
+#include "rom.h"
 
 
 /* NOTES ABOUT C65/M65 DMAgic "F018", AND THIS EMULATION:
@@ -56,8 +57,6 @@ int   dma_chip_revision;		// revision of DMA chip
 int   dma_chip_revision_is_dynamic;	// allowed to change DMA chip revision (normally yes) by MEGA65
 int   dma_chip_revision_override;
 int   dma_chip_initial_revision;
-int   rom_date = 0;
-int   rom_is_openroms = 0;
 // Hacky stuff:
 // low byte: the transparent byte value
 // bit 8: zero = transprent mode is used, 1 = no DMA transparency is in used
@@ -618,44 +617,9 @@ int dma_update_multi_steps ( int do_for_cycles )
 }
 
 
-void detect_rom_date ( const Uint8 *rom )
-{
-	if (!rom) {
-		DEBUGPRINT("ROM: version check is disabled (NULL pointer), previous version info: %d" NL, rom_date);
-		return;
-	}
-	sha1_hash_str hash_str;
-	sha1_checksum_as_string(hash_str, rom, 0x20000);
-	DEBUGPRINT("ROM: SHA1 checksum is %s" NL, hash_str);
-	rom_is_openroms = 0;
-	if (rom[0x16] == 0x56) {	// 'V' at ofs $16 for closed ROMs
-		rom += 0x16;
-	} else if (rom[0x10] == 0x4F) {	// 'O' at ofs $10 for open ROMs
-		rom += 0x10;
-		rom_is_openroms = 1;
-	} else {
-		DEBUGPRINT("ROM: version check failed (no leading 'V' or 'O' at ROM ofs $10/$16)" NL);
-		rom_date = -1;
-		return;
-	}
-	rom_date = 0;
-	for (int a = 0; a < 6; a++) {
-		rom++;
-		if (*rom >= '0' && *rom <= '9')
-			rom_date = rom_date * 10 + *rom - '0';
-		else {
-			rom_date = -1;
-			DEBUGPRINT("ROM: version check failed (num-numberic character)" NL);
-			return;
-		}
-	}
-	DEBUGPRINT("ROM: version check succeeded, detected version: %d (%s)" NL, rom_date, rom_is_openroms ? "Open-ROMs" : "Closed-ROMs");
-}
-
-
 void dma_init_set_rev ( unsigned int revision, const Uint8 *rom )
 {
-	detect_rom_date(rom);
+	rom_detect_date(rom);
 	const int rom_suggested_dma_revision = (rom_date < 900000 || rom_date > 910522 || rom_is_openroms);
 	DEBUGPRINT("ROM: version check suggests DMA revision %d" NL, rom_suggested_dma_revision);
 	revision &= 0xFF;

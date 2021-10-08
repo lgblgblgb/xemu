@@ -37,6 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "audio65.h"
 #include "vic4.h"
 #include "configdb.h"
+#include "rom.h"
 
 
 static int attach_d81 ( const char *fn )
@@ -208,7 +209,7 @@ static void ui_update_sdcard ( void )
 		return;
 	// Check the loaded ROM: let's warn the user if it's open-ROMs, since it seems users are often confused to think,
 	// that's the right choice for every-day usage.
-	detect_rom_date(xemu_load_buffer_p);
+	rom_detect_date(xemu_load_buffer_p);
 	if (rom_is_openroms) {
 		WARNING_WINDOW(
 			"You've selected a ROM for update which belongs to the\n"
@@ -367,7 +368,7 @@ static void ui_emu_info ( void )
 	xemu_get_uname_string(uname_str, sizeof uname_str);
 	INFO_WINDOW(
 		"DMA chip current revision: %d (F018 rev-%s)\n"
-		"ROM version detected: %d%s %s\n"
+		"ROM version detected: %d %s\n"
 		"C64 'CPU' I/O port (low 3 bits): DDR=%d OUT=%d\n"
 		"Current VIC and I/O mode: %s %s, hot registers are %s\n"
 		"\n"
@@ -375,7 +376,7 @@ static void ui_emu_info ( void )
 		"Xemu's host OS: %s"
 		,
 		dma_chip_revision, dma_chip_revision ? "B, new" : "A, old",
-		rom_date, rom_date > 0 ? "" : " (unknown or bad ROM signature)", rom_date > 0 ? (rom_is_openroms ? "Open-ROMs" : "Closed-ROMs") : "UNKNOWN",
+		rom_date, rom_name,
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
 		vic_iomode < 4 ? iomode_names[vic_iomode] : "?INVALID?", videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
 		td_stat_str,
