@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "io_mapper.h"
 #include "xemu/emutools_config.h"
 #include "configdb.h"
+#include "rom.h"
 
 #include <sys/types.h>
 #include <fcntl.h>
@@ -38,6 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 int in_hypervisor;			// mega65 hypervisor mode
+int hypervisor_request_stub_rom = 0;
 
 static char debug_lines[0x4000][2][INFO_MAX_SIZE];		// I know. UGLY! and wasting memory. But this is only a HACK :)
 static int resolver_ok = 0;
@@ -280,15 +282,21 @@ void hypervisor_leave ( void )
 	if (XEMU_UNLIKELY(first_hypervisor_leave)) {
 		DEBUGPRINT("HYPERVISOR: first return after RESET, start of processing workarounds." NL);
 		first_hypervisor_leave = 0;
-		int new_pc = refill_c65_rom_from_preinit_cache();	// this function should decide then, if it's really a (forced) thing to do ...
-		if (new_pc >= 0) {
-			// positive return value from the re-fill routine: we DID re-fill, we should re-initialize "user space" PC from the return value
-			DEBUGPRINT("MEM: force ROM re-apply policy, PC change: $%04X -> $%04X" NL,
-				cpu65.pc, new_pc
-			);
-			cpu65.pc = new_pc;
-		} else
-			DEBUGPRINT("MEM: no forced ROM re-apply policy was requested" NL);
+		if (hypervisor_request_stub_rom) {
+			DEBUGPRINT("MEM: using stub-ROM was forced" NL);
+			hypervisor_request_stub_rom = 0;
+			cpu65.pc = rom_make_xemu_stub_rom(main_ram + 0x20000);
+		} else {
+			int new_pc = refill_c65_rom_from_preinit_cache();	// this function should decide then, if it's really a (forced) thing to do ...
+			if (new_pc >= 0) {
+				// positive return value from the re-fill routine: we DID re-fill, we should re-initialize "user space" PC from the return value
+				DEBUGPRINT("MEM: force ROM re-apply policy, PC change: $%04X -> $%04X" NL,
+					cpu65.pc, new_pc
+				);
+				cpu65.pc = new_pc;
+			} else
+				DEBUGPRINT("MEM: no forced ROM re-apply policy was requested" NL);
+		}
 		dma_init_set_rev(configdb.dmarev, main_ram + 0x20000);
 		if (configdb.init_videostd >= 0) {
 			DEBUGPRINT("VIC: setting %s mode as initial-default based on request" NL, configdb.init_videostd ? "NTSC" : "PAL");

@@ -38,6 +38,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "vic4.h"
 #include "configdb.h"
 #include "rom.h"
+#include "hypervisor.h"
 
 
 static int attach_d81 ( const char *fn )
@@ -289,6 +290,13 @@ static void reset_into_c65_mode ( void )
 	if (reset_mega65_asked()) {
 		KBD_RELEASE_KEY(0x75);
 		hwa_kbd_fake_key(0);
+	}
+}
+
+static void reset_into_xemu_stub ( void )
+{
+	if (reset_mega65_asked()) {
+		hypervisor_request_stub_rom = 1;
 	}
 }
 
@@ -560,10 +568,11 @@ static const struct menu_st menu_sdcard[] = {
 	{ NULL }
 };
 static const struct menu_st menu_reset[] = {
-	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode        },
-	{ "Reset M65 without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot },
-	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu    },
-	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode        },
+	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode		},
+	{ "Reset M65 without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot	},
+	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu	},
+	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode		},
+	{ "Reset into Xemu stub-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_stub		},
 	{ NULL }
 };
 static const struct menu_st menu_inputdevices[] = {
