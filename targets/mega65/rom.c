@@ -64,26 +64,28 @@ void rom_detect_date ( const Uint8 *rom )
 	const int res_open   = rom_detect_try(rom + 0x10, 0x4F);	// 'O' (0x4F) at ofs $10 + followed by "rom date": open-ROMs
 	const int res_closed = rom_detect_try(rom + 0x16, 0x56);	// 'V' (0x56) at ofs $16 + followed by "rom date": closed-ROMs
 	rom_is_stub = 0;
+	rom_is_openroms = 0;
+	rom_date = -1;
+	rom_name = _rom_name_bad;
 	if (res_open >= 0 && res_closed <  0) {
-		rom_is_openroms = 1;
 		rom_date = res_open;
+		rom_is_openroms = 1;
 		rom_name = _rom_name_open;
 		goto ok;
 	}
 	if (res_open <  0 && res_closed >= 0) {
-		rom_is_openroms = 0;
 		rom_date = res_closed;
-		rom_is_stub = !strncmp((const char*)rom + 0x16 + 7, "Xemu", 3);
-		rom_name = rom_is_stub ? _rom_name_xemu : _rom_name_closed;
+		if (!strncmp((const char*)rom + 0x16 + 7, "Xemu", 3)) {
+			rom_is_stub = 1;
+			rom_name = _rom_name_xemu;
+		} else
+			rom_name = _rom_name_closed;
 		goto ok;
 	}
 	if (res_open <  0 && res_closed <  0)
 		DEBUGPRINT("ROM: version check failed (no leading 'V' or 'O' at ROM ofs $10/$16)" NL);
 	else
 		ERROR_WINDOW("Serious problem: ROM can be identified both as open and closed ROM?!");
-	rom_is_openroms = 0;
-	rom_date = -1;
-	rom_name = _rom_name_bad;
 	return;
 ok:
 	DEBUGPRINT("ROM: %s detected with version %d" NL, rom_name, rom_date);

@@ -621,7 +621,7 @@ void dma_init_set_rev ( unsigned int revision, const Uint8 *rom )
 {
 	rom_detect_date(rom);
 	const int rom_suggested_dma_revision = (rom_date < 900000 || rom_date > 910522 || rom_is_openroms);
-	DEBUGPRINT("ROM: version check suggests DMA revision %d" NL, rom_suggested_dma_revision);
+	DEBUGPRINT("DMA: ROM version (%d %s) check suggests DMA revision %d" NL, rom_date, rom_name, rom_suggested_dma_revision);
 	revision &= 0xFF;
 	if (revision > 2) {
 		FATAL("Unknown DMA revision value tried to be set (%d)!", revision);
