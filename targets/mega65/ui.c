@@ -192,6 +192,7 @@ static void ui_update_sdcard ( void )
 {
 	char fnbuf[PATH_MAX + 1];
 	static char dir[PATH_MAX + 1] = "";
+	xemu_load_buffer_p = NULL;
 	if (!*dir)
 		strcpy(dir, sdl_pref_dir);
 	// Select ROM image
@@ -203,14 +204,20 @@ static void ui_update_sdcard ( void )
 		sizeof fnbuf
 	)) {
 		WARNING_WINDOW("Cannot update: you haven't selected a ROM image");
-		return;
+		goto ret;
 	}
 	// Load selected ROM image into memory, also checks the size!
 	if (xemu_load_file(fnbuf, NULL, 0x20000, 0x20000, "Cannot begin image update, bad C65/M65 ROM image has been selected!") != 0x20000)
-		return;
+		goto ret;
 	// Check the loaded ROM: let's warn the user if it's open-ROMs, since it seems users are often confused to think,
 	// that's the right choice for every-day usage.
 	rom_detect_date(xemu_load_buffer_p);
+	if (rom_date < 0) {
+		if (!ARE_YOU_SURE("Selected ROM cannot be identified as a valid C65/MEGA65 ROM. Are you sure to continue?", ARE_YOU_SURE_DEFAULT_NO)) {
+			INFO_WINDOW("SD-card system files update was aborted by the user.");
+			goto ret;
+		}
+	}
 	if (rom_is_openroms) {
 		WARNING_WINDOW(
 			"You've selected a ROM for update which belongs to the\n"
@@ -221,6 +228,7 @@ static void ui_update_sdcard ( void )
 			"for curious minds."
 		);
 	}
+	DEBUGPRINT("UI: upgrading SD-card system files, ROM %d (%s)" NL, rom_date, rom_name);
 	// Copy file to the pref'dir (if not the same as the selected file)
 	char fnbuf_target[PATH_MAX];
 	strcpy(fnbuf_target, sdl_pref_dir);
@@ -232,11 +240,8 @@ static void ui_update_sdcard ( void )
 			xemu_load_buffer_p,
 			0x20000,
 			"Cannot save the selected ROM file for the updater"
-		)) {
-			free(xemu_load_buffer_p);
-			xemu_load_buffer_p = NULL;
-			return;
-		}
+		))
+			goto ret;
 	}
 	// Generate character ROM from the ROM image
 	Uint8 char_rom[CHAR_ROM_SIZE];
@@ -249,11 +254,8 @@ static void ui_update_sdcard ( void )
 		char_rom,
 		CHAR_ROM_SIZE,
 		"Cannot save the extracted CHAR ROM file for the updater"
-	)) {
-		free(xemu_load_buffer_p);
-		xemu_load_buffer_p = NULL;
-		return;
-	}
+	))
+		goto ret;
 	// Call the updater :)
 	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES)) {
 		// this memcpy would not be needed ideally, as hyppo should load the new ROM, but it does not do that
@@ -261,13 +263,18 @@ static void ui_update_sdcard ( void )
 		memcpy(main_ram + 0x20000, xemu_load_buffer_p, 0x20000);
 		INFO_WINDOW(
 			"System files on your SD-card image seems to be updated successfully.\n"
-			"Next time you may need this function, you can use MEGA65.ROM which is a backup copy of your selected ROM.\n"
-			"MEGA65 emulation is about to RESET now!"
+			"Next time you may need this function, you can use MEGA65.ROM which is a backup copy of your selected ROM.\n\n"
+			"ROM: %d (%s)\n\n"
+			"Your emulated MEGA65 is about to RESET now!", rom_date, rom_name
 		);
 	}
-	free(xemu_load_buffer_p);
-	xemu_load_buffer_p = NULL;
 	reset_mega65();
+ret:
+	if (xemu_load_buffer_p) {
+		free(xemu_load_buffer_p);
+		xemu_load_buffer_p = NULL;
+	}
+	rom_detect_date(main_ram + 0x20000);	// make sure we have the correct detected results again based on the actual memory content
 }
 
 
