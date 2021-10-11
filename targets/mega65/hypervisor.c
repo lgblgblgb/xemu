@@ -285,7 +285,7 @@ void hypervisor_leave ( void )
 		if (hypervisor_request_stub_rom) {
 			DEBUGPRINT("MEM: using stub-ROM was forced" NL);
 			hypervisor_request_stub_rom = 0;
-			cpu65.pc = rom_make_xemu_stub_rom(main_ram + 0x20000);
+			cpu65.pc = rom_make_xemu_stub_rom(main_ram + 0x20000, XEMU_STUB_ROM_SAVE_FILENAME);
 		} else {
 			int new_pc = refill_c65_rom_from_preinit_cache();	// this function should decide then, if it's really a (forced) thing to do ...
 			if (new_pc >= 0) {

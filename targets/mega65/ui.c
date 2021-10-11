@@ -217,16 +217,27 @@ static void ui_update_sdcard ( void )
 			INFO_WINDOW("SD-card system files update was aborted by the user.");
 			goto ret;
 		}
-	}
-	if (rom_is_openroms) {
-		WARNING_WINDOW(
-			"You've selected a ROM for update which belongs to the\n"
-			"Open-ROMs projects. Please note, that Open-ROMs are not\n"
-			"yet ready for usage by an average user! For general usage\n"
-			"currently, closed-ROMs are recommended! Open-ROMs\n"
-			"currently can be interesting for mostly developers and\n"
-			"for curious minds."
-		);
+	} else {
+		if (rom_is_openroms) {
+			if (!ARE_YOU_SURE(
+				"Are you sure you want to use Open-ROMs on your SD-card?\n\n"
+				"You've selected a ROM for update which belongs to the\n"
+				"Open-ROMs projects. Please note, that Open-ROMs are not\n"
+				"yet ready for usage by an average user! For general usage\n"
+				"currently, closed-ROMs are recommended! Open-ROMs\n"
+				"currently can be interesting for mostly developers and\n"
+				"for curious minds.",
+				ARE_YOU_SURE_DEFAULT_NO
+			))
+				goto ret;
+		}
+		if (rom_is_stub) {
+			ERROR_WINDOW(
+				"The selected ROM image is an Xemu-internal ROM image.\n"
+				"This cannot be used to update your emulated SD-card."
+			);
+			goto ret;
+		}
 	}
 	DEBUGPRINT("UI: upgrading SD-card system files, ROM %d (%s)" NL, rom_date, rom_name);
 	// Copy file to the pref'dir (if not the same as the selected file)

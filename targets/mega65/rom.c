@@ -17,6 +17,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
 #include "rom.h"
+#include "xemu/emutools_files.h"
 
 #define CHARACTER_SET_DEFINER_8X8 const Uint8 vga_font_8x8[2048]
 #include "xemu/vgafonts.c"
@@ -103,7 +104,7 @@ static const Uint8 xemu_stub_rom[] = {
 };
 
 
-int rom_make_xemu_stub_rom ( Uint8 *rom )
+int rom_make_xemu_stub_rom ( Uint8 *rom, const char *save_file )
 {
 	// The message is line-wrapped by the ROM maker code itself. '\n' works as forcing into a new line,
 	// as expected, '~' toggles highlighted/normal mode. Text MUST be ended with a '\n'!
@@ -155,6 +156,11 @@ int rom_make_xemu_stub_rom ( Uint8 *rom )
 		/* --- it's important to have an '\n' at the end! --- */
 		"\n"
 	;
+	int dyn_rom = 0;
+	if (!rom) {
+		rom = xemu_malloc(0x20000);
+		dyn_rom = 1;
+	}
 	rom_clear_rom(rom);
 	// Make a fake closed-rom version identifier Xemu to stop complain later about its missing nature
 	strcpy((char*)rom + 0x16, "V920000XemuStubROM! Part of the Xemu project.");
@@ -199,5 +205,9 @@ int rom_make_xemu_stub_rom ( Uint8 *rom )
 		pos++;
 	}
 	rom[0x10000 + pos] = 0xFF;	// end of text marker, should be after '\n' in the source text
+	if (save_file)
+		xemu_save_file(save_file, rom, 0x20000, NULL);
+	if (dyn_rom)
+		free(rom);
 	return 0xE000;
 }
