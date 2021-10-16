@@ -53,6 +53,7 @@ static void _xemumacgui_menu_action_handler ( id self, SEL selector, id sender )
 // TODO: separator line after menu item, checked/unchecked status for menu items
 static id _xemumacgui_r_menu_builder ( const struct menu_st desc[], const char *parent_name )
 {
+	id menu_item, menu_state;
 	id ui_menu = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSMenu"), sel_registerName("new"));
 	((void (*) (id, SEL)) objc_msgSend)(ui_menu, sel_registerName("autorelease"));
 	for (int a = 0; desc[a].name; a++) {
@@ -74,28 +75,35 @@ static id _xemumacgui_r_menu_builder ( const struct menu_st desc[], const char *
 			DEBUGGUI("GUI: query-back for \"%s\"" NL, desc[a].name);
 			((xemugui_callback_t)(desc[a].handler))(&desc[a], &type);
 		}
-		id menu_item = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSMenuItem"), sel_registerName("alloc"));
-		((void (*) (id, SEL)) objc_msgSend)(menu_item, sel_registerName("autorelease"));
-		id str_name = ((id (*) (Class, SEL, const char*)) objc_msgSend)(
-			objc_getClass("NSString"),
-			sel_registerName("stringWithUTF8String:"),
-			desc[a].name
-		);
-		id str_key =  ((id (*) (Class, SEL, const char*)) objc_msgSend)(
-			objc_getClass("NSString"),
-			sel_registerName("stringWithUTF8String:"),
-			""
-		);
-		((void (*) (id, SEL, id, SEL, id))objc_msgSend)(
-			menu_item,
-			sel_registerName("initWithTitle:action:keyEquivalent:"),
-			str_name,
-			sel_registerName("menuActionHandler"),
-			str_key
-		);
-		((void (*) (id, SEL, BOOL)) objc_msgSend)(menu_item, sel_registerName("setEnabled:"), YES);
-		id menu_object = ((id (*) (Class, SEL, id)) objc_msgSend) (objc_getClass("NSValue"), sel_registerName("valueWithPointer:"),(id) &desc[a]);
-		((void (*) (id, SEL, id))objc_msgSend)(menu_item, sel_registerName("setRepresentedObject:"), menu_object);
+		if (type & XEMUGUI_MENUFLAG_SEPARATOR) {
+			menu_item = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSMenuItem"), sel_registerName("separatorItem"));
+		} else { 
+			menu_item = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSMenuItem"), sel_registerName("alloc"));
+			((void (*) (id, SEL)) objc_msgSend)(menu_item, sel_registerName("autorelease"));
+			id str_name = ((id (*) (Class, SEL, const char*)) objc_msgSend)(
+				objc_getClass("NSString"),
+				sel_registerName("stringWithUTF8String:"),
+				desc[a].name
+			);
+			id str_key =  ((id (*) (Class, SEL, const char*)) objc_msgSend)(
+				objc_getClass("NSString"),
+				sel_registerName("stringWithUTF8String:"),
+				""
+			);
+			((void (*) (id, SEL, id, SEL, id))objc_msgSend)(
+				menu_item,
+				sel_registerName("initWithTitle:action:keyEquivalent:"),
+				str_name,
+				sel_registerName("menuActionHandler"),
+				str_key
+			);
+			((void (*) (id, SEL, BOOL)) objc_msgSend)(menu_item, sel_registerName("setEnabled:"), YES);
+			id menu_object = ((id (*) (Class, SEL, id)) objc_msgSend) (objc_getClass("NSValue"), sel_registerName("valueWithPointer:"),(id) &desc[a]);
+			((void (*) (id, SEL, id))objc_msgSend)(menu_item, sel_registerName("setRepresentedObject:"), menu_object);
+		}
+		if (type & XEMUGUI_MENUFLAG_CHECKED) {
+			((id (*) (id, SEL, int)) objc_msgSend)(menu_item, sel_registerName("setState:"), 1); 	
+		}
 		((void (*) (id, SEL, id))objc_msgSend)(ui_menu, sel_registerName("addItem:"), menu_item);
 		if ((type & 0xFF) == XEMUGUI_MENUID_SUBMENU) {
 			// submenus use the user_data as the submenu menu_st struct pointer!
@@ -140,38 +148,49 @@ static int xemuosxgui_popup ( const struct menu_st desc[] )
 
 static int xemuosxgui_file_selector ( int dialog_mode, const char *dialog_title, char *default_dir, char *selected, int path_max_size )
 {
-	switch (dialog_mode & 3) {
-		case XEMUGUI_FSEL_OPEN:	// that's OK, this is till now the only implemented mode on MacOS -> TODO
+	char panel_type[12] = { 0 };
+	char open_selector[10] = { 0 };
+	switch ( dialog_mode & 3 ) {
+		case XEMUGUI_FSEL_OPEN:
+			strncpy(panel_type, "NSOpenPanel", sizeof(panel_type));
+			strncpy(open_selector, "openPanel", sizeof(open_selector));
 			break;
 		case XEMUGUI_FSEL_SAVE:
-			// TODO: must be implemented, Windows and GTK UI already know this!
-			ERROR_WINDOW("Sorry, save functionality is not yet implemented in the MacOS port!");
-			return 1;
+			strncpy(panel_type, "NSSavePanel", sizeof(panel_type));
+			strncpy(open_selector, "savePanel", sizeof(open_selector));
+			break;
 		default:
 			FATAL("Invalid mode for UI selector: %d", dialog_mode & 3);
 			return 1;
 	}
 	*selected = '\0';
-	id open_panel = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSOpenPanel"), sel_registerName("openPanel"));
-	((void (*) (id, SEL)) objc_msgSend)(open_panel, sel_registerName("autorelease"));
+	id file_panel = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass(panel_type), sel_registerName(open_selector));
+	((void (*) (id, SEL)) objc_msgSend)(file_panel, sel_registerName("autorelease"));
 	id main_window = ((id (*) (id, SEL)) objc_msgSend)(application, sel_registerName("mainWindow"));
-	((void (*) (id, SEL, BOOL)) objc_msgSend)(open_panel, sel_registerName("setCanChooseDirectories:"), NO);
-	((void (*) (id, SEL, BOOL)) objc_msgSend)(open_panel, sel_registerName("setAllowsMultipleSelection:"), NO);
+	if ((dialog_mode & 3) == XEMUGUI_FSEL_OPEN) {
+		((void (*) (id, SEL, BOOL)) objc_msgSend)(file_panel, sel_registerName("setCanChooseDirectories:"), NO);
+		((void (*) (id, SEL, BOOL)) objc_msgSend)(file_panel, sel_registerName("setAllowsMultipleSelection:"), NO);
+	}
 	id dialog_title_str = ((id (*) (Class, SEL, const char*)) objc_msgSend)
 		(objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), dialog_title);
-	((void (*) (id, SEL, id)) objc_msgSend)(open_panel, sel_registerName("setMessage:"), dialog_title_str);
+	((void (*) (id, SEL, id)) objc_msgSend)(file_panel, sel_registerName("setMessage:"), dialog_title_str);
 	if (default_dir) {
 		id default_dir_str = ((id (*) (Class, SEL, const char*)) objc_msgSend)
 			(objc_getClass("NSString"), sel_registerName("stringWithUTF8String:"), default_dir);
 		id dir_url = ((id (*) (Class, SEL, id)) objc_msgSend)(objc_getClass("NSURL"), sel_registerName("fileURLWithPath:"), default_dir_str);
-		((void (*) (id, SEL, id)) objc_msgSend) (open_panel, sel_registerName("directoryURL"), dir_url);
+		((void (*) (id, SEL, id)) objc_msgSend) (file_panel, sel_registerName("directoryURL"), dir_url);
 	}
-	id panel_result = ((id (*) (id, SEL)) objc_msgSend)(open_panel, sel_registerName("runModal"));
+	id panel_result = ((id (*) (id, SEL)) objc_msgSend)(file_panel, sel_registerName("runModal"));
 	((void (*) (id, SEL)) objc_msgSend)(main_window, sel_registerName("makeKeyWindow")); // Ensure focus returns to Xemu window.
 	if ((unsigned long)panel_result == NSFileHandlingPanelOKButton) {
 		DEBUGPRINT("GUI: macOS panel OK button pressed" NL);
-		id url_array = ((id (*) (id, SEL)) objc_msgSend)(open_panel, sel_registerName("URLs"));
-		id filename_url = ((id (*) (id, SEL, int)) objc_msgSend)(url_array, sel_registerName("objectAtIndex:"), 0);
+		id filename_url;
+		if ((dialog_mode & 3) == XEMUGUI_FSEL_OPEN) {
+			id url_array = ((id (*) (id, SEL)) objc_msgSend)(file_panel, sel_registerName("URLs"));
+			filename_url = ((id (*) (id, SEL, int)) objc_msgSend)(url_array, sel_registerName("objectAtIndex:"), 0);
+		} else {
+			filename_url = ((id (*) (id, SEL)) objc_msgSend)(file_panel, sel_registerName("URL"));
+		}
 		const char* filename = (const char*)((id (*) (id, SEL)) objc_msgSend)(filename_url, sel_registerName("fileSystemRepresentation"));
 		strcpy(selected, filename);
 		store_dir_from_file_selection(default_dir, filename, dialog_mode);
