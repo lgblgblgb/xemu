@@ -113,6 +113,27 @@ echo "*** Chown'ing directory /usr/local/lgb to root:wheel ..."
 sudo chown -R root:wheel /usr/local/lgb || exit 1
 ls -lad /usr/local/lgb
 
+echo "*** Trying to patch MacOS to shut up on Finder madness ***"
+
+cd || exit 1
+builder_home="`pwd`"
+echo "Home for builder user `whoami`: $builder_home"
+tcc_db_path="$builder_home/Library/Application Support/com.apple.TCC"
+echo "TCC.db directory: $tcc_db_path"
+mkdir -p "$tcc_db_path"
+tcc_db_path="$tcc_db_path/TCC.db"
+echo "TCC.db full path: $tcc_db_path"
+epochdate=$(($(date +'%s * 1000 + %-N / 1000000')))
+echo "Epoch date: $epochdate"
+
+for cmd in /usr/sbin/sshd ; do
+	tcc_sql="replace into access (service,client,client_type,auth_value,auth_reason,auth_version,indirect_object_identifier_type,indirect_object_identifier,flags,last_modified) values (\"kTCCServiceAppleEvents\",\"$cmd\",1,2,4,1,0,\"com.apple.finder\",0,$epochdate);"
+	echo "+ Patching for $cmd with $tcc_sql"
+	sudo sqlite3 "$tcc_db_path" "$tcc_sql"
+done
+
+# --- END ---
+
 echo "**** Chdir from `pwd` to $ORIGCWD ..."
 cd "$ORIGCWD" || exit 1
 
