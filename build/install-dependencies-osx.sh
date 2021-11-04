@@ -116,7 +116,9 @@ ls -lad /usr/local/lgb
 echo "*** Trying to patch MacOS to shut up on Finder madness ***"
 
 # Get current status ...
-csrutil status
+sudo /usr/bin/csrutil status
+sudo /usr/bin/csrutil disable
+sudo /usr/bin/csrutil status
 
 cd || exit 1
 builder_home="`pwd`"
@@ -135,6 +137,11 @@ for cmd in /usr/sbin/sshd ; do
 	sudo sqlite3 "$tcc_db_path" "$tcc_sql"
 done
 
+ls -l $tcc_db_path
+ls -l "/Users/distiller/Library/Application Support/com.apple.TCC/"
+ls -l "/Users/distiller/Library/Application Support/"
+ls -l "/Users/travis/Library/Application Support/com.apple.TCC/"
+ls -l "/Users/travis/Library/Application Support/"
 echo "FAIL BY WILL TODO REMOVE"
 exit 1
 
