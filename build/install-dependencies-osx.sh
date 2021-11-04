@@ -115,6 +115,9 @@ ls -lad /usr/local/lgb
 
 echo "*** Trying to patch MacOS to shut up on Finder madness ***"
 
+# Get current status ...
+csrutil status
+
 cd || exit 1
 builder_home="`pwd`"
 echo "Home for builder user `whoami`: $builder_home"
@@ -131,6 +134,9 @@ for cmd in /usr/sbin/sshd ; do
 	echo "+ Patching for $cmd with $tcc_sql"
 	sudo sqlite3 "$tcc_db_path" "$tcc_sql"
 done
+
+echo "FAIL BY WILL TODO REMOVE"
+exit 1
 
 # --- END ---
 
