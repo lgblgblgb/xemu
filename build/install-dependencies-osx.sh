@@ -3,9 +3,9 @@
 
 FILEREPOBASE="https://github.com/lgblgblgb/xemu/raw/gh-pages/files"
 
-CREATE_DMG_VER="1.0.0.5"
+CREATE_DMG_VER="1.0.9"
 CREATE_DMG_ARCH="macos-$CREATE_DMG_VER-create-dmg.tar.gz"
-CREATE_DMG_DIR="create-dmg-$CREATE_DMG_VER"
+CREATE_DMG_DIR="create-dmg/$CREATE_DMG_VER"
 
 SDL2_ARCH="macos-2.0.16-sdl2.tar.gz"
 
