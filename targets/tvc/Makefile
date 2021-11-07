@@ -21,7 +21,7 @@ EMU_DESCRIPTION	= Videoton TV Computer
 
 SRCS_TARGET_xtvc	= tvc.c tvc_keymatrix.c sdext.c
 SRCS_COMMON_xtvc	= emutools.c emutools_hid.c emutools_config.c z80.c emutools_files.c
-CFLAGS_TARGET_xtvc	= $(SDL2_CFLAGS)
-LDFLAGS_TARGET_xtvc	= $(SDL2_LIBS)
+CFLAGS_TARGET_xtvc	= $(SDL2_CFLAGS) $(MATH_CFLAGS)
+LDFLAGS_TARGET_xtvc	= $(SDL2_LIBS) $(MATH_LIBS)
 
 include ../../build/Makefile.common

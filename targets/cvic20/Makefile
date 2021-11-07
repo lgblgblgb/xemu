@@ -21,7 +21,7 @@ EMU_DESCRIPTION	= Commodore VIC-20
 
 SRCS_TARGET_xvic20	= commodore_vic20.c vic6561.c
 SRCS_COMMON_xvic20	= emutools.c cpu65.c via65c22.c emutools_hid.c emutools_config.c emutools_files.c
-CFLAGS_TARGET_xvic20	= $(SDL2_CFLAGS)
-LDFLAGS_TARGET_xvic20	= $(SDL2_LIBS)
+CFLAGS_TARGET_xvic20	= $(SDL2_CFLAGS) $(MATH_CFLAGS)
+LDFLAGS_TARGET_xvic20	= $(SDL2_LIBS) $(MATH_LIBS)
 
 include ../../build/Makefile.common
