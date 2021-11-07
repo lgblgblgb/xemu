@@ -102,8 +102,10 @@ if [ ! -d "$dir" ]; then
 	echo "ERROR: directory $dir does not exist" >&2
 	exit 1
 fi
-ls -la create-dmg
 cd "$dir" || exit 1
+pwd
+ls -la
+echo "Calling sudo make install ..."
 sudo make install || exit 1
 ls -la /usr/local/bin/create-dmg
 
