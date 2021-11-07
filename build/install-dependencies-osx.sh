@@ -5,7 +5,7 @@ FILEREPOBASE="https://github.com/lgblgblgb/xemu/raw/gh-pages/files"
 
 CREATE_DMG_VER="1.0.9"
 CREATE_DMG_ARCH="macos-$CREATE_DMG_VER-create-dmg.tar.gz"
-CREATE_DMG_DIR="create-dmg/$CREATE_DMG_VER"
+CREATE_DMG_DIR="create-dmg-$CREATE_DMG_VER"
 
 SDL2_ARCH="macos-2.0.16-sdl2.tar.gz"
 
@@ -102,10 +102,10 @@ if [ ! -d "$dir" ]; then
 	echo "ERROR: directory $dir does not exist" >&2
 	exit 1
 fi
-echo "Renaming/moving directory $dir as /usr/local/lgb/create-dmg ..."
-mv "$dir" /usr/local/lgb/create-dmg || exit
-echo "Directory listing of /usr/local/lgb/create-dmg:"
-ls -l /usr/local/lgb/create-dmg/
+ls -la create-dmg
+cd "$dir" || exit 1
+sudo make install || exit 1
+ls -la /usr/local/bin/create-dmg
 
 echo "*** Chown'ing directory /usr/local/lgb to root:wheel ..."
 # It seems on Mac, system binaries/etc should have user root AND group wheel ...
