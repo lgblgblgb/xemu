@@ -49,6 +49,9 @@ else
 	COMMIT="$TRAVIS_COMMIT"
 fi
 
+rm -fr .dmg
+rm -f *.dmg
+
 mkdir .dmg .dmg/bin || exit 1
 
 if [ "$BUNDLE" = "yes" ]; then
@@ -148,6 +151,7 @@ time create-dmg	\
 	--eula LICENSE \
 	--background "build/xemu-bg.png" \
 	--window-pos 200 120 \
+	--skip-jenkins \
 	--window-size 800 400 \
 	--icon-size 100 \
 	--icon "Application.app" 200 190 \
@@ -155,6 +159,12 @@ time create-dmg	\
 	--app-drop-link 600 185 \
 	Xemu-Installer.dmg	\
 	.dmg
+
+rm -fr .dmg
+
+ls -lad *.dmg
+
+mv *Xemu*.dmg Xemu-Installer.dmg
 
 ls -l Xemu-Installer.dmg
 

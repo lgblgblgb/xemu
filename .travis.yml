@@ -168,6 +168,7 @@ matrix:
         - echo "127.126.125.124 lgb" | sudo tee -a /etc/hosts 2>/dev/null || true
         - cat /etc/hosts || true
         - hostname
+        - sudo /usr/bin/csrutil status || true
         - build/install-dependencies-osx.sh
         - set +e
         - uname -a ; pwd ; df -h ; id -a
