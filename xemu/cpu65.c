@@ -1819,10 +1819,11 @@ int cpu65_step (
 			break;
 	case 0xCE:	/* DEC Absolute */
 			{
-			int addr = _abs();
-			Uint8 data = readByte(addr) - 1;
-			SET_NZ(data);
-			writeByte(addr, data);
+			const int addr = _abs();
+			const Uint8 old_data = readByte(addr);
+			const Uint8 new_data = old_data - 1;
+			SET_NZ(new_data);
+			writeByteTwice(addr, old_data, new_data);
 			}
 			break;
 	case 0xCF:	/* BBS Relative */
@@ -2034,10 +2035,11 @@ int cpu65_step (
 			break;
 	case 0xEE:	/* INC Absolute */
 			{
-			int addr = _abs();
-			Uint8 data = readByte(addr) + 1;
-			SET_NZ(data);
-			writeByte(addr, data);
+			const int addr = _abs();
+			const Uint8 old_data = readByte(addr);
+			const Uint8 new_data = old_data + 1;
+			SET_NZ(new_data);
+			writeByteTwice(addr, old_data, new_data);
 			}
 			break;
 	case 0xEF:	/* BBS Relative */
