@@ -164,6 +164,25 @@ Xemu should build with command:
 
     make
 
+#### Example for FreeBSD
+
+An example to install dependencies with `pkg` on a FreeBSD system:
+
+    pkg install git
+    pkg install gmake
+    pkg install bash
+    pkg install sdl2
+    pkg install pkgconf
+    pkg install gtk3
+    pkg install readline
+
+Some comments:
+
+* Surely, `git` is only needed if you want to clone the repository from git
+* `bash` is used by the Xemu-configuration tool
+* You must use `gmake` (GNU make) instead of `make` (BSD make)
+* `pkgconf` is used by the Xemu-configuration tool to found GTK3 library
+
 #### Raspberry Pi
 
 If you use some Linux distributions (probably Raspbian) on your Raspberry Pi,
@@ -200,6 +219,8 @@ problem can drive me to have more optimizations :)
 ### Compilation
 
     make
+
+On BSDs you want to use `gmake` (GNU make) instead of `make` (BSD make).
 
 Optionally, to create binary DEBian .deb package for Ubuntu/Debian Linux,
 result will be built in build/bin (which can be installed with `dpkg -i`,

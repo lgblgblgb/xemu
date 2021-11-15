@@ -268,7 +268,7 @@ static int is_our_rom ( void )
 
 
 // Need to be defined, if CPU65_TRAP_OPCODE is defined for the CPU emulator!
-int cpu65_trap_callback ( Uint8 opcode )
+int cpu65_trap_callback ( const Uint8 opcode )
 {
 	if (cpu65.pc >= 0xA000 && opcode == CPU65_TRAP_OPCODE) {	// cpu65.pc always meant to be the position _after_ the trap opcode!
 		Uint8 trap = memory[cpu65.pc];

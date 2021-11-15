@@ -93,15 +93,12 @@ struct cpu65_st CPU65;
 static XEMU_INLINE Uint32 AXYZ_GET ( void ) {
 	return (Uint32)CPU65.a | ((Uint32)CPU65.x << 8) | ((Uint32)CPU65.y << 16) | ((Uint32)CPU65.z << 24);
 }
-static XEMU_INLINE void   AXYZ_SET ( Uint32 val ) {
+static XEMU_INLINE Uint32 AXYZ_SET ( const Uint32 val ) {
 	CPU65.a =  val        & 0xFF;
 	CPU65.x = (val >>  8) & 0xFF;
 	CPU65.y = (val >> 16) & 0xFF;
 	CPU65.z = (val >> 24);
-}
-static XEMU_INLINE Uint32 LONG_PTR16_GET ( Uint16 ptr16 ) {
-}
-static XEMU_INLINE Uint32 LONG_PTR32_GET ( Uint8 zp_ptr ) {
+	return val;
 }
 #endif
 
@@ -206,22 +203,22 @@ static XEMU_INLINE Uint32 LONG_PTR32_GET ( Uint8 zp_ptr ) {
 
 
 
-static XEMU_INLINE Uint16 readWord(Uint16 addr) {
+static XEMU_INLINE Uint16 readWord ( const Uint16 addr ) {
 	return readByte(addr) | (readByte(addr + 1) << 8);
 }
 
 
 #ifdef MEGA65
-static Uint32 readQuad ( Uint16 addr ) {
+static inline Uint32 readQuad ( const Uint16 addr ) {
 	return
 		 readByte(addr    )        |
-		(readByte(addr + 1) << 8 ) |
+		(readByte(addr + 1) <<  8) |
 		(readByte(addr + 2) << 16) |
 		(readByte(addr + 3) << 24)
 	;
 }
 
-static void writeQuad ( Uint16 addr, Uint32 data ) {
+static inline void writeQuad ( const Uint16 addr, const Uint32 data ) {
 	writeByte(addr    ,  data        & 0xFF);
 	writeByte(addr + 1, (data >>  8) & 0xFF);
 	writeByte(addr + 2, (data >> 16) & 0xFF);
@@ -234,7 +231,7 @@ static void writeQuad ( Uint16 addr, Uint32 data ) {
 /* The stack pointer is a 16 bit register that has two modes. It can be programmed to be either an 8-bit page Programmable pointer, or a full 16-bit pointer.
    The processor status E bit selects which mode will be used. When set, the E bit selects the 8-bit mode. When reset, the E bit selects the 16-bit mode. */
 
-static XEMU_INLINE void push ( Uint8 data )
+static XEMU_INLINE void push ( const Uint8 data )
 {
 	writeByte(CPU65.s | CPU65.sphi, data);
 	CPU65.s--;
@@ -261,19 +258,19 @@ static XEMU_INLINE Uint8 pop ( void )
 #define pop()       readByte(((Uint8)(++CPU65.s)) | SP_HI)
 #endif
 
-static XEMU_INLINE void  pushWord(Uint16 data) { push(data >> 8); push(data & 0xFF); }
-static XEMU_INLINE Uint16 popWord() { Uint16 temp = pop(); return temp | (pop() << 8); }
+static XEMU_INLINE void  pushWord ( const Uint16 data ) { push(data >> 8); push(data & 0xFF); }
+static XEMU_INLINE Uint16 popWord ( void ) { const Uint16 temp = pop(); return temp | (pop() << 8); }
 
 
 #ifdef CPU_65CE02
 // FIXME: remove this, if we don't need!
 // NOTE!! Interesting, it seems PHW opcodes pushes the word the OPPOSITE direction as eg JSR would push the PC ...
 #define PUSH_FOR_PHW pushWord_rev
-static XEMU_INLINE void  pushWord_rev(Uint16 data) { push(data & 0xFF); push(data >> 8); }
+static XEMU_INLINE void  pushWord_rev ( const Uint16 data ) { push(data & 0xFF); push(data >> 8); }
 #endif
 
 
-void cpu65_set_pf(Uint8 st) {
+void cpu65_set_pf ( const Uint8 st ) {
 #ifdef CPU65_DISCRETE_PF_NZ
 	CPU65.pf_n = st & CPU65_PF_N;
 	CPU65.pf_z = st & CPU65_PF_Z;
@@ -291,7 +288,7 @@ void cpu65_set_pf(Uint8 st) {
 	CPU65.pf_c = st & CPU65_PF_C;
 }
 
-Uint8 cpu65_get_pf() {
+Uint8 cpu65_get_pf ( void ) {
 	return
 #ifdef CPU65_DISCRETE_PF_NZ
 	(CPU65.pf_n ? CPU65_PF_N : 0) | (CPU65.pf_z ? CPU65_PF_Z : 0)
@@ -313,7 +310,7 @@ Uint8 cpu65_get_pf() {
 	(CPU65.pf_c ? CPU65_PF_C : 0);
 }
 
-void cpu65_reset() {
+void cpu65_reset ( void ) {
 	cpu65_set_pf(0x34);
 	CPU65.s = 0xFF;
 	CPU65.irqLevel = CPU65.nmiEdge = 0;
@@ -340,7 +337,7 @@ void cpu65_reset() {
 }
 
 
-static XEMU_INLINE void SET_NZ(Uint8 st) {
+static XEMU_INLINE void SET_NZ ( const Uint8 st ) {
 #ifdef CPU65_DISCRETE_PF_NZ
 	CPU65.pf_n = st & CPU65_PF_N;
 	CPU65.pf_z = !st;
@@ -350,7 +347,7 @@ static XEMU_INLINE void SET_NZ(Uint8 st) {
 }
 
 #ifdef CPU_65CE02
-static XEMU_INLINE void SET_NZ16(Uint16 st) {
+static XEMU_INLINE void SET_NZ16 ( const Uint16 st ) {
 #ifdef CPU65_DISCRETE_PF_NZ
 	CPU65.pf_n = st & 0x8000;
 	CPU65.pf_z = !st;
@@ -362,7 +359,7 @@ static XEMU_INLINE void SET_NZ16(Uint16 st) {
 
 #ifdef MEGA65
 #define BIT31 0x80000000U
-static XEMU_INLINE void SET_NZ32(Uint32 st) {
+static XEMU_INLINE void SET_NZ32 ( const Uint32 st ) {
 #ifdef CPU65_DISCRETE_PF_NZ
 	CPU65.pf_n = st & BIT31;
 	CPU65.pf_z = !st;
@@ -374,7 +371,7 @@ static XEMU_INLINE void SET_NZ32(Uint32 st) {
 
 
 #define _imm() (CPU65.pc++)
-static XEMU_INLINE Uint16 _abs() {
+static XEMU_INLINE Uint16 _abs ( void ) {
 	Uint16 o = readByte(CPU65.pc++);
 	return o | (readByte(CPU65.pc++) << 8);
 }
@@ -384,7 +381,7 @@ static XEMU_INLINE Uint16 _abs() {
 #define _absxi() readWord(_absx())
 #define _zp() (readByte(CPU65.pc++) | ZP_HI)
 
-static XEMU_INLINE Uint16 _zpi() {
+static XEMU_INLINE Uint16 _zpi ( void ) {
 	Uint8 a = readByte(CPU65.pc++);
 #ifdef CPU_65CE02
 	return (readByte(a | ZP_HI) | (readByte(((a + 1) & 0xFF) | ZP_HI) << 8)) + CPU65.z;
@@ -393,7 +390,14 @@ static XEMU_INLINE Uint16 _zpi() {
 #endif
 }
 
-static XEMU_INLINE Uint16 _zpiy() {
+#ifdef MEGA65
+static XEMU_INLINE Uint16 _zpi_noz ( void ) {
+	const Uint8 a = readByte(CPU65.pc++);
+	return  readByte(a | ZP_HI) | (readByte(((a + 1) & 0xFF) | ZP_HI) << 8);
+}
+#endif
+
+static XEMU_INLINE Uint16 _zpiy ( void ) {
 	Uint8 a = readByte(CPU65.pc++);
 	return (readByte(a | ZP_HI) | (readByte(((a + 1) & 0xFF) | ZP_HI) << 8)) + CPU65.y;
 }
@@ -402,12 +406,12 @@ static XEMU_INLINE Uint16 _zpiy() {
 #define _zpx() (((readByte(CPU65.pc++) + CPU65.x) & 0xFF) | ZP_HI)
 #define _zpy() (((readByte(CPU65.pc++) + CPU65.y) & 0xFF) | ZP_HI)
 
-static XEMU_INLINE Uint16 _zpxi() {
+static XEMU_INLINE Uint16 _zpxi ( void ) {
 	Uint8 a = readByte(CPU65.pc++) + CPU65.x;
 	return readByte(a | ZP_HI) | (readByte(((a + 1) & 0xFF) | ZP_HI) << 8);
 }
 
-static XEMU_INLINE void _BRA(int cond) {
+static XEMU_INLINE void _BRA ( const int cond ) {
 	 if (cond) {
 		int temp = readByte(CPU65.pc);
 		if (temp & 128) temp = CPU65.pc - (temp ^ 0xFF);
@@ -419,7 +423,7 @@ static XEMU_INLINE void _BRA(int cond) {
 		CPU65.pc++;
 }
 #ifdef CPU_65CE02
-static XEMU_INLINE void _BRA16(int cond) {
+static XEMU_INLINE void _BRA16 ( const int cond ) {
 	if (cond) {
 		// Note: 16 bit PC relative stuffs works a bit differently as 8 bit ones, not the same base of the offsets!
 		CPU65.pc += 1 + (Sint16)(readByte(CPU65.pc) | (readByte(CPU65.pc + 1) << 8));
@@ -446,12 +450,12 @@ static XEMU_INLINE Uint16 _GET_SP_INDIRECT_ADDR ( void )
 	return (Uint16)(tmp2 + CPU65.y);
 }
 #endif
-static XEMU_INLINE void _CMP(Uint8 reg, Uint8 data) {
+static XEMU_INLINE void _CMP ( const Uint8 reg, const Uint8 data ) {
 	Uint16 temp = reg - data;
 	CPU65.pf_c = temp < 0x100;
 	SET_NZ(temp);
 }
-static XEMU_INLINE void _TSB(int addr) {
+static XEMU_INLINE void _TSB ( const int addr ) {
 	Uint8 m = readByte(addr);
 #ifdef CPU65_DISCRETE_PF_NZ
 	CPU65.pf_z = (!(m & CPU65.a));
@@ -460,7 +464,7 @@ static XEMU_INLINE void _TSB(int addr) {
 #endif
 	writeByte(addr, m | CPU65.a);
 }
-static XEMU_INLINE void _TRB(int addr) {
+static XEMU_INLINE void _TRB ( const int addr ) {
 	Uint8 m = readByte(addr);
 #ifdef CPU65_DISCRETE_PF_NZ
 	CPU65.pf_z = (!(m & CPU65.a));
@@ -469,7 +473,7 @@ static XEMU_INLINE void _TRB(int addr) {
 #endif
 	writeByte(addr, m & (255 - CPU65.a));
 }
-static XEMU_INLINE void _ASL(int addr) {
+static XEMU_INLINE void _ASL ( const int addr ) {
 	Uint8 t = (addr == -1 ? CPU65.a : readByte(addr));
 	Uint8 o = t;
 	CPU65.pf_c = t & 128;
@@ -478,7 +482,7 @@ static XEMU_INLINE void _ASL(int addr) {
 	SET_NZ(t);
 	if (addr == -1) CPU65.a = t; else writeByteTwice(addr, o, t);
 }
-static XEMU_INLINE void _LSR(int addr) {
+static XEMU_INLINE void _LSR ( const int addr ) {
 	Uint8 t = (addr == -1 ? CPU65.a : readByte(addr));
 	Uint8 o = t;
 	CPU65.pf_c = t & 1;
@@ -488,7 +492,7 @@ static XEMU_INLINE void _LSR(int addr) {
 	if (addr == -1) CPU65.a = t; else writeByteTwice(addr, o, t);
 }
 #ifdef CPU_65CE02
-static XEMU_INLINE void _ASR(int addr) {
+static XEMU_INLINE void _ASR ( const int addr ) {
 	Uint8 t = (addr == -1 ? CPU65.a : readByte(addr));
 	Uint8 o = t;
 	CPU65.pf_c = t & 1;
@@ -497,7 +501,7 @@ static XEMU_INLINE void _ASR(int addr) {
 	if (addr == -1) CPU65.a = t; else writeByteTwice(addr, o, t);
 }
 #endif
-static XEMU_INLINE void _BIT(Uint8 data) {
+static XEMU_INLINE void _BIT ( const Uint8 data ) {
 	CPU65.pf_v = data & 64;
 #ifdef CPU65_DISCRETE_PF_NZ
 	CPU65.pf_n = data & CPU65_PF_N;
@@ -506,7 +510,7 @@ static XEMU_INLINE void _BIT(Uint8 data) {
 	CPU65.pf_nz = (data & CPU65_PF_N) | VALUE_TO_PF_ZERO(CPU65.a & data);
 #endif
 }
-static XEMU_INLINE void _ADC(unsigned int data) {
+static XEMU_INLINE void _ADC ( const unsigned int data ) {
 	if (XEMU_UNLIKELY(CPU65.pf_d)) {
 		if (HAS_NMOS_BUG_BCD) {
 			/* This algorithm was written according the one found in VICE: 6510core.c */
@@ -543,7 +547,7 @@ static XEMU_INLINE void _ADC(unsigned int data) {
 		SET_NZ(CPU65.a);
 	}
 }
-static XEMU_INLINE void _SBC(Uint16 data) {
+static XEMU_INLINE void _SBC ( const Uint16 data ) {
 	if (XEMU_UNLIKELY(CPU65.pf_d)) {
 		if (HAS_NMOS_BUG_BCD) {
 			/* This algorithm was written according the one found in VICE: 6510core.c */
@@ -578,7 +582,7 @@ static XEMU_INLINE void _SBC(Uint16 data) {
 		SET_NZ(CPU65.a);
 	}
 }
-static XEMU_INLINE void _ROR(int addr) {
+static XEMU_INLINE void _ROR ( const int addr ) {
 	Uint16 t = ((addr == -1) ? CPU65.a : readByte(addr));
 	Uint8  o = t;
 	if (CPU65.pf_c) t |= 0x100;
@@ -587,7 +591,7 @@ static XEMU_INLINE void _ROR(int addr) {
 	SET_NZ(t);
 	if (addr == -1) CPU65.a = t; else writeByteTwice(addr, o, t);
 }
-static XEMU_INLINE void _ROL(int addr) {
+static XEMU_INLINE void _ROL ( const int addr ) {
 	Uint16 t = ((addr == -1) ? CPU65.a : readByte(addr));
 	Uint8  o = t;
 	t = (t << 1) | (CPU65.pf_c ? 1 : 0);
@@ -597,16 +601,6 @@ static XEMU_INLINE void _ROL(int addr) {
 	if (addr == -1) CPU65.a = t; else writeByteTwice(addr, o, t);
 }
 #ifdef MEGA65
-static XEMU_INLINE Uint32 _INQ ( Uint32 q ) {
-	q++;
-	SET_NZ32(q);
-	return q;
-}
-static XEMU_INLINE Uint32 _DEQ ( Uint32 q ) {
-	q--;
-	SET_NZ32(q);
-	return q;
-}
 static XEMU_INLINE Uint32 _RORQ ( Uint32 q ) {
 	// TODO: check implementation
 	Uint32 pf_c_new = q & 1;
@@ -686,7 +680,7 @@ static XEMU_INLINE Uint32 _LSRQ ( Uint32 q ) {
 
 int cpu65_step (
 #ifdef CPU_STEP_MULTI_OPS
-	int run_for_cycles
+	const int run_for_cycles
 #else
 	void
 #endif
@@ -804,6 +798,12 @@ int cpu65_step (
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else { _TSB(_zp()); }
 			break;
 	case 0x05:	/* ORA Zero_Page */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ORQ $nn
+				SET_NZ32(AXYZ_SET(AXYZ_GET() | readQuad(_zp())));
+				break;
+			}
+#endif
 			SET_NZ(A_OP(|,readByte(_zp())));
 			break;
 	case 0x06:	/* ASL Zero_Page */
@@ -906,7 +906,7 @@ int cpu65_step (
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
 				if (IS_NEG_NEG_OP())
-					AXYZ_SET(_INQ(AXYZ_GET()));	// MEGA65-OP: INQ
+					SET_NZ32(AXYZ_SET(AXYZ_GET() + 1));	// MEGA65-QOP: INQ
 				else
 #endif
 					SET_NZ(++CPU65.a);
@@ -1073,7 +1073,7 @@ int cpu65_step (
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
 				if (IS_NEG_NEG_OP())
-					AXYZ_SET(_DEQ(AXYZ_GET()));	// MEGA65-OP: DEQ
+					SET_NZ32(AXYZ_SET(AXYZ_GET() - 1));	// MEGA65-QOP: DEQ
 				else
 #endif
 					SET_NZ(--CPU65.a);
@@ -1626,6 +1626,12 @@ int cpu65_step (
 			SET_NZ(CPU65.y = readByte(_zp()));
 			break;
 	case 0xA5:	/* LDA Zero_Page */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LDQ $nn
+				SET_NZ32(AXYZ_SET(readQuad(_zp())));
+				break;
+			}
+#endif
 			SET_NZ(CPU65.a = readByte(_zp()));
 			break;
 	case 0xA6:	/* LDX Zero_Page */
@@ -1658,6 +1664,12 @@ int cpu65_step (
 			SET_NZ(CPU65.y = readByte(_abs()));
 			break;
 	case 0xAD:	/* LDA Absolute */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LDQ $nnnn
+				SET_NZ32(AXYZ_SET(readQuad(_abs())));
+				break;
+			}
+#endif
 			SET_NZ(CPU65.a = readByte(_abs()));
 			break;
 	case 0xAE:	/* LDX Absolute */
@@ -1819,10 +1831,11 @@ int cpu65_step (
 			break;
 	case 0xCE:	/* DEC Absolute */
 			{
-			int addr = _abs();
-			Uint8 data = readByte(addr) - 1;
-			SET_NZ(data);
-			writeByte(addr, data);
+			const int addr = _abs();
+			const Uint8 old_data = readByte(addr);
+			const Uint8 new_data = old_data - 1;
+			SET_NZ(new_data);
+			writeByteTwice(addr, old_data, new_data);
 			}
 			break;
 	case 0xCF:	/* BBS Relative */
@@ -2034,10 +2047,11 @@ int cpu65_step (
 			break;
 	case 0xEE:	/* INC Absolute */
 			{
-			int addr = _abs();
-			Uint8 data = readByte(addr) + 1;
-			SET_NZ(data);
-			writeByte(addr, data);
+			const int addr = _abs();
+			const Uint8 old_data = readByte(addr);
+			const Uint8 new_data = old_data + 1;
+			SET_NZ(new_data);
+			writeByteTwice(addr, old_data, new_data);
 			}
 			break;
 	case 0xEF:	/* BBS Relative */

@@ -109,21 +109,21 @@ extern void  cpu65_illegal_opcode_callback ( void );
 extern void cpu65_reset ( void );
 extern int  cpu65_step  (
 #ifdef CPU_STEP_MULTI_OPS
-	int run_for_cycles
+	const int run_for_cycles
 #else
 	void
 #endif
 );
 
 #ifdef CPU65_TRAP_OPCODE
-extern int  cpu65_trap_callback ( Uint8 opcode );
+extern int  cpu65_trap_callback ( const Uint8 opcode );
 #endif
 #ifdef CPU_65CE02
 extern void cpu65_do_aug_callback ( void );
 extern void cpu65_do_nop_callback ( void );
 #endif
 
-extern void  cpu65_set_pf ( Uint8 st );
+extern void  cpu65_set_pf ( const Uint8 st );
 extern Uint8 cpu65_get_pf ( void );
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
