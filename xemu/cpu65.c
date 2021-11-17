@@ -362,6 +362,7 @@ static XEMU_INLINE void SET_NZ16 ( const Uint16 st ) {
 
 #ifdef MEGA65
 #define BIT31 0x80000000U
+#define BIT30 0x40000000U
 static XEMU_INLINE void SET_NZ32 ( const Uint32 st ) {
 #ifdef CPU65_DISCRETE_PF_NZ
 	CPU65.pf_n = st & BIT31;
@@ -606,45 +607,36 @@ static XEMU_INLINE void _ROL ( const int addr ) {
 
 #ifdef MEGA65
 
-static XEMU_INLINE void _SBCQ ( Uint32 m ) {
-	if (!CPU65.pf_c)
-		m++;
+static XEMU_INLINE void _SBCQ ( const Uint32 m ) {
 	const Uint32 q = AXYZ_GET();
-#if 0
-	const Uint32 result = q - m - 1 + !!CPU65.pf_c;
-	CPU65.pf_c = !(result & BIT31);
-#else
-	const Uint64 result64 = (Uint64)q - (Uint64)m;
+	const Uint64 result64 = (Uint64)q - (Uint64)m  - (Uint64)1 + (Uint64)!!CPU65.pf_c;
 	CPU65.pf_c = (result64 < 0x100000000UL);
 	const Uint32 result = result64 & 0xFFFFFFFFUL;
-#endif
-	CPU65.pf_v = ((result ^ q) & BIT31) && ((result ^ m) & BIT31);
+	CPU65.pf_v = ((result ^ q) & BIT31) && ((q ^ m) & BIT31);
 	SET_NZ32(AXYZ_SET(result));
 }
 static XEMU_INLINE void _CMPQ ( const Uint32 m ) {
-#if 0
-	const Uint32 result = AXYZ_GET() - m;
-	SET_NZ32(result);
-	CPU65.pf_c = !(result & BIT31);
-#else
 	const Uint64 result64 = (Uint64)AXYZ_GET() - (Uint64)m;
 	const Uint32 result = result64 & 0xFFFFFFFFUL;
 	SET_NZ32(result);
 	CPU65.pf_c = (result64 < 0x100000000UL);
-#endif
 }
 static XEMU_INLINE void _ADCQ ( const Uint32 m ) {
 	const Uint32 q = AXYZ_GET();
-#if 0
-	const Uint32 result = q + m + !!CPU65.pf_c;
-	CPU65.pf_c = (result & 0xFFFFFF00U);	// FIXME: according the manual, carry is set based on result > $FF, which is crazy, since it's 32 bit operation!!!!!
-#else
 	const Uint64 result64 = (Uint64)q + (Uint64)m + (Uint64)!!CPU65.pf_c;
 	CPU65.pf_c = (result64 >= 0x100000000UL);
 	const Uint32 result = result64 & 0xFFFFFFFFUL;
-#endif
 	CPU65.pf_v = ((result ^ q) & BIT31) && ((result ^ m) & BIT31);
 	SET_NZ32(AXYZ_SET(result));
+}
+static XEMU_INLINE void _BITQ ( const Uint32 m ) {
+	CPU65.pf_v = (m & BIT30);
+#ifdef CPU65_DISCRETE_PF_NZ
+	CPU65.pf_n = (m & BIT31);
+	CPU65.pf_z = (!(AXYZ_GET() & m));
+#else
+	CPU65.pf_nz = ((m & BIT31) ? CPU65_PF_N : 0) | VALUE_TO_PF_ZERO(AXYZ_GET() & m);
+#endif
 }
 
 // TODO / FIXME ?? What happens if NEG NEG NOP prefix is tried to be applied on an opcode only supports NEG NEG?
@@ -967,6 +959,12 @@ int cpu65_step (
 			}
 			break;
 	case 0x24:	/* BIT Zero_Page */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: BITQ $nn
+				_BITQ(readQuad(_zp()));
+				break;
+			}
+#endif
 			_BIT(readByte(_zp()));
 			break;
 	case 0x25:	/* AND Zero_Page */
@@ -1009,6 +1007,12 @@ int cpu65_step (
 			}
 			break;
 	case 0x2C:	/* BIT Absolute */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: BITQ $nnnn
+				_BITQ(readQuad(_abs()));
+				break;
+			}
+#endif
 			_BIT(readByte(_abs()));
 			break;
 	case 0x2D:	/* AND Absolute */
