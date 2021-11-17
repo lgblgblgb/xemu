@@ -888,26 +888,22 @@ void cpu65_write_linear_opcode_callback ( Uint8 data )
 
 
 // FIXME: very ugly and very slow and maybe very buggy implementation! Should be done in a sane way in the next memory decoder version being developmented ...
-Uint32 cpu65_read_linear_long_opcode_callback ( void )
+Uint32 cpu65_read_linear_long_opcode_callback ( const Uint8 index )
 {
-	register int addr = cpu_get_flat_addressing_mode_address(cpu65.z);
-	Uint32 ret = 0;
-	for (int a = 0 ;;) {
+	for (int shift = 0, ret = 0, addr = cpu_get_flat_addressing_mode_address(index) ;; ) {
 		phys_addr_decoder(addr, MEM_SLOT_CPU_32BIT, MEM_SLOT_CPU_32BIT);
-		ret += CALL_MEMORY_READER(MEM_SLOT_CPU_32BIT, addr);
-		if (a == 3)
+		ret += (Uint32)CALL_MEMORY_READER(MEM_SLOT_CPU_32BIT, addr) << shift;
+		if (shift == 24)
 			return ret;
 		addr++;
-		ret <<= 8;
-		a++;
+		shift += 8;
 	}
 }
 
 // FIXME: very ugly and very slow and maybe very buggy implementation! Should be done in a sane way in the next memory decoder version being developmented ...
-void cpu65_write_linear_long_opcode_callback ( Uint32 data )
+void cpu65_write_linear_long_opcode_callback ( const Uint8 index, Uint32 data )
 {
-	register int addr = cpu_get_flat_addressing_mode_address(cpu65.z);
-	for (int a = 0 ;;) {
+	for (int a = 0, addr = cpu_get_flat_addressing_mode_address(index) ;; ) {
 		phys_addr_decoder(addr, MEM_SLOT_CPU_32BIT, MEM_SLOT_CPU_32BIT);
 		CALL_MEMORY_WRITER(MEM_SLOT_CPU_32BIT, addr, data & 0xFF);
 		if (a == 3)

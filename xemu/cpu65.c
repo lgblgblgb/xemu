@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    THIS IS AN UGLY PIECE OF SOURCE REALLY.
 
@@ -155,8 +155,11 @@ static XEMU_INLINE Uint32 AXYZ_SET ( const Uint32 val ) {
 
 #define writeFlatAddressedByte(d)	cpu65_write_linear_opcode_callback(d)
 #define readFlatAddressedByte()		cpu65_read_linear_opcode_callback()
-#define writeFlatAddressedLong(d)	cpu65_write_linear_long_opcode_callback(d)
-#define readFlatAddressedLong()		cpu65_read_linear_long_opcode_callback()
+
+#define writeFlatAddressedQuadWithZ(d)		cpu65_write_linear_long_opcode_callback(CPU65.z, d)
+#define readFlatAddressedQuadWithZ()		cpu65_read_linear_long_opcode_callback(CPU65.z)
+#define writeFlatAddressedQuadWithoutZ(d)	cpu65_write_linear_long_opcode_callback(0, d)
+#define readFlatAddressedQuadWithoutZ()		cpu65_read_linear_long_opcode_callback(0)
 #ifdef CPU65_NO_RMW_EMULATION
 #define writeByteTwice(a,od,nd)		cpu65_write_callback(a,nd)
 #else
@@ -601,7 +604,27 @@ static XEMU_INLINE void _ROL ( const int addr ) {
 	if (addr == -1) CPU65.a = t; else writeByteTwice(addr, o, t);
 }
 #ifdef MEGA65
-static XEMU_INLINE Uint32 _RORQ ( Uint32 q ) {
+static XEMU_INLINE void _SBCQ ( const Uint32 m ) {
+	const Uint32 q = AXYZ_GET();
+	const Uint32 result = q - m - 1 + !!CPU65.pf_c;
+	CPU65.pf_c = !(result & BIT31);
+	CPU65.pf_v = ((result ^ q) & BIT31) && ((result ^ m) & BIT31);
+	SET_NZ32(AXYZ_SET(result));
+}
+static XEMU_INLINE void _CMPQ ( const Uint32 m ) {
+	const Uint32 result = AXYZ_GET() - m;
+	SET_NZ32(result);
+	CPU65.pf_c = !(result & BIT31);
+}
+static XEMU_INLINE void _ADCQ ( const Uint32 m ) {
+	const Uint32 q = AXYZ_GET();
+	const Uint32 result = q + m + !!CPU65.pf_c;
+	CPU65.pf_c = (result & 0xFFFFFF00U);	// FIXME: according the manual, carry is set based on result > $FF, which is crazy, since it's 32 bit operation!!!!!
+	CPU65.pf_v = ((result ^ q) & BIT31) && ((result ^ m) & BIT31);
+	SET_NZ32(AXYZ_SET(result));
+}
+
+static XEMU_INLINE Uint32 _RORQ_NOPE ( Uint32 q ) {
 	// TODO: check implementation
 	Uint32 pf_c_new = q & 1;
 	q >>= 1;
@@ -610,7 +633,7 @@ static XEMU_INLINE Uint32 _RORQ ( Uint32 q ) {
 	SET_NZ32(q);
 	return q;
 }
-static XEMU_INLINE Uint32 _ROLQ ( Uint32 q ) {
+static XEMU_INLINE Uint32 _ROLQ_NOPE ( Uint32 q ) {
 	// TODO: check implementation
 	Uint32 pf_c_new = q & BIT31;
 	q <<= 1;
@@ -619,22 +642,22 @@ static XEMU_INLINE Uint32 _ROLQ ( Uint32 q ) {
 	SET_NZ32(q);
 	return q;
 }
-static XEMU_INLINE void _ORQ ( Uint32 q ) {	// Always operates on the 32 bit accu.
+static XEMU_INLINE void _ORQ_NOPE ( Uint32 q ) {	// Always operates on the 32 bit accu.
 	q = AXYZ_GET() | q;
 	SET_NZ32(q);
 	AXYZ_SET(q);
 }
-static XEMU_INLINE void _ANDQ ( Uint32 q ) {	// Always operates on the 32 bit accu.
+static XEMU_INLINE void _ANDQ_NOPE ( Uint32 q ) {	// Always operates on the 32 bit accu.
 	q = AXYZ_GET() & q;
 	SET_NZ32(q);
 	AXYZ_SET(q);
 }
-static XEMU_INLINE void _EORQ ( Uint32 q ) {	// Always operates on the 32 bit accu.
+static XEMU_INLINE void _EORQ_NOPE ( Uint32 q ) {	// Always operates on the 32 bit accu.
 	q = AXYZ_GET() ^ q;
 	SET_NZ32(q);
 	AXYZ_SET(q);
 }
-static XEMU_INLINE void _BITQ ( Uint32 q ) {	// Always operates on the 32 bit accu.
+static XEMU_INLINE void _BITQ_NOPE ( Uint32 q ) {	// Always operates on the 32 bit accu.
 	Uint32 acc = AXYZ_GET();
 	CPU65.pf_v = q & (BIT31 >> 1);	// OK, what should it be for 32 bit? TODO: I guess its bit 30 then instead of bit 6 (what it's when normal BIT)
 #ifdef CPU65_DISCRETE_PF_NZ
@@ -644,24 +667,24 @@ static XEMU_INLINE void _BITQ ( Uint32 q ) {	// Always operates on the 32 bit ac
 	CPU65.pf_nz = ((q & BIT31) >> 24) | VALUE_TO_PF_ZERO(q & acc);
 #endif
 }
-static XEMU_INLINE void _CMPQ ( Uint32 q ) {	// Always operates on the 32 bit accu.
+static XEMU_INLINE void _CMPQ_NOPE ( Uint32 q ) {	// Always operates on the 32 bit accu.
 	Uint32 acc = AXYZ_GET();
 	SET_NZ32((Uint32)(acc - q));
 	CPU65.pf_c = (acc >= q);	// TODO: checkit
 }
-static XEMU_INLINE Uint32 _ASLQ ( Uint32 q ) {
+static XEMU_INLINE Uint32 _ASLQ_NOPE ( Uint32 q ) {
 	CPU65.pf_c = (q & BIT31);
 	q <<= 1;
 	SET_NZ32(q);
 	return q;
 }
-static XEMU_INLINE Uint32 _ASRQ ( Uint32 q ) {
+static XEMU_INLINE Uint32 _ASRQ_NOPE ( Uint32 q ) {
 	CPU65.pf_c = (q & 1);
 	q = (q & BIT31) | (q >> 1);
 	SET_NZ32(q);
 	return q;
 }
-static XEMU_INLINE Uint32 _LSRQ ( Uint32 q ) {
+static XEMU_INLINE Uint32 _LSRQ_NOPE ( Uint32 q ) {
 	CPU65.pf_c = (q & 1);
 	q >>= 1;
 	SET_NZ32(q);
@@ -669,7 +692,9 @@ static XEMU_INLINE Uint32 _LSRQ ( Uint32 q ) {
 }
 // TODO / FIXME ?? What happens if NEG NEG NOP prefix is tried to be applied on an opcode only supports NEG NEG?
 // Whole prefix sequence is ignored, or it will be treated as NEG NEG only (thus the "NOP part" of prefix is ignored only)?
-#define IS_NEG_NEG_OP()	XEMU_UNLIKELY(CPU65.prefix == PREFIX_NEG_NEG)
+#define IS_NEG_NEG_OP()		XEMU_UNLIKELY(CPU65.prefix == PREFIX_NEG_NEG)
+#define IS_NOP_OP()		XEMU_UNLIKELY(CPU65.prefix == PREFIX_NOP)
+#define IS_NEG_NEG_NOP_OP()	XEMU_UNLIKELY(CPU65.prefix == PREFIX_NEG_NEG_NOP)
 #endif
 
 
@@ -838,6 +863,12 @@ int cpu65_step (
 			}
 			break;
 	case 0x0D:	/* ORA Absolute */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ORQ $nnnn
+				SET_NZ32(AXYZ_SET(AXYZ_GET() | readQuad(_abs())));
+				break;
+			}
+#endif
 			SET_NZ(A_OP(|,readByte(_abs())));
 			break;
 	case 0x0E:	/* ASL Absolute */
@@ -861,11 +892,23 @@ int cpu65_step (
 	case 0x12:	/* ORA (Zero_Page) or (ZP),Z on 65CE02 */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-			if (CPU65.prefix == PREFIX_NOP)
-				SET_NZ(A_OP(|,readFlatAddressedByte()));
-			else
+			if (XEMU_UNLIKELY(CPU65.prefix != PREFIX_NOTHING)) {
+				if (IS_NOP_OP()) {		// MEGA65-BOP: ORA [$nn],Z
+					SET_NZ(A_OP(|,readFlatAddressedByte()));
+					break;
+				}
+				if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ORQ ($nn)
+					SET_NZ32(AXYZ_SET(AXYZ_GET() | readQuad(_zpi_noz())));
+					break;
+				}
+				if (IS_NEG_NEG_NOP_OP()) {	// MEGA65-QOP: ORQ [$nn]
+					SET_NZ32(AXYZ_SET(AXYZ_GET() | readFlatAddressedQuadWithoutZ()));
+					break;
+				}
+				// do not break here, some quasi-state may apply, we need to continue then!
+			}
 #endif
-				SET_NZ(A_OP(|,readByte(_zpi())));
+			SET_NZ(A_OP(|,readByte(_zpi())));
 			}
 			break;
 	case 0x13:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BPL 16 bit relative */
@@ -968,6 +1011,12 @@ int cpu65_step (
 			_BIT(readByte(_zp()));
 			break;
 	case 0x25:	/* AND Zero_Page */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: AND $nn
+				SET_NZ32(AXYZ_SET(AXYZ_GET() & readQuad(_zp())));
+				break;
+			}
+#endif
 			SET_NZ(A_OP(&,readByte(_zp())));
 			break;
 	case 0x26:	/* ROL Zero_Page */
@@ -1004,6 +1053,12 @@ int cpu65_step (
 			_BIT(readByte(_abs()));
 			break;
 	case 0x2D:	/* AND Absolute */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: AND $nnnn
+				SET_NZ32(AXYZ_SET(AXYZ_GET() & readQuad(_abs())));
+				break;
+			}
+#endif
 			SET_NZ(A_OP(&,readByte(_abs())));
 			break;
 	case 0x2E:	/* ROL Absolute */
@@ -1027,11 +1082,23 @@ int cpu65_step (
 	case 0x32:	/* 65C02: AND (Zero_Page), 65CE02: AND (ZP),Z */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-			if (CPU65.prefix == PREFIX_NOP)
-				SET_NZ(A_OP(&,readFlatAddressedByte()));
-			else
+			if (XEMU_UNLIKELY(CPU65.prefix != PREFIX_NOTHING)) {
+				if (IS_NOP_OP()) {				// MEGA65-BOP: AND [$nn],Z
+					SET_NZ(A_OP(&,readFlatAddressedByte()));
+					break;
+				}
+				if (IS_NEG_NEG_OP()) {				// MEGA65-QOP: ANDQ ($nn)
+					SET_NZ32(AXYZ_SET(AXYZ_GET() & readQuad(_zpi_noz())));
+					break;
+				}
+				if (IS_NEG_NEG_NOP_OP()) {			// MEGA65-QOP: ANDQ [$nn]
+					SET_NZ32(AXYZ_SET(AXYZ_GET() & readFlatAddressedQuadWithoutZ()));
+					break;
+				}
+				// do not break here, some quasi-state may apply, we need to continue then!
+			}
 #endif
-				SET_NZ(A_OP(&,readByte(_zpi())));
+			SET_NZ(A_OP(&,readByte(_zpi())));
 			}
 			break;
 	case 0x33:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BMI 16-bit relative */
@@ -1159,6 +1226,12 @@ int cpu65_step (
 			}
 			break;
 	case 0x45:	/* EOR Zero_Page */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {			// MEGA65-QOP: EORQ $nn
+				SET_NZ32(AXYZ_SET(AXYZ_GET() ^ readQuad(_zp())));
+				break;
+			}
+#endif
 			SET_NZ(A_OP(^,readByte(_zp())));
 			break;
 	case 0x46:	/* LSR Zero_Page */
@@ -1191,6 +1264,12 @@ int cpu65_step (
 			CPU65.pc = _abs();
 			break;
 	case 0x4D:	/* EOR Absolute */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {			// MEGA65-QOP: EORQ $nnnn
+				SET_NZ32(AXYZ_SET(AXYZ_GET() ^ readQuad(_abs())));
+				break;
+			}
+#endif
 			SET_NZ(A_OP(^,readByte(_abs())));
 			break;
 	case 0x4E:	/* LSR Absolute */
@@ -1210,11 +1289,23 @@ int cpu65_step (
 	case 0x52:	/* EOR (Zero_Page) or (ZP),Z on 65CE02 */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-			if (CPU65.prefix == PREFIX_NOP)
-				SET_NZ(A_OP(^,readFlatAddressedByte()));
-			else
+			if (XEMU_UNLIKELY(CPU65.prefix != PREFIX_NOTHING)) {
+				if (IS_NOP_OP()) {			// MEGA65-BOP: EOR [$nn],Z
+					SET_NZ(A_OP(^,readFlatAddressedByte()));
+					break;
+				}
+				if (IS_NEG_NEG_OP()) {			// MEGA65-QOP: EORQ ($nn)
+					SET_NZ32(AXYZ_SET(AXYZ_GET() ^ readQuad(_zpi_noz())));
+					break;
+				}
+				if (IS_NEG_NEG_NOP_OP()) {		// MEGA65-QOP: EORQ [$nn]
+					SET_NZ32(AXYZ_SET(AXYZ_GET() ^ readFlatAddressedQuadWithoutZ()));
+					break;
+				}
+				// do not break here, some quasi-state may apply, we need to continue then!
+			}
 #endif
-				SET_NZ(A_OP(^,readByte(_zpi())));
+			SET_NZ(A_OP(^,readByte(_zpi())));
 			}
 			break;
 	case 0x53:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BVC 16-bit-relative */
@@ -1331,6 +1422,12 @@ int cpu65_step (
 			}
 			break;
 	case 0x65:	/* ADC Zero_Page */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {			// MEGA65-QOP: ADCQ $nn
+				_ADCQ(readQuad(_zp()));
+				break;
+			}
+#endif
 			_ADC(readByte(_zp()));
 			break;
 	case 0x66:	/* ROR Zero_Page */
@@ -1367,6 +1464,12 @@ int cpu65_step (
 				CPU65.pc = _absi();
 			break;
 	case 0x6D:	/* ADC Absolute */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {			// MEGA65-QOP: ADCQ $nnnn
+				_ADCQ(readQuad(_abs()));
+				break;
+			}
+#endif
 			_ADC(readByte(_abs()));
 			break;
 	case 0x6E:	/* ROR Absolute */
@@ -1386,11 +1489,23 @@ int cpu65_step (
 	case 0x72:	/* 0x72 ADC (Zero_Page) or (ZP),Z on 65CE02 */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-			if (CPU65.prefix == PREFIX_NOP)
-				_ADC(readFlatAddressedByte());
-			else
+			if (XEMU_UNLIKELY(CPU65.prefix != PREFIX_NOTHING)) {
+				if (IS_NOP_OP()) {			// MEGA65-BOP: ADC [$nn],Z
+					_ADC(readFlatAddressedByte());
+					break;
+				}
+				if (IS_NEG_NEG_OP()) {			// MEGA65-QOP: ADCQ ($nn)
+					_ADCQ(readQuad(_zpi_noz()));
+					break;
+				}
+				if (IS_NEG_NEG_NOP_OP()) {		// MEGA65-QOP: ADCQ [$nn]
+					_ADCQ(readFlatAddressedQuadWithoutZ());
+					break;
+				}
+				// do not break here, some quasi-state may apply, we need to continue then!
+			}
 #endif
-				_ADC(readByte(_zpi()));
+			_ADC(readByte(_zpi()));
 			}
 			break;
 	case 0x73:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BVS 16 bit relative */
@@ -1483,6 +1598,12 @@ int cpu65_step (
 			writeByte(_zp(), CPU65.y);
 			break;
 	case 0x85:	/* STA Zero_Page */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: STQ $nn
+				writeQuad(_zp(), AXYZ_GET());
+				break;
+			}
+#endif
 			writeByte(_zp(), CPU65.a);
 			break;
 	case 0x86:	/* STX Zero_Page */
@@ -1521,6 +1642,12 @@ int cpu65_step (
 			writeByte(_abs(), CPU65.y);
 			break;
 	case 0x8D:	/* STA Absolute */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: STQ $nnnn
+				writeQuad(_abs(), AXYZ_GET());
+				break;
+			}
+#endif
 			writeByte(_abs(), CPU65.a);
 			break;
 	case 0x8E:	/* STX Absolute */
@@ -1540,11 +1667,23 @@ int cpu65_step (
 	case 0x92:	/* STA (Zero_Page) or (ZP),Z on 65CE02 */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-			if (CPU65.prefix == PREFIX_NOP)
-				writeFlatAddressedByte(CPU65.a);
-			else
+			if (XEMU_UNLIKELY(CPU65.prefix != PREFIX_NOTHING)) {
+				if (IS_NOP_OP()) {				// MEGA65-BOP: STA [$nn],Z
+					writeFlatAddressedByte(CPU65.a);
+					break;
+				}
+				if (IS_NEG_NEG_OP()) {				// MEGA65-QOP: STQ ($nn)
+					writeQuad(_zpi_noz(), AXYZ_GET());
+					break;
+				}
+				if (IS_NEG_NEG_NOP_OP()) {			// MEGA65-QOP: STQ [$nn]
+					writeFlatAddressedQuadWithoutZ(AXYZ_GET());
+					break;
+				}
+				// do not break here, some quasi-state may apply, we need to continue then!
+			}
 #endif
-				writeByte(_zpi(), CPU65.a);
+			writeByte(_zpi(), CPU65.a);
 			}
 			break;
 	case 0x93:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BCC $nnnn */
@@ -1684,16 +1823,34 @@ int cpu65_step (
 			_BRA(CPU65.pf_c);
 			break;
 	case 0xB1:	/* LDA (Zero_Page),Y */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LDQ ($nn),Y
+				SET_NZ32(AXYZ_SET(readQuad(_zpiy())));
+				break;
+			}
+#endif
 			SET_NZ(CPU65.a = readByte(_zpiy()));
 			break;
 	case 0xB2:	/* LDA (Zero_Page) or (ZP),Z on 65CE02 */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-			if (CPU65.prefix == PREFIX_NOP)
-				SET_NZ(CPU65.a = readFlatAddressedByte());
-			else
+			if (XEMU_UNLIKELY(CPU65.prefix != PREFIX_NOTHING)) {
+				if (IS_NOP_OP()) {			// MEGA65-BOP: LDA [$nn],Z
+					SET_NZ(CPU65.a = readFlatAddressedByte());
+					break;
+				}
+				if (IS_NEG_NEG_OP()) {			// MEGA65-QOP: LDQ ($nn),Z
+					SET_NZ32(AXYZ_SET(readQuad(_zpi())));
+					break;
+				}
+				if (IS_NEG_NEG_NOP_OP()) {		// MEGA65-QOP: LDQ [$nn],Z
+					SET_NZ32(AXYZ_SET(readFlatAddressedQuadWithZ()));
+					break;
+				}
+				// do not break here, some quasi-state may apply, we need to continue then!
+			}
 #endif
-				SET_NZ(CPU65.a = readByte(_zpi()));
+			SET_NZ(CPU65.a = readByte(_zpi()));
 			}
 			break;
 	case 0xB3:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BCS $nnnn */
@@ -1708,6 +1865,12 @@ int cpu65_step (
 			SET_NZ(CPU65.y = readByte(_zpx()));
 			break;
 	case 0xB5:	/* LDA Zero_Page,X */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LDQ $nn,X
+				SET_NZ32(AXYZ_SET(readQuad(_zpx())));
+				break;
+			}
+#endif
 			SET_NZ(CPU65.a = readByte(_zpx()));
 			break;
 	case 0xB6:	/* LDX Zero_Page,Y */
@@ -1723,6 +1886,12 @@ int cpu65_step (
 			CPU65.pf_v = 0;
 			break;
 	case 0xB9:	/* LDA Absolute,Y */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LDQ $nnnn,Y
+				SET_NZ32(AXYZ_SET(readQuad(_absy())));
+				break;
+			}
+#endif
 			SET_NZ(CPU65.a = readByte(_absy()));
 			break;
 	case 0xBA:	/* TSX Implied */
@@ -1740,6 +1909,12 @@ int cpu65_step (
 			SET_NZ(CPU65.y = readByte(_absx()));
 			break;
 	case 0xBD:	/* LDA Absolute,X */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LDQ $nnnn,X
+				SET_NZ32(AXYZ_SET(readQuad(_absx())));
+				break;
+			}
+#endif
 			SET_NZ(CPU65.a = readByte(_absx()));
 			break;
 	case 0xBE:	/* LDX Absolute,Y */
@@ -1856,11 +2031,23 @@ int cpu65_step (
 	case 0xD2:	/* CMP (Zero_Page) or (ZP),Z on 65CE02 */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-			if (CPU65.prefix == PREFIX_NOP)	// NOTE: this was not mentioned in Paul's blog-post, but this op should have this property as well, IMHO!
-				_CMP(CPU65.a, readFlatAddressedByte());
-			else
+			if (XEMU_UNLIKELY(CPU65.prefix != PREFIX_NOTHING)) {
+				if (IS_NOP_OP()) {		// MEGA65-BOP: CMP [$nn],Z   --   NOTE: this was not mentioned in Paul's blog-post, but this op should have this property as well, IMHO!
+					_CMP(CPU65.a, readFlatAddressedByte());
+					break;
+				}
+				if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: CMPQ ($nn)
+					_CMPQ(readQuad(_zpi_noz()));
+					break;
+				}
+				if (IS_NEG_NEG_NOP_OP()) {	// MEGA65-QOP: CMPQ [$nn]
+					_CMPQ(readFlatAddressedQuadWithoutZ());
+					break;
+				}
+				// do not break here, some quasi-state may apply, we need to continue then!
+			}
 #endif
-				_CMP(CPU65.a, readByte(_zpi()));
+			_CMP(CPU65.a, readByte(_zpi()));
 			}
 			break;
 	case 0xD3:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BNE16 */
@@ -2072,11 +2259,23 @@ int cpu65_step (
 	case 0xF2:	/* SBC (Zero_Page) or (ZP),Z on 65CE02 */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-			if (CPU65.prefix == PREFIX_NOP)
-				_SBC(readFlatAddressedByte());
-			else
+			if (XEMU_UNLIKELY(CPU65.prefix != PREFIX_NOTHING)) {
+				if (IS_NOP_OP()) {			// MEGA65-BOP: SBC [$nn],Z
+					_SBC(readFlatAddressedByte());
+					break;
+				}
+				if (IS_NEG_NEG_OP()) {			// MEGA65-QOP: SBCQ ($nn)
+					_SBCQ(readQuad(_zpi_noz()));
+					break;
+				}
+				if (IS_NEG_NEG_NOP_OP()) {		// MEGA65-QOP: SBCQ [$nn]
+					_SBCQ(readFlatAddressedQuadWithoutZ());
+					break;
+				}
+				// do not break here, some quasi-state may apply, we need to continue then!
+			}
 #endif
-				_SBC(readByte(_zpi()));
+			_SBC(readByte(_zpi()));
 			}
 			break;
 	case 0xF3:	/* 65C02: NOP (nonstd loc, implied), 65CE02: BEQ16 */
