@@ -607,6 +607,9 @@ static XEMU_INLINE void _ROL ( const int addr ) {
 
 #ifdef MEGA65
 
+// Thanks to lydon on MEGA65-discord for his extensive work on the Q-opcodes on the
+// mega65-core VHDL, and for giving some hints here and there to me as well for emulation.
+
 static XEMU_INLINE void _SBCQ ( const Uint32 m ) {
 	const Uint32 q = AXYZ_GET();
 	const Uint64 result64 = (Uint64)q - (Uint64)m  - (Uint64)1 + (Uint64)!!CPU65.pf_c;
@@ -626,7 +629,7 @@ static XEMU_INLINE void _ADCQ ( const Uint32 m ) {
 	const Uint64 result64 = (Uint64)q + (Uint64)m + (Uint64)!!CPU65.pf_c;
 	CPU65.pf_c = (result64 >= 0x100000000UL);
 	const Uint32 result = result64 & 0xFFFFFFFFUL;
-	CPU65.pf_v = ((result ^ q) & BIT31) && ((result ^ m) & BIT31);
+	CPU65.pf_v = ((result ^ q) & BIT31) && !((q ^ m) & BIT31);
 	SET_NZ32(AXYZ_SET(result));
 }
 static XEMU_INLINE void _BITQ ( const Uint32 m ) {
@@ -637,6 +640,106 @@ static XEMU_INLINE void _BITQ ( const Uint32 m ) {
 #else
 	CPU65.pf_nz = ((m & BIT31) ? CPU65_PF_N : 0) | VALUE_TO_PF_ZERO(AXYZ_GET() & m);
 #endif
+}
+
+// RMW kind of MEGA65 Q-opcodes, operates on memory address (argument is address, not data!)
+
+static XEMU_INLINE void _INQ_RMW ( const Uint16 addr ) {
+	Uint32 q = readQuad(addr);
+	q++;
+	SET_NZ32(q);
+	writeQuad(addr, q);
+}
+static XEMU_INLINE void _DEQ_RMW ( const Uint16 addr ) {
+	Uint32 q = readQuad(addr);
+	q--;
+	SET_NZ32(q);
+	writeQuad(addr, q);
+}
+static XEMU_INLINE void _ASLQ_RMW ( const Uint16 addr ) {
+	Uint32 q = readQuad(addr);
+	CPU65.pf_c = q & BIT31;
+	q <<= 1;
+	SET_NZ32(q);
+	writeQuad(addr, q);
+}
+static XEMU_INLINE void _LSRQ_RMW ( const Uint16 addr ) {
+	Uint32 q = readQuad(addr);
+	CPU65.pf_c = q & 1;
+	q >>= 1;
+	SET_NZ32(q);
+	writeQuad(addr, q);
+}
+static XEMU_INLINE void _ASRQ_RMW ( const Uint16 addr ) {
+	Uint32 q = readQuad(addr);
+	CPU65.pf_c = q & 1;
+	q = (q >> 1) | (q & BIT31);
+	SET_NZ32(q);
+	writeQuad(addr, q);
+}
+static XEMU_INLINE void _ROLQ_RMW ( const Uint16 addr ) {
+	Uint32 q = readQuad(addr);
+	const int new_carry = q & BIT31;
+	q = (q << 1) | (!!CPU65.pf_c);
+	CPU65.pf_c = new_carry;
+	SET_NZ32(q);
+	writeQuad(addr, q);
+}
+static XEMU_INLINE void _RORQ_RMW ( const Uint16 addr ) {
+	Uint32 q = readQuad(addr);
+	const int new_carry = q & 1;
+	q = (q >> 1) | (CPU65.pf_c ? BIT31 : 0);
+	CPU65.pf_c = new_carry;
+	SET_NZ32(q);
+	writeQuad(addr, q);
+
+}
+
+// Q-register opcodes (no memory operation is involved)
+
+static XEMU_INLINE void _INQ_Q ( void ) {
+	SET_NZ32(AXYZ_SET(AXYZ_GET() + 1));
+}
+static XEMU_INLINE void _DEQ_Q ( void ) {
+	SET_NZ32(AXYZ_SET(AXYZ_GET() - 1));
+}
+static XEMU_INLINE void _ASLQ_Q ( void ) {
+	Uint32 q = AXYZ_GET();
+	CPU65.pf_c = q & BIT31;
+	q <<= 1;
+	SET_NZ32(q);
+	AXYZ_SET(q);
+}
+static XEMU_INLINE void _LSRQ_Q ( void ) {
+	Uint32 q = AXYZ_GET();
+	CPU65.pf_c = q & 1;
+	q >>= 1;
+	SET_NZ32(q);
+	AXYZ_SET(q);
+}
+static XEMU_INLINE void _ASRQ_Q ( void ) {
+	Uint32 q = AXYZ_GET();
+	CPU65.pf_c = q & 1;
+	q = (q >> 1) | (q & BIT31);
+	SET_NZ32(q);
+	AXYZ_SET(q);
+}
+static XEMU_INLINE void _ROLQ_Q ( void ) {
+	Uint32 q = AXYZ_GET();
+	const int new_carry = q & BIT31;
+	q = (q << 1) | (!!CPU65.pf_c);
+	CPU65.pf_c = new_carry;
+	SET_NZ32(q);
+	AXYZ_SET(q);
+}
+static XEMU_INLINE void _RORQ_Q ( void ) {
+	Uint32 q = AXYZ_GET();
+	const int new_carry = q & 1;
+	q = (q >> 1) | (CPU65.pf_c ? BIT31 : 0);
+	CPU65.pf_c = new_carry;
+	SET_NZ32(q);
+	AXYZ_SET(q);
+
 }
 
 // TODO / FIXME ?? What happens if NEG NEG NOP prefix is tried to be applied on an opcode only supports NEG NEG?
@@ -782,6 +885,12 @@ int cpu65_step (
 			SET_NZ(A_OP(|,readByte(_zp())));
 			break;
 	case 0x06:	/* ASL Zero_Page */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ASLQ $nn
+				_ASLQ_RMW(_zp());
+				break;
+			}
+#endif
 			_ASL(_zp());
 			break;
 	case 0x07:	/* RMB Zero_Page */
@@ -797,6 +906,12 @@ int cpu65_step (
 			SET_NZ(A_OP(|,readByte(_imm())));
 			break;
 	case 0x0A:	/* ASL Accumulator */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ASLQ (Q)
+				_ASLQ_Q();
+				break;
+			}
+#endif
 			_ASL(-1);
 			break;
 	case 0x0B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: TSY */
@@ -822,6 +937,12 @@ int cpu65_step (
 			SET_NZ(A_OP(|,readByte(_abs())));
 			break;
 	case 0x0E:	/* ASL Absolute */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ASLQ $nnnn
+				_ASLQ_RMW(_abs());
+				break;
+			}
+#endif
 			_ASL(_abs());
 			break;
 	case 0x0F:	/* BBR Relative */
@@ -882,6 +1003,12 @@ int cpu65_step (
 			SET_NZ(A_OP(|,readByte(_zpx())));
 			break;
 	case 0x16:	/* ASL Zero_Page,X */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ASLQ $nn,X
+				_ASLQ_RMW(_zpx());
+				break;
+			}
+#endif
 			_ASL(_zpx());
 			break;
 	case 0x17:	/* RMB Zero_Page */
@@ -898,8 +1025,8 @@ int cpu65_step (
 	case 0x1A:	/* INA Accumulator */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-				if (IS_NEG_NEG_OP()) {
-					SET_NZ32(AXYZ_SET(AXYZ_GET() + 1));	// MEGA65-QOP: INQ
+				if (IS_NEG_NEG_OP()) {	// MEGA65-QOP: INQ (Q)
+					_INQ_Q();
 					break;
 				}
 #endif
@@ -923,6 +1050,12 @@ int cpu65_step (
 			SET_NZ(A_OP(|,readByte(_absx())));
 			break;
 	case 0x1E:	/* ASL Absolute,X */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ASLQ $nnnn,X
+				_ASLQ_RMW(_absx());
+				break;
+			}
+#endif
 			_ASL(_absx());
 			break;
 	case 0x1F:	/* BBR Relative */
@@ -977,6 +1110,12 @@ int cpu65_step (
 			SET_NZ(A_OP(&,readByte(_zp())));
 			break;
 	case 0x26:	/* ROL Zero_Page */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ROLQ $nn
+				_ROLQ_RMW(_zp());
+				break;
+			}
+#endif
 			_ROL(_zp());
 			break;
 	case 0x27:	/* RMB Zero_Page */
@@ -992,6 +1131,12 @@ int cpu65_step (
 			SET_NZ(A_OP(&,readByte(_imm())));
 			break;
 	case 0x2A:	/* ROL Accumulator */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ROLQ (Q)
+				_ROLQ_Q();
+				break;
+			}
+#endif
 			_ROL(-1);
 			break;
 	case 0x2B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: TYS */
@@ -1025,6 +1170,12 @@ int cpu65_step (
 			SET_NZ(A_OP(&,readByte(_abs())));
 			break;
 	case 0x2E:	/* ROL Absolute */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ROLQ $nnnn
+				_ROLQ_RMW(_abs());
+				break;
+			}
+#endif
 			_ROL(_abs());
 			break;
 	case 0x2F:	/* BBR Relative */
@@ -1085,6 +1236,12 @@ int cpu65_step (
 			SET_NZ(A_OP(&,readByte(_zpx())));
 			break;
 	case 0x36:	/* ROL Zero_Page,X */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ROLQ $nn,X
+				_ROLQ_RMW(_zpx());
+				break;
+			}
+#endif
 			_ROL(_zpx());
 			break;
 	case 0x37:	/* RMB Zero_Page */
@@ -1102,8 +1259,8 @@ int cpu65_step (
 	case 0x3A:	/* DEA Accumulator */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
-				if (IS_NEG_NEG_OP()) {
-					SET_NZ32(AXYZ_SET(AXYZ_GET() - 1));	// MEGA65-QOP: DEQ
+				if (IS_NEG_NEG_OP()) {	// MEGA65-QOP: DEQ (Q)
+					_DEQ_Q();
 					break;
 				}
 #endif
@@ -1127,6 +1284,12 @@ int cpu65_step (
 			SET_NZ(A_OP(&,readByte(_absx())));
 			break;
 	case 0x3E:	/* ROL Absolute,X */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ROLQ $nnnn,X
+				_ROLQ_RMW(_absx());
+				break;
+			}
+#endif
 			_ROL(_absx());
 			break;
 	case 0x3F:	/* BBR Relative */
@@ -1170,6 +1333,12 @@ int cpu65_step (
 			break;
 	case 0x43:	/* 65C02: NOP (nonstd loc, implied), 65CE02: ASR A */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ASRQ (Q)
+				_ASRQ_Q();
+				break;
+			}
+#endif
 #ifdef CPU_65CE02
 			OPC_65CE02("ASR A");
 			_ASR(-1);
@@ -1181,6 +1350,12 @@ int cpu65_step (
 			break;
 	case 0x44:	/* 65C02: NOP zp (non-std NOP with addr mode), 65CE02: ASR $nn */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ASRQ $nn
+				_ASRQ_RMW(_zp());
+				break;
+			}
+#endif
 #ifdef CPU_65CE02
 			OPC_65CE02("ASR nn");
 			_ASR(_zp());				// 65CE02: ASR $nn
@@ -1199,6 +1374,12 @@ int cpu65_step (
 			SET_NZ(A_OP(^,readByte(_zp())));
 			break;
 	case 0x46:	/* LSR Zero_Page */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LSRQ $nn
+				_LSRQ_RMW(_zp());
+				break;
+			}
+#endif
 			_LSR(_zp());
 			break;
 	case 0x47:	/* RMB Zero_Page */
@@ -1214,6 +1395,12 @@ int cpu65_step (
 			SET_NZ(A_OP(^,readByte(_imm())));
 			break;
 	case 0x4A:	/* LSR Accumulator */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LSRQ (Q)
+				_LSRQ_Q();
+				break;
+			}
+#endif
 			_LSR(-1);
 			break;
 	case 0x4B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: TAZ */
@@ -1237,6 +1424,12 @@ int cpu65_step (
 			SET_NZ(A_OP(^,readByte(_abs())));
 			break;
 	case 0x4E:	/* LSR Absolute */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LSRQ $nnnn
+				_LSRQ_RMW(_abs());
+				break;
+			}
+#endif
 			_LSR(_abs());
 			break;
 	case 0x4F:	/* BBR Relative */
@@ -1282,6 +1475,12 @@ int cpu65_step (
 			break;
 	case 0x54:	/* 65C02: NOP zpx (non-std NOP with addr mode), 65CE02: ASR $nn,X */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ASRQ $nn,X
+				_ASRQ_RMW(_zpx());
+				break;
+			}
+#endif
 #ifdef CPU_65CE02
 			OPC_65CE02("ASR nn,X");
 			_ASR(_zpx());
@@ -1294,6 +1493,12 @@ int cpu65_step (
 			SET_NZ(A_OP(^,readByte(_zpx())));
 			break;
 	case 0x56:	/* LSR Zero_Page,X */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LSRQ $nn,X
+				_LSRQ_RMW(_zpx());
+				break;
+			}
+#endif
 			_LSR(_zpx());
 			break;
 	case 0x57:	/* RMB Zero_Page */
@@ -1339,6 +1544,12 @@ int cpu65_step (
 			SET_NZ(A_OP(^,readByte(_absx())));
 			break;
 	case 0x5E:	/* LSR Absolute,X */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LSRQ $nnnn,X
+				_LSRQ_RMW(_absx());
+				break;
+			}
+#endif
 			_LSR(_absx());
 			break;
 	case 0x5F:	/* BBR Relative */
@@ -1395,6 +1606,12 @@ int cpu65_step (
 			_ADC(readByte(_zp()));
 			break;
 	case 0x66:	/* ROR Zero_Page */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: RORQ $nn
+				_RORQ_RMW(_zp());
+				break;
+			}
+#endif
 			_ROR(_zp());
 			break;
 	case 0x67:	/* RMB Zero_Page */
@@ -1410,6 +1627,12 @@ int cpu65_step (
 			_ADC(readByte(_imm()));
 			break;
 	case 0x6A:	/* ROR Accumulator */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: RORQ (Q)
+				_RORQ_Q();
+				break;
+			}
+#endif
 			_ROR(-1);
 			break;
 	case 0x6B:	/* 65C02: NOP (nonstd loc, implied), 65CE02: TZA */
@@ -1437,6 +1660,12 @@ int cpu65_step (
 			_ADC(readByte(_abs()));
 			break;
 	case 0x6E:	/* ROR Absolute */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: RORQ $nnnn
+				_RORQ_RMW(_abs());
+				break;
+			}
+#endif
 			_ROR(_abs());
 			break;
 	case 0x6F:	/* BBR Relative */
@@ -1489,6 +1718,12 @@ int cpu65_step (
 			_ADC(readByte(_zpx()));
 			break;
 	case 0x76:	/* ROR Zero_Page,X */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: RORQ $nn,X
+				_RORQ_RMW(_zpx());
+				break;
+			}
+#endif
 			_ROR(_zpx());
 			break;
 	case 0x77:	/* RMB Zero_Page */
@@ -1525,6 +1760,12 @@ int cpu65_step (
 			_ADC(readByte(_absx()));
 			break;
 	case 0x7E:	/* ROR Absolute,X */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: RORQ $nnnn,X
+				_RORQ_RMW(_absx());
+				break;
+			}
+#endif
 			_ROR(_absx());
 			break;
 	case 0x7F:	/* BBR Relative */
@@ -1933,6 +2174,12 @@ int cpu65_step (
 			break;
 	case 0xC6:	/* DEC Zero_Page */
 			{
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: DEQ $nn
+				_DEQ_RMW(_zp());
+				break;
+			}
+#endif
 			int addr = _zp();
 			Uint8 data = readByte(addr) - 1;
 			SET_NZ(data);
@@ -1982,6 +2229,12 @@ int cpu65_step (
 			break;
 	case 0xCE:	/* DEC Absolute */
 			{
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: DEQ $nnnn
+				_DEQ_RMW(_abs());
+				break;
+			}
+#endif
 			const int addr = _abs();
 			const Uint8 old_data = readByte(addr);
 			const Uint8 new_data = old_data - 1;
@@ -2053,6 +2306,12 @@ int cpu65_step (
 			break;
 	case 0xD6:	/* DEC Zero_Page,X */
 			{
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: DEQ $nn,X
+				_DEQ_RMW(_zpx());
+				break;
+			}
+#endif
 			int addr = _zpx();
 			Uint8 data = readByte(addr) - 1;
 			SET_NZ(data); writeByte(addr, data);
@@ -2098,6 +2357,12 @@ int cpu65_step (
 			break;
 	case 0xDE:	/* DEC Absolute,X */
 			{
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: DEQ $nnnn,X
+				_DEQ_RMW(_absx());
+				break;
+			}
+#endif
 			int addr = _absx();
 			Uint8 data = readByte(addr) - 1;
 			SET_NZ(data);
@@ -2117,6 +2382,12 @@ int cpu65_step (
 			break;
 	case 0xE2:	/* 65C02: NOP imm (non-std NOP with addr mode), 65CE02: LDA (nn,S),Y */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {
+				SET_NZ32(AXYZ_SET(readQuad(_GET_SP_INDIRECT_ADDR())));	// MEGA65-QOP: LDQ ($nn,SP),Y
+				break;
+			}
+#endif
 #ifdef CPU_65CE02
 			OPC_65CE02("LDA (nn,S),Y");
 			// 65CE02 LDA ($nn,SP),Y
@@ -2156,6 +2427,12 @@ int cpu65_step (
 			break;
 	case 0xE6:	/* INC Zero_Page */
 			{
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: INQ $nn
+				_INQ_RMW(_zp());
+				break;
+			}
+#endif
 			int addr = _zp();
 			Uint8 data = readByte(addr) + 1;
 			SET_NZ(data);
@@ -2222,6 +2499,12 @@ int cpu65_step (
 			break;
 	case 0xEE:	/* INC Absolute */
 			{
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: INQ $nnnn
+				_INQ_RMW(_abs());
+				break;
+			}
+#endif
 			const int addr = _abs();
 			const Uint8 old_data = readByte(addr);
 			const Uint8 new_data = old_data + 1;
@@ -2294,6 +2577,12 @@ int cpu65_step (
 			break;
 	case 0xF6:	/* INC Zero_Page,X */
 			{
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: INQ $nn,X
+				_INQ_RMW(_zpx());
+				break;
+			}
+#endif
 			int addr = _zpx();
 			Uint8 data = readByte(addr) + 1;
 			SET_NZ(data);
@@ -2342,6 +2631,12 @@ int cpu65_step (
 			break;
 	case 0xFE:	/* INC Absolute,X */
 			{
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: INQ $nnnn,X
+				_INQ_RMW(_absx());
+				break;
+			}
+#endif
 			int addr = _absx();
 			Uint8 data = readByte(addr) + 1;
 			SET_NZ(data);
