@@ -80,6 +80,8 @@ struct cpu65_st CPU65;
 
 
 #ifdef MEGA65
+static int mega65_fastclock_1_penalty;
+static int mega65_fastclock_2_penalty;
 #define PREFIX_NOTHING		0
 #define PREFIX_NOP		1
 #define PREFIX_NEG_NEG		2
@@ -123,10 +125,36 @@ static XEMU_INLINE Uint32 AXYZ_SET ( const Uint32 val ) {
 		// static const Uint8 opcycles_fast_mode[0x100] = TIMINGS_65CE02_;
 		static const Uint8 opcycles_fast_mode[0x100] = TIMINGS_65CE02;
 		static const Uint8 *opcycles = opcycles_fast_mode;
+#		ifdef MEGA65
+			static Uint8 opcycles_ultra_mode[0x100];	// "ultra" = MEGA65-fast (~40MHz) timing, compared to C65-fast (~3.5MHz) timing. We want to calculate this
+#		endif
 		// FIXME: this must be extended to support three different modes, one additional for MEGA65 native speed!
 		// as regular 65CE02 opcodes can be LONGER at native MEGA65 fast mode than on 65CE02!!!!!
-		void cpu65_set_ce_timing ( int is_ce ) {
-			opcycles = is_ce ? opcycles_fast_mode : opcycles_slow_mode;
+		void cpu65_set_timing ( unsigned int mode ) {
+			switch (mode) {
+				case 0:
+					opcycles = opcycles_slow_mode;
+#					ifdef MEGA65
+					mega65_fastclock_1_penalty = 0;
+					mega65_fastclock_2_penalty = 0;
+#					endif
+					break;
+				default:
+					opcycles = opcycles_fast_mode;
+#					ifdef MEGA65
+					mega65_fastclock_1_penalty = 0;
+					mega65_fastclock_2_penalty = 0;
+#					endif
+					break;
+#				ifdef MEGA65
+				case 2:
+					opcycles = opcycles_fast_mode;		// FIXME: XXX see the next line and its comment ;)
+					//opcycles = opcycles_ultra_mode;	// FIXME: XXX constuct the "ultra" (ie 40MHz timing) table for MEGA65 and use here!!
+					mega65_fastclock_1_penalty = 1;
+					mega65_fastclock_2_penalty = 2;
+					break;
+#				endif
+			}
 		}
 #	else
 		//static const Uint8 opcycles[0x100] = TIMINGS_65CE02_;
@@ -138,6 +166,15 @@ static XEMU_INLINE Uint32 AXYZ_SET ( const Uint32 val ) {
 #	else
 		static const Uint8 opcycles[0x100] = TIMINGS_65C02;
 #	endif
+#endif
+
+#ifdef MEGA65
+void cpu65_init_mega_specific ( void )
+{
+	for (int a = 0; a < 0x100; a++) {
+		opcycles_ultra_mode[a] = opcycles_fast_mode[a];
+	}
+}
 #endif
 
 #ifndef CPU65_DISCRETE_PF_NZ
@@ -878,6 +915,7 @@ int cpu65_step (
 	case 0x05:	/* ORA Zero_Page */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ORQ $nn
+				CPU65.op_cycles = 8 - 2 + mega65_fastclock_1_penalty;
 				SET_NZ32(AXYZ_SET(AXYZ_GET() | readQuad(_zp())));
 				break;
 			}
@@ -908,6 +946,7 @@ int cpu65_step (
 	case 0x0A:	/* ASL Accumulator */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ASLQ (Q)
+				CPU65.op_cycles = 3 - 2;
 				_ASLQ_Q();
 				break;
 			}
@@ -930,6 +969,7 @@ int cpu65_step (
 	case 0x0D:	/* ORA Absolute */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ORQ $nnnn
+				CPU65.op_cycles = 9 - 2 + mega65_fastclock_1_penalty;
 				SET_NZ32(AXYZ_SET(AXYZ_GET() | readQuad(_abs())));
 				break;
 			}
@@ -965,14 +1005,17 @@ int cpu65_step (
 #ifdef MEGA65
 			if (XEMU_UNLIKELY(CPU65.prefix != PREFIX_NOTHING)) {
 				if (IS_NOP_OP()) {		// MEGA65-BOP: ORA [$nn],Z
+					CPU65.op_cycles = 7 - 1 + mega65_fastclock_2_penalty;
 					SET_NZ(A_OP(|,readFlatAddressedByte()));
 					break;
 				}
 				if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ORQ ($nn)
+					CPU65.op_cycles = 10 - 2 + mega65_fastclock_1_penalty;
 					SET_NZ32(AXYZ_SET(AXYZ_GET() | readQuad(_zpi_noz())));
 					break;
 				}
 				if (IS_NEG_NEG_NOP_OP()) {	// MEGA65-QOP: ORQ [$nn]
+					CPU65.op_cycles = 13 - 3 + mega65_fastclock_1_penalty;
 					SET_NZ32(AXYZ_SET(AXYZ_GET() | readFlatAddressedQuadWithoutZ()));
 					break;
 				}
@@ -1026,6 +1069,7 @@ int cpu65_step (
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
 				if (IS_NEG_NEG_OP()) {	// MEGA65-QOP: INQ (Q)
+					CPU65.op_cycles = 3 - 2;
 					_INQ_Q();
 					break;
 				}
@@ -1094,6 +1138,7 @@ int cpu65_step (
 	case 0x24:	/* BIT Zero_Page */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: BITQ $nn
+				CPU65.op_cycles = 8 - 2 + mega65_fastclock_1_penalty;
 				_BITQ(readQuad(_zp()));
 				break;
 			}
@@ -1103,6 +1148,7 @@ int cpu65_step (
 	case 0x25:	/* AND Zero_Page */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ANDQ $nn
+				CPU65.op_cycles = 8 - 2 + mega65_fastclock_1_penalty;
 				SET_NZ32(AXYZ_SET(AXYZ_GET() & readQuad(_zp())));
 				break;
 			}
@@ -1133,6 +1179,7 @@ int cpu65_step (
 	case 0x2A:	/* ROL Accumulator */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ROLQ (Q)
+				CPU65.op_cycles = 3 - 2;
 				_ROLQ_Q();
 				break;
 			}
@@ -1154,6 +1201,7 @@ int cpu65_step (
 	case 0x2C:	/* BIT Absolute */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: BITQ $nnnn
+				CPU65.op_cycles = 9 - 2 + mega65_fastclock_1_penalty;
 				_BITQ(readQuad(_abs()));
 				break;
 			}
@@ -1163,6 +1211,7 @@ int cpu65_step (
 	case 0x2D:	/* AND Absolute */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ANDQ $nnnn
+				CPU65.op_cycles = 9 - 2 + mega65_fastclock_1_penalty;
 				SET_NZ32(AXYZ_SET(AXYZ_GET() & readQuad(_abs())));
 				break;
 			}
@@ -1198,14 +1247,17 @@ int cpu65_step (
 #ifdef MEGA65
 			if (XEMU_UNLIKELY(CPU65.prefix != PREFIX_NOTHING)) {
 				if (IS_NOP_OP()) {				// MEGA65-BOP: AND [$nn],Z
+					CPU65.op_cycles = 7 - 1 + mega65_fastclock_2_penalty;
 					SET_NZ(A_OP(&,readFlatAddressedByte()));
 					break;
 				}
 				if (IS_NEG_NEG_OP()) {				// MEGA65-QOP: ANDQ ($nn)
+					CPU65.op_cycles = 10 - 2 + mega65_fastclock_2_penalty;
 					SET_NZ32(AXYZ_SET(AXYZ_GET() & readQuad(_zpi_noz())));
 					break;
 				}
 				if (IS_NEG_NEG_NOP_OP()) {			// MEGA65-QOP: ANDQ [$nn]
+					CPU65.op_cycles = 13 - 3 + mega65_fastclock_2_penalty;
 					SET_NZ32(AXYZ_SET(AXYZ_GET() & readFlatAddressedQuadWithoutZ()));
 					break;
 				}
@@ -1260,6 +1312,7 @@ int cpu65_step (
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
 				if (IS_NEG_NEG_OP()) {	// MEGA65-QOP: DEQ (Q)
+					CPU65.op_cycles = 3 - 2;
 					_DEQ_Q();
 					break;
 				}
@@ -1335,6 +1388,7 @@ int cpu65_step (
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: ASRQ (Q)
+				CPU65.op_cycles = 3 - 2;
 				_ASRQ_Q();
 				break;
 			}
@@ -1367,6 +1421,7 @@ int cpu65_step (
 	case 0x45:	/* EOR Zero_Page */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {			// MEGA65-QOP: EORQ $nn
+				CPU65.op_cycles = 8 - 2 + mega65_fastclock_1_penalty;
 				SET_NZ32(AXYZ_SET(AXYZ_GET() ^ readQuad(_zp())));
 				break;
 			}
@@ -1397,6 +1452,7 @@ int cpu65_step (
 	case 0x4A:	/* LSR Accumulator */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LSRQ (Q)
+				CPU65.op_cycles = 3 - 2;
 				_LSRQ_Q();
 				break;
 			}
@@ -1417,6 +1473,7 @@ int cpu65_step (
 	case 0x4D:	/* EOR Absolute */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {			// MEGA65-QOP: EORQ $nnnn
+				CPU65.op_cycles = 9 - 2 + mega65_fastclock_1_penalty;
 				SET_NZ32(AXYZ_SET(AXYZ_GET() ^ readQuad(_abs())));
 				break;
 			}
@@ -1448,14 +1505,17 @@ int cpu65_step (
 #ifdef MEGA65
 			if (XEMU_UNLIKELY(CPU65.prefix != PREFIX_NOTHING)) {
 				if (IS_NOP_OP()) {			// MEGA65-BOP: EOR [$nn],Z
+					CPU65.op_cycles = 7 - 1 + mega65_fastclock_2_penalty;
 					SET_NZ(A_OP(^,readFlatAddressedByte()));
 					break;
 				}
 				if (IS_NEG_NEG_OP()) {			// MEGA65-QOP: EORQ ($nn)
+					CPU65.op_cycles = 10 - 2 + mega65_fastclock_2_penalty;
 					SET_NZ32(AXYZ_SET(AXYZ_GET() ^ readQuad(_zpi_noz())));
 					break;
 				}
 				if (IS_NEG_NEG_NOP_OP()) {		// MEGA65-QOP: EORQ [$nn]
+					CPU65.op_cycles = 13 - 3 + mega65_fastclock_2_penalty;
 					SET_NZ32(AXYZ_SET(AXYZ_GET() ^ readFlatAddressedQuadWithoutZ()));
 					break;
 				}
@@ -1599,6 +1659,7 @@ int cpu65_step (
 	case 0x65:	/* ADC Zero_Page */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {			// MEGA65-QOP: ADCQ $nn
+				CPU65.op_cycles = 8 - 2 - mega65_fastclock_1_penalty;
 				_ADCQ(readQuad(_zp()));
 				break;
 			}
@@ -1629,6 +1690,7 @@ int cpu65_step (
 	case 0x6A:	/* ROR Accumulator */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: RORQ (Q)
+				CPU65.op_cycles = 3 - 2;
 				_RORQ_Q();
 				break;
 			}
@@ -1653,6 +1715,7 @@ int cpu65_step (
 	case 0x6D:	/* ADC Absolute */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {			// MEGA65-QOP: ADCQ $nnnn
+				CPU65.op_cycles = 9 - 2 + mega65_fastclock_2_penalty;
 				_ADCQ(readQuad(_abs()));
 				break;
 			}
@@ -1684,14 +1747,17 @@ int cpu65_step (
 #ifdef MEGA65
 			if (XEMU_UNLIKELY(CPU65.prefix != PREFIX_NOTHING)) {
 				if (IS_NOP_OP()) {			// MEGA65-BOP: ADC [$nn],Z
+					CPU65.op_cycles = 7 - 1 + mega65_fastclock_2_penalty;
 					_ADC(readFlatAddressedByte());
 					break;
 				}
 				if (IS_NEG_NEG_OP()) {			// MEGA65-QOP: ADCQ ($nn)
+					CPU65.op_cycles = 10 - 2 + mega65_fastclock_2_penalty;
 					_ADCQ(readQuad(_zpi_noz()));
 					break;
 				}
 				if (IS_NEG_NEG_NOP_OP()) {		// MEGA65-QOP: ADCQ [$nn]
+					CPU65.op_cycles = 13 - 3 + mega65_fastclock_2_penalty;
 					_ADCQ(readFlatAddressedQuadWithoutZ());
 					break;
 				}
@@ -1805,6 +1871,7 @@ int cpu65_step (
 	case 0x85:	/* STA Zero_Page */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: STQ $nn
+				CPU65.op_cycles = 8 - 2;
 				writeQuad(_zp(), AXYZ_GET());
 				break;
 			}
@@ -1849,6 +1916,7 @@ int cpu65_step (
 	case 0x8D:	/* STA Absolute */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: STQ $nnnn
+				CPU65.op_cycles = 9 - 2;
 				writeQuad(_abs(), AXYZ_GET());
 				break;
 			}
@@ -1874,14 +1942,17 @@ int cpu65_step (
 #ifdef MEGA65
 			if (XEMU_UNLIKELY(CPU65.prefix != PREFIX_NOTHING)) {
 				if (IS_NOP_OP()) {				// MEGA65-BOP: STA [$nn],Z
+					CPU65.op_cycles = 8 - 1 + mega65_fastclock_1_penalty;
 					writeFlatAddressedByte(CPU65.a);
 					break;
 				}
 				if (IS_NEG_NEG_OP()) {				// MEGA65-QOP: STQ ($nn)
+					CPU65.op_cycles = 10 - 2 + mega65_fastclock_1_penalty;
 					writeQuad(_zpi_noz(), AXYZ_GET());
 					break;
 				}
 				if (IS_NEG_NEG_NOP_OP()) {			// MEGA65-QOP: STQ [$nn]
+					CPU65.op_cycles = 13 - 3 + mega65_fastclock_1_penalty;
 					writeFlatAddressedQuadWithoutZ(AXYZ_GET());
 					break;
 				}
@@ -1972,6 +2043,7 @@ int cpu65_step (
 	case 0xA5:	/* LDA Zero_Page */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LDQ $nn
+				CPU65.op_cycles = 8 - 2 + mega65_fastclock_1_penalty;
 				SET_NZ32(AXYZ_SET(readQuad(_zp())));
 				break;
 			}
@@ -2010,6 +2082,7 @@ int cpu65_step (
 	case 0xAD:	/* LDA Absolute */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LDQ $nnnn
+				CPU65.op_cycles = 9 - 2 + mega65_fastclock_1_penalty;
 				SET_NZ32(AXYZ_SET(readQuad(_abs())));
 				break;
 			}
@@ -2030,6 +2103,7 @@ int cpu65_step (
 	case 0xB1:	/* LDA (Zero_Page),Y */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LDQ ($nn),Y
+				// FIXME XXX missing timing, this Q opcode is not in the manual?!
 				SET_NZ32(AXYZ_SET(readQuad(_zpiy())));
 				break;
 			}
@@ -2041,14 +2115,17 @@ int cpu65_step (
 #ifdef MEGA65
 			if (XEMU_UNLIKELY(CPU65.prefix != PREFIX_NOTHING)) {
 				if (IS_NOP_OP()) {			// MEGA65-BOP: LDA [$nn],Z
+					CPU65.op_cycles = 7 - 1 + mega65_fastclock_2_penalty;
 					SET_NZ(CPU65.a = readFlatAddressedByte());
 					break;
 				}
 				if (IS_NEG_NEG_OP()) {			// MEGA65-QOP: LDQ ($nn),Z
+					CPU65.op_cycles = 10 - 2 + mega65_fastclock_2_penalty;
 					SET_NZ32(AXYZ_SET(readQuad(_zpi())));
 					break;
 				}
 				if (IS_NEG_NEG_NOP_OP()) {		// MEGA65-QOP: LDQ [$nn],Z
+					CPU65.op_cycles = 13 - 3 + mega65_fastclock_2_penalty;
 					SET_NZ32(AXYZ_SET(readFlatAddressedQuadWithZ()));
 					break;
 				}
@@ -2072,6 +2149,7 @@ int cpu65_step (
 	case 0xB5:	/* LDA Zero_Page,X */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LDQ $nn,X
+				// FIXME XXX missing timing! this Q opcode is not in the manual??
 				SET_NZ32(AXYZ_SET(readQuad(_zpx())));
 				break;
 			}
@@ -2093,6 +2171,7 @@ int cpu65_step (
 	case 0xB9:	/* LDA Absolute,Y */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LDQ $nnnn,Y
+				// FIXME XXX missing timing! this Q opcode is not in the manual??
 				SET_NZ32(AXYZ_SET(readQuad(_absy())));
 				break;
 			}
@@ -2116,6 +2195,7 @@ int cpu65_step (
 	case 0xBD:	/* LDA Absolute,X */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LDQ $nnnn,X
+				// FIXME XXX missing timing! this Q opcode is not in the manual??
 				SET_NZ32(AXYZ_SET(readQuad(_absx())));
 				break;
 			}
@@ -2166,6 +2246,7 @@ int cpu65_step (
 	case 0xC5:	/* CMP Zero_Page */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: CPMQ $nn
+				CPU65.op_cycles = 8 - 2 + mega65_fastclock_1_penalty;
 				_CMPQ(readQuad(_zp()));
 				break;
 			}
@@ -2221,6 +2302,7 @@ int cpu65_step (
 	case 0xCD:	/* CMP Absolute */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: CPMQ $nnnn
+				CPU65.op_cycles = 9 - 2 + mega65_fastclock_1_penalty;
 				_CMPQ(readQuad(_abs()));
 				break;
 			}
@@ -2262,14 +2344,17 @@ int cpu65_step (
 #ifdef MEGA65
 			if (XEMU_UNLIKELY(CPU65.prefix != PREFIX_NOTHING)) {
 				if (IS_NOP_OP()) {		// MEGA65-BOP: CMP [$nn],Z   --   NOTE: this was not mentioned in Paul's blog-post, but this op should have this property as well, IMHO!
+					CPU65.op_cycles = 7 - 1 + mega65_fastclock_2_penalty;
 					_CMP(CPU65.a, readFlatAddressedByte());
 					break;
 				}
 				if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: CMPQ ($nn)
+					CPU65.op_cycles = 10 - 2 + mega65_fastclock_2_penalty;
 					_CMPQ(readQuad(_zpi_noz()));
 					break;
 				}
 				if (IS_NEG_NEG_NOP_OP()) {	// MEGA65-QOP: CMPQ [$nn]
+					CPU65.op_cycles = 13 - 3 + mega65_fastclock_2_penalty;
 					_CMPQ(readFlatAddressedQuadWithoutZ());
 					break;
 				}
@@ -2384,6 +2469,7 @@ int cpu65_step (
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {
+				// FIXME XXX missing timing! this Q opcode is not in the manual??????
 				SET_NZ32(AXYZ_SET(readQuad(_GET_SP_INDIRECT_ADDR())));	// MEGA65-QOP: LDQ ($nn,SP),Y
 				break;
 			}
@@ -2419,6 +2505,7 @@ int cpu65_step (
 	case 0xE5:	/* SBC Zero_Page */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: SBCQ $nn
+				CPU65.op_cycles = 8 - 2 + mega65_fastclock_1_penalty;
 				_SBCQ(readQuad(_zp()));
 				break;
 			}
@@ -2491,6 +2578,7 @@ int cpu65_step (
 	case 0xED:	/* SBC Absolute */
 #ifdef MEGA65
 			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: SBCQ $nnnn
+				CPU65.op_cycles = 9 - 2 + mega65_fastclock_1_penalty;
 				_SBCQ(readQuad(_abs()));
 				break;
 			}
@@ -2532,14 +2620,17 @@ int cpu65_step (
 #ifdef MEGA65
 			if (XEMU_UNLIKELY(CPU65.prefix != PREFIX_NOTHING)) {
 				if (IS_NOP_OP()) {			// MEGA65-BOP: SBC [$nn],Z
+					CPU65.op_cycles = 8 - 1 + mega65_fastclock_1_penalty;
 					_SBC(readFlatAddressedByte());
 					break;
 				}
 				if (IS_NEG_NEG_OP()) {			// MEGA65-QOP: SBCQ ($nn)
+					CPU65.op_cycles = 10 - 2 + mega65_fastclock_2_penalty;
 					_SBCQ(readQuad(_zpi_noz()));
 					break;
 				}
 				if (IS_NEG_NEG_NOP_OP()) {		// MEGA65-QOP: SBCQ [$nn]
+					CPU65.op_cycles = 13 - 3 + mega65_fastclock_2_penalty;
 					_SBCQ(readFlatAddressedQuadWithoutZ());
 					break;
 				}

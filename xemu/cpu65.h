@@ -82,10 +82,11 @@ extern struct cpu65_st CPU65;
 
 #ifdef MEGA65
 extern int  cpu_mega65_opcodes;
+extern void cpu65_init_mega_specific ( void );
 #endif
 
 #ifdef CPU65_65CE02_6502NMOS_TIMING_EMULATION
-extern void cpu65_set_ce_timing ( int is_ce );
+extern void cpu65_set_timing ( unsigned int mode );
 #endif
 //extern int cpu_multi_step_stop_trigger;
 
