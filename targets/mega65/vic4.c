@@ -74,6 +74,7 @@ static Uint8 vic_pixel_readback_result[4];
 static Uint8 vic_color_register_mask = 0xFF;
 static Uint32 *used_palette;					// normally the same value as "palette" from vic4_palette.c but GOTOX RRB token can modify this! So this should be used
 static int EFFECTIVE_V400;
+static Uint8 sprite_y_adjust = 0;
 
 // --- these things are altered by vic4_open_frame_access() ONLY at every fame ONLY based on PAL or NTSC selection
 Uint8 videostd_id = 0xFF;			// 0=PAL, 1=NTSC [give some insane value by default to force the change at the fist frame after starting Xemu]
@@ -287,25 +288,23 @@ static void vic4_update_vertical_borders( void )
 			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - 2);
 	}
 	if (!EFFECTIVE_V400) {	// Standard mode (200-lines)
+		display_row_count = 24;
 		if (REG_RSEL) {	// 25-row
 			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster));
 			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster) - 1);
-			display_row_count = 25;
 		} else {
 			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster) + 8);
 			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - (2 * vicii_first_raster) - SINGLE_TOP_BORDER_200 - 7);
-			display_row_count = 24;
 		}
 		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_200 - (2 * vicii_first_raster) - 6 + REG_VIC2_YSCROLL * 2);
 	} else {		// V400
+		display_row_count = 49;
 		if (REG_RSEL) {	// 25-line+V400
 			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster));
 			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 1);
-			display_row_count = 25*2;
 		} else {
 			SET_BORDER_Y_TOP(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) + 8);
 			SET_BORDER_Y_BOTTOM(RASTER_CORRECTION + DISPLAY_HEIGHT - (2 * vicii_first_raster) - SINGLE_TOP_BORDER_200 - 7);
-			display_row_count = 24*2;
 		}
 		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 6 + (REG_VIC2_YSCROLL * 2));
 	}
@@ -380,6 +379,7 @@ void vic4_open_frame_access ( void )
 			max_rasters = PHYSICAL_RASTERS_NTSC;
 			visible_area_height = SCREEN_HEIGHT_VISIBLE_NTSC;
 			vicii_first_raster = 7;
+			sprite_y_adjust = 24;
 		} else {
 			// --- PAL ---
 			new_name = PAL_STD_NAME;
@@ -388,6 +388,7 @@ void vic4_open_frame_access ( void )
 			max_rasters = PHYSICAL_RASTERS_PAL;
 			visible_area_height = SCREEN_HEIGHT_VISIBLE_PAL;
 			vicii_first_raster = 0;
+			sprite_y_adjust = 0;
 		}
 		DEBUGPRINT("VIC: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec, max raster is %d, visible area height is %d)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime, max_rasters, visible_area_height);
 		videostd_name = new_name;
@@ -1028,8 +1029,8 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 	for (int sprnum = 7; sprnum >= 0; sprnum--) {
 		if (REG_SPRITE_ENABLE & (1 << sprnum)) {
 			const int spriteHeight = SPRITE_EXTHEIGHT(sprnum) ? REG_SPRHGHT : 21;
-			const int x_display_pos = border_x_left + ((SPRITE_POS_X(sprnum) - SPRITE_X_BASE_COORD) * (REG_SPR640 ? 1 : 2));	// in display units
-			const int y_logical_pos = SPRITE_POS_Y(sprnum) - SPRITE_Y_BASE_COORD +(BORDER_Y_TOP / (EFFECTIVE_V400 ? 1 : 2));	// in logical units
+			const int x_display_pos = SPRITE_FIRST_X + (SPRITE_POS_X(sprnum) * (REG_SPR640 ? 1 : 2));	// in display units
+			const int y_logical_pos = SPRITE_POS_Y(sprnum) - sprite_y_adjust + ( (EFFECTIVE_V400 ? 1 : 2));	// in logical units
 
 			int sprite_row_in_raster = logical_raster - y_logical_pos;
 
@@ -1270,7 +1271,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 	int line_char_index = 0;
 	enable_bg_paint = 1;
 	const Uint8 *row_data_base_addr = get_charset_effective_addr();	// FIXME: is it OK that I moved here, before the loop?
-	if (display_row >= 0 && display_row < display_row_count) {
+	if (display_row <= display_row_count) {
 		Uint8 *colour_ram_current_ptr = colour_ram + COLOUR_RAM_OFFSET + (display_row * LINESTEP_BYTES);
 		Uint8 *screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row * LINESTEP_BYTES);
 		// Account for Chargen X-displacement
@@ -1458,13 +1459,15 @@ int vic4_render_scanline ( void )
 #			ifdef SPRITE_SPRITE_COLLISION
 			memset(is_sprite, 0, sizeof is_sprite);
 #			endif
-			vic4_do_sprites();
 		}
 		// Paint screen color if positive y-offset (CHARGEN_Y_START > BORDER_Y_TOP)
 		// FIXME: in case of changed palette by GOTOX, maybe this must be dependent on bg_paint to use the new palette or the old??
-		if (ycounter >= BORDER_Y_TOP && ycounter < CHARGEN_Y_START) {
-			while (xcounter++ < border_x_right)
-				*current_pixel++ = palette[REG_SCREEN_COLOR];
+		if (ycounter >= BORDER_Y_TOP) {
+			if (ycounter < CHARGEN_Y_START)
+				while (xcounter++ < border_x_right)
+					*current_pixel++ = palette[REG_SCREEN_COLOR];
+			if (ycounter < BORDER_Y_BOTTOM)
+				vic4_do_sprites();
 			// for (int i = 0; i < TEXTURE_WIDTH - border_x_right; i++, current_pixel++)
 			//	*current_pixel = palette[REG_SCREEN_COLOR];
 		}
