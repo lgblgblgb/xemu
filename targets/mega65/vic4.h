@@ -218,12 +218,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SET_COLORRAM_BASE(x)		SET_16BIT_REG(0x64,(x))
 #define SET_LINESTEP_BYTES(x)		SET_16BIT_REG(0x58,(x))
 
-// Review this! (VIC-II values)
+// Base coordinates (from VICIV VHDL)
 
-#define SPRITE_X_BASE_COORD		24
-#define SPRITE_Y_BASE_COORD		50
-//#define SPRITE_X_UPPER_COORD		250
-//#define SPRITE_Y_UPPER_COORD		344
+#define SPRITE_FIRST_X			31
 
 // Current state
 
