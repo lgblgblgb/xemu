@@ -75,6 +75,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode", &configdb.hyperdebug },
 	{ "hyperserialascii", "Convert PETSCII/ASCII hypervisor serial debug output to ASCII upper-case", &configdb.hyperserialascii },
 	{ "forcerom", "Re-fill 'ROM' from external source on start-up, requires option -loadrom <filename>", &configdb.forcerom },
+	{ "stubrom", "Use Xemu's internal stub-rom", &configdb.stubrom },
 	{ "fontrefresh", "Upload character ROM from the loaded ROM image", &configdb.force_upload_fonts },
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	{ "virtsd", "Interpret -sdimg option as a DIRECTORY to be fed onto the FAT32FS and use virtual-in-memory disk storage.", &configdb.virtsd },
@@ -89,7 +90,6 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "fullborders", "Show non-clipped display borders", &configdb.fullborders },
 	{ "nosound", "Disables audio output generation", &configdb.nosound },
 	{ "noopl3", "Disables OPL3 emulation", &configdb.noopl3 },
-	{ "soundresetbug", "Disables audio during reset (workaround)", &configdb.soundresetbug },
 	{ NULL }
 };
 
@@ -109,6 +109,7 @@ static const struct xemutools_configdef_num_st num_options[] = {
 	// FIXME: as a workaround, I set this to "0" PAL, as newer MEGA65's default is this. HOWEVER this should be not handled this way but using a newer Hyppo!
 	{ "initvideostd", 0, "Use given video standard as the startup one (0 = PAL, 1 = NTSC, -1 = Hyppo default)", &configdb.init_videostd, -1, 1 },
 	{ "sidmask", 15, "Enabled SIDs of the four, in form of a bitmask", &configdb.sidmask, 0, 15 },
+	{ "audiobuffersize", AUDIO_BUFFER_SAMPLES_DEFAULT, "Audio buffer size in BYTES", &configdb.audiobuffersize, AUDIO_BUFFER_SAMPLES_MIN, AUDIO_BUFFER_SAMPLES_MAX },
 	{ NULL }
 };
 

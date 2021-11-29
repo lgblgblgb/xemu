@@ -21,8 +21,8 @@ SHELL		= sh
 AWK		= awk
 CL65		= cl65
 URL_LIST	= rom-fetch-list.txt
-OUR_ROMS	= vic20-emulator-tool.rom c65-minimal-rom.rom clcd-u104-parasite.rom
-OUR_INCS	= c65-minimal-rom.cdata
+OUR_ROMS	= vic20-emulator-tool.rom c65-minimal-rom.rom clcd-u104-parasite.rom mega65-xemu-stub-rom.rom
+OUR_INCS	= c65-minimal-rom.cdata mega65-xemu-stub-rom.cdata
 
 all:	$(OUR_ROMS) $(OUR_INCS)
 
@@ -33,10 +33,10 @@ distclean:
 	$(MAKE) clean
 	rm -f `$(AWK) 'NF == 3 && $$1 ~ /^[a-zA-Z0-9]/ { print $$1 }' < $(URL_LIST)`
 
-%.rom: %.asm Makefile
+%.rom: %.a65 Makefile
 	@echo "<<< Crafting $@ >>>"
 	$(CL65) -t none -o $@ $<
-	rm -f $(<:.asm=.o)
+	rm -f $(<:.a65=.o)
 
 %.cdata: %.rom Makefile
 	@echo "<<< Crafting $@ >>>"

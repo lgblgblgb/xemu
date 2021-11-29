@@ -1,5 +1,5 @@
 #!/bin/bash
-# (C)2020 Gabor Lenart LGB, lgblgblgb@gmail.com
+# (C)2020,2021 Gabor Lenart LGB, lgblgblgb@gmail.com
 # -------------------------------------------------
 # Requires create-dmg (eg with homebrew'ing it ...)
 # https://github.com/andreyvit/create-dmg
@@ -8,6 +8,9 @@
 BUNDLE="yes"
 #TIMESTAMP="`date '+%Y%m%d%H%M%S'`"
 TIMESTAMP="`cat build/objs/cdate.data`"
+
+PATH="$PATH:/usr/local/lgb/create-dmg"
+export PATH
 
 echo "*** *** DMG begin: $0 @ `date` *** ***"
 
@@ -45,6 +48,9 @@ if [ "$TRAVIS_COMMIT" = "" ]; then
 else
 	COMMIT="$TRAVIS_COMMIT"
 fi
+
+rm -fr .dmg
+rm -f *.dmg
 
 mkdir .dmg .dmg/bin || exit 1
 
@@ -145,6 +151,7 @@ time create-dmg	\
 	--eula LICENSE \
 	--background "build/xemu-bg.png" \
 	--window-pos 200 120 \
+	--skip-jenkins \
 	--window-size 800 400 \
 	--icon-size 100 \
 	--icon "Application.app" 200 190 \
@@ -152,6 +159,12 @@ time create-dmg	\
 	--app-drop-link 600 185 \
 	Xemu-Installer.dmg	\
 	.dmg
+
+rm -fr .dmg
+
+ls -lad *.dmg
+
+mv *Xemu*.dmg Xemu-Installer.dmg
 
 ls -l Xemu-Installer.dmg
 

@@ -37,6 +37,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "audio65.h"
 #include "vic4.h"
 #include "configdb.h"
+#include "rom.h"
+#include "hypervisor.h"
 
 
 static int attach_d81 ( const char *fn )
@@ -190,6 +192,7 @@ static void ui_update_sdcard ( void )
 {
 	char fnbuf[PATH_MAX + 1];
 	static char dir[PATH_MAX + 1] = "";
+	xemu_load_buffer_p = NULL;
 	if (!*dir)
 		strcpy(dir, sdl_pref_dir);
 	// Select ROM image
@@ -201,11 +204,42 @@ static void ui_update_sdcard ( void )
 		sizeof fnbuf
 	)) {
 		WARNING_WINDOW("Cannot update: you haven't selected a ROM image");
-		return;
+		goto ret;
 	}
 	// Load selected ROM image into memory, also checks the size!
 	if (xemu_load_file(fnbuf, NULL, 0x20000, 0x20000, "Cannot begin image update, bad C65/M65 ROM image has been selected!") != 0x20000)
-		return;
+		goto ret;
+	// Check the loaded ROM: let's warn the user if it's open-ROMs, since it seems users are often confused to think,
+	// that's the right choice for every-day usage.
+	rom_detect_date(xemu_load_buffer_p);
+	if (rom_date < 0) {
+		if (!ARE_YOU_SURE("Selected ROM cannot be identified as a valid C65/MEGA65 ROM. Are you sure to continue?", ARE_YOU_SURE_DEFAULT_NO)) {
+			INFO_WINDOW("SD-card system files update was aborted by the user.");
+			goto ret;
+		}
+	} else {
+		if (rom_is_openroms) {
+			if (!ARE_YOU_SURE(
+				"Are you sure you want to use Open-ROMs on your SD-card?\n\n"
+				"You've selected a ROM for update which belongs to the\n"
+				"Open-ROMs projects. Please note, that Open-ROMs are not\n"
+				"yet ready for usage by an average user! For general usage\n"
+				"currently, closed-ROMs are recommended! Open-ROMs\n"
+				"currently can be interesting for mostly developers and\n"
+				"for curious minds.",
+				ARE_YOU_SURE_DEFAULT_NO
+			))
+				goto ret;
+		}
+		if (rom_is_stub) {
+			ERROR_WINDOW(
+				"The selected ROM image is an Xemu-internal ROM image.\n"
+				"This cannot be used to update your emulated SD-card."
+			);
+			goto ret;
+		}
+	}
+	DEBUGPRINT("UI: upgrading SD-card system files, ROM %d (%s)" NL, rom_date, rom_name);
 	// Copy file to the pref'dir (if not the same as the selected file)
 	char fnbuf_target[PATH_MAX];
 	strcpy(fnbuf_target, sdl_pref_dir);
@@ -217,18 +251,13 @@ static void ui_update_sdcard ( void )
 			xemu_load_buffer_p,
 			0x20000,
 			"Cannot save the selected ROM file for the updater"
-		)) {
-			free(xemu_load_buffer_p);
-			xemu_load_buffer_p = NULL;
-			return;
-		}
+		))
+			goto ret;
 	}
 	// Generate character ROM from the ROM image
 	Uint8 char_rom[CHAR_ROM_SIZE];
 	memcpy(char_rom + 0x0000, xemu_load_buffer_p + 0xD000, 0x1000);
 	memcpy(char_rom + 0x1000, xemu_load_buffer_p + 0x9000, 0x1000);
-	free(xemu_load_buffer_p);
-	xemu_load_buffer_p = NULL;
 	// And store our character ROM!
 	strcpy(fnbuf_target + strlen(sdl_pref_dir), CHAR_ROM_NAME);
 	if (xemu_save_file(
@@ -236,17 +265,27 @@ static void ui_update_sdcard ( void )
 		char_rom,
 		CHAR_ROM_SIZE,
 		"Cannot save the extracted CHAR ROM file for the updater"
-	)) {
-		return;
-	}
+	))
+		goto ret;
 	// Call the updater :)
-	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES))
+	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES)) {
+		// this memcpy would not be needed ideally, as hyppo should load the new ROM, but it does not do that
+		// for some unknown reason. So we just copy the newly loaded ROM into the memory here ... :-/
+		memcpy(main_ram + 0x20000, xemu_load_buffer_p, 0x20000);
 		INFO_WINDOW(
 			"System files on your SD-card image seems to be updated successfully.\n"
-			"Next time you may need this function, you can use MEGA65.ROM which is a backup copy of your selected ROM.\n"
-			"MEGA65 emulation is about to RESET now!"
+			"Next time you may need this function, you can use MEGA65.ROM which is a backup copy of your selected ROM.\n\n"
+			"ROM: %d (%s)\n\n"
+			"Your emulated MEGA65 is about to RESET now!", rom_date, rom_name
 		);
+	}
 	reset_mega65();
+ret:
+	if (xemu_load_buffer_p) {
+		free(xemu_load_buffer_p);
+		xemu_load_buffer_p = NULL;
+	}
+	rom_detect_date(main_ram + 0x20000);	// make sure we have the correct detected results again based on the actual memory content
 }
 
 
@@ -275,6 +314,13 @@ static void reset_into_c65_mode ( void )
 	if (reset_mega65_asked()) {
 		KBD_RELEASE_KEY(0x75);
 		hwa_kbd_fake_key(0);
+	}
+}
+
+static void reset_into_xemu_stub ( void )
+{
+	if (reset_mega65_asked()) {
+		hypervisor_request_stub_rom = 1;
 	}
 }
 
@@ -354,7 +400,7 @@ static void ui_emu_info ( void )
 	xemu_get_uname_string(uname_str, sizeof uname_str);
 	INFO_WINDOW(
 		"DMA chip current revision: %d (F018 rev-%s)\n"
-		"ROM version detected: %d%s %s\n"
+		"ROM version detected: %d %s\n"
 		"C64 'CPU' I/O port (low 3 bits): DDR=%d OUT=%d\n"
 		"Current VIC and I/O mode: %s %s, hot registers are %s\n"
 		"\n"
@@ -362,7 +408,7 @@ static void ui_emu_info ( void )
 		"Xemu's host OS: %s"
 		,
 		dma_chip_revision, dma_chip_revision ? "B, new" : "A, old",
-		rom_date, rom_date > 0 ? "" : " (unknown or bad ROM signature)", rom_date > 0 ? (rom_is_openroms ? "Open-ROMs" : "Closed-ROMs") : "UNKNOWN",
+		rom_date, rom_name,
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
 		vic_iomode < 4 ? iomode_names[vic_iomode] : "?INVALID?", videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
 		td_stat_str,
@@ -546,10 +592,11 @@ static const struct menu_st menu_sdcard[] = {
 	{ NULL }
 };
 static const struct menu_st menu_reset[] = {
-	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode        },
-	{ "Reset M65 without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot },
-	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu    },
-	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode        },
+	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode		},
+	{ "Reset M65 without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot	},
+	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu	},
+	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode		},
+	{ "Reset into Xemu stub-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_stub		},
 	{ NULL }
 };
 static const struct menu_st menu_inputdevices[] = {

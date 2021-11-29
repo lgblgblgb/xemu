@@ -611,7 +611,6 @@ echo "OK"
 # PKG-CONFIG based optional stuffs #
 ####################################
 
-# "READLINE:readline:#include <readline.h>:printf(\"%p\", readline(\"prompt\"))"
 for a in \
 	"GTK3:gtk+-3.0:#include <gtk/gtk.h>:gtk_init_check(NULL,NULL)"
 do
@@ -631,31 +630,23 @@ do
 		echo "Skipping $name check with $PKG_CONFIG for HTML target"
 		continue
 	fi
-	if [ $TARGET_IS_OSX = Y -a "$name" = "READLINE" ]; then
-		# Override libreadline madness with Mac's internal libedit also called readline. Or WTF :-O
-		# OSX is really an alien stuff .......
-		echo -n "Overriding libreadline on Mac for system default ... "
-		L1="-I/usr/include/readline"
-		L2="-lreadline"
-	else
-		echo -n "Checking for $name (via $PKG_CONFIG [--cflags-only-I|--libs] $id) ... "
-		"$PKG_CONFIG" --cflags-only-I $id > $COUT 2> $CERR
-		ret=$?
-		if [ "$ret" != "0" -o -s $CERR -o ! -s $COUT ]; then
-			echo "NO"
-			cat $CERR
-			continue
-		fi
-		L1="`cat $COUT`"
-		"$PKG_CONFIG" --libs $id > $COUT 2> $CERR
-		ret=$?
-		if [ "$ret" != "0" -o -s $CERR -o ! -s $COUT ]; then
-			echo "NO"
-			cat $CERR
-			continue
-		fi
-		L2="`cat $COUT`"
+	echo -n "Checking for $name (via $PKG_CONFIG [--cflags-only-I|--libs] $id) ... "
+	"$PKG_CONFIG" --cflags-only-I $id > $COUT 2> $CERR
+	ret=$?
+	if [ "$ret" != "0" -o -s $CERR -o ! -s $COUT ]; then
+		echo "NO"
+		cat $CERR
+		continue
 	fi
+	L1="`cat $COUT`"
+	"$PKG_CONFIG" --libs $id > $COUT 2> $CERR
+	ret=$?
+	if [ "$ret" != "0" -o -s $CERR -o ! -s $COUT ]; then
+		echo "NO"
+		cat $CERR
+		continue
+	fi
+	L2="`cat $COUT`"
 	cat > $SRC <<EOF
 #include <stdio.h>
 $glob
@@ -700,18 +691,32 @@ int main ( void ) {
 	return 0;
 }
 EOF
-echo -n "Checking libreadline usability ... "
-$CC $SRC -o $OBJ -lreadline > $COUT 2> $CERR
-ret=$?
-if [ "$ret" = "0" -a -s $OBJ ]; then
-	echo "OK"
-	echo "READLINE_CFLAGS=" >> $OUTPUT_MAKEFILE
-	echo "READLINE_LIBS=-lreadline" >> $OUTPUT_MAKEFILE
-	echo "#define XEMU_HAS_READLINE" >> $OUTPUT_HEADERFILE
-	HAS_READLINE=Y
-else
-	echo "NO"
-fi
+
+for prefix in "" "/usr/local" ; do
+	if [ "$prefix" != "" ]; then
+		readline_cflags_test="-I$prefix/include "
+		readline_libs_test="-L$prefix/lib "
+		readline_test="at prefix $prefix"
+	else
+		readline_cflags_test=""
+		readline_libs_test=""
+		readline_test="without -I and -L"
+	fi
+	echo -n "Checking libreadline usability $readline_test ... "
+	$CC $SRC -o $OBJ $readline_cflags_test $readline_libs_test -lreadline > $COUT 2> $CERR
+	ret=$?
+	if [ "$ret" = "0" -a -s $OBJ ]; then
+		echo "OK"
+		echo "READLINE_CFLAGS=${readline_cflags_test}" >> $OUTPUT_MAKEFILE
+		echo "READLINE_LIBS=${readline_libs_test}-lreadline" >> $OUTPUT_MAKEFILE
+		echo "#define XEMU_HAS_READLINE" >> $OUTPUT_HEADERFILE
+		HAS_READLINE=Y
+		break
+	else
+		echo "NO"
+		#cat $CERR
+	fi
+done
 
 
 ############################################

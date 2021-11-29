@@ -79,6 +79,7 @@ SDL_Window   *sdl_win = NULL;
 SDL_Renderer *sdl_ren = NULL;
 SDL_Texture  *sdl_tex = NULL;
 SDL_PixelFormat *sdl_pix_fmt;
+int sdl_on_x11 = 0, sdl_on_wayland = 0;
 static Uint32 sdl_pixel_format_id;
 static const char default_window_title[] = "XEMU";
 int register_new_texture_creation = 0;
@@ -711,7 +712,12 @@ int xemu_init_sdl ( void )
 		DEBUGPRINT("SDL: no SDL subsystem initialization has been done already." NL);
 #endif
 	SDL_VERSION(&sdlver_compiled);
-        SDL_GetVersion(&sdlver_linked);
+	SDL_GetVersion(&sdlver_linked);
+	const char *sdl_video_driver = SDL_GetCurrentVideoDriver();
+	if (!sdl_video_driver)
+		FATAL("SDL_GetCurrentVideoDriver() == NULL");
+	sdl_on_x11 = !strcasecmp(sdl_video_driver, "x11");
+	sdl_on_wayland = !strcasecmp(sdl_video_driver, "wayland");
 	if (chatty_xemu)
 		printf( "SDL version: (%s) compiled with %d.%d.%d, used with %d.%d.%d on platform %s" NL
 			"SDL system info: %d bits %s, %d cores, l1_line=%d, RAM=%dMbytes, max_alignment=%d%s, CPU features: "
@@ -728,7 +734,7 @@ int xemu_init_sdl ( void )
 			"",
 #endif
 			SDL_Has3DNow(),SDL_HasAVX(),SDL_HasAVX2(),SDL_HasAltiVec(),SDL_HasMMX(),SDL_HasRDTSC(),SDL_HasSSE(),SDL_HasSSE2(),SDL_HasSSE3(),SDL_HasSSE41(),SDL_HasSSE42(),
-			SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver()
+			sdl_video_driver, SDL_GetCurrentAudioDriver()
 		);
 #if defined(XEMU_ARCH_WIN)
 #	define SDL_VER_MISMATCH_WARN_STR "Xemu was not compiled with the linked DLL for SDL.\nPlease upgrade your DLL too, not just Xemu binary."
@@ -1660,3 +1666,119 @@ int xemu_os_stat ( const char *fn, struct stat *statbuf )
 }
 
 #endif
+
+
+/* -------------------------- SHA1 checksumming -------------------------- */
+
+
+static inline Uint32 leftrotate ( Uint32 i, unsigned int count )
+{
+	count &= 31;
+	return (i << count) + (i >> (32 - count));
+}
+
+
+static void sha1_chunk ( Uint32 h[5], const Uint8 *data )
+{
+	// Note: this function has been written by me (LGB) by following the pseudocode from Wikipedia
+	Uint32 w[80];
+	// Split our chunk into sixteen 32-bit big-endian words
+	for (unsigned int i = 0; i < 16; i++) {
+		w[i] = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+		data += 4;
+	}
+	// Extend the sixteen 32-bit words into eighty 32-bit words
+	for (unsigned int i = 16; i <= 79; i++)
+		w[i] = leftrotate(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
+	// Initialize variables from the current state of the hash (previous chunk OR default hash values for SHA-1)
+	Uint32 a = h[0];
+	Uint32 b = h[1];
+	Uint32 c = h[2];
+	Uint32 d = h[3];
+	Uint32 e = h[4];
+	// Main loop for the 80 words
+	for (unsigned int i = 0; i <= 79; i++) {
+		Uint32 f, k;
+		if (i <= 19) {		// 0 ... 19
+			f = (b & c) | ((~b) & d);
+			k = 0x5A827999U;
+		} else if (i <= 39) {	// 20 .. 39
+			f = b ^ c ^ d;
+			k = 0x6ED9EBA1U;
+		} else if (i <= 59) {	// 40 .. 59
+			f = (b & c) | (b & d) | (c & d);
+			k = 0x8F1BBCDCU;
+		} else { 		// 60 .. 79
+			f = b ^ c ^ d;
+			k = 0xCA62C1D6U;
+		}
+		Uint32 temp = leftrotate(a, 5) + f + e + k + w[i];
+		e = d;
+		d = c;
+		c = leftrotate(b, 30);
+		b = a;
+		a = temp;
+	}
+	// Update hash value with this chunk's result
+	h[0] += a;
+	h[1] += b;
+	h[2] += c;
+	h[3] += d;
+	h[4] += e;
+}
+
+
+void sha1_checksum_as_words ( Uint32 hash[5], const Uint8 *data, Uint32 size )
+{
+	hash[0] = 0x67452301U;
+	hash[1] = 0xEFCDAB89U;
+	hash[2] = 0x98BADCFEU;
+	hash[3] = 0x10325476U;
+	hash[4] = 0xC3D2E1F0U;
+	Uint64 size_in_bits = (Uint64)size << 3;
+	// Process full chunks (if any)
+	while (size >= 64) {	// 64 bytes = 512 bits
+		sha1_chunk(hash, data);
+		data += 64;
+		size -= 64;
+	}
+	// Process remaining sub-chunk + SHA specific additions: it may result in two chunks, actually!
+	Uint8 tail[128], *tail_p;
+	memset(tail, 0, sizeof tail);
+	if (size)
+		memcpy(tail, data, size);
+	tail[size++] = 0x80;	// append '1' bit at the end of message
+	if (size > 64 - 8) {
+		// Needs an additional chunk
+		sha1_chunk(hash, tail);
+		tail_p = tail + 64;
+	} else
+		tail_p = tail;
+	// Last chunk, with size information at the end
+	for (unsigned int i = 63; i >= 56; i--) {
+		tail_p[i] = size_in_bits & 0xFF;
+		size_in_bits >>= 8;
+	}
+	sha1_chunk(hash, tail_p);
+}
+
+
+void sha1_checksum_as_bytes ( sha1_hash_bytes hash_bytes, const Uint8 *data, Uint32 size )
+{
+	Uint32 hash[5];
+	sha1_checksum_as_words(hash, data, size);
+	for (unsigned int i = 0; i < 5; i++) {
+		*hash_bytes++ = (hash[i] >> 24) & 0xFF;
+		*hash_bytes++ = (hash[i] >> 16) & 0xFF;
+		*hash_bytes++ = (hash[i] >>  8) & 0xFF;
+		*hash_bytes++ = (hash[i]      ) & 0xFF;
+	}
+}
+
+
+void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data, Uint32 size )
+{
+	Uint32 hash[5];
+	sha1_checksum_as_words(hash, data, size);
+	sprintf(hash_str, "%08x%08x%08x%08x%08x", hash[0], hash[1], hash[2], hash[3], hash[4]);
+}

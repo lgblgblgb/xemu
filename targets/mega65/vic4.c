@@ -249,22 +249,35 @@ void vic4_close_frame_access ( void )
 	D7XX[0xFA]++;	// D7FA: elapsed number of frames counter
 }
 
+// The hardware allows a sideborder value of 16383 as a remnant of old MEGA65 design.
+// In practical terms, any sideborder exceeding display_width / 2 will cover the entire 
+// character generator (effective 400 since since dw is fixed to 800px wide). Since our
+// scanline renderer takes borders into account and any bizarre value will crash emulator
+// due to offlimits pixel buffer access, we clamp the maximum practical sideborder value
+// to TEXTURE_WIDTH/2, even when program code can set any of the 13-bit value range through
+// the $D05C/$D05D registers.
+static inline unsigned int vic4_single_side_border_clamped( void )
+{
+	return (SINGLE_SIDE_BORDER > (TEXTURE_WIDTH / 2)) ? (TEXTURE_WIDTH / 2) : SINGLE_SIDE_BORDER;
+}
+
 
 static void vic4_update_sideborder_dimensions ( void )
 {
 	if (REG_CSEL) {	// 40-columns?
-		border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER;
+		border_x_left = FRAME_H_FRONT + vic4_single_side_border_clamped();
 		if (!REG_H640)
-			border_x_right = FRAME_H_FRONT + TEXTURE_WIDTH - SINGLE_SIDE_BORDER - 1;
+			border_x_right = FRAME_H_FRONT + TEXTURE_WIDTH - vic4_single_side_border_clamped() - 1;
 		else	// 80-col mode
-			border_x_right = FRAME_H_FRONT + TEXTURE_WIDTH - SINGLE_SIDE_BORDER;
+			border_x_right = FRAME_H_FRONT + TEXTURE_WIDTH - vic4_single_side_border_clamped();
 	} else {	// 38-columns
-		border_x_right = FRAME_H_FRONT + TEXTURE_WIDTH - SINGLE_SIDE_BORDER - 18;
+		border_x_right = FRAME_H_FRONT + TEXTURE_WIDTH - vic4_single_side_border_clamped() - 18;
 		if (!REG_H640)
-			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER + 14;
+			border_x_left = FRAME_H_FRONT + vic4_single_side_border_clamped() + 14;
 		else	// 78-col mode
-			border_x_left = FRAME_H_FRONT + SINGLE_SIDE_BORDER + 15;
+			border_x_left = FRAME_H_FRONT + vic4_single_side_border_clamped() + 15;
 	}
+	
 	DEBUGPRINT("VIC4: set border left=%d, right=%d, textxpos=%d" NL, border_x_left, border_x_right, CHARGEN_X_START);
 }
 
@@ -739,11 +752,11 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			vic_hotreg_touched = 0;
 			vic4_sideborder_touched = 0;
 		}
-		if (vic4_sideborder_touched) {
+	}
+	if (vic4_sideborder_touched) {
 			//DEBUGPRINT("VIC: vic4_sideborder_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
 			vic4_update_sideborder_dimensions();
 			vic4_sideborder_touched = 0;
-		}
 	}
 }
 

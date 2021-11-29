@@ -375,6 +375,25 @@ static void mega65_init ( void )
 	// This is a separated step, to be able to call refill_memory_from_preinit_cache() later as well, in case of a "deep reset" functionality is needed for Xemu (not just CPU/hw reset),
 	// without restarting Xemu for that purpose.
 	refill_memory_from_preinit_cache();
+	// If we have no -8 option given, but we found a suitable disk image in the pref-dir,
+	// with the desired name, let's use that! In this way, it may cure some complains,
+	// that the default disk is "inside" the SD-card image which is hard to deal with.
+	if (!configdb.disk8) {
+		static const char default_d81_fn[] = "default.d81";
+		char *fn = xemu_malloc(strlen(sdl_pref_dir) + strlen(default_d81_fn) + 1);
+		sprintf(fn, "%s%s", sdl_pref_dir, default_d81_fn);
+		off_t size = xemu_safe_file_size_by_name(fn);
+		if (size != OFF_T_ERROR) {
+			if (size == (off_t)D81_SIZE) {
+				DEBUGPRINT("DISK: using external default disk image, since without -8 we found: %s" NL, fn);
+				configdb.disk8 = fn;
+			} else {
+				ERROR_WINDOW("Found: %s\nfor default external disk image,\nbut it has wrong size", fn);
+				free(fn);
+			}
+		} else
+			free(fn);
+	}
 	// *** Image file for SDCARD support
 	if (sdcard_init(configdb.sdimg, configdb.disk8, configdb.virtsd) < 0)
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
@@ -475,10 +494,6 @@ static void shutdown_callback ( void )
 
 void reset_mega65 ( void )
 {
-	if (!configdb.nosound && configdb.soundresetbug) {
-		configdb.nosound = 1;
-		hypervisor_to_enable_audio = 1;
-	}
 	eth65_reset();
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0xFF;
@@ -786,7 +801,8 @@ int main ( int argc, char **argv )
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
 		AUDIO_SAMPLE_FREQ,		// sound mix freq
 		configdb.mastervolume,
-		configdb.stereoseparation
+		configdb.stereoseparation,
+		configdb.audiobuffersize
 	);
 	DEBUGPRINT("MEM: UNHANDLED memory policy: %d" NL, configdb.skip_unhandled_mem);
 	if (configdb.skip_unhandled_mem)
@@ -816,6 +832,7 @@ int main ( int argc, char **argv )
 	} else if (configdb.autoload)
 		c64_register_fake_typing(fake_typing_for_load65);
 #endif
+	hypervisor_request_stub_rom = configdb.stubrom;
 	audio65_start();
 	xemu_set_full_screen(configdb.fullscreen_requested);
 	if (!configdb.syscon)

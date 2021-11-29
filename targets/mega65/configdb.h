@@ -65,6 +65,7 @@ struct configdb_st {
 	int	hyperdebug;
 	int	hyperserialascii;
 	int	forcerom;
+	int	stubrom;
 	int	force_upload_fonts;
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	int	virtsd;
@@ -90,7 +91,7 @@ struct configdb_st {
 	int	nosound;
 	int	noopl3;
 	int	sidmask;
-	int	soundresetbug;
+	int	audiobuffersize;
 };
 
 extern struct configdb_st configdb;
