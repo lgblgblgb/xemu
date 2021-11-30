@@ -2101,13 +2101,6 @@ int cpu65_step (
 			_BRA(CPU65.pf_c);
 			break;
 	case 0xB1:	/* LDA (Zero_Page),Y */
-#ifdef MEGA65
-			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LDQ ($nn),Y
-				// FIXME XXX missing timing, this Q opcode is not in the manual?!
-				SET_NZ32(AXYZ_SET(readQuad(_zpiy())));
-				break;
-			}
-#endif
 			SET_NZ(CPU65.a = readByte(_zpiy()));
 			break;
 	case 0xB2:	/* LDA (Zero_Page) or (ZP),Z on 65CE02 */
@@ -2147,13 +2140,6 @@ int cpu65_step (
 			SET_NZ(CPU65.y = readByte(_zpx()));
 			break;
 	case 0xB5:	/* LDA Zero_Page,X */
-#ifdef MEGA65
-			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LDQ $nn,X
-				// FIXME XXX missing timing! this Q opcode is not in the manual??
-				SET_NZ32(AXYZ_SET(readQuad(_zpx())));
-				break;
-			}
-#endif
 			SET_NZ(CPU65.a = readByte(_zpx()));
 			break;
 	case 0xB6:	/* LDX Zero_Page,Y */
@@ -2169,13 +2155,6 @@ int cpu65_step (
 			CPU65.pf_v = 0;
 			break;
 	case 0xB9:	/* LDA Absolute,Y */
-#ifdef MEGA65
-			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LDQ $nnnn,Y
-				// FIXME XXX missing timing! this Q opcode is not in the manual??
-				SET_NZ32(AXYZ_SET(readQuad(_absy())));
-				break;
-			}
-#endif
 			SET_NZ(CPU65.a = readByte(_absy()));
 			break;
 	case 0xBA:	/* TSX Implied */
@@ -2193,13 +2172,6 @@ int cpu65_step (
 			SET_NZ(CPU65.y = readByte(_absx()));
 			break;
 	case 0xBD:	/* LDA Absolute,X */
-#ifdef MEGA65
-			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LDQ $nnnn,X
-				// FIXME XXX missing timing! this Q opcode is not in the manual??
-				SET_NZ32(AXYZ_SET(readQuad(_absx())));
-				break;
-			}
-#endif
 			SET_NZ(CPU65.a = readByte(_absx()));
 			break;
 	case 0xBE:	/* LDX Absolute,Y */
@@ -2467,13 +2439,6 @@ int cpu65_step (
 			break;
 	case 0xE2:	/* 65C02: NOP imm (non-std NOP with addr mode), 65CE02: LDA (nn,S),Y */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
-#ifdef MEGA65
-			if (IS_NEG_NEG_OP()) {
-				// FIXME XXX missing timing! this Q opcode is not in the manual??????
-				SET_NZ32(AXYZ_SET(readQuad(_GET_SP_INDIRECT_ADDR())));	// MEGA65-QOP: LDQ ($nn,SP),Y
-				break;
-			}
-#endif
 #ifdef CPU_65CE02
 			OPC_65CE02("LDA (nn,S),Y");
 			// 65CE02 LDA ($nn,SP),Y
