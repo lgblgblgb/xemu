@@ -160,7 +160,7 @@ static const struct KeyMappingDefault lcd_key_map[] = {
 
 
 
-int cpu65_trap_callback ( Uint8 opcode )
+int cpu65_trap_callback ( const Uint8 opcode )
 {
 	return 0;	// not recognized
 }

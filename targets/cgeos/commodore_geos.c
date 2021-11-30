@@ -674,7 +674,7 @@ static void io_write ( int addr, Uint8 data )
 
 
 
-int cpu65_trap_callback ( Uint8 opcode )
+int cpu65_trap_callback ( const Uint8 opcode )
 {
 	Uint8 *pc_p = GET_READ_P(cpu65.pc);
 	if (pc_p != 1 + &PATCH_P) {
