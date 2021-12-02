@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -72,8 +72,8 @@ extern int cpu_rmw_old_data;
 
 extern void   cpu65_write_linear_opcode_callback ( Uint8 data );
 extern Uint8  cpu65_read_linear_opcode_callback  ( void );
-extern void   cpu65_write_linear_long_opcode_callback ( Uint32 data );
-extern Uint32 cpu65_read_linear_long_opcode_callback  ( void );
+extern void   cpu65_write_linear_long_opcode_callback ( const Uint8 index, Uint32 data );
+extern Uint32 cpu65_read_linear_long_opcode_callback  ( const Uint8 index );
 
 extern void  cpu65_illegal_opcode_callback ( void );
 

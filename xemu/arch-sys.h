@@ -85,6 +85,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #		define	XEMU_ARCH_NAME	"linux"
 #	else
 #		define	XEMU_ARCH_NAME	"unix"
+		// It seems at least on FreeBSD there is some problem hiding definitions by the FreeBSD system headers
+		// when using some other macros like _C11_SOURCE by default. Thus we define this as well, to avoid
+		// the problem. Thanks to @Scott on MEGA65/Xemu Discord for the the hint.
+#		define	__BSD_VISIBLE	1
 #	endif
 #	define	XEMU_SLEEP_IS_NANOSLEEP
 #else

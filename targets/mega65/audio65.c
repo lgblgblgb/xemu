@@ -139,6 +139,14 @@ static inline void render_dma_audio ( int channel, Sint16 *buffer, int len )
 		(double)(chio[4] + (chio[5] << 8) + (chio[6] << 16))		// this value is added to the 24 bit counter every 40.5MHz clock, to see overflow
 		*
 		dma_audio_mixing_value;
+	// convert unsigned -> signed, as Xemu's output is signed, but source sample is unsigned
+	// value of zero does not convert, 0x8000 adds 0x8000 thus doing the crude conversion
+	// (which is the same as XOR in our case). See later when this sample_signedness_conversion value is used.
+	const Uint16 sample_signedness_conversion = (chio[0] & 0x20) << 10;
+#if 0
+	if (sample_signedness_conversion)
+		DEBUGPRINT("AUDIOCONV-ch%d!", channel);
+#endif
 	for (unsigned int i = 0; i < len; i++) {
 		if (!(chio[0] & 0x80) || (chio[0] & 0x08)) {
 			// silence
@@ -178,13 +186,10 @@ static inline void render_dma_audio ( int channel, Sint16 *buffer, int len )
 					default:
 						XEMU_UNREACHABLE();
 				}
-				// TODO: use unsigned_read, convert signed<->unsigned stuff, etc ....
-				// NOTE: the read above to 'unsigned_read' can be still signed, we just read as unsigned 16 bit uniform data
-				// so we can transform here to the output needs (that is: signed 16 bit). It's based on MEGA65's audio DMA
-				// setting: is it fed by unsigned or signed samples?
-				sample[channel] = unsigned_read - 0x8000;
-				sample[channel] = unsigned_read;
-				sample[channel] = (sample[channel] * chio[9]) / 0xFF;	// volume control (reg9, max volume $FF)
+				// do the conversion if needed between signed and unsigned (based on value of sample_signedness_conversion_add)
+				const Sint16 signed_sample = (Uint16)(unsigned_read ^ sample_signedness_conversion);
+				// the final sample value, correcting with the sound setting (FIXME: I am really not sure, if volume is supposed to be linear ...)
+				sample[channel] = ((int)signed_sample * chio[9]) / 0xFF;	// volume control (max volume is $FF)
 			}
 			if (XEMU_UNLIKELY((addr & 0xFFFF) == limit)) {
 				// if top address is reached: either stop, or loop (on looped samples only!)

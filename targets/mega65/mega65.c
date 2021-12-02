@@ -115,25 +115,25 @@ void machine_set_speed ( int verbose )
 			case 5:	// 101 - 1MHz
 				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C64_MHZ_CLOCK));
 				cpu_clock_speed_str_index = 0;
-				cpu65_set_ce_timing(0);
+				cpu65_set_timing(0);
 				break;
 			case 0:	// 000 - 2MHz
 				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C128_MHZ_CLOCK));
 				cpu_clock_speed_str_index = 1;
-				cpu65_set_ce_timing(0);
+				cpu65_set_timing(0);
 				break;
 			case 2:	// 010 - 3.5MHz
 			case 6:	// 110 - 3.5MHz
 				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C65_MHZ_CLOCK));
 				cpu_clock_speed_str_index = 2;
-				cpu65_set_ce_timing(1);
+				cpu65_set_timing(1);
 				break;
 			case 1:	// 001 - 40MHz (or Xemu specified custom speed)
 			case 3:	// 011 -		-- "" --
 			case 7:	// 111 -		-- "" --
 				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(configdb.fast_mhz));
 				cpu_clock_speed_str_index = 3;
-				cpu65_set_ce_timing(1);
+				cpu65_set_timing(2);
 				break;
 		}
 		// XXX use only DEBUG() here!
@@ -430,6 +430,7 @@ static void mega65_init ( void )
 #endif
 	sprintf(fast_mhz_in_string, "%.2fMHz", configdb.fast_mhz);
 	DEBUGPRINT("SPEED: fast clock is set to %.2fMHz." NL, configdb.fast_mhz);
+	cpu65_init_mega_specific();
 	cpu65_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
 	rom_protect = 0;
 	hypervisor_start_machine();
