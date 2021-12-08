@@ -272,17 +272,17 @@ static Uint8 rom_init_image[0x20000];
 static Uint8 c000_init_image[0x1000];
 
 
-//#define BANNER_MEM_ADDRESS	0x3D00
-#define BANNER_MEM_ADDRESS	(0x58000 - 3*256)
-
 static void refill_memory_from_preinit_cache ( void )
 {
 	memcpy(char_wom, meminitdata_chrwom, MEMINITDATA_CHRWOM_SIZE);
 	memcpy(colour_ram, meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
-	memcpy(main_ram +  BANNER_MEM_ADDRESS, meminitdata_banner, MEMINITDATA_BANNER_SIZE);
-	memcpy(main_ram + 0x20000, rom_init_image, sizeof rom_init_image);
-	memcpy(hypervisor_ram, meminitdata_kickstart, MEMINITDATA_KICKSTART_SIZE);
-	memcpy(main_ram +  0xC000, c000_init_image, sizeof c000_init_image);
+	memcpy(main_ram + 0x57D00, meminitdata_banner, MEMINITDATA_BANNER_SIZE);
+	memcpy(main_ram + 0x20000, meminitdata_openrom, MEMINITDATA_OPENROM_SIZE);
+	memcpy(hypervisor_ram, meminitdata_hickup, MEMINITDATA_HICKUP_SIZE);
+	memcpy(main_ram + 0x0C000, c000_init_image, sizeof c000_init_image);
+	memcpy(main_ram + 0x50000, meminitdata_megaflash, MEMINITDATA_MEGAFLASH_SIZE);
+	memcpy(main_ram + 0x40000, meminitdata_onboard, MEMINITDATA_ONBOARD_SIZE);
+	memcpy(main_ram + 0x12000, meminitdata_freezer, MEMINITDATA_FREEZER_SIZE);
 }
 
 
@@ -349,7 +349,7 @@ static void mega65_init ( void )
 	load_memory_preinit_cache(0, "loadcram", configdb.loadcram, "CRAM utilities", meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
 	load_memory_preinit_cache(0, "loadbanner", configdb.loadbanner, "M65 logo", meminitdata_banner, MEMINITDATA_BANNER_SIZE);
 	load_memory_preinit_cache(1, "loadc000", configdb.loadc000, "C000 utilities", c000_init_image, sizeof c000_init_image);
-	if (load_memory_preinit_cache(0, "kickup", configdb.kickup, "M65 kickstart", meminitdata_kickstart, MEMINITDATA_KICKSTART_SIZE)  != MEMINITDATA_KICKSTART_SIZE)
+	if (load_memory_preinit_cache(0, "kickup", configdb.kickup, "M65 kickstart", meminitdata_hickup, MEMINITDATA_HICKUP_SIZE)  != MEMINITDATA_HICKUP_SIZE)
 		hypervisor_debug_invalidate("no kickup is loaded, built-in one does not have debug info");
 	// *** Initializes memory subsystem of MEGA65 emulation itself
 	memory_init();

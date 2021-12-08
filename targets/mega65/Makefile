@@ -25,47 +25,18 @@ SRCS_COMMON_xmega65	= emutools.c cpu65.c cia6526.c emutools_hid.c sid.c f011_cor
 CFLAGS_TARGET_xmega65	= $(SDL2_CFLAGS) $(MATH_CFLAGS) $(SOCKET_CFLAGS) $(XEMUGUI_CFLAGS)
 LDFLAGS_TARGET_xmega65	= $(SDL2_LIBS) $(MATH_LIBS) $(SOCKET_LIBS) $(XEMUGUI_LIBS)
 
-MEGA65_CORE = ../../../mega65-core
+MEGA65_CORE	= ../../../mega65-core
+MEGA65_FILES	= bin/HICKUP.M65 bin/COLOURRAM.BIN sdcard-files/BANNER.M65 sdcard-files/FREEZER.M65 sdcard-files/ONBOARD.M65 src/open-roms/bin/mega65.rom src/utilities/megaflash-a200t.prg
+MEGA65_FILES	+= sdcard-files/AUDIOMIX.M65 sdcard-files/C64THUMB.M65 sdcard-files/C65THUMB.M65 sdcard-files/ROMLOAD.M65 sdcard-files/SPRITED.M65
+MEGA65_FPATHS	= $(addprefix $(MEGA65_CORE)/,$(MEGA65_FILES))
 
 include ../../build/Makefile.common
 
 recreatememcontent:
-	@echo "*** Creating needed files from mega65-core ..."
-	$(MAKE) -C $(MEGA65_CORE) bin/HICKUP.M65
-	$(MAKE) -C $(MEGA65_CORE) bin/COLOURRAM.BIN
-	$(MAKE) -C $(MEGA65_CORE) sdcard-files/BANNER.M65
-	$(MAKE) -C $(MEGA65_CORE) sdcard-files/FREEZER.M65
-	@echo "*** About creating our C file"
-	rm -f memcontent.c.tmp
-	echo "/* !THIS IS A GENERATED FILE! DO NOT EDIT!" >> memcontent.c.tmp
-	echo " * Instead, say 'make recreatememcontent' to re-generate this file" >> memcontent.c.tmp
-	echo " * Binary data from MEGA65 project. Please note, that MEGA65 is" >> memcontent.c.tmp
-	echo " * an open source, GNU/GPL project, like Xemu. Thus, it's valid" >> memcontent.c.tmp
-	echo " * to use binaries as it's from the compiled version of MEGA65" >> memcontent.c.tmp
-	echo " * which is available in source form at https://github.com/MEGA65/mega65-core */" >> memcontent.c.tmp
-	cp memcontent.c.tmp memcontent_sizes.h.tmp
-	echo '#include "xemu/emutools.h"' >> memcontent.c.tmp
-	echo '#include "memcontent.h"' >> memcontent.c.tmp
-	echo "Uint8 meminitdata_kickstart[MEMINITDATA_KICKSTART_SIZE] = {" >> memcontent.c.tmp
-	../../build/bin2values.py $(MEGA65_CORE)/bin/HICKUP.M65 - >> memcontent.c.tmp
-	../../build/filesizedefine.py MEMINITDATA_KICKSTART_SIZE $(MEGA65_CORE)/bin/HICKUP.M65 >> memcontent_sizes.h.tmp
-	echo "};" >> memcontent.c.tmp
-	echo "Uint8 meminitdata_chrwom[MEMINITDATA_CHRWOM_SIZE] = {" >> memcontent.c.tmp
-	gawk '/^[\t ]*[xX]"/ { $$0 = toupper($$0); gsub("X\"","0x",$$0); gsub("\"","",$$0); print "\t" $$0 }' < $(MEGA65_CORE)/src/vhdl/charrom.vhdl >> memcontent.c.tmp
-	echo "};" >> memcontent.c.tmp
-	@echo "*** $(MEGA65_CORE)/bin/COLOURRAM.BIN as meminitdata_cramutils / MEMINITDATA_CRAMUTILS_SIZE ***"
-	echo "Uint8 meminitdata_cramutils[MEMINITDATA_CRAMUTILS_SIZE] = {" >> memcontent.c.tmp
-	../../build/bin2values.py $(MEGA65_CORE)/bin/COLOURRAM.BIN - >> memcontent.c.tmp
-	../../build/filesizedefine.py MEMINITDATA_CRAMUTILS_SIZE $(MEGA65_CORE)/bin/COLOURRAM.BIN >> memcontent_sizes.h.tmp
-	echo "};" >> memcontent.c.tmp
-	echo "Uint8 meminitdata_banner[MEMINITDATA_BANNER_SIZE] = {" >> memcontent.c.tmp
-	../../build/bin2values.py $(MEGA65_CORE)/sdcard-files/BANNER.M65 - >> memcontent.c.tmp
-	../../build/filesizedefine.py MEMINITDATA_BANNER_SIZE $(MEGA65_CORE)/sdcard-files/BANNER.M65 >> memcontent_sizes.h.tmp
-	echo "};" >> memcontent.c.tmp
-	echo "Uint8 meminitdata_freezer[] = {" >> memcontent.c.tmp
-	../../build/bin2values.py $(MEGA65_CORE)/sdcard-files/FREEZER.M65 - >> memcontent.c.tmp
-	../../build/filesizedefine.py MEMINITDATA_FIXME_SIZE $(MEGA65_CORE)/sdcard-files/FREEZER.M65 >> memcontent_sizes.h.tmp
-	echo "};" >> memcontent.c.tmp
-	echo "const int meminitdata_freezer_size = sizeof(meminitdata_freezer);" >> memcontent.c.tmp
-	cp memcontent.c memcontent.c.BAK
-	@echo "*** OK. Please rename memcontent.c.tmp to memcontent.c and memcontent_sizes.h.tmp to memcontent_sizes.h to really apply these changes, then re-compile the emulator ***"
+	@echo "*** Compiling needed files from mega65-core at $(MEGA65_CORE) ***"
+	$(MAKE) -C $(MEGA65_CORE) $(MEGA65_FILES)
+	@ls -l $(MEGA65_FPATHS)
+	@echo "*** Extracting CHRWOM initialization ***"
+	gawk '/^[\t ]*[xX]"/ { $$0 = toupper($$0); gsub("X\"","0x",$$0); gsub("\"","",$$0); print "\t" $$0 }' < $(MEGA65_CORE)/src/vhdl/charrom.vhdl > memcontent_chrwom.cdata
+	@echo "*** Generating C files from mega65-core binary results ***"
+	python3 memcontent_generator.py memcontent.c memcontent.h $(MEGA65_FPATHS)

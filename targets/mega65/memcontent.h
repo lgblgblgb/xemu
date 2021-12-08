@@ -1,43 +1,71 @@
-/* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
-   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* !THIS IS A GENERATED FILE! DO NOT EDIT!
+ * Instead, say 'make recreatememcontent' to re-generate this file
+ * from binary data from the MEGA65 project. Please note, that MEGA65 is
+ * an open source, GNU/GPL project, like Xemu. Thus, it's valid
+ * to use binaries from it, as it's from the compiled version of MEGA65
+ * which is available in source form at https://github.com/MEGA65/mega65-core
+ * always, as per GNU/GPL. */
 
-This program is free software; you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation; either version 2 of the License, or
-(at your option) any later version.
-
-This program is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with this program; if not, write to the Free Software
-Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
+#include "xemu/emutools.h"
 
 #ifndef XEMU_MEGA65_MEMCONTENT_H_INCLUDED
 #define XEMU_MEGA65_MEMCONTENT_H_INCLUDED
 
 // This must be incremented by ONE every time, when memcontent.c changes, or even
 // if sdcontent.c is changed in a way to write new files, new content, or whatever
-// to the SD-card as part of the "update system files" process.
-#define MEMCONTENT_VERSION_ID		1
+// to the SD-card as part of the "update system files" process. Edit this in the python generator though, not in this file!
+#define MEMCONTENT_VERSION_ID 1
 
-#include "memcontent_sizes.h"
-
-#define MEMINITDATA_KICKSTART_SIZE	0x4000
-#define MEMINITDATA_CHRWOM_SIZE		0x1000
-#define MEMINITDATA_CRAMUTILS_SIZE	0x8000
-#define MEMINITDATA_BANNER_SIZE		21248
-
-extern Uint8 meminitdata_kickstart[MEMINITDATA_KICKSTART_SIZE];
+// Extra stuff ...
+#define MEMINITDATA_CHRWOM_SIZE 4096
 extern Uint8 meminitdata_chrwom[MEMINITDATA_CHRWOM_SIZE];
-extern Uint8 meminitdata_cramutils[MEMINITDATA_CRAMUTILS_SIZE];
-extern Uint8 meminitdata_banner[MEMINITDATA_BANNER_SIZE];
-extern Uint8 meminitdata_freezer[];
 
-extern const int meminitdata_freezer_size;
-#define MEMINITDATA_FREEZER_SIZE	meminitdata_freezer_size
+// Generated as "hickup" from file ../../../mega65-core/bin/HICKUP.M65 (16384 bytes)
+#define MEMINITDATA_HICKUP_SIZE 16384
+extern Uint8 meminitdata_hickup[MEMINITDATA_HICKUP_SIZE];
+
+// Generated as "cramutils" from file ../../../mega65-core/bin/COLOURRAM.BIN (32768 bytes)
+#define MEMINITDATA_CRAMUTILS_SIZE 32768
+extern Uint8 meminitdata_cramutils[MEMINITDATA_CRAMUTILS_SIZE];
+
+// Generated as "banner" from file ../../../mega65-core/sdcard-files/BANNER.M65 (21248 bytes)
+#define MEMINITDATA_BANNER_SIZE 21248
+extern Uint8 meminitdata_banner[MEMINITDATA_BANNER_SIZE];
+
+// Generated as "freezer" from file ../../../mega65-core/sdcard-files/FREEZER.M65 (31639 bytes)
+#define MEMINITDATA_FREEZER_SIZE 31639
+extern Uint8 meminitdata_freezer[MEMINITDATA_FREEZER_SIZE];
+
+// Generated as "onboard" from file ../../../mega65-core/sdcard-files/ONBOARD.M65 (10406 bytes)
+#define MEMINITDATA_ONBOARD_SIZE 10406
+extern Uint8 meminitdata_onboard[MEMINITDATA_ONBOARD_SIZE];
+
+// Generated as "openrom" from file ../../../mega65-core/src/open-roms/bin/mega65.rom (131072 bytes)
+#define MEMINITDATA_OPENROM_SIZE 131072
+extern Uint8 meminitdata_openrom[MEMINITDATA_OPENROM_SIZE];
+
+// Generated as "megaflash" from file ../../../mega65-core/src/utilities/megaflash-a200t.prg (25456 bytes)
+#define MEMINITDATA_MEGAFLASH_SIZE 25456
+extern Uint8 meminitdata_megaflash[MEMINITDATA_MEGAFLASH_SIZE];
+
+// Generated as "audiomix" from file ../../../mega65-core/sdcard-files/AUDIOMIX.M65 (27355 bytes)
+#define MEMINITDATA_AUDIOMIX_SIZE 27355
+extern Uint8 meminitdata_audiomix[MEMINITDATA_AUDIOMIX_SIZE];
+
+// Generated as "c64thumb" from file ../../../mega65-core/sdcard-files/C64THUMB.M65 (11776 bytes)
+#define MEMINITDATA_C64THUMB_SIZE 11776
+extern Uint8 meminitdata_c64thumb[MEMINITDATA_C64THUMB_SIZE];
+
+// Generated as "c65thumb" from file ../../../mega65-core/sdcard-files/C65THUMB.M65 (9152 bytes)
+#define MEMINITDATA_C65THUMB_SIZE 9152
+extern Uint8 meminitdata_c65thumb[MEMINITDATA_C65THUMB_SIZE];
+
+// Generated as "romload" from file ../../../mega65-core/sdcard-files/ROMLOAD.M65 (25864 bytes)
+#define MEMINITDATA_ROMLOAD_SIZE 25864
+extern Uint8 meminitdata_romload[MEMINITDATA_ROMLOAD_SIZE];
+
+// Generated as "sprited" from file ../../../mega65-core/sdcard-files/SPRITED.M65 (33954 bytes)
+#define MEMINITDATA_SPRITED_SIZE 33954
+extern Uint8 meminitdata_sprited[MEMINITDATA_SPRITED_SIZE];
 
 #endif
