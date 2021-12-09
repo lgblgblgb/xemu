@@ -274,13 +274,24 @@ static Uint8 c000_init_image[0x1000];
 
 static void refill_memory_from_preinit_cache ( void )
 {
+	// This is an absolute minimum flash utility to replace the official one ;)
+	// As Xemu does not have flash (it does not deal with real bitstreams, being an emulator), the official
+	// flash utility during the boot process would throw ugly error and wait for a key to continue, which
+	// is annoying. This short code just creates the minimal thing the flash utility expected to do, to be
+	// able to continue without any side effect.
+	static const Uint8 fake_megaflashutility[] = {
+		0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78,
+		0xA9, 0x00, 0x8D, 0x00, 0x00, 0xA9, 0x47, 0x8D, 0x2F, 0xD0, 0xA9, 0x53, 0x8D, 0x2F, 0xD0, 0xA9,
+		0x4C, 0x8D, 0x7F, 0xCF, 0x4C, 0x7F, 0xCF
+	};
 	memcpy(char_wom, meminitdata_chrwom, MEMINITDATA_CHRWOM_SIZE);
 	memcpy(colour_ram, meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
 	memcpy(main_ram + 0x57D00, meminitdata_banner, MEMINITDATA_BANNER_SIZE);
 	memcpy(main_ram + 0x20000, meminitdata_openrom, MEMINITDATA_OPENROM_SIZE);
 	memcpy(hypervisor_ram, meminitdata_hickup, MEMINITDATA_HICKUP_SIZE);
 	memcpy(main_ram + 0x0C000, c000_init_image, sizeof c000_init_image);
-	memcpy(main_ram + 0x50000, meminitdata_megaflash, MEMINITDATA_MEGAFLASH_SIZE);
+	//memcpy(main_ram + 0x50000, meminitdata_megaflash, MEMINITDATA_MEGAFLASH_SIZE);
+	memcpy(main_ram + 0x50000, fake_megaflashutility, sizeof fake_megaflashutility);
 	memcpy(main_ram + 0x40000, meminitdata_onboard, MEMINITDATA_ONBOARD_SIZE);
 	memcpy(main_ram + 0x12000, meminitdata_freezer, MEMINITDATA_FREEZER_SIZE);
 }
