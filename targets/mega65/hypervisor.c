@@ -51,6 +51,7 @@ static int debug_on = 0;
 static int hypervisor_serial_out_asciizer;
 
 static int first_hypervisor_leave;
+static int execution_range_check_gate;
 
 static int hypervisor_queued_trap = -1;
 
@@ -238,6 +239,7 @@ void hypervisor_start_machine ( void )
 	in_hypervisor = 0;
 	hypervisor_queued_trap = -1;
 	first_hypervisor_leave = 1;
+	execution_range_check_gate = 0;
 	hypervisor_enter(TRAP_RESET);
 }
 
@@ -282,6 +284,7 @@ void hypervisor_leave ( void )
 	if (XEMU_UNLIKELY(first_hypervisor_leave)) {
 		DEBUGPRINT("HYPERVISOR: first return after RESET, start of processing workarounds." NL);
 		first_hypervisor_leave = 0;
+		execution_range_check_gate = 1;
 		if (hypervisor_request_stub_rom) {
 			DEBUGPRINT("MEM: using stub-ROM was forced" NL);
 			hypervisor_request_stub_rom = 0;
@@ -368,7 +371,7 @@ void hypervisor_debug ( void )
 		DEBUG("HYPERVISOR-DEBUG: allowed to run outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu65.pc);
 		return;
 	}
-	if (XEMU_UNLIKELY((cpu65.pc & 0xC000) != 0x8000 && do_execution_range_check)) {
+	if (XEMU_UNLIKELY((cpu65.pc & 0xC000) != 0x8000 && do_execution_range_check && execution_range_check_gate)) {
 		DEBUG("HYPERVISOR-DEBUG: execution outside of the hypervisor memory, PC = $%04X" NL, cpu65.pc);
 		char msg[128];
 		sprintf(msg, "Hypervisor fatal error: execution outside of the hypervisor memory, PC=$%04X SP=$%04X", cpu65.pc, cpu65.sphi | cpu65.s);
