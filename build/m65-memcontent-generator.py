@@ -40,6 +40,7 @@ FILE_DB = {
     "C65THUMB.M65":         "c65thumb",
     "ROMLOAD.M65":          "romload",
     "SPRITED.M65":          "sprited",
+    "charrom.bin":          "chrwom",
 }
 files_done = set()
 
@@ -88,10 +89,6 @@ if __name__ == "__main__":
 // to the SD-card as part of the "update system files" process. Edit this in the python generator though, not in this file!
 #define MEMCONTENT_VERSION_ID {}\n""".format(MEMCONTENT_VERSION_ID)
     c_data += "#include \"memcontent.h\"\n\n"
-    c_data += PROTOTYPE + " meminitdata_chrwom[MEMINITDATA_CHRWOM_SIZE] = {\n#include \"memcontent_chrwom.cdata\"\n};\n\n"
-    h_data += "\n// Extra stuff ...\n"
-    h_data += "#define MEMINITDATA_CHRWOM_SIZE 4096\n"
-    h_data += "extern " + PROTOTYPE + " meminitdata_chrwom[MEMINITDATA_CHRWOM_SIZE];\n"
     for fn in in_files:
         fn_base = fn.split("/")[-1]
         if fn_base not in FILE_DB:

@@ -26,17 +26,13 @@ CFLAGS_TARGET_xmega65	= $(SDL2_CFLAGS) $(MATH_CFLAGS) $(SOCKET_CFLAGS) $(XEMUGUI
 LDFLAGS_TARGET_xmega65	= $(SDL2_LIBS) $(MATH_LIBS) $(SOCKET_LIBS) $(XEMUGUI_LIBS)
 
 MEGA65_CORE	= ../../../mega65-core
-MEGA65_FILES	= bin/HICKUP.M65 bin/COLOURRAM.BIN sdcard-files/BANNER.M65 sdcard-files/FREEZER.M65 sdcard-files/ONBOARD.M65 src/open-roms/bin/mega65.rom src/utilities/megaflash-a200t.prg
+MEGA65_FILES	= bin/charrom.bin bin/HICKUP.M65 bin/COLOURRAM.BIN sdcard-files/BANNER.M65 sdcard-files/FREEZER.M65 sdcard-files/ONBOARD.M65 src/open-roms/bin/mega65.rom src/utilities/megaflash-a200t.prg
 MEGA65_FILES	+= sdcard-files/AUDIOMIX.M65 sdcard-files/C64THUMB.M65 sdcard-files/C65THUMB.M65 sdcard-files/ROMLOAD.M65 sdcard-files/SPRITED.M65
-MEGA65_FPATHS	= $(addprefix $(MEGA65_CORE)/,$(MEGA65_FILES))
 
 include ../../build/Makefile.common
 
 recreatememcontent:
 	@echo "*** Compiling needed files from mega65-core at $(MEGA65_CORE) ***"
 	$(MAKE) -C $(MEGA65_CORE) $(MEGA65_FILES)
-	@ls -l $(MEGA65_FPATHS)
-	@echo "*** Extracting CHRWOM initialization ***"
-	gawk '/^[\t ]*[xX]"/ { $$0 = toupper($$0); gsub("X\"","0x",$$0); gsub("\"","",$$0); print "\t" $$0 }' < $(MEGA65_CORE)/src/vhdl/charrom.vhdl > memcontent_chrwom.cdata
 	@echo "*** Generating C files from mega65-core binary results ***"
-	python3 memcontent_generator.py memcontent.c memcontent.h $(MEGA65_FPATHS)
+	python3 $(TOPDIR)/build/m65-memcontent-generator.py memcontent.c memcontent.h $(addprefix $(MEGA65_CORE)/,$(MEGA65_FILES))

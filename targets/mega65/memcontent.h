@@ -16,7 +16,7 @@
 // to the SD-card as part of the "update system files" process. Edit this in the python generator though, not in this file!
 #define MEMCONTENT_VERSION_ID 1
 
-// Extra stuff ...
+// Generated as "chrwom" from file ../../../mega65-core/bin/charrom.bin (4096 bytes)
 #define MEMINITDATA_CHRWOM_SIZE 4096
 extern Uint8 meminitdata_chrwom[MEMINITDATA_CHRWOM_SIZE];
 
