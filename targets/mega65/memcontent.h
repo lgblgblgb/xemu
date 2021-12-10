@@ -6,8 +6,6 @@
  * which is available in source form at https://github.com/MEGA65/mega65-core
  * always, as per GNU/GPL. */
 
-#include "xemu/emutools.h"
-
 #ifndef XEMU_MEGA65_MEMCONTENT_H_INCLUDED
 #define XEMU_MEGA65_MEMCONTENT_H_INCLUDED
 
@@ -15,6 +13,13 @@
 // if sdcontent.c is changed in a way to write new files, new content, or whatever
 // to the SD-card as part of the "update system files" process. Edit this in the python generator though, not in this file!
 #define MEMCONTENT_VERSION_ID 1
+
+#include "xemu/emutools.h"
+
+// Special structure array for system files update on the SD-image
+struct meminitdata_sdfiles_st { const Uint8 *p; const char *fn; const int size; };
+#define MEMINITDATA_SDFILES_ITEMS 8
+extern const struct meminitdata_sdfiles_st meminitdata_sdfiles_db[MEMINITDATA_SDFILES_ITEMS];
 
 // Generated as "chrwom" from file ../../../mega65-core/bin/charrom.bin (4096 bytes)
 #define MEMINITDATA_CHRWOM_SIZE 4096
@@ -43,10 +48,6 @@ extern Uint8 meminitdata_onboard[MEMINITDATA_ONBOARD_SIZE];
 // Generated as "openrom" from file ../../../mega65-core/src/open-roms/bin/mega65.rom (131072 bytes)
 #define MEMINITDATA_OPENROM_SIZE 131072
 extern Uint8 meminitdata_openrom[MEMINITDATA_OPENROM_SIZE];
-
-// Generated as "megaflash" from file ../../../mega65-core/src/utilities/megaflash-a200t.prg (25456 bytes)
-#define MEMINITDATA_MEGAFLASH_SIZE 25456
-extern Uint8 meminitdata_megaflash[MEMINITDATA_MEGAFLASH_SIZE];
 
 // Generated as "audiomix" from file ../../../mega65-core/sdcard-files/AUDIOMIX.M65 (27355 bytes)
 #define MEMINITDATA_AUDIOMIX_SIZE 27355

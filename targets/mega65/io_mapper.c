@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "input_devices.h"
 #include "audio65.h"
 #include "configdb.h"
+#include "mega65.h"
 
 
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
@@ -458,6 +459,13 @@ void io_write ( unsigned int addr, Uint8 data )
 					DEBUG("QUERY: $D6%02X reg written with data %02X excepted %02X gate is %1X ptr is %p" NL,
 							addr, data, cpld_firmware_version[addr - 0x32] ^ fpga_firmware_version[addr - 0x32],
 							xemu_query_gate, xemu_query_interface_p);
+					return;
+				case 0xCF:
+					if (data == 0x42) {
+						if (ARE_YOU_SURE("FPGA reconfiguration request. System must be reset.\nIs it OK to do now?\nAnswering NO may crash your program requesting this task though,\nor can result in endless loop of trying.", ARE_YOU_SURE_DEFAULT_YES)) {
+							reset_mega65();
+						}
+					}
 					return;
 				default:
 					DEBUG("MEGA65: this I/O port is not emulated in Xemu yet: $D6%02X (tried to be written with $%02X)" NL, addr, data);

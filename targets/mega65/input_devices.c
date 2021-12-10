@@ -31,6 +31,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define DEBUGKBDHWA(...)	DEBUG(__VA_ARGS__)
 #define DEBUGKBDHWACOM(...)	//DEBUGPRINT(__VA_ARGS__)
 
+//#define FREEZER_WORKS
+
 
 /* Note: M65 has a "hardware accelerated" keyboard scanner, it can provide you the
    last pressed character as ASCII (!) without the need to actually scan/etc the
@@ -258,7 +260,7 @@ void kbd_trigger_restore_trap ( void )
 			} else
 				DEBUGPRINT("KBD: *IGNORING* RESTORE trap trigger, already in hypervisor mode!" NL);
 #else
-			WARNING_WINDOW("Long press of RESTORE would trigger FREEZER.\nHowever FREEZER is not yet implemented in Xemu :-(");
+			WARNING_WINDOW("Long press of RESTORE would trigger FREEZER.\nHowever FREEZER does not yet work inside Xemu :-(");
 #endif
 		}
 	}

@@ -28,21 +28,23 @@ PROTOTYPE = "Uint8"
 MEMCONTENT_VERSION_ID = 1
 
 FILE_DB = {
-    "HICKUP.M65":           "hickup",
-    "COLOURRAM.BIN":        "cramutils",
-    "BANNER.M65":           "banner",
-    "FREEZER.M65":          "freezer",
-    "ONBOARD.M65":          "onboard",
-    "mega65.rom":           "openrom",
-    "megaflash-a200t.prg":  "megaflash",
-    "AUDIOMIX.M65":         "audiomix",
-    "C64THUMB.M65":         "c64thumb",
-    "C65THUMB.M65":         "c65thumb",
-    "ROMLOAD.M65":          "romload",
-    "SPRITED.M65":          "sprited",
-    "charrom.bin":          "chrwom",
+    # -------------------------------------------------------------------- #
+    # mega65-core-base-name | file-id       |SD-image-name(None=not-on-SD) #
+    #--------------------------------------------------------------------- #
+    "HICKUP.M65":           ("hickup",      None ),
+    "COLOURRAM.BIN":        ("cramutils",   None ),
+    "BANNER.M65":           ("banner",      "BANNER.M65" ),
+    "FREEZER.M65":          ("freezer",     "FREEZER.M65" ),
+    "ONBOARD.M65":          ("onboard",     "ONBOARD.M65" ),    # Do we really need this on SD-card?
+    "mega65.rom":           ("openrom",     None ),
+    #"megaflash-a200t.prg": ("megaflash",   None ),
+    "AUDIOMIX.M65":         ("audiomix",    "AUDIOMIX.M65" ),
+    "C64THUMB.M65":         ("c64thumb",    "C64THUMB.M65" ),
+    "C65THUMB.M65":         ("c65thumb",    "C65THUMB.M65" ),
+    "ROMLOAD.M65":          ("romload",     "ROMLOAD.M65" ),    # Do we really need this on SD-card?
+    "SPRITED.M65":          ("sprited",     "SPRITED.M65" ),
+    "charrom.bin":          ("chrwom",      None ),
 }
-files_done = set()
 
 HEADER = """/* !THIS IS A GENERATED FILE! DO NOT EDIT!
  * Instead, say 'make recreatememcontent' to re-generate this file
@@ -51,8 +53,6 @@ HEADER = """/* !THIS IS A GENERATED FILE! DO NOT EDIT!
  * to use binaries from it, as it's from the compiled version of MEGA65
  * which is available in source form at https://github.com/MEGA65/mega65-core
  * always, as per GNU/GPL. */
-
-#include "xemu/emutools.h"
 
 """
 
@@ -77,6 +77,7 @@ if __name__ == "__main__":
     if len(sys.argv) < 4:
         sys.stderr.write("Bad usage.\n")
         sys.exit(1)
+    files_done = set()
     c_file = sys.argv[1]
     h_file = sys.argv[2]
     in_files = sys.argv[3:]
@@ -87,14 +88,28 @@ if __name__ == "__main__":
     h_data += """\n// This must be incremented by ONE every time, when memcontent.c changes, or even
 // if sdcontent.c is changed in a way to write new files, new content, or whatever
 // to the SD-card as part of the "update system files" process. Edit this in the python generator though, not in this file!
-#define MEMCONTENT_VERSION_ID {}\n""".format(MEMCONTENT_VERSION_ID)
+#define MEMCONTENT_VERSION_ID {}\n\n""".format(MEMCONTENT_VERSION_ID)
     c_data += "#include \"memcontent.h\"\n\n"
+    h_data += "#include \"xemu/emutools.h\"\n\n"
+    h_data += "// Special structure array for system files update on the SD-image\n"
+    c_data += "// Special structure array for system files update on the SD-image\n"
+    on_sd = sorted([k for k, v in FILE_DB.items() if v[1] is not None])
+    h_data += "struct meminitdata_sdfiles_st { const Uint8 *p; const char *fn; const int size; };\n"
+    h_data += "#define MEMINITDATA_SDFILES_ITEMS {}\n".format(len(on_sd))
+    h_data += "extern const struct meminitdata_sdfiles_st meminitdata_sdfiles_db[MEMINITDATA_SDFILES_ITEMS];\n"
+    c_data += "const struct meminitdata_sdfiles_st meminitdata_sdfiles_db[MEMINITDATA_SDFILES_ITEMS] = {\n"
+    print("Adding files also as SD-content: {}".format(" ".join(on_sd)))
+    for a in on_sd:
+        c_data += "\t{"
+        c_data += " meminitdata_{}, \"{}\", MEMINITDATA_{}_SIZE ".format(FILE_DB[a][0], FILE_DB[a][1].upper(), FILE_DB[a][0].upper())
+        c_data += "},\n"
+    c_data += "};\n\n"
     for fn in in_files:
         fn_base = fn.split("/")[-1]
         if fn_base not in FILE_DB:
             sys.stderr.write("Unknown file encountered: {}\n".format(fn))
             sys.exit(1)
-        fn_id = FILE_DB[fn_base]
+        fn_id = FILE_DB[fn_base][0]
         if fn_id in files_done:
             sys.stderr.write("ERROR: file {} is used more than once by id \"{}\"!\n".format(fn, fn_id))
             sys.exit(1)
@@ -115,6 +130,6 @@ if __name__ == "__main__":
     with open(c_file, "wt") as f: f.write(c_data)
     with open(h_file, "wt") as f: f.write(h_data)
     for k, v in FILE_DB.items():
-        if v not in files_done:
-            print("Warning: entity {} was not specified (via filename {})\n".format(v, k))
+        if v[0] not in files_done:
+            print("Warning: entity {} was not specified (via filename {})\n".format(v[0], k))
     sys.exit(0)

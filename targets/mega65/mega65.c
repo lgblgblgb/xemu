@@ -506,6 +506,7 @@ static void shutdown_callback ( void )
 
 void reset_mega65 ( void )
 {
+	refill_memory_from_preinit_cache();	// FIXME: hack, to allow to enter into utility menu (otherwise hickup displays you must power-cycle ..)
 	eth65_reset();
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0xFF;
