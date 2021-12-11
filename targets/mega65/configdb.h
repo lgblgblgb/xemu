@@ -35,7 +35,6 @@ struct configdb_st {
 	char	*kickup;
 	char	*kickuplist;
 	char	*loadbanner;
-	char	*loadc000;
 	char	*loadcram;
 	char	*loadrom;
 	char	*prg;

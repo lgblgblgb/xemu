@@ -269,7 +269,6 @@ static int load_memory_preinit_cache ( int to_prezero, const char *config_name, 
 
 
 static Uint8 rom_init_image[0x20000];
-static Uint8 c000_init_image[0x1000];
 
 
 static void refill_memory_from_preinit_cache ( void )
@@ -289,8 +288,6 @@ static void refill_memory_from_preinit_cache ( void )
 	memcpy(main_ram + 0x57D00, meminitdata_banner, MEMINITDATA_BANNER_SIZE);
 	memcpy(main_ram + 0x20000, meminitdata_openrom, MEMINITDATA_OPENROM_SIZE);
 	memcpy(hypervisor_ram, meminitdata_hickup, MEMINITDATA_HICKUP_SIZE);
-	memcpy(main_ram + 0x0C000, c000_init_image, sizeof c000_init_image);
-	//memcpy(main_ram + 0x50000, meminitdata_megaflash, MEMINITDATA_MEGAFLASH_SIZE);
 	memcpy(main_ram + 0x50000, fake_megaflashutility, sizeof fake_megaflashutility);
 	memcpy(main_ram + 0x40000, meminitdata_onboard, MEMINITDATA_ONBOARD_SIZE);
 	memcpy(main_ram + 0x12000, meminitdata_freezer, MEMINITDATA_FREEZER_SIZE);
@@ -359,7 +356,6 @@ static void mega65_init ( void )
 		ERROR_WINDOW("-forcerom is ignored, because no -loadrom <filename> option was used, or it was not a succesfull load operation at least");
 	load_memory_preinit_cache(0, "loadcram", configdb.loadcram, "CRAM utilities", meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
 	load_memory_preinit_cache(0, "loadbanner", configdb.loadbanner, "M65 logo", meminitdata_banner, MEMINITDATA_BANNER_SIZE);
-	load_memory_preinit_cache(1, "loadc000", configdb.loadc000, "C000 utilities", c000_init_image, sizeof c000_init_image);
 	if (load_memory_preinit_cache(0, "kickup", configdb.kickup, "M65 kickstart", meminitdata_hickup, MEMINITDATA_HICKUP_SIZE)  != MEMINITDATA_HICKUP_SIZE)
 		hypervisor_debug_invalidate("no kickup is loaded, built-in one does not have debug info");
 	// *** Initializes memory subsystem of MEGA65 emulation itself

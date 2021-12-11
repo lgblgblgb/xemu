@@ -42,7 +42,6 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "kickup",	NULL, "Override path of external KickStart to be used", &configdb.kickup },
 	{ "kickuplist",	NULL, "Set path of symbol list file for external KickStart", &configdb.kickuplist },
 	{ "loadbanner",	NULL, "Load initial memory content for banner", &configdb.loadbanner },
-	{ "loadc000",	NULL, "Load initial memory content at $C000 (usually disk mounter)", &configdb.loadc000 },
 	{ "loadcram",	NULL, "Load initial content (32K) into the colour RAM", &configdb.loadcram },
 	{ "loadrom",	NULL, "Preload C65 ROM image (you may need the -forcerom option to prevent KickStart to re-load from SD)", &configdb.loadrom },
 	{ "prg",	NULL, "Load a PRG file directly into the memory (/w C64/65 auto-detection on load address)", &configdb.prg },
