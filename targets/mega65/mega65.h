@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // different directories, ie, most notably, in rom/
 // Real M65 would not expect to have eg the ROM, as it can be loaded from the SD-card,
 // but it's not the case with Xemu, as you wouldn't have charset either without prior
-// loading it (however kickstart can overwrite "C65 ROM" anyway, later)
+// loading it (however hyppo HICKUP can overwrite "C65 ROM" anyway, later)
 #define SDCARD_NAME		"@mega65.img"
 
 #define NVRAM_FILE_NAME		"@nvram.bin"

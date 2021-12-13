@@ -40,7 +40,7 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "9",		NULL, "Path of ALWAYS EXTERNAL D81 disk image on drive 9", &configdb.disk9 },
 	{ "fpga",	NULL, "Comma separated list of FPGA-board switches turned ON", &configdb.fpga },
 	{ "hickup",	NULL, "Use external HICKUP (HYPPO)", &configdb.hickup },
-	{ "hickuplist",	NULL, "Set path of symbol list file for external Hyppo-KickStart", &configdb.hickuplist },
+	{ "hickuplist",	NULL, "Set path of symbol list file for external Hyppo-HICKUP", &configdb.hickuplist },
 	{ "extbanner",	NULL, "Use external initial memory content for banner", &configdb.extbanner },
 	{ "extcramutils",NULL,"Use external initial content (32K) into the colour RAM (\"cram-utils\")", &configdb.extcramutils },
 	{ "extinitrom",	NULL, "Use external init-ROM. Beware: this is not the normal ROM you may think off!", &configdb.extinitrom },
@@ -97,7 +97,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 static const struct xemutools_configdef_num_st num_options[] = {
 	{ "dmarev", 2 + 0x100, "DMA revision (0/1/2=F018A/B/auto +256=autochange, +512=modulo, you always wants +256!)", &configdb.dmarev, 0, 1024 },
 	{ "model", 0xFF, "Emulated MEGA65 model (255=custom/Xemu)", &configdb.mega65_model, 0, 0xFF },
-	{ "hicked", 0x0, "Answer to KickStart upgrade (128=ask user in a pop-up window)", &configdb.hicked, 0, 0xFF },
+	{ "hicked", 0x0, "Answer to Hyppo-HICKUP upgrade (128=ask user in a pop-up window)", &configdb.hicked, 0, 0xFF },
 	{ "prgmode", 0, "Override auto-detect option for -prg (64 or 65 for C64/C65 modes, 0 = default, auto detect)", &configdb.prgmode, 0, 65 },
 	{ "rtchofs", 0, "RTC (and CIA TOD) default hour offset to real-time -24 ... 24 (for testing!)", &configdb.rtc_hour_offset, -24, 24 },
 #ifdef HAVE_XEMU_UMON

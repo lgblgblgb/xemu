@@ -410,8 +410,8 @@ void hypervisor_debug ( void )
 	static int do_execution_range_check = 1;
 	if (!in_hypervisor)
 		return;
-	// TODO: better hypervisor upgrade check, maybe with checking the exact range kickstart uses for upgrade outside of the "normal" hypervisor mem range
-	if (XEMU_UNLIKELY((cpu65.pc & 0xFF00) == 0x3000)) {	// this area is used by kickstart upgrade
+	// TODO: better hypervisor upgrade check, maybe with checking the exact range hyppo/hickup uses for upgrade outside of the "normal" hypervisor mem range
+	if (XEMU_UNLIKELY((cpu65.pc & 0xFF00) == 0x3000)) {	// this area is used by HICKUP upgrade
 		DEBUG("HYPERVISOR-DEBUG: allowed to run outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu65.pc);
 		return;
 	}
@@ -435,7 +435,7 @@ void hypervisor_debug ( void )
 		return;
 	}
 	if (!resolver_ok) {
-		return;	// no debug info loaded from kickstart.list ...
+		return;	// no debug info loaded from hickstart.list ...
 	}
 	if (XEMU_UNLIKELY(!debug_lines[cpu65.pc - 0x8000][0][0])) {
 		DEBUG("HYPERVISOR-DEBUG: execution address not found in list file (out-of-bound code?), PC = $%04X" NL, cpu65.pc);
