@@ -305,7 +305,7 @@ int refill_c65_rom_from_external ( void )
 	if (!configdb.rom || !*configdb.rom)
 		return -1;	// not using external ROM
 	// Try to load external sourced ROM
-	if (xemu_load_file(configdb.rom, main_ram + 0x20000, 0x20000, 0x20000, "External ROM") == 0x20000)
+	if (xemu_load_file(configdb.rom, main_ram + 0x20000, 0x20000, 0x20000, "Tried to load that external file as ROM on user's request.\nUsing the default installed, instead.") == 0x20000)
 		return main_ram[0x2FFFC] | (main_ram[0x2FFFD] << 8);	// succeeded, pass back the new reset vector
 	// Failed to load external ROM
 	return -1;
@@ -820,6 +820,7 @@ int main ( int argc, char **argv )
 #endif
 	hypervisor_request_stub_rom = configdb.stubrom;
 	hypervisor_request_init_rom = configdb.initrom;
+	allow_freezer_triggering = configdb.allowfreezer;
 	audio65_start();
 	xemu_set_full_screen(configdb.fullscreen_requested);
 	if (!configdb.syscon)

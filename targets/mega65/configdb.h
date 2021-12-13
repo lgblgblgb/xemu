@@ -63,6 +63,7 @@ struct configdb_st {
 	int	init_videostd;
 	int	fullborders;
 	int	show_drive_led;
+	int	allowfreezer;
 	int	hyperdebug;
 	int	hyperserialascii;
 	int	stubrom;

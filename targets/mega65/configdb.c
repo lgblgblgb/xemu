@@ -72,6 +72,7 @@ static const struct xemutools_configdef_str_st str_options[] = {
 static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "driveled", "Render drive LED at the top right corner of the screen", &configdb.show_drive_led },
 	{ "allowmousegrab", "Allow auto mouse grab with left-click", &allow_mouse_grab },
+	{ "allowfreezer", "Allow triggering freezer [NOT WORKING YET]", &configdb.allowfreezer },
 	{ "fullscreen", "Start in fullscreen mode", &configdb.fullscreen_requested },
 	{ "hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode", &configdb.hyperdebug },
 	{ "hyperserialascii", "Convert PETSCII/ASCII hypervisor serial debug output to ASCII upper-case", &configdb.hyperserialascii },
