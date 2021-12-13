@@ -293,27 +293,22 @@ static void preinit_memory_for_start ( void )
 }
 
 
-int refill_c65_rom_from_preinit_cache ( void )
+int refill_c65_rom_from_initrom ( void )
 {
+	memcpy(main_ram + 0x20000, meminitdata_initrom, MEMINITDATA_INITROM_SIZE);
+	return main_ram[0x2FFFC] | (main_ram[0x2FFFD] << 8);	// pass back the new reset vector
+}
+
+
+int refill_c65_rom_from_external ( void )
+{
+	if (!configdb.rom || !*configdb.rom)
+		return -1;	// not using external ROM
+	// Try to load external sourced ROM
+	if (xemu_load_file(configdb.rom, main_ram + 0x20000, 0x20000, 0x20000, "External ROM") == 0x20000)
+		return main_ram[0x2FFFC] | (main_ram[0x2FFFD] << 8);	// succeeded, pass back the new reset vector
+	// Failed to load external ROM
 	return -1;
-#if 0
-	int ret;
-	if (force_external_rom) {
-		DEBUGPRINT("ROM: forcing re-apply of ROM image" NL);
-		memcpy(main_ram + 0x20000, rom_init_image, sizeof rom_init_image);
-		// memcpy(char_wom, rom_init_image + 0xD000, sizeof char_wom);	// also fill char-WOM [FIXME: do we really want this?!]
-		// The 128K ROM image is actually holds the reset bector at the lower 64K, ie C65 would start in "C64 mode" for real, just it switches into C65 mode then ...
-		ret = rom_init_image[0xFFFC] | (rom_init_image[0xFFFD] << 8);	// pass back new reset vector
-	} else {
-		ret = -1; // no refill force external rom policy ...
-	}
-	if (configdb.force_upload_fonts) {
-		DEBUGPRINT("ROM: forcing upload font definitions from ROM area to WOM" NL);
-		memcpy(char_wom + 0x0000, main_ram + 0x2D000, 0x1000);
-		memcpy(char_wom + 0x1000, main_ram + 0x29000, 0x1000);
-	}
-	return ret;
-#endif
 }
 
 
@@ -824,6 +819,7 @@ int main ( int argc, char **argv )
 		c64_register_fake_typing(fake_typing_for_load65);
 #endif
 	hypervisor_request_stub_rom = configdb.stubrom;
+	hypervisor_request_init_rom = configdb.initrom;
 	audio65_start();
 	xemu_set_full_screen(configdb.fullscreen_requested);
 	if (!configdb.syscon)

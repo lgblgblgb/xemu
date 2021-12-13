@@ -39,7 +39,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 int in_hypervisor;			// mega65 hypervisor mode
+
 int hypervisor_request_stub_rom = 0;
+int hypervisor_request_init_rom = 0;
 
 static char debug_lines[0x4000][2][INFO_MAX_SIZE];		// I know. UGLY! and wasting memory. But this is only a HACK :)
 static int resolver_ok = 0;
@@ -244,6 +246,45 @@ void hypervisor_start_machine ( void )
 }
 
 
+static void first_leave ( void )
+{
+		DEBUGPRINT("HYPERVISOR: first return after RESET, start of processing workarounds." NL);
+		first_hypervisor_leave = 0;
+		execution_range_check_gate = 1;
+		int new_pc = -1;
+		if (hypervisor_request_stub_rom) {
+			DEBUGPRINT("MEM: using stub-ROM was forced" NL);
+			hypervisor_request_stub_rom = 0;
+			new_pc = rom_make_xemu_stub_rom(main_ram + 0x20000, XEMU_STUB_ROM_SAVE_FILENAME);
+		} else if (hypervisor_request_init_rom) {
+			DEBUGPRINT("MEM: using init-ROM was forced" NL);
+			hypervisor_request_init_rom = 0;
+			new_pc = refill_c65_rom_from_initrom();
+		} else {
+			new_pc = refill_c65_rom_from_external();	// this function should decide then, if it's really a (forced) thing to do ...
+			if (new_pc >= 0)
+				DEBUGPRINT("MEM: using external custom ROM was forced" NL);
+		}
+		if (new_pc >= 0) {
+			// if ROM was forced here, PC for returning hypervisor is invalid, thus we must re-set
+			DEBUGPRINT("MEM: force ROM re-apply policy, PC change: $%04X -> $%04X" NL, cpu65.pc, new_pc);
+			cpu65.pc = new_pc;
+		} else {
+			DEBUGPRINT("MEM: no custom force-ROM policy, continue at $%04X" NL, cpu65.pc);
+		}
+		dma_init_set_rev(configdb.dmarev, main_ram + 0x20000);
+		if (configdb.init_videostd >= 0) {
+			DEBUGPRINT("VIC: setting %s mode as initial-default based on request" NL, configdb.init_videostd ? "NTSC" : "PAL");
+			if (configdb.init_videostd)
+				vic_registers[0x6F] |= 0x80;
+			else
+				vic_registers[0x6F] &= 0x7F;
+		}
+		DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
+}
+
+
+
 void hypervisor_leave ( void )
 {
 	// Sanity check
@@ -281,35 +322,8 @@ void hypervisor_leave ( void )
 	machine_set_speed(0);	// restore speed ...
 	memory_set_vic3_rom_mapping(vic_registers[0x30]);	// restore possible active VIC-III mapping
 	memory_set_do_map();	// restore mapping ...
-	if (XEMU_UNLIKELY(first_hypervisor_leave)) {
-		DEBUGPRINT("HYPERVISOR: first return after RESET, start of processing workarounds." NL);
-		first_hypervisor_leave = 0;
-		execution_range_check_gate = 1;
-		if (hypervisor_request_stub_rom) {
-			DEBUGPRINT("MEM: using stub-ROM was forced" NL);
-			hypervisor_request_stub_rom = 0;
-			cpu65.pc = rom_make_xemu_stub_rom(main_ram + 0x20000, XEMU_STUB_ROM_SAVE_FILENAME);
-		} else {
-			int new_pc = refill_c65_rom_from_preinit_cache();	// this function should decide then, if it's really a (forced) thing to do ...
-			if (new_pc >= 0) {
-				// positive return value from the re-fill routine: we DID re-fill, we should re-initialize "user space" PC from the return value
-				DEBUGPRINT("MEM: force ROM re-apply policy, PC change: $%04X -> $%04X" NL,
-					cpu65.pc, new_pc
-				);
-				cpu65.pc = new_pc;
-			} else
-				DEBUGPRINT("MEM: no forced ROM re-apply policy was requested" NL);
-		}
-		dma_init_set_rev(configdb.dmarev, main_ram + 0x20000);
-		if (configdb.init_videostd >= 0) {
-			DEBUGPRINT("VIC: setting %s mode as initial-default based on request" NL, configdb.init_videostd ? "NTSC" : "PAL");
-			if (configdb.init_videostd)
-				vic_registers[0x6F] |= 0x80;
-			else
-				vic_registers[0x6F] &= 0x7F;
-		}
-		DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
-	}
+	if (XEMU_UNLIKELY(first_hypervisor_leave))
+		first_leave();
 	if (XEMU_UNLIKELY(hypervisor_queued_trap >= 0)) {
 		// Not so much used currently ...
 		DEBUG("HYPERVISOR: processing queued trap on leaving hypervisor: trap #$%02X" NL, hypervisor_queued_trap);

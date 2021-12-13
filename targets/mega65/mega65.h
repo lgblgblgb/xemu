@@ -71,7 +71,8 @@ extern int  reset_mega65_asked( void );
 
 extern int  dump_memory       ( const char *fn );
 
-extern int  refill_c65_rom_from_preinit_cache ( void );
+extern int  refill_c65_rom_from_external ( void );
+extern int  refill_c65_rom_from_initrom ( void );
 
 extern int newhack;
 extern int registered_screenshot_request;

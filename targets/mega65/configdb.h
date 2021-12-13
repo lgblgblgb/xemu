@@ -66,7 +66,7 @@ struct configdb_st {
 	int	hyperdebug;
 	int	hyperserialascii;
 	int	stubrom;
-	int	force_upload_fonts;
+	int	initrom;
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	int	virtsd;
 #endif

@@ -24,7 +24,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define TRAP_ALTTAB	0x43
 
 extern int  in_hypervisor;
+
 extern int  hypervisor_request_stub_rom;
+extern int  hypervisor_request_init_rom;
 
 extern int  hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hypervisor_serial_out_asciizer );
 extern void hypervisor_debug ( void );

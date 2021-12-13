@@ -76,7 +76,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode", &configdb.hyperdebug },
 	{ "hyperserialascii", "Convert PETSCII/ASCII hypervisor serial debug output to ASCII upper-case", &configdb.hyperserialascii },
 	{ "stubrom", "Use Xemu's internal stub-rom", &configdb.stubrom },
-	{ "fontrefresh", "Upload character ROM from the loaded ROM image", &configdb.force_upload_fonts },
+	{ "initrom", "Use Xemu's internal init-rom", &configdb.initrom },
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	{ "virtsd", "Interpret -sdimg option as a DIRECTORY to be fed onto the FAT32FS and use virtual-in-memory disk storage.", &configdb.virtsd },
 #endif
