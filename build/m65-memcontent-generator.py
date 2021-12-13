@@ -20,7 +20,7 @@
 
 import sys
 
-PROTOTYPE = "Uint8"
+PROTOTYPE = "const Uint8"
 
 # This must be incremented by ONE every time, when memcontent.c changes, or even
 # if sdcontent.c is changed in a way to write new files, new content, or whatever
@@ -36,7 +36,7 @@ FILE_DB = {
     "BANNER.M65":           ("banner",      "BANNER.M65" ),
     "FREEZER.M65":          ("freezer",     "FREEZER.M65" ),
     "ONBOARD.M65":          ("onboard",     "ONBOARD.M65" ),    # Do we really need this on SD-card?
-    "mega65.rom":           ("openrom",     None ),
+    "mega65.rom":           ("initrom",     None ),
     #"megaflash-a200t.prg": ("megaflash",   None ),
     "AUDIOMIX.M65":         ("audiomix",    "AUDIOMIX.M65" ),
     "C64THUMB.M65":         ("c64thumb",    "C64THUMB.M65" ),
@@ -89,8 +89,8 @@ if __name__ == "__main__":
 // if sdcontent.c is changed in a way to write new files, new content, or whatever
 // to the SD-card as part of the "update system files" process. Edit this in the python generator though, not in this file!
 #define MEMCONTENT_VERSION_ID {}\n\n""".format(MEMCONTENT_VERSION_ID)
+    c_data += "#include \"xemu/emutools_basicdefs.h\"\n"
     c_data += "#include \"memcontent.h\"\n\n"
-    h_data += "#include \"xemu/emutools.h\"\n\n"
     h_data += "// Special structure array for system files update on the SD-image\n"
     c_data += "// Special structure array for system files update on the SD-image\n"
     on_sd = sorted([k for k, v in FILE_DB.items() if v[1] is not None])
@@ -116,14 +116,14 @@ if __name__ == "__main__":
         files_done.add(fn_id)
         with open(fn, "rb") as data:
             data = data.read()
-        print("Using file {} ({} bytes) as {} ...".format(fn, len(data), fn_id))
+        print("Using file {} (${:X} bytes) as {} ...".format(fn, len(data), fn_id))
         if len(data) < 1:
             sys.stderr.write("ERROR: file {} is zero byte long!\n".format(fn))
             sys.exit(1)
-        h_data += "\n// Generated as \"{}\" from file {} ({} bytes)\n".format(fn_id, fn, len(data))
-        h_data += "#define MEMINITDATA_{}_SIZE {}\n".format(fn_id.upper(), len(data))
+        h_data += "\n// Generated as \"{}\" from file {} (${:X} bytes)\n".format(fn_id, fn, len(data))
+        h_data += "#define MEMINITDATA_{}_SIZE 0x{:X}\n".format(fn_id.upper(), len(data))
         h_data += "extern {} meminitdata_{}[MEMINITDATA_{}_SIZE];\n".format(PROTOTYPE, fn_id, fn_id.upper())
-        c_data += "\n// Generated as \"{}\" from file {} ({} bytes)\n".format(fn_id, fn, len(data))
+        c_data += "\n// Generated as \"{}\" from file {} (${:X} bytes)\n".format(fn_id, fn, len(data))
         c_data += "{} meminitdata_{}[MEMINITDATA_{}_SIZE] = {};\n".format(PROTOTYPE, fn_id, fn_id.upper(), bin_dump(data))
     h_data += "\n#endif\n"
     # OK, now write out the result ...

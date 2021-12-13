@@ -32,11 +32,13 @@ struct configdb_st {
 	char	*disk8;
 	char	*disk9;
 	char	*fpga;
-	char	*kickup;
-	char	*kickuplist;
-	char	*loadbanner;
-	char	*loadcram;
-	char	*loadrom;
+	char	*hickup;
+	char	*hickuplist;
+	char	*extbanner;
+	char	*extcramutils;
+	char	*extinitrom;
+	char	*extchrwom;
+	char	*rom;
 	char	*prg;
 	char	*sdimg;
 	char	*dumpmem;
@@ -63,7 +65,6 @@ struct configdb_st {
 	int	show_drive_led;
 	int	hyperdebug;
 	int	hyperserialascii;
-	int	forcerom;
 	int	stubrom;
 	int	force_upload_fonts;
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
@@ -77,7 +78,7 @@ struct configdb_st {
 	int	syscon;
 	int	dmarev;
 	int	mega65_model;		// $FF = Xemu/others, 1/2/3 = MEGA65 PCB rev 1/2/3, $40=nexys4, $41=nexys4ddr, $42=nexys4ddr-widget, $FD=wukong, $FE=simulation
-	int	kicked;
+	int	hicked;
 	int	prgmode;
 	int	rtc_hour_offset;
 #ifdef HAVE_XEMU_UMON

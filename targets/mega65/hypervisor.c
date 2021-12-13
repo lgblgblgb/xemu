@@ -353,6 +353,7 @@ void hypervisor_serial_monitor_push_char ( Uint8 chr )
 
 void hypervisor_debug_invalidate ( const char *reason )
 {
+	DEBUGPRINT("HYPERVISOR: disabling debug ability: %s" NL, reason);
 	if (resolver_ok) {
 		resolver_ok = 0;
 		INFO_WINDOW("Hypervisor debug feature is asked to be disabled: %s", reason);
