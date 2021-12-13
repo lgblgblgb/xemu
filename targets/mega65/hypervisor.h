@@ -38,5 +38,6 @@ extern void hypervisor_start_machine ( void );
 extern void hypervisor_leave ( void );
 extern void hypervisor_serial_monitor_push_char ( Uint8 chr );
 extern void hypervisor_debug_invalidate ( const char *reason );
+extern void hypervisor_extract_version_string ( char *target, int target_max_size );
 
 #endif

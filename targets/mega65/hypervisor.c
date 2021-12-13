@@ -243,6 +243,35 @@ void hypervisor_start_machine ( void )
 	first_hypervisor_leave = 1;
 	execution_range_check_gate = 0;
 	hypervisor_enter(TRAP_RESET);
+	char hyperver[64];
+	hypervisor_extract_version_string(hyperver, sizeof hyperver);
+	DEBUGPRINT("HYPERVISOR: version is \"%s\"" NL, hyperver);
+}
+
+
+void hypervisor_extract_version_string ( char *target, int target_max_size )
+{
+	static const char marker[] = "GIT: ";
+	int a = 0;
+	// Note: memmem() would be handy, but a bit problematic, some platforms don't know it,
+	// others may require special macros to be defined to be able to use it.
+	for (;;) {
+		if (a == 0x4000 - 0x10) {
+			strcpy(target, "???");
+			return;
+		}
+		if (!memcmp(hypervisor_ram + a, marker, strlen(marker)))
+			break;
+		a++;
+	}
+	a += strlen(marker);
+	int l = 0;
+	while (a < 0x4000 && hypervisor_ram[a + l])
+		l++;
+	if (l >= target_max_size)
+		l = target_max_size - 1;
+	memcpy(target, hypervisor_ram + a, l);
+	target[l] = '\0';
 }
 
 
