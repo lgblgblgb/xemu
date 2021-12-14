@@ -253,7 +253,7 @@ static int preinit_memory_item ( const char *name, const char *desc, Uint8 *targ
 		goto internal;
 	}
 	const int size = xemu_load_file(fn, target_ptr, min_size, max_size, desc);
-	if (XEMU_UNLIKELY(size > min_size)) {
+	if (XEMU_UNLIKELY(size > 0)) {
 		DEBUGPRINT("MEMCONTENT: \"%s\" (%s) loaded custom object ($%X bytes) from external file: %s" NL, name, desc, size, xemu_load_filepath);
 		return size;
 	}

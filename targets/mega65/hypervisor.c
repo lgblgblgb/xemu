@@ -57,6 +57,15 @@ static int execution_range_check_gate;
 
 static int hypervisor_queued_trap = -1;
 
+static struct {
+	int   func;
+	Uint8 in_x, in_y, in_z;
+	char  setnam_fn[64];
+} hdos;
+
+#define DEBUGHDOS(...) DEBUG(__VA_ARGS__)
+
+
 
 int hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hypervisor_serial_out_asciizer )
 {
@@ -180,6 +189,66 @@ void hypervisor_enter_via_write_trap ( int trapno )
 }
 
 
+static int copy_mem_from_user ( Uint8 *target, int max_size, const int terminator_byte, int source_cpu_addr )
+{
+	int len = 0;
+	if (terminator_byte >= 0)
+		max_size--;
+	for (;;) {
+		const Uint8 byte = memory_debug_read_cpu_addr(source_cpu_addr++);
+		*target++ = byte;
+		len++;
+		if (len >= max_size) {
+			if (terminator_byte >= 0)
+				*target = terminator_byte;
+			break;
+		}
+		if ((int)byte == terminator_byte)
+			break;
+	}
+	return len;
+}
+
+
+static int copy_string_from_user ( char *target, const int max_size, int source_cpu_addr )
+{
+	return copy_mem_from_user((Uint8*)target, max_size, 0, source_cpu_addr);
+}
+
+
+static void hdos_enter ( void )
+{
+	hdos.in_x = cpu65.x;
+	hdos.in_y = cpu65.y;
+	hdos.in_z = cpu65.z;
+	DEBUGHDOS("HDOS: entering function #$%02X" NL, hdos.func);
+}
+
+
+static void hdos_leave ( void )
+{
+	DEBUGHDOS("HDOS: leaving function #$%02X" NL, hdos.func);
+	if (hdos.func == 0x2E && cpu65.pf_c) {	// HDOS setnam function. Also check carry set (which means "ok" by HDOS trap)
+		copy_string_from_user(hdos.setnam_fn, sizeof hdos.setnam_fn, hdos.in_x + (hdos.in_y << 8));
+		for (char *p = hdos.setnam_fn; *p; p++) {
+			if (*p < 0x20 || *p >= 0x80) {
+				DEBUGHDOS("HDOS: setnam(): invalid character in filename $%02X" NL, *p);
+				hdos.setnam_fn[0] = '\0';
+				break;
+			}
+			if (*p >= 'A' && *p <= 'Z')
+				*p = *p - 'A' + 'a';
+		}
+		DEBUGHDOS("HDOS: setnam(): selected filename is [%s]" NL, hdos.setnam_fn);
+		return;
+	}
+	if (hdos.func == 0x40) {
+		DEBUGHDOS("HDOS: d81attach(): setnam=\"%s\", result=%s" NL, hdos.setnam_fn, cpu65.pf_c ? "OK" : "FAILED");
+		return;
+	}
+}
+
+
 void hypervisor_enter ( int trapno )
 {
 	// Sanity checks
@@ -231,7 +300,12 @@ void hypervisor_enter ( int trapno )
 	memory_set_do_map();	// now the memory mapping is changed
 	machine_set_speed(0);	// set machine speed (hypervisor always runs at M65 fast ... ??) FIXME: check this!
 	cpu65.pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
-	DEBUG("HYPERVISOR: entering into hypervisor mode, trap=$%02X @ $%04X -> $%04X" NL, trapno, D6XX_registers[0x48] | (D6XX_registers[0x49] << 8), cpu65.pc);
+	DEBUG("HYPERVISOR: entering into hypervisor mode, trap=$%02X (A=$%02X) @ $%04X -> $%04X" NL, trapno, cpu65.a, D6XX_registers[0x48] | (D6XX_registers[0x49] << 8), cpu65.pc);
+	if (trapno == 0) {
+		hdos.func = cpu65.a & 0x7E;
+		hdos_enter();
+	} else
+		hdos.func = -1;
 }
 
 
@@ -245,7 +319,9 @@ void hypervisor_start_machine ( void )
 	hypervisor_enter(TRAP_RESET);
 	char hyperver[64];
 	hypervisor_extract_version_string(hyperver, sizeof hyperver);
-	DEBUGPRINT("HYPERVISOR: version is \"%s\"" NL, hyperver);
+	DEBUGPRINT("HYPERVISOR: HYPPO version \"%s\" starting with TRAP reset (#$%02X)" NL, hyperver, TRAP_RESET);
+	hdos.setnam_fn[0] = '\0';
+	hdos.func = -1;
 }
 
 
@@ -253,7 +329,7 @@ void hypervisor_extract_version_string ( char *target, int target_max_size )
 {
 	static const char marker[] = "GIT: ";
 	int a = 0;
-	// Note: memmem() would be handy, but a bit problematic, some platforms don't know it,
+	// Note: memmem() would be handy, but a bit problematic, some platforms don't have it,
 	// others may require special macros to be defined to be able to use it.
 	for (;;) {
 		if (a == 0x4000 - 0x10) {
@@ -290,16 +366,16 @@ static void first_leave ( void )
 			hypervisor_request_init_rom = 0;
 			new_pc = refill_c65_rom_from_initrom();
 		} else {
-			new_pc = refill_c65_rom_from_external();	// this function should decide then, if it's really a (forced) thing to do ...
+			new_pc = refill_c65_rom_from_external();	// this function should decide&load something if it wants
 			if (new_pc >= 0)
 				DEBUGPRINT("MEM: using external custom ROM was forced" NL);
 		}
 		if (new_pc >= 0) {
-			// if ROM was forced here, PC for returning hypervisor is invalid, thus we must re-set
+			// if ROM was forced here, PC hypervisor would return is invalid (valid for the _original_ ROM which was overriden here!), thus we must set it now!
 			DEBUGPRINT("MEM: force ROM re-apply policy, PC change: $%04X -> $%04X" NL, cpu65.pc, new_pc);
 			cpu65.pc = new_pc;
 		} else {
-			DEBUGPRINT("MEM: no custom force-ROM policy, continue at $%04X" NL, cpu65.pc);
+			DEBUGPRINT("MEM: no custom force-ROM policy, PC remains at: $%04X" NL, cpu65.pc);
 		}
 		dma_init_set_rev(configdb.dmarev, main_ram + 0x20000);
 		if (configdb.init_videostd >= 0) {
@@ -331,6 +407,8 @@ void hypervisor_leave ( void )
 	cpu65_set_pf(D6XX_registers[0x47]);
 	cpu65.pf_e = D6XX_registers[0x47] & CPU65_PF_E;	// cpu65_set_pf() does NOT set 'E' bit by design, so we do at our own
 	cpu65.pc   = D6XX_registers[0x48] | (D6XX_registers[0x49] << 8);
+	if (XEMU_UNLIKELY(hdos.func >= 0))
+		hdos_leave();
 	map_offset_low  = ((D6XX_registers[0x4A] & 0xF) << 16) | (D6XX_registers[0x4B] << 8);
 	map_offset_high = ((D6XX_registers[0x4C] & 0xF) << 16) | (D6XX_registers[0x4D] << 8);
 	map_mask = (D6XX_registers[0x4A] >> 4) | (D6XX_registers[0x4C] & 0xF0);

@@ -45,6 +45,7 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "extcramutils",NULL,"Use external initial content (32K) into the colour RAM (\"cram-utils\")", &configdb.extcramutils },
 	{ "extinitrom",	NULL, "Use external init-ROM. Beware: this is not the normal ROM you may think off!", &configdb.extinitrom },
 	{ "extchrwom",	NULL, "Use external initial memory content for char-WOM (WriteOnlyMemory)", &configdb.extchrwom },
+	{ "d81dir",	NULL, "Set path for directory with D81 collections", &configdb.d81dir },
 	{ "rom",	NULL, "Override Hyppo's loaded ROM during booting.", &configdb.rom },
 	{ "prg",	NULL, "Load a PRG file directly into the memory (/w C64/65 auto-detection on load address)", &configdb.prg },
 	{ "sdimg",	SDCARD_NAME, "Override path of SD-image to be used (also see the -virtsd option!)", &configdb.sdimg },
