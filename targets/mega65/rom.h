@@ -28,7 +28,6 @@ extern const Uint8 vga_font_8x8[2048];
 
 extern int rom_stubrom_requested;
 extern int rom_initrom_requested;
-extern const char *rom_external_requested_fn;
 extern int rom_is_overriden;
 
 extern void rom_clear_reports ( void );
@@ -37,5 +36,6 @@ extern void rom_detect_date ( const Uint8 *rom );
 extern void rom_make_xemu_stub_rom ( Uint8 *rom, const char *save_file );
 extern void rom_clear_rom ( Uint8 *rom );
 extern int  rom_do_override ( Uint8 *rom );
+extern int  rom_load_custom ( const char *fn );
 
 #endif

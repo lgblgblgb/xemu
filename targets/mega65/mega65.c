@@ -249,16 +249,20 @@ static int preinit_memory_item ( const char *name, const char *desc, Uint8 *targ
 	if (source_size < min_size || source_size > max_size || min_size > max_size)
 		FATAL("MEMCONTENT: internal error, memcontent item \"%s\" (%s) given size (%d) is outside of interval %d...%d", name, desc, source_size, min_size, max_size);
 	memset(target_ptr, 0, max_size);
+	sha1_hash_str hash_str;
 	if (XEMU_LIKELY(!fn || !*fn)) {
-		DEBUGPRINT("MEMCONTENT: \"%s\" (%s) was not requested, using the default ($%X bytes)." NL, name, desc, source_size);
+		sha1_checksum_as_string(hash_str, source_ptr, source_size);
+		DEBUGPRINT("MEMCONTENT: \"%s\" (%s) was not requested, using the default ($%X bytes) [%s]." NL, name, desc, source_size, hash_str);
 		goto internal;
 	}
 	const int size = xemu_load_file(fn, target_ptr, min_size, max_size, desc);
 	if (XEMU_UNLIKELY(size > 0)) {
-		DEBUGPRINT("MEMCONTENT: \"%s\" (%s) loaded custom object ($%X bytes) from external file: %s" NL, name, desc, size, xemu_load_filepath);
+		sha1_checksum_as_string(hash_str, target_ptr, size);
+		DEBUGPRINT("MEMCONTENT: \"%s\" (%s) loaded custom object ($%X bytes) from external file [%s]: %s" NL, name, desc, size, hash_str, xemu_load_filepath);
 		return size;
 	}
-	DEBUGPRINT("MEMCONTENT: \"%s\" (%s) **FAILED** to load custom file (using default - $%X bytes) by filename request: %s" NL, name, desc, source_size, fn);
+	sha1_checksum_as_string(hash_str, source_ptr, source_size);
+	DEBUGPRINT("MEMCONTENT: \"%s\" (%s) **FAILED** to load custom file (using default - $%X bytes [%s]) by filename request: %s" NL, name, desc, source_size, hash_str, fn);
 internal:
 	memcpy(target_ptr, source_ptr, source_size);
 	return 0;
@@ -803,7 +807,7 @@ int main ( int argc, char **argv )
 #endif
 	rom_stubrom_requested = configdb.usestubrom;
 	rom_initrom_requested = configdb.useinitrom;
-	rom_external_requested_fn = configdb.rom;
+	rom_load_custom(configdb.rom);
 	allow_freezer_triggering = configdb.allowfreezer;
 	audio65_start();
 	xemu_set_full_screen(configdb.fullscreen_requested);

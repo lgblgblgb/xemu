@@ -363,7 +363,7 @@ static void first_leave ( void )
 			cpu65.pc = new_pc;
 			// FIXME: apply font upload to WOM, maybe here?
 		} else {
-			DEBUGPRINT("ROM: no custom force-ROM policy, PC remains at: $%04X" NL, cpu65.pc);
+			DEBUGPRINT("ROM: no custom force-ROM policy, PC remains at $%04X" NL, cpu65.pc);
 		}
 		dma_init_set_rev(configdb.dmarev, main_ram + 0x20000);
 		if (configdb.init_videostd >= 0) {

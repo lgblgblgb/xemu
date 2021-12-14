@@ -30,8 +30,8 @@ int rom_is_stub = 0;
 
 int rom_stubrom_requested = 0;
 int rom_initrom_requested = 0;
-const char *rom_external_requested_fn = NULL;
 int rom_is_overriden = 0;
+static Uint8 *external_image = NULL;
 
 static const char _rom_name_closed[]	= "Closed-ROMs";
 static const char _rom_name_open[]	= "Open-ROMs";
@@ -56,7 +56,7 @@ void rom_unset_requests ( void )
 {
 	rom_stubrom_requested = 0;
 	rom_initrom_requested = 0;
-	rom_external_requested_fn = NULL;
+	rom_load_custom(NULL);	// to cancel possible already set custom ROM
 }
 
 
@@ -83,7 +83,7 @@ void rom_detect_date ( const Uint8 *rom )
 		return;
 	}
 	sha1_hash_str hash_str;
-	sha1_checksum_as_string(hash_str, rom, 0x20000);
+	sha1_checksum_as_string(hash_str, rom, MEMINITDATA_INITROM_SIZE);
 	DEBUGPRINT("ROM: SHA1 checksum is %s" NL, hash_str);
 	const int res_open   = rom_detect_try(rom + 0x10, 0x4F);	// 'O' (0x4F) at ofs $10 + followed by "rom date": open-ROMs
 	const int res_closed = rom_detect_try(rom + 0x16, 0x56);	// 'V' (0x56) at ofs $16 + followed by "rom date": closed-ROMs
@@ -118,7 +118,7 @@ ok:
 
 void rom_clear_rom ( Uint8 *rom )
 {
-	memset(rom, 0, 0x20000);
+	memset(rom, 0, MEMINITDATA_INITROM_SIZE);
 }
 
 
@@ -181,7 +181,7 @@ void rom_make_xemu_stub_rom ( Uint8 *rom, const char *save_file )
 	;
 	int dyn_rom = 0;
 	if (!rom) {
-		rom = xemu_malloc(0x20000);
+		rom = xemu_malloc(MEMINITDATA_INITROM_SIZE);
 		dyn_rom = 1;
 	}
 	rom_clear_rom(rom);
@@ -229,9 +229,36 @@ void rom_make_xemu_stub_rom ( Uint8 *rom, const char *save_file )
 	}
 	rom[0x10000 + pos] = 0xFF;	// end of text marker, should be after '\n' in the source text
 	if (save_file)
-		xemu_save_file(save_file, rom, 0x20000, NULL);
+		xemu_save_file(save_file, rom, MEMINITDATA_INITROM_SIZE, NULL);
 	if (dyn_rom)
 		free(rom);
+}
+
+
+int rom_load_custom ( const char *fn )
+{
+	if (!fn || !*fn) {
+		DEBUGPRINT("ROM: unsetting custom ROM (clear request)" NL);
+		if (external_image) {
+			free(external_image);
+			external_image = NULL;
+		}
+		return 0;
+	} else if (xemu_load_file(fn, NULL, MEMINITDATA_INITROM_SIZE, MEMINITDATA_INITROM_SIZE, "Failed to load external ROM on user's request.\nUsing the default installed, instead.") > 0) {
+		DEBUGPRINT("ROM: custom ROM load was OK, setting custom ROM" NL);
+		if (external_image) {
+			memcpy(external_image, xemu_load_buffer_p, MEMINITDATA_INITROM_SIZE);
+			free(xemu_load_buffer_p);
+		} else {
+			external_image = xemu_load_buffer_p;
+		}
+		xemu_load_buffer_p = NULL;
+		rom_stubrom_requested = 0;
+		rom_initrom_requested = 0;
+		return 1;
+	}
+	DEBUGPRINT("ROM: custom ROM setting failed, not touching custom ROM request setting (now: %s)" NL, external_image ? "SET" : "UNSET");
+	return 0;
 }
 
 
@@ -252,15 +279,12 @@ int rom_do_override ( Uint8 *rom )
 		memcpy(rom, meminitdata_initrom, MEMINITDATA_INITROM_SIZE);
 		goto overriden;
 	}
-	if (!rom_external_requested_fn || !*rom_external_requested_fn)
-		return -1;	// no ROM override was needed
-	if (xemu_load_file(rom_external_requested_fn, rom, 0x20000, 0x20000, "Tried to load that external file as ROM on user's request.\nUsing the default installed, instead.") > 0) {
-		DEBUGPRINT("ROM: loaded external ROM from %s" NL, xemu_load_filepath);
+	if (external_image) {
+		DEBUGPRINT("ROM: using external pre-loaded ROM" NL);
+		memcpy(rom, external_image, MEMINITDATA_INITROM_SIZE);
 		goto overriden;
 	}
-	DEBUGPRINT("ROM: failed to load external ROM from %s" NL, rom_external_requested_fn);
-	rom_external_requested_fn = NULL;	// do not try again on next reset/etc, since it was a failure
-	return -1;	// Failed to load external ROM
+	return -1;	// No override has been done
 overriden:
 	rom_is_overriden = 1;
 	// return with the RESET vector of the ROM

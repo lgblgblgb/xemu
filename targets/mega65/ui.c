@@ -289,10 +289,9 @@ ret:
 	rom_detect_date(main_ram + 0x20000);
 }
 
-static char custom_rom_fnbuf[PATH_MAX + 1];
-
 static void reset_into_custom_rom ( void )
 {
+	char fnbuf[PATH_MAX + 1];
 	if (!*dir_rom)
 		strcpy(dir_rom, sdl_pref_dir);
 	// Select ROM image
@@ -300,18 +299,21 @@ static void reset_into_custom_rom ( void )
 		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
 		"Select ROM image",
 		dir_rom,
-		custom_rom_fnbuf,
-		sizeof custom_rom_fnbuf
+		fnbuf,
+		sizeof fnbuf
 	))
 		return;
-	if (reset_mega65_asked()) {
-		rom_external_requested_fn = custom_rom_fnbuf;
+	if (rom_load_custom(fnbuf)) {
+		if (!reset_mega65_asked())
+			WARNING_WINDOW("You refused reset, loaded ROM can be only activated at the next reset.");
 	}
 }
 
 static void reset_into_utility_menu ( void )
 {
 	if (reset_mega65_asked()) {
+		rom_stubrom_requested = 0;
+		rom_initrom_requested = 0;
 		hwa_kbd_fake_key(0x20);
 		KBD_RELEASE_KEY(0x75);
 	}
@@ -320,6 +322,8 @@ static void reset_into_utility_menu ( void )
 static void reset_into_c64_mode ( void )
 {
 	if (reset_mega65_asked()) {
+		rom_stubrom_requested = 0;
+		rom_initrom_requested = 0;
 		// we need this, because autoboot disk image would bypass the "go to C64 mode" on 'Commodore key' feature
 		// this call will deny disk access, and re-enable on the READY. state.
 		inject_register_allow_disk_access();
@@ -329,7 +333,7 @@ static void reset_into_c64_mode ( void )
 
 }
 
-static void reset_into_c65_mode ( void )
+static void reset_generic ( void )
 {
 	if (reset_mega65_asked()) {
 		KBD_RELEASE_KEY(0x75);
@@ -340,6 +344,7 @@ static void reset_into_c65_mode ( void )
 static void reset_into_xemu_stubrom ( void )
 {
 	if (reset_mega65_asked()) {
+		rom_initrom_requested = 0;
 		rom_stubrom_requested = 1;
 	}
 }
@@ -347,6 +352,7 @@ static void reset_into_xemu_stubrom ( void )
 static void reset_into_xemu_initrom ( void )
 {
 	if (reset_mega65_asked()) {
+		rom_stubrom_requested = 0;
 		rom_initrom_requested = 1;
 	}
 }
@@ -354,6 +360,8 @@ static void reset_into_xemu_initrom ( void )
 static void reset_into_c65_mode_noboot ( void )
 {
 	if (reset_mega65_asked()) {
+		rom_stubrom_requested = 0;
+		rom_initrom_requested = 0;
 		inject_register_allow_disk_access();
 		KBD_RELEASE_KEY(0x75);
 		hwa_kbd_fake_key(0);
@@ -639,7 +647,7 @@ static const struct menu_st menu_sdcard[] = {
 static const struct menu_st menu_reset[] = {
 	{ "Reset back to default ROM",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_use_default_rom, NULL				},
-	{ "Reset", 			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode		},
+	{ "Reset", 			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_generic		},
 	{ "Reset without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot	},
 	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu	},
 	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode		},
