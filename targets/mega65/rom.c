@@ -31,7 +31,6 @@ int rom_is_stub = 0;
 int rom_stubrom_requested = 0;
 int rom_initrom_requested = 0;
 const char *rom_external_requested_fn = NULL;
-int rom_external_requested_only_once = 0;
 int rom_is_overriden = 0;
 
 static const char _rom_name_closed[]	= "Closed-ROMs";
@@ -245,13 +244,11 @@ int rom_do_override ( Uint8 *rom )
 	rom_is_overriden = 0;
 	if (rom_stubrom_requested) {
 		DEBUGPRINT("ROM: using stub-ROM was forced" NL);
-		rom_stubrom_requested = 0;
 		rom_make_xemu_stub_rom(rom, XEMU_STUB_ROM_SAVE_FILENAME);
 		goto overriden;
 	}
 	if (rom_initrom_requested) {
 		DEBUGPRINT("ROM: using init-ROM was forced" NL);
-		rom_initrom_requested = 0;
 		memcpy(rom, meminitdata_initrom, MEMINITDATA_INITROM_SIZE);
 		goto overriden;
 	}
@@ -259,10 +256,6 @@ int rom_do_override ( Uint8 *rom )
 		return -1;	// no ROM override was needed
 	if (xemu_load_file(rom_external_requested_fn, rom, 0x20000, 0x20000, "Tried to load that external file as ROM on user's request.\nUsing the default installed, instead.") > 0) {
 		DEBUGPRINT("ROM: loaded external ROM from %s" NL, xemu_load_filepath);
-		if (rom_external_requested_only_once) {
-			rom_external_requested_only_once = 0;
-			rom_external_requested_fn = NULL;
-		}
 		goto overriden;
 	}
 	DEBUGPRINT("ROM: failed to load external ROM from %s" NL, rom_external_requested_fn);

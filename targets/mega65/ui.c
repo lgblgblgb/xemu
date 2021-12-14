@@ -188,18 +188,20 @@ static void ui_format_sdcard ( void )
 }
 
 
+static char dir_rom[PATH_MAX + 1] = "";
+
+
 static void ui_update_sdcard ( void )
 {
 	char fnbuf[PATH_MAX + 1];
-	static char dir[PATH_MAX + 1] = "";
 	xemu_load_buffer_p = NULL;
-	if (!*dir)
-		strcpy(dir, sdl_pref_dir);
+	if (!*dir_rom)
+		strcpy(dir_rom, sdl_pref_dir);
 	// Select ROM image
 	if (xemugui_file_selector(
 		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
 		"Select your ROM image",
-		dir,
+		dir_rom,
 		fnbuf,
 		sizeof fnbuf
 	)) {
@@ -287,6 +289,25 @@ ret:
 	rom_detect_date(main_ram + 0x20000);
 }
 
+static char custom_rom_fnbuf[PATH_MAX + 1];
+
+static void reset_into_custom_rom ( void )
+{
+	if (!*dir_rom)
+		strcpy(dir_rom, sdl_pref_dir);
+	// Select ROM image
+	if (xemugui_file_selector(
+		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		"Select ROM image",
+		dir_rom,
+		custom_rom_fnbuf,
+		sizeof custom_rom_fnbuf
+	))
+		return;
+	if (reset_mega65_asked()) {
+		rom_external_requested_fn = custom_rom_fnbuf;
+	}
+}
 
 static void reset_into_utility_menu ( void )
 {
@@ -336,6 +357,20 @@ static void reset_into_c65_mode_noboot ( void )
 		inject_register_allow_disk_access();
 		KBD_RELEASE_KEY(0x75);
 		hwa_kbd_fake_key(0);
+	}
+}
+
+static void ui_cb_use_default_rom ( const struct menu_st *m, int *query )
+{
+	if (query) {
+		if (!rom_is_overriden)
+			*query |= XEMUGUI_MENUFLAG_HIDDEN | XEMUGUI_MENUFLAG_SEPARATOR;
+		return;
+	}
+	if (rom_is_overriden) {
+		if (reset_mega65_asked()) {
+			rom_unset_requests();
+		}
 	}
 }
 
@@ -408,7 +443,7 @@ static void ui_emu_info ( void )
 	hypervisor_extract_version_string(hyperver_str, sizeof hyperver_str);
 	INFO_WINDOW(
 		"DMA chip current revision: %d (F018 rev-%s)\n"
-		"ROM version detected: %d %s\n"
+		"ROM version detected: %d %s (%s)\n"
 		"Hyppo version: %s\n"
 		"C64 'CPU' I/O port (low 3 bits): DDR=%d OUT=%d\n"
 		"Current VIC and I/O mode: %s %s, hot registers are %s\n"
@@ -417,7 +452,7 @@ static void ui_emu_info ( void )
 		"Xemu's host OS: %s"
 		,
 		dma_chip_revision, dma_chip_revision ? "B, new" : "A, old",
-		rom_date, rom_name,
+		rom_date, rom_name, rom_is_overriden ? "overriden": "default",
 		hyperver_str,
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
 		vic_iomode < 4 ? iomode_names[vic_iomode] : "?INVALID?", videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
@@ -602,12 +637,15 @@ static const struct menu_st menu_sdcard[] = {
 	{ NULL }
 };
 static const struct menu_st menu_reset[] = {
-	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode		},
-	{ "Reset M65 without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot	},
+	{ "Reset back to default ROM",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_use_default_rom, NULL				},
+	{ "Reset", 			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode		},
+	{ "Reset without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot	},
 	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu	},
 	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode		},
 	{ "Reset into Xemu stub-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_stubrom	},
 	{ "Reset into boot init-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_initrom	},
+	{ "Reset/use custom ROM file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_custom_rom	},
 	{ NULL }
 };
 static const struct menu_st menu_inputdevices[] = {
@@ -728,7 +766,7 @@ static const struct menu_st menu_main[] = {
 	{ "Audio",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio   },
 	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
 	{ "FD D81",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_d81     },
-	{ "Reset",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
+	{ "Reset / ROM switching",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
 	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
 #ifdef CBM_BASIC_TEXT_SUPPORT
