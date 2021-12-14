@@ -18,15 +18,22 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_MEGA65_ROM_H_INCLUDED
 #define XEMU_MEGA65_ROM_H_INCLUDED
 
+#define XEMU_STUB_ROM_SAVE_FILENAME "@XEMU-STUB.ROM"
+
 extern int rom_date;
 extern const char *rom_name;
 extern int rom_is_openroms;
 extern int rom_is_stub;
-
 extern const Uint8 vga_font_8x8[2048];
 
+extern int rom_stubrom_requested;
+extern int rom_initrom_requested;
+extern const char *rom_external_requested_fn;
+
+
 extern void rom_detect_date ( const Uint8 *rom );
-extern int rom_make_xemu_stub_rom ( Uint8 *rom, const char *save_file );
+extern int  rom_make_xemu_stub_rom ( Uint8 *rom, const char *save_file );
 extern void rom_clear_rom ( Uint8 *rom );
+extern int  rom_do_override ( Uint8 *rom_mem );
 
 #endif

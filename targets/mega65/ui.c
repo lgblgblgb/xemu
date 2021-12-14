@@ -269,9 +269,6 @@ static void ui_update_sdcard ( void )
 		goto ret;
 	// Call the updater :)
 	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES)) {
-		// this memcpy would not be needed ideally, as hyppo should load the new ROM, but it does not do that
-		// for some unknown reason. So we just copy the newly loaded ROM into the memory here ... :-/
-		memcpy(main_ram + 0x20000, xemu_load_buffer_p, 0x20000);
 		INFO_WINDOW(
 			"System files on your SD-card image seems to be updated successfully.\n"
 			"Next time you may need this function, you can use MEGA65.ROM which is a backup copy of your selected ROM.\n\n"
@@ -285,7 +282,9 @@ ret:
 		free(xemu_load_buffer_p);
 		xemu_load_buffer_p = NULL;
 	}
-	rom_detect_date(main_ram + 0x20000);	// make sure we have the correct detected results again based on the actual memory content
+	// make sure we have the correct detected results again based on the actual memory content,
+	// since we've used the detect function on the to-be-loaded ROM to check
+	rom_detect_date(main_ram + 0x20000);
 }
 
 
@@ -317,10 +316,17 @@ static void reset_into_c65_mode ( void )
 	}
 }
 
-static void reset_into_xemu_stub ( void )
+static void reset_into_xemu_stubrom ( void )
 {
 	if (reset_mega65_asked()) {
-		hypervisor_request_stub_rom = 1;
+		rom_stubrom_requested = 1;
+	}
+}
+
+static void reset_into_xemu_initrom ( void )
+{
+	if (reset_mega65_asked()) {
+		rom_initrom_requested = 1;
 	}
 }
 
@@ -600,7 +606,8 @@ static const struct menu_st menu_reset[] = {
 	{ "Reset M65 without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot	},
 	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu	},
 	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode		},
-	{ "Reset into Xemu stub-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_stub		},
+	{ "Reset into Xemu stub-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_stubrom	},
+	{ "Reset into boot init-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_initrom	},
 	{ NULL }
 };
 static const struct menu_st menu_inputdevices[] = {

@@ -18,6 +18,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "rom.h"
 #include "xemu/emutools_files.h"
+#include "memcontent.h"
 
 #define CHARACTER_SET_DEFINER_8X8 const Uint8 vga_font_8x8[2048]
 #include "xemu/vgafonts.c"
@@ -27,6 +28,9 @@ int rom_date = 0;
 int rom_is_openroms = 0;
 int rom_is_stub = 0;
 
+int rom_stubrom_requested = 0;
+int rom_initrom_requested = 0;
+const char *rom_external_requested_fn = NULL;
 
 static const char _rom_name_closed[]	= "Closed-ROMs";
 static const char _rom_name_open[]	= "Open-ROMs";
@@ -210,4 +214,32 @@ int rom_make_xemu_stub_rom ( Uint8 *rom, const char *save_file )
 	if (dyn_rom)
 		free(rom);
 	return 0xE000;
+}
+
+
+// Called by hypervisor on exiting the first (reset) trap.
+// Thus this is an ability to override the ROM what HICKUP loaded for us with some another one.
+// Return value: negative: no custom ROM is needed to be loaded,
+//               otherwise, the RESET vector of the ROM (CPU PC value)
+int rom_do_override ( Uint8 *rom_mem )
+{
+	if (rom_stubrom_requested) {
+		DEBUGPRINT("ROM: using stub-ROM was forced" NL);
+		rom_stubrom_requested = 0;
+		return rom_make_xemu_stub_rom(rom_mem, XEMU_STUB_ROM_SAVE_FILENAME);
+	}
+	if (rom_initrom_requested) {
+		DEBUGPRINT("ROM: using init-ROM was forced" NL);
+		rom_initrom_requested = 0;
+		memcpy(rom_mem, meminitdata_initrom, MEMINITDATA_INITROM_SIZE);
+		return rom_mem[0xFFFC] | (rom_mem[0xFFFD] << 8);
+	}
+	if (!rom_external_requested_fn || !*rom_external_requested_fn)
+		return -1;	// no ROM override
+	if (xemu_load_file(rom_external_requested_fn, rom_mem, 0x20000, 0x20000, "Tried to load that external file as ROM on user's request.\nUsing the default installed, instead.") > 0) {
+		DEBUGPRINT("ROM: loaded external ROM from %s" NL, xemu_load_filepath);
+		return rom_mem[0xFFFC] | (rom_mem[0xFFFD] << 8);
+	}
+	DEBUGPRINT("ROM: failed to load external ROM from %s" NL, rom_external_requested_fn);
+	return -1;	// Failed to load external ROM
 }

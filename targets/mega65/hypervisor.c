@@ -40,9 +40,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 int in_hypervisor;			// mega65 hypervisor mode
 
-int hypervisor_request_stub_rom = 0;
-int hypervisor_request_init_rom = 0;
-
 static char debug_lines[0x4000][2][INFO_MAX_SIZE];		// I know. UGLY! and wasting memory. But this is only a HACK :)
 static int resolver_ok = 0;
 
@@ -312,16 +309,16 @@ void hypervisor_enter ( int trapno )
 // Actual (CPU level opcode execution) emulation of MEGA65 should start with calling this function (surely after initialization of every subsystems etc).
 void hypervisor_start_machine ( void )
 {
-	in_hypervisor = 0;
-	hypervisor_queued_trap = -1;
-	first_hypervisor_leave = 1;
-	execution_range_check_gate = 0;
-	hypervisor_enter(TRAP_RESET);
 	char hyperver[64];
 	hypervisor_extract_version_string(hyperver, sizeof hyperver);
 	DEBUGPRINT("HYPERVISOR: HYPPO version \"%s\" starting with TRAP reset (#$%02X)" NL, hyperver, TRAP_RESET);
 	hdos.setnam_fn[0] = '\0';
 	hdos.func = -1;
+	in_hypervisor = 0;
+	hypervisor_queued_trap = -1;
+	first_hypervisor_leave = 1;
+	execution_range_check_gate = 0;
+	hypervisor_enter(TRAP_RESET);
 }
 
 
@@ -356,26 +353,14 @@ static void first_leave ( void )
 		DEBUGPRINT("HYPERVISOR: first return after RESET, start of processing workarounds." NL);
 		first_hypervisor_leave = 0;
 		execution_range_check_gate = 1;
-		int new_pc = -1;
-		if (hypervisor_request_stub_rom) {
-			DEBUGPRINT("MEM: using stub-ROM was forced" NL);
-			hypervisor_request_stub_rom = 0;
-			new_pc = rom_make_xemu_stub_rom(main_ram + 0x20000, XEMU_STUB_ROM_SAVE_FILENAME);
-		} else if (hypervisor_request_init_rom) {
-			DEBUGPRINT("MEM: using init-ROM was forced" NL);
-			hypervisor_request_init_rom = 0;
-			new_pc = refill_c65_rom_from_initrom();
-		} else {
-			new_pc = refill_c65_rom_from_external();	// this function should decide&load something if it wants
-			if (new_pc >= 0)
-				DEBUGPRINT("MEM: using external custom ROM was forced" NL);
-		}
+		// returns with new PC for reset vector _OR_ negative value if no ROM override was needed
+		int new_pc = rom_do_override(main_ram + 0x20000);
 		if (new_pc >= 0) {
 			// if ROM was forced here, PC hypervisor would return is invalid (valid for the _original_ ROM which was overriden here!), thus we must set it now!
-			DEBUGPRINT("MEM: force ROM re-apply policy, PC change: $%04X -> $%04X" NL, cpu65.pc, new_pc);
+			DEBUGPRINT("ROM: force ROM re-apply policy, PC change: $%04X -> $%04X" NL, cpu65.pc, new_pc);
 			cpu65.pc = new_pc;
 		} else {
-			DEBUGPRINT("MEM: no custom force-ROM policy, PC remains at: $%04X" NL, cpu65.pc);
+			DEBUGPRINT("ROM: no custom force-ROM policy, PC remains at: $%04X" NL, cpu65.pc);
 		}
 		dma_init_set_rev(configdb.dmarev, main_ram + 0x20000);
 		if (configdb.init_videostd >= 0) {

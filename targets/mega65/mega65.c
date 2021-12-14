@@ -42,6 +42,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "inject.h"
 #include "configdb.h"
 #include "xemu/emutools_socketapi.h"
+#include "rom.h"
 
 
 static int nmi_level;			// please read the comment at nmi_set() below
@@ -290,25 +291,6 @@ static void preinit_memory_for_start ( void )
 	//                  ----------------------------------------------------------------------------------------------------------------------------------------------------------
 	if (!external_hickup)
 		hypervisor_debug_invalidate("no external hickup is loaded, built-in one does not have debug info");
-}
-
-
-int refill_c65_rom_from_initrom ( void )
-{
-	memcpy(main_ram + 0x20000, meminitdata_initrom, MEMINITDATA_INITROM_SIZE);
-	return main_ram[0x2FFFC] | (main_ram[0x2FFFD] << 8);	// pass back the new reset vector
-}
-
-
-int refill_c65_rom_from_external ( void )
-{
-	if (!configdb.rom || !*configdb.rom)
-		return -1;	// not using external ROM
-	// Try to load external sourced ROM
-	if (xemu_load_file(configdb.rom, main_ram + 0x20000, 0x20000, 0x20000, "Tried to load that external file as ROM on user's request.\nUsing the default installed, instead.") == 0x20000)
-		return main_ram[0x2FFFC] | (main_ram[0x2FFFD] << 8);	// succeeded, pass back the new reset vector
-	// Failed to load external ROM
-	return -1;
 }
 
 
@@ -818,8 +800,9 @@ int main ( int argc, char **argv )
 	} else if (configdb.autoload)
 		c64_register_fake_typing(fake_typing_for_load65);
 #endif
-	hypervisor_request_stub_rom = configdb.stubrom;
-	hypervisor_request_init_rom = configdb.initrom;
+	rom_stubrom_requested = configdb.stubrom;
+	rom_initrom_requested = configdb.initrom;
+	rom_external_requested_fn = configdb.rom;
 	allow_freezer_triggering = configdb.allowfreezer;
 	audio65_start();
 	xemu_set_full_screen(configdb.fullscreen_requested);

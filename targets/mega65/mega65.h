@@ -35,8 +35,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define CHAR_ROM_NAME		"CHARROM.ROM"
 #define CHAR_ROM_SIZE		0x2000
 
-#define XEMU_STUB_ROM_SAVE_FILENAME "@XEMU-STUB.ROM"
-
 // Do *NOT* modify these, as other parts of the emulator currently depends on these values ...
 #define TEXTURE_FORMAT		SDL_PIXELFORMAT_ARGB8888
 #define USE_LOCKED_TEXTURE	1
@@ -70,9 +68,6 @@ extern void reset_mega65      ( void );
 extern int  reset_mega65_asked( void );
 
 extern int  dump_memory       ( const char *fn );
-
-extern int  refill_c65_rom_from_external ( void );
-extern int  refill_c65_rom_from_initrom ( void );
 
 extern int newhack;
 extern int registered_screenshot_request;
