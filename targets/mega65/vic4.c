@@ -250,7 +250,7 @@ void vic4_close_frame_access ( void )
 }
 
 // The hardware allows a sideborder value of 16383 as a remnant of old MEGA65 design.
-// In practical terms, any sideborder exceeding display_width / 2 will cover the entire 
+// In practical terms, any sideborder exceeding display_width / 2 will cover the entire
 // character generator (effective 400 since since dw is fixed to 800px wide). Since our
 // scanline renderer takes borders into account and any bizarre value will crash emulator
 // due to offlimits pixel buffer access, we clamp the maximum practical sideborder value
@@ -277,7 +277,7 @@ static void vic4_update_sideborder_dimensions ( void )
 		else	// 78-col mode
 			border_x_left = FRAME_H_FRONT + vic4_single_side_border_clamped() + 15;
 	}
-	
+
 	DEBUGPRINT("VIC4: set border left=%d, right=%d, textxpos=%d" NL, border_x_left, border_x_right, CHARGEN_X_START);
 }
 

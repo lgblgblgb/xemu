@@ -67,8 +67,8 @@ struct configdb_st {
 	int	allowfreezer;
 	int	hyperdebug;
 	int	hyperserialascii;
-	int	stubrom;
-	int	initrom;
+	int	usestubrom;
+	int	useinitrom;
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	int	virtsd;
 #endif

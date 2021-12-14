@@ -358,7 +358,10 @@ static void first_leave ( void )
 		if (new_pc >= 0) {
 			// if ROM was forced here, PC hypervisor would return is invalid (valid for the _original_ ROM which was overriden here!), thus we must set it now!
 			DEBUGPRINT("ROM: force ROM re-apply policy, PC change: $%04X -> $%04X" NL, cpu65.pc, new_pc);
+			if (new_pc < 0x8000)
+				WARNING_WINDOW("ROM override has a suspect reset address! ($%04X)", new_pc);
 			cpu65.pc = new_pc;
+			// FIXME: apply font upload to WOM, maybe here?
 		} else {
 			DEBUGPRINT("ROM: no custom force-ROM policy, PC remains at: $%04X" NL, cpu65.pc);
 		}

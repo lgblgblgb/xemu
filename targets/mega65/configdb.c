@@ -77,8 +77,8 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "fullscreen", "Start in fullscreen mode", &configdb.fullscreen_requested },
 	{ "hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode", &configdb.hyperdebug },
 	{ "hyperserialascii", "Convert PETSCII/ASCII hypervisor serial debug output to ASCII upper-case", &configdb.hyperserialascii },
-	{ "stubrom", "Use Xemu's internal stub-rom", &configdb.stubrom },
-	{ "initrom", "Use Xemu's internal init-rom", &configdb.initrom },
+	{ "usestubrom", "Use Xemu's internal stub-rom", &configdb.usestubrom },
+	{ "useinitrom", "Use Xemu's internal init-rom", &configdb.useinitrom },
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	{ "virtsd", "Interpret -sdimg option as a DIRECTORY to be fed onto the FAT32FS and use virtual-in-memory disk storage.", &configdb.virtsd },
 #endif

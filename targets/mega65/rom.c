@@ -31,6 +31,8 @@ int rom_is_stub = 0;
 int rom_stubrom_requested = 0;
 int rom_initrom_requested = 0;
 const char *rom_external_requested_fn = NULL;
+int rom_external_requested_only_once = 0;
+int rom_is_overriden = 0;
 
 static const char _rom_name_closed[]	= "Closed-ROMs";
 static const char _rom_name_open[]	= "Open-ROMs";
@@ -39,6 +41,24 @@ static const char _rom_name_bad[]	= "?unknown?";
 static const char _rom_name_preboot[]	= "?before-boot?";
 
 const char *rom_name = _rom_name_preboot;
+
+
+void rom_clear_reports ( void )
+{
+	rom_is_overriden = 0;
+	rom_is_openroms = 0;
+	rom_is_stub = 0;
+	rom_date = 0;
+	rom_name = _rom_name_preboot;
+}
+
+
+void rom_unset_requests ( void )
+{
+	rom_stubrom_requested = 0;
+	rom_initrom_requested = 0;
+	rom_external_requested_fn = NULL;
+}
 
 
 static int rom_detect_try ( const Uint8 *rom, const Uint8 rom_id )
@@ -108,7 +128,7 @@ static const Uint8 xemu_stub_rom[] = {
 };
 
 
-int rom_make_xemu_stub_rom ( Uint8 *rom, const char *save_file )
+void rom_make_xemu_stub_rom ( Uint8 *rom, const char *save_file )
 {
 	// The message is line-wrapped by the ROM maker code itself. '\n' works as forcing into a new line,
 	// as expected, '~' toggles highlighted/normal mode. Text MUST be ended with a '\n'!
@@ -213,7 +233,6 @@ int rom_make_xemu_stub_rom ( Uint8 *rom, const char *save_file )
 		xemu_save_file(save_file, rom, 0x20000, NULL);
 	if (dyn_rom)
 		free(rom);
-	return 0xE000;
 }
 
 
@@ -221,25 +240,36 @@ int rom_make_xemu_stub_rom ( Uint8 *rom, const char *save_file )
 // Thus this is an ability to override the ROM what HICKUP loaded for us with some another one.
 // Return value: negative: no custom ROM is needed to be loaded,
 //               otherwise, the RESET vector of the ROM (CPU PC value)
-int rom_do_override ( Uint8 *rom_mem )
+int rom_do_override ( Uint8 *rom )
 {
+	rom_is_overriden = 0;
 	if (rom_stubrom_requested) {
 		DEBUGPRINT("ROM: using stub-ROM was forced" NL);
 		rom_stubrom_requested = 0;
-		return rom_make_xemu_stub_rom(rom_mem, XEMU_STUB_ROM_SAVE_FILENAME);
+		rom_make_xemu_stub_rom(rom, XEMU_STUB_ROM_SAVE_FILENAME);
+		goto overriden;
 	}
 	if (rom_initrom_requested) {
 		DEBUGPRINT("ROM: using init-ROM was forced" NL);
 		rom_initrom_requested = 0;
-		memcpy(rom_mem, meminitdata_initrom, MEMINITDATA_INITROM_SIZE);
-		return rom_mem[0xFFFC] | (rom_mem[0xFFFD] << 8);
+		memcpy(rom, meminitdata_initrom, MEMINITDATA_INITROM_SIZE);
+		goto overriden;
 	}
 	if (!rom_external_requested_fn || !*rom_external_requested_fn)
-		return -1;	// no ROM override
-	if (xemu_load_file(rom_external_requested_fn, rom_mem, 0x20000, 0x20000, "Tried to load that external file as ROM on user's request.\nUsing the default installed, instead.") > 0) {
+		return -1;	// no ROM override was needed
+	if (xemu_load_file(rom_external_requested_fn, rom, 0x20000, 0x20000, "Tried to load that external file as ROM on user's request.\nUsing the default installed, instead.") > 0) {
 		DEBUGPRINT("ROM: loaded external ROM from %s" NL, xemu_load_filepath);
-		return rom_mem[0xFFFC] | (rom_mem[0xFFFD] << 8);
+		if (rom_external_requested_only_once) {
+			rom_external_requested_only_once = 0;
+			rom_external_requested_fn = NULL;
+		}
+		goto overriden;
 	}
 	DEBUGPRINT("ROM: failed to load external ROM from %s" NL, rom_external_requested_fn);
+	rom_external_requested_fn = NULL;	// do not try again on next reset/etc, since it was a failure
 	return -1;	// Failed to load external ROM
+overriden:
+	rom_is_overriden = 1;
+	// return with the RESET vector of the ROM
+	return rom[0xFFFC] | (rom[0xFFFD] << 8);
 }

@@ -461,7 +461,8 @@ static void shutdown_callback ( void )
 
 void reset_mega65 ( void )
 {
-	preinit_memory_for_start();	// FIXME: hack, to allow to enter into utility menu (otherwise hickup displays you must power-cycle ..)
+	rom_clear_reports();
+	preinit_memory_for_start();
 	eth65_reset();
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0xFF;
@@ -800,8 +801,8 @@ int main ( int argc, char **argv )
 	} else if (configdb.autoload)
 		c64_register_fake_typing(fake_typing_for_load65);
 #endif
-	rom_stubrom_requested = configdb.stubrom;
-	rom_initrom_requested = configdb.initrom;
+	rom_stubrom_requested = configdb.usestubrom;
+	rom_initrom_requested = configdb.useinitrom;
 	rom_external_requested_fn = configdb.rom;
 	allow_freezer_triggering = configdb.allowfreezer;
 	audio65_start();
