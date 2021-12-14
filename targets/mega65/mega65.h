@@ -32,8 +32,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // Used by updater, etc ... base name only, no path info!
 #define MEGA65_ROM_NAME		"MEGA65.ROM"
 #define MEGA65_ROM_SIZE		0x20000
-#define CHAR_ROM_NAME		"CHARROM.ROM"
-#define CHAR_ROM_SIZE		0x2000
+#define CHAR_ROM_NAME		"CHARROM.M65"
+#define CHAR_ROM_SIZE		0x1000
 
 // Do *NOT* modify these, as other parts of the emulator currently depends on these values ...
 #define TEXTURE_FORMAT		SDL_PIXELFORMAT_ARGB8888

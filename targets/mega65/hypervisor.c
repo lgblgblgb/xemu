@@ -228,7 +228,7 @@ static void hdos_leave ( void )
 	if (hdos.func == 0x2E && cpu65.pf_c) {	// HDOS setnam function. Also check carry set (which means "ok" by HDOS trap)
 		copy_string_from_user(hdos.setnam_fn, sizeof hdos.setnam_fn, hdos.in_x + (hdos.in_y << 8));
 		for (char *p = hdos.setnam_fn; *p; p++) {
-			if (*p < 0x20 || *p >= 0x80) {
+			if (*p < 0x20 || *p >= 0x7F) {
 				DEBUGHDOS("HDOS: setnam(): invalid character in filename $%02X" NL, *p);
 				hdos.setnam_fn[0] = '\0';
 				break;
@@ -353,6 +353,7 @@ static void first_leave ( void )
 		DEBUGPRINT("HYPERVISOR: first return after RESET, start of processing workarounds." NL);
 		first_hypervisor_leave = 0;
 		execution_range_check_gate = 1;
+		// Workarounds: ROM override
 		// returns with new PC for reset vector _OR_ negative value if no ROM override was needed
 		int new_pc = rom_do_override(main_ram + 0x20000);
 		if (new_pc >= 0) {
@@ -361,11 +362,15 @@ static void first_leave ( void )
 			if (new_pc < 0x8000)
 				WARNING_WINDOW("ROM override has a suspect reset address! ($%04X)", new_pc);
 			cpu65.pc = new_pc;
-			// FIXME: apply font upload to WOM, maybe here?
+			// Since we have overriden ROM, we also must take the responsibility to do what Hyppo would also do:
+			// uploading chargen from the loaded ROM into the "char WOM".
+			memcpy(char_wom, main_ram + 0x2D000, 0x1000);
 		} else {
 			DEBUGPRINT("ROM: no custom force-ROM policy, PC remains at $%04X" NL, cpu65.pc);
 		}
+		// Workaround: set DMA version based on ROM version
 		dma_init_set_rev(configdb.dmarev, main_ram + 0x20000);
+		// Workaround: force video standard
 		if (configdb.init_videostd >= 0) {
 			DEBUGPRINT("VIC: setting %s mode as initial-default based on request" NL, configdb.init_videostd ? "NTSC" : "PAL");
 			if (configdb.init_videostd)

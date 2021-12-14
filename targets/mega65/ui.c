@@ -258,8 +258,7 @@ static void ui_update_sdcard ( void )
 	}
 	// Generate character ROM from the ROM image
 	Uint8 char_rom[CHAR_ROM_SIZE];
-	memcpy(char_rom + 0x0000, xemu_load_buffer_p + 0xD000, 0x1000);
-	memcpy(char_rom + 0x1000, xemu_load_buffer_p + 0x9000, 0x1000);
+	memcpy(char_rom, xemu_load_buffer_p + 0xD000, 0x1000);
 	// And store our character ROM!
 	strcpy(fnbuf_target + strlen(sdl_pref_dir), CHAR_ROM_NAME);
 	if (xemu_save_file(
@@ -279,6 +278,7 @@ static void ui_update_sdcard ( void )
 		);
 	}
 	reset_mega65();
+	rom_unset_requests();
 ret:
 	if (xemu_load_buffer_p) {
 		free(xemu_load_buffer_p);
