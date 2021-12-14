@@ -283,6 +283,8 @@ static GtkWidget *_gtkgui_recursive_menu_builder ( const struct menu_st desc[], 
 					DEBUGGUI("GUI: query-back for \"%s\"" NL, desc[a].name);
 					((xemugui_callback_t)(desc[a].handler))(&desc[a], &type);
 				}
+				if ((type & XEMUGUI_MENUFLAG_HIDDEN))
+					continue;
 				if ((type & (XEMUGUI_MENUFLAG_CHECKED | XEMUGUI_MENUFLAG_UNCHECKED))) {
 					item = gtk_check_menu_item_new_with_label(desc[a].name);
 					gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), (type & XEMUGUI_MENUFLAG_CHECKED));
