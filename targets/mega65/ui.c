@@ -209,7 +209,7 @@ static void ui_update_sdcard ( void )
 		goto ret;
 	}
 	// Load selected ROM image into memory, also checks the size!
-	if (xemu_load_file(fnbuf, NULL, 0x20000, 0x20000, "Cannot begin image update, bad C65/M65 ROM image has been selected!") != 0x20000)
+	if (xemu_load_file(fnbuf, NULL, 0x20000, 0x20000, "Cannot start updating, bad C65/M65 ROM image has been selected!") != 0x20000)
 		goto ret;
 	// Check the loaded ROM: let's warn the user if it's open-ROMs, since it seems users are often confused to think,
 	// that's the right choice for every-day usage.
@@ -256,14 +256,11 @@ static void ui_update_sdcard ( void )
 		))
 			goto ret;
 	}
-	// Generate character ROM from the ROM image
-	Uint8 char_rom[CHAR_ROM_SIZE];
-	memcpy(char_rom, xemu_load_buffer_p + 0xD000, 0x1000);
-	// And store our character ROM!
+	// store our character ROM
 	strcpy(fnbuf_target + strlen(sdl_pref_dir), CHAR_ROM_NAME);
 	if (xemu_save_file(
 		fnbuf_target,
-		char_rom,
+		xemu_load_buffer_p + 0xD000,
 		CHAR_ROM_SIZE,
 		"Cannot save the extracted CHAR ROM file for the updater"
 	))
