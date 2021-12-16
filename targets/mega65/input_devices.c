@@ -252,7 +252,7 @@ void kbd_trigger_restore_trap ( void )
 			if (!in_hypervisor) {
 				DEBUGPRINT("KBD: RESTORE trap has been triggered." NL);
 				KBD_RELEASE_KEY(RESTORE_KEY_POS);
-				hypervisor_enter(TRAP_RESTORE);
+				hypervisor_enter(TRAP_FREEZER_RESTORE_PRESS);
 			} else
 				DEBUGPRINT("KBD: *IGNORING* RESTORE trap trigger, already in hypervisor mode!" NL);
 		}

@@ -39,6 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "configdb.h"
 #include "rom.h"
 #include "hypervisor.h"
+#include "xemu/cpu65.h"
 
 
 static int attach_d81 ( const char *fn )
@@ -444,13 +445,15 @@ static void ui_emu_info ( void )
 	xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
 	char uname_str[100];
 	xemu_get_uname_string(uname_str, sizeof uname_str);
-	char hyperver_str[64];
-	hypervisor_extract_version_string(hyperver_str, sizeof hyperver_str);
+	sha1_hash_str rom_now_hash_str;
+	sha1_checksum_as_string(rom_now_hash_str, main_ram + 0x20000, 0x20000);
 	INFO_WINDOW(
 		"DMA chip current revision: %d (F018 rev-%s)\n"
 		"ROM version detected: %d %s (%s)\n"
+		"ROM checksum: %s (%s)\n"
 		"Hyppo version: %s (%s)\n"
 		"C64 'CPU' I/O port (low 3 bits): DDR=%d OUT=%d\n"
+		"Current PC: $%04X (linear: $%07X)\n"
 		"Current VIC and I/O mode: %s %s, hot registers are %s\n"
 		"\n"
 		"Xemu host CPU usage so far: %s\n"
@@ -458,8 +461,10 @@ static void ui_emu_info ( void )
 		,
 		dma_chip_revision, dma_chip_revision ? "B, new" : "A, old",
 		rom_date, rom_name, rom_is_overriden ? "OVERRIDEN" : "installed",
-		hyperver_str, hickup_is_overriden ?  "OVERRIDEN" : "built-in",
+		rom_now_hash_str, strcmp(rom_hash_str, rom_now_hash_str) ? "MANGLED" : "intact",
+		hyppo_version_string, hickup_is_overriden ?  "OVERRIDEN" : "built-in",
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
+		cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc),
 		vic_iomode < 4 ? iomode_names[vic_iomode] : "?INVALID?", videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
 		td_stat_str,
 		uname_str

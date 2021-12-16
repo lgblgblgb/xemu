@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 int rom_date = 0;
 int rom_is_openroms = 0;
 int rom_is_stub = 0;
+sha1_hash_str rom_hash_str;
 
 int rom_stubrom_requested = 0;
 int rom_initrom_requested = 0;
@@ -82,9 +83,8 @@ void rom_detect_date ( const Uint8 *rom )
 		DEBUGPRINT("ROM: version check is disabled (NULL pointer), previous version info: %d" NL, rom_date);
 		return;
 	}
-	sha1_hash_str hash_str;
-	sha1_checksum_as_string(hash_str, rom, MEMINITDATA_INITROM_SIZE);
-	DEBUGPRINT("ROM: SHA1 checksum is %s" NL, hash_str);
+	sha1_checksum_as_string(rom_hash_str, rom, MEMINITDATA_INITROM_SIZE);
+	DEBUGPRINT("ROM: SHA1 checksum is %s" NL, rom_hash_str);
 	const int res_open   = rom_detect_try(rom + 0x10, 0x4F);	// 'O' (0x4F) at ofs $10 + followed by "rom date": open-ROMs
 	const int res_closed = rom_detect_try(rom + 0x16, 0x56);	// 'V' (0x56) at ofs $16 + followed by "rom date": closed-ROMs
 	rom_is_stub = 0;

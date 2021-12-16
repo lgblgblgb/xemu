@@ -19,12 +19,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_MEGA65_HYPERVISOR_H_INCLUDED
 #define XEMU_MEGA65_HYPERVISOR_H_INCLUDED
 
-#define TRAP_RESET	0x40
-#define TRAP_RESTORE	0x42
-#define TRAP_ALTTAB	0x43
+#define TRAP_DOS			0x00
+#define TRAP_FREEZER_USER_CALL		0x3F
+#define TRAP_RESET			0x40
+#define TRAP_FREEZER_RESTORE_PRESS	0x42
+#define TRAP_ALTTAB			0x43
 
 extern int  in_hypervisor;
 extern int  hickup_is_overriden;
+extern char hyppo_version_string[64];
 
 extern int  hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hypervisor_serial_out_asciizer );
 extern void hypervisor_debug ( void );
@@ -36,6 +39,5 @@ extern void hypervisor_start_machine ( void );
 extern void hypervisor_leave ( void );
 extern void hypervisor_serial_monitor_push_char ( Uint8 chr );
 extern void hypervisor_debug_invalidate ( const char *reason );
-extern void hypervisor_extract_version_string ( char *target, int target_max_size );
 
 #endif

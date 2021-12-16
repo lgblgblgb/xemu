@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 extern int rom_date;
 extern const char *rom_name;
+extern sha1_hash_str rom_hash_str;
 extern int rom_is_openroms;
 extern int rom_is_stub;
 extern const Uint8 vga_font_8x8[2048];

@@ -252,7 +252,7 @@ static int preinit_memory_item ( const char *name, const char *desc, Uint8 *targ
 	sha1_hash_str hash_str;
 	if (XEMU_LIKELY(!fn || !*fn)) {
 		sha1_checksum_as_string(hash_str, source_ptr, source_size);
-		DEBUGPRINT("MEMCONTENT: \"%s\" (%s) was not requested, using the default ($%X bytes) [%s]." NL, name, desc, source_size, hash_str);
+		DEBUGPRINT("MEMCONTENT: \"%s\" (%s) was not requested, using the built-in ($%X bytes) [%s]." NL, name, desc, source_size, hash_str);
 		goto internal;
 	}
 	const int size = xemu_load_file(fn, target_ptr, min_size, max_size, desc);
@@ -406,6 +406,8 @@ static void mega65_init ( void )
 	hypervisor_start_machine();
 	speed_current = 0;
 	machine_set_speed(1);
+	if (configdb.useutilmenu)
+		hwa_kbd_fake_key(0x20);
 	DEBUG("INIT: end of initialization!" NL);
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemusnap_init(m65_snapshot_definition);

@@ -72,6 +72,7 @@ struct configdb_st {
 	int	hyperserialascii;
 	int	usestubrom;
 	int	useinitrom;
+	int	useutilmenu;
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	int	virtsd;
 #endif

@@ -31,18 +31,27 @@ MEGA65_FILES	+= sdcard-files/FREEZER.M65
 MEGA65_FILES	+= sdcard-files/AUDIOMIX.M65 sdcard-files/C64THUMB.M65 sdcard-files/C65THUMB.M65 sdcard-files/ROMLOAD.M65 sdcard-files/SPRITED.M65
 
 MEGA65_FP_FILES	= $(addprefix $(MEGA65_CORE)/,$(MEGA65_FILES))
-MEGA65_LOCALDIR	= sys-files-mega65-core
+MEGA65_LOCALDIR	= .sys-files-mega65-core
 
 include ../../build/Makefile.common
 
+# mega65-core has very tricky build system, it's very hard to be sure, that everything
+# is up-to-date, this is the reason for this mess
 recreatememcontent:
 	@echo "*** Compiling needed files from mega65-core at $(MEGA65_CORE) ***"
+	$(MAKE) -C $(MEGA65_CORE) clean
+	for dir in src/mega65-freezemenu src/mega65-fdisk src/mega65-libc src/open-roms ; do $(MAKE) -C $(MEGA65_CORE)/$$dir clean ; done
+	find $(MEGA65_CORE) -name "*.o" | xargs -n 100 rm -f
+	find $(MEGA65_CORE) -name "*.M65" | xargs -n 100 rm -f
+	mkdir -p $(MEGA65_CORE)/sdcard-files
 	rm -f `echo $(MEGA65_FP_FILES) | fgrep -v mega65.rom`
-	rm -f $(MEGA65_CORE)/sdcard-files/*
+	rm -f $(MEGA65_CORE)/sdcard-files/* $(MEGA65_CORE)/src/mega65-fdisk/*.prg $(MEGA65_CORE)/src/utilities/*.prg
+	$(MAKE) -C $(MEGA65_CORE)/src/mega65-fdisk m65fdisk.prg
 	$(MAKE) -C $(MEGA65_CORE)/src/mega65-freezemenu
 	$(MAKE) -C $(MEGA65_CORE) freezer_files
 	$(MAKE) -C $(MEGA65_CORE) $(MEGA65_FILES)
 	mkdir -p $(MEGA65_LOCALDIR)
+	rm -f $(MEGA65_LOCALDIR)/*
 	cp $(MEGA65_FP_FILES) $(MEGA65_LOCALDIR)/
 	@echo "*** Generating C files from mega65-core binary results ***"
 	python3 $(TOPDIR)/build/m65-memcontent-generator.py memcontent.c memcontent.h $(MEGA65_FP_FILES)

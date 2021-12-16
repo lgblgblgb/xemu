@@ -38,23 +38,23 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define INFO_MAX_SIZE	32
 
 
-int in_hypervisor;			// mega65 hypervisor mode
+int  in_hypervisor;			// mega65 hypervisor mode
+char hyppo_version_string[64] = "?";
+int  hickup_is_overriden = 0;
 
-static char debug_lines[0x4000][2][INFO_MAX_SIZE];		// I know. UGLY! and wasting memory. But this is only a HACK :)
-static int resolver_ok = 0;
+static char  debug_lines[0x4000][2][INFO_MAX_SIZE];		// I know. UGLY! and wasting memory. But this is only a HACK :)
+static int   resolver_ok = 0;
 
 static char  hypervisor_monout[0x10000];
 static char *hypervisor_monout_p = hypervisor_monout;
 
-static int debug_on = 0;
-static int hypervisor_serial_out_asciizer;
+static int   debug_on = 0;
+static int   hypervisor_serial_out_asciizer;
 
-static int first_hypervisor_leave;
-static int execution_range_check_gate;
+static int   hypervisor_is_first_call;
+static int   execution_range_check_gate;
 
-static int hypervisor_queued_trap = -1;
-
-int hickup_is_overriden = 0;
+static int   hypervisor_queued_trap = -1;
 
 static struct {
 	int   func;
@@ -300,38 +300,19 @@ void hypervisor_enter ( int trapno )
 	machine_set_speed(0);	// set machine speed (hypervisor always runs at M65 fast ... ??) FIXME: check this!
 	cpu65.pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
 	DEBUG("HYPERVISOR: entering into hypervisor mode, trap=$%02X (A=$%02X) @ $%04X -> $%04X" NL, trapno, cpu65.a, D6XX_registers[0x48] | (D6XX_registers[0x49] << 8), cpu65.pc);
-	if (trapno == 0) {
+	if (trapno == TRAP_DOS) {
 		hdos.func = cpu65.a & 0x7E;
 		hdos_enter();
 	} else
 		hdos.func = -1;
-	DEBUGPRINT("HYPERVISOR: trap #$%02X" NL, trapno);
-	if ((trapno == TRAP_RESTORE || trapno == 0x3F) && !configdb.allowfreezer) {
-		WARNING_WINDOW("FREEZER is not enabled feature in Xemu.");
+	if ((trapno == TRAP_FREEZER_RESTORE_PRESS || trapno == TRAP_FREEZER_USER_CALL) && !configdb.allowfreezer) {
+		WARNING_WINDOW("FREEZER is not enabled in Xemu currently.");
 		hypervisor_leave();
 	}
 }
 
 
-// Actual (CPU level opcode execution) emulation of MEGA65 should start with calling this function (surely after initialization of every subsystems etc).
-void hypervisor_start_machine ( void )
-{
-	if (configdb.hdosdir) {
-	}
-	char hyperver[64];
-	hypervisor_extract_version_string(hyperver, sizeof hyperver);
-	DEBUGPRINT("HYPERVISOR: HYPPO version \"%s\" (%s) starting with TRAP reset (#$%02X)" NL, hyperver, hickup_is_overriden ? "OVERRIDEN" : "built-in", TRAP_RESET);
-	hdos.setnam_fn[0] = '\0';
-	hdos.func = -1;
-	in_hypervisor = 0;
-	hypervisor_queued_trap = -1;
-	first_hypervisor_leave = 1;
-	execution_range_check_gate = 0;
-	hypervisor_enter(TRAP_RESET);
-}
-
-
-void hypervisor_extract_version_string ( char *target, int target_max_size )
+static void extract_version_string ( char *target, int target_max_size )
 {
 	static const char marker[] = "GIT: ";
 	int a = 0;
@@ -357,10 +338,32 @@ void hypervisor_extract_version_string ( char *target, int target_max_size )
 }
 
 
-static void first_leave ( void )
+// Actual (CPU level opcode execution) emulation of MEGA65 should start with calling this function (surely after initialization of every subsystems etc).
+void hypervisor_start_machine ( void )
+{
+	static int first_time_init = 1;
+	if (first_time_init) {
+		first_time_init = 0;
+		// Setup root for the "faked" HDOS traps
+		// First build our default one. We may need this anyway, if overriden one invalid
+		if (configdb.hdosdir) {
+		}
+	}
+	hdos.setnam_fn[0] = '\0';
+	hdos.func = -1;
+	in_hypervisor = 0;
+	hypervisor_queued_trap = -1;
+	hypervisor_is_first_call = 1;
+	execution_range_check_gate = 0;
+	extract_version_string(hyppo_version_string, sizeof hyppo_version_string);
+	DEBUGPRINT("HYPERVISOR: HYPPO version \"%s\" (%s) starting with TRAP reset (#$%02X)" NL, hyppo_version_string, hickup_is_overriden ? "OVERRIDEN" : "built-in", TRAP_RESET);
+	hypervisor_enter(TRAP_RESET);
+}
+
+
+static inline void first_leave ( void )
 {
 	DEBUGPRINT("HYPERVISOR: first return after RESET, start of processing workarounds." NL);
-	first_hypervisor_leave = 0;
 	execution_range_check_gate = 1;
 	// Workarounds: ROM override
 	// returns with new PC for reset vector _OR_ negative value if no ROM override was needed
@@ -431,8 +434,10 @@ void hypervisor_leave ( void )
 	machine_set_speed(0);	// restore speed ...
 	memory_set_vic3_rom_mapping(vic_registers[0x30]);	// restore possible active VIC-III mapping
 	memory_set_do_map();	// restore mapping ...
-	if (XEMU_UNLIKELY(first_hypervisor_leave))
+	if (XEMU_UNLIKELY(hypervisor_is_first_call)) {
 		first_leave();
+		hypervisor_is_first_call = 0;
+	}
 	if (XEMU_UNLIKELY(hypervisor_queued_trap >= 0)) {
 		// Not so much used currently ...
 		DEBUG("HYPERVISOR: processing queued trap on leaving hypervisor: trap #$%02X" NL, hypervisor_queued_trap);
