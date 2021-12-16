@@ -54,6 +54,8 @@ static int execution_range_check_gate;
 
 static int hypervisor_queued_trap = -1;
 
+int hickup_is_overriden = 0;
+
 static struct {
 	int   func;
 	Uint8 in_x, in_y, in_z;
@@ -303,15 +305,22 @@ void hypervisor_enter ( int trapno )
 		hdos_enter();
 	} else
 		hdos.func = -1;
+	DEBUGPRINT("HYPERVISOR: trap #$%02X" NL, trapno);
+	if ((trapno == TRAP_RESTORE || trapno == 0x3F) && !configdb.allowfreezer) {
+		WARNING_WINDOW("FREEZER is not enabled feature in Xemu.");
+		hypervisor_leave();
+	}
 }
 
 
 // Actual (CPU level opcode execution) emulation of MEGA65 should start with calling this function (surely after initialization of every subsystems etc).
 void hypervisor_start_machine ( void )
 {
+	if (configdb.hdosdir) {
+	}
 	char hyperver[64];
 	hypervisor_extract_version_string(hyperver, sizeof hyperver);
-	DEBUGPRINT("HYPERVISOR: HYPPO version \"%s\" starting with TRAP reset (#$%02X)" NL, hyperver, TRAP_RESET);
+	DEBUGPRINT("HYPERVISOR: HYPPO version \"%s\" (%s) starting with TRAP reset (#$%02X)" NL, hyperver, hickup_is_overriden ? "OVERRIDEN" : "built-in", TRAP_RESET);
 	hdos.setnam_fn[0] = '\0';
 	hdos.func = -1;
 	in_hypervisor = 0;
@@ -350,35 +359,35 @@ void hypervisor_extract_version_string ( char *target, int target_max_size )
 
 static void first_leave ( void )
 {
-		DEBUGPRINT("HYPERVISOR: first return after RESET, start of processing workarounds." NL);
-		first_hypervisor_leave = 0;
-		execution_range_check_gate = 1;
-		// Workarounds: ROM override
-		// returns with new PC for reset vector _OR_ negative value if no ROM override was needed
-		int new_pc = rom_do_override(main_ram + 0x20000);
-		if (new_pc >= 0) {
-			// if ROM was forced here, PC hypervisor would return is invalid (valid for the _original_ ROM which was overriden here!), thus we must set it now!
-			DEBUGPRINT("ROM: force ROM re-apply policy, PC change: $%04X -> $%04X" NL, cpu65.pc, new_pc);
-			if (new_pc < 0x8000)
-				WARNING_WINDOW("ROM override has a suspect reset address! ($%04X)", new_pc);
-			cpu65.pc = new_pc;
-			// Since we have overriden ROM, we also must take the responsibility to do what Hyppo would also do:
-			// uploading chargen from the loaded ROM into the "char WOM".
-			memcpy(char_wom, main_ram + 0x2D000, 0x1000);
-		} else {
-			DEBUGPRINT("ROM: no custom force-ROM policy, PC remains at $%04X" NL, cpu65.pc);
-		}
-		// Workaround: set DMA version based on ROM version
-		dma_init_set_rev(configdb.dmarev, main_ram + 0x20000);
-		// Workaround: force video standard
-		if (configdb.init_videostd >= 0) {
-			DEBUGPRINT("VIC: setting %s mode as initial-default based on request" NL, configdb.init_videostd ? "NTSC" : "PAL");
-			if (configdb.init_videostd)
-				vic_registers[0x6F] |= 0x80;
-			else
-				vic_registers[0x6F] &= 0x7F;
-		}
-		DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
+	DEBUGPRINT("HYPERVISOR: first return after RESET, start of processing workarounds." NL);
+	first_hypervisor_leave = 0;
+	execution_range_check_gate = 1;
+	// Workarounds: ROM override
+	// returns with new PC for reset vector _OR_ negative value if no ROM override was needed
+	int new_pc = rom_do_override(main_ram + 0x20000);
+	if (new_pc >= 0) {
+		// if ROM was forced here, PC hypervisor would return is invalid (valid for the _original_ ROM which was overriden here!), thus we must set it now!
+		DEBUGPRINT("ROM: force ROM re-apply policy, PC change: $%04X -> $%04X" NL, cpu65.pc, new_pc);
+		if (new_pc < 0x8000)
+			WARNING_WINDOW("ROM override has a suspect reset address! ($%04X)", new_pc);
+		cpu65.pc = new_pc;
+		// Since we have overriden ROM, we also must take the responsibility to do what Hyppo would also do:
+		// uploading chargen from the loaded ROM into the "char WOM".
+		memcpy(char_wom, main_ram + 0x2D000, 0x1000);
+	} else {
+		DEBUGPRINT("ROM: no custom force-ROM policy, PC remains at $%04X" NL, cpu65.pc);
+	}
+	// Workaround: set DMA version based on ROM version
+	dma_init_set_rev(configdb.dmarev, main_ram + 0x20000);
+	// Workaround: force video standard
+	if (configdb.init_videostd >= 0) {
+		DEBUGPRINT("VIC: setting %s mode as boot-default based on request" NL, configdb.init_videostd ? "NTSC" : "PAL");
+		if (configdb.init_videostd)
+			vic_registers[0x6F] |= 0x80;
+		else
+			vic_registers[0x6F] &= 0x7F;
+	}
+	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 }
 
 

@@ -876,6 +876,9 @@ int cpu65_step (
 	case 0x00:	/* BRK Implied */
 #ifdef DEBUG_CPU
 			DEBUG("CPU: WARN: BRK is about executing at PC=$%04X" NL, (CPU65.pc - 1) & 0xFFFF);
+#ifdef MEGA65
+			DEBUG("CPU: BRK opcode linear address is $%X" NL, memory_cpurd2linear_xlat((CPU65.pc - 1) & 0xFFFF));
+#endif
 #endif
 			pushWord(CPU65.pc + 1);
 			push(cpu65_get_pf() | CPU65_PF_B);	// BRK always pushes 'B' bit set (like PHP too, unlike hardware interrupts

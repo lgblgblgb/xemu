@@ -396,7 +396,7 @@ static void phys_addr_decoder ( int phys, int slot, int hint_slot )
 	// hint_slot is "likely" to have some contiunity with the slot given by "slot" otherwise it's just makes
 	// thing worse. If not used, hint_slot should be negative to skip this feature. hint_slot can be even same
 	// as "slot" if you need a "moving" mapping in a "caching" slot, ie DMA-aux access functions, etc.
-	if (hint_slot >= 0 && mem_page_refp[hint_slot]->end < 0xFFFFFFF) {	// FIXME there was a serious bug here, takinking invalid mem slot for anything after hinting that
+	if (hint_slot >= 0 && mem_page_refp[hint_slot]->end < 0xFFFFFFF) {	// FIXME there was a serious bug here, taking invalid mem slot for anything after hinting that
 		p = mem_page_refp[hint_slot];
 		if (phys >= p->start && phys <= p->end) {
 #ifdef DEBUGMEM
@@ -967,6 +967,12 @@ void  memory_debug_write_phys_addr ( int addr, Uint8 data )
 {
 	phys_addr_decoder(addr, MEM_SLOT_DEBUG_RESOLVER, MEM_SLOT_DEBUG_RESOLVER);
 	CALL_MEMORY_WRITER(MEM_SLOT_DEBUG_RESOLVER, addr, data);
+}
+
+int   memory_cpurd2linear_xlat ( Uint16 cpu_addr)
+{
+	int slot = cpu_addr >> 8;
+	return mem_page_rd_o[slot] + mem_page_refp[slot]->start + (int)(cpu_addr & 0xFF);
 }
 
 /* the same as above but for CPU addresses */

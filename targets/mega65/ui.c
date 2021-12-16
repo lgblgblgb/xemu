@@ -449,7 +449,7 @@ static void ui_emu_info ( void )
 	INFO_WINDOW(
 		"DMA chip current revision: %d (F018 rev-%s)\n"
 		"ROM version detected: %d %s (%s)\n"
-		"Hyppo version: %s\n"
+		"Hyppo version: %s (%s)\n"
 		"C64 'CPU' I/O port (low 3 bits): DDR=%d OUT=%d\n"
 		"Current VIC and I/O mode: %s %s, hot registers are %s\n"
 		"\n"
@@ -457,8 +457,8 @@ static void ui_emu_info ( void )
 		"Xemu's host OS: %s"
 		,
 		dma_chip_revision, dma_chip_revision ? "B, new" : "A, old",
-		rom_date, rom_name, rom_is_overriden ? "overriden": "default",
-		hyperver_str,
+		rom_date, rom_name, rom_is_overriden ? "OVERRIDEN" : "installed",
+		hyperver_str, hickup_is_overriden ?  "OVERRIDEN" : "built-in",
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
 		vic_iomode < 4 ? iomode_names[vic_iomode] : "?INVALID?", videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
 		td_stat_str,
@@ -674,6 +674,8 @@ static const struct menu_st menu_debug[] = {
 	{ "Dump colour RAM into file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_colram },
 	{ "Dump hyperRAM into file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_hyperram },
 	{ "Emulation state info",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_emu_info },
+	{ "Allow freezer trap",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_toggle_int, (void*)&configdb.allowfreezer },
 	{ NULL }
 };
 #ifdef HAVE_XEMU_EXEC_API

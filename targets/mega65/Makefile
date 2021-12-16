@@ -26,13 +26,23 @@ CFLAGS_TARGET_xmega65	= $(SDL2_CFLAGS) $(MATH_CFLAGS) $(SOCKET_CFLAGS) $(XEMUGUI
 LDFLAGS_TARGET_xmega65	= $(SDL2_LIBS) $(MATH_LIBS) $(SOCKET_LIBS) $(XEMUGUI_LIBS)
 
 MEGA65_CORE	= ../../../mega65-core
-MEGA65_FILES	= bin/charrom.bin bin/HICKUP.M65 bin/COLOURRAM.BIN sdcard-files/BANNER.M65 sdcard-files/FREEZER.M65 sdcard-files/ONBOARD.M65 src/open-roms/bin/mega65.rom
+MEGA65_FILES	= bin/charrom.bin bin/HICKUP.M65 bin/COLOURRAM.BIN sdcard-files/BANNER.M65 sdcard-files/ONBOARD.M65 src/open-roms/bin/mega65.rom
+MEGA65_FILES	+= sdcard-files/FREEZER.M65
 MEGA65_FILES	+= sdcard-files/AUDIOMIX.M65 sdcard-files/C64THUMB.M65 sdcard-files/C65THUMB.M65 sdcard-files/ROMLOAD.M65 sdcard-files/SPRITED.M65
+
+MEGA65_FP_FILES	= $(addprefix $(MEGA65_CORE)/,$(MEGA65_FILES))
+MEGA65_LOCALDIR	= sys-files-mega65-core
 
 include ../../build/Makefile.common
 
 recreatememcontent:
 	@echo "*** Compiling needed files from mega65-core at $(MEGA65_CORE) ***"
+	rm -f `echo $(MEGA65_FP_FILES) | fgrep -v mega65.rom`
+	rm -f $(MEGA65_CORE)/sdcard-files/*
+	$(MAKE) -C $(MEGA65_CORE)/src/mega65-freezemenu
+	$(MAKE) -C $(MEGA65_CORE) freezer_files
 	$(MAKE) -C $(MEGA65_CORE) $(MEGA65_FILES)
+	mkdir -p $(MEGA65_LOCALDIR)
+	cp $(MEGA65_FP_FILES) $(MEGA65_LOCALDIR)/
 	@echo "*** Generating C files from mega65-core binary results ***"
-	python3 $(TOPDIR)/build/m65-memcontent-generator.py memcontent.c memcontent.h $(addprefix $(MEGA65_CORE)/,$(MEGA65_FILES))
+	python3 $(TOPDIR)/build/m65-memcontent-generator.py memcontent.c memcontent.h $(MEGA65_FP_FILES)

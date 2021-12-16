@@ -38,7 +38,10 @@ struct configdb_st {
 	char	*extcramutils;
 	char	*extinitrom;
 	char	*extchrwom;
-	char	*d81dir;
+	char	*extflashutil;
+	char	*extonboard;
+	char	*extfreezer;
+	char	*hdosdir;
 	char	*rom;
 	char	*prg;
 	char	*sdimg;

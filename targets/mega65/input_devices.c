@@ -77,7 +77,6 @@ static struct {
 } hwa_kbd;
 
 static int restore_is_held = 0;
-int allow_freezer_triggering = 0;
 static Uint8 virtkey_state[3] = { 0xFF, 0xFF, 0xFF };
 
 
@@ -250,15 +249,12 @@ void kbd_trigger_restore_trap ( void )
 		restore_is_held++;
 		if (restore_is_held >= 20) {
 			restore_is_held = 0;
-			if (allow_freezer_triggering) {
-				if (!in_hypervisor) {
-					DEBUGPRINT("KBD: RESTORE trap has been triggered." NL);
-					KBD_RELEASE_KEY(RESTORE_KEY_POS);
-					hypervisor_enter(TRAP_RESTORE);
-				} else
-					DEBUGPRINT("KBD: *IGNORING* RESTORE trap trigger, already in hypervisor mode!" NL);
+			if (!in_hypervisor) {
+				DEBUGPRINT("KBD: RESTORE trap has been triggered." NL);
+				KBD_RELEASE_KEY(RESTORE_KEY_POS);
+				hypervisor_enter(TRAP_RESTORE);
 			} else
-				WARNING_WINDOW("Long press of RESTORE would trigger FREEZER.\nHowever FREEZER does not yet work inside Xemu :-(");
+				DEBUGPRINT("KBD: *IGNORING* RESTORE trap trigger, already in hypervisor mode!" NL);
 		}
 	}
 }

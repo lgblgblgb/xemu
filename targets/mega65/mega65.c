@@ -283,17 +283,17 @@ static void preinit_memory_for_start ( void )
 	};
 	//                  Option/name     Description            Target memory ptr   Built-in source ptr    Built-in size               Minsize  Maxsize  External-filename(or-NULL)
 	//                  --------------  ---------------------- ------------------- ---------------------- --------------------------- -------- -------- --------------------------
-	preinit_memory_item("-",            "Freezer",             main_ram + 0x12000, meminitdata_freezer,   MEMINITDATA_FREEZER_SIZE,   0x00100, 0x0E000, NULL);
+	preinit_memory_item("extfreezer",   "Freezer",             main_ram + 0x12000, meminitdata_freezer,   MEMINITDATA_FREEZER_SIZE,   0x00100, 0x0E000, configdb.extfreezer);
 	preinit_memory_item("extinitrom",   "Initial boot-ROM",    main_ram + 0x20000, meminitdata_initrom,   MEMINITDATA_INITROM_SIZE,   0x20000, 0x20000, configdb.extinitrom);
-	preinit_memory_item("-",            "On-boarding utility", main_ram + 0x40000, meminitdata_onboard,   MEMINITDATA_ONBOARD_SIZE,   0x00100, 0x10000, NULL);
-	preinit_memory_item("-",            "MEGA-flash utility",  main_ram + 0x50000, megaflashutility,      sizeof megaflashutility,    0x00010, 0x07D00, NULL);
+	preinit_memory_item("extonboard",   "On-boarding utility", main_ram + 0x40000, meminitdata_onboard,   MEMINITDATA_ONBOARD_SIZE,   0x00020, 0x10000, configdb.extonboard);
+	preinit_memory_item("extflashutil", "MEGA-flash utility",  main_ram + 0x50000, megaflashutility,      sizeof megaflashutility,    0x00020, 0x07D00, configdb.extflashutil);
 	preinit_memory_item("extbanner",    "MEGA65 banner",       main_ram + 0x57D00, meminitdata_banner,    MEMINITDATA_BANNER_SIZE,    0x01000, 0x08300, configdb.extbanner);
 	preinit_memory_item("extchrwom",    "Character-WOM",       char_wom,           meminitdata_chrwom,    MEMINITDATA_CHRWOM_SIZE,    0x01000, 0x01000, configdb.extchrwom);
 	preinit_memory_item("extcramutils", "Utils in CRAM",       colour_ram,         meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE, 0x08000, 0x08000, configdb.extcramutils);
-	const int external_hickup =
+	hickup_is_overriden =
 	preinit_memory_item("hickup",       "Hyppo-Hickup",        hypervisor_ram,     meminitdata_hickup,    MEMINITDATA_HICKUP_SIZE,    0x04000, 0x04000, configdb.hickup);
 	//                  ----------------------------------------------------------------------------------------------------------------------------------------------------------
-	if (!external_hickup)
+	if (!hickup_is_overriden)
 		hypervisor_debug_invalidate("no external hickup is loaded, built-in one does not have debug info");
 }
 
@@ -458,13 +458,15 @@ static void shutdown_callback ( void )
 #ifdef XEMU_HAS_SOCKET_API
 	xemusock_uninit();
 #endif
-	DEBUG("Execution has been stopped at PC=$%04X" NL, cpu65.pc);
+	DEBUGPRINT("Execution has been stopped at PC=$%04X (linear=%X)" NL, cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc));
 }
 
 
 
 void reset_mega65 ( void )
 {
+	static const char reset_debug_msg[] = "SYSTEM: RESET - ";
+	DEBUGPRINT("%sBEGIN" NL, reset_debug_msg);
 	rom_clear_reports();
 	preinit_memory_for_start();
 	eth65_reset();
@@ -483,7 +485,7 @@ void reset_mega65 ( void )
 	nmi_level = 0;
 	D6XX_registers[0x7E] = configdb.hicked;
 	hypervisor_start_machine();
-	DEBUGPRINT("SYSTEM: RESET" NL);
+	DEBUGPRINT("%sEND" NL, reset_debug_msg);
 }
 
 
@@ -808,7 +810,6 @@ int main ( int argc, char **argv )
 	rom_stubrom_requested = configdb.usestubrom;
 	rom_initrom_requested = configdb.useinitrom;
 	rom_load_custom(configdb.rom);
-	allow_freezer_triggering = configdb.allowfreezer;
 	audio65_start();
 	xemu_set_full_screen(configdb.fullscreen_requested);
 	if (!configdb.syscon)
