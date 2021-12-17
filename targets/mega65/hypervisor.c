@@ -39,7 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 int  in_hypervisor;			// mega65 hypervisor mode
-char hyppo_version_string[64] = "?";
+char hyppo_version_string[64];
 int  hickup_is_overriden = 0;
 
 static char  debug_lines[0x4000][2][INFO_MAX_SIZE];		// I know. UGLY! and wasting memory. But this is only a HACK :)
@@ -60,6 +60,7 @@ static struct {
 	int   func;
 	Uint8 in_x, in_y, in_z;
 	char  setnam_fn[64];
+	const char  *rootdir;
 } hdos;
 
 #define DEBUGHDOS(...) DEBUG(__VA_ARGS__)
@@ -306,9 +307,21 @@ void hypervisor_enter ( int trapno )
 	} else
 		hdos.func = -1;
 	if ((trapno == TRAP_FREEZER_RESTORE_PRESS || trapno == TRAP_FREEZER_USER_CALL) && !configdb.allowfreezer) {
+		// If freezer is not enabled I warn the user, also return from the hypervisor trap now, without doing anything
 		WARNING_WINDOW("FREEZER is not enabled in Xemu currently.");
+		// Leave hypervisor mode now, do not allow Hyppo to get this trap.
 		hypervisor_leave();
 	}
+#ifdef TRAP_XEMU
+	if (trapno == TRAP_XEMU) {
+		// Xemu's own trap.
+		ERROR_WINDOW("XEMU TRAP feature is not yet implemented :(");
+		// Leave hypervisor mode now, do not allow Hyppo to get this trap.
+		D6XX_registers[0x47] &= 0xFE;	// clear carry flag (bit zero)
+		D6XX_registers[0x40] = 0xFF;	// set A register to $FF
+		hypervisor_leave();
+	}
+#endif
 }
 
 
@@ -338,16 +351,42 @@ static void extract_version_string ( char *target, int target_max_size )
 }
 
 
+static inline void hypervisor_xemu_init ( void )
+{
+	hyppo_version_string[0] = '\0';
+	if (configdb.hdosvirt) {
+		// Setup root for the "faked" HDOS traps
+		// First build our default one. We may need this anyway, if overriden one invalid
+		char dir[PATH_MAX + 1];
+		strcpy(dir, sdl_pref_dir);
+		strcat(dir, "hdosroot" DIRSEP_STR);
+		MKDIR(dir);	// try to make that directory, maybe hasn't existed yet
+		if (configdb.hdosdir) {
+			XDIR *dirhandle = xemu_os_opendir(configdb.hdosdir);
+			if (dirhandle) {
+				xemu_os_closedir(dirhandle);
+				strcpy(dir, configdb.hdosdir);
+				if (dir[strlen(dir) - 1] != DIRSEP_CHR)
+					strcat(dir, DIRSEP_STR);
+			} else
+				ERROR_WINDOW("HYPERVISOR: bad HDOS virtual directory given (cannot open as directory): %s\nUsing the default instead: %s", configdb.hdosdir, dir);
+		}
+		hdos.rootdir = xemu_strdup(dir);
+		DEBUGPRINT("HYPERVISOR: HDOS virtual directory: %s" NL, hdos.rootdir);
+	} else {
+		hdos.rootdir = NULL;
+		DEBUGPRINT("HYPERVISOR: HDOS trap virtualization is not enabled." NL);
+	}
+}
+
+
 // Actual (CPU level opcode execution) emulation of MEGA65 should start with calling this function (surely after initialization of every subsystems etc).
 void hypervisor_start_machine ( void )
 {
-	static int first_time_init = 1;
-	if (first_time_init) {
-		first_time_init = 0;
-		// Setup root for the "faked" HDOS traps
-		// First build our default one. We may need this anyway, if overriden one invalid
-		if (configdb.hdosdir) {
-		}
+	static int init_done = 0;
+	if (XEMU_UNLIKELY(!init_done)) {
+		init_done = 1;
+		hypervisor_xemu_init();
 	}
 	hdos.setnam_fn[0] = '\0';
 	hdos.func = -1;

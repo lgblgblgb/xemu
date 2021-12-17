@@ -74,6 +74,7 @@ static const struct xemutools_configdef_str_st str_options[] = {
 };
 
 static const struct xemutools_configdef_switch_st switch_options[] = {
+	{ "hdosvirt", "Virtualize HDOS file access functions, but via only traps", &configdb.hdosvirt },
 	{ "driveled", "Render drive LED at the top right corner of the screen", &configdb.show_drive_led },
 	{ "allowmousegrab", "Allow auto mouse grab with left-click", &allow_mouse_grab },
 	{ "allowfreezer", "Allow triggering freezer [NOT YET WORKING]", &configdb.allowfreezer },

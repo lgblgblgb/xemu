@@ -40,7 +40,7 @@ include ../../build/Makefile.common
 recreatememcontent:
 	@echo "*** Compiling needed files from mega65-core at $(MEGA65_CORE) ***"
 	$(MAKE) -C $(MEGA65_CORE) clean
-	for dir in src/mega65-freezemenu src/mega65-fdisk src/mega65-libc src/open-roms ; do $(MAKE) -C $(MEGA65_CORE)/$$dir clean ; done
+	for dir in src/mega65-freezemenu src/mega65-fdisk src/open-roms ; do $(MAKE) -C $(MEGA65_CORE)/$$dir clean || exit 1 ; done
 	find $(MEGA65_CORE) -name "*.o" | xargs -n 100 rm -f
 	find $(MEGA65_CORE) -name "*.M65" | xargs -n 100 rm -f
 	mkdir -p $(MEGA65_CORE)/sdcard-files

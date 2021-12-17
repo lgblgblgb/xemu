@@ -460,7 +460,7 @@ static void shutdown_callback ( void )
 #ifdef XEMU_HAS_SOCKET_API
 	xemusock_uninit();
 #endif
-	DEBUGPRINT("Execution has been stopped at PC=$%04X (linear=%X)" NL, cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc));
+	DEBUGPRINT("CPU: Execution ended at PC=$%04X (linear=%X)" NL, cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc));
 }
 
 

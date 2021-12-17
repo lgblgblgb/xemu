@@ -66,6 +66,7 @@ struct configdb_st {
 	int	force_videostd;
 	int	init_videostd;
 	int	fullborders;
+	int	hdosvirt;
 	int	show_drive_led;
 	int	allowfreezer;
 	int	hyperdebug;
