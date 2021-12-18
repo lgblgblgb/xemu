@@ -53,6 +53,7 @@ static int   hypervisor_serial_out_asciizer;
 
 static int   hypervisor_is_first_call;
 static int   execution_range_check_gate;
+static int   trap_current;
 
 static int   hypervisor_queued_trap = -1;
 
@@ -251,6 +252,7 @@ static void hdos_leave ( void )
 
 void hypervisor_enter ( int trapno )
 {
+	trap_current = trapno;
 	// Sanity checks
 	if (XEMU_UNLIKELY(trapno > 0x7F || trapno < 0))
 		FATAL("FATAL: got invalid trap number %d", trapno);
@@ -310,6 +312,10 @@ void hypervisor_enter ( int trapno )
 		// If freezer is not enabled I warn the user, also return from the hypervisor trap now, without doing anything
 		WARNING_WINDOW("FREEZER is not enabled in Xemu currently.");
 		// Leave hypervisor mode now, do not allow Hyppo to get this trap.
+		if (trapno == TRAP_FREEZER_USER_CALL) {
+			D6XX_registers[0x47] &= 0xFE;	// clear carry flag (bit zero)
+			D6XX_registers[0x40] = 0xFF;	// set A register to $FF
+		}
 		hypervisor_leave();
 	}
 #ifdef TRAP_XEMU
@@ -433,6 +439,18 @@ static inline void first_leave ( void )
 }
 
 
+int hypervisor_level_reset ( void )
+{
+	if (!in_hypervisor) {
+		DEBUGPRINT("HYPERVISOR: hypervisor-only reset was requested by Xemu." NL);
+		hypervisor_enter(TRAP_RESET);
+		last_reset_type = "HYPPO";
+		return 0;
+	}
+	DEBUGPRINT("HYPERVISOR: hypervisor-only reset requested by Xemu **FAILED**: already in hypervisor mode!" NL);
+	return 1;
+}
+
 
 void hypervisor_leave ( void )
 {
@@ -474,9 +492,19 @@ void hypervisor_leave ( void )
 	memory_set_vic3_rom_mapping(vic_registers[0x30]);	// restore possible active VIC-III mapping
 	memory_set_do_map();	// restore mapping ...
 	if (XEMU_UNLIKELY(hypervisor_is_first_call)) {
+		if (trap_current != TRAP_RESET)
+			ERROR_WINDOW("First hypervisor TRAP is not RESET?!");
 		first_leave();
-		hypervisor_is_first_call = 0;
 	}
+	// Catch the event when it's a reset TRAP but not part of the initial call (not "cold" reset)
+	if (XEMU_UNLIKELY(trap_current == TRAP_RESET && !hypervisor_is_first_call)) {
+		// If Xemu does a "hyppo level reset" only, we can have problems with knowing the
+		// exact ROM type, thus, make sure, to do it here.
+		// FIXME: really, should we care about this minor detail so much?! ;)
+		rom_clear_reports();
+		rom_detect_date(main_ram + 0x20000);
+	}
+	hypervisor_is_first_call = 0;
 	if (XEMU_UNLIKELY(hypervisor_queued_trap >= 0)) {
 		// Not so much used currently ...
 		DEBUG("HYPERVISOR: processing queued trap on leaving hypervisor: trap #$%02X" NL, hypervisor_queued_trap);

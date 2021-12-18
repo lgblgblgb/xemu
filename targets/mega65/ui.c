@@ -289,10 +289,10 @@ ret:
 
 static void reset_via_hyppo ( void )
 {
-	if (!in_hypervisor)
-		hypervisor_enter(TRAP_RESET);
-	else
-		ERROR_WINDOW("Currently in hypervisor mode.\nNot possible to trigger a trap now");
+	if (ARE_YOU_SURE("Are you sure to HYPPO-RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
+		if (hypervisor_level_reset())
+			ERROR_WINDOW("Currently in hypervisor mode.\nNot possible to trigger a trap now");
+	}
 }
 
 static void reset_into_custom_rom ( void )
@@ -459,6 +459,7 @@ static void ui_emu_info ( void )
 		"DMA chip current revision: %d (F018 rev-%s)\n"
 		"ROM version detected: %d %s (%s)\n"
 		"ROM SHA1: %s (%s)\n"
+		"Last RESET type: %s\n"
 		"Hyppo version: %s (%s)\n"
 		"C64 'CPU' I/O port (low 3 bits): DDR=%d OUT=%d\n"
 		"Current PC: $%04X (linear: $%07X)\n"
@@ -470,6 +471,7 @@ static void ui_emu_info ( void )
 		dma_chip_revision, dma_chip_revision ? "B, new" : "A, old",
 		rom_date, rom_name, rom_is_overriden ? "OVERRIDEN" : "installed",
 		rom_now_hash_str, strcmp(rom_hash_str, rom_now_hash_str) ? "MANGLED" : "intact",
+		last_reset_type,
 		hyppo_version_string, hickup_is_overriden ?  "OVERRIDEN" : "built-in",
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
 		cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc),
@@ -664,6 +666,7 @@ static const struct menu_st menu_reset[] = {
 	{ "Reset into Xemu stub-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_stubrom	},
 	{ "Reset into boot init-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_initrom	},
 	{ "Reset via HYPPO",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_via_hyppo		},
+	{ "Reset CPU only",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_mega65_cpu_only	},
 	{ "Reset/use custom ROM file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_custom_rom	},
 	{ NULL }
 };

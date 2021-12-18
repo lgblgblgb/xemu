@@ -66,11 +66,13 @@ extern void machine_set_speed ( int verbose );
 
 extern void reset_mega65      ( void );
 extern int  reset_mega65_asked( void );
+extern void reset_mega65_cpu_only ( void );
 
 extern int  dump_memory       ( const char *fn );
 
 extern int newhack;
 extern int registered_screenshot_request;
 extern Uint8 last_dd00_bits;
+extern const char *last_reset_type;
 
 #endif

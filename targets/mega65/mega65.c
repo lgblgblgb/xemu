@@ -74,6 +74,7 @@ static int uuid_must_be_saved = 0;
 int registered_screenshot_request = 0;
 
 Uint8 last_dd00_bits = 3;		// Bank 0
+const char *last_reset_type;
 
 
 
@@ -300,6 +301,7 @@ static void preinit_memory_for_start ( void )
 
 static void mega65_init ( void )
 {
+	last_reset_type = "XEMU-STARTUP";
 	hypervisor_debug_init(configdb.hickuplist, configdb.hyperdebug, configdb.hyperserialascii);
 	hid_init(
 		c64_key_map,
@@ -464,11 +466,12 @@ static void shutdown_callback ( void )
 }
 
 
-
 void reset_mega65 ( void )
 {
 	static const char reset_debug_msg[] = "SYSTEM: RESET - ";
+	last_reset_type = "COLD";
 	DEBUGPRINT("%sBEGIN" NL, reset_debug_msg);
+	memset(D7XX + 0x20, 0, 0x40);	// stop audio DMA possibly going on
 	rom_clear_reports();
 	preinit_memory_for_start();
 	eth65_reset();
@@ -491,9 +494,25 @@ void reset_mega65 ( void )
 }
 
 
+void reset_mega65_cpu_only ( void )
+{
+	last_reset_type = "WARM";
+	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
+	c128_d030_reg = 0xFF;
+	machine_set_speed(0);
+	memory_set_cpu_io_port_ddr_and_data(0xFF, 0xFF);
+	map_mask = 0;
+	in_hypervisor = 0;
+	vic_registers[0x30] = 0;	// FIXME: hack! we need this, and memory_set_vic3_rom_mapping above too :(
+	memory_set_vic3_rom_mapping(0);
+	memory_set_do_map();
+	cpu65_reset();
+}
+
+
 int reset_mega65_asked ( void )
 {
-	if (ARE_YOU_SURE("Are you sure to HARD RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
+	if (ARE_YOU_SURE("Are you sure to RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
 		reset_mega65();
 		return 1;
 	} else
