@@ -78,6 +78,7 @@ static struct {
 
 static int restore_is_held = 0;
 static Uint8 virtkey_state[3] = { 0xFF, 0xFF, 0xFF };
+int in_the_matrix = 0;
 
 
 void hwa_kbd_fake_key ( Uint8 k )
@@ -270,6 +271,16 @@ static void kbd_trigger_alttab_trap ( void )
 		hypervisor_enter(TRAP_ALTTAB);
 	} else
 		DEBUGPRINT("KBD: *IGNORING* ALT-TAB trap trigger, already in hypervisor mode!" NL);
+}
+
+
+void matrix_mode_toggle ( int status )
+{
+	status = !!status;
+	if (status == in_the_matrix)
+		return;
+	in_the_matrix = status;
+	OSD(-1, -1, "Matrix mode would be switched %s", status ? "ON" : "OFF");
 }
 
 

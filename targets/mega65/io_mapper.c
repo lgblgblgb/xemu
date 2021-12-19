@@ -39,7 +39,7 @@ Uint8  D7XX[0x100];			// FIXME: hack for future M65 stuffs like ALU! FIXME: no s
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 int    cpu_mega65_opcodes = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;
-int port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65 keyboard
+int    port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65 keyboard
 
 
 static const Uint8 fpga_firmware_version[] = { 'X','e','m','u' };
@@ -421,6 +421,9 @@ void io_write ( unsigned int addr, Uint8 data )
 				case 0x16:
 				case 0x17:
 					virtkey(addr - 0x15, data & 0x7F);
+					return;
+				case 0x72:	// "$D672.6 HCPU:MATRIXEN Enable composited Matrix Mode, and disable UART access to serial monitor."
+					matrix_mode_toggle(data & 0x40);
 					return;
 				case 0x7C:					// hypervisor serial monitor port
 					hypervisor_serial_monitor_push_char(data);

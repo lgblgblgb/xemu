@@ -84,7 +84,7 @@ void emu_dropfile_callback ( const char *fn )
 #endif
 
 
-static void ui_attach_d81 ( const struct menu_st *m, int *query )
+static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
 	const int drive = VOIDPTR_TO_INT(m->user_data);
@@ -114,7 +114,7 @@ static void ui_attach_d81 ( const struct menu_st *m, int *query )
 }
 
 
-static void ui_detach_d81 ( const struct menu_st *m, int *query )
+static void ui_cb_detach_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
 	const int drive = VOIDPTR_TO_INT(m->user_data);
@@ -389,7 +389,7 @@ static void ui_cb_use_default_rom ( const struct menu_st *m, int *query )
 }
 
 #ifdef HAS_UARTMON_SUPPORT
-static void ui_start_umon ( const struct menu_st *m, int *query )
+static void ui_cb_start_umon ( const struct menu_st *m, int *query )
 {
 	int is_active = uartmon_is_active();
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, is_active);
@@ -402,6 +402,11 @@ static void ui_start_umon ( const struct menu_st *m, int *query )
 }
 #endif
 
+static void ui_cb_matrix_mode ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, in_the_matrix);
+	matrix_mode_toggle(!in_the_matrix);
+}
 
 static char last_used_dump_directory[PATH_MAX + 1] = "";
 
@@ -545,7 +550,7 @@ static void ui_cb_audio_volume ( const struct menu_st *m, int *query )
 }
 
 
-static void ui_video_standard ( const struct menu_st *m, int *query )
+static void ui_cb_video_standard ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == videostd_id);
 	Uint8 reg = vic_read_reg(0x6F);
@@ -606,9 +611,9 @@ static void ui_cb_render_scale_quality ( const struct menu_st *m, int *query )
 
 static const struct menu_st menu_video_standard[] = {
 	{ "PAL",			XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_video_standard, (void*)0 },
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_video_standard, (void*)0 },
 	{ "NTSC",			XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_video_standard, (void*)1 },
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_video_standard, (void*)1 },
 	{ NULL }
 };
 static const struct menu_st menu_window_size[] = {
@@ -685,10 +690,12 @@ static const struct menu_st menu_debug[] = {
 #ifdef HAS_UARTMON_SUPPORT
 	{ "Start umon on " UMON_DEFAULT_PORT,
 					XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_start_umon, NULL },
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_start_umon, NULL },
 #endif
-	{ "Allow freezer trap",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
+	{ "Allow freezer trap",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_toggle_int, (void*)&configdb.allowfreezer },
+	{ "Matrix mode",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_matrix_mode, NULL },
 	{ "Emulation state info",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_emu_info },
 	{ "Dump main RAM info file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_memory },
 	{ "Dump colour RAM into file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_colram },
@@ -707,11 +714,11 @@ static const struct menu_st menu_help[] = {
 #endif
 static const struct menu_st menu_d81[] = {
 	{ "Attach user D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_attach_d81, (void*)0 },
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_d81, (void*)0 },
 	{ "Use internal D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_detach_d81, (void*)0 },
-	{ "Attach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_attach_d81, (void*)1 },
-	{ "Detach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_detach_d81, (void*)1 },
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_detach_d81, (void*)0 },
+	{ "Attach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_cb_attach_d81, (void*)1 },
+	{ "Detach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_cb_detach_d81, (void*)1 },
 	{ NULL }
 };
 static const struct menu_st menu_audio_stereo[] = {
@@ -788,7 +795,7 @@ static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
 	{ "Input devices",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_inputdevices },
 	{ "Audio",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio   },
-	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
+	{ "SD-card + sys/ROM update",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
 	{ "FD D81",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_d81     },
 	{ "Reset / ROM switching",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
 	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
