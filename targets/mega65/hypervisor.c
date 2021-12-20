@@ -35,14 +35,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <errno.h>
 
 
-#define INFO_MAX_SIZE	32
-
-
 int  in_hypervisor;			// mega65 hypervisor mode
 char hyppo_version_string[64];
 int  hickup_is_overriden = 0;
 
-static char  debug_lines[0x4000][2][INFO_MAX_SIZE];		// I know. UGLY! and wasting memory. But this is only a HACK :)
 static int   resolver_ok = 0;
 
 static char  hypervisor_monout[0x10000];
@@ -58,6 +54,12 @@ static int   trap_current;
 static int   hypervisor_queued_trap = -1;
 
 static struct {
+	const char *name;
+	int         offs;
+	int         exec;
+} debug_symbols[0x4000];
+
+static struct {
 	int   func;
 	Uint8 in_x, in_y, in_z;
 	char  setnam_fn[64];
@@ -67,69 +69,6 @@ static struct {
 #define DEBUGHDOS(...) DEBUG(__VA_ARGS__)
 
 
-
-int hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hypervisor_serial_out_asciizer )
-{
-	char buffer[1024];
-	FILE *fp;
-	int fd;
-	hypervisor_serial_out_asciizer = use_hypervisor_serial_out_asciizer;
-	if (!fn || !*fn) {
-		DEBUG("MEGADEBUG: feature is not enabled, null file name for list file" NL);
-		return 1;
-	}
-	for (fd = 0; fd < 0x4000; fd++) {
-		debug_lines[fd][0][0] = 0;
-	}
-	fd = xemu_open_file(fn, O_RDONLY, NULL, NULL);
-	if (fd < 0) {
-		INFO_WINDOW("Cannot open %s, no resolved symbols will be used.", fn);
-		return 1;
-	}
-	fp = fdopen(fd, "rb");
-	while (fgets(buffer, sizeof buffer, fp)) {
-		int addr = 0xFFFF;
-		char *p, *p1, *p2;
-		if (sscanf(buffer, "%04X", &addr) != 1) continue;
-		if (addr < 0x8000 || addr >= 0xC000) continue;
-		p2  = strchr(buffer, '|');
-		if (!p2) continue;			// no '|' pipe in the line, skip
-		if (strchr(p2 + 1, '|')) continue;	// more than one '|' pipes, it's a hex dump, skip
-		*(p2++) = 0;
-		p = strrchr(p2, '/');
-		if (p)
-			p2 = p + 1;
-		else {
-			p = strrchr(p2, '\\');
-			if (p)
-				p2 = p + 1;
-		}
-		while (*p2 <= 32 && *p2)
-			p2++;
-		p = p2 + strlen(p2) - 1;
-		while (p > p2 && *p <= 32)
-			*(p--) = 0;
-		if (strlen(p2) >= 32)
-			FATAL("Bad list file, too long file reference part");
-		// that was awful. Now the first part
-		p1 = buffer + 5;
-		while (*p1 && *p1 <= 32)
-			p1++;
-		p = p1 + strlen(p1) - 1;
-		while (p > p1 && *p <= 32)
-			*(p--) = 0;
-		if (strlen(p2) >= 32)
-			FATAL("Bad list file, too long assembly part");
-		// And finally, copy line to its well deserved place(s)
-		snprintf(debug_lines[addr - 0x8000][0], INFO_MAX_SIZE, "%s", p1);
-		snprintf(debug_lines[addr - 0x8000][1], INFO_MAX_SIZE, "%s", p2);
-	}
-	fclose(fp);
-	close(fd);
-	resolver_ok = 1;
-	debug_on = hypervisor_debug;
-	return 0;
-}
 
 
 int hypervisor_queued_enter ( int trapno )
@@ -556,6 +495,91 @@ void hypervisor_debug_invalidate ( const char *reason )
 }
 
 
+int hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hypervisor_serial_out_asciizer )
+{
+	static int init_done = 0;
+	if (init_done)
+		FATAL("%s() cannot be called more times!", __func__);
+	init_done = 1;
+	hypervisor_serial_out_asciizer = use_hypervisor_serial_out_asciizer;
+	if (!fn || !*fn) {
+		DEBUG("MEGADEBUG: feature is not enabled, null file name for list file" NL);
+		return 1;
+	}
+	int fd = xemu_open_file(fn, O_RDONLY, NULL, NULL);
+	if (fd < 0) {
+		ERROR_WINDOW("Cannot open %s, no resolved symbols will be used.", fn);
+		return 1;
+	}
+	FILE *fp = fdopen(fd, "rb");
+	if (!fp) {
+		ERROR_WINDOW("Cannot open %s, no resolved symbols will be used.", fn);
+		close(fd);
+		return 1;
+	}
+	// Preinitalize symtab
+	int syms[0x4000];
+	for (int a = 0; a < 0x4000; a++)
+		syms[a] = -1;
+	// to have something as the first one (may be overwritten later anyway)
+	char *storage = xemu_strdup("start_of_hypervisor_ram_at_8000");
+	int storage_size = strlen(storage) + 1;
+	syms[0] = 0;
+	// Start parsing the file
+	int total_symbols = 1;
+	char linebuf[256];
+	int lineno = 0, size_now = 0;
+	while (fgets(linebuf, sizeof(linebuf) - 1, fp)) {
+		lineno++;
+		if (strlen(linebuf) >= sizeof(linebuf) - 4) {
+			ERROR_WINDOW("Bad hickup debug SYM file: contains extra long line in line %d", lineno);
+			goto error;
+		}
+		char sym[256];
+		int addr;
+		if (sscanf(linebuf, "%s = $%x", sym, &addr) != 2) {
+			ERROR_WINDOW("Bad hickup debug SYM file: contains badly formatted line in line %d", lineno);
+			goto error;
+		}
+		if (addr < 0x8000 || addr >= 0xC000) {
+			continue;
+		}
+		total_symbols++;
+		size_now = strlen(sym) + 1;
+		// Store symbol name in the name "storage"
+		storage = xemu_realloc(storage, storage_size + size_now);
+		strcpy(storage + storage_size, sym);
+		// Store address + offset. Note: DO NOT use pointers, as "realloc" above could alter that!
+		syms[addr - 0x8000] = storage_size;
+		// Finally increate storage size offset
+		storage_size += size_now;
+	}
+	fclose(fp);
+	close(fd);
+	DEBUGPRINT("HYPERVISOR-DEBUG: loaded %d symbols, using %d bytes of memory for symbol storage." NL, total_symbols, storage_size - size_now);
+	// OK, now expand the symbol table for untaken positions, and "export" the result to global variable, with pointers
+	for (int i = 0, lastref = 0; i < 0x4000; i++) {
+		if (syms[i] >= 0) {
+			debug_symbols[i].name = storage + syms[i];
+			debug_symbols[i].offs = 0;
+			debug_symbols[i].exec = 1;	// FIXME: later, it can be used to tell if it's OK to be executed there, needs the "rep" file
+			lastref = i;
+		} else {
+			debug_symbols[i].name = debug_symbols[lastref].name;
+			debug_symbols[i].offs = i - lastref;
+			debug_symbols[i].exec = 1;	// FIXME: see the previous similar comment above.
+		}
+	}
+	// Now, it's really the end
+	resolver_ok = 1;
+	debug_on = hypervisor_debug;
+	return 0;
+error:
+	fclose(fp);
+	close(fd);
+	return 1;
+}
+
 
 void hypervisor_debug ( void )
 {
@@ -589,7 +613,7 @@ void hypervisor_debug ( void )
 	if (!resolver_ok) {
 		return;	// no debug info loaded from hickstart.list ...
 	}
-	if (XEMU_UNLIKELY(!debug_lines[cpu65.pc - 0x8000][0][0])) {
+	if (XEMU_UNLIKELY(!debug_symbols[cpu65.pc - 0x8000].exec)) {
 		DEBUG("HYPERVISOR-DEBUG: execution address not found in list file (out-of-bound code?), PC = $%04X" NL, cpu65.pc);
 		FATAL("Hypervisor fatal error: execution address not found in list file (out-of-bound code?), PC = $%04X", cpu65.pc);
 		return;
@@ -597,11 +621,11 @@ void hypervisor_debug ( void )
 	// WARNING: as it turned out, using stdio I/O to log every opcodes even "only" at ~3.5MHz rate makes emulation _VERY_ slow ...
 	if (XEMU_UNLIKELY(debug_on)) {
 		if (debug_fp) {
-			Uint8 pf = cpu65_get_pf();
+			const Uint8 pf = cpu65_get_pf();
+			const int inside_hypervisor_ram = (cpu65.pc >= 0x8000 && cpu65.pc < 0xC000);
 			fprintf(
 				debug_fp,
-				"HYPERVISOR-DEBUG: %-32s PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%d OPC=%02X @ %s" NL,
-				debug_lines[cpu65.pc - 0x8000][0],
+				"HYPERVISOR-DEBUG: PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%d OPC=%02X @ %s+%d" NL,
 				cpu65.pc, cpu65.sphi | cpu65.s, cpu65.bphi >> 8, cpu65.a, cpu65.x, cpu65.y, cpu65.z,
 				(pf & CPU65_PF_N) ? 'N' : 'n',
 				(pf & CPU65_PF_V) ? 'V' : 'v',
@@ -613,7 +637,8 @@ void hypervisor_debug ( void )
 				(pf & CPU65_PF_C) ? 'C' : 'c',
 				vic_iomode,
 				cpu65_read_callback(cpu65.pc),
-				debug_lines[cpu65.pc - 0x8000][1]
+				inside_hypervisor_ram ? debug_symbols[cpu65.pc - 0x8000].name : "NOT_IN_HYPERVISOR_RAM",
+				inside_hypervisor_ram ? debug_symbols[cpu65.pc - 0x8000].offs : 0
 			);
 		}
 	}

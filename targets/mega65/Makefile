@@ -46,6 +46,7 @@ recreatememcontent:
 	mkdir -p $(MEGA65_CORE)/sdcard-files
 	rm -f `echo $(MEGA65_FP_FILES) | fgrep -v mega65.rom`
 	rm -f $(MEGA65_CORE)/sdcard-files/* $(MEGA65_CORE)/src/mega65-fdisk/*.prg $(MEGA65_CORE)/src/utilities/*.prg
+	rm -f $(MEGA65_CORE)/src/hyppo/HICKUP.rep $(MEGA65_CORE)/src/hyppo/HICKUP.sym
 	$(MAKE) -C $(MEGA65_CORE)/src/mega65-fdisk m65fdisk.prg
 	$(MAKE) -C $(MEGA65_CORE)/src/mega65-freezemenu
 	$(MAKE) -C $(MEGA65_CORE) freezer_files
@@ -53,5 +54,6 @@ recreatememcontent:
 	mkdir -p $(MEGA65_LOCALDIR)
 	rm -f $(MEGA65_LOCALDIR)/*
 	cp $(MEGA65_FP_FILES) $(MEGA65_LOCALDIR)/
+	cp $(MEGA65_CORE)/src/hyppo/HICKUP.rep $(MEGA65_CORE)/src/hyppo/HICKUP.sym $(MEGA65_LOCALDIR)/
 	@echo "*** Generating C files from mega65-core binary results ***"
 	python3 $(TOPDIR)/build/m65-memcontent-generator.py memcontent.c memcontent.h $(MEGA65_FP_FILES)
