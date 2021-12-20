@@ -38,13 +38,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 int  in_hypervisor;			// mega65 hypervisor mode
 char hyppo_version_string[64];
 int  hickup_is_overriden = 0;
+int  hypervisor_is_debugged = 0;
 
 static int   resolver_ok = 0;
 
 static char  hypervisor_monout[0x10000];
 static char *hypervisor_monout_p = hypervisor_monout;
 
-static int   debug_on = 0;
 static int   hypervisor_serial_out_asciizer;
 
 static int   hypervisor_is_first_call;
@@ -572,7 +572,7 @@ int hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hyperv
 	}
 	// Now, it's really the end
 	resolver_ok = 1;
-	debug_on = hypervisor_debug;
+	hypervisor_is_debugged = hypervisor_debug;
 	return 0;
 error:
 	fclose(fp);
@@ -591,7 +591,8 @@ void hypervisor_debug ( void )
 		DEBUG("HYPERVISOR-DEBUG: allowed to run outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu65.pc);
 		return;
 	}
-	if (XEMU_UNLIKELY((cpu65.pc & 0xC000) != 0x8000 && do_execution_range_check && execution_range_check_gate)) {
+	const int within_hypervisor_ram = (cpu65.pc >= 0x8000 && cpu65.pc < 0xC000);
+	if (XEMU_UNLIKELY(!within_hypervisor_ram && do_execution_range_check && execution_range_check_gate)) {
 		DEBUG("HYPERVISOR-DEBUG: execution outside of the hypervisor memory, PC = $%04X" NL, cpu65.pc);
 		char msg[128];
 		sprintf(msg, "Hypervisor fatal error: execution outside of the hypervisor memory, PC=$%04X SP=$%04X", cpu65.pc, cpu65.sphi | cpu65.s);
@@ -613,16 +614,15 @@ void hypervisor_debug ( void )
 	if (!resolver_ok) {
 		return;	// no debug info loaded from hickstart.list ...
 	}
-	if (XEMU_UNLIKELY(!debug_symbols[cpu65.pc - 0x8000].exec)) {
+	if (XEMU_UNLIKELY(within_hypervisor_ram && !debug_symbols[cpu65.pc - 0x8000].exec)) {
 		DEBUG("HYPERVISOR-DEBUG: execution address not found in list file (out-of-bound code?), PC = $%04X" NL, cpu65.pc);
 		FATAL("Hypervisor fatal error: execution address not found in list file (out-of-bound code?), PC = $%04X", cpu65.pc);
 		return;
 	}
 	// WARNING: as it turned out, using stdio I/O to log every opcodes even "only" at ~3.5MHz rate makes emulation _VERY_ slow ...
-	if (XEMU_UNLIKELY(debug_on)) {
+	if (XEMU_UNLIKELY(hypervisor_is_debugged)) {
 		if (debug_fp) {
 			const Uint8 pf = cpu65_get_pf();
-			const int inside_hypervisor_ram = (cpu65.pc >= 0x8000 && cpu65.pc < 0xC000);
 			fprintf(
 				debug_fp,
 				"HYPERVISOR-DEBUG: PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%d OPC=%02X @ %s+%d" NL,
@@ -637,8 +637,8 @@ void hypervisor_debug ( void )
 				(pf & CPU65_PF_C) ? 'C' : 'c',
 				vic_iomode,
 				cpu65_read_callback(cpu65.pc),
-				inside_hypervisor_ram ? debug_symbols[cpu65.pc - 0x8000].name : "NOT_IN_HYPERVISOR_RAM",
-				inside_hypervisor_ram ? debug_symbols[cpu65.pc - 0x8000].offs : 0
+				within_hypervisor_ram ? debug_symbols[cpu65.pc - 0x8000].name : "NOT_IN_HYPERVISOR_RAM",
+				within_hypervisor_ram ? debug_symbols[cpu65.pc - 0x8000].offs : 0
 			);
 		}
 	}
