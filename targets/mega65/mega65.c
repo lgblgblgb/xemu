@@ -49,6 +49,7 @@ static int nmi_level;			// please read the comment at nmi_set() below
 
 int newhack = 0;
 
+static int emulation_is_running = 0;
 static int speed_current = -1;
 static int paused = 0, paused_old = 0;
 static int breakpoint_pc = -1;
@@ -464,7 +465,8 @@ static void shutdown_callback ( void )
 #ifdef XEMU_HAS_SOCKET_API
 	xemusock_uninit();
 #endif
-	DEBUGPRINT("CPU: Execution ended at PC=$%04X (linear=%X)" NL, cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc));
+	if (emulation_is_running)
+		DEBUGPRINT("CPU: Execution ended at PC=$%04X (linear=%X)" NL, cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc));
 }
 
 
@@ -838,6 +840,7 @@ int main ( int argc, char **argv )
 	if (!configdb.syscon)
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();
+	emulation_is_running = 1;
 	// FIXME: for emscripten (anyway it does not work too much currently) there should be 50 or 60 (PAL/NTSC) instead of (fixed, and wrong!) 25!!!!!!
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;
