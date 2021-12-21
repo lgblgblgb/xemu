@@ -53,15 +53,16 @@ static int   trap_current;
 
 static int   hypervisor_queued_trap = -1;
 
-static char *rep_file = NULL;
-static struct {
+static char *debug_file_storage = NULL;
+struct debug_info_st {
 	const char *src_fn;
 	int src_ln;
 	const char *sym_name;
 	int sym_offs;
 	int exec;
 	const char *line;
-} rep_info[0x4000];
+};
+static struct debug_info_st *debug_info = NULL;
 
 static struct {
 	int   func;
@@ -499,15 +500,22 @@ void hypervisor_debug_invalidate ( const char *reason )
 
 int hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hypervisor_serial_out_asciizer )
 {
+	resolver_ok = 0;
+	hypervisor_is_debugged = 0;
 	hypervisor_serial_out_asciizer = use_hypervisor_serial_out_asciizer;
+	if (debug_file_storage) {
+		free(debug_file_storage);
+		debug_file_storage = NULL;
+	}
+	if (debug_info) {
+		free(debug_info);
+		debug_info = NULL;
+	}
 	if (!fn || !*fn) {
-		DEBUG("HYPERVISOR-DEBUG: feature is not enabled, null file name for list file" NL);
+		DEBUG("HYPERDEBUG: feature is not enabled, null file name for list file" NL);
 		return 1;
 	}
-	if (rep_file) {
-		free(rep_file);
-		rep_file = NULL;
-	}
+	debug_info = xemu_malloc(sizeof(struct debug_info_st) * 0x4000);
 	// Load REP file into a memory buffer. Yes, it's maybe a waste of memory a bit, but we can
 	// use then to reference various parts of it with pointers, with some mangling though (like inserting field
 	// terminator '\0's to have valid C-strings). It also eliminates the need to build up storage for symbols, lines
@@ -515,23 +523,23 @@ int hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hyperv
 	int ret = xemu_load_file(fn, NULL, 10, 4 << 20, "Failed to load the REP file");	// hopefully 4Mbyte max size is enough
 	if (ret < 0)
 		return -1;
-	rep_file = xemu_realloc(xemu_load_buffer_p, ret + 1);	// reallocate buffer to have space for the '\0' terminator
+	debug_file_storage = xemu_realloc(xemu_load_buffer_p, ret + 1);	// reallocate buffer to have space for the '\0' terminator
 	xemu_load_buffer_p = NULL;
-	rep_file[ret] = '\0';	// terminate the file content, to form a valid C-string
-	if (strlen(rep_file) != ret) {
+	debug_file_storage[ret] = '\0';	// terminate the file content, to form a valid C-string
+	if (strlen(debug_file_storage) != ret) {
 		ERROR_WINDOW("The loaded REP file has NULL character inside, thus it's invalid!");
 		goto failure;
 	}
-	DEBUGPRINT("HYPERVISOR-DEBUG: loaded REP file with %d bytes" NL, ret);
+	DEBUGPRINT("HYPERDEBUG: loaded REP file with %d bytes" NL, ret);
 	static const char unknown_source_name[] = "UNKNOWN_SRC";
 	static const char unknown_line[] = "<UNKNOWN LINE>";
 	for (int a = 0; a < 0x4000; a++) {
-		rep_info[a].src_fn = unknown_source_name;
-		rep_info[a].src_ln = 0;
-		rep_info[a].sym_name = NULL;
-		rep_info[a].sym_offs = 0;
-		rep_info[a].exec = 0;
-		rep_info[a].line = unknown_line;
+		debug_info[a].src_fn = unknown_source_name;
+		debug_info[a].src_ln = 0;
+		debug_info[a].sym_name = NULL;
+		debug_info[a].sym_offs = 0;
+		debug_info[a].exec = 0;
+		debug_info[a].line = unknown_line;
 	}
 	// The big loop, which walks through the file and parses it
 	const char *current_source_file_name = unknown_source_name;
@@ -539,9 +547,9 @@ int hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hyperv
 	static const char valid_label_characters[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789_";
 	int total_symbols = 0;
 	int total_lines = 0;
-	for (char *r = rep_file ;*r ;) {
+	for (char *r = debug_file_storage ;*r ;) {
 		// search the end of line marker, with trying to guess line ending policy
-		//DEBUGPRINT("HYPERVISOR-DEBUG: processing line at offset %d" NL, (int)(r - rep_file));
+		//DEBUGPRINT("HYPERDEBUG: processing line at offset %d" NL, (int)(r - debug_file_storage));
 		char *nl = r;
 		while (*nl && *nl != '\r' && *nl != '\n')
 			nl++;
@@ -562,11 +570,11 @@ int hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hyperv
 					q--;
 				current_source_file_name = q > p ? q + 1 : p;
 			} else
-				DEBUGPRINT("HYPERVISOR-DEBUG: unknown acme-comment line: %s" NL, r);
+				DEBUGPRINT("HYPERDEBUG: unknown acme-comment line: %s" NL, r);
 			goto next_line;
 		}
 		if (strlen(r) < 32) {
-			//DEBUGPRINT("HYPERVISOR-DEBUG: too short line!" NL);
+			//DEBUGPRINT("HYPERDEBUG: too short line!" NL);
 			goto next_line;
 		}
 		r[31] = '\0';		// terminate the 'acme' apart from the 'user' part of the line
@@ -592,7 +600,7 @@ int hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hyperv
 		r += 32;		// now "r" points to the "user" part of the line
 		while (*r && *r <= 0x20)// skip spaces/tabs/odd things though
 			r++;
-		//DEBUGPRINT("HYPERVISOR-DEBUG: REP-PARSER: (%s:%d) $%X \"%s\"" NL, current_source_file_name, line_number, addr, r);
+		//DEBUGPRINT("HYPERDEBUG: REP-PARSER: (%s:%d) $%X \"%s\"" NL, current_source_file_name, line_number, addr, r);
 		// Now search if there is some "label-like" entity in the 'user' part of the line
 		char *l = r;
 		while (strchr(valid_label_characters, *l))
@@ -600,49 +608,49 @@ int hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hyperv
 		if (*l == ':') {
 			// wow we seems to have found a label!
 			*l = '\0'; // terminate string here for the label
-			//DEBUGPRINT("HYPERVISOR-DEBUG: found label!!! \"%s\"" NL, r);
+			//DEBUGPRINT("HYPERDEBUG: found label!!! \"%s\"" NL, r);
 			if (addr == -1) {
 				if (unresolved_symbol)
-					DEBUGPRINT("HYPERVISOR-DEBUG: warning, multiple unresolved syms collide %s -> %s" NL, unresolved_symbol, r);
+					DEBUGPRINT("HYPERDEBUG: warning, multiple unresolved syms collide %s -> %s" NL, unresolved_symbol, r);
 				unresolved_symbol = r;
 			} else
-				rep_info[addr - 0x8000].sym_name = r;
+				debug_info[addr - 0x8000].sym_name = r;
 			total_symbols++;
 			r = l + 1;
 		}
 		if (addr != -1) {
-			rep_info[addr - 0x8000].src_fn = current_source_file_name;
-			rep_info[addr - 0x8000].src_ln = line_number;
-			rep_info[addr - 0x8000].exec = 1;
+			debug_info[addr - 0x8000].src_fn = current_source_file_name;
+			debug_info[addr - 0x8000].src_ln = line_number;
+			debug_info[addr - 0x8000].exec = 1;
 			if (unresolved_symbol) {
-				rep_info[addr - 0x8000].sym_name = unresolved_symbol;
+				debug_info[addr - 0x8000].sym_name = unresolved_symbol;
 				unresolved_symbol = NULL;
 
 			}
 			while (*r && *r <= 0x20)	// skip spaces/tabs/odd things
 				r++;
-			rep_info[addr - 0x8000].line = r;
+			debug_info[addr - 0x8000].line = r;
 			total_lines++;
 		}
 	next_line:
 		r = nl;
 	}
-	DEBUGPRINT("HYPERVISOR-DEBUG: imported %d symbols and %d code/data lines" NL, total_symbols, total_lines);
+	DEBUGPRINT("HYPERDEBUG: imported %d symbols and %d code/data lines" NL, total_symbols, total_lines);
 	// for debug info entries not having any symbol, let's populate those with offsets compared to the last known one
-	if (!rep_info[0].sym_name) {
+	if (!debug_info[0].sym_name) {
 		static const char first_fake_label[] = "<HYPPO_BASE>";
-		rep_info[0].sym_name = first_fake_label;
+		debug_info[0].sym_name = first_fake_label;
 	}
 	for (int a = 0, last_symi = 0; a < 0x4000; a++) {
-		if (!rep_info[a].sym_name) {
-			rep_info[a].sym_name = rep_info[last_symi].sym_name;
-			rep_info[a].sym_offs = a - last_symi;
+		if (!debug_info[a].sym_name) {
+			debug_info[a].sym_name = debug_info[last_symi].sym_name;
+			debug_info[a].sym_offs = a - last_symi;
 		} else
 			last_symi = a;
 	}
 #if 0
 	for (int a = 0; a < 0x4000; a++) {
-		DEBUGPRINT("HYPERVISOR-DEBUG: FINAL: $%04X %s:%d %s+%d%s%s" NL, a + 0x8000, rep_info[a].src_fn, rep_info[a].src_ln, rep_info[a].sym_name, rep_info[a].sym_offs, rep_info[a].exec ? " [EXEC] " : " ", rep_info[a].line);
+		DEBUGPRINT("HYPERDEBUG: FINAL: $%04X %s:%d %s+%d%s%s" NL, a + 0x8000, debug_info[a].src_fn, debug_info[a].src_ln, debug_info[a].sym_name, debug_info[a].sym_offs, debug_info[a].exec ? " [EXEC] " : " ", debug_info[a].line);
 	}
 	exit(1);
 #endif
@@ -651,9 +659,13 @@ int hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hyperv
 	hypervisor_is_debugged = hypervisor_debug;
 	return 0;
 failure:
-	if (rep_file) {
-		free(rep_file);
-		rep_file = NULL;
+	if (debug_file_storage) {
+		free(debug_file_storage);
+		debug_file_storage = NULL;
+	}
+	if (debug_info) {
+		free(debug_info);
+		debug_info = NULL;
 	}
 	return -1;
 }
@@ -661,17 +673,17 @@ failure:
 
 void hypervisor_debug ( void )
 {
-	static int do_execution_range_check = 1;
 	if (!in_hypervisor)
 		return;
 	// TODO: better hypervisor upgrade check, maybe with checking the exact range hyppo/hickup uses for upgrade outside of the "normal" hypervisor mem range
 	if (XEMU_UNLIKELY((cpu65.pc & 0xFF00) == 0x3000)) {	// this area is used by HICKUP upgrade
-		DEBUG("HYPERVISOR-DEBUG: allowed to run outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu65.pc);
+		DEBUG("HYPERDEBUG: allowed to run outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu65.pc);
 		return;
 	}
+	static int do_execution_range_check = 1;
 	const int within_hypervisor_ram = (cpu65.pc >= 0x8000 && cpu65.pc < 0xC000);
 	if (XEMU_UNLIKELY(!within_hypervisor_ram && do_execution_range_check && execution_range_check_gate)) {
-		DEBUG("HYPERVISOR-DEBUG: execution outside of the hypervisor memory, PC = $%04X" NL, cpu65.pc);
+		DEBUG("HYPERDEBUG: execution outside of the hypervisor memory, PC = $%04X" NL, cpu65.pc);
 		char msg[128];
 		sprintf(msg, "Hypervisor fatal error: execution outside of the hypervisor memory, PC=$%04X SP=$%04X", cpu65.pc, cpu65.sphi | cpu65.s);
 		switch (QUESTION_WINDOW("Reset|Exit Xemu|Ignore now|Ingore all", msg)) {
@@ -689,38 +701,35 @@ void hypervisor_debug ( void )
 		}
 		return;
 	}
-	if (!resolver_ok) {
-		return;	// no debug info loaded from hickstart.list ...
-	}
-	if (XEMU_UNLIKELY(within_hypervisor_ram && !rep_info[cpu65.pc - 0x8000].exec)) {
-		DEBUG("HYPERVISOR-DEBUG: execution address not found in list file (out-of-bound code?), PC = $%04X" NL, cpu65.pc);
+	if (!resolver_ok)
+		return;		// no debug info loaded, cannot continue
+	if (XEMU_UNLIKELY(within_hypervisor_ram && !debug_info[cpu65.pc - 0x8000].exec)) {
+		DEBUG("HYPERDEBUG: execution address not found in list file (out-of-bound code?), PC = $%04X" NL, cpu65.pc);
 		FATAL("Hypervisor fatal error: execution address not found in list file (out-of-bound code?), PC = $%04X", cpu65.pc);
 		return;
 	}
 	// WARNING: as it turned out, using stdio I/O to log every opcodes even "only" at ~3.5MHz rate makes emulation _VERY_ slow ...
-	if (XEMU_UNLIKELY(hypervisor_is_debugged)) {
-		if (debug_fp) {
-			const Uint8 pf = cpu65_get_pf();
-			fprintf(
-				debug_fp,
-				"HYPERVISOR-DEBUG: PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%d OPC=%02X @ %s:%d %s+%d | %s" NL,
-				cpu65.pc, cpu65.sphi | cpu65.s, cpu65.bphi >> 8, cpu65.a, cpu65.x, cpu65.y, cpu65.z,
-				(pf & CPU65_PF_N) ? 'N' : 'n',
-				(pf & CPU65_PF_V) ? 'V' : 'v',
-				(pf & CPU65_PF_E) ? 'E' : 'e',
-				'-',
-				(pf & CPU65_PF_D) ? 'D' : 'd',
-				(pf & CPU65_PF_I) ? 'I' : 'i',
-				(pf & CPU65_PF_Z) ? 'Z' : 'z',
-				(pf & CPU65_PF_C) ? 'C' : 'c',
-				vic_iomode,
-				cpu65_read_callback(cpu65.pc),
-				within_hypervisor_ram ? rep_info[cpu65.pc - 0x8000].src_fn   : "<NOT>",
-				within_hypervisor_ram ? rep_info[cpu65.pc - 0x8000].src_ln   : 0,
-				within_hypervisor_ram ? rep_info[cpu65.pc - 0x8000].sym_name : "<NOT>",
-				within_hypervisor_ram ? rep_info[cpu65.pc - 0x8000].sym_offs : 0,
-				within_hypervisor_ram ? rep_info[cpu65.pc - 0x8000].line     : ""
-			);
-		}
+	if (XEMU_UNLIKELY(hypervisor_is_debugged && debug_fp)) {
+		const Uint8 pf = cpu65_get_pf();
+		fprintf(
+			debug_fp,
+			"HYPERDEBUG: PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%d @ %s:%d %s+$%X | %s" NL,
+			cpu65.pc, cpu65.sphi | cpu65.s, cpu65.bphi >> 8, cpu65.a, cpu65.x, cpu65.y, cpu65.z,
+			(pf & CPU65_PF_N) ? 'N' : 'n',
+			(pf & CPU65_PF_V) ? 'V' : 'v',
+			(pf & CPU65_PF_E) ? 'E' : 'e',
+			'-',
+			(pf & CPU65_PF_D) ? 'D' : 'd',
+			(pf & CPU65_PF_I) ? 'I' : 'i',
+			(pf & CPU65_PF_Z) ? 'Z' : 'z',
+			(pf & CPU65_PF_C) ? 'C' : 'c',
+			vic_iomode,
+			//cpu65_read_callback(cpu65.pc),
+			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].src_fn   : "<NOT>",
+			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].src_ln   : 0,
+			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].sym_name : "<NOT>",
+			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].sym_offs : 0,
+			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].line     : ""
+		);
 	}
 }

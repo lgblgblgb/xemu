@@ -33,7 +33,7 @@ struct configdb_st {
 	char	*disk9;
 	char	*fpga;
 	char	*hickup;
-	char	*hickuplist;
+	char	*hickuprep;
 	char	*extbanner;
 	char	*extcramutils;
 	char	*extinitrom;

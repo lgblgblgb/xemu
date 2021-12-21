@@ -303,7 +303,7 @@ static void preinit_memory_for_start ( void )
 static void mega65_init ( void )
 {
 	last_reset_type = "XEMU-STARTUP";
-	hypervisor_debug_init(configdb.hickuplist, configdb.hyperdebug, configdb.hyperserialascii);
+	hypervisor_debug_init(configdb.hickuprep, configdb.hyperdebug, configdb.hyperserialascii);
 	if (hypervisor_is_debugged)
 		cpu_cycles_per_step = 0;
 	hid_init(
