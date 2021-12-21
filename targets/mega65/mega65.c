@@ -738,9 +738,8 @@ static void emulation_loop ( void )
 				}
 			}
 		}
-		if (XEMU_UNLIKELY(in_hypervisor)) {
+		if (XEMU_UNLIKELY(in_hypervisor))
 			hypervisor_debug();
-		}
 		if (XEMU_UNLIKELY(breakpoint_pc == cpu65.pc)) {
 			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu65.pc);
 			paused = 1;
