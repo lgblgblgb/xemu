@@ -41,5 +41,6 @@ extern int  hypervisor_level_reset ( void );
 extern void hypervisor_leave ( void );
 extern void hypervisor_serial_monitor_push_char ( Uint8 chr );
 extern void hypervisor_debug_invalidate ( const char *reason );
+extern void hypervisor_debug_late_enable ( void );
 
 #endif

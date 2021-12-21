@@ -70,6 +70,7 @@ struct configdb_st {
 	int	show_drive_led;
 	int	allowfreezer;
 	int	hyperdebug;
+	int	hyperdebugfreezer;
 	int	hyperserialascii;
 	int	usestubrom;
 	int	useinitrom;

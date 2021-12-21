@@ -80,6 +80,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "allowfreezer", "Allow triggering freezer [NOT YET WORKING]", &configdb.allowfreezer },
 	{ "fullscreen", "Start in fullscreen mode", &configdb.fullscreen_requested },
 	{ "hyperdebug", "Crazy, VERY slow and 'spammy' hypervisor debug mode", &configdb.hyperdebug },
+	{ "hyperdebugfrz", "Only start hyperdebug on entering the freezer", &configdb.hyperdebugfreezer },
 	{ "hyperserialascii", "Convert PETSCII/ASCII hypervisor serial debug output to ASCII upper-case", &configdb.hyperserialascii },
 	{ "usestubrom", "Use Xemu's internal stub-rom", &configdb.usestubrom },
 	{ "useinitrom", "Use Xemu's internal init-rom", &configdb.useinitrom },

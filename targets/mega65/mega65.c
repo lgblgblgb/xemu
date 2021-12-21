@@ -67,7 +67,7 @@ static char fast_mhz_in_string[16] = "";
 static const char *cpu_clock_speed_strs[4] = { "1MHz", "2MHz", "3.5MHz", fast_mhz_in_string };
 static unsigned int cpu_clock_speed_str_index = 0;
 static unsigned int cpu_cycles_per_scanline;
-static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
+int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 
 static Uint8 nvram_original[sizeof nvram];
 static int uuid_must_be_saved = 0;

@@ -252,15 +252,19 @@ void hypervisor_enter ( int trapno )
 		hdos_enter();
 	} else
 		hdos.func = -1;
-	if ((trapno == TRAP_FREEZER_RESTORE_PRESS || trapno == TRAP_FREEZER_USER_CALL) && !configdb.allowfreezer) {
-		// If freezer is not enabled I warn the user, also return from the hypervisor trap now, without doing anything
-		WARNING_WINDOW("FREEZER is not enabled in Xemu currently.");
-		// Leave hypervisor mode now, do not allow Hyppo to get this trap.
-		if (trapno == TRAP_FREEZER_USER_CALL) {
-			D6XX_registers[0x47] &= 0xFE;	// clear carry flag (bit zero)
-			D6XX_registers[0x40] = 0xFF;	// set A register to $FF
+	if (trapno == TRAP_FREEZER_RESTORE_PRESS || trapno == TRAP_FREEZER_USER_CALL) {
+		if (!configdb.allowfreezer) {
+			// If freezer is not enabled I warn the user, also return from the hypervisor trap now, without doing anything
+			WARNING_WINDOW("FREEZER is not enabled in Xemu currently.");
+			// Leave hypervisor mode now, do not allow Hyppo to get this trap.
+			if (trapno == TRAP_FREEZER_USER_CALL) {
+				D6XX_registers[0x47] &= 0xFE;	// clear carry flag (bit zero)
+				D6XX_registers[0x40] = 0xFF;	// set A register to $FF
+			}
+			hypervisor_leave();
+		} else if (configdb.hyperdebugfreezer) {
+			hypervisor_debug_late_enable();
 		}
-		hypervisor_leave();
 	}
 #ifdef TRAP_XEMU
 	if (trapno == TRAP_XEMU) {
@@ -665,6 +669,16 @@ failure:
 }
 
 
+void hypervisor_debug_late_enable ( void )
+{
+	if (resolver_ok && !hypervisor_is_debugged) {
+		hypervisor_is_debugged = 1;
+		cpu_cycles_per_step = 0;
+		DEBUGPRINT("HYPERDEBUG: late-enable process now." NL);
+	}
+}
+
+
 void hypervisor_debug ( void )
 {
 	if (!in_hypervisor)
@@ -712,11 +726,12 @@ void hypervisor_debug ( void )
 		return;
 	}
 	// WARNING: as it turned out, using stdio I/O to log every opcodes even "only" at ~3.5MHz rate makes emulation _VERY_ slow ...
-	if (XEMU_UNLIKELY(hypervisor_is_debugged && debug_fp)) {
+	if (XEMU_UNLIKELY(hypervisor_is_debugged)) {
 		const Uint8 pf = cpu65_get_pf();
+		static const unsigned int io_mode_xlat[4] = {2, 3, 0, 4};
 		fprintf(
-			debug_fp,
-			"HYPERDEBUG: PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%d @ %s:%d %s+$%X | %s" NL,
+			debug_fp ? debug_fp : stdout,
+			"HYPERDEBUG: PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%u @ %s:%d %s+$%X | %s" NL,
 			cpu65.pc, cpu65.sphi | cpu65.s, cpu65.bphi >> 8, cpu65.a, cpu65.x, cpu65.y, cpu65.z,
 			(pf & CPU65_PF_N) ? 'N' : 'n',
 			(pf & CPU65_PF_V) ? 'V' : 'v',
@@ -726,13 +741,12 @@ void hypervisor_debug ( void )
 			(pf & CPU65_PF_I) ? 'I' : 'i',
 			(pf & CPU65_PF_Z) ? 'Z' : 'z',
 			(pf & CPU65_PF_C) ? 'C' : 'c',
-			vic_iomode,
-			//cpu65_read_callback(cpu65.pc),
+			io_mode_xlat[vic_iomode],
 			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].src_fn   : "<NOT>",
 			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].src_ln   : 0,
 			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].sym_name : "<NOT>",
 			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].sym_offs : 0,
-			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].line     : ""
+			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].line     : (cpu65.prefix ? "<PREFIXED-OP>" : "?")
 		);
 	}
 }
