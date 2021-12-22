@@ -62,6 +62,8 @@ struct debug_info_st {
 	int exec;		// @ this addr, executable? [out-of-bound PC check]
 	const char *line;	// source line (minus symbol definition)
 };
+// Will be malloc'ed to have 0x4000 entries for the space of $8000-$BFFF of hypervisor
+// RAM, info about each bytes there
 static struct debug_info_st *debug_info = NULL;
 
 static struct {
@@ -690,10 +692,14 @@ void hypervisor_debug ( void )
 	}
 	static int prev_pc = 0;
 	static int do_execution_range_check = 1;
-	static int previous_within_hypervisor_ram = 0;
+	static int previous_within_hypervisor_ram = 1;	// in case of "cold boot" we start in hypervisor, do not give false alarms because of that
 	const int within_hypervisor_ram = (cpu65.pc >= 0x8000 && cpu65.pc < 0xC000);
 	if (previous_within_hypervisor_ram != within_hypervisor_ram) {
 		DEBUG("HYPERDEBUG: execution %s hypervisor RAM at PC=$%04X (PC before=$%04X)" NL, within_hypervisor_ram ? "RETURNS to" : "LEAVES", cpu65.pc, prev_pc);
+		if (within_hypervisor_ram && cpu65.sphi != 0x0100)
+			DEBUG("HYPERDEBUG: warning, execution in hypervisor mode leaves the hypervisor RAM with SPHI != $01 but $%02X" NL, cpu65.sphi >> 8);
+		if (within_hypervisor_ram && cpu65.bphi != 0x0000)
+			DEBUG("HYPERDEBUG: warning, execution in hypervisor mode leaves the hypervisor RAM with BPHI != $00 but $%02X" NL, cpu65.bphi >> 8);
 		previous_within_hypervisor_ram = within_hypervisor_ram;
 	}
 	prev_pc = cpu65.pc;
