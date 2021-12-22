@@ -537,8 +537,8 @@ int hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hyperv
 		goto failure;
 	}
 	DEBUGPRINT("HYPERDEBUG: loaded REP file with %d bytes" NL, ret);
-	static const char unknown_source_name[] = "UNKNOWN_SRC";
-	static const char unknown_line[] = "<UNKNOWN LINE>";
+	static const char unknown_source_name[] = "<UNKNOWN_SRC>";
+	static const char unknown_line[] = "<UNKNOWN_LINE>";
 	for (int a = 0; a < 0x4000; a++) {
 		debug_info[a].src_fn = unknown_source_name;
 		debug_info[a].src_ln = 0;
@@ -683,7 +683,7 @@ void hypervisor_debug_late_enable ( void )
 
 void hypervisor_debug ( void )
 {
-	if (!in_hypervisor)
+	if (!in_hypervisor || !hypervisor_is_debugged)
 		return;
 	// TODO: better hypervisor upgrade check, maybe with checking the exact range hyppo/hickup uses for upgrade outside of the "normal" hypervisor mem range
 	if (XEMU_UNLIKELY((cpu65.pc & 0xFF00) == 0x3000)) {	// this area is used by HICKUP upgrade
@@ -694,13 +694,19 @@ void hypervisor_debug ( void )
 	static int do_execution_range_check = 1;
 	static int previous_within_hypervisor_ram = 1;	// in case of "cold boot" we start in hypervisor, do not give false alarms because of that
 	const int within_hypervisor_ram = (cpu65.pc >= 0x8000 && cpu65.pc < 0xC000);
-	if (previous_within_hypervisor_ram != within_hypervisor_ram) {
+	if (XEMU_UNLIKELY(previous_within_hypervisor_ram != within_hypervisor_ram)) {
 		DEBUG("HYPERDEBUG: execution %s hypervisor RAM at PC=$%04X (PC before=$%04X)" NL, within_hypervisor_ram ? "RETURNS to" : "LEAVES", cpu65.pc, prev_pc);
 		if (within_hypervisor_ram && cpu65.sphi != 0x0100)
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor mode leaves the hypervisor RAM with SPHI != $01 but $%02X" NL, cpu65.sphi >> 8);
 		if (within_hypervisor_ram && cpu65.bphi != 0x0000)
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor mode leaves the hypervisor RAM with BPHI != $00 but $%02X" NL, cpu65.bphi >> 8);
 		previous_within_hypervisor_ram = within_hypervisor_ram;
+	}
+	if (XEMU_LIKELY(within_hypervisor_ram)) {
+		if (XEMU_UNLIKELY(cpu65.sphi != 0xBE00))
+			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without SPHI == $BE but $%02X" NL, cpu65.sphi >> 8);
+		if (XEMU_UNLIKELY(cpu65.bphi != 0xBF00))
+			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without BPHI == $BF but $%02X" NL, cpu65.bphi >> 8);
 	}
 	prev_pc = cpu65.pc;
 	if (XEMU_UNLIKELY(!within_hypervisor_ram && do_execution_range_check && execution_range_check_gate)) {
@@ -732,7 +738,7 @@ void hypervisor_debug ( void )
 		return;
 	}
 	// WARNING: as it turned out, using stdio I/O to log every opcodes even "only" at ~3.5MHz rate makes emulation _VERY_ slow ...
-	if (XEMU_UNLIKELY(hypervisor_is_debugged)) {
+	if (hypervisor_is_debugged) {
 		const Uint8 pf = cpu65_get_pf();
 		static const unsigned int io_mode_xlat[4] = {2, 3, 0, 4};
 		fprintf(
