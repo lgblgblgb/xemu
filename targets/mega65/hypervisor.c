@@ -254,7 +254,11 @@ void hypervisor_enter ( int trapno )
 		hdos_enter();
 	} else
 		hdos.func = -1;
-	if (trapno == TRAP_FREEZER_RESTORE_PRESS || trapno == TRAP_FREEZER_USER_CALL) {
+	if (XEMU_UNLIKELY(trapno == TRAP_RESET)) {
+		vic4_disallow_video_std_change = 1;
+		DEBUGPRINT("HYPERVISOR: setting video standard change banning" NL);
+	}
+	if (XEMU_UNLIKELY(trapno == TRAP_FREEZER_RESTORE_PRESS || trapno == TRAP_FREEZER_USER_CALL)) {
 		if (!configdb.allowfreezer) {
 			// If freezer is not enabled I warn the user, also return from the hypervisor trap now, without doing anything
 			WARNING_WINDOW("FREEZER is not enabled in Xemu currently.");
@@ -269,7 +273,7 @@ void hypervisor_enter ( int trapno )
 		}
 	}
 #ifdef TRAP_XEMU
-	if (trapno == TRAP_XEMU) {
+	if (XEMU_UNLIKELY(trapno == TRAP_XEMU)) {
 		// Xemu's own trap.
 		ERROR_WINDOW("XEMU TRAP feature is not yet implemented :(");
 		// Leave hypervisor mode now, do not allow Hyppo to get this trap.
@@ -385,7 +389,6 @@ static inline void first_leave ( void )
 		else
 			vic_registers[0x6F] &= 0x7F;
 	}
-	vic4_disallow_video_std_change = 0;
 	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 }
 
@@ -420,7 +423,7 @@ void hypervisor_leave ( void )
 	cpu65_set_pf(D6XX_registers[0x47]);
 	cpu65.pf_e = D6XX_registers[0x47] & CPU65_PF_E;	// cpu65_set_pf() does NOT set 'E' bit by design, so we do at our own
 	cpu65.pc   = D6XX_registers[0x48] | (D6XX_registers[0x49] << 8);
-	if (XEMU_UNLIKELY(hdos.func >= 0))
+	if (hdos.func >= 0)
 		hdos_leave();
 	map_offset_low  = ((D6XX_registers[0x4A] & 0xF) << 16) | (D6XX_registers[0x4B] << 8);
 	map_offset_high = ((D6XX_registers[0x4C] & 0xF) << 16) | (D6XX_registers[0x4D] << 8);
@@ -456,6 +459,12 @@ void hypervisor_leave ( void )
 		rom_detect_date(main_ram + 0x20000);
 	}
 	hypervisor_is_first_call = 0;
+	if (XEMU_UNLIKELY(trap_current == TRAP_RESET)) {
+		if (vic4_disallow_video_std_change) {
+			DEBUGPRINT("HYPERVISOR: clearing video standard change banning" NL);
+			vic4_disallow_video_std_change = 0;
+		}
+	}
 	if (XEMU_UNLIKELY(hypervisor_queued_trap >= 0)) {
 		// Not so much used currently ...
 		DEBUG("HYPERVISOR: processing queued trap on leaving hypervisor: trap #$%02X" NL, hypervisor_queued_trap);
