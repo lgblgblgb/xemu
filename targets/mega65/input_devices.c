@@ -31,7 +31,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define DEBUGKBDHWA(...)	DEBUG(__VA_ARGS__)
 #define DEBUGKBDHWACOM(...)	//DEBUGPRINT(__VA_ARGS__)
 
-
 /* Note: M65 has a "hardware accelerated" keyboard scanner, it can provide you the
    last pressed character as ASCII (!) without the need to actually scan/etc the
    keyboard matrix */
@@ -79,6 +78,7 @@ static struct {
 
 static int restore_is_held = 0;
 static Uint8 virtkey_state[3] = { 0xFF, 0xFF, 0xFF };
+int in_the_matrix = 0;
 
 
 void hwa_kbd_fake_key ( Uint8 k )
@@ -250,16 +250,12 @@ void kbd_trigger_restore_trap ( void )
 		restore_is_held++;
 		if (restore_is_held >= 20) {
 			restore_is_held = 0;
-#ifdef FREEZER_WORKS
 			if (!in_hypervisor) {
 				DEBUGPRINT("KBD: RESTORE trap has been triggered." NL);
 				KBD_RELEASE_KEY(RESTORE_KEY_POS);
-				hypervisor_enter(TRAP_RESTORE);
+				hypervisor_enter(TRAP_FREEZER_RESTORE_PRESS);
 			} else
 				DEBUGPRINT("KBD: *IGNORING* RESTORE trap trigger, already in hypervisor mode!" NL);
-#else
-			WARNING_WINDOW("Long press of RESTORE would trigger FREEZER.\nHowever FREEZER is not yet implemented in Xemu :-(");
-#endif
 		}
 	}
 }
@@ -275,6 +271,16 @@ static void kbd_trigger_alttab_trap ( void )
 		hypervisor_enter(TRAP_ALTTAB);
 	} else
 		DEBUGPRINT("KBD: *IGNORING* ALT-TAB trap trigger, already in hypervisor mode!" NL);
+}
+
+
+void matrix_mode_toggle ( int status )
+{
+	status = !!status;
+	if (status == in_the_matrix)
+		return;
+	in_the_matrix = status;
+	OSD(-1, -1, "Matrix mode would be switched %s", status ? "ON" : "OFF");
 }
 
 

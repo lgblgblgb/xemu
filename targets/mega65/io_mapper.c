@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "input_devices.h"
 #include "audio65.h"
 #include "configdb.h"
+#include "mega65.h"
 
 
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
@@ -38,7 +39,7 @@ Uint8  D7XX[0x100];			// FIXME: hack for future M65 stuffs like ALU! FIXME: no s
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 int    cpu_mega65_opcodes = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;
-int port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65 keyboard
+int    port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65 keyboard
 
 
 static const Uint8 fpga_firmware_version[] = { 'X','e','m','u' };
@@ -158,12 +159,12 @@ Uint8 io_read ( unsigned int addr )
 				return eth65_read_reg(addr);
 			switch (addr) {
 				case 0x7C:
-					return 0;			// emulate the "UART is ready" situation (used by newer kickstarts around from v0.11 or so)
+					return 0;			// emulate the "UART is ready" situation (used by some HICKUPs around from v0.11 or so)
 				case 0x7E:				// upgraded hypervisor signal
 					if (D6XX_registers[0x7E] == 0x80)	// 0x80 means for Xemu (not for a real M65!): ask the user!
 						D6XX_registers[0x7E] = QUESTION_WINDOW(
-							"Not upgraded yet, it can do it|Already upgraded, I test kicked state",
-							"Kickstart asks hypervisor upgrade state. What do you want Xemu to answer?\n"
+							"Not upgraded yet, it can do it|Already upgraded, I test hicked state",
+							"HICKUP asks hypervisor upgrade state. What do you want Xemu to answer?\n"
 							"(don't worry, it won't be asked again without RESET)"
 						) ? 0xFF : 0;
 					return D6XX_registers[0x7E];
@@ -421,6 +422,9 @@ void io_write ( unsigned int addr, Uint8 data )
 				case 0x17:
 					virtkey(addr - 0x15, data & 0x7F);
 					return;
+				case 0x72:	// "$D672.6 HCPU:MATRIXEN Enable composited Matrix Mode, and disable UART access to serial monitor."
+					matrix_mode_toggle(data & 0x40);
+					return;
 				case 0x7C:					// hypervisor serial monitor port
 					hypervisor_serial_monitor_push_char(data);
 					return;
@@ -437,8 +441,8 @@ void io_write ( unsigned int addr, Uint8 data )
 					return;
 				case 0x7E:
 					D6XX_registers[0x7E] = 0xFF;	// iomap.txt: "Hypervisor already-upgraded bit (sets permanently)"
-					DEBUG("MEGA65: Writing already-kicked register $%04X!" NL, addr);
-					hypervisor_debug_invalidate("$D67E was written, maybe new kickstart will boot!");
+					DEBUG("MEGA65: Writing already-hicked register $%04X!" NL, addr);
+					hypervisor_debug_invalidate("$D67E was written, maybe new HICKUP will boot!");
 					return;
 				case 0x7F:	// hypervisor leave
 					hypervisor_leave();	// 0x67F is also handled on enter's state, so it will be executed only in_hypervisor mode, which is what I want
@@ -458,6 +462,13 @@ void io_write ( unsigned int addr, Uint8 data )
 					DEBUG("QUERY: $D6%02X reg written with data %02X excepted %02X gate is %1X ptr is %p" NL,
 							addr, data, cpld_firmware_version[addr - 0x32] ^ fpga_firmware_version[addr - 0x32],
 							xemu_query_gate, xemu_query_interface_p);
+					return;
+				case 0xCF:
+					if (data == 0x42) {
+						if (ARE_YOU_SURE("FPGA reconfiguration request. System must be reset.\nIs it OK to do now?\nAnswering NO may crash your program requesting this task though,\nor can result in endless loop of trying.", ARE_YOU_SURE_DEFAULT_YES)) {
+							reset_mega65();
+						}
+					}
 					return;
 				default:
 					DEBUG("MEGA65: this I/O port is not emulated in Xemu yet: $D6%02X (tried to be written with $%02X)" NL, addr, data);

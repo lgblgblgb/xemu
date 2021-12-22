@@ -39,6 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "configdb.h"
 #include "rom.h"
 #include "hypervisor.h"
+#include "xemu/cpu65.h"
 
 
 static int attach_d81 ( const char *fn )
@@ -83,7 +84,7 @@ void emu_dropfile_callback ( const char *fn )
 #endif
 
 
-static void ui_attach_d81 ( const struct menu_st *m, int *query )
+static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
 	const int drive = VOIDPTR_TO_INT(m->user_data);
@@ -113,7 +114,7 @@ static void ui_attach_d81 ( const struct menu_st *m, int *query )
 }
 
 
-static void ui_detach_d81 ( const struct menu_st *m, int *query )
+static void ui_cb_detach_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
 	const int drive = VOIDPTR_TO_INT(m->user_data);
@@ -188,18 +189,20 @@ static void ui_format_sdcard ( void )
 }
 
 
+static char dir_rom[PATH_MAX + 1] = "";
+
+
 static void ui_update_sdcard ( void )
 {
 	char fnbuf[PATH_MAX + 1];
-	static char dir[PATH_MAX + 1] = "";
 	xemu_load_buffer_p = NULL;
-	if (!*dir)
-		strcpy(dir, sdl_pref_dir);
+	if (!*dir_rom)
+		strcpy(dir_rom, sdl_pref_dir);
 	// Select ROM image
 	if (xemugui_file_selector(
 		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
 		"Select your ROM image",
-		dir,
+		dir_rom,
 		fnbuf,
 		sizeof fnbuf
 	)) {
@@ -207,7 +210,7 @@ static void ui_update_sdcard ( void )
 		goto ret;
 	}
 	// Load selected ROM image into memory, also checks the size!
-	if (xemu_load_file(fnbuf, NULL, 0x20000, 0x20000, "Cannot begin image update, bad C65/M65 ROM image has been selected!") != 0x20000)
+	if (xemu_load_file(fnbuf, NULL, 0x20000, 0x20000, "Cannot start updating, bad C65/M65 ROM image has been selected!") != 0x20000)
 		goto ret;
 	// Check the loaded ROM: let's warn the user if it's open-ROMs, since it seems users are often confused to think,
 	// that's the right choice for every-day usage.
@@ -254,24 +257,17 @@ static void ui_update_sdcard ( void )
 		))
 			goto ret;
 	}
-	// Generate character ROM from the ROM image
-	Uint8 char_rom[CHAR_ROM_SIZE];
-	memcpy(char_rom + 0x0000, xemu_load_buffer_p + 0xD000, 0x1000);
-	memcpy(char_rom + 0x1000, xemu_load_buffer_p + 0x9000, 0x1000);
-	// And store our character ROM!
+	// store our character ROM
 	strcpy(fnbuf_target + strlen(sdl_pref_dir), CHAR_ROM_NAME);
 	if (xemu_save_file(
 		fnbuf_target,
-		char_rom,
+		xemu_load_buffer_p + 0xD000,
 		CHAR_ROM_SIZE,
 		"Cannot save the extracted CHAR ROM file for the updater"
 	))
 		goto ret;
 	// Call the updater :)
 	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES)) {
-		// this memcpy would not be needed ideally, as hyppo should load the new ROM, but it does not do that
-		// for some unknown reason. So we just copy the newly loaded ROM into the memory here ... :-/
-		memcpy(main_ram + 0x20000, xemu_load_buffer_p, 0x20000);
 		INFO_WINDOW(
 			"System files on your SD-card image seems to be updated successfully.\n"
 			"Next time you may need this function, you can use MEGA65.ROM which is a backup copy of your selected ROM.\n\n"
@@ -280,18 +276,50 @@ static void ui_update_sdcard ( void )
 		);
 	}
 	reset_mega65();
+	rom_unset_requests();
 ret:
 	if (xemu_load_buffer_p) {
 		free(xemu_load_buffer_p);
 		xemu_load_buffer_p = NULL;
 	}
-	rom_detect_date(main_ram + 0x20000);	// make sure we have the correct detected results again based on the actual memory content
+	// make sure we have the correct detected results again based on the actual memory content,
+	// since we've used the detect function on the to-be-loaded ROM to check
+	rom_detect_date(main_ram + 0x20000);
 }
 
+static void reset_via_hyppo ( void )
+{
+	if (ARE_YOU_SURE("Are you sure to HYPPO-RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
+		if (hypervisor_level_reset())
+			ERROR_WINDOW("Currently in hypervisor mode.\nNot possible to trigger a trap now");
+	}
+}
+
+static void reset_into_custom_rom ( void )
+{
+	char fnbuf[PATH_MAX + 1];
+	if (!*dir_rom)
+		strcpy(dir_rom, sdl_pref_dir);
+	// Select ROM image
+	if (xemugui_file_selector(
+		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		"Select ROM image",
+		dir_rom,
+		fnbuf,
+		sizeof fnbuf
+	))
+		return;
+	if (rom_load_custom(fnbuf)) {
+		if (!reset_mega65_asked())
+			WARNING_WINDOW("You refused reset, loaded ROM can be only activated at the next reset.");
+	}
+}
 
 static void reset_into_utility_menu ( void )
 {
 	if (reset_mega65_asked()) {
+		rom_stubrom_requested = 0;
+		rom_initrom_requested = 0;
 		hwa_kbd_fake_key(0x20);
 		KBD_RELEASE_KEY(0x75);
 	}
@@ -300,6 +328,8 @@ static void reset_into_utility_menu ( void )
 static void reset_into_c64_mode ( void )
 {
 	if (reset_mega65_asked()) {
+		rom_stubrom_requested = 0;
+		rom_initrom_requested = 0;
 		// we need this, because autoboot disk image would bypass the "go to C64 mode" on 'Commodore key' feature
 		// this call will deny disk access, and re-enable on the READY. state.
 		inject_register_allow_disk_access();
@@ -309,7 +339,7 @@ static void reset_into_c64_mode ( void )
 
 }
 
-static void reset_into_c65_mode ( void )
+static void reset_generic ( void )
 {
 	if (reset_mega65_asked()) {
 		KBD_RELEASE_KEY(0x75);
@@ -317,24 +347,49 @@ static void reset_into_c65_mode ( void )
 	}
 }
 
-static void reset_into_xemu_stub ( void )
+static void reset_into_xemu_stubrom ( void )
 {
 	if (reset_mega65_asked()) {
-		hypervisor_request_stub_rom = 1;
+		rom_initrom_requested = 0;
+		rom_stubrom_requested = 1;
+	}
+}
+
+static void reset_into_xemu_initrom ( void )
+{
+	if (reset_mega65_asked()) {
+		rom_stubrom_requested = 0;
+		rom_initrom_requested = 1;
 	}
 }
 
 static void reset_into_c65_mode_noboot ( void )
 {
 	if (reset_mega65_asked()) {
+		rom_stubrom_requested = 0;
+		rom_initrom_requested = 0;
 		inject_register_allow_disk_access();
 		KBD_RELEASE_KEY(0x75);
 		hwa_kbd_fake_key(0);
 	}
 }
 
+static void ui_cb_use_default_rom ( const struct menu_st *m, int *query )
+{
+	if (query) {
+		if (!rom_is_overriden)
+			*query |= XEMUGUI_MENUFLAG_HIDDEN | XEMUGUI_MENUFLAG_SEPARATOR;
+		return;
+	}
+	if (rom_is_overriden) {
+		if (reset_mega65_asked()) {
+			rom_unset_requests();
+		}
+	}
+}
+
 #ifdef HAS_UARTMON_SUPPORT
-static void ui_start_umon ( const struct menu_st *m, int *query )
+static void ui_cb_start_umon ( const struct menu_st *m, int *query )
 {
 	int is_active = uartmon_is_active();
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, is_active);
@@ -347,6 +402,11 @@ static void ui_start_umon ( const struct menu_st *m, int *query )
 }
 #endif
 
+static void ui_cb_matrix_mode ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, in_the_matrix);
+	matrix_mode_toggle(!in_the_matrix);
+}
 
 static char last_used_dump_directory[PATH_MAX + 1] = "";
 
@@ -398,18 +458,28 @@ static void ui_emu_info ( void )
 	xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
 	char uname_str[100];
 	xemu_get_uname_string(uname_str, sizeof uname_str);
+	sha1_hash_str rom_now_hash_str;
+	sha1_checksum_as_string(rom_now_hash_str, main_ram + 0x20000, 0x20000);
 	INFO_WINDOW(
 		"DMA chip current revision: %d (F018 rev-%s)\n"
-		"ROM version detected: %d %s\n"
+		"ROM version detected: %d %s (%s)\n"
+		"ROM SHA1: %s (%s)\n"
+		"Last RESET type: %s\n"
+		"Hyppo version: %s (%s)\n"
 		"C64 'CPU' I/O port (low 3 bits): DDR=%d OUT=%d\n"
+		"Current PC: $%04X (linear: $%07X)\n"
 		"Current VIC and I/O mode: %s %s, hot registers are %s\n"
 		"\n"
 		"Xemu host CPU usage so far: %s\n"
 		"Xemu's host OS: %s"
 		,
 		dma_chip_revision, dma_chip_revision ? "B, new" : "A, old",
-		rom_date, rom_name,
+		rom_date, rom_name, rom_is_overriden ? "OVERRIDEN" : "installed",
+		rom_now_hash_str, strcmp(rom_hash_str, rom_now_hash_str) ? "MANGLED" : "intact",
+		last_reset_type,
+		hyppo_version_string, hickup_is_overriden ?  "OVERRIDEN" : "built-in",
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
+		cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc),
 		vic_iomode < 4 ? iomode_names[vic_iomode] : "?INVALID?", videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
 		td_stat_str,
 		uname_str
@@ -480,7 +550,7 @@ static void ui_cb_audio_volume ( const struct menu_st *m, int *query )
 }
 
 
-static void ui_video_standard ( const struct menu_st *m, int *query )
+static void ui_cb_video_standard ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == videostd_id);
 	Uint8 reg = vic_read_reg(0x6F);
@@ -541,9 +611,9 @@ static void ui_cb_render_scale_quality ( const struct menu_st *m, int *query )
 
 static const struct menu_st menu_video_standard[] = {
 	{ "PAL",			XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_video_standard, (void*)0 },
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_video_standard, (void*)0 },
 	{ "NTSC",			XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_video_standard, (void*)1 },
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_video_standard, (void*)1 },
 	{ NULL }
 };
 static const struct menu_st menu_window_size[] = {
@@ -592,11 +662,17 @@ static const struct menu_st menu_sdcard[] = {
 	{ NULL }
 };
 static const struct menu_st menu_reset[] = {
-	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode		},
-	{ "Reset M65 without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot	},
+	{ "Reset back to default ROM",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_use_default_rom, NULL				},
+	{ "Reset", 			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_generic		},
+	{ "Reset without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot	},
 	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu	},
 	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode		},
-	{ "Reset into Xemu stub-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_stub		},
+	{ "Reset into Xemu stub-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_stubrom	},
+	{ "Reset into boot init-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_initrom	},
+	{ "Reset via HYPPO",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_via_hyppo		},
+	{ "Reset CPU only",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_mega65_cpu_only	},
+	{ "Reset/use custom ROM file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_custom_rom	},
 	{ NULL }
 };
 static const struct menu_st menu_inputdevices[] = {
@@ -614,12 +690,16 @@ static const struct menu_st menu_debug[] = {
 #ifdef HAS_UARTMON_SUPPORT
 	{ "Start umon on " UMON_DEFAULT_PORT,
 					XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_start_umon, NULL },
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_start_umon, NULL },
 #endif
+	{ "Allow freezer trap",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_toggle_int, (void*)&configdb.allowfreezer },
+	{ "Matrix mode",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_matrix_mode, NULL },
+	{ "Emulation state info",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_emu_info },
 	{ "Dump main RAM info file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_memory },
 	{ "Dump colour RAM into file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_colram },
 	{ "Dump hyperRAM into file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_hyperram },
-	{ "Emulation state info",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_emu_info },
 	{ NULL }
 };
 #ifdef HAVE_XEMU_EXEC_API
@@ -634,11 +714,11 @@ static const struct menu_st menu_help[] = {
 #endif
 static const struct menu_st menu_d81[] = {
 	{ "Attach user D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_attach_d81, (void*)0 },
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_d81, (void*)0 },
 	{ "Use internal D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_detach_d81, (void*)0 },
-	{ "Attach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_attach_d81, (void*)1 },
-	{ "Detach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_detach_d81, (void*)1 },
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_detach_d81, (void*)0 },
+	{ "Attach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_cb_attach_d81, (void*)1 },
+	{ "Detach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_cb_detach_d81, (void*)1 },
 	{ NULL }
 };
 static const struct menu_st menu_audio_stereo[] = {
@@ -715,9 +795,9 @@ static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
 	{ "Input devices",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_inputdevices },
 	{ "Audio",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio   },
-	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
+	{ "SD-card + sys/ROM update",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
 	{ "FD D81",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_d81     },
-	{ "Reset",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
+	{ "Reset / ROM switching",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
 	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
 #ifdef CBM_BASIC_TEXT_SUPPORT

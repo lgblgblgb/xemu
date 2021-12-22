@@ -412,6 +412,7 @@ static int fdisk ( Uint32 device_size )
 static int update_sdcard_file ( const char *on_card_name, int options, const char *fn_or_data, int size_to_install )
 {
 	int fd = -1;
+	DEBUGPRINT("SDCONTENT: about to updating file %s ..." NL, on_card_name);
 	if (size_to_install <= 0) {
 		fd = open(fn_or_data, O_RDONLY | O_BINARY);
 		if (fd < 0) {
@@ -697,8 +698,12 @@ int sdcontent_handle ( Uint32 size_in_blocks, const char *update_dir_path, int o
 		r |= update_sdcard_file(MEGA65_ROM_NAME,	options | SDCONTENT_SYS_FILE,	rom_path,				-MEGA65_ROM_SIZE);
 		snprintf(rom_path, sizeof rom_path, "%s%s", sdl_pref_dir, CHAR_ROM_NAME);
 		r |= update_sdcard_file(CHAR_ROM_NAME,		options | SDCONTENT_SYS_FILE,	rom_path,				-CHAR_ROM_SIZE);
-		r |= update_sdcard_file("BANNER.M65",		options,			(const char*)meminitdata_banner,	MEMINITDATA_BANNER_SIZE);
-		r |= update_sdcard_file("FREEZER.M65",		options,			(const char*)meminitdata_freezer,	MEMINITDATA_FREEZER_SIZE);
+
+		// Update system files based on the structure in memcontent.c and .h
+		for (int a = 0; a < MEMINITDATA_SDFILES_ITEMS; a++)
+			r |= update_sdcard_file(meminitdata_sdfiles_db[a].fn, options, (const char*)meminitdata_sdfiles_db[a].p, meminitdata_sdfiles_db[a].size);
+		//r |= update_sdcard_file("BANNER.M65",		options,			(const char*)meminitdata_banner,	MEMINITDATA_BANNER_SIZE);
+		//r |= update_sdcard_file("FREEZER.M65",	options,			(const char*)meminitdata_freezer,	MEMINITDATA_FREEZER_SIZE);
 		char *d81 = xemu_malloc(D81_SIZE);
 		memset(d81, 0, D81_SIZE);
 		memcpy(d81 + 0x61800, d81_at_61800, sizeof d81_at_61800);

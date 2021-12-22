@@ -77,6 +77,8 @@ extern Uint32 cpu65_read_linear_long_opcode_callback  ( const Uint8 index );
 
 extern void  cpu65_illegal_opcode_callback ( void );
 
+extern int memory_cpurd2linear_xlat ( Uint16 cpu_addr);
+
 CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR Uint8 cpu65_read_callback ( Uint16 addr ) {
 	return CALL_MEMORY_READER(addr >> 8, addr);
 }

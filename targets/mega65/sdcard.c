@@ -477,6 +477,11 @@ static Uint8 sdcard_read_status ( void )
 {
 	Uint8 ret = sd_status;
 	DEBUG("SDCARD: reading SD status $D680 result is $%02X PC=$%04X" NL, ret, cpu65.pc);
+	// Suggested by @Jimbo on MEGA65/Xemu Dicord: a workaround to report busy status
+	// if external SD bus is used, always when reading status. It seems to be needed now
+	// with newer hyppo, otherwise it misinterprets the SDHC detection method on the external bus!
+	if (ret & SD_ST_EXT_BUS)
+		ret |= SD_ST_BUSY1 | SD_ST_BUSY0;
 #ifdef USE_KEEP_BUSY
 	if (!keep_busy)
 		sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);

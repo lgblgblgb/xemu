@@ -139,6 +139,8 @@ static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[], const
 					DEBUGGUI("GUI: query-back for \"%s\"" NL, desc[a].name);
 					((xemugui_callback_t)(desc[a].handler))(&desc[a], &type);
 				}
+				if ((type & XEMUGUI_MENUFLAG_HIDDEN))
+					continue;
 				xemuwinmenu.items[xemuwinmenu.num_of_items] = &desc[a];
 				// Note the +1 for ID. That is because some stange Windows sting:
 				// TrackPopupMenu() with TPM_RETURNCMD returns zero as error/no-selection ...

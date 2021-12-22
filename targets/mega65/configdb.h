@@ -29,15 +29,21 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 struct configdb_st {
 	int	fullscreen_requested;
+	int	cpusinglestep;
 	char	*disk8;
 	char	*disk9;
 	char	*fpga;
-	char	*kickup;
-	char	*kickuplist;
-	char	*loadbanner;
-	char	*loadc000;
-	char	*loadcram;
-	char	*loadrom;
+	char	*hickup;
+	char	*hickuprep;
+	char	*extbanner;
+	char	*extcramutils;
+	char	*extinitrom;
+	char	*extchrwom;
+	char	*extflashutil;
+	char	*extonboard;
+	char	*extfreezer;
+	char	*hdosdir;
+	char	*rom;
 	char	*prg;
 	char	*sdimg;
 	char	*dumpmem;
@@ -61,12 +67,15 @@ struct configdb_st {
 	int	force_videostd;
 	int	init_videostd;
 	int	fullborders;
+	int	hdosvirt;
 	int	show_drive_led;
+	int	allowfreezer;
 	int	hyperdebug;
+	int	hyperdebugfreezer;
 	int	hyperserialascii;
-	int	forcerom;
-	int	stubrom;
-	int	force_upload_fonts;
+	int	usestubrom;
+	int	useinitrom;
+	int	useutilmenu;
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	int	virtsd;
 #endif
@@ -78,7 +87,7 @@ struct configdb_st {
 	int	syscon;
 	int	dmarev;
 	int	mega65_model;		// $FF = Xemu/others, 1/2/3 = MEGA65 PCB rev 1/2/3, $40=nexys4, $41=nexys4ddr, $42=nexys4ddr-widget, $FD=wukong, $FE=simulation
-	int	kicked;
+	int	hicked;
 	int	prgmode;
 	int	rtc_hour_offset;
 #ifdef HAVE_XEMU_UMON

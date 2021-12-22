@@ -601,12 +601,12 @@ int xemucfg_parse_config_file ( const char *filename_in, const char *open_fail_m
 				p1 = NULL;
 			DEBUG("Line#%d = \"%s\",\"%s\"" NL, lineno, p, p1 ? p1 : "<no-specified>");
 			o = search_option(p);
-			if ((o->flags & XEMUCFG_FLAG_CLI_ONLY)) {
-				ERROR_WINDOW("Config file (%s) error at line %d:\nkeyword '%s' is a command-line only option, cannot be used in config files", xemu_load_filepath, lineno, p);
-				return 1;
-			}
 			if (!o) {
 				ERROR_WINDOW("Config file (%s) error at line %d:\nkeyword '%s' is unknown.", xemu_load_filepath, lineno, p);
+				return 1;
+			}
+			if ((o->flags & XEMUCFG_FLAG_CLI_ONLY)) {
+				ERROR_WINDOW("Config file (%s) error at line %d:\nkeyword '%s' is a command-line only option, cannot be used in config files", xemu_load_filepath, lineno, p);
 				return 1;
 			}
 			if (o->type == XEMUCFG_OPT_BOOL && !p1)	// Only for bool type, special case: if there is no parameter it means "1" (true)
