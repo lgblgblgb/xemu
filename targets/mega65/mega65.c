@@ -139,7 +139,7 @@ void machine_set_speed ( int verbose )
 		}
 		// XXX use only DEBUG() here!
 		DEBUGPRINT("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_strs[cpu_clock_speed_str_index], cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
-		if (cpu_cycles_per_step > 1 && !hypervisor_is_debugged)
+		if (cpu_cycles_per_step > 1 && !hypervisor_is_debugged && !configdb.cpusinglestep)
 			cpu_cycles_per_step = cpu_cycles_per_scanline;	// if in trace mode (or hyper-debug ...), do not set this! So set only if non-trace and non-hyper-debug
 	}
 }
@@ -304,7 +304,7 @@ static void mega65_init ( void )
 {
 	last_reset_type = "XEMU-STARTUP";
 	hypervisor_debug_init(configdb.hickuprep, configdb.hyperdebug, configdb.hyperserialascii);
-	if (hypervisor_is_debugged)
+	if (hypervisor_is_debugged || configdb.cpusinglestep)
 		cpu_cycles_per_step = 0;
 	hid_init(
 		c64_key_map,
