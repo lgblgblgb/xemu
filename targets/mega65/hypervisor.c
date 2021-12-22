@@ -385,6 +385,7 @@ static inline void first_leave ( void )
 		else
 			vic_registers[0x6F] &= 0x7F;
 	}
+	vic4_disallow_video_std_change = 0;
 	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 }
 

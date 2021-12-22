@@ -473,6 +473,7 @@ static void shutdown_callback ( void )
 void reset_mega65 ( void )
 {
 	static const char reset_debug_msg[] = "SYSTEM: RESET - ";
+	vic4_disallow_video_std_change = 1;	// will be cleared in hypervisor.c
 	last_reset_type = "COLD";
 	DEBUGPRINT("%sBEGIN" NL, reset_debug_msg);
 	memset(D7XX + 0x20, 0, 0x40);	// stop audio DMA possibly going on
