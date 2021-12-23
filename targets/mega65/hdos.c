@@ -23,9 +23,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "hypervisor.h"
 #include "memory_mapper.h"
 
+#include <fcntl.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
 
+
+// This source is meant to virtualize Hyppo's DOS functions to
+// be able to access the host OS (what runs Xemu) filesystem
+// via the normal HDOS calls (ie what would see the sd-card
+// otherwise).
 
 #if 0
 #include "xemu/emutools_files.h"
@@ -39,18 +46,29 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "rom.h"
 
 #include <sys/types.h>
-#include <fcntl.h>
 #include <unistd.h>
 #include <errno.h>
 #endif
 
 static struct {
 	Uint8 func;
-	const char *func_desc;
+	const char *func_name;
 	Uint8 in_x, in_y, in_z;
 	char  setnam_fn[64];
 	const char *rootdir;
+	int do_virt;
+	int fd_tab[0x100];
+	XDIR *dp_tab[0x100];
 } hdos;
+
+static struct {
+	union {
+		int fd;
+		XDIR *dirp;
+	};
+	enum { HDOS_DESC_CLOSED, HDOS_DESC_FILE, HDOS_DESC_DIR } status;
+} desc_table[0x100];
+
 
 
 //#define DEBUGHDOS(...) DEBUG(__VA_ARGS__)
@@ -58,82 +76,83 @@ static struct {
 
 
 
-static const char *get_func_name ( const int func_no )
+static const char *hdos_get_func_name ( const int func_no )
 {
-	static const char INVALID_SUBFUNCTION[] = "invalid_subfunction!";
-	if (XEMU_UNLIKELY(func_no & 1))
-		goto fatal;
-	// the shift: DOS functions are EVEN numbers only.
-	// however for more efficient switch-case we shift right by one for decoding purposes only, here!
-	switch (func_no >> 1) {
-		case 0x00 >> 1: return "getversion";
-		case 0x02 >> 1: return "getdefaultdrive";
-		case 0x04 >> 1: return "getcurrentdrive";
-		case 0x06 >> 1: return "selectdrive";
-		case 0x08 >> 1: return "getdisksize [UNIMPLEMENTED]";
-		case 0x0A >> 1: return "getcwd [UNIMPLEMENTED]";
-		case 0x0C >> 1: return "chdir";
-		case 0x0E >> 1: return "mkdir [UNIMPLEMENTED]";
-		case 0x10 >> 1: return "rmdir [UNIMPLEMENTED]";
-		case 0x12 >> 1: return "opendir";
-		case 0x14 >> 1: return "readdir";
-		case 0x16 >> 1: return "closedir";
-		case 0x18 >> 1: return "openfile";
-		case 0x1A >> 1: return "readfile";
-		case 0x1C >> 1: return "writefile [UNIMPLEMENTED]";
-		case 0x1E >> 1: return "mkfile [WIP]";
-		case 0x20 >> 1: return "closefile";
-		case 0x22 >> 1: return "closeall";
-		case 0x24 >> 1: return "seekfile [UNIMPLEMENTED]";
-		case 0x26 >> 1: return "rmfile [UNIMPLEMENTED]";
-		case 0x28 >> 1: return "fstat [UNIMPLEMENTED]";
-		case 0x2A >> 1: return "rename [UNIMPLEMENTED]";
-		case 0x2C >> 1: return "filedate [UNIMPLEMENTED]";
-		case 0x2E >> 1: return "setname";
-		case 0x30 >> 1: return "findfirst";
-		case 0x32 >> 1: return "findnext";
-		case 0x34 >> 1: return "findfile";
-		case 0x36 >> 1: return "loadfile";
-		case 0x38 >> 1: return "geterrorcode";
-		case 0x3A >> 1: return "setup_transfer_area";
-		case 0x3C >> 1: return "cdrootdir";
-		case 0x3E >> 1: return "loadfile_attic";
-		case 0x40 >> 1: return "d81attach0";
-		case 0x42 >> 1: return "d81detach";
-		case 0x44 >> 1: return "d81write_en";
-		case 0x46 >> 1: return "d81attach1";
-		case 0x48 >> 1: return "get_proc_desc";
-		case 0x4A >> 1: return INVALID_SUBFUNCTION;
-		case 0x4C >> 1: return INVALID_SUBFUNCTION;
-		case 0x4E >> 1: return INVALID_SUBFUNCTION;
-		case 0x50 >> 1: return "gettasklist [UNIMPLEMENTED]";
-		case 0x52 >> 1: return "sendmessage [UNIMPLEMENTED]";
-		case 0x54 >> 1: return "receivemessage [UNIMPLEMENTED]";
-		case 0x56 >> 1: return "writeintotask [UNIMPLEMENTED]";
-		case 0x58 >> 1: return "readoutoftask [UNIMPLEMENTED]";
-		case 0x5A >> 1: return INVALID_SUBFUNCTION;
-		case 0x5C >> 1: return INVALID_SUBFUNCTION;
-		case 0x5E >> 1: return INVALID_SUBFUNCTION;
-		case 0x60 >> 1: return "terminateothertask [UNIMPLEMENTED]";
-		case 0x62 >> 1: return "create_task_native [UNIMPLEMENTED]";
-		case 0x64 >> 1: return "load_into_task [UNIMPLEMENTED]";
-		case 0x66 >> 1: return "create_task_c64 [UNIMPLEMENTED]";
-		case 0x68 >> 1: return "create_task_c65 [UNIMPLEMENTED]";
-		case 0x6A >> 1: return "exit_and_switch_to_task [UNIMPLEMENTED]";
-		case 0x6C >> 1: return "switch_to_task [UNIMPLEMENTED]";
-		case 0x6E >> 1: return "exit_task [UNIMPLEMENTED]";
-		case 0x70 >> 1: return "trap_task_toggle_rom_writeprotect";
-		case 0x72 >> 1: return "trap_task_toggle_force_4502";
-		case 0x74 >> 1: return "trap_task_get_mapping";
-		case 0x76 >> 1: return "trap_task_set_mapping";
-		case 0x78 >> 1: return INVALID_SUBFUNCTION;
-		case 0x7A >> 1: return INVALID_SUBFUNCTION;
-		case 0x7C >> 1: return "trap_serial_monitor_write";
-		case 0x7E >> 1: return "reset_entry";
+	if (XEMU_UNLIKELY((func_no & 1) || (unsigned int)func_no >= 0x80U)) {
+		FATAL("%s(%d) invalid DOS trap function number", __func__, func_no);
+		return "?";
 	}
-fatal:
-	FATAL("%s(%d) invalid DOS trap function number", __func__, func_no);
-	return "?";
+	// DOS function names are from hyppo's asm source from mega65-core repository
+	// It should be updated if there is a change there. Also maybe at other parts of
+	// this source too, to follow the ABI of the Hyppo-DOS here too.
+	static const char INVALID_SUBFUNCTION[] = "INVALID_DOS_FUNC";
+	static const char *func_names[] = {
+		"getversion",					// 00
+		"getdefaultdrive",				// 02
+		"getcurrentdrive",				// 04
+		"selectdrive",					// 06
+		"getdisksize [UNIMPLEMENTED]",			// 08
+		"getcwd [UNIMPLEMENTED]",			// 0A
+		"chdir",					// 0C
+		"mkdir [UNIMPLEMENTED]",			// 0E
+		"rmdir [UNIMPLEMENTED]",			// 10
+		"opendir",					// 12
+		"readdir",					// 14
+		"closedir",					// 16
+		"openfile",					// 18
+		"readfile",					// 1A
+		"writefile [UNIMPLEMENTED]",			// 1C
+		"mkfile [WIP]",					// 1E
+		"closefile",					// 20
+		"closeall",					// 22
+		"seekfile [UNIMPLEMENTED]",			// 24
+		"rmfile [UNIMPLEMENTED]",			// 26
+		"fstat [UNIMPLEMENTED]",			// 28
+		"rename [UNIMPLEMENTED]",			// 2A
+		"filedate [UNIMPLEMENTED]",			// 2C
+		"setname",					// 2E
+		"findfirst",					// 30
+		"findnext",					// 32
+		"findfile",					// 34
+		"loadfile",					// 36
+		"geterrorcode",					// 38
+		"setup_transfer_area",				// 3A
+		"cdrootdir",					// 3C
+		"loadfile_attic",				// 3E
+		"d81attach0",					// 40
+		"d81detach",					// 42
+		"d81write_en",					// 44
+		"d81attach1",					// 46
+		"get_proc_desc",				// 48
+		INVALID_SUBFUNCTION,				// 4A
+		INVALID_SUBFUNCTION,				// 4C
+		INVALID_SUBFUNCTION,				// 4E
+		"gettasklist [UNIMPLEMENTED]",			// 50
+		"sendmessage [UNIMPLEMENTED]",			// 52
+		"receivemessage [UNIMPLEMENTED]",		// 54
+		"writeintotask [UNIMPLEMENTED]",		// 56
+		"readoutoftask [UNIMPLEMENTED]",		// 58
+		INVALID_SUBFUNCTION,				// 5A
+		INVALID_SUBFUNCTION,				// 5C
+		INVALID_SUBFUNCTION,				// 5E
+		"terminateothertask [UNIMPLEMENTED]",		// 60
+		"create_task_native [UNIMPLEMENTED]",		// 62
+		"load_into_task [UNIMPLEMENTED]",		// 64
+		"create_task_c64 [UNIMPLEMENTED]",		// 66
+		"create_task_c65 [UNIMPLEMENTED]",		// 68
+		"exit_and_switch_to_task [UNIMPLEMENTED]",	// 6A
+		"switch_to_task [UNIMPLEMENTED]",		// 6C
+		"exit_task [UNIMPLEMENTED]",			// 6E
+		"trap_task_toggle_rom_writeprotect",		// 70
+		"trap_task_toggle_force_4502",			// 72
+		"trap_task_get_mapping",			// 74
+		"trap_task_set_mapping",			// 76
+		INVALID_SUBFUNCTION,				// 78
+		INVALID_SUBFUNCTION,				// 7A
+		"trap_serial_monitor_write",			// 7C
+		"reset_entry"					// 7E
+	};
+	return func_names[func_no >> 1];
 }
 
 
@@ -167,23 +186,47 @@ static int copy_string_from_user ( char *target, const int max_size, unsigned in
 }
 
 
-void hdos_enter ( const Uint8 func_no )
+static int copy_mem_to_user ( unsigned int target_cpu_addr, Uint8 *source, int size )
 {
-	hdos.func = func_no;
-	hdos.func_desc = get_func_name(hdos.func);
-	hdos.in_x = cpu65.x;
-	hdos.in_y = cpu65.y;
-	hdos.in_z = cpu65.z;
-	DEBUGHDOS("HDOS: entering function #$%02X (%s)" NL, hdos.func, hdos.func_desc);
+	int len = 0;
+	while (size) {
+		if (target_cpu_addr >= 0x8000)
+			return -1;
+		memory_debug_write_cpu_addr(target_cpu_addr++, *source++);
+		size--;
+		len++;
+	}
+	return len;
 }
 
 
+// Called when DOS trap is triggered.
+// Can be used to take control (without hyppo doing it) but setting the needed register values,
+// and calling hypervisor_leave() to avoid Hyppo to run.
+void hdos_enter ( const Uint8 func_no )
+{
+	hdos.func = func_no;
+	hdos.func_name = hdos_get_func_name(hdos.func);
+	// NOTE: hdos.in_ things are the *INPUT* registers of the trap, cannot be used
+	// to override the result passing back by the trap!
+	// Here we store input register values can be even examined at the hdos_leave() stage
+	hdos.in_x = cpu65.x;
+	hdos.in_y = cpu65.y;
+	hdos.in_z = cpu65.z;
+	DEBUGHDOS("HDOS: entering function #$%02X (%s)" NL, hdos.func, hdos.func_name);
+}
+
+
+// Called when DOS trap is leaving.
+// Can be used to examine the result hyppo did with a call, or even do some modifications.
 void hdos_leave ( const Uint8 func_no )
 {
 	hdos.func = func_no;
-	hdos.func_desc = get_func_name(hdos.func);
-	DEBUGHDOS("HDOS: leaving function #$%02X (%s)" NL, hdos.func, hdos.func_desc);
+	hdos.func_name = hdos_get_func_name(hdos.func);
+	DEBUGHDOS("HDOS: leaving function #$%02X (%s) with carry %s" NL, hdos.func, hdos.func_name, cpu65.pf_c ? "SET" : "CLEAR");
 	if (hdos.func == 0x2E && cpu65.pf_c) {	// HDOS setnam function. Also check carry set (which means "ok" by HDOS trap)
+		// we always track this call, because we should know the actual name selected with some other calls then
+		// let's do a local copy of the successfully selected name via hyppo (we know this by knowing that C flag is set by hyppo)
 		if (copy_string_from_user(hdos.setnam_fn, sizeof hdos.setnam_fn, hdos.in_x + (hdos.in_y << 8)) >= 0)
 			for (char *p = hdos.setnam_fn; *p; p++) {
 				if (*p < 0x20 || *p >= 0x7F) {
@@ -194,49 +237,77 @@ void hdos_leave ( const Uint8 func_no )
 				if (*p >= 'A' && *p <= 'Z')
 					*p = *p - 'A' + 'a';
 			}
-		DEBUGHDOS("HDOS: setnam(): selected filename is [%s]" NL, hdos.setnam_fn);
+		DEBUGHDOS("HDOS: %s: selected filename is [%s]" NL, hdos.func_name, hdos.setnam_fn);
 		return;
 	}
 	if (hdos.func == 0x40) {
-		DEBUGHDOS("HDOS: d81attach(): setnam=\"%s\", result=%s" NL, hdos.setnam_fn, cpu65.pf_c ? "OK" : "FAILED");
+		DEBUGHDOS("HDOS: %s(\"%s\") = %s" NL, hdos.func_name, hdos.setnam_fn, cpu65.pf_c ? "OK" : "FAILED");
 		return;
 	}
 }
 
 
+// Must be called on TRAP RESET, also causes to close all file descriptors (BTW, may be called on exit xemu,
+// to nicely close open files/directories ...)
 void hdos_reset ( void )
 {
-	DEBUGHDOS("HDOS: reset event." NL);
+	DEBUGHDOS("HDOS: reset" NL);
 	hdos.setnam_fn[0] = '\0';
 	hdos.func = -1;
+	for (int a = 0; a < 0x100; a++)
+		if (desc_table[a].status == HDOS_DESC_FILE) {
+			const int ret = close(desc_table[a].fd);
+			DEBUGHDOS("HDOS: reset: closing file descriptor #$%02X: %d" NL, a, ret);
+			desc_table[a].status = HDOS_DESC_CLOSED;
+		} else if (desc_table[a].status == HDOS_DESC_DIR) {
+			const int ret = xemu_os_closedir(desc_table[a].dirp);
+			DEBUGHDOS("HDOS: reset: closing directory descriptor #$%02X: %d" NL, a , ret);
+			desc_table[a].status = HDOS_DESC_CLOSED;
+		}
 }
 
 
+// implementation is here, but prototype is in hypervisor.h and not in hdos.h as you would expect!
+int hypervisor_hdos_virtualization_status ( const int to_enable, const char **root_ptr )
+{
+	if (to_enable >= 0) {
+		if (!!hdos.do_virt != !!to_enable) {
+			hdos.do_virt = to_enable;
+			DEBUGPRINT("HDOS: switcihing virtualization %s" NL, to_enable ? "ON" : "OFF");
+		}
+	}
+	if (root_ptr)
+		*root_ptr = hdos.rootdir;
+	return hdos.do_virt;
+}
+
+
+// Must be called, but **ONLY** once in Xemu's running lifetime, before using XEMU HDOS related things here!
 void hdos_init ( const int do_virt, const char *virtroot )
 {
+	DEBUGHDOS("HDOS: initialization with do_virt=%d and virtroot=\"%s\"" NL, do_virt, virtroot ? virtroot : "<NULL>");
+	for (int a = 0; a < 0x100; a++)
+		desc_table[a].status = HDOS_DESC_CLOSED;
 	hdos_reset();
-	if (do_virt) {
-		// Setup root for the "faked" HDOS traps
-		// First build our default one. We may need this anyway, if overriden one invalid
-		char dir[PATH_MAX + 1];
-		strcpy(dir, sdl_pref_dir);
-		strcat(dir, "hdosroot" DIRSEP_STR);
-		MKDIR(dir);	// try to make that directory, maybe hasn't existed yet
-		if (virtroot && *virtroot) {
-			XDIR *dirhandle = xemu_os_opendir(virtroot);
-			if (dirhandle) {
-				xemu_os_closedir(dirhandle);
-				strcpy(dir, virtroot);
-				if (dir[strlen(dir) - 1] != DIRSEP_CHR)
-					strcat(dir, DIRSEP_STR);
-			} else
-				ERROR_WINDOW("HDOS: bad HDOS virtual directory given (cannot open as directory): %s\nUsing the default instead: %s", virtroot, dir);
+	// HDOS virtualization related stuff
+	// First build the default path for HDOS root, also try to create, maybe hasn't existed yet.
+	// We may not using this one (but virtroot), however the default should exist.
+	char hdosdir[PATH_MAX + 1];
+	strcpy(hdosdir, sdl_pref_dir);
+	strcat(hdosdir, "hdosroot" DIRSEP_STR);
+	MKDIR(hdosdir);
+	if (virtroot && *virtroot) {	// now we may want to override the default, if it's given at all
+		XDIR *dirhandle = xemu_os_opendir(virtroot);	// try to open directory just for testing
+		if (dirhandle) {
+			// seems to work! use the virtroot path but prepare it for having directory separator as the last character
+			xemu_os_closedir(dirhandle);
+			strcpy(hdosdir, virtroot);
+			if (hdosdir[strlen(hdosdir) - 1] != DIRSEP_CHR)
+				strcat(hdosdir, DIRSEP_STR);
 		}
-		hdos.rootdir = xemu_strdup(dir);
-		DEBUGPRINT("HDOS: virtual directory is %s" NL, hdos.rootdir);
-	} else {
-		hdos.rootdir = NULL;
-		DEBUGPRINT("HDOS: trap virtualization is not enabled." NL);
+			ERROR_WINDOW("HDOS: bad HDOS virtual directory given (cannot open as directory): %s\nUsing the default instead: %s", virtroot, hdosdir);
 	}
+	hdos.rootdir = xemu_strdup(hdosdir);	// populate the result of HDOS virtualization root directory
+	hdos.do_virt = do_virt;			// though, virtualization itself can be turned on/off by this, still
+	DEBUGPRINT("HDOS: virtualization is %s, root = \"%s\"" NL, hdos.do_virt ? "ENABDLED" : "DISABLED", hdos.rootdir);
 }
-

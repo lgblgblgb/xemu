@@ -408,6 +408,13 @@ static void ui_cb_matrix_mode ( const struct menu_st *m, int *query )
 	matrix_mode_toggle(!in_the_matrix);
 }
 
+static void ui_cb_hdos_virt ( const struct menu_st *m, int *query )
+{
+	int status = hypervisor_hdos_virtualization_status(-1, NULL);
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, status);
+	(void)hypervisor_hdos_virtualization_status(!status, NULL);
+}
+
 static char last_used_dump_directory[PATH_MAX + 1] = "";
 
 static void ui_dump_memory ( void )
@@ -460,12 +467,15 @@ static void ui_emu_info ( void )
 	xemu_get_uname_string(uname_str, sizeof uname_str);
 	sha1_hash_str rom_now_hash_str;
 	sha1_checksum_as_string(rom_now_hash_str, main_ram + 0x20000, 0x20000);
+	const char *hdos_root;
+	int hdos_virt = hypervisor_hdos_virtualization_status(-1, &hdos_root);
 	INFO_WINDOW(
 		"DMA chip current revision: %d (F018 rev-%s)\n"
 		"ROM version detected: %d %s (%s)\n"
 		"ROM SHA1: %s (%s)\n"
 		"Last RESET type: %s\n"
 		"Hyppo version: %s (%s)\n"
+		"HDOS virtualization: %s, root = %s\n"
 		"C64 'CPU' I/O port (low 3 bits): DDR=%d OUT=%d\n"
 		"Current PC: $%04X (linear: $%07X)\n"
 		"Current VIC and I/O mode: %s %s, hot registers are %s\n"
@@ -478,6 +488,7 @@ static void ui_emu_info ( void )
 		rom_now_hash_str, strcmp(rom_hash_str, rom_now_hash_str) ? "MANGLED" : "intact",
 		last_reset_type,
 		hyppo_version_string, hickup_is_overriden ?  "OVERRIDEN" : "built-in",
+		hdos_virt ? "ON" : "OFF", hdos_root,
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
 		cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc),
 		vic_iomode < 4 ? iomode_names[vic_iomode] : "?INVALID?", videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
@@ -701,6 +712,8 @@ static const struct menu_st menu_debug[] = {
 #endif
 	{ "Allow freezer trap",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_toggle_int, (void*)&configdb.allowfreezer },
+	{ "HDOS virtualization",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_hdos_virt, NULL },
 	{ "Matrix mode",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_matrix_mode, NULL },
 	{ "Emulation state info",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_emu_info },
