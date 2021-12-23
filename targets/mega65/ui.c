@@ -553,13 +553,18 @@ static void ui_cb_audio_volume ( const struct menu_st *m, int *query )
 static void ui_cb_video_standard ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == videostd_id);
-	Uint8 reg = vic_read_reg(0x6F);
-	if (m->user_data)
-		reg |= 0x80;
+	if (VOIDPTR_TO_INT(m->user_data))
+		vic_registers[0x6F] |= 0x80;
 	else
-		reg &= 0x7F;
+		vic_registers[0x6F] &= 0x7F;
 	configdb.force_videostd = -1;	// turn off possible CLI/config dictated force video mode, otherwise it won't work to change video standard ...
-	vic_write_reg(0x6F, reg);	// write VIC-IV register to trigger the stuff
+}
+
+
+static void ui_cb_video_standard_disallow_change ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, vic4_disallow_video_std_change);
+	vic4_disallow_video_std_change = vic4_disallow_video_std_change ? 0 : 2;
 }
 
 
@@ -610,9 +615,11 @@ static void ui_cb_render_scale_quality ( const struct menu_st *m, int *query )
 
 
 static const struct menu_st menu_video_standard[] = {
-	{ "PAL",			XEMUGUI_MENUID_CALLABLE |
+	{ "Disallow change by programs",XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_video_standard_disallow_change, NULL },
+	{ "PAL @ 50Hz",			XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_video_standard, (void*)0 },
-	{ "NTSC",			XEMUGUI_MENUID_CALLABLE |
+	{ "NTSC @ 60Hz",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_video_standard, (void*)1 },
 	{ NULL }
 };

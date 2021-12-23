@@ -28,6 +28,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_config.h"
 #include "configdb.h"
 #include "rom.h"
+#define  XEMU_MEGA65_HDOS_H_ALLOWED
+#include "hdos.h"
 
 #include <sys/types.h>
 #include <fcntl.h>
@@ -50,6 +52,7 @@ static int   hypervisor_serial_out_asciizer;
 static int   hypervisor_is_first_call;
 static int   execution_range_check_gate;
 static int   trap_current;
+static int   current_hdos_func = -1;
 
 static int   hypervisor_queued_trap = -1;
 
@@ -65,16 +68,6 @@ struct debug_info_st {
 // Will be malloc'ed to have 0x4000 entries for the space of $8000-$BFFF of hypervisor
 // RAM, info about each bytes there
 static struct debug_info_st *debug_info = NULL;
-
-static struct {
-	int   func;
-	Uint8 in_x, in_y, in_z;
-	char  setnam_fn[64];
-	const char  *rootdir;
-} hdos;
-
-#define DEBUGHDOS(...) DEBUG(__VA_ARGS__)
-
 
 
 
@@ -136,66 +129,6 @@ void hypervisor_enter_via_write_trap ( int trapno )
 }
 
 
-static int copy_mem_from_user ( Uint8 *target, int max_size, const int terminator_byte, int source_cpu_addr )
-{
-	int len = 0;
-	if (terminator_byte >= 0)
-		max_size--;
-	for (;;) {
-		const Uint8 byte = memory_debug_read_cpu_addr(source_cpu_addr++);
-		*target++ = byte;
-		len++;
-		if (len >= max_size) {
-			if (terminator_byte >= 0)
-				*target = terminator_byte;
-			break;
-		}
-		if ((int)byte == terminator_byte)
-			break;
-	}
-	return len;
-}
-
-
-static int copy_string_from_user ( char *target, const int max_size, int source_cpu_addr )
-{
-	return copy_mem_from_user((Uint8*)target, max_size, 0, source_cpu_addr);
-}
-
-
-static void hdos_enter ( void )
-{
-	hdos.in_x = cpu65.x;
-	hdos.in_y = cpu65.y;
-	hdos.in_z = cpu65.z;
-	DEBUGHDOS("HDOS: entering function #$%02X" NL, hdos.func);
-}
-
-
-static void hdos_leave ( void )
-{
-	DEBUGHDOS("HDOS: leaving function #$%02X" NL, hdos.func);
-	if (hdos.func == 0x2E && cpu65.pf_c) {	// HDOS setnam function. Also check carry set (which means "ok" by HDOS trap)
-		copy_string_from_user(hdos.setnam_fn, sizeof hdos.setnam_fn, hdos.in_x + (hdos.in_y << 8));
-		for (char *p = hdos.setnam_fn; *p; p++) {
-			if (*p < 0x20 || *p >= 0x7F) {
-				DEBUGHDOS("HDOS: setnam(): invalid character in filename $%02X" NL, *p);
-				hdos.setnam_fn[0] = '\0';
-				break;
-			}
-			if (*p >= 'A' && *p <= 'Z')
-				*p = *p - 'A' + 'a';
-		}
-		DEBUGHDOS("HDOS: setnam(): selected filename is [%s]" NL, hdos.setnam_fn);
-		return;
-	}
-	if (hdos.func == 0x40) {
-		DEBUGHDOS("HDOS: d81attach(): setnam=\"%s\", result=%s" NL, hdos.setnam_fn, cpu65.pf_c ? "OK" : "FAILED");
-		return;
-	}
-}
-
-
 void hypervisor_enter ( int trapno )
 {
 	trap_current = trapno;
@@ -250,13 +183,16 @@ void hypervisor_enter ( int trapno )
 	cpu65.pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
 	DEBUG("HYPERVISOR: entering into hypervisor mode, trap=$%02X (A=$%02X) @ $%04X -> $%04X" NL, trapno, cpu65.a, D6XX_registers[0x48] | (D6XX_registers[0x49] << 8), cpu65.pc);
 	if (trapno == TRAP_DOS) {
-		hdos.func = cpu65.a & 0x7E;
-		hdos_enter();
+		current_hdos_func = cpu65.a & 0x7E;
+		hdos_enter(current_hdos_func);
 	} else
-		hdos.func = -1;
+		current_hdos_func = -1;
 	if (XEMU_UNLIKELY(trapno == TRAP_RESET)) {
-		vic4_disallow_video_std_change = 1;
-		DEBUGPRINT("HYPERVISOR: setting video standard change banning" NL);
+		hdos_reset();
+		if (!vic4_disallow_video_std_change) {
+			vic4_disallow_video_std_change = 1;
+			DEBUGPRINT("HYPERVISOR: setting video standard change banning" NL);
+		}
 	}
 	if (XEMU_UNLIKELY(trapno == TRAP_FREEZER_RESTORE_PRESS || trapno == TRAP_FREEZER_USER_CALL)) {
 		if (!configdb.allowfreezer) {
@@ -314,29 +250,7 @@ static void extract_version_string ( char *target, int target_max_size )
 static inline void hypervisor_xemu_init ( void )
 {
 	hyppo_version_string[0] = '\0';
-	if (configdb.hdosvirt) {
-		// Setup root for the "faked" HDOS traps
-		// First build our default one. We may need this anyway, if overriden one invalid
-		char dir[PATH_MAX + 1];
-		strcpy(dir, sdl_pref_dir);
-		strcat(dir, "hdosroot" DIRSEP_STR);
-		MKDIR(dir);	// try to make that directory, maybe hasn't existed yet
-		if (configdb.hdosdir) {
-			XDIR *dirhandle = xemu_os_opendir(configdb.hdosdir);
-			if (dirhandle) {
-				xemu_os_closedir(dirhandle);
-				strcpy(dir, configdb.hdosdir);
-				if (dir[strlen(dir) - 1] != DIRSEP_CHR)
-					strcat(dir, DIRSEP_STR);
-			} else
-				ERROR_WINDOW("HYPERVISOR: bad HDOS virtual directory given (cannot open as directory): %s\nUsing the default instead: %s", configdb.hdosdir, dir);
-		}
-		hdos.rootdir = xemu_strdup(dir);
-		DEBUGPRINT("HYPERVISOR: HDOS virtual directory: %s" NL, hdos.rootdir);
-	} else {
-		hdos.rootdir = NULL;
-		DEBUGPRINT("HYPERVISOR: HDOS trap virtualization is not enabled." NL);
-	}
+	hdos_init(configdb.hdosvirt, configdb.hdosdir);
 }
 
 
@@ -348,8 +262,6 @@ void hypervisor_start_machine ( void )
 		init_done = 1;
 		hypervisor_xemu_init();
 	}
-	hdos.setnam_fn[0] = '\0';
-	hdos.func = -1;
 	in_hypervisor = 0;
 	hypervisor_queued_trap = -1;
 	hypervisor_is_first_call = 1;
@@ -423,8 +335,8 @@ void hypervisor_leave ( void )
 	cpu65_set_pf(D6XX_registers[0x47]);
 	cpu65.pf_e = D6XX_registers[0x47] & CPU65_PF_E;	// cpu65_set_pf() does NOT set 'E' bit by design, so we do at our own
 	cpu65.pc   = D6XX_registers[0x48] | (D6XX_registers[0x49] << 8);
-	if (hdos.func >= 0)
-		hdos_leave();
+	if (current_hdos_func >= 0)
+		hdos_leave(current_hdos_func);
 	map_offset_low  = ((D6XX_registers[0x4A] & 0xF) << 16) | (D6XX_registers[0x4B] << 8);
 	map_offset_high = ((D6XX_registers[0x4C] & 0xF) << 16) | (D6XX_registers[0x4D] << 8);
 	map_mask = (D6XX_registers[0x4A] >> 4) | (D6XX_registers[0x4C] & 0xF0);
@@ -460,7 +372,7 @@ void hypervisor_leave ( void )
 	}
 	hypervisor_is_first_call = 0;
 	if (XEMU_UNLIKELY(trap_current == TRAP_RESET)) {
-		if (vic4_disallow_video_std_change) {
+		if (vic4_disallow_video_std_change == 1) {
 			DEBUGPRINT("HYPERVISOR: clearing video standard change banning" NL);
 			vic4_disallow_video_std_change = 0;
 		}
@@ -624,7 +536,7 @@ int hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hyperv
 			*l = '\0'; // terminate string here for the label
 			if (addr == -1) {
 				if (unresolved_symbol) {
-					DEBUG("HYPERDEBUG: warning, multiple unresolved syms collide ignoring %s in favour of %s" NL, r, unresolved_symbol);
+					DEBUG("HYPERDEBUG: warning: multiple unresolved syms collide ignoring %s in favour of %s" NL, r, unresolved_symbol);
 					sym_cols++;
 				} else
 					unresolved_symbol = r;
@@ -700,6 +612,7 @@ void hypervisor_debug ( void )
 		DEBUG("HYPERDEBUG: allowed to run outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu65.pc);
 		return;
 	}
+	static Uint16 prev_sp = 0xBEFF;
 	static int prev_pc = 0;
 	static int do_execution_range_check = 1;
 	static int previous_within_hypervisor_ram = 1;	// in case of "cold boot" we start in hypervisor, do not give false alarms because of that
@@ -717,6 +630,18 @@ void hypervisor_debug ( void )
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without SPHI == $BE but $%02X" NL, cpu65.sphi >> 8);
 		if (XEMU_UNLIKELY(cpu65.bphi != 0xBF00))
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without BPHI == $BF but $%02X" NL, cpu65.bphi >> 8);
+	}
+	const Uint16 now_sp = cpu65.sphi | cpu65.s;
+	int sp_diff = (int)prev_sp - (int)now_sp;
+	if (XEMU_UNLIKELY(sp_diff)) {
+		if (sp_diff < 0)
+			sp_diff = -sp_diff;
+		// the theory: a single opcode should not change the effective stack address more than 2 positions
+		// However, since stack page itself can be changed, difference >= $100 should not be reported.
+		// Also, I may need to check for opcode TXS to avoid false alarm on that (FIXME)
+		if (sp_diff > 2 && sp_diff < 0x100)
+			DEBUG("HYPERVISOR: warning, possible underflow of stack! SP has changed: $%04X -> $%04X @ PC=$%04X", prev_sp, now_sp, cpu65.pc);
+		prev_sp = now_sp;
 	}
 	prev_pc = cpu65.pc;
 	if (XEMU_UNLIKELY(!within_hypervisor_ram && do_execution_range_check && execution_range_check_gate)) {
@@ -754,7 +679,7 @@ void hypervisor_debug ( void )
 		fprintf(
 			debug_fp ? debug_fp : stdout,
 			"HYPERDEBUG: PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%u @ %s:%d %s+$%X | %s" NL,
-			cpu65.pc, cpu65.sphi | cpu65.s, cpu65.bphi >> 8, cpu65.a, cpu65.x, cpu65.y, cpu65.z,
+			cpu65.pc, now_sp, cpu65.bphi >> 8, cpu65.a, cpu65.x, cpu65.y, cpu65.z,
 			(pf & CPU65_PF_N) ? 'N' : 'n',
 			(pf & CPU65_PF_V) ? 'V' : 'v',
 			(pf & CPU65_PF_E) ? 'E' : 'e',
