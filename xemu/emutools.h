@@ -246,6 +246,7 @@ extern void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data,
 
 #include <dirent.h>
 #ifdef XEMU_ARCH_WIN
+#	include <sys/stat.h>
 	typedef _WDIR XDIR;
 	extern int   xemu_winos_utf8_to_wchar ( wchar_t *restrict o, const char *restrict i, size_t size );
 	extern int   xemu_os_open   ( const char *fn, int flags );
@@ -256,6 +257,7 @@ extern void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data,
 	extern XDIR *xemu_os_opendir ( const char *fn );
 	extern struct dirent *xemu_os_readdir ( XDIR *dirp, struct dirent *entry );
 	extern int   xemu_os_closedir ( XDIR *dir );
+	extern int   xemu_os_stat ( const char *fn, struct stat *statbuf );
 #else
 	typedef	DIR	XDIR;
 #	define	xemu_os_open			open
@@ -266,6 +268,7 @@ extern void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data,
 #	define	xemu_os_opendir			opendir
 #	define	xemu_os_readdir(dirp,not_used)	readdir(dirp)
 #	define	xemu_os_closedir 		closedir
+#	define	xemu_os_stat			stat
 #endif
 #define	xemu_os_close	close
 

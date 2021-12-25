@@ -42,6 +42,7 @@ extern void hypervisor_leave ( void );
 extern void hypervisor_serial_monitor_push_char ( Uint8 chr );
 extern void hypervisor_debug_invalidate ( const char *reason );
 extern void hypervisor_debug_late_enable ( void );
-extern int  hypervisor_hdos_virtualization_status ( const int to_enable, const char **root_ptr );	// prototype is here, but implemented in hdos.c!
+extern int  hypervisor_hdos_virtualization_status ( const int set, const char **root_ptr );	// prototype is here, but it's implemented in hdos.c not in hypervisor.c
+extern void hypervisor_hdos_close_descriptors ( void );	// prototype is here, but it's implemented in hdos.c not in hypervisor.c
 
 #endif

@@ -692,7 +692,7 @@ int xemu_init_sdl ( void )
 #if defined(XEMU_ARCH_WIN) && defined(SDL_INIT_SENSOR)
 		// FIXME: SDL or Windows has the bug that SDL_INIT_SENSOR when used, there is some "sensor manager" problem, so we left it out
 		// SDL_INIT_SENSOR was introduced somewhere in 2.0.9, however since it's a macro, it's safer not to test actual SDL version number
-		SDL_INIT_EVERYTHING & (~SDL_INIT_SENSOR);
+		SDL_INIT_EVERYTHING & ~(SDL_INIT_SENSOR | SDL_INIT_HAPTIC);
 #warning	"Activating windows + SDL sensor init problem workaround ..."
 #else
 		SDL_INIT_EVERYTHING;

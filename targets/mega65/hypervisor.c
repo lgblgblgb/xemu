@@ -247,20 +247,14 @@ static void extract_version_string ( char *target, int target_max_size )
 }
 
 
-static inline void hypervisor_xemu_init ( void )
-{
-	hyppo_version_string[0] = '\0';
-	hdos_init(configdb.hdosvirt, configdb.hdosdir);
-}
-
-
 // Actual (CPU level opcode execution) emulation of MEGA65 should start with calling this function (surely after initialization of every subsystems etc).
 void hypervisor_start_machine ( void )
 {
 	static int init_done = 0;
 	if (XEMU_UNLIKELY(!init_done)) {
 		init_done = 1;
-		hypervisor_xemu_init();
+		hyppo_version_string[0] = '\0';
+		hdos_init(configdb.hdosvirt, configdb.hdosdir);
 	}
 	in_hypervisor = 0;
 	hypervisor_queued_trap = -1;
@@ -323,8 +317,8 @@ void hypervisor_leave ( void )
 	// Sanity check
 	if (XEMU_UNLIKELY(!in_hypervisor))
 		FATAL("FATAL: not in hypervisor mode while calling hypervisor_leave()");
-	// First, restore machine status from hypervisor registers
 	DEBUG("HYPERVISOR: leaving hypervisor mode @ $%04X -> $%04X" NL, cpu65.pc, D6XX_registers[0x48] | (D6XX_registers[0x49] << 8));
+	// First, restore machine status from hypervisor registers
 	cpu65.a    = D6XX_registers[0x40];
 	cpu65.x    = D6XX_registers[0x41];
 	cpu65.y    = D6XX_registers[0x42];
