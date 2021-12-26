@@ -255,7 +255,6 @@ extern void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data,
 	extern int   xemu_os_unlink ( const char *fn );
 	extern int   xemu_os_mkdir  ( const char *fn, const int mode );
 	extern XDIR *xemu_os_opendir ( const char *fn );
-	extern struct dirent *xemu_os_readdir ( XDIR *dirp, struct dirent *entry );
 	extern int   xemu_os_closedir ( XDIR *dir );
 	extern int   xemu_os_stat ( const char *fn, struct stat *statbuf );
 #else
@@ -266,10 +265,10 @@ extern void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data,
 #	define	xemu_os_unlink			unlink
 #	define	xemu_os_mkdir			mkdir
 #	define	xemu_os_opendir			opendir
-#	define	xemu_os_readdir(dirp,not_used)	readdir(dirp)
 #	define	xemu_os_closedir 		closedir
 #	define	xemu_os_stat			stat
 #endif
 #define	xemu_os_close	close
+extern int   xemu_os_readdir ( XDIR *dirp, char *fn );
 
 #endif
