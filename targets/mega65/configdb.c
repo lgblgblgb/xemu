@@ -86,6 +86,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "usestubrom", "Use Xemu's internal stub-rom", &configdb.usestubrom },
 	{ "useinitrom", "Use Xemu's internal init-rom", &configdb.useinitrom },
 	{ "useutilmenu", "Try to tigger utility menu", &configdb.useutilmenu },
+	{ "romfromsd", "Force ROM to be used from SD-card", &configdb.romfromsd },
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	{ "virtsd", "Interpret -sdimg option as a DIRECTORY to be fed onto the FAT32FS and use virtual-in-memory disk storage.", &configdb.virtsd },
 #endif

@@ -44,6 +44,7 @@ struct configdb_st {
 	char	*extfreezer;
 	char	*hdosdir;
 	char	*rom;
+	int	romfromsd;
 	char	*prg;
 	char	*sdimg;
 	char	*dumpmem;

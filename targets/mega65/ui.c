@@ -712,6 +712,8 @@ static const struct menu_st menu_debug[] = {
 #endif
 	{ "Allow freezer trap",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_toggle_int, (void*)&configdb.allowfreezer },
+	{ "Try external ROM first",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_toggle_int, (void*)&rom_from_prefdir_allowed },
 	{ "HDOS virtualization",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_hdos_virt, NULL },
 	{ "Matrix mode",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
@@ -815,10 +817,10 @@ static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
 	{ "Input devices",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_inputdevices },
 	{ "Audio",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio   },
-	{ "SD-card + sys/ROM update",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
+	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
 	{ "FD D81",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_d81     },
 	{ "Reset / ROM switching",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
-	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
+	{ "Debug / Advanced",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
 #ifdef CBM_BASIC_TEXT_SUPPORT
 	{ "Save BASIC as text",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_save_basic_as_text },

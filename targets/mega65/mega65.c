@@ -834,6 +834,7 @@ int main ( int argc, char **argv )
 #endif
 	rom_stubrom_requested = configdb.usestubrom;
 	rom_initrom_requested = configdb.useinitrom;
+	rom_from_prefdir_allowed = !configdb.romfromsd;
 	rom_load_custom(configdb.rom);
 	audio65_start();
 	xemu_set_full_screen(configdb.fullscreen_requested);

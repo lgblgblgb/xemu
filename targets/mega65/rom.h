@@ -29,6 +29,7 @@ extern const Uint8 vga_font_8x8[2048];
 
 extern int rom_stubrom_requested;
 extern int rom_initrom_requested;
+extern int rom_from_prefdir_allowed;
 extern int rom_is_overriden;
 
 extern void rom_clear_reports ( void );
