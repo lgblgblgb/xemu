@@ -284,6 +284,12 @@ char *xemu_strdup ( const char *s )
 	return p;
 }
 
+void xemu_restrdup ( char **ptr, const char *str )
+{
+	size_t len = strlen(str) + 1;
+	*ptr = xemu_realloc(*ptr, len);
+	memcpy(*ptr, str, len);
+}
 
 // Just drop queued SDL events ...
 void xemu_drop_events ( void )

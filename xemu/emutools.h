@@ -177,6 +177,7 @@ extern const int ZERO_INT;
 extern const int ONE_INT;
 
 extern char *xemu_strdup ( const char *s );
+extern void xemu_restrdup ( char **ptr, const char *str );
 extern void xemu_set_full_screen ( int setting );
 extern void xemu_set_screen_mode ( int setting );
 extern void xemu_timekeeping_delay ( int td_em );

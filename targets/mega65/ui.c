@@ -22,7 +22,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_gui.h"
 #include "mega65.h"
 #include "xemu/emutools_files.h"
-#include "xemu/d81access.h"
 #include "sdcard.h"
 #include "sdcontent.h"
 #include "xemu/emutools_hid.h"
@@ -42,38 +41,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 
 
-static int attach_d81 ( const char *fn )
-{
-	if (fd_mounted) {
-		if (mount_external_d81(fn, 0)) {
-			ERROR_WINDOW("Mount failed for some reason.");
-			return 1;
-		} else {
-			DEBUGPRINT("UI: file seems to be mounted successfully as D81: %s" NL, fn);
-			return 0;
-		}
-	} else {
-		ERROR_WINDOW(
-			"External D81 cannot be mounted, unless you have first setup the SD card image.\n"
-			"Please use menu at 'SD-card -> Update files on SD image' to create MEGA65.D81,\n"
-			"which can be overriden then to mount external D81 images for you"
-		);
-		return 1;
-	}
-}
-
-
-// end of #if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_GUI_C)
-//#endif
-
-
 #ifdef CONFIG_DROPFILE_CALLBACK
 void emu_dropfile_callback ( const char *fn )
 {
 	DEBUGGUI("UI: file drop event, file: %s" NL, fn);
 	switch (QUESTION_WINDOW("Cancel|Mount as D81|Run/inject as PRG", "What to do with the dropped file?")) {
 		case 1:
-			attach_d81(fn);
+			sdcard_force_external_mount(0, fn, "D81 mount failure");
 			break;
 		case 2:
 			reset_mega65();
@@ -97,17 +71,7 @@ static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
 		fnbuf,
 		sizeof fnbuf
 	)) {
-		// FIXME: Ugly hack.
-		// Currently, handle only drive-8 via real MEGA65 emulation ("mounting mechanism"), and use
-		// drive-9 outside of Hyppo/etc terrotiry. To correct this, a whole big project would needed,
-		// to rewrite major part of sdcard.c, adopting new Hyppo, etc ...
-		if (drive == 0) {
-			attach_d81(fnbuf);
-		} else {
-			/*int ret =*/ sdcard_hack_mount_drive_9_now(fnbuf);
-			//if (ret)
-			//	DEBUGPRINT("SDCARD: D81: couldn't mount external D81 image" NL);
-		}
+		sdcard_force_external_mount(drive, fnbuf, "D81 mount failure");
 	} else {
 		DEBUGPRINT("UI: file selection for D81 mount was cancelled." NL);
 	}
@@ -118,13 +82,7 @@ static void ui_cb_detach_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
 	const int drive = VOIDPTR_TO_INT(m->user_data);
-	if (drive == 0) {
-		forget_external_d81();
-	} else {
-		// Again ugly hack ...
-		// to handle drive-0 and 1 (well, 8 and 9) in comepletely different ways
-		d81access_close(1);
-	}
+	sdcard_force_external_mount(drive, NULL, NULL);
 }
 
 
