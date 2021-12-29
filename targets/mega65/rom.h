@@ -31,6 +31,7 @@ extern int rom_stubrom_requested;
 extern int rom_initrom_requested;
 extern int rom_from_prefdir_allowed;
 extern int rom_is_overriden;
+extern int rom_is_external;
 
 extern void rom_clear_reports ( void );
 extern void rom_unset_requests ( void );

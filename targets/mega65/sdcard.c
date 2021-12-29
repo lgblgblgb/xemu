@@ -69,8 +69,6 @@ static int	keep_busy = 0;
 Uint8		disk_buffers[0x1000];
 static Uint8	sd_fill_buffer[512];	// Only used by the sd fill mode write command
 
-//static char	external_d81[PATH_MAX + 1];
-
 const char	xemu_external_d81_signature[] = "\xFF\xFE<{[(XemuExternalDiskMagic)]}>";
 
 Uint8 sd_reg9;
@@ -81,10 +79,6 @@ static struct {
 	char *force_external_name;
 	char *default_external_name;
 } mount_info[2];
-
-
-
-
 
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 
@@ -143,6 +137,7 @@ static void virtdisk_destroy ( void )
 	memset(vdisk.range_map, 0, RANGE_MAP_SIZE);
 }
 
+
 static void virtdisk_init ( int blocks_per_chunk, Uint32 total_number_of_blocks )
 {
 	virtdisk_destroy();
@@ -152,6 +147,7 @@ static void virtdisk_init ( int blocks_per_chunk, Uint32 total_number_of_blocks 
 	vdisk.range_map_divisor = (total_number_of_blocks / (RANGE_MAP_SIZE * 8)) + 1;
 	DEBUGPRINT("SDCARD: VDISK: %d blocks (%dKbytes) per chunk, range-divisor is %u" NL, blocks_per_chunk, blocks_per_chunk >> 1, vdisk.range_map_divisor);
 }
+
 
 // Note: you must take care to call this function with "block" not outside of the desired capacity or some logic (range_map) will cause crash.
 // That's not a problem, as this function is intended to use as storage backend, thus boundary checking should be done BEFORE you call this!
@@ -210,6 +206,7 @@ static Uint8 *virtdisk_search_block ( Uint32 block, int do_allocate )
 	return v->base;	// no need to add block offset in storage, always the first block is served in a new chunk!
 }
 
+
 static inline void virtdisk_write_block ( Uint32 block, Uint8 *buffer )
 {
 	// Check if the block is all zero. If yes, we can omit write if the block is not cached
@@ -218,6 +215,7 @@ static inline void virtdisk_write_block ( Uint32 block, Uint8 *buffer )
 		memcpy(vbuf, buffer, 512);
 	// TODO: Like with the next function, this whole strategy needs to be changed when mixed operation is used!!!!!
 }
+
 
 static inline void virtdisk_read_block ( Uint32 block, Uint8 *buffer )
 {
@@ -250,7 +248,6 @@ int fdc_cb_wr_sec ( int which, Uint8 *buffer, int d81_offset ) {
 	DEBUG("SDCARD: D81: writing sector at d81_offset=%d, return value=%d" NL, d81_offset, ret);
 	return ret;
 }
-
 
 
 static void sdcard_shutdown ( void )
@@ -479,7 +476,6 @@ static int host_seek ( Uint32 block )
 }
 
 
-
 // This tries to emulate the behaviour, that at least another one status query
 // is needed to BUSY flag to go away instead of with no time. DUNNO if it is needed at all.
 static Uint8 sdcard_read_status ( void )
@@ -551,7 +547,6 @@ int sdcard_write_block ( Uint32 block, Uint8 *buffer )
 	else
 		return -1;
 }
-
 
 
 /* Lots of TODO's here:
@@ -639,7 +634,7 @@ static void sdcard_command ( Uint8 cmd )
 {
 	static Uint32 multi_io_block;
 	static Uint8 sd_last_ok_cmd;
-	DEBUG("SDCARD: writing command register $D680 with $%02X PC=$%04X" NL, cmd, cpu65.pc);
+	DEBUGPRINT("SDCARD: writing command register $D680 with $%02X PC=$%04X" NL, cmd, cpu65.pc);
 	sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);	// ugly hack :-@
 	KEEP_BUSY(0);
 	switch (cmd) {
@@ -653,6 +648,8 @@ static void sdcard_command ( Uint8 cmd )
 		case 0x11:	// ... [FIXME: again, I don't know what the difference is ...]
 			sd_status &= ~(SD_ST_RESET | SD_ST_ERROR | SD_ST_FSM_ERROR);
 			break;
+		case 0x57:	// write sector gate
+			break;	// FIXME: implement this!!!
 		case 0x02:	// read block
 			sdcard_block_io(U8A_TO_U32(sd_regs + 1), 0);
 			break;
@@ -669,7 +666,7 @@ static void sdcard_command ( Uint8 cmd )
 			}
 			break;
 		case 0x05:	// multi sector write - not the first, neither the last sector
-			if (sd_last_ok_cmd == 0x04 || sd_last_ok_cmd == 0x05) {
+			if (sd_last_ok_cmd == 0x04 || sd_last_ok_cmd == 0x05 || sd_last_ok_cmd == 0x57) {
 				multi_io_block++;
 				sdcard_block_io(multi_io_block, 1);
 			} else {
@@ -678,7 +675,7 @@ static void sdcard_command ( Uint8 cmd )
 			}
 			break;
 		case 0x06:	// multi sector write - last sector
-			if (sd_last_ok_cmd == 0x04 || sd_last_ok_cmd == 0x05) {
+			if (sd_last_ok_cmd == 0x04 || sd_last_ok_cmd == 0x05 || sd_last_ok_cmd == 0x57) {
 				multi_io_block++;
 				sdcard_block_io(multi_io_block, 1);
 			} else {
@@ -740,14 +737,14 @@ static int internal_mount ( const int unit )
 		// must be 'image enabled' and 'disk present' bit set for "unit 0"
 		if ((sd_regs[0xB] & 0x03) != 0x03 || mount_info[0].force_external_name || mount_info[0].default_external_name)
 			return 0;
-		if ((sd_regs[0xB] & 0x04) || sd_is_read_only)
+		if (/*(sd_regs[0xB] & 0x04) ||*/ sd_is_read_only)	// it seems checking the register as well causes RO mount for some reason, let's ignore for now!
 			ro_flag = D81ACCESS_RO;
 		at_sector = U8A_TO_U32(sd_regs + 0x0C);
 	} else {
 		// must be 'image enabled' and 'disk present' bit set for "unit 1"
 		if ((sd_regs[0xB] & 0x18) != 0x18 || mount_info[1].force_external_name || mount_info[1].default_external_name)
 			return 0;
-		if ((sd_regs[0xB] & 0x20) || sd_is_read_only)
+		if (/*(sd_regs[0xB] & 0x20) ||*/ sd_is_read_only)	// see above at the similar line for drive-0
 			ro_flag = D81ACCESS_RO;
 		at_sector = U8A_TO_U32(sd_regs + 0x10);
 	}
@@ -798,8 +795,6 @@ static int some_mount ( const int unit )
 	}
 	return 0;
 }
-
-
 
 
 const char *sdcard_get_mount_info ( const int unit, int *is_internal )
@@ -892,32 +887,41 @@ void sdcard_write_register ( int reg, Uint8 data )
 }
 
 
-
 Uint8 sdcard_read_register ( int reg )
 {
-	Uint8 data;
+	Uint8 data = sd_regs[reg];	// default answer
 	switch (reg) {
 		case 0:
-			data = sdcard_read_status();
-			break;
+			return sdcard_read_status();
 		case 1:
 		case 2:
 		case 3:
 		case 4:
-			data = sd_regs[reg];
 			break;
-		case 8:	// SDcard read bytes low byte
-			data = sdcard_bytes_read & 0xFF;
+		case 6:
 			break;
+		case 8:	// SDcard read bytes low byte	: THIS IS WRONG!!!! It's a very old thing does not exist anymore, FIXME!
+			return sdcard_bytes_read & 0xFF;
 		case 9:
 			return sd_reg9;
+		case 0xB:
+			break;
+		case 0xC:
+		case 0xD:
+		case 0xE:
+		case 0xF:
+			break;
+		case 0x10:
+		case 0x11:
+		case 0x12:
+		case 0x13:
+			break;
 #if 0
 			// SDcard read bytes hi byte
 			data = sdcard_bytes_read >> 8;
 #endif
 			break;
 		default:
-			data = sd_regs[reg];
 			DEBUGPRINT("SDCARD: unimplemented register: $%02X tried to be read, defaulting to the back storage with data $%02X" NL, reg, data);
 			break;
 	}

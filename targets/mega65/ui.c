@@ -429,11 +429,12 @@ static void ui_emu_info ( void )
 	int hdos_virt = hypervisor_hdos_virtualization_status(-1, &hdos_root);
 	INFO_WINDOW(
 		"DMA chip current revision: %d (F018 rev-%s)\n"
-		"ROM version detected: %d %s (%s)\n"
+		"ROM version detected: %d %s (%s,%s)\n"
 		"ROM SHA1: %s (%s)\n"
 		"Last RESET type: %s\n"
 		"Hyppo version: %s (%s)\n"
 		"HDOS virtualization: %s, root = %s\n"
+		"Disk8 = %s\nDisk9 = %s\n"
 		"C64 'CPU' I/O port (low 3 bits): DDR=%d OUT=%d\n"
 		"Current PC: $%04X (linear: $%07X)\n"
 		"Current VIC and I/O mode: %s %s, hot registers are %s\n"
@@ -442,11 +443,12 @@ static void ui_emu_info ( void )
 		"Xemu's host OS: %s"
 		,
 		dma_chip_revision, dma_chip_revision ? "B, new" : "A, old",
-		rom_date, rom_name, rom_is_overriden ? "OVERRIDEN" : "installed",
+		rom_date, rom_name, rom_is_overriden ? "OVERRIDEN" : "installed", rom_is_external ? "external" : "internal",
 		rom_now_hash_str, strcmp(rom_hash_str, rom_now_hash_str) ? "MANGLED" : "intact",
 		last_reset_type,
 		hyppo_version_string, hickup_is_overriden ?  "OVERRIDEN" : "built-in",
 		hdos_virt ? "ON" : "OFF", hdos_root,
+		sdcard_get_mount_info(0, NULL), sdcard_get_mount_info(1, NULL),
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
 		cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc),
 		vic_iomode < 4 ? iomode_names[vic_iomode] : "?INVALID?", videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
