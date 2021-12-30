@@ -31,7 +31,9 @@ sha1_hash_str rom_hash_str;
 
 int rom_stubrom_requested = 0;
 int rom_initrom_requested = 0;
+int rom_from_prefdir_allowed = 0;
 int rom_is_overriden = 0;
+int rom_is_external = 0;
 static Uint8 *external_image = NULL;
 
 static const char _rom_name_closed[]	= "Closed-ROMs";
@@ -269,6 +271,7 @@ int rom_load_custom ( const char *fn )
 int rom_do_override ( Uint8 *rom )
 {
 	rom_is_overriden = 0;
+	rom_is_external = 0;
 	if (rom_stubrom_requested) {
 		DEBUGPRINT("ROM: using stub-ROM was forced" NL);
 		rom_make_xemu_stub_rom(rom, XEMU_STUB_ROM_SAVE_FILENAME);
@@ -282,11 +285,25 @@ int rom_do_override ( Uint8 *rom )
 	if (external_image) {
 		DEBUGPRINT("ROM: using external pre-loaded ROM" NL);
 		memcpy(rom, external_image, MEMINITDATA_INITROM_SIZE);
+		rom_is_external = 1;
 		goto overriden;
+	}
+	if (rom_from_prefdir_allowed) {
+		// Special option to allow ROM to be loaded from the preferences directory as the "default" ROM:
+		// it's kind of override, but not really and handled as "default" if this option is allowed.
+		if (xemu_load_file("@MEGA65.ROM", NULL, MEMINITDATA_INITROM_SIZE, MEMINITDATA_INITROM_SIZE, NULL) > 0) {
+			DEBUGPRINT("ROM: using 'ROM from prefdir' policy for default ROM, ROM is from file %s" NL, xemu_load_filepath);
+			memcpy(rom, xemu_load_buffer_p, MEMINITDATA_INITROM_SIZE);
+			free(xemu_load_buffer_p);
+			xemu_load_buffer_p = NULL;
+			rom_is_external = 1;
+			goto overriden_but_lie;
+		}
 	}
 	return -1;	// No override has been done
 overriden:
 	rom_is_overriden = 1;
+overriden_but_lie:
 	// return with the RESET vector of the ROM
 	return rom[0xFFFC] | (rom[0xFFFD] << 8);
 }

@@ -85,6 +85,7 @@ int videostd_changed = 0;
 static const char NTSC_STD_NAME[] = "NTSC";
 static const char PAL_STD_NAME[] = "PAL";
 int vic_readjust_sdl_viewport = 0;
+int vic4_disallow_video_std_change = 1;
 
 // VIC-IV Modeline Parameters
 // ----------------------------------------------------
@@ -708,7 +709,10 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			vic_registers[addr & 0x7F] = data;
 			break;
 		CASE_VIC_4(0x6F):
-			// We trigger video setup at next frame.
+			// If video standard change was disallowed, we keep bit7 as is, regardless of the write
+			if (vic4_disallow_video_std_change)
+				data = (vic_registers[0x6F] & 0x80) | (data & 0x7F);
+			// We trigger video setup at next frame automatically, no need do anything further here
 			break;
 
 		CASE_VIC_4(0x70):	// VIC-IV palette selection register

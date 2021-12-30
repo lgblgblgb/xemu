@@ -22,7 +22,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_gui.h"
 #include "mega65.h"
 #include "xemu/emutools_files.h"
-#include "xemu/d81access.h"
 #include "sdcard.h"
 #include "sdcontent.h"
 #include "xemu/emutools_hid.h"
@@ -42,38 +41,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 
 
-static int attach_d81 ( const char *fn )
-{
-	if (fd_mounted) {
-		if (mount_external_d81(fn, 0)) {
-			ERROR_WINDOW("Mount failed for some reason.");
-			return 1;
-		} else {
-			DEBUGPRINT("UI: file seems to be mounted successfully as D81: %s" NL, fn);
-			return 0;
-		}
-	} else {
-		ERROR_WINDOW(
-			"External D81 cannot be mounted, unless you have first setup the SD card image.\n"
-			"Please use menu at 'SD-card -> Update files on SD image' to create MEGA65.D81,\n"
-			"which can be overriden then to mount external D81 images for you"
-		);
-		return 1;
-	}
-}
-
-
-// end of #if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_GUI_C)
-//#endif
-
-
 #ifdef CONFIG_DROPFILE_CALLBACK
 void emu_dropfile_callback ( const char *fn )
 {
 	DEBUGGUI("UI: file drop event, file: %s" NL, fn);
 	switch (QUESTION_WINDOW("Cancel|Mount as D81|Run/inject as PRG", "What to do with the dropped file?")) {
 		case 1:
-			attach_d81(fn);
+			sdcard_force_external_mount(0, fn, "D81 mount failure");
 			break;
 		case 2:
 			reset_mega65();
@@ -97,17 +71,7 @@ static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
 		fnbuf,
 		sizeof fnbuf
 	)) {
-		// FIXME: Ugly hack.
-		// Currently, handle only drive-8 via real MEGA65 emulation ("mounting mechanism"), and use
-		// drive-9 outside of Hyppo/etc terrotiry. To correct this, a whole big project would needed,
-		// to rewrite major part of sdcard.c, adopting new Hyppo, etc ...
-		if (drive == 0) {
-			attach_d81(fnbuf);
-		} else {
-			/*int ret =*/ sdcard_hack_mount_drive_9_now(fnbuf);
-			//if (ret)
-			//	DEBUGPRINT("SDCARD: D81: couldn't mount external D81 image" NL);
-		}
+		sdcard_force_external_mount(drive, fnbuf, "D81 mount failure");
 	} else {
 		DEBUGPRINT("UI: file selection for D81 mount was cancelled." NL);
 	}
@@ -118,13 +82,7 @@ static void ui_cb_detach_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
 	const int drive = VOIDPTR_TO_INT(m->user_data);
-	if (drive == 0) {
-		forget_external_d81();
-	} else {
-		// Again ugly hack ...
-		// to handle drive-0 and 1 (well, 8 and 9) in comepletely different ways
-		d81access_close(1);
-	}
+	sdcard_force_external_mount(drive, NULL, NULL);
 }
 
 
@@ -408,6 +366,13 @@ static void ui_cb_matrix_mode ( const struct menu_st *m, int *query )
 	matrix_mode_toggle(!in_the_matrix);
 }
 
+static void ui_cb_hdos_virt ( const struct menu_st *m, int *query )
+{
+	int status = hypervisor_hdos_virtualization_status(-1, NULL);
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, status);
+	(void)hypervisor_hdos_virtualization_status(!status, NULL);
+}
+
 static char last_used_dump_directory[PATH_MAX + 1] = "";
 
 static void ui_dump_memory ( void )
@@ -460,12 +425,16 @@ static void ui_emu_info ( void )
 	xemu_get_uname_string(uname_str, sizeof uname_str);
 	sha1_hash_str rom_now_hash_str;
 	sha1_checksum_as_string(rom_now_hash_str, main_ram + 0x20000, 0x20000);
+	const char *hdos_root;
+	int hdos_virt = hypervisor_hdos_virtualization_status(-1, &hdos_root);
 	INFO_WINDOW(
 		"DMA chip current revision: %d (F018 rev-%s)\n"
-		"ROM version detected: %d %s (%s)\n"
+		"ROM version detected: %d %s (%s,%s)\n"
 		"ROM SHA1: %s (%s)\n"
 		"Last RESET type: %s\n"
 		"Hyppo version: %s (%s)\n"
+		"HDOS virtualization: %s, root = %s\n"
+		"Disk8 = %s\nDisk9 = %s\n"
 		"C64 'CPU' I/O port (low 3 bits): DDR=%d OUT=%d\n"
 		"Current PC: $%04X (linear: $%07X)\n"
 		"Current VIC and I/O mode: %s %s, hot registers are %s\n"
@@ -474,10 +443,12 @@ static void ui_emu_info ( void )
 		"Xemu's host OS: %s"
 		,
 		dma_chip_revision, dma_chip_revision ? "B, new" : "A, old",
-		rom_date, rom_name, rom_is_overriden ? "OVERRIDEN" : "installed",
+		rom_date, rom_name, rom_is_overriden ? "OVERRIDEN" : "installed", rom_is_external ? "external" : "internal",
 		rom_now_hash_str, strcmp(rom_hash_str, rom_now_hash_str) ? "MANGLED" : "intact",
 		last_reset_type,
 		hyppo_version_string, hickup_is_overriden ?  "OVERRIDEN" : "built-in",
+		hdos_virt ? "ON" : "OFF", hdos_root,
+		sdcard_get_mount_info(0, NULL), sdcard_get_mount_info(1, NULL),
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
 		cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc),
 		vic_iomode < 4 ? iomode_names[vic_iomode] : "?INVALID?", videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
@@ -553,13 +524,18 @@ static void ui_cb_audio_volume ( const struct menu_st *m, int *query )
 static void ui_cb_video_standard ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == videostd_id);
-	Uint8 reg = vic_read_reg(0x6F);
-	if (m->user_data)
-		reg |= 0x80;
+	if (VOIDPTR_TO_INT(m->user_data))
+		vic_registers[0x6F] |= 0x80;
 	else
-		reg &= 0x7F;
+		vic_registers[0x6F] &= 0x7F;
 	configdb.force_videostd = -1;	// turn off possible CLI/config dictated force video mode, otherwise it won't work to change video standard ...
-	vic_write_reg(0x6F, reg);	// write VIC-IV register to trigger the stuff
+}
+
+
+static void ui_cb_video_standard_disallow_change ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, vic4_disallow_video_std_change);
+	vic4_disallow_video_std_change = vic4_disallow_video_std_change ? 0 : 2;
 }
 
 
@@ -610,9 +586,11 @@ static void ui_cb_render_scale_quality ( const struct menu_st *m, int *query )
 
 
 static const struct menu_st menu_video_standard[] = {
-	{ "PAL",			XEMUGUI_MENUID_CALLABLE |
+	{ "Disallow change by programs",XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_video_standard_disallow_change, NULL },
+	{ "PAL @ 50Hz",			XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_video_standard, (void*)0 },
-	{ "NTSC",			XEMUGUI_MENUID_CALLABLE |
+	{ "NTSC @ 60Hz",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_video_standard, (void*)1 },
 	{ NULL }
 };
@@ -694,6 +672,10 @@ static const struct menu_st menu_debug[] = {
 #endif
 	{ "Allow freezer trap",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_toggle_int, (void*)&configdb.allowfreezer },
+	{ "Try external ROM first",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_toggle_int, (void*)&rom_from_prefdir_allowed },
+	{ "HDOS virtualization",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_hdos_virt, NULL },
 	{ "Matrix mode",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_matrix_mode, NULL },
 	{ "Emulation state info",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_emu_info },
@@ -795,10 +777,10 @@ static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
 	{ "Input devices",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_inputdevices },
 	{ "Audio",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio   },
-	{ "SD-card + sys/ROM update",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
+	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
 	{ "FD D81",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_d81     },
 	{ "Reset / ROM switching",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
-	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
+	{ "Debug / Advanced",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
 #ifdef CBM_BASIC_TEXT_SUPPORT
 	{ "Save BASIC as text",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_save_basic_as_text },

@@ -350,9 +350,11 @@ static void mega65_init ( void )
 	}
 	// Fill memory with the needed pre-initialized regions to be able to start.
 	preinit_memory_for_start();
+#if 0
 	// If we have no -8 option given, but we found a suitable disk image in the pref-dir,
 	// with the desired name, let's use that! In this way, it may cure some complains,
 	// that the default disk is "inside" the SD-card image which is hard to deal with.
+	// FIXME: remove this ugliness and solve this in a more fine way! XXX
 	if (!configdb.disk8) {
 		static const char default_d81_fn[] = "default.d81";
 		char *fn = xemu_malloc(strlen(sdl_pref_dir) + strlen(default_d81_fn) + 1);
@@ -369,8 +371,9 @@ static void mega65_init ( void )
 		} else
 			free(fn);
 	}
+#endif
 	// *** Image file for SDCARD support
-	if (sdcard_init(configdb.sdimg, configdb.disk8, configdb.virtsd) < 0)
+	if (sdcard_init(configdb.sdimg, configdb.virtsd) < 0)
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
 	vic_init();
@@ -398,8 +401,16 @@ static void mega65_init ( void )
 	dma_init(newhack ? DMA_FEATURE_HACK | DMA_FEATURE_DYNMODESET | configdb.dmarev : configdb.dmarev);
 	// Initialize FDC
 	fdc_init(disk_buffers + FD_BUFFER_POS);
-	//
-	sdcard_hack_mount_drive_9_now(configdb.disk9);	// FIXME: Ugly hack to support CLI forced drive-9 disk
+	// *** Drive 8 external mount
+	if (configdb.disk8)
+		sdcard_force_external_mount(0, configdb.disk8, "Mount failure on CLI/CFG requested drive-8");
+	else {
+		// FIXME: move the logic for "default d81" here. Also note, that the current changes in sdcard.c
+		// makes it impossible to work correctly if that will be umounted ....
+	}
+	// *** Drive 9 external mount
+	if (configdb.disk9)
+		sdcard_force_external_mount(1, configdb.disk9, "Mount failure on CLI/CFG requested drive-9");
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_init(configdb.uartmon);
 #endif
@@ -465,6 +476,7 @@ static void shutdown_callback ( void )
 #ifdef XEMU_HAS_SOCKET_API
 	xemusock_uninit();
 #endif
+	hypervisor_hdos_close_descriptors();
 	if (emulation_is_running)
 		DEBUGPRINT("CPU: Execution ended at PC=$%04X (linear=%X)" NL, cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc));
 }
@@ -833,6 +845,7 @@ int main ( int argc, char **argv )
 #endif
 	rom_stubrom_requested = configdb.usestubrom;
 	rom_initrom_requested = configdb.useinitrom;
+	rom_from_prefdir_allowed = !configdb.romfromsd;
 	rom_load_custom(configdb.rom);
 	audio65_start();
 	xemu_set_full_screen(configdb.fullscreen_requested);
