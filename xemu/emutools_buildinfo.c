@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -20,7 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools_basicdefs.h"
 
-const char *XEMU_BUILDINFO_CC  = CC_TYPE " " __VERSION__ " " ARCH_BITS_AS_TEXT ENDIAN_NAME;
+const char XEMU_BUILDINFO_CC[]  = CC_TYPE " " __VERSION__ " " ARCH_BITS_AS_TEXT ENDIAN_NAME;
 
 const char emulators_disclaimer[] =
 	"LICENSE: Copyright (C)" COPYRIGHT_YEARS " Gábor Lénárt (aka LGB) lgb@lgb.hu http://lgb.hu/" NL

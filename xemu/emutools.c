@@ -50,10 +50,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	include <stdio.h>
 #	include <io.h>
 #	include <fcntl.h>
+#	include <math.h>
 #endif
-//#ifdef XEMU_CONFIGDB_SUPPORT
-//#	include "xemu/emutools_config.h"
-//#endif
 
 const char EMPTY_STR[] = "";
 const int ZERO_INT = 0;
@@ -472,15 +470,60 @@ void xemu_get_uname_string ( char *buf, unsigned int size )
 {
 	struct utsname uts;
 	uname(&uts);
-	snprintf(buf, size, "%s %s %s %s %s",
+	if (snprintf(buf, size, "%s %s %s %s %s",
 		uts.sysname, uts.nodename,
 		uts.release, uts.version, uts.machine
-	);
+	) >= size) {
+		strcpy(buf, "<buffer-is-too-small>");
+	}
+}
+#elif defined(XEMU_ARCH_WIN)
+void xemu_get_uname_string ( char *buf, unsigned int size )
+{
+	char host_name[128];
+	DWORD size_used = sizeof host_name;
+	if (!GetComputerNameA(host_name, &size_used))
+		strcpy(host_name, "<?name?>");
+	// query version, strange windows have no simple way and/or "obsoleted" to get version number :(
+	// Also functions like this GetVersionEx and such are strange, for example it needs LPOSVERSIONINFOA pointer
+	// according to mingw at least rather than the documented LPOSVERSIONINFOA ... Huh??
+	OSVERSIONINFOA info;
+	ZeroMemory(&info, sizeof info);
+	info.dwOSVersionInfoSize = sizeof info;
+	GetVersionEx(&info);
+	// query architecture
+	SYSTEM_INFO sysinfo;
+	GetNativeSystemInfo(&sysinfo);
+	//WORD w = sysinfo.DUMMYUNIONNAME.DUMMYSTRUCTNAME.wProcessorArchitecture; What is this shit? Windows is horrible ...
+	const char *isa_name = "(Xemu-unknown-ISA)";
+	switch (sysinfo.wProcessorArchitecture) {
+		case 9:		// PROCESSOR_ARCHITECTURE_AMD64: x86_64 (intel or AMD)
+			isa_name = "x86_64";	break;
+		case 5: 	// PROCESSOR_ARCHITECTURE_ARM
+			isa_name = "ARM";	break;
+		case 12:	// PROCESSOR_ARCHITECTURE_ARM64
+			isa_name = "ARM64";	break;
+		case 6:		// PROCESSOR_ARCHITECTURE_IA64 (itanium, heh)
+			isa_name = "Itanium";	break;
+		case 0:		// PROCESSOR_ARCHITECTURE_INTEL (32 bit x86?)
+			isa_name = "x86";	break;
+		case 0xffff:	// PROCESSOR_ARCHITECTURE_UNKNOWN
+			isa_name = "(Windows-unknown-ISA)";
+			break;
+	}
+	// Huh, Windows is a real pain to collect _basic_ system informations ... on UNIX just an uname() and you're done ...
+	if (snprintf(buf, size, "Windows %s %u.%u %s",
+		host_name,
+		(unsigned int)info.dwMajorVersion, (unsigned int)info.dwMinorVersion,
+		isa_name
+	) >= size) {
+		strcpy(buf, "<buffer-is-too-small>");
+	}
 }
 #else
 void xemu_get_uname_string ( char *buf, unsigned int size )
 {
-	snprintf(buf, size, XEMU_ARCH_NAME " (no uname syscall for further info)");
+	snprintf(buf, size, XEMU_ARCH_NAME " (Xemu-no-uname)");
 }
 #endif
 
@@ -699,7 +742,7 @@ int xemu_init_sdl ( void )
 		// FIXME: SDL or Windows has the bug that SDL_INIT_SENSOR when used, there is some "sensor manager" problem, so we left it out
 		// SDL_INIT_SENSOR was introduced somewhere in 2.0.9, however since it's a macro, it's safer not to test actual SDL version number
 		SDL_INIT_EVERYTHING & ~(SDL_INIT_SENSOR | SDL_INIT_HAPTIC);
-#warning	"Activating windows + SDL sensor init problem workaround ..."
+#warning	"NOTE: SDL_INIT_SENSOR and SDL_INIT_HAPTIC is not used on Windows because seems to cause problems :("
 #else
 		SDL_INIT_EVERYTHING;
 #endif
