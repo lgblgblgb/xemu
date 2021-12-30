@@ -44,9 +44,6 @@ int    port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65
 
 static const Uint8 fpga_firmware_version[] = { 'X','e','m','u' };
 static const Uint8 cpld_firmware_version[] = { 'N','o','w','!' };
-#define xemu_query_interface_str XEMU_BUILDINFO_CDATE
-static const char *xemu_query_interface_p = NULL;
-static int         xemu_query_gate = 0;
 
 
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
@@ -192,27 +189,12 @@ Uint8 io_read ( unsigned int addr )
 				case 0x33:
 				case 0x34:
 				case 0x35:
-					if (xemu_query_gate == 0xF) {
-						Uint8 data = *xemu_query_interface_p;
-						//if (!data)
-						//	xemu_query_gate = 0;
-						return data;
-					} else {
-						return fpga_firmware_version[addr - 0x32];
-					}
+					return fpga_firmware_version[addr - 0x32];
 				case 0x2C: // D62C-D62F: CPLD firmware ID
 				case 0x2D:
 				case 0x2E:
 				case 0x2F:
-					if (xemu_query_gate == 0xF) {
-						Uint8 data = *xemu_query_interface_p++;
-						if (!data) {
-							xemu_query_gate = 0;
-						}
-						return data;
-					} else {
-						return cpld_firmware_version[addr - 0x2C];
-					}
+					return cpld_firmware_version[addr - 0x2C];
 				default:
 					DEBUG("MEGA65: reading MEGA65 specific I/O @ $D6%02X result is $%02X" NL, addr, D6XX_registers[addr]);
 					return D6XX_registers[addr];
@@ -446,22 +428,6 @@ void io_write ( unsigned int addr, Uint8 data )
 					return;
 				case 0x7F:	// hypervisor leave
 					hypervisor_leave();	// 0x67F is also handled on enter's state, so it will be executed only in_hypervisor mode, which is what I want
-					return;
-				case 0x32:
-				case 0x33:
-				case 0x34:
-				case 0x35:
-					if (data == (cpld_firmware_version[addr - 0x32] ^ fpga_firmware_version[addr - 0x32])) {
-						DEBUG("QUERY: before gating: %X" NL, xemu_query_gate);
-						xemu_query_gate |= (1 << (addr - 0x32));
-						if (xemu_query_gate == 0xF)
-							xemu_query_interface_p = xemu_query_interface_str;
-					} else {
-						xemu_query_gate = 0;
-					}
-					DEBUG("QUERY: $D6%02X reg written with data %02X excepted %02X gate is %1X ptr is %p" NL,
-							addr, data, cpld_firmware_version[addr - 0x32] ^ fpga_firmware_version[addr - 0x32],
-							xemu_query_gate, xemu_query_interface_p);
 					return;
 				case 0xCF:
 					if (data == 0x42) {
