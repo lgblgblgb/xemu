@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMU_MEGA65_HYPERVISOR_H_INCLUDED
 
 #define TRAP_DOS			0x00
+#define TRAP_XEMU			0x04
 #define TRAP_FREEZER_USER_CALL		0x3F
 #define TRAP_RESET			0x40
 #define TRAP_FREEZER_RESTORE_PRESS	0x42

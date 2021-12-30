@@ -31,4 +31,10 @@ extern void hdos_reset ( void );
 extern void hdos_enter ( const Uint8 func_no );
 extern void hdos_leave ( const Uint8 func_no );
 
+#ifdef TRAP_XEMU
+// though not so much HDOS specfific, it's still Xemu related (Xemu's own trap handler)
+// so we put it into hdos.c ...
+extern void trap_for_xemu ( const int func_no );
+#endif
+
 #endif

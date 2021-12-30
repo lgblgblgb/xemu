@@ -30,26 +30,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <sys/types.h>
 #include <unistd.h>
 
+// This source is meant to virtualize Hyppo's DOS functions to be able to access
+// the host OS (what runs Xemu) filesystem via the normal HDOS calls (ie what
+// would see the sd-card otherwise).
 
-// This source is meant to virtualize Hyppo's DOS functions to
-// be able to access the host OS (what runs Xemu) filesystem
-// via the normal HDOS calls (ie what would see the sd-card
-// otherwise).
-
-#if 0
-#include "xemu/emutools_files.h"
-#include "mega65.h"
-#include "hypervisor.h"
-#include "vic4.h"
-#include "dma65.h"
-#include "xemu/emutools_config.h"
-#include "configdb.h"
-#include "rom.h"
-
-#include <sys/types.h>
-#include <unistd.h>
-#include <errno.h>
-#endif
+//#define DEBUGHDOS(...) DEBUG(__VA_ARGS__)
+#define DEBUGHDOS(...) DEBUGPRINT(__VA_ARGS__)
 
 static struct {
 	Uint8 func;
@@ -81,11 +67,6 @@ static struct {
 	int dir_entry_no;
 } desc_table[HDOS_DESCRIPTORS];
 
-
-
-//#define DEBUGHDOS(...) DEBUG(__VA_ARGS__)
-#define DEBUGHDOS(...) DEBUGPRINT(__VA_ARGS__)
-
 #define HDOSERR_INVALID_ADDRESS	0x10
 #define HDOSERR_FILE_NOT_FOUND	0x88
 #define HDOSERR_INVALID_DESC	0x89
@@ -97,6 +78,108 @@ static struct {
 // Some questionable choice in Xemu as error code:
 #define HDOSERR_END_DIR		0x85	// invalid cluster, it is returned by readdir if trying to read beyond end of directory
 #define HDOSERR_CANNOT_OPEN_DIR	HDOSERR_FILE_NOT_FOUND
+
+
+
+static int copy_mem_from_user ( Uint8 *target, int max_size, const int terminator_byte, unsigned int source_cpu_addr )
+{
+	int len = 0;
+	if (terminator_byte >= 0)
+		max_size--;
+	for (;;) {
+		// DOS calls should not have user specified data >= $8000!
+		if (source_cpu_addr >= 0x8000)
+			return -1;
+		const Uint8 byte = memory_debug_read_cpu_addr(source_cpu_addr++);
+		*target++ = byte;
+		len++;
+		if (len >= max_size) {
+			if (terminator_byte >= 0)
+				*target = terminator_byte;
+			break;
+		}
+		if ((int)byte == terminator_byte)
+			break;
+	}
+	return len;
+}
+
+
+static int copy_string_from_user ( char *target, const int max_size, unsigned int source_cpu_addr )
+{
+	return copy_mem_from_user((Uint8*)target, max_size, 0, source_cpu_addr);
+}
+
+
+static int copy_mem_to_user ( unsigned int target_cpu_addr, const Uint8 *source, int size )
+{
+	int len = 0;
+	while (size) {
+		if (target_cpu_addr >= 0x8000)
+			return -1;
+		memory_debug_write_cpu_addr(target_cpu_addr++, *source++);
+		size--;
+		len++;
+	}
+	return len;
+}
+
+
+#ifdef TRAP_XEMU
+// though not so much HDOS specfific, it's still Xemu related (Xemu's own trap handler)
+// so we put it into hdos.c ...
+void trap_for_xemu ( const int func_no )
+{
+	switch (func_no) {			// A register = function code
+		case 0x00:			// Function $00: identify emulation
+			// On real hw, A=$FF, carry is clear on return, in emulation carry is set, and the above id values are returned in regs)
+			// It must be these identify values even for a future non-Xemu (?) MEGA65 emulator though! The real emulator info get
+			// function ($01) can be used to really tell the emulator name, version, etc.
+			D6XX_registers[0x40] = 'X';	// -> A [capitcal ascii!]
+			D6XX_registers[0x41] = 'e';	// -> X
+			D6XX_registers[0x42] = 'm';	// -> Y
+			D6XX_registers[0x43] = 'U';	// -> Z [capitcal ascii!]
+			break;
+		case 0x01: {			// Function $01: get emulator textual informations, subfunction = Z, memory pointer X/Y
+			const char *res = "";
+			char work[0x100];
+			switch (D6XX_registers[0x43]) {
+				case 0:			// Z = 0: emulator base name (Xemu always for Xemu, can be different for other emulators)
+					res = "Xemu";
+					break;
+				case 1:			// version-kind-of-information
+					res = XEMU_BUILDINFO_CDATE;
+					break;
+				case 2:			// git information
+					res = XEMU_BUILDINFO_GIT;
+					break;
+				case 3:			// host-OS information
+					xemu_get_uname_string(work, sizeof work);
+					res = work;
+					break;
+				case 4:			// detailed info about hyppo (the real one, not Xemu's extensions)
+					res = hyppo_version_string;
+					break;
+				default:
+					break;
+			}
+			if (copy_mem_to_user(D6XX_registers[0x41] + (D6XX_registers[0x42] << 8), (const Uint8*)res, strlen(res) + 1) <= 0) {
+				D6XX_registers[0x40] = HDOSERR_INVALID_ADDRESS;
+				goto error_some;
+			}
+			}
+			break;
+		default:
+			goto error_nofunc;
+	}
+	D6XX_registers[0x47] |= CPU65_PF_C;	// signal OK status with setting carry
+	return;
+error_nofunc:
+	D6XX_registers[0x40] = 0xFF;		// set A register to 0xFF as error code
+error_some:
+	D6XX_registers[0x47] &= ~CPU65_PF_C;	// clear carry (error!)
+}
+#endif
 
 
 static const char *hdos_get_func_name ( const int func_no )
@@ -176,50 +259,6 @@ static const char *hdos_get_func_name ( const int func_no )
 		"reset_entry"					// 7E
 	};
 	return func_names[func_no >> 1];
-}
-
-
-static int copy_mem_from_user ( Uint8 *target, int max_size, const int terminator_byte, unsigned int source_cpu_addr )
-{
-	int len = 0;
-	if (terminator_byte >= 0)
-		max_size--;
-	for (;;) {
-		// DOS calls should not have user specified data >= $8000!
-		if (source_cpu_addr >= 0x8000)
-			return -1;
-		const Uint8 byte = memory_debug_read_cpu_addr(source_cpu_addr++);
-		*target++ = byte;
-		len++;
-		if (len >= max_size) {
-			if (terminator_byte >= 0)
-				*target = terminator_byte;
-			break;
-		}
-		if ((int)byte == terminator_byte)
-			break;
-	}
-	return len;
-}
-
-
-static int copy_string_from_user ( char *target, const int max_size, unsigned int source_cpu_addr )
-{
-	return copy_mem_from_user((Uint8*)target, max_size, 0, source_cpu_addr);
-}
-
-
-static int copy_mem_to_user ( unsigned int target_cpu_addr, Uint8 *source, int size )
-{
-	int len = 0;
-	while (size) {
-		if (target_cpu_addr >= 0x8000)
-			return -1;
-		memory_debug_write_cpu_addr(target_cpu_addr++, *source++);
-		size--;
-		len++;
-	}
-	return len;
 }
 
 
@@ -540,8 +579,7 @@ static void hdos_virt_cd ( void )
 	}
 	xemu_os_closedir(dirp);			// not needed to much here, let's close it
 	strcat(pathout, DIRSEP_STR);
-	free(hdos.cwd);
-	hdos.cwd = xemu_strdup(pathout);
+	xemu_restrdup(&hdos.cwd, pathout);
 	hdos.cwd_is_root = 0;		// if we managed to 'cd' into something (and it is cannot be '.' or '..' at this point!) we cannot be in the root anymore!
 	hdos.virt_out_carry = 1;	// signal OK status
 }

@@ -200,8 +200,8 @@ void hypervisor_enter ( int trapno )
 			WARNING_WINDOW("FREEZER is not enabled in Xemu currently.");
 			// Leave hypervisor mode now, do not allow Hyppo to get this trap.
 			if (trapno == TRAP_FREEZER_USER_CALL) {
-				D6XX_registers[0x47] &= 0xFE;	// clear carry flag (bit zero)
-				D6XX_registers[0x40] = 0xFF;	// set A register to $FF
+				D6XX_registers[0x47] &= ~CPU65_PF_C;	// clear carry flag (bit zero)
+				D6XX_registers[0x40] = 0xFF;		// set A register to $FF
 			}
 			hypervisor_leave();
 		} else if (configdb.hyperdebugfreezer) {
@@ -211,11 +211,8 @@ void hypervisor_enter ( int trapno )
 #ifdef TRAP_XEMU
 	if (XEMU_UNLIKELY(trapno == TRAP_XEMU)) {
 		// Xemu's own trap.
-		ERROR_WINDOW("XEMU TRAP feature is not yet implemented :(");
-		// Leave hypervisor mode now, do not allow Hyppo to get this trap.
-		D6XX_registers[0x47] &= 0xFE;	// clear carry flag (bit zero)
-		D6XX_registers[0x40] = 0xFF;	// set A register to $FF
-		hypervisor_leave();
+		trap_for_xemu(D6XX_registers[0x40]);
+		hypervisor_leave();	// leave hypervisor mode, do not allow Hyppo to take control on this trap
 	}
 #endif
 }
