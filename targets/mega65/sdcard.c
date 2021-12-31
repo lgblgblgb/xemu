@@ -346,6 +346,7 @@ int sdcard_init ( const char *fn, const int virtsd_flag )
 retry:
 	sd_is_read_only = O_RDONLY;
 	sdfd = xemu_open_file(fn, O_RDWR, &sd_is_read_only, fnbuf);
+	sd_is_read_only = (sd_is_read_only != XEMU_OPEN_FILE_FIRST_MODE_USED);
 	if (sdfd < 0) {
 		int r = errno;
 		ERROR_WINDOW("Cannot open SD-card image %s, SD-card access won't work! ERROR: %s", fnbuf, strerror(r));
@@ -372,7 +373,7 @@ retry:
 		}
 	} else {
 		if (sd_is_read_only)
-			INFO_WINDOW("Image file %s could be open only in R/O mode", fnbuf);
+			INFO_WINDOW("SDCARD: image file %s could be open only in R/O mode!", fnbuf);
 		else
 			DEBUG("SDCARD: image file re-opened in RD/WR mode, good" NL);
 		// Check size!
@@ -476,12 +477,20 @@ static int host_seek ( Uint32 block )
 }
 
 
+// static int status_read_counter = 0;
+
 // This tries to emulate the behaviour, that at least another one status query
 // is needed to BUSY flag to go away instead of with no time. DUNNO if it is needed at all.
 static Uint8 sdcard_read_status ( void )
 {
 	Uint8 ret = sd_status;
 	DEBUG("SDCARD: reading SD status $D680 result is $%02X PC=$%04X" NL, ret, cpu65.pc);
+//	if (status_read_counter > 20) {
+//		sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);
+//		status_read_counter = 0;
+//		DEBUGPRINT(">>> SDCARD resetting status read counter <<<" NL);
+//	}
+//	status_read_counter++;
 	// Suggested by @Jimbo on MEGA65/Xemu Dicord: a workaround to report busy status
 	// if external SD bus is used, always when reading status. It seems to be needed now
 	// with newer hyppo, otherwise it misinterprets the SDHC detection method on the external bus!
@@ -637,6 +646,7 @@ static void sdcard_command ( Uint8 cmd )
 	DEBUGPRINT("SDCARD: writing command register $D680 with $%02X PC=$%04X" NL, cmd, cpu65.pc);
 	sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);	// ugly hack :-@
 	KEEP_BUSY(0);
+//	status_read_counter = 0;
 	switch (cmd) {
 		case 0x00:	// RESET SD-card
 		case 0x10:	// RESET SD-card with flags specified [FIXME: I don't know what the difference is ...]

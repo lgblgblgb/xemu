@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2015-2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2016,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -334,6 +334,7 @@ int sdext_init ( const char *img_fn )
 	for (;;) {
 		int ro = O_RDONLY;
 		sdfd = xemu_open_file(img_fn, O_RDWR, &ro, sdimg_path);
+		ro = (ro != XEMU_OPEN_FILE_FIRST_MODE_USED);
 		if (sdfd >= 0) {
 			DEBUGPRINT("SDEXT: SD-card image is open %s from file %s" NL, sdimg_path, ro ? "R/O" : "R/W");
 			if (ro)

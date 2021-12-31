@@ -133,6 +133,7 @@ int wd_attach_disk_image ( const char *fn )
 	int ro = O_RDONLY;
 	char wd_img_path_new[PATH_MAX];
 	int disk_fd_new = xemu_open_file(fn, O_RDWR, &ro, wd_img_path_new);
+	ro = (ro != XEMU_OPEN_FILE_FIRST_MODE_USED);
 	if (disk_fd_new <= 0) {
 		ERROR_WINDOW("Cannot open EXDOS disk because %s\n%s", ERRSTR(), fn);
 		return 1;
