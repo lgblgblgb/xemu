@@ -126,8 +126,25 @@ static int copy_mem_to_user ( unsigned int target_cpu_addr, const Uint8 *source,
 
 
 #ifdef TRAP_XEMU
+#include "xemu/emutools_config.h"
 // though not so much HDOS specfific, it's still Xemu related (Xemu's own trap handler)
 // so we put it into hdos.c ...
+
+static void reconstruct_commandline ( char *p, unsigned int max_size )
+{
+	int argc;
+	char **argv;
+	xemucfg_get_cli_info(NULL, &argc, &argv);
+	*p = '\0';
+	for (int a = 0; a < argc; a++) {
+		if (strlen(p) + strlen(argv[a]) >= max_size - 2)
+			return;
+		strcat(p, argv[a]);
+		if (a < argc - 1)
+			strcat(p, " ");
+	}
+}
+
 void trap_for_xemu ( const int func_no )
 {
 	switch (func_no) {			// A register = function code
@@ -140,11 +157,11 @@ void trap_for_xemu ( const int func_no )
 			D6XX_registers[0x42] = 'm';	// -> Y
 			D6XX_registers[0x43] = 'U';	// -> Z [capitcal ascii!]
 			break;
-		case 0x01: {			// Function $01: get emulator textual informations, subfunction = Z, memory pointer X/Y
+		case 0x01: {			// Function $01: get emulator textual information, subfunction = Z, memory pointer X(low-byte)/Y(hi-byte) [buffer must fit in the low 32K of CPU addr space]
 			const char *res = "";
 			char work[0x100];
 			switch (D6XX_registers[0x43]) {
-				case 0:			// Z = 0: emulator base name (Xemu always for Xemu, can be different for other emulators)
+				case 0:			// Z = 0: emulator base name (Xemu in our case, can be different for other emulators)
 					res = "Xemu";
 					break;
 				case 1:			// version-kind-of-information
@@ -160,10 +177,39 @@ void trap_for_xemu ( const int func_no )
 				case 4:			// detailed info about hyppo (the real one, not Xemu's extensions)
 					res = hyppo_version_string;
 					break;
+				case 5:			// executable name of Xemu
+					xemucfg_get_cli_info(&res, NULL, NULL);
+					break;
+				case 6:			// CLI parameters of Xemu
+					reconstruct_commandline(work, sizeof work);
+					res = work;
+					break;
+				case 7: {		// get mount info on drive-0
+					int i;
+					res = sdcard_get_mount_info(0, &i);
+					D6XX_registers[0x43] = !!i;	// passes back "internal" boolean value in Z!
+					}
+					break;
+				case 8:	{		// get mount info on drive-1
+					int i;
+					res = sdcard_get_mount_info(1, &i);
+					D6XX_registers[0x43] = !!i;	// passes back "internal" boolean value in Z!
+					}
+					break;
 				default:
 					break;
 			}
-			if (copy_mem_to_user(D6XX_registers[0x41] + (D6XX_registers[0x42] << 8), (const Uint8*)res, strlen(res) + 1) <= 0) {
+			int len = strlen(res) + 1;
+			if (len >= sizeof work) {
+				D6XX_registers[0x40] = HDOSERR_INVALID_ADDRESS;	// well, it should be another kind of error, but anyway ...
+				goto error_some;
+			}
+			for (int a = 0; a < len; a++) {
+				//work[a] = *res;
+				work[a] = (*res >= 'a' && *res <= 'z') ? *res - 32 : *res;
+				res++;
+			}
+			if (copy_mem_to_user(D6XX_registers[0x41] + (D6XX_registers[0x42] << 8), (const Uint8*)work, len) <= 0) {
 				D6XX_registers[0x40] = HDOSERR_INVALID_ADDRESS;
 				goto error_some;
 			}
@@ -468,22 +514,25 @@ readdir_again:
 				memcpy(mem + 65, fn_found, mem[64]);
 			}
 		} else
-			goto readdir_again;	// entry names starting with '.' can be problematic, let's ignore them
+			goto readdir_again;	// entry names starting with '.' (other than '.' and '..' handled above!) can be problematic, let's ignore them!
 	} else {
 		// Copy, check (length and chars) and convert filename
 		for (Uint8 *s = (Uint8*)fn_found, *t = mem, *sn = mem + 65; *s; s++, t++, mem[64]++) {
 			if (mem[64] >= 63)
-				goto readdir_again;
-			if (*s < 0x20 || *s >= 0x80)
-				goto readdir_again;
-			*t = (*s >= 'a' && *s <= 'z') ? *s - 32 : *s;
+				goto readdir_again;	// skip file: too long name
+			Uint8 c = *s;
+			if (c < 0x20 || c >= 0x80)
+				goto readdir_again;	// skip file: contains invalid character (as considered by us, at least) Also catches UTF-8 sequences, fortunately
+			if (c >= 'a' && c <= 'z')
+				c -= 32;
+			*t = c;
 			// For the faked 'short name' part of the story ... This is a very faulty and bad algorithm, but who cares about short names ;)
 			// It would be exteremly hard to do correctly, anyway ...
-			if (*s == '.') {
+			if (c == '.') {
 				sn = mem + 65 + 8;
 				memset(sn, 0x20, 3);
 			} else if (sn < mem + 65 + 11)
-				*sn++ = *s;
+				*sn++ = c;
 		}
 	}
 	// Stat our file about details
@@ -664,7 +713,7 @@ void hdos_enter ( const Uint8 func_no )
 			case 0x20 >> 1:
 				hdos_virt_close_dir_or_file();
 				break;
-			case 0x2E >> 1:	// setname, do NOT virtualize this! (though we track/store result in hdos_leave)
+			case 0x2E >> 1:	// setname, do NOT virtualize this! (though we track/store result in hdos_leave) It's also great that we have hyppo's check on filename syntax, etc.
 				break;
 			case 0x38 >> 1:	// get last error code
 				hdos.func_is_virtualized = 1;
