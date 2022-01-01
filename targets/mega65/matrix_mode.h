@@ -16,28 +16,11 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef XEMU_MEGA65_INPUT_DEVICES_H_INCLUDED
-#define XEMU_MEGA65_INPUT_DEVICES_H_INCLUDED
+#ifndef XEMU_MEGA65_MATRIX_MODE_H_INCLUDED
+#define XEMU_MEGA65_MATRIX_MODE_H_INCLUDED
 
-extern void  clear_emu_events  ( void );
-extern Uint8 cia1_in_b         ( void );
-extern Uint8 cia1_in_a         ( void );
-extern int   emu_callback_key  ( int pos, SDL_Scancode key, int pressed, int handled );
+extern int in_the_matrix;
 
-extern void  input_toggle_joy_emu  ( void );
-
-extern Uint8 hwa_kbd_get_last      ( void );
-extern Uint8 hwa_kbd_get_modifiers ( void );
-extern void  hwa_kbd_move_next     ( void );
-extern void  hwa_kbd_fake_key      ( Uint8 k );
-
-extern void  virtkey               ( Uint8 rno, Uint8 scancode );
-
-extern Uint8 kbd_directscan_query  ( Uint8 row );
-
-extern void  kbd_trigger_restore_trap ( void );
-
-extern Uint8 get_mouse_x_via_sid ( void );
-extern Uint8 get_mouse_y_via_sid ( void );
+extern void matrix_mode_toggle ( int status );
 
 #endif

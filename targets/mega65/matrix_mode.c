@@ -16,28 +16,20 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef XEMU_MEGA65_INPUT_DEVICES_H_INCLUDED
-#define XEMU_MEGA65_INPUT_DEVICES_H_INCLUDED
 
-extern void  clear_emu_events  ( void );
-extern Uint8 cia1_in_b         ( void );
-extern Uint8 cia1_in_a         ( void );
-extern int   emu_callback_key  ( int pos, SDL_Scancode key, int pressed, int handled );
+#include "xemu/emutools.h"
+#include "matrix_mode.h"
 
-extern void  input_toggle_joy_emu  ( void );
 
-extern Uint8 hwa_kbd_get_last      ( void );
-extern Uint8 hwa_kbd_get_modifiers ( void );
-extern void  hwa_kbd_move_next     ( void );
-extern void  hwa_kbd_fake_key      ( Uint8 k );
+int in_the_matrix = 0;
 
-extern void  virtkey               ( Uint8 rno, Uint8 scancode );
 
-extern Uint8 kbd_directscan_query  ( Uint8 row );
 
-extern void  kbd_trigger_restore_trap ( void );
-
-extern Uint8 get_mouse_x_via_sid ( void );
-extern Uint8 get_mouse_y_via_sid ( void );
-
-#endif
+void matrix_mode_toggle ( int status )
+{
+	status = !!status;
+	if (status == !!in_the_matrix)
+		return;
+	in_the_matrix = status;
+	OSD(-1, -1, "Matrix mode would be switched %s", status ? "ON" : "OFF");
+}

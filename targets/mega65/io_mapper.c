@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "hypervisor.h"
 #include "ethernet65.h"
 #include "input_devices.h"
+#include "matrix_mode.h"
 #include "audio65.h"
 #include "configdb.h"
 #include "mega65.h"
