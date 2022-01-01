@@ -255,40 +255,7 @@ int d81access_attach_fsobj ( int which, const char *fn, int mode )
 	close(fd);
 	ERROR_WINDOW("Cannot guess the type of object (from its size) wanted to use for floppy emulation");
 	return 1;
-#if 0
-	return 1;
-		if (d81_size < PRG_MIN_SIZE) {	// the minimal size which is not treated as valid program file, and for sure, not D81 image either!
-			ERROR_WINDOW("External PRG file tried to open as virtual-D81 but it's too short (" PRINTF_LLD " bytes) for %s, should be at least %d bytes!", (long long)d81_size, fnbuf, PRG_MIN_SIZE);
-			close(d81fd);
-			d81fd = -1;
-			return d81fd;
-		} else if (d81_size <= PRG_MAX_SIZE) {	// some random size at max which is treated as valid program file
-			d81_is_prg = d81_size;	// we use the "d81_is_prg" flag to carry the file size as well
-			// However we need the size in 254 bytes unit as well
-			prg_blk_size = d81_size / 254;
-			prg_blk_last_size = d81_size % 254;
-			if (!prg_blk_last_size)
-				prg_blk_last_size = 254;
-			else
-				prg_blk_size++;
-			INFO_WINDOW("External file opened as a program file, guessed on its size (smaller than a D81). Size = %d, blocks = %d", d81_is_prg, prg_blk_size);
-		} else if (d81_size != D81_SIZE) {
-			ERROR_WINDOW("Bad external D81 image size " PRINTF_LLD " for %s, should be %d bytes!", (long long)d81_size, fnbuf, D81_SIZE);
-			close(d81fd);
-			d81fd = -1;
-			return d81fd;
-		}
-		if (!d81_is_prg) {
-			if (d81_is_read_only)
-				INFO_WINDOW("External D81 image file %s could be open only in R/O mode", fnbuf);
-			else
-				DEBUG("SDCARD: exernal D81 image file re-opened in RD/WR mode, good" NL);
-		}
-	}
-	return d81fd;
-#endif
 }
-
 
 
 static int file_io_op ( int which, int is_write, int d81_offset, Uint8 *buffer, int size )
@@ -302,56 +269,6 @@ static int file_io_op ( int which, int is_write, int d81_offset, Uint8 *buffer, 
 	FATAL("D81: %s: host-OS error: %s", is_write ? "WRITE" : "READ", strerror(errno));
 	return -1;
 }
-
-
-#if 0
-static off_t host_seek_to ( Uint8 *addr_buffer, int addressing_offset, const char *description, off_t size_limit, int fd )
-{
-	off_t image_offset = (addr_buffer ? (((off_t)addr_buffer[0]) | ((off_t)addr_buffer[1] << 8) | ((off_t)addr_buffer[2] << 16) | ((off_t)addr_buffer[3] << 24)) : 0) + (off_t)addressing_offset;
-	DEBUG("SDCARD: %s card at position " PRINTF_LLD " (offset=%d) PC=$%04X" NL, description, (long long)image_offset, addressing_offset, cpu65.pc);
-	if (image_offset < 0 || image_offset > size_limit - 512) {
-		DEBUGPRINT("SDCARD: SEEK: invalid offset requested for %s with offset " PRINTF_LLD " PC=$%04X" NL, description, (long long)image_offset, cpu65.pc);
-		return -1;
-	}
-	if (lseek(fd, image_offset, SEEK_SET) != image_offset)
-		FATAL("SDCARD: SEEK: image seek host-OS failure: %s", strerror(errno));
-	return image_offset;
-}
-
-
-
-static int diskimage_read_block ( Uint8 *io_buffer, Uint8 *addr_buffer, int addressing_offset, const char *description, off_t size_limit, int fd )
-{
-	int ret;
-	if (sdfd < 0)
-		return -1;
-	if (host_seek_to(addr_buffer, addressing_offset, description, size_limit, fd) < 0)
-		return -1;
-	ret = xemu_safe_read(fd, io_buffer, 512);
-	if (ret != 512)
-		FATAL("SDCARD: %s failure ... ERROR: %s", description, ret >= 0 ? "not 512 bytes could be read" : strerror(errno));
-	DEBUG("SDCARD: cool, sector %s was OK (%d bytes read)!" NL, description, ret);
-	return ret;
-}
-
-
-
-static int diskimage_write_block ( Uint8 *io_buffer, Uint8 *addr_buffer, int addressing_offset, const char *description, off_t size_limit, int fd )
-{
-	int ret;
-	if (sdfd < 0)
-		return -1;
-	if (sd_is_read_only)
-		return -1;
-	if (host_seek_to(addr_buffer, addressing_offset, description, size_limit, fd) < 0)
-		return -1;
-	ret = xemu_safe_write(fd, io_buffer, 512);
-	if (ret != 512)
-		FATAL("SDCARD: %s failure ... ERROR: %s", description, ret >= 0 ? "not 512 bytes could be written" : strerror(errno));
-	DEBUG("SDCARD: cool, sector %s was OK (%d bytes read)!" NL, description, ret);
-	return ret;
-}
-#endif
 
 
 static int read_fake64 ( int which, Uint8 *buffer, int d81_offset, int number_of_logical_sectors )
