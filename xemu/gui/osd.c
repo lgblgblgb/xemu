@@ -1,7 +1,7 @@
 /* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and MEGA65 as well.
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -21,6 +21,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 int osd_status = 0;
+int osd_notifications_enabled = 1;
+void (*osd_update_callback)(void) = NULL;
 
 
 static struct {
@@ -43,6 +45,8 @@ static struct {
 static XEMU_INLINE void _osd_render ( void )
 {
 	if (osd_status) {
+		if (osd_update_callback)
+			osd_update_callback();
 		if (osd_status < OSD_STATIC)
 			osd_status -= osd.fade_dec;
 		if (osd_status <= osd.fade_end) {
@@ -57,6 +61,16 @@ static XEMU_INLINE void _osd_render ( void )
 			}
 			SDL_RenderCopy(sdl_ren, osd.tex, NULL, NULL);
 		}
+	}
+}
+
+
+void osd_clear_with_colour ( const int index )
+{
+	if (osd.enabled) {
+		DEBUG("OSD: osd_clear_with_colour() called." NL);
+		for (int i = 0; i < osd.xsize * osd.ysize; i++)
+			osd.pixels[i] = osd.colours[index];
 	}
 }
 
@@ -117,8 +131,10 @@ int osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_entries, 
 int osd_init_with_defaults ( void )
 {
 	static const Uint8 palette[] = {
-		0xC0, 0x40, 0x40, 0xFF,
-		0xFF, 0xFF, 0x00, 0xFF
+		0xC0, 0x40, 0x40, 0xFF,		// normal background for OSD text
+		0xFF, 0xFF, 0x00, 0xFF,		// normal foreground for OSD text
+		0x00, 0x00, 0x00, 0x80,		// "matrix-mode" like use-case, background
+		0x00, 0xFF, 0x00, 0xFF		// "matrix-mode" like use-case, foreground
 	};
 	return osd_init(
 		OSD_TEXTURE_X_SIZE, OSD_TEXTURE_Y_SIZE,

@@ -20,9 +20,24 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "matrix_mode.h"
 
+#include "xemu/cpu65.h"
+
 
 int in_the_matrix = 0;
 
+
+
+static void matrix_update ( void )
+{
+	if (!in_the_matrix)
+		return;		// should not happen, but ...
+	osd_write_string(0,  0, "Not implemented yet ..");
+	osd_write_string(0, 16, "Press Right-ALT and TAB to exit");
+	char buffer[100];
+	snprintf(buffer, sizeof buffer, "PC:$%04X A:$%02X X:$%02X Y:$%02X Z:$%02X", cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z);
+	osd_write_string(0, 32, buffer);
+	osd_update();
+}
 
 
 void matrix_mode_toggle ( int status )
@@ -31,5 +46,19 @@ void matrix_mode_toggle ( int status )
 	if (status == !!in_the_matrix)
 		return;
 	in_the_matrix = status;
-	OSD(-1, -1, "Matrix mode would be switched %s", status ? "ON" : "OFF");
+	if (in_the_matrix) {
+		osd_notifications_enabled = 0;	// disable OSD notification as it would cause any notify event would mess up the matrix mode
+		DEBUGPRINT("MATRIX: on" NL);
+		osd_update_callback = matrix_update;
+		osd_on(OSD_STATIC);
+		osd_clear_with_colour(2);
+		osd_set_colours(3, 2);
+	} else {
+		DEBUGPRINT("MATRIX: off" NL);
+		osd_update_callback = NULL;
+		osd_set_colours(1, 0);	// restore colours
+		osd_clear();
+		osd_off();
+		osd_notifications_enabled = 1;
+	}
 }
