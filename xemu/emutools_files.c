@@ -457,7 +457,7 @@ void xemuexec_open_native_file_browser ( char *dir )
  *	pointer to an int, secondary open mode set
  *		- if it's NULL pointer, it won't be used ever
  *		- if it's not NULL, open() is also tried with the pointed flags for open() after trying (and failed!) open() with the 'mode' par
- *		- if mode2 pointer is not NULL, the pointed value will be zeroed by this func, if NOT *mode2 is used with successfull open
+ *		- if mode2 pointer is not NULL, the pointed value will be set to XEMU_OPEN_FILE_FIRST_MODE_USED by this func, if NOT *mode2 is used with successfull open
  *		- the reason for this madness: opening a disk image which neads to be read/write access, but also works for read-only, however
  *		  then the caller needs to know if the disk emulation is about r/w or ro only ...
  * @param *filepath_back
@@ -516,7 +516,7 @@ int xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_
 			strcpy(filepath_back, filepath);
 		if (fd >= 0) {
 			if (mode2)
-				*mode2 = 0;
+				*mode2 = XEMU_OPEN_FILE_FIRST_MODE_USED;
 			DEBUGPRINT("FILE: file %s opened as %s with base mode-set as fd=%d" NL, filename, paths[a], fd);
 			return fd;
 		}

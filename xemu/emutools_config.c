@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -34,6 +34,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // Also, stdlib.h "should" be needed anyway
 #include <stdlib.h>
 
+static int original_argc = 0;
+static char **original_argv = NULL;
+static const char *original_program_name = "?";
 
 static struct xemutools_config_st *config_head = NULL;
 static struct xemutools_config_st *config_current;
@@ -706,8 +709,21 @@ static void define_core_options ( void )
 }
 
 
+void xemucfg_get_cli_info ( const char **exec_name_ptr, int *argc_ptr, char ***argv_ptr )
+{
+	if (exec_name_ptr)
+		*exec_name_ptr = original_program_name;
+	if (argc_ptr)
+		*argc_ptr = original_argc;
+	if (argv_ptr)
+		*argv_ptr = original_argv;
+}
+
+
 int xemucfg_parse_all ( int argc, char **argv )
 {
+	if (argc > 0)	// maybe overkill to CHECK, argv[0] should be there always ...
+		original_program_name = argv[0];
 	// Skip program name
 	argc--;
 	argv++;
@@ -725,6 +741,8 @@ int xemucfg_parse_all ( int argc, char **argv )
 		// still having CLI options what can make it legit not to do so?
 	}
 #endif
+	original_argc = argc;
+	original_argv = argv;
 	// Check some hard-coded options (help, version ...)
 	// This is done by looking only for the FIRST command line parameter (if there's any ...)
 	int skip_config_file = 0;

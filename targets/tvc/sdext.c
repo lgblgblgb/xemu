@@ -1,5 +1,5 @@
 /* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015,2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    http://xep128.lgb.hu/
 
 This program is free software; you can redistribute it and/or modify
@@ -312,6 +312,7 @@ void sdext_init ( const char *sdimg_filename, const char *sdrom_filename )
 	//sdf = open_emu_file(emucfg_get_str("sdimg"), "rb", sdimg_path); // open in read-only mode, to get the path
 	sd_is_ro = O_RDONLY;
 	sdfd = xemu_open_file(sdimg_filename, O_RDWR, &sd_is_ro, sdimg_path);
+	sd_is_ro = (sd_is_ro != XEMU_OPEN_FILE_FIRST_MODE_USED);
 	if (sdfd < 0) {
 		WARNING_WINDOW("SD card image file \"%s\" cannot be open: %s. You can use the emulator but SD card access won't work!", sdimg_path, strerror(errno));
 		goto error;

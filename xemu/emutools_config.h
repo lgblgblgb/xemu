@@ -148,6 +148,8 @@ extern int  xemucfg_str2int    ( const char *s,    int *result );
 extern int  xemucfg_str2double ( const char *s, double *result );
 extern int  xemucfg_str2bool   ( const char *s,    int *result );
 
+extern void xemucfg_get_cli_info ( const char **exec_name_ptr, int *argc_ptr, char ***argv_ptr );
+
 #ifndef XEMU_RELEASE_BUILD
 extern void xemucfg_dump_db ( const char *msg );
 #endif

@@ -1,6 +1,6 @@
 /* Various D81 access method for F011 core, for Xemu / C65 and M65 emulators.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2018,2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -38,6 +38,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define D81ACCESS_CALLBACKS	8
 #define D81ACCESS_RO		0x100
 #define D81ACCESS_AUTOCLOSE	0x200
+#define D81ACCESS_FAKE64	0x400
 
 typedef int(*d81access_rd_cb_t)    ( int which, void *buffer, off_t offset, int sector_size );
 typedef int(*d81access_wr_cb_t)    ( int which, void *buffer, off_t offset, int sector_size );

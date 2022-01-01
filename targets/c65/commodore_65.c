@@ -1,7 +1,7 @@
 /* Test-case for simple, work-in-progress Commodore 65 emulator.
 
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -366,8 +366,8 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// Initialize D81 access abstraction for FDC
 	d81access_init();
 	atexit(d81access_close_all);
-	d81access_attach_fsobj(0, configdb.disk8, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (configdb.d81ro ? D81ACCESS_RO : 0));
-	d81access_attach_fsobj(1, configdb.disk9, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (configdb.d81ro ? D81ACCESS_RO : 0));
+	d81access_attach_fsobj(0, configdb.disk8, D81ACCESS_IMG | D81ACCESS_FAKE64 | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (configdb.d81ro ? D81ACCESS_RO : 0));
+	d81access_attach_fsobj(1, configdb.disk9, D81ACCESS_IMG | D81ACCESS_FAKE64 | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (configdb.d81ro ? D81ACCESS_RO : 0));
 	// SIDs, plus SDL audio
 	sid_init(&sids[0], sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sids[1], sid_cycles_per_sec, sound_mix_freq);
