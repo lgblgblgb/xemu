@@ -1,7 +1,7 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    I/O decoding part (used by memory_mapper.h and DMA mainly)
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
