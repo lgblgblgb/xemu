@@ -86,6 +86,10 @@ void cpu65_illegal_opcode_callback ( void )
 }
 
 
+//#define C128_SPEED_BIT_BUG 1
+#define C128_SPEED_BIT_BUG 0
+
+
 void machine_set_speed ( int verbose )
 {
 	int speed_wanted;
@@ -105,7 +109,7 @@ void machine_set_speed ( int verbose )
 			in_hypervisor, D6XX_registers[0x7D] & 16, (c128_d030_reg & 1), vic_registers[0x31] & 64, vic_registers[0x54] & 64
 	);
 	// ^1 at c128... because it was inverted :-O --> FIXME: this is ugly workaround, the switch statement should be re-organized
-	speed_wanted = (in_hypervisor || (D6XX_registers[0x7D] & 16)) ? 7 : ((((c128_d030_reg & 1) ^ 1) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
+	speed_wanted = (in_hypervisor || (D6XX_registers[0x7D] & 16)) ? 7 : ((((c128_d030_reg & 1) ^ C128_SPEED_BIT_BUG) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
 	// videostd_changed: we also want to force recalulation if PAL/NTSC change happened, even if the speed setting remains the same!
 	if (speed_wanted != speed_current || videostd_changed) {
 		speed_current = speed_wanted;
