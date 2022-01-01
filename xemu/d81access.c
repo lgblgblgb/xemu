@@ -1,6 +1,6 @@
 /* Various D81 access method for F011 core, for Xemu / C65 and M65 emulators.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -41,6 +41,7 @@ static struct {
 } d81[8];
 static int enable_mode_transient_callback = -1;
 
+#define D64_SIZE	174848
 
 #define IS_RO(p)	(!!((p) & D81ACCESS_RO))
 #define IS_RW(p)	(!((p) & D81ACCESS_RO))
@@ -239,6 +240,12 @@ int d81access_attach_fsobj ( int which, const char *fn, int mode )
 		ERROR_WINDOW("D81 image mode was not requested ...");
 		return 1;
 	}
+	// Fake-D64 ... If requested + allowed at all.
+	if (size == D64_SIZE && (mode & D81ACCESS_FAKE64)) {
+		// Set D81ACCESS_RO! As this is only a read-only hack mode!!
+		d81access_attach_fd_internal(which, fd, 0, D81ACCESS_IMG | D81ACCESS_AUTOCLOSE | D81ACCESS_RO | D81ACCESS_FAKE64);
+		return 0;
+	}
 	// Only the possibility left that it's a D81 image
 	if (size == D81_SIZE) {
 		// candidate for the "normal" D81 as being used
@@ -347,6 +354,112 @@ static int diskimage_write_block ( Uint8 *io_buffer, Uint8 *addr_buffer, int add
 #endif
 
 
+static int read_fake64 ( int which, Uint8 *buffer, int d81_offset, int number_of_logical_sectors )
+{
+	for (; number_of_logical_sectors; number_of_logical_sectors--, d81_offset += 0x100, buffer += 0x100) {
+		int track  =  d81_offset / 0x2800 + 1;	// Calculate D81 requested track number (starting from 1)
+		int sector = (d81_offset % 0x2800) >> 8;// Calculate D81 requested sector number, in _256_ bytes long sectors though! (starting from 0)
+		if (track == 18) {
+			memset(buffer, 0, 0x100);
+			DEBUGPRINT("D81: FAKE64: D81 track 18 tried to be read, which would be the D64 dir/sys track. Ignoring!" NL);
+			continue;
+		}
+		if (track == 40)	// track 40 on D81 is the directory. We replace that with track 18 on the D64 (some workarounds still needed to be applied later, possibly)
+			track = 18;
+		if (!track || track > 35) {	// not existing track on D64
+			memset(buffer, 0, 0x100);
+			DEBUGPRINT("D81: FAKE64: invalid track for D64 %d" NL, track);
+			continue;
+		}
+		// Resolve number of sectors on D64 given by the track (unlike D81, it's not a constant!)
+		// Also work out the base byte offset of the track in the D64 image ("sector * 256" should be added later)
+		int d64_max_sectors, d64_track_ofs;
+		if (track <= 17) {		// D64 tracks  1-17
+			d64_track_ofs   = 21 * 256 * (track -  1) + 0x00000;
+			d64_max_sectors = 21;
+		} else if (track <= 24) {	// D64 tracks 18-24
+			d64_track_ofs   = 19 * 256 * (track - 18) + 0x16500;
+			d64_max_sectors = 19;
+		} else if (track <= 30) {	// D64 tracks 25-30
+			d64_track_ofs   = 18 * 256 * (track - 25) + 0x1EA00;
+			d64_max_sectors = 18;
+		} else {			// D64 tracks 31-35
+			d64_track_ofs   = 17 * 256 * (track - 31) + 0x25600;
+			d64_max_sectors = 17;
+		}
+		if (sector >= d64_max_sectors) {	// requested sector does not exist on D64 on the given track
+			memset(buffer, 0, 0x100);
+			DEBUGPRINT("D81: FAKE64: invalid sector for D64 %d on track %d" NL, sector, track);
+			continue;
+		}
+		// This is now checks for 18, as we already translated our 40 to 18 as the directory track!!
+		int sector_to_read;
+		if (track == 18) {
+			if (sector >= 3)
+				sector_to_read = sector - 2;
+			else
+				sector_to_read = 0;	// for D81 sectors 0,1,2 we always want to read sector 0 of D64 to extract the needed information from there!
+		} else
+			sector_to_read = sector;
+		if (track == 18 || sector_to_read != sector)
+			DEBUGPRINT("D81: FAKE64: translated to D64 track:sector %d:%d from the orginal requested %d:%d" NL, track, sector_to_read, track == 18 ? 40 : track, sector);
+		if (file_io_op(which, 0, d64_track_ofs + sector_to_read * 256, buffer, 0x100) != 0x100) {
+			DEBUGPRINT("D81: FAKE64: read failed!" NL);
+			return -1;
+		}
+		// This is now checks for 18, as we already translated our 40 to 18 as the directory track!!
+		if (track == 18) {
+			if (sector == 0) {
+				buffer[0] = 40;		// next track
+				buffer[1] = 3;		// next sector
+				buffer[2] = 0x44;	// 'D': DOS version, this is for 1581
+				buffer[3] = 0;
+				memcpy(buffer + 4, buffer + 0x90, 16);	// 0x4 - 0x13: disk name, on D64 that is from offset $90
+				buffer[0x14] = 0xA0;
+				buffer[0x15] = 0xA0;
+				buffer[0x16] = buffer[0xA2];	// disk ID
+				buffer[0x17] = buffer[0xA3];	// disk ID
+				buffer[0x18] = 0xA0;
+				buffer[0x19] = 0x33;	// DOS version: '3'
+				buffer[0x1A] = 0x44;	// DOS version: 'D'
+				buffer[0x1B] = 0xA0;
+				buffer[0x1C] = 0xA0;
+				memset(buffer + 0x1D, 0, 0x100 - 0x1D);
+			} else if (sector == 1 || sector == 2) {
+				// these two sectors are the BAM on D81 among some other information (partly the same as with sector 0)
+				Uint8 obuffer[0x100];
+				memcpy(obuffer, buffer, 0x100);	// save these, as we overwrite the original values ...
+				memset(buffer, 0, 0x100);
+				if (sector == 1) {	// sector 1, first BAM
+					buffer[0] = 40;
+					buffer[1] =  2;
+					for (int tf0 = 0; tf0 < 35; tf0++) {
+						Uint8 *obam = obuffer + 4 + (4 * tf0);
+						Uint8 *nbam = buffer + 0x10 + (6 * tf0);
+						if (tf0 + 1 != 18)	// tf0 -> "track from zero" (non std method), skip the directory/system track (memset above already did the trick)
+							memcpy(nbam, obam, 4);
+					}
+				} else {		// sector 2, second BAM (not used, as all the D64 tracks fits into the first part of the BAM ...)
+					buffer[0] = 0x00;
+					buffer[1] = 0xFF;
+				}
+				buffer[2] = 0x44;	// 'D': DOS version
+				buffer[3] = 0xBB;	// one's complement of the version ...
+				buffer[4] = obuffer[0xA2];	// disk ID, same as in sector 0
+				buffer[5] = obuffer[0xA3];	// disk ID, same as in sector 0
+				buffer[6] = 0xC0;	// flags [it seems it's usually $C0?]
+				buffer[7] = 0;		// autoboot?
+			} else if (buffer[0] == 18) {	// fix chain track/sector in the buffer to have some meaningful values for D81 context on track 40 (vs track 18 on D64)
+				buffer[0] = 40;
+				if (buffer[1] > 0 && buffer[1] < 19)
+					buffer[1] += 2;
+			}
+		}
+	}
+	return 0;
+}
+
+
 static int read_prg ( int which, Uint8 *buffer, int d81_offset, int number_of_logical_sectors )
 {
 	// just pre-zero buffer, so we don't need to take care on this at various code points with possible partly filled output
@@ -420,10 +533,14 @@ int d81access_read_sect  ( int which, Uint8 *buffer, int d81_offset, int sector_
 		case D81ACCESS_EMPTY:
 			return -1;
 		case D81ACCESS_IMG:
-			if (file_io_op(which, 0, d81_offset, buffer, sector_size) == sector_size)
-				return 0;
-			else
-				return -1;
+			if (XEMU_UNLIKELY(d81[which].mode & D81ACCESS_FAKE64)) {
+				return read_fake64(which, buffer, d81_offset, sector_size >> 8);
+			} else {
+				if (file_io_op(which, 0, d81_offset, buffer, sector_size) == sector_size)
+					return 0;
+				else
+					return -1;
+			}
 		case D81ACCESS_PRG:
 			return read_prg(which, buffer, d81_offset, sector_size >> 8);
 		case D81ACCESS_DIR:
@@ -431,7 +548,7 @@ int d81access_read_sect  ( int which, Uint8 *buffer, int d81_offset, int sector_
 		case D81ACCESS_CALLBACKS:
 			return d81[which].read_cb(which, buffer, d81[which].start_at + d81_offset, sector_size);
 		default:
-			FATAL("d81access_read_sect(): invalid d81[%d].mode & 0xFF", which);
+			FATAL("d81access_read_sect(): invalid value for 'd81[%d].mode & 0xFF' = %d", which, d81[which].mode & 0xFF);
 	}
 	return -1;
 }
