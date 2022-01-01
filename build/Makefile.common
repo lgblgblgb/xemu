@@ -198,7 +198,13 @@ $(DEPFILE): $(DEPALL) $(SRCS)
 clean:
 	rm -f $(TOPDIR)/build/objs/?-$(ARCH)-$(TARGET)-* $(PRG)
 
-.PHONY: clean all strip dep do-all run xemu-info config install
+dll32:
+	cp `i686-w64-mingw32-sdl2-config --prefix`/bin/SDL2.dll $(TOPDIR)/build/bin/
+
+dll64:
+	cp `x86_64-w64-mingw32-sdl2-config --prefix`/bin/SDL2.dll $(TOPDIR)/build/bin/
+
+.PHONY: clean all strip dep do-all run xemu-info config install dll32 dll64
 
 ifneq ($(wildcard $(DEPFILE)),)
 include $(DEPFILE)
