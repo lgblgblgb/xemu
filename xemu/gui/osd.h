@@ -39,6 +39,7 @@ extern void osd_global_enable ( int status );
 extern void osd_set_colours ( int fg_index, int bg_index );
 extern void osd_write_char ( int x, int y, char ch );
 extern void osd_write_string ( int x, int y, const char *s );
+extern void osd_hijack ( void(*updater)(void), int *xsize_ptr, int *ysize_ptr, Uint32 **pixel_ptr );
 
 #define OSD_STATIC		0x1000
 #define OSD_FADE_START		300

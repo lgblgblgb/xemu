@@ -229,3 +229,26 @@ void osd_write_string ( int x, int y, const char *s )
 			s++;
 	}
 }
+
+
+void osd_hijack ( void(*updater)(void), int *xsize_ptr, int *ysize_ptr, Uint32 **pixel_ptr )
+{
+	if (updater) {
+		osd_notifications_enabled = 0;	// disable OSD notification as it would cause any notify event would mess up the matrix mode
+		osd_update_callback = updater;
+		osd_clear();
+		osd_on(OSD_STATIC);
+		if (xsize_ptr)
+			*xsize_ptr = osd.xsize;
+		if (ysize_ptr)
+			*ysize_ptr = osd.ysize;
+		if (pixel_ptr)
+			*pixel_ptr = osd.pixels;
+	} else {
+		osd_update_callback = NULL;
+		osd_clear();
+		osd_off();
+		osd_set_colours(1, 0);		// restore standard colours for notifications (maybe changed in updater)
+		osd_notifications_enabled = 1;	// OK, now we can re-allow OSD notifications already
+	}
+}
