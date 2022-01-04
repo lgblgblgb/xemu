@@ -1,6 +1,6 @@
 
 ; ******** Source: src/hyppo/main.asm
-     1                            ;; ------------------------------------------------------------------- 
+     1                            ;; -------------------------------------------------------------------
      2                            ;;   MEGA65 "HYPPOBOOT" Combined boot and hypervisor ROM.
      3                            ;;   Paul Gardner-Stephen, 2014-2019.
      4                            ;;   -------------------------------------------------------------------
@@ -25,7 +25,7 @@
     23                          
     24                            ;;   This included file defines many of the alias used throughout
     25                            ;;   it also suggests some memory-map definitions
-    26                            ;;   ---------------------------------------------------------------- 
+    26                            ;;   ----------------------------------------------------------------
     27                          
 
 ; ******** Source: constants.asm
@@ -355,7 +355,7 @@
     40                          !addr HyppoZP_Start                = $bf00
     41                          !addr Hyppo_End                    = $bfff
     42                          
-    43                          ;; .file [name="../../bin/HICKUP.M65", type="bin", segments="TrapEntryPoints,RelocatedCPUVectors,Traps,DOSDiskTable,SysPartStructure,DOSWorkArea,ProcessDescriptors,HyppoStack,HyppoZP"] 
+    43                          ;; .file [name="../../bin/HICKUP.M65", type="bin", segments="TrapEntryPoints,RelocatedCPUVectors,Traps,DOSDiskTable,SysPartStructure,DOSWorkArea,ProcessDescriptors,HyppoStack,HyppoZP"]
     44                          	!to "bin/HICKUP.M65", plain
     45                          
     46                          ;; .segmentdef TrapEntryPoints        [min=TrapEntryPoints_Start,     max=RelocatedCPUVectors_Start-1                         ]
@@ -388,7 +388,7 @@
     73  8007 ea                         eom                                     ;; refer: hyppo_mem.asm
     74  8008 4cca85                     jmp syspart_trap                        ;; Trap #$02
     75  800b ea                         eom                                     ;; refer: hyppo_syspart.asm
-    76  800c 4c64ad                     jmp serialwrite                         ;; Trap #$03
+    76  800c 4c70ad                     jmp serialwrite                         ;; Trap #$03
     77  800f ea                         eom                                     ;; refer serialwrite in this file
     78  8010 4c0082                     jmp nosuchtrap
     79  8013 ea                         eom
@@ -556,7 +556,7 @@
    241  8117 ea                         eom
    242                          
    243  8118 4c439e                     jmp unstable_illegal_opcode_trap        ;; Trap #$46 (6502 unstable illegal opcode)
-   244  811b ea                         eom                                     
+   244  811b ea                         eom
    245  811c 4c439e                     jmp kill_opcode_trap                    ;; Trap #$47 (6502 KIL instruction)
    246  811f ea                         eom
    247  8120 4c0082                     jmp nosuchtrap
@@ -591,7 +591,7 @@
    276  81fc cfa2                       !16 reset_entry    ;; RESET
    277  81fe 0cab                       !16 hypervisor_irq ;; IRQ
    278                          
-   279                          	
+   279                          
    280                                  ;; .segment Traps
    281                                  * = Traps_Start
    282                          
@@ -644,7 +644,7 @@
    329                          
    330                          	;; DO NOT Clear A on return
    331                                  ;; (else traps can't return anything in A register)
-   332                          	
+   332                          
    333                                  ;; return from hypervisor
    334  821b 8d7fd6                     sta hypervisor_enterexit_trigger
    335                          
@@ -761,7 +761,7 @@
     79                          	;; Run util from in hypervisor context, similarly to how we run the flash menu
     80                          	;; this means the whole thing must be less than ~29KB in size, to not run over
     81                          	;; $8000-$BFFF where the hypervisor is mapped
-    82  8255 4c2dac             	jmp run_util_in_hypervisor_context
+    82  8255 4c39ac             	jmp run_util_in_hypervisor_context
     83                          	
     84                          syspart_open:
     85                                  ;; Open a system partition.
@@ -1156,7 +1156,7 @@
    474  84ac a20f                       ldx #$0f
    475                          disknamecopy:
    476  84ae bd10de                     lda	$de10, x
-   477  84b1 9d9cb2                     sta	txt_MEGA65D81, x
+   477  84b1 9da8b2                     sta	txt_MEGA65D81, x
    478  84b4 ca                         dex
    479  84b5 10f7                       bpl	disknamecopy
    480                          nodiskname:
@@ -1227,7 +1227,7 @@
    545  8519 a901                       lda #$01
    546  851b 0c03d7                     tsb $d703
    547                          
-   548  851e a246                       ldx #<msg_dmagicb
+   548  851e a252                       ldx #<msg_dmagicb
    549  8520 a0b2                       ldy #>msg_dmagicb
    550  8522 4c74a8                     jmp printmessage
    551                          
@@ -1236,7 +1236,7 @@
    554  8527 a901                       lda #$01
    555  8529 1c03d7                     trb $d703
    556                          
-   557  852c a234                       ldx #<msg_dmagica
+   557  852c a240                       ldx #<msg_dmagica
    558  852e a0b2                       ldy #>msg_dmagica
    559  8530 4c74a8                     jmp printmessage
    560                          
@@ -1350,7 +1350,6 @@
    668  8650 2f82                       !16 invalid_subfunction
 
 ; ******** Source: src/hyppo/main.asm
-   366                          	
    367                          
    368                          ;; /*  -------------------------------------------------------------------
    369                          ;;     Freeze/Unfreeze functions
@@ -7409,7 +7408,7 @@
    200  9e52 2047a5                     jsr attempt_loadcharrom
    201  9e55 2061a5                     jsr attempt_loadc65rom
    202                          
-   203  9e58 a2c3                       ldx #<txt_FREEZER
+   203  9e58 a2cf                       ldx #<txt_FREEZER
    204  9e5a a0b2                       ldy #>txt_FREEZER
    205  9e5c 205699                     jsr dos_setname
    206                          
@@ -7648,7 +7647,7 @@
     74                                  ;; XXX - We no longer support standard SD cards, so
     75                                  ;; we display an error and infinite loop.
     76                          
-    77  9f33 a2cf                       ldx #<msg_foundsdcard
+    77  9f33 a2db                       ldx #<msg_foundsdcard
     78  9f35 a0ae                       ldy #>msg_foundsdcard
     79  9f37 2074a8                     jsr printmessage
     80                          
@@ -7657,7 +7656,7 @@
     83  9f3d 4c3a9f                     jmp @unsupportedcard
     84                          
     85                          issdhc:
-    86  9f40 a2f2                       ldx #<msg_foundsdhccard
+    86  9f40 a2fe                       ldx #<msg_foundsdhccard
     87  9f42 a0ae                       ldy #>msg_foundsdhccard
     88  9f44 2074a8                     jsr printmessage
     89                          
@@ -7849,7 +7848,7 @@
    275                                  ;;
    276                                  ;; print out a debug message to indicate RE-reading (ie previous read failed)
    277                                  ;;
-   278  9fee a227                       ldx #<msg_sdredoread
+   278  9fee a233                       ldx #<msg_sdredoread
    279  9ff0 a0af                       ldy #>msg_sdredoread
    280  9ff2 2074a8                     jsr printmessage
    281                          
@@ -8372,7 +8371,7 @@
    442                          	;; Enable cartridge /EXROM and /GAME lines in CPU addressing
    443  a25e a902               	lda #$02
    444  a260 0cfbd7             	tsb $d7fb
-   445                          	
+   445                          
    446                          	;; /EXROM and /GAME follow cartridge port
    447  a263 a93f                       lda #$3f
    448  a265 8dfdd7                     sta $d7fd
@@ -8489,19 +8488,19 @@
    559                          
    560                                  ;; display welcome screen
    561                                  ;;
-   562  a2e6 a2ed                       ldx #<msg_hyppo
+   562  a2e6 a2f9                       ldx #<msg_hyppo
    563  a2e8 a0ad                       ldy #>msg_hyppo
    564  a2ea 2074a8                     jsr printmessage
    565                          
    566                                  ;; leave a blank line below hyppo banner
    567                                  ;;
-   568  a2ed a277                       ldx #<msg_blankline
+   568  a2ed a283                       ldx #<msg_blankline
    569  a2ef a0b2                       ldy #>msg_blankline
    570  a2f1 2074a8                     jsr printmessage
    571                          
    572                                  ;; Display GIT commit
    573                                  ;;
-   574  a2f4 a258                       ldx #<msg_gitcommit
+   574  a2f4 a264                       ldx #<msg_gitcommit
    575  a2f6 a0b2                       ldy #>msg_gitcommit
    576  a2f8 2074a8                     jsr printmessage
    577                          
@@ -8510,26 +8509,26 @@
    580                                  ;; SD-cardless operation
    581  a2fb 2c14a9                     bit go64
    582  a2fe 2c3412                     bit $1234
-   583                          	
+   583                          
    584                                  ;; Display help text
    585  a301 ad19a3             	lda first_boot_flag_instruction
    586  a304 c94c               	cmp #$4c
    587  a306 f00a               	beq not_first_boot_message
-   588  a308 a20d                       ldx #<msg_hyppohelpfirst
+   588  a308 a219                       ldx #<msg_hyppohelpfirst
    589  a30a a0ae                       ldy #>msg_hyppohelpfirst
    590  a30c 2074a8                     jsr printmessage
    591  a30f 4c19a3             	jmp first_boot_flag_instruction
-   592                          	
-   593                          not_first_boot_message:	
-   594  a312 a233                       ldx #<msg_hyppohelpnotfirst
+   592                          
+   593                          not_first_boot_message:
+   594  a312 a23f                       ldx #<msg_hyppohelpnotfirst
    595  a314 a0ae                       ldy #>msg_hyppohelpnotfirst
    596  a316 2074a8                     jsr printmessage
-   597                          	
+   597                          
    598                          	;; Work out if we are on first reset.  If so, then try switching to bitstream in 2nd slot.
    599                          
    600                          first_boot_flag_instruction:
-   601                          try_flash_menu:	
-   602                          	
+   601                          try_flash_menu:
+   602                          
    603                          	;; Use first boot code path only once
    604                          	;; WARNING: Self modifying code!
    605  a319 2c77a3             	bit dont_launch_flash_menu
@@ -8537,7 +8536,7 @@
    607                          	;; On first boot, we start the flash menu regardless
    608                          	;; (The flash menu will work out whether to switch bitstream or not)
    609  a31c 4c30a3             	jmp launch_flash_menu
-   610                          	
+   610                          
    611                          	;; On ALT or either joystick button, enter flash menu.
    612                          	;; But only on first boot, while flash menu program can still be relied upon to be in memory.
    613  a31f ad10d6             	lda $d610
@@ -8547,12 +8546,12 @@
    617  a329 2d01dc             	and $dc01
    618  a32c 2910               	and #$10
    619  a32e d047               	bne dont_launch_flash_menu
-   620                          	
+   620                          
    621                          launch_flash_menu:
    622                          
    623                          	;; Disable digital audio when launching flash menu
    624  a330 2033ab             	jsr safe_video_mode
-   625                          	
+   625                          
    626                          	;; Store where the flash menu should jump to if it doesn't need to do anything.
    627  a333 a940               	lda #<return_from_flashmenu
    628  a335 8d80cf             	sta $cf80
@@ -8561,9 +8560,9 @@
    631                          	;; Then actually start it.
    632                          	;; NOTE: Flash menu runs in hypervisor mode, so can't use memory beyond $7FFF etc.
    633                          
-   634  a33d 4c1bac             	jmp flash_menu
+   634  a33d 4c27ac             	jmp flash_menu
    635                          
-   636                          return_from_flashmenu:	
+   636                          return_from_flashmenu:
    637                          
    638                          	;; Here we have been given control back from the flash menu program.
    639                          	;; So we have to put some things back to continue the kickstart boot process.
@@ -8575,7 +8574,7 @@
    645  a345 2b                 	tys
    646  a346 a2ff               	ldx #$ff
    647  a348 9a                 	txs
-   648                          	
+   648                          
    649  a349 a9ff                       lda #$ff
    650  a34b 8d02d7                     sta $d702
    651  a34e a9ff                       lda #$ff
@@ -8592,18 +8591,18 @@
    662  a35f 8d05d7                     sta $d705
    663  a362 a901               	lda #$01
    664  a364 1c30d0             	trb $d030
-   665                          	
+   665                          
    666                          	;; And finally, the screen data
    667  a367 a9ac                       lda #>screenrestore_dmalist
    668  a369 8d01d7                     sta $d701
    669                                  ;; Trigger enhanced DMA
-   670  a36c a99e                       lda #<screenrestore_dmalist
+   670  a36c a9aa                       lda #<screenrestore_dmalist
    671  a36e 8d05d7                     sta $d705
    672                          
    673  a371 207fa6             	jsr resetdisplay
-   674                          		
+   674                          
    675  a374 4c77a3             	jmp dont_launch_flash_menu
-   676                          	
+   676                          
    677                          dont_launch_flash_menu:
    678  a377 ad10d6             	lda ascii_key_in
    679  a37a c909               	cmp #$09
@@ -8611,20 +8610,20 @@
    681                          
    682                          	;; Tell user what to do if they can't access the flash menu
    683                          noflash_menu:
-   684  a37e a2b0                       ldx #<msg_noflashmenu
+   684  a37e a2bc                       ldx #<msg_noflashmenu
    685  a380 a0ad                       ldy #>msg_noflashmenu
    686  a382 2074a8                     jsr printmessage
    687  a385 ee20d0             	inc $d020
    688                          nfm1:
    689  a388 4c88a3             	jmp nfm1
-   690                          	
+   690                          
    691                          
-   692                          fpga_has_been_reconfigured:	
+   692                          fpga_has_been_reconfigured:
    693                          
    694                          	;; We can't trust that the flash menu is still in memory by this point, so do nothing.
    695                          	;; (This also means if you choose "safe mode" factory bitstream, and then reset, it
    696                          	;; won't try to run upgraded bitstream again.)
-   697                          	
+   697                          
    698                                  ;; wait 0.1 msec for things to settle after power-up
    699  a38b 20929f                     jsr sdwaitawhile
    700                          
@@ -8643,7 +8642,7 @@
    713                          
    714                                  ;; Try to read the MBR from the SD card to ensure SD card is happy
    715                                  ;;
-   716  a391 a2b0                       ldx #<msg_tryingsdcard
+   716  a391 a2bc                       ldx #<msg_tryingsdcard
    717  a393 a0ae                       ldy #>msg_tryingsdcard
    718  a395 2074a8                     jsr printmessage
    719                          
@@ -8668,7 +8667,7 @@
    738                          
    739  a3b3 da                         phx
    740                          
-   741  a3b4 a221                       ldx #<msg_usingcard1
+   741  a3b4 a22d                       ldx #<msg_usingcard1
    742  a3b6 a0b2                       ldy #>msg_usingcard1
    743  a3b8 2074a8                     jsr printmessage
    744                          
@@ -8682,7 +8681,7 @@
    752  a3c2 a9c0                       lda #$c0
    753  a3c4 8d80d6                     sta $d680
    754                          
-   755  a3c7 a20d                       ldx #<msg_tryingcard0
+   755  a3c7 a219                       ldx #<msg_tryingcard0
    756  a3c9 a0b2                       ldy #>msg_tryingcard0
    757  a3cb 2074a8                     jsr printmessage
    758                          
@@ -8700,7 +8699,7 @@
    770                          
    771                                  ;; No working SD card -- we can just try booting to BASIC, since we
    772                                  ;; now include our open-source ROM
-   773  a3e2 a239                       ldx #<msg_nosdcard
+   773  a3e2 a245                       ldx #<msg_nosdcard
    774  a3e4 a0af                       ldy #>msg_nosdcard
    775  a3e6 2074a8                     jsr printmessage
    776  a3e9 4c14a9                     jmp go64
@@ -8720,7 +8719,7 @@
    790                                  ;; Oops, cant read MBR
    791                                  ;; display debug message to screen
    792                                  ;;
-   793  a3fd a2d7                       ldx #<msg_retryreadmbr
+   793  a3fd a2e3                       ldx #<msg_retryreadmbr
    794  a3ff a0ad                       ldy #>msg_retryreadmbr
    795  a401 2074a8                     jsr printmessage
    796                          
@@ -8747,7 +8746,7 @@
    817                          
    818                                  ;; then print out some useful information
    819                                  ;;
-   820  a412 a2be                       ldx #<msg_diskcount
+   820  a412 a2ca                       ldx #<msg_diskcount
    821  a414 a0af                       ldy #>msg_diskcount
    822  a416 2074a8                     jsr printmessage
    823                                  ;;
@@ -8781,7 +8780,7 @@
    851                          
    852                                  ;; failed
    853                                  ;;
-   854  a439 a2ed                       ldx #<msg_cdrootfailed
+   854  a439 a2f9                       ldx #<msg_cdrootfailed
    855  a43b a0b1                       ldy #>msg_cdrootfailed
    856  a43d 2074a8                     jsr printmessage
    857  a440 a000                       ldy #$00
@@ -8807,7 +8806,7 @@
    877  a454 a900                       lda #$00
    878  a456 851b                       sta <dos_file_loadaddress+3
    879                          
-   880  a458 a2b8                       ldx #<txt_BOOTLOGOM65
+   880  a458 a2c4                       ldx #<txt_BOOTLOGOM65
    881  a45a a0b2                       ldy #>txt_BOOTLOGOM65
    882  a45c 205699                     jsr dos_setname
    883                          
@@ -8826,7 +8825,7 @@
    896                          
    897                                  ;; print debug message
    898                                  ;;
-   899  a464 a2c8                       ldx #<msg_nologo
+   899  a464 a2d4                       ldx #<msg_nologo
    900  a466 a0b1                       ldy #>msg_nologo
    901  a468 2074a8                     jsr printmessage
    902  a46b a000                       ldy #$00
@@ -8850,7 +8849,7 @@
    920                          
    921                                  ;; already hicked
    922                                  ;;
-   923  a47b a28e                       ldx #<msg_alreadyhicked
+   923  a47b a29a                       ldx #<msg_alreadyhicked
    924  a47d a0b1                       ldy #>msg_alreadyhicked
    925  a47f 2074a8                     jsr printmessage
    926                          
@@ -8876,7 +8875,7 @@
    946  a491 a900                       lda #$00
    947  a493 851b                       sta <dos_file_loadaddress+3
    948                          
-   949  a495 a2ad                       ldx #<txt_HICKUPM65
+   949  a495 a2b9                       ldx #<txt_HICKUPM65
    950  a497 a0b2                       ldy #>txt_HICKUPM65
    951  a499 205699                     jsr dos_setname
    952                          
@@ -9023,10 +9022,10 @@
   1093  a510 ada1d6             	lda $d6a1
   1094  a513 2901               	and #$01
   1095  a515 d01b               	bne @dontMountD81
-  1096                          	
+  1096                          
   1097                                  ;; set name of file we are looking for
   1098                                  ;;
-  1099  a517 a29c                       ldx #<txt_MEGA65D81
+  1099  a517 a2a8                       ldx #<txt_MEGA65D81
   1100  a519 a0b2                       ldy #>txt_MEGA65D81
   1101  a51b 205699                     jsr dos_setname
   1102                          
@@ -9041,7 +9040,7 @@
   1111  a526 208799                     jsr dos_d81attach0
   1112  a529 900a                       bcc d81attachfail
   1113                          
-  1114  a52b a2cc                       ldx #<msg_d81mounted
+  1114  a52b a2d8                       ldx #<msg_d81mounted
   1115  a52d a0b0                       ldy #>msg_d81mounted
   1116  a52f 2074a8                     jsr printmessage
   1117                          
@@ -9059,7 +9058,7 @@
   1129                          d81attachfail:
   1130                                  ;; we couldn't find the D81 file, so tell the user
   1131                                  ;;
-  1132  a535 a2ad                       ldx #<msg_nod81
+  1132  a535 a2b9                       ldx #<msg_nod81
   1133  a537 a0b0                       ldy #>msg_nod81
   1134  a539 2074a8                     jsr printmessage
   1135  a53c a000                       ldy #$00
@@ -9070,13 +9069,13 @@
   1140                                  +Checkpoint "couldnt mount/attach MEGA65.D81"
   1141                          
   1142  a544 4c91a5             	jmp loadrom
-  1143                          	
+  1143                          
   1144                          ;;         ========================
   1145                          
   1146                          attempt_loadcharrom:
   1147                                  ;; Load CHARROM.M65 into character ROM
   1148                                  ;;
-  1149  a547 a284                       ldx #<txt_CHARROMM65
+  1149  a547 a290                       ldx #<txt_CHARROMM65
   1150  a549 a0b2                       ldy #>txt_CHARROMM65
   1151  a54b 205699                     jsr dos_setname
   1152                          
@@ -9094,7 +9093,7 @@
   1164  a55e 4c5198                     jmp dos_readfileintomemory
   1165                          
   1166                          attempt_loadc65rom:
-  1167  a561 a290                       ldx #<txt_MEGA65ROM
+  1167  a561 a29c                       ldx #<txt_MEGA65ROM
   1168  a563 a0b2                       ldy #>txt_MEGA65ROM
   1169  a565 205699                     jsr dos_setname
   1170                          
@@ -9110,7 +9109,7 @@
   1180  a574 4c5198                     jmp dos_readfileintomemory
   1181                          
   1182                          attempt_load1541rom:
-  1183  a577 a278                       ldx #<txt_1541ROM
+  1183  a577 a284                       ldx #<txt_1541ROM
   1184  a579 a0b2                       ldy #>txt_1541ROM
   1185  a57b 205699                     jsr dos_setname
   1186                          
@@ -9166,7 +9165,7 @@
   1236                                  sta file_pagesread+1
   1237                          }
   1238                          
-  1239  a599 a271                       ldx #<msg_charromloaded
+  1239  a599 a27d                       ldx #<msg_charromloaded
   1240  a59b a0ae                       ldy #>msg_charromloaded
   1241  a59d 2074a8                     jsr printmessage
   1242                          
@@ -9197,11 +9196,11 @@
   1267                                  ;; ROM not found: indicate which ROM we were looking for
   1268                                  ;;
   1269  a5a5 a20b                       ldx #$0b
-  1270  a5a7 bd90b2             l17d:   lda txt_MEGA65ROM,x
-  1271  a5aa 9d44b1                     sta msg_romnotfound+19,x
+  1270  a5a7 bd9cb2             l17d:   lda txt_MEGA65ROM,x
+  1271  a5aa 9d50b1                     sta msg_romnotfound+19,x
   1272  a5ad ca                         dex
   1273  a5ae d0f7                       bne l17d
-  1274  a5b0 a231                       ldx #<msg_romnotfound
+  1274  a5b0 a23d                       ldx #<msg_romnotfound
   1275  a5b2 a0b1                       ldy #>msg_romnotfound
   1276  a5b4 2074a8                     jsr printmessage
   1277                          
@@ -9284,7 +9283,7 @@
   1354                                  sta file_pagesread+1
   1355                          }
   1356                          
-  1357  a618 a291                       ldx #<msg_megaromloaded
+  1357  a618 a29d                       ldx #<msg_megaromloaded
   1358  a61a a0ae                       ldy #>msg_megaromloaded
   1359  a61c 2074a8                     jsr printmessage
   1360                          
@@ -9298,7 +9297,7 @@
   1368                          
   1369                                  ;; ROM file loaded, transfer control
   1370                                  ;;
-  1371  a61f a257                       ldx #<msg_romok
+  1371  a61f a263                       ldx #<msg_romok
   1372  a621 a0ae                       ldy #>msg_romok
   1373  a623 2074a8                     jsr printmessage
   1374                          
@@ -9311,7 +9310,7 @@
   1381                          
   1382                                  +Checkpoint "  FAIL loading 1541 ROM"
   1383                          
-  1384  a62b a273                       ldx #<msg_no1541rom
+  1384  a62b a27f                       ldx #<msg_no1541rom
   1385  a62d a0b1                       ldy #>msg_no1541rom
   1386  a62f 2074a8                     jsr printmessage
   1387                          
@@ -9332,7 +9331,7 @@
   1402                          ;;         ========================
   1403                          
   1404                          romfiletoolong:
-  1405  a644 a23a                       ldx #<msg_romfilelongerror
+  1405  a644 a246                       ldx #<msg_romfilelongerror
   1406  a646 a0b0                       ldy #>msg_romfilelongerror
   1407  a648 2074a8                     jsr printmessage
   1408                          !if DEBUG_HYPPO {
@@ -9345,7 +9344,7 @@
   1415  a64e 4ccfa2                     jmp reset_entry
   1416                          
   1417                          romfiletooshort:
-  1418  a651 a25a                       ldx #<msg_romfileshorterror
+  1418  a651 a266                       ldx #<msg_romfileshorterror
   1419  a653 a0b0                       ldy #>msg_romfileshorterror
   1420  a655 2074a8                     jsr printmessage
   1421                          !if DEBUG_HYPPO {
@@ -9360,12 +9359,12 @@
   1430                          ;;         ========================
   1431                          
   1432                          fileopenerror:
-  1433  a65e a202                       ldx #<msg_fileopenerror
+  1433  a65e a20e                       ldx #<msg_fileopenerror
   1434  a660 a0b0                       ldy #>msg_fileopenerror
   1435  a662 2074a8                     jsr printmessage
   1436                          
   1437                          sdcarderror:
-  1438  a665 a20c                       ldx #<msg_sdcarderror
+  1438  a665 a218                       ldx #<msg_sdcarderror
   1439  a667 a0af                       ldy #>msg_sdcarderror
   1440  a669 2074a8                     jsr printmessage
   1441                          
@@ -9375,7 +9374,7 @@
   1445                          ;;         ========================
   1446                          
   1447                          badfs:
-  1448  a672 a258                       ldx #<msg_badformat
+  1448  a672 a264                       ldx #<msg_badformat
   1449  a674 a0af                       ldy #>msg_badformat
   1450  a676 2074a8                     jsr printmessage
   1451                          
@@ -9405,7 +9404,7 @@
   1475                                  ;; (Also required to make sure matrix mode pixels aren't ragged on first boot).
   1476                          	;; The label here is used so that the syspartition settings can be used to
   1477                          	;; change the default video mode on reset.
-  1478                          pal_ntsc_minus_1:	
+  1478                          pal_ntsc_minus_1:
   1479  a697 a980                       lda #$80
   1480  a699 8d6fd0                     sta $d06f
   1481                          
@@ -9469,7 +9468,7 @@
   1539  a6e7 0c30d0                     tsb $D030        ;; enable PAL bit in $D030
   1540                          
   1541  a6ea 202ea8             	jsr setbannerpalette
-  1542                          	
+  1542                          
   1543                                  ;; C64 colours designed to look like C65 colours on an
   1544                                  ;; RGBI screen.
   1545                                  ;;
@@ -9786,7 +9785,7 @@
   1856  a887 e019                       cpx #25
   1857  a889 d008                       bne pm2
   1858                          
-  1859  a88b 20aeac             	jsr scroll_screen
+  1859  a88b 20baac             	jsr scroll_screen
   1860  a88e a218               	ldx #24
   1861  a890 8e20bf             	stx screenrow
   1862                          
@@ -9795,7 +9794,7 @@
   1865                          pm2:
   1866  a893 e000               	cpx #$00
   1867  a895 f010                       beq pm1
-  1868                          	
+  1868                          
   1869  a897 18                         clc
   1870  a898 a50e                       lda <zptempp2
   1871  a89a 6950                       adc #$50          ;; 40 columns x 16 bit
@@ -9933,7 +9932,7 @@
   2003  a91e ad9dd6             	lda $d69d
   2004  a921 2904               	and #$04
   2005  a923 f014               	beq l41
-  2006  a925 a20a                       ldx #<msg_dipswitch3on
+  2006  a925 a216                       ldx #<msg_dipswitch3on
   2007  a927 a0b1                       ldy #>msg_dipswitch3on
   2008  a929 2074a8                     jsr printmessage
   2009                          l40a:
@@ -9946,7 +9945,7 @@
   2016                          l41:
   2017                          	;; remove RUN/STOP from key queue
   2018  a939 8d10d6             	sta $d610
-  2019                          	
+  2019                          
   2020                                  ;; Check if hold boot switch is set (control-key)
   2021                                  ;;
   2022  a93c ad11d6             	lda buckykey_status
@@ -9955,7 +9954,7 @@
   2025                          
   2026                                  ;; yes, display message
   2027                                  ;;
-  2028  a943 a2e5                       ldx #<msg_releasectrl
+  2028  a943 a2f1                       ldx #<msg_releasectrl
   2029  a945 a0b0                       ldy #>msg_releasectrl
   2030  a947 2074a8                     jsr printmessage
   2031                          
@@ -10311,7 +10310,7 @@
   2257                          utility_menu_check:
   2258  aa9a ad11d6                     lda buckykey_status
   2259  aa9d c920               	cmp #$20
-  2260  aa9f f00c               	beq @startFlashMenu	
+  2260  aa9f f00c               	beq @startFlashMenu
   2261  aaa1 c903                       cmp #$03
   2262  aaa3 f005                       beq @startUtilMenu
   2263  aaa5 2910                       and #$10
@@ -10335,7 +10334,7 @@
   2281                          ;; based on that, i.e., holding any key down during boot will load MEGA65<that character>.ROM instead of MEGA65.ROM
   2282                          
   2283  aaba 209aaa                     jsr utility_menu_check
-  2284                                  
+  2284                          
   2285  aabd a201                       ldx #$01
   2286  aabf ad29d6                     lda $d629
   2287  aac2 2940                       and #$40
@@ -10345,11 +10344,11 @@
   2291                          @startscan:
   2292  aac8 208eaa                     jsr scankeyboard
   2293  aacb 9006                       bcc @checkkey
-  2294                                  
+  2294                          
   2295  aacd ca                         dex     ;; no key pressed yet
   2296  aace d0f8                       bne @startscan
   2297  aad0 4ce2aa                     jmp kr2  ;; no key was pressed, despite looping for a while to wait for it
-  2298                                  
+  2298                          
   2299                          @checkkey:
   2300  aad3 c920                       cmp #$20
   2301  aad5 d003                       bne @notUtilMenu
@@ -10367,23 +10366,23 @@
   2313  aae4 a206                       ldx #6
   2314  aae6 c920                       cmp #$20
   2315  aae8 f004                       beq default_rom
-  2316  aaea 9d90b2                     sta txt_MEGA65ROM,x
+  2316  aaea 9d9cb2                     sta txt_MEGA65ROM,x
   2317  aaed e8                         inx
   2318                          default_rom:
   2319  aaee a92e                       lda #'.'
-  2320  aaf0 9d90b2                     sta txt_MEGA65ROM,x
+  2320  aaf0 9d9cb2                     sta txt_MEGA65ROM,x
   2321  aaf3 e8                         inx
   2322  aaf4 a952                       lda #'R'
-  2323  aaf6 9d90b2                     sta txt_MEGA65ROM,x
+  2323  aaf6 9d9cb2                     sta txt_MEGA65ROM,x
   2324  aaf9 e8                         inx
   2325  aafa a94f                       lda #'O'
-  2326  aafc 9d90b2                     sta txt_MEGA65ROM,x
+  2326  aafc 9d9cb2                     sta txt_MEGA65ROM,x
   2327  aaff e8                         inx
   2328  ab00 a94d                       lda #'M'
-  2329  ab02 9d90b2                     sta txt_MEGA65ROM,x
+  2329  ab02 9d9cb2                     sta txt_MEGA65ROM,x
   2330  ab05 e8                         inx
   2331  ab06 a900                       lda #0
-  2332  ab08 9d90b2                     sta txt_MEGA65ROM,x
+  2332  ab08 9d9cb2                     sta txt_MEGA65ROM,x
   2333                          
   2334  ab0b 60                         rts
   2335                          
@@ -10628,7 +10627,7 @@
   2574                          
   2575                          	;; Tell user what to do if they can't access the utility menu
   2576                          noutility_menu:
-  2577  ab26 a288                       ldx #<msg_noutilitymenu
+  2577  ab26 a294                       ldx #<msg_noutilitymenu
   2578  ab28 a0ad                       ldy #>msg_noutilitymenu
   2579  ab2a 2074a8                     jsr printmessage
   2580  ab2d ee20d0             	inc $d020
@@ -10643,21 +10642,21 @@
   2589  ab38 a980               	lda #$80
   2590  ab3a 8d6fd0             	sta $d06f
   2591  ab3d 60                 	rts
-  2592                          	
+  2592                          
   2593                          utility_menu:
   2594                          	;; Gets self-modified to prevent entering utility menu except on first boot
   2595  ab3e 2c26ab             	bit noutility_menu
   2596                          
   2597                          	;; Disable digital audio when utility menu
   2598  ab41 2033ab             	jsr safe_video_mode
-  2599                          	
+  2599                          
   2600                                  ;; Display GIT commit again, so that it's easy to check commit of a build
-  2601  ab44 a258                       ldx #<msg_gitcommit
+  2601  ab44 a264                       ldx #<msg_gitcommit
   2602  ab46 a0b2                       ldy #>msg_gitcommit
   2603  ab48 2074a8                     jsr printmessage
   2604                          
   2605                          	;; Display utility menu message
-  2606  ab4b a26f               	ldx #<msg_utilitymenu
+  2606  ab4b a27b               	ldx #<msg_utilitymenu
   2607  ab4d a0ad                       ldy #>msg_utilitymenu
   2608  ab4f 2074a8                     jsr printmessage
   2609                          
@@ -10665,35 +10664,35 @@
   2611  ab52 a930                       lda #$30
   2612  ab54 8d08bf                     sta zptempv
   2613                          
-  2614  ab57 2053ad                     jsr utillist_rewind
+  2614  ab57 205fad                     jsr utillist_rewind
   2615                          
   2616                          um1:
-  2617  ab5a 201bad                     jsr utillist_validity_check
+  2617  ab5a 2027ad                     jsr utillist_validity_check
   2618  ab5d 9030                       bcc utility_end_of_list
-  2619                          	
+  2619                          
   2620                                  ;; Display utility and assign number
   2621  ab5f a027                       ldy #39
   2622  ab61 a920                       lda #$20
-  2623  ab63 99e2ac             um2:    sta msg_utility_item,y
+  2623  ab63 99eeac             um2:    sta msg_utility_item,y
   2624  ab66 88                         dey
   2625  ab67 c002                       cpy #2
   2626  ab69 d0f8                       bne um2
   2627  ab6b c8                         iny
   2628  ab6c ee08bf                     inc zptempv
   2629  ab6f ad08bf                     lda zptempv
-  2630  ab72 8de2ac                     sta msg_utility_item
+  2630  ab72 8deeac                     sta msg_utility_item
   2631  ab75 a304                       ldz #4
   2632  ab77 eab210             um4:    lda [<zptempv32],z
-  2633  ab7a 99e2ac                     sta msg_utility_item,y
+  2633  ab7a 99eeac                     sta msg_utility_item,y
   2634  ab7d f004                       beq um3
   2635  ab7f c8                         iny
   2636  ab80 1b                         inz
   2637  ab81 80f4                       bra um4
-  2638  ab83 a2e2               um3:    ldx #<msg_utility_item
+  2638  ab83 a2ee               um3:    ldx #<msg_utility_item
   2639  ab85 a0ac                       ldy #>msg_utility_item
   2640  ab87 2074a8                     jsr printmessage
   2641                          
-  2642  ab8a 200aad                     jsr utillist_next
+  2642  ab8a 2016ad                     jsr utillist_next
   2643                          
   2644  ab8d 80cb                       bra um1
   2645                          
@@ -10712,13 +10711,13 @@
   2658  ab9e 290f                       and #$f
   2659  aba0 aa                         tax
   2660  aba1 ca                         dex ;; input is 1-9, so subtract one for list beginning at 0
-  2661  aba2 2053ad                     jsr utillist_rewind
-  2662  aba5 201bad             ueol2:  jsr utillist_validity_check
+  2661  aba2 205fad                     jsr utillist_rewind
+  2662  aba5 2027ad             ueol2:  jsr utillist_validity_check
   2663                                  ;; Select again if first choice invalid
   2664  aba8 90e5                       bcc utility_end_of_list
   2665  abaa ca                         dex
   2666  abab 3005                       bmi ueol1
-  2667  abad 200aad                     jsr utillist_next
+  2667  abad 2016ad                     jsr utillist_next
   2668  abb0 80f3                       bra ueol2
   2669                          ueol1:
   2670                          
@@ -10735,777 +10734,789 @@
   2681                                  ;; length @ offset 36
   2682  abb5 a324                       ldz #36
   2683  abb7 eab210                     lda [<zptempv32],z
-  2684  abba 8dd8ac                     sta utility_dmalist_length+0
+  2684  abba 8de4ac                     sta utility_dmalist_length+0
   2685  abbd 1b                         inz
   2686  abbe eab210                     lda [<zptempv32],z
-  2687  abc1 8dd9ac                     sta utility_dmalist_length+1
+  2687  abc1 8de5ac                     sta utility_dmalist_length+1
   2688  abc4 a510                       lda <zptempv32+0
   2689  abc6 18                         clc
   2690  abc7 692c                       adc #44 ;; length of header structure
-  2691  abc9 8ddaac                     sta utility_dmalist_srcaddr+0
+  2691  abc9 8de6ac                     sta utility_dmalist_srcaddr+0
   2692  abcc a511                       lda <zptempv32+1
   2693  abce 6900                       adc #0
-  2694  abd0 8ddbac                     sta utility_dmalist_srcaddr+1
+  2694  abd0 8de7ac                     sta utility_dmalist_srcaddr+1
   2695                          
   2696                          	;; We have to call this before initialising OpenROM
-  2697  abd3 203cac             	jsr setup_for_openrom
-  2698                          	
-  2699                                  ;; load address is always $07FF (to skip $0801 header)
-  2700                                  ;; start @ zptempv32 + 44
-  2701                                  ;; DMA list is from Hypervisor ROM, so DMA list address MB also = $FF
-  2702  abd6 a9ff                       lda #$ff
-  2703  abd8 8d02d7                     sta $d702
-  2704  abdb 8d04d7                     sta $d704
-  2705  abde a9ac                       lda #>utility_dmalist
-  2706  abe0 8d01d7                     sta $d701
-  2707  abe3 a9d1                       lda #<utility_dmalist
-  2708  abe5 8d05d7                     sta $d705       ;; Trigger enhanced DMA
-  2709                          
-  2710                                  ;; clear 16-bit char mode
-  2711  abe8 a905                       lda #$05        ;; 0000 0101
-  2712  abea 1c54d0                     trb $d054       ;; VIC-IV Control Register C
-  2713                          
-  2714                                  ;; and 40 bytes (40 8-bit characters) per row.
-  2715  abed a928                       lda #<40
-  2716  abef 8d58d0                     sta $d058
-  2717  abf2 a900                       lda #>40
-  2718  abf4 8d59d0                     sta $d059
-  2719                          
-  2720                                  ;; screen at $0800 for debug
-  2721  abf7 a925                       lda #$25
-  2722  abf9 8d18d0                     sta $d018
-  2723                          
-  2724                                  ;; Exit hypervisor, with PC set to entry point of utility
-  2725  abfc a326                       ldz #38
-  2726  abfe eab210                     lda [<zptempv32],z
-  2727  ac01 8d48d6                     sta hypervisor_pcl
-  2728  ac04 1b                         inz
-  2729  ac05 eab210                     lda [<zptempv32],z
-  2730  ac08 8d49d6                     sta hypervisor_pch
+  2697                          	; LGB BEGIN
+  2698  abd3 a900               	lda #$00
+  2699  abd5 5b                         !8 $5B ;; tab
+  2700  abd6 a001                       ldy #$01
+  2701  abd8 2b                         !8 $2B ;; tys
+  2702                          	; LGB END
+  2703  abd9 2048ac             	jsr setup_for_openrom
+  2704                          	; LGB BEGIN
+  2705  abdc a9bf               	lda #$BF
+  2706  abde 5b                 	!8 $5B ;; tab
+  2707  abdf a0be               	ldy #$BE
+  2708  abe1 2b                 	!8 $2B ;; tys
+  2709                          	; LGB END
+  2710                          
+  2711                                  ;; load address is always $07FF (to skip $0801 header)
+  2712                                  ;; start @ zptempv32 + 44
+  2713                                  ;; DMA list is from Hypervisor ROM, so DMA list address MB also = $FF
+  2714  abe2 a9ff                       lda #$ff
+  2715  abe4 8d02d7                     sta $d702
+  2716  abe7 8d04d7                     sta $d704
+  2717  abea a9ac                       lda #>utility_dmalist
+  2718  abec 8d01d7                     sta $d701
+  2719  abef a9dd                       lda #<utility_dmalist
+  2720  abf1 8d05d7                     sta $d705       ;; Trigger enhanced DMA
+  2721                          
+  2722                                  ;; clear 16-bit char mode
+  2723  abf4 a905                       lda #$05        ;; 0000 0101
+  2724  abf6 1c54d0                     trb $d054       ;; VIC-IV Control Register C
+  2725                          
+  2726                                  ;; and 40 bytes (40 8-bit characters) per row.
+  2727  abf9 a928                       lda #<40
+  2728  abfb 8d58d0                     sta $d058
+  2729  abfe a900                       lda #>40
+  2730  ac00 8d59d0                     sta $d059
   2731                          
-  2732  ac0b 20729d                     jsr task_set_c64_memorymap
-  2733  ac0e a93f                       lda #$3f
-  2734  ac10 8d50d6                     sta hypervisor_cpuport00
-  2735  ac13 a936                       lda #$36 ;; IO + Kernel ROM @ $E000 (will be OpenROM KERNAL)
-  2736  ac15 8d51d6                     sta hypervisor_cpuport01
-  2737                          
-  2738                                  ;; Next instruction exits hypervisor to user mode
-  2739  ac18 8d7fd6                     sta hypervisor_enterexit_trigger
-  2740                          
-  2741                          flash_menu:
-  2742                          
-  2743                          	;; Run the flash menu which is pre-loaded into memory on first boot
-  2744                          	;; (in the FPGA BRAM).
-  2745                          	;; Also DMA copy our current screen safely somewhere for later restoration	
-  2746                          
-  2747  ac1b a9ff                       lda #$ff
-  2748  ac1d 8d02d7                     sta $d702
-  2749                                  ;; lda #$ff
-  2750  ac20 8d04d7                     sta $d704  ;; dma list is in top MB of address space
-  2751  ac23 a9ac                       lda #>flashmenu_dmalist
-  2752  ac25 8d01d7                     sta $d701
-  2753                                  ;; Trigger enhanced DMA
-  2754  ac28 a981                       lda #<flashmenu_dmalist
-  2755  ac2a 8d05d7                     sta $d705
-  2756                          
-  2757                          	;; FALL THROUGH
-  2758                          run_util_in_hypervisor_context:	
-  2759                          	;; XXX Move Stack and ZP to normal places, before letting C64 KERNAL loose on
-  2760                          	;; Hypervisor memory map!
-  2761  ac2d a900               	lda #$00
-  2762  ac2f 5b                 	!8 $5B ;; tab
-  2763  ac30 a001               	ldy #$01
-  2764  ac32 2b                 	!8 $2B ;; tys
-  2765                          		
-  2766  ac33 203cac             	jsr setup_for_openrom
-  2767                          	;; XXX Work around bug in OpenROMs that erases our banner palette when we do this
-  2768                          	;; by putting the palette back immediately.
-  2769  ac36 202ea8                     jsr setbannerpalette
-  2770                          
-  2771                          	;; Actually launch freeze menu
-  2772  ac39 4c0d08             	jmp $080d
-  2773                          	
-  2774                          setup_for_openrom:
-  2775                          	
-  2776                          	;; Bank in KERNAL ROM space so megaflash can run
-  2777                          	;; Writing to $01 when ZP is relocated is a bit tricky, as
-  2778                          	;; we have to mess about with the Base Register, or force
-  2779                          	;; the assembler to do an absolute write.
-  2780  ac3c a937               	lda #$37
-  2781  ac3e 8d0100             	!8 $8d,$01,$00 ;; ABS STA $0001
+  2732                                  ;; screen at $0800 for debug
+  2733  ac03 a925                       lda #$25
+  2734  ac05 8d18d0                     sta $d018
+  2735                          
+  2736                                  ;; Exit hypervisor, with PC set to entry point of utility
+  2737  ac08 a326                       ldz #38
+  2738  ac0a eab210                     lda [<zptempv32],z
+  2739  ac0d 8d48d6                     sta hypervisor_pcl
+  2740  ac10 1b                         inz
+  2741  ac11 eab210                     lda [<zptempv32],z
+  2742  ac14 8d49d6                     sta hypervisor_pch
+  2743                          
+  2744  ac17 20729d                     jsr task_set_c64_memorymap
+  2745  ac1a a93f                       lda #$3f
+  2746  ac1c 8d50d6                     sta hypervisor_cpuport00
+  2747  ac1f a936                       lda #$36 ;; IO + Kernel ROM @ $E000 (will be OpenROM KERNAL)
+  2748  ac21 8d51d6                     sta hypervisor_cpuport01
+  2749                          
+  2750                                  ;; Next instruction exits hypervisor to user mode
+  2751  ac24 8d7fd6                     sta hypervisor_enterexit_trigger
+  2752                          
+  2753                          flash_menu:
+  2754                          
+  2755                          	;; Run the flash menu which is pre-loaded into memory on first boot
+  2756                          	;; (in the FPGA BRAM).
+  2757                          	;; Also DMA copy our current screen safely somewhere for later restoration
+  2758                          
+  2759  ac27 a9ff                       lda #$ff
+  2760  ac29 8d02d7                     sta $d702
+  2761                                  ;; lda #$ff
+  2762  ac2c 8d04d7                     sta $d704  ;; dma list is in top MB of address space
+  2763  ac2f a9ac                       lda #>flashmenu_dmalist
+  2764  ac31 8d01d7                     sta $d701
+  2765                                  ;; Trigger enhanced DMA
+  2766  ac34 a98d                       lda #<flashmenu_dmalist
+  2767  ac36 8d05d7                     sta $d705
+  2768                          
+  2769                          	;; FALL THROUGH
+  2770                          run_util_in_hypervisor_context:
+  2771                          	;; XXX Move Stack and ZP to normal places, before letting C64 KERNAL loose on
+  2772                          	;; Hypervisor memory map!
+  2773  ac39 a900               	lda #$00
+  2774  ac3b 5b                 	!8 $5B ;; tab
+  2775  ac3c a001               	ldy #$01
+  2776  ac3e 2b                 	!8 $2B ;; tys
+  2777                          
+  2778  ac3f 2048ac             	jsr setup_for_openrom
+  2779                          	;; XXX Work around bug in OpenROMs that erases our banner palette when we do this
+  2780                          	;; by putting the palette back immediately.
+  2781  ac42 202ea8                     jsr setbannerpalette
   2782                          
-  2783                          	;; We should also reset video mode to normal
-  2784  ac41 a997               	lda #$97
-  2785  ac43 1c54d0             	trb $d054
-  2786                          
-  2787                          	;; Clear memory map at $4000-5FFF
-  2788                          	;; (Why on earth do we even map some of the HyperRAM there, anyway???)
-  2789  ac46 a900               	lda #0
-  2790  ac48 aa                 	tax
-  2791  ac49 a8                 	tay
-  2792  ac4a a33f               	ldz #$3f
-  2793  ac4c 5c                 	map
-  2794  ac4d ea                 	eom
-  2795                          	;; And set MB low to $00, so that OpenROM doesn't jump into lala land
-  2796  ac4e a900               	lda #0
-  2797  ac50 a20f               	ldx #$0f
-  2798  ac52 5c                 	map
-  2799  ac53 ea                 	eom	
-  2800                          
-  2801                          	;; Tell KERNAL screen is at $0400
-  2802  ac54 a904               	lda #>$0400
-  2803  ac56 8d8802             	sta $0288
-  2804                          
-  2805  ac59 adf9ff             	lda $fff9
-  2806  ac5c c9ff               	cmp #$ff
-  2807  ac5e f003               	beq @notOpenROM
-  2808                          	;; OpenROMs setup (XXX Won't work with Commodore C65 ROMs!)
-  2809  ac60 22f8ff             	jsr ($fff8)
-  2810                          @notOpenROM:
-  2811                          	;; make sure not in quote mode etc
-  2812  ac63 a900               	lda #$00
-  2813  ac65 85d8               	sta $d8 ;; number of insertions outstanding = 0
-  2814  ac67 850f               	sta $0f ;; clear quote mode
-  2815                          
-  2816                          	;; Clear common interrupt sources
-  2817                          
-  2818                          	;; CIAs
-  2819                          ;;	lda #$ff
-  2820                          ;;	sta $dc0d
-  2821                          ;;	sta $dd0d
-  2822                          ;;	lda $dc0d
-  2823                          ;;	lda $dd0d
-  2824                          
-  2825                          	;; VIC-IV
-  2826                          ;;	dec $d019
-  2827                          ;;	lda #$00
-  2828                          ;;	sta $d01a
+  2783                          	;; Actually launch freeze menu
+  2784  ac45 4c0d08             	jmp $080d
+  2785                          
+  2786                          setup_for_openrom:
+  2787                          
+  2788                          	;; Bank in KERNAL ROM space so megaflash can run
+  2789                          	;; Writing to $01 when ZP is relocated is a bit tricky, as
+  2790                          	;; we have to mess about with the Base Register, or force
+  2791                          	;; the assembler to do an absolute write.
+  2792  ac48 a937               	lda #$37
+  2793  ac4a 8d0100             	!8 $8d,$01,$00 ;; ABS STA $0001
+  2794                          
+  2795                          	;; We should also reset video mode to normal
+  2796  ac4d a997               	lda #$97
+  2797  ac4f 1c54d0             	trb $d054
+  2798                          
+  2799                          	;; Clear memory map at $4000-5FFF
+  2800                          	;; (Why on earth do we even map some of the HyperRAM there, anyway???)
+  2801  ac52 a900               	lda #0
+  2802  ac54 aa                 	tax
+  2803  ac55 a8                 	tay
+  2804  ac56 a33f               	ldz #$3f
+  2805  ac58 5c                 	map
+  2806  ac59 ea                 	eom
+  2807                          	;; And set MB low to $00, so that OpenROM doesn't jump into lala land
+  2808  ac5a a900               	lda #0
+  2809  ac5c a20f               	ldx #$0f
+  2810  ac5e 5c                 	map
+  2811  ac5f ea                 	eom
+  2812                          
+  2813                          	;; Tell KERNAL screen is at $0400
+  2814  ac60 a904               	lda #>$0400
+  2815  ac62 8d8802             	sta $0288
+  2816                          
+  2817  ac65 adf9ff             	lda $fff9
+  2818  ac68 c9ff               	cmp #$ff
+  2819  ac6a f003               	beq @notOpenROM
+  2820                          	;; OpenROMs setup (XXX Won't work with Commodore C65 ROMs!)
+  2821  ac6c 22f8ff             	jsr ($fff8)
+  2822                          @notOpenROM:
+  2823                          	;; make sure not in quote mode etc
+  2824  ac6f a900               	lda #$00
+  2825  ac71 85d8               	sta $d8 ;; number of insertions outstanding = 0
+  2826  ac73 850f               	sta $0f ;; clear quote mode
+  2827                          
+  2828                          	;; Clear common interrupt sources
   2829                          
-  2830                          	;; Ethernet
-  2831                          ;;	lda #$00
-  2832                          ;;	sta $d6e1
-  2833                          
-  2834                          	;; C65 UART
-  2835                          	;; XXX Actually it can't generate interrupts yet, so nothing to do :)
+  2830                          	;; CIAs
+  2831                          ;;	lda #$ff
+  2832                          ;;	sta $dc0d
+  2833                          ;;	sta $dd0d
+  2834                          ;;	lda $dc0d
+  2835                          ;;	lda $dd0d
   2836                          
-  2837                          	;; Finally, clear any pending interrupts by using MAP instruction
-  2838                          ;;	tax
-  2839                          ;;	tay
-  2840                          ;;	taz
-  2841                          ;;	map
-  2842                          ;;	lda #0    ;; to give time to effect clearing irq_pending in CPU
-  2843                          ;;	eom
-  2844                          	
-  2845                          	;; And ignore any queued NMI (these don't get cleared by the MAP trick)
-  2846                          
-  2847                          	;;  Clear pending NMI flag
-  2848  ac69 ad7dd6                     lda hypervisor_feature_enables
-  2849  ac6c 297f               	and #$7f
-  2850  ac6e 8d7dd6                     sta hypervisor_feature_enables
-  2851                          
-  2852                          	;; Set safety-net NMI handler
-  2853  ac71 a940               	lda #$40
-  2854  ac73 8d2004             	sta $0420
-  2855  ac76 a920               	lda #<$0420
-  2856  ac78 8d1803             	sta $0318
-  2857  ac7b a904               	lda #>$0420
-  2858  ac7d 8d1903             	sta $0319	
-  2859  ac80 60                 	rts
-  2860                          
-  2861                          flashmenu_dmalist:
-  2862                                  ;; copy $50000-$577FF to $00007FF-$0007FFFF
+  2837                          	;; VIC-IV
+  2838                          ;;	dec $d019
+  2839                          ;;	lda #$00
+  2840                          ;;	sta $d01a
+  2841                          
+  2842                          	;; Ethernet
+  2843                          ;;	lda #$00
+  2844                          ;;	sta $d6e1
+  2845                          
+  2846                          	;; C65 UART
+  2847                          	;; XXX Actually it can't generate interrupts yet, so nothing to do :)
+  2848                          
+  2849                          	;; Finally, clear any pending interrupts by using MAP instruction
+  2850                          ;;	tax
+  2851                          ;;	tay
+  2852                          ;;	taz
+  2853                          ;;	map
+  2854                          ;;	lda #0    ;; to give time to effect clearing irq_pending in CPU
+  2855                          ;;	eom
+  2856                          
+  2857                          	;; And ignore any queued NMI (these don't get cleared by the MAP trick)
+  2858                          
+  2859                          	;;  Clear pending NMI flag
+  2860  ac75 ad7dd6                     lda hypervisor_feature_enables
+  2861  ac78 297f               	and #$7f
+  2862  ac7a 8d7dd6                     sta hypervisor_feature_enables
   2863                          
-  2864                                  ;; MEGA65 Enhanced DMA options
-  2865  ac81 0a                         !8 $0A      ;; Request format is F018A
-  2866  ac82 8000                       !8 $80,$00  ;; Copy from $00xxxxx
-  2867  ac84 8100                       !8 $81,$00  ;; Copy to $00xxxxx
-  2868                          
-  2869                          	;; Copy screen from $0400-$0BFF to $00009000
-  2870  ac86 00                         !8 $00 ;; no more options
-  2871                                  ;; F018A DMA list
-  2872  ac87 04                         !8 $04 ;; copy + chained
-  2873  ac88 0008                       !16 $0800 ;; size of copy 
-  2874  ac8a 0004                       !16 $0400 ;; starting addr 
-  2875  ac8c 00                         !8 $00   ;; of bank $0
-  2876  ac8d 0090                       !16 $9000 ;; destination address is $8000
-  2877  ac8f 00                         !8 $00   ;; of bank $5
-  2878  ac90 0000                       !16 $0000 ;; modulo (unused)
-  2879                          
-  2880                          	;; Copy program down
-  2881  ac92 00                         !8 $00 ;; no more options
-  2882                          	;; F018A DMA list
-  2883  ac93 00                         !8 $00 ;; copy + not chained request
-  2884  ac94 ff77                       !16 $77FF ;; size of copy 
-  2885  ac96 0000                       !16 $0000 ;; starting addr 
-  2886  ac98 05                         !8 $05   ;; of bank $5
-  2887  ac99 ff07                       !16 $07FF ;; destination address is $0801 - 2
-  2888  ac9b 00                         !8 $00   ;; of bank $0
-  2889  ac9c 0000                       !16 $0000 ;; modulo (unused)
-  2890                          
-  2891                          screenrestore_dmalist:
-  2892  ac9e 8000                       !8 $80,$00  ;; Copy from $00xxxxx
-  2893  aca0 8100                       !8 $81,$00  ;; Copy to $00xxxxx
-  2894  aca2 00                         !8 $00 ;; no more options
-  2895                                  ;; F018A DMA list
-  2896  aca3 00                         !8 $00 ;; copy + last in chain
-  2897  aca4 0008                       !16 $0800 ;; size of copy 
-  2898  aca6 0090                       !16 $9000 ;; destination address is $0000
-  2899  aca8 00                         !8 $00   ;; of bank $0
-  2900  aca9 0004                       !16 $0400 ;; starting addr 
-  2901  acab 00                         !8 $00   ;; of bank $5
-  2902  acac 0000                       !16 $0000 ;; modulo (unused)
-  2903                          
-  2904                          scroll_screen:
-  2905                          	
-  2906  acae a9ff                       lda #$ff
-  2907  acb0 8d02d7                     sta $d702
-  2908  acb3 8d04d7                     sta $d704  ;; dma list is in top MB of address space
-  2909                          
-  2910                          	;; Don't forget to reset colour RAM also
-  2911  acb6 a9ac                       lda #>scrollscreen_dmalist
-  2912  acb8 8d01d7                     sta $d701
-  2913                                  ;; set bottom 8 bits of address and trigger DMA.
-  2914                                  ;;
-  2915  acbb a9c1                       lda #<scrollscreen_dmalist
-  2916  acbd 8d05d7                     sta $d705
+  2864                          	;; Set safety-net NMI handler
+  2865  ac7d a940               	lda #$40
+  2866  ac7f 8d2004             	sta $0420
+  2867  ac82 a920               	lda #<$0420
+  2868  ac84 8d1803             	sta $0318
+  2869  ac87 a904               	lda #>$0420
+  2870  ac89 8d1903             	sta $0319
+  2871  ac8c 60                 	rts
+  2872                          
+  2873                          flashmenu_dmalist:
+  2874                                  ;; copy $50000-$577FF to $00007FF-$0007FFFF
+  2875                          
+  2876                                  ;; MEGA65 Enhanced DMA options
+  2877  ac8d 0a                         !8 $0A      ;; Request format is F018A
+  2878  ac8e 8000                       !8 $80,$00  ;; Copy from $00xxxxx
+  2879  ac90 8100                       !8 $81,$00  ;; Copy to $00xxxxx
+  2880                          
+  2881                          	;; Copy screen from $0400-$0BFF to $00009000
+  2882  ac92 00                         !8 $00 ;; no more options
+  2883                                  ;; F018A DMA list
+  2884  ac93 04                         !8 $04 ;; copy + chained
+  2885  ac94 0008                       !16 $0800 ;; size of copy
+  2886  ac96 0004                       !16 $0400 ;; starting addr
+  2887  ac98 00                         !8 $00   ;; of bank $0
+  2888  ac99 0090                       !16 $9000 ;; destination address is $8000
+  2889  ac9b 00                         !8 $00   ;; of bank $5
+  2890  ac9c 0000                       !16 $0000 ;; modulo (unused)
+  2891                          
+  2892                          	;; Copy program down
+  2893  ac9e 00                         !8 $00 ;; no more options
+  2894                          	;; F018A DMA list
+  2895  ac9f 00                         !8 $00 ;; copy + not chained request
+  2896  aca0 ff77                       !16 $77FF ;; size of copy
+  2897  aca2 0000                       !16 $0000 ;; starting addr
+  2898  aca4 05                         !8 $05   ;; of bank $5
+  2899  aca5 ff07                       !16 $07FF ;; destination address is $0801 - 2
+  2900  aca7 00                         !8 $00   ;; of bank $0
+  2901  aca8 0000                       !16 $0000 ;; modulo (unused)
+  2902                          
+  2903                          screenrestore_dmalist:
+  2904  acaa 8000                       !8 $80,$00  ;; Copy from $00xxxxx
+  2905  acac 8100                       !8 $81,$00  ;; Copy to $00xxxxx
+  2906  acae 00                         !8 $00 ;; no more options
+  2907                                  ;; F018A DMA list
+  2908  acaf 00                         !8 $00 ;; copy + last in chain
+  2909  acb0 0008                       !16 $0800 ;; size of copy
+  2910  acb2 0090                       !16 $9000 ;; destination address is $0000
+  2911  acb4 00                         !8 $00   ;; of bank $0
+  2912  acb5 0004                       !16 $0400 ;; starting addr
+  2913  acb7 00                         !8 $00   ;; of bank $5
+  2914  acb8 0000                       !16 $0000 ;; modulo (unused)
+  2915                          
+  2916                          scroll_screen:
   2917                          
-  2918  acc0 60                 	rts
-  2919                          	
-  2920                          scrollscreen_dmalist:
-  2921  acc1 8000                       !8 $80,$00  ;; Copy from $00xxxxx
-  2922  acc3 8100                       !8 $81,$00  ;; Copy to $00xxxxx
-  2923  acc5 00                         !8 $00 ;; no more options
-  2924                                  ;; F018A DMA list
-  2925  acc6 00                         !8 $00 ;; copy + last in chain
-  2926  acc7 0005                       !16 1280 ;; size of copy  ( (17-1) * 40 * 2 )
-  2927  acc9 d006                       !16 1744 ;; src address is line 9 of screen
-  2928  accb 00                         !8 $00   ;; of bank $0
-  2929  accc 8006                       !16 1664 ;; starting addr is line 8 of screen
-  2930  acce 00                         !8 $00   ;; of bank $0
-  2931  accf 0000                       !16 $0000 ;; modulo (unused)
-  2932                          	
-  2933                          	
-  2934                          utility_dmalist:
-  2935                                  ;; copy $FF8xxxx-$FF8yyyy to $00007FF-$000xxxx
-  2936                          
-  2937                                  ;; MEGA65 Enhanced DMA options
-  2938  acd1 0a                         !8 $0A      ;; Request format is F018A
-  2939  acd2 80ff                       !8 $80,$FF  ;; Copy from $FFxxxxx
-  2940  acd4 8100                       !8 $81,$00  ;; Copy to $00xxxxx
-  2941  acd6 00                         !8 $00 ;; no more options
-  2942                                  ;; F018A DMA list
-  2943  acd7 00                         !8 $00 ;; copy + last request in chain
-  2944                          utility_dmalist_length:
-  2945  acd8 ffff                       !16 $FFFF ;; size of copy  (gets overwritten)
-  2946                          utility_dmalist_srcaddr:
-  2947  acda ffff                       !16 $FFFF ;; starting addr (gets overwritten)
-  2948  acdc 08                         !8 $08   ;; of bank $8
-  2949  acdd ff07                       !16 $07FF ;; destination address is $0801 - 2
-  2950  acdf 00                         !8 $00   ;; of bank $0
-  2951  ace0 0000                       !16 $0000 ;; modulo (unused)
-  2952                          
-  2953                          
-  2954                          msg_utility_item:
-  2955  ace2 312e203332204348...        !text "1. 32 CHARACTERS OF UTILITY NAME...    "
-  2956  ad09 00                         !8 0
-  2957                          
-  2958                          utillist_next:
-  2959                          
-  2960                                  ;; Advance pointer to the next pointer
-  2961  ad0a a32a                       ldz #42
-  2962  ad0c eab210                     lda [<zptempv32],z
-  2963  ad0f da                         phx
-  2964  ad10 aa                         tax
-  2965  ad11 1b                         inz
-  2966  ad12 eab210                     lda [<zptempv32],z
-  2967                                  ;; XXX - Make sure it can't point earlier into the colour RAM here
-  2968                          
-  2969  ad15 8511                       sta <zptempv32+1
-  2970  ad17 8610                       stx <zptempv32
-  2971  ad19 fa                         plx
-  2972  ad1a 60                         rts
-  2973                          
-  2974                          utillist_validity_check:
-  2975                                  ;; See if this is a valid utility entry
-  2976  ad1b a300                       ldz #0
-  2977                          
-  2978                                  ;; Check for magic value
-  2979  ad1d eab210                     lda [<zptempv32],z
-  2980  ad20 c94d                       cmp #'M'
-  2981  ad22 d02d                       bne ulvc_fail
-  2982  ad24 1b                         inz
-  2983  ad25 eab210                     lda [<zptempv32],z
-  2984  ad28 c936                       cmp #'6'
-  2985  ad2a d025                       bne ulvc_fail
-  2986  ad2c 1b                         inz
-  2987  ad2d eab210                     lda [<zptempv32],z
-  2988  ad30 c935                       cmp #'5'
-  2989  ad32 d01d                       bne ulvc_fail
-  2990  ad34 1b                         inz
-  2991  ad35 eab210                     lda [<zptempv32],z
-  2992  ad38 c955                       cmp #'U'
-  2993  ad3a d015                       bne ulvc_fail
-  2994                          
-  2995                                  ;; Check self address
-  2996  ad3c a328                       ldz #40
-  2997  ad3e eab210                     lda [<zptempv32],z
-  2998  ad41 cd10bf                     cmp zptempv32
-  2999  ad44 d00b                       bne ulvc_fail
-  3000  ad46 1b                         inz
-  3001  ad47 eab210                     lda [<zptempv32],z
-  3002  ad4a cd11bf                     cmp zptempv32+1
-  3003  ad4d d002                       bne ulvc_fail
-  3004                          
-  3005                                  ;; success
-  3006  ad4f 38                         sec
-  3007  ad50 60                         rts
-  3008                          
-  3009                          ulvc_fail:
-  3010  ad51 18                         clc
-  3011  ad52 60                         rts
-  3012                          
-  3013                          utillist_rewind:
-  3014                          
-  3015                                  ;; Set pointer to first entry in colour RAM ($0850)
-  3016  ad53 a950                       lda #<$0850
-  3017  ad55 8510                       sta <zptempv32
-  3018  ad57 a908                       lda #>$0850
-  3019  ad59 8511                       sta <(zptempv32+1)
-  3020  ad5b a9f8                       lda #<$0FF8
-  3021  ad5d 8512                       sta <(zptempv32+2)
-  3022  ad5f a90f                       lda #>$0FF8
-  3023  ad61 8513                       sta <(zptempv32+3)
+  2918  acba a9ff                       lda #$ff
+  2919  acbc 8d02d7                     sta $d702
+  2920  acbf 8d04d7                     sta $d704  ;; dma list is in top MB of address space
+  2921                          
+  2922                          	;; Don't forget to reset colour RAM also
+  2923  acc2 a9ac                       lda #>scrollscreen_dmalist
+  2924  acc4 8d01d7                     sta $d701
+  2925                                  ;; set bottom 8 bits of address and trigger DMA.
+  2926                                  ;;
+  2927  acc7 a9cd                       lda #<scrollscreen_dmalist
+  2928  acc9 8d05d7                     sta $d705
+  2929                          
+  2930  accc 60                 	rts
+  2931                          
+  2932                          scrollscreen_dmalist:
+  2933  accd 8000                       !8 $80,$00  ;; Copy from $00xxxxx
+  2934  accf 8100                       !8 $81,$00  ;; Copy to $00xxxxx
+  2935  acd1 00                         !8 $00 ;; no more options
+  2936                                  ;; F018A DMA list
+  2937  acd2 00                         !8 $00 ;; copy + last in chain
+  2938  acd3 0005                       !16 1280 ;; size of copy  ( (17-1) * 40 * 2 )
+  2939  acd5 d006                       !16 1744 ;; src address is line 9 of screen
+  2940  acd7 00                         !8 $00   ;; of bank $0
+  2941  acd8 8006                       !16 1664 ;; starting addr is line 8 of screen
+  2942  acda 00                         !8 $00   ;; of bank $0
+  2943  acdb 0000                       !16 $0000 ;; modulo (unused)
+  2944                          
+  2945                          
+  2946                          utility_dmalist:
+  2947                                  ;; copy $FF8xxxx-$FF8yyyy to $00007FF-$000xxxx
+  2948                          
+  2949                                  ;; MEGA65 Enhanced DMA options
+  2950  acdd 0a                         !8 $0A      ;; Request format is F018A
+  2951  acde 80ff                       !8 $80,$FF  ;; Copy from $FFxxxxx
+  2952  ace0 8100                       !8 $81,$00  ;; Copy to $00xxxxx
+  2953  ace2 00                         !8 $00 ;; no more options
+  2954                                  ;; F018A DMA list
+  2955  ace3 00                         !8 $00 ;; copy + last request in chain
+  2956                          utility_dmalist_length:
+  2957  ace4 ffff                       !16 $FFFF ;; size of copy  (gets overwritten)
+  2958                          utility_dmalist_srcaddr:
+  2959  ace6 ffff                       !16 $FFFF ;; starting addr (gets overwritten)
+  2960  ace8 08                         !8 $08   ;; of bank $8
+  2961  ace9 ff07                       !16 $07FF ;; destination address is $0801 - 2
+  2962  aceb 00                         !8 $00   ;; of bank $0
+  2963  acec 0000                       !16 $0000 ;; modulo (unused)
+  2964                          
+  2965                          
+  2966                          msg_utility_item:
+  2967  acee 312e203332204348...        !text "1. 32 CHARACTERS OF UTILITY NAME...    "
+  2968  ad15 00                         !8 0
+  2969                          
+  2970                          utillist_next:
+  2971                          
+  2972                                  ;; Advance pointer to the next pointer
+  2973  ad16 a32a                       ldz #42
+  2974  ad18 eab210                     lda [<zptempv32],z
+  2975  ad1b da                         phx
+  2976  ad1c aa                         tax
+  2977  ad1d 1b                         inz
+  2978  ad1e eab210                     lda [<zptempv32],z
+  2979                                  ;; XXX - Make sure it can't point earlier into the colour RAM here
+  2980                          
+  2981  ad21 8511                       sta <zptempv32+1
+  2982  ad23 8610                       stx <zptempv32
+  2983  ad25 fa                         plx
+  2984  ad26 60                         rts
+  2985                          
+  2986                          utillist_validity_check:
+  2987                                  ;; See if this is a valid utility entry
+  2988  ad27 a300                       ldz #0
+  2989                          
+  2990                                  ;; Check for magic value
+  2991  ad29 eab210                     lda [<zptempv32],z
+  2992  ad2c c94d                       cmp #'M'
+  2993  ad2e d02d                       bne ulvc_fail
+  2994  ad30 1b                         inz
+  2995  ad31 eab210                     lda [<zptempv32],z
+  2996  ad34 c936                       cmp #'6'
+  2997  ad36 d025                       bne ulvc_fail
+  2998  ad38 1b                         inz
+  2999  ad39 eab210                     lda [<zptempv32],z
+  3000  ad3c c935                       cmp #'5'
+  3001  ad3e d01d                       bne ulvc_fail
+  3002  ad40 1b                         inz
+  3003  ad41 eab210                     lda [<zptempv32],z
+  3004  ad44 c955                       cmp #'U'
+  3005  ad46 d015                       bne ulvc_fail
+  3006                          
+  3007                                  ;; Check self address
+  3008  ad48 a328                       ldz #40
+  3009  ad4a eab210                     lda [<zptempv32],z
+  3010  ad4d cd10bf                     cmp zptempv32
+  3011  ad50 d00b                       bne ulvc_fail
+  3012  ad52 1b                         inz
+  3013  ad53 eab210                     lda [<zptempv32],z
+  3014  ad56 cd11bf                     cmp zptempv32+1
+  3015  ad59 d002                       bne ulvc_fail
+  3016                          
+  3017                                  ;; success
+  3018  ad5b 38                         sec
+  3019  ad5c 60                         rts
+  3020                          
+  3021                          ulvc_fail:
+  3022  ad5d 18                         clc
+  3023  ad5e 60                         rts
   3024                          
-  3025  ad63 60                         rts
+  3025                          utillist_rewind:
   3026                          
-  3027                          serialwrite:
-  3028                                  ;; write character to serial port
-  3029                          
-  3030                          	;; First wait for it to go ready
-  3031  ad64 ae7cd6             	ldx hypervisor_write_char_to_serial_monitor
-  3032  ad67 d0fb               	bne serialwrite
-  3033                          	
-  3034                                  ;; XXX - Have some kind of permission control on this
-  3035                                  ;; XXX - $D67C should not work when matrix mode is enabled at all?
-  3036  ad69 8d7cd6                     sta hypervisor_write_char_to_serial_monitor
-  3037  ad6c 8d7fd6                     sta hypervisor_enterexit_trigger
+  3027                                  ;; Set pointer to first entry in colour RAM ($0850)
+  3028  ad5f a950                       lda #<$0850
+  3029  ad61 8510                       sta <zptempv32
+  3030  ad63 a908                       lda #>$0850
+  3031  ad65 8511                       sta <(zptempv32+1)
+  3032  ad67 a9f8                       lda #<$0FF8
+  3033  ad69 8512                       sta <(zptempv32+2)
+  3034  ad6b a90f                       lda #>$0FF8
+  3035  ad6d 8513                       sta <(zptempv32+3)
+  3036                          
+  3037  ad6f 60                         rts
   3038                          
-  3039                          ;;         ========================
-  3040                          
-  3041                          !if DEBUG_HYPPO {
-  3042                          
-  3043                          ;; checkpoint message
-  3044                          
-  3045                          msg_checkpoint:         !text "$"
-  3046                          msg_checkpoint_pc:      !text "%%%% A:"
-  3047                          msg_checkpoint_a:       !text "%%, X:"
-  3048                          msg_checkpoint_x:       !text "%%, Y:"
-  3049                          msg_checkpoint_y:       !text "%%, Z:"
-  3050                          msg_checkpoint_z:       !text "%%, P:"
-  3051                          msg_checkpoint_p:       !text "%% :"
-  3052                          msg_checkpointmsg:      !text "                                                             " ;; END_OF_STRING
-  3053                                                  !8 13,10  ;; CR/LF
+  3039                          serialwrite:
+  3040                                  ;; write character to serial port
+  3041                          
+  3042                          	;; First wait for it to go ready
+  3043  ad70 ae7cd6             	ldx hypervisor_write_char_to_serial_monitor
+  3044  ad73 d0fb               	bne serialwrite
+  3045                          
+  3046                                  ;; XXX - Have some kind of permission control on this
+  3047                                  ;; XXX - $D67C should not work when matrix mode is enabled at all?
+  3048  ad75 8d7cd6                     sta hypervisor_write_char_to_serial_monitor
+  3049  ad78 8d7fd6                     sta hypervisor_enterexit_trigger
+  3050                          
+  3051                          ;;         ========================
+  3052                          
+  3053                          !if DEBUG_HYPPO {
   3054                          
-  3055                          }
+  3055                          ;; checkpoint message
   3056                          
-  3057                          ;;         ========================
-  3058                          
-  3059                          msg_checkpoint_eom:
-  3060                          
-  3061                          ;; messages all have to be <=40 bytes long
-  3062                          
-  3063                          msg_utilitymenu:
-  3064  ad6f 53454c4543542055...        !text "SELECT UTILITY TO LAUNCH"
-  3065  ad87 00                         !8 0
+  3057                          msg_checkpoint:         !text "$"
+  3058                          msg_checkpoint_pc:      !text "%%%% A:"
+  3059                          msg_checkpoint_a:       !text "%%, X:"
+  3060                          msg_checkpoint_x:       !text "%%, Y:"
+  3061                          msg_checkpoint_y:       !text "%%, Z:"
+  3062                          msg_checkpoint_z:       !text "%%, P:"
+  3063                          msg_checkpoint_p:       !text "%% :"
+  3064                          msg_checkpointmsg:      !text "                                                             " ;; END_OF_STRING
+  3065                                                  !8 13,10  ;; CR/LF
   3066                          
-  3067                          msg_noutilitymenu:	
-  3068  ad88 484f4c4420414c54...		        !text "HOLD ALT + POWER CYCLE FOR UTILITY MENU"
-  3069  adaf 00                 	                !8 0
-  3070                          	
-  3071                          msg_noflashmenu:	
-  3072  adb0 484f4c44204e4f20...		        !text "HOLD NO SCROLL + POWER CYCLE FOR FLASH"
-  3073  add6 00                 	                !8 0
-  3074                          	
-  3075  add7 52452d545259494e...msg_retryreadmbr:       !text "RE-TRYING TO READ MBR"
-  3076  adec 00                                         !8 0
-  3077  aded 4d4547413635204d...msg_hyppo:              !text "MEGA65 MEGAOS HYPERVISOR V00.16"
-  3078  ae0c 00                                         !8 0
-  3079  ae0d 4e4f205343524f4c...msg_hyppohelpfirst:     !text "NO SCROLL=FLASH, ALT=UTILS, CTRL=HOLD"
-  3080  ae32 00                                         !8 0
-  3081  ae33 504f574552204f46...msg_hyppohelpnotfirst:  !text "POWER OFF/ON FOR FLASH OR UTIL MENU"
-  3082  ae56 00                                         !8 0
-  3083  ae57 524f4d2043484543...msg_romok:              !text "ROM CHECKSUM OK - BOOTING"
-  3084  ae70 00                                         !8 0
-  3085                          ;; msg_rombad:          !text "ROM CHECKSUM FAIL - LOADING ROMS"
-  3086                          ;;                      !8 0
-  3087                          ;; msg_charrombad:      !text "COULD NOT LOAD CHARROM.M65"
-  3088                          ;;                      !8 0
-  3089  ae71 4c4f414445442043...msg_charromloaded:      !text "LOADED CHARROM.M65 ($$$$ PAGES)"
-  3090  ae90 00                                         !8 0
-  3091  ae91 4c4f41444544204d...msg_megaromloaded:      !text "LOADED MEGA65.ROM ($$$$ PAGES)"
-  3092  aeaf 00                                         !8 0
-  3093  aeb0 4c4f4f4b494e4720...msg_tryingsdcard:       !text "LOOKING FOR SDHC CARD >=4GB..."
-  3094  aece 00                                         !8 0
-  3095  aecf 5344204341524420...msg_foundsdcard:        !text "SD CARD IS NOT SDHC. MUST BE SDHC."
-  3096  aef1 00                                         !8 0
-  3097  aef2 464f554e4420414e...msg_foundsdhccard:      !text "FOUND AND RESET SDHC CARD"
-  3098  af0b 00                                         !8 0
-  3099  af0c 4552524f52205245...msg_sdcarderror:        !text "ERROR READING FROM SD CARD"
-  3100  af26 00                                         !8 0
-  3101  af27 52452d5245414449...msg_sdredoread:         !text "RE-READING SDCARD"
-  3102  af38 00                                         !8 0
-  3103  af39 4e4f205344434152...msg_nosdcard:           !text "NO SDCARD, TRYING BUILT-IN ROM"
-  3104  af57 00                                         !8 0
-  3105  af58 424144204d425220...msg_badformat:          !text "BAD MBR OR DOS BOOT SECTOR."
-  3106  af73 00                                         !8 0
-  3107  af74 5245414420504152...msg_sdcardfound:        !text "READ PARTITION TABLE FROM SDCARD"
-  3108  af94 00                                         !8 0
-  3109  af95 464f554e4420524f...msg_foundromfile:       !text "FOUND ROM FILE. START CLUSTER = $$$$$$$$"
-  3110  afbd 00                                         !8 0
-  3111  afbe 4449534b2d434f55...msg_diskcount:          !text "DISK-COUNT=$$, DEFAULT-DISK=$$"
-  3112  afdc 00                                         !8 0
-  3113                          ;; msg_diskdata0:       !text "DISK-TABLE:"
-  3114                          ;;                      !8 0
-  3115                          ;; msg_diskdata:        !text "BB$$:$$.$$.$$.$$.$$.$$.$$.$$"
-  3116                          ;;                      !8 0
-  3117  afdd 4c4f4f4b494e4720...msg_filelengths:        !text "LOOKING FOR $$ BYTES, I SEE $$ BYTES"
-  3118  b001 00                                         !8 0
-  3119  b002 434f554c44204e4f...msg_fileopenerror:      !text "COULD NOT OPEN ROM FILE FOR READING"
-  3120  b025 00                                         !8 0
-  3121  b026 52454144494e4720...msg_readingfile:        !text "READING ROM FILE..."
-  3122  b039 00                                         !8 0
-  3123  b03a 524f4d20544f4f20...msg_romfilelongerror:   !text "ROM TOO LONG: (READ $$$$ PAGES)"
-  3124  b059 00                                         !8 0
-  3125  b05a 524f4d20544f4f20...msg_romfileshorterror:  !text "ROM TOO SHORT: (READ $$$$ PAGES)"
-  3126  b07a 00                                         !8 0
-  3127  b07b 43555252454e5420...msg_clusternumber:      !text "CURRENT CLUSTER=$$$$$$$$"
-  3128  b093 00                                         !8 0
-  3129  b094 43555252454e5420...msg_sectoraddress:      !text "CURRENT SECTOR= $$$$$$$$"
-  3130  b0ac 00                                         !8 0
-  3131  b0ad 43414e4e4f54204d...msg_nod81:              !text "CANNOT MOUNT D81 - (ERRNO: $$)"
-  3132  b0cb 00                                         !8 0
-  3133  b0cc 4438312053554343...msg_d81mounted:         !text "D81 SUCCESSFULLY MOUNTED"
-  3134  b0e4 00                                         !8 0
-  3135  b0e5 52454c4541534520...msg_releasectrl:        !text "RELEASE CONTROL TO CONTINUE BOOTING."
-  3136  b109 00                                         !8 0
-  3137  b10a 535733204f464620...msg_dipswitch3on:       !text "SW3 OFF OR PRESS RUN/STOP TO CONTINUE."
-  3138  b130 00                                         !8 0
-  3139  b131 434f554c44204e4f...msg_romnotfound:        !text "COULD NOT FIND ROM MEGA65XXROM"
-  3140  b14f 00                                         !8 0
-  3141  b150 4c4f4144494e4720...msg_foundhickup:        !text "LOADING HICKUP.M65 INTO HYPERVISOR"
-  3142  b172 00                                         !8 0
-  3143  b173 434f554c44204e4f...msg_no1541rom:          !text "COULD NOT LOAD 1541ROM.M65"
-  3144  b18d 00                                         !8 0
-  3145                          ;; msg_nohickup:        !text "NO HICKUP.M65 TO LOAD (OR BROKEN)"
-  3146                          ;;                      !8 0
-  3147                          ;; msg_hickuploaded:    !text "HICKUP LOADED TO 00004000 - $$$$$$$$"
-  3148                          ;;                      !8 0
-  3149  b18e 52554e4e494e4720...msg_alreadyhicked:      !text "RUNNING HICKED HYPERVISOR"
-  3150  b1a7 00                                         !8 0
-  3151                          msg_lookingfornextsector:
-  3152  b1a8 4c4f4f4b494e4720...                        !text "LOOKING FOR NEXT SECTOR OF FILE"
-  3153  b1c7 00                                         !8 0
-  3154  b1c8 434f554c44204e4f...msg_nologo:             !text "COULD NOT LOAD BANNER.M65 (ERRNO:$$)"
-  3155  b1ec 00                                         !8 0
-  3156  b1ed 434f554c44204e4f...msg_cdrootfailed:       !text "COULD NOT CHDIR TO / (ERRNO:$$)"
-  3157  b20c 00                                         !8 0
-  3158  b20d 545259494e472053...msg_tryingcard0:        !text "TRYING SDCARD BUS 0"
-  3159  b220 00                                         !8 0
-  3160  b221 5553494e47205344...msg_usingcard1:         !text "USING SDCARD BUS 1"
-  3161  b233 00                                         !8 0
-  3162  b234 444d414749432052...msg_dmagica:            !text "DMAGIC REV A MODE"
-  3163  b245 00                                         !8 0
-  3164  b246 444d414749432052...msg_dmagicb:            !text "DMAGIC REV B MODE"
-  3165  b257 00                                         !8 0
-  3166                          	
-  3167                          ;; Include the GIT Message as a string
+  3067                          }
+  3068                          
+  3069                          ;;         ========================
+  3070                          
+  3071                          msg_checkpoint_eom:
+  3072                          
+  3073                          ;; messages all have to be <=40 bytes long
+  3074                          
+  3075                          msg_utilitymenu:
+  3076  ad7b 53454c4543542055...        !text "SELECT UTILITY TO LAUNCH"
+  3077  ad93 00                         !8 0
+  3078                          
+  3079                          msg_noutilitymenu:
+  3080  ad94 484f4c4420414c54...		        !text "HOLD ALT + POWER CYCLE FOR UTILITY MENU"
+  3081  adbb 00                 	                !8 0
+  3082                          
+  3083                          msg_noflashmenu:
+  3084  adbc 484f4c44204e4f20...		        !text "HOLD NO SCROLL + POWER CYCLE FOR FLASH"
+  3085  ade2 00                 	                !8 0
+  3086                          
+  3087  ade3 52452d545259494e...msg_retryreadmbr:       !text "RE-TRYING TO READ MBR"
+  3088  adf8 00                                         !8 0
+  3089  adf9 4d4547413635204d...msg_hyppo:              !text "MEGA65 MEGAOS HYPERVISOR V00.16"
+  3090  ae18 00                                         !8 0
+  3091  ae19 4e4f205343524f4c...msg_hyppohelpfirst:     !text "NO SCROLL=FLASH, ALT=UTILS, CTRL=HOLD"
+  3092  ae3e 00                                         !8 0
+  3093  ae3f 504f574552204f46...msg_hyppohelpnotfirst:  !text "POWER OFF/ON FOR FLASH OR UTIL MENU"
+  3094  ae62 00                                         !8 0
+  3095  ae63 524f4d2043484543...msg_romok:              !text "ROM CHECKSUM OK - BOOTING"
+  3096  ae7c 00                                         !8 0
+  3097                          ;; msg_rombad:          !text "ROM CHECKSUM FAIL - LOADING ROMS"
+  3098                          ;;                      !8 0
+  3099                          ;; msg_charrombad:      !text "COULD NOT LOAD CHARROM.M65"
+  3100                          ;;                      !8 0
+  3101  ae7d 4c4f414445442043...msg_charromloaded:      !text "LOADED CHARROM.M65 ($$$$ PAGES)"
+  3102  ae9c 00                                         !8 0
+  3103  ae9d 4c4f41444544204d...msg_megaromloaded:      !text "LOADED MEGA65.ROM ($$$$ PAGES)"
+  3104  aebb 00                                         !8 0
+  3105  aebc 4c4f4f4b494e4720...msg_tryingsdcard:       !text "LOOKING FOR SDHC CARD >=4GB..."
+  3106  aeda 00                                         !8 0
+  3107  aedb 5344204341524420...msg_foundsdcard:        !text "SD CARD IS NOT SDHC. MUST BE SDHC."
+  3108  aefd 00                                         !8 0
+  3109  aefe 464f554e4420414e...msg_foundsdhccard:      !text "FOUND AND RESET SDHC CARD"
+  3110  af17 00                                         !8 0
+  3111  af18 4552524f52205245...msg_sdcarderror:        !text "ERROR READING FROM SD CARD"
+  3112  af32 00                                         !8 0
+  3113  af33 52452d5245414449...msg_sdredoread:         !text "RE-READING SDCARD"
+  3114  af44 00                                         !8 0
+  3115  af45 4e4f205344434152...msg_nosdcard:           !text "NO SDCARD, TRYING BUILT-IN ROM"
+  3116  af63 00                                         !8 0
+  3117  af64 424144204d425220...msg_badformat:          !text "BAD MBR OR DOS BOOT SECTOR."
+  3118  af7f 00                                         !8 0
+  3119  af80 5245414420504152...msg_sdcardfound:        !text "READ PARTITION TABLE FROM SDCARD"
+  3120  afa0 00                                         !8 0
+  3121  afa1 464f554e4420524f...msg_foundromfile:       !text "FOUND ROM FILE. START CLUSTER = $$$$$$$$"
+  3122  afc9 00                                         !8 0
+  3123  afca 4449534b2d434f55...msg_diskcount:          !text "DISK-COUNT=$$, DEFAULT-DISK=$$"
+  3124  afe8 00                                         !8 0
+  3125                          ;; msg_diskdata0:       !text "DISK-TABLE:"
+  3126                          ;;                      !8 0
+  3127                          ;; msg_diskdata:        !text "BB$$:$$.$$.$$.$$.$$.$$.$$.$$"
+  3128                          ;;                      !8 0
+  3129  afe9 4c4f4f4b494e4720...msg_filelengths:        !text "LOOKING FOR $$ BYTES, I SEE $$ BYTES"
+  3130  b00d 00                                         !8 0
+  3131  b00e 434f554c44204e4f...msg_fileopenerror:      !text "COULD NOT OPEN ROM FILE FOR READING"
+  3132  b031 00                                         !8 0
+  3133  b032 52454144494e4720...msg_readingfile:        !text "READING ROM FILE..."
+  3134  b045 00                                         !8 0
+  3135  b046 524f4d20544f4f20...msg_romfilelongerror:   !text "ROM TOO LONG: (READ $$$$ PAGES)"
+  3136  b065 00                                         !8 0
+  3137  b066 524f4d20544f4f20...msg_romfileshorterror:  !text "ROM TOO SHORT: (READ $$$$ PAGES)"
+  3138  b086 00                                         !8 0
+  3139  b087 43555252454e5420...msg_clusternumber:      !text "CURRENT CLUSTER=$$$$$$$$"
+  3140  b09f 00                                         !8 0
+  3141  b0a0 43555252454e5420...msg_sectoraddress:      !text "CURRENT SECTOR= $$$$$$$$"
+  3142  b0b8 00                                         !8 0
+  3143  b0b9 43414e4e4f54204d...msg_nod81:              !text "CANNOT MOUNT D81 - (ERRNO: $$)"
+  3144  b0d7 00                                         !8 0
+  3145  b0d8 4438312053554343...msg_d81mounted:         !text "D81 SUCCESSFULLY MOUNTED"
+  3146  b0f0 00                                         !8 0
+  3147  b0f1 52454c4541534520...msg_releasectrl:        !text "RELEASE CONTROL TO CONTINUE BOOTING."
+  3148  b115 00                                         !8 0
+  3149  b116 535733204f464620...msg_dipswitch3on:       !text "SW3 OFF OR PRESS RUN/STOP TO CONTINUE."
+  3150  b13c 00                                         !8 0
+  3151  b13d 434f554c44204e4f...msg_romnotfound:        !text "COULD NOT FIND ROM MEGA65XXROM"
+  3152  b15b 00                                         !8 0
+  3153  b15c 4c4f4144494e4720...msg_foundhickup:        !text "LOADING HICKUP.M65 INTO HYPERVISOR"
+  3154  b17e 00                                         !8 0
+  3155  b17f 434f554c44204e4f...msg_no1541rom:          !text "COULD NOT LOAD 1541ROM.M65"
+  3156  b199 00                                         !8 0
+  3157                          ;; msg_nohickup:        !text "NO HICKUP.M65 TO LOAD (OR BROKEN)"
+  3158                          ;;                      !8 0
+  3159                          ;; msg_hickuploaded:    !text "HICKUP LOADED TO 00004000 - $$$$$$$$"
+  3160                          ;;                      !8 0
+  3161  b19a 52554e4e494e4720...msg_alreadyhicked:      !text "RUNNING HICKED HYPERVISOR"
+  3162  b1b3 00                                         !8 0
+  3163                          msg_lookingfornextsector:
+  3164  b1b4 4c4f4f4b494e4720...                        !text "LOOKING FOR NEXT SECTOR OF FILE"
+  3165  b1d3 00                                         !8 0
+  3166  b1d4 434f554c44204e4f...msg_nologo:             !text "COULD NOT LOAD BANNER.M65 (ERRNO:$$)"
+  3167  b1f8 00                                         !8 0
+  3168  b1f9 434f554c44204e4f...msg_cdrootfailed:       !text "COULD NOT CHDIR TO / (ERRNO:$$)"
+  3169  b218 00                                         !8 0
+  3170  b219 545259494e472053...msg_tryingcard0:        !text "TRYING SDCARD BUS 0"
+  3171  b22c 00                                         !8 0
+  3172  b22d 5553494e47205344...msg_usingcard1:         !text "USING SDCARD BUS 1"
+  3173  b23f 00                                         !8 0
+  3174  b240 444d414749432052...msg_dmagica:            !text "DMAGIC REV A MODE"
+  3175  b251 00                                         !8 0
+  3176  b252 444d414749432052...msg_dmagicb:            !text "DMAGIC REV B MODE"
+  3177  b263 00                                         !8 0
+  3178                          
+  3179                          ;; Include the GIT Message as a string
 
 ; ******** Source: ../version.asm
      1                          msg_gitcommit:
-     2  b258 4749543a20687773...	!text "GIT: hwsc,20211221.19,d894bf4~"
-     3  b276 00                 	!8 0
+     2  b264 4749543a20687773...	!text "GIT: hwsc,20211221.19,d894bf4~"
+     3  b282 00                 	!8 0
 
 ; ******** Source: src/hyppo/main.asm
-  3169                          
-  3170  b277 00                 msg_blankline:          !8 0
-  3171                          
-  3172                          ;;         ========================
-  3173                                      ;; filename of 1541 ROM
-  3174  b278 31353431524f4d2e...txt_1541ROM:            !text "1541ROM.M65"
-  3175  b283 00                                         !8 0
-  3176                          
-  3177                                      ;; filename of character ROM
-  3178  b284 43484152524f4d2e...txt_CHARROMM65:         !text "CHARROM.M65"
-  3179  b28f 00                                         !8 0
-  3180                          
-  3181                                      ;; filename of ROM we want to load in FAT directory format
-  3182                                      ;; (the two zero bytes are so that we can insert an extra digit after
-  3183                                      ;; the 5, when a user presses a key, so that they can choose a
-  3184                                      ;; different ROM to load).
-  3185                                      ;;
-  3186  b290 4d45474136352e52...txt_MEGA65ROM:          !text "MEGA65.ROM"
-  3187  b29a 0000                                       !8 0,0
+  3181                          
+  3182  b283 00                 msg_blankline:          !8 0
+  3183                          
+  3184                          ;;         ========================
+  3185                                      ;; filename of 1541 ROM
+  3186  b284 31353431524f4d2e...txt_1541ROM:            !text "1541ROM.M65"
+  3187  b28f 00                                         !8 0
   3188                          
-  3189                                      ;; filename of 1581 disk image we mount by default
-  3190                                      ;;
-  3191  b29c 4d45474136352e44...txt_MEGA65D81:          !text "MEGA65.D81"
-  3192  b2a6 00000000000000                             !8 0,0,0,0,0,0,0
-  3193                          
-  3194                                      ;; filename of hyppo update file
-  3195                                      ;;
-  3196  b2ad 4849434b55502e4d...txt_HICKUPM65:          !text "HICKUP.M65"
-  3197  b2b7 00                                         !8 0
-  3198                          
-  3199                                      ;; filename containing boot logo
-  3200                                      ;;
-  3201  b2b8 42414e4e45522e4d...txt_BOOTLOGOM65:        !text "BANNER.M65"
-  3202  b2c2 00                                         !8 0
-  3203                          
-  3204                                      ;; filename containing freeze menu
-  3205  b2c3 465245455a45522e...txt_FREEZER:            !text "FREEZER.M65"
-  3206  b2ce 00                                         !8 0
-  3207                          
-  3208                                      ;; If this file is present, then machine starts up with video
-  3209                                      ;; mode set to NTSC (60Hz), else as PAL (50Hz).
-  3210                                      ;; This is to allow us to boot in PAL by default, except for
-  3211                                      ;; those who have a monitor that cannot do 50Hz.
-  3212  b2cf 4e545343           txt_NTSC:               !text "NTSC"
-  3213  b2d3 00                                         !8 0
-  3214                          
-  3215                          ;;         ========================
-  3216                          
-  3217                          !if DEBUG_HYPPO {
-  3218                                  !src "debug.asm"
-  3219                          }
-  3220                          
-  3221                          ;;         ========================
-  3222                          
-  3223                                  ;; Table of available disks.
-  3224                                  ;; Include native FAT32 disks, as well as (in the future at least)
-  3225                                  ;; mounted .D41, .D71, .D81 and .DHD files using Commodore DOS filesystems.
-  3226                                  ;; But for now, we are supporting only FAT32 as the filesystem.
-  3227                                  ;; See hyppo_dos.asm for information on how the table is used.
-  3228                                  ;; Entries are 32 bytes long, so we can have 6 of them.
-  3229                                  ;;
-  3230                                  dos_max_disks = 6
-  3231                          
-  3232                                  ;; .segment DOSDiskTable
-  3233                                  * = DOSDiskTable_Start
-  3234                          dos_disk_table:
-  3235                          
-  3236                                  ;; .segment SysPartStructure
-  3237                                  * = SysPartStructure_Start
-  3238                          
-  3239                          syspart_structure:
-  3240                          
-  3241                          syspart_start_sector:
-  3242  bbc0 00000000                   !8 0,0,0,0
-  3243                          syspart_size_in_sectors:
-  3244  bbc4 00000000                   !8 0,0,0,0
-  3245                          syspart_reserved:
-  3246  bbc8 0000000000000000           !8 0,0,0,0,0,0,0,0
+  3189                                      ;; filename of character ROM
+  3190  b290 43484152524f4d2e...txt_CHARROMM65:         !text "CHARROM.M65"
+  3191  b29b 00                                         !8 0
+  3192                          
+  3193                                      ;; filename of ROM we want to load in FAT directory format
+  3194                                      ;; (the two zero bytes are so that we can insert an extra digit after
+  3195                                      ;; the 5, when a user presses a key, so that they can choose a
+  3196                                      ;; different ROM to load).
+  3197                                      ;;
+  3198  b29c 4d45474136352e52...txt_MEGA65ROM:          !text "MEGA65.ROM"
+  3199  b2a6 0000                                       !8 0,0
+  3200                          
+  3201                                      ;; filename of 1581 disk image we mount by default
+  3202                                      ;;
+  3203  b2a8 4d45474136352e44...txt_MEGA65D81:          !text "MEGA65.D81"
+  3204  b2b2 00000000000000                             !8 0,0,0,0,0,0,0
+  3205                          
+  3206                                      ;; filename of hyppo update file
+  3207                                      ;;
+  3208  b2b9 4849434b55502e4d...txt_HICKUPM65:          !text "HICKUP.M65"
+  3209  b2c3 00                                         !8 0
+  3210                          
+  3211                                      ;; filename containing boot logo
+  3212                                      ;;
+  3213  b2c4 42414e4e45522e4d...txt_BOOTLOGOM65:        !text "BANNER.M65"
+  3214  b2ce 00                                         !8 0
+  3215                          
+  3216                                      ;; filename containing freeze menu
+  3217  b2cf 465245455a45522e...txt_FREEZER:            !text "FREEZER.M65"
+  3218  b2da 00                                         !8 0
+  3219                          
+  3220                                      ;; If this file is present, then machine starts up with video
+  3221                                      ;; mode set to NTSC (60Hz), else as PAL (50Hz).
+  3222                                      ;; This is to allow us to boot in PAL by default, except for
+  3223                                      ;; those who have a monitor that cannot do 50Hz.
+  3224  b2db 4e545343           txt_NTSC:               !text "NTSC"
+  3225  b2df 00                                         !8 0
+  3226                          
+  3227                          ;;         ========================
+  3228                          
+  3229                          !if DEBUG_HYPPO {
+  3230                                  !src "debug.asm"
+  3231                          }
+  3232                          
+  3233                          ;;         ========================
+  3234                          
+  3235                                  ;; Table of available disks.
+  3236                                  ;; Include native FAT32 disks, as well as (in the future at least)
+  3237                                  ;; mounted .D41, .D71, .D81 and .DHD files using Commodore DOS filesystems.
+  3238                                  ;; But for now, we are supporting only FAT32 as the filesystem.
+  3239                                  ;; See hyppo_dos.asm for information on how the table is used.
+  3240                                  ;; Entries are 32 bytes long, so we can have 6 of them.
+  3241                                  ;;
+  3242                                  dos_max_disks = 6
+  3243                          
+  3244                                  ;; .segment DOSDiskTable
+  3245                                  * = DOSDiskTable_Start
+  3246                          dos_disk_table:
   3247                          
-  3248                          ;; For fast freezing/unfreezing, we have a number of contiguous
-  3249                          ;; freeze slots that can each store the state of the machine
-  3250                          ;; We note where the area begins, how big it is, how many slots
-  3251                          ;; it has, and how many sectors are used at the start of the area
-  3252                          ;; to hold a directory with 128 bytes per slot, the contains info
-  3253                          ;; about the frozen program.
-  3254                          syspart_freeze_area_start:
-  3255  bbd0 00000000                   !8 0,0,0,0
-  3256                          syspart_freeze_area_size_in_sectors:
-  3257  bbd4 00000000                   !8 0,0,0,0
-  3258                          syspart_freeze_slot_size_in_sectors:
-  3259  bbd8 00000000                   !8 0,0,0,0
-  3260                          syspart_freeze_slot_count:
-  3261  bbdc 0000                       !8 0,0
-  3262                          syspart_freeze_directory_sector_count:
-  3263  bbde 0000                       !8 0,0
-  3264                          
-  3265                                  ;; The first 64 freeze slots are reserved for various purposes
-  3266                                 syspart_freeze_slots_reserved  = 64
-  3267                                  ;; Freeze slot 0 is used when the hypervisor needs to
-  3268                                  ;; temporarily shove all or part of the active process out
-  3269                                  ;; the way to do something
-  3270                                 freeze_slot_temporary = 0
-  3271                          
-  3272                                  ;; Freeze slots 1 - 63 are currently reserved
-  3273                                  ;; They will likely get used for a service call-stack
-  3274                                  ;; among other purposes.
-  3275                          
-  3276                                  ;; We then have a similar area for system services, which are stored
-  3277                                  ;; using much the same representation, but are used as helper
-  3278                                  ;; programs.
-  3279                          syspart_service_area_start:
-  3280  bbe0 00000000                   !8 0,0,0,0
-  3281                          syspart_service_area_size_in_bytes:
-  3282  bbe4 00000000                   !8 0,0,0,0
-  3283                          syspart_service_slot_size_in_bytes:
-  3284  bbe8 00000000                   !8 0,0,0,0
-  3285                          syspart_service_slot_count:
-  3286  bbec 0000                       !8 0,0
-  3287                          syspart_service_directory_sector_count:
-  3288  bbee 0000                       !8 0,0
-  3289                          
-  3290                          ;; /*  -------------------------------------------------------------------
-  3291                          ;;     Hypervisor DOS work area and scratch pad at $BC00-$BCFF
-  3292                          ;;     ---------------------------------------------------------------- */
-  3293                          
-  3294                                  ;; .segment DOSWorkArea
-  3295                                  * = DOSWorkArea_Start
-  3296                          
-  3297                          hyppo_scratchbyte0:
-  3298  bc00 00                         !8 $00
-  3299                          
-  3300                                  ;; The number of disks we have
-  3301                                  ;;
-  3302                          dos_disk_count:
-  3303  bc01 00                         !8 $00
-  3304                          
-  3305                                  ;; The default disk
-  3306                                  ;;
-  3307                          dos_default_disk:
-  3308  bc02 00                         !8 $00
-  3309                          
-  3310                                  ;; The current disk
-  3311                                  ;;
-  3312                          dos_disk_current_disk:
-  3313  bc03 00                         !8 $00
-  3314                          
-  3315                                  ;; Offset of current disk entry in disk table
-  3316                                  ;;
-  3317                          dos_disk_table_offset:
-  3318  bc04 00                         !8 $00
-  3319                          
-  3320                                  ;; cluster of current directory of current disk
-  3321                                  ;;
-  3322                          dos_disk_cwd_cluster:
-  3323  bc05 00000000                   !8 0,0,0,0
-  3324                          
-  3325                          ;;         ========================
+  3248                                  ;; .segment SysPartStructure
+  3249                                  * = SysPartStructure_Start
+  3250                          
+  3251                          syspart_structure:
+  3252                          
+  3253                          syspart_start_sector:
+  3254  bbc0 00000000                   !8 0,0,0,0
+  3255                          syspart_size_in_sectors:
+  3256  bbc4 00000000                   !8 0,0,0,0
+  3257                          syspart_reserved:
+  3258  bbc8 0000000000000000           !8 0,0,0,0,0,0,0,0
+  3259                          
+  3260                          ;; For fast freezing/unfreezing, we have a number of contiguous
+  3261                          ;; freeze slots that can each store the state of the machine
+  3262                          ;; We note where the area begins, how big it is, how many slots
+  3263                          ;; it has, and how many sectors are used at the start of the area
+  3264                          ;; to hold a directory with 128 bytes per slot, the contains info
+  3265                          ;; about the frozen program.
+  3266                          syspart_freeze_area_start:
+  3267  bbd0 00000000                   !8 0,0,0,0
+  3268                          syspart_freeze_area_size_in_sectors:
+  3269  bbd4 00000000                   !8 0,0,0,0
+  3270                          syspart_freeze_slot_size_in_sectors:
+  3271  bbd8 00000000                   !8 0,0,0,0
+  3272                          syspart_freeze_slot_count:
+  3273  bbdc 0000                       !8 0,0
+  3274                          syspart_freeze_directory_sector_count:
+  3275  bbde 0000                       !8 0,0
+  3276                          
+  3277                                  ;; The first 64 freeze slots are reserved for various purposes
+  3278                                 syspart_freeze_slots_reserved  = 64
+  3279                                  ;; Freeze slot 0 is used when the hypervisor needs to
+  3280                                  ;; temporarily shove all or part of the active process out
+  3281                                  ;; the way to do something
+  3282                                 freeze_slot_temporary = 0
+  3283                          
+  3284                                  ;; Freeze slots 1 - 63 are currently reserved
+  3285                                  ;; They will likely get used for a service call-stack
+  3286                                  ;; among other purposes.
+  3287                          
+  3288                                  ;; We then have a similar area for system services, which are stored
+  3289                                  ;; using much the same representation, but are used as helper
+  3290                                  ;; programs.
+  3291                          syspart_service_area_start:
+  3292  bbe0 00000000                   !8 0,0,0,0
+  3293                          syspart_service_area_size_in_bytes:
+  3294  bbe4 00000000                   !8 0,0,0,0
+  3295                          syspart_service_slot_size_in_bytes:
+  3296  bbe8 00000000                   !8 0,0,0,0
+  3297                          syspart_service_slot_count:
+  3298  bbec 0000                       !8 0,0
+  3299                          syspart_service_directory_sector_count:
+  3300  bbee 0000                       !8 0,0
+  3301                          
+  3302                          ;; /*  -------------------------------------------------------------------
+  3303                          ;;     Hypervisor DOS work area and scratch pad at $BC00-$BCFF
+  3304                          ;;     ---------------------------------------------------------------- */
+  3305                          
+  3306                                  ;; .segment DOSWorkArea
+  3307                                  * = DOSWorkArea_Start
+  3308                          
+  3309                          hyppo_scratchbyte0:
+  3310  bc00 00                         !8 $00
+  3311                          
+  3312                                  ;; The number of disks we have
+  3313                                  ;;
+  3314                          dos_disk_count:
+  3315  bc01 00                         !8 $00
+  3316                          
+  3317                                  ;; The default disk
+  3318                                  ;;
+  3319                          dos_default_disk:
+  3320  bc02 00                         !8 $00
+  3321                          
+  3322                                  ;; The current disk
+  3323                                  ;;
+  3324                          dos_disk_current_disk:
+  3325  bc03 00                         !8 $00
   3326                          
-  3327                                  ;; Current point in open directory
+  3327                                  ;; Offset of current disk entry in disk table
   3328                                  ;;
-  3329                          dos_opendir_cluster:
-  3330  bc09 00000000                   !8 0,0,0,0
-  3331                          dos_opendir_sector:
-  3332  bc0d 00                         !8 0
-  3333                          dos_opendir_entry:
-  3334  bc0e 00                         !8 0
-  3335                          
-  3336                          ;;         ========================
-  3337                          
-  3338                                  ;; WARNING: dos_readdir_read_next_entry uses carnal knowledge about the following
-  3339                                  ;;          structure, particularly the length as calculated here:
+  3329                          dos_disk_table_offset:
+  3330  bc04 00                         !8 $00
+  3331                          
+  3332                                  ;; cluster of current directory of current disk
+  3333                                  ;;
+  3334                          dos_disk_cwd_cluster:
+  3335  bc05 00000000                   !8 0,0,0,0
+  3336                          
+  3337                          ;;         ========================
+  3338                          
+  3339                                  ;; Current point in open directory
   3340                                  ;;
-  3341                                  dos_dirent_structure_length = dos_dirent_struct_end - dos_dirent_struct_start
-  3342                          
-  3343                                  ;; Current long filename (max 64 bytes)
-  3344                                  ;;
-  3345                          dos_dirent_struct_start:	
-  3346                          dos_dirent_longfilename:
-  3347  bc0f 56656e657a75616c...        !text "Venezualen casaba melon productio" ;; 33-chars
-  3348  bc30 6e20737461746973...        !text "n statistics (2012-2015).txt  "    ;; 30-chars
-  3349  bc4e 00                         !8 0
-  3350                          
-  3351                          dos_dirent_longfilename_length:
-  3352  bc4f 00                         !8 0
-  3353                          
-  3354                          dos_dirent_shortfilename:
-  3355  bc50 46494c454e414d45...        !text "FILENAME.EXT"
-  3356  bc5c 00                         !8 0
-  3357                          
-  3358                          dos_dirent_cluster:
-  3359  bc5d 00000000                   !8 0,0,0,0
-  3360                          
-  3361                          dos_dirent_length:
-  3362  bc61 00000000                   !8 0,0,0,0
-  3363                          
-  3364                          dos_dirent_type_and_attribs:
-  3365  bc65 00                         !8 0
-  3366                          dos_dirent_struct_end:	
-  3367                          
-  3368                          ;;         ========================
+  3341                          dos_opendir_cluster:
+  3342  bc09 00000000                   !8 0,0,0,0
+  3343                          dos_opendir_sector:
+  3344  bc0d 00                         !8 0
+  3345                          dos_opendir_entry:
+  3346  bc0e 00                         !8 0
+  3347                          
+  3348                          ;;         ========================
+  3349                          
+  3350                                  ;; WARNING: dos_readdir_read_next_entry uses carnal knowledge about the following
+  3351                                  ;;          structure, particularly the length as calculated here:
+  3352                                  ;;
+  3353                                  dos_dirent_structure_length = dos_dirent_struct_end - dos_dirent_struct_start
+  3354                          
+  3355                                  ;; Current long filename (max 64 bytes)
+  3356                                  ;;
+  3357                          dos_dirent_struct_start:
+  3358                          dos_dirent_longfilename:
+  3359  bc0f 56656e657a75616c...        !text "Venezualen casaba melon productio" ;; 33-chars
+  3360  bc30 6e20737461746973...        !text "n statistics (2012-2015).txt  "    ;; 30-chars
+  3361  bc4e 00                         !8 0
+  3362                          
+  3363                          dos_dirent_longfilename_length:
+  3364  bc4f 00                         !8 0
+  3365                          
+  3366                          dos_dirent_shortfilename:
+  3367  bc50 46494c454e414d45...        !text "FILENAME.EXT"
+  3368  bc5c 00                         !8 0
   3369                          
-  3370                                  ;; Requested file name and length
-  3371                                  ;;
-  3372                          dos_requested_filename_len:
-  3373  bc66 00                         !8 0
-  3374                          
-  3375                          dos_requested_filename:
-  3376  bc67 56656e657a75616c...        !text "Venezualen casaba melon productio"
-  3377  bc88 6e20737461746973...        !text "n statistics (2007-2011).txt     "
-  3378                          
-  3379                          ;;         ========================
-  3380                          
-  3381                                  ;; Details about current DOS request
-  3382                                  ;;
-  3383  bca9 0000               dos_sectorsread:                !16 0
-  3384  bcab 00000000           dos_bytes_remaining:            !16 0,0
-  3385  bcaf 00000000           dos_current_sector:             !16 0,0
-  3386  bcb3 00000000           dos_current_cluster:            !16 0,0
-  3387  bcb7 00                 dos_current_sector_in_cluster:  !8 0
-  3388                          
-  3389                          ;; Current file descriptors
-  3390                          ;; Each descriptor has:
-  3391                          ;;   disk id : 1 byte ($00-$07 = file open, $FF = file closed)
-  3392                          ;;   access mode : 1 byte ($00 = read only)
-  3393                          ;;   start cluster : 4 bytes
-  3394                          ;;   current cluster : 4 bytes
-  3395                          ;;   current sector in cluster : 1 byte
-  3396                          ;;   offset in sector: 2 bytes
-  3397                          ;;   file offset / $100 : 3 bytes
-  3398                          ;;
-  3399                                  dos_filedescriptor_max = 4
-  3400                                  dos_filedescriptor_offset_diskid = 0
-  3401                                  dos_filedescriptor_offset_mode = 1
-  3402                                  dos_filedescriptor_offset_startcluster = 2
-  3403                                  dos_filedescriptor_offset_currentcluster = 6
-  3404                          ;;
-  3405                          ;; These last three fields must be contiguous, as dos_open_current_file
-  3406                          ;; relies on it.
-  3407                          ;;
-  3408                                  dos_filedescriptor_offset_sectorincluster = 10
-  3409                                  dos_filedescriptor_offset_offsetinsector = 11
-  3410                                  dos_filedescriptor_offset_fileoffset = 13
-  3411                          
-  3412                          dos_file_descriptors:
-  3413  bcb8 ff00000000000000...        !8 $FF,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0        ;; each is 16 bytes
-  3414  bcc8 ff00000000000000...        !8 $FF,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-  3415  bcd8 ff00000000000000...        !8 $FF,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-  3416  bce8 ff00000000000000...        !8 $FF,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
-  3417                          
-  3418                              ;; The current file descriptor
-  3419                              ;;
-  3420                          dos_current_file_descriptor:
-  3421  bcf8 00                         !8 0
-  3422                          
-  3423                              ;; Offset of current file descriptor
-  3424                              ;;
-  3425                          dos_current_file_descriptor_offset:
-  3426  bcf9 00                         !8 0
-  3427                          
-  3428                          ;;         ========================
+  3370                          dos_dirent_cluster:
+  3371  bc5d 00000000                   !8 0,0,0,0
+  3372                          
+  3373                          dos_dirent_length:
+  3374  bc61 00000000                   !8 0,0,0,0
+  3375                          
+  3376                          dos_dirent_type_and_attribs:
+  3377  bc65 00                         !8 0
+  3378                          dos_dirent_struct_end:
+  3379                          
+  3380                          ;;         ========================
+  3381                          
+  3382                                  ;; Requested file name and length
+  3383                                  ;;
+  3384                          dos_requested_filename_len:
+  3385  bc66 00                         !8 0
+  3386                          
+  3387                          dos_requested_filename:
+  3388  bc67 56656e657a75616c...        !text "Venezualen casaba melon productio"
+  3389  bc88 6e20737461746973...        !text "n statistics (2007-2011).txt     "
+  3390                          
+  3391                          ;;         ========================
+  3392                          
+  3393                                  ;; Details about current DOS request
+  3394                                  ;;
+  3395  bca9 0000               dos_sectorsread:                !16 0
+  3396  bcab 00000000           dos_bytes_remaining:            !16 0,0
+  3397  bcaf 00000000           dos_current_sector:             !16 0,0
+  3398  bcb3 00000000           dos_current_cluster:            !16 0,0
+  3399  bcb7 00                 dos_current_sector_in_cluster:  !8 0
+  3400                          
+  3401                          ;; Current file descriptors
+  3402                          ;; Each descriptor has:
+  3403                          ;;   disk id : 1 byte ($00-$07 = file open, $FF = file closed)
+  3404                          ;;   access mode : 1 byte ($00 = read only)
+  3405                          ;;   start cluster : 4 bytes
+  3406                          ;;   current cluster : 4 bytes
+  3407                          ;;   current sector in cluster : 1 byte
+  3408                          ;;   offset in sector: 2 bytes
+  3409                          ;;   file offset / $100 : 3 bytes
+  3410                          ;;
+  3411                                  dos_filedescriptor_max = 4
+  3412                                  dos_filedescriptor_offset_diskid = 0
+  3413                                  dos_filedescriptor_offset_mode = 1
+  3414                                  dos_filedescriptor_offset_startcluster = 2
+  3415                                  dos_filedescriptor_offset_currentcluster = 6
+  3416                          ;;
+  3417                          ;; These last three fields must be contiguous, as dos_open_current_file
+  3418                          ;; relies on it.
+  3419                          ;;
+  3420                                  dos_filedescriptor_offset_sectorincluster = 10
+  3421                                  dos_filedescriptor_offset_offsetinsector = 11
+  3422                                  dos_filedescriptor_offset_fileoffset = 13
+  3423                          
+  3424                          dos_file_descriptors:
+  3425  bcb8 ff00000000000000...        !8 $FF,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0        ;; each is 16 bytes
+  3426  bcc8 ff00000000000000...        !8 $FF,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+  3427  bcd8 ff00000000000000...        !8 $FF,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
+  3428  bce8 ff00000000000000...        !8 $FF,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0
   3429                          
-  3430                              ;; For providing feedback on why DOS calls have failed
-  3431                              ;; There is a set of error codes defined in hyppo_dos.asm
-  3432                          dos_error_code:
-  3433  bcfa 00                         !8 $00
+  3430                              ;; The current file descriptor
+  3431                              ;;
+  3432                          dos_current_file_descriptor:
+  3433  bcf8 00                         !8 0
   3434                          
-  3435                              ;; Similarly for system partition related errors
-  3436                          syspart_error_code:
-  3437  bcfb 00                         !8 $00
-  3438                          
-  3439                              ;; Non-zero if there is a valid system partition
-  3440                          syspart_present:
-  3441  bcfc 00                         !8 $00
-  3442                          
-  3443                          ;; /*  -------------------------------------------------------------------
-  3444                          ;;     Reserved space for Hypervisor Process work area $BD00-$BDFF
-  3445                          ;;     ---------------------------------------------------------------- */
-  3446                                  ;; .segment ProcessDescriptors
-  3447                                  * = ProcessDescriptors_Start
-  3448                          
+  3435                              ;; Offset of current file descriptor
+  3436                              ;;
+  3437                          dos_current_file_descriptor_offset:
+  3438  bcf9 00                         !8 0
+  3439                          
+  3440                          ;;         ========================
+  3441                          
+  3442                              ;; For providing feedback on why DOS calls have failed
+  3443                              ;; There is a set of error codes defined in hyppo_dos.asm
+  3444                          dos_error_code:
+  3445  bcfa 00                         !8 $00
+  3446                          
+  3447                              ;; Similarly for system partition related errors
+  3448                          syspart_error_code:
+  3449  bcfb 00                         !8 $00
+  3450                          
+  3451                              ;; Non-zero if there is a valid system partition
+  3452                          syspart_present:
+  3453  bcfc 00                         !8 $00
+  3454                          
+  3455                          ;; /*  -------------------------------------------------------------------
+  3456                          ;;     Reserved space for Hypervisor Process work area $BD00-$BDFF
+  3457                          ;;     ---------------------------------------------------------------- */
+  3458                                  ;; .segment ProcessDescriptors
+  3459                                  * = ProcessDescriptors_Start
+  3460                          
 
 ; ******** Source: process_descriptor.asm
      1                          ;; /*  -------------------------------------------------------------------
@@ -11635,95 +11646,95 @@
    125                          
 
 ; ******** Source: src/hyppo/main.asm
-  3450                          
-  3451                          
-  3452                          
-  3453                          ;; /*  -------------------------------------------------------------------
-  3454                          ;;     Reserved space for Hyppo ZP at $BF00-$BFFF
-  3455                          ;;     ---------------------------------------------------------------- */
-  3456                                  ;; .segment HyppoZP
-  3457                                  * = HyppoZP_Start
-  3458                          
-  3459                                  ;; Temporary vector storage for DOS
-  3460                                  ;;
-  3461                          dos_scratch_vector:
-  3462  bf00 00000000                   !16 0,0
-  3463                          dos_scratch_byte_1:
-  3464  bf04 00                         !8 0
-  3465                          dos_scratch_byte_2:
-  3466  bf05 00                         !8 0
-  3467                          
-  3468                                  ;; Vectors for copying data between hypervisor and user-space
-  3469                                  ;;
-  3470                          hypervisor_userspace_copy_vector:
-  3471  bf06 0000                       !16 0
-  3472                          
-  3473                                  ;; general hyppo temporary variables
-  3474                                  ;;
-  3475                          zptempv:
-  3476  bf08 0000                       !16 0
-  3477                          zptempv2:
-  3478  bf0a 0000                       !16 0
-  3479                          zptempp:
-  3480  bf0c 0000                       !16 0
-  3481                          zptempp2:
-  3482  bf0e 0000                       !16 0
-  3483                          zptempv32:
-  3484  bf10 00000000                   !16 0,0
-  3485                          zptempv32b:
-  3486  bf14 00000000                   !16 0,0
-  3487                          dos_file_loadaddress:
-  3488  bf18 00000000                   !16 0,0
-  3489                          
-  3490                          !if DEBUG_HYPPO {
-  3491                                  ;; Used for checkpoint debug system of hypervisor
-  3492                                  ;;
-  3493                          checkpoint_a:
-  3494                                  !8 0
-  3495                          checkpoint_x:
-  3496                                  !8 0
-  3497                          checkpoint_y:
-  3498                                  !8 0
-  3499                          checkpoint_z:
-  3500                                  !8 0
-  3501                          checkpoint_p:
-  3502                                  !8 0
-  3503                          checkpoint_pcl:
-  3504                                  !8 0
-  3505                          checkpoint_pch:
+  3462                          
+  3463                          
+  3464                          
+  3465                          ;; /*  -------------------------------------------------------------------
+  3466                          ;;     Reserved space for Hyppo ZP at $BF00-$BFFF
+  3467                          ;;     ---------------------------------------------------------------- */
+  3468                                  ;; .segment HyppoZP
+  3469                                  * = HyppoZP_Start
+  3470                          
+  3471                                  ;; Temporary vector storage for DOS
+  3472                                  ;;
+  3473                          dos_scratch_vector:
+  3474  bf00 00000000                   !16 0,0
+  3475                          dos_scratch_byte_1:
+  3476  bf04 00                         !8 0
+  3477                          dos_scratch_byte_2:
+  3478  bf05 00                         !8 0
+  3479                          
+  3480                                  ;; Vectors for copying data between hypervisor and user-space
+  3481                                  ;;
+  3482                          hypervisor_userspace_copy_vector:
+  3483  bf06 0000                       !16 0
+  3484                          
+  3485                                  ;; general hyppo temporary variables
+  3486                                  ;;
+  3487                          zptempv:
+  3488  bf08 0000                       !16 0
+  3489                          zptempv2:
+  3490  bf0a 0000                       !16 0
+  3491                          zptempp:
+  3492  bf0c 0000                       !16 0
+  3493                          zptempp2:
+  3494  bf0e 0000                       !16 0
+  3495                          zptempv32:
+  3496  bf10 00000000                   !16 0,0
+  3497                          zptempv32b:
+  3498  bf14 00000000                   !16 0,0
+  3499                          dos_file_loadaddress:
+  3500  bf18 00000000                   !16 0,0
+  3501                          
+  3502                          !if DEBUG_HYPPO {
+  3503                                  ;; Used for checkpoint debug system of hypervisor
+  3504                                  ;;
+  3505                          checkpoint_a:
   3506                                  !8 0
-  3507                          }
-  3508                          
-  3509                                  ;; SD card timeout handling
-  3510                                  ;;
-  3511                          sdcounter:
-  3512  bf1c 000000                     !8 0,0,0
-  3513                          
-  3514                          ;; /*  -------------------------------------------------------------------
-  3515                          ;;     Scratch space in ZP space usually used by kernel
-  3516                          ;;     we try to use address space not normally used by C64 kernel, so
-  3517                          ;;     that it is possible to make calls to hyppo after boot. Eventually
-  3518                          ;;     the desire is to have an SYS call that brings up a menu that lets
-  3519                          ;;     you choose a disk image from a list.
-  3520                          ;;     ---------------------------------------------------------------- */
-  3521                          
-  3522                          romslab:
-  3523  bf1f 00                         !8 0
-  3524                          screenrow:
-  3525  bf20 00                         !8 0
-  3526                          checksum:
-  3527  bf21 00000000                   !32 0
-  3528                          file_pagesread:
-  3529  bf25 0000                       !16 0
-  3530                          
-  3531                                  ;; Variables for testing of D81 boot image
-  3532                          d81_clusternumber:
-  3533  bf27 00000000                   !32 0
-  3534                          d81_clustersneeded:
-  3535  bf2b 0000                       !16 0
-  3536                          d81_clustercount:
-  3537  bf2d 0000                       !16 0
-  3538                          
-  3539                          	;; Make sure we pad to full size
-  3540                          	* = Hyppo_End
-  3541  bfff 00                 	!8 0
+  3507                          checkpoint_x:
+  3508                                  !8 0
+  3509                          checkpoint_y:
+  3510                                  !8 0
+  3511                          checkpoint_z:
+  3512                                  !8 0
+  3513                          checkpoint_p:
+  3514                                  !8 0
+  3515                          checkpoint_pcl:
+  3516                                  !8 0
+  3517                          checkpoint_pch:
+  3518                                  !8 0
+  3519                          }
+  3520                          
+  3521                                  ;; SD card timeout handling
+  3522                                  ;;
+  3523                          sdcounter:
+  3524  bf1c 000000                     !8 0,0,0
+  3525                          
+  3526                          ;; /*  -------------------------------------------------------------------
+  3527                          ;;     Scratch space in ZP space usually used by kernel
+  3528                          ;;     we try to use address space not normally used by C64 kernel, so
+  3529                          ;;     that it is possible to make calls to hyppo after boot. Eventually
+  3530                          ;;     the desire is to have an SYS call that brings up a menu that lets
+  3531                          ;;     you choose a disk image from a list.
+  3532                          ;;     ---------------------------------------------------------------- */
+  3533                          
+  3534                          romslab:
+  3535  bf1f 00                         !8 0
+  3536                          screenrow:
+  3537  bf20 00                         !8 0
+  3538                          checksum:
+  3539  bf21 00000000                   !32 0
+  3540                          file_pagesread:
+  3541  bf25 0000                       !16 0
+  3542                          
+  3543                                  ;; Variables for testing of D81 boot image
+  3544                          d81_clusternumber:
+  3545  bf27 00000000                   !32 0
+  3546                          d81_clustersneeded:
+  3547  bf2b 0000                       !16 0
+  3548                          d81_clustercount:
+  3549  bf2d 0000                       !16 0
+  3550                          
+  3551                          	;; Make sure we pad to full size
+  3552                          	* = Hyppo_End
+  3553  bfff 00                 	!8 0
