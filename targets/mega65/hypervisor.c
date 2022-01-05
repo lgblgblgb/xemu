@@ -603,6 +603,7 @@ void hypervisor_debug ( void )
 		DEBUG("HYPERDEBUG: allowed to run outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu65.pc);
 		return;
 	}
+	static const unsigned int io_mode_xlat[4] = {2, 3, 0, 4};
 	static Uint16 prev_sp = 0xBEFF;
 	static int prev_pc = 0;
 	static int do_execution_range_check = 1;
@@ -621,6 +622,8 @@ void hypervisor_debug ( void )
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without SPHI == $BE but $%02X" NL, cpu65.sphi >> 8);
 		if (XEMU_UNLIKELY(cpu65.bphi != 0xBF00))
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without BPHI == $BF but $%02X" NL, cpu65.bphi >> 8);
+		if (XEMU_UNLIKELY(vic_iomode != 3))	// "3" means VIC-4 I/O mode. See "io_mode_xlat" definition above.
+			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory with VIC I/O mode of %d" NL, io_mode_xlat[vic_iomode]);
 	}
 	const Uint16 now_sp = cpu65.sphi | cpu65.s;
 	int sp_diff = (int)prev_sp - (int)now_sp;
@@ -666,7 +669,6 @@ void hypervisor_debug ( void )
 	// WARNING: as it turned out, using stdio I/O to log every opcodes even "only" at ~3.5MHz rate makes emulation _VERY_ slow ...
 	if (hypervisor_is_debugged) {
 		const Uint8 pf = cpu65_get_pf();
-		static const unsigned int io_mode_xlat[4] = {2, 3, 0, 4};
 		fprintf(
 			debug_fp ? debug_fp : stdout,
 			"HYPERDEBUG: PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%u @ %s:%d %s+$%X | %s" NL,
