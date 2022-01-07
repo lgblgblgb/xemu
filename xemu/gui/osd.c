@@ -84,7 +84,7 @@ void osd_clear ( void )
 }
 
 
-void osd_update ()
+void osd_update ( void )
 {
 	if (osd.enabled) {
 		DEBUG("OSD: osd_update() called." NL);

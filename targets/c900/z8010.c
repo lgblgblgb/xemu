@@ -35,11 +35,11 @@ static Uint8  segment_attributes[64];
 static Uint8  mode,sar,dsc;
 
 
-void z8010_init ()
+void z8010_init ( void )
 {
 }
 
-void z8010_reset ()
+void z8010_reset ( void )
 {
 	for (int a = 0; a < 64; a++) {
 		segment_bases[a] = 0;

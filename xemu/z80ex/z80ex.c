@@ -153,7 +153,7 @@ int z80ex_step(void)
 }
 
 
-void z80ex_reset()
+void z80ex_reset ( void )
 {
 	PC = 0x0000; IFF1 = IFF2 = 0; IM = IM0;
 	AF= SP = BC = DE = HL = IX = IY = AF_ = BC_ = DE_ = HL_ = 0xffff;
