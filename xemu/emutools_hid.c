@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -559,7 +559,7 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 			break;
 #ifdef CONFIG_KBD_ALSO_TEXTEDITING_SDL_CALLBACK
 		case SDL_TEXTEDITING:
-			emu_callback_key_texteditng_sdl(&event->edit);
+			emu_callback_key_textediting_sdl(&event->edit);
 			break;
 #endif
 #ifdef CONFIG_KBD_ALSO_TEXTINPUT_SDL_CALLBACK

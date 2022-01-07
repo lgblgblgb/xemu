@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -59,8 +59,8 @@ extern int  emu_callback_key		( int pos, SDL_Scancode key, int pressed, int hand
 extern void emu_dropfile_callback	( const char *fn );
 extern void emu_quit_callback		( void );
 extern void emu_callback_key_raw_sdl	( SDL_KeyboardEvent *ev );
-extern void emu_callback_key_texteditng_sdl ( SDL_TextEditingEvent *ev );
-extern void emu_callback_key_textinput_sdl  ( SDL_TextInputEvent   *ev );
+extern void emu_callback_key_textediting_sdl ( SDL_TextEditingEvent *ev );
+extern void emu_callback_key_textinput_sdl   ( SDL_TextInputEvent   *ev );
 
 extern void hid_sdl_synth_key_event	( int matrix_pos, int is_press );
 
