@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -54,6 +54,11 @@ static Uint8 virtual_shift_pos = 0;
 static struct KeyMappingUsed key_map[0x100];
 static const struct KeyMappingDefault *key_map_default;
 static int release_this_key_on_first_event = -1;
+
+// Custom callbacks
+static hid_sdl_keyboard_event_callback_t    sdl_keyboard_event_cb    = NULL, sdl_keyboard_event_master_cb    = NULL;
+static hid_sdl_textediting_event_callback_t sdl_textediting_event_cb = NULL, sdl_textediting_event_master_cb = NULL;
+static hid_sdl_textinput_event_callback_t   sdl_textinput_event_cb   = NULL, sdl_textinput_event_master_cb   = NULL;
 
 
 void hid_set_autoreleased_key ( int key )
@@ -520,11 +525,16 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 				&& !(event->key.keysym.scancode == SDL_SCANCODE_TAB && (event->key.keysym.mod & KMOD_LALT))
 #endif
 			) {
-#ifdef CONFIG_KBD_ALSO_RAW_SDL_CALLBACK
 				// Note: if this one is requested, it is fired even on key repeats, while the normal
 				// HID callback may NOT!
-				emu_callback_key_raw_sdl(&event->key);
-#endif
+				if (sdl_keyboard_event_master_cb) {
+					if (!sdl_keyboard_event_master_cb(&event->key))
+						break;
+				}
+				if (sdl_keyboard_event_cb) {
+					if (!sdl_keyboard_event_cb(&event->key))
+						break;
+				}
 #ifndef CONFIG_KBD_ALSO_REPEATS
 				if (event->key.repeat == 0)
 #endif
@@ -557,16 +567,26 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 			else
 				emu_callback_key(-2, 0, event->type == SDL_MOUSEBUTTONDOWN, event->button.button);
 			break;
-#ifdef CONFIG_KBD_ALSO_TEXTEDITING_SDL_CALLBACK
 		case SDL_TEXTEDITING:
-			emu_callback_key_texteditng_sdl(&event->edit);
+			if (sdl_textediting_event_master_cb) {
+				if (!sdl_textediting_event_master_cb(&event->edit))
+					break;
+			}
+			if (sdl_textediting_event_cb) {
+				if (!sdl_textediting_event_cb(&event->edit))
+					break;
+			}
 			break;
-#endif
-#ifdef CONFIG_KBD_ALSO_TEXTINPUT_SDL_CALLBACK
 		case SDL_TEXTINPUT:
-			emu_callback_key_textinput_sdl(&event->text);
+			if (sdl_textinput_event_master_cb) {
+				if (!sdl_textinput_event_master_cb(&event->text))
+					break;
+			}
+			if (sdl_textinput_event_cb) {
+				if (!sdl_textinput_event_cb(&event->text))
+					break;
+			}
 			break;
-#endif
 		default:
 			handled = 0;
 			break;
@@ -582,4 +602,30 @@ void hid_handle_all_sdl_events ( void )
 	while (SDL_PollEvent(&event) != 0)
 		hid_handle_one_sdl_event(&event);
 
+}
+
+
+void hid_register_sdl_keyboard_event_callback           ( hid_sdl_keyboard_event_callback_t    cb )
+{
+	sdl_keyboard_event_cb = cb;
+}
+void hid_register_sdl_textediting_event_callback        ( hid_sdl_textediting_event_callback_t cb )
+{
+	sdl_textediting_event_cb = cb;
+}
+void hid_register_sdl_textinput_event_callback          ( hid_sdl_textinput_event_callback_t   cb )
+{
+	sdl_textinput_event_cb = cb;
+}
+void hid_register_master_sdl_keyboard_event_callback    ( hid_sdl_keyboard_event_callback_t    cb )
+{
+	sdl_keyboard_event_master_cb = cb;
+}
+void hid_register_master_sdl_textediting_event_callback ( hid_sdl_textediting_event_callback_t cb )
+{
+	sdl_textediting_event_master_cb = cb;
+}
+void hid_register_master_textinput_event_callback       ( hid_sdl_textinput_event_callback_t   cb )
+{
+	sdl_textinput_event_master_cb = cb;
 }

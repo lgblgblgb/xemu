@@ -311,6 +311,7 @@ static void mega65_init ( void )
 		VIRTUAL_SHIFT_POS,
 		SDL_ENABLE		// joy HID events enabled
 	);
+	input_init();
 #ifdef HID_KBD_MAP_CFG_SUPPORT
 	hid_keymap_from_config_file(configdb.keymap);
 #endif

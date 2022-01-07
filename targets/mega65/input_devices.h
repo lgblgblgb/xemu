@@ -24,6 +24,7 @@ extern int in_the_matrix;
 extern void  clear_emu_events  ( void );
 extern Uint8 cia1_in_b         ( void );
 extern Uint8 cia1_in_a         ( void );
+extern void  input_init        ( void );
 extern int   emu_callback_key  ( int pos, SDL_Scancode key, int pressed, int handled );
 
 extern void  input_toggle_joy_emu  ( void );

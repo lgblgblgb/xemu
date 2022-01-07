@@ -61,12 +61,15 @@ void video_reset ( void )
 	video_clear();
 }
 
+#define cursor_line_start 10
+#define cursor_line_end   12
+
 
 void video_render_text_screen ( void )
 {
 	int tail;
 	Uint32 *pix = xemu_start_pixel_buffer_access(&tail);
-	Uint32 *pix_cursor = pix + current_x * 8 + current_y * 8 * 80 * 16;
+	Uint32 *pix_cursor = pix;
 	for (int y = 0; y < 25; y++) {
 		for (int raster = 0; raster < 16; raster++) {
 			uint8_t *vp = TEXT_SCREEN_SOURCE + y * 160;
@@ -77,12 +80,15 @@ void video_render_text_screen ( void )
 		}
 	}
 	static uint32_t cursor_phase = 0;
-	if (cursor_phase++ & 32)
-		for (int y = 0; y < 16; y++) {
+	if (cursor_phase++ & 16) {
+		const uint32_t colour = sdlpal[current_colour & 0xF];
+		pix_cursor += current_x * 8 + current_y * 8 * 80 * 16 + cursor_line_start * 80 * 8;
+		for (int y = cursor_line_start; y <= cursor_line_end; y++) {
 			for (int x = 0; x < 8; x++)
-				*pix_cursor++ = 0xFFFFFFFFU;
+				*pix_cursor++ = colour;
 			pix_cursor += 8 * 79;
 		}
+	}
 	xemu_update_screen();
 }
 

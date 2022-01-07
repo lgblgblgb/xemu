@@ -44,6 +44,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define CPU_OPS_PER_SEC		4000000
 //#define CPU_OPS_PER_SEC		REFRESH_RATE
 
+#define CPU_OPS_PER_RUN CPU_OPS_PER_SEC / REFRESH_RATE
+
 
 static const Uint8 init_pal[16 * 3] = {
 	  0,   0,   0,
@@ -174,10 +176,11 @@ void emu_quit_callback ( void )
 
 static void emulation_loop ( void )
 {
-#define CPU_OPS_PER_RUN CPU_OPS_PER_SEC / REFRESH_RATE
 	//DEBUGPRINT("Executing at %04X:%04X ops = %d" NL, X86_CS, X86_IP, CPU_OPS_PER_RUN);
 	uint32_t ret = exec86(CPU_OPS_PER_RUN);
 	//DEBUGPRINT("Executed %u ops" NL, ret);
+	if (ret != CPU_OPS_PER_RUN)
+		DEBUGPRINT("CPU discrepency, wanted %d ops, got %d" NL, CPU_OPS_PER_RUN, ret);
 
 	video_render_text_screen();
 	hid_handle_all_sdl_events();

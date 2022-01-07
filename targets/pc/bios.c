@@ -18,14 +18,17 @@ along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
-#include "xemu/emutools_files.h"
 #include "bios.h"
+
+#include "xemu/emutools_files.h"
+#include "xemu/emutools_hid.h"
 
 #include "cpu.h"
 #include "video.h"
 #include "memory.h"
 
 #include <time.h>
+#include <sys/time.h>
 
 
 // All should be >= 0x100 !!!!
@@ -497,14 +500,41 @@ static void go_wait ( void(*callback)(void) )
 }
 
 
-void emu_callback_key_raw_sdl ( SDL_KeyboardEvent *ev )
+static int emu_callback_key_raw_sdl ( SDL_KeyboardEvent *ev )
 {
 	if (ev->state == SDL_PRESSED) {
 		fprintf(stderr, "RAW EVENT! %d mod=%d\n", ev->keysym.sym, ev->keysym.mod);
-		if (ev->keysym.sym > 0 && ev->keysym.sym < 127)
+		if (ev->keysym.sym > 0 && ev->keysym.sym < 32) {
 			da_key = ev->keysym.sym;
+		}
 	}
+	static SDL_Keymod lastmod = 0;
+	if (ev->keysym.mod != lastmod) {
+		DEBUGPRINT("MODIFIER CHANGE: %u -> %u" NL, (uint32_t)lastmod, (uint32_t)ev->keysym.mod);
+		lastmod = ev->keysym.mod;
+	}
+	return 1;	// allow to run default handler
 }
+
+
+static int emu_callback_key_textediting_sdl ( SDL_TextEditingEvent *ev )
+{
+	fprintf(stderr, "TEXT EDIT EVENT: \"%s\"\n", ev->text);
+	if (ev->text[0])
+		fprintf(stderr, "******** WOW NOT ZERO STR ********\n");
+	return 1;	// allow to run default handler
+}
+
+
+static int emu_callback_key_textinput_sdl ( SDL_TextInputEvent *ev )
+{
+	fprintf(stderr, "TEXT INPUT EVENT: \"%s\"\n", ev->text);
+	const uint8_t c = ev->text[0];
+	if (c >= 32 && c < 128)
+		da_key = c;
+	return 1;	// allow to run default handler
+}
+
 
 static void wait_on_int16_00 ( void )
 {
@@ -553,6 +583,7 @@ int into_opcode ( void )
 			break;
 		default:
 			if (addr32 < 0x100) {
+				DEBUGPRINT("INTERRUPT: $%02X AH=$%02X" NL, addr32, X86_AH);
 				switch (addr32) {
 					case 0x10:
 						if (X86_AH == 0) {	// set video mode
@@ -671,18 +702,23 @@ int into_opcode ( void )
 					case 0x16:
 						//DEBUGPRINT("INT16H: function $%02X is called" NL, X86_AH);
 						if (X86_AH == 0) {		// get key with waiting.
-							go_wait(wait_on_int16_00);
+							go_wait(wait_on_int16_00);	// do NOT do iret86 when on_wait is used!!!!!!
+							return 0;	// !!!!
 						} else if (X86_AH == 1) {
 							iret86();
 							X86_CF = 0;
 							if (da_key) {
 								X86_ZF = 0;
 								X86_AX = da_key;
-							} else
+							} else {
 								X86_ZF = 1;	// no char in buffer if Z is set, interestingly if I do that, "Starting MS-DOS" hangs :-@
+								X86_AX = 0;	// null then?!
+							}
 						} else if (X86_AH == 2) {
 							iret86();
 							X86_AL = 0;		// keyboard status (modifier keys etc)
+							X86_ZF = 1;
+							X86_CF = 0;
 						} else if (X86_AH == 0x55) {	// some QBASIC TSR stuff ....
 							iret86();
 							X86_CF = 1;
@@ -701,25 +737,35 @@ int into_opcode ( void )
 						bios_int_19h_boot();
 						break;
 					case 0x1A:
+						DEBUGPRINT("INT1AH: calling function $%02X" NL, X86_AH);
 						iret86();
 						if (X86_AH == 0) {	// query time counter.
-							static uint32_t time_counter;
+							// calculate the timer IRQ frequency exactly starting the from NTSC carrier (315/88 MHz) was choosen as base even the
+							// clock of the first PC (around 4.77MHz)
+							static const double tick_hz = 315.0l/88.0l*4.0l/3.0l/4.0l/65536.0l*1000000.0l;
+							struct timeval tv;
+							gettimeofday(&tv, NULL);
+							//const time_t uts = time(NULL);
+							const time_t t = tv.tv_sec;	// this step is needed, since mingw drops some ugly warning if used directly :-/
+							const struct tm *tim = localtime(&t);
+							const uint32_t time_counter = (uint32_t)(double)((
+								(double)((uint32_t)tim->tm_hour * 3600 + tim->tm_min * 60 + tim->tm_sec) + (double)tv.tv_usec / 1000000.0l
+							) * tick_hz);
 							X86_DX = time_counter & 0xFFFF;
 							X86_CX = time_counter >> 16;
 							X86_AL = 0;
-							time_counter++;
 							X86_CF = 0;
 						} else if (X86_AH == 2) {	// real time clock read
-							time_t uts = time(NULL);
-							struct tm *tim = localtime(&uts);
+							const time_t uts = time(NULL);
+							const struct tm *tim = localtime(&uts);
 							X86_CH = TO_BCD(tim->tm_hour);
 							X86_CL = TO_BCD(tim->tm_min);
 							X86_DH = TO_BCD(tim->tm_sec);
 							X86_DL = 0;
 							X86_CF = 0;	// if set -> battery is flat ;)
 						} else if (X86_AH == 4) {       // real time clock read date
-							time_t uts = time(NULL);
-							struct tm *tim = localtime(&uts);
+							const time_t uts = time(NULL);
+							const struct tm *tim = localtime(&uts);
 							X86_CH = TO_BCD((tim->tm_year + 1900) / 100);
 							X86_CL = TO_BCD(tim->tm_year % 100);
 							X86_DH = TO_BCD(tim->tm_mon + 1);
@@ -756,6 +802,10 @@ int into_opcode ( void )
 
 void bios_init ( uint8_t *in_base_memory, uint8_t *in_rom_memory )
 {
+	static int init_done = 0;
+	if (init_done)
+		FATAL("%s() can be called only once!", __func__);
+	init_done = 1;
 	ram = in_base_memory;
 	rom = in_rom_memory;
 	memset(rom, 0, 0x10000);
@@ -764,4 +814,9 @@ void bios_init ( uint8_t *in_base_memory, uint8_t *in_rom_memory )
 	// Special traps
 	PUT_FAR_JMP(0xFFF0, BIOS_TRAP_RESET + TRAP_TABLE_START);	// reset vector at FFFF:0000 == F000:FFF0 should jump to the RESET trap
 	bios_reset();
+	// register special events from the HID layer
+	hid_register_sdl_keyboard_event_callback(emu_callback_key_raw_sdl);
+	hid_register_sdl_textediting_event_callback(emu_callback_key_textediting_sdl);
+	hid_register_sdl_textinput_event_callback(emu_callback_key_textinput_sdl);
+	SDL_StartTextInput();
 }
