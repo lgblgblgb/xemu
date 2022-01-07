@@ -389,5 +389,5 @@ Uint8 get_mouse_y_via_sid ( void )
 
 void input_init ( void )
 {
-	hid_register_sdl_keyboard_event_callback(emu_callback_key_raw_sdl);
+	hid_register_sdl_keyboard_event_callback(HID_CB_LEVEL_EMU, emu_callback_key_raw_sdl);
 }

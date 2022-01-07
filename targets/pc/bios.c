@@ -815,8 +815,8 @@ void bios_init ( uint8_t *in_base_memory, uint8_t *in_rom_memory )
 	PUT_FAR_JMP(0xFFF0, BIOS_TRAP_RESET + TRAP_TABLE_START);	// reset vector at FFFF:0000 == F000:FFF0 should jump to the RESET trap
 	bios_reset();
 	// register special events from the HID layer
-	hid_register_sdl_keyboard_event_callback(emu_callback_key_raw_sdl);
-	hid_register_sdl_textediting_event_callback(emu_callback_key_textediting_sdl);
-	hid_register_sdl_textinput_event_callback(emu_callback_key_textinput_sdl);
+	hid_register_sdl_keyboard_event_callback(HID_CB_LEVEL_EMU, emu_callback_key_raw_sdl);
+	hid_register_sdl_textediting_event_callback(HID_CB_LEVEL_EMU, emu_callback_key_textediting_sdl);
+	hid_register_sdl_textinput_event_callback(HID_CB_LEVEL_EMU, emu_callback_key_textinput_sdl);
 	SDL_StartTextInput();
 }

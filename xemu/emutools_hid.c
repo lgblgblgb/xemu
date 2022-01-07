@@ -56,9 +56,10 @@ static const struct KeyMappingDefault *key_map_default;
 static int release_this_key_on_first_event = -1;
 
 // Custom callbacks
-static hid_sdl_keyboard_event_callback_t    sdl_keyboard_event_cb    = NULL, sdl_keyboard_event_master_cb    = NULL;
-static hid_sdl_textediting_event_callback_t sdl_textediting_event_cb = NULL, sdl_textediting_event_master_cb = NULL;
-static hid_sdl_textinput_event_callback_t   sdl_textinput_event_cb   = NULL, sdl_textinput_event_master_cb   = NULL;
+#define HID_MAX_CUSTOM_CALLBACKS 3
+static hid_sdl_keyboard_event_callback_t    sdl_keyboard_event_cbs[HID_MAX_CUSTOM_CALLBACKS];
+static hid_sdl_textediting_event_callback_t sdl_textediting_event_cbs[HID_MAX_CUSTOM_CALLBACKS];
+static hid_sdl_textinput_event_callback_t   sdl_textinput_event_cbs[HID_MAX_CUSTOM_CALLBACKS];
 
 
 void hid_set_autoreleased_key ( int key )
@@ -280,7 +281,11 @@ void hid_init ( const struct KeyMappingDefault *key_map_in, Uint8 virtual_shift_
 		DEBUGPRINT("HID: warning, hid_init() was called key_map_in=NULL. This seems to be a FreeBSD specific bug, as far as I can tell from experience." NL);
 		return;
 	}
-	int a;
+	for (int a = 0; a < HID_MAX_CUSTOM_CALLBACKS; a++) {
+		sdl_keyboard_event_cbs[a] = NULL;
+		sdl_textediting_event_cbs[a] = NULL;
+		sdl_textinput_event_cbs[a] = NULL;
+	}
 #ifdef HID_KBD_MAP_CFG_SUPPORT
 	char kbdcfg[8192];
 	char *kp = kbdcfg + sprintf(kbdcfg,
@@ -299,7 +304,7 @@ void hid_init ( const struct KeyMappingDefault *key_map_in, Uint8 virtual_shift_
 		(KEYMAP_USER_FILENAME) + 1
 	);
 #endif
-	for (a = 0;;) {
+	for (int a = 0;;) {
 		if (a >= 0x100)
 			FATAL("Too long default keymapping table for hid_init()");
 		key_map[a].pos = key_map_in[a].pos;
@@ -491,6 +496,13 @@ int hid_read_mouse_button_right ( int on, int off )
 }
 
 
+#define TRY_CUSTOM_CALLBACKS(cbs,par) do { \
+	for (int i = 0; i < HID_MAX_CUSTOM_CALLBACKS; i++) \
+		if (cbs[i] && !cbs[i](par)) \
+			goto give_up; \
+} while(0)
+
+
 int hid_handle_one_sdl_event ( SDL_Event *event )
 {
 	int handled = 1;
@@ -527,14 +539,7 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 			) {
 				// Note: if this one is requested, it is fired even on key repeats, while the normal
 				// HID callback may NOT!
-				if (sdl_keyboard_event_master_cb) {
-					if (!sdl_keyboard_event_master_cb(&event->key))
-						break;
-				}
-				if (sdl_keyboard_event_cb) {
-					if (!sdl_keyboard_event_cb(&event->key))
-						break;
-				}
+				TRY_CUSTOM_CALLBACKS(sdl_keyboard_event_cbs, &event->key);
 #ifndef CONFIG_KBD_ALSO_REPEATS
 				if (event->key.repeat == 0)
 #endif
@@ -568,29 +573,16 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 				emu_callback_key(-2, 0, event->type == SDL_MOUSEBUTTONDOWN, event->button.button);
 			break;
 		case SDL_TEXTEDITING:
-			if (sdl_textediting_event_master_cb) {
-				if (!sdl_textediting_event_master_cb(&event->edit))
-					break;
-			}
-			if (sdl_textediting_event_cb) {
-				if (!sdl_textediting_event_cb(&event->edit))
-					break;
-			}
+			TRY_CUSTOM_CALLBACKS(sdl_textediting_event_cbs, &event->edit);
 			break;
 		case SDL_TEXTINPUT:
-			if (sdl_textinput_event_master_cb) {
-				if (!sdl_textinput_event_master_cb(&event->text))
-					break;
-			}
-			if (sdl_textinput_event_cb) {
-				if (!sdl_textinput_event_cb(&event->text))
-					break;
-			}
+			TRY_CUSTOM_CALLBACKS(sdl_textinput_event_cbs, &event->text);
 			break;
 		default:
 			handled = 0;
 			break;
 	}
+give_up:
 	return handled;
 }
 
@@ -601,31 +593,20 @@ void hid_handle_all_sdl_events ( void )
 	SDL_Event event;
 	while (SDL_PollEvent(&event) != 0)
 		hid_handle_one_sdl_event(&event);
-
 }
 
 
-void hid_register_sdl_keyboard_event_callback           ( hid_sdl_keyboard_event_callback_t    cb )
+void hid_register_sdl_keyboard_event_callback ( const unsigned int level, hid_sdl_keyboard_event_callback_t cb )
 {
-	sdl_keyboard_event_cb = cb;
+	sdl_keyboard_event_cbs[level] = cb;
 }
-void hid_register_sdl_textediting_event_callback        ( hid_sdl_textediting_event_callback_t cb )
+
+void hid_register_sdl_textediting_event_callback ( const unsigned int level, hid_sdl_textediting_event_callback_t cb )
 {
-	sdl_textediting_event_cb = cb;
+	sdl_textediting_event_cbs[level] = cb;
 }
-void hid_register_sdl_textinput_event_callback          ( hid_sdl_textinput_event_callback_t   cb )
+
+void hid_register_sdl_textinput_event_callback ( const unsigned int level, hid_sdl_textinput_event_callback_t cb )
 {
-	sdl_textinput_event_cb = cb;
-}
-void hid_register_master_sdl_keyboard_event_callback    ( hid_sdl_keyboard_event_callback_t    cb )
-{
-	sdl_keyboard_event_master_cb = cb;
-}
-void hid_register_master_sdl_textediting_event_callback ( hid_sdl_textediting_event_callback_t cb )
-{
-	sdl_textediting_event_master_cb = cb;
-}
-void hid_register_master_textinput_event_callback       ( hid_sdl_textinput_event_callback_t   cb )
-{
-	sdl_textinput_event_master_cb = cb;
+	sdl_textinput_event_cbs[level] = cb;
 }
