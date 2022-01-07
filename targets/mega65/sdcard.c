@@ -643,7 +643,7 @@ static void sdcard_command ( Uint8 cmd )
 {
 	static Uint32 multi_io_block;
 	static Uint8 sd_last_ok_cmd;
-	DEBUGPRINT("SDCARD: writing command register $D680 with $%02X PC=$%04X" NL, cmd, cpu65.pc);
+	DEBUG("SDCARD: writing command register $D680 with $%02X PC=$%04X" NL, cmd, cpu65.pc);
 	sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);	// ugly hack :-@
 	KEEP_BUSY(0);
 //	status_read_counter = 0;

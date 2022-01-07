@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern void  clear_emu_events  ( void );
 extern Uint8 cia1_in_b         ( void );
 extern Uint8 cia1_in_a         ( void );
+extern void  input_init        ( void );
 extern int   emu_callback_key  ( int pos, SDL_Scancode key, int pressed, int handled );
 
 extern void  input_toggle_joy_emu  ( void );

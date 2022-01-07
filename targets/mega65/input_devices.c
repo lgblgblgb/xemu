@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 #include "hypervisor.h"
 #include "ui.h"
+#include "matrix_mode.h"
 
 
 #define DEBUGKBD(...)		DEBUG(__VA_ARGS__)
@@ -269,26 +270,30 @@ static void kbd_trigger_alttab_trap ( void )
 	if (!in_hypervisor) {
 		DEBUGPRINT("KBD: ALT-TAB trap has been triggered." NL);
 		hypervisor_enter(TRAP_ALTTAB);
-	} else
+	} else {
+		matrix_external_msg_inject("Already in hypervisor, cannot accept matrix mode toggle trap!\n");
 		DEBUGPRINT("KBD: *IGNORING* ALT-TAB trap trigger, already in hypervisor mode!" NL);
+	}
 }
 
 
 /* BEGIN HACK */
 // Super ugly way to implement key repeats with the hardware accelerated ASCII based keyboard scanner.
 // Since rest of Xemu, the kbd-matrix emulation want to actually DISABLE any repeated key events to
-// come ... For this trick, xemu-target.h must contain: #define CONFIG_KBD_ALSO_RAW_SDL_CALLBACK
+// come ... For this trick, the emu_callback_key_raw_sdl() handler must be registered, which is done
+// in input_init() function.
 // TODO: this whole mess of the HID must be resolved some day in a much nicer way. Not only this
 // problem but in general (like decoding 'hotkeys' of emulator here in this file and things
 // like that ...)
 static SDL_Scancode last_scancode_seen = SDL_SCANCODE_UNKNOWN;
 static int last_poscode_seen = 0;
 
-void emu_callback_key_raw_sdl ( SDL_KeyboardEvent *ev )
+static int emu_callback_key_raw_sdl ( SDL_KeyboardEvent *ev )
 {
 	if (ev->repeat && ev->state == SDL_PRESSED && ev->keysym.scancode == last_scancode_seen) {
 		hwa_kbd_convert_and_push(last_poscode_seen);
 	}
+	return 1;	// allow default handler to run, though
 }
 /* END HACK */
 
@@ -372,4 +377,10 @@ Uint8 get_mouse_y_via_sid ( void )
 	mouse_y = (mouse_y - hid_read_mouse_rel_y(-31, 31)) & 63;
 	DEBUG("MOUSE-Y: reading Y as %d" NL, mouse_y << 1);
 	return mouse_y << 1;
+}
+
+
+void input_init ( void )
+{
+	hid_register_sdl_keyboard_event_callback(HID_CB_LEVEL_EMU, emu_callback_key_raw_sdl);
 }

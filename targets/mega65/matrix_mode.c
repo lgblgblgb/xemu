@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 #include "hypervisor.h"
 #include "vic4.h"
+#include "mega65.h"
 
 
 int in_the_matrix = 0;
@@ -58,6 +59,7 @@ static Uint8 *vmem = NULL;
 static int current_x = 0, current_y = 0;
 static int need_update = 0;
 static int reserve_top_lines = 0;	// reserve this amount of top lines when scrolling
+static int init_done = 0;
 
 
 
@@ -82,7 +84,7 @@ static void matrix_update ( void )
 	need_update = 0;
 	if (updated) {
 		osd_update();
-		DEBUGPRINT("MATRIX: updated %d characters in the texture" NL, updated);
+		DEBUG("MATRIX: updated %d characters in the texture" NL, updated);
 	}
 }
 
@@ -110,6 +112,7 @@ static void matrix_clear ( void )
 
 static void matrix_scroll ( void )
 {
+	DEBUG("MATRIX: scrolling ... reserved=%d lines" NL, reserve_top_lines);
 	memmove(
 		vmem + 2 * chrscreen_xsize *  reserve_top_lines,
 		vmem + 2 * chrscreen_xsize * (reserve_top_lines + 1),
@@ -152,14 +155,36 @@ static void matrix_updater_callback ( void )
 {
 	if (!in_the_matrix)
 		return;		// should not happen, but ...
+	int saved_x = current_x, saved_y = current_y;
 	current_x = 0;
 	current_y = 1;
 	static const Uint8 io_mode_xlat[4] = {2, 3, 0, 4};
-	MATRIX("PC:%04X A:%02X X:%02X Y:%02X Z:%02X SP:%04X B:%02X I/O=%d HYPER=%d",
+	static const char rotator[] = "-\\|/";
+	static int rotator_val = 0;
+	MATRIX("PC:%04X A:%02X X:%02X Y:%02X Z:%02X SP:%04X B:%02X IO:%d (%c) %c %s %s     !",
 		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z,
-		cpu65.sphi + cpu65.s, cpu65.bphi >> 8, io_mode_xlat[vic_iomode], !!in_hypervisor
+		cpu65.sphi + cpu65.s, cpu65.bphi >> 8, io_mode_xlat[vic_iomode],
+		!!in_hypervisor ? 'H' : 'U',
+		rotator[((rotator_val++) >> 3) & 3],
+		videostd_id ? "NTSC" : "PAL ",
+		cpu_clock_speed_string
 	);
+	current_x = saved_x;
+	current_y = saved_y;
 	matrix_update();
+}
+
+
+void matrix_external_msg_inject ( const char *s )
+{
+	if (init_done) {
+		DEBUGPRINT("MATRIX: external string=\"%s\"" NL, s);
+		matrix_write_string("EXTERNAL MESSAGE: ");
+		matrix_write_string(s);
+		need_update = 2;
+	} else {
+		DEBUGPRINT("MATRIX: external msg inject disabled (no init before!)" NL);
+	}
 }
 
 
@@ -169,9 +194,9 @@ void matrix_mode_toggle ( int status )
 	if (status == !!in_the_matrix)
 		return;
 	in_the_matrix = status;
+	static int msg_num = 0;
 	if (in_the_matrix) {
 		osd_hijack(matrix_updater_callback, &backend_xsize, &backend_ysize, &backend_pixels);
-		static int init_done = 0;
 		if (!init_done) {
 			init_done = 1;
 			for (int i = 0; i < sizeof(console_colours) / 4; i++)
@@ -184,13 +209,19 @@ void matrix_mode_toggle ( int status )
 			current_colour = 2;
 			matrix_write_string("Stub-matrix mode only, for now ... press right-ALT + TAB to exit");
 			current_colour = 1;
-		}
+			current_y = 5;
+			current_x = 0;
+			reserve_top_lines = 5;
+			MATRIX("[%d] Welcome!\n", msg_num++);
+		} else
+			MATRIX("[%d] Welcome back!\n", msg_num++);
 		need_update = 2;
 		matrix_update();
 		DEBUGPRINT("MATRIX: ON (%dx%d pixels, %dx%d character resolution)" NL,
 			backend_xsize, backend_ysize, chrscreen_xsize, chrscreen_ysize
 		);
 	} else {
+		MATRIX("[%d] Good bye!\n", msg_num++);
 		osd_hijack(NULL, NULL, NULL, NULL);
 		DEBUGPRINT("MATRIX: OFF" NL);
 	}

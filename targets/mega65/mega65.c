@@ -65,6 +65,7 @@ static const char emulator_paused_title[] = "TRACE/PAUSE";
 static char emulator_speed_title[64] = "";
 static char fast_mhz_in_string[16] = "";
 static const char *cpu_clock_speed_strs[4] = { "1MHz", "2MHz", "3.5MHz", fast_mhz_in_string };
+const char *cpu_clock_speed_string = "";
 static unsigned int cpu_clock_speed_str_index = 0;
 static unsigned int cpu_cycles_per_scanline;
 int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
@@ -141,8 +142,8 @@ void machine_set_speed ( int verbose )
 				cpu65_set_timing(2);
 				break;
 		}
-		// XXX use only DEBUG() here!
-		DEBUGPRINT("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_strs[cpu_clock_speed_str_index], cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
+		cpu_clock_speed_string = cpu_clock_speed_strs[cpu_clock_speed_str_index];
+		DEBUG("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_string, cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
 		if (cpu_cycles_per_step > 1 && !hypervisor_is_debugged && !configdb.cpusinglestep)
 			cpu_cycles_per_step = cpu_cycles_per_scanline;	// if in trace mode (or hyper-debug ...), do not set this! So set only if non-trace and non-hyper-debug
 	}
@@ -315,6 +316,7 @@ static void mega65_init ( void )
 		VIRTUAL_SHIFT_POS,
 		SDL_ENABLE		// joy HID events enabled
 	);
+	input_init();
 #ifdef HID_KBD_MAP_CFG_SUPPORT
 	hid_keymap_from_config_file(configdb.keymap);
 #endif
