@@ -164,7 +164,7 @@ static void _apu_push_fix32(Sint64 data) {
  */
 
 
-static double _apu_pop_float()
+static double _apu_pop_float(void)
 {
 	int exp = _apu_pop8();
 	int data = _apu_pop8() << 16;

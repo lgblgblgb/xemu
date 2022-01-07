@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/c64_kbd_mapping.h"
 #include "inject.h"
 #include "input_devices.h"
+#include "matrix_mode.h"
 #include "uart_monitor.h"
 #include "xemu/f011_core.h"
 #include "dma65.h"

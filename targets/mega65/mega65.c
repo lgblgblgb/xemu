@@ -65,6 +65,7 @@ static const char emulator_paused_title[] = "TRACE/PAUSE";
 static char emulator_speed_title[64] = "";
 static char fast_mhz_in_string[16] = "";
 static const char *cpu_clock_speed_strs[4] = { "1MHz", "2MHz", "3.5MHz", fast_mhz_in_string };
+const char *cpu_clock_speed_string = "";
 static unsigned int cpu_clock_speed_str_index = 0;
 static unsigned int cpu_cycles_per_scanline;
 int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
@@ -86,6 +87,10 @@ void cpu65_illegal_opcode_callback ( void )
 }
 
 
+//#define C128_SPEED_BIT_BUG 1
+#define C128_SPEED_BIT_BUG 0
+
+
 void machine_set_speed ( int verbose )
 {
 	int speed_wanted;
@@ -105,7 +110,7 @@ void machine_set_speed ( int verbose )
 			in_hypervisor, D6XX_registers[0x7D] & 16, (c128_d030_reg & 1), vic_registers[0x31] & 64, vic_registers[0x54] & 64
 	);
 	// ^1 at c128... because it was inverted :-O --> FIXME: this is ugly workaround, the switch statement should be re-organized
-	speed_wanted = (in_hypervisor || (D6XX_registers[0x7D] & 16)) ? 7 : ((((c128_d030_reg & 1) ^ 1) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
+	speed_wanted = (in_hypervisor || (D6XX_registers[0x7D] & 16)) ? 7 : ((((c128_d030_reg & 1) ^ C128_SPEED_BIT_BUG) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
 	// videostd_changed: we also want to force recalulation if PAL/NTSC change happened, even if the speed setting remains the same!
 	if (speed_wanted != speed_current || videostd_changed) {
 		speed_current = speed_wanted;
@@ -137,8 +142,8 @@ void machine_set_speed ( int verbose )
 				cpu65_set_timing(2);
 				break;
 		}
-		// XXX use only DEBUG() here!
-		DEBUGPRINT("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_strs[cpu_clock_speed_str_index], cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
+		cpu_clock_speed_string = cpu_clock_speed_strs[cpu_clock_speed_str_index];
+		DEBUG("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_string, cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
 		if (cpu_cycles_per_step > 1 && !hypervisor_is_debugged && !configdb.cpusinglestep)
 			cpu_cycles_per_step = cpu_cycles_per_scanline;	// if in trace mode (or hyper-debug ...), do not set this! So set only if non-trace and non-hyper-debug
 	}

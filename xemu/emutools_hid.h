@@ -63,9 +63,9 @@ typedef int (*hid_sdl_keyboard_event_callback_t  ) (SDL_KeyboardEvent*   );	// R
 typedef int (*hid_sdl_textediting_event_callback_t)(SDL_TextEditingEvent*);	// REMOVED: void emu_callback_key_textediting_sdl ( SDL_TextEditingEvent*);
 typedef int (*hid_sdl_textinput_event_callback_t  )(SDL_TextInputEvent*  );	// REMOVED: void emu_callback_key_textinput_sdl   ( SDL_TextInputEvent*  );
 
-extern void hid_register_sdl_keyboard_event_callback           ( const unsigned int level, hid_sdl_keyboard_event_callback_t    cb );
-extern void hid_register_sdl_textediting_event_callback        ( const unsigned int level, hid_sdl_textediting_event_callback_t cb );
-extern void hid_register_sdl_textinput_event_callback          ( const unsigned int level, hid_sdl_textinput_event_callback_t   cb );
+extern void hid_register_sdl_keyboard_event_callback	( const unsigned int level, hid_sdl_keyboard_event_callback_t    cb );
+extern void hid_register_sdl_textediting_event_callback	( const unsigned int level, hid_sdl_textediting_event_callback_t cb );
+extern void hid_register_sdl_textinput_event_callback	( const unsigned int level, hid_sdl_textinput_event_callback_t   cb );
 
 #define HID_CB_LEVEL_CORE	0
 #define HID_CB_LEVEL_CONSOLE	1

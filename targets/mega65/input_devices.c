@@ -18,6 +18,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #include "xemu/emutools.h"
+#include "input_devices.h"
 #include "xemu/emutools_hid.h"
 #include "xemu/c64_kbd_mapping.h"
 #include "mega65.h"
@@ -25,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 #include "hypervisor.h"
 #include "ui.h"
+#include "matrix_mode.h"
 
 
 #define DEBUGKBD(...)		DEBUG(__VA_ARGS__)
@@ -78,7 +80,6 @@ static struct {
 
 static int restore_is_held = 0;
 static Uint8 virtkey_state[3] = { 0xFF, 0xFF, 0xFF };
-int in_the_matrix = 0;
 
 
 void hwa_kbd_fake_key ( Uint8 k )
@@ -269,18 +270,10 @@ static void kbd_trigger_alttab_trap ( void )
 	if (!in_hypervisor) {
 		DEBUGPRINT("KBD: ALT-TAB trap has been triggered." NL);
 		hypervisor_enter(TRAP_ALTTAB);
-	} else
+	} else {
+		matrix_external_msg_inject("Already in hypervisor, cannot accept matrix mode toggle trap!\n");
 		DEBUGPRINT("KBD: *IGNORING* ALT-TAB trap trigger, already in hypervisor mode!" NL);
-}
-
-
-void matrix_mode_toggle ( int status )
-{
-	status = !!status;
-	if (status == in_the_matrix)
-		return;
-	in_the_matrix = status;
-	OSD(-1, -1, "Matrix mode would be switched %s", status ? "ON" : "OFF");
+	}
 }
 
 

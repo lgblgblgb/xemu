@@ -16,7 +16,7 @@
 
 // Special structure array for system files update on the SD-image
 struct meminitdata_sdfiles_st { const Uint8 *p; const char *fn; const int size; };
-#define MEMINITDATA_SDFILES_ITEMS 8
+#define MEMINITDATA_SDFILES_ITEMS 9
 extern const struct meminitdata_sdfiles_st meminitdata_sdfiles_db[MEMINITDATA_SDFILES_ITEMS];
 
 // Generated as "chrwom" from file ../../../mega65-core/bin/charrom.bin ($1000 bytes)
@@ -46,6 +46,10 @@ extern const Uint8 meminitdata_initrom[MEMINITDATA_INITROM_SIZE];
 // Generated as "freezer" from file ../../../mega65-core/sdcard-files/FREEZER.M65 ($7E7C bytes)
 #define MEMINITDATA_FREEZER_SIZE 0x7E7C
 extern const Uint8 meminitdata_freezer[MEMINITDATA_FREEZER_SIZE];
+
+// Generated as "makedisk" from file ../../../mega65-core/sdcard-files/MAKEDISK.M65 ($667E bytes)
+#define MEMINITDATA_MAKEDISK_SIZE 0x667E
+extern const Uint8 meminitdata_makedisk[MEMINITDATA_MAKEDISK_SIZE];
 
 // Generated as "audiomix" from file ../../../mega65-core/sdcard-files/AUDIOMIX.M65 ($6C45 bytes)
 #define MEMINITDATA_AUDIOMIX_SIZE 0x6C45

@@ -20,14 +20,14 @@ TARGET		= mega65
 PRG_TARGET	= xmega65
 EMU_DESCRIPTION	= MEGA65
 
-SRCS_TARGET_xmega65	= configdb.c mega65.c sdcard.c uart_monitor.c hypervisor.c m65_snapshot.c memory_mapper.c io_mapper.c vic4.c vic4_palette.c ethernet65.c input_devices.c memcontent.c ui.c fat32.c sdcontent.c audio65.c inject.c dma65.c rom.c hdos.c
+SRCS_TARGET_xmega65	= configdb.c mega65.c sdcard.c uart_monitor.c hypervisor.c m65_snapshot.c memory_mapper.c io_mapper.c vic4.c vic4_palette.c ethernet65.c input_devices.c memcontent.c ui.c fat32.c sdcontent.c audio65.c inject.c dma65.c rom.c hdos.c matrix_mode.c
 SRCS_COMMON_xmega65	= emutools.c cpu65.c cia6526.c emutools_hid.c sid.c f011_core.c c64_kbd_mapping.c emutools_config.c emutools_snapshot.c emutools_files.c emutools_umon.c emutools_socketapi.c ethertap.c d81access.c emutools_gui.c basic_text.c opl3.c lodepng.c
 CFLAGS_TARGET_xmega65	= $(SDL2_CFLAGS) $(MATH_CFLAGS) $(SOCKET_CFLAGS) $(XEMUGUI_CFLAGS)
 LDFLAGS_TARGET_xmega65	= $(SDL2_LIBS) $(MATH_LIBS) $(SOCKET_LIBS) $(XEMUGUI_LIBS)
 
 MEGA65_CORE	= ../../../mega65-core
 MEGA65_FILES	= bin/charrom.bin bin/HICKUP.M65 bin/COLOURRAM.BIN sdcard-files/BANNER.M65 sdcard-files/ONBOARD.M65 src/open-roms/bin/mega65.rom
-MEGA65_FILES	+= sdcard-files/FREEZER.M65
+MEGA65_FILES	+= sdcard-files/FREEZER.M65 sdcard-files/MAKEDISK.M65
 MEGA65_FILES	+= sdcard-files/AUDIOMIX.M65 sdcard-files/C64THUMB.M65 sdcard-files/C65THUMB.M65 sdcard-files/ROMLOAD.M65 sdcard-files/SPRITED.M65
 
 MEGA65_FP_FILES	= $(addprefix $(MEGA65_CORE)/,$(MEGA65_FILES))
@@ -58,3 +58,13 @@ recreatememcontent:
 	if [ -d ../../../xemu-gh-pages ]; then mkdir -p ../../../xemu-gh-pages/files/xemu-mega65-sysfiles || exit 1 ; for a in $(MEGA65_LOCALDIR)/* ; do echo "Submitting $$a to gh-pages ..." ; cp $$a ../../../xemu-gh-pages/files/xemu-mega65-sysfiles/`git branch | awk '$$1 == "*" { print $$2 }'`-`basename $$a` || exit 1 ; done ; else echo "*** WARNING cannot submit file to gh-pages @ ../../../xemu-gh-pages/xemu-mega65-sysfiles/ ***" ; fi
 	@echo "*** Generating C files from mega65-core binary results ***"
 	python3 $(TOPDIR)/build/m65-memcontent-generator.py memcontent.c memcontent.h $(MEGA65_FP_FILES)
+
+wine64:
+	$(MAKE) ARCH=win64
+	$(MAKE) dll64
+	wine ../../build/bin/xmega65.win64
+
+wine32:
+	$(MAKE) ARCH=win32
+	$(MAKE) dll32
+	wine ../../build/bin/xmega65.win32

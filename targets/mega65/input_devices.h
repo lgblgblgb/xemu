@@ -19,8 +19,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_MEGA65_INPUT_DEVICES_H_INCLUDED
 #define XEMU_MEGA65_INPUT_DEVICES_H_INCLUDED
 
-extern int in_the_matrix;
-
 extern void  clear_emu_events  ( void );
 extern Uint8 cia1_in_b         ( void );
 extern Uint8 cia1_in_a         ( void );
@@ -42,7 +40,5 @@ extern void  kbd_trigger_restore_trap ( void );
 
 extern Uint8 get_mouse_x_via_sid ( void );
 extern Uint8 get_mouse_y_via_sid ( void );
-
-extern void matrix_mode_toggle ( int status );
 
 #endif
