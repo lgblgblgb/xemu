@@ -20,10 +20,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "matrix_mode.h"
 
+#include "xemu/emutools_hid.h"
 #include "xemu/cpu65.h"
 #include "hypervisor.h"
 #include "vic4.h"
 #include "mega65.h"
+#include "io_mapper.h"
 
 
 int in_the_matrix = 0;
@@ -41,13 +43,18 @@ int in_the_matrix = 0;
 	matrix_write_string(_buf_for_msg_); \
 } while(0)
 
-
+#define CURSOR_CHAR	0xDB
+#define CURSOR_COLOUR	4
+#define CLI_START_LINE	4
+#define NORMAL_COLOUR	1
+#define BANNER_COLOUR	2
 
 static const Uint8 console_colours[] = {
 	0x00, 0x00, 0x00, 0x80,		// 0: for background shade of the console
 	0x00, 0xFF, 0x00, 0xFF,		// 1: normal green colour of the console text
 	0xFF, 0xFF, 0x00, 0xFF,		// 2: alternative yellow colour of the console text
-	0x00, 0x00, 0x00, 0x00		// 3: totally transparent stuff
+	0x00, 0x00, 0x00, 0x00,		// 3: totally transparent stuff
+	0xFF, 0x00, 0x00, 0xFF		// 4: red
 };
 static Uint32 colour_mappings[16];
 static Uint8 current_colour;
@@ -60,6 +67,7 @@ static int current_x = 0, current_y = 0;
 static int need_update = 0;
 static int reserve_top_lines = 0;	// reserve this amount of top lines when scrolling
 static int init_done = 0;
+static Uint8 queued_input;
 
 
 
@@ -84,7 +92,7 @@ static void matrix_update ( void )
 	need_update = 0;
 	if (updated) {
 		osd_update();
-		DEBUG("MATRIX: updated %d characters in the texture" NL, updated);
+		DEBUGPRINT("MATRIX: updated %d characters in the texture" NL, updated);
 	}
 }
 
@@ -110,25 +118,14 @@ static void matrix_clear ( void )
 }
 
 
-static void matrix_scroll ( void )
-{
-	DEBUG("MATRIX: scrolling ... reserved=%d lines" NL, reserve_top_lines);
-	memmove(
-		vmem + 2 * chrscreen_xsize *  reserve_top_lines,
-		vmem + 2 * chrscreen_xsize * (reserve_top_lines + 1),
-		chrscreen_xsize * (chrscreen_ysize - 1 - reserve_top_lines) * 2
-	);
-	for (Uint8 x = 0, *vp = vmem + (chrscreen_ysize - 1) * chrscreen_xsize * 2; x < chrscreen_xsize; x++, vp += 2)
-		vp[0] = 0x20, vp[1] = current_colour;
-	need_update |= 2;
-}
-
-
 static void matrix_write_char ( const Uint8 c )
 {
-	if (c == '\n') {
+	if (c == '\n' || c == '\r') {
 		current_x = 0;
 		current_y++;
+	} else if (c == 8) {
+		if (current_x > 0)
+			current_x--;
 	} else {
 		write_char_raw(current_x, current_y, c, current_colour);
 		current_x++;
@@ -139,7 +136,15 @@ static void matrix_write_char ( const Uint8 c )
 	}
 	if (current_y >= chrscreen_ysize) {
 		current_y = chrscreen_ysize - 1;
-		matrix_scroll();
+		DEBUG("MATRIX: scrolling ... reserved=%d lines" NL, reserve_top_lines);
+		memmove(
+			vmem + 2 * chrscreen_xsize *  reserve_top_lines,
+			vmem + 2 * chrscreen_xsize * (reserve_top_lines + 1),
+			chrscreen_xsize * (chrscreen_ysize - 1 - reserve_top_lines) * 2
+		);
+		for (Uint8 x = 0, *vp = vmem + (chrscreen_ysize - 1) * chrscreen_xsize * 2; x < chrscreen_xsize; x++, vp += 2)
+			vp[0] = 0x20, vp[1] = current_colour;
+		need_update |= 2;
 	}
 }
 
@@ -151,40 +156,123 @@ static inline void matrix_write_string ( const char *s )
 }
 
 
+static void execute ( const char *cmd )
+{
+	if (!strcasecmp(cmd, "off")) {
+		matrix_mode_toggle(0);
+	} else if (!strcasecmp(cmd, "uname")) {
+		char uname_str[100];
+		xemu_get_uname_string(uname_str, sizeof uname_str);
+		matrix_write_string(uname_str);
+	} else if (!strcasecmp(cmd, "ver")) {
+		MATRIX("Xemu/%s %s %s %s %s %s", TARGET_DESC, XEMU_BUILDINFO_CDATE, XEMU_BUILDINFO_GIT, XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT, XEMU_BUILDINFO_CC);
+	} else
+		MATRIX("?UNIMPLEMENTED: \"%s\"\n", cmd);
+}
+
+
+static void input ( const char c )
+{
+	static int start_x;
+	static Uint8 prev_char;
+	static const char prompt[] = "Xemu>";
+	if (!current_x) {
+		matrix_write_string(prompt);
+		start_x = current_x;
+		prev_char = 0;
+		if (!c)
+			return;
+	}
+	if (current_x < chrscreen_xsize - 1 && (c >= 33 || (c == 32 && current_x > start_x && prev_char != 32))) {
+		matrix_write_char(c);
+		prev_char = c;
+	} else if (current_x > start_x && c == 8) {
+		static const char backspace_seq_str[] = { 8, 32, 8, 0 };
+		matrix_write_string(backspace_seq_str);
+	} else if ((c == '\r' || c == '\n') && current_x > start_x) {
+		const int len = current_x - start_x;
+		char cmd[len + 1];
+		for (int i = 0, j = (current_y * chrscreen_xsize + start_x) << 1; i < len; i++, j += 2)
+			cmd[i] = vmem[j];
+		cmd[len - (prev_char == 32)] = 0;
+		matrix_write_char('\n');
+		execute(cmd);
+		if (current_x)
+			matrix_write_char('\n');
+	}
+}
+
+
 static void matrix_updater_callback ( void )
 {
 	if (!in_the_matrix)
-		return;		// should not happen, but ...
-	int saved_x = current_x, saved_y = current_y;
+		return;		// should not happen, but ... (and can be a race condition with toggle function anyway!)
+	write_char_raw(current_x, current_y, ' ', current_colour);	// delete cursor
+	const int saved_x = current_x, saved_y = current_y;
 	current_x = 0;
 	current_y = 1;
-	static const Uint8 io_mode_xlat[4] = {2, 3, 0, 4};
-	static const char rotator[] = "-\\|/";
-	static int rotator_val = 0;
-	MATRIX("PC:%04X A:%02X X:%02X Y:%02X Z:%02X SP:%04X B:%02X IO:%d (%c) %c %s %s     !",
+	static const Uint8 io_mode_xlat[4] = { 2, 3, 0, 4 };
+	static const char rotator[4] = { '-', '\\', '|', '/' };
+	static Uint32 counter = 0;
+	const Uint8 pf = cpu65_get_pf();
+	MATRIX("PC:%04X A:%02X X:%02X Y:%02X Z:%02X SP:%04X B:%02X %c%c%c%c%c%c%c%c IO:%d (%c) %c %s %s     !",
 		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z,
-		cpu65.sphi + cpu65.s, cpu65.bphi >> 8, io_mode_xlat[vic_iomode],
+		cpu65.sphi + cpu65.s, cpu65.bphi >> 8,
+		(pf & CPU65_PF_N) ? 'N' : 'n',
+		(pf & CPU65_PF_V) ? 'V' : 'v',
+		(pf & CPU65_PF_E) ? 'E' : 'e',
+		'-',
+		(pf & CPU65_PF_D) ? 'D' : 'd',
+		(pf & CPU65_PF_I) ? 'I' : 'i',
+		(pf & CPU65_PF_Z) ? 'Z' : 'z',
+		(pf & CPU65_PF_C) ? 'C' : 'c',
+		io_mode_xlat[vic_iomode],
 		!!in_hypervisor ? 'H' : 'U',
-		rotator[((rotator_val++) >> 3) & 3],
+		rotator[(counter >> 3) & 3],
 		videostd_id ? "NTSC" : "PAL ",
 		cpu_clock_speed_string
 	);
 	current_x = saved_x;
 	current_y = saved_y;
+	if (queued_input) {
+		DEBUGPRINT("MATRIX-INPUT: [%c] (%d)" NL, queued_input >= 32 ? queued_input : ' ', queued_input);
+		input(queued_input);
+		queued_input = 0;
+	} else if (current_x == 0)
+		input(0);	// just to have some prompt by default
+	if (counter & 8)
+		write_char_raw(current_x, current_y, CURSOR_CHAR, CURSOR_COLOUR);	// show cursor (gated with some bit of the "counter" to have blinking)
+	counter++;
 	matrix_update();
 }
 
+// TODO+FIXME: though the theory to hijack keyboard input looks nice, we have some problems:
+// * hotkeys does not work anymore
+// * if in mouse grab mode, you don't even have your mouse to be able to close window, AND/OR use the menu system
 
-void matrix_external_msg_inject ( const char *s )
+
+// Async stuff as callbacks. Only updates "queued_input"
+
+static int kbd_cb_keyevent ( SDL_KeyboardEvent *ev )
 {
-	if (init_done) {
-		DEBUGPRINT("MATRIX: external string=\"%s\"" NL, s);
-		matrix_write_string("EXTERNAL MESSAGE: ");
-		matrix_write_string(s);
-		need_update = 2;
-	} else {
-		DEBUGPRINT("MATRIX: external msg inject disabled (no init before!)" NL);
+	if (ev->state == SDL_PRESSED && ev->keysym.sym > 0 && ev->keysym.sym < 32 && !queued_input) {
+		// Monitor alt-tab, as the main handler is defunct at this point, we "hijacked" it!
+		// So we must give up the matrix mode themselves here
+		if (ev->keysym.sym == 9 && (ev->keysym.mod & KMOD_RALT))
+			matrix_mode_toggle(0);
+		else
+			queued_input = ev->keysym.sym;
 	}
+	return 0;	// do NOT execute further handlers!
+}
+
+
+static int kbd_cb_textevent ( SDL_TextInputEvent *ev )
+{
+	const uint8_t c = ev->text[0];
+	if (c >= 32 && c < 128 && !queued_input)
+		queued_input = c;
+	return 0;	// do NOT execute further handlers!
 }
 
 
@@ -194,8 +282,9 @@ void matrix_mode_toggle ( int status )
 	if (status == !!in_the_matrix)
 		return;
 	in_the_matrix = status;
-	static int msg_num = 0;
+	static int save_allow_mouse_grab;
 	if (in_the_matrix) {
+		D6XX_registers[0x72] |= 0x40;	// be sure we're sync with the matrix bit!
 		osd_hijack(matrix_updater_callback, &backend_xsize, &backend_ysize, &backend_pixels);
 		if (!init_done) {
 			init_done = 1;
@@ -204,25 +293,42 @@ void matrix_mode_toggle ( int status )
 			chrscreen_xsize = backend_xsize / 8;
 			chrscreen_ysize = backend_ysize / 8;
 			vmem = xemu_malloc(chrscreen_xsize * chrscreen_ysize * 2);
-			current_colour = 1;
+			current_colour = NORMAL_COLOUR;
 			matrix_clear();
-			current_colour = 2;
-			matrix_write_string("Stub-matrix mode only, for now ... press right-ALT + TAB to exit");
-			current_colour = 1;
-			current_y = 5;
+			current_colour = BANNER_COLOUR;
+			matrix_write_string("*** Xemu's pre-matrix ... press right-ALT + TAB to exit ***");
+			current_colour = NORMAL_COLOUR;
+			current_y = CLI_START_LINE;
 			current_x = 0;
-			reserve_top_lines = 5;
-			MATRIX("[%d] Welcome!\n", msg_num++);
-		} else
-			MATRIX("[%d] Welcome back!\n", msg_num++);
+			reserve_top_lines = CLI_START_LINE;
+			matrix_write_string("INFO: Remember, there is no spoon.\nINFO: Hot-keys do not work in matrix mode!\nINFO: Matrix mode bypasses emulation keyboard mappings.\n");
+		}
 		need_update = 2;
 		matrix_update();
-		DEBUGPRINT("MATRIX: ON (%dx%d pixels, %dx%d character resolution)" NL,
+		DEBUGPRINT("MATRIX: ON (%dx%d OSD texture pixels, %dx%d character resolution)" NL,
 			backend_xsize, backend_ysize, chrscreen_xsize, chrscreen_ysize
 		);
+		// "hijack" input for ourselves ...
+	        hid_register_sdl_keyboard_event_callback(HID_CB_LEVEL_CONSOLE, kbd_cb_keyevent);
+		hid_register_sdl_textinput_event_callback(HID_CB_LEVEL_CONSOLE, kbd_cb_textevent);
+		queued_input = 0;
+		// give up mouse grab if matrix mode is selected, since in matrix mode no hotkeys works,
+		// thus user would also lose the chance to use the mouse at least to close, access menu, whatever ...
+		if (is_mouse_grab()) {
+			if (!current_x)	// skip warning in this case, since probably command line editing is in effect ...
+				matrix_write_string("WARN: mouse grab/emu is released for matrix mode\n");
+			set_mouse_grab(SDL_FALSE, 0);
+		}
+		save_allow_mouse_grab = allow_mouse_grab;
+		allow_mouse_grab = 0;
 	} else {
-		MATRIX("[%d] Good bye!\n", msg_num++);
+		D6XX_registers[0x72] &= ~0x40;	// be sure we're sync with the matrix bit!
 		osd_hijack(NULL, NULL, NULL, NULL);
 		DEBUGPRINT("MATRIX: OFF" NL);
+		// release our custom console events
+	        hid_register_sdl_keyboard_event_callback(HID_CB_LEVEL_CONSOLE, NULL);
+		hid_register_sdl_textinput_event_callback(HID_CB_LEVEL_CONSOLE, NULL);
+		allow_mouse_grab = save_allow_mouse_grab;
 	}
+	clear_emu_events();
 }

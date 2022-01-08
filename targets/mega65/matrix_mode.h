@@ -22,6 +22,5 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern int in_the_matrix;
 
 extern void matrix_mode_toggle ( int status );
-extern void matrix_external_msg_inject ( const char *s );
 
 #endif
