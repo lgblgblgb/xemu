@@ -26,7 +26,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 #include "hypervisor.h"
 #include "ui.h"
-#include "matrix_mode.h"
 
 
 #define DEBUGKBD(...)		DEBUG(__VA_ARGS__)
@@ -271,7 +270,6 @@ static void kbd_trigger_alttab_trap ( void )
 		DEBUGPRINT("KBD: ALT-TAB trap has been triggered." NL);
 		hypervisor_enter(TRAP_ALTTAB);
 	} else {
-		matrix_external_msg_inject("Already in hypervisor, cannot accept matrix mode toggle trap!\n");
 		DEBUGPRINT("KBD: *IGNORING* ALT-TAB trap trigger, already in hypervisor mode!" NL);
 	}
 }

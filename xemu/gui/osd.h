@@ -32,7 +32,7 @@ extern int  osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_e
 extern int  osd_init_with_defaults ( void );
 extern void osd_clear ( void );
 extern void osd_clear_with_colour ( const int index );
-extern void osd_update ( void );
+extern void osd_texture_update ( const SDL_Rect *rect );
 extern void osd_on ( int value );
 extern void osd_off ( void );
 extern void osd_global_enable ( int status );
@@ -57,7 +57,7 @@ extern void osd_hijack ( void(*updater)(void), int *xsize_ptr, int *ysize_ptr, U
 		fprintf(stderr, "OSD: %s" NL, _buf_for_msg_); \
 		osd_clear(); \
 		osd_write_string(x, y, _buf_for_msg_); \
-		osd_update(); \
+		osd_texture_update(NULL); \
 		osd_on(OSD_FADE_START); \
 	} \
 } while(0)
