@@ -84,11 +84,11 @@ void osd_clear ( void )
 }
 
 
-void osd_update ( void )
+void osd_texture_update ( const SDL_Rect *rect )
 {
 	if (osd.enabled) {
-		DEBUG("OSD: osd_update() called." NL);
-                SDL_UpdateTexture(osd.tex, NULL, osd.pixels, osd.xsize * sizeof (Uint32));
+		DEBUG("OSD: %s() called." NL, __func__);
+		SDL_UpdateTexture(osd.tex, rect, rect ? osd.pixels + rect->y * osd.xsize + rect->x : osd.pixels, osd.xsize * sizeof (Uint32));
 	}
 }
 
@@ -121,7 +121,7 @@ int osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_entries, 
 	osd.enabled = 1;	// great, everything is OK, we can set enabled state!
 	osd.available = 1;
 	osd_clear();
-	osd_update();
+	osd_texture_update(NULL);
 	osd_set_colours(1, 0);
 	DEBUG("OSD: init: %dx%d pixels, %d palette entries, %d fade_dec, %d fade_end" NL, xsize, ysize, palette_entries, fade_dec, fade_end);
 	return 0;
