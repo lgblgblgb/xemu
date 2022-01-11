@@ -19,56 +19,56 @@ struct meminitdata_sdfiles_st { const Uint8 *p; const char *fn; const int size; 
 #define MEMINITDATA_SDFILES_ITEMS 9
 extern const struct meminitdata_sdfiles_st meminitdata_sdfiles_db[MEMINITDATA_SDFILES_ITEMS];
 
-// Generated as "chrwom" from file ../../../mega65-core/bin/charrom.bin ($1000 bytes)
+// Generated as "chrwom" from file ../../../mega65-core-master/bin/charrom.bin ($1000 bytes)
 #define MEMINITDATA_CHRWOM_SIZE 0x1000
 extern const Uint8 meminitdata_chrwom[MEMINITDATA_CHRWOM_SIZE];
 
-// Generated as "hickup" from file ../../../mega65-core/bin/HICKUP.M65 ($4000 bytes)
+// Generated as "hickup" from file ../../../mega65-core-master/bin/HICKUP.M65 ($4000 bytes)
 #define MEMINITDATA_HICKUP_SIZE 0x4000
 extern const Uint8 meminitdata_hickup[MEMINITDATA_HICKUP_SIZE];
 
-// Generated as "cramutils" from file ../../../mega65-core/bin/COLOURRAM.BIN ($8000 bytes)
+// Generated as "cramutils" from file ../../../mega65-core-master/bin/COLOURRAM.BIN ($8000 bytes)
 #define MEMINITDATA_CRAMUTILS_SIZE 0x8000
 extern const Uint8 meminitdata_cramutils[MEMINITDATA_CRAMUTILS_SIZE];
 
-// Generated as "banner" from file ../../../mega65-core/sdcard-files/BANNER.M65 ($5300 bytes)
+// Generated as "banner" from file ../../../mega65-core-master/sdcard-files/BANNER.M65 ($5300 bytes)
 #define MEMINITDATA_BANNER_SIZE 0x5300
 extern const Uint8 meminitdata_banner[MEMINITDATA_BANNER_SIZE];
 
-// Generated as "onboard" from file ../../../mega65-core/sdcard-files/ONBOARD.M65 ($28A6 bytes)
-#define MEMINITDATA_ONBOARD_SIZE 0x28A6
+// Generated as "onboard" from file ../../../mega65-core-master/sdcard-files/ONBOARD.M65 ($29CC bytes)
+#define MEMINITDATA_ONBOARD_SIZE 0x29CC
 extern const Uint8 meminitdata_onboard[MEMINITDATA_ONBOARD_SIZE];
 
-// Generated as "initrom" from file ../../../mega65-core/src/open-roms/bin/mega65.rom ($20000 bytes)
+// Generated as "initrom" from file ../../../mega65-core-master/src/open-roms/bin/mega65.rom ($20000 bytes)
 #define MEMINITDATA_INITROM_SIZE 0x20000
 extern const Uint8 meminitdata_initrom[MEMINITDATA_INITROM_SIZE];
 
-// Generated as "freezer" from file ../../../mega65-core/sdcard-files/FREEZER.M65 ($7E7C bytes)
+// Generated as "freezer" from file ../../../mega65-core-master/sdcard-files/FREEZER.M65 ($7E7C bytes)
 #define MEMINITDATA_FREEZER_SIZE 0x7E7C
 extern const Uint8 meminitdata_freezer[MEMINITDATA_FREEZER_SIZE];
 
-// Generated as "makedisk" from file ../../../mega65-core/sdcard-files/MAKEDISK.M65 ($667E bytes)
+// Generated as "makedisk" from file ../../../mega65-core-master/sdcard-files/MAKEDISK.M65 ($667E bytes)
 #define MEMINITDATA_MAKEDISK_SIZE 0x667E
 extern const Uint8 meminitdata_makedisk[MEMINITDATA_MAKEDISK_SIZE];
 
-// Generated as "audiomix" from file ../../../mega65-core/sdcard-files/AUDIOMIX.M65 ($6C45 bytes)
+// Generated as "audiomix" from file ../../../mega65-core-master/sdcard-files/AUDIOMIX.M65 ($6C45 bytes)
 #define MEMINITDATA_AUDIOMIX_SIZE 0x6C45
 extern const Uint8 meminitdata_audiomix[MEMINITDATA_AUDIOMIX_SIZE];
 
-// Generated as "c64thumb" from file ../../../mega65-core/sdcard-files/C64THUMB.M65 ($2E00 bytes)
+// Generated as "c64thumb" from file ../../../mega65-core-master/sdcard-files/C64THUMB.M65 ($2E00 bytes)
 #define MEMINITDATA_C64THUMB_SIZE 0x2E00
 extern const Uint8 meminitdata_c64thumb[MEMINITDATA_C64THUMB_SIZE];
 
-// Generated as "c65thumb" from file ../../../mega65-core/sdcard-files/C65THUMB.M65 ($23C0 bytes)
+// Generated as "c65thumb" from file ../../../mega65-core-master/sdcard-files/C65THUMB.M65 ($23C0 bytes)
 #define MEMINITDATA_C65THUMB_SIZE 0x23C0
 extern const Uint8 meminitdata_c65thumb[MEMINITDATA_C65THUMB_SIZE];
 
-// Generated as "romload" from file ../../../mega65-core/sdcard-files/ROMLOAD.M65 ($6672 bytes)
+// Generated as "romload" from file ../../../mega65-core-master/sdcard-files/ROMLOAD.M65 ($6672 bytes)
 #define MEMINITDATA_ROMLOAD_SIZE 0x6672
 extern const Uint8 meminitdata_romload[MEMINITDATA_ROMLOAD_SIZE];
 
-// Generated as "sprited" from file ../../../mega65-core/sdcard-files/SPRITED.M65 ($8847 bytes)
-#define MEMINITDATA_SPRITED_SIZE 0x8847
+// Generated as "sprited" from file ../../../mega65-core-master/sdcard-files/SPRITED.M65 ($8858 bytes)
+#define MEMINITDATA_SPRITED_SIZE 0x8858
 extern const Uint8 meminitdata_sprited[MEMINITDATA_SPRITED_SIZE];
 
 #endif
