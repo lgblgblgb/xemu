@@ -42,7 +42,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define OFF_T_ERROR ((off_t)-1)
 
-#define XEMU_OPEN_FILE_FIRST_MODE_USED INT_MIN
+#define XEMU_OPEN_FILE_FIRST_MODE_USED -1
 
 extern void *xemu_load_buffer_p;
 extern char  xemu_load_filepath[PATH_MAX];

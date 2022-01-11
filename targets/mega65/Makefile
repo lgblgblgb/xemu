@@ -58,13 +58,3 @@ recreatememcontent:
 	if [ -d ../../../xemu-gh-pages ]; then mkdir -p ../../../xemu-gh-pages/files/xemu-mega65-sysfiles || exit 1 ; for a in $(MEGA65_LOCALDIR)/* ; do echo "Submitting $$a to gh-pages ..." ; cp $$a ../../../xemu-gh-pages/files/xemu-mega65-sysfiles/`git branch | awk '$$1 == "*" { print $$2 }'`-`basename $$a` || exit 1 ; done ; else echo "*** WARNING cannot submit file to gh-pages @ ../../../xemu-gh-pages/xemu-mega65-sysfiles/ ***" ; fi
 	@echo "*** Generating C files from mega65-core binary results ***"
 	python3 $(TOPDIR)/build/m65-memcontent-generator.py memcontent.c memcontent.h $(MEGA65_FP_FILES)
-
-wine64:
-	$(MAKE) ARCH=win64
-	$(MAKE) dll64
-	wine ../../build/bin/xmega65.win64
-
-wine32:
-	$(MAKE) ARCH=win32
-	$(MAKE) dll32
-	wine ../../build/bin/xmega65.win32
