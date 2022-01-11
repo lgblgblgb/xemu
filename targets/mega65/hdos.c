@@ -171,8 +171,7 @@ void trap_for_xemu ( const int func_no )
 					res = XEMU_BUILDINFO_GIT;
 					break;
 				case 3:			// host-OS information
-					xemu_get_uname_string(work, sizeof work);
-					res = work;
+					res = xemu_get_uname_string();
 					break;
 				case 4:			// detailed info about hyppo (the real one, not Xemu's extensions)
 					res = hyppo_version_string;

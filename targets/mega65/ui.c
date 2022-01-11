@@ -422,8 +422,6 @@ static void ui_emu_info ( void )
 {
 	char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
 	xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
-	char uname_str[100];
-	xemu_get_uname_string(uname_str, sizeof uname_str);
 	sha1_hash_str rom_now_hash_str;
 	sha1_checksum_as_string(rom_now_hash_str, main_ram + 0x20000, 0x20000);
 	const char *hdos_root;
@@ -454,7 +452,7 @@ static void ui_emu_info ( void )
 		cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc),
 		vic_iomode < 4 ? iomode_names[vic_iomode] : "?INVALID?", videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
 		td_stat_str,
-		uname_str
+		xemu_get_uname_string()
 	);
 }
 

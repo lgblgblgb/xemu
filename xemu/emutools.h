@@ -64,7 +64,7 @@ extern int  sysconsole_toggle ( int set );
 
 #define XEMU_CPU_STAT_INFO_BUFFER_SIZE 64
 extern void xemu_get_timing_stat_string ( char *buf, unsigned int size );
-extern void xemu_get_uname_string ( char *buf, unsigned int size );
+extern const char *xemu_get_uname_string ( void );
 
 // You should define this in your emulator, most probably with resetting the keyboard matrix
 // Purpose: emulator windows my cause the emulator does not get the key event normally, thus some keys "seems to be stucked"

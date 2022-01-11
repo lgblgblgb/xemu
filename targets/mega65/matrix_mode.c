@@ -232,9 +232,7 @@ static void cmd_off ( char *p )
 
 static void cmd_uname ( char *p )
 {
-	char uname_str[100];
-	xemu_get_uname_string(uname_str, sizeof uname_str);
-	matrix_write_string(uname_str);
+	matrix_write_string(xemu_get_uname_string());
 }
 
 
