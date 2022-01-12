@@ -31,6 +31,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <ctype.h>
 
 
+//#define DEBUGMATRIX	DEBUGPRINT
+//#define DEBUGMATRIX	DEBUG
+#define DEBUGMATRIX(...)
+
+
 int in_the_matrix = 0;
 
 
@@ -124,8 +129,8 @@ static void matrix_update ( void )
 					.w = (x_max[i] - x_min[i] + 1) * 8,
 					.h = (y_max[i] - y_min[i] + 1) * 8
 				};
-				DEBUGPRINT("MATRIX: update rectangle region #%d is %dx%d character wide at %d,%d" NL, i, x_max[i] - x_min[i] + 1, y_max[i] - y_min[i] + 1, x_min[i], y_min[i]);
-				DEBUGPRINT("MATRIX: update rectangle region #%d in pixels is %dx%d pixels at %d,%d" NL, i, rect.w, rect.h, rect.x, rect.y);
+				DEBUGMATRIX("MATRIX: update rectangle region #%d is %dx%d character wide at %d,%d" NL, i, x_max[i] - x_min[i] + 1, y_max[i] - y_min[i] + 1, x_min[i], y_min[i]);
+				DEBUGMATRIX("MATRIX: update rectangle region #%d in pixels is %dx%d pixels at %d,%d" NL, i, rect.w, rect.h, rect.x, rect.y);
 				osd_texture_update(&rect);
 				area += rect.w * rect.h / 64;
 			}
@@ -133,7 +138,7 @@ static void matrix_update ( void )
 		int area = chrscreen_xsize * chrscreen_ysize;
 		osd_texture_update(NULL);
 #endif
-		DEBUGPRINT("MATRIX: updated %d characters, %d OSD chars (=%.03f%%)" NL, updated, area, (double)(area * 100) / (double)(chrscreen_xsize * chrscreen_ysize));
+		DEBUGMATRIX("MATRIX: updated %d characters, %d OSD chars (=%.03f%%)" NL, updated, area, (double)(area * 100) / (double)(chrscreen_xsize * chrscreen_ysize));
 	}
 }
 
@@ -177,7 +182,7 @@ static void matrix_write_char ( const Uint8 c )
 	}
 	if (current_y >= chrscreen_ysize) {
 		current_y = chrscreen_ysize - 1;
-		DEBUG("MATRIX: scrolling ... reserved=%d lines" NL, reserve_top_lines);
+		DEBUGMATRIX("MATRIX: scrolling ... reserved=%d lines" NL, reserve_top_lines);
 		memmove(
 			vmem + 2 * chrscreen_xsize *  reserve_top_lines,
 			vmem + 2 * chrscreen_xsize * (reserve_top_lines + 1),
@@ -305,6 +310,12 @@ static int mem_args ( const char *p, int need_data )
 }
 
 
+static void cmd_log ( char *p )
+{
+	DEBUGPRINT("USERLOG: %s" NL, *p ? p : "<EMPTY-TEXT>");
+}
+
+
 static void cmd_write ( char *p )
 {
 	if (mem_args(p, 1) != 2)
@@ -377,6 +388,7 @@ static const struct command_tab_st {
 	{ "dump",	cmd_dump,	"d"	},
 	{ "exit",	cmd_off,	"x"	},
 	{ "help",	cmd_help,	"h?"	},
+	{ "log",	cmd_log,	NULL	},
 	{ "reg",	cmd_reg,	"r"	},
 	{ "show",	cmd_show,	"s"	},
 	{ "uname",	cmd_uname,	NULL	},
@@ -462,7 +474,7 @@ static void matrix_updater_callback ( void )
 	current_x = saved_x;
 	current_y = saved_y;
 	if (queued_input) {
-		DEBUGPRINT("MATRIX-INPUT: [%c] (%d)" NL, queued_input >= 32 ? queued_input : ' ', queued_input);
+		DEBUGMATRIX("MATRIX-INPUT: [%c] (%d)" NL, queued_input >= 32 ? queued_input : ' ', queued_input);
 		input(queued_input);
 		queued_input = 0;
 	} else if (current_x == 0)
