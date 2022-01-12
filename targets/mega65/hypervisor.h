@@ -24,7 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define TRAP_FREEZER_USER_CALL		0x3F
 #define TRAP_RESET			0x40
 #define TRAP_FREEZER_RESTORE_PRESS	0x42
-#define TRAP_ALTTAB			0x43
+#define TRAP_MATRIX			0x43
 
 extern int  in_hypervisor;
 extern int  hickup_is_overriden;
