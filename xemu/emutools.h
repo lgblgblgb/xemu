@@ -1,6 +1,6 @@
 /* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
    8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -64,7 +64,7 @@ extern int  sysconsole_toggle ( int set );
 
 #define XEMU_CPU_STAT_INFO_BUFFER_SIZE 64
 extern void xemu_get_timing_stat_string ( char *buf, unsigned int size );
-extern void xemu_get_uname_string ( char *buf, unsigned int size );
+extern const char *xemu_get_uname_string ( void );
 
 // You should define this in your emulator, most probably with resetting the keyboard matrix
 // Purpose: emulator windows my cause the emulator does not get the key event normally, thus some keys "seems to be stucked"

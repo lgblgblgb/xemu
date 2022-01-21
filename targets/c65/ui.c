@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -130,8 +130,6 @@ static void ui_emu_info ( void )
 {
 	char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
 	xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
-	char uname_str[100];
-	xemu_get_uname_string(uname_str, sizeof uname_str);
 	INFO_WINDOW(
 		"DMA chip current revision: %d (F018 rev-%s)\n"
 		"ROM version detected: %d%s\n"
@@ -148,7 +146,7 @@ static void ui_emu_info ( void )
 		//memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
 		vic_new_mode ? "VIC-III" : "VIC-II",
 		td_stat_str,
-		uname_str
+		xemu_get_uname_string()
 	);
 }
 
