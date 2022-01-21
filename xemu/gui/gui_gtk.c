@@ -1,6 +1,6 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    ~/xemu/gui/gui_gtk.c: UI implementation for GTK+3 of Xemu's UI abstraction layer
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -78,9 +78,9 @@ static int xemugtkgui_init ( void )
 	if (sdl_on_x11) {
 		// Workaround: on Wayland, it's possible that SDL uses x11, but the GUI (with GTK) would use Wayland, mixing x11 and wayland within the same app, isn't a good idea
 		// thus we try to force x11 for GTK (better say GDK as its backend) via an environment variable set here, if we detect SDL uses x11
-		static const char *gdk_backend_var_name  = "GDK_BACKEND";
-		static const char *gdk_backend_var_value = "x11";
-		DEBUGPRINT("GTK: setting environment variable  %s=%s to avoid possible GTK backend mismatch with SDL" NL, gdk_backend_var_name, gdk_backend_var_value);
+		static const char gdk_backend_var_name[]  = "GDK_BACKEND";
+		static const char gdk_backend_var_value[] = "x11";
+		DEBUGPRINT("GTK: setting environment variable %s=%s to avoid possible GTK backend mismatch with SDL" NL, gdk_backend_var_name, gdk_backend_var_value);
 		setenv(gdk_backend_var_name, gdk_backend_var_value, 1);
 	}
 #endif
@@ -283,6 +283,8 @@ static GtkWidget *_gtkgui_recursive_menu_builder ( const struct menu_st desc[], 
 					DEBUGGUI("GUI: query-back for \"%s\"" NL, desc[a].name);
 					((xemugui_callback_t)(desc[a].handler))(&desc[a], &type);
 				}
+				if ((type & XEMUGUI_MENUFLAG_HIDDEN))
+					continue;
 				if ((type & (XEMUGUI_MENUFLAG_CHECKED | XEMUGUI_MENUFLAG_UNCHECKED))) {
 					item = gtk_check_menu_item_new_with_label(desc[a].name);
 					gtk_check_menu_item_set_active(GTK_CHECK_MENU_ITEM(item), (type & XEMUGUI_MENUFLAG_CHECKED));
