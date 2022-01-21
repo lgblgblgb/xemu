@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -340,6 +340,7 @@ int sdcard_init ( const char *fn, const char *extd81fn, int virtsd_flag )
 retry:
 	sd_is_read_only = O_RDONLY;
 	sdfd = xemu_open_file(fn, O_RDWR, &sd_is_read_only, fnbuf);
+	sd_is_read_only = (sd_is_read_only != XEMU_OPEN_FILE_FIRST_MODE_USED);
 	if (sdfd < 0) {
 		int r = errno;
 		ERROR_WINDOW("Cannot open SD-card image %s, SD-card access won't work! ERROR: %s", fnbuf, strerror(r));
@@ -366,7 +367,7 @@ retry:
 		}
 	} else {
 		if (sd_is_read_only)
-			INFO_WINDOW("Image file %s could be open only in R/O mode", fnbuf);
+			INFO_WINDOW("SDCARD: image file %s could be open only in R/O mode!", fnbuf);
 		else
 			DEBUG("SDCARD: image file re-opened in RD/WR mode, good" NL);
 		// Check size!

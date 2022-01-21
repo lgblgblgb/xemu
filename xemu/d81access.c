@@ -1,6 +1,6 @@
 /* Various D81 access method for F011 core, for Xemu / C65 and M65 emulators.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -203,12 +203,13 @@ int d81access_attach_fsobj ( int which, const char *fn, int mode )
 	}
 	// OK, so some file based open request can happen, let's continue
 	char fnbuf[PATH_MAX + 1];
-	int ro, fd = xemu_open_file(fn, IS_RO(mode) ? O_RDONLY : O_RDWR, &ro, fnbuf);
+	int ro = O_RDONLY;
+	int fd = xemu_open_file(fn, IS_RO(mode) ? O_RDONLY : O_RDWR, IS_RO(mode) ? NULL : &ro, fnbuf);
+	ro = (IS_RO(mode) || ro != XEMU_OPEN_FILE_FIRST_MODE_USED) ? D81ACCESS_RO : 0;
 	if (fd < 0) {
 		ERROR_WINDOW("D81: image/program file was specified (%s) but it cannot be opened: %s", fn, strerror(errno));
 		return 1;
 	}
-	ro = (IS_RO(mode) || ro) ? D81ACCESS_RO : 0;
 	off_t size = xemu_safe_file_size_by_fd(fd);
 	if (size == OFF_T_ERROR) {
 		ERROR_WINDOW("D81: Cannot query the size of external D81 image/program file %s ERROR: %s", fn, strerror(errno));
@@ -245,7 +246,7 @@ int d81access_attach_fsobj ( int which, const char *fn, int mode )
 		return 0;
 	}
 	close(fd);
-	ERROR_WINDOW("Cannot guess the type of object (from its size) wanted to use for floppy emulation, sorry");
+	ERROR_WINDOW("Cannot guess the type of object (from its size) wanted to use for floppy emulation");
 	return 1;
 #if 0
 	return 1;

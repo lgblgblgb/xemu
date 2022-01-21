@@ -1,6 +1,6 @@
 /* Xemu - Emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
  * 8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -41,6 +41,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 
 #define OFF_T_ERROR ((off_t)-1)
+
+#define XEMU_OPEN_FILE_FIRST_MODE_USED -1
 
 extern void *xemu_load_buffer_p;
 extern char  xemu_load_filepath[PATH_MAX];
