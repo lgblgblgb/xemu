@@ -38,6 +38,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define D81ACCESS_CALLBACKS	8
 #define D81ACCESS_RO		0x100
 #define D81ACCESS_AUTOCLOSE	0x200
+#define D81ACCESS_FAKE64	0x400
 
 typedef int(*d81access_rd_cb_t)    ( int which, void *buffer, off_t offset, int sector_size );
 typedef int(*d81access_wr_cb_t)    ( int which, void *buffer, off_t offset, int sector_size );
