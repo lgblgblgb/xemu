@@ -21,7 +21,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_files.h"
 #include "mega65.h"
 #include "xemu/cpu65.h"
-#include "xemu/f011_core.h"
 #include "dma65.h"
 #include "xemu/emutools_hid.h"
 #include "vic4.h"
@@ -386,7 +385,7 @@ static void mega65_init ( void )
 			free(fn);
 	}
 #endif
-	// *** Image file for SDCARD support
+	// *** Image file for SDCARD support, and other related init functions handled there as well (eg d81access, fdc init ... related registers, etc)
 	if (sdcard_init(configdb.sdimg, configdb.virtsd) < 0)
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
@@ -413,8 +412,6 @@ static void mega65_init ( void )
 	cia2.DDRA = 3; // Ugly workaround ... I think, SD-card setup "CRAM UTIL" (or better: Hyppo) should set this by its own. Maybe Xemu bug, maybe not?
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
 	dma_init(newhack ? DMA_FEATURE_HACK | DMA_FEATURE_DYNMODESET | configdb.dmarev : configdb.dmarev);
-	// Initialize FDC
-	fdc_init(disk_buffers + FD_BUFFER_POS);
 	// *** Drive 8 external mount
 	if (configdb.disk8)
 		sdcard_force_external_mount(0, configdb.disk8, "Mount failure on CLI/CFG requested drive-8");

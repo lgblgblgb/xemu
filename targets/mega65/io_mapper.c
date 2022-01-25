@@ -250,29 +250,29 @@ Uint8 io_read ( unsigned int addr )
 			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x1800] : cia_read(&cia2, addr & 0xF);
 		case 0x3D:	// $DD00-$DDFF ~ M65 I/O mode
 			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x3800] : cia_read(&cia2, addr & 0xF);
-		/* --------------------------------------------------- */
-		/* $DE00-$DFFF: IO exp, EXTENDED COLOUR RAM, SD buffer */
-		/* --------------------------------------------------- */
+		/* ----------------------------------------------------- */
+		/* $DE00-$DFFF: IO exp, EXTENDED COLOUR RAM, disk buffer */
+		/* ----------------------------------------------------- */
 		case 0x0E:	// $DE00-$DEFF ~ C64 I/O mode
 		case 0x0F:	// $DF00-$DFFF ~ C64 I/O mode
 			if (vic_registers[0x30] & 1)
 				return colour_ram[addr - 0x0800];
 			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED))
-				return sd_buffer[addr - 0x0E00];
+				return disk_buffer_cpu_view[addr - 0x0E00];
 			return 0xFF;	// I/O exp is not supported
 		case 0x1E:	// $DE00-$DEFF ~ C65 I/O mode
 		case 0x1F:	// $DF00-$DFFF ~ C65 I/O mode
 			if (vic_registers[0x30] & 1)
 				return colour_ram[addr - 0x1800];
 			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED))
-				return sd_buffer[addr - 0x1E00];
+				return disk_buffer_cpu_view[addr - 0x1E00];
 			return 0xFF;	// I/O exp is not supported
 		case 0x3E:	// $DE00-$DEFF ~ M65 I/O mode
 		case 0x3F:	// $DF00-$DFFF ~ M65 I/O mode
 			if (vic_registers[0x30] & 1)
 				return colour_ram[addr - 0x3800];
 			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED))
-				return sd_buffer[addr - 0x3E00];
+				return disk_buffer_cpu_view[addr - 0x3E00];
 			return 0xFF;	// I/O exp is not supported
 		/* --------------------------------------------------------------- */
 		/* $2xxx I/O area is not supported: FIXME: what is that for real?! */
@@ -519,9 +519,9 @@ void io_write ( unsigned int addr, Uint8 data )
 			else
 				cia_write(&cia2, addr & 0xF, data);
 			return;
-		/* --------------------------------------------------- */
-		/* $DE00-$DFFF: IO exp, EXTENDED COLOUR RAM, SD buffer */
-		/* --------------------------------------------------- */
+		/* ----------------------------------------------------- */
+		/* $DE00-$DFFF: IO exp, EXTENDED COLOUR RAM, disk buffer */
+		/* ----------------------------------------------------- */
 		case 0x0E:	// $DE00-$DEFF ~ C64 I/O mode
 		case 0x0F:	// $DF00-$DFFF ~ C64 I/O mode
 			if (vic_registers[0x30] & 1) {
@@ -529,7 +529,7 @@ void io_write ( unsigned int addr, Uint8 data )
 				return;
 			}
 			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED)) {
-				sd_buffer[addr - 0x0E00] = data;
+				disk_buffer_cpu_view[addr - 0x0E00] = data;
 				return;
 			}
 			return;		// I/O exp is not supported
@@ -540,7 +540,7 @@ void io_write ( unsigned int addr, Uint8 data )
 				return;
 			}
 			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED)) {
-				sd_buffer[addr - 0x1E00] = data;
+				disk_buffer_cpu_view[addr - 0x1E00] = data;
 				return;
 			}
 			return;		// I/O exp is not supported
@@ -551,7 +551,7 @@ void io_write ( unsigned int addr, Uint8 data )
 				return;
 			}
 			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED)) {
-				sd_buffer[addr - 0x3E00] = data;
+				disk_buffer_cpu_view[addr - 0x3E00] = data;
 				return;
 			}
 			return;		// I/O exp is not supported

@@ -47,6 +47,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // FIXME: invent same sane value here
 #define MIN_MOUNT_SECTOR_NO 10
 
+#define SD_BUFFER_POS 0x0E00
+#define FD_BUFFER_POS 0x0C00
+
 
 static Uint8	sd_regs[0x30];
 static int	sdfd;			// SD-card controller emulation, UNIX file descriptor of the open image file
@@ -68,6 +71,7 @@ static int	keep_busy = 0;
 // 4K buffer space: Actually the SD buffer _IS_ inside this, also the F011 buffer should be (FIXME: that is not implemented yet right now!!)
 Uint8		disk_buffers[0x1000];
 static Uint8	sd_fill_buffer[512];	// Only used by the sd fill mode write command
+Uint8		*disk_buffer_cpu_view;
 
 const char	xemu_external_d81_signature[] = "\xFF\xFE<{[(XemuExternalDiskMagic)]}>";
 
@@ -304,10 +308,17 @@ Uint32 sdcard_get_size ( void )
 }
 
 
+static XEMU_INLINE void set_disk_buffer_cpu_view ( void )
+{
+	disk_buffer_cpu_view =  disk_buffers + ((sd_regs[9] & 0x80) ? SD_BUFFER_POS : FD_BUFFER_POS);
+}
+
+
 int sdcard_init ( const char *fn, const int virtsd_flag )
 {
 	memset(sd_regs, 0, sizeof sd_regs);			// reset all registers
-	memset(D6XX_registers + 0x80, 0, sizeof sd_regs);	// make sure that D6XX backend is the same!
+	memcpy(D6XX_registers + 0x80, sd_regs, sizeof sd_regs);	// be sure, this is in sync with the D6XX register backend (used by io_mapper which also calls us ...)
+	set_disk_buffer_cpu_view();	// make sure to initialize disk_buffer_cpu_view based on current sd_regs[9] otherwise disk_buffer_cpu_view may points to NULL when referenced!
 	for (int a = 0; a < 2; a++) {
 		mount_info[a].current_name = xemu_strdup("<INIT>");
 		mount_info[a].internal = -1;
@@ -325,6 +336,7 @@ int sdcard_init ( const char *fn, const int virtsd_flag )
 #endif
 	d81access_init();
 	atexit(sdcard_shutdown);
+	fdc_init(disk_buffers + FD_BUFFER_POS);	// initialize F011 emulation
 	KEEP_BUSY(0);
 	sd_status = 0;
 	memset(sd_fill_buffer, sd_fill_value, 512);
@@ -437,6 +449,10 @@ retry:
 		} else if (r > MEMCONTENT_VERSION_ID) {
 			INFO_WINDOW("Xemu's signature is too new%s to DOWNgrade", msg);
 		}
+		// TODO: check MEGA65.D81 on the disk, and get its starting sector (!) number. So we can know if mount of MEGA65.D81 is
+		// requested later by sector number given in D81 "mount" registers. We can use this information to
+		// give a D81 as an external mount instead then, to please users not to have the default D81 "inside"
+		// the SD-card image rather than in their native file system.
 	}
 	return sdfd;
 }
@@ -491,7 +507,7 @@ static Uint8 sdcard_read_status ( void )
 //		DEBUGPRINT(">>> SDCARD resetting status read counter <<<" NL);
 //	}
 //	status_read_counter++;
-	// Suggested by @Jimbo on MEGA65/Xemu Dicord: a workaround to report busy status
+	// Suggested by @Jimbo on MEGA65/Xemu Discord: a workaround to report busy status
 	// if external SD bus is used, always when reading status. It seems to be needed now
 	// with newer hyppo, otherwise it misinterprets the SDHC detection method on the external bus!
 	if (ret & SD_ST_EXT_BUS)
@@ -510,7 +526,7 @@ static XEMU_INLINE Uint8 *get_buffer_memory ( int is_write )
 {
 	// Currently the only buffer available in Xemu is the SD buffer, UNLESS it's a write operation and "fill mode" is used
 	// (sd_fill_buffer is just filled with a single byte value)
-	return (is_write && sd_fill_mode) ? sd_fill_buffer : sd_buffer;
+	return (is_write && sd_fill_mode) ? sd_fill_buffer : (disk_buffers + SD_BUFFER_POS);
 }
 
 
@@ -802,7 +818,8 @@ static int some_mount ( const int unit )
 		d81access_close(unit);	// unmount, if internal_mount() finds no internal mount situation
 		mount_info[unit].current_name[0] = '\0';
 		mount_info[unit].internal = -1;
-	}
+	} else
+		DEBUGPRINT("SDCARD: D81: internal mount #%d failed?" NL, unit);
 	return 0;
 }
 
@@ -862,8 +879,7 @@ void sdcard_write_register ( int reg, Uint8 data )
 				memset(sd_fill_buffer, sd_fill_value, 512);
 			break;
 		case 0x09:
-			sd_reg9 = data;
-			// FIXME: bit7 of reg9 is buffer select?! WHAT is THAT?! [f011sd_buffer_select]  btw, bit2 seems to be some "handshake" stuff ...
+			set_disk_buffer_cpu_view();	// update disk_buffer_cpu_view pointer according to sd_regs[9] just written
 			break;
 		case 0x0B:
 			DEBUGPRINT("SDCARD: writing FDC configuration register $%04X with $%02X (old_data=$%02X) PC=$%04X" NL, reg + 0xD680, data, prev_data, cpu65.pc);
