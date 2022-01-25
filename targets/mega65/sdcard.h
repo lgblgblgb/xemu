@@ -40,14 +40,9 @@ extern int    sdcard_write_block    ( Uint32 block, Uint8 *buffer );
 extern int    mount_external_d81    ( const char *name, int force_ro );
 extern int    forget_external_d81   ( void );
 
-#define SD_BUFFER_POS 0x0E00
-#define FD_BUFFER_POS 0x0C00
-
-#define sd_buffer	(disk_buffers+SD_BUFFER_POS)
-
 // disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space"
 extern Uint8  disk_buffers[0x1000];
-extern Uint8  sd_reg9;
+extern Uint8  *disk_buffer_cpu_view;
 extern Uint8  sd_status;
 
 extern int fd_mounted;

@@ -44,6 +44,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define SD_ST_SDHC	0x10
 
+#define SD_BUFFER_POS 0x0E00
+#define FD_BUFFER_POS 0x0C00
+
 
 static int	sdfd;			// SD-card controller emulation, UNIX file descriptor of the open image file
 Uint8		sd_status;		// SD-status byte
@@ -67,12 +70,11 @@ static int	keep_busy = 0;
 // 4K buffer space: Actually the SD buffer _IS_ inside this, also the F011 buffer should be (FIXME: that is not implemented yet right now!!)
 Uint8		disk_buffers[0x1000];
 static Uint8	sd_fill_buffer[512];	// Only used by the sd fill mode write command
+Uint8		*disk_buffer_cpu_view;
 
 static char	external_d81[PATH_MAX + 1];
 
 const char	xemu_external_d81_signature[] = "\xFF\xFE<{[(XemuExternalDiskMagic)]}>";
-
-Uint8 sd_reg9;
 
 
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
@@ -302,8 +304,17 @@ int sdcard_hack_mount_drive_9_now ( const char *disk9 )
 }
 
 
+static XEMU_INLINE void set_disk_buffer_cpu_view ( void )
+{
+	disk_buffer_cpu_view =  disk_buffers + ((D6XX_registers[0x89] & 0x80) ? SD_BUFFER_POS : FD_BUFFER_POS);
+}
+
+
+
 int sdcard_init ( const char *fn, const char *extd81fn, int virtsd_flag )
 {
+	memset(D6XX_registers + 0x80, 0, 0x30);
+	set_disk_buffer_cpu_view();		// make sure to initialize disk_buffer_cpu_view based on current sd_regs[9] otherwise disk_buffer_cpu_view may points to NULL when referenced!
 	int just_created_image_file =  0;	// will signal to format image automatically for the user (if set, by default it's clear, here)
 	char fnbuf[PATH_MAX + 1];
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
@@ -316,6 +327,7 @@ int sdcard_init ( const char *fn, const char *extd81fn, int virtsd_flag )
 	sdcard_set_external_d81_name(extd81fn);
 	d81access_init();
 	atexit(sdcard_shutdown);
+	fdc_init(disk_buffers + FD_BUFFER_POS);	// initialize F011 emulation
 	KEEP_BUSY(0);
 	sd_status = 0;
 	fd_mounted = 0;
@@ -478,6 +490,11 @@ static Uint8 sdcard_read_status ( void )
 {
 	Uint8 ret = sd_status;
 	DEBUG("SDCARD: reading SD status $D680 result is $%02X PC=$%04X" NL, ret, cpu65.pc);
+	// Suggested by @Jimbo on MEGA65/Xemu Discord: a workaround to report busy status
+	// if external SD bus is used, always when reading status. It seems to be needed now
+	// with newer hyppo, otherwise it misinterprets the SDHC detection method on the external bus!
+	if (ret & SD_ST_EXT_BUS)
+		ret |= SD_ST_BUSY1 | SD_ST_BUSY0;
 #ifdef USE_KEEP_BUSY
 	if (!keep_busy)
 		sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);
@@ -492,7 +509,7 @@ static XEMU_INLINE Uint8 *get_buffer_memory ( int is_write )
 {
 	// Currently the only buffer available in Xemu is the SD buffer, UNLESS it's a write operation and "fill mode" is used
 	// (sd_fill_buffer is just filled with a single byte value)
-	return (is_write && sd_fill_mode) ? sd_fill_buffer : sd_buffer;
+	return (is_write && sd_fill_mode) ? sd_fill_buffer : (disk_buffers + SD_BUFFER_POS);
 }
 
 
@@ -856,8 +873,7 @@ void sdcard_write_register ( int reg, Uint8 data )
 				memset(sd_fill_buffer, sd_fill_value, 512);
 			break;
 		case 0x09:
-			sd_reg9 = data;
-			// FIXME: bit7 of reg9 is buffer select?! WHAT is THAT?! [f011sd_buffer_select]  btw, bit2 seems to be some "handshake" stuff ...
+			set_disk_buffer_cpu_view();	// update disk_buffer_cpu_view pointer according to sd_regs[9] just written
 			break;
 		case 0xB:
 			sdcard_mount_d81(data);
@@ -894,7 +910,7 @@ Uint8 sdcard_read_register ( int reg )
 			data = sdcard_bytes_read & 0xFF;
 			break;
 		case 9:
-			return sd_reg9;
+			data = D6XX_registers[reg + 0x80];
 #if 0
 			// SDcard read bytes hi byte
 			data = sdcard_bytes_read >> 8;

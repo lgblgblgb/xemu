@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2017-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2017-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -280,23 +280,23 @@ DEFINE_WRITER(eth_buffer_writer) {
 	eth65_write_tx_buffer(GET_WRITER_OFFSET(), data);
 }
 DEFINE_READER(disk_buffers_reader) {
-#if 1
+#if 0
 	return disk_buffers[GET_READER_OFFSET()];
 #else
 	if (in_hypervisor)
 		return disk_buffers[GET_READER_OFFSET()];
 	else
-		return disk_buffers[(GET_WRITER_OFFSET() & 0x1FF) + ((sd_reg9 & 0x80) ? SD_BUFFER_POS : FD_BUFFER_POS)];
+		return disk_buffer_cpu_view[GET_READER_OFFSET() & 0x1FF];
 #endif
 }
 DEFINE_WRITER(disk_buffers_writer) {
-#if 1
+#if 0
 	disk_buffers[GET_WRITER_OFFSET()] = data;
 #else
 	if (in_hypervisor)
 		disk_buffers[GET_WRITER_OFFSET()] = data;
 	else
-		disk_buffers[(GET_WRITER_OFFSET() & 0x1FF) + ((sd_reg9 & 0x80) ? SD_BUFFER_POS : FD_BUFFER_POS)] = data;
+		disk_buffer_cpu_view[GET_WRITER_OFFSET() & 0x1FF] = data;
 #endif
 }
 DEFINE_READER(i2c_io_reader) {

@@ -1,7 +1,7 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    I/O decoding part (used by memory_mapper.h and DMA mainly)
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -38,7 +38,7 @@ Uint8  D7XX[0x100];			// FIXME: hack for future M65 stuffs like ALU! FIXME: no s
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 int    cpu_mega65_opcodes = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;
-int port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65 keyboard
+int    port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65 keyboard
 
 
 static const Uint8 fpga_firmware_version[] = { 'X','e','m','u' };
@@ -266,29 +266,21 @@ Uint8 io_read ( unsigned int addr )
 			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x1800] : cia_read(&cia2, addr & 0xF);
 		case 0x3D:	// $DD00-$DDFF ~ M65 I/O mode
 			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x3800] : cia_read(&cia2, addr & 0xF);
-		/* --------------------------------------------------- */
-		/* $DE00-$DFFF: IO exp, EXTENDED COLOUR RAM, SD buffer */
-		/* --------------------------------------------------- */
+		/* ----------------------------------------------------- */
+		/* $DE00-$DFFF: IO exp, EXTENDED COLOUR RAM, disk buffer */
+		/* ----------------------------------------------------- */
 		case 0x0E:	// $DE00-$DEFF ~ C64 I/O mode
 		case 0x0F:	// $DF00-$DFFF ~ C64 I/O mode
-			if (vic_registers[0x30] & 1)
-				return colour_ram[addr - 0x0800];
-			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED))
-				return sd_buffer[addr - 0x0E00];
-			return 0xFF;	// I/O exp is not supported
 		case 0x1E:	// $DE00-$DEFF ~ C65 I/O mode
 		case 0x1F:	// $DF00-$DFFF ~ C65 I/O mode
-			if (vic_registers[0x30] & 1)
-				return colour_ram[addr - 0x1800];
-			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED))
-				return sd_buffer[addr - 0x1E00];
-			return 0xFF;	// I/O exp is not supported
 		case 0x3E:	// $DE00-$DEFF ~ M65 I/O mode
 		case 0x3F:	// $DF00-$DFFF ~ M65 I/O mode
+			// FIXME: is it really true for *ALL* I/O modes, that colour RAM expansion to 2K and
+			// disk buffer I/O mapping works in all of them??
 			if (vic_registers[0x30] & 1)
-				return colour_ram[addr - 0x3800];
+				return colour_ram[0x600 + (addr & 0x1FF)];
 			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED))
-				return sd_buffer[addr - 0x3E00];
+				return disk_buffer_cpu_view[addr & 0x1FF];
 			return 0xFF;	// I/O exp is not supported
 		/* --------------------------------------------------------------- */
 		/* $2xxx I/O area is not supported: FIXME: what is that for real?! */
@@ -541,39 +533,23 @@ void io_write ( unsigned int addr, Uint8 data )
 			else
 				cia_write(&cia2, addr & 0xF, data);
 			return;
-		/* --------------------------------------------------- */
-		/* $DE00-$DFFF: IO exp, EXTENDED COLOUR RAM, SD buffer */
-		/* --------------------------------------------------- */
+		/* ----------------------------------------------------- */
+		/* $DE00-$DFFF: IO exp, EXTENDED COLOUR RAM, disk buffer */
+		/* ----------------------------------------------------- */
 		case 0x0E:	// $DE00-$DEFF ~ C64 I/O mode
 		case 0x0F:	// $DF00-$DFFF ~ C64 I/O mode
-			if (vic_registers[0x30] & 1) {
-				colour_ram[addr - 0x0800] = data;
-				return;
-			}
-			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED)) {
-				sd_buffer[addr - 0x0E00] = data;
-				return;
-			}
-			return;		// I/O exp is not supported
 		case 0x1E:	// $DE00-$DEFF ~ C65 I/O mode
 		case 0x1F:	// $DF00-$DFFF ~ C65 I/O mode
-			if (vic_registers[0x30] & 1) {
-				colour_ram[addr - 0x1800] = data;
-				return;
-			}
-			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED)) {
-				sd_buffer[addr - 0x1E00] = data;
-				return;
-			}
-			return;		// I/O exp is not supported
 		case 0x3E:	// $DE00-$DEFF ~ M65 I/O mode
 		case 0x3F:	// $DF00-$DFFF ~ M65 I/O mode
+			// FIXME: is it really true for *ALL* I/O modes, that colour RAM expansion to 2K and
+			// disk buffer I/O mapping works in all of them??
 			if (vic_registers[0x30] & 1) {
-				colour_ram[addr - 0x3800] = data;
+				colour_ram[0x600 + (addr & 0x1FF)] = data;
 				return;
 			}
 			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED)) {
-				sd_buffer[addr - 0x3E00] = data;
+				disk_buffer_cpu_view[addr & 0x1FF] = data;
 				return;
 			}
 			return;		// I/O exp is not supported
@@ -587,7 +563,6 @@ void io_write ( unsigned int addr, Uint8 data )
 			FATAL("Xemu internal error: undecoded I/O area writing for address $(%X)%03X and data $%02X", addr >> 8, addr & 0xFFF, data);
 	}
 }
-
 
 
 Uint8 io_dma_reader ( int addr ) {
