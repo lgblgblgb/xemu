@@ -280,24 +280,18 @@ DEFINE_WRITER(eth_buffer_writer) {
 	eth65_write_tx_buffer(GET_WRITER_OFFSET(), data);
 }
 DEFINE_READER(disk_buffers_reader) {
-#if 0
-	return disk_buffers[GET_READER_OFFSET()];
-#else
+	const unsigned int offs = GET_READER_OFFSET();
 	if (in_hypervisor)
-		return disk_buffers[GET_READER_OFFSET()];
+		return disk_buffers[offs];
 	else
-		return disk_buffer_cpu_view[GET_READER_OFFSET() & 0x1FF];
-#endif
+		return disk_buffer_cpu_view[offs & 0x1FF];
 }
 DEFINE_WRITER(disk_buffers_writer) {
-#if 0
-	disk_buffers[GET_WRITER_OFFSET()] = data;
-#else
+	const unsigned int offs = GET_WRITER_OFFSET();
 	if (in_hypervisor)
-		disk_buffers[GET_WRITER_OFFSET()] = data;
+		disk_buffers[offs] = data;
 	else
-		disk_buffer_cpu_view[GET_WRITER_OFFSET() & 0x1FF] = data;
-#endif
+		disk_buffer_cpu_view[offs & 0x1FF] = data;
 }
 DEFINE_READER(i2c_io_reader) {
 	int addr = GET_READER_OFFSET();
@@ -356,7 +350,7 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 	{ 0xFFD0000, 0xFFD3FFF, m65_io_reader, m65_io_writer },
 	// full colour RAM
 	{ 0xFF80000, 0xFF87FFF, colour_ram_reader, colour_ram_writer },		// full colour RAM (32K)
-	{ 0xFFF8000, 0xFFFBFFF, hypervisor_ram_reader, hypervisor_ram_writer },	// 16KB Kickstart/hypervisor ROM
+	{ 0xFFF8000, 0xFFFBFFF, hypervisor_ram_reader, hypervisor_ram_writer },	// 16KB HYPPO hickup/hypervisor ROM
 	{ 0xFF7E000, 0xFF7FFFF, dummy_reader, char_wom_writer },		// Character "WriteOnlyMemory"
 	{ 0xFFDE800, 0xFFDEFFF, eth_buffer_reader, eth_buffer_writer },		// ethernet RX/TX buffer, NOTE: the same address, reading is always the RX_read, writing is always TX_write
 	{ 0xFFD6000, 0xFFD6FFF, disk_buffers_reader, disk_buffers_writer },	// disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space" [??]
@@ -396,7 +390,7 @@ static void phys_addr_decoder ( int phys, int slot, int hint_slot )
 	// hint_slot is "likely" to have some contiunity with the slot given by "slot" otherwise it's just makes
 	// thing worse. If not used, hint_slot should be negative to skip this feature. hint_slot can be even same
 	// as "slot" if you need a "moving" mapping in a "caching" slot, ie DMA-aux access functions, etc.
-	if (hint_slot >= 0 && mem_page_refp[hint_slot]->end < 0xFFFFFFF) {	// FIXME there was a serious bug here, takinking invalid mem slot for anything after hinting that
+	if (hint_slot >= 0 && mem_page_refp[hint_slot]->end < 0xFFFFFFF) {	// FIXME there was a serious bug here, taking invalid mem slot for anything after hinting that
 		p = mem_page_refp[hint_slot];
 		if (phys >= p->start && phys <= p->end) {
 #ifdef DEBUGMEM

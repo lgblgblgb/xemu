@@ -43,6 +43,7 @@ extern int    forget_external_d81   ( void );
 // disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space"
 extern Uint8  disk_buffers[0x1000];
 extern Uint8  *disk_buffer_cpu_view;
+extern Uint8  *disk_buffer_io_mapped;
 extern Uint8  sd_status;
 
 extern int fd_mounted;

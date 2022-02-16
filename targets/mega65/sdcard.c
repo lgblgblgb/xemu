@@ -71,6 +71,10 @@ static int	keep_busy = 0;
 Uint8		disk_buffers[0x1000];
 static Uint8	sd_fill_buffer[512];	// Only used by the sd fill mode write command
 Uint8		*disk_buffer_cpu_view;
+// FIXME/TODO: unfortunately it seems I/O mapping of SD-buffer is buggy even on
+// real MEGA65 and the new code to have mapping allowing FD _and_ SD buffer mount
+// causes problems. So let's revert back to a fixed "SD-only" solution for now.
+Uint8		*disk_buffer_io_mapped = disk_buffers + SD_BUFFER_POS;
 
 static char	external_d81[PATH_MAX + 1];
 
