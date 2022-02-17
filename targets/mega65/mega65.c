@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "xemu/cpu65.h"
 #include "xemu/f011_core.h"
+#include "xemu/d81access.h"
 #include "dma65.h"
 #include "xemu/emutools_hid.h"
 #include "vic4.h"
@@ -398,6 +399,7 @@ static void mega65_init ( void )
 	if (sdcard_init(configdb.sdimg, configdb.disk8, configdb.virtsd) < 0)
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
+	vic4_disallow_video_std_change = 0;	// TODO: remove this later, as will be managed by reset/first-hyppo-leave sequence and even by UI menu
 	vic_init();
 	// *** CIAs
 	cia_init(&cia1, "CIA-1",

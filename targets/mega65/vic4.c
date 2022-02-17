@@ -76,6 +76,9 @@ static Uint32 *used_palette;					// normally the same value as "palette" from vi
 static int EFFECTIVE_V400;
 static Uint8 sprite_y_adjust = 0;
 
+// TODO: not really implemented just here ...
+static int etherbuffer_is_io_mapped = 0;
+
 // --- these things are altered by vic4_open_frame_access() ONLY at every fame ONLY based on PAL or NTSC selection
 Uint8 videostd_id = 0xFF;			// 0=PAL, 1=NTSC [give some insane value by default to force the change at the fist frame after starting Xemu]
 const char *videostd_name = "<UNDEF>";		// PAL or NTSC, however initially is not yet set
@@ -85,7 +88,7 @@ int videostd_changed = 0;
 static const char NTSC_STD_NAME[] = "NTSC";
 static const char PAL_STD_NAME[] = "PAL";
 int vic_readjust_sdl_viewport = 0;
-int vic4_disallow_video_std_change = 0;
+int vic4_disallow_video_std_change = 1;
 
 // VIC-IV Modeline Parameters
 // ----------------------------------------------------
@@ -587,8 +590,11 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_ALL(0x1D):	// sprite-X expansion
 			break;
 		CASE_VIC_ALL(0x1E):	// sprite-sprite collision
+			vic_registers[0x1E] = 0;
+			return;
 		CASE_VIC_ALL(0x1F):	// sprite-data collision
-			return;		// NOT writeable!
+			vic_registers[0x1F] = 0;
+			return;
 		CASE_VIC_2(0x20): CASE_VIC_2(0x21): CASE_VIC_2(0x22): CASE_VIC_2(0x23): CASE_VIC_2(0x24): CASE_VIC_2(0x25): CASE_VIC_2(0x26): CASE_VIC_2(0x27):
 		CASE_VIC_2(0x28): CASE_VIC_2(0x29): CASE_VIC_2(0x2A): CASE_VIC_2(0x2B): CASE_VIC_2(0x2C): CASE_VIC_2(0x2D): CASE_VIC_2(0x2E):
 			data &= 0xF;	// colour-related registers are 4 bit only for VIC-II
@@ -604,12 +610,19 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_ALL(0x2F):	// the KEY register, it must be handled in ALL VIC modes, to be able to set VIC I/O mode
 			do {
 				int vic_new_iomode;
+				etherbuffer_is_io_mapped = 0;
 				if (data == 0x96 && vic_registers[0x2F] == 0xA5) {
 					vic_new_iomode = VIC3_IOMODE;
 					vic_color_register_mask = 0xFF;
 				} else if (data == 0x53 && vic_registers[0x2F] == 0x47) {
 					vic_new_iomode = VIC4_IOMODE;
 					vic_color_register_mask = 0xFF;
+				} else if (data == 0x54 && vic_registers[0x2F] == 0x45) {
+					// this I/O mode is the same as VIC4 I/O mode _but_ with ethernet buffer also mapped
+					DEBUGPRINT("VIC: warning, unimplemented ethernet I/O mode is set!" NL);
+					vic_new_iomode = VIC4_IOMODE;
+					vic_color_register_mask = 0xFF;
+					etherbuffer_is_io_mapped = 1;
 				} else {
 					vic_new_iomode = VIC2_IOMODE;
 					vic_color_register_mask = 0x0F;
@@ -621,7 +634,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			} while(0);
 			break;
 		CASE_VIC_2(0x30):	// this register is _SPECIAL_, and exists only in VIC-II (C64) I/O mode: C128-style "2MHz fast" mode ...
-			DEBUGPRINT("VIC: Write 0xD030: $%02x" NL, data);
+			DEBUGPRINT("VIC: Write 0xD030 in VIC-II I/O mode with data $%02x @ PC=$%04X (hypervisor mode: %d)" NL, data, cpu65.old_pc, !!in_hypervisor);
 			c128_d030_reg = data;
 			machine_set_speed(0);
 			return;		// it IS important to have return here, since it's not a "real" VIC-4 mode register's view in another mode!!

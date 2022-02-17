@@ -19,9 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_COMMON_D81ACCESS_H_INCLUDED
 #define XEMU_COMMON_D81ACCESS_H_INCLUDED
 
-#ifndef D81_SIZE
 #define D81_SIZE		819200
-#endif
 
 #define PRG_MIN_SIZE		16
 
@@ -44,10 +42,10 @@ typedef int(*d81access_rd_cb_t)    ( int which, void *buffer, off_t offset, int 
 typedef int(*d81access_wr_cb_t)    ( int which, void *buffer, off_t offset, int sector_size );
 
 // must be defined by the caller!
-extern void d81access_cb_chgmode   ( int which, int mode );
+extern void d81access_cb_chgmode   ( const int which, const int mode );
 
-extern int  d81access_read_sect    ( int which, Uint8 *buffer, int d81_offset, int sector_size );
-extern int  d81access_write_sect   ( int which, Uint8 *buffer, int d81_offset, int sector_size );
+extern int  d81access_read_sect    ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector, const int sector_size );
+extern int  d81access_write_sect   ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector, const int sector_size );
 
 extern void d81access_init         ( void      );
 extern int  d81access_get_mode     ( int which );

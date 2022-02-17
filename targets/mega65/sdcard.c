@@ -226,25 +226,26 @@ static inline void virtdisk_read_block ( Uint32 block, Uint8 *buffer )
 
 
 // define the callback, d81access call this, we can dispatch the change in FDC config to the F011 core emulation this way, automatically
-void d81access_cb_chgmode ( int which, int mode ) {
-	int have_disk = ((mode & 0xFF) != D81ACCESS_EMPTY);
-	int can_write = (!(mode & D81ACCESS_RO));
+void d81access_cb_chgmode ( const int which, const int mode ) {
+	const int have_disk = ((mode & 0xFF) != D81ACCESS_EMPTY);
+	const int can_write = (!(mode & D81ACCESS_RO));
 	if (which < 2)
 		DEBUGPRINT("SDCARD: configuring F011 FDC (#%d) with have_disk=%d, can_write=%d" NL, which, have_disk, can_write);
 	fdc_set_disk(which, have_disk, can_write);
 }
 // Here we implement F011 core's callbacks using d81access (and yes, F011 uses 512 bytes long sectors for real)
-int fdc_cb_rd_sec ( int which, Uint8 *buffer, int d81_offset ) {
-	int ret = d81access_read_sect(which, buffer, d81_offset, 512);
-	DEBUG("SDCARD: D81: reading sector at d81_offset=%d, return value=%d" NL, d81_offset, ret);
+int fdc_cb_rd_sec ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector )
+{
+	const int ret = d81access_read_sect(which, buffer, side, track, sector, 512);
+	DEBUG("SDCARD: D81: reading sector at d81_pos=(%d,%d,%d), return value=%d" NL, side, track, sector, ret);
 	return ret;
 }
-int fdc_cb_wr_sec ( int which, Uint8 *buffer, int d81_offset ) {
-	int ret = d81access_write_sect(which, buffer, d81_offset, 512);
-	DEBUG("SDCARD: D81: writing sector at d81_offset=%d, return value=%d" NL, d81_offset, ret);
+int fdc_cb_wr_sec ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector )
+{
+	const int ret = d81access_write_sect(which, buffer, side, track, sector , 512);
+	DEBUG("SDCARD: D81: writing sector at d81_pos=(%d,%d,%d), return value=%d" NL, side, track, sector, ret);
 	return ret;
 }
-
 
 
 static void sdcard_shutdown ( void )

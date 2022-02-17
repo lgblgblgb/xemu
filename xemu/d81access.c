@@ -49,20 +49,6 @@ static int enable_mode_transient_callback = -1;
 #define IS_AUTOCLOSE(p)	(!!((p) & D81ACCESS_AUTOCLOSE))
 
 
-static const Uint8 vdsk_head_sect[] = {
-	0x28, 0x03,
-	0x44, 0x00,
-	'X', 'E', 'M', 'U', ' ', 'V', 'R', '-', 'D', 'I', 'S', 'K', ' ', 'R', '/', 'O',
-	0xA0, 0xA0,
-	'6', '5',
-	0xA0,
-	0x33, 0x44, 0xA0, 0xA0
-};
-static const Uint8 vdsk_file_name[16] = {
-	'F', 'I', 'L', 'E', 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0
-};
-
-
 void d81access_init ( void )
 {
 	DEBUGPRINT("D81: initial subsystem reset" NL);
@@ -258,7 +244,7 @@ int d81access_attach_fsobj ( int which, const char *fn, int mode )
 }
 
 
-static int file_io_op ( int which, int is_write, int d81_offset, Uint8 *buffer, int size )
+static int file_io_op ( const int which, const int is_write, const int d81_offset, Uint8 *buffer, const int size )
 {
 	off_t offset = d81[which].start_at + (off_t)d81_offset;
 	if (lseek(d81[which].fd, offset, SEEK_SET) != offset)
@@ -271,7 +257,7 @@ static int file_io_op ( int which, int is_write, int d81_offset, Uint8 *buffer, 
 }
 
 
-static int read_fake64 ( int which, Uint8 *buffer, int d81_offset, int number_of_logical_sectors )
+static int read_fake64 ( const int which, Uint8 *buffer, int d81_offset, int number_of_logical_sectors )
 {
 	for (; number_of_logical_sectors; number_of_logical_sectors--, d81_offset += 0x100, buffer += 0x100) {
 		int track  =  d81_offset / 0x2800 + 1;	// Calculate D81 requested track number (starting from 1)
@@ -377,8 +363,20 @@ static int read_fake64 ( int which, Uint8 *buffer, int d81_offset, int number_of
 }
 
 
-static int read_prg ( int which, Uint8 *buffer, int d81_offset, int number_of_logical_sectors )
+static int read_prg ( const int which, Uint8 *buffer, int d81_offset, int number_of_logical_sectors )
 {
+	static const Uint8 vdsk_head_sect[] = {
+		0x28, 0x03,
+		0x44, 0x00,
+		'X', 'E', 'M', 'U', ' ', 'V', 'R', '-', 'D', 'I', 'S', 'K', ' ', 'R', '/', 'O',
+		0xA0, 0xA0,
+		'6', '5',
+		0xA0,
+		0x33, 0x44, 0xA0, 0xA0
+	};
+	static const Uint8 vdsk_file_name[16] = {
+		'F', 'I', 'L', 'E', 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0, 0xA0
+	};
 	// just pre-zero buffer, so we don't need to take care on this at various code points with possible partly filled output
 	memset(buffer, 0, 512);
 	// disk organization at CBM-DOS level is 256 byte sector based, though FDC F011 itself is 512 bytes sectored stuff
@@ -405,6 +403,11 @@ static int read_prg ( int which, Uint8 *buffer, int d81_offset, int number_of_lo
 			memcpy(buffer + 5, vdsk_file_name, 16);
 			buffer[0x1E] = d81[which].prg_blk_size & 0xFF;
 			buffer[0x1F] = d81[which].prg_blk_size >> 8;
+			memcpy(buffer + 0x22, buffer + 2, 0x20 - 2);	// the next dir entry is the same, BUT:
+			buffer[0x22] = 0x81;				// ... SEQ prg type
+			buffer[0x29] = 'S';				// ... "SEQ" after name "FILE", so we have "FILE" (PRG) and "FILESEQ" (SEQ)
+			buffer[0x2A] = 'E';
+			buffer[0x2B] = 'Q';
 		} else {		// what we want to handle at all yet, is the file itself, which starts at the very beginning at our 'virtual' disk
 			int block = d81_offset >> 8;	// calculate the block from offset
 			if (block < d81[which].prg_blk_size) {	// so it seems, we need to do something here at last, disk area belongs to our file!
@@ -434,18 +437,30 @@ static int read_prg ( int which, Uint8 *buffer, int d81_offset, int number_of_lo
 }
 
 
-static void check_io_req_params ( int d81_offset, int sector_size )
+static int check_io_req_params ( const int which, const Uint8 side, const Uint8 track, const Uint8 sector, const int sector_size )
 {
 	if (XEMU_UNLIKELY(sector_size != 0x100 && sector_size != 0x200))
-		FATAL("d81access: check_io_req_params(): invalid sector size %d", sector_size);
-	if (XEMU_UNLIKELY(d81_offset < 0 || (d81_offset % sector_size) || d81_offset > D81_SIZE - sector_size))
-		FATAL("d81access: check_io_req_params(): invalid offset %d", d81_offset);
+		FATAL("D81ACCESS: check_io_req_params(): invalid sector size %d", sector_size);
+	if (XEMU_UNLIKELY(sector == 0)) {
+		DEBUGPRINT("D81ACCESS: warning, trying file op on sector-0 within track %d" NL, track);
+		return -1;
+	}
+	const int d81_offset = 40 * (track - 0) * 256 + (sector - 1) * 512 + side * 20 * 256; // somewhat experimental value, it was after I figured out how that should work :-P
+	if (XEMU_UNLIKELY(d81_offset < 0 || (d81_offset % sector_size)))
+		FATAL("D81ACCESS: check_io_req_params(): invalid offset %d", d81_offset);
+	if (XEMU_UNLIKELY(d81_offset > D81_SIZE - sector_size)) {
+		DEBUGPRINT("D81ACCESS: warning, trying file op outside of the image size (%d)" NL, d81_offset);
+		return -1;
+	}
+	return d81_offset;
 }
 
 
-int d81access_read_sect  ( int which, Uint8 *buffer, int d81_offset, int sector_size )
+int d81access_read_sect  ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector, const int sector_size )
 {
-	check_io_req_params(d81_offset, sector_size);
+	const int d81_offset = check_io_req_params(which, side, track, sector, sector_size);
+	if (d81_offset < 0)
+		return d81_offset;	// return negative number as error
 	switch (d81[which].mode & 0xFF) {
 		case D81ACCESS_EMPTY:
 			return -1;
@@ -461,21 +476,24 @@ int d81access_read_sect  ( int which, Uint8 *buffer, int d81_offset, int sector_
 		case D81ACCESS_PRG:
 			return read_prg(which, buffer, d81_offset, sector_size >> 8);
 		case D81ACCESS_DIR:
-			FATAL("DIR access method is not yet implemented in Xemu, sorry :-(");
+			FATAL("D81ACCESS: DIR access method is not yet implemented in Xemu, sorry :-(");
 		case D81ACCESS_CALLBACKS:
 			return d81[which].read_cb(which, buffer, d81[which].start_at + d81_offset, sector_size);
 		default:
-			FATAL("d81access_read_sect(): invalid value for 'd81[%d].mode & 0xFF' = %d", which, d81[which].mode & 0xFF);
+			FATAL("D81ACCESS: d81access_read_sect(): invalid value for 'd81[%d].mode & 0xFF' = %d", which, d81[which].mode & 0xFF);
 	}
+	FATAL("D81ACCESS: d81access_read_sect() unhandled case" NL);
 	return -1;
 }
 
 
-int d81access_write_sect ( int which, Uint8 *buffer, int d81_offset, int sector_size )
+int d81access_write_sect ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector, const int sector_size )
 {
-	check_io_req_params(d81_offset, sector_size);
+	const int d81_offset = check_io_req_params(which, side, track, sector, sector_size);
 	if (IS_RO(d81[which].mode))
 		return -1;
+	if (d81_offset < 0)
+		return d81_offset;	// return negative number as error
 	switch (d81[which].mode & 0xFF) {
 		case D81ACCESS_EMPTY:
 			return -1;
@@ -490,7 +508,8 @@ int d81access_write_sect ( int which, Uint8 *buffer, int d81_offset, int sector_
 		case D81ACCESS_CALLBACKS:
 			return (d81[which].write_cb ? d81[which].write_cb(which, buffer, d81[which].start_at + d81_offset, sector_size) : -1);
 		default:
-			FATAL("d81access_write_sect(): invalid d81[%d].mode & 0xFF", which);
+			FATAL("D81ACCESS: d81access_write_sect(): invalid d81[%d].mode & 0xFF", which);
 	}
+	FATAL("D81ACCESS: d81access_write_sect() unhandled case" NL);
 	return -1;
 }

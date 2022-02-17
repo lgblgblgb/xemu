@@ -19,10 +19,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_COMMON_F011_CORE_H_INCLUDED
 #define XEMU_COMMON_F011_CORE_H_INCLUDED
 
-#ifndef D81_SIZE
-#define D81_SIZE			819200
-#endif
-
 #define FDC_DENY_DISK_ACCESS		0
 #define FDC_ALLOW_DISK_ACCESS		1
 #define FDC_DENY_DISK_ACCESS_ONCE	2
@@ -35,8 +31,8 @@ extern void  fdc_allow_disk_access ( int in );
 extern int   fdc_get_led_state ( int blink_inc );
 
 /* must defined by the user */
-extern int   fdc_cb_rd_sec ( int which, Uint8 *buffer, int offset );
-extern int   fdc_cb_wr_sec ( int which, Uint8 *buffer, int offset );
+extern int   fdc_cb_rd_sec ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector );
+extern int   fdc_cb_wr_sec ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector );
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 #include "xemu/emutools_snapshot.h"
