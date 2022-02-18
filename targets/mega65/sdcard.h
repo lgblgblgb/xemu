@@ -42,6 +42,7 @@ extern const char *sdcard_get_mount_info ( const int unit, int *is_internal );
 // disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space"
 extern Uint8  disk_buffers[0x1000];
 extern Uint8  *disk_buffer_cpu_view;
+extern Uint8  *disk_buffer_io_mapped;
 extern Uint8  sd_status;
 
 extern const char xemu_external_d81_signature[];

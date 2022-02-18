@@ -656,7 +656,7 @@ void hdos_enter ( const Uint8 func_no )
 	hdos.in_x = cpu65.x;
 	hdos.in_y = cpu65.y;
 	hdos.in_z = cpu65.z;
-	DEBUGHDOS("HDOS: entering function #$%02X (%s)" NL, hdos.func, hdos.func_name);
+	DEBUGHDOS("HDOS: entering function #$%02X (%s) A=$%02X X=$%02X Y=$%02X Z=$%02X" NL, hdos.func, hdos.func_name, cpu65.a, cpu65.x, cpu65.y, cpu65.z);
 	if (hdos.do_virt) {
 		// Can be overriden by virtualized functions.
 		// these virt_out stuffs won't be used otherwise, if a virtualized function does not set hdos.func_is_virtualized
@@ -759,7 +759,7 @@ void hdos_leave ( const Uint8 func_no )
 {
 	hdos.func = func_no;
 	hdos.func_name = hdos_get_func_name(hdos.func);
-	DEBUGHDOS("HDOS: leaving function #$%02X (%s) with carry %s" NL, hdos.func, hdos.func_name, cpu65.pf_c ? "SET" : "CLEAR");
+	DEBUGHDOS("HDOS: leaving function #$%02X (%s) with carry %s (A=$%02X)" NL, hdos.func, hdos.func_name, cpu65.pf_c ? "SET" : "CLEAR", cpu65.a);
 	// if "func_is_virtualized" flag is set, we don't want to mess things up further, as it was handled before in hdos.c somewhere
 	if (hdos.func_is_virtualized) {
 		DEBUGHDOS("HDOS: VIRT: was marked as virtualized, so end of %s in %s()" NL, hdos.func_name, __func__);
@@ -794,8 +794,10 @@ void hdos_leave ( const Uint8 func_no )
 		DEBUGHDOS("HDOS: transfer area address is set to $%04X" NL, hdos.transfer_area_addr);
 		return;
 	}
-	if (hdos.func == 0x40) {
-		DEBUGHDOS("HDOS: %s(\"%s\") = %s" NL, hdos.func_name, hdos.setname_fn, cpu65.pf_c ? "OK" : "FAILED");
+	if (hdos.func == 0x40) {	// 0x40: d81attach0 TODO: later I should check if mount was OK and name was MEGA65.D81 to have special external mount then. If HDOS virt is not enabled.
+		DEBUGPRINT("HDOS: %s(\"%s\") = %s" NL, hdos.func_name, hdos.setname_fn, cpu65.pf_c ? "OK" : "FAILED");
+		if (!strcasecmp(hdos.setname_fn, "MEGA65.D81"))
+			OSD(-1, -1, "MEGA65.D81 ;-)");
 		return;
 	}
 }

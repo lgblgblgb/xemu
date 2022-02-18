@@ -236,43 +236,31 @@ Uint8 io_read ( unsigned int addr )
 		/* $DC00-$DCFF: CIA#1, EXTENDED COLOUR RAM */
 		/* --------------------------------------- */
 		case 0x0C:	// $DC00-$DCFF ~ C64 I/O mode
-			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x0800] : cia_read(&cia1, addr & 0xF);
 		case 0x1C:	// $DC00-$DCFF ~ C65 I/O mode
-			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x1800] : cia_read(&cia1, addr & 0xF);
 		case 0x3C:	// $DC00-$DCFF ~ M65 I/O mode
-			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x3800] : cia_read(&cia1, addr & 0xF);
+			return (vic_registers[0x30] & 1) ? colour_ram[0x400 + (addr & 0xFF)] : cia_read(&cia1, addr & 0xF);
 		/* --------------------------------------- */
 		/* $DD00-$DDFF: CIA#2, EXTENDED COLOUR RAM */
 		/* --------------------------------------- */
 		case 0x0D:	// $DD00-$DDFF ~ C64 I/O mode
-			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x0800] : cia_read(&cia2, addr & 0xF);
 		case 0x1D:	// $DD00-$DDFF ~ C65 I/O mode
-			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x1800] : cia_read(&cia2, addr & 0xF);
 		case 0x3D:	// $DD00-$DDFF ~ M65 I/O mode
-			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x3800] : cia_read(&cia2, addr & 0xF);
+			return (vic_registers[0x30] & 1) ? colour_ram[0x500 + (addr & 0xFF)] : cia_read(&cia2, addr & 0xF);
 		/* ----------------------------------------------------- */
 		/* $DE00-$DFFF: IO exp, EXTENDED COLOUR RAM, disk buffer */
 		/* ----------------------------------------------------- */
 		case 0x0E:	// $DE00-$DEFF ~ C64 I/O mode
 		case 0x0F:	// $DF00-$DFFF ~ C64 I/O mode
-			if (vic_registers[0x30] & 1)
-				return colour_ram[addr - 0x0800];
-			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED))
-				return disk_buffer_cpu_view[addr - 0x0E00];
-			return 0xFF;	// I/O exp is not supported
 		case 0x1E:	// $DE00-$DEFF ~ C65 I/O mode
 		case 0x1F:	// $DF00-$DFFF ~ C65 I/O mode
-			if (vic_registers[0x30] & 1)
-				return colour_ram[addr - 0x1800];
-			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED))
-				return disk_buffer_cpu_view[addr - 0x1E00];
-			return 0xFF;	// I/O exp is not supported
 		case 0x3E:	// $DE00-$DEFF ~ M65 I/O mode
 		case 0x3F:	// $DF00-$DFFF ~ M65 I/O mode
+			// FIXME: is it really true for *ALL* I/O modes, that colour RAM expansion to 2K and
+			// disk buffer I/O mapping works in all of them??
 			if (vic_registers[0x30] & 1)
-				return colour_ram[addr - 0x3800];
+				return colour_ram[0x600 + (addr & 0x1FF)];
 			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED))
-				return disk_buffer_cpu_view[addr - 0x3E00];
+				return disk_buffer_io_mapped[addr & 0x1FF];
 			return 0xFF;	// I/O exp is not supported
 		/* --------------------------------------------------------------- */
 		/* $2xxx I/O area is not supported: FIXME: what is that for real?! */
@@ -481,20 +469,10 @@ void io_write ( unsigned int addr, Uint8 data )
 		/* $DC00-$DCFF: CIA#1, EXTENDED COLOUR RAM */
 		/* --------------------------------------- */
 		case 0x0C:	// $DC00-$DCFF ~ C64 I/O mode
-			if (vic_registers[0x30] & 1)
-				colour_ram[addr - 0x0800] = data;
-			else
-				cia_write(&cia1, addr & 0xF, data);
-			return;
 		case 0x1C:	// $DC00-$DCFF ~ C65 I/O mode
-			if (vic_registers[0x30] & 1)
-				colour_ram[addr - 0x1800] = data;
-			else
-				cia_write(&cia1, addr & 0xF, data);
-			return;
 		case 0x3C:	// $DC00-$DCFF ~ M65 I/O mode
 			if (vic_registers[0x30] & 1)
-				colour_ram[addr - 0x3800] = data;
+				colour_ram[0x400 + (addr & 0xFF)] = data;
 			else
 				cia_write(&cia1, addr & 0xF, data);
 			return;
@@ -502,20 +480,10 @@ void io_write ( unsigned int addr, Uint8 data )
 		/* $DD00-$DDFF: CIA#2, EXTENDED COLOUR RAM */
 		/* --------------------------------------- */
 		case 0x0D:	// $DD00-$DDFF ~ C64 I/O mode
-			if (vic_registers[0x30] & 1)
-				colour_ram[addr - 0x0800] = data;
-			else
-				cia_write(&cia2, addr & 0xF, data);
-			return;
 		case 0x1D:	// $DD00-$DDFF ~ C65 I/O mode
-			if (vic_registers[0x30] & 1)
-				colour_ram[addr - 0x1800] = data;
-			else
-				cia_write(&cia2, addr & 0xF, data);
-			return;
 		case 0x3D:	// $DD00-$DDFF ~ M65 I/O mode
 			if (vic_registers[0x30] & 1)
-				colour_ram[addr - 0x3800] = data;
+				colour_ram[0x500 + (addr & 0xFF)] = data;
 			else
 				cia_write(&cia2, addr & 0xF, data);
 			return;
@@ -524,34 +492,18 @@ void io_write ( unsigned int addr, Uint8 data )
 		/* ----------------------------------------------------- */
 		case 0x0E:	// $DE00-$DEFF ~ C64 I/O mode
 		case 0x0F:	// $DF00-$DFFF ~ C64 I/O mode
-			if (vic_registers[0x30] & 1) {
-				colour_ram[addr - 0x0800] = data;
-				return;
-			}
-			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED)) {
-				disk_buffer_cpu_view[addr - 0x0E00] = data;
-				return;
-			}
-			return;		// I/O exp is not supported
 		case 0x1E:	// $DE00-$DEFF ~ C65 I/O mode
 		case 0x1F:	// $DF00-$DFFF ~ C65 I/O mode
-			if (vic_registers[0x30] & 1) {
-				colour_ram[addr - 0x1800] = data;
-				return;
-			}
-			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED)) {
-				disk_buffer_cpu_view[addr - 0x1E00] = data;
-				return;
-			}
-			return;		// I/O exp is not supported
 		case 0x3E:	// $DE00-$DEFF ~ M65 I/O mode
 		case 0x3F:	// $DF00-$DFFF ~ M65 I/O mode
+			// FIXME: is it really true for *ALL* I/O modes, that colour RAM expansion to 2K and
+			// disk buffer I/O mapping works in all of them??
 			if (vic_registers[0x30] & 1) {
-				colour_ram[addr - 0x3800] = data;
+				colour_ram[0x600 + (addr & 0x1FF)] = data;
 				return;
 			}
 			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED)) {
-				disk_buffer_cpu_view[addr - 0x3E00] = data;
+				disk_buffer_io_mapped[addr & 0x1FF] = data;
 				return;
 			}
 			return;		// I/O exp is not supported
@@ -565,7 +517,6 @@ void io_write ( unsigned int addr, Uint8 data )
 			FATAL("Xemu internal error: undecoded I/O area writing for address $(%X)%03X and data $%02X", addr >> 8, addr & 0xFFF, data);
 	}
 }
-
 
 
 Uint8 io_dma_reader ( int addr ) {

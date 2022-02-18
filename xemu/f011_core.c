@@ -172,43 +172,24 @@ void fdc_set_disk ( int which, int in_have_disk, int in_have_write )
 }
 
 
-static int calc_offset ( const char *opdesc )
-{
-	int offset;
-	DEBUG("FDC: %s sector drive=%d track=%d sector=%d side=%d @ PC=$%04X" NL, opdesc, drive, track, sector, side, cpu65.old_pc);
-	// FIXME: no checking of input parameters, can be insane values
-	// FIXME: no check for desired track/side and the currently selected/seeked, what should be!
-	// FIXME: whatever :)
-	offset = 40 * (track - 0) * 256 + (sector - 1) * 512 + side * 20 * 256; // somewhat experimental value, it was after I figured out how that should work :-P
-	if (offset < 0 || offset > D81_SIZE - 512 || (offset & 511)) {
-		DEBUG("FDC: invalid D81 offset %d on drive %d" NL, offset, drive);
-		return -1;
-	}
-	return offset;
-}
-
-
 /* Note: this is really not so nice, but faster and easier to emulate ;)
    That is, we read 512 bytes at once. Not byte-by-byte and allow program
    to see this with DRQ changing, pointer maintaince on each byte read/written, etc ... */
 static void read_sector ( void )
 {
-	int error;
+	int error = 0;
 	if (drives[drive].have_disk && allowed_disk == FDC_ALLOW_DISK_ACCESS) {
-		int offset = calc_offset("reading");
-		error = (offset < 0);
-		if (!error) {
-			Uint8 read_buffer[512];
-			error = fdc_cb_rd_sec(drive, read_buffer, offset);
-			if (error)
-				DEBUG("FDC: sector read-callback returned with error!" NL);
-			else {
-				int n;
-				DEBUG("FDC: sector has been read." NL);
-				for (n = 0; n < 512; n++) {
-					cache[cache_p_fdc] = read_buffer[n];
-					cache_p_fdc = (cache_p_fdc + 1) & 511;
-				}
+		DEBUG("FDC: reading sector drive=%d track=%d sector=%d side=%d @ PC=$%04X" NL, drive, track, sector, side, cpu65.old_pc);
+		Uint8 read_buffer[512];
+		error = fdc_cb_rd_sec(drive, read_buffer, side, track, sector);
+		if (error)
+			DEBUG("FDC: sector read-callback returned with error!" NL);
+		else {
+			int n;
+			DEBUG("FDC: sector has been read." NL);
+			for (n = 0; n < 512; n++) {
+				cache[cache_p_fdc] = read_buffer[n];
+				cache_p_fdc = (cache_p_fdc + 1) & 511;
 			}
 		}
 	} else {
@@ -234,23 +215,20 @@ static void read_sector ( void )
 
 static void write_sector ( void )
 {
-	int error;
+	int error = 0;
 	if (drives[drive].have_disk && allowed_disk == FDC_ALLOW_DISK_ACCESS && drives[drive].have_write) {
-		int offset = calc_offset("writing");
-		error = (offset < 0);
-		if (!error) {
-			Uint8 write_buffer[512];
-			int n;
-			for (n = 0; n < 512; n++) {
-				write_buffer[n] = cache[cache_p_fdc];
-				cache_p_fdc = (cache_p_fdc + 1) & 511;
-			}
-			error = fdc_cb_wr_sec(drive, write_buffer, offset);
-			if (error)
-				DEBUG("FDC: sector write-callback returned with error!" NL);
-			else
-				DEBUG("FDC: sector has been written." NL);
+		DEBUG("FDC: writing sector drive=%d track=%d sector=%d side=%d @ PC=$%04X" NL, drive, track, sector, side, cpu65.old_pc);
+		Uint8 write_buffer[512];
+		int n;
+		for (n = 0; n < 512; n++) {
+			write_buffer[n] = cache[cache_p_fdc];
+			cache_p_fdc = (cache_p_fdc + 1) & 511;
 		}
+		error = fdc_cb_wr_sec(drive, write_buffer, side, track, sector);
+		if (error)
+			DEBUG("FDC: sector write-callback returned with error!" NL);
+		else
+			DEBUG("FDC: sector has been written." NL);
 	} else {
 		error = 1;
 		DEBUG("FDC: no disk in drive or write protected" NL);
