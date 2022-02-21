@@ -321,6 +321,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 #endif
 	;
 	DEBUGKBD("KBD: HWA: pos = %d sdl_key = %d, pressed = %d, handled = %d" NL, pos, key, pressed, handled);
+	static int old_joystick_emu_port;	// used to remember emulated joy port, as with mouse grab, we need to switch to port-1, and we want to restore user's one on leaving grab mode
 	if (pressed) {
 		// check if we have the ALT-TAB trap triggered (TAB is pressed now, and ALT is hold)
 		if (pos == TAB_KEY_POS && (hwa_kbd.modifiers & MODKEY_ALT)) {
@@ -347,6 +348,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			input_toggle_joy_emu();
 		} else if (((hwa_kbd.modifiers & (MODKEY_LSHIFT | MODKEY_RSHIFT)) == (MODKEY_LSHIFT | MODKEY_RSHIFT)) && set_mouse_grab(SDL_FALSE, 0)) {
 			DEBUGPRINT("UI: mouse grab cancelled" NL);
+			joystick_emu = old_joystick_emu_port;
 		}
 	} else {
 		if (pos == RESTORE_KEY_POS)
@@ -355,6 +357,8 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			if ((handled == SDL_BUTTON_LEFT) && set_mouse_grab(SDL_TRUE, 0)) {
 				OSD(-1, -1, "Mouse grab activated. Press\nboth SHIFTs together to cancel.");
 				DEBUGPRINT("UI: mouse grab activated" NL);
+				old_joystick_emu_port = joystick_emu;
+				joystick_emu = 1;
 			}
 			if (handled == SDL_BUTTON_RIGHT) {
 				ui_enter();
