@@ -32,16 +32,20 @@ static struct {
 	DIR	*dir;
 	off_t	start_at;
 	int	mode;
+	int	image_size;
+	//d81access_rd_cb_t read_cb;
+	//d81access_wr_cb_t write_cb;
 	// Only valid for PRG mode currently:
 	int	prg_size;
 	int	prg_blk_size;
 	int	prg_blk_last_size;
-	d81access_rd_cb_t read_cb;
-	d81access_wr_cb_t write_cb;
 } d81[8];
 static int enable_mode_transient_callback = -1;
 
+// Note: D81_SIZE is defined in the header file, unlike these:
 #define D64_SIZE	174848
+#define D71_SIZE	349696
+#define D65_SIZE	2785280
 
 #define IS_RO(p)	(!!((p) & D81ACCESS_RO))
 #define IS_RW(p)	(!((p) & D81ACCESS_RO))
@@ -116,7 +120,15 @@ static void d81access_attach_fd_internal ( int which, int fd, off_t offset, int 
 	if (HAS_DISK(mode)) {
 		d81[which].fd = fd;
 		d81[which].mode = mode;
-		DEBUGPRINT("D81: fd %d has been attached to #%d with " PRINTF_LLD " offset, read_only = %d, autoclose = %d" NL, fd, which, (long long)offset, IS_RO(mode), IS_AUTOCLOSE(mode));
+		d81[which].image_size = D81_SIZE;	// the default size of the image ...
+		// ... override based on possible options, if image size is different:
+		if ((mode & D81ACCESS_D64))
+			d81[which].image_size = D64_SIZE;
+		if ((mode & D81ACCESS_D71))
+			d81[which].image_size = D71_SIZE;
+		if ((mode & D81ACCESS_D65))
+			d81[which].image_size = D65_SIZE;
+		DEBUGPRINT("D81: fd %d has been attached to #%d with " PRINTF_LLD " offset, read_only = %d, autoclose = %d, size = %d" NL, fd, which, (long long)offset, IS_RO(mode), IS_AUTOCLOSE(mode), d81[which].image_size);
 	} else {
 		DEBUGPRINT("D81: using empty access (no disk in drive) by request" NL);
 		d81[which].mode = D81ACCESS_EMPTY;
@@ -139,6 +151,9 @@ void d81access_attach_fd ( int which, int fd, off_t offset, int mode )
 }
 
 
+// FIXME: this API function is removed, since does not provide size information. Since currently it's not used,
+// either remove it in the future, or refactor it!
+#if 0
 // Attach callbacks instead of handling requests in this source
 void d81access_attach_cb ( int which, off_t offset, d81access_rd_cb_t rd_callback, d81access_wr_cb_t wr_callback )
 {
@@ -152,6 +167,7 @@ void d81access_attach_cb ( int which, off_t offset, d81access_rd_cb_t rd_callbac
 	DEBUGPRINT("D81: attaching D81 via provided callbacks, read=%p, write=%p" NL, rd_callback, wr_callback);
 	d81access_cb_chgmode(which, d81[which].mode);
 }
+#endif
 
 
 int d81access_attach_fsobj ( int which, const char *fn, int mode )
@@ -172,6 +188,7 @@ int d81access_attach_fsobj ( int which, const char *fn, int mode )
 			d81access_close_internal(which);
 			d81[which].dir = dir;
 			d81[which].mode = D81ACCESS_DIR | D81ACCESS_RO | D81ACCESS_AUTOCLOSE;	// TODO? directory access is always read only currently ...
+			d81[which].image_size = D81_SIZE;
 			DEBUGPRINT("D81: file system object \"%s\" opened as a directory." NL, fn);
 			d81access_cb_chgmode(which, d81[which].mode);
 			return 0;
@@ -214,6 +231,7 @@ int d81access_attach_fsobj ( int which, const char *fn, int mode )
 				d81[which].prg_blk_size++;
 			else
 				d81[which].prg_blk_last_size = 254;
+			d81[which].image_size = D81_SIZE;
 			return 0;
 		} else {
 			close(fd);
@@ -229,7 +247,22 @@ int d81access_attach_fsobj ( int which, const char *fn, int mode )
 	// Fake-D64 ... If requested + allowed at all.
 	if (size == D64_SIZE && (mode & D81ACCESS_FAKE64)) {
 		// Set D81ACCESS_RO! As this is only a read-only hack mode!!
-		d81access_attach_fd_internal(which, fd, 0, D81ACCESS_IMG | D81ACCESS_AUTOCLOSE | D81ACCESS_RO | D81ACCESS_FAKE64);
+		d81access_attach_fd_internal(which, fd, 0, D81ACCESS_IMG | D81ACCESS_AUTOCLOSE | D81ACCESS_FAKE64 | D81ACCESS_RO);
+		return 0;
+	}
+	// D64 mounted as a D81 - via ROM support
+	if (size == D64_SIZE && (mode & D81ACCESS_D64)) {
+		d81access_attach_fd_internal(which, fd, 0, D81ACCESS_IMG | D81ACCESS_AUTOCLOSE | D81ACCESS_D64 | ro);
+		return 0;
+	}
+	// D71 mounted as a D81 - via ROM support
+	if (size == D71_SIZE && (mode & D81ACCESS_D71)) {
+		d81access_attach_fd_internal(which, fd, 0, D81ACCESS_IMG | D81ACCESS_AUTOCLOSE | D81ACCESS_D71 | ro);
+		return 0;
+	}
+	// D65 mounted as a D81
+	if (size == D65_SIZE && (mode & D81ACCESS_D65)) {
+		d81access_attach_fd_internal(which, fd, 0, D81ACCESS_IMG | D81ACCESS_AUTOCLOSE | D81ACCESS_D65 | ro);
 		return 0;
 	}
 	// Only the possibility left that it's a D81 image
@@ -244,12 +277,12 @@ int d81access_attach_fsobj ( int which, const char *fn, int mode )
 }
 
 
-static int file_io_op ( const int which, const int is_write, const int d81_offset, Uint8 *buffer, const int size )
+static int file_io_op ( const int which, const int is_write, const int image_offset, Uint8 *buffer, const int size )
 {
-	off_t offset = d81[which].start_at + (off_t)d81_offset;
+	off_t offset = d81[which].start_at + (off_t)image_offset;
 	if (lseek(d81[which].fd, offset, SEEK_SET) != offset)
 		FATAL("D81: SEEK: seek host-OS failure: %s", strerror(errno));
-	int ret = is_write ? xemu_safe_write(d81[which].fd, buffer, size) : xemu_safe_read(d81[which].fd, buffer, size);
+	const int ret = is_write ? xemu_safe_write(d81[which].fd, buffer, size) : xemu_safe_read(d81[which].fd, buffer, size);
 	if (ret >= 0)
 		return ret;
 	FATAL("D81: %s: host-OS error: %s", is_write ? "WRITE" : "READ", strerror(errno));
@@ -437,7 +470,11 @@ static int read_prg ( const int which, Uint8 *buffer, int d81_offset, int number
 }
 
 
-static int check_io_req_params ( const int which, const Uint8 side, const Uint8 track, const Uint8 sector, const int sector_size )
+// Notes:
+// * all calculations are based on 512 bytes sector, "sector_size" parameter is merely is a read size not the actual size of the sector
+// * sectors per track meant as on one side only!
+
+static int check_io_req_params ( const int which, const Uint8 side, const Uint8 track, const Uint8 sector, const int sector_size, int *io_size_p )
 {
 	if (XEMU_UNLIKELY(sector_size != 0x100 && sector_size != 0x200))
 		FATAL("D81ACCESS: check_io_req_params(): invalid sector size %d", sector_size);
@@ -445,40 +482,81 @@ static int check_io_req_params ( const int which, const Uint8 side, const Uint8 
 		DEBUGPRINT("D81ACCESS: warning, trying file op on sector-0 within track %d" NL, track);
 		return -1;
 	}
-	const int d81_offset = 40 * (track - 0) * 256 + (sector - 1) * 512 + side * 20 * 256; // somewhat experimental value, it was after I figured out how that should work :-P
-	if (XEMU_UNLIKELY(d81_offset < 0 || (d81_offset % sector_size)))
-		FATAL("D81ACCESS: check_io_req_params(): invalid offset %d", d81_offset);
-	if (XEMU_UNLIKELY(d81_offset > D81_SIZE - sector_size)) {
-		DEBUGPRINT("D81ACCESS: warning, trying file op outside of the image size (%d)" NL, d81_offset);
+	int offset, num_of_sides, num_of_tracks, num_of_sectors;
+	// NOTE: MEGA65 D71 and D64 access works as leaving D81 calculation as-is, and from software you need to do the geometry conversion, so not the scope of the emulator
+	//       (this also means that a D64/D71 can be addressed beyond the end of the disk image, it needs a final check on offset not only geometry info limitations!)
+	//       However, D65 has its own geometry calulcation at hardware level!
+	if (XEMU_UNLIKELY(d81[which].mode & D81ACCESS_D65)) {
+		// FIXME: no idea about the exact values for D65, or the formula :(
+		offset = (((const int)track << 7) + (sector - 1)) * 512;
+		num_of_sides = 2;
+		num_of_tracks = 85;
+		num_of_sectors = 64;	// (sectors by SIDE ...)
+	} else {
+		offset = 40 * (track - 0) * 256 + (sector - 1) * 512 + side * 20 * 256;	// somewhat experimental value, it was after I figured out how that should work :-P
+		num_of_sides = 2;
+		num_of_tracks = 80;
+		num_of_sectors = 10;	// (sectors by SIDE ...)
+	}
+	// Check disk geometry limit (note about the D64/D71 comment above, those are handled internally as D81 disk geometry!)
+	if (XEMU_UNLIKELY(num_of_sides != -1 && side >= num_of_sides)) {	// num_of_sides = -1 --> do not check side info
+		DEBUGPRINT("D81ACCESS: trying to access non-existing side (%d)" NL, side);
 		return -1;
 	}
-	return d81_offset;
+	if (XEMU_UNLIKELY(track >= num_of_tracks)) {
+		DEBUGPRINT("D81ACCESS: trying to access non-existing track (%d)" NL, track);
+		return -1;
+	}
+	if (XEMU_UNLIKELY(sector > num_of_sectors || sector == 0)) {		// sector numbering starts with ONE, not with zero!
+		DEBUGPRINT("D81ACCESS: trying to access non-exisiting sector (%d)" NL, sector);
+		return -1;
+	}
+	// Check offset limit
+	if (XEMU_UNLIKELY(offset < 0 || offset >= d81[which].image_size)) {
+		DEBUGPRINT("D81ACCESS: trying to R/W beyond the end of disk image (offset %d, size %d)" NL, offset, d81[which].image_size);
+		return -1;
+	}
+	// Check "partial" I/O, can happen with a disk image like D64 is accessed as a D81 and D64 image size is not divisable by 512, only by 256
+	const int io_size = d81[which].image_size - offset;
+	if (XEMU_UNLIKELY(io_size < sector_size)) {
+		DEBUGPRINT("D81ACCESS: partial R/W with %d bytes" NL, io_size);
+		if (io_size != 256) {
+			// this should not happen though ...
+			ERROR_WINDOW("Partial R/W on D81 access which is not 256 byte in length but %d (at offset %d, image size is %d bytes)!", io_size, offset, d81[which].image_size);
+			return -1;
+		}
+		*io_size_p = io_size;
+	} else
+		*io_size_p = sector_size;
+	return offset;
 }
 
 
 int d81access_read_sect  ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector, const int sector_size )
 {
-	const int d81_offset = check_io_req_params(which, side, track, sector, sector_size);
-	if (d81_offset < 0)
-		return d81_offset;	// return negative number as error
+	int io_size;
+	const int offset = check_io_req_params(which, side, track, sector, sector_size, &io_size);
+	if (XEMU_UNLIKELY(offset < 0))
+		return offset;	// return negative number as error
 	switch (d81[which].mode & 0xFF) {
 		case D81ACCESS_EMPTY:
 			return -1;
 		case D81ACCESS_IMG:
 			if (XEMU_UNLIKELY(d81[which].mode & D81ACCESS_FAKE64)) {
-				return read_fake64(which, buffer, d81_offset, sector_size >> 8);
+				return read_fake64(which, buffer, offset, sector_size >> 8);
 			} else {
-				if (file_io_op(which, 0, d81_offset, buffer, sector_size) == sector_size)
-					return 0;
-				else
-					return -1;
+				// we fill the buffer if partial read is done to have consistent "tail"
+				if (XEMU_UNLIKELY(io_size != sector_size))
+					memset(buffer, 0xFF, sector_size);
+				return file_io_op(which, 0, offset, buffer, io_size) == io_size ? 0 : -1;
 			}
 		case D81ACCESS_PRG:
-			return read_prg(which, buffer, d81_offset, sector_size >> 8);
+			return read_prg(which, buffer, offset, sector_size >> 8);
 		case D81ACCESS_DIR:
 			FATAL("D81ACCESS: DIR access method is not yet implemented in Xemu, sorry :-(");
 		case D81ACCESS_CALLBACKS:
-			return d81[which].read_cb(which, buffer, d81[which].start_at + d81_offset, sector_size);
+			FATAL("D81: D81ACCESS_CALLBACKS is not implemented!");
+			//return d81[which].read_cb(which, buffer, d81[which].start_at + offset, sector_size);
 		default:
 			FATAL("D81ACCESS: d81access_read_sect(): invalid value for 'd81[%d].mode & 0xFF' = %d", which, d81[which].mode & 0xFF);
 	}
@@ -489,24 +567,23 @@ int d81access_read_sect  ( const int which, Uint8 *buffer, const Uint8 side, con
 
 int d81access_write_sect ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector, const int sector_size )
 {
-	const int d81_offset = check_io_req_params(which, side, track, sector, sector_size);
+	int io_size;
+	const int offset = check_io_req_params(which, side, track, sector, sector_size, &io_size);
 	if (IS_RO(d81[which].mode))
 		return -1;
-	if (d81_offset < 0)
-		return d81_offset;	// return negative number as error
+	if (XEMU_UNLIKELY(offset < 0))
+		return offset;	// return negative number as error
 	switch (d81[which].mode & 0xFF) {
 		case D81ACCESS_EMPTY:
 			return -1;
 		case D81ACCESS_IMG:
-			if (file_io_op(which, 1, d81_offset, buffer, sector_size) == sector_size)
-				return 0;
-			else
-				return -1;
+			return file_io_op(which, 1, offset, buffer, io_size) == io_size ? 0 : -1;
 		case D81ACCESS_PRG:
 		case D81ACCESS_DIR:
 			return -1;	// currently, these are all read-only, even if caller forgets that and try :-O
 		case D81ACCESS_CALLBACKS:
-			return (d81[which].write_cb ? d81[which].write_cb(which, buffer, d81[which].start_at + d81_offset, sector_size) : -1);
+			FATAL("D81: D81ACCESS_CALLBACKS is not implemented!");
+			//return (d81[which].write_cb ? d81[which].write_cb(which, buffer, d81[which].start_at + offset, sector_size) : -1);
 		default:
 			FATAL("D81ACCESS: d81access_write_sect(): invalid d81[%d].mode & 0xFF", which);
 	}

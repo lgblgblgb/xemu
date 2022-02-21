@@ -37,9 +37,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define D81ACCESS_RO		0x100
 #define D81ACCESS_AUTOCLOSE	0x200
 #define D81ACCESS_FAKE64	0x400
+#define D81ACCESS_D64		0x800
+#define D81ACCESS_D71		0x1000
+#define D81ACCESS_D65		0x2000
 
+#if 0
 typedef int(*d81access_rd_cb_t)    ( int which, void *buffer, off_t offset, int sector_size );
 typedef int(*d81access_wr_cb_t)    ( int which, void *buffer, off_t offset, int sector_size );
+extern void d81access_attach_cb	   ( int which, off_t offset, d81access_rd_cb_t rd_callback, d81access_wr_cb_t wd_callback );
+#endif
 
 // must be defined by the caller!
 extern void d81access_cb_chgmode   ( const int which, const int mode );
@@ -53,6 +59,5 @@ extern void d81access_close        ( int which );
 extern void d81access_close_all    ( void      );
 extern void d81access_attach_fd    ( int which, int fd, off_t offset, int mode );
 extern int  d81access_attach_fsobj ( int which, const char *fn, int mode );
-extern void d81access_attach_cb	   ( int which, off_t offset, d81access_rd_cb_t rd_callback, d81access_wr_cb_t wd_callback );
 
 #endif
