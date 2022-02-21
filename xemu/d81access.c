@@ -482,22 +482,25 @@ static int check_io_req_params ( const int which, const Uint8 side, const Uint8 
 		DEBUGPRINT("D81ACCESS: warning, trying file op on sector-0 within track %d" NL, track);
 		return -1;
 	}
-	int offset, num_of_sides, num_of_tracks, num_of_sectors;
+	int offset; //, num_of_sides, num_of_tracks, num_of_sectors;
 	// NOTE: MEGA65 D71 and D64 access works as leaving D81 calculation as-is, and from software you need to do the geometry conversion, so not the scope of the emulator
 	//       (this also means that a D64/D71 can be addressed beyond the end of the disk image, it needs a final check on offset not only geometry info limitations!)
 	//       However, D65 has its own geometry calulcation at hardware level!
 	if (XEMU_UNLIKELY(d81[which].mode & D81ACCESS_D65)) {
 		// FIXME: no idea about the exact values for D65, or the formula :(
 		offset = (((const int)track << 7) + (sector - 1)) * 512;
-		num_of_sides = 2;
-		num_of_tracks = 85;
-		num_of_sectors = 64;	// (sectors by SIDE ...)
+		//num_of_sides = 2;
+		//num_of_tracks = 85;
+		//num_of_sectors = 64;	// (sectors by SIDE ...)
 	} else {
 		offset = 40 * (track - 0) * 256 + (sector - 1) * 512 + side * 20 * 256;	// somewhat experimental value, it was after I figured out how that should work :-P
-		num_of_sides = 2;
-		num_of_tracks = 80;
-		num_of_sectors = 10;	// (sectors by SIDE ...)
+		//num_of_sides = 2;
+		//num_of_tracks = 80;
+		//num_of_sectors = 10;	// (sectors by SIDE ...)
 	}
+	// FIXME: I have no idea why it does not work. It seems, some software wants to access sector 17 and such,
+	// which does not exist (only 10 sectors per side). By deactivating these checks, everything seems to work again :-O
+#if 0
 	// Check disk geometry limit (note about the D64/D71 comment above, those are handled internally as D81 disk geometry!)
 	if (XEMU_UNLIKELY(num_of_sides != -1 && side >= num_of_sides)) {	// num_of_sides = -1 --> do not check side info
 		DEBUGPRINT("D81ACCESS: trying to access non-existing side (%d)" NL, side);
@@ -508,9 +511,10 @@ static int check_io_req_params ( const int which, const Uint8 side, const Uint8 
 		return -1;
 	}
 	if (XEMU_UNLIKELY(sector > num_of_sectors || sector == 0)) {		// sector numbering starts with ONE, not with zero!
-		DEBUGPRINT("D81ACCESS: trying to access non-exisiting sector (%d)" NL, sector);
+		DEBUGPRINT("D81ACCESS: trying to access non-exisiting sector (%d) on track %d" NL, sector, track);
 		return -1;
 	}
+#endif
 	// Check offset limit
 	if (XEMU_UNLIKELY(offset < 0 || offset >= d81[which].image_size)) {
 		DEBUGPRINT("D81ACCESS: trying to R/W beyond the end of disk image (offset %d, size %d)" NL, offset, d81[which].image_size);
