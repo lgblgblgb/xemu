@@ -69,3 +69,6 @@ recreatememcontent:
 	echo "const int meminitdata_freezer_size = sizeof(meminitdata_freezer);" >> memcontent.c.tmp
 	cp memcontent.c memcontent.c.BAK
 	@echo "*** OK. Please rename memcontent.c.tmp to memcontent.c and memcontent_sizes.h.tmp to memcontent_sizes.h to really apply these changes, then re-compile the emulator ***"
+
+showmatrix2ascii:
+	$(TOPDIR)/build/m65-import-matrix2ascii.sh < $(MEGA65_CORE)/src/vhdl/matrix_to_ascii.vhdl
