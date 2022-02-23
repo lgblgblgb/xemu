@@ -436,6 +436,7 @@ static void mega65_init ( void )
 	hypervisor_start_machine();
 	speed_current = 0;
 	machine_set_speed(1);
+	hwa_kbd_disable_selector(0);	// FIXME: do we need this, or hyppo will make it so for us?
 	DEBUG("INIT: end of initialization!" NL);
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemusnap_init(m65_snapshot_definition);
@@ -495,6 +496,7 @@ static void shutdown_callback ( void )
 
 void reset_mega65 ( void )
 {
+	hwa_kbd_disable_selector(0);	// FIXME: do we need this, or hyppo will make it so for us?
 	eth65_reset();
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0xFF;
