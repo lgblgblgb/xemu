@@ -375,7 +375,7 @@ Uint8 get_mouse_x_via_sid ( void )
 	if (is_mouse_grab()) {
 		static int mouse_x = 0;
 		mouse_x = (mouse_x + (hid_read_mouse_rel_x(-23, 23) / 3)) & 0x3F;
-		DEBUG("MOUSE-X: reading X as %d" NL, mouse_x);
+		DEBUG("MOUSE: X is %d, result byte is %d" NL, mouse_x, result);
 		result = mouse_x << 1;
 	}
 	return result;
@@ -388,7 +388,7 @@ Uint8 get_mouse_y_via_sid ( void )
 	if (is_mouse_grab()) {
 		static int mouse_y = 0;
 		mouse_y = (mouse_y - (hid_read_mouse_rel_y(-23, 23) / 3)) & 0x3F;
-		DEBUG("MOUSE-Y: reading Y as %d" NL, mouse_y);
+		DEBUG("MOUSE: Y is %d, result byte is %d" NL, mouse_y, result);
 		result = mouse_y << 1;
 	}
 	return result;
