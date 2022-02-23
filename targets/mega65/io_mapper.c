@@ -388,6 +388,9 @@ void io_write ( unsigned int addr, Uint8 data )
 				case 0x10:	// ASCII kbd last press value to zero whatever the written data would be
 					hwa_kbd_move_next();
 					return;
+				case 0x11:
+					hwa_kbd_disable_selector(data & 0x80);
+					return;
 				case 0x15:
 				case 0x16:
 				case 0x17:

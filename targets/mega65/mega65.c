@@ -501,6 +501,7 @@ void reset_mega65 ( void )
 	memset(D7XX + 0x20, 0, 0x40);	// stop audio DMA possibly going on
 	rom_clear_reports();
 	preinit_memory_for_start();
+	hwa_kbd_disable_selector(0);	// FIXME: do we need this, or hyppo will make it so for us?
 	eth65_reset();
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0xFF;
