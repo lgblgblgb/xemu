@@ -383,7 +383,7 @@ static void _block_read ( void )
  * This is not a real thing, but easier to code this way.
  * The implementation of the real behaviour is up to the caller of this function.
  */
-static void _spi_shifting_with_sd_card ()
+static void _spi_shifting_with_sd_card ( void )
 {
 	if (!cs0) { // Currently, we only emulate one SD card, and it must be selected for any answer
 		_read_b = 0xFF;

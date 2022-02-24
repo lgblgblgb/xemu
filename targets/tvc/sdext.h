@@ -1,5 +1,5 @@
 /* Xep128: Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
-   Copyright (C)2015-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015,2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    http://xep128.lgb.hu/
 
 This program is free software; you can redistribute it and/or modify

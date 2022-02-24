@@ -6,7 +6,7 @@
 from sys import argv, stderr, stdout, exit
 from textwrap import wrap
 
-if __name__ == "__main__":        
+if __name__ == "__main__":
     if len(argv) != 3:
         stderr.write("Bad usage.\n")
         exit(1)
