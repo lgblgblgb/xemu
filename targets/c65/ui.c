@@ -33,7 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static int attach_d81 ( int drive, const char *fn )
 {
 	if (fn && *fn)
-		return d81access_attach_fsobj(drive, fn, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE);
+		return d81access_attach_fsobj(drive, fn, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_FAKE64 | D81ACCESS_AUTOCLOSE);
 	return -1;
 }
 
