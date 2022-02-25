@@ -316,6 +316,7 @@ static void mega65_init ( void )
 		VIRTUAL_SHIFT_POS,
 		SDL_ENABLE		// joy HID events enabled
 	);
+	input_init();
 #ifdef HID_KBD_MAP_CFG_SUPPORT
 	hid_keymap_from_config_file(configdb.keymap);
 #endif
@@ -436,7 +437,6 @@ static void mega65_init ( void )
 	hypervisor_start_machine();
 	speed_current = 0;
 	machine_set_speed(1);
-	hwa_kbd_disable_selector(0);	// FIXME: do we need this, or hyppo will make it so for us?
 	DEBUG("INIT: end of initialization!" NL);
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemusnap_init(m65_snapshot_definition);
