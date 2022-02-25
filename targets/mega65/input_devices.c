@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 #include "hypervisor.h"
 #include "ui.h"
+#include "matrix_mode.h"
 
 
 #define DEBUGKBD(...)		DEBUG(__VA_ARGS__)
@@ -282,11 +283,20 @@ static void kbd_trigger_alttab_trap ( void )
 	KBD_RELEASE_KEY(TAB_KEY_POS);
 	//KBD_RELEASE_KEY(ALT_KEY_POS);
 	//hwa_kbd.modifiers &= ~MODKEY_ALT;
+	matrix_mode_toggle(!in_the_matrix);
+	// TODO: remove the #if 0 part, if we're sure:
+#if 0
+	// It would trigger matrix-mode via hypervisor call, but it has the problem that
+	// it won't work if you're already in hypervisor mode. So I reverted back to the
+	// direct method above. If it does not cause problem on longer term, let's remove this
+	// section.
 	if (!in_hypervisor) {
-		DEBUGPRINT("KBD: ALT-TAB trap has been triggered." NL);
-		hypervisor_enter(TRAP_ALTTAB);
-	} else
-		DEBUGPRINT("KBD: *IGNORING* ALT-TAB trap trigger, already in hypervisor mode!" NL);
+		DEBUGPRINT("KBD: MATRIX trap has been triggered." NL);
+		hypervisor_enter(TRAP_MATRIX);
+	} else {
+		DEBUGPRINT("KBD: *IGNORING* MATRIX trap trigger, already in hypervisor mode!" NL);
+	}
+#endif
 }
 
 
