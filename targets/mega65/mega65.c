@@ -44,6 +44,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "configdb.h"
 #include "xemu/emutools_socketapi.h"
 
+// "Typical" size in default settings (video standard is PAL, default border settings).
+// See also vic4.h
+// It's just here to give an initial window size. Though if it's not the same what
+// hyppo/ROM will set, then soon you see a resize event which is kinda "ugly" for a
+// second. Thus I try to setup some typical value which is the final result in most
+// cases.
+#define	INITIAL_WINDOW_WIDTH	705
+#define	INITIAL_WINDOW_HEIGHT	576
 
 static int nmi_level;			// please read the comment at nmi_set() below
 
@@ -401,7 +409,6 @@ static void mega65_init ( void )
 	if (sdcard_init(configdb.sdimg, configdb.disk8, configdb.virtsd) < 0)
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
-	vic4_disallow_video_std_change = 0;	// TODO: remove this later, as will be managed by reset/first-hyppo-leave sequence and even by UI menu
 	vic_init();
 	// *** CIAs
 	cia_init(&cia1, "CIA-1",
@@ -787,7 +794,8 @@ int main ( int argc, char **argv )
 		1,				// resizable window
 		TEXTURE_WIDTH, TEXTURE_HEIGHT,	// texture sizes
 		TEXTURE_WIDTH, TEXTURE_HEIGHT,	// logical size (used with keeping aspect ratio by the SDL render stuffs)
-		TEXTURE_WIDTH, TEXTURE_HEIGHT,	// window size
+		INITIAL_WINDOW_WIDTH,		// window size
+		INITIAL_WINDOW_HEIGHT,		// -- "" --
 		TEXTURE_FORMAT,			// pixel format
 		0,				// we have *NO* pre-defined colours as with more simple machines (too many we need). we want to do this ourselves!
 		NULL,				// -- "" --

@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "hypervisor.h"
 #include "ethernet65.h"
 #include "input_devices.h"
+#include "matrix_mode.h"
 #include "audio65.h"
 #include "configdb.h"
 #include "mega65.h"
@@ -394,6 +395,9 @@ void io_write ( unsigned int addr, Uint8 data )
 				case 0x16:
 				case 0x17:
 					virtkey(addr - 0x15, data & 0x7F);
+					return;
+				case 0x72:	// "$D672.6 HCPU:MATRIXEN Enable composited Matrix Mode, and disable UART access to serial monitor."
+					matrix_mode_toggle(data & 0x40);
 					return;
 				case 0x7C:					// hypervisor serial monitor port
 					hypervisor_serial_monitor_push_char(data);
