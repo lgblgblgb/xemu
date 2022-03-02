@@ -115,8 +115,9 @@ Uint8 hwa_kbd_get_last ( void )
 /* used by actual I/O function to read $D611 */
 Uint8 hwa_kbd_get_modifiers ( void )
 {
-	DEBUGKBDHWACOM("KBD: HWA: reading key modifiers @ PC=$%04X result = $%02X" NL, cpu65.pc, hwa_kbd.modifiers);
-	return hwa_kbd.modifiers;
+	const Uint8 result = hwa_kbd.modifiers | (hwa_kbd.active_selector ? 0 : 0x80);
+	DEBUGKBDHWACOM("KBD: HWA: reading key modifiers @ PC=$%04X result = $%02X" NL, cpu65.pc, result);
+	return result;
 }
 
 

@@ -881,7 +881,7 @@ int cpu65_step (
 #endif
 #endif
 			pushWord(CPU65.pc + 1);
-			push(cpu65_get_pf() | CPU65_PF_B);	// BRK always pushes 'B' bit set (like PHP too, unlike hardware interrupts
+			push(cpu65_get_pf() | CPU65_PF_B);	// BRK always pushes 'B' bit set (like PHP too, unlike hardware interrupts)
 			CPU65.pf_d = 0;				// actually, NMOS CPU does not do this for real, only 65C02+
 			CPU65.pf_i = 1;
 			CPU65.pc = readWord(0xFFFE);

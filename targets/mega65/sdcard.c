@@ -803,7 +803,7 @@ static int some_mount ( const int unit )
 	if (extfn) {	// force external mount
 		if (strcmp(mount_info[unit].current_name, extfn)) {
 			DEBUGPRINT("SDCARD: D81: external mount #%d change from \"%s\" to \"%s\"" NL, unit, mount_info[unit].current_name, extfn);
-			if (d81access_attach_fsobj(unit, extfn, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | D81ACCESS_D64)) {
+			if (d81access_attach_fsobj(unit, extfn, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | D81ACCESS_D64 | D81ACCESS_D71)) {
 				DEBUGPRINT("SDCARD: D81: external mount #%d failed at \"%s\", closing unit." NL, unit, extfn);
 				d81access_close(unit);
 				mount_info[unit].current_name[0] = '\0';
