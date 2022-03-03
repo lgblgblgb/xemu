@@ -83,6 +83,7 @@ int hid_key_event ( SDL_Scancode key, int pressed )
 			case SDL_SCANCODE_DOWN:	sel = JOYSTATE_DOWN;	break;
 			case SDL_SCANCODE_LEFT:	sel = JOYSTATE_LEFT;	break;
 			case SDL_SCANCODE_RIGHT:sel = JOYSTATE_RIGHT;	break;
+			case SDL_SCANCODE_RGUI:		// Mac does not seem to have right CTRL. Use this too, right-GUI key is right-command (or right-windows key on PC or wtf ...)
 			case SDL_SCANCODE_RCTRL:sel = JOYSTATE_BUTTON;	break;
 			default:		sel = -1;		break;
 		}

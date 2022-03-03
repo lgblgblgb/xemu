@@ -721,6 +721,30 @@ void xemucfg_get_cli_info ( const char **exec_name_ptr, int *argc_ptr, char ***a
 }
 
 
+const char *xemucfg_get_default_config_file_name ( void )
+{
+	static char *storage = NULL;
+	if (!storage) {
+		char buf[64];
+		snprintf(buf, sizeof buf, CONFIG_FILE_USE_NAME, xemu_app_name);
+		storage = xemu_strdup(buf);
+	}
+	return storage;
+}
+
+
+static const char *xemucfg_get_template_config_file_name ( void )
+{
+	static char *storage = NULL;
+	if (!storage) {
+		char buf[64];
+		snprintf(buf, sizeof buf, CONFIG_FILE_TEMPL_NAME, xemu_app_name);
+		storage = xemu_strdup(buf);
+	}
+	return storage;
+}
+
+
 int xemucfg_parse_all ( int argc, char **argv )
 {
 	if (argc > 0)	// maybe overkill to CHECK, argv[0] should be there always ...
@@ -770,10 +794,8 @@ int xemucfg_parse_all ( int argc, char **argv )
 	// Prepare filenames for default and template configuration files
 	// CONFIG_FILE_*_NAME are expected that the first character is '@' (denoted to pref dir) and contains a '%s' for xemu_app_name
 	// No worries, WLAs here should have anough space for the trailing '\0' because '%s' there is counted.
-	char cfg_default_fn[strlen(CONFIG_FILE_USE_NAME) + strlen(xemu_app_name)];
-	char cfg_template_fn[strlen(CONFIG_FILE_TEMPL_NAME) + strlen(xemu_app_name)];
-	sprintf(cfg_default_fn, CONFIG_FILE_USE_NAME, xemu_app_name);
-	sprintf(cfg_template_fn, CONFIG_FILE_TEMPL_NAME, xemu_app_name);
+	const char *cfg_default_fn = xemucfg_get_default_config_file_name();
+	const char *cfg_template_fn = xemucfg_get_template_config_file_name();
 	// Get config template now!
 	// We want to save this, but we must before parse, to have
 	// the default values. We save it later though!
