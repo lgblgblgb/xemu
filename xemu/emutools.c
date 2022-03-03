@@ -283,6 +283,12 @@ char *xemu_strdup ( const char *s )
 	return p;
 }
 
+void xemu_restrdup ( char **ptr, const char *str )
+{
+	size_t len = strlen(str) + 1;
+	*ptr = xemu_realloc(*ptr, len);
+	memcpy(*ptr, str, len);
+}
 
 // Just drop queued SDL events ...
 void xemu_drop_events ( void )
@@ -1670,19 +1676,16 @@ int xemu_os_closedir ( XDIR *dirp )
 	return _wclosedir(dirp);
 }
 
-struct dirent *xemu_os_readdir ( XDIR *dirp, struct dirent *entry )
+int xemu_os_readdir ( XDIR *dirp, char *fn )
 {
-	struct _wdirent *p;
+	const struct _wdirent *p;
 	do {
+		errno = 0;
 		p = _wreaddir(dirp);
 		if (!p)
-			return NULL;
-		entry->d_ino = p->d_ino;
-		//entry->d_off = p->d_off;
-		entry->d_reclen = p->d_reclen;
-		//entry->d_type = p->d_type;
-	} while (WIN_WCHAR_TO_UTF8(entry->d_name, p->d_name, FILENAME_MAX));	// UGLY! Though without this probably an opendir/readdir scan would be interrupted by this anomaly ...
-	return entry;
+			return -1;
+	} while (WIN_WCHAR_TO_UTF8(fn, p->d_name, FILENAME_MAX));	// UGLY! Though without this probably an opendir/readdir scan would be interrupted by this anomaly ...
+	return 0;
 }
 
 #include <assert.h>
@@ -1715,6 +1718,19 @@ int xemu_os_stat ( const char *fn, struct stat *statbuf )
 	return 0;
 }
 
+#endif
+
+
+#ifndef XEMU_ARCH_WIN
+int xemu_os_readdir ( XDIR *dirp, char *fn )
+{
+	errno = 0;
+	const struct dirent *p = readdir(dirp);
+	if (!p)
+		return -1;
+	strcpy(fn, p->d_name);
+	return 0;
+}
 #endif
 
 
