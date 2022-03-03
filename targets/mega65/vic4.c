@@ -74,7 +74,6 @@ static Uint8 vic_pixel_readback_result[4];
 static Uint8 vic_color_register_mask = 0xFF;
 static Uint32 *used_palette;					// normally the same value as "palette" from vic4_palette.c but GOTOX RRB token can modify this! So this should be used
 static int EFFECTIVE_V400;
-static Uint8 sprite_y_adjust = 0;
 
 // TODO: not really implemented just here ...
 static int etherbuffer_is_io_mapped = 0;
@@ -396,7 +395,7 @@ void vic4_open_frame_access ( void )
 			max_rasters = PHYSICAL_RASTERS_NTSC;
 			visible_area_height = SCREEN_HEIGHT_VISIBLE_NTSC;
 			vicii_first_raster = 7;
-			sprite_y_adjust = 24;
+			REG_SPRITE_Y_ADJUST = 24;
 		} else {
 			// --- PAL ---
 			new_name = PAL_STD_NAME;
@@ -405,7 +404,7 @@ void vic4_open_frame_access ( void )
 			max_rasters = PHYSICAL_RASTERS_PAL;
 			visible_area_height = SCREEN_HEIGHT_VISIBLE_PAL;
 			vicii_first_raster = 0;
-			sprite_y_adjust = 0;
+			REG_SPRITE_Y_ADJUST = 0;
 		}
 		DEBUGPRINT("VIC: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec, max raster is %d, visible area height is %d)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime, max_rasters, visible_area_height);
 		videostd_name = new_name;
@@ -1062,11 +1061,15 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 	const int reg_tiling = REG_SPRTILEN;
 	for (int sprnum = 7; sprnum >= 0; sprnum--) {
 		if (REG_SPRITE_ENABLE & (1 << sprnum)) {
+			const int y_adjust = SPRITE_V400(sprnum) ? 0 : (REG_SPRITE_Y_ADJUST - 2);
 			const int spriteHeight = SPRITE_EXTHEIGHT(sprnum) ? REG_SPRHGHT : 21;
-			const int x_display_pos = SPRITE_FIRST_X + (SPRITE_POS_X(sprnum) * (REG_SPR640 ? 1 : 2));	// in display units
-			const int y_logical_pos = SPRITE_POS_Y(sprnum) - sprite_y_adjust + ( (EFFECTIVE_V400 ? 1 : 2));	// in logical units
+			const int x_display_pos = (REG_SPR640 ? 1 : 2) * SPRITE_POS_X(sprnum) + (REG_SPR640 ? 1 : SPRITE_FIRST_X);
+			const int y_display_pos = ((SPRITE_V400(sprnum) ? 1 : 2) * (SPRITE_POS_Y(sprnum) - y_adjust)) ;
 
-			int sprite_row_in_raster = logical_raster - y_logical_pos;
+			int sprite_row_in_raster = ycounter - y_display_pos;
+
+			if (!SPRITE_V400(sprnum))
+				sprite_row_in_raster = sprite_row_in_raster >> 1;
 
 			if (SPRITE_VERT_2X(sprnum))
 				sprite_row_in_raster = sprite_row_in_raster >> 1;
@@ -1471,8 +1474,6 @@ int vic4_render_scanline ( void )
 	// FIXME: is this really correct? ie even sprites cannot be set to Y pos finer than V200 or ...
 	// ... having resolution finer than V200 with some "VIC-IV magic"?
 	if (!EFFECTIVE_V400 && (ycounter & 1)) {
-		//for (int i = 0; i < TEXTURE_WIDTH; i++, current_pixel++)
-		//	*current_pixel = /* user_scanlines_setting ? 0 : */ *(current_pixel - TEXTURE_WIDTH);
 		memcpy(current_pixel, current_pixel - TEXTURE_WIDTH, TEXTURE_WIDTH * 4);
 		current_pixel += TEXTURE_WIDTH;
 	} else {
@@ -1501,16 +1502,19 @@ int vic4_render_scanline ( void )
 			if (ycounter < CHARGEN_Y_START)
 				while (xcounter++ < border_x_right)
 					*current_pixel++ = palette[REG_SCREEN_COLOR];
-			if (ycounter < BORDER_Y_BOTTOM)
-				vic4_do_sprites();
-			// for (int i = 0; i < TEXTURE_WIDTH - border_x_right; i++, current_pixel++)
-			//	*current_pixel = palette[REG_SCREEN_COLOR];
 		}
 		for (Uint32 *p = pixel_raster_start; p < pixel_raster_start + border_x_left; p++)
 			*p = palette[REG_BORDER_COLOR];
 		for (Uint32 *p = current_pixel; p < current_pixel + border_x_right; p++)
 			*p = palette[REG_BORDER_COLOR];
 	}
+	// Sprites can be displayed on V200/V400 independently of char generator, so
+	// this must be outside of the main loop to avoid being affected by double-scan
+
+	if (XEMU_LIKELY(REG_DISPLAYENABLE) && (ycounter >= BORDER_Y_TOP && ycounter < BORDER_Y_BOTTOM)) {
+		vic4_do_sprites();
+	}
+
 	ycounter++;
 	// End of frame?
 	if (ycounter == max_rasters) {
