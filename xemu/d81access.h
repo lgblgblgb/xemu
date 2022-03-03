@@ -59,5 +59,6 @@ extern void d81access_close        ( int which );
 extern void d81access_close_all    ( void      );
 extern void d81access_attach_fd    ( int which, int fd, off_t offset, int mode );
 extern int  d81access_attach_fsobj ( int which, const char *fn, int mode );
+extern Uint8 *d81access_create_image ( Uint8 *img, const char *diskname, const int name_from_fn );
 
 #endif

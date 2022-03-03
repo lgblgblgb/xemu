@@ -37,6 +37,7 @@ extern int    sdcard_read_block     ( Uint32 block, Uint8 *buffer );
 extern int    sdcard_write_block    ( Uint32 block, Uint8 *buffer );
 
 extern int    sdcard_force_external_mount ( const int unit, const char *filename, const char *cry );
+extern int    sdcard_force_external_mount_with_image_creation ( const int unit, const char *filename, const char *cry );
 extern const char *sdcard_get_mount_info ( const int unit, int *is_internal );
 
 // disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space"

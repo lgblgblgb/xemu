@@ -864,6 +864,17 @@ int sdcard_force_external_mount ( const int unit, const char *filename, const ch
 }
 
 
+int sdcard_force_external_mount_with_image_creation ( const int unit, const char *filename, const char *cry )
+{
+	Uint8 *img = d81access_create_image(NULL, filename, 1);
+	const int ret = xemu_save_file(filename, img, D81_SIZE, "Cannot create/save D81");
+	free(img);
+	if (ret)
+		return -1;
+	return sdcard_force_external_mount(unit, filename, cry);
+}
+
+
 void sdcard_write_register ( int reg, Uint8 data )
 {
 	const Uint8 prev_data = sd_regs[reg];
