@@ -86,16 +86,32 @@ void emu_dropfile_callback ( const char *fn )
 static void ui_attach_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
-	const int drive = VOIDPTR_TO_INT(m->user_data);
+	const int drive = VOIDPTR_TO_INT(m->user_data) & 0x7F;
+	const int creat = !!(VOIDPTR_TO_INT(m->user_data) & 0x80);
 	char fnbuf[PATH_MAX + 1];
 	static char dir[PATH_MAX + 1] = "";
+	if (!dir[0])
+		strcpy(dir, sdl_pref_dir);
 	if (!xemugui_file_selector(
-		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
-		"Select D81 to attach",
+		(creat ? XEMUGUI_FSEL_SAVE : XEMUGUI_FSEL_OPEN) | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		creat ? "Create new D81 to attach" : "Select D81 to attach",
 		dir,
 		fnbuf,
 		sizeof fnbuf
 	)) {
+		if (creat) {
+			// append .d81 extension if user did not specify that ...
+			const int fnlen = strlen(fnbuf);
+			static const char d81_ext[] = ".d81";
+			if (strcasecmp(fnbuf + fnlen - strlen(d81_ext), d81_ext))
+				strcpy(fnbuf + fnlen, d81_ext);
+			// create and save the image
+			Uint8 *img = d81access_create_image(NULL, fnbuf, 1);
+			const int ret = xemu_save_file(fnbuf, img, D81_SIZE, "Cannot create/save D81");
+			free(img);
+			if (ret)
+				return;
+		}
 		// FIXME: Ugly hack.
 		// Currently, handle only drive-8 via real MEGA65 emulation ("mounting mechanism"), and use
 		// drive-9 outside of Hyppo/etc terrotiry. To correct this, a whole big project would needed,
@@ -618,6 +634,8 @@ static const struct menu_st menu_help[] = {
 static const struct menu_st menu_d81[] = {
 	{ "Attach user D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_attach_d81, (void*)0 },
+	{ "Create&attach D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_attach_d81, (void*)(0 + 0x80) },
 	{ "Use internal D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_detach_d81, (void*)0 },
 	{ "Attach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_attach_d81, (void*)1 },
