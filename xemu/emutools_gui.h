@@ -97,5 +97,12 @@ extern void xemugui_cb_web_help_main		( const struct menu_st *m, int *query );
 extern void xemugui_cb_osd_key_debugger		( const struct menu_st *m, int *query );
 extern void xemugui_cb_set_mouse_grab		( const struct menu_st *m, int *query );
 extern void xemugui_cb_set_integer_to_one	( const struct menu_st *m, int *query );
+extern void xemugui_cb_toggle_int		( const struct menu_st *m, int *query );
+extern void xemugui_cb_toggle_int_inverted	( const struct menu_st *m, int *query );
+
+#ifdef XEMU_CONFIGDB_SUPPORT
+enum xemuguicfgfileop_type { XEMUGUICFGFILEOP_LOAD_DEFAULT, XEMUGUICFGFILEOP_SAVE_DEFAULT, XEMUGUICFGFILEOP_LOAD_CUSTOM, XEMUGUICFGFILEOP_SAVE_CUSTOM };
+void xemugui_cb_cfgfile ( const struct menu_st *m, int *query );
+#endif
 
 #endif

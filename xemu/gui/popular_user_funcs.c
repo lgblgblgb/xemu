@@ -1,6 +1,6 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    ~/xemu/gui/popular_user_funcs.c: popular/common functions for Xemu's UI abstraction
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -189,3 +189,62 @@ void xemugui_cb_set_integer_to_one ( const struct menu_st *m, int *query )
 	if (!query)
 		*(int*)(m->user_data) = 1;
 }
+
+void xemugui_cb_toggle_int_inverted ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, !*(int*)m->user_data);
+	*(int*)m->user_data = !*(int*)m->user_data;
+}
+
+void xemugui_cb_toggle_int ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, *(int*)m->user_data);
+	*(int*)m->user_data = !*(int*)m->user_data;
+}
+
+#ifdef XEMU_CONFIGDB_SUPPORT
+#include "xemu/emutools_config.h"
+
+/* Note: currently, this is not recommended to use functions to LOAD any config file.
+   This is because the configuration is loaded on Xemu start-up and many options are
+   parsed in a strict order bound to machine and emulation initialization, thus it's
+   kinda impossible to have valid state when loading a config file run-time "randomly". */
+
+void xemugui_cb_cfgfile ( const struct menu_st *m, int *query )
+{
+	if (XEMU_UNLIKELY(query))
+		return;
+	const enum xemuguicfgfileop_type mode = (const enum xemuguicfgfileop_type)VOIDPTR_TO_INT(m->user_data);
+	char fnbuf[PATH_MAX + 1];
+	static char dir[PATH_MAX + 1] = "";
+	if (!*dir)
+		strcpy(dir, sdl_pref_dir);
+	switch (mode) {
+		case XEMUGUICFGFILEOP_SAVE_DEFAULT:
+		case XEMUGUICFGFILEOP_LOAD_DEFAULT:
+			strcpy(fnbuf, xemucfg_get_default_config_file_name());
+			break;
+		case XEMUGUICFGFILEOP_LOAD_CUSTOM:
+		case XEMUGUICFGFILEOP_SAVE_CUSTOM:
+			if (xemugui_file_selector(
+				(mode == XEMUGUICFGFILEOP_LOAD_CUSTOM ? XEMUGUI_FSEL_OPEN : XEMUGUI_FSEL_SAVE) | XEMUGUI_FSEL_FLAG_STORE_DIR,
+				"Select config file",
+				dir,
+				fnbuf,
+				sizeof fnbuf
+			))
+				return;
+			break;
+	}
+	switch (mode) {
+		case XEMUGUICFGFILEOP_LOAD_DEFAULT:
+		case XEMUGUICFGFILEOP_LOAD_CUSTOM:
+			xemucfg_parse_config_file(fnbuf, "Cannot load/parse config file");
+			break;
+		case XEMUGUICFGFILEOP_SAVE_DEFAULT:
+		case XEMUGUICFGFILEOP_SAVE_CUSTOM:
+			xemucfg_save_config_file(fnbuf, "# Saved from Xemu GUI by the user" NL NL, "Cannot save/store config file");
+			break;
+	}
+}
+#endif

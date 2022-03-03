@@ -499,30 +499,13 @@ static void ui_cb_fullborders ( const struct menu_st *m, int *query )
 }
 
 
-// FIXME: should be renamed with better name ;)
-// FIXME: should be moved into the core
-static void ui_cb_toggle_int_inverted ( const struct menu_st *m, int *query )
-{
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, !*(int*)m->user_data);
-	*(int*)m->user_data = !*(int*)m->user_data;
-}
-
-
-// FIXME: should be renamed with better name ;)
-// FIXME: should be moved into the core
-static void ui_cb_toggle_int ( const struct menu_st *m, int *query )
-{
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, *(int*)m->user_data);
-	*(int*)m->user_data = !*(int*)m->user_data;
-}
-
-
 static void ui_cb_sids_enabled ( const struct menu_st *m, int *query )
 {
 	const int mask = VOIDPTR_TO_INT(m->user_data);
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, (configdb.sidmask & mask));
 	configdb.sidmask ^= mask;
 }
+
 
 static void ui_cb_render_scale_quality ( const struct menu_st *m, int *query )
 {
@@ -576,7 +559,7 @@ static const struct menu_st menu_display[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_fullborders, NULL },
 	{ "Show drive LED",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK |
-					XEMUGUI_MENUFLAG_SEPARATOR,	ui_cb_toggle_int, (void*)&configdb.show_drive_led },
+					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_toggle_int, (void*)&configdb.show_drive_led },
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &registered_screenshot_request },
 #endif
@@ -604,7 +587,7 @@ static const struct menu_st menu_inputdevices[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
 	{ "Swap emulated joystick port",XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, input_toggle_joy_emu },
 	{ "Cursor keys as joystick",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_toggle_int, (void*)&hid_joy_on_cursor_keys },
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&hid_joy_on_cursor_keys },
 #if 0
 	{ "Devices as joy port 2 (vs 1)",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_joy_devices },
 #endif
@@ -702,13 +685,22 @@ static const struct menu_st menu_audio_sids[] = {
 };
 static const struct menu_st menu_audio[] = {
 	{ "Audio output",		XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_toggle_int_inverted, (void*)&configdb.nosound },
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&configdb.nosound },
 	{ "OPL3 emulation",		XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_toggle_int_inverted, (void*)&configdb.noopl3 },
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&configdb.noopl3 },
 	{ "Clear audio registers",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, audio65_clear_regs },
 	{ "Emulated SIDs",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_sids   },
 	{ "Stereo separation",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_stereo },
 	{ "Master volume",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_volume },
+	{ NULL }
+};
+static const struct menu_st menu_config [] = {
+	{ "Confirmation on exit/reset", XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&i_am_sure_override },
+	//{ "Load saved default config",XEMUGUI_MENUID_CALLABLE,	xemugui_cb_cfgfile, (void*)XEMUGUICFGFILEOP_LOAD_DEFAULT },
+	{ "Save config as default",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_cfgfile, (void*)XEMUGUICFGFILEOP_SAVE_DEFAULT },
+	//{ "Load saved custom config",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_cfgfile, (void*)XEMUGUICFGFILEOP_LOAD_CUSTOM  },
+	{ "Save config as custom file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_cfgfile, (void*)XEMUGUICFGFILEOP_SAVE_CUSTOM  },
 	{ NULL }
 };
 static const struct menu_st menu_main[] = {
@@ -719,6 +711,7 @@ static const struct menu_st menu_main[] = {
 	{ "FD D81",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_d81     },
 	{ "Reset",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
 	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
+	{ "Configuration",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_config  },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
 #ifdef CBM_BASIC_TEXT_SUPPORT
 	{ "Save BASIC as text",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_save_basic_as_text },
