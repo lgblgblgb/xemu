@@ -1,7 +1,7 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   Copyright (C)2020-2021 Hernán Di Pietro <hernan.di.pietro@gmail.com>
+   Copyright (C)2020-2022 Hernán Di Pietro <hernan.di.pietro@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -325,7 +325,7 @@ static void vic4_update_vertical_borders( void )
 		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 6 + (REG_VIC2_YSCROLL * 2));
 	}
 
-	// This offset is present in recent versions of VIC-IV VHDL.
+	// This offset is present in recent versions of VIC-IV VHDL
 	SET_CHARGEN_X_START(CHARGEN_X_START - 1);
 
 	DEBUGPRINT("VIC4: set border top=%d, bottom=%d, textypos=%d, display_row_count=%d vic_ii_first_raster=%d EFFECTIVE_V400=%d REG_V400=%d" NL, BORDER_Y_TOP, BORDER_Y_BOTTOM,
@@ -1478,6 +1478,8 @@ int vic4_render_scanline ( void )
 	// FIXME: is this really correct? ie even sprites cannot be set to Y pos finer than V200 or ...
 	// ... having resolution finer than V200 with some "VIC-IV magic"?
 	if (!EFFECTIVE_V400 && (ycounter & 1)) {
+		//for (int i = 0; i < TEXTURE_WIDTH; i++, current_pixel++)
+		//	*current_pixel = /* user_scanlines_setting ? 0 : */ *(current_pixel - TEXTURE_WIDTH);
 		memcpy(current_pixel, current_pixel - TEXTURE_WIDTH, TEXTURE_WIDTH * 4);
 		current_pixel += TEXTURE_WIDTH;
 	} else {

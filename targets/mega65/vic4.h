@@ -143,7 +143,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_POS_Y(n)			(((Uint16)vic_registers[1 + (n)*2]) | \
 								( (vic_registers[0x77] & (1 << (n)) ? 0x100 : 0)) | \
 								( (vic_registers[0x78] & (1 << (n)) ? 0x200 : 0)))
-#define SPRITE_POS_X(n)			(((Uint16)vic_registers[(n)*2]) | ( (vic_registers[0x10] & (1 << (n)) ? 0x100 : 0)))
+#define SPRITE_POS_X(n)			(((Uint16)vic_registers[(n)*2]) | \
+								( (vic_registers[0x10] & (1 << (n)) ? 0x100 : 0)) | \
+								( (vic_registers[0x5f] & (1 << (n)) ? 0x200 : 0)))
 #define SPRITE_COLOR(n)			(vic_registers[0x27+(n)] & vic_color_register_mask)
 #define SPRITE_COLOR_4BIT(n)		(vic_registers[0x27+(n)] & 0xF)
 #define SPRITE_MULTICOLOR_1		(vic_registers[0x25] & vic_color_register_mask)
