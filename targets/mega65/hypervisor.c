@@ -292,6 +292,7 @@ static inline void first_leave ( void )
 		else
 			vic_registers[0x6F] &= 0x7F;
 	}
+	hdos_mount_external_default_d81_hack();
 	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 }
 

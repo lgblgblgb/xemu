@@ -848,7 +848,7 @@ int sdcard_force_external_mount ( const int unit, const char *filename, const ch
 		mount_info[unit].force_external_name = NULL;
 	}
 	if (some_mount(unit)) {
-		// error. close access - if ANY -
+		// error. close access - if ANY
 		d81access_close(unit);
 		mount_info[unit].current_name[0] = '\0';
 		if (mount_info[unit].force_external_name) {
@@ -864,13 +864,21 @@ int sdcard_force_external_mount ( const int unit, const char *filename, const ch
 }
 
 
-int sdcard_force_external_mount_with_image_creation ( const int unit, const char *filename, const char *cry )
+int sdcard_force_external_mount_with_image_creation ( const int unit, const char *filename, const int do_overwrite, const char *cry )
 {
-	Uint8 *img = d81access_create_image(NULL, filename, 1);
-	const int ret = xemu_save_file(filename, img, D81_SIZE, "Cannot create/save D81");
-	free(img);
-	if (ret)
+	if (d81access_create_image_file(filename, NULL, do_overwrite, "Cannot create D81"))
 		return -1;
+	return sdcard_force_external_mount(unit, filename, cry);
+}
+
+
+// This awkward function is mainly for creating&mounting the external default mega65.d81
+int sdcard_force_external_mount_with_possible_image_creation ( const int unit, const char *filename, const char *diskname, const char *cry )
+{
+	// d81access_create_image_file() returns with 0 if image was created, -2 if image existed before, and -1 for other errors
+	if (d81access_create_image_file(filename, diskname, 0, NULL) == -1)
+		return -1;
+	// ... so, the file existed before case allows to reach this point, since then retval is -2
 	return sdcard_force_external_mount(unit, filename, cry);
 }
 

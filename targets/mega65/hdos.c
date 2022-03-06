@@ -840,6 +840,34 @@ int hypervisor_hdos_virtualization_status ( const int set, const char **root_ptr
 }
 
 
+int hdos_mount_external_default_d81_hack ( void )
+{
+	static char *default_d81_path = NULL;
+	if (!default_d81_path) {
+		static const char default_d81_basename[] = "mega65.d81";
+		const int len = strlen(hdos.rootdir) + strlen(default_d81_basename) + 1;
+		default_d81_path = xemu_malloc(len);
+		snprintf(default_d81_path, len, "%s%s", hdos.rootdir, default_d81_basename);
+		DEBUGPRINT("HDOS: default external D81 is %s" NL, default_d81_path);
+	}
+	// Check mount info, if external mount is done _ONLY_ execute that function above,
+	// so we won't mount the default when user has some (external) mount already
+	// TODO: this logic is a bit primitive and should be somewhat refined in the future:
+	//		* to allow to use internal mounts remained
+	//		* only change the mega65.d81 internal mount (so the mount sector should be compared to starting sector of mega65.d81 on the sd image)
+	//		* option to allow to turn off this whole logic for testing only in-sdcard stuff
+	int is_internal;
+	const char *mount_name = sdcard_get_mount_info(0, &is_internal);
+	DEBUGPRINT("HDOS: external info: is_internal=%d mount_name=%s" NL, is_internal, mount_name);
+	if (is_internal) {
+		DEBUGPRINT("HDOS: do mount default D81, as internal mounting is active for %s" NL, mount_name);
+		return sdcard_force_external_mount_with_possible_image_creation(0, default_d81_path, "XEMU EXTERNAL", "Cannot mount default external D81");
+	} else
+		DEBUGPRINT("HDOS: skip mounting default D81, as external mounting is already active for %s" NL, mount_name);
+	return 0;
+}
+
+
 // Must be called, but **ONLY** once in Xemu's running lifetime, before using XEMU HDOS related things here!
 void hdos_init ( const int do_virt, const char *virtroot )
 {

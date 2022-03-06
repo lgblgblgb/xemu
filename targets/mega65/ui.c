@@ -63,7 +63,7 @@ static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
 	const int drive = VOIDPTR_TO_INT(m->user_data) & 0x7F;
-	const int creat = VOIDPTR_TO_INT(m->user_data) & 0x80;
+	const int creat = !!(VOIDPTR_TO_INT(m->user_data) & 0x80);
 	char fnbuf[PATH_MAX + 1];
 	static char dir[PATH_MAX + 1] = "";
 	if (!dir[0])
@@ -78,12 +78,12 @@ static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
 		if (creat) {
 			// append .d81 extension if user did not specify that ...
 			const int fnlen = strlen(fnbuf);
-			static const char d81_ext[] = ".D81";
+			static const char d81_ext[] = ".d81";
 			char fnbuf2[fnlen + strlen(d81_ext) + 1];
 			strcpy(fnbuf2, fnbuf);
 			if (strcasecmp(fnbuf2 + fnlen - strlen(d81_ext), d81_ext))
 				strcpy(fnbuf2 + fnlen, d81_ext);
-			sdcard_force_external_mount_with_image_creation(drive, fnbuf2, "D81 mount failure");
+			sdcard_force_external_mount_with_image_creation(drive, fnbuf2, 1, "D81 mount failure"); // third arg: allow overwrite existing D81
 		} else
 			sdcard_force_external_mount(drive, fnbuf, "D81 mount failure");
 	} else {
