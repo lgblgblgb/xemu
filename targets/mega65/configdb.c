@@ -87,6 +87,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "useinitrom", "Use Xemu's internal init-rom", &configdb.useinitrom },
 	{ "useutilmenu", "Try to tigger utility menu", &configdb.useutilmenu },
 	{ "romfromsd", "Force ROM to be used from SD-card", &configdb.romfromsd },
+	{ "defd81fromsd", "Force default D81 to be used from SD-card", &configdb.defd81fromsd },
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	{ "virtsd", "Interpret -sdimg option as a DIRECTORY to be fed onto the FAT32FS and use virtual-in-memory disk storage.", &configdb.virtsd },
 #endif

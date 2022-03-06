@@ -253,6 +253,7 @@ void hypervisor_start_machine ( void )
 		hyppo_version_string[0] = '\0';
 		hdos_init(configdb.hdosvirt, configdb.hdosdir);
 	}
+	hdos_notify_start_machine();
 	in_hypervisor = 0;
 	hypervisor_queued_trap = -1;
 	hypervisor_is_first_call = 1;
@@ -292,7 +293,6 @@ static inline void first_leave ( void )
 		else
 			vic_registers[0x6F] &= 0x7F;
 	}
-	hdos_mount_external_default_d81_hack();
 	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 }
 

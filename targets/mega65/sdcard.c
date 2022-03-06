@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "io_mapper.h"
 #include "sdcontent.h"
 #include "memcontent.h"
+#include "hypervisor.h"
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -44,7 +45,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define SD_ST_SDHC	0x10
 
-// FIXME: invent same sane value here
+// FIXME: invent same sane value here (the perfect solution would be to use sdcontent/mfat subsystem to query the boundaries of the FAT partitions)
 #define MIN_MOUNT_SECTOR_NO 10
 
 #define SD_BUFFER_POS 0x0E00
@@ -59,6 +60,8 @@ static Uint32	sdcard_size_in_blocks;	// SD card size in term of number of 512 by
 static int	sdcard_bytes_read = 0;
 static int	sd_fill_mode = 0;
 static Uint8	sd_fill_value = 0;
+Uint32		sdcard_first_internal_mount_drive0 = 0;
+static int	default_d81_is_from_sd;
 #ifdef COMPRESSED_SD
 static int	sd_compressed = 0;
 static off_t	sd_bdata_start;
@@ -273,17 +276,6 @@ static void sdcard_shutdown ( void )
 }
 
 
-#if 0
-static void sdcard_set_external_d81_name ( const char *name )
-{
-	if (name == NULL || strlen(name) >= sizeof(external_d81))
-		*external_d81 = 0;
-	else
-		strcpy(external_d81, name);
-}
-#endif
-
-
 #ifdef COMPRESSED_SD
 static int detect_compressed_image ( int fd )
 {
@@ -320,8 +312,20 @@ static XEMU_INLINE void set_disk_buffer_cpu_view ( void )
 }
 
 
-int sdcard_init ( const char *fn, const int virtsd_flag )
+static void show_card_init_done ( void )
 {
+	DEBUGPRINT("SDCARD: card init done, size=%u Mbytes (%s), virtsd_mode=%s, default_D81_from_sd=%d" NL,
+		sdcard_size_in_blocks >> 11,
+		sd_is_read_only ? "R/O" : "R/W",
+		vdisk.mode ? "IN-MEMORY-VIRTUAL" : "image-file",
+		default_d81_is_from_sd
+	);
+}
+
+
+int sdcard_init ( const char *fn, const int virtsd_flag, const int default_d81_is_from_sd_in )
+{
+	default_d81_is_from_sd = default_d81_is_from_sd_in;
 	memset(sd_regs, 0, sizeof sd_regs);			// reset all registers
 	memcpy(D6XX_registers + 0x80, sd_regs, sizeof sd_regs);	// be sure, this is in sync with the D6XX register backend (used by io_mapper which also calls us ...)
 	set_disk_buffer_cpu_view();	// make sure to initialize disk_buffer_cpu_view based on current sd_regs[9] otherwise disk_buffer_cpu_view may points to NULL when referenced!
@@ -338,6 +342,7 @@ int sdcard_init ( const char *fn, const int virtsd_flag )
 		virtdisk_init(VIRTUAL_DISK_BLOCKS_PER_CHUNK, VIRTUAL_DISK_SIZE_IN_BLOCKS);
 		vdisk.mode = 1;
 	} else
+#else
 		vdisk.mode = 0;
 #endif
 	d81access_init();
@@ -354,7 +359,7 @@ int sdcard_init ( const char *fn, const int virtsd_flag )
 #ifdef COMPRESSED_SD
 		sd_compressed = 0;
 #endif
-		DEBUGPRINT("SDCARD: card init done (VDISK!), size=%u Mbytes, virtsd_flag=%d" NL, sdcard_size_in_blocks >> 11, virtsd_flag);
+		show_card_init_done();
 #ifdef SD_CONTENT_SUPPORT
 		sdcontent_handle(sdcard_size_in_blocks, fn, SDCONTENT_FORCE_FDISK);
 #endif
@@ -432,7 +437,7 @@ retry:
 		}
 	}
 	if (sdfd >= 0) {
-		DEBUGPRINT("SDCARD: card init done, size=%u Mbytes, virtsd_flag=%d" NL, sdcard_size_in_blocks >> 11, virtsd_flag);
+		show_card_init_done();
 		//sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_ASK_FDISK | SDCONTENT_ASK_FILES);
 		if (just_created_image_file) {
 			just_created_image_file = 0;
@@ -444,7 +449,7 @@ retry:
 		}
 	}
 	if (!virtsd_flag && sdfd >= 0) {
-		static const char msg[] = " on the SD-card image.\nPlease use UI menu: SD-card -> Update files ...\nUI can be accessed with right mouse click into the emulator window.";
+		static const char msg[] = " on the SD-card image.\nPlease use UI menu: Disks -> SD-card -> Update files ...\nUI can be accessed with right mouse click into the emulator window.";
 		int r = sdcontent_check_xemu_signature();
 		if (r < 0) {
 			ERROR_WINDOW("Warning! Cannot read SD-card to get Xemu signature!");
@@ -761,6 +766,29 @@ static void sdcard_command ( Uint8 cmd )
 }
 
 
+// Called from internal_mount() only!
+static inline int default_d81_mount_hack ( void )
+{
+	static char *default_d81_path = NULL;
+	if (!default_d81_path) {
+		// Prepare to determine the full path of the default external mega65.d81, if we haven't got it yet
+		static const char default_d81_basename[] = "mega65.d81";
+		const char *hdosroot;
+		hypervisor_hdos_virtualization_status(-1, &hdosroot);
+		const int len = strlen(hdosroot) + strlen(default_d81_basename) + 1;
+		default_d81_path = xemu_malloc(len);
+		snprintf(default_d81_path, len, "%s%s", hdosroot, default_d81_basename);
+	}
+	static const char default_d81_disk_label[] = "XEMU EXTERNAL";
+	DEBUGPRINT("SDCARD: D81-DEFAULT: trying to mount external D81 instead of internal default one as %s (\"%s\")" NL, default_d81_path, default_d81_disk_label);
+	// d81access_create_image_file() returns with 0 if image was created, -2 if image existed before, and -1 for other errors
+	if (d81access_create_image_file(default_d81_path, default_d81_disk_label, 0, NULL) == -1)
+		return -1;
+	// ... so, the file existed before case allows to reach this point, since then retval is -2
+	return sdcard_force_external_mount(0, default_d81_path, "Cannot mount default external D81");
+}
+
+
 static int internal_mount ( const int unit )
 {
 	int ro_flag = 0;
@@ -780,12 +808,25 @@ static int internal_mount ( const int unit )
 			ro_flag = D81ACCESS_RO;
 		at_sector = U8A_TO_U32(sd_regs + 0x10);
 	}
+	// FIXME: actual upper limit should take account the image size to mount which can be different now than D81_SIZE like in case of D65 image (not now, but in the future?)
+	// FIXME: also a better algorithm to find limits, see the comment at defining MIN_MOUNT_SECTOR_NO near the beginning in this file
 	if (at_sector < MIN_MOUNT_SECTOR_NO || ((at_sector + (D81_SIZE >> 9)) >= sdcard_size_in_blocks)) {
 		DEBUGPRINT("SDCARD: D81: internal mount #%d **INVALID** SD sector (mount refused!), too %s $%X" NL, unit, at_sector < MIN_MOUNT_SECTOR_NO ? "low" : "high", at_sector);
 		d81access_close(unit);
 		mount_info[unit].current_name[0] = '\0';
 		mount_info[unit].internal = -1;
 		return -1;
+	}
+	if (!unit && !default_d81_is_from_sd) {
+		// This whole stuff is to check we should apply and call default_d81_mount_hack() to override the default d81 mount with an external one
+		// This logic is for only unit-0 and if option default d81 from sd is not enabled, thus the condition above this code fragment is in
+		if (!sdcard_first_internal_mount_drive0)	// store the first ever internal mount, assuming it's the default mega65.d81 so we know it's sector address
+			sdcard_first_internal_mount_drive0 = at_sector;
+		if (at_sector == sdcard_first_internal_mount_drive0) {
+			// it seems the first ever mounted D81 wanted to be mounted now, so let's override that with external mount at this point
+			if (!default_d81_mount_hack())
+				return 1;	// if succeeded, stop processing further!
+		}
 	}
 	DEBUGPRINT("SDCARD: D81: internal mount #%d from SD sector $%X (%s)" NL, unit, at_sector, ro_flag ? "R/O" : "R/W");
 	d81access_attach_fd(unit, sdfd, (off_t)at_sector << 9, D81ACCESS_IMG | ro_flag);
@@ -824,8 +865,8 @@ static int some_mount ( const int unit )
 		d81access_close(unit);	// unmount, if internal_mount() finds no internal mount situation
 		mount_info[unit].current_name[0] = '\0';
 		mount_info[unit].internal = -1;
-	} else
-		DEBUGPRINT("SDCARD: D81: internal mount #%d failed?" NL, unit);
+	} /* else
+		DEBUGPRINT("SDCARD: D81: internal mount #%d failed?" NL, unit); */
 	return 0;
 }
 
@@ -868,17 +909,6 @@ int sdcard_force_external_mount_with_image_creation ( const int unit, const char
 {
 	if (d81access_create_image_file(filename, NULL, do_overwrite, "Cannot create D81"))
 		return -1;
-	return sdcard_force_external_mount(unit, filename, cry);
-}
-
-
-// This awkward function is mainly for creating&mounting the external default mega65.d81
-int sdcard_force_external_mount_with_possible_image_creation ( const int unit, const char *filename, const char *diskname, const char *cry )
-{
-	// d81access_create_image_file() returns with 0 if image was created, -2 if image existed before, and -1 for other errors
-	if (d81access_create_image_file(filename, diskname, 0, NULL) == -1)
-		return -1;
-	// ... so, the file existed before case allows to reach this point, since then retval is -2
 	return sdcard_force_external_mount(unit, filename, cry);
 }
 
