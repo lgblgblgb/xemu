@@ -40,13 +40,14 @@ extern int    sdcard_force_external_mount ( const int unit, const char *filename
 extern int    sdcard_force_external_mount_with_image_creation ( const int unit, const char *filename, const int do_overwrite, const char *cry );
 extern const char *sdcard_get_mount_info ( const int unit, int *is_internal );
 
+extern void   sdcard_notify_system_start_begin ( void );
+extern void   sdcard_notify_system_start_end   ( void );
+
 // disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space"
 extern Uint8  disk_buffers[0x1000];
 extern Uint8  *disk_buffer_cpu_view;
 extern Uint8  *disk_buffer_io_mapped;
 extern Uint8  sd_status;
-extern Uint32 sdcard_first_internal_mount_drive0;
-extern int    sdcard_default_d81_is_from_sd;
 
 extern const char xemu_external_d81_signature[];
 

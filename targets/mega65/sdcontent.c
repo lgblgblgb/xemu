@@ -665,7 +665,9 @@ int sdcontent_handle ( Uint32 size_in_blocks, const char *update_dir_path, int o
 		//r |= update_sdcard_file("BANNER.M65",		options,			(const char*)meminitdata_banner,	MEMINITDATA_BANNER_SIZE);
 		//r |= update_sdcard_file("FREEZER.M65",	options,			(const char*)meminitdata_freezer,	MEMINITDATA_FREEZER_SIZE);
 		char *d81 = (char*)d81access_create_image(NULL, "D81 ON <SDCARD>!", 0);
-		xemu_save_file("@template.d81", d81, D81_SIZE, NULL);
+		// FIXME: deactivated now: no need for template, Xemu can create&mount D81s! (maybe we should remove this)
+		// ... also it's very confusing since template would have disk label D81 ON SDCARD as well, confusing people a lot
+		//xemu_save_file("@template.d81", d81, D81_SIZE, NULL);
 		r |= update_sdcard_file(default_disk_image,	options,			d81,					D81_SIZE);
 		strcpy(d81, xemu_external_d81_signature);
 		r |= update_sdcard_file(xemu_disk_image,	options,			d81,					D81_SIZE);

@@ -60,7 +60,6 @@ static Uint32	sdcard_size_in_blocks;	// SD card size in term of number of 512 by
 static int	sdcard_bytes_read = 0;
 static int	sd_fill_mode = 0;
 static Uint8	sd_fill_value = 0;
-Uint32		sdcard_first_internal_mount_drive0 = 0;
 static int	default_d81_is_from_sd;
 #ifdef COMPRESSED_SD
 static int	sd_compressed = 0;
@@ -80,15 +79,21 @@ Uint8		*disk_buffer_cpu_view;
 // causes problems. So let's revert back to a fixed "SD-only" solution for now.
 Uint8		*disk_buffer_io_mapped = disk_buffers + SD_BUFFER_POS;
 
-const char	xemu_external_d81_signature[] = "\xFF\xFE<{[(XemuExternalDiskMagic)]}>";
+static const char	*default_d81_basename[2]	= { "mega65.d81",	"mega65_9.d81"    };
+static const char	*default_d81_disk_label[2]	= { "XEMU EXTERNAL",	"XEMU EXTERNAL 9" };
+const char		xemu_external_d81_signature[]	= "\xFF\xFE<{[(XemuExternalDiskMagic)]}>";
 
 Uint8 sd_reg9;
 
+// Disk image mount information for the two units
 static struct {
-	char *current_name;
-	int   internal;
-	char *force_external_name;
-	char *default_external_name;
+	char	*current_name;
+	int	internal;		// is internal mount? FIXME: in this source it's a hard to understand 3-stated logic being 0,1 or -1 ... let's fix this!
+	char	*force_external_name;
+	char	*default_external_name;
+	Uint32	at_sector;		// valid only if "internal", internal mount sector number
+	Uint32	at_sector_initial;	// internal mount sector number during only the first (reset/poweron) trap
+	int	monitoring_initial;	// if true, at_sector_initial is monitored and changed, if false, not anymore
 } mount_info[2];
 
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
@@ -334,6 +339,9 @@ int sdcard_init ( const char *fn, const int virtsd_flag, const int default_d81_i
 		mount_info[a].internal = -1;
 		mount_info[a].force_external_name = NULL;
 		mount_info[a].default_external_name = NULL;
+		mount_info[a].at_sector = 0;
+		mount_info[a].at_sector_initial = 0;
+		mount_info[a].monitoring_initial = 0;
 	}
 	int just_created_image_file =  0;	// will signal to format image automatically for the user (if set, by default it's clear, here)
 	char fnbuf[PATH_MAX + 1];
@@ -766,29 +774,58 @@ static void sdcard_command ( Uint8 cmd )
 }
 
 
-// Called from internal_mount() only!
-static inline int default_d81_mount_hack ( void )
+// These are called from hdos.c as part of the beginning/end of the machine
+// initialization (ie, trap reset). The purpose here currently is activating
+// and deactivating mount monitoring so we can override later the default
+// on-sdcard D81 image mount with external one, knowing the mount-sector-number.
+
+
+void sdcard_notify_system_start_begin ( void )
 {
-	static char *default_d81_path = NULL;
-	if (!default_d81_path) {
-		// Prepare to determine the full path of the default external mega65.d81, if we haven't got it yet
-		static const char default_d81_basename[] = "mega65.d81";
-		const char *hdosroot;
-		hypervisor_hdos_virtualization_status(-1, &hdosroot);
-		const int len = strlen(hdosroot) + strlen(default_d81_basename) + 1;
-		default_d81_path = xemu_malloc(len);
-		snprintf(default_d81_path, len, "%s%s", hdosroot, default_d81_basename);
+	for (int unit = 0; unit < 2; unit++) {
+		mount_info[unit].at_sector_initial = 0;
+		mount_info[unit].monitoring_initial = 1;
 	}
-	static const char default_d81_disk_label[] = "XEMU EXTERNAL";
-	DEBUGPRINT("SDCARD: D81-DEFAULT: trying to mount external D81 instead of internal default one as %s (\"%s\")" NL, default_d81_path, default_d81_disk_label);
-	// d81access_create_image_file() returns with 0 if image was created, -2 if image existed before, and -1 for other errors
-	if (d81access_create_image_file(default_d81_path, default_d81_disk_label, 0, NULL) == -1)
-		return -1;
-	// ... so, the file existed before case allows to reach this point, since then retval is -2
-	return sdcard_force_external_mount(0, default_d81_path, "Cannot mount default external D81");
 }
 
 
+void sdcard_notify_system_start_end ( void )
+{
+	for (int unit = 0; unit < 2; unit++) {
+		if (!mount_info[unit].monitoring_initial)
+			ERROR_WINDOW("%s::%s() monitoring_initial was zero??", __FILE__, __func__);
+		mount_info[unit].monitoring_initial = 0;
+		if (!unit && !mount_info[unit].at_sector_initial)
+			DEBUGPRINT("SDCARD: D81-DEFAULT: WARNING: could not determine default on-sd D81 mount sector info during the RESET TRAP for unit #%d!" NL, unit);
+	}
+}
+
+
+// Called from internal_mount() only!
+static inline int do_default_d81_mount_hack ( const int unit )
+{
+	static char *default_d81_path[2] = { NULL, NULL };
+	if (!default_d81_path[unit]) {
+		// Prepare to determine the full path of the default external d81 image, if we haven't got it yet
+		const char *hdosroot;
+		(void)hypervisor_hdos_virtualization_status(-1, &hdosroot);
+		const int len = strlen(hdosroot) + strlen(default_d81_basename[unit]) + 1;
+		default_d81_path[unit] = xemu_malloc(len);
+		snprintf(default_d81_path[unit], len, "%s%s", hdosroot, default_d81_basename[unit]);
+	}
+	DEBUGPRINT("SDCARD: D81-DEFAULT: trying to mount external D81 instead of internal default one as %s on unit #%d" NL, default_d81_path[unit], unit);
+	// d81access_create_image_file() returns with 0 if image was created, -2 if image existed before, and -1 for other errors
+	if (d81access_create_image_file(default_d81_path[unit], default_d81_disk_label[unit], 0, NULL) == -1)
+		return -1;
+	// ... so, the file existed before case allows to reach this point, since then retval is -2
+	return sdcard_force_external_mount(unit, default_d81_path[unit], "Cannot mount default external D81");
+}
+
+
+// Return values:
+//	* -1: error
+//	*  0: no image was mounted internally (not enabled etc)
+//	*  1: image has been mounted
 static int internal_mount ( const int unit )
 {
 	int ro_flag = 0;
@@ -817,16 +854,13 @@ static int internal_mount ( const int unit )
 		mount_info[unit].internal = -1;
 		return -1;
 	}
-	if (!unit && !default_d81_is_from_sd) {
-		// This whole stuff is to check we should apply and call default_d81_mount_hack() to override the default d81 mount with an external one
-		// This logic is for only unit-0 and if option default d81 from sd is not enabled, thus the condition above this code fragment is in
-		if (!sdcard_first_internal_mount_drive0)	// store the first ever internal mount, assuming it's the default mega65.d81 so we know it's sector address
-			sdcard_first_internal_mount_drive0 = at_sector;
-		if (at_sector == sdcard_first_internal_mount_drive0) {
-			// it seems the first ever mounted D81 wanted to be mounted now, so let's override that with external mount at this point
-			if (!default_d81_mount_hack())
-				return 1;	// if succeeded, stop processing further!
-		}
+	mount_info[unit].at_sector = at_sector;
+	if (XEMU_UNLIKELY(mount_info[unit].monitoring_initial && !mount_info[unit].at_sector_initial))
+		mount_info[unit].at_sector_initial = at_sector;
+	if (at_sector == mount_info[unit].at_sector_initial && !default_d81_is_from_sd) {
+		// it seems the first ever mounted D81 wanted to be mounted now, so let's override that with external mount at this point
+		if (!do_default_d81_mount_hack(unit))
+			return 1;	// if succeeded, stop processing further! (note the return value needs of this functions!)
 	}
 	DEBUGPRINT("SDCARD: D81: internal mount #%d from SD sector $%X (%s)" NL, unit, at_sector, ro_flag ? "R/O" : "R/W");
 	d81access_attach_fd(unit, sdfd, (off_t)at_sector << 9, D81ACCESS_IMG | ro_flag);

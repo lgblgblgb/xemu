@@ -1718,7 +1718,15 @@ int xemu_os_stat ( const char *fn, struct stat *statbuf )
 	return 0;
 }
 
+
 #endif
+
+
+int xemu_os_file_exists ( const char *fn )
+{
+	struct stat st;
+	return !xemu_os_stat(fn, &st);
+}
 
 
 #ifndef XEMU_ARCH_WIN

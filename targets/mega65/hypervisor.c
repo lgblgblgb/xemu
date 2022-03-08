@@ -189,6 +189,7 @@ void hypervisor_enter ( int trapno )
 		current_hdos_func = -1;
 	if (XEMU_UNLIKELY(trapno == TRAP_RESET)) {
 		hdos_reset();
+		hdos_notify_system_start_begin();
 		if (!vic4_disallow_video_std_change) {
 			vic4_disallow_video_std_change = 1;
 			DEBUGPRINT("HYPERVISOR: setting video standard change banning" NL);
@@ -253,7 +254,6 @@ void hypervisor_start_machine ( void )
 		hyppo_version_string[0] = '\0';
 		hdos_init(configdb.hdosvirt, configdb.hdosdir);
 	}
-	hdos_notify_start_machine();
 	in_hypervisor = 0;
 	hypervisor_queued_trap = -1;
 	hypervisor_is_first_call = 1;
@@ -293,6 +293,7 @@ static inline void first_leave ( void )
 		else
 			vic_registers[0x6F] &= 0x7F;
 	}
+	hdos_notify_system_start_end();
 	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 }
 

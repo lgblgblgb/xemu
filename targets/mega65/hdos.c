@@ -840,12 +840,21 @@ int hypervisor_hdos_virtualization_status ( const int set, const char **root_ptr
 }
 
 
-// Called by hypervisor at start machine state.
+// These are called by hypervisor at the beginning and the end of the start machine state (ie, trap reset).
 // Its intent is to tell hdos.c to do things private to hdos.c but still connected to start machine functionality.
-void hdos_notify_start_machine ( void )
+
+
+void hdos_notify_system_start_begin ( void )
 {
-	DEBUGPRINT("HDOS: start machine notification received." NL);
-	sdcard_first_internal_mount_drive0 = 0;
+	DEBUG("HDOS: system-start-begin notification received." NL);
+	sdcard_notify_system_start_begin();
+}
+
+
+void hdos_notify_system_start_end ( void )
+{
+	DEBUG("HDOS: system-start-end notification recevied." NL);
+	sdcard_notify_system_start_end();
 }
 
 

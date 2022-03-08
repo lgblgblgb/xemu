@@ -81,8 +81,17 @@ static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
 			static const char d81_ext[] = ".d81";
 			char fnbuf2[fnlen + strlen(d81_ext) + 1];
 			strcpy(fnbuf2, fnbuf);
-			if (strcasecmp(fnbuf2 + fnlen - strlen(d81_ext), d81_ext))
+			if (strcasecmp(fnbuf2 + fnlen - strlen(d81_ext), d81_ext)) {
 				strcpy(fnbuf2 + fnlen, d81_ext);
+				// FIXME: when we appended .d81 we should check if file exists! file sel dialog only checks for the base name of course
+				// However this is a bit lame this way, that there are two different kind of question, one from the save filesel dailog,
+				// at the other case, we check here ...
+				if (xemu_os_file_exists(fnbuf2)) {
+					if (!ARE_YOU_SURE("Overwrite existing D81 image?", ARE_YOU_SURE_DEFAULT_YES)) {
+						return;
+					}
+				}
+			}
 			sdcard_force_external_mount_with_image_creation(drive, fnbuf2, 1, "D81 mount failure"); // third arg: allow overwrite existing D81
 		} else
 			sdcard_force_external_mount(drive, fnbuf, "D81 mount failure");
@@ -575,6 +584,12 @@ static void ui_cb_render_scale_quality ( const struct menu_st *m, int *query )
 	register_new_texture_creation = 1;
 }
 
+static void ui_cb_displayenable ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, vic_registers[0x11] & 0x10);
+	vic_registers[0x11] ^= 0x10;
+}
+
 
 /**** MENU SYSTEM ****/
 
@@ -667,8 +682,13 @@ static const struct menu_st menu_debug[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&rom_from_prefdir_allowed },
 	{ "HDOS virtualization",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_hdos_virt, NULL },
+#if 0
+	// removed now, because it's misleading, would require an xemu-restart anyway ...
 	{ "mega65.d81 mount from SD",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&configdb.defd81fromsd },
+#endif
+	{ "Display enable VIC reg",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_displayenable, NULL },
 	{ "Matrix mode",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_matrix_mode, NULL },
 	{ "Emulation state info",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_emu_info },
@@ -692,8 +712,22 @@ static const struct menu_st menu_sdcard[] = {
 	{ "Update files on SD image",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_update_sdcard },
 	{ NULL }
 };
+#define D81_MENU_TEMPLATE(no) \
+{ \
+	{ "Attach existing D81",	XEMUGUI_MENUID_CALLABLE | \
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_d81, (void*)(no) }, \
+	{ "Detach D81",			XEMUGUI_MENUID_CALLABLE | \
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_detach_d81, (void*)(no) }, \
+	{ "Create and attach new D81",	XEMUGUI_MENUID_CALLABLE | \
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_d81, (void*)((no) | 0x80) }, \
+	{ NULL } \
+}
+static const struct menu_st menu_drv8[] = D81_MENU_TEMPLATE(0);
+static const struct menu_st menu_drv9[] = D81_MENU_TEMPLATE(1);
 static const struct menu_st menu_disk[] = {
-	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
+	{ "Drive-8",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_drv8    },
+	{ "Drive-9",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_drv9    },
+#if 0
 	{ "Attach user D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_d81, (void*)0 },
 	{ "Use internal D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
@@ -702,6 +736,8 @@ static const struct menu_st menu_disk[] = {
 	{ "Detach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_cb_detach_d81, (void*)1 },
 	{ "Create&use D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_d81, (void*)(0 | 0x80) },
+#endif
+	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
 	{ NULL }
 };
 static const struct menu_st menu_audio_stereo[] = {
