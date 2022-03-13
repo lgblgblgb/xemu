@@ -38,6 +38,8 @@ extern int    sdcard_write_block    ( Uint32 block, Uint8 *buffer );
 
 extern int    sdcard_force_external_mount ( const int unit, const char *filename, const char *cry );
 extern int    sdcard_force_external_mount_with_image_creation ( const int unit, const char *filename, const int do_overwrite, const char *cry );
+extern int    sdcard_unmount ( const int unit );
+extern int    sdcard_default_d81_mount ( const int unit );
 extern const char *sdcard_get_mount_info ( const int unit, int *is_internal );
 
 extern void   sdcard_notify_system_start_begin ( void );

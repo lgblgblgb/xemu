@@ -19,8 +19,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "xemu/cpu65.h"
 #define  XEMU_MEGA65_HDOS_H_ALLOWED
-#include "hdos.h"
 #include "hypervisor.h"
+#include "hdos.h"
 #include "memory_mapper.h"
 #include "io_mapper.h"
 #include "sdcard.h"
@@ -152,10 +152,10 @@ void trap_for_xemu ( const int func_no )
 			// On real hw, A=$FF, carry is clear on return, in emulation carry is set, and the above id values are returned in regs)
 			// It must be these identify values even for a future non-Xemu (?) MEGA65 emulator though! The real emulator info get
 			// function ($01) can be used to really tell the emulator name, version, etc.
-			D6XX_registers[0x40] = 'X';	// -> A [capitcal ascii!]
-			D6XX_registers[0x41] = 'e';	// -> X
-			D6XX_registers[0x42] = 'm';	// -> Y
-			D6XX_registers[0x43] = 'U';	// -> Z [capitcal ascii!]
+			D6XX_registers[0x40] = 'X';	// -> A [uppercase ascii!]
+			D6XX_registers[0x41] = 'e';	// -> X [lowercase ascii!]
+			D6XX_registers[0x42] = 'm';	// -> Y [lowercase ascii!]
+			D6XX_registers[0x43] = 'U';	// -> Z [uppercase ascii!]
 			break;
 		case 0x01: {			// Function $01: get emulator textual information, subfunction = Z, memory pointer X(low-byte)/Y(hi-byte) [buffer must fit in the low 32K of CPU addr space]
 			const char *res = "";
@@ -805,7 +805,7 @@ void hdos_leave ( const Uint8 func_no )
 
 // Must be called on TRAP RESET, also causes to close all file descriptors (BTW, may be called on exit xemu,
 // to nicely close open files/directories ...)
-void hdos_reset ( void )
+static void hdos_reset ( void )
 {
 	DEBUGHDOS("HDOS: reset" NL);
 	hdos.setname_fn[0] = '\0';
@@ -846,15 +846,16 @@ int hypervisor_hdos_virtualization_status ( const int set, const char **root_ptr
 
 void hdos_notify_system_start_begin ( void )
 {
-	DEBUG("HDOS: system-start-begin notification received." NL);
-	sdcard_notify_system_start_begin();
+	DEBUGHDOS("HDOS: system-start-begin notification received." NL);
+	hdos_reset();
+	sdcard_notify_system_start_begin();	// sd-card/d81 subsystem notification since it will check initial in-sdcard internal d81 mount
 }
 
 
 void hdos_notify_system_start_end ( void )
 {
-	DEBUG("HDOS: system-start-end notification recevied." NL);
-	sdcard_notify_system_start_end();
+	DEBUGHDOS("HDOS: system-start-end notification recevied." NL);
+	sdcard_notify_system_start_end();	// read the comment at the similar line in function hdos_notify_system_start_begin() above
 }
 
 

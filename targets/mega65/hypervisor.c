@@ -188,7 +188,6 @@ void hypervisor_enter ( int trapno )
 	} else
 		current_hdos_func = -1;
 	if (XEMU_UNLIKELY(trapno == TRAP_RESET)) {
-		hdos_reset();
 		hdos_notify_system_start_begin();
 		if (!vic4_disallow_video_std_change) {
 			vic4_disallow_video_std_change = 1;

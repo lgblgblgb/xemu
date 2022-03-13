@@ -610,7 +610,7 @@ static void sdcard_block_io ( Uint32 block, int is_write )
 			goto error;
 		} else {
 			char msg[128];
-			sprintf(msg, "Program tries to overwrite SD sector #%d!\nUnless you fdisk/format you card, it's not something you want.", block);
+			sprintf(msg, "Program tries to overwrite SD sector #%d!\nUnless you fdisk/format your card, it's not something you want.", block);
 			switch (QUESTION_WINDOW("Reject this|Reject all|Allow this|Allow all", msg)) {
 				case 0:
 					goto error;
@@ -792,17 +792,14 @@ void sdcard_notify_system_start_begin ( void )
 void sdcard_notify_system_start_end ( void )
 {
 	for (int unit = 0; unit < 2; unit++) {
-		if (!mount_info[unit].monitoring_initial)
-			ERROR_WINDOW("%s::%s() monitoring_initial was zero??", __FILE__, __func__);
-		mount_info[unit].monitoring_initial = 0;
+		mount_info[unit].monitoring_initial = 0;	// stop monitoring initial D81 mounts, end of "machine-start" state
 		if (!unit && !mount_info[unit].at_sector_initial)
 			DEBUGPRINT("SDCARD: D81-DEFAULT: WARNING: could not determine default on-sd D81 mount sector info during the RESET TRAP for unit #%d!" NL, unit);
 	}
 }
 
 
-// Called from internal_mount() only!
-static inline int do_default_d81_mount_hack ( const int unit )
+static int do_default_d81_mount_hack ( const int unit )
 {
 	static char *default_d81_path[2] = { NULL, NULL };
 	if (!default_d81_path[unit]) {
@@ -814,11 +811,22 @@ static inline int do_default_d81_mount_hack ( const int unit )
 		snprintf(default_d81_path[unit], len, "%s%s", hdosroot, default_d81_basename[unit]);
 	}
 	DEBUGPRINT("SDCARD: D81-DEFAULT: trying to mount external D81 instead of internal default one as %s on unit #%d" NL, default_d81_path[unit], unit);
+	// we want to create the default image file if does not exist (note the "0" for d81access_create_image_file, ie do not overwrite exisiting image)
 	// d81access_create_image_file() returns with 0 if image was created, -2 if image existed before, and -1 for other errors
 	if (d81access_create_image_file(default_d81_path[unit], default_d81_disk_label[unit], 0, NULL) == -1)
 		return -1;
-	// ... so, the file existed before case allows to reach this point, since then retval is -2
+	// ... so, the file existed before case allows to reach this point, since then retval is -2 (and not -1 as a generic error)
 	return sdcard_force_external_mount(unit, default_d81_path[unit], "Cannot mount default external D81");
+}
+
+
+int sdcard_default_d81_mount ( const int unit )
+{
+	if (default_d81_is_from_sd) {
+		ERROR_WINDOW("This function is not available when\n\"default D81 mount from SD\" option is inactive!");
+		return -1;
+	}
+	return do_default_d81_mount_hack(unit);
 }
 
 
@@ -862,6 +870,7 @@ static int internal_mount ( const int unit )
 		if (!do_default_d81_mount_hack(unit))
 			return 1;	// if succeeded, stop processing further! (note the return value needs of this functions!)
 	}
+	// FIXME/TODO: no support yet to take account D64,D71,D65 mount from SD-card! However it's not so common I guess from SD-card in case of emulator, but more from external FS in that case
 	DEBUGPRINT("SDCARD: D81: internal mount #%d from SD sector $%X (%s)" NL, unit, at_sector, ro_flag ? "R/O" : "R/W");
 	d81access_attach_fd(unit, sdfd, (off_t)at_sector << 9, D81ACCESS_IMG | ro_flag);
 	char fn[32];
@@ -944,6 +953,15 @@ int sdcard_force_external_mount_with_image_creation ( const int unit, const char
 	if (d81access_create_image_file(filename, NULL, do_overwrite, "Cannot create D81"))
 		return -1;
 	return sdcard_force_external_mount(unit, filename, cry);
+}
+
+
+int sdcard_unmount ( const int unit )
+{
+	d81access_close(unit);
+	mount_info[unit].internal = 0;	// FIXME ???
+	xemu_restrdup(&mount_info[unit].current_name, "<EMPTY>");
+	return 0;
 }
 
 
