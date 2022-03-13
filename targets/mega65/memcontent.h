@@ -35,8 +35,8 @@ extern const Uint8 meminitdata_cramutils[MEMINITDATA_CRAMUTILS_SIZE];
 #define MEMINITDATA_BANNER_SIZE 0x5300
 extern const Uint8 meminitdata_banner[MEMINITDATA_BANNER_SIZE];
 
-// Generated as "onboard" from file ../../../mega65-core-master/sdcard-files/ONBOARD.M65 ($29CC bytes)
-#define MEMINITDATA_ONBOARD_SIZE 0x29CC
+// Generated as "onboard" from file ../../../mega65-core-master/sdcard-files/ONBOARD.M65 ($2B84 bytes)
+#define MEMINITDATA_ONBOARD_SIZE 0x2B84
 extern const Uint8 meminitdata_onboard[MEMINITDATA_ONBOARD_SIZE];
 
 // Generated as "initrom" from file ../../../mega65-core-master/src/open-roms/bin/mega65.rom ($20000 bytes)
