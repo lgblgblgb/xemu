@@ -90,7 +90,6 @@ static struct {
 	char	*current_name;
 	int	internal;		// is internal mount? FIXME: in this source it's a hard to understand 3-stated logic being 0,1 or -1 ... let's fix this!
 	char	*force_external_name;
-	char	*default_external_name;
 	Uint32	at_sector;		// valid only if "internal", internal mount sector number
 	Uint32	at_sector_initial;	// internal mount sector number during only the first (reset/poweron) trap
 	int	monitoring_initial;	// if true, at_sector_initial is monitored and changed, if false, not anymore
@@ -338,7 +337,6 @@ int sdcard_init ( const char *fn, const int virtsd_flag, const int default_d81_i
 		mount_info[a].current_name = xemu_strdup("<INIT>");
 		mount_info[a].internal = -1;
 		mount_info[a].force_external_name = NULL;
-		mount_info[a].default_external_name = NULL;
 		mount_info[a].at_sector = 0;
 		mount_info[a].at_sector_initial = 0;
 		mount_info[a].monitoring_initial = 0;
@@ -840,14 +838,14 @@ static int internal_mount ( const int unit )
 	Uint32 at_sector;
 	if (!unit) {
 		// must be 'image enabled' and 'disk present' bit set for "unit 0"
-		if ((sd_regs[0xB] & 0x03) != 0x03 || mount_info[0].force_external_name || mount_info[0].default_external_name)
+		if ((sd_regs[0xB] & 0x03) != 0x03 || mount_info[0].force_external_name)
 			return 0;
 		if (/*(sd_regs[0xB] & 0x04) ||*/ sd_is_read_only)	// it seems checking the register as well causes RO mount for some reason, let's ignore for now!
 			ro_flag = D81ACCESS_RO;
 		at_sector = U8A_TO_U32(sd_regs + 0x0C);
 	} else {
 		// must be 'image enabled' and 'disk present' bit set for "unit 1"
-		if ((sd_regs[0xB] & 0x18) != 0x18 || mount_info[1].force_external_name || mount_info[1].default_external_name)
+		if ((sd_regs[0xB] & 0x18) != 0x18 || mount_info[1].force_external_name)
 			return 0;
 		if (/*(sd_regs[0xB] & 0x20) ||*/ sd_is_read_only)	// see above at the similar line for drive-0
 			ro_flag = D81ACCESS_RO;
@@ -883,7 +881,7 @@ static int internal_mount ( const int unit )
 
 static int some_mount ( const int unit )
 {
-	const char *extfn = mount_info[unit].force_external_name ? mount_info[unit].force_external_name : mount_info[unit].default_external_name;
+	const char *extfn = mount_info[unit].force_external_name;
 	if (extfn) {	// force external mount
 		if (strcmp(mount_info[unit].current_name, extfn)) {
 			DEBUGPRINT("SDCARD: D81: external mount #%d change from \"%s\" to \"%s\"" NL, unit, mount_info[unit].current_name, extfn);
@@ -909,7 +907,7 @@ static int some_mount ( const int unit )
 		mount_info[unit].current_name[0] = '\0';
 		mount_info[unit].internal = -1;
 	} /* else
-		DEBUGPRINT("SDCARD: D81: internal mount #%d failed?" NL, unit); */
+		DEBUGPRINT("SDCARD: D81: internal mount #%d failed?" NL, unit); */	// FIXME: remove/rethink this part! internal_mount() can return with non-zero, zero or negative as answer!!
 	return 0;
 }
 
@@ -961,6 +959,11 @@ int sdcard_unmount ( const int unit )
 	d81access_close(unit);
 	mount_info[unit].internal = 0;	// FIXME ???
 	xemu_restrdup(&mount_info[unit].current_name, "<EMPTY>");
+	if (mount_info[unit].force_external_name) {
+		// We must null this out, otherwise next (even internal) mount will pick it up and use it again as this external mount!
+		free(mount_info[unit].force_external_name);
+		mount_info[unit].force_external_name = NULL;
+	}
 	return 0;
 }
 
