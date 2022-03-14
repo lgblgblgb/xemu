@@ -24,12 +24,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #error "You cannot include hdos.h!"
 #endif
 
-#define HDOSROOT_SUBDIR_NAME "hdosroot"
+#define HDOSROOT_SUBDIR_NAME "hdos"
 
 extern void hdos_init  ( const int do_virt, const char *virtroot );
-extern void hdos_reset ( void );
 extern void hdos_enter ( const Uint8 func_no );
 extern void hdos_leave ( const Uint8 func_no );
+extern void hdos_notify_system_start_begin ( void );
+extern void hdos_notify_system_start_end   ( void );
 
 #ifdef TRAP_XEMU
 // though not so much HDOS specfific, it's still Xemu related (Xemu's own trap handler)

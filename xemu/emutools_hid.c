@@ -32,6 +32,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 Uint8 kbd_matrix[16];		// keyboard matrix state, 16 * 8 bits at max currently (not compulsory to use all positions!)
 int hid_show_osd_keys = 0;
+int hid_joy_on_cursor_keys = 0;	// working mode to have cursor keys as joystick not regular key emu
 
 static int mouse_delta_x;
 static int mouse_delta_y;
@@ -71,8 +72,29 @@ void hid_set_autoreleased_key ( int key )
 int hid_key_event ( SDL_Scancode key, int pressed )
 {
 	const struct KeyMappingUsed *map = key_map;
-	if (hid_show_osd_keys)
+	if (XEMU_UNLIKELY(hid_show_osd_keys))
 		OSD(-1, -1, "Key %s <%s>", pressed ? "press  " : "release", SDL_GetScancodeName(key));
+	if (XEMU_UNLIKELY(hid_joy_on_cursor_keys)) {
+		// hid_joy_on_cursor_keys signals a special mode to emulate joystick with cursor-keys if enabled,
+		// instead of the normal functionality of those keys. Right-CTRL is fire.
+		int sel;
+		switch (key) {
+			case SDL_SCANCODE_UP:	sel = JOYSTATE_UP;	break;
+			case SDL_SCANCODE_DOWN:	sel = JOYSTATE_DOWN;	break;
+			case SDL_SCANCODE_LEFT:	sel = JOYSTATE_LEFT;	break;
+			case SDL_SCANCODE_RIGHT:sel = JOYSTATE_RIGHT;	break;
+			case SDL_SCANCODE_RGUI:		// Mac does not seem to have right CTRL. Use this too, right-GUI key is right-command (or right-windows key on PC or wtf ...)
+			case SDL_SCANCODE_RCTRL:sel = JOYSTATE_BUTTON;	break;
+			default:		sel = -1;		break;
+		}
+		if (sel >= 0) {
+			if (pressed)
+				hid_state |= sel;
+			else
+				hid_state &= ~sel;
+			return 1;
+		}
+	}
 	while (map->pos >= 0) {
 		if (map->scan == key) {
 			if (XEMU_UNLIKELY(release_this_key_on_first_event > 0)) {

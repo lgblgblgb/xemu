@@ -280,24 +280,18 @@ DEFINE_WRITER(eth_buffer_writer) {
 	eth65_write_tx_buffer(GET_WRITER_OFFSET(), data);
 }
 DEFINE_READER(disk_buffers_reader) {
-#if 1
-	return disk_buffers[GET_READER_OFFSET()];
-#else
+	const unsigned int offs = GET_READER_OFFSET();
 	if (in_hypervisor)
-		return disk_buffers[GET_READER_OFFSET()];
+		return disk_buffers[offs];
 	else
-		return disk_buffers[(GET_WRITER_OFFSET() & 0x1FF) + ((sd_reg9 & 0x80) ? SD_BUFFER_POS : FD_BUFFER_POS)];
-#endif
+		return disk_buffer_cpu_view[offs & 0x1FF];
 }
 DEFINE_WRITER(disk_buffers_writer) {
-#if 1
-	disk_buffers[GET_WRITER_OFFSET()] = data;
-#else
+	const unsigned int offs = GET_WRITER_OFFSET();
 	if (in_hypervisor)
-		disk_buffers[GET_WRITER_OFFSET()] = data;
+		disk_buffers[offs] = data;
 	else
-		disk_buffers[(GET_WRITER_OFFSET() & 0x1FF) + ((sd_reg9 & 0x80) ? SD_BUFFER_POS : FD_BUFFER_POS)] = data;
-#endif
+		disk_buffer_cpu_view[offs & 0x1FF] = data;
 }
 DEFINE_READER(i2c_io_reader) {
 	int addr = GET_READER_OFFSET();

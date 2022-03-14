@@ -45,6 +45,7 @@ struct configdb_st {
 	char	*hdosdir;
 	char	*rom;
 	int	romfromsd;
+	int	defd81fromsd;
 	char	*prg;
 	char	*sdimg;
 	char	*dumpmem;

@@ -171,7 +171,10 @@ $(PRG): $(OBJS) $(DEPALL)
 	$(CONFIG_CC) -o $(PRG) $(OBJS) $(DEPFILEPREFIX)-buildinfo.o $(LDFLAGS)
 
 run:	$(PRG)
-	cd $(TOPDIR) && XEMU_DEBUG_FILE=debug.log $(PRG_TOP_REL)
+	../../$(PRG_TOP_REL)
+
+debugrun: $(PRG)
+	XEMU_DEBUG_FILE=xemu.log ../../$(PRG_TOP_REL)
 
 strip: $(PRG)
 	$(CONFIG_STRIP) $(PRG)
@@ -204,7 +207,17 @@ dll32:
 dll64:
 	cp `x86_64-w64-mingw32-sdl2-config --prefix`/bin/SDL2.dll $(TOPDIR)/build/bin/
 
-.PHONY: clean all strip dep do-all run xemu-info config install dll32 dll64
+wine64:
+	$(MAKE) ARCH=win64
+	$(MAKE) dll64
+	wine $(TOPDIR)/build/bin/$(PRG_TARGET).win64
+
+wine32:
+	$(MAKE) ARCH=win32
+	$(MAKE) dll32
+	wine $(TOPDIR)/build/bin/$(PRG_TARGET).win32
+
+.PHONY: clean all strip dep do-all run debugrun xemu-info config install dll32 dll64 wine32 wine64
 
 ifneq ($(wildcard $(DEPFILE)),)
 include $(DEPFILE)

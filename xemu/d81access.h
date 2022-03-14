@@ -19,9 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_COMMON_D81ACCESS_H_INCLUDED
 #define XEMU_COMMON_D81ACCESS_H_INCLUDED
 
-#ifndef D81_SIZE
 #define D81_SIZE		819200
-#endif
 
 #define PRG_MIN_SIZE		16
 
@@ -39,15 +37,21 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define D81ACCESS_RO		0x100
 #define D81ACCESS_AUTOCLOSE	0x200
 #define D81ACCESS_FAKE64	0x400
+#define D81ACCESS_D64		0x800
+#define D81ACCESS_D71		0x1000
+#define D81ACCESS_D65		0x2000
 
+#if 0
 typedef int(*d81access_rd_cb_t)    ( int which, void *buffer, off_t offset, int sector_size );
 typedef int(*d81access_wr_cb_t)    ( int which, void *buffer, off_t offset, int sector_size );
+extern void d81access_attach_cb	   ( int which, off_t offset, d81access_rd_cb_t rd_callback, d81access_wr_cb_t wd_callback );
+#endif
 
 // must be defined by the caller!
-extern void d81access_cb_chgmode   ( int which, int mode );
+extern void d81access_cb_chgmode   ( const int which, const int mode );
 
-extern int  d81access_read_sect    ( int which, Uint8 *buffer, int d81_offset, int sector_size );
-extern int  d81access_write_sect   ( int which, Uint8 *buffer, int d81_offset, int sector_size );
+extern int  d81access_read_sect    ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector, const int sector_size );
+extern int  d81access_write_sect   ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector, const int sector_size );
 
 extern void d81access_init         ( void      );
 extern int  d81access_get_mode     ( int which );
@@ -55,6 +59,7 @@ extern void d81access_close        ( int which );
 extern void d81access_close_all    ( void      );
 extern void d81access_attach_fd    ( int which, int fd, off_t offset, int mode );
 extern int  d81access_attach_fsobj ( int which, const char *fn, int mode );
-extern void d81access_attach_cb	   ( int which, off_t offset, d81access_rd_cb_t rd_callback, d81access_wr_cb_t wd_callback );
+extern Uint8 *d81access_create_image ( Uint8 *img, const char *diskname, const int name_from_fn );
+extern int  d81access_create_image_file ( const char *fn, const char *diskname, const int do_overwrite, const char *cry );
 
 #endif

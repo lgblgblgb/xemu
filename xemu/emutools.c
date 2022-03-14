@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <errno.h>
 #ifdef XEMU_ARCH_UNIX
 #	include <signal.h>
+#	include <sys/utsname.h>
 #endif
 
 #ifdef XEMU_MISSING_BIGGEST_ALIGNMENT_WORKAROUND
@@ -464,68 +465,74 @@ static void atexit_callback_for_console ( void )
 }
 
 
+const char *xemu_get_uname_string ( void )
+{
 #ifdef XEMU_ARCH_UNIX
-#include <sys/utsname.h>
-void xemu_get_uname_string ( char *buf, unsigned int size )
-{
-	struct utsname uts;
-	uname(&uts);
-	if (snprintf(buf, size, "%s %s %s %s %s",
-		uts.sysname, uts.nodename,
-		uts.release, uts.version, uts.machine
-	) >= size) {
-		strcpy(buf, "<buffer-is-too-small>");
+	static const char *result = NULL;
+	if (!result) {
+		char buf[1024];
+		struct utsname uts;
+		uname(&uts);
+		if (snprintf(buf, sizeof buf, "%s %s %s %s %s",
+			uts.sysname, uts.nodename,
+			uts.release, uts.version, uts.machine
+		) >= sizeof buf) {
+			strcpy(buf, "<buffer-is-too-small>");
+		}
+		result = xemu_strdup(buf);
 	}
-}
+	return result;
 #elif defined(XEMU_ARCH_WIN)
-void xemu_get_uname_string ( char *buf, unsigned int size )
-{
-	char host_name[128];
-	DWORD size_used = sizeof host_name;
-	if (!GetComputerNameA(host_name, &size_used))
-		strcpy(host_name, "<?name?>");
-	// query version, strange windows have no simple way and/or "obsoleted" to get version number :(
-	// Also functions like this GetVersionEx and such are strange, for example it needs LPOSVERSIONINFOA pointer
-	// according to mingw at least rather than the documented LPOSVERSIONINFOA ... Huh??
-	OSVERSIONINFOA info;
-	ZeroMemory(&info, sizeof info);
-	info.dwOSVersionInfoSize = sizeof info;
-	GetVersionEx(&info);
-	// query architecture
-	SYSTEM_INFO sysinfo;
-	GetNativeSystemInfo(&sysinfo);
-	//WORD w = sysinfo.DUMMYUNIONNAME.DUMMYSTRUCTNAME.wProcessorArchitecture; What is this shit? Windows is horrible ...
-	const char *isa_name = "(Xemu-unknown-ISA)";
-	switch (sysinfo.wProcessorArchitecture) {
-		case 9:		// PROCESSOR_ARCHITECTURE_AMD64: x86_64 (intel or AMD)
-			isa_name = "x86_64";	break;
-		case 5: 	// PROCESSOR_ARCHITECTURE_ARM
-			isa_name = "ARM";	break;
-		case 12:	// PROCESSOR_ARCHITECTURE_ARM64
-			isa_name = "ARM64";	break;
-		case 6:		// PROCESSOR_ARCHITECTURE_IA64 (itanium, heh)
-			isa_name = "Itanium";	break;
-		case 0:		// PROCESSOR_ARCHITECTURE_INTEL (32 bit x86?)
-			isa_name = "x86";	break;
-		case 0xffff:	// PROCESSOR_ARCHITECTURE_UNKNOWN
-			isa_name = "(Windows-unknown-ISA)";
-			break;
+	static const char *result = NULL;
+	if (!result) {
+		char buf[1024];
+		char host_name[128];
+		DWORD size_used = sizeof host_name;
+		if (!GetComputerNameA(host_name, &size_used))
+			strcpy(host_name, "<?name?>");
+		// query version, strange windows have no simple way and/or "obsoleted" to get version number :(
+		// Also functions like this GetVersionEx and such are strange, for example it needs LPOSVERSIONINFOA pointer
+		// according to mingw at least rather than the documented LPOSVERSIONINFOA ... Huh??
+		OSVERSIONINFOA info;
+		ZeroMemory(&info, sizeof info);
+		info.dwOSVersionInfoSize = sizeof info;
+		GetVersionEx(&info);
+		// query architecture
+		SYSTEM_INFO sysinfo;
+		GetNativeSystemInfo(&sysinfo);
+		//WORD w = sysinfo.DUMMYUNIONNAME.DUMMYSTRUCTNAME.wProcessorArchitecture; What is this shit? Windows is horrible ...
+		const char *isa_name = "(Xemu-unknown-ISA)";
+		switch (sysinfo.wProcessorArchitecture) {
+			case 9:		// PROCESSOR_ARCHITECTURE_AMD64: x86_64 (intel or AMD)
+				isa_name = "x86_64";	break;
+			case 5: 	// PROCESSOR_ARCHITECTURE_ARM
+				isa_name = "ARM";	break;
+			case 12:	// PROCESSOR_ARCHITECTURE_ARM64
+				isa_name = "ARM64";	break;
+			case 6:		// PROCESSOR_ARCHITECTURE_IA64 (itanium, heh)
+				isa_name = "Itanium";	break;
+			case 0:		// PROCESSOR_ARCHITECTURE_INTEL (32 bit x86?)
+				isa_name = "x86";	break;
+			case 0xffff:	// PROCESSOR_ARCHITECTURE_UNKNOWN
+				isa_name = "(Windows-unknown-ISA)";
+				break;
+		}
+		// Huh, Windows is a real pain to collect _basic_ system informations ... on UNIX just an uname() and you're done ...
+		if (snprintf(buf, sizeof buf, "Windows %s %u.%u %s",
+			host_name,
+			(unsigned int)info.dwMajorVersion, (unsigned int)info.dwMinorVersion,
+			isa_name
+		) >= sizeof buf) {
+			strcpy(buf, "<buffer-is-too-small>");
+		}
+		result = xemu_strdup(buf);
 	}
-	// Huh, Windows is a real pain to collect _basic_ system informations ... on UNIX just an uname() and you're done ...
-	if (snprintf(buf, size, "Windows %s %u.%u %s",
-		host_name,
-		(unsigned int)info.dwMajorVersion, (unsigned int)info.dwMinorVersion,
-		isa_name
-	) >= size) {
-		strcpy(buf, "<buffer-is-too-small>");
-	}
-}
+	return result;
 #else
-void xemu_get_uname_string ( char *buf, unsigned int size )
-{
-	snprintf(buf, size, XEMU_ARCH_NAME " (Xemu-no-uname)");
-}
+	static const char result[] = XEMU_ARCH_NAME " (Xemu-no-uname)";
+	return result;
 #endif
+}
 
 
 void xemu_get_timing_stat_string ( char *buf, unsigned int size )
@@ -1711,7 +1718,15 @@ int xemu_os_stat ( const char *fn, struct stat *statbuf )
 	return 0;
 }
 
+
 #endif
+
+
+int xemu_os_file_exists ( const char *fn )
+{
+	struct stat st;
+	return !xemu_os_stat(fn, &st);
+}
 
 
 #ifndef XEMU_ARCH_WIN

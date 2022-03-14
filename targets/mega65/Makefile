@@ -25,7 +25,7 @@ SRCS_COMMON_xmega65	= emutools.c cpu65.c cia6526.c emutools_hid.c sid.c f011_cor
 CFLAGS_TARGET_xmega65	= $(SDL2_CFLAGS) $(MATH_CFLAGS) $(SOCKET_CFLAGS) $(XEMUGUI_CFLAGS)
 LDFLAGS_TARGET_xmega65	= $(SDL2_LIBS) $(MATH_LIBS) $(SOCKET_LIBS) $(XEMUGUI_LIBS)
 
-MEGA65_CORE	= ../../../mega65-core
+MEGA65_CORE	= ../../../mega65-core-master
 MEGA65_FILES	= bin/charrom.bin bin/HICKUP.M65 bin/COLOURRAM.BIN sdcard-files/BANNER.M65 sdcard-files/ONBOARD.M65 src/open-roms/bin/mega65.rom
 MEGA65_FILES	+= sdcard-files/FREEZER.M65 sdcard-files/MAKEDISK.M65
 MEGA65_FILES	+= sdcard-files/AUDIOMIX.M65 sdcard-files/C64THUMB.M65 sdcard-files/C65THUMB.M65 sdcard-files/ROMLOAD.M65 sdcard-files/SPRITED.M65
@@ -59,12 +59,5 @@ recreatememcontent:
 	@echo "*** Generating C files from mega65-core binary results ***"
 	python3 $(TOPDIR)/build/m65-memcontent-generator.py memcontent.c memcontent.h $(MEGA65_FP_FILES)
 
-wine64:
-	$(MAKE) ARCH=win64
-	$(MAKE) dll64
-	wine ../../build/bin/xmega65.win64
-
-wine32:
-	$(MAKE) ARCH=win32
-	$(MAKE) dll32
-	wine ../../build/bin/xmega65.win32
+showmatrix2ascii:
+	$(TOPDIR)/build/m65-import-matrix2ascii.sh < $(MEGA65_CORE)/src/vhdl/matrix_to_ascii.vhdl
