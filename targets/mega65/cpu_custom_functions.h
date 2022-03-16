@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -76,6 +76,8 @@ extern void   cpu65_write_linear_long_opcode_callback ( const Uint8 index, Uint3
 extern Uint32 cpu65_read_linear_long_opcode_callback  ( const Uint8 index );
 
 extern void  cpu65_illegal_opcode_callback ( void );
+
+extern int memory_cpurd2linear_xlat ( Uint16 cpu_addr);
 
 CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR Uint8 cpu65_read_callback ( Uint16 addr ) {
 	return CALL_MEMORY_READER(addr >> 8, addr);

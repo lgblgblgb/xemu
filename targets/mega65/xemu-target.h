@@ -3,9 +3,9 @@
 #define CPU_65CE02
 #define MEGA65
 #define CPU65_65CE02_6502NMOS_TIMING_EMULATION
-#define XEMU_SNAPSHOT_SUPPORT "MEGA65"
+//#define XEMU_SNAPSHOT_SUPPORT "MEGA65"
 #define CPU_STEP_MULTI_OPS
-#define DEBUG_CPU
+//#define DEBUG_CPU
 #define CPU_CUSTOM_MEMORY_FUNCTIONS_H "cpu_custom_functions.h"
 #define CPU65 cpu65
 //#define CPU65_DISCRETE_PF_NZ
