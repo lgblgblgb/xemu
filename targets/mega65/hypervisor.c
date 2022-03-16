@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_config.h"
 #include "configdb.h"
 #include "rom.h"
+#include "sdcard.h"
 
 #include <sys/types.h>
 #include <fcntl.h>
@@ -246,6 +247,7 @@ void hypervisor_start_machine ( void )
 	in_hypervisor = 0;
 	hypervisor_queued_trap = -1;
 	first_hypervisor_leave = 1;
+	sdcard_notify_system_start_begin();
 	hypervisor_enter(TRAP_RESET);
 }
 
@@ -313,6 +315,7 @@ void hypervisor_leave ( void )
 			else
 				vic_registers[0x6F] &= 0x7F;
 		}
+		sdcard_notify_system_start_end();
 		DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 	}
 	if (XEMU_UNLIKELY(trap_current == TRAP_RESET)) {

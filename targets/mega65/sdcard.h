@@ -28,8 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SD_ST_BUSY1	0x02
 #define SD_ST_BUSY0	0x01
 
-extern int    sdcard_init           ( const char *fn, const char *extd81fn, int virtsd_flag );
-extern int    sdcard_hack_mount_drive_9_now ( const char *disk9 );
+extern int    sdcard_init           ( const char *fn, const int virtsd_flag, const int default_d81_is_from_sd_in );
 extern Uint32 sdcard_get_size       ( void );
 extern void   sdcard_write_register ( int reg, Uint8 data );
 extern Uint8  sdcard_read_register  ( int reg  );
@@ -37,16 +36,20 @@ extern Uint8  sdcard_read_register  ( int reg  );
 extern int    sdcard_read_block     ( Uint32 block, Uint8 *buffer );
 extern int    sdcard_write_block    ( Uint32 block, Uint8 *buffer );
 
-extern int    mount_external_d81    ( const char *name, int force_ro );
-extern int    forget_external_d81   ( void );
+extern int    sdcard_force_external_mount ( const int unit, const char *filename, const char *cry );
+extern int    sdcard_force_external_mount_with_image_creation ( const int unit, const char *filename, const int do_overwrite, const char *cry );
+extern int    sdcard_unmount ( const int unit );
+extern int    sdcard_default_d81_mount ( const int unit );
+extern const char *sdcard_get_mount_info ( const int unit, int *is_internal );
+
+extern void   sdcard_notify_system_start_begin ( void );
+extern void   sdcard_notify_system_start_end   ( void );
 
 // disk buffer for SD (can be mapped to I/O space too), F011, and some "3.5K scratch space"
 extern Uint8  disk_buffers[0x1000];
 extern Uint8  *disk_buffer_cpu_view;
 extern Uint8  *disk_buffer_io_mapped;
 extern Uint8  sd_status;
-
-extern int fd_mounted;
 
 extern const char xemu_external_d81_signature[];
 

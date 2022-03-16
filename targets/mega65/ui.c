@@ -43,22 +43,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 static int attach_d81 ( const char *fn )
 {
-	if (fd_mounted) {
-		if (mount_external_d81(fn, 0)) {
-			ERROR_WINDOW("Mount failed for some reason.");
-			return 1;
-		} else {
-			DEBUGPRINT("UI: file seems to be mounted successfully as D81: %s" NL, fn);
-			return 0;
-		}
-	} else {
-		ERROR_WINDOW(
-			"External D81 cannot be mounted, unless you have first setup the SD card image.\n"
-			"Please use menu at 'SD-card -> Update files on SD image' to create MEGA65.D81,\n"
-			"which can be overriden then to mount external D81 images for you"
-		);
-		return 1;
-	}
+	return sdcard_force_external_mount(0, fn, "D81 mount failure");
 }
 
 
@@ -83,10 +68,10 @@ void emu_dropfile_callback ( const char *fn )
 #endif
 
 
-static void ui_attach_d81 ( const struct menu_st *m, int *query )
+static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
-	const int drive = VOIDPTR_TO_INT(m->user_data) & 0x7F;
+	const int drive = VOIDPTR_TO_INT(m->user_data) & 1;	// only two possible drives (or units, or WTF ...)
 	const int creat = !!(VOIDPTR_TO_INT(m->user_data) & 0x80);
 	char fnbuf[PATH_MAX + 1];
 	static char dir[PATH_MAX + 1] = "";
@@ -103,43 +88,31 @@ static void ui_attach_d81 ( const struct menu_st *m, int *query )
 			// append .d81 extension if user did not specify that ...
 			const int fnlen = strlen(fnbuf);
 			static const char d81_ext[] = ".d81";
-			if (strcasecmp(fnbuf + fnlen - strlen(d81_ext), d81_ext))
-				strcpy(fnbuf + fnlen, d81_ext);
-			// create and save the image
-			Uint8 *img = d81access_create_image(NULL, fnbuf, 1);
-			const int ret = xemu_save_file(fnbuf, img, D81_SIZE, "Cannot create/save D81");
-			free(img);
-			if (ret)
-				return;
-		}
-		// FIXME: Ugly hack.
-		// Currently, handle only drive-8 via real MEGA65 emulation ("mounting mechanism"), and use
-		// drive-9 outside of Hyppo/etc terrotiry. To correct this, a whole big project would needed,
-		// to rewrite major part of sdcard.c, adopting new Hyppo, etc ...
-		if (drive == 0) {
-			attach_d81(fnbuf);
-		} else {
-			/*int ret =*/ sdcard_hack_mount_drive_9_now(fnbuf);
-			//if (ret)
-			//	DEBUGPRINT("SDCARD: D81: couldn't mount external D81 image" NL);
-		}
+			char fnbuf2[fnlen + strlen(d81_ext) + 1];
+			strcpy(fnbuf2, fnbuf);
+			if (strcasecmp(fnbuf2 + fnlen - strlen(d81_ext), d81_ext)) {
+				strcpy(fnbuf2 + fnlen, d81_ext);
+				// FIXME: when we appended .d81 we should check if file exists! file sel dialog only checks for the base name of course
+				// However this is a bit lame this way, that there are two different kind of question, one from the save filesel dailog,
+				// at the other case, we check here ...
+				if (xemu_os_file_exists(fnbuf2)) {
+					if (!ARE_YOU_SURE("Overwrite existing D81 image?", ARE_YOU_SURE_DEFAULT_YES)) {
+						return;
+					}
+				}
+			}
+			sdcard_force_external_mount_with_image_creation(drive, fnbuf2, 1, "D81 mount failure"); // third arg: allow overwrite existing D81
+		} else
+			sdcard_force_external_mount(drive, fnbuf, "D81 mount failure");
 	} else {
 		DEBUGPRINT("UI: file selection for D81 mount was cancelled." NL);
 	}
 }
 
-
-static void ui_detach_d81 ( const struct menu_st *m, int *query )
+static void ui_cb_detach_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
-	const int drive = VOIDPTR_TO_INT(m->user_data);
-	if (drive == 0) {
-		forget_external_d81();
-	} else {
-		// Again ugly hack ...
-		// to handle drive-0 and 1 (well, 8 and 9) in comepletely different ways
-		d81access_close(1);
-	}
+	sdcard_unmount(VOIDPTR_TO_INT(m->user_data));
 }
 
 
@@ -633,13 +606,13 @@ static const struct menu_st menu_help[] = {
 #endif
 static const struct menu_st menu_d81[] = {
 	{ "Attach user D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_attach_d81, (void*)0 },
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_d81, (void*)0 },
 	{ "Create&attach D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_attach_d81, (void*)(0 + 0x80) },
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_d81, (void*)(0 + 0x80) },
 	{ "Use internal D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_detach_d81, (void*)0 },
-	{ "Attach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_attach_d81, (void*)1 },
-	{ "Detach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_detach_d81, (void*)1 },
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_detach_d81, (void*)0 },
+	{ "Attach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_cb_attach_d81, (void*)1 },
+	{ "Detach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_cb_detach_d81, (void*)1 },
 	{ NULL }
 };
 static const struct menu_st menu_audio_stereo[] = {

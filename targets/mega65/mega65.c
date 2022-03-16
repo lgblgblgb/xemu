@@ -406,7 +406,7 @@ static void mega65_init ( void )
 			free(fn);
 	}
 	// *** Image file for SDCARD support, and other related init functions handled there as well (eg d81access, fdc init ... related registers, etc)
-	if (sdcard_init(configdb.sdimg, configdb.disk8, configdb.virtsd) < 0)
+	if (sdcard_init(configdb.sdimg, configdb.virtsd, 0) < 0)
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
 	vic_init();
@@ -433,7 +433,10 @@ static void mega65_init ( void )
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
 	dma_init(newhack ? DMA_FEATURE_HACK | DMA_FEATURE_DYNMODESET | configdb.dmarev : configdb.dmarev);
 	//
-	sdcard_hack_mount_drive_9_now(configdb.disk9);	// FIXME: Ugly hack to support CLI forced drive-9 disk
+	if (configdb.disk8)
+		sdcard_force_external_mount(0, configdb.disk8, "Mount failure on CLI/CFG requested drive-8");
+	if (configdb.disk9)
+		sdcard_force_external_mount(1, configdb.disk9, "Mount failure on CLI/CFG requested drive-9");
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_init(configdb.uartmon);
 #endif
