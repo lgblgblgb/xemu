@@ -29,6 +29,10 @@ extern void  fdc_init      ( Uint8 *cache_set );
 extern void  fdc_set_disk  ( int which, int in_have_disk, int in_have_write );
 extern void  fdc_allow_disk_access ( int in );
 extern int   fdc_get_led_state ( int blink_inc );
+extern int   fdc_get_buffer_cpu_address  ( void );
+extern int   fdc_get_buffer_disk_address ( void );
+extern int   fdc_get_status_a ( const int which );
+extern int   fdc_get_status_b ( const int which );
 
 /* must defined by the user */
 extern int   fdc_cb_rd_sec ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector );

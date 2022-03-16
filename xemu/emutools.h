@@ -271,5 +271,6 @@ extern void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data,
 #endif
 #define	xemu_os_close	close
 extern int   xemu_os_readdir ( XDIR *dirp, char *fn );
+extern int   xemu_os_file_exists ( const char *fn );
 
 #endif
