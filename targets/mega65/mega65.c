@@ -43,6 +43,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "inject.h"
 #include "configdb.h"
 #include "xemu/emutools_socketapi.h"
+#include "rom.h"
 
 // "Typical" size in default settings (video standard is PAL, default border settings).
 // See also vic4.h
@@ -75,7 +76,7 @@ static const char *cpu_clock_speed_strs[4] = { "1MHz", "2MHz", "3.5MHz", fast_mh
 const char *cpu_clock_speed_string = "";
 static unsigned int cpu_clock_speed_str_index = 0;
 static unsigned int cpu_cycles_per_scanline;
-static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
+int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 
 static int force_external_rom = 0;
 
@@ -85,6 +86,7 @@ static int uuid_must_be_saved = 0;
 int registered_screenshot_request = 0;
 
 Uint8 last_dd00_bits = 3;		// Bank 0
+const char *last_reset_type;
 
 
 
@@ -308,18 +310,14 @@ int refill_c65_rom_from_preinit_cache ( void )
 	} else {
 		ret = -1; // no refill force external rom policy ...
 	}
-	if (configdb.force_upload_fonts) {
-		DEBUGPRINT("ROM: forcing upload font definitions from ROM area to WOM" NL);
-		memcpy(char_wom + 0x0000, main_ram + 0x2D000, 0x1000);
-		memcpy(char_wom + 0x1000, main_ram + 0x29000, 0x1000);
-	}
 	return ret;
 }
 
 
 static void mega65_init ( void )
 {
-	hypervisor_debug_init(configdb.kickuplist, configdb.hyperdebug, configdb.hyperserialascii);
+	last_reset_type = "XEMU-STARTUP";
+	hypervisor_debug_init(configdb.hickuprep, configdb.hyperdebug, configdb.hyperserialascii);
 	hid_init(
 		c64_key_map,
 		VIRTUAL_SHIFT_POS,
@@ -352,15 +350,15 @@ static void mega65_init ( void )
 	// project, with all sources available on-line, thus no licensing/copyright problem here.
 	// For mega65-core source, visit https://github.com/MEGA65/mega65-core
 	// For C000 utilties: mega65-core currently under reorganization, no C000 utilties are provided.
-	force_external_rom = ((load_memory_preinit_cache(1, "loadrom", configdb.loadrom, "C65 ROM image", rom_init_image, sizeof rom_init_image) == (int)sizeof(rom_init_image)) && configdb.forcerom);
+	force_external_rom = ((load_memory_preinit_cache(1, "loadrom", configdb.rom, "C65 ROM image", rom_init_image, sizeof rom_init_image) == (int)sizeof(rom_init_image)));
 	if (force_external_rom)
 		DEBUGPRINT("MEM: forcing external ROM usage (hypervisor leave memory re-fill policy)" NL);
-	else if (configdb.forcerom)
-		ERROR_WINDOW("-forcerom is ignored, because no -loadrom <filename> option was used, or it was not a succesfull load operation at least");
-	load_memory_preinit_cache(0, "loadcram", configdb.loadcram, "CRAM utilities", meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
-	load_memory_preinit_cache(0, "loadbanner", configdb.loadbanner, "M65 logo", meminitdata_banner, MEMINITDATA_BANNER_SIZE);
-	load_memory_preinit_cache(1, "loadc000", configdb.loadc000, "C000 utilities", c000_init_image, sizeof c000_init_image);
-	if (load_memory_preinit_cache(0, "kickup", configdb.kickup, "M65 kickstart", meminitdata_kickstart, MEMINITDATA_KICKSTART_SIZE)  != MEMINITDATA_KICKSTART_SIZE)
+	/*else if (configdb.forcerom)
+		ERROR_WINDOW("-forcerom is ignored, because no -loadrom <filename> option was used, or it was not a succesfull load operation at least");*/
+	load_memory_preinit_cache(0, "loadcram", configdb.extcramutils, "CRAM utilities", meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
+	load_memory_preinit_cache(0, "loadbanner", configdb.extbanner, "M65 logo", meminitdata_banner, MEMINITDATA_BANNER_SIZE);
+	//load_memory_preinit_cache(1, "loadc000", configdb.loadc000, "C000 utilities", c000_init_image, sizeof c000_init_image);
+	if (load_memory_preinit_cache(0, "kickup", configdb.hickup, "M65 kickstart", meminitdata_kickstart, MEMINITDATA_KICKSTART_SIZE)  != MEMINITDATA_KICKSTART_SIZE)
 		hypervisor_debug_invalidate("no kickup is loaded, built-in one does not have debug info");
 	// *** Initializes memory subsystem of MEGA65 emulation itself
 	memory_init();
@@ -406,7 +404,7 @@ static void mega65_init ( void )
 			free(fn);
 	}
 	// *** Image file for SDCARD support, and other related init functions handled there as well (eg d81access, fdc init ... related registers, etc)
-	if (sdcard_init(configdb.sdimg, configdb.virtsd, 0) < 0)
+	if (sdcard_init(configdb.sdimg, configdb.virtsd, configdb.defd81fromsd) < 0)
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
 	vic_init();
@@ -522,7 +520,7 @@ void reset_mega65 ( void )
 	cpu65_reset();
 	dma_reset();
 	nmi_level = 0;
-	D6XX_registers[0x7E] = configdb.kicked;
+	D6XX_registers[0x7E] = configdb.hicked;
 	hypervisor_start_machine();
 	DEBUGPRINT("SYSTEM: RESET" NL);
 }
@@ -847,7 +845,9 @@ int main ( int argc, char **argv )
 	} else if (configdb.autoload)
 		c64_register_fake_typing(fake_typing_for_load65);
 #endif
-	hypervisor_request_stub_rom = configdb.stubrom;
+	rom_stubrom_requested = configdb.usestubrom;
+	rom_from_prefdir_allowed = !configdb.romfromsd;
+	rom_load_custom(configdb.rom);
 	audio65_start();
 	xemu_set_full_screen(configdb.fullscreen_requested);
 	if (!configdb.syscon)

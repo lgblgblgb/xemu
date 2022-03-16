@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -29,15 +29,22 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 struct configdb_st {
 	int	fullscreen_requested;
+	int	cpusinglestep;
 	char	*disk8;
 	char	*disk9;
 	char	*fpga;
-	char	*kickup;
-	char	*kickuplist;
-	char	*loadbanner;
-	char	*loadc000;
-	char	*loadcram;
-	char	*loadrom;
+	char	*hickup;
+	char	*hickuprep;
+	char	*extbanner;
+	char	*extcramutils;
+	char	*extchrwom;
+	char	*extflashutil;
+	char	*extonboard;
+	char	*extfreezer;
+	char	*hdosdir;
+	char	*rom;
+	int	romfromsd;
+	int	defd81fromsd;
 	char	*prg;
 	char	*sdimg;
 	char	*dumpmem;
@@ -61,12 +68,15 @@ struct configdb_st {
 	int	force_videostd;
 	int	init_videostd;
 	int	fullborders;
+	int	hdosvirt;
 	int	show_drive_led;
+	int	allowfreezer;
 	int	hyperdebug;
+	int	hyperdebugfreezer;
 	int	hyperserialascii;
-	int	forcerom;
-	int	stubrom;
-	int	force_upload_fonts;
+	int	usestubrom;
+	int	useinitrom;
+	int	useutilmenu;
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	int	virtsd;
 #endif
@@ -78,7 +88,7 @@ struct configdb_st {
 	int	syscon;
 	int	dmarev;
 	int	mega65_model;		// $FF = Xemu/others, 1/2/3 = MEGA65 PCB rev 1/2/3, $40=nexys4, $41=nexys4ddr, $42=nexys4ddr-widget, $FD=wukong, $FE=simulation
-	int	kicked;
+	int	hicked;
 	int	prgmode;
 	int	rtc_hour_offset;
 #ifdef HAVE_XEMU_UMON

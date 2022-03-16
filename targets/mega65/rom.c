@@ -1,5 +1,5 @@
 /* Part of the Xemu project.  https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -18,6 +18,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "rom.h"
 #include "xemu/emutools_files.h"
+#include "memcontent.h"
 
 #define CHARACTER_SET_DEFINER_8X8 const Uint8 vga_font_8x8[2048]
 #include "xemu/vgafonts.c"
@@ -26,7 +27,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 int rom_date = 0;
 int rom_is_openroms = 0;
 int rom_is_stub = 0;
+sha1_hash_str rom_hash_str;
 
+int rom_stubrom_requested = 0;
+int rom_from_prefdir_allowed = 0;
+int rom_is_overriden = 0;
+int rom_is_external = 0;
+static Uint8 *external_image = NULL;
 
 static const char _rom_name_closed[]	= "Closed-ROMs";
 static const char _rom_name_open[]	= "Open-ROMs";
@@ -35,6 +42,23 @@ static const char _rom_name_bad[]	= "?unknown?";
 static const char _rom_name_preboot[]	= "?before-boot?";
 
 const char *rom_name = _rom_name_preboot;
+
+
+void rom_clear_reports ( void )
+{
+	rom_is_overriden = 0;
+	rom_is_openroms = 0;
+	rom_is_stub = 0;
+	rom_date = 0;
+	rom_name = _rom_name_preboot;
+}
+
+
+void rom_unset_requests ( void )
+{
+	rom_stubrom_requested = 0;
+	rom_load_custom(NULL);	// to cancel possible already set custom ROM
+}
 
 
 static int rom_detect_try ( const Uint8 *rom, const Uint8 rom_id )
@@ -59,9 +83,8 @@ void rom_detect_date ( const Uint8 *rom )
 		DEBUGPRINT("ROM: version check is disabled (NULL pointer), previous version info: %d" NL, rom_date);
 		return;
 	}
-	sha1_hash_str hash_str;
-	sha1_checksum_as_string(hash_str, rom, 0x20000);
-	DEBUGPRINT("ROM: SHA1 checksum is %s" NL, hash_str);
+	sha1_checksum_as_string(rom_hash_str, rom, MEMINITDATA_INITROM_SIZE);
+	DEBUGPRINT("ROM: SHA1 checksum is %s" NL, rom_hash_str);
 	const int res_open   = rom_detect_try(rom + 0x10, 0x4F);	// 'O' (0x4F) at ofs $10 + followed by "rom date": open-ROMs
 	const int res_closed = rom_detect_try(rom + 0x16, 0x56);	// 'V' (0x56) at ofs $16 + followed by "rom date": closed-ROMs
 	rom_is_stub = 0;
@@ -95,7 +118,7 @@ ok:
 
 void rom_clear_rom ( Uint8 *rom )
 {
-	memset(rom, 0, 0x20000);
+	memset(rom, 0, MEMINITDATA_INITROM_SIZE);
 }
 
 
@@ -104,7 +127,7 @@ static const Uint8 xemu_stub_rom[] = {
 };
 
 
-int rom_make_xemu_stub_rom ( Uint8 *rom, const char *save_file )
+void rom_make_xemu_stub_rom ( Uint8 *rom, const char *save_file )
 {
 	// The message is line-wrapped by the ROM maker code itself. '\n' works as forcing into a new line,
 	// as expected, '~' toggles highlighted/normal mode. Text MUST be ended with a '\n'!
@@ -158,7 +181,7 @@ int rom_make_xemu_stub_rom ( Uint8 *rom, const char *save_file )
 	;
 	int dyn_rom = 0;
 	if (!rom) {
-		rom = xemu_malloc(0x20000);
+		rom = xemu_malloc(MEMINITDATA_INITROM_SIZE);
 		dyn_rom = 1;
 	}
 	rom_clear_rom(rom);
@@ -206,8 +229,73 @@ int rom_make_xemu_stub_rom ( Uint8 *rom, const char *save_file )
 	}
 	rom[0x10000 + pos] = 0xFF;	// end of text marker, should be after '\n' in the source text
 	if (save_file)
-		xemu_save_file(save_file, rom, 0x20000, NULL);
+		xemu_save_file(save_file, rom, MEMINITDATA_INITROM_SIZE, NULL);
 	if (dyn_rom)
 		free(rom);
-	return 0xE000;
+}
+
+
+int rom_load_custom ( const char *fn )
+{
+	if (!fn || !*fn) {
+		DEBUGPRINT("ROM: unsetting custom ROM (clear request)" NL);
+		if (external_image) {
+			free(external_image);
+			external_image = NULL;
+		}
+		return 0;
+	} else if (xemu_load_file(fn, NULL, MEMINITDATA_INITROM_SIZE, MEMINITDATA_INITROM_SIZE, "Failed to load external ROM on user's request.\nUsing the default installed, instead.") > 0) {
+		DEBUGPRINT("ROM: custom ROM load was OK, setting custom ROM" NL);
+		if (external_image) {
+			memcpy(external_image, xemu_load_buffer_p, MEMINITDATA_INITROM_SIZE);
+			free(xemu_load_buffer_p);
+		} else {
+			external_image = xemu_load_buffer_p;
+		}
+		xemu_load_buffer_p = NULL;
+		rom_stubrom_requested = 0;
+		return 1;
+	}
+	DEBUGPRINT("ROM: custom ROM setting failed, not touching custom ROM request setting (now: %s)" NL, external_image ? "SET" : "UNSET");
+	return 0;
+}
+
+
+// Called by hypervisor on exiting the first (reset) trap.
+// Thus this is an ability to override the ROM what HICKUP loaded for us with some another one.
+// Return value: negative: no custom ROM is needed to be loaded,
+//               otherwise, the RESET vector of the ROM (CPU PC value)
+int rom_do_override ( Uint8 *rom )
+{
+	rom_is_overriden = 0;
+	rom_is_external = 0;
+	if (rom_stubrom_requested) {
+		DEBUGPRINT("ROM: using stub-ROM was forced" NL);
+		rom_make_xemu_stub_rom(rom, XEMU_STUB_ROM_SAVE_FILENAME);
+		goto overriden;
+	}
+	if (external_image) {
+		DEBUGPRINT("ROM: using external pre-loaded ROM" NL);
+		memcpy(rom, external_image, MEMINITDATA_INITROM_SIZE);
+		rom_is_external = 1;
+		goto overriden;
+	}
+	if (rom_from_prefdir_allowed) {
+		// Special option to allow ROM to be loaded from the preferences directory as the "default" ROM:
+		// it's kind of override, but not really and handled as "default" if this option is allowed.
+		if (xemu_load_file("@MEGA65.ROM", NULL, MEMINITDATA_INITROM_SIZE, MEMINITDATA_INITROM_SIZE, NULL) > 0) {
+			DEBUGPRINT("ROM: using 'ROM from prefdir' policy for default ROM, ROM is from file %s" NL, xemu_load_filepath);
+			memcpy(rom, xemu_load_buffer_p, MEMINITDATA_INITROM_SIZE);
+			free(xemu_load_buffer_p);
+			xemu_load_buffer_p = NULL;
+			rom_is_external = 1;
+			goto overriden_but_lie;
+		}
+	}
+	return -1;	// No override has been done
+overriden:
+	rom_is_overriden = 1;
+overriden_but_lie:
+	// return with the RESET vector of the ROM
+	return rom[0xFFFC] | (rom[0xFFFD] << 8);
 }

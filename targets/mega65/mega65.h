@@ -76,6 +76,8 @@ extern int  refill_c65_rom_from_preinit_cache ( void );
 extern int newhack;
 extern int registered_screenshot_request;
 extern Uint8 last_dd00_bits;
+extern const char *last_reset_type;
+extern int cpu_cycles_per_step;
 extern const char *cpu_clock_speed_string;
 
 #endif

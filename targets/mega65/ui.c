@@ -309,7 +309,7 @@ static void reset_into_c65_mode ( void )
 static void reset_into_xemu_stub ( void )
 {
 	if (reset_mega65_asked()) {
-		hypervisor_request_stub_rom = 1;
+		rom_stubrom_requested = 1;
 	}
 }
 

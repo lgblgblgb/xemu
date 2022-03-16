@@ -801,11 +801,12 @@ static int do_default_d81_mount_hack ( const int unit )
 {
 	static char *default_d81_path[2] = { NULL, NULL };
 	if (!default_d81_path[unit]) {
-		char path[PATH_MAX + 1];
-		snprintf(path, sizeof path, "%s%s/%s", sdl_pref_dir, "hdos", default_d81_basename[unit]);
-		DEBUGPRINT("-----> default D81 is %s" NL, path);
-		MKDIR(path);
-		default_d81_path[unit] = xemu_strdup(path);
+		// Prepare to determine the full path of the default external d81 image, if we haven't got it yet
+		const char *hdosroot;
+		(void)hypervisor_hdos_virtualization_status(-1, &hdosroot);
+		const int len = strlen(hdosroot) + strlen(default_d81_basename[unit]) + 1;
+		default_d81_path[unit] = xemu_malloc(len);
+		snprintf(default_d81_path[unit], len, "%s%s", hdosroot, default_d81_basename[unit]);
 	}
 	DEBUGPRINT("SDCARD: D81-DEFAULT: trying to mount external D81 instead of internal default one as %s on unit #%d" NL, default_d81_path[unit], unit);
 	// we want to create the default image file if does not exist (note the "0" for d81access_create_image_file, ie do not overwrite exisiting image)
