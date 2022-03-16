@@ -176,18 +176,27 @@ static void ui_update_sdcard ( void )
 {
 	char fnbuf[PATH_MAX + 1];
 	xemu_load_buffer_p = NULL;
-	if (!*dir_rom)
-		strcpy(dir_rom, sdl_pref_dir);
-	// Select ROM image
-	if (xemugui_file_selector(
-		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
-		"Select your ROM image",
-		dir_rom,
-		fnbuf,
-		sizeof fnbuf
-	)) {
-		WARNING_WINDOW("Cannot update: you haven't selected a ROM image");
-		goto ret;
+	// Try default ROM
+	snprintf(fnbuf, sizeof fnbuf, "%sMEGA65.ROM", sdl_pref_dir);
+	int ask_rom;
+	if (xemu_os_file_exists(fnbuf))
+		ask_rom = QUESTION_WINDOW("Yes|No", "Use the previously installed ROM?");
+	else
+		ask_rom = 1;
+	if (ask_rom) {
+		if (!*dir_rom)
+			strcpy(dir_rom, sdl_pref_dir);
+		// Select ROM image
+		if (xemugui_file_selector(
+			XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
+			"Select your ROM image",
+			dir_rom,
+			fnbuf,
+			sizeof fnbuf
+		)) {
+			WARNING_WINDOW("Cannot update: you haven't selected a ROM image");
+			goto ret;
+		}
 	}
 	// Load selected ROM image into memory, also checks the size!
 	if (xemu_load_file(fnbuf, NULL, 0x20000, 0x20000, "Cannot start updating, bad C65/M65 ROM image has been selected!") != 0x20000)

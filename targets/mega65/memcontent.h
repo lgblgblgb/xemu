@@ -12,7 +12,7 @@
 // This must be incremented by ONE every time, when memcontent.c changes, or even
 // if sdcontent.c is changed in a way to write new files, new content, or whatever
 // to the SD-card as part of the "update system files" process. Edit this in the python generator though, not in this file!
-#define MEMCONTENT_VERSION_ID 1
+#define MEMCONTENT_VERSION_ID 2
 
 // Special structure array for system files update on the SD-image
 struct meminitdata_sdfiles_st { const Uint8 *p; const char *fn; const int size; };

@@ -415,10 +415,6 @@ static void mega65_init ( void )
 	// *** Drive 8 external mount
 	if (configdb.disk8)
 		sdcard_force_external_mount(0, configdb.disk8, "Mount failure on CLI/CFG requested drive-8");
-	else {
-		// FIXME: move the logic for "default d81" here. Also note, that the current changes in sdcard.c
-		// makes it impossible to work correctly if that will be umounted ....
-	}
 	// *** Drive 9 external mount
 	if (configdb.disk9)
 		sdcard_force_external_mount(1, configdb.disk9, "Mount failure on CLI/CFG requested drive-9");

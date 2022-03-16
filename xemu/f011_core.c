@@ -134,6 +134,30 @@ void fdc_init ( Uint8 *cache_set )
 }
 
 
+int fdc_get_buffer_disk_address ( void )
+{
+	return cache_p_fdc;
+}
+
+
+int fdc_get_buffer_cpu_address ( void )
+{
+	return cache_p_cpu;
+}
+
+
+int fdc_get_status_a ( const int which )
+{
+	return DRV_STATUS_A(which >= 0 ? which : drive);
+}
+
+
+int fdc_get_status_b ( const int which )
+{
+	return DRV_STATUS_B(which >= 0 ? which : drive);
+}
+
+
 int fdc_get_led_state ( int blink_inc )
 {
 	static unsigned int blink_counter = 0;
