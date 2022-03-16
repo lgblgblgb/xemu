@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -139,6 +139,7 @@ extern void xemucfg_define_proc_option   ( const char *optname, xemucfg_parser_c
 extern int  xemucfg_parse_all ( int argc, char **argv );
 extern int  xemucfg_save_config_file  ( const char *filename, const char *initial_part, const char *cry );
 extern int  xemucfg_parse_config_file ( const char *filename_in, const char *open_fail_msg );
+extern const char *xemucfg_get_default_config_file_name ( void );
 
 extern void xemucfg_set_str ( char **ptr, const char *value );
 
@@ -147,6 +148,8 @@ extern int  xemucfg_integer_list_from_string ( const char *value, int *result, i
 extern int  xemucfg_str2int    ( const char *s,    int *result );
 extern int  xemucfg_str2double ( const char *s, double *result );
 extern int  xemucfg_str2bool   ( const char *s,    int *result );
+
+extern void xemucfg_get_cli_info ( const char **exec_name_ptr, int *argc_ptr, char ***argv_ptr );
 
 #ifndef XEMU_RELEASE_BUILD
 extern void xemucfg_dump_db ( const char *msg );

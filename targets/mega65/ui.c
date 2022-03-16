@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -86,16 +86,32 @@ void emu_dropfile_callback ( const char *fn )
 static void ui_attach_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
-	const int drive = VOIDPTR_TO_INT(m->user_data);
+	const int drive = VOIDPTR_TO_INT(m->user_data) & 0x7F;
+	const int creat = !!(VOIDPTR_TO_INT(m->user_data) & 0x80);
 	char fnbuf[PATH_MAX + 1];
 	static char dir[PATH_MAX + 1] = "";
+	if (!dir[0])
+		strcpy(dir, sdl_pref_dir);
 	if (!xemugui_file_selector(
-		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
-		"Select D81 to attach",
+		(creat ? XEMUGUI_FSEL_SAVE : XEMUGUI_FSEL_OPEN) | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		creat ? "Create new D81 to attach" : "Select D81 to attach",
 		dir,
 		fnbuf,
 		sizeof fnbuf
 	)) {
+		if (creat) {
+			// append .d81 extension if user did not specify that ...
+			const int fnlen = strlen(fnbuf);
+			static const char d81_ext[] = ".d81";
+			if (strcasecmp(fnbuf + fnlen - strlen(d81_ext), d81_ext))
+				strcpy(fnbuf + fnlen, d81_ext);
+			// create and save the image
+			Uint8 *img = d81access_create_image(NULL, fnbuf, 1);
+			const int ret = xemu_save_file(fnbuf, img, D81_SIZE, "Cannot create/save D81");
+			free(img);
+			if (ret)
+				return;
+		}
 		// FIXME: Ugly hack.
 		// Currently, handle only drive-8 via real MEGA65 emulation ("mounting mechanism"), and use
 		// drive-9 outside of Hyppo/etc terrotiry. To correct this, a whole big project would needed,
@@ -396,8 +412,6 @@ static void ui_emu_info ( void )
 {
 	char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
 	xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
-	char uname_str[100];
-	xemu_get_uname_string(uname_str, sizeof uname_str);
 	INFO_WINDOW(
 		"DMA chip current revision: %d (F018 rev-%s)\n"
 		"ROM version detected: %d %s\n"
@@ -412,7 +426,7 @@ static void ui_emu_info ( void )
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
 		vic_iomode < 4 ? iomode_names[vic_iomode] : "?INVALID?", videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
 		td_stat_str,
-		uname_str
+		xemu_get_uname_string()
 	);
 }
 
@@ -501,30 +515,13 @@ static void ui_cb_fullborders ( const struct menu_st *m, int *query )
 }
 
 
-// FIXME: should be renamed with better name ;)
-// FIXME: should be moved into the core
-static void ui_cb_toggle_int_inverted ( const struct menu_st *m, int *query )
-{
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, !*(int*)m->user_data);
-	*(int*)m->user_data = !*(int*)m->user_data;
-}
-
-
-// FIXME: should be renamed with better name ;)
-// FIXME: should be moved into the core
-static void ui_cb_toggle_int ( const struct menu_st *m, int *query )
-{
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, *(int*)m->user_data);
-	*(int*)m->user_data = !*(int*)m->user_data;
-}
-
-
 static void ui_cb_sids_enabled ( const struct menu_st *m, int *query )
 {
 	const int mask = VOIDPTR_TO_INT(m->user_data);
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, (configdb.sidmask & mask));
 	configdb.sidmask ^= mask;
 }
+
 
 static void ui_cb_render_scale_quality ( const struct menu_st *m, int *query )
 {
@@ -578,7 +575,7 @@ static const struct menu_st menu_display[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_fullborders, NULL },
 	{ "Show drive LED",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK |
-					XEMUGUI_MENUFLAG_SEPARATOR,	ui_cb_toggle_int, (void*)&configdb.show_drive_led },
+					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_toggle_int, (void*)&configdb.show_drive_led },
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &registered_screenshot_request },
 #endif
@@ -605,6 +602,8 @@ static const struct menu_st menu_inputdevices[] = {
 	{ "Use OSD key debugger",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
 	{ "Swap emulated joystick port",XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, input_toggle_joy_emu },
+	{ "Cursor keys as joystick",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&hid_joy_on_cursor_keys },
 #if 0
 	{ "Devices as joy port 2 (vs 1)",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_joy_devices },
 #endif
@@ -635,6 +634,8 @@ static const struct menu_st menu_help[] = {
 static const struct menu_st menu_d81[] = {
 	{ "Attach user D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_attach_d81, (void*)0 },
+	{ "Create&attach D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_attach_d81, (void*)(0 + 0x80) },
 	{ "Use internal D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_detach_d81, (void*)0 },
 	{ "Attach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_attach_d81, (void*)1 },
@@ -702,13 +703,22 @@ static const struct menu_st menu_audio_sids[] = {
 };
 static const struct menu_st menu_audio[] = {
 	{ "Audio output",		XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_toggle_int_inverted, (void*)&configdb.nosound },
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&configdb.nosound },
 	{ "OPL3 emulation",		XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_toggle_int_inverted, (void*)&configdb.noopl3 },
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&configdb.noopl3 },
 	{ "Clear audio registers",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, audio65_clear_regs },
 	{ "Emulated SIDs",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_sids   },
 	{ "Stereo separation",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_stereo },
 	{ "Master volume",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_volume },
+	{ NULL }
+};
+static const struct menu_st menu_config [] = {
+	{ "Confirmation on exit/reset", XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&i_am_sure_override },
+	//{ "Load saved default config",XEMUGUI_MENUID_CALLABLE,	xemugui_cb_cfgfile, (void*)XEMUGUICFGFILEOP_LOAD_DEFAULT },
+	{ "Save config as default",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_cfgfile, (void*)XEMUGUICFGFILEOP_SAVE_DEFAULT },
+	//{ "Load saved custom config",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_cfgfile, (void*)XEMUGUICFGFILEOP_LOAD_CUSTOM  },
+	{ "Save config as custom file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_cfgfile, (void*)XEMUGUICFGFILEOP_SAVE_CUSTOM  },
 	{ NULL }
 };
 static const struct menu_st menu_main[] = {
@@ -719,6 +729,7 @@ static const struct menu_st menu_main[] = {
 	{ "FD D81",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_d81     },
 	{ "Reset",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
 	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
+	{ "Configuration",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_config  },
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
 #ifdef CBM_BASIC_TEXT_SUPPORT
 	{ "Save BASIC as text",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_save_basic_as_text },

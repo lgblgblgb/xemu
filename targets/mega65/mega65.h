@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -76,5 +76,6 @@ extern int  refill_c65_rom_from_preinit_cache ( void );
 extern int newhack;
 extern int registered_screenshot_request;
 extern Uint8 last_dd00_bits;
+extern const char *cpu_clock_speed_string;
 
 #endif

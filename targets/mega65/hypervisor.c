@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -51,6 +51,7 @@ static int debug_on = 0;
 static int hypervisor_serial_out_asciizer;
 
 static int first_hypervisor_leave;
+static int trap_current;
 
 static int hypervisor_queued_trap = -1;
 
@@ -179,6 +180,7 @@ void hypervisor_enter_via_write_trap ( int trapno )
 
 void hypervisor_enter ( int trapno )
 {
+	trap_current = trapno;
 	// Sanity checks
 	if (XEMU_UNLIKELY(trapno > 0x7F || trapno < 0))
 		FATAL("FATAL: got invalid trap number %d", trapno);
@@ -228,7 +230,13 @@ void hypervisor_enter ( int trapno )
 	memory_set_do_map();	// now the memory mapping is changed
 	machine_set_speed(0);	// set machine speed (hypervisor always runs at M65 fast ... ??) FIXME: check this!
 	cpu65.pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
-	DEBUG("HYPERVISOR: entering into hypervisor mode, trap=$%02X @ $%04X -> $%04X" NL, trapno, D6XX_registers[0x48] | (D6XX_registers[0x49] << 8), cpu65.pc);
+	DEBUG("HYPERVISOR: entering into hypervisor mode, trap=$%02X (A=$%02X) @ $%04X -> $%04X" NL, trapno, cpu65.a, D6XX_registers[0x48] | (D6XX_registers[0x49] << 8), cpu65.pc);
+	if (XEMU_UNLIKELY(trapno == TRAP_RESET)) {
+		if (!vic4_disallow_video_std_change) {
+			vic4_disallow_video_std_change = 1;
+			DEBUGPRINT("HYPERVISOR: setting video standard change banning" NL);
+		}
+	}
 }
 
 
@@ -306,6 +314,12 @@ void hypervisor_leave ( void )
 				vic_registers[0x6F] &= 0x7F;
 		}
 		DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
+	}
+	if (XEMU_UNLIKELY(trap_current == TRAP_RESET)) {
+		if (vic4_disallow_video_std_change == 1) {
+			DEBUGPRINT("HYPERVISOR: clearing video standard change banning" NL);
+			vic4_disallow_video_std_change = 0;
+		}
 	}
 	if (XEMU_UNLIKELY(hypervisor_queued_trap >= 0)) {
 		// Not so much used currently ...

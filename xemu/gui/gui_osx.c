@@ -1,7 +1,7 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    ~/xemu/gui/gui_osx.c: UI implementation for MacOS of Xemu's UI abstraction layer
    Copyright (C)2020 Hernán Di Pietro <hernan.di.pietro@gmail.com>
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -75,9 +75,11 @@ static id _xemumacgui_r_menu_builder ( const struct menu_st desc[], const char *
 			DEBUGGUI("GUI: query-back for \"%s\"" NL, desc[a].name);
 			((xemugui_callback_t)(desc[a].handler))(&desc[a], &type);
 		}
+		if ((type & XEMUGUI_MENUFLAG_HIDDEN))
+			continue;
 		if (type & XEMUGUI_MENUFLAG_SEPARATOR) {
 			menu_item = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSMenuItem"), sel_registerName("separatorItem"));
-		} else { 
+		} else {
 			menu_item = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSMenuItem"), sel_registerName("alloc"));
 			((void (*) (id, SEL)) objc_msgSend)(menu_item, sel_registerName("autorelease"));
 			id str_name = ((id (*) (Class, SEL, const char*)) objc_msgSend)(
@@ -102,7 +104,7 @@ static id _xemumacgui_r_menu_builder ( const struct menu_st desc[], const char *
 			((void (*) (id, SEL, id))objc_msgSend)(menu_item, sel_registerName("setRepresentedObject:"), menu_object);
 		}
 		if (type & XEMUGUI_MENUFLAG_CHECKED) {
-			((id (*) (id, SEL, int)) objc_msgSend)(menu_item, sel_registerName("setState:"), 1); 	
+			((id (*) (id, SEL, int)) objc_msgSend)(menu_item, sel_registerName("setState:"), 1);
 		}
 		((void (*) (id, SEL, id))objc_msgSend)(ui_menu, sel_registerName("addItem:"), menu_item);
 		if ((type & 0xFF) == XEMUGUI_MENUID_SUBMENU) {

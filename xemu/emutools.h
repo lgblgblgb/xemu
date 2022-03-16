@@ -1,6 +1,6 @@
 /* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
    8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -64,7 +64,7 @@ extern int  sysconsole_toggle ( int set );
 
 #define XEMU_CPU_STAT_INFO_BUFFER_SIZE 64
 extern void xemu_get_timing_stat_string ( char *buf, unsigned int size );
-extern void xemu_get_uname_string ( char *buf, unsigned int size );
+extern const char *xemu_get_uname_string ( void );
 
 // You should define this in your emulator, most probably with resetting the keyboard matrix
 // Purpose: emulator windows my cause the emulator does not get the key event normally, thus some keys "seems to be stucked"
@@ -177,6 +177,7 @@ extern const int ZERO_INT;
 extern const int ONE_INT;
 
 extern char *xemu_strdup ( const char *s );
+extern void xemu_restrdup ( char **ptr, const char *str );
 extern void xemu_set_full_screen ( int setting );
 extern void xemu_set_screen_mode ( int setting );
 extern void xemu_timekeeping_delay ( int td_em );
@@ -246,6 +247,7 @@ extern void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data,
 
 #include <dirent.h>
 #ifdef XEMU_ARCH_WIN
+#	include <sys/stat.h>
 	typedef _WDIR XDIR;
 	extern int   xemu_winos_utf8_to_wchar ( wchar_t *restrict o, const char *restrict i, size_t size );
 	extern int   xemu_os_open   ( const char *fn, int flags );
@@ -254,8 +256,8 @@ extern void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data,
 	extern int   xemu_os_unlink ( const char *fn );
 	extern int   xemu_os_mkdir  ( const char *fn, const int mode );
 	extern XDIR *xemu_os_opendir ( const char *fn );
-	extern struct dirent *xemu_os_readdir ( XDIR *dirp, struct dirent *entry );
 	extern int   xemu_os_closedir ( XDIR *dir );
+	extern int   xemu_os_stat ( const char *fn, struct stat *statbuf );
 #else
 	typedef	DIR	XDIR;
 #	define	xemu_os_open			open
@@ -264,9 +266,10 @@ extern void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data,
 #	define	xemu_os_unlink			unlink
 #	define	xemu_os_mkdir			mkdir
 #	define	xemu_os_opendir			opendir
-#	define	xemu_os_readdir(dirp,not_used)	readdir(dirp)
 #	define	xemu_os_closedir 		closedir
+#	define	xemu_os_stat			stat
 #endif
 #define	xemu_os_close	close
+extern int   xemu_os_readdir ( XDIR *dirp, char *fn );
 
 #endif

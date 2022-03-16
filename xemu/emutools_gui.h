@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -31,14 +31,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMUGUI_MENUID_SUBMENU		1
 #define XEMUGUI_MENUID_TITLE		2
 
-#define XEMUGUI_MENUFLAG_INACTIVE	0x0100
-#define XEMUGUI_MENUFLAG_BEGIN_RADIO	0x0200
-#define XEMUGUI_MENUFLAG_END_RADIO	0x0400
-#define XEMUGUI_MENUFLAG_ACTIVE_RADIO	0x0800
-#define XEMUGUI_MENUFLAG_SEPARATOR	0x1000
-#define XEMUGUI_MENUFLAG_CHECKED	0x2000
-#define XEMUGUI_MENUFLAG_QUERYBACK	0x4000
-#define XEMUGUI_MENUFLAG_UNCHECKED	0x8000
+#define XEMUGUI_MENUFLAG_INACTIVE	0x00100
+#define XEMUGUI_MENUFLAG_BEGIN_RADIO	0x00200
+#define XEMUGUI_MENUFLAG_END_RADIO	0x00400
+#define XEMUGUI_MENUFLAG_ACTIVE_RADIO	0x00800
+#define XEMUGUI_MENUFLAG_SEPARATOR	0x01000
+#define XEMUGUI_MENUFLAG_CHECKED	0x02000
+#define XEMUGUI_MENUFLAG_QUERYBACK	0x04000
+#define XEMUGUI_MENUFLAG_UNCHECKED	0x08000
+#define XEMUGUI_MENUFLAG_HIDDEN		0x10000
 
 #ifndef XEMUGUI_MAX_SUBMENUS
 #define XEMUGUI_MAX_SUBMENUS		100
@@ -96,5 +97,12 @@ extern void xemugui_cb_web_help_main		( const struct menu_st *m, int *query );
 extern void xemugui_cb_osd_key_debugger		( const struct menu_st *m, int *query );
 extern void xemugui_cb_set_mouse_grab		( const struct menu_st *m, int *query );
 extern void xemugui_cb_set_integer_to_one	( const struct menu_st *m, int *query );
+extern void xemugui_cb_toggle_int		( const struct menu_st *m, int *query );
+extern void xemugui_cb_toggle_int_inverted	( const struct menu_st *m, int *query );
+
+#ifdef XEMU_CONFIGDB_SUPPORT
+enum xemuguicfgfileop_type { XEMUGUICFGFILEOP_LOAD_DEFAULT, XEMUGUICFGFILEOP_SAVE_DEFAULT, XEMUGUICFGFILEOP_LOAD_CUSTOM, XEMUGUICFGFILEOP_SAVE_CUSTOM };
+void xemugui_cb_cfgfile ( const struct menu_st *m, int *query );
+#endif
 
 #endif

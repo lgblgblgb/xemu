@@ -1,7 +1,7 @@
 ## Collection of emulators of some 8 bits machines using SDL2 library,
 ## including the MEGA65, Commodore LCD and Commodore 65.
 ##
-## Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -158,20 +158,23 @@ endif
 
 $(PRG): $(OBJS) $(DEPALL)
 	@echo "$(PROGRESS_MARKER_START)CONSTRUCTING: $(DEPFILEPREFIX)-buildinfo.c$(PROGRESS_MARKER_END)"
-	@echo "const char *XEMU_BUILDINFO_ON  = \"`whoami`@`uname -n` on `uname -s` `uname -r`\";" > $(DEPFILEPREFIX)-buildinfo.c
-	@echo "const char *XEMU_BUILDINFO_AT  = \"`date`\";" >> $(DEPFILEPREFIX)-buildinfo.c
-	@echo "const char *XEMU_BUILDINFO_GIT = \"`bash $(TOPDIR)/build/show-git-info`\";" >> $(DEPFILEPREFIX)-buildinfo.c
-	@echo "const char *XEMU_BUILDINFO_TARGET = \"$(PRG_TARGET) ($(PRG)) for $(TARGET) on \" XEMU_ARCH_NAME \" ($(ARCH)) using $(CONFIG_CC)\";" >> $(DEPFILEPREFIX)-buildinfo.c
+	@echo "const char XEMU_BUILDINFO_ON[]  = \"`whoami`@`uname -n` on `uname -s` `uname -r`\";" > $(DEPFILEPREFIX)-buildinfo.c
+	@echo "const char XEMU_BUILDINFO_AT[]  = \"`date`\";" >> $(DEPFILEPREFIX)-buildinfo.c
+	@echo "const char XEMU_BUILDINFO_GIT[] = \"`bash $(TOPDIR)/build/show-git-info`\";" >> $(DEPFILEPREFIX)-buildinfo.c
+	@echo "const char XEMU_BUILDINFO_TARGET[] = \"$(PRG_TARGET) ($(PRG)) for $(TARGET) on \" XEMU_ARCH_NAME \" ($(ARCH)) using $(CONFIG_CC)\";" >> $(DEPFILEPREFIX)-buildinfo.c
 	@git log -1 --format=%cd --date=format:%Y%m%d%H%M%S > $(TOPDIR)/build/objs/cdate.data || date '+%Y%m%d%H%M%S' > $(TOPDIR)/build/objs/cdate.data
 	@echo "$(PROGRESS_MARKER_START)Commit date we're building ($(TOPDIR)/build/objs/cdate.data): `cat $(TOPDIR)/build/objs/cdate.data`$(PROGRESS_MARKER_END)"
-	@echo "const char *XEMU_BUILDINFO_CDATE = \"`cat $(TOPDIR)/build/objs/cdate.data`\";" >> $(DEPFILEPREFIX)-buildinfo.c
+	@echo "const char XEMU_BUILDINFO_CDATE[] = \"`cat $(TOPDIR)/build/objs/cdate.data`\";" >> $(DEPFILEPREFIX)-buildinfo.c
 	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)COMPILING: $(DEPFILEPREFIX)-buildinfo.c$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	$(CONFIG_CC) $(CFLAGS) -c -o $(DEPFILEPREFIX)-buildinfo.o $(DEPFILEPREFIX)-buildinfo.c
 	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)LINKING: $(PRG)$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	$(CONFIG_CC) -o $(PRG) $(OBJS) $(DEPFILEPREFIX)-buildinfo.o $(LDFLAGS)
 
 run:	$(PRG)
-	cd $(TOPDIR) && XEMU_DEBUG_FILE=debug.log $(PRG_TOP_REL)
+	../../$(PRG_TOP_REL)
+
+debugrun: $(PRG)
+	XEMU_DEBUG_FILE=xemu.log ../../$(PRG_TOP_REL)
 
 strip: $(PRG)
 	$(CONFIG_STRIP) $(PRG)
@@ -198,7 +201,23 @@ $(DEPFILE): $(DEPALL) $(SRCS)
 clean:
 	rm -f $(TOPDIR)/build/objs/?-$(ARCH)-$(TARGET)-* $(PRG)
 
-.PHONY: clean all strip dep do-all run xemu-info config install
+dll32:
+	cp `i686-w64-mingw32-sdl2-config --prefix`/bin/SDL2.dll $(TOPDIR)/build/bin/
+
+dll64:
+	cp `x86_64-w64-mingw32-sdl2-config --prefix`/bin/SDL2.dll $(TOPDIR)/build/bin/
+
+wine64:
+	$(MAKE) ARCH=win64
+	$(MAKE) dll64
+	wine $(TOPDIR)/build/bin/$(PRG_TARGET).win64
+
+wine32:
+	$(MAKE) ARCH=win32
+	$(MAKE) dll32
+	wine $(TOPDIR)/build/bin/$(PRG_TARGET).win32
+
+.PHONY: clean all strip dep do-all run debugrun xemu-info config install dll32 dll64 wine32 wine64
 
 ifneq ($(wildcard $(DEPFILE)),)
 include $(DEPFILE)

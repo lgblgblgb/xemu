@@ -1,6 +1,6 @@
 /* F018 DMA core emulation for MEGA65
    Part of the Xemu project.  https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -112,7 +112,7 @@ static struct {
 #define DMA_TARGET_SKIP_RATE		((int)(dma_registers[0x0A] | (dma_registers[0x0B] << 8)))
 #define DMA_ADDR_FRACT_PART(p)		((p) & 0xFF)
 
-#define DMA_ADDRESSING(channel)		((DMA_ADDR_INTEGER_PART(channel.addr) & channel.mask) | channel.base)
+#define DMA_ADDRESSING(channel)		((DMA_ADDR_INTEGER_PART(channel.addr) & channel.mask) + channel.base)
 
 // source and target DMA "channels":
 static struct {

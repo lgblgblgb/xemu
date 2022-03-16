@@ -1,7 +1,7 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   Copyright (C)2020-2021 Hernán Di Pietro <hernan.di.pietro@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2020-2022 Hernán Di Pietro <hernan.di.pietro@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -74,7 +74,9 @@ static Uint8 vic_pixel_readback_result[4];
 static Uint8 vic_color_register_mask = 0xFF;
 static Uint32 *used_palette;					// normally the same value as "palette" from vic4_palette.c but GOTOX RRB token can modify this! So this should be used
 static int EFFECTIVE_V400;
-static Uint8 sprite_y_adjust = 0;
+
+// TODO: not really implemented just here ...
+static int etherbuffer_is_io_mapped = 0;
 
 // --- these things are altered by vic4_open_frame_access() ONLY at every fame ONLY based on PAL or NTSC selection
 Uint8 videostd_id = 0xFF;			// 0=PAL, 1=NTSC [give some insane value by default to force the change at the fist frame after starting Xemu]
@@ -85,6 +87,7 @@ int videostd_changed = 0;
 static const char NTSC_STD_NAME[] = "NTSC";
 static const char PAL_STD_NAME[] = "PAL";
 int vic_readjust_sdl_viewport = 0;
+int vic4_disallow_video_std_change = 1;
 
 // VIC-IV Modeline Parameters
 // ----------------------------------------------------
@@ -98,7 +101,7 @@ int vic_readjust_sdl_viewport = 0;
 #define TOP_BORDERS_HEIGHT_400		(DISPLAY_HEIGHT - TEXT_HEIGHT_400)
 #define SINGLE_TOP_BORDER_200		(TOP_BORDERS_HEIGHT_200 >> 1)
 #define SINGLE_TOP_BORDER_400		(TOP_BORDERS_HEIGHT_400 >> 1)
-// TODO: move as many things as possible from vic4.h to here which is only used by vic4.c to avoid confusions ...
+// TODO: move as many things as possible from vic4.h to here which is only used by vic4.c, to avoid confusion ...
 
 
 static const Uint8 reverse_byte_table[] = {
@@ -250,7 +253,7 @@ void vic4_close_frame_access ( void )
 }
 
 // The hardware allows a sideborder value of 16383 as a remnant of old MEGA65 design.
-// In practical terms, any sideborder exceeding display_width / 2 will cover the entire 
+// In practical terms, any sideborder exceeding display_width / 2 will cover the entire
 // character generator (effective 400 since since dw is fixed to 800px wide). Since our
 // scanline renderer takes borders into account and any bizarre value will crash emulator
 // due to offlimits pixel buffer access, we clamp the maximum practical sideborder value
@@ -277,7 +280,7 @@ static void vic4_update_sideborder_dimensions ( void )
 		else	// 78-col mode
 			border_x_left = FRAME_H_FRONT + vic4_single_side_border_clamped() + 15;
 	}
-	
+
 	DEBUGPRINT("VIC4: set border left=%d, right=%d, textxpos=%d" NL, border_x_left, border_x_right, CHARGEN_X_START);
 }
 
@@ -321,6 +324,10 @@ static void vic4_update_vertical_borders( void )
 		}
 		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 6 + (REG_VIC2_YSCROLL * 2));
 	}
+
+	// This offset is present in recent versions of VIC-IV VHDL
+	SET_CHARGEN_X_START(CHARGEN_X_START - 1);
+
 	DEBUGPRINT("VIC4: set border top=%d, bottom=%d, textypos=%d, display_row_count=%d vic_ii_first_raster=%d EFFECTIVE_V400=%d REG_V400=%d" NL, BORDER_Y_TOP, BORDER_Y_BOTTOM,
 		CHARGEN_Y_START, display_row_count, vicii_first_raster, EFFECTIVE_V400, REG_V400);
 }
@@ -392,7 +399,7 @@ void vic4_open_frame_access ( void )
 			max_rasters = PHYSICAL_RASTERS_NTSC;
 			visible_area_height = SCREEN_HEIGHT_VISIBLE_NTSC;
 			vicii_first_raster = 7;
-			sprite_y_adjust = 24;
+			REG_SPRITE_Y_ADJUST = 24;
 		} else {
 			// --- PAL ---
 			new_name = PAL_STD_NAME;
@@ -401,7 +408,7 @@ void vic4_open_frame_access ( void )
 			max_rasters = PHYSICAL_RASTERS_PAL;
 			visible_area_height = SCREEN_HEIGHT_VISIBLE_PAL;
 			vicii_first_raster = 0;
-			sprite_y_adjust = 0;
+			REG_SPRITE_Y_ADJUST = 0;
 		}
 		DEBUGPRINT("VIC: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec, max raster is %d, visible area height is %d)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime, max_rasters, visible_area_height);
 		videostd_name = new_name;
@@ -586,8 +593,11 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_ALL(0x1D):	// sprite-X expansion
 			break;
 		CASE_VIC_ALL(0x1E):	// sprite-sprite collision
+			vic_registers[0x1E] = 0;
+			return;
 		CASE_VIC_ALL(0x1F):	// sprite-data collision
-			return;		// NOT writeable!
+			vic_registers[0x1F] = 0;
+			return;
 		CASE_VIC_2(0x20): CASE_VIC_2(0x21): CASE_VIC_2(0x22): CASE_VIC_2(0x23): CASE_VIC_2(0x24): CASE_VIC_2(0x25): CASE_VIC_2(0x26): CASE_VIC_2(0x27):
 		CASE_VIC_2(0x28): CASE_VIC_2(0x29): CASE_VIC_2(0x2A): CASE_VIC_2(0x2B): CASE_VIC_2(0x2C): CASE_VIC_2(0x2D): CASE_VIC_2(0x2E):
 			data &= 0xF;	// colour-related registers are 4 bit only for VIC-II
@@ -603,12 +613,19 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_ALL(0x2F):	// the KEY register, it must be handled in ALL VIC modes, to be able to set VIC I/O mode
 			do {
 				int vic_new_iomode;
+				etherbuffer_is_io_mapped = 0;
 				if (data == 0x96 && vic_registers[0x2F] == 0xA5) {
 					vic_new_iomode = VIC3_IOMODE;
 					vic_color_register_mask = 0xFF;
 				} else if (data == 0x53 && vic_registers[0x2F] == 0x47) {
 					vic_new_iomode = VIC4_IOMODE;
 					vic_color_register_mask = 0xFF;
+				} else if (data == 0x54 && vic_registers[0x2F] == 0x45) {
+					// this I/O mode is the same as VIC4 I/O mode _but_ with ethernet buffer also mapped
+					DEBUGPRINT("VIC: warning, unimplemented ethernet I/O mode is set!" NL);
+					vic_new_iomode = VIC4_IOMODE;
+					vic_color_register_mask = 0xFF;
+					etherbuffer_is_io_mapped = 1;
 				} else {
 					vic_new_iomode = VIC2_IOMODE;
 					vic_color_register_mask = 0x0F;
@@ -620,7 +637,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			} while(0);
 			break;
 		CASE_VIC_2(0x30):	// this register is _SPECIAL_, and exists only in VIC-II (C64) I/O mode: C128-style "2MHz fast" mode ...
-			DEBUGPRINT("VIC: Write 0xD030: $%02x" NL, data);
+			DEBUGPRINT("VIC: Write 0xD030 in VIC-II I/O mode with data $%02x @ PC=$%04X (hypervisor mode: %d)" NL, data, cpu65.old_pc, !!in_hypervisor);
 			c128_d030_reg = data;
 			machine_set_speed(0);
 			return;		// it IS important to have return here, since it's not a "real" VIC-4 mode register's view in another mode!!
@@ -708,7 +725,10 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			vic_registers[addr & 0x7F] = data;
 			break;
 		CASE_VIC_4(0x6F):
-			// We trigger video setup at next frame.
+			// If video standard change was disallowed, we keep bit7 as is, regardless of the write
+			if (vic4_disallow_video_std_change)
+				data = (vic_registers[0x6F] & 0x80) | (data & 0x7F);
+			// We trigger video setup at next frame automatically, no need do anything further here
 			break;
 
 		CASE_VIC_4(0x70):	// VIC-IV palette selection register
@@ -969,64 +989,68 @@ static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_d
 }
 
 
-static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( int sprnum, int x_display_pos, const Uint8* row_data_ptr, int xscale )
+static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( const int sprnum, int x_display_pos, const Uint8* row_data_ptr, const int xscale, const int do_tiling )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const Uint8 mcm_spr_pal_indices[4] = { 0, SPRITE_MULTICOLOR_1, SPRITE_COLOR(sprnum), SPRITE_MULTICOLOR_2 };	// entry zero is not used
 #	ifdef SPRITE_ANY_COLLISION
 	const Uint8 sprbmask = 1 << sprnum;
 #	endif
-	for (int byte = 0; byte < totalBytes; byte++) {
-		const Uint8 row_data = *row_data_ptr++;
-		for (int shift = 6; shift >= 0; shift -= 2) {
-			const int mcm_pixel_value = (row_data >> shift) & 3;
-			const Uint32 sdl_pixel = spritepalette[mcm_spr_pal_indices[mcm_pixel_value]];
-			for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos += 2) {
-				if (mcm_pixel_value) {
-					if (x_display_pos >= border_x_left && (
-						!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
-					)) {
-						*(pixel_raster_start + x_display_pos) = sdl_pixel;
-						DO_SPRITE_SPRITE_COLLISION(x_display_pos, mcm_pixel_value & 2);
-						DO_SPRITE_FG_COLLISION(x_display_pos, mcm_pixel_value & 2);
-					}
-					if (x_display_pos + 1 >= border_x_left && (
-						!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos + 1])
-					)) {
-						*(pixel_raster_start + x_display_pos + 1) = sdl_pixel;
-						DO_SPRITE_SPRITE_COLLISION(x_display_pos + 1, mcm_pixel_value & 2);
-						DO_SPRITE_FG_COLLISION(x_display_pos + 1, mcm_pixel_value & 2);
+	do {
+		for (int byte = 0; byte < totalBytes; byte++) {
+			const Uint8 row_data = *row_data_ptr++;
+			for (int shift = 6; shift >= 0; shift -= 2) {
+				const int mcm_pixel_value = (row_data >> shift) & 3;
+				const Uint32 sdl_pixel = spritepalette[mcm_spr_pal_indices[mcm_pixel_value]];
+				for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos += 2) {
+					if (mcm_pixel_value) {
+						if (x_display_pos >= border_x_left && (
+							!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
+						)) {
+							*(pixel_raster_start + x_display_pos) = sdl_pixel;
+							DO_SPRITE_SPRITE_COLLISION(x_display_pos, mcm_pixel_value & 2);
+							DO_SPRITE_FG_COLLISION(x_display_pos, mcm_pixel_value & 2);
+						}
+						if (x_display_pos + 1 >= border_x_left && (
+							!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos + 1])
+						)) {
+							*(pixel_raster_start + x_display_pos + 1) = sdl_pixel;
+							DO_SPRITE_SPRITE_COLLISION(x_display_pos + 1, mcm_pixel_value & 2);
+							DO_SPRITE_FG_COLLISION(x_display_pos + 1, mcm_pixel_value & 2);
+						}
 					}
 				}
 			}
 		}
-	}
+	} while (XEMU_UNLIKELY(do_tiling && x_display_pos < border_x_right));
 }
 
 
-static XEMU_INLINE void vic4_draw_sprite_row_mono ( int sprnum, int x_display_pos, const Uint8 *row_data_ptr, int xscale )
+static XEMU_INLINE void vic4_draw_sprite_row_mono ( const int sprnum, int x_display_pos, const Uint8 *row_data_ptr, const int xscale, const int do_tiling )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const Uint32 sdl_pixel = spritepalette[SPRITE_COLOR(sprnum)];
 #	ifdef SPRITE_ANY_COLLISION
 	const Uint8 sprbmask = 1 << sprnum;
 #	endif
-	for (int byte = 0; byte < totalBytes; byte++) {
-		for (int xbit = 0; xbit < 8; xbit++) {
-			const Uint8 sprite_bit = *row_data_ptr & (0x80 >> xbit);
-			for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
-				if (x_display_pos >= border_x_left && sprite_bit && (
-					!SPRITE_IS_BACK(sprnum) ||
-					(SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
-				)) {
-					*(pixel_raster_start + x_display_pos) = sdl_pixel;
-					DO_SPRITE_SPRITE_COLLISION(x_display_pos, 1);
-					DO_SPRITE_FG_COLLISION(x_display_pos, 1);
+	do {
+		for (int byte = 0; byte < totalBytes; byte++) {
+			for (int xbit = 0; xbit < 8; xbit++) {
+				const Uint8 sprite_bit = *row_data_ptr & (0x80 >> xbit);
+				for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
+					if (x_display_pos >= border_x_left && sprite_bit && (
+						!SPRITE_IS_BACK(sprnum) ||
+						(SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
+					)) {
+						*(pixel_raster_start + x_display_pos) = sdl_pixel;
+						DO_SPRITE_SPRITE_COLLISION(x_display_pos, 1);
+						DO_SPRITE_FG_COLLISION(x_display_pos, 1);
+					}
 				}
 			}
+			row_data_ptr++;
 		}
-		row_data_ptr++;
-	}
+	} while (XEMU_UNLIKELY(do_tiling && x_display_pos < border_x_right));
 }
 
 
@@ -1041,11 +1065,15 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 	const int reg_tiling = REG_SPRTILEN;
 	for (int sprnum = 7; sprnum >= 0; sprnum--) {
 		if (REG_SPRITE_ENABLE & (1 << sprnum)) {
+			const int y_adjust = SPRITE_V400(sprnum) ? 0 : (REG_SPRITE_Y_ADJUST - 2);
 			const int spriteHeight = SPRITE_EXTHEIGHT(sprnum) ? REG_SPRHGHT : 21;
-			const int x_display_pos = SPRITE_FIRST_X + (SPRITE_POS_X(sprnum) * (REG_SPR640 ? 1 : 2));	// in display units
-			const int y_logical_pos = SPRITE_POS_Y(sprnum) - sprite_y_adjust + ( (EFFECTIVE_V400 ? 1 : 2));	// in logical units
+			const int x_display_pos = (REG_SPR640 ? 1 : 2) * SPRITE_POS_X(sprnum) + (REG_SPR640 ? 1 : SPRITE_FIRST_X);
+			const int y_display_pos = ((SPRITE_V400(sprnum) ? 1 : 2) * (SPRITE_POS_Y(sprnum) - y_adjust)) ;
 
-			int sprite_row_in_raster = logical_raster - y_logical_pos;
+			int sprite_row_in_raster = ycounter - y_display_pos;
+
+			if (!SPRITE_V400(sprnum))
+				sprite_row_in_raster = sprite_row_in_raster >> 1;
 
 			if (SPRITE_VERT_2X(sprnum))
 				sprite_row_in_raster = sprite_row_in_raster >> 1;
@@ -1063,12 +1091,13 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 				const Uint8 *sprite_data = main_ram + sprite_data_addr;
 				const Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
 				const int xscale = (REG_SPR640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
+				const int do_tiling = reg_tiling & (1 << sprnum);
 				if (SPRITE_MULTICOLOR(sprnum))
-					vic4_draw_sprite_row_multicolor(sprnum, x_display_pos, row_data, xscale);
+					vic4_draw_sprite_row_multicolor(sprnum, x_display_pos, row_data, xscale, do_tiling);
 				else if (SPRITE_16COLOR(sprnum))
-					vic4_draw_sprite_row_16color(sprnum, x_display_pos, row_data, xscale, reg_tiling & (1 << sprnum));
+					vic4_draw_sprite_row_16color(sprnum, x_display_pos, row_data, xscale, do_tiling);
 				else
-					vic4_draw_sprite_row_mono(sprnum, x_display_pos, row_data, xscale);
+					vic4_draw_sprite_row_mono(sprnum, x_display_pos, row_data, xscale, do_tiling);
 			}
 		}
 	}
@@ -1479,16 +1508,19 @@ int vic4_render_scanline ( void )
 			if (ycounter < CHARGEN_Y_START)
 				while (xcounter++ < border_x_right)
 					*current_pixel++ = palette[REG_SCREEN_COLOR];
-			if (ycounter < BORDER_Y_BOTTOM)
-				vic4_do_sprites();
-			// for (int i = 0; i < TEXTURE_WIDTH - border_x_right; i++, current_pixel++)
-			//	*current_pixel = palette[REG_SCREEN_COLOR];
 		}
 		for (Uint32 *p = pixel_raster_start; p < pixel_raster_start + border_x_left; p++)
 			*p = palette[REG_BORDER_COLOR];
 		for (Uint32 *p = current_pixel; p < current_pixel + border_x_right; p++)
 			*p = palette[REG_BORDER_COLOR];
 	}
+	// Sprites can be displayed on V200/V400 independently of char generator, so
+	// this must be outside of the main loop to avoid being affected by double-scan
+
+	if (XEMU_LIKELY(REG_DISPLAYENABLE) && (ycounter >= BORDER_Y_TOP && ycounter < BORDER_Y_BOTTOM)) {
+		vic4_do_sprites();
+	}
+
 	ycounter++;
 	// End of frame?
 	if (ycounter == max_rasters) {

@@ -1,7 +1,7 @@
 /* Test-case for simple, work-in-progress Commodore 65 emulator.
 
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -279,7 +279,7 @@ static void c65_snapshot_saver_on_exit_callback ( void )
 
 
 // define the callback, d81access call this, we can dispatch the change in FDC config to the F011 core emulation this way, automatically
-void d81access_cb_chgmode ( int which, int mode ) {
+void d81access_cb_chgmode ( const int which, const int mode ) {
 	int have_disk = ((mode & 0xFF) != D81ACCESS_EMPTY);
 	int can_write = (!(mode & D81ACCESS_RO));
 	if (which < 2)
@@ -287,14 +287,16 @@ void d81access_cb_chgmode ( int which, int mode ) {
 	fdc_set_disk(which, have_disk, can_write);
 }
 // Here we implement F011 core's callbacks using d81access (and yes, F011 uses 512 bytes long sectors for real)
-int fdc_cb_rd_sec ( int which, Uint8 *buffer, int d81_offset ) {
-	int ret = d81access_read_sect(which, buffer, d81_offset, 512);
-	DEBUG("C65FDC: D81: reading sector (drive #%d) at d81_offset=%d, return value=%d" NL, which, d81_offset, ret);
+int fdc_cb_rd_sec ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector )
+{
+	const int ret = d81access_read_sect(which, buffer, side, track, sector, 512);
+	DEBUG("SDCARD: D81: reading sector at d81_pos=(%d,%d,%d), return value=%d" NL, side, track, sector, ret);
 	return ret;
 }
-int fdc_cb_wr_sec ( int which, Uint8 *buffer, int d81_offset ) {
-	int ret = d81access_write_sect(which, buffer, d81_offset, 512);
-	DEBUG("C65FDC: D81: writing sector (drive #%d) at d81_offset=%d, return value=%d" NL, which, d81_offset, ret);
+int fdc_cb_wr_sec ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector )
+{
+	const int ret = d81access_write_sect(which, buffer, side, track, sector, 512);
+	DEBUG("SDCARD: D81: writing sector at d81_pos=(%d,%d,%d), return value=%d" NL, side, track, sector, ret);
 	return ret;
 }
 
@@ -366,8 +368,8 @@ static void c65_init ( int sid_cycles_per_sec, int sound_mix_freq )
 	// Initialize D81 access abstraction for FDC
 	d81access_init();
 	atexit(d81access_close_all);
-	d81access_attach_fsobj(0, configdb.disk8, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (configdb.d81ro ? D81ACCESS_RO : 0));
-	d81access_attach_fsobj(1, configdb.disk9, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (configdb.d81ro ? D81ACCESS_RO : 0));
+	d81access_attach_fsobj(0, configdb.disk8, D81ACCESS_IMG | D81ACCESS_FAKE64 | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (configdb.d81ro ? D81ACCESS_RO : 0));
+	d81access_attach_fsobj(1, configdb.disk9, D81ACCESS_IMG | D81ACCESS_FAKE64 | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (configdb.d81ro ? D81ACCESS_RO : 0));
 	// SIDs, plus SDL audio
 	sid_init(&sids[0], sid_cycles_per_sec, sound_mix_freq);
 	sid_init(&sids[1], sid_cycles_per_sec, sound_mix_freq);

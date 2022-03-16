@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2015-2016,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2016,2020-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -133,6 +133,7 @@ int wd_attach_disk_image ( const char *fn )
 	int ro = O_RDONLY;
 	char wd_img_path_new[PATH_MAX];
 	int disk_fd_new = xemu_open_file(fn, O_RDWR, &ro, wd_img_path_new);
+	ro = (ro != XEMU_OPEN_FILE_FIRST_MODE_USED);
 	if (disk_fd_new <= 0) {
 		ERROR_WINDOW("Cannot open EXDOS disk because %s\n%s", ERRSTR(), fn);
 		return 1;

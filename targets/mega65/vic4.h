@@ -1,7 +1,7 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
-   Copyright (C)2020-2021 Hernán Di Pietro <hernan.di.pietro@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2020-2022 Hernán Di Pietro <hernan.di.pietro@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -116,6 +116,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_SPRPTR_B0			vic_registers[0x6C]
 #define REG_SPRPTR_B1			vic_registers[0x6D]
 #define REG_SPRPTR_B2			(vic_registers[0x6E] & 0x7F)
+#define REG_SPRITE_Y_ADJUST		vic_registers[0x72]
 //#define REG_SCREEN_ROWS		vic_registers[0x7B]
 //#define REG_PAL_RED_BASE		(vic_registers[0x100])
 //#define REG_PAL_GREEN_BASE		(vic_registers[0x200])
@@ -139,8 +140,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define COLOUR_RAM_OFFSET		((((Uint16)REG_COLPTR) | (REG_COLPTR_MSB) << 8))
 //#define IS_NTSC_MODE			(videostd_id)
 //#define SCREEN_STEP			(((Uint16)REG_LINESTEP) | (REG_LINESTEP_U8) << 8)
-#define SPRITE_POS_Y(n)			(vic_registers[1 + (n)*2])
-#define SPRITE_POS_X(n)			(((Uint16)vic_registers[(n)*2]) | ( (vic_registers[0x10] & (1 << (n)) ? 0x100 : 0)))
+#define SPRITE_POS_Y(n)			(((Uint16)vic_registers[1 + (n)*2]) | \
+								( (vic_registers[0x77] & (1 << (n)) ? 0x100 : 0)) | \
+								( (vic_registers[0x78] & (1 << (n)) ? 0x200 : 0)))
+#define SPRITE_POS_X(n)			(((Uint16)vic_registers[(n)*2]) | \
+								( (vic_registers[0x10] & (1 << (n)) ? 0x100 : 0)) | \
+								( (vic_registers[0x5f] & (1 << (n)) ? 0x200 : 0)))
 #define SPRITE_COLOR(n)			(vic_registers[0x27+(n)] & vic_color_register_mask)
 #define SPRITE_COLOR_4BIT(n)		(vic_registers[0x27+(n)] & 0xF)
 #define SPRITE_MULTICOLOR_1		(vic_registers[0x25] & vic_color_register_mask)
@@ -154,6 +159,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_EXTHEIGHT(n)		(vic_registers[0x55] & (1 << (n)))
 #define SPRITE_BITPLANE_ENABLE(n)	(((REG_SPRBPMEN_4_7) << 4 | REG_SPRBPMEN_0_3) & (1 << (n)))
 #define SPRITE_16BITPOINTER		(vic_registers[0x6E] & 0x80)
+#define SPRITE_V400(n)			(vic_registers[0x76] & (1 << (n)))
 //#define TEXT_MODE			(!REG_BMM)
 //#define HIRES_BITMAP_MODE		(REG_BMM & !REG_MCM & !REG_EBM)
 //#define MULTICOLOR_BITMAP_MODE	(REG_BMM & REG_MCM & !REG_EBM)
@@ -235,6 +241,7 @@ extern int   videostd_changed;
 extern Uint8 videostd_id;
 extern float videostd_1mhz_cycles_per_scanline;
 extern int   vic_readjust_sdl_viewport;
+extern int   vic4_disallow_video_std_change;
 
 extern int   vic_vidp_legacy, vic_chrp_legacy, vic_sprp_legacy;
 

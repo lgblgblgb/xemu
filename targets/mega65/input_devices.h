@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern void  clear_emu_events  ( void );
 extern Uint8 cia1_in_b         ( void );
 extern Uint8 cia1_in_a         ( void );
+extern void  input_init        ( void );
 extern int   emu_callback_key  ( int pos, SDL_Scancode key, int pressed, int handled );
 
 extern void  input_toggle_joy_emu  ( void );
@@ -30,6 +31,7 @@ extern Uint8 hwa_kbd_get_last      ( void );
 extern Uint8 hwa_kbd_get_modifiers ( void );
 extern void  hwa_kbd_move_next     ( void );
 extern void  hwa_kbd_fake_key      ( Uint8 k );
+extern void  hwa_kbd_disable_selector ( int state );
 
 extern void  virtkey               ( Uint8 rno, Uint8 scancode );
 

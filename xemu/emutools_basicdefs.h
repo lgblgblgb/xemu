@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_COMMON_EMUTOOLS_BASICDEFS_H_INCLUDED
 #define XEMU_COMMON_EMUTOOLS_BASICDEFS_H_INCLUDED
 
-#define COPYRIGHT_YEARS "2016-2021"
+#define COPYRIGHT_YEARS "2016-2022"
 
 #include <stdio.h>
 #include <limits.h>
@@ -248,7 +248,7 @@ static inline int xemu_byte_order_test ( void )
 
 #define BOOLEAN_VALUE(n)	(!!(n))
 
-extern const char *XEMU_BUILDINFO_ON, *XEMU_BUILDINFO_AT, *XEMU_BUILDINFO_GIT, *XEMU_BUILDINFO_CC, *XEMU_BUILDINFO_TARGET, *XEMU_BUILDINFO_CDATE;
+extern const char XEMU_BUILDINFO_ON[], XEMU_BUILDINFO_AT[], XEMU_BUILDINFO_GIT[], XEMU_BUILDINFO_CC[], XEMU_BUILDINFO_TARGET[], XEMU_BUILDINFO_CDATE[];
 extern const char emulators_disclaimer[];
 extern void xemu_dump_version ( FILE *fp, const char *slogan );
 extern int xemu_is_official_build ( void );

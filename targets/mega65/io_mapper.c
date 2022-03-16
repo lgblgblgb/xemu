@@ -1,7 +1,7 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    I/O decoding part (used by memory_mapper.h and DMA mainly)
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -28,8 +28,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "hypervisor.h"
 #include "ethernet65.h"
 #include "input_devices.h"
+#include "matrix_mode.h"
 #include "audio65.h"
 #include "configdb.h"
+#include "mega65.h"
 
 
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
@@ -38,14 +40,11 @@ Uint8  D7XX[0x100];			// FIXME: hack for future M65 stuffs like ALU! FIXME: no s
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 int    cpu_mega65_opcodes = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;
-int port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65 keyboard
+int    port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65 keyboard
 
 
 static const Uint8 fpga_firmware_version[] = { 'X','e','m','u' };
 static const Uint8 cpld_firmware_version[] = { 'N','o','w','!' };
-#define xemu_query_interface_str XEMU_BUILDINFO_CDATE
-static const char *xemu_query_interface_p = NULL;
-static int         xemu_query_gate = 0;
 
 
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
@@ -158,12 +157,12 @@ Uint8 io_read ( unsigned int addr )
 				return eth65_read_reg(addr);
 			switch (addr) {
 				case 0x7C:
-					return 0;			// emulate the "UART is ready" situation (used by newer kickstarts around from v0.11 or so)
+					return 0;			// emulate the "UART is ready" situation (used by some HICKUPs around from v0.11 or so)
 				case 0x7E:				// upgraded hypervisor signal
 					if (D6XX_registers[0x7E] == 0x80)	// 0x80 means for Xemu (not for a real M65!): ask the user!
 						D6XX_registers[0x7E] = QUESTION_WINDOW(
-							"Not upgraded yet, it can do it|Already upgraded, I test kicked state",
-							"Kickstart asks hypervisor upgrade state. What do you want Xemu to answer?\n"
+							"Not upgraded yet, it can do it|Already upgraded, I test hicked state",
+							"HICKUP asks hypervisor upgrade state. What do you want Xemu to answer?\n"
 							"(don't worry, it won't be asked again without RESET)"
 						) ? 0xFF : 0;
 					return D6XX_registers[0x7E];
@@ -191,27 +190,12 @@ Uint8 io_read ( unsigned int addr )
 				case 0x33:
 				case 0x34:
 				case 0x35:
-					if (xemu_query_gate == 0xF) {
-						Uint8 data = *xemu_query_interface_p;
-						//if (!data)
-						//	xemu_query_gate = 0;
-						return data;
-					} else {
-						return fpga_firmware_version[addr - 0x32];
-					}
+					return fpga_firmware_version[addr - 0x32];
 				case 0x2C: // D62C-D62F: CPLD firmware ID
 				case 0x2D:
 				case 0x2E:
 				case 0x2F:
-					if (xemu_query_gate == 0xF) {
-						Uint8 data = *xemu_query_interface_p++;
-						if (!data) {
-							xemu_query_gate = 0;
-						}
-						return data;
-					} else {
-						return cpld_firmware_version[addr - 0x2C];
-					}
+					return cpld_firmware_version[addr - 0x2C];
 				default:
 					DEBUG("MEGA65: reading MEGA65 specific I/O @ $D6%02X result is $%02X" NL, addr, D6XX_registers[addr]);
 					return D6XX_registers[addr];
@@ -252,43 +236,31 @@ Uint8 io_read ( unsigned int addr )
 		/* $DC00-$DCFF: CIA#1, EXTENDED COLOUR RAM */
 		/* --------------------------------------- */
 		case 0x0C:	// $DC00-$DCFF ~ C64 I/O mode
-			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x0800] : cia_read(&cia1, addr & 0xF);
 		case 0x1C:	// $DC00-$DCFF ~ C65 I/O mode
-			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x1800] : cia_read(&cia1, addr & 0xF);
 		case 0x3C:	// $DC00-$DCFF ~ M65 I/O mode
-			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x3800] : cia_read(&cia1, addr & 0xF);
+			return (vic_registers[0x30] & 1) ? colour_ram[0x400 + (addr & 0xFF)] : cia_read(&cia1, addr & 0xF);
 		/* --------------------------------------- */
 		/* $DD00-$DDFF: CIA#2, EXTENDED COLOUR RAM */
 		/* --------------------------------------- */
 		case 0x0D:	// $DD00-$DDFF ~ C64 I/O mode
-			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x0800] : cia_read(&cia2, addr & 0xF);
 		case 0x1D:	// $DD00-$DDFF ~ C65 I/O mode
-			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x1800] : cia_read(&cia2, addr & 0xF);
 		case 0x3D:	// $DD00-$DDFF ~ M65 I/O mode
-			return (vic_registers[0x30] & 1) ? colour_ram[addr - 0x3800] : cia_read(&cia2, addr & 0xF);
-		/* --------------------------------------------------- */
-		/* $DE00-$DFFF: IO exp, EXTENDED COLOUR RAM, SD buffer */
-		/* --------------------------------------------------- */
+			return (vic_registers[0x30] & 1) ? colour_ram[0x500 + (addr & 0xFF)] : cia_read(&cia2, addr & 0xF);
+		/* ----------------------------------------------------- */
+		/* $DE00-$DFFF: IO exp, EXTENDED COLOUR RAM, disk buffer */
+		/* ----------------------------------------------------- */
 		case 0x0E:	// $DE00-$DEFF ~ C64 I/O mode
 		case 0x0F:	// $DF00-$DFFF ~ C64 I/O mode
-			if (vic_registers[0x30] & 1)
-				return colour_ram[addr - 0x0800];
-			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED))
-				return sd_buffer[addr - 0x0E00];
-			return 0xFF;	// I/O exp is not supported
 		case 0x1E:	// $DE00-$DEFF ~ C65 I/O mode
 		case 0x1F:	// $DF00-$DFFF ~ C65 I/O mode
-			if (vic_registers[0x30] & 1)
-				return colour_ram[addr - 0x1800];
-			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED))
-				return sd_buffer[addr - 0x1E00];
-			return 0xFF;	// I/O exp is not supported
 		case 0x3E:	// $DE00-$DEFF ~ M65 I/O mode
 		case 0x3F:	// $DF00-$DFFF ~ M65 I/O mode
+			// FIXME: is it really true for *ALL* I/O modes, that colour RAM expansion to 2K and
+			// disk buffer I/O mapping works in all of them??
 			if (vic_registers[0x30] & 1)
-				return colour_ram[addr - 0x3800];
+				return colour_ram[0x600 + (addr & 0x1FF)];
 			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED))
-				return sd_buffer[addr - 0x3E00];
+				return disk_buffer_io_mapped[addr & 0x1FF];
 			return 0xFF;	// I/O exp is not supported
 		/* --------------------------------------------------------------- */
 		/* $2xxx I/O area is not supported: FIXME: what is that for real?! */
@@ -416,10 +388,16 @@ void io_write ( unsigned int addr, Uint8 data )
 				case 0x10:	// ASCII kbd last press value to zero whatever the written data would be
 					hwa_kbd_move_next();
 					return;
+				case 0x11:
+					hwa_kbd_disable_selector(data & 0x80);
+					return;
 				case 0x15:
 				case 0x16:
 				case 0x17:
 					virtkey(addr - 0x15, data & 0x7F);
+					return;
+				case 0x72:	// "$D672.6 HCPU:MATRIXEN Enable composited Matrix Mode, and disable UART access to serial monitor."
+					matrix_mode_toggle(data & 0x40);
 					return;
 				case 0x7C:					// hypervisor serial monitor port
 					hypervisor_serial_monitor_push_char(data);
@@ -437,27 +415,18 @@ void io_write ( unsigned int addr, Uint8 data )
 					return;
 				case 0x7E:
 					D6XX_registers[0x7E] = 0xFF;	// iomap.txt: "Hypervisor already-upgraded bit (sets permanently)"
-					DEBUG("MEGA65: Writing already-kicked register $%04X!" NL, addr);
-					hypervisor_debug_invalidate("$D67E was written, maybe new kickstart will boot!");
+					DEBUG("MEGA65: Writing already-hicked register $%04X!" NL, addr);
+					hypervisor_debug_invalidate("$D67E was written, maybe new HICKUP will boot!");
 					return;
 				case 0x7F:	// hypervisor leave
 					hypervisor_leave();	// 0x67F is also handled on enter's state, so it will be executed only in_hypervisor mode, which is what I want
 					return;
-				case 0x32:
-				case 0x33:
-				case 0x34:
-				case 0x35:
-					if (data == (cpld_firmware_version[addr - 0x32] ^ fpga_firmware_version[addr - 0x32])) {
-						DEBUG("QUERY: before gating: %X" NL, xemu_query_gate);
-						xemu_query_gate |= (1 << (addr - 0x32));
-						if (xemu_query_gate == 0xF)
-							xemu_query_interface_p = xemu_query_interface_str;
-					} else {
-						xemu_query_gate = 0;
+				case 0xCF:
+					if (data == 0x42) {
+						if (ARE_YOU_SURE("FPGA reconfiguration request. System must be reset.\nIs it OK to do now?\nAnswering NO may crash your program requesting this task though,\nor can result in endless loop of trying.", ARE_YOU_SURE_DEFAULT_YES)) {
+							reset_mega65();
+						}
 					}
-					DEBUG("QUERY: $D6%02X reg written with data %02X excepted %02X gate is %1X ptr is %p" NL,
-							addr, data, cpld_firmware_version[addr - 0x32] ^ fpga_firmware_version[addr - 0x32],
-							xemu_query_gate, xemu_query_interface_p);
 					return;
 				default:
 					DEBUG("MEGA65: this I/O port is not emulated in Xemu yet: $D6%02X (tried to be written with $%02X)" NL, addr, data);
@@ -503,20 +472,10 @@ void io_write ( unsigned int addr, Uint8 data )
 		/* $DC00-$DCFF: CIA#1, EXTENDED COLOUR RAM */
 		/* --------------------------------------- */
 		case 0x0C:	// $DC00-$DCFF ~ C64 I/O mode
-			if (vic_registers[0x30] & 1)
-				colour_ram[addr - 0x0800] = data;
-			else
-				cia_write(&cia1, addr & 0xF, data);
-			return;
 		case 0x1C:	// $DC00-$DCFF ~ C65 I/O mode
-			if (vic_registers[0x30] & 1)
-				colour_ram[addr - 0x1800] = data;
-			else
-				cia_write(&cia1, addr & 0xF, data);
-			return;
 		case 0x3C:	// $DC00-$DCFF ~ M65 I/O mode
 			if (vic_registers[0x30] & 1)
-				colour_ram[addr - 0x3800] = data;
+				colour_ram[0x400 + (addr & 0xFF)] = data;
 			else
 				cia_write(&cia1, addr & 0xF, data);
 			return;
@@ -524,56 +483,30 @@ void io_write ( unsigned int addr, Uint8 data )
 		/* $DD00-$DDFF: CIA#2, EXTENDED COLOUR RAM */
 		/* --------------------------------------- */
 		case 0x0D:	// $DD00-$DDFF ~ C64 I/O mode
-			if (vic_registers[0x30] & 1)
-				colour_ram[addr - 0x0800] = data;
-			else
-				cia_write(&cia2, addr & 0xF, data);
-			return;
 		case 0x1D:	// $DD00-$DDFF ~ C65 I/O mode
-			if (vic_registers[0x30] & 1)
-				colour_ram[addr - 0x1800] = data;
-			else
-				cia_write(&cia2, addr & 0xF, data);
-			return;
 		case 0x3D:	// $DD00-$DDFF ~ M65 I/O mode
 			if (vic_registers[0x30] & 1)
-				colour_ram[addr - 0x3800] = data;
+				colour_ram[0x500 + (addr & 0xFF)] = data;
 			else
 				cia_write(&cia2, addr & 0xF, data);
 			return;
-		/* --------------------------------------------------- */
-		/* $DE00-$DFFF: IO exp, EXTENDED COLOUR RAM, SD buffer */
-		/* --------------------------------------------------- */
+		/* ----------------------------------------------------- */
+		/* $DE00-$DFFF: IO exp, EXTENDED COLOUR RAM, disk buffer */
+		/* ----------------------------------------------------- */
 		case 0x0E:	// $DE00-$DEFF ~ C64 I/O mode
 		case 0x0F:	// $DF00-$DFFF ~ C64 I/O mode
-			if (vic_registers[0x30] & 1) {
-				colour_ram[addr - 0x0800] = data;
-				return;
-			}
-			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED)) {
-				sd_buffer[addr - 0x0E00] = data;
-				return;
-			}
-			return;		// I/O exp is not supported
 		case 0x1E:	// $DE00-$DEFF ~ C65 I/O mode
 		case 0x1F:	// $DF00-$DFFF ~ C65 I/O mode
-			if (vic_registers[0x30] & 1) {
-				colour_ram[addr - 0x1800] = data;
-				return;
-			}
-			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED)) {
-				sd_buffer[addr - 0x1E00] = data;
-				return;
-			}
-			return;		// I/O exp is not supported
 		case 0x3E:	// $DE00-$DEFF ~ M65 I/O mode
 		case 0x3F:	// $DF00-$DFFF ~ M65 I/O mode
+			// FIXME: is it really true for *ALL* I/O modes, that colour RAM expansion to 2K and
+			// disk buffer I/O mapping works in all of them??
 			if (vic_registers[0x30] & 1) {
-				colour_ram[addr - 0x3800] = data;
+				colour_ram[0x600 + (addr & 0x1FF)] = data;
 				return;
 			}
 			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED)) {
-				sd_buffer[addr - 0x3E00] = data;
+				disk_buffer_io_mapped[addr & 0x1FF] = data;
 				return;
 			}
 			return;		// I/O exp is not supported
@@ -587,7 +520,6 @@ void io_write ( unsigned int addr, Uint8 data )
 			FATAL("Xemu internal error: undecoded I/O area writing for address $(%X)%03X and data $%02X", addr >> 8, addr & 0xFFF, data);
 	}
 }
-
 
 
 Uint8 io_dma_reader ( int addr ) {

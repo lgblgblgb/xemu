@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -44,6 +44,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define SD_ST_SDHC	0x10
 
+#define SD_BUFFER_POS 0x0E00
+#define FD_BUFFER_POS 0x0C00
+
 
 static int	sdfd;			// SD-card controller emulation, UNIX file descriptor of the open image file
 Uint8		sd_status;		// SD-status byte
@@ -67,12 +70,15 @@ static int	keep_busy = 0;
 // 4K buffer space: Actually the SD buffer _IS_ inside this, also the F011 buffer should be (FIXME: that is not implemented yet right now!!)
 Uint8		disk_buffers[0x1000];
 static Uint8	sd_fill_buffer[512];	// Only used by the sd fill mode write command
+Uint8		*disk_buffer_cpu_view;
+// FIXME/TODO: unfortunately it seems I/O mapping of SD-buffer is buggy even on
+// real MEGA65 and the new code to have mapping allowing FD _and_ SD buffer mount
+// causes problems. So let's revert back to a fixed "SD-only" solution for now.
+Uint8		*disk_buffer_io_mapped = disk_buffers + SD_BUFFER_POS;
 
 static char	external_d81[PATH_MAX + 1];
 
 const char	xemu_external_d81_signature[] = "\xFF\xFE<{[(XemuExternalDiskMagic)]}>";
-
-Uint8 sd_reg9;
 
 
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
@@ -220,25 +226,26 @@ static inline void virtdisk_read_block ( Uint32 block, Uint8 *buffer )
 
 
 // define the callback, d81access call this, we can dispatch the change in FDC config to the F011 core emulation this way, automatically
-void d81access_cb_chgmode ( int which, int mode ) {
-	int have_disk = ((mode & 0xFF) != D81ACCESS_EMPTY);
-	int can_write = (!(mode & D81ACCESS_RO));
+void d81access_cb_chgmode ( const int which, const int mode ) {
+	const int have_disk = ((mode & 0xFF) != D81ACCESS_EMPTY);
+	const int can_write = (!(mode & D81ACCESS_RO));
 	if (which < 2)
 		DEBUGPRINT("SDCARD: configuring F011 FDC (#%d) with have_disk=%d, can_write=%d" NL, which, have_disk, can_write);
 	fdc_set_disk(which, have_disk, can_write);
 }
 // Here we implement F011 core's callbacks using d81access (and yes, F011 uses 512 bytes long sectors for real)
-int fdc_cb_rd_sec ( int which, Uint8 *buffer, int d81_offset ) {
-	int ret = d81access_read_sect(which, buffer, d81_offset, 512);
-	DEBUG("SDCARD: D81: reading sector at d81_offset=%d, return value=%d" NL, d81_offset, ret);
+int fdc_cb_rd_sec ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector )
+{
+	const int ret = d81access_read_sect(which, buffer, side, track, sector, 512);
+	DEBUG("SDCARD: D81: reading sector at d81_pos=(%d,%d,%d), return value=%d" NL, side, track, sector, ret);
 	return ret;
 }
-int fdc_cb_wr_sec ( int which, Uint8 *buffer, int d81_offset ) {
-	int ret = d81access_write_sect(which, buffer, d81_offset, 512);
-	DEBUG("SDCARD: D81: writing sector at d81_offset=%d, return value=%d" NL, d81_offset, ret);
+int fdc_cb_wr_sec ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector )
+{
+	const int ret = d81access_write_sect(which, buffer, side, track, sector , 512);
+	DEBUG("SDCARD: D81: writing sector at d81_pos=(%d,%d,%d), return value=%d" NL, side, track, sector, ret);
 	return ret;
 }
-
 
 
 static void sdcard_shutdown ( void )
@@ -298,12 +305,21 @@ int sdcard_hack_mount_drive_9_now ( const char *disk9 )
 	// FIXME: Ugly hack to support CLI forced drive-9 disk
 	// FIXME: See ui.c for explanation at function ui_attach_d81()
 	// FIXME: This function must die!
-	return d81access_attach_fsobj(1, disk9, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE);
+	return d81access_attach_fsobj(1, disk9, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | D81ACCESS_D64 | D81ACCESS_D71 );
 }
+
+
+static XEMU_INLINE void set_disk_buffer_cpu_view ( void )
+{
+	disk_buffer_cpu_view =  disk_buffers + ((D6XX_registers[0x89] & 0x80) ? SD_BUFFER_POS : FD_BUFFER_POS);
+}
+
 
 
 int sdcard_init ( const char *fn, const char *extd81fn, int virtsd_flag )
 {
+	memset(D6XX_registers + 0x80, 0, 0x30);
+	set_disk_buffer_cpu_view();		// make sure to initialize disk_buffer_cpu_view based on current sd_regs[9] otherwise disk_buffer_cpu_view may points to NULL when referenced!
 	int just_created_image_file =  0;	// will signal to format image automatically for the user (if set, by default it's clear, here)
 	char fnbuf[PATH_MAX + 1];
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
@@ -316,6 +332,7 @@ int sdcard_init ( const char *fn, const char *extd81fn, int virtsd_flag )
 	sdcard_set_external_d81_name(extd81fn);
 	d81access_init();
 	atexit(sdcard_shutdown);
+	fdc_init(disk_buffers + FD_BUFFER_POS);	// initialize F011 emulation
 	KEEP_BUSY(0);
 	sd_status = 0;
 	fd_mounted = 0;
@@ -340,6 +357,7 @@ int sdcard_init ( const char *fn, const char *extd81fn, int virtsd_flag )
 retry:
 	sd_is_read_only = O_RDONLY;
 	sdfd = xemu_open_file(fn, O_RDWR, &sd_is_read_only, fnbuf);
+	sd_is_read_only = (sd_is_read_only != XEMU_OPEN_FILE_FIRST_MODE_USED);
 	if (sdfd < 0) {
 		int r = errno;
 		ERROR_WINDOW("Cannot open SD-card image %s, SD-card access won't work! ERROR: %s", fnbuf, strerror(r));
@@ -366,7 +384,7 @@ retry:
 		}
 	} else {
 		if (sd_is_read_only)
-			INFO_WINDOW("Image file %s could be open only in R/O mode", fnbuf);
+			INFO_WINDOW("SDCARD: image file %s could be open only in R/O mode!", fnbuf);
 		else
 			DEBUG("SDCARD: image file re-opened in RD/WR mode, good" NL);
 		// Check size!
@@ -477,6 +495,11 @@ static Uint8 sdcard_read_status ( void )
 {
 	Uint8 ret = sd_status;
 	DEBUG("SDCARD: reading SD status $D680 result is $%02X PC=$%04X" NL, ret, cpu65.pc);
+	// Suggested by @Jimbo on MEGA65/Xemu Discord: a workaround to report busy status
+	// if external SD bus is used, always when reading status. It seems to be needed now
+	// with newer hyppo, otherwise it misinterprets the SDHC detection method on the external bus!
+	if (ret & SD_ST_EXT_BUS)
+		ret |= SD_ST_BUSY1 | SD_ST_BUSY0;
 #ifdef USE_KEEP_BUSY
 	if (!keep_busy)
 		sd_status &= ~(SD_ST_BUSY1 | SD_ST_BUSY0);
@@ -491,7 +514,7 @@ static XEMU_INLINE Uint8 *get_buffer_memory ( int is_write )
 {
 	// Currently the only buffer available in Xemu is the SD buffer, UNLESS it's a write operation and "fill mode" is used
 	// (sd_fill_buffer is just filled with a single byte value)
-	return (is_write && sd_fill_mode) ? sd_fill_buffer : sd_buffer;
+	return (is_write && sd_fill_mode) ? sd_fill_buffer : (disk_buffers + SD_BUFFER_POS);
 }
 
 
@@ -718,38 +741,12 @@ static void sdcard_command ( Uint8 cmd )
 }
 
 
-// Note: off_t for "block" is requirement of the FDC core framework, not so much sdcard.c, where it's used as Uint32
-// XXX FIXME -> which is not used!
-static int on_sd_fdc_read_block_cb ( int which, void *buffer, off_t offset, int sector_size )
-{
-	if (XEMU_UNLIKELY(which))
-		FATAL("on_sd_fdc_read_block_cb() must not be called with drive != 0");
-	if (XEMU_UNLIKELY(sector_size != 512))
-		FATAL("Invalid sector size in fdc read CB: %d" NL, sector_size);
-	if (XEMU_UNLIKELY(offset & 511))
-		FATAL("Invalid offset in fdc read CB" NL);
-	return sdcard_read_block((Uint32)(offset >> 9), buffer);
-}
-
-// XXX FIXME -> which is not used!
-static int on_sd_fdc_write_block_cb ( int which, void *buffer, off_t offset, int sector_size )
-{
-	if (XEMU_UNLIKELY(which))
-		FATAL("on_sd_fdc_write_block_cb() must not be called with drive != 0");
-	if (XEMU_UNLIKELY(sector_size != 512))
-		FATAL("Invalid sector size in fdc write CB: %d" NL, sector_size);
-	if (XEMU_UNLIKELY(offset & 511))
-		FATAL("Invalid offset in fdc read CB" NL);
-	return sdcard_write_block((Uint32)(offset >> 9), buffer);
-}
-
-
 int mount_external_d81 ( const char *name, int force_ro )
 {
 	// Let fsobj func guess the "name" being image, a program file, or an FS directory
 	// In addition, pass AUTOCLOSE parameter, as it will be managed by d81access subsys, not sdcard level!
 	// This is the opposite situation compared to mount_internal_d81() where an sdcard.c managed FD is passed only.
-	int ret = d81access_attach_fsobj(0, name, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (force_ro ? D81ACCESS_RO : 0));
+	int ret = d81access_attach_fsobj(0, name, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | (force_ro ? D81ACCESS_RO : 0) | D81ACCESS_D64 | D81ACCESS_D71);
 	if (!ret)
 		fd_mounted = 1;
 	else
@@ -760,7 +757,7 @@ int mount_external_d81 ( const char *name, int force_ro )
 
 static int mount_internal_d81 ( int force_ro )
 {
-	unsigned int block = U8A_TO_U32(sd_d81_img1_start);
+	const unsigned int block = U8A_TO_U32(sd_d81_img1_start);
 	if (XEMU_UNLIKELY(block + (D81_SIZE >> 9) >= sdcard_size_in_blocks || block <= 0)) {
 		DEBUGPRINT("SDCARD: D81: image is outside of the SD-card boundaries! Refusing to mount." NL);
 		return -1;
@@ -769,7 +766,7 @@ static int mount_internal_d81 ( int force_ro )
 	//       which can be used in the future to trigger external mount with native-M65 in-emulator tools, instead of emulator controls externally (like -8 option).
 	// Do not use D81ACCESS_AUTOCLOSE here! It would cause to close the sdfd by d81access on umount, thus even our SD card image is closed!
 	// Also, let's inherit the possible read-only status of our SD image, of course.
-	d81access_attach_cb(0, (off_t)block << 9, on_sd_fdc_read_block_cb, (sd_is_read_only || force_ro) ? NULL : on_sd_fdc_write_block_cb);
+	d81access_attach_fd(0, sdfd, (off_t)block << 9, D81ACCESS_IMG | ((sd_is_read_only || force_ro) ? D81ACCESS_RO : 0));	// do not use D81ACCESS_AUTOCLOSE, as it would close the SD fd!
 	return 0;
 }
 
@@ -855,8 +852,7 @@ void sdcard_write_register ( int reg, Uint8 data )
 				memset(sd_fill_buffer, sd_fill_value, 512);
 			break;
 		case 0x09:
-			sd_reg9 = data;
-			// FIXME: bit7 of reg9 is buffer select?! WHAT is THAT?! [f011sd_buffer_select]  btw, bit2 seems to be some "handshake" stuff ...
+			set_disk_buffer_cpu_view();	// update disk_buffer_cpu_view pointer according to sd_regs[9] just written
 			break;
 		case 0xB:
 			sdcard_mount_d81(data);
@@ -893,7 +889,7 @@ Uint8 sdcard_read_register ( int reg )
 			data = sdcard_bytes_read & 0xFF;
 			break;
 		case 9:
-			return sd_reg9;
+			data = D6XX_registers[reg + 0x80];
 #if 0
 			// SDcard read bytes hi byte
 			data = sdcard_bytes_read >> 8;

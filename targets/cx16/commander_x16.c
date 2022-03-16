@@ -368,12 +368,13 @@ int main ( int argc, char **argv )
 	);
 	// --- memory initialization ---
 	init_ram(configdb.hiramsize);
-	vera_init();
+	memset(rom, 0, sizeof rom);
 	if (
 		load_rom(configdb.rom)
 	)
 		return 1;
 	// Continue with initializing ...
+	vera_init();
 	clear_emu_events();	// also resets the keyboard
 	cpu65_reset();	// reset CPU: it must be AFTER kernal is loaded at least, as reset also fetches the reset vector into PC ...
 	// Initiailize VIAs.

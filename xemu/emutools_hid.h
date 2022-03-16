@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -40,6 +40,7 @@ extern void hid_keymap_from_config_file ( const char *fn );
 
 extern Uint8 kbd_matrix[16];
 extern int   hid_show_osd_keys;
+extern int   hid_joy_on_cursor_keys;
 
 #define KBD_CLEAR_MATRIX()      memset(kbd_matrix, 0xFF, sizeof kbd_matrix)
 #define KBD_PRESS_KEY(a)        kbd_matrix[(a) >> 4] &= ~(1 << ((a) & 0x7))
@@ -58,9 +59,18 @@ extern int  emu_callback_key		( int pos, SDL_Scancode key, int pressed, int hand
 // Optinally can be defined by the emulator:
 extern void emu_dropfile_callback	( const char *fn );
 extern void emu_quit_callback		( void );
-extern void emu_callback_key_raw_sdl	( SDL_KeyboardEvent *ev );
-extern void emu_callback_key_texteditng_sdl ( SDL_TextEditingEvent *ev );
-extern void emu_callback_key_textinput_sdl  ( SDL_TextInputEvent   *ev );
+
+typedef int (*hid_sdl_keyboard_event_callback_t  ) (SDL_KeyboardEvent*   );	// REMOVED: void emu_callback_key_raw_sdl         ( SDL_KeyboardEvent*   )
+typedef int (*hid_sdl_textediting_event_callback_t)(SDL_TextEditingEvent*);	// REMOVED: void emu_callback_key_textediting_sdl ( SDL_TextEditingEvent*);
+typedef int (*hid_sdl_textinput_event_callback_t  )(SDL_TextInputEvent*  );	// REMOVED: void emu_callback_key_textinput_sdl   ( SDL_TextInputEvent*  );
+
+extern void hid_register_sdl_keyboard_event_callback	( const unsigned int level, hid_sdl_keyboard_event_callback_t    cb );
+extern void hid_register_sdl_textediting_event_callback	( const unsigned int level, hid_sdl_textediting_event_callback_t cb );
+extern void hid_register_sdl_textinput_event_callback	( const unsigned int level, hid_sdl_textinput_event_callback_t   cb );
+
+#define HID_CB_LEVEL_CORE	0
+#define HID_CB_LEVEL_CONSOLE	1
+#define HID_CB_LEVEL_EMU	2
 
 extern void hid_sdl_synth_key_event	( int matrix_pos, int is_press );
 
@@ -105,5 +115,9 @@ extern void hid_handle_all_sdl_events   ( void ) ;
 	{ SDL_SCANCODE_KP_2,	XEMU_EVENT_FAKE_JOY_DOWN,	"XEMU-JOY-DOWN" },	/* for joy DOWN  we map PC num keypad 2 */ \
 	{ SDL_SCANCODE_KP_4,	XEMU_EVENT_FAKE_JOY_LEFT,	"XEMU-JOY-LEFT" },	/* for joy LEFT  we map PC num keypad 4 */ \
 	{ SDL_SCANCODE_KP_6,	XEMU_EVENT_FAKE_JOY_RIGHT,	"XEMU-JOY-RIGHT" }	/* for joy RIGHT we map PC num keypad 6 */
+
+#if defined(CONFIG_KBD_ALSO_TEXTEDITING_SDL_CALLBACK) || defined(CONFIG_KBD_ALSO_TEXTINPUT_SDL_CALLBACK) || defined(CONFIG_KBD_ALSO_RAW_SDL_CALLBACK)
+#error "Feature request macros CONFIG_KBD_ALSO_TEXTEDITING_SDL_CALLBACK / CONFIG_KBD_ALSO_TEXTINPUT_SDL_CALLBACK / CONFIG_KBD_ALSO_RAW_SDL_CALLBACK has been **REMOVED**, emulator code **MUST** be reworked for the new API!"
+#endif
 
 #endif

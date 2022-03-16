@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "xemu/cpu65.h"
 #include "xemu/f011_core.h"
+#include "xemu/d81access.h"
 #include "dma65.h"
 #include "xemu/emutools_hid.h"
 #include "vic4.h"
@@ -43,6 +44,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "configdb.h"
 #include "xemu/emutools_socketapi.h"
 
+// "Typical" size in default settings (video standard is PAL, default border settings).
+// See also vic4.h
+// It's just here to give an initial window size. Though if it's not the same what
+// hyppo/ROM will set, then soon you see a resize event which is kinda "ugly" for a
+// second. Thus I try to setup some typical value which is the final result in most
+// cases.
+#define	INITIAL_WINDOW_WIDTH	705
+#define	INITIAL_WINDOW_HEIGHT	576
 
 static int nmi_level;			// please read the comment at nmi_set() below
 
@@ -63,6 +72,7 @@ static const char emulator_paused_title[] = "TRACE/PAUSE";
 static char emulator_speed_title[64] = "";
 static char fast_mhz_in_string[16] = "";
 static const char *cpu_clock_speed_strs[4] = { "1MHz", "2MHz", "3.5MHz", fast_mhz_in_string };
+const char *cpu_clock_speed_string = "";
 static unsigned int cpu_clock_speed_str_index = 0;
 static unsigned int cpu_cycles_per_scanline;
 static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
@@ -136,8 +146,8 @@ void machine_set_speed ( int verbose )
 				cpu65_set_timing(2);
 				break;
 		}
-		// XXX use only DEBUG() here!
-		DEBUGPRINT("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_strs[cpu_clock_speed_str_index], cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
+		cpu_clock_speed_string = cpu_clock_speed_strs[cpu_clock_speed_str_index];
+		DEBUG("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_string, cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
 		if (cpu_cycles_per_step > 1)	// if in trace mode, do not set this!
 			cpu_cycles_per_step = cpu_cycles_per_scanline;
 	}
@@ -315,6 +325,7 @@ static void mega65_init ( void )
 		VIRTUAL_SHIFT_POS,
 		SDL_ENABLE		// joy HID events enabled
 	);
+	input_init();
 #ifdef HID_KBD_MAP_CFG_SUPPORT
 	hid_keymap_from_config_file(configdb.keymap);
 #endif
@@ -394,7 +405,7 @@ static void mega65_init ( void )
 		} else
 			free(fn);
 	}
-	// *** Image file for SDCARD support
+	// *** Image file for SDCARD support, and other related init functions handled there as well (eg d81access, fdc init ... related registers, etc)
 	if (sdcard_init(configdb.sdimg, configdb.disk8, configdb.virtsd) < 0)
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
@@ -421,8 +432,6 @@ static void mega65_init ( void )
 	cia2.DDRA = 3; // Ugly workaround ... I think, SD-card setup "CRAM UTIL" (or better: the kickstart) should set this by its own. Maybe Xemu bug, maybe not?
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
 	dma_init(newhack ? DMA_FEATURE_HACK | DMA_FEATURE_DYNMODESET | configdb.dmarev : configdb.dmarev);
-	// Initialize FDC
-	fdc_init(disk_buffers + FD_BUFFER_POS);
 	//
 	sdcard_hack_mount_drive_9_now(configdb.disk9);	// FIXME: Ugly hack to support CLI forced drive-9 disk
 #ifdef HAS_UARTMON_SUPPORT
@@ -495,6 +504,7 @@ static void shutdown_callback ( void )
 
 void reset_mega65 ( void )
 {
+	hwa_kbd_disable_selector(0);	// FIXME: do we need this, or hyppo will make it so for us?
 	eth65_reset();
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0xFF;
@@ -784,7 +794,8 @@ int main ( int argc, char **argv )
 		1,				// resizable window
 		TEXTURE_WIDTH, TEXTURE_HEIGHT,	// texture sizes
 		TEXTURE_WIDTH, TEXTURE_HEIGHT,	// logical size (used with keeping aspect ratio by the SDL render stuffs)
-		TEXTURE_WIDTH, TEXTURE_HEIGHT,	// window size
+		INITIAL_WINDOW_WIDTH,		// window size
+		INITIAL_WINDOW_HEIGHT,		// -- "" --
 		TEXTURE_FORMAT,			// pixel format
 		0,				// we have *NO* pre-defined colours as with more simple machines (too many we need). we want to do this ourselves!
 		NULL,				// -- "" --
