@@ -658,10 +658,16 @@ int sdcontent_handle ( Uint32 size_in_blocks, const char *update_dir_path, int o
 		r |= update_sdcard_file(MEGA65_ROM_NAME,	options | SDCONTENT_SYS_FILE,	rom_path,				-MEGA65_ROM_SIZE);
 		snprintf(rom_path, sizeof rom_path, "%s%s", sdl_pref_dir, CHAR_ROM_NAME);
 		r |= update_sdcard_file(CHAR_ROM_NAME,		options | SDCONTENT_SYS_FILE,	rom_path,				-CHAR_ROM_SIZE);
-		r |= update_sdcard_file("BANNER.M65",		options,			(const char*)meminitdata_banner,	MEMINITDATA_BANNER_SIZE);
-		r |= update_sdcard_file("FREEZER.M65",		options,			(const char*)meminitdata_freezer,	MEMINITDATA_FREEZER_SIZE);
+
+		// Update system files based on the structure in memcontent.c and .h
+		for (int a = 0; a < MEMINITDATA_SDFILES_ITEMS; a++)
+			r |= update_sdcard_file(meminitdata_sdfiles_db[a].fn, options, (const char*)meminitdata_sdfiles_db[a].p, meminitdata_sdfiles_db[a].size);
+		//r |= update_sdcard_file("BANNER.M65",		options,			(const char*)meminitdata_banner,	MEMINITDATA_BANNER_SIZE);
+		//r |= update_sdcard_file("FREEZER.M65",	options,			(const char*)meminitdata_freezer,	MEMINITDATA_FREEZER_SIZE);
 		char *d81 = (char*)d81access_create_image(NULL, "D81 ON <SDCARD>!", 0);
-		xemu_save_file("@template.d81", d81, D81_SIZE, NULL);
+		// FIXME: deactivated now: no need for template, Xemu can create&mount D81s! (maybe we should remove this)
+		// ... also it's very confusing since template would have disk label D81 ON SDCARD as well, confusing people a lot
+		//xemu_save_file("@template.d81", d81, D81_SIZE, NULL);
 		r |= update_sdcard_file(default_disk_image,	options,			d81,					D81_SIZE);
 		strcpy(d81, xemu_external_d81_signature);
 		r |= update_sdcard_file(xemu_disk_image,	options,			d81,					D81_SIZE);

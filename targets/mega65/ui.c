@@ -309,6 +309,7 @@ static void reset_into_utility_menu ( void )
 	ERROR_WINDOW("Currently there are some problems using this function,\nIt's a known problem. You'll get empty screen after utility selection.\nOnce it's resolved this message will be removed from Xemu");
 	if (reset_mega65_asked()) {
 		rom_stubrom_requested = 0;
+		rom_initrom_requested = 0;
 		hwa_kbd_fake_key(0x20);
 		KBD_RELEASE_KEY(0x75);
 	}
@@ -318,6 +319,7 @@ static void reset_into_c64_mode ( void )
 {
 	if (reset_mega65_asked()) {
 		rom_stubrom_requested = 0;
+		rom_initrom_requested = 0;
 		// we need this, because autoboot disk image would bypass the "go to C64 mode" on 'Commodore key' feature
 		// this call will deny disk access, and re-enable on the READY. state.
 		inject_register_allow_disk_access();
@@ -338,6 +340,7 @@ static void reset_generic ( void )
 static void reset_into_xemu_stubrom ( void )
 {
 	if (reset_mega65_asked()) {
+		rom_initrom_requested = 0;
 		rom_stubrom_requested = 1;
 	}
 }
@@ -346,6 +349,7 @@ static void reset_into_xemu_initrom ( void )
 {
 	if (reset_mega65_asked()) {
 		rom_stubrom_requested = 0;
+		rom_initrom_requested = 1;
 	}
 }
 
@@ -353,6 +357,7 @@ static void reset_into_c65_mode_noboot ( void )
 {
 	if (reset_mega65_asked()) {
 		rom_stubrom_requested = 0;
+		rom_initrom_requested = 0;
 		inject_register_allow_disk_access();
 		KBD_RELEASE_KEY(0x75);
 		hwa_kbd_fake_key(0);

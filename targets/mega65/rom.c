@@ -30,6 +30,7 @@ int rom_is_stub = 0;
 sha1_hash_str rom_hash_str;
 
 int rom_stubrom_requested = 0;
+int rom_initrom_requested = 0;
 int rom_from_prefdir_allowed = 0;
 int rom_is_overriden = 0;
 int rom_is_external = 0;
@@ -57,6 +58,7 @@ void rom_clear_reports ( void )
 void rom_unset_requests ( void )
 {
 	rom_stubrom_requested = 0;
+	rom_initrom_requested = 0;
 	rom_load_custom(NULL);	// to cancel possible already set custom ROM
 }
 
@@ -254,6 +256,7 @@ int rom_load_custom ( const char *fn )
 		}
 		xemu_load_buffer_p = NULL;
 		rom_stubrom_requested = 0;
+		rom_initrom_requested = 0;
 		return 1;
 	}
 	DEBUGPRINT("ROM: custom ROM setting failed, not touching custom ROM request setting (now: %s)" NL, external_image ? "SET" : "UNSET");
@@ -272,6 +275,11 @@ int rom_do_override ( Uint8 *rom )
 	if (rom_stubrom_requested) {
 		DEBUGPRINT("ROM: using stub-ROM was forced" NL);
 		rom_make_xemu_stub_rom(rom, XEMU_STUB_ROM_SAVE_FILENAME);
+		goto overriden;
+	}
+	if (rom_initrom_requested) {
+		DEBUGPRINT("ROM: using init-ROM was forced" NL);
+		memcpy(rom, meminitdata_initrom, MEMINITDATA_INITROM_SIZE);
 		goto overriden;
 	}
 	if (external_image) {

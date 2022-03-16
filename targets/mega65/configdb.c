@@ -43,6 +43,7 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "hickuprep",	NULL, "Set path of hyper-debug REP file for external HICKUP", &configdb.hickuprep },
 	{ "extbanner",	NULL, "Use external initial memory content for banner", &configdb.extbanner },
 	{ "extcramutils",NULL,"Use external initial content (32K) into the colour RAM (\"cram-utils\")", &configdb.extcramutils },
+	{ "extinitrom",	NULL, "Use external init-ROM. Beware: this is not the normal ROM you may think!", &configdb.extinitrom },
 	{ "extchrwom",	NULL, "Use external initial memory content for char-WOM (WriteOnlyMemory)", &configdb.extchrwom },
 	{ "extflashutil",NULL,"Use external initial memory content for flashing utility", &configdb.extflashutil },
 	{ "extonboard",	NULL, "Use external initial memory content for the onboarding utility", &configdb.extonboard },

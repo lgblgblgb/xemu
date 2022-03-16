@@ -37,6 +37,7 @@ struct configdb_st {
 	char	*hickuprep;
 	char	*extbanner;
 	char	*extcramutils;
+	char	*extinitrom;
 	char	*extchrwom;
 	char	*extflashutil;
 	char	*extonboard;
