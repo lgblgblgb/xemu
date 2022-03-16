@@ -22,13 +22,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_gui.h"
 #include "mega65.h"
 #include "xemu/emutools_files.h"
-#include "xemu/d81access.h"
 #include "sdcard.h"
 #include "sdcontent.h"
 #include "xemu/emutools_hid.h"
 #include "xemu/c64_kbd_mapping.h"
 #include "inject.h"
 #include "input_devices.h"
+#include "matrix_mode.h"
 #include "uart_monitor.h"
 #include "xemu/f011_core.h"
 #include "dma65.h"
@@ -39,16 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "configdb.h"
 #include "rom.h"
 #include "hypervisor.h"
-
-
-static int attach_d81 ( const char *fn )
-{
-	return sdcard_force_external_mount(0, fn, "D81 mount failure");
-}
-
-
-// end of #if defined(CONFIG_DROPFILE_CALLBACK) || defined(XEMU_GUI_C)
-//#endif
+#include "xemu/cpu65.h"
 
 
 #ifdef CONFIG_DROPFILE_CALLBACK
@@ -57,7 +48,7 @@ void emu_dropfile_callback ( const char *fn )
 	DEBUGGUI("UI: file drop event, file: %s" NL, fn);
 	switch (QUESTION_WINDOW("Cancel|Mount as D81|Run/inject as PRG", "What to do with the dropped file?")) {
 		case 1:
-			attach_d81(fn);
+			sdcard_force_external_mount(0, fn, "D81 mount failure");
 			break;
 		case 2:
 			reset_mega65();
@@ -67,6 +58,11 @@ void emu_dropfile_callback ( const char *fn )
 }
 #endif
 
+static void ui_cb_attach_default_d81 ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
+	sdcard_default_d81_mount(VOIDPTR_TO_INT(m->user_data));
+}
 
 static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
 {
@@ -115,7 +111,6 @@ static void ui_cb_detach_d81 ( const struct menu_st *m, int *query )
 	sdcard_unmount(VOIDPTR_TO_INT(m->user_data));
 }
 
-
 static void ui_run_prg_by_browsing ( void )
 {
 	char fnbuf[PATH_MAX + 1];
@@ -160,7 +155,6 @@ static void ui_save_basic_as_text ( void )
 }
 #endif
 
-
 static void ui_format_sdcard ( void )
 {
 	if (ARE_YOU_SURE(
@@ -176,27 +170,36 @@ static void ui_format_sdcard ( void )
 	reset_mega65();
 }
 
+static char dir_rom[PATH_MAX + 1] = "";
 
 static void ui_update_sdcard ( void )
 {
 	char fnbuf[PATH_MAX + 1];
-	static char dir[PATH_MAX + 1] = "";
 	xemu_load_buffer_p = NULL;
-	if (!*dir)
-		strcpy(dir, sdl_pref_dir);
-	// Select ROM image
-	if (xemugui_file_selector(
-		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
-		"Select your ROM image",
-		dir,
-		fnbuf,
-		sizeof fnbuf
-	)) {
-		WARNING_WINDOW("Cannot update: you haven't selected a ROM image");
-		goto ret;
+	// Try default ROM
+	snprintf(fnbuf, sizeof fnbuf, "%sMEGA65.ROM", sdl_pref_dir);
+	int ask_rom;
+	if (xemu_os_file_exists(fnbuf))
+		ask_rom = QUESTION_WINDOW("Yes|No", "Use the previously installed ROM?");
+	else
+		ask_rom = 1;
+	if (ask_rom) {
+		if (!*dir_rom)
+			strcpy(dir_rom, sdl_pref_dir);
+		// Select ROM image
+		if (xemugui_file_selector(
+			XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
+			"Select your ROM image",
+			dir_rom,
+			fnbuf,
+			sizeof fnbuf
+		)) {
+			WARNING_WINDOW("Cannot update: you haven't selected a ROM image");
+			goto ret;
+		}
 	}
 	// Load selected ROM image into memory, also checks the size!
-	if (xemu_load_file(fnbuf, NULL, 0x20000, 0x20000, "Cannot begin image update, bad C65/M65 ROM image has been selected!") != 0x20000)
+	if (xemu_load_file(fnbuf, NULL, 0x20000, 0x20000, "Cannot start updating, bad C65/M65 ROM image has been selected!") != 0x20000)
 		goto ret;
 	// Check the loaded ROM: let's warn the user if it's open-ROMs, since it seems users are often confused to think,
 	// that's the right choice for every-day usage.
@@ -243,24 +246,17 @@ static void ui_update_sdcard ( void )
 		))
 			goto ret;
 	}
-	// Generate character ROM from the ROM image
-	Uint8 char_rom[CHAR_ROM_SIZE];
-	memcpy(char_rom + 0x0000, xemu_load_buffer_p + 0xD000, 0x1000);
-	memcpy(char_rom + 0x1000, xemu_load_buffer_p + 0x9000, 0x1000);
-	// And store our character ROM!
+	// store our character ROM
 	strcpy(fnbuf_target + strlen(sdl_pref_dir), CHAR_ROM_NAME);
 	if (xemu_save_file(
 		fnbuf_target,
-		char_rom,
+		xemu_load_buffer_p + 0xD000,
 		CHAR_ROM_SIZE,
 		"Cannot save the extracted CHAR ROM file for the updater"
 	))
 		goto ret;
 	// Call the updater :)
 	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES)) {
-		// this memcpy would not be needed ideally, as hyppo should load the new ROM, but it does not do that
-		// for some unknown reason. So we just copy the newly loaded ROM into the memory here ... :-/
-		memcpy(main_ram + 0x20000, xemu_load_buffer_p, 0x20000);
 		INFO_WINDOW(
 			"System files on your SD-card image seems to be updated successfully.\n"
 			"Next time you may need this function, you can use MEGA65.ROM which is a backup copy of your selected ROM.\n\n"
@@ -269,18 +265,50 @@ static void ui_update_sdcard ( void )
 		);
 	}
 	reset_mega65();
+	rom_unset_requests();
 ret:
 	if (xemu_load_buffer_p) {
 		free(xemu_load_buffer_p);
 		xemu_load_buffer_p = NULL;
 	}
-	rom_detect_date(main_ram + 0x20000);	// make sure we have the correct detected results again based on the actual memory content
+	// make sure we have the correct detected results again based on the actual memory content,
+	// since we've used the detect function on the to-be-loaded ROM to check
+	rom_detect_date(main_ram + 0x20000);
 }
 
+static void reset_via_hyppo ( void )
+{
+	if (ARE_YOU_SURE("Are you sure to HYPPO-RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
+		if (hypervisor_level_reset())
+			ERROR_WINDOW("Currently in hypervisor mode.\nNot possible to trigger a trap now");
+	}
+}
+
+static void reset_into_custom_rom ( void )
+{
+	char fnbuf[PATH_MAX + 1];
+	if (!*dir_rom)
+		strcpy(dir_rom, sdl_pref_dir);
+	// Select ROM image
+	if (xemugui_file_selector(
+		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		"Select ROM image",
+		dir_rom,
+		fnbuf,
+		sizeof fnbuf
+	))
+		return;
+	if (rom_load_custom(fnbuf)) {
+		if (!reset_mega65_asked())
+			WARNING_WINDOW("You refused reset, loaded ROM can be only activated at the next reset.");
+	}
+}
 
 static void reset_into_utility_menu ( void )
 {
+	ERROR_WINDOW("Currently there are some problems using this function,\nIt's a known problem. You'll get empty screen after utility selection.\nOnce it's resolved this message will be removed from Xemu");
 	if (reset_mega65_asked()) {
+		rom_stubrom_requested = 0;
 		hwa_kbd_fake_key(0x20);
 		KBD_RELEASE_KEY(0x75);
 	}
@@ -289,6 +317,7 @@ static void reset_into_utility_menu ( void )
 static void reset_into_c64_mode ( void )
 {
 	if (reset_mega65_asked()) {
+		rom_stubrom_requested = 0;
 		// we need this, because autoboot disk image would bypass the "go to C64 mode" on 'Commodore key' feature
 		// this call will deny disk access, and re-enable on the READY. state.
 		inject_register_allow_disk_access();
@@ -298,7 +327,7 @@ static void reset_into_c64_mode ( void )
 
 }
 
-static void reset_into_c65_mode ( void )
+static void reset_generic ( void )
 {
 	if (reset_mega65_asked()) {
 		KBD_RELEASE_KEY(0x75);
@@ -306,24 +335,46 @@ static void reset_into_c65_mode ( void )
 	}
 }
 
-static void reset_into_xemu_stub ( void )
+static void reset_into_xemu_stubrom ( void )
 {
 	if (reset_mega65_asked()) {
 		rom_stubrom_requested = 1;
 	}
 }
 
+static void reset_into_xemu_initrom ( void )
+{
+	if (reset_mega65_asked()) {
+		rom_stubrom_requested = 0;
+	}
+}
+
 static void reset_into_c65_mode_noboot ( void )
 {
 	if (reset_mega65_asked()) {
+		rom_stubrom_requested = 0;
 		inject_register_allow_disk_access();
 		KBD_RELEASE_KEY(0x75);
 		hwa_kbd_fake_key(0);
 	}
 }
 
+static void ui_cb_use_default_rom ( const struct menu_st *m, int *query )
+{
+	if (query) {
+		if (!rom_is_overriden)
+			*query |= XEMUGUI_MENUFLAG_HIDDEN | XEMUGUI_MENUFLAG_SEPARATOR;
+		return;
+	}
+	if (rom_is_overriden) {
+		if (reset_mega65_asked()) {
+			rom_unset_requests();
+		}
+	}
+}
+
 #ifdef HAS_UARTMON_SUPPORT
-static void ui_start_umon ( const struct menu_st *m, int *query )
+static void ui_cb_start_umon ( const struct menu_st *m, int *query )
 {
 	int is_active = uartmon_is_active();
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, is_active);
@@ -336,6 +387,18 @@ static void ui_start_umon ( const struct menu_st *m, int *query )
 }
 #endif
 
+static void ui_cb_matrix_mode ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, in_the_matrix);
+	matrix_mode_toggle(!in_the_matrix);
+}
+
+static void ui_cb_hdos_virt ( const struct menu_st *m, int *query )
+{
+	int status = hypervisor_hdos_virtualization_status(-1, NULL);
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, status);
+	(void)hypervisor_hdos_virtualization_status(!status, NULL);
+}
 
 static char last_used_dump_directory[PATH_MAX + 1] = "";
 
@@ -385,24 +448,39 @@ static void ui_emu_info ( void )
 {
 	char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
 	xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
+	sha1_hash_str rom_now_hash_str;
+	sha1_checksum_as_string(rom_now_hash_str, main_ram + 0x20000, 0x20000);
+	const char *hdos_root;
+	int hdos_virt = hypervisor_hdos_virtualization_status(-1, &hdos_root);
 	INFO_WINDOW(
 		"DMA chip current revision: %d (F018 rev-%s)\n"
-		"ROM version detected: %d %s\n"
+		"ROM version detected: %d %s (%s,%s)\n"
+		"ROM SHA1: %s (%s)\n"
+		"Last RESET type: %s\n"
+		"Hyppo version: %s (%s)\n"
+		"HDOS virtualization: %s, root = %s\n"
+		"Disk8 = %s\nDisk9 = %s\n"
 		"C64 'CPU' I/O port (low 3 bits): DDR=%d OUT=%d\n"
+		"Current PC: $%04X (linear: $%07X)\n"
 		"Current VIC and I/O mode: %s %s, hot registers are %s\n"
 		"\n"
 		"Xemu host CPU usage so far: %s\n"
 		"Xemu's host OS: %s"
 		,
 		dma_chip_revision, dma_chip_revision ? "B, new" : "A, old",
-		rom_date, rom_name,
+		rom_date, rom_name, rom_is_overriden ? "OVERRIDEN" : "installed", rom_is_external ? "external" : "internal",
+		rom_now_hash_str, strcmp(rom_hash_str, rom_now_hash_str) ? "MANGLED" : "intact",
+		last_reset_type,
+		hyppo_version_string, hickup_is_overriden ?  "OVERRIDEN" : "built-in",
+		hdos_virt ? "ON" : "OFF", hdos_root,
+		sdcard_get_mount_info(0, NULL), sdcard_get_mount_info(1, NULL),
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
+		cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc),
 		vic_iomode < 4 ? iomode_names[vic_iomode] : "?INVALID?", videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
 		td_stat_str,
 		xemu_get_uname_string()
 	);
 }
-
 
 static void ui_put_screen_text_into_paste_buffer ( void )
 {
@@ -425,7 +503,6 @@ static void ui_put_screen_text_into_paste_buffer ( void )
 	} else
 		INFO_WINDOW("Screen is empty, nothing to capture.");
 }
-
 
 static void ui_put_paste_buffer_into_screen_text ( void )
 {
@@ -452,13 +529,11 @@ no_clipboard:
 	ERROR_WINDOW("Clipboard query error, or clipboard was empty");
 }
 
-
 static void ui_cb_mono_downmix ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == stereo_separation);
 	audio_set_stereo_parameters(AUDIO_UNCHANGED_VOLUME, VOIDPTR_TO_INT(m->user_data));
 }
-
 
 static void ui_cb_audio_volume ( const struct menu_st *m, int *query )
 {
@@ -466,19 +541,21 @@ static void ui_cb_audio_volume ( const struct menu_st *m, int *query )
 	audio_set_stereo_parameters(VOIDPTR_TO_INT(m->user_data), AUDIO_UNCHANGED_VOLUME);
 }
 
-
-static void ui_video_standard ( const struct menu_st *m, int *query )
+static void ui_cb_video_standard ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == videostd_id);
-	Uint8 reg = vic_read_reg(0x6F);
-	if (m->user_data)
-		reg |= 0x80;
+	if (VOIDPTR_TO_INT(m->user_data))
+		vic_registers[0x6F] |= 0x80;
 	else
-		reg &= 0x7F;
+		vic_registers[0x6F] &= 0x7F;
 	configdb.force_videostd = -1;	// turn off possible CLI/config dictated force video mode, otherwise it won't work to change video standard ...
-	vic_write_reg(0x6F, reg);	// write VIC-IV register to trigger the stuff
 }
 
+static void ui_cb_video_standard_disallow_change ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, vic4_disallow_video_std_change);
+	vic4_disallow_video_std_change = vic4_disallow_video_std_change ? 0 : 2;
+}
 
 static void ui_cb_fullborders ( const struct menu_st *m, int *query )
 {
@@ -487,14 +564,12 @@ static void ui_cb_fullborders ( const struct menu_st *m, int *query )
 	vic_readjust_sdl_viewport = 1;		// To force readjust viewport on the next frame open.
 }
 
-
 static void ui_cb_sids_enabled ( const struct menu_st *m, int *query )
 {
 	const int mask = VOIDPTR_TO_INT(m->user_data);
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, (configdb.sidmask & mask));
 	configdb.sidmask ^= mask;
 }
-
 
 static void ui_cb_render_scale_quality ( const struct menu_st *m, int *query )
 {
@@ -505,15 +580,25 @@ static void ui_cb_render_scale_quality ( const struct menu_st *m, int *query )
 	register_new_texture_creation = 1;
 }
 
+#if 0
+static void ui_cb_displayenable ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, vic_registers[0x11] & 0x10);
+	vic_registers[0x11] ^= 0x10;
+}
+#endif
+
 
 /**** MENU SYSTEM ****/
 
 
 static const struct menu_st menu_video_standard[] = {
-	{ "PAL",			XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_video_standard, (void*)0 },
-	{ "NTSC",			XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_video_standard, (void*)1 },
+	{ "Disallow change by programs",XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_video_standard_disallow_change, NULL },
+	{ "PAL @ 50Hz",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_video_standard, (void*)0 },
+	{ "NTSC @ 60Hz",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_video_standard, (void*)1 },
 	{ NULL }
 };
 static const struct menu_st menu_window_size[] = {
@@ -556,17 +641,18 @@ static const struct menu_st menu_display[] = {
 	{ "OS paste buffer to screen",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_paste_buffer_into_screen_text },
 	{ NULL }
 };
-static const struct menu_st menu_sdcard[] = {
-	{ "Re-format SD image",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_format_sdcard },
-	{ "Update files on SD image",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_update_sdcard },
-	{ NULL }
-};
 static const struct menu_st menu_reset[] = {
-	{ "Reset M65",  		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode		},
-	{ "Reset M65 without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot	},
+	{ "Reset back to default ROM",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_use_default_rom, NULL				},
+	{ "Reset", 			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_generic		},
+	{ "Reset without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot	},
 	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu	},
 	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode		},
-	{ "Reset into Xemu stub-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_stub		},
+	{ "Reset into Xemu stub-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_stubrom	},
+	{ "Reset into boot init-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_initrom	},
+	{ "Reset via HYPPO",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_via_hyppo		},
+	{ "Reset CPU only",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_mega65_cpu_only	},
+	{ "Reset/use custom ROM file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_custom_rom	},
 	{ NULL }
 };
 static const struct menu_st menu_inputdevices[] = {
@@ -574,9 +660,9 @@ static const struct menu_st menu_inputdevices[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
 	{ "Use OSD key debugger",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
-	{ "Swap emulated joystick port",XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, input_toggle_joy_emu },
 	{ "Cursor keys as joystick",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&hid_joy_on_cursor_keys },
+	{ "Swap emulated joystick port",XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, input_toggle_joy_emu },
 #if 0
 	{ "Devices as joy port 2 (vs 1)",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_joy_devices },
 #endif
@@ -586,12 +672,36 @@ static const struct menu_st menu_debug[] = {
 #ifdef HAS_UARTMON_SUPPORT
 	{ "Start umon on " UMON_DEFAULT_PORT,
 					XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_start_umon, NULL },
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_start_umon, NULL },
+#endif
+#ifdef XEMU_ARCH_WIN
+	{ "System console",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_sysconsole, NULL },
+#endif
+	{ "Allow freezer trap",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&configdb.allowfreezer },
+	{ "Try external ROM first",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&rom_from_prefdir_allowed },
+	{ "HDOS virtualization",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_hdos_virt, NULL },
+#if 0
+	// removed now, because it's misleading, would require an xemu-restart anyway ...
+	{ "mega65.d81 mount from SD",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&configdb.defd81fromsd },
+#endif
+#if 0
+	{ "Display enable VIC reg",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_displayenable, NULL },
+#endif
+	{ "Matrix mode",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_matrix_mode, NULL },
+	{ "Emulation state info",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_emu_info },
+#ifdef HAVE_XEMU_EXEC_API
+	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_native_os_prefdir_browser, NULL },
 #endif
 	{ "Dump main RAM info file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_memory },
 	{ "Dump colour RAM into file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_colram },
 	{ "Dump hyperRAM into file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_hyperram },
-	{ "Emulation state info",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_emu_info },
 	{ NULL }
 };
 #ifdef HAVE_XEMU_EXEC_API
@@ -604,15 +714,40 @@ static const struct menu_st menu_help[] = {
 	{ NULL }
 };
 #endif
-static const struct menu_st menu_d81[] = {
-	{ "Attach user D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
+static const struct menu_st menu_sdcard[] = {
+	{ "Re-format SD image",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_format_sdcard },
+	{ "Update files on SD image",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_update_sdcard },
+	{ NULL }
+};
+static const struct menu_st menu_drv8[] = {
+	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_d81, (void*)0 },
-	{ "Create&attach D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_d81, (void*)(0 + 0x80) },
-	{ "Use internal D81 on drv-8",	XEMUGUI_MENUID_CALLABLE |
+	{ "Attach default D81",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_default_d81, (void*)0 },
+	{ "Detach D81",			XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_detach_d81, (void*)0 },
-	{ "Attach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_cb_attach_d81, (void*)1 },
-	{ "Detach user D81 on drv-9",	XEMUGUI_MENUID_CALLABLE,	ui_cb_detach_d81, (void*)1 },
+	{ "Create and attach new D81",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_d81, (void*)(0 | 0x80) },
+	{ NULL }
+};
+static const struct menu_st menu_drv9[] = {
+	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_d81, (void*)1 },
+#if 0
+	// Currently, there is no default disk image for drv9 too much.
+	{ "Attach default D81",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_default_d81, (void*)1 },
+#endif
+	{ "Detach D81",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_detach_d81, (void*)1 },
+	{ "Create and attach new D81",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_d81, (void*)(1 | 0x80) },
+	{ NULL }
+};
+static const struct menu_st menu_disks[] = {
+	{ "Drive-8",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_drv8    },
+	{ "Drive-9",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_drv9    },
+	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
 	{ NULL }
 };
 static const struct menu_st menu_audio_stereo[] = {
@@ -685,8 +820,8 @@ static const struct menu_st menu_audio[] = {
 	{ "Master volume",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_volume },
 	{ NULL }
 };
-static const struct menu_st menu_config [] = {
-	{ "Confirmation on exit/reset", XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
+static const struct menu_st menu_config[] = {
+	{ "Confirmation on exit/reset",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&i_am_sure_override },
 	//{ "Load saved default config",XEMUGUI_MENUID_CALLABLE,	xemugui_cb_cfgfile, (void*)XEMUGUICFGFILEOP_LOAD_DEFAULT },
 	{ "Save config as default",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_cfgfile, (void*)XEMUGUICFGFILEOP_SAVE_DEFAULT },
@@ -695,29 +830,21 @@ static const struct menu_st menu_config [] = {
 	{ NULL }
 };
 static const struct menu_st menu_main[] = {
-	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
-	{ "Input devices",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_inputdevices },
-	{ "Audio",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio   },
-	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
-	{ "FD D81",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_d81     },
-	{ "Reset",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset   },
-	{ "Debug",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug   },
-	{ "Configuration",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_config  },
+	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display	},
+	{ "Input devices",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_inputdevices	},
+	{ "Audio",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio	},
+	{ "Disks",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_disks	},
+	{ "Reset / ROM switching",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset	},
+	{ "Debug / Advanced",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug	},
+	{ "Configuration",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_config	},
+#ifdef HAVE_XEMU_EXEC_API
+	{ "Help (online)",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_help },
+#endif
 	{ "Run PRG directly",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_run_prg_by_browsing },
 #ifdef CBM_BASIC_TEXT_SUPPORT
 	{ "Save BASIC as text",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_save_basic_as_text },
 #endif
-#ifdef XEMU_ARCH_WIN
-	{ "System console",		XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_sysconsole, NULL },
-#endif
-#ifdef HAVE_XEMU_EXEC_API
-	{ "Help (online)",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_help },
-#endif
 	{ "About",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_about_window, NULL },
-#ifdef HAVE_XEMU_EXEC_API
-	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_native_os_prefdir_browser, NULL },
-#endif
 	{ "Quit",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_quit_if_sure, NULL },
 	{ NULL }
 };

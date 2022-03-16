@@ -505,6 +505,11 @@ static void shutdown_callback ( void )
 
 void reset_mega65 ( void )
 {
+	static const char reset_debug_msg[] = "SYSTEM: RESET - ";
+	last_reset_type = "COLD";
+	DEBUGPRINT("%sBEGIN" NL, reset_debug_msg);
+	memset(D7XX + 0x20, 0, 0x40);	// stop audio DMA possibly going on
+	rom_clear_reports();
 	hwa_kbd_disable_selector(0);	// FIXME: do we need this, or hyppo will make it so for us?
 	eth65_reset();
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
@@ -522,7 +527,23 @@ void reset_mega65 ( void )
 	nmi_level = 0;
 	D6XX_registers[0x7E] = configdb.hicked;
 	hypervisor_start_machine();
-	DEBUGPRINT("SYSTEM: RESET" NL);
+	DEBUGPRINT("%sEND" NL, reset_debug_msg);
+}
+
+
+void reset_mega65_cpu_only ( void )
+{
+	last_reset_type = "WARM";
+	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
+	c128_d030_reg = 0xFF;
+	machine_set_speed(0);
+	memory_set_cpu_io_port_ddr_and_data(0xFF, 0xFF);
+	map_mask = 0;
+	in_hypervisor = 0;
+	vic_registers[0x30] = 0;	// FIXME: hack! we need this, and memory_set_vic3_rom_mapping above too :(
+	memory_set_vic3_rom_mapping(0);
+	memory_set_do_map();
+	cpu65_reset();
 }
 
 
