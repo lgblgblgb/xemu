@@ -192,9 +192,9 @@ static void xep128_emulation ( void )
 
 int main (int argc, char *argv[])
 {
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The Enterprise-128 \"old XEP128 within the Xemu project now\" emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Enterprise-128 \"old XEP128 within the Xemu project now\" emulator from LGB", argc, argv);
 	configdb_define_emulator_options();
-	if (xemucfg_parse_all(argc, argv))
+	if (xemucfg_parse_all())
 		return 1;
 	window_title_info_addon = emulator_speed_title;
 	if (xemu_post_init(

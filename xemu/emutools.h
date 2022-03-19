@@ -127,6 +127,9 @@ extern const char *str_are_you_sure_to_exit;
 
 extern int ARE_YOU_SURE ( const char *s, int flags );
 
+extern char **xemu_initial_argv;
+extern int    xemu_initial_argc;
+extern const char *xemu_initial_cwd;
 extern char *sdl_window_title;
 extern char *window_title_custom_addon;
 extern char *window_title_info_addon;
@@ -142,6 +145,7 @@ extern int sdl_default_win_x_size, sdl_default_win_y_size;
 extern int register_new_texture_creation;
 extern SDL_version sdlver_compiled, sdlver_linked;
 extern Uint32 *xemu_frame_pixel_access_p;
+extern const char *xemu_argv0;
 
 #define XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE	1
 //#define XEMU_VIEWPORT_WIN_SIZE_FOLLOW_LOGICAL	2
@@ -181,7 +185,7 @@ extern void xemu_restrdup ( char **ptr, const char *str );
 extern void xemu_set_full_screen ( int setting );
 extern void xemu_set_screen_mode ( int setting );
 extern void xemu_timekeeping_delay ( int td_em );
-extern void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan );
+extern void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan, const int argc, char **argv );
 extern int xemu_init_sdl ( void );
 extern int xemu_post_init (
         const char *window_title,               // title of our window

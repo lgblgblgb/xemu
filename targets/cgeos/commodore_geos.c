@@ -797,7 +797,7 @@ static void update_emulator ( void )
 int main ( int argc, char **argv )
 {
 	int cycles, frameskip;
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unexplained Commodore GEOS emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unexplained Commodore GEOS emulator from LGB", argc, argv);
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode", &configdb.fullscreen);
 	xemucfg_define_str_option("geosimg", NULL, "Select GEOS disk image to use (NOT USED YET!)", &configdb.geosimg);
 	xemucfg_define_str_option("geoskernal", "#geos-kernal.bin", "Select GEOS KERNAL to use", &configdb.geoskernal);
@@ -807,7 +807,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("romkernal", "#c64-kernal.rom", "Select KERNAL ROM to use", &configdb.romkernal);
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon);
 	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2);
-	if (xemucfg_parse_all(argc, argv))
+	if (xemucfg_parse_all())
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
         if (xemu_post_init(

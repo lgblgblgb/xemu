@@ -132,16 +132,15 @@ static int copy_mem_to_user ( unsigned int target_cpu_addr, const Uint8 *source,
 
 static void reconstruct_commandline ( char *p, unsigned int max_size )
 {
-	int argc;
-	char **argv;
-	xemucfg_get_cli_info(NULL, &argc, &argv);
 	*p = '\0';
-	for (int a = 0; a < argc; a++) {
-		if (strlen(p) + strlen(argv[a]) >= max_size - 2)
+	for (int a = 1; a < xemu_initial_argc; a++) {
+		if (!xemu_initial_argv[a])
 			return;
-		strcat(p, argv[a]);
-		if (a < argc - 1)
+		if (strlen(p) + strlen(xemu_initial_argv[a]) >= max_size - 2)
+			return;
+		if (a > 1)
 			strcat(p, " ");
+		strcat(p, xemu_initial_argv[a]);
 	}
 }
 
@@ -177,7 +176,7 @@ void trap_for_xemu ( const int func_no )
 					res = hyppo_version_string;
 					break;
 				case 5:			// executable name of Xemu
-					xemucfg_get_cli_info(&res, NULL, NULL);
+					res = xemu_initial_argv[0];
 					break;
 				case 6:			// CLI parameters of Xemu
 					reconstruct_commandline(work, sizeof work);
