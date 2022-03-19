@@ -917,7 +917,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 
 int main ( int argc, char **argv )
 {
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unknown Primo emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unknown Primo emulator from LGB", argc, argv);
 	XEMUCFG_DEFINE_STR_OPTIONS(
 		{ "rom", NULL, "Select ROM to use", &configdb.rom_fn },
 		{ "exprom", NULL, "ROM expansion file selector (max 32K size)", &configdb.exprom_fn },
@@ -933,7 +933,7 @@ int main ( int argc, char **argv )
 	);
 	xemucfg_define_float_option("clock", (double)DEFAULT_CPU_CLOCK / 1000000.0, "Selects CPU frequency (1.00-16.00 in MHz)", &configdb.clock_mhz, 1.0, 16.0);
 	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2);
-	if (xemucfg_parse_all(argc, argv))
+	if (xemucfg_parse_all())
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (xemu_post_init(

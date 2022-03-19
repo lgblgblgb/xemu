@@ -783,9 +783,9 @@ static void emulation_loop ( void )
 
 int main ( int argc, char **argv )
 {
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The Evolving MEGA65 emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Evolving MEGA65 emulator from LGB", argc, argv);
 	configdb_define_emulator_options(sizeof configdb);
-	if (xemucfg_parse_all(argc, argv))
+	if (xemucfg_parse_all())
 		return 1;
 	// xemucfg_dump_db("After returning from xemucfg_parse_all in main()");
 	DEBUGPRINT("XEMU: emulated MEGA65 model ID: %d" NL, configdb.mega65_model);

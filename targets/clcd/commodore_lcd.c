@@ -651,7 +651,7 @@ static struct {
 
 int main ( int argc, char **argv )
 {
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The world's first Commodore LCD emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The world's first Commodore LCD emulator from LGB", argc, argv);
 	XEMUCFG_DEFINE_SWITCH_OPTIONS(
 		{ "fullscreen", "Start in fullscreen mode", &configdb.fullscreen_requested },
 		{ "keepram", "Deactivate ROM patch for clear RAM and also save/restore RAM", &configdb.keep_ram },
@@ -676,7 +676,7 @@ int main ( int argc, char **argv )
 		{ "prg", NULL, "Inject BASIC program on entering to BASIC", &configdb.prg_inject_fn },
 		{ "gui", NULL, "Select GUI type for usage. Specify some insane str to get a list", &configdb.gui_selection }
 	);
-	if (xemucfg_parse_all(argc, argv))
+	if (xemucfg_parse_all())
 		return 1;
 	//xemucfg_limit_num(&configdb.sdlrenderquality, 0, 2);
 	//xemucfg_limit_num(&configdb.clock_mhz, 1, 16);

@@ -243,7 +243,15 @@ static void cmd_uname ( char *p )
 
 static void cmd_ver ( char *p )
 {
-	MATRIX("Xemu/%s %s %s %s %s %s", TARGET_DESC, XEMU_BUILDINFO_CDATE, XEMU_BUILDINFO_GIT, XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT, XEMU_BUILDINFO_CC);
+	MATRIX("Xemu/%s %s %s %s %s %s\n", TARGET_DESC, XEMU_BUILDINFO_CDATE, XEMU_BUILDINFO_GIT, XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT, XEMU_BUILDINFO_CC);
+	MATRIX("SDL base dir: %s\n", sdl_base_dir);
+	MATRIX("SDL pref dir: %s\n", sdl_pref_dir);
+	matrix_write_string("Command line: ");
+	for (int i = 0; i < xemu_initial_argc; i++) {
+		if (i)
+			matrix_write_string(" ");
+		matrix_write_string(xemu_initial_argv[i]);
+	}
 }
 
 
