@@ -686,8 +686,11 @@ Uint8 *d81access_create_image ( Uint8 *img, const char *diskname, const int name
 	}
 	diskid = (diskid ^ (diskid >> 5));
 	for (unsigned int i = 0; i < 2; i++, diskid /= 36) {
-		const Uint8 c = diskid % 36;
-		img[0x61816 + i] = c < 26 ? c + 'A' : c - 26 + '0';
+		Uint8 c = diskid % 36;
+		c = c < 26 ? c + 'A' : c - 26 + '0';
+		img[0x61816 + i] = c;
+		img[0x61904 + i] = c;
+		img[0x61a04 + i] = c;
 	}
 	DEBUGPRINT("\",\"%c%c\"" NL, img[0x61816], img[0x61817]);
 	return img;
