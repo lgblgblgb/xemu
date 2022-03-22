@@ -1175,7 +1175,7 @@ static XEMU_INLINE void vic4_render_fullcolor_char_row ( const Uint8* char_row, 
 
 
 // 16-color (Nybl) mode (4-bit per pixel / 16 pixel wide characters)
-static XEMU_INLINE void vic4_render_16color_char_row ( const Uint8* char_row, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 *palette16, const int hflip )
+static XEMU_INLINE void vic4_render_16color_char_row ( const Uint8* char_row, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 fg_sdl_color, const Uint32 *palette16, const int hflip )
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		Uint8 char_data;
@@ -1194,7 +1194,7 @@ static XEMU_INLINE void vic4_render_16color_char_row ( const Uint8* char_row, co
 		}
 		is_fg[xcounter++] = char_data;
 		if (char_data)
-			*current_pixel = palette16[char_data];
+			*current_pixel = (char_data != 15) ? palette16[char_data] : fg_sdl_color;
 		else if (enable_bg_paint)
 			*current_pixel = bg_sdl_color;
 		current_pixel++;
@@ -1381,6 +1381,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
 					16 - glyph_trim,
 					used_palette[char_bgcolor],		// bg SDL colour
+					used_palette[char_fgcolor],		// fg SDL colour
 					used_palette + (color_data & 0xF0),	// palette(16) pointer
 					SXA_HORIZONTAL_FLIP(color_data)		// hflip?
 				);
