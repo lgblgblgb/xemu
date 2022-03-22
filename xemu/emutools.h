@@ -145,7 +145,6 @@ extern int sdl_default_win_x_size, sdl_default_win_y_size;
 extern int register_new_texture_creation;
 extern SDL_version sdlver_compiled, sdlver_linked;
 extern Uint32 *xemu_frame_pixel_access_p;
-extern const char *xemu_argv0;
 
 #define XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE	1
 //#define XEMU_VIEWPORT_WIN_SIZE_FOLLOW_LOGICAL	2
