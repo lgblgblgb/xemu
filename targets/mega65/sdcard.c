@@ -473,13 +473,13 @@ retry:
 }
 
 
-static XEMU_INLINE Uint32 U8A_TO_U32 ( Uint8 *a )
+static XEMU_INLINE Uint32 U8A_TO_U32 ( const Uint8 *a )
 {
 	return ((Uint32)a[0]) | ((Uint32)a[1] << 8) | ((Uint32)a[2] << 16) | ((Uint32)a[3] << 24);
 }
 
 
-static int host_seek ( Uint32 block )
+static int host_seek ( const Uint32 block )
 {
 	if (sdfd < 0)
 		FATAL("host_seek is called with invalid sdfd!");	// FIXME: this check can go away, once we're sure it does not apply!
@@ -537,7 +537,7 @@ static Uint8 sdcard_read_status ( void )
 
 
 // TODO: later we need to deal with buffer selection, whatever
-static XEMU_INLINE Uint8 *get_buffer_memory ( int is_write )
+static XEMU_INLINE Uint8 *get_buffer_memory ( const int is_write )
 {
 	// Currently the only buffer available in Xemu is the SD buffer, UNLESS it's a write operation and "fill mode" is used
 	// (sd_fill_buffer is just filled with a single byte value)
@@ -545,7 +545,7 @@ static XEMU_INLINE Uint8 *get_buffer_memory ( int is_write )
 }
 
 
-int sdcard_read_block ( Uint32 block, Uint8 *buffer )
+int sdcard_read_block ( const Uint32 block, Uint8 *buffer )
 {
 	if (block >= sdcard_size_in_blocks) {
 		DEBUGPRINT("SDCARD: SEEK: invalid block was requested to READ: block=%u (max_block=%u) @ PC=$%04X" NL, block, sdcard_size_in_blocks, cpu65.pc);
@@ -566,7 +566,7 @@ int sdcard_read_block ( Uint32 block, Uint8 *buffer )
 }
 
 
-int sdcard_write_block ( Uint32 block, Uint8 *buffer )
+int sdcard_write_block ( const Uint32 block, Uint8 *buffer )
 {
 	if (block >= sdcard_size_in_blocks) {
 		DEBUGPRINT("SDCARD: SEEK: invalid block was requested to WRITE: block=%u (max_block=%u) @ PC=$%04X" NL, block, sdcard_size_in_blocks, cpu65.pc);
@@ -594,7 +594,7 @@ int sdcard_write_block ( Uint32 block, Uint8 *buffer )
  * + with external D81 mounting: have a "fake D81" on the card, and redirect accesses to that, if someone if insane enough to try to access D81 at the SD-level too ...
  * + In general: SD emulation is "too fast" done in zero emulated CPU time, which can affect the emulation badly if an I/O-rich task is running on Xemu/M65
  * */
-static void sdcard_block_io ( Uint32 block, int is_write )
+static void sdcard_block_io ( const Uint32 block, const int is_write )
 {
 	static int protect_important_blocks = 1;
 	DEBUG("SDCARD: %s block #%u @ PC=$%04X" NL,
@@ -666,7 +666,7 @@ static void sdcard_block_io ( Uint32 block, int is_write )
 }
 
 
-static void sdcard_command ( Uint8 cmd )
+static void sdcard_command ( const Uint8 cmd )
 {
 	static Uint32 multi_io_block;
 	static Uint8 sd_last_ok_cmd;
@@ -970,7 +970,7 @@ int sdcard_unmount ( const int unit )
 }
 
 
-void sdcard_write_register ( int reg, Uint8 data )
+void sdcard_write_register ( const int reg, const Uint8 data )
 {
 	const Uint8 prev_data = sd_regs[reg];
 	sd_regs[reg] = data;
@@ -1032,7 +1032,7 @@ void sdcard_write_register ( int reg, Uint8 data )
 }
 
 
-Uint8 sdcard_read_register ( int reg )
+Uint8 sdcard_read_register ( const int reg )
 {
 	Uint8 data = sd_regs[reg];	// default answer
 	switch (reg) {

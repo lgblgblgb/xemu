@@ -25,12 +25,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sdcard.h"
 #include "sdcontent.h"
 #include "xemu/emutools_hid.h"
-#include "xemu/c64_kbd_mapping.h"
+//#include "xemu/c64_kbd_mapping.h"
 #include "inject.h"
 #include "input_devices.h"
 #include "matrix_mode.h"
 #include "uart_monitor.h"
-#include "xemu/f011_core.h"
+//#include "xemu/f011_core.h"
 #include "dma65.h"
 #include "memory_mapper.h"
 #include "xemu/basic_text.h"
@@ -40,7 +40,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "rom.h"
 #include "hypervisor.h"
 #include "xemu/cpu65.h"
+#include "xemu/emutools_config.h"
 
+
+// Used by UI CBs to maintain configDB persistence
+static void _mountd81_configdb_change ( const int drive, const char *fn )
+{
+	char **p = drive ? &configdb.disk9 : &configdb.disk8;
+	DEBUGPRINT("UI: configDB change for drive #%d from <%s> to <%s>" NL, drive, *p ? *p : "NULL", fn ? fn : "NULL");
+	xemucfg_set_str(p, fn);
+}
 
 #ifdef CONFIG_DROPFILE_CALLBACK
 void emu_dropfile_callback ( const char *fn )
@@ -48,7 +57,8 @@ void emu_dropfile_callback ( const char *fn )
 	DEBUGGUI("UI: file drop event, file: %s" NL, fn);
 	switch (QUESTION_WINDOW("Cancel|Mount as D81|Run/inject as PRG", "What to do with the dropped file?")) {
 		case 1:
-			sdcard_force_external_mount(0, fn, "D81 mount failure");
+			if (!sdcard_force_external_mount(0, fn, "D81 mount failure"))
+				_mountd81_configdb_change(0, fn);
 			break;
 		case 2:
 			reset_mega65();
@@ -61,7 +71,9 @@ void emu_dropfile_callback ( const char *fn )
 static void ui_cb_attach_default_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
-	sdcard_default_d81_mount(VOIDPTR_TO_INT(m->user_data));
+	const int drive = VOIDPTR_TO_INT(m->user_data);
+	sdcard_default_d81_mount(drive);
+	_mountd81_configdb_change(drive, NULL);	// just book this as "not mounted" (as the default). Maybe is it a FIXME?
 }
 
 static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
@@ -71,8 +83,14 @@ static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
 	const int creat = !!(VOIDPTR_TO_INT(m->user_data) & 0x80);
 	char fnbuf[PATH_MAX + 1];
 	static char dir[PATH_MAX + 1] = "";
-	if (!dir[0])
-		strcpy(dir, sdl_pref_dir);
+	// if "dir" static var is empty, let's initialize (otherwise it holds the last used dir by the user)
+	if (!dir[0]) {
+		// If HDOS virtualization is enabled, provide hdos root dir as default to browse,
+		// otherwise let's stick with sdl_pref_dir
+		const char *hdos_root;
+		const int hdos_virt = hypervisor_hdos_virtualization_status(-1, &hdos_root);
+		strcpy(dir, hdos_virt ? hdos_root : sdl_pref_dir);
+	}
 	if (!xemugui_file_selector(
 		(creat ? XEMUGUI_FSEL_SAVE : XEMUGUI_FSEL_OPEN) | XEMUGUI_FSEL_FLAG_STORE_DIR,
 		creat ? "Create new D81 to attach" : "Select D81 to attach",
@@ -97,9 +115,12 @@ static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
 					}
 				}
 			}
-			sdcard_force_external_mount_with_image_creation(drive, fnbuf2, 1, "D81 mount failure"); // third arg: allow overwrite existing D81
-		} else
-			sdcard_force_external_mount(drive, fnbuf, "D81 mount failure");
+			if (!sdcard_force_external_mount_with_image_creation(drive, fnbuf2, 1, "D81 mount failure")) // third arg: allow overwrite existing D81
+				_mountd81_configdb_change(drive, fnbuf2);
+		} else {
+			if (!sdcard_force_external_mount(drive, fnbuf, "D81 mount failure"))
+				_mountd81_configdb_change(drive, fnbuf);
+		}
 	} else {
 		DEBUGPRINT("UI: file selection for D81 mount was cancelled." NL);
 	}
@@ -108,7 +129,9 @@ static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
 static void ui_cb_detach_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
-	sdcard_unmount(VOIDPTR_TO_INT(m->user_data));
+	const int drive = VOIDPTR_TO_INT(m->user_data);
+	sdcard_unmount(drive);
+	_mountd81_configdb_change(drive, NULL);
 }
 
 static void ui_run_prg_by_browsing ( void )
@@ -402,7 +425,9 @@ static void ui_cb_hdos_virt ( const struct menu_st *m, int *query )
 {
 	int status = hypervisor_hdos_virtualization_status(-1, NULL);
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, status);
-	(void)hypervisor_hdos_virtualization_status(!status, NULL);
+	status = !status;
+	(void)hypervisor_hdos_virtualization_status(status, NULL);
+	configdb.hdosvirt = status;	// propogate status to the configDB system as well
 }
 
 static char last_used_dump_directory[PATH_MAX + 1] = "";
