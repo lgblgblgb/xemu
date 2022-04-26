@@ -127,6 +127,9 @@ extern const char *str_are_you_sure_to_exit;
 
 extern int ARE_YOU_SURE ( const char *s, int flags );
 
+extern char **xemu_initial_argv;
+extern int    xemu_initial_argc;
+extern const char *xemu_initial_cwd;
 extern char *sdl_window_title;
 extern char *window_title_custom_addon;
 extern char *window_title_info_addon;
@@ -181,7 +184,7 @@ extern void xemu_restrdup ( char **ptr, const char *str );
 extern void xemu_set_full_screen ( int setting );
 extern void xemu_set_screen_mode ( int setting );
 extern void xemu_timekeeping_delay ( int td_em );
-extern void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan );
+extern void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan, const int argc, char **argv );
 extern int xemu_init_sdl ( void );
 extern int xemu_post_init (
         const char *window_title,               // title of our window
@@ -271,5 +274,6 @@ extern void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data,
 #endif
 #define	xemu_os_close	close
 extern int   xemu_os_readdir ( XDIR *dirp, char *fn );
+extern int   xemu_os_file_exists ( const char *fn );
 
 #endif

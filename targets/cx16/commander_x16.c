@@ -335,7 +335,7 @@ static void emulator_shutdown ( void )
 
 int main ( int argc, char **argv )
 {
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The Surprising Commander X16 emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Surprising Commander X16 emulator from LGB", argc, argv);
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode", &configdb.fullscreen);
 	xemucfg_define_str_option("rom", ROM_NAME, "Sets character ROM to use", &configdb.rom);
 	xemucfg_define_num_option("hiramsize", 2048, "Size of high-RAM in Kbytes", &configdb.hiramsize, 0, 2048);
@@ -343,7 +343,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon);
 	xemucfg_define_switch_option("dumpmem", "Dump memory states on exit into files", &configdb.dumpmem);
 	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2 );
-	if (xemucfg_parse_all(argc, argv))
+	if (xemucfg_parse_all())
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (xemu_post_init(

@@ -23,7 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // different directories, ie, most notably, in rom/
 // Real M65 would not expect to have eg the ROM, as it can be loaded from the SD-card,
 // but it's not the case with Xemu, as you wouldn't have charset either without prior
-// loading it (however kickstart can overwrite "C65 ROM" anyway, later)
+// loading it (however hyppo HICKUP can overwrite "C65 ROM" anyway, later)
 #define SDCARD_NAME		"@mega65.img"
 
 #define NVRAM_FILE_NAME		"@nvram.bin"
@@ -32,10 +32,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // Used by updater, etc ... base name only, no path info!
 #define MEGA65_ROM_NAME		"MEGA65.ROM"
 #define MEGA65_ROM_SIZE		0x20000
-#define CHAR_ROM_NAME		"CHARROM.ROM"
-#define CHAR_ROM_SIZE		0x2000
-
-#define XEMU_STUB_ROM_SAVE_FILENAME "@XEMU-STUB.ROM"
+#define CHAR_ROM_NAME		"CHARROM.M65"
+#define CHAR_ROM_SIZE		0x1000
 
 // Do *NOT* modify these, as other parts of the emulator currently depends on these values ...
 #define TEXTURE_FORMAT		SDL_PIXELFORMAT_ARGB8888
@@ -68,14 +66,15 @@ extern void machine_set_speed ( int verbose );
 
 extern void reset_mega65      ( void );
 extern int  reset_mega65_asked( void );
+extern void reset_mega65_cpu_only ( void );
 
 extern int  dump_memory       ( const char *fn );
-
-extern int  refill_c65_rom_from_preinit_cache ( void );
 
 extern int newhack;
 extern int registered_screenshot_request;
 extern Uint8 last_dd00_bits;
+extern const char *last_reset_type;
+extern int cpu_cycles_per_step;
 extern const char *cpu_clock_speed_string;
 
 #endif

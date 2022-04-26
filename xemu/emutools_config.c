@@ -34,9 +34,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // Also, stdlib.h "should" be needed anyway
 #include <stdlib.h>
 
-static int original_argc = 0;
-static char **original_argv = NULL;
-static const char *original_program_name = "?";
 
 static struct xemutools_config_st *config_head = NULL;
 static struct xemutools_config_st *config_current;
@@ -710,17 +707,6 @@ static void define_core_options ( void )
 }
 
 
-void xemucfg_get_cli_info ( const char **exec_name_ptr, int *argc_ptr, char ***argv_ptr )
-{
-	if (exec_name_ptr)
-		*exec_name_ptr = original_program_name;
-	if (argc_ptr)
-		*argc_ptr = original_argc;
-	if (argv_ptr)
-		*argv_ptr = original_argv;
-}
-
-
 const char *xemucfg_get_default_config_file_name ( void )
 {
 	static char *storage = NULL;
@@ -745,10 +731,10 @@ static const char *xemucfg_get_template_config_file_name ( void )
 }
 
 
-int xemucfg_parse_all ( int argc, char **argv )
+int xemucfg_parse_all ( void )
 {
-	if (argc > 0)	// maybe overkill to CHECK, argv[0] should be there always ...
-		original_program_name = argv[0];
+	int argc = xemu_initial_argc;
+	char **argv = xemu_initial_argv;
 	// Skip program name
 	argc--;
 	argv++;
@@ -766,8 +752,6 @@ int xemucfg_parse_all ( int argc, char **argv )
 		// still having CLI options what can make it legit not to do so?
 	}
 #endif
-	original_argc = argc;
-	original_argv = argv;
 	// Check some hard-coded options (help, version ...)
 	// This is done by looking only for the FIRST command line parameter (if there's any ...)
 	int skip_config_file = 0;

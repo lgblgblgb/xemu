@@ -335,7 +335,7 @@ static void construct_mega_keyboard ( void )
 int main ( int argc, char **argv )
 {
 	static const char boring_warning[] = "\nThis program is not meant to be used manually.\nPlease use the menu of an Xemu emulator which supports key re-mapping.";
-	xemu_pre_init(APP_ORG, TARGET_NAME, "Xemu Keyboard Configurator");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "Xemu Keyboard Configurator", argc, argv);
 	if (argc != 4)
 		FATAL("Missing specifier(s) from command line.%s", boring_warning);
 	if (!strcmp(argv[3], "mega65"))

@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    THIS IS AN UGLY PIECE OF SOURCE REALLY.
 
@@ -876,9 +876,12 @@ int cpu65_step (
 	case 0x00:	/* BRK Implied */
 #ifdef DEBUG_CPU
 			DEBUG("CPU: WARN: BRK is about executing at PC=$%04X" NL, (CPU65.pc - 1) & 0xFFFF);
+#ifdef MEGA65
+			DEBUG("CPU: BRK opcode linear address is $%X" NL, memory_cpurd2linear_xlat((CPU65.pc - 1) & 0xFFFF));
+#endif
 #endif
 			pushWord(CPU65.pc + 1);
-			push(cpu65_get_pf() | CPU65_PF_B);	// BRK always pushes 'B' bit set (like PHP too, unlike hardware interrupts
+			push(cpu65_get_pf() | CPU65_PF_B);	// BRK always pushes 'B' bit set (like PHP too, unlike hardware interrupts)
 			CPU65.pf_d = 0;				// actually, NMOS CPU does not do this for real, only 65C02+
 			CPU65.pf_i = 1;
 			CPU65.pc = readWord(0xFFFE);

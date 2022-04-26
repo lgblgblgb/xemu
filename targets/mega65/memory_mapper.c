@@ -963,6 +963,12 @@ void  memory_debug_write_phys_addr ( int addr, Uint8 data )
 	CALL_MEMORY_WRITER(MEM_SLOT_DEBUG_RESOLVER, addr, data);
 }
 
+int   memory_cpurd2linear_xlat ( Uint16 cpu_addr)
+{
+	int slot = cpu_addr >> 8;
+	return mem_page_rd_o[slot] + mem_page_refp[slot]->start + (int)(cpu_addr & 0xFF);
+}
+
 /* the same as above but for CPU addresses */
 Uint8 memory_debug_read_cpu_addr   ( Uint16 addr )
 {

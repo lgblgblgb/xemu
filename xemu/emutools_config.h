@@ -136,7 +136,7 @@ extern void xemucfg_define_float_option  ( const char *optname, const double def
 extern void xemucfg_define_switch_option ( const char *optname,                      const char *help, int    *storage  );
 extern void xemucfg_define_proc_option   ( const char *optname, xemucfg_parser_callback_func_t cb, const char *help     );
 
-extern int  xemucfg_parse_all ( int argc, char **argv );
+extern int  xemucfg_parse_all ( void );
 extern int  xemucfg_save_config_file  ( const char *filename, const char *initial_part, const char *cry );
 extern int  xemucfg_parse_config_file ( const char *filename_in, const char *open_fail_msg );
 extern const char *xemucfg_get_default_config_file_name ( void );
@@ -148,8 +148,6 @@ extern int  xemucfg_integer_list_from_string ( const char *value, int *result, i
 extern int  xemucfg_str2int    ( const char *s,    int *result );
 extern int  xemucfg_str2double ( const char *s, double *result );
 extern int  xemucfg_str2bool   ( const char *s,    int *result );
-
-extern void xemucfg_get_cli_info ( const char **exec_name_ptr, int *argc_ptr, char ***argv_ptr );
 
 #ifndef XEMU_RELEASE_BUILD
 extern void xemucfg_dump_db ( const char *msg );

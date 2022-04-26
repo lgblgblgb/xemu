@@ -50,10 +50,9 @@ static void _xemumacgui_menu_action_handler ( id self, SEL selector, id sender )
 }
 
 
-// TODO: separator line after menu item, checked/unchecked status for menu items
 static id _xemumacgui_r_menu_builder ( const struct menu_st desc[], const char *parent_name )
 {
-	id menu_item, menu_state;
+	id menu_item /*, menu_state */;
 	id ui_menu = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSMenu"), sel_registerName("new"));
 	((void (*) (id, SEL)) objc_msgSend)(ui_menu, sel_registerName("autorelease"));
 	for (int a = 0; desc[a].name; a++) {
@@ -75,11 +74,7 @@ static id _xemumacgui_r_menu_builder ( const struct menu_st desc[], const char *
 			DEBUGGUI("GUI: query-back for \"%s\"" NL, desc[a].name);
 			((xemugui_callback_t)(desc[a].handler))(&desc[a], &type);
 		}
-		if ((type & XEMUGUI_MENUFLAG_HIDDEN))
-			continue;
-		if (type & XEMUGUI_MENUFLAG_SEPARATOR) {
-			menu_item = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSMenuItem"), sel_registerName("separatorItem"));
-		} else {
+		if (!(type & XEMUGUI_MENUFLAG_HIDDEN)) {
 			menu_item = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSMenuItem"), sel_registerName("alloc"));
 			((void (*) (id, SEL)) objc_msgSend)(menu_item, sel_registerName("autorelease"));
 			id str_name = ((id (*) (Class, SEL, const char*)) objc_msgSend)(
@@ -102,15 +97,22 @@ static id _xemumacgui_r_menu_builder ( const struct menu_st desc[], const char *
 			((void (*) (id, SEL, BOOL)) objc_msgSend)(menu_item, sel_registerName("setEnabled:"), YES);
 			id menu_object = ((id (*) (Class, SEL, id)) objc_msgSend) (objc_getClass("NSValue"), sel_registerName("valueWithPointer:"),(id) &desc[a]);
 			((void (*) (id, SEL, id))objc_msgSend)(menu_item, sel_registerName("setRepresentedObject:"), menu_object);
+			if (type & XEMUGUI_MENUFLAG_CHECKED) {
+				((id (*) (id, SEL, int)) objc_msgSend)(menu_item, sel_registerName("setState:"), 1);
+			}
+			((void (*) (id, SEL, id))objc_msgSend)(ui_menu, sel_registerName("addItem:"), menu_item);
+			if ((type & 0xFF) == XEMUGUI_MENUID_SUBMENU) {
+				// submenus use the user_data as the submenu menu_st struct pointer!
+				id sub_menu = _xemumacgui_r_menu_builder(desc[a].user_data, desc[a].name);
+				((void (*) (id, SEL, id, id))objc_msgSend)(ui_menu, sel_registerName("setSubmenu:forItem:"), sub_menu, menu_item);
+			}
 		}
-		if (type & XEMUGUI_MENUFLAG_CHECKED) {
-			((id (*) (id, SEL, int)) objc_msgSend)(menu_item, sel_registerName("setState:"), 1);
-		}
-		((void (*) (id, SEL, id))objc_msgSend)(ui_menu, sel_registerName("addItem:"), menu_item);
-		if ((type & 0xFF) == XEMUGUI_MENUID_SUBMENU) {
-			// submenus use the user_data as the submenu menu_st struct pointer!
-			id sub_menu = _xemumacgui_r_menu_builder(desc[a].user_data, desc[a].name);
-			((void (*) (id, SEL, id, id))objc_msgSend)(ui_menu, sel_registerName("setSubmenu:forItem:"), sub_menu, menu_item);
+		// Note-1: XEMUGUI_MENUFLAG_SEPARATOR does not mean to have separator only, but draw a separator AFTER its meaning otherwise.
+		//         So we may need adding two items (so menu item, THEN the separator) for a single Xemu UI description data
+		// Note-2: Even if a menu item is hidden, separator can be drawn after it!
+		if (type & XEMUGUI_MENUFLAG_SEPARATOR) {
+			menu_item = ((id (*) (Class, SEL)) objc_msgSend)(objc_getClass("NSMenuItem"), sel_registerName("separatorItem"));
+			((void (*) (id, SEL, id))objc_msgSend)(ui_menu, sel_registerName("addItem:"), menu_item);
 		}
 	}
 	return ui_menu;

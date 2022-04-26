@@ -492,7 +492,7 @@ static void emulation_loop ( void )
 
 int main ( int argc, char **argv )
 {
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The Inaccurate Commodore VIC-20 emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Inaccurate Commodore VIC-20 emulator from LGB", argc, argv);
 	XEMUCFG_DEFINE_SWITCH_OPTIONS(
 		{ "bootmon", "Boot into monitor", &configdb.bootmon },
 		{ "fullscreen", "Start in fullscreen mode", &configdb.fullscreen },
@@ -507,7 +507,7 @@ int main ( int argc, char **argv )
 		{ "romemu",    EMU_ROM_NAME, "Sets EMU ROM to use", &configdb.romemu }
 	);
 	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2);
-	if (xemucfg_parse_all(argc, argv))
+	if (xemucfg_parse_all())
 		return 1;
 	emufile_p = NULL;
 	emufile_size = 0;

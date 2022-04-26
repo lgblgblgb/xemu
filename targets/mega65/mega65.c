@@ -21,8 +21,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_files.h"
 #include "mega65.h"
 #include "xemu/cpu65.h"
-#include "xemu/f011_core.h"
-#include "xemu/d81access.h"
 #include "dma65.h"
 #include "xemu/emutools_hid.h"
 #include "vic4.h"
@@ -43,6 +41,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "inject.h"
 #include "configdb.h"
 #include "xemu/emutools_socketapi.h"
+#include "rom.h"
 
 // "Typical" size in default settings (video standard is PAL, default border settings).
 // See also vic4.h
@@ -51,12 +50,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // second. Thus I try to setup some typical value which is the final result in most
 // cases.
 #define	INITIAL_WINDOW_WIDTH	705
-#define	INITIAL_WINDOW_HEIGHT	576
+#define INITIAL_WINDOW_HEIGHT	576
 
 static int nmi_level;			// please read the comment at nmi_set() below
 
 int newhack = 0;
 
+static int emulation_is_running = 0;
 static int speed_current = -1;
 static int paused = 0, paused_old = 0;
 static int breakpoint_pc = -1;
@@ -75,9 +75,7 @@ static const char *cpu_clock_speed_strs[4] = { "1MHz", "2MHz", "3.5MHz", fast_mh
 const char *cpu_clock_speed_string = "";
 static unsigned int cpu_clock_speed_str_index = 0;
 static unsigned int cpu_cycles_per_scanline;
-static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
-
-static int force_external_rom = 0;
+int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 
 static Uint8 nvram_original[sizeof nvram];
 static int uuid_must_be_saved = 0;
@@ -85,6 +83,7 @@ static int uuid_must_be_saved = 0;
 int registered_screenshot_request = 0;
 
 Uint8 last_dd00_bits = 3;		// Bank 0
+const char *last_reset_type;
 
 
 
@@ -93,6 +92,10 @@ void cpu65_illegal_opcode_callback ( void )
 	// FIXME: implement this, it won't be ever seen now, as not even switch to 6502 NMOS persona is done yet ...
 	FATAL("Internal error: 6502 NMOS persona is not supported yet.");
 }
+
+
+//#define C128_SPEED_BIT_BUG 1
+#define C128_SPEED_BIT_BUG 0
 
 
 void machine_set_speed ( int verbose )
@@ -114,7 +117,7 @@ void machine_set_speed ( int verbose )
 			in_hypervisor, D6XX_registers[0x7D] & 16, (c128_d030_reg & 1), vic_registers[0x31] & 64, vic_registers[0x54] & 64
 	);
 	// ^1 at c128... because it was inverted :-O --> FIXME: this is ugly workaround, the switch statement should be re-organized
-	speed_wanted = (in_hypervisor || (D6XX_registers[0x7D] & 16)) ? 7 : ((((c128_d030_reg & 1) ^ 1) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
+	speed_wanted = (in_hypervisor || (D6XX_registers[0x7D] & 16)) ? 7 : ((((c128_d030_reg & 1) ^ C128_SPEED_BIT_BUG) << 2) | ((vic_registers[0x31] & 64) >> 5) | ((vic_registers[0x54] & 64) >> 6));
 	// videostd_changed: we also want to force recalulation if PAL/NTSC change happened, even if the speed setting remains the same!
 	if (speed_wanted != speed_current || videostd_changed) {
 		speed_current = speed_wanted;
@@ -148,8 +151,8 @@ void machine_set_speed ( int verbose )
 		}
 		cpu_clock_speed_string = cpu_clock_speed_strs[cpu_clock_speed_str_index];
 		DEBUG("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_string, cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
-		if (cpu_cycles_per_step > 1)	// if in trace mode, do not set this!
-			cpu_cycles_per_step = cpu_cycles_per_scanline;
+		if (cpu_cycles_per_step > 1 && !hypervisor_is_debugged && !configdb.cpusinglestep)
+			cpu_cycles_per_step = cpu_cycles_per_scanline;	// if in trace mode (or hyper-debug ...), do not set this! So set only if non-trace and non-hyper-debug
 	}
 }
 
@@ -255,71 +258,66 @@ static void m65_snapshot_saver_on_exit_callback ( void )
 #endif
 
 
-static int load_memory_preinit_cache ( int to_prezero, const char *config_name, const char *fn, const char *description, Uint8 *memory_pointer, int size )
+static int preinit_memory_item ( const char *name, const char *desc, Uint8 *target_ptr, const Uint8 *source_ptr, const int source_size, const int min_size, const int max_size, const char *fn )
 {
-	if (to_prezero) {
-		DEBUGPRINT("BIN: config \"%s\" as \"%s\": pre-zero policy, clearing memory content." NL, config_name, description);
-		memset(memory_pointer, 0, size);
-	} else
-		DEBUGPRINT("BIN: config \"%s\" as \"%s\": no pre-zero policy, using some (possible) built-in default content." NL, config_name, description);
-	if (fn) {
-		if (!strcmp(fn, "-")) {
-			DEBUGPRINT("BIN: config \"%s\" as \"%s\": has option override policy to force and use pre-zeroed content." NL, config_name, description);
-			memset(memory_pointer, 0, size);
-			return 0;
-		} else {
-			DEBUGPRINT("BIN: config \"%s\" as \"%s\": has option override, trying to load content: \"%s\"." NL, config_name, description, fn);
-			return xemu_load_file(fn, memory_pointer, size, size, description);
-		}
-	} else {
-		DEBUGPRINT("BIN: config \"%s\" as \"%s\": has no option override, using the previously stated policy." NL, config_name, description);
-		return 0;
+	if (source_size < min_size || source_size > max_size || min_size > max_size)
+		FATAL("MEMCONTENT: internal error, memcontent item \"%s\" (%s) given size (%d) is outside of interval %d...%d", name, desc, source_size, min_size, max_size);
+	memset(target_ptr, 0, max_size);
+	sha1_hash_str hash_str;
+	if (XEMU_LIKELY(!fn || !*fn)) {
+		sha1_checksum_as_string(hash_str, source_ptr, source_size);
+		DEBUGPRINT("MEMCONTENT: \"%s\" (%s) was not requested, using the built-in ($%X bytes) [%s]." NL, name, desc, source_size, hash_str);
+		goto internal;
 	}
+	const int size = xemu_load_file(fn, target_ptr, min_size, max_size, desc);
+	if (XEMU_UNLIKELY(size > 0)) {
+		sha1_checksum_as_string(hash_str, target_ptr, size);
+		DEBUGPRINT("MEMCONTENT: \"%s\" (%s) loaded custom object ($%X bytes) from external file [%s]: %s" NL, name, desc, size, hash_str, xemu_load_filepath);
+		return size;
+	}
+	sha1_checksum_as_string(hash_str, source_ptr, source_size);
+	DEBUGPRINT("MEMCONTENT: \"%s\" (%s) **FAILED** to load custom file (using default - $%X bytes [%s]) by filename request: %s" NL, name, desc, source_size, hash_str, fn);
+internal:
+	memcpy(target_ptr, source_ptr, source_size);
+	return 0;
 }
 
 
-static Uint8 rom_init_image[0x20000];
-static Uint8 c000_init_image[0x1000];
-
-
-//#define BANNER_MEM_ADDRESS	0x3D00
-#define BANNER_MEM_ADDRESS	(0x58000 - 3*256)
-
-static void refill_memory_from_preinit_cache ( void )
+static void preinit_memory_for_start ( void )
 {
-	memcpy(char_wom, meminitdata_chrwom, MEMINITDATA_CHRWOM_SIZE);
-	memcpy(colour_ram, meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
-	memcpy(main_ram +  BANNER_MEM_ADDRESS, meminitdata_banner, MEMINITDATA_BANNER_SIZE);
-	memcpy(main_ram + 0x20000, rom_init_image, sizeof rom_init_image);
-	memcpy(hypervisor_ram, meminitdata_kickstart, MEMINITDATA_KICKSTART_SIZE);
-	memcpy(main_ram +  0xC000, c000_init_image, sizeof c000_init_image);
-}
-
-
-int refill_c65_rom_from_preinit_cache ( void )
-{
-	int ret;
-	if (force_external_rom) {
-		DEBUGPRINT("ROM: forcing re-apply of ROM image" NL);
-		memcpy(main_ram + 0x20000, rom_init_image, sizeof rom_init_image);
-		// memcpy(char_wom, rom_init_image + 0xD000, sizeof char_wom);	// also fill char-WOM [FIXME: do we really want this?!]
-		// The 128K ROM image is actually holds the reset bector at the lower 64K, ie C65 would start in "C64 mode" for real, just it switches into C65 mode then ...
-		ret = rom_init_image[0xFFFC] | (rom_init_image[0xFFFD] << 8);	// pass back new reset vector
-	} else {
-		ret = -1; // no refill force external rom policy ...
-	}
-	if (configdb.force_upload_fonts) {
-		DEBUGPRINT("ROM: forcing upload font definitions from ROM area to WOM" NL);
-		memcpy(char_wom + 0x0000, main_ram + 0x2D000, 0x1000);
-		memcpy(char_wom + 0x1000, main_ram + 0x29000, 0x1000);
-	}
-	return ret;
+	// This is an absolute minimum flash utility to replace the official one ;)
+	// As Xemu does not have flash (it does not deal with real bitstreams, being an emulator), the official
+	// flash utility during the boot process would throw ugly error and wait for a key to continue, which
+	// is annoying. This short code just creates the minimal thing the flash utility expected to do, to be
+	// able to continue without any side effect.
+	static const Uint8 megaflashutility[] = {
+		0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78, 0x78,
+		0xA9, 0x00, 0x8D, 0x00, 0x00, 0xA9, 0x47, 0x8D, 0x2F, 0xD0, 0xA9, 0x53, 0x8D, 0x2F, 0xD0, 0xA9,
+		0x4C, 0x8D, 0x7F, 0xCF, 0x4C, 0x7F, 0xCF
+	};
+	//                  Option/name     Description            Target memory ptr   Built-in source ptr    Built-in size               Minsize  Maxsize  External-filename(or-NULL)
+	//                  --------------  ---------------------- ------------------- ---------------------- --------------------------- -------- -------- --------------------------
+	preinit_memory_item("extfreezer",   "Freezer",             main_ram + 0x12000, meminitdata_freezer,   MEMINITDATA_FREEZER_SIZE,   0x00100, 0x0E000, configdb.extfreezer);
+	preinit_memory_item("extinitrom",   "Initial boot-ROM",    main_ram + 0x20000, meminitdata_initrom,   MEMINITDATA_INITROM_SIZE,   0x20000, 0x20000, configdb.extinitrom);
+	preinit_memory_item("extonboard",   "On-boarding utility", main_ram + 0x40000, meminitdata_onboard,   MEMINITDATA_ONBOARD_SIZE,   0x00020, 0x10000, configdb.extonboard);
+	preinit_memory_item("extflashutil", "MEGA-flash utility",  main_ram + 0x50000, megaflashutility,      sizeof megaflashutility,    0x00020, 0x07D00, configdb.extflashutil);
+	preinit_memory_item("extbanner",    "MEGA65 banner",       main_ram + 0x57D00, meminitdata_banner,    MEMINITDATA_BANNER_SIZE,    0x01000, 0x08300, configdb.extbanner);
+	preinit_memory_item("extchrwom",    "Character-WOM",       char_wom,           meminitdata_chrwom,    MEMINITDATA_CHRWOM_SIZE,    0x01000, 0x01000, configdb.extchrwom);
+	preinit_memory_item("extcramutils", "Utils in CRAM",       colour_ram,         meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE, 0x08000, 0x08000, configdb.extcramutils);
+	hickup_is_overriden =
+	preinit_memory_item("hickup",       "Hyppo-Hickup",        hypervisor_ram,     meminitdata_hickup,    MEMINITDATA_HICKUP_SIZE,    0x04000, 0x04000, configdb.hickup);
+	//                  ----------------------------------------------------------------------------------------------------------------------------------------------------------
+	if (!hickup_is_overriden)
+		hypervisor_debug_invalidate("no external hickup is loaded, built-in one does not have debug info");
 }
 
 
 static void mega65_init ( void )
 {
-	hypervisor_debug_init(configdb.kickuplist, configdb.hyperdebug, configdb.hyperserialascii);
+	last_reset_type = "XEMU-STARTUP";
+	hypervisor_debug_init(configdb.hickuprep, configdb.hyperdebug, configdb.hyperserialascii);
+	if (hypervisor_is_debugged || configdb.cpusinglestep)
+		cpu_cycles_per_step = 0;
 	hid_init(
 		c64_key_map,
 		VIRTUAL_SHIFT_POS,
@@ -343,25 +341,6 @@ static void mega65_init ( void )
 			fpga_switches |= 1 << (switches[r]);
 		}
 	} while (0);
-	// *** Init memory space
-	// *** Pre-init some memory areas from built-in resources, or by loaded binaries, see the
-	//     previous part of the source here and refill_memory_from_preinit_cache() function definitation
-	// Notes about the used "built-in" contents as "binary blobs":
-	// C65 ROM image is not included in Xemu built-in, since it's a copyrighted, non-CPL licensed material
-	// Other "blobs" are built-in, they are extracted from mega65-core project (unmodified) and it's also a GPL
-	// project, with all sources available on-line, thus no licensing/copyright problem here.
-	// For mega65-core source, visit https://github.com/MEGA65/mega65-core
-	// For C000 utilties: mega65-core currently under reorganization, no C000 utilties are provided.
-	force_external_rom = ((load_memory_preinit_cache(1, "loadrom", configdb.loadrom, "C65 ROM image", rom_init_image, sizeof rom_init_image) == (int)sizeof(rom_init_image)) && configdb.forcerom);
-	if (force_external_rom)
-		DEBUGPRINT("MEM: forcing external ROM usage (hypervisor leave memory re-fill policy)" NL);
-	else if (configdb.forcerom)
-		ERROR_WINDOW("-forcerom is ignored, because no -loadrom <filename> option was used, or it was not a succesfull load operation at least");
-	load_memory_preinit_cache(0, "loadcram", configdb.loadcram, "CRAM utilities", meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE);
-	load_memory_preinit_cache(0, "loadbanner", configdb.loadbanner, "M65 logo", meminitdata_banner, MEMINITDATA_BANNER_SIZE);
-	load_memory_preinit_cache(1, "loadc000", configdb.loadc000, "C000 utilities", c000_init_image, sizeof c000_init_image);
-	if (load_memory_preinit_cache(0, "kickup", configdb.kickup, "M65 kickstart", meminitdata_kickstart, MEMINITDATA_KICKSTART_SIZE)  != MEMINITDATA_KICKSTART_SIZE)
-		hypervisor_debug_invalidate("no kickup is loaded, built-in one does not have debug info");
 	// *** Initializes memory subsystem of MEGA65 emulation itself
 	memory_init();
 	// Load contents of NVRAM.
@@ -371,42 +350,21 @@ static void mega65_init ( void )
 		memcpy(nvram_original, nvram, sizeof nvram);
 	} else {
 		// could not load from disk. Initialize to soma values.
-		// Alsa, set nvram and nvram_original being different, so exit handler will sense the situation and save it.
+		// Also, set nvram and nvram_original being different, so exit handler will sense the situation and save it.
 		memset(nvram, 0, sizeof nvram);
 		memset(nvram_original, 0xAA, sizeof nvram);
 	}
-	// We generate (if does not exist) an UUID for ourself. It can be read back via the 'UUID' registers.
+	// Let's generate (if it does not exist) an UUID for myself. It can be read back via the 'UUID' registers.
 	if (xemu_load_file(UUID_FILE_NAME, mega65_uuid, sizeof mega65_uuid, sizeof mega65_uuid, NULL) != sizeof mega65_uuid) {
 		for (int a = 0; a < sizeof mega65_uuid; a++) {
 			mega65_uuid[a] = rand();
 		}
 		uuid_must_be_saved = 1;
 	}
-	// fill the actual M65 memory areas with values managed by load_memory_preinit_cache() calls
-	// This is a separated step, to be able to call refill_memory_from_preinit_cache() later as well, in case of a "deep reset" functionality is needed for Xemu (not just CPU/hw reset),
-	// without restarting Xemu for that purpose.
-	refill_memory_from_preinit_cache();
-	// If we have no -8 option given, but we found a suitable disk image in the pref-dir,
-	// with the desired name, let's use that! In this way, it may cure some complains,
-	// that the default disk is "inside" the SD-card image which is hard to deal with.
-	if (!configdb.disk8) {
-		static const char default_d81_fn[] = "default.d81";
-		char *fn = xemu_malloc(strlen(sdl_pref_dir) + strlen(default_d81_fn) + 1);
-		sprintf(fn, "%s%s", sdl_pref_dir, default_d81_fn);
-		off_t size = xemu_safe_file_size_by_name(fn);
-		if (size != OFF_T_ERROR) {
-			if (size == (off_t)D81_SIZE) {
-				DEBUGPRINT("DISK: using external default disk image, since without -8 we found: %s" NL, fn);
-				configdb.disk8 = fn;
-			} else {
-				ERROR_WINDOW("Found: %s\nfor default external disk image,\nbut it has wrong size", fn);
-				free(fn);
-			}
-		} else
-			free(fn);
-	}
+	// Fill memory with the needed pre-initialized regions to be able to start.
+	preinit_memory_for_start();
 	// *** Image file for SDCARD support, and other related init functions handled there as well (eg d81access, fdc init ... related registers, etc)
-	if (sdcard_init(configdb.sdimg, configdb.disk8, configdb.virtsd) < 0)
+	if (sdcard_init(configdb.sdimg, configdb.virtsd, configdb.defd81fromsd) < 0)
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
 	vic_init();
@@ -429,11 +387,19 @@ static void mega65_init ( void )
 		NULL,			// callback: INSR
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
-	cia2.DDRA = 3; // Ugly workaround ... I think, SD-card setup "CRAM UTIL" (or better: the kickstart) should set this by its own. Maybe Xemu bug, maybe not?
+	cia2.DDRA = 3; // Ugly workaround ... I think, SD-card setup "CRAM UTIL" (or better: Hyppo) should set this by its own. Maybe Xemu bug, maybe not?
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
 	dma_init(newhack ? DMA_FEATURE_HACK | DMA_FEATURE_DYNMODESET | configdb.dmarev : configdb.dmarev);
-	//
-	sdcard_hack_mount_drive_9_now(configdb.disk9);	// FIXME: Ugly hack to support CLI forced drive-9 disk
+	// *** Drive 8 external mount
+	if (configdb.disk8) {
+		if (sdcard_force_external_mount(0, configdb.disk8, "Mount failure on CLI/CFG requested drive-8"))
+			xemucfg_set_str(&configdb.disk8, NULL);	// In case of error, unset configDB option
+	}
+	// *** Drive 9 external mount
+	if (configdb.disk9) {
+		if (sdcard_force_external_mount(1, configdb.disk9, "Mount failure on CLI/CFG requested drive-9"))
+			xemucfg_set_str(&configdb.disk9, NULL);	// In case of error, unset configDB option
+	}
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_init(configdb.uartmon);
 #endif
@@ -445,6 +411,8 @@ static void mega65_init ( void )
 	hypervisor_start_machine();
 	speed_current = 0;
 	machine_set_speed(1);
+	if (configdb.useutilmenu)
+		hwa_kbd_fake_key(0x20);
 	DEBUG("INIT: end of initialization!" NL);
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemusnap_init(m65_snapshot_definition);
@@ -497,13 +465,20 @@ static void shutdown_callback ( void )
 #ifdef XEMU_HAS_SOCKET_API
 	xemusock_uninit();
 #endif
-	DEBUG("Execution has been stopped at PC=$%04X" NL, cpu65.pc);
+	hypervisor_hdos_close_descriptors();
+	if (emulation_is_running)
+		DEBUGPRINT("CPU: Execution ended at PC=$%04X (linear=%X)" NL, cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc));
 }
-
 
 
 void reset_mega65 ( void )
 {
+	static const char reset_debug_msg[] = "SYSTEM: RESET - ";
+	last_reset_type = "COLD";
+	DEBUGPRINT("%sBEGIN" NL, reset_debug_msg);
+	memset(D7XX + 0x20, 0, 0x40);	// stop audio DMA possibly going on
+	rom_clear_reports();
+	preinit_memory_for_start();
 	hwa_kbd_disable_selector(0);	// FIXME: do we need this, or hyppo will make it so for us?
 	eth65_reset();
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
@@ -519,15 +494,31 @@ void reset_mega65 ( void )
 	cpu65_reset();
 	dma_reset();
 	nmi_level = 0;
-	D6XX_registers[0x7E] = configdb.kicked;
+	D6XX_registers[0x7E] = configdb.hicked;
 	hypervisor_start_machine();
-	DEBUGPRINT("SYSTEM: RESET" NL);
+	DEBUGPRINT("%sEND" NL, reset_debug_msg);
+}
+
+
+void reset_mega65_cpu_only ( void )
+{
+	last_reset_type = "WARM";
+	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
+	c128_d030_reg = 0xFF;
+	machine_set_speed(0);
+	memory_set_cpu_io_port_ddr_and_data(0xFF, 0xFF);
+	map_mask = 0;
+	in_hypervisor = 0;
+	vic_registers[0x30] = 0;	// FIXME: hack! we need this, and memory_set_vic3_rom_mapping above too :(
+	memory_set_vic3_rom_mapping(0);
+	memory_set_do_map();
+	cpu65_reset();
 }
 
 
 int reset_mega65_asked ( void )
 {
-	if (ARE_YOU_SURE("Are you sure to HARD RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
+	if (ARE_YOU_SURE("Are you sure to RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
 		reset_mega65();
 		return 1;
 	} else
@@ -749,9 +740,8 @@ static void emulation_loop ( void )
 				}
 			}
 		}
-		if (XEMU_UNLIKELY(in_hypervisor)) {
+		if (XEMU_UNLIKELY(hypervisor_is_debugged && in_hypervisor))
 			hypervisor_debug();
-		}
 		if (XEMU_UNLIKELY(breakpoint_pc == cpu65.pc)) {
 			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu65.pc);
 			paused = 1;
@@ -775,9 +765,9 @@ static void emulation_loop ( void )
 
 int main ( int argc, char **argv )
 {
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The Evolving MEGA65 emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Evolving MEGA65 emulator from LGB", argc, argv);
 	configdb_define_emulator_options(sizeof configdb);
-	if (xemucfg_parse_all(argc, argv))
+	if (xemucfg_parse_all())
 		return 1;
 	// xemucfg_dump_db("After returning from xemucfg_parse_all in main()");
 	DEBUGPRINT("XEMU: emulated MEGA65 model ID: %d" NL, configdb.mega65_model);
@@ -844,12 +834,16 @@ int main ( int argc, char **argv )
 	} else if (configdb.autoload)
 		c64_register_fake_typing(fake_typing_for_load65);
 #endif
-	hypervisor_request_stub_rom = configdb.stubrom;
+	rom_stubrom_requested = configdb.usestubrom;
+	rom_initrom_requested = configdb.useinitrom;
+	rom_from_prefdir_allowed = !configdb.romfromsd;
+	rom_load_custom(configdb.rom);
 	audio65_start();
 	xemu_set_full_screen(configdb.fullscreen_requested);
 	if (!configdb.syscon)
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();
+	emulation_is_running = 1;
 	// FIXME: for emscripten (anyway it does not work too much currently) there should be 50 or 60 (PAL/NTSC) instead of (fixed, and wrong!) 25!!!!!!
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;
