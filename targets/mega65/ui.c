@@ -481,7 +481,8 @@ static void ui_emu_info ( void )
 	sha1_hash_str rom_now_hash_str;
 	sha1_checksum_as_string(rom_now_hash_str, main_ram + 0x20000, 0x20000);
 	const char *hdos_root;
-	int hdos_virt = hypervisor_hdos_virtualization_status(-1, &hdos_root);
+	const int hdos_virt = hypervisor_hdos_virtualization_status(-1, &hdos_root);
+	const int dma_rev = dma_get_revision();
 	INFO_WINDOW(
 		"DMA chip current revision: %d (F018 rev-%s)\n"
 		"ROM version detected: %d %s (%s,%s)\n"
@@ -497,7 +498,7 @@ static void ui_emu_info ( void )
 		"Xemu host CPU usage so far: %s\n"
 		"Xemu's host OS: %s"
 		,
-		dma_chip_revision, dma_chip_revision ? "B, new" : "A, old",
+		dma_rev, dma_rev ? "B, new" : "A, old",
 		rom_date, rom_name, rom_is_overriden ? "OVERRIDEN" : "installed", rom_is_external ? "external" : "internal",
 		rom_now_hash_str, strcmp(rom_hash_str, rom_now_hash_str) ? "MANGLED" : "intact",
 		last_reset_type,

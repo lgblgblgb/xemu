@@ -284,7 +284,7 @@ static inline void first_leave ( void )
 		DEBUGPRINT("ROM: no custom force-ROM policy, PC remains at $%04X" NL, cpu65.pc);
 	}
 	// Workaround: set DMA version based on ROM version
-	dma_init_set_rev(configdb.dmarev, main_ram + 0x20000);
+	dma_init_set_rev(main_ram + 0x20000);
 	// Workaround: force video standard
 	if (configdb.init_videostd >= 0) {
 		DEBUGPRINT("VIC: setting %s mode as boot-default based on request" NL, configdb.init_videostd ? "NTSC" : "PAL");

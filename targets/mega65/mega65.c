@@ -53,9 +53,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define INITIAL_WINDOW_HEIGHT	576
 
 static int nmi_level;			// please read the comment at nmi_set() below
-
-int newhack = 0;
-
 static int emulation_is_running = 0;
 static int speed_current = -1;
 static int paused = 0, paused_old = 0;
@@ -391,7 +388,7 @@ static void mega65_init ( void )
 	);
 	cia2.DDRA = 3; // Ugly workaround ... I think, SD-card setup "CRAM UTIL" (or better: Hyppo) should set this by its own. Maybe Xemu bug, maybe not?
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
-	dma_init(newhack ? DMA_FEATURE_HACK | DMA_FEATURE_DYNMODESET | configdb.dmarev : configdb.dmarev);
+	dma_init();
 	// *** Drive 8 external mount
 	if (configdb.disk8) {
 		if (sdcard_force_external_mount(0, configdb.disk8, "Mount failure on CLI/CFG requested drive-8"))
@@ -776,9 +773,6 @@ int main ( int argc, char **argv )
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(configdb.installer);
 #endif
-	newhack = !newhack;	// hehe, the meaning is kind of inverted, but never mind ...
-	if (newhack)
-		DEBUGPRINT("WARNING: *** NEW M65 HACK MODE ACTIVATED ***" NL);
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	window_title_info_addon = emulator_speed_title;
 	if (xemu_post_init(
