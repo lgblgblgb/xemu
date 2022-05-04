@@ -165,6 +165,7 @@ void hypervisor_enter ( int trapno )
 	D6XX_registers[0x58] = dma_registers[4] >> 4;	// GS $D658 - Hypervisor DMAGic list address bits 27-24
 	// Now entering into hypervisor mode
 	in_hypervisor = 1;	// this will cause apply_memory_config to map hypervisor RAM, also for checks later to out-of-bound execution of hypervisor RAM, etc ...
+	// In hypervisor mode, VIC4 I/O mode is implied. I also disable $D02F writing to take effect while in hypervisor mode in vic4.c!
 	vic_iomode = VIC4_IOMODE;
 	memory_set_cpu_io_port_ddr_and_data(0x3F, 0x35); // sets all-RAM + I/O config up!
 	cpu65.pf_d = 0;		// clear decimal mode ... according to Paul, punnishment will be done, if it's removed :-)
@@ -623,6 +624,7 @@ void hypervisor_debug ( void )
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without SPHI == $BE but $%02X" NL, cpu65.sphi >> 8);
 		if (XEMU_UNLIKELY(cpu65.bphi != 0xBF00))
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without BPHI == $BF but $%02X" NL, cpu65.bphi >> 8);
+		// NOTE: this is may be not even possible as in hypervisor mode vic_iomode cannot be altered via the usual $D02F "KEY" register ...
 		if (XEMU_UNLIKELY(vic_iomode != 3))	// "3" means VIC-4 I/O mode. See "io_mode_xlat" definition above.
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory with VIC I/O mode of %d" NL, io_mode_xlat[vic_iomode]);
 	}

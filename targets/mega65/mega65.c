@@ -94,8 +94,10 @@ void cpu65_illegal_opcode_callback ( void )
 }
 
 
-//#define C128_SPEED_BIT_BUG 1
-#define C128_SPEED_BIT_BUG 0
+// The original code may have the speed bit inverted for C128 fast mode (2MHz).
+// I can play with this to setting the workaround or not.
+#define C128_SPEED_BIT_BUG 1
+//#define C128_SPEED_BIT_BUG 0
 
 
 void machine_set_speed ( int verbose )
@@ -482,7 +484,7 @@ void reset_mega65 ( void )
 	hwa_kbd_disable_selector(0);	// FIXME: do we need this, or hyppo will make it so for us?
 	eth65_reset();
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
-	c128_d030_reg = 0xFF;
+	c128_d030_reg = 0;
 	machine_set_speed(0);
 	memory_set_cpu_io_port_ddr_and_data(0xFF, 0xFF);
 	map_mask = 0;
@@ -504,7 +506,7 @@ void reset_mega65_cpu_only ( void )
 {
 	last_reset_type = "WARM";
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
-	c128_d030_reg = 0xFF;
+	c128_d030_reg = 0;
 	machine_set_speed(0);
 	memory_set_cpu_io_port_ddr_and_data(0xFF, 0xFF);
 	map_mask = 0;
