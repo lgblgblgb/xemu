@@ -60,4 +60,7 @@ extern int   c65_reset_asked ( void );
 extern int   dump_memory ( const char *fn );
 extern int   c65_load_rom ( const char *fn, unsigned int dma_rev );
 
+extern void  write_phys_mem_for_dma ( int addr, Uint8 data );
+extern Uint8 read_phys_mem_for_dma ( int addr );
+
 #endif

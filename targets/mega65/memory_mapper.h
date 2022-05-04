@@ -31,6 +31,13 @@ extern void  memory_debug_write_phys_addr ( int addr, Uint8 data );
 extern Uint8 memory_debug_read_cpu_addr   ( Uint16 addr );
 extern void  memory_debug_write_cpu_addr  ( Uint16 addr, Uint8 data );
 
+// DMA implementation related, used by dma65.c:
+extern Uint8 memory_dma_source_mreader ( int addr );
+extern void  memory_dma_source_mwriter ( int addr, Uint8 data );
+extern Uint8 memory_dma_target_mreader ( int addr );
+extern void  memory_dma_target_mwriter ( int addr, Uint8 data );
+extern Uint8 memory_dma_list_reader    ( int addr );
+
 //#define SIZEOF_CHIP_RAM  0x20000
 //#define SIZEOF_FAST_RAM  0x20000
 //#define SIZEOF_EXTRA_RAM 0x20000

@@ -10,3 +10,4 @@ debug.log
 /.dist
 /.pending
 .vscode
+.DS_Store
