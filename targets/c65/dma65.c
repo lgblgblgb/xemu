@@ -1,6 +1,6 @@
 /* F018 DMA core emulation for Commodore 65.
    Part of the Xemu project. https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "dma65.h"
 #include "xemu/cpu65.h"
+#include "commodore_65.h"
 
 
 /* NOTES ABOUT C65 DMAgic "F018", AND THIS EMULATION:
@@ -93,32 +94,32 @@ static struct {
 
 
 
-#define DMA_READ_SOURCE()	(XEMU_UNLIKELY(source.is_io) ? DMA_SOURCE_IOREADER_FUNC(DMA_ADDRESSING(source)) : DMA_SOURCE_MEMREADER_FUNC(DMA_ADDRESSING(source)))
-#define DMA_READ_TARGET()	(XEMU_UNLIKELY(target.is_io) ? DMA_TARGET_IOREADER_FUNC(DMA_ADDRESSING(target)) : DMA_TARGET_MEMREADER_FUNC(DMA_ADDRESSING(target)))
+#define DMA_READ_SOURCE()	(XEMU_UNLIKELY(source.is_io) ? io_read(DMA_ADDRESSING(source)) : read_phys_mem_for_dma(DMA_ADDRESSING(source)))
+#define DMA_READ_TARGET()	(XEMU_UNLIKELY(target.is_io) ? io_read(DMA_ADDRESSING(target)) : read_phys_mem_for_dma(DMA_ADDRESSING(target)))
 #define DMA_WRITE_SOURCE(data)	do { \
 					if (XEMU_UNLIKELY(source.is_io)) \
-						DMA_SOURCE_IOWRITER_FUNC(DMA_ADDRESSING(source), data); \
+						io_write(DMA_ADDRESSING(source), data); \
 					else \
-						DMA_SOURCE_MEMWRITER_FUNC(DMA_ADDRESSING(source), data); \
+						write_phys_mem_for_dma(DMA_ADDRESSING(source), data); \
 				} while (0)
 #define DMA_WRITE_TARGET(data)	do { \
 					if (XEMU_UNLIKELY(target.is_io)) \
-						DMA_TARGET_IOWRITER_FUNC(DMA_ADDRESSING(target), data); \
+						io_write(DMA_ADDRESSING(target), data); \
 					else \
-						DMA_TARGET_MEMWRITER_FUNC(DMA_ADDRESSING(target), data); \
+						write_phys_mem_for_dma(DMA_ADDRESSING(target), data); \
 				} while (0)
 
 // Unlike the functions above, DMA list read is always memory (not I/O)
 // FIXME: I guess here, that reading DMA list also warps within a 64K area
 #ifndef DO_DEBUG_DMA
-#define DMA_READ_LIST_NEXT_BYTE()	DMA_LIST_READER_FUNC(((list_addr++) & 0xFFFF) | list_base)
+#define DMA_READ_LIST_NEXT_BYTE()	read_phys_mem_for_dma(((list_addr++) & 0xFFFF) | list_base)
 #else
 static int dma_list_entry_pos = 0;
 
 static Uint8 DMA_READ_LIST_NEXT_BYTE ( void )
 {
 	int addr = ((list_addr++) & 0xFFFF) | list_base;
-	Uint8 data = DMA_LIST_READER_FUNC(addr);
+	Uint8 data = read_phys_mem_for_dma(addr);
 	DEBUGPRINT("DMA: reading DMA (rev#%d) list from $%08X ($%02X) [#%d]: $%02X" NL, dma_chip_revision, addr, (list_addr-1) & 0xFFFF, dma_list_entry_pos++, data);
 	return data;
 }
