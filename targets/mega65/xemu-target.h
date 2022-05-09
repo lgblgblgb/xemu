@@ -79,5 +79,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define CONFIG_EMSCRIPTEN_OK
 
+// Needed for the stub-ROM, also matrix-mode uses it
+#define XEMU_VGA_FONT_8X8
+
 #define XEMU_CONFIGDB_SUPPORT
 #define XEMU_OSD_SUPPORT

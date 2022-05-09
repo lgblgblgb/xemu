@@ -78,8 +78,8 @@ char **xemu_initial_argv = NULL;
 int    xemu_initial_argc = -1;
 const char *xemu_initial_cwd = NULL;
 SDL_Window   *sdl_win = NULL;
-SDL_Renderer *sdl_ren = NULL;
-SDL_Texture  *sdl_tex = NULL;
+static SDL_Renderer *sdl_ren = NULL;
+static SDL_Texture  *sdl_tex = NULL;
 SDL_PixelFormat *sdl_pix_fmt;
 int sdl_on_x11 = 0, sdl_on_wayland = 0;
 static Uint32 sdl_pixel_format_id;
@@ -126,7 +126,23 @@ static int follow_win_size;
 #error "At least SDL version 2.0.4 is needed!"
 #endif
 
-#ifdef XEMU_OSD_SUPPORT
+#ifdef	XEMU_VGA_FONT_8X8
+#define	CHARACTER_SET_DEFINER_8X8	const Uint8 vga_font_8x8[256 *  8]
+#endif
+#ifdef	XEMU_VGA_FONT_8X14
+#define	CHARACTER_SET_DEFINER_8X14	const Uint8 vga_font_8x14[256 * 14]
+#endif
+#ifdef	XEMU_VGA_FONT_8X16
+#define	CHARACTER_SET_DEFINER_8X16	const Uint8 vga_font_8x16[256 * 16]
+#endif
+#define ALLOW_INCLUDE_VGAFONTS
+#include "xemu/vgafonts.c"
+#undef ALLOW_INCLUDE_VGAFONTS
+#undef	CHARACTER_SET_DEFINER_8X8
+#undef	CHARACTER_SET_DEFINER_8X14
+#undef	CHARACTER_SET_DEFINER_8X16
+
+#ifdef	XEMU_OSD_SUPPORT
 #include "xemu/gui/osd.c"
 #endif
 
