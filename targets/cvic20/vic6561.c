@@ -199,7 +199,7 @@ static inline Uint8 vic_read_mem_hi4 ( Uint16 addr )
 // It's not a correct solution to render a line in once, however it's only a sily emulator try from me, not an accurate one :-D
 void vic_render_line ( void )
 {
-	int v_columns, v_vid, dotpos, visible_scanline, mcm, bitp, chr;
+	int v_columns, v_vid, dotpos, visible_scanline, bitp;
 	// Check for start the active display (end of top border) and end of active display (start of bottom border)
 	if (vic_row_counter >= text_rows && vic_vertical_area == 0)	// FIXME: the exact condition! Maybe not ">" like relation but equality is checked by VIC-I only?
 		vic_vertical_area = 2;	// this will be the first scanline of bottom border
@@ -227,11 +227,11 @@ void vic_render_line ( void )
 				*(pixels++) = BORDER_COLOUR;
 		} else {
 			if (v_columns) {
+				int chr = vic_read_mem_lo8((vic_read_mem_lo8(vic_vid_addr + v_vid) << char_height_shift) + vic_chr_addr + charline);
+				int mcm = vic_read_mem_hi4(vic_vid_addr + v_vid);	// mcm here is simply the fetched colour SRAM byte (only lower 4 bits will be used)
 				if (bitp == 128) {
 					// NOTE! *AFAIK* VIC-I fetches colour info from the *VERY SAME* address as the video data! It's just matter of usage in VIC-20
 					// that only 1K of SRAM is connected for the upper 4 bits of the 12 bit wide data bus of VIC-I, but it can be otherwise too!
-					chr = vic_read_mem_lo8((vic_read_mem_lo8(vic_vid_addr + v_vid) << char_height_shift) + vic_chr_addr + charline);
-					mcm = vic_read_mem_hi4(vic_vid_addr + v_vid);	// mcm here is simply the fetched colour SRAM byte (only lower 4 bits will be used)
 					v_vid++;	// increment video address
 					vic_cpal[sram_colour_index] = vic_palette[mcm & 7];	// set text colour with the lower 3 bits fetched on the right place (depends on reverse mode: sram_colour_index)
 					mcm &= 8;	// mcm: multi colour mode flag, bit 3 - so the true meaning of "mcm" ;-)
