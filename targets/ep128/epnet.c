@@ -177,7 +177,6 @@ static int net_thread ( void *ptr )
 	while (SDL_AtomicGet(&thread_can_go) != 0) {
 		int activity = 0;
 		for (int sn = 0; sn < 8; sn++) {
-			Uint8 buffer[0x20000];
 			struct net_task_data_st data;
 			/* LOCK BEGINS */
 			if (SDL_AtomicTryLock(&net_thread_tasks[sn].lock) == SDL_FALSE) {
@@ -329,7 +328,7 @@ static Uint8 read_reg ( int addr )
 				data = wregs[addr];	// access of reg Sn_BASE + 0x30 stored the needed value here!
 				break;
 			default:
-				DEBUGPRINT("EPNET: W5300: reading unemulated SOCKET register $%03X S-%d/$%02X" NL, addr, sn, sn_reg);
+				DEBUGPRINT("EPNET: W5300: writing unemulated SOCKET register $%03X S-%d/$%02X/$%02X" NL, addr, sn, sn_base, sn_reg);
 				data = wregs[addr];	// no idea, just pass back the value ...
 				break;
 		}
@@ -526,7 +525,7 @@ static void write_reg ( int addr, Uint8 data )
 				RX_FIFO_FILL(sn, (wregs[addr - 1] << 8) | data);	// access of reg Sn_BASE + 0x30 stored the needed value we're referencing here!
 				break;
 			default:
-				DEBUGPRINT("EPNET: W5300: writing unemulated SOCKET register $%03X S-%d/$%02X" NL, addr, sn, sn_reg);
+				DEBUGPRINT("EPNET: W5300: writing unemulated SOCKET register $%03X S-%d/$%02X/$%02X" NL, addr, sn, sn_base, sn_reg);
 				wregs[addr] = data;
 				break;
 		}

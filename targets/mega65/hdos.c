@@ -840,7 +840,6 @@ void hdos_leave ( const Uint8 func_no )
 		// Let's do a local copy of the successfully selected name via hyppo (we know this by knowing that C flag is set by hyppo)
 		// FIXME: in case of error, is setname buffer modified?
 		// FIXME: is only Y used for _page_ and X ignored, also is tranfer area addr is really modified as a "side effect"?
-		char setnam_current[sizeof hdos.setname_fn];
 		// FIXME: copy routine should not fail ever if hyppo already accepted!
 		if (copy_string_from_user(hdos.setname_fn, sizeof hdos.setname_fn, hdos.in_x + (hdos.in_y << 8)) >= 0)
 			// hdos.transfer_area_address = hdos.in_y << 8;	// WTF? setname has X/Y as input!
