@@ -207,6 +207,7 @@ int osd_init_with_defaults ( void )
 		0x00, 0xFF, 0x00, 0xFF,		// 3: "matrix-mode" like use-case, foreground
 		0x00, 0x00, 0xFF, 0xFF,		// 4: blue
 		0x00, 0x00, 0x00, 0xFF,		// 5: black
+		0xFF, 0xFF, 0xFF, 0xFF,		// 6: white
 	};
 	return osd_init(
 		OSD_TEXTURE_X_SIZE, OSD_TEXTURE_Y_SIZE,
@@ -257,8 +258,10 @@ void osd_write_char ( int x, int y, char ch )
 	int warn = 1;
 	Uint32 *d = osd.pixels + y * osd.xsize + x;
 	Uint32 *e = osd.pixels + osd.xsize * osd.ysize;
+#ifdef OSDFONT16
 	if ((signed char)ch < 32)	// also for >127 chars, since they're negative in 2-complements 8 bit type
 		ch = '?';
+#endif
 	const OSDFONTCTYPE *s = OSDGETFONTPTR(ch);
 	for (int row = 0; row < osd.fontlines; row++) {
 		const int font_word = *s++;
