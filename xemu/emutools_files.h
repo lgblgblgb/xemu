@@ -32,7 +32,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 	/* Fow windows, we use 'cmd /c start' as web browser, but it needs special care because of
 	 * being not a single string as executable. Thus WEB_BROWSER for Windows is handled in
 	 * code, in emutools_files.c */
-#elif	defined(XEMU_ARCH_MAC)
+#elif	defined(XEMU_ARCH_MAC) || defined(XEMU_ARCH_HAIKU)
 #	define FILE_BROWSER	"open"
 #	define WEB_BROWSER	"open"
 #else
