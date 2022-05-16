@@ -593,7 +593,9 @@ static void shutdown_emulator ( void )
 	}
 	// It seems, calling SQL_Quit() at least on Windows causes "segfault".
 	// Not sure why, but to be safe, I just skip calling it :(
-	//SDL_Quit();
+#ifndef XEMU_ARCH_WIN
+	SDL_Quit();
+#endif
 }
 
 
