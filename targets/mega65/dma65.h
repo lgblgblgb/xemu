@@ -19,12 +19,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_MEGA65_DMA_H_INCLUDED
 #define XEMU_MEGA65_DMA_H_INCLUDED
 
-/* Feature bit masks for dma_init(): */
-
-#define DMA_FEATURE_DYNMODESET	0x100
-#define DMA_FEATURE_MODULO	0x200
-#define DMA_FEATURE_HACK	0x400
-
 /* Variables */
 
 extern Uint8 dma_status;
@@ -35,24 +29,13 @@ extern int   dma_chip_revision;
 
 extern void  dma_write_reg	( int addr, Uint8 data );
 extern Uint8 dma_read_reg	( int reg );
-extern void  dma_init		( unsigned int revision );
-extern void  dma_init_set_rev	( unsigned int revision, const Uint8 *rom );
+extern void  dma_init		( void );
+extern void  dma_init_set_rev	( const Uint8 *rom );
 extern void  dma_reset		( void );
 extern int   dma_update		( void );
 extern int   dma_update_multi_steps ( int do_for_cycles );
 extern int   dma_is_in_use      ( void );
-
-/* Things should be provided by the emulator: */
-
-extern Uint8 DMA_SOURCE_IOREADER_FUNC	( int );
-extern Uint8 DMA_SOURCE_MEMREADER_FUNC	( int );
-extern Uint8 DMA_TARGET_IOREADER_FUNC	( int );
-extern Uint8 DMA_TARGET_MEMREADER_FUNC	( int );
-extern Uint8 DMA_LIST_READER_FUNC	( int );
-extern void  DMA_SOURCE_IOWRITER_FUNC	( int, Uint8 );
-extern void  DMA_SOURCE_MEMWRITER_FUNC	( int, Uint8 );
-extern void  DMA_TARGET_IOWRITER_FUNC	( int, Uint8 );
-extern void  DMA_TARGET_MEMWRITER_FUNC	( int, Uint8 );
+extern int   dma_get_revision   ( void );
 
 /* Snapshot related part: */
 

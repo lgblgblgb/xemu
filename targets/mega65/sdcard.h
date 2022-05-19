@@ -30,11 +30,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 extern int    sdcard_init           ( const char *fn, const int virtsd_flag, const int default_d81_is_from_sd_in );
 extern Uint32 sdcard_get_size       ( void );
-extern void   sdcard_write_register ( int reg, Uint8 data );
-extern Uint8  sdcard_read_register  ( int reg  );
+extern void   sdcard_write_register ( const int reg, const Uint8 data );
+extern Uint8  sdcard_read_register  ( const int reg  );
 
-extern int    sdcard_read_block     ( Uint32 block, Uint8 *buffer );
-extern int    sdcard_write_block    ( Uint32 block, Uint8 *buffer );
+extern int    sdcard_read_block     ( const Uint32 block, Uint8 *buffer );
+extern int    sdcard_write_block    ( const Uint32 block, Uint8 *buffer );
 
 extern int    sdcard_force_external_mount ( const int unit, const char *filename, const char *cry );
 extern int    sdcard_force_external_mount_with_image_creation ( const int unit, const char *filename, const int do_overwrite, const char *cry );

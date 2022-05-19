@@ -367,7 +367,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			restore_is_held = 0;
 		if (pos == -2 && key == 0) {	// special case pos = -2, key = 0, handled = mouse button (which?) and release event!
 			if ((handled == SDL_BUTTON_LEFT) && set_mouse_grab(SDL_TRUE, 0)) {
-				OSD(-1, -1, "Mouse grab activated. Press\nboth SHIFTs together to cancel.");
+				OSD(-1, -1, " Mouse grab activated. Press \n both SHIFTs together to cancel.");
 				DEBUGPRINT("UI: mouse grab activated" NL);
 				old_joystick_emu_port = joystick_emu;
 				joystick_emu = 1;

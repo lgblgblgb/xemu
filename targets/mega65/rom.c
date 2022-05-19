@@ -20,9 +20,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_files.h"
 #include "memcontent.h"
 
-#define CHARACTER_SET_DEFINER_8X8 const Uint8 vga_font_8x8[2048]
-#include "xemu/vgafonts.c"
-
 
 int rom_date = 0;
 int rom_is_openroms = 0;

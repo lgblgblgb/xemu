@@ -74,9 +74,12 @@ static int atexit_callback_for_console_registered = 0;
 int i_am_sure_override = 0;
 const char *str_are_you_sure_to_exit = "Are you sure to exit Xemu?";
 
+char **xemu_initial_argv = NULL;
+int    xemu_initial_argc = -1;
+const char *xemu_initial_cwd = NULL;
 SDL_Window   *sdl_win = NULL;
-SDL_Renderer *sdl_ren = NULL;
-SDL_Texture  *sdl_tex = NULL;
+static SDL_Renderer *sdl_ren = NULL;
+static SDL_Texture  *sdl_tex = NULL;
 SDL_PixelFormat *sdl_pix_fmt;
 int sdl_on_x11 = 0, sdl_on_wayland = 0;
 static Uint32 sdl_pixel_format_id;
@@ -123,7 +126,23 @@ static int follow_win_size;
 #error "At least SDL version 2.0.4 is needed!"
 #endif
 
-#ifdef XEMU_OSD_SUPPORT
+#ifdef	XEMU_VGA_FONT_8X8
+#define	CHARACTER_SET_DEFINER_8X8	const Uint8 vga_font_8x8[256 *  8]
+#endif
+#ifdef	XEMU_VGA_FONT_8X14
+#define	CHARACTER_SET_DEFINER_8X14	const Uint8 vga_font_8x14[256 * 14]
+#endif
+#ifdef	XEMU_VGA_FONT_8X16
+#define	CHARACTER_SET_DEFINER_8X16	const Uint8 vga_font_8x16[256 * 16]
+#endif
+#define ALLOW_INCLUDE_VGAFONTS
+#include "xemu/vgafonts.c"
+#undef ALLOW_INCLUDE_VGAFONTS
+#undef	CHARACTER_SET_DEFINER_8X8
+#undef	CHARACTER_SET_DEFINER_8X14
+#undef	CHARACTER_SET_DEFINER_8X16
+
+#ifdef	XEMU_OSD_SUPPORT
 #include "xemu/gui/osd.c"
 #endif
 
@@ -574,7 +593,9 @@ static void shutdown_emulator ( void )
 	}
 	// It seems, calling SQL_Quit() at least on Windows causes "segfault".
 	// Not sure why, but to be safe, I just skip calling it :(
-	//SDL_Quit();
+#ifndef XEMU_ARCH_WIN
+	SDL_Quit();
+#endif
 }
 
 
@@ -648,8 +669,56 @@ int xemu_is_first_time_user ( void )
 }
 
 
-void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan )
+// It seems SDL_GetBasePath() can be defunct on some architectures.
+// This function is intended to be used only by xemu_pre_init() and contains workaround.
+static char *_getbasepath ( void )
 {
+	char *p = SDL_GetBasePath();
+	if (p) {
+		char *ret = xemu_strdup(p);
+		SDL_free(p);
+		return ret;
+	}
+#ifdef XEMU_ARCH_UNIX
+	// We assume that SDL_GetBasePath only may have problem on certain UNIXes like for example on OpenBSD
+	DEBUGPRINT("SDL: WARNING: could not query SDL base directory: %s. Reverting back to Xemu's implementation." NL, SDL_GetError());
+	// reverting back to our own method ...
+	char exepath[PATH_MAX + 1];
+	snprintf(exepath, sizeof exepath, "%s%s", xemu_initial_argv[0][0] == DIRSEP_CHR ? "" : xemu_initial_cwd, xemu_initial_argv[0]);
+	p = strrchr(exepath, DIRSEP_CHR);
+	if (p)
+		p[1] = '\0';
+	else
+		return NULL;
+	return xemu_strdup(exepath);
+#endif
+	return NULL;
+}
+
+
+void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan, const int argc, char **argv )
+{
+	if (xemu_initial_argc < 0)
+		xemu_initial_argc = argc;
+	if (xemu_initial_argc < 1)
+		FATAL("%s(): Cannot extract argc [%d?]", __func__, xemu_initial_argc);
+	if (!xemu_initial_argv)
+		xemu_initial_argv = argv;
+	if (!xemu_initial_argv)
+		FATAL("%s(): Cannot extract argv [NULL?]", __func__);
+	for (int i = 0; i < xemu_initial_argc; i++)
+		if (!xemu_initial_argv[i])
+			FATAL("%s(): Cannot extract argv[%d] [NULL?]", __func__, i);
+	if (!xemu_initial_cwd) {
+		char buffer[PATH_MAX + 2];
+		if (getcwd(buffer, sizeof buffer)) {
+			if (buffer[strlen(buffer) - 1] != DIRSEP_CHR)
+				strcat(buffer, DIRSEP_STR);
+			xemu_initial_cwd = xemu_strdup(buffer);
+		}
+	}
+	if (!xemu_initial_cwd)
+		FATAL("%s(): getcwd() resolution does not work", __func__);
 #ifdef XEMU_ARCH_UNIX
 #ifndef XEMU_DO_NOT_DISALLOW_ROOT
 	// Some check to disallow dangerous things (running Xemu as user/group root)
@@ -657,6 +726,8 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 		FATAL("Xemu must not be run as user root");
 	if (getgid() == 0 || getegid() == 0)
 		FATAL("Xemu must not be run as group root");
+#elif !defined(XEMU_ARCH_SINGLEUSER)
+#	warning "Running as root check is deactivated."
 #endif
 	// ignore SIGHUP, eg closing the terminal Xemu was started from ...
 	signal(SIGHUP, SIG_IGN);	// ignore SIGHUP, eg closing the terminal Xemu was started from ...
@@ -713,11 +784,8 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 	if (SDL_Init(0))
 		FATAL("Cannot pre-initialize SDL without any subsystem: %s", SDL_GetError());
 	atexit(shutdown_emulator);
-	p = SDL_GetBasePath();
-	if (p) {
-		sdl_base_dir = xemu_strdup(p);
-		SDL_free(p);
-	} else
+	sdl_base_dir = _getbasepath();
+	if (!sdl_base_dir)
 		FATAL("Cannot query SDL base directory: %s", SDL_GetError());
 	p = GetHackedPrefDir(sdl_base_dir, app_name);
 	if (!p)

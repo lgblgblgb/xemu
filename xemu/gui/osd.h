@@ -32,6 +32,7 @@ extern int  osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_e
 extern int  osd_init_with_defaults ( void );
 extern void osd_clear ( void );
 extern void osd_clear_with_colour ( const int index );
+extern void osd_clear_rect_with_colour ( const int index, const SDL_Rect *const rect );
 extern void osd_texture_update ( const SDL_Rect *rect );
 extern void osd_on ( int value );
 extern void osd_off ( void );
@@ -39,7 +40,10 @@ extern void osd_global_enable ( int status );
 extern void osd_set_colours ( int fg_index, int bg_index );
 extern void osd_write_char ( int x, int y, char ch );
 extern void osd_write_string ( int x, int y, const char *s );
+extern void osd_get_texture_info ( SDL_Texture **tex, Uint32 **pixels, int *xsize, int *ysize, int *fontwidth, int *fontheight );
 extern void osd_hijack ( void(*updater)(void), int *xsize_ptr, int *ysize_ptr, Uint32 **pixel_ptr );
+extern int  is_osd_enabled ( void );
+extern void osd_only_sdl_render_hack ( void );
 
 #define OSD_STATIC		0x1000
 #define OSD_FADE_START		300

@@ -179,7 +179,7 @@ void vic_init ( void )
 	// Init VIC4 stuffs
 	vic4_init_palette();
 	vic_reset();
-	c128_d030_reg = 0xFE;	// this may be set to 2MHz in the previous step, so be sure to set to FF here, BUT FIX: bit 0 should be inverted!!
+	c128_d030_reg = 0;	// make sure to set it to zero, FIXME: should we move this into vic_reset() which is also called from vic_init() but then would function only calling reset as well?!
 	machine_set_speed(0);
 	vic4_reset_display_counters();
 	DEBUG("VIC4: has been initialized." NL);
@@ -538,6 +538,10 @@ static const char vic_registers_internal_mode_names[] = {'4', '3', '2'};
 */
 void vic_write_reg ( unsigned int addr, Uint8 data )
 {
+#if 0
+	if (addr == 0x7D || addr == 0x7E || addr == 0x7F)
+		DEBUGPRINT("VIC: crosshair reg $%02X was written with value $%03X at PC=$%04X" NL, addr, data, cpu65.old_pc);
+#endif
 	//DEBUGPRINT("VIC%c: write reg $%02X (internally $%03X) with data $%02X" NL, XEMU_LIKELY(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, data);
 	// IMPORTANT NOTE: writing of vic_registers[] happens only *AFTER* this switch/case construct! This means if you need to do this before, you must do it manually at the right "case"!!!!
 	// if you do so, you can even use "return" instead of "break" to save the then-redundant write of the register
@@ -611,7 +615,9 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x28): CASE_VIC_4(0x29): CASE_VIC_4(0x2A): CASE_VIC_4(0x2B): CASE_VIC_4(0x2C): CASE_VIC_4(0x2D): CASE_VIC_4(0x2E):
 			break;		// colour-related registers are full 8 bit for VIC-IV and VIC-III
 		CASE_VIC_ALL(0x2F):	// the KEY register, it must be handled in ALL VIC modes, to be able to set VIC I/O mode
-			do {
+			// FIXME? in hypervisor mode, it's not possible to alter I/O mode?? Thus I just ignore write in that case.
+			// This seems to make freezer actually starting in Xemu, first time ever :-O
+			if (!in_hypervisor) {
 				int vic_new_iomode;
 				etherbuffer_is_io_mapped = 0;
 				if (data == 0x96 && vic_registers[0x2F] == 0xA5) {
@@ -634,10 +640,13 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 					DEBUG("VIC: changing I/O mode %d(%s) -> %d(%s)" NL, vic_iomode, iomode_names[vic_iomode], vic_new_iomode, iomode_names[vic_new_iomode]);
 					vic_iomode = vic_new_iomode;
 				}
-			} while(0);
+			} else
+				DEBUGPRINT("VIC: warning: I/O mode KEY $D02F register wanted to be written (with $%02X) in hypervisor mode! PC=$%04X" NL, data, cpu65.old_pc);
 			break;
 		CASE_VIC_2(0x30):	// this register is _SPECIAL_, and exists only in VIC-II (C64) I/O mode: C128-style "2MHz fast" mode ...
-			DEBUGPRINT("VIC: Write 0xD030 in VIC-II I/O mode with data $%02x @ PC=$%04X (hypervisor mode: %d)" NL, data, cpu65.old_pc, !!in_hypervisor);
+			// NOTE: in theory it's NOT possible to write this reg in hypervisor mode anymore, as then **always** VIC-4 I/O mode is assumed, if I'm right!
+			DEBUGPRINT("VIC: Write $D030 in VIC-II I/O mode with data $%02x @ PC=$%04X (hypervisor mode: %d)" NL, data, cpu65.old_pc, !!in_hypervisor);
+			data &= 1;	// use only bit0
 			c128_d030_reg = data;
 			machine_set_speed(0);
 			return;		// it IS important to have return here, since it's not a "real" VIC-4 mode register's view in another mode!!
@@ -1175,7 +1184,7 @@ static XEMU_INLINE void vic4_render_fullcolor_char_row ( const Uint8* char_row, 
 
 
 // 16-color (Nybl) mode (4-bit per pixel / 16 pixel wide characters)
-static XEMU_INLINE void vic4_render_16color_char_row ( const Uint8* char_row, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 *palette16, const int hflip )
+static XEMU_INLINE void vic4_render_16color_char_row ( const Uint8* char_row, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 fg_sdl_color, const Uint32 *palette16, const int hflip )
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		Uint8 char_data;
@@ -1194,7 +1203,7 @@ static XEMU_INLINE void vic4_render_16color_char_row ( const Uint8* char_row, co
 		}
 		is_fg[xcounter++] = char_data;
 		if (char_data)
-			*current_pixel = palette16[char_data];
+			*current_pixel = (char_data != 15) ? palette16[char_data] : fg_sdl_color;
 		else if (enable_bg_paint)
 			*current_pixel = bg_sdl_color;
 		current_pixel++;
@@ -1381,6 +1390,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
 					16 - glyph_trim,
 					used_palette[char_bgcolor],		// bg SDL colour
+					(used_palette + (color_data & 0xF0))[char_fgcolor],		// fg SDL colour
 					used_palette + (color_data & 0xF0),	// palette(16) pointer
 					SXA_HORIZONTAL_FLIP(color_data)		// hflip?
 				);

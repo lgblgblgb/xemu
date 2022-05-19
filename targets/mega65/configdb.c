@@ -49,6 +49,7 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "extonboard",	NULL, "Use external initial memory content for the onboarding utility", &configdb.extonboard },
 	{ "extfreezer",	NULL, "Use external initial memory content for the Freezer", &configdb.extfreezer },
 	{ "hdosdir",	NULL, "Set directory with HyppoDOS redirections", &configdb.hdosdir },
+	{ "defaultdir",	NULL, "Set initial default directory for most file selector UIs", &configdb.defaultdir },
 	{ "rom",	NULL, "Override Hyppo's loaded ROM during booting.", &configdb.rom },
 	{ "prg",	NULL, "Load a PRG file directly into the memory (/w C64/65 auto-detection on load address)", &configdb.prg },
 	{ "sdimg",	SDCARD_NAME, "Override path of SD-image to be used (also see the -virtsd option!)", &configdb.sdimg },
@@ -85,7 +86,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "hyperserialascii", "Convert PETSCII/ASCII hypervisor serial debug output to ASCII upper-case", &configdb.hyperserialascii },
 	{ "usestubrom", "Use Xemu's internal stub-rom", &configdb.usestubrom },
 	{ "useinitrom", "Use Xemu's internal init-rom", &configdb.useinitrom },
-	{ "useutilmenu", "Try to tigger utility menu", &configdb.useutilmenu },
+	{ "useutilmenu", "Try to trigger utility menu access on boot", &configdb.useutilmenu },
 	{ "romfromsd", "Force ROM to be used from SD-card", &configdb.romfromsd },
 	{ "defd81fromsd", "Force default D81 to be used from SD-card", &configdb.defd81fromsd },
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
@@ -105,7 +106,6 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 };
 
 static const struct xemutools_configdef_num_st num_options[] = {
-	{ "dmarev", 2 + 0x100, "DMA revision (0/1/2=F018A/B/auto +256=autochange, +512=modulo, you always wants +256!)", &configdb.dmarev, 0, 1024 },
 	{ "model", 0xFF, "Emulated MEGA65 model (255=custom/Xemu)", &configdb.mega65_model, 0, 0xFF },
 	{ "hicked", 0x0, "Answer to HICKUP upgrade (128=ask user in a pop-up window)", &configdb.hicked, 0, 0xFF },
 	{ "prgmode", 0, "Override auto-detect option for -prg (64 or 65 for C64/C65 modes, 0 = default, auto detect)", &configdb.prgmode, 0, 65 },

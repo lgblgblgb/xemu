@@ -45,8 +45,6 @@ int in_the_matrix = 0;
 // TODO: some code here (Xemu specific matrix commands ...) should share interfade with
 // the uart_mon/umon, and in fact, that should be accessed from here, as on a real MEGA65!
 
-// to get charset
-#include "rom.h"
 
 #define MATRIX(...) do { \
 	char _buf_for_msg_[4096]; \
@@ -243,7 +241,15 @@ static void cmd_uname ( char *p )
 
 static void cmd_ver ( char *p )
 {
-	MATRIX("Xemu/%s %s %s %s %s %s", TARGET_DESC, XEMU_BUILDINFO_CDATE, XEMU_BUILDINFO_GIT, XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT, XEMU_BUILDINFO_CC);
+	MATRIX("Xemu/%s %s %s %s %s %s\n", TARGET_DESC, XEMU_BUILDINFO_CDATE, XEMU_BUILDINFO_GIT, XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT, XEMU_BUILDINFO_CC);
+	MATRIX("SDL base dir: %s\n", sdl_base_dir);
+	MATRIX("SDL pref dir: %s\n", sdl_pref_dir);
+	matrix_write_string("Command line: ");
+	for (int i = 0; i < xemu_initial_argc; i++) {
+		if (i)
+			matrix_write_string(" ");
+		matrix_write_string(xemu_initial_argv[i]);
+	}
 }
 
 
@@ -517,6 +523,10 @@ static int kbd_cb_textevent ( SDL_TextInputEvent *ev )
 
 void matrix_mode_toggle ( int status )
 {
+	if (!is_osd_enabled()) {
+		ERROR_WINDOW("OSD is not enabled to be able to use Matrix mode.");
+		return;
+	}
 	status = !!status;
 	if (status == !!in_the_matrix)
 		return;

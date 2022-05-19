@@ -25,7 +25,7 @@ PROTOTYPE = "const Uint8"
 # This must be incremented by ONE every time, when memcontent.c changes, or even
 # if sdcontent.c is changed in a way to write new files, new content, or whatever
 # to the SD-card as part of the "update system files" process.
-MEMCONTENT_VERSION_ID = 1
+MEMCONTENT_VERSION_ID = 2
 
 FILE_DB = {
     # -------------------------------------------------------------------- #

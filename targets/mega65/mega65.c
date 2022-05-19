@@ -53,9 +53,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define INITIAL_WINDOW_HEIGHT	576
 
 static int nmi_level;			// please read the comment at nmi_set() below
-
-int newhack = 0;
-
 static int emulation_is_running = 0;
 static int speed_current = -1;
 static int paused = 0, paused_old = 0;
@@ -94,8 +91,10 @@ void cpu65_illegal_opcode_callback ( void )
 }
 
 
-//#define C128_SPEED_BIT_BUG 1
-#define C128_SPEED_BIT_BUG 0
+// The original code may have the speed bit inverted for C128 fast mode (2MHz).
+// I can play with this to setting the workaround or not.
+#define C128_SPEED_BIT_BUG 1
+//#define C128_SPEED_BIT_BUG 0
 
 
 void machine_set_speed ( int verbose )
@@ -363,28 +362,6 @@ static void mega65_init ( void )
 	}
 	// Fill memory with the needed pre-initialized regions to be able to start.
 	preinit_memory_for_start();
-#if 0
-	// If we have no -8 option given, but we found a suitable disk image in the pref-dir,
-	// with the desired name, let's use that! In this way, it may cure some complains,
-	// that the default disk is "inside" the SD-card image which is hard to deal with.
-	// FIXME: remove this ugliness and solve this in a more fine way! XXX
-	if (!configdb.disk8) {
-		static const char default_d81_fn[] = "default.d81";
-		char *fn = xemu_malloc(strlen(sdl_pref_dir) + strlen(default_d81_fn) + 1);
-		sprintf(fn, "%s%s", sdl_pref_dir, default_d81_fn);
-		off_t size = xemu_safe_file_size_by_name(fn);
-		if (size != OFF_T_ERROR) {
-			if (size == (off_t)D81_SIZE) {
-				DEBUGPRINT("DISK: using external default disk image, since without -8 we found: %s" NL, fn);
-				configdb.disk8 = fn;
-			} else {
-				ERROR_WINDOW("Found: %s\nfor default external disk image,\nbut it has wrong size", fn);
-				free(fn);
-			}
-		} else
-			free(fn);
-	}
-#endif
 	// *** Image file for SDCARD support, and other related init functions handled there as well (eg d81access, fdc init ... related registers, etc)
 	if (sdcard_init(configdb.sdimg, configdb.virtsd, configdb.defd81fromsd) < 0)
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
@@ -411,17 +388,17 @@ static void mega65_init ( void )
 	);
 	cia2.DDRA = 3; // Ugly workaround ... I think, SD-card setup "CRAM UTIL" (or better: Hyppo) should set this by its own. Maybe Xemu bug, maybe not?
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
-	dma_init(newhack ? DMA_FEATURE_HACK | DMA_FEATURE_DYNMODESET | configdb.dmarev : configdb.dmarev);
+	dma_init();
 	// *** Drive 8 external mount
-	if (configdb.disk8)
-		sdcard_force_external_mount(0, configdb.disk8, "Mount failure on CLI/CFG requested drive-8");
-	else {
-		// FIXME: move the logic for "default d81" here. Also note, that the current changes in sdcard.c
-		// makes it impossible to work correctly if that will be umounted ....
+	if (configdb.disk8) {
+		if (sdcard_force_external_mount(0, configdb.disk8, "Mount failure on CLI/CFG requested drive-8"))
+			xemucfg_set_str(&configdb.disk8, NULL);	// In case of error, unset configDB option
 	}
 	// *** Drive 9 external mount
-	if (configdb.disk9)
-		sdcard_force_external_mount(1, configdb.disk9, "Mount failure on CLI/CFG requested drive-9");
+	if (configdb.disk9) {
+		if (sdcard_force_external_mount(1, configdb.disk9, "Mount failure on CLI/CFG requested drive-9"))
+			xemucfg_set_str(&configdb.disk9, NULL);	// In case of error, unset configDB option
+	}
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_init(configdb.uartmon);
 #endif
@@ -504,7 +481,7 @@ void reset_mega65 ( void )
 	hwa_kbd_disable_selector(0);	// FIXME: do we need this, or hyppo will make it so for us?
 	eth65_reset();
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
-	c128_d030_reg = 0xFF;
+	c128_d030_reg = 0;
 	machine_set_speed(0);
 	memory_set_cpu_io_port_ddr_and_data(0xFF, 0xFF);
 	map_mask = 0;
@@ -526,7 +503,7 @@ void reset_mega65_cpu_only ( void )
 {
 	last_reset_type = "WARM";
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
-	c128_d030_reg = 0xFF;
+	c128_d030_reg = 0;
 	machine_set_speed(0);
 	memory_set_cpu_io_port_ddr_and_data(0xFF, 0xFF);
 	map_mask = 0;
@@ -787,18 +764,15 @@ static void emulation_loop ( void )
 
 int main ( int argc, char **argv )
 {
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The Evolving MEGA65 emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Evolving MEGA65 emulator from LGB", argc, argv);
 	configdb_define_emulator_options(sizeof configdb);
-	if (xemucfg_parse_all(argc, argv))
+	if (xemucfg_parse_all())
 		return 1;
 	// xemucfg_dump_db("After returning from xemucfg_parse_all in main()");
 	DEBUGPRINT("XEMU: emulated MEGA65 model ID: %d" NL, configdb.mega65_model);
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(configdb.installer);
 #endif
-	newhack = !newhack;	// hehe, the meaning is kind of inverted, but never mind ...
-	if (newhack)
-		DEBUGPRINT("WARNING: *** NEW M65 HACK MODE ACTIVATED ***" NL);
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	window_title_info_addon = emulator_speed_title;
 	if (xemu_post_init(

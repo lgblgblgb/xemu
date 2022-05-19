@@ -127,6 +127,9 @@ extern const char *str_are_you_sure_to_exit;
 
 extern int ARE_YOU_SURE ( const char *s, int flags );
 
+extern char **xemu_initial_argv;
+extern int    xemu_initial_argc;
+extern const char *xemu_initial_cwd;
 extern char *sdl_window_title;
 extern char *window_title_custom_addon;
 extern char *window_title_info_addon;
@@ -181,7 +184,7 @@ extern void xemu_restrdup ( char **ptr, const char *str );
 extern void xemu_set_full_screen ( int setting );
 extern void xemu_set_screen_mode ( int setting );
 extern void xemu_timekeeping_delay ( int td_em );
-extern void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan );
+extern void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan, const int argc, char **argv );
 extern int xemu_init_sdl ( void );
 extern int xemu_post_init (
         const char *window_title,               // title of our window
@@ -234,12 +237,42 @@ static XEMU_INLINE void xemu_u64le_to_u8p ( Uint8 *const p, const Uint64 data ) 
 	p[7] = (data >> 56) & 0xFF;
 }
 
-typedef char sha1_hash_str[41];
+typedef char  sha1_hash_str[41];
 typedef Uint8 sha1_hash_bytes[20];
 
 extern void sha1_checksum_as_words ( Uint32 hash[5], const Uint8 *data, Uint32 size );
 extern void sha1_checksum_as_bytes ( sha1_hash_bytes hash_bytes, const Uint8 *data, Uint32 size );
 extern void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data, Uint32 size );
+
+#if	defined(XEMU_OSD_SUPPORT)
+// OSD support requested without defined XEMU_OSD_FONT8HEIGHT: fall back to use 8 pixel height font by default in this case
+#	if	!defined(XEMU_OSD_FONT8HEIGHT)
+#		define	XEMU_OSD_FONT8HEIGHT	8
+#	endif
+// Based on requested OSD font height set up some macros
+#	if	XEMU_OSD_FONT8HEIGHT == 8
+#		define	XEMU_VGA_FONT_8X8
+#		define	XEMU_OSD_FONTBIN vga_font_8x8
+#	elif	XEMU_OSD_FONT8HEIGHT == 14
+#		define	XEMU_VGA_FONT_8X14
+#		define	XEMU_OSD_FONTBIN vga_font_8x14
+#	elif	XEMU_OSD_FONT8HEIGHT == 16
+#		define	XEMU_VGA_FONT_8X16
+#		define	XEMU_OSD_FONTBIN vga_font_8x16
+#	else
+#		error "XEMU_OSD_FONT8HEIGHT has been defined but has invalid numeric value!"
+#	endif
+#endif
+
+#ifdef	XEMU_VGA_FONT_8X8
+extern const Uint8 vga_font_8x8[256 *  8];
+#endif
+#ifdef	XEMU_VGA_FONT_8X14
+extern const Uint8 vga_font_8x14[256 * 14];
+#endif
+#ifdef	XEMU_VGA_FONT_8X16
+extern const Uint8 vga_font_8x16[256 * 16];
+#endif
 
 #ifdef XEMU_OSD_SUPPORT
 #include "xemu/gui/osd.h"

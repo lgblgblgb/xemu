@@ -325,12 +325,12 @@ static struct {
 
 int main ( int argc, char **argv )
 {
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The learner's ZX Spectrum emulator from LGB (the learner)");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The learner's ZX Spectrum emulator from LGB (the learner)", argc, argv);
 	xemucfg_define_str_option("rom", ROM_NAME, "Path and filename for ROM to be loaded", &configdb.rom);
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode", &configdb.fullscreen);
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon);
 	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2);
-	if (xemucfg_parse_all(argc, argv))
+	if (xemucfg_parse_all())
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (xemu_post_init(
