@@ -1,5 +1,5 @@
 /* Commodore LCD emulator (son of my world's first working Commodore LCD emulator)
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Part of the Xemu project: https://github.com/lgblgblgb/xemu
 
    This is an ongoing work to rewrite my old Commodore LCD emulator:
@@ -52,6 +52,8 @@ static char emulator_addon_title[32] = "";
 static int cpu_mhz, cpu_cycles_per_tv_frame;
 static int register_screenshot_request = 0;
 
+static const int BASIC_START = 0x1001;
+
 static Uint8 memory[0x40000];
 static Uint8 charrom[4096];
 extern unsigned const char roms[];
@@ -71,8 +73,9 @@ static int ram_size;
 
 static struct {
 	int phase;
-	Uint8 data[65536];
+	Uint8 data[55294];
 	int size;
+	int basic_size;
 } prg_inject;
 
 static const Uint8 init_lcd_palette_rgb[6] = {
@@ -156,6 +159,24 @@ static const struct KeyMappingDefault lcd_key_map[] = {
 	STD_XEMU_SPECIAL_KEYS,
 	{ 0,	-1	}	// this must be the last line: end of mapping table
 };
+
+static struct {
+	int fullscreen_requested, syscon, keep_ram;
+	int zoom;
+	int sdlrenderquality;
+	int ram_size_kbytes;
+	int clock_mhz;
+	char *rom102_fn;
+	char *rom103_fn;
+	char *rom104_fn;
+	char *rom105_fn;
+	char *romchr_fn;
+	char *prg_inject_fn;
+	char *gui_selection;
+	char *dumpmem;
+} configdb;
+
+
 
 
 
@@ -289,7 +310,6 @@ static void  via1_setint(int level)
 }
 
 
-
 #define BG lcd_palette[0]
 #define FG lcd_palette[1]
 
@@ -363,7 +383,6 @@ static void render_screen ( void )
 
 static const struct menu_st menu_main[];
 
-
 // HID needs this to be defined, it's up to the emulator if it uses or not ...
 int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
@@ -374,7 +393,6 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 	}
         return 0;
 }
-
 
 
 static void update_rtc ( void )
@@ -396,56 +414,13 @@ static void update_rtc ( void )
 }
 
 
-
-static void update_emulator ( void )
-{
-	if (XEMU_UNLIKELY(prg_inject.phase == 1)) {
-		static const Uint8 screen_sample1[] = { 0x20, 0x03, 0x0f, 0x0d, 0x0d, 0x0f, 0x04, 0x0f, 0x12, 0x05, 0x20, 0x0c, 0x03, 0x04, 0x20 };
-		static const Uint8 screen_sample2[] = { 0x12, 0x05, 0x01, 0x04, 0x19, 0x2e };
-		if (
-			!memcmp(memory + 0x880, screen_sample1, sizeof screen_sample1) &&
-			!memcmp(memory + 0x980, screen_sample2, sizeof screen_sample2)
-		) {
-			prg_inject.phase = 2;
-			DEBUGPRINT("BASIC: startup screen detected, injecting loaded basic program!" NL);
-			memory[0xA01] = 'R' - 'A' + 1;
-			memory[0xA02] = 'U' - 'A' + 1;
-			memory[0xA03] = 'N' - 'A' + 1;
-			memory[0x1000] = 0;
-			memset(memory + 0x1000, 0, 0x8000);
-			memcpy(memory + 0x1001, prg_inject.data + 2, prg_inject.size - 2);
-			//memset(memory + 0x1001 + prg_inject.size - 2, 0, 4);
-			int addr = 0x1001;
-			memory[0x65] = addr & 0xFF;
-			memory[0x66] = addr >> 8;
-			addr += prg_inject.size - 2;
-			memory[0x67] = addr & 0xFF;
-			memory[0x68] = addr >> 8;
-		}
-	}
-	xemugui_iteration();
-	render_screen();
-	hid_handle_all_sdl_events();
-	xemu_timekeeping_delay(40000);	// 40000 microseconds would be the real time for a full TV frame (see main() for more info: CLCD is not TV based for real ...)
-	if (seconds_timer_trigger)
-		update_rtc();
-}
-
-
 static void shutdown_emu ( void )
 {
-#if 0
-#ifndef __EMSCRIPTEN__
-	FILE *f = fopen("memory.dump", "wb");
-	if (f) {
-		fwrite(memory, sizeof memory, 1, f);
-		fclose(f);
-	}
-#endif
-#endif
 	//if (keep_ram) {
 	//	xemu_save_file("@memory_saved.bin", memory, ram_size, "Cannot save memory content :(");
 	//}
+	if (configdb.dumpmem)
+		xemu_save_file(configdb.dumpmem, memory, ram_size, "Cannot dump RAM content into file");
 	DEBUGPRINT("Shutting down ..." NL);
 }
 
@@ -480,40 +455,129 @@ static void rom_list ( void )
 }
 
 
+static int prg_relink ( Uint8 *data, int target_addr, int source_addr, const int size_limit, int *actual_size )
+{
+	int i = 0, relink_counter = 0;
+	for (;;) {
+		if (i + 1 >= size_limit)
+			return -1;
+		const int ptrpos = i;
+		const int nextptr = data[i] + (data[i + 1] << 8);	// read the next-addr pointer
+		i += 2;	// jump over nextptr
+		if (!nextptr)
+			break;	// end of program
+		i += 2;	// jump over basic line number word
+		for (int linelength = 0;;) {
+			if (i >= size_limit)
+				return -1;
+			if (!data[i++])
+				break;
+			if (++linelength >= 255)	// FIXME: max line length!
+				return -1;
+		}
+		source_addr += i - ptrpos;
+		if (nextptr != source_addr)
+			return -1;
+		if (target_addr >= 0) {
+			target_addr += i - ptrpos;
+			if (nextptr != target_addr) {
+				data[ptrpos]     = target_addr  & 0xFF;
+				data[ptrpos + 1] = target_addr >> 8;
+				relink_counter++;
+			}
+		}
+	}
+	if (actual_size)
+		*actual_size = i;
+	return relink_counter;
+}
 
-static void load_program_for_inject ( const char *file_name, int new_address )
+
+static int prg_load_prepare_inject ( const char *file_name, int new_address )
 {
 	prg_inject.phase = 0;
 	if (!file_name)
-		return;
+		return -1;
 	memset(prg_inject.data, 0, sizeof prg_inject.data);
-	prg_inject.size = xemu_load_file(file_name, prg_inject.data, 8, sizeof(prg_inject.data) - 4, "Cannot load program");
+	prg_inject.size = xemu_load_file(file_name, prg_inject.data, 4, sizeof(prg_inject.data) - 4, "Cannot load program");
 	if (prg_inject.size <= 0)
-		return;
-	int old_address = prg_inject.data[0] | (prg_inject.data[1] << 8);
-	DEBUGPRINT("PRG: program \"%s\" load_addr=$%04X, new_load_addr=$%04X" NL, file_name, old_address, new_address);
-	if (old_address != new_address) {
-		int i = 2;
-		for (;;) {
-			if (prg_inject.data[i] == 0 && prg_inject.data[i + 1] == 0)
-				break;
-			int o = i;	// offset of the next addr to patch
-			i += 4;		// skip next line offset + line number
-			while (prg_inject.data[i])
-				i++;
-			i++;
-			new_address += i - o;
-			DEBUGPRINT("BASIC: re-linking line (%d) $%04X -> $%04X" NL,
-				prg_inject.data[o + 2] | (prg_inject.data[o + 3] << 8),
-				prg_inject.data[o] | (prg_inject.data[o + 1] << 8),
-				new_address
-			);
-			prg_inject.data[o] = new_address & 0xFF;
-			prg_inject.data[o + 1] = new_address >> 8;
-		}
-
+		return -1;
+	prg_inject.basic_size = prg_inject.size - 2;
+	const int old_address = prg_inject.data[0] | (prg_inject.data[1] << 8);
+	DEBUGPRINT("PRG: program \"%s\" load_addr=$%04X, new_load_addr=$%04X, size=%d, basic_size=%d" NL, file_name, old_address, new_address, prg_inject.size, prg_inject.basic_size);
+	int real_size;
+	const int relink_status = prg_relink(prg_inject.data + 2, new_address, old_address, prg_inject.basic_size, &real_size);
+	if (relink_status < 0) {
+		ERROR_WINDOW("Invalid PRG, bad link structure");
+		return -1;
 	}
-	prg_inject.phase = 1;
+	DEBUGPRINT("PRG: relink points=%d, size_from_linking=%d" NL, relink_status, real_size);
+	if (real_size != prg_inject.basic_size)
+		DEBUGPRINT("PRG: warning, program contains extra non-BASIC %d bytes" NL, real_size - prg_inject.basic_size);
+	return 0;
+}
+
+
+static int prg_load_do_inject ( void )
+{
+	// TODO: find out some way to detect if BASIC is unning at the moment, and if we're in screen-edit mode (not like running a program or something)
+	int addr = BASIC_START;
+	if (memory[0x65] != (addr & 0xFF) || memory[0x66] != (addr >> 8)) {
+		ERROR_WINDOW("Could not inject PRG into memory:\nwrong BASIC start address in ZP: $%04X (should be: $%04X)", memory[0x65] + (memory[0x66] << 8), addr);
+		return -1;
+	}
+	// As a kind of test, we use relink on the memory itself first, if there is something there.
+	const int memtop = memory[0x71] + (memory[0x72] << 8);
+	int previous_size = -1;
+	const int prev_status = prg_relink(memory + BASIC_START, -1, BASIC_START, memtop - BASIC_START, &previous_size);
+	DEBUGPRINT("PRG: previous status: %d, previous size: %d" NL, prev_status, previous_size);
+	const int last_addr = addr + prg_inject.size + 0x100; 	// 0x100: margin of error for now ;) TODO
+	if (last_addr >= memtop) {
+		ERROR_WINDOW("Program is too large to fit into the available BASIC memory\nMEMTOP = $%04X, last_load_byte = $%04X", memtop, last_addr);
+		return -1;
+	}
+	memory[0x1000] = 0;
+	// memset(memory + 0x1000, 0, 0x8000); // FIXME: what is this?
+	memcpy(memory + BASIC_START, prg_inject.data + 2, prg_inject.size - 2);
+	//memset(memory + BASIC_START + prg_inject.size - 2, 0, 4);
+	memory[0x65] = addr & 0xFF;
+	memory[0x66] = addr >> 8;
+	addr += prg_inject.basic_size;
+	memory[0x67] = addr & 0xFF;
+	memory[0x68] = addr >> 8;
+	memory[0x69] = addr & 0xFF;
+	memory[0x6A] = addr >> 8;
+	memory[0x6B] = addr & 0xFF;
+	memory[0x6C] = addr >> 8;
+	memory[0x6D] = memory[0x71];
+	memory[0x6E] = memory[0x72];
+	return 0;
+}
+
+
+static void update_emulator ( void )
+{
+	if (XEMU_UNLIKELY(prg_inject.phase == 1)) {
+		static const Uint8 screen_sample1[] = { 0x20, 0x03, 0x0f, 0x0d, 0x0d, 0x0f, 0x04, 0x0f, 0x12, 0x05, 0x20, 0x0c, 0x03, 0x04, 0x20 };
+		static const Uint8 screen_sample2[] = { 0x12, 0x05, 0x01, 0x04, 0x19, 0x2e };
+		if (
+			!memcmp(memory + 0x880, screen_sample1, sizeof screen_sample1) &&
+			!memcmp(memory + 0x980, screen_sample2, sizeof screen_sample2)
+		) {
+			prg_inject.phase = 2;
+			DEBUGPRINT("BASIC: startup screen detected, injecting loaded basic program!" NL);
+			prg_load_do_inject();
+			memory[0xA01] = 'R' - 'A' + 1;
+			memory[0xA02] = 'U' - 'A' + 1;
+			memory[0xA03] = 'N' - 'A' + 1;
+		}
+	}
+	xemugui_iteration();
+	render_screen();
+	hid_handle_all_sdl_events();
+	xemu_timekeeping_delay(40000);	// 40000 microseconds would be the real time for a full TV frame (see main() for more info: CLCD is not TV based for real ...)
+	if (seconds_timer_trigger)
+		update_rtc();
 }
 
 
@@ -537,7 +601,6 @@ static void set_cpu_speed ( int mhz )
 	DEBUGPRINT("CPU: setting CPU to %dMHz, %d CPU cycles per full 1/25sec frame." NL, mhz, cpu_cycles_per_tv_frame);
 	update_addon_title();
 }
-
 
 
 static int cycles, viacyc;
@@ -565,7 +628,66 @@ static void emulation_loop ( void )
 }
 
 
+static char last_used_ui_dir[PATH_MAX + 1] = "";
 
+static void ui_load_basic_prg ( void )
+{
+	char fnbuf[PATH_MAX + 1];
+	if (!xemugui_file_selector(
+		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		"Load BASIC .PRG",
+		last_used_ui_dir,
+		fnbuf,
+		sizeof fnbuf
+	)) {
+		if (prg_load_prepare_inject(fnbuf, BASIC_START)) {
+			return;
+		}
+		prg_load_do_inject();
+	}
+}
+
+static void ui_save_basic_prg ( void )
+{
+	if (memory[0x65] != (BASIC_START & 0xFF) || memory[0x66] != (BASIC_START << 8)) {
+		ERROR_WINDOW("Wrong start addr of BASIC ZP");
+		return;
+	}
+	int size = memory[0x67] + (memory[0x68] << 8) - BASIC_START;	// size of the current program, without the load address
+	if (size < 2 || size >= sizeof(prg_inject.data) - 2) {
+		ERROR_WINDOW("Bad end of prg ptr in BASIC ZP");
+		return;
+	}
+	// hijack prg_inject.data for our purposes here ...
+	prg_inject.data[0] = BASIC_START & 0xFF;
+	prg_inject.data[1] = BASIC_START >> 8;
+	memcpy(prg_inject.data + 2, memory + BASIC_START, size);
+	size += 2;
+	char fnbuf[PATH_MAX + 1];
+	if (!xemugui_file_selector(
+		XEMUGUI_FSEL_SAVE | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		"Save BASIC .PRG",
+		last_used_ui_dir,
+		fnbuf,
+		sizeof fnbuf
+	)) {
+		xemu_save_file(fnbuf, prg_inject.data, size, "Cannot save BASIC PRG");
+	}
+}
+
+static void ui_dump_memory ( void )
+{
+	char fnbuf[PATH_MAX + 1];
+	if (!xemugui_file_selector(
+		XEMUGUI_FSEL_SAVE | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		"Dump memory content into file",
+		last_used_ui_dir,
+		fnbuf,
+		sizeof fnbuf
+	)) {
+		xemu_save_file(fnbuf, memory, ram_size, "Cannot dump RAM content into file");
+	}
+}
 
 static void ui_cb_clock_mhz ( const struct menu_st *m, int *query )
 {
@@ -573,6 +695,7 @@ static void ui_cb_clock_mhz ( const struct menu_st *m, int *query )
 	if (VOIDPTR_TO_INT(m->user_data) != cpu_mhz)
 		set_cpu_speed(VOIDPTR_TO_INT(m->user_data));
 }
+
 static void ui_cb_ramsize ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, (ram_size >> 10) == VOIDPTR_TO_INT(m->user_data));
@@ -581,6 +704,7 @@ static void ui_cb_ramsize ( const struct menu_st *m, int *query )
 		cpu65_reset();
 	}
 }
+
 static const struct menu_st menu_display[] = {
 	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)0 },
 	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)1 },
@@ -615,6 +739,9 @@ static const struct menu_st menu_main[] = {
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &register_screenshot_request },
 #endif
+	{ "Load BASIC program",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_load_basic_prg },
+	{ "Save BASIC program",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_save_basic_prg },
+	{ "Dump RAM into file",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_memory },
 #ifdef XEMU_ARCH_WIN
 	{ "System console",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_sysconsole, NULL },
@@ -630,23 +757,6 @@ static const struct menu_st menu_main[] = {
 	{ "Quit",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_quit_if_sure, NULL },
 	{ NULL }
 };
-
-
-static struct {
-	int fullscreen_requested, syscon, keep_ram;
-	int zoom;
-	int sdlrenderquality;
-	int ram_size_kbytes;
-	int clock_mhz;
-	char *rom102_fn;
-	char *rom103_fn;
-	char *rom104_fn;
-	char *rom105_fn;
-	char *romchr_fn;
-	char *prg_inject_fn;
-	char *gui_selection;
-} configdb;
-
 
 
 int main ( int argc, char **argv )
@@ -674,7 +784,8 @@ int main ( int argc, char **argv )
 		{ "romchr", "#clcd-chargen.rom", "Selects character ROM to use", &configdb.romchr_fn },
 		//{ "defprg", NULL, "Selects the ROM-program to set default to", &configdb.defprg },
 		{ "prg", NULL, "Inject BASIC program on entering to BASIC", &configdb.prg_inject_fn },
-		{ "gui", NULL, "Select GUI type for usage. Specify some insane str to get a list", &configdb.gui_selection }
+		{ "gui", NULL, "Select GUI type for usage. Specify some insane str to get a list", &configdb.gui_selection },
+		{ "dumpmem", NULL, "Save memory content on exit", &configdb.dumpmem }
 	);
 	if (xemucfg_parse_all())
 		return 1;
@@ -747,7 +858,9 @@ int main ( int argc, char **argv )
 	xemu_load_file("#clcd-u105-parasite.rom", memory + 0x26800, 32, 0x8000 - 0x6800, NULL);
 	xemu_load_file("#clcd-u104-parasite.rom", memory + 0x2E800, 32, 0x8000 - 0x6800, NULL);
 #endif
-	load_program_for_inject(configdb.prg_inject_fn, 0x1001);
+	prg_inject.phase = 0;
+	if (!prg_load_prepare_inject(configdb.prg_inject_fn, BASIC_START))
+		prg_inject.phase = 1;
 	rom_list();
 	/* init CPU */
 	cpu65_reset();	// we must do this after loading KERNAL at least, since PC is fetched from reset vector here!
