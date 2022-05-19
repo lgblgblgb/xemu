@@ -22,8 +22,8 @@ PRG_TARGET	= xpc
 EMU_DESCRIPTION	= PC
 
 SRCS_TARGET_xpc		= cpu.c memory.c bios.c video.c pc.c
-SRCS_COMMON_xpc		= emutools.c emutools_hid.c emutools_config.c emutools_files.c
-CFLAGS_TARGET_xpc	= $(SDL2_CFLAGS)
-LDFLAGS_TARGET_xpc	= $(SDL2_LIBS)
+SRCS_COMMON_xpc		= emutools.c emutools_hid.c emutools_config.c emutools_files.c emutools_gui.c
+CFLAGS_TARGET_xpc	= $(SDL2_CFLAGS) $(XEMUGUI_CFLAGS)
+LDFLAGS_TARGET_xpc	= $(SDL2_LIBS) $(XEMUGUI_LIBS)
 
 include ../../build/Makefile.common

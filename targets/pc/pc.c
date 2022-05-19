@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_files.h"
 #include "xemu/emutools_hid.h"
 #include "xemu/emutools_config.h"
-//#include "xemu/emutools_gui.h"
+#include "xemu/emutools_gui.h"
 
 
 
@@ -184,7 +184,7 @@ static void emulation_loop ( void )
 
 	video_render_text_screen();
 	hid_handle_all_sdl_events();
-	//xemugui_iteration();
+	xemugui_iteration();
 	//xemu_timekeeping_delay((Uint64)(1000000L * (Uint64)(all_cycles_spent - all_cycles_old) / (Uint64)cpu_clock));
 	xemu_timekeeping_delay(1000000 / REFRESH_RATE);
 }
@@ -212,17 +212,44 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 }
 
 
+static const struct menu_st menu_main[] = {
+#ifdef XEMU_ARCH_WIN
+        { "System console",             XEMUGUI_MENUID_CALLABLE |
+                                        XEMUGUI_MENUFLAG_QUERYBACK,     xemugui_cb_sysconsole, NULL },
+#endif
+        { "About",                      XEMUGUI_MENUID_CALLABLE,        xemugui_cb_about_window, NULL },
+#ifdef HAVE_XEMU_EXEC_API
+        { "Browse system folder",       XEMUGUI_MENUID_CALLABLE,        xemugui_cb_native_os_prefdir_browser, NULL },
+#endif
+        { "Quit",                       XEMUGUI_MENUID_CALLABLE,        xemugui_cb_call_quit_if_sure, NULL },
+        { NULL }
+};
+
+
+
+static void ui_enter ( void )
+{
+	DEBUGPRINT("UI: handler has been called." NL);
+	if (xemugui_popup(menu_main)) {
+		DEBUGPRINT("UI: oops, POPUP does not worked :(" NL);
+	} else {
+		DEBUGPRINT("UI: hmm, POPUP _seems_ to worked ..." NL);
+	}
+}
+
+
 
 int main ( int argc, char **argv )
 {
+	int fullscreen, leave_syscon_open;
+	char *selected_gui;
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unwanted PC emulator from LGB");
-	//xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	//xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	////xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
-	//xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
+	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode", &fullscreen);
+	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)", &leave_syscon_open);
+	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override);
+	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list", &selected_gui);
 	if (xemucfg_parse_all(argc, argv))
 		return 1;
-	i_am_sure_override = 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
@@ -239,33 +266,21 @@ int main ( int argc, char **argv )
 		emu_quit_callback	// no emulator specific shutdown function
 	))
 		return 1;
-	//for (int a = 0; a < 0x100; a++)	// generate (colour primo's) palette
-	//	primo_palette[a] = SDL_MapRGBA(sdl_pix_fmt, (a >> 5) * 0xFF / 7, ((a >> 2) & 7) * 0xFF / 7, ((a << 1) & 7) * 0xFF / 7, 0xFF);
-	//primo_palette_white = SDL_MapRGBA(sdl_pix_fmt, 0xFF, 0xFF, 0xFF, 0xFF); // colour primo scheme seems to have no white :-O So we do an extra entry for non-colour primo's only colour :)
-	//palette[0] = SDL_MapRGBA(sdl_pix_fmt, 0x00, 0x00, 0x00, 0xFF);
-	//palette[1] = SDL_MapRGBA(sdl_pix_fmt, 0xFF, 0xFF, 0xFF, 0xFF);
 	hid_init(
 		primo_key_map,
 		VIRTUAL_SHIFT_POS,
 		SDL_ENABLE		// enable joystick HID events
 	);
 	osd_init_with_defaults();
-	//xemugui_init(xemucfg_get_str("gui"));
+	xemugui_init(selected_gui, ui_enter);
 	// Initialize memory, which also calls bios init
 	memory_init();
 	video_reset();
 	reset86();
 	clear_emu_events();	// also resets the keyboard
-	//set_cpu_hz(DEFAULT_CPU_CLOCK);
-	//xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
-	//if (!xemucfg_get_bool("syscon"))
-	//	sysconsole_close(NULL);
-	//emu_loop_notification = 0;
-	//all_cycles_spent = 0;
-	//if (pri_name)
-	//	emu_loop_notification |= EMU_LOOP_LOAD_NOTIFY;
-	//if (xemucfg_get_bool("disasm"))
-	//	emu_loop_notification |= EMU_LOOP_DISASM_NOTIFY;
+	xemu_set_full_screen(fullscreen);
+	if (!leave_syscon_open)
+		sysconsole_close(NULL);
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	XEMU_MAIN_LOOP(emulation_loop, REFRESH_RATE, 1);
 	return 0;
