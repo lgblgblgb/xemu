@@ -36,6 +36,7 @@ extern void  hwa_kbd_disable_selector ( int state );
 extern void  virtkey               ( Uint8 rno, Uint8 scancode );
 
 extern Uint8 kbd_directscan_query  ( Uint8 row );
+extern Uint8 kbd_query_leftup_status ( void );
 
 extern void  kbd_trigger_restore_trap ( void );
 
