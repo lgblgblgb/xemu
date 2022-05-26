@@ -624,9 +624,6 @@ void hypervisor_debug ( void )
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without SPHI == $BE but $%02X" NL, cpu65.sphi >> 8);
 		if (XEMU_UNLIKELY(cpu65.bphi != 0xBF00))
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without BPHI == $BF but $%02X" NL, cpu65.bphi >> 8);
-		// NOTE: this is may be not even possible as in hypervisor mode vic_iomode cannot be altered via the usual $D02F "KEY" register ...
-		if (XEMU_UNLIKELY(vic_iomode != 3))	// "3" means VIC-4 I/O mode. See "io_mode_xlat" definition above.
-			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory with VIC I/O mode of %d" NL, io_mode_xlat[vic_iomode]);
 	}
 	const Uint16 now_sp = cpu65.sphi | cpu65.s;
 	int sp_diff = (int)prev_sp - (int)now_sp;
