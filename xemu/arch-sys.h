@@ -20,9 +20,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 #define	XEMU_COMMON_ARCH_SYS_H_INCLUDED
 
-#ifndef	_ISOC11_SOURCE
-#	define	_ISOC11_SOURCE
-#endif
+#undef	_ISOC11_SOURCE
+#define	_ISOC11_SOURCE 1
+
 // We need this otherwise stupid things happen like M_E is not defined by math.h, grrr.
 #ifndef _DEFAULT_SOURCE
 #	define	_DEFAULT_SOURCE
