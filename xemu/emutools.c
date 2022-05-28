@@ -76,6 +76,7 @@ const char *str_are_you_sure_to_exit = "Are you sure to exit Xemu?";
 
 char **xemu_initial_argv = NULL;
 int    xemu_initial_argc = -1;
+Uint64 buildinfo_cdate_uts = 0;
 const char *xemu_initial_cwd = NULL;
 SDL_Window   *sdl_win = NULL;
 static SDL_Renderer *sdl_ren = NULL;
@@ -696,8 +697,27 @@ static char *_getbasepath ( void )
 }
 
 
+static inline Uint64 _get_uts_from_cdate ( void )
+{
+	if (strlen(XEMU_BUILDINFO_CDATE) != 14)
+		FATAL("Wrong XEMU_BUILDINFO_CDATE length (%d)!", (int)strlen(XEMU_BUILDINFO_CDATE));
+	struct tm t = {
+		.tm_year  = (XEMU_BUILDINFO_CDATE[ 0] - '0') * 1000 + (XEMU_BUILDINFO_CDATE[ 1] - '0') * 100 + (XEMU_BUILDINFO_CDATE[2] - '0') * 10 + (XEMU_BUILDINFO_CDATE[3] - '0') - 1900,
+		.tm_mon   = (XEMU_BUILDINFO_CDATE[ 4] - '0') *   10 + (XEMU_BUILDINFO_CDATE[ 5] - '0') - 1,
+		.tm_mday  = (XEMU_BUILDINFO_CDATE[ 6] - '0') *   10 + (XEMU_BUILDINFO_CDATE[ 7] - '0'),
+		.tm_hour  = (XEMU_BUILDINFO_CDATE[ 8] - '0') *   10 + (XEMU_BUILDINFO_CDATE[ 9] - '0'),
+		.tm_min   = (XEMU_BUILDINFO_CDATE[10] - '0') *   10 + (XEMU_BUILDINFO_CDATE[11] - '0'),
+		.tm_sec   = (XEMU_BUILDINFO_CDATE[12] - '0') *   10 + (XEMU_BUILDINFO_CDATE[13] - '0'),
+		.tm_isdst = -1
+	};
+	return (Uint64)mktime(&t);
+}
+
+
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan, const int argc, char **argv )
 {
+	if (!buildinfo_cdate_uts)
+		buildinfo_cdate_uts = _get_uts_from_cdate();
 	if (xemu_initial_argc < 0)
 		xemu_initial_argc = argc;
 	if (xemu_initial_argc < 1)
