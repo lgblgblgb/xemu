@@ -765,6 +765,7 @@ static void emulation_loop ( void )
 int main ( int argc, char **argv )
 {
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Evolving MEGA65 emulator from LGB", argc, argv);
+	core_age_in_days = (buildinfo_cdate_uts - 1577836800) / 86400;	// get build cdate (approx.) days since 2020 Jan 1
 	configdb_define_emulator_options(sizeof configdb);
 	if (xemucfg_parse_all())
 		return 1;
