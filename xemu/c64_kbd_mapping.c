@@ -77,21 +77,25 @@ const struct KeyMappingDefault c64_key_map[] = {
 	{ SDL_SCANCODE_O,		0x46, "O" },
 	{ SDL_SCANCODE_N,		0x47, "N" },
 	{ SDL_SCANCODE_INSERT,		0x50, "PLUS" },		// PC "Insert" key -> C64 '+' (plus) key [FIXME: map something more sane as '+' ?]
+	{ SDL_SCANCODE_KP_PLUS,		0x50, "PLUS" },		// ... also the numeric keypad '+'
 	{ SDL_SCANCODE_P,		0x51, "P" },
 	{ SDL_SCANCODE_L,		0x52, "L" },
 	{ SDL_SCANCODE_MINUS,		0x53, "MINUS" },
+	{ SDL_SCANCODE_KP_MINUS,	0x53, "MINUS" },	// ... also the numeric keypad '-'
 	{ SDL_SCANCODE_PERIOD,		0x54, "PERIOD" },
 	{ SDL_SCANCODE_APOSTROPHE,	0x55, "COLON" },	// mapped as ":"
 	{ SDL_SCANCODE_LEFTBRACKET,	0x56, "AT" },		// FIXME: map something sane as @ ?
 	{ SDL_SCANCODE_COMMA,		0x57, "COMMA" },
 	{ SDL_SCANCODE_DELETE,		0x60, "POUND" },	// FIXME: map something sane as £ ?
 	{ SDL_SCANCODE_RIGHTBRACKET,	0x61, "ASTERISK" },	// FIXME: map something sane as * ?
+	{ SDL_SCANCODE_KP_MULTIPLY,	0x61, "ASTERISK" },	// ... also the numeric keypad '*'
 	{ SDL_SCANCODE_SEMICOLON,	0x62, "SEMICOLON" },
 	{ SDL_SCANCODE_HOME,		0x63, "CLR" },		// PC "home" -> C64 "CLR/HOME"
 	{ SDL_SCANCODE_RSHIFT,		0x64, "RSHIFT" }, 	// PC right shift -> C64 right shift
 	{ SDL_SCANCODE_EQUALS,		0x65, "EQUALS" },
 	{ SDL_SCANCODE_BACKSLASH,	0x66, "UARROW" },	// PC \ (backslash) -> C64 "up-arrow" symbol [which is the PI, when shifted ...]
 	{ SDL_SCANCODE_SLASH,		0x67, "SLASH" },
+	{ SDL_SCANCODE_KP_DIVIDE,	0x67, "SLASH" },	// ... also the numeric keypad '/'
 	{ SDL_SCANCODE_1,		0x70, "1" },
 	{ SDL_SCANCODE_GRAVE,		0x71, "LARROW" },	// FIXME: map something sane as <-- ?
 	{ SDL_SCANCODE_LCTRL,		0x72, "CTRL" },
