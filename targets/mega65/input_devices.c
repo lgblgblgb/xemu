@@ -189,6 +189,17 @@ Uint8 kbd_directscan_query ( Uint8 row )
 }
 
 
+Uint8 kbd_query_leftup_status ( void )
+{
+	// Xemu does not have the concept of up/left keys for real, always simulates that as shited down/right ...
+	// Thus, to query left/up only as separate key, we do the trick to query the emulated shift press AND down/right ...
+	return
+		((KBD_IS_PRESSED(2) && KBD_IS_PRESSED(VIRTUAL_SHIFT_POS)) ? 1 : 0) +     // left
+		((KBD_IS_PRESSED(7) && KBD_IS_PRESSED(VIRTUAL_SHIFT_POS)) ? 2 : 0)       // up
+	;
+}
+
+
 void clear_emu_events ( void )
 {
 	DEBUGKBDHWA("KBD: HWA: reset" NL);

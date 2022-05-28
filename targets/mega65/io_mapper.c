@@ -178,11 +178,14 @@ Uint8 io_read ( unsigned int addr )
 					return hwa_kbd_get_modifiers();
 				case 0x13:				// $D613: direct access to the kbd matrix, read selected row (set by writing $D614), bit 0 = key pressed
 					return kbd_directscan_query(D6XX_registers[0x14]);	// for further explanations please see this function in input_devices.c
+				case 0x0F:
+					// GS $D60F
+					// bit 0: cursor left key is pressed
+					// bit 1: cursor up key is pressed
+					// bit 5: 1=real hardware, 0=emulation
+					return kbd_query_leftup_status();	// do bit 0/1 forming in input_devices.c, other bits should be zero, so it's ok to call only this
 				case 0x29:
 					return configdb.mega65_model;		// MEGA65 model
-				case 0x0F:
-					// D60F bit 5, real hardware (1), emulation (0), other bits are not emulated yet by Xemu, so I give simply zero
-					return 0;
 				case 0x1B:
 					// D61B amiga / 1531 mouse auto-detect. FIXME XXX what value we should return at this point? :-O
 					return 0xFF;
