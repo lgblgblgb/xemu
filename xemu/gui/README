@@ -17,3 +17,79 @@ GUI itself.
 popular_user_funcs.c is also included by ../emutools_gui.c and contains
 "popular" GUI features, so the actual emulators does not need to implement
 as their own, all the time.
+
+=== THE PLUGIN GUI ===
+
+PluginGUI is kinda strange entity. Xemu loads a shared object from the
+preferences directory called "plugingui.so". Xemu's primitive GUI abstraction
+is outsourced to that object from now. Currently, this kind of GUI is
+only supported on OSes using UNIX-style dlopen/dlsym/..., so not on Windows.
+
+The goal: provide ability to create "exotic" GUI not so much OK to be put
+into the mainline Xemu, like C++ implementation needed for some OS and such.
+
+Note, that GUI-Plugin API is kinda strange. You'll need SDL2 headers in
+your plugin, _BUT_ only for data types / defines, you _DON'T_ NEED to
+link your code against SDL2 or anything like that!
+
+The object should "export" the following functions with the very exact
+prototypes:
+
+int XemuPluginGuiAPI_init ( const int flags );
+
+	The only compulsory export. Called to initialize the plugin. Flags:
+
+		PLUGINGUI_INITFLAG_X11          1
+		PLUGINGUI_INITFLAG_WAYLAND      2
+
+	These flags are sent by Xemu so the plugin can see what SDL runs
+	on. It's only important if you have the problem that your own
+	widget want to use with Xemu as a plugin supports both of Wayland
+	and X11, and you don't know what Xemu uses at all.
+
+	Should return with non-positve value in case of initialization error.
+
+	Otherwise it should return with the "compatibility level" what Xemu
+	uses to check if the plugin is compatible with Xemu. The current
+	compatibility level can be seen in Xemu's source code:
+
+		xemu/gui/gui_plugin.c: #define PLUGINGUI_COMPATIBILITY_LEVEL 1
+
+void XemuPluginGuiAPI_shutdown ( void );
+
+	Not compulsory. If defined, it will be called on shutting down the GUI
+	subsystem (Xemu's exit time probably).
+
+int XemuPluginGuiAPI_ShowSimpleMessageBox(Uint32 flags, const char *title, const char *message, SDL_Window *window);
+
+	Not compulsory. If defined, it will be used to replace the default
+	SDL_ShowSimpleMessageBox() functionality, with its very same API
+	and behaviour. So you need to "emulate" SDL_ShowSimpleMessageBox(),
+	its API and its behaviour. Surely, you may _want_ to ignore the
+	value of "window".
+
+int XemuPluginGuiAPI_ShowMessageBox(const SDL_MessageBoxData* messageboxdata, int *buttonid);
+
+	Not compulsory. The purpose is similar like for XemuPluginGuiAPI_ShowSimpleMessageBox(),
+	see the comments above, just now for emulating SDL_ShowMessageBox() instead
+	of SDL_ShowSimpleMessageBox().
+
+int XemuPluginGuiAPI_iteration ( void );
+
+	Xemu calls this quite often, usually several dozens of time within a second.
+	Can be used for some purpose, however the exact frequency cannot be told and not
+	stable either.
+
+int XemuPluginGuiAPI_file_selector ( int dialog_mode, const char *dialog_title, char *default_dir, char *selected, int path_max_size );
+
+	Opens a file selector window, either for open or save functionality.
+	The behaviour of this function is complex enough to tell the whole
+	story, see xemu/gui/gui_*.c files for examples.
+
+int XemuPluginGuiAPI_popup ( const struct menu_st desc[] );
+
+	Opens the popup menu. See xemu/gui/gui_*.c files for examples.
+
+int XemuPluginGuiAPI_info ( int sdl_class, const char *msg );
+
+	Opens an info dialog. See xemu/gui/gui_*.c files for examples.

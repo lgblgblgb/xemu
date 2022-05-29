@@ -62,6 +62,9 @@ struct xemugui_descriptor_st {
 #if defined(XEMU_OSD_SUPPORT)
 #	include "xemu/gui/gui_osd.c"
 #endif
+#if defined(XEMU_HAS_DLSYM_API)
+#	include "xemu/gui/gui_plugin.c"
+#endif
 #include "xemu/gui/gui_nogui.c"
 
 static const struct xemugui_descriptor_st *current_gui = NULL;
@@ -78,6 +81,9 @@ static const struct xemugui_descriptor_st *xemugui_descriptor_list[] = {
 #endif
 #if defined(XEMU_OSD_SUPPORT)
 	&xemuosdgui_descriptor,
+#endif
+#if defined(XEMU_HAS_DLSYM_API)
+	&xemuplugingui_descriptor,
 #endif
 //	&xemuosdgui_descriptor,
 	&xemunullgui_descriptor		// THIS MUST BE THE LAST ENTRY

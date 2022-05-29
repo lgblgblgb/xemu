@@ -729,6 +729,57 @@ for prefix in "" "/usr/local" ; do
 done
 
 
+##############################################
+# Check support for dlopen/dlsym/dl... stuff #
+##############################################
+
+
+HAS_DLSYM=N
+if [ $TARGET_IS_UNIX = Y ]; then
+	cat > $SRC << EOF
+#include <stdio.h>
+#include <dlfcn.h>
+int main ( void )
+{
+	void *so = dlopen("dummy.so", RTLD_NOW);
+	void *sy = so ? dlsym(so, "symbol") : NULL;
+	printf("%s\n", dlerror());
+	dlclose(so);
+	return !!so && !!sy;
+}
+EOF
+	echo -n "Checking dlopen/dlsym/dlerror/dlcose without -ldl ... "
+	if [ $TARGET_IS_LINUX = Y ]; then
+		echo -n "(skipping) "
+		ret=1
+	else
+		$CC $SRC -o $OBJ
+		ret=$?
+	fi
+	if [ "$ret" = "0" -a -s $OBJ ]; then
+		echo "OK"
+		echo "#define XEMU_HAS_DLSYM_API" >> $OUTPUT_HEADERFILE
+		echo "HAS_DLSYM_API=1" >> $OUTPUT_MAKEFILE
+		echo "DLSYM_LIBS=" >> $OUTPUT_MAKEFILE
+		HAS_DLSYM=Y
+	else
+		echo "NO"
+		echo -n "Checking dlopen/dlsym/dlerror/dlcose with -ldl ... "
+		$CC $SRC -o $OBJ -ldl
+		ret=$?
+		if [ "$ret" = "0" -a -s $OBJ ]; then
+			echo "OK"
+			echo "#define XEMU_HAS_DLSYM_API" >> $OUTPUT_HEADERFILE
+			echo "HAS_DLSYM_API=1" >> $OUTPUT_MAKEFILE
+			echo "DLSYM_LIBS=-ldl" >> $OUTPUT_MAKEFILE
+			HAS_DLSYM=Y
+		else
+			echo "NO"
+		fi
+	fi
+fi
+
+
 ############################################
 # Construct needed CFLAGS and LIBS for GUI #
 ############################################
