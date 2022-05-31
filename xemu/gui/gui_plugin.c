@@ -25,14 +25,32 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define PLUGINGUI_COMPATIBILITY_LEVEL	1
 #define PLUGINGUI_SYM_PREFIX		"XemuPluginGuiAPI_"
 
-#define PLUGINGUI_INITFLAG_X11		1
-#define PLUGINGUI_INITFLAG_WAYLAND	2
+static int  xemuplugingui_init		( void );
+static void xemuplugingui_shutdown	( void );
+static int  xemuplugingui_info		( int sdl_class, const char *msg );
 
+// DO NOT MODIFY OR MOVE THIS COMMENT: __PLUGIN_EXTRACT_INFO_ST__
 
-static int  xemuplugingui_init     ( void );
-static void xemuplugingui_shutdown ( void );
-static int  xemuplugingui_info     ( int sdl_class, const char *msg );
+#define PLUGINGUI_INFOFLAG_X11		1
+#define PLUGINGUI_INFOFLAG_WAYLAND	2
 
+// A pointer to this struct is passed the plugin's init function, which can be used by the plugin then
+// Also can be updated by the plugin, by calling this very struct's function pointer: info_updater
+// **** DO NOT MODIFY THIS STRUCT, IT WILL BREAK COMPATIBILITY WITH PLUGINS ****
+struct xemuplugingui_info_st {
+	int length;		// length of the structure (bytes) can be used to compare result from plugin's definition for this struct
+	Uint64 flags;		// various flags, see: PLUGINGUI_INFOFLAG_*
+	SDL_Window *sdl_window;	// SDL window of the emulator
+	const char *xemu_version;	// Xemu's "version"
+	struct xemuplugingui_info_st *(*info_updater)(void);	// call this from plugin to update the passed struct pointer at 'init'
+	int mousex,mousey;	// mouse position in pixels
+	int winx,winy;		// Xemu's window position in pixels
+	int sizex,sizey;	// Xemu's window size in pixels
+	FILE *debug_fp;		// DEBUG file's FILE* pointer, can be zero if not used!
+	int screenx,screeny;	// screen size in pixels
+};
+
+// DO NOT MODIFY OR MOVE THIS COMMENT: __PLUGIN_EXTRACT_INFO_ST__
 
 static struct xemugui_descriptor_st xemuplugingui_descriptor = {
 	.name		= "plugin",
@@ -108,6 +126,8 @@ static void *_plugingui_dlsym ( const char *name, const char *fatal_errstr )
 	char sym[strlen(prefix) + strlen(name) + 1];
 	strcpy(sym, prefix);
 	strcat(sym, name);
+	if (!plugingui.so)
+		FATAL("Plugin-GUI dlsym() without dlopen()");
 	void *result = dlsym(plugingui.so, sym);
 	if (!result) {
 		DEBUGPRINT("GUI: PLUGIN: cannot resolve \"%s\" [%s]: %s" NL, sym, fatal_errstr ? "FATAL-ERROR" : "skipping-symbol", dlerror());
@@ -120,6 +140,32 @@ static void *_plugingui_dlsym ( const char *name, const char *fatal_errstr )
 }
 
 
+// Though it's a static function, it will be exposed via "info_updater" ptr to the plugin
+static struct xemuplugingui_info_st *init_struct_updater ( void )
+{
+	// though this struct is here (and static, important!) it will be exposed to the plugin
+	// via the 'return' at the end of this function which is passed to the "init" function of the plugin.
+	static struct xemuplugingui_info_st i;
+	memset(&i, 0, sizeof i);
+	i.length = sizeof i;
+	i.flags =
+		(sdl_on_x11	? PLUGINGUI_INFOFLAG_X11     : 0) |
+		(sdl_on_wayland	? PLUGINGUI_INFOFLAG_WAYLAND : 0);
+	i.sdl_window = sdl_win;
+	i.xemu_version = XEMU_BUILDINFO_CDATE;
+	i.info_updater = init_struct_updater;	// ourself ;)
+	SDL_GetGlobalMouseState(&i.mousex, &i.mousey);
+	SDL_GetWindowPosition(sdl_win, &i.winx, &i.winy);
+	SDL_GetWindowSize(sdl_win, &i.sizex, &i.sizey);
+	i.debug_fp = debug_fp;
+	SDL_DisplayMode dm;
+	SDL_GetCurrentDisplayMode(0, &dm);
+	i.screenx = dm.w;
+	i.screeny = dm.h;
+	return &i;
+}
+
+
 static int xemuplugingui_init ( void )
 {
 	static const char plugin_fn[] = PLUGINGUI_SO_FN;
@@ -127,11 +173,11 @@ static int xemuplugingui_init ( void )
 	char fn[strlen(sdl_pref_dir) + strlen(plugin_fn) + 1];
 	strcpy(fn, sdl_pref_dir);
 	strcat(fn, plugin_fn);
+	_plugingui_dlclose();
 	plugingui.ShowMessageBox	= NULL;
 	plugingui.ShowSimpleMessageBox	= NULL;
 	SDL_ShowSimpleMessageBox_custom = NULL;
 	SDL_ShowMessageBox_custom	= NULL;
-	_plugingui_dlclose();
 	if (!xemu_os_file_exists(fn)) {
 		DEBUGPRINT("GUI: PLUGIN: plugin does not exist, skipping it: %s" NL, fn);
 		return 1;
@@ -152,14 +198,10 @@ static int xemuplugingui_init ( void )
 		return 1;
 	}
 	// Initialize plugin
-	int (*init_cb)(const int) = _plugingui_dlsym("init", missing_compulsory_export_errstr);
-	if (!init_cb) {
+	int (*init_cb)(struct xemuplugingui_info_st*) = _plugingui_dlsym("init", missing_compulsory_export_errstr);
+	if (!init_cb)
 		return 1;
-	}
-	const int init_result = init_cb(
-		(sdl_on_x11	? PLUGINGUI_INITFLAG_X11     : 0) |
-		(sdl_on_wayland	? PLUGINGUI_INITFLAG_WAYLAND : 0)
-	);
+	const int init_result = init_cb(init_struct_updater());
 	if (init_result) {
 		DEBUGPRINT("GUI: PLUGIN: init call failure: plugin returned with non-zero (%d) value" NL, init_result);
 		_plugingui_dlclose();
