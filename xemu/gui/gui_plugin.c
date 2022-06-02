@@ -20,7 +20,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include <dlfcn.h>
 
-
 #define PLUGINGUI_SO_FN			"plugingui.so"
 #define PLUGINGUI_COMPATIBILITY_LEVEL	1
 #define PLUGINGUI_SYM_PREFIX		"XemuPluginGuiAPI_"
@@ -31,6 +30,7 @@ static int  xemuplugingui_info		( int sdl_class, const char *msg );
 
 // DO NOT MODIFY OR MOVE THIS COMMENT: __PLUGIN_EXTRACT_INFO_ST__
 
+// **** DO NOT MODIFY THESE VALUES, IT WILL BREAK COMPATIBILITY WITH PLUGINS ****
 #define PLUGINGUI_INFOFLAG_X11		1
 #define PLUGINGUI_INFOFLAG_WAYLAND	2
 
@@ -66,27 +66,9 @@ static struct xemugui_descriptor_st xemuplugingui_descriptor = {
 static struct {
 	void  *so;
 	void (*shutdown_cb)(void);
-	int  (*ShowSimpleMessageBox)(Uint32 flags, const char *title, const char *message, SDL_Window *window);
-	int  (*ShowMessageBox)(const SDL_MessageBoxData *messageboxdata, int *buttonid);
 } plugingui = {
 	.so	= NULL
 };
-
-
-static int SDL_ShowSimpleMessageBox_xemuguiplugin ( Uint32 flags, const char *title, const char *message, SDL_Window *window )
-{
-	return (plugingui.so && plugingui.ShowSimpleMessageBox) ?
-		plugingui.ShowSimpleMessageBox(flags, title, message, window) :
-		SDL_ShowSimpleMessageBox(flags, title, message, window);
-}
-
-
-static int SDL_ShowMessageBox_xemuguiplugin ( const SDL_MessageBoxData *messageboxdata, int *buttonid )
-{
-	return (plugingui.so && plugingui.ShowMessageBox) ?
-		plugingui.ShowMessageBox(messageboxdata, buttonid) :
-		SDL_ShowMessageBox(messageboxdata, buttonid);
-}
 
 
 static int xemuplugingui_info ( int sdl_class, const char *msg )
@@ -106,11 +88,15 @@ static int xemuplugingui_info ( int sdl_class, const char *msg )
 			title = "Xemu ???";
 			break;
 	}
-	return SDL_ShowSimpleMessageBox_xemuguiplugin(sdl_class, title, msg, sdl_win);
+#ifndef XEMU_NO_SDL_DIALOG_OVERRIDE5
+	return SDL_ShowSimpleMessageBox_custom(sdl_class, title, msg, sdl_win);
+#else
+	return SDL_ShowSimpleMessageBox(sdl_class, title, msg, sdl_win);
+#endif
 }
 
 
-static inline void _plugingui_dlclose ( void )
+static void _plugingui_dlclose ( void )
 {
 	if (plugingui.so) {
 		dlclose(plugingui.so);
@@ -141,7 +127,7 @@ static void *_plugingui_dlsym ( const char *name, const char *fatal_errstr )
 
 
 // Though it's a static function, it will be exposed via "info_updater" ptr to the plugin
-static struct xemuplugingui_info_st *init_struct_updater ( void )
+static struct xemuplugingui_info_st *get_info_struct ( void )
 {
 	// though this struct is here (and static, important!) it will be exposed to the plugin
 	// via the 'return' at the end of this function which is passed to the "init" function of the plugin.
@@ -153,7 +139,7 @@ static struct xemuplugingui_info_st *init_struct_updater ( void )
 		(sdl_on_wayland	? PLUGINGUI_INFOFLAG_WAYLAND : 0);
 	i.sdl_window = sdl_win;
 	i.xemu_version = XEMU_BUILDINFO_CDATE;
-	i.info_updater = init_struct_updater;	// ourself ;)
+	i.info_updater = get_info_struct;	// ourself ;)
 	SDL_GetGlobalMouseState(&i.mousex, &i.mousey);
 	SDL_GetWindowPosition(sdl_win, &i.winx, &i.winy);
 	SDL_GetWindowSize(sdl_win, &i.sizex, &i.sizey);
@@ -173,11 +159,9 @@ static int xemuplugingui_init ( void )
 	char fn[strlen(sdl_pref_dir) + strlen(plugin_fn) + 1];
 	strcpy(fn, sdl_pref_dir);
 	strcat(fn, plugin_fn);
+	SDL_ShowSimpleMessageBox_custom = SDL_ShowSimpleMessageBox;
+	SDL_ShowMessageBox_custom	= SDL_ShowMessageBox;
 	_plugingui_dlclose();
-	plugingui.ShowMessageBox	= NULL;
-	plugingui.ShowSimpleMessageBox	= NULL;
-	SDL_ShowSimpleMessageBox_custom = NULL;
-	SDL_ShowMessageBox_custom	= NULL;
 	if (!xemu_os_file_exists(fn)) {
 		DEBUGPRINT("GUI: PLUGIN: plugin does not exist, skipping it: %s" NL, fn);
 		return 1;
@@ -201,7 +185,7 @@ static int xemuplugingui_init ( void )
 	int (*init_cb)(struct xemuplugingui_info_st*) = _plugingui_dlsym("init", missing_compulsory_export_errstr);
 	if (!init_cb)
 		return 1;
-	const int init_result = init_cb(init_struct_updater());
+	const int init_result = init_cb(get_info_struct());
 	if (init_result) {
 		DEBUGPRINT("GUI: PLUGIN: init call failure: plugin returned with non-zero (%d) value" NL, init_result);
 		_plugingui_dlclose();
@@ -211,10 +195,12 @@ static int xemuplugingui_init ( void )
 	// it means, that the plugin does not provide that kind of capability.
 	plugingui.shutdown_cb			= _plugingui_dlsym("shutdown", NULL);
 #ifndef XEMU_NO_SDL_DIALOG_OVERRIDE5
-	plugingui.ShowSimpleMessageBox		= _plugingui_dlsym("SDL_ShowSimpleMessageBox", NULL);
-	SDL_ShowSimpleMessageBox_custom		= SDL_ShowSimpleMessageBox_xemuguiplugin;
-	plugingui.ShowMessageBox		= _plugingui_dlsym("SDL_ShowMessageBox", NULL);
-	SDL_ShowMessageBox_custom		= SDL_ShowMessageBox_xemuguiplugin;
+	void *s	= _plugingui_dlsym("SDL_ShowSimpleMessageBox", NULL);
+	if (s)
+		SDL_ShowSimpleMessageBox_custom	= s;
+	s	= _plugingui_dlsym("SDL_ShowMessageBox", NULL);
+	if (s)
+		SDL_ShowMessageBox_custom	= s;
 #endif
 	xemuplugingui_descriptor.iteration	= _plugingui_dlsym("iteration", NULL);
 	xemuplugingui_descriptor.file_selector	= _plugingui_dlsym("file_selector", NULL);
@@ -226,7 +212,12 @@ static int xemuplugingui_init ( void )
 
 static void xemuplugingui_shutdown ( void )
 {
-	if (plugingui.so && plugingui.shutdown_cb)
+	if (!plugingui.so)
+		return;
+	SDL_ShowSimpleMessageBox_custom = SDL_ShowSimpleMessageBox;
+	SDL_ShowMessageBox_custom	= SDL_ShowMessageBox;
+	if (plugingui.shutdown_cb)
 		plugingui.shutdown_cb();
 	_plugingui_dlclose();
+	DEBUGPRINT("GUI: PLUGIN: shutdown." NL);
 }
