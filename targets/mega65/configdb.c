@@ -49,6 +49,7 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "extonboard",	NULL, "Use external initial memory content for the onboarding utility", &configdb.extonboard },
 	{ "extfreezer",	NULL, "Use external initial memory content for the Freezer", &configdb.extfreezer },
 	{ "hdosdir",	NULL, "Set directory with HyppoDOS redirections", &configdb.hdosdir },
+	{ "defaultdir",	NULL, "Set initial default directory for most file selector UIs", &configdb.defaultdir },
 	{ "rom",	NULL, "Override Hyppo's loaded ROM during booting.", &configdb.rom },
 	{ "prg",	NULL, "Load a PRG file directly into the memory (/w C64/65 auto-detection on load address)", &configdb.prg },
 	{ "sdimg",	SDCARD_NAME, "Override path of SD-image to be used (also see the -virtsd option!)", &configdb.sdimg },

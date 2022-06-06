@@ -43,6 +43,7 @@ struct configdb_st {
 	char	*extonboard;
 	char	*extfreezer;
 	char	*hdosdir;
+	char	*defaultdir;
 	char	*rom;
 	int	romfromsd;
 	int	defd81fromsd;

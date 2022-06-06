@@ -2,7 +2,7 @@
 ## This file is part of the Xemu project: https://github.com/lgblgblgb/xemu
 ## Collection of various emulators of some 8 bits machines using SDL2 library.
 ##
-## Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -466,6 +466,11 @@ cat > $SRC <<EOF
 #else
 #	define	IS_HTML		"N"
 #endif
+#ifdef	XEMU_ARCH_HAIKU
+#	define	IS_HAIKU	"Y"
+#else
+#	define	IS_HAIKU	"N"
+#endif
 
 // Do *NOT* modify these (not even a single space!!!), the configure script will extract the result from this after running the C preprocessor!
 const char *xemu_SYSTEM = XEMU_ARCH_NAME;
@@ -476,6 +481,7 @@ const char *xemu_IS_WIN64 = IS_WIN64;
 const char *xemu_IS_OSX	= IS_OSX;
 const char *xemu_IS_LINUX = IS_LINUX;
 const char *xemu_IS_HTML = IS_HTML;
+const char *xemu_IS_HAIKU = IS_HAIKU;
 
 int main ( void ) {
 	// This is not used at all. Just for testing linkage to see if we have printf()
@@ -491,7 +497,7 @@ $CC $CFLAGS -E -I. -c $SRC > $COUT 2> $CERR || failed
 echo "OK"
 
 echo -n "Analyzing compilation target:"
-for a in SYSTEM IS_UNIX IS_WIN IS_WIN32 IS_WIN64 IS_OSX IS_LINUX IS_HTML ; do
+for a in SYSTEM IS_UNIX IS_WIN IS_WIN32 IS_WIN64 IS_OSX IS_LINUX IS_HTML IS_HAIKU ; do
 	echo -n " $a="
 	b=`sed -n "s/^const char \*xemu_$a = \"//p" $COUT | cut -f1 -d'"'`
 	echo -n $b
@@ -518,7 +524,11 @@ echo
 ###############################
 
 
-if [ $TARGET_IS_UNIX = Y ]; then
+if [ $TARGET_IS_HAIKU = Y ]; then
+	# Haiku has "UNIX-compatible" socket API, but needs libnetwork to be linked
+	echo "#define XEMU_HAS_SOCKET_API" >> $OUTPUT_HEADERFILE
+	echo "SOCKET_LIBS = -lnetwork" >> $OUTPUT_MAKEFILE
+elif [ $TARGET_IS_UNIX = Y ]; then
 	# UNIX-kind systems should have socket API, also without any additional libraries involved
 	echo "#define XEMU_HAS_SOCKET_API" >> $OUTPUT_HEADERFILE
 	echo "SOCKET_LIBS =" >> $OUTPUT_MAKEFILE
