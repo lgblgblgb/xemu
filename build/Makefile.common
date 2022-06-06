@@ -68,6 +68,11 @@ SUPERPICKY		= no
 CFLAGS_TARGET		= $(CFLAGS_TARGET_$(PRG_TARGET))
 LDFLAGS_TARGET		= $(LDFLAGS_TARGET_$(PRG_TARGET))
 
+ifeq ($(SANITIZE), yes)
+CONFIG_CFLAGS_DEBUG	+= -fsanitize=address -fno-omit-frame-pointer
+CONFIG_CFLAGS_LINK	+= -fsanitize=address -fno-omit-frame-pointer
+DEBUG			= yes
+endif
 ifeq ($(DEBUG), yes)
 CFLAGS_OPT		= $(CONFIG_CFLAGS_DEBUG)
 CONFIG_CFLAGS_LINK	+= -g
