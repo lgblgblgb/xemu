@@ -179,7 +179,7 @@ void vic_init ( void )
 	// Init VIC4 stuffs
 	vic4_init_palette();
 	vic_reset();
-	c128_d030_reg = 0xFE;	// this may be set to 2MHz in the previous step, so be sure to set to FF here, BUT FIX: bit 0 should be inverted!!
+	c128_d030_reg = 0;	// make sure to set it to zero, FIXME: should we move this into vic_reset() which is also called from vic_init() but then would function only calling reset as well?!
 	machine_set_speed(0);
 	vic4_reset_display_counters();
 	DEBUG("VIC4: has been initialized." NL);
@@ -538,6 +538,10 @@ static const char vic_registers_internal_mode_names[] = {'4', '3', '2'};
 */
 void vic_write_reg ( unsigned int addr, Uint8 data )
 {
+#if 0
+	if (addr == 0x7D || addr == 0x7E || addr == 0x7F)
+		DEBUGPRINT("VIC: crosshair reg $%02X was written with value $%03X at PC=$%04X" NL, addr, data, cpu65.old_pc);
+#endif
 	//DEBUGPRINT("VIC%c: write reg $%02X (internally $%03X) with data $%02X" NL, XEMU_LIKELY(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, data);
 	// IMPORTANT NOTE: writing of vic_registers[] happens only *AFTER* this switch/case construct! This means if you need to do this before, you must do it manually at the right "case"!!!!
 	// if you do so, you can even use "return" instead of "break" to save the then-redundant write of the register
@@ -594,9 +598,13 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;
 		CASE_VIC_ALL(0x1E):	// sprite-sprite collision
 			vic_registers[0x1E] = 0;
+			interrupt_status &= 255 - 4;
+			interrupt_checker();
 			return;
 		CASE_VIC_ALL(0x1F):	// sprite-data collision
 			vic_registers[0x1F] = 0;
+			interrupt_status &= 255 - 2;
+			interrupt_checker();
 			return;
 		CASE_VIC_2(0x20): CASE_VIC_2(0x21): CASE_VIC_2(0x22): CASE_VIC_2(0x23): CASE_VIC_2(0x24): CASE_VIC_2(0x25): CASE_VIC_2(0x26): CASE_VIC_2(0x27):
 		CASE_VIC_2(0x28): CASE_VIC_2(0x29): CASE_VIC_2(0x2A): CASE_VIC_2(0x2B): CASE_VIC_2(0x2C): CASE_VIC_2(0x2D): CASE_VIC_2(0x2E):
@@ -611,7 +619,9 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x28): CASE_VIC_4(0x29): CASE_VIC_4(0x2A): CASE_VIC_4(0x2B): CASE_VIC_4(0x2C): CASE_VIC_4(0x2D): CASE_VIC_4(0x2E):
 			break;		// colour-related registers are full 8 bit for VIC-IV and VIC-III
 		CASE_VIC_ALL(0x2F):	// the KEY register, it must be handled in ALL VIC modes, to be able to set VIC I/O mode
-			do {
+			// FIXME? in hypervisor mode, it's not possible to alter I/O mode?? Thus I just ignore write in that case.
+			// This seems to make freezer actually starting in Xemu, first time ever :-O
+			if (!in_hypervisor) {
 				int vic_new_iomode;
 				etherbuffer_is_io_mapped = 0;
 				if (data == 0x96 && vic_registers[0x2F] == 0xA5) {
@@ -634,10 +644,13 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 					DEBUG("VIC: changing I/O mode %d(%s) -> %d(%s)" NL, vic_iomode, iomode_names[vic_iomode], vic_new_iomode, iomode_names[vic_new_iomode]);
 					vic_iomode = vic_new_iomode;
 				}
-			} while(0);
+			} else
+				DEBUGPRINT("VIC: warning: I/O mode KEY $D02F register wanted to be written (with $%02X) in hypervisor mode! PC=$%04X" NL, data, cpu65.old_pc);
 			break;
 		CASE_VIC_2(0x30):	// this register is _SPECIAL_, and exists only in VIC-II (C64) I/O mode: C128-style "2MHz fast" mode ...
-			DEBUGPRINT("VIC: Write 0xD030 in VIC-II I/O mode with data $%02x @ PC=$%04X (hypervisor mode: %d)" NL, data, cpu65.old_pc, !!in_hypervisor);
+			// NOTE: in theory it's NOT possible to write this reg in hypervisor mode anymore, as then **always** VIC-4 I/O mode is assumed, if I'm right!
+			DEBUGPRINT("VIC: Write $D030 in VIC-II I/O mode with data $%02x @ PC=$%04X (hypervisor mode: %d)" NL, data, cpu65.old_pc, !!in_hypervisor);
+			data &= 1;	// use only bit0
 			c128_d030_reg = data;
 			machine_set_speed(0);
 			return;		// it IS important to have return here, since it's not a "real" VIC-4 mode register's view in another mode!!
@@ -821,9 +834,14 @@ Uint8 vic_read_reg ( int unsigned addr )
 		CASE_VIC_ALL(0x1D):	// sprite-X expansion
 			break;
 		CASE_VIC_ALL(0x1E):	// sprite-sprite collision
+			vic_registers[0x1E] = 0;
+			interrupt_status &= 255 - 4;
+			interrupt_checker();
+			break;
 		CASE_VIC_ALL(0x1F):	// sprite-data collision
-			vic_registers[addr & 0x7F] = 0;	// 1E and 1F registers are cleared on read!
-			// FIXME: needs to re-check interrupts!
+			vic_registers[0x1F] = 0;
+			interrupt_status &= 255 - 2;
+			interrupt_checker();
 			break;
 		CASE_VIC_2(0x20): CASE_VIC_2(0x21): CASE_VIC_2(0x22): CASE_VIC_2(0x23): CASE_VIC_2(0x24): CASE_VIC_2(0x25): CASE_VIC_2(0x26): CASE_VIC_2(0x27):
 		CASE_VIC_2(0x28): CASE_VIC_2(0x29): CASE_VIC_2(0x2A): CASE_VIC_2(0x2B): CASE_VIC_2(0x2C): CASE_VIC_2(0x2D): CASE_VIC_2(0x2E):
@@ -915,16 +933,20 @@ Uint8 vic_read_reg ( int unsigned addr )
 #undef CASE_VIC_3_4
 
 
-
+// A very interesting thing happening here. If I want to check only if is_sprite[pos] is zero,
+// I found, that the sprite can collide with itself ... Looks like it sees it's "own data"
+// somehow which should be impossible as "is_sprite" is zeroed after each scanline. No idea,
+// maybe some non-integer stepping make this? Anyway, I had to use another algorithm because of
+// this problem. - LGB
 #ifdef	SPRITE_SPRITE_COLLISION
 #	warning "Sprite-sprite collision is an experimental feature (SPRITE_SPRITE_COLLISION is defined)!"
-#	define DO_SPRITE_SPRITE_COLLISION(pos,cond) do {	\
-		if (cond) {					\
-			const Uint8 sp = is_sprite[pos];	\
-			is_sprite[pos] = sp | sprbmask;		\
-			if (sp) 				\
-				vic_registers[0x1E] |= sp | sprbmask;	\
-		}						\
+#	define DO_SPRITE_SPRITE_COLLISION(pos,cond) do {		\
+		if (cond) {						\
+			const Uint8 sp = is_sprite[pos] | sprbmask;	\
+			is_sprite[pos] = sp;				\
+			if (XEMU_UNLIKELY(sp != sprbmask))		\
+				vic_registers[0x1E] |= sp;		\
+		}							\
 	} while (0)
 #ifndef	SPRITE_ANY_COLLISION
 #define	SPRITE_ANY_COLLISION
@@ -1520,6 +1542,16 @@ int vic4_render_scanline ( void )
 
 	if (XEMU_LIKELY(REG_DISPLAYENABLE) && (ycounter >= BORDER_Y_TOP && ycounter < BORDER_Y_BOTTOM)) {
 		vic4_do_sprites();
+		if (vic_registers[0x1E])		// sprite-sprite collision
+			interrupt_status |= 4;
+		else
+			interrupt_status &= 255 - 4;
+		if (vic_registers[0x1F])		// sprite-foreground collision
+			interrupt_status |= 2;
+		else
+			interrupt_status &= 255 - 2;
+		// I don't call interrupt_checker() as it will be on the next call of the current function.
+		// That check then is part of function check_raster_interrupt. Yes a bit confusing and messy ... - LGB
 	}
 
 	ycounter++;

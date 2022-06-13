@@ -53,9 +53,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define INITIAL_WINDOW_HEIGHT	576
 
 static int nmi_level;			// please read the comment at nmi_set() below
-
-int newhack = 0;
-
 static int emulation_is_running = 0;
 static int speed_current = -1;
 static int paused = 0, paused_old = 0;
@@ -94,8 +91,10 @@ void cpu65_illegal_opcode_callback ( void )
 }
 
 
-//#define C128_SPEED_BIT_BUG 1
-#define C128_SPEED_BIT_BUG 0
+// The original code may have the speed bit inverted for C128 fast mode (2MHz).
+// I can play with this to setting the workaround or not.
+#define C128_SPEED_BIT_BUG 1
+//#define C128_SPEED_BIT_BUG 0
 
 
 void machine_set_speed ( int verbose )
@@ -389,7 +388,7 @@ static void mega65_init ( void )
 	);
 	cia2.DDRA = 3; // Ugly workaround ... I think, SD-card setup "CRAM UTIL" (or better: Hyppo) should set this by its own. Maybe Xemu bug, maybe not?
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
-	dma_init(newhack ? DMA_FEATURE_HACK | DMA_FEATURE_DYNMODESET | configdb.dmarev : configdb.dmarev);
+	dma_init();
 	// *** Drive 8 external mount
 	if (configdb.disk8) {
 		if (sdcard_force_external_mount(0, configdb.disk8, "Mount failure on CLI/CFG requested drive-8"))
@@ -482,7 +481,7 @@ void reset_mega65 ( void )
 	hwa_kbd_disable_selector(0);	// FIXME: do we need this, or hyppo will make it so for us?
 	eth65_reset();
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
-	c128_d030_reg = 0xFF;
+	c128_d030_reg = 0;
 	machine_set_speed(0);
 	memory_set_cpu_io_port_ddr_and_data(0xFF, 0xFF);
 	map_mask = 0;
@@ -504,7 +503,7 @@ void reset_mega65_cpu_only ( void )
 {
 	last_reset_type = "WARM";
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
-	c128_d030_reg = 0xFF;
+	c128_d030_reg = 0;
 	machine_set_speed(0);
 	memory_set_cpu_io_port_ddr_and_data(0xFF, 0xFF);
 	map_mask = 0;
@@ -766,6 +765,7 @@ static void emulation_loop ( void )
 int main ( int argc, char **argv )
 {
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Evolving MEGA65 emulator from LGB", argc, argv);
+	core_age_in_days = (buildinfo_cdate_uts - 1577836800) / 86400;	// get build cdate (approx.) days since 2020 Jan 1
 	configdb_define_emulator_options(sizeof configdb);
 	if (xemucfg_parse_all())
 		return 1;
@@ -774,9 +774,6 @@ int main ( int argc, char **argv )
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(configdb.installer);
 #endif
-	newhack = !newhack;	// hehe, the meaning is kind of inverted, but never mind ...
-	if (newhack)
-		DEBUGPRINT("WARNING: *** NEW M65 HACK MODE ACTIVATED ***" NL);
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	window_title_info_addon = emulator_speed_title;
 	if (xemu_post_init(

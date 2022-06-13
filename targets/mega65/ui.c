@@ -76,6 +76,17 @@ static void ui_cb_attach_default_d81 ( const struct menu_st *m, int *query )
 	_mountd81_configdb_change(drive, NULL);	// just book this as "not mounted" (as the default). Maybe is it a FIXME?
 }
 
+
+// Used to override default directory for UI dialogs if it was "empty" (empty string as "dir")
+static void _check_file_selection_default_override ( char *dir )
+{
+	if (!*dir && configdb.defaultdir && strlen(configdb.defaultdir) < PATH_MAX) {
+		//DEBUGPRINT("UI: specifying default directory: %s" NL, configdb.defaultdir);
+		strcpy(dir, configdb.defaultdir);
+	}
+}
+
+
 static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
@@ -83,6 +94,7 @@ static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
 	const int creat = !!(VOIDPTR_TO_INT(m->user_data) & 0x80);
 	char fnbuf[PATH_MAX + 1];
 	static char dir[PATH_MAX + 1] = "";
+	_check_file_selection_default_override(dir);
 	// if "dir" static var is empty, let's initialize (otherwise it holds the last used dir by the user)
 	if (!dir[0]) {
 		// If HDOS virtualization is enabled, provide hdos root dir as default to browse,
@@ -138,6 +150,7 @@ static void ui_run_prg_by_browsing ( void )
 {
 	char fnbuf[PATH_MAX + 1];
 	static char dir[PATH_MAX + 1] = "";
+	_check_file_selection_default_override(dir);
 	if (!xemugui_file_selector(
 		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
 		"Select PRG to directly load and run",
@@ -207,6 +220,7 @@ static void ui_update_sdcard ( void )
 	else
 		ask_rom = 1;
 	if (ask_rom) {
+		_check_file_selection_default_override(dir_rom);
 		if (!*dir_rom)
 			strcpy(dir_rom, sdl_pref_dir);
 		// Select ROM image
@@ -310,6 +324,7 @@ static void reset_via_hyppo ( void )
 static void reset_into_custom_rom ( void )
 {
 	char fnbuf[PATH_MAX + 1];
+	_check_file_selection_default_override(dir_rom);
 	if (!*dir_rom)
 		strcpy(dir_rom, sdl_pref_dir);
 	// Select ROM image
@@ -435,6 +450,7 @@ static char last_used_dump_directory[PATH_MAX + 1] = "";
 static void ui_dump_memory ( void )
 {
 	char fnbuf[PATH_MAX + 1];
+	_check_file_selection_default_override(last_used_dump_directory);
 	if (!xemugui_file_selector(
 		XEMUGUI_FSEL_SAVE | XEMUGUI_FSEL_FLAG_STORE_DIR,
 		"Dump main memory content into file",
@@ -449,6 +465,7 @@ static void ui_dump_memory ( void )
 static void ui_dump_colram ( void )
 {
 	char fnbuf[PATH_MAX + 1];
+	_check_file_selection_default_override(last_used_dump_directory);
 	if (!xemugui_file_selector(
 		XEMUGUI_FSEL_SAVE | XEMUGUI_FSEL_FLAG_STORE_DIR,
 		"Dump colour memory content into file",
@@ -463,6 +480,7 @@ static void ui_dump_colram ( void )
 static void ui_dump_hyperram ( void )
 {
 	char fnbuf[PATH_MAX + 1];
+	_check_file_selection_default_override(last_used_dump_directory);
 	if (!xemugui_file_selector(
 		XEMUGUI_FSEL_SAVE | XEMUGUI_FSEL_FLAG_STORE_DIR,
 		"Dump hyperRAM content into file",
@@ -481,7 +499,8 @@ static void ui_emu_info ( void )
 	sha1_hash_str rom_now_hash_str;
 	sha1_checksum_as_string(rom_now_hash_str, main_ram + 0x20000, 0x20000);
 	const char *hdos_root;
-	int hdos_virt = hypervisor_hdos_virtualization_status(-1, &hdos_root);
+	const int hdos_virt = hypervisor_hdos_virtualization_status(-1, &hdos_root);
+	const int dma_rev = dma_get_revision();
 	INFO_WINDOW(
 		"DMA chip current revision: %d (F018 rev-%s)\n"
 		"ROM version detected: %d %s (%s,%s)\n"
@@ -497,7 +516,7 @@ static void ui_emu_info ( void )
 		"Xemu host CPU usage so far: %s\n"
 		"Xemu's host OS: %s"
 		,
-		dma_chip_revision, dma_chip_revision ? "B, new" : "A, old",
+		dma_rev, dma_rev ? "B, new" : "A, old",
 		rom_date, rom_name, rom_is_overriden ? "OVERRIDEN" : "installed", rom_is_external ? "external" : "internal",
 		rom_now_hash_str, strcmp(rom_hash_str, rom_now_hash_str) ? "MANGLED" : "intact",
 		last_reset_type,

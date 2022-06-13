@@ -41,6 +41,7 @@ struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 int    cpu_mega65_opcodes = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;
 int    port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65 keyboard
+int    core_age_in_days;
 
 
 static const Uint8 fpga_firmware_version[] = { 'X','e','m','u' };
@@ -178,14 +179,23 @@ Uint8 io_read ( unsigned int addr )
 					return hwa_kbd_get_modifiers();
 				case 0x13:				// $D613: direct access to the kbd matrix, read selected row (set by writing $D614), bit 0 = key pressed
 					return kbd_directscan_query(D6XX_registers[0x14]);	// for further explanations please see this function in input_devices.c
-				case 0x29:
-					return configdb.mega65_model;		// MEGA65 model
 				case 0x0F:
-					// D60F bit 5, real hardware (1), emulation (0), other bits are not emulated yet by Xemu, so I give simply zero
-					return 0;
+					// GS $D60F
+					// bit 0: cursor left key is pressed
+					// bit 1: cursor up key is pressed
+					// bit 5: 1=real hardware, 0=emulation
+					return kbd_query_leftup_status();	// do bit 0/1 forming in input_devices.c, other bits should be zero, so it's ok to call only this
 				case 0x1B:
 					// D61B amiga / 1531 mouse auto-detect. FIXME XXX what value we should return at this point? :-O
 					return 0xFF;
+				case 0x29: // GS $D629: UARTMISC:M65MODEL MEGA65 model ID.
+					return configdb.mega65_model;
+				case 0x2A: // GS $D62A KBD:FWDATEL LSB of keyboard firmware date stamp (days since 1 Jan 2020)
+				case 0x30: // GS $D630 FPGA:FWDATEL LSB of MEGA65 FPGA design date stamp (days since 1 Jan 2020)
+					return core_age_in_days & 0xFF;
+				case 0x2B: // GS $D62B KBD:FWDATEH MSB of keyboard firmware date stamp (days since 1 Jan 2020)
+				case 0x31: // GS $D631 FPGA:FWDATEH MSB of MEGA65 FPGA design date stamp (days since 1 Jan 2020)
+					return core_age_in_days >> 8;
 				case 0x32: // D632-D635: FPGA firmware ID
 				case 0x33:
 				case 0x34:

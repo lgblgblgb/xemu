@@ -1,5 +1,5 @@
 /* Commodore LCD emulator.
-   Copyright (C)2016,2018-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2018-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Part of the Xemu project: https://github.com/lgblgblgb/xemu
 
 This program is free software; you can redistribute it and/or modify

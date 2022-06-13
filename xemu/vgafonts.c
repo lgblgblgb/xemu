@@ -8,6 +8,10 @@
  *  Slightly modified in the Xemu project with those ugly macros ;)
  */
 
+#ifndef ALLOW_INCLUDE_VGAFONTS
+#error "Do not include vgafonts.c directly, but request it via emutools.c!"
+#endif
+
 #ifdef CHARACTER_SET_DEFINER_8X8
 CHARACTER_SET_DEFINER_8X8 = {
     0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00,

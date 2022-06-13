@@ -76,10 +76,11 @@ const char *str_are_you_sure_to_exit = "Are you sure to exit Xemu?";
 
 char **xemu_initial_argv = NULL;
 int    xemu_initial_argc = -1;
+Uint64 buildinfo_cdate_uts = 0;
 const char *xemu_initial_cwd = NULL;
 SDL_Window   *sdl_win = NULL;
-SDL_Renderer *sdl_ren = NULL;
-SDL_Texture  *sdl_tex = NULL;
+static SDL_Renderer *sdl_ren = NULL;
+static SDL_Texture  *sdl_tex = NULL;
 SDL_PixelFormat *sdl_pix_fmt;
 int sdl_on_x11 = 0, sdl_on_wayland = 0;
 static Uint32 sdl_pixel_format_id;
@@ -126,7 +127,23 @@ static int follow_win_size;
 #error "At least SDL version 2.0.4 is needed!"
 #endif
 
-#ifdef XEMU_OSD_SUPPORT
+#ifdef	XEMU_VGA_FONT_8X8
+#define	CHARACTER_SET_DEFINER_8X8	const Uint8 vga_font_8x8[256 *  8]
+#endif
+#ifdef	XEMU_VGA_FONT_8X14
+#define	CHARACTER_SET_DEFINER_8X14	const Uint8 vga_font_8x14[256 * 14]
+#endif
+#ifdef	XEMU_VGA_FONT_8X16
+#define	CHARACTER_SET_DEFINER_8X16	const Uint8 vga_font_8x16[256 * 16]
+#endif
+#define ALLOW_INCLUDE_VGAFONTS
+#include "xemu/vgafonts.c"
+#undef ALLOW_INCLUDE_VGAFONTS
+#undef	CHARACTER_SET_DEFINER_8X8
+#undef	CHARACTER_SET_DEFINER_8X14
+#undef	CHARACTER_SET_DEFINER_8X16
+
+#ifdef	XEMU_OSD_SUPPORT
 #include "xemu/gui/osd.c"
 #endif
 
@@ -577,7 +594,9 @@ static void shutdown_emulator ( void )
 	}
 	// It seems, calling SQL_Quit() at least on Windows causes "segfault".
 	// Not sure why, but to be safe, I just skip calling it :(
-	//SDL_Quit();
+#ifndef XEMU_ARCH_WIN
+	SDL_Quit();
+#endif
 }
 
 
@@ -678,8 +697,27 @@ static char *_getbasepath ( void )
 }
 
 
+static inline Uint64 _get_uts_from_cdate ( void )
+{
+	if (strlen(XEMU_BUILDINFO_CDATE) != 14)
+		FATAL("Wrong XEMU_BUILDINFO_CDATE length (%d)!", (int)strlen(XEMU_BUILDINFO_CDATE));
+	struct tm t = {
+		.tm_year  = (XEMU_BUILDINFO_CDATE[ 0] - '0') * 1000 + (XEMU_BUILDINFO_CDATE[ 1] - '0') * 100 + (XEMU_BUILDINFO_CDATE[2] - '0') * 10 + (XEMU_BUILDINFO_CDATE[3] - '0') - 1900,
+		.tm_mon   = (XEMU_BUILDINFO_CDATE[ 4] - '0') *   10 + (XEMU_BUILDINFO_CDATE[ 5] - '0') - 1,
+		.tm_mday  = (XEMU_BUILDINFO_CDATE[ 6] - '0') *   10 + (XEMU_BUILDINFO_CDATE[ 7] - '0'),
+		.tm_hour  = (XEMU_BUILDINFO_CDATE[ 8] - '0') *   10 + (XEMU_BUILDINFO_CDATE[ 9] - '0'),
+		.tm_min   = (XEMU_BUILDINFO_CDATE[10] - '0') *   10 + (XEMU_BUILDINFO_CDATE[11] - '0'),
+		.tm_sec   = (XEMU_BUILDINFO_CDATE[12] - '0') *   10 + (XEMU_BUILDINFO_CDATE[13] - '0'),
+		.tm_isdst = -1
+	};
+	return (Uint64)mktime(&t);
+}
+
+
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan, const int argc, char **argv )
 {
+	if (!buildinfo_cdate_uts)
+		buildinfo_cdate_uts = _get_uts_from_cdate();
 	if (xemu_initial_argc < 0)
 		xemu_initial_argc = argc;
 	if (xemu_initial_argc < 1)
@@ -708,6 +746,8 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 		FATAL("Xemu must not be run as user root");
 	if (getgid() == 0 || getegid() == 0)
 		FATAL("Xemu must not be run as group root");
+#elif !defined(XEMU_ARCH_SINGLEUSER)
+#	warning "Running as root check is deactivated."
 #endif
 	// ignore SIGHUP, eg closing the terminal Xemu was started from ...
 	signal(SIGHUP, SIG_IGN);	// ignore SIGHUP, eg closing the terminal Xemu was started from ...

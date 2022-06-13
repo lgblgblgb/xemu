@@ -43,6 +43,7 @@ struct configdb_st {
 	char	*extonboard;
 	char	*extfreezer;
 	char	*hdosdir;
+	char	*defaultdir;
 	char	*rom;
 	int	romfromsd;
 	int	defd81fromsd;
@@ -87,7 +88,6 @@ struct configdb_st {
 #endif
 	int	skip_unhandled_mem;
 	int	syscon;
-	int	dmarev;
 	int	mega65_model;		// $FF = Xemu/others, 1/2/3 = MEGA65 PCB rev 1/2/3, $40=nexys4, $41=nexys4ddr, $42=nexys4ddr-widget, $FD=wukong, $FE=simulation
 	int	hicked;
 	int	prgmode;

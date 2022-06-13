@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,9 +20,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 #define	XEMU_COMMON_ARCH_SYS_H_INCLUDED
 
-#ifndef	_ISOC11_SOURCE
-#	define	_ISOC11_SOURCE
-#endif
+#undef	_ISOC11_SOURCE
+#define	_ISOC11_SOURCE 1
+
 // We need this otherwise stupid things happen like M_E is not defined by math.h, grrr.
 #ifndef _DEFAULT_SOURCE
 #	define	_DEFAULT_SOURCE
@@ -91,6 +91,19 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #		define	__BSD_VISIBLE	1
 #	endif
 #	define	XEMU_SLEEP_IS_NANOSLEEP
+#elif defined(__HAIKU__)
+		// Haiku is not really a UNIX, but for starting point let's define
+		// it that way, since Xemu relies at many places that everything
+		// which is not Windows is UNIX (including Linux and MacOS)
+#		define	XEMU_ARCH_UNIX
+#		define	XEMU_ARCH_HAIKU
+#		define	XEMU_ARCH_NAME	"haiku"
+#		define	XEMU_SLEEP_IS_NANOSLEEP
+		// Haiku is not so much a multi-user system, thus we want
+		// to do this:
+#		define	XEMU_DO_NOT_DISALLOW_ROOT
+		// Also in general:
+#		define	XEMU_ARCH_SINGLEUSER
 #else
 #	error	"Unknown target OS architecture."
 #endif

@@ -25,7 +25,6 @@ extern const char *rom_name;
 extern sha1_hash_str rom_hash_str;
 extern int rom_is_openroms;
 extern int rom_is_stub;
-extern const Uint8 vga_font_8x8[2048];
 
 extern int rom_stubrom_requested;
 extern int rom_initrom_requested;

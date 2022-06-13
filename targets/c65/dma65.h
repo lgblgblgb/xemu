@@ -1,6 +1,6 @@
 /* F018 DMA core emulation for Commodore 65.
    Part of the Xemu project. https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -42,18 +42,6 @@ extern int   dma_update		( void );
 extern int   dma_update_multi_steps ( int do_for_cycles );
 
 extern void  detect_rom_date    ( Uint8 *p );
-
-/* Things should be provided by the emulator: */
-
-extern Uint8 DMA_SOURCE_IOREADER_FUNC	( int );
-extern Uint8 DMA_SOURCE_MEMREADER_FUNC	( int );
-extern Uint8 DMA_TARGET_IOREADER_FUNC	( int );
-extern Uint8 DMA_TARGET_MEMREADER_FUNC	( int );
-extern Uint8 DMA_LIST_READER_FUNC	( int );
-extern void  DMA_SOURCE_IOWRITER_FUNC	( int, Uint8 );
-extern void  DMA_SOURCE_MEMWRITER_FUNC	( int, Uint8 );
-extern void  DMA_TARGET_IOWRITER_FUNC	( int, Uint8 );
-extern void  DMA_TARGET_MEMWRITER_FUNC	( int, Uint8 );
 
 /* Snapshot related part: */
 

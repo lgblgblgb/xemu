@@ -331,6 +331,14 @@ DEFINE_WRITER(i2c_io_writer) {
 			break;
 	}
 }
+// Not implemented yet, just here, since freezer accesses this memory area, and without **some** dummy
+// support, it would cause "unhandled memory access" warning in Xemu.
+DEFINE_READER(mem1541_reader) {
+	return 0xFF;
+}
+DEFINE_WRITER(mem1541_writer) {
+}
+
 
 // Memory layout table for MEGA65
 // Please note, that for optimization considerations, it should be organized in a way
@@ -360,6 +368,7 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 	{ 0x4000000, 0x7FFFFFF, dummy_reader, dummy_writer },		// slow RAM memory area, not exactly known what it's for, let's define as "dummy"
 	{ 0xFE00000, 0xFE000FF, opl3_reader, opl3_writer },
 	{ 0x60000, 0xFFFFF, dummy_reader, dummy_writer },			// upper "unused" area of C65 (!) memory map. It seems C65 ROMs want it (Expansion RAM?) so we define as unused.
+	{ 0xFFDB000, 0xFFDFFFF, mem1541_reader, mem1541_writer },		// 1541's 16K ROM + 4K RAM, not so much used currently, but freezer seems to access it, for example ...
 	// the last entry *MUST* include the all possible addressing space to "catch" undecoded memory area accesses!!
 	{ 0, 0xFFFFFFF, invalid_mem_reader, invalid_mem_writer },
 	// even after the last entry :-) to filter out programming bugs, catch all possible even not valid M65 physical address space acceses ...

@@ -45,8 +45,6 @@ int in_the_matrix = 0;
 // TODO: some code here (Xemu specific matrix commands ...) should share interfade with
 // the uart_mon/umon, and in fact, that should be accessed from here, as on a real MEGA65!
 
-// to get charset
-#include "rom.h"
 
 #define MATRIX(...) do { \
 	char _buf_for_msg_[4096]; \
@@ -525,6 +523,10 @@ static int kbd_cb_textevent ( SDL_TextInputEvent *ev )
 
 void matrix_mode_toggle ( int status )
 {
+	if (!is_osd_enabled()) {
+		ERROR_WINDOW("OSD is not enabled to be able to use Matrix mode.");
+		return;
+	}
 	status = !!status;
 	if (status == !!in_the_matrix)
 		return;

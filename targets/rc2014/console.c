@@ -37,9 +37,7 @@ static int console_width, console_height;
 static Uint8 *video_ram;
 static Uint8 *color_ram;
 static Uint32 palette[16];
-#define	CHARACTER_SET_DEFINER_8X16 static const Uint8 chargen[]
-#include "xemu/vgafonts.c"
-#undef	CHARACTER_SET_DEFINER_8X16
+
 static const Uint8 console_colors[3*16] = {	// FIXME
 	0x00, 0x00, 0x00,	// black
 	0xFF, 0xFF, 0xFF,	// white
@@ -193,7 +191,7 @@ void console_iteration ( void )
 			for (int x = 0; x < console_width; x++) {
 				Uint32 fg  = palette[color_ram[vp + x] & 0xF];
 				Uint32 bg  = palette[color_ram[vp + x] >>  4];
-				Uint8 chln = chargen[video_ram[vp + x] * FONT_HEIGHT + row];
+				Uint8 chln = vga_font_8x16[video_ram[vp + x] * FONT_HEIGHT + row];
 				if (XEMU_UNLIKELY(cursor_line == y && cursor.x == x)) {
 					//Uint32 temp = fg;
 					//fg = bg;
