@@ -1321,7 +1321,7 @@ static XEMU_INLINE Uint8 *get_charset_effective_addr ( void )
 // color modes:
 //
 // - Monochrome (Bg/Fg)
-// - VICII Multicolor
+// - VIC-II Multicolor
 // - 16-color
 // - 256-color
 //
@@ -1336,8 +1336,8 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 	enable_bg_paint = 1;
 	const Uint8 *row_data_base_addr = get_charset_effective_addr();	// FIXME: is it OK that I moved here, before the loop?
 	if (display_row <= display_row_count) {
-		Uint8 *colour_ram_current_ptr = colour_ram + COLOUR_RAM_OFFSET + (display_row * LINESTEP_BYTES);
-		Uint8 *screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row * LINESTEP_BYTES);
+		Uint32 colour_ram_current_addr = COLOUR_RAM_OFFSET + (display_row * LINESTEP_BYTES);
+		Uint32 screen_ram_current_addr = SCREEN_ADDR + (display_row * LINESTEP_BYTES);
 		// Account for Chargen X-displacement
 		for (Uint32 *p = current_pixel; p < current_pixel + (CHARGEN_X_START - border_x_left); p++)
 			*p = palette[REG_SCREEN_COLOR];
@@ -1347,11 +1347,11 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 		Uint8 char_fetch_offset = 0;
 		// Chargen starts here.
 		while (line_char_index < REG_CHRCOUNT) {
-			Uint16 color_data = *(colour_ram_current_ptr++);
-			Uint16 char_value = *(screen_ram_current_ptr++);
+			Uint16 color_data = colour_ram[(colour_ram_current_addr++) & 0x07FFF];
+			Uint16 char_value = main_ram[(screen_ram_current_addr++) & 0x7FFFF];
 			if (REG_16BITCHARSET) {
-				color_data = (color_data << 8) | (*(colour_ram_current_ptr++));
-				char_value = char_value | (*(screen_ram_current_ptr++) << 8);
+				color_data = (color_data << 8) | colour_ram[(colour_ram_current_addr++) & 0x07FFF];
+				char_value = char_value | (main_ram[(screen_ram_current_addr++) & 0x7FFFF] << 8);
 				if (XEMU_UNLIKELY(SXA_GOTO_X(color_data))) {
 					// ---- Start of the GOTOX re-positioning functionality implementation, tricky one ----
 					xcounter = (char_value & 0x3FF);	// first, extract the goto 'X' value as an usigned number
