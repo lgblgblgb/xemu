@@ -56,7 +56,7 @@ static int   command;			// DMA command (-1, no command yet) byte of DMA list rea
 static enum  dma_op_types dma_op;	// two lower bits of "command"
 static int   chained;			// 1 = chained (read next DMA operation "descriptor")
 static int   list_addr;			// Current address of the DMA list, controller will read to "execute"
-static int   is_list_by_cpu_addr;		// logic value, if true, the list_addr is CPU mapped address not linear!
+static int   list_addr_policy;		// 0 = normal, 1 = list addr by CPU addr, 2 = list addr by CPU addr WITH PC-writeback (3=temporary signal to fetch CPU-PC then go back to '2')
 static Uint8 minterms[4];		// Used with MIX DMA command only
 static int   in_dma_update;		// signal that DMA update do something. Currently only useful to avoid PANIC when DMA would modify its own registers
 static int   dma_self_write_warning;	// Warning window policy for the event in case of the happening described in the comment of the previous line :)
@@ -90,30 +90,12 @@ static struct {
 	int enabled, used, col_counter, col_limit, row_counter, row_limit, value;
 } modulo;
 
-
 // On C65, DMA cannot cross 64K boundaries, so the right mask is 0xFFFF
 // On MEGA65 it seems to be 1Mbyte, thus the mask should be 0xFFFFF
 #define MEM_ADDR_MASK	0xFFFFF
 
-
 #define dma_read_source()	(XEMU_UNLIKELY(source.is_io) ? io_dma_reader(DMA_ADDRESSING(source)) : memory_dma_source_mreader(DMA_ADDRESSING(source)))
 #define dma_read_target()	(XEMU_UNLIKELY(target.is_io) ? io_dma_reader(DMA_ADDRESSING(target)) : memory_dma_target_mreader(DMA_ADDRESSING(target)))
-
-
-#if 0
-#define dma_write_source(data)	do { \
-					if (XEMU_UNLIKELY(source.is_io)) \
-						io_dma_writer(DMA_ADDRESSING(source), data); \
-					else \
-						memory_dma_source_mwriter(DMA_ADDRESSING(source), data); \
-				} while (0)
-#define dma_write_target(data)	do { \
-					if (XEMU_UNLIKELY(target.is_io)) \
-						io_dma_writer(DMA_ADDRESSING(target), data); \
-					else \
-						memory_dma_target_mwriter(DMA_ADDRESSING(target), data); \
-				} while (0)
-#endif
 
 static XEMU_INLINE void dma_write_source ( Uint8 data )
 {
@@ -138,25 +120,27 @@ static XEMU_INLINE void dma_write_target ( Uint8 data )
 // On MEGA65 DMA list reading address never warps around (64K or 1M boundaries) BUT, we must take account the whole 28 bit memory address space at least
 #define MEM_LIST_MASK 0xFFFFFFFU
 
-// Unlike the functions above, DMA list read is always memory (not I/O)
-// Also the "step" is always one. So it's a bit special case ... even on M65 we don't use fixed point math here, just pure number
-// FIXME: I guess here, that reading DMA list also warps within a 64K area
-#ifndef DO_DEBUG_DMA
-#define dma_read_list_next_byte()	memory_dma_list_reader(((list_addr++) & MEM_LIST_MASK))
-#else
+#ifdef DO_DEBUG_DMA
 static int dma_list_entry_pos = 0;
+#endif
 
 static Uint8 dma_read_list_next_byte ( void )
 {
-	list_addr &= MEM_LIST_MASK;
-	const Uint8 data = memory_dma_list_reader(list_addr);
-	DEBUGPRINT("DMA: reading DMA (rev#%d) list from $%08X ($%02X) [#%d]: $%02X" NL, dma_revision, addr, list_addr, dma_list_entry_pos, data);
-	list_addr++;
+	Uint8 data;
+	if (list_addr_policy) {
+		list_addr &= 0xFFFF;
+		data = cpu65_read_callback(list_addr);
+	} else {
+		list_addr &= MEM_LIST_MASK;
+		data = memory_dma_list_reader(list_addr);
+	}
+#ifdef	DO_DEBUG_DMA
+	DEBUGPRINT("DMA: reading DMA (rev#%d) list from $%08X [%s] [#%d]: $%02X" NL, dma_revision, list_addr, list_addr_policy ? "CPU-addr" : "linear-addr", dma_list_entry_pos, data);
 	dma_list_entry_pos++;
+#endif
+	list_addr++;
 	return data;
 }
-#endif
-
 
 static XEMU_INLINE void copy_next ( void )
 {
@@ -217,35 +201,47 @@ void dma_write_reg ( int addr, Uint8 data )
 		return;
 	}
 	dma_registers[addr] = data;
-	enhanced_dma = 0;		// default: not an enhanced MEGA65 DMA session
-	is_list_by_cpu_addr = 0;	// default: DMA list is by physical address
+	// The rule here: every cases in the "switch" statement MUST return from the function, UNLESS the DMA register
+	// write is about to initiate a new DMA session!
 	switch (addr) {
 		case 0x3:
 			if (dma_default_revision != (data & 1)) {
 				DEBUGPRINT("DMA: default DMA chip revision change %d -> %d because of writing DMA register 3" NL, dma_default_revision, data & 1);
 				dma_default_revision = data & 1;
 			}
-			break;
+			return;
 		case 0x2:	// for compatibility with C65, MEGA65 here resets the MB part of the DMA list address
 			dma_registers[4] = 0;	// this is the "MB" part of the DMA list address (hopefully ...)
-			break;
+			return;
 		case 0xE:	// Set low order bits of DMA list address, without starting (MEGA65 feature, but without VIC4 new mode, this reg will never addressed here anyway)
 			dma_registers[0] = data;
-			break;
+			return;
+		default:
+			return;
+		case 0x0:
 		case 0x5:
-		case 0x6:
-			addr = 0;		// fool the code that it's a DMA trigger
-			enhanced_dma = 1;	// set the enhanced mode flag though
+			// Normal DMA session (0) OR enhanced DMA session (5)
+			enhanced_dma = !!addr;
 			dma_registers[0] = data;
-			is_list_by_cpu_addr = (addr == 0x6);	// in case of register 6, it's a special mode with CPU mapped addr to read DMA list
-			break;
+			list_addr = data | (dma_registers[1] << 8) | ((dma_registers[2] & 0xF) << 16) | (dma_registers[4] << 20);
+			list_addr_policy = 0;
+			break;	// Do NOT return but continue the function!
+		case 0x6:
+			// Enhanced DMA session, list by CPU address
+			enhanced_dma = 1;
+			dma_registers[0] = data;
+			list_addr = data | (dma_registers[1] << 8);
+			list_addr_policy = 1;
+			break;	// Do NOT return but continue the function!
+		case 0x7:
+			// Enhanced DMA session, list by CPU address _AND_ using CPU's PC register!
+			enhanced_dma = 1;
+			list_addr_policy = 3;	// 3 signals to pick up CPU's PC in dma_update() then using '2'!! So list_addr will be set there.
+			break;	// Do NOT return but continue the function!
 	}
-	if (addr)
-		return;	// Only writing register 0 starts the DMA operation, otherwise just return from this function (reg write already happened)
 	/* --- FROM THIS POINT, THERE IS A NEW DMA SESSION WAS INITAITED BY SOME REGISTER WRITE --- */
 	if (XEMU_UNLIKELY(dma_status))
 		FATAL("dma_write_reg(): new DMA op with dma_status != 0");
-	list_addr = dma_registers[0] | (dma_registers[1] << 8) | ((dma_registers[2] & 0xF) << 16) | (dma_registers[4] << 20);
 	// Initial values, enhanced mode DMA may overrides this later during reading enhanced option list
 	dma_revision = dma_default_revision;	// initialize current revision from default revision
 	dma_transparency = 0x100;		// no DMA transparency by default
@@ -260,7 +256,7 @@ void dma_write_reg ( int addr, Uint8 data )
 		DEBUGDMA("DMA: initiation of ENCHANCED MODE DMA!!!!\n");
 	else
 		DEBUGDMA("DMA: initiation of normal mode DMA\n");
-	DEBUGDMA("DMA: list address is $%07X now, just written to register %d value $%02X @ PC=$%04X" NL, list_addr, addr, data, cpu65.pc);
+	DEBUGDMA("DMA: list address is $%07X (%s) now, just written to register %d value $%02X @ PC=$%04X" NL, list_addr, list_addr_policy ? "CPU-addr" : "linear-addr", addr, data, cpu65.pc);
 	dma_status = 0x80;	// DMA is busy now, also to signal the emulator core to call dma_update() in its main loop
 	command = -1;		// signal dma_update() that it's needed to fetch the DMA command, no command is fetched yet
 	cpu65.multi_step_stop_trigger = 1;	// trigger stopping multi-op CPU emulation mode, otherwise DMA wouldn't be started when it should be, right after triggering!
@@ -283,14 +279,19 @@ int dma_get_revision ( void )
    This way we have 'real' DMA, ie works while the rest of the machine is emulated too.
    Please note, that the "exact" timing of DMA and eg the CPU is still incorrect, but it's far
    better than the previous version where DMA was "blocky", ie the whole machine was "halted" while DMA worked ...
-   NOTE: there was an ugly description here about the differences between F018A,F018B. it's a too big topic
-   for a comment here, so it has been deleted. See here: http://c65.lgb.hu/dma.html */
+   Note, the whole topic of the DMA is a bit large for this comment, here is a quite outdated
+   description from me though: http://c65.lgb.hu/dma.html */
 int dma_update ( void )
 {
 	int cycles = 0;
 	if (XEMU_UNLIKELY(!dma_status))
 		FATAL("dma_update() called with no dma_status set!");
 	if (XEMU_UNLIKELY(command == -1)) {
+		if (XEMU_UNLIKELY(list_addr_policy == 3)) {
+			list_addr = cpu65.pc;
+			DEBUGDMA("DMA: adjusting list addr to CPU PC: $%04X" NL, list_addr);
+			list_addr_policy = 2;
+		}
 		if (enhanced_dma) {
 			Uint8 opt, optval;
 			do {
@@ -354,7 +355,7 @@ int dma_update ( void )
 		// command == -1 signals the situation, that the (next) DMA command should be read!
 		// This part is highly incorrect, ie fetching so many bytes in one step only of dma_update()
 		// NOTE: in case of MEGA65: dma_read_list_next_byte() uses the "megabyte" part already (taken from reg#4, in case if that reg is written)
-#ifdef DO_DEBUG_DMA
+#ifdef		DO_DEBUG_DMA
 		dma_list_entry_pos = 0;
 #endif
 		command            = dma_read_list_next_byte();
@@ -530,6 +531,10 @@ int dma_update ( void )
 		} else {
 			DEBUGDMA("DMA: end of operation, no chained next one." NL);
 			dma_status = 0;		// end of DMA command
+			if (list_addr_policy == 2) {
+				DEBUGDMA("DMA: adjusting CPU PC from $%04X to $%04X" NL, cpu65.pc, list_addr & 0xFFFF);
+				cpu65.pc = list_addr & 0xFFFF;
+			}
 		}
 		command = -1;	// signal for next DMA command fetch
 	}
