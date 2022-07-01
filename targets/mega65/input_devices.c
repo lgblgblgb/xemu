@@ -42,7 +42,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 /* Some explanation is at the comments of function hwa_kbd_convert_and_push() */
 
 // 64 possibility of C64 keys (ie, the 8*8 matrix) + 8 extra C65 keys = 72
-#define MAT2ASC_TAB_SIZE	72
+#define KBD_MATRIX_SIZE		72
+
+#define MAT2ASC_TAB_SIZE	KBD_MATRIX_SIZE
 
 static const Uint8 matrix_normal_to_ascii[MAT2ASC_TAB_SIZE] ={0x14,0x0D,0x1d,0xf7,0xf1,0xf3,0xf5,0x11,0x33,0x77,0x61,0x34,0x7a,0x73,0x65,0x00,0x35,0x72,0x64,0x36,0x63,0x66,0x74,0x78,0x37,0x79,0x67,0x38,0x62,0x68,0x75,0x76,0x39,0x69,0x6a,0x30,0x6d,0x6b,0x6f,0x6e,0x2b,0x70,0x6c,0x2d,0x2e,0x3a,0x40,0x2c,0xa3,0x2a,0x3b,0x13,0x00,0x3d,0xAF,0x2f,0x31,0x5f,0x00,0x32,0x20,0x00,0x71,0x03,0x00,0x09,0x00,0x1f,0xf9,0xfb,0xfd,0x1b};
 static const Uint8 matrix_shift_to_ascii[MAT2ASC_TAB_SIZE]  ={0x94,0x0D,0x9d,0xf8,0xf2,0xf4,0xf6,0x91,0x23,0x57,0x41,0x24,0x5a,0x53,0x45,0x00,0x25,0x52,0x44,0x26,0x43,0x46,0x54,0x58,0x27,0x59,0x47,0x28,0x42,0x48,0x55,0x56,0x29,0x49,0x4a,0x7b,0x4d,0x4b,0x4f,0x4e,0x00,0x50,0x4c,0x00,0x3e,0x5b,0x00,0x3c,0x00,0x00,0x5d,0x93,0x00,0x5f,0x00,0x3f,0x21,0x60,0x00,0x22,0x20,0x00,0x51,0xa3,0x00,0x0f,0x00,0x1f,0xfa,0xfc,0xfe,0x1b};
@@ -141,23 +143,14 @@ void hwa_kbd_move_next ( void )
  *   - scan: MEGA65 "scan code" (also 'table index' to index within the matrix2ascii tables): 0-63 nornal "c64 keys" (64 possibilities, 8*8 matrix), 64-71 "c65 extra keys" (8 possibilities)
  *   - ascii: the result ASCII value (with the mentioned "invented" codes included)
  */
-static void hwa_kbd_convert_and_push ( int pos )
+static void hwa_kbd_convert_and_push ( const unsigned int pos )
 {
-	int scan;
-	if (pos >= (C65_KEYBOARD_EXTRA_POS) && pos < ((C65_KEYBOARD_EXTRA_POS) + 8)) {
-		// Ugly hack: this should fix the problem that Xemu has disjoint space for std C64 and extra C65 keys ...
-		scan = pos - (C65_KEYBOARD_EXTRA_POS) + 64;
-		DEBUGKBDHWA("KBD: HWA: PUSH: doing C65 extra key translation from kbd pos $%02X to table index $%02X ..." NL, pos, scan);
-	} else {
-		// this is the normal case (ie, no special extra C65 key, but among the regular C64 ones):
-		// Xemu has a design to have key positions stored in row/col as low/high nybble of a byte
-		// normalize this here, to have a linear index.
-		// Note, that "extra C65 keys" are kinda handled as a hack, see above.
-		scan = ((pos & 0xF0) >> 1) | (pos & 7);
-		if (scan > 63) {
-			DEBUGKBDHWA("KBD: HWA: PUSH: NOT storing key (outside of translation table) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, pos, scan, cpu65.pc);
-			return;
-		}
+	// Xemu has a design to have key positions stored in row/col as low/high nybble of a byte
+	// normalize this here, to have a linear index.
+	const unsigned int scan = ((pos & 0xF0) >> 1) | (pos & 7);
+	if ((pos & 8) || scan >= KBD_MATRIX_SIZE) {
+		DEBUGKBDHWA("KBD: HWA: PUSH: NOT storing key (outside of translation table) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, pos, scan, cpu65.pc);
+		return;
 	}
 	// Now, convert scan code to MEGA65 ASCII value, using one of the conversion tables selected by the actual used modifier key(s)
 	// Size of conversion table is 72 (64+8, C64keys+C65keys). This is already checked above, so it must be ok to do so without any further boundary checks
@@ -178,14 +171,10 @@ static void hwa_kbd_convert_and_push ( int pos )
 // * no joystick interference on the keyboard
 // * C65 extra keys are part of the main matrix
 // * row selection is a simple number not mask of rows (that can be a "con" too if you want to check multiple rows at once?)
-Uint8 kbd_directscan_query ( Uint8 row )
+Uint8 kbd_directscan_query ( const Uint8 row )
 {
-	if (row > 8)	// FIXME: what happens in this case?
-		return 0xFF;
-	if (row == 8)	// this is the "extra" row of the "C65 keys"
-		return kbd_matrix[(C65_KEYBOARD_EXTRA_POS) >> 4];
-	// Otherwise the normal "C64-style" matrix is used.
-	return kbd_matrix[row];
+	// row 0-7: C64-style matrix, row 8: C65/M65 extra row
+	return row <= 8 ? kbd_matrix[row] : 0xFF;	// FIXME: what should happen if row > 8?
 }
 
 

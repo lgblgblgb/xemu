@@ -28,17 +28,20 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define IS_KEY_PRESSED(pos)	(!(kbd_matrix[(pos) >> 4] & (1 << ((pos) & 7))))
 
-#define RESTORE_KEY_POS		0x80
-#define CAPSLOCK_KEY_POS	0x81
+#ifdef C65_KEYBOARD
+#	define C65_KEYBOARD_EXTRA_POS	0x80
+#	define SCRL_KEY_POS		(C65_KEYBOARD_EXTRA_POS + 0)
+#	define TAB_KEY_POS		(C65_KEYBOARD_EXTRA_POS + 1)
+#	define ALT_KEY_POS		(C65_KEYBOARD_EXTRA_POS + 2)
+#	define RESTORE_KEY_POS		0x90
+#	define CAPSLOCK_KEY_POS		0x91
+#else
+#	define RESTORE_KEY_POS		0x80
+#	define CAPSLOCK_KEY_POS		0x81
+#endif
+
 #define IS_RESTORE_PRESSED()	IS_KEY_PRESSED(RESTORE_KEY_POS)
 //#define IS_RESTORE_PRESSED()	(!(kbd_matrix[RESTORE_KEY_POS >> 4] & (1 << (RESTORE_KEY_POS & 7))))
-
-#ifdef C65_KEYBOARD
-#define C65_KEYBOARD_EXTRA_POS	0x90
-#define SCRL_KEY_POS		(C65_KEYBOARD_EXTRA_POS + 0)
-#define TAB_KEY_POS		(C65_KEYBOARD_EXTRA_POS + 1)
-#define ALT_KEY_POS		(C65_KEYBOARD_EXTRA_POS + 2)
-#endif
 
 extern const struct KeyMappingDefault c64_key_map[];
 extern int joystick_emu;
