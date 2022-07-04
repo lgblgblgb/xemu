@@ -30,9 +30,6 @@ static int current_x, current_y, current_colour;
 
 #define TEXT_SCREEN_SOURCE (segB000 + 0x8000)
 
-#define CHARACTER_SET_DEFINER_8X16 static const Uint8 vgafont[]
-#include "xemu/vgafonts.c"
-
 // Used by memory.c in memory decoders:
 
 uint8_t read_A0000 ( const uint16_t addr16 )
@@ -74,7 +71,7 @@ void video_render_text_screen ( void )
 		for (int raster = 0; raster < 16; raster++) {
 			uint8_t *vp = TEXT_SCREEN_SOURCE + y * 160;
 			for (int x = 0; x < 80; x++, vp += 2) {
-				for (uint8_t fbyte = vgafont[(vp[0] << 4) + raster], mask = 0x80, bg = vp[1] >> 4, fg = vp[1] & 0xF; mask; mask >>= 1)
+				for (uint8_t fbyte = vga_font_8x16[(vp[0] << 4) + raster], mask = 0x80, bg = vp[1] >> 4, fg = vp[1] & 0xF; mask; mask >>= 1)
 					*pix++ = sdlpal[(fbyte & mask) ? fg : bg];
 			}
 		}

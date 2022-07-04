@@ -227,6 +227,7 @@ static const struct menu_st menu_main[] = {
 
 
 
+#if 0
 static void ui_enter ( void )
 {
 	DEBUGPRINT("UI: handler has been called." NL);
@@ -236,19 +237,19 @@ static void ui_enter ( void )
 		DEBUGPRINT("UI: hmm, POPUP _seems_ to worked ..." NL);
 	}
 }
-
+#endif
 
 
 int main ( int argc, char **argv )
 {
 	int fullscreen, leave_syscon_open;
 	char *selected_gui;
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unwanted PC emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unwanted PC emulator from LGB", argc, argv);
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode", &fullscreen);
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)", &leave_syscon_open);
 	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override);
 	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list", &selected_gui);
-	if (xemucfg_parse_all(argc, argv))
+	if (xemucfg_parse_all())
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (xemu_post_init(
@@ -272,7 +273,7 @@ int main ( int argc, char **argv )
 		SDL_ENABLE		// enable joystick HID events
 	);
 	osd_init_with_defaults();
-	xemugui_init(selected_gui, ui_enter);
+	xemugui_init(selected_gui);
 	// Initialize memory, which also calls bios init
 	memory_init();
 	video_reset();

@@ -60,4 +60,4 @@ recreatememcontent:
 	python3 $(TOPDIR)/build/m65-memcontent-generator.py memcontent.c memcontent.h $(MEGA65_FP_FILES)
 
 showmatrix2ascii:
-	$(TOPDIR)/build/m65-import-matrix2ascii.sh < $(MEGA65_CORE)/src/vhdl/matrix_to_ascii.vhdl
+	bash $(TOPDIR)/build/m65-import-matrix2ascii.sh < $(MEGA65_CORE)/src/vhdl/matrix_to_ascii.vhdl
