@@ -50,6 +50,7 @@ struct configdb_st {
 	char	*prg;
 	char	*sdimg;
 	char	*dumpmem;
+	char	*dumpscreen;
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	char	*snapload;
 	char	*snapsave;

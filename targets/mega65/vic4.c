@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/f011_core.h"
 #include "xemu/emutools_files.h"
 #include "io_mapper.h"
+#include "xemu/basic_text.h"
 
 
 #define SPRITE_SPRITE_COLLISION
@@ -1567,6 +1568,54 @@ int vic4_render_scanline ( void )
 		return 1;
 	}
 	return 0;
+}
+
+
+/* --- AUX FUNCTIONS FOR NON-ESSENTIAL THINGS (query current text screen parameters for other components, put/get screen content as ASCII) --- */
+
+
+int vic4_query_screen_width ( void )
+{
+	return REG_H640 ? 80 : 40;
+}
+
+
+int vic4_query_screen_height ( void )
+{
+	return EFFECTIVE_V400 ? 50 : 25;
+}
+
+
+Uint8 *vic4_query_screen_memory ( void )
+{
+	return main_ram + (SCREEN_ADDR & 0x7FFFF);
+}
+
+
+char *vic4_textshot ( void )
+{
+	char text[8192];
+	char *result = xemu_cbm_screen_to_text(
+		text,
+		sizeof text,
+		vic4_query_screen_memory(),
+		vic4_query_screen_width(),
+		vic4_query_screen_height(),
+		(vic_registers[0x18] & 2)	// lowercase font? try to auto-detect by checking selected address chargen addr, LSB
+	);
+	return result ? xemu_strdup(result) : NULL;
+}
+
+
+int vic4_textinsert ( const char *text )
+{
+	return xemu_cbm_text_to_screen(
+		vic4_query_screen_memory(),
+		vic4_query_screen_width(),
+		vic4_query_screen_height(),
+		text,				// text buffer as input
+		(vic_registers[0x18] & 2)	// lowercase font? try to auto-detect by checking selected address chargen addr, LSB
+	);
 }
 
 

@@ -435,6 +435,23 @@ int dump_memory ( const char *fn )
 }
 
 
+int dump_screen ( const char *fn )
+{
+	if (!fn || !*fn)
+		return 0;
+	char *text = vic4_textshot();
+	int retcode = 1;
+	if (text) {
+		if (*text)
+			retcode = xemu_save_file(fn, text, strlen(text), "Cannot dump ASCII screen content into file");
+		else
+			retcode = 0;
+	}
+	free(text);
+	return retcode;
+}
+
+
 static void shutdown_callback ( void )
 {
 	// Write out NVRAM if changed!
@@ -454,6 +471,7 @@ static void shutdown_callback ( void )
 	cia_dump_state (&cia2);
 #if !defined(XEMU_ARCH_HTML)
 	(void)dump_memory(configdb.dumpmem);
+	(void)dump_screen(configdb.dumpscreen);
 #endif
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_close();

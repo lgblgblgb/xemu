@@ -253,7 +253,13 @@ extern void  vic_write_reg ( unsigned int addr, Uint8 data );
 extern Uint8 vic_read_reg  ( unsigned int addr );
 extern int   vic4_render_scanline ( void );
 extern void  vic4_open_frame_access ( void );
-extern void  vic4_close_frame_access (void );
+extern void  vic4_close_frame_access ( void );
+
+extern Uint8*vic4_query_screen_memory ( void );
+extern int   vic4_query_screen_width ( void );
+extern int   vic4_query_screen_height ( void );
+extern char *vic4_textshot ( void );
+extern int   vic4_textinsert ( const char *text );
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 #include "xemu/emutools_snapshot.h"
