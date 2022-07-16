@@ -144,6 +144,8 @@ Uint8 io_read ( unsigned int addr )
 			switch (addr & 0x5F) {
 				case 0x19: return get_mouse_x_via_sid();
 				case 0x1A: return get_mouse_y_via_sid();
+				case 0x1B: return rand();	// oscillator-3 status read/only, generate some random byte here, even if it's not correct
+				case 0x1C: return rand();	// -- "" --
 			}
 			return 0xFF;
 		case 0x16:	// $D600-$D6FF ~ C65 I/O mode
@@ -206,6 +208,10 @@ Uint8 io_read ( unsigned int addr )
 				case 0x2E:
 				case 0x2F:
 					return cpld_firmware_version[addr - 0x2C];
+				case 0xDE: // D6DE: FPGA die temperatore, low byte: assuming to be 0, but the low nybble contains a kind of "noise" only
+					return rand() & 0xF;
+				case 0xDF: // D6DF: FPGA die temperature, high byte: assuming to be 164 (just because I see that on a real MEGA65 currently at my room's temperature ...)
+					return 164;
 				default:
 					DEBUG("MEGA65: reading MEGA65 specific I/O @ $D6%02X result is $%02X" NL, addr, D6XX_registers[addr]);
 					return D6XX_registers[addr];
