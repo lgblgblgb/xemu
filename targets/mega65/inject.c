@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,7 +16,6 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-
 #include "xemu/emutools.h"
 #include "inject.h"
 #include "xemu/emutools_files.h"
@@ -24,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "vic4.h"
 #include "xemu/emutools_hid.h"
 #include "xemu/f011_core.h"
+#include "input_devices.h"
 
 #define C64_BASIC_LOAD_ADDR	0x0801
 #define C65_BASIC_LOAD_ADDR	0x2001
@@ -40,16 +40,6 @@ static struct {
 	int   run_it;
 } prg;
 static Uint8 *under_ready_p;
-
-
-static XEMU_INLINE int get_screen_width ( void )
-{
-	// C65 $D031.7 VIC-III:H640 Enable C64 640 horizontal pixels / 80 column mode
-	// Used to determine if C64 or C65 "power-on" screen
-	// TODO: this should be revised in the future, as MEGA65 can other means have
-	// different screens!!!
-	return (vic_registers[0x31] & 0x80) ? 80 : 40;
-}
 
 
 static void _cbm_screen_write ( Uint8 *p, const char *s )
@@ -81,7 +71,7 @@ static void prg_inject_callback ( void *unused )
 	fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);
 	memcpy(main_ram + prg.load_addr, prg.stream, prg.size);
 	clear_emu_events();	// clear keyboard & co state, ie for C64 mode, probably had MEGA key pressed still
-	CBM_SCREEN_PRINTF(under_ready_p - get_screen_width() + 7, "<$%04X-$%04X,%d bytes>", prg.load_addr, prg.load_addr + prg.size - 1, prg.size);
+	CBM_SCREEN_PRINTF(under_ready_p - vic4_query_screen_width() + 7, "<$%04X-$%04X,%d bytes>", prg.load_addr, prg.load_addr + prg.size - 1, prg.size);
 	if (prg.run_it) {
 		// We must modify BASIC pointers ... Important to know the C64/C65 differences!
 		if (prg.c64_mode) {
@@ -96,7 +86,7 @@ static void prg_inject_callback ( void *unused )
 		// If program was detected as BASIC (by load-addr) we want to auto-RUN it
 		CBM_SCREEN_PRINTF(under_ready_p, " ?\"@\":RUN:");
 		KBD_PRESS_KEY(0x01);	// press RETURN
-		under_ready_p[get_screen_width()] = 0x20;	// be sure no "@" (screen code 0) at the trigger position
+		under_ready_p[vic4_query_screen_width()] = 0x20;	// be sure no "@" (screen code 0) at the trigger position
 		inject_ready_check_status = 100;	// go into special mode, to see "@" character printed by PRINT, to release RETURN by that trigger
 	} else {
 		// In this case we DO NOT press RETURN for user, as maybe the SYS addr is different, or user does not want this at all!
@@ -214,15 +204,14 @@ static const Uint8 ready_msg[] = { 0x12, 0x05, 0x01, 0x04, 0x19, 0x2E };	// "REA
 
 static int is_ready_on_screen ( void )
 {
-	int width = get_screen_width();
-	// TODO: this should be revised in the future, as MEGA65 can other means have
-	// different screen starting addresses, and not even dependent on the 40/80 column mode!!!
-	int start = (width == 80) ? 2048 : 1024;
+	const int width = vic4_query_screen_width();
+	const int height = vic4_query_screen_height();
+	Uint8 *start = vic4_query_screen_memory();
 	// Check every lines of the screen (not the "0th" line, because we need "READY." in the previous line!)
 	// NOTE: I cannot rely on exact position as different ROMs can have different line position for the "READY." text!
-	for (int i = 1; i < 23; i++) {
+	for (int i = 1; i < height - 2; i++) {
 		// We need this pointer later, to "fake" a command on the screen
-		under_ready_p = main_ram + start + i * width;
+		under_ready_p = start + i * width;
 		// 0XA0 -> cursor is shown, and the READY. in the previous line
 		if (*under_ready_p == 0xA0 && !memcmp(under_ready_p - width, ready_msg, sizeof ready_msg))
 			return 1;
@@ -242,11 +231,16 @@ void inject_ready_check_do ( void )
 		// This is used to check the @ char printed by our tricky RUN line to see it's time to release RETURN (or just simply clear all the keyboard)
 		// Also check for 'READY.' if it's still there, run program running maybe cleared the screen and we'll miss '@'!
 		// TODO: this logic is too error-proon! Consider for some timing only, ie wait some frames after virtually pressing RETURN then release it.
-		int width = get_screen_width();
+		int width = vic4_query_screen_width();
 		if (under_ready_p[width] == 0x00 || memcmp(under_ready_p - width, ready_msg, sizeof ready_msg)) {
 			inject_ready_check_status = 0;
 			clear_emu_events();		// reset keyboard state & co
 			DEBUGPRINT("INJECT: clearing keyboard status on '@' trigger." NL);
+			// This strange stuff is here for a kinda "funny" purpose. Many people started to use the $D610 hardware accelerated keyboard scanner
+			// feature, but they often miss to realize that the queue must be emptied by the program itself. Since Xemu is used with with feature
+			// like program injection they never face the problem, and the surprise only coccures when trying on a real MEGA65, blaming Xemu then
+			// for the problem. Thus we inject same fake stuff here just not to have empty $D610 buffer. Otherwise this statement has NO other purpose!
+			hwa_kbd_fake_string("dir\rload");	// more than enough to fill the buffer
 		}
 	} else if (inject_ready_check_status > 10) {
 		inject_ready_check_status = 0;	// turn off "ready check" mode, we have our READY.

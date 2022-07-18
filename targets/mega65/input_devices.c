@@ -44,15 +44,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 // 64 possibility of C64 keys (ie, the 8*8 matrix) + 8 extra C65 keys = 72
 #define KBD_MATRIX_SIZE		72
 
-static const Uint8 matrix_normal_to_ascii[KBD_MATRIX_SIZE] ={0x14,0x0D,0x1d,0xf7,0xf1,0xf3,0xf5,0x11,0x33,0x77,0x61,0x34,0x7a,0x73,0x65,0x00,0x35,0x72,0x64,0x36,0x63,0x66,0x74,0x78,0x37,0x79,0x67,0x38,0x62,0x68,0x75,0x76,0x39,0x69,0x6a,0x30,0x6d,0x6b,0x6f,0x6e,0x2b,0x70,0x6c,0x2d,0x2e,0x3a,0x40,0x2c,0xa3,0x2a,0x3b,0x13,0x00,0x3d,0xAF,0x2f,0x31,0x5f,0x00,0x32,0x20,0x00,0x71,0x03,0x00,0x09,0x00,0x1f,0xf9,0xfb,0xfd,0x1b};
+static const Uint8 matrix_base_to_ascii[KBD_MATRIX_SIZE] ={0x14,0x0D,0x1d,0xf7,0xf1,0xf3,0xf5,0x11,0x33,0x77,0x61,0x34,0x7a,0x73,0x65,0x00,0x35,0x72,0x64,0x36,0x63,0x66,0x74,0x78,0x37,0x79,0x67,0x38,0x62,0x68,0x75,0x76,0x39,0x69,0x6a,0x30,0x6d,0x6b,0x6f,0x6e,0x2b,0x70,0x6c,0x2d,0x2e,0x3a,0x40,0x2c,0xa3,0x2a,0x3b,0x13,0x00,0x3d,0xAF,0x2f,0x31,0x5f,0x00,0x32,0x20,0x00,0x71,0x03,0x00,0x09,0x00,0x1f,0xf9,0xfb,0xfd,0x1b};
 static const Uint8 matrix_shift_to_ascii[KBD_MATRIX_SIZE]  ={0x94,0x0D,0x9d,0xf8,0xf2,0xf4,0xf6,0x91,0x23,0x57,0x41,0x24,0x5a,0x53,0x45,0x00,0x25,0x52,0x44,0x26,0x43,0x46,0x54,0x58,0x27,0x59,0x47,0x28,0x42,0x48,0x55,0x56,0x29,0x49,0x4a,0x7b,0x4d,0x4b,0x4f,0x4e,0x00,0x50,0x4c,0x00,0x3e,0x5b,0x00,0x3c,0x00,0x00,0x5d,0x93,0x00,0x5f,0x00,0x3f,0x21,0x60,0x00,0x22,0x20,0x00,0x51,0xa3,0x00,0x0f,0x00,0x1f,0xfa,0xfc,0xfe,0x1b};
-static const Uint8 matrix_control_to_ascii[KBD_MATRIX_SIZE]={0x94,0x0D,0x9d,0xf8,0xf2,0xf4,0xf6,0x91,0x1c,0x17,0x01,0x9f,0x1a,0x13,0x05,0x00,0x9c,0x12,0x04,0x1e,0x03,0x06,0x14,0x18,0x1f,0x19,0x07,0x9e,0x02,0x08,0x15,0x16,0x12,0x09,0x0a,0x00,0x0d,0x0b,0x0f,0x0e,0x2b,0x10,0x0c,0x2d,0x2e,0x3a,0x40,0x2c,0x00,0xEF,0x3b,0x93,0x00,0x3d,0x00,0x2f,0x90,0x60,0x00,0x05,0x20,0x00,0x11,0xa3,0x00,0x0f,0x00,0x1f,0xfa,0xfc,0xfe,0x1b};
+static const Uint8 matrix_ctrl_to_ascii[KBD_MATRIX_SIZE]={0x94,0x0D,0x9d,0xf8,0xf2,0xf4,0xf6,0x91,0x1c,0x17,0x01,0x9f,0x1a,0x13,0x05,0x00,0x9c,0x12,0x04,0x1e,0x03,0x06,0x14,0x18,0x1f,0x19,0x07,0x9e,0x02,0x08,0x15,0x16,0x12,0x09,0x0a,0x00,0x0d,0x0b,0x0f,0x0e,0x2b,0x10,0x0c,0x2d,0x2e,0x3a,0x40,0x2c,0x00,0xEF,0x3b,0x93,0x00,0x3d,0x00,0x2f,0x90,0x60,0x00,0x05,0x20,0x00,0x11,0xa3,0x00,0x0f,0x00,0x1f,0xfa,0xfc,0xfe,0x1b};
 static const Uint8 matrix_cbm_to_ascii[KBD_MATRIX_SIZE]    ={0x94,0x0D,0xED,0xf8,0xf2,0xf4,0xf6,0xEE,0x96,0xd7,0xc1,0x97,0xda,0xd3,0xc5,0x00,0x98,0xd2,0xc4,0x99,0xc3,0xc6,0xd4,0xd8,0x9a,0xd9,0xc7,0x9b,0xc2,0xc8,0xd5,0xd6,0x92,0xc9,0xca,0x81,0xcd,0xcb,0xcf,0xce,0x2b,0xd0,0xcc,0x2d,0x7c,0x7b,0x40,0x7e,0x00,0x2A,0x7d,0x93,0x00,0x5f,0x00,0x5c,0x81,0x60,0x00,0x95,0x20,0x00,0xd1,0xa3,0x00,0xef,0x00,0x1f,0xfa,0xfc,0xfe,0x1b};
 static const Uint8 matrix_alt_to_ascii[KBD_MATRIX_SIZE]    ={0x7f,0x00,0xdf,0xde,0xB9,0xB2,0xB3,0x00,0xA4,0xAE,0xE5,0xA2,0xF7,0xA7,0xE6,0x00,0xB0,0xAE,0xF0,0xA5,0xE7,0x00,0xFE,0xD7,0xB4,0xFF,0xE8,0xE2,0xFA,0xFD,0xFC,0xd3,0xda,0xED,0xE9,0xdb,0xB5,0xE1,0xF8,0xF1,0xB1,0xB6,0xF3,0xAC,0xBB,0xE4,0xA8,0xAB,0xA3,0xB7,0xE4,0xDC,0xDD,0xA6,0xAF,0xBF,0xA1,0xB8,0x00,0xAA,0xa0,0x00,0xA9,0xBA,0x00,0xC0,0x00,0x1f,0xBC,0xBD,0xBE,0xDB};
 
-#if 0
-// TODO: make the petscii based scanner as well!
-static const Uint8 matrix_normal_to_petscii[KBD_MATRIX_SIZE] = {
+static const Uint8 matrix_base_to_petscii[KBD_MATRIX_SIZE] = {
 	0x14,0x0d,0x1d,0x88,0x85,0x86,0x87,0x11,	// del ret rt  f7  f1  f3  f5  dn
 	0x33,0x57,0x41,0x34,0x5a,0x53,0x45,0x01,	//  3   w   a   4   z   s   e  shf
 	0x35,0x52,0x44,0x36,0x43,0x46,0x54,0x58,	//  5   r   d   6   c   f   t   x
@@ -85,7 +83,7 @@ static const Uint8 matrix_cbm_to_petscii[KBD_MATRIX_SIZE] = {		// mode3: English
 	0x81,0x60,0x04,0x95,0xa0,0x02,0xab,0x03,	// blk <-- ctl wht spc  C=  Q  run
 	0xff,0x18,0x08,0x84,0x15,0x17,0x1a,0x1b		// scl TAB alt hlp f10 f12 f14 esc
 };
-static const Uint8 matrix_control_to_petscii[KBD_MATRIX_SIZE] = {	// mode4: English control keys
+static const Uint8 matrix_ctrl_to_petscii[KBD_MATRIX_SIZE] = {	// mode4: English control keys
 	0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,	//  ~   ~   ~   ~   ~   ~   ~   ~
 	0x1c,0x17,0x01,0x9f,0x1a,0x13,0x05,0xff,	// red /w  /a  cyn /z  /s  /e   ~
 	0x9c,0x12,0x04,0x1e,0x03,0x06,0x14,0x18,	// pur /r  /d  grn /c  /f  /t  /x
@@ -96,6 +94,7 @@ static const Uint8 matrix_control_to_petscii[KBD_MATRIX_SIZE] = {	// mode4: Engl
 	0x90,0x60,0xff,0x05,0xff,0xff,0x11,0xff,	// blk /<-  ~  wht  ~   ~  /q   ~
 	0xff,0x09,0x08,0x84,0xff,0xff,0xff,0x1b		// scl tab alt hlp  ~   ~   ~  esc
 };
+#if 0
 static const Uint8 matrix_caps_to_petscii[KBD_MATRIX_SIZE] = {		// mode5: English caps lock mode
 	0x14,0x0d,0x1d,0x88,0x85,0x86,0x87,0x11,	// del ret rt  f7  f1  f3  f5  dn
 	0x33,0xd7,0xc1,0x34,0xda,0xd3,0xc5,0x01,	//  3   w   a   4   z   s   e  shf
@@ -119,23 +118,34 @@ static const Uint8 matrix_caps_to_petscii[KBD_MATRIX_SIZE] = {		// mode5: Englis
 // Decoding table based on modoifer keys (the index is the MODKEY stuffs, low 4 bits)
 // Priority is CBM, ALT, SHIFT, CTRL
 static const Uint8 *matrix_to_ascii_table_selector[32] = {
-	matrix_normal_to_ascii,  matrix_shift_to_ascii,   matrix_shift_to_ascii,   matrix_shift_to_ascii,
-	matrix_control_to_ascii, matrix_control_to_ascii, matrix_control_to_ascii, matrix_control_to_ascii,
-	matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,		// CBM key has priority
-	matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,		// CBM key has priority
-	matrix_alt_to_ascii,     matrix_alt_to_ascii,     matrix_alt_to_ascii,     matrix_alt_to_ascii,
-	matrix_alt_to_ascii,     matrix_alt_to_ascii,     matrix_alt_to_ascii,     matrix_alt_to_ascii,
-	matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,
-	matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii
+	matrix_base_to_ascii,   matrix_shift_to_ascii,   matrix_shift_to_ascii,   matrix_shift_to_ascii,
+	matrix_ctrl_to_ascii,   matrix_ctrl_to_ascii,    matrix_ctrl_to_ascii,    matrix_ctrl_to_ascii,
+	matrix_cbm_to_ascii,    matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,		// CBM key has priority
+	matrix_cbm_to_ascii,    matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,		// CBM key has priority
+	matrix_alt_to_ascii,    matrix_alt_to_ascii,     matrix_alt_to_ascii,     matrix_alt_to_ascii,
+	matrix_alt_to_ascii,    matrix_alt_to_ascii,     matrix_alt_to_ascii,     matrix_alt_to_ascii,
+	matrix_cbm_to_ascii,    matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,
+	matrix_cbm_to_ascii,    matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii
+};
+// Similar to the ASCII table but for PETSCII. It's also shorter.
+static const Uint8 *matrix_to_petscii_table_selector[16] = {
+	matrix_base_to_petscii, matrix_shift_to_petscii, matrix_shift_to_petscii, matrix_shift_to_petscii,
+	matrix_ctrl_to_petscii, matrix_ctrl_to_petscii,  matrix_ctrl_to_petscii,  matrix_ctrl_to_petscii,
+	matrix_cbm_to_petscii,  matrix_cbm_to_petscii,	 matrix_cbm_to_petscii,   matrix_cbm_to_petscii,
+	matrix_cbm_to_petscii,  matrix_cbm_to_petscii,	 matrix_cbm_to_petscii,   matrix_cbm_to_petscii
 };
 
-#define HWA_SINGLE_ITEM
+#define HWA_QUEUE_SIZE 5
+
+struct kqueue_st {
+	Uint8	q[HWA_QUEUE_SIZE];
+	int	i;
+};
 
 static struct {
 	Uint8	modifiers;
-	Uint8	next;
-	Uint8	last;
 	int	active_selector;
+	struct kqueue_st ascii_queue, petscii_queue;
 } hwa_kbd;
 
 static int restore_is_held = 0;
@@ -147,27 +157,70 @@ void hwa_kbd_disable_selector ( int state )
 	state = !state;
 	if (state != hwa_kbd.active_selector) {
 		hwa_kbd.active_selector = state;
-		DEBUGPRINT("KBD: hardware accelerated keyboard scanner selector is now %s" NL, state ? "ENABLED" : "DISABLED");
+		DEBUGKBDHWA("KBD: hardware accelerated keyboard scanner selector is now %s" NL, state ? "ENABLED" : "DISABLED");
 	}
 }
 
 
-void hwa_kbd_fake_key ( Uint8 k )
+static inline void kqueue_empty ( struct kqueue_st *p )
 {
-	hwa_kbd.next = 0;
-	hwa_kbd.last = k;
+	p->i = 0;
+	p->q[0] = 0;	// to make the more frequent 'peek into queue' (without removing) faster, so it does not need to check 'i' ...
+}
+
+
+static inline void kqueue_remove ( struct kqueue_st *p )
+{
+	if (p->i > 1)
+		memmove(p->q, p->q + 1, --p->i);
+	else
+		kqueue_empty(p);
+}
+
+
+static void kqueue_write ( struct kqueue_st *p, const Uint8 k )
+{
+	if (XEMU_UNLIKELY(!k)) {
+		DEBUGPRINT("KBD: HWA: PUSH: warning, trying to write zero into the queue! Refused." NL);
+		return;
+	}
+	if (p->i < HWA_QUEUE_SIZE)
+		p->q[p->i++] = k;
+	else
+		DEBUGKBDHWACOM("KBD: HWA: PUSH: queue is full, cannot store key" NL);
+}
+
+
+void hwa_kbd_fake_key ( const Uint8 k )
+{
+	hwa_kbd.ascii_queue.q[0] = k;
+	hwa_kbd.ascii_queue.i = !!k;	// if k was zero, empty queue otherwise the queue is one element long
+}
+
+
+void hwa_kbd_fake_string ( const char *s )
+{
+	kqueue_empty(&hwa_kbd.ascii_queue);
+	while (*s)
+		kqueue_write(&hwa_kbd.ascii_queue, *s++);
 }
 
 
 /* used by actual I/O function to read $D610 */
-Uint8 hwa_kbd_get_last ( void )
+Uint8 hwa_kbd_get_last_ascii ( void )
 {
-	if (hwa_kbd.next && !hwa_kbd.last) {
-		hwa_kbd.last = hwa_kbd.next;
-		hwa_kbd.next = 0;
-	}
-	DEBUGKBDHWACOM("KBD: HWA: reading key @ PC=$%04X result = $%02X" NL, cpu65.pc, hwa_kbd.last);
-	return hwa_kbd.last;
+	const Uint8 k = hwa_kbd.ascii_queue.q[0];
+	DEBUGKBDHWACOM("KBD: HWA: reading ASCII key @ PC=$%04X result = $%02X" NL, cpu65.pc, k);
+	return k;
+}
+
+
+/* used by actual I/O function to read $D619 */
+Uint8 hwa_kbd_get_last_petscii ( void )
+{
+	const Uint8 k = hwa_kbd.petscii_queue.q[0];
+	DEBUGKBDHWACOM("KBD: HWA: reading PETSCII key @ PC=$%04X result = $%02X" NL, cpu65.pc, k);
+	return k;
 }
 
 
@@ -181,10 +234,18 @@ Uint8 hwa_kbd_get_modifiers ( void )
 
 
 /* used by actual I/O function to write $D610, the written data itself is not used, only the fact of writing */
-void hwa_kbd_move_next ( void )
+void hwa_kbd_move_next_ascii ( void )
 {
-	DEBUGKBDHWACOM("KBD: HWA: moving to next key @ PC=$%04X previous queued key = $%02X" NL, cpu65.pc, hwa_kbd.last);
-	hwa_kbd.last = 0;
+	kqueue_remove(&hwa_kbd.ascii_queue);
+	DEBUGKBDHWACOM("KBD: HWA: moving to next ASCII key @ PC=$%04X keys left in queue: %d" NL, cpu65.pc, hwa_kbd.ascii_queue.i);
+}
+
+
+/* used by actual I/O function to write $D619, the written data itself is not used, only the fact of writing */
+void hwa_kbd_move_next_petscii ( void )
+{
+	kqueue_remove(&hwa_kbd.petscii_queue);
+	DEBUGKBDHWACOM("KBD: HWA: moving to next PETSCII key @ PC=$%04X keys left in queue: %d" NL, cpu65.pc, hwa_kbd.petscii_queue.i);
 }
 
 
@@ -205,21 +266,25 @@ static void hwa_kbd_convert_and_push ( const unsigned int pos )
 	// Xemu has a design to have key positions stored in row/col as low/high nybble of a byte
 	// normalize this here, to have a linear index.
 	const unsigned int scan = ((pos & 0xF0) >> 1) | (pos & 7);
-	if ((pos & 8) || scan >= KBD_MATRIX_SIZE) {
+	if (scan >= KBD_MATRIX_SIZE) {
 		DEBUGKBDHWA("KBD: HWA: PUSH: NOT storing key (outside of translation table) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, pos, scan, cpu65.pc);
 		return;
 	}
 	// Now, convert scan code to MEGA65 ASCII value, using one of the conversion tables selected by the actual used modifier key(s)
 	// Size of conversion table is 72 (64+8, C64keys+C65keys). This is already checked above, so it must be ok to do so without any further boundary checks
-	const int ascii = matrix_to_ascii_table_selector[hwa_kbd.active_selector ? (hwa_kbd.modifiers & 0x1F) : 0][scan];
-	if (ascii) {
-		if (!hwa_kbd.next) {
-			DEBUGKBDHWA("KBD: HWA: PUSH: storing key $%02X '%c' from kbd pos $%02X and table index $%02X at PC=$%04X" NL, ascii, CHR_EQU(ascii), pos, scan, cpu65.pc);
-			hwa_kbd.next = ascii;
-		} else
-			DEBUGKBDHWA("KBD: HWA: PUSH: NOT storing key (already waiting) $%02X '%c' from kbd pos $%02X and table index $%02X at PC=$%04X" NL, ascii, CHR_EQU(ascii), pos, scan, cpu65.pc);
+	int conv = matrix_to_ascii_table_selector[hwa_kbd.active_selector ? (hwa_kbd.modifiers & 0x1F) : 0][scan];
+	if (conv) {
+		DEBUGKBDHWA("KBD: HWA: PUSH: storing ASCII key $%02X '%c' from kbd pos $%02X and table index $%02X at PC=$%04X" NL, conv, CHR_EQU(conv), pos, scan, cpu65.pc);
+		kqueue_write(&hwa_kbd.ascii_queue, conv);
 	} else
-		DEBUGKBDHWA("KBD: HWA: PUSH: NOT storing key (zero in translation table) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, pos, scan, cpu65.pc);
+		DEBUGKBDHWA("KBD: HWA: PUSH: NOT storing ASCII key (zero in translation table) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, pos, scan, cpu65.pc);
+	// The PETSCII decoder
+	conv = matrix_to_petscii_table_selector[hwa_kbd.modifiers & 0x0F][scan];
+	if (conv && conv != 0xFF) {
+		DEBUGKBDHWA("KBD: HWA: PUSH: storing PETSCII key $%02X from kbd pos $%02X and table index $%02X at PC=$%04X" NL, conv, pos, scan, cpu65.pc);
+		kqueue_write(&hwa_kbd.petscii_queue, conv);
+	} else
+		DEBUGKBDHWA("KBD: HWA: PUSH: NOT storing PETSCII key (translation value of %d) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, conv, pos, scan, cpu65.pc);
 }
 
 
@@ -251,8 +316,8 @@ void clear_emu_events ( void )
 	DEBUGKBDHWA("KBD: HWA: reset" NL);
 	hid_reset_events(1);
 	hwa_kbd.modifiers = 0;
-	hwa_kbd.next = 0;
-	hwa_kbd.last = 0;
+	kqueue_empty(&hwa_kbd.ascii_queue);
+	kqueue_empty(&hwa_kbd.petscii_queue);
 	for (int a = 0; a < 3; a++) {
 		if (virtkey_state[0] != 0xFF) {
 			hid_sdl_synth_key_event(virtkey_state[a], 0);
@@ -335,19 +400,6 @@ static void kbd_trigger_alttab_trap ( void )
 	//KBD_RELEASE_KEY(ALT_KEY_POS);
 	//hwa_kbd.modifiers &= ~MODKEY_ALT;
 	matrix_mode_toggle(!in_the_matrix);
-	// TODO: remove the #if 0 part, if we're sure:
-#if 0
-	// It would trigger matrix-mode via hypervisor call, but it has the problem that
-	// it won't work if you're already in hypervisor mode. So I reverted back to the
-	// direct method above. If it does not cause problem on longer term, let's remove this
-	// section.
-	if (!in_hypervisor) {
-		DEBUGPRINT("KBD: MATRIX trap has been triggered." NL);
-		hypervisor_enter(TRAP_MATRIX);
-	} else {
-		DEBUGPRINT("KBD: *IGNORING* MATRIX trap trigger, already in hypervisor mode!" NL);
-	}
-#endif
 }
 
 
@@ -466,4 +518,6 @@ void input_init ( void )
 {
 	hid_register_sdl_keyboard_event_callback(HID_CB_LEVEL_EMU, emu_callback_key_raw_sdl);
 	hwa_kbd.active_selector = 1;
+	kqueue_empty(&hwa_kbd.ascii_queue);
+	kqueue_empty(&hwa_kbd.petscii_queue);
 }
