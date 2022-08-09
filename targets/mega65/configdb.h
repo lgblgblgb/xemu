@@ -47,10 +47,12 @@ struct configdb_st {
 	char	*rom;
 	int	romfromsd;
 	int	defd81fromsd;
+	int	testing;
 	char	*prg;
 	char	*sdimg;
 	char	*dumpmem;
 	char	*dumpscreen;
+	char	*screenshot_and_exit;
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	char	*snapload;
 	char	*snapsave;

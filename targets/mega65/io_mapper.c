@@ -437,8 +437,15 @@ void io_write ( unsigned int addr, Uint8 data )
 				case 0x7F:	// hypervisor leave
 					hypervisor_leave();	// 0x67F is also handled on enter's state, so it will be executed only in_hypervisor mode, which is what I want
 					return;
-				case 0xCF:
+				case 0xCF:	// $D6CF - FPGA reconfiguration reg (if $42 is written). In testing mode, Xemu invents some new values here, though!
 					if (data == 0x42) {
+						if (configdb.testing) {	// in testing mode, writing $42 would mean to exit emulation!
+							if (configdb.screenshot_and_exit)
+								vic4_registered_screenshot_request = 1;	// this will cause also to exit (as configdb.screenshot_and_exit is not NULL)
+							else
+								XEMUEXIT(0);
+							return;
+						}
 						if (ARE_YOU_SURE("FPGA reconfiguration request. System must be reset.\nIs it OK to do now?\nAnswering NO may crash your program requesting this task though,\nor can result in endless loop of trying.", ARE_YOU_SURE_DEFAULT_YES)) {
 							reset_mega65();
 						}

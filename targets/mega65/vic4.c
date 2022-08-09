@@ -89,6 +89,8 @@ static const char NTSC_STD_NAME[] = "NTSC";
 static const char PAL_STD_NAME[] = "PAL";
 int vic_readjust_sdl_viewport = 0;
 int vic4_disallow_video_std_change = 1;
+int vic4_registered_screenshot_request = 0;
+
 
 // VIC-IV Modeline Parameters
 // ----------------------------------------------------
@@ -222,12 +224,12 @@ void vic4_close_frame_access ( void )
 	pixel_readback();
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	// Screenshot
-	if (XEMU_UNLIKELY(registered_screenshot_request)) {
+	if (XEMU_UNLIKELY(vic4_registered_screenshot_request)) {
 		unsigned int x1, y1, x2, y2;
 		xemu_get_viewport(&x1, &y1, &x2, &y2);
-		registered_screenshot_request = 0;
+		vic4_registered_screenshot_request = 0;
 		if (!xemu_screenshot_png(
-			NULL, NULL,
+			NULL, configdb.screenshot_and_exit,
 			1, 1,		// no ratio/zoom correction is applied
 			pixel_start + y1 * TEXTURE_WIDTH + x1,	// pixel pointer corresponding to the top left corner of the viewport
 			x2 - x1 + 1,	// width
@@ -237,6 +239,10 @@ void vic4_close_frame_access ( void )
 			const char *p = strrchr(xemu_screenshot_full_path, DIRSEP_CHR);
 			if (p)
 				OSD(-1, -1, "%s", p + 1);
+		}
+		if (configdb.screenshot_and_exit) {
+			DEBUGPRINT("VIC4: exiting on 'exit-on-screenshot' feature." NL);
+			XEMUEXIT(0);
 		}
 	}
 #endif

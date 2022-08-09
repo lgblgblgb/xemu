@@ -77,8 +77,6 @@ int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it mu
 static Uint8 nvram_original[sizeof nvram];
 static int uuid_must_be_saved = 0;
 
-int registered_screenshot_request = 0;
-
 Uint8 last_dd00_bits = 3;		// Bank 0
 const char *last_reset_type;
 

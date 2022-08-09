@@ -55,6 +55,7 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "sdimg",	SDCARD_NAME, "Override path of SD-image to be used (also see the -virtsd option!)", &configdb.sdimg },
 	{ "dumpmem",	NULL, "Save memory content on exit", &configdb.dumpmem },
 	{ "dumpscreen",	NULL, "Save screen content (ASCII) on exit", &configdb.dumpscreen },
+	{ "screenshot",	NULL, "Save screenshot (PNG) on exit and vice-versa (for testing!)", &configdb.screenshot_and_exit },
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	{ "snapload",	NULL, "Load a snapshot from the given file", &configdb.snapload },
 	{ "snapsave",	NULL, "Save a snapshot into the given file before Xemu would exit", &configdb.snapsave },
@@ -92,6 +93,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "useutilmenu", "Try to trigger utility menu access on boot", &configdb.useutilmenu },
 	{ "romfromsd", "Force ROM to be used from SD-card", &configdb.romfromsd },
 	{ "defd81fromsd", "Force default D81 to be used from SD-card", &configdb.defd81fromsd },
+	{ "testing", "Turn on features allows program to do privileged things", &configdb.testing },
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	{ "virtsd", "Interpret -sdimg option as a DIRECTORY to be fed onto the FAT32FS and use virtual-in-memory disk storage.", &configdb.virtsd },
 #endif

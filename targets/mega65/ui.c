@@ -685,7 +685,7 @@ static const struct menu_st menu_display[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK |
 					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_toggle_int, (void*)&configdb.show_drive_led },
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
-	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &registered_screenshot_request },
+	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &vic4_registered_screenshot_request },
 #endif
 	{ "Screen to OS paste buffer",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_screen_text_into_paste_buffer },
 	{ "Screen to ASCII file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_screen_text_into_file },
