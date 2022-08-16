@@ -176,7 +176,7 @@ Uint8 io_read ( unsigned int addr )
 				case 0xF1:
 					return (fpga_switches >> 8) & 0xFF;
 				case 0x10:				// last keypress ASCII value
-					return hwa_kbd_get_last();
+					return hwa_kbd_get_last_ascii();
 				case 0x11:				// modifier keys on kbd being used
 					return hwa_kbd_get_modifiers();
 				case 0x13:				// $D613: direct access to the kbd matrix, read selected row (set by writing $D614), bit 0 = key pressed
@@ -190,6 +190,8 @@ Uint8 io_read ( unsigned int addr )
 				case 0x1B:
 					// D61B amiga / 1531 mouse auto-detect. FIXME XXX what value we should return at this point? :-O
 					return 0xFF;
+				case 0x19:
+					return hwa_kbd_get_last_petscii();
 				case 0x29: // GS $D629: UARTMISC:M65MODEL MEGA65 model ID.
 					return configdb.mega65_model;
 				case 0x2A: // GS $D62A KBD:FWDATEL LSB of keyboard firmware date stamp (days since 1 Jan 2020)
@@ -404,7 +406,10 @@ void io_write ( unsigned int addr, Uint8 data )
 			}
 			switch (addr) {
 				case 0x10:	// ASCII kbd last press value to zero whatever the written data would be
-					hwa_kbd_move_next();
+					hwa_kbd_move_next_ascii();
+					return;
+				case 0x19:
+					hwa_kbd_move_next_petscii();
 					return;
 				case 0x11:
 					hwa_kbd_disable_selector(data & 0x80);

@@ -19,29 +19,31 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_MEGA65_INPUT_DEVICES_H_INCLUDED
 #define XEMU_MEGA65_INPUT_DEVICES_H_INCLUDED
 
-extern void  clear_emu_events  ( void );
-extern Uint8 cia1_in_b         ( void );
-extern Uint8 cia1_in_a         ( void );
-extern void  input_init        ( void );
-extern int   emu_callback_key  ( int pos, SDL_Scancode key, int pressed, int handled );
+extern void  clear_emu_events		( void );
+extern Uint8 cia1_in_b			( void );
+extern Uint8 cia1_in_a			( void );
+extern void  input_init			( void );
+extern int   emu_callback_key		( int pos, SDL_Scancode key, int pressed, int handled );
 
-extern void  input_toggle_joy_emu  ( void );
+extern void  input_toggle_joy_emu	( void );
 
-extern Uint8 hwa_kbd_get_last      ( void );
-extern Uint8 hwa_kbd_get_modifiers ( void );
-extern void  hwa_kbd_move_next     ( void );
-extern void  hwa_kbd_fake_key      ( const Uint8 k );
-extern void  hwa_kbd_fake_string   ( const char *s );
-extern void  hwa_kbd_disable_selector ( int state );
+extern Uint8 hwa_kbd_get_last_ascii	( void );
+extern Uint8 hwa_kbd_get_last_petscii	( void );
+extern Uint8 hwa_kbd_get_modifiers	( void );
+extern void  hwa_kbd_move_next_ascii	( void );
+extern void  hwa_kbd_move_next_petscii	( void );
+extern void  hwa_kbd_fake_key		( const Uint8 k );
+extern void  hwa_kbd_fake_string	( const char *s );
+extern void  hwa_kbd_disable_selector	( int state );
 
-extern void  virtkey               ( Uint8 rno, Uint8 scancode );
+extern void  virtkey			( Uint8 rno, Uint8 scancode );
 
-extern Uint8 kbd_directscan_query  ( const Uint8 row );
-extern Uint8 kbd_query_leftup_status ( void );
+extern Uint8 kbd_directscan_query	( const Uint8 row );
+extern Uint8 kbd_query_leftup_status	( void );
 
-extern void  kbd_trigger_restore_trap ( void );
+extern void  kbd_trigger_restore_trap	( void );
 
-extern Uint8 get_mouse_x_via_sid ( void );
-extern Uint8 get_mouse_y_via_sid ( void );
+extern Uint8 get_mouse_x_via_sid	( void );
+extern Uint8 get_mouse_y_via_sid	( void );
 
 #endif
