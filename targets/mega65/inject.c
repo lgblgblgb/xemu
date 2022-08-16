@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "vic4.h"
 #include "xemu/emutools_hid.h"
 #include "xemu/f011_core.h"
+#include "input_devices.h"
 
 #define C64_BASIC_LOAD_ADDR	0x0801
 #define C65_BASIC_LOAD_ADDR	0x2001
@@ -235,6 +236,11 @@ void inject_ready_check_do ( void )
 			inject_ready_check_status = 0;
 			clear_emu_events();		// reset keyboard state & co
 			DEBUGPRINT("INJECT: clearing keyboard status on '@' trigger." NL);
+			// This strange stuff is here for a kinda "funny" purpose. Many people started to use the $D610 hardware accelerated keyboard scanner
+			// feature, but they often miss to realize that the queue must be emptied by the program itself. Since Xemu is used with with feature
+			// like program injection they never face the problem, and the surprise only coccures when trying on a real MEGA65, blaming Xemu then
+			// for the problem. Thus we inject same fake stuff here just not to have empty $D610 buffer. Otherwise this statement has NO other purpose!
+			hwa_kbd_fake_string("dir\rload");	// more than enough to fill the buffer
 		}
 	} else if (inject_ready_check_status > 10) {
 		inject_ready_check_status = 0;	// turn off "ready check" mode, we have our READY.

@@ -30,7 +30,8 @@ extern void  input_toggle_joy_emu  ( void );
 extern Uint8 hwa_kbd_get_last      ( void );
 extern Uint8 hwa_kbd_get_modifiers ( void );
 extern void  hwa_kbd_move_next     ( void );
-extern void  hwa_kbd_fake_key      ( Uint8 k );
+extern void  hwa_kbd_fake_key      ( const Uint8 k );
+extern void  hwa_kbd_fake_string   ( const char *s );
 extern void  hwa_kbd_disable_selector ( int state );
 
 extern void  virtkey               ( Uint8 rno, Uint8 scancode );

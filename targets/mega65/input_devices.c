@@ -70,13 +70,17 @@ static const Uint8 *matrix_to_ascii_table_selector[32] = {
 	matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii,     matrix_cbm_to_ascii
 };
 
-#define HWA_SINGLE_ITEM
+#define HWA_QUEUE_SIZE 5
+
+struct kqueue_st {
+	Uint8	q[HWA_QUEUE_SIZE];
+	int	i;
+};
 
 static struct {
 	Uint8	modifiers;
-	Uint8	next;
-	Uint8	last;
 	int	active_selector;
+	struct kqueue_st ascii_queue;
 } hwa_kbd;
 
 static int restore_is_held = 0;
@@ -88,27 +92,61 @@ void hwa_kbd_disable_selector ( int state )
 	state = !state;
 	if (state != hwa_kbd.active_selector) {
 		hwa_kbd.active_selector = state;
-		DEBUGPRINT("KBD: hardware accelerated keyboard scanner selector is now %s" NL, state ? "ENABLED" : "DISABLED");
+		DEBUGKBDHWA("KBD: hardware accelerated keyboard scanner selector is now %s" NL, state ? "ENABLED" : "DISABLED");
 	}
 }
 
 
-void hwa_kbd_fake_key ( Uint8 k )
+static inline void kqueue_empty ( struct kqueue_st *p )
 {
-	hwa_kbd.next = 0;
-	hwa_kbd.last = k;
+	p->i = 0;
+	p->q[0] = 0;	// to make the more frequent 'peek into queue' (without removing) faster, so it does not need to check 'i' ...
+}
+
+
+static inline void kqueue_remove ( struct kqueue_st *p )
+{
+	if (p->i > 1)
+		memmove(p->q, p->q + 1, --p->i);
+	else
+		kqueue_empty(p);
+}
+
+
+static void kqueue_write ( struct kqueue_st *p, const Uint8 k )
+{
+	if (XEMU_UNLIKELY(!k)) {
+		DEBUGPRINT("KBD: HWA: PUSH: warning, trying to write zero into the queue! Refused." NL);
+		return;
+	}
+	if (p->i < HWA_QUEUE_SIZE)
+		p->q[p->i++] = k;
+	else
+		DEBUGKBDHWACOM("KBD: HWA: PUSH: queue is full, cannot store key" NL);
+}
+
+
+void hwa_kbd_fake_key ( const Uint8 k )
+{
+	hwa_kbd.ascii_queue.q[0] = k;
+	hwa_kbd.ascii_queue.i = !!k;	// if k was zero, empty queue otherwise the queue is one element long
+}
+
+
+void hwa_kbd_fake_string ( const char *s )
+{
+	kqueue_empty(&hwa_kbd.ascii_queue);
+	while (*s)
+		kqueue_write(&hwa_kbd.ascii_queue, *s++);
 }
 
 
 /* used by actual I/O function to read $D610 */
 Uint8 hwa_kbd_get_last ( void )
 {
-	if (hwa_kbd.next && !hwa_kbd.last) {
-		hwa_kbd.last = hwa_kbd.next;
-		hwa_kbd.next = 0;
-	}
-	DEBUGKBDHWACOM("KBD: HWA: reading key @ PC=$%04X result = $%02X" NL, cpu65.pc, hwa_kbd.last);
-	return hwa_kbd.last;
+	const Uint8 k = hwa_kbd.ascii_queue.q[0];
+	DEBUGKBDHWACOM("KBD: HWA: reading ASCII key @ PC=$%04X result = $%02X" NL, cpu65.pc, k);
+	return k;
 }
 
 
@@ -124,8 +162,8 @@ Uint8 hwa_kbd_get_modifiers ( void )
 /* used by actual I/O function to write $D610, the written data itself is not used, only the fact of writing */
 void hwa_kbd_move_next ( void )
 {
-	DEBUGKBDHWACOM("KBD: HWA: moving to next key @ PC=$%04X previous queued key = $%02X" NL, cpu65.pc, hwa_kbd.last);
-	hwa_kbd.last = 0;
+	kqueue_remove(&hwa_kbd.ascii_queue);
+	DEBUGKBDHWACOM("KBD: HWA: moving to next ASCII key @ PC=$%04X keys left in queue: %d" NL, cpu65.pc, hwa_kbd.ascii_queue.i);
 }
 
 
@@ -152,13 +190,10 @@ static void hwa_kbd_convert_and_push ( const unsigned int pos )
 	}
 	// Now, convert scan code to MEGA65 ASCII value, using one of the conversion tables selected by the actual used modifier key(s)
 	// Size of conversion table is 72 (64+8, C64keys+C65keys). This is already checked above, so it must be ok to do so without any further boundary checks
-	const int ascii = matrix_to_ascii_table_selector[hwa_kbd.active_selector ? (hwa_kbd.modifiers & 0x1F) : 0][scan];
-	if (ascii) {
-		if (!hwa_kbd.next) {
-			DEBUGKBDHWA("KBD: HWA: PUSH: storing key $%02X '%c' from kbd pos $%02X and table index $%02X at PC=$%04X" NL, ascii, CHR_EQU(ascii), pos, scan, cpu65.pc);
-			hwa_kbd.next = ascii;
-		} else
-			DEBUGKBDHWA("KBD: HWA: PUSH: NOT storing key (already waiting) $%02X '%c' from kbd pos $%02X and table index $%02X at PC=$%04X" NL, ascii, CHR_EQU(ascii), pos, scan, cpu65.pc);
+	int conv = matrix_to_ascii_table_selector[hwa_kbd.active_selector ? (hwa_kbd.modifiers & 0x1F) : 0][scan];
+	if (conv) {
+		DEBUGKBDHWA("KBD: HWA: PUSH: storing key $%02X '%c' from kbd pos $%02X and table index $%02X at PC=$%04X" NL, conv, CHR_EQU(conv), pos, scan, cpu65.pc);
+		kqueue_write(&hwa_kbd.ascii_queue, conv);
 	} else
 		DEBUGKBDHWA("KBD: HWA: PUSH: NOT storing key (zero in translation table) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, pos, scan, cpu65.pc);
 }
@@ -192,8 +227,7 @@ void clear_emu_events ( void )
 	DEBUGKBDHWA("KBD: HWA: reset" NL);
 	hid_reset_events(1);
 	hwa_kbd.modifiers = 0;
-	hwa_kbd.next = 0;
-	hwa_kbd.last = 0;
+	kqueue_empty(&hwa_kbd.ascii_queue);
 	for (int a = 0; a < 3; a++) {
 		if (virtkey_state[0] != 0xFF) {
 			hid_sdl_synth_key_event(virtkey_state[a], 0);
@@ -276,19 +310,6 @@ static void kbd_trigger_alttab_trap ( void )
 	//KBD_RELEASE_KEY(ALT_KEY_POS);
 	//hwa_kbd.modifiers &= ~MODKEY_ALT;
 	matrix_mode_toggle(!in_the_matrix);
-	// TODO: remove the #if 0 part, if we're sure:
-#if 0
-	// It would trigger matrix-mode via hypervisor call, but it has the problem that
-	// it won't work if you're already in hypervisor mode. So I reverted back to the
-	// direct method above. If it does not cause problem on longer term, let's remove this
-	// section.
-	if (!in_hypervisor) {
-		DEBUGPRINT("KBD: MATRIX trap has been triggered." NL);
-		hypervisor_enter(TRAP_MATRIX);
-	} else {
-		DEBUGPRINT("KBD: *IGNORING* MATRIX trap trigger, already in hypervisor mode!" NL);
-	}
-#endif
 }
 
 
@@ -407,4 +428,5 @@ void input_init ( void )
 {
 	hid_register_sdl_keyboard_event_callback(HID_CB_LEVEL_EMU, emu_callback_key_raw_sdl);
 	hwa_kbd.active_selector = 1;
+	kqueue_empty(&hwa_kbd.ascii_queue);
 }
