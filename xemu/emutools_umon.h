@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2017-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2017-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -26,11 +26,21 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 
 #define XUMON_DEFAULT_PORT	9000
-#define XUMON_MAX_THREADS	32
-#define XUMON_STACK_SIZE	(8*1024*1024)
+//#define XUMON_STACK_SIZE	(8*1024*1024)
 
-extern int xumon_init ( int port );
+struct xumon_com_st {
+	int	size;
+	Uint8	*data;
+	int	seq;
+	const void *ptr;
+};
+
+extern int xumon_running;
+
+extern int xumon_init ( const int port );
 extern int xumon_stop ( void );
+extern int xumon_get_request ( struct xumon_com_st *res );
+extern int xumon_set_answer  ( struct xumon_com_st *res );
 
 #endif
 #endif
