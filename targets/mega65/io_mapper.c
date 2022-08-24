@@ -144,6 +144,8 @@ Uint8 io_read ( unsigned int addr )
 			switch (addr & 0x5F) {
 				case 0x19: return get_mouse_x_via_sid();
 				case 0x1A: return get_mouse_y_via_sid();
+				case 0x1B: return rand();	// oscillator-3 status read/only, generate some random byte here, even if it's not correct
+				case 0x1C: return rand();	// -- "" --
 			}
 			return 0xFF;
 		case 0x16:	// $D600-$D6FF ~ C65 I/O mode
@@ -174,7 +176,7 @@ Uint8 io_read ( unsigned int addr )
 				case 0xF1:
 					return (fpga_switches >> 8) & 0xFF;
 				case 0x10:				// last keypress ASCII value
-					return hwa_kbd_get_last();
+					return hwa_kbd_get_last_ascii();
 				case 0x11:				// modifier keys on kbd being used
 					return hwa_kbd_get_modifiers();
 				case 0x13:				// $D613: direct access to the kbd matrix, read selected row (set by writing $D614), bit 0 = key pressed
@@ -188,6 +190,8 @@ Uint8 io_read ( unsigned int addr )
 				case 0x1B:
 					// D61B amiga / 1531 mouse auto-detect. FIXME XXX what value we should return at this point? :-O
 					return 0xFF;
+				case 0x19:
+					return hwa_kbd_get_last_petscii();
 				case 0x29: // GS $D629: UARTMISC:M65MODEL MEGA65 model ID.
 					return configdb.mega65_model;
 				case 0x2A: // GS $D62A KBD:FWDATEL LSB of keyboard firmware date stamp (days since 1 Jan 2020)
@@ -206,6 +210,10 @@ Uint8 io_read ( unsigned int addr )
 				case 0x2E:
 				case 0x2F:
 					return cpld_firmware_version[addr - 0x2C];
+				case 0xDE: // D6DE: FPGA die temperatore, low byte: assuming to be 0, but the low nybble contains a kind of "noise" only
+					return rand() & 0xF;
+				case 0xDF: // D6DF: FPGA die temperature, high byte: assuming to be 164 (just because I see that on a real MEGA65 currently at my room's temperature ...)
+					return 164;
 				default:
 					DEBUG("MEGA65: reading MEGA65 specific I/O @ $D6%02X result is $%02X" NL, addr, D6XX_registers[addr]);
 					return D6XX_registers[addr];
@@ -220,6 +228,8 @@ Uint8 io_read ( unsigned int addr )
 				return dma_read_reg(addr & 0xF);
 			if (addr == 0x0F)
 				return 0;	// FIXME: D70F bit 7 = 32/32 bits divisor busy flag, bit 6 = 32*32 mult busy flag. We're never busy, so the zero. But the OTHER bits??? Any purpose of those??
+			if (addr == 0xEF)	// $D7EF CPU:RAND Hardware random number generator
+				return rand() & 0xFF;
 			// ;) FIXME this is LAZY not to decode if we need to update bigmult at all ;-P
 			if (XEMU_UNLIKELY(!bigmult_valid_result))
 				update_hw_multiplier();
@@ -396,7 +406,10 @@ void io_write ( unsigned int addr, Uint8 data )
 			}
 			switch (addr) {
 				case 0x10:	// ASCII kbd last press value to zero whatever the written data would be
-					hwa_kbd_move_next();
+					hwa_kbd_move_next_ascii();
+					return;
+				case 0x19:
+					hwa_kbd_move_next_petscii();
 					return;
 				case 0x11:
 					hwa_kbd_disable_selector(data & 0x80);
@@ -431,8 +444,15 @@ void io_write ( unsigned int addr, Uint8 data )
 				case 0x7F:	// hypervisor leave
 					hypervisor_leave();	// 0x67F is also handled on enter's state, so it will be executed only in_hypervisor mode, which is what I want
 					return;
-				case 0xCF:
+				case 0xCF:	// $D6CF - FPGA reconfiguration reg (if $42 is written). In testing mode, Xemu invents some new values here, though!
 					if (data == 0x42) {
+						if (configdb.testing) {	// in testing mode, writing $42 would mean to exit emulation!
+							if (configdb.screenshot_and_exit)
+								vic4_registered_screenshot_request = 1;	// this will cause also to exit (as configdb.screenshot_and_exit is not NULL)
+							else
+								XEMUEXIT(0);
+							return;
+						}
 						if (ARE_YOU_SURE("FPGA reconfiguration request. System must be reset.\nIs it OK to do now?\nAnswering NO may crash your program requesting this task though,\nor can result in endless loop of trying.", ARE_YOU_SURE_DEFAULT_YES)) {
 							reset_mega65();
 						}

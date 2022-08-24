@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/f011_core.h"
 #include "xemu/emutools_files.h"
 #include "io_mapper.h"
+#include "xemu/basic_text.h"
 
 
 #define SPRITE_SPRITE_COLLISION
@@ -88,6 +89,8 @@ static const char NTSC_STD_NAME[] = "NTSC";
 static const char PAL_STD_NAME[] = "PAL";
 int vic_readjust_sdl_viewport = 0;
 int vic4_disallow_video_std_change = 1;
+int vic4_registered_screenshot_request = 0;
+
 
 // VIC-IV Modeline Parameters
 // ----------------------------------------------------
@@ -221,12 +224,12 @@ void vic4_close_frame_access ( void )
 	pixel_readback();
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	// Screenshot
-	if (XEMU_UNLIKELY(registered_screenshot_request)) {
+	if (XEMU_UNLIKELY(vic4_registered_screenshot_request)) {
 		unsigned int x1, y1, x2, y2;
 		xemu_get_viewport(&x1, &y1, &x2, &y2);
-		registered_screenshot_request = 0;
+		vic4_registered_screenshot_request = 0;
 		if (!xemu_screenshot_png(
-			NULL, NULL,
+			NULL, configdb.screenshot_and_exit,
 			1, 1,		// no ratio/zoom correction is applied
 			pixel_start + y1 * TEXTURE_WIDTH + x1,	// pixel pointer corresponding to the top left corner of the viewport
 			x2 - x1 + 1,	// width
@@ -236,6 +239,10 @@ void vic4_close_frame_access ( void )
 			const char *p = strrchr(xemu_screenshot_full_path, DIRSEP_CHR);
 			if (p)
 				OSD(-1, -1, "%s", p + 1);
+		}
+		if (configdb.screenshot_and_exit) {
+			DEBUGPRINT("VIC4: exiting on 'exit-on-screenshot' feature." NL);
+			XEMUEXIT(0);
 		}
 	}
 #endif
@@ -598,9 +605,13 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;
 		CASE_VIC_ALL(0x1E):	// sprite-sprite collision
 			vic_registers[0x1E] = 0;
+			interrupt_status &= 255 - 4;
+			interrupt_checker();
 			return;
 		CASE_VIC_ALL(0x1F):	// sprite-data collision
 			vic_registers[0x1F] = 0;
+			interrupt_status &= 255 - 2;
+			interrupt_checker();
 			return;
 		CASE_VIC_2(0x20): CASE_VIC_2(0x21): CASE_VIC_2(0x22): CASE_VIC_2(0x23): CASE_VIC_2(0x24): CASE_VIC_2(0x25): CASE_VIC_2(0x26): CASE_VIC_2(0x27):
 		CASE_VIC_2(0x28): CASE_VIC_2(0x29): CASE_VIC_2(0x2A): CASE_VIC_2(0x2B): CASE_VIC_2(0x2C): CASE_VIC_2(0x2D): CASE_VIC_2(0x2E):
@@ -830,9 +841,14 @@ Uint8 vic_read_reg ( int unsigned addr )
 		CASE_VIC_ALL(0x1D):	// sprite-X expansion
 			break;
 		CASE_VIC_ALL(0x1E):	// sprite-sprite collision
+			vic_registers[0x1E] = 0;
+			interrupt_status &= 255 - 4;
+			interrupt_checker();
+			break;
 		CASE_VIC_ALL(0x1F):	// sprite-data collision
-			vic_registers[addr & 0x7F] = 0;	// 1E and 1F registers are cleared on read!
-			// FIXME: needs to re-check interrupts!
+			vic_registers[0x1F] = 0;
+			interrupt_status &= 255 - 2;
+			interrupt_checker();
 			break;
 		CASE_VIC_2(0x20): CASE_VIC_2(0x21): CASE_VIC_2(0x22): CASE_VIC_2(0x23): CASE_VIC_2(0x24): CASE_VIC_2(0x25): CASE_VIC_2(0x26): CASE_VIC_2(0x27):
 		CASE_VIC_2(0x28): CASE_VIC_2(0x29): CASE_VIC_2(0x2A): CASE_VIC_2(0x2B): CASE_VIC_2(0x2C): CASE_VIC_2(0x2D): CASE_VIC_2(0x2E):
@@ -924,16 +940,20 @@ Uint8 vic_read_reg ( int unsigned addr )
 #undef CASE_VIC_3_4
 
 
-
+// A very interesting thing happening here. If I want to check only if is_sprite[pos] is zero,
+// I found, that the sprite can collide with itself ... Looks like it sees it's "own data"
+// somehow which should be impossible as "is_sprite" is zeroed after each scanline. No idea,
+// maybe some non-integer stepping make this? Anyway, I had to use another algorithm because of
+// this problem. - LGB
 #ifdef	SPRITE_SPRITE_COLLISION
 #	warning "Sprite-sprite collision is an experimental feature (SPRITE_SPRITE_COLLISION is defined)!"
-#	define DO_SPRITE_SPRITE_COLLISION(pos,cond) do {	\
-		if (cond) {					\
-			const Uint8 sp = is_sprite[pos];	\
-			is_sprite[pos] = sp | sprbmask;		\
-			if (sp) 				\
-				vic_registers[0x1E] |= sp | sprbmask;	\
-		}						\
+#	define DO_SPRITE_SPRITE_COLLISION(pos,cond) do {		\
+		if (cond) {						\
+			const Uint8 sp = is_sprite[pos] | sprbmask;	\
+			is_sprite[pos] = sp;				\
+			if (XEMU_UNLIKELY(sp != sprbmask))		\
+				vic_registers[0x1E] |= sp;		\
+		}							\
 	} while (0)
 #ifndef	SPRITE_ANY_COLLISION
 #define	SPRITE_ANY_COLLISION
@@ -1308,7 +1328,7 @@ static XEMU_INLINE Uint8 *get_charset_effective_addr ( void )
 // color modes:
 //
 // - Monochrome (Bg/Fg)
-// - VICII Multicolor
+// - VIC-II Multicolor
 // - 16-color
 // - 256-color
 //
@@ -1323,8 +1343,8 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 	enable_bg_paint = 1;
 	const Uint8 *row_data_base_addr = get_charset_effective_addr();	// FIXME: is it OK that I moved here, before the loop?
 	if (display_row <= display_row_count) {
-		Uint8 *colour_ram_current_ptr = colour_ram + COLOUR_RAM_OFFSET + (display_row * LINESTEP_BYTES);
-		Uint8 *screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row * LINESTEP_BYTES);
+		Uint32 colour_ram_current_addr = COLOUR_RAM_OFFSET + (display_row * LINESTEP_BYTES);
+		Uint32 screen_ram_current_addr = SCREEN_ADDR + (display_row * LINESTEP_BYTES);
 		// Account for Chargen X-displacement
 		for (Uint32 *p = current_pixel; p < current_pixel + (CHARGEN_X_START - border_x_left); p++)
 			*p = palette[REG_SCREEN_COLOR];
@@ -1334,11 +1354,11 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 		Uint8 char_fetch_offset = 0;
 		// Chargen starts here.
 		while (line_char_index < REG_CHRCOUNT) {
-			Uint16 color_data = *(colour_ram_current_ptr++);
-			Uint16 char_value = *(screen_ram_current_ptr++);
+			Uint16 color_data = colour_ram[(colour_ram_current_addr++) & 0x07FFF];
+			Uint16 char_value = main_ram[(screen_ram_current_addr++) & 0x7FFFF];
 			if (REG_16BITCHARSET) {
-				color_data = (color_data << 8) | (*(colour_ram_current_ptr++));
-				char_value = char_value | (*(screen_ram_current_ptr++) << 8);
+				color_data = (color_data << 8) | colour_ram[(colour_ram_current_addr++) & 0x07FFF];
+				char_value = char_value | (main_ram[(screen_ram_current_addr++) & 0x7FFFF] << 8);
 				if (XEMU_UNLIKELY(SXA_GOTO_X(color_data))) {
 					// ---- Start of the GOTOX re-positioning functionality implementation, tricky one ----
 					xcounter = (char_value & 0x3FF);	// first, extract the goto 'X' value as an usigned number
@@ -1529,6 +1549,16 @@ int vic4_render_scanline ( void )
 
 	if (XEMU_LIKELY(REG_DISPLAYENABLE) && (ycounter >= BORDER_Y_TOP && ycounter < BORDER_Y_BOTTOM)) {
 		vic4_do_sprites();
+		if (vic_registers[0x1E])		// sprite-sprite collision
+			interrupt_status |= 4;
+		else
+			interrupt_status &= 255 - 4;
+		if (vic_registers[0x1F])		// sprite-foreground collision
+			interrupt_status |= 2;
+		else
+			interrupt_status &= 255 - 2;
+		// I don't call interrupt_checker() as it will be on the next call of the current function.
+		// That check then is part of function check_raster_interrupt. Yes a bit confusing and messy ... - LGB
 	}
 
 	ycounter++;
@@ -1544,6 +1574,54 @@ int vic4_render_scanline ( void )
 		return 1;
 	}
 	return 0;
+}
+
+
+/* --- AUX FUNCTIONS FOR NON-ESSENTIAL THINGS (query current text screen parameters for other components, put/get screen content as ASCII) --- */
+
+
+int vic4_query_screen_width ( void )
+{
+	return REG_H640 ? 80 : 40;
+}
+
+
+int vic4_query_screen_height ( void )
+{
+	return EFFECTIVE_V400 ? 50 : 25;
+}
+
+
+Uint8 *vic4_query_screen_memory ( void )
+{
+	return main_ram + (SCREEN_ADDR & 0x7FFFF);
+}
+
+
+char *vic4_textshot ( void )
+{
+	char text[8192];
+	char *result = xemu_cbm_screen_to_text(
+		text,
+		sizeof text,
+		vic4_query_screen_memory(),
+		vic4_query_screen_width(),
+		vic4_query_screen_height(),
+		(vic_registers[0x18] & 2)	// lowercase font? try to auto-detect by checking selected address chargen addr, LSB
+	);
+	return result ? xemu_strdup(result) : NULL;
+}
+
+
+int vic4_textinsert ( const char *text )
+{
+	return xemu_cbm_text_to_screen(
+		vic4_query_screen_memory(),
+		vic4_query_screen_width(),
+		vic4_query_screen_height(),
+		text,				// text buffer as input
+		(vic_registers[0x18] & 2)	// lowercase font? try to auto-detect by checking selected address chargen addr, LSB
+	);
 }
 
 

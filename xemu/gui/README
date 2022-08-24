@@ -17,3 +17,14 @@ GUI itself.
 popular_user_funcs.c is also included by ../emutools_gui.c and contains
 "popular" GUI features, so the actual emulators does not need to implement
 as their own, all the time.
+
+=== THE PLUGIN GUI ===
+
+PluginGUI plugins, API description and examples now have its own Github
+repository! Please check it out here:
+
+https://github.com/lgblgblgb/xemu-pluginguis
+
+The API description itself:
+
+https://github.com/lgblgblgb/xemu-pluginguis/wiki/PluginGuiAPI

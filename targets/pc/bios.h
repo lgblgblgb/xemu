@@ -1,4 +1,5 @@
-/* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
+/* Test-case for a primitive PC emulator inside the Xemu project,
+   currently using Fake86's x86 CPU emulation.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
@@ -16,15 +17,9 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef XEMU_MEGA65_INJECT_H_INCLUDED
-#define XEMU_MEGA65_INJECT_H_INCLUDED
+#ifndef XEMU_PC_BIOS_H_INCLUDED
+#define XEMU_PC_BIOS_H_INCLUDED
 
-extern int inject_ready_check_status;
-
-extern void inject_ready_check_do        ( void );
-extern int  inject_register_ready_status ( const char *debug_msg, void (*callback)(void*), void *userdata );
-
-extern int  inject_register_prg          ( const char *prg_file, int prg_mode );
-extern void inject_register_allow_disk_access ( void );
+extern void bios_init ( uint8_t *in_base_memory, uint8_t *in_rom_memory );
 
 #endif
