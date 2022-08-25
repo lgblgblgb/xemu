@@ -240,12 +240,16 @@ static XEMU_INLINE void xemu_u64le_to_u8p ( Uint8 *const p, const Uint64 data ) 
 	p[7] = (data >> 56) & 0xFF;
 }
 
+extern void base64_encode ( char *t, const Uint8 *s, int l );
+
 typedef char  sha1_hash_str[41];
+typedef char  sha1_hash_base64_str[60];
 typedef Uint8 sha1_hash_bytes[20];
 
 extern void sha1_checksum_as_words ( Uint32 hash[5], const Uint8 *data, Uint32 size );
 extern void sha1_checksum_as_bytes ( sha1_hash_bytes hash_bytes, const Uint8 *data, Uint32 size );
 extern void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data, Uint32 size );
+extern void sha1_checksum_as_base64_string ( sha1_hash_base64_str hash_str, const Uint8 *data, Uint32 size );
 
 #if	defined(XEMU_OSD_SUPPORT)
 // OSD support requested without defined XEMU_OSD_FONT8HEIGHT: fall back to use 8 pixel height font by default in this case

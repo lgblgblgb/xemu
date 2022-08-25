@@ -1841,6 +1841,42 @@ int xemu_os_readdir ( XDIR *dirp, char *fn )
 }
 #endif
 
+/* ---------------------------- BASE64 encode ---------------------------- */
+
+
+void base64_encode ( char *t, const Uint8 *s, int l )
+{
+	static const char b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	for (;;)
+		if (l >= 3) {
+			register const Uint32 d = (s[0] << 16) + (s[1] << 8) + s[2];
+			*t++ = b64[ d >> 18      ];
+			*t++ = b64[(d >> 12) & 63];
+			*t++ = b64[(d >>  6) & 63];
+			*t++ = b64[ d        & 63];
+			l -= 3;
+			s += 3;
+		} else if (l == 2) {
+			register const Uint32 d = (s[0] << 8) + s[1];
+			*t++ = b64[ d >> 10      ];
+			*t++ = b64[(d >>  4) & 63];
+			*t++ = b64[(d <<  2) & 63];
+			*t++ = '=';
+			*t   = '\0';
+			return;
+		} else if (l == 1) {
+			*t++ = b64[ *s >> 2      ];
+			*t++ = b64[(*s << 4) & 63];
+			*t++ = '=';
+			*t++ = '=';
+			*t   = '\0';
+			return;
+		} else {
+			*t   = '\0';
+			return;
+		}
+}
+
 
 /* -------------------------- SHA1 checksumming -------------------------- */
 
@@ -1955,4 +1991,12 @@ void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data, Uint32
 	Uint32 hash[5];
 	sha1_checksum_as_words(hash, data, size);
 	sprintf(hash_str, "%08x%08x%08x%08x%08x", hash[0], hash[1], hash[2], hash[3], hash[4]);
+}
+
+
+void sha1_checksum_as_base64_string ( sha1_hash_base64_str hash_str, const Uint8 *data, Uint32 size )
+{
+	sha1_hash_bytes bytes;
+	sha1_checksum_as_bytes(bytes, data, size);
+	base64_encode(hash_str, bytes, 20);
 }
