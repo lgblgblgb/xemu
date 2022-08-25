@@ -32,7 +32,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #define LISTEN_BACKLOG		SOMAXCONN
+#define SELECT_TIMEOUT		100000
 #define MAX_CLIENT_SLOTS	32
+#define WEBSOCKET_VERSION	"13"					// proto-version in string format
+#define WEBSOCKET_PROTOCOL	"chat"
+#define WEBSOCKET_KEY_UUID	"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"	// according to RFC-6455
 
 //#define UNCONNECTED	XS_INVALID_SOCKET
 static xemusock_socket_t sock_server;
@@ -43,8 +47,12 @@ static SDL_atomic_t thread_client_seq;
 static jmp_buf jmp_finish_client_thread;
 
 static char *docroot = NULL;
+static int xumon_port;
+static Uint64 start_ts = 0;	// FIXME: implement this
 static const char *generic_http_headers = NULL;
 static const char html_footer[] = "<br><br><hr>From your Xemu acting as a webserver now ;)";
+static const char default_vhost[] = "127.0.0.1";	// TODO modify this later to be allocated dynamically, ie host:port
+static const char default_agent[] = "unknown_user_agent";
 
 int xumon_running = 0;
 
@@ -62,10 +70,21 @@ struct linked_fifo_st {
 	Uint8 *data;
 };
 
+enum xumon_conn_mode {
+	XUMON_CONN_INIT,
+	XUMON_CONN_TEXT,
+	XUMON_CONN_BIN,
+	XUMON_CONN_HTTP,
+	XUMON_CONN_WEBSOCKET
+};
+
 struct client_st {
 	xemusock_socket_t	sock;
-	int			fd;		// used when file access is needed (like built-in HTTP server, file streaming)
 	int			seq;
+	int			fd;		// generic purpose, auto-close, used when file access is needed (like built-in HTTP server, file streaming)
+	const char		*vhost;
+	const char		*agent;
+	enum xumon_conn_mode	mode;
 	struct linked_fifo_st	*read_head;
 	struct linked_fifo_st	*read_tail;
 	struct linked_fifo_st	*write_head;
@@ -73,8 +92,8 @@ struct client_st {
 };
 
 static SDL_SpinLock clients_lock;
-#define CLIENTS_LOCK()		SDL_AtomicLock (&clients_lock)
-#define CLIENTS_UNLOCK()	SDL_AtomicUnlock (&clients_lock)
+#define CLIENTS_LOCK()		SDL_AtomicLock(&clients_lock)
+#define CLIENTS_UNLOCK()	SDL_AtomicUnlock(&clients_lock)
 
 static struct client_st clients[MAX_CLIENT_SLOTS];
 
@@ -88,7 +107,7 @@ static int recv_raw ( xemusock_socket_t sock, void *buffer, int min_size, int ma
 	while (size < min_size && max_size > 0) {
 		CHECK_STOP_TRIGGER();
 		int xerr;
-		int ret = xemusock_select_1(sock, 100000, XEMUSOCK_SELECT_R, &xerr);
+		int ret = xemusock_select_1(sock, SELECT_TIMEOUT, XEMUSOCK_SELECT_R, &xerr);
 		if (ret < 0) {
 			if (xerr == XSEINTR) {
 				DEBUGPRINT("UMON: client: recv_raw: select() got EINTR, restarting" NL);
@@ -126,7 +145,7 @@ static void send_raw ( xemusock_socket_t sock, const void *buffer, int size )
 	while (size > 0) {
 		CHECK_STOP_TRIGGER();
 		int xerr;
-		int ret = xemusock_select_1(sock, 100000, XEMUSOCK_SELECT_W, &xerr);
+		int ret = xemusock_select_1(sock, SELECT_TIMEOUT, XEMUSOCK_SELECT_W, &xerr);
 		if (ret < 0) {
 			if (xerr == XSEINTR) {
 				DEBUGPRINT("UMON: client: send_raw: select() got EINTR, restarting" NL);
@@ -164,7 +183,7 @@ static inline void send_string ( xemusock_socket_t sock, const char *p )
 
 
 // err_code = 0 is a special mode about the same as "200 OK" just with slightly modified text inside the <h1>...</h1>
-static void http_page_and_exit ( xemusock_socket_t sock, int err_code, const char *err1, const char *err2, const char *err3, const char *extra_headers )
+static void http_page_and_exit ( struct client_st *client, int err_code, const char *err1, const char *err2, const char *err3, const char *extra_headers )
 {
 	const char *err_text;
 	switch (err_code) {
@@ -210,7 +229,7 @@ static void http_page_and_exit ( xemusock_socket_t sock, int err_code, const cha
 	char buffer[l];
 	snprintf(buffer, l,
 		"HTTP/1.1 %d %s\r\n"
-		"Host: 127.0.0.1\r\n"
+		"Host: %s\r\n"
 		"Content-Type: text/html; charset=UTF-8\r\n"
 		"Connection: close\r\n"
 		"%s"
@@ -218,7 +237,7 @@ static void http_page_and_exit ( xemusock_socket_t sock, int err_code, const cha
 		"%s"
 		"\r\n%s"
 		,
-		err_code, err_code == 200 ? "OK" : err_text,
+		err_code, err_code == 200 ? "OK" : err_text, client->vhost,
 		generic_http_headers,
 		(unsigned int)strlen(page),
 		extra_headers,
@@ -226,7 +245,7 @@ static void http_page_and_exit ( xemusock_socket_t sock, int err_code, const cha
 	);
 	if (err_code != 200)
 		DEBUGPRINT("UMON: client: http error answer %d %s %s %s %s" NL, err_code, err_text, err1, err2, err3);
-	send_string(sock, buffer);
+	send_string(client->sock, buffer);
 	END_CLIENT_THREAD(1);
 }
 
@@ -235,19 +254,21 @@ static void http_main_page_and_exit ( struct client_st *client )
 {
 	char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
 	xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
-	char page[2048];
+	char page[4096];
 	snprintf(page, sizeof page,
 		"<table style=\"background-color: coral; border: 2px solid black;\"><tr><th>Emulation:</th><td>%s</td></tr>"
 		"<tr><th>Version/date:</th><td>%s</td></tr>"
 		"<tr><th>GIT info:</th><td>%s</td></tr>"
 		"<tr><th>CPU stat:</th><td>%s</td></tr>"
+		"<tr><th>Browser:</th><td>%s</td></tr>"
 		"<tr><th>OS:</th><td>%s</td></tr>"
-		"<tr><th>System:</th><td>%d x CPU (<i style=\"font-size: 66%%;\">%s%s%s%s%s%s%s%s%s%s%s</i>), cache-line %d, ~%dM RAM</td></tr>"
+		"<tr><th>System:</th><td>%d x CPU/core (<i style=\"font-size: 66%%;\">%s%s%s%s%s%s%s%s%s%s%s</i>), cache-line %d, ~%dMbytes RAM</td></tr>"
 		"<tr><th>SDL:</th><td>%d.%d.%d %s (<i>video:%s audio:%s</i>)</td></tr>"
 		"<tr><th>Copyright:</th><td><pre>%s</pre></td></tr>"
 		"<table>",
 		TARGET_DESC, XEMU_BUILDINFO_CDATE, XEMU_BUILDINFO_GIT,
 		td_stat_str,
+		client->agent,
                 xemu_get_uname_string(),
 		SDL_GetCPUCount(),
 			SDL_Has3DNow() ? "3Dnow " : "", SDL_HasAVX() ? "AVX " : "", SDL_HasAVX2() ? "AVX2 " : "" ,
@@ -257,7 +278,17 @@ static void http_main_page_and_exit ( struct client_st *client )
 		sdlver_linked.major, sdlver_linked.minor, sdlver_linked.patch, SDL_GetRevision(), SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver(),
 		emulators_disclaimer
 	);
-	http_page_and_exit(client->sock, 0, page, NULL, NULL, NULL);
+	char initiator[2048];
+	snprintf(initiator, sizeof initiator,
+		"<input type=\"hidden\" name=\"ts\" value=\"" PRINTF_LLU "\">"
+		"<input type=\"text\" name=\"host\" value=\"127.0.0.1\">"
+		"<input type=\"text\" name=\"port\" value=\"%d\">"
+		"<input type=\"submit\" name=\"submit\" value=\"Start web monitor\">"
+		,
+		(long long unsigned int)start_ts,
+		xumon_port
+	);
+	http_page_and_exit(client, 0, page, initiator, NULL, NULL);
 }
 
 
@@ -266,12 +297,12 @@ static void http_serve_file_and_exit ( struct client_st *client, const char *uri
 	while (*uri == '/')
 		uri++;
 	if (*uri == '.')
-		http_page_and_exit(client->sock, 403, "URI starts with '.'", NULL, NULL, NULL);
+		http_page_and_exit(client, 403, "URI starts with '.'", NULL, NULL, NULL);
 	int l = 0;
 	// Rather lame, currently file URIs should not contain special characters, so no resolving %XX and anything like that at all
 	for (const char *p = uri; *p > 32 && *p < 127 && *p != '?' && *p != '#'; p++, l++)
 		if (*p == '/' || *p == '\\')
-			http_page_and_exit(client->sock, 403, "URI contains directory separator", NULL, NULL, NULL);
+			http_page_and_exit(client, 403, "URI contains directory separator", NULL, NULL, NULL);
 	if (!l) {
 		static const char default_index[] = "index.html";
 		uri = default_index;
@@ -283,11 +314,11 @@ static void http_serve_file_and_exit ( struct client_st *client, const char *uri
 	path[strlen(docroot) + l] = 0;
 	client->fd = open(path, O_RDONLY | O_BINARY);
 	if (client->fd < 0)
-		http_page_and_exit(client->sock, 404, "Cannot open specified file", path, strerror(errno), NULL);
+		http_page_and_exit(client, 404, "Cannot open specified file", path, strerror(errno), NULL);
 	// Guess mime-type
 	const char *mime = strrchr(path, '.');
 	if (!mime)
-		http_page_and_exit(client->sock, 403, "Filename does not contain extension to guess mime-type", path, NULL, NULL);
+		http_page_and_exit(client, 403, "Filename does not contain extension to guess mime-type", path, NULL, NULL);
 	mime++;
 	if (!strcasecmp(mime, "html"))		mime = "text/html; charset=UTF-8";
 	else if (!strcasecmp(mime, "txt"))	mime = "text/plain; charset=UTF-8";
@@ -299,19 +330,19 @@ static void http_serve_file_and_exit ( struct client_st *client, const char *uri
 	else if (!strcasecmp(mime, "json"))	mime = "application/json";
 	else if (!strcasecmp(mime, "bin"))	mime = "application/octet-stream";
 	else
-		http_page_and_exit(client->sock, 403, path, "Cannot guess mime-type from filename extension:", mime - 1, NULL);
+		http_page_and_exit(client, 403, path, "Cannot guess mime-type from filename extension:", mime - 1, NULL);
 	DEBUGPRINT("UMON: client: trying to serve file \"%s\" (fd %d), mime-type is \"%s\"" NL, path, client->fd, mime);
 	// Chunked transfer encoding ...
 	char buffer[4096];
 	sprintf(buffer,
 		"HTTP/1.1 200 OK\r\n"
 		"Transfer-Encoding: chunked\r\n"
-		"Host: 127.0.0.1\r\n"
+		"Host: %s\r\n"
 		"Content-Type: %s\r\n"
 		"Connection: close\r\n"
 		"%s"
 		"\r\n",
-		mime, generic_http_headers
+		client->vhost, mime, generic_http_headers
 	);
 	send_string(client->sock, buffer);
 	for (int total_len = 0;;) {
@@ -319,7 +350,7 @@ static void http_serve_file_and_exit ( struct client_st *client, const char *uri
 		int ret = xemu_safe_read(client->fd, buffer + 16, sizeof(buffer) - 2 - 16);
 		if (ret < 0) {	// this shouldn't happen ...
 			DEBUGPRINT("UMON: client: ERROR, read error during file serving!" NL);
-			END_CLIENT_THREAD(1);
+			break;
 		}
 		buffer[ret + 16] = '\r';
 		buffer[ret + 17] = '\n';
@@ -328,72 +359,221 @@ static void http_serve_file_and_exit ( struct client_st *client, const char *uri
 		memcpy(p_to_send, chunk_head, chunk_head_size);
 		send_raw(client->sock, p_to_send, ret + 2 + chunk_head_size);
 		if (!ret)	// We're done :D
-			END_CLIENT_THREAD(1);
+			break;
 		total_len += ret;
 		if (total_len > (256 << 20)) {
 			DEBUGPRINT("UMON: client: ERROR, too long file tried to be streamed!" NL);
-			END_CLIENT_THREAD(1);
+			break;
 		}
 	}
+	END_CLIENT_THREAD(1);
 }
 
 
+static inline void memcpy_downwards ( char *dest, const char *src, int size )
+{
+	while (size-- > 0)
+		*dest++ = *src++;
+}
 
 
 static void client_run ( struct client_st *client )
 {
 	char buffer[8192];
 	int read_size = 0;
+	char *headers_p = buffer;	// make gcc happy not to throw warning ...
+	char *http_uri = "";		// make gcc happy ...
 	for (;;) {
+		// TODO: write pending-queued data!
 		CHECK_STOP_TRIGGER();
-		if (read_size >= sizeof(buffer) - 1)
-			break;
-		int xerr, ret = xemusock_recv(client->sock, buffer + read_size, sizeof(buffer) - read_size - 1, &xerr);
+		if (read_size < 0) {
+			DEBUGPRINT("UMON: client: FATAL: read_size = %d" NL, read_size);
+			return;
+		}
+		const int to_be_read = sizeof(buffer) - read_size - 1;
+		if (to_be_read < 1) {
+			DEBUGPRINT("UMON: client: overflow of the receiver buffer (can_read=%d)!" NL, to_be_read);
+			if (client->mode == XUMON_CONN_HTTP)
+				http_page_and_exit(client, 400, "Too long request", NULL, NULL, NULL);
+			return;
+		}
+		int xerr, ret = xemusock_select_1(client->sock, SELECT_TIMEOUT, XEMUSOCK_SELECT_R, &xerr);
+		if (!ret)
+			continue;
+		if (ret < 0) {
+			DEBUGPRINT("UMON: client: select error: %s" NL, xemusock_strerror(xerr));
+			continue;
+		}
+		ret = xemusock_recv(client->sock, buffer + read_size, to_be_read, &xerr);
 		DEBUGPRINT("UMON: client: result of recv() = %d, error = %s" NL, ret, ret == -1 ? xemusock_strerror(xerr) : "OK");
-		if (ret == 0)
-			break;
-		if (ret > 0) {
-			read_size += ret;
-			buffer[read_size] = 0;
-			const char *p = strstr(buffer, "\r\n\r\n");
-			if (p) {
-				http_main_page_and_exit(client);
-				http_page_and_exit(client->sock, 0, "We will rock you ;)", NULL, NULL, NULL);
-				http_serve_file_and_exit(client, "index.html");
-				return;
-				char buffer[8192];
-				sprintf(buffer,
-					"HTTP/1.1 200 OK\r\n"
-					"Host: 127.0.0.1\r\n"
-					"Content-Type: text/plain; charset=UTF-8\r\n"
-					"Connection: close\r\n"
-					"Cache-Control: no-store, no-cache, must-revalidate, max-age=0\r\n"
-					"Cache-Control: post-check=0, pre-check=0\r\n"
-					"Pragma: no-cache\r\n"
-					"Expires: Tue, 19 Sep 2017 19:08:16 GMT\r\n"
-					"X-UA-Compatible: IE=edge\r\n"
-					"X-Powered-By: The Powerpuff Girls\r\n"
-					"X-Content-Type-Options: nosniff\r\n"
-					"Access-Control-Allow-Origin: *\r\n"
-					"Server: Xemu/0.1\r\n"
-					"\r\n"
-					"Hello, world ;)\r\n"
-				);
-				send_string(client->sock, buffer);
-				//p = buffer;
-				//while (*p) {
-				//	ret = xemusock_send(client->sock, p, strlen(p), &xerr);
-				//	DEBUGPRINT("UMON: client: result of send() = %d, error = %s" NL, ret, ret == -1 ? xemusock_strerror(xerr) : "OK");
-				//	if (ret == 0)
-				//		break;
-				//	if (ret > 0)
-				//		p += ret;
-				//	SDL_Delay(100);
-				//}
-				return;
+		if (ret == 0) {
+			DEBUGPRINT("UMON: client: closing connection because zero byte read." NL);
+			return;
+		}
+		if (ret < 0) {
+			if (xemusock_should_repeat_from_error(xerr)) {
+				DEBUGPRINT("UMON: client: select() can-continue error: %s" NL, xemusock_strerror(xerr));
+				continue;
+			}
+			DEBUGPRINT("UMON: client: select() FATAL error: %s" NL, xemusock_strerror(xerr));
+			continue;	// FIXME: should we change this to 'return' to abort connection?
+		}
+		if (ret > to_be_read) {	// can it happen?
+			DEBUGPRINT("UMON: client: FATAL, more bytes has been read than wanted?!" NL);
+			return;
+		}
+		read_size += ret;
+		if (client->mode == XUMON_CONN_INIT || client->mode == XUMON_CONN_TEXT) {
+			// in this mode, we need a complete line to be processed
+			int lsize, len;
+			char *endp;
+		check_next_line:
+			lsize = 0;
+			for (endp = buffer; endp < buffer + read_size; endp++)
+				if ((endp[0] == '\r' && endp[1] == '\n') || endp[0] == '\n') {	// hmm, ugly, but some clients may send only '\n' ...
+					len = endp - buffer;
+					lsize = len + 2;
+					if (endp[0] == '\n')
+						lsize--;
+					break;
+				}
+			if (!lsize)
+				continue;		// not a full line recieved yet, read more data
+			// OK, we have our line
+			if (client->mode == XUMON_CONN_INIT) {	// auto-detect if http or text mode ...
+				int sep = 1, n = 0;
+				char *res[10];
+				for (char *p = buffer; p < endp; p++) {
+					const int sep_now = (*(unsigned char*)p <= 32);
+					if (sep_now != sep) {
+						sep = sep_now;
+						if (n < 6)
+							res[n] = p;
+						n++;
+					}
+				}
+				// UMON: #0 = (GET / HTTP/1.1
+				// UMON: #1 = ( / HTTP/1.1
+				// UMON: #2 = (/ HTTP/1.1
+				// UMON: #3 = ( HTTP/1.1
+				// UMON: #4 = (HTTP/1.1
+				if (n >= 5 && !strncasecmp(res[4], "http/", 5) && res[2][0] == '/') {
+					// This seems to be a HTTP request, boo!
+					headers_p = endp + lsize - len;
+					*res[1] = '\0';
+					if (strcasecmp(res[0], "GET"))
+						http_page_and_exit(client, 405, "Unsupported HTTP method:", res[0], "<i>Use GET method instead!</i>", "Allow: GET\r\n");
+					http_uri = res[2];
+					while (*http_uri == '/' || *http_uri == '\\')
+						http_uri++;
+					*res[3] = '\0';
+					client->mode = XUMON_CONN_HTTP;
+				} else
+					client->mode = XUMON_CONN_TEXT;	// text request, as couldn't be identified as http
+			}
+			if (client->mode == XUMON_CONN_TEXT) {
+				// So we have a text request it seems!!
+				*endp = '\0';
+				DEBUGPRINT("UMON: text-request: (%s)" NL, buffer);
+				// --- End of processing line ---
+				read_size -= lsize;
+				if (read_size > 0) {
+					memcpy_downwards(buffer, buffer + lsize, read_size);
+					goto check_next_line;
+				} else
+					continue;
 			}
 		}
-		SDL_Delay(100);
+		if (client->mode == XUMON_CONN_HTTP) {
+			buffer[read_size] = '\0';
+			char *p = strstr(headers_p, "\r\n\r\n");
+			if (!p)
+				continue;	// still waiting for the full HTTP request to arrive!
+			for (p = http_uri; *p; p++)
+				if (*p == '?' || *p == '#') {
+					*p = '\0';
+					break;
+				}
+			// We need to parse the headers now
+			const char *header_upgrade = "";		// Upgrade: websocket
+			const char *header_connection = "";		// Connection: Upgrade
+			const char *header_websocket_key = "";		// Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==
+			//const char *header_websocket_protocol = "";	// Sec-WebSocket-Protocol: chat, superchat
+			const char *header_websocket_version = "";	// Sec-WebSocket-Version: 13
+			for (p = headers_p;;) {
+				char *e = strstr(p, "\r\n");
+				if (!e)
+					http_page_and_exit(client, 400, "Truncated HTTP request", NULL, NULL, NULL);
+				if (e == p)
+					break;
+				*e = '\0';
+				char *v = strchr(p, ':');
+				if (!v || v == p)
+					http_page_and_exit(client, 400, "Invalid HTTP header syntax", NULL, NULL, NULL);
+				*v++ = '\0';
+				while (*v && *(unsigned char*)v <= 32)
+					v++;
+				DEBUGPRINT("UMON: http_header: (%s) = (%s)" NL, p, v);
+				if (!strcasecmp(p, "Host"))
+					client->vhost = v;
+				else if (!strcasecmp(p, "User-Agent"))
+					client->agent = v;
+				else if (!strcasecmp(p, "Upgrade"))
+					header_upgrade = v;
+				else if (!strcasecmp(p, "Connection"))
+					header_connection = v;
+				else if (!strcasecmp(p, "Sec-WebSocket-Key"))
+					header_websocket_key = v;
+				//else if (!strcasecmp(p, "Sec-WebSocket-Protocol"))
+				//	header_websocket_protocol = v;
+				else if (!strcasecmp(p, "Sec-WebSocket-Version"))
+					header_websocket_version = v;
+				p = e + 2;
+			}
+			// FIXME: don't use connection header, as it can be "upgrade, keep-alive" for example, not just plain "upgrade"!
+			//if (!strcasecmp(header_connection, "Upgrade")) {	// checking the possibility to switch into websocket mode
+			if (!strcasecmp(header_upgrade, "websocket")) {
+				//if (strcasecmp(header_upgrade, "websocket"))
+				//	http_page_and_exit(client, 400, "Invalid connection upgrade.", "<b>Upgrade:</b> header can be only <b>websocket</b> but I got:", header_upgrade, NULL);
+				if (strcasecmp(header_websocket_version, WEBSOCKET_VERSION))
+					http_page_and_exit(client, 400, "Unsupported websocket version.", "I need <b>" WEBSOCKET_VERSION "</b> but I got:", header_websocket_version, "Sec-WebSocket-Version: " WEBSOCKET_VERSION "\r\n");
+				// if (strcmp(header_websocket_protocol, WEBSOCKET_PROTOCOL))
+				//	http_page_and_exit(client, 400, "Unsupported websocket protocol.", "I need <b>" WEBSOCKET_PROTOCOL "</b> but I got:", header_websocket_protocol, "Sec-WebSocket-Version: " WEBSOCKET_VERSION "\r\n");
+				static const char websocket_key_uuid[] = WEBSOCKET_KEY_UUID;
+				char keybuffer[strlen(websocket_key_uuid) + strlen(header_websocket_key) + 1];
+				strcpy(keybuffer, header_websocket_key);
+				strcat(keybuffer, websocket_key_uuid);
+				sha1_hash_base64_str checksum;
+				sha1_checksum_as_base64_string(checksum, (Uint8*)keybuffer, strlen(keybuffer));
+				char outbuf[2048];
+				snprintf(outbuf, sizeof outbuf,
+					"HTTP/1.1 101 Switching Protocols\r\n"
+					"Upgrade: websocket\r\n"
+					"Connection: Upgrade\r\n"
+					"Sec-WebSocket-Accept: %s\r\n"
+					"Sec-WebSocket-Protocol: " WEBSOCKET_PROTOCOL "\r\n"
+					"Host: %s\r\n"
+					"%s"
+					"\r\n",
+					checksum,
+					client->vhost,
+					generic_http_headers
+				);
+				send_string(client->sock, outbuf);
+				client->mode = XUMON_CONN_WEBSOCKET;
+				read_size = 0;	// make sure our recv buffer is empty at this point or FIXME: is that ok?!
+				continue;	// back to the main read loop, we need data at this point
+			}
+			if (!http_uri[0])
+				http_main_page_and_exit(client);
+			http_serve_file_and_exit(client, http_uri);
+		}
+		if (client->mode == XUMON_CONN_WEBSOCKET) {
+			DEBUGPRINT("UMON: sorry, websocket is not yet supported ;( We got %d bytes of data read!" NL, read_size);
+			return;
+		}
+		DEBUGPRINT("UMON: FATAL: unknown connection mode!" NL);
+		return;
 	}
 }
 
@@ -423,10 +603,13 @@ static int client_thread_initiate ( void *user_param )
 		CLIENTS_LOCK();
 		for (struct client_st *c = clients; c < clients + MAX_CLIENT_SLOTS; c++)
 			if (!c->seq) {
-				c->seq = client_seq;
-				c->sock = CLIENT_SOCK;
-				c->fd = -1;
 				client = c;
+				client->seq = client_seq;
+				client->sock = CLIENT_SOCK;
+				client->fd = -1;
+				client->mode = XUMON_CONN_INIT;
+				client->vhost = default_vhost;
+				client->agent = default_agent;
 				CLIENTS_UNLOCK();
 				goto slot_found;
 			}
@@ -442,8 +625,11 @@ slot_found:
 	if (XEMU_UNLIKELY(xemusock_set_nonblocking(CLIENT_SOCK, XEMUSOCK_NONBLOCKING, &xerr))) {
 		DEBUGPRINT("UMON: client: Cannot set socket %d into non-blocking mode:\n%s" NL, (int)CLIENT_SOCK, xemusock_strerror(xerr));
 	} else {
-		if (!setjmp(jmp_finish_client_thread))
+		if (!setjmp(jmp_finish_client_thread)) {
 			client_run(client);
+			DEBUGPRINT("UMON: client: returned via <return>" NL);
+		} else
+			DEBUGPRINT("UMON: client: returned via <longjmp>" NL);
 		// longjmp() in END_CLIENT_THREAD() will bring us back here. Also if client_run() returns, for sure.
 		xemusock_set_nonblocking(CLIENT_SOCK, XEMUSOCK_BLOCKING, NULL);
 	}
@@ -460,7 +646,7 @@ finish:
 		client->read_tail  = NULL;
 		client->write_tail = NULL;
 		CLIENTS_UNLOCK();
-		client = NULL;
+		client = NULL;	// just to reveal (with crash) if someone still tries to use this ptr (should not!)
 		for (int i = 0; i < 2; i++)
 			while (l[i]) {
 				free(l[i]->data);
@@ -486,13 +672,13 @@ static int main_thread ( void *user_param )
 		int xerr;
 		// Wait for socket event with select, with 0.1sec timeout
 		// We need timeout, to check thread_stop_trigger condition
-		const int select_result = xemusock_select_1(sock_server, 100000, XEMUSOCK_SELECT_R | XEMUSOCK_SELECT_E, &xerr);
+		const int select_result = xemusock_select_1(sock_server, SELECT_TIMEOUT, XEMUSOCK_SELECT_R | XEMUSOCK_SELECT_E, &xerr);
 		if (!select_result)
 			continue;
 		if (select_result < 0) {
 			if (xerr == XSEINTR)
 				continue;
-			DEBUGPRINT("UMON: client: select() error: %s" NL, xemusock_strerror(xerr));
+			DEBUGPRINT("UMON: main-server: select() error: %s" NL, xemusock_strerror(xerr));
 			SDL_Delay(100);
 			continue;
 		}
@@ -505,12 +691,12 @@ static int main_thread ( void *user_param )
 			if (thread) {
 				SDL_DetachThread(thread);
 			} else {
-				DEBUGPRINT("UMON: client: cannot create thread for incomming connection" NL);
+				DEBUGPRINT("UMON: main-server: cannot create thread for incomming connection" NL);
 				xemusock_shutdown(sock, NULL);
 				xemusock_close(sock, NULL);
 			}
 		} else {
-			DEBUGPRINT("UMON: client: accept() error: %s" NL, xemusock_strerror(xerr));
+			DEBUGPRINT("UMON: main-server: accept() error: %s" NL, xemusock_strerror(xerr));
 			SDL_Delay(10);
 		}
 	}
@@ -640,6 +826,7 @@ int xumon_init ( const int port )
 		ERROR_WINDOW("%sInvalid port (must be between 1024 and 65535): %d", err_msg, port);
 		goto error;
 	}
+	xumon_port = port;
 	const char *sock_init_status = xemusock_init();
 	if (sock_init_status) {
 		ERROR_WINDOW("%sCannot initialize network library:\n%s", err_msg, sock_init_status);
@@ -746,7 +933,7 @@ int xumon_stop ( void )
 	Uint32 passed_time = 0, start_time = SDL_GetTicks();
 	SDL_AtomicSet(&thread_stop_trigger, 1);
 	while (SDL_AtomicGet(&thread_counter) > 0) {
-		SDL_Delay(1);
+		SDL_Delay(4);
 		passed_time = SDL_GetTicks() - start_time;
 		if (passed_time > 500) {
 			DEBUGPRINT("UMON: timeout while waiting for threads to stop!" NL);
