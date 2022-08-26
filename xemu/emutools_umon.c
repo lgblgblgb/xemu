@@ -32,7 +32,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #define LISTEN_BACKLOG		SOMAXCONN
-#define SELECT_TIMEOUT		100000
+#define SELECT_TIMEOUT		100000					// in microsends (FIXME: really?)
+#define HTTP_TIMEOUT		1000					// in SDL-ticks!!! ie: miliseconds
 #define MAX_CLIENT_SLOTS	32
 #define WEBSOCKET_VERSION	"13"					// proto-version in string format
 #define WEBSOCKET_PROTOCOL	"chat"
@@ -206,6 +207,9 @@ static void http_page_and_exit ( struct client_st *client, int err_code, const c
 		case 405:
 			err_text = "Method Not Allowed";
 			break;
+		case 408:
+			err_text = "Request Timeout";
+			break;
 		default:
 			DEBUGPRINT("UMON: client: unknown HTTP status code (%d), reverting to 500" NL, err_code);
 			err_text = "Internal Server Error";
@@ -280,10 +284,13 @@ static void http_main_page_and_exit ( struct client_st *client )
 	);
 	char initiator[2048];
 	snprintf(initiator, sizeof initiator,
+		"<script>var socket; function doit() {"
+		"console.log('Connecting to websocket now!'); socket = new WebSocket('ws://127.0.0.1:4502/ws');"
+		"}</script>"
 		"<input type=\"hidden\" name=\"ts\" value=\"" PRINTF_LLU "\">"
 		"<input type=\"text\" name=\"host\" value=\"127.0.0.1\">"
 		"<input type=\"text\" name=\"port\" value=\"%d\">"
-		"<input type=\"submit\" name=\"submit\" value=\"Start web monitor\">"
+		"<input type=\"submit\" name=\"submit\" value=\"Start web monitor\" onclick=\"doit()\">"
 		,
 		(long long unsigned int)start_ts,
 		xumon_port
@@ -383,6 +390,7 @@ static void client_run ( struct client_st *client )
 	int read_size = 0;
 	char *headers_p = buffer;	// make gcc happy not to throw warning ...
 	char *http_uri = "";		// make gcc happy ...
+	Uint32 http_start_tick = 0;
 	for (;;) {
 		// TODO: write pending-queued data!
 		CHECK_STOP_TRIGGER();
@@ -390,6 +398,8 @@ static void client_run ( struct client_st *client )
 			DEBUGPRINT("UMON: client: FATAL: read_size = %d" NL, read_size);
 			return;
 		}
+		if (http_start_tick && (SDL_GetTicks() - http_start_tick) > HTTP_TIMEOUT)
+			http_page_and_exit(client, 408, "Request timeout while waiting for \"\\r\\n\\r\\n\"", NULL, NULL, NULL);
 		const int to_be_read = sizeof(buffer) - read_size - 1;
 		if (to_be_read < 1) {
 			DEBUGPRINT("UMON: client: overflow of the receiver buffer (can_read=%d)!" NL, to_be_read);
@@ -468,6 +478,7 @@ static void client_run ( struct client_st *client )
 						http_uri++;
 					*res[3] = '\0';
 					client->mode = XUMON_CONN_HTTP;
+					http_start_tick = SDL_GetTicks();
 				} else
 					client->mode = XUMON_CONN_TEXT;	// text request, as couldn't be identified as http
 			}
@@ -479,6 +490,7 @@ static void client_run ( struct client_st *client )
 				read_size -= lsize;
 				if (read_size > 0) {
 					memcpy_downwards(buffer, buffer + lsize, read_size);
+					// TODO: FIXME: is it compulsory to wait answer from the main thread, or do pipelining-like workflow to process things in once, like currently here?
 					goto check_next_line;
 				} else
 					continue;
@@ -486,21 +498,22 @@ static void client_run ( struct client_st *client )
 		}
 		if (client->mode == XUMON_CONN_HTTP) {
 			buffer[read_size] = '\0';
-			char *p = strstr(headers_p, "\r\n\r\n");
-			if (!p)
+			const char *crlfcrlf = strstr(headers_p, "\r\n\r\n");
+			if (!crlfcrlf)
 				continue;	// still waiting for the full HTTP request to arrive!
-			for (p = http_uri; *p; p++)
+			http_start_tick = 0;	// to avoid timeout later (ie, like streaming file, going to websocket mode), as we have our request now.
+			for (char *p = http_uri; *p; p++)
 				if (*p == '?' || *p == '#') {
 					*p = '\0';
 					break;
 				}
 			// We need to parse the headers now
 			const char *header_upgrade = "";		// Upgrade: websocket
-			const char *header_connection = "";		// Connection: Upgrade
+			//const char *header_connection = "";		// Connection: Upgrade
 			const char *header_websocket_key = "";		// Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==
 			//const char *header_websocket_protocol = "";	// Sec-WebSocket-Protocol: chat, superchat
 			const char *header_websocket_version = "";	// Sec-WebSocket-Version: 13
-			for (p = headers_p;;) {
+			for (char *p = headers_p;;) {
 				char *e = strstr(p, "\r\n");
 				if (!e)
 					http_page_and_exit(client, 400, "Truncated HTTP request", NULL, NULL, NULL);
@@ -520,8 +533,8 @@ static void client_run ( struct client_st *client )
 					client->agent = v;
 				else if (!strcasecmp(p, "Upgrade"))
 					header_upgrade = v;
-				else if (!strcasecmp(p, "Connection"))
-					header_connection = v;
+				//else if (!strcasecmp(p, "Connection"))
+				//	header_connection = v;
 				else if (!strcasecmp(p, "Sec-WebSocket-Key"))
 					header_websocket_key = v;
 				//else if (!strcasecmp(p, "Sec-WebSocket-Protocol"))
@@ -535,8 +548,10 @@ static void client_run ( struct client_st *client )
 			if (!strcasecmp(header_upgrade, "websocket")) {
 				//if (strcasecmp(header_upgrade, "websocket"))
 				//	http_page_and_exit(client, 400, "Invalid connection upgrade.", "<b>Upgrade:</b> header can be only <b>websocket</b> but I got:", header_upgrade, NULL);
+				if (!*header_websocket_key)
+					http_page_and_exit(client, 400, "Missing websocket header Sec-WebSocket-Key", NULL, NULL, NULL);
 				if (strcasecmp(header_websocket_version, WEBSOCKET_VERSION))
-					http_page_and_exit(client, 400, "Unsupported websocket version.", "I need <b>" WEBSOCKET_VERSION "</b> but I got:", header_websocket_version, "Sec-WebSocket-Version: " WEBSOCKET_VERSION "\r\n");
+					http_page_and_exit(client, 400, "Unsupported websocket version.", "I need <b>" WEBSOCKET_VERSION "</b> but I got:", *header_websocket_version ? header_websocket_version : "?MISSING?", "Sec-WebSocket-Version: " WEBSOCKET_VERSION "\r\n");
 				// if (strcmp(header_websocket_protocol, WEBSOCKET_PROTOCOL))
 				//	http_page_and_exit(client, 400, "Unsupported websocket protocol.", "I need <b>" WEBSOCKET_PROTOCOL "</b> but I got:", header_websocket_protocol, "Sec-WebSocket-Version: " WEBSOCKET_VERSION "\r\n");
 				static const char websocket_key_uuid[] = WEBSOCKET_KEY_UUID;
@@ -552,6 +567,7 @@ static void client_run ( struct client_st *client )
 					"Connection: Upgrade\r\n"
 					"Sec-WebSocket-Accept: %s\r\n"
 					"Sec-WebSocket-Protocol: " WEBSOCKET_PROTOCOL "\r\n"
+					"Sec-WebSocket-Version: " WEBSOCKET_VERSION "\r\n"
 					"Host: %s\r\n"
 					"%s"
 					"\r\n",
@@ -561,6 +577,8 @@ static void client_run ( struct client_st *client )
 				);
 				send_string(client->sock, outbuf);
 				client->mode = XUMON_CONN_WEBSOCKET;
+				read_size -= crlfcrlf - buffer + 4;
+				DEBUGPRINT("UMON: http: upgraded to websocket mode, data bytes left in buffer: %d" NL, read_size);
 				read_size = 0;	// make sure our recv buffer is empty at this point or FIXME: is that ok?!
 				continue;	// back to the main read loop, we need data at this point
 			}
