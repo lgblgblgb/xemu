@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html>
+<head><title>Xemu WebMonitor</title></head>
+<body>
+<script>
+const socket = new WebSocket('ws://127.0.0.1:4502/XemuWebMonitorMain');
+
+// Fired when a connection with a WebSocket is opened
+socket.onopen = function () {
+	console.log("Websocket is open :-)");
+	//setInterval(function() {
+	//	if (socket.bufferedAmount == 0)
+	//		socket.send(getUpdateData());
+	//}, 50);
+};
+
+// Fired when data is received through a WebSocket
+socket.onmessage = function(event) {
+	console.log("Websocket message received!");
+	//handleUpdateData(event.data);
+};
+
+// Fired when a connection with a WebSocket is closed
+socket.onclose = function(event) {
+	console.log("Websocket is closed!");
+	//onSocketClose(event);
+};
+
+// Fired when a connection with a WebSocket has been closed because of an error
+socket.onerror = function(event) {
+	console.log("Websocket error :-O");
+	console.log(event);
+	//onSocketError(event);
+};
+</script>
+</body>
+</html>

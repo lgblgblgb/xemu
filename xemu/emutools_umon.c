@@ -40,6 +40,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define WEBSOCKET_KEY_UUID	"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"	// according to RFC-6455
 #define READ_BUFFER_SIZE	8192
 #define DOCROOT_SUBDIR		"webserver-docroot"
+#define WEBSOCKET_ENDPOINT	"XemuWebMonitorMain"
 
 //#define UNCONNECTED	XS_INVALID_SOCKET
 static xemusock_socket_t sock_server;
@@ -75,7 +76,6 @@ struct linked_fifo_st {
 enum xumon_conn_mode {
 	XUMON_CONN_INIT,
 	XUMON_CONN_TEXT,
-	XUMON_CONN_BIN,
 	XUMON_CONN_HTTP,
 	XUMON_CONN_WEBSOCKET
 };
@@ -83,8 +83,8 @@ enum xumon_conn_mode {
 struct client_st {
 	xemusock_socket_t	sock;
 	int			seq;
-	int			fd;		// generic purpose, auto-close, used when file access is needed (like built-in HTTP server, file streaming)
-	Uint8			*p;		// auto-free, used by write functionality
+	int			fd;		// auto-close, used when file access is needed (like built-in HTTP server, file streaming)
+	Uint8			*p;		// auto-free, used by write data functionality
 	const char		*vhost;
 	const char		*agent;
 	struct linked_fifo_st	*rhead;
@@ -92,14 +92,11 @@ struct client_st {
 	struct linked_fifo_st	*whead;
 	struct linked_fifo_st	*wtail;
 };
+static struct client_st clients[MAX_CLIENT_SLOTS];
 
 static SDL_SpinLock clients_lock;
 #define CLIENTS_LOCK()		SDL_AtomicLock(&clients_lock)
 #define CLIENTS_UNLOCK()	SDL_AtomicUnlock(&clients_lock)
-
-static struct client_st clients[MAX_CLIENT_SLOTS];
-
-
 
 
 #if 0
@@ -250,7 +247,7 @@ static void http_page_and_exit ( struct client_st *client, int err_code, const c
 		page
 	);
 	if (err_code != 200)
-		DEBUGPRINT("UMON: client: http error answer %d %s %s %s %s" NL, err_code, err_text, err1, err2, err3);
+		DEBUGPRINT("UMON: http-answer: %d %s %s %s %s" NL, err_code, err_text, err1, err2, err3);
 	send_string(client->sock, buffer);
 	END_CLIENT_THREAD(1);
 }
@@ -285,41 +282,20 @@ static void http_main_page_and_exit ( struct client_st *client )
 		emulators_disclaimer
 	);
 	char initiator[2048];
-	snprintf(initiator, sizeof initiator,
-		"<script>var socket; function doit() {"
-		"console.log('Connecting to websocket now!'); socket = new WebSocket('ws://127.0.0.1:4502/ws');"
-		"}</script>"
-		"<input type=\"hidden\" name=\"uts\" value=\"%d\">"
-		"<input type=\"text\" name=\"target\" value=\"%s\">"
-		"<input type=\"submit\" name=\"submit\" value=\"Start web monitor\" onclick=\"doit()\">"
-		,
-		start_id,
-		client->vhost
-	);
+	snprintf(initiator, sizeof initiator, "<a style=\"background-color: #C0C0C0; border: 2px solid black;\" href=\"//%s/main.html?uts=%d&amp;target=%s\">START WEBMONITOR</a>", client->vhost, start_id, TARGET_DESC);
 	http_page_and_exit(client, 0, page, initiator, NULL, NULL);
 }
 
 
-static void http_serve_file_and_exit ( struct client_st *client, const char *uri )
+// Must be called with "prepared" URI as fn, ie, no directory separator character, GET parameters etc.
+static void http_serve_file_and_exit ( struct client_st *client, const char *fn )
 {
-	while (*uri == '/')
-		uri++;
-	if (*uri == '.')
-		http_page_and_exit(client, 403, "URI starts with '.'", NULL, NULL, NULL);
-	int l = 0;
-	// Rather lame, currently file URIs should not contain special characters, so no resolving %XX and anything like that at all
-	for (const char *p = uri; *p > 32 && *p < 127 && *p != '?' && *p != '#'; p++, l++)
-		if (*p == '/' || *p == '\\')
-			http_page_and_exit(client, 403, "URI contains directory separator", NULL, NULL, NULL);
-	if (!l) {
-		static const char default_index[] = "index.html";
-		uri = default_index;
-		l = strlen(default_index);
-	}
-	char path[strlen(docroot) + l + 1];
+	for (const char *p = fn; *p; p++)
+		if ((p == fn && *p == '.') || !((*p >= 'a' && *p <= 'z') || (*p >= 'A' && *p <= 'Z') || (*p >= '0' && *p <= '9') || *p == '.' || *p == '_'))
+			http_page_and_exit(client, 403, "URI starts with '.' or contains not allowed character.", "URI was:", fn, NULL);
+	char path[strlen(docroot) + strlen(fn) + 1];
 	strcpy(path, docroot);
-	memcpy(path + strlen(docroot), uri, l);
-	path[strlen(docroot) + l] = 0;
+	strcat(path, fn);
 	client->fd = open(path, O_RDONLY | O_BINARY);
 	if (client->fd < 0)
 		http_page_and_exit(client, 404, "Cannot open specified file", path, strerror(errno), NULL);
@@ -339,7 +315,7 @@ static void http_serve_file_and_exit ( struct client_st *client, const char *uri
 	else if (!strcasecmp(mime, "bin"))	mime = "application/octet-stream";
 	else
 		http_page_and_exit(client, 403, path, "Cannot guess mime-type from filename extension:", mime - 1, NULL);
-	DEBUGPRINT("UMON: client: trying to serve file \"%s\" (fd %d), mime-type is \"%s\"" NL, path, client->fd, mime);
+	DEBUGPRINT("UMON: http-file-streaming: trying to serve file \"%s\" (fd %d), mime-type is \"%s\"" NL, path, client->fd, mime);
 	// Chunked transfer encoding ...
 	char buffer[4096];
 	sprintf(buffer,
@@ -357,7 +333,7 @@ static void http_serve_file_and_exit ( struct client_st *client, const char *uri
 		char chunk_head[16];
 		int ret = xemu_safe_read(client->fd, buffer + 16, sizeof(buffer) - 2 - 16);
 		if (ret < 0) {	// this shouldn't happen ...
-			DEBUGPRINT("UMON: client: ERROR, read error during file serving!" NL);
+			DEBUGPRINT("UMON: http-file-streaming: ERROR, read error during file serving!" NL);
 			break;
 		}
 		buffer[ret + 16] = '\r';
@@ -366,11 +342,13 @@ static void http_serve_file_and_exit ( struct client_st *client, const char *uri
 		char *p_to_send = buffer + 16 - chunk_head_size;
 		memcpy(p_to_send, chunk_head, chunk_head_size);
 		send_raw(client->sock, p_to_send, ret + 2 + chunk_head_size);
-		if (!ret)	// We're done :D
+		if (!ret) {	// We're done :D
+			DEBUGPRINT("UMON: http-file-streaming: successfull streaming of file" NL);
 			break;
+		}
 		total_len += ret;
 		if (total_len > (256 << 20)) {
-			DEBUGPRINT("UMON: client: ERROR, too long file tried to be streamed!" NL);
+			DEBUGPRINT("UMON: http-file-streaming: ERROR, too long file tried to be streamed!" NL);
 			break;
 		}
 	}
@@ -582,6 +560,8 @@ static void client_run ( struct client_st *client )
 				// So I don't check protocol here, and I always answer with "chat" as the protocol name.
 				// if (strcmp(header_websocket_protocol, WEBSOCKET_PROTOCOL))
 				//	http_page_and_exit(client, 400, "Unsupported websocket protocol.", "I need <b>" WEBSOCKET_PROTOCOL "</b> but I got:", header_websocket_protocol, "Sec-WebSocket-Version: " WEBSOCKET_VERSION "\r\n");
+				if (strcmp(http_uri, WEBSOCKET_ENDPOINT))
+					http_page_and_exit(client, 404, "Unknown websocket endpoint", "endpoint:", http_uri, NULL);
 				static const char websocket_key_uuid[] = WEBSOCKET_KEY_UUID;
 				char keybuffer[strlen(websocket_key_uuid) + strlen(header_websocket_key) + 1];
 				strcpy(keybuffer, header_websocket_key);
@@ -610,7 +590,7 @@ static void client_run ( struct client_st *client )
 				read_size = 0;	// make sure our recv buffer is empty at this point, though "it should be" ...
 				continue;	// back to the main read loop, we need data at this point
 			}
-			if (!http_uri[0])
+			if (!http_uri[0] || !strcmp(http_uri, "index.html"))
 				http_main_page_and_exit(client);
 			http_serve_file_and_exit(client, http_uri);
 		}
@@ -661,7 +641,7 @@ static int client_thread_initiate ( void *user_param )
 			}
 		CLIENTS_UNLOCK();
 		if (SDL_GetTicks() - start >= SLOT_FIND_TIMEOUT) {
-			DEBUGPRINT("UMON: client: cannot allocate slot for new connection: aborting connection for now" NL);
+			DEBUGPRINT("UMON: client: cannot allocate slot for new connection: aborting connection" NL);
 			goto finish;
 		}
 		SDL_Delay(10);
@@ -676,7 +656,6 @@ slot_found:
 			DEBUGPRINT("UMON: client: returned via <return>" NL);
 		} else
 			DEBUGPRINT("UMON: client: returned via <longjmp>" NL);
-		// longjmp() in END_CLIENT_THREAD() will bring us back here. Also if client_run() returns, for sure.
 		xemusock_set_nonblocking(CLIENT_SOCK, XEMUSOCK_BLOCKING, NULL);
 	}
 finish:
