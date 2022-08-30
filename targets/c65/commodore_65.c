@@ -875,8 +875,8 @@ static void update_emulator ( void )
 	nmi_set(IS_RESTORE_PRESSED(), 2); // Custom handling of the restore key ...
 	xemu_timekeeping_delay(40000);
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
-	const struct tm *t = xemu_get_localtime();
-	const Uint8 sec10ths = xemu_get_microseconds() / 100000;
+	const struct tm *t = xemu_get_localtime_last();
+	const Uint8 sec10ths = xemu_get_microseconds_last() / 100000;
 	cia_ugly_tod_updater(&cia1, t, sec10ths, 0);
 	cia_ugly_tod_updater(&cia2, t, sec10ths, 0);
 }

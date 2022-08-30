@@ -673,8 +673,8 @@ static void update_emulator ( void )
 	xemu_timekeeping_delay(videostd_frametime);
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
 //	if (seconds_timer_trigger) {
-	const struct tm *t = xemu_get_localtime();
-	const Uint8 sec10ths = xemu_get_microseconds() / 100000;
+	const struct tm *t = xemu_get_localtime_last();
+	const Uint8 sec10ths = xemu_get_microseconds_last() / 100000;
 	// UPDATE CIA TODs:
 	cia_ugly_tod_updater(&cia1, t, sec10ths, configdb.rtc_hour_offset);
 	cia_ugly_tod_updater(&cia2, t, sec10ths, configdb.rtc_hour_offset);

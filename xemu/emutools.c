@@ -206,7 +206,7 @@ static inline int get_elapsed_time ( Uint64 t_old, Uint64 *t_new, struct timeval
 
 
 
-struct tm *xemu_get_localtime ( void )
+struct tm *xemu_get_localtime_last ( void )
 {
 #ifdef XEMU_ARCH_WIN64
 	// Fix a potentional issue with Windows 64 bit ...
@@ -218,15 +218,21 @@ struct tm *xemu_get_localtime ( void )
 }
 
 
-time_t xemu_get_unixtime ( void )
+time_t xemu_get_unixtime_last ( void )
 {
 	return unix_time_tv.tv_sec;
 }
 
 
-unsigned int xemu_get_microseconds ( void )
+unsigned int xemu_get_microseconds_last ( void )
 {
 	return unix_time_tv.tv_usec;
+}
+
+
+Uint64 xemu_uts64_now ( void )
+{
+	return (Uint64)time(NULL);
 }
 
 

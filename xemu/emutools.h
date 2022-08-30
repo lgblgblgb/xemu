@@ -158,10 +158,12 @@ extern void xemu_get_viewport ( unsigned int *x1, unsigned int *y1, unsigned int
 extern void xemu_window_snap_to_optimal_size ( int forced );
 
 extern int xemu_init_debug ( const char *fn );
-extern time_t xemu_get_unixtime ( void );
-extern struct tm *xemu_get_localtime ( void );
+extern time_t xemu_get_unixtime_last ( void );
+extern struct tm *xemu_get_localtime_last ( void );
 extern Uint8 xemu_hour_to_bcd12h ( Uint8 hours, int hour_offset );
-extern unsigned int xemu_get_microseconds ( void );
+extern unsigned int xemu_get_microseconds_last ( void );
+extern Uint64 xemu_uts64_now ( void );
+
 extern void *xemu_malloc ( size_t size );
 extern void *xemu_realloc ( void *p, size_t size );
 

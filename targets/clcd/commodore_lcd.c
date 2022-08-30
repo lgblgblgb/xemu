@@ -396,7 +396,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 
 static void update_rtc ( void )
 {
-	struct tm *t = xemu_get_localtime();
+	struct tm *t = xemu_get_localtime_last();
 	rtc_regs[ 0] = t->tm_sec % 10;
 	rtc_regs[ 1] = t->tm_sec / 10;
 	rtc_regs[ 2] = t->tm_min % 10;
