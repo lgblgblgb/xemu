@@ -26,7 +26,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 
 #define XUMON_DEFAULT_PORT	9000
-//#define XUMON_STACK_SIZE	(8*1024*1024)
 
 struct xumon_com_st {
 	int	size;

@@ -112,6 +112,7 @@ static Uint64 et_old;
 static int td_balancer, td_em_ALL, td_pc_ALL;
 static Uint64 td_stat_counter = 0, td_stat_sum = 0;
 static int td_stat_min = INT_MAX, td_stat_max = INT_MIN;
+time_t start_unix_time = 0;
 int sysconsole_is_open = 0;
 FILE *debug_fp = NULL;
 int chatty_xemu = 1;
@@ -726,6 +727,7 @@ static inline Uint64 _get_uts_from_cdate ( void )
 
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan, const int argc, char **argv )
 {
+	start_unix_time = time(NULL);
 	if (!buildinfo_cdate_uts)
 		buildinfo_cdate_uts = _get_uts_from_cdate();
 	if (xemu_initial_argc < 0)

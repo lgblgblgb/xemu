@@ -37,12 +37,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define MAX_CLIENT_SLOTS	32
 #define WEBSOCKET_VERSION	"13"					// our supported websocket protocol version (in string format!)
 #define WEBSOCKET_PROTOCOL	"chat"
-#define WEBSOCKET_KEY_UUID	"258EAFA5-E914-47DA-95CA-C5AB0DC85B11"	// according to RFC-6455
-#define READ_BUFFER_SIZE	8192
+#define READ_BUFFER_SIZE	8192					// note, must be large enough to hold a full command/HTTP-request/websocket frame!
 #define DOCROOT_SUBDIR		"webserver-docroot"
 #define WEBSOCKET_ENDPOINT	"XemuWebMonitorMain"
+//#define XUMON_STACK_SIZE	(8*1024*1024)
 
-//#define UNCONNECTED	XS_INVALID_SOCKET
+#define START_ID		(unsigned int)start_unix_time		// just a 'weak' kind-of-ID, so it does not matter too much ...
+
 static xemusock_socket_t sock_server;
 
 static SDL_atomic_t thread_counter;
@@ -52,12 +53,12 @@ static jmp_buf jmp_finish_client_thread;
 
 static char *docroot = NULL;
 static int xumon_port;
-static Uint32 start_id = 0;
 
 static const char *generic_http_headers = NULL;
 static char default_vhost[22];
 static const char html_footer[] = "<br><br><hr>From your Xemu acting as a webserver now ;)";
 static const char default_agent[] = "unknown_user_agent";
+static const char websocket_key_uuid[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";	// according to RFC-6455
 
 int xumon_running = 0;
 
@@ -215,16 +216,16 @@ static void http_page_and_exit ( struct client_st *client, int err_code, const c
 			err_code = 500;
 			break;
 	}
-	if (!extra_headers) extra_headers = "";
-	if (!err1) err1 = "";
-	if (!err2) err2 = "";
-	if (!err3) err3 = "";
+	if (!extra_headers) extra_headers = EMPTY_STR;
+	if (!err1) err1 = EMPTY_STR;
+	if (!err2) err2 = EMPTY_STR;
+	if (!err3) err3 = EMPTY_STR;
 	int l = strlen(err_text) * 2 + strlen(html_footer) + strlen(err1) + strlen(err2) + strlen(err3) + 512;
 	char page[l];
 	snprintf(page, l,
-		"<!DOCTYPE html><html><head><title>%s</title></head><body style=\"background-color: white; color: darkblue;\"><h1>%d %s</h1><p>%s</p><p>%s</p><p>%s</p>%s</body></html>",
+		"<!DOCTYPE html><html><head><title>%s</title></head><body style=\"background-color: white; color: darkblue;\"><h1>%d %s [%u]</h1><p>%s</p><p>%s</p><p>%s</p>%s</body></html>",
 		err_text,
-		err_code, err_text,
+		err_code, err_text, START_ID,
 		err1, err2, err3,
 		html_footer
 	);
@@ -282,7 +283,10 @@ static void http_main_page_and_exit ( struct client_st *client )
 		emulators_disclaimer
 	);
 	char initiator[2048];
-	snprintf(initiator, sizeof initiator, "<a style=\"background-color: #C0C0C0; border: 2px solid black;\" href=\"//%s/main.html?uts=%d&amp;target=%s\">START WEBMONITOR</a>", client->vhost, start_id, TARGET_DESC);
+	snprintf(initiator, sizeof initiator,
+		"<a style=\"background-color: #C0C0C0; border: 2px solid black;\" href=\"//%s/main.html?uts=%u&amp;target=%s\">START WEBMONITOR</a>",
+		client->vhost, START_ID, TARGET_DESC
+	);
 	http_page_and_exit(client, 0, page, initiator, NULL, NULL);
 }
 
@@ -368,7 +372,7 @@ static void client_run ( struct client_st *client )
 	char buffer[READ_BUFFER_SIZE];
 	int read_size = 0;
 	char *headers_p = buffer;	// make gcc happy not to throw warning ...
-	char *http_uri = "";		// make gcc happy ...
+	char *http_uri = NULL;		// make gcc happy ...
 	Uint32 http_start_tick = 0;	// keep it zero to deactivate http timeout checking!
 	enum xumon_conn_mode mode = XUMON_CONN_INIT;
 	for (;;) {
@@ -505,17 +509,17 @@ static void client_run ( struct client_st *client )
 			if (!crlfcrlf)
 				continue;	// still waiting for the full HTTP request to arrive!
 			http_start_tick = 0;	// to avoid timeout later (ie, like streaming file, going to websocket mode), as we have our request now.
-			for (char *p = http_uri; *p; p++)
-				if (*p == '?' || *p == '#') {
-					*p = '\0';
-					break;
-				}
+			char *args = strchr(http_uri, '?');
+			if (args)
+				*args++ = '\0';
+			else
+				args = (char*)EMPTY_STR;
 			// We need to parse the headers now
-			const char *header_upgrade = "";		// Upgrade: websocket
-			//const char *header_connection = "";		// Connection: Upgrade
-			const char *header_websocket_key = "";		// Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==
-			const char *header_websocket_protocol = "";	// Sec-WebSocket-Protocol: chat, superchat
-			const char *header_websocket_version = "";	// Sec-WebSocket-Version: 13
+			const char *header_upgrade = EMPTY_STR;			// Upgrade: websocket
+			//const char *header_connection = EMPTY_STR;		// Connection: Upgrade
+			const char *header_websocket_key = EMPTY_STR;		// Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==
+			const char *header_websocket_protocol = EMPTY_STR;	// Sec-WebSocket-Protocol: chat, superchat
+			const char *header_websocket_version = EMPTY_STR;	// Sec-WebSocket-Version: 13
 			for (char *p = headers_p;;) {
 				char *e = strstr(p, "\r\n");
 				if (!e)
@@ -562,7 +566,6 @@ static void client_run ( struct client_st *client )
 				//	http_page_and_exit(client, 400, "Unsupported websocket protocol.", "I need <b>" WEBSOCKET_PROTOCOL "</b> but I got:", header_websocket_protocol, "Sec-WebSocket-Version: " WEBSOCKET_VERSION "\r\n");
 				if (strcmp(http_uri, WEBSOCKET_ENDPOINT))
 					http_page_and_exit(client, 404, "Unknown websocket endpoint", "endpoint:", http_uri, NULL);
-				static const char websocket_key_uuid[] = WEBSOCKET_KEY_UUID;
 				char keybuffer[strlen(websocket_key_uuid) + strlen(header_websocket_key) + 1];
 				strcpy(keybuffer, header_websocket_key);
 				strcat(keybuffer, websocket_key_uuid);
@@ -589,6 +592,16 @@ static void client_run ( struct client_st *client )
 				DEBUGPRINT("UMON: http: upgraded to websocket mode (protocol: [%s]->[%s]), data bytes left in buffer: %d" NL, header_websocket_protocol, WEBSOCKET_PROTOCOL, read_size);
 				read_size = 0;	// make sure our recv buffer is empty at this point, though "it should be" ...
 				continue;	// back to the main read loop, we need data at this point
+			}
+			char id_arg[32];
+			sprintf(id_arg, "uts=%u", START_ID);
+			if (strncmp(args, id_arg, strlen(id_arg))) {
+				const char *args2 = strchr(args, '&');
+				if (!args2)
+					args2 = EMPTY_STR;
+				char hredir[strlen(client->vhost) + strlen(http_uri) + strlen(args) + 64];
+				sprintf(hredir, "Location: //%s/%s?%s%s\r\n", client->vhost, http_uri, id_arg, args2);
+				http_page_and_exit(client, 302, EMPTY_STR, "redirect to:", hredir, hredir);
 			}
 			if (!http_uri[0] || !strcmp(http_uri, "index.html"))
 				http_main_page_and_exit(client);
@@ -912,7 +925,6 @@ int xumon_init ( const int port )
 		sprintf(docroot, "%s%s%c", sdl_pref_dir, DOCROOT_SUBDIR, DIRSEP_CHR);
 		MKDIR(docroot);
 	}
-	start_id = (int)xemu_uts64_now();	// 32 bit signed int will break in 2038, but we don't care as it's kind of "id" more here than actual timestamp for real!
 	// generic http headers
 	if (!generic_http_headers) {
 		const char *p = strstr(XEMU_BUILDINFO_GIT, "https://");
@@ -931,9 +943,9 @@ int xumon_init ( const int port )
 			"X-Content-Type-Options: nosniff\r\n"
 			"Access-Control-Allow-Origin: *\r\n"
 			"Server: Xemu;%s/%s %s\r\n"
-			"X-Xemu-Start-Id: %d\r\n",
+			"X-Xemu-Start-Id: %u\r\n",
 			TARGET_DESC, XEMU_BUILDINFO_CDATE, p,
-			start_id
+			START_ID
 		);
 		generic_http_headers = xemu_strdup(buffer);
 	}
@@ -941,7 +953,7 @@ int xumon_init ( const int port )
 	snprintf(default_vhost, sizeof default_vhost, "127.0.0.1:%d", port);
 	// Everything is OK, return with success.
 	xumon_running = 1;
-	DEBUGPRINT("UMON: has been initialized for TCP/IP port %d backlog %d id %d (web-docroot: %s) within %d msecs." NL, port, LISTEN_BACKLOG, start_id, docroot, passed_time);
+	DEBUGPRINT("UMON: has been initialized for TCP/IP port %d backlog %d start-id %u (web-docroot: %s) within %d msecs." NL, port, LISTEN_BACKLOG, START_ID, docroot, passed_time);
 	return 0;
 error:
 	SDL_AtomicSet(&thread_stop_trigger, 1);
