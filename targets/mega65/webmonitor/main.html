@@ -8,6 +8,7 @@ const socket = new WebSocket('ws://127.0.0.1:4502/XemuWebMonitorMain');
 // Fired when a connection with a WebSocket is opened
 socket.onopen = function () {
 	console.log("Websocket is open :-)");
+	console.log(event);
 	//setInterval(function() {
 	//	if (socket.bufferedAmount == 0)
 	//		socket.send(getUpdateData());
@@ -17,12 +18,14 @@ socket.onopen = function () {
 // Fired when data is received through a WebSocket
 socket.onmessage = function(event) {
 	console.log("Websocket message received!");
+	console.log(event);
 	//handleUpdateData(event.data);
 };
 
 // Fired when a connection with a WebSocket is closed
 socket.onclose = function(event) {
 	console.log("Websocket is closed!");
+	console.log(event);
 	//onSocketClose(event);
 };
 

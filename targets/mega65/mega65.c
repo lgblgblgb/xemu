@@ -770,6 +770,14 @@ static void emulation_loop ( void )
 			cycles -= cpu_cycles_per_scanline;
 			cia_tick(&cia1, 32);	// FIXME: why 32?????? why fixed????? what should be the CIA "tick" frequency for real? Is it dependent on NTSC/PAL?
 			cia_tick(&cia2, 32);
+			static struct xumon_com_st xum;
+			while (XEMU_UNLIKELY(xumon_get_request(&xum))) {
+				DEBUGPRINT("UMON: main: got req = [%s]" NL, xum.data);
+				free(xum.data);
+				xum.data = "We will rock you ;)\r\n";
+				xum.size = strlen(xum.data);
+				xumon_set_answer(&xum);
+			}
 			if (XEMU_UNLIKELY(vic4_render_scanline()))
 				break;	// break the (main, "for") loop, if frame is over!
 		}

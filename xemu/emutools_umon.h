@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_COMMON_EMUTOOLS_UMON_H_INCLUDED
 #define __XEMU_COMMON_EMUTOOLS_UMON_H_INCLUDED
 #ifdef HAVE_XEMU_UMON
+
 #ifndef XEMU_HAS_SOCKET_API
 #error "Need HAVE_XEMU_SOCKET_API for HAVE_XEMU_UMON to be enabled at the target!"
 #endif
@@ -38,6 +39,7 @@ extern int xumon_running;
 
 extern int xumon_init ( const int port );
 extern int xumon_stop ( void );
+
 extern int xumon_get_request ( struct xumon_com_st *res );
 extern int xumon_set_answer  ( struct xumon_com_st *res );
 

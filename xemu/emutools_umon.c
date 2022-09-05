@@ -1,9 +1,6 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2017-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
-!!  NOTE: I AM NOT a windows programmer, not even a user ...
-!!  These are my best tries with winsock to be usable also on the win32/64 platform ...
-
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or
@@ -36,7 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SLOT_FIND_TIMEOUT	100					// in SDL-ticks, max time to find free slot
 #define MAX_CLIENT_SLOTS	32
 #define WEBSOCKET_VERSION	"13"					// our supported websocket protocol version (in string format!)
-#define WEBSOCKET_PROTOCOL	"chat"
+#define WEBSOCKET_PROTOCOL	"xemu-umon"
 #define READ_BUFFER_SIZE	8192					// note, must be large enough to hold a full command/HTTP-request/websocket frame!
 #define DOCROOT_SUBDIR		"webserver-docroot"
 #define WEBSOCKET_ENDPOINT	"XemuWebMonitorMain"
@@ -49,6 +46,8 @@ static xemusock_socket_t sock_server;
 static SDL_atomic_t thread_counter;
 static SDL_atomic_t thread_stop_trigger;
 static SDL_atomic_t thread_client_seq;
+static SDL_atomic_t incoming_msg_counter;
+static SDL_sem *responder_sem = NULL;
 static jmp_buf jmp_finish_client_thread;
 
 static char *docroot = NULL;
@@ -71,7 +70,8 @@ int xumon_running = 0;
 struct linked_fifo_st {
 	struct linked_fifo_st *next;
 	int size;
-	Uint8 *data;
+	void *data;
+	Uint32 time;
 };
 
 enum xumon_conn_mode {
@@ -84,8 +84,8 @@ enum xumon_conn_mode {
 struct client_st {
 	xemusock_socket_t	sock;
 	int			seq;
-	int			fd;		// auto-close, used when file access is needed (like built-in HTTP server, file streaming)
-	Uint8			*p;		// auto-free, used by write data functionality
+	enum xumon_conn_mode	mode;
+	int			fd;		// auto-close, used when file access is needed (like file streaming in the built-in HTTP server)
 	const char		*vhost;
 	const char		*agent;
 	struct linked_fifo_st	*rhead;
@@ -100,80 +100,49 @@ static SDL_SpinLock clients_lock;
 #define CLIENTS_UNLOCK()	SDL_AtomicUnlock(&clients_lock)
 
 
-#if 0
-static int recv_raw ( xemusock_socket_t sock, void *buffer, int min_size, int max_size )
-{
-	int size = 0;
-	while (size < min_size && max_size > 0) {
-		CHECK_STOP_TRIGGER();
-		int xerr;
-		int ret = xemusock_select_1(sock, SELECT_TIMEOUT, XEMUSOCK_SELECT_R, &xerr);
-		if (ret < 0) {
-			if (xerr == XSEINTR) {
-				DEBUGPRINT("UMON: client: recv_raw: select() got EINTR, restarting" NL);
-				continue;
-			}
-			DEBUGPRINT("UMON: client: recv_raw: select() returned with error: %s" NL, xemusock_strerror(xerr));
-			END_CLIENT_THREAD(1);
-		}
-		if (!ret)
-			continue;
-		ret = xemusock_recv(sock, buffer, max_size, &xerr);
-		if (ret == 0) {
-			// successfull receiving of zero bytes usually (?? FIXME ??) means socket has been closed
-			DEBUGPRINT("UMON: client: recv_raw: recv() returned with zero" NL);
-			END_CLIENT_THREAD(1);
-		}
-		if (ret < 0) {
-			if (xemusock_should_repeat_from_error(xerr)) {
-				DEBUGPRINT("UMON: client: recv_raw: recv() non-fatal error, restarting: %s" NL, xemusock_strerror(xerr));
-				continue;
-			}
-			DEBUGPRINT("UMON: client: recv_raw: recv() returned with error: %s" NL, xemusock_strerror(xerr));
-			END_CLIENT_THREAD(1);
-		}
-		buffer += ret;
-		size += ret;
-		max_size -= ret;
-	}
-	return size;
-}
-#endif
 
-
-static void send_raw ( xemusock_socket_t sock, const void *buffer, int size )
+static int send_raw_unwrapped ( xemusock_socket_t sock, const void *buffer, int size )
 {
 	while (size > 0) {
-		CHECK_STOP_TRIGGER();
+		if (XEMU_UNLIKELY(SDL_AtomicGet(&thread_stop_trigger)))
+			return -1;
 		int xerr;
 		int ret = xemusock_select_1(sock, SELECT_TIMEOUT, XEMUSOCK_SELECT_W, &xerr);
 		if (ret < 0) {
 			if (xerr == XSEINTR) {
-				DEBUGPRINT("UMON: client: send_raw: select() got EINTR, restarting" NL);
+				DEBUGPRINT("UMON: send_raw: select() got EINTR, restarting" NL);
 				continue;
 			}
-			DEBUGPRINT("UMON: client: send_raw: select() returned with error: %s" NL, xemusock_strerror(xerr));
-			END_CLIENT_THREAD(1);
+			DEBUGPRINT("UMON: send_raw: select() returned with error: %s" NL, xemusock_strerror(xerr));
+			return -1;
 		}
 		if (!ret)
 			continue;
 		ret = xemusock_send(sock, buffer, size, &xerr);
 		if (ret == 0) {
 			// successfull sending of zero bytes usually (?? FIXME ??) means socket has been closed
-			DEBUGPRINT("UMON: client: send_raw: send() returned with zero" NL);
-			END_CLIENT_THREAD(1);
+			DEBUGPRINT("UMON: send_raw: send() returned with zero" NL);
+			return -1;
 		}
 		if (ret < 0) {
 			if (xemusock_should_repeat_from_error(xerr)) {
-				DEBUGPRINT("UMON: client: send_raw: send() non-fatal error, restarting: %s" NL, xemusock_strerror(xerr));
+				DEBUGPRINT("UMON: send_raw: send() non-fatal error, restarting: %s" NL, xemusock_strerror(xerr));
 				continue;
 			}
-			DEBUGPRINT("UMON: client: send_raw: send() returned with error: %s" NL, xemusock_strerror(xerr));
-			END_CLIENT_THREAD(1);
+			DEBUGPRINT("UMON: send_raw: send() returned with error: %s" NL, xemusock_strerror(xerr));
+			return -1;
 		}
 		buffer += ret;
 		size -= ret;
 	}
+	return 0;
+}
+
+
+static inline void send_raw ( xemusock_socket_t sock, const void *buffer, int size )
+{
+	if (send_raw_unwrapped(sock, buffer, size))
+		END_CLIENT_THREAD(1);
 }
 
 
@@ -360,6 +329,30 @@ static void http_serve_file_and_exit ( struct client_st *client, const char *fn 
 }
 
 
+static void store_request ( struct client_st *client, const void *data, const int size )
+{
+	DEBUGPRINT("UMON: pushing data received (%d bytes)" NL, size);
+	struct linked_fifo_st *p = malloc(sizeof(struct linked_fifo_st));
+	void *d = malloc(size);
+	if (!p || !d) {
+		DEBUGPRINT("UMON: ERROR: cannot allocate memory for storing incoming request!" NL);
+		free(p);
+		free(d);
+		END_CLIENT_THREAD(1);
+	}
+	memcpy(d, data, size);
+	p->data = d;
+	p->size = size;
+	CLIENTS_LOCK();
+	p->next = client->rhead;
+	client->rhead = p;
+	if (!client->rtail)
+		client->rtail = p;
+	CLIENTS_UNLOCK();
+	SDL_AtomicAdd(&incoming_msg_counter, 1);
+}
+
+
 static inline void memmove_downwards ( char *dest, const char *src, int size )
 {
 	while (size-- > 0)
@@ -367,62 +360,49 @@ static inline void memmove_downwards ( char *dest, const char *src, int size )
 }
 
 
+// src/dest memory areas can overlap, but only if dest <= src
+static inline void websocket_unmask_downwards ( Uint8 *dest, const Uint8 *src, const int size, Uint8 key[4] )
+{
+	for (int i = 0; i < size; i++) {
+		dest[i] = src[i] ^ key[i & 3];
+	}
+}
+
+
 static void client_run ( struct client_st *client )
 {
 	char buffer[READ_BUFFER_SIZE];
-	int read_size = 0;
+	int read_fill = 0;
 	char *headers_p = buffer;	// make gcc happy not to throw warning ...
 	char *http_uri = NULL;		// make gcc happy ...
 	Uint32 http_start_tick = 0;	// keep it zero to deactivate http timeout checking!
-	enum xumon_conn_mode mode = XUMON_CONN_INIT;
+	int ws = 0;			// websocket parse next packet point in buffer
+	int ws_plen = 0;		// websocket unfragmented data size in the buffer so far
 	for (;;) {
 		// TODO: write pending-queued data!
 		CHECK_STOP_TRIGGER();
-		if (read_size < 0) {
-			DEBUGPRINT("UMON: client: FATAL: read_size = %d" NL, read_size);
+		if (read_fill < 0) {
+			DEBUGPRINT("UMON: client: FATAL: read_fill = %d" NL, read_fill);
 			return;
 		}
 		if (http_start_tick && (SDL_GetTicks() - http_start_tick) > HTTP_TIMEOUT)
 			http_page_and_exit(client, 408, "Request timeout while waiting for \"\\r\\n\\r\\n\"", NULL, NULL, NULL);
-		// TODO: at this point we need to check for data queued to be written!
-		// Only allow to write if no data is read yet, since I really don't want half sent command interleaved with some pending answer.
-		if (!read_size && (mode == XUMON_CONN_TEXT || XUMON_CONN_WEBSOCKET)) {
-			for (;;) {
-				CLIENTS_LOCK();
-				if (client->whead) {
-					const int write_size = client->whead->size;
-					const void *o = client->whead;
-					client->p = client->whead->data;		// "p" member will be free'ed automatically, so it's OK!
-					client->whead = client->whead->next;
-					if (!client->whead)
-						client->wtail = NULL;
-					CLIENTS_UNLOCK();
-					free((void*)o);
-					// Data to send is in "buffer" with size of "write_size"
-					// TODO: implement this in the right way! It's not just send like here ... Line endings, formatting,
-					// especially in websocket mode must be done!
-					send_raw(client->sock, client->p, write_size);
-				} else {
-					CLIENTS_UNLOCK();
-					break;
-				}
-			}
-		}
-		const int to_be_read = sizeof(buffer) - read_size - 1;
+		const int to_be_read = sizeof(buffer) - read_fill - 1;
 		if (to_be_read < 1) {
-			DEBUGPRINT("UMON: client: overflow of the receiver buffer (can_read=%d)!" NL, to_be_read);
-			if (mode == XUMON_CONN_HTTP)
+			DEBUGPRINT("UMON: client: overflow of the receiver buffer (read=%d)! Too long request?" NL, to_be_read);
+			if (client->mode == XUMON_CONN_HTTP)
 				http_page_and_exit(client, 400, "Too long request", NULL, NULL, NULL);
 			return;
 		}
-		int xerr, ret = xemusock_select_1(client->sock, SELECT_TIMEOUT, XEMUSOCK_SELECT_R, &xerr);
+		int xerr, ret = xemusock_select_1(client->sock, SELECT_TIMEOUT, XEMUSOCK_SELECT_R | (client->whead ? XEMUSOCK_SELECT_W : 0), &xerr);
 		if (!ret)
 			continue;
 		if (ret < 0) {
+			// FIXME: is there any case when select() error should be considered as "fatal", thus not continue?
 			DEBUGPRINT("UMON: client: select error: %s" NL, xemusock_strerror(xerr));
 			continue;
 		}
-		ret = xemusock_recv(client->sock, buffer + read_size, to_be_read, &xerr);
+		ret = xemusock_recv(client->sock, buffer + read_fill, to_be_read, &xerr);
 		DEBUGPRINT("UMON: client: result of recv() = %d, error = %s" NL, ret, ret == -1 ? xemusock_strerror(xerr) : "OK");
 		if (!ret) {
 			DEBUGPRINT("UMON: client: closing connection because zero byte read." NL);
@@ -440,14 +420,14 @@ static void client_run ( struct client_st *client )
 			DEBUGPRINT("UMON: client: FATAL, more bytes has been read than wanted?!" NL);
 			return;
 		}
-		read_size += ret;
-		if (mode == XUMON_CONN_INIT || mode == XUMON_CONN_TEXT) {
+		read_fill += ret;
+		if (client->mode == XUMON_CONN_INIT || client->mode == XUMON_CONN_TEXT) {
 			// in this mode, we need a complete line to be processed
 			int lsize, len;
 			char *endp;
 		check_next_line:
 			lsize = 0;
-			for (endp = buffer; endp < buffer + read_size; endp++)
+			for (endp = buffer; endp < buffer + read_fill; endp++)
 				if ((endp[0] == '\r' && endp[1] == '\n') || endp[0] == '\n') {	// hmm, ugly, but some clients may send only '\n' ...
 					len = endp - buffer;
 					lsize = len + (endp[0] == '\n' ? 1 : 2);
@@ -456,7 +436,7 @@ static void client_run ( struct client_st *client )
 			if (!lsize)
 				continue;		// not a full line recieved yet, read more data
 			// OK, we have our line
-			if (mode == XUMON_CONN_INIT) {	// auto-detect if http or text mode ...
+			if (client->mode == XUMON_CONN_INIT) {	// auto-detect if http or text mode ...
 				int sep = 1, n = 0;
 				char *res[10];
 				for (char *p = buffer; p < endp; p++) {
@@ -484,27 +464,28 @@ static void client_run ( struct client_st *client )
 					while (*http_uri == '/' || *http_uri == '\\')
 						http_uri++;
 					*res[3] = '\0';
-					mode = XUMON_CONN_HTTP;
+					client->mode = XUMON_CONN_HTTP;
 					http_start_tick = SDL_GetTicks();
 				} else
-					mode = XUMON_CONN_TEXT;	// text request, as couldn't be identified as http
+					client->mode = XUMON_CONN_TEXT;	// text request, as couldn't be identified as http
 			}
-			if (mode == XUMON_CONN_TEXT) {
+			if (client->mode == XUMON_CONN_TEXT) {
 				// So we have a text request it seems!!
 				*endp = '\0';
 				DEBUGPRINT("UMON: text-request: (%s)" NL, buffer);
+				store_request(client, buffer, strlen(buffer) + 1);
 				// --- End of processing line ---
-				read_size -= lsize;
-				if (read_size > 0) {
-					memmove_downwards(buffer, buffer + lsize, read_size);
+				read_fill -= lsize;
+				if (read_fill > 0) {
+					memmove_downwards(buffer, buffer + lsize, read_fill);
 					// TODO: FIXME: is it compulsory to wait answer from the main thread, or do pipelining-like workflow to process things in once, like currently here?
 					goto check_next_line;
 				} else
 					continue;
 			}
 		}
-		if (mode == XUMON_CONN_HTTP) {
-			buffer[read_size] = '\0';
+		if (client->mode == XUMON_CONN_HTTP) {
+			buffer[read_fill] = '\0';
 			const char *crlfcrlf = strstr(headers_p, "\r\n\r\n");
 			if (!crlfcrlf)
 				continue;	// still waiting for the full HTTP request to arrive!
@@ -587,10 +568,9 @@ static void client_run ( struct client_st *client )
 					generic_http_headers
 				);
 				send_string(client->sock, outbuf);
-				mode = XUMON_CONN_WEBSOCKET;
-				read_size -= crlfcrlf - buffer + 4;
-				DEBUGPRINT("UMON: http: upgraded to websocket mode (protocol: [%s]->[%s]), data bytes left in buffer: %d" NL, header_websocket_protocol, WEBSOCKET_PROTOCOL, read_size);
-				read_size = 0;	// make sure our recv buffer is empty at this point, though "it should be" ...
+				client->mode = XUMON_CONN_WEBSOCKET;
+				read_fill -= crlfcrlf - buffer + 4;
+				DEBUGPRINT("UMON: http: upgraded to websocket mode (protocol: [%s]->[%s]), data bytes left in buffer: %d" NL, header_websocket_protocol, WEBSOCKET_PROTOCOL, read_fill);
 				continue;	// back to the main read loop, we need data at this point
 			}
 			char id_arg[32];
@@ -601,15 +581,94 @@ static void client_run ( struct client_st *client )
 					args2 = EMPTY_STR;
 				char hredir[strlen(client->vhost) + strlen(http_uri) + strlen(args) + 64];
 				sprintf(hredir, "Location: //%s/%s?%s%s\r\n", client->vhost, http_uri, id_arg, args2);
-				http_page_and_exit(client, 302, EMPTY_STR, "redirect to:", hredir, hredir);
+				http_page_and_exit(client, 302, NULL, NULL, NULL, hredir);
 			}
 			if (!http_uri[0] || !strcmp(http_uri, "index.html"))
 				http_main_page_and_exit(client);
 			http_serve_file_and_exit(client, http_uri);
 		}
-		if (mode == XUMON_CONN_WEBSOCKET) {
-			DEBUGPRINT("UMON: sorry, websocket is not yet supported ;( We got %d bytes of data read!" NL, read_size);
-			return;
+		if (client->mode == XUMON_CONN_WEBSOCKET) {
+			int nds;
+		check_next_ws_frame:
+			nds = read_fill - ws;			// new data size: amount of unparsed bytes in buffer
+			if (nds < 2)
+				continue;			// read more data!
+			Uint8 *wsh = (Uint8*)buffer + ws;	// websocket header: points to the start of the new (unparsed) websocket frame
+			// Check next frame, we have at least 2 bytes of new data ie, nds >= 2
+			if ((wsh[0] & 0x70)) {
+				DEBUGPRINT("UMON: ERROR: reserved bit(s) is/are set in websocket frame header, aborting connection!" NL);
+				return;
+			}
+			int plen = wsh[1] & 0x7F;	// payload length (< 126: bytes, 126 = read a word and use that, 127 = dword, not supported by Xemu)
+			int hlen = 2;			// header length
+			if (plen == 127) {
+				DEBUGPRINT("UMON: ERROR: >=64K websocket frame is not supported, aborting connection!" NL);
+				return;
+			} else if (plen == 126) {
+				if (nds < 4)
+					continue;		// read more data!
+				plen = (wsh[2] << 8) + wsh[3];
+				/*
+				if (plen > sizeof(buffer) - 128) {
+					DEBUGPRINT("UMON: ERROR: too long packet (%d)" NL, plen);
+					return;
+				}
+				*/
+				hlen += 2;
+			}
+			const int masked = wsh[1] & 0x80;
+			if (masked)
+				hlen += 4;
+			// As we know the size of the frame now, we can check if it's fully read
+			if (nds < hlen + plen)
+				continue;		// no ... so we need more data
+			// Cool, at this point we can be sure the next frame is fully read!
+			// FIXME: check if control frame????
+			const int opcode = wsh[0] & 0xF;
+			const int fin = wsh[0] & 0x80;	// FIN
+			DEBUGPRINT("UMON: websocket: frame len=%d fin=%d masked=%d opcode=$%X" NL, plen, !!fin, !!masked, opcode);
+			if (opcode >= 8) {	// control frame
+				if (!fin) {
+					DEBUGPRINT("UMON: ERROR: websocket control frame without FIN, aborting connection!" NL);
+					return;
+				}
+				if (opcode == 8) {
+					DEBUGPRINT("UMON: closing websocket connection on frame-8 ('close')." NL);
+					return;
+				} else if (opcode == 9) {
+					// Tricky. We want to respond (but that's the task of the responder thread!)
+					// *AND* remove this frame from the buffer, leaving possible collected data intact though.
+					DEBUGPRINT("UMON: SORRY, ping is not yet supported :(" NL);
+					return;
+				} else {
+					DEBUGPRINT("UMON: ERROR: unknown control frame $%X, aborting connection!" NL, opcode);
+					return;
+				}
+			} else {
+				if (opcode > 2) {
+					DEBUGPRINT("UMON: ERROR: unknown user frame $%X, aborting connection!" NL, opcode);
+					return;
+				}
+			}
+			if (masked)
+				websocket_unmask_downwards((Uint8*)buffer + ws_plen, wsh + hlen, plen, wsh + hlen - 4);
+			else
+				memmove_downwards(buffer + ws_plen, (char*)wsh + hlen, plen);
+			ws_plen += plen;
+			ws += hlen + plen;
+			if (fin) {	// FIN bit, so we can process the data, finally
+				char *p = buffer + ws_plen;
+				const char oc = *p;
+				*p = '\0';
+				DEBUGPRINT("UMON: websocket-request: (%s)" NL, buffer);
+				store_request(client, buffer, ws_plen + 1);
+				*p = oc;
+				read_fill -= ws;
+				memmove_downwards(buffer, buffer + ws, read_fill);
+				ws_plen = 0;
+				ws = 0;
+			}
+			goto check_next_ws_frame;
 		}
 		DEBUGPRINT("UMON: FATAL: unknown connection mode!" NL);
 		return;
@@ -648,7 +707,7 @@ static int client_thread_initiate ( void *user_param )
 				client->fd = -1;
 				client->vhost = default_vhost;
 				client->agent = default_agent;
-				client->p = NULL;
+				client->mode = XUMON_CONN_INIT;
 				CLIENTS_UNLOCK();
 				goto slot_found;
 			}
@@ -676,26 +735,39 @@ finish:
 	if (client) {
 		if (client->fd >= 0)
 			close(client->fd);
-		free(client->p);
 		CLIENTS_LOCK();
 		client->seq = 0;
-		struct linked_fifo_st *l[2] = { client->rhead, client->whead };
+		struct linked_fifo_st *rh = client->rhead, *wh = client->whead;
 		client->rhead  = NULL;
 		client->whead = NULL;
 		client->rtail  = NULL;
 		client->wtail = NULL;
 		CLIENTS_UNLOCK();
 		client = NULL;	// just to reveal (with crash) if someone still tries to use this ptr (should not!)
-		for (int i = 0; i < 2; i++)
-			while (l[i]) {
-				free(l[i]->data);
-				free(l[i]);
-				l[i] = l[i]->next;
-			}
+		int rc = 0, wc = 0;
+		while (rh) {
+			void *next = rh->next;
+			free(rh->data);
+			free(rh);
+			rc++;
+			rh = next;
+		}
+		while (wh) {
+			void *next = wh->next;
+			free(wh->data);
+			free(wh);
+			wc++;
+			wh = next;
+		}
+		if (rc || wc) {
+			if (rc)
+				SDL_AtomicAdd(&incoming_msg_counter, -rc);
+			DEBUGPRINT("UMON: client: WARNING: unused %d read and %d write chunk(s)!" NL, rc, wc);
+		}
 	}
 	xemusock_shutdown(CLIENT_SOCK, NULL);
 	xemusock_close(CLIENT_SOCK, NULL);
-	(void)SDL_AtomicAdd(&thread_counter, -1);			// decrement thread counter
+	SDL_AtomicAdd(&thread_counter, -1);
 	return 0;
 #	undef CLIENT_SOCK
 }
@@ -703,15 +775,17 @@ finish:
 
 // Main server thread, running during the full life-time of UMON subsystem.
 // It accepts incoming connections and creating new threads to handle the given connection then.
-static int main_thread ( void *user_param )
+static int main_thread ( void *_unused )
 {
-	SDL_AtomicSet(&thread_counter, 1);	// the main thread counts as the first one already
+	SDL_AtomicAdd(&thread_counter, 1);
 	while (!SDL_AtomicGet(&thread_stop_trigger)) {
 		struct sockaddr_in sock_st;
 		int xerr;
 		// Wait for socket event with select, with 0.1sec timeout
 		// We need timeout, to check thread_stop_trigger condition
 		const int select_result = xemusock_select_1(sock_server, SELECT_TIMEOUT, XEMUSOCK_SELECT_R | XEMUSOCK_SELECT_E, &xerr);
+		if (SDL_AtomicGet(&thread_stop_trigger))
+			break;
 		if (!select_result)
 			continue;
 		if (select_result < 0) {
@@ -723,6 +797,8 @@ static int main_thread ( void *user_param )
 		}
 		xemusock_socklen_t len = sizeof(struct sockaddr_in);
 		xemusock_socket_t sock = xemusock_accept(sock_server, (struct sockaddr *)&sock_st, &len, &xerr);
+		if (SDL_AtomicGet(&thread_stop_trigger))
+			break;
 		if (sock != XS_INVALID_SOCKET && sock != XS_SOCKET_ERROR) {	// FIXME: both conditions needed? maybe others as well?
 			char thread_name[64];
 			sprintf(thread_name, "Xemu-Umon-%d-%d", SDL_AtomicGet(&thread_counter), SDL_AtomicGet(&thread_client_seq));
@@ -739,12 +815,69 @@ static int main_thread ( void *user_param )
 			SDL_Delay(10);
 		}
 	}
-	(void)SDL_AtomicAdd(&thread_counter, -1);	// for the main thread itself
+	SDL_AtomicAdd(&thread_counter, -1);
 	return 0;
 }
 
 
+/* !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! *
+ * The next function implements the responder thread, and runs in single instance *
+ * without any depedancy on the "normal" connection handler thread                *
+ * This thread only responsible to do "async" responding, ie, replies submitted   *
+ * by xumon_set_answer() from the main emulator program flow.                     *
+ * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */
 
+
+// WARNING: we can't use normal "send_raw" function and like that, since it is written
+// for the client-connection thread with longjmp() there and such!
+static int responder_thread ( void *_unused )
+{
+	static Uint8 buffer[8192];
+	SDL_AtomicAdd(&thread_counter, 1);
+	for (;;) {
+		SDL_SemWait(responder_sem);
+		if (SDL_AtomicGet(&thread_stop_trigger))
+			break;
+		struct client_st *client = NULL;
+		CLIENTS_LOCK();
+		for (int i = 0; i < MAX_CLIENT_SLOTS; i++)
+			if (clients[i].whead) {
+				client = &clients[i];
+				break;
+			}
+		if (!client) {
+			CLIENTS_UNLOCK();
+			DEBUGPRINT("UMON: responder-thread: WARNING: no data found to transmit?" NL);
+			continue;
+		}
+		xemusock_socket_t sock = client->sock;
+		const int write_size = client->whead->size;
+		void *o = client->whead;
+		void *p = client->whead->data;
+		const Uint32 t = client->whead->time;
+		client->whead = client->whead->next;
+		if (!client->whead)
+			client->wtail = NULL;
+		CLIENTS_UNLOCK();
+		memcpy(buffer, p, write_size);
+		free(p);
+		free(o);
+		const int ret = send_raw_unwrapped(sock, buffer, write_size);	// do NOT use plain "send_raw" it will crash because of longjmp() usage of ANOTHER thread!!!
+		if (ret)
+			DEBUGPRINT("UMON: responder-thread: error during transmit?" NL);
+		else
+			DEBUGPRINT("UMON: responder-thread: (hopefully) sent %d bytes of data after %d msec of submitting" NL, write_size, SDL_GetTicks() - t);
+	}
+	SDL_AtomicAdd(&thread_counter, -1);
+	return 0;
+}
+
+
+/* !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! *
+ * END CRITICAL PART: these part ABOVE of the code runs in a *THREAD*.            *
+ * The next functions runs from the main thread BUT must be careful with locking  *
+ * since they uses data structures also accessed from the threads!                *
+ * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */
 
 
 // Called by the emulator! Returns with the "seq" number of the client connection.
@@ -755,26 +888,27 @@ static int main_thread ( void *user_param )
 // values, this function returned, to identify the connection (there can be more!)
 int xumon_get_request ( struct xumon_com_st *res )
 {
-	if (XEMU_LIKELY(!xumon_running))
-		return 0;
-	CLIENTS_LOCK();
-	for (struct client_st *c = clients; c < clients + MAX_CLIENT_SLOTS; c++) {
-		if (c->rhead) {
-			struct linked_fifo_st *o = c->rhead;
-			c->rhead = o->next;
-			if (!o->next)
-				c->rtail = NULL;
-			res->data = o->data;
-			res->size = o->size;
-			res->seq = c->seq;
-			res->ptr = (const void*)c;
-			CLIENTS_UNLOCK();
-			free(o);
-			return res->seq;
+	struct linked_fifo_st *p = NULL;
+	if (XEMU_UNLIKELY(xumon_running && SDL_AtomicGet(&incoming_msg_counter))) {
+		CLIENTS_LOCK();
+		for (struct client_st *c = clients; c < clients + MAX_CLIENT_SLOTS; c++) {
+			if (c->rhead) {
+				p = c->rhead;
+				c->rhead = p->next;
+				if (!p->next)
+					c->rtail = NULL;
+				res->data = p->data;	// caller must free this ...
+				res->size = p->size;
+				res->seq = c->seq;
+				res->ptr = (const void*)c;
+				SDL_AtomicAdd(&incoming_msg_counter, -1);
+				break;
+			}
 		}
+		CLIENTS_UNLOCK();
+		free(p);
 	}
-	CLIENTS_UNLOCK();
-	return 0;
+	return !!p;
 }
 
 
@@ -782,61 +916,53 @@ int xumon_set_answer ( struct xumon_com_st *res )
 {
 	if (XEMU_LIKELY(!xumon_running))
 		return 0;
+	struct client_st *c = (struct client_st*)res->ptr;
+	int plen = res->size;
+	int tlen = res->size;
+	if (c->mode == XUMON_CONN_WEBSOCKET)
+		tlen += plen < 126 ? 2 : 4;
 	struct linked_fifo_st *p = malloc(sizeof(struct linked_fifo_st));
-	Uint8 *d = malloc(res->size);
+	Uint8 *d = malloc(tlen);
 	if (!p || !d) {
+		DEBUGPRINT("UMON: ERROR: memory allocation failure" NL);
 		free(p);
 		free(d);
 		return 1;
 	}
-	struct client_st *client = (struct client_st*)res->ptr;
+	if (c->mode == XUMON_CONN_WEBSOCKET) {
+		d[0] = 0x82;	// binary frame + FIN bit (non-fragmented message)
+		if (plen < 126)
+			d[1] = plen;
+		else {
+			d[1] = 126;
+			d[2] = plen >> 8;
+			d[3] = plen & 0xFF;
+		}
+	}
+	memcpy(d + (tlen - plen), res->data, plen);
+	p->data = d;
+	p->size = tlen;
+	p->time = SDL_GetTicks();
 	CLIENTS_LOCK();
-	if (client->seq == res->seq) {
-		if (!client->whead)
-			client->wtail = p;
-		p->next = client->whead;
-		client->whead = p;
+	if (c->seq == res->seq) {
+		if (!c->whead)
+			c->wtail = p;
+		p->next = c->whead;
+		c->whead = p;
 		CLIENTS_UNLOCK();
+		SDL_SemPost(responder_sem);
 		return 0;
 	} else {
 		CLIENTS_UNLOCK();
-		free(p);
 		free(d);
+		free(p);
+		DEBUGPRINT("UMON: ERROR: could not match connection to send answer!" NL);
 		return 1;
 	}
 }
 
-#if 0
-
-// Called by umon to store a request
-static void store_request ( struct client_st *client, const void *buffer, int size )
-{
-	struct linked_fifo_st *p = malloc(sizeof(struct linked_fifo_st));
-	Uint8 *d = malloc(size);
-	if (XEMU_UNLIKELY(!p || !d)) {
-		DEBUGPRINT("UMON: client: malloc() failed to store request! Aborting connection." NL);
-		END_CLIENT_THREAD(1);
-	}
-	memcpy(d, buffer, size);
-	p->data = d;
-	p->next = NULL;
-	p->size = size;
-	CLIENTS_LOCK();
-	if (client->rtail)
-		client->rtail->next = p;
-	client->rtail = p;
-	CLIENTS_UNLOCK();
-}
-
-
-
-
-
-#endif
-
 
 /* !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! *
- * END CRITICAL PART: these part ABOVE of the code runs in a *THREAD*.            *
  * The rest of this file is about creating the thread and it's enivornment first, *
  * and it will run in the main context of the execution.                          *
  * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */
@@ -856,6 +982,7 @@ int xumon_init ( const int port )
 		clients[i].wtail = NULL;
 	}
 	SDL_AtomicSet(&thread_counter, 0);
+	SDL_AtomicSet(&incoming_msg_counter, 0);
 	static char first_time = 1;
 	if (first_time) {
 		first_time = 0;
@@ -903,6 +1030,11 @@ int xumon_init ( const int port )
 		goto error;
 	}
 	// Create thread to handle incoming connections on our brand new server socket we've just created for this purpose
+	responder_sem = SDL_CreateSemaphore(0);
+	if (!responder_sem) {
+		ERROR_WINDOW("%sCannot create responder semaphore:\n%s", err_msg, SDL_GetError());
+		goto error;
+	}
 	SDL_AtomicSet(&thread_stop_trigger, 0);
 	Uint32 passed_time = 0, start_time = SDL_GetTicks();
 	SDL_Thread *thread = SDL_CreateThread(main_thread, "Xemu-Umon-Main", NULL);
@@ -911,7 +1043,13 @@ int xumon_init ( const int port )
 		goto error;
 	}
 	SDL_DetachThread(thread);
-	while (!SDL_AtomicGet(&thread_counter)) {
+	thread = SDL_CreateThread(responder_thread, "Xemu-Umon-Responder", NULL);
+	if (!thread) {
+		ERROR_WINDOW("%sCannot create monitor responder thread:\n%s", err_msg, SDL_GetError());
+		goto error;
+	}
+	SDL_DetachThread(thread);
+	while (SDL_AtomicGet(&thread_counter) < 2) {
 		SDL_Delay(1);
 		passed_time = SDL_GetTicks() - start_time;
 		if (passed_time > 500) {
@@ -937,7 +1075,6 @@ int xumon_init ( const int port )
 			"Cache-Control: no-store, no-cache, must-revalidate, max-age=0\r\n"
 			"Cache-Control: post-check=0, pre-check=0\r\n"
 			"Pragma: no-cache\r\n"
-			"Expires: Tue, 19 Sep 2017 19:08:16 GMT\r\n"
 			"X-UA-Compatible: IE=edge\r\n"
 			"X-Powered-By: The Powerpuff Girls ;)\r\n"
 			"X-Content-Type-Options: nosniff\r\n"
@@ -963,6 +1100,8 @@ error:
 			DEBUGPRINT("UMON: warning, could not close server socket after error: %s" NL, xemusock_strerror(xerr));
 		sock_server = XS_INVALID_SOCKET;
 	}
+	if (responder_sem)
+		SDL_DestroySemaphore(responder_sem);
 	return 1;
 }
 
@@ -980,6 +1119,7 @@ int xumon_stop ( void )
 	Uint32 passed_time = 0, start_time = SDL_GetTicks();
 	SDL_AtomicSet(&thread_stop_trigger, 1);
 	while (SDL_AtomicGet(&thread_counter) > 0) {
+		SDL_SemPost(responder_sem);	// to get the "attention" of the responder thread
 		SDL_Delay(4);
 		passed_time = SDL_GetTicks() - start_time;
 		if (passed_time > 500) {
@@ -990,8 +1130,10 @@ int xumon_stop ( void )
 	xemusock_set_nonblocking(sock_server, XEMUSOCK_BLOCKING, NULL);
 	xemusock_shutdown(sock_server, NULL);
 	xemusock_close(sock_server, NULL);
+	SDL_DestroySemaphore(responder_sem);
 	sock_server = XS_INVALID_SOCKET;
 	const int count2 = SDL_AtomicGet(&thread_counter);
+	// FIXME: normalize this msg, with "client" etc
 	DEBUGPRINT("UMON: shutdown, %d thread(s) (%d client) exited, %d thread(s) has timeout condition, backlog %d, %d msecs." NL, count - count2, count - count2 - 1, count2, LISTEN_BACKLOG, passed_time);
 	return 0;
 }
