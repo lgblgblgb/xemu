@@ -70,8 +70,8 @@ struct configdb_st {
 	char	*keymap;
 #endif
 	char	*selectedgui;
-	int	force_videostd;
-	int	init_videostd;
+	int	forced_videostd;
+	int	videostd;
 	int	fullborders;
 	int	hdosvirt;
 	int	show_drive_led;

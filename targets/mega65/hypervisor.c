@@ -190,9 +190,9 @@ void hypervisor_enter ( int trapno )
 		current_hdos_func = -1;
 	if (XEMU_UNLIKELY(trapno == TRAP_RESET)) {
 		hdos_notify_system_start_begin();
-		if (!vic4_disallow_video_std_change) {
-			vic4_disallow_video_std_change = 1;
-			DEBUGPRINT("HYPERVISOR: setting video standard change banning" NL);
+		if (!vic4_disallow_videostd_change && configdb.videostd >= 0) {
+			vic4_disallow_videostd_change = 1;
+			DEBUGPRINT("HYPERVISOR: setting video standard change (PAL/NTSC) banning" NL);
 		}
 	}
 	if (XEMU_UNLIKELY(trapno == TRAP_FREEZER_RESTORE_PRESS || trapno == TRAP_FREEZER_USER_CALL)) {
@@ -285,14 +285,9 @@ static inline void first_leave ( void )
 	}
 	// Workaround: set DMA version based on ROM version
 	dma_init_set_rev(main_ram + 0x20000);
-	// Workaround: force video standard
-	if (configdb.init_videostd >= 0) {
-		DEBUGPRINT("VIC: setting %s mode as boot-default based on request" NL, configdb.init_videostd ? "NTSC" : "PAL");
-		if (configdb.init_videostd)
-			vic_registers[0x6F] |= 0x80;
-		else
-			vic_registers[0x6F] &= 0x7F;
-	}
+	// Workaround: set our desired video standard (if configdb.videostd == -1, then vic4_set_videostd() won't do anything, so it's fine)
+	vic4_set_videostd(configdb.videostd, "in hypervisor.c, requested as boot/reset default");
+	// OK, that's enough
 	hdos_notify_system_start_end();
 	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 }
@@ -365,9 +360,9 @@ void hypervisor_leave ( void )
 	}
 	hypervisor_is_first_call = 0;
 	if (XEMU_UNLIKELY(trap_current == TRAP_RESET)) {
-		if (vic4_disallow_video_std_change == 1) {
-			DEBUGPRINT("HYPERVISOR: clearing video standard change banning" NL);
-			vic4_disallow_video_std_change = 0;
+		if (vic4_disallow_videostd_change && !configdb.forced_videostd) {
+			DEBUGPRINT("HYPERVISOR: clearing video standard change (PAL/NTSC) banning" NL);
+			vic4_disallow_videostd_change = 0;
 		}
 	}
 	if (XEMU_UNLIKELY(hypervisor_queued_trap >= 0)) {

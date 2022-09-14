@@ -88,7 +88,7 @@ int videostd_changed = 0;
 static const char NTSC_STD_NAME[] = "NTSC";
 static const char PAL_STD_NAME[] = "PAL";
 int vic_readjust_sdl_viewport = 0;
-int vic4_disallow_video_std_change = 1;
+int vic4_disallow_videostd_change = 0;		// Disallows programs to change video std via register D06F, bit 7 (emulator internally writing that bit still can change video std though!)
 int vic4_registered_screenshot_request = 0;
 
 
@@ -390,7 +390,7 @@ void vic4_open_frame_access ( void )
 	// Though it can be changed any time, this kind of information really only can be applied
 	// at frame level. Thus we check here, if during the previous frame there was change
 	// and apply the video mode set for our just started new frame.
-	Uint8 new_mode = (configdb.force_videostd >= 0) ? configdb.force_videostd : !!(vic_registers[0x6F] & 0x80);
+	const Uint8 new_mode = !!(vic_registers[0x6F] & 0x80);
 	if (XEMU_UNLIKELY(new_mode != videostd_id)) {
 		// We have video mode change!
 		videostd_id = new_mode;
@@ -436,6 +436,17 @@ void vic4_open_frame_access ( void )
 			xemu_set_viewport(0, 0, TEXTURE_WIDTH - 1, max_rasters - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
 		else
 			xemu_set_viewport(48, 0, TEXTURE_WIDTH - 48, visible_area_height - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
+	}
+}
+
+
+// This works even if vic4_disallow_videostd_change is true!
+void vic4_set_videostd ( const int mode, const char *comment )
+{
+	// other values are ignored, since the caller may have the policy that -1 means leave it as it was, etc
+	if (mode == 0 || mode == 1) {
+		vic_registers[0x6F] = (vic_registers[0x6F] & 0x7F) | (mode << 7);
+		DEBUGPRINT("VIC: setting %s mode (%s)" NL, mode ? "NTSC" : "PAL", comment ? comment : EMPTY_STR);
 	}
 }
 
@@ -746,7 +757,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;
 		CASE_VIC_4(0x6F):
 			// If video standard change was disallowed, we keep bit7 as is, regardless of the write
-			if (vic4_disallow_video_std_change)
+			if (vic4_disallow_videostd_change)
 				data = (vic_registers[0x6F] & 0x80) | (data & 0x7F);
 			// We trigger video setup at next frame automatically, no need do anything further here
 			break;
