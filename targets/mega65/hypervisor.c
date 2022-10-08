@@ -360,7 +360,7 @@ void hypervisor_leave ( void )
 	}
 	hypervisor_is_first_call = 0;
 	if (XEMU_UNLIKELY(trap_current == TRAP_RESET)) {
-		if (vic4_disallow_videostd_change && !configdb.forced_videostd) {
+		if (vic4_disallow_videostd_change && !configdb.lock_videostd) {
 			DEBUGPRINT("HYPERVISOR: clearing video standard change (PAL/NTSC) banning" NL);
 			vic4_disallow_videostd_change = 0;
 		}

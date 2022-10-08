@@ -107,7 +107,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "fullborders", "Show non-clipped display borders", &configdb.fullborders },
 	{ "nosound", "Disables audio output generation", &configdb.nosound },
 	{ "noopl3", "Disables OPL3 emulation", &configdb.noopl3 },
-	{ "forcedvideostd", "Force video standard (programs cannot change it)", &configdb.forced_videostd },
+	{ "lockvideostd", "Lock video standard (programs cannot change it)", &configdb.lock_videostd },
 	{ NULL }
 };
 

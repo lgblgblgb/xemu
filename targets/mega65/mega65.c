@@ -365,7 +365,7 @@ static void mega65_init ( void )
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
 	vic_init();
-	vic4_disallow_videostd_change = configdb.forced_videostd;
+	vic4_disallow_videostd_change = configdb.lock_videostd;
 	vic4_set_videostd(configdb.videostd >= 0 ? configdb.videostd : 0, "by emulator initalization");
 	// *** CIAs
 	cia_init(&cia1, "CIA-1",

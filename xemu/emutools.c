@@ -1097,6 +1097,9 @@ int xemu_post_init (
 #ifdef SDL_HINT_VIDEO_ALLOW_SCREENSAVER
 	SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");				// 1 = enable screen saver
 #endif
+#if defined(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK) && defined(XEMU_ARCH_MAC)
+#	warning "Activating workaround for lame newer Apple notebooks (no right click on touchpads)"
+#endif
 	/* end of SDL hints section */
 	sdl_window_title = xemu_strdup(window_title);
 	sdl_win = SDL_CreateWindow(

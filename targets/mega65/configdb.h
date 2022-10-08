@@ -70,7 +70,7 @@ struct configdb_st {
 	char	*keymap;
 #endif
 	char	*selectedgui;
-	int	forced_videostd;
+	int	lock_videostd;
 	int	videostd;
 	int	fullborders;
 	int	hdosvirt;

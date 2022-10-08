@@ -95,6 +95,7 @@ struct client_st {
 };
 static struct client_st clients[MAX_CLIENT_SLOTS];
 
+static SDL_SpinLock responder_lock;	// FIXME: remove this hack
 static SDL_SpinLock clients_lock;
 #define CLIENTS_LOCK()		SDL_AtomicLock(&clients_lock)
 #define CLIENTS_UNLOCK()	SDL_AtomicUnlock(&clients_lock)
@@ -360,8 +361,9 @@ static inline void memmove_downwards ( char *dest, const char *src, int size )
 }
 
 
-// src/dest memory areas can overlap, but only if dest <= src
-static inline void websocket_unmask_downwards ( Uint8 *dest, const Uint8 *src, const int size, Uint8 key[4] )
+// src/dest memory areas can overlap, but only if dest <= src, ie the "downwards" it can work if "dest" is downwards compared to "src"
+// just like with the memmove_downwards() above [the reason there not memmove() was used, since the single case of overlapping]
+static inline void websocket_unmask_downwards ( Uint8 *dest, const Uint8 *src, const int size, const Uint8 *key )
 {
 	for (int i = 0; i < size; i++) {
 		dest[i] = src[i] ^ key[i & 3];
@@ -387,9 +389,9 @@ static void client_run ( struct client_st *client )
 		}
 		if (http_start_tick && (SDL_GetTicks() - http_start_tick) > HTTP_TIMEOUT)
 			http_page_and_exit(client, 408, "Request timeout while waiting for \"\\r\\n\\r\\n\"", NULL, NULL, NULL);
-		const int to_be_read = sizeof(buffer) - read_fill - 1;
+		const int to_be_read = sizeof(buffer) - read_fill - 1;	// leave one byte space to terminate the string after reading (when needed)
 		if (to_be_read < 1) {
-			DEBUGPRINT("UMON: client: overflow of the receiver buffer (read=%d)! Too long request?" NL, to_be_read);
+			DEBUGPRINT("UMON: client: overflow of the receiver buffer (read=%d)! Too long request? Aborting connection!" NL, to_be_read);
 			if (client->mode == XUMON_CONN_HTTP)
 				http_page_and_exit(client, 400, "Too long request", NULL, NULL, NULL);
 			return;
@@ -640,6 +642,7 @@ static void client_run ( struct client_st *client )
 					// *AND* remove this frame from the buffer, leaving possible collected data intact though.
 					DEBUGPRINT("UMON: SORRY, ping is not yet supported :(" NL);
 					return;
+					goto check_next_ws_frame;
 				} else {
 					DEBUGPRINT("UMON: ERROR: unknown control frame $%X, aborting connection!" NL, opcode);
 					return;
@@ -862,7 +865,9 @@ static int responder_thread ( void *_unused )
 		memcpy(buffer, p, write_size);
 		free(p);
 		free(o);
-		const int ret = send_raw_unwrapped(sock, buffer, write_size);	// do NOT use plain "send_raw" it will crash because of longjmp() usage of ANOTHER thread!!!
+		SDL_AtomicLock(&responder_lock);
+		const int ret = send_raw_unwrapped(sock, buffer, write_size);	// do NOT use plain "send_raw" it will crash because of longjmp() and locking usage of ANOTHER thread!!!
+		SDL_AtomicUnlock(&responder_lock);
 		if (ret)
 			DEBUGPRINT("UMON: responder-thread: error during transmit?" NL);
 		else
@@ -930,7 +935,7 @@ int xumon_set_answer ( struct xumon_com_st *res )
 		return 1;
 	}
 	if (c->mode == XUMON_CONN_WEBSOCKET) {
-		d[0] = 0x82;	// binary frame + FIN bit (non-fragmented message)
+		d[0] = 0x82;	// binary frame + FIN bit (= non-fragmented message)
 		if (plen < 126)
 			d[1] = plen;
 		else {

@@ -600,9 +600,9 @@ static void ui_cb_video_standard ( const struct menu_st *m, int *query )
 
 static void ui_cb_video_standard_disallow_change ( const struct menu_st *m, int *query )
 {
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, configdb.forced_videostd);
-	configdb.forced_videostd = !configdb.forced_videostd;
-	vic4_disallow_videostd_change = configdb.forced_videostd;
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, configdb.lock_videostd);
+	configdb.lock_videostd = !configdb.lock_videostd;
+	vic4_disallow_videostd_change = configdb.lock_videostd;
 }
 
 static void ui_cb_fullborders ( const struct menu_st *m, int *query )
