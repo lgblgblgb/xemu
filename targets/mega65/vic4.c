@@ -1125,7 +1125,7 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 				const Uint8 *sprite_data_pointer = main_ram + sprite_pointer_addr + sprnum * ((SPRITE_16BITPOINTER >> 7) + 1);
 				const Uint32 sprite_data_addr = SPRITE_16BITPOINTER ?
 					64 * ((*(sprite_data_pointer + 1) << 8) | (*sprite_data_pointer))
-					: ((64 * (*sprite_data_pointer)) | ( ((~last_dd00_bits) & 0x3)) << 14);
+					: ((64 * (*sprite_data_pointer)) | (SPRITE_POINTER_ADDR & 0xC000)); // Use bits 14-15 (this can be set from $DD00 if HOTREG is ENABLED)
 
 				//DEBUGPRINT("VIC: Sprite %d data at $%08X " NL, sprnum, sprite_data_addr);
 				const Uint8 *sprite_data = main_ram + sprite_data_addr;
