@@ -1099,6 +1099,7 @@ int xemu_post_init (
 #endif
 #if defined(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK) && defined(XEMU_ARCH_MAC)
 #	warning "Activating workaround for lame newer Apple notebooks (no right click on touchpads)"
+	SDL_SetHint(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK, "1");			// 1 = enable CTRL + click = right click (needed for modern Mac touchpads, it seems)
 #endif
 	/* end of SDL hints section */
 	sdl_window_title = xemu_strdup(window_title);
