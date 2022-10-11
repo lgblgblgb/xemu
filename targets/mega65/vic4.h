@@ -241,7 +241,7 @@ extern int   videostd_changed;
 extern Uint8 videostd_id;
 extern float videostd_1mhz_cycles_per_scanline;
 extern int   vic_readjust_sdl_viewport;
-extern int   vic4_disallow_video_std_change;
+extern int   vic4_disallow_videostd_change;
 
 extern int   vic4_registered_screenshot_request;
 extern int   vic_vidp_legacy, vic_chrp_legacy, vic_sprp_legacy;
@@ -255,6 +255,7 @@ extern Uint8 vic_read_reg  ( unsigned int addr );
 extern int   vic4_render_scanline ( void );
 extern void  vic4_open_frame_access ( void );
 extern void  vic4_close_frame_access ( void );
+extern void  vic4_set_videostd ( const int mode, const char *comment );
 
 extern Uint8*vic4_query_screen_memory ( void );
 extern int   vic4_query_screen_width ( void );
