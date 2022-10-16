@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is the Commander X16 emulation. Note: the source is overcrowded with comments by intent :)
    That it can useful for other people as well, or someone wants to contribute, etc ...
@@ -29,26 +29,25 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "input_devices.h"
 
 
-//#define	IODEBUGPRINT	DEBUGPRINT
-#define	IODEBUGPRINT	DEBUG
+#define	IODEBUGPRINT	DEBUGPRINT
+//#define	IODEBUGPRINT	DEBUG
 //#define	IODEBUGPRINT(...)
 
 #define SCREEN_WIDTH		640
 #define SCREEN_HEIGHT		480
 
 
-// TODO: kill these
-//#define LAST_SCANLINE		325
-#define CYCLES_PER_SCANLINE	254
-
 static Uint8 lo_ram[0x9F00];
 static Uint8 hi_ram[256 * 8192];	// 2M
-static Uint8 rom[0x20000];		// 128K
+static Uint8 rom[0x80000];		// 512K
 static int   hi_ram_banks;
-static int   hi_ram_access_offset;
-static int   hi_rom_access_offset;
+static int   hi_ram_access_offset, hi_ram_access_bank;
+static int   hi_rom_access_offset, hi_rom_access_bank;
+static Uint8 *hi_ram_p, *hi_rom_p;
+static Uint8 *hi_ram_base_ptr, *hi_rom_base_ptr;	// simply the "rom" and "hi_ram". Unfortunately some C compilers are angry to set pointers directly outside of the bounds of an array, even if I WANT.
 
 static int frameskip = 0;
+static int cycles_per_scanline;
 static struct Via65c22 via1, via2;		// VIA-1 and VIA-2 emulation structures
 
 
@@ -70,6 +69,38 @@ static struct {
 
 
 
+static const char *cpu_where ( void )
+{
+	static char buffer[128];
+	if (cpu65.old_pc < 0xA000)
+		sprintf(buffer, "PC=[LO]:%04X", cpu65.old_pc);
+	else if (cpu65.old_pc < 0xC000)
+		sprintf(buffer, "PC=[HIRAM:%d]:%04X", hi_ram_access_bank, cpu65.old_pc);
+	else
+		sprintf(buffer, "PC=[HIROM:%d]:%04X", hi_rom_access_bank, cpu65.old_pc);
+	return buffer;
+}
+
+
+static XEMU_INLINE void set_ram_bank ( Uint8 bank )
+{
+	lo_ram[0] = bank;
+	hi_ram_access_bank = bank;
+	hi_ram_access_offset = bank << 13;
+	hi_ram_p = hi_ram_base_ptr + hi_ram_access_offset - 0xA000;	// hi_ram_p is a pointer can be dereferenced with cpu addr directly
+	//DEBUGPRINT("RAM: HI-RAM access offset set to $%06X, BANK=%d @ %s" NL, hi_ram_access_offset, bank, cpu_where());
+}
+
+
+static XEMU_INLINE void set_rom_bank ( Uint8 bank )
+{
+	bank &= 31;
+	lo_ram[1] = bank | (128 + 64 + 32);
+	hi_rom_access_bank = bank;
+	hi_rom_access_offset = bank << 14;
+	hi_rom_p = hi_rom_base_ptr + hi_rom_access_offset - 0xC000;	// hi_rom_p is a pointer can be dereferenced with cpu addr directly
+	DEBUGPRINT("ROM: HI-ROM access offset set to $%05X, BANK=%d @ %s" NL, hi_rom_access_offset, bank, cpu_where());
+}
 
 
 // Called by CPU emulation code when any kind of memory byte must be written.
@@ -77,45 +108,46 @@ void  cpu65_write_callback ( Uint16 addr, Uint8 data )
 {
 	/**** 0000-9EFF: low RAM (fixed RAM) area ****/
 	if (addr < 0x9F00) {
-		lo_ram[addr] = data;
+		if (XEMU_LIKELY(addr & 0xFFFE)) {
+			lo_ram[addr] = data;
+			return;
+		}
+		if (!addr)
+			set_ram_bank(data);
+		else
+			set_rom_bank(data);
 		return;
 	}
 	/**** 9F00-9FFF: I/O area ****/
 	if (addr < 0xA000) {
 		switch ((addr >> 4) & 0xF) {
 			case 0x0:
+				//IODEBUGPRINT("IO_W: writing to reg $%04X (data=$%02X), VIA-1 @ %s" NL, addr, data, cpu_where());
+				via_write(&via1, addr & 0xF, data);
+				break;
 			case 0x1:
-				IODEBUGPRINT("IO_W: writing to reg $%04X (data=$%02X), audio controller @ PC=$%04X" NL, addr, data, cpu65.old_pc);
+				IODEBUGPRINT("IO_W: writing to reg $%04X (data=$%02X), VIA-2 @ %s" NL, addr, data, cpu_where());
+				via_write(&via2, addr & 0xF, data);
 				break;
 			case 0x2:
 			case 0x3:
-				IODEBUGPRINT("IO_W: writing to reg $%04X (data=$%02X), VERA video controller @ PC=$%04X" NL, addr, data, cpu65.old_pc);
+				IODEBUGPRINT("IO_W: writing to reg $%04X (data=$%02X), VERA video controller @ %s" NL, addr, data, cpu_where());
 				vera_write_cpu_register(addr, data);	// VERA masks the addr bits, so it's OK.
 				break;
-			case 0x6:
-				IODEBUGPRINT("IO_W: writing to reg $%04X (data=$%02X), VIA-1 @ PC=$%04X" NL, addr, data, cpu65.old_pc);
-				via_write(&via1, addr & 0xF, data);
-				break;
-			case 0x7:
-				IODEBUGPRINT("IO_W: writing to reg $%04X (data=$%02X), VIA-2 @ PC=$%04X" NL, addr, data, cpu65.old_pc);
-				via_write(&via2, addr & 0xF, data);
-				break;
-			case 0x8:
-			case 0x9:
-				IODEBUGPRINT("IO_W: writing to reg $%04X (data=$%02X), RTC @ PC=$%04X" NL, addr, data, cpu65.old_pc);
-				break;
 			default:
-				IODEBUGPRINT("IO_W: writing to reg $%04X (data=$%02X), UNKNOWN/RESERVED @ PC=$%04X" NL, addr, data, cpu65.old_pc);
+				IODEBUGPRINT("IO_W: writing to reg $%04X (data=$%02X), UNKNOWN/RESERVED @ %s" NL, addr, data, cpu_where());
 				break;
 		}
 		return;
 	}
 	/**** A000-BFFF: 8K pageable RAM area, "hi-RAM" ****/
 	if (XEMU_LIKELY(addr < 0xC000)) {
-		hi_ram[hi_ram_access_offset + addr - 0xA000] = data;
+		if (XEMU_LIKELY(hi_ram_access_bank <= hi_ram_banks))
+			hi_ram_p[addr] = data;
 		return;
 	}
 	// Others (ROM) can be ignored, since it's ROM (not writable anyway) ...
+	DEBUGPRINT("ROM: trying to write ROM at address $%04X (in bank %d) @ %s" NL, addr, hi_ram_access_bank, cpu_where());
 }
 
 
@@ -132,59 +164,47 @@ Uint8 cpu65_read_callback ( Uint16 addr )
 		Uint8 data = 0xFF;
 		switch ((addr >> 4) & 0xF) {
 			case 0x0:
+				data = via_read(&via1, addr & 0xF);
+				//IODEBUGPRINT("IO_R: reading from reg $%04X (data=$%02X), VIA-1 @ %s" NL, addr, data, cpu_where());
+				break;
 			case 0x1:
-				IODEBUGPRINT("IO_R: reading from reg $%04X (data=$%02X), audio controller @ PC=$%04X" NL, addr, data, cpu65.old_pc);
+				data = via_read(&via2, addr & 0xF);
+				IODEBUGPRINT("IO_R: reading from reg $%04X (data=$%02X), VIA-2 @ %s" NL, addr, data, cpu_where());
 				break;
 			case 0x2:
 			case 0x3:
 				data = vera_read_cpu_register(addr);	// VERA masks the addr bits, so it's OK
-				IODEBUGPRINT("IO_R: reading from reg $%04X (data=$%02X), VERA video controller @ PC=$%04X" NL, addr, data, cpu65.old_pc);
-				break;
-			case 0x6:
-				data = via_read(&via1, addr & 0xF);
-				IODEBUGPRINT("IO_R: reading from reg $%04X (data=$%02X), VIA-1 @ PC=$%04X" NL, addr, data, cpu65.old_pc);
-				break;
-			case 0x7:
-				data = via_read(&via2, addr & 0xF);
-				IODEBUGPRINT("IO_R: reading from reg $%04X (data=$%02X), VIA-2 @ PC=$%04X" NL, addr, data, cpu65.old_pc);
-				break;
-			case 0x8:
-			case 0x9:
-				IODEBUGPRINT("IO_R: reading from reg $%04X (data=$%02X), RTC @ PC=$%04X" NL, addr, data, cpu65.old_pc);
+				IODEBUGPRINT("IO_R: reading from reg $%04X (data=$%02X), VERA video controller @ %s" NL, addr, data, cpu_where());
 				break;
 			default:
-				IODEBUGPRINT("IO_R: reading from reg $%04X (data=$%02X), UNKNOWN/RESERVED @ PC=$%04X" NL, addr, data, cpu65.old_pc);
+				data = 0x00;
+				IODEBUGPRINT("IO_R: reading from reg $%04X (data=$%02X), UNKNOWN/RESERVED @ %s" NL, addr, data, cpu_where());
 				break;
 		}
 		return data;
 	}
 	/**** A000-BFFF: 8K pageable RAM area, "hi-RAM" ****/
 	if (addr < 0xC000)
-		return hi_ram[hi_ram_access_offset + addr - 0xA000];
+		return hi_ram_p[addr];
 	/**** C000-FFFF: the rest, 16K pagable ROM area ****/
-	return rom[hi_rom_access_offset + addr - 0xC000];
+	return hi_rom_p[addr];
 }
 
 
-static XEMU_INLINE void set_rom_bank ( Uint8 bank )
-{
-	bank &= 7;
-	hi_rom_access_offset = bank << 14;
-	//DEBUGPRINT("HI-ROM access offset set to $%05X, BANK=%d @ PC=$%04X" NL, hi_rom_access_offset, bank, cpu65.old_pc);
-}
-
-static XEMU_INLINE void set_ram_bank ( Uint8 bank )
-{
-	hi_ram_access_offset = (bank % hi_ram_banks) << 13;
-	//DEBUGPRINT("HI-RAM access offset set to $%06X, BANK=%d @ PC=$%04X" NL, hi_ram_access_offset, bank, cpu65.old_pc);
-}
 
 
 
 static int load_rom ( const char *fn )
 {
-	if (xemu_load_file(fn, rom, sizeof rom, sizeof rom, "Cannot load ROM") != sizeof rom)
+	memset(rom, 0xFF, sizeof rom);
+	const int ret = xemu_load_file(fn, rom, 16384, sizeof rom, "Cannot load ROM");
+	if (ret <= 0)
 		return 1;
+	if (ret % 16384) {
+		ERROR_WINDOW("Bad ROM image, size must be multiple of 16384 bytes:\n%s", xemu_load_filepath);
+		return 1;
+	}
+	DEBUGPRINT("ROM: system ROM loaded, %d bytes, %d (16K) pages, source: %s" NL, ret, ret / 16384, xemu_load_filepath);
 	set_rom_bank(0);
 	return 0;
 }
@@ -192,40 +212,44 @@ static int load_rom ( const char *fn )
 
 static void init_ram ( int hi_ram_size )
 {
+	hi_rom_base_ptr = rom;
+	hi_ram_base_ptr = hi_ram;
 	if (hi_ram_size > 2048)
 		hi_ram_size = 2048;
 	if (hi_ram_size < 0)
 		hi_ram_size = 0;
 	hi_ram_banks = hi_ram_size >> 3;
-	DEBUGPRINT("Setting (hi-)RAM size memtop to %dK, %d banks." NL, hi_ram_size, hi_ram_banks);
+	DEBUGPRINT("RAM: Setting (hi-)RAM size memtop to %dK, %d banks." NL, hi_ram_size, hi_ram_banks);
 	memset(lo_ram, 0, sizeof lo_ram);
 	memset(hi_ram, 0xFF, sizeof hi_ram);
-	set_ram_bank(0xFF);
+	set_ram_bank(0);
+	set_rom_bank(0);
 }
 
 
 
 /* VIA emulation callbacks, called by VIA core. See main() near to via_init() calls for further information */
 
-static void via1_outa_ram_bank ( Uint8 mask, Uint8 data )
+static void via1_outa ( Uint8 mask, Uint8 data )
 {
 	//DEBUGPRINT("VIA OUTA (RAM BANK) SET mask=%d data=%d" NL, (int)mask, (int)data);
-	set_ram_bank(data);
+	//set_ram_bank(data);
 }
 
-static Uint8 via1_ina_ram_bank ( Uint8 mask )
+static Uint8 via1_ina ( Uint8 mask )
 {
 	//DEBUGPRINT("READING VIA1-A (RAM BANK): $%02X" NL, via1.ORA);
-	return via1.ORA;
+	//return via1.ORA;
+	return read_ps2_port() | (0xFF - 3);
 }
 
-static void via1_outb_rom_bank ( Uint8 mask, Uint8 data )
+static void via1_outb ( Uint8 mask, Uint8 data )
 {
 	//DEBUGPRINT("VIA OUTB (ROM BANK) SET mask=%d data=%d" NL, (int)mask, (int)data);
-	set_rom_bank(data);
+	//set_rom_bank(data);
 }
 
-static Uint8 via1_inb_rom_bank ( Uint8 mask )
+static Uint8 via1_inb ( Uint8 mask )
 {
 	//DEBUGPRINT("READING VIA1-B (ROM BANK): $%02X" NL, via1.ORB);
 	return via1.ORB;
@@ -254,7 +278,7 @@ static void via2_setint ( int level )
 static Uint8 via2_ina ( Uint8 mask )
 {
 	//DEBUGPRINT("READING VIA2-A, DDR mask is: $%02X output register is $%02X" NL, via2.DDRA, via2.ORA);
-	return read_ps2_port() | (0xFF - 3);
+	return via2.ORA;
 }
 
 
@@ -287,8 +311,8 @@ static void emulation_loop ( void )
 		via_tick(&via2, opcyc);	// -- "" -- the same for VIA-2
 		//opcyc <<= speed_shifter;
 		cycles += opcyc;
-		all_virt_cycles += opcyc;	// FIXME: should be scaled for different CPU speeds, but then also CYCLES_PER_SECOND should be altered for the desired CPU speed!!!
-		if (cycles >= CYCLES_PER_SCANLINE) {
+		all_virt_cycles += opcyc;
+		if (cycles >= cycles_per_scanline) {
 			if (!frameskip) {
 			}
 			if (vera_render_line() == 0) {	// start of a new frame that is ...
@@ -297,7 +321,7 @@ static void emulation_loop ( void )
 				frameskip = !frameskip;
 				return;
 			}
-			cycles -= CYCLES_PER_SCANLINE;
+			cycles -= cycles_per_scanline;
 		}
 	}
 }
@@ -333,12 +357,20 @@ static void emulator_shutdown ( void )
 }
 
 
+static void reset_machine ( void )
+{
+	set_rom_bank(0);
+	set_ram_bank(0);
+	cpu65_reset();
+}
+
+
 int main ( int argc, char **argv )
 {
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Surprising Commander X16 emulator from LGB", argc, argv);
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode", &configdb.fullscreen);
 	xemucfg_define_str_option("rom", ROM_NAME, "Sets character ROM to use", &configdb.rom);
-	xemucfg_define_num_option("hiramsize", 2048, "Size of high-RAM in Kbytes", &configdb.hiramsize, 0, 2048);
+	xemucfg_define_num_option("hiramsize", 2048, "Size of high-RAM in Kbytes", &configdb.hiramsize, 512, 2048);
 	xemucfg_define_num_option("clock", 8, "CPU frequency in MHz [1..8]", &configdb.clock, 1, 8);
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon);
 	xemucfg_define_switch_option("dumpmem", "Dump memory states on exit into files", &configdb.dumpmem);
@@ -353,7 +385,7 @@ int main ( int argc, char **argv )
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// logical size
 		SCREEN_WIDTH, SCREEN_HEIGHT,	// window size
 		SCREEN_FORMAT,			// pixel format
-		0,				// we have 16 colours
+		0,				// no predef colours at this point
 		NULL,				// initialize palette from this constant array
 		NULL,				// initialize palette into this stuff
 		configdb.sdlrenderquality,	// render scaling quality
@@ -368,36 +400,35 @@ int main ( int argc, char **argv )
 	);
 	// --- memory initialization ---
 	init_ram(configdb.hiramsize);
-	memset(rom, 0, sizeof rom);
-	if (
-		load_rom(configdb.rom)
-	)
+	if (load_rom(configdb.rom))
 		return 1;
 	// Continue with initializing ...
+	cycles_per_scanline = configdb.clock * 1000000 / 525 / 60;
+	DEBUGPRINT("Clock requested %d MHz, %d cycles per scanline" NL, configdb.clock, cycles_per_scanline);
 	vera_init();
 	clear_emu_events();	// also resets the keyboard
-	cpu65_reset();	// reset CPU: it must be AFTER kernal is loaded at least, as reset also fetches the reset vector into PC ...
 	// Initiailize VIAs.
 	// Note: this is my unfinished VIA emulation skeleton, for my Commodore LCD emulator originally, ported from my JavaScript code :)
 	// it uses callback functions, which must be registered here, NULL values means unused functionality
 	via_init(&via1, "VIA-1",
-		via1_outa_ram_bank,	// outa
-		via1_outb_rom_bank,	// outb
-		NULL,	// outsr
-		via1_ina_ram_bank,	// ina
-		via1_inb_rom_bank,	// inb
-		NULL,	// insr
+		via1_outa,	// outa
+		via1_outb,	// outb
+		NULL,		// outsr
+		via1_ina,	// ina
+		via1_inb,	// inb
+		NULL,		// insr
 		via1_setint
 	);
 	via_init(&via2, "VIA-2",
 		NULL,			// outa [reg 1]
-		NULL, //via2_kbd_set_scan,	// outb [reg 0], we wire port B as output to set keyboard scan, HOWEVER, we use ORB directly in get scan!
+		NULL,
 		NULL,	// outsr
-		via2_ina,	// ina  [reg 1], we wire port A as input to get the scan result, which was selected with port-A
-		NULL, //via2_inb,
+		NULL,
+		NULL,	//via2_inb,
 		NULL,	// insr
 		via2_setint
 	);
+	reset_machine();
 	// Without these, the first DDR register writes would cause problems, since not OR* (Output Register) is written first ...
 	//via1.ORA = 0xFF;
 	//via1.ORB = 0xFF;
