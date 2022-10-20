@@ -306,6 +306,9 @@ static void preinit_memory_for_start ( void )
 	//                  ----------------------------------------------------------------------------------------------------------------------------------------------------------
 	if (!hickup_is_overriden)
 		hypervisor_debug_invalidate("no external hickup is loaded, built-in one does not have debug info");
+	// At this point, be sure, we have the 2K "C65" style colour RAM @ $1F800 are in sync with the "fast" RAM, as Xemu uses some shadowing as a performance hack!
+	// As we updated the colour RAM above, let's update the corresponding part of the main_ram according to that
+	memcpy(main_ram + 0x1F800, colour_ram, 2048);
 }
 
 
