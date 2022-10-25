@@ -447,7 +447,7 @@ int vera_render_line ( void )
 			int ch = vram[(layer[LAYER].tile_base + (vram[map_addr + x * 2] & 0x1FFFF) * (layer[LAYER].tile_height16 ? 16 : 8) + tile_line) & 0x1FFFF];
 			int co = vram[(map_addr + x * 2 + 1) & 0x1FFFF];
 			for (int c = 128; c; c >>= 1) {
-				*pixel++ = palette.colours[((co >> (c & ch ? 4 : 0)) & 0xF) + layer[LAYER].palette_offset];
+				*pixel++ = palette.colours[((co >> (c & ch ? 0 : 4)) & 0xF) + layer[LAYER].palette_offset];
 			}
 
 		}
@@ -456,7 +456,7 @@ int vera_render_line ( void )
 			tile_line = 0;
 			map_addr += layer[LAYER].map_width * 2;
 		}
-		*(pixel - 1) = 0xFFFFFFFFU;
+		//*(pixel - 1) = 0xFFFFFFFFU;	// debug purposes, show vertical line at the end of scanlines
 	}
 	// Manage end of full frame and vsync IRQ handling
 	if (XEMU_UNLIKELY(scanline == SCANLINES_TOTAL - 1)) {

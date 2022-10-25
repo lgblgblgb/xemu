@@ -369,6 +369,10 @@ void cpu65_reset ( void ) {
 	CPU65.nmos_mode = 0;
 	CPU65.prefix = PREFIX_NOTHING;
 #endif
+#ifdef	CPU_65C02_WDC_WAI_AND_STP
+	CPU65.wdc_wai = 0;
+	CPU65.wdc_stp = 0;
+#endif
 	CPU65.pc = readWord(0xFFFC);
 	DEBUGPRINT("CPU[" CPU_TYPE "]: RESET, PC=%04X, BCD_behaviour=%s" NL,
 			CPU65.pc, // FIXME
@@ -804,6 +808,28 @@ int cpu65_step (
 	int all_cycles = 0;
 	do {
 #endif
+	// ---- Handle 65C02-WDC WAI and STP: BEGIN ----
+#ifdef CPU_65C02_WDC_WAI_AND_STP
+	if (XEMU_UNLIKELY(CPU65.wdc_stp)) {
+#ifdef CPU_STEP_MULTI_OPS
+		all_cycles++;
+		continue;
+#else
+		return 1;
+#endif
+	}
+	if (XEMU_UNLIKELY(CPU65.wdc_wai)) {
+		if (CPU65.nmiEdge || CPU65.irqLevel)
+			CPU65.wdc_wai = 0;
+#ifdef CPU_STEP_MULTI_OPS
+		all_cycles++;
+		continue;
+#else
+		return 1;
+#endif
+	}
+#endif
+	//  ---- Handle 65C02-WDC WAI and STP: END ----
 	if (XEMU_UNLIKELY(CPU65.nmiEdge
 #ifdef CPU_65CE02
 		&& CPU65.op_cycles != 1 && !CPU65.cpu_inhibit_interrupts
@@ -2257,7 +2283,7 @@ int cpu65_step (
 	case 0xCA:	/* DEX Implied */
 			SET_NZ(--CPU65.x);
 			break;
-	case 0xCB:	/* 65C02: NOP (nonstd loc, implied), 65CE02: ASW $nnnn ("Arithmetic Shift Left Word") */
+	case 0xCB:	/* 65C02: NOP (nonstd loc, implied), 65CE02: ASW $nnnn ("Arithmetic Shift Left Word"), 65C02-WDC: WAI */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("ASW nnnn");
@@ -2268,6 +2294,8 @@ int cpu65_step (
 			SET_NZ16(data);
 			writeByte(addr, data & 0xFF);
 			writeByte(addr + 1, data >> 8);
+#elif defined(CPU_65C02_WDC_WAI_AND_STP)
+			CPU65.wdc_wai = 1;		// 65C02-WDC specific "WAI" opcode, TODO: check if it's really a 3 clock opcode as it should be
 #endif
 			}
 			break;
@@ -2394,11 +2422,13 @@ int cpu65_step (
 			push(CPU65.x);
 			}
 			break;
-	case 0xDB:	/* 65C02: NOP (nonstd loc, implied), 65CE02: PHZ */
+	case 0xDB:	/* 65C02: NOP (nonstd loc, implied), 65CE02: PHZ, 65C02-WDC: STP */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
 #ifdef CPU_65CE02
 			OPC_65CE02("PHZ");
 			push(CPU65.z);
+#elif defined(CPU_65C02_WDC_WAI_AND_STP)
+			CPU65.wdc_stp = 1;		// 65C02-WDC specific "STP" opcode, TODO: check if it's really a 3 clock opcode as it should be
 #endif
 			}
 			break;

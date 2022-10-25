@@ -36,19 +36,30 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_WIDTH		640
 #define SCREEN_HEIGHT		480
 
+// 1'000'000 / 60
+#define FULL_FRAME_USECS	16667
 
-static Uint8 lo_ram[0x9F00];
-static Uint8 hi_ram[256 * 8192];	// 2M
-static Uint8 rom[0x80000];		// 512K
-static int   hi_ram_banks;
-static int   hi_ram_access_offset, hi_ram_access_bank;
-static int   hi_rom_access_offset, hi_rom_access_bank;
+#define	HI_RAM_MAX_SIZE		0x200000
+#define	HI_ROM_MAX_SIZE		0x80000
+#define LO_MEM_SIZE		0xA000
+#define	LO_MEM_REAL_SIZE	(LO_MEM_SIZE - 0x100)
+
+#define	MEM_STORAGE_SIZE	(LO_MEM_SIZE + HI_RAM_MAX_SIZE + HI_ROM_MAX_SIZE)
+static Uint8 memory_storage[MEM_STORAGE_SIZE];
+static int memconfig_ready = 0;
+#define lo_ram_ptr	memory_storage
+#define	hi_ram_abs_ptr	(memory_storage + LO_MEM_SIZE)
+#define	hi_rom_abs_ptr	(memory_storage + LO_MEM_SIZE + HI_RAM_MAX_SIZE)
+#define hi_ram_rel_ptr	(memory_storage + LO_MEM_SIZE - 0xA000)
+#define hi_rom_rel_ptr	(memory_storage + LO_MEM_SIZE + HI_RAM_MAX_SIZE - 0xC000)
 static Uint8 *hi_ram_p, *hi_rom_p;
-static Uint8 *hi_ram_base_ptr, *hi_rom_base_ptr;	// simply the "rom" and "hi_ram". Unfortunately some C compilers are angry to set pointers directly outside of the bounds of an array, even if I WANT.
+static int hi_ram_access_bank, hi_rom_access_bank;
+static int hi_ram_banks;
 
-static int frameskip = 0;
 static int cycles_per_scanline;
 static struct Via65c22 via1, via2;		// VIA-1 and VIA-2 emulation structures
+
+Uint64 all_cycles = 0;
 
 
 #define VIRTUAL_SHIFT_POS	0x31
@@ -82,24 +93,44 @@ static const char *cpu_where ( void )
 }
 
 
-static XEMU_INLINE void set_ram_bank ( Uint8 bank )
+static XEMU_INLINE void set_ram_bank ( const Uint8 bank )
 {
-	lo_ram[0] = bank;
 	hi_ram_access_bank = bank;
-	hi_ram_access_offset = bank << 13;
-	hi_ram_p = hi_ram_base_ptr + hi_ram_access_offset - 0xA000;	// hi_ram_p is a pointer can be dereferenced with cpu addr directly
+	lo_ram_ptr[0] = bank;
+	hi_ram_p = hi_ram_rel_ptr + (bank << 13);
 	//DEBUGPRINT("RAM: HI-RAM access offset set to $%06X, BANK=%d @ %s" NL, hi_ram_access_offset, bank, cpu_where());
 }
 
 
-static XEMU_INLINE void set_rom_bank ( Uint8 bank )
+// argument must be between 0...31
+static XEMU_INLINE void set_rom_bank ( const Uint8 bank )
 {
-	bank &= 31;
-	lo_ram[1] = bank | (128 + 64 + 32);
 	hi_rom_access_bank = bank;
-	hi_rom_access_offset = bank << 14;
-	hi_rom_p = hi_rom_base_ptr + hi_rom_access_offset - 0xC000;	// hi_rom_p is a pointer can be dereferenced with cpu addr directly
-	DEBUGPRINT("ROM: HI-ROM access offset set to $%05X, BANK=%d @ %s" NL, hi_rom_access_offset, bank, cpu_where());
+	lo_ram_ptr[1] = bank | (128 + 64 + 32);
+	hi_rom_p = hi_rom_rel_ptr + (bank << 14);
+	//DEBUGPRINT("ROM: HI-ROM access offset set to $%05X, BANK=%d @ %s" NL, hi_rom_access_offset, bank, cpu_where());
+}
+
+
+static int init_ram ( const int hi_ram_kbytes )
+{
+	memconfig_ready &= ~1;
+	if (hi_ram_kbytes < 8 || hi_ram_kbytes > 2048) {
+		ERROR_WINDOW("Bad high-RAM size, must be between 8 and 2048");
+		return 1;
+	}
+	if (hi_ram_kbytes & 7) {
+		ERROR_WINDOW("Bad high-RAM size, must be multiple of 8Kbytes");
+		return 1;
+	}
+	hi_ram_banks = hi_ram_kbytes >> 3;
+	DEBUGPRINT("RAM: Setting (hi-)RAM size memtop to %dK, %d banks." NL, hi_ram_kbytes, hi_ram_banks);
+	memset(lo_ram_ptr, 0xFF, LO_MEM_SIZE);
+	memset(hi_ram_abs_ptr, 0xFF, HI_RAM_MAX_SIZE);
+	set_ram_bank(0);
+	set_rom_bank(0);
+	memconfig_ready |= 1;
+	return 0;
 }
 
 
@@ -107,19 +138,19 @@ static XEMU_INLINE void set_rom_bank ( Uint8 bank )
 void  cpu65_write_callback ( Uint16 addr, Uint8 data )
 {
 	/**** 0000-9EFF: low RAM (fixed RAM) area ****/
-	if (addr < 0x9F00) {
-		if (XEMU_LIKELY(addr & 0xFFFE)) {
-			lo_ram[addr] = data;
+	if (addr < 0x9F00U) {
+		if (XEMU_LIKELY(addr & 0xFFFEU)) {
+			lo_ram_ptr[addr] = data;
 			return;
 		}
 		if (!addr)
 			set_ram_bank(data);
 		else
-			set_rom_bank(data);
+			set_rom_bank(data & 31);
 		return;
 	}
 	/**** 9F00-9FFF: I/O area ****/
-	if (addr < 0xA000) {
+	if (addr < 0xA000U) {
 		switch ((addr >> 4) & 0xF) {
 			case 0x0:
 				//IODEBUGPRINT("IO_W: writing to reg $%04X (data=$%02X), VIA-1 @ %s" NL, addr, data, cpu_where());
@@ -141,13 +172,13 @@ void  cpu65_write_callback ( Uint16 addr, Uint8 data )
 		return;
 	}
 	/**** A000-BFFF: 8K pageable RAM area, "hi-RAM" ****/
-	if (XEMU_LIKELY(addr < 0xC000)) {
+	if (XEMU_LIKELY(addr < 0xC000U)) {
 		if (XEMU_LIKELY(hi_ram_access_bank <= hi_ram_banks))
 			hi_ram_p[addr] = data;
 		return;
 	}
 	// Others (ROM) can be ignored, since it's ROM (not writable anyway) ...
-	DEBUGPRINT("ROM: trying to write ROM at address $%04X (in bank %d) @ %s" NL, addr, hi_ram_access_bank, cpu_where());
+	DEBUGPRINT("ROM: trying to write ROM at address $%04X (in bank %d) @ %s" NL, addr, hi_rom_access_bank, cpu_where());
 }
 
 
@@ -157,10 +188,10 @@ void  cpu65_write_callback ( Uint16 addr, Uint8 data )
 Uint8 cpu65_read_callback ( Uint16 addr )
 {
 	/**** 0000-9EFF: low RAM (fixed RAM) area ****/
-	if (addr < 0x9F00)
-		return lo_ram[addr];
+	if (addr < 0x9F00U)
+		return lo_ram_ptr[addr];
 	/**** 9F00-9FFF: I/O area ****/
-	if (addr < 0xA000) {
+	if (addr < 0xA000U) {
 		Uint8 data = 0xFF;
 		switch ((addr >> 4) & 0xF) {
 			case 0x0:
@@ -184,7 +215,7 @@ Uint8 cpu65_read_callback ( Uint16 addr )
 		return data;
 	}
 	/**** A000-BFFF: 8K pageable RAM area, "hi-RAM" ****/
-	if (addr < 0xC000)
+	if (addr < 0xC000U)
 		return hi_ram_p[addr];
 	/**** C000-FFFF: the rest, 16K pagable ROM area ****/
 	return hi_rom_p[addr];
@@ -196,8 +227,9 @@ Uint8 cpu65_read_callback ( Uint16 addr )
 
 static int load_rom ( const char *fn )
 {
-	memset(rom, 0xFF, sizeof rom);
-	const int ret = xemu_load_file(fn, rom, 16384, sizeof rom, "Cannot load ROM");
+	memconfig_ready &= ~2;
+	memset(hi_rom_abs_ptr, 0xFF, HI_ROM_MAX_SIZE);
+	const int ret = xemu_load_file(fn, hi_rom_abs_ptr, 16384, HI_ROM_MAX_SIZE, "Cannot load ROM");
 	if (ret <= 0)
 		return 1;
 	if (ret % 16384) {
@@ -206,25 +238,10 @@ static int load_rom ( const char *fn )
 	}
 	DEBUGPRINT("ROM: system ROM loaded, %d bytes, %d (16K) pages, source: %s" NL, ret, ret / 16384, xemu_load_filepath);
 	set_rom_bank(0);
+	memconfig_ready |= 2;
 	return 0;
 }
 
-
-static void init_ram ( int hi_ram_size )
-{
-	hi_rom_base_ptr = rom;
-	hi_ram_base_ptr = hi_ram;
-	if (hi_ram_size > 2048)
-		hi_ram_size = 2048;
-	if (hi_ram_size < 0)
-		hi_ram_size = 0;
-	hi_ram_banks = hi_ram_size >> 3;
-	DEBUGPRINT("RAM: Setting (hi-)RAM size memtop to %dK, %d banks." NL, hi_ram_size, hi_ram_banks);
-	memset(lo_ram, 0, sizeof lo_ram);
-	memset(hi_ram, 0xFF, sizeof hi_ram);
-	set_ram_bank(0);
-	set_rom_bank(0);
-}
 
 
 
@@ -232,26 +249,25 @@ static void init_ram ( int hi_ram_size )
 
 static void via1_outa ( Uint8 mask, Uint8 data )
 {
-	//DEBUGPRINT("VIA OUTA (RAM BANK) SET mask=%d data=%d" NL, (int)mask, (int)data);
-	//set_ram_bank(data);
+	DEBUGPRINT("VIA1: OUTA: DDR=%02X I2C" NL, via1.DDRA);
+	i2c_bus_write(data & 3);
 }
 
 static Uint8 via1_ina ( Uint8 mask )
 {
-	//DEBUGPRINT("READING VIA1-A (RAM BANK): $%02X" NL, via1.ORA);
+	DEBUGPRINT("VIA1: INA: DDR=%02X I2C" NL, via1.DDRA);
+	//DEBUGPRINT("I2C: reading port!" NL);
 	//return via1.ORA;
-	return read_ps2_port() | (0xFF - 3);
+	return i2c_bus_read() | (0xFF - 3);
 }
 
 static void via1_outb ( Uint8 mask, Uint8 data )
 {
-	//DEBUGPRINT("VIA OUTB (ROM BANK) SET mask=%d data=%d" NL, (int)mask, (int)data);
-	//set_rom_bank(data);
 }
 
 static Uint8 via1_inb ( Uint8 mask )
 {
-	//DEBUGPRINT("READING VIA1-B (ROM BANK): $%02X" NL, via1.ORB);
+	return 0xFF;		// without this, no READY. prompt. Something needs to be emulated here.
 	return via1.ORB;
 }
 
@@ -259,10 +275,18 @@ static Uint8 via1_inb ( Uint8 mask )
 
 static void via1_setint ( int level )
 {
+	// TODO: it seems, according to the DOC, VIA1 interrupt output is connected to NMI of the CPU!!!!! [and VIA2 to IRQ, but VIA2 is not even used by the system recently ...]
+#if 0
 	if (level)
 		cpu65.irqLevel |=  0x100;
 	else
 		cpu65.irqLevel &= ~0x100;
+#endif
+	static int old_level = 0;
+	if (!old_level && level)
+		cpu65.nmiEdge = 1;
+	old_level = level;
+
 }
 
 
@@ -284,25 +308,20 @@ static Uint8 via2_ina ( Uint8 mask )
 
 static void update_emulator ( void )
 {
-	if (!frameskip) {
-		// First: update screen ...
-		xemu_update_screen();
-		// Second: we must handle SDL events waiting for us in the event queue ...
-		hid_handle_all_sdl_events();
-		// Third: Sleep ... Please read emutools.c source about this madness ... 40000 is (PAL) microseconds for a full frame to be produced
-		xemu_timekeeping_delay(FULL_FRAME_USECS);
-	}
-	//vic_vsync(!frameskip);	// prepare for the next frame!
+	// First: update screen ...
+	xemu_update_screen();
+	// Second: we must handle SDL events waiting for us in the event queue ...
+	hid_handle_all_sdl_events();
+	// Third: Sleep ... Please read emutools.c source about this madness ... 40000 is (PAL) microseconds for a full frame to be produced
+	xemu_timekeeping_delay(FULL_FRAME_USECS);
 }
 
 
 
-static int cycles;
-Uint64 all_virt_cycles = 0;
-
 
 static void emulation_loop ( void )
 {
+	static int cycles = 0;
 	for (;;) { // our emulation loop ...
 		int opcyc;
 		//printf("PC=%04X OPC=%02X\n", cpu65.pc, cpu65_read_callback(cpu65.pc));
@@ -311,14 +330,11 @@ static void emulation_loop ( void )
 		via_tick(&via2, opcyc);	// -- "" -- the same for VIA-2
 		//opcyc <<= speed_shifter;
 		cycles += opcyc;
-		all_virt_cycles += opcyc;
+		all_cycles += opcyc;
 		if (cycles >= cycles_per_scanline) {
-			if (!frameskip) {
-			}
 			if (vera_render_line() == 0) {	// start of a new frame that is ...
 				update_emulator();
 				//vera_vsync();
-				frameskip = !frameskip;
 				return;
 			}
 			cycles -= cycles_per_scanline;
@@ -348,11 +364,11 @@ int dump_stuff ( const char *fn, void *mem, int size )
 
 static void emulator_shutdown ( void )
 {
-	if (configdb.dumpmem) {
-		vera_dump_vram("vram.dump");
-		dump_stuff("loram.dump", lo_ram, sizeof lo_ram);
+	if (configdb.dumpmem && memconfig_ready == 3) {
+		vera_dump_vram("ram_vera.dump");
+		dump_stuff("ram_lo.dump", lo_ram_ptr, LO_MEM_REAL_SIZE);
 		if (hi_ram_banks)
-			dump_stuff("hiram.dump", hi_ram, hi_ram_banks << 13);
+			dump_stuff("ram_hi.dump", hi_ram_abs_ptr, hi_ram_banks << 13);
 	}
 }
 
@@ -362,6 +378,14 @@ static void reset_machine ( void )
 	set_rom_bank(0);
 	set_ram_bank(0);
 	cpu65_reset();
+}
+
+
+static void set_cpu_speed ( const unsigned int hz )
+{
+	cycles_per_scanline = hz / 525 / 60;	// FIXME: do not hard code scanline number per frame?
+	DEBUGPRINT("CPU: Clock requested %f MHz, %d cycles per scanline." NL, (float)hz / 1000000, cycles_per_scanline);
+	ps2_set_clock_factor(hz);
 }
 
 
@@ -399,12 +423,12 @@ int main ( int argc, char **argv )
 		SDL_ENABLE		// enable HID joy events
 	);
 	// --- memory initialization ---
-	init_ram(configdb.hiramsize);
+	if (init_ram(configdb.hiramsize))
+		return 1;
 	if (load_rom(configdb.rom))
 		return 1;
 	// Continue with initializing ...
-	cycles_per_scanline = configdb.clock * 1000000 / 525 / 60;
-	DEBUGPRINT("Clock requested %d MHz, %d cycles per scanline" NL, configdb.clock, cycles_per_scanline);
+	set_cpu_speed(configdb.clock * 1000000);
 	vera_init();
 	clear_emu_events();	// also resets the keyboard
 	// Initiailize VIAs.
@@ -434,7 +458,6 @@ int main ( int argc, char **argv )
 	//via1.ORB = 0xFF;
 	//via2.ORA = 0xFF;
 	//via2.ORB = 0xFF;
-	cycles = 0;
 	xemu_set_full_screen(configdb.fullscreen);
 	if (!configdb.syscon)
 		sysconsole_close(NULL);
@@ -446,6 +469,6 @@ int main ( int argc, char **argv )
 	close(2);
 #endif
 	DEBUGPRINT("CPU: starting exection at $%04X" NL, cpu65.pc);
-	XEMU_MAIN_LOOP(emulation_loop, 30, 1);
+	XEMU_MAIN_LOOP(emulation_loop, 60, 1);
 	return 0;
 }

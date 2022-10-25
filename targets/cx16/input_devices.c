@@ -54,80 +54,116 @@ static const struct ps2_keymap_st ps2_keymap[] = {
 	{SDL_SCANCODE_KP_PLUS,		0x79},	{SDL_SCANCODE_KP_MINUS,		0x7b},	{SDL_SCANCODE_KP_MULTIPLY,	0x7c},	{SDL_SCANCODE_KP_DIVIDE,	0x14a},	{0,				-1}
 };
 
+
+#define KBD_QUEUE_LEN 4
+static int kbd_queue[KBD_QUEUE_LEN];
+static int kbd_queue_size = 0;
+static Uint64 last_key_queued_at = 0;
+static Uint64 forget_key_cycles;
+static Uint64 clock_factor;
+static int stream_size = 0;
+static int stream[1000];	// FIXME: exact size?
+
+
+#define DAT_LO	0
+#define	DAT_HI	1
+#define	CLK_LO	0
+#define CLK_HI	2
+
+
 void clear_emu_events ( void )
 {
 	hid_reset_events(1);
 }
 
 
-
-
-
-static Uint8  ps2_stream[128];
-static int    ps2_stream_w_pos = 0;
-static Uint64 virt_cycle_last_read;
-
-
-int read_ps2_port ( void )
+void ps2_set_clock_factor ( const unsigned int cpu_hz )
 {
-	static int clk = 2;
-	static int data = 1;
-	if (ps2_stream_w_pos) {
-		Uint64 since = all_virt_cycles - virt_cycle_last_read;
-		// This is BAD, since actually the keyboard sends data the CPU takes care or not, it won't "pause" just because PS/2 lines are not checked ...
-		if (since > 333) {
-			virt_cycle_last_read = all_virt_cycles;
-			//while (since > 333 && ps2_stream_w_pos) {
-				clk ^= 2;
-				if (!clk) {
-					data = ps2_stream[0];
-					memmove(ps2_stream, ps2_stream + 1, --ps2_stream_w_pos);
-				}
-			//	since -= 333;
-			//}
-		}
-	} else {
-		clk = 2;
-		data = 1;
-	}
-	return clk | data;
+	clock_factor = cpu_hz / 12500;
+	forget_key_cycles = cpu_hz / 10;
+	DEBUGPRINT("PS2: clock factor set to %u" NL, (unsigned int)clock_factor);
 }
 
 
-static void queue_ps2_device_packet ( Uint8 data )
+static void render_packet ( Uint8 data )
 {
-	//DEBUGPRINT("PS2: queuing protocol byte $%02X" NL, data);
-	ps2_stream[ps2_stream_w_pos++] = 0;	// start bit, always zero
+	stream[stream_size++] = CLK_HI + DAT_HI;
+	stream[stream_size++] = CLK_HI + DAT_HI;
+	// Start bit
+	stream[stream_size++] = CLK_HI + DAT_LO;
+	stream[stream_size++] = CLK_LO + DAT_LO;
+	stream[stream_size++] = CLK_LO + DAT_LO;
+	stream[stream_size++] = CLK_HI + DAT_LO;
+	// Individual bits of the data byte to be sent
 	int parity = 1;				// odd parity, we start with '1'.
 	for (int a = 0; a < 8; a++, data >>=1 ) {
-		ps2_stream[ps2_stream_w_pos++] = (data & 1);
-		if ((data & 1))
-			parity ^= 1;
+		parity ^= (data & 1);
+		stream[stream_size++] = CLK_HI + (data & 1);
+		stream[stream_size++] = CLK_LO + (data & 1);
+		stream[stream_size++] = CLK_LO + (data & 1);
+		stream[stream_size++] = CLK_HI + (data & 1);
 	}
-	ps2_stream[ps2_stream_w_pos++] = parity;
-	ps2_stream[ps2_stream_w_pos++] = 1;	// stop bit, always one
+	// Parity bit
+	stream[stream_size++] = CLK_HI + parity;
+	stream[stream_size++] = CLK_LO + parity;
+	stream[stream_size++] = CLK_LO + parity;
+	stream[stream_size++] = CLK_HI + parity;
+	// Stop bit
+	stream[stream_size++] = CLK_HI + DAT_HI;
+	stream[stream_size++] = CLK_LO + DAT_HI;
+	stream[stream_size++] = CLK_LO + DAT_HI;
+	stream[stream_size++] = CLK_HI + DAT_HI;
+
+
+
+	//stream[stream_size++] = CLK_LO + DAT_HI;
+	//stream[stream_size++] = CLK_LO + DAT_HI;
+
+	for (int a = 0; a < 200; a++)
+		stream[stream_size++] = CLK_HI + DAT_HI;
 }
 
 
-static XEMU_INLINE void emit_ps2_event ( SDL_Scancode key, int pressed )
+int ps2_read_kbd_port ( void )
 {
-	const struct ps2_keymap_st *p = ps2_keymap;
-	while (p->ps2_code >= 0)
-		if (key == p->key) {
-			if (ps2_stream_w_pos < sizeof(ps2_stream) - 12 * 3) {
-				int ps2 = p->ps2_code;
-				//fprintf(stderr, "FOUND KEY: SDL=%d PS2=%d PRESSED=%s\n", p->key, ps2, pressed ? "pressed" : "released");
-				if (ps2 >= 0x100)
-					queue_ps2_device_packet(0xE0);	// extended key, emit E0
-				if (!pressed)
-					queue_ps2_device_packet(0xF0);	// "break" code, ie, release of a key
-				queue_ps2_device_packet(ps2 & 0xFF);
-			} else
-				DEBUGPRINT("PS2: protocol stream is full :-(" NL);
-			return;
-		} else
-			p++;
-	//DEBUGPRINT("PS2: KEY NOT FOUND SDL=%d PRESSED=%s" NL, key, pressed ? "pressed" : "released");
+	static Uint64 start_tx = 0;
+	Uint64 phase;
+	if (start_tx) {
+		phase = (Uint64)(all_cycles - start_tx) / clock_factor;
+		if (phase >= (Uint64)stream_size)
+			start_tx = 0;
+	}
+	if (!start_tx) {
+		if (all_cycles - last_key_queued_at > forget_key_cycles)
+			kbd_queue_size = 0;
+		if (!kbd_queue_size)
+			return CLK_HI + DAT_HI;	// no PS/2 data, CLK and DATA are both at high state
+		const int code = kbd_queue[0];
+		stream_size = 0;
+		if (code & 0x100)
+			render_packet(0xE0);	// extended key
+		if (code & 0x200)
+			render_packet(0xF0);	// key is released (not pressed)
+		render_packet(code & 0xFF);
+		for (int a = 1; a < kbd_queue_size; a++)
+			kbd_queue[a - 1] = kbd_queue[a];
+		kbd_queue_size--;
+		start_tx = all_cycles;
+		phase = 0;
+		for (int a = 0; a < 18; a++)
+			stream[stream_size++] = CLK_HI + DAT_HI;
+		DEBUGPRINT("KBD: queued, %d events" NL, stream_size);
+	}
+	static Uint64 reported = (Uint64)-1;
+	static unsigned int reported_same_len_new = 0, reported_same_len = 0;
+	if (reported != phase) {
+		reported_same_len = reported_same_len_new;
+		reported_same_len_new = 0;
+		DEBUGPRINT("KBD: streamed phase %u/%u (same data = %u)" NL, (unsigned int)phase, stream_size, reported_same_len);
+		reported = phase;
+	} else
+		reported_same_len_new++;
+	return stream[phase];
 }
 
 
@@ -141,6 +177,17 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			pos, key, pressed, handled
 	);*/
 	if (pos == -1 && handled == 0)
-		emit_ps2_event(key, pressed);
+		for (const struct ps2_keymap_st *p = ps2_keymap; p->ps2_code >= 0; p++)
+			if (key == p->key) {
+				if (all_cycles - last_key_queued_at > forget_key_cycles)
+					kbd_queue_size = 0;
+				if (kbd_queue_size < KBD_QUEUE_LEN) {
+					kbd_queue[kbd_queue_size++] = p->ps2_code + (pressed ? 0 : 0x200);
+					last_key_queued_at = all_cycles;
+					DEBUGPRINT("KBD: queued key '%d' <%s> (%s)" NL, p->ps2_code, SDL_GetScancodeName(key), pressed ? "PRESS" : "RELEASE");
+				} else
+					DEBUGPRINT("KBD: keyboard queue overflow :(" NL);
+				break;
+			}
 	return 0;
 }

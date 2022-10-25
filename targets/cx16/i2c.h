@@ -1,5 +1,5 @@
-/* Preliminary Commander X16 emulation ...
-   Copyright (C)2019 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,10 +15,10 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_LOCAL_COMMANDER_X16_INPUT_DEVICES_H_INCLUDED
-#define __XEMU_LOCAL_COMMANDER_X16_INPUT_DEVICES_H_INCLUDED
+#ifndef __XEMU_LOCAL_I2C_H_INCLUDED
+#define __XEMU_LOCAL_I2C_H_INCLUDED
 
-extern int  ps2_read_kbd_port ( void );
-extern void ps2_set_clock_factor ( const unsigned int cpu_hz );
+extern Uint8 i2c_bus_read ( void );
+extern void i2c_bus_write ( Uint8 data );
 
 #endif

@@ -22,16 +22,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888
 
-#define FULL_FRAME_USECS	39971
-
-#define REAL_CPU_SPEED		1108404
-
 #define USE_LOCKED_TEXTURE	1
 #define RENDER_SCALE_QUALITY	2
 
 #define ROM_NAME		"#cx16-system.rom"
 
-extern Uint64 all_virt_cycles;
+extern Uint64 all_cycles;
 
 extern int dump_stuff ( const char *fn, void *mem, int size );
 

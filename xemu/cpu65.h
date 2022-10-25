@@ -56,6 +56,9 @@ struct cpu65_st {
 	int nmos_mode;
 	int prefix;
 #endif
+#ifdef CPU_65C02_WDC_WAI_AND_STP
+	int wdc_wai, wdc_stp;
+#endif
 #ifdef CPU_65CE02
 	Uint8 z;
 	Uint16 bphi, sphi;		// NOTE: it must store the value shifted to the high byte!
