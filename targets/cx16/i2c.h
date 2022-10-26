@@ -19,6 +19,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define __XEMU_LOCAL_I2C_H_INCLUDED
 
 extern Uint8 i2c_bus_read ( void );
-extern void i2c_bus_write ( Uint8 data );
+extern void i2c_bus_write ( const Uint8 data, const Uint8 mask );
 
 #endif

@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/via65c22.h"
 #include "vera.h"
 #include "input_devices.h"
+#include "i2c.h"
 
 
 #define	IODEBUGPRINT	DEBUGPRINT
@@ -249,13 +250,13 @@ static int load_rom ( const char *fn )
 
 static void via1_outa ( Uint8 mask, Uint8 data )
 {
-	DEBUGPRINT("VIA1: OUTA: DDR=%02X I2C" NL, via1.DDRA);
-	i2c_bus_write(data & 3);
+	//DEBUGPRINT("VIA1: OUTA: DDR=%02X I2C" NL, via1.DDRA);
+	i2c_bus_write(data & 3, mask & 3);
 }
 
 static Uint8 via1_ina ( Uint8 mask )
 {
-	DEBUGPRINT("VIA1: INA: DDR=%02X I2C" NL, via1.DDRA);
+	//DEBUGPRINT("VIA1: INA: DDR=%02X I2C" NL, via1.DDRA);
 	//DEBUGPRINT("I2C: reading port!" NL);
 	//return via1.ORA;
 	return i2c_bus_read() | (0xFF - 3);

@@ -25,40 +25,43 @@ static int sdc = 2;
 static int sda_send = 1;
 static int state = 0;
 
+static struct {
+	int	clock;
+	int	data;
+	int	old_clock;
+	int	old_data;
+} bus; /* = {
+	.clock	= 1,
+	.data	= 1,
+	.
+};*/
+
 
 
 Uint8 i2c_bus_read ( void )
 {
 	return 3;
-	if (!state)
-		return 3;
-	return sdc | 1;
+	return (bus.clock ? 2 : 0) + (bus.data ? 1 : 0);
 }
 
 
-void i2c_bus_write ( Uint8 data )
+void i2c_bus_write ( const Uint8 data, const Uint8 mask )
 {
-	data &= 3;
-	static int old = 0, sda_old, sdc_old;
-	if (old == data)
-		return;
-	const int sda = data & 1;
-	sdc = data & 2;
-	const int sdc_raising_edge = !sdc_old &&  sdc;
-	const int sdc_falling_edge =  sdc_old && !sdc;
-
-	DEBUGPRINT("I2C send: %d->%d" NL, old, data);
-	static int command;
-	if (old == 3 && data == 0 && state == 0) {
-		// was a "start condition"
-		DEBUGPRINT("I2C: start condition!" NL);
-		state = 1;
-		command = 0;
-	} else {
-		command = (command << 1) + sda;
-		DEBUGPRINT("I2C: another change: %d -> %d command so far: $%02X" NL, old, data, command);
+	bus.old_clock = bus.clock;
+	bus.old_data = bus.data;
+	// check CLK
+	if (mask & 2)			// DDR: output ...
+		bus.clock = data & 2;	// ... so VIA drives the bus.
+	else				// DDR: input ...
+		bus.clock = 2;		// ... so pull-up resistor.
+	// check DATA
+	if (mask & 1)			// DDR: output ...
+		bus.data = data & 1;	// ... so VIA drives the bus.
+	else				// DDR: input ...
+		bus.data = 1;		// ... so pull-up resistor.
+	if (bus.data != bus.old_data || bus.clock != bus.old_clock) {
+		static Uint64 collect = 0;
+		collect = (collect << 1) | (Uint64)bus.data;
+		DEBUGPRINT("I2C: change: CLK:%d->%d DAT:%d->%d DATA:%X" NL, bus.old_clock, bus.clock, bus.old_data, bus.data, (unsigned int)collect);
 	}
-	old = data;
-	sda_old = sda;
-	sdc_old = sdc;
 }
