@@ -77,8 +77,6 @@ int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it mu
 static Uint8 nvram_original[sizeof nvram];
 static int uuid_must_be_saved = 0;
 
-int registered_screenshot_request = 0;
-
 Uint8 last_dd00_bits = 3;		// Bank 0
 const char *last_reset_type;
 
@@ -308,6 +306,9 @@ static void preinit_memory_for_start ( void )
 	//                  ----------------------------------------------------------------------------------------------------------------------------------------------------------
 	if (!hickup_is_overriden)
 		hypervisor_debug_invalidate("no external hickup is loaded, built-in one does not have debug info");
+	// At this point, be sure, we have the 2K "C65" style colour RAM @ $1F800 are in sync with the "fast" RAM, as Xemu uses some shadowing as a performance hack!
+	// As we updated the colour RAM above, let's update the corresponding part of the main_ram according to that
+	memcpy(main_ram + 0x1F800, colour_ram, 2048);
 }
 
 
@@ -367,6 +368,8 @@ static void mega65_init ( void )
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
 	vic_init();
+	vic4_disallow_videostd_change = configdb.lock_videostd;
+	vic4_set_videostd(configdb.videostd >= 0 ? configdb.videostd : 0, "by emulator initalization");
 	// *** CIAs
 	cia_init(&cia1, "CIA-1",
 		NULL,			// callback: OUTA
@@ -435,6 +438,23 @@ int dump_memory ( const char *fn )
 }
 
 
+int dump_screen ( const char *fn )
+{
+	if (!fn || !*fn)
+		return 0;
+	char *text = vic4_textshot();
+	int retcode = 1;
+	if (text) {
+		if (*text)
+			retcode = xemu_save_file(fn, text, strlen(text), "Cannot dump ASCII screen content into file");
+		else
+			retcode = 0;
+	}
+	free(text);
+	return retcode;
+}
+
+
 static void shutdown_callback ( void )
 {
 	// Write out NVRAM if changed!
@@ -454,6 +474,7 @@ static void shutdown_callback ( void )
 	cia_dump_state (&cia2);
 #if !defined(XEMU_ARCH_HTML)
 	(void)dump_memory(configdb.dumpmem);
+	(void)dump_screen(configdb.dumpscreen);
 #endif
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_close();

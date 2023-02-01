@@ -33,7 +33,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 //#include "xemu/f011_core.h"
 #include "dma65.h"
 #include "memory_mapper.h"
-#include "xemu/basic_text.h"
 #include "audio65.h"
 #include "vic4.h"
 #include "configdb.h"
@@ -533,16 +532,8 @@ static void ui_emu_info ( void )
 
 static void ui_put_screen_text_into_paste_buffer ( void )
 {
-	char text[8192];
-	char *result = xemu_cbm_screen_to_text(
-		text,
-		sizeof text,
-		main_ram + ((vic_registers[0x31] & 0x80) ? (vic_registers[0x18] & 0xE0) << 6 : (vic_registers[0x18] & 0xF0) << 6),	// pointer to screen RAM, try to audo-tected: FIXME: works only in bank0!
-		(vic_registers[0x31] & 0x80) ? 80 : 40,		// number of columns, try to auto-detect it
-		25,						// number of rows
-		(vic_registers[0x18] & 2)			// lowercase font? try to auto-detect by checking selected address chargen addr, LSB
-	);
-	if (result == NULL)
+	char *result = vic4_textshot();
+	if (!result)
 		return;
 	if (*result) {
 		if (SDL_SetClipboardText(result))
@@ -551,6 +542,22 @@ static void ui_put_screen_text_into_paste_buffer ( void )
 			OSD(-1, -1, "Copied to OS paste buffer.");
 	} else
 		INFO_WINDOW("Screen is empty, nothing to capture.");
+	free(result);
+}
+
+static void ui_put_screen_text_into_file ( void )
+{
+	char fnbuf[PATH_MAX + 1];
+	_check_file_selection_default_override(last_used_dump_directory);
+	if (!xemugui_file_selector(
+		XEMUGUI_FSEL_SAVE | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		"Dump screen ASCII content into file",
+		last_used_dump_directory,
+		fnbuf,
+		sizeof fnbuf
+	)) {
+		dump_screen(fnbuf);
+	}
 }
 
 static void ui_put_paste_buffer_into_screen_text ( void )
@@ -563,13 +570,7 @@ static void ui_put_paste_buffer_into_screen_text ( void )
 		t2++;
 	if (!*t2)
 		goto no_clipboard;
-	xemu_cbm_text_to_screen(
-		main_ram + ((vic_registers[0x31] & 0x80) ? (vic_registers[0x18] & 0xE0) << 6 : (vic_registers[0x18] & 0xF0) << 6),	// pointer to screen RAM, try to audo-tected: FIXME: works only in bank0!
-		(vic_registers[0x31] & 0x80) ? 80 : 40,		// number of columns, try to auto-detect it
-		25,						// number of rows
-		t2,						// text buffer as input
-		(vic_registers[0x18] & 2)			// lowercase font? try to auto-detect by checking selected address chargen addr, LSB
-	);
+	vic4_textinsert(t2);
 	SDL_free(t);
 	return;
 no_clipboard:
@@ -593,17 +594,15 @@ static void ui_cb_audio_volume ( const struct menu_st *m, int *query )
 static void ui_cb_video_standard ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == videostd_id);
-	if (VOIDPTR_TO_INT(m->user_data))
-		vic_registers[0x6F] |= 0x80;
-	else
-		vic_registers[0x6F] &= 0x7F;
-	configdb.force_videostd = -1;	// turn off possible CLI/config dictated force video mode, otherwise it won't work to change video standard ...
+	configdb.videostd = VOIDPTR_TO_INT(m->user_data);
+	vic4_set_videostd(configdb.videostd, "requested by UI");
 }
 
 static void ui_cb_video_standard_disallow_change ( const struct menu_st *m, int *query )
 {
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, vic4_disallow_video_std_change);
-	vic4_disallow_video_std_change = vic4_disallow_video_std_change ? 0 : 2;
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, configdb.lock_videostd);
+	configdb.lock_videostd = !configdb.lock_videostd;
+	vic4_disallow_videostd_change = configdb.lock_videostd;
 }
 
 static void ui_cb_fullborders ( const struct menu_st *m, int *query )
@@ -684,9 +683,10 @@ static const struct menu_st menu_display[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK |
 					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_toggle_int, (void*)&configdb.show_drive_led },
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
-	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &registered_screenshot_request },
+	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &vic4_registered_screenshot_request },
 #endif
 	{ "Screen to OS paste buffer",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_screen_text_into_paste_buffer },
+	{ "Screen to ASCII file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_screen_text_into_file },
 	{ "OS paste buffer to screen",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_paste_buffer_into_screen_text },
 	{ NULL }
 };

@@ -97,6 +97,8 @@ Uint32 *sdl_pixel_buffer = NULL;
 Uint32 *xemu_frame_pixel_access_p = NULL;
 int texture_x_size_in_bytes;
 int emu_is_fullscreen = 0;
+int emu_is_headless = 0;
+int emu_is_sleepless = 0;
 static int win_xsize, win_ysize;
 char *sdl_pref_dir = NULL, *sdl_base_dir = NULL, *sdl_inst_dir = NULL;
 Uint32 sdl_winid;
@@ -374,6 +376,8 @@ void xemu_set_screen_mode ( int setting )
 
 static inline void do_sleep ( int td )
 {
+	if (XEMU_UNLIKELY(emu_is_sleepless))
+		return;
 #ifdef XEMU_ARCH_HTML
 #define __SLEEP_METHOD_DESC "emscripten_set_main_loop_timing"
 	// Note: even if td is zero (or negative ...) give at least a little time for the browser
@@ -582,7 +586,6 @@ static void shutdown_emulator ( void )
 		sdl_win = NULL;
 	}
 	atexit_callback_for_console();
-	//SDL_Quit();
 	if (td_stat_counter) {
 		char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
 		xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
@@ -594,6 +597,7 @@ static void shutdown_emulator ( void )
 	}
 	// It seems, calling SQL_Quit() at least on Windows causes "segfault".
 	// Not sure why, but to be safe, I just skip calling it :(
+	//SDL_Quit();
 #ifndef XEMU_ARCH_WIN
 	SDL_Quit();
 #endif
@@ -1008,9 +1012,6 @@ int xemu_post_init (
 	void (*shutdown_callback)(void)		// callback function called on exit (can be nULL to not have any emulator specific stuff)
 ) {
 	srand((unsigned int)time(NULL));
-#	include "build/xemu-48x48.xpm"
-	SDL_RendererInfo ren_info;
-	int a;
 	if (!debug_fp)
 		xemu_init_debug(getenv("XEMU_DEBUG_FILE"));
 	if (!debug_fp && chatty_xemu)
@@ -1021,6 +1022,15 @@ int xemu_post_init (
 		ERROR_WINDOW("Byte order test failed!!");
 		return 1;
 	}
+#ifndef	XEMU_ARCH_HTML
+	if (emu_is_headless) {
+		static char *dummies[] = { "SDL_VIDEODRIVER=dummy", "SDL_AUDIODRIVER=dummy", NULL };
+		for (char **p = dummies; *p; p++) {
+			DEBUGPRINT("SDL: headless mode env-var setup: %s" NL, *p);
+			putenv(*p);
+		}
+	}
+#endif
 #ifdef SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR
 	// Disallow disabling compositing (of KDE, for example)
 	// Maybe needed before SDL_Init(), so it's here before calling xemu_init_sdl()
@@ -1079,6 +1089,10 @@ int xemu_post_init (
 #ifdef SDL_HINT_VIDEO_ALLOW_SCREENSAVER
 	SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");				// 1 = enable screen saver
 #endif
+#if defined(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK) && defined(XEMU_ARCH_MAC)
+#	warning "Activating workaround for lame newer Apple notebooks (no right click on touchpads)"
+	SDL_SetHint(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK, "1");			// 1 = enable CTRL + click = right click (needed for modern Mac touchpads, it seems)
+#endif
 	/* end of SDL hints section */
 	sdl_window_title = xemu_strdup(window_title);
 	sdl_win = SDL_CreateWindow(
@@ -1098,7 +1112,8 @@ int xemu_post_init (
 	strcpy(window_title_buffer, window_title);
 	window_title_buffer_end = window_title_buffer + strlen(window_title);
 	//SDL_SetWindowMinimumSize(sdl_win, SCREEN_WIDTH, SCREEN_HEIGHT * 2);
-	a = SDL_GetNumRenderDrivers();
+	int a = SDL_GetNumRenderDrivers();
+	SDL_RendererInfo ren_info;
 	while (--a >= 0) {
 		if (!SDL_GetRenderDriverInfo(a, &ren_info)) {
 			DEBUGPRINT("SDL renderer driver #%d: \"%s\"" NL, a, ren_info.name);
@@ -1146,6 +1161,7 @@ int xemu_post_init (
 	xemu_render_dummy_frame(black_colour, texture_x_size, texture_y_size);
 	if (chatty_xemu)
 		printf(NL);
+#	include "build/xemu-48x48.xpm"
 	xemu_set_icon_from_xpm(favicon_xpm);
 	return 0;
 }

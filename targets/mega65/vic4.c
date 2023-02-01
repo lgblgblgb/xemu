@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/f011_core.h"
 #include "xemu/emutools_files.h"
 #include "io_mapper.h"
+#include "xemu/basic_text.h"
 
 
 #define SPRITE_SPRITE_COLLISION
@@ -87,7 +88,9 @@ int videostd_changed = 0;
 static const char NTSC_STD_NAME[] = "NTSC";
 static const char PAL_STD_NAME[] = "PAL";
 int vic_readjust_sdl_viewport = 0;
-int vic4_disallow_video_std_change = 1;
+int vic4_disallow_videostd_change = 0;		// Disallows programs to change video std via register D06F, bit 7 (emulator internally writing that bit still can change video std though!)
+int vic4_registered_screenshot_request = 0;
+
 
 // VIC-IV Modeline Parameters
 // ----------------------------------------------------
@@ -221,12 +224,12 @@ void vic4_close_frame_access ( void )
 	pixel_readback();
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	// Screenshot
-	if (XEMU_UNLIKELY(registered_screenshot_request)) {
+	if (XEMU_UNLIKELY(vic4_registered_screenshot_request)) {
 		unsigned int x1, y1, x2, y2;
 		xemu_get_viewport(&x1, &y1, &x2, &y2);
-		registered_screenshot_request = 0;
+		vic4_registered_screenshot_request = 0;
 		if (!xemu_screenshot_png(
-			NULL, NULL,
+			NULL, configdb.screenshot_and_exit,
 			1, 1,		// no ratio/zoom correction is applied
 			pixel_start + y1 * TEXTURE_WIDTH + x1,	// pixel pointer corresponding to the top left corner of the viewport
 			x2 - x1 + 1,	// width
@@ -236,6 +239,10 @@ void vic4_close_frame_access ( void )
 			const char *p = strrchr(xemu_screenshot_full_path, DIRSEP_CHR);
 			if (p)
 				OSD(-1, -1, "%s", p + 1);
+		}
+		if (configdb.screenshot_and_exit) {
+			DEBUGPRINT("VIC4: exiting on 'exit-on-screenshot' feature." NL);
+			XEMUEXIT(0);
 		}
 	}
 #endif
@@ -383,7 +390,7 @@ void vic4_open_frame_access ( void )
 	// Though it can be changed any time, this kind of information really only can be applied
 	// at frame level. Thus we check here, if during the previous frame there was change
 	// and apply the video mode set for our just started new frame.
-	Uint8 new_mode = (configdb.force_videostd >= 0) ? configdb.force_videostd : !!(vic_registers[0x6F] & 0x80);
+	const Uint8 new_mode = !!(vic_registers[0x6F] & 0x80);
 	if (XEMU_UNLIKELY(new_mode != videostd_id)) {
 		// We have video mode change!
 		videostd_id = new_mode;
@@ -429,6 +436,17 @@ void vic4_open_frame_access ( void )
 			xemu_set_viewport(0, 0, TEXTURE_WIDTH - 1, max_rasters - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
 		else
 			xemu_set_viewport(48, 0, TEXTURE_WIDTH - 48, visible_area_height - 1, XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE);
+	}
+}
+
+
+// This works even if vic4_disallow_videostd_change is true!
+void vic4_set_videostd ( const int mode, const char *comment )
+{
+	// other values are ignored, since the caller may have the policy that -1 means leave it as it was, etc
+	if (mode == 0 || mode == 1) {
+		vic_registers[0x6F] = (vic_registers[0x6F] & 0x7F) | (mode << 7);
+		DEBUGPRINT("VIC: setting %s mode (%s)" NL, mode ? "NTSC" : "PAL", comment ? comment : EMPTY_STR);
 	}
 }
 
@@ -739,7 +757,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;
 		CASE_VIC_4(0x6F):
 			// If video standard change was disallowed, we keep bit7 as is, regardless of the write
-			if (vic4_disallow_video_std_change)
+			if (vic4_disallow_videostd_change)
 				data = (vic_registers[0x6F] & 0x80) | (data & 0x7F);
 			// We trigger video setup at next frame automatically, no need do anything further here
 			break;
@@ -1107,7 +1125,7 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 				const Uint8 *sprite_data_pointer = main_ram + sprite_pointer_addr + sprnum * ((SPRITE_16BITPOINTER >> 7) + 1);
 				const Uint32 sprite_data_addr = SPRITE_16BITPOINTER ?
 					64 * ((*(sprite_data_pointer + 1) << 8) | (*sprite_data_pointer))
-					: ((64 * (*sprite_data_pointer)) | ( ((~last_dd00_bits) & 0x3)) << 14);
+					: ((64 * (*sprite_data_pointer)) | (SPRITE_POINTER_ADDR & 0xC000)); // Use bits 14-15 (this can be set from $DD00 if HOTREG is ENABLED)
 
 				//DEBUGPRINT("VIC: Sprite %d data at $%08X " NL, sprnum, sprite_data_addr);
 				const Uint8 *sprite_data = main_ram + sprite_data_addr;
@@ -1321,7 +1339,7 @@ static XEMU_INLINE Uint8 *get_charset_effective_addr ( void )
 // color modes:
 //
 // - Monochrome (Bg/Fg)
-// - VICII Multicolor
+// - VIC-II Multicolor
 // - 16-color
 // - 256-color
 //
@@ -1336,8 +1354,8 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 	enable_bg_paint = 1;
 	const Uint8 *row_data_base_addr = get_charset_effective_addr();	// FIXME: is it OK that I moved here, before the loop?
 	if (display_row <= display_row_count) {
-		Uint8 *colour_ram_current_ptr = colour_ram + COLOUR_RAM_OFFSET + (display_row * LINESTEP_BYTES);
-		Uint8 *screen_ram_current_ptr = main_ram + SCREEN_ADDR + (display_row * LINESTEP_BYTES);
+		Uint32 colour_ram_current_addr = COLOUR_RAM_OFFSET + (display_row * LINESTEP_BYTES);
+		Uint32 screen_ram_current_addr = SCREEN_ADDR + (display_row * LINESTEP_BYTES);
 		// Account for Chargen X-displacement
 		for (Uint32 *p = current_pixel; p < current_pixel + (CHARGEN_X_START - border_x_left); p++)
 			*p = palette[REG_SCREEN_COLOR];
@@ -1347,11 +1365,11 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 		Uint8 char_fetch_offset = 0;
 		// Chargen starts here.
 		while (line_char_index < REG_CHRCOUNT) {
-			Uint16 color_data = *(colour_ram_current_ptr++);
-			Uint16 char_value = *(screen_ram_current_ptr++);
+			Uint16 color_data = colour_ram[(colour_ram_current_addr++) & 0x07FFF];
+			Uint16 char_value = main_ram[(screen_ram_current_addr++) & 0x7FFFF];
 			if (REG_16BITCHARSET) {
-				color_data = (color_data << 8) | (*(colour_ram_current_ptr++));
-				char_value = char_value | (*(screen_ram_current_ptr++) << 8);
+				color_data = (color_data << 8) | colour_ram[(colour_ram_current_addr++) & 0x07FFF];
+				char_value = char_value | (main_ram[(screen_ram_current_addr++) & 0x7FFFF] << 8);
 				if (XEMU_UNLIKELY(SXA_GOTO_X(color_data))) {
 					// ---- Start of the GOTOX re-positioning functionality implementation, tricky one ----
 					xcounter = (char_value & 0x3FF);	// first, extract the goto 'X' value as an usigned number
@@ -1567,6 +1585,54 @@ int vic4_render_scanline ( void )
 		return 1;
 	}
 	return 0;
+}
+
+
+/* --- AUX FUNCTIONS FOR NON-ESSENTIAL THINGS (query current text screen parameters for other components, put/get screen content as ASCII) --- */
+
+
+int vic4_query_screen_width ( void )
+{
+	return REG_H640 ? 80 : 40;
+}
+
+
+int vic4_query_screen_height ( void )
+{
+	return EFFECTIVE_V400 ? 50 : 25;
+}
+
+
+Uint8 *vic4_query_screen_memory ( void )
+{
+	return main_ram + (SCREEN_ADDR & 0x7FFFF);
+}
+
+
+char *vic4_textshot ( void )
+{
+	char text[8192];
+	char *result = xemu_cbm_screen_to_text(
+		text,
+		sizeof text,
+		vic4_query_screen_memory(),
+		vic4_query_screen_width(),
+		vic4_query_screen_height(),
+		(vic_registers[0x18] & 2)	// lowercase font? try to auto-detect by checking selected address chargen addr, LSB
+	);
+	return result ? xemu_strdup(result) : NULL;
+}
+
+
+int vic4_textinsert ( const char *text )
+{
+	return xemu_cbm_text_to_screen(
+		vic4_query_screen_memory(),
+		vic4_query_screen_width(),
+		vic4_query_screen_height(),
+		text,				// text buffer as input
+		(vic_registers[0x18] & 2)	// lowercase font? try to auto-detect by checking selected address chargen addr, LSB
+	);
 }
 
 

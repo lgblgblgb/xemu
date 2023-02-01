@@ -58,4 +58,12 @@ extern Uint8 slow_ram[SLOW_RAM_SIZE];
 
 extern int cpu_rmw_old_data;
 
+static XEMU_INLINE void write_colour_ram ( const int addr, const Uint8 data )
+{
+	colour_ram[addr] = data;
+	// we also need to update the corresponding part of the main RAM, if it's the first 2K of the colour RAM!
+	if (addr < 2048)
+		main_ram[addr + 0x1F800] = data;
+}
+
 #endif

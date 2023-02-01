@@ -91,6 +91,7 @@ static struct {
 	Uint32	at_sector;		// valid only if "internal", internal mount sector number
 	Uint32	at_sector_initial;	// internal mount sector number during only the first (reset/poweron) trap
 	int	monitoring_initial;	// if true, at_sector_initial is monitored and changed, if false, not anymore
+	int	access_size_mode;
 } mount_info[2];
 
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
@@ -241,13 +242,53 @@ static inline void virtdisk_read_block ( Uint32 block, Uint8 *buffer )
 #endif
 
 
+static void set_access_size_mode ( const int which )
+{
+	if (!which) {	// drive/image 0 (bits 6 of D68A and D68B)
+		sd_regs[0xA] = (sd_regs[0xA] & (~0x40)) | ((mount_info[0].access_size_mode & 1) << 6);
+		sd_regs[0xB] = (sd_regs[0xB] & (~0x40)) | ((mount_info[0].access_size_mode & 2) << 5);
+	} else {	// drive/image 1 (bits 7 of D68A and D68B)
+		sd_regs[0xA] = (sd_regs[0xA] & (~0x80)) | ((mount_info[1].access_size_mode & 1) << 7);
+		sd_regs[0xB] = (sd_regs[0xB] & (~0x80)) | ((mount_info[1].access_size_mode & 2) << 6);
+	}
+}
+
+
 // define the callback, d81access call this, we can dispatch the change in FDC config to the F011 core emulation this way, automatically.
 // So basically these stuff binds F011 emulation and d81access so the F011 emulation used the d81access framework.
 void d81access_cb_chgmode ( const int which, const int mode ) {
 	const int have_disk = ((mode & 0xFF) != D81ACCESS_EMPTY);
 	const int can_write = (!(mode & D81ACCESS_RO));
-	if (which < 2)
-		DEBUGPRINT("SDCARD: configuring F011 FDC (#%d) with have_disk=%d, can_write=%d" NL, which, have_disk, can_write);
+	if (which < 2) {
+		// Using the d81access layer "mode" info to tell the image size, so we can set the bits 6 or 7 (drive 0/1) in $D68A and $D68B above
+		Uint8 acm = 0;
+		// acs will be only used to have "nice" text version for the "mode"
+		const char *acs = "D81";
+		if (have_disk)
+			switch (mode & (D81ACCESS_D64 | D81ACCESS_D71 | D81ACCESS_D65)) {
+				case D81ACCESS_D64:
+					acs = "D64";
+					acm = 1;
+					break;
+				case D81ACCESS_D71:
+					acs = "D71";
+					acm = 3;
+					break;
+				case D81ACCESS_D65:
+					acs = "D65";
+					acm = 2;
+					break;
+				case 0:		// D81 image
+					break;	// acs/acm are already set for this case
+				default:
+					// this should not happen, but leave here for now to be sure, TODO: remove in the future when I am sure ;)
+					ERROR_WINDOW("Got invalid FDC change event (mode) in %s(%d,%d)", __func__, which, mode);
+					break;
+			}
+		mount_info[which].access_size_mode = acm;
+		set_access_size_mode(which);
+		DEBUGPRINT("SDCARD: configuring F011 FDC (#%d) with have_disk=%d, can_write=%d, d81_access=\"%s\"(M:%d,A=$%02X,B=$%02X)" NL, which, have_disk, can_write, acs, acm, sd_regs[0xA], sd_regs[0xB]);
+	}
 	fdc_set_disk(which, have_disk, can_write);
 }
 // Here we implement F011 core's callbacks using d81access (and yes, F011 uses 512 bytes long sectors for real)
@@ -338,6 +379,7 @@ int sdcard_init ( const char *fn, const int virtsd_flag, const int default_d81_i
 		mount_info[a].at_sector = 0;
 		mount_info[a].at_sector_initial = 0;
 		mount_info[a].monitoring_initial = 0;
+		mount_info[a].access_size_mode = 0;
 	}
 	int just_created_image_file =  0;	// will signal to format image automatically for the user (if set, by default it's clear, here)
 	char fnbuf[PATH_MAX + 1];
@@ -784,6 +826,8 @@ void sdcard_notify_system_start_begin ( void )
 	memset(sd_regs + 0x0C, 0, 4);
 	memset(sd_regs + 0x10, 0, 4);
 	sd_regs[0xB] &= 255 - (8 + 1);	// set D81 (internal) mounted to zero for the two units
+	//sd_regs[0xB] &= 255 - (8 + 1 + 128 + 64);	// set D81 (internal) mounted to zero for the two units, also clear bits 6 and 7 for image size D81
+	//sd_regs[0xA] &= 255 - (128 + 64);		// other bits for the two units for image size, formed with also bits 6 and 7 of reg B
 }
 
 
@@ -793,6 +837,7 @@ void sdcard_notify_system_start_end ( void )
 		mount_info[unit].monitoring_initial = 0;	// stop monitoring initial D81 mounts, end of "machine-start" state
 		if (!unit && !mount_info[unit].at_sector_initial)
 			DEBUGPRINT("SDCARD: D81-DEFAULT: WARNING: could not determine default on-sd D81 mount sector info during the RESET TRAP for unit #%d!" NL, unit);
+		set_access_size_mode(unit);	// workaround to restore possible lost image size access mode info at the end of (or by) hyppo reset trap (FIXME, this whole solution is a mess!)
 	}
 }
 
@@ -1051,15 +1096,15 @@ Uint8 sdcard_read_register ( const int reg )
 			return
 				(fdc_get_buffer_disk_address() >> 8) |	// $D689.0 - High bit of F011 buffer pointer (disk side) (read only)
 				((fdc_get_status_a(-1) & (64 + 32)) == (64 + 32) ? 2 : 0) |	// $D689.1 - Sector read from SD/F011/FDC, but not yet read by CPU (i.e., EQ and DRQ)
-				(sd_regs[0x9] & 0x80);			// $D689.7 - Memory mapped sector buffer select: 1=SD-Card, 0=F011/FDC
+				(data & 0x80);				// $D689.7 - Memory mapped sector buffer select: 1=SD-Card, 0=F011/FDC
 			break;
 		case 0xA:
 			// FIXME: ethernet I/O mode should be a disctict I/O mode??
 			// bits 2 and 3 is always zero in Xemu (no drive virtualization for drive 0 and 1)
 			return
 				(vic_registers[0x30] & 1) |		// $D68A.0 SD:CDC00 (read only) Set if colour RAM at $DC00
-				(vic_iomode == VIC4_IOMODE ? 2 : 0)	// $D68A.1 SD:VICIII (read only) Set if VIC-IV or ethernet IO bank visible
-			;
+				(vic_iomode == VIC4_IOMODE ? 2 : 0) |	// $D68A.1 SD:VICIII (read only) Set if VIC-IV or ethernet IO bank visible
+				(data & (128 + 64));			// size info for disk mounting
 			break;
 		case 0xB:
 			break;

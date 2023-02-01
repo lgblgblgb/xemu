@@ -7,7 +7,7 @@ BEGIN {
 /^\s*signal\s+matrix_(normal|shift|control|cbm|alt)/ {
 	grab = $2
 	gsub(":.*$","",grab)
-	grab = "static const Uint8 " grab "_to_ascii[MAT2ASC_TAB_SIZE] = {"
+	grab = "static const Uint8 " grab "_to_ascii[KBD_MATRIX_SIZE] = {"
 	comma = ""
 	next
 }
