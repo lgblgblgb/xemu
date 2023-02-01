@@ -12,7 +12,7 @@
 Emulators running on Linux/Unix/Windows/OSX of various (mainly 8 bit) machines,
 including the Commodore LCD and Commodore 65 and MEGA65 as well.
 
-Written by (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+Written by (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 Source repository: https://github.com/lgblgblgb/xemu
 
 Xemu also contains code wasn't written by me (sources I use from others,
@@ -77,6 +77,29 @@ https://github.com/lgblgblgb/xemu/wiki
   cool enough to use this name for this emulator.
 * **reCPM**: Another dead project from me (at least in this form): the goal is to
   create a free CP/M compatible OS with the needed hardware (Z80) emulated as well.
+
+## Supported OSes Xemu can run on
+
+"Mainstream" OSes:
+
+* Linux (including Raspberry Pi OS as well - probably other SBCs as well with Linux
+  as the OS -, though in general, Raspberry Pi can be too slow for certain
+  emulation tasks like emulating MEGA65 at full speed)
+* Windows (there are some problems if Xemu encounters any directory path containing
+  non-US-ascii characters, because of the brainda ... errr ... strange way how
+  Windows handles this compared to other sane OSes)
+* MacOS (Apple silicion shouldn't be a problem)
+
+In general, Xemu should run on other UNIX-like OSes too with no (or minimal) source
+level modification. At least once tested on (which may or may not reflect the current
+state of the project):
+
+* OpenBSD
+* FreeBSD
+* HaikuOS (no native UI, though the then-default OSD UI should work)
+
+Note, the list does not mean the upstream availability of ready-to-use binary builds
+in general, but the possibility that you can compile Xemu and that "should" work.
 
 ## Quickest start (Xemu running in your web browser!)
 
@@ -182,6 +205,11 @@ Some comments:
 * `bash` is used by the Xemu-configuration tool
 * You must use `gmake` (GNU make) instead of `make` (BSD make)
 * `pkgconf` is used by the Xemu-configuration tool to found GTK3 library
+
+#### OpenBSD
+
+Very similar to FreeBSD (see above), surely you want to use the `pkg_add` tool
+instead of `pkg install` then.
 
 #### Raspberry Pi
 
