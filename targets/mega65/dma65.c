@@ -1,6 +1,6 @@
 /* F018 DMA core emulation for MEGA65
    Part of the Xemu project.  https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -60,9 +60,8 @@ static int   list_addr_policy;		// 0 = normal, 1 = list addr by CPU addr, 2 = li
 static Uint8 minterms[4];		// Used with MIX DMA command only
 static int   in_dma_update;		// signal that DMA update do something. Currently only useful to avoid PANIC when DMA would modify its own registers
 static int   dma_self_write_warning;	// Warning window policy for the event in case of the happening described in the comment of the previous line :)
-static int   filler_byte;		// byte used for FILL DMA command only
+static Uint8 filler_byte;		// byte used for FILL DMA command only
 static int   enhanced_dma;		// MEGA65 enhanced mode DMA
-
 
 // In case of MEGA65 we should support fractional steps (8 bits for the fraction part).
 // DMA_ADDR_FRACT_PART() is used only in debug functions to log
@@ -71,54 +70,64 @@ static int   enhanced_dma;		// MEGA65 enhanced mode DMA
 #define DMA_TARGET_SKIP_RATE		((int)(target.step_fract | (target.step_int << 8)))
 #define DMA_ADDR_FRACT_PART(p)		((p) & 0xFF)
 
-#define DMA_ADDRESSING(channel)		((DMA_ADDR_INTEGER_PART(channel.addr) & channel.mask) + channel.base)
+// On C65, DMA cannot cross 64K boundaries, so the right mask is 0xFFFF
+// On MEGA65 it seems to be 1Mbyte, thus the mask should be 0xFFFFF
+#define DMA_ADDRESSING(channel)		((DMA_ADDR_INTEGER_PART(channel.addr) & 0xFFFFF) + channel.base)
 
 // source and target DMA "channels":
 static struct {
 	int   addr;		// address of the current operation, it's a fixed-point math value
 	int   base;		// base address for "addr", always a "pure" number! It also contains the "megabyte selection", pre-shifted by << 20
-	int   mask;		// mask value to handle warp around etc, eg 0xFFFF for 64K, 0xFFF for 4K (I/O)
 	int   step;		// step value, zero(HOLD)/negative/positive, this is a fixed point arithmetic value!!
 	Uint8 step_fract;	// step value during option read, fractional part only
 	Uint8 step_int;		// step value during option read, integer part only
 	Uint8 mbyte;		// megabyte slice selected during option read
 	int   is_modulo;	// modulo mode, if it's not zero
-	int   is_io;		// channel access I/O instead of memory, if it's not zero
+	int   also_io;		// channel access I/O instead of memory, if it's not zero
 } source, target;
 
 static struct {
 	int enabled, used, col_counter, col_limit, row_counter, row_limit, value;
 } modulo;
 
-// On C65, DMA cannot cross 64K boundaries, so the right mask is 0xFFFF
-// On MEGA65 it seems to be 1Mbyte, thus the mask should be 0xFFFFF
-#define MEM_ADDR_MASK	0xFFFFF
 
-#define dma_read_source()	(XEMU_UNLIKELY(source.is_io) ? io_dma_reader(DMA_ADDRESSING(source)) : memory_dma_source_mreader(DMA_ADDRESSING(source)))
-#define dma_read_target()	(XEMU_UNLIKELY(target.is_io) ? io_dma_reader(DMA_ADDRESSING(target)) : memory_dma_target_mreader(DMA_ADDRESSING(target)))
 
-static XEMU_INLINE void dma_write_source ( Uint8 data )
+static XEMU_INLINE Uint8 dma_read_source ( void )
+{
+	const int addr = DMA_ADDRESSING(source);
+	return (XEMU_UNLIKELY(source.also_io && ((addr & 0xF000) == 0xD000))) ?
+		io_dma_reader(addr) : memory_dma_source_mreader(addr);
+}
+
+static XEMU_INLINE Uint8 dma_read_target ( void )
+{
+	const int addr = DMA_ADDRESSING(target);
+	return (XEMU_UNLIKELY(target.also_io && ((addr & 0xF000) == 0xD000))) ?
+		io_dma_reader(addr) : memory_dma_target_mreader(addr);
+}
+
+static XEMU_INLINE void dma_write_source ( const Uint8 data )
 {
 	if (XEMU_LIKELY((unsigned int)data != dma_transparency)) {
-		if (XEMU_UNLIKELY(source.is_io))
-			io_dma_writer(DMA_ADDRESSING(source), data);
+		const int addr = DMA_ADDRESSING(source);
+		if (XEMU_UNLIKELY(source.also_io && ((addr & 0xF000) == 0xD000)))
+			io_dma_writer(addr, data);
 		else
-			memory_dma_source_mwriter(DMA_ADDRESSING(source), data);
+			memory_dma_source_mwriter(addr, data);
 	}
 }
 
-static XEMU_INLINE void dma_write_target ( Uint8 data )
+static XEMU_INLINE void dma_write_target ( const Uint8 data )
 {
 	if (XEMU_LIKELY((unsigned int)data != dma_transparency)) {
-		if (XEMU_UNLIKELY(target.is_io))
-			io_dma_writer(DMA_ADDRESSING(target), data);
+		const int addr = DMA_ADDRESSING(target);
+		if (XEMU_UNLIKELY(target.also_io && ((addr & 0xF000) == 0xD000)))
+			io_dma_writer(addr, data);
 		else
-			memory_dma_source_mwriter(DMA_ADDRESSING(target), data);
+			memory_dma_source_mwriter(addr, data);
 	}
 }
 
-// On MEGA65 DMA list reading address never warps around (64K or 1M boundaries) BUT, we must take account the whole 28 bit memory address space at least
-#define MEM_LIST_MASK 0xFFFFFFFU
 
 #ifdef DO_DEBUG_DMA
 static int dma_list_entry_pos = 0;
@@ -128,10 +137,10 @@ static Uint8 dma_read_list_next_byte ( void )
 {
 	Uint8 data;
 	if (list_addr_policy) {
-		list_addr &= 0xFFFF;
+		list_addr &= 0xFFFF;		// when DMA list is read by CPU addr, limit read addr within 64K
 		data = cpu65_read_callback(list_addr);
 	} else {
-		list_addr &= MEM_LIST_MASK;
+		list_addr &= 0xFFFFFFFU;	// 28 bit addr space of MEGA65
 		data = memory_dma_list_reader(list_addr);
 	}
 #ifdef	DO_DEBUG_DMA
@@ -363,10 +372,11 @@ int dma_update ( void )
 		modulo.col_limit   = dma_read_list_next_byte();
 		modulo.row_limit   = dma_read_list_next_byte();
 		length             = modulo.col_limit | (modulo.row_limit << 8) | (length_byte3 << 16);
-		filler_byte        = dma_read_list_next_byte()      ;			// source low byte is also the filler byte in case of FILL command
-		source.addr        =(dma_read_list_next_byte() <<  8) | filler_byte;	// -- "" --
+		source.addr        = dma_read_list_next_byte();
+		filler_byte        = source.addr;					// source low byte is also the filler byte in case of FILL command
+		source.addr       |=(dma_read_list_next_byte() <<  8);
 		source.addr       |= dma_read_list_next_byte() << 16;
-		target.addr        = dma_read_list_next_byte()      ;
+		target.addr        = dma_read_list_next_byte();
 		target.addr       |= dma_read_list_next_byte() <<  8;
 		target.addr       |= dma_read_list_next_byte() << 16;
 		Uint8 subcommand;
@@ -436,43 +446,29 @@ int dma_update ( void )
 		}
 #endif
 		// It *seems* I/O stuff is still in the place even with F018B. FIXME: is it true?
-		source.is_io = (source.addr & 0x800000);
-		target.is_io = (target.addr & 0x800000);
-		/* source selection */
-		if (source.is_io) {
-			source.mask	= 0xFFF;			// 4K I/O size (warps within 4K only)
-			source.base	= 0;				// in case of I/O, base is not interpreted in Xemu (uses pure numbers 0-$FFF, no $DXXX, not even M65-spec mapping), and must be zero ...
-			source.addr	= (source.addr & 0xFFF) << 8;	// for M65, it is fixed-point arithmetic
-		} else {
-			source.mask	= MEM_ADDR_MASK;		// in case of memory (not I/O) access, we have again a mask, see at "MEM_ADDR_MASK" for more explanation
-			// base selection for M65
-			// M65 has an "mbyte part" register for source (and target too)
-			// however, with F018B there are 3 bits over 1Mbyte as well, and it seems M65 (see VHDL code) add these together then. Interesting.
-			if (dma_revision)
-			    source.base = (source.addr & 0x0F0000) | (((source.mbyte << 20) + (source.addr & 0x700000)) & 0xFF00000);
-			else
-			    source.base = (source.addr & 0x0F0000) | (  source.mbyte << 20);
-			source.addr	= (source.addr & 0x00FFFF) << 8;// offset from base, for M65 this *IS* fixed point arithmetic!
-		}
-		/* target selection - see similar lines with comments above, for source ... */
-		if (target.is_io) {
-			target.mask	= 0xFFF;
-			target.base	= 0;
-			target.addr	= (target.addr & 0xFFF) << 8;
-		} else {
-			target.mask	= MEM_ADDR_MASK;
-			if (dma_revision)
-			    target.base = (target.addr & 0x0F0000) | (((target.mbyte << 20) + (target.addr & 0x700000)) & 0xFF00000);
-			else
-			    target.base = (target.addr & 0x0F0000) | (  target.mbyte << 20);
-			target.addr	= (target.addr & 0x00FFFF) << 8;
-		}
+		source.also_io = (source.addr & 0x800000);
+		target.also_io = (target.addr & 0x800000);
+		/* -- source selection -- */
+		// base selection for M65
+		// M65 has an "mbyte part" register for source (and target too)
+		// however, with F018B there are 3 bits over 1Mbyte as well, and it seems M65 (see VHDL code) add these together then. Interesting.
+		if (dma_revision)
+		    source.base = ((source.mbyte << 20) + (source.addr & 0x700000)) & 0xFF00000;
+		else
+		    source.base = source.mbyte << 20;
+		source.addr	= (source.addr & 0x0FFFFF) << 8;// offset from base, for M65 this *IS* fixed point arithmetic!
+		/* -- target selection -- see similar lines with comments above, for source ... */
+		if (dma_revision)
+		    target.base = ((target.mbyte << 20) + (target.addr & 0x700000)) & 0xFF00000;
+		else
+		    target.base = target.mbyte << 20;
+		target.addr	= (target.addr & 0x0FFFFF) << 8;
 		/* other stuff */
 		chained = (command & 4);
 		// FIXME: this is a debug mesg, yeah, but with fractional step on M65, the step values needs to be interpreted with keep in mind the fixed point math ...
 		DEBUG("DMA: READ COMMAND: $%07X[%s%s %d:%d] -> $%07X[%s%s %d:%d] (L=$%04X) CMD=%d (%s)" NL,
-			DMA_ADDRESSING(source), source.is_io ? "I/O" : "MEM", source.is_modulo ? " MOD" : "", DMA_ADDR_INTEGER_PART(source.step), DMA_ADDR_FRACT_PART(source.step),
-			DMA_ADDRESSING(target), target.is_io ? "I/O" : "MEM", target.is_modulo ? " MOD" : "", DMA_ADDR_INTEGER_PART(target.step), DMA_ADDR_FRACT_PART(target.step),
+			DMA_ADDRESSING(source), source.also_io ? "I/O" : "MEM", source.is_modulo ? " MOD" : "", DMA_ADDR_INTEGER_PART(source.step), DMA_ADDR_FRACT_PART(source.step),
+			DMA_ADDRESSING(target), target.also_io ? "I/O" : "MEM", target.is_modulo ? " MOD" : "", DMA_ADDR_INTEGER_PART(target.step), DMA_ADDR_FRACT_PART(target.step),
 			length, dma_op, chained ? "CHAINED" : "LAST"
 		);
 		if (!length)
