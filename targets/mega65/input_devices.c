@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -27,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "hypervisor.h"
 #include "ui.h"
 #include "matrix_mode.h"
+#include "dma65.h"
 
 
 #define DEBUGKBD(...)		DEBUG(__VA_ARGS__)
@@ -383,12 +384,16 @@ void kbd_trigger_restore_trap ( void )
 		restore_is_held++;
 		if (restore_is_held >= 20) {
 			restore_is_held = 0;
-			if (!in_hypervisor) {
+			if (XEMU_UNLIKELY(in_hypervisor)) {
+				DEBUGPRINT("KBD: *IGNORING* RESTORE trap trigger, already in hypervisor mode!" NL);
+			} else if (XEMU_UNLIKELY(in_dma)) {
+				// keyboard triggered trap is "async" but the CPU must be not in DMA mode to be able to handle that without a disaster
+				DEBUGPRINT("KBD: *IGNORING* RESTORE trap trigger, DMA is in progress!" NL);
+			} else {
 				DEBUGPRINT("KBD: RESTORE trap has been triggered." NL);
 				KBD_RELEASE_KEY(RESTORE_KEY_POS);
 				hypervisor_enter(TRAP_FREEZER_RESTORE_PRESS);
-			} else
-				DEBUGPRINT("KBD: *IGNORING* RESTORE trap trigger, already in hypervisor mode!" NL);
+			}
 		}
 	}
 }

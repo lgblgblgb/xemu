@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -94,7 +94,7 @@ int hypervisor_queued_enter ( int trapno )
 // (sometimes one byte is skipped on execution after a trap caused by writing D640-D67F)
 void hypervisor_enter_via_write_trap ( int trapno )
 {
-	if (XEMU_UNLIKELY(dma_is_in_use())) {
+	if (XEMU_UNLIKELY(in_dma)) {
 		static int do_warn = 1;
 		if (do_warn) {
 			WARNING_WINDOW("DMA operation would trigger hypervisor trap.\nThis is totally ignored!\nThere will be no future warning before you restart Xemu");
@@ -157,12 +157,9 @@ void hypervisor_enter ( int trapno )
 	D6XX_registers[0x50] = memory_get_cpu_io_port(0);
 	D6XX_registers[0x51] = memory_get_cpu_io_port(1);
 	D6XX_registers[0x52] = vic_iomode;
-	D6XX_registers[0x53] = dma_registers[5];	// GS $D653 - Hypervisor DMAgic source MB
-	D6XX_registers[0x54] = dma_registers[6];	// GS $D654 - Hypervisor DMAgic destination MB
-	D6XX_registers[0x55] = dma_registers[0];	// GS $D655 - Hypervisor DMAGic list address bits 0-7
-	D6XX_registers[0x56] = dma_registers[1];	// GS $D656 - Hypervisor DMAGic list address bits 15-8
-	D6XX_registers[0x57] = (dma_registers[2] & 15) | ((dma_registers[4] & 15) << 4);	// GS $D657 - Hypervisor DMAGic list address bits 23-16
-	D6XX_registers[0x58] = dma_registers[4] >> 4;	// GS $D658 - Hypervisor DMAGic list address bits 27-24
+	D6XX_registers[0x53] = 0;				// GS $D653 - Hypervisor DMAgic source MB      - *UNUSED*
+	D6XX_registers[0x54] = 0;				// GS $D654 - Hypervisor DMAgic destination MB - *UNUSED*
+	dma_get_list_addr_as_bytes(D6XX_registers + 0x55);	// GS $D655-$D658 - Hypervisor DMAGic list address bits 27-0
 	// Now entering into hypervisor mode
 	in_hypervisor = 1;	// this will cause apply_memory_config to map hypervisor RAM, also for checks later to out-of-bound execution of hypervisor RAM, etc ...
 	// In hypervisor mode, VIC4 I/O mode is implied. I also disable $D02F writing to take effect while in hypervisor mode in vic4.c!
@@ -190,9 +187,9 @@ void hypervisor_enter ( int trapno )
 		current_hdos_func = -1;
 	if (XEMU_UNLIKELY(trapno == TRAP_RESET)) {
 		hdos_notify_system_start_begin();
-		if (!vic4_disallow_video_std_change) {
-			vic4_disallow_video_std_change = 1;
-			DEBUGPRINT("HYPERVISOR: setting video standard change banning" NL);
+		if (!vic4_disallow_videostd_change && configdb.videostd >= 0) {
+			vic4_disallow_videostd_change = 1;
+			DEBUGPRINT("HYPERVISOR: setting video standard change (PAL/NTSC) banning" NL);
 		}
 	}
 	if (XEMU_UNLIKELY(trapno == TRAP_FREEZER_RESTORE_PRESS || trapno == TRAP_FREEZER_USER_CALL)) {
@@ -285,14 +282,9 @@ static inline void first_leave ( void )
 	}
 	// Workaround: set DMA version based on ROM version
 	dma_init_set_rev(main_ram + 0x20000);
-	// Workaround: force video standard
-	if (configdb.init_videostd >= 0) {
-		DEBUGPRINT("VIC: setting %s mode as boot-default based on request" NL, configdb.init_videostd ? "NTSC" : "PAL");
-		if (configdb.init_videostd)
-			vic_registers[0x6F] |= 0x80;
-		else
-			vic_registers[0x6F] &= 0x7F;
-	}
+	// Workaround: set our desired video standard (if configdb.videostd == -1, then vic4_set_videostd() won't do anything, so it's fine)
+	vic4_set_videostd(configdb.videostd, "in hypervisor.c, requested as boot/reset default");
+	// OK, that's enough
 	hdos_notify_system_start_end();
 	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 }
@@ -339,12 +331,9 @@ void hypervisor_leave ( void )
 	vic_iomode = D6XX_registers[0x52] & 3;
 	if (vic_iomode == VIC_BAD_IOMODE)
 		vic_iomode = VIC3_IOMODE;	// I/O mode "2" (binary: 10) is not used, I guess
-	dma_registers[5] = D6XX_registers[0x53];	// GS $D653 - Hypervisor DMAgic source MB
-	dma_registers[6] = D6XX_registers[0x54];	// GS $D654 - Hypervisor DMAgic destination MB
-	dma_registers[0] = D6XX_registers[0x55];	// GS $D655 - Hypervisor DMAGic list address bits 0-7
-	dma_registers[1] = D6XX_registers[0x56];	// GS $D656 - Hypervisor DMAGic list address bits 15-8
-	dma_registers[2] = D6XX_registers[0x57] & 15;	//
-	dma_registers[4] = (D6XX_registers[0x57] >> 4) | (D6XX_registers[0x58] << 4);
+	// GS $D653 - Hypervisor DMAgic source MB - *UNUSED*
+	// GS $D654 - Hypervisor DMAgic destination MB - *UNUSED*
+	dma_set_list_addr_from_bytes(D6XX_registers + 0x55);	// GS $D655-$D658 - Hypervisor DMAGic list address bits 27-0
 	// Now leaving hypervisor mode ...
 	in_hypervisor = 0;
 	machine_set_speed(0);	// restore speed ...
@@ -365,9 +354,9 @@ void hypervisor_leave ( void )
 	}
 	hypervisor_is_first_call = 0;
 	if (XEMU_UNLIKELY(trap_current == TRAP_RESET)) {
-		if (vic4_disallow_video_std_change == 1) {
-			DEBUGPRINT("HYPERVISOR: clearing video standard change banning" NL);
-			vic4_disallow_video_std_change = 0;
+		if (vic4_disallow_videostd_change && !configdb.lock_videostd) {
+			DEBUGPRINT("HYPERVISOR: clearing video standard change (PAL/NTSC) banning" NL);
+			vic4_disallow_videostd_change = 0;
 		}
 	}
 	if (XEMU_UNLIKELY(hypervisor_queued_trap >= 0)) {
@@ -624,6 +613,9 @@ void hypervisor_debug ( void )
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without SPHI == $BE but $%02X" NL, cpu65.sphi >> 8);
 		if (XEMU_UNLIKELY(cpu65.bphi != 0xBF00))
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without BPHI == $BF but $%02X" NL, cpu65.bphi >> 8);
+		// NOTE: this is may be not even possible as in hypervisor mode vic_iomode cannot be altered via the usual $D02F "KEY" register ...
+		if (XEMU_UNLIKELY(vic_iomode != 3))	// "3" means VIC-4 I/O mode. See "io_mode_xlat" definition above.
+			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory with VIC I/O mode of %d" NL, io_mode_xlat[vic_iomode]);
 	}
 	const Uint16 now_sp = cpu65.sphi | cpu65.s;
 	int sp_diff = (int)prev_sp - (int)now_sp;

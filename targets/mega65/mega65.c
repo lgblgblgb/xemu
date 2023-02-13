@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -306,6 +306,9 @@ static void preinit_memory_for_start ( void )
 	//                  ----------------------------------------------------------------------------------------------------------------------------------------------------------
 	if (!hickup_is_overriden)
 		hypervisor_debug_invalidate("no external hickup is loaded, built-in one does not have debug info");
+	// At this point, be sure, we have the 2K "C65" style colour RAM @ $1F800 are in sync with the "fast" RAM, as Xemu uses some shadowing as a performance hack!
+	// As we updated the colour RAM above, let's update the corresponding part of the main_ram according to that
+	memcpy(main_ram + 0x1F800, colour_ram, 2048);
 }
 
 
@@ -365,6 +368,8 @@ static void mega65_init ( void )
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
 	vic_init();
+	vic4_disallow_videostd_change = configdb.lock_videostd;
+	vic4_set_videostd(configdb.videostd >= 0 ? configdb.videostd : 0, "by emulator initalization");
 	// *** CIAs
 	cia_init(&cia1, "CIA-1",
 		NULL,			// callback: OUTA
@@ -527,6 +532,7 @@ void reset_mega65_cpu_only ( void )
 	vic_registers[0x30] = 0;	// FIXME: hack! we need this, and memory_set_vic3_rom_mapping above too :(
 	memory_set_vic3_rom_mapping(0);
 	memory_set_do_map();
+	dma_reset();			// We need this: even though it's CPU reset only, DMA is part of the CPU: either DMA or CPU running, resetting in the middle of a DMA session is a disaster
 	cpu65_reset();
 }
 
@@ -717,7 +723,7 @@ static void emulation_loop ( void )
 		}
 #endif
 		while (XEMU_UNLIKELY(paused)) {	// paused special mode, ie tracing support, or something ...
-			if (XEMU_UNLIKELY(dma_status))
+			if (XEMU_UNLIKELY(in_dma))
 				break;		// if DMA is pending, do not allow monitor/etc features
 #ifdef HAS_UARTMON_SUPPORT
 			if (m65mon_callback) {	// delayed uart monitor command should be finished ...
@@ -761,7 +767,7 @@ static void emulation_loop ( void )
 			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu65.pc);
 			paused = 1;
 		}
-		cycles += XEMU_UNLIKELY(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
+		cycles += XEMU_UNLIKELY(in_dma) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
 #ifdef CPU_STEP_MULTI_OPS
 			cpu_cycles_per_step
 #endif
