@@ -484,19 +484,19 @@ void io_write ( unsigned int addr, Uint8 data )
 		case 0x09:	// $D900-$D9FF ~ C64 I/O mode
 		case 0x0A:	// $DA00-$DAFF ~ C64 I/O mode
 		case 0x0B:	// $DB00-$DBFF ~ C64 I/O mode
-			colour_ram[addr - 0x0800] = data & 0xF;		// FIXME: is this true, that high nibble is masked, so switching to C65/M65 mode high nibble will be zero??
+			write_colour_ram(addr - 0x0800, data & 0xF);	// FIXME: is this true, that high nibble is masked, so switching to C65/M65 mode high nibble will be zero??
 			return;
 		case 0x18:	// $D800-$D8FF ~ C65 I/O mode
 		case 0x19:	// $D900-$D9FF ~ C65 I/O mode
 		case 0x1A:	// $DA00-$DAFF ~ C65 I/O mode
 		case 0x1B:	// $DB00-$DBFF ~ C65 I/O mode
-			colour_ram[addr - 0x1800] = data;
+			write_colour_ram(addr - 0x1800, data);
 			return;
 		case 0x38:	// $D800-$D8FF ~ M65 I/O mode
 		case 0x39:	// $D900-$D9FF ~ M65 I/O mode
 		case 0x3A:	// $DA00-$DAFF ~ M65 I/O mode
 		case 0x3B:	// $DB00-$DBFF ~ M65 I/O mode
-			colour_ram[addr - 0x3800] = data;
+			write_colour_ram(addr - 0x3800, data);
 			return;
 		/* --------------------------------------- */
 		/* $DC00-$DCFF: CIA#1, EXTENDED COLOUR RAM */
@@ -505,7 +505,7 @@ void io_write ( unsigned int addr, Uint8 data )
 		case 0x1C:	// $DC00-$DCFF ~ C65 I/O mode
 		case 0x3C:	// $DC00-$DCFF ~ M65 I/O mode
 			if (vic_registers[0x30] & 1)
-				colour_ram[0x400 + (addr & 0xFF)] = data;
+				write_colour_ram(0x400 + (addr & 0xFF), data);
 			else
 				cia_write(&cia1, addr & 0xF, data);
 			return;
@@ -516,7 +516,7 @@ void io_write ( unsigned int addr, Uint8 data )
 		case 0x1D:	// $DD00-$DDFF ~ C65 I/O mode
 		case 0x3D:	// $DD00-$DDFF ~ M65 I/O mode
 			if (vic_registers[0x30] & 1)
-				colour_ram[0x500 + (addr & 0xFF)] = data;
+				write_colour_ram(0x500 + (addr & 0xFF), data);
 			else
 				cia_write(&cia2, addr & 0xF, data);
 			return;
@@ -532,7 +532,7 @@ void io_write ( unsigned int addr, Uint8 data )
 			// FIXME: is it really true for *ALL* I/O modes, that colour RAM expansion to 2K and
 			// disk buffer I/O mapping works in all of them??
 			if (vic_registers[0x30] & 1) {
-				colour_ram[0x600 + (addr & 0x1FF)] = data;
+				write_colour_ram(0x600 + (addr & 0x1FF), data);
 				return;
 			}
 			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED)) {

@@ -594,17 +594,15 @@ static void ui_cb_audio_volume ( const struct menu_st *m, int *query )
 static void ui_cb_video_standard ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == videostd_id);
-	if (VOIDPTR_TO_INT(m->user_data))
-		vic_registers[0x6F] |= 0x80;
-	else
-		vic_registers[0x6F] &= 0x7F;
-	configdb.force_videostd = -1;	// turn off possible CLI/config dictated force video mode, otherwise it won't work to change video standard ...
+	configdb.videostd = VOIDPTR_TO_INT(m->user_data);
+	vic4_set_videostd(configdb.videostd, "requested by UI");
 }
 
 static void ui_cb_video_standard_disallow_change ( const struct menu_st *m, int *query )
 {
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, vic4_disallow_video_std_change);
-	vic4_disallow_video_std_change = vic4_disallow_video_std_change ? 0 : 2;
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, configdb.lock_videostd);
+	configdb.lock_videostd = !configdb.lock_videostd;
+	vic4_disallow_videostd_change = configdb.lock_videostd;
 }
 
 static void ui_cb_fullborders ( const struct menu_st *m, int *query )

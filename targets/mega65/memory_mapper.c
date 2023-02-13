@@ -187,9 +187,7 @@ DEFINE_READER(colour_ram_reader) {
 	return colour_ram[GET_READER_OFFSET()];
 }
 DEFINE_WRITER(colour_ram_writer) {
-	colour_ram[GET_WRITER_OFFSET()] = data;
-	// we also need the update the "real" RAM
-	//main_ram[GET_WRITER_OFFSET() & 2047] = data;
+	write_colour_ram(GET_WRITER_OFFSET(), data);
 }
 DEFINE_READER(dummy_reader) {
 	return 0xFF;

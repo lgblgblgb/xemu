@@ -16,7 +16,7 @@ jobs:
     - name: List of all installed packages
       run: dpkg -l | cat || true
     - name: Modifying the build system
-      run: pwd ; hostname ; sudo hostname actions.github.com || true ; sudo adduser --home `pwd` --shell /bin/bash --no-create-home --disabled-password --disabled-login --gecos "LGB builder" lgb && sudo chown -R lgb:lgb .
+      run: pwd ; OHOME="`getent passwd $USER | cut -f6 -d:`" ; echo $OHOME ; hostname ; sudo hostname xemu-builder-vm-lgb.github.com || true ; echo "127.128.129.130 xemu-builder-vm-lgb.github.com" | sudo tee -a /etc/hosts ; sudo adduser --home `pwd` --shell /bin/bash --no-create-home --disabled-password --disabled-login --gecos "LGB builder" lgb && sudo chown -R lgb . $OHOME && sudo chmod -R g+w . $OHOME
     - name: Show system status
       run: cat /etc/debian_version ; lsb_release -a ; yacc --version | head -n 1 ; gcc --version | head -n 1 ; g++ --version | head -n 1 ; make --version | head -n 1 ; git --version | head -n 1 ; gawk --version | head -n 1 ; bash --version | head -n 1 ; uname -a ; id -a ; echo "CWD is `pwd`" ; echo "PATH is $PATH" ; echo "Hostname is `hostname`" ; sudo lscpu || true ; sudo lspci || true ; uptime ; sudo /sbin/ip a || true ; df -h . ; ls -la .
     - name: Show shell variables
