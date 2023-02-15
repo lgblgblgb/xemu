@@ -84,3 +84,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define XEMU_CONFIGDB_SUPPORT
 #define XEMU_OSD_SUPPORT
+
+// Workaround for hang causes by trying fast-seriel-IEC by ROM
+// These defines are used by xemu/cia6526.c
+//#define CIA_IN_SDR_SETS_ICR_BIT3
+#define CIA_OUT_SDR_SETS_ICR_BIT3
