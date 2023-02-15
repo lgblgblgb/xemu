@@ -1395,13 +1395,34 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
    this function. I can't do anything, since Windows API is a nightmare, using non-C-standard types for system
    calls, I have no idea ... */
 
+#ifdef XEMU_ARCH_WIN
+static int redirect_stdfp ( const DWORD handle_const, FILE *std, const char *mode, const char *desc )
+{
+	const HANDLE lStdHandle = GetStdHandle(handle_const);
+	if (lStdHandle == NULL || lStdHandle == INVALID_HANDLE_VALUE) {
+		DEBUGPRINT("WINDOWS: cannot redirect %s: GetStdHandle() failed" NL, desc);
+		return 1;
+	}
+	const int hConHandle = _open_osfhandle((INT_PTR)lStdHandle, _O_TEXT);
+	if (hConHandle < 0) {
+		DEBUGPRINT("WINDOWS: cannot redirect %s: _open_osfhandle() failed" NL, desc);
+		return 1;
+	}
+	FILE *fp = _fdopen(hConHandle, mode);
+	if (!fp) {
+		DEBUGPRINT("WINDOWS: cannot redirect %s: _fdopen() failed" NL, desc);
+		return 1;
+	}
+	*std = *fp;
+	setvbuf(std, NULL, _IONBF, 0);
+	return 0;
+}
+#endif
+
 void sysconsole_open ( void )
 {
 #ifdef XEMU_ARCH_WIN
-	int hConHandle;
-	HANDLE lStdHandle;
 	CONSOLE_SCREEN_BUFFER_INFO coninfo;
-	FILE *fp;
 	if (sysconsole_is_open)
 		return;
 	sysconsole_is_open = 0;
@@ -1430,28 +1451,14 @@ void sysconsole_open ( void )
 	coninfo.dwSize.Y = 1024;
 	//coninfo.dwSize.X = 100;
 	SetConsoleScreenBufferSize(GetStdHandle(STD_OUTPUT_HANDLE), coninfo.dwSize);
-	// redirect unbuffered STDOUT to the console
-	lStdHandle = GetStdHandle(STD_OUTPUT_HANDLE);
-	hConHandle = _open_osfhandle((INT_PTR)lStdHandle, _O_TEXT);
-	fp = _fdopen( hConHandle, "w" );
-	*stdout = *fp;
-	setvbuf( stdout, NULL, _IONBF, 0 );
-	// redirect unbuffered STDIN to the console
-	lStdHandle = GetStdHandle(STD_INPUT_HANDLE);
-	hConHandle = _open_osfhandle((INT_PTR)lStdHandle, _O_TEXT);
-	fp = _fdopen( hConHandle, "r" );
-	*stdin = *fp;
-	setvbuf( stdin, NULL, _IONBF, 0 );
-	// redirect unbuffered STDERR to the console
-	lStdHandle = GetStdHandle(STD_ERROR_HANDLE);
-	hConHandle = _open_osfhandle((INT_PTR)lStdHandle, _O_TEXT);
-	fp = _fdopen( hConHandle, "w" );
-	*stderr = *fp;
-	setvbuf( stderr, NULL, _IONBF, 0 );
+	// redirect unbuffered stdin/stdout/stderr to the console:
+	redirect_stdfp(STD_OUTPUT_HANDLE, stdout, "w", "STDOUT");
+	redirect_stdfp(STD_INPUT_HANDLE,  stdin,  "r", "STDIN" );
+	redirect_stdfp(STD_ERROR_HANDLE,  stderr, "w", "STDERR");
 	// make cout, wcout, cin, wcin, wcerr, cerr, wclog and clog point to console as well
 	// sync_with_stdio();
 	// Set Con Attributes
-	//SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), FOREGROUND_RED | FOREGROUND_INTENSITY);
+	SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), FOREGROUND_RED | FOREGROUND_INTENSITY);
 	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_GREEN | FOREGROUND_INTENSITY);
 	SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT);
 	SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT);
