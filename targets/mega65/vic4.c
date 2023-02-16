@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Copyright (C)2020-2022 Hernán Di Pietro <hernan.di.pietro@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -1409,7 +1409,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 				}
 			}
 			// Background and foreground colors
-			const Uint8 char_fgcolor = color_data & 0xF;
+			//const Uint8 char_fgcolor = color_data & 0xF;	// FIXME: remove this! commented out since "&0xF" causes problems, replaced any char_fgcolor refs later with color_data refs
 			const Uint16 char_id = REG_EBM ? (char_value & 0x3f) : char_value & 0x1fff; // up to 8192 characters (13-bit)
 			const Uint8 char_bgcolor = REG_EBM ? vic_registers[0x21 + ((char_value >> 6) & 3)] : REG_SCREEN_COLOR;
 			const Uint8 glyph_trim = SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(color_data) ? 8 : 0);
@@ -1421,21 +1421,21 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
 					16 - glyph_trim,
 					used_palette[char_bgcolor],		// bg SDL colour
-					(used_palette + (color_data & 0xF0))[char_fgcolor],		// fg SDL colour
+					used_palette[color_data & 0xFF],	// fg SDL colour
 					used_palette + (color_data & 0xF0),	// palette(16) pointer
 					SXA_HORIZONTAL_FLIP(color_data)		// hflip?
 				);
 			} else if (CHAR_IS256_COLOR(char_id)) {	// 256-color character
 				// fgcolor in case of FCM should mean colour index $FF
-				// FIXME: check if the passed palette[char_fgcolor] is correct or another index should be used for that $FF colour stuff
+				// FIXME: check if the passed palette[color_data & 0xFF] is correct or another index should be used for that $FF colour stuff
 				vic4_render_fullcolor_char_row(
 					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
 					8 - glyph_trim,
 					used_palette[char_bgcolor],		// bg SDL colour
-					used_palette[char_fgcolor],		// fg SDL colour
+					used_palette[color_data & 0xFF],	// fg SDL colour
 					SXA_HORIZONTAL_FLIP(color_data)		// hflip?
 				);
-			} else if ((REG_MCM && (char_fgcolor & 8)) || (REG_MCM && REG_BMM)) {	// Multicolor character
+			} else if ((REG_MCM && (color_data & 8)) || (REG_MCM && REG_BMM)) {	// Multicolor character
 				// using static vars: faster in a rapid loop like this, no need to re-adjust stack pointer all the time to allocate space and this way using constant memory address
 				// also, as an optimization, later, some value can be re-used and not always initialized here, when in reality VIC
 				// registers in current Xemu cannot change within a scanline anyway (ie, scanline precision based emulation/rendering)
@@ -1452,7 +1452,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 					// value 00 is common /w or w/o BMM so not initialized here
 					color_source_mcm[1] = REG_MULTICOLOR_1;	// 01
 					color_source_mcm[2] = REG_MULTICOLOR_2;	// 10
-					color_source_mcm[3] = char_fgcolor & 7;	// 11
+					color_source_mcm[3] = color_data & 7;	// 11
 					char_byte = *(row_data_base_addr + (char_id * 8) + sel_char_row);
 				}
 				// FIXME: is this really a thing to have FLIP in bitmap mode AS WELL?!
@@ -1468,7 +1468,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 				Uint8 char_byte, char_bgcolor_now, char_fgcolor_now;
 				if (!REG_BMM) {
 					char_bgcolor_now = char_bgcolor;
-					char_fgcolor_now = char_fgcolor;
+					char_fgcolor_now = color_data & 0xF;	// FIXME: is the "&" mask OK as being 0xF?
 					char_byte = *(row_data_base_addr + (char_id * 8) + sel_char_row);
 				} else {
 					char_bgcolor_now = char_value & 0xF;
