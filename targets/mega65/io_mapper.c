@@ -1,7 +1,7 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    I/O decoding part (used by memory_mapper.h and DMA mainly)
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -553,9 +553,9 @@ void io_write ( unsigned int addr, Uint8 data )
 
 
 Uint8 io_dma_reader ( int addr ) {
-	return io_read(addr | (vic_iomode << 12));
+	return io_read((addr & 0xFFF) + (vic_iomode << 12));
 }
 
 void  io_dma_writer ( int addr, Uint8 data ) {
-	io_write(addr | (vic_iomode << 12), data);
+	io_write((addr & 0xFFF) + (vic_iomode << 12), data);
 }
