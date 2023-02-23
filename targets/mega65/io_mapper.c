@@ -192,6 +192,12 @@ Uint8 io_read ( unsigned int addr )
 					return 0xFF;
 				case 0x19:
 					return hwa_kbd_get_last_petscii();
+				case 0x20: // GS $D620 UARTMISC:POTAX Read Port A paddle X, without having to fiddle with SID/CIA settings.
+				case 0x22: // GS $D622 UARTMISC:POTBX Read Port B paddle X, without having to fiddle with SID/CIA settings.
+					return get_mouse_x_via_sid();
+				case 0x21: // GS $D621 UARTMISC:POTAY Read Port A paddle Y, without having to fiddle with SID/CIA settings.
+				case 0x23: // GS $D623 UARTMISC:POTBY Read Port B paddle Y, without having to fiddle with SID/CIA settings.
+					return get_mouse_y_via_sid();
 				case 0x29: // GS $D629: UARTMISC:M65MODEL MEGA65 model ID.
 					return configdb.mega65_model;
 				case 0x2A: // GS $D62A KBD:FWDATEL LSB of keyboard firmware date stamp (days since 1 Jan 2020)
