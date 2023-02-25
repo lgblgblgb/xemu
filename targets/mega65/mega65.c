@@ -364,7 +364,7 @@ static void mega65_init ( void )
 	// Fill memory with the needed pre-initialized regions to be able to start.
 	preinit_memory_for_start();
 	// *** Image file for SDCARD support, and other related init functions handled there as well (eg d81access, fdc init ... related registers, etc)
-	if (sdcard_init(configdb.sdimg, configdb.virtsd, configdb.defd81fromsd) < 0)
+	if (sdcard_init(configdb.sdimg, configdb.virtsd) < 0)
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
 	vic_init();
@@ -392,16 +392,6 @@ static void mega65_init ( void )
 	cia2.DDRA = 3; // Ugly workaround ... I think, SD-card setup "CRAM UTIL" (or better: Hyppo) should set this by its own. Maybe Xemu bug, maybe not?
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
 	dma_init();
-	// *** Drive 8 external mount
-	if (configdb.disk8) {
-		if (sdcard_force_external_mount(0, configdb.disk8, "Mount failure on CLI/CFG requested drive-8"))
-			xemucfg_set_str(&configdb.disk8, NULL);	// In case of error, unset configDB option
-	}
-	// *** Drive 9 external mount
-	if (configdb.disk9) {
-		if (sdcard_force_external_mount(1, configdb.disk9, "Mount failure on CLI/CFG requested drive-9"))
-			xemucfg_set_str(&configdb.disk9, NULL);	// In case of error, unset configDB option
-	}
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_init(configdb.uartmon);
 #endif
@@ -689,7 +679,7 @@ static void update_emulator ( void )
 	rtc_regs[1] = XEMU_BYTE_TO_BCD(t->tm_min);	// minutes
 	//rtc_regs[2] = xemu_hour_to_bcd12h(t->tm_hour, configdb.rtc_hour_offset);	// hours
 	rtc_regs[2] = XEMU_BYTE_TO_BCD((t->tm_hour + configdb.rtc_hour_offset + 24) % 24) | 0x80;	// hours (24H format, bit 7 always set)
-	rtc_regs[3] = XEMU_BYTE_TO_BCD(t->tm_mday);	// day of mounth
+	rtc_regs[3] = XEMU_BYTE_TO_BCD(t->tm_mday);	// day of month
 	rtc_regs[4] = XEMU_BYTE_TO_BCD(t->tm_mon) + 1;	// month
 	rtc_regs[5] = XEMU_BYTE_TO_BCD(t->tm_year - 100);	// year
 //	}

@@ -341,7 +341,7 @@ void hypervisor_leave ( void )
 	memory_set_do_map();	// restore mapping ...
 	if (XEMU_UNLIKELY(hypervisor_is_first_call)) {
 		if (trap_current != TRAP_RESET)
-			ERROR_WINDOW("First hypervisor TRAP is not RESET?!");
+			FATAL("First hypervisor TRAP is not RESET?!");
 		first_leave();
 	}
 	// Catch the event when it's a reset TRAP but not part of the initial call (not "cold" reset)

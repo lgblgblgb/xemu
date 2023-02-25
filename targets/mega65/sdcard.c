@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -28,6 +28,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "memcontent.h"
 #include "hypervisor.h"
 #include "vic4.h"
+#include "configdb.h"
+#include "xemu/emutools_config.h"
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -60,7 +62,6 @@ static int	sdhc_mode = 1;
 static Uint32	sdcard_size_in_blocks;	// SD card size in term of number of 512 byte blocks
 static int	sd_fill_mode = 0;
 static Uint8	sd_fill_value = 0;
-static int	default_d81_is_from_sd;
 #ifdef COMPRESSED_SD
 static int	sd_compressed = 0;
 static off_t	sd_bdata_start;
@@ -78,20 +79,54 @@ Uint8		*disk_buffer_cpu_view;
 // real MEGA65 and the new code to have mapping allowing FD _and_ SD buffer mount
 // causes problems. So let's revert back to a fixed "SD-only" solution for now.
 Uint8		*disk_buffer_io_mapped = disk_buffers + SD_BUFFER_POS;
+// "External mount area". Will be initialized later in sdcard_set_external_mount_pool(). This range should be enough for _two_ D65 images.
+// If outside of SD-card size, then it's simply "virtual" only.
+Uint32		sd_external_mount_area_start = 0;
+Uint32		sd_external_mount_area_end = 0;
 
 static const char	*default_d81_basename[2]	= { "mega65.d81",	"mega65_9.d81"    };
 static const char	*default_d81_disk_label[2]	= { "XEMU EXTERNAL",	"XEMU EXTERNAL 9" };
 const char		xemu_external_d81_signature[]	= "\xFF\xFE<{[(XemuExternalDiskMagic)]}>";
 
+#if (D65_SIZE & 511) || (D81_SIZE & 511) || (D71_SIZE & 511) || !(D64_SIZE & 511) || (D64_SIZE & 255)
+#error "Bad Dxx_SIZE"
+#endif
+
+// No need to specify D81ACCESS_D81, that's always "included"
+// Used by do_external_mount() to tell the d81access layer, what formats we want to support
+// TODO: D81ACCESS_D65 is NOT included here since even the d81access layer would need finished support for that, etc.
+#define EXTERNAL_MOUNT_FORMAT_SUPPORT_FLAGS	D81ACCESS_D64|D81ACCESS_D71
+
+#define MOUNT_TYPE_EMPTY	0
+#define MOUNT_TYPE_INTERNAL	1
+#define MOUNT_TYPE_EXTERNAL	2
+
+// Do NOT modify the numbers, other than IDs, they are used like bitfields etc too, must be axactly these values!
+// 2 bit value for real
+#define MOUNT_ACM_D81		0
+#define MOUNT_ACM_D64		1
+#define MOUNT_ACM_D65		2
+#define MOUNT_ACM_D71		3
+// Must be the same order as the MOUNT_ACM_* numerical values are!
+static const char  *acm_names[4]	= { "D81",                  "D64",               "D65",         "D71" };
+static const int    acm_d81consts[4]	= { 0,             D81ACCESS_D64,       D81ACCESS_D65, D81ACCESS_D71  };
+static const Uint32 acm_sectors[4]	= { D81_SIZE >> 9, (D64_SIZE >> 9) + 1, D65_SIZE >> 9, D71_SIZE >> 9  };	// D64 image size is not divisible by 512!
+
 // Disk image mount information for the two units
 static struct {
-	char	*current_name;
-	int	internal;		// is internal mount? FIXME: in this source it's a hard to understand 3-stated logic being 0,1 or -1 ... let's fix this!
-	char	*force_external_name;
-	Uint32	at_sector;		// valid only if "internal", internal mount sector number
-	Uint32	at_sector_initial;	// internal mount sector number during only the first (reset/poweron) trap
-	int	monitoring_initial;	// if true, at_sector_initial is monitored and changed, if false, not anymore
-	int	access_size_mode;
+	int	type;		// mount type, see MOUNT_TYPE_* defines above
+	char	*desc;		// descriptive info on mount not used directly in emulation but only for information query purposes
+	char	*last_ext_fn;	// last (maybe not current mount!) successfull external mount image filename
+	Uint32	sector;		// valid only if "internal", SD sector of the mount
+	Uint32	sector_initial;	// initial disk image at SD-sector, if non-zero
+	Uint32	sector_fake;	// fake sector number for external mount
+	int	acm;		// MOUNT_ACM_* constants, "access mode"
+	int	acm_initial;	// the same as above for the initial disk image, which should be MOUNT_ACM_D81 normally very much
+	int	read_only;	// mount is read-only
+	int	image_size;	// mount size in bytes
+	Uint32	first_sector;	// first SD sector the mount belongs to
+	Uint32	last_sector;	// last SD sector the mount belongs to
+	Uint32	partial_sector;	// partial SD sector the mount belongs to (ie, mount size - D64 - is not divisible by 512)
 } mount_info[2];
 
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
@@ -242,70 +277,6 @@ static inline void virtdisk_read_block ( Uint32 block, Uint8 *buffer )
 #endif
 
 
-static void set_access_size_mode ( const int which )
-{
-	if (!which) {	// drive/image 0 (bits 6 of D68A and D68B)
-		sd_regs[0xA] = (sd_regs[0xA] & (~0x40)) | ((mount_info[0].access_size_mode & 1) << 6);
-		sd_regs[0xB] = (sd_regs[0xB] & (~0x40)) | ((mount_info[0].access_size_mode & 2) << 5);
-	} else {	// drive/image 1 (bits 7 of D68A and D68B)
-		sd_regs[0xA] = (sd_regs[0xA] & (~0x80)) | ((mount_info[1].access_size_mode & 1) << 7);
-		sd_regs[0xB] = (sd_regs[0xB] & (~0x80)) | ((mount_info[1].access_size_mode & 2) << 6);
-	}
-}
-
-
-// define the callback, d81access call this, we can dispatch the change in FDC config to the F011 core emulation this way, automatically.
-// So basically these stuff binds F011 emulation and d81access so the F011 emulation used the d81access framework.
-void d81access_cb_chgmode ( const int which, const int mode ) {
-	const int have_disk = ((mode & 0xFF) != D81ACCESS_EMPTY);
-	const int can_write = (!(mode & D81ACCESS_RO));
-	if (which < 2) {
-		// Using the d81access layer "mode" info to tell the image size, so we can set the bits 6 or 7 (drive 0/1) in $D68A and $D68B above
-		Uint8 acm = 0;
-		// acs will be only used to have "nice" text version for the "mode"
-		const char *acs = "D81";
-		if (have_disk)
-			switch (mode & (D81ACCESS_D64 | D81ACCESS_D71 | D81ACCESS_D65)) {
-				case D81ACCESS_D64:
-					acs = "D64";
-					acm = 1;
-					break;
-				case D81ACCESS_D71:
-					acs = "D71";
-					acm = 3;
-					break;
-				case D81ACCESS_D65:
-					acs = "D65";
-					acm = 2;
-					break;
-				case 0:		// D81 image
-					break;	// acs/acm are already set for this case
-				default:
-					// this should not happen, but leave here for now to be sure, TODO: remove in the future when I am sure ;)
-					ERROR_WINDOW("Got invalid FDC change event (mode) in %s(%d,%d)", __func__, which, mode);
-					break;
-			}
-		mount_info[which].access_size_mode = acm;
-		set_access_size_mode(which);
-		DEBUGPRINT("SDCARD: configuring F011 FDC (#%d) with have_disk=%d, can_write=%d, d81_access=\"%s\"(M:%d,A=$%02X,B=$%02X)" NL, which, have_disk, can_write, acs, acm, sd_regs[0xA], sd_regs[0xB]);
-	}
-	fdc_set_disk(which, have_disk, can_write);
-}
-// Here we implement F011 core's callbacks using d81access (and yes, F011 uses 512 bytes long sectors for real)
-int fdc_cb_rd_sec ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector )
-{
-	const int ret = d81access_read_sect(which, buffer, side, track, sector, 512);
-	DEBUG("SDCARD: D81: reading sector at d81_pos=(%d,%d,%d), return value=%d" NL, side, track, sector, ret);
-	return ret;
-}
-int fdc_cb_wr_sec ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector )
-{
-	const int ret = d81access_write_sect(which, buffer, side, track, sector , 512);
-	DEBUG("SDCARD: D81: writing sector at d81_pos=(%d,%d,%d), return value=%d" NL, side, track, sector, ret);
-	return ret;
-}
-
-
 static void sdcard_shutdown ( void )
 {
 	d81access_close_all();
@@ -355,31 +326,37 @@ static XEMU_INLINE void set_disk_buffer_cpu_view ( void )
 }
 
 
-static void show_card_init_done ( void )
+static void card_init_done ( void )
 {
 	DEBUGPRINT("SDCARD: card init done, size=%u Mbytes (%s), virtsd_mode=%s, default_D81_from_sd=%d" NL,
 		sdcard_size_in_blocks >> 11,
 		sd_is_read_only ? "R/O" : "R/W",
 		vdisk.mode ? "IN-MEMORY-VIRTUAL" : "image-file",
-		default_d81_is_from_sd
+		configdb.defd81fromsd
 	);
+	sdcard_set_external_mount_pool(sdcard_size_in_blocks);
 }
 
 
-int sdcard_init ( const char *fn, const int virtsd_flag, const int default_d81_is_from_sd_in )
+int sdcard_init ( const char *fn, const int virtsd_flag )
 {
-	default_d81_is_from_sd = default_d81_is_from_sd_in;
 	memset(sd_regs, 0, sizeof sd_regs);			// reset all registers
 	memcpy(D6XX_registers + 0x80, sd_regs, sizeof sd_regs);	// be sure, this is in sync with the D6XX register backend (used by io_mapper which also calls us ...)
 	set_disk_buffer_cpu_view();	// make sure to initialize disk_buffer_cpu_view based on current sd_regs[9] otherwise disk_buffer_cpu_view may points to NULL when referenced!
 	for (int a = 0; a < 2; a++) {
-		mount_info[a].current_name = xemu_strdup("<INIT>");
-		mount_info[a].internal = -1;
-		mount_info[a].force_external_name = NULL;
-		mount_info[a].at_sector = 0;
-		mount_info[a].at_sector_initial = 0;
-		mount_info[a].monitoring_initial = 0;
-		mount_info[a].access_size_mode = 0;
+		mount_info[a].type = MOUNT_TYPE_EMPTY;
+		mount_info[a].desc = NULL;
+		mount_info[a].last_ext_fn = NULL;
+		mount_info[a].sector = 0;
+		mount_info[a].sector_initial = 0;
+		mount_info[a].acm = MOUNT_ACM_D81;
+		mount_info[a].acm_initial = MOUNT_ACM_D81;
+		mount_info[a].read_only = 0;
+		mount_info[a].image_size = 0;
+		mount_info[a].image_size = 0;
+		mount_info[a].first_sector = 1;	// making first sector larger than last (impossible)
+		mount_info[a].last_sector = 0;
+		mount_info[a].partial_sector = 0;
 	}
 	int just_created_image_file =  0;	// will signal to format image automatically for the user (if set, by default it's clear, here)
 	char fnbuf[PATH_MAX + 1];
@@ -405,7 +382,7 @@ int sdcard_init ( const char *fn, const int virtsd_flag, const int default_d81_i
 #ifdef COMPRESSED_SD
 		sd_compressed = 0;
 #endif
-		show_card_init_done();
+		card_init_done();
 #ifdef SD_CONTENT_SUPPORT
 		sdcontent_handle(sdcard_size_in_blocks, fn, SDCONTENT_FORCE_FDISK);
 #endif
@@ -483,7 +460,7 @@ retry:
 		}
 	}
 	if (sdfd >= 0) {
-		show_card_init_done();
+		card_init_done();
 		//sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_ASK_FDISK | SDCONTENT_ASK_FILES);
 		if (just_created_image_file) {
 			just_created_image_file = 0;
@@ -506,10 +483,6 @@ retry:
 		} else if (r > MEMCONTENT_VERSION_ID) {
 			INFO_WINDOW("Xemu's signature is too new%s to DOWNgrade", msg);
 		}
-		// TODO: check MEGA65.D81 on the disk, and get its starting sector (!) number. So we can know if mount of MEGA65.D81 is
-		// requested later by sector number given in D81 "mount" registers. We can use this information to
-		// give a D81 as an external mount instead then, to please users not to have the default D81 "inside"
-		// the SD-card image rather than in their native file system.
 	}
 	return sdfd;
 }
@@ -518,6 +491,15 @@ retry:
 static XEMU_INLINE Uint32 U8A_TO_U32 ( const Uint8 *a )
 {
 	return ((Uint32)a[0]) | ((Uint32)a[1] << 8) | ((Uint32)a[2] << 16) | ((Uint32)a[3] << 24);
+}
+
+
+static XEMU_INLINE void U32_TO_U8A ( Uint8 *a, const Uint32 d )
+{
+	a[0] =  d        & 0xFF;
+	a[1] = (d >>  8) & 0xFF;
+	a[2] = (d >> 16) & 0xFF;
+	a[3] = (d >> 24) & 0xFF;
 }
 
 
@@ -593,6 +575,13 @@ int sdcard_read_block ( const Uint32 block, Uint8 *buffer )
 		DEBUGPRINT("SDCARD: SEEK: invalid block was requested to READ: block=%u (max_block=%u) @ PC=$%04X" NL, block, sdcard_size_in_blocks, cpu65.pc);
 		return -1;
 	}
+	if (XEMU_UNLIKELY(block >= sd_external_mount_area_start && block <= sd_external_mount_area_end)) {
+		for (int unit = 0; unit < 2; unit++)
+			if (mount_info[unit].type == MOUNT_TYPE_EXTERNAL && block >= mount_info[unit].first_sector && block <= mount_info[unit].last_sector)
+				return d81access_read_sect_raw(unit, buffer, (block - mount_info[unit].first_sector) << 9, 512, block == mount_info[unit].partial_sector ? 256 : 512);
+		memset(buffer, 0xFF, 512);
+		return 0;
+	}
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	if (vdisk.mode) {
 		virtdisk_read_block(block, buffer);
@@ -614,6 +603,12 @@ int sdcard_write_block ( const Uint32 block, Uint8 *buffer )
 		DEBUGPRINT("SDCARD: SEEK: invalid block was requested to WRITE: block=%u (max_block=%u) @ PC=$%04X" NL, block, sdcard_size_in_blocks, cpu65.pc);
 		return -1;
 	}
+	if (XEMU_UNLIKELY(block >= sd_external_mount_area_start && block <= sd_external_mount_area_end)) {
+		for (int unit = 0; unit < 2; unit++)
+			if (mount_info[unit].type == MOUNT_TYPE_EXTERNAL && block >= mount_info[unit].first_sector && block <= mount_info[unit].last_sector)
+				return d81access_write_sect_raw(unit, buffer, (block - mount_info[unit].first_sector) << 9, 512, block == mount_info[unit].partial_sector ? 256 : 512);
+		return 0;
+	}
 	if (sd_is_read_only)	// on compressed SD image, it's also set btw
 		return -1;	// read-only SD-card
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
@@ -633,7 +628,6 @@ int sdcard_write_block ( const Uint32 block, Uint8 *buffer )
 
 /* Lots of TODO's here:
  * + study M65's quite complex error handling behaviour to really match ...
- * + with external D81 mounting: have a "fake D81" on the card, and redirect accesses to that, if someone if insane enough to try to access D81 at the SD-level too ...
  * + In general: SD emulation is "too fast" done in zero emulated CPU time, which can affect the emulation badly if an I/O-rich task is running on Xemu/M65
  * */
 static void sdcard_block_io ( const Uint32 block, const int is_write )
@@ -680,31 +674,6 @@ static void sdcard_block_io ( const Uint32 block, const int is_write )
 		return;
 	}
 	sd_status &= ~(SD_ST_ERROR | SD_ST_FSM_ERROR);
-#if 0
-	off_t offset = sd_sector;
-	offset <<= 9;	// make byte offset from sector (always SDHC card!)
-	int ret = host__seek(offset);
-	if (XEMU_UNLIKELY(!ret && is_write && sd_is_read_only)) {
-		ret = 1;	// write protected SD image?
-	}
-	if (XEMU_LIKELY(!ret)) {
-		Uint8 *wp = get_buffer_memory(is_write);
-		if (
-#ifdef COMPRESSED_SD
-			(is_write && compressed_block) ||
-#endif
-			(is_write ? xemu_safe_write(sdfd, wp, 512) : xemu_safe_read(sdfd, wp, 512)) != 512
-		)
-			ret = -1;
-	}
-	if (XEMU_UNLIKELY(ret < 0)) {
-		sd_status |= SD_ST_ERROR | SD_ST_FSM_ERROR; // | SD_ST_BUSY1 | SD_ST_BUSY0;
-			sd_status |= SD_ST_BUSY1 | SD_ST_BUSY0;
-			//KEEP_BUSY(1);
-		return;
-	}
-	sd_status &= ~(SD_ST_ERROR | SD_ST_FSM_ERROR);
-#endif
 }
 
 
@@ -811,38 +780,317 @@ static void sdcard_command ( const Uint8 cmd )
 }
 
 
+// Here we implement F011 core's callbacks using d81access (and yes, F011 uses 512 bytes long sectors for real)
+int fdc_cb_rd_sec ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector )
+{
+	const int ret = d81access_read_sect(which, buffer, side, track, sector, 512);
+	DEBUG("SDCARD: FDC: reading sector at (side,track,sector)=(%u,%u,%u), return value=%d" NL, side, track, sector, ret);
+	return ret;
+}
+
+
+int fdc_cb_wr_sec ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector )
+{
+	const int ret = d81access_write_sect(which, buffer, side, track, sector , 512);
+	DEBUG("SDCARD: FDC: writing sector at (side,track,sector)=(%u,%u,%u), return value=%d" NL, side, track, sector, ret);
+	return ret;
+}
+
+
+// define the callback, d81access call this, we can dispatch the change in FDC config to the F011 core emulation this way, automatically.
+// So basically these stuff binds F011 emulation and d81access so the F011 emulation used the d81access framework.
+void d81access_cb_chgmode ( const int which, const int mode ) {
+	const int have_disk = ((mode & 0xFF) != D81ACCESS_EMPTY);
+	const int can_write = !(mode & D81ACCESS_RO) || !have_disk;
+	if (which < 2) {
+		// Using the d81access layer "mode" info to tell the image size, so we can set the bits 6 or 7 (drive 0/1) in $D68A and $D68B above
+		Uint8 acm = MOUNT_ACM_D81;
+		if (have_disk) {
+			switch (mode & (D81ACCESS_D64 | D81ACCESS_D71 | D81ACCESS_D65)) {
+				case D81ACCESS_D64: acm = MOUNT_ACM_D64; break;
+				case D81ACCESS_D71: acm = MOUNT_ACM_D71; break;
+				case D81ACCESS_D65: acm = MOUNT_ACM_D65; break;
+			}
+		}
+		mount_info[which].acm = acm;
+		mount_info[which].read_only = !can_write;
+		if (have_disk) {
+			const int size = d81access_get_size(which);
+			mount_info[which].image_size = size;
+			if (mount_info[which].type == MOUNT_TYPE_EXTERNAL)
+				mount_info[which].sector = mount_info[which].sector_fake;
+			mount_info[which].first_sector = mount_info[which].sector;
+			mount_info[which].last_sector = mount_info[which].sector + (Uint32)(size >> 9) - 1U;
+			if ((size & 511)) {
+				mount_info[which].last_sector++;
+				mount_info[which].partial_sector = mount_info[which].last_sector;
+			} else {
+				mount_info[which].partial_sector = 0;
+			}
+		} else {
+			mount_info[which].image_size = 0;
+			mount_info[which].first_sector = 1;	// making first sector larger than last (impossible)
+			mount_info[which].last_sector = 0;
+			mount_info[which].partial_sector = 0;
+		}
+		// TODO+FIXME: seriously review the following part ...
+		if (!which) {	// drive/image 0 (bits 6 of D68A and D68B)
+			if (have_disk) {
+				U32_TO_U8A(sd_regs + 0x0C, mount_info[0].sector);
+				sd_regs[0xA] = (sd_regs[0xA] & (~0x40)) | ((acm & 1) << 6);
+				sd_regs[0xB] = (sd_regs[0xB] & (~0x44)) | ((acm & 2) << 5) | 0x03 | (mount_info[0].read_only ?  4 : 0);
+			} else {
+				sd_regs[0xB] &= ~0x07;
+			}
+		} else {	// drive/image 1 (bits 7 of D68A and D68B)
+			if (have_disk) {
+				U32_TO_U8A(sd_regs + 0x10, mount_info[1].sector);
+				sd_regs[0xA] = (sd_regs[0xA] & (~0x80)) | ((acm & 1) << 7);
+				sd_regs[0xB] = (sd_regs[0xB] & (~0xA0)) | ((acm & 2) << 6) | 0x18 | (mount_info[1].read_only ? 32 : 0);
+			} else {
+				sd_regs[0xB] &= ~0x38;
+			}
+		}
+		DEBUGPRINT("SDCARD: configuring F011 FDC (#%d) with have_disk=%d, can_write=%d, image_size=%d, d81_access=\"%s\"(M:%d,A=$%02X,B=$%02X)" NL, which, have_disk, can_write, mount_info[which].image_size, acm_names[acm], acm, sd_regs[0xA], sd_regs[0xB]);
+	}
+	fdc_set_disk(which, have_disk, can_write);
+}
+
+
+void sdcard_set_external_mount_pool ( Uint32 sector )
+{
+	if (sd_external_mount_area_start == sector)
+		return;
+	sd_external_mount_area_start = sector;
+	for (Uint32 unit = 0; unit < 2; unit++) {
+		mount_info[unit].sector_fake = sector;
+		if (mount_info[unit].type == MOUNT_TYPE_EXTERNAL) {
+			mount_info[unit].sector = sector;
+			U32_TO_U8A(sd_regs + (!unit ? 0x0C : 0x10), sector);
+		}
+		sector += (Uint32)(D65_SIZE >> 9);
+	}
+	sd_external_mount_area_end = sector - 1U;
+	DEBUGPRINT("SDCARD: external mount pool is #%u...%u (card size: %u)" NL, sd_external_mount_area_start, sd_external_mount_area_end, sdcard_size_in_blocks);
+}
+
+
+static inline int get_mounted ( const int unit )
+{
+	return !unit ? ((sd_regs[0xB] & 0x03) == 0x03) : ((sd_regs[0xB] & 0x18) == 0x18);
+}
+
+static inline int get_ro ( const int unit )
+{
+	return !!(sd_regs[0xB] & (!unit ? 4 : 32));
+}
+
+static inline int get_acm ( const int unit )
+{
+	return !unit ?
+		((sd_regs[0xA] & 0x40) >> 6) + ((sd_regs[0xB] & 0x40) >> 5) :	// (bits 6 of D68A and D68B)
+		((sd_regs[0xA] & 0x80) >> 7) + ((sd_regs[0xB] & 0x80) >> 6)	// (bits 7 of D68A and D68B)
+	;
+}
+
+static inline Uint32 get_sector ( const int unit )
+{
+	return U8A_TO_U32(sd_regs + (!unit ? 0x0C : 0x10));
+}
+
+
+static int do_external_mount ( const int unit, const char *fn, int read_only )
+{
+	const int old_type = mount_info[unit].type;
+	DEBUGPRINT("SDCARD: MOUNT: external mount #%d from file %s (%s)" NL, unit, fn, read_only ? "R/O" : "R/W");
+	if (old_type == MOUNT_TYPE_EXTERNAL && !strcmp(fn, mount_info[unit].desc) && !!mount_info[unit].read_only == !!read_only) {
+		DEBUGPRINT("SDCARD: MOUNT: (external mount) already mounted, no change" NL);
+		return 0;	// no change, report success though
+	}
+	mount_info[unit].type = MOUNT_TYPE_EXTERNAL;
+	read_only = read_only ? D81ACCESS_RO : 0;
+	if (d81access_attach_fsobj(unit, fn, read_only | D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | EXTERNAL_MOUNT_FORMAT_SUPPORT_FLAGS)) {
+		mount_info[unit].type = old_type;	// failed, restore previous state!
+		return 1;
+	}
+	xemu_restrdup(&mount_info[unit].desc, fn);
+	xemu_restrdup(&mount_info[unit].last_ext_fn, fn);
+	return 0;
+}
+
+
+// Meant to check the legitimity of INTERNAL mounts
+static inline int is_bad_mount_sector ( const Uint32 sector, const int acm )
+{
+	const Uint32 till_sector = sector + acm_sectors[acm] - 1U;
+	return
+		 sector      <  MIN_MOUNT_SECTOR_NO   ||
+		till_sector  >= sdcard_size_in_blocks ||
+		(sector      >= sd_external_mount_area_start && till_sector <= sd_external_mount_area_end) ||
+		(till_sector >= sd_external_mount_area_start && till_sector <= sd_external_mount_area_end) ||
+		(sector      <  sd_external_mount_area_start && till_sector >  sd_external_mount_area_end)
+	;
+}
+
+
+static int do_internal_mount ( const int unit, const Uint32 sector, const int acm, int read_only )
+{
+	if (mount_info[unit].type == MOUNT_TYPE_INTERNAL && mount_info[unit].sector == sector && mount_info[unit].acm == acm && !!mount_info[unit].read_only == !!read_only) {
+		DEBUGPRINT("SDCARD: MOUNT: (internal mount) already mounted on #%d, no change" NL, unit);
+		return 0;	// no change
+	}
+	if (sector >= sd_external_mount_area_start && sector <= sd_external_mount_area_end) {
+		if (sector == mount_info[unit].sector_fake) {
+			if (mount_info[unit].last_ext_fn) {
+				DEBUGPRINT("SDCARD: MOUNT: (internal mount) fake register mount using previous EXTERNAL mount now on #%d for: %s" NL, unit, mount_info[unit].last_ext_fn);
+				if (do_external_mount(unit, mount_info[unit].last_ext_fn, 0))
+					sdcard_unmount(unit);
+			} else {
+				DEBUGPRINT("SDCARD: MOUNT: (internal mount) fake register mount is INVALID on #%d" NL, unit);
+				goto invalid_internal;
+			}
+		} else {
+			DEBUGPRINT("SDCARD: MOUNT: (internal mount) external mount reference problem on #%d" NL, unit);
+			goto invalid_internal;
+		}
+	}
+	if (is_bad_mount_sector(sector, acm)) {
+		DEBUGPRINT("SDCARD: MOUNT: (internal mount) INVALID mount sector (#%u) on #%d, refusing to change config!" NL, sector, unit);
+		goto invalid_internal;
+	}
+	read_only = (sd_is_read_only || read_only) ? D81ACCESS_RO : 0;
+	char desc[16];
+	snprintf(desc, sizeof desc, "<%s@%u>", acm_names[acm], sector);
+	xemu_restrdup(&mount_info[unit].desc, desc);
+	mount_info[unit].type = MOUNT_TYPE_INTERNAL;
+	mount_info[unit].sector = sector;
+	DEBUGPRINT("SDCARD: MOUNT: internal mount #%d from SD sector $%X (%s)" NL, unit, sector, read_only ? "R/O" : "R/W");
+	d81access_attach_fd(unit, sdfd, (off_t)sector << 9, D81ACCESS_IMG | read_only | acm_d81consts[acm]);
+	return 0;
+invalid_internal:
+	OSD(-1, -1, "INVALID FDC MOUNT FROM SD%s", mount_info[unit].type == MOUNT_TYPE_EMPTY ? "" : "\n<emergency unmounting>");
+	sdcard_unmount(unit);
+	return 1;
+}
+
+
+static int is_hyppo_reset = -1;
+#define MOUNT_REG_BACKUP_LEN (0x13 - 0x0A + 1)
+
+
+static void clear_mount_registers ( void )
+{
+	memset(sd_regs + 0x0A, 0, MOUNT_REG_BACKUP_LEN);
+}
+
+
+static void backup_or_restore_mount_registers ( const int is_backup )
+{
+	static Uint8 backup[MOUNT_REG_BACKUP_LEN];
+	static int has_backup = 0;
+	if (is_backup) {
+		if (!has_backup) {
+			memcpy(backup, sd_regs + 0x0A, sizeof backup);
+			has_backup = 1;
+		}
+	} else {
+		if (!has_backup)
+			FATAL("%s(): restore without prior backup!", __func__);
+		memcpy(sd_regs + 0x0A, backup, sizeof backup);
+		has_backup = 0;
+	}
+}
+
+
 // These are called from hdos.c as part of the beginning/end of the machine
-// initialization (ie, trap reset). The purpose here currently is activating
-// and deactivating mount monitoring so we can override later the default
-// on-sdcard D81 image mount with external one, knowing the mount-sector-number.
-
-
-void sdcard_notify_system_start_begin ( void )
+// initialization (ie, trap reset) _AND_ in case of a DOS trap (Hyppo may
+// do mount/umount by request in this case).
+void sdcard_notify_hyppo_enter ( const int _is_hyppo_reset )
 {
-	for (int unit = 0; unit < 2; unit++) {
-		mount_info[unit].at_sector_initial = 0;
-		mount_info[unit].monitoring_initial = 1;
-	}
-	memset(sd_regs + 0x0C, 0, 4);
-	memset(sd_regs + 0x10, 0, 4);
-	sd_regs[0xB] &= 255 - (8 + 1);	// set D81 (internal) mounted to zero for the two units
-	//sd_regs[0xB] &= 255 - (8 + 1 + 128 + 64);	// set D81 (internal) mounted to zero for the two units, also clear bits 6 and 7 for image size D81
-	//sd_regs[0xA] &= 255 - (128 + 64);		// other bits for the two units for image size, formed with also bits 6 and 7 of reg B
-}
-
-
-void sdcard_notify_system_start_end ( void )
-{
-	for (int unit = 0; unit < 2; unit++) {
-		mount_info[unit].monitoring_initial = 0;	// stop monitoring initial D81 mounts, end of "machine-start" state
-		if (!unit && !mount_info[unit].at_sector_initial)
-			DEBUGPRINT("SDCARD: D81-DEFAULT: WARNING: could not determine default on-sd D81 mount sector info during the RESET TRAP for unit #%d!" NL, unit);
-		set_access_size_mode(unit);	// workaround to restore possible lost image size access mode info at the end of (or by) hyppo reset trap (FIXME, this whole solution is a mess!)
+	is_hyppo_reset = _is_hyppo_reset;
+	if (is_hyppo_reset) {
+		backup_or_restore_mount_registers(1);
+		clear_mount_registers();
 	}
 }
 
 
-static int do_default_d81_mount_hack ( const int unit )
+void sdcard_notify_hyppo_leave ( void )
+{
+	if (is_hyppo_reset < 0)
+		FATAL("%s() with is_hyppo_reset < 0", __func__);
+	const int was_hyppo_reset = is_hyppo_reset;
+	is_hyppo_reset = -1;
+	if (was_hyppo_reset == 1) {
+		for (int unit = 0; unit < 2; unit++) {
+			// See, if HYPPO mounts any default disk image at this point. If so, book as "default disk image" so we can reuse this info later
+			Uint32 sector = 0;
+			const int acm = get_acm(unit);
+			if (get_mounted(unit))
+				sector = get_sector(unit);
+			if (is_bad_mount_sector(sector, acm))
+				sector = 0;
+			if (sector) {
+				mount_info[unit].sector_initial = sector;
+				mount_info[unit].acm_initial = acm;
+				DEBUGPRINT("SDCARD: MOUNT: default SD-internal image for unit #%d is at sector #%u (%s)" NL, unit, sector, acm_names[acm]);
+			} else {
+				mount_info[unit].sector_initial = 0;
+				DEBUGPRINT("SDCARD: MOUNT: default SD-internal image for unit #%d could not be determined" NL, unit);
+			}
+		}
+		backup_or_restore_mount_registers(0);
+		static int is_first_reset = 1;
+		if (is_first_reset) {
+			is_first_reset = 0;
+			clear_mount_registers();
+		        if (configdb.disk8) {
+				if (sdcard_external_mount(0, configdb.disk8, "Mount failure on CLI/CFG requested drive-8"))
+					xemucfg_set_str(&configdb.disk8, NULL); // In case of error, unset configDB option
+			}
+			if (!configdb.disk8) {
+				if (!configdb.defd81fromsd) {
+					// mount default D81 on U8 if no (successfull) mount was done AND no "default disk image from SD-card" option is used
+					sdcard_default_external_d81_mount(0);
+				} else if (configdb.defd81fromsd && mount_info[0].sector_initial) {
+					sdcard_default_internal_d81_mount(0);
+				}
+			}
+			if (configdb.disk9) {
+				if (sdcard_external_mount(1, configdb.disk9, "Mount failure on CLI/CFG requested drive-9"))
+					xemucfg_set_str(&configdb.disk9, NULL); // In case of error, unset configDB option
+			}
+		}
+		return;
+	}
+	// Check if there is change in mounting AND it's not the RESET phase, so it must be done by some HYPPO mount/umount call at this point!
+	for (int unit = 0; unit < 2; unit++) {
+		const int is_mounted = get_mounted(unit);
+		const Uint32 sector = get_sector(unit);
+		const int acm = get_acm(unit);
+		const int ro = get_ro(unit);
+		if (mount_info[unit].type != MOUNT_TYPE_EMPTY && !is_mounted) {
+			DEBUGPRINT("SDCARD: MOUNT: unmount scenario detected during-HDOS-trap on #%d, doing so" NL, unit);
+			sdcard_unmount(unit);
+		} else if (is_mounted && (
+			mount_info[unit].type == MOUNT_TYPE_EMPTY ||
+			mount_info[unit].sector != sector ||
+			mount_info[unit].acm != acm ||
+			!mount_info[unit].read_only != !ro
+		)) {
+			if (sector == mount_info[unit].sector_initial && !configdb.defd81fromsd) {
+				if (sdcard_default_external_d81_mount(unit))
+					sdcard_unmount(unit);
+			} else {
+				if (do_internal_mount(unit, sector, acm, ro))
+					sdcard_unmount(unit);
+			}
+		}
+	}
+}
+
+
+int sdcard_default_external_d81_mount ( const int unit )
 {
 	static char *default_d81_path[2] = { NULL, NULL };
 	if (!default_d81_path[unit]) {
@@ -853,139 +1101,46 @@ static int do_default_d81_mount_hack ( const int unit )
 		default_d81_path[unit] = xemu_malloc(len);
 		snprintf(default_d81_path[unit], len, "%s%s", hdosroot, default_d81_basename[unit]);
 	}
-	DEBUGPRINT("SDCARD: D81-DEFAULT: trying to mount external D81 instead of internal default one as %s on unit #%d" NL, default_d81_path[unit], unit);
+	DEBUGPRINT("SDCARD: MOUNT: trying to mount DEFAULT external image instead of internal default one as %s on unit #%d" NL, default_d81_path[unit], unit);
 	// we want to create the default image file if does not exist (note the "0" for d81access_create_image_file, ie do not overwrite exisiting image)
 	// d81access_create_image_file() returns with 0 if image was created, -2 if image existed before, and -1 for other errors
 	if (d81access_create_image_file(default_d81_path[unit], default_d81_disk_label[unit], 0, NULL) == -1)
 		return -1;
 	// ... so, the file existed before case allows to reach this point, since then retval is -2 (and not -1 as a generic error)
-	return sdcard_force_external_mount(unit, default_d81_path[unit], "Cannot mount default external D81");
+	return sdcard_external_mount(unit, default_d81_path[unit], "Cannot mount default external D81");
 }
 
 
-int sdcard_default_d81_mount ( const int unit )
+int sdcard_default_internal_d81_mount ( const int unit )
 {
-	if (default_d81_is_from_sd) {
-		ERROR_WINDOW("This function is not available when\n\"default D81 mount from SD\" option is inactive!");
-		return -1;
+	if (!mount_info[unit].sector_initial) {
+		ERROR_WINDOW("No default disk image on SD-card for unit #%d", unit);
+		return 1;
 	}
-	return do_default_d81_mount_hack(unit);
-}
-
-
-// Return values:
-//	* -1: error
-//	*  0: no image was mounted internally (not enabled etc)
-//	*  1: image has been mounted
-static int internal_mount ( const int unit )
-{
-	int ro_flag = 0;
-	Uint32 at_sector;
-	if (!unit) {
-		// must be 'image enabled' and 'disk present' bit set for "unit 0"
-		if ((sd_regs[0xB] & 0x03) != 0x03 || mount_info[0].force_external_name)
-			return 0;
-		if (/*(sd_regs[0xB] & 0x04) ||*/ sd_is_read_only)	// it seems checking the register as well causes RO mount for some reason, let's ignore for now!
-			ro_flag = D81ACCESS_RO;
-		at_sector = U8A_TO_U32(sd_regs + 0x0C);
-	} else {
-		// must be 'image enabled' and 'disk present' bit set for "unit 1"
-		if ((sd_regs[0xB] & 0x18) != 0x18 || mount_info[1].force_external_name)
-			return 0;
-		if (/*(sd_regs[0xB] & 0x20) ||*/ sd_is_read_only)	// see above at the similar line for drive-0
-			ro_flag = D81ACCESS_RO;
-		at_sector = U8A_TO_U32(sd_regs + 0x10);
-	}
-	// FIXME: actual upper limit should take account the image size to mount which can be different now than D81_SIZE like in case of D65 image (not now, but in the future?)
-	// FIXME: also a better algorithm to find limits, see the comment at defining MIN_MOUNT_SECTOR_NO near the beginning in this file
-	if (at_sector < MIN_MOUNT_SECTOR_NO || ((at_sector + (D81_SIZE >> 9)) >= sdcard_size_in_blocks)) {
-		DEBUGPRINT("SDCARD: D81: internal mount #%d **INVALID** SD sector (mount refused!), too %s $%X" NL, unit, at_sector < MIN_MOUNT_SECTOR_NO ? "low" : "high", at_sector);
-		d81access_close(unit);
-		mount_info[unit].current_name[0] = '\0';
-		mount_info[unit].internal = -1;
-		return -1;
-	}
-	mount_info[unit].at_sector = at_sector;
-	// FIXME: remove this? This logic has to be moved to the register write time, as this code is not executed maybe, if other external (CLI etc) mount overrides stuff anyway
-	/*if (XEMU_UNLIKELY(mount_info[unit].monitoring_initial && !mount_info[unit].at_sector_initial))
-		mount_info[unit].at_sector_initial = at_sector;*/
-	if (at_sector == mount_info[unit].at_sector_initial && !default_d81_is_from_sd) {
-		// it seems the first ever mounted D81 wanted to be mounted now, so let's override that with external mount at this point
-		if (!do_default_d81_mount_hack(unit))
-			return 1;	// if succeeded, stop processing further! (note the return value needs of this functions!)
-	}
-	// FIXME/TODO: no support yet to take account D64,D71,D65 mount from SD-card! However it's not so common I guess from SD-card in case of emulator, but more from external FS in that case
-	DEBUGPRINT("SDCARD: D81: internal mount #%d from SD sector $%X (%s)" NL, unit, at_sector, ro_flag ? "R/O" : "R/W");
-	d81access_attach_fd(unit, sdfd, (off_t)at_sector << 9, D81ACCESS_IMG | ro_flag);
-	char fn[32];
-	sprintf(fn, "<SD@$%X:%s>", at_sector, ro_flag ? "RO" : "RW");
-	xemu_restrdup(&mount_info[unit].current_name, fn);
-	mount_info[unit].internal = 1;
-	return 1;
-}
-
-
-static int some_mount ( const int unit )
-{
-	const char *extfn = mount_info[unit].force_external_name;
-	if (extfn) {	// force external mount
-		if (strcmp(mount_info[unit].current_name, extfn)) {
-			DEBUGPRINT("SDCARD: D81: external mount #%d change from \"%s\" to \"%s\"" NL, unit, mount_info[unit].current_name, extfn);
-			if (d81access_attach_fsobj(unit, extfn, D81ACCESS_IMG | D81ACCESS_PRG | D81ACCESS_DIR | D81ACCESS_AUTOCLOSE | D81ACCESS_D64 | D81ACCESS_D71)) {
-				DEBUGPRINT("SDCARD: D81: external mount #%d failed at \"%s\", closing unit." NL, unit, extfn);
-				d81access_close(unit);
-				mount_info[unit].current_name[0] = '\0';
-				return -1;
-			} else {
-				xemu_restrdup(&mount_info[unit].current_name, extfn);
-			}
-		} else {
-			DEBUGPRINT("SDCARD: D81: external mount #%d but no change, \"%s\" = \"%s\"" NL, unit, mount_info[unit].current_name, extfn);
-		}
-		mount_info[unit].internal = 0;
-		// at this point, let's update sd_regs register to reflect that we use external mount ...
-		sd_regs[0xB] |= !unit ? 1 : 8;
-		return 0;
-	}
-	// fall back to try internal mount
-	if (internal_mount(unit) == 0) {
-		DEBUGPRINT("SDCARD: D81: internal mount #%d has no condition to mount anything." NL, unit);
-		d81access_close(unit);	// unmount, if internal_mount() finds no internal mount situation
-		mount_info[unit].current_name[0] = '\0';
-		mount_info[unit].internal = -1;
-	} /* else
-		DEBUGPRINT("SDCARD: D81: internal mount #%d failed?" NL, unit); */	// FIXME: remove/rethink this part! internal_mount() can return with non-zero, zero or negative as answer!!
-	return 0;
+	DEBUGPRINT("SDCARD: MOUNT: mounting DEFAULT on-SD card (at sector %u) default image on unit #%d" NL, mount_info[unit].sector_initial, unit);
+	return do_internal_mount(unit, mount_info[unit].sector_initial, mount_info[unit].acm_initial, 0);
 }
 
 
 const char *sdcard_get_mount_info ( const int unit, int *is_internal )
 {
 	if (is_internal)
-		*is_internal = mount_info[unit & 1].internal;
-	return mount_info[unit & 1].current_name;
+		*is_internal = (mount_info[unit & 1].type == MOUNT_TYPE_INTERNAL);
+	static const char *str_empty = "<EMPTY>";
+	return mount_info[unit & 1].desc ? mount_info[unit & 1].desc : str_empty;
 }
 
 
-int sdcard_force_external_mount ( const int unit, const char *filename, const char *cry )
+int sdcard_external_mount ( const int unit, const char *filename, const char *cry )
 {
-	DEBUGPRINT("SDCARD: D81: %s(%d, \"%s\", \"%s\");" NL, __func__, unit, filename, cry);
-	if (filename && *filename) {
-		xemu_restrdup(&mount_info[unit].force_external_name, filename);
-	} else if (mount_info[unit].force_external_name) {
-		free(mount_info[unit].force_external_name);
-		mount_info[unit].force_external_name = NULL;
+	DEBUGPRINT("SDCARD: MOUNT: %s(%d, \"%s\", \"%s\");" NL, __func__, unit, filename, cry);
+	if (!filename || !*filename) {
+		ERROR_WINDOW("Calling %s() with NULL or empty str?!", __func__);	// FIXME: remove this!
+		return -1;
 	}
-	if (some_mount(unit)) {
-		// error. close access - if ANY
-		d81access_close(unit);
-		mount_info[unit].current_name[0] = '\0';
-		if (mount_info[unit].force_external_name) {
-			if (cry) {
-				ERROR_WINDOW("%s\nCould not mount requested file as unit #%d:\n%s", cry, unit, filename);
-			}
-			free(mount_info[unit].force_external_name);
-			mount_info[unit].force_external_name = NULL;
+	if (do_external_mount(unit, filename, 0)) {
+		if (cry) {
+			ERROR_WINDOW("%s\nCould not mount requested file as unit #%d:\n%s", cry, unit, filename);
 		}
 		return -1;
 	}
@@ -993,31 +1148,53 @@ int sdcard_force_external_mount ( const int unit, const char *filename, const ch
 }
 
 
-int sdcard_force_external_mount_with_image_creation ( const int unit, const char *filename, const int do_overwrite, const char *cry )
+int sdcard_external_mount_with_image_creation ( const int unit, const char *filename, const int do_overwrite, const char *cry )
 {
 	if (d81access_create_image_file(filename, NULL, do_overwrite, "Cannot create D81"))
 		return -1;
-	return sdcard_force_external_mount(unit, filename, cry);
+	return sdcard_external_mount(unit, filename, cry);
 }
 
 
-int sdcard_unmount ( const int unit )
+
+void sdcard_unmount ( const int unit )
 {
+	if (mount_info[unit].type == MOUNT_TYPE_EMPTY)
+		return;
+	DEBUGPRINT("SDCARD: MOUNT: unmounting #%d" NL, unit);
+	mount_info[unit].type = MOUNT_TYPE_EMPTY;
+	free(mount_info[unit].desc);
+	mount_info[unit].desc = NULL;
 	d81access_close(unit);
-	mount_info[unit].internal = 0;	// FIXME ???
-	xemu_restrdup(&mount_info[unit].current_name, "<EMPTY>");
-	if (mount_info[unit].force_external_name) {
-		// We must null this out, otherwise next (even internal) mount will pick it up and use it again as this external mount!
-		free(mount_info[unit].force_external_name);
-		mount_info[unit].force_external_name = NULL;
-	}
-	return 0;
 }
 
 
 void sdcard_write_register ( const int reg, const Uint8 data )
 {
 	const Uint8 prev_data = sd_regs[reg];
+	if (!in_hypervisor && reg >= 0x0A && reg <= 0x13) {
+		// TODO/FIXME: this is probably wrong if MEGA65 allows FDC-mount operations outside of hypervisor as well
+		// However this is much safer/more simple this way as we can use the fact of hypervisor leave gate to "evaluate" the resulf of
+		// register changes than allowing any program to do random modifications here and there (also I don't know any MEGA65 titles
+		// which would do direct mount reg modifications anyway). If it's a serious limitation of emulation, I should rewrote these things.
+		// Must be placed here, since if written from the "user-space" then we must avoid "sd_regs" to be updated.
+		// --- HOWEVER ---
+		// ROM seems to manipulate register 0xB directly for umount (not via hyppo!)? Let's see if we can handle that here ourself.
+		// Honestly, there should be a FIXME/TODO here to also handle _any_ kind of direct FDC mount reg operation as well.
+		if (reg == 0x0B) {
+			if (mount_info[0].type != MOUNT_TYPE_EMPTY && (data & 0x03) != 0x03) {
+				DEBUGPRINT("SDCARD: user-space unmount on unit #0" NL);
+				sdcard_unmount(0);
+			}
+			if (mount_info[1].type != MOUNT_TYPE_EMPTY && (data & 0x18) != 0x18) {
+				DEBUGPRINT("SDCARD: user-space unmount on unit #1" NL);
+				sdcard_unmount(1);
+			}
+			return;
+		}
+		DEBUGPRINT("SDCARD: *REFUSING* to modify FDC-mount registers ($%02X of $0B-$13, data: $%02X, prev_value: $%02X) while not in hypervisor mode @ PC=$%04X" NL, reg, data, prev_data, cpu65.pc);
+		return;
+	}
 	sd_regs[reg] = data;
 	// Note: don't update D6XX backend as it's already done in the I/O decoder
 	switch (reg) {
@@ -1038,38 +1215,17 @@ void sdcard_write_register ( const int reg, const Uint8 data )
 		case 0x09:
 			set_disk_buffer_cpu_view();	// update disk_buffer_cpu_view pointer according to sd_regs[9] just written
 			break;
-		case 0x0B:
-			// FIXME: note, this logic is probably not precise. There is true "mount event" but if D81 image access
-			// allowed, any write to D81 addr registers cause to immediately "move the mounting window" without the need
-			// to write this reg at all again. At least AFAIK. Should be checked!!
-			DEBUGPRINT("SDCARD: writing FDC configuration register $%04X with $%02X (old_data=$%02X) PC=$%04X" NL, reg + 0xD680, data, prev_data, cpu65.pc);
-			if (XEMU_UNLIKELY(mount_info[0].monitoring_initial && !mount_info[0].at_sector_initial && (data & 1)))
-				mount_info[0].at_sector_initial = U8A_TO_U32(sd_regs + 0x0C);
-			if (XEMU_UNLIKELY(mount_info[1].monitoring_initial && !mount_info[1].at_sector_initial && (data & 8)))
-				mount_info[1].at_sector_initial = U8A_TO_U32(sd_regs + 0x10);
-			if ((data ^ prev_data) & 0x07)	// FIXME: ignores bit 6 "superfloppy"
-				some_mount(0);
-			if ((data ^ prev_data) & 0x38)	// FIXME: ignores bit 7 "superfloppy"
-				some_mount(1);
-			break;
+		case 0x0A:	// mount info for upper two bits (other bits seem to be R/O!)
+		case 0x0B:	// mount register
 		case 0x0C:	// first D81 disk image starting sector registers
 		case 0x0D:
 		case 0x0E:
 		case 0x0F:
-			if (data != prev_data) {
-				DEBUGPRINT("SDCARD: writing D81 #0 sector register $%04X with $%02X PC=$%04X" NL, reg + 0xD680, data, cpu65.pc);
-				internal_mount(0);
-			}
-			break;
 		case 0x10:	// second D81 disk image starting sector registers
 		case 0x11:
 		case 0x12:
 		case 0x13:
-			if (data != prev_data) {
-				DEBUGPRINT("SDCARD: writing D81 #1 sector register $%04X with $%02X PC=$%04X" NL, reg + 0xD680, data, cpu65.pc);
-				internal_mount(1);
-			}
-			break;
+			break;	// do nothing! for now, mounting is done via hyppo trap/leave callbacks. also, read the comment near of the current function
 		default:
 			DEBUGPRINT("SDCARD: unimplemented register: $%02X tried to be written with data $%02X" NL, reg, data);
 			break;

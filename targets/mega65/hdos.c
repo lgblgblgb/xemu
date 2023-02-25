@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -421,7 +421,7 @@ static void hdos_virt_mount ( const int unit )
 		return;
 	}
 	xemu_os_close(fd);	// we don't need it anymore
-	if (sdcard_force_external_mount(unit, fullpath, NULL)) {
+	if (sdcard_external_mount(unit, fullpath, NULL)) {
 		DEBUGHDOS("HDOS: VIRT: mount of image \"%s\" on unit %d FAILED :(" NL, fullpath, unit);
 		hdos.virt_out_a = HDOSERR_IMAGE_WRONG_LEN;	// this is probably the only reason the mount call could fail
 		return;
@@ -692,6 +692,15 @@ static void _hdos_func_unimplemented ( const char *by_entity )
 #define HDOS_VIRT_XEMU_UNIMPLEMENTED()	_hdos_func_unimplemented("XEMU")
 
 
+static inline int is_need_to_notify_sdcard ( const Uint8 func_no )
+{
+	// Notify SDCARD/F011 subsystem if:
+	// * HDOS virutalization is not enabled
+	// * And, any "mount" related HDOS function is/was called
+	return !hdos.do_virt && (func_no == 0x40 || func_no == 0x42 || func_no == 0x44 || func_no == 0x46);
+}
+
+
 // Called when DOS trap is triggered.
 // Can be used to take control (without hyppo doing it) but setting the needed register values,
 // and calling hypervisor_leave() to avoid Hyppo to run.
@@ -699,6 +708,8 @@ void hdos_enter ( const Uint8 func_no )
 {
 	if (XEMU_UNLIKELY(!hdos_init_is_done))
 		FATAL("%s() is called before HDOS subsystem init!", __func__);
+	if (is_need_to_notify_sdcard(func_no))
+		sdcard_notify_hyppo_enter(0);
 	hdos.func = func_no;
 	hdos.func_name = hdos_get_func_name(hdos.func);
 	hdos.func_is_virtualized = 0;
@@ -825,6 +836,8 @@ void hdos_enter ( const Uint8 func_no )
 // Can be used to examine the result hyppo did with a call, or even do some modifications.
 void hdos_leave ( const Uint8 func_no )
 {
+	if (is_need_to_notify_sdcard(func_no))
+		sdcard_notify_hyppo_leave();
 	hdos.func = func_no;
 	hdos.func_name = hdos_get_func_name(hdos.func);
 	DEBUGHDOS("HDOS: leaving function #$%02X (%s) with carry %s (A,X,Y,Z=$%02X,$%02X,$%02X,$%02X)" NL, hdos.func, hdos.func_name, cpu65.pf_c ? "SET" : "CLEAR", cpu65.a, cpu65.x, cpu65.y, cpu65.z);
@@ -864,8 +877,8 @@ void hdos_leave ( const Uint8 func_no )
 	}
 	if (hdos.func == 0x40) {	// 0x40: d81attach0 TODO: later I should check if mount was OK and name was MEGA65.D81 to have special external mount then. If HDOS virt is not enabled.
 		DEBUGPRINT("HDOS: %s(\"%s\") = %s" NL, hdos.func_name, hdos.setname_fn, cpu65.pf_c ? "OK" : "FAILED");
-		if (!strcasecmp(hdos.setname_fn, "MEGA65.D81"))
-			OSD(-1, -1, "MEGA65.D81 mounted from SD-card");
+		//if (!strcasecmp(hdos.setname_fn, "MEGA65.D81"))
+		//	OSD(-1, -1, "MEGA65.D81 mounted from SD-card");
 		return;
 	}
 }
@@ -918,14 +931,14 @@ void hdos_notify_system_start_begin ( void )
 {
 	DEBUGHDOS("HDOS: system-start-begin notification received." NL);
 	hdos_reset();
-	sdcard_notify_system_start_begin();	// sd-card/d81 subsystem notification since it will check initial in-sdcard internal d81 mount
+	sdcard_notify_hyppo_enter(1);	// 1="first hypervisor call we're in" (reset trap)
 }
 
 
 void hdos_notify_system_start_end ( void )
 {
 	DEBUGHDOS("HDOS: system-start-end notification recevied." NL);
-	sdcard_notify_system_start_end();	// read the comment at the similar line in function hdos_notify_system_start_begin() above
+	sdcard_notify_hyppo_leave();
 }
 
 

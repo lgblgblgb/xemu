@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -56,7 +56,7 @@ void emu_dropfile_callback ( const char *fn )
 	DEBUGGUI("UI: file drop event, file: %s" NL, fn);
 	switch (QUESTION_WINDOW("Cancel|Mount as D81|Run/inject as PRG", "What to do with the dropped file?")) {
 		case 1:
-			if (!sdcard_force_external_mount(0, fn, "D81 mount failure"))
+			if (!sdcard_external_mount(0, fn, "D81 mount failure"))
 				_mountd81_configdb_change(0, fn);
 			break;
 		case 2:
@@ -70,9 +70,13 @@ void emu_dropfile_callback ( const char *fn )
 static void ui_cb_attach_default_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
-	const int drive = VOIDPTR_TO_INT(m->user_data);
-	sdcard_default_d81_mount(drive);
-	_mountd81_configdb_change(drive, NULL);	// just book this as "not mounted" (as the default). Maybe is it a FIXME?
+	int drive = VOIDPTR_TO_INT(m->user_data);
+	if ((drive & 1024))
+		sdcard_default_internal_d81_mount(drive & 1);
+	else {
+		sdcard_default_external_d81_mount(drive & 1);
+		_mountd81_configdb_change(drive & 1, NULL);	// just book this as "not mounted" (as the default). Maybe is it a FIXME?
+	}
 }
 
 
@@ -126,10 +130,10 @@ static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
 					}
 				}
 			}
-			if (!sdcard_force_external_mount_with_image_creation(drive, fnbuf2, 1, "D81 mount failure")) // third arg: allow overwrite existing D81
+			if (!sdcard_external_mount_with_image_creation(drive, fnbuf2, 1, "D81 mount failure")) // third arg: allow overwrite existing D81
 				_mountd81_configdb_change(drive, fnbuf2);
 		} else {
-			if (!sdcard_force_external_mount(drive, fnbuf, "D81 mount failure"))
+			if (!sdcard_external_mount(drive, fnbuf, "D81 mount failure"))
 				_mountd81_configdb_change(drive, fnbuf);
 		}
 	} else {
@@ -773,6 +777,8 @@ static const struct menu_st menu_drv8[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_d81, (void*)0 },
 	{ "Attach default D81",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_default_d81, (void*)0 },
+	{ "Attach default on-SD D81",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_default_d81, (void*)(0 + 1024) },
 	{ "Detach D81",			XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_detach_d81, (void*)0 },
 	{ "Create and attach new D81",	XEMUGUI_MENUID_CALLABLE |
