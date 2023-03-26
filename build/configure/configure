@@ -2,7 +2,7 @@
 ## This file is part of the Xemu project: https://github.com/lgblgblgb/xemu
 ## Collection of various emulators of some 8 bits machines using SDL2 library.
 ##
-## Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -19,8 +19,6 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 echo "*** Running xemu-configure ***"
-
-MACOS_VERSION_MIN=10.6
 
 ###########################################################
 # Check some basic common UNIX utilities if work, we need #
@@ -65,7 +63,7 @@ CC=""
 WINDRES=""
 SDL2_CONFIG=""
 PKG_CONFIG=""
-CFLAGS_USER="$val"
+CFLAGS_USER=""
 while [ "$1" != "" ] ; do
 	var="`echo $1 | cut -f1 -d=`"
 	val="`echo $1 | cut -f2- -d=`"
@@ -344,8 +342,7 @@ for a in \
 	            PIPE_SUPPORTED_BY_CC:-pipe: \
   		      O0_SUPPORTED_BY_CC:-O0: \
 		       G_SUPPORTED_BY_CC:-g: \
-		    FLTO_SUPPORTED_BY_CC:-flto \
-	     MACOSVERMIN_SUPPORTED_BY_CC:-mmacosx-version-min=$MACOS_VERSION_MIN
+		    FLTO_SUPPORTED_BY_CC:-flto
 do
 	b="`echo $a | cut -f1 -d:`"
 	c="`echo $a | cut -f2 -d:`"
