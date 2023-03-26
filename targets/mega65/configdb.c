@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -108,6 +108,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "nosound", "Disables audio output generation", &configdb.nosound },
 	{ "noopl3", "Disables OPL3 emulation", &configdb.noopl3 },
 	{ "lockvideostd", "Lock video standard (programs cannot change it)", &configdb.lock_videostd },
+	{ "curskeyjoy", "Cursor keys as joystick [makes your emulator unsable to move cursor in BASIC/etc!]", &hid_joy_on_cursor_keys },
 	{ NULL }
 };
 
