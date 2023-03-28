@@ -798,17 +798,10 @@ echo "XEMUGUI_CFLAGS=$XEMUGUI_CFLAGS" >> $OUTPUT_MAKEFILE
 echo "XEMUGUI_LIBS=$XEMUGUI_LIBS" >> $OUTPUT_MAKEFILE
 
 
-################
-# MACOS target #
-################
-
-if [ $TARGET_IS_OSX = Y -a $MACOSVERMIN_SUPPORTED_BY_CC = Y ]; then
-	CFLAGS="$CFLAGS-mmacosx-version-min=$MACOS_VERSION_MIN "
-fi
-
 #########################################
 # Windows target: check windres utility #
 #########################################
+
 
 if [ $TARGET_IS_WIN = Y -a "$WINDRES" != "" ]; then
 	cat > $SRC <<EOF
