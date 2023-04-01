@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -206,15 +206,23 @@ static int is_ready_on_screen ( void )
 {
 	const int width = vic4_query_screen_width();
 	const int height = vic4_query_screen_height();
-	Uint8 *start = vic4_query_screen_memory();
+	Uint8 *start = vic4_query_screen_address();
+	Uint8 *cstart = vic4_query_colour_address();
 	// Check every lines of the screen (not the "0th" line, because we need "READY." in the previous line!)
 	// NOTE: I cannot rely on exact position as different ROMs can have different line position for the "READY." text!
+	// NOTE: Also, there are differences how cursor is shown, see later in this code as comments:
 	for (int i = 1; i < height - 2; i++) {
 		// We need this pointer later, to "fake" a command on the screen
 		under_ready_p = start + i * width;
-		// 0XA0 -> cursor is shown, and the READY. in the previous line
-		if (*under_ready_p == 0xA0 && !memcmp(under_ready_p - width, ready_msg, sizeof ready_msg))
-			return 1;
+		if (!memcmp(under_ready_p - width, ready_msg, sizeof ready_msg)) {
+			if (*under_ready_p == 0xA0 || (			// 0xA0 -> cursor is shown, and the READY. in the previous line (C65/C64 ROMs, older MEGA65 ROMs)
+				*under_ready_p == 0x20 &&		// 0x20 AND hw attrib inverse, and the READY. in the previous line (used method on newer MEGA65 ROMs)
+				(vic_iomode == VIC4_IOMODE || vic_iomode == VIC3_IOMODE) &&	// makes no sense in VIC-II I/O mode though, and could be a mis-detection!
+				REG_VICIII_ATTRIBS &&
+				(*(cstart + (unsigned int)(under_ready_p - start)) & 0xF0) == 0x20
+			))
+				return 1;
+		}
 	}
 	return 0;
 }

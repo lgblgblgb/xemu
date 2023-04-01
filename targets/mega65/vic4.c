@@ -1603,9 +1603,15 @@ int vic4_query_screen_height ( void )
 }
 
 
-Uint8 *vic4_query_screen_memory ( void )
+Uint8 *vic4_query_screen_address ( void )
 {
 	return main_ram + (SCREEN_ADDR & 0x7FFFF);
+}
+
+
+Uint8 *vic4_query_colour_address ( void )
+{
+	return colour_ram + COLOUR_RAM_OFFSET;
 }
 
 
@@ -1615,7 +1621,7 @@ char *vic4_textshot ( void )
 	char *result = xemu_cbm_screen_to_text(
 		text,
 		sizeof text,
-		vic4_query_screen_memory(),
+		vic4_query_screen_address(),
 		vic4_query_screen_width(),
 		vic4_query_screen_height(),
 		(vic_registers[0x18] & 2)	// lowercase font? try to auto-detect by checking selected address chargen addr, LSB
@@ -1627,7 +1633,7 @@ char *vic4_textshot ( void )
 int vic4_textinsert ( const char *text )
 {
 	return xemu_cbm_text_to_screen(
-		vic4_query_screen_memory(),
+		vic4_query_screen_address(),
 		vic4_query_screen_width(),
 		vic4_query_screen_height(),
 		text,				// text buffer as input
