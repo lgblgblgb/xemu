@@ -33,6 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define SPRITE_SPRITE_COLLISION
 #define SPRITE_FG_COLLISION
+#define SPRITE_COORD_LATCHING
 
 
 const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
@@ -75,6 +76,10 @@ static Uint8 vic_pixel_readback_result[4];
 static Uint8 vic_color_register_mask = 0xFF;
 static Uint32 *used_palette;					// normally the same value as "palette" from vic4_palette.c but GOTOX RRB token can modify this! So this should be used
 static int EFFECTIVE_V400;
+#ifdef SPRITE_COORD_LATCHING
+static Uint8 sprite_is_being_rendered[8];
+#warning "Sprite coordinate latching is an experimental feature (SPRITE_COORD_LATCHING is defined)!"
+#endif
 
 // TODO: not really implemented just here ...
 static int etherbuffer_is_io_mapped = 0;
@@ -220,9 +225,14 @@ static XEMU_INLINE void pixel_readback ( void )
 void vic4_close_frame_access ( void )
 {
 	DEBUG("FRAME CLOSED" NL);
+#ifdef	SPRITE_COORD_LATCHING
+	// To avoid the problem when sprite rendering is not finished (at the very bottom of the screen, does not "fit"),
+	// thus the "end" condition in active rendering is never reached: that would be remain latched for the next frame then!
+	memset(sprite_is_being_rendered, 0, sizeof sprite_is_being_rendered);
+#endif
 	// Debug pixel-read back feature of MEGA65
 	pixel_readback();
-#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+#ifdef	XEMU_FILES_SCREENSHOT_SUPPORT
 	// Screenshot
 	if (XEMU_UNLIKELY(vic4_registered_screenshot_request)) {
 		unsigned int x1, y1, x2, y2;
@@ -1102,23 +1112,41 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 	// In multicolor mode (MCM=1), the bit combinations "00" and "01" belong to the background
 	// and "10" and "11" to the foreground whereas in standard mode (MCM=0),
 	// cleared pixels belong to the background and set pixels to the foreground.
+#ifdef	SPRITE_COORD_LATCHING
+	static int sprite_x_latch[8], sprite_y_latch[8];
+#endif
 	const int reg_tiling = REG_SPRTILEN;
 	for (int sprnum = 7; sprnum >= 0; sprnum--) {
 		if (REG_SPRITE_ENABLE & (1 << sprnum)) {
-			const int y_adjust = SPRITE_V400(sprnum) ? 0 : (REG_SPRITE_Y_ADJUST - 2);
 			const int spriteHeight = SPRITE_EXTHEIGHT(sprnum) ? REG_SPRHGHT : 21;
-			const int x_display_pos = (REG_SPR640 ? 1 : 2) * SPRITE_POS_X(sprnum) + (REG_SPR640 ? 1 : SPRITE_FIRST_X);
-			const int y_display_pos = ((SPRITE_V400(sprnum) ? 1 : 2) * (SPRITE_POS_Y(sprnum) - y_adjust)) ;
-
+			const int y_display_pos =
+#ifdef				SPRITE_COORD_LATCHING
+				sprite_is_being_rendered[sprnum] ? sprite_y_latch[sprnum] :
+#endif
+				((SPRITE_V400(sprnum) ? 1 : 2) * (SPRITE_POS_Y(sprnum) - (SPRITE_V400(sprnum) ? 0 : (REG_SPRITE_Y_ADJUST - 2))));
 			int sprite_row_in_raster = ycounter - y_display_pos;
-
 			if (!SPRITE_V400(sprnum))
 				sprite_row_in_raster = sprite_row_in_raster >> 1;
-
 			if (SPRITE_VERT_2X(sprnum))
 				sprite_row_in_raster = sprite_row_in_raster >> 1;
-
 			if (sprite_row_in_raster >= 0 && sprite_row_in_raster < spriteHeight) {
+				// FIXME: it's currently unknown if X coordinate is latched as well, now I assume it is ...
+				const int x_display_pos =
+#ifdef					SPRITE_COORD_LATCHING
+					sprite_is_being_rendered[sprnum] ? sprite_x_latch[sprnum] :
+#endif
+					((REG_SPR640 ? 1 : 2) * SPRITE_POS_X(sprnum) + (REG_SPR640 ? 1 : SPRITE_FIRST_X));
+#ifdef				SPRITE_COORD_LATCHING
+				if (sprite_row_in_raster == spriteHeight - 1) {
+					// the last line of sprite, turn off the latched signal
+					sprite_is_being_rendered[sprnum] = 0;
+				} else if (!sprite_is_being_rendered[sprnum]) {
+					// first - detected - render event for the sprite, let's latch it
+					sprite_is_being_rendered[sprnum] = 1;
+					sprite_x_latch[sprnum] = x_display_pos;
+					sprite_y_latch[sprnum] = y_display_pos;
+				}
+#endif
 				const int widthBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 				// Mask-out bits 0-3, 23-19 if SPRPTR16 enabled
 				const Uint32 sprite_pointer_addr = SPRITE_16BITPOINTER ? (SPRITE_POINTER_ADDR & 0x8FFFF0) : SPRITE_POINTER_ADDR;
@@ -1126,7 +1154,6 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 				const Uint32 sprite_data_addr = SPRITE_16BITPOINTER ?
 					64 * ((*(sprite_data_pointer + 1) << 8) | (*sprite_data_pointer))
 					: ((64 * (*sprite_data_pointer)) | (SPRITE_POINTER_ADDR & 0xC000)); // Use bits 14-15 (this can be set from $DD00 if HOTREG is ENABLED)
-
 				//DEBUGPRINT("VIC: Sprite %d data at $%08X " NL, sprnum, sprite_data_addr);
 				const Uint8 *sprite_data = main_ram + sprite_data_addr;
 				const Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
@@ -1139,6 +1166,12 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 				else
 					vic4_draw_sprite_row_mono(sprnum, x_display_pos, row_data, xscale, do_tiling);
 			}
+		} else {
+#ifdef			SPRITE_COORD_LATCHING
+			// To avoid the problem when sprite gets disabled during its rendering so remains latched for the whole rest of the frame,
+			// since the "end" condition is never hit above on its - would be - active rendering region (by its height).
+			sprite_is_being_rendered[sprnum] = 0;
+#endif
 		}
 	}
 }
