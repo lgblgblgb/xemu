@@ -24,6 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_hid.h"
 #include "xemu/f011_core.h"
 #include "input_devices.h"
+#include "hypervisor.h"
 
 #define C64_BASIC_LOAD_ADDR	0x0801
 #define C65_BASIC_LOAD_ADDR	0x2001
@@ -101,21 +102,6 @@ static void allow_disk_access_callback ( void *unused )
 {
 	DEBUGPRINT("INJECT: re-enable disk access on READY. prompt" NL);
 	fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);
-}
-
-
-int inject_register_ready_status ( const char *debug_msg, void (*callback)(void*), void *userdata )
-{
-	if (inject_ready_check_status) {
-		DEBUGPRINT("WARNING: INJECT: cannot register 'READY.' event, already having one in progress!" NL);
-		//return 1;
-	}
-	DEBUGPRINT("INJECT: registering 'READY.' event: %s" NL, debug_msg);
-	inject_ready_userdata = userdata;
-	inject_ready_callback = callback;
-	inject_ready_check_status = 1;
-	memset(main_ram + 1024, 0, 1024 * 3);	// be sure, no READY. can be seen already on the screen
-	return 0;
 }
 
 
@@ -202,12 +188,15 @@ error:
 static const Uint8 ready_msg[] = { 0x12, 0x05, 0x01, 0x04, 0x19, 0x2E };	// "READY." in screen codes
 
 
-static int is_ready_on_screen ( void )
+static int is_ready_on_screen ( const int delete_all_ready )
 {
+	if (in_hypervisor && !delete_all_ready)
+		return 0;
 	const int width = vic4_query_screen_width();
 	const int height = vic4_query_screen_height();
+	const Uint8 *cstart = ((vic_iomode == VIC4_IOMODE || vic_iomode == VIC3_IOMODE) && REG_VICIII_ATTRIBS) ? vic4_query_colour_address() : NULL;
 	Uint8 *start = vic4_query_screen_address();
-	Uint8 *cstart = vic4_query_colour_address();
+	int num = 0;
 	// Check every lines of the screen (not the "0th" line, because we need "READY." in the previous line!)
 	// NOTE: I cannot rely on exact position as different ROMs can have different line position for the "READY." text!
 	// NOTE: Also, there are differences how cursor is shown, see later in this code as comments:
@@ -215,15 +204,34 @@ static int is_ready_on_screen ( void )
 		// We need this pointer later, to "fake" a command on the screen
 		under_ready_p = start + i * width;
 		if (!memcmp(under_ready_p - width, ready_msg, sizeof ready_msg)) {
-			if (*under_ready_p == 0xA0 || (			// 0xA0 -> cursor is shown, and the READY. in the previous line (C65/C64 ROMs, older MEGA65 ROMs)
+			if (delete_all_ready) {
+				(*(under_ready_p - width))++;
+				num++;
+			} else if (*under_ready_p == 0xA0 || (		// 0xA0 -> cursor is shown, and the READY. in the previous line (C65/C64 ROMs, older MEGA65 ROMs)
+				cstart &&
 				*under_ready_p == 0x20 &&		// 0x20 AND hw attrib inverse, and the READY. in the previous line (used method on newer MEGA65 ROMs)
-				(vic_iomode == VIC4_IOMODE || vic_iomode == VIC3_IOMODE) &&	// makes no sense in VIC-II I/O mode though, and could be a mis-detection!
-				REG_VICIII_ATTRIBS &&
 				(*(cstart + (unsigned int)(under_ready_p - start)) & 0xF0) == 0x20
 			))
 				return 1;
 		}
 	}
+	if (delete_all_ready)
+		DEBUGPRINT("INJECT: READY. has been invalidated %d times (%dx%d@$%X)" NL, num, width, height, (unsigned int)(start - main_ram));
+	return num;
+}
+
+
+int inject_register_ready_status ( const char *debug_msg, void (*callback)(void*), void *userdata )
+{
+	if (inject_ready_check_status) {
+		DEBUGPRINT("WARNING: INJECT: cannot register 'READY.' event, already having one in progress!" NL);
+		//return 1;
+	}
+	DEBUGPRINT("INJECT: registering 'READY.' event: %s" NL, debug_msg);
+	inject_ready_userdata = userdata;
+	inject_ready_callback = callback;
+	inject_ready_check_status = 1;
+	is_ready_on_screen(1);			// be sure, no READY. can be seen already on the screen
 	return 0;
 }
 
@@ -233,7 +241,7 @@ void inject_ready_check_do ( void )
 	if (XEMU_LIKELY(!inject_ready_check_status))
 		return;
 	if (inject_ready_check_status == 1) {		// we're in "waiting for READY." phase
-		if (is_ready_on_screen())
+		if (is_ready_on_screen(0))
 			inject_ready_check_status = 2;
 	} else if (inject_ready_check_status == 100) {	// special mode ...
 		// This is used to check the @ char printed by our tricky RUN line to see it's time to release RETURN (or just simply clear all the keyboard)
