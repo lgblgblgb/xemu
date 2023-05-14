@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -85,10 +85,8 @@ struct configdb_st {
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	int	virtsd;
 #endif
-#ifdef FAKE_TYPING_SUPPORT
 	int	go64;
 	int	autoload;
-#endif
 	int	skip_unhandled_mem;
 	int	syscon;
 	int	mega65_model;		// $FF = Xemu/others, 1/2/3 = MEGA65 PCB rev 1/2/3, $40=nexys4, $41=nexys4ddr, $42=nexys4ddr-widget, $FD=wukong, $FE=simulation

@@ -35,6 +35,7 @@ static void *inject_ready_userdata;
 static void (*inject_ready_callback)(void*);
 static struct {
 	Uint8 *stream;
+	char  *cmd;	// used by the command inject stuff
 	int   size;
 	int   load_addr;
 	int   c64_mode;
@@ -98,6 +99,22 @@ static void prg_inject_callback ( void *unused )
 }
 
 
+static void command_callback ( void *s )
+{
+	if (!prg.cmd)
+		return;
+	DEBUGPRINT("INJECT: hit 'READY.' trigger, injecting command: <%s>" NL, prg.cmd);
+	CBM_SCREEN_PRINTF(under_ready_p, " ?\"@\":%s", prg.cmd);
+	free(prg.cmd);
+	prg.cmd = NULL;
+	fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);	// re-allow disk access
+	clear_emu_events();
+	KBD_PRESS_KEY(0x01);	// press RETURN
+	under_ready_p[vic4_query_screen_width()] = 0x20;	// be sure no "@" (screen code 0) at the trigger position
+	inject_ready_check_status = 100;		// go into special mode, to see "@" character printed by PRINT, to release RETURN by that trigger
+}
+
+
 static void allow_disk_access_callback ( void *unused )
 {
 	DEBUGPRINT("INJECT: re-enable disk access on READY. prompt" NL);
@@ -110,6 +127,14 @@ void inject_register_allow_disk_access ( void )
 	fdc_allow_disk_access(FDC_DENY_DISK_ACCESS);	// deny now!
 	// register event for the READY. prompt for re-enable
 	inject_register_ready_status("Disk access re-enabled", allow_disk_access_callback, NULL);
+}
+
+
+void inject_register_command ( const char *s )
+{
+	inject_register_ready_status("Command", command_callback, NULL);
+	fdc_allow_disk_access(FDC_DENY_DISK_ACCESS);	// deny disk access, to avoid problem when autoboot disk image is used otherwise
+	prg.cmd = xemu_strdup(s);
 }
 
 

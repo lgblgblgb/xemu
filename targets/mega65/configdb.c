@@ -97,10 +97,8 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	{ "virtsd", "Interpret -sdimg option as a DIRECTORY to be fed onto the FAT32FS and use virtual-in-memory disk storage.", &configdb.virtsd },
 #endif
-#ifdef FAKE_TYPING_SUPPORT
 	{ "go64", "Go into C64 mode after start (with auto-typing, can be combined with -autoload)", &configdb.go64 },
 	{ "autoload", "Load and start the first program from disk (with auto-typing, can be combined with -go64)", &configdb.autoload },
-#endif
 	{ "syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon },
 	{ "besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override },
 	{ "skipunhandledmem", "Do not even ask on unhandled memory access (hides problems!!)", &configdb.skip_unhandled_mem },

@@ -834,15 +834,18 @@ int main ( int argc, char **argv )
 #endif
 	if (configdb.prg)
 		inject_register_prg(configdb.prg, configdb.prgmode);
-#ifdef FAKE_TYPING_SUPPORT
-	if (configdb.go64) {
+	else {
+		if (configdb.go64) {
+			hid_set_autoreleased_key(0x75);
+			KBD_PRESS_KEY(0x75);
+		}
 		if (configdb.autoload)
-			c64_register_fake_typing(fake_typing_for_load64);
-		else
-			c64_register_fake_typing(fake_typing_for_go64);
-	} else if (configdb.autoload)
-		c64_register_fake_typing(fake_typing_for_load65);
-#endif
+			inject_register_command(
+				configdb.go64 ?
+				"poke631,131:poke198,1" :	// C64 mode: put ctrl character SHIFT-RUN/STOP to fake a LOAD/AUTORUN stuff
+				"run\"*\""			// for native MEGA65 mode, we have nice command for that functionality ...
+			);
+	}
 	rom_stubrom_requested = configdb.usestubrom;
 	rom_initrom_requested = configdb.useinitrom;
 	rom_from_prefdir_allowed = !configdb.romfromsd;
