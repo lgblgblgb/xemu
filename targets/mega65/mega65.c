@@ -648,8 +648,7 @@ static void update_emulator ( void )
 {
 	vic4_close_frame_access();
 	// XXX: some things has been moved here from the main loop, however update_emulator is called from other places as well, FIXME check if it causes problems or not!
-	if (XEMU_UNLIKELY(inject_ready_check_status))
-		inject_ready_check_do();
+	inject_ready_check_do();
 	audio65_sid_inc_framecount();
 	strcpy(emulator_speed_title, cpu_clock_speed_strs[cpu_clock_speed_str_index]);
 	strcat(emulator_speed_title, " ");
@@ -832,9 +831,9 @@ int main ( int argc, char **argv )
 		configdb.umon = XUMON_DEFAULT_PORT;
 	xumon_init(configdb.umon);
 #endif
-	if (configdb.prg)
+	if (configdb.prg) {
 		inject_register_prg(configdb.prg, configdb.prgmode);
-	else {
+	} else {
 		if (configdb.go64) {
 			hid_set_autoreleased_key(0x75);
 			KBD_PRESS_KEY(0x75);
@@ -842,8 +841,8 @@ int main ( int argc, char **argv )
 		if (configdb.autoload)
 			inject_register_command(
 				configdb.go64 ?
-				"poke631,131:poke198,1" :	// C64 mode: put ctrl character SHIFT-RUN/STOP to fake a LOAD/AUTORUN stuff
-				"run\"*\""			// for native MEGA65 mode, we have nice command for that functionality ...
+				"poke0,65:load\"*\"|poke0,64:run" :	// for C64 mode, we need two steps, also using some "turbo speed" during loading ;)
+				"run\"*\""				// for C65/MEGA65 mode, we have nice command for that functionality ...
 			);
 	}
 	rom_stubrom_requested = configdb.usestubrom;

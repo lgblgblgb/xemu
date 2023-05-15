@@ -29,34 +29,45 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define C64_BASIC_LOAD_ADDR	0x0801
 #define C65_BASIC_LOAD_ADDR	0x2001
 
-int inject_ready_check_status = 0;
+#define KEY_PRESS_TIMEOUT	6
 
+static int check_status = 0;
+static int key2release = -1;
+static int key2release_timeout;
 static void *inject_ready_userdata;
 static void (*inject_ready_callback)(void*);
 static struct {
 	Uint8 *stream;
-	char  *cmd;	// used by the command inject stuff
+	char  *cmd, *cmd_p;	// used by the command inject stuff
 	int   size;
 	int   load_addr;
 	int   c64_mode;
 	int   run_it;
-} prg;
+} prg = {
+	.stream	= NULL,
+	.cmd	= NULL,
+	.cmd_p	= NULL
+};
 static Uint8 *under_ready_p;
+
+
+static void _cbm_screen_write_char ( Uint8 *p, const char c )
+{
+	if (c == '@')
+		*p = 0;
+	else if (c >= 'a' && c <= 'z')
+		*p = c - 'a' + 1;
+	else if (c >= 'A' && c <= 'Z')
+		*p = c - 'A' + 1;
+	else
+		*p = c;
+}
 
 
 static void _cbm_screen_write ( Uint8 *p, const char *s )
 {
-	while (*s) {
-		if (*s == '@')
-			*p++ = 0;
-		else if (*s >= 'a' && *s <= 'z')
-			*p++ = *s - 'a' + 1;
-		else if (*s >= 'A' && *s <= 'Z')
-			*p++ = *s - 'A' + 1;
-		else
-			*p++ = *s;
-		s++;
-	}
+	while (*s)
+		_cbm_screen_write_char(p++, *s++);
 }
 
 
@@ -65,6 +76,52 @@ static void _cbm_screen_write ( Uint8 *p, const char *s )
 	sprintf(__buffer__, ##__VA_ARGS__);	\
 	_cbm_screen_write(scrp, __buffer__);	\
 	} while (0)
+
+
+static void press_key ( const int key )
+{
+	if (key2release >= 0)
+		KBD_RELEASE_KEY(key2release);
+	DEBUGPRINT("INJECT: pressing key #%d" NL, key);
+	key2release = key;
+	key2release_timeout = KEY_PRESS_TIMEOUT;
+	KBD_PRESS_KEY(key);
+}
+
+
+static int is_ready_on_screen ( const int delete_all_ready )
+{
+	if (in_hypervisor && !delete_all_ready)
+		return 0;
+	static const Uint8 ready_msg[] = { 0x12, 0x05, 0x01, 0x04, 0x19, 0x2E };	// "READY." in screen codes
+	const int width = vic4_query_screen_width();
+	const int height = vic4_query_screen_height();
+	const Uint8 *cstart = ((vic_iomode == VIC4_IOMODE || vic_iomode == VIC3_IOMODE) && REG_VICIII_ATTRIBS) ? vic4_query_colour_address() : NULL;
+	Uint8 *start = vic4_query_screen_address();
+	int num = 0;
+	// Check every lines of the screen (not the "0th" line, because we need "READY." in the previous line!)
+	// NOTE: I cannot rely on exact position as different ROMs can have different line position for the "READY." text!
+	// NOTE: Also, there are differences how cursor is shown, see later in this code as comments:
+	for (int i = 1; i < height - 2; i++) {
+		// We need this pointer later, to "fake" a command on the screen
+		under_ready_p = start + i * width;
+		if (!memcmp(under_ready_p - width, ready_msg, sizeof ready_msg)) {
+			if (delete_all_ready) {
+				// this changes "READY."->"READY " (space insteaf of ".") to avoid confusion when waiting "READY." but having one even before starting to wait
+				*(under_ready_p - width + 5) = 32;
+				num++;
+			} else if (*under_ready_p == 0xA0 || (		// 0xA0 -> cursor is shown, and the READY. in the previous line (C65/C64 ROMs, older MEGA65 ROMs)
+				cstart &&
+				*under_ready_p == 0x20 &&		// 0x20 AND hw attrib inverse, and the READY. in the previous line (used method on newer MEGA65 ROMs)
+				(*(cstart + (unsigned int)(under_ready_p - start)) & 0xF0) == 0x20
+			))
+				return 1;
+		}
+	}
+	if (delete_all_ready)
+		DEBUGPRINT("INJECT: READY. has been invalidated %d times (%dx%d@$%X)" NL, num, width, height, (unsigned int)(start - main_ram));
+	return num;
+}
 
 
 static void prg_inject_callback ( void *unused )
@@ -86,10 +143,13 @@ static void prg_inject_callback ( void *unused )
 			main_ram[0x83] = (prg.size + prg.load_addr) >> 8;
 		}
 		// If program was detected as BASIC (by load-addr) we want to auto-RUN it
-		CBM_SCREEN_PRINTF(under_ready_p, " ?\"@\":RUN:");
-		KBD_PRESS_KEY(0x01);	// press RETURN
-		under_ready_p[vic4_query_screen_width()] = 0x20;	// be sure no "@" (screen code 0) at the trigger position
-		inject_ready_check_status = 100;	// go into special mode, to see "@" character printed by PRINT, to release RETURN by that trigger
+		CBM_SCREEN_PRINTF(under_ready_p, " RUN:");
+		press_key(1);
+		// This strange stuff is here for a kinda "funny" purpose. Many people started to use the $D610 hardware accelerated keyboard scanner
+		// feature, but they often miss to realize that the queue must be emptied by the program itself. Since Xemu is used with with feature
+		// like program injection they never face the problem, and the surprise only coccures when trying on a real MEGA65, blaming Xemu then
+		// for the problem. Thus we inject same fake stuff here just not to have empty $D610 buffer. Otherwise this statement has NO other purpose!
+		hwa_kbd_fake_string("dir\rload");	// more than enough to fill the buffer
 	} else {
 		// In this case we DO NOT press RETURN for user, as maybe the SYS addr is different, or user does not want this at all!
 		CBM_SCREEN_PRINTF(under_ready_p, " SYS%d:REM **YOU CAN PRESS RETURN**", prg.load_addr);
@@ -99,19 +159,32 @@ static void prg_inject_callback ( void *unused )
 }
 
 
-static void command_callback ( void *s )
+static void command_callback ( void *unused )
 {
-	if (!prg.cmd)
+	if (!prg.cmd_p)
 		return;
-	DEBUGPRINT("INJECT: hit 'READY.' trigger, injecting command: <%s>" NL, prg.cmd);
-	CBM_SCREEN_PRINTF(under_ready_p, " ?\"@\":%s", prg.cmd);
-	free(prg.cmd);
-	prg.cmd = NULL;
-	fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);	// re-allow disk access
+	DEBUGPRINT("INJECT: hit 'READY.' trigger, injecting command at offset %d" NL, (int)(prg.cmd_p - prg.cmd));
+	if (prg.cmd_p == prg.cmd)
+		fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);	// re-allow disk access
+	Uint8 *p = under_ready_p;
+	*p++ = 32;
+	for (;;) {
+		const char c = *(prg.cmd_p++);
+		if (!c) {
+			free(prg.cmd);
+			prg.cmd_p = NULL;
+			prg.cmd = NULL;
+			break;
+		}
+		if (c == '|') {
+			is_ready_on_screen(1);	// clear already present READY. to be sure not to confuse us on waiting for another one ...
+			check_status = 1;	// re-engage the whole stuff ... (but with the next "part" of the command, where prg.cmd_p points to)
+			break;
+		}
+		_cbm_screen_write_char(p++, c);
+	}
 	clear_emu_events();
-	KBD_PRESS_KEY(0x01);	// press RETURN
-	under_ready_p[vic4_query_screen_width()] = 0x20;	// be sure no "@" (screen code 0) at the trigger position
-	inject_ready_check_status = 100;		// go into special mode, to see "@" character printed by PRINT, to release RETURN by that trigger
+	press_key(1);
 }
 
 
@@ -130,17 +203,24 @@ void inject_register_allow_disk_access ( void )
 }
 
 
+// You can register multi-step command separated by '|' character. command_callback will parse that
 void inject_register_command ( const char *s )
 {
 	inject_register_ready_status("Command", command_callback, NULL);
 	fdc_allow_disk_access(FDC_DENY_DISK_ACCESS);	// deny disk access, to avoid problem when autoboot disk image is used otherwise
+	if (prg.cmd)
+		free(prg.cmd);
 	prg.cmd = xemu_strdup(s);
+	prg.cmd_p = prg.cmd;
 }
 
 
 int inject_register_prg ( const char *prg_fn, int prg_mode )
 {
-	prg.stream = NULL;
+	if (prg.stream) {
+		free(prg.stream);
+		prg.stream = NULL;
+	}
 	prg.size = xemu_load_file(prg_fn, NULL, 3, 0x1F800, "Cannot load PRG to be injected");
 	if (prg.size < 3)
 		goto error;
@@ -210,82 +290,40 @@ error:
 }
 
 
-static const Uint8 ready_msg[] = { 0x12, 0x05, 0x01, 0x04, 0x19, 0x2E };	// "READY." in screen codes
-
-
-static int is_ready_on_screen ( const int delete_all_ready )
-{
-	if (in_hypervisor && !delete_all_ready)
-		return 0;
-	const int width = vic4_query_screen_width();
-	const int height = vic4_query_screen_height();
-	const Uint8 *cstart = ((vic_iomode == VIC4_IOMODE || vic_iomode == VIC3_IOMODE) && REG_VICIII_ATTRIBS) ? vic4_query_colour_address() : NULL;
-	Uint8 *start = vic4_query_screen_address();
-	int num = 0;
-	// Check every lines of the screen (not the "0th" line, because we need "READY." in the previous line!)
-	// NOTE: I cannot rely on exact position as different ROMs can have different line position for the "READY." text!
-	// NOTE: Also, there are differences how cursor is shown, see later in this code as comments:
-	for (int i = 1; i < height - 2; i++) {
-		// We need this pointer later, to "fake" a command on the screen
-		under_ready_p = start + i * width;
-		if (!memcmp(under_ready_p - width, ready_msg, sizeof ready_msg)) {
-			if (delete_all_ready) {
-				(*(under_ready_p - width))++;
-				num++;
-			} else if (*under_ready_p == 0xA0 || (		// 0xA0 -> cursor is shown, and the READY. in the previous line (C65/C64 ROMs, older MEGA65 ROMs)
-				cstart &&
-				*under_ready_p == 0x20 &&		// 0x20 AND hw attrib inverse, and the READY. in the previous line (used method on newer MEGA65 ROMs)
-				(*(cstart + (unsigned int)(under_ready_p - start)) & 0xF0) == 0x20
-			))
-				return 1;
-		}
-	}
-	if (delete_all_ready)
-		DEBUGPRINT("INJECT: READY. has been invalidated %d times (%dx%d@$%X)" NL, num, width, height, (unsigned int)(start - main_ram));
-	return num;
-}
-
-
 int inject_register_ready_status ( const char *debug_msg, void (*callback)(void*), void *userdata )
 {
-	if (inject_ready_check_status) {
+	if (check_status) {
 		DEBUGPRINT("WARNING: INJECT: cannot register 'READY.' event, already having one in progress!" NL);
 		//return 1;
 	}
 	DEBUGPRINT("INJECT: registering 'READY.' event: %s" NL, debug_msg);
 	inject_ready_userdata = userdata;
 	inject_ready_callback = callback;
-	inject_ready_check_status = 1;
+	check_status = 1;
 	is_ready_on_screen(1);			// be sure, no READY. can be seen already on the screen
 	return 0;
 }
 
 
+// Must be called by the main emulation loop regularly, let's say, once a frame or so.
 void inject_ready_check_do ( void )
 {
-	if (XEMU_LIKELY(!inject_ready_check_status))
+	if (XEMU_UNLIKELY(key2release >= 0)) {
+		if (key2release_timeout <= 0) {
+			DEBUGPRINT("INJECT: releasing key #%d" NL, key2release);
+			KBD_RELEASE_KEY(key2release);
+			key2release = -1;
+		} else
+			key2release_timeout--;
+	}
+	if (XEMU_LIKELY(!check_status))
 		return;
-	if (inject_ready_check_status == 1) {		// we're in "waiting for READY." phase
+	if (check_status == 1) {		// we're in "waiting for READY." phase
 		if (is_ready_on_screen(0))
-			inject_ready_check_status = 2;
-	} else if (inject_ready_check_status == 100) {	// special mode ...
-		// This is used to check the @ char printed by our tricky RUN line to see it's time to release RETURN (or just simply clear all the keyboard)
-		// Also check for 'READY.' if it's still there, run program running maybe cleared the screen and we'll miss '@'!
-		// TODO: this logic is too error-proon! Consider for some timing only, ie wait some frames after virtually pressing RETURN then release it.
-		int width = vic4_query_screen_width();
-		if (under_ready_p[width] == 0x00 || memcmp(under_ready_p - width, ready_msg, sizeof ready_msg)) {
-			inject_ready_check_status = 0;
-			clear_emu_events();		// reset keyboard state & co
-			DEBUGPRINT("INJECT: clearing keyboard status on '@' trigger." NL);
-			// This strange stuff is here for a kinda "funny" purpose. Many people started to use the $D610 hardware accelerated keyboard scanner
-			// feature, but they often miss to realize that the queue must be emptied by the program itself. Since Xemu is used with with feature
-			// like program injection they never face the problem, and the surprise only coccures when trying on a real MEGA65, blaming Xemu then
-			// for the problem. Thus we inject same fake stuff here just not to have empty $D610 buffer. Otherwise this statement has NO other purpose!
-			hwa_kbd_fake_string("dir\rload");	// more than enough to fill the buffer
-		}
-	} else if (inject_ready_check_status > 10) {
-		inject_ready_check_status = 0;	// turn off "ready check" mode, we have our READY.
+			check_status = 2;
+	} else if (check_status > 10) {
+		check_status = 0;	// turn off "ready check" mode, we have our READY.
 		inject_ready_callback(inject_ready_userdata);	// callback is activated now
 	} else
-		inject_ready_check_status++;		// we're "let's wait some time after READY." phase
+		check_status++;		// we're "let's wait some time after READY." phase
 }

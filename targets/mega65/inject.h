@@ -19,8 +19,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_MEGA65_INJECT_H_INCLUDED
 #define XEMU_MEGA65_INJECT_H_INCLUDED
 
-extern int inject_ready_check_status;
-
 extern void inject_ready_check_do        ( void );
 extern int  inject_register_ready_status ( const char *debug_msg, void (*callback)(void*), void *userdata );
 
