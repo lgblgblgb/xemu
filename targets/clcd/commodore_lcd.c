@@ -1,5 +1,5 @@
-/* Commodore LCD emulator (son of my world's first working Commodore LCD emulator)
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* Commodore LCD emulator (rewrite of my world's first working Commodore LCD emulator)
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Part of the Xemu project: https://github.com/lgblgblgb/xemu
 
    This is an ongoing work to rewrite my old Commodore LCD emulator:
@@ -41,6 +41,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 
 #include "commodore_lcd.h"
+#include "acia.h"
 
 #include <time.h>
 
@@ -54,22 +55,39 @@ static int register_screenshot_request = 0;
 
 static const int BASIC_START = 0x1001;
 
+#define MMU_RAM_MODE		0
+#define MMU_APPL_MODE		1
+#define MMU_KERN_MODE		2
+#define MMU_TEST_MODE		3
+
+#define MMU_KERN_WIN_OFS	mmu[MMU_KERN_MODE][1]
+#define MMU_APPL_WIN_OFS(n)	mmu[MMU_APPL_MODE][n]
+#define MMU_USE_CURRENT(n)	mmu[mmu_current][n]
+
+#define MMU_RECALL		4
+#define MMU_SAVE		5
+
+static const char *mmu_mode_names[] = { "RAM", "APPL", "KERN", "TEST" };
+
 static Uint8 memory[0x40000];
 static Uint8 charrom[4096];
 extern unsigned const char roms[];
-static int mmu[3][4] = {
-	{0, 0, 0, 0},
-	{0, 0, 0, 0},
-	{0, 0, 0x30000, 0x30000}
+static unsigned int mmu[3][4] = {
+	{0, 0, 0, 0},			// MMU_RAM_MODE (=0)
+	{0, 0, 0, 0},			// MMU_APPL_MODE(=1)
+	{0, 0, 0x30000, 0x30000}	// MMU_KERN_MODE(=2)
 };
-static int *mmu_current = mmu[0];
-static int *mmu_saved = mmu[0];
+static unsigned int mmu_current = MMU_TEST_MODE, mmu_saved = MMU_TEST_MODE;
 static Uint8 lcd_ctrl[4];
 static struct Via65c22 via1, via2;
 static Uint8 keysel;
 static Uint8 rtc_regs[16];
 static int rtc_sel = 0;
-static int ram_size;
+static unsigned int ram_size;
+
+#define IRQ_VIA1	1
+#define IRQ_VIA2	2
+#define	IRQ_ACIA	4
 
 static struct {
 	int phase;
@@ -192,21 +210,86 @@ void clear_emu_events ( void )
 }
 
 
-#define GET_MEMORY(phys_addr) memory[phys_addr]
+// Warning: this function DOES NOT decode the fixed lo-4K and upper-1.5K ranges!!
+// It also not deal with the I/O and such.
+// Only call this, if those cases are handled/checked already!
+static XEMU_INLINE unsigned int get_phys_addr ( const Uint16 cpu_addr )
+{
+	const unsigned int k16 = cpu_addr >> 14;
+	if (XEMU_LIKELY(mmu_current != MMU_TEST_MODE))
+		return (MMU_USE_CURRENT(k16) + cpu_addr) & 0x3FFFF;
+	return ((cpu_addr < 0xE000) ? MMU_APPL_WIN_OFS(k16) : MMU_KERN_WIN_OFS) + (cpu_addr & 0x3FF);
+}
 
 
 Uint8 cpu65_read_callback ( Uint16 addr ) {
-	if (addr <  0x1000) return GET_MEMORY(addr);
-	if (addr <  0xF800) return GET_MEMORY((mmu_current[addr >> 14] + addr) & 0x3FFFF);
-	if (addr >= 0xFA00) return GET_MEMORY(addr | 0x30000);
-	if (addr >= 0xF980) return 0; // ACIA
+	if (addr <  0x1000) return memory[addr];
+	if (addr <  0xF800) {
+		// DEBUG only
+		DEBUGPRINT("READING $%04X at real addr $%X" NL, addr, get_phys_addr(addr));
+		// DEBUG only ends
+		return memory[get_phys_addr(addr)];
+	}
+	if (addr >= 0xFA00) return memory[addr + 0x30000U];
+	if (addr >= 0xF980) return acia_read_reg(addr & 3);
 	if (addr >= 0xF900) return 0xFF; // I/O exp
 	if (addr >= 0xF880) return via_read(&via2, addr & 15);
 	return via_read(&via1, addr & 15);
 }
 
+
+static void write_lcd_reg ( const Uint8 addr, const Uint8 data )
+{
+	static int regs[4] = { -1, -1, -1, -1 };
+	int old_data = regs[addr & 3];
+	regs[addr & 3] = data;
+	lcd_ctrl[addr & 3] = data;
+	if (old_data != data)
+		DEBUGPRINT("LCD-CTRL: reg #%d $%02X->$%02X, regs now: $%02X $%02X $%02X $%02X" NL,
+			addr & 3,
+			old_data,
+			data,
+			regs[0], regs[1], regs[2], regs[3]
+		);
+}
+
+
+static void mmu_set ( const unsigned int spec )
+{
+	if (spec == mmu_current)
+		return;
+	const unsigned int old = mmu_current;
+	switch (spec) {
+		case MMU_SAVE:
+			mmu_saved = mmu_current;
+			DEBUG("MMU: mode (%s) has been saved" NL, mmu_mode_names[mmu_current]);
+			break;
+		case MMU_RECALL:
+			mmu_current = mmu_saved;
+			DEBUG("MMU: mode (%s) has been recalled" NL, mmu_mode_names[mmu_saved]);
+			break;
+		case MMU_KERN_MODE:
+		case MMU_APPL_MODE:
+		case MMU_TEST_MODE:
+		case MMU_RAM_MODE:
+			mmu_current = spec;
+			break;
+		default:
+			FATAL("mmu_set_mode(): invalid spec %u", spec);
+			break;
+	}
+	if (XEMU_UNLIKELY(mmu_current > 3))
+		FATAL("mmu_set_mode(): invalid mode %u", mmu_current);
+	if (old != mmu_current)
+		DEBUG("MMU: mode change %s -> %s" NL, mmu_mode_names[old], mmu_mode_names[mmu_current]);
+	if (old == MMU_TEST_MODE && mmu_current != MMU_TEST_MODE)
+		DEBUGPRINT("MMU: leaving TEST mode (to %s)" NL, mmu_mode_names[mmu_current]);
+	if (old != MMU_TEST_MODE && mmu_current == MMU_TEST_MODE)
+		DEBUGPRINT("MMU: entering TEST mode (from %s)" NL, mmu_mode_names[old]);
+}
+
+
 void cpu65_write_callback ( Uint16 addr, Uint8 data ) {
-	int maddr;
 	if (addr < 0x1000) {
 		memory[addr] = data;
 		return;
@@ -216,36 +299,29 @@ void cpu65_write_callback ( Uint16 addr, Uint8 data ) {
 			case  0: via_write(&via1, addr & 15, data); return;
 			case  1: via_write(&via2, addr & 15, data); return;
 			case  2: return; // I/O exp area is not handled
-			case  3: return; // no ACIA yet
-			case  4: mmu_current = mmu[2]; return;
-			case  5: mmu_current = mmu[1]; return;
-			case  6: mmu_current = mmu[0]; return;
-			case  7: mmu_current = mmu_saved; return;
-			case  8: mmu_saved = mmu_current; return;
-			case  9: FATAL("MMU test mode is set, it would not work"); break;
-			case 10: mmu[1][0] = data << 10; return;
-			case 11: mmu[1][1] = data << 10; return;
-			case 12: mmu[1][2] = data << 10; return;
-			case 13: mmu[1][3] = data << 10; return;
-			case 14: mmu[2][1] = data << 10; return;
-			case 15: lcd_ctrl[addr & 3] = data; return;
+			case  3: acia_write_reg(addr & 3, data); return;
+			case  4: mmu_set(MMU_KERN_MODE); return;
+			case  5: mmu_set(MMU_APPL_MODE); return;
+			case  6: mmu_set(MMU_RAM_MODE);  return;
+			case  7: mmu_set(MMU_RECALL);    return;
+			case  8: mmu_set(MMU_SAVE);      return;
+			case  9: mmu_set(MMU_TEST_MODE); return;
+			case 10: MMU_APPL_WIN_OFS(0) = data << 10; return;
+			case 11: MMU_APPL_WIN_OFS(1) = data << 10; return;
+			case 12: MMU_APPL_WIN_OFS(2) = data << 10; return;
+			case 13: MMU_APPL_WIN_OFS(3) = data << 10; return;
+			case 14: MMU_KERN_WIN_OFS    = data << 10; return;
+			//case 15: lcd_ctrl[addr & 3] = data; return;
+			case 15: write_lcd_reg(addr, data); return;
 		}
-		DEBUG("ERROR: should be not here!" NL);
-		return;
+		FATAL("Unhandled case in cpu65_write_callback()");
 	}
-	maddr = (mmu_current[addr >> 14] + addr) & 0x3FFFF;
-	if (maddr < ram_size) {
-		memory[maddr] = data;
-		return;
+	const unsigned int phys_addr = get_phys_addr(addr);
+	if (XEMU_LIKELY(phys_addr < ram_size)) {	// Do not allow write more RAM than we have, also avoids to overwrite ROM
+		memory[phys_addr] = data;
+	} else {
+		DEBUG("MEM: out-of-RAM write addr=$%04X phys_addr=$%05X" NL, addr, phys_addr);
 	}
-	DEBUG("MEM: out-of-RAM write addr=$%04X maddr=$%05X" NL, addr, maddr);
-}
-
-
-// I guess Commodore LCD since used CMOS 65C02 already, no need to emulate the RMW behaviour on NMOS 6502 (??)
-void cpu65_write_rmw_callback ( Uint16 addr, Uint8 old_data, Uint8 new_data )
-{
-	cpu65_write_callback(addr, new_data);
 }
 
 
@@ -254,16 +330,37 @@ static int keytrans = 0;
 static int powerstatus = 0;
 
 
-static void  via1_outa(Uint8 mask, Uint8 data) { keysel = data & mask; }
-static void  via1_outb(Uint8 mask, Uint8 data) {
+static void via1_outa ( Uint8 mask, Uint8 data )
+{
+	keysel = data & mask;
+}
+
+static void via1_outb ( Uint8 mask, Uint8 data )
+{
 	keytrans = ((!(portB1 & 1)) && (data & 1));
 	portB1 = data;
 }
-static void  via1_outsr(Uint8 data) {}
-static Uint8 via1_ina(Uint8 mask) { return 0xFF; }
-static Uint8 via1_inb(Uint8 mask) { return 0xFF; }
-static void  via2_setint(int level) {}
-static void  via2_outa(Uint8 mask, Uint8 data) {
+
+static void via1_outsr(Uint8 data)
+{
+}
+
+static Uint8 via1_ina(Uint8 mask)
+{
+	return 0xFF;
+}
+
+static Uint8 via1_inb ( Uint8 mask )
+{
+	return 0xFF;
+}
+
+static void via2_setint ( int level )
+{
+}
+
+static void via2_outa ( Uint8 mask, Uint8 data )
+{
 	portA2 = data;
 	// ugly stuff, but now the needed part is cut here from my other emulator :)
 	if (portB1 & 2) {	// RTC RD
@@ -272,9 +369,17 @@ static void  via2_outa(Uint8 mask, Uint8 data) {
 		}
 	}
 }
-static void  via2_outb(Uint8 mask, Uint8 data) {}
-static void  via2_outsr(Uint8 data) {}
-static Uint8 via2_ina(Uint8 mask) {
+
+static void via2_outb ( Uint8 mask, Uint8 data )
+{
+}
+
+static void via2_outsr ( Uint8 data )
+{
+}
+
+static Uint8 via2_ina ( Uint8 mask )
+{
 	if (portB1 & 2) {
 		if (portA2 & 16) {
 			return rtc_regs[rtc_sel] | (portA2 & 0x70);
@@ -283,9 +388,18 @@ static Uint8 via2_ina(Uint8 mask) {
 	}
 	return 0;
 }
-static Uint8 via2_inb(Uint8 mask) { return 0xFF; }
-static Uint8 via2_insr() { return 0xFF; }
-static Uint8 via1_insr()
+
+static Uint8 via2_inb ( Uint8 mask )
+{
+	return 0xFF;
+}
+
+static Uint8 via2_insr ( void )
+{
+	return 0xFF;
+}
+
+static Uint8 via1_insr ( void )
 {
 	if (keytrans) {
 		int data = 0;
@@ -302,10 +416,22 @@ static Uint8 via1_insr()
 	} else
 		return (~kbd_matrix[8]) | powerstatus;
 }
-static void  via1_setint(int level)
+
+static void via1_setint ( int level )
 {
 	//DEBUG("IRQ level: %d" NL, level);
-	cpu65.irqLevel = level;
+	if (level)
+		cpu65.irqLevel |= IRQ_VIA1;
+	else
+		cpu65.irqLevel &= ~IRQ_VIA1;
+}
+
+static void acia_setint( const int level )
+{
+	if (level)
+		cpu65.irqLevel |= IRQ_ACIA;
+	else
+		cpu65.irqLevel &= ~IRQ_ACIA;
 }
 
 
@@ -901,6 +1027,8 @@ int main ( int argc, char **argv )
 	/* init VIAs */
 	via_init(&via1, "VIA#1", via1_outa, via1_outb, via1_outsr, via1_ina, via1_inb, via1_insr, via1_setint);
 	via_init(&via2, "VIA#2", via2_outa, via2_outb, via2_outsr, via2_ina, via2_inb, via2_insr, via2_setint);
+	/* init ACIA */
+	acia_init(acia_setint);
 	/* keyboard */
 	clear_emu_events();	// also resets the keyboard
 	keysel = 0;
@@ -911,6 +1039,7 @@ int main ( int argc, char **argv )
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	update_rtc();			// this will use time-keeping stuff as well, so initially let's do after the function call above
+	KBD_PRESS_KEY(0x80);
 	viacyc = 0;
 	// FIXME: add here the "OK to save ROM state" ...
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
