@@ -7,7 +7,7 @@ if len(sys.argv) != 2:
     sys.exit(1)
 with open(sys.argv[1], "rb") as rom:
     rom = rom.read()
-print("ROM {} loaded, {} bytes.".format(sys.argv[1], len(rom)))
+print("ROM {} loaded, {} bytes (${:X} chars).".format(sys.argv[1], len(rom), len(rom) >> 3))
 if len(rom) & 7:
     sys.stderr.write("Error, ROM length is not 8 byte aligned.\n")
     sys.exit(1)

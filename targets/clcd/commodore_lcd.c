@@ -331,6 +331,9 @@ static void via1_outa ( Uint8 mask, Uint8 data )
 
 static void via1_outb ( Uint8 mask, Uint8 data )
 {
+	if ((data ^ portB1) & 4) {
+		DEBUGPRINT("POWER: goes %s" NL, data & 4 ? "OFF" : "ON");
+	}
 	keytrans = ((!(portB1 & 1)) && (data & 1));
 	portB1 = data;
 }
@@ -533,14 +536,92 @@ static void update_rtc ( void )
 }
 
 
+static void backup_ram_content ( void )
+{
+	char fn[64];
+	sprintf(fn, "@ram-saved-%u.mem", ram_size);
+	xemu_save_file(fn, memory, ram_size, "Cannot save memory content :(");
+}
+
+
+static void restore_ram_content ( void )
+{
+	char fn[64];
+	sprintf(fn, "@ram-saved-%u.mem", ram_size);
+	xemu_load_file(fn, memory, ram_size, ram_size, NULL);
+}
+
+
 static void shutdown_emu ( void )
 {
-	//if (keep_ram) {
-	//	xemu_save_file("@memory_saved.bin", memory, ram_size, "Cannot save memory content :(");
-	//}
+	//if (configdb.keep_ram)
+	//	backup_ram_content();
 	if (configdb.dumpmem)
 		xemu_save_file(configdb.dumpmem, memory, ram_size, "Cannot dump RAM content into file");
 	DEBUGPRINT("Shutting down ..." NL);
+}
+
+
+static int memory_init ( void )
+{
+	memset(memory, 0xFF, sizeof memory);
+	memset(charrom, 0xFF, sizeof charrom);
+	if (
+		xemu_load_file(configdb.rom102_fn, memory + 0x38000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
+		xemu_load_file(configdb.rom103_fn, memory + 0x30000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
+		xemu_load_file(configdb.rom104_fn, memory + 0x28000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
+		xemu_load_file(configdb.rom105_fn, memory + 0x20000, 0x8000, 0x8000, rom_fatal_msg) < 0
+	)
+		return 1;
+	const int charrom_load_size = xemu_load_file(configdb.romchr_fn, charrom, 0x1000, 0x2000, rom_fatal_msg);
+	if (charrom_load_size < 0)
+		return 1;
+	if (charrom_load_size == 0x1000) {
+		memcpy(charrom + 0x1000, charrom, 0x1000);
+		DEBUGPRINT("ROM: character ROM is 4096 bytes, duplicated to be 8192 bytes long." NL);
+	} else if (charrom_load_size != 0x2000) {
+		ERROR_WINDOW("Bad character ROM, must be 4096 or 8192 bytes in length (got %d bytes): %s", charrom_load_size, configdb.romchr_fn);
+		return 1;
+	}
+	sha1_hash_str rom_sha;
+	sha1_checksum_as_string(rom_sha, memory + 0x38000, 0x8000);
+	const int rom_good_sha = !strcmp(rom_sha, "e49c20b237a78b54c2cb26b133d5903bb60bd8ef");
+	DEBUGPRINT("ROM: KERNAL SHA1 checksum: %s [%s]" NL, rom_sha, rom_good_sha ? "OK" : "UNKNOWN_ROM");
+	// Ugly hacks :-( <patching ROM>
+#ifdef ROM_HACK_COLD_START
+	if (!configdb.keep_ram) {
+		if (rom_good_sha) {
+			// this ROM patching is needed, as Commodore LCD seems not to work to well with "not intact" SRAM content (ie: it has battery powered SRAM even when "switched off")
+			DEBUGPRINT("ROM-HACK: forcing cold start condition with ROM patching!" NL);
+			memory[0x385BB] = 0xEA;
+			memory[0x385BC] = 0xEA;
+		} else {
+			DEBUGPRINT("ROM: warning! Cannot apply 'force cold start condition' ROM patch because of unknown ROM" NL);
+		}
+	} else {
+		DEBUGPRINT("ROM-HACK: SKIP cold start condition forcing!" NL);
+		restore_ram_content();
+	}
+#endif
+#ifdef ROM_HACK_NEW_ROM_SEARCHING
+	if (rom_good_sha) {
+		// this ROM hack modifies the ROM signature searching bytes so we can squeeze extra menu points of the main screen!
+		// this hack SHOULD NOT be used, if the ROM 32K ROM images from 0x20000 and 0x28000 are not empty after offset 0x6800
+		// WARNING: Commodore LCDs are known to have different ROM versions, be careful with different ROMs, if you find any!
+		// [note: if you find other ROM versions, please tell me!!!! - that's the other message ...]
+		DEBUG("ROM-HACK: modifying ROM searching MMU table" NL);
+		// overwrite MMU table positions for ROM scanner in KERNAL
+		memory[0x382CC] = 0x8A;	// offset 0x6800 in the ROM image of clcd-u105.rom [phys memory address: 0x26800]
+		memory[0x382CE] = 0xAA;	// offset 0x6800 in the ROM image of clcd-u104.rom [phys memory address: 0x2E800]
+		// try to load "parasite" ROMs (it's not fatal if we cannot ...)
+		// these loads to an unused part of the original ROM images
+		xemu_load_file("#clcd-u105-parasite.rom", memory + 0x26800, 32, 0x8000 - 0x6800, NULL);
+		xemu_load_file("#clcd-u104-parasite.rom", memory + 0x2E800, 32, 0x8000 - 0x6800, NULL);
+	} else {
+		DEBUGPRINT("ROM: warning! Cannot apply 'MMU-search-table' ROM patch because of unknown ROM" NL);
+	}
+#endif
+	return 0;
 }
 
 
@@ -769,20 +850,40 @@ static void set_cpu_speed ( int mhz )
 }
 
 
+static void clcd_reset ( void )
+{
+	clear_emu_events();
+	DEBUGPRINT("RESET" NL);
+	acia_reset();
+	via_reset(&via1);
+	via_reset(&via2);
+	cpu65_reset();
+}
+
+
+static void clcd_reset_with_stop ( void )
+{
+	clcd_reset();
+	KBD_PRESS_KEY(0x80);
+}
+
+
 static int cycles, viacyc;
 
 
 static void emulation_loop ( void )
 {
 	for (;;) {
-		int opcyc = cpu65_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles
+		const int opcyc = cpu65_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles
 		viacyc += opcyc;
 		cycles += opcyc;
 		if (viacyc >= cpu_mhz) {
-			int steps = viacyc / cpu_mhz;
-			viacyc = viacyc % cpu_mhz;
-			via_tick(&via1, steps);	// run VIA-1 tasks for the same amount of cycles as the CPU would do @ 1MHz
-			via_tick(&via2, steps);	// -- "" -- the same for VIA-2
+			const int steps = viacyc / cpu_mhz;
+			if (steps) {
+				viacyc = viacyc % cpu_mhz;
+				via_tick(&via1, steps);	// run VIA-1 tasks for the same amount of cycles as the CPU would do @ 1MHz
+				via_tick(&via2, steps);	// -- "" -- the same for VIA-2
+			}
 		}
 		/* Note, Commodore LCD is not TV standard based ... Since I have no idea about the update etc, I still assume some kind of TV-related stuff, who cares :) */
 		if (XEMU_UNLIKELY(cycles >= cpu_cycles_per_tv_frame)) {	// if enough cycles elapsed (what would be the amount of CPU cycles for a TV frame), let's call the update function.
@@ -855,7 +956,7 @@ static void ui_cb_ramsize ( const struct menu_st *m, int *query )
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, (ram_size >> 10) == VOIDPTR_TO_INT(m->user_data));
 	if (VOIDPTR_TO_INT(m->user_data) != (ram_size >> 10) && ARE_YOU_SURE("This will RESET your machine!", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
 		set_ram_size(VOIDPTR_TO_INT(m->user_data));
-		cpu65_reset();
+		clcd_reset();
 	}
 }
 
@@ -903,7 +1004,9 @@ static const struct menu_st menu_main[] = {
 #ifdef HAVE_XEMU_EXEC_API
 	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_native_os_prefdir_browser, NULL },
 #endif
-	{ "Reset",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data_if_sure, cpu65_reset },
+	{ "Reset",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data_if_sure, clcd_reset },
+	{ "Reset with STOP",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data_if_sure, clcd_reset_with_stop },
+	{ "Force saving RAM content",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, backup_ram_content },
 	{ "About",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_about_window, NULL },
 #ifdef HAVE_XEMU_EXEC_API
 	{ "Help (on-line)",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_web_help_main, NULL },
@@ -976,55 +1079,14 @@ int main ( int argc, char **argv )
 		VIRTUAL_SHIFT_POS,
 		SDL_DISABLE	// no joystick HID events enabled
 	);
-	memset(memory, 0xFF, sizeof memory);
-	memset(charrom, 0xFF, sizeof charrom);
-	if (
-		xemu_load_file(configdb.rom102_fn, memory + 0x38000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
-		xemu_load_file(configdb.rom103_fn, memory + 0x30000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
-		xemu_load_file(configdb.rom104_fn, memory + 0x28000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
-		xemu_load_file(configdb.rom105_fn, memory + 0x20000, 0x8000, 0x8000, rom_fatal_msg) < 0
-	)
+	/* init memory & ROM content */
+	if (memory_init())
 		return 1;
-	const int charrom_load_size = xemu_load_file(configdb.romchr_fn, charrom, 0x1000, 0x2000, rom_fatal_msg);
-	if (charrom_load_size < 0)
-		return 1;
-	if (charrom_load_size == 0x1000) {
-		memcpy(charrom + 0x1000, charrom, 0x1000);
-		DEBUGPRINT("ROM: character ROM is 4096 bytes, duplicated to be 8192 bytes long." NL);
-	} else if (charrom_load_size != 0x2000) {
-		ERROR_WINDOW("Bad character ROM, must be 4096 or 8192 bytes in length (got %d bytes): %s", charrom_load_size, configdb.romchr_fn);
-		return 1;
-	}
-	// Ugly hacks :-( <patching ROM>
-#ifdef ROM_HACK_COLD_START
-	if (!configdb.keep_ram) {
-		// this ROM patching is needed, as Commodore LCD seems not to work to well with "not intact" SRAM content (ie: it has battery powered SRAM even when "switched off")
-		DEBUGPRINT("ROM-HACK: forcing cold start condition with ROM patching!" NL);
-		memory[0x385BB] = 0xEA;
-		memory[0x385BC] = 0xEA;
-	} else {
-		DEBUGPRINT("ROM-HACK: SKIP cold start condition forcing!" NL);
-		xemu_load_file("@memory_saved.bin", memory, ram_size, ram_size, "Cannot load memory content!");
-	}
-#endif
-#ifdef ROM_HACK_NEW_ROM_SEARCHING
-	// this ROM hack modifies the ROM signature searching bytes so we can squeeze extra menu points of the main screen!
-	// this hack SHOULD NOT be used, if the ROM 32K ROM images from 0x20000 and 0x28000 are not empty after offset 0x6800
-	// WARNING: Commodore LCDs are known to have different ROM versions, be careful with different ROMs, if you find any!
-	// [note: if you find other ROM versions, please tell me!!!! - that's the other message ...]
-	DEBUG("ROM HACK: modifying ROM searching MMU table" NL);
-	// overwrite MMU table positions for ROM scanner in KERNAL
-	memory[0x382CC] = 0x8A;	// offset 0x6800 in the ROM image of clcd-u105.rom [phys memory address: 0x26800]
-	memory[0x382CE] = 0xAA;	// offset 0x6800 in the ROM image of clcd-u104.rom [phys memory address: 0x2E800]
-	// try to load "parasite" ROMs (it's not fatal if we cannot ...)
-	// these loads to an unused part of the original ROM images
-	xemu_load_file("#clcd-u105-parasite.rom", memory + 0x26800, 32, 0x8000 - 0x6800, NULL);
-	xemu_load_file("#clcd-u104-parasite.rom", memory + 0x2E800, 32, 0x8000 - 0x6800, NULL);
-#endif
+	rom_list();
+	/* PRG injection CLI request */
 	prg_inject.phase = 0;
 	if (!prg_load_prepare_inject(configdb.prg_inject_fn, BASIC_START))
 		prg_inject.phase = 1;
-	rom_list();
 	/* init CPU */
 	cpu65_reset();	// we must do this after loading KERNAL at least, since PC is fetched from reset vector here!
 	/* init VIAs */
