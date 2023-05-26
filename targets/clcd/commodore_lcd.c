@@ -70,7 +70,7 @@ static const int BASIC_START = 0x1001;
 static const char *mmu_mode_names[] = { "RAM", "APPL", "KERN", "TEST" };
 
 static Uint8 memory[0x40000];
-static Uint8 charrom[4096];
+static Uint8 charrom[0x2000];
 extern unsigned const char roms[];
 static unsigned int mmu[3][4] = {
 	{0, 0, 0, 0},			// MMU_RAM_MODE (=0)
@@ -78,7 +78,7 @@ static unsigned int mmu[3][4] = {
 	{0, 0, 0x30000, 0x30000}	// MMU_KERN_MODE(=2)
 };
 static unsigned int mmu_current = MMU_TEST_MODE, mmu_saved = MMU_TEST_MODE;
-static Uint8 lcd_ctrl[4];
+static Uint8 lcd_regs[4];
 static struct Via65c22 via1, via2;
 static Uint8 keysel;
 static Uint8 rtc_regs[16];
@@ -224,15 +224,10 @@ static XEMU_INLINE unsigned int get_phys_addr ( const Uint16 cpu_addr )
 
 Uint8 cpu65_read_callback ( Uint16 addr ) {
 	if (addr <  0x1000) return memory[addr];
-	if (addr <  0xF800) {
-		// DEBUG only
-		DEBUGPRINT("READING $%04X at real addr $%X" NL, addr, get_phys_addr(addr));
-		// DEBUG only ends
-		return memory[get_phys_addr(addr)];
-	}
+	if (addr <  0xF800) return memory[get_phys_addr(addr)];
 	if (addr >= 0xFA00) return memory[addr + 0x30000U];
 	if (addr >= 0xF980) return acia_read_reg(addr & 3);
-	if (addr >= 0xF900) return 0xFF; // I/O exp
+	if (addr >= 0xF900) return 0xFF; // I/O exp area - not used by default
 	if (addr >= 0xF880) return via_read(&via2, addr & 15);
 	return via_read(&via1, addr & 15);
 }
@@ -243,7 +238,7 @@ static void write_lcd_reg ( const Uint8 addr, const Uint8 data )
 	static int regs[4] = { -1, -1, -1, -1 };
 	int old_data = regs[addr & 3];
 	regs[addr & 3] = data;
-	lcd_ctrl[addr & 3] = data;
+	lcd_regs[addr & 3] = data;
 	if (old_data != data)
 		DEBUGPRINT("LCD-CTRL: reg #%d $%02X->$%02X, regs now: $%02X $%02X $%02X $%02X" NL,
 			addr & 3,
@@ -311,7 +306,6 @@ void cpu65_write_callback ( Uint16 addr, Uint8 data ) {
 			case 12: MMU_APPL_WIN_OFS(2) = data << 10; return;
 			case 13: MMU_APPL_WIN_OFS(3) = data << 10; return;
 			case 14: MMU_KERN_WIN_OFS    = data << 10; return;
-			//case 15: lcd_ctrl[addr & 3] = data; return;
 			case 15: write_lcd_reg(addr, data); return;
 		}
 		FATAL("Unhandled case in cpu65_write_callback()");
@@ -440,11 +434,11 @@ static void acia_setint( const int level )
 
 static void render_screen ( void )
 {
-	int ps = lcd_ctrl[1] << 7;
+	int ps = lcd_regs[1] << 7;
 	int x, y, ch;
 	int tail;
 	Uint32 *pix = xemu_start_pixel_buffer_access(&tail);
-	if (lcd_ctrl[2] & 2) { // graphic mode
+	if (lcd_regs[2] & 2) { // graphic mode
 		for (y = 0; y < 128; y++) {
 			for (x = 0; x < 60; x++) {
 				ch = memory[ps++];
@@ -461,9 +455,9 @@ static void render_screen ( void )
 			pix += tail;
 		}
 	} else { // text mode
-		int cof  = (lcd_ctrl[2] & 1) << 10;
-		int maxx = (lcd_ctrl[3] & 4) ? 60 : 80;
-		ps += lcd_ctrl[0] & 0x7F; // X-Scroll register, only the lower 7 bits are used
+		int cof  = (lcd_regs[2] & 1) << 10;
+		int maxx = (lcd_regs[3] & 4) ? 60 : 80;
+		ps += lcd_regs[0] & 0x7F; // X-Scroll register, only the lower 7 bits are used
 		for (y = 0; y < 128; y++) {
 			for (x = 0; x < maxx; x++) {
 				ps &= 0x7FFF;
@@ -475,7 +469,7 @@ static void render_screen ( void )
 				pix[3] = (ch & 0x10) ? FG : BG;
 				pix[4] = (ch & 0x08) ? FG : BG;
 				pix[5] = (ch & 0x04) ? FG : BG;
-				if (lcd_ctrl[3] & 4) {
+				if (lcd_regs[3] & 4) {
 					pix[6] = (ch & 0x02) ? FG : BG;
 					pix[7] = (ch & 0x01) ? FG : BG;
 					pix += 8;
@@ -988,10 +982,19 @@ int main ( int argc, char **argv )
 		xemu_load_file(configdb.rom102_fn, memory + 0x38000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
 		xemu_load_file(configdb.rom103_fn, memory + 0x30000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
 		xemu_load_file(configdb.rom104_fn, memory + 0x28000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
-		xemu_load_file(configdb.rom105_fn, memory + 0x20000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
-		xemu_load_file(configdb.romchr_fn, charrom,          0x1000, 0x1000, rom_fatal_msg) < 0
+		xemu_load_file(configdb.rom105_fn, memory + 0x20000, 0x8000, 0x8000, rom_fatal_msg) < 0
 	)
 		return 1;
+	const int charrom_load_size = xemu_load_file(configdb.romchr_fn, charrom, 0x1000, 0x2000, rom_fatal_msg);
+	if (charrom_load_size < 0)
+		return 1;
+	if (charrom_load_size == 0x1000) {
+		memcpy(charrom + 0x1000, charrom, 0x1000);
+		DEBUGPRINT("ROM: character ROM is 4096 bytes, duplicated to be 8192 bytes long." NL);
+	} else if (charrom_load_size != 0x2000) {
+		ERROR_WINDOW("Bad character ROM, must be 4096 or 8192 bytes in length (got %d bytes): %s", charrom_load_size, configdb.romchr_fn);
+		return 1;
+	}
 	// Ugly hacks :-( <patching ROM>
 #ifdef ROM_HACK_COLD_START
 	if (!configdb.keep_ram) {
@@ -1039,7 +1042,6 @@ int main ( int argc, char **argv )
 		sysconsole_close(NULL);
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	update_rtc();			// this will use time-keeping stuff as well, so initially let's do after the function call above
-	KBD_PRESS_KEY(0x80);
 	viacyc = 0;
 	// FIXME: add here the "OK to save ROM state" ...
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
