@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -41,6 +41,7 @@ extern void hid_keymap_from_config_file ( const char *fn );
 extern Uint8 kbd_matrix[16];
 extern int   hid_show_osd_keys;
 extern int   hid_joy_on_cursor_keys;
+extern int (*hid_ok_to_exit_cb)(void);
 
 #define KBD_IS_PRESSED(a)	(!(kbd_matrix[(a) >> 4] & (1 << ((a) & 0x7))))
 #define KBD_CLEAR_MATRIX()      memset(kbd_matrix, 0xFF, sizeof kbd_matrix)

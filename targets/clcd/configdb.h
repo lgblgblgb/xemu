@@ -1,4 +1,4 @@
-/* Commodore LCD emulator.
+/* Commodore LCD emulator (rewrite of my world's first working Commodore LCD emulator)
    Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Part of the Xemu project: https://github.com/lgblgblgb/xemu
 
@@ -16,14 +16,28 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef XEMU_CLCD_ACIA_H_INCLUDED
-#define XEMU_CLCD_ACIA_H_INCLUDED
+#ifndef XEMU_CLCD_CONFIGDB_H_INCLUDED
+#define XEMU_CLCD_CONFIGDB_H_INCLUDED
 
-typedef void(*acia_interrupt_setter_t)(const int actve);
+extern void configdb_define_emulator_options ( void );
 
-extern void  acia_reset     ( void );
-extern void  acia_init      ( acia_interrupt_setter_t int_setter );
-extern void  acia_write_reg ( const int reg, const Uint8 data );
-extern Uint8 acia_read_reg  ( const int reg );
+struct configdb_st {
+	int fullscreen_requested;
+	int syscon;
+	int zoom;
+	int sdlrenderquality;
+	int ram_size_kbytes;
+	int clock_mhz;
+	char *rom102_fn;
+	char *rom103_fn;
+	char *rom104_fn;
+	char *rom105_fn;
+	char *romchr_fn;
+	char *prg_inject_fn;
+	char *gui_selection;
+	char *dumpmem;
+};
+
+extern struct configdb_st configdb;
 
 #endif

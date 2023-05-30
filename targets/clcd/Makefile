@@ -19,7 +19,7 @@ TARGET		= clcd
 PRG_TARGET	= xclcd
 EMU_DESCRIPTION	= Commodore LCD
 
-SRCS_TARGET_xclcd	= commodore_lcd.c acia.c
+SRCS_TARGET_xclcd	= commodore_lcd.c configdb.c acia.c inject.c ui.c
 SRCS_COMMON_xclcd	= emutools.c cpu65.c via65c22.c emutools_hid.c emutools_config.c emutools_files.c emutools_gui.c lodepng.c
 CFLAGS_TARGET_xclcd	= $(SDL2_CFLAGS) $(XEMUGUI_CFLAGS) $(MATH_CFLAGS)
 LDFLAGS_TARGET_xclcd	= $(SDL2_LIBS) $(XEMUGUI_LIBS) $(MATH_LIBS)

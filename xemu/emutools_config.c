@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -56,6 +56,15 @@ void xemucfg_set_str ( char **ptr, const char *value )
 		free(*ptr);
 		*ptr = NULL;
 	}
+}
+
+
+const char *xemucfg_get_optname ( void *dataptr )
+{
+	for (const struct xemutools_config_st *p = config_head; p; p=p->next)
+		if (dataptr == p->opt_ANY.p)
+			return p->name;
+	return NULL;
 }
 
 

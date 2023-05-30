@@ -30,4 +30,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define ROM_HACK_COLD_START
 //#define ROM_HACK_NEW_ROM_SEARCHING
 
+#define BASIC_START		0x1001
+
+extern Uint8 memory[0x40000];
+extern Uint8 powerstatus;
+
+extern void set_cpu_mhz			( const int mhz );
+extern int  get_cpu_mhz			( void );
+extern int  get_ram_size		( void );
+extern void poweroff_request		( void );
+extern void ramsizechange_request	( const int new_ram_size_in );
+extern void reset_request		( const int with_scrub );
+
 #endif

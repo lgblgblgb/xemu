@@ -2,7 +2,7 @@
 
 Commodore LCD is an almost totally unknown, never released 8 bit machine from
 Commodore. It is a portable machine, with LCD screen, thus the name. It is
-estimated that only 4-5 units exist at max.
+estimated that only sub-10 units exist at all.
 
 Commodore LCD had no working emulator at all. I (Gabor Lenart aka LGB) made
 the world's first working emulator, in hand written Javascript, running inside

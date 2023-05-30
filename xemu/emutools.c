@@ -790,7 +790,7 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 	if (SDL_Init(SDL_INIT_EVERYTHING & ~(SDL_INIT_TIMER | SDL_INIT_HAPTIC)))
 		FATAL("Cannot initialize SDL: %s", SDL_GetError());
 	atexit(shutdown_emulator);
-#else
+#else	// XEMU_ARCH_HTML
 	char *p;
 	sysconsole_open();
 	if (chatty_xemu)
@@ -818,7 +818,11 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 		SDL_free(p);
 	} else
 		FATAL("Cannot query SDL preference directory: %s", SDL_GetError());
-#endif
+#ifdef	XEMU_ARCH_WIN
+	//FATAL("Win yeah!");
+	// TODO: test UTF8 filename capability?
+#endif	// XEMU_ARCH_WIN
+#endif	// XEMU_ARCH_HTML
 	xemu_app_org = xemu_strdup(app_organization);
 	xemu_app_name = xemu_strdup(app_name);
 #ifdef XEMU_CONFIGDB_SUPPORT

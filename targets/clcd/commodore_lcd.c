@@ -35,25 +35,22 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_files.h"
 #include "xemu/emutools_hid.h"
 #include "xemu/emutools_config.h"
-#include "xemu/emutools_gui.h"
 #include "xemu/cpu65.h"
 #include "xemu/via65c22.h"
 #include "xemu/emutools.h"
 
 #include "commodore_lcd.h"
+
 #include "acia.h"
+#include "configdb.h"
+#include "inject.h"
+#include "ui.h"
 
 #include <time.h>
-
-
-static const char *rom_fatal_msg = "This is one of the selected ROMs. Without it, Xemu won't work.\nInstall it, or use -romXXX CLI switches to specify another path, see the -h output for help.";
 
 static char emulator_addon_title[32] = "";
 
 static int cpu_mhz, cpu_cycles_per_tv_frame;
-static int register_screenshot_request = 0;
-
-static const int BASIC_START = 0x1001;
 
 #define MMU_RAM_MODE		0
 #define MMU_APPL_MODE		1
@@ -69,8 +66,9 @@ static const int BASIC_START = 0x1001;
 
 static const char *mmu_mode_names[] = { "RAM", "APPL", "KERN", "TEST" };
 
-static Uint8 memory[0x40000];
+Uint8 memory[0x40000];
 static Uint8 charrom[0x2000];
+static sha1_hash_str rom_sha;
 extern unsigned const char roms[];
 static unsigned int mmu[3][4] = {
 	{0, 0, 0, 0},			// MMU_RAM_MODE (=0)
@@ -84,16 +82,22 @@ static Uint8 keysel;
 static Uint8 rtc_regs[16];
 static int rtc_sel = 0;
 static unsigned int ram_size;
+static Uint8 portB1 = 0, portA2 = 0;
+static int keytrans = 0;
+Uint8 powerstatus = 0;
 
 #define IRQ_VIA1	1
 #define IRQ_VIA2	2
 #define	IRQ_ACIA	4
 
-static struct {
-	int phase;
-	Uint8 data[55294];
-	int size;
-} prg_inject;
+#define POWER_DOWN_WAIT_TIMEOUT	100
+#define POWER_BUTTON_RELEASE_TIMEOUT 1
+
+typedef enum { POWER_DOWN_CAUSE_NONE = 0, POWER_DOWN_CAUSE_EXIT, POWER_DOWN_CAUSE_RAMCHANGE, POWER_DOWN_CAUSE_RECYCLE, POWER_DOWN_CAUSE_SCRUB } power_down_cause_enum;
+static power_down_cause_enum power_down_cause = POWER_DOWN_CAUSE_NONE;
+static int power_down_wait_timeout = 0;
+static int power_button_release_timeout = 0;
+static int new_ram_size;
 
 static const Uint8 init_lcd_palette_rgb[6] = {
 	0xC0, 0xC0, 0xC0,
@@ -173,26 +177,10 @@ static const struct KeyMappingDefault lcd_key_map[] = {
 	{ SDL_SCANCODE_LSHIFT, 0x82 }, { SDL_SCANCODE_RSHIFT, 0x82 },
 	{ SDL_SCANCODE_LCTRL, 0x83 }, { SDL_SCANCODE_RCTRL, 0x83 },
 	{ SDL_SCANCODE_LALT, 0x84 }, { SDL_SCANCODE_RALT, 0x84 },
+	{ SDL_SCANCODE_F10, 0x87 },	// this is the power button. Usually we don't wanna be accessible by the user directly ...
 	STD_XEMU_SPECIAL_KEYS,
 	{ 0,	-1	}	// this must be the last line: end of mapping table
 };
-
-static struct {
-	int fullscreen_requested, syscon, keep_ram;
-	int zoom;
-	int sdlrenderquality;
-	int ram_size_kbytes;
-	int clock_mhz;
-	char *rom102_fn;
-	char *rom103_fn;
-	char *rom104_fn;
-	char *rom105_fn;
-	char *romchr_fn;
-	char *prg_inject_fn;
-	char *gui_selection;
-	char *dumpmem;
-} configdb;
-
 
 
 
@@ -207,6 +195,30 @@ int cpu65_trap_callback ( const Uint8 opcode )
 void clear_emu_events ( void )
 {
 	hid_reset_events(1);
+}
+
+
+static void update_addon_title ( void )
+{
+	sprintf(emulator_addon_title, "(%dMHz, %dK RAM)", cpu_mhz, ram_size >> 10);
+}
+
+
+static void clcd_reset ( void )
+{
+	clear_emu_events();
+	DEBUGPRINT("RESET" NL);
+	acia_reset();
+	via_reset(&via1);
+	via_reset(&via2);
+	cpu65_reset();
+	portB1 |= 4;	// Simulate "power is not yet enabled" situation by default
+	// Enable waiting for enabling power by ROM, thus we can monitor, if that works on a real CLCD at all
+	// ... FIXME: do that!
+	// clear power-down waiting if it was in progress!
+	power_down_cause = POWER_DOWN_CAUSE_NONE;
+	power_down_wait_timeout = 0;
+	update_addon_title();	// just in case, if memory size changed
 }
 
 
@@ -319,9 +331,129 @@ void cpu65_write_callback ( Uint16 addr, Uint8 data ) {
 }
 
 
-static Uint8 portB1 = 0, portA2 = 0;
-static int keytrans = 0;
-static int powerstatus = 0;
+static const char *get_ram_state_filename ( void )
+{
+	static char fn[64];
+	sprintf(fn, "@ram-saved-%s-%u.mem", rom_sha, ram_size);
+	return fn;
+}
+
+
+static int backup_ram_content ( void )
+{
+	DEBUGPRINT("RAM: backing up RAM content" NL);
+	return xemu_save_file(get_ram_state_filename(), memory, ram_size, "Cannot save memory content :(") != ram_size;
+}
+
+
+static int restore_ram_content ( void )
+{
+	DEBUGPRINT("RAM: restoring RAM content" NL);
+	return xemu_load_file(get_ram_state_filename(), memory, ram_size, ram_size, NULL) != ram_size;
+}
+
+
+static void press_power_button ( const int with_scrub )
+{
+	powerstatus &= 0x80|0x40|0x20;		// reset all bits but the higher three
+	powerstatus |= 0x80;			// press the power button
+        // lda MODKEY
+        // and #MOD_CBM + MOD_SHIFT + MOD_CTRL + MOD_CAPS + MOD_STOP
+        // eor #MOD_CBM + MOD_SHIFT + MOD_STOP
+        // bne L85C0
+        // jmp L87C5 -- we need this??? */
+	if (with_scrub)
+		powerstatus |= 1|4|16;		// press the "magic key combo" as well: CBM + SHIFT + STOP
+	power_button_release_timeout = POWER_BUTTON_RELEASE_TIMEOUT;
+	DEBUGPRINT("POWER: virtually pressing POWER button %s scrub." NL, with_scrub ? "**WITH**" : "without");
+}
+
+
+static void sim_power_request ( power_down_cause_enum req )
+{
+	power_down_cause = req;
+	press_power_button(req == POWER_DOWN_CAUSE_SCRUB);
+	// will cause to force request if takes too long for the CLCD to react!
+	power_down_wait_timeout = POWER_DOWN_WAIT_TIMEOUT;
+}
+
+
+void poweroff_request ( void )
+{
+	sim_power_request(POWER_DOWN_CAUSE_EXIT);
+}
+
+
+void ramsizechange_request ( const int new_ram_size_in )
+{
+	if (new_ram_size_in != ram_size) {
+		new_ram_size = new_ram_size_in;	// "new_ram_size" will be used by on_power_down() with power_down_cause == POWER_DOWN_CAUSE_RAMCHANGE
+		sim_power_request(POWER_DOWN_CAUSE_RAMCHANGE);
+	}
+}
+
+
+void reset_request ( const int with_scrub )
+{
+	sim_power_request(with_scrub ? POWER_DOWN_CAUSE_SCRUB : POWER_DOWN_CAUSE_RECYCLE);
+}
+
+
+static void on_power_down ( const int forced )
+{
+	// At this point, we can say: Commodore LCD wants to shut itself down.
+	// We need to decode the intent, ie is it the result of an action we did
+	// (like virtually pressed the POWER button and such) and decide what to
+	// do now.
+	if (forced)
+		DEBUGPRINT("POWER: forcing event (CLCD does not react?)" NL);
+	switch (power_down_cause) {
+		case POWER_DOWN_CAUSE_EXIT:
+			if (!forced)
+				backup_ram_content();
+			DEBUGPRINT("POWER: exiting on power-down request." NL);
+			XEMUEXIT(0);
+			break;
+		case POWER_DOWN_CAUSE_RAMCHANGE:
+			if (!forced)
+				backup_ram_content();	// backup RAM content from the previous amount of RAM
+			memset(memory, 0xFF, ram_size > new_ram_size ? ram_size : new_ram_size);
+			ram_size = new_ram_size;
+			press_power_button(restore_ram_content());
+			clcd_reset();
+			DEBUGPRINT("POWER: RAM-size change re-powering request." NL);
+			break;
+		case POWER_DOWN_CAUSE_SCRUB:
+			if (!forced)
+				backup_ram_content();
+			memset(memory, 0xFF, ram_size);
+			press_power_button(1);
+			clcd_reset();
+			DEBUGPRINT("POWER: memory-scrub RESET re-powering request." NL);
+			break;
+		case POWER_DOWN_CAUSE_RECYCLE:
+			if (!forced)
+				backup_ram_content();
+			press_power_button(restore_ram_content());
+			clcd_reset();
+			DEBUGPRINT("POWER: re-cycle RESET request." NL);
+			break;
+		case POWER_DOWN_CAUSE_NONE:
+			// CLCD powering itself down without user's (via emulator) request?
+			// Probably it's some built-in power-off feature of the ROM then (not using the power button).
+			// FIXME: ask, what the hell to do now!
+			//if (!forced)
+			//	backup_ram_content();
+			DEBUGPRINT("POWER: exiting on power-down request." NL);
+			ERROR_WINDOW("Unknown power-down reason, ignoring!!");
+			//XEMUEXIT(0);
+			break;
+
+	}
+	power_down_cause = POWER_DOWN_CAUSE_NONE;
+	power_down_wait_timeout = 0;
+	powerstatus &= 0x7F;
+}
 
 
 static void via1_outa ( Uint8 mask, Uint8 data )
@@ -329,32 +461,46 @@ static void via1_outa ( Uint8 mask, Uint8 data )
 	keysel = data & mask;
 }
 
+
 static void via1_outb ( Uint8 mask, Uint8 data )
 {
-	if ((data ^ portB1) & 4) {
-		DEBUGPRINT("POWER: goes %s" NL, data & 4 ? "OFF" : "ON");
+	// FIXME: for real, mask+data should be considered both to be correct!!!!!!!!
+	//DEBUGPRINT("POWER: writing VIA1-PORTB with $%02X" NL, data);
+	if (XEMU_UNLIKELY((data ^ portB1) & 4)) {
+		DEBUGPRINT("POWER: supply power goes %s ($%02X->$%02X)" NL, data & 4 ? "OFF" : "ON", portB1, data);
+		if (data & 4)
+			on_power_down(0);	// See the comment at function power_down();
 	}
 	keytrans = ((!(portB1 & 1)) && (data & 1));
 	portB1 = data;
 }
 
+
 static void via1_outsr(Uint8 data)
 {
 }
+
 
 static Uint8 via1_ina(Uint8 mask)
 {
 	return 0xFF;
 }
 
+
 static Uint8 via1_inb ( Uint8 mask )
 {
-	return 0xFF;
+	return
+		(portB1 & 4) |
+		((via1.ORB & 32) << 2) |
+		((via1.ORB & 16) << 2);
+	return 0x00;	// LGB
 }
+
 
 static void via2_setint ( int level )
 {
 }
+
 
 static void via2_outa ( Uint8 mask, Uint8 data )
 {
@@ -367,13 +513,16 @@ static void via2_outa ( Uint8 mask, Uint8 data )
 	}
 }
 
+
 static void via2_outb ( Uint8 mask, Uint8 data )
 {
 }
 
+
 static void via2_outsr ( Uint8 data )
 {
 }
+
 
 static Uint8 via2_ina ( Uint8 mask )
 {
@@ -386,15 +535,18 @@ static Uint8 via2_ina ( Uint8 mask )
 	return 0;
 }
 
+
 static Uint8 via2_inb ( Uint8 mask )
 {
 	return 0xFF;
 }
 
+
 static Uint8 via2_insr ( void )
 {
 	return 0xFF;
 }
+
 
 static Uint8 via1_insr ( void )
 {
@@ -414,6 +566,7 @@ static Uint8 via1_insr ( void )
 		return (~kbd_matrix[8]) | powerstatus;
 }
 
+
 static void via1_setint ( int level )
 {
 	//DEBUG("IRQ level: %d" NL, level);
@@ -422,6 +575,7 @@ static void via1_setint ( int level )
 	else
 		cpu65.irqLevel &= ~IRQ_VIA1;
 }
+
 
 static void acia_setint( const int level )
 {
@@ -435,16 +589,17 @@ static void acia_setint( const int level )
 #define BG lcd_palette[0]
 #define FG lcd_palette[1]
 
+
 static void render_screen ( void )
 {
 	int ps = lcd_regs[1] << 7;
-	int x, y, ch;
+	//int x, y, ch;
 	int tail;
 	Uint32 *pix = xemu_start_pixel_buffer_access(&tail);
 	if (lcd_regs[2] & 2) { // graphic mode
-		for (y = 0; y < 128; y++) {
-			for (x = 0; x < 60; x++) {
-				ch = memory[ps++];
+		for (int y = 0; y < 128; y++) {
+			for (int x = 0; x < 60; x++) {
+				const Uint8 ch = memory[ps++];
 				*(pix++) = (ch & 0x80) ? FG : BG;
 				*(pix++) = (ch & 0x40) ? FG : BG;
 				*(pix++) = (ch & 0x20) ? FG : BG;
@@ -461,10 +616,10 @@ static void render_screen ( void )
 		int cof  = (lcd_regs[2] & 1) << 10;
 		int maxx = (lcd_regs[3] & 4) ? 60 : 80;
 		ps += lcd_regs[0] & 0x7F; // X-Scroll register, only the lower 7 bits are used
-		for (y = 0; y < 128; y++) {
-			for (x = 0; x < maxx; x++) {
+		for (int y = 0; y < 128; y++) {
+			for (int x = 0; x < maxx; x++) {
 				ps &= 0x7FFF;
-				ch = memory[ps++];
+				Uint8 ch = memory[ps++];
 				ch = charrom[cof + ((ch & 0x7F) << 3) + (y & 7)] ^ ((ch & 0x80) ? 0xFF : 0x00);
 				pix[0] = (ch & 0x80) ? FG : BG;
 				pix[1] = (ch & 0x40) ? FG : BG;
@@ -503,16 +658,13 @@ static void render_screen ( void )
 }
 
 
-static const struct menu_st menu_main[];
-
 // HID needs this to be defined, it's up to the emulator if it uses or not ...
 int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
-	if (!pressed && pos == -2 && key == 0 && handled == SDL_BUTTON_RIGHT) {
-		DEBUGGUI("UI: handler has been called." NL);
-		if (xemugui_popup(menu_main))
-			DEBUGPRINT("UI: oops, POPUP does not worked :(" NL);
-	}
+	if (!pressed && pos == -2 && key == 0 && handled == SDL_BUTTON_RIGHT)
+		ui_enter_menu();
+	else
+		powerstatus &= 128|64|32;	// resets other bit than the upper 3 on any key event
         return 0;
 }
 
@@ -536,22 +688,6 @@ static void update_rtc ( void )
 }
 
 
-static void backup_ram_content ( void )
-{
-	char fn[64];
-	sprintf(fn, "@ram-saved-%u.mem", ram_size);
-	xemu_save_file(fn, memory, ram_size, "Cannot save memory content :(");
-}
-
-
-static void restore_ram_content ( void )
-{
-	char fn[64];
-	sprintf(fn, "@ram-saved-%u.mem", ram_size);
-	xemu_load_file(fn, memory, ram_size, ram_size, NULL);
-}
-
-
 static void shutdown_emu ( void )
 {
 	//if (configdb.keep_ram)
@@ -564,31 +700,57 @@ static void shutdown_emu ( void )
 
 static int memory_init ( void )
 {
+	static const char *rom_fatal_msg = "This is one of the selected ROMs. Without it, Xemu won't work.\nInstall it, or use -romXXX CLI switches to specify another path, see the -h output for help.";
 	memset(memory, 0xFF, sizeof memory);
 	memset(charrom, 0xFF, sizeof charrom);
-	if (
-		xemu_load_file(configdb.rom102_fn, memory + 0x38000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
-		xemu_load_file(configdb.rom103_fn, memory + 0x30000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
-		xemu_load_file(configdb.rom104_fn, memory + 0x28000, 0x8000, 0x8000, rom_fatal_msg) < 0 ||
-		xemu_load_file(configdb.rom105_fn, memory + 0x20000, 0x8000, 0x8000, rom_fatal_msg) < 0
-	)
+	// --- Load the character ROM
+	const int charrom_load_size = xemu_load_file(configdb.romchr_fn, charrom, 0x1000, 0x2000, "Cannot load character ROM (must exist with size exactly 4K or 8K");
+	if (charrom_load_size < 0) {
 		return 1;
-	const int charrom_load_size = xemu_load_file(configdb.romchr_fn, charrom, 0x1000, 0x2000, rom_fatal_msg);
-	if (charrom_load_size < 0)
-		return 1;
-	if (charrom_load_size == 0x1000) {
+	} else if (charrom_load_size == 0x1000) {
 		memcpy(charrom + 0x1000, charrom, 0x1000);
 		DEBUGPRINT("ROM: character ROM is 4096 bytes, duplicated to be 8192 bytes long." NL);
 	} else if (charrom_load_size != 0x2000) {
 		ERROR_WINDOW("Bad character ROM, must be 4096 or 8192 bytes in length (got %d bytes): %s", charrom_load_size, configdb.romchr_fn);
 		return 1;
+	} else {
+		DEBUGPRINT("ROM: character ROM is 8192 bytes, low/high 4K %s" NL, !memcmp(charrom, charrom + 0x1000, 0x1000) ? "matches" : "mismatches");
 	}
-	sha1_hash_str rom_sha;
+	// --- Load the KERNAL
+	if (xemu_load_file(configdb.rom102_fn, memory + 0x38000, 0x8000, 0x8000, rom_fatal_msg) < 0)
+		return 1;
 	sha1_checksum_as_string(rom_sha, memory + 0x38000, 0x8000);
 	const int rom_good_sha = !strcmp(rom_sha, "e49c20b237a78b54c2cb26b133d5903bb60bd8ef");
 	DEBUGPRINT("ROM: KERNAL SHA1 checksum: %s [%s]" NL, rom_sha, rom_good_sha ? "OK" : "UNKNOWN_ROM");
+	// --- Load other ROMs
+	static char **rom_fnps[] = { &configdb.rom103_fn, &configdb.rom104_fn, &configdb.rom105_fn };
+	static const int rom_addrs[] = { 0x30000, 0x28000, 0x20000, 0 };
+	for (int i = 0; rom_addrs[i]; i++) {
+		const char *fn = *rom_fnps[i];
+		const char *on = xemucfg_get_optname(rom_fnps[i]);
+		if (!fn || !fn[0] || (fn[0] == '-' && !fn[1])) {
+			DEBUGPRINT("ROM: skipping loading ROM to $%X (optname %s): not requested." NL, rom_addrs[i], on);
+			continue;
+		}
+		if (xemu_load_file(fn, memory + rom_addrs[i], 0x8000, 0x8000, "Cannot load ROM") < 0)
+			return 1;
+		DEBUGPRINT("ROM: loaded to $%X (option %s): %s" NL, rom_addrs[i], on, xemu_load_filepath);
+	}
+	// --- Restore RAM content, if possible & press power button
+	press_power_button(restore_ram_content());
+	powerstatus &= 0x7F;	// FIXME: remove this
+	//restore_ram_content();
+	// --- Checking/patching KERNAL ROM
+#ifdef	ROM_HACK_COLD_START
+#undef		ROM_HACK_COLD_START
+#warning	"ROM_HACK_COLD_START is obsolete for now, FIXME?"
+#endif
+#ifdef	ROM_HACK_NEW_ROM_SEARCHING
+#undef		ROM_HACK_NEW_ROM_SEARCHING
+#warning	"ROM_HACK_NEW_ROM_SEARCHING is obsolete for now, FIXME?"
+#endif
 	// Ugly hacks :-( <patching ROM>
-#ifdef ROM_HACK_COLD_START
+#ifdef	ROM_HACK_COLD_START
 	if (!configdb.keep_ram) {
 		if (rom_good_sha) {
 			// this ROM patching is needed, as Commodore LCD seems not to work to well with "not intact" SRAM content (ie: it has battery powered SRAM even when "switched off")
@@ -596,14 +758,14 @@ static int memory_init ( void )
 			memory[0x385BB] = 0xEA;
 			memory[0x385BC] = 0xEA;
 		} else {
-			DEBUGPRINT("ROM: warning! Cannot apply 'force cold start condition' ROM patch because of unknown ROM" NL);
+			DEBUGPRINT("ROM-HACK: Warning! Cannot apply 'force cold start condition' ROM patch because of unknown ROM" NL);
 		}
 	} else {
 		DEBUGPRINT("ROM-HACK: SKIP cold start condition forcing!" NL);
 		restore_ram_content();
 	}
 #endif
-#ifdef ROM_HACK_NEW_ROM_SEARCHING
+#ifdef	ROM_HACK_NEW_ROM_SEARCHING
 	if (rom_good_sha) {
 		// this ROM hack modifies the ROM signature searching bytes so we can squeeze extra menu points of the main screen!
 		// this hack SHOULD NOT be used, if the ROM 32K ROM images from 0x20000 and 0x28000 are not empty after offset 0x6800
@@ -618,7 +780,7 @@ static int memory_init ( void )
 		xemu_load_file("#clcd-u105-parasite.rom", memory + 0x26800, 32, 0x8000 - 0x6800, NULL);
 		xemu_load_file("#clcd-u104-parasite.rom", memory + 0x2E800, 32, 0x8000 - 0x6800, NULL);
 	} else {
-		DEBUGPRINT("ROM: warning! Cannot apply 'MMU-search-table' ROM patch because of unknown ROM" NL);
+		DEBUGPRINT("ROM-HACK: Warning! Cannot apply 'MMU-search-table' ROM patch because of unknown ROM" NL);
 	}
 #endif
 	return 0;
@@ -631,6 +793,15 @@ static void rom_list ( void )
 	for (int addr = 0x20000; addr < 0x40000; addr += 0x4000) {
 		if (!memcmp(memory + addr + 8, "Commodore LCD", 13)) {
 			DEBUGPRINT("ROM directory entry point @ $%05X" NL, addr);
+			DEBUGPRINT("  ROM header bytes: $%02X $%02X $%02X $%02X $%02X $%02X $%02X $%02X" NL,
+				memory[addr + 0], memory[addr + 1], memory[addr + 2], memory[addr + 3],
+				memory[addr + 4], memory[addr + 5], memory[addr + 6], memory[addr + 7]
+			);
+			DEBUGPRINT("  ROM checksum Kbytes: %dK (@4)" NL, memory[addr + 4]);
+			if (memory[addr + 5] != 0xDD && memory[addr + 6] != 0xDD && memory[addr + 7] != 0xDD)
+				DEBUGPRINT("  ROM date: %02X-%02X-%02X" NL,
+					memory[addr + 5], memory[addr + 6], memory[addr + 7]
+				);
 			int pos = addr + 13 + 8;
 			while (memory[pos]) {
 				char name[256];
@@ -655,194 +826,10 @@ static void rom_list ( void )
 }
 
 
-static int prg_relink ( Uint8 *data, int target_addr, int source_addr, const int size_limit, int *actual_size )
+void set_cpu_mhz ( const int mhz )
 {
-	int i = 0, relink_counter = 0;
-	for (;;) {
-		if (i + 1 >= size_limit)
-			return -1;
-		const int ptrpos = i;
-		const int nextptr = data[i] + (data[i + 1] << 8);	// read the next-addr pointer
-		i += 2;	// jump over nextptr
-		if (!nextptr)
-			break;	// end of program
-		//DEBUGPRINT("BASIC LINE: %d" NL, data[i] + data[i + 1] * 256);
-		i += 2;	// jump over basic line number word
-		for (int linelength = 0;;) {
-			if (i >= size_limit)
-				return -1;
-			if (!data[i++])
-				break;
-			if (++linelength >= 255)	// FIXME: max line length!
-				return -1;
-		}
-		if (source_addr >= 0) {
-			source_addr += i - ptrpos;
-			if (nextptr != source_addr)
-				return -1;
-		}
-		if (target_addr >= 0) {
-			target_addr += i - ptrpos;
-			if (nextptr != target_addr) {
-				data[ptrpos]     = target_addr  & 0xFF;
-				data[ptrpos + 1] = target_addr >> 8;
-				relink_counter++;
-			}
-		}
-	}
-	if (actual_size)
-		*actual_size = i;
-	return relink_counter;
-}
-
-
-static int prg_load_prepare_inject ( const char *file_name, int new_address )
-{
-	prg_inject.phase = 0;
-	if (!file_name)
-		return -1;
-	memset(prg_inject.data, 0, sizeof prg_inject.data);
-	prg_inject.size = xemu_load_file(file_name, prg_inject.data, 4, sizeof(prg_inject.data) - 4, "Cannot load program");
-	if (prg_inject.size <= 0)
-		return -1;
-	if (prg_inject.size <= 4) {
-		ERROR_WINDOW("PRG is empty");
-		return -1;
-	}
-	const int old_address = prg_inject.data[0] + (prg_inject.data[1] << 8);
-	DEBUGPRINT("PRG: program \"%s\" load_addr=$%04X, new_load_addr=$%04X, size=%d" NL, file_name, old_address, new_address, prg_inject.size);
-	int linked_size;
-	const int relink_status = prg_relink(prg_inject.data + 2, new_address, -1, prg_inject.size - 2, &linked_size);
-	if (relink_status < 0) {
-		ERROR_WINDOW("Invalid PRG, bad BASIC link chain");
-		return -1;
-	}
-	DEBUGPRINT("PRG: relink points=%d, size_from_linking=%d" NL, relink_status, linked_size);
-	const int tail = prg_inject.size - 2 - linked_size;
-	if (tail < 0) {	// technically it shouldn't happen ever, since prg_relink above should return then with relink_status < 0
-		ERROR_WINDOW("Too short?!");
-		return -1;
-	}
-	if (tail)
-		DEBUGPRINT("PRG: PRG has non-BASIC tail of %d byte(s)" NL, tail);
-	else
-		DEBUGPRINT("PRG: PRG has no non-BASIC tail" NL);
-	return 0;
-}
-
-
-static int prg_load_do_inject ( const int address )
-{
-	// TODO: find out some way to detect if BASIC is unning at the moment, and if we're in screen-edit mode (not like running a program or something)
-	if (memory[0x65] != (address & 0xFF) || memory[0x66] != (address >> 8)) {
-		ERROR_WINDOW("Could not inject PRG into memory:\nwrong BASIC start address in ZP: $%04X (should be: $%04X)", memory[0x65] + (memory[0x66] << 8), address);
-		return -1;
-	}
-	const int memtop = memory[0x71] + (memory[0x72] << 8);
-#if 0
-	int previous_size = -1;
-	// NOTE: this is *NOT* relink the program. It *CHECKS* links of the program in the memory BEFORE injecting the new program which overwrites memory.
-	// The only intent of this step is try to be sure that we're in BASIC mode at all hoping that "no answer" would mean, these checks fail.
-	const int prev_status = prg_relink(memory + address, -1, address, memtop - address, &previous_size);
-	DEBUGPRINT("PRG: previous status: %d, previous size: %d" NL, prev_status, previous_size);
-#endif
-	const int last_addr = address + prg_inject.size + 0x100; 	// 0x100: margin of error for now ;) TODO
-	if (last_addr >= memtop) {
-		ERROR_WINDOW("Program is too large to fit into the available BASIC memory\nMEMTOP = $%04X, last_load_byte = $%04X", memtop, last_addr);
-		return -1;
-	}
-	memory[address - 1] = 0;	// I *think* that byte should be zero. I'm not absolutely sure though.
-	memcpy(memory + address, prg_inject.data + 2, prg_inject.size - 2);
-	memory[0x65] = address & 0xFF;
-	memory[0x66] = address >> 8;
-	const int end_address = address + prg_inject.size - 2;
-	memory[0x67] = end_address & 0xFF;
-	memory[0x68] = end_address >> 8;
-	memory[0x69] = end_address & 0xFF;
-	memory[0x6A] = end_address >> 8;
-	memory[0x6B] = end_address & 0xFF;
-	memory[0x6C] = end_address >> 8;
-	memory[0x6D] = memory[0x71];
-	memory[0x6E] = memory[0x72];
-	return 0;
-}
-
-
-static int prg_save_prepare_store ( const int address )
-{
-	prg_inject.phase = 0;
-	if (memory[0x65] != (address & 0xFF) || memory[0x66] != (address >> 8)) {
-		ERROR_WINDOW("SAVE error: wrong start addr ($%02X%02X) of BASIC ZP (should be: $%04X)", memory[0x66], memory[0x65], address);
-		return -1;
-	}
-	const int memtop = memory[0x67] + (memory[0x68] << 8);
-	const int size = memtop - address;	// size of the current program, without the load address
-	if (size < 2 || size >= sizeof(prg_inject.data) - 2) {
-		ERROR_WINDOW("SAVE error: Bad end of prg ptr in BASIC ZP");
-		return -1;
-	}
-	if (size <= 4) {
-		ERROR_WINDOW("SAVE error: no BASIC PRG in memory");
-		return -1;
-	}
-	// use the relink functionality to check validity of memory
-	int linked_size;
-	const int ret = prg_relink(memory + address, -1, address, size, &linked_size);
-	if (ret) {
-		ERROR_WINDOW("SAVE error: in-memory program has invalid link structure, retcode: %d", ret);
-		return -1;
-	}
-	DEBUGPRINT("SAVE: size from pointers = %d, size from link-check = %d" NL, size, linked_size);
-	// hijack prg_inject.data for our purposes here ...
-	prg_inject.data[0] = address & 0xFF;
-	prg_inject.data[1] = address >> 8;
-	memcpy(prg_inject.data + 2, memory + address, size);
-	prg_inject.size = size + 2;
-	return 0;
-}
-
-
-static void update_emulator ( void )
-{
-	if (XEMU_UNLIKELY(prg_inject.phase == 1)) {
-		static const Uint8 screen_sample1[] = { 0x20, 0x03, 0x0f, 0x0d, 0x0d, 0x0f, 0x04, 0x0f, 0x12, 0x05, 0x20, 0x0c, 0x03, 0x04, 0x20 };
-		static const Uint8 screen_sample2[] = { 0x12, 0x05, 0x01, 0x04, 0x19, 0x2e };
-		if (
-			!memcmp(memory + 0x880, screen_sample1, sizeof screen_sample1) &&
-			!memcmp(memory + 0x980, screen_sample2, sizeof screen_sample2)
-		) {
-			prg_inject.phase = 2;
-			DEBUGPRINT("BASIC: startup screen detected, injecting loaded basic program!" NL);
-			prg_load_do_inject(BASIC_START);
-			memory[0xA01] = 'R' - 'A' + 1;
-			memory[0xA02] = 'U' - 'A' + 1;
-			memory[0xA03] = 'N' - 'A' + 1;
-		}
-	}
-	xemugui_iteration();
-	render_screen();
-	hid_handle_all_sdl_events();
-	xemu_timekeeping_delay(40000);	// 40000 microseconds would be the real time for a full TV frame (see main() for more info: CLCD is not TV based for real ...)
-	if (seconds_timer_trigger)
-		update_rtc();
-}
-
-
-static void update_addon_title ( void )
-{
-	sprintf(emulator_addon_title, "(%dMHz, %dK RAM)", cpu_mhz, ram_size >> 10);
-}
-
-
-static void set_ram_size ( int kbytes )
-{
-	ram_size = kbytes << 10;
-	DEBUGPRINT("MEM: RAM size is set to %dKbytes." NL, kbytes);
-	update_addon_title();
-}
-
-static void set_cpu_speed ( int mhz )
-{
+	if (mhz == cpu_mhz)
+		return;
 	cpu_mhz = mhz;
 	cpu_cycles_per_tv_frame = mhz * 1000000 / 25;
 	DEBUGPRINT("CPU: setting CPU to %dMHz, %d CPU cycles per full 1/25sec frame." NL, mhz, cpu_cycles_per_tv_frame);
@@ -850,21 +837,43 @@ static void set_cpu_speed ( int mhz )
 }
 
 
-static void clcd_reset ( void )
+int get_cpu_mhz ( void )
 {
-	clear_emu_events();
-	DEBUGPRINT("RESET" NL);
-	acia_reset();
-	via_reset(&via1);
-	via_reset(&via2);
-	cpu65_reset();
+	return cpu_mhz;
 }
 
 
-static void clcd_reset_with_stop ( void )
+int get_ram_size ( void )
 {
-	clcd_reset();
-	KBD_PRESS_KEY(0x80);
+	return ram_size;
+}
+
+
+static void update_emulator ( void )
+{
+	if (XEMU_UNLIKELY(power_button_release_timeout)) {
+		power_button_release_timeout--;
+		if (power_button_release_timeout <= 0) {
+			power_button_release_timeout = 0;
+			powerstatus &= ~0x40;
+			DEBUGPRINT("POWER: virtually releasing POWER button (and maybe others)" NL);
+		}
+	}
+	if (XEMU_UNLIKELY(power_down_wait_timeout)) {
+		power_down_wait_timeout--;
+		if (power_down_wait_timeout <= 0) {
+			power_down_wait_timeout = 0;
+			on_power_down(1);
+		}
+	}
+	if (XEMU_UNLIKELY(prg_inject.phase == 1))
+		prg_inject_periodic_check();
+	ui_iteration();
+	render_screen();
+	hid_handle_all_sdl_events();
+	xemu_timekeeping_delay(40000);	// 40000 microseconds would be the real time for a full TV frame (see main() for more info: CLCD is not TV based for real ...)
+	if (seconds_timer_trigger)
+		update_rtc();
 }
 
 
@@ -879,11 +888,9 @@ static void emulation_loop ( void )
 		cycles += opcyc;
 		if (viacyc >= cpu_mhz) {
 			const int steps = viacyc / cpu_mhz;
-			if (steps) {
-				viacyc = viacyc % cpu_mhz;
-				via_tick(&via1, steps);	// run VIA-1 tasks for the same amount of cycles as the CPU would do @ 1MHz
-				via_tick(&via2, steps);	// -- "" -- the same for VIA-2
-			}
+			viacyc = viacyc % cpu_mhz;
+			via_tick(&via1, steps);	// run VIA-1 tasks for the same amount of cycles as the CPU would do @ 1MHz
+			via_tick(&via2, steps);	// -- "" -- the same for VIA-2
 		}
 		/* Note, Commodore LCD is not TV standard based ... Since I have no idea about the update etc, I still assume some kind of TV-related stuff, who cares :) */
 		if (XEMU_UNLIKELY(cycles >= cpu_cycles_per_tv_frame)) {	// if enough cycles elapsed (what would be the amount of CPU cycles for a TV frame), let's call the update function.
@@ -895,163 +902,26 @@ static void emulation_loop ( void )
 }
 
 
-static char last_used_ui_dir[PATH_MAX + 1] = "";
-
-static void ui_load_basic_prg ( void )
+static int ok_to_exit ( void )
 {
-	char fnbuf[PATH_MAX + 1];
-	if (!xemugui_file_selector(
-		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
-		"Load BASIC .PRG",
-		last_used_ui_dir,
-		fnbuf,
-		sizeof fnbuf
-	)) {
-		if (prg_load_prepare_inject(fnbuf, BASIC_START)) {
-			return;
-		}
-		prg_load_do_inject(BASIC_START);
-	}
+	DEBUGPRINT("POWER: exit request received, pressing the POWER button!" NL);
+	//exit_requested = 1;
+	//powerstatus = 0x80;
+	return 0;	// do NOT exit (yet!)
 }
 
-static void ui_save_basic_prg ( void )
-{
-	if (prg_save_prepare_store(BASIC_START))
-		return;
-	char fnbuf[PATH_MAX + 1];
-	if (!xemugui_file_selector(
-		XEMUGUI_FSEL_SAVE | XEMUGUI_FSEL_FLAG_STORE_DIR,
-		"Save BASIC .PRG",
-		last_used_ui_dir,
-		fnbuf,
-		sizeof fnbuf
-	)) {
-		xemu_save_file(fnbuf, prg_inject.data, prg_inject.size, "Cannot save BASIC PRG");
-	}
-}
 
-static void ui_dump_memory ( void )
-{
-	char fnbuf[PATH_MAX + 1];
-	if (!xemugui_file_selector(
-		XEMUGUI_FSEL_SAVE | XEMUGUI_FSEL_FLAG_STORE_DIR,
-		"Dump memory content into file",
-		last_used_ui_dir,
-		fnbuf,
-		sizeof fnbuf
-	)) {
-		xemu_save_file(fnbuf, memory, ram_size, "Cannot dump RAM content into file");
-	}
-}
-
-static void ui_cb_clock_mhz ( const struct menu_st *m, int *query )
-{
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, cpu_mhz == VOIDPTR_TO_INT(m->user_data));
-	if (VOIDPTR_TO_INT(m->user_data) != cpu_mhz)
-		set_cpu_speed(VOIDPTR_TO_INT(m->user_data));
-}
-
-static void ui_cb_ramsize ( const struct menu_st *m, int *query )
-{
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, (ram_size >> 10) == VOIDPTR_TO_INT(m->user_data));
-	if (VOIDPTR_TO_INT(m->user_data) != (ram_size >> 10) && ARE_YOU_SURE("This will RESET your machine!", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
-		set_ram_size(VOIDPTR_TO_INT(m->user_data));
-		clcd_reset();
-	}
-}
-
-static const struct menu_st menu_display[] = {
-	{ "Fullscreen",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)0 },
-	{ "Window - 100%",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_windowsize, (void*)1 },
-	{ "Window - 200%",		XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize, (void*)2 },
-        { NULL }
-};
-static const struct menu_st menu_clock[] = {
-	{ "1MHz",			XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_clock_mhz, (void*)1 },
-	{ "2MHz",			XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_clock_mhz, (void*)2 },
-	{ "4MHz",			XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_clock_mhz, (void*)4 },
-	{ NULL }
-};
-static const struct menu_st menu_ramsize[] = {
-	{ " 32K",			XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_ramsize, (void*)32  },
-	{ " 64K",			XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_ramsize, (void*)64  },
-	{ " 96K",			XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_ramsize, (void*)96  },
-	{ "128K",			XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_ramsize, (void*)128 },
-	{ NULL }
-};
-static const struct menu_st menu_main[] = {
-	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display },
-	{ "CPU clock speed",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_clock },
-	{ "RAM size",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_ramsize },
-#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
-	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &register_screenshot_request },
-#endif
-	{ "Load BASIC program",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_load_basic_prg },
-	{ "Save BASIC program",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_save_basic_prg },
-	{ "Dump RAM into file",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_dump_memory },
-#ifdef XEMU_ARCH_WIN
-	{ "System console",		XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_sysconsole, NULL },
-#endif
-#ifdef HAVE_XEMU_EXEC_API
-	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_native_os_prefdir_browser, NULL },
-#endif
-	{ "Reset",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data_if_sure, clcd_reset },
-	{ "Reset with STOP",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data_if_sure, clcd_reset_with_stop },
-	{ "Force saving RAM content",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, backup_ram_content },
-	{ "About",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_about_window, NULL },
-#ifdef HAVE_XEMU_EXEC_API
-	{ "Help (on-line)",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_web_help_main, NULL },
-#endif
-	{ "Quit",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_quit_if_sure, NULL },
-	{ NULL }
-};
 
 
 int main ( int argc, char **argv )
 {
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The world's first Commodore LCD emulator from LGB", argc, argv);
-	XEMUCFG_DEFINE_SWITCH_OPTIONS(
-		{ "fullscreen", "Start in fullscreen mode", &configdb.fullscreen_requested },
-		{ "keepram", "Deactivate ROM patch for clear RAM and also save/restore RAM", &configdb.keep_ram },
-		{ "syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon },
-		{ "besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override }
-	);
-	XEMUCFG_DEFINE_NUM_OPTIONS(
-#ifdef SDL_HINT_RENDER_SCALE_QUALITY
-		{ "sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2 },
-#endif
-		{ "zoom", 1, "Window zoom value (1-4)", &configdb.zoom, 1, 4 },
-		{ "ram", 128, "Sets RAM size in KBytes (32-128)", &configdb.ram_size_kbytes, 32, 128 },
-		{ "clock", 1, "Sets CPU speed in MHz (integer only) 1-16", &configdb.clock_mhz, 1, 16 }
-	);
-	XEMUCFG_DEFINE_STR_OPTIONS(
-		{ "rom102", "#clcd-u102.rom", "Selects 'U102' ROM to use", &configdb.rom102_fn },
-		{ "rom103", "#clcd-u103.rom", "Selects 'U103' ROM to use", &configdb.rom103_fn },
-		{ "rom104", "#clcd-u104.rom", "Selects 'U104' ROM to use", &configdb.rom104_fn },
-		{ "rom105", "#clcd-u105.rom", "Selects 'U105' ROM to use", &configdb.rom105_fn },
-		{ "romchr", "#clcd-chargen.rom", "Selects character ROM to use", &configdb.romchr_fn },
-		//{ "defprg", NULL, "Selects the ROM-program to set default to", &configdb.defprg },
-		{ "prg", NULL, "Inject BASIC program on entering to BASIC", &configdb.prg_inject_fn },
-		{ "gui", NULL, "Select GUI type for usage. Specify some insane str to get a list", &configdb.gui_selection },
-		{ "dumpmem", NULL, "Save memory content on exit", &configdb.dumpmem }
-	);
+	configdb_define_emulator_options();
 	if (xemucfg_parse_all())
 		return 1;
-	//xemucfg_limit_num(&configdb.sdlrenderquality, 0, 2);
-	//xemucfg_limit_num(&configdb.clock_mhz, 1, 16);
-	//xemucfg_limit_num(&configdb.ram_size_kbytes, 32, 128);
-	set_cpu_speed(configdb.clock_mhz);
-	set_ram_size(configdb.ram_size_kbytes);
-	DEBUGPRINT("CFG: ram size is %d Kbytes." NL, ram_size);
+	ram_size = configdb.ram_size_kbytes << 10;
+	DEBUGPRINT("MEM: RAM size is set to %dKbytes." NL, configdb.ram_size_kbytes);
+	set_cpu_mhz(configdb.clock_mhz);	// will update the "addon" display as well: update_addon_title() will be called
 	window_title_info_addon = emulator_addon_title;
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
@@ -1069,16 +939,17 @@ int main ( int argc, char **argv )
 		RENDER_SCALE_QUALITY,	// render scaling quality
 #endif
 		USE_LOCKED_TEXTURE,	// 1 = locked texture access
-		shutdown_emu		// no emulator specific shutdown function
+		shutdown_emu		// shutdown function
 	))
 		return 1;
 	osd_init_with_defaults();
-	xemugui_init(configdb.gui_selection);	// allow to fail (do not exit if it fails). Some targets may not have X running
+	ui_init(configdb.gui_selection);	// allow to fail (do not exit if it fails). Some targets may not have X running, etc.
 	hid_init(
 		lcd_key_map,
 		VIRTUAL_SHIFT_POS,
 		SDL_DISABLE	// no joystick HID events enabled
 	);
+	hid_ok_to_exit_cb = ok_to_exit;
 	/* init memory & ROM content */
 	if (memory_init())
 		return 1;
@@ -1092,6 +963,7 @@ int main ( int argc, char **argv )
 	/* init VIAs */
 	via_init(&via1, "VIA#1", via1_outa, via1_outb, via1_outsr, via1_ina, via1_inb, via1_insr, via1_setint);
 	via_init(&via2, "VIA#2", via2_outa, via2_outb, via2_outsr, via2_ina, via2_inb, via2_insr, via2_setint);
+	portB1 = 4;
 	/* init ACIA */
 	acia_init(acia_setint);
 	/* keyboard */

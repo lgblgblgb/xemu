@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -33,6 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 Uint8 kbd_matrix[16];		// keyboard matrix state, 16 * 8 bits at max currently (not compulsory to use all positions!)
 int hid_show_osd_keys = 0;
 int hid_joy_on_cursor_keys = 0;	// working mode to have cursor keys as joystick not regular key emu
+int (*hid_ok_to_exit_cb)(void) = NULL;
 
 static int mouse_delta_x;
 static int mouse_delta_y;
@@ -104,8 +105,10 @@ int hid_key_event ( SDL_Scancode key, int pressed )
 			if (map->pos > 0xFF) {	// special emulator key!
 				switch (map->pos) {	// handle "built-in" events, if emulator target uses them at all ...
 					case XEMU_EVENT_EXIT:
-						if (ARE_YOU_SURE(str_are_you_sure_to_exit, i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
-							exit(0);
+						if (ARE_YOU_SURE(str_are_you_sure_to_exit, i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
+							if ((hid_ok_to_exit_cb && hid_ok_to_exit_cb()) || !hid_ok_to_exit_cb)
+								exit(0);
+						}
 						break;
 					case XEMU_EVENT_FAKE_JOY_UP:
 						if (pressed) hid_state |= JOYSTATE_UP;     else hid_state &= ~JOYSTATE_UP;
