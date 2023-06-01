@@ -1445,9 +1445,10 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 			//const Uint8 char_fgcolor = color_data & 0xF;	// FIXME: remove this! commented out since "&0xF" causes problems, replaced any char_fgcolor refs later with color_data refs
 			const Uint16 char_id = REG_EBM ? (char_value & 0x3f) : char_value & 0x1fff; // up to 8192 characters (13-bit)
 			const Uint8 char_bgcolor = REG_EBM ? vic_registers[0x21 + ((char_value >> 6) & 3)] : REG_SCREEN_COLOR;
-			// FIXME: the commented out part below seems not to work in a way as MEGA65 does, which seems to simply ignore that part (even if it shouldn't [?])
+			// FIXME: the commented line below seems not to work in a way as MEGA65 does, there is some disturbance in the force even on the MEGA65 it seems [?]
 			//        This change seems to fix MegaPoly intro to allow it to work on Xemu as well. Suggested by Mirage_BD (the author of MegaPoly)
-			const Uint8 glyph_trim = SXA_TRIM_RIGHT_BITS012(char_value); // + (SXA_TRIM_RIGHT_BIT3(color_data) ? 8 : 0);
+			// const Uint8 glyph_trim = SXA_TRIM_RIGHT_BITS012(char_value); // + (SXA_TRIM_RIGHT_BIT3(color_data) ? 8 : 0);
+			const Uint8 glyph_trim = SXA_TRIM_RIGHT_BITS012(char_value) + ((SXA_TRIM_RIGHT_BIT3(color_data) & (SXA_4BIT_PER_PIXEL(color_data)>>1)) ? 8 : 0);
 			// Default fetch from char mode.
 			const int sel_char_row = (XEMU_UNLIKELY(SXA_VERTICAL_FLIP(color_data)) ? 7 - char_row : char_row);
 			// Render character cell row
