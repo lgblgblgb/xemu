@@ -40,11 +40,17 @@ typedef EMUCFG_PARSER_CALLBACK_RET_TYPE (*xemucfg_parser_callback_func_t)( EMUCF
 #define XEMUCFG_FLAG_FIRST_ONLY	2
 #define XEMUCFG_FLAG_DUMMY	4
 #define XEMUCFG_FLAG_FILE_ONLY	8
+#define XEMUCFG_FLAG_NO_SAVE    16
+
+enum xemutools_config_source {
+	CONFIG_SOURCE_DEFAULT = 0, CONFIG_SOURCE_CLI, CONFIG_SOURCE_FILE, CONFIG_SOURCE_RUNTIME
+};
 
 struct xemutools_config_st {
 	struct xemutools_config_st *next;
 	const char *name;
 	enum xemutools_option_type type;
+	enum xemutools_config_source source;
 	const char *help;
 	unsigned int flags;
 	union {
@@ -150,6 +156,8 @@ extern int  xemucfg_str2double ( const char *s, double *result );
 extern int  xemucfg_str2bool   ( const char *s,    int *result );
 
 extern const char *xemucfg_get_optname ( void *dataptr );
+extern void xemucfg_set_options_to_default ( const void *ptrs[] );
+extern void xemucfg_add_flags_to_options   ( const void *ptrs[], const unsigned int flags );
 
 #ifndef XEMU_RELEASE_BUILD
 extern void xemucfg_dump_db ( const char *msg );
