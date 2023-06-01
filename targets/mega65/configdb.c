@@ -134,6 +134,14 @@ static const struct xemutools_configdef_float_st float_options[] = {
 };
 
 
+// Options (given by the value pointers!) which SHOULD NOT BE saved when user saves their config.
+// The list MUST BE closed with a NULL.
+// The intent: some options makes sense mostly from using the command line (testing, called from scripts,
+// etc), however if the user saves the config in Xemu when started this way, it would also save these
+// CLI-given options, which is not the thing he wants, 99.999999% of time, I guess ...
+
+static const void *do_not_save_opts[] = { &configdb.prg, &configdb.autoload, &configdb.go64, NULL };
+
 
 void configdb_define_emulator_options ( size_t size )
 {
@@ -143,4 +151,5 @@ void configdb_define_emulator_options ( size_t size )
 	xemucfg_define_switch_option_multi(switch_options);
 	xemucfg_define_num_option_multi(num_options);
 	xemucfg_define_float_option_multi(float_options);
+	xemucfg_add_flags_to_options(do_not_save_opts, XEMUCFG_FLAG_NO_SAVE);
 }
