@@ -205,6 +205,11 @@ Uint8 via_read(struct Via65c22 *via, int addr)
 		case 0xA: // SR
 			ifr_clear(via, 4);
 			if (via->SRmode) via->SRcount = 8;
+			static Uint8 old_sr = 0xEE;
+			if (via->SR != old_sr) {
+				DEBUGPRINT("VIA-SR: reading byte $%02X" NL, via->SR);
+				old_sr = via->SR;
+			}
 			return via->SR;
 		case 0xB: // ACR
 			return via->ACR;

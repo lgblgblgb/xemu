@@ -84,14 +84,21 @@ static int rtc_sel = 0;
 static unsigned int ram_size;
 static Uint8 portB1 = 0, portA2 = 0;
 static int keytrans = 0;
-Uint8 powerstatus = 0;
+
+//#define MOD_KEYS_ARE_INVERTED
+Uint8 powerstatus =
+#ifndef MOD_KEYS_ARE_INVERTED
+	0;
+#else
+	16|8|4|2|1;
+#endif
 
 #define IRQ_VIA1	1
 #define IRQ_VIA2	2
 #define	IRQ_ACIA	4
 
 #define POWER_DOWN_WAIT_TIMEOUT	100
-#define POWER_BUTTON_RELEASE_TIMEOUT 1
+#define POWER_BUTTON_RELEASE_TIMEOUT 50
 
 typedef enum { POWER_DOWN_CAUSE_NONE = 0, POWER_DOWN_CAUSE_EXIT, POWER_DOWN_CAUSE_RAMCHANGE, POWER_DOWN_CAUSE_RECYCLE, POWER_DOWN_CAUSE_SCRUB } power_down_cause_enum;
 static power_down_cause_enum power_down_cause = POWER_DOWN_CAUSE_NONE;
@@ -298,6 +305,10 @@ static void mmu_set ( const unsigned int spec )
 
 void cpu65_write_callback ( Uint16 addr, Uint8 data ) {
 	if (addr < 0x1000) {
+		if (addr == 0xAD && (data & 2)) {
+			DEBUGPRINT("AD-DEBUG: writing $AD with data $%02X at PC=%04X" NL, data, cpu65.pc);
+			data &= ~2;
+		}
 		memory[addr] = data;
 		return;
 	}
@@ -362,8 +373,13 @@ static void press_power_button ( const int with_scrub )
         // eor #MOD_CBM + MOD_SHIFT + MOD_STOP
         // bne L85C0
         // jmp L87C5 -- we need this??? */
-	if (with_scrub)
+	if (with_scrub) {
+#ifndef MOD_KEYS_ARE_INVERTED
 		powerstatus |= 1|4|16;		// press the "magic key combo" as well: CBM + SHIFT + STOP
+#else
+		powerstatus &= ~(1|4|16);
+#endif
+	}
 	power_button_release_timeout = POWER_BUTTON_RELEASE_TIMEOUT;
 	DEBUGPRINT("POWER: virtually pressing POWER button %s scrub." NL, with_scrub ? "**WITH**" : "without");
 }
@@ -562,8 +578,16 @@ static Uint8 via1_insr ( void )
 		if (!(keysel &  64)) data |= ~kbd_matrix[6];
 		if (!(keysel & 128)) data |= ~kbd_matrix[7];
 		return data;
-	} else
-		return (~kbd_matrix[8]) | powerstatus;
+	} else {
+		// FIXME: for some reason capslock is stuck in emulation!!! so we want to unmask it!
+		static Uint8 old_data = 0xEE;
+		const Uint8 data = ((~kbd_matrix[8]) | powerstatus) & (~2);
+		if (data != old_data) {
+			DEBUGPRINT("Reading keytrans/1 result=$%02X" NL, data);
+			old_data = data;
+		}
+		return data;
+	}
 }
 
 
@@ -737,7 +761,7 @@ static int memory_init ( void )
 		DEBUGPRINT("ROM: loaded to $%X (option %s): %s" NL, rom_addrs[i], on, xemu_load_filepath);
 	}
 	// --- Restore RAM content, if possible & press power button
-	press_power_button(restore_ram_content());
+	press_power_button(restore_ram_content() | configdb.scrub);
 	powerstatus &= 0x7F;	// FIXME: remove this
 	//restore_ram_content();
 	// --- Checking/patching KERNAL ROM
@@ -751,6 +775,7 @@ static int memory_init ( void )
 #endif
 	// Ugly hacks :-( <patching ROM>
 #ifdef	ROM_HACK_COLD_START
+#error	"DO not enable this for now!"
 	if (!configdb.keep_ram) {
 		if (rom_good_sha) {
 			// this ROM patching is needed, as Commodore LCD seems not to work to well with "not intact" SRAM content (ie: it has battery powered SRAM even when "switched off")
@@ -766,6 +791,7 @@ static int memory_init ( void )
 	}
 #endif
 #ifdef	ROM_HACK_NEW_ROM_SEARCHING
+#error	"DO not enable this for now!"
 	if (rom_good_sha) {
 		// this ROM hack modifies the ROM signature searching bytes so we can squeeze extra menu points of the main screen!
 		// this hack SHOULD NOT be used, if the ROM 32K ROM images from 0x20000 and 0x28000 are not empty after offset 0x6800
@@ -855,8 +881,14 @@ static void update_emulator ( void )
 		power_button_release_timeout--;
 		if (power_button_release_timeout <= 0) {
 			power_button_release_timeout = 0;
-			powerstatus &= ~0x40;
+			//powerstatus &= 0x40;
 			DEBUGPRINT("POWER: virtually releasing POWER button (and maybe others)" NL);
+			KBD_CLEAR_MATRIX();
+#ifndef MOD_KEYS_ARE_INVERTED
+			powerstatus &= ~(1|4|16);
+#else
+			powerstatus |= 1|4|16;
+#endif
 		}
 	}
 	if (XEMU_UNLIKELY(power_down_wait_timeout)) {
@@ -883,7 +915,13 @@ static int cycles, viacyc;
 static void emulation_loop ( void )
 {
 	for (;;) {
+		if (cpu65.pc >= 0x85B5 && cpu65.pc <= 0x85C0) {
+			DEBUGPRINT("CPU-DEBUG **before** PC=$%04X A=%02X" NL, cpu65.pc, cpu65.a);
+		}
 		const int opcyc = cpu65_step();	// execute one opcode (or accept IRQ, etc), return value is the used clock cycles
+		if (cpu65.pc >= 0x85B5 && cpu65.pc <= 0x85C0) {
+			DEBUGPRINT("CPU-DEBUG **after**  PC=$%04X A=%02X" NL, cpu65.pc, cpu65.a);
+		}
 		viacyc += opcyc;
 		cycles += opcyc;
 		if (viacyc >= cpu_mhz) {

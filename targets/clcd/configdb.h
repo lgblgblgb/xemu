@@ -24,6 +24,7 @@ extern void configdb_define_emulator_options ( void );
 struct configdb_st {
 	int fullscreen_requested;
 	int syscon;
+	int scrub;
 	int zoom;
 	int sdlrenderquality;
 	int ram_size_kbytes;

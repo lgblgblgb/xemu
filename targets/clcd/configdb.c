@@ -32,7 +32,8 @@ void configdb_define_emulator_options ( void )
 	XEMUCFG_DEFINE_SWITCH_OPTIONS(
 		{ "fullscreen", "Start in fullscreen mode", &configdb.fullscreen_requested },
 		{ "syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon },
-		{ "besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override }
+		{ "besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override },
+		{ "scrub", "Start with memory-scrub state", &configdb.scrub }
 	);
 	XEMUCFG_DEFINE_NUM_OPTIONS(
 #ifdef SDL_HINT_RENDER_SCALE_QUALITY
