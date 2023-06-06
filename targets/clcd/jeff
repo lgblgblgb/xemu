@@ -1,0 +1,4 @@
+#!/bin/bash
+exec ../../build/bin/xclcd.native -clock 16 -scrub -rom102 rom-jeff/k5-28-new-io-u105.bin -rom103 rom-jeff/term-wp-5-30-u106.bin -rom104 rom-jeff/calc-u107.bin -rom105 rom-jeff/s-3-24-85-u108.bin | tee L
+
+

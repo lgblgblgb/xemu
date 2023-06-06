@@ -307,7 +307,7 @@ void cpu65_write_callback ( Uint16 addr, Uint8 data ) {
 	if (addr < 0x1000) {
 		if (addr == 0xAD && (data & 2)) {
 			DEBUGPRINT("AD-DEBUG: writing $AD with data $%02X at PC=%04X" NL, data, cpu65.pc);
-			data &= ~2;
+			//data &= ~2;
 		}
 		memory[addr] = data;
 		return;
@@ -368,6 +368,7 @@ static void press_power_button ( const int with_scrub )
 {
 	powerstatus &= 0x80|0x40|0x20;		// reset all bits but the higher three
 	powerstatus |= 0x80;			// press the power button
+	powerstatus &= ~0x80;			// OR NOT ....
         // lda MODKEY
         // and #MOD_CBM + MOD_SHIFT + MOD_CTRL + MOD_CAPS + MOD_STOP
         // eor #MOD_CBM + MOD_SHIFT + MOD_STOP
@@ -581,7 +582,8 @@ static Uint8 via1_insr ( void )
 	} else {
 		// FIXME: for some reason capslock is stuck in emulation!!! so we want to unmask it!
 		static Uint8 old_data = 0xEE;
-		const Uint8 data = ((~kbd_matrix[8]) | powerstatus) & (~2);
+		//const Uint8 data = ((~kbd_matrix[8]) | powerstatus) & (~2);
+		const Uint8 data = ((~kbd_matrix[8]) | powerstatus);
 		if (data != old_data) {
 			DEBUGPRINT("Reading keytrans/1 result=$%02X" NL, data);
 			old_data = data;

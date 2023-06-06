@@ -36,9 +36,6 @@ static int console_width, console_height;
 static Uint8 *video_ram;
 static Uint8 *color_ram;
 static Uint32 palette[16];
-#define	CHARACTER_SET_DEFINER_8X16 static const Uint8 chargen[]
-#include "xemu/vgafonts.c"
-#undef	CHARACTER_SET_DEFINER_8X16
 static const Uint8 console_colors[3*16] = {	// FIXME
 	0x00, 0x00, 0x00,	// black
 	0xFF, 0xFF, 0xFF,	// white
@@ -182,7 +179,7 @@ void console_iteration ( void )
 			for (int x = 0; x < console_width; x++) {
 				Uint32 fg  = palette[color_ram[vp + x] & 0xF];
 				Uint32 bg  = palette[color_ram[vp + x] >>  4];
-				Uint8 chln = chargen[video_ram[vp + x] * FONT_HEIGHT + row];
+				Uint8 chln = vga_font_8x16[video_ram[vp + x] * FONT_HEIGHT + row];
 				if (XEMU_UNLIKELY(cursor_line == y && cursor.x == x)) {
 					//Uint32 temp = fg;
 					//fg = bg;
@@ -230,10 +227,8 @@ static void queue_key ( Uint8 k )
 }
 
 
-
-
 // We uses this actually. it needs global macro set: CONFIG_KBD_ALSO_RAW_SDL_CALLBACK
-void emu_callback_key_raw_sdl ( SDL_KeyboardEvent *ev )
+static int emu_callback_key_raw_sdl ( SDL_KeyboardEvent *ev )
 {
 	if (ev->state == SDL_PRESSED) {
 		int k = ev->keysym.sym;
@@ -244,16 +239,11 @@ void emu_callback_key_raw_sdl ( SDL_KeyboardEvent *ev )
 			queue_key(k);
 		}
 	}
+	return 1;	// allow default handler to run, though
 }
 
-#if 0
-void emu_callback_key_texteditng_sdl ( SDL_TextEditingEvent *ev )
-{
-	DEBUGPRINT("TEXTEDITING: \"%s\"" NL, ev->text);
-}
-#endif
 
-void emu_callback_key_textinput_sdl  ( SDL_TextInputEvent   *ev )
+static int emu_callback_key_textinput_sdl  ( SDL_TextInputEvent   *ev )
 {
 	DEBUGPRINT("TEXTINPUT: \"%s\"" NL, ev->text);
 	Uint8 *p = (Uint8*)ev->text;
@@ -262,6 +252,7 @@ void emu_callback_key_textinput_sdl  ( SDL_TextInputEvent   *ev )
 			queue_key(*p);
 		p++;
 	}
+	return 1;
 }
 
 
@@ -320,6 +311,8 @@ int console_init ( int width, int height, int zoom_percent, int *map_to_ram, int
 	cursor.phase = 1;
 	cursor.phase_counter = 0;
 	cursor.cursor_color = 2;
+	hid_register_sdl_keyboard_event_callback(HID_CB_LEVEL_EMU, emu_callback_key_raw_sdl);
+	hid_register_sdl_textinput_event_callback(HID_CB_LEVEL_EMU, emu_callback_key_textinput_sdl);
 	SDL_StartTextInput();
 	return 0;
 }

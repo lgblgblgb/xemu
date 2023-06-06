@@ -18,6 +18,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 #include "xemu/emutools.h"
+#include "xemu/emutools_files.h"
 #include "bios.h"
 #include "hardware.h"
 #include "console.h"
@@ -30,6 +31,8 @@ static int bios_start;
 // may depend on that (?).
 void bios_install ( int addr )
 {
+	bios_start = 0xFF00;	// start with this one
+
 	bios_start = addr;
 	for (int tab_addr = addr, tab_end = addr + 99, fnc_addr = tab_end; tab_addr < tab_end;) {
 		// We could put the "dispatch" points here directly. But some tricky software may expect to have real addresses here, as a true JMP table ...
@@ -49,6 +52,43 @@ void bios_install ( int addr )
 	DEBUGPRINT("BIOS: installed from $%04X, entry point is $%04X" NL, bios_start, bios_start + 3);
 }
 
+
+void bios_get_cold_boot_address ( void )
+{
+	return bios_start;
+}
+
+
+static void relocate_bdos ( const Uint8 rel_page, Uint8 *p1, const Uint8 *p2, const int size )
+{
+	int n = 0;
+	for (int a = 0; a < size; a++)
+		if (((p1[a] + 1) & 0xFF) == p2[a])
+			p1[a] += rel_page - 1, n++;
+		else if (p2[a] != p1[a])
+			FATAL("Bad BDOS image: relocation error");
+	DEBUGPRINT("BDOS: %d relocation points" NL, n);
+}
+
+
+static void load_bdos ( const char *fn )
+{
+	int size = xemu_load_file(fn, NULL, 2048, 0x8000, "Cannot load BDOS relocatable image");
+	if (size <= 0)
+		XEMUEXIT(1);
+	if ((size & 0x1FF))
+		FATAL("Bad BDOS image: size must be multiple of 512");
+	size >>= 1;
+	cpm_start = bios_start - size;
+	if ((cpm_start & 0xFF))
+		FATAL("Assert: CPM start is not page aligned: $%04X", cpm_start);
+	relocate_bdos(cpm_start >> 8, xemu_load_buffer_p, xemu_load_buffer_p + size, size);
+	memcpy(memory + cpm_start, xemu_load_buffer_p, size);
+	free(xemu_load_buffer_p);
+}
+
+
+
 // dispatch addr (OUT emulation with the PC ...)
 int bios_handle ( int addr )
 {
@@ -58,12 +98,19 @@ int bios_handle ( int addr )
 	DEBUG("BIOS: calling function #%d" NL, addr);
 	switch (addr) {
 		case 0:	// BOOT
+			conclear();
+			memset(memory, 0, 0x100);
 			conputs("<<BOOT BIOS vector>>");
-			stop_emulation = 1;
-			break;
+			/* fall through */
 		case 1: // WBOOT
-			conputs("<<WBOOT BIOS vector>>");
-			stop_emulation = 1;
+			load_bdos();
+			emu_mem_write(0, 0xC3);				// opcode of "JP"
+			emu_mem_write(1, (bios_start + 3) & 0xFF);	// low byte for BIOS WBOOT
+			emu_mem_write(2, (bios_start + 3) >>   8);	// high byte for BIOS WBOOT
+			Z80_SP = 0x100;
+			Z80_C = emu_mem_read(5);			// get drive+user byte and put into register C
+			//FIXME: check if low 4 bits of C is a valid drive, reset C to zero if no
+			Z80_PC = cpm_start;
 			break;
 		case 2:	// CONST
 			Z80_A = console_status();

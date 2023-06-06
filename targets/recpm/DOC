@@ -1,0 +1,46 @@
+reCPM defines a "quasi-hardware" interface, thus it's possible to write custom
+programs interacting with the emulator directly. Communication is done via
+I/O ports.
+
+I/O ports:
+
+
+00h:	read=status, write=IGNORED
+
+	read=selected disk, write=select disk
+	if there is an error, selected disk won't change (check with read back)
+
+
+Track number low byte
+Track number hi byte
+Sector number low byte
+Sector number hi byte
+Sector command = $80 -> read sector, $81 -> write sector
+       read: status: $FF = busy
+Sector command error register
+
+
+- resets sector buffer position
+- put one byte into the sector buffer
+- get one byte from the sector buffer
+
+
+
+
+
+Write console (character)
+Console status
+Read console
+Set console mode
+	00	- do not change console only reset state
+
+
+
+Reset console
+
+
+
+
+
+00h:  read=-, write=write sector
+
