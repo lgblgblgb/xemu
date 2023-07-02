@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Copyright (C)2020-2022 Hernán Di Pietro <hernan.di.pietro@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -33,6 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define SPRITE_SPRITE_COLLISION
 #define SPRITE_FG_COLLISION
+#define SPRITE_COORD_LATCHING
 
 
 const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
@@ -75,6 +76,10 @@ static Uint8 vic_pixel_readback_result[4];
 static Uint8 vic_color_register_mask = 0xFF;
 static Uint32 *used_palette;					// normally the same value as "palette" from vic4_palette.c but GOTOX RRB token can modify this! So this should be used
 static int EFFECTIVE_V400;
+#ifdef SPRITE_COORD_LATCHING
+static Uint8 sprite_is_being_rendered[8];
+#warning "Sprite coordinate latching is an experimental feature (SPRITE_COORD_LATCHING is defined)!"
+#endif
 
 // TODO: not really implemented just here ...
 static int etherbuffer_is_io_mapped = 0;
@@ -220,9 +225,14 @@ static XEMU_INLINE void pixel_readback ( void )
 void vic4_close_frame_access ( void )
 {
 	DEBUG("FRAME CLOSED" NL);
+#ifdef	SPRITE_COORD_LATCHING
+	// To avoid the problem when sprite rendering is not finished (at the very bottom of the screen, does not "fit"),
+	// thus the "end" condition in active rendering is never reached: that would be remain latched for the next frame then!
+	memset(sprite_is_being_rendered, 0, sizeof sprite_is_being_rendered);
+#endif
 	// Debug pixel-read back feature of MEGA65
 	pixel_readback();
-#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
+#ifdef	XEMU_FILES_SCREENSHOT_SUPPORT
 	// Screenshot
 	if (XEMU_UNLIKELY(vic4_registered_screenshot_request)) {
 		unsigned int x1, y1, x2, y2;
@@ -1102,23 +1112,41 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 	// In multicolor mode (MCM=1), the bit combinations "00" and "01" belong to the background
 	// and "10" and "11" to the foreground whereas in standard mode (MCM=0),
 	// cleared pixels belong to the background and set pixels to the foreground.
+#ifdef	SPRITE_COORD_LATCHING
+	static int sprite_x_latch[8], sprite_y_latch[8];
+#endif
 	const int reg_tiling = REG_SPRTILEN;
 	for (int sprnum = 7; sprnum >= 0; sprnum--) {
 		if (REG_SPRITE_ENABLE & (1 << sprnum)) {
-			const int y_adjust = SPRITE_V400(sprnum) ? 0 : (REG_SPRITE_Y_ADJUST - 2);
 			const int spriteHeight = SPRITE_EXTHEIGHT(sprnum) ? REG_SPRHGHT : 21;
-			const int x_display_pos = (REG_SPR640 ? 1 : 2) * SPRITE_POS_X(sprnum) + (REG_SPR640 ? 1 : SPRITE_FIRST_X);
-			const int y_display_pos = ((SPRITE_V400(sprnum) ? 1 : 2) * (SPRITE_POS_Y(sprnum) - y_adjust)) ;
-
+			const int y_display_pos =
+#ifdef				SPRITE_COORD_LATCHING
+				sprite_is_being_rendered[sprnum] ? sprite_y_latch[sprnum] :
+#endif
+				((SPRITE_V400(sprnum) ? 1 : 2) * (SPRITE_POS_Y(sprnum) - (SPRITE_V400(sprnum) ? 0 : (REG_SPRITE_Y_ADJUST - 2))));
 			int sprite_row_in_raster = ycounter - y_display_pos;
-
 			if (!SPRITE_V400(sprnum))
 				sprite_row_in_raster = sprite_row_in_raster >> 1;
-
 			if (SPRITE_VERT_2X(sprnum))
 				sprite_row_in_raster = sprite_row_in_raster >> 1;
-
 			if (sprite_row_in_raster >= 0 && sprite_row_in_raster < spriteHeight) {
+				// FIXME: it's currently unknown if X coordinate is latched as well, now I assume it is ...
+				const int x_display_pos =
+#ifdef					SPRITE_COORD_LATCHING
+					sprite_is_being_rendered[sprnum] ? sprite_x_latch[sprnum] :
+#endif
+					((REG_SPR640 ? 1 : 2) * SPRITE_POS_X(sprnum) + (REG_SPR640 ? 1 : SPRITE_FIRST_X));
+#ifdef				SPRITE_COORD_LATCHING
+				if (sprite_row_in_raster == spriteHeight - 1) {
+					// the last line of sprite, turn off the latched signal
+					sprite_is_being_rendered[sprnum] = 0;
+				} else if (!sprite_is_being_rendered[sprnum]) {
+					// first - detected - render event for the sprite, let's latch it
+					sprite_is_being_rendered[sprnum] = 1;
+					sprite_x_latch[sprnum] = x_display_pos;
+					sprite_y_latch[sprnum] = y_display_pos;
+				}
+#endif
 				const int widthBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 				// Mask-out bits 0-3, 23-19 if SPRPTR16 enabled
 				const Uint32 sprite_pointer_addr = SPRITE_16BITPOINTER ? (SPRITE_POINTER_ADDR & 0x8FFFF0) : SPRITE_POINTER_ADDR;
@@ -1126,7 +1154,6 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 				const Uint32 sprite_data_addr = SPRITE_16BITPOINTER ?
 					64 * ((*(sprite_data_pointer + 1) << 8) | (*sprite_data_pointer))
 					: ((64 * (*sprite_data_pointer)) | (SPRITE_POINTER_ADDR & 0xC000)); // Use bits 14-15 (this can be set from $DD00 if HOTREG is ENABLED)
-
 				//DEBUGPRINT("VIC: Sprite %d data at $%08X " NL, sprnum, sprite_data_addr);
 				const Uint8 *sprite_data = main_ram + sprite_data_addr;
 				const Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
@@ -1139,6 +1166,12 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 				else
 					vic4_draw_sprite_row_mono(sprnum, x_display_pos, row_data, xscale, do_tiling);
 			}
+		} else {
+#ifdef			SPRITE_COORD_LATCHING
+			// To avoid the problem when sprite gets disabled during its rendering so remains latched for the whole rest of the frame,
+			// since the "end" condition is never hit above on its - would be - active rendering region (by its height).
+			sprite_is_being_rendered[sprnum] = 0;
+#endif
 		}
 	}
 }
@@ -1409,10 +1442,13 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 				}
 			}
 			// Background and foreground colors
-			const Uint8 char_fgcolor = color_data & 0xF;
+			//const Uint8 char_fgcolor = color_data & 0xF;	// FIXME: remove this! commented out since "&0xF" causes problems, replaced any char_fgcolor refs later with color_data refs
 			const Uint16 char_id = REG_EBM ? (char_value & 0x3f) : char_value & 0x1fff; // up to 8192 characters (13-bit)
 			const Uint8 char_bgcolor = REG_EBM ? vic_registers[0x21 + ((char_value >> 6) & 3)] : REG_SCREEN_COLOR;
-			const Uint8 glyph_trim = SXA_TRIM_RIGHT_BITS012(char_value) + (SXA_TRIM_RIGHT_BIT3(color_data) ? 8 : 0);
+			// FIXME: the commented line below seems not to work in a way as MEGA65 does, there is some disturbance in the force even on the MEGA65 it seems [?]
+			//        This change seems to fix MegaPoly intro to allow it to work on Xemu as well. Suggested by Mirage_BD (the author of MegaPoly)
+			// const Uint8 glyph_trim = SXA_TRIM_RIGHT_BITS012(char_value); // + (SXA_TRIM_RIGHT_BIT3(color_data) ? 8 : 0);
+			const Uint8 glyph_trim = SXA_TRIM_RIGHT_BITS012(char_value) + ((SXA_TRIM_RIGHT_BIT3(color_data) & (SXA_4BIT_PER_PIXEL(color_data)>>1)) ? 8 : 0);
 			// Default fetch from char mode.
 			const int sel_char_row = (XEMU_UNLIKELY(SXA_VERTICAL_FLIP(color_data)) ? 7 - char_row : char_row);
 			// Render character cell row
@@ -1421,21 +1457,21 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
 					16 - glyph_trim,
 					used_palette[char_bgcolor],		// bg SDL colour
-					(used_palette + (color_data & 0xF0))[char_fgcolor],		// fg SDL colour
+					used_palette[color_data & 0xFF],	// fg SDL colour
 					used_palette + (color_data & 0xF0),	// palette(16) pointer
 					SXA_HORIZONTAL_FLIP(color_data)		// hflip?
 				);
 			} else if (CHAR_IS256_COLOR(char_id)) {	// 256-color character
 				// fgcolor in case of FCM should mean colour index $FF
-				// FIXME: check if the passed palette[char_fgcolor] is correct or another index should be used for that $FF colour stuff
+				// FIXME: check if the passed palette[color_data & 0xFF] is correct or another index should be used for that $FF colour stuff
 				vic4_render_fullcolor_char_row(
 					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
 					8 - glyph_trim,
 					used_palette[char_bgcolor],		// bg SDL colour
-					used_palette[char_fgcolor],		// fg SDL colour
+					used_palette[color_data & 0xFF],	// fg SDL colour
 					SXA_HORIZONTAL_FLIP(color_data)		// hflip?
 				);
-			} else if ((REG_MCM && (char_fgcolor & 8)) || (REG_MCM && REG_BMM)) {	// Multicolor character
+			} else if ((REG_MCM && (color_data & 8)) || (REG_MCM && REG_BMM)) {	// Multicolor character
 				// using static vars: faster in a rapid loop like this, no need to re-adjust stack pointer all the time to allocate space and this way using constant memory address
 				// also, as an optimization, later, some value can be re-used and not always initialized here, when in reality VIC
 				// registers in current Xemu cannot change within a scanline anyway (ie, scanline precision based emulation/rendering)
@@ -1452,7 +1488,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 					// value 00 is common /w or w/o BMM so not initialized here
 					color_source_mcm[1] = REG_MULTICOLOR_1;	// 01
 					color_source_mcm[2] = REG_MULTICOLOR_2;	// 10
-					color_source_mcm[3] = char_fgcolor & 7;	// 11
+					color_source_mcm[3] = color_data & 7;	// 11
 					char_byte = *(row_data_base_addr + (char_id * 8) + sel_char_row);
 				}
 				// FIXME: is this really a thing to have FLIP in bitmap mode AS WELL?!
@@ -1468,7 +1504,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 				Uint8 char_byte, char_bgcolor_now, char_fgcolor_now;
 				if (!REG_BMM) {
 					char_bgcolor_now = char_bgcolor;
-					char_fgcolor_now = char_fgcolor;
+					char_fgcolor_now = color_data & 0xF;	// FIXME: is the "&" mask OK as being 0xF?
 					char_byte = *(row_data_base_addr + (char_id * 8) + sel_char_row);
 				} else {
 					char_bgcolor_now = char_value & 0xF;
@@ -1603,9 +1639,15 @@ int vic4_query_screen_height ( void )
 }
 
 
-Uint8 *vic4_query_screen_memory ( void )
+Uint8 *vic4_query_screen_address ( void )
 {
 	return main_ram + (SCREEN_ADDR & 0x7FFFF);
+}
+
+
+Uint8 *vic4_query_colour_address ( void )
+{
+	return colour_ram + COLOUR_RAM_OFFSET;
 }
 
 
@@ -1615,7 +1657,7 @@ char *vic4_textshot ( void )
 	char *result = xemu_cbm_screen_to_text(
 		text,
 		sizeof text,
-		vic4_query_screen_memory(),
+		vic4_query_screen_address(),
 		vic4_query_screen_width(),
 		vic4_query_screen_height(),
 		(vic_registers[0x18] & 2)	// lowercase font? try to auto-detect by checking selected address chargen addr, LSB
@@ -1627,7 +1669,7 @@ char *vic4_textshot ( void )
 int vic4_textinsert ( const char *text )
 {
 	return xemu_cbm_text_to_screen(
-		vic4_query_screen_memory(),
+		vic4_query_screen_address(),
 		vic4_query_screen_width(),
 		vic4_query_screen_height(),
 		text,				// text buffer as input

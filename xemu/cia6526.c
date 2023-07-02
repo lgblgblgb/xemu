@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This is a *VERY* crude CIA 6526 emulation, lacks of TOD, mostly to SDR stuff, timing,
    and other problems as well ... Hopefully enough for C65 to boot, what is its only reason ...
@@ -150,6 +150,9 @@ Uint8 cia_read ( struct Cia6526 *cia, int addr )
 		case 11:	// reg#B: TOD hours + PM
 			return cia->tod[3];
 		case 12:	// reg#C: SP
+#			ifdef CIA_IN_SDR_SETS_ICR_BIT3
+			ICR_SET(8);
+#			endif
 			return cia->SDR;
 		case 13: 	// reg#D: ICR data
 			temp = cia->ICRdata;
@@ -237,8 +240,12 @@ void cia_write ( struct Cia6526 *cia, int addr, Uint8 data )
 			break;
 		case 12:	// reg#C: SP
 			cia->SDR = data;
-			if (cia->CRA & 64)
+			if (cia->CRA & 64) {
 				cia->outsr(data);
+#				ifdef CIA_OUT_SDR_SETS_ICR_BIT3
+				ICR_SET(8);
+#				endif
+			}
 			break;
 		case 13:	// reg#D: ICR mask
 			if (data & 128)

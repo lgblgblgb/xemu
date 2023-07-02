@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -97,10 +97,8 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	{ "virtsd", "Interpret -sdimg option as a DIRECTORY to be fed onto the FAT32FS and use virtual-in-memory disk storage.", &configdb.virtsd },
 #endif
-#ifdef FAKE_TYPING_SUPPORT
 	{ "go64", "Go into C64 mode after start (with auto-typing, can be combined with -autoload)", &configdb.go64 },
 	{ "autoload", "Load and start the first program from disk (with auto-typing, can be combined with -go64)", &configdb.autoload },
-#endif
 	{ "syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon },
 	{ "besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override },
 	{ "skipunhandledmem", "Do not even ask on unhandled memory access (hides problems!!)", &configdb.skip_unhandled_mem },
@@ -108,6 +106,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "nosound", "Disables audio output generation", &configdb.nosound },
 	{ "noopl3", "Disables OPL3 emulation", &configdb.noopl3 },
 	{ "lockvideostd", "Lock video standard (programs cannot change it)", &configdb.lock_videostd },
+	{ "curskeyjoy", "Cursor keys as joystick [makes your emulator unsable to move cursor in BASIC/etc!]", &hid_joy_on_cursor_keys },
 	{ NULL }
 };
 
@@ -135,6 +134,14 @@ static const struct xemutools_configdef_float_st float_options[] = {
 };
 
 
+// Options (given by the value pointers!) which SHOULD NOT BE saved when user saves their config.
+// The list MUST BE closed with a NULL.
+// The intent: some options makes sense mostly from using the command line (testing, called from scripts,
+// etc), however if the user saves the config in Xemu when started this way, it would also save these
+// CLI-given options, which is not the thing he wants, 99.999999% of time, I guess ...
+
+static const void *do_not_save_opts[] = { &configdb.prg, &configdb.autoload, &configdb.go64, NULL };
+
 
 void configdb_define_emulator_options ( size_t size )
 {
@@ -144,4 +151,5 @@ void configdb_define_emulator_options ( size_t size )
 	xemucfg_define_switch_option_multi(switch_options);
 	xemucfg_define_num_option_multi(num_options);
 	xemucfg_define_float_option_multi(float_options);
+	xemucfg_add_flags_to_options(do_not_save_opts, XEMUCFG_FLAG_NO_SAVE);
 }

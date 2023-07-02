@@ -1,7 +1,7 @@
 ## Collection of emulators of some 8 bits machines using SDL2 library,
 ## including the MEGA65, Commodore LCD and Commodore 65.
 ##
-## Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -64,6 +64,7 @@ DEBUG			= no
 RELEASE			= no
 OFFICIALBUILD		= no
 SUPERPICKY		= no
+MACMINVER		= no
 
 CFLAGS_TARGET		= $(CFLAGS_TARGET_$(PRG_TARGET))
 LDFLAGS_TARGET		= $(LDFLAGS_TARGET_$(PRG_TARGET))
@@ -95,6 +96,10 @@ endif
 ifeq ($(STACKPROTECTOR), yes)
 CONFIG_CFLAGS		+= -fstack-protector-strong
 CONFIG_CFLAGS_LINK	+= -fstack-protector-strong
+endif
+ifneq ($(MACMINVER), no)
+CONFIG_CFLAGS		+= -mmacosx-version-min=$(MACMINVER)
+CONFIG_CFLAGS_LINK	+= -mmacosx-version-min=$(MACMINVER)
 endif
 
 CFLAGS			= $(CONFIG_CFLAGS) $(CFLAGS_OPT) $(CFLAGS_TARGET) -I. -I$(TOPDIR) -include build/configure/config-$(ARCH).h

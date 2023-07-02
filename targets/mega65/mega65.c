@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -364,7 +364,7 @@ static void mega65_init ( void )
 	// Fill memory with the needed pre-initialized regions to be able to start.
 	preinit_memory_for_start();
 	// *** Image file for SDCARD support, and other related init functions handled there as well (eg d81access, fdc init ... related registers, etc)
-	if (sdcard_init(configdb.sdimg, configdb.virtsd, configdb.defd81fromsd) < 0)
+	if (sdcard_init(configdb.sdimg, configdb.virtsd) < 0)
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
 	vic_init();
@@ -392,16 +392,6 @@ static void mega65_init ( void )
 	cia2.DDRA = 3; // Ugly workaround ... I think, SD-card setup "CRAM UTIL" (or better: Hyppo) should set this by its own. Maybe Xemu bug, maybe not?
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
 	dma_init();
-	// *** Drive 8 external mount
-	if (configdb.disk8) {
-		if (sdcard_force_external_mount(0, configdb.disk8, "Mount failure on CLI/CFG requested drive-8"))
-			xemucfg_set_str(&configdb.disk8, NULL);	// In case of error, unset configDB option
-	}
-	// *** Drive 9 external mount
-	if (configdb.disk9) {
-		if (sdcard_force_external_mount(1, configdb.disk9, "Mount failure on CLI/CFG requested drive-9"))
-			xemucfg_set_str(&configdb.disk9, NULL);	// In case of error, unset configDB option
-	}
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_init(configdb.uartmon);
 #endif
@@ -532,6 +522,7 @@ void reset_mega65_cpu_only ( void )
 	vic_registers[0x30] = 0;	// FIXME: hack! we need this, and memory_set_vic3_rom_mapping above too :(
 	memory_set_vic3_rom_mapping(0);
 	memory_set_do_map();
+	dma_reset();			// We need this: even though it's CPU reset only, DMA is part of the CPU: either DMA or CPU running, resetting in the middle of a DMA session is a disaster
 	cpu65_reset();
 }
 
@@ -657,8 +648,7 @@ static void update_emulator ( void )
 {
 	vic4_close_frame_access();
 	// XXX: some things has been moved here from the main loop, however update_emulator is called from other places as well, FIXME check if it causes problems or not!
-	if (XEMU_UNLIKELY(inject_ready_check_status))
-		inject_ready_check_do();
+	inject_ready_check_do();
 	audio65_sid_inc_framecount();
 	strcpy(emulator_speed_title, cpu_clock_speed_strs[cpu_clock_speed_str_index]);
 	strcat(emulator_speed_title, " ");
@@ -688,7 +678,7 @@ static void update_emulator ( void )
 	rtc_regs[1] = XEMU_BYTE_TO_BCD(t->tm_min);	// minutes
 	//rtc_regs[2] = xemu_hour_to_bcd12h(t->tm_hour, configdb.rtc_hour_offset);	// hours
 	rtc_regs[2] = XEMU_BYTE_TO_BCD((t->tm_hour + configdb.rtc_hour_offset + 24) % 24) | 0x80;	// hours (24H format, bit 7 always set)
-	rtc_regs[3] = XEMU_BYTE_TO_BCD(t->tm_mday);	// day of mounth
+	rtc_regs[3] = XEMU_BYTE_TO_BCD(t->tm_mday);	// day of month
 	rtc_regs[4] = XEMU_BYTE_TO_BCD(t->tm_mon) + 1;	// month
 	rtc_regs[5] = XEMU_BYTE_TO_BCD(t->tm_year - 100);	// year
 //	}
@@ -722,7 +712,7 @@ static void emulation_loop ( void )
 		}
 #endif
 		while (XEMU_UNLIKELY(paused)) {	// paused special mode, ie tracing support, or something ...
-			if (XEMU_UNLIKELY(dma_status))
+			if (XEMU_UNLIKELY(in_dma))
 				break;		// if DMA is pending, do not allow monitor/etc features
 #ifdef HAS_UARTMON_SUPPORT
 			if (m65mon_callback) {	// delayed uart monitor command should be finished ...
@@ -766,7 +756,7 @@ static void emulation_loop ( void )
 			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu65.pc);
 			paused = 1;
 		}
-		cycles += XEMU_UNLIKELY(dma_status) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
+		cycles += XEMU_UNLIKELY(in_dma) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
 #ifdef CPU_STEP_MULTI_OPS
 			cpu_cycles_per_step
 #endif
@@ -841,17 +831,20 @@ int main ( int argc, char **argv )
 		configdb.umon = XUMON_DEFAULT_PORT;
 	xumon_init(configdb.umon);
 #endif
-	if (configdb.prg)
+	if (configdb.prg) {
 		inject_register_prg(configdb.prg, configdb.prgmode);
-#ifdef FAKE_TYPING_SUPPORT
-	if (configdb.go64) {
+	} else {
+		if (configdb.go64) {
+			hid_set_autoreleased_key(0x75);
+			KBD_PRESS_KEY(0x75);
+		}
 		if (configdb.autoload)
-			c64_register_fake_typing(fake_typing_for_load64);
-		else
-			c64_register_fake_typing(fake_typing_for_go64);
-	} else if (configdb.autoload)
-		c64_register_fake_typing(fake_typing_for_load65);
-#endif
+			inject_register_command(
+				configdb.go64 ?
+				"poke0,65:load\"*\"|poke0,64:run" :	// for C64 mode, we need two steps, also using some "turbo speed" during loading ;)
+				"run\"*\""				// for C65/MEGA65 mode, we have nice command for that functionality ...
+			);
+	}
 	rom_stubrom_requested = configdb.usestubrom;
 	rom_initrom_requested = configdb.useinitrom;
 	rom_from_prefdir_allowed = !configdb.romfromsd;

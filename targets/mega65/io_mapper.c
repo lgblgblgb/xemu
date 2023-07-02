@@ -1,7 +1,7 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    I/O decoding part (used by memory_mapper.h and DMA mainly)
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -192,6 +192,12 @@ Uint8 io_read ( unsigned int addr )
 					return 0xFF;
 				case 0x19:
 					return hwa_kbd_get_last_petscii();
+				case 0x20: // GS $D620 UARTMISC:POTAX Read Port A paddle X, without having to fiddle with SID/CIA settings.
+				case 0x22: // GS $D622 UARTMISC:POTBX Read Port B paddle X, without having to fiddle with SID/CIA settings.
+					return get_mouse_x_via_sid();
+				case 0x21: // GS $D621 UARTMISC:POTAY Read Port A paddle Y, without having to fiddle with SID/CIA settings.
+				case 0x23: // GS $D623 UARTMISC:POTBY Read Port B paddle Y, without having to fiddle with SID/CIA settings.
+					return get_mouse_y_via_sid();
 				case 0x29: // GS $D629: UARTMISC:M65MODEL MEGA65 model ID.
 					return configdb.mega65_model;
 				case 0x2A: // GS $D62A KBD:FWDATEL LSB of keyboard firmware date stamp (days since 1 Jan 2020)
@@ -553,9 +559,9 @@ void io_write ( unsigned int addr, Uint8 data )
 
 
 Uint8 io_dma_reader ( int addr ) {
-	return io_read(addr | (vic_iomode << 12));
+	return io_read((addr & 0xFFF) + (vic_iomode << 12));
 }
 
 void  io_dma_writer ( int addr, Uint8 data ) {
-	io_write(addr | (vic_iomode << 12), data);
+	io_write((addr & 0xFFF) + (vic_iomode << 12), data);
 }
