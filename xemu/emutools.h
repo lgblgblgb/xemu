@@ -88,22 +88,26 @@ static XEMU_INLINE int CHECK_SNPRINTF( int ret, int limit )
 	return 0;
 }
 
+extern int dialogs_allowed;
+
 #define _REPORT_WINDOW_(sdlflag, str, ...) do { \
 	char _buf_for_win_msg_[4096]; \
 	CHECK_SNPRINTF(snprintf(_buf_for_win_msg_, sizeof _buf_for_win_msg_, __VA_ARGS__), sizeof _buf_for_win_msg_); \
 	fprintf(stderr, str ": %s" NL, _buf_for_win_msg_); \
 	if (debug_fp)	\
 		fprintf(debug_fp, str ": %s" NL, _buf_for_win_msg_);	\
-	if (sdl_win) { \
-		save_mouse_grab(); \
-		MSG_POPUP_WINDOW(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
-		clear_emu_events(); \
-		xemu_drop_events(); \
-		SDL_RaiseWindow(sdl_win); \
-		restore_mouse_grab(); \
-		xemu_timekeeping_start(); \
-	} else \
-		MSG_POPUP_WINDOW(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
+	if (dialogs_allowed) {	\
+		if (sdl_win) {	\
+			save_mouse_grab(); \
+			MSG_POPUP_WINDOW(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
+			clear_emu_events(); \
+			xemu_drop_events(); \
+			SDL_RaiseWindow(sdl_win); \
+			restore_mouse_grab(); \
+			xemu_timekeeping_start(); \
+		} else \
+			MSG_POPUP_WINDOW(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
+	}	\
 } while (0)
 
 #define INFO_WINDOW(...)	_REPORT_WINDOW_(SDL_MESSAGEBOX_INFORMATION, "INFO", __VA_ARGS__)

@@ -73,6 +73,7 @@ const char *str_are_you_sure_to_exit = "Are you sure to exit Xemu?";
 
 char **xemu_initial_argv = NULL;
 int    xemu_initial_argc = -1;
+int emu_exit_code = 0;
 Uint64 buildinfo_cdate_uts = 0;
 const char *xemu_initial_cwd = NULL;
 SDL_Window   *sdl_win = NULL;
@@ -96,6 +97,7 @@ int texture_x_size_in_bytes;
 int emu_is_fullscreen = 0;
 int emu_is_headless = 0;
 int emu_is_sleepless = 0;
+int dialogs_allowed = 1;
 static int win_xsize, win_ysize;
 char *sdl_pref_dir = NULL, *sdl_base_dir = NULL, *sdl_inst_dir = NULL;
 Uint32 sdl_winid;
@@ -1008,6 +1010,10 @@ int xemu_post_init (
 	int locked_texture_update,		// use locked texture method [non zero], or malloc'ed stuff [zero]. NOTE: locked access doesn't allow to _READ_ pixels and you must fill ALL pixels!
 	void (*shutdown_callback)(void)		// callback function called on exit (can be nULL to not have any emulator specific stuff)
 ) {
+	if (emu_is_headless) {
+		dialogs_allowed = 0;
+		i_am_sure_override = 1;
+	}
 	srand((unsigned int)time(NULL));
 	if (!debug_fp)
 		xemu_init_debug(getenv("XEMU_DEBUG_FILE"));
@@ -1321,7 +1327,7 @@ int ARE_YOU_SURE ( const char *s, int flags )
 int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 {
 	char items_buf[512], *items = items_buf;
-	int buttonid;
+	int buttonid = 0;
 	SDL_MessageBoxButtonData buttons[16];
 	SDL_MessageBoxData messageboxdata = {
 		SDL_MESSAGEBOX_WARNING	// .flags
@@ -1344,6 +1350,7 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 		switch (*items) {
 			case '!':
 				buttons[messageboxdata.numbuttons].flags = SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT;
+				buttonid = messageboxdata.numbuttons;
 				items++;
 				break;
 			case '?':
@@ -1352,6 +1359,7 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 				break;
 			case '*':
 				buttons[messageboxdata.numbuttons].flags = SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT | SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT;
+				buttonid = messageboxdata.numbuttons;
 				items++;
 				break;
 			default:
@@ -1372,13 +1380,16 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 		*p = 0;
 		items = p + 1;
 	}
-	save_mouse_grab();
-	SDL_ShowMessageBox_custom(&messageboxdata, &buttonid);
-	xemu_drop_events();
-	clear_emu_events();
-	SDL_RaiseWindow(sdl_win);
-	restore_mouse_grab();
-	xemu_timekeeping_start();
+	if (dialogs_allowed) {
+		save_mouse_grab();
+		SDL_ShowMessageBox_custom(&messageboxdata, &buttonid);
+		xemu_drop_events();
+		clear_emu_events();
+		SDL_RaiseWindow(sdl_win);
+		restore_mouse_grab();
+		xemu_timekeeping_start();
+	} else
+		DEBUGPRINT("UI: returning #%d (%s) for choice in dialog box, as dialogs are NOT allowed!" NL, buttonid, buttons[buttonid].text);
 	return buttonid;
 }
 
