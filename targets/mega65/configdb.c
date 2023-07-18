@@ -107,6 +107,8 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "noopl3", "Disables OPL3 emulation", &configdb.noopl3 },
 	{ "lockvideostd", "Lock video standard (programs cannot change it)", &configdb.lock_videostd },
 	{ "curskeyjoy", "Cursor keys as joystick [makes your emulator unsable to move cursor in BASIC/etc!]", &hid_joy_on_cursor_keys },
+	{ "showscanlines", "Show scanlines in V200 modes", &configdb.show_scanlines },
+	{ "allowscanlines", "Allow user programs to control scanline visibility", &configdb.allow_scanlines },
 	{ NULL }
 };
 

@@ -644,6 +644,13 @@ static void ui_cb_displayenable ( const struct menu_st *m, int *query )
 /**** MENU SYSTEM ****/
 
 
+static const struct menu_st menu_show_scanlines[] = {
+	{ "Disallow change by programs",XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&configdb.allow_scanlines },
+	{ "Show scanlines",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&configdb.show_scanlines },
+	{ NULL }
+};
 static const struct menu_st menu_video_standard[] = {
 	{ "Disallow change by programs",XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_video_standard_disallow_change, NULL },
@@ -681,6 +688,7 @@ static const struct menu_st menu_display[] = {
 	{ "Render scale quality",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_render_scale_quality },
 	{ "Window size / fullscreen",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_window_size },
 	{ "Video standard",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_video_standard },
+	{ "Show scanlines at V200",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_show_scanlines },
 	{ "Show full borders",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_fullborders, NULL },
 	{ "Show drive LED",		XEMUGUI_MENUID_CALLABLE |

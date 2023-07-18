@@ -72,6 +72,8 @@ struct configdb_st {
 	char	*selectedgui;
 	int	lock_videostd;
 	int	videostd;
+	int	show_scanlines;
+	int	allow_scanlines;
 	int	fullborders;
 	int	hdosvirt;
 	int	show_drive_led;

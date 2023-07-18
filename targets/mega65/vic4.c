@@ -722,6 +722,8 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x54):
 			vic_registers[0x54] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
 			machine_set_speed(0);
+			if (configdb.allow_scanlines && !in_hypervisor)	// FIXME: this is "do now allow to alter show-scanline setting by hypervisor"
+				configdb.show_scanlines = !!(data & 32);
 			return;				// since we DID the write, it's OK to return here and not using "break"
 		CASE_VIC_4(0x55): CASE_VIC_4(0x56): CASE_VIC_4(0x57): break;
 		CASE_VIC_4(0x58): CASE_VIC_4(0x59):
@@ -1555,10 +1557,13 @@ int vic4_render_scanline ( void )
 	// FIXME: is this really correct? ie even sprites cannot be set to Y pos finer than V200 or ...
 	// ... having resolution finer than V200 with some "VIC-IV magic"?
 	if (!EFFECTIVE_V400 && (ycounter & 1)) {
-		//for (int i = 0; i < TEXTURE_WIDTH; i++, current_pixel++)
-		//	*current_pixel = /* user_scanlines_setting ? 0 : */ *(current_pixel - TEXTURE_WIDTH);
-		memcpy(current_pixel, current_pixel - TEXTURE_WIDTH, TEXTURE_WIDTH * 4);
-		current_pixel += TEXTURE_WIDTH;
+		if (XEMU_UNLIKELY(configdb.show_scanlines)) {
+			for (int i = 0; i < TEXTURE_WIDTH; i++, current_pixel++)
+				*current_pixel = ((*(current_pixel - TEXTURE_WIDTH) >> 1) & 0x7F7F7F7FU) | black_colour;	// "| black_colour" is used to correct the messed-up alpha channel to $FF
+		} else {
+			memcpy(current_pixel, current_pixel - TEXTURE_WIDTH, TEXTURE_WIDTH * 4);
+			current_pixel += TEXTURE_WIDTH;
+		}
 	} else {
 		// Top and bottom borders
 		if (ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM || !REG_DISPLAYENABLE) {
