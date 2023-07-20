@@ -50,6 +50,7 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "extfreezer",	NULL, "Use external initial memory content for the Freezer", &configdb.extfreezer },
 	{ "hdosdir",	NULL, "Set directory with HyppoDOS redirections", &configdb.hdosdir },
 	{ "defaultdir",	NULL, "Set initial default directory for most file selector UIs", &configdb.defaultdir },
+	{ "hyperserialfile", NULL, "Use a file to write serial output into (no ASCII conversion, not even with -hyperserialascii)", &configdb.hyperserialfile },
 	{ "rom",	NULL, "Override Hyppo's loaded ROM during booting.", &configdb.rom },
 	{ "prg",	NULL, "Load a PRG file directly into the memory (/w C64/65 auto-detection on load address)", &configdb.prg },
 	{ "sdimg",	SDCARD_NAME, "Override path of SD-image to be used (also see the -virtsd option!)", &configdb.sdimg },
@@ -142,7 +143,7 @@ static const struct xemutools_configdef_float_st float_options[] = {
 // etc), however if the user saves the config in Xemu when started this way, it would also save these
 // CLI-given options, which is not the thing he wants, 99.999999% of time, I guess ...
 
-static const void *do_not_save_opts[] = { &configdb.prg, &configdb.autoload, &configdb.go64, NULL };
+static const void *do_not_save_opts[] = { &configdb.prg, &configdb.autoload, &configdb.go64, &configdb.hyperserialfile, NULL };
 
 
 void configdb_define_emulator_options ( size_t size )

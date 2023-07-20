@@ -81,6 +81,7 @@ struct configdb_st {
 	int	hyperdebug;
 	int	hyperdebugfreezer;
 	int	hyperserialascii;
+	char	*hyperserialfile;
 	int	usestubrom;
 	int	useinitrom;
 	int	useutilmenu;

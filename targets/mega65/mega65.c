@@ -447,6 +447,7 @@ int dump_screen ( const char *fn )
 
 static void shutdown_callback ( void )
 {
+	hypervisor_serial_monitor_close_file(configdb.hyperserialfile);
 	// Write out NVRAM if changed!
 	if (memcmp(nvram, nvram_original, sizeof(nvram))) {
 		DEBUGPRINT("NVRAM: changed, writing out on exit." NL);
@@ -577,12 +578,10 @@ void m65mon_dumpmem28 ( int addr )
 		umon_printf("%02X", memory_debug_read_phys_addr(addr++));
 }
 
-void m65mon_setmem28( int addr, int cnt, Uint8* vals )
+void m65mon_setmem28 ( int addr, int cnt, Uint8* vals )
 {
-  for (int k = 0; k < cnt; k++)
-  {
-    memory_debug_write_phys_addr(addr++, vals[k]);
-  }
+	while (--cnt >= 0)
+		memory_debug_write_phys_addr(addr++, *(vals++));
 }
 
 void m65mon_set_trace ( int m )
@@ -853,6 +852,7 @@ int main ( int argc, char **argv )
 	xemu_set_full_screen(configdb.fullscreen_requested);
 	if (!configdb.syscon)
 		sysconsole_close(NULL);
+	hypervisor_serial_monitor_open_file(configdb.hyperserialfile);
 	xemu_timekeeping_start();
 	emulation_is_running = 1;
 	// FIXME: for emscripten (anyway it does not work too much currently) there should be 50 or 60 (PAL/NTSC) instead of (fixed, and wrong!) 25!!!!!!
