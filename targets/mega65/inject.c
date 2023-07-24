@@ -25,11 +25,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/f011_core.h"
 #include "input_devices.h"
 #include "hypervisor.h"
+#include "sdcard.h"
+#include "configdb.h"
 
 #define C64_BASIC_LOAD_ADDR	0x0801
 #define C65_BASIC_LOAD_ADDR	0x2001
 
 #define KEY_PRESS_TIMEOUT	6
+
+#define IMPORT_BAS_TEXT_TEMPFILE "@lastimporttext.bas"
 
 static int check_status = 0;
 static int key2release = -1;
@@ -156,6 +160,26 @@ static void prg_inject_callback ( void *unused )
 	}
 	free(prg.stream);
 	prg.stream = NULL;
+}
+
+
+static void import_callback2 ( void *unused )
+{
+	CBM_SCREEN_PRINTF(under_ready_p, " SCNCLR:RUN:");
+	if (configdb.disk9)
+		sdcard_external_mount(1, configdb.disk9, NULL);
+	press_key(1);
+}
+
+
+static void import_callback ( void *unused )
+{
+	DEBUGPRINT("INJECT: hit 'READY.' trigger, about to import BASIC65 text program." NL);
+	fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);	// re-allow disk access
+	sdcard_external_mount(1, IMPORT_BAS_TEXT_TEMPFILE, "Mount failure for BASIC65 import");
+	CBM_SCREEN_PRINTF(under_ready_p, " IMPORT\"FILESEQ\",U9:");
+	press_key(1);
+	inject_register_ready_status("BASIC65 text import2", import_callback2, NULL);
 }
 
 
@@ -326,4 +350,39 @@ void inject_ready_check_do ( void )
 		inject_ready_callback(inject_ready_userdata);	// callback is activated now
 	} else
 		check_status++;		// we're "let's wait some time after READY." phase
+}
+
+
+static int basic_text_conv ( char *dst, const char *src, int len )
+{
+	// TODO: currently it's only a copy!!!!
+	memcpy(dst, src, len);
+	dst[len] = 0;
+	return 0;
+}
+
+
+int inject_register_import_basic_text ( const char *fn )
+{
+	if (!fn || !*fn)
+		return 0;
+	const int len = xemu_load_file(fn, NULL, 1, 65535, "Could not open/load text import for BASIC65");
+	if (len < 1)
+		return -1;
+	char *buf = xemu_malloc(len + 1);
+	if (basic_text_conv(buf, xemu_load_buffer_p, len)) {
+		free(buf);
+		free(xemu_load_buffer_p);
+		return -1;
+	}
+	free(xemu_load_buffer_p);
+	if (xemu_save_file(IMPORT_BAS_TEXT_TEMPFILE, buf, len, "Could not save prepared text for BASIC65 import") < 0) {
+		free(buf);
+		return -1;
+	}
+	free(buf);
+	if (inject_register_ready_status("BASIC65 text import", import_callback, NULL)) // prg inject does not use the userdata ...
+		return -1;
+	fdc_allow_disk_access(FDC_DENY_DISK_ACCESS);	// deny now, to avoid problem on PRG load while autoboot disk is mounted
+	return 0;
 }

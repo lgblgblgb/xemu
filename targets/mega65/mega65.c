@@ -844,6 +844,8 @@ int main ( int argc, char **argv )
 				"run\"*\""				// for C65/MEGA65 mode, we have nice command for that functionality ...
 			);
 	}
+	if (!configdb.prg && !configdb.go64 && !configdb.autoload && configdb.importbas)
+		inject_register_import_basic_text(configdb.importbas);
 	rom_stubrom_requested = configdb.usestubrom;
 	rom_initrom_requested = configdb.useinitrom;
 	rom_from_prefdir_allowed = !configdb.romfromsd;

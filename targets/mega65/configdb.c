@@ -74,6 +74,7 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "keymap",	KEYMAP_USER_FILENAME, "Set keymap configuration file to be used", &configdb.keymap },
 #endif
 	{ "gui",	NULL, "Select GUI type for usage. Specify some insane str to get a list", &configdb.selectedgui },
+	{ "importbas",	NULL, "Import and RUN BASIC65 program from TEXT file", &configdb.importbas },
 	{ NULL }
 };
 
@@ -143,7 +144,7 @@ static const struct xemutools_configdef_float_st float_options[] = {
 // etc), however if the user saves the config in Xemu when started this way, it would also save these
 // CLI-given options, which is not the thing he wants, 99.999999% of time, I guess ...
 
-static const void *do_not_save_opts[] = { &configdb.prg, &configdb.autoload, &configdb.go64, &configdb.hyperserialfile, NULL };
+static const void *do_not_save_opts[] = { &configdb.prg, &configdb.autoload, &configdb.go64, &configdb.hyperserialfile, &configdb.importbas, NULL };
 
 
 void configdb_define_emulator_options ( size_t size )

@@ -25,5 +25,6 @@ extern int  inject_register_ready_status ( const char *debug_msg, void (*callbac
 extern int  inject_register_prg          ( const char *prg_file, int prg_mode );
 extern void inject_register_allow_disk_access ( void );
 extern void inject_register_command      ( const char *s );
+extern int  inject_register_import_basic_text ( const char *fn );
 
 #endif

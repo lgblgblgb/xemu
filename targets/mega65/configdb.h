@@ -49,6 +49,7 @@ struct configdb_st {
 	int	defd81fromsd;
 	int	testing;
 	char	*prg;
+	char	*importbas;
 	char	*sdimg;
 	char	*dumpmem;
 	char	*dumpscreen;
