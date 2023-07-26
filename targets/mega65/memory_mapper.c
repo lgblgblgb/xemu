@@ -74,6 +74,8 @@ Uint8 nvram[64];
 Uint8 mega65_uuid[8];
 // RTC registers
 Uint8 rtc_regs[6];
+// I2C registers, not so much used yet other than write/read back ...
+static Uint8 i2c_regs[0x1000];
 
 Uint8 slow_ram[SLOW_RAM_SIZE];
 
@@ -297,7 +299,7 @@ DEFINE_WRITER(disk_buffers_writer) {
 }
 DEFINE_READER(i2c_io_reader) {
 	int addr = GET_READER_OFFSET();
-	Uint8 data = 0x00;	// initial value, if nothing match (unknown I2C to Xemu?)
+	Uint8 data = i2c_regs[addr];	// initial value, if nothing match (unknown I2C to Xemu?)
 	switch (addr) {
 		case 0x100:	// 8 bytes of UUID (64 bit value)
 		case 0x101:
@@ -322,10 +324,13 @@ DEFINE_READER(i2c_io_reader) {
 				data = nvram[addr - 0x140];
 			break;
 	}
+	DEBUG("I2C: read ($%02X) @ $%X" NL, data, addr);
 	return data;
 }
 DEFINE_WRITER(i2c_io_writer) {
 	int addr = GET_WRITER_OFFSET();
+	DEBUG("I2C: write ($%02X) @ $%X" NL, data, addr);
+	i2c_regs[addr] = data;
 	switch (addr) {
 		default:
 			if (addr > 0x140 && addr <= 0x17F)
@@ -492,6 +497,7 @@ void memory_init ( void )
 	int a;
 	memset(D6XX_registers, 0, sizeof D6XX_registers);
 	memset(D7XX, 0xFF, sizeof D7XX);
+	memset(i2c_regs, 0, sizeof i2c_regs);
 	rom_protect = 0;
 	in_hypervisor = 0;
 	for (a = 0; a < MEM_SLOTS; a++) {
