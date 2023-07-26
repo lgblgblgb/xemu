@@ -108,6 +108,7 @@ struct configdb_st {
 	int	noopl3;
 	int	sidmask;
 	int	audiobuffersize;
+	int	fastboot;
 };
 
 extern struct configdb_st configdb;

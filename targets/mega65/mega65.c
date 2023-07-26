@@ -830,6 +830,7 @@ int main ( int argc, char **argv )
 		configdb.umon = XUMON_DEFAULT_PORT;
 	xumon_init(configdb.umon);
 #endif
+	xemu_sleepless_temporary_mode(configdb.fastboot);
 	if (configdb.prg) {
 		inject_register_prg(configdb.prg, configdb.prgmode);
 	} else {

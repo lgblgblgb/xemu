@@ -288,6 +288,7 @@ static inline void first_leave ( void )
 	vic4_set_videostd(configdb.videostd, "in hypervisor.c, requested as boot/reset default");
 	// OK, that's enough
 	hdos_notify_system_start_end();
+	xemu_sleepless_temporary_mode(0);	// turn off temporary sleepless mode which may have been enabled before
 	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 }
 

@@ -1236,6 +1236,26 @@ void xemu_timekeeping_start ( void )
 }
 
 
+void xemu_sleepless_temporary_mode ( const int enable )
+{
+	static int enabled = 0;
+	if ((enable && enabled) || (!enable && !enabled))
+		return;
+	enabled = enable;
+	static int sleepless_old = 0;
+	if (enable) {
+		DEBUGPRINT("TIMING: enabling temporary sleepless mode: %s" NL, emu_is_sleepless ? "already sleepless" : "OK");
+		sleepless_old = emu_is_sleepless;
+		emu_is_sleepless = 1;
+	} else {
+		DEBUGPRINT("TIMING: disabling temporary sleepless mode: %s" NL, sleepless_old ? "constant sleepless" : "OK");
+		emu_is_sleepless = sleepless_old;
+		if (!emu_is_sleepless)
+			xemu_timekeeping_start();
+	}
+}
+
+
 void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_size )
 {
 	int tail;
