@@ -68,6 +68,8 @@ extern void reset_mega65      ( void );
 extern int  reset_mega65_asked( void );
 extern void reset_mega65_cpu_only ( void );
 
+extern int  mega65_set_model ( const Uint8 id );
+
 extern int  dump_memory       ( const char *fn );
 extern int  dump_screen       ( const char *fn );
 

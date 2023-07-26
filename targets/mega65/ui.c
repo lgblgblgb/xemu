@@ -640,10 +640,34 @@ static void ui_cb_displayenable ( const struct menu_st *m, int *query )
 }
 #endif
 
+static void ui_cb_mega65_model ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == configdb.mega65_model);
+	if (mega65_set_model(VOIDPTR_TO_INT(m->user_data)))
+		WARNING_WINDOW("It is recommended to reset emulation at this point");
+}
+
 
 /**** MENU SYSTEM ****/
 
 
+static const struct menu_st menu_mega65_model[] = {
+	{ "MEGA65 r1",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x01	},
+	{ "MEGA65 r2",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x02	},
+	{ "MEGA65 r3",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x03	},
+	{ "MEGAphone r1",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x21 },
+	{ "MEGAphone r4",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x22	},
+	{ "Nexys4",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x40	},
+	{ "Nexys4DDR",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x41	},
+	{ "Nexys4DDR-widget",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x42	},
+	{ "QMtech A100T",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x60	},
+	{ "QMtech A200T",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x61	},
+	{ "QMtech A325T",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x62	},
+	{ "Wukong",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0xFD	},
+	{ "Simulation",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0xFE	},
+	{ "Emulator/other",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0xFF	},
+	{ NULL }
+};
 static const struct menu_st menu_show_scanlines[] = {
 	{ "Disallow change by programs",XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&configdb.allow_scanlines },
@@ -730,6 +754,9 @@ static const struct menu_st menu_inputdevices[] = {
 	{ NULL }
 };
 static const struct menu_st menu_debug[] = {
+	{ "MEGA65 model",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_mega65_model },
+	{ "Fastboot (turbo on boot)",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&configdb.fastboot },
 #ifdef HAS_UARTMON_SUPPORT
 	{ "Start umon on " UMON_DEFAULT_PORT,
 					XEMUGUI_MENUID_CALLABLE |

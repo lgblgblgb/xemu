@@ -176,10 +176,11 @@ static void import_callback ( void *unused )
 {
 	DEBUGPRINT("INJECT: hit 'READY.' trigger, about to import BASIC65 text program." NL);
 	fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);	// re-allow disk access
-	sdcard_external_mount(1, IMPORT_BAS_TEXT_TEMPFILE, "Mount failure for BASIC65 import");
-	CBM_SCREEN_PRINTF(under_ready_p, " IMPORT\"FILESEQ\",U9:");
-	press_key(1);
-	inject_register_ready_status("BASIC65 text import2", import_callback2, NULL);
+	if (!sdcard_external_mount(1, IMPORT_BAS_TEXT_TEMPFILE, "Mount failure for BASIC65 import")) {
+		CBM_SCREEN_PRINTF(under_ready_p, " IMPORT\"FILESEQ\",U9:");
+		press_key(1);
+		inject_register_ready_status("BASIC65 text import2", import_callback2, NULL);
+	}
 }
 
 

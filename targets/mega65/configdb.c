@@ -145,7 +145,13 @@ static const struct xemutools_configdef_float_st float_options[] = {
 // etc), however if the user saves the config in Xemu when started this way, it would also save these
 // CLI-given options, which is not the thing he wants, 99.999999% of time, I guess ...
 
-static const void *do_not_save_opts[] = { &configdb.prg, &configdb.autoload, &configdb.go64, &configdb.hyperserialfile, &configdb.importbas, NULL };
+static const void *do_not_save_opts[] = {
+	&configdb.prg, &configdb.prgmode, &configdb.autoload, &configdb.go64, &configdb.hyperserialfile, &configdb.importbas,
+	&emu_is_sleepless, &emu_is_headless, &configdb.testing,
+	&configdb.dumpmem, &configdb.dumpscreen, &configdb.screenshot_and_exit,
+	&configdb.testing, &configdb.hyperdebug, &configdb.hyperdebugfreezer, &configdb.usestubrom, &configdb.useinitrom, &configdb.useutilmenu,
+	NULL
+};
 
 
 void configdb_define_emulator_options ( size_t size )

@@ -154,6 +154,18 @@ void machine_set_speed ( int verbose )
 }
 
 
+int mega65_set_model ( const Uint8 id )
+{
+	static int first_call = 1;
+	if (configdb.mega65_model == id && !first_call)
+		return 0;
+	first_call = 0;
+	configdb.mega65_model = id;
+	DEBUGPRINT("XEMU: emulated MEGA65 model ID: $%02X" NL, configdb.mega65_model);
+	return 1;
+}
+
+
 static void cia1_setint_cb ( int level )
 {
 	DEBUG("%s: IRQ level changed to %d" NL, cia1.name, level);
@@ -780,7 +792,7 @@ int main ( int argc, char **argv )
 	if (xemucfg_parse_all())
 		return 1;
 	// xemucfg_dump_db("After returning from xemucfg_parse_all in main()");
-	DEBUGPRINT("XEMU: emulated MEGA65 model ID: %d" NL, configdb.mega65_model);
+	mega65_set_model(configdb.mega65_model);
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(configdb.installer);
 #endif
@@ -830,7 +842,6 @@ int main ( int argc, char **argv )
 		configdb.umon = XUMON_DEFAULT_PORT;
 	xumon_init(configdb.umon);
 #endif
-	xemu_sleepless_temporary_mode(configdb.fastboot);
 	if (configdb.prg) {
 		inject_register_prg(configdb.prg, configdb.prgmode);
 	} else {

@@ -139,6 +139,8 @@ void hypervisor_enter ( int trapno )
 		FATAL("FATAL: got invalid trap number %d", trapno);
 	if (XEMU_UNLIKELY(in_hypervisor))
 		FATAL("FATAL: already in hypervisor mode while calling hypervisor_enter()");
+	if (trapno == TRAP_RESET && configdb.fastboot)
+		xemu_sleepless_temporary_mode(1);
 	// First, save machine status into hypervisor registers, TODO: incomplete, can be buggy!
 	D6XX_registers[0x40] = cpu65.a;
 	D6XX_registers[0x41] = cpu65.x;

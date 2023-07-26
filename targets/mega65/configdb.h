@@ -93,7 +93,9 @@ struct configdb_st {
 	int	autoload;
 	int	skip_unhandled_mem;
 	int	syscon;
-	int	mega65_model;		// $FF = Xemu/others, 1/2/3 = MEGA65 PCB rev 1/2/3, $40=nexys4, $41=nexys4ddr, $42=nexys4ddr-widget, $FD=wukong, $FE=simulation
+	// $FF = Xemu/others, 1/2/3 = MEGA65 PCB rev 1/2/3, $40/$41/$42=nexys/nexys4ddr/nexys4ddr-widget, $FD=wukong, $FE=simulation,
+	// $60/$61/$62 = qmtecha100t/qmtecha200t/qmtecha325t, $21/$22=megaphoner1/megaphoner4
+	int	mega65_model;
 	int	hicked;
 	int	prgmode;
 	int	rtc_hour_offset;
