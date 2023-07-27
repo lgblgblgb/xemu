@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    MEGA65 palette handling for VIC-IV with compatibility for C65 style
    VIC-III palette.
@@ -40,6 +40,7 @@ static struct {
 	Uint32 alpha_shift, alpha_mask, alpha_revmask;
 } sdlpalinfo;
 unsigned int palregaccofs;
+int emulation_colour_effect = 0;
 
 
 static XEMU_INLINE Uint8 swap_nibbles ( Uint8 i )
@@ -48,14 +49,47 @@ static XEMU_INLINE Uint8 swap_nibbles ( Uint8 i )
 }
 
 
+static void recalc_sdl_palval ( const unsigned int i )
+{
+	Uint8 red   = swap_nibbles(vic_palette_bytes_red  [i] & 0xEF);
+	Uint8 green = swap_nibbles(vic_palette_bytes_green[i]);
+	Uint8 blue  = swap_nibbles(vic_palette_bytes_blue [i]);
+	switch (emulation_colour_effect) {
+		case 0:			// normal
+			break;
+		case 1:			// grayscale
+			red = (Uint8)(float)(0.299 * (float)red + 0.587 * (float)green + 0.114 * (float)blue);
+			green = red;
+			blue = red;
+			break;
+		case 2:			// reduced red
+			red >>= 1;
+			break;
+		case 3:			// missing red
+			red = 0;
+			break;
+		case 4:			// reduced green
+			green >>= 1;
+			break;
+		case 5:			// missing green
+			green = 0;
+			break;
+		case 6:			// reduced blue
+			blue >>= 1;
+			break;
+		case 7:			// missing blue
+			blue = 0;
+			break;
+
+	}
+	vic_palettes[i] = sdlpalinfo.alpha_mask | (red << sdlpalinfo.red_shift) | (green << sdlpalinfo.green_shift) | (blue << sdlpalinfo.blue_shift);
+}
+
+
 void vic4_revalidate_all_palette ( void )
 {
-	for (int i = 0; i < NO_OF_PALETTE_REGS; i++)
-		vic_palettes[i] =
-			sdlpalinfo.alpha_mask |
-			((swap_nibbles(vic_palette_bytes_red  [i] & 0xEF)) << sdlpalinfo.red_shift  ) |
-			( swap_nibbles(vic_palette_bytes_green[i])         << sdlpalinfo.green_shift) |
-			( swap_nibbles(vic_palette_bytes_blue [i])         << sdlpalinfo.blue_shift ) ;
+	for (unsigned int i = 0; i < NO_OF_PALETTE_REGS; i++)
+		recalc_sdl_palval(i);
 }
 
 
@@ -127,7 +161,8 @@ void vic4_write_palette_reg_red ( unsigned int num, Uint8 data )
 {
 	num = (num & 0xFF) + palregaccofs;
 	vic_palette_bytes_red[num] = data;
-	vic_palettes[num] = (vic_palettes[num] & sdlpalinfo.red_revmask) | ((swap_nibbles(data & 0xEF)) << sdlpalinfo.red_shift);
+	//vic_palettes[num] = (vic_palettes[num] & sdlpalinfo.red_revmask) | ((swap_nibbles(data & 0xEF)) << sdlpalinfo.red_shift);
+	recalc_sdl_palval(num);
 	if (num >= 0x300 && num <= 0x30F) 	// first 16 entries of bank #3 forms the "ROM palette" of C65
 		vic_palettes[num + 0x100] = vic_palettes[num];
 	if (num >= 0x10 && num <= 0xFF)		// rest of the entires of bank #0, also the "ROM palette" emulation stuff
@@ -138,7 +173,8 @@ void vic4_write_palette_reg_green ( unsigned int num, Uint8 data )
 {
 	num = (num & 0xFF) + palregaccofs;
 	vic_palette_bytes_green[num] = data;
-	vic_palettes[num] = (vic_palettes[num] & sdlpalinfo.green_revmask) | (swap_nibbles(data) << sdlpalinfo.green_shift);
+	//vic_palettes[num] = (vic_palettes[num] & sdlpalinfo.green_revmask) | (swap_nibbles(data) << sdlpalinfo.green_shift);
+	recalc_sdl_palval(num);
 	if (num >= 0x300 && num <= 0x30F)
 		vic_palettes[num + 0x100] = vic_palettes[num];
 	if (num >= 0x10 && num <= 0xFF)
@@ -149,7 +185,8 @@ void vic4_write_palette_reg_blue  ( unsigned int num, Uint8 data )
 {
 	num = (num & 0xFF) + palregaccofs;
 	vic_palette_bytes_blue[num] = data;
-	vic_palettes[num] = (vic_palettes[num] & sdlpalinfo.blue_revmask) | (swap_nibbles(data) << sdlpalinfo.blue_shift);
+	//vic_palettes[num] = (vic_palettes[num] & sdlpalinfo.blue_revmask) | (swap_nibbles(data) << sdlpalinfo.blue_shift);
+	recalc_sdl_palval(num);
 	if (num >= 0x300 && num <= 0x30F)
 		vic_palettes[num + 0x100] = vic_palettes[num];
 	if (num >= 0x10 && num <= 0xFF)

@@ -246,6 +246,8 @@ extern int   vic4_disallow_videostd_change;
 extern int   vic4_registered_screenshot_request;
 extern int   vic_vidp_legacy, vic_chrp_legacy, vic_sprp_legacy;
 
+extern int   emulation_colour_effect;	// for real, it's in vic4_palette.c
+
 extern const char *iomode_names[4];
 
 extern void  vic_init ( void );
@@ -263,6 +265,7 @@ extern int   vic4_query_screen_width ( void );
 extern int   vic4_query_screen_height ( void );
 extern char *vic4_textshot ( void );
 extern int   vic4_textinsert ( const char *text );
+extern void  vic4_set_emulation_colour_effect ( const int val );
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 #include "xemu/emutools_snapshot.h"

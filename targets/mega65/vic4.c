@@ -1683,6 +1683,15 @@ int vic4_textinsert ( const char *text )
 }
 
 
+void vic4_set_emulation_colour_effect ( const int val )
+{
+	if (emulation_colour_effect != val) {
+		emulation_colour_effect = val;
+		vic4_revalidate_all_palette();
+	}
+}
+
+
 /* --- SNAPSHOT RELATED --- */
 
 

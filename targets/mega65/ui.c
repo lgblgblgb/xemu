@@ -647,10 +647,27 @@ static void ui_cb_mega65_model ( const struct menu_st *m, int *query )
 		WARNING_WINDOW("It is recommended to reset emulation at this point");
 }
 
+static void ui_cb_colour_effect ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == emulation_colour_effect);
+	vic4_set_emulation_colour_effect(VOIDPTR_TO_INT(m->user_data));
+}
+
 
 /**** MENU SYSTEM ****/
 
 
+static const struct menu_st menu_colour_effects[] = {
+	{ "Normal colours",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)0 },
+	{ "Grayscale",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)1 },
+	{ "Reduced red channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)2 },
+	{ "Missing red channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)3 },
+	{ "Reduced green channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)4 },
+	{ "Missing green channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)5 },
+	{ "Reduced blue channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)6 },
+	{ "Missing blue channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)7 },
+	{ NULL }
+};
 static const struct menu_st menu_mega65_model[] = {
 	{ "MEGA65 r1",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x01	},
 	{ "MEGA65 r2",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x02	},
@@ -713,6 +730,7 @@ static const struct menu_st menu_display[] = {
 	{ "Window size / fullscreen",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_window_size },
 	{ "Video standard",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_video_standard },
 	{ "Show scanlines at V200",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_show_scanlines },
+	{ "Colour effects",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_colour_effects },
 	{ "Show full borders",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_fullborders, NULL },
 	{ "Show drive LED",		XEMUGUI_MENUID_CALLABLE |
