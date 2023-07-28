@@ -35,6 +35,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "ethernet65.h"
 #include "audio65.h"
 #include "sdcard.h"
+#include "cart.h"
 #include <string.h>
 
 #define ALLOW_CPU_CUSTOM_FUNCTIONS_INCLUDE
@@ -338,6 +339,14 @@ DEFINE_WRITER(i2c_io_writer) {
 			break;
 	}
 }
+// "Slow device" ~ cardridge space
+DEFINE_READER(slowdev_reader) {
+	return cart_read_byte(GET_READER_OFFSET());
+}
+DEFINE_WRITER(slowdev_writer) {
+	cart_write_byte(GET_WRITER_OFFSET(), data);
+}
+
 // Not implemented yet, just here, since freezer accesses this memory area, and without **some** dummy
 // support, it would cause "unhandled memory access" warning in Xemu.
 DEFINE_READER(mem1541_reader) {
@@ -372,7 +381,7 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 	{ 0xFFD7000, 0xFFD7FFF, i2c_io_reader, i2c_io_writer },			// I2C devices
 	{ 0x8000000, 0x8000000 + SLOW_RAM_SIZE - 1, slow_ram_reader, slow_ram_writer },		// "slow RAM" also called "hyper RAM" (not to be confused with hypervisor RAM!)
 	{ 0x8000000 + SLOW_RAM_SIZE, 0xFDFFFFF, dummy_reader, dummy_writer },			// ununsed big part of the "slow RAM" or so ...
-	{ 0x4000000, 0x7FFFFFF, dummy_reader, dummy_writer },		// slow RAM memory area, not exactly known what it's for, let's define as "dummy"
+	{ 0x4000000, 0x7FFFFFF, slowdev_reader, slowdev_writer },		// slow RAM memory area ~ cartridge
 	{ 0xFE00000, 0xFE000FF, opl3_reader, opl3_writer },
 	{ 0x60000, 0xFFFFF, dummy_reader, dummy_writer },			// upper "unused" area of C65 (!) memory map. It seems C65 ROMs want it (Expansion RAM?) so we define as unused.
 	{ 0xFFDB000, 0xFFDFFFF, mem1541_reader, mem1541_writer },		// 1541's 16K ROM + 4K RAM, not so much used currently, but freezer seems to access it, for example ...
@@ -498,6 +507,7 @@ void memory_init ( void )
 	memset(D6XX_registers, 0, sizeof D6XX_registers);
 	memset(D7XX, 0xFF, sizeof D7XX);
 	memset(i2c_regs, 0, sizeof i2c_regs);
+	cart_init();
 	rom_protect = 0;
 	in_hypervisor = 0;
 	for (a = 0; a < MEM_SLOTS; a++) {

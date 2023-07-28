@@ -97,6 +97,7 @@ struct configdb_st {
 	// $60/$61/$62 = qmtecha100t/qmtecha200t/qmtecha325t, $21/$22=megaphoner1/megaphoner4
 	int	mega65_model;
 	int	colour_effect;
+	char	*cartbin8000;
 	int	hicked;
 	int	prgmode;
 	int	rtc_hour_offset;

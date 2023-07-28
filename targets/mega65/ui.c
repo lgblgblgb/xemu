@@ -40,6 +40,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "hypervisor.h"
 #include "xemu/cpu65.h"
 #include "xemu/emutools_config.h"
+#include "cart.h"
 
 
 // Used by UI CBs to maintain configDB persistence
@@ -653,10 +654,46 @@ static void ui_cb_colour_effect ( const struct menu_st *m, int *query )
 	vic4_set_emulation_colour_effect(VOIDPTR_TO_INT(m->user_data));
 }
 
+static void ui_cb_load_bin_cart ( const struct menu_st *m, int *query )
+{
+	char fnbuf[PATH_MAX + 1];
+	static char dir[PATH_MAX + 1] = "";
+	_check_file_selection_default_override(dir);
+	if (!xemugui_file_selector(
+		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		"Select binary cartridge",
+		dir,
+		fnbuf,
+		sizeof fnbuf
+	)) {
+		if (!cart_load_bin(fnbuf, VOIDPTR_TO_INT(m->user_data), "Cannot load binary cartridge"))
+			xemucfg_set_str(&configdb.cartbin8000, fnbuf);
+	} else
+		DEBUGPRINT("UI: file selection for PRG injection was cancelled." NL);
+}
+
+static void ui_start_cartridge ( void )
+{
+	if (!cart_is_loaded()) {
+		ERROR_WINDOW("No cartridge is loaded yet.");
+		return;
+	}
+	if (cart_detect_id()) {
+		INFO_WINDOW("Cartridge signature M65 not detected. Start with your own risk.");
+	}
+	cart_copy_from(0x8000, main_ram + 0x8000, 0x2000);
+	INFO_WINDOW("Copied. Type BANK0:SYS$8000 to start");
+}
+
 
 /**** MENU SYSTEM ****/
 
 
+static const struct menu_st menu_cartridge[] = {
+	{ "Load BIN cartridge to $8000",XEMUGUI_MENUID_CALLABLE,	ui_cb_load_bin_cart, (void*)0x8000 },
+	{ "Start cartridge",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_start_cartridge },
+	{ NULL }
+};
 static const struct menu_st menu_colour_effects[] = {
 	{ "Normal colours",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)0 },
 	{ "Grayscale",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)1 },
@@ -857,6 +894,7 @@ static const struct menu_st menu_disks[] = {
 	{ "Drive-8",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_drv8    },
 	{ "Drive-9",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_drv9    },
 	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
+	{ "Cartridge",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_cartridge },
 	{ NULL }
 };
 static const struct menu_st menu_audio_stereo[] = {
@@ -942,7 +980,7 @@ static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display	},
 	{ "Input devices",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_inputdevices	},
 	{ "Audio",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio	},
-	{ "Disks",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_disks	},
+	{ "Disks / Cart",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_disks	},
 	{ "Reset / ROM switching",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset	},
 	{ "Debug / Advanced",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug	},
 	{ "Configuration",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_config	},

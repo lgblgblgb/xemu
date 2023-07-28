@@ -75,6 +75,7 @@ static const struct xemutools_configdef_str_st str_options[] = {
 #endif
 	{ "gui",	NULL, "Select GUI type for usage. Specify some insane str to get a list", &configdb.selectedgui },
 	{ "importbas",	NULL, "Import and RUN BASIC65 program from TEXT file", &configdb.importbas },
+	{ "cartbin8000",NULL, "Load binary cartridge image from $8000", &configdb.cartbin8000 },
 	{ NULL }
 };
 
@@ -151,6 +152,7 @@ static const void *do_not_save_opts[] = {
 	&emu_is_sleepless, &emu_is_headless, &configdb.testing,
 	&configdb.dumpmem, &configdb.dumpscreen, &configdb.screenshot_and_exit,
 	&configdb.testing, &configdb.hyperdebug, &configdb.hyperdebugfreezer, &configdb.usestubrom, &configdb.useinitrom, &configdb.useutilmenu,
+	&configdb.cartbin8000,
 	NULL
 };
 

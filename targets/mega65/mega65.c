@@ -42,6 +42,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "configdb.h"
 #include "xemu/emutools_socketapi.h"
 #include "rom.h"
+#include "cart.h"
 
 // "Typical" size in default settings (video standard is PAL, default border settings).
 // See also vic4.h
@@ -355,6 +356,7 @@ static void mega65_init ( void )
 	} while (0);
 	// *** Initializes memory subsystem of MEGA65 emulation itself
 	memory_init();
+	cart_load_bin(configdb.cartbin8000, 0x8000, "Cannot load binary cartridge image from $8000");
 	// Load contents of NVRAM.
 	// Also store as "nvram_original" so we can sense on shutdown of the emu, if we need to up-date the on-disk version
 	// If we fail to load it (does not exist?) it will be written out anyway on exit.
