@@ -130,6 +130,7 @@ static const struct xemutools_configdef_num_st num_options[] = {
 	{ "videostd", 0, "Use given video standard at startup/reset (0 = PAL, 1 = NTSC, -1 = Hyppo default)", &configdb.videostd, -1, 1 },
 	{ "sidmask", 15, "Enabled SIDs of the four, in form of a bitmask", &configdb.sidmask, 0, 15 },
 	{ "audiobuffersize", AUDIO_BUFFER_SAMPLES_DEFAULT, "Audio buffer size in BYTES", &configdb.audiobuffersize, AUDIO_BUFFER_SAMPLES_MIN, AUDIO_BUFFER_SAMPLES_MAX },
+	{ "coloureffect", 0, "Colour effect to be applied to the SDL output (0=none, 1=grayscale, 2=green-monitor, ...)", &configdb.colour_effect, 0, 255 },
 	{ NULL }
 };
 

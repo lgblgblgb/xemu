@@ -96,6 +96,7 @@ struct configdb_st {
 	// $FF = Xemu/others, 1/2/3 = MEGA65 PCB rev 1/2/3, $40/$41/$42=nexys/nexys4ddr/nexys4ddr-widget, $FD=wukong, $FE=simulation,
 	// $60/$61/$62 = qmtecha100t/qmtecha200t/qmtecha325t, $21/$22=megaphoner1/megaphoner4
 	int	mega65_model;
+	int	colour_effect;
 	int	hicked;
 	int	prgmode;
 	int	rtc_hour_offset;

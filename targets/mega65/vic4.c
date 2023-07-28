@@ -1683,10 +1683,13 @@ int vic4_textinsert ( const char *text )
 }
 
 
-void vic4_set_emulation_colour_effect ( const int val )
+void vic4_set_emulation_colour_effect ( int val )
 {
-	if (emulation_colour_effect != val) {
-		emulation_colour_effect = val;
+	if (configdb.colour_effect != val) {
+		if (val < 0)
+			val = -val;	// negative value: to allow to set anyway, even if it was the previous one
+		DEBUGPRINT("XEMU: setting colour effect to %d" NL, val);
+		configdb.colour_effect = val;
 		vic4_revalidate_all_palette();
 	}
 }

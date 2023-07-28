@@ -382,6 +382,7 @@ static void mega65_init ( void )
 	vic_init();
 	vic4_disallow_videostd_change = configdb.lock_videostd;
 	vic4_set_videostd(configdb.videostd >= 0 ? configdb.videostd : 0, "by emulator initalization");
+	vic4_set_emulation_colour_effect(-configdb.colour_effect);
 	// *** CIAs
 	cia_init(&cia1, "CIA-1",
 		NULL,			// callback: OUTA

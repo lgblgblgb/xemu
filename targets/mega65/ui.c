@@ -649,7 +649,7 @@ static void ui_cb_mega65_model ( const struct menu_st *m, int *query )
 
 static void ui_cb_colour_effect ( const struct menu_st *m, int *query )
 {
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == emulation_colour_effect);
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == configdb.colour_effect);
 	vic4_set_emulation_colour_effect(VOIDPTR_TO_INT(m->user_data));
 }
 
@@ -660,12 +660,13 @@ static void ui_cb_colour_effect ( const struct menu_st *m, int *query )
 static const struct menu_st menu_colour_effects[] = {
 	{ "Normal colours",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)0 },
 	{ "Grayscale",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)1 },
-	{ "Reduced red channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)2 },
-	{ "Missing red channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)3 },
-	{ "Reduced green channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)4 },
-	{ "Missing green channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)5 },
-	{ "Reduced blue channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)6 },
-	{ "Missing blue channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)7 },
+	{ "Green monochrome monitor",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)2 },
+	{ "Reduced red channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)3 },
+	{ "Missing red channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)4 },
+	{ "Reduced green channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)5 },
+	{ "Missing green channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)6 },
+	{ "Reduced blue channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)7 },
+	{ "Missing blue channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)8 },
 	{ NULL }
 };
 static const struct menu_st menu_mega65_model[] = {
