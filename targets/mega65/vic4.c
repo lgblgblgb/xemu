@@ -153,12 +153,16 @@ void vic_reset ( void )
 	vic_iomode = VIC2_IOMODE;
 	interrupt_status = 0;
 	compare_raster = 0;
+	vic_hotreg_touched = 0;
+	vic4_sideborder_touched = 0;
+	vic_registers[0x5D] |= 0x80;	// set hotregs by default
 	// *** Just a check to try all possible regs (in VIC2,VIC3 and VIC4 modes), it should not panic ...
 	// It may also sets/initializes some internal variables sets by register writes, which would cause a crash on screen rendering without prior setup!
 	for (int i = 0; i < 0x140; i++) {
 		vic_write_reg(i, 0);
 		(void)vic_read_reg(i);
 	}
+	vic_registers[0x5D] |= 0x80;	// set hotregs by default (again)
 	// to deactivate the pixel readback crosshair by default, ie X/Y pos that never meet
 	vic_registers[0x7D] = 0xFF;
 	vic_registers[0x7E] = 0xFF;
@@ -602,16 +606,13 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			// (See vic4_interpret_legacy_mode_registers () for later REG_SCRNPTR_ adjustments)
 			// Reads are mapped to extended registers.
 			// So we just store the D018 Legacy Screen Address to be referenced elsewhere.
-			//
-			if (vic_registers[0x18] ^ data) {
-				REG_CHARPTR_B2 = 0;
-				REG_CHARPTR_B1 = (data & 14) << 2;
-				REG_CHARPTR_B0 = 0;
-				REG_SCRNPTR_B2 &= 0xF0;
-				reg_d018_screen_addr = (data & 0xF0) >> 4;
-				vic_hotreg_touched = 1;
-			}
-			data &= 0xFE;
+			REG_CHARPTR_B2 = 0;
+			REG_CHARPTR_B1 = (data & 14) << 2;
+			REG_CHARPTR_B0 = 0;
+			REG_SCRNPTR_B2 &= 0xF0;
+			reg_d018_screen_addr = (data & 0xF0) >> 4;
+			vic_hotreg_touched = 1;
+			//DEBUGPRINT("D018 is set to $%02X @ PC=$%04X" NL, data, cpu65.pc);
 			break;
 		CASE_VIC_ALL(0x19):
 			interrupt_status = interrupt_status & (~data) & 0xF;
@@ -808,18 +809,19 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			FATAL("Xemu: invalid VIC internal register numbering on write: $%X", addr);
 	}
 	vic_registers[addr & 0x7F] = data;
-	if (REG_HOTREG) {
-		if (vic_hotreg_touched) {
+	// NOTE: it was needed to exchange the conditions here, so vic_hotreg_touched is not remained set during non-hotreg enabled state
+	if (vic_hotreg_touched) {
+		if (REG_HOTREG) {
 			//DEBUGPRINT("VIC: vic_hotreg_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
 			vic4_interpret_legacy_mode_registers();
-			vic_hotreg_touched = 0;
 			vic4_sideborder_touched = 0;
 		}
+		vic_hotreg_touched = 0;
 	}
 	if (vic4_sideborder_touched) {
-			//DEBUGPRINT("VIC: vic4_sideborder_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
-			vic4_update_sideborder_dimensions();
-			vic4_sideborder_touched = 0;
+		//DEBUGPRINT("VIC: vic4_sideborder_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
+		vic4_update_sideborder_dimensions();
+		vic4_sideborder_touched = 0;
 	}
 }
 
@@ -848,10 +850,12 @@ Uint8 vic_read_reg ( int unsigned addr )
 		CASE_VIC_ALL(0x17):	// sprite-Y expansion
 			break;
 		CASE_VIC_ALL(0x18):	// memory pointers
-			result |= 1;
-			// Always mapped to VIC-IV extended "precise" registers
-			// result = ((REG_SCRNPTR_B1 & 60) << 2) | ((REG_CHARPTR_B1 & 60) >> 2);
-			// DEBUGPRINT("READ 0x81: $%02x" NL, result);
+			// Always mapped to VIC-IV extended "precise" registers according to the VHDL!
+			// That is, reading D018 does not read back what D018 was written with before, at least
+			// NOT always, if you someone alters the "precise" registers (REG_*PTR_*) then
+			// not, even not when hotregs are disabled it seems!!
+			result = ((REG_SCRNPTR_B1 << 2) & 0xF0) | ((REG_CHARPTR_B1 >> 2) & 0x0F);
+			//DEBUGPRINT("D018 is read as $%02X @ PC=$%04X" NL, result, cpu65.pc);
 			break;
 		CASE_VIC_ALL(0x19):
 			result = interrupt_status | (64 + 32 + 16);
