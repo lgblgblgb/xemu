@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -49,6 +49,7 @@ struct configdb_st {
 	int	defd81fromsd;
 	int	testing;
 	char	*prg;
+	char	*importbas;
 	char	*sdimg;
 	char	*dumpmem;
 	char	*dumpscreen;
@@ -72,6 +73,8 @@ struct configdb_st {
 	char	*selectedgui;
 	int	lock_videostd;
 	int	videostd;
+	int	show_scanlines;
+	int	allow_scanlines;
 	int	fullborders;
 	int	hdosvirt;
 	int	show_drive_led;
@@ -79,19 +82,22 @@ struct configdb_st {
 	int	hyperdebug;
 	int	hyperdebugfreezer;
 	int	hyperserialascii;
+	char	*hyperserialfile;
 	int	usestubrom;
 	int	useinitrom;
 	int	useutilmenu;
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	int	virtsd;
 #endif
-#ifdef FAKE_TYPING_SUPPORT
 	int	go64;
 	int	autoload;
-#endif
 	int	skip_unhandled_mem;
 	int	syscon;
-	int	mega65_model;		// $FF = Xemu/others, 1/2/3 = MEGA65 PCB rev 1/2/3, $40=nexys4, $41=nexys4ddr, $42=nexys4ddr-widget, $FD=wukong, $FE=simulation
+	// $FF = Xemu/others, 1/2/3 = MEGA65 PCB rev 1/2/3, $40/$41/$42=nexys/nexys4ddr/nexys4ddr-widget, $FD=wukong, $FE=simulation,
+	// $60/$61/$62 = qmtecha100t/qmtecha200t/qmtecha325t, $21/$22=megaphoner1/megaphoner4
+	int	mega65_model;
+	int	colour_effect;
+	char	*cartbin8000;
 	int	hicked;
 	int	prgmode;
 	int	rtc_hour_offset;
@@ -106,6 +112,7 @@ struct configdb_st {
 	int	noopl3;
 	int	sidmask;
 	int	audiobuffersize;
+	int	fastboot;
 };
 
 extern struct configdb_st configdb;

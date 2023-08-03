@@ -132,7 +132,7 @@ static struct {
 int main ( int argc, char **argv )
 {
 	int memtop = 0x10000;
-	xemu_pre_init(APP_ORG, TARGET_NAME, "Re-CP/M", argc, argv);
+	xemu_pre_init(APP_ORG, TARGET_NAME, "Re-CP/M");
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode", &configdb.fullscreen);
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)", &configdb.fullscreen);
 	xemucfg_define_num_option("width", 80, "Terminal width in character columns", &configdb.term_width, 38, 160);
@@ -144,7 +144,7 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("load", NULL, "Load and run a CP/M program", &configdb.load);
 	xemucfg_define_switch_option("trace", "Trace the program, VERY spammy!", &trace);
 	xemucfg_define_switch_option("mapvideo", "Map video+colour RAM into the end of addr space", &configdb.mapvideo);
-	if (xemucfg_parse_all())
+	if (xemucfg_parse_all(argc, argv))
 		return 1;
 	if (configdb.baud && configdb.baud < 300)
 		configdb.baud = 300;

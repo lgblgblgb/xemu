@@ -1,6 +1,6 @@
 /* Various D81 access method for F011 core, for Xemu / C65 and M65 emulators.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,7 +19,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_COMMON_D81ACCESS_H_INCLUDED
 #define XEMU_COMMON_D81ACCESS_H_INCLUDED
 
-#define D81_SIZE		819200
+#define D81_SIZE		819200U
+#define D64_SIZE		174848U
+#define D71_SIZE		349696U
+#define D65_SIZE		2785280U
 
 #define PRG_MIN_SIZE		16
 
@@ -53,9 +56,14 @@ extern void d81access_cb_chgmode   ( const int which, const int mode );
 extern int  d81access_read_sect    ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector, const int sector_size );
 extern int  d81access_write_sect   ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector, const int sector_size );
 
+// These two are "raw" operations without too much checking, use at your own risk only, may even crash/abort emulation if non-mounted "which" is used or invalid mode, etc etc!!
+extern int d81access_read_sect_raw ( const int which, Uint8 *buffer, const int offset, const int sector_size, const int io_size );
+extern int d81access_write_sect_raw( const int which, Uint8 *buffer, const int offset, const int sector_size, const int io_size );
+
 extern void d81access_init         ( void      );
-extern int  d81access_get_mode     ( int which );
-extern void d81access_close        ( int which );
+extern int  d81access_get_mode     ( const int which );
+extern void d81access_close        ( const int which );
+extern int  d81access_get_size     ( const int which );
 extern void d81access_close_all    ( void      );
 extern void d81access_attach_fd    ( int which, int fd, off_t offset, int mode );
 extern int  d81access_attach_fsobj ( int which, const char *fn, int mode );

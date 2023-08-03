@@ -1,7 +1,6 @@
 /* Test-case for simple, work-in-progress Commodore 65 emulator.
-
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -67,4 +66,6 @@ void configdb_define_emulator_options ( void )
 		{ "dmarev", 2, "Revision of the DMAgic chip (0/1=F018A/B, 2=rom_auto, +512=modulo))", &configdb.dmarev, 0, 1000 },
 		{ "prgmode", 0, "Override auto-detect option for -prg (64 or 65 for C64/C65 modes, 0 = default, auto detect)", &configdb.prgmode, 0, 65 }
 	);
+	static const void *do_not_save_opts[] = { &configdb.prg, &configdb.go64, &configdb.autoload, NULL };
+	xemucfg_add_flags_to_options(do_not_save_opts, XEMUCFG_FLAG_NO_SAVE);
 }

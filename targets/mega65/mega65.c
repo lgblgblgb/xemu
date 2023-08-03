@@ -42,6 +42,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "configdb.h"
 #include "xemu/emutools_socketapi.h"
 #include "rom.h"
+#include "cart.h"
 
 // "Typical" size in default settings (video standard is PAL, default border settings).
 // See also vic4.h
@@ -151,6 +152,18 @@ void machine_set_speed ( int verbose )
 		if (cpu_cycles_per_step > 1 && !hypervisor_is_debugged && !configdb.cpusinglestep)
 			cpu_cycles_per_step = cpu_cycles_per_scanline;	// if in trace mode (or hyper-debug ...), do not set this! So set only if non-trace and non-hyper-debug
 	}
+}
+
+
+int mega65_set_model ( const Uint8 id )
+{
+	static int first_call = 1;
+	if (configdb.mega65_model == id && !first_call)
+		return 0;
+	first_call = 0;
+	configdb.mega65_model = id;
+	DEBUGPRINT("XEMU: emulated MEGA65 model ID: $%02X" NL, configdb.mega65_model);
+	return 1;
 }
 
 
@@ -343,6 +356,7 @@ static void mega65_init ( void )
 	} while (0);
 	// *** Initializes memory subsystem of MEGA65 emulation itself
 	memory_init();
+	cart_load_bin(configdb.cartbin8000, 0x8000, "Cannot load binary cartridge image from $8000");
 	// Load contents of NVRAM.
 	// Also store as "nvram_original" so we can sense on shutdown of the emu, if we need to up-date the on-disk version
 	// If we fail to load it (does not exist?) it will be written out anyway on exit.
@@ -364,12 +378,13 @@ static void mega65_init ( void )
 	// Fill memory with the needed pre-initialized regions to be able to start.
 	preinit_memory_for_start();
 	// *** Image file for SDCARD support, and other related init functions handled there as well (eg d81access, fdc init ... related registers, etc)
-	if (sdcard_init(configdb.sdimg, configdb.virtsd, configdb.defd81fromsd) < 0)
+	if (sdcard_init(configdb.sdimg, configdb.virtsd) < 0)
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
 	vic_init();
 	vic4_disallow_videostd_change = configdb.lock_videostd;
 	vic4_set_videostd(configdb.videostd >= 0 ? configdb.videostd : 0, "by emulator initalization");
+	vic4_set_emulation_colour_effect(-configdb.colour_effect);
 	// *** CIAs
 	cia_init(&cia1, "CIA-1",
 		NULL,			// callback: OUTA
@@ -392,16 +407,6 @@ static void mega65_init ( void )
 	cia2.DDRA = 3; // Ugly workaround ... I think, SD-card setup "CRAM UTIL" (or better: Hyppo) should set this by its own. Maybe Xemu bug, maybe not?
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
 	dma_init();
-	// *** Drive 8 external mount
-	if (configdb.disk8) {
-		if (sdcard_force_external_mount(0, configdb.disk8, "Mount failure on CLI/CFG requested drive-8"))
-			xemucfg_set_str(&configdb.disk8, NULL);	// In case of error, unset configDB option
-	}
-	// *** Drive 9 external mount
-	if (configdb.disk9) {
-		if (sdcard_force_external_mount(1, configdb.disk9, "Mount failure on CLI/CFG requested drive-9"))
-			xemucfg_set_str(&configdb.disk9, NULL);	// In case of error, unset configDB option
-	}
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_init(configdb.uartmon);
 #endif
@@ -457,6 +462,7 @@ int dump_screen ( const char *fn )
 
 static void shutdown_callback ( void )
 {
+	hypervisor_serial_monitor_close_file(configdb.hyperserialfile);
 	// Write out NVRAM if changed!
 	if (memcmp(nvram, nvram_original, sizeof(nvram))) {
 		DEBUGPRINT("NVRAM: changed, writing out on exit." NL);
@@ -587,12 +593,10 @@ void m65mon_dumpmem28 ( int addr )
 		umon_printf("%02X", memory_debug_read_phys_addr(addr++));
 }
 
-void m65mon_setmem28( int addr, int cnt, Uint8* vals )
+void m65mon_setmem28 ( int addr, int cnt, Uint8* vals )
 {
-  for (int k = 0; k < cnt; k++)
-  {
-    memory_debug_write_phys_addr(addr++, vals[k]);
-  }
+	while (--cnt >= 0)
+		memory_debug_write_phys_addr(addr++, *(vals++));
 }
 
 void m65mon_set_trace ( int m )
@@ -658,8 +662,7 @@ static void update_emulator ( void )
 {
 	vic4_close_frame_access();
 	// XXX: some things has been moved here from the main loop, however update_emulator is called from other places as well, FIXME check if it causes problems or not!
-	if (XEMU_UNLIKELY(inject_ready_check_status))
-		inject_ready_check_do();
+	inject_ready_check_do();
 	audio65_sid_inc_framecount();
 	strcpy(emulator_speed_title, cpu_clock_speed_strs[cpu_clock_speed_str_index]);
 	strcat(emulator_speed_title, " ");
@@ -689,7 +692,7 @@ static void update_emulator ( void )
 	rtc_regs[1] = XEMU_BYTE_TO_BCD(t->tm_min);	// minutes
 	//rtc_regs[2] = xemu_hour_to_bcd12h(t->tm_hour, configdb.rtc_hour_offset);	// hours
 	rtc_regs[2] = XEMU_BYTE_TO_BCD((t->tm_hour + configdb.rtc_hour_offset + 24) % 24) | 0x80;	// hours (24H format, bit 7 always set)
-	rtc_regs[3] = XEMU_BYTE_TO_BCD(t->tm_mday);	// day of mounth
+	rtc_regs[3] = XEMU_BYTE_TO_BCD(t->tm_mday);	// day of month
 	rtc_regs[4] = XEMU_BYTE_TO_BCD(t->tm_mon) + 1;	// month
 	rtc_regs[5] = XEMU_BYTE_TO_BCD(t->tm_year - 100);	// year
 //	}
@@ -792,7 +795,7 @@ int main ( int argc, char **argv )
 	if (xemucfg_parse_all())
 		return 1;
 	// xemucfg_dump_db("After returning from xemucfg_parse_all in main()");
-	DEBUGPRINT("XEMU: emulated MEGA65 model ID: %d" NL, configdb.mega65_model);
+	mega65_set_model(configdb.mega65_model);
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(configdb.installer);
 #endif
@@ -842,17 +845,22 @@ int main ( int argc, char **argv )
 		configdb.umon = XUMON_DEFAULT_PORT;
 	xumon_init(configdb.umon);
 #endif
-	if (configdb.prg)
+	if (configdb.prg) {
 		inject_register_prg(configdb.prg, configdb.prgmode);
-#ifdef FAKE_TYPING_SUPPORT
-	if (configdb.go64) {
+	} else {
+		if (configdb.go64) {
+			hid_set_autoreleased_key(0x75);
+			KBD_PRESS_KEY(0x75);
+		}
 		if (configdb.autoload)
-			c64_register_fake_typing(fake_typing_for_load64);
-		else
-			c64_register_fake_typing(fake_typing_for_go64);
-	} else if (configdb.autoload)
-		c64_register_fake_typing(fake_typing_for_load65);
-#endif
+			inject_register_command(
+				configdb.go64 ?
+				"poke0,65:load\"*\"|poke0,64:run" :	// for C64 mode, we need two steps, also using some "turbo speed" during loading ;)
+				"run\"*\""				// for C65/MEGA65 mode, we have nice command for that functionality ...
+			);
+	}
+	if (!configdb.prg && !configdb.go64 && !configdb.autoload && configdb.importbas)
+		inject_register_import_basic_text(configdb.importbas);
 	rom_stubrom_requested = configdb.usestubrom;
 	rom_initrom_requested = configdb.useinitrom;
 	rom_from_prefdir_allowed = !configdb.romfromsd;
@@ -861,6 +869,7 @@ int main ( int argc, char **argv )
 	xemu_set_full_screen(configdb.fullscreen_requested);
 	if (!configdb.syscon)
 		sysconsole_close(NULL);
+	hypervisor_serial_monitor_open_file(configdb.hyperserialfile);
 	xemu_timekeeping_start();
 	emulation_is_running = 1;
 	// FIXME: for emscripten (anyway it does not work too much currently) there should be 50 or 60 (PAL/NTSC) instead of (fixed, and wrong!) 25!!!!!!

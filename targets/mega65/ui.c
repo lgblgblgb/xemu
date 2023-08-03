@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -40,6 +40,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "hypervisor.h"
 #include "xemu/cpu65.h"
 #include "xemu/emutools_config.h"
+#include "cart.h"
 
 
 // Used by UI CBs to maintain configDB persistence
@@ -56,7 +57,7 @@ void emu_dropfile_callback ( const char *fn )
 	DEBUGGUI("UI: file drop event, file: %s" NL, fn);
 	switch (QUESTION_WINDOW("Cancel|Mount as D81|Run/inject as PRG", "What to do with the dropped file?")) {
 		case 1:
-			if (!sdcard_force_external_mount(0, fn, "D81 mount failure"))
+			if (!sdcard_external_mount(0, fn, "D81 mount failure"))
 				_mountd81_configdb_change(0, fn);
 			break;
 		case 2:
@@ -70,9 +71,13 @@ void emu_dropfile_callback ( const char *fn )
 static void ui_cb_attach_default_d81 ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, 0);
-	const int drive = VOIDPTR_TO_INT(m->user_data);
-	sdcard_default_d81_mount(drive);
-	_mountd81_configdb_change(drive, NULL);	// just book this as "not mounted" (as the default). Maybe is it a FIXME?
+	int drive = VOIDPTR_TO_INT(m->user_data);
+	if ((drive & 1024))
+		sdcard_default_internal_d81_mount(drive & 1);
+	else {
+		sdcard_default_external_d81_mount(drive & 1);
+		_mountd81_configdb_change(drive & 1, NULL);	// just book this as "not mounted" (as the default). Maybe is it a FIXME?
+	}
 }
 
 
@@ -126,10 +131,10 @@ static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
 					}
 				}
 			}
-			if (!sdcard_force_external_mount_with_image_creation(drive, fnbuf2, 1, "D81 mount failure")) // third arg: allow overwrite existing D81
+			if (!sdcard_external_mount_with_image_creation(drive, fnbuf2, 1, "D81 mount failure")) // third arg: allow overwrite existing D81
 				_mountd81_configdb_change(drive, fnbuf2);
 		} else {
-			if (!sdcard_force_external_mount(drive, fnbuf, "D81 mount failure"))
+			if (!sdcard_external_mount(drive, fnbuf, "D81 mount failure"))
 				_mountd81_configdb_change(drive, fnbuf);
 		}
 	} else {
@@ -636,10 +641,95 @@ static void ui_cb_displayenable ( const struct menu_st *m, int *query )
 }
 #endif
 
+static void ui_cb_mega65_model ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == configdb.mega65_model);
+	if (mega65_set_model(VOIDPTR_TO_INT(m->user_data)))
+		WARNING_WINDOW("It is recommended to reset emulation at this point");
+}
+
+static void ui_cb_colour_effect ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == configdb.colour_effect);
+	vic4_set_emulation_colour_effect(VOIDPTR_TO_INT(m->user_data));
+}
+
+static void ui_cb_load_bin_cart ( const struct menu_st *m, int *query )
+{
+	char fnbuf[PATH_MAX + 1];
+	static char dir[PATH_MAX + 1] = "";
+	_check_file_selection_default_override(dir);
+	if (!xemugui_file_selector(
+		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
+		"Select binary cartridge",
+		dir,
+		fnbuf,
+		sizeof fnbuf
+	)) {
+		if (!cart_load_bin(fnbuf, VOIDPTR_TO_INT(m->user_data), "Cannot load binary cartridge"))
+			xemucfg_set_str(&configdb.cartbin8000, fnbuf);
+	} else
+		DEBUGPRINT("UI: file selection for PRG injection was cancelled." NL);
+}
+
+static void ui_start_cartridge ( void )
+{
+	if (!cart_is_loaded()) {
+		ERROR_WINDOW("No cartridge is loaded yet.");
+		return;
+	}
+	if (cart_detect_id()) {
+		INFO_WINDOW("Cartridge signature M65 not detected. Start with your own risk.");
+	}
+	cart_copy_from(0x8000, main_ram + 0x8000, 0x2000);
+	INFO_WINDOW("Copied. Type BANK0:SYS$8000 to start");
+}
+
 
 /**** MENU SYSTEM ****/
 
 
+static const struct menu_st menu_cartridge[] = {
+	{ "Load BIN cartridge to $8000",XEMUGUI_MENUID_CALLABLE,	ui_cb_load_bin_cart, (void*)0x8000 },
+	{ "Start cartridge",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_start_cartridge },
+	{ NULL }
+};
+static const struct menu_st menu_colour_effects[] = {
+	{ "Normal colours",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)0 },
+	{ "Grayscale",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)1 },
+	{ "Green monochrome monitor",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)2 },
+	{ "Reduced red channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)3 },
+	{ "Missing red channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)4 },
+	{ "Reduced green channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)5 },
+	{ "Missing green channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)6 },
+	{ "Reduced blue channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)7 },
+	{ "Missing blue channel",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_colour_effect, (void*)8 },
+	{ NULL }
+};
+static const struct menu_st menu_mega65_model[] = {
+	{ "MEGA65 r1",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x01	},
+	{ "MEGA65 r2",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x02	},
+	{ "MEGA65 r3",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x03	},
+	{ "MEGAphone r1",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x21 },
+	{ "MEGAphone r4",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x22	},
+	{ "Nexys4",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x40	},
+	{ "Nexys4DDR",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x41	},
+	{ "Nexys4DDR-widget",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x42	},
+	{ "QMtech A100T",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x60	},
+	{ "QMtech A200T",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x61	},
+	{ "QMtech A325T",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x62	},
+	{ "Wukong",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0xFD	},
+	{ "Simulation",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0xFE	},
+	{ "Emulator/other",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0xFF	},
+	{ NULL }
+};
+static const struct menu_st menu_show_scanlines[] = {
+	{ "Disallow change by programs",XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&configdb.allow_scanlines },
+	{ "Show scanlines",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&configdb.show_scanlines },
+	{ NULL }
+};
 static const struct menu_st menu_video_standard[] = {
 	{ "Disallow change by programs",XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_video_standard_disallow_change, NULL },
@@ -677,6 +767,8 @@ static const struct menu_st menu_display[] = {
 	{ "Render scale quality",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_render_scale_quality },
 	{ "Window size / fullscreen",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_window_size },
 	{ "Video standard",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_video_standard },
+	{ "Show scanlines at V200",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_show_scanlines },
+	{ "Colour effects",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_colour_effects },
 	{ "Show full borders",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_fullborders, NULL },
 	{ "Show drive LED",		XEMUGUI_MENUID_CALLABLE |
@@ -718,6 +810,9 @@ static const struct menu_st menu_inputdevices[] = {
 	{ NULL }
 };
 static const struct menu_st menu_debug[] = {
+	{ "MEGA65 model",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_mega65_model },
+	{ "Fastboot (turbo on boot)",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&configdb.fastboot },
 #ifdef HAS_UARTMON_SUPPORT
 	{ "Start umon on " UMON_DEFAULT_PORT,
 					XEMUGUI_MENUID_CALLABLE |
@@ -773,6 +868,8 @@ static const struct menu_st menu_drv8[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_d81, (void*)0 },
 	{ "Attach default D81",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_default_d81, (void*)0 },
+	{ "Attach default on-SD D81",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_default_d81, (void*)(0 + 1024) },
 	{ "Detach D81",			XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_detach_d81, (void*)0 },
 	{ "Create and attach new D81",	XEMUGUI_MENUID_CALLABLE |
@@ -797,6 +894,7 @@ static const struct menu_st menu_disks[] = {
 	{ "Drive-8",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_drv8    },
 	{ "Drive-9",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_drv9    },
 	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
+	{ "Cartridge",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_cartridge },
 	{ NULL }
 };
 static const struct menu_st menu_audio_stereo[] = {
@@ -882,7 +980,7 @@ static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display	},
 	{ "Input devices",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_inputdevices	},
 	{ "Audio",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio	},
-	{ "Disks",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_disks	},
+	{ "Disks / Cart",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_disks	},
 	{ "Reset / ROM switching",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset	},
 	{ "Debug / Advanced",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug	},
 	{ "Configuration",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_config	},

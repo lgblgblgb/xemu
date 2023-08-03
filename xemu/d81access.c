@@ -1,6 +1,6 @@
 /* Various D81 access method for F011 core, for Xemu / C65 and M65 emulators.
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -42,11 +42,6 @@ static struct {
 } d81[8];
 static int enable_mode_transient_callback = -1;
 
-// Note: D81_SIZE is defined in the header file, unlike these:
-#define D64_SIZE	174848
-#define D71_SIZE	349696
-#define D65_SIZE	2785280
-
 #define IS_RO(p)	(!!((p) & D81ACCESS_RO))
 #define IS_RW(p)	(!((p) & D81ACCESS_RO))
 #define HAS_DISK(p)	(((p)&& 0xFF) != D81ACCESS_EMPTY)
@@ -69,13 +64,19 @@ void d81access_init ( void )
 }
 
 
-int d81access_get_mode ( int which )
+int d81access_get_mode ( const int which )
 {
 	return d81[which].mode;
 }
 
 
-void d81access_close ( int which )
+int d81access_get_size ( const int which )
+{
+	return d81[which].image_size;
+}
+
+
+void d81access_close ( const int which )
 {
 	if (d81[which].fd >= 0) {
 		if (IS_AUTOCLOSE(d81[which].mode)) {
@@ -536,12 +537,8 @@ static int check_io_req_params ( const int which, const Uint8 side, const Uint8 
 }
 
 
-int d81access_read_sect  ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector, const int sector_size )
+int d81access_read_sect_raw ( const int which, Uint8 *buffer, const int offset, const int sector_size, const int io_size )
 {
-	int io_size;
-	const int offset = check_io_req_params(which, side, track, sector, sector_size, &io_size);
-	if (XEMU_UNLIKELY(offset < 0))
-		return offset;	// return negative number as error
 	switch (d81[which].mode & 0xFF) {
 		case D81ACCESS_EMPTY:
 			return -1;
@@ -569,14 +566,20 @@ int d81access_read_sect  ( const int which, Uint8 *buffer, const Uint8 side, con
 }
 
 
-int d81access_write_sect ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector, const int sector_size )
+int d81access_read_sect  ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector, const int sector_size )
 {
 	int io_size;
 	const int offset = check_io_req_params(which, side, track, sector, sector_size, &io_size);
-	if (IS_RO(d81[which].mode))
-		return -1;
 	if (XEMU_UNLIKELY(offset < 0))
 		return offset;	// return negative number as error
+	return d81access_read_sect_raw(which, buffer, offset, sector_size, io_size);
+}
+
+
+int d81access_write_sect_raw ( const int which, Uint8 *buffer, const int offset, const int sector_size, const int io_size )
+{
+	if (IS_RO(d81[which].mode))
+		return -1;
 	switch (d81[which].mode & 0xFF) {
 		case D81ACCESS_EMPTY:
 			return -1;
@@ -593,6 +596,16 @@ int d81access_write_sect ( const int which, Uint8 *buffer, const Uint8 side, con
 	}
 	FATAL("D81ACCESS: d81access_write_sect() unhandled case" NL);
 	return -1;
+}
+
+
+int d81access_write_sect ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector, const int sector_size )
+{
+	int io_size;
+	const int offset = check_io_req_params(which, side, track, sector, sector_size, &io_size);
+	if (XEMU_UNLIKELY(offset < 0))
+		return offset;	// return negative number as error
+	return d81access_write_sect_raw(which, buffer, offset, sector_size, io_size);
 }
 
 

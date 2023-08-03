@@ -46,6 +46,8 @@ static int   resolver_ok = 0;
 
 static char  hypervisor_monout[0x10000];
 static char *hypervisor_monout_p = hypervisor_monout;
+static int   hypervisor_serial_output_fd = -1;
+static int   hypervisor_serial_output_errors;
 
 static int   hypervisor_serial_out_asciizer;
 
@@ -137,6 +139,8 @@ void hypervisor_enter ( int trapno )
 		FATAL("FATAL: got invalid trap number %d", trapno);
 	if (XEMU_UNLIKELY(in_hypervisor))
 		FATAL("FATAL: already in hypervisor mode while calling hypervisor_enter()");
+	if (trapno == TRAP_RESET && configdb.fastboot)
+		xemu_sleepless_temporary_mode(1);
 	// First, save machine status into hypervisor registers, TODO: incomplete, can be buggy!
 	D6XX_registers[0x40] = cpu65.a;
 	D6XX_registers[0x41] = cpu65.x;
@@ -286,6 +290,7 @@ static inline void first_leave ( void )
 	vic4_set_videostd(configdb.videostd, "in hypervisor.c, requested as boot/reset default");
 	// OK, that's enough
 	hdos_notify_system_start_end();
+	xemu_sleepless_temporary_mode(0);	// turn off temporary sleepless mode which may have been enabled before
 	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 }
 
@@ -341,7 +346,7 @@ void hypervisor_leave ( void )
 	memory_set_do_map();	// restore mapping ...
 	if (XEMU_UNLIKELY(hypervisor_is_first_call)) {
 		if (trap_current != TRAP_RESET)
-			ERROR_WINDOW("First hypervisor TRAP is not RESET?!");
+			FATAL("First hypervisor TRAP is not RESET?!");
 		first_leave();
 	}
 	// Catch the event when it's a reset TRAP but not part of the initial call (not "cold" reset)
@@ -368,8 +373,42 @@ void hypervisor_leave ( void )
 }
 
 
+void hypervisor_serial_monitor_open_file ( const char *fn )
+{
+	if (!fn || !*fn) {
+		DEBUG("SERIAL: no need to open file (was not requested)" NL);
+		return;
+	}
+	hypervisor_serial_output_fd = xemu_open_file(fn, O_CREAT | O_TRUNC | O_WRONLY, NULL, NULL);
+	if (hypervisor_serial_output_fd < 0) {
+		ERROR_WINDOW("Could not open hypervisor serial output file %s", fn);
+	} else {
+		DEBUGPRINT("SERIAL: opened hypervisor serial output file: %s" NL, fn);
+		hypervisor_serial_output_errors = 0;
+	}
+}
+
+
+void hypervisor_serial_monitor_close_file ( const char *fn )
+{
+	if (!fn || !*fn || hypervisor_serial_output_fd < 0) {
+		DEBUG("SERIAL: no need to close file (was not active)" NL);
+		return;
+	}
+	DEBUGPRINT("SERIAL: closing hypervisor serial output file %s" NL, fn);
+	close(hypervisor_serial_output_fd);
+	hypervisor_serial_output_fd = -1;
+	if (hypervisor_serial_output_errors) {
+		ERROR_WINDOW("SERIAL: deleting hypervisor serial output file %s, because write error(s) occured" NL, fn);
+		unlink(fn);
+	}
+}
+
+
 void hypervisor_serial_monitor_push_char ( Uint8 chr )
 {
+	if (hypervisor_serial_output_fd >= 0 && write(hypervisor_serial_output_fd, &chr, 1) != 1)
+		hypervisor_serial_output_errors++;
 	if (hypervisor_monout_p >= hypervisor_monout - 1 + sizeof hypervisor_monout)
 		return;
 	int flush = (chr == 0x0A || chr == 0x0D || chr == 0x8A || chr == 0x8D);

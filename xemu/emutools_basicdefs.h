@@ -238,12 +238,19 @@ static inline int xemu_byte_order_test ( void )
 	return (r.b.l != ENDIAN_CHECKER_BYTE_L || r.b.h != ENDIAN_CHECKER_BYTE_H || r.w.w != ENDIAN_CHECKER_WORD || r.d != ENDIAN_CHECKER_DWORD);
 }
 
+extern int emu_exit_code;
+
+static inline int _get_emu_exit_code ( const int input )
+{
+	return input ? input : emu_exit_code;
+}
+
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
-#define XEMUEXIT(n)	do { emscripten_cancel_main_loop(); emscripten_force_exit(n); exit(n); } while (0)
+#define XEMUEXIT(n)	do { const int e = _get_emu_exit_code(n); emscripten_cancel_main_loop(); emscripten_force_exit(e); exit(e); } while (0)
 #else
 #include <stdlib.h>
-#define XEMUEXIT(n)	exit(n)
+#define XEMUEXIT(n)	exit(_get_emu_exit_code(n))
 #endif
 
 #define BOOLEAN_VALUE(n)	(!!(n))

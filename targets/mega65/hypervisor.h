@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -41,6 +41,8 @@ extern void hypervisor_start_machine ( void );
 extern int  hypervisor_level_reset ( void );
 extern void hypervisor_leave ( void );
 extern void hypervisor_serial_monitor_push_char ( Uint8 chr );
+extern void hypervisor_serial_monitor_open_file ( const char *fn );
+extern void hypervisor_serial_monitor_close_file ( const char *fn );
 extern void hypervisor_debug_invalidate ( const char *reason );
 extern void hypervisor_debug_late_enable ( void );
 extern int  hypervisor_hdos_virtualization_status ( const int set, const char **root_ptr );	// prototype is here, but it's implemented in hdos.c not in hypervisor.c

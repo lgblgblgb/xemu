@@ -1,4 +1,4 @@
-/* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
+/* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
@@ -16,28 +16,15 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef XEMU_MEGA65_UART_MONITOR_H_INCLUDED
-#define XEMU_MEGA65_UART_MONITOR_H_INCLUDED
+#ifndef XEMU_MEGA65_CART_H_INCLUDED
+#define XEMU_MEGA65_CART_H_INCLUDED
 
-#ifdef HAS_UARTMON_SUPPORT
-
-#define UMON_SYNTAX_ERROR "?SYNTAX ERROR  "
-
-#define UMON_DEFAULT_PORT ":4510"
-
-#define UMON_WRITE_BUFFER_SIZE	0x4000
-#define umon_printf(...)	umon_write_size += sprintf(umon_write_buffer + umon_write_size, __VA_ARGS__)
-
-extern int  umon_write_size;
-extern int  umon_send_ok;
-extern char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
-
-extern int  uartmon_init   ( const char *fn );
-extern int  uartmon_is_active ( void );
-extern void uartmon_update ( void );
-extern void uartmon_close  ( void );
-extern void uartmon_finish_command ( void );
-
-#endif
+extern void  cart_init       ( void );
+extern Uint8 cart_read_byte  ( unsigned int addr );
+extern void  cart_write_byte ( unsigned int addr, Uint8 data );
+extern int   cart_load_bin   ( const char *fn, const unsigned int addr, const char *cry );
+extern void  cart_copy_from  ( const Uint16 cart_addr, Uint8 *target, const Uint16 size );
+extern int   cart_detect_id  ( void );
+extern int   cart_is_loaded  ( void );
 
 #endif

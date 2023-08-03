@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -67,6 +67,8 @@ extern void machine_set_speed ( int verbose );
 extern void reset_mega65      ( void );
 extern int  reset_mega65_asked( void );
 extern void reset_mega65_cpu_only ( void );
+
+extern int  mega65_set_model ( const Uint8 id );
 
 extern int  dump_memory       ( const char *fn );
 extern int  dump_screen       ( const char *fn );
