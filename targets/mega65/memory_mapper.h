@@ -38,23 +38,19 @@ extern Uint8 memory_dma_target_mreader ( int addr );
 extern void  memory_dma_target_mwriter ( int addr, Uint8 data );
 extern Uint8 memory_dma_list_reader    ( int addr );
 
-//#define SIZEOF_CHIP_RAM  0x20000
-//#define SIZEOF_FAST_RAM  0x20000
-//#define SIZEOF_EXTRA_RAM 0x20000
-
 extern int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
 extern int rom_protect, skip_unhandled_mem;
 extern Uint8 main_ram[512 << 10], colour_ram[0x8000], char_wom[0x2000], hypervisor_ram[0x4000];
-extern Uint8 nvram[64];
-extern Uint8 mega65_uuid[8];
-extern Uint8 rtc_regs[6];
 #define SLOW_RAM_SIZE (8 << 20)
 extern Uint8 slow_ram[SLOW_RAM_SIZE];
-//extern Uint8 chip_ram[SIZEOF_CHIP_RAM], fast_ram[SIZEOF_FAST_RAM];
-// Ugly hack for more RAM!
-//#define chip_ram  (main_ram + 0)
-//#define fast_ram  (main_ram + 0x20000)
-//#define extra_ram (main_ram + 0x40000)
+
+#define I2C_UUID_OFFSET		0x100
+#define I2C_UUID_SIZE		8
+#define I2C_RTC_OFFSET		0x110
+#define I2C_RTC_SIZE		7
+#define I2C_NVRAM_OFFSET	0x140
+#define I2C_NVRAM_SIZE		64
+extern Uint8 i2c_regs[0x1000];
 
 extern int cpu_rmw_old_data;
 
