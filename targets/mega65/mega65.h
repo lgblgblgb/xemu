@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define NVRAM_FILE_NAME		"@nvram.bin"
 #define UUID_FILE_NAME		"@uuid.bin"
+#define I2C_FILE_NAME		"@i2c.bin"
 
 // Used by updater, etc ... base name only, no path info!
 #define MEGA65_ROM_NAME		"MEGA65.ROM"
