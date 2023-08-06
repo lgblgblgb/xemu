@@ -692,8 +692,11 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			// (!) NOTE:
 			// According to Paul, speed change should trigger "HOTREG" touched notification but no VIC legacy register "interpret"
 			// So probably we need a separate (cpu_speed_hotreg) var?
-			if ((vic_registers[0x31] & 0xBF) ^ (data & 0xBF))
-				vic_hotreg_touched = 1;
+			// NOTE/FIXME: it's seems this regsiter is always hotreg now! See mega65-core change 0f1a8b37186d17b6a8d6f89d8fb95d166704fcd4
+			// Also this may invalidate the first (old!) "(!) NOTE"
+			//if ((vic_registers[0x31] & 0xBF) ^ (data & 0xBF))
+			//    vic_hotreg_touched = 1;
+			vic_hotreg_touched = 1;
 			vic_registers[0x31] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
 			machine_set_speed(0);
 			calculate_char_x_step();
@@ -743,9 +746,12 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 
 		CASE_VIC_4(0x5D):
 			DEBUGPRINT("VIC: Write $%04x SIDEBORDER/HOTREG: $%02x" NL, addr, data);
-
 			if ((vic_registers[0x5D] & 0x1F) ^ (data & 0x1F))	// sideborder MSB (0..5) modified ?
 				vic4_sideborder_touched = 1;
+			if (!(data & 0x80))	// writing bit 7 as zero (hotreg disable) also clears any possible remembered "trigger"
+				vic_hotreg_touched = 0;
+			// NOTE: if bit 7 is one, hotreg=enabled feature will be set after the switch/case block, thus indeed, the
+			// hotreg event will be triggered then (also in this function, below) as "should be"
 			break;
 
 		CASE_VIC_4(0x5E):
@@ -808,14 +814,11 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		default:
 			FATAL("Xemu: invalid VIC internal register numbering on write: $%X", addr);
 	}
-	vic_registers[addr & 0x7F] = data;
-	// NOTE: it was needed to exchange the conditions here, so vic_hotreg_touched is not remained set during non-hotreg enabled state
-	if (vic_hotreg_touched) {
-		if (REG_HOTREG) {
-			//DEBUGPRINT("VIC: vic_hotreg_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
-			vic4_interpret_legacy_mode_registers();
-			vic4_sideborder_touched = 0;
-		}
+	vic_registers[addr & 0x7F] = data;	// if addr == 0x5D and data bit 7 is one, REG_HOTREG just below will be already true (REG_HOTREG actually tests reg $5D bit 7)
+	if (vic_hotreg_touched && REG_HOTREG) {
+		//DEBUGPRINT("VIC: vic_hotreg_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
+		vic4_interpret_legacy_mode_registers();	// this also calls vic4_update_sideborder_dimensions(), thus we reset vic4_sideborder_touched to avoid calling it again below
+		vic4_sideborder_touched = 0;
 		vic_hotreg_touched = 0;
 	}
 	if (vic4_sideborder_touched) {
@@ -852,7 +855,7 @@ Uint8 vic_read_reg ( int unsigned addr )
 		CASE_VIC_ALL(0x18):	// memory pointers
 			// Always mapped to VIC-IV extended "precise" registers according to the VHDL!
 			// That is, reading D018 does not read back what D018 was written with before, at least
-			// NOT always, if you someone alters the "precise" registers (REG_*PTR_*) then
+			// NOT always, if someone alters the "precise" registers (REG_*PTR_*) then
 			// not, even not when hotregs are disabled it seems!!
 			result = ((REG_SCRNPTR_B1 << 2) & 0xF0) | ((REG_CHARPTR_B1 >> 2) & 0x0F);
 			//DEBUGPRINT("D018 is read as $%02X @ PC=$%04X" NL, result, cpu65.pc);
