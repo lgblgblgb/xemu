@@ -42,14 +42,14 @@ const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
 static Uint32 *current_pixel;					// current_pixel pointer to the rendering target (one current_pixel: 32 bit)
 static Uint32 *pixel_start;					// points to the end and start of the buffer
 static Uint32 *pixel_raster_start;				// first pixel of current raster
-Uint8 vic_registers[0x80];					// VIC-4 registers
+Uint8 vic_registers[0x80];					// VIC4 registers
 int vic_iomode;							// VIC2/VIC3/VIC4 mode
 static int compare_raster;					// raster compare (9 bits width) data
 static int logical_raster = 0;
 static int interrupt_status;					// Interrupt status of VIC
 static int blink_phase = 0;					// blinking attribute helper, state.
-Uint8 c128_d030_reg;						// C128-like register can be only accessed in VIC-II mode but not in others, quite special!
-static Uint8 reg_d018_screen_addr = 0;				// Legacy VIC-II $D018 screen address register
+Uint8 c128_d030_reg;						// C128-like register can be only accessed in VIC2 mode but not in others, quite special!
+static Uint8 reg_d018_screen_addr = 0;				// Legacy VIC2 $D018 screen address register
 static int vic_hotreg_touched = 0;				// If any "legacy" registers were touched
 static int vic4_sideborder_touched = 0;				// If side-border register were touched
 static int border_x_left= 0;			 		// Side border left
@@ -97,7 +97,7 @@ int vic4_disallow_videostd_change = 0;		// Disallows programs to change video st
 int vic4_registered_screenshot_request = 0;
 
 
-// VIC-IV Modeline Parameters
+// VIC4 Modeline Parameters
 // ----------------------------------------------------
 #define DISPLAY_HEIGHT			((max_rasters-1)-20)
 #define TEXT_HEIGHT_200			400
@@ -301,8 +301,7 @@ static void vic4_update_sideborder_dimensions ( void )
 		else	// 78-col mode
 			border_x_left = FRAME_H_FRONT + vic4_single_side_border_clamped() + 15;
 	}
-
-	DEBUGPRINT("VIC4: set border left=%d, right=%d, textxpos=%d" NL, border_x_left, border_x_right, CHARGEN_X_START);
+	DEBUG("VIC4: set border left=%d, right=%d, textxpos=%d" NL, border_x_left, border_x_right, CHARGEN_X_START);
 }
 
 
@@ -345,11 +344,9 @@ static void vic4_update_vertical_borders( void )
 		}
 		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 6 + (REG_VIC2_YSCROLL * 2));
 	}
-
-	// This offset is present in recent versions of VIC-IV VHDL
+	// This offset is present in recent versions of VIC4 VHDL
 	SET_CHARGEN_X_START(CHARGEN_X_START - 1);
-
-	DEBUGPRINT("VIC4: set border top=%d, bottom=%d, textypos=%d, display_row_count=%d vic_ii_first_raster=%d EFFECTIVE_V400=%d REG_V400=%d" NL, BORDER_Y_TOP, BORDER_Y_BOTTOM,
+	DEBUG("VIC4: set border top=%d, bottom=%d, textypos=%d, display_row_count=%d vic_ii_first_raster=%d EFFECTIVE_V400=%d REG_V400=%d" NL, BORDER_Y_TOP, BORDER_Y_BOTTOM,
 		CHARGEN_Y_START, display_row_count, vicii_first_raster, EFFECTIVE_V400, REG_V400);
 }
 
@@ -362,26 +359,26 @@ static void vic4_interpret_legacy_mode_registers ( void )
 
 	Uint8 width = REG_H640 ? 80 : 40;
 	REG_CHRCOUNT = width;
-	SET_LINESTEP_BYTES(width);// * (REG_16BITCHARSET ? 2 : 1));
+	SET_LINESTEP_BYTES(width);	// * (REG_16BITCHARSET ? 2 : 1));
 
 	REG_SCRNPTR_B0 = 0;
 	REG_SCRNPTR_B1 &= 0xC0;
 	REG_SCRNPTR_B1 |= REG_H640 ? ((reg_d018_screen_addr & 14) << 2) : (reg_d018_screen_addr << 2);
 	REG_SCRNPTR_B2 = 0;
-	vic_registers[0x63] &= 0b11110000;	// clear VIC-IV precise screen addr bits 31-24 (from post bits 3-0) as it does not make sense; MEGA65 does not have enough fast RAM to use it
+	vic_registers[0x63] &= 0b11110000;	// clear VIC4 precise screen addr bits 31-24 (from post bits 3-0) as it does not make sense; MEGA65 does not have enough fast RAM to use it
 
 	REG_SPRPTR_B0 = 0xF8;
 	REG_SPRPTR_B1 = (reg_d018_screen_addr << 2) | 0x3;
 	if (REG_H640 | EFFECTIVE_V400)
 		REG_SPRPTR_B1 |= 4;
-	vic_registers[0x6E] &= 128;		// hmmm, clearing VIC-IV sprite pointer bits 22-16 (bits 0-6 of this reg)
+	vic_registers[0x6E] &= 128;		// hmmm, clearing VIC4 sprite pointer bits 22-16 (bits 0-6 of this reg)
 
 	REG_SPRPTR_B1  = (~last_dd00_bits << 6) | (REG_SPRPTR_B1 & 0x3F);
 	REG_SCRNPTR_B1 = (~last_dd00_bits << 6) | (REG_SCRNPTR_B1 & 0x3F);
 	REG_CHARPTR_B1 = (~last_dd00_bits << 6) | (REG_CHARPTR_B1 & 0x3F);
 
 	SET_COLORRAM_BASE(0);
-	DEBUGPRINT("VIC4: 16bit=%d, chrcount=%d, linestep=%d bytes, charxscale=%d, ras_src=%d "
+	DEBUG("VIC4: 16bit=%d, chrcount=%d, linestep=%d bytes, charxscale=%d, ras_src=%d "
 		"screen_ram=$%06x, charset/bitmap=$%06x, sprite=$%06x" NL,
 		REG_16BITCHARSET, REG_CHRCOUNT, LINESTEP_BYTES, REG_CHARXSCALE,
 		REG_FNRST, SCREEN_ADDR, CHARSET_ADDR, SPRITE_POINTER_ADDR);
@@ -431,7 +428,7 @@ void vic4_open_frame_access ( void )
 			vicii_first_raster = 0;
 			REG_SPRITE_Y_ADJUST = 0;
 		}
-		DEBUGPRINT("VIC: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec, max raster is %d, visible area height is %d)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime, max_rasters, visible_area_height);
+		DEBUGPRINT("VIC4: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec, max raster is %d, visible area height is %d)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime, max_rasters, visible_area_height);
 		videostd_name = new_name;
 		vic_readjust_sdl_viewport = 1;
 		vicii_first_raster = vic_registers[0x6F] & 0x1F;
@@ -460,7 +457,7 @@ void vic4_set_videostd ( const int mode, const char *comment )
 	// other values are ignored, since the caller may have the policy that -1 means leave it as it was, etc
 	if (mode == 0 || mode == 1) {
 		vic_registers[0x6F] = (vic_registers[0x6F] & 0x7F) | (mode << 7);
-		DEBUGPRINT("VIC: setting %s mode (%s)" NL, mode ? "NTSC" : "PAL", comment ? comment : EMPTY_STR);
+		DEBUGPRINT("VIC4: setting %s mode (%s)" NL, mode ? "NTSC" : "PAL", comment ? comment : EMPTY_STR);
 	}
 }
 
@@ -513,7 +510,7 @@ static XEMU_INLINE Uint8 *get_dat_addr ( unsigned int bpn )
 	unsigned int h640 = (vic_registers[0x31] & 128);
 	unsigned int and_mask, bit_shifter;
 	x &= 0x7F;
-	//DEBUGPRINT("VIC-IV: DAT: accessing DAT for bitplane #%u at X,Y of %u,%u in H%u mode" NL, bpn, x, y, h640 ? 640 : 320);
+	//DEBUGPRINT("VIC4: DAT: accessing DAT for bitplane #%u at X,Y of %u,%u in H%u mode" NL, bpn, x, y, h640 ? 640 : 320);
 	// In V400 modes, odd/even scanlines should be considered as well!
 	if (EFFECTIVE_V400) {
 		if ((y & 1)) {
@@ -538,14 +535,14 @@ static XEMU_INLINE Uint8 *get_dat_addr ( unsigned int bpn )
 
 
 /* DESIGN of vic_read_reg() and vic_write_reg() functions:
-   addr = 00-7F, VIC-IV registers 00-7F (ALWAYS, regardless of current I/O mode!)
-   addr = 80-FF, VIC-III registers 00-7F (ALWAYS, regardless of current I/O mode!) [though for VIC-III, many registers are ignored after the last one]
-   addr = 100-13F, VIC-II registers 00-3F (ALWAYS, regardless of current I/O mode!)
+   addr = 00-7F, VIC4 registers 00-7F (ALWAYS, regardless of current I/O mode!)
+   addr = 80-FF, VIC3 registers 00-7F (ALWAYS, regardless of current I/O mode!) [though for VIC3, many registers are ignored after the last one]
+   addr = 100-13F, VIC2 registers 00-3F (ALWAYS, regardless of current I/O mode!)
    NOTES:
-	* on a real VIC-II last used register is $2E. However we need the KEY register ($2F) and the C128-style 2MHz mode ($30) on M65 too.
+	* on a real VIC2 last used register is $2E. However we need the KEY register ($2F) and the C128-style 2MHz mode ($30) on MEGA65 too.
 	* ALL cases must be handled!! from 000-13F for both of reading/writing funcs, otherwise Xemu will panic! this is a safety stuff
-	* on write, later an M65-alike solution is needed: ie "hot registers" for VIC-II,VIC-III also writes VIC-IV specific registers then
-	* currently MANY things are not handled, it will be the task of "move to VIC-IV internals" project ...
+	* on write, later an MEGA65-alike solution is needed: ie "hot registers" for VIC2,VIC3 also writes VIC4 specific registers then
+	* currently MANY things are not handled, it will be the task of "move to VIC4 internals" project ...
 	* the purpose of ugly "tons of case" implementation that it should compile into a simple jump-table, which cannot be done faster too much ...
 	* do not confuse these "vic reg mode" ranges with the vic_iomode variable, not so much direct connection between them! vic_iomode referred
 	  for the I/O mode used on the "classic $D000 area" and DMA I/O access only
@@ -560,21 +557,21 @@ static const char vic_registers_internal_mode_names[] = {'4', '3', '2'};
 #define CASE_VIC_3_4(n)	CASE_VIC_3(n): CASE_VIC_4(n)
 
 
-/* - If HOTREG register is enabled, VICIV will trigger recalculation of border and such on next raster,
-     on any "legacy" register write. For the VIC-IV such "hot" registers are:
+/* - If HOTREG register is enabled, VIC4 will trigger recalculation of border and such on next raster,
+     on any "legacy" register write. For the VIC4 such "hot" registers are:
 
-	  -- @IO:C64 $D011 VIC-II control register
-	  -- @IO:C64 $D016 VIC-II control register
-	  -- @IO:C64 $D018 VIC-II RAM addresses
-	  -- @IO:C65 $D031 VIC-III Control Register B
+	  -- @IO:C64 $D011 VIC2 control register
+	  -- @IO:C64 $D016 VIC2 control register
+	  -- @IO:C64 $D018 VIC2 RAM addresses
+	  -- @IO:C65 $D031 VIC3 Control Register B
 */
 void vic_write_reg ( unsigned int addr, Uint8 data )
 {
 #if 0
 	if (addr == 0x7D || addr == 0x7E || addr == 0x7F)
-		DEBUGPRINT("VIC: crosshair reg $%02X was written with value $%03X at PC=$%04X" NL, addr, data, cpu65.old_pc);
+		DEBUGPRINT("VIC4: crosshair reg $%02X was written with value $%03X at PC=$%04X" NL, addr, data, cpu65.old_pc);
 #endif
-	//DEBUGPRINT("VIC%c: write reg $%02X (internally $%03X) with data $%02X" NL, XEMU_LIKELY(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, data);
+	//DEBUGPRINT("VIC4: write VIC%c reg $%02X (internally $%03X) with data $%02X" NL, XEMU_LIKELY(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, data);
 	// IMPORTANT NOTE: writing of vic_registers[] happens only *AFTER* this switch/case construct! This means if you need to do this before, you must do it manually at the right "case"!!!!
 	// if you do so, you can even use "return" instead of "break" to save the then-redundant write of the register
 	switch (addr) {
@@ -586,11 +583,11 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			if (vic_registers[0x11] ^ data)
 				vic_hotreg_touched = 1;
 			compare_raster = (compare_raster & 0xFF) | ((data & 0x80) << 1);
-			DEBUG("VIC: compare raster is now %d" NL, compare_raster);
+			DEBUG("VIC4: compare raster is now %d" NL, compare_raster);
 			break;
 		CASE_VIC_ALL(0x12):
 			compare_raster = (compare_raster & 0xFF00) | data;
-			DEBUG("VIC: compare raster is now %d" NL, compare_raster);
+			DEBUG("VIC4: compare raster is now %d" NL, compare_raster);
 			break;
 		CASE_VIC_ALL(0x13): CASE_VIC_ALL(0x14):
 			return;		// FIXME: writing light-pen registers?????
@@ -612,7 +609,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			REG_SCRNPTR_B2 &= 0xF0;
 			reg_d018_screen_addr = (data & 0xF0) >> 4;
 			vic_hotreg_touched = 1;
-			//DEBUGPRINT("D018 is set to $%02X @ PC=$%04X" NL, data, cpu65.pc);
+			//DEBUGPRINT("VIC4: $D018 is set to $%02X @ PC=$%04X" NL, data, cpu65.pc);
 			break;
 		CASE_VIC_ALL(0x19):
 			interrupt_status = interrupt_status & (~data) & 0xF;
@@ -637,16 +634,16 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			return;
 		CASE_VIC_2(0x20): CASE_VIC_2(0x21): CASE_VIC_2(0x22): CASE_VIC_2(0x23): CASE_VIC_2(0x24): CASE_VIC_2(0x25): CASE_VIC_2(0x26): CASE_VIC_2(0x27):
 		CASE_VIC_2(0x28): CASE_VIC_2(0x29): CASE_VIC_2(0x2A): CASE_VIC_2(0x2B): CASE_VIC_2(0x2C): CASE_VIC_2(0x2D): CASE_VIC_2(0x2E):
-			data &= 0xF;	// colour-related registers are 4 bit only for VIC-II
+			data &= 0xF;	// colour-related registers are 4 bit only for VIC2
 			break;
-		// Colour registers of VIC seems to be always 8 in VIC-III. It's may be in conflict with c65manual.txt
+		// Colour registers of VIC seems to be always 8 in VIC3. It's may be in conflict with c65manual.txt
 		// But anyway, this seems to be MEGA65's way.
 		// Previously this was "gated" with D031.5, however that was not correct!
 		CASE_VIC_3(0x20): CASE_VIC_3(0x21): CASE_VIC_3(0x22): CASE_VIC_3(0x23): CASE_VIC_3(0x24): CASE_VIC_3(0x25): CASE_VIC_3(0x26): CASE_VIC_3(0x27):
 		CASE_VIC_3(0x28): CASE_VIC_3(0x29): CASE_VIC_3(0x2A): CASE_VIC_3(0x2B): CASE_VIC_3(0x2C): CASE_VIC_3(0x2D): CASE_VIC_3(0x2E):
 		CASE_VIC_4(0x20): CASE_VIC_4(0x21): CASE_VIC_4(0x22): CASE_VIC_4(0x23): CASE_VIC_4(0x24): CASE_VIC_4(0x25): CASE_VIC_4(0x26): CASE_VIC_4(0x27):
 		CASE_VIC_4(0x28): CASE_VIC_4(0x29): CASE_VIC_4(0x2A): CASE_VIC_4(0x2B): CASE_VIC_4(0x2C): CASE_VIC_4(0x2D): CASE_VIC_4(0x2E):
-			break;		// colour-related registers are full 8 bit for VIC-IV and VIC-III
+			break;		// colour-related registers are full 8 bit for VIC4 and VIC3
 		CASE_VIC_ALL(0x2F):	// the KEY register, it must be handled in ALL VIC modes, to be able to set VIC I/O mode
 			// FIXME? in hypervisor mode, it's not possible to alter I/O mode?? Thus I just ignore write in that case.
 			// This seems to make freezer actually starting in Xemu, first time ever :-O
@@ -661,7 +658,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 					vic_color_register_mask = 0xFF;
 				} else if (data == 0x54 && vic_registers[0x2F] == 0x45) {
 					// this I/O mode is the same as VIC4 I/O mode _but_ with ethernet buffer also mapped
-					DEBUGPRINT("VIC: warning, unimplemented ethernet I/O mode is set!" NL);
+					DEBUGPRINT("VIC4: warning, unimplemented ethernet I/O mode is set!" NL);
 					vic_new_iomode = VIC4_IOMODE;
 					vic_color_register_mask = 0xFF;
 					etherbuffer_is_io_mapped = 1;
@@ -670,20 +667,20 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 					vic_color_register_mask = 0x0F;
 				}
 				if (vic_new_iomode != vic_iomode) {
-					DEBUG("VIC: changing I/O mode %d(%s) -> %d(%s)" NL, vic_iomode, iomode_names[vic_iomode], vic_new_iomode, iomode_names[vic_new_iomode]);
+					DEBUG("VIC4: changing I/O mode %d(%s) -> %d(%s)" NL, vic_iomode, iomode_names[vic_iomode], vic_new_iomode, iomode_names[vic_new_iomode]);
 					vic_iomode = vic_new_iomode;
 				}
 			} else
-				DEBUGPRINT("VIC: warning: I/O mode KEY $D02F register wanted to be written (with $%02X) in hypervisor mode! PC=$%04X" NL, data, cpu65.old_pc);
+				DEBUGPRINT("VIC4: warning: I/O mode KEY $D02F register wanted to be written (with $%02X) in hypervisor mode! PC=$%04X" NL, data, cpu65.old_pc);
 			break;
-		CASE_VIC_2(0x30):	// this register is _SPECIAL_, and exists only in VIC-II (C64) I/O mode: C128-style "2MHz fast" mode ...
-			// NOTE: in theory it's NOT possible to write this reg in hypervisor mode anymore, as then **always** VIC-4 I/O mode is assumed, if I'm right!
-			DEBUGPRINT("VIC: Write $D030 in VIC-II I/O mode with data $%02x @ PC=$%04X (hypervisor mode: %d)" NL, data, cpu65.old_pc, !!in_hypervisor);
+		CASE_VIC_2(0x30):	// this register is _SPECIAL_, and exists only in VIC2 (C64) I/O mode: C128-style "2MHz fast" mode ...
+			// NOTE: in theory it's NOT possible to write this reg in hypervisor mode anymore, as then **always** VIC4 I/O mode is assumed, if I'm right!
+			DEBUGPRINT("VIC4: writing $D030 in VIC2 I/O mode with data $%02x @ PC=$%04X (hypervisor mode: %d)" NL, data, cpu65.old_pc, !!in_hypervisor);
 			data &= 1;	// use only bit0
 			c128_d030_reg = data;
 			machine_set_speed(0);
-			return;		// it IS important to have return here, since it's not a "real" VIC-4 mode register's view in another mode!!
-		/* --- NO MORE VIC-II REGS FROM HERE --- */
+			return;		// it IS important to have return here, since it's not a "real" VIC4 mode register's view in another mode!!
+		/* --- NO MORE VIC2 REGS FROM HERE --- */
 		CASE_VIC_3_4(0x30):
 			memory_set_vic3_rom_mapping(data);
 			check_if_rom_palette(!(data & 4));
@@ -710,7 +707,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_3_4(0x47):
 			*get_dat_addr(addr & 7) = data;	// write pixels via the DAT!
 			break;
-		/* --- NO MORE VIC-III REGS FROM HERE --- */
+		/* --- NO MORE VIC3 REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B):
 		CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
 			break;
@@ -731,10 +728,10 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			return;				// since we DID the write, it's OK to return here and not using "break"
 		CASE_VIC_4(0x55): CASE_VIC_4(0x56): CASE_VIC_4(0x57): break;
 		CASE_VIC_4(0x58): CASE_VIC_4(0x59):
-			DEBUGPRINT("VIC: Write $%04x LINESTEP: $%02x" NL, addr, data);
+			DEBUG("VIC4: writing $%04X LINESTEP: $%02X" NL, addr, data);
 			break;
 		CASE_VIC_4(0x5A):
-			//DEBUGPRINT("WRITE $%04x CHARXSCALE: $%02x" NL, addr, data);
+			//DEBUGPRINT("VIC4: WRITE $%04x CHARXSCALE: $%02x" NL, addr, data);
 			vic_registers[0x5A] = data;	// write now and calculate step
 			calculate_char_x_step();
 			return;
@@ -745,8 +742,8 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;
 
 		CASE_VIC_4(0x5D):
-			DEBUGPRINT("VIC: Write $%04x SIDEBORDER/HOTREG: $%02x" NL, addr, data);
-			if ((vic_registers[0x5D] & 0x1F) ^ (data & 0x1F))	// sideborder MSB (0..5) modified ?
+			DEBUG("VIC4: writing $%04X SIDEBORDER/HOTREG: $%02X" NL, addr, data);
+			if ((vic_registers[0x5D] & 0x1F) ^ (data & 0x1F))	// sideborder MSB (0..5) modified?
 				vic4_sideborder_touched = 1;
 			if (!(data & 0x80))	// writing bit 7 as zero (hotreg disable) also clears any possible remembered "trigger"
 				vic_hotreg_touched = 0;
@@ -755,12 +752,12 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;
 
 		CASE_VIC_4(0x5E):
-			DEBUGPRINT("VIC: Write $%04x CHARCOUNT: $%02x" NL, addr, data);
+			DEBUG("VIC4: writing $%04X CHARCOUNT: $%02X" NL, addr, data);
 			break;
 		CASE_VIC_4(0x5F):
 			break;
 		CASE_VIC_4(0x60): CASE_VIC_4(0x61): CASE_VIC_4(0x62): CASE_VIC_4(0x63):
-			DEBUG("VIC: Write SCREENADDR byte 0xD0%02x: $%02x" NL, addr, data);
+			DEBUG("VIC4: writing SCREENADDR byte $D0%02X: $%02X" NL, addr, data);
 			break;
 		CASE_VIC_4(0x64):
 		CASE_VIC_4(0x65): CASE_VIC_4(0x66): CASE_VIC_4(0x67): /*CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):*/ CASE_VIC_4(0x6B): /*CASE_VIC_4(0x6C):
@@ -781,7 +778,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			// We trigger video setup at next frame automatically, no need do anything further here
 			break;
 
-		CASE_VIC_4(0x70):	// VIC-IV palette selection register
+		CASE_VIC_4(0x70):	// VIC4 palette selection register
 			altpalette	= ((data & 0x03) << 8) + vic_palettes;
 			spritepalette	= ((data & 0x0C) << 6) + vic_palettes;
 			palette		= ((data & 0x30) << 4) + vic_palettes;
@@ -799,8 +796,8 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		/* --- NON-EXISTING REGISTERS --- */
 		CASE_VIC_2(0x31): CASE_VIC_2(0x32): CASE_VIC_2(0x33): CASE_VIC_2(0x34): CASE_VIC_2(0x35): CASE_VIC_2(0x36): CASE_VIC_2(0x37): CASE_VIC_2(0x38):
 		CASE_VIC_2(0x39): CASE_VIC_2(0x3A): CASE_VIC_2(0x3B): CASE_VIC_2(0x3C): CASE_VIC_2(0x3D): CASE_VIC_2(0x3E): CASE_VIC_2(0x3F):
-			DEBUG("VIC2: this register does not exist for this mode, ignoring write." NL);
-			return;		// not existing VIC-II registers, do not write!
+			DEBUG("VIC4: this VIC2 register does not exist for this mode, ignoring write." NL);
+			return;		// not existing VIC2 registers, do not write!
 		CASE_VIC_3(0x48): CASE_VIC_3(0x49): CASE_VIC_3(0x4A): CASE_VIC_3(0x4B): CASE_VIC_3(0x4C): CASE_VIC_3(0x4D): CASE_VIC_3(0x4E): CASE_VIC_3(0x4F):
 		CASE_VIC_3(0x50): CASE_VIC_3(0x51): CASE_VIC_3(0x52): CASE_VIC_3(0x53): CASE_VIC_3(0x54): CASE_VIC_3(0x55): CASE_VIC_3(0x56): CASE_VIC_3(0x57):
 		CASE_VIC_3(0x58): CASE_VIC_3(0x59): CASE_VIC_3(0x5A): CASE_VIC_3(0x5B): CASE_VIC_3(0x5C): CASE_VIC_3(0x5D): CASE_VIC_3(0x5E): CASE_VIC_3(0x5F):
@@ -808,21 +805,21 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_3(0x68): CASE_VIC_3(0x69): CASE_VIC_3(0x6A): CASE_VIC_3(0x6B): CASE_VIC_3(0x6C): CASE_VIC_3(0x6D): CASE_VIC_3(0x6E): CASE_VIC_3(0x6F):
 		CASE_VIC_3(0x70): CASE_VIC_3(0x71): CASE_VIC_3(0x72): CASE_VIC_3(0x73): CASE_VIC_3(0x74): CASE_VIC_3(0x75): CASE_VIC_3(0x76): CASE_VIC_3(0x77):
 		CASE_VIC_3(0x78): CASE_VIC_3(0x79): CASE_VIC_3(0x7A): CASE_VIC_3(0x7B): CASE_VIC_3(0x7C): CASE_VIC_3(0x7D): CASE_VIC_3(0x7E): CASE_VIC_3(0x7F):
-			DEBUG("VIC3: this register does not exist for this mode, ignoring write." NL);
-			return;		// not existing VIC-III registers, do not write!
+			DEBUG("VIC4: this VIC3 register does not exist for this mode, ignoring write." NL);
+			return;		// not existing VIC3 registers, do not write!
 		/* --- FINALLY, IF THIS IS HIT, IT MEANS A MISTAKE SOMEWHERE IN MY CODE --- */
 		default:
 			FATAL("Xemu: invalid VIC internal register numbering on write: $%X", addr);
 	}
 	vic_registers[addr & 0x7F] = data;	// if addr == 0x5D and data bit 7 is one, REG_HOTREG just below will be already true (REG_HOTREG actually tests reg $5D bit 7)
 	if (vic_hotreg_touched && REG_HOTREG) {
-		//DEBUGPRINT("VIC: vic_hotreg_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
+		//DEBUGPRINT("VIC4: vic_hotreg_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
 		vic4_interpret_legacy_mode_registers();	// this also calls vic4_update_sideborder_dimensions(), thus we reset vic4_sideborder_touched to avoid calling it again below
 		vic4_sideborder_touched = 0;
 		vic_hotreg_touched = 0;
 	}
 	if (vic4_sideborder_touched) {
-		//DEBUGPRINT("VIC: vic4_sideborder_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
+		//DEBUGPRINT("VIC4: vic4_sideborder_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
 		vic4_update_sideborder_dimensions();
 		vic4_sideborder_touched = 0;
 	}
@@ -853,12 +850,12 @@ Uint8 vic_read_reg ( int unsigned addr )
 		CASE_VIC_ALL(0x17):	// sprite-Y expansion
 			break;
 		CASE_VIC_ALL(0x18):	// memory pointers
-			// Always mapped to VIC-IV extended "precise" registers according to the VHDL!
+			// Always mapped to VIC4 extended "precise" registers according to the VHDL!
 			// That is, reading D018 does not read back what D018 was written with before, at least
 			// NOT always, if someone alters the "precise" registers (REG_*PTR_*) then
 			// not, even not when hotregs are disabled it seems!!
 			result = ((REG_SCRNPTR_B1 << 2) & 0xF0) | ((REG_CHARPTR_B1 >> 2) & 0x0F);
-			//DEBUGPRINT("D018 is read as $%02X @ PC=$%04X" NL, result, cpu65.pc);
+			//DEBUGPRINT("VIC4: $D018 is read as $%02X @ PC=$%04X" NL, result, cpu65.pc);
 			break;
 		CASE_VIC_ALL(0x19):
 			result = interrupt_status | (64 + 32 + 16);
@@ -883,19 +880,19 @@ Uint8 vic_read_reg ( int unsigned addr )
 		CASE_VIC_2(0x20): CASE_VIC_2(0x21): CASE_VIC_2(0x22): CASE_VIC_2(0x23): CASE_VIC_2(0x24): CASE_VIC_2(0x25): CASE_VIC_2(0x26): CASE_VIC_2(0x27):
 		CASE_VIC_2(0x28): CASE_VIC_2(0x29): CASE_VIC_2(0x2A): CASE_VIC_2(0x2B): CASE_VIC_2(0x2C): CASE_VIC_2(0x2D): CASE_VIC_2(0x2E):
 			// XXX check this!!! I'm not sure if MEGA65 really does this, even though on C64, unused top 4 bits are read as '1'!
-			result |= 0xF0;	// colour-related registers are 4 bit only for VIC-II
+			result |= 0xF0;	// colour-related registers are 4 bit only for VIC2
 			break;
 		CASE_VIC_3(0x20): CASE_VIC_3(0x21): CASE_VIC_3(0x22): CASE_VIC_3(0x23): CASE_VIC_3(0x24): CASE_VIC_3(0x25): CASE_VIC_3(0x26): CASE_VIC_3(0x27):
 		CASE_VIC_3(0x28): CASE_VIC_3(0x29): CASE_VIC_3(0x2A): CASE_VIC_3(0x2B): CASE_VIC_3(0x2C): CASE_VIC_3(0x2D): CASE_VIC_3(0x2E):
 		CASE_VIC_4(0x20): CASE_VIC_4(0x21): CASE_VIC_4(0x22): CASE_VIC_4(0x23): CASE_VIC_4(0x24): CASE_VIC_4(0x25): CASE_VIC_4(0x26): CASE_VIC_4(0x27):
 		CASE_VIC_4(0x28): CASE_VIC_4(0x29): CASE_VIC_4(0x2A): CASE_VIC_4(0x2B): CASE_VIC_4(0x2C): CASE_VIC_4(0x2D): CASE_VIC_4(0x2E):
-			break;		// colour-related registers are full 8 bit for VIC-IV and VIC-III
+			break;		// colour-related registers are full 8 bit for VIC4 and VIC3
 		CASE_VIC_ALL(0x2F):	// the KEY register
 			break;
-		CASE_VIC_2(0x30):	// this register is _SPECIAL_, and exists only in VIC-II (C64) I/O mode: C128-style "2MHz fast" mode ...
+		CASE_VIC_2(0x30):	// this register is _SPECIAL_, and exists only in VIC2 (C64) I/O mode: C128-style "2MHz fast" mode ...
 			result = c128_d030_reg;	// ... so we override "result" read before the "switch" statement!
 			break;
-		/* --- NO MORE VIC-II REGS FROM HERE --- */
+		/* --- NO MORE VIC2 REGS FROM HERE --- */
 		CASE_VIC_3_4(0x30):
 			break;
 		CASE_VIC_3_4(0x31):
@@ -908,7 +905,7 @@ Uint8 vic_read_reg ( int unsigned addr )
 		CASE_VIC_3_4(0x47):
 			result = *get_dat_addr(addr & 7);	// read pixels via the DAT!
 			break;
-		/* --- NO MORE VIC-III REGS FROM HERE --- */
+		/* --- NO MORE VIC3 REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B): CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
 		CASE_VIC_4(0x50):
 			// XPOS low byte
@@ -942,8 +939,8 @@ Uint8 vic_read_reg ( int unsigned addr )
 		/* --- NON-EXISTING REGISTERS --- */
 		CASE_VIC_2(0x31): CASE_VIC_2(0x32): CASE_VIC_2(0x33): CASE_VIC_2(0x34): CASE_VIC_2(0x35): CASE_VIC_2(0x36): CASE_VIC_2(0x37): CASE_VIC_2(0x38):
 		CASE_VIC_2(0x39): CASE_VIC_2(0x3A): CASE_VIC_2(0x3B): CASE_VIC_2(0x3C): CASE_VIC_2(0x3D): CASE_VIC_2(0x3E): CASE_VIC_2(0x3F):
-			DEBUG("VIC2: this register does not exist for this mode, $FF for read answer." NL);
-			result = 0xFF;		// not existing VIC-II registers
+			DEBUG("VIC4: this VIC2 register does not exist for this mode, $FF for read answer." NL);
+			result = 0xFF;		// not existing VIC2 registers
 			break;
 		CASE_VIC_3(0x48): CASE_VIC_3(0x49): CASE_VIC_3(0x4A): CASE_VIC_3(0x4B): CASE_VIC_3(0x4C): CASE_VIC_3(0x4D): CASE_VIC_3(0x4E): CASE_VIC_3(0x4F):
 		CASE_VIC_3(0x50): CASE_VIC_3(0x51): CASE_VIC_3(0x52): CASE_VIC_3(0x53): CASE_VIC_3(0x54): CASE_VIC_3(0x55): CASE_VIC_3(0x56): CASE_VIC_3(0x57):
@@ -952,14 +949,14 @@ Uint8 vic_read_reg ( int unsigned addr )
 		CASE_VIC_3(0x68): CASE_VIC_3(0x69): CASE_VIC_3(0x6A): CASE_VIC_3(0x6B): CASE_VIC_3(0x6C): CASE_VIC_3(0x6D): CASE_VIC_3(0x6E): CASE_VIC_3(0x6F):
 		CASE_VIC_3(0x70): CASE_VIC_3(0x71): CASE_VIC_3(0x72): CASE_VIC_3(0x73): CASE_VIC_3(0x74): CASE_VIC_3(0x75): CASE_VIC_3(0x76): CASE_VIC_3(0x77):
 		CASE_VIC_3(0x78): CASE_VIC_3(0x79): CASE_VIC_3(0x7A): CASE_VIC_3(0x7B): CASE_VIC_3(0x7C): CASE_VIC_3(0x7D): CASE_VIC_3(0x7E): CASE_VIC_3(0x7F):
-			DEBUG("VIC3: this register does not exist for this mode, $FF for read answer." NL);
+			DEBUG("VIC4: this VIC3 register does not exist for this mode, $FF for read answer." NL);
 			result = 0xFF;
-			break;			// not existing VIC-III registers
+			break;			// not existing VIC3 registers
 		/* --- FINALLY, IF THIS IS HIT, IT MEANS A MISTAKE SOMEWHERE IN MY CODE --- */
 		default:
 			FATAL("Xemu: invalid VIC internal register numbering on read: $%X", addr);
 	}
-	DEBUG("VIC%c: read reg $%02X (internally $%03X) with result $%02X" NL, XEMU_LIKELY(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, result);
+	DEBUG("VIC4: read VIC%c reg $%02X (internally $%03X) with result $%02X" NL, XEMU_LIKELY(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, result);
 	return result;
 }
 
@@ -1163,7 +1160,7 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 				const Uint32 sprite_data_addr = SPRITE_16BITPOINTER ?
 					64 * ((*(sprite_data_pointer + 1) << 8) | (*sprite_data_pointer))
 					: ((64 * (*sprite_data_pointer)) | (SPRITE_POINTER_ADDR & 0xC000)); // Use bits 14-15 (this can be set from $DD00 if HOTREG is ENABLED)
-				//DEBUGPRINT("VIC: Sprite %d data at $%08X " NL, sprnum, sprite_data_addr);
+				//DEBUGPRINT("VIC4: Sprite %d data at $%08X " NL, sprnum, sprite_data_addr);
 				const Uint8 *sprite_data = main_ram + sprite_data_addr;
 				const Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
 				const int xscale = (REG_SPR640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
@@ -1377,18 +1374,18 @@ static XEMU_INLINE Uint8 *get_charset_effective_addr ( void )
 
 
 // The character rendering engine. Most features are shared between
-// all graphic modes. Basically, the VIC-IV supports the following character
+// all graphic modes. Basically, the VIC4 supports the following character
 // color modes:
 //
 // - Monochrome (Bg/Fg)
-// - VIC-II Multicolor
+// - VIC2 Multicolor
 // - 16-color
 // - 256-color
 //
 // It's interesting to see that the four modes can be selected in
 // bitmap or text modes.
 //
-// VIC-III Extended attributes are applied to characters if properly set,
+// VIC3 Extended attributes are applied to characters if properly set,
 // except in Multicolor modes.
 static XEMU_INLINE void vic4_render_char_raster ( void )
 {
@@ -1529,7 +1526,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 					8 - glyph_trim,	// glyph_width
 					char_bgcolor_now,			// bg colour index
 					char_fgcolor_now,			// fg colour index
-					(REG_VICIII_ATTRIBS && !REG_MCM) ? (color_data >> 4) : 0	// VIC-III hardware attribute info
+					(REG_VICIII_ATTRIBS && !REG_MCM) ? (color_data >> 4) : 0	// VIC3 hardware attribute info
 				);
 			}
 			line_char_index++;
@@ -1558,11 +1555,11 @@ int vic4_render_scanline ( void )
 	logical_raster = ycounter >> (EFFECTIVE_V400 ? 0 : 1);
 
 	// FIXME: this is probably a bad fix ... Trying to remedy that in V400, no raster interrupts seems to work ... XXX
-	if (!(ycounter & 1) || EFFECTIVE_V400) // VIC-II raster source: We shall check FNRST ?
+	if (!(ycounter & 1) || EFFECTIVE_V400) // VIC2 raster source: shall we check FNRST?
 		check_raster_interrupt(logical_raster);
 	// "Double-scan hack"
 	// FIXME: is this really correct? ie even sprites cannot be set to Y pos finer than V200 or ...
-	// ... having resolution finer than V200 with some "VIC-IV magic"?
+	// ... having resolution finer than V200 with some "VIC4 magic"?
 	if (!EFFECTIVE_V400 && (ycounter & 1)) {
 		if (XEMU_UNLIKELY(configdb.show_scanlines)) {
 			for (int i = 0; i < TEXTURE_WIDTH; i++, current_pixel++)
@@ -1695,7 +1692,7 @@ void vic4_set_emulation_colour_effect ( int val )
 	if (configdb.colour_effect != val) {
 		if (val < 0)
 			val = -val;	// negative value: to allow to set anyway, even if it was the previous one
-		DEBUGPRINT("XEMU: setting colour effect to %d" NL, val);
+		DEBUGPRINT("VIC4: setting XEMU-specific colour effect to %d" NL, val);
 		configdb.colour_effect = val;
 		vic4_revalidate_all_palette();
 	}
@@ -1717,7 +1714,7 @@ int vic4_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, st
 	Uint8 buffer[SNAPSHOT_VIC4_BLOCK_SIZE];
 	int a;
 	if (block->block_version != SNAPSHOT_VIC4_BLOCK_VERSION || block->sub_counter || block->sub_size != sizeof buffer)
-		RETURN_XSNAPERR_USER("Bad VIC-4 block syntax");
+		RETURN_XSNAPERR_USER("Bad VIC4 block syntax");
 	a = xemusnap_read_file(buffer, sizeof buffer);
 	if (a) return a;
 	/* loading state ... */
@@ -1729,7 +1726,7 @@ int vic4_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, st
 	memcpy(vic_palette_bytes_blue,  buffer + 0x100 + 2 * NO_OF_PALETTE_REGS, NO_OF_PALETTE_REGS);
 	vic4_revalidate_all_palette();
 	vic_iomode = buffer[0];
-	DEBUG("SNAP: VIC: changing I/O mode to %d(%s)" NL, vic_iomode, iomode_names[vic_iomode]);
+	DEBUG("SNAP: VIC4: changing I/O mode to %d(%s)" NL, vic_iomode, iomode_names[vic_iomode]);
 	interrupt_status = (int)P_AS_BE32(buffer + 1);
 	return 0;
 }
