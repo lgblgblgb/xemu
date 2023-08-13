@@ -122,7 +122,7 @@ static unsigned int sdl_texture_x_size, sdl_texture_y_size;
 static SDL_bool grabbed_mouse = SDL_FALSE, grabbed_mouse_saved = SDL_FALSE;
 int allow_mouse_grab = 1;
 static int sdl_viewport_changed;
-static int follow_win_size;
+static int follow_win_size = 0;
 
 #if !SDL_VERSION_ATLEAST(2, 0, 4)
 #error "At least SDL version 2.0.4 is needed!"
@@ -717,6 +717,43 @@ static inline Uint64 _get_uts_from_cdate ( void )
 }
 
 
+#ifdef XEMU_ARCH_WIN
+static inline void check_windows_utf8_fs ( void )
+{
+	static const char test_file_fn[] = "tükörfúrógép.txt";
+	char fn[strlen(sdl_pref_dir) + strlen(test_file_fn) + 1];
+	strcpy(fn, sdl_pref_dir);
+	strcat(fn, test_file_fn);
+	//int fd = open(fn, O_BINARY | O_CREAT | O_TRUNC | O_WRONLY, 0666);
+	//int fd = open(fn, O_BINARY | O_RDONLY);
+	FILE *f = fopen(fn, "rb");
+	if (f) {
+		INFO_WINDOW("Cool, UTF8 works with fopen");
+		fclose(f);
+	} else {
+		ERROR_WINDOW("Ooops, UTF8 fails with fopen of %s : %s", fn, strerror(errno));
+	}
+}
+
+static inline BOOL is_running_as_win_admin ( void )
+{
+	BOOL ret = FALSE;
+	HANDLE htoken = NULL;
+	if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &htoken)) {
+		TOKEN_ELEVATION elevation;
+		DWORD cbsize = sizeof(TOKEN_ELEVATION);
+		if (GetTokenInformation(htoken, TokenElevation, &elevation, sizeof elevation, &cbsize))
+			ret = elevation.TokenIsElevated;
+	}
+	if (htoken)
+		CloseHandle(htoken);
+	if (ret)
+		DEBUGPRINT("WINDOWS: warning, running as administrator!" NL);
+	return ret;
+}
+#endif
+
+
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan, const int argc, char **argv )
 {
 	if (!buildinfo_cdate_uts)
@@ -742,42 +779,27 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 	}
 	if (!xemu_initial_cwd)
 		FATAL("%s(): getcwd() resolution does not work", __func__);
+#if defined(XEMU_DO_NOT_DISALLOW_ROOT) && !defined(XEMU_ARCH_SINGLEUSER)
+#	warning "Running as root/admin check is deactivated."
+#endif
+#ifdef	XEMU_ARCH_WIN
+	// Windows: Some check to disallow dangerous things (running Xemu as administrator)
+	if (is_running_as_win_admin()) {
+#ifndef 	XEMU_DO_NOT_DISALLOW_ROOT
+		WARNING_WINDOW("Running Xemu as administrator is dangerous, stop doing that!");
+#endif
+	}
+#endif
 #ifdef XEMU_ARCH_UNIX
 #ifndef XEMU_DO_NOT_DISALLOW_ROOT
-	// Some check to disallow dangerous things (running Xemu as user/group root)
+	// UNIX: Some check to disallow dangerous things (running Xemu as user/group root)
 	if (getuid() == 0 || geteuid() == 0)
 		FATAL("Xemu must not be run as user root");
 	if (getgid() == 0 || getegid() == 0)
 		FATAL("Xemu must not be run as group root");
-#elif !defined(XEMU_ARCH_SINGLEUSER)
-#	warning "Running as root check is deactivated."
 #endif
 	// ignore SIGHUP, eg closing the terminal Xemu was started from ...
 	signal(SIGHUP, SIG_IGN);	// ignore SIGHUP, eg closing the terminal Xemu was started from ...
-#endif
-#if 0
-	// This core is currently commented out, since I guess it would casue problems for many users
-	// Unfortunately Windows is not secure by nature (or better say, by user habits, that most
-	// user uses their system as administrator all the time ... when it would be desired to use
-	// administrator user only, if adminstration task is needed much like the habit in UNIX-like
-	// systems)
-#if defined(XEMU_ARCH_WIN) && !defined(XEMU_DO_NOT_DISALLOW_ROOT)
-	BOOL fRet = FALSE;
-	HANDLE hToken = NULL;
-	if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
-		TOKEN_ELEVATION Elevation;
-		DWORD cbSize = sizeof(TOKEN_ELEVATION);
-		if (GetTokenInformation(hToken, TokenElevation, &Elevation, sizeof(Elevation), &cbSize)) {
-			fRet = Elevation.TokenIsElevated;
-		}
-	}
-	if (hToken) {
-		CloseHandle(hToken);
-	}
-	if (fRet) {
-		WARNING_WINDOW("Do not run Xemu with administrator rights!\nXemu is not OS security audited and can access network, filesystem, etc.\nIt can be easily used to exploit your system.\nAs always, never run anything as adminstrator, unless you really need to\nadministrate your OS, as the name suggest!");
-	}
-#endif
 #endif
 #ifdef XEMU_ARCH_HTML
 	if (chatty_xemu)
@@ -820,6 +842,9 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 		SDL_free(p);
 	} else
 		FATAL("Cannot query SDL preference directory: %s", SDL_GetError());
+#ifdef XEMU_ARCH_WIN
+	check_windows_utf8_fs();
+#endif
 #endif
 	xemu_app_org = xemu_strdup(app_organization);
 	xemu_app_name = xemu_strdup(app_name);
@@ -1115,12 +1140,11 @@ int xemu_post_init (
 	strcpy(window_title_buffer, window_title);
 	window_title_buffer_end = window_title_buffer + strlen(window_title);
 	//SDL_SetWindowMinimumSize(sdl_win, SCREEN_WIDTH, SCREEN_HEIGHT * 2);
-	int a = SDL_GetNumRenderDrivers();
 	SDL_RendererInfo ren_info;
-	while (--a >= 0) {
-		if (!SDL_GetRenderDriverInfo(a, &ren_info)) {
+	for (int a = 0, max = SDL_GetNumRenderDrivers(); a < max; a++) {
+		if (!SDL_GetRenderDriverInfo(a, &ren_info))
 			DEBUGPRINT("SDL renderer driver #%d: \"%s\"" NL, a, ren_info.name);
-		} else
+		else
 			DEBUGPRINT("SDL renderer driver #%d: FAILURE TO QUERY (%s)" NL, a, SDL_GetError());
 	}
 	sdl_ren = SDL_CreateRenderer(sdl_win, -1, SDL_RENDERER_ACCELERATED);
@@ -1137,8 +1161,15 @@ int xemu_post_init (
 	SDL_SetRenderDrawColor(sdl_ren, 0, 0, 0, SDL_ALPHA_OPAQUE);
 	if (!SDL_GetRendererInfo(sdl_ren, &ren_info)) {
 		DEBUGPRINT("SDL renderer used: \"%s\" max_tex=%dx%d tex_formats=%d ", ren_info.name, ren_info.max_texture_width, ren_info.max_texture_height, ren_info.num_texture_formats);
-		for (a = 0; a < ren_info.num_texture_formats; a++)
-			DEBUGPRINT("%c%s", a ? ' ' : '(', SDL_GetPixelFormatName(ren_info.texture_formats[a]));
+		for (int a = 0; a < ren_info.num_texture_formats; a++) {
+			const char *p = SDL_GetPixelFormatName(ren_info.texture_formats[a]);
+			if (p) {
+				static const char name_head[] = { 'S','D','L','_','P','I','X','E','L','F','O','R','M','A','T','_' };
+				if (!strncmp(p, name_head, sizeof name_head))
+					p += sizeof name_head;
+			}
+			DEBUGPRINT("%c%s", a ? ' ' : '(', p ? p : "?");
+		}
 		DEBUGPRINT(")" NL);
 	}
 	SDL_RenderSetLogicalSize(sdl_ren, logical_x_size, logical_y_size);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
