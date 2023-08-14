@@ -287,32 +287,11 @@ extern const Uint8 vga_font_8x16[256 * 16];
 #include "xemu/gui/osd.h"
 #endif
 
+#ifdef DEFINE_XEMU_OS_READDIR
 #include <dirent.h>
-#ifdef XEMU_ARCH_WIN
-#	include <sys/stat.h>
-	typedef _WDIR XDIR;
-	extern int   xemu_winos_utf8_to_wchar ( wchar_t *restrict o, const char *restrict i, size_t size );
-	extern int   xemu_os_open   ( const char *fn, int flags );
-	extern int   xemu_os_creat  ( const char *fn, int flags, int pmode );
-	extern FILE *xemu_os_fopen  ( const char *restrict fn, const char *restrict mode );
-	extern int   xemu_os_unlink ( const char *fn );
-	extern int   xemu_os_mkdir  ( const char *fn, const int mode );
-	extern XDIR *xemu_os_opendir ( const char *fn );
-	extern int   xemu_os_closedir ( XDIR *dir );
-	extern int   xemu_os_stat ( const char *fn, struct stat *statbuf );
-#else
-	typedef	DIR	XDIR;
-#	define	xemu_os_open			open
-#	define	xemu_os_creat			creat
-#	define	xemu_os_fopen			fopen
-#	define	xemu_os_unlink			unlink
-#	define	xemu_os_mkdir			mkdir
-#	define	xemu_os_opendir			opendir
-#	define	xemu_os_closedir 		closedir
-#	define	xemu_os_stat			stat
+extern int   xemu_os_readdir ( DIR *dirp, char *fn, const int fnmaxsize );
 #endif
-#define	xemu_os_close	close
-extern int   xemu_os_readdir ( XDIR *dirp, char *fn );
+
 extern int   xemu_os_file_exists ( const char *fn );
 
 #endif

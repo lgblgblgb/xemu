@@ -728,12 +728,12 @@ int d81access_create_image_file ( const char *fn, const char *diskname, const in
 	}
 	Uint8 *img = d81access_create_image(NULL, diskname ? diskname : fn, !diskname);
 	const int written = xemu_safe_write(fd, img, D81_SIZE);
-	xemu_os_close(fd);
+	close(fd);
 	free(img);
 	if (written != D81_SIZE) {
 		if (cry)
 			ERROR_WINDOW("%s [D81-WRITE]\n%s\n%s", cry, fullpath, strerror(errno));
-		xemu_os_unlink(fullpath);
+		unlink(fullpath);
 		return -1;
 	}
 	DEBUGPRINT("D81ACCESS: new disk image file \"%s\" has been successfully created (overwrite policy %d)." NL, fullpath, do_overwrite);

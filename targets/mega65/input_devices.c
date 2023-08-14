@@ -29,6 +29,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "matrix_mode.h"
 #include "dma65.h"
 
+#include <string.h>
+
 
 #define DEBUGKBD(...)		DEBUG(__VA_ARGS__)
 #define DEBUGKBDHWA(...)	DEBUG(__VA_ARGS__)

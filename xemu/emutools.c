@@ -16,6 +16,7 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
+#define DEFINE_XEMU_OS_READDIR
 #include "xemu/emutools.h"
 
 #include <string.h>
@@ -1693,275 +1694,27 @@ int sysconsole_toggle ( int set )
 	return sysconsole_is_open;
 }
 
-#ifdef XEMU_ARCH_WIN
-
-// WideCharToMultiByte(UINT CodePage, DWORD dwFlags, _In_NLS_string_(cchWideChar)LPCWCH lpWideCharStr, int cchWideChar, LPSTR lpMultiByteStr, int cbMultiByte, LPCCH lpDefaultChar, LPBOOL lpUsedDefaultChar)
-//                     CP_UTF8,       0,             i,                                                -1,              o,                    size,            NULL,                NULL
-#define WIN_WCHAR_TO_UTF8(o,i,size) !WideCharToMultiByte(CP_UTF8, 0, i, -1, o, size, NULL, NULL)
-// int MultiByteToWideChar(UINT CodePage, DWORD dwFlags, _In_NLS_string_(cbMultiByte)LPCCH lpMultiByteStr, int cbMultiByte, LPWSTR lpWideCharStr, int cchWideChar)
-//                         CP_UTF8,       0,             i,                                                -1,              o                      size
-#define WIN_UTF8_TO_WCHAR(o,i,size) !MultiByteToWideChar(CP_UTF8, 0, i, -1, o, size)
-
-#if 0
-#define WIN_WCHAR_TO_UTF8(o,i,size)	xemu_winos_wchar_to_utf8
-#define WIN_UTF8_TO_WCHAR(o,i,size)	xemu_winos_utf8_to_wchar
-#include <assert.h>
-// This function does not make fully extensive work to detect all errors etc ...
-int xemu_winos_utf8_to_wchar ( wchar_t *restrict o, const char *restrict i, size_t size )
-{
-	Uint32 upos = 0;
-	int ulen = 0;
-	//BUILD_BUG_ON( sizeof(wchar_t) != 3 );
-	static_assert(sizeof(wchar_t) == 2, "wchar_t must be two bytes long");
-	for (;;) {
-		Uint8 c = (unsigned)*i++;
-		if (ulen == 1 && (c & 0xC0) != 0x80) {
-			if (XEMU_UNLIKELY(!size--))
-				return -1;
-			if (XEMU_UNLIKELY(upos >= 0x100000))	// cannot be represented, even not by using surrogates! Dunno if it can happen AT ALL with utf8 source
-				return -1;
-			// FIXME, not so much idea about surrogate point pairs, maybe this code is totally worng what I "invented" here ...
-			if (XEMU_UNLIKELY(upos >= (1U << (sizeof(wchar_t) << 3)))) {
-				if (XEMU_UNLIKELY(!size--))	// check again, we need two chunks for a surrogate pair
-					return -1;
-				*o++ = (upos >>  10) + 0xD800;	// high surrogate of the pair, STORE it
-				upos = (upos & 1023) + 0xDC00;	// this will be the low part, after this "if" ... which is also the normal case (no surrogate points needed)
-			}
-			*o++ = upos;
-			ulen = 0;
-			upos = 0;
-		}
-		if ((c & 0x80) == 0) {
-			if (XEMU_UNLIKELY(!size--))
-				return -1;
-			if (XEMU_UNLIKELY(ulen))
-				return -1;
-			*o++ = c;
-			if (!c)
-				return 0;	// WOW, the end :)
-		} else if ((c & 0xE0) == 0xC0) {
-			if (XEMU_UNLIKELY(ulen))
-				return -1;
-			ulen = 2;
-			upos = c & 0x1F;
-		} else if ((c & 0xF0) == 0xE0) {
-			if (XEMU_UNLIKELY(ulen))
-				return -1;
-			ulen = 3;
-			upos = c & 0x0F;
-		} else if ((c & 0xF8) == 0xF0) {
-			if (XEMU_UNLIKELY(ulen))
-				return -1;
-			ulen = 4;
-			upos = c & 0x07;
-		} else if ((c & 0xC0) == 0x80) {
-			if (XEMU_UNLIKELY(ulen <= 1))
-				return -1;
-			ulen--;
-			upos = (upos << 6) + (c & 0x3F);
-		} else
-			return -1;
-		if (XEMU_UNLIKELY(ulen && !upos))
-			return -1;
-	}
-}
-
-
-
-int xemu_winos_wchar_to_utf8 ( char *restrict o, const wchar_t *restrict i, size_t size )
-{
-	unsigned int sur = 0;
-	for (;;) {
-		unsigned int c = *i++;
-		// FIXME: check this surrogate madness a bit more ...
-		// Personally I just tried to follow wikipedia, as it says:
-		// There are 1024 "high" surrogates (D800–DBFF) and 1024 "low" surrogates (DC00–DFFF)
-		// In UTF-16, they must always appear in pairs, as a high surrogate followed by a low surrogate, thus using 32 bits to denote one code point.
-		if (XEMU_UNLIKELY(c >= 0xD800 && c <= 0xDBFF)) {
-			if (XEMU_UNLIKELY(sur))
-				return -1;
-			sur = (c - 0xD800) << 10;
-			if (XEMU_UNLIKELY(!sur))
-				return -1;
-			continue;
-		} else if (XEMU_UNLIKELY(c >= 0xDC00 && c <= 0xDFFF)) {
-			if (XEMU_UNLIKELY(!sur))
-				return -1;
-			c = sur + (c - 0xDC00);
-			sur = 0;
-		}
-		if (XEMU_UNLIKELY(sur))
-			return -1;
-		if (c < 0x80) {
-			if (XEMU_UNLIKELY(size < 1))
-				return -1;
-			size =- 1;
-			*o++ = c;
-			if (!c)
-				return 0;	// Wow, the end :)
-		} else if (c < 0x800) {
-			if (XEMU_UNLIKELY(size < 2))
-				return -1;
-			size -= 2;
-			*o++ = 0xC0 + ( c >>  6        );
-			*o++ = 0x80 + ( c        & 0x3F);
-		} else if (c < 0x10000) {
-			if (XEMU_UNLIKELY(size < 3))
-				return -1;
-			size -= 3;
-			*o++ = 0xE0 + ( c >> 12        );
-			*o++ = 0x80 + ((c >>  6) & 0x3F);
-			*o++ = 0x80 + ( c        & 0x3F);
-		} else if (c < 0x110000) {
-			if (XEMU_UNLIKELY(size < 4))
-				return -1;
-			size -= 4;
-			*o++ = 0xF0 + ( c >> 18        );
-			*o++ = 0x80 + ((c >> 12) & 0x3F);
-			*o++ = 0x80 + ((c >>  6) & 0x3F);
-			*o++ = 0x80 + ( c        & 0x3F);
-		} else
-			return -1;
-	}
-}
-#endif
-
-int xemu_os_open ( const char *fn, int flags )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return -1;
-	}
-	return _wopen(wchar_fn, flags | O_BINARY);
-}
-
-int xemu_os_creat ( const char *fn, int flags, int pmode )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return -1;
-	}
-	return _wopen(wchar_fn, flags | O_BINARY, pmode);
-}
-
-FILE *xemu_os_fopen ( const char *restrict fn, const char *restrict mode )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	wchar_t wchar_mode[32];	// FIXME?
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return NULL;
-	}
-	if (WIN_UTF8_TO_WCHAR(wchar_mode, mode, sizeof wchar_mode)) {
-		errno = EINVAL;		// FIXME?
-		return NULL;
-	}
-	return _wfopen(wchar_fn, wchar_mode);
-}
-
-int xemu_os_unlink ( const char *fn )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return -1;
-	}
-	return _wunlink(wchar_fn);
-}
-
-#include <direct.h>
-
-int xemu_os_mkdir ( const char *fn, const int mode )	// "mode" parameter is unused in Windows
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return -1;
-	}
-	return _wmkdir(wchar_fn);
-}
-
-XDIR *xemu_os_opendir ( const char *fn )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return NULL;
-	}
-	return _wopendir(wchar_fn);
-}
-
-int xemu_os_closedir ( XDIR *dirp )
-{
-	return _wclosedir(dirp);
-}
-
-int xemu_os_readdir ( XDIR *dirp, char *fn )
-{
-	const struct _wdirent *p;
-	do {
-		errno = 0;
-		p = _wreaddir(dirp);
-		if (!p)
-			return -1;
-	} while (WIN_WCHAR_TO_UTF8(fn, p->d_name, FILENAME_MAX));	// UGLY! Though without this probably an opendir/readdir scan would be interrupted by this anomaly ...
-	return 0;
-}
-
-#include <assert.h>
-
-int xemu_os_stat ( const char *fn, struct stat *statbuf )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return -1;
-	}
-	struct __stat64 st;
-	if (_wstat64(wchar_fn, &st))
-		return -1;	// _wstat64() sets errno
-	//static_assert(sizeof(statbuf->st_atime) <= 4, "32-bit time for stat");
-	//static_assert(sizeof(statbuf->st_size) <= 4, "32-bit file size for stat");
-	//FIXME: how can be sure we have 64-bit time and 64-bit file size ALWAYS, win32+win64 too!!! (2038 is not so far away now ...)
-	//FIXME-2: how can we present the input parameter of this func being struct stat (POSIX) but the same requirements as the previous comment line ...
-	statbuf->st_gid   = st.st_gid;
-	statbuf->st_atime = st.st_atime;
-	statbuf->st_ctime = st.st_ctime;
-	statbuf->st_dev   = st.st_dev;
-	statbuf->st_ino   = st.st_ino;
-	statbuf->st_mode  = st.st_mode;
-	statbuf->st_mtime = st.st_mtime;
-	statbuf->st_nlink = st.st_nlink;
-	statbuf->st_rdev  = st.st_rdev;
-	statbuf->st_size  = st.st_size;
-	statbuf->st_uid   = st.st_uid;
-	return 0;
-}
-
-
-#endif
-
 
 int xemu_os_file_exists ( const char *fn )
 {
 	struct stat st;
-	return !xemu_os_stat(fn, &st);
+	return !stat(fn, &st);
 }
 
 
-#ifndef XEMU_ARCH_WIN
-int xemu_os_readdir ( XDIR *dirp, char *fn )
+int xemu_os_readdir ( DIR *dirp, char *fn, const int fnmaxsize )
 {
 	errno = 0;
 	const struct dirent *p = readdir(dirp);
 	if (!p)
 		return -1;
+	if (strlen(p->d_name) >= fnmaxsize) {
+		return -1;
+	}
 	strcpy(fn, p->d_name);
 	return 0;
 }
-#endif
+
 
 
 /* -------------------------- SHA1 checksumming -------------------------- */
@@ -2078,3 +1831,8 @@ void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data, Uint32
 	sha1_checksum_as_words(hash, data, size);
 	sprintf(hash_str, "%08x%08x%08x%08x%08x", hash[0], hash[1], hash[2], hash[3], hash[4]);
 }
+
+
+#if defined(XEMU_ARCH_WIN64) && defined(_USE_32BIT_TIME_T)
+#error "_USE_32BIT_TIME_T is defined while compiling for 64-bit Windows!"
+#endif

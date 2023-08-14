@@ -16,6 +16,7 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
+#define DEFINE_XEMU_OS_READDIR
 #include "xemu/emutools.h"
 #include "xemu/cpu65.h"
 #define  XEMU_MEGA65_HDOS_H_ALLOWED
@@ -31,6 +32,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
+#include <dirent.h>
 
 // This source is meant to virtualize Hyppo's DOS functions to be able to access
 // the host OS (what runs Xemu) filesystem via the normal HDOS calls (ie what
@@ -63,7 +65,7 @@ static int hdos_init_is_done = 0;
 static struct {
 	union {
 		int fd;
-		XDIR *dirp;
+		DIR *dirp;
 	};
 	enum { HDOS_DESC_CLOSED, HDOS_DESC_FILE, HDOS_DESC_DIR } status;
 	char *basedirpath;	// pointer to malloc'ed string (when in use). ALWAYS ends with directory separator of your host OS!
@@ -336,7 +338,7 @@ static int close_desc ( unsigned int entry )
 			return -1;	// error value??
 		return 0;
 	} else if (desc_table[entry].status == HDOS_DESC_DIR) {
-		const int ret = xemu_os_closedir(desc_table[entry].dirp);
+		const int ret = closedir(desc_table[entry].dirp);
 		desc_table[entry].status = HDOS_DESC_CLOSED;
 		DEBUGHDOS("HDOS: closing directory descriptor #$%02X: %d" NL, entry, ret);
 		if (ret)
@@ -358,11 +360,11 @@ static int try_open ( const char *basedirfn, const char *needfn, int open_mode, 
 {
 	if (strchr(needfn, '/') || strchr(needfn, '\\') || !*needfn)	// needfn could not contain directory component(s) and also cannot be empty
 		return HDOSERR_FILE_NOT_FOUND;
-	XDIR *dirp = xemu_os_opendir(basedirfn);
+	DIR *dirp = opendir(basedirfn);
 	if (!dirp)
 		return HDOSERR_FILE_NOT_FOUND;
 	char fn_found[FILENAME_MAX];
-	while (!xemu_os_readdir(dirp, fn_found)) {
+	while (!xemu_os_readdir(dirp, fn_found, sizeof fn_found)) {
 		// TODO: add check for "." and ".." not done in root of emulated HDOS FS
 		if (!strcasecmp(fn_found, needfn) && strlen(fn_found) <= 63)
 			goto found;
@@ -374,32 +376,32 @@ static int try_open ( const char *basedirfn, const char *needfn, int open_mode, 
 #if 0
 	xemu_os_rewinddir(dirp);
 	// try again with short name policy now ...
-	while ((entry = xemu_os_readdir(dirp, &entry_storage))) {
+	while ((entry = xemu_os_readdir(dirp, &entry_storage, sizeof fn_found))) {
 
 	}
 #endif
-	xemu_os_closedir(dirp);
+	closedir(dirp);
 	return HDOSERR_FILE_NOT_FOUND;
 found:
 	strcpy(fullpathout, basedirfn);
 	if (fullpathout[strlen(fullpathout) - 1] != DIRSEP_CHR)
 		strcat(fullpathout, DIRSEP_STR);
 	strcat(fullpathout, fn_found);
-	if (xemu_os_stat(fullpathout, st))
+	if (stat(fullpathout, st))
 		return HDOSERR_FILE_NOT_FOUND;
 	const int type = st->st_mode & S_IFMT;
 	if (open_mode == -1) {		// -1 as "open_mode" func argument means: open as a DIRECTORY
 		if (type != S_IFDIR)
 			return HDOSERR_NOT_DIRECTORY;
-		dirp = xemu_os_opendir(fullpathout);
+		dirp = opendir(fullpathout);
 		if (!dirp)
 			return HDOSERR_FILE_NOT_FOUND;
 		strcat(fullpathout, DIRSEP_STR);
-		*(XDIR**)result = dirp;
+		*(DIR**)result = dirp;
 	} else {			// if "open_mode" as not -1, then it means some kind of flags for open(), opening as a file
 		if (type != S_IFREG)
 			return HDOSERR_IS_DIRECTORY;
-		int fd = xemu_os_open(fullpathout, open_mode);
+		int fd = open(fullpathout, open_mode | O_BINARY);
 		if (fd < 0)
 			return HDOSERR_FILE_NOT_FOUND;
 		*(int*)result = fd;
@@ -420,7 +422,7 @@ static void hdos_virt_mount ( const int unit )
 		hdos.virt_out_a = ret;	// pass back the error code got from try_open()
 		return;
 	}
-	xemu_os_close(fd);	// we don't need it anymore
+	close(fd);	// we don't need it anymore
 	if (sdcard_external_mount(unit, fullpath, NULL)) {
 		DEBUGHDOS("HDOS: VIRT: mount of image \"%s\" on unit %d FAILED :(" NL, fullpath, unit);
 		hdos.virt_out_a = HDOSERR_IMAGE_WRONG_LEN;	// this is probably the only reason the mount call could fail
@@ -465,7 +467,7 @@ static void hdos_virt_loadfile ( const Uint32 addr_base )
 		for (const Uint8 *b = buffer; ret > 0; ret--, b++, addr_ofs++)
 			memory_debug_write_phys_addr(addr_base + (addr_ofs & 0xFFFFFF), *b);
 	}
-	xemu_os_close(fd);
+	close(fd);
 	if (ret < 0 || loaded != st.st_size) {
 		DEBUGHDOS("HDOS: VIRT: loadfile read() error (or file size changed?) on %s" NL, fullpath);
 		hdos.virt_out_a = HDOSERR_READ_ERROR;
@@ -484,7 +486,7 @@ static void hdos_virt_opendir ( void )
 		hdos.virt_out_a = HDOSERR_TOO_MANY_OPEN;
 		return;
 	}
-	XDIR *dirp = xemu_os_opendir(hdos.cwd);
+	DIR *dirp = opendir(hdos.cwd);
 	if (!dirp) {
 		hdos.virt_out_a = HDOSERR_CANNOT_OPEN_DIR;	// some error code; directory cannot be open (this SHOULD not happen though!)
 		return;
@@ -540,7 +542,7 @@ static void hdos_virt_readdir ( void )
 	}
 #endif
 readdir_again:
-	if (xemu_os_readdir(desc_table[hdos.in_x].dirp, fn_found)) {
+	if (xemu_os_readdir(desc_table[hdos.in_x].dirp, fn_found, sizeof fn_found)) {
 		// FIXME: there should be error checking here, but we assume for now, that NULL means end of directory
 		// But anyway, what should we do in case of an error during readdir? Not so much ...
 		DEBUGHDOS("HDOS: VIRT: %s(): end-of-directory" NL, __func__);
@@ -586,7 +588,7 @@ readdir_again:
 	char fn[strlen(desc_table[hdos.in_x].basedirpath) + strlen(fn_found) + 1];
 	sprintf(fn, "%s%s", desc_table[hdos.in_x].basedirpath, fn_found);
 	struct stat st;
-	if (xemu_os_stat(fn, &st))
+	if (stat(fn, &st))
 		goto readdir_again;
 	const int type = st.st_mode & S_IFMT;
 	if (type != S_IFDIR && type != S_IFREG)	// some irregular file, we should not pass back
@@ -665,7 +667,7 @@ static void hdos_virt_cd ( void )
 	}
 	// -- the rest: 'cd' into some subdir other than '.' or '..' --
 	struct stat st;
-	XDIR *dirp;
+	DIR *dirp;
 	char pathout[PATH_MAX + 1];
 	//static int try_open ( const char *basedirfn, const char *needfn, int open_mode, struct stat *st, char *pathout, void *result );
 	int ret = try_open(hdos.cwd, hdos.setname_fn, -1, &st, pathout, &dirp);
@@ -673,7 +675,7 @@ static void hdos_virt_cd ( void )
 		hdos.virt_out_a = ret;
 		return;
 	}
-	xemu_os_closedir(dirp);			// not needed to much here, let's close it
+	closedir(dirp);			// not needed to much here, let's close it
 	strcat(pathout, DIRSEP_STR);
 	xemu_restrdup(&hdos.cwd, pathout);
 	hdos.cwd_is_root = 0;		// if we managed to 'cd' into something (and it is cannot be '.' or '..' at this point!) we cannot be in the root anymore!
@@ -960,15 +962,15 @@ void hdos_init ( const int do_virt, const char *virtroot )
 	char hdosdir[PATH_MAX + 1];
 	sprintf(hdosdir, "%s%s%c", sdl_pref_dir, HDOSROOT_SUBDIR_NAME, DIRSEP_CHR);
 	MKDIR(hdosdir);
-	XDIR *dirp = xemu_os_opendir(hdosdir);
+	DIR *dirp = opendir(hdosdir);
 	if (!dirp)
 		FATAL("Cannot open default HDOS root: %s", hdosdir);
-	xemu_os_closedir(dirp);
+	closedir(dirp);
 	if (virtroot && *virtroot) {	// now we may want to override the default, if it's given at all
-		XDIR *dirp = xemu_os_opendir(virtroot);	// try to open directory just for testing
+		DIR *dirp = opendir(virtroot);	// try to open directory just for testing
 		if (dirp) {
 			// seems to work! use the virtroot path but prepare it for having directory separator as the last character
-			xemu_os_closedir(dirp);
+			closedir(dirp);
 			strcpy(hdosdir, virtroot);
 			if (hdosdir[strlen(hdosdir) - 1] != DIRSEP_CHR)
 				strcat(hdosdir, DIRSEP_STR);

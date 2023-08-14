@@ -36,6 +36,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sdext.h"
 #include "exdos_wd.h"
 #include <time.h>
+#include <string.h>
 
 Z80EX_CONTEXT z80ex VARALIGN;
 static int memsegs[4] VARALIGN;
