@@ -899,7 +899,7 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 	} else
 		DEBUGPRINT("WINDOWS: UTF-8 filenames ARE supported, cool!" NL);
 	if (!p != (GetACP() == 65001U))
-		ERROR_WINDOW("Mismatch between Windows UTF8 checks!\nPlease report the problem!");
+		ERROR_WINDOW("Mismatch between Windows UTF8 checks!\nPlease report the problem!\nCP=%u, p=%s", GetACP(), p ? p : "NULL");
 #endif
 #ifdef XEMU_CONFIGDB_SUPPORT
 	// If configDB support is compiled in, we can define some common options, should apply for ALL emulators.
@@ -1498,7 +1498,6 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 }
 
 
-
 /* Note, Windows has some braindead idea about console, ie even the standard stdout/stderr/stdin does not work with
    a GUI application. We have to dance a bit, to fool Windows to do what is SHOULD according the standard to be used
    by every other operating systems. Ehhh, Microsoft, please, get some real designers and programmers :-)
@@ -1530,6 +1529,7 @@ static int redirect_stdfp ( const DWORD handle_const, FILE *std, const char *mod
 	return 0;
 }
 #endif
+
 
 void sysconsole_open ( void )
 {
@@ -1714,7 +1714,6 @@ int xemu_os_readdir ( DIR *dirp, char *fn, const int fnmaxsize )
 	strcpy(fn, p->d_name);
 	return 0;
 }
-
 
 
 /* -------------------------- SHA1 checksumming -------------------------- */
