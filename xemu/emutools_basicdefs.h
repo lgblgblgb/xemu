@@ -151,8 +151,8 @@ typedef uint64_t Uint64;
 #	define DIRSEP_CHR	'\\'
 #	define NL		"\r\n"
 #	define NL_LENGTH	2
-#	define PRINTF_LLD	"%I64d"
-#	define PRINTF_LLU	"%I64u"
+#	define PRINTF_LLD	"%I64lld"
+#	define PRINTF_LLU	"%I64llu"
 #	define MKDIR(__n)	mkdir(__n)
 #	define NULL_DEVICE	"NUL:"
 #endif

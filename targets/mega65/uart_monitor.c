@@ -52,8 +52,8 @@ char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
 #define UNCONNECTED	XS_INVALID_SOCKET
 
-#ifdef XEMU_ARCH_WIN
-#	define PRINTF_SOCK	"%I64d"
+#ifdef XEMU_ARCH_WIN64
+#	define PRINTF_SOCK	"%I64lld"
 #else
 #	define PRINTF_SOCK	"%d"
 #endif
