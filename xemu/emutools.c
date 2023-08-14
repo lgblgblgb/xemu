@@ -98,6 +98,12 @@ int emu_is_fullscreen = 0;
 int emu_is_headless = 0;
 int emu_is_sleepless = 0;
 int dialogs_allowed = 1;
+#ifdef XEMU_ARCH_WIN
+int emu_fs_is_utf8 = 0;	// assuming non-UTF-8 capable filesystem for Windows hosts, I'll test it later in xemu_pre_init() if it's really the case
+#else
+int emu_fs_is_utf8 = 1;	// assuming UTF-8 capable filesystem for any non-Windows hosts
+#endif
+const char *emu_wine_version = NULL;
 static int win_xsize, win_ysize;
 char *sdl_pref_dir = NULL, *sdl_base_dir = NULL, *sdl_inst_dir = NULL;
 Uint32 sdl_winid;
@@ -541,10 +547,12 @@ const char *xemu_get_uname_string ( void )
 				break;
 		}
 		// Huh, Windows is a real pain to collect _basic_ system informations ... on UNIX just an uname() and you're done ...
-		if (snprintf(buf, sizeof buf, "Windows %s %u.%u %s",
+		if (snprintf(buf, sizeof buf, "Windows %s %u.%u %s%s%s",
 			host_name,
 			(unsigned int)info.dwMajorVersion, (unsigned int)info.dwMinorVersion,
-			isa_name
+			isa_name,
+			emu_wine_version ? " WINE-" : "",
+			emu_wine_version ? emu_wine_version : ""
 		) >= sizeof buf) {
 			strcpy(buf, "<buffer-is-too-small>");
 		}
@@ -718,44 +726,77 @@ static inline Uint64 _get_uts_from_cdate ( void )
 
 
 #ifdef XEMU_ARCH_WIN
-static inline void check_windows_utf8_fs ( void )
+static inline char *check_windows_utf8_fs ( void )
 {
-	static const char test_file_fn[] = "tükörfúrógép.txt";
-	char fn[strlen(sdl_pref_dir) + strlen(test_file_fn) + 1];
-	strcpy(fn, sdl_pref_dir);
-	strcat(fn, test_file_fn);
-	//int fd = open(fn, O_BINARY | O_CREAT | O_TRUNC | O_WRONLY, 0666);
-	//int fd = open(fn, O_BINARY | O_RDONLY);
-	FILE *f = fopen(fn, "rb");
+	emu_fs_is_utf8 = 0;
+	// test file name (it's in Hungarian: "flood-proof mirror-drilling device", does not make sense, but contains all "special" Hungarian characters)
+	static const char test_file_fn[] = "árvíztűrő_tükörfúrógép.txt";
+	const int len = strlen(sdl_pref_dir) + strlen(test_file_fn) + 1;
+	char fn_a[len];
+	wchar_t fn_w[len];
+	strcpy(fn_a, sdl_pref_dir);
+	strcat(fn_a, test_file_fn);
+	if (MultiByteToWideChar(CP_UTF8, 0, fn_a, -1, fn_w, len) <= 0)
+		return "could not convert test file name to wchar_t";
+	static const wchar_t mode_w[] = {'w', 'b', 0};
+	FILE *f = _wfopen(fn_w, mode_w);
+	if (!f)
+		return "could not create test file with wide-func";
+	fclose(f);
+	f = fopen(fn_a, "rb");
 	if (f) {
-		INFO_WINDOW("Cool, UTF8 works with fopen");
 		fclose(f);
-	} else {
-		ERROR_WINDOW("Ooops, UTF8 fails with fopen of %s : %s", fn, strerror(errno));
+		_wunlink(fn_w);
+		emu_fs_is_utf8 = 1;
+		return NULL;
 	}
+	_wunlink(fn_w);
+	return "could not use UTF-8 files without wchar_t aware functions";
 }
 
 static inline BOOL is_running_as_win_admin ( void )
 {
 	BOOL ret = FALSE;
-	HANDLE htoken = NULL;
-	if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &htoken)) {
+	HANDLE token = NULL;
+	if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+		DWORD size = sizeof(TOKEN_ELEVATION);
 		TOKEN_ELEVATION elevation;
-		DWORD cbsize = sizeof(TOKEN_ELEVATION);
-		if (GetTokenInformation(htoken, TokenElevation, &elevation, sizeof elevation, &cbsize))
+		if (GetTokenInformation(token, TokenElevation, &elevation, sizeof elevation, &size))
 			ret = elevation.TokenIsElevated;
 	}
-	if (htoken)
-		CloseHandle(htoken);
+	if (token)
+		CloseHandle(token);
 	if (ret)
 		DEBUGPRINT("WINDOWS: warning, running as administrator!" NL);
 	return ret;
+}
+
+static inline int detect_wine ( void )
+{
+	free((void*)emu_wine_version);
+	emu_wine_version = NULL;
+	static const char *(CDECL *wine_get_version_ptr)(void);
+	HMODULE ntdll = GetModuleHandle("ntdll.dll");
+	if (!ntdll)
+		return 0;
+	wine_get_version_ptr = (void*)GetProcAddress(ntdll, "wine_get_version");
+	if (wine_get_version_ptr) {
+		const char *p = wine_get_version_ptr();
+		if (p) {
+			emu_wine_version = xemu_strdup(p);
+			return 1;
+		}
+	}
+	return 0;
 }
 #endif
 
 
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan, const int argc, char **argv )
 {
+#ifdef XEMU_ARCH_WIN
+	(void)detect_wine();
+#endif
 	if (!buildinfo_cdate_uts)
 		buildinfo_cdate_uts = _get_uts_from_cdate();
 	if (xemu_initial_argc < 0)
@@ -786,7 +827,8 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 	// Windows: Some check to disallow dangerous things (running Xemu as administrator)
 	if (is_running_as_win_admin()) {
 #ifndef 	XEMU_DO_NOT_DISALLOW_ROOT
-		WARNING_WINDOW("Running Xemu as administrator is dangerous, stop doing that!");
+		if (!emu_wine_version)	// ignore the check if it's wine, it seems it always runs programs with elevated privs
+			WARNING_WINDOW("Running Xemu as Administrator is dangerous, stop doing that!");
 #endif
 	}
 #endif
@@ -842,12 +884,22 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 		SDL_free(p);
 	} else
 		FATAL("Cannot query SDL preference directory: %s", SDL_GetError());
-#ifdef XEMU_ARCH_WIN
-	check_windows_utf8_fs();
-#endif
 #endif
 	xemu_app_org = xemu_strdup(app_organization);
 	xemu_app_name = xemu_strdup(app_name);
+#ifdef XEMU_ARCH_WIN
+	if (emu_wine_version)
+		DEBUGPRINT("WINDOWS: running on WINE %s" NL, emu_wine_version);
+	p = check_windows_utf8_fs();
+	if (p) {
+		DEBUGPRINT("WINDOWS: UTF-8 filenames are NOT supported: %s" NL, p);
+		if (!emu_wine_version)
+			WARNING_WINDOW("Your windows is too old to support UTF-8 file functions!\nYou may encounter problems with files/paths containing any non US-ASCII characters!");
+	} else
+		DEBUGPRINT("WINDOWS: UTF-8 filenames ARE supported, cool!" NL);
+	if (!p != (GetACP() == 65001U))
+		ERROR_WINDOW("Mismatch between Windows UTF8 checks!\nPlease report the problem!");
+#endif
 #ifdef XEMU_CONFIGDB_SUPPORT
 	// If configDB support is compiled in, we can define some common options, should apply for ALL emulators.
 	// This way, it's not needed to define those in all of the emulator targets ...

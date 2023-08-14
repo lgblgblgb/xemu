@@ -152,6 +152,7 @@ extern SDL_version sdlver_compiled, sdlver_linked;
 extern Uint32 *xemu_frame_pixel_access_p;
 extern int emu_is_headless;
 extern int emu_is_sleepless;
+extern int emu_fs_is_utf8;
 
 #define XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE	1
 //#define XEMU_VIEWPORT_WIN_SIZE_FOLLOW_LOGICAL	2
