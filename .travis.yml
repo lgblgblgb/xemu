@@ -35,6 +35,8 @@ matrix:
             - zip
       compiler: gcc
       before_script:
+        - dpkg -L | fgrep -ai ruby || true
+        - sudo apt-get -yq --no-install-suggests --no-install-recommends upgrade || true
         - echo "127.126.125.124 lgb" | sudo tee -a /etc/hosts 2>/dev/null || true
         - cat /etc/hosts || true
         - hostname

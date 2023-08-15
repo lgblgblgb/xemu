@@ -18,7 +18,8 @@
 # Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
 
 
-TARGETS	= c65 cvic20 clcd ep128 mega65 primo tvc
+#TARGETS	= c65 cvic20 clcd ep128 mega65 primo tvc
+TARGETS	= mega65
 ARCHS	= native win32 win64
 
 ARCH	= native
