@@ -67,6 +67,7 @@ matrix:
         - build/deploy/before-deploy.sh xemu-deploy Linux
         - gem install specific_install || true
         - gem specific_install https://github.com/tumblr/tumblr_client || true
+        - gem specific_install https://github.com/lostisland/faraday || true
         - dpkg -l | fgrep -ai ruby || true
       deploy:
         provider: pages
