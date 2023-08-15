@@ -33,22 +33,17 @@ matrix:
             - vim-common
             - wget
             - zip
+            - ruby3.0
+            - ruby
+            - rubygems-integration
+            - rake
       compiler: gcc
       before_script:
-        - cat /proc/cpuinfo || true
         - echo "127.126.125.124 lgb" | sudo tee -a /etc/hosts 2>/dev/null || true
-        - dpkg -l | fgrep -ai ruby || true
-        - sudo apt-get -yq --no-install-suggests --no-install-recommends install ruby3.0 rake ruby rubygems-integration || true
-        - dpkg -l | fgrep -ai ruby || true
-        - sudo apt-get -yq --no-install-suggests --no-install-recommends upgrade || true
-        - dpkg -l | fgrep -ai ruby || true
-        - sudo apt-get -yq --no-install-suggests --no-install-recommends dist-upgrade || true
-        - dpkg -l | fgrep -ai ruby || true
-        - trigger_an_error_by_unkown_command ; false
         - cat /etc/hosts || true
         - hostname
         - set +e
-        - uname -a ; lsb_release -a || true ; hostname ; pwd ; df -h ; id -a
+        - uname -a ; lsb_release -a || true ; cat /proc/cpuinfo || true ; hostname ; pwd ; df -h ; id -a
         - set -e
         - sdl2-config --version --prefix --cflags --libs --static-libs
         - pkg-config --cflags-only-I --libs gtk+-3.0
@@ -70,6 +65,9 @@ matrix:
         - uptime ; pwd ; ls -l
       before_deploy:
         - build/deploy/before-deploy.sh xemu-deploy Linux
+        - gem install specific_install || true
+        - gem specific_install https://github.com/tumblr/tumblr_client || true
+        - dpkg -l | fgrep -ai ruby || true
       deploy:
         provider: pages
         local_dir: xemu-deploy
