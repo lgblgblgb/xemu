@@ -67,8 +67,6 @@ matrix:
         - uptime ; pwd ; ls -l
       before_deploy:
         - build/deploy/before-deploy.sh xemu-deploy Linux
-        - build/deploy/gem-hack
-        - gem install faraday || true
         - dpkg -l | fgrep -ai ruby || true
         - gem list || true
       deploy:
