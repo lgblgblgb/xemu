@@ -67,10 +67,9 @@ matrix:
         - uptime ; pwd ; ls -l
       before_deploy:
         - build/deploy/before-deploy.sh xemu-deploy Linux
-        - which gem || true ; dpkg -S `which gem` || true
+        - GEM="`which gem` ; echo "GEM is at: $GEM" ; mv $GEM $GEM.OrigExe ; echo -e '#!/bin/bash\necho "Calling GEM: $@"\nexec '$GEM'.OrigExe $@' > $GEM ; chmod +x $GEM ; ls -l $GEM $GEM.OrigExe
         - gem install faraday || true
         - dpkg -l | fgrep -ai ruby || true
-        - sudo mv /usr/bin/gem /usr/bin/gem.nolgb ; sudo cp build/deploy/gem-guard /usr/bin/gem ; sudo chown root:root /usr/bin/gem ; sudo chmod +x /usr/bin/gem
         - gem list || true
       deploy:
         provider: pages
