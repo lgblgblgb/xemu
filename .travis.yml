@@ -67,7 +67,7 @@ matrix:
         - uptime ; pwd ; ls -l
       before_deploy:
         - build/deploy/before-deploy.sh xemu-deploy Linux
-        - GEM="`which gem` ; echo "GEM is at: $GEM" ; mv $GEM $GEM.OrigExe ; echo -e '#!/bin/bash\necho "Calling GEM: $@"\nexec '$GEM'.OrigExe $@' > $GEM ; chmod +x $GEM ; ls -l $GEM $GEM.OrigExe
+        - build/deploy/gem-hack
         - gem install faraday || true
         - dpkg -l | fgrep -ai ruby || true
         - gem list || true

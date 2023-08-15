@@ -1,0 +1,14 @@
+#!/bin/bash
+GEM="`which gem`"
+GEM="/tmp/rosa"
+echo "GEM is at: $GEM"
+echo "Renaming $GEM -> $GEM.OrigExe"
+mv $GEM $GEM.OrigExe
+echo '#!/bin/bash' > $GEM
+echo 'echo "Calling GEM: $@"' >> $GEM
+echo 'exec '$GEM'.OrigExe $@' >> $GEM
+chmod +x $GEM
+ls -la $GEM.OrigExe $GEM
+echo "New GEM script is:"
+cat $GEM
+exit 0
