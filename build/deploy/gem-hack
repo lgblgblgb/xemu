@@ -4,7 +4,7 @@ echo "GEM is at: $GEM"
 echo "Renaming $GEM -> $GEM.OrigExe"
 mv $GEM $GEM.OrigExe
 echo '#!/bin/bash' > $GEM
-echo 'echo "Calling GEM: $@"' >> $GEM
+echo 'echo "Calling GEM: $@" >&2' >> $GEM
 echo 'exec '$GEM'.OrigExe $@' >> $GEM
 chmod +x $GEM
 ls -la $GEM.OrigExe $GEM
