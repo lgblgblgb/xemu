@@ -36,14 +36,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_COORD_LATCHING
 
 
-const char *iomode_names[4] = { "VIC2", "VIC3", "BAD!", "VIC4" };
+const char *iomode_names[4] = { "VIC2", "VIC3", "VIC4ETH", "VIC4" };
 
 // (SDL) target texture rendering pointers
 static Uint32 *current_pixel;					// current_pixel pointer to the rendering target (one current_pixel: 32 bit)
 static Uint32 *pixel_start;					// points to the end and start of the buffer
 static Uint32 *pixel_raster_start;				// first pixel of current raster
 Uint8 vic_registers[0x80];					// VIC4 registers
-int vic_iomode;							// VIC2/VIC3/VIC4 mode
+unsigned int vic_iomode;					// VIC2/VIC3/VIC4 mode
 static int compare_raster;					// raster compare (9 bits width) data
 static int logical_raster = 0;
 static int interrupt_status;					// Interrupt status of VIC
@@ -73,7 +73,7 @@ static Uint8 *bitplane_bank_p = main_ram;
 static Uint8 *bitplane_p[8];
 static Uint32 red_colour, black_colour;				// used by "drive LED", and cross-hair (only the red) for debug pixel read
 static Uint8 vic_pixel_readback_result[4];
-static Uint8 vic_color_register_mask = 0xFF;
+static Uint8 vic_color_register_mask;
 static Uint32 *used_palette;					// normally the same value as "palette" from vic4_palette.c but GOTOX RRB token can modify this! So this should be used
 static int EFFECTIVE_V400;
 #ifdef SPRITE_COORD_LATCHING
@@ -148,7 +148,7 @@ static const Uint8 reverse_byte_table[] = {
 void vic_reset ( void )
 {
 	vic_iomode = VIC2_IOMODE;
-	etherbuffer_is_io_mapped = 0;
+	vic_color_register_mask = 0x0F;
 	interrupt_status = 0;
 	compare_raster = 0;
 	vic_hotreg_touched = 0;
@@ -647,35 +647,17 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			// This seems to make freezer actually starting in Xemu, first time ever :-O
 			if (!in_hypervisor) {
 				int vic_new_iomode;
-				int new_etherbuffer_is_io_mapped = 0;
-				if (data == 0x96 && vic_registers[0x2F] == 0xA5) {		// sequence for setting VIC3 I/O mode
-					vic_new_iomode = VIC3_IOMODE;
-					vic_color_register_mask = 0xFF;
-				} else if (
-					(data == 0x53 && vic_registers[0x2F] == 0x47) ||	// sequence for setting VIC4 I/O mode
-					(data == 0x54 && vic_registers[0x2F] == 0x45)		// sequence for setting "ethernet" I/O mode [VIC4 with ethernet buffer mapped in]
-				) {
-					vic_new_iomode = VIC4_IOMODE;
-					vic_color_register_mask = 0xFF;
-					if (data == 0x54) {					// [it was the "ethernet" I/O mode]
-						// this I/O mode is the same as VIC4 I/O mode _but_ with ethernet buffer also mapped
-						// the actual implementation of this is different than MEGA65: I set VIC4_IOMODE still
-						// but also set the etherbuffer_is_io_mapped variable. This difference (hw<->emu) should
-						// be also handled in hypervisor.c though!
-						DEBUGPRINT("VIC4: warning, ethernet I/O mode is set! FIXME: remove this message in the futurue" NL);
-						new_etherbuffer_is_io_mapped = 1;
-					}
-				} else {							// ... otherwise, plain old VIC2 I/O mode
-					vic_new_iomode = VIC2_IOMODE;
-					vic_color_register_mask = 0x0F;
+				switch ((vic_registers[0x2F] << 8) | data) {
+					default:     vic_new_iomode = VIC2_IOMODE;    break;
+					case 0xA596: vic_new_iomode = VIC3_IOMODE;    break;
+					case 0x4554: vic_new_iomode = VIC4ETH_IOMODE; break;
+					case 0x4753: vic_new_iomode = VIC4_IOMODE;    break;
 				}
-				if (vic_new_iomode != vic_iomode || new_etherbuffer_is_io_mapped != etherbuffer_is_io_mapped) {
-					DEBUG("VIC4: changing I/O mode %d(%s)[ETH:%d] -> %d(%s)[ETH:%d]" NL,
-						vic_iomode, iomode_names[vic_iomode], etherbuffer_is_io_mapped,
-						vic_new_iomode, iomode_names[vic_new_iomode], new_etherbuffer_is_io_mapped
-					);
+				if (vic_new_iomode != vic_iomode) {
+					static const Uint8 color_register_masks[4] = { 0x0F, 0xFF, 0xFF, 0xFF };
+					DEBUG("VIC4: changing I/O mode %d(%s) -> %d(%s)" NL, vic_iomode, iomode_names[vic_iomode], vic_new_iomode, iomode_names[vic_new_iomode]);
 					vic_iomode = vic_new_iomode;
-					etherbuffer_is_io_mapped = new_etherbuffer_is_io_mapped;
+					vic_color_register_mask = color_register_masks[vic_iomode];
 				}
 			} else
 				DEBUGPRINT("VIC4: warning: I/O mode KEY $D02F register wanted to be written (with $%02X) in hypervisor mode! PC=$%04X" NL, data, cpu65.old_pc);

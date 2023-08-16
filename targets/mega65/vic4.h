@@ -22,8 +22,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define VIC2_IOMODE	0
 #define VIC3_IOMODE	1
-#define VIC_BAD_IOMODE	2
+#define VIC4ETH_IOMODE	2
 #define VIC4_IOMODE	3
+
+// bit1 of IO-mode is set: either VIC4ETH_IOMODE or VIC4_IOMODE
+#define VIC4_LIKE_IO_MODE() (vic_iomode & 2U)
 
 // Horizontal sync frequencies (in Hertz) for NTSC and PAL video output of MEGA65. Must be float.
 #define PAL_LINE_FREQ	31250.0
@@ -230,7 +233,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 // Current state
 
-extern int   vic_iomode;
+extern unsigned int   vic_iomode;
 //extern int   scanline;
 extern Uint8 vic_registers[];
 extern Uint8 c128_d030_reg;
