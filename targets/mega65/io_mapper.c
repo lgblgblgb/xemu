@@ -97,6 +97,9 @@ static XEMU_INLINE void update_hw_multiplier ( void )
 Uint8 io_read ( unsigned int addr )
 {
 	// DEBUG("IO: read $%03X IO_mode is %d @ PC=$%04X" NL, addr & 0xFFF, addr >> 12, cpu65.pc);
+	if (XEMU_UNLIKELY(etherbuffer_is_io_mapped && ((addr & 0xFFFU) >= 0x800U))) {
+		return eth65_read_rx_buffer(addr & 0xFFFU);
+	}
 	switch (addr >> 8) {
 		/* ---------------------------------------------------- */
 		/* $D000-$D3FF: VIC-II, VIC-III+FDC+REC, VIC-IV+FDC+REC */
@@ -289,10 +292,13 @@ Uint8 io_read ( unsigned int addr )
 				return disk_buffer_io_mapped[addr & 0x1FF];
 			return 0xFF;	// I/O exp is not supported
 		/* --------------------------------------------------------------- */
-		/* $2xxx I/O area is not supported: FIXME: what is that for real?! */
+		/* Mode "2" is not supported, that is VIC-4 IO mode with ethernet  */
+		/* that is handled in a special way instead, so this should never  */
+		/* happen! See vic4.c at writing $D02F (key) for more info.        */
 		/* --------------------------------------------------------------- */
 		case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27:
 		case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
+			FATAL("Xemu internal error: IO-mode-2 directly hit in %s()", __func__);
 			return 0xFF;
 		default:
 			FATAL("Xemu internal error: undecoded I/O area reading for address $(%X)%03X", addr >> 8, addr & 0xFFF);
@@ -306,6 +312,10 @@ Uint8 io_read ( unsigned int addr )
 void io_write ( unsigned int addr, Uint8 data )
 {
 	// DEBUG("IO: write $%03X with data $%02X IO_mode is %d @ PC=$%04X" NL, addr & 0xFFF, data, addr >> 12, cpu65.pc);
+	if (XEMU_UNLIKELY(etherbuffer_is_io_mapped && ((addr & 0xFFFU) >= 0x800U))) {
+		eth65_write_tx_buffer(addr & 0xFFFU, data);
+		return;
+	}
 	if (XEMU_UNLIKELY(cpu_rmw_old_data >= 0)) {
 		// RMW handling! FIXME: do this only in the needed I/O ports only, not here, globally!
 		// however, for that, we must check this at every devices where it can make any difference ...
@@ -550,10 +560,13 @@ void io_write ( unsigned int addr, Uint8 data )
 			}
 			return;		// I/O exp is not supported
 		/* --------------------------------------------------------------- */
-		/* $2xxx I/O area is not supported: FIXME: what is that for real?! */
+		/* Mode "2" is not supported, that is VIC-4 IO mode with ethernet  */
+		/* that is handled in a special way instead, so this should never  */
+		/* happen! See vic4.c at writing $D02F (key) for more info.        */
 		/* --------------------------------------------------------------- */
 		case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27:
 		case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
+			FATAL("Xemu internal error: IO-mode-2 directly hit in %s()", __func__);
 			return;
 		default:
 			FATAL("Xemu internal error: undecoded I/O area writing for address $(%X)%03X and data $%02X", addr >> 8, addr & 0xFFF, data);

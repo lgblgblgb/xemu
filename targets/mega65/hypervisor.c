@@ -160,7 +160,12 @@ void hypervisor_enter ( int trapno )
 	D6XX_registers[0x4F] = map_megabyte_high >> 20;
 	D6XX_registers[0x50] = memory_get_cpu_io_port(0);
 	D6XX_registers[0x51] = memory_get_cpu_io_port(1);
-	D6XX_registers[0x52] = vic_iomode;
+	// "VIC4 I/O mode WITH ethenet buffer mapped in" is handled strangely in Xemu. Please see vic4.c at writing $D02F (key register) for further explanation.
+	if (etherbuffer_is_io_mapped) {
+		etherbuffer_is_io_mapped = 0;
+		D6XX_registers[0x52] = VIC_BAD_IOMODE;
+	} else
+		D6XX_registers[0x52] = vic_iomode;
 	D6XX_registers[0x53] = 0;				// GS $D653 - Hypervisor DMAgic source MB      - *UNUSED*
 	D6XX_registers[0x54] = 0;				// GS $D654 - Hypervisor DMAgic destination MB - *UNUSED*
 	dma_get_list_addr_as_bytes(D6XX_registers + 0x55);	// GS $D655-$D658 - Hypervisor DMAGic list address bits 27-0
@@ -333,9 +338,12 @@ void hypervisor_leave ( void )
 	map_megabyte_low =  D6XX_registers[0x4E] << 20;
 	map_megabyte_high = D6XX_registers[0x4F] << 20;
 	memory_set_cpu_io_port_ddr_and_data(D6XX_registers[0x50], D6XX_registers[0x51]);
+	// "VIC4 I/O mode WITH ethenet buffer mapped in" is handled strangely in Xemu. Please see vic4.c at writing $D02F (key register) for further explanation.
 	vic_iomode = D6XX_registers[0x52] & 3;
-	if (vic_iomode == VIC_BAD_IOMODE)
-		vic_iomode = VIC3_IOMODE;	// I/O mode "2" (binary: 10) is not used, I guess
+	if (vic_iomode == VIC_BAD_IOMODE) {
+		vic_iomode = VIC4_IOMODE;
+		etherbuffer_is_io_mapped = 1;
+	}
 	// GS $D653 - Hypervisor DMAgic source MB - *UNUSED*
 	// GS $D654 - Hypervisor DMAgic destination MB - *UNUSED*
 	dma_set_list_addr_from_bytes(D6XX_registers + 0x55);	// GS $D655-$D658 - Hypervisor DMAGic list address bits 27-0

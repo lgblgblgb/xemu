@@ -505,6 +505,9 @@ static void ui_emu_info ( void )
 	const char *hdos_root;
 	const int hdos_virt = hypervisor_hdos_virtualization_status(-1, &hdos_root);
 	const int dma_rev = dma_get_revision();
+	const char *iomode_desc = vic_iomode < 4 ? iomode_names[vic_iomode] : "?INVALID?";
+	if (etherbuffer_is_io_mapped)
+		iomode_desc = "VIC4+ETH";
 	INFO_WINDOW(
 		"DMA chip current revision: %d (F018 rev-%s)\n"
 		"ROM version detected: %d %s (%s,%s)\n"
@@ -529,7 +532,7 @@ static void ui_emu_info ( void )
 		sdcard_get_mount_info(0, NULL), sdcard_get_mount_info(1, NULL),
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
 		cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc),
-		vic_iomode < 4 ? iomode_names[vic_iomode] : "?INVALID?", videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
+		iomode_desc, videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
 		td_stat_str,
 		xemu_get_uname_string(),
 		emu_fs_is_utf8 ? "UTF8-FS" : "ASCII-FS"

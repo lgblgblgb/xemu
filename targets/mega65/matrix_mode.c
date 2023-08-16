@@ -205,7 +205,7 @@ static void dump_regs ( const char rot_fig )
 {
 	static const Uint8 io_mode_xlat[4] = { 2, 3, 0, 4 };
 	const Uint8 pf = cpu65_get_pf();
-	MATRIX("PC:%04X A:%02X X:%02X Y:%02X Z:%02X SP:%04X B:%02X %c%c%c%c%c%c%c%c IO:%d (%c) %c %s %s     ",
+	MATRIX("PC:%04X A:%02X X:%02X Y:%02X Z:%02X SP:%04X B:%02X %c%c%c%c%c%c%c%c IO:%X (%c) %c %s %s     ",
 		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z,
 		cpu65.sphi + cpu65.s, cpu65.bphi >> 8,
 		(pf & CPU65_PF_N) ? 'N' : 'n',
@@ -216,7 +216,7 @@ static void dump_regs ( const char rot_fig )
 		(pf & CPU65_PF_I) ? 'I' : 'i',
 		(pf & CPU65_PF_Z) ? 'Z' : 'z',
 		(pf & CPU65_PF_C) ? 'C' : 'c',
-		io_mode_xlat[vic_iomode],
+		io_mode_xlat[etherbuffer_is_io_mapped ? 2 : vic_iomode],
 		!!in_hypervisor ? 'H' : 'U',
 		rot_fig,
 		videostd_id ? "NTSC" : "PAL ",
@@ -384,6 +384,12 @@ static void cmd_dump ( char *p )
 }
 
 
+static void cmd_reset ( char *p )
+{
+	reset_mega65();
+}
+
+
 static void cmd_help ( char *p );
 
 
@@ -397,6 +403,7 @@ static const struct command_tab_st {
 	{ "help",	cmd_help,	"h?"	},
 	{ "log",	cmd_log,	NULL	},
 	{ "reg",	cmd_reg,	"r"	},
+	{ "reset",	cmd_reset,	NULL	},
 	{ "show",	cmd_show,	"s"	},
 	{ "uname",	cmd_uname,	NULL	},
 	{ "ver",	cmd_ver,	NULL	},

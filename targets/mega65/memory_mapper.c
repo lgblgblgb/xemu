@@ -142,6 +142,7 @@ int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_hi
 static int map_marker_low, map_marker_high;
 int rom_protect;
 int skip_unhandled_mem = 0;
+int etherbuffer_is_io_mapped = 0;
 
 
 #define DEFINE_READER(name) static Uint8 name ( MEMORY_HANDLERS_ADDR_TYPE )

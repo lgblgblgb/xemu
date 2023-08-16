@@ -40,6 +40,7 @@ extern Uint8 memory_dma_list_reader    ( int addr );
 
 extern int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
 extern int rom_protect, skip_unhandled_mem;
+extern int etherbuffer_is_io_mapped;
 extern Uint8 main_ram[512 << 10], colour_ram[0x8000], char_wom[0x2000], hypervisor_ram[0x4000];
 #define SLOW_RAM_SIZE (8 << 20)
 extern Uint8 slow_ram[SLOW_RAM_SIZE];

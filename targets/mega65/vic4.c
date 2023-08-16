@@ -81,9 +81,6 @@ static Uint8 sprite_is_being_rendered[8];
 #warning "Sprite coordinate latching is an experimental feature (SPRITE_COORD_LATCHING is defined)!"
 #endif
 
-// TODO: not really implemented just here ...
-static int etherbuffer_is_io_mapped = 0;
-
 // --- these things are altered by vic4_open_frame_access() ONLY at every fame ONLY based on PAL or NTSC selection
 Uint8 videostd_id = 0xFF;			// 0=PAL, 1=NTSC [give some insane value by default to force the change at the fist frame after starting Xemu]
 const char *videostd_name = "<UNDEF>";		// PAL or NTSC, however initially is not yet set
@@ -151,6 +148,7 @@ static const Uint8 reverse_byte_table[] = {
 void vic_reset ( void )
 {
 	vic_iomode = VIC2_IOMODE;
+	etherbuffer_is_io_mapped = 0;
 	interrupt_status = 0;
 	compare_raster = 0;
 	vic_hotreg_touched = 0;
@@ -649,26 +647,35 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			// This seems to make freezer actually starting in Xemu, first time ever :-O
 			if (!in_hypervisor) {
 				int vic_new_iomode;
-				etherbuffer_is_io_mapped = 0;
-				if (data == 0x96 && vic_registers[0x2F] == 0xA5) {
+				int new_etherbuffer_is_io_mapped = 0;
+				if (data == 0x96 && vic_registers[0x2F] == 0xA5) {		// sequence for setting VIC3 I/O mode
 					vic_new_iomode = VIC3_IOMODE;
 					vic_color_register_mask = 0xFF;
-				} else if (data == 0x53 && vic_registers[0x2F] == 0x47) {
+				} else if (
+					(data == 0x53 && vic_registers[0x2F] == 0x47) ||	// sequence for setting VIC4 I/O mode
+					(data == 0x54 && vic_registers[0x2F] == 0x45)		// sequence for setting "ethernet" I/O mode [VIC4 with ethernet buffer mapped in]
+				) {
 					vic_new_iomode = VIC4_IOMODE;
 					vic_color_register_mask = 0xFF;
-				} else if (data == 0x54 && vic_registers[0x2F] == 0x45) {
-					// this I/O mode is the same as VIC4 I/O mode _but_ with ethernet buffer also mapped
-					DEBUGPRINT("VIC4: warning, unimplemented ethernet I/O mode is set!" NL);
-					vic_new_iomode = VIC4_IOMODE;
-					vic_color_register_mask = 0xFF;
-					etherbuffer_is_io_mapped = 1;
-				} else {
+					if (data == 0x54) {					// [it was the "ethernet" I/O mode]
+						// this I/O mode is the same as VIC4 I/O mode _but_ with ethernet buffer also mapped
+						// the actual implementation of this is different than MEGA65: I set VIC4_IOMODE still
+						// but also set the etherbuffer_is_io_mapped variable. This difference (hw<->emu) should
+						// be also handled in hypervisor.c though!
+						DEBUGPRINT("VIC4: warning, ethernet I/O mode is set! FIXME: remove this message in the futurue" NL);
+						new_etherbuffer_is_io_mapped = 1;
+					}
+				} else {							// ... otherwise, plain old VIC2 I/O mode
 					vic_new_iomode = VIC2_IOMODE;
 					vic_color_register_mask = 0x0F;
 				}
-				if (vic_new_iomode != vic_iomode) {
-					DEBUG("VIC4: changing I/O mode %d(%s) -> %d(%s)" NL, vic_iomode, iomode_names[vic_iomode], vic_new_iomode, iomode_names[vic_new_iomode]);
+				if (vic_new_iomode != vic_iomode || new_etherbuffer_is_io_mapped != etherbuffer_is_io_mapped) {
+					DEBUG("VIC4: changing I/O mode %d(%s)[ETH:%d] -> %d(%s)[ETH:%d]" NL,
+						vic_iomode, iomode_names[vic_iomode], etherbuffer_is_io_mapped,
+						vic_new_iomode, iomode_names[vic_new_iomode], new_etherbuffer_is_io_mapped
+					);
 					vic_iomode = vic_new_iomode;
+					etherbuffer_is_io_mapped = new_etherbuffer_is_io_mapped;
 				}
 			} else
 				DEBUGPRINT("VIC4: warning: I/O mode KEY $D02F register wanted to be written (with $%02X) in hypervisor mode! PC=$%04X" NL, data, cpu65.old_pc);
