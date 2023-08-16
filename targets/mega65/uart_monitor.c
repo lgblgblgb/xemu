@@ -228,6 +228,8 @@ static void execute_command ( char *cmd )
 		case '~':
 			if (!strncmp(cmd, "exit", 4)) {
 				XEMUEXIT(0);
+			} else if (!strncmp(cmd, "reset", 5)) {
+				reset_mega65();
 			} else if (!strncmp(cmd, "mount", 5)) {
 				// Quite crude syntax for now:
 				// 	~mount0		- unmounting image/disk in drive-0
