@@ -1695,14 +1695,14 @@ int sysconsole_toggle ( int set )
 }
 
 
-int xemu_os_file_exists ( const char *fn )
+int xemu_file_exists ( const char *fn )
 {
 	struct stat st;
 	return !stat(fn, &st);
 }
 
 
-int xemu_os_readdir ( DIR *dirp, char *fn, const int fnmaxsize )
+int xemu_readdir ( DIR *dirp, char *fn, const int fnmaxsize )
 {
 	errno = 0;
 	const struct dirent *p = readdir(dirp);

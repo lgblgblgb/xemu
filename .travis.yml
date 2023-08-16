@@ -33,12 +33,6 @@ matrix:
             - vim-common
             - wget
             - zip
-            - ruby3.0
-            - ruby
-            - rubygems-integration
-            - rake
-            - ruby-faraday
-            - ruby-rubygems
       compiler: gcc
       before_script:
         - echo "127.126.125.124 lgb" | sudo tee -a /etc/hosts 2>/dev/null || true

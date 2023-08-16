@@ -364,7 +364,7 @@ static int try_open ( const char *basedirfn, const char *needfn, int open_mode, 
 	if (!dirp)
 		return HDOSERR_FILE_NOT_FOUND;
 	char fn_found[FILENAME_MAX];
-	while (!xemu_os_readdir(dirp, fn_found, sizeof fn_found)) {
+	while (!xemu_readdir(dirp, fn_found, sizeof fn_found)) {
 		// TODO: add check for "." and ".." not done in root of emulated HDOS FS
 		if (!strcasecmp(fn_found, needfn) && strlen(fn_found) <= 63)
 			goto found;
@@ -374,9 +374,9 @@ static int try_open ( const char *basedirfn, const char *needfn, int open_mode, 
 	// FIXME: however maybe this is NOT what real hyppo would do, but note, in case of
 	// real hyppo and sd-card it has access to _real_ short names, etc ...
 #if 0
-	xemu_os_rewinddir(dirp);
+	xemu_rewinddir(dirp);
 	// try again with short name policy now ...
-	while ((entry = xemu_os_readdir(dirp, &entry_storage, sizeof fn_found))) {
+	while ((entry = xemu_readdir(dirp, &entry_storage, sizeof fn_found))) {
 
 	}
 #endif
@@ -542,7 +542,7 @@ static void hdos_virt_readdir ( void )
 	}
 #endif
 readdir_again:
-	if (xemu_os_readdir(desc_table[hdos.in_x].dirp, fn_found, sizeof fn_found)) {
+	if (xemu_readdir(desc_table[hdos.in_x].dirp, fn_found, sizeof fn_found)) {
 		// FIXME: there should be error checking here, but we assume for now, that NULL means end of directory
 		// But anyway, what should we do in case of an error during readdir? Not so much ...
 		DEBUGHDOS("HDOS: VIRT: %s(): end-of-directory" NL, __func__);

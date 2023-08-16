@@ -125,7 +125,7 @@ static void ui_cb_attach_d81 ( const struct menu_st *m, int *query )
 				// FIXME: when we appended .d81 we should check if file exists! file sel dialog only checks for the base name of course
 				// However this is a bit lame this way, that there are two different kind of question, one from the save filesel dailog,
 				// at the other case, we check here ...
-				if (xemu_os_file_exists(fnbuf2)) {
+				if (xemu_file_exists(fnbuf2)) {
 					if (!ARE_YOU_SURE("Overwrite existing D81 image?", ARE_YOU_SURE_DEFAULT_YES)) {
 						return;
 					}
@@ -219,7 +219,7 @@ static void ui_update_sdcard ( void )
 	// Try default ROM
 	snprintf(fnbuf, sizeof fnbuf, "%sMEGA65.ROM", sdl_pref_dir);
 	int ask_rom;
-	if (xemu_os_file_exists(fnbuf))
+	if (xemu_file_exists(fnbuf))
 		ask_rom = QUESTION_WINDOW("Yes|No", "Use the previously installed ROM?");
 	else
 		ask_rom = 1;

@@ -289,9 +289,9 @@ extern const Uint8 vga_font_8x16[256 * 16];
 
 #ifdef DEFINE_XEMU_OS_READDIR
 #include <dirent.h>
-extern int   xemu_os_readdir ( DIR *dirp, char *fn, const int fnmaxsize );
+extern int   xemu_readdir ( DIR *dirp, char *fn, const int fnmaxsize );
 #endif
 
-extern int   xemu_os_file_exists ( const char *fn );
+extern int   xemu_file_exists ( const char *fn );
 
 #endif
