@@ -37,6 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 const char *iomode_names[4] = { "VIC2", "VIC3", "VIC4ETH", "VIC4" };
+const Uint8 iomode_hexdigitids[4] = { 2, 3, 0xE, 4 };	// identifier of IO modes uses with %X (hex digit print format), will result "E" when IO mode is VIC4-ETH, "E" meaning "Ethernet"
 
 // (SDL) target texture rendering pointers
 static Uint32 *current_pixel;					// current_pixel pointer to the rendering target (one current_pixel: 32 bit)

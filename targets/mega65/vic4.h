@@ -20,6 +20,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_MEGA65_VIC4_H_INCLUDED
 #define XEMU_MEGA65_VIC4_H_INCLUDED
 
+// Do not EVER change the numbers! Other parts of the code depends on these
+// exact values, also the values themselves are used by software and must be
+// compatible with a real MEGA65! The only reason for "names" rather than
+// numvers for easier understand Xemu's code at many places.
 #define VIC2_IOMODE	0
 #define VIC3_IOMODE	1
 #define VIC4ETH_IOMODE	2
@@ -250,6 +254,7 @@ extern int   vic4_registered_screenshot_request;
 extern int   vic_vidp_legacy, vic_chrp_legacy, vic_sprp_legacy;
 
 extern const char *iomode_names[4];
+extern const Uint8 iomode_hexdigitids[4];
 
 extern void  vic_init ( void );
 extern void  vic_reset ( void );

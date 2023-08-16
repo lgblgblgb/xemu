@@ -203,7 +203,6 @@ static inline void matrix_write_string ( const char *s )
 
 static void dump_regs ( const char rot_fig )
 {
-	static const Uint8 io_mode_xlat[4] = { 2, 3, 0xE, 4 };
 	const Uint8 pf = cpu65_get_pf();
 	MATRIX("PC:%04X A:%02X X:%02X Y:%02X Z:%02X SP:%04X B:%02X %c%c%c%c%c%c%c%c IO:%X (%c) %c %s %s     ",
 		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z,
@@ -216,7 +215,7 @@ static void dump_regs ( const char rot_fig )
 		(pf & CPU65_PF_I) ? 'I' : 'i',
 		(pf & CPU65_PF_Z) ? 'Z' : 'z',
 		(pf & CPU65_PF_C) ? 'C' : 'c',
-		io_mode_xlat[vic_iomode],
+		iomode_hexdigitids[vic_iomode],
 		in_hypervisor ? 'H' : 'U',
 		rot_fig,
 		videostd_id ? "NTSC" : "PAL ",

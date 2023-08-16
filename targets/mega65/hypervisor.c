@@ -631,7 +631,6 @@ void hypervisor_debug ( void )
 		DEBUG("HYPERDEBUG: allowed to run outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu65.pc);
 		return;
 	}
-	static const unsigned int io_mode_xlat[4] = {2, 3, 0xE, 4};
 	static Uint16 prev_sp = 0xBEFF;
 	static int prev_pc = 0;
 	static int do_execution_range_check = 1;
@@ -650,9 +649,9 @@ void hypervisor_debug ( void )
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without SPHI == $BE but $%02X" NL, cpu65.sphi >> 8);
 		if (XEMU_UNLIKELY(cpu65.bphi != 0xBF00))
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without BPHI == $BF but $%02X" NL, cpu65.bphi >> 8);
-		// NOTE: this is may be not even possible as in hypervisor mode vic_iomode cannot be altered via the usual $D02F "KEY" register ...
-		if (XEMU_UNLIKELY(vic_iomode != VIC4_IOMODE))	// "3" means VIC-4 I/O mode. See "io_mode_xlat" definition above.
-			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory with VIC I/O mode of %X" NL, io_mode_xlat[vic_iomode]);
+		// FIXME: remove this? Reason: this is not even possible as in hypervisor mode vic_iomode cannot be altered via the usual $D02F "KEY" register ... [if there are no bugs ...]
+		if (XEMU_UNLIKELY(vic_iomode != VIC4_IOMODE))
+			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory with VIC I/O mode of %X" NL, iomode_hexdigitids[vic_iomode]);
 	}
 	const Uint16 now_sp = cpu65.sphi | cpu65.s;
 	int sp_diff = (int)prev_sp - (int)now_sp;
@@ -710,7 +709,7 @@ void hypervisor_debug ( void )
 			(pf & CPU65_PF_I) ? 'I' : 'i',
 			(pf & CPU65_PF_Z) ? 'Z' : 'z',
 			(pf & CPU65_PF_C) ? 'C' : 'c',
-			io_mode_xlat[vic_iomode],
+			iomode_hexdigitids[vic_iomode],
 			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].src_fn   : "<NOT>",
 			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].src_ln   : 0,
 			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].sym_name : "<NOT>",
