@@ -143,6 +143,7 @@ static const Uint8 *matrix_to_petscii_table_selector[16] = {
 struct kqueue_st {
 	Uint8	q[HWA_QUEUE_SIZE];
 	int	i;
+	Uint8	empty_marker;
 };
 
 static struct {
@@ -168,7 +169,7 @@ void hwa_kbd_disable_selector ( int state )
 static inline void kqueue_empty ( struct kqueue_st *p )
 {
 	p->i = 0;
-	p->q[0] = 0;	// to make the more frequent 'peek into queue' (without removing) faster, so it does not need to check 'i' ...
+	p->q[0] = p->empty_marker;	// to make the more frequent 'peek into queue' (without removing) faster, so it does not need to check 'i' ...
 }
 
 
@@ -183,8 +184,8 @@ static inline void kqueue_remove ( struct kqueue_st *p )
 
 static void kqueue_write ( struct kqueue_st *p, const Uint8 k )
 {
-	if (XEMU_UNLIKELY(!k)) {
-		DEBUGPRINT("KBD: HWA: PUSH: warning, trying to write zero into the queue! Refused." NL);
+	if (XEMU_UNLIKELY(k == p->empty_marker)) {
+		DEBUGPRINT("KBD: HWA: PUSH: warning, trying to write the empty marker ($%02X) into the queue! Refused." NL, p->empty_marker);
 		return;
 	}
 	if (p->i < HWA_QUEUE_SIZE)
@@ -525,6 +526,8 @@ void input_init ( void )
 {
 	hid_register_sdl_keyboard_event_callback(HID_CB_LEVEL_EMU, emu_callback_key_raw_sdl);
 	hwa_kbd.active_selector = 1;
+	hwa_kbd.ascii_queue.empty_marker = 0x00;
+	hwa_kbd.petscii_queue.empty_marker = 0xFF;
 	kqueue_empty(&hwa_kbd.ascii_queue);
 	kqueue_empty(&hwa_kbd.petscii_queue);
 }
