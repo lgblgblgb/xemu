@@ -52,11 +52,7 @@ char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
 #define UNCONNECTED	XS_INVALID_SOCKET
 
-#ifdef XEMU_ARCH_WIN64
-#	define PRINTF_SOCK	"%I64lld"
-#else
-#	define PRINTF_SOCK	"%d"
-#endif
+#define PRINTF_SOCK PRINTF_LLD
 
 
 static xemusock_socket_t  sock_server = UNCONNECTED;
@@ -409,7 +405,7 @@ void uartmon_update ( void )
 		xemusock_socket_t ret_sock = xemusock_accept(sock_server, (struct sockaddr *)&sock_st, &len, &xerr);
 		if (ret_sock != XS_INVALID_SOCKET || (ret_sock == XS_INVALID_SOCKET && !xemusock_should_repeat_from_error(xerr)))
 			DEBUG("UARTMON: accept()=" PRINTF_SOCK " error=%s" NL,
-				ret_sock,
+				(Sint64)ret_sock,
 				ret_sock != XS_INVALID_SOCKET ? "OK" : xemusock_strerror(xerr)
 			);
 		if (ret_sock != XS_INVALID_SOCKET) {
@@ -422,7 +418,7 @@ void uartmon_update ( void )
 				// Reset reading/writing information
 				umon_write_size = 0;
 				umon_read_pos = 0;
-				DEBUGPRINT("UARTMON: new connection established on socket " PRINTF_SOCK NL, sock_client);
+				DEBUGPRINT("UARTMON: new connection established on socket " PRINTF_SOCK NL, (Sint64)sock_client);
 			}
 		}
 	}
@@ -436,7 +432,7 @@ void uartmon_update ( void )
 		ret = xemusock_send(sock_client, umon_write_buffer + umon_write_pos, umon_write_size, &xerr);
 		if (ret != XS_SOCKET_ERROR || (ret == XS_SOCKET_ERROR && !xemusock_should_repeat_from_error(xerr)))
 			DEBUG("UARTMON: write(" PRINTF_SOCK ",buffer+%d,%d)=%d (%s)" NL,
-				sock_client, umon_write_pos, umon_write_size,
+				(Sint64)sock_client, umon_write_pos, umon_write_size,
 				ret, ret == XS_SOCKET_ERROR ? xemusock_strerror(xerr) : "OK"
 			);
 		if (ret == 0) { // client socket closed
@@ -460,7 +456,7 @@ void uartmon_update ( void )
 	ret = xemusock_recv(sock_client, umon_read_buffer + umon_read_pos, sizeof(umon_read_buffer) - umon_read_pos - 1, &xerr);
 	if (ret != XS_SOCKET_ERROR || (ret == XS_SOCKET_ERROR && !xemusock_should_repeat_from_error(xerr)))
 		DEBUG("UARTMON: read(" PRINTF_SOCK ",buffer+%d,%d)=%d (%s)" NL,
-			sock_client, umon_read_pos, (int)sizeof(umon_read_buffer) - umon_read_pos - 1,
+			(Sint64)sock_client, umon_read_pos, (int)sizeof(umon_read_buffer) - umon_read_pos - 1,
 			ret, ret == XS_SOCKET_ERROR ? xemusock_strerror(xerr) : "OK"
 		);
 	if (ret == 0) { // client socket closed

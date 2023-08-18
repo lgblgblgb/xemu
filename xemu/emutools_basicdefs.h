@@ -142,8 +142,6 @@ typedef uint64_t Uint64;
 #	define DIRSEP_CHR	'/'
 #	define NL		"\n"
 #	define NL_LENGTH	1
-#	define PRINTF_LLD	"%lld"
-#	define PRINTF_LLU	"%llu"
 #	define MKDIR(__n)	mkdir((__n), 0777)
 #	define NULL_DEVICE	"/dev/null"
 #else
@@ -151,11 +149,14 @@ typedef uint64_t Uint64;
 #	define DIRSEP_CHR	'\\'
 #	define NL		"\r\n"
 #	define NL_LENGTH	2
-#	define PRINTF_LLD	"%I64lld"
-#	define PRINTF_LLU	"%I64llu"
 #	define MKDIR(__n)	mkdir(__n)
 #	define NULL_DEVICE	"NUL:"
 #endif
+
+
+#define PRINTF_LLD "%" SDL_PRIs64
+#define PRINTF_LLU "%" SDL_PRIu64
+
 
 extern FILE *debug_fp;
 extern int chatty_xemu;

@@ -1,6 +1,6 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    ~/xemu/gui/popular_user_funcs.c: popular/common functions for Xemu's UI abstraction
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -157,7 +157,7 @@ void xemugui_cb_web_help_main ( const struct menu_st *m, int *query )
 		TARGET_NAME,				// t=%s (target name)
 		TARGET_DESC,				// T=%s (target description)
 		XEMU_ARCH_NAME,				// p=%s (platform name)
-		(long long int)time(NULL),		// u=%d (uts of the current time)
+		(Sint64)time(NULL),			// u=%d (uts of the current time)
 		m->user_data != NULL ? (const char*)(m->user_data) : "null"	// x=%s (user defined command)
 	);
 	const char *par_list[] = { XEMU_ONLINE_HELP_GET_VAR, par, NULL };

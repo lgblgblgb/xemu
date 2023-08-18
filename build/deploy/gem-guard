@@ -1,3 +1,0 @@
-#!/bin/bash
-echo "GEM called: $@"
-exec /usr/bin/gem.nolgb $@
