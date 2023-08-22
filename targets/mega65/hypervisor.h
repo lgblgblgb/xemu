@@ -30,6 +30,7 @@ extern int  in_hypervisor;
 extern int  hickup_is_overriden;
 extern int  hypervisor_is_debugged;
 extern char hyppo_version_string[64];
+extern Uint32 hypervisor_booted_vic_frame_counter;
 
 extern int  hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hypervisor_serial_out_asciizer );
 extern void hypervisor_debug ( void );

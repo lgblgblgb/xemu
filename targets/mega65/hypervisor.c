@@ -41,6 +41,7 @@ int  in_hypervisor;			// mega65 hypervisor mode
 char hyppo_version_string[64];
 int  hickup_is_overriden = 0;
 int  hypervisor_is_debugged = 0;
+Uint32 hypervisor_booted_vic_frame_counter;
 
 static int   resolver_ok = 0;
 
@@ -291,6 +292,7 @@ static inline void first_leave ( void )
 	// OK, that's enough
 	hdos_notify_system_start_end();
 	xemu_sleepless_temporary_mode(0);	// turn off temporary sleepless mode which may have been enabled before
+	hypervisor_booted_vic_frame_counter = vic_frame_counter;
 	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 }
 

@@ -343,6 +343,8 @@ void inject_ready_check_do ( void )
 	}
 	if (XEMU_LIKELY(!check_status))
 		return;
+	//if (!in_hypervisor && (vic_frame_counter - hypervisor_booted_vic_frame_counter) > 100)
+	//	DEBUGPRINT("Inject timeout: %d" NL, vic_frame_counter - hypervisor_booted_vic_frame_counter);
 	if (check_status == 1) {		// we're in "waiting for READY." phase
 		if (is_ready_on_screen(0))
 			check_status = 2;
