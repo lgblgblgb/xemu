@@ -150,7 +150,7 @@ void xemugui_cb_web_help_main ( const struct menu_st *m, int *query )
 	if (query)
 		return;
 	char par[512];
-	sprintf(par, "o=%d\001v=%s\001b=%s\001t=%s\001T=%s\001p=%s\001u=" PRINTF_LLD "\001x=%s\002chk",	// normal param list MUST end with \002 for future extension!
+	sprintf(par, "o=%d\001v=%s\001b=%s\001t=%s\001T=%s\001p=%s\001u=" PRINTF_S64 "\001x=%s\002chk",	// normal param list MUST end with \002 for future extension!
 		xemu_is_official_build(),		// o=%d (official build?)
 		XEMU_BUILDINFO_CDATE,			// v=%s (version data - formed from commit date actually)
 		XEMU_BUILDINFO_GIT,			// b=%s (build info)

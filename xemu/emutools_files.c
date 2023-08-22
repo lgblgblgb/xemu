@@ -235,7 +235,7 @@ void xemuexec_open_native_file_browser ( char *dir )
 	}
 	if (fbp != XEMUEXEC_NULL_PROCESS_ID) {
 		int w = xemuexec_check_status(fbp, 0);
-		DEBUGPRINT("EXEC: FILEBROWSER: previous file browser process (" PRINTF_LLU ") status was: %d" NL, (Uint64)(uintptr_t)fbp, w);
+		DEBUGPRINT("EXEC: FILEBROWSER: previous file browser process (" PRINTF_U64 ") status was: %d" NL, (Uint64)(uintptr_t)fbp, w);
 		if (w == XEMUEXEC_STILL_RUNNING)
 			ERROR_WINDOW("A file browser is already has been opened.");
 		else if (w == -1)
@@ -734,10 +734,10 @@ int xemu_create_large_empty_file ( const char *os_path, Uint64 size, int is_spar
 	if (is_sparse) {
 		DWORD dwTemp;
 		if (DeviceIoControl((HANDLE)_get_osfhandle(fd), FSCTL_SET_SPARSE, NULL, 0, NULL, 0, &dwTemp, NULL) == 0) {
-			ERROR_WINDOW("Cannot set file as sparse file!\nWindows error #" PRINTF_LLU "\nIt's not a fatal problem, though the file will take much more space than usual", (Uint64)GetLastError());
+			ERROR_WINDOW("Cannot set file as sparse file!\nWindows error #" PRINTF_U64 "\nIt's not a fatal problem, though the file will take much more space than usual", (Uint64)GetLastError());
 			goto error;
 		} else
-			DEBUGPRINT("WINDOWS: file has been made sparse, lpBytesReturned=" PRINTF_LLU NL, (Uint64)dwTemp);
+			DEBUGPRINT("WINDOWS: file has been made sparse, lpBytesReturned=" PRINTF_U64 NL, (Uint64)dwTemp);
 	} else
 		DEBUGPRINT("WINDOWS: not using sparse file ..." NL);
 #else

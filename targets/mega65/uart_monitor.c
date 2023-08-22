@@ -52,7 +52,7 @@ char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
 #define UNCONNECTED	XS_INVALID_SOCKET
 
-#define PRINTF_SOCK PRINTF_LLD
+#define PRINTF_SOCK PRINTF_S64
 
 
 static xemusock_socket_t  sock_server = UNCONNECTED;

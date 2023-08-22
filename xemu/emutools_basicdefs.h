@@ -154,8 +154,8 @@ typedef uint64_t Uint64;
 #endif
 
 
-#define PRINTF_LLD "%" SDL_PRIs64
-#define PRINTF_LLU "%" SDL_PRIu64
+#define PRINTF_S64 "%" SDL_PRIs64
+#define PRINTF_U64 "%" SDL_PRIu64
 
 
 extern FILE *debug_fp;

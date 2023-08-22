@@ -171,7 +171,7 @@ static inline off_t _assert_on_csd_size_mismatch ( off_t expected_size, int expe
 	int blocklen = 2 ** i["READ_BL_LEN"]
 	off_t size = (off_t)blocknr * (off_t)blocklen;
 	if (size != expected_size || mult != expected_mult || blocknr != excepted_blocknr || blocklen != expected_blocklen)
-		FATAL("Internal CSD size calculation failure!\nExpected=" PRINTF_LLD " Got=" PRINTF_LLD " (mult=%d blocknr=%d blocklen=%d)",
+		FATAL("Internal CSD size calculation failure!\nExpected=" PRINTF_S64 " Got=" PRINTF_S64 " (mult=%d blocknr=%d blocklen=%d)",
 			(Sint64)expected_size, (Sint64)size,
 			mult, blocknr, blocklen
 		);
@@ -219,7 +219,7 @@ static int sdext_check_and_set_size ( void )
 	int is_vhd;
 	if (sd_card_size < MIN_CARD_SIZE) {
 		ERROR_WINDOW(
-			"SD card image file \"%s\" is too small, minimal size is " PRINTF_LLU " Mbytes, but this one is " PRINTF_LLU " bytes long (about " PRINTF_LLU " Mbytes). SD access has been disabled!",
+			"SD card image file \"%s\" is too small, minimal size is " PRINTF_U64 " Mbytes, but this one is " PRINTF_U64 " bytes long (about " PRINTF_U64 " Mbytes). SD access has been disabled!",
 			sdimg_path, (Uint64)(MIN_CARD_SIZE >> 20), (Uint64)sd_card_size, (Uint64)(sd_card_size >> 20)
 		);
 		return 1;
@@ -256,7 +256,7 @@ static int sdext_check_and_set_size ( void )
 		DEBUG("SDEXT: VHD file is not detected." NL);
 	if (sd_card_size > MAX_CARD_SIZE) {	// do this check here, as VHD footer could overflow on 2G boundary at the beginning what we have support for in Xep128
 		ERROR_WINDOW(
-			"SD card image file \"%s\" is too large, maximal allowed size is " PRINTF_LLU " Mbytes, but this one is " PRINTF_LLU " bytes long (about " PRINTF_LLU " Mbytes). "
+			"SD card image file \"%s\" is too large, maximal allowed size is " PRINTF_U64 " Mbytes, but this one is " PRINTF_U64 " bytes long (about " PRINTF_U64 " Mbytes). "
 			"SD access has been disabled!",
 			sdimg_path, (Uint64)(MAX_CARD_SIZE >> 20), (Uint64)sd_card_size, (Uint64)(sd_card_size >> 20)
 		);
@@ -274,7 +274,7 @@ static int sdext_check_and_set_size ( void )
 		return 0;
 	if (is_vhd)
 		WARNING_WINDOW("SD-card image \"%s\" is promoted for extension but it seems to be a VHD file.\nIf you allow extension it WON'T BE USED AS VHD ANY MORE BY OTHER SOFTWARE!", sdimg_path);
-	INFO_WINDOW("SD-card image file \"%s\" is about to be extended with %d bytes (the next valid SD-card size), new size is: " PRINTF_LLU, sdimg_path, (int)(new_size - sd_card_size), (Uint64)new_size);
+	INFO_WINDOW("SD-card image file \"%s\" is about to be extended with %d bytes (the next valid SD-card size), new size is: " PRINTF_U64, sdimg_path, (int)(new_size - sd_card_size), (Uint64)new_size);
 	if (!QUESTION_WINDOW("Not allowed|Allowed (DANGEROUS)", "Do you allow this extension? NOTE: it's a test feature, do not allow it, if you are unsure!")) {
 		INFO_WINDOW("You didn't allow the extension. You can continue, but some EP128 software may fail (ie: fdisk)!");
 		return 0;
@@ -328,7 +328,7 @@ void sdext_init ( const char *sdimg_filename, const char *sdrom_filename )
 		close(sdfd);
 		goto error;
 	} else
-		DEBUG("SDEXT: SD card size is: " PRINTF_LLU " bytes" NL, (Uint64)sd_card_size);
+		DEBUG("SDEXT: SD card size is: " PRINTF_U64 " bytes" NL, (Uint64)sd_card_size);
 	sdext_clear_ram();
 	sdext_enabled = 1;	// turn emulation on
 	rom_page_ofs = 0;
@@ -509,7 +509,7 @@ static void _spi_shifting_with_sd_card ( void )
 				_read_b = 32; // address error, if no SD card image ... [this is bad TODO, better error handling]
 			else {
 				off_t ret, _offset = (cmd[1] << 24) | (cmd[2] << 16) | (cmd[3] << 8) | cmd[4];
-				SD_DEBUG("SDEXT: REGIO: seek to " PRINTF_LLD " in the image file." NL, (Sint64)_offset);
+				SD_DEBUG("SDEXT: REGIO: seek to " PRINTF_S64 " in the image file." NL, (Sint64)_offset);
 				z80ex_w_states(100);	// TODO: fake some wait states here, actully this is the WRONG method, as not the Z80 should wait but the SD card's answer ...
 				if (_offset > sd_card_size - 512UL) {
 					_read_b = 32; // address error, TODO: what is the correct answer here?
@@ -519,7 +519,7 @@ static void _spi_shifting_with_sd_card ( void )
 					ret = lseek(sdfd, _offset, SEEK_SET);
 					if (ret != _offset) {
 						_read_b = 32; // address error, TODO: what is the correct answer here?
-						SD_DEBUG("SDEXT: seek error to " PRINTF_LLD " (got: " PRINTF_LLD ")" NL, (Sint64)_offset, (Sint64)ret);
+						SD_DEBUG("SDEXT: seek error to " PRINTF_S64 " (got: " PRINTF_S64 ")" NL, (Sint64)_offset, (Sint64)ret);
 					} else {
 						_block_read();
 						if (cmd[0] == 18)
