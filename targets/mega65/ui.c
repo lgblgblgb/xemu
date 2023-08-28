@@ -711,6 +711,8 @@ static const struct menu_st menu_mega65_model[] = {
 	{ "MEGA65 r1",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x01	},
 	{ "MEGA65 r2",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x02	},
 	{ "MEGA65 r3",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x03	},
+	{ "MEGA65 r4",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x04	},
+	{ "MEGA65 r5",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x05	},
 	{ "MEGAphone r1",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x21 },
 	{ "MEGAphone r4",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x22	},
 	{ "Nexys4",			XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mega65_model, (void*)0x40	},

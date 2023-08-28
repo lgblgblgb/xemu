@@ -153,10 +153,10 @@ typedef uint64_t Uint64;
 #	define NULL_DEVICE	"NUL:"
 #endif
 
-
-#define PRINTF_S64 "%" SDL_PRIs64
-#define PRINTF_U64 "%" SDL_PRIu64
-
+#include <inttypes.h>
+#define PRINTF_S64 "%" PRId64
+#define PRINTF_U64 "%" PRIu64
+#define PRINTF_X64 "%" PRIX64
 
 extern FILE *debug_fp;
 extern int chatty_xemu;
