@@ -537,7 +537,7 @@ echo
 echo -n "Extracting 64-bit printf numeric format strings:"
 cp $COUT /tmp/xemu
 for a in PRINTF_S64 PRINTF_U64 PRINTF_X64 ; do
-	b=$(cat $COUT  | grep -v '^#' | tr '\n\r\t' '   ' | sed 's/[," ]*//g' | sed -nr "s/^.*CONFIGURE_${a}_BEGIN([^_]*)_CONFIGURE_${a}_END.*$/\1/p")
+	b=$(cat $COUT  | grep -v '^#' | tr '\n\r\t' '   ' | sed 's/[," ]*//g' | sed -nE "s/^.*CONFIGURE_${a}_BEGIN([^_]*)_CONFIGURE_${a}_END.*$/\1/p")
 	if [ "$b" = "" ]; then
 		echo -n " $a=ERROR_NOT_FOUND"
 	else
