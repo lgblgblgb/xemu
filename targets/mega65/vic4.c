@@ -92,7 +92,7 @@ static const char PAL_STD_NAME[] = "PAL";
 int vic_readjust_sdl_viewport = 0;
 int vic4_disallow_videostd_change = 0;		// Disallows programs to change video std via register D06F, bit 7 (emulator internally writing that bit still can change video std though!)
 int vic4_registered_screenshot_request = 0;
-Uint32 vic_frame_counter;
+unsigned int vic_frame_counter, vic_frame_counter_since_boot;
 
 
 // VIC4 Modeline Parameters
@@ -149,6 +149,7 @@ static const Uint8 reverse_byte_table[] = {
 void vic_reset ( void )
 {
 	vic_frame_counter = 0;
+	vic_frame_counter_since_boot = 0;
 	vic_iomode = VIC2_IOMODE;
 	vic_color_register_mask = 0x0F;
 	interrupt_status = 0;
@@ -271,6 +272,7 @@ void vic4_close_frame_access ( void )
 	// FINALLY ....
 	xemu_update_screen();
 	vic_frame_counter++;
+	vic_frame_counter_since_boot++;
 }
 
 // The hardware allows a sideborder value of 16383 as a remnant of old MEGA65 design.

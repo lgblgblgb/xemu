@@ -1,6 +1,6 @@
 /* Xemu - Emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
  * 8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -80,11 +80,9 @@ extern void xemuexec_open_native_file_browser ( char *dir );
 extern void xemu_set_installer ( const char *filename );
 #endif
 
-#if defined(XEMU_USE_LODEPNG) && defined(XEMU_FILES_SCREENSHOT_SUPPORT)
 // NOTE: you must call this function before the final rendering of course, thus source_pixels has a full rendered frame already ;)
 extern int xemu_screenshot_png ( const char *path, const char *fn, unsigned int zoom_width, unsigned int zoom_height, Uint32 *source_pixels, unsigned int source_width, unsigned int source_height, unsigned int source_texture_width );
 extern char xemu_screenshot_full_path[];
-#endif
 
 #ifndef XEMU_ARCH_WIN
 #	define UNIX_DATADIR_0 "/usr/local/share/xemu"

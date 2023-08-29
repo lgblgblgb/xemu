@@ -518,7 +518,7 @@ static void ui_emu_info ( void )
 		"Current VIC and I/O mode: %s %s, hot registers are %s\n"
 		"\n"
 		"Xemu host CPU usage so far: %s\n"
-		"Xemu's host OS: %s [%s]"
+		"Xemu's host OS: %s [%s] (64bit-FMTs: %s %s %s)"
 		,
 		dma_rev, dma_rev ? "B, new" : "A, old",
 		rom_date, rom_name, rom_is_overriden ? "OVERRIDEN" : "installed", rom_is_external ? "external" : "internal",
@@ -531,8 +531,7 @@ static void ui_emu_info ( void )
 		cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc),
 		iomode_names[vic_iomode], videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
 		td_stat_str,
-		xemu_get_uname_string(),
-		emu_fs_is_utf8 ? "UTF8-FS" : "ASCII-FS"
+		xemu_get_uname_string(), emu_fs_is_utf8 ? "UTF8-FS" : "ASCII-FS", PRINTF_U64, PRINTF_X64, PRINTF_S64
 	);
 }
 

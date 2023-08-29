@@ -126,7 +126,9 @@ static const struct menu_st menu_debug[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
 	{ "Monitor prompt",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_monitor, NULL },
+#ifdef HAVE_XEMU_EXEC_API
 	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_native_os_prefdir_browser, NULL },
+#endif
 	{ NULL }
 };
 static const struct menu_st menu_reset[] = {

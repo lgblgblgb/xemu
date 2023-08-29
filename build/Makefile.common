@@ -118,7 +118,7 @@ ifeq ($(CONFIG_HAS_WINDRES), yes)
 WINDRES_SRC	= $(TOPDIR)/build/windres.rc
 WINDRES_OBJ	= $(COMMONOBJPREFIX)windres.res
 OBJS		+= $(WINDRES_OBJ)
-$(WINDRES_OBJ): $(WINDRES_SRC) $(TOPDIR)/build/xemu.ico $(DEPALL)
+$(WINDRES_OBJ): $(WINDRES_SRC) $(TOPDIR)/build/xemu.ico $(TOPDIR)/build/windres-manifest.xml $(DEPALL)
 	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)WINDRES: $<$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	$(CONFIG_WINDRES) $< -O coff -o $@
 endif

@@ -32,6 +32,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define OSDGUI_MENU_MAXDEPTH	16
 #define OSDGUI_MENU_MAIN_NAME	"*** MAIN ***"
 
+// Needed by emcc?
+#include <sys/types.h>
+#include <sys/stat.h>
+
+
 // Filled by xemuosdgui_init(), because the GUI subsystem has no direct access for OSD layer internals
 static struct {
 	//SDL_Texture	*tex;

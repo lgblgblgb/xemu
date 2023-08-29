@@ -96,6 +96,7 @@ static int nick_addressing_init ( void )
 
 void screenshot ( void )
 {
+#ifndef XEMU_ARCH_HTML
 	if (!xemu_screenshot_png(
 		NULL, NULL,
 		1,
@@ -109,6 +110,7 @@ void screenshot ( void )
 		if (p)
 			OSD(-1, -1, "%s", p + 1);
 	}
+#endif
 }
 
 
