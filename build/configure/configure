@@ -20,52 +20,71 @@
 
 echo "*** Running xemu-configure ***"
 
+LANG=C
+LC_TIME=C
+export LANG LC_TIME
+
 ###########################################################
 # Check some basic common UNIX utilities if work, we need #
 ###########################################################
 
-tool_list="sed"
-if [ "`echo "testSTRSTRing" | sed -n 's/STR/RTS/gp'`" != "testRTSRTSing" ]; then
+echo -n "Testing needed UNIX tools for the build: "
+
+echo -n "grep "
+if [ "`echo 'alma,korte,banan' | grep -oEia ',K[^,]+,'`" != ",korte," ]; then
+	echo
+	echo "FATAL: UNIX utility 'grep' does not seem to work or cannot be found" >&2
+	exit 1
+fi
+echo -n "sed "
+if [ "`echo "testSTRSTRing" | sed -nE 's/(STR)/_\1/gp'`" != "test_STR_STRing" ]; then
+	echo
 	echo "FATAL: UNIX utility 'sed' does not seem to work or cannot be found" >&2
 	exit 1
 fi
-tool_list="$tool_list tr"
+echo -n "tr "
 if [ "`echo almAalma | tr 'a' 'b'`" != "blmAblmb" ]; then
+	echo
 	echo "FATAL: UNIX utility 'tr' does not seem to work or cannot be found" >&2
 	exit 1
 fi
-tool_list="$tool_list cut"
+echo -n "cut "
 if [ \
 	"`echo ez=az=amaz | cut -f1 -d=`" != "ez" -o \
 	"`echo ez=az=amaz | cut -f2- -d=`" != "az=amaz" -o \
 	"`echo ezaz | cut -f1 -d=`" != "ezaz" -o \
 	"`echo ezaz | cut -f2- -d=`" != "ezaz" \
 ]; then
+	echo
 	echo "FATAL: UNIX utility 'cut' does not seem to work or cannot be found" >&2
 	exit 1
 fi
-tool_list="$tool_list dirname"
+echo -n "dirname "
 if [ "`dirname /something`" != "/" ]; then
+	echo
 	echo "FATAL: UNIX utility 'dirname' does not seem to work or cannot be found" >&2
 	exit 1
 fi
-tool_list="$tool_list pwd"
+echo -n "pwd "
 if [ "`pwd`" = "" ]; then
+	echo
 	echo "FATAL: UNIX utility 'pwd' does not seem to work or cannot be found" >&2
 	exit 1
 fi
-tool_list="$tool_list uname"
+echo -n "uname "
 if [ "`uname -a`" = "" ]; then
+	echo
 	echo "FATAL: UNIX utility 'uname' does not seem to work or cannot be found" >&2
 	exit 1
 fi
-tool_list="$tool_list date"
+echo -n "date "
 if [ "`date`" = "" ]; then
+	echo
 	echo "FATAL: UNIX utility 'date' does not seem to work or cannot be found" >&2
 	exit 1
 fi
 
-echo "Checked needed UNIX tools: $tool_list"
+echo "... [OK]"
 
 #####################################################
 # Evaluate given parameters to the configure script #
