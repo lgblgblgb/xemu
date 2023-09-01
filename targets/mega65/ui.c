@@ -195,6 +195,9 @@ static void ui_save_basic_as_text ( void )
 }
 #endif
 
+static char dir_rom[PATH_MAX + 1] = "";
+
+#ifdef SD_CONTENT_SUPPORT
 static void ui_format_sdcard ( void )
 {
 	if (ARE_YOU_SURE(
@@ -209,8 +212,6 @@ static void ui_format_sdcard ( void )
 	}
 	reset_mega65();
 }
-
-static char dir_rom[PATH_MAX + 1] = "";
 
 static void ui_update_sdcard ( void )
 {
@@ -316,6 +317,7 @@ ret:
 	// since we've used the detect function on the to-be-loaded ROM to check
 	rom_detect_date(main_ram + 0x20000);
 }
+#endif	// SD_CONTENT_SUPPORT
 
 static void reset_via_hyppo ( void )
 {
@@ -860,11 +862,13 @@ static const struct menu_st menu_help[] = {
 	{ NULL }
 };
 #endif
+#ifdef SD_CONTENT_SUPPORT
 static const struct menu_st menu_sdcard[] = {
 	{ "Re-format SD image",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_format_sdcard },
 	{ "Update files on SD image",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_update_sdcard },
 	{ NULL }
 };
+#endif
 static const struct menu_st menu_drv8[] = {
 	{ "Attach D81",			XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_d81, (void*)0 },
@@ -895,7 +899,9 @@ static const struct menu_st menu_drv9[] = {
 static const struct menu_st menu_disks[] = {
 	{ "Drive-8",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_drv8    },
 	{ "Drive-9",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_drv9    },
+#ifdef SD_CONTENT_SUPPORT
 	{ "SD-card",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_sdcard  },
+#endif
 	{ "Cartridge",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_cartridge },
 	{ NULL }
 };

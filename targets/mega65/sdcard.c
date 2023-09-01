@@ -331,7 +331,11 @@ static void card_init_done ( void )
 	DEBUGPRINT("SDCARD: card init done, size=%u Mbytes (%s), virtsd_mode=%s, default_D81_from_sd=%d" NL,
 		sdcard_size_in_blocks >> 11,
 		sd_is_read_only ? "R/O" : "R/W",
+#ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 		vdisk.mode ? "IN-MEMORY-VIRTUAL" : "image-file",
+#else
+		"NOT-SUPPORTED",
+#endif
 		configdb.defd81fromsd
 	);
 	sdcard_set_external_mount_pool(sdcard_size_in_blocks);
@@ -364,9 +368,9 @@ int sdcard_init ( const char *fn, const int virtsd_flag )
 	if (virtsd_flag) {
 		virtdisk_init(VIRTUAL_DISK_BLOCKS_PER_CHUNK, VIRTUAL_DISK_SIZE_IN_BLOCKS);
 		vdisk.mode = 1;
-	} else
-#else
+	} else {
 		vdisk.mode = 0;
+	}
 #endif
 	d81access_init();
 	atexit(sdcard_shutdown);
@@ -465,12 +469,15 @@ retry:
 		if (just_created_image_file) {
 			just_created_image_file = 0;
 			// Just created SD-card image file by Xemu itself! So it's nice if we format it for the user at this point!
+#ifdef SD_CONTENT_SUPPORT
 			if (!sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_FORCE_FDISK)) {
 				INFO_WINDOW("Your just created SD-card image file has\nbeen auto-fdisk/format'ed by Xemu. Great :).");
 				sdcontent_write_rom_stub();
 			}
+#endif
 		}
 	}
+#ifdef SD_CONTENT_SUPPORT
 	if (!virtsd_flag && sdfd >= 0) {
 		static const char msg[] = " on the SD-card image.\nPlease use UI menu: Disks -> SD-card -> Update files ...\nUI can be accessed with right mouse click into the emulator window.";
 		int r = sdcontent_check_xemu_signature();
@@ -484,6 +491,7 @@ retry:
 			INFO_WINDOW("Xemu's signature is too new%s to DOWNgrade", msg);
 		}
 	}
+#endif
 	return sdfd;
 }
 
@@ -637,7 +645,11 @@ static void sdcard_block_io ( const Uint32 block, const int is_write )
 		is_write ? "writing" : "reading",
 		block, cpu65.pc
 	);
+#ifdef SD_CONTENT_SUPPORT
 	if (XEMU_UNLIKELY(is_write && (block == 0 || block == XEMU_INFO_SDCARD_BLOCK_NO) && sdfd >= 0 && protect_important_blocks)) {
+#else
+	if (XEMU_UNLIKELY(is_write &&  block == 0                                        && sdfd >= 0 && protect_important_blocks)) {
+#endif
 		if (protect_important_blocks == 2) {
 			goto error;
 		} else {

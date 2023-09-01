@@ -24,6 +24,10 @@ LANG=C
 LC_TIME=C
 export LANG LC_TIME
 
+# Only used in case of emscripten builds, the default 65536 can be too small
+# NOTE: it must be multiple of 8192
+EMSCRIPTEN_STACK_SIZE=655360
+
 ###########################################################
 # Check some basic common UNIX utilities if work, we need #
 ###########################################################
@@ -599,7 +603,8 @@ echo "SOCKET_CFLAGS =" >> $OUTPUT_MAKEFILE
 if [ $TARGET_IS_HTML = Y ]; then
 	SDL2_CONFIG="emscripten-builtin"
 	SDL2_CFLAGS="-s USE_SDL=2"
-	SDL2_LIBS="-s USE_SDL=2"
+	SDL2_LIBS="-s USE_SDL=2 -s STACK_SIZE=$EMSCRIPTEN_STACK_SIZE"
+	echo "Stack size on emscripten builds: $EMSCRIPTEN_STACK_SIZE"
 else
 	echo -n "Checking sdl2-config script as \"$SDL2_CONFIG\" ... "
 	SDL2_VERSION="`$SDL2_CONFIG --version 2> $CERR`"

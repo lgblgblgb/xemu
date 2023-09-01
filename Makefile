@@ -1,7 +1,7 @@
 ## Collection of *simple* emulators of some 8 bits machines using SDL2 library,
 ## including the MEGA65, Commodore LCD and Commodore 65.
 ##
-## Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -76,6 +76,10 @@ publish:
 	$(MAKE) nsi
 	$(MAKE) -C build/bin dist
 
+emscriptenpublish:
+	@echo "*** You should not use this target, this is only for distributing binaries on the site of the author!"
+	scp build/bin/*.html build/bin/*.js build/bin/*.wasm sol.lgb.hu:/var/www/html/xemu/
+
 build/objs/xemu-48x48.png: build/xemu-48x48.xpm Makefile
 	convert $< $@
 build/objs/Doxyfile.tmp: build/Doxyfile Makefile
@@ -90,4 +94,4 @@ doxypublish:
 config:
 	ARCH=$(ARCH) $(MAKE) -C build/configure
 
-.PHONY: all all-arch clean all-clean distclean dep all-dep deb nsi publish doxygen doxypublish config install
+.PHONY: all all-arch clean all-clean distclean dep all-dep deb nsi publish doxygen doxypublish config install emscriptenpublish

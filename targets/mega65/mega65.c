@@ -380,7 +380,13 @@ static void mega65_init ( void )
 	// Fill memory with the needed pre-initialized regions to be able to start.
 	preinit_memory_for_start();
 	// *** Image file for SDCARD support, and other related init functions handled there as well (eg d81access, fdc init ... related registers, etc)
-	if (sdcard_init(configdb.sdimg, configdb.virtsd) < 0)
+	if (sdcard_init(configdb.sdimg,
+#ifndef XEMU_ARCH_HTML
+		configdb.virtsd
+#else
+		0
+#endif
+	) < 0)
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
 	vic_init();

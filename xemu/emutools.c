@@ -682,6 +682,7 @@ int xemu_is_first_time_user ( void )
 }
 
 
+#ifndef XEMU_ARCH_HTML
 // It seems SDL_GetBasePath() can be defunct on some architectures.
 // This function is intended to be used only by xemu_pre_init() and contains workaround.
 static char *_getbasepath ( void )
@@ -707,6 +708,7 @@ static char *_getbasepath ( void )
 #endif
 	return NULL;
 }
+#endif
 
 
 static inline Uint64 _get_uts_from_cdate ( void )
