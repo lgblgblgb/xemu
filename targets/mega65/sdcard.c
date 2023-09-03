@@ -435,14 +435,15 @@ retry:
 			sdfd = -1;
 			return sdfd;
 		}
+		sdcard_size_in_blocks = size_in_bytes >> 9;
 #ifdef COMPRESSED_SD
 		sd_compressed = detect_compressed_image(sdfd);
 		if (sd_compressed < 0) {
 			ERROR_WINDOW("Error while trying to detect compressed SD-image");
 			sdcard_size_in_blocks = 0; // just cheating to trigger error handling later
-		}
+		} else if (sd_compressed > 0)
+			goto no_check_compressed_card;
 #endif
-		sdcard_size_in_blocks = size_in_bytes >> 9;
 		DEBUG("SDCARD: detected size in Mbytes: %d" NL, (int)(size_in_bytes >> 20));
 		if (size_in_bytes < 67108864UL) {
 			ERROR_WINDOW("SD-card image is too small! Min required size is 64Mbytes!");
@@ -463,6 +464,7 @@ retry:
 			return sdfd;
 		}
 	}
+no_check_compressed_card:
 	if (sdfd >= 0) {
 		card_init_done();
 		//sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_ASK_FDISK | SDCONTENT_ASK_FILES);

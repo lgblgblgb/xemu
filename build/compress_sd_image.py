@@ -15,7 +15,7 @@ def run(argv):
     if size & 511:
         os.close(fin)
         return "Input file size is not multiple of 512 bytes!"
-    if size > 0x80000000:
+    if size > 0x100000000:
         os.close(fin)
         return "Too large input file, max supported is 2Gbyte in length!"
     size >>= 9

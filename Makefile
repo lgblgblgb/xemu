@@ -78,7 +78,7 @@ publish:
 
 emscriptenpublish:
 	@echo "*** You should not use this target, this is only for distributing binaries on the site of the author!"
-	scp build/bin/*.html build/bin/*.js build/bin/*.wasm sol.lgb.hu:/var/www/html/xemu/
+	rsync -av build/bin/*.data build/bin/*.wasm build/bin/*.js build/bin/*.html sol.lgb.hu:/var/www/html/xemu/
 
 build/objs/xemu-48x48.png: build/xemu-48x48.xpm Makefile
 	convert $< $@
