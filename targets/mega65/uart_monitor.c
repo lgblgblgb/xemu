@@ -101,7 +101,6 @@ static char *parse_hex_arg ( char *p, int *val, int min, int max )
 }
 
 
-
 static int check_end_of_command ( char *p, int error_out )
 {
 	while (*p == 32)
@@ -212,6 +211,10 @@ static void execute_command ( char *cmd )
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
 			if (cmd && check_end_of_command(cmd, 1))
 				m65mon_breakpoint(par1);
+			break;
+		case 'g':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
+			m65mon_set_pc(par1);
 			break;
 #ifdef TRACE_NEXT_SUPPORT
 		case 'N':

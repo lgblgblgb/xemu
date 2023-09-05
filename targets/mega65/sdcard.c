@@ -592,6 +592,47 @@ int sdcard_read_block ( const Uint32 block, Uint8 *buffer )
 		memset(buffer, 0xFF, 512);
 		return 0;
 	}
+#ifdef NEW_COMPRESSED
+	if (sd_compressed) {
+		const int page_no = block >> 7;			// "block" is 512 byte based, so to get 64K based page, we need 7 more shifts
+		static int cached_page = -1;
+		static Uint8 page_cache = NULL;
+		if (XEMU_UNLIKELY(!page_cache))
+			page_cache = xemu_alloc(0x10000);
+		if (cached_page != page_no) {
+			seek(sdfd, SEEK_SET, mapping_base + 4 * page_ofs);
+			Uint8 ofs_info[8];
+			xemu_safe_read(sdfd, ofs_info, sizeof ofs_info);
+			const Uint32 img_ofs = ofs_info[0] + (ofs_info[1] << 8) + (ofs_info[2] << 16) + (ofs_info[3] << 24);
+			const Uint32 img_siz = ofs_info[4] + (ofs_info[5] << 8) + (ofs_info[6] << 16) + (ofs_info[7] << 24) - img_ofs;
+			seek(sdfd, SEEK_SET, img_ofs);
+			xemu_safe_read(sdfd, unpack_buffer, img_siz);
+			memset(page_cache, unpack_buffer[0], sizeof page_cache);
+
+			for (int i = 1, o = 0; i < img_siz;) {
+				const Uint8 c = unpack_buffer[i++];
+				if (c == unpack_buffer[0]) {
+					const Uint8 v = unpack_buffer[i++];
+					int n = unpack_buffer[i++];
+					if (!n) {
+						n = unpack_buffer[i++];
+						n += unpack_buffer[i++] << 16;
+					}
+					memset(page_cache + o, v, n);
+					o += n;
+				} else
+					page_cache[o++] = c;
+			}
+
+
+
+			....
+			cached_page = page_no;
+		}
+		memcpy(buffer, page_cache + ((block & 127) << 9), 512);
+		return 0;
+	}
+#endif
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	if (vdisk.mode) {
 		virtdisk_read_block(block, buffer);

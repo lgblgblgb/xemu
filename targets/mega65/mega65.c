@@ -581,6 +581,11 @@ void m65mon_show_regs ( void )
 	);
 }
 
+void m65mon_set_pc ( const Uint16 addr )
+{
+	cpu65.pc = addr;
+}
+
 void m65mon_dumpmem16 ( Uint16 addr )
 {
 	int n = 16;
