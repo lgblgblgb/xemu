@@ -384,6 +384,12 @@ static void cmd_dump ( char *p )
 }
 
 
+static void cmd_reset ( char *p )
+{
+	reset_mega65();
+}
+
+
 static void cmd_help ( char *p );
 
 
@@ -397,6 +403,7 @@ static const struct command_tab_st {
 	{ "help",	cmd_help,	"h?"	},
 	{ "log",	cmd_log,	NULL	},
 	{ "reg",	cmd_reg,	"r"	},
+	{ "reset",	cmd_reset,	NULL	},
 	{ "show",	cmd_show,	"s"	},
 	{ "uname",	cmd_uname,	NULL	},
 	{ "ver",	cmd_ver,	NULL	},

@@ -212,6 +212,10 @@ static void execute_command ( char *cmd )
 			if (cmd && check_end_of_command(cmd, 1))
 				m65mon_breakpoint(par1);
 			break;
+		case 'g':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
+			m65mon_set_pc(par1);
+			break;
 #ifdef TRACE_NEXT_SUPPORT
 		case 'N':
 			m65mon_next_command();
@@ -220,9 +224,14 @@ static void execute_command ( char *cmd )
 		case 0:
 			m65mon_empty_command();	// emulator can use this, if it wants
 			break;
+		case '!':
+			reset_mega65();
+			break;
 		case '~':
 			if (!strncmp(cmd, "exit", 4)) {
 				XEMUEXIT(0);
+			} else if (!strncmp(cmd, "reset", 5)) {
+				reset_mega65();
 			} else if (!strncmp(cmd, "mount", 5)) {
 				// Quite crude syntax for now:
 				// 	~mount0		- unmounting image/disk in drive-0

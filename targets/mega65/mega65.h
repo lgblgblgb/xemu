@@ -51,6 +51,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define AUDIO_SAMPLE_FREQ	44100
 
 extern void m65mon_show_regs ( void );
+extern void m65mon_set_pc    ( const Uint16 addr );
 extern void m65mon_dumpmem16 ( Uint16 addr );
 extern void m65mon_dumpmem28 ( int addr );
 extern void m65mon_setmem28  ( int addr, int cnt, Uint8* vals );

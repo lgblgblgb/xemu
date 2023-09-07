@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 | For more information about "cpu65" please also read comments in file cpu65.c |
 
@@ -108,6 +108,7 @@ extern void  cpu65_illegal_opcode_callback ( void );
 #endif
 
 extern void cpu65_reset ( void );
+extern void cpu65_debug_set_pc ( const Uint16 new_pc );
 extern int  cpu65_step  (
 #ifdef CPU_STEP_MULTI_OPS
 	const int run_for_cycles

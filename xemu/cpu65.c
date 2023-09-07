@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    THIS IS AN UGLY PIECE OF SOURCE REALLY.
 
@@ -374,6 +374,31 @@ void cpu65_reset ( void ) {
 			CPU65.pc, // FIXME
 			HAS_NMOS_BUG_BCD ? "NMOS-6502" : "65C02+"
 	);
+}
+
+void cpu65_debug_set_pc ( const Uint16 new_pc ) {
+#ifdef	CPU_65CE02
+	int max = 100;
+	while (
+		CPU65.cpu_inhibit_interrupts
+#ifdef	MEGA65
+		|| CPU65.prefix != PREFIX_NOTHING
+#endif
+	)
+		if (max-- <= 0) {
+			DEBUGPRINT("CPU65: SET_PC: **warning** timeout while waiting for EOM or PREFIX" NL);
+			break;
+		} else cpu65_step(
+#ifdef			CPU_STEP_MULTI_OPS
+			1
+#endif
+		);
+	CPU65.cpu_inhibit_interrupts = 0;
+#ifdef	MEGA65
+	CPU65.prefix = PREFIX_NOTHING;
+#endif
+#endif
+	CPU65.pc = new_pc;
 }
 
 
