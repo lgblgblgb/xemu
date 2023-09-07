@@ -52,7 +52,7 @@ char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
 #define UNCONNECTED	XS_INVALID_SOCKET
 
-#define PRINTF_SOCK PRINTF_S64
+#define PRINTF_SOCK	PRINTF_S64
 
 
 static xemusock_socket_t  sock_server = UNCONNECTED;
@@ -223,6 +223,9 @@ static void execute_command ( char *cmd )
 #endif
 		case 0:
 			m65mon_empty_command();	// emulator can use this, if it wants
+			break;
+		case '!':
+			reset_mega65();
 			break;
 		case '~':
 			if (!strncmp(cmd, "exit", 4)) {

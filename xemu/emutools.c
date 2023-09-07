@@ -298,7 +298,7 @@ void *xemu_malloc_ALIGNED ( size_t size )
 	}
 	return p;
 }
-#else
+#elif !defined(XEMU_ARCH_HTML)
 #warning "No _mm_malloc() for this architecture ..."
 #endif
 

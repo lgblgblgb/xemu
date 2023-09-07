@@ -20,7 +20,8 @@
 #define HAVE_XEMU_EXEC_API
 #endif
 
-#define CONFIG_EMSCRIPTEN_OK
+//FIXME: let's repair ep128 with emscripten and re-allow it!
+//#define CONFIG_EMSCRIPTEN_OK
 
 #define VARALIGN MAXALIGNED
 
