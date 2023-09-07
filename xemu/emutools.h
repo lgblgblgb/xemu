@@ -1,6 +1,6 @@
 /* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
    8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -37,7 +37,7 @@ extern int (*SDL_ShowMessageBox_custom)(const SDL_MessageBoxData*, int* );
 #include <emscripten.h>
 #define EMSCRIPTEN_SDL_BASE_DIR "/files/"
 #define MSG_POPUP_WINDOW(sdlflag, title, msg, win) \
-	do { if (1 || sdlflag == SDL_MESSAGEBOX_ERROR) { EM_ASM_INT({ window.alert(Pointer_stringify($0)); }, msg); } } while(0)
+	do { if (1 || sdlflag == SDL_MESSAGEBOX_ERROR) { EM_ASM_INT({ window.alert(UTF8ToString($0)); }, msg); } } while(0)
 #else
 #define MSG_POPUP_WINDOW(sdlflag, title, msg, win) SDL_ShowSimpleMessageBox_custom(sdlflag, title, msg, win)
 #define INSTALL_DIRECTORY_ENTRY_NAME "default-files"

@@ -367,7 +367,13 @@ static void mega65_init ( void )
 	// *** Initializes memory subsystem of MEGA65 emulation itself
 	memory_init();
 	cart_load_bin(configdb.cartbin8000, 0x8000, "Cannot load binary cartridge image from $8000");
-	if (xemu_load_file(I2C_FILE_NAME, i2c_regs, sizeof i2c_regs, sizeof i2c_regs, "Cannot load I2C reg-space. Maybe first run or upgrade of Xemu?\nFor the next Xemu launch, it should have been already corrected automatically.\nSo no need to worry.") != sizeof i2c_regs) {
+	if (xemu_load_file(I2C_FILE_NAME, i2c_regs, sizeof i2c_regs, sizeof i2c_regs,
+#ifndef		XEMU_ARCH_HTML
+		"Cannot load I2C reg-space. Maybe first run or upgrade of Xemu?\nFor the next Xemu launch, it should have been already corrected automatically.\nSo no need to worry."
+#else
+		NULL
+#endif
+	) != sizeof i2c_regs) {
 		// if we could not load I2C backup, try legacy ways (older Xemu?)
 		const int r = (xemu_load_file(UUID_FILE_NAME, i2c_regs + I2C_UUID_OFFSET, I2C_UUID_SIZE, I2C_UUID_SIZE, NULL) == I2C_UUID_SIZE) +
 			(xemu_load_file(NVRAM_FILE_NAME, i2c_regs + I2C_NVRAM_OFFSET, I2C_NVRAM_SIZE, I2C_NVRAM_SIZE, NULL) == I2C_NVRAM_SIZE);
@@ -380,7 +386,13 @@ static void mega65_init ( void )
 	// Fill memory with the needed pre-initialized regions to be able to start.
 	preinit_memory_for_start();
 	// *** Image file for SDCARD support, and other related init functions handled there as well (eg d81access, fdc init ... related registers, etc)
-	if (sdcard_init(configdb.sdimg, configdb.virtsd) < 0)
+	if (sdcard_init(configdb.sdimg,
+#ifndef		XEMU_ARCH_HTML
+		configdb.virtsd
+#else
+		0
+#endif
+	) < 0)
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
 	vic_init();

@@ -768,8 +768,8 @@ error:
 }
 
 
-#if defined(XEMU_USE_LODEPNG) && defined(XEMU_FILES_SCREENSHOT_SUPPORT)
 char xemu_screenshot_full_path[PATH_MAX+1];
+#if defined(XEMU_USE_LODEPNG) && defined(XEMU_FILES_SCREENSHOT_SUPPORT)
 #include "xemu/lodepng.h"
 #include <time.h>
 // TODO: use libpng in Linux, smaller binary (on windows I wouldn't introduce another DLL dependency though ...)
@@ -857,5 +857,12 @@ int xemu_screenshot_png ( const char *path, const char *fn, unsigned int zoom_wi
 			source_width, source_height, target_width, target_height, xemu_screenshot_full_path
 		);
 	return ret;
+}
+#else
+int xemu_screenshot_png ( const char *path, const char *fn, unsigned int zoom_width, unsigned int zoom_height, Uint32 *source_pixels, unsigned int source_width, unsigned int source_height, unsigned int source_texture_width )
+{
+	xemu_screenshot_full_path[0] = 0;
+	DEBUGPRINT("SCREENSHOT: NOT SUPPORTED ON THIS PLATFORM" NL);
+	return 1;
 }
 #endif

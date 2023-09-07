@@ -101,7 +101,6 @@ static char *parse_hex_arg ( char *p, int *val, int min, int max )
 }
 
 
-
 static int check_end_of_command ( char *p, int error_out )
 {
 	while (*p == 32)
