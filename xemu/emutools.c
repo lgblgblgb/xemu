@@ -1995,3 +1995,8 @@ void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data, Uint32
 	sha1_checksum_as_words(hash, data, size);
 	sprintf(hash_str, "%08x%08x%08x%08x%08x", hash[0], hash[1], hash[2], hash[3], hash[4]);
 }
+
+
+#if defined(XEMU_ARCH_WIN64) && defined(_USE_32BIT_TIME_T)
+#error "_USE_32BIT_TIME_T is defined while compiling for 64-bit Windows!"
+#endif

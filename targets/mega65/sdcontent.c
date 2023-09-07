@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -381,7 +381,7 @@ static int update_sdcard_file ( const char *on_card_name, int options, const cha
 		}
 		off_t oft = xemu_safe_file_size_by_fd(fd);
 		if (oft == OFF_T_ERROR || (size_to_install < 0 && oft != (off_t)(-size_to_install))) {
-			DEBUGPRINT("Got size: " PRINTF_LLD " instruct size: %d" NL, (long long int)oft, size_to_install);
+			DEBUGPRINT("Got size: " PRINTF_S64 " instruct size: %d" NL, (Sint64)oft, size_to_install);
 			ERROR_WINDOW("Bad file, size is incorrect or other I/O error\n%s", fn_or_data);
 			goto error_on_maybe_sys_file;
 		}

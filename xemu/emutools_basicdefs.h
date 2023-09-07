@@ -137,24 +137,36 @@ typedef uint64_t Uint64;
          So we always use O_BINARY in the code, and defining O_BINARY as zero for non-Windows systems, so it won't hurt at all.
 	 Surely, SDL has some kind of file abstraction layer, but I seem to get used to some "native" code as well :-) */
 #ifndef XEMU_ARCH_WIN
+	// "UNIX" (all non-windows systems)
 #	define O_BINARY		0
 #	define DIRSEP_STR	"/"
 #	define DIRSEP_CHR	'/'
 #	define NL		"\n"
 #	define NL_LENGTH	1
-#	define PRINTF_LLD	"%lld"
-#	define PRINTF_LLU	"%llu"
 #	define MKDIR(__n)	mkdir((__n), 0777)
 #	define NULL_DEVICE	"/dev/null"
 #else
+	// WINDOWS
 #	define DIRSEP_STR	"\\"
 #	define DIRSEP_CHR	'\\'
 #	define NL		"\r\n"
 #	define NL_LENGTH	2
-#	define PRINTF_LLD	"%I64d"
-#	define PRINTF_LLU	"%I64u"
 #	define MKDIR(__n)	mkdir(__n)
 #	define NULL_DEVICE	"NUL:"
+#endif
+
+#if !defined(PRINTF_S64) || !defined(PRINTF_U64) || !defined(PRINTF_X64)
+#	include <inttypes.h>
+#	warning "Missing definition(s) for PRINTF_S64/PRINTF_U64/PRINTF_X64 (any of them) by configure. Please investigate."
+#	if !defined(PRINTF_S64)
+#		define PRINTF_S64 "%" PRId64
+#	endif
+#	if !defined(PRINTF_U64)
+#		define PRINTF_U64 "%" PRIu64
+#	endif
+#	if !defined(PRINTF_X64)
+#		define PRINTF_X64 "%" PRIX64
+#	endif
 #endif
 
 extern FILE *debug_fp;
@@ -269,8 +281,8 @@ static XEMU_INLINE unsigned char XEMU_BYTE_TO_BCD ( unsigned char b ) {
 // * it returns with the _updated_ 'target' pointer, not the original!
 static inline void *xemu_strcpy_special ( void *target, const void *source )
 {
-	while (*(char *)source)
-		*(char *)target++ = *(char *)source++;
+	while (*(char*)source)
+		*(char*)target++ = *(char*)source++;
 	return target;
 }
 
