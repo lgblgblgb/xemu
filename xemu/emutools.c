@@ -16,6 +16,7 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
+#define DEFINE_XEMU_OS_READDIR
 #include "xemu/emutools.h"
 
 #include <string.h>
@@ -98,6 +99,12 @@ int emu_is_fullscreen = 0;
 int emu_is_headless = 0;
 int emu_is_sleepless = 0;
 int dialogs_allowed = 1;
+#ifdef XEMU_ARCH_WIN
+int emu_fs_is_utf8 = 0;	// assuming non-UTF-8 capable filesystem for Windows hosts, I'll test it later in xemu_pre_init() if it's really the case
+#else
+int emu_fs_is_utf8 = 1;	// assuming UTF-8 capable filesystem for any non-Windows hosts
+#endif
+const char *emu_wine_version = NULL;
 static int win_xsize, win_ysize;
 char *sdl_pref_dir = NULL, *sdl_base_dir = NULL, *sdl_inst_dir = NULL;
 Uint32 sdl_winid;
@@ -122,7 +129,7 @@ static unsigned int sdl_texture_x_size, sdl_texture_y_size;
 static SDL_bool grabbed_mouse = SDL_FALSE, grabbed_mouse_saved = SDL_FALSE;
 int allow_mouse_grab = 1;
 static int sdl_viewport_changed;
-static int follow_win_size;
+static int follow_win_size = 0;
 
 #if !SDL_VERSION_ATLEAST(2, 0, 4)
 #error "At least SDL version 2.0.4 is needed!"
@@ -541,10 +548,12 @@ const char *xemu_get_uname_string ( void )
 				break;
 		}
 		// Huh, Windows is a real pain to collect _basic_ system informations ... on UNIX just an uname() and you're done ...
-		if (snprintf(buf, sizeof buf, "Windows %s %u.%u %s",
+		if (snprintf(buf, sizeof buf, "Windows %s %u.%u %s%s%s",
 			host_name,
 			(unsigned int)info.dwMajorVersion, (unsigned int)info.dwMinorVersion,
-			isa_name
+			isa_name,
+			emu_wine_version ? " WINE-" : "",
+			emu_wine_version ? emu_wine_version : ""
 		) >= sizeof buf) {
 			strcpy(buf, "<buffer-is-too-small>");
 		}
@@ -719,8 +728,78 @@ static inline Uint64 _get_uts_from_cdate ( void )
 }
 
 
+#ifdef XEMU_ARCH_WIN
+static inline char *check_windows_utf8_fs ( void )
+{
+	emu_fs_is_utf8 = 0;
+	// test file name (it's in Hungarian: "flood-proof mirror-drilling device", does not make sense, but contains all "special" Hungarian characters)
+	static const char test_file_fn[] = "árvíztűrő_tükörfúrógép.txt";
+	const int len = strlen(sdl_pref_dir) + strlen(test_file_fn) + 1;
+	char fn_a[len];
+	wchar_t fn_w[len];
+	strcpy(fn_a, sdl_pref_dir);
+	strcat(fn_a, test_file_fn);
+	if (MultiByteToWideChar(CP_UTF8, 0, fn_a, -1, fn_w, len) <= 0)
+		return "could not convert test file name to wchar_t";
+	static const wchar_t mode_w[] = {'w', 'b', 0};
+	FILE *f = _wfopen(fn_w, mode_w);
+	if (!f)
+		return "could not create test file with wide-func";
+	fclose(f);
+	f = fopen(fn_a, "rb");
+	if (f) {
+		fclose(f);
+		_wunlink(fn_w);
+		emu_fs_is_utf8 = 1;
+		return NULL;
+	}
+	_wunlink(fn_w);
+	return "could not use UTF-8 files without wchar_t aware functions";
+}
+
+static inline BOOL is_running_as_win_admin ( void )
+{
+	BOOL ret = FALSE;
+	HANDLE token = NULL;
+	if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+		DWORD size = sizeof(TOKEN_ELEVATION);
+		TOKEN_ELEVATION elevation;
+		if (GetTokenInformation(token, TokenElevation, &elevation, sizeof elevation, &size))
+			ret = elevation.TokenIsElevated;
+	}
+	if (token)
+		CloseHandle(token);
+	if (ret)
+		DEBUGPRINT("WINDOWS: warning, running as administrator!" NL);
+	return ret;
+}
+
+static inline int detect_wine ( void )
+{
+	free((void*)emu_wine_version);
+	emu_wine_version = NULL;
+	static const char *(CDECL *wine_get_version_ptr)(void);
+	HMODULE ntdll = GetModuleHandle("ntdll.dll");
+	if (!ntdll)
+		return 0;
+	wine_get_version_ptr = (void*)GetProcAddress(ntdll, "wine_get_version");
+	if (wine_get_version_ptr) {
+		const char *p = wine_get_version_ptr();
+		if (p) {
+			emu_wine_version = xemu_strdup(p);
+			return 1;
+		}
+	}
+	return 0;
+}
+#endif
+
+
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan, const int argc, char **argv )
 {
+#ifdef XEMU_ARCH_WIN
+	(void)detect_wine();
+#endif
 	if (!buildinfo_cdate_uts)
 		buildinfo_cdate_uts = _get_uts_from_cdate();
 	if (xemu_initial_argc < 0)
@@ -744,42 +823,28 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 	}
 	if (!xemu_initial_cwd)
 		FATAL("%s(): getcwd() resolution does not work", __func__);
+#if defined(XEMU_DO_NOT_DISALLOW_ROOT) && !defined(XEMU_ARCH_SINGLEUSER)
+#	warning "Running as root/admin check is deactivated."
+#endif
+#ifdef	XEMU_ARCH_WIN
+	// Windows: Some check to disallow dangerous things (running Xemu as administrator)
+	if (is_running_as_win_admin()) {
+#ifndef 	XEMU_DO_NOT_DISALLOW_ROOT
+		if (!emu_wine_version)	// ignore the check if it's wine, it seems it always runs programs with elevated privs
+			WARNING_WINDOW("Running Xemu as Administrator is dangerous, stop doing that!");
+#endif
+	}
+#endif
 #ifdef XEMU_ARCH_UNIX
 #ifndef XEMU_DO_NOT_DISALLOW_ROOT
-	// Some check to disallow dangerous things (running Xemu as user/group root)
+	// UNIX: Some check to disallow dangerous things (running Xemu as user/group root)
 	if (getuid() == 0 || geteuid() == 0)
 		FATAL("Xemu must not be run as user root");
 	if (getgid() == 0 || getegid() == 0)
 		FATAL("Xemu must not be run as group root");
-#elif !defined(XEMU_ARCH_SINGLEUSER)
-#	warning "Running as root check is deactivated."
 #endif
 	// ignore SIGHUP, eg closing the terminal Xemu was started from ...
 	signal(SIGHUP, SIG_IGN);	// ignore SIGHUP, eg closing the terminal Xemu was started from ...
-#endif
-#if 0
-	// This core is currently commented out, since I guess it would casue problems for many users
-	// Unfortunately Windows is not secure by nature (or better say, by user habits, that most
-	// user uses their system as administrator all the time ... when it would be desired to use
-	// administrator user only, if adminstration task is needed much like the habit in UNIX-like
-	// systems)
-#if defined(XEMU_ARCH_WIN) && !defined(XEMU_DO_NOT_DISALLOW_ROOT)
-	BOOL fRet = FALSE;
-	HANDLE hToken = NULL;
-	if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
-		TOKEN_ELEVATION Elevation;
-		DWORD cbSize = sizeof(TOKEN_ELEVATION);
-		if (GetTokenInformation(hToken, TokenElevation, &Elevation, sizeof(Elevation), &cbSize)) {
-			fRet = Elevation.TokenIsElevated;
-		}
-	}
-	if (hToken) {
-		CloseHandle(hToken);
-	}
-	if (fRet) {
-		WARNING_WINDOW("Do not run Xemu with administrator rights!\nXemu is not OS security audited and can access network, filesystem, etc.\nIt can be easily used to exploit your system.\nAs always, never run anything as adminstrator, unless you really need to\nadministrate your OS, as the name suggest!");
-	}
-#endif
 #endif
 #ifdef XEMU_ARCH_HTML
 	if (chatty_xemu)
@@ -825,6 +890,19 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 #endif
 	xemu_app_org = xemu_strdup(app_organization);
 	xemu_app_name = xemu_strdup(app_name);
+#ifdef XEMU_ARCH_WIN
+	if (emu_wine_version)
+		DEBUGPRINT("WINDOWS: running on WINE %s" NL, emu_wine_version);
+	p = check_windows_utf8_fs();
+	if (p) {
+		DEBUGPRINT("WINDOWS: UTF-8 filenames are NOT supported: %s" NL, p);
+		if (!emu_wine_version)
+			WARNING_WINDOW("Your windows is too old to support UTF-8 file functions!\nYou may encounter problems with files/paths containing any non US-ASCII characters!");
+	} else
+		DEBUGPRINT("WINDOWS: UTF-8 filenames ARE supported, cool!" NL);
+	if (!p != (GetACP() == 65001U))
+		ERROR_WINDOW("Mismatch between Windows UTF8 checks!\nPlease report the problem!\nCP=%u, p=%s", GetACP(), p ? p : "NULL");
+#endif
 #ifdef XEMU_CONFIGDB_SUPPORT
 	// If configDB support is compiled in, we can define some common options, should apply for ALL emulators.
 	// This way, it's not needed to define those in all of the emulator targets ...
@@ -1117,12 +1195,11 @@ int xemu_post_init (
 	strcpy(window_title_buffer, window_title);
 	window_title_buffer_end = window_title_buffer + strlen(window_title);
 	//SDL_SetWindowMinimumSize(sdl_win, SCREEN_WIDTH, SCREEN_HEIGHT * 2);
-	int a = SDL_GetNumRenderDrivers();
 	SDL_RendererInfo ren_info;
-	while (--a >= 0) {
-		if (!SDL_GetRenderDriverInfo(a, &ren_info)) {
+	for (int a = 0, max = SDL_GetNumRenderDrivers(); a < max; a++) {
+		if (!SDL_GetRenderDriverInfo(a, &ren_info))
 			DEBUGPRINT("SDL renderer driver #%d: \"%s\"" NL, a, ren_info.name);
-		} else
+		else
 			DEBUGPRINT("SDL renderer driver #%d: FAILURE TO QUERY (%s)" NL, a, SDL_GetError());
 	}
 	sdl_ren = SDL_CreateRenderer(sdl_win, -1, SDL_RENDERER_ACCELERATED);
@@ -1139,8 +1216,15 @@ int xemu_post_init (
 	SDL_SetRenderDrawColor(sdl_ren, 0, 0, 0, SDL_ALPHA_OPAQUE);
 	if (!SDL_GetRendererInfo(sdl_ren, &ren_info)) {
 		DEBUGPRINT("SDL renderer used: \"%s\" max_tex=%dx%d tex_formats=%d ", ren_info.name, ren_info.max_texture_width, ren_info.max_texture_height, ren_info.num_texture_formats);
-		for (a = 0; a < ren_info.num_texture_formats; a++)
-			DEBUGPRINT("%c%s", a ? ' ' : '(', SDL_GetPixelFormatName(ren_info.texture_formats[a]));
+		for (int a = 0; a < ren_info.num_texture_formats; a++) {
+			const char *p = SDL_GetPixelFormatName(ren_info.texture_formats[a]);
+			if (p) {
+				static const char name_head[] = { 'S','D','L','_','P','I','X','E','L','F','O','R','M','A','T','_' };
+				if (!strncmp(p, name_head, sizeof name_head))
+					p += sizeof name_head;
+			}
+			DEBUGPRINT("%c%s", a ? ' ' : '(', p ? p : "?");
+		}
 		DEBUGPRINT(")" NL);
 	}
 	SDL_RenderSetLogicalSize(sdl_ren, logical_x_size, logical_y_size);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
@@ -1416,7 +1500,6 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 }
 
 
-
 /* Note, Windows has some braindead idea about console, ie even the standard stdout/stderr/stdin does not work with
    a GUI application. We have to dance a bit, to fool Windows to do what is SHOULD according the standard to be used
    by every other operating systems. Ehhh, Microsoft, please, get some real designers and programmers :-)
@@ -1448,6 +1531,7 @@ static int redirect_stdfp ( const DWORD handle_const, FILE *std, const char *mod
 	return 0;
 }
 #endif
+
 
 void sysconsole_open ( void )
 {
@@ -1612,275 +1696,26 @@ int sysconsole_toggle ( int set )
 	return sysconsole_is_open;
 }
 
-#ifdef XEMU_ARCH_WIN
 
-// WideCharToMultiByte(UINT CodePage, DWORD dwFlags, _In_NLS_string_(cchWideChar)LPCWCH lpWideCharStr, int cchWideChar, LPSTR lpMultiByteStr, int cbMultiByte, LPCCH lpDefaultChar, LPBOOL lpUsedDefaultChar)
-//                     CP_UTF8,       0,             i,                                                -1,              o,                    size,            NULL,                NULL
-#define WIN_WCHAR_TO_UTF8(o,i,size) !WideCharToMultiByte(CP_UTF8, 0, i, -1, o, size, NULL, NULL)
-// int MultiByteToWideChar(UINT CodePage, DWORD dwFlags, _In_NLS_string_(cbMultiByte)LPCCH lpMultiByteStr, int cbMultiByte, LPWSTR lpWideCharStr, int cchWideChar)
-//                         CP_UTF8,       0,             i,                                                -1,              o                      size
-#define WIN_UTF8_TO_WCHAR(o,i,size) !MultiByteToWideChar(CP_UTF8, 0, i, -1, o, size)
-
-#if 0
-#define WIN_WCHAR_TO_UTF8(o,i,size)	xemu_winos_wchar_to_utf8
-#define WIN_UTF8_TO_WCHAR(o,i,size)	xemu_winos_utf8_to_wchar
-#include <assert.h>
-// This function does not make fully extensive work to detect all errors etc ...
-int xemu_winos_utf8_to_wchar ( wchar_t *restrict o, const char *restrict i, size_t size )
-{
-	Uint32 upos = 0;
-	int ulen = 0;
-	//BUILD_BUG_ON( sizeof(wchar_t) != 3 );
-	static_assert(sizeof(wchar_t) == 2, "wchar_t must be two bytes long");
-	for (;;) {
-		Uint8 c = (unsigned)*i++;
-		if (ulen == 1 && (c & 0xC0) != 0x80) {
-			if (XEMU_UNLIKELY(!size--))
-				return -1;
-			if (XEMU_UNLIKELY(upos >= 0x100000))	// cannot be represented, even not by using surrogates! Dunno if it can happen AT ALL with utf8 source
-				return -1;
-			// FIXME, not so much idea about surrogate point pairs, maybe this code is totally worng what I "invented" here ...
-			if (XEMU_UNLIKELY(upos >= (1U << (sizeof(wchar_t) << 3)))) {
-				if (XEMU_UNLIKELY(!size--))	// check again, we need two chunks for a surrogate pair
-					return -1;
-				*o++ = (upos >>  10) + 0xD800;	// high surrogate of the pair, STORE it
-				upos = (upos & 1023) + 0xDC00;	// this will be the low part, after this "if" ... which is also the normal case (no surrogate points needed)
-			}
-			*o++ = upos;
-			ulen = 0;
-			upos = 0;
-		}
-		if ((c & 0x80) == 0) {
-			if (XEMU_UNLIKELY(!size--))
-				return -1;
-			if (XEMU_UNLIKELY(ulen))
-				return -1;
-			*o++ = c;
-			if (!c)
-				return 0;	// WOW, the end :)
-		} else if ((c & 0xE0) == 0xC0) {
-			if (XEMU_UNLIKELY(ulen))
-				return -1;
-			ulen = 2;
-			upos = c & 0x1F;
-		} else if ((c & 0xF0) == 0xE0) {
-			if (XEMU_UNLIKELY(ulen))
-				return -1;
-			ulen = 3;
-			upos = c & 0x0F;
-		} else if ((c & 0xF8) == 0xF0) {
-			if (XEMU_UNLIKELY(ulen))
-				return -1;
-			ulen = 4;
-			upos = c & 0x07;
-		} else if ((c & 0xC0) == 0x80) {
-			if (XEMU_UNLIKELY(ulen <= 1))
-				return -1;
-			ulen--;
-			upos = (upos << 6) + (c & 0x3F);
-		} else
-			return -1;
-		if (XEMU_UNLIKELY(ulen && !upos))
-			return -1;
-	}
-}
-
-
-
-int xemu_winos_wchar_to_utf8 ( char *restrict o, const wchar_t *restrict i, size_t size )
-{
-	unsigned int sur = 0;
-	for (;;) {
-		unsigned int c = *i++;
-		// FIXME: check this surrogate madness a bit more ...
-		// Personally I just tried to follow wikipedia, as it says:
-		// There are 1024 "high" surrogates (D800–DBFF) and 1024 "low" surrogates (DC00–DFFF)
-		// In UTF-16, they must always appear in pairs, as a high surrogate followed by a low surrogate, thus using 32 bits to denote one code point.
-		if (XEMU_UNLIKELY(c >= 0xD800 && c <= 0xDBFF)) {
-			if (XEMU_UNLIKELY(sur))
-				return -1;
-			sur = (c - 0xD800) << 10;
-			if (XEMU_UNLIKELY(!sur))
-				return -1;
-			continue;
-		} else if (XEMU_UNLIKELY(c >= 0xDC00 && c <= 0xDFFF)) {
-			if (XEMU_UNLIKELY(!sur))
-				return -1;
-			c = sur + (c - 0xDC00);
-			sur = 0;
-		}
-		if (XEMU_UNLIKELY(sur))
-			return -1;
-		if (c < 0x80) {
-			if (XEMU_UNLIKELY(size < 1))
-				return -1;
-			size =- 1;
-			*o++ = c;
-			if (!c)
-				return 0;	// Wow, the end :)
-		} else if (c < 0x800) {
-			if (XEMU_UNLIKELY(size < 2))
-				return -1;
-			size -= 2;
-			*o++ = 0xC0 + ( c >>  6        );
-			*o++ = 0x80 + ( c        & 0x3F);
-		} else if (c < 0x10000) {
-			if (XEMU_UNLIKELY(size < 3))
-				return -1;
-			size -= 3;
-			*o++ = 0xE0 + ( c >> 12        );
-			*o++ = 0x80 + ((c >>  6) & 0x3F);
-			*o++ = 0x80 + ( c        & 0x3F);
-		} else if (c < 0x110000) {
-			if (XEMU_UNLIKELY(size < 4))
-				return -1;
-			size -= 4;
-			*o++ = 0xF0 + ( c >> 18        );
-			*o++ = 0x80 + ((c >> 12) & 0x3F);
-			*o++ = 0x80 + ((c >>  6) & 0x3F);
-			*o++ = 0x80 + ( c        & 0x3F);
-		} else
-			return -1;
-	}
-}
-#endif
-
-int xemu_os_open ( const char *fn, int flags )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return -1;
-	}
-	return _wopen(wchar_fn, flags | O_BINARY);
-}
-
-int xemu_os_creat ( const char *fn, int flags, int pmode )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return -1;
-	}
-	return _wopen(wchar_fn, flags | O_BINARY, pmode);
-}
-
-FILE *xemu_os_fopen ( const char *restrict fn, const char *restrict mode )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	wchar_t wchar_mode[32];	// FIXME?
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return NULL;
-	}
-	if (WIN_UTF8_TO_WCHAR(wchar_mode, mode, sizeof wchar_mode)) {
-		errno = EINVAL;		// FIXME?
-		return NULL;
-	}
-	return _wfopen(wchar_fn, wchar_mode);
-}
-
-int xemu_os_unlink ( const char *fn )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return -1;
-	}
-	return _wunlink(wchar_fn);
-}
-
-#include <direct.h>
-
-int xemu_os_mkdir ( const char *fn, const int mode )	// "mode" parameter is unused in Windows
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return -1;
-	}
-	return _wmkdir(wchar_fn);
-}
-
-XDIR *xemu_os_opendir ( const char *fn )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return NULL;
-	}
-	return _wopendir(wchar_fn);
-}
-
-int xemu_os_closedir ( XDIR *dirp )
-{
-	return _wclosedir(dirp);
-}
-
-int xemu_os_readdir ( XDIR *dirp, char *fn )
-{
-	const struct _wdirent *p;
-	do {
-		errno = 0;
-		p = _wreaddir(dirp);
-		if (!p)
-			return -1;
-	} while (WIN_WCHAR_TO_UTF8(fn, p->d_name, FILENAME_MAX));	// UGLY! Though without this probably an opendir/readdir scan would be interrupted by this anomaly ...
-	return 0;
-}
-
-#include <assert.h>
-
-int xemu_os_stat ( const char *fn, struct stat *statbuf )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return -1;
-	}
-	struct __stat64 st;
-	if (_wstat64(wchar_fn, &st))
-		return -1;	// _wstat64() sets errno
-	//static_assert(sizeof(statbuf->st_atime) <= 4, "32-bit time for stat");
-	//static_assert(sizeof(statbuf->st_size) <= 4, "32-bit file size for stat");
-	//FIXME: how can be sure we have 64-bit time and 64-bit file size ALWAYS, win32+win64 too!!! (2038 is not so far away now ...)
-	//FIXME-2: how can we present the input parameter of this func being struct stat (POSIX) but the same requirements as the previous comment line ...
-	statbuf->st_gid   = st.st_gid;
-	statbuf->st_atime = st.st_atime;
-	statbuf->st_ctime = st.st_ctime;
-	statbuf->st_dev   = st.st_dev;
-	statbuf->st_ino   = st.st_ino;
-	statbuf->st_mode  = st.st_mode;
-	statbuf->st_mtime = st.st_mtime;
-	statbuf->st_nlink = st.st_nlink;
-	statbuf->st_rdev  = st.st_rdev;
-	statbuf->st_size  = st.st_size;
-	statbuf->st_uid   = st.st_uid;
-	return 0;
-}
-
-
-#endif
-
-
-int xemu_os_file_exists ( const char *fn )
+int xemu_file_exists ( const char *fn )
 {
 	struct stat st;
-	return !xemu_os_stat(fn, &st);
+	return !stat(fn, &st);
 }
 
 
-#ifndef XEMU_ARCH_WIN
-int xemu_os_readdir ( XDIR *dirp, char *fn )
+int xemu_readdir ( DIR *dirp, char *fn, const int fnmaxsize )
 {
 	errno = 0;
 	const struct dirent *p = readdir(dirp);
 	if (!p)
 		return -1;
+	if (strlen(p->d_name) >= fnmaxsize) {
+		return -1;
+	}
 	strcpy(fn, p->d_name);
 	return 0;
 }
-#endif
 
 
 /* -------------------------- SHA1 checksumming -------------------------- */

@@ -162,7 +162,7 @@ static int xemuplugingui_init ( void )
 	SDL_ShowSimpleMessageBox_custom = SDL_ShowSimpleMessageBox;
 	SDL_ShowMessageBox_custom	= SDL_ShowMessageBox;
 	_plugingui_dlclose();
-	if (!xemu_os_file_exists(fn)) {
+	if (!xemu_file_exists(fn)) {
 		DEBUGPRINT("GUI: PLUGIN: plugin does not exist, skipping it: %s" NL, fn);
 		return 1;
 	}
