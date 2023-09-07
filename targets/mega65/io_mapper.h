@@ -31,8 +31,4 @@ extern struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 extern int    port_d607;			// ugly hack for C65 extended keys ...
 extern int    core_age_in_days;
 
-// DMA implementation related, used by dma65.c:
-extern Uint8 io_dma_reader ( int addr );
-extern void  io_dma_writer ( int addr, Uint8 data );
-
 #endif

@@ -87,7 +87,7 @@ static XEMU_INLINE void update_hw_multiplier ( void )
    while the most significant nibble shows the I/O mode the operation is meant, according to the following table:
    0 = C64 (VIC-II) I/O mode
    1 = C65 (VIC-III) I/O mode
-   2 = *INVALID* should not happen, unless some maps the $FF-megabyte M65 specific area, then it should do nothing or so ...
+   2 = M65 (VIC-IV) I/O mode BUT with ethernet buffer visible at the second 2K of the I/O space!
    3 = M65 (VIC-IV) I/O mode.
    Even writing the "classic" I/O area at $D000 will ends up here. These addressed are stricly based on the VIC mode
    according the table above, no $D000 addresses here at all!
@@ -96,7 +96,6 @@ static XEMU_INLINE void update_hw_multiplier ( void )
 
 Uint8 io_read ( unsigned int addr )
 {
-	// DEBUG("IO: read $%03X IO_mode is %d @ PC=$%04X" NL, addr & 0xFFF, addr >> 12, cpu65.pc);
 	switch (addr >> 8) {
 		/* ---------------------------------------------------- */
 		/* $D000-$D3FF: VIC-II, VIC-III+FDC+REC, VIC-IV+FDC+REC */
@@ -114,6 +113,7 @@ Uint8 io_read ( unsigned int addr )
 				return fdc_read_reg(addr & 0xF);
 			RETURN_ON_IO_READ_NOT_IMPLEMENTED("RAM expansion controller", 0xFF);
 		case 0x30:	// $D000-$D0FF ~ M65 I/O mode
+		case 0x20:
 			addr &= 0xFF;
 			if (XEMU_LIKELY(addr < 0x80))
 				return vic_read_reg(addr);		// VIC-IV read register
@@ -123,12 +123,15 @@ Uint8 io_read ( unsigned int addr )
 		case 0x11:	// $D100-$D1FF ~ C65 I/O mode
 		case 0x12:	// $D200-$D2FF ~ C65 I/O mode
 		case 0x13:	// $D300-$D3FF ~ C65 I/O mode
-			return 0xFF;	// FIXME: AFAIK C65 does not allow to read palette register back, however M65 I/O mode does allow (?)
+			return 0xFF;	// FIXME: AFAIK C65 does not allow to read palette register back, however M65 I/O mode does allow
 		case 0x31:	// $D100-$D1FF ~ M65 I/O mode
+		case 0x21:
 			return vic4_read_palette_reg_red(addr);	// function takes care using only 8 low bits of addr, no need to do here
 		case 0x32:	// $D200-$D2FF ~ M65 I/O mode
+		case 0x22:
 			return vic4_read_palette_reg_green(addr);
 		case 0x33:	// $D300-$D3FF ~ M65 I/O mode
+		case 0x23:
 			return vic4_read_palette_reg_blue(addr);
 		/* ------------------------------------------------ */
 		/* $D400-$D7FF: SID, SID+UART+DMA, SID+UART+DMA+M65 */
@@ -141,6 +144,8 @@ Uint8 io_read ( unsigned int addr )
 		case 0x15:	// $D500-$D5FF ~ C65 I/O mode
 		case 0x34:	// $D400-$D4FF ~ M65 I/O mode
 		case 0x35:	// $D500-$D5FF ~ M65 I/O mode
+		case 0x24:
+		case 0x25:
 			switch (addr & 0x5F) {
 				case 0x19: return get_mouse_x_via_sid();
 				case 0x1A: return get_mouse_y_via_sid();
@@ -151,6 +156,7 @@ Uint8 io_read ( unsigned int addr )
 		case 0x16:	// $D600-$D6FF ~ C65 I/O mode
 			RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);	// FIXME: UART is not yet supported!
 		case 0x36:	// $D600-$D6FF ~ M65 I/O mode
+		case 0x26:
 			addr &= 0xFF;
 			if (addr < 9)
 				RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);	// FIXME: UART is not yet supported!
@@ -228,6 +234,7 @@ Uint8 io_read ( unsigned int addr )
 			// FIXME: really a partial deconding like this? really on every 16 bytes?!
 			return dma_read_reg(addr & 0xF);
 		case 0x37:	// $D700-$D7FF ~ M65 I/O mode
+		case 0x27:
 			// FIXME: this is probably very bad! I guess DMA does not decode for every 16 addresses ... Proposed fix is here:
 			addr &= 0xFF;
 			if (addr < 15)		// FIXME!!!! 0x0F was part of DMA reg array, but it seems now used by divisor busy stuff??
@@ -236,10 +243,17 @@ Uint8 io_read ( unsigned int addr )
 				return 0;	// FIXME: D70F bit 7 = 32/32 bits divisor busy flag, bit 6 = 32*32 mult busy flag. We're never busy, so the zero. But the OTHER bits??? Any purpose of those??
 			if (addr == 0xEF)	// $D7EF CPU:RAND Hardware random number generator
 				return rand() & 0xFF;
+			if (addr == 0xFA)	// $D7FA CPU:FRAMECOUNT Count number of elapsed video frames
+				return vic_frame_counter & 0xFFU;
 			// ;) FIXME this is LAZY not to decode if we need to update bigmult at all ;-P
 			if (XEMU_UNLIKELY(!bigmult_valid_result))
 				update_hw_multiplier();
 			return D7XX[addr];
+		/* ----------------------------------------------- */
+		/* $D800-$DFFF: in case of ethernet I/O mode only! */
+		/* ----------------------------------------------- */
+		case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
+			return eth65_read_rx_buffer(addr - 0x2800);
 		/* ----------------------- */
 		/* $D800-$DBFF: COLOUR RAM */
 		/* ----------------------- */
@@ -288,12 +302,6 @@ Uint8 io_read ( unsigned int addr )
 			if (XEMU_LIKELY(sd_status & SD_ST_MAPPED))
 				return disk_buffer_io_mapped[addr & 0x1FF];
 			return 0xFF;	// I/O exp is not supported
-		/* --------------------------------------------------------------- */
-		/* $2xxx I/O area is not supported: FIXME: what is that for real?! */
-		/* --------------------------------------------------------------- */
-		case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27:
-		case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
-			return 0xFF;
 		default:
 			FATAL("Xemu internal error: undecoded I/O area reading for address $(%X)%03X", addr >> 8, addr & 0xFFF);
 	}
@@ -305,7 +313,6 @@ Uint8 io_read ( unsigned int addr )
    In nutshell: this function *NEEDS* addresses 0-$3FFF based on the given I/O (VIC) mode! */
 void io_write ( unsigned int addr, Uint8 data )
 {
-	// DEBUG("IO: write $%03X with data $%02X IO_mode is %d @ PC=$%04X" NL, addr & 0xFFF, data, addr >> 12, cpu65.pc);
 	if (XEMU_UNLIKELY(cpu_rmw_old_data >= 0)) {
 		// RMW handling! FIXME: do this only in the needed I/O ports only, not here, globally!
 		// however, for that, we must check this at every devices where it can make any difference ...
@@ -336,6 +343,7 @@ void io_write ( unsigned int addr, Uint8 data )
 			}
 			RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("RAM expansion controller");
 		case 0x30:	// $D000-$D0FF ~ M65 I/O mode
+		case 0x20:
 			addr &= 0xFF;
 			if (XEMU_LIKELY(addr < 0x80)) {
 				vic_write_reg(addr, data);		// VIC-IV write register
@@ -356,12 +364,15 @@ void io_write ( unsigned int addr, Uint8 data )
 			vic3_write_palette_reg_blue(addr, data);
 			return;
 		case 0x31:	// $D100-$D1FF ~ M65 I/O mode
+		case 0x21:
 			vic4_write_palette_reg_red(addr, data);
 			return;
 		case 0x32:	// $D200-$D2FF ~ M65 I/O mode
+		case 0x22:
 			vic4_write_palette_reg_green(addr, data);
 			return;
 		case 0x33:	// $D300-$D3FF ~ M65 I/O mode
+		case 0x23:
 			vic4_write_palette_reg_blue(addr, data);
 			return;
 		/* ------------------------------------------------ */
@@ -375,6 +386,8 @@ void io_write ( unsigned int addr, Uint8 data )
 		case 0x15:	// $D500-$D5FF ~ C65 I/O mode
 		case 0x34:	// $D400-$D4FF ~ M65 I/O mode
 		case 0x35:	// $D500-$D5FF ~ M65 I/O mode
+		case 0x24:
+		case 0x25:
 			//sid_write_reg(addr & 0x40 ? &sid[1] : &sid[0], addr & 31, data);
 			//DEBUGPRINT("SID #%d reg#%02X data=%02X" NL, (addr >> 5) & 3, addr & 0x1F, data);
 			//sid_write_reg(&sid[(addr >> 5) & 3], addr & 0x1F, data);
@@ -387,6 +400,7 @@ void io_write ( unsigned int addr, Uint8 data )
 			} else
 				RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("UART");	// FIXME: UART is not yet supported!
 		case 0x36:	// $D600-$D6FF ~ M65 I/O mode
+		case 0x26:
 			addr &= 0xFF;
 			if (!in_hypervisor && addr >= 0x40 && addr <= 0x7F) {
 				// In user mode, writing to $D640-$D67F (in VIC4 iomode) causes to enter hypervisor mode with
@@ -477,6 +491,7 @@ void io_write ( unsigned int addr, Uint8 data )
 			dma_write_reg(addr & 0xF, data);
 			return;
 		case 0x37:	// $D700-$D7FF ~ M65 I/O mode
+		case 0x27:
 			// FIXME: this is probably very bad! I guess DMA does not decode for every 16 addresses ... Proposed fix is here:
 			addr &= 0xFF;
 			if (addr < 16)
@@ -485,6 +500,12 @@ void io_write ( unsigned int addr, Uint8 data )
 			else if (addr >= 0x68 && addr <= 0x7F)
 				bigmult_valid_result = 0;
 			D7XX[addr] = data;
+			return;
+		/* ----------------------------------------------- */
+		/* $D800-$DFFF: in case of ethernet I/O mode only! */
+		/* ----------------------------------------------- */
+		case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
+			eth65_write_tx_buffer(addr - 0x2800, data);
 			return;
 		/* ----------------------- */
 		/* $D800-$DBFF: COLOUR RAM */
@@ -549,22 +570,7 @@ void io_write ( unsigned int addr, Uint8 data )
 				return;
 			}
 			return;		// I/O exp is not supported
-		/* --------------------------------------------------------------- */
-		/* $2xxx I/O area is not supported: FIXME: what is that for real?! */
-		/* --------------------------------------------------------------- */
-		case 0x20: case 0x21: case 0x22: case 0x23: case 0x24: case 0x25: case 0x26: case 0x27:
-		case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
-			return;
 		default:
 			FATAL("Xemu internal error: undecoded I/O area writing for address $(%X)%03X and data $%02X", addr >> 8, addr & 0xFFF, data);
 	}
-}
-
-
-Uint8 io_dma_reader ( int addr ) {
-	return io_read((addr & 0xFFF) + (vic_iomode << 12));
-}
-
-void  io_dma_writer ( int addr, Uint8 data ) {
-	io_write((addr & 0xFFF) + (vic_iomode << 12), data);
 }

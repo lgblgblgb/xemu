@@ -1273,7 +1273,7 @@ Uint8 sdcard_read_register ( const int reg )
 			// bits 2 and 3 is always zero in Xemu (no drive virtualization for drive 0 and 1)
 			return
 				(vic_registers[0x30] & 1) |		// $D68A.0 SD:CDC00 (read only) Set if colour RAM at $DC00
-				(vic_iomode == VIC4_IOMODE ? 2 : 0) |	// $D68A.1 SD:VICIII (read only) Set if VIC-IV or ethernet IO bank visible
+				(vic_iomode & 2)  |			// $D68A.1 SD:VICIII (read only) Set if VIC-IV or ethernet IO bank visible [same bit pos as in vic_iomode for mode-4 and mode-ETH!]
 				(data & (128 + 64));			// size info for disk mounting
 			break;
 		case 0xB:

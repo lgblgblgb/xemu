@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "io_mapper.h"
 #include "xemu/cpu65.h"
 #include "rom.h"
+#include "vic4.h"
 
 
 //#define DO_DEBUG_DMA
@@ -82,6 +83,18 @@ static struct {
 static struct {
 	int enabled, used, col_counter, col_limit, row_counter, row_limit, value;
 } modulo;
+
+
+static inline Uint8 io_dma_reader ( const unsigned int addr )
+{
+	return io_read((addr & 0xFFFU) + (vic_iomode << 12));
+}
+
+
+static inline void  io_dma_writer ( const unsigned int addr, Uint8 data )
+{
+	io_write((addr & 0xFFFU) + (vic_iomode << 12), data);
+}
 
 
 // Calculates step rate as a positive/negative fixed-point-math value from input values, used by dma_update() at processing (after reading the whole) DMA list
@@ -201,7 +214,7 @@ static XEMU_INLINE void mix_next ( void )
 void dma_write_reg ( int addr, Uint8 data )
 {
 	// The following condition is commented out for now. FIXME: how it is handled for real?!
-	//if (vic_iomode != VIC4_IOMODE)
+	//if (!VIC4_LIKE_IO_MODE())
 	//	addr &= 3;
 	if (XEMU_UNLIKELY(in_dma)) {
 		// this is just an emergency stuff to disallow DMA to update its own registers ... FIXME: what would be the correct policy?

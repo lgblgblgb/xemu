@@ -20,10 +20,17 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_MEGA65_VIC4_H_INCLUDED
 #define XEMU_MEGA65_VIC4_H_INCLUDED
 
+// Do not EVER change the numbers! Other parts of the code depends on these
+// exact values, also the values themselves are used by software and must be
+// compatible with a real MEGA65! The only reason for "names" rather than
+// numvers for easier understand Xemu's code at many places.
 #define VIC2_IOMODE	0
 #define VIC3_IOMODE	1
-#define VIC_BAD_IOMODE	2
+#define VIC4ETH_IOMODE	2
 #define VIC4_IOMODE	3
+
+// bit1 of IO-mode is set: either VIC4ETH_IOMODE or VIC4_IOMODE
+#define VIC4_LIKE_IO_MODE() (vic_iomode & 2U)
 
 // Horizontal sync frequencies (in Hertz) for NTSC and PAL video output of MEGA65. Must be float.
 #define PAL_LINE_FREQ	31250.0
@@ -230,7 +237,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 // Current state
 
-extern int   vic_iomode;
+extern unsigned int   vic_iomode;
 //extern int   scanline;
 extern Uint8 vic_registers[];
 extern Uint8 c128_d030_reg;
@@ -242,11 +249,13 @@ extern Uint8 videostd_id;
 extern float videostd_1mhz_cycles_per_scanline;
 extern int   vic_readjust_sdl_viewport;
 extern int   vic4_disallow_videostd_change;
+extern unsigned int vic_frame_counter, vic_frame_counter_since_boot;
 
 extern int   vic4_registered_screenshot_request;
 extern int   vic_vidp_legacy, vic_chrp_legacy, vic_sprp_legacy;
 
 extern const char *iomode_names[4];
+extern const Uint8 iomode_hexdigitids[4];
 
 extern void  vic_init ( void );
 extern void  vic_reset ( void );

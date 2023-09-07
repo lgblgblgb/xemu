@@ -100,7 +100,7 @@ static int is_ready_on_screen ( const int delete_all_ready )
 	static const Uint8 ready_msg[] = { 0x12, 0x05, 0x01, 0x04, 0x19, 0x2E };	// "READY." in screen codes
 	const int width = vic4_query_screen_width();
 	const int height = vic4_query_screen_height();
-	const Uint8 *cstart = ((vic_iomode == VIC4_IOMODE || vic_iomode == VIC3_IOMODE) && REG_VICIII_ATTRIBS) ? vic4_query_colour_address() : NULL;
+	const Uint8 *cstart = (VIC4_LIKE_IO_MODE() && REG_VICIII_ATTRIBS) ? vic4_query_colour_address() : NULL;
 	Uint8 *start = vic4_query_screen_address();
 	int num = 0;
 	// Check every lines of the screen (not the "0th" line, because we need "READY." in the previous line!)
