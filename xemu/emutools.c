@@ -770,7 +770,7 @@ static inline BOOL is_running_as_win_admin ( void )
 	if (token)
 		CloseHandle(token);
 	if (ret)
-		DEBUGPRINT("WINDOWS: warning, running as administrator!" NL);
+		DEBUGPRINT("WINDOWS: **WARNING** running as Administrator!!!" NL);
 	return ret;
 }
 
@@ -792,12 +792,30 @@ static inline int detect_wine ( void )
 	}
 	return 0;
 }
+
+static const char xemu_windows_registry_path[] = "Software\\X-Emulators";
+static const char xemu_windows_registry_class[] = "HKEY_LOCAL_MACHINE";
+
+static DWORD get_registry_key_dword ( const char *name )
+{
+	DWORD answer = 0;
+	DWORD answer_size = sizeof(answer);
+	DWORD type_got = 0;
+	LSTATUS ret = RegGetValue(HKEY_LOCAL_MACHINE, xemu_windows_registry_path, name, RRF_RT_DWORD, &type_got, &answer, &answer_size);
+	if (ret == ERROR_SUCCESS)
+		return answer;
+	return 0;
+}
 #endif
 
 
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan, const int argc, char **argv )
 {
 #ifdef XEMU_ARCH_WIN
+	static const char reg_key_allowadminrun[] = "AllowAdministratorRun";
+	static const char reg_key_noutf8warning[] = "NoUTF8Warning";
+	const DWORD registry_hack_allow_administrator	= get_registry_key_dword(reg_key_allowadminrun);
+	const DWORD registry_hack_no_utf8_warning	= get_registry_key_dword(reg_key_noutf8warning);
 	(void)detect_wine();
 #endif
 	if (!buildinfo_cdate_uts)
@@ -830,8 +848,17 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 	// Windows: Some check to disallow dangerous things (running Xemu as administrator)
 	if (is_running_as_win_admin()) {
 #ifndef 	XEMU_DO_NOT_DISALLOW_ROOT
-		if (!emu_wine_version)	// ignore the check if it's wine, it seems it always runs programs with elevated privs
-			WARNING_WINDOW("Running Xemu as Administrator is dangerous, stop doing that!");
+		if (!emu_wine_version) {	// ignore the check if it's wine, it seems it always runs programs with elevated privs
+			if (!registry_hack_allow_administrator)
+				WARNING_WINDOW(
+					"Running Xemu as Administrator is dangerous, stop doing that!\n"
+					"Alternatively, if you're really sure what you're doing,\n"
+					"you can set a DWORD typed registry key %s\\%s\\%s with value of 1 to silent this warning.",
+					xemu_windows_registry_class,
+					xemu_windows_registry_path,
+					reg_key_allowadminrun
+				);
+		}
 #endif
 	}
 #endif
@@ -896,11 +923,19 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 	p = check_windows_utf8_fs();
 	if (p) {
 		DEBUGPRINT("WINDOWS: UTF-8 filenames are NOT supported: %s" NL, p);
-		if (!emu_wine_version)
-			WARNING_WINDOW("Your windows is too old to support UTF-8 file functions!\nYou may encounter problems with files/paths containing any non US-ASCII characters!");
+		if (!emu_wine_version && !registry_hack_no_utf8_warning)
+			WARNING_WINDOW(
+				"Your windows is too old to support UTF-8 file functions!\n"
+				"You may encounter problems with files/paths containing any non US-ASCII characters!\n"
+				"Alternatively, if you're really sure what you're doing,\n"
+				"you can set a DWORD typed registry key %s\\%s\\%s with value of 1 to silent this warning.",
+				xemu_windows_registry_class,
+				xemu_windows_registry_path,
+				reg_key_noutf8warning
+			);
 	} else
 		DEBUGPRINT("WINDOWS: UTF-8 filenames ARE supported, cool!" NL);
-	if (!p != (GetACP() == 65001U))
+	if (!p != (GetACP() == 65001U) && !registry_hack_no_utf8_warning)
 		ERROR_WINDOW("Mismatch between Windows UTF8 checks!\nPlease report the problem!\nCP=%u, p=%s", GetACP(), p ? p : "NULL");
 #endif
 #ifdef XEMU_CONFIGDB_SUPPORT
