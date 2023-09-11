@@ -198,8 +198,18 @@ static void ui_save_basic_as_text ( void )
 static char dir_rom[PATH_MAX + 1] = "";
 
 #ifdef SD_CONTENT_SUPPORT
+static int is_card_writable_with_error_popup ( void )
+{
+	if (sdcard_is_writeable())
+		return 1;
+	ERROR_WINDOW("SD-card is in read-only mode, operation denied");
+	return 0;
+}
+
 static void ui_format_sdcard ( void )
 {
+	if (!is_card_writable_with_error_popup())
+		return;
 	if (ARE_YOU_SURE(
 		"Formatting your SD-card image file will cause ALL your data,\n"
 		"system files (etc!) to be lost, forever!\n"
@@ -215,6 +225,8 @@ static void ui_format_sdcard ( void )
 
 static void ui_update_sdcard ( void )
 {
+	if (!is_card_writable_with_error_popup())
+		return;
 	char fnbuf[PATH_MAX + 1];
 	xemu_load_buffer_p = NULL;
 	// Try default ROM
