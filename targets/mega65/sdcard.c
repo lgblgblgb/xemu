@@ -353,9 +353,8 @@ static int detect_compressed_image ( const int fd )
 	}
 	sd_pagedir[pages]  = data_offset;	// we need pages+1 elements in the array, see read_compressed_block() later
 	free(buf);
-	// Done
+	sd_is_read_only = 1;	// compressed SD image can only be R/O
 	DEBUGPRINT("SDCARD: compressed image with %u 64K-pages, max packed page size is %u bytes." NL, pages, sd_unpack_buffer_size);
-	sd_is_read_only = O_RDONLY;	// set mode to R/O!
 	return 1;
 unpack_error:
 	free(buf);
@@ -619,9 +618,9 @@ static int read_compressed_block ( const Uint32 block, Uint8 *buffer )
 			FATAL("Compressed SD unpack fatal error: too large unpack request");
 		if (!pck_siz) {
 			memset(page_cache, 0, 0x10000);
-			DEBUGPRINT("SDCARD: CACHE: miss-zeroed" NL);
+			//DEBUGPRINT("SDCARD: CACHE: miss-zeroed" NL);
 		} else {
-			DEBUGPRINT("SDCARD: CACHE: miss" NL);
+			//DEBUGPRINT("SDCARD: CACHE: miss" NL);
 			if (lseek(sdfd, img_ofs, SEEK_SET) != (off_t)img_ofs)
 				goto seek_error;
 			if (xemu_safe_read(sdfd, unpack_buffer, pck_siz) != pck_siz)
@@ -645,7 +644,7 @@ static int read_compressed_block ( const Uint32 block, Uint8 *buffer )
 		}
 		cached_page = page_no;
 	} else {
-		DEBUGPRINT("SDCARD: CACHE: hit!" NL);
+		//DEBUGPRINT("SDCARD: CACHE: hit!" NL);
 	}
 	memcpy(buffer, page_cache + ((block & 127) << 9), 512);
 	return 0;
