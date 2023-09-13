@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -21,7 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_COMMON_EMUTOOLS_BASICDEFS_H_INCLUDED
 #define XEMU_COMMON_EMUTOOLS_BASICDEFS_H_INCLUDED
 
-#define COPYRIGHT_YEARS "2016-2020"
+#define COPYRIGHT_YEARS "2016-2023"
 
 #include <stdio.h>
 #include <limits.h>
@@ -60,7 +60,13 @@ typedef uint64_t Uint64;
 #define SDL_BIG_ENDIAN  4321
 #ifdef __linux__
 #include <endian.h>
-#define SDL_BYTEORDER  __BYTE_ORDER
+#define SDL_BYTEORDER	__BYTE_ORDER
+#elif defined(__OpenBSD__)
+#include <endian.h>
+#define SDL_BYTEORDER	BYTE_ORDER
+#elif defined(__FreeBSD__)
+#include <sys/endian.h>
+#define SDL_BYTEORDER	BYTE_ORDER
 #else /* __linux__ */
 #if defined(__hppa__) || \
     defined(__m68k__) || defined(mc68000) || defined(_M_M68K) || \
@@ -131,20 +137,36 @@ typedef uint64_t Uint64;
          So we always use O_BINARY in the code, and defining O_BINARY as zero for non-Windows systems, so it won't hurt at all.
 	 Surely, SDL has some kind of file abstraction layer, but I seem to get used to some "native" code as well :-) */
 #ifndef XEMU_ARCH_WIN
+	// "UNIX" (all non-windows systems)
 #	define O_BINARY		0
 #	define DIRSEP_STR	"/"
 #	define DIRSEP_CHR	'/'
 #	define NL		"\n"
-#	define PRINTF_LLD	"%lld"
-#	define PRINTF_LLU	"%llu"
+#	define NL_LENGTH	1
 #	define MKDIR(__n)	mkdir((__n), 0777)
+#	define NULL_DEVICE	"/dev/null"
 #else
+	// WINDOWS
 #	define DIRSEP_STR	"\\"
 #	define DIRSEP_CHR	'\\'
 #	define NL		"\r\n"
-#	define PRINTF_LLD	"%I64d"
-#	define PRINTF_LLU	"%I64u"
+#	define NL_LENGTH	2
 #	define MKDIR(__n)	mkdir(__n)
+#	define NULL_DEVICE	"NUL:"
+#endif
+
+#if !defined(PRINTF_S64) || !defined(PRINTF_U64) || !defined(PRINTF_X64)
+#	include <inttypes.h>
+#	warning "Missing definition(s) for PRINTF_S64/PRINTF_U64/PRINTF_X64 (any of them) by configure. Please investigate."
+#	if !defined(PRINTF_S64)
+#		define PRINTF_S64 "%" PRId64
+#	endif
+#	if !defined(PRINTF_U64)
+#		define PRINTF_U64 "%" PRIu64
+#	endif
+#	if !defined(PRINTF_X64)
+#		define PRINTF_X64 "%" PRIX64
+#	endif
 #endif
 
 extern FILE *debug_fp;
@@ -166,8 +188,14 @@ extern int chatty_xemu;
 #endif
 
 #ifndef __BIGGEST_ALIGNMENT__
-#define __BIGGEST_ALIGNMENT__	16
+#	define __BIGGEST_ALIGNMENT__	16
+#	define XEMU_MISSING_BIGGEST_ALIGNMENT_WORKAROUND
+#elif __BIGGEST_ALIGNMENT__ > 256
+#	undef __BIGGEST_ALIGNMENT__
+#	define __BIGGEST_ALIGNMENT__ 256
+#	define XEMU_OVERSIZED_BIGGEST_ALIGNMENT_WORKAROUND
 #endif
+
 #define ALIGNED(n) __attribute__ ((aligned (n)))
 #define MAXALIGNED ALIGNED(__BIGGEST_ALIGNMENT__)
 
@@ -222,17 +250,24 @@ static inline int xemu_byte_order_test ( void )
 	return (r.b.l != ENDIAN_CHECKER_BYTE_L || r.b.h != ENDIAN_CHECKER_BYTE_H || r.w.w != ENDIAN_CHECKER_WORD || r.d != ENDIAN_CHECKER_DWORD);
 }
 
+extern int emu_exit_code;
+
+static inline int _get_emu_exit_code ( const int input )
+{
+	return input ? input : emu_exit_code;
+}
+
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
-#define XEMUEXIT(n)	do { emscripten_cancel_main_loop(); emscripten_force_exit(n); exit(n); } while (0)
+#define XEMUEXIT(n)	do { const int e = _get_emu_exit_code(n); emscripten_cancel_main_loop(); emscripten_force_exit(e); exit(e); } while (0)
 #else
 #include <stdlib.h>
-#define XEMUEXIT(n)	exit(n)
+#define XEMUEXIT(n)	exit(_get_emu_exit_code(n))
 #endif
 
 #define BOOLEAN_VALUE(n)	(!!(n))
 
-extern const char *XEMU_BUILDINFO_ON, *XEMU_BUILDINFO_AT, *XEMU_BUILDINFO_GIT, *XEMU_BUILDINFO_CC, *XEMU_BUILDINFO_TARGET, *XEMU_BUILDINFO_CDATE;
+extern const char XEMU_BUILDINFO_ON[], XEMU_BUILDINFO_AT[], XEMU_BUILDINFO_GIT[], XEMU_BUILDINFO_CC[], XEMU_BUILDINFO_TARGET[], XEMU_BUILDINFO_CDATE[];
 extern const char emulators_disclaimer[];
 extern void xemu_dump_version ( FILE *fp, const char *slogan );
 extern int xemu_is_official_build ( void );
@@ -241,7 +276,21 @@ static XEMU_INLINE unsigned char XEMU_BYTE_TO_BCD ( unsigned char b ) {
 	return ((b / 10) << 4) + (b % 10);
 }
 
+// this function is similar to strcpy() however:
+// * it does not copy the final '\0'
+// * it returns with the _updated_ 'target' pointer, not the original!
+static inline void *xemu_strcpy_special ( void *target, const void *source )
+{
+	while (*(char*)source)
+		*(char*)target++ = *(char*)source++;
+	return target;
+}
+
 #define VOIDPTR_TO_INT(x)	((int)(intptr_t)(void*)(x))
 #define VOIDPTR_TO_UINT(x)	((unsigned int)(uintptr_t)(void*)(x))
+
+// Stringification
+#define TO_STR_LEVEL1_(x)	#x			// stringification argument
+#define STRINGIFY(x)		TO_STR_LEVEL1_(x)	// level of indirection to be able to expand argument given as macros
 
 #endif

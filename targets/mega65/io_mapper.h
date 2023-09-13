@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -29,6 +29,6 @@ extern Uint8  D7XX[0x100];			// FIXME: newhack!
 extern int    fpga_switches;
 extern struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 extern int    port_d607;			// ugly hack for C65 extended keys ...
-extern int    mega65_model;
+extern int    core_age_in_days;
 
 #endif

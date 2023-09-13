@@ -160,11 +160,11 @@ static void _apu_push_fix32(Sint64 data) {
 /* Foreword for FLOAT handling: I use natural float (well, double ...)
  * numberic format of C, using pop/push APU functions to convert from/to.
  * This is kinda messy, and not bit-exact emulation of Am9511.
- * Even my lame push/pop functions can be done much better!!
+ * Even my crude push/pop functions can be done much better!!
  */
 
 
-static double _apu_pop_float()
+static double _apu_pop_float(void)
 {
 	int exp = _apu_pop8();
 	int data = _apu_pop8() << 16;
@@ -270,7 +270,7 @@ static void _apu_copy(int from, int to) {
  * carry to be set in case of overflow, or not?
  * */
 static void _apu_carry ( Sint64 val, Sint64 limit )
-{	
+{
 	if (val >= limit * 2 || val < -limit * 2) {
 		_apu_status |= _APU_F_OVERFLOW;
 		// should carry set here????????????????
@@ -503,8 +503,7 @@ void apu_write_command ( Uint8 cmd )
 				_apu_status |= _APU_F_ZERO;
 			clocks = 18;
 			break;
-		
-		
+
 		case 0x77: // PTOS: Push stack. Duplicate NOS to TOS.
 			_apu_move(2);
 			_apu_copy(2, 0);
@@ -530,7 +529,7 @@ void apu_write_command ( Uint8 cmd )
 			_apu_sz_float();
 			clocks = 20;
 			break;
-		
+
 		case 0x78: // POPS: Pop stack. Old NOS becomes new TOS, old TOS rotates to bottom.
 			_apu_move(-2);
 			_apu_sz_fix16(); // set "sz" (S and Z status flags) by inspecting (new) TOS

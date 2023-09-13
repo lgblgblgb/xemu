@@ -1,6 +1,6 @@
 /* RC2014 and generic Z80 SBC emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2020,2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -37,9 +37,7 @@ static int console_width, console_height;
 static Uint8 *video_ram;
 static Uint8 *color_ram;
 static Uint32 palette[16];
-#define	CHARACTER_SET_DEFINER_8X16 static const Uint8 chargen[]
-#include "xemu/vgafonts.c"
-#undef	CHARACTER_SET_DEFINER_8X16
+
 static const Uint8 console_colors[3*16] = {	// FIXME
 	0x00, 0x00, 0x00,	// black
 	0xFF, 0xFF, 0xFF,	// white
@@ -193,7 +191,7 @@ void console_iteration ( void )
 			for (int x = 0; x < console_width; x++) {
 				Uint32 fg  = palette[color_ram[vp + x] & 0xF];
 				Uint32 bg  = palette[color_ram[vp + x] >>  4];
-				Uint8 chln = chargen[video_ram[vp + x] * FONT_HEIGHT + row];
+				Uint8 chln = vga_font_8x16[video_ram[vp + x] * FONT_HEIGHT + row];
 				if (XEMU_UNLIKELY(cursor_line == y && cursor.x == x)) {
 					//Uint32 temp = fg;
 					//fg = bg;
@@ -276,7 +274,7 @@ void emu_callback_key_textinput_sdl  ( SDL_TextInputEvent   *ev )
 }
 
 
-int console_init ( int width, int height, int zoom_percent, Uint8 *video_mapped, Uint8 *color_mapped )
+int console_init ( int width, int height, int zoom_percent, Uint8 *video_mapped, Uint8 *color_mapped, int sdlrenderquality )
 {
 	int screen_width = width * 9;
 	int screen_height = height * FONT_HEIGHT;
@@ -296,7 +294,7 @@ int console_init ( int width, int height, int zoom_percent, Uint8 *video_mapped,
 		16,				// we have 16 colours
 		console_colors,			// initialize palette from this constant array
 		palette,			// initialize palette into this stuff
-		RENDER_SCALE_QUALITY,		// render scaling quality
+		sdlrenderquality,		// render scaling quality
 		USE_LOCKED_TEXTURE,		// 1 = locked texture access
 		rc_shutdown_callback		// shutdown function
 	))

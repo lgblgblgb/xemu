@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2015-2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2016,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "enterprise128.h"
 #include "printer.h"
 #include "dave.h"
+#include "configdb.h"
 #include <errno.h>
 #include <fcntl.h>
 
@@ -93,10 +94,9 @@ static void send_data_to_printer ( Uint8 data )
 {
 	//DEBUG("PRINTER GOT DATA: %d" NL, data);
 	if (fd_to_open) {
-		const char *printfile = xemucfg_get_str("printfile");
 		char path[PATH_MAX + 1];
 		//fp = open_emu_file(printfile, "ab", path);
-		printer_fd = xemu_open_file(printfile, O_WRONLY | O_APPEND | O_CREAT, NULL, path);
+		printer_fd = xemu_open_file(configdb.printfile, O_WRONLY | O_APPEND | O_CREAT, NULL, path);
 		if (printer_fd < 0)
 			WARNING_WINDOW("Cannot create/append printer output file \"%s\": %s.\nYou can use Xep128 but printer output will not be logged!", path, ERRSTR());
 		else

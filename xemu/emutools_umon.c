@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2017-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2017-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 !!  NOTE: I AM NOT a windows programmer, not even a user ...
 !!  These are my best tries with winsock to be usable also on the win32/64 platform ...
@@ -22,6 +22,27 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
 #include "xemu/emutools_umon.h"
+#include "xemu/emutools_socketapi.h"
+#include <string.h>
+#include <setjmp.h>
+
+
+//#define UNCONNECTED	XS_INVALID_SOCKET
+static xemusock_socket_t sock_server;
+
+static SDL_atomic_t thread_counter;
+static SDL_atomic_t thread_stop_trigger;
+static jmp_buf jmp_finish_client_thread;
+
+#define END_CLIENT_THREAD(n)	do { longjmp(jmp_finish_client_thread, n); XEMU_UNREACHABLE(); } while(0)
+#define CHECK_STOP_TRIGGER()	do { \
+					if (XEMU_UNLIKELY(SDL_AtomicGet(&thread_stop_trigger))) \
+						END_CLIENT_THREAD(1); \
+				} while(0)
+
+#if 0
+
+
 #include <string.h>
 #include <setjmp.h>
 
@@ -516,6 +537,226 @@ static int xumon_main ( void *user_data_unused )
 
 #undef FINISH_THREAD
 
+#endif
+
+
+static int recv_raw ( xemusock_socket_t sock, void *buffer, int min_size, int max_size )
+{
+	int size = 0;
+	while (size < min_size && max_size > 0) {
+		CHECK_STOP_TRIGGER();
+		int xerr;
+		int ret = xemusock_select_1(sock, 100000, XEMUSOCK_SELECT_R, &xerr);
+		if (ret < 0) {
+			if (xerr == XSEINTR) {
+				DEBUGPRINT("UMON: client: recv_raw: select() got EINTR, restarting" NL);
+				continue;
+			}
+			DEBUGPRINT("UMON: client: recv_raw: select() returned with error: %s" NL, xemusock_strerror(xerr));
+			END_CLIENT_THREAD(1);
+		}
+		if (!ret)
+			continue;
+		ret = xemusock_recv(sock, buffer, max_size, &xerr);
+		if (ret == 0) {
+			// successfull receiving of zero bytes usually (?? FIXME ??) means socket has been closed
+			DEBUGPRINT("UMON: client: recv_raw: recv() returned with zero" NL);
+			END_CLIENT_THREAD(1);
+		}
+		if (ret < 0) {
+			if (xemusock_should_repeat_from_error(xerr)) {
+				DEBUGPRINT("UMON: client: recv_raw: recv() non-fatal error, restarting: %s" NL, xemusock_strerror(xerr));
+				continue;
+			}
+			DEBUGPRINT("UMON: client: recv_raw: recv() returned with error: %s" NL, xemusock_strerror(xerr));
+			END_CLIENT_THREAD(1);
+		}
+		buffer += ret;
+		size += ret;
+		max_size -= ret;
+	}
+	return size;
+}
+
+
+static void send_raw ( xemusock_socket_t sock, const void *buffer, int size )
+{
+	while (size > 0) {
+		CHECK_STOP_TRIGGER();
+		int xerr;
+		int ret = xemusock_select_1(sock, 100000, XEMUSOCK_SELECT_W, &xerr);
+		if (ret < 0) {
+			if (xerr == XSEINTR) {
+				DEBUGPRINT("UMON: client: send_raw: select() got EINTR, restarting" NL);
+				continue;
+			}
+			DEBUGPRINT("UMON: client: send_raw: select() returned with error: %s" NL, xemusock_strerror(xerr));
+			END_CLIENT_THREAD(1);
+		}
+		if (!ret)
+			continue;
+		ret = xemusock_send(sock, buffer, size, &xerr);
+		if (ret == 0) {
+			// successfull sending of zero bytes usually (?? FIXME ??) means socket has been closed
+			DEBUGPRINT("UMON: client: send_raw: send() returned with zero" NL);
+			END_CLIENT_THREAD(1);
+		}
+		if (ret < 0) {
+			if (xemusock_should_repeat_from_error(xerr)) {
+				DEBUGPRINT("UMON: client: send_raw: send() non-fatal error, restarting: %s" NL, xemusock_strerror(xerr));
+				continue;
+			}
+			DEBUGPRINT("UMON: client: send_raw: send() returned with error: %s" NL, xemusock_strerror(xerr));
+			END_CLIENT_THREAD(1);
+		}
+		buffer += ret;
+		size -= ret;
+	}
+}
+
+
+static inline void send_string ( xemusock_socket_t sock, const char *p )
+{
+	send_raw(sock, p, strlen(p));
+}
+
+
+static void client_run ( xemusock_socket_t sock )
+{
+	char buffer[8192];
+	int read_size = 0;
+	int xerr;
+	for (;;) {
+		CHECK_STOP_TRIGGER();
+		if (read_size >= sizeof(buffer) - 1)
+			break;
+		int ret = xemusock_recv(sock, buffer + read_size, sizeof(buffer) - read_size - 1, &xerr);
+		DEBUGPRINT("UMON: client: result of recv() = %d, error = %s" NL, ret, ret == -1 ? xemusock_strerror(xerr) : "OK");
+		if (ret == 0)
+			break;
+		if (ret > 0) {
+			read_size += ret;
+			buffer[read_size] = 0;
+			const char *p = strstr(buffer, "\r\n\r\n");
+			if (p) {
+
+				char outbuffer[8192];
+				sprintf(outbuffer,
+					"HTTP/1.1 200 OK\r\n"
+					"Host: 127.0.0.1\r\n"
+					"Content-Type: text/plain; charset=UTF-8\r\n"
+					"Connection: close\r\n"
+					"Cache-Control: no-store, no-cache, must-revalidate, max-age=0\r\n"
+					"Cache-Control: post-check=0, pre-check=0\r\n"
+					"Pragma: no-cache\r\n"
+					"Expires: Tue, 19 Sep 2017 19:08:16 GMT\r\n"
+					"X-UA-Compatible: IE=edge\r\n"
+					"X-Powered-By: The Powerpuff Girls\r\n"
+					"X-Content-Type-Options: nosniff\r\n"
+					"Access-Control-Allow-Origin: *\r\n"
+					"Server: Xemu/0.1\r\n"
+					"\r\n"
+					"Hello, world ;)\r\n"
+				);
+				send_string(sock, outbuffer);
+				//p = outbuffer;
+				//while (*p) {
+				//	ret = xemusock_send(sock, p, strlen(p), &xerr);
+				//	DEBUGPRINT("UMON: client: result of send() = %d, error = %s" NL, ret, ret == -1 ? xemusock_strerror(xerr) : "OK");
+				//	if (ret == 0)
+				//		break;
+				//	if (ret > 0)
+				//		p += ret;
+				//	SDL_Delay(100);
+				//}
+				return;
+			}
+		}
+		SDL_Delay(100);
+	}
+}
+
+
+#undef END_CLIENT_THREAD
+#undef CHECK_STOP_TRIGGER
+
+
+// Client handling thread, for the life-time of a given connection only.
+// It calls function client_run() to actually handle the connection.
+// It's a very trivial function, just "extracts" the client socket from the thread parameter,
+// and sets client socket to non-blocking mode, besides calling the mentioned real handler function.
+// Also, this function sets a jump point for longjmp() thus, it's possible to return and finish thread
+// without "walking backwards" in the call chain to be able to return from the thread handler itself.
+static int client_thread_initiate ( void *user_param )
+{
+	int num_of_threads = SDL_AtomicAdd(&thread_counter, 1) + 1;	// increment thread counter (and remember)
+	xemusock_socket_t sock = (xemusock_socket_t)(uintptr_t)user_param;
+	DEBUGPRINT("UMON: client: new connection on socket %d" NL, (int)sock);
+	if (num_of_threads > XUMON_MAX_THREADS) {
+		DEBUGPRINT("UMON: client: too many threads (%d > %d), aborting connection." NL, num_of_threads, XUMON_MAX_THREADS);
+	} else {
+		int xerr;
+		if (xemusock_set_nonblocking(sock, XEMUSOCK_NONBLOCKING, &xerr)) {
+			DEBUGPRINT("UMON: client: Cannot set socket %d into non-blocking mode:\n%s" NL, (int)sock, xemusock_strerror(xerr));
+		} else {
+			if (!setjmp(jmp_finish_client_thread))
+				client_run(sock);
+			xemusock_set_nonblocking(sock, XEMUSOCK_BLOCKING, NULL);
+		}
+	}
+	xemusock_shutdown(sock, NULL);
+	xemusock_close(sock, NULL);
+	(void)SDL_AtomicAdd(&thread_counter, -1);			// decrement thread counter
+	return 0;
+}
+
+
+// Main server thread, running during the full life-time of UMON subsystem.
+// It accepts incoming connections and creating new threads to handle the given connection then.
+static int main_thread ( void *user_param )
+{
+	int client_seq = 0;
+	SDL_AtomicSet(&thread_counter, 1);	// the main thread counts as the first one already
+	while (!SDL_AtomicGet(&thread_stop_trigger)) {
+		struct sockaddr_in sock_st;
+		int xerr;
+		// Wait for socket event with select, with 0.1sec timeout
+		// We need timeout, to check thread_stop_trigger condition
+		int select_result = xemusock_select_1(sock_server, 100000, XEMUSOCK_SELECT_R | XEMUSOCK_SELECT_E, &xerr);
+		if (!select_result)
+			continue;
+		if (select_result < 0) {
+			if (xerr == XSEINTR)
+				continue;
+			DEBUGPRINT("UMON: client: select() error: %s" NL, xemusock_strerror(xerr));
+			SDL_Delay(100);
+			continue;
+		}
+		xemusock_socklen_t len = sizeof(struct sockaddr_in);
+		xemusock_socket_t sock = xemusock_accept(sock_server, (struct sockaddr *)&sock_st, &len, &xerr);
+		if (sock != XS_INVALID_SOCKET && sock != XS_SOCKET_ERROR) {	// FIXME: both conditions needed? maybe others as well?
+			char thread_name[64];
+			sprintf(thread_name, "Xemu-Umon-%d-%d", SDL_AtomicGet(&thread_counter), client_seq);
+			SDL_Thread *thread = SDL_CreateThread(client_thread_initiate, thread_name, (void*)(uintptr_t)sock);
+			if (thread) {
+				client_seq++;
+				SDL_DetachThread(thread);
+			} else {
+				DEBUGPRINT("UMON: client: cannot create thread for incomming connection" NL);
+				xemusock_shutdown(sock, NULL);
+				xemusock_close(sock, NULL);
+			}
+		} else {
+			DEBUGPRINT("UMON: client: accept() error: %s" NL, xemusock_strerror(xerr));
+			SDL_Delay(10);
+		}
+	}
+	(void)SDL_AtomicAdd(&thread_counter, -1);	// for the main thread itself
+	return 0;
+}
+
+
+
 /* !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! *
  * END CRITICAL PART: these part ABOVE of the code runs in a *THREAD*.            *
  * The rest of this file is about creating the thread and it's enivornment first, *
@@ -523,72 +764,103 @@ static int xumon_main ( void *user_data_unused )
  * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */
 
 
-int xumon_init ( int port, int threaded )
+int xumon_init ( int port )
 {
-	int optval;
-	struct sockaddr_in serveraddr;
-	DEBUGPRINT("UMON: requested monitor service on TCP port %d (%s)" NL, port, threaded ? "in dedicated thread" : "DEVELOPER: IN-MAIN-THREAD");
-	if (xemu_use_sockapi())
-		return -1;
-	if (server_sock != XEMUNET_INVALID_SOCKET || xumon_is_running)
-		return 0;	// already initialized??
-	server_sock = socket(AF_INET, SOCK_STREAM, 0);
-	if (server_sock == XEMUNET_INVALID_SOCKET) {
-		ERROR_WINDOW("UMON: Cannot create TCP socket: %s", xemunet_strneterror());
-		return -1;
-	}
-	optval = 1;
-	if (setsockopt(server_sock, SOL_SOCKET, SO_REUSEADDR, (const void*)&optval, sizeof(int)) < 0) {
-		// Hmm, we may not want to treat this error as fatal, though SO_REUSEADDR is handy if you have crashed etc and be able to re-bind on the port
-		// without long minutes to wait :-O
-		xemunet_perror("setsockopt()");
-	}
-	memset(&serveraddr, 0, sizeof serveraddr);
-	serveraddr.sin_family = AF_INET;
-	serveraddr.sin_addr.s_addr = htonl(INADDR_ANY);
-	serveraddr.sin_port = htons((unsigned short)port);
-	if (bind(server_sock, (struct sockaddr *)&serveraddr, sizeof serveraddr) < 0) {
-		ERROR_WINDOW("UMON: Cannot bind TCP socket to port %d: %s", port, xemunet_strneterror());
-		xemunet_close_socket(server_sock);
-		server_sock = XEMUNET_INVALID_SOCKET;
-		return -1;
-	}
-	if (listen(server_sock, 32) < 0) {
-		ERROR_WINDOW("UMON: Cannot listen to socket on TCP port %d: %s", port, xemunet_strneterror());
-		xemunet_close_socket(server_sock);
-		server_sock = XEMUNET_INVALID_SOCKET;
-		return -1;
-	}
-	if (threaded) {
-		xumon_thread_id = SDL_CreateThread(xumon_main, "Xemu-uMonitor", NULL);
-		if (!xumon_thread_id) {
-			ERROR_WINDOW("UMON: cannot create monitor thread: %s" NL, SDL_GetError());
-			xemunet_close_socket(server_sock);
-			server_sock = XEMUNET_INVALID_SOCKET;
-			return -1;
-		}
-		DEBUGPRINT("UMON: thread started with thread id %p: \"%s\"" NL, xumon_thread_id, SDL_GetThreadName(xumon_thread_id));
-		//SDL_DetachThread(xumon_thread_id);
+	SDL_AtomicSet(&thread_counter, 0);
+	sock_server = XS_INVALID_SOCKET;
+	if (!port) {
+		DEBUGPRINT("UMON: not enabled" NL);
 		return 0;
-	} else {
-		ERROR_WINDOW("!!Developer ONLY mode activated with negative port number!!");
-		return xumon_main(NULL);
 	}
+	static const char err_msg[] = "UMON initialization problem, UMON won't be available:\n";
+	if (port < 1024 || port > 0xFFFF) {
+		ERROR_WINDOW("%sInvalid port (must be between 1024 and 65535): %d", err_msg, port);
+		goto error;
+	}
+	const char *sock_init_status = xemusock_init();
+	if (sock_init_status) {
+		ERROR_WINDOW("%sCannot initialize network library:\n%s", err_msg, sock_init_status);
+		goto error;
+	}
+	int xerr;
+	sock_server = xemusock_create_for_inet(XEMUSOCK_TCP, XEMUSOCK_BLOCKING, &xerr);
+	if (sock_server == XS_INVALID_SOCKET) {
+		ERROR_WINDOW("%sCannot create TCP socket:\n%s", err_msg, xemusock_strerror(xerr));
+		goto error;
+	}
+	if (xemusock_setsockopt_reuseaddr(sock_server, &xerr)) {
+		ERROR_WINDOW("UMON setsockopt for SO_REUSEADDR failed:\n%s", xemusock_strerror(xerr));
+		goto error;
+	}
+	struct sockaddr_in sock_st;
+	xemusock_fill_servaddr_for_inet_ip_native(&sock_st, 0, port);
+	xemusock_socklen_t sock_len = sizeof(struct sockaddr_in);
+	if (xemusock_bind(sock_server, (struct sockaddr*)&sock_st, sock_len, &xerr)) {
+		ERROR_WINDOW("%sCannot bind TCP socket %d:\n%s", err_msg, port, xemusock_strerror(xerr));
+		goto error;
+	}
+	if (xemusock_listen(sock_server, 5, &xerr)) {
+		ERROR_WINDOW("%sCannot listen socket %d:\n%s", err_msg, (int)sock_server, xemusock_strerror(xerr));
+		goto error;
+	}
+	if (xemusock_set_nonblocking(sock_server, XEMUSOCK_NONBLOCKING, &xerr)) {
+		ERROR_WINDOW("%sCannot set socket %d into non-blocking mode:\n%s", err_msg, (int)sock_server, xemusock_strerror(xerr));
+		goto error;
+	}
+	// Create thread to handle incoming connections on our brand new server socket we've just created for this purpose
+	SDL_AtomicSet(&thread_stop_trigger, 0);
+	Uint32 passed_time = 0, start_time = SDL_GetTicks();
+	SDL_Thread *thread = SDL_CreateThread(main_thread, "Xemu-Umon-Main", NULL);
+	if (!thread) {
+		ERROR_WINDOW("%sCannot create monitor thread:\n%s", err_msg, SDL_GetError());
+		goto error;
+	}
+	SDL_DetachThread(thread);
+	while (!SDL_AtomicGet(&thread_counter)) {
+		SDL_Delay(1);
+		passed_time = SDL_GetTicks() - start_time;
+		if (passed_time > 500) {
+			DEBUGPRINT("UMON: timeout while waiting for thread to start! UMON won't be available!" NL);
+			goto error;
+		}
+	}
+	// Everything is OK, return with success.
+	DEBUGPRINT("UMON: has been initialized for TCP/IP port %d, on-line within %d msecs." NL, port, passed_time);
 	return 0;
+error:
+	SDL_AtomicSet(&thread_stop_trigger, 1);
+	if (sock_server != XS_INVALID_SOCKET) {
+		int xerr;
+		if (xemusock_close(sock_server, &xerr))
+			DEBUGPRINT("UMON: warning, could not close server socket after error: %s" NL, xemusock_strerror(xerr));
+		sock_server = XS_INVALID_SOCKET;
+	}
+	return 1;
 }
 
 
 int xumon_stop ( void )
 {
-	if (xumon_thread_id && !xumon_is_running) {
-		int ret;
-		SDL_WaitThread(xumon_thread_id, &ret);
-		xumon_thread_id = NULL;
-		return ret;
+	int count = SDL_AtomicGet(&thread_counter);
+	if (!count)
+		return 0;
+	Uint32 passed_time = 0, start_time = SDL_GetTicks();
+	SDL_AtomicSet(&thread_stop_trigger, 1);
+	while (SDL_AtomicGet(&thread_counter) > 0) {
+		SDL_Delay(1);
+		passed_time = SDL_GetTicks() - start_time;
+		if (passed_time > 500) {
+			DEBUGPRINT("UMON: timeout while waiting for threads to stop!" NL);
+			break;
+		}
 	}
-	if (!xumon_is_running || !xumon_thread_id)
-		return -1;
-	thread_stop_trigger = 1;
+	xemusock_set_nonblocking(sock_server, XEMUSOCK_BLOCKING, NULL);
+	xemusock_shutdown(sock_server, NULL);
+	xemusock_close(sock_server, NULL);
+	sock_server = XS_INVALID_SOCKET;
+	int count2 = SDL_AtomicGet(&thread_counter);
+	DEBUGPRINT("UMON: shutdown, %d thread(s) (%d client) exited, %d thread(s) has timeout condition, %d msecs." NL, count - count2, count - count2 - 1, count2, passed_time);
+	return 0;
 }
 
 #endif

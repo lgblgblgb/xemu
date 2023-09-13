@@ -1,7 +1,7 @@
 /* Xemu/Xep128 Emscripten "booter" and option/FS parser + file XHR downloader.
  * Note: it's pre-alpha UGLY code, with globals, without modularization, etc etc ...
  * Some code based on (or the original) the Emscripten generated code. Other parts:
-  
+
 Copyright (C)2015,2016 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 http://xep128.lgb.hu/
 

@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2019-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -53,14 +53,19 @@ struct xemugui_descriptor_st {
 };
 
 #if defined(XEMU_HAS_GTK3)
-#	include "xemu/gui/gtk.c"
+#	include "xemu/gui/gui_gtk.c"
 #elif defined(XEMU_ARCH_MAC)
-#	include "xemu/gui/osx.c"
+#	include "xemu/gui/gui_osx.c"
 #elif defined(XEMU_ARCH_WIN)
-#	include "xemu/gui/windows.c"
+#	include "xemu/gui/gui_win.c"
 #endif
-#include "xemu/gui/nogui.c"
-#include "xemu/gui/osd.c"
+#if defined(XEMU_OSD_SUPPORT)
+#	include "xemu/gui/gui_osd.c"
+#endif
+#if defined(XEMU_HAS_DLSYM_API)
+#	include "xemu/gui/gui_plugin.c"
+#endif
+#include "xemu/gui/gui_nogui.c"
 
 static const struct xemugui_descriptor_st *current_gui = NULL;
 
@@ -74,6 +79,12 @@ static const struct xemugui_descriptor_st *xemugui_descriptor_list[] = {
 #if defined(XEMU_HAS_GTK3)
 	&xemugtkgui_descriptor,
 #endif
+#if defined(XEMU_OSD_SUPPORT)
+	&xemuosdgui_descriptor,
+#endif
+#if defined(XEMU_HAS_DLSYM_API)
+	&xemuplugingui_descriptor,
+#endif
 //	&xemuosdgui_descriptor,
 	&xemunullgui_descriptor		// THIS MUST BE THE LAST ENTRY
 };
@@ -81,9 +92,15 @@ static const struct xemugui_descriptor_st *xemugui_descriptor_list[] = {
 
 int xemugui_init ( const char *name )
 {
+	is_xemugui_ok = 0;
+	if (name && name[0] == '\0')	// make sure that empty string means the same as NULL pointer passed
+		name = NULL;
+	if (emu_is_headless) {
+		name = xemunullgui_descriptor.name;
+		DEBUGPRINT("GUI: forcing \"%s\" because of headless mode" NL, name);
+	}
 	char avail[256];	// "should be enough" (yeah, I know, the 640K ...) for some names ...
 	avail[0] = 0;
-	is_xemugui_ok = 0;
 	for (int a = 0 ;; a++) {
 		strcat(avail, " ");
 		strcat(avail, xemugui_descriptor_list[a]->name);
@@ -132,11 +149,24 @@ int xemugui_file_selector ( int dialog_mode, const char *dialog_title, char *def
 
 int xemugui_popup ( const struct menu_st desc[] )
 {
-	if (current_gui && current_gui->popup)
-		return current_gui->popup(desc);
-	else
+	if (!current_gui) {
+		ERROR_WINDOW("GUI hasn't been initialized yet, cannot pop menu.");
 		return 1;
+	}
+	if (!current_gui->popup) {
+#ifndef GUI_HAS_POPUP
+		ERROR_WINDOW("GUI support is not compiled for this Xemu build for any GUI backend which can pop menu");
+		return 1;
+#endif
+		if (current_gui == &xemunullgui_descriptor)
+			ERROR_WINDOW("The 'none' GUI is used. It does not support popping menu");
+		else
+			ERROR_WINDOW("Current GUI backend (%s) does not support popping menu", current_gui->name);
+		return 1;
+	}
+	return current_gui->popup(desc);
 }
+
 
 int xemugui_info ( int sdl_class, const char *msg )
 {

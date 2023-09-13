@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2015-2017,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2017,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -25,6 +25,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "enterprise128.h"
 
+#include "configdb.h"
 #include "dave.h"
 #include "nick.h"
 #include "sdext.h"
@@ -189,41 +190,12 @@ static void xep128_emulation ( void )
 }
 
 
-static const char *rom_parse_opt_cb ( struct xemutools_config_st *unused, const char *optname, const char *optvalue )
-{
-	return rom_parse_opt(optname, optvalue);
-}
-
-
-
 int main (int argc, char *argv[])
 {
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The Enterprise-128 \"old XEP128 within the Xemu project now\" emulator from LGB");
-	xemucfg_define_switch_option("audio", "Enable (buggy) audio output");
-	xemucfg_define_switch_option("syscon", "Keep console window open (Windows-specific)");
-	//{ DEBUGFILE_OPT,CONFITEM_STR,	"none",		0, "Enable debug messages written to a specified file" },
-	xemucfg_define_str_option("ddn", NULL, "Default device name (none = not to set)");
-	xemucfg_define_float_option("clock", (double)DEFAULT_CPU_CLOCK, "Z80 clock in MHz");
-	xemucfg_define_str_option("filedir", "@files", "Default directory for FILE: device");
-	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode");
-	xemucfg_define_num_option("mousemode",	1, "Set mouse mode, 1-3 = J-column 2,4,8 bytes and 4-6 the same for K-column");
-	xemucfg_define_switch_option("primo", "Start in Primo emulator mode");
-	xemucfg_define_str_option("printfile", PRINT_OUT_FN, "Printing into this file");
-	xemucfg_define_str_option("ram", "128", "RAM size in Kbytes (decimal) or segment specification(s) prefixed with @ in hex (VRAM is always assumed), like: @C0-CF,E0,E3-E7");
-	xemucfg_define_proc_option("rom", rom_parse_opt_cb, "ROM image, format is \"rom@xx=filename\" (xx=start segment in hex), use rom@00 for EXOS or combined ROM set");
-	xemucfg_define_str_option("sdimg", SDCARD_IMG_FN, "SD-card disk image (VHD) file name/path");
-	xemucfg_define_str_option("sdl", NULL, "Sets SDL specific option(s) including rendering related stuffs");
-	xemucfg_define_switch_option("skiplogo", "Disables Enterprise logo on start-up via XEP ROM");
-	xemucfg_define_str_option("snapshot", NULL, "Load and use ep128emu snapshot");
-	xemucfg_define_str_option("wdimg", NULL, "EXDOS WD disk image file name/path");
-	xemucfg_define_switch_option("noxeprom", "Disables XEP internal ROM");
-	//{ "epkey",	CONFITEM_STR,	NULL,		1, "Define a given EP/emu key, format epkey@xy=SDLname, where x/y are row/col in hex or spec code (ie screenshot, etc)." },
-	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT");
-	xemucfg_define_switch_option("monitor", "Start monitor on console");
-	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list");
-	if (xemucfg_parse_all(argc, argv))
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Enterprise-128 \"old XEP128 within the Xemu project now\" emulator from LGB", argc, argv);
+	configdb_define_emulator_options();
+	if (xemucfg_parse_all())
 		return 1;
-	i_am_sure_override = xemucfg_get_bool("besure");
 	window_title_info_addon = emulator_speed_title;
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
@@ -235,12 +207,12 @@ int main (int argc, char *argv[])
 		0,				// we have *NO* pre-defined colours as with more simple machines (too many we need). we want to do this ourselves!
 		NULL,				// -- "" --
 		NULL,				// -- "" --
-		RENDER_SCALE_QUALITY,		// render scaling quality
+		configdb.sdlrenderquality,	// render scaling quality
 		USE_LOCKED_TEXTURE,		// 1 = locked texture access
 		shutdown_callback		// registered shutdown function
 	))
 		return 1;
-	xemugui_init(xemucfg_get_str("gui"));	// allow to fail (do not exit if it fails). Some targets may not have X running
+	xemugui_init(configdb.gui_selection);	// allow to fail (do not exit if it fails). Some targets may not have X running
 	hid_init(
 		ep128_key_map,
 		VIRTUAL_SHIFT_POS,
@@ -254,53 +226,53 @@ int main (int argc, char *argv[])
 		sdl_pref_dir,
 #endif
 	"files");
-	audio_init(xemucfg_get_bool("audio"));
+	audio_init(configdb.audio);
 	z80ex_init();
 	set_ep_cpu(CPU_Z80);
 	if (nick_init())
 		return 1;
-	const char *snapshot = xemucfg_get_str("snapshot");
-	if (snapshot) {
-		if (ep128snap_load(snapshot))
-			snapshot = NULL;
+	//const char *snapshot = xemucfg_get_str("snapshot");
+	if (configdb.snapshot) {
+		if (ep128snap_load(configdb.snapshot))
+			xemucfg_set_str(&configdb.snapshot, NULL);
 	} // else
-	if (!snapshot) {
+	if (!configdb.snapshot) {
 		if (roms_load())
 			return 1;
 		primo_rom_seg = primo_search_rom();
-		ep_set_ram_config(xemucfg_get_str("ram"));
+		ep_set_ram_config(configdb.ram_setup_str);
 	}
-	mouse_setup(xemucfg_get_num("mousemode"));
+	mouse_setup(configdb.mousemode);
 	ep_reset();
 	clear_emu_events();
 #ifdef CONFIG_SDEXT_SUPPORT
-	if (!snapshot)
-		sdext_init(xemucfg_get_str("sdimg"));
+	if (!configdb.snapshot)
+		sdext_init(configdb.sdimg);
 #endif
 #ifdef CONFIG_EXDOS_SUPPORT
 	wd_exdos_reset();
-	wd_attach_disk_image(xemucfg_get_str("wdimg"));
+	wd_attach_disk_image(configdb.wd_img_path);
 #endif
 #ifdef CONFIG_EPNET_SUPPORT
 	epnet_init(NULL);
 #endif
 	balancer = 0;
-	set_cpu_clock((int)(xemucfg_get_ranged_float("clock", 1.0, 12.0) * 1000000.0));
+	set_cpu_clock((int)(configdb.clock * 1000000.0));
 	audio_start();
-	xemu_set_full_screen(xemucfg_get_bool("fullscreen"));
+	xemu_set_full_screen(configdb.fullscreen_requested);
 	sram_ready = 1;
-	if (xemucfg_get_bool("primo") && !snapshot) {
+	if (configdb.primo && !configdb.snapshot) {
 		if (primo_rom_seg != -1) {
 			primo_emulator_execute();
 			OSD(-1, -1, "Primo Emulator Mode");
 		} else
 			ERROR_WINDOW("Primo mode was requested, but PRIMO ROM was not loaded.\nRefusing Primo mode");
 	}
-	if (snapshot)
+	if (configdb.snapshot)
 		ep128snap_set_cpu_and_io();
-	if (!xemucfg_get_bool("syscon") && !xemucfg_get_bool("monitor"))
+	if (!configdb.syscon && !configdb.monitor)
 		sysconsole_close(NULL);
-	if (xemucfg_get_bool("monitor"))
+	if (configdb.monitor)
 		monitor_start();
 	clear_emu_events();
 	xemu_timekeeping_start();

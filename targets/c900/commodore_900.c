@@ -60,15 +60,16 @@ void clear_emu_events ( void )
 	printf("CLEAR EMU EVENTS!\n");
 }
 
+static char *bootrom_name;
 
 
 int main ( int argc, char **argv )
 {
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The new-territory-for-me Commodore 900 emulator from LGB");
-	xemucfg_define_str_option("bootrom", BOOT_ROM, "Set BOOT ROM to be loaded");
-	if (xemucfg_parse_all(argc, argv))
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The new-territory-for-me Commodore 900 emulator from LGB", argc, argv);
+	xemucfg_define_str_option("bootrom", BOOT_ROM, "Set BOOT ROM to be loaded", &bootrom_name);
+	if (xemucfg_parse_all())
 		return 1;
-	if (xemu_load_file(xemucfg_get_str("bootrom"), memory, 0x8000, 0x8000, "The boot ROM of Commodore 900 (combined HI+LO)") != 0x8000)
+	if (xemu_load_file(bootrom_name, memory, 0x8000, 0x8000, "The boot ROM of Commodore 900 (combined HI+LO)") != 0x8000)
 		return 1;
 	z8k1_init();
 	puts("\nCURRENT GOAL: only disassembly the BOOT ROM and compare it with well known disasm result done by others on boot ROMs\n");

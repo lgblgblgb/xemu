@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2015-2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2016,2020-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -24,6 +24,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifdef CONFIG_EXDOS_SUPPORT
 
 #include "exdos_wd.h"
+#include "configdb.h"
+
 #include <unistd.h>
 #include <sys/types.h>
 #include <errno.h>
@@ -36,7 +38,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 static int   disk_fd = -1;
 static Uint8 disk_buffer[512];
-char wd_img_path[PATH_MAX + 1];
 int wd_max_tracks, wd_max_sectors, wd_image_size;
 
 
@@ -92,15 +93,16 @@ static int doCRC (Uint8 *buf, int nBytes, int n)	// CRC16 hmmm Just copied from 
 }
 
 
-static int guess_geometry ( void )
+static int guess_geometry ( int fd )
 {
-	int a;
-	off_t disk_size = lseek(disk_fd, 0, SEEK_END);
-	for (a = 0; disk_formats[a][0] != -1; a++) {
-		wd_max_tracks = disk_formats[a][0];
-		wd_max_sectors = disk_formats[a][1];
-		if ((wd_max_tracks * wd_max_sectors) << 10 == disk_size) {
+	off_t disk_size = lseek(fd, 0, SEEK_END);
+	for (int a = 0; disk_formats[a][0] != -1; a++) {
+		int wd_max_tracks_new = disk_formats[a][0];
+		int wd_max_sectors_new = disk_formats[a][1];
+		if ((wd_max_tracks_new * wd_max_sectors_new) << 10 == disk_size) {
 			wd_image_size = disk_size;
+			wd_max_tracks = wd_max_tracks_new;
+			wd_max_sectors = wd_max_sectors_new;
 			DEBUGPRINT("WD: disk size is %d bytes, %d tracks, %d sectors." NL, wd_image_size, wd_max_tracks, wd_max_sectors);
 			return 0;
 		}
@@ -114,7 +116,7 @@ void wd_detach_disk_image ( void )
 	if (disk_fd >= 0)
 		close(disk_fd);
 	disk_fd = -1;
-	*wd_img_path = 0;
+	xemucfg_set_str(&configdb.wd_img_path, NULL);
 	readOnly = 0;
 	diskInserted = 1; // no disk inserted by default (1 means NOT)
 }
@@ -129,25 +131,31 @@ int wd_attach_disk_image ( const char *fn )
 		return 0;
 	}
 	int ro = O_RDONLY;
-	disk_fd = xemu_open_file(fn, O_RDWR, &ro, wd_img_path);
-	if (disk_fd <= 0) {
+	char wd_img_path_new[PATH_MAX];
+	int disk_fd_new = xemu_open_file(fn, O_RDWR, &ro, wd_img_path_new);
+	ro = (ro != XEMU_OPEN_FILE_FIRST_MODE_USED);
+	if (disk_fd_new <= 0) {
 		ERROR_WINDOW("Cannot open EXDOS disk because %s\n%s", ERRSTR(), fn);
 		return 1;
 	}
 	if (ro) {
-		INFO_WINDOW("Disk image could be opened only in R/O mode\n%s", wd_img_path);
-		DEBUGPRINT("WD: disk image opened in R/O mode only: %s" NL, wd_img_path);
+		INFO_WINDOW("Disk image could be opened only in R/O mode\n%s", wd_img_path_new);
+		DEBUGPRINT("WD: disk image opened in R/O mode only: %s" NL, wd_img_path_new);
 		readOnly = 1;
 	} else {
-		DEBUGPRINT("WD: disk image opened in R/W mode: %s" NL, wd_img_path);
+		DEBUGPRINT("WD: disk image opened in R/W mode: %s" NL, wd_img_path_new);
 	}
-	if (guess_geometry()) {
+	if (guess_geometry(disk_fd_new)) {
 		ERROR_WINDOW("Cannot figure the EXDOS disk image geometry out, invalid/not supported image size?");
-		wd_detach_disk_image();
+		close(disk_fd_new);
 		return 1;
 	}
-	diskInserted = 0;	// disk OK, use inserted status
-	return 1;
+	diskInserted = 0;	// disk OK, use inserted status (inverted meaning!)
+	if (disk_fd >= 0)	// close previous file descriptor, of any ...
+		close(disk_fd);
+	disk_fd = disk_fd_new;	// advertise the new FD
+	xemucfg_set_str(&configdb.wd_img_path, wd_img_path_new);	// advertise the new used floppy disk image name
+	return 0;
 }
 
 

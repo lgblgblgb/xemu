@@ -1,7 +1,6 @@
-/* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing
-   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and MEGA65 as well.
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
+   8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -17,6 +16,7 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
+#define DEFINE_XEMU_OS_READDIR
 #include "xemu/emutools.h"
 
 #include <string.h>
@@ -31,12 +31,30 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <errno.h>
 #ifdef XEMU_ARCH_UNIX
 #	include <signal.h>
-#endif
-#ifdef HAVE_XEMU_SOCKET_API
-#	include "xemu/emutools_socketapi.h"
+#	include <sys/utsname.h>
 #endif
 
-#include "xemu/osd_font_16x16.c"
+#ifdef XEMU_MISSING_BIGGEST_ALIGNMENT_WORKAROUND
+#	warning "System did not define __BIGGEST_ALIGNMENT__ Xemu assumes some default value."
+#endif
+#ifdef XEMU_OVERSIZED_BIGGEST_ALIGNMENT_WORKAROUND
+#	warning "System deifned __BIGGEST_ALIGNMENT__ just too big Xemu will use a smaller default."
+#endif
+#ifdef XEMU_CPU_ARM
+#	warning "Compiling for ARM (including Apple Silicon as well) CPU. Some features of Xemu won't be available because of some limitations of usual OSes on this ISA."
+#endif
+
+#ifdef XEMU_ARCH_WIN
+#	include <windows.h>
+#	include <stdio.h>
+#	include <io.h>
+#	include <fcntl.h>
+#	include <math.h>
+#endif
+
+const char EMPTY_STR[] = "";
+const int ZERO_INT = 0;
+const int ONE_INT = 1;
 
 #ifndef XEMU_NO_SDL_DIALOG_OVERRIDE
 int (*SDL_ShowSimpleMessageBox_custom)(Uint32, const char*, const char*, SDL_Window* ) = SDL_ShowSimpleMessageBox;
@@ -54,11 +72,19 @@ static int atexit_callback_for_console_registered = 0;
 int i_am_sure_override = 0;
 const char *str_are_you_sure_to_exit = "Are you sure to exit Xemu?";
 
+char **xemu_initial_argv = NULL;
+int    xemu_initial_argc = -1;
+int emu_exit_code = 0;
+Uint64 buildinfo_cdate_uts = 0;
+const char *xemu_initial_cwd = NULL;
 SDL_Window   *sdl_win = NULL;
-SDL_Renderer *sdl_ren = NULL;
-SDL_Texture  *sdl_tex = NULL;
+static SDL_Renderer *sdl_ren = NULL;
+static SDL_Texture  *sdl_tex = NULL;
 SDL_PixelFormat *sdl_pix_fmt;
+int sdl_on_x11 = 0, sdl_on_wayland = 0;
+static Uint32 sdl_pixel_format_id;
 static const char default_window_title[] = "XEMU";
+int register_new_texture_creation = 0;
 char *xemu_app_org = NULL, *xemu_app_name = NULL;
 #ifdef XEMU_ARCH_HTML
 static const char *emscripten_sdl_base_dir = EMSCRIPTEN_SDL_BASE_DIR;
@@ -70,6 +96,15 @@ Uint32 *sdl_pixel_buffer = NULL;
 Uint32 *xemu_frame_pixel_access_p = NULL;
 int texture_x_size_in_bytes;
 int emu_is_fullscreen = 0;
+int emu_is_headless = 0;
+int emu_is_sleepless = 0;
+int dialogs_allowed = 1;
+#ifdef XEMU_ARCH_WIN
+int emu_fs_is_utf8 = 0;	// assuming non-UTF-8 capable filesystem for Windows hosts, I'll test it later in xemu_pre_init() if it's really the case
+#else
+int emu_fs_is_utf8 = 1;	// assuming UTF-8 capable filesystem for any non-Windows hosts
+#endif
+const char *emu_wine_version = NULL;
 static int win_xsize, win_ysize;
 char *sdl_pref_dir = NULL, *sdl_base_dir = NULL, *sdl_inst_dir = NULL;
 Uint32 sdl_winid;
@@ -88,16 +123,36 @@ FILE *debug_fp = NULL;
 int chatty_xemu = 1;
 int sdl_default_win_x_size;
 int sdl_default_win_y_size;
+static SDL_Rect sdl_viewport, *sdl_viewport_ptr = NULL;
+static unsigned int sdl_texture_x_size, sdl_texture_y_size;
 
-static int osd_enabled = 0, osd_available = 0, osd_xsize, osd_ysize, osd_fade_dec, osd_fade_end, osd_alpha_last;
-int osd_status = 0;
-static Uint32 osd_colours[16], *osd_pixels = NULL, osd_colour_fg, osd_colour_bg;
-static SDL_Texture *sdl_osdtex = NULL;
 static SDL_bool grabbed_mouse = SDL_FALSE, grabbed_mouse_saved = SDL_FALSE;
 int allow_mouse_grab = 1;
+static int sdl_viewport_changed;
+static int follow_win_size = 0;
 
 #if !SDL_VERSION_ATLEAST(2, 0, 4)
 #error "At least SDL version 2.0.4 is needed!"
+#endif
+
+#ifdef	XEMU_VGA_FONT_8X8
+#define	CHARACTER_SET_DEFINER_8X8	const Uint8 vga_font_8x8[256 *  8]
+#endif
+#ifdef	XEMU_VGA_FONT_8X14
+#define	CHARACTER_SET_DEFINER_8X14	const Uint8 vga_font_8x14[256 * 14]
+#endif
+#ifdef	XEMU_VGA_FONT_8X16
+#define	CHARACTER_SET_DEFINER_8X16	const Uint8 vga_font_8x16[256 * 16]
+#endif
+#define ALLOW_INCLUDE_VGAFONTS
+#include "xemu/vgafonts.c"
+#undef ALLOW_INCLUDE_VGAFONTS
+#undef	CHARACTER_SET_DEFINER_8X8
+#undef	CHARACTER_SET_DEFINER_8X14
+#undef	CHARACTER_SET_DEFINER_8X16
+
+#ifdef	XEMU_OSD_SUPPORT
+#include "xemu/gui/osd.c"
 #endif
 
 
@@ -214,6 +269,19 @@ void *xemu_realloc ( void *p, size_t size )
 }
 
 
+void *_xemu_malloc_ALIGNED_emulated ( size_t size )
+{
+	void *p = xemu_malloc(size + __BIGGEST_ALIGNMENT__);
+	unsigned int reminder = (unsigned int)((uintptr_t)p % (uintptr_t)__BIGGEST_ALIGNMENT__);
+	DEBUG("ALIGNED-ALLOC: using malloc(): base_pointer=%p size=%d need_alignment_of=%d reminder=%d" NL, p, (int)size, __BIGGEST_ALIGNMENT__, reminder);
+	if (reminder) {
+		void *p_old = p;
+		p += __BIGGEST_ALIGNMENT__ - reminder;
+		DEBUGPRINT("ALIGNED-ALLOC: malloc() alignment-workaround: correcting alignment %p -> %p (reminder: %u, need_alignment_of: %u)" NL, p_old, p, reminder, __BIGGEST_ALIGNMENT__);
+	} else
+		DEBUG("ALIGNED-ALLOC: malloc() alignment-workaround: alignment was OK already" NL);
+	return p;
+}
 #ifdef HAVE_MM_MALLOC
 #ifdef XEMU_ARCH_WIN
 extern void *_mm_malloc ( size_t size, size_t alignment );	// it seems mingw/win has issue not to define this properly ... FIXME? Ugly windows, always the problems ...
@@ -221,11 +289,16 @@ extern void *_mm_malloc ( size_t size, size_t alignment );	// it seems mingw/win
 void *xemu_malloc_ALIGNED ( size_t size )
 {
 	// it seems _mm_malloc() is quite standard at least on gcc, mingw, clang ... so let's try to use it
+	// unfortunately even the C11 standard (!) for this does not seem to work on Windows neither on Mac :(
 	void *p = _mm_malloc(size, __BIGGEST_ALIGNMENT__);
-	DEBUG("ALIGNED-ALLOC: base_pointer=%p size=%d alignment=%d" NL, p, (int)size, __BIGGEST_ALIGNMENT__);
+	DEBUG("ALIGNED-ALLOC: using _mm_malloc(): base_pointer=%p size=%d alignment=%d" NL, p, (int)size, __BIGGEST_ALIGNMENT__);
+	if (p == NULL) {
+		DEBUGPRINT("ALIGNED-ALLOC: _mm_malloc() failed, errno=%d[%s] ... defaulting to malloc()" NL, errno, strerror(errno));
+		return _xemu_malloc_ALIGNED_emulated(size);
+	}
 	return p;
 }
-#else
+#elif !defined(XEMU_ARCH_HTML)
 #warning "No _mm_malloc() for this architecture ..."
 #endif
 
@@ -238,6 +311,12 @@ char *xemu_strdup ( const char *s )
 	return p;
 }
 
+void xemu_restrdup ( char **ptr, const char *str )
+{
+	size_t len = strlen(str) + 1;
+	*ptr = xemu_realloc(*ptr, len);
+	memcpy(*ptr, str, len);
+}
 
 // Just drop queued SDL events ...
 void xemu_drop_events ( void )
@@ -303,6 +382,8 @@ void xemu_set_screen_mode ( int setting )
 
 static inline void do_sleep ( int td )
 {
+	if (XEMU_UNLIKELY(emu_is_sleepless))
+		return;
 #ifdef XEMU_ARCH_HTML
 #define __SLEEP_METHOD_DESC "emscripten_set_main_loop_timing"
 	// Note: even if td is zero (or negative ...) give at least a little time for the browser
@@ -342,7 +423,6 @@ static inline void do_sleep ( int td )
 #error "No SLEEP method is defined with XEMU_SLEEP_IS_* macros!"
 #endif
 }
-
 
 
 /* Should be called regularly (eg on each screen global update), this function
@@ -409,10 +489,98 @@ void xemu_timekeeping_delay ( int td_em )
 }
 
 
-
 static void atexit_callback_for_console ( void )
 {
 	sysconsole_close("Please review the console content (if you need it) before exiting!");
+}
+
+
+const char *xemu_get_uname_string ( void )
+{
+#ifdef XEMU_ARCH_UNIX
+	static const char *result = NULL;
+	if (!result) {
+		char buf[1024];
+		struct utsname uts;
+		uname(&uts);
+		if (snprintf(buf, sizeof buf, "%s %s %s %s %s",
+			uts.sysname, uts.nodename,
+			uts.release, uts.version, uts.machine
+		) >= sizeof buf) {
+			strcpy(buf, "<buffer-is-too-small>");
+		}
+		result = xemu_strdup(buf);
+	}
+	return result;
+#elif defined(XEMU_ARCH_WIN)
+	static const char *result = NULL;
+	if (!result) {
+		char buf[1024];
+		char host_name[128];
+		DWORD size_used = sizeof host_name;
+		if (!GetComputerNameA(host_name, &size_used))
+			strcpy(host_name, "<?name?>");
+		// query version, strange windows have no simple way and/or "obsoleted" to get version number :(
+		// Also functions like this GetVersionEx and such are strange, for example it needs LPOSVERSIONINFOA pointer
+		// according to mingw at least rather than the documented LPOSVERSIONINFOA ... Huh??
+		OSVERSIONINFOA info;
+		ZeroMemory(&info, sizeof info);
+		info.dwOSVersionInfoSize = sizeof info;
+		GetVersionEx(&info);
+		// query architecture
+		SYSTEM_INFO sysinfo;
+		GetNativeSystemInfo(&sysinfo);
+		//WORD w = sysinfo.DUMMYUNIONNAME.DUMMYSTRUCTNAME.wProcessorArchitecture; What is this shit? Windows is horrible ...
+		const char *isa_name = "(Xemu-unknown-ISA)";
+		switch (sysinfo.wProcessorArchitecture) {
+			case 9:		// PROCESSOR_ARCHITECTURE_AMD64: x86_64 (intel or AMD)
+				isa_name = "x86_64";	break;
+			case 5: 	// PROCESSOR_ARCHITECTURE_ARM
+				isa_name = "ARM";	break;
+			case 12:	// PROCESSOR_ARCHITECTURE_ARM64
+				isa_name = "ARM64";	break;
+			case 6:		// PROCESSOR_ARCHITECTURE_IA64 (itanium, heh)
+				isa_name = "Itanium";	break;
+			case 0:		// PROCESSOR_ARCHITECTURE_INTEL (32 bit x86?)
+				isa_name = "x86";	break;
+			case 0xffff:	// PROCESSOR_ARCHITECTURE_UNKNOWN
+				isa_name = "(Windows-unknown-ISA)";
+				break;
+		}
+		// Huh, Windows is a real pain to collect _basic_ system informations ... on UNIX just an uname() and you're done ...
+		if (snprintf(buf, sizeof buf, "Windows %s %u.%u %s%s%s",
+			host_name,
+			(unsigned int)info.dwMajorVersion, (unsigned int)info.dwMinorVersion,
+			isa_name,
+			emu_wine_version ? " WINE-" : "",
+			emu_wine_version ? emu_wine_version : ""
+		) >= sizeof buf) {
+			strcpy(buf, "<buffer-is-too-small>");
+		}
+		result = xemu_strdup(buf);
+	}
+	return result;
+#else
+	static const char result[] = XEMU_ARCH_NAME " (Xemu-no-uname)";
+	return result;
+#endif
+}
+
+
+void xemu_get_timing_stat_string ( char *buf, unsigned int size )
+{
+	if (td_stat_counter) {
+		Uint32 ticks = SDL_GetTicks() / 1000;
+		snprintf(buf, size,
+			"avg=%.2f%%, min=%d%%, max=%d%% (%u counts), uptime=%02d:%02d",
+			td_stat_sum / (double)td_stat_counter,
+			td_stat_min == INT_MAX ? 0 : td_stat_min,
+			td_stat_max,
+			(unsigned int)td_stat_counter,
+			ticks / 60, ticks % 60
+		);
+	} else
+		snprintf(buf, size, "Currently unavailable");
 }
 
 
@@ -426,17 +594,11 @@ static void shutdown_emulator ( void )
 		sdl_win = NULL;
 	}
 	atexit_callback_for_console();
-#ifdef HAVE_XEMU_SOCKET_API
-	xemusock_uninit();
-#endif
-	//SDL_Quit();
 	if (td_stat_counter) {
-		DEBUGPRINT(NL "TIMING: Xemu CPU usage: avg=%.2f%%, min=%d%%, max=%d%% (%u counts)" NL,
-			td_stat_sum / (double)td_stat_counter, td_stat_min == INT_MAX ? 0 : td_stat_min, td_stat_max,
-			(unsigned int)td_stat_counter
-		);
+		char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
+		xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
+		DEBUGPRINT(NL "TIMING: Xemu CPU usage: %s" NL "XEMU: good by(T)e." NL, td_stat_str);
 	}
-	DEBUGPRINT("XEMU: good by(T)e." NL);
 	if (debug_fp) {
 		fclose(debug_fp);
 		debug_fp = NULL;
@@ -444,6 +606,9 @@ static void shutdown_emulator ( void )
 	// It seems, calling SQL_Quit() at least on Windows causes "segfault".
 	// Not sure why, but to be safe, I just skip calling it :(
 	//SDL_Quit();
+#ifndef XEMU_ARCH_WIN
+	SDL_Quit();
+#endif
 }
 
 
@@ -483,20 +648,223 @@ static char *GetHackedPrefDir ( const char *base_path, const char *name )
 	if (fd < 0)
 		return NULL;
 	close(fd);
-	char *p = SDL_malloc(strlen(path) + 1);
-	if (!p)
-		return NULL;
-	strcpy(p, path);
-	return p;
+	return xemu_strdup(path);
 }
 #endif
 
 
-void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan )
+// "First time user" check. We use SDL file functions here only, to be implementation independent (ie, no need for emutools_files.c ...)
+int xemu_is_first_time_user ( void )
 {
+	static int is_first_time_user = -1;
+	if (is_first_time_user >= 0)
+		return is_first_time_user;
+	char fn[PATH_MAX];
+	snprintf(fn, sizeof fn, "%s%s", sdl_pref_dir, "notfirsttimeuser.txt");
+	SDL_RWops *file = SDL_RWFromFile(fn, "rb");
+	if (file) {
+		SDL_RWclose(file);
+		is_first_time_user = 0;	// not first time user
+		return is_first_time_user;
+	}
+	// First time user, it seems, since we don't have our file
+	// Thus write the "signal file" so next time, it won't be first time ... ;) Confusing sentence ...
+	file = SDL_RWFromFile(fn, "wb");
+	if (!file) {
+		ERROR_WINDOW("Xemu cannot write the preferences directory!\nFile: %s\nError: %s", fn, SDL_GetError());
+		return 0;	// pretend not first time user, since there is some serious problem already ... leave our static variable as is, also!!
+	}
+	static const char message[] = "DO NOT DELETE. Xemu uses this file to tell, if Xemu has been already run on this system at all.";
+	SDL_RWwrite(file, message, strlen(message), 1);	// Nah, we simply do not check if write worked ...
+	SDL_RWclose(file);
+	is_first_time_user = 1;
+	return is_first_time_user;	// first time user detected!!
+}
+
+
+#ifndef XEMU_ARCH_HTML
+// It seems SDL_GetBasePath() can be defunct on some architectures.
+// This function is intended to be used only by xemu_pre_init() and contains workaround.
+static char *_getbasepath ( void )
+{
+	char *p = SDL_GetBasePath();
+	if (p) {
+		char *ret = xemu_strdup(p);
+		SDL_free(p);
+		return ret;
+	}
+#ifdef XEMU_ARCH_UNIX
+	// We assume that SDL_GetBasePath only may have problem on certain UNIXes like for example on OpenBSD
+	DEBUGPRINT("SDL: WARNING: could not query SDL base directory: %s. Reverting back to Xemu's implementation." NL, SDL_GetError());
+	// reverting back to our own method ...
+	char exepath[PATH_MAX + 1];
+	snprintf(exepath, sizeof exepath, "%s%s", xemu_initial_argv[0][0] == DIRSEP_CHR ? "" : xemu_initial_cwd, xemu_initial_argv[0]);
+	p = strrchr(exepath, DIRSEP_CHR);
+	if (p)
+		p[1] = '\0';
+	else
+		return NULL;
+	return xemu_strdup(exepath);
+#endif
+	return NULL;
+}
+#endif
+
+
+static inline Uint64 _get_uts_from_cdate ( void )
+{
+	if (strlen(XEMU_BUILDINFO_CDATE) != 14)
+		FATAL("Wrong XEMU_BUILDINFO_CDATE length (%d)!", (int)strlen(XEMU_BUILDINFO_CDATE));
+	struct tm t = {
+		.tm_year  = (XEMU_BUILDINFO_CDATE[ 0] - '0') * 1000 + (XEMU_BUILDINFO_CDATE[ 1] - '0') * 100 + (XEMU_BUILDINFO_CDATE[2] - '0') * 10 + (XEMU_BUILDINFO_CDATE[3] - '0') - 1900,
+		.tm_mon   = (XEMU_BUILDINFO_CDATE[ 4] - '0') *   10 + (XEMU_BUILDINFO_CDATE[ 5] - '0') - 1,
+		.tm_mday  = (XEMU_BUILDINFO_CDATE[ 6] - '0') *   10 + (XEMU_BUILDINFO_CDATE[ 7] - '0'),
+		.tm_hour  = (XEMU_BUILDINFO_CDATE[ 8] - '0') *   10 + (XEMU_BUILDINFO_CDATE[ 9] - '0'),
+		.tm_min   = (XEMU_BUILDINFO_CDATE[10] - '0') *   10 + (XEMU_BUILDINFO_CDATE[11] - '0'),
+		.tm_sec   = (XEMU_BUILDINFO_CDATE[12] - '0') *   10 + (XEMU_BUILDINFO_CDATE[13] - '0'),
+		.tm_isdst = -1
+	};
+	return (Uint64)mktime(&t);
+}
+
+
+#ifdef XEMU_ARCH_WIN
+static inline char *check_windows_utf8_fs ( void )
+{
+	emu_fs_is_utf8 = 0;
+	// test file name (it's in Hungarian: "flood-proof mirror-drilling device", does not make sense, but contains all "special" Hungarian characters)
+	static const char test_file_fn[] = "árvíztűrő_tükörfúrógép.txt";
+	const int len = strlen(sdl_pref_dir) + strlen(test_file_fn) + 1;
+	char fn_a[len];
+	wchar_t fn_w[len];
+	strcpy(fn_a, sdl_pref_dir);
+	strcat(fn_a, test_file_fn);
+	if (MultiByteToWideChar(CP_UTF8, 0, fn_a, -1, fn_w, len) <= 0)
+		return "could not convert test file name to wchar_t";
+	static const wchar_t mode_w[] = {'w', 'b', 0};
+	FILE *f = _wfopen(fn_w, mode_w);
+	if (!f)
+		return "could not create test file with wide-func";
+	fclose(f);
+	f = fopen(fn_a, "rb");
+	if (f) {
+		fclose(f);
+		_wunlink(fn_w);
+		emu_fs_is_utf8 = 1;
+		return NULL;
+	}
+	_wunlink(fn_w);
+	return "could not use UTF-8 files without wchar_t aware functions";
+}
+
+static inline BOOL is_running_as_win_admin ( void )
+{
+	BOOL ret = FALSE;
+	HANDLE token = NULL;
+	if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &token)) {
+		DWORD size = sizeof(TOKEN_ELEVATION);
+		TOKEN_ELEVATION elevation;
+		if (GetTokenInformation(token, TokenElevation, &elevation, sizeof elevation, &size))
+			ret = elevation.TokenIsElevated;
+	}
+	if (token)
+		CloseHandle(token);
+	if (ret)
+		DEBUGPRINT("WINDOWS: **WARNING** running as Administrator!!!" NL);
+	return ret;
+}
+
+static inline int detect_wine ( void )
+{
+	free((void*)emu_wine_version);
+	emu_wine_version = NULL;
+	static const char *(CDECL *wine_get_version_ptr)(void);
+	HMODULE ntdll = GetModuleHandle("ntdll.dll");
+	if (!ntdll)
+		return 0;
+	wine_get_version_ptr = (void*)GetProcAddress(ntdll, "wine_get_version");
+	if (wine_get_version_ptr) {
+		const char *p = wine_get_version_ptr();
+		if (p) {
+			emu_wine_version = xemu_strdup(p);
+			return 1;
+		}
+	}
+	return 0;
+}
+
+static const char xemu_windows_registry_path[] = "Software\\X-Emulators";
+static const char xemu_windows_registry_class[] = "HKEY_LOCAL_MACHINE";
+
+static DWORD get_registry_key_dword ( const char *name )
+{
+	DWORD answer = 0;
+	DWORD answer_size = sizeof(answer);
+	DWORD type_got = 0;
+	LSTATUS ret = RegGetValue(HKEY_LOCAL_MACHINE, xemu_windows_registry_path, name, RRF_RT_DWORD, &type_got, &answer, &answer_size);
+	if (ret == ERROR_SUCCESS)
+		return answer;
+	return 0;
+}
+#endif
+
+
+void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan, const int argc, char **argv )
+{
+#ifdef XEMU_ARCH_WIN
+	static const char reg_key_allowadminrun[] = "AllowAdministratorRun";
+	static const char reg_key_noutf8warning[] = "NoUTF8Warning";
+	const DWORD registry_hack_allow_administrator	= get_registry_key_dword(reg_key_allowadminrun);
+	const DWORD registry_hack_no_utf8_warning	= get_registry_key_dword(reg_key_noutf8warning);
+	(void)detect_wine();
+#endif
+	if (!buildinfo_cdate_uts)
+		buildinfo_cdate_uts = _get_uts_from_cdate();
+	if (xemu_initial_argc < 0)
+		xemu_initial_argc = argc;
+	if (xemu_initial_argc < 1)
+		FATAL("%s(): Cannot extract argc [%d?]", __func__, xemu_initial_argc);
+	if (!xemu_initial_argv)
+		xemu_initial_argv = argv;
+	if (!xemu_initial_argv)
+		FATAL("%s(): Cannot extract argv [NULL?]", __func__);
+	for (int i = 0; i < xemu_initial_argc; i++)
+		if (!xemu_initial_argv[i])
+			FATAL("%s(): Cannot extract argv[%d] [NULL?]", __func__, i);
+	if (!xemu_initial_cwd) {
+		char buffer[PATH_MAX + 2];
+		if (getcwd(buffer, sizeof buffer)) {
+			if (buffer[strlen(buffer) - 1] != DIRSEP_CHR)
+				strcat(buffer, DIRSEP_STR);
+			xemu_initial_cwd = xemu_strdup(buffer);
+		}
+	}
+	if (!xemu_initial_cwd)
+		FATAL("%s(): getcwd() resolution does not work", __func__);
+#if defined(XEMU_DO_NOT_DISALLOW_ROOT) && !defined(XEMU_ARCH_SINGLEUSER)
+#	warning "Running as root/admin check is deactivated."
+#endif
+#ifdef	XEMU_ARCH_WIN
+	// Windows: Some check to disallow dangerous things (running Xemu as administrator)
+	if (is_running_as_win_admin()) {
+#ifndef 	XEMU_DO_NOT_DISALLOW_ROOT
+		if (!emu_wine_version) {	// ignore the check if it's wine, it seems it always runs programs with elevated privs
+			if (!registry_hack_allow_administrator)
+				WARNING_WINDOW(
+					"Running Xemu as Administrator is dangerous, stop doing that!\n"
+					"Alternatively, if you're really sure what you're doing,\n"
+					"you can set a DWORD typed registry key %s\\%s\\%s with value of 1 to silent this warning.",
+					xemu_windows_registry_class,
+					xemu_windows_registry_path,
+					reg_key_allowadminrun
+				);
+		}
+#endif
+	}
+#endif
 #ifdef XEMU_ARCH_UNIX
 #ifndef XEMU_DO_NOT_DISALLOW_ROOT
-	// Some check to disallow dangerous things (running Xemu as user/group root)
+	// UNIX: Some check to disallow dangerous things (running Xemu as user/group root)
 	if (getuid() == 0 || geteuid() == 0)
 		FATAL("Xemu must not be run as user root");
 	if (getgid() == 0 || getegid() == 0)
@@ -533,11 +901,8 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 	if (SDL_Init(0))
 		FATAL("Cannot pre-initialize SDL without any subsystem: %s", SDL_GetError());
 	atexit(shutdown_emulator);
-	p = SDL_GetBasePath();
-	if (p) {
-		sdl_base_dir = xemu_strdup(p);
-		SDL_free(p);
-	} else
+	sdl_base_dir = _getbasepath();
+	if (!sdl_base_dir)
 		FATAL("Cannot query SDL base directory: %s", SDL_GetError());
 	p = GetHackedPrefDir(sdl_base_dir, app_name);
 	if (!p)
@@ -552,6 +917,32 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 #endif
 	xemu_app_org = xemu_strdup(app_organization);
 	xemu_app_name = xemu_strdup(app_name);
+#ifdef XEMU_ARCH_WIN
+	if (emu_wine_version)
+		DEBUGPRINT("WINDOWS: running on WINE %s" NL, emu_wine_version);
+	p = check_windows_utf8_fs();
+	if (p) {
+		DEBUGPRINT("WINDOWS: UTF-8 filenames are NOT supported: %s" NL, p);
+		if (!emu_wine_version && !registry_hack_no_utf8_warning)
+			WARNING_WINDOW(
+				"Your windows is too old to support UTF-8 file functions!\n"
+				"You may encounter problems with files/paths containing any non US-ASCII characters!\n"
+				"Alternatively, if you're really sure what you're doing,\n"
+				"you can set a DWORD typed registry key %s\\%s\\%s with value of 1 to silent this warning.",
+				xemu_windows_registry_class,
+				xemu_windows_registry_path,
+				reg_key_noutf8warning
+			);
+	} else
+		DEBUGPRINT("WINDOWS: UTF-8 filenames ARE supported, cool!" NL);
+	if (!p != (GetACP() == 65001U) && !registry_hack_no_utf8_warning)
+		ERROR_WINDOW("Mismatch between Windows UTF8 checks!\nPlease report the problem!\nCP=%u, p=%s", GetACP(), p ? p : "NULL");
+#endif
+#ifdef XEMU_CONFIGDB_SUPPORT
+	// If configDB support is compiled in, we can define some common options, should apply for ALL emulators.
+	// This way, it's not needed to define those in all of the emulator targets ...
+	// TODO: it's an unfinished project here ...
+#endif
 }
 
 
@@ -559,34 +950,53 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 int xemu_init_sdl ( void )
 {
 #ifndef XEMU_ARCH_HTML
-	if (!SDL_WasInit(SDL_INIT_EVERYTHING)) {
+	const Uint32 XEMU_SDL_INIT_EVERYTHING =
+#if defined(XEMU_ARCH_WIN) && defined(SDL_INIT_SENSOR)
+		// FIXME: SDL or Windows has the bug that SDL_INIT_SENSOR when used, there is some "sensor manager" problem, so we left it out
+		// SDL_INIT_SENSOR was introduced somewhere in 2.0.9, however since it's a macro, it's safer not to test actual SDL version number
+		SDL_INIT_EVERYTHING & ~(SDL_INIT_SENSOR | SDL_INIT_HAPTIC);
+#warning	"NOTE: SDL_INIT_SENSOR and SDL_INIT_HAPTIC is not used on Windows because seems to cause problems :("
+#else
+		SDL_INIT_EVERYTHING;
+#endif
+	if (!SDL_WasInit(XEMU_SDL_INIT_EVERYTHING)) {
 		DEBUGPRINT("SDL: no SDL subsystem initialization has been done yet, do it!" NL);
 		SDL_Quit();	// Please read the long comment at the pre-init func above to understand this SDL_Quit() here and then the SDL_Init() right below ...
 		DEBUG("SDL: before SDL init" NL);
-		if (SDL_Init(SDL_INIT_EVERYTHING)) {
+		if (SDL_Init(XEMU_SDL_INIT_EVERYTHING)) {
 			ERROR_WINDOW("Cannot initialize SDL: %s", SDL_GetError());
 			return 1;
 		}
 		DEBUG("SDL: after SDL init" NL);
-		if (!SDL_WasInit(SDL_INIT_EVERYTHING))
+		if (!SDL_WasInit(XEMU_SDL_INIT_EVERYTHING))
 			FATAL("SDL_WasInit()=0 after init??");
 	} else
 		DEBUGPRINT("SDL: no SDL subsystem initialization has been done already." NL);
 #endif
 	SDL_VERSION(&sdlver_compiled);
-        SDL_GetVersion(&sdlver_linked);
+	SDL_GetVersion(&sdlver_linked);
+	const char *sdl_video_driver = SDL_GetCurrentVideoDriver();
+	if (!sdl_video_driver)
+		FATAL("SDL_GetCurrentVideoDriver() == NULL");
+	sdl_on_x11 = !strcasecmp(sdl_video_driver, "x11");
+	sdl_on_wayland = !strcasecmp(sdl_video_driver, "wayland");
 	if (chatty_xemu)
 		printf( "SDL version: (%s) compiled with %d.%d.%d, used with %d.%d.%d on platform %s" NL
-			"SDL system info: %d bits %s, %d cores, l1_line=%d, RAM=%dMbytes, CPU features: "
+			"SDL system info: %d bits %s, %d cores, l1_line=%d, RAM=%dMbytes, max_alignment=%d%s, CPU features: "
 			"3DNow=%d AVX=%d AVX2=%d AltiVec=%d MMX=%d RDTSC=%d SSE=%d SSE2=%d SSE3=%d SSE41=%d SSE42=%d" NL
 			"SDL drivers: video = %s, audio = %s" NL,
 			SDL_GetRevision(),
 			sdlver_compiled.major, sdlver_compiled.minor, sdlver_compiled.patch,
 			sdlver_linked.major, sdlver_linked.minor, sdlver_linked.patch,
 			SDL_GetPlatform(),
-			ARCH_BITS, ENDIAN_NAME, SDL_GetCPUCount(), SDL_GetCPUCacheLineSize(), SDL_GetSystemRAM(),
+			ARCH_BITS, ENDIAN_NAME, SDL_GetCPUCount(), SDL_GetCPUCacheLineSize(), SDL_GetSystemRAM(), __BIGGEST_ALIGNMENT__,
+#ifdef XEMU_MISSING_BIGGEST_ALIGNMENT_WORKAROUND
+			" (set-by-Xemu)",
+#else
+			"",
+#endif
 			SDL_Has3DNow(),SDL_HasAVX(),SDL_HasAVX2(),SDL_HasAltiVec(),SDL_HasMMX(),SDL_HasRDTSC(),SDL_HasSSE(),SDL_HasSSE2(),SDL_HasSSE3(),SDL_HasSSE41(),SDL_HasSSE42(),
-			SDL_GetCurrentVideoDriver(), SDL_GetCurrentAudioDriver()
+			sdl_video_driver, SDL_GetCurrentAudioDriver()
 		);
 #if defined(XEMU_ARCH_WIN)
 #	define SDL_VER_MISMATCH_WARN_STR "Xemu was not compiled with the linked DLL for SDL.\nPlease upgrade your DLL too, not just Xemu binary."
@@ -601,6 +1011,103 @@ int xemu_init_sdl ( void )
 }
 
 
+void xemu_window_snap_to_optimal_size ( int forced )
+{
+	// XXX TODO check if fullscreen state is active?
+	// though it must be checked if it's needed at all (ie: SDL is OK with resizing window in fullscreen mode without any effect BEFORE switcing back from fullscreen)
+	static Uint32 last_resize = 0;
+	Uint32 now = 0;
+	if (!forced && sdl_viewport_changed && follow_win_size) {
+		now = SDL_GetTicks();
+		if (now - last_resize >= 1000) {
+			sdl_viewport_changed = 0;
+			forced = 1;
+		}
+	}
+	if (!forced)
+		return;
+	int w, h;
+	SDL_GetWindowSize(sdl_win, &w, &h);
+	float rat = (float)w / (float)sdl_viewport.w;
+	const float rat2 = (float)h / (float)sdl_viewport.h;
+	if (rat2 > rat)
+		rat = rat2;
+	rat = roundf(rat);	// XXX TODO: depends on math.h mingw warning!
+	// XXX TODO: check if window is not larger than the screen itself
+	if (rat < 1)
+		rat = 1;
+	const int w2 = rat * sdl_viewport.w;
+	const int h2 = rat * sdl_viewport.h;
+	if (w != w2 || h != h2) {
+		last_resize = now;
+		SDL_SetWindowSize(sdl_win, w2, h2);
+		DEBUGPRINT("SDL: auto-resizing window to %d x %d (zoom level approximated: %d)" NL, w2, h2, (int)rat);
+	} else
+		DEBUGPRINT("SDL: no auto-resizing was needed (same size)" NL);
+}
+
+
+void xemu_set_viewport ( unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, unsigned int flags )
+{
+	if (XEMU_UNLIKELY(x1 == 0 && y1 == 0 && x2 == 0 && y2 == 0)) {
+		sdl_viewport_ptr = NULL;
+		sdl_viewport.x = 0;
+		sdl_viewport.y = 0;
+		sdl_viewport.w = sdl_texture_x_size;
+		sdl_viewport.h = sdl_texture_y_size;
+	} else {
+		if (XEMU_UNLIKELY(x1 > x2 || y1 > y2 || x1 >= sdl_texture_x_size || y1 >= sdl_texture_y_size || x2 >= sdl_texture_x_size || y2 >= sdl_texture_y_size)) {
+			FATAL("Invalid xemu_set_viewport(%d,%d,%d,%d) for texture (%d x %d)", x1, y1, x2, y2, sdl_texture_x_size, sdl_texture_y_size);
+		} else {
+			sdl_viewport_ptr = &sdl_viewport;
+			sdl_viewport.x = x1;
+			sdl_viewport.y = y1;
+			sdl_viewport.w = x2 - x1 + 1;
+			sdl_viewport.h = y2 - y1 + 1;
+		}
+	}
+	sdl_viewport_changed = 1;
+	follow_win_size = 0;
+	if ((flags & XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE)) {
+		SDL_RenderSetLogicalSize(sdl_ren, sdl_viewport.w, sdl_viewport.h);
+		// XXX this should be not handled this way
+		sdl_default_win_x_size = sdl_viewport.w;
+		sdl_default_win_y_size = sdl_viewport.h;
+		//if ((flags & XEMU_VIEWPORT_WIN_SIZE_FOLLOW_LOGICAL))
+		//XXX remove this XEMU_VIEWPORT_WIN_SIZE_FOLLOW_LOGICAL then!
+		follow_win_size = 1;
+	}
+}
+
+
+void xemu_get_viewport ( unsigned int *x1, unsigned int *y1, unsigned int *x2, unsigned int *y2 )
+{
+	if (x1)
+		*x1 = sdl_viewport.x;
+	if (y1)
+		*y1 = sdl_viewport.y;
+	if (x2)
+		*x2 = sdl_viewport.x + sdl_viewport.w - 1;
+	if (y2)
+		*y2 = sdl_viewport.y + sdl_viewport.h - 1;
+}
+
+
+static int xemu_create_main_texture ( void )
+{
+	DEBUGPRINT("SDL: creating main texture %d x %d" NL, sdl_texture_x_size, sdl_texture_y_size);
+	SDL_Texture *new_tex = SDL_CreateTexture(sdl_ren, sdl_pixel_format_id, SDL_TEXTUREACCESS_STREAMING, sdl_texture_x_size, sdl_texture_y_size);
+	if (!new_tex) {
+		DEBUGPRINT("SDL: cannot create main texture: %s" NL, SDL_GetError());
+		return 1;
+	}
+	if (sdl_tex) {
+		DEBUGPRINT("SDL: destroying old main texture" NL);
+		SDL_DestroyTexture(sdl_tex);
+	}
+	sdl_tex = new_tex;
+	return 0;
+}
 
 
 /* Return value: 0 = ok, otherwise: ERROR, caller must exit, and can't use any other functionality, otherwise crash would happen.*/
@@ -618,10 +1125,11 @@ int xemu_post_init (
 	int locked_texture_update,		// use locked texture method [non zero], or malloc'ed stuff [zero]. NOTE: locked access doesn't allow to _READ_ pixels and you must fill ALL pixels!
 	void (*shutdown_callback)(void)		// callback function called on exit (can be nULL to not have any emulator specific stuff)
 ) {
-#	include "build/xemu-48x48.xpm"
-	SDL_RendererInfo ren_info;
-	char render_scale_quality_s[2];
-	int a;
+	if (emu_is_headless) {
+		dialogs_allowed = 0;
+		i_am_sure_override = 1;
+	}
+	srand((unsigned int)time(NULL));
 	if (!debug_fp)
 		xemu_init_debug(getenv("XEMU_DEBUG_FILE"));
 	if (!debug_fp && chatty_xemu)
@@ -630,7 +1138,22 @@ int xemu_post_init (
 		FATAL("xemu_pre_init() hasn't been called yet!");
 	if (xemu_byte_order_test()) {
 		ERROR_WINDOW("Byte order test failed!!");
-		return 1;}
+		return 1;
+	}
+#ifndef	XEMU_ARCH_HTML
+	if (emu_is_headless) {
+		static char *dummies[] = { "SDL_VIDEODRIVER=dummy", "SDL_AUDIODRIVER=dummy", NULL };
+		for (char **p = dummies; *p; p++) {
+			DEBUGPRINT("SDL: headless mode env-var setup: %s" NL, *p);
+			putenv(*p);
+		}
+	}
+#endif
+#ifdef SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR
+	// Disallow disabling compositing (of KDE, for example)
+	// Maybe needed before SDL_Init(), so it's here before calling xemu_init_sdl()
+	SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR, "0");
+#endif
 	if (xemu_init_sdl())	// it is possible that is has been already called, but it's not a problem
 		return 1;
 	shutdown_user_function = shutdown_callback;
@@ -657,6 +1180,38 @@ int xemu_post_init (
 		}
 	} while (0);
 #endif
+	/* SDL hints */
+	// Moved here (instead of near the end of this func) since some of hints needed to be given
+	// rearly (like SDL_HINT_RENDER_SCALE_QUALITY before creating texture?)
+#if defined(SDL_HINT_THREAD_STACK_SIZE) && defined(XEMU_THREAD_STACK_SIZE)
+	// string as positive number: use stack size, zero: use thread backend default (glibc usually gives 8Mb, other maybe small!)
+	// Leave that to user, if XEMU_THREAD_STACK_SIZE is defined, it will be set.
+	SDL_SetHint(SDL_HINT_THREAD_STACK_SIZE, STRINGIFY(XEMU_THREAD_STACK_SIZE));
+#endif
+#ifdef SDL_HINT_RENDER_SCALE_QUALITY
+	const char render_scale_quality_s[2] = { '0' + (render_scale_quality & 3), '\0' };
+	SDL_SetHintWithPriority(SDL_HINT_RENDER_SCALE_QUALITY, render_scale_quality_s, SDL_HINT_OVERRIDE);		// render scale quality 0, 1, 2
+#endif
+#ifdef SDL_HINT_VIDEO_X11_NET_WM_PING
+	SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_PING, "0");				// disable WM ping, SDL dialog boxes makes WMs things emu is dead (?)
+#endif
+#ifdef SDL_HINT_RENDER_VSYNC
+	SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0");					// disable vsync aligned screen rendering
+#endif
+#ifdef SDL_HINT_WINDOWS_NO_CLOSE_ON_ALT_F4
+	SDL_SetHint(SDL_HINT_WINDOWS_NO_CLOSE_ON_ALT_F4, "1");				// 1 = disable ALT-F4 close on Windows
+#endif
+#ifdef SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS
+	SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");			// 1 = do minimize the SDL_Window if it loses key focus when in fullscreen mode
+#endif
+#ifdef SDL_HINT_VIDEO_ALLOW_SCREENSAVER
+	SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");				// 1 = enable screen saver
+#endif
+#if defined(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK) && defined(XEMU_ARCH_MAC)
+#	warning "Activating workaround for lame newer Apple notebooks (no right click on touchpads)"
+	SDL_SetHint(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK, "1");			// 1 = enable CTRL + click = right click (needed for modern Mac touchpads, it seems)
+#endif
+	/* end of SDL hints section */
 	sdl_window_title = xemu_strdup(window_title);
 	sdl_win = SDL_CreateWindow(
 		window_title,
@@ -675,11 +1230,11 @@ int xemu_post_init (
 	strcpy(window_title_buffer, window_title);
 	window_title_buffer_end = window_title_buffer + strlen(window_title);
 	//SDL_SetWindowMinimumSize(sdl_win, SCREEN_WIDTH, SCREEN_HEIGHT * 2);
-	a = SDL_GetNumRenderDrivers();
-	while (--a >= 0) {
-		if (!SDL_GetRenderDriverInfo(a, &ren_info)) {
+	SDL_RendererInfo ren_info;
+	for (int a = 0, max = SDL_GetNumRenderDrivers(); a < max; a++) {
+		if (!SDL_GetRenderDriverInfo(a, &ren_info))
 			DEBUGPRINT("SDL renderer driver #%d: \"%s\"" NL, a, ren_info.name);
-		} else
+		else
 			DEBUGPRINT("SDL renderer driver #%d: FAILURE TO QUERY (%s)" NL, a, SDL_GetError());
 	}
 	sdl_ren = SDL_CreateRenderer(sdl_win, -1, SDL_RENDERER_ACCELERATED);
@@ -696,13 +1251,23 @@ int xemu_post_init (
 	SDL_SetRenderDrawColor(sdl_ren, 0, 0, 0, SDL_ALPHA_OPAQUE);
 	if (!SDL_GetRendererInfo(sdl_ren, &ren_info)) {
 		DEBUGPRINT("SDL renderer used: \"%s\" max_tex=%dx%d tex_formats=%d ", ren_info.name, ren_info.max_texture_width, ren_info.max_texture_height, ren_info.num_texture_formats);
-		for (a = 0; a < ren_info.num_texture_formats; a++)
-			DEBUGPRINT("%c%s", a ? ' ' : '(', SDL_GetPixelFormatName(ren_info.texture_formats[a]));
+		for (int a = 0; a < ren_info.num_texture_formats; a++) {
+			const char *p = SDL_GetPixelFormatName(ren_info.texture_formats[a]);
+			if (p) {
+				static const char name_head[] = { 'S','D','L','_','P','I','X','E','L','F','O','R','M','A','T','_' };
+				if (!strncmp(p, name_head, sizeof name_head))
+					p += sizeof name_head;
+			}
+			DEBUGPRINT("%c%s", a ? ' ' : '(', p ? p : "?");
+		}
 		DEBUGPRINT(")" NL);
 	}
 	SDL_RenderSetLogicalSize(sdl_ren, logical_x_size, logical_y_size);	// this helps SDL to know the "logical ratio" of screen, even in full screen mode when scaling is needed!
-	sdl_tex = SDL_CreateTexture(sdl_ren, pixel_format, SDL_TEXTUREACCESS_STREAMING, texture_x_size, texture_y_size);
-	if (!sdl_tex) {
+	sdl_texture_x_size = texture_x_size;
+	sdl_texture_y_size = texture_y_size;
+	sdl_pixel_format_id = pixel_format;
+	xemu_set_viewport(0, 0, 0, 0, 0);
+	if (xemu_create_main_texture()) {
 		ERROR_WINDOW("Cannot create SDL texture: %s", SDL_GetError());
 		return 1;
 	}
@@ -713,24 +1278,14 @@ int xemu_post_init (
 	black_colour = SDL_MapRGBA(sdl_pix_fmt, 0, 0, 0, 0xFF);	// used to initialize pixel buffer
 	while (n_colours--)
 		store_palette[n_colours] = SDL_MapRGBA(sdl_pix_fmt, colours[n_colours * 3], colours[n_colours * 3 + 1], colours[n_colours * 3 + 2], 0xFF);
-	/* SDL hints */
-	snprintf(render_scale_quality_s, 2, "%d", render_scale_quality);
-	SDL_SetHint(SDL_HINT_RENDER_SCALE_QUALITY, render_scale_quality_s);		// render scale quality 0, 1, 2
-	SDL_SetHint(SDL_HINT_VIDEO_X11_NET_WM_PING, "0");				// disable WM ping, SDL dialog boxes makes WMs things emu is dead (?)
-	SDL_SetHint(SDL_HINT_RENDER_VSYNC, "0");					// disable vsync aligned screen rendering
-#ifdef XEMU_ARCH_WIN
-	SDL_SetHint(SDL_HINT_WINDOWS_NO_CLOSE_ON_ALT_F4, "1");				// 1 = disable ALT-F4 close on Windows
-#endif
-	SDL_SetHint(SDL_HINT_VIDEO_MINIMIZE_ON_FOCUS_LOSS, "0");			// 1 = do minimize the SDL_Window if it loses key focus when in fullscreen mode
-	SDL_SetHint(SDL_HINT_VIDEO_ALLOW_SCREENSAVER, "1");				// 1 = enable screen saver
 	/* texture access / buffer */
-	if (!locked_texture_update) {
+	if (!locked_texture_update)
 		sdl_pixel_buffer = xemu_malloc_ALIGNED(texture_x_size_in_bytes * texture_y_size);
-	}
 	// play a single frame game, to set a consistent colour (all black ...) for the emulator. Also, it reveals possible errors with rendering
 	xemu_render_dummy_frame(black_colour, texture_x_size, texture_y_size);
 	if (chatty_xemu)
 		printf(NL);
+#	include "build/xemu-48x48.xpm"
 	xemu_set_icon_from_xpm(favicon_xpm);
 	return 0;
 }
@@ -802,6 +1357,25 @@ void xemu_timekeeping_start ( void )
 }
 
 
+void xemu_sleepless_temporary_mode ( const int enable )
+{
+	static int enabled = 0;
+	if ((enable && enabled) || (!enable && !enabled))
+		return;
+	enabled = enable;
+	static int sleepless_old = 0;
+	if (enable) {
+		DEBUGPRINT("TIMING: enabling temporary sleepless mode: %s" NL, emu_is_sleepless ? "already sleepless" : "OK");
+		sleepless_old = emu_is_sleepless;
+		emu_is_sleepless = 1;
+	} else {
+		DEBUGPRINT("TIMING: disabling temporary sleepless mode: %s" NL, sleepless_old ? "constant sleepless" : "OK");
+		emu_is_sleepless = sleepless_old;
+		if (!emu_is_sleepless)
+			xemu_timekeeping_start();
+	}
+}
+
 
 void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_size )
 {
@@ -817,7 +1391,6 @@ void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_
 }
 
 
-
 /* You *MUST* call this _ONCE_ before any access of pixels of the rendering target
    after render is done. Then pixels can be written but especially in locked_texture
    mode, you CAN'T read the previous frame pixels back! Also then you need to update
@@ -827,6 +1400,10 @@ void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_
    tail is meant in 4 bytes (ie Uint32 pointer)! */
 Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail )
 {
+	if (register_new_texture_creation) {
+		register_new_texture_creation = 0;
+		xemu_create_main_texture();
+	}
 	if (sdl_pixel_buffer) {
 		*texture_tail = 0;		// using non-locked texture access, "tail" is always zero
 		xemu_frame_pixel_access_p = sdl_pixel_buffer;
@@ -862,185 +1439,11 @@ void xemu_update_screen ( void )
 	}
 	//if (seconds_timer_trigger)
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
-	SDL_RenderCopy(sdl_ren, sdl_tex, NULL, NULL);
-	if (osd_status) {
-		if (osd_status < OSD_STATIC)
-			osd_status -= osd_fade_dec;
-		if (osd_status <= osd_fade_end) {
-			DEBUG("OSD: end of fade at %d" NL, osd_status);
-			osd_status = 0;
-			osd_alpha_last = 0;
-		} else {
-			int alpha = osd_status > 0xFF ? 0xFF : osd_status;
-			if (alpha != osd_alpha_last) {
-				osd_alpha_last = alpha;
-				SDL_SetTextureAlphaMod(sdl_osdtex, alpha);
-			}
-			SDL_RenderCopy(sdl_ren, sdl_osdtex, NULL, NULL);
-		}
-	}
+	SDL_RenderCopy(sdl_ren, sdl_tex, sdl_viewport_ptr, NULL);
+#ifdef XEMU_OSD_SUPPORT
+	_osd_render();
+#endif
 	SDL_RenderPresent(sdl_ren);
-}
-
-
-void osd_clear ( void )
-{
-	if (osd_enabled) {
-		DEBUG("OSD: osd_clear() called." NL);
-		memset(osd_pixels, 0, osd_xsize * osd_ysize * 4);
-	}
-}
-
-
-void osd_update ()
-{
-	if (osd_enabled) {
-		DEBUG("OSD: osd_update() called." NL);
-                SDL_UpdateTexture(sdl_osdtex, NULL, osd_pixels, osd_xsize * sizeof (Uint32));
-	}
-}
-
-
-int osd_init ( int xsize, int ysize, const Uint8 *palette, int palette_entries, int fade_dec, int fade_end )
-{
-	// start with disabled state, so we can abort our init process without need to disable this
-	osd_status = 0;
-	osd_enabled = 0;
-	if (sdl_osdtex || osd_pixels)
-		FATAL("Calling osd_init() multiple times?");
-	sdl_osdtex = SDL_CreateTexture(sdl_ren, sdl_pix_fmt->format, SDL_TEXTUREACCESS_STREAMING, xsize, ysize);
-	if (!sdl_osdtex) {
-		ERROR_WINDOW("Error with SDL_CreateTexture(), OSD won't be available: %s", SDL_GetError());
-		return 1;
-	}
-	if (SDL_SetTextureBlendMode(sdl_osdtex, SDL_BLENDMODE_BLEND)) {
-		ERROR_WINDOW("Error with SDL_SetTextureBlendMode(), OSD won't be available: %s", SDL_GetError());
-		SDL_DestroyTexture(sdl_osdtex);
-		sdl_osdtex = NULL;
-		return 1;
-	}
-	osd_pixels = malloc(xsize * ysize * 4);
-	if (!osd_pixels) {
-		ERROR_WINDOW("Not enough memory to allocate texture, OSD won't be available");
-		SDL_DestroyTexture(sdl_osdtex);
-		sdl_osdtex = NULL;
-		return 1;
-	}
-	osd_xsize = xsize;
-	osd_ysize = ysize;
-	osd_fade_dec = fade_dec;
-	osd_fade_end = fade_end;
-	for (int a = 0; a < palette_entries; a++)
-		osd_colours[a] = SDL_MapRGBA(sdl_pix_fmt, palette[a << 2], palette[(a << 2) + 1], palette[(a << 2) + 2], palette[(a << 2) + 3]);
-	osd_enabled = 1;	// great, everything is OK, we can set enabled state!
-	osd_available = 1;
-	osd_clear();
-	osd_update();
-	osd_set_colours(1, 0);
-	DEBUG("OSD: init: %dx%d pixels, %d palette entries, %d fade_dec, %d fade_end" NL, xsize, ysize, palette_entries, fade_dec, fade_end);
-	return 0;
-}
-
-
-
-int osd_init_with_defaults ( void )
-{
-	const Uint8 palette[] = {
-		0xC0, 0x40, 0x40, 0xFF,
-		0xFF, 0xFF, 0x00, 0xFF
-	};
-	return osd_init(
-		OSD_TEXTURE_X_SIZE, OSD_TEXTURE_Y_SIZE,
-		palette,
-		sizeof(palette) >> 2,
-		OSD_FADE_DEC_VAL,
-		OSD_FADE_END_VAL
-	);
-}
-
-
-void osd_on ( int value )
-{
-	if (osd_enabled) {
-		osd_alpha_last = 0;	// force alphamod to set on next screen update
-		osd_status = value;
-		DEBUG("OSD: osd_on(%d) called." NL, value);
-	}
-}
-
-
-void osd_off ( void )
-{
-	osd_status = 0;
-	DEBUG("OSD: osd_off() called." NL);
-}
-
-
-void osd_global_enable ( int status )
-{
-	osd_enabled = (status && osd_available);
-	osd_alpha_last = -1;
-	osd_status = 0;
-	DEBUG("OSD: osd_global_enable(%d), result of status = %d" NL, status, osd_enabled);
-}
-
-
-void osd_set_colours ( int fg_index, int bg_index )
-{
-	osd_colour_fg = osd_colours[fg_index];
-	osd_colour_bg = osd_colours[bg_index];
-	DEBUG("OSD: osd_set_colours(%d,%d) called." NL, fg_index, bg_index);
-}
-
-
-void osd_write_char ( int x, int y, char ch )
-{
-	int row;
-	const Uint16 *s;
-	int warn = 1;
-	Uint32 *d = osd_pixels + y * osd_xsize + x;
-	Uint32 *e = osd_pixels + osd_xsize * osd_ysize;
-	if ((signed char)ch < 32)	// also for >127 chars, since they're negative in 2-complements 8 bit type
-		ch = '?';
-	s = font_16x16 + (((unsigned char)ch - 32) << 4);
-	for (row = 0; row < 16; row++) {
-		Uint16 mask = 0x8000;
-		do {
-			if (XEMU_LIKELY(d >= osd_pixels && d < e))
-				*d = *s & mask ? osd_colour_fg : osd_colour_bg;
-			else if (warn) {
-				warn = 0;
-				DEBUG("OSD: ERROR: out of OSD dimensions for char %c at starting point %d:%d" NL, ch, x, y);
-			}
-			d++;
-			mask >>= 1;
-		} while (mask);
-		s++;
-		d += osd_xsize - 16;
-	}
-}
-
-
-void osd_write_string ( int x, int y, const char *s )
-{
-	if (y < 0)	// negative y: standard place for misc. notifications
-		y = osd_ysize / 2;
-	for (;;) {
-		int len = 0, xt;
-		if (!*s)
-			break;
-		while (s[len] && s[len] != '\n')
-			len++;
-		xt = (x < 0) ? ((osd_xsize - len * 16) / 2) : x;	// request for centered? (if x < 0)
-		while (len--) {
-			osd_write_char(xt, y, *s);
-			s++;
-			xt += 16;
-		}
-		y += 16;
-		if (*s == '\n')
-			s++;
-	}
 }
 
 
@@ -1065,7 +1468,7 @@ int ARE_YOU_SURE ( const char *s, int flags )
 int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 {
 	char items_buf[512], *items = items_buf;
-	int buttonid;
+	int buttonid = 0;
 	SDL_MessageBoxButtonData buttons[16];
 	SDL_MessageBoxData messageboxdata = {
 		SDL_MESSAGEBOX_WARNING	// .flags
@@ -1088,6 +1491,7 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 		switch (*items) {
 			case '!':
 				buttons[messageboxdata.numbuttons].flags = SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT;
+				buttonid = messageboxdata.numbuttons;
 				items++;
 				break;
 			case '?':
@@ -1096,6 +1500,7 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 				break;
 			case '*':
 				buttons[messageboxdata.numbuttons].flags = SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT | SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT;
+				buttonid = messageboxdata.numbuttons;
 				items++;
 				break;
 			default:
@@ -1116,27 +1521,19 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
 		*p = 0;
 		items = p + 1;
 	}
-	save_mouse_grab();
-	SDL_ShowMessageBox_custom(&messageboxdata, &buttonid);
-	xemu_drop_events();
-	clear_emu_events();
-	SDL_RaiseWindow(sdl_win);
-	restore_mouse_grab();
-	xemu_timekeeping_start();
+	if (dialogs_allowed) {
+		save_mouse_grab();
+		SDL_ShowMessageBox_custom(&messageboxdata, &buttonid);
+		xemu_drop_events();
+		clear_emu_events();
+		SDL_RaiseWindow(sdl_win);
+		restore_mouse_grab();
+		xemu_timekeeping_start();
+	} else
+		DEBUGPRINT("UI: returning #%d (%s) for choice in dialog box, as dialogs are NOT allowed!" NL, buttonid, buttons[buttonid].text);
 	return buttonid;
 }
 
-
-#ifdef XEMU_ARCH_WIN
-
-/* for windows console madness */
-
-#include <windows.h>
-#include <stdio.h>
-#include <io.h>
-#include <fcntl.h>
-
-#endif
 
 /* Note, Windows has some braindead idea about console, ie even the standard stdout/stderr/stdin does not work with
    a GUI application. We have to dance a bit, to fool Windows to do what is SHOULD according the standard to be used
@@ -1146,13 +1543,35 @@ int _sdl_emu_secured_modal_box_ ( const char *items_in, const char *msg )
    this function. I can't do anything, since Windows API is a nightmare, using non-C-standard types for system
    calls, I have no idea ... */
 
+#ifdef XEMU_ARCH_WIN
+static int redirect_stdfp ( const DWORD handle_const, FILE *std, const char *mode, const char *desc )
+{
+	const HANDLE lStdHandle = GetStdHandle(handle_const);
+	if (lStdHandle == NULL || lStdHandle == INVALID_HANDLE_VALUE) {
+		DEBUGPRINT("WINDOWS: cannot redirect %s: GetStdHandle() failed" NL, desc);
+		return 1;
+	}
+	const int hConHandle = _open_osfhandle((INT_PTR)lStdHandle, _O_TEXT);
+	if (hConHandle < 0) {
+		DEBUGPRINT("WINDOWS: cannot redirect %s: _open_osfhandle() failed" NL, desc);
+		return 1;
+	}
+	FILE *fp = _fdopen(hConHandle, mode);
+	if (!fp) {
+		DEBUGPRINT("WINDOWS: cannot redirect %s: _fdopen() failed" NL, desc);
+		return 1;
+	}
+	*std = *fp;
+	setvbuf(std, NULL, _IONBF, 0);
+	return 0;
+}
+#endif
+
+
 void sysconsole_open ( void )
 {
 #ifdef XEMU_ARCH_WIN
-	int hConHandle;
-	HANDLE lStdHandle;
 	CONSOLE_SCREEN_BUFFER_INFO coninfo;
-	FILE *fp;
 	if (sysconsole_is_open)
 		return;
 	sysconsole_is_open = 0;
@@ -1181,28 +1600,14 @@ void sysconsole_open ( void )
 	coninfo.dwSize.Y = 1024;
 	//coninfo.dwSize.X = 100;
 	SetConsoleScreenBufferSize(GetStdHandle(STD_OUTPUT_HANDLE), coninfo.dwSize);
-	// redirect unbuffered STDOUT to the console
-	lStdHandle = GetStdHandle(STD_OUTPUT_HANDLE);
-	hConHandle = _open_osfhandle((INT_PTR)lStdHandle, _O_TEXT);
-	fp = _fdopen( hConHandle, "w" );
-	*stdout = *fp;
-	setvbuf( stdout, NULL, _IONBF, 0 );
-	// redirect unbuffered STDIN to the console
-	lStdHandle = GetStdHandle(STD_INPUT_HANDLE);
-	hConHandle = _open_osfhandle((INT_PTR)lStdHandle, _O_TEXT);
-	fp = _fdopen( hConHandle, "r" );
-	*stdin = *fp;
-	setvbuf( stdin, NULL, _IONBF, 0 );
-	// redirect unbuffered STDERR to the console
-	lStdHandle = GetStdHandle(STD_ERROR_HANDLE);
-	hConHandle = _open_osfhandle((INT_PTR)lStdHandle, _O_TEXT);
-	fp = _fdopen( hConHandle, "w" );
-	*stderr = *fp;
-	setvbuf( stderr, NULL, _IONBF, 0 );
+	// redirect unbuffered stdin/stdout/stderr to the console:
+	redirect_stdfp(STD_OUTPUT_HANDLE, stdout, "w", "STDOUT");
+	redirect_stdfp(STD_INPUT_HANDLE,  stdin,  "r", "STDIN" );
+	redirect_stdfp(STD_ERROR_HANDLE,  stderr, "w", "STDERR");
 	// make cout, wcout, cin, wcin, wcerr, cerr, wclog and clog point to console as well
 	// sync_with_stdio();
 	// Set Con Attributes
-	//SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), FOREGROUND_RED | FOREGROUND_INTENSITY);
+	SetConsoleTextAttribute(GetStdHandle(STD_ERROR_HANDLE), FOREGROUND_RED | FOREGROUND_INTENSITY);
 	SetConsoleTextAttribute(GetStdHandle(STD_OUTPUT_HANDLE), FOREGROUND_GREEN | FOREGROUND_INTENSITY);
 	SetConsoleMode(GetStdHandle(STD_OUTPUT_HANDLE), ENABLE_PROCESSED_OUTPUT | ENABLE_WRAP_AT_EOL_OUTPUT);
 	SetConsoleMode(GetStdHandle(STD_INPUT_HANDLE), ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT);
@@ -1233,6 +1638,18 @@ static CHAR sysconsole_getch( void )
 #endif
 
 
+#ifdef XEMU_ARCH_WIN
+static int file_handle_redirect ( const char *target, const char *symname, const char *mode, FILE *handle )
+{
+	if (!freopen(target, mode, handle)) {
+		ERROR_WINDOW("Failed to redirect [%s] to \"%s\"\n%s", symname, target, strerror(errno));
+		return 1;
+	}
+	return 0;
+}
+#endif
+
+
 void sysconsole_close ( const char *waitmsg )
 {
 	if (!sysconsole_is_open)
@@ -1243,14 +1660,23 @@ void sysconsole_close ( const char *waitmsg )
 		// So instead of a GUI element here with a dialog box, we must rely on the console to press a key to continue ...
 		printf("\n\n*** %s\nPress SPACE to continue.", waitmsg);
 		while (sysconsole_getch() != 32)
-			;
+			SDL_Delay(1);
 	}
 	if (!FreeConsole()) {
 		if (!waitmsg)
 			ERROR_WINDOW("Cannot release windows console!");
 	} else {
 		sysconsole_is_open = 0;
-		DEBUGPRINT("WINDOWS: console is closed" NL);
+#if 1
+		// redirect std file handled to "NUL" to avoid strange issues after closing the console, like corrupting
+		// other files (for unknown reasons) by further I/O after FreeConsole() ...
+		int ret = file_handle_redirect(NULL_DEVICE, "stderr", "w", stderr);
+		ret |=    file_handle_redirect(NULL_DEVICE, "stdout", "w", stdout);
+		ret |=    file_handle_redirect(NULL_DEVICE, "stdin",  "r", stdin );
+		DEBUG("WINDOWS: console has been closed (file_handle_redirect: %s)" NL, ret ? "ERROR" : "OK");
+#else
+		DEBUGPRINT("WINDOWS: console has been closed" NL);
+#endif
 	}
 #elif defined(XEMU_ARCH_MAC)
 	if (macos_gui_started) {
@@ -1305,254 +1731,144 @@ int sysconsole_toggle ( int set )
 	return sysconsole_is_open;
 }
 
-#ifdef XEMU_ARCH_WIN
 
-// WideCharToMultiByte(UINT CodePage, DWORD dwFlags, _In_NLS_string_(cchWideChar)LPCWCH lpWideCharStr, int cchWideChar, LPSTR lpMultiByteStr, int cbMultiByte, LPCCH lpDefaultChar, LPBOOL lpUsedDefaultChar)
-//                     CP_UTF8,       0,             i,                                                -1,              o,                    size,            NULL,                NULL
-#define WIN_WCHAR_TO_UTF8(o,i,size) !WideCharToMultiByte(CP_UTF8, 0, i, -1, o, size, NULL, NULL)
-// int MultiByteToWideChar(UINT CodePage, DWORD dwFlags, _In_NLS_string_(cbMultiByte)LPCCH lpMultiByteStr, int cbMultiByte, LPWSTR lpWideCharStr, int cchWideChar)
-//                         CP_UTF8,       0,             i,                                                -1,              o                      size
-#define WIN_UTF8_TO_WCHAR(o,i,size) !MultiByteToWideChar(CP_UTF8, 0, i, -1, o, size)
-
-#if 0
-#define WIN_WCHAR_TO_UTF8(o,i,size)	xemu_winos_wchar_to_utf8
-#define WIN_UTF8_TO_WCHAR(o,i,size)	xemu_winos_utf8_to_wchar
-#include <assert.h>
-// This function does not make fully extensive work to detect all errors etc ...
-int xemu_winos_utf8_to_wchar ( wchar_t *restrict o, const char *restrict i, size_t size )
+int xemu_file_exists ( const char *fn )
 {
-	Uint32 upos = 0;
-	int ulen = 0;
-	//BUILD_BUG_ON( sizeof(wchar_t) != 3 );
-	static_assert(sizeof(wchar_t) == 2, "wchar_t must be two bytes long");
-	for (;;) {
-		Uint8 c = (unsigned)*i++;
-		if (ulen == 1 && (c & 0xC0) != 0x80) {
-			if (XEMU_UNLIKELY(!size--))
-				return -1;
-			if (XEMU_UNLIKELY(upos >= 0x100000))	// cannot be represented, even not by using surrogates! Dunno if it can happen AT ALL with utf8 source
-				return -1;
-			// FIXME, not so much idea about surrogate point pairs, maybe this code is totally worng what I "invented" here ...
-			if (XEMU_UNLIKELY(upos >= (1U << (sizeof(wchar_t) << 3)))) {
-				if (XEMU_UNLIKELY(!size--))	// check again, we need two chunks for a surrogate pair
-					return -1;
-				*o++ = (upos >>  10) + 0xD800;	// high surrogate of the pair, STORE it
-				upos = (upos & 1023) + 0xDC00;	// this will be the low part, after this "if" ... which is also the normal case (no surrogate points needed)
-			}
-			*o++ = upos;
-			ulen = 0;
-			upos = 0;
-		}
-		if ((c & 0x80) == 0) {
-			if (XEMU_UNLIKELY(!size--))
-				return -1;
-			if (XEMU_UNLIKELY(ulen))
-				return -1;
-			*o++ = c;
-			if (!c)
-				return 0;	// WOW, the end :)
-		} else if ((c & 0xE0) == 0xC0) {
-			if (XEMU_UNLIKELY(ulen))
-				return -1;
-			ulen = 2;
-			upos = c & 0x1F;
-		} else if ((c & 0xF0) == 0xE0) {
-			if (XEMU_UNLIKELY(ulen))
-				return -1;
-			ulen = 3;
-			upos = c & 0x0F;
-		} else if ((c & 0xF8) == 0xF0) {
-			if (XEMU_UNLIKELY(ulen))
-				return -1;
-			ulen = 4;
-			upos = c & 0x07;
-		} else if ((c & 0xC0) == 0x80) {
-			if (XEMU_UNLIKELY(ulen <= 1))
-				return -1;
-			ulen--;
-			upos = (upos << 6) + (c & 0x3F);
-		} else
-			return -1;
-		if (XEMU_UNLIKELY(ulen && !upos))
-			return -1;
-	}
+	struct stat st;
+	return !stat(fn, &st);
 }
 
 
-
-int xemu_winos_wchar_to_utf8 ( char *restrict o, const wchar_t *restrict i, size_t size )
+int xemu_readdir ( DIR *dirp, char *fn, const int fnmaxsize )
 {
-	unsigned int sur = 0;
-	for (;;) {
-		unsigned int c = *i++;
-		// FIXME: check this surrogate madness a bit more ...
-		// Personally I just tried to follow wikipedia, as it says:
-		// There are 1024 "high" surrogates (D800–DBFF) and 1024 "low" surrogates (DC00–DFFF)
-		// In UTF-16, they must always appear in pairs, as a high surrogate followed by a low surrogate, thus using 32 bits to denote one code point.
-		if (XEMU_UNLIKELY(c >= 0xD800 && c <= 0xDBFF)) {
-			if (XEMU_UNLIKELY(sur))
-				return -1;
-			sur = (c - 0xD800) << 10;
-			if (XEMU_UNLIKELY(!sur))
-				return -1;
-			continue;
-		} else if (XEMU_UNLIKELY(c >= 0xDC00 && c <= 0xDFFF)) {
-			if (XEMU_UNLIKELY(!sur))
-				return -1;
-			c = sur + (c - 0xDC00);
-			sur = 0;
-		}
-		if (XEMU_UNLIKELY(sur))
-			return -1;
-		if (c < 0x80) {
-			if (XEMU_UNLIKELY(size < 1))
-				return -1;
-			size =- 1;
-			*o++ = c;
-			if (!c)
-				return 0;	// Wow, the end :)
-		} else if (c < 0x800) {
-			if (XEMU_UNLIKELY(size < 2))
-				return -1;
-			size -= 2;
-			*o++ = 0xC0 + ( c >>  6        );
-			*o++ = 0x80 + ( c        & 0x3F);
-		} else if (c < 0x10000) {
-			if (XEMU_UNLIKELY(size < 3))
-				return -1;
-			size -= 3;
-			*o++ = 0xE0 + ( c >> 12        );
-			*o++ = 0x80 + ((c >>  6) & 0x3F);
-			*o++ = 0x80 + ( c        & 0x3F);
-		} else if (c < 0x110000) {
-			if (XEMU_UNLIKELY(size < 4))
-				return -1;
-			size -= 4;
-			*o++ = 0xF0 + ( c >> 18        );
-			*o++ = 0x80 + ((c >> 12) & 0x3F);
-			*o++ = 0x80 + ((c >>  6) & 0x3F);
-			*o++ = 0x80 + ( c        & 0x3F);
-		} else
-			return -1;
-	}
-}
-#endif
-
-int xemu_os_open ( const char *fn, int flags )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
+	errno = 0;
+	const struct dirent *p = readdir(dirp);
+	if (!p)
+		return -1;
+	if (strlen(p->d_name) >= fnmaxsize) {
 		return -1;
 	}
-	return _wopen(wchar_fn, flags | O_BINARY);
-}
-
-int xemu_os_creat ( const char *fn, int flags, int pmode )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return -1;
-	}
-	return _wopen(wchar_fn, flags | O_BINARY, pmode);
-}
-
-FILE *xemu_os_fopen ( const char *restrict fn, const char *restrict mode )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	wchar_t wchar_mode[32];	// FIXME?
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return NULL;
-	}
-	if (WIN_UTF8_TO_WCHAR(wchar_mode, mode, sizeof wchar_mode)) {
-		errno = EINVAL;		// FIXME?
-		return NULL;
-	}
-	return _wfopen(wchar_fn, wchar_mode);
-}
-
-int xemu_os_unlink ( const char *fn )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return -1;
-	}
-	return _wunlink(wchar_fn);
-}
-
-#include <direct.h>
-
-int xemu_os_mkdir ( const char *fn, const int mode )	// "mode" parameter is unused in Windows
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return -1;
-	}
-	return _wmkdir(wchar_fn);
-}
-
-XDIR *xemu_os_opendir ( const char *fn )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return NULL;
-	}
-	return _wopendir(wchar_fn);
-}
-
-int xemu_os_closedir ( XDIR *dirp )
-{
-	return _wclosedir(dirp);
-}
-
-struct dirent *xemu_os_readdir ( XDIR *dirp, struct dirent *entry )
-{
-	struct _wdirent *p;
-	do {
-		p = _wreaddir(dirp);
-		if (!p)
-			return NULL;
-		entry->d_ino = p->d_ino;
-		//entry->d_off = p->d_off;
-		entry->d_reclen = p->d_reclen;
-		//entry->d_type = p->d_type;
-	} while (WIN_WCHAR_TO_UTF8(entry->d_name, p->d_name, FILENAME_MAX));	// UGLY! Though without this probably an opendir/readdir scan would be interrupted by this anomaly ...
-	return entry;
-}
-
-#include <assert.h>
-
-int xemu_os_stat ( const char *fn, struct stat *statbuf )
-{
-	wchar_t wchar_fn[PATH_MAX];
-	if (WIN_UTF8_TO_WCHAR(wchar_fn, fn, PATH_MAX)) {
-		errno = ENOENT;
-		return -1;
-	}
-	struct __stat64 st;
-	if (_wstat64(wchar_fn, &st))
-		return -1;	// _wstat64() sets errno
-	//static_assert(sizeof(statbuf->st_atime) <= 4, "32-bit time for stat");
-	//static_assert(sizeof(statbuf->st_size) <= 4, "32-bit file size for stat");
-	//FIXME: how can be sure we have 64-bit time and 64-bit file size ALWAYS, win32+win64 too!!! (2038 is not so far away now ...)
-	//FIXME-2: how can we present the input parameter of this func being struct stat (POSIX) but the same requirements as the previous comment line ...
-	statbuf->st_gid   = st.st_gid;
-	statbuf->st_atime = st.st_atime;
-	statbuf->st_ctime = st.st_ctime;
-	statbuf->st_dev   = st.st_dev;
-	statbuf->st_ino   = st.st_ino;
-	statbuf->st_mode  = st.st_mode;
-	statbuf->st_mtime = st.st_mtime;
-	statbuf->st_nlink = st.st_nlink;
-	statbuf->st_rdev  = st.st_rdev;
-	statbuf->st_size  = st.st_size;
-	statbuf->st_uid   = st.st_uid;
+	strcpy(fn, p->d_name);
 	return 0;
 }
 
+
+/* -------------------------- SHA1 checksumming -------------------------- */
+
+
+static inline Uint32 leftrotate ( Uint32 i, unsigned int count )
+{
+	count &= 31;
+	return (i << count) + (i >> (32 - count));
+}
+
+
+static void sha1_chunk ( Uint32 h[5], const Uint8 *data )
+{
+	// Note: this function has been written by me (LGB) by following the pseudocode from Wikipedia
+	Uint32 w[80];
+	// Split our chunk into sixteen 32-bit big-endian words
+	for (unsigned int i = 0; i < 16; i++) {
+		w[i] = (data[0] << 24) | (data[1] << 16) | (data[2] << 8) | data[3];
+		data += 4;
+	}
+	// Extend the sixteen 32-bit words into eighty 32-bit words
+	for (unsigned int i = 16; i <= 79; i++)
+		w[i] = leftrotate(w[i - 3] ^ w[i - 8] ^ w[i - 14] ^ w[i - 16], 1);
+	// Initialize variables from the current state of the hash (previous chunk OR default hash values for SHA-1)
+	Uint32 a = h[0];
+	Uint32 b = h[1];
+	Uint32 c = h[2];
+	Uint32 d = h[3];
+	Uint32 e = h[4];
+	// Main loop for the 80 words
+	for (unsigned int i = 0; i <= 79; i++) {
+		Uint32 f, k;
+		if (i <= 19) {		// 0 ... 19
+			f = (b & c) | ((~b) & d);
+			k = 0x5A827999U;
+		} else if (i <= 39) {	// 20 .. 39
+			f = b ^ c ^ d;
+			k = 0x6ED9EBA1U;
+		} else if (i <= 59) {	// 40 .. 59
+			f = (b & c) | (b & d) | (c & d);
+			k = 0x8F1BBCDCU;
+		} else { 		// 60 .. 79
+			f = b ^ c ^ d;
+			k = 0xCA62C1D6U;
+		}
+		Uint32 temp = leftrotate(a, 5) + f + e + k + w[i];
+		e = d;
+		d = c;
+		c = leftrotate(b, 30);
+		b = a;
+		a = temp;
+	}
+	// Update hash value with this chunk's result
+	h[0] += a;
+	h[1] += b;
+	h[2] += c;
+	h[3] += d;
+	h[4] += e;
+}
+
+
+void sha1_checksum_as_words ( Uint32 hash[5], const Uint8 *data, Uint32 size )
+{
+	hash[0] = 0x67452301U;
+	hash[1] = 0xEFCDAB89U;
+	hash[2] = 0x98BADCFEU;
+	hash[3] = 0x10325476U;
+	hash[4] = 0xC3D2E1F0U;
+	Uint64 size_in_bits = (Uint64)size << 3;
+	// Process full chunks (if any)
+	while (size >= 64) {	// 64 bytes = 512 bits
+		sha1_chunk(hash, data);
+		data += 64;
+		size -= 64;
+	}
+	// Process remaining sub-chunk + SHA specific additions: it may result in two chunks, actually!
+	Uint8 tail[128], *tail_p;
+	memset(tail, 0, sizeof tail);
+	if (size)
+		memcpy(tail, data, size);
+	tail[size++] = 0x80;	// append '1' bit at the end of message
+	if (size > 64 - 8) {
+		// Needs an additional chunk
+		sha1_chunk(hash, tail);
+		tail_p = tail + 64;
+	} else
+		tail_p = tail;
+	// Last chunk, with size information at the end
+	for (unsigned int i = 63; i >= 56; i--) {
+		tail_p[i] = size_in_bits & 0xFF;
+		size_in_bits >>= 8;
+	}
+	sha1_chunk(hash, tail_p);
+}
+
+
+void sha1_checksum_as_bytes ( sha1_hash_bytes hash_bytes, const Uint8 *data, Uint32 size )
+{
+	Uint32 hash[5];
+	sha1_checksum_as_words(hash, data, size);
+	for (unsigned int i = 0; i < 5; i++) {
+		*hash_bytes++ = (hash[i] >> 24) & 0xFF;
+		*hash_bytes++ = (hash[i] >> 16) & 0xFF;
+		*hash_bytes++ = (hash[i] >>  8) & 0xFF;
+		*hash_bytes++ = (hash[i]      ) & 0xFF;
+	}
+}
+
+
+void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data, Uint32 size )
+{
+	Uint32 hash[5];
+	sha1_checksum_as_words(hash, data, size);
+	sprintf(hash_str, "%08x%08x%08x%08x%08x", hash[0], hash[1], hash[2], hash[3], hash[4]);
+}
+
+
+#if defined(XEMU_ARCH_WIN64) && defined(_USE_32BIT_TIME_T)
+#error "_USE_32BIT_TIME_T is defined while compiling for 64-bit Windows!"
 #endif

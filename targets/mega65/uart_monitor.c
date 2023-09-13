@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -27,6 +27,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #warning "Platform does not support UMON"
 #else
 
+#include "sdcard.h"
+
 #include "xemu/emutools_socketapi.h"
 
 //#include <sys/types.h>
@@ -50,11 +52,7 @@ char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
 #define UNCONNECTED	XS_INVALID_SOCKET
 
-#ifdef XEMU_ARCH_WIN
-#	define PRINTF_SOCK	"%I64d"
-#else
-#	define PRINTF_SOCK	"%d"
-#endif
+#define PRINTF_SOCK	PRINTF_S64
 
 
 static xemusock_socket_t  sock_server = UNCONNECTED;
@@ -101,7 +99,6 @@ static char *parse_hex_arg ( char *p, int *val, int min, int max )
 	}
 	return p;
 }
-
 
 
 static int check_end_of_command ( char *p, int error_out )
@@ -173,8 +170,7 @@ static void execute_command ( char *cmd )
 		case 'm':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
 			bank = par1 >> 16;
-			if (cmd && check_end_of_command(cmd, 1))
-			{
+			if (cmd && check_end_of_command(cmd, 1)) {
 				if (bank == 0x777)
 					m65mon_dumpmem16(par1);
 				else
@@ -184,10 +180,8 @@ static void execute_command ( char *cmd )
 		case 'M':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
 			bank = par1 >> 16;
-			if (cmd && check_end_of_command(cmd, 1))
-			{
-				for (int k = 0; k < 32; k++)
-				{
+			if (cmd && check_end_of_command(cmd, 1)) {
+				for (int k = 0; k < 32; k++) {
 					if (bank == 0x777)
 						m65mon_dumpmem16(par1);
 					else
@@ -218,6 +212,10 @@ static void execute_command ( char *cmd )
 			if (cmd && check_end_of_command(cmd, 1))
 				m65mon_breakpoint(par1);
 			break;
+		case 'g':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
+			m65mon_set_pc(par1);
+			break;
 #ifdef TRACE_NEXT_SUPPORT
 		case 'N':
 			m65mon_next_command();
@@ -226,12 +224,42 @@ static void execute_command ( char *cmd )
 		case 0:
 			m65mon_empty_command();	// emulator can use this, if it wants
 			break;
+		case '!':
+			reset_mega65();
+			break;
+		case '~':
+			if (!strncmp(cmd, "exit", 4)) {
+				XEMUEXIT(0);
+			} else if (!strncmp(cmd, "reset", 5)) {
+				reset_mega65();
+			} else if (!strncmp(cmd, "mount", 5)) {
+				// Quite crude syntax for now:
+				// 	~mount0		- unmounting image/disk in drive-0
+				//	~mount1		- --""-- in drive-1
+				//	~mount0disk.d81	- mounting "disk81" to drive-0 (yes, no spaces, etc ....)
+				// So you got it.
+				cmd += 5;
+				if (*cmd && (*cmd == '0' || *cmd == '1')) {
+					const int unit = *cmd - '0';
+					cmd++;
+					if (*cmd) {
+						umon_printf("Mounting %d for: \"%s\"", unit, cmd);
+						if (!sdcard_external_mount(unit, cmd, "Monitor: D81 mount failure")) {
+							OSD(-1, -1, "Mounted (%d): %s", unit, cmd);
+						}
+					} else {
+						sdcard_unmount(unit);
+						OSD(-1, -1, "Unmounted (%d)", unit);
+					}
+				}
+			} else
+				umon_printf(UMON_SYNTAX_ERROR "unknown (or not implemented) Xemu special command: %s", cmd - 1);
+			break;
 		default:
 			umon_printf(UMON_SYNTAX_ERROR "unknown (or not implemented) command '%c'", cmd[-1]);
 			break;
 	}
 }
-
 
 
 /* ------------------------- SOCKET HANDLING, etc ------------------------- */
@@ -258,8 +286,9 @@ int uartmon_init ( const char *fn )
 		DEBUGPRINT("UARTMON: disabled, no name is specified to bind to." NL);
 		return 0;
 	}
-	if (xemusock_init(NULL)) {
-		ERROR_WINDOW("Cannot initialize network, uart_mon won't be availbale");
+	const char *init_status = xemusock_init();
+	if (init_status) {
+		ERROR_WINDOW("Cannot initialize network, uart_mon won't be availbale\n%s", init_status);
 		return 1;
 	}
 	if (fn[0] == ':') {
@@ -382,7 +411,7 @@ void uartmon_update ( void )
 		xemusock_socket_t ret_sock = xemusock_accept(sock_server, (struct sockaddr *)&sock_st, &len, &xerr);
 		if (ret_sock != XS_INVALID_SOCKET || (ret_sock == XS_INVALID_SOCKET && !xemusock_should_repeat_from_error(xerr)))
 			DEBUG("UARTMON: accept()=" PRINTF_SOCK " error=%s" NL,
-				ret_sock,
+				(Sint64)ret_sock,
 				ret_sock != XS_INVALID_SOCKET ? "OK" : xemusock_strerror(xerr)
 			);
 		if (ret_sock != XS_INVALID_SOCKET) {
@@ -395,7 +424,7 @@ void uartmon_update ( void )
 				// Reset reading/writing information
 				umon_write_size = 0;
 				umon_read_pos = 0;
-				DEBUGPRINT("UARTMON: new connection established on socket " PRINTF_SOCK NL, sock_client);
+				DEBUGPRINT("UARTMON: new connection established on socket " PRINTF_SOCK NL, (Sint64)sock_client);
 			}
 		}
 	}
@@ -409,7 +438,7 @@ void uartmon_update ( void )
 		ret = xemusock_send(sock_client, umon_write_buffer + umon_write_pos, umon_write_size, &xerr);
 		if (ret != XS_SOCKET_ERROR || (ret == XS_SOCKET_ERROR && !xemusock_should_repeat_from_error(xerr)))
 			DEBUG("UARTMON: write(" PRINTF_SOCK ",buffer+%d,%d)=%d (%s)" NL,
-				sock_client, umon_write_pos, umon_write_size,
+				(Sint64)sock_client, umon_write_pos, umon_write_size,
 				ret, ret == XS_SOCKET_ERROR ? xemusock_strerror(xerr) : "OK"
 			);
 		if (ret == 0) { // client socket closed
@@ -433,7 +462,7 @@ void uartmon_update ( void )
 	ret = xemusock_recv(sock_client, umon_read_buffer + umon_read_pos, sizeof(umon_read_buffer) - umon_read_pos - 1, &xerr);
 	if (ret != XS_SOCKET_ERROR || (ret == XS_SOCKET_ERROR && !xemusock_should_repeat_from_error(xerr)))
 		DEBUG("UARTMON: read(" PRINTF_SOCK ",buffer+%d,%d)=%d (%s)" NL,
-			sock_client, umon_read_pos, (int)sizeof(umon_read_buffer) - umon_read_pos - 1,
+			(Sint64)sock_client, umon_read_pos, (int)sizeof(umon_read_buffer) - umon_read_pos - 1,
 			ret, ret == XS_SOCKET_ERROR ? xemusock_strerror(xerr) : "OK"
 		);
 	if (ret == 0) { // client socket closed

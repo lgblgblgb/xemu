@@ -1,7 +1,7 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
-   This is a *VERY* lame CIA 6526 emulation, lacks of TOD, mostly to SDR stuff, timing,
+   This is a *VERY* crude CIA 6526 emulation, lacks of TOD, mostly to SDR stuff, timing,
    and other problems as well ... Hopefully enough for C65 to boot, what is its only reason ...
 
 This program is free software; you can redistribute it and/or modify
@@ -27,7 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  * implemented incorrectly (not cycle exact, simplified, ignored
  * conditions, etc).
  * Some doc:
- *      http://archive.6502.org/datasheets/mos_6526_cia.pdf
+ *      http://archive.6502.org/datasheets/mos_6526_cia_recreated.pdf
  *      http://www.c64-wiki.com/index.php/CIA
  */
 
@@ -150,6 +150,9 @@ Uint8 cia_read ( struct Cia6526 *cia, int addr )
 		case 11:	// reg#B: TOD hours + PM
 			return cia->tod[3];
 		case 12:	// reg#C: SP
+#			ifdef CIA_IN_SDR_SETS_ICR_BIT3
+			ICR_SET(8);
+#			endif
 			return cia->SDR;
 		case 13: 	// reg#D: ICR data
 			temp = cia->ICRdata;
@@ -237,8 +240,12 @@ void cia_write ( struct Cia6526 *cia, int addr, Uint8 data )
 			break;
 		case 12:	// reg#C: SP
 			cia->SDR = data;
-			if (cia->CRA & 64)
+			if (cia->CRA & 64) {
 				cia->outsr(data);
+#				ifdef CIA_OUT_SDR_SETS_ICR_BIT3
+				ICR_SET(8);
+#				endif
+			}
 			break;
 		case 13:	// reg#D: ICR mask
 			if (data & 128)
@@ -280,24 +287,38 @@ void cia_ugly_tod_updater ( struct Cia6526 *cia, const struct tm *t, Uint8 sec10
 
 void cia_tick ( struct Cia6526 *cia, int ticks )
 {
+	int timer_a_underflow = 0;	// used to emulate linked timer mode for a 32 bit counter
 	/* Timer A */
 	if (cia->CRA & 1) {
 		cia->TCA -= ticks;
 		if (cia->TCA <= 0) {
+			timer_a_underflow = 1;
 			DEBUG("%s timer-A expired!" NL, cia->name);
 			ICR_SET(1);
-			cia->TCA = cia->TLAL | (cia->TLAH << 8);
+			cia->TCA += cia->TLAL | (cia->TLAH << 8);
+			if (cia->TCA < 0)
+				cia->TCA = 0;
 			if (cia->CRA & 8)
 				cia->CRA &= 254; // one shot mode: reset bit 1 (timer stop)
 		}
 	}
 	/* Timer B */
 	if (cia->CRB & 1) {
-		cia->TCB -= ticks;
+		// this is kinda bad, we assume "CNT" does not affect anything :-/
+		if ((cia->CRB & 64)) {		// linked timers mode: timer-B counts of underflows of timer-A
+			if (timer_a_underflow)
+				cia->TCB--;
+			else
+				return;
+		} else {			// independent timer-B: works the same as timer-A
+			cia->TCB -= ticks;
+		}
 		if (cia->TCB <= 0) {
 			DEBUG("%s timer-B expired!" NL, cia->name);
 			ICR_SET(2);
-			cia->TCB = cia->TLBL | (cia->TLBH << 8);
+			cia->TCB += cia->TLBL | (cia->TLBH << 8);
+			if (cia->TCB < 0)
+				cia->TCB = 0;
 			if (cia->CRB & 8)
 				cia->CRB &= 254; // one shot mode: reset bit 1 (timer stop)
 		}

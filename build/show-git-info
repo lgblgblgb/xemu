@@ -1,0 +1,49 @@
+#!/bin/bash
+## Part of the xemu project.
+## Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## ---
+## The problem: we need to get the GIT origin, including branch.
+## However that is hard, since environments like github actions or travis Ci
+## used detached heads and no control over the GIT clone process before getting
+## control to our build scripts. So we need to dance a lot. Oh shit ...
+
+# *** Try to figure out remote origin ***
+
+remote=`git config --get remote.origin.url`
+if [ "$remote" = "" ]; then
+	remote="unknown_remote"
+fi
+
+# *** Try to figure out branch ***
+
+if [ "$TRAVIS_BRANCH" = "" ]; then
+	if [ "$GITHUB_REF" = "" ]; then
+		branch=`git branch | awk 'BEGIN { s = "UNKNOWN" } $1 == "*" { s = $2 } END { print s }'`
+	else
+		branch="`echo $GITHUB_REF | awk -F/ '{ print $NF }'`"
+	fi
+else
+	branch="$TRAVIS_BRANCH"
+fi
+if [ "$branch" = "" ]; then
+	branch="unknown_branch"
+fi
+
+# *** Try to figure out commit ID ***
+
+if [ "$TRAVIS_COMMIT" = "" ]; then
+	commit=`git rev-parse HEAD`
+else
+	commit="$TRAVIS_COMMIT"
+fi
+if [ "$commit" = "" ]; then
+	commit="unknown_commit_id"
+fi
+
+# *** Print the result tripplet ***
+
+echo "$remote $branch $commit"
+
+# *** END ***
+
+exit 0

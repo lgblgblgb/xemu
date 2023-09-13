@@ -1,5 +1,6 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   ~/xemu/gui/popular_user_funcs.c: popular/common functions for Xemu's UI abstraction
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -149,14 +150,14 @@ void xemugui_cb_web_help_main ( const struct menu_st *m, int *query )
 	if (query)
 		return;
 	char par[512];
-	sprintf(par, "o=%d\001v=%s\001b=%s\001t=%s\001T=%s\001p=%s\001u=" PRINTF_LLD "\001x=%s\002chk",	// normal param list MUST end with \002 for future extension!
+	sprintf(par, "o=%d\001v=%s\001b=%s\001t=%s\001T=%s\001p=%s\001u=" PRINTF_S64 "\001x=%s\002chk",	// normal param list MUST end with \002 for future extension!
 		xemu_is_official_build(),		// o=%d (official build?)
 		XEMU_BUILDINFO_CDATE,			// v=%s (version data - formed from commit date actually)
 		XEMU_BUILDINFO_GIT,			// b=%s (build info)
 		TARGET_NAME,				// t=%s (target name)
 		TARGET_DESC,				// T=%s (target description)
 		XEMU_ARCH_NAME,				// p=%s (platform name)
-		(long long int)time(NULL),		// u=%d (uts of the current time)
+		(Sint64)time(NULL),			// u=%d (uts of the current time)
 		m->user_data != NULL ? (const char*)(m->user_data) : "null"	// x=%s (user defined command)
 	);
 	const char *par_list[] = { XEMU_ONLINE_HELP_GET_VAR, par, NULL };
@@ -176,8 +177,11 @@ void xemugui_cb_set_mouse_grab ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, allow_mouse_grab);
 	allow_mouse_grab = !allow_mouse_grab;
-	if (allow_mouse_grab)
-		OSD(-1, -1, "ENABLED. Left click to activate!");
+	static int first_warning = 1;
+	if (allow_mouse_grab && first_warning) {
+		first_warning = 0;
+		INFO_WINDOW("Mouse grab mode has been enabled.\nLeft click into the emulator window to initiate.\nPress both SHIFTs together to cancel.");
+	}
 }
 
 void xemugui_cb_set_integer_to_one ( const struct menu_st *m, int *query )
@@ -185,3 +189,62 @@ void xemugui_cb_set_integer_to_one ( const struct menu_st *m, int *query )
 	if (!query)
 		*(int*)(m->user_data) = 1;
 }
+
+void xemugui_cb_toggle_int_inverted ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, !*(int*)m->user_data);
+	*(int*)m->user_data = !*(int*)m->user_data;
+}
+
+void xemugui_cb_toggle_int ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, *(int*)m->user_data);
+	*(int*)m->user_data = !*(int*)m->user_data;
+}
+
+#ifdef XEMU_CONFIGDB_SUPPORT
+#include "xemu/emutools_config.h"
+
+/* Note: currently, this is not recommended to use functions to LOAD any config file.
+   This is because the configuration is loaded on Xemu start-up and many options are
+   parsed in a strict order bound to machine and emulation initialization, thus it's
+   kinda impossible to have valid state when loading a config file run-time "randomly". */
+
+void xemugui_cb_cfgfile ( const struct menu_st *m, int *query )
+{
+	if (XEMU_UNLIKELY(query))
+		return;
+	const enum xemuguicfgfileop_type mode = (const enum xemuguicfgfileop_type)VOIDPTR_TO_INT(m->user_data);
+	char fnbuf[PATH_MAX + 1];
+	static char dir[PATH_MAX + 1] = "";
+	if (!*dir)
+		strcpy(dir, sdl_pref_dir);
+	switch (mode) {
+		case XEMUGUICFGFILEOP_SAVE_DEFAULT:
+		case XEMUGUICFGFILEOP_LOAD_DEFAULT:
+			strcpy(fnbuf, xemucfg_get_default_config_file_name());
+			break;
+		case XEMUGUICFGFILEOP_LOAD_CUSTOM:
+		case XEMUGUICFGFILEOP_SAVE_CUSTOM:
+			if (xemugui_file_selector(
+				(mode == XEMUGUICFGFILEOP_LOAD_CUSTOM ? XEMUGUI_FSEL_OPEN : XEMUGUI_FSEL_SAVE) | XEMUGUI_FSEL_FLAG_STORE_DIR,
+				"Select config file",
+				dir,
+				fnbuf,
+				sizeof fnbuf
+			))
+				return;
+			break;
+	}
+	switch (mode) {
+		case XEMUGUICFGFILEOP_LOAD_DEFAULT:
+		case XEMUGUICFGFILEOP_LOAD_CUSTOM:
+			xemucfg_parse_config_file(fnbuf, "Cannot load/parse config file");
+			break;
+		case XEMUGUICFGFILEOP_SAVE_DEFAULT:
+		case XEMUGUICFGFILEOP_SAVE_CUSTOM:
+			xemucfg_save_config_file(fnbuf, "# Saved from Xemu GUI by the user" NL NL, "Cannot save/store config file");
+			break;
+	}
+}
+#endif

@@ -1,7 +1,6 @@
-/* Xemu - Emulation (running on Linux/Unix/Windows/OSX, utilizing
-   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and MEGA65 as well.
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* Xemu - Emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
+ * 8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -30,13 +29,20 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifdef	XEMU_ARCH_WIN
 #	define FILE_BROWSER	"explorer"
-#elif	defined(XEMU_ARCH_MAC)
+	/* Fow windows, we use 'cmd /c start' as web browser, but it needs special care because of
+	 * being not a single string as executable. Thus WEB_BROWSER for Windows is handled in
+	 * code, in emutools_files.c */
+#elif	defined(XEMU_ARCH_MAC) || defined(XEMU_ARCH_HAIKU)
 #	define FILE_BROWSER	"open"
+#	define WEB_BROWSER	"open"
 #else
 #	define FILE_BROWSER	"xdg-open"
+#	define WEB_BROWSER	"xdg-open"
 #endif
 
 #define OFF_T_ERROR ((off_t)-1)
+
+#define XEMU_OPEN_FILE_FIRST_MODE_USED -1
 
 extern void *xemu_load_buffer_p;
 extern char  xemu_load_filepath[PATH_MAX];
@@ -49,7 +55,7 @@ extern ssize_t xemu_safe_write ( int fd, const void *buffer, size_t length );
 extern int     xemu_safe_close ( int fd );
 extern off_t   xemu_safe_file_size_by_fd ( int fd );
 extern off_t   xemu_safe_file_size_by_name ( const char *name );
-extern int     xemu_create_sparse_file ( const char *os_path, Uint64 size );
+extern int     xemu_create_large_empty_file ( const char *os_path, Uint64 size, int is_sparse );
 
 #if defined(HAVE_XEMU_INSTALLER) && !defined(HAVE_XEMU_EXEC_API)
 #define HAVE_XEMU_EXEC_API
@@ -74,11 +80,9 @@ extern void xemuexec_open_native_file_browser ( char *dir );
 extern void xemu_set_installer ( const char *filename );
 #endif
 
-#if defined(XEMU_USE_LODEPNG) && defined(XEMU_FILES_SCREENSHOT_SUPPORT)
 // NOTE: you must call this function before the final rendering of course, thus source_pixels has a full rendered frame already ;)
-extern int xemu_screenshot_png ( const char *path, const char *fn, int zoom_width, int zoom_height, Uint32 *source_pixels, int source_width, int source_height );
+extern int xemu_screenshot_png ( const char *path, const char *fn, unsigned int zoom_width, unsigned int zoom_height, Uint32 *source_pixels, unsigned int source_width, unsigned int source_height, unsigned int source_texture_width );
 extern char xemu_screenshot_full_path[];
-#endif
 
 #ifndef XEMU_ARCH_WIN
 #	define UNIX_DATADIR_0 "/usr/local/share/xemu"

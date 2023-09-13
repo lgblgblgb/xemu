@@ -595,7 +595,6 @@ void z80_reset ( void )
 #ifdef CONFIG_Z180
 	z180_internal_reset();
 #endif
-	srand((unsigned int)time(NULL));
 	Z80_AF	= rand() & 0xFFFF;
 	Z80_BC	= rand() & 0xFFFF;
 	Z80_DE	= rand() & 0xFFFF;

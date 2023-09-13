@@ -34,6 +34,7 @@ extern Uint8 vic3_registers[];
 extern int   cpu_cycles_per_scanline;
 extern int   frameskip;
 extern char  scanline_render_debug_info[320];
+extern int   show_drive_led;
 
 extern void  vic3_init ( void );
 extern void  vic3_write_reg ( int addr, Uint8 data );

@@ -1,7 +1,5 @@
-## Collection of *simple* emulators of some 8 bits machines using SDL2 library,
-## including the Commodore LCD and Commodore 65 too.
-##
-## Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+## Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -23,7 +21,7 @@ EMU_DESCRIPTION	= Commander X16
 
 SRCS_TARGET_xcx16	= commander_x16.c vera.c input_devices.c sdcard.c
 SRCS_COMMON_xcx16	= emutools.c cpu65.c via65c22.c emutools_hid.c emutools_config.c emutools_files.c
-CFLAGS_TARGET_xcx16	= $(SDL2_CFLAGS)
-LDFLAGS_TARGET_xcx16	= $(SDL2_LIBS)
+CFLAGS_TARGET_xcx16	= $(SDL2_CFLAGS) $(MATH_CFLAGS)
+LDFLAGS_TARGET_xcx16	= $(SDL2_LIBS) $(MATH_LIBS)
 
 include ../../build/Makefile.common

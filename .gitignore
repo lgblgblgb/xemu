@@ -9,3 +9,5 @@ debug.log
 /dist.zip
 /.dist
 /.pending
+.vscode
+.DS_Store

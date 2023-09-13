@@ -1,7 +1,6 @@
-/* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing
-   SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
-   and MEGA65 as well.
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
+ * 8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -25,6 +24,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <stdlib.h>
 #include <limits.h>
 #include <errno.h>
+
+
+#ifdef XEMU_ARCH_WIN
+#include <windows.h>
+#endif
 
 
 void *xemu_load_buffer_p;
@@ -81,7 +85,6 @@ int xemuexec_check_status ( pid_t pid, int wait )
 }
 
 #else
-#include <windows.h>
 #include <tchar.h>
 
 /* I'm not a Windows programmer not even a user ... By inpsecting MSDN articles, I am not sure, what needs
@@ -127,7 +130,7 @@ void *xemuexec_run ( char *const args[] )
 	//st->si.hStdError = GetStdHandle(STD_ERROR_HANDLE);
 	st->si.hStdError = (HANDLE)_open_osfhandle(_fileno(stderr), _O_TEXT);
 	st->si.hStdOutput = (HANDLE)_open_osfhandle(_fileno(stdout), _O_TEXT);
-		//_open_osfhandle((INT_PTR)_fileno(stdout), _O_TEXT);	
+		//_open_osfhandle((INT_PTR)_fileno(stdout), _O_TEXT);
 		//GetStdHandle(STD_OUTPUT_HANDLE);
 	//st->si.hStdInput = GetStdHandle(STD_INPUT_HANDLE);
 	st->si.hStdInput = (HANDLE)_get_osfhandle(fileno(stdin));
@@ -208,10 +211,31 @@ void xemuexec_open_native_file_browser ( char *dir )
 {
 #ifdef HAVE_XEMU_EXEC_API
 	static xemuexec_process_t fbp = XEMUEXEC_NULL_PROCESS_ID;
-	char *args[] = {FILE_BROWSER, dir, NULL};
+	while (*dir == ' ' || *dir == '\t')
+		dir++;
+	if (!strncasecmp(dir, "file://", 7))
+		dir += 7;
+	char *args[] = {
+		FILE_BROWSER, dir, NULL
+#ifdef XEMU_ARCH_WIN
+		,
+		NULL,
+		NULL
+#endif
+	};
+	if (!strncasecmp(dir, "ftp://", 6) || !strncasecmp(dir, "http://", 7) || !strncasecmp(dir, "https://", 8)) {
+#ifdef XEMU_ARCH_WIN
+		args[0] = "cmd";
+		args[1] = "/c";
+		args[2] = "start";
+		args[3] = dir;
+#else
+		args[0] = WEB_BROWSER;
+#endif
+	}
 	if (fbp != XEMUEXEC_NULL_PROCESS_ID) {
 		int w = xemuexec_check_status(fbp, 0);
-		DEBUGPRINT("EXEC: FILEBROWSER: previous file browser process (" PRINTF_LLD ") status was: %d" NL, (unsigned long long int)(uintptr_t)fbp, w);
+		DEBUGPRINT("EXEC: FILEBROWSER: previous file browser process (" PRINTF_U64 ") status was: %d" NL, (Uint64)(uintptr_t)fbp, w);
 		if (w == XEMUEXEC_STILL_RUNNING)
 			ERROR_WINDOW("A file browser is already has been opened.");
 		else if (w == -1)
@@ -433,7 +457,7 @@ void xemuexec_open_native_file_browser ( char *dir )
  *	pointer to an int, secondary open mode set
  *		- if it's NULL pointer, it won't be used ever
  *		- if it's not NULL, open() is also tried with the pointed flags for open() after trying (and failed!) open() with the 'mode' par
- *		- if mode2 pointer is not NULL, the pointed value will be zeroed by this func, if NOT *mode2 is used with successfull open
+ *		- if mode2 pointer is not NULL, the pointed value will be set to XEMU_OPEN_FILE_FIRST_MODE_USED by this func, if NOT *mode2 is used with successfull open
  *		- the reason for this madness: opening a disk image which neads to be read/write access, but also works for read-only, however
  *		  then the caller needs to know if the disk emulation is about r/w or ro only ...
  * @param *filepath_back
@@ -492,7 +516,7 @@ int xemu_open_file ( const char *filename, int mode, int *mode2, char *filepath_
 			strcpy(filepath_back, filepath);
 		if (fd >= 0) {
 			if (mode2)
-				*mode2 = 0;
+				*mode2 = XEMU_OPEN_FILE_FIRST_MODE_USED;
 			DEBUGPRINT("FILE: file %s opened as %s with base mode-set as fd=%d" NL, filename, paths[a], fd);
 			return fd;
 		}
@@ -700,14 +724,27 @@ int xemu_load_file ( const char *filename, void *store_to, int min_size, int max
 }
 
 
-int xemu_create_sparse_file ( const char *os_path, Uint64 size )
+int xemu_create_large_empty_file ( const char *os_path, Uint64 size, int is_sparse )
 {
-	int err = 0, fd;
-	unsigned char zero = 0;
-	fd = open(os_path, O_BINARY | O_RDWR | O_CREAT, 0600);
+	int error;
+	int fd = open(os_path, O_BINARY | O_RDWR | O_CREAT | O_TRUNC, 0600);
 	if (fd < 0)
 		goto error;
+#ifdef XEMU_ARCH_WIN
+	if (is_sparse) {
+		DWORD dwTemp;
+		if (DeviceIoControl((HANDLE)_get_osfhandle(fd), FSCTL_SET_SPARSE, NULL, 0, NULL, 0, &dwTemp, NULL) == 0) {
+			ERROR_WINDOW("Cannot set file as sparse file!\nWindows error #" PRINTF_U64 "\nIt's not a fatal problem, though the file will take much more space than usual", (Uint64)GetLastError());
+			goto error;
+		} else
+			DEBUGPRINT("WINDOWS: file has been made sparse, lpBytesReturned=" PRINTF_U64 NL, (Uint64)dwTemp);
+	} else
+		DEBUGPRINT("WINDOWS: not using sparse file ..." NL);
+#else
+	is_sparse = 0;	// on non-Windows architectures we simply don't deal with sparse, that's the default!
+#endif
 	if (size > 0) {
+		static const Uint8 zero = 0;
 		size--;
 		if (lseek(fd, size, SEEK_SET) != size)
 			goto error;
@@ -716,27 +753,30 @@ int xemu_create_sparse_file ( const char *os_path, Uint64 size )
 		if (lseek(fd, -1, SEEK_CUR) != size)
 			goto error;
 	}
-	if (close(fd))
-		goto error;
-	return 0;
+	if (!close(fd))
+		return 0;
 error:
-	err = errno;
-	if (fd >= 0)
+	error = errno;
+	if (error >= 0)
+		error = -9999;
+	if (fd >= 0) {
 		close(fd);
-	unlink(os_path);
-	return err ? err : -1;
+		unlink(os_path);
+	}
+	// If request for sparse file and open itself succeeded, try again without sparse ...
+	return (is_sparse && fd >= 0) ? xemu_create_large_empty_file(os_path, size, 0) : error;
 }
 
 
-#if defined(XEMU_USE_LODEPNG) && defined(XEMU_FILES_SCREENSHOT_SUPPORT)
 char xemu_screenshot_full_path[PATH_MAX+1];
+#if defined(XEMU_USE_LODEPNG) && defined(XEMU_FILES_SCREENSHOT_SUPPORT)
 #include "xemu/lodepng.h"
 #include <time.h>
 // TODO: use libpng in Linux, smaller binary (on windows I wouldn't introduce another DLL dependency though ...)
 // NOTE: you must call this function before the final rendering of course, thus source_pixels has a full rendered frame already ;)
 // NOTE: ... however, it must be called BEFORE xemu_update_screen() otherwise the texture access may not be valid anymore and crash occures
 // source_pixels CAN be null. In this case though, Xemu framework tries to use the right pointer based on locked texture or non-locked mode.
-int xemu_screenshot_png ( const char *path, const char *fn, int zoom_width, int zoom_height, Uint32 *source_pixels, int source_width, int source_height )
+int xemu_screenshot_png ( const char *path, const char *fn, unsigned int zoom_width, unsigned int zoom_height, Uint32 *source_pixels, unsigned int source_width, unsigned int source_height, unsigned int source_texture_width )
 {
 	int target_width = source_width * zoom_width;
 	int target_height = source_height * zoom_height;
@@ -755,12 +795,12 @@ int xemu_screenshot_png ( const char *path, const char *fn, int zoom_width, int 
 	}
 	for (int i = 0; i < target_width * target_height; i++) {
 		// Sampling pixel in the source
-		// Kinda lame algorith, but it is not needed to be very fast and real-time operation, just
+		// Kinda crude algorithm, but it is not needed to be very fast and real-time operation, just
 		// to create a screenshot on user's request.
 		Uint32 pixel = source_pixels[(
 			(i % target_width) / zoom_width
 		) + (
-			((i / target_width) / zoom_height) * source_width
+			((i / target_width) / zoom_height) * source_texture_width
 		)];
 		// Generate LodePNG compatible RGB stuff
 		// (note, this is maybe possible with simple SDL functions to convert a whole texture
@@ -817,5 +857,12 @@ int xemu_screenshot_png ( const char *path, const char *fn, int zoom_width, int 
 			source_width, source_height, target_width, target_height, xemu_screenshot_full_path
 		);
 	return ret;
+}
+#else
+int xemu_screenshot_png ( const char *path, const char *fn, unsigned int zoom_width, unsigned int zoom_height, Uint32 *source_pixels, unsigned int source_width, unsigned int source_height, unsigned int source_texture_width )
+{
+	xemu_screenshot_full_path[0] = 0;
+	DEBUGPRINT("SCREENSHOT: NOT SUPPORTED ON THIS PLATFORM" NL);
+	return 1;
 }
 #endif

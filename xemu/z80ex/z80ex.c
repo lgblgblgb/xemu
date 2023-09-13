@@ -48,13 +48,13 @@ int z80ex_step(void)
 {
 	Z80EX_BYTE opcode, d;
 	z80ex_opcode_fn ofn = NULL;
-	
+
 	z80ex.doing_opcode = 1;
 	z80ex.noint_once = 0;
 	z80ex.reset_PV_on_int = 0;
 	z80ex.tstate = 0;
 	z80ex.op_tstate = 0;
-	
+
 	opcode = READ_OP_M1(); 		/* fetch opcode */
 	if (z80ex.int_vector_req)
 	{
@@ -100,7 +100,7 @@ int z80ex_step(void)
 #endif
 					}
 					break;
-								
+
 				case 0xED: /* ED opcodes */
 #ifdef Z80EX_ED_TRAPPING_SUPPORT
 					if (XEMU_UNLIKELY(opcode > 0xBB)) {
@@ -126,7 +126,7 @@ int z80ex_step(void)
 							ofn = opcodes_base[0x00];
 					}
 					break;
-				
+
 				case 0xCB: /* CB opcodes */
 #ifdef Z80EX_Z180_SUPPORT
 					if (XEMU_UNLIKELY(z80ex.z180 && (opcode & 0xF8) == 0x30))
@@ -135,25 +135,25 @@ int z80ex_step(void)
 #endif
 						ofn = opcodes_cb[opcode];
 					break;
-					
+
 				default:
 					/* this must'nt happen! */
 					assert(0);
 					break;
 			}
-		
+
 			ofn();
-		
+
 			z80ex.prefix = 0;
 		}
 	}
-		
+
 	z80ex.doing_opcode = 0;
 	return z80ex.tstate;
 }
 
-	
-void z80ex_reset()
+
+void z80ex_reset ( void )
 {
 	PC = 0x0000; IFF1 = IFF2 = 0; IM = IM0;
 	AF= SP = BC = DE = HL = IX = IY = AF_ = BC_ = DE_ = HL_ = 0xffff;
@@ -175,9 +175,9 @@ void z80ex_reset()
 void z80ex_init ( void )
 {
 	memset(&z80ex, 0x00, sizeof(Z80EX_CONTEXT));
-	
+
 	z80ex_reset();
-	
+
 	z80ex.nmos = 1;
 #ifdef Z80EX_HAVE_TSTATE_CB_VAR
 	z80ex.tstate_cb = 0;
@@ -192,32 +192,32 @@ void z80ex_init ( void )
 int z80ex_nmi(void)
 {
 	if (z80ex.doing_opcode || z80ex.noint_once || z80ex.prefix) return 0;
-	
+
 	if (z80ex.halted) {
 		/*so we met an interrupt... stop waiting*/
 		PC++;
 		z80ex.halted = 0;
 	}
-	
+
 	z80ex.doing_opcode = 1;
-	
+
 	R++; /* accepting interrupt increases R by one */
 	/*IFF2=IFF1;*/ /* contrary to zilog z80 docs, IFF2 is not modified on NMI. proved by Slava Tretiak aka restorer */
 	IFF1 = 0;
 
 	TSTATES(5);
-	
+
 	z80ex_mwrite_cb(--SP, z80ex.pc.b.h); /* PUSH PC -- high byte */
 	TSTATES(3);
-		
+
 	z80ex_mwrite_cb(--SP, z80ex.pc.b.l); /* PUSH PC -- low byte */
 	TSTATES(3);
-	
+
 	PC = 0x0066;
 	MEMPTR = PC; /* FIXME: is that really so? */
-		
+
 	z80ex.doing_opcode = 0;
-	
+
 	return 11; /* NMI always takes 11 t-states */
 }
 
@@ -227,7 +227,7 @@ int z80ex_int(void)
 	Z80EX_WORD inttemp;
 	Z80EX_BYTE iv;
 	unsigned long tt;
-	
+
 	/* If the INT line is low and IFF1 is set, and there's no opcode executing just now,
 	a maskable interrupt is accepted, whether or not the
 	last INT routine has finished */
@@ -240,13 +240,13 @@ int z80ex_int(void)
 
 	z80ex.tstate = 0;
 	z80ex.op_tstate = 0;
-	
+
 	if (z80ex.halted) {
 		/* so we met an interrupt... stop waiting */
 		PC++;
 		z80ex.halted = 0;
 	}
-	
+
 	/* When an INT is accepted, both IFF1 and IFF2 are cleared, preventing another interrupt from
 	occurring which would end up as an infinite loop */
 	IFF1 = IFF2 = 0;
@@ -261,7 +261,7 @@ int z80ex_int(void)
 
 	z80ex.int_vector_req = 1;
 	z80ex.doing_opcode = 1;
-	
+
 	switch (IM) {
 		case IM0:
 			/* note: there's no need to do R++ and WAITs here, it'll be handled by z80ex_step */
@@ -271,7 +271,7 @@ int z80ex_int(void)
 			}
 			z80ex.tstate = tt;
 			break;
-		
+
 		case IM1:
 			R++;
 			TSTATES(2); /* two extra wait-states */
@@ -279,7 +279,7 @@ int z80ex_int(void)
 			value the I register has. 13 t-states (2 extra + 11 for RST). */
 			opcodes_base[0xff](); /* RST 38 */
 			break;
-		
+
 		case IM2:
 			R++;
 			/* takes 19 clock periods to complete (seven to fetch the
@@ -288,19 +288,19 @@ int z80ex_int(void)
 			iv=READ_OP();
 			T_WAIT_UNTIL(7);
 			inttemp = (0x100 * I) + iv;
-		
+
 			PUSH(PC, 7, 10);
-				
+
 			READ_MEM(PCL, inttemp++, 13); READ_MEM(PCH, inttemp, 16);
 			MEMPTR = PC;
 			T_WAIT_UNTIL(19);
-			
+
 			break;
 	}
-	
+
 	z80ex.doing_opcode = 0;
 	z80ex.int_vector_req = 0;
-	
+
 	return z80ex.tstate;
 }
 

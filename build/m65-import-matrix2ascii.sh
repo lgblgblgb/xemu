@@ -4,15 +4,15 @@ BEGIN {
 	print "/* from src/vhdl/matrix_to_ascii.vhdl in mega65-core project */"
 	grab = ""
 }
-/^\s*signal\s+matrix_(normal|shift|control|cbm)/ {
+/^\s*signal\s+matrix_(normal|shift|control|cbm|alt)/ {
 	grab = $2
 	gsub(":.*$","",grab)
-	grab = "static const Uint8 " grab "_to_ascii [] = {"
-	comma = " "
+	grab = "static const Uint8 " grab "_to_ascii[KBD_MATRIX_SIZE] = {"
+	comma = ""
 	next
 }
 grab && ($1 ~ /^others|)/) {
-	print grab " };"
+	print grab "};"
 	grab = ""
 	next
 }
@@ -24,4 +24,4 @@ grab && $0 ~ /^\s*[0-9]+\s*=>\s*[xX]"/ {
 	comma = ","
 	next
 }
-' < ../../../mega65-core/src/vhdl/matrix_to_ascii.vhdl
+'

@@ -170,7 +170,6 @@ int ep128snap_load ( const char *fn )
 	//printf("Memory = %Xh %f" NL, block_sizes[BLOCK_MEM], (block_sizes[BLOCK_MEM] - 4) / (float)0x4002);
 
 	xep_rom_seg = -1;	// with snapshots, no XEP rom is possible :( [at least not with ep128emu snapshots too much ...]
-	
 
 	memset(memory, 0xFF, 0x400000);
 	for (pos = 0; pos < 0x100; pos++) {

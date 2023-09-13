@@ -1,5 +1,5 @@
 /* Commodore LCD emulator.
-   Copyright (C)2016,2018-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2018-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Part of the Xemu project: https://github.com/lgblgblgb/xemu
 
 This program is free software; you can redistribute it and/or modify
@@ -16,8 +16,8 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_COMMODORE_LCD_H_INCLUDED
-#define __XEMU_COMMODORE_LCD_H_INCLUDED
+#ifndef XEMU_COMMODORE_LCD_H_INCLUDED
+#define XEMU_COMMODORE_LCD_H_INCLUDED
 
 #define SCREEN_WIDTH            480
 #define SCREEN_HEIGHT           128
@@ -25,9 +25,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SCREEN_FORMAT           SDL_PIXELFORMAT_ARGB8888
 
 #define USE_LOCKED_TEXTURE	1
-#define RENDER_SCALE_QUALITY	1
+#define RENDER_SCALE_QUALITY	0
 
 #define ROM_HACK_COLD_START
-#define ROM_HACK_NEW_ROM_SEARCHING
+//#define ROM_HACK_NEW_ROM_SEARCHING
 
 #endif

@@ -1,30 +1,30 @@
 #!/bin/bash
 # A very lame binary-level DEB package builder ... :-/
 # Part of the Xemu project: https://github.com/lgblgblgb/xemu
-# (C)2016-2020 LGB Gabor Lenart
+# (C)2016-2021 LGB Gabor Lenart
 
 PROJECT="xemu"
-DEPENDENCY="libsdl2-2.0-0 (>= 2.0.4), libc6 (>= 2.15), `dpkg -s libreadline-dev | grep ^Depends: | grep -o 'libreadline[0-9][0-9]*'`, libgtk-3-0 (>= 3.18), wget"
+DEPENDENCY="libsdl2-2.0-0 (>= 2.0.4), libc6 (>= 2.15), `dpkg -s libreadline-dev | grep ^Depends: | grep -o 'libreadline[0-9]*'`, libgtk-3-0 (>= 3.18)"
 AUTHOR="Gábor Lénárt <lgblgblgb@gmail.com>"
 WEBSITE="https://github.com/lgblgblgb/xemu"
 BUGSITE="https://github.com/lgblgblgb/xemu/issues"
-#VERSION="`date '+%Y%m%d%H%M%S'`"
-ROOT=".dist/${PROJECT}_$VERSION"
 ARCH=`dpkg --print-architecture`
-DEB="${PROJECT}_current_$ARCH.deb"
 BINDIRREAL="/usr/bin"
 DATADIRREAL="/usr/share/xemu"
-
-BINDIR="$ROOT$BINDIRREAL"
-DATADIR="$ROOT$DATADIRREAL"
 
 cd `dirname $0` || exit 1
 
 VERSION="`cat ../build/objs/cdate.data`"
+ROOT=".dist/${PROJECT}_${VERSION}"
+BINDIR="${ROOT}${BINDIRREAL}"
+DATADIR="${ROOT}${DATADIRREAL}"
+DEB="${PROJECT}_${VERSION}_${ARCH}.deb"
 
-echo "Current directory: `pwd`"
-echo "Build architecture: $ARCH"
-echo "Version: $VERSION"
+echo "* Cur.dir.  : `pwd`"
+echo "* Arch.     : ${ARCH}"
+echo "* Version   : ${VERSION}"
+echo "* Build root: ${ROOT}"
+echo "* Dependency: ${DEPENDENCY}"
 
 rm -fr .dist || exit 1
 
@@ -92,21 +92,17 @@ fakeroot dpkg-deb --build $ROOT || exit 1
 mv .dist/*.deb bin/$DEB
 rm -fr .dist
 
-ls -l bin/$DEB || exit 1
-
 cd bin
+echo "Current directory now: `pwd`"
+
+ls -l $DEB || exit 1
 
 rm -f *.rpm
-fakeroot alien -r $DEB
-pwd
-if [ -f *.rpm ]; then
-	ls -l *.rpm
-	RPM="`ls *.rpm`"
-	echo $RPM
-	mv $RPM `echo $RPM | sed 's/[0-9][0-9-]*/current-1/'`
-	ls -l *.rpm
-else
-	echo "If you see an error with 'alien', do not panic. It is only an ugly extra to convert DEB package to RPM, so you can have an RPM package as well. Which may fail anyway on an RPM based distro, since dependency problems."
-fi
+fakeroot alien -r $DEB || true
+ls -l *.rpm || true
+echo "!! If you see an error with 'alien' and/or anything with RPM files, do not panic."
+echo "!! It is only an ugly extra to convert DEB package to RPM, so you can have an RPM"
+echo "!! package as well. Which may fail anyway on an RPM based distro, since dependency"
+echo "!! problems."
 
 exit 0

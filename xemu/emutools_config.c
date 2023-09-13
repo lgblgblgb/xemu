@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -15,99 +15,427 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
+#ifndef XEMU_CONFIGDB_SUPPORT
+#error "XEMU_CONFIGDB_SUPPORT was not defined in your xemu-target.h but xemu/emutools_config.c got compiled!"
+#else
+
 #include "xemu/emutools.h"
 #include "xemu/emutools_files.h"
 #include "xemu/emutools_config.h"
 #include <string.h>
 #include <errno.h>
+// About using strtod and maybe strtol too, some issues on Windows:
+// ERROR: FIXME: windows does not now about HUGE_VALF and VALL ... it seems it want .._VAL with +/- sign?
+// Also FIXME: widnows talks about EINVAL as well :-O
+// https://docs.microsoft.com/en-us/cpp/c-runtime-library/reference/strtod-strtod-l-wcstod-wcstod-l?view=msvc-160
+// ... but maybe that is for invalid paramers only (null pointer, invalid base, such like that)
+// it seems windows needs math.h to have HUGE_VAL :-O
+#include <math.h>
+// Also, stdlib.h "should" be needed anyway
+#include <stdlib.h>
 
 
 static struct xemutools_config_st *config_head = NULL;
+static struct xemutools_config_st *config_current;
+
+static int configdb_finalized = 0;	// no new option can be defined if it's set to non-zero (after first use of any parse functionality)
+static int config_file_was_never_open = 1;
+
+static const char CONFIGDB_ERROR_MSG[] = "Xemu internal ConfigDB error:";
 
 
-
-static inline int check_string_size ( const char *s )
+void xemucfg_set_str ( char **ptr, const char *value )
 {
-	if (!s)
-		return 0;
-	return strlen(s) >= CONFIG_VALUE_MAX_LENGTH;
+	if (value) {
+		size_t len = strlen(value);
+		*ptr = xemu_realloc(*ptr, len + 1);	// need space for '\0' at the end of the string as well
+		if (len)
+			memcpy(*ptr, value, len);	// probably memcpy() with len == 0 is not problematic, but who knows on some architectures ...
+		(*ptr)[len] = '\0';
+	} else if (*ptr) {
+		free(*ptr);
+		*ptr = NULL;
+	}
 }
 
 
-
-void xemucfg_define_option ( const char *optname, enum xemutools_option_type type, void *defval, const char *help )
+const char *xemucfg_get_optname ( void *dataptr )
 {
-	struct xemutools_config_st *entry;
-	if (type == OPT_STR && check_string_size(defval))
-		FATAL("Xemu internal config error: too long default option for option '%s'", optname);
-	entry = xemu_malloc(sizeof(struct xemutools_config_st));
+	for (const struct xemutools_config_st *p = config_head; p; p=p->next)
+		if (dataptr == p->opt_ANY.p)
+			return p->name;
+	return NULL;
+}
+
+
+void xemucfg_set_options_to_default ( const void *ptrs[] )
+{
+	if (!ptrs)
+		return;
+	for (int a = 0; ptrs[a]; a++)
+		for (const struct xemutools_config_st *p = config_head;; p=p->next)
+			if (!p) {
+				FATAL("%s(): could not find setting for ptr %p (position arg: %d)", __func__, ptrs[a], a);
+			} else if (p->opt_ANY.p == ptrs[a]) {
+				switch (p->type) {
+					case XEMUCFG_OPT_STR:
+						xemucfg_set_str(p->opt_str.pp, p->opt_str.defval);
+						break;
+					case XEMUCFG_OPT_NUM:
+						*(p->opt_num.p) = p->opt_num.defval;
+						break;
+					case XEMUCFG_OPT_BOOL:
+						*(p->opt_bool.p) = p->opt_bool.defval;
+						break;
+					case XEMUCFG_OPT_FLOAT:
+						*(p->opt_float.p) = p->opt_float.defval;
+						break;
+					default:
+						FATAL("%s(): no support for #%d type which option '%s' has (position arg: %d)", __func__, (int)p->type, p->name, a);
+				}
+				break;
+			}
+}
+
+
+void xemucfg_add_flags_to_options ( const void *ptrs[], const unsigned int flags )
+{
+	if (!ptrs || !flags)
+		return;
+	for (int a = 0; ptrs[a]; a++)
+		for (struct xemutools_config_st *p = config_head;; p=p->next)
+			if (!p) {
+				FATAL("%s(): could not find setting for ptr %p (position arg: %d)", __func__, ptrs[a], a);
+			} else if (p->opt_ANY.p == ptrs[a]) {
+				p->flags |= flags;
+				break;
+			}
+}
+
+
+// Warning! No check, be sure to call this ONLY if "p" has really p->type == XEMUCFG_OPT_STR!
+static int is_str_opt_default ( struct xemutools_config_st *p )
+{
+	if (*p->opt_str.pp == NULL)
+		return p->opt_str.defval == NULL ? 1 : 0;
+	if (p->opt_str.defval == NULL)
+		return 0;
+	return !strcmp(*p->opt_str.pp, p->opt_str.defval);
+}
+
+
+static const char *set_option_value ( struct xemutools_config_st *p, const void *value, const enum xemutools_config_source source )
+{
+	static char error_str[128];
+	if ((p->flags & XEMUCFG_FLAG_DUMMY))
+		return NULL;
+	if (value == NULL && p->type != XEMUCFG_OPT_STR)
+		FATAL("%s option %s gets value to set as NULL", CONFIGDB_ERROR_MSG, p->name);
+	int error_flag = 0;
+	int i;
+	double f;
+	switch (p->type) {
+		case XEMUCFG_OPT_STR:
+			xemucfg_set_str(p->opt_str.pp, value);
+			break;
+		case XEMUCFG_OPT_NUM:
+			i = *(int*)value;
+			if (i < p->opt_num.min) {
+				i = p->opt_num.min;
+				error_flag = 1;
+			}
+			if (i > p->opt_num.max) {
+				i = p->opt_num.max;
+				error_flag = 1;
+			}
+			if (error_flag)
+				snprintf(error_str, sizeof error_str, "requires integer value between %d and %d, your value of %d is invalid",
+					p->opt_num.min, p->opt_num.max, *(int*)value
+				);
+			*p->opt_num.p = i;
+			break;
+		case XEMUCFG_OPT_BOOL:
+			i = *(int*)value;
+			if (i != 0 && i != 1) {
+				error_flag = 1;
+				snprintf(error_str, sizeof error_str, "requires boolean value 0 or 1, your value was %d", i);
+			}
+			*(int*)p->opt_bool.p = !!i;
+			break;
+		case XEMUCFG_OPT_FLOAT:
+			f = *(double*)value;
+			if (f < p->opt_float.min) {
+				f = p->opt_float.min;
+				error_flag = 1;
+			}
+			if (f > p->opt_float.max) {
+				f = p->opt_float.max;
+				error_flag = 1;
+			}
+			if (error_flag)
+				snprintf(error_str, sizeof error_str, "requires float value between %f and %f, your value of %f is invalid",
+					p->opt_float.min, p->opt_float.max, *(double*)value
+				);
+			*p->opt_float.p = f;
+			break;
+		case XEMUCFG_OPT_PROC:
+			p->opt_proc.p = value;
+			break;
+	}
+	p->source = source;
+	if (error_flag) {
+		// Errors before finalization means, that the defined parameter values ARE invalid.
+		// Which should not happen, and must be treated as fatal errors, ASAP!
+		if (!configdb_finalized)
+			FATAL("%s Invalid default value at defining option: %s", CONFIGDB_ERROR_MSG, error_str);
+		return error_str;
+	} else
+		return NULL;
+}
+
+
+int xemucfg_str2int ( const char *s, int *result )
+{
+	int base;
+	// Own logic to try to identify base-16 and base-2
+	// The base=0 for strtol() trick is not so nice, as it does not recognize
+	// "fancy" prefixes, but it also recognizes octal with starting of "0"
+	// which can be VERY confusing and I want to avoid!
+	if (!strncasecmp(s, "0x", 2)) {
+		base = 16;
+		s += 2;
+	} else if (s[0] == '$') {
+		base = 16;
+		s++;
+	} else if (!strncasecmp(s, "0b", 2)) {
+		base = 2;
+		s += 2;
+	} else if (s[0] == '%') {
+		base = 2;
+		s++;
+	} else if (s[0] != '\0' && !strcasecmp(s + strlen(s) - 1, "h")) {
+		base = 16;
+	} else if (!strncasecmp(s, "0o", 2)) {	// heh, maybe somebody use octal, but please, no simple "0" prefix, that stupid! use "0o"
+		base = 8;
+		s += 2;
+	} else
+		base = 10;
+	char *endptr;
+	errno = 0;
+	// yes-yes, maybe your OS, your computer etc has "long int" the same size as "int" but it's not universal
+	// and for some reason there is no function strtoi() for int, just for longs ... Dunno why ...
+	long int res = strtol(s, &endptr, base);
+	if (((res == LONG_MIN || res == LONG_MAX) && errno == ERANGE) || res < INT_MIN || res > INT_MAX || endptr == s || (*endptr != '\0' && strcasecmp(endptr ,"h")))
+		return 1;
+	*result = (int)res;
+	return 0;
+}
+
+
+int xemucfg_str2double ( const char *s, double *result )
+{
+	char *endptr;
+	errno = 0;
+	double res = strtod(s, &endptr);
+	// Still we would like to detect problems, and want result which would fit into "int" as well, thush the INT_MIN and INT_MAX here
+	if (((res == HUGE_VAL || res == -HUGE_VAL || res == 0) && errno == ERANGE) || res <= (double)INT_MIN || res >= (double)INT_MAX || endptr == s || *endptr != '\0')
+		return 1;
+	*result = res;
+	return 0;
+}
+
+
+int xemucfg_str2bool ( const char *s, int *result )
+{
+	if (!strcasecmp(s, "yes") || !strcasecmp(s, "on") || !strcmp(s, "1") || !strcasecmp(s, "true")) {
+		*result = 1;
+		return 0;
+	}
+	if (!strcasecmp(s, "no") || !strcasecmp(s, "off") || !strcmp(s, "0") || !strcasecmp(s, "false")) {
+		*result = 0;
+		return 0;
+	}
+	return 1;
+}
+
+
+static const char *set_option_value_from_string ( struct xemutools_config_st *p, const char *value, const char *optname_fullspec, const enum xemutools_config_source source )
+{
+	if ((p->flags & XEMUCFG_FLAG_DUMMY))
+		return NULL;
+	int i;
+	double f;
+	switch (p->type) {
+		case XEMUCFG_OPT_STR:
+			return set_option_value(p, (void*)value, source);
+		case XEMUCFG_OPT_NUM:
+			if (xemucfg_str2int(value, &i))
+				return "integer value has invalid syntax";
+			return set_option_value(p, &i, source);
+		case XEMUCFG_OPT_FLOAT:
+			if (xemucfg_str2double(value, &f))
+				return "float value has invalid syntax";
+			return set_option_value(p, &f, source);
+		case XEMUCFG_OPT_BOOL:
+			if (xemucfg_str2bool(value, &i))
+				return "boolean value must be yes/on/1/true OR no/off/0/false";
+			return set_option_value(p, &i, source);
+		case XEMUCFG_OPT_PROC:
+			// TODO: book all "proc" events (value and optname_full - this second one needed for @... prefixes)
+			// so config save can save those!
+			//return (*(xemucfg_parser_callback_func_t)(p->opt_proc.p))(p, optname_fullspec, value);
+			return p->opt_proc.p(p, optname_fullspec, value);
+	}
+	return "unknown code-path";
+}
+
+
+static void define_core_options ( void );
+
+
+// This internal function may leaves some fields unfilled!
+// The various xemcfg_define_..._option() functions must set those up!
+static void define_new_option ( const char *optname, enum xemutools_option_type type, const char *help, void *storage )
+{
+	static int core_definitions = 0;
+	if (!core_definitions) {
+		// Define some options BEFORE the requested one, if this is the first requested.
+		// Yay, define_core_options() will call this routine, be careful :-O
+		core_definitions = 1;
+		define_core_options();
+	}
+	if (configdb_finalized)
+		FATAL("%s cannot define new option '%s', DB is already finalized!", CONFIGDB_ERROR_MSG, optname);
+	if (optname == NULL)
+		FATAL("%s optname = NULL for define_new_option()", CONFIGDB_ERROR_MSG);
+	if (strlen(optname) > OPT_NAME_MAX_LENGTH)
+		FATAL("%s optname is too long string for define_new_option() at defining option %s", CONFIGDB_ERROR_MSG, optname);
+	if (storage == NULL)
+		FATAL("%s storage = NULL for define_new_option() at defining option %s", CONFIGDB_ERROR_MSG, optname);
+	config_current = xemu_malloc(sizeof(struct xemutools_config_st));
 	if (!config_head) {
-		config_head = entry;
-		entry->next = NULL;
+		config_head = config_current;
+		config_current->next = NULL;
 	} else {
 		struct xemutools_config_st *p = config_head, *p_prev = NULL;
 		for (;;) {
 			// we want to manage alphabet sorted list just for nice help output, and for checking re-definition assertion in one step as well
 			int ret = strcasecmp(optname, p->name);
 			if (!ret)
-				FATAL("Xemu internal config error: trying to re-define option '%s'", optname);
+				FATAL("%s trying to re-define option '%s'", CONFIGDB_ERROR_MSG, optname);
 			if (ret < 0) {	// we want the first entry already later in alphabet than current one, insert new entry before that!
-				entry->next = p;
+				config_current->next = p;
 				if (p_prev)
-					p_prev->next = entry;
+					p_prev->next = config_current;
 				else
-					config_head = entry;
+					config_head = config_current;
 				break;
 			}
 			if (p->next) {
 				p_prev = p;
 				p = p->next;
 			} else {
-				p->next = entry;
-				entry->next = NULL;
+				p->next = config_current;
+				config_current->next = NULL;
 				break;
 			}
 
 		}
 	}
-	entry->name = xemu_strdup(optname);
-	entry->type = type;
-	switch (type) {
-		case OPT_FLOAT:
-			entry->value = xemu_malloc(sizeof(double));
-			*(double*)(entry->value) = *(double*)defval;
-			break;
-		case OPT_STR:
-			entry->value = (defval != NULL) ? xemu_strdup(defval) : NULL;
-			break;
-		default:
-			entry->value = defval;
-			break;
-	}
-	//entry->value = (defval && type == OPT_STR) ? xemu_strdup(defval) : defval;
-	entry->help = help;
+	static const char no_help[] = "(no help)";
+	config_current->name = optname;
+	config_current->type = type;
+	config_current->source = CONFIG_SOURCE_DEFAULT;	// should be overriden anyway on setting an option value (even for default value)
+	config_current->help = (help && *help) ? help : no_help;
+	config_current->flags = 0;
+	config_current->opt_ANY.p = storage;
+	if (type == XEMUCFG_OPT_STR)
+		*config_current->opt_str.pp = NULL;
 }
 
 
-void xemucfg_define_bool_option   ( const char *optname, int defval, const char *help ) {
-	xemucfg_define_option(optname, OPT_BOOL, (void*)(intptr_t)(defval ? 1 : 0), help);
-}
-void xemucfg_define_str_option    ( const char *optname, const char *defval, const char *help ) {
-	xemucfg_define_option(optname, OPT_STR, (void*)defval, help);
-}
-void xemucfg_define_num_option    ( const char *optname, int defval, const char *help ) {
-	xemucfg_define_option(optname, OPT_NUM, (void*)(intptr_t)defval, help);
-}
-void xemucfg_define_float_option  ( const char *optname, double defval, const char *help ) {
-	xemucfg_define_option(optname, OPT_FLOAT, &defval, help);
-}
-void xemucfg_define_proc_option   ( const char *optname, xemucfg_parser_callback_func_t cb, const char *help ) {
-	xemucfg_define_option(optname, OPT_PROC, (void*)cb, help);
-}
-void xemucfg_define_switch_option ( const char *optname, const char *help ) {
-	xemucfg_define_option(optname, OPT_NO, (void*)(intptr_t)0, help);
+
+void xemucfg_define_bool_option   ( const char *optname, const int defval, const char *help, int *storage )
+{
+	define_new_option(optname, XEMUCFG_OPT_BOOL, help, storage);
+	// return value (error message) is ignored since in define stage (configdb_finalized is zero) it will
+	// be fatal error anyway, triggered by set_option_value()
+	(void)set_option_value(config_current, &defval, CONFIG_SOURCE_DEFAULT);
+	config_current->opt_bool.defval = *config_current->opt_bool.p;
 }
 
+void xemucfg_define_switch_option ( const char *optname, const char *help, int *storage )
+{	// Really, this function defines a BOOL typed option, same as "bool" however the default value is hardcoded to be zero.
+	xemucfg_define_bool_option(optname, 0, help, storage);
+}
+
+static void xemucfg_define_dummy_option  ( const char *optname, const char *help, int flags )
+{
+	static int dummy = 0;
+	define_new_option(optname, XEMUCFG_OPT_BOOL, help, &dummy);
+	config_current->flags = flags | XEMUCFG_FLAG_DUMMY;
+	config_current->opt_bool.defval = 0;
+}
+
+void xemucfg_define_str_option    ( const char *optname, const char *defval, const char *help, char **storage ) {
+	define_new_option(optname, XEMUCFG_OPT_STR, help, storage);
+	(void)set_option_value(config_current, defval, CONFIG_SOURCE_DEFAULT);
+	config_current->opt_str.defval = defval;
+}
+
+void xemucfg_define_num_option    ( const char *optname, const int defval, const char *help, int *storage, int min, int max )
+{
+	if (min >= max)
+		FATAL("%s cannot define new option '%s', given numeric range is irreal: %d ... %d", CONFIGDB_ERROR_MSG, optname, min, max);
+	define_new_option(optname, XEMUCFG_OPT_NUM, help, storage);
+	config_current->opt_num.min = min;
+	config_current->opt_num.max = max;
+	(void)set_option_value(config_current, &defval, CONFIG_SOURCE_DEFAULT);
+	config_current->opt_num.defval = *config_current->opt_num.p;
+}
+
+void xemucfg_define_float_option  ( const char *optname, const double defval, const char *help, double *storage, double min, double max )
+{
+	if (min >= max)
+		FATAL("%s cannot define new option '%s', given float range is irreal: %f ... %f", CONFIGDB_ERROR_MSG, optname, min, max);
+	define_new_option(optname, XEMUCFG_OPT_FLOAT, help, storage);
+	config_current->opt_float.min = min;
+	config_current->opt_float.max = max;
+	(void)set_option_value(config_current, &defval, CONFIG_SOURCE_DEFAULT);
+	config_current->opt_float.defval = *config_current->opt_float.p;
+}
+
+void xemucfg_define_proc_option   ( const char *optname, xemucfg_parser_callback_func_t cb, const char *help )
+{
+	define_new_option(optname, XEMUCFG_OPT_PROC, help, cb);
+}
+
+
+
+void xemucfg_define_bool_option_multi   ( const struct xemutools_configdef_bool_st   p[] ) {
+	for (int i = 0; p[i].optname; i++)
+		xemucfg_define_bool_option  (p[i].optname, p[i].defval, p[i].help, p[i].store_here);
+}
+void xemucfg_define_switch_option_multi ( const struct xemutools_configdef_switch_st p[] ) {
+	for (int i = 0; p[i].optname; i++)
+		xemucfg_define_switch_option(p[i].optname, p[i].help, p[i].store_here);
+}
+void xemucfg_define_str_option_multi    ( const struct xemutools_configdef_str_st    p[] ) {
+	for (int i = 0; p[i].optname; i++)
+		xemucfg_define_str_option   (p[i].optname, p[i].defval, p[i].help, p[i].store_here);
+}
+void xemucfg_define_num_option_multi    ( const struct xemutools_configdef_num_st    p[] ) {
+	for (int i = 0; p[i].optname; i++)
+		xemucfg_define_num_option   (p[i].optname, p[i].defval, p[i].help, p[i].store_here, p[i].min, p[i].max);
+}
+void xemucfg_define_float_option_multi  ( const struct xemutools_configdef_float_st  p[] ) {
+	for (int i = 0; p[i].optname; i++)
+		xemucfg_define_float_option (p[i].optname, p[i].defval, p[i].help, p[i].store_here, p[i].min, p[i].max);
+}
+void xemucfg_define_proc_option_multi   ( const struct xemutools_configdef_proc_st   p[] ) {
+	for (int i = 0; p[i].optname; i++)
+		xemucfg_define_proc_option  (p[i].optname, p[i].cb, p[i].help);
+}
 
 
 static struct xemutools_config_st *search_option ( const char *name )
@@ -120,110 +448,105 @@ static struct xemutools_config_st *search_option ( const char *name )
 			break;
 		else
 			p = p->next;
-	return (p && s && p->type != OPT_PROC) ? NULL : p;
+	return (p && s && p->type != XEMUCFG_OPT_PROC) ? NULL : p;
 }
-
 
 
 static void dump_help ( void )
 {
-	struct xemutools_config_st *p = config_head;
 	printf("Available command line options:" NL NL);
-	while (p) {
+	for (struct xemutools_config_st *p = config_head; p != NULL; p = p->next) {
+		if ((p->flags & XEMUCFG_FLAG_FILE_ONLY))
+			continue;
 		const char *t = "";
-		switch (p->type) {
-			case OPT_NO: t = "NO ARG"; break;
-			case OPT_BOOL: t = "bool"; break;
-			case OPT_NUM: t = "int-num"; break;
-			case OPT_FLOAT: t = "float-num"; break;
-			case OPT_STR: t = "str"; break;
-			case OPT_PROC: t = "spec"; break;
-		}
-		printf("-%-16s  (%s) %s" NL, p->name, t, p->help ? p->help : "(no help is available)");
-		p = p->next;
+		if ((p->flags & XEMUCFG_FLAG_FIRST_ONLY))
+			t = "(1st-arg!)  ";
+		/*else if ((p->flags & XEMUCFG_FLAG_DUMMY))
+			t = "            ";*/
+		else
+			switch (p->type) {
+				case XEMUCFG_OPT_BOOL:	t = "(bool)      "; break;
+				case XEMUCFG_OPT_NUM:	t = "(int-num)   "; break;
+				case XEMUCFG_OPT_FLOAT:	t = "(float-num) "; break;
+				case XEMUCFG_OPT_STR:	t = "(str)       "; break;
+				case XEMUCFG_OPT_PROC:	t = "(spec)      "; break;
+			}
+		printf("-%-16s  %s%s" NL, p->name, t, p->help);
 	}
+	printf(NL "Bool(-ean) options can be written without parameter if it means (1/on/yes/true)." NL);
 }
 
 
-#define OPT_ERROR_CMDLINE(...) do { ERROR_WINDOW("Command line error: " __VA_ARGS__); return 1; } while(0)
-
-
-static const char *set_boolean_value ( const char *str, void **set_this )
+static char *get_config_string_representation ( const char *initial_part, const unsigned int forbidden_flags )
 {
-	if (!strcasecmp(str, "yes") || !strcasecmp(str, "on") || !strcmp(str, "1") || !strcasecmp(str, "true")) {
-		*set_this = (void*)1;
-		return NULL;
-	}
-	if (!strcasecmp(str, "no") || !strcasecmp(str, "off") || !strcmp(str, "0") || !strcasecmp(str, "false")) {
-		*set_this = (void*)0;
-		return NULL;
-	}
-	return "needs a boolean parameter (0/1 or off/on or no/yes)";
-}
-
-
-static char *get_config_string_representation ( const char *initial_part )
-{
-	struct xemutools_config_st *cfg = config_head;
 	char *out = xemu_strdup(initial_part ? initial_part : "");
-	while (cfg) {
+	for (struct xemutools_config_st *p = config_head; p != NULL; p = p->next) {
+		if ((p->flags & (XEMUCFG_FLAG_CLI_ONLY | XEMUCFG_FLAG_DUMMY)))
+			continue;
 		char buffer[256 + PATH_MAX];
 		int r = 0;	// sigh, gcc is stupid, it must be set, even if it see all cases are handled later ...
-		switch (cfg->type) {
-			case OPT_STR:
-				r = snprintf(buffer, sizeof buffer, NL "## %s" NL "## (string param)" NL "%s%s = %s" NL,
-					cfg->help,
-					cfg->value ? "" : "#",
-					cfg->name,
-					cfg->value ? (const char *)cfg->value : ""
+		const int forbid = p->flags & forbidden_flags;
+		// We want to dump configDB in a way, that:
+		// * includes the help
+		// * values left at their default values are just there as comment
+		switch (p->type) {
+			case XEMUCFG_OPT_STR:
+				r = snprintf(buffer, sizeof buffer, NL "## %s" NL "## (string param)" NL "%s%s = \"%s\"" NL,
+					p->help,
+					is_str_opt_default(p) || forbid ? "#" : "",
+					p->name,
+					*p->opt_str.pp ? *p->opt_str.pp : ""
 				);
 				break;
-			case OPT_NO:
-				r = snprintf(buffer, sizeof buffer, NL "## %s" NL "## (no param at all, use the option only)" NL "%s%s" NL,
-					cfg->help,
-					cfg->value ? "" : "#",
-					cfg->name
+			case XEMUCFG_OPT_BOOL:
+				r = snprintf(buffer, sizeof buffer, NL "## %s" NL "## (boolean param)" NL "%s%s = %s" NL,
+					p->help,
+					*p->opt_bool.p == p->opt_bool.defval || forbid ? "#" : "",
+					p->name,
+					*p->opt_bool.p ? "true" : "false"
 				);
 				break;
-			case OPT_BOOL:
-				r = snprintf(buffer, sizeof buffer, NL "## %s" NL "## (boolean param)" NL "%s = %s" NL,
-					cfg->help,
-					cfg->name,
-					(int)(intptr_t)cfg->value ? "yes" : "no"
+			case XEMUCFG_OPT_NUM:
+				r = snprintf(buffer, sizeof buffer, NL "## %s" NL "## (integer param)" NL "%s%s = %d" NL,
+					p->help,
+					*p->opt_num.p == p->opt_num.defval || forbid ? "#" : "",
+					p->name,
+					*p->opt_num.p
 				);
 				break;
-			case OPT_NUM:
-				r = snprintf(buffer, sizeof buffer, NL "## %s" NL "## (integer param)" NL "%s = %d" NL,
-					cfg->help,
-					cfg->name,
-					(int)(intptr_t)cfg->value
+			case XEMUCFG_OPT_FLOAT:
+				r = snprintf(buffer, sizeof buffer, NL "## %s" NL "## (real-num param)" NL "%s%s = %f" NL,
+					p->help,
+					*p->opt_float.p == p->opt_float.defval || forbid ? "#" : "",
+					p->name,
+					*p->opt_float.p
 				);
 				break;
-			case OPT_FLOAT:
-				r = snprintf(buffer, sizeof buffer, NL "## %s" NL "## (real-num param)" NL "%s = %f" NL,
-					cfg->help,
-					cfg->name,
-					*(double*)cfg->value
-				);
-				break;
-			case OPT_PROC:
+			case XEMUCFG_OPT_PROC:
 				r = snprintf(buffer, sizeof buffer, NL "## %s" NL "## (SPECIAL)" NL "#%s" NL,
-					cfg->help,
-					cfg->name
+					p->help,
+					p->name
 				);
 				break;
+		}
+		if (forbid) {
+			static const char no_save_txt[] = "## (NOT saved actively into cfg-files to avoid confusion)" NL;
+			const int r2 = r + strlen(no_save_txt);
+			if (r2 < sizeof(buffer) - 1) {
+				strcpy(buffer + r, no_save_txt);
+				r = r2;
+			}
 		}
 		if (r >= sizeof(buffer) - 1) {
 			free(out);
-			FATAL("Too large result for dumping config option '%s'!" NL, cfg->name);
+			FATAL("%s Too large result for dumping config option '%s'!", CONFIGDB_ERROR_MSG, p->name);
 		}
 		out = xemu_realloc(out, strlen(out) + strlen(buffer) + 1);
 		strcpy(out + strlen(out), buffer);
-		cfg = cfg->next;
 	}
 	if (strlen(out) > CONFIG_FILE_MAX_SIZE) {
 		free(out);
-		FATAL("Too large config file generated in %s", __func__);
+		FATAL("%s Too large config file generated in %s", CONFIGDB_ERROR_MSG,  __func__);
 	}
 	return out;
 }
@@ -231,30 +554,32 @@ static char *get_config_string_representation ( const char *initial_part )
 
 int xemucfg_save_config_file ( const char *filename, const char *initial_part, const char *cry )
 {
-	char *out = get_config_string_representation(initial_part);
+	char *out = get_config_string_representation(initial_part, XEMUCFG_FLAG_NO_SAVE);
 	int ret = out[0] ? xemu_save_file(filename, out, strlen(out), cry) : 0;
 	free(out);
 	return ret;
 }
 
 
-static char *get_config_template_string_representation ( void )
+static char *get_config_template_string_representation ( const char *template_fn, const char *default_fn )
 {
 	char templ[4096];
 	sprintf(templ,
-		"# Config template for XEMU/%s %s (%s)" NL
+		"# Config template for XEMU/%s %s (%s) file %s" NL
 		"# ----" NL
-		"# DO NOT EDIT THIS FILE - THIS WILL BE OVERWRITTEN" NL
-		"# Instead copy this file to a custom name and edit that, if needed." NL
-		"# This file is never read back, only written out as template / reference." NL
+		"# !!DO NOT EDIT THIS FILE - THIS WILL BE OVERWRITTEN EACH TIME YOU START XEMU!!" NL
+		"# This is only a *TEMPLATE* file, never loaded by Xemu. For actual configuration" NL
+		"# please edit the file %s instead. You can use this file to learn about the set" NL
+		"# of config options and format though." NL
 		"# ----" NL
 		"# Rules: basically option = value syntax." NL
-		"# 'switch' options does not have value, so you mustn't write the '= value' part." NL
-		"# Option values expecting file names can start with letters '@' or '#'." NL
-		"# In case of '@' the rest of the filename/path is interpreted as relative to the" NL
-		"# preferences directory. In case of '#', the rest of the filename/path will be searched" NL
-		"# at some common places (including the preferences directory, but also in the same directory" NL
-		"# as the binary is, or in case of UNIX-like OS, even the common data directory)" NL
+		"# String values optionally can be encolsed by '\"', and this is the only way" NL
+		"# to have empty string. Option values expecting file names can start with" NL
+		"# letters '@' or '#'. In case of '@' the rest of the filename/path is" NL
+		"# interpreted as relative to the preferences directory. In case of '#', the" NL
+		"# rest of the filename/path will be searched at some common places (including" NL
+		"# the preferences directory, but also in the same directory as the binary is, or" NL
+		"# in case of UNIX-like OS, even the common data directory)" NL
 		"# ----" NL
 		"# SDL preference directory for this installation: %s" NL
 		"# Binary base directory when generating this file: %s" NL
@@ -267,28 +592,35 @@ static char *get_config_template_string_representation ( void )
 #endif
 		"# ----" NL NL NL,
 		/* args */
-		xemu_app_name,
-		XEMU_BUILDINFO_CDATE,
-		XEMU_ARCH_NAME,
+		xemu_app_name, XEMU_BUILDINFO_CDATE, XEMU_ARCH_NAME,
+		template_fn,
+		default_fn,
 		sdl_pref_dir,
 		sdl_base_dir
 	);
-	return get_config_string_representation(templ);
+	return get_config_string_representation(templ, 0);
 }
 
 
-int xemucfg_parse_config_file ( const char *filename_in, int open_can_fail )
+static inline void finalize_configdb ( void )
 {
+	configdb_finalized = 1;
+}
+
+
+int xemucfg_parse_config_file ( const char *filename_in, const char *open_fail_msg )
+{
+	finalize_configdb();
 	char *p, cfgmem[CONFIG_FILE_MAX_SIZE + 1];
-	int  lineno = xemu_load_file(filename_in, cfgmem, 0, CONFIG_FILE_MAX_SIZE, open_can_fail ? NULL : "Cannot load specified configuration file.");
-	if (lineno < 0) {
-		if (open_can_fail)
-			return 1;
-		XEMUEXIT(1);
-	}
+	int  lineno = xemu_load_file(filename_in, cfgmem, 0, CONFIG_FILE_MAX_SIZE, open_fail_msg);
+	if (lineno < 0)
+		return 1;
+	config_file_was_never_open = 0;
 	cfgmem[lineno] = 0;	// terminate string
-	if (strlen(cfgmem) != lineno)
-		FATAL("Config: bad config file (%s), contains NULL character (not a text file)", xemu_load_filepath);
+	if (strlen(cfgmem) != lineno) {
+		ERROR_WINDOW("Bad config file (%s),\ncontains '\\0' character (not a text file?)", xemu_load_filepath);
+		return 1;
+	}
 	p = cfgmem;
 	lineno = 1;	// line number counter in read config file from now
 	do {
@@ -333,41 +665,40 @@ int xemucfg_parse_config_file ( const char *filename_in, int open_can_fail )
 					p1 = NULL;
 			} else
 				p1 = NULL;
-			printf("Line#%d = \"%s\",\"%s\"" NL, lineno, p, p1 ? p1 : "<no-specified>");
+			DEBUG("Line#%d = \"%s\",\"%s\"" NL, lineno, p, p1 ? p1 : "<no-specified>");
 			o = search_option(p);
-			if (!o)
-				FATAL("Config file (%s) error at line %d: keyword '%s' is unknown.", xemu_load_filepath, lineno, p);
-			if (o->type != OPT_NO && !p1)
-				FATAL("Config file (%s) error at line %d: keyword '%s' requires a value.", xemu_load_filepath, lineno, p);
-			switch (o->type) {
-				case OPT_STR:
-					if (o->value)
-						free(o->value);
-					if (check_string_size(p1))
-						FATAL("Config file (%s) error at line %d: keyword '%s' has too long value", xemu_load_filepath, lineno, p);
-					o->value = xemu_strdup(p1);
-					break;
-				case OPT_BOOL:
-					s = set_boolean_value(p1, &o->value);
-					if (s)
-						FATAL("Config file (%s) error at line %d: keyword '%s' %s, but '%s' is detected.", xemu_load_filepath, lineno, p, s, p1);
-					break;
-				case OPT_NUM:
-					o->value = (void*)(intptr_t)atoi(p1);
-					break;
-				case OPT_FLOAT:
-					*(double*)(o->value) = atof(p1);
-					break;
-				case OPT_NO:
-					if (p1)
-						FATAL("Config file (%s) error at line %d: keyword '%s' DOES NOT require any value, but '%s' is detected.", xemu_load_filepath, lineno, p, p1);
-					o->value = (void*)1;
-					break;
-				case OPT_PROC:
-					s = (*(xemucfg_parser_callback_func_t)(o->value))(o, p, p1);
-					if (s)
-						FATAL("Config file (%s) error at line %d: keyword '%s' is invalid: %s", xemu_load_filepath, lineno, p, s);
-					break;
+			if (!o) {
+				ERROR_WINDOW("Config file (%s) error at line %d:\nkeyword '%s' is unknown.", xemu_load_filepath, lineno, p);
+				return 1;
+			}
+			if ((o->flags & XEMUCFG_FLAG_CLI_ONLY)) {
+				ERROR_WINDOW("Config file (%s) error at line %d:\nkeyword '%s' is a command-line only option, cannot be used in config files", xemu_load_filepath, lineno, p);
+				return 1;
+			}
+			if (o->type == XEMUCFG_OPT_BOOL && !p1)	// Only for bool type, special case: if there is no parameter it means "1" (true)
+				p1 = "1";			// ... though let the common case parser to intepret the textual presentation to our desired value
+			else if (!p1) {
+				ERROR_WINDOW("Config file (%s) error at line %d:\nkeyword '%s' requires a value.", xemu_load_filepath, lineno, p);
+				return 1;
+			}
+			if (o->type == XEMUCFG_OPT_STR) {
+				// Special rules applies only for STR type params and only in config files
+				if (!strcmp(p1, "<NULL>"))	// to force a NULL pointer (more like a debug feature!!)
+					p1 = NULL;
+				else {
+					// remove heading " char - if there is one (by moving the pointer itself)
+					if (*p1 == '"')
+						p1++;
+					// remove trailing " char - if there is one
+					size_t i = strlen(p1);
+					if (i && p1[i - 1] == '"')
+						p1[i - 1] = '\0';
+				}
+			}
+			s = set_option_value_from_string(o, p1, p, CONFIG_SOURCE_FILE);
+			if (s) {
+				ERROR_WINDOW("Config file (%s) error at line %d:\nkeyword '%s': %s", xemu_load_filepath, lineno, p, s);
+				return 1;
 			}
 		}
 		// Prepare for next line
@@ -378,175 +709,188 @@ int xemucfg_parse_config_file ( const char *filename_in, int open_can_fail )
 }
 
 
-static int xemucfg_parse_commandline ( int argc, char **argv, const char *only_this )
+#define OPT_ERROR_CMDLINE(...) do { ERROR_WINDOW("Command line error: " __VA_ARGS__); return 1; } while(0)
+
+
+static int parse_commandline ( int argc, char **argv )
 {
-	// Prepare the config template, since we want before modifying the default values by CLI/config file
-	// However we want to save it later, if parsing was OK at all, eg we don't want to write files on help
-	// requests, etc!
-	static int template_needs_to_be_saved = 1;
-	static char *template_string = NULL;
-	if (!template_string && template_needs_to_be_saved)
-		template_string = get_config_template_string_representation();
-	// Skip arg-0, which is program name ...
+	finalize_configdb();
+	while (argc) {
+		if (argv[0][0] != '-')
+			OPT_ERROR_CMDLINE("Invalid option '%s', must start with '-'", *argv);
+		if (argv[0][1] == '-')
+			OPT_ERROR_CMDLINE("Invalid option '%s', options start with '-' and not '--'", *argv);
+		struct xemutools_config_st *p = search_option(*argv + 1);
+		if (!p)
+			OPT_ERROR_CMDLINE("Unknown option '%s'", *argv);
+		if ((p->flags & XEMUCFG_FLAG_FIRST_ONLY))
+			OPT_ERROR_CMDLINE("'%s' must be the first option", *argv);
+		argc--;
+		argv++;
+		if (p->type == XEMUCFG_OPT_BOOL && (
+			(argc && argv[0][0] == '-') ||			// if next position in CLI seems to be an option (starting with '-')
+			(!argc)						// ... or, we are at the end of CLI
+		)) {
+			set_option_value(p, (void*)&ONE_INT, CONFIG_SOURCE_CLI);	// THEN, it's a boolean parameter without value meaning 'setting to one' (like "-fullscreen" versus "-fullscreen 1")
+		} else {						// ELSE, we *NEED* some parameter for the option!
+			if (!argc)
+				OPT_ERROR_CMDLINE("Option '%s' requires a parameter, but end of command line detected.", argv[-1]);
+			const char *s = set_option_value_from_string(p, *argv, argv[-1] + 1, CONFIG_SOURCE_CLI);
+			if (s) {
+				OPT_ERROR_CMDLINE("Option '%s' error:\n%s", p->name, s);
+			}
+			argc--;
+			argv++;
+		}
+	}
+	DEBUGPRINT("CFG: CLI parsing is done without error." NL);
+	return 0;
+}
+
+
+static const char *custom_config_file_reader ( struct xemutools_config_st *opt, const char *optname, const char *optvalue )
+{
+	xemucfg_parse_config_file(optvalue, "Cannot open/read selected config file");
+	return NULL;	// hmm, call of xemucfg_parse_config_file() catched errors anyway (hopefully!)
+}
+
+
+static const char skipconfigfile_option_name[] = "skipconfigfile";
+
+
+static void define_core_options ( void )
+{
+	// Here must come some self-defining options (if we have any)
+	// we want to define anyway, regardless of what an Xemu emulator target defines or not
+	xemucfg_define_proc_option("config", custom_config_file_reader, "Use a given config file");
+	config_current->flags = XEMUCFG_FLAG_CLI_ONLY;
+	// These are for completness only as they are not handled "the normal way", but
+	// still nice if help can shows all the options.
+	xemucfg_define_dummy_option("help", "Shows this help screen", XEMUCFG_FLAG_CLI_ONLY | XEMUCFG_FLAG_FIRST_ONLY);
+	xemucfg_define_dummy_option("version", "Dump version info only and exit", XEMUCFG_FLAG_CLI_ONLY | XEMUCFG_FLAG_FIRST_ONLY);
+	xemucfg_define_dummy_option(skipconfigfile_option_name, "Skip loading the default config file", XEMUCFG_FLAG_CLI_ONLY | XEMUCFG_FLAG_FIRST_ONLY);
+}
+
+
+const char *xemucfg_get_default_config_file_name ( void )
+{
+	static char *storage = NULL;
+	if (!storage) {
+		char buf[64];
+		snprintf(buf, sizeof buf, CONFIG_FILE_USE_NAME, xemu_app_name);
+		storage = xemu_strdup(buf);
+	}
+	return storage;
+}
+
+
+static const char *xemucfg_get_template_config_file_name ( void )
+{
+	static char *storage = NULL;
+	if (!storage) {
+		char buf[64];
+		snprintf(buf, sizeof buf, CONFIG_FILE_TEMPL_NAME, xemu_app_name);
+		storage = xemu_strdup(buf);
+	}
+	return storage;
+}
+
+
+int xemucfg_parse_all ( void )
+{
+	int argc = xemu_initial_argc;
+	char **argv = xemu_initial_argv;
+	// Skip program name
 	argc--;
 	argv++;
 #ifdef XEMU_ARCH_MAC
 	// Oh no, another MacOS miss-feature :-O it seems Finder passes a strange parameter to EVERY app it starts!!
 	// Skip that, otherwise the user will experience an error box about unknown option and Xemu exits ...
-	if (argc && !strncmp(argv[0], "-psn_", 5)) {
+	if (argc && !strncmp(argv[0], "-psn_", 5) && !macos_gui_started) {
+		DEBUGPRINT("MACOS: -psn MacOS-madness detected, throwing in some workaround ..." NL);
 		argc--;
 		argv++;
 		macos_gui_started = 1;
+		// FIXME: if we know it's a Mac GUI-started app (we have this -psn...)
+		// wouldn't it better to skip ALL of the command line parsing?
+		// Is there a way in Mac to start program from GUI (finder, or wtf) but
+		// still having CLI options what can make it legit not to do so?
 	}
 #endif
-	while (argc) {
-		struct xemutools_config_st *o;
-		if (*argv[0] != '/' && *argv[0] != '-')
-			OPT_ERROR_CMDLINE("Invalid option '%s', must start with '-'", *argv);
-		if (!strcasecmp(*argv + 1, "h") || !strcasecmp(*argv + 1, "help") || !strcasecmp(*argv + 1, "-help") || !strcasecmp(*argv + 1, "?")) {
-			if (!only_this || (only_this && !strcasecmp(only_this, "help"))) {
-				dump_help();
-				return 1;
-			}
+	// Check some hard-coded options (help, version ...)
+	// This is done by looking only for the FIRST command line parameter (if there's any ...)
+	int skip_config_file = 0;
+	if (argc) {
+		const char *p = argv[0];
+		while (*p == '-' || *p == '/' || *p == '\\')	// skip various option markers, at this point, user may not have idea what is the right syntax yet
+			p++;
+		if (!strcasecmp(p, "h") || !strcasecmp(p, "help") || !strcasecmp(p, "?")) {
+			dump_help();
+			return 1;
+		} else if (!strcasecmp(p, "v") || !strcasecmp(p, "ver")  || !strcasecmp(p, "version")) {
+			DEBUGPRINT("Exiting, because only version information was requested." NL);
+			return 1;	// version info. Simply return, as it's already printed out ;)
+		} else if (!strcasecmp(p, skipconfigfile_option_name)) {
+			// Special option to skip config file parsing. Can be useful if there is an
+			// error in the default config file which prevents user to be able to start Xemu.
+			skip_config_file = 1;
+			// Also "remove" this option from the scope, so cli parser won't see it :)
 			argc--;
 			argv++;
-			continue;
-		}
-		o = search_option(*argv + 1);
-		if (!o)
-			OPT_ERROR_CMDLINE("Unknown option '%s'", *argv);
-		argc--;
-		argv++;
-		if (o->type == OPT_NO) {
-			if (only_this && strcasecmp(only_this, o->name))
-				continue;
-			o->value = (void*)1;
-		} else {
-			const char *s;
-			if (!argc)
-				OPT_ERROR_CMDLINE("Option '%s' requires a parameter, but end of command line detected.", argv[-1]);
-			if (only_this && strcasecmp(only_this, o->name))
-				goto do_not;
-			switch (o->type) {
-				case OPT_STR:
-					if (o->value)
-						free(o->value);
-					if (check_string_size(*argv))
-						OPT_ERROR_CMDLINE("Option '%s' has too long value.", argv[1]);
-					o->value = xemu_strdup(*argv);
-					break;
-				case OPT_BOOL:
-					s = set_boolean_value(*argv, &o->value);
-					if (s)
-						OPT_ERROR_CMDLINE("Option '%s' %s, but '%s' is detected.", argv[-1], s, *argv);
-					break;
-				case OPT_NUM:
-					o->value = (void*)(intptr_t)atoi(*argv);
-					break;
-				case OPT_FLOAT:
-					*(double*)(o->value) = atof(*argv);
-					break;
-				case OPT_PROC:
-					s = (*(xemucfg_parser_callback_func_t)(o->value))(o, argv[-1] + 1, *argv);
-					if (s)
-						OPT_ERROR_CMDLINE("Option '%s' is invalid: %s", argv[-1], s);
-					break;
-				case OPT_NO:
-					break;	// make GCC happy to handle all cases ...
-			}
-		do_not:
-			argc--;
-			argv++;
+			// But continue ...
 		}
 	}
-	DEBUGPRINT("CFG: CLI parsing done (%s)" NL, only_this ? only_this : "ALL options");
-	if (template_string && template_needs_to_be_saved) {
-		char fn[PATH_MAX+1];
-		sprintf(fn, CONFIG_FILE_TEMPL_NAME, xemu_app_name);
-		template_needs_to_be_saved = 0;
-		xemu_save_file(fn, template_string, strlen(template_string), "Cannot save config template");
-		free(template_string);
-		template_string = NULL;
+	// Prepare filenames for default and template configuration files
+	// CONFIG_FILE_*_NAME are expected that the first character is '@' (denoted to pref dir) and contains a '%s' for xemu_app_name
+	// No worries, WLAs here should have anough space for the trailing '\0' because '%s' there is counted.
+	const char *cfg_default_fn = xemucfg_get_default_config_file_name();
+	const char *cfg_template_fn = xemucfg_get_template_config_file_name();
+	// Get config template now!
+	// We want to save this, but we must before parse, to have
+	// the default values. We save it later though!
+	char *config_template_string = get_config_template_string_representation(cfg_template_fn + 1, cfg_default_fn + 1);
+	// Next, we want to parse default config file! Since we want the command line
+	// override this optionally, we do command line parsing after this step only!
+	// ... unless user hasn't disabled parsing it, above ...
+	if (!skip_config_file) {
+		if (xemucfg_parse_config_file(cfg_default_fn, NULL))
+			DEBUGPRINT("CFG: Default config file %s cannot be used" NL, cfg_default_fn);
+		else
+			DEBUGPRINT("CFG: Default config file %s has been used" NL, cfg_default_fn);
+		// check if cfg_default_fn exits, if no (but only if!! - otherwise it would overwrite user's config!)
+		// write out an empty file with some comments, so user would find easily what to edit at all
+		if (config_file_was_never_open) {
+			DEBUGPRINT("CFG: default config file %s does not exist, creating an empty one" NL, cfg_default_fn);
+			char empty_config_file_str[512];
+			const int size = snprintf(empty_config_file_str, sizeof empty_config_file_str,
+				"# Use this (%s) file to put your configuration directives into." NL
+				"# This file is loaded by Xemu automatically during each start-up." NL
+				"# You can have a look on file %s to learn more about the syntax and options," NL
+				"# but you need to use THIS file to edit, not THAT (as that is overwritten" NL
+				"# each time Xemu starts up)." NL NL,
+				cfg_default_fn + 1, cfg_template_fn + 1
+			);
+			xemu_save_file(cfg_default_fn, empty_config_file_str, size, "Cannot save default config file");
+		}
+	} else
+		DEBUGPRINT("CFG: Default config file is SKIPPED by user request!" NL);
+	// And now, we want to parse command line arguments, now it can override already defined values by config file
+	const int ret = parse_commandline(argc, argv);
+	if (!ret) {
+		// save the template (only is cli parsing was OK, otherwise Xemu will exit later, anyway)
+		xemu_save_file(cfg_template_fn, config_template_string, strlen(config_template_string), "Cannot save config template");
 	}
-	return 0;
-}
-
-
-
-int xemucfg_parse_all ( int argc, char **argv )
-{
-	char cfgfn[PATH_MAX];
-	if (xemucfg_parse_commandline(argc, argv, "help"))
-		return 1;
-	sprintf(cfgfn, CONFIG_FILE_USE_NAME, xemu_app_name);
-	if (xemucfg_parse_config_file(cfgfn, 1))
-		DEBUGPRINT("CFG: Default config file %s cannot be used" NL, cfgfn);
-	else
-		DEBUGPRINT("CFG: Default config file %s has been used" NL, cfgfn);
-	return xemucfg_parse_commandline(argc, argv, NULL);
-}
-
-
-int xemucfg_has_option ( const char *name )
-{
-	return (search_option(name) != NULL);
-}
-
-static struct xemutools_config_st *search_option_query ( const char *name, enum xemutools_option_type type )
-{
-	struct xemutools_config_st *p = search_option(name);
-	if (!p)
-		FATAL("Internal ConfigDB error: not defined option '%s' is queried inside Xemu!", name);
-	if (p->type == type || (p->type == OPT_NO && type == OPT_BOOL))
-		return p;
-	FATAL("Internal ConfigDB error: queried option '%s' with different type as defined inside Xemu!", name);
-}
-
-
-const char *xemucfg_get_str ( const char *optname ) {
-	return (const char*)(search_option_query(optname, OPT_STR)->value);
-}
-int xemucfg_get_num ( const char *optname ) {
-	return (int)(intptr_t)(search_option_query(optname, OPT_NUM)->value);
-}
-int xemucfg_get_ranged_num ( const char *optname, int min, int max ) {
-	int ret = xemucfg_get_num(optname);
-	if (ret < min) {
-		WARNING_WINDOW("Bad value (%d) for option '%s': must not be smaller than %d.\nUsing the minimal value.", ret, optname, min);
-		ret = min;
-	}
-	if (ret > max) {
-		WARNING_WINDOW("Bad value (%d) for option '%s': must not be larger than %d.\nUsing the maximal value.", ret, optname, max);
-		ret = max;
-	}
-	return ret;
-}
-int xemucfg_get_bool ( const char *optname ) {
-	return BOOLEAN_VALUE((int)(intptr_t)(search_option_query(optname, OPT_BOOL)->value));
-}
-double xemucfg_get_float ( const char *optname ) {
-	return *(double*)(search_option_query(optname, OPT_FLOAT)->value);
-}
-double xemucfg_get_ranged_float ( const char *optname, double min, double max ) {
-	double ret = xemucfg_get_float(optname);
-	if (ret < min) {
-		WARNING_WINDOW("Bad value (%f) for option '%s': must not be smaller than %f.\nUsing the minimal value.", ret, optname, min);
-		ret = min;
-	}
-	if (ret > max) {
-		WARNING_WINDOW("Bad value (%f) for option '%s': must not be larger than %f.\nUsing the maximal value.", ret, optname, max);
-		ret = max;
-	}
+	free(config_template_string);
 	return ret;
 }
 
 
 int xemucfg_integer_list_from_string ( const char *value, int *result, int maxitems, const char *delims )
 {
-	char buffer[CONFIG_VALUE_MAX_LENGTH], *p;
 	int num = 0;
 	if (!value)
 		return num;
+	char buffer[strlen(value) + 1], *p;
 	strcpy(buffer, value);
 	p = strtok(buffer, delims);
 	while (p) {
@@ -557,3 +901,34 @@ int xemucfg_integer_list_from_string ( const char *value, int *result, int maxit
 	}
 	return num;
 }
+
+
+#ifndef XEMU_RELEASE_BUILD
+void xemucfg_dump_db ( const char *msg )
+{
+	DEBUGPRINT("CFG: --- test dump of ConfigDB follows: %s" NL, msg ? msg : "<no-info>");
+	for (struct xemutools_config_st *p = config_head; p != NULL; p = p->next) {
+		switch (p->type) {
+			case XEMUCFG_OPT_STR:
+				DEBUGPRINT("CFG: %s %p %p %s [%s]" NL, p->name, p->opt_str.pp, *p->opt_str.pp, *p->opt_str.pp, p->help);
+				break;
+			case XEMUCFG_OPT_BOOL:
+				DEBUGPRINT("CFG: %s %p %d [%s]" NL, p->name, p->opt_bool.p, *p->opt_bool.p, p->help);
+				break;
+			case XEMUCFG_OPT_NUM:
+				DEBUGPRINT("CFG: %s %p %d [%s]" NL, p->name, p->opt_num.p, *p->opt_num.p, p->help);
+				break;
+			case XEMUCFG_OPT_FLOAT:
+				DEBUGPRINT("CFG: %s %p %f [%s]" NL, p->name, p->opt_float.p, *p->opt_float.p, p->help);
+				break;
+			case XEMUCFG_OPT_PROC:
+				DEBUGPRINT("CFG: %s %p [%s]" NL, p->name, p->opt_proc.p, p->help);
+				break;
+		}
+	}
+	DEBUGPRINT("CFG: --- end of dump." NL);
+}
+#endif
+
+// XEMU_CONFIGDB_SUPPORT
+#endif

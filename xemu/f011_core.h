@@ -1,6 +1,6 @@
-/* Test-case for a very simple, inaccurate, work-in-progress Commodore 65 / MEGA65 emulator,
-   within the Xemu project. F011 FDC core implementation.
-   Copyright (C)2016,2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+/* F011 FDC (used by Commodore 65 and MEGA65) emulation.
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,21 +16,27 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#ifndef __XEMU_F011_CORE_H_INCLUDED
-#define __XEMU_F011_CORE_H_INCLUDED
+#ifndef XEMU_COMMON_F011_CORE_H_INCLUDED
+#define XEMU_COMMON_F011_CORE_H_INCLUDED
 
-#ifndef D81_SIZE
-#define D81_SIZE 819200
-#endif
+#define FDC_DENY_DISK_ACCESS		0
+#define FDC_ALLOW_DISK_ACCESS		1
+#define FDC_DENY_DISK_ACCESS_ONCE	2
 
 extern void  fdc_write_reg ( int addr, Uint8 data );
 extern Uint8 fdc_read_reg  ( int addr );
 extern void  fdc_init      ( Uint8 *cache_set );
-extern void  fdc_set_disk  ( int in_have_disk, int in_have_write );
+extern void  fdc_set_disk  ( int which, int in_have_disk, int in_have_write );
+extern void  fdc_allow_disk_access ( int in );
+extern int   fdc_get_led_state ( int blink_inc );
+extern int   fdc_get_buffer_cpu_address  ( void );
+extern int   fdc_get_buffer_disk_address ( void );
+extern int   fdc_get_status_a ( const int which );
+extern int   fdc_get_status_b ( const int which );
 
 /* must defined by the user */
-extern int   fdc_cb_rd_sec ( Uint8 *buffer, int offset );
-extern int   fdc_cb_wr_sec ( Uint8 *buffer, int offset );
+extern int   fdc_cb_rd_sec ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector );
+extern int   fdc_cb_wr_sec ( const int which, Uint8 *buffer, const Uint8 side, const Uint8 track, const Uint8 sector );
 
 #ifdef XEMU_SNAPSHOT_SUPPORT
 #include "xemu/emutools_snapshot.h"

@@ -6,12 +6,13 @@
 [![License: GPL-2.0](https://img.shields.io/github/license/lgblgblgb/xemu.svg)](./LICENSE)
 [![Contributors](https://img.shields.io/github/contributors/lgblgblgb/xemu.svg)](https://github.com/lgblgblgb/xemu/graphs/contributors)
 [![GitHub last commit (dev)](https://img.shields.io/github/last-commit/lgblgblgb/xemu/dev?label=Last%20commit%20DEV)](https://github.com/lgblgblgb/xemu/wiki/ReleaseLogDEVEL)
+[![GitHub last commit (next)](https://img.shields.io/github/last-commit/lgblgblgb/xemu/next?label=Last%20commit%20NEXT)](https://github.com/lgblgblgb/xemu/wiki/ReleaseLogNEXT)
 [![GitHub last commit (master)](https://img.shields.io/github/last-commit/lgblgblgb/xemu/master?label=Last%20commit%20MASTER)](https://github.com/lgblgblgb/xemu/wiki/ReleaseLog)
 
 Emulators running on Linux/Unix/Windows/OSX of various (mainly 8 bit) machines,
 including the Commodore LCD and Commodore 65 and MEGA65 as well.
 
-Written by (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+Written by (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 Source repository: https://github.com/lgblgblgb/xemu
 
 Xemu also contains code wasn't written by me (sources I use from others,
@@ -30,6 +31,75 @@ This file is only some place holder :) For some sane documentation, please **vis
 the wiki section of the project, here**:
 
 https://github.com/lgblgblgb/xemu/wiki
+
+## Emulators within the Xemu project
+
+### List of emulators which can be useful:
+
+* **MEGA65**: Emulation of the modern reincarnation of the Commodore 65 with
+  many-many enhancements and new features: https://mega65.org/
+* **Commodore 65**: Emulation of Commodore's final, never finished 8 bit machine,
+  quite rare, and expensive to buy.
+* **Commodore LCD**: Emulation of Commodore's portable LCD based computer, never
+  released, about 4-5 units estimated to exist (much more rare than the
+  Commodore 65, and not possible to get one). I've created the first working
+  emulation of this machine ever. This emulator within Xemu is a refactored
+  version of that emulator of mine.
+* **Enterprise 128**: Emulation of a not so well known but neat, versatile, Z80
+  based computer with very unique features among 8 bit systems, both in
+  hardware and software solutions.
+* **Videoton TV Computer** ("TVC"): Emulation of a Hungarian computer.
+* **Primo**: Emulation of a simple but neat Hungarian computer.
+
+### Not so much useful, unfinished and/or obsoleted but in theory can be compiled and started:
+
+* **Commander X16**: The 8-bit guy's "dream" computer, 65C02 based, not compatible
+  with existing micros. This emulator is old, buggy, missing features, and
+  cannot use modern ROMs for the X16 any more. Please note, this emulator is
+  **nothing** to do with the official X16 emulator, it's just my fun project to
+  emulate X16 by my own, from its documentation only.
+* **Commodore VIC20**: Somewhat barebone emulation of the VIC20, no sound, no
+  storage medium emulation (tape or disk) ...
+* **Commodore GEOS**: This was an unfinished experiment of mine. The intent was
+  creating a very rudimentary C64 emulation just enough to run GEOS, and
+  trying to experiment with custom modifications on GEOS this way, or even
+  creating a free GEOS re-implementation later.
+
+### Absolutely not working, not useable or even cannot be compiled:
+
+* **Commodore 900**: Commodore's never released Z8000 based Coherent UNIX based
+  machine. Currently it does nothing, work-in-progress (on the longer term!).
+* **ZX Spectrum + clones**: Currently unusable, my intent was to emulate the
+  original Speccy to learn about it more in this way, and add some "advanced
+  clones" kind of features later, like ULAplus, and who knows what else.
+* **RC2014**: Z80 based generic "SBC" emulation under the name of RC2014 but will
+  include emulation of several simple projects, just I found the name "RC2014"
+  cool enough to use this name for this emulator.
+* **reCPM**: Another dead project from me (at least in this form): the goal is to
+  create a free CP/M compatible OS with the needed hardware (Z80) emulated as well.
+
+## Supported OSes Xemu can run on
+
+"Mainstream" OSes:
+
+* Linux (including Raspberry Pi OS as well - probably other SBCs as well with Linux
+  as the OS -, though in general, Raspberry Pi can be too slow for certain
+  emulation tasks like emulating MEGA65 at full speed)
+* Windows (there are some problems if Xemu encounters any directory path containing
+  non-US-ascii characters, because of the brainda ... errr ... strange way how
+  Windows handles this compared to other sane OSes)
+* MacOS (Apple silicion shouldn't be a problem)
+
+In general, Xemu should run on other UNIX-like OSes too with no (or minimal) source
+level modification. At least once tested on (which may or may not reflect the current
+state of the project):
+
+* OpenBSD
+* FreeBSD
+* HaikuOS (no native UI, though the then-default OSD UI should work)
+
+Note, the list does not mean the upstream availability of ready-to-use binary builds
+in general, but the possibility that you can compile Xemu and that "should" work.
 
 ## Quickest start (Xemu running in your web browser!)
 
@@ -101,6 +171,10 @@ For more information: https://github.com/lgblgblgb/xemu/wiki/Source
     sudo apt update
     sudo apt install git build-essential libsdl2-dev libgtk-3-dev libreadline-dev
 
+Note for Linux compilation (other UNIX'es as well) in general: **GTK3 development
+libraries must be installed, if Xemu's build system cannot detect it, you won't
+have any menu system support, though compilation will suceeded without that!**
+
 #### Example for MacOS
 
 Assuming Apple development components and `homebrew` is already installed on your
@@ -112,6 +186,30 @@ Mac: https://brew.sh/
 Xemu should build with command:
 
     make
+
+#### Example for FreeBSD
+
+An example to install dependencies with `pkg` on a FreeBSD system:
+
+    pkg install git
+    pkg install gmake
+    pkg install bash
+    pkg install sdl2
+    pkg install pkgconf
+    pkg install gtk3
+    pkg install readline
+
+Some comments:
+
+* Surely, `git` is only needed if you want to clone the repository from git
+* `bash` is used by the Xemu-configuration tool
+* You must use `gmake` (GNU make) instead of `make` (BSD make)
+* `pkgconf` is used by the Xemu-configuration tool to found GTK3 library
+
+#### OpenBSD
+
+Very similar to FreeBSD (see above), surely you want to use the `pkg_add` tool
+instead of `pkg install` then.
 
 #### Raspberry Pi
 
@@ -128,6 +226,28 @@ support (though I can be wrong, contant me, if you know more on this topic).
 I've - of course - tested this and it worked, however it's hard to provide a
 binary build this way currently, and needs more "manual work" to compile Xemu,
 and even SDL2 before.
+
+### Emscripten (in-web-browser)
+
+Follow the instructions at: https://emscripten.org/docs/getting_started/downloads.html
+In nutshell:
+
+    git clone https://github.com/emscripten-core/emsdk.git
+    cd emsdk
+    git pull
+    ./emsdk install latest
+    ./emsdk activate latest
+    cd ..
+
+But in nutshell:
+
+You must source the `emsdk_env.sh` file before the next step, eg.:
+
+    source emsdk/emsdk_env.sh
+
+The building process of Xemu then:
+
+    make ARCH=html
 
 #### Bare metal?
 
@@ -149,6 +269,8 @@ problem can drive me to have more optimizations :)
 ### Compilation
 
     make
+
+On BSDs you want to use `gmake` (GNU make) instead of `make` (BSD make).
 
 Optionally, to create binary DEBian .deb package for Ubuntu/Debian Linux,
 result will be built in build/bin (which can be installed with `dpkg -i`,
@@ -189,7 +311,7 @@ For building binary (exe) for Windows, you still need a UNIX-like environment
 (in theory WSL - Windows Subsystem for Linux - should be enough)  for the
 compilation, with cross-compiler and SDL2 MinGW cross platform suite installed.
 
-#### MSYS2 native build
+#### MSYS2 native build on Windows for Windows
 
 Note: this is probably the easier method for a Windows user, however this is
 _not the method we use to build official_ binaries for Windows.
@@ -218,7 +340,7 @@ Restart the prompt if needed, and finish installing remaining packages with:
 Now we can install the GCC compiler and required packages to build xemu with
 one command executed:
 
-    pacman -S make mingw-w64-x86_64-toolchain mingw-w64-x86_64-SDL2 
+    pacman -S make mingw-w64-x86_64-toolchain mingw-w64-x86_64-SDL2
 
 Build the native Windows executables by issuing:
 
@@ -228,7 +350,7 @@ You can find the executables, with `.native` extension, in the `build/bin`
 directory. Surely, you can (and maybe you want) rename files to have extension
 `.exe` instead.
 
-#### Alternative method (Cross-compilation)
+#### Alternative method, cross-compilation on Linux for Windows
 
 Note: this is the _official method we use to build official binaries for Windows_.
 

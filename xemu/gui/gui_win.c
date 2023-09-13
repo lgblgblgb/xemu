@@ -1,5 +1,6 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   ~/xemu/gui/gui_win.c: UI implementation for Windows of Xemu's UI abstraction layer
+   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,6 +21,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include <windows.h>
 #include <SDL_syswm.h>
+
+#ifndef GUI_HAS_POPUP
+#define GUI_HAS_POPUP
+#endif
 
 static struct {
 	int num_of_hmenus;
@@ -95,7 +100,7 @@ static int xemuwingui_file_selector ( int dialog_mode, const char *dialog_title,
 
 
 
-static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[] )
+static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[], const char *parent_name )
 {
 	HMENU menu = CreatePopupMenu();
 	if (!menu) {
@@ -114,7 +119,7 @@ static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[] )
 			((desc[a].type & 0xFF) == XEMUGUI_MENUID_SUBMENU && (desc[a].handler  || !desc[a].user_data)) ||
 			!desc[a].name
 		) {
-			DEBUGPRINT("GUI: invalid menu entry found, skipping it" NL);
+			DEBUGPRINT("GUI: invalid menu entry found, skipping it (item #%d of menu \"%s\")" NL, a, parent_name);
 			continue;
 		}
 		if (xemuwinmenu.num_of_items >= XEMUGUI_MAX_ITEMS)
@@ -123,7 +128,7 @@ static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[] )
 		switch (type & 0xFF) {
 			case XEMUGUI_MENUID_SUBMENU: {
 				// submenus use the user_data as the submenu menu_st struct pointer!
-				HMENU submenu = _wingui_recursive_menu_builder(desc[a].user_data);	// that's a prime example for using recursion :)
+				HMENU submenu = _wingui_recursive_menu_builder(desc[a].user_data, desc[a].name);	// that's a prime example for using recursion :)
 				if (!submenu)
 					goto PROBLEM;
 				ret = AppendMenu(menu, MF_POPUP, (UINT_PTR)submenu, desc[a].name);
@@ -134,6 +139,8 @@ static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[] )
 					DEBUGGUI("GUI: query-back for \"%s\"" NL, desc[a].name);
 					((xemugui_callback_t)(desc[a].handler))(&desc[a], &type);
 				}
+				if ((type & XEMUGUI_MENUFLAG_HIDDEN))
+					continue;
 				xemuwinmenu.items[xemuwinmenu.num_of_items] = &desc[a];
 				// Note the +1 for ID. That is because some stange Windows sting:
 				// TrackPopupMenu() with TPM_RETURNCMD returns zero as error/no-selection ...
@@ -141,7 +148,7 @@ static HMENU _wingui_recursive_menu_builder ( const struct menu_st desc[] )
 				ret = AppendMenu(menu, MF_STRING, ++xemuwinmenu.num_of_items, desc[a].name);
 				break;
 			default:
-				DEBUGPRINT("GUI: invalid menu item type: %d" NL, type & 0xFF);
+				DEBUGPRINT("GUI: invalid menu item type: %d (item #%d of menu \"%s\")" NL, type & 0xFF, a, parent_name);
 				break;
 		}
 		if (!ret) {
@@ -186,7 +193,7 @@ static HMENU _wingui_create_popup_menu ( const struct menu_st desc[] )
 {
 	_wingui_destroy_menu();
 	xemuwinmenu.problem = 0;
-	HMENU menu = _wingui_recursive_menu_builder(desc);
+	HMENU menu = _wingui_recursive_menu_builder(desc, XEMUGUI_MAINMENU_NAME);
 	if (!menu || xemuwinmenu.problem) {
 		_wingui_destroy_menu();
 		return NULL;

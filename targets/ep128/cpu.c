@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2015-2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -36,6 +36,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sdext.h"
 #include "exdos_wd.h"
 #include <time.h>
+#include <string.h>
 
 Z80EX_CONTEXT z80ex VARALIGN;
 static int memsegs[4] VARALIGN;
@@ -603,7 +604,6 @@ void z80_reset ( void )
 #ifdef CONFIG_Z180
 	z180_internal_reset();
 #endif
-	srand((unsigned int)time(NULL));
 	Z80_AF	= rand() & 0xFFFF;
 	Z80_BC	= rand() & 0xFFFF;
 	Z80_DE	= rand() & 0xFFFF;

@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2017-2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2017-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -21,13 +21,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_COMMON_EMUTOOLS_UMON_H_INCLUDED
 #define __XEMU_COMMON_EMUTOOLS_UMON_H_INCLUDED
 #ifdef HAVE_XEMU_UMON
-#ifndef HAVE_XEMU_SOCKET_API
+#ifndef XEMU_HAS_SOCKET_API
 #error "Need HAVE_XEMU_SOCKET_API for HAVE_XEMU_UMON to be enabled at the target!"
 #endif
 
-extern volatile int xumon_is_running;
+#define XUMON_DEFAULT_PORT	9000
+#define XUMON_MAX_THREADS	32
+#define XUMON_STACK_SIZE	(8*1024*1024)
 
-extern int xumon_init ( int port, int threaded );
+extern int xumon_init ( int port );
+extern int xumon_stop ( void );
 
 #endif
 #endif

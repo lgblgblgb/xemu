@@ -21,8 +21,7 @@
 
 	Z800X uses "special I/O instructions" to program the MMU. I am not sure why not normal ones, the manual
 	says something that special ones provides the bus cycle/state transitions needed by the MMU. OK then ...
- 
- 
+
 */
 
 #include "xemu/emutools.h"
@@ -36,11 +35,11 @@ static Uint8  segment_attributes[64];
 static Uint8  mode,sar,dsc;
 
 
-void z8010_init ()
+void z8010_init ( void )
 {
 }
 
-void z8010_reset ()
+void z8010_reset ( void )
 {
 	for (int a = 0; a < 64; a++) {
 		segment_bases[a] = 0;
@@ -141,8 +140,7 @@ void z8010_write_register ( int port, Uint8 data )
 			if (!dsc)
 				sar = (sar + 1) & 63;
 			break;
-			
-			
+
 		case 0x20:	// descriptor counter
 			dsc = data & 3;
 			DEBUGPRINT("Z8010: DSC is set to %d" NL, dsc);

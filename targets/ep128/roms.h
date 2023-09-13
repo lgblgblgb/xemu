@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2015-2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2016,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@ extern int sram_save_all_segments ( void );
 extern int roms_load ( void );
 extern const char *rom_parse_opt  ( const char *optname, const char *optvalue );
 
-extern int xep_rom_seg, xep_rom_addr;
+extern int xep_rom_seg, xep_rom_addr, cfg_noexprom;
 extern const char *rom_name_tab[0x100];
 
 #endif

@@ -1,7 +1,8 @@
 /* Test-case for a very simple and inaccurate Videoton TV computer
-   (a Z80 based 8 bit computer) emulator using SDL2 library.
+   (a Z80 based 8 bit computer) emulator.
 
-   Copyright (C)2016,2017 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+   Copyright (C)2015-2017,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    This emulator is HIGHLY inaccurate and unusable.
 
@@ -76,6 +77,14 @@ static Uint32 palette_col16_pixel2[0x100];
 static Uint32 border_colour;
 
 static int frameskip = 0;
+
+static struct {
+	int	sdext;
+	char	*sdimg;
+	char	*sdrom;
+	int	syscon, fullscreen_requested, sdlrenderquality;
+} configdb;
+
 
 
 
@@ -383,8 +392,8 @@ static void init_tvc ( void )
 	)
 		FATAL("Cannot load ROM(s).");
 #ifdef CONFIG_SDEXT_SUPPORT
-	if (xemucfg_get_bool("sdext"))
-		sdext_init(xemucfg_get_str("sdimg"), xemucfg_get_str("sdrom"));
+	if (configdb.sdext)
+		sdext_init(configdb.sdimg, configdb.sdrom);
 #endif
 }
 
@@ -413,17 +422,18 @@ static void emulation_loop ( void )
 }
 
 
-
 int main ( int argc, char **argv )
 {
-	xemu_pre_init(APP_ORG, TARGET_NAME, "The Careless Videoton TV Computer emulator from LGB");
+	xemu_pre_init(APP_ORG, TARGET_NAME, "The Careless Videoton TV Computer emulator from LGB", argc, argv);
 #ifdef CONFIG_SDEXT_SUPPORT
-	xemucfg_define_switch_option("sdext", "Enables SD-ext");
-	xemucfg_define_str_option("sdimg", "@sdcard.img", "SD-card image filename / path");
-	xemucfg_define_str_option("sdrom", "#tvc_sddos.rom", "SD-card cartridge ROM image path");
+	xemucfg_define_switch_option("sdext", "Enables SD-ext", &configdb.sdext);
+	xemucfg_define_str_option("sdimg", "@sdcard.img", "SD-card image filename / path", &configdb.sdimg);
+	xemucfg_define_str_option("sdrom", "#tvc_sddos.rom", "SD-card cartridge ROM image path", &configdb.sdrom);
 #endif
-	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)");
-	if (xemucfg_parse_all(argc, argv))
+	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode", &configdb.fullscreen_requested);
+	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon);
+	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2);
+	if (xemucfg_parse_all())
 		return 1;
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
 	if (xemu_post_init(
@@ -436,7 +446,7 @@ int main ( int argc, char **argv )
 		0,			// custom palette init. Later, in init_tvc()
 		NULL,			// -- "" --
 		NULL,			// -- "" --
-		RENDER_SCALE_QUALITY,	// render scaling quality
+		configdb.sdlrenderquality,	// render scaling quality
 		USE_LOCKED_TEXTURE,	// 1 = locked texture access
 		NULL			// no emulator specific shutdown function
 	))
@@ -452,8 +462,9 @@ int main ( int argc, char **argv )
 	z80ex_init();
 	cycles = 0;
 	interrupt_active = 0;
-	if (!xemucfg_get_bool("syscon"))
+	if (!configdb.syscon)
 		sysconsole_close(NULL);
+	xemu_set_full_screen(configdb.fullscreen_requested);
 	xemu_timekeeping_start();	// we must call this once, right before the start of the emulation
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;

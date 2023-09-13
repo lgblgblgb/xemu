@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -32,6 +32,7 @@ static const Uint8 xep_rom_image[] = {
 };
 int xep_rom_seg = -1;
 int xep_rom_addr;
+int cfg_noexprom;
 const char *rom_name_tab[0x100];
 static int reloading = 0;	// allows to re-load ROM config run-time, this non-zero after the first call of roms_load()
 
@@ -177,7 +178,7 @@ int roms_load ( void )
 	}
 	rom_request_list_size = 0;
 	/* XEP ROM: guess where to place it, or disable it ... */
-	if (!xemucfg_get_bool("noxeprom")) {
+	if (!cfg_noexprom) {
 		// XEP ROM is enabled with 'xeprom' directive
 		if (xep_rom_seg == -1) {	// not assigned manually, try to find a place for it ...
 			for (int seg = 0; seg < 0xFC; seg++) {
