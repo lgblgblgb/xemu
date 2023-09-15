@@ -24,4 +24,4 @@ grab && $0 ~ /^\s*[0-9]+\s*=>\s*[xX]"/ {
 	comma = ","
 	next
 }
-'
+' | sed 's/_normal_/_base_/g;s/_control_/_ctrl_/g'
