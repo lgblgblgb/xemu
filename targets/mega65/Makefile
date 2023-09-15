@@ -33,6 +33,7 @@ MEGA65_FILES	+= sdcard-files/AUDIOMIX.M65 sdcard-files/C64THUMB.M65 sdcard-files
 
 MEGA65_FP_FILES	= $(addprefix $(MEGA65_CORE)/,$(MEGA65_FILES))
 MEGA65_LOCALDIR	= .sys-files-mega65-core
+MATRIX_TAB_VHDL = $(MEGA65_CORE)/src/vhdl/matrix_to_ascii.vhdl
 
 include ../../build/Makefile.common
 
@@ -60,5 +61,6 @@ recreatememcontent:
 	@echo "*** Generating C files from mega65-core binary results ***"
 	python3 $(TOPDIR)/build/m65-memcontent-generator.py memcontent.c memcontent.h $(MEGA65_FP_FILES)
 
-showmatrix2ascii:
-	bash $(TOPDIR)/build/m65-import-matrix2ascii.sh < $(MEGA65_CORE)/src/vhdl/matrix_to_ascii.vhdl
+showmatrix:
+	bash $(TOPDIR)/build/m65-import-matrix2ascii.sh < $(MATRIX_TAB_VHDL)
+	bash $(TOPDIR)/build/m65-import-matrix2petscii.sh < $(MATRIX_TAB_VHDL)
