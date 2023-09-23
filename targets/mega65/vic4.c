@@ -56,6 +56,7 @@ static int border_x_left= 0;			 		// Side border left
 static int border_x_right= 0;			 		// Side border right
 static int xcounter = 0, ycounter = 0;				// video counters
 static int char_row = 0, display_row = 0;
+static Uint8 draw_mask;						// Normally $FF, if RRB asks for specific ROW MASK, draw_mask will be set to FF/00 for the right char_row according to the ROW MASK
 // FIXME: really, it's 2048 now, since in H320, GOTOX value is multiplied with 2 and may overflow this array even if it's not so much used this way, we want avoid crash ...
 // FIXME: should be rethought!!!!
 static Uint8 is_fg[2048];					// this cache helps in sprite rendering, zero means background state, other value: foreground
@@ -203,7 +204,7 @@ void vic_init ( void )
 static XEMU_INLINE void pixel_readback ( void )
 {
 	// FIXME: this is surely wrong, and we should not use texture coords directly. We must fix this somehow (offsets?)
-	const int pix_readback_x = (vic_registers[0x7D] | ((vic_registers[0x7F] & 0x0F) << 8)) - 8 + 2;
+	const int pix_readback_x = (vic_registers[0x7D] | ((vic_registers[0x7F] & 0x0F) << 8)) - 8 + 2 - 3;	// FIXME: no idea about this strange offset! It's just experimental, I have no idea!!
 	const int pix_readback_y = vic_registers[0x7E] | ((vic_registers[0x7F] & 0xF0) << 4);
 	if (XEMU_UNLIKELY(pix_readback_y >= 0 && pix_readback_x >= 0 && pix_readback_y < max_rasters && pix_readback_x < TEXTURE_WIDTH)) {
 		const Uint32 texpixcol = xemu_frame_pixel_access_p[TEXTURE_WIDTH * pix_readback_y + pix_readback_x];
@@ -1180,11 +1181,11 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 // flip = 00 Dont flip, 01 = flip vertical, 10 = flip horizontal, 11 = flip both
 static XEMU_INLINE void vic4_render_mono_char_row ( Uint8 char_byte, const int glyph_width, const Uint8 bg_color, Uint8 fg_color, Uint8 vic3attr )
 {
-	Uint32* active_palette = used_palette;
+	const Uint32 *palette_now = used_palette;
 	if (XEMU_UNLIKELY(vic3attr)) {
 		if(!VIC3_ATTR_BLINK(vic3attr) || blink_phase) {
 			if (XEMU_UNLIKELY(VIC3_ATTR_BOLD(vic3attr) && VIC3_ATTR_REVERSE(vic3attr)))
-				used_palette = altpalette;
+				palette_now = altpalette;
 			else if (VIC3_ATTR_REVERSE(vic3attr))
 				char_byte = ~char_byte;
 			if (VIC3_ATTR_BOLD(vic3attr))
@@ -1195,9 +1196,10 @@ static XEMU_INLINE void vic4_render_mono_char_row ( Uint8 char_byte, const int g
 			char_byte = 0;
 		}
 	}
-	const Uint32 sdl_fg_color = used_palette[fg_color];
+	char_byte &= draw_mask;
+	const Uint32 sdl_fg_color = palette_now[fg_color];
 	if (XEMU_LIKELY(enable_bg_paint)) {
-		const Uint32 sdl_bg_color = used_palette[bg_color];
+		const Uint32 sdl_bg_color = palette_now[bg_color];
 		for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 			const Uint8 char_pixel = (char_byte & (0x80 >> (int)cx));
 			*(current_pixel++) = char_pixel ? sdl_fg_color : sdl_bg_color;
@@ -1212,12 +1214,12 @@ static XEMU_INLINE void vic4_render_mono_char_row ( Uint8 char_byte, const int g
 			is_fg[xcounter++] = char_pixel;
 		}
 	}
-	used_palette = active_palette;
 }
 
 
-static XEMU_INLINE void vic4_render_multicolor_char_row ( const Uint8 char_byte, const int glyph_width, const Uint8 color_source[4] )
+static XEMU_INLINE void vic4_render_multicolor_char_row ( Uint8 char_byte, const int glyph_width, const Uint8 color_source[4] )
 {
+	char_byte &= draw_mask;
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		const Uint8 bitsel = 2 * (int)(cx / 2);
 		const Uint8 bit_pair = (char_byte & (0x80 >> bitsel)) >> (6-bitsel) | (char_byte & (0x40 >> bitsel)) >> (6-bitsel);
@@ -1230,14 +1232,14 @@ static XEMU_INLINE void vic4_render_multicolor_char_row ( const Uint8 char_byte,
 
 
 // 8-bytes per row
-static XEMU_INLINE void vic4_render_fullcolor_char_row ( const Uint8* char_row, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 fg_sdl_color, const int hflip )
+static XEMU_INLINE void vic4_render_fullcolor_char_row ( const Uint8* char_row, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 fg_sdl_color, const int hflip, const Uint32 *palette_now )
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
-		const Uint8 char_data = char_row[XEMU_LIKELY(!hflip) ? (int)cx : glyph_width - 1 - (int)cx];
+		const Uint8 char_data = draw_mask & char_row[XEMU_LIKELY(!hflip) ? (int)cx : glyph_width - 1 - (int)cx];
 		if (char_data == 0xFF)
 			*current_pixel = fg_sdl_color;
 		else if (XEMU_LIKELY(char_data))
-			*current_pixel = used_palette[char_data];
+			*current_pixel = palette_now[char_data];
 		else if (XEMU_LIKELY(enable_bg_paint))
 			*current_pixel = bg_sdl_color;
 		current_pixel++;
@@ -1264,6 +1266,7 @@ static XEMU_INLINE void vic4_render_16color_char_row ( const Uint8* char_row, co
 			else
 				char_data >>= 4;
 		}
+		char_data &= draw_mask;
 		is_fg[xcounter++] = char_data;
 		if (char_data)
 			*current_pixel = (char_data != 15) ? palette16[char_data] : fg_sdl_color;
@@ -1384,6 +1387,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 {
 	int line_char_index = 0;
 	enable_bg_paint = 1;
+	draw_mask = 0xFF;	// initialize draw mask being $FF initially (glyph row is not masked out)
 	const Uint8 *row_data_base_addr = get_charset_effective_addr();	// FIXME: is it OK that I moved here, before the loop?
 	if (display_row <= display_row_count) {
 		Uint32 colour_ram_current_addr = COLOUR_RAM_OFFSET + (display_row * LINESTEP_BYTES);
@@ -1433,10 +1437,15 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 					char_fetch_offset = char_value >> 13;
 					if (SXA_VERTICAL_FLIP(color_data))
 						enable_bg_paint = 0;
-					if (SXA_ATTR_BOLD(color_data) && SXA_ATTR_REVERSE(color_data) && !REG_VICIII_ATTRIBS)
+					if (SXA_ATTR_ALTPALETTE(color_data) && !REG_VICIII_ATTRIBS)	// FIXME: do we really need the !REG_VICIII_ATTRIBS part here?
 						used_palette = altpalette;	// use the alternate palette from now in the scanline
 					else
 						used_palette = palette;		// we do this as well, since there can be "double GOTOX" so we want back to "original" palette ...
+					if (SXA_4BIT_PER_PIXEL(color_data)) 	// this signals for rowmask [the rowmask itself is color_data & 0xFF]
+						draw_mask = (color_data & (1 << char_row)) ? 0xFF : 0x00;	// draw_mask is $FF (not masked) _or_ $00 (masked) ~ for the current char_row!
+					else
+						draw_mask = 0xFF;		// double/multiple GOTOX, we *may* reset to default if does not apply! FIXME: is this true? check!
+					// !!! end of processing the "GOTOX" token, there is nothing to render here, back to the scanline loop
 					continue;
 				}
 			}
@@ -1463,12 +1472,14 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 			} else if (CHAR_IS256_COLOR(char_id)) {	// 256-color character
 				// fgcolor in case of FCM should mean colour index $FF
 				// FIXME: check if the passed palette[color_data & 0xFF] is correct or another index should be used for that $FF colour stuff
+				const Uint32 *palette_now = SXA_ATTR_ALTPALETTE(color_data) ? altpalette : used_palette;
 				vic4_render_fullcolor_char_row(
 					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
 					8 - glyph_trim,
-					used_palette[char_bgcolor],		// bg SDL colour
-					used_palette[color_data & 0xFF],	// fg SDL colour
-					SXA_HORIZONTAL_FLIP(color_data)		// hflip?
+					palette_now[char_bgcolor],		// bg SDL colour
+					palette_now[color_data & 0xFF],		// fg SDL colour
+					SXA_HORIZONTAL_FLIP(color_data),	// hflip?
+					palette_now
 				);
 			} else if ((REG_MCM && (color_data & 8)) || (REG_MCM && REG_BMM)) {	// Multicolor character
 				// using static vars: faster in a rapid loop like this, no need to re-adjust stack pointer all the time to allocate space and this way using constant memory address
