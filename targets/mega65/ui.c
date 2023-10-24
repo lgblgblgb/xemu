@@ -699,6 +699,19 @@ static void ui_start_cartridge ( void )
 	INFO_WINDOW("Copied. Type BANK0:SYS$8000 to start");
 }
 
+#ifndef XEMU_ARCH_HTML
+static void ui_restore_config ( void )
+{
+	if (!xemucfg_delete_default_config_file(
+		"This option DELETES your saved (if there was any!) default configuration.\n"
+		"So using this option will reset emulator config to the default.\n"
+		"No user data (disk images, SD-image, ...) will be lost though.\n\n"
+		"Are you sure to do this?"
+	))
+		WARNING_WINDOW("DONE.\nYou must re-start Xemu to have any effect");
+}
+#endif
+
 
 /**** MENU SYSTEM ****/
 
@@ -987,6 +1000,7 @@ static const struct menu_st menu_audio[] = {
 	{ "Master volume",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_volume },
 	{ NULL }
 };
+#ifndef XEMU_ARCH_HTML
 static const struct menu_st menu_config[] = {
 	{ "Confirmation on exit/reset",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&i_am_sure_override },
@@ -994,8 +1008,10 @@ static const struct menu_st menu_config[] = {
 	{ "Save config as default",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_cfgfile, (void*)XEMUGUICFGFILEOP_SAVE_DEFAULT },
 	//{ "Load saved custom config",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_cfgfile, (void*)XEMUGUICFGFILEOP_LOAD_CUSTOM  },
 	{ "Save config as custom file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_cfgfile, (void*)XEMUGUICFGFILEOP_SAVE_CUSTOM  },
+	{ "Restore default config",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_restore_config },
 	{ NULL }
 };
+#endif
 static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display	},
 	{ "Input devices",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_inputdevices	},
@@ -1003,7 +1019,9 @@ static const struct menu_st menu_main[] = {
 	{ "Disks / Cart",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_disks	},
 	{ "Reset / ROM switching",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset	},
 	{ "Debug / Advanced",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug	},
+#ifndef XEMU_ARCH_HTML
 	{ "Configuration",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_config	},
+#endif
 #ifdef HAVE_XEMU_EXEC_API
 	{ "Help (online)",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_help },
 #endif
