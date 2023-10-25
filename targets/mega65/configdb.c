@@ -113,6 +113,8 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "showscanlines", "Show scanlines in V200 modes", &configdb.show_scanlines },
 	{ "allowscanlines", "Allow user programs to control scanline visibility", &configdb.allow_scanlines },
 	{ "fastboot", "Try to use sleepless emulation mode during booting", &configdb.fastboot },
+	{ "matrixstart", "Start with matrix-mode activated", &configdb.matrixstart },
+	{ "matrixdisable", "Disable the matrix hotkey", &configdb.matrixdisable },
 	{ NULL }
 };
 
@@ -150,6 +152,7 @@ static const struct xemutools_configdef_float_st float_options[] = {
 static const void *do_not_save_opts[] = {
 	&configdb.prg, &configdb.prgmode, &configdb.autoload, &configdb.go64, &configdb.hyperserialfile, &configdb.importbas,
 	&emu_is_sleepless, &emu_is_headless, &configdb.testing,
+	&configdb.matrixstart,
 	&configdb.dumpmem, &configdb.dumpscreen, &configdb.screenshot_and_exit,
 	&configdb.testing, &configdb.hyperdebug, &configdb.hyperdebugfreezer, &configdb.usestubrom, &configdb.useinitrom, &configdb.useutilmenu,
 	&configdb.cartbin8000,

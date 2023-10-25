@@ -866,8 +866,10 @@ static const struct menu_st menu_debug[] = {
 	{ "Display enable VIC reg",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_displayenable, NULL },
 #endif
-	{ "Matrix mode",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
+	{ "Matrix mode",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_matrix_mode, NULL },
+	{ "Matrix hotkey disable",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&configdb.matrixdisable },
 	{ "Emulation state info",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_emu_info },
 #ifdef HAVE_XEMU_EXEC_API
 	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_native_os_prefdir_browser, NULL },

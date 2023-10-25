@@ -243,6 +243,8 @@ Uint8 io_read ( unsigned int addr )
 				return 0;	// FIXME: D70F bit 7 = 32/32 bits divisor busy flag, bit 6 = 32*32 mult busy flag. We're never busy, so the zero. But the OTHER bits??? Any purpose of those??
 			if (addr == 0xEF)	// $D7EF CPU:RAND Hardware random number generator
 				return rand() & 0xFF;
+			if (addr == 0xFE)
+				return D7XX[0xFE] & 0x7F;	// $D7FE.7 CPU:HWRNG!NOTRDY Hardware Real RNG random number not ready -> but we're always ready!
 			if (addr == 0xFA)	// $D7FA CPU:FRAMECOUNT Count number of elapsed video frames
 				return vic_frame_counter & 0xFFU;
 			// ;) FIXME this is LAZY not to decode if we need to update bigmult at all ;-P

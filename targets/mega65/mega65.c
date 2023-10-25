@@ -43,6 +43,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_socketapi.h"
 #include "rom.h"
 #include "cart.h"
+#include "matrix_mode.h"
 
 // "Typical" size in default settings (video standard is PAL, default border settings).
 // See also vic4.h
@@ -890,6 +891,8 @@ int main ( int argc, char **argv )
 	xemu_timekeeping_start();
 	emulation_is_running = 1;
 	update_emulated_time_sources();
+	if (configdb.matrixstart)
+		matrix_mode_toggle(1);
 	// FIXME: for emscripten (anyway it does not work too much currently) there should be 50 or 60 (PAL/NTSC) instead of (fixed, and wrong!) 25!!!!!!
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;

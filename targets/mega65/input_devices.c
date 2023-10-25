@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "ui.h"
 #include "matrix_mode.h"
 #include "dma65.h"
+#include "configdb.h"
 
 #include <string.h>
 
@@ -402,7 +403,7 @@ void kbd_trigger_restore_trap ( void )
 }
 
 
-static void kbd_trigger_alttab_trap ( void )
+static void kbd_trigger_matrix_trap ( void )
 {
 	KBD_RELEASE_KEY(TAB_KEY_POS);
 	//KBD_RELEASE_KEY(ALT_KEY_POS);
@@ -451,8 +452,13 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 	static int old_joystick_emu_port;	// used to remember emulated joy port, as with mouse grab, we need to switch to port-1, and we want to restore user's one on leaving grab mode
 	if (pressed) {
 		// check if we have the ALT-TAB trap triggered (TAB is pressed now, and ALT is hold)
-		if (pos == TAB_KEY_POS && (hwa_kbd.modifiers & MODKEY_ALT)) {
-			kbd_trigger_alttab_trap();
+		if (key == SDL_SCANCODE_TAB && (hwa_kbd.modifiers & MODKEY_CTRL)) {
+			if (!configdb.matrixdisable) {
+				kbd_trigger_matrix_trap();
+			} else {
+				DEBUGPRINT("MATRIX: matrix mode hotkey is disabled by config!" NL);
+				clear_emu_events();
+			}
 			return 0;
 		}
 		// RESTORE triggered trap is different as it depends on timing (how long it's pressed)

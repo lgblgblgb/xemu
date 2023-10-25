@@ -69,16 +69,25 @@ static const Uint8 console_colours[] = {
 static Uint32 colour_mappings[16];
 static Uint8 current_colour;
 
+#define PROMPT		"Xemu>"
+
+#define CMD_HISTORY_SIZE	64
+static char *history[CMD_HISTORY_SIZE];
+
+static char *cmdbuf;
+
 static int backend_xsize, backend_ysize;
 static Uint32 *backend_pixels;
 static int chrscreen_xsize, chrscreen_ysize;
 static Uint8 *vmem = NULL;
 static int current_x = 0, current_y = 0;
-static const char *prompt = NULL;
 static int need_update = 0;
 static int reserve_top_lines = 0;	// reserve this amount of top lines when scrolling
 static int init_done = 0;
 static Uint8 queued_input;
+static unsigned int matrix_counter = 0;
+static int live_update_enabled = 1;
+static int blink_phase = 0;		// used with flashing the cursor, etc
 
 
 #define PARTIAL_OSD_TEXTURE_UPDATE
@@ -348,19 +357,17 @@ static void cmd_show ( char *p )
 }
 
 
-static void cmd_dump ( char *p )
+static void dump_mem_lines ( int lines, const char sepchr )
 {
-	if (*p && mem_args(p, 0) != 1)
-		return;
 	char chardump[79];
 	memset(chardump, 0, sizeof chardump);
-	for (int lines = 0; lines < 16; lines++) {
+	while (lines-- > 0) {
 		if (addr_hiword != 0xFFFF) {
 			// Clamp to 28 bit address space, unless hiword is $FFFF meaning CPU view, thus having a special meaning
 			addr_hiword &= 0xFFF;
-			sprintf(chardump + 1, "%03X:%04X", addr_hiword, addr_loword);
+			sprintf(chardump + 1, "%03X%c%04X", addr_hiword, sepchr, addr_loword);
 		} else
-			sprintf(chardump + 1, "cpu:%04X", addr_loword);
+			sprintf(chardump + 1, "cpu%c%04X", sepchr, addr_loword);
 		for (int i = 0; i < 16; i++) {
 			Uint8 data;
 			if (addr_hiword == 0xFFFF)
@@ -377,9 +384,62 @@ static void cmd_dump ( char *p )
 		for (int i = 0; i < sizeof(chardump) - 2; i++)
 			if (!chardump[i])
 				chardump[i] = 0x20;
+		chardump[0] = 0xFF;	// marker for "live update" stuff (rendered as space anyway!)
 		chardump[sizeof(chardump) - 2] = '\n';
 		matrix_write_string(chardump);
 	}
+}
+
+
+static void cmd_dump ( char *p )
+{
+	if (*p && mem_args(p, 0) != 1)
+		return;
+	dump_mem_lines(16, ':');
+}
+
+
+static void live_dump_update ( void )
+{
+	const Uint16 backup_hiword = addr_hiword;
+	const Uint16 backup_loword = addr_loword;
+	char t[9];
+	for (int y = 0; y < chrscreen_ysize; y++) {
+		const Uint8 *s = vmem + (y * chrscreen_xsize * 2);
+		if (*s == 0xFF) {
+			for (unsigned int i = 0; i < sizeof(t); i++, s += 2)
+				t[i] = (char)s[2];
+			t[sizeof(t) - 1] = 0;
+			t[3] = 0;	// separator between "bank" and "offset", we have "t" as bank now, and "t+4" as the offset
+			int hi, lo;
+			if (!strcmp(t, "cpu"))
+				hi = 0xFFFF;
+			else if (sscanf(t, "%X", &hi) != 1)
+				continue;
+			if (sscanf(t + 4, "%X", &lo) != 1)
+				continue;
+			// Note: we call this function from the main matrix updater, which stores/restores X/Y screen position,
+			// so it's OK to modify that here!
+			current_x = 0;
+			current_y = y;
+			// And for these: backed up/restored by us, in this very function
+			addr_hiword = hi;
+			addr_loword = lo;
+			//DEBUGPRINT("Found update in row %d, text is \"%s\" bank = %X offset = %X" NL, y, t, hi, lo);
+			dump_mem_lines(1, blink_phase ? ':' : ' ');	// blinking ':' to indicate live update
+		}
+	}
+	addr_hiword = backup_hiword;
+	addr_loword = backup_loword;
+	if (live_update_enabled < 0 && blink_phase)
+		live_update_enabled = 0;
+}
+
+
+static void cmd_live ( char *p )
+{
+	live_update_enabled = (live_update_enabled <= 0) ? 1 : -1;
+	MATRIX("Live memory dump updates are turned %s\n", (live_update_enabled > 0) ? "ON" : "OFF");
 }
 
 
@@ -400,6 +460,7 @@ static const struct command_tab_st {
 	{ "dump",	cmd_dump,	"d"	},
 	{ "exit",	cmd_off,	"x"	},
 	{ "help",	cmd_help,	"h?"	},
+	{ "live",	cmd_live,	NULL	},
 	{ "log",	cmd_log,	NULL	},
 	{ "reg",	cmd_reg,	"r"	},
 	{ "reset",	cmd_reset,	NULL	},
@@ -442,29 +503,58 @@ static void execute ( char *cmd )
 static void input ( const char c )
 {
 	static int start_x;
-	static Uint8 prev_char;
+	static int history_browse_current = 0;
 	if (!current_x) {
-		matrix_write_string(prompt && *prompt ? prompt : "Xemu>");
+		matrix_write_string(PROMPT);
 		start_x = current_x;
-		prev_char = 0;
 		if (!c)
 			return;
 	}
-	if (current_x < chrscreen_xsize - 1 && (c >= 33 || (c == 32 && current_x > start_x && prev_char != 32))) {
+	if (c == 1 || c == 2) {	// 1=up arrow (older entry), 2=down arrow (newer entry)
+		const int dir = (c == 1) ? 1 : -1;
+		if (
+			(dir == -1 && history_browse_current > 0                    && history[history_browse_current - 1]) ||
+			(dir ==  1 && history_browse_current < CMD_HISTORY_SIZE - 1 && history[history_browse_current + 1])
+		) {
+			cmdbuf[current_x - start_x] = 0;
+			if (!history_browse_current) {
+				free(history[0]);
+				history[0] = xemu_strdup(cmdbuf);
+			}
+			history_browse_current += dir;
+			strcpy(cmdbuf, history[history_browse_current]);
+			current_x = start_x;
+			for (int i = 0; i < chrscreen_xsize - start_x - 1; i++)
+				matrix_write_char(i < strlen(cmdbuf) ? cmdbuf[i] : ' ');
+			current_x = start_x + strlen(cmdbuf);
+		}
+		return;
+	}
+	if (current_x < chrscreen_xsize - 1 && (c >= 33 || (c == 32 && current_x > start_x && cmdbuf[current_x - start_x - 1] != 32))) {
+		cmdbuf[current_x - start_x] = c;
 		matrix_write_char(c);
-		prev_char = c;
+		cmdbuf[current_x - start_x] = 0;
+		//DEBUGMATRIX("MATRIX: input change: \"%s\"" NL, cmdbuf);
 	} else if (current_x > start_x && c == 8) {
 		static const char backspace_seq_str[] = { 8, 32, 8, 0 };
 		matrix_write_string(backspace_seq_str);
-	} else if (c == '\r' || c == '\n') {
-		const int len = current_x - start_x;
-		char cmd[len + 1];
-		for (int i = 0, j = (current_y * chrscreen_xsize + start_x) << 1; i < len; i++, j += 2)
-			cmd[i] = vmem[j];
-		cmd[len - (prev_char == 32)] = 0;
+		cmdbuf[current_x - start_x] = 0;
+		//DEBUGPRINT("MATRIX: input change: \"%s\"" NL, cmdbuf);
+	} else if (c == 13) {
 		matrix_write_char('\n');
-		if (*cmd)
-			execute(cmd);
+		if (cmdbuf[0]) {
+			if (cmdbuf[strlen(cmdbuf) - 1] == 32)
+				cmdbuf[strlen(cmdbuf) - 1] = 0;
+			free(history[CMD_HISTORY_SIZE - 1]);	// oldest entry will be dropped: if it's NULL, no problem, free() can accept NULL ptr
+			free(history[0]);
+			history[0] = xemu_strdup(cmdbuf);
+			memmove(history + 1, history, (CMD_HISTORY_SIZE - 1) * sizeof(char*));
+			history[0] = xemu_strdup("");
+			history_browse_current = 0;
+			//DEBUGMATRIX("MATRIX: executing: \"%s\"" NL, cmdbuf);
+			execute(cmdbuf);
+			cmdbuf[0] = 0;
+		}
 		if (current_x)
 			matrix_write_char('\n');
 	}
@@ -477,13 +567,15 @@ static void matrix_updater_callback ( void )
 {
 	if (!in_the_matrix)
 		return;		// should not happen, but ... (and can be a race condition with toggle function anyway!)
+	blink_phase = (matrix_counter & 8);
 	write_char_raw(current_x, current_y, ' ', current_colour);	// delete cursor
 	const int saved_x = current_x, saved_y = current_y;
 	current_x = 0;
 	current_y = 1;
 	static const char rotator[4] = { '-', '\\', '|', '/' };
-	static Uint32 counter = 0;
-	dump_regs(rotator[(counter >> 3) & 3]);
+	dump_regs(rotator[(matrix_counter >> 3) & 3]);
+	if (live_update_enabled)
+		live_dump_update();
 	current_x = saved_x;
 	current_y = saved_y;
 	if (queued_input) {
@@ -492,9 +584,9 @@ static void matrix_updater_callback ( void )
 		queued_input = 0;
 	} else if (current_x == 0)
 		input(0);	// just to have some prompt by default
-	if (counter & 8)
-		write_char_raw(current_x, current_y, CURSOR_CHAR, CURSOR_COLOUR);	// show cursor (gated with some bit of the "counter" to have blinking)
-	counter++;
+	if (blink_phase)
+		write_char_raw(current_x, current_y, CURSOR_CHAR, CURSOR_COLOUR);	// show cursor
+	matrix_counter++;
 	matrix_update();
 }
 
@@ -507,13 +599,31 @@ static void matrix_updater_callback ( void )
 
 static int kbd_cb_keyevent ( SDL_KeyboardEvent *ev )
 {
-	if (ev->state == SDL_PRESSED && ev->keysym.sym > 0 && ev->keysym.sym < 32 && !queued_input) {
-		// Monitor alt-tab, as the main handler is defunct at this point, we "hijacked" it!
-		// So we must give up the matrix mode themselves here
-		if (ev->keysym.sym == 9 && (ev->keysym.mod & KMOD_RALT))
-			matrix_mode_toggle(0);
-		else
-			queued_input = ev->keysym.sym;
+	if (ev->state == SDL_PRESSED) {
+		int sym;
+		switch (ev->keysym.sym) {
+			case SDLK_UP:
+				sym = 1; break;
+			case SDLK_DOWN:
+				sym = 2; break;
+			case SDLK_RETURN:
+			case SDLK_KP_ENTER:
+				sym = 13; break;
+			case SDLK_BACKSPACE:
+			case SDLK_DELETE:
+			case SDLK_KP_BACKSPACE:
+				sym = 8; break;
+			default:
+				sym = ev->keysym.sym; break;
+		}
+		if (sym > 0 && sym < 32 && !queued_input) {
+			// Monitor ctrl-tab, as the main handler is defunct at this point, we "hijacked" it!
+			// So we must give up the matrix mode themselves here
+			if (sym == SDLK_TAB && (ev->keysym.mod & (KMOD_LCTRL | KMOD_RCTRL)))
+				matrix_mode_toggle(0);
+			else
+				queued_input = sym;
+		}
 	}
 	return 0;	// do NOT execute further handlers!
 }
@@ -549,10 +659,14 @@ void matrix_mode_toggle ( int status )
 			chrscreen_xsize = backend_xsize / 8;
 			chrscreen_ysize = backend_ysize / 8;
 			vmem = xemu_malloc(chrscreen_xsize * chrscreen_ysize * 2);
+			cmdbuf = xemu_malloc(chrscreen_xsize * 2);
+			cmdbuf[0] = 0;
+			for (int i = 0; i < CMD_HISTORY_SIZE; i++)
+				history[i] = NULL;
 			current_colour = NORMAL_COLOUR;
 			matrix_clear();
 			current_colour = BANNER_COLOUR;
-			static const char banner_msg[] = "*** Xemu's pre-matrix ... press right-ALT + TAB to exit ***";
+			static const char banner_msg[] = "*** Xemu's pre-matrix ... press left-CTRL + TAB to exit ***";
 			current_x = (chrscreen_xsize - strlen(banner_msg)) >> 1;
 			matrix_write_string(banner_msg);
 			current_colour = NORMAL_COLOUR;

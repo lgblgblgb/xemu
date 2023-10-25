@@ -113,6 +113,8 @@ struct configdb_st {
 	int	sidmask;
 	int	audiobuffersize;
 	int	fastboot;
+	int	matrixstart;
+	int	matrixdisable;
 };
 
 extern struct configdb_st configdb;
