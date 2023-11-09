@@ -211,8 +211,8 @@ static void ui_format_sdcard ( void )
 	if (!is_card_writable_with_error_popup())
 		return;
 	if (ARE_YOU_SURE(
-		"Formatting your SD-card image file will cause ALL your data,\n"
-		"system files (etc!) to be lost, forever!\n"
+		"Formatting your SD-card image file will cause all MEGA65\n"
+		"system and user content to be lost on the image file.\n"
 		"Are you sure to continue this self-destruction sequence? :)"
 		,
 		0
