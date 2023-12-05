@@ -549,6 +549,34 @@ static void ui_emu_info ( void )
 	);
 }
 
+static void ui_hwa_kbd_pasting ( void )
+{
+	char *buf = SDL_GetClipboardText();
+	if (!buf || !*buf) {
+		DEBUGPRINT("UI: paste buffer typing-in had no input (p=%p)" NL, buf);
+		if (buf)
+			SDL_free(buf);
+		return;
+	}
+	unsigned int multi_case = 0;
+	for (register char *p = buf, cc = 0; *p; p++) {
+		if (*p >= 'a' && *p <= 'z')
+			cc |= 1;
+		else if (*p >= 'A' && *p <= 'Z')
+			cc |= 2;
+		else
+			continue;
+		if (cc == 3) {
+			multi_case = QUESTION_WINDOW("Convert to single case|Paste as is|Cancel", "Paste contains mixed case letters. What to do now?");
+			break;
+		}
+	}
+	if (multi_case > 1)
+		SDL_free(buf);
+	else
+		inject_hwa_pasting(buf, !multi_case);	// will free the buffer as its own
+}
+
 static void ui_put_screen_text_into_paste_buffer ( void )
 {
 	char *result = vic4_textshot();
@@ -806,9 +834,10 @@ static const struct menu_st menu_display[] = {
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &vic4_registered_screenshot_request },
 #endif
-	{ "Screen to OS paste buffer",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_screen_text_into_paste_buffer },
+	{ "Screen to OS clipboard",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_screen_text_into_paste_buffer },
 	{ "Screen to ASCII file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_screen_text_into_file },
-	{ "OS paste buffer to screen",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_paste_buffer_into_screen_text },
+	{ "OS clipboard typing-in",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_hwa_kbd_pasting },
+	{ "OS clipboard to screen",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_paste_buffer_into_screen_text },
 	{ NULL }
 };
 static const struct menu_st menu_reset[] = {

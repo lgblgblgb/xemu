@@ -165,27 +165,52 @@ void hwa_kbd_disable_selector ( int state )
 
 
 // No checks for queue length here, must be called with care!
-static void add_hwa_fake_key_unprotected ( const Uint8 asc )
+static void add_hwa_fake_key_unprotected ( Uint8 asc, const int single_case )
 {
-	// FIXME: same value is pushed for ASCII and PETSCII!
-	// Since input parameter for this func is ASCII, we should convert the PETSCII one to PETSCII
-	// for real.
-	kbd_queue[queue_pos++] = asc + (asc << 8);
+	static Uint8 prev_asc = 0;
+	if ((prev_asc == '\n' && asc == '\r') || (prev_asc == '\r' && asc == '\n')) {
+		prev_asc = 0;
+		return;
+	}
+	prev_asc = asc;
+	Uint8 pet = asc;
+	Uint8 mod = 0;
+	if (asc == 10 || asc == 13) {
+		asc = 13;
+		pet = 13;
+	} else if (asc < 32 || asc > 127) {
+		return;
+	} else if (asc >= 'A' && asc <= 'Z') {
+		if (single_case) {
+			asc += 32;
+		} else {
+			mod = MODKEY_LSHIFT;
+			pet = asc + 32;
+		}
+	} else if (asc >= 'a' && asc <= 'z') {
+		pet = asc - 32;
+	} else if (asc == '@') {
+		pet = 0;
+	} else if (strchr("!\"#$%&'()<>?[]", asc)) {
+		mod = MODKEY_LSHIFT;
+	}
+	kbd_queue[queue_pos++] = asc + (pet << 8) + (mod << 16);
 }
 
 
+// This works by ASCII input!
 void hwa_kbd_set_fake_key ( const Uint8 asc )
 {
 	queue_pos = 0;
 	if (asc)
-		add_hwa_fake_key_unprotected(asc);
+		add_hwa_fake_key_unprotected(asc, 0);
 }
 
 
-const char *hwa_kbd_add_string ( const char *s )
+const char *hwa_kbd_add_string ( const char *s, const int single_case )
 {
 	while (*s && !IS_QUEUE_FULL())
-		add_hwa_fake_key_unprotected(*s++);
+		add_hwa_fake_key_unprotected((Uint8)*s++, single_case);
 	return s;
 }
 

@@ -53,6 +53,8 @@ static struct {
 	.cmd_p	= NULL
 };
 static Uint8 *under_ready_p;
+static char *kbd_hwa_pasting = NULL;
+static int   kbd_hwa_pasting_single_case;
 
 
 static void _cbm_screen_write_char ( Uint8 *p, const char c )
@@ -337,6 +339,42 @@ void inject_ready_check_do ( void )
 		} else
 			key2release_timeout--;
 	}
+	if (kbd_hwa_pasting) {
+		static const char *now = NULL;
+		static int stalling = 0;
+		if (!now) {
+			now = kbd_hwa_pasting;
+			stalling = 0;
+		}
+		osd_display_console_log = 0;
+		OSD(-1, 10, "Pasting in progress: %u", (unsigned int)strlen(now));
+		osd_status = OSD_STATIC;
+		const char *next = hwa_kbd_add_string(now, kbd_hwa_pasting_single_case);
+		if (!*next)
+			goto end_pasting;
+		if (next == now) {
+			stalling++;
+			if (stalling > 60) {
+				ERROR_WINDOW(
+					"Pasting did not work through. Some possibilities:\n"
+					"  You don't run a decent enough ROM using hardware keyboard scanning\n"
+					"  You are in GO64 BASIC mode (it won't work there)\n"
+					"  System is busy or (currently?) does not use hardware keyboard scanning"
+				);
+				goto end_pasting;
+			}
+			return;
+		}
+		now = next;
+		stalling = 0;
+		return;
+	end_pasting:
+		osd_status = 0;
+		now = NULL;
+		free(kbd_hwa_pasting);
+		kbd_hwa_pasting = NULL;
+		return;
+	}
 	if (XEMU_LIKELY(!check_status))
 		return;
 	if (check_status == 1) {		// we're in "waiting for READY." phase
@@ -381,5 +419,22 @@ int inject_register_import_basic_text ( const char *fn )
 	if (inject_register_ready_status("BASIC65 text import", import_callback, NULL)) // prg inject does not use the userdata ...
 		return -1;
 	fdc_allow_disk_access(FDC_DENY_DISK_ACCESS);	// deny now, to avoid problem on PRG load while autoboot disk is mounted
+	return 0;
+}
+
+
+int inject_hwa_pasting ( char *s, const int single_case )
+{
+	if (!s || !*s) {
+		DEBUGPRINT("INJECT: cannot register empty text to be typed-in" NL);
+		return -1;
+	}
+	if (kbd_hwa_pasting) {
+		ERROR_WINDOW("Another pasting event is already in progress.");
+		return -1;
+	}
+	DEBUGPRINT("INJECT: %u bytes long text is registered to be typed-in" NL, (unsigned int)strlen(s));
+	kbd_hwa_pasting = s;
+	kbd_hwa_pasting_single_case = single_case;
 	return 0;
 }

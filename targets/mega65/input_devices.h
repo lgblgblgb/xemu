@@ -35,7 +35,7 @@ extern Uint8 hwa_kbd_get_current_modkeys( void );
 extern void  hwa_kbd_move_next		( void );
 extern void  hwa_kbd_set_fake_key	( const Uint8 asc );
 extern void  hwa_kbd_disable_selector	( int state );
-extern const char *hwa_kbd_add_string	( const char *s );
+extern const char *hwa_kbd_add_string	( const char *s, const int single_case );
 
 extern void  virtkey			( Uint8 rno, Uint8 scancode );
 

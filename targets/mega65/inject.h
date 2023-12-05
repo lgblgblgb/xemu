@@ -26,5 +26,6 @@ extern int  inject_register_prg          ( const char *prg_file, int prg_mode );
 extern void inject_register_allow_disk_access ( void );
 extern void inject_register_command      ( const char *s );
 extern int  inject_register_import_basic_text ( const char *fn );
+extern int  inject_hwa_pasting ( char *s, const int single_case );
 
 #endif
