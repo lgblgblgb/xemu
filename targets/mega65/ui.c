@@ -366,7 +366,7 @@ static void reset_into_utility_menu ( void )
 	if (reset_mega65_asked()) {
 		rom_stubrom_requested = 0;
 		rom_initrom_requested = 0;
-		hwa_kbd_fake_key(0x20);
+		hwa_kbd_set_fake_key(0x20);
 		KBD_RELEASE_KEY(0x75);
 	}
 }
@@ -389,7 +389,7 @@ static void reset_generic ( void )
 {
 	if (reset_mega65_asked()) {
 		KBD_RELEASE_KEY(0x75);
-		hwa_kbd_fake_key(0);
+		hwa_kbd_set_fake_key(0);
 	}
 }
 
@@ -416,7 +416,7 @@ static void reset_into_c65_mode_noboot ( void )
 		rom_initrom_requested = 0;
 		inject_register_allow_disk_access();
 		KBD_RELEASE_KEY(0x75);
-		hwa_kbd_fake_key(0);
+		hwa_kbd_set_fake_key(0);
 	}
 }
 

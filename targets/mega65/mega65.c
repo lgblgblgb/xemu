@@ -434,7 +434,7 @@ static void mega65_init ( void )
 	speed_current = 0;
 	machine_set_speed(1);
 	if (configdb.useutilmenu)
-		hwa_kbd_fake_key(0x20);
+		hwa_kbd_set_fake_key(0x20);
 	DEBUG("INIT: end of initialization!" NL);
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemusnap_init(m65_snapshot_definition);

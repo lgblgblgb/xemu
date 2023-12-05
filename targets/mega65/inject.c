@@ -82,14 +82,15 @@ static void _cbm_screen_write ( Uint8 *p, const char *s )
 	} while (0)
 
 
-static void press_key ( const int key )
+static void press_return ( void )
 {
 	if (key2release >= 0)
 		KBD_RELEASE_KEY(key2release);
-	DEBUGPRINT("INJECT: pressing key #%d" NL, key);
-	key2release = key;
+	DEBUGPRINT("INJECT: pressing key RETURN" NL);
+	key2release = 1;
 	key2release_timeout = KEY_PRESS_TIMEOUT;
-	KBD_PRESS_KEY(key);
+	KBD_PRESS_KEY(1);
+	hwa_kbd_set_fake_key(13);
 }
 
 
@@ -148,12 +149,7 @@ static void prg_inject_callback ( void *unused )
 		}
 		// If program was detected as BASIC (by load-addr) we want to auto-RUN it
 		CBM_SCREEN_PRINTF(under_ready_p, " RUN:");
-		press_key(1);
-		// This strange stuff is here for a kinda "funny" purpose. Many people started to use the $D610 hardware accelerated keyboard scanner
-		// feature, but they often miss to realize that the queue must be emptied by the program itself. Since Xemu is used with with feature
-		// like program injection they never face the problem, and the surprise only coccures when trying on a real MEGA65, blaming Xemu then
-		// for the problem. Thus we inject same fake stuff here just not to have empty $D610 buffer. Otherwise this statement has NO other purpose!
-		hwa_kbd_fake_string("dir\rload");	// more than enough to fill the buffer
+		press_return();
 	} else {
 		// In this case we DO NOT press RETURN for user, as maybe the SYS addr is different, or user does not want this at all!
 		CBM_SCREEN_PRINTF(under_ready_p, " SYS%d:REM **YOU CAN PRESS RETURN**", prg.load_addr);
@@ -168,7 +164,7 @@ static void import_callback2 ( void *unused )
 	CBM_SCREEN_PRINTF(under_ready_p, " SCNCLR:RUN:");
 	if (configdb.disk9)
 		sdcard_external_mount(1, configdb.disk9, NULL);
-	press_key(1);
+	press_return();
 }
 
 
@@ -178,7 +174,7 @@ static void import_callback ( void *unused )
 	fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);	// re-allow disk access
 	if (!sdcard_external_mount(1, IMPORT_BAS_TEXT_TEMPFILE, "Mount failure for BASIC65 import")) {
 		CBM_SCREEN_PRINTF(under_ready_p, " IMPORT\"FILESEQ\",U9:");
-		press_key(1);
+		press_return();
 		inject_register_ready_status("BASIC65 text import2", import_callback2, NULL);
 	}
 }
@@ -209,7 +205,7 @@ static void command_callback ( void *unused )
 		_cbm_screen_write_char(p++, c);
 	}
 	clear_emu_events();
-	press_key(1);
+	press_return();
 }
 
 

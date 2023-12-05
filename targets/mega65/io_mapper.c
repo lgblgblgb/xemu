@@ -182,11 +182,13 @@ Uint8 io_read ( unsigned int addr )
 				case 0xF1:
 					return (fpga_switches >> 8) & 0xFF;
 				case 0x10:				// last keypress ASCII value
-					return hwa_kbd_get_last_ascii();
+					return hwa_kbd_get_queued_ascii();
 				case 0x11:				// modifier keys on kbd being used
-					return hwa_kbd_get_modifiers();
+					return hwa_kbd_get_current_modkeys();
 				case 0x13:				// $D613: direct access to the kbd matrix, read selected row (set by writing $D614), bit 0 = key pressed
 					return kbd_directscan_query(D6XX_registers[0x14]);	// for further explanations please see this function in input_devices.c
+				case 0x0A:
+					return hwa_kbd_get_queued_modkeys();
 				case 0x0F:
 					// GS $D60F
 					// bit 0: cursor left key is pressed
@@ -197,7 +199,7 @@ Uint8 io_read ( unsigned int addr )
 					// D61B amiga / 1531 mouse auto-detect. FIXME XXX what value we should return at this point? :-O
 					return 0xFF;
 				case 0x19:
-					return hwa_kbd_get_last_petscii();
+					return hwa_kbd_get_queued_petscii();
 				case 0x20: // GS $D620 UARTMISC:POTAX Read Port A paddle X, without having to fiddle with SID/CIA settings.
 				case 0x22: // GS $D622 UARTMISC:POTBX Read Port B paddle X, without having to fiddle with SID/CIA settings.
 					return get_mouse_x_via_sid();
@@ -428,11 +430,13 @@ void io_write ( unsigned int addr, Uint8 data )
 			}
 			static int d6cf_exit_status = 0x42;
 			switch (addr) {
-				case 0x10:	// ASCII kbd last press value to zero whatever the written data would be
-					hwa_kbd_move_next_ascii();
+				case 0x0A:	// write bit 7 is zero -> flush the queue
+					if (!(data & 0x80))
+						hwa_kbd_flush_queue();
 					return;
+				case 0x10:	// dequeue an item if ASCII or PETSCII hw accel kbd scanner registers are written
 				case 0x19:
-					hwa_kbd_move_next_petscii();
+					hwa_kbd_move_next();
 					return;
 				case 0x11:
 					hwa_kbd_disable_selector(data & 0x80);
