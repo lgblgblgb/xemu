@@ -1,4 +1,5 @@
 #include <winver.h>
+#include <winuser.h>
 
 1 VERSIONINFO
 BEGIN
@@ -17,3 +18,4 @@ BEGIN
 	END
 END
 1 ICON "../../build/xemu.ico"
+1 RT_MANIFEST "../../build/windres-manifest.xml"

@@ -35,6 +35,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "ethernet65.h"
 #include "audio65.h"
 #include "sdcard.h"
+#include "cart.h"
+#include "configdb.h"
 #include <string.h>
 
 #define ALLOW_CPU_CUSTOM_FUNCTIONS_INCLUDE
@@ -68,12 +70,8 @@ Uint8 colour_ram[0x8000];
 Uint8 char_wom[0x2000];
 // 16K of hypervisor RAM, can be only seen in hypervisor mode.
 Uint8 hypervisor_ram[0x4000];
-// 64 bytes of NVRAM
-Uint8 nvram[64];
-// 8 bytes of UUID
-Uint8 mega65_uuid[8];
-// RTC registers
-Uint8 rtc_regs[6];
+// I2C registers
+Uint8 i2c_regs[0x1000];
 
 Uint8 slow_ram[SLOW_RAM_SIZE];
 
@@ -296,43 +294,31 @@ DEFINE_WRITER(disk_buffers_writer) {
 		disk_buffer_cpu_view[offs & 0x1FF] = data;
 }
 DEFINE_READER(i2c_io_reader) {
-	int addr = GET_READER_OFFSET();
-	Uint8 data = 0x00;	// initial value, if nothing match (unknown I2C to Xemu?)
-	switch (addr) {
-		case 0x100:	// 8 bytes of UUID (64 bit value)
-		case 0x101:
-		case 0x102:
-		case 0x103:
-		case 0x104:
-		case 0x105:
-		case 0x106:
-		case 0x107:
-			data = mega65_uuid[addr & 7];
-			break;
-		case 0x110:	// RTC: seconds BCD
-		case 0x111:	// RTC: minutes BCD
-		case 0x112:	// RTC: hours BCD
-		case 0x113:	// RTC: day of month BCD
-		case 0x114:	// RTC: month BCD
-		case 0x115:	// RTC: year BCD
-			data = rtc_regs[addr - 0x110];
-			break;
-		default:
-			if (addr > 0x140 && addr <= 0x17F)
-				data = nvram[addr - 0x140];
-			break;
-	}
-	return data;
+	const unsigned int addr = GET_READER_OFFSET();
+	//DEBUGPRINT("I2C: read ($%02X) @ I2C+$%X" NL, i2c_regs[addr], addr);
+	return i2c_regs[addr];
 }
 DEFINE_WRITER(i2c_io_writer) {
-	int addr = GET_WRITER_OFFSET();
-	switch (addr) {
-		default:
-			if (addr > 0x140 && addr <= 0x17F)
-				nvram[addr - 0x140] = data;
-			break;
+	const unsigned int addr = GET_WRITER_OFFSET();
+	//DEBUGPRINT("I2C: write ($%02X) @ $%X" NL, data, addr);
+	if (addr >= I2C_NVRAM_OFFSET && addr < (I2C_NVRAM_OFFSET + I2C_NVRAM_SIZE)) {
+		//DEBUGPRINT("I2C: NVRAM write ($%02X->$%02X) @ NVRAM+$%X" NL, i2c_regs[addr], data, addr - I2C_NVRAM_OFFSET);
+		i2c_regs[addr] = data;
+	} else if (configdb.mega65_model == 3 && addr >= 0x1D0 && addr <= 0x1EF) {	// Hyppo needs this on PCB R3 for I2C target setup (audio mixer settings)
+		// TODO: emulate the mixer stuff
+		i2c_regs[addr] = data;
+	} else {
+		DEBUGPRINT("I2C: unhandled write ($%02X) @ I2C+$%X" NL, data, addr);
 	}
 }
+// "Slow device" ~ cardridge space
+DEFINE_READER(slowdev_reader) {
+	return cart_read_byte(GET_READER_OFFSET());
+}
+DEFINE_WRITER(slowdev_writer) {
+	cart_write_byte(GET_WRITER_OFFSET(), data);
+}
+
 // Not implemented yet, just here, since freezer accesses this memory area, and without **some** dummy
 // support, it would cause "unhandled memory access" warning in Xemu.
 DEFINE_READER(mem1541_reader) {
@@ -367,7 +353,7 @@ static const struct m65_memory_map_st m65_memory_map[] = {
 	{ 0xFFD7000, 0xFFD7FFF, i2c_io_reader, i2c_io_writer },			// I2C devices
 	{ 0x8000000, 0x8000000 + SLOW_RAM_SIZE - 1, slow_ram_reader, slow_ram_writer },		// "slow RAM" also called "hyper RAM" (not to be confused with hypervisor RAM!)
 	{ 0x8000000 + SLOW_RAM_SIZE, 0xFDFFFFF, dummy_reader, dummy_writer },			// ununsed big part of the "slow RAM" or so ...
-	{ 0x4000000, 0x7FFFFFF, dummy_reader, dummy_writer },		// slow RAM memory area, not exactly known what it's for, let's define as "dummy"
+	{ 0x4000000, 0x7FFFFFF, slowdev_reader, slowdev_writer },		// slow RAM memory area ~ cartridge
 	{ 0xFE00000, 0xFE000FF, opl3_reader, opl3_writer },
 	{ 0x60000, 0xFFFFF, dummy_reader, dummy_writer },			// upper "unused" area of C65 (!) memory map. It seems C65 ROMs want it (Expansion RAM?) so we define as unused.
 	{ 0xFFDB000, 0xFFDFFFF, mem1541_reader, mem1541_writer },		// 1541's 16K ROM + 4K RAM, not so much used currently, but freezer seems to access it, for example ...
@@ -489,12 +475,17 @@ static void init_helper_custom_memtab_policy (
 
 void memory_init ( void )
 {
-	int a;
 	memset(D6XX_registers, 0, sizeof D6XX_registers);
 	memset(D7XX, 0xFF, sizeof D7XX);
+	memset(i2c_regs, 0xFF, sizeof i2c_regs);
+	// generate UUID. It will be overwritten anyway in mega65.c if there is i2c backup (not totally new Xemu install)
+	for (int a = I2C_UUID_OFFSET; a < I2C_UUID_OFFSET + I2C_UUID_SIZE; a++)
+		i2c_regs[a] = rand();
+	memset(i2c_regs + I2C_NVRAM_OFFSET, 0, I2C_NVRAM_SIZE);	// also fill NVRAM area with 0 (FIXME: needed?)
+	cart_init();
 	rom_protect = 0;
 	in_hypervisor = 0;
-	for (a = 0; a < MEM_SLOTS; a++) {
+	for (int a = 0; a < MEM_SLOTS; a++) {
 		// First of ALL! Initialize mem_page_phys for an impossible value! or otherwise bad crashes would happen ...
 		mem_page_phys[a] = 1;	// this is cool enough, since phys addr for this func, can be only 256 byte aligned, so it won't find these ever as cached!
 		phys_addr_decoder((a & 0xFF) << 8, a, -1);	// at least we have well defined defaults :) with 'real' and 'virtual' slots as well ...
@@ -532,7 +523,7 @@ void memory_init ( void )
 	map_marker_low =  MAP_MARKER_DUMMY_OFFSET;
 	map_marker_high = MAP_MARKER_DUMMY_OFFSET;
 	//skip_unhandled_mem = 0;
-	for (a = 0; a < 9; a++)
+	for (int a = 0; a < 9; a++)
 		applied_memcfg[a] = MAP_MARKER_DUMMY_OFFSET - 1;
 	// Setting up the default memory configuration for M65 at least!
 	// Note, the exact order is IMPORTANT as being the first use of memory subsystem, actually these will initialize some things ...

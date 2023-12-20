@@ -796,6 +796,30 @@ static const char *xemucfg_get_template_config_file_name ( void )
 }
 
 
+int xemucfg_delete_default_config_file ( const char *are_you_sure_msg )
+{
+	char path[PATH_MAX];
+	const char *fn = xemucfg_get_default_config_file_name();
+	int ret = xemu_open_file(fn, O_RDONLY, NULL, path);
+	if (ret < 0) {
+		DEBUGPRINT("CONFIG: ERROR: cannot delete default configuration file, since file does not exist: %s" NL, fn);
+		return ret;
+	}
+	close(ret);
+	if (are_you_sure_msg && !ARE_YOU_SURE(are_you_sure_msg, ARE_YOU_SURE_DEFAULT_NO))
+		return 1;
+	DEBUGPRINT("CONFIG: deleting default configuration file: %s" NL, path);
+	ret = unlink(path);
+	if (ret) {
+		if (are_you_sure_msg)
+			ERROR_WINDOW("Error deleting default configuration file file: %s\n(%s)", strerror(errno), path);
+		else
+			DEBUGPRINT("CONFIG: ERROR: could not delete: %s" NL, strerror(errno));
+	}
+	return ret;
+}
+
+
 int xemucfg_parse_all ( void )
 {
 	int argc = xemu_initial_argc;

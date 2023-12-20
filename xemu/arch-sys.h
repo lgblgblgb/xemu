@@ -54,6 +54,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #		define	DISABLE_DEBUG
 #	endif
 //#	define	XEMU_OLD_TIMING
+#elif	defined(__ANDROID__)
+#	define	XEMU_ARCH_ANDROID
+#	define	XEMU_ARCH_NAME	"android"
+#	ifndef	DISABLE_DEBUG
+#		define	DISABLE_DEBUG
+#	endif
+#	define	XEMU_SLEEP_IS_SDL_DELAY
 #elif	defined(_WIN64)
 #	define	XEMU_ARCH_WIN64
 #	define	XEMU_ARCH_WIN

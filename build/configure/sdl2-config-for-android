@@ -1,0 +1,74 @@
+#!/bin/bash
+# A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
+# Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
+# Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+
+# As the name of this script suggests, it's an sdl2-config replacement for
+# Android builds **BUT** it's also used by Xemu for every other aspects to
+# control the Android build process, like specifying the compiler, used
+# flags, etc. Generally, you don't want to edit this script, but the
+# sdl2-config-for-android.params instead, which will be created after the
+# first run.
+
+PARAM_FILE="`dirname $0`/sdl2-config-for-android.params"
+
+if [ ! -s $PARAM_FILE ]; then
+# *** DO NOT MODIFY THESE, BUT THE FILE sdl2-config-for-android.params ***
+# This part only writes file sdl2-config-for-android.params if it's not
+# there yet, but you can customize it then, there.
+cat > $PARAM_FILE << EOF
+SDL_BASE=/home/lgb/android/SDL-release-2.28.5
+NDK_CC=/home/lgb/android/Sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang
+CFLAGS_SDL="-I\$SDL_BASE/include/ -D_REENTRANT"
+CFLAGS_ANDROID="-fPIC"
+CFLAGS_ARCH=""
+#CFLAGS_ARCH="-march=armv7-a -mfpu=vfpv3-d16 -mfloat-abi=softfp -mthumb"
+LDFLAGS_SDL="-L\$SDL_BASE/build/android/lib/arm64-v8a/ -lSDL2"
+LDFLAGS_ARCH=""
+#LDFLAGS_ARCH="-march=armv7-a -Wl,--fix-cortex-a8"
+LDFLAGS_ANDROID="--shared -fPIC"
+EOF
+fi
+
+source $PARAM_FILE
+
+if [ "$1" = "--summary" ]; then
+	echo "---- ANDROID SUMMARY BEGINS ----"
+	echo "PARAM_FILE:      $PARAM_FILE"
+	echo "SDL BASE:        $SDL_BASE"
+	echo "NDK_CC:          $NDK_CC"
+	echo "CFLAGS_SDL:      $CFLAGS_SDL"
+	echo "CFLAGS_ARCH:     $CFLAGS_ARCH"
+	echo "CFLAGS_ANDROID:  $CFLAGS_ANDROID"
+	echo "LDFLAGS_SDL:     $LDFLAGS_SDL"
+	echo "LDFLAGS_ARCH:    $LDFLAGS_ARCH"
+	echo "LDFLAGS_ANDROID: $LDFLAGS_ANDROID"
+	echo "Trying to query the compiler now ..."
+	$NDK_CC --version || exit 1
+	echo "---- ANDROID SUMMARY ENDS ----"
+	exit 0
+elif [ "$1" = "--paramfile" ]; then
+	echo "$PARAM_FILE"
+	exit 0
+elif [ "$1" = "--compiler" ]; then
+	echo "$NDK_CC"
+	exit 0
+elif [ "$1" = "--libs" ]; then
+	echo "$LDFLAGS_SDL $LDFLAGS_ANDROID $LDFLAGS_ARCH"
+	exit 0
+elif [ "$1" = "--cflags" ]; then
+	echo "$CFLAGS_SDL $CFLAGS_ANDROID $CFLAGS_ARCH"
+	exit 0
+elif [ "$1" = "--prefix" ]; then
+	echo "$SDL_BASE"
+	exit 0
+elif [ "$1" = "--version" ]; then
+	# How to do this better?
+	sed -n 's/title[\ t]*sdl[\t ]*//pi' $SDL_BASE/Xcode/SDL/pkg-support/SDL.info
+	exit 0
+elif [ "$1" = "" ]; then
+	echo "Missing argument for script $0" >&2
+	exit 1
+fi
+echo "Invalid argument $1 for script $0" >&2
+exit 1

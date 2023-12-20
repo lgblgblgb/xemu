@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    THIS IS AN UGLY PIECE OF SOURCE REALLY.
 
@@ -374,6 +374,31 @@ void cpu65_reset ( void ) {
 			CPU65.pc, // FIXME
 			HAS_NMOS_BUG_BCD ? "NMOS-6502" : "65C02+"
 	);
+}
+
+void cpu65_debug_set_pc ( const Uint16 new_pc ) {
+#ifdef	CPU_65CE02
+	int max = 100;
+	while (
+		CPU65.cpu_inhibit_interrupts
+#ifdef	MEGA65
+		|| CPU65.prefix != PREFIX_NOTHING
+#endif
+	)
+		if (max-- <= 0) {
+			DEBUGPRINT("CPU65: SET_PC: **warning** timeout while waiting for EOM or PREFIX" NL);
+			break;
+		} else cpu65_step(
+#ifdef			CPU_STEP_MULTI_OPS
+			1
+#endif
+		);
+	CPU65.cpu_inhibit_interrupts = 0;
+#ifdef	MEGA65
+	CPU65.prefix = PREFIX_NOTHING;
+#endif
+#endif
+	CPU65.pc = new_pc;
 }
 
 
@@ -1895,10 +1920,20 @@ int cpu65_step (
 			break;
 	case 0x89:	/* BIT+ Immediate */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
-#ifdef CPU65_DISCRETE_PF_NZ
-			CPU65.pf_z = (!(CPU65.a & readByte(_imm())));
+			// Note: For the CPU65 emulator I used (maybe old) datasheet on 65C02, which all stated
+			// that BIT #immed is special, and only the Z flag is affected, unlike other BIT
+			// addressing modes. However it seems it was just for early 65C02s. Also
+			// mega65-core (and it seems also C65 iself) uses the regular implementation for
+			// immediate addressing mode as well. Just in case, I left open the possibility
+			// to use the old impementation if CPU65_OLD_BIT_IMMEDIATE is defined.
+#ifndef CPU65_OLD_BIT_IMMEDIATE
+			_BIT(readByte(_imm()));
 #else
+#	ifdef CPU65_DISCRETE_PF_NZ
+			CPU65.pf_z = (!(CPU65.a & readByte(_imm())));
+#	else
 			if (CPU65.a & readByte(_imm())) CPU65.pf_nz &= (~CPU65_PF_Z); else CPU65.pf_nz |= CPU65_PF_Z;
+#	endif
 #endif
 			}
 			break;

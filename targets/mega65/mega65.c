@@ -42,6 +42,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "configdb.h"
 #include "xemu/emutools_socketapi.h"
 #include "rom.h"
+#include "cart.h"
+#include "matrix_mode.h"
 
 // "Typical" size in default settings (video standard is PAL, default border settings).
 // See also vic4.h
@@ -73,10 +75,7 @@ const char *cpu_clock_speed_string = "";
 static unsigned int cpu_clock_speed_str_index = 0;
 static unsigned int cpu_cycles_per_scanline;
 int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
-
-static Uint8 nvram_original[sizeof nvram];
-static int uuid_must_be_saved = 0;
-
+static Uint8 i2c_regs_original[sizeof i2c_regs];
 Uint8 last_dd00_bits = 3;		// Bank 0
 const char *last_reset_type;
 
@@ -151,6 +150,18 @@ void machine_set_speed ( int verbose )
 		if (cpu_cycles_per_step > 1 && !hypervisor_is_debugged && !configdb.cpusinglestep)
 			cpu_cycles_per_step = cpu_cycles_per_scanline;	// if in trace mode (or hyper-debug ...), do not set this! So set only if non-trace and non-hyper-debug
 	}
+}
+
+
+int mega65_set_model ( const Uint8 id )
+{
+	static int first_call = 1;
+	if (configdb.mega65_model == id && !first_call)
+		return 0;
+	first_call = 0;
+	configdb.mega65_model = id;
+	DEBUGPRINT("XEMU: emulated MEGA65 model ID: $%02X" NL, configdb.mega65_model);
+	return 1;
 }
 
 
@@ -280,6 +291,19 @@ internal:
 }
 
 
+static void i2c_save_storage ( const int forced )
+{
+	// Save I2C space, which includes UUID and NVRAM info as well (which may have been initialized - UUID - OR changed - NVRAM - during this emulation run)
+	memset(i2c_regs_original + I2C_RTC_OFFSET, 0, I2C_RTC_SIZE);	// copy RTC regs, so it won't trigger save because of this difference alone
+	memset(i2c_regs          + I2C_RTC_OFFSET, 0, I2C_RTC_SIZE);	// -- "" --
+	if (forced || memcmp(i2c_regs, i2c_regs_original, sizeof i2c_regs)) {
+		DEBUGPRINT("I2C: saving register storage to %s (%s)" NL, I2C_FILE_NAME, forced ? "forced" : "changed");
+		if (!xemu_save_file(I2C_FILE_NAME, i2c_regs, sizeof i2c_regs, "Cannot save I2C registers (including eg NVRAM and UUID). Changes will be lost!"))
+			memcpy(i2c_regs_original, i2c_regs, sizeof i2c_regs);
+	}
+}
+
+
 static void preinit_memory_for_start ( void )
 {
 	// This is an absolute minimum flash utility to replace the official one ;)
@@ -343,33 +367,39 @@ static void mega65_init ( void )
 	} while (0);
 	// *** Initializes memory subsystem of MEGA65 emulation itself
 	memory_init();
-	// Load contents of NVRAM.
-	// Also store as "nvram_original" so we can sense on shutdown of the emu, if we need to up-date the on-disk version
-	// If we fail to load it (does not exist?) it will be written out anyway on exit.
-	if (xemu_load_file(NVRAM_FILE_NAME, nvram, sizeof nvram, sizeof nvram, "Cannot load NVRAM state. Maybe first run of Xemu?\nOn next Xemu run, it should have been corrected though automatically!\nSo no need to worry.") == sizeof nvram) {
-		memcpy(nvram_original, nvram, sizeof nvram);
+	cart_load_bin(configdb.cartbin8000, 0x8000, "Cannot load binary cartridge image from $8000");
+	if (xemu_load_file(I2C_FILE_NAME, i2c_regs, sizeof i2c_regs, sizeof i2c_regs,
+#ifndef		XEMU_ARCH_HTML
+		"Cannot load I2C reg-space. Maybe first run or upgrade of Xemu?\nFor the next Xemu launch, it should have been already corrected automatically.\nSo no need to worry."
+#else
+		NULL
+#endif
+	) != sizeof i2c_regs) {
+		// if we could not load I2C backup, try legacy ways (older Xemu?)
+		const int r = (xemu_load_file(UUID_FILE_NAME, i2c_regs + I2C_UUID_OFFSET, I2C_UUID_SIZE, I2C_UUID_SIZE, NULL) == I2C_UUID_SIZE) +
+			(xemu_load_file(NVRAM_FILE_NAME, i2c_regs + I2C_NVRAM_OFFSET, I2C_NVRAM_SIZE, I2C_NVRAM_SIZE, NULL) == I2C_NVRAM_SIZE);
+		if (r > 0)
+			INFO_WINDOW("Imported %d legacy NVRAM/UUID files (older Xemu) into the new I2C space. Good.\nOn next run, you won't get these messages anymore (hopefully).", r);
+		i2c_save_storage(1);
 	} else {
-		// could not load from disk. Initialize to soma values.
-		// Also, set nvram and nvram_original being different, so exit handler will sense the situation and save it.
-		memset(nvram, 0, sizeof nvram);
-		memset(nvram_original, 0xAA, sizeof nvram);
-	}
-	// Let's generate (if it does not exist) an UUID for myself. It can be read back via the 'UUID' registers.
-	if (xemu_load_file(UUID_FILE_NAME, mega65_uuid, sizeof mega65_uuid, sizeof mega65_uuid, NULL) != sizeof mega65_uuid) {
-		for (int a = 0; a < sizeof mega65_uuid; a++) {
-			mega65_uuid[a] = rand();
-		}
-		uuid_must_be_saved = 1;
+		memcpy(i2c_regs_original, i2c_regs, sizeof i2c_regs);
 	}
 	// Fill memory with the needed pre-initialized regions to be able to start.
 	preinit_memory_for_start();
 	// *** Image file for SDCARD support, and other related init functions handled there as well (eg d81access, fdc init ... related registers, etc)
-	if (sdcard_init(configdb.sdimg, configdb.virtsd) < 0)
+	if (sdcard_init(configdb.sdimg,
+#ifndef		XEMU_ARCH_HTML
+		configdb.virtsd
+#else
+		0
+#endif
+	) < 0)
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
 	vic_init();
 	vic4_disallow_videostd_change = configdb.lock_videostd;
 	vic4_set_videostd(configdb.videostd >= 0 ? configdb.videostd : 0, "by emulator initalization");
+	vic4_set_emulation_colour_effect(-configdb.colour_effect);
 	// *** CIAs
 	cia_init(&cia1, "CIA-1",
 		NULL,			// callback: OUTA
@@ -404,7 +434,7 @@ static void mega65_init ( void )
 	speed_current = 0;
 	machine_set_speed(1);
 	if (configdb.useutilmenu)
-		hwa_kbd_fake_key(0x20);
+		hwa_kbd_set_fake_key(0x20);
 	DEBUG("INIT: end of initialization!" NL);
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemusnap_init(m65_snapshot_definition);
@@ -447,21 +477,13 @@ int dump_screen ( const char *fn )
 
 static void shutdown_callback ( void )
 {
-	// Write out NVRAM if changed!
-	if (memcmp(nvram, nvram_original, sizeof(nvram))) {
-		DEBUGPRINT("NVRAM: changed, writing out on exit." NL);
-		xemu_save_file(NVRAM_FILE_NAME, nvram, sizeof nvram, "Cannot save changed NVRAM state! NVRAM changes will be lost!");
-	}
-	if (uuid_must_be_saved) {
-		uuid_must_be_saved = 0;
-		DEBUGPRINT("UUID: must be saved." NL);
-		xemu_save_file(UUID_FILE_NAME, mega65_uuid, sizeof mega65_uuid, NULL);
-	}
+	hypervisor_serial_monitor_close_file(configdb.hyperserialfile);
+	i2c_save_storage(0);
 	eth65_shutdown();
 	for (int a = 0; a < 0x40; a++)
 		DEBUG("VIC-3 register $%02X is %02X" NL, a, vic_registers[a]);
-	cia_dump_state (&cia1);
-	cia_dump_state (&cia2);
+	cia_dump_state(&cia1);
+	cia_dump_state(&cia2);
 #if !defined(XEMU_ARCH_HTML)
 	(void)dump_memory(configdb.dumpmem);
 	(void)dump_screen(configdb.dumpscreen);
@@ -560,6 +582,11 @@ void m65mon_show_regs ( void )
 	);
 }
 
+void m65mon_set_pc ( const Uint16 addr )
+{
+	cpu65_debug_set_pc(addr);
+}
+
 void m65mon_dumpmem16 ( Uint16 addr )
 {
 	int n = 16;
@@ -577,12 +604,10 @@ void m65mon_dumpmem28 ( int addr )
 		umon_printf("%02X", memory_debug_read_phys_addr(addr++));
 }
 
-void m65mon_setmem28( int addr, int cnt, Uint8* vals )
+void m65mon_setmem28 ( int addr, int cnt, Uint8* vals )
 {
-  for (int k = 0; k < cnt; k++)
-  {
-    memory_debug_write_phys_addr(addr++, vals[k]);
-  }
+	while (--cnt >= 0)
+		memory_debug_write_phys_addr(addr++, *(vals++));
 }
 
 void m65mon_set_trace ( int m )
@@ -644,6 +669,28 @@ void m65mon_breakpoint ( int brk )
 #endif
 
 
+static void update_emulated_time_sources ( void )
+{
+	// Ugly CIA trick to maintain realtime TOD in CIAs :)
+//	if (seconds_timer_trigger) {
+	const struct tm *t = xemu_get_localtime();
+	const Uint8 sec10ths = xemu_get_microseconds() / 100000;
+	// UPDATE CIA TODs:
+	cia_ugly_tod_updater(&cia1, t, sec10ths, configdb.rtc_hour_offset);
+	cia_ugly_tod_updater(&cia2, t, sec10ths, configdb.rtc_hour_offset);
+	// UPDATE the RTC too:
+	i2c_regs[I2C_RTC_OFFSET + 0] = XEMU_BYTE_TO_BCD(t->tm_sec);	// seconds
+	i2c_regs[I2C_RTC_OFFSET + 1] = XEMU_BYTE_TO_BCD(t->tm_min);	// minutes
+	//i2c_regs[I2C_RTC_OFFSET + 2] = xemu_hour_to_bcd12h(t->tm_hour, configdb.rtc_hour_offset);	// hours
+	i2c_regs[I2C_RTC_OFFSET + 2] = XEMU_BYTE_TO_BCD((t->tm_hour + configdb.rtc_hour_offset + 24) % 24) | 0x80;	// hours (24H format, bit 7 always set)
+	i2c_regs[I2C_RTC_OFFSET + 3] = XEMU_BYTE_TO_BCD(t->tm_mday);	// day of month
+	i2c_regs[I2C_RTC_OFFSET + 4] = XEMU_BYTE_TO_BCD(t->tm_mon) + 1;	// month
+	i2c_regs[I2C_RTC_OFFSET + 5] = XEMU_BYTE_TO_BCD(t->tm_year - 100);	// year
+	i2c_regs[I2C_RTC_OFFSET + 6] = XEMU_BYTE_TO_BCD(t->tm_wday);	// day of week
+//	}
+}
+
+
 static void update_emulator ( void )
 {
 	vic4_close_frame_access();
@@ -666,22 +713,7 @@ static void update_emulator ( void )
 	//vic4_close_frame_access();
 	// Let's sleep ...
 	xemu_timekeeping_delay(videostd_frametime);
-	// Ugly CIA trick to maintain realtime TOD in CIAs :)
-//	if (seconds_timer_trigger) {
-	const struct tm *t = xemu_get_localtime();
-	const Uint8 sec10ths = xemu_get_microseconds() / 100000;
-	// UPDATE CIA TODs:
-	cia_ugly_tod_updater(&cia1, t, sec10ths, configdb.rtc_hour_offset);
-	cia_ugly_tod_updater(&cia2, t, sec10ths, configdb.rtc_hour_offset);
-	// UPDATE the RTC too:
-	rtc_regs[0] = XEMU_BYTE_TO_BCD(t->tm_sec);	// seconds
-	rtc_regs[1] = XEMU_BYTE_TO_BCD(t->tm_min);	// minutes
-	//rtc_regs[2] = xemu_hour_to_bcd12h(t->tm_hour, configdb.rtc_hour_offset);	// hours
-	rtc_regs[2] = XEMU_BYTE_TO_BCD((t->tm_hour + configdb.rtc_hour_offset + 24) % 24) | 0x80;	// hours (24H format, bit 7 always set)
-	rtc_regs[3] = XEMU_BYTE_TO_BCD(t->tm_mday);	// day of month
-	rtc_regs[4] = XEMU_BYTE_TO_BCD(t->tm_mon) + 1;	// month
-	rtc_regs[5] = XEMU_BYTE_TO_BCD(t->tm_year - 100);	// year
-//	}
+	update_emulated_time_sources();
 }
 
 
@@ -781,7 +813,7 @@ int main ( int argc, char **argv )
 	if (xemucfg_parse_all())
 		return 1;
 	// xemucfg_dump_db("After returning from xemucfg_parse_all in main()");
-	DEBUGPRINT("XEMU: emulated MEGA65 model ID: %d" NL, configdb.mega65_model);
+	mega65_set_model(configdb.mega65_model);
 #ifdef HAVE_XEMU_INSTALLER
 	xemu_set_installer(configdb.installer);
 #endif
@@ -845,6 +877,8 @@ int main ( int argc, char **argv )
 				"run\"*\""				// for C65/MEGA65 mode, we have nice command for that functionality ...
 			);
 	}
+	if (!configdb.prg && !configdb.go64 && !configdb.autoload && configdb.importbas)
+		inject_register_import_basic_text(configdb.importbas);
 	rom_stubrom_requested = configdb.usestubrom;
 	rom_initrom_requested = configdb.useinitrom;
 	rom_from_prefdir_allowed = !configdb.romfromsd;
@@ -853,8 +887,12 @@ int main ( int argc, char **argv )
 	xemu_set_full_screen(configdb.fullscreen_requested);
 	if (!configdb.syscon)
 		sysconsole_close(NULL);
+	hypervisor_serial_monitor_open_file(configdb.hyperserialfile);
 	xemu_timekeeping_start();
 	emulation_is_running = 1;
+	update_emulated_time_sources();
+	if (configdb.matrixstart)
+		matrix_mode_toggle(1);
 	// FIXME: for emscripten (anyway it does not work too much currently) there should be 50 or 60 (PAL/NTSC) instead of (fixed, and wrong!) 25!!!!!!
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;

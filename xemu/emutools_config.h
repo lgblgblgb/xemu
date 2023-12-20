@@ -146,6 +146,7 @@ extern int  xemucfg_parse_all ( void );
 extern int  xemucfg_save_config_file  ( const char *filename, const char *initial_part, const char *cry );
 extern int  xemucfg_parse_config_file ( const char *filename_in, const char *open_fail_msg );
 extern const char *xemucfg_get_default_config_file_name ( void );
+extern int xemucfg_delete_default_config_file ( const char *are_you_sure_msg );
 
 extern void xemucfg_set_str ( char **ptr, const char *value );
 

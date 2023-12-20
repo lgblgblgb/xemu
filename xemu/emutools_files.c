@@ -1,6 +1,6 @@
 /* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
  * 8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -235,7 +235,7 @@ void xemuexec_open_native_file_browser ( char *dir )
 	}
 	if (fbp != XEMUEXEC_NULL_PROCESS_ID) {
 		int w = xemuexec_check_status(fbp, 0);
-		DEBUGPRINT("EXEC: FILEBROWSER: previous file browser process (" PRINTF_LLD ") status was: %d" NL, (unsigned long long int)(uintptr_t)fbp, w);
+		DEBUGPRINT("EXEC: FILEBROWSER: previous file browser process (" PRINTF_U64 ") status was: %d" NL, (Uint64)(uintptr_t)fbp, w);
 		if (w == XEMUEXEC_STILL_RUNNING)
 			ERROR_WINDOW("A file browser is already has been opened.");
 		else if (w == -1)
@@ -734,10 +734,10 @@ int xemu_create_large_empty_file ( const char *os_path, Uint64 size, int is_spar
 	if (is_sparse) {
 		DWORD dwTemp;
 		if (DeviceIoControl((HANDLE)_get_osfhandle(fd), FSCTL_SET_SPARSE, NULL, 0, NULL, 0, &dwTemp, NULL) == 0) {
-			ERROR_WINDOW("Cannot set file as sparse file!\nWindows error #" PRINTF_LLU "\nIt's not a fatal problem, though the file will take much more space than usual", (unsigned long long int)GetLastError());
+			ERROR_WINDOW("Cannot set file as sparse file!\nWindows error #" PRINTF_U64 "\nIt's not a fatal problem, though the file will take much more space than usual", (Uint64)GetLastError());
 			goto error;
 		} else
-			DEBUGPRINT("WINDOWS: file has been made sparse, lpBytesReturned=" PRINTF_LLU NL, (unsigned long long int)dwTemp);
+			DEBUGPRINT("WINDOWS: file has been made sparse, lpBytesReturned=" PRINTF_U64 NL, (Uint64)dwTemp);
 	} else
 		DEBUGPRINT("WINDOWS: not using sparse file ..." NL);
 #else
@@ -768,8 +768,8 @@ error:
 }
 
 
-#if defined(XEMU_USE_LODEPNG) && defined(XEMU_FILES_SCREENSHOT_SUPPORT)
 char xemu_screenshot_full_path[PATH_MAX+1];
+#if defined(XEMU_USE_LODEPNG) && defined(XEMU_FILES_SCREENSHOT_SUPPORT)
 #include "xemu/lodepng.h"
 #include <time.h>
 // TODO: use libpng in Linux, smaller binary (on windows I wouldn't introduce another DLL dependency though ...)
@@ -857,5 +857,12 @@ int xemu_screenshot_png ( const char *path, const char *fn, unsigned int zoom_wi
 			source_width, source_height, target_width, target_height, xemu_screenshot_full_path
 		);
 	return ret;
+}
+#else
+int xemu_screenshot_png ( const char *path, const char *fn, unsigned int zoom_width, unsigned int zoom_height, Uint32 *source_pixels, unsigned int source_width, unsigned int source_height, unsigned int source_texture_width )
+{
+	xemu_screenshot_full_path[0] = 0;
+	DEBUGPRINT("SCREENSHOT: NOT SUPPORTED ON THIS PLATFORM" NL);
+	return 1;
 }
 #endif

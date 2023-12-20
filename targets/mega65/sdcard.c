@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "vic4.h"
 #include "configdb.h"
 #include "xemu/emutools_config.h"
+#include "xemu/compressed_disk_image.h"
 
 #include <sys/types.h>
 #include <unistd.h>
@@ -37,7 +38,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <fcntl.h>
 #include <limits.h>
 
-#define COMPRESSED_SD
 #define USE_KEEP_BUSY
 
 #ifdef USE_KEEP_BUSY
@@ -62,10 +62,9 @@ static int	sdhc_mode = 1;
 static Uint32	sdcard_size_in_blocks;	// SD card size in term of number of 512 byte blocks
 static int	sd_fill_mode = 0;
 static Uint8	sd_fill_value = 0;
-#ifdef COMPRESSED_SD
+#ifdef RLE_COMPRESSED_DISK_IMAGE_SUPPORT
 static int	sd_compressed = 0;
-static off_t	sd_bdata_start;
-static int	compressed_block;
+static struct compressed_diskimage_st sd_compressed_info;
 #endif
 static int	sd_is_read_only;
 #ifdef USE_KEEP_BUSY
@@ -290,30 +289,6 @@ static void sdcard_shutdown ( void )
 }
 
 
-#ifdef COMPRESSED_SD
-static int detect_compressed_image ( int fd )
-{
-	static const char compressed_marker[] = "XemuBlockCompressedImage000";
-	Uint8 buf[512];
-	if (lseek(sdfd, 0, SEEK_SET) == OFF_T_ERROR || xemu_safe_read(fd, buf, 512) != 512)
-		return -1;
-	if (memcmp(buf, compressed_marker, sizeof compressed_marker)) {
-		DEBUGPRINT("SDCARD: image is not compressed" NL);
-		return 0;
-	}
-	if (((buf[0x1C] << 16) | (buf[0x1D] << 8) | buf[0x1E]) != 3) {
-		ERROR_WINDOW("Invalid/unknown compressed image format");
-		return -1;
-	}
-	sdcard_size_in_blocks = (buf[0x1F] << 16) | (buf[0x20] << 8) | buf[0x21];
-	DEBUGPRINT("SDCARD: compressed image with %u blocks" NL, sdcard_size_in_blocks);
-	sd_bdata_start = 3 * sdcard_size_in_blocks + 0x22;
-	sd_is_read_only = O_RDONLY;
-	return 1;
-}
-#endif
-
-
 Uint32 sdcard_get_size ( void )
 {
 	return sdcard_size_in_blocks;
@@ -331,7 +306,11 @@ static void card_init_done ( void )
 	DEBUGPRINT("SDCARD: card init done, size=%u Mbytes (%s), virtsd_mode=%s, default_D81_from_sd=%d" NL,
 		sdcard_size_in_blocks >> 11,
 		sd_is_read_only ? "R/O" : "R/W",
+#ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 		vdisk.mode ? "IN-MEMORY-VIRTUAL" : "image-file",
+#else
+		"NOT-SUPPORTED",
+#endif
 		configdb.defd81fromsd
 	);
 	sdcard_set_external_mount_pool(sdcard_size_in_blocks);
@@ -364,9 +343,9 @@ int sdcard_init ( const char *fn, const int virtsd_flag )
 	if (virtsd_flag) {
 		virtdisk_init(VIRTUAL_DISK_BLOCKS_PER_CHUNK, VIRTUAL_DISK_SIZE_IN_BLOCKS);
 		vdisk.mode = 1;
-	} else
-#else
+	} else {
 		vdisk.mode = 0;
+	}
 #endif
 	d81access_init();
 	atexit(sdcard_shutdown);
@@ -379,7 +358,7 @@ int sdcard_init ( const char *fn, const int virtsd_flag )
 		sdfd = -1;
 		sd_is_read_only = 0;
 		sdcard_size_in_blocks = VIRTUAL_DISK_SIZE_IN_BLOCKS;
-#ifdef COMPRESSED_SD
+#ifdef RLE_COMPRESSED_DISK_IMAGE_SUPPORT
 		sd_compressed = 0;
 #endif
 		card_init_done();
@@ -431,14 +410,23 @@ retry:
 			sdfd = -1;
 			return sdfd;
 		}
-#ifdef COMPRESSED_SD
-		sd_compressed = detect_compressed_image(sdfd);
+		sdcard_size_in_blocks = size_in_bytes >> 9;	// sdcard_size_in_blocks will be overwritten below if it's a compressed image
+#ifdef RLE_COMPRESSED_DISK_IMAGE_SUPPORT
+		sd_compressed = compressed_diskimage_detect(&sd_compressed_info, sdfd, "SDCARD: RLE");
 		if (sd_compressed < 0) {
 			ERROR_WINDOW("Error while trying to detect compressed SD-image");
-			sdcard_size_in_blocks = 0; // just cheating to trigger error handling later
+			sdcard_size_in_blocks = 0;	// just cheating to trigger error handling later
+			size_in_bytes = 0;
+			sd_compressed = 0;
+			sd_is_read_only = 1;
+		} else if (sd_compressed > 0) {
+			sd_is_read_only = 1;	// compressed disk image is always read-only!
+			sdcard_size_in_blocks = sd_compressed_info.size_in_blocks;
+			size_in_bytes = (off_t)sdcard_size_in_blocks << 9;
+		} else {
+			DEBUGPRINT("SDCARD: image is not compressed" NL);
 		}
 #endif
-		sdcard_size_in_blocks = size_in_bytes >> 9;
 		DEBUG("SDCARD: detected size in Mbytes: %d" NL, (int)(size_in_bytes >> 20));
 		if (size_in_bytes < 67108864UL) {
 			ERROR_WINDOW("SD-card image is too small! Min required size is 64Mbytes!");
@@ -465,12 +453,15 @@ retry:
 		if (just_created_image_file) {
 			just_created_image_file = 0;
 			// Just created SD-card image file by Xemu itself! So it's nice if we format it for the user at this point!
+#ifdef SD_CONTENT_SUPPORT
 			if (!sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_FORCE_FDISK)) {
 				INFO_WINDOW("Your just created SD-card image file has\nbeen auto-fdisk/format'ed by Xemu. Great :).");
 				sdcontent_write_rom_stub();
 			}
+#endif
 		}
 	}
+#ifdef SD_CONTENT_SUPPORT
 	if (!virtsd_flag && sdfd >= 0) {
 		static const char msg[] = " on the SD-card image.\nPlease use UI menu: Disks -> SD-card -> Update files ...\nUI can be accessed with right mouse click into the emulator window.";
 		int r = sdcontent_check_xemu_signature();
@@ -484,22 +475,8 @@ retry:
 			INFO_WINDOW("Xemu's signature is too new%s to DOWNgrade", msg);
 		}
 	}
+#endif
 	return sdfd;
-}
-
-
-static XEMU_INLINE Uint32 U8A_TO_U32 ( const Uint8 *a )
-{
-	return ((Uint32)a[0]) | ((Uint32)a[1] << 8) | ((Uint32)a[2] << 16) | ((Uint32)a[3] << 24);
-}
-
-
-static XEMU_INLINE void U32_TO_U8A ( Uint8 *a, const Uint32 d )
-{
-	a[0] =  d        & 0xFF;
-	a[1] = (d >>  8) & 0xFF;
-	a[2] = (d >> 16) & 0xFF;
-	a[3] = (d >> 24) & 0xFF;
 }
 
 
@@ -507,25 +484,7 @@ static int host_seek ( const Uint32 block )
 {
 	if (sdfd < 0)
 		FATAL("host_seek is called with invalid sdfd!");	// FIXME: this check can go away, once we're sure it does not apply!
-	off_t offset;
-#ifdef COMPRESSED_SD
-	if (sd_compressed) {
-		offset = block * 3 + 0x22;
-		if (lseek(sdfd, offset, SEEK_SET) != offset)
-			FATAL("SDCARD: SEEK: compressed image host-OS seek failure: %s", strerror(errno));
-		Uint8 buf[3];
-		if (xemu_safe_read(sdfd, buf, 3) != 3)
-			FATAL("SDCARD: SEEK: compressed image host-OK pre-read failure: %s", strerror(errno));
-		compressed_block = (buf[0] & 0x80);
-		buf[0] &= 0x7F;
-		offset = ((off_t)((buf[0] << 16) | (buf[1] << 8) | buf[2]) << 9) + sd_bdata_start;
-		//DEBUGPRINT("SD-COMP: got address: %d" NL, (int)offset);
-	} else {
-		offset = (off_t)block << 9;
-	}
-#else
-	offset = (off_t)block << 9;
-#endif
+	off_t offset = (off_t)block << 9;
 	if (lseek(sdfd, offset, SEEK_SET) != offset)
 		FATAL("SDCARD: SEEK: image seek host-OS failure: %s", strerror(errno));
 	return 0;
@@ -582,6 +541,10 @@ int sdcard_read_block ( const Uint32 block, Uint8 *buffer )
 		memset(buffer, 0xFF, 512);
 		return 0;
 	}
+#ifdef RLE_COMPRESSED_DISK_IMAGE_SUPPORT
+	if (sd_compressed)
+		return compressed_diskimage_read_block(&sd_compressed_info, block, buffer);
+#endif
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	if (vdisk.mode) {
 		virtdisk_read_block(block, buffer);
@@ -611,6 +574,10 @@ int sdcard_write_block ( const Uint32 block, Uint8 *buffer )
 	}
 	if (sd_is_read_only)	// on compressed SD image, it's also set btw
 		return -1;	// read-only SD-card
+#ifdef RLE_COMPRESSED_DISK_IMAGE_SUPPORT
+	if (XEMU_UNLIKELY(sd_compressed))	// This shouldn't ever happen, since then sd_is_read_only must be true, and the condition above handles that
+		FATAL("Hitting %s() with compressed image. Should never happen!", __func__);
+#endif
 #ifdef VIRTUAL_DISK_IMAGE_SUPPORT
 	if (vdisk.mode) {
 		virtdisk_write_block(block, buffer);
@@ -637,7 +604,11 @@ static void sdcard_block_io ( const Uint32 block, const int is_write )
 		is_write ? "writing" : "reading",
 		block, cpu65.pc
 	);
+#ifdef SD_CONTENT_SUPPORT
 	if (XEMU_UNLIKELY(is_write && (block == 0 || block == XEMU_INFO_SDCARD_BLOCK_NO) && sdfd >= 0 && protect_important_blocks)) {
+#else
+	if (XEMU_UNLIKELY(is_write &&  block == 0                                        && sdfd >= 0 && protect_important_blocks)) {
+#endif
 		if (protect_important_blocks == 2) {
 			goto error;
 		} else {
@@ -699,17 +670,17 @@ static void sdcard_command ( const Uint8 cmd )
 		case 0x57:	// write sector gate
 			break;	// FIXME: implement this!!!
 		case 0x02:	// read block
-			sdcard_block_io(U8A_TO_U32(sd_regs + 1), 0);
+			sdcard_block_io(xemu_u8p_to_u32le(sd_regs + 1), 0);
 			break;
 		case 0x03:	// write block
-			sdcard_block_io(U8A_TO_U32(sd_regs + 1), 1);
+			sdcard_block_io(xemu_u8p_to_u32le(sd_regs + 1), 1);
 			break;
 		case 0x53:	// FLASH read! (not an SD-card command!)
 			memset(disk_buffers + SD_BUFFER_POS, 0xFF, 0x200);	// Not so much a real read khmm ...
 			break;
 		case 0x04:	// multi sector write - first sector
 			if (sd_last_ok_cmd != 0x04) {
-				multi_io_block = U8A_TO_U32(sd_regs + 1);
+				multi_io_block = xemu_u8p_to_u32le(sd_regs + 1);
 				sdcard_block_io(multi_io_block, 1);
 			} else {
 				DEBUGPRINT("SDCARD: bad multi-command sequence command $%02X after command $%02X" NL, cmd, sd_last_ok_cmd);
@@ -836,7 +807,7 @@ void d81access_cb_chgmode ( const int which, const int mode ) {
 		// TODO+FIXME: seriously review the following part ...
 		if (!which) {	// drive/image 0 (bits 6 of D68A and D68B)
 			if (have_disk) {
-				U32_TO_U8A(sd_regs + 0x0C, mount_info[0].sector);
+				xemu_u32le_to_u8p(sd_regs + 0x0C, mount_info[0].sector);
 				sd_regs[0xA] = (sd_regs[0xA] & (~0x40)) | ((acm & 1) << 6);
 				sd_regs[0xB] = (sd_regs[0xB] & (~0x44)) | ((acm & 2) << 5) | 0x03 | (mount_info[0].read_only ?  4 : 0);
 			} else {
@@ -844,7 +815,7 @@ void d81access_cb_chgmode ( const int which, const int mode ) {
 			}
 		} else {	// drive/image 1 (bits 7 of D68A and D68B)
 			if (have_disk) {
-				U32_TO_U8A(sd_regs + 0x10, mount_info[1].sector);
+				xemu_u32le_to_u8p(sd_regs + 0x10, mount_info[1].sector);
 				sd_regs[0xA] = (sd_regs[0xA] & (~0x80)) | ((acm & 1) << 7);
 				sd_regs[0xB] = (sd_regs[0xB] & (~0xA0)) | ((acm & 2) << 6) | 0x18 | (mount_info[1].read_only ? 32 : 0);
 			} else {
@@ -866,7 +837,7 @@ void sdcard_set_external_mount_pool ( Uint32 sector )
 		mount_info[unit].sector_fake = sector;
 		if (mount_info[unit].type == MOUNT_TYPE_EXTERNAL) {
 			mount_info[unit].sector = sector;
-			U32_TO_U8A(sd_regs + (!unit ? 0x0C : 0x10), sector);
+			xemu_u32le_to_u8p(sd_regs + (!unit ? 0x0C : 0x10), sector);
 		}
 		sector += (Uint32)(D65_SIZE >> 9);
 	}
@@ -895,7 +866,7 @@ static inline int get_acm ( const int unit )
 
 static inline Uint32 get_sector ( const int unit )
 {
-	return U8A_TO_U32(sd_regs + (!unit ? 0x0C : 0x10));
+	return xemu_u8p_to_u32le(sd_regs + (!unit ? 0x0C : 0x10));
 }
 
 
@@ -1068,7 +1039,11 @@ void sdcard_notify_hyppo_leave ( void )
 		const int is_mounted = get_mounted(unit);
 		const Uint32 sector = get_sector(unit);
 		const int acm = get_acm(unit);
-		const int ro = get_ro(unit);
+		int ro = get_ro(unit);
+		if (is_mounted && ro) {
+			DEBUGPRINT("SDCARD: MOUNT: D81 for unit #%d instructed for R/O mount in hypervisor mode. HYPPO/HDOS bug? Forcing R/W!" NL, unit);
+			ro = 0;
+		}
 		if (mount_info[unit].type != MOUNT_TYPE_EMPTY && !is_mounted) {
 			DEBUGPRINT("SDCARD: MOUNT: unmount scenario detected during-HDOS-trap on #%d, doing so" NL, unit);
 			sdcard_unmount(unit);
@@ -1233,6 +1208,12 @@ void sdcard_write_register ( const int reg, const Uint8 data )
 }
 
 
+int sdcard_is_writeable ( void )
+{
+	return !sd_is_read_only;
+}
+
+
 Uint8 sdcard_read_register ( const int reg )
 {
 	Uint8 data = sd_regs[reg];	// default answer
@@ -1259,7 +1240,7 @@ Uint8 sdcard_read_register ( const int reg )
 			// bits 2 and 3 is always zero in Xemu (no drive virtualization for drive 0 and 1)
 			return
 				(vic_registers[0x30] & 1) |		// $D68A.0 SD:CDC00 (read only) Set if colour RAM at $DC00
-				(vic_iomode == VIC4_IOMODE ? 2 : 0) |	// $D68A.1 SD:VICIII (read only) Set if VIC-IV or ethernet IO bank visible
+				(vic_iomode & 2)  |			// $D68A.1 SD:VICIII (read only) Set if VIC-IV or ethernet IO bank visible [same bit pos as in vic_iomode for mode-4 and mode-ETH!]
 				(data & (128 + 64));			// size info for disk mounting
 			break;
 		case 0xB:

@@ -50,6 +50,7 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "extfreezer",	NULL, "Use external initial memory content for the Freezer", &configdb.extfreezer },
 	{ "hdosdir",	NULL, "Set directory with HyppoDOS redirections", &configdb.hdosdir },
 	{ "defaultdir",	NULL, "Set initial default directory for most file selector UIs", &configdb.defaultdir },
+	{ "hyperserialfile", NULL, "Use a file to write serial output into (no ASCII conversion, not even with -hyperserialascii)", &configdb.hyperserialfile },
 	{ "rom",	NULL, "Override Hyppo's loaded ROM during booting.", &configdb.rom },
 	{ "prg",	NULL, "Load a PRG file directly into the memory (/w C64/65 auto-detection on load address)", &configdb.prg },
 	{ "sdimg",	SDCARD_NAME, "Override path of SD-image to be used (also see the -virtsd option!)", &configdb.sdimg },
@@ -73,6 +74,8 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "keymap",	KEYMAP_USER_FILENAME, "Set keymap configuration file to be used", &configdb.keymap },
 #endif
 	{ "gui",	NULL, "Select GUI type for usage. Specify some insane str to get a list", &configdb.selectedgui },
+	{ "importbas",	NULL, "Import and RUN BASIC65 program from TEXT file", &configdb.importbas },
+	{ "cartbin8000",NULL, "Load binary cartridge image from $8000", &configdb.cartbin8000 },
 	{ NULL }
 };
 
@@ -107,11 +110,16 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "noopl3", "Disables OPL3 emulation", &configdb.noopl3 },
 	{ "lockvideostd", "Lock video standard (programs cannot change it)", &configdb.lock_videostd },
 	{ "curskeyjoy", "Cursor keys as joystick [makes your emulator unsable to move cursor in BASIC/etc!]", &hid_joy_on_cursor_keys },
+	{ "showscanlines", "Show scanlines in V200 modes", &configdb.show_scanlines },
+	{ "allowscanlines", "Allow user programs to control scanline visibility", &configdb.allow_scanlines },
+	{ "fastboot", "Try to use sleepless emulation mode during booting", &configdb.fastboot },
+	{ "matrixstart", "Start with matrix-mode activated", &configdb.matrixstart },
+	{ "matrixdisable", "Disable the matrix hotkey", &configdb.matrixdisable },
 	{ NULL }
 };
 
 static const struct xemutools_configdef_num_st num_options[] = {
-	{ "model", 0xFF, "Emulated MEGA65 model (255=custom/Xemu)", &configdb.mega65_model, 0, 0xFF },
+	{ "model", 3, "Emulated MEGA65 model ID", &configdb.mega65_model, 0, 0xFF },
 	{ "hicked", 0x0, "Answer to HICKUP upgrade (128=ask user in a pop-up window)", &configdb.hicked, 0, 0xFF },
 	{ "prgmode", 0, "Override auto-detect option for -prg (64 or 65 for C64/C65 modes, 0 = default, auto detect)", &configdb.prgmode, 0, 65 },
 	{ "rtchofs", 0, "RTC (and CIA TOD) default hour offset to real-time -24 ... 24 (for testing!)", &configdb.rtc_hour_offset, -24, 24 },
@@ -125,6 +133,7 @@ static const struct xemutools_configdef_num_st num_options[] = {
 	{ "videostd", 0, "Use given video standard at startup/reset (0 = PAL, 1 = NTSC, -1 = Hyppo default)", &configdb.videostd, -1, 1 },
 	{ "sidmask", 15, "Enabled SIDs of the four, in form of a bitmask", &configdb.sidmask, 0, 15 },
 	{ "audiobuffersize", AUDIO_BUFFER_SAMPLES_DEFAULT, "Audio buffer size in BYTES", &configdb.audiobuffersize, AUDIO_BUFFER_SAMPLES_MIN, AUDIO_BUFFER_SAMPLES_MAX },
+	{ "coloureffect", 0, "Colour effect to be applied to the SDL output (0=none, 1=grayscale, 2=green-monitor, ...)", &configdb.colour_effect, 0, 255 },
 	{ NULL }
 };
 
@@ -140,7 +149,15 @@ static const struct xemutools_configdef_float_st float_options[] = {
 // etc), however if the user saves the config in Xemu when started this way, it would also save these
 // CLI-given options, which is not the thing he wants, 99.999999% of time, I guess ...
 
-static const void *do_not_save_opts[] = { &configdb.prg, &configdb.autoload, &configdb.go64, NULL };
+static const void *do_not_save_opts[] = {
+	&configdb.prg, &configdb.prgmode, &configdb.autoload, &configdb.go64, &configdb.hyperserialfile, &configdb.importbas,
+	&emu_is_sleepless, &emu_is_headless, &configdb.testing,
+	&configdb.matrixstart,
+	&configdb.dumpmem, &configdb.dumpscreen, &configdb.screenshot_and_exit,
+	&configdb.testing, &configdb.hyperdebug, &configdb.hyperdebugfreezer, &configdb.usestubrom, &configdb.useinitrom, &configdb.useutilmenu,
+	&configdb.cartbin8000,
+	NULL
+};
 
 
 void configdb_define_emulator_options ( size_t size )

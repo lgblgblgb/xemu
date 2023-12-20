@@ -1,7 +1,7 @@
 /* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing
    SDL2) of some 8 bit machines, including the Commodore LCD and Commodore 65
    and MEGA65 as well.
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 extern int  osd_status;
+extern int  osd_display_console_log;
 extern void (*osd_update_callback)(void);
 extern int  osd_notifications_enabled;
 #ifdef XEMU_OSD_EXPORT_FONT
@@ -58,7 +59,9 @@ extern void osd_only_sdl_render_hack ( void );
 	if (osd_notifications_enabled) { \
 		char _buf_for_msg_[4096]; \
 		CHECK_SNPRINTF(snprintf(_buf_for_msg_, sizeof _buf_for_msg_, __VA_ARGS__), sizeof _buf_for_msg_); \
-		fprintf(stderr, "OSD: %s" NL, _buf_for_msg_); \
+		if (osd_display_console_log) \
+			DEBUGPRINT("OSD: %s" NL, _buf_for_msg_); \
+		osd_display_console_log = 1; \
 		osd_clear(); \
 		osd_write_string(x, y, _buf_for_msg_); \
 		osd_texture_update(NULL); \

@@ -227,6 +227,28 @@ I've - of course - tested this and it worked, however it's hard to provide a
 binary build this way currently, and needs more "manual work" to compile Xemu,
 and even SDL2 before.
 
+### Emscripten (in-web-browser)
+
+Follow the instructions at: https://emscripten.org/docs/getting_started/downloads.html
+In nutshell:
+
+    git clone https://github.com/emscripten-core/emsdk.git
+    cd emsdk
+    git pull
+    ./emsdk install latest
+    ./emsdk activate latest
+    cd ..
+
+But in nutshell:
+
+You must source the `emsdk_env.sh` file before the next step, eg.:
+
+    source emsdk/emsdk_env.sh
+
+The building process of Xemu then:
+
+    make ARCH=html
+
 #### Bare metal?
 
 I received the idea to be able to run Xemu as a "bare-metal" project on

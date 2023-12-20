@@ -46,6 +46,8 @@ static int   resolver_ok = 0;
 
 static char  hypervisor_monout[0x10000];
 static char *hypervisor_monout_p = hypervisor_monout;
+static int   hypervisor_serial_output_fd = -1;
+static int   hypervisor_serial_output_errors;
 
 static int   hypervisor_serial_out_asciizer;
 
@@ -137,6 +139,8 @@ void hypervisor_enter ( int trapno )
 		FATAL("FATAL: got invalid trap number %d", trapno);
 	if (XEMU_UNLIKELY(in_hypervisor))
 		FATAL("FATAL: already in hypervisor mode while calling hypervisor_enter()");
+	if (trapno == TRAP_RESET && configdb.fastboot)
+		xemu_sleepless_temporary_mode(1);
 	// First, save machine status into hypervisor registers, TODO: incomplete, can be buggy!
 	D6XX_registers[0x40] = cpu65.a;
 	D6XX_registers[0x41] = cpu65.x;
@@ -157,8 +161,8 @@ void hypervisor_enter ( int trapno )
 	D6XX_registers[0x50] = memory_get_cpu_io_port(0);
 	D6XX_registers[0x51] = memory_get_cpu_io_port(1);
 	D6XX_registers[0x52] = vic_iomode;
-	D6XX_registers[0x53] = 0;				// GS $D653 - Hypervisor DMAgic source MB      - *UNUSED*
-	D6XX_registers[0x54] = 0;				// GS $D654 - Hypervisor DMAgic destination MB - *UNUSED*
+	//D6XX_registers[0x53] = 0;				// GS $D653 - Hypervisor DMAgic source MB      - *UNUSED*
+	//D6XX_registers[0x54] = 0;				// GS $D654 - Hypervisor DMAgic destination MB - *UNUSED*
 	dma_get_list_addr_as_bytes(D6XX_registers + 0x55);	// GS $D655-$D658 - Hypervisor DMAGic list address bits 27-0
 	// Now entering into hypervisor mode
 	in_hypervisor = 1;	// this will cause apply_memory_config to map hypervisor RAM, also for checks later to out-of-bound execution of hypervisor RAM, etc ...
@@ -286,6 +290,8 @@ static inline void first_leave ( void )
 	vic4_set_videostd(configdb.videostd, "in hypervisor.c, requested as boot/reset default");
 	// OK, that's enough
 	hdos_notify_system_start_end();
+	xemu_sleepless_temporary_mode(0);	// turn off temporary sleepless mode which may have been enabled before
+	vic_frame_counter_since_boot = 0;
 	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 }
 
@@ -329,8 +335,6 @@ void hypervisor_leave ( void )
 	map_megabyte_high = D6XX_registers[0x4F] << 20;
 	memory_set_cpu_io_port_ddr_and_data(D6XX_registers[0x50], D6XX_registers[0x51]);
 	vic_iomode = D6XX_registers[0x52] & 3;
-	if (vic_iomode == VIC_BAD_IOMODE)
-		vic_iomode = VIC3_IOMODE;	// I/O mode "2" (binary: 10) is not used, I guess
 	// GS $D653 - Hypervisor DMAgic source MB - *UNUSED*
 	// GS $D654 - Hypervisor DMAgic destination MB - *UNUSED*
 	dma_set_list_addr_from_bytes(D6XX_registers + 0x55);	// GS $D655-$D658 - Hypervisor DMAGic list address bits 27-0
@@ -368,8 +372,42 @@ void hypervisor_leave ( void )
 }
 
 
+void hypervisor_serial_monitor_open_file ( const char *fn )
+{
+	if (!fn || !*fn) {
+		DEBUG("SERIAL: no need to open file (was not requested)" NL);
+		return;
+	}
+	hypervisor_serial_output_fd = xemu_open_file(fn, O_CREAT | O_TRUNC | O_WRONLY, NULL, NULL);
+	if (hypervisor_serial_output_fd < 0) {
+		ERROR_WINDOW("Could not open hypervisor serial output file %s", fn);
+	} else {
+		DEBUGPRINT("SERIAL: opened hypervisor serial output file: %s" NL, fn);
+		hypervisor_serial_output_errors = 0;
+	}
+}
+
+
+void hypervisor_serial_monitor_close_file ( const char *fn )
+{
+	if (!fn || !*fn || hypervisor_serial_output_fd < 0) {
+		DEBUG("SERIAL: no need to close file (was not active)" NL);
+		return;
+	}
+	DEBUGPRINT("SERIAL: closing hypervisor serial output file %s" NL, fn);
+	close(hypervisor_serial_output_fd);
+	hypervisor_serial_output_fd = -1;
+	if (hypervisor_serial_output_errors) {
+		ERROR_WINDOW("SERIAL: deleting hypervisor serial output file %s, because write error(s) occured" NL, fn);
+		unlink(fn);
+	}
+}
+
+
 void hypervisor_serial_monitor_push_char ( Uint8 chr )
 {
+	if (hypervisor_serial_output_fd >= 0 && write(hypervisor_serial_output_fd, &chr, 1) != 1)
+		hypervisor_serial_output_errors++;
 	if (hypervisor_monout_p >= hypervisor_monout - 1 + sizeof hypervisor_monout)
 		return;
 	int flush = (chr == 0x0A || chr == 0x0D || chr == 0x8A || chr == 0x8D);
@@ -594,7 +632,6 @@ void hypervisor_debug ( void )
 		DEBUG("HYPERDEBUG: allowed to run outside of hypervisor memory, no debug info, PC = $%04X" NL, cpu65.pc);
 		return;
 	}
-	static const unsigned int io_mode_xlat[4] = {2, 3, 0, 4};
 	static Uint16 prev_sp = 0xBEFF;
 	static int prev_pc = 0;
 	static int do_execution_range_check = 1;
@@ -613,9 +650,9 @@ void hypervisor_debug ( void )
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without SPHI == $BE but $%02X" NL, cpu65.sphi >> 8);
 		if (XEMU_UNLIKELY(cpu65.bphi != 0xBF00))
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without BPHI == $BF but $%02X" NL, cpu65.bphi >> 8);
-		// NOTE: this is may be not even possible as in hypervisor mode vic_iomode cannot be altered via the usual $D02F "KEY" register ...
-		if (XEMU_UNLIKELY(vic_iomode != 3))	// "3" means VIC-4 I/O mode. See "io_mode_xlat" definition above.
-			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory with VIC I/O mode of %d" NL, io_mode_xlat[vic_iomode]);
+		// FIXME: remove this? Reason: this is not even possible as in hypervisor mode vic_iomode cannot be altered via the usual $D02F "KEY" register ... [if there are no bugs ...]
+		if (XEMU_UNLIKELY(vic_iomode != VIC4_IOMODE))
+			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory with VIC I/O mode of %X" NL, iomode_hexdigitids[vic_iomode]);
 	}
 	const Uint16 now_sp = cpu65.sphi | cpu65.s;
 	int sp_diff = (int)prev_sp - (int)now_sp;
@@ -663,7 +700,7 @@ void hypervisor_debug ( void )
 		const Uint8 pf = cpu65_get_pf();
 		fprintf(
 			debug_fp ? debug_fp : stdout,
-			"HYPERDEBUG: PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%u @ %s:%d %s+$%X | %s" NL,
+			"HYPERDEBUG: PC=%04X SP=%04X B=%02X A=%02X X=%02X Y=%02X Z=%02X P=%c%c%c%c%c%c%c%c IO=%X @ %s:%d %s+$%X | %s" NL,
 			cpu65.pc, now_sp, cpu65.bphi >> 8, cpu65.a, cpu65.x, cpu65.y, cpu65.z,
 			(pf & CPU65_PF_N) ? 'N' : 'n',
 			(pf & CPU65_PF_V) ? 'V' : 'v',
@@ -673,7 +710,7 @@ void hypervisor_debug ( void )
 			(pf & CPU65_PF_I) ? 'I' : 'i',
 			(pf & CPU65_PF_Z) ? 'Z' : 'z',
 			(pf & CPU65_PF_C) ? 'C' : 'c',
-			io_mode_xlat[vic_iomode],
+			iomode_hexdigitids[vic_iomode],
 			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].src_fn   : "<NOT>",
 			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].src_ln   : 0,
 			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].sym_name : "<NOT>",

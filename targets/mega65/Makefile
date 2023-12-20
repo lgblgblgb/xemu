@@ -1,6 +1,6 @@
 ## A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
 ## Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-## Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -20,10 +20,11 @@ TARGET		= mega65
 PRG_TARGET	= xmega65
 EMU_DESCRIPTION	= MEGA65
 
-SRCS_TARGET_xmega65	= configdb.c mega65.c sdcard.c uart_monitor.c hypervisor.c m65_snapshot.c memory_mapper.c io_mapper.c vic4.c vic4_palette.c ethernet65.c input_devices.c memcontent.c ui.c fat32.c sdcontent.c audio65.c inject.c dma65.c rom.c hdos.c matrix_mode.c
-SRCS_COMMON_xmega65	= emutools.c cpu65.c cia6526.c emutools_hid.c sid.c f011_core.c c64_kbd_mapping.c emutools_config.c emutools_snapshot.c emutools_files.c emutools_umon.c emutools_socketapi.c ethertap.c d81access.c emutools_gui.c basic_text.c opl3.c lodepng.c
+SRCS_TARGET_xmega65	= configdb.c mega65.c sdcard.c uart_monitor.c hypervisor.c m65_snapshot.c memory_mapper.c io_mapper.c vic4.c vic4_palette.c ethernet65.c input_devices.c memcontent.c ui.c fat32.c sdcontent.c audio65.c inject.c dma65.c rom.c hdos.c matrix_mode.c cart.c
+SRCS_COMMON_xmega65	= emutools.c cpu65.c cia6526.c emutools_hid.c sid.c f011_core.c c64_kbd_mapping.c emutools_config.c emutools_snapshot.c emutools_files.c emutools_umon.c emutools_socketapi.c ethertap.c d81access.c emutools_gui.c basic_text.c opl3.c lodepng.c compressed_disk_image.c cpu65_disasm.c
 CFLAGS_TARGET_xmega65	= $(SDL2_CFLAGS) $(MATH_CFLAGS) $(SOCKET_CFLAGS) $(XEMUGUI_CFLAGS)
 LDFLAGS_TARGET_xmega65	= $(SDL2_LIBS) $(MATH_LIBS) $(SOCKET_LIBS) $(XEMUGUI_LIBS)
+LDFLAGS_TARGET_xmega65_ON_html = -s STACK_SIZE=655360 --preload-file=$$HOME/.local/share/xemu-lgb/mega65/mega65.img.compressed3@/files/mega65.img --preload-file=$$HOME/mega65/megapoly.d81@/files/files/hdos/mega65.d81
 
 MEGA65_CORE	= ../../../mega65-core-master
 MEGA65_FILES	= bin/charrom.bin bin/HICKUP.M65 bin/COLOURRAM.BIN sdcard-files/BANNER.M65 sdcard-files/ONBOARD.M65 src/open-roms/bin/mega65.rom
@@ -32,6 +33,7 @@ MEGA65_FILES	+= sdcard-files/AUDIOMIX.M65 sdcard-files/C64THUMB.M65 sdcard-files
 
 MEGA65_FP_FILES	= $(addprefix $(MEGA65_CORE)/,$(MEGA65_FILES))
 MEGA65_LOCALDIR	= .sys-files-mega65-core
+MATRIX_TAB_VHDL = $(MEGA65_CORE)/src/vhdl/matrix_to_ascii.vhdl
 
 include ../../build/Makefile.common
 
@@ -59,5 +61,6 @@ recreatememcontent:
 	@echo "*** Generating C files from mega65-core binary results ***"
 	python3 $(TOPDIR)/build/m65-memcontent-generator.py memcontent.c memcontent.h $(MEGA65_FP_FILES)
 
-showmatrix2ascii:
-	bash $(TOPDIR)/build/m65-import-matrix2ascii.sh < $(MEGA65_CORE)/src/vhdl/matrix_to_ascii.vhdl
+showmatrix:
+	bash $(TOPDIR)/build/m65-import-matrix2ascii.sh < $(MATRIX_TAB_VHDL)
+	bash $(TOPDIR)/build/m65-import-matrix2petscii.sh < $(MATRIX_TAB_VHDL)

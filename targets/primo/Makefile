@@ -23,5 +23,6 @@ SRCS_TARGET_xprimo	= primo.c
 SRCS_COMMON_xprimo	= emutools.c emutools_hid.c z80.c z80_dasm.c emutools_config.c emutools_files.c emutools_gui.c lodepng.c
 CFLAGS_TARGET_xprimo	= $(SDL2_CFLAGS) $(XEMUGUI_CFLAGS) $(MATH_CFLAGS)
 LDFLAGS_TARGET_xprimo	= $(SDL2_LIBS) $(XEMUGUI_LIBS) $(MATH_LIBS)
+LDFLAGS_TARGET_xprimo_ON_html = -s STACK_SIZE=655360 --preload-file=$$HOME/.local/share/xemu-lgb/primo/primo-b64.rom@/files/primo-b64.rom
 
 include ../../build/Makefile.common

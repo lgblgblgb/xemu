@@ -1,6 +1,6 @@
 /* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
    8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -37,7 +37,7 @@ extern int (*SDL_ShowMessageBox_custom)(const SDL_MessageBoxData*, int* );
 #include <emscripten.h>
 #define EMSCRIPTEN_SDL_BASE_DIR "/files/"
 #define MSG_POPUP_WINDOW(sdlflag, title, msg, win) \
-	do { if (1 || sdlflag == SDL_MESSAGEBOX_ERROR) { EM_ASM_INT({ window.alert(Pointer_stringify($0)); }, msg); } } while(0)
+	do { if (1 || sdlflag == SDL_MESSAGEBOX_ERROR) { EM_ASM_INT({ window.alert(UTF8ToString($0)); }, msg); } } while(0)
 #else
 #define MSG_POPUP_WINDOW(sdlflag, title, msg, win) SDL_ShowSimpleMessageBox_custom(sdlflag, title, msg, win)
 #define INSTALL_DIRECTORY_ENTRY_NAME "default-files"
@@ -88,22 +88,26 @@ static XEMU_INLINE int CHECK_SNPRINTF( int ret, int limit )
 	return 0;
 }
 
+extern int dialogs_allowed;
+
 #define _REPORT_WINDOW_(sdlflag, str, ...) do { \
 	char _buf_for_win_msg_[4096]; \
 	CHECK_SNPRINTF(snprintf(_buf_for_win_msg_, sizeof _buf_for_win_msg_, __VA_ARGS__), sizeof _buf_for_win_msg_); \
 	fprintf(stderr, str ": %s" NL, _buf_for_win_msg_); \
 	if (debug_fp)	\
 		fprintf(debug_fp, str ": %s" NL, _buf_for_win_msg_);	\
-	if (sdl_win) { \
-		save_mouse_grab(); \
-		MSG_POPUP_WINDOW(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
-		clear_emu_events(); \
-		xemu_drop_events(); \
-		SDL_RaiseWindow(sdl_win); \
-		restore_mouse_grab(); \
-		xemu_timekeeping_start(); \
-	} else \
-		MSG_POPUP_WINDOW(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
+	if (dialogs_allowed) {	\
+		if (sdl_win) {	\
+			save_mouse_grab(); \
+			MSG_POPUP_WINDOW(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
+			clear_emu_events(); \
+			xemu_drop_events(); \
+			SDL_RaiseWindow(sdl_win); \
+			restore_mouse_grab(); \
+			xemu_timekeeping_start(); \
+		} else \
+			MSG_POPUP_WINDOW(sdlflag, sdl_window_title, _buf_for_win_msg_, sdl_win); \
+	}	\
 } while (0)
 
 #define INFO_WINDOW(...)	_REPORT_WINDOW_(SDL_MESSAGEBOX_INFORMATION, "INFO", __VA_ARGS__)
@@ -148,6 +152,7 @@ extern SDL_version sdlver_compiled, sdlver_linked;
 extern Uint32 *xemu_frame_pixel_access_p;
 extern int emu_is_headless;
 extern int emu_is_sleepless;
+extern int emu_fs_is_utf8;
 
 #define XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE	1
 //#define XEMU_VIEWPORT_WIN_SIZE_FOLLOW_LOGICAL	2
@@ -205,6 +210,7 @@ extern int xemu_post_init (
 );
 extern int xemu_set_icon_from_xpm ( char *xpm[] );
 extern void xemu_timekeeping_start ( void );
+extern void xemu_sleepless_temporary_mode ( const int enable );
 extern void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_size );
 extern Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail );
 extern void xemu_update_screen ( void );
@@ -281,32 +287,11 @@ extern const Uint8 vga_font_8x16[256 * 16];
 #include "xemu/gui/osd.h"
 #endif
 
+#ifdef DEFINE_XEMU_OS_READDIR
 #include <dirent.h>
-#ifdef XEMU_ARCH_WIN
-#	include <sys/stat.h>
-	typedef _WDIR XDIR;
-	extern int   xemu_winos_utf8_to_wchar ( wchar_t *restrict o, const char *restrict i, size_t size );
-	extern int   xemu_os_open   ( const char *fn, int flags );
-	extern int   xemu_os_creat  ( const char *fn, int flags, int pmode );
-	extern FILE *xemu_os_fopen  ( const char *restrict fn, const char *restrict mode );
-	extern int   xemu_os_unlink ( const char *fn );
-	extern int   xemu_os_mkdir  ( const char *fn, const int mode );
-	extern XDIR *xemu_os_opendir ( const char *fn );
-	extern int   xemu_os_closedir ( XDIR *dir );
-	extern int   xemu_os_stat ( const char *fn, struct stat *statbuf );
-#else
-	typedef	DIR	XDIR;
-#	define	xemu_os_open			open
-#	define	xemu_os_creat			creat
-#	define	xemu_os_fopen			fopen
-#	define	xemu_os_unlink			unlink
-#	define	xemu_os_mkdir			mkdir
-#	define	xemu_os_opendir			opendir
-#	define	xemu_os_closedir 		closedir
-#	define	xemu_os_stat			stat
+extern int   xemu_readdir ( DIR *dirp, char *fn, const int fnmaxsize );
 #endif
-#define	xemu_os_close	close
-extern int   xemu_os_readdir ( XDIR *dirp, char *fn );
-extern int   xemu_os_file_exists ( const char *fn );
+
+extern int   xemu_file_exists ( const char *fn );
 
 #endif

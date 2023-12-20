@@ -25,11 +25,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/f011_core.h"
 #include "input_devices.h"
 #include "hypervisor.h"
+#include "sdcard.h"
+#include "configdb.h"
 
 #define C64_BASIC_LOAD_ADDR	0x0801
 #define C65_BASIC_LOAD_ADDR	0x2001
 
 #define KEY_PRESS_TIMEOUT	6
+
+#define IMPORT_BAS_TEXT_TEMPFILE "@lastimporttext.bas"
 
 static int check_status = 0;
 static int key2release = -1;
@@ -49,6 +53,8 @@ static struct {
 	.cmd_p	= NULL
 };
 static Uint8 *under_ready_p;
+static char *kbd_hwa_pasting = NULL;
+static int   kbd_hwa_pasting_single_case;
 
 
 static void _cbm_screen_write_char ( Uint8 *p, const char c )
@@ -78,14 +84,15 @@ static void _cbm_screen_write ( Uint8 *p, const char *s )
 	} while (0)
 
 
-static void press_key ( const int key )
+static void press_return ( void )
 {
 	if (key2release >= 0)
 		KBD_RELEASE_KEY(key2release);
-	DEBUGPRINT("INJECT: pressing key #%d" NL, key);
-	key2release = key;
+	DEBUGPRINT("INJECT: pressing key RETURN" NL);
+	key2release = 1;
 	key2release_timeout = KEY_PRESS_TIMEOUT;
-	KBD_PRESS_KEY(key);
+	KBD_PRESS_KEY(1);
+	hwa_kbd_set_fake_key(13);
 }
 
 
@@ -96,7 +103,7 @@ static int is_ready_on_screen ( const int delete_all_ready )
 	static const Uint8 ready_msg[] = { 0x12, 0x05, 0x01, 0x04, 0x19, 0x2E };	// "READY." in screen codes
 	const int width = vic4_query_screen_width();
 	const int height = vic4_query_screen_height();
-	const Uint8 *cstart = ((vic_iomode == VIC4_IOMODE || vic_iomode == VIC3_IOMODE) && REG_VICIII_ATTRIBS) ? vic4_query_colour_address() : NULL;
+	const Uint8 *cstart = (VIC4_LIKE_IO_MODE() && REG_VICIII_ATTRIBS) ? vic4_query_colour_address() : NULL;
 	Uint8 *start = vic4_query_screen_address();
 	int num = 0;
 	// Check every lines of the screen (not the "0th" line, because we need "READY." in the previous line!)
@@ -144,18 +151,34 @@ static void prg_inject_callback ( void *unused )
 		}
 		// If program was detected as BASIC (by load-addr) we want to auto-RUN it
 		CBM_SCREEN_PRINTF(under_ready_p, " RUN:");
-		press_key(1);
-		// This strange stuff is here for a kinda "funny" purpose. Many people started to use the $D610 hardware accelerated keyboard scanner
-		// feature, but they often miss to realize that the queue must be emptied by the program itself. Since Xemu is used with with feature
-		// like program injection they never face the problem, and the surprise only coccures when trying on a real MEGA65, blaming Xemu then
-		// for the problem. Thus we inject same fake stuff here just not to have empty $D610 buffer. Otherwise this statement has NO other purpose!
-		hwa_kbd_fake_string("dir\rload");	// more than enough to fill the buffer
+		press_return();
 	} else {
 		// In this case we DO NOT press RETURN for user, as maybe the SYS addr is different, or user does not want this at all!
 		CBM_SCREEN_PRINTF(under_ready_p, " SYS%d:REM **YOU CAN PRESS RETURN**", prg.load_addr);
 	}
 	free(prg.stream);
 	prg.stream = NULL;
+}
+
+
+static void import_callback2 ( void *unused )
+{
+	CBM_SCREEN_PRINTF(under_ready_p, " SCNCLR:RUN:");
+	if (configdb.disk9)
+		sdcard_external_mount(1, configdb.disk9, NULL);
+	press_return();
+}
+
+
+static void import_callback ( void *unused )
+{
+	DEBUGPRINT("INJECT: hit 'READY.' trigger, about to import BASIC65 text program." NL);
+	fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);	// re-allow disk access
+	if (!sdcard_external_mount(1, IMPORT_BAS_TEXT_TEMPFILE, "Mount failure for BASIC65 import")) {
+		CBM_SCREEN_PRINTF(under_ready_p, " IMPORT\"FILESEQ\",U9:");
+		press_return();
+		inject_register_ready_status("BASIC65 text import2", import_callback2, NULL);
+	}
 }
 
 
@@ -184,7 +207,7 @@ static void command_callback ( void *unused )
 		_cbm_screen_write_char(p++, c);
 	}
 	clear_emu_events();
-	press_key(1);
+	press_return();
 }
 
 
@@ -316,6 +339,42 @@ void inject_ready_check_do ( void )
 		} else
 			key2release_timeout--;
 	}
+	if (kbd_hwa_pasting) {
+		static const char *now = NULL;
+		static int stalling = 0;
+		if (!now) {
+			now = kbd_hwa_pasting;
+			stalling = 0;
+		}
+		osd_display_console_log = 0;
+		OSD(-1, 10, "Pasting in progress: %u", (unsigned int)strlen(now));
+		osd_status = OSD_STATIC;
+		const char *next = hwa_kbd_add_string(now, kbd_hwa_pasting_single_case);
+		if (!*next)
+			goto end_pasting;
+		if (next == now) {
+			stalling++;
+			if (stalling > 60) {
+				ERROR_WINDOW(
+					"Pasting did not work through. Some possibilities:\n"
+					"  You don't run a decent enough ROM using hardware keyboard scanning\n"
+					"  You are in GO64 BASIC mode (it won't work there)\n"
+					"  System is busy or (currently?) does not use hardware keyboard scanning"
+				);
+				goto end_pasting;
+			}
+			return;
+		}
+		now = next;
+		stalling = 0;
+		return;
+	end_pasting:
+		osd_status = 0;
+		now = NULL;
+		free(kbd_hwa_pasting);
+		kbd_hwa_pasting = NULL;
+		return;
+	}
 	if (XEMU_LIKELY(!check_status))
 		return;
 	if (check_status == 1) {		// we're in "waiting for READY." phase
@@ -326,4 +385,56 @@ void inject_ready_check_do ( void )
 		inject_ready_callback(inject_ready_userdata);	// callback is activated now
 	} else
 		check_status++;		// we're "let's wait some time after READY." phase
+}
+
+
+static int basic_text_conv ( char *dst, const char *src, int len )
+{
+	// TODO: currently it's only a copy!!!!
+	memcpy(dst, src, len);
+	dst[len] = 0;
+	return 0;
+}
+
+
+int inject_register_import_basic_text ( const char *fn )
+{
+	if (!fn || !*fn)
+		return 0;
+	const int len = xemu_load_file(fn, NULL, 1, 65535, "Could not open/load text import for BASIC65");
+	if (len < 1)
+		return -1;
+	char *buf = xemu_malloc(len + 1);
+	if (basic_text_conv(buf, xemu_load_buffer_p, len)) {
+		free(buf);
+		free(xemu_load_buffer_p);
+		return -1;
+	}
+	free(xemu_load_buffer_p);
+	if (xemu_save_file(IMPORT_BAS_TEXT_TEMPFILE, buf, len, "Could not save prepared text for BASIC65 import") < 0) {
+		free(buf);
+		return -1;
+	}
+	free(buf);
+	if (inject_register_ready_status("BASIC65 text import", import_callback, NULL)) // prg inject does not use the userdata ...
+		return -1;
+	fdc_allow_disk_access(FDC_DENY_DISK_ACCESS);	// deny now, to avoid problem on PRG load while autoboot disk is mounted
+	return 0;
+}
+
+
+int inject_hwa_pasting ( char *s, const int single_case )
+{
+	if (!s || !*s) {
+		DEBUGPRINT("INJECT: cannot register empty text to be typed-in" NL);
+		return -1;
+	}
+	if (kbd_hwa_pasting) {
+		ERROR_WINDOW("Another pasting event is already in progress.");
+		return -1;
+	}
+	DEBUGPRINT("INJECT: %u bytes long text is registered to be typed-in" NL, (unsigned int)strlen(s));
+	kbd_hwa_pasting = s;
+	kbd_hwa_pasting_single_case = single_case;
+	return 0;
 }

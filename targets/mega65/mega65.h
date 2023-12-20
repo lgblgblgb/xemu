@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define NVRAM_FILE_NAME		"@nvram.bin"
 #define UUID_FILE_NAME		"@uuid.bin"
+#define I2C_FILE_NAME		"@i2c.bin"
 
 // Used by updater, etc ... base name only, no path info!
 #define MEGA65_ROM_NAME		"MEGA65.ROM"
@@ -50,6 +51,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define AUDIO_SAMPLE_FREQ	44100
 
 extern void m65mon_show_regs ( void );
+extern void m65mon_set_pc    ( const Uint16 addr );
 extern void m65mon_dumpmem16 ( Uint16 addr );
 extern void m65mon_dumpmem28 ( int addr );
 extern void m65mon_setmem28  ( int addr, int cnt, Uint8* vals );
@@ -67,6 +69,8 @@ extern void machine_set_speed ( int verbose );
 extern void reset_mega65      ( void );
 extern int  reset_mega65_asked( void );
 extern void reset_mega65_cpu_only ( void );
+
+extern int  mega65_set_model ( const Uint8 id );
 
 extern int  dump_memory       ( const char *fn );
 extern int  dump_screen       ( const char *fn );

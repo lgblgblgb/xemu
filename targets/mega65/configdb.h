@@ -49,6 +49,7 @@ struct configdb_st {
 	int	defd81fromsd;
 	int	testing;
 	char	*prg;
+	char	*importbas;
 	char	*sdimg;
 	char	*dumpmem;
 	char	*dumpscreen;
@@ -72,6 +73,8 @@ struct configdb_st {
 	char	*selectedgui;
 	int	lock_videostd;
 	int	videostd;
+	int	show_scanlines;
+	int	allow_scanlines;
 	int	fullborders;
 	int	hdosvirt;
 	int	show_drive_led;
@@ -79,6 +82,7 @@ struct configdb_st {
 	int	hyperdebug;
 	int	hyperdebugfreezer;
 	int	hyperserialascii;
+	char	*hyperserialfile;
 	int	usestubrom;
 	int	useinitrom;
 	int	useutilmenu;
@@ -89,7 +93,11 @@ struct configdb_st {
 	int	autoload;
 	int	skip_unhandled_mem;
 	int	syscon;
-	int	mega65_model;		// $FF = Xemu/others, 1/2/3 = MEGA65 PCB rev 1/2/3, $40=nexys4, $41=nexys4ddr, $42=nexys4ddr-widget, $FD=wukong, $FE=simulation
+	// $FF = Xemu/others, 1/2/3 = MEGA65 PCB rev 1/2/3, $40/$41/$42=nexys/nexys4ddr/nexys4ddr-widget, $FD=wukong, $FE=simulation,
+	// $60/$61/$62 = qmtecha100t/qmtecha200t/qmtecha325t, $21/$22=megaphoner1/megaphoner4
+	int	mega65_model;
+	int	colour_effect;
+	char	*cartbin8000;
 	int	hicked;
 	int	prgmode;
 	int	rtc_hour_offset;
@@ -104,6 +112,9 @@ struct configdb_st {
 	int	noopl3;
 	int	sidmask;
 	int	audiobuffersize;
+	int	fastboot;
+	int	matrixstart;
+	int	matrixdisable;
 };
 
 extern struct configdb_st configdb;

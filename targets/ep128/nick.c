@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2015-2017,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -96,6 +96,7 @@ static int nick_addressing_init ( void )
 
 void screenshot ( void )
 {
+#ifndef XEMU_ARCH_HTML
 	if (!xemu_screenshot_png(
 		NULL, NULL,
 		1,
@@ -109,6 +110,7 @@ void screenshot ( void )
 		if (p)
 			OSD(-1, -1, "%s", p + 1);
 	}
+#endif
 }
 
 

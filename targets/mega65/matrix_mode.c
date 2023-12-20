@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools_hid.h"
 #include "xemu/cpu65.h"
+#include "xemu/cpu65_disasm.h"
 #include "hypervisor.h"
 #include "vic4.h"
 #include "mega65.h"
@@ -29,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "memory_mapper.h"
 
 #include <ctype.h>
+#include <string.h>
 
 
 //#define DEBUGMATRIX	DEBUGPRINT
@@ -58,6 +60,11 @@ int in_the_matrix = 0;
 #define NORMAL_COLOUR	1
 #define BANNER_COLOUR	2
 
+#define FULL_SCREEN_BYTE_SIZE	(chrscreen_ysize * chrscreen_xsize * 2)
+#define TOP_AREA_BYTE_SIZE	(CLI_START_LINE * chrscreen_xsize * 2)
+#define CLI_AREA_BYTE_SIZE	((chrscreen_ysize - CLI_START_LINE) * chrscreen_xsize * 2)
+#define CLI_AREA_BYTE_OFFSET	TOP_AREA_BYTE_SIZE
+
 static const Uint8 console_colours[] = {
 	0x00, 0x00, 0x00, 0x80,		// 0: for background shade of the console
 	0x00, 0xFF, 0x00, 0xFF,		// 1: normal green colour of the console text
@@ -68,16 +75,25 @@ static const Uint8 console_colours[] = {
 static Uint32 colour_mappings[16];
 static Uint8 current_colour;
 
+#define PROMPT		"Xemu>"
+
+#define CMD_HISTORY_SIZE	64
+static char *history[CMD_HISTORY_SIZE];
+
+static char *cmdbuf;
+
 static int backend_xsize, backend_ysize;
 static Uint32 *backend_pixels;
 static int chrscreen_xsize, chrscreen_ysize;
-static Uint8 *vmem = NULL;
+static Uint8 *vmem = NULL, *vmem_prev = NULL, *vmem_backup = NULL;
 static int current_x = 0, current_y = 0;
-static const char *prompt = NULL;
 static int need_update = 0;
-static int reserve_top_lines = 0;	// reserve this amount of top lines when scrolling
 static int init_done = 0;
 static Uint8 queued_input;
+static unsigned int matrix_counter = 0;
+static int live_update_enabled = 1;
+static int blink_phase = 0;		// used with flashing the cursor, etc
+static int current_viewport = 0;
 
 
 #define PARTIAL_OSD_TEXTURE_UPDATE
@@ -95,7 +111,7 @@ static void matrix_update ( void )
 #endif
 	for (int y = 0; y < chrscreen_ysize; y++) {
 #ifdef PARTIAL_OSD_TEXTURE_UPDATE
-		if (XEMU_UNLIKELY(y == reserve_top_lines))
+		if (XEMU_UNLIKELY(y == CLI_START_LINE))
 			region = 1;
 #endif
 		for (int x = 0; x < chrscreen_xsize; x++, vp += 2)
@@ -180,16 +196,41 @@ static void matrix_write_char ( const Uint8 c )
 	}
 	if (current_y >= chrscreen_ysize) {
 		current_y = chrscreen_ysize - 1;
-		DEBUGMATRIX("MATRIX: scrolling ... reserved=%d lines" NL, reserve_top_lines);
-		memmove(
-			vmem + 2 * chrscreen_xsize *  reserve_top_lines,
-			vmem + 2 * chrscreen_xsize * (reserve_top_lines + 1),
-			chrscreen_xsize * (chrscreen_ysize - 1 - reserve_top_lines) * 2
+		DEBUGMATRIX("MATRIX: scrolling ... reserved=%d lines" NL, CLI_START_LINE);
+		memmove(		// scroll the the previous viewport
+			vmem_prev,
+			vmem_prev + chrscreen_xsize * 2,
+			CLI_AREA_BYTE_SIZE - (2 * chrscreen_xsize)
+		);
+		memcpy(			// copy a single line which "migrates" from the current to the previous viewport
+			vmem_prev + CLI_AREA_BYTE_SIZE - (2 * chrscreen_xsize),	// to the _END_ of "vmem_prev"
+			vmem + CLI_AREA_BYTE_OFFSET,
+			chrscreen_xsize * 2
+		);
+		memmove(		// scroll the current viewport
+			vmem + CLI_AREA_BYTE_OFFSET,
+			vmem + CLI_AREA_BYTE_OFFSET + 2 * chrscreen_xsize,
+			CLI_AREA_BYTE_SIZE - 2 * chrscreen_xsize
 		);
 		for (Uint8 x = 0, *vp = vmem + (chrscreen_ysize - 1) * chrscreen_xsize * 2; x < chrscreen_xsize; x++, vp += 2)
 			vp[0] = 0x20, vp[1] = current_colour;
 		need_update |= 2;
 	}
+}
+
+
+static void set_viewport ( const int vp )
+{
+	if (vp == current_viewport)
+		return;
+	current_viewport = vp;
+	if (vp) {
+		memcpy(vmem_backup,                 vmem + CLI_AREA_BYTE_OFFSET, CLI_AREA_BYTE_SIZE);	// Backup the actual page so we can restore it later
+		memcpy(vmem + CLI_AREA_BYTE_OFFSET, vmem_prev,                   CLI_AREA_BYTE_SIZE);
+	} else {
+		memcpy(vmem + CLI_AREA_BYTE_OFFSET, vmem_backup,                 CLI_AREA_BYTE_SIZE);
+	}
+	need_update |= 2;
 }
 
 
@@ -202,9 +243,8 @@ static inline void matrix_write_string ( const char *s )
 
 static void dump_regs ( const char rot_fig )
 {
-	static const Uint8 io_mode_xlat[4] = { 2, 3, 0, 4 };
 	const Uint8 pf = cpu65_get_pf();
-	MATRIX("PC:%04X A:%02X X:%02X Y:%02X Z:%02X SP:%04X B:%02X %c%c%c%c%c%c%c%c IO:%d (%c) %c %s %s     ",
+	MATRIX("PC:%04X A:%02X X:%02X Y:%02X Z:%02X SP:%04X B:%02X %c%c%c%c%c%c%c%c IO:%X (%c) %c %s %s     ",
 		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z,
 		cpu65.sphi + cpu65.s, cpu65.bphi >> 8,
 		(pf & CPU65_PF_N) ? 'N' : 'n',
@@ -215,8 +255,8 @@ static void dump_regs ( const char rot_fig )
 		(pf & CPU65_PF_I) ? 'I' : 'i',
 		(pf & CPU65_PF_Z) ? 'Z' : 'z',
 		(pf & CPU65_PF_C) ? 'C' : 'c',
-		io_mode_xlat[vic_iomode],
-		!!in_hypervisor ? 'H' : 'U',
+		iomode_hexdigitids[vic_iomode],
+		in_hypervisor ? 'H' : 'U',
 		rot_fig,
 		videostd_id ? "NTSC" : "PAL ",
 		cpu_clock_speed_string
@@ -348,19 +388,17 @@ static void cmd_show ( char *p )
 }
 
 
-static void cmd_dump ( char *p )
+static void dump_mem_lines ( int lines, const char sepchr )
 {
-	if (*p && mem_args(p, 0) != 1)
-		return;
 	char chardump[79];
 	memset(chardump, 0, sizeof chardump);
-	for (int lines = 0; lines < 16; lines++) {
+	while (lines-- > 0) {
 		if (addr_hiword != 0xFFFF) {
 			// Clamp to 28 bit address space, unless hiword is $FFFF meaning CPU view, thus having a special meaning
 			addr_hiword &= 0xFFF;
-			sprintf(chardump + 1, "%03X:%04X", addr_hiword, addr_loword);
+			sprintf(chardump + 1, "%03X%c%04X", addr_hiword, sepchr, addr_loword);
 		} else
-			sprintf(chardump + 1, "cpu:%04X", addr_loword);
+			sprintf(chardump + 1, "cpu%c%04X", sepchr, addr_loword);
 		for (int i = 0; i < 16; i++) {
 			Uint8 data;
 			if (addr_hiword == 0xFFFF)
@@ -377,9 +415,113 @@ static void cmd_dump ( char *p )
 		for (int i = 0; i < sizeof(chardump) - 2; i++)
 			if (!chardump[i])
 				chardump[i] = 0x20;
+		chardump[0] = 0xFF;	// marker for "live update" stuff (rendered as space anyway!)
 		chardump[sizeof(chardump) - 2] = '\n';
 		matrix_write_string(chardump);
 	}
+}
+
+
+static Uint8 d_bytes[10];
+
+
+static Uint8 reader_for_disasm_phys ( const unsigned int addr, const unsigned int ofs )
+{
+	const Uint8 b = memory_debug_read_phys_addr((addr + ofs) & 0xFFFFFFU);
+	d_bytes[ofs] = b;
+	return b;
+}
+
+
+static Uint8 reader_for_disasm_cpu ( const unsigned int addr, const unsigned int ofs )
+{
+	const Uint8 b = cpu65_read_callback((addr + ofs) & 0xFFFFU);
+	d_bytes[ofs] = b;
+	return b;
+}
+
+
+static void cmd_asm ( char *p )
+{
+	if (*p && mem_args(p, 0) != 1)
+		return;
+	const char *opname;
+	char arg[64];
+	for (unsigned int l = 0; l < 16; l++) {
+		unsigned int len;
+		if (addr_hiword == 0xFFFF) {
+			len = cpu65_disasm(reader_for_disasm_cpu, addr_loword, 0xFFFFU, &opname, arg);
+			MATRIX(" cpu:%04X  ", addr_loword);
+		} else {
+			len = cpu65_disasm(reader_for_disasm_phys, (addr_hiword << 16) + addr_loword, 0xFFFFFFU, &opname, arg);
+			MATRIX(" %03X:%04X  ", addr_hiword, addr_loword);
+		}
+		for (unsigned int a = 0; a < 5; a++)
+			if (a < len)
+				MATRIX("%02X ", d_bytes[a]);
+			else
+				MATRIX("   ");
+		MATRIX("%s%s %s\n", opname, strlen(opname) != 4 ? " " : "", arg);
+		addr_loword += len;
+	}
+}
+
+
+static void cmd_dump ( char *p )
+{
+	if (*p && mem_args(p, 0) != 1)
+		return;
+	dump_mem_lines(16, ':');
+}
+
+
+static void live_dump_update ( void )
+{
+	const Uint16 backup_hiword = addr_hiword;
+	const Uint16 backup_loword = addr_loword;
+	char t[9];
+	for (int y = CLI_START_LINE; y < chrscreen_ysize; y++) {
+		const Uint8 *s = vmem + (y * chrscreen_xsize * 2);
+		if (*s == 0xFF) {
+			for (unsigned int i = 0; i < sizeof(t); i++, s += 2)
+				t[i] = (char)s[2];
+			t[sizeof(t) - 1] = 0;
+			t[3] = 0;	// separator between "bank" and "offset", we have "t" as bank now, and "t+4" as the offset
+			int hi, lo;
+			if (!strcmp(t, "cpu"))
+				hi = 0xFFFF;
+			else if (sscanf(t, "%X", &hi) != 1)
+				continue;
+			if (sscanf(t + 4, "%X", &lo) != 1)
+				continue;
+			// Note: we call this function from the main matrix updater, which stores/restores X/Y screen position,
+			// so it's OK to modify that here!
+			current_x = 0;
+			current_y = y;
+			// And for these: backed up/restored by us, in this very function
+			addr_hiword = hi;
+			addr_loword = lo;
+			//DEBUGPRINT("Found update in row %d, text is \"%s\" bank = %X offset = %X" NL, y, t, hi, lo);
+			dump_mem_lines(1, blink_phase ? ':' : ' ');	// blinking ':' to indicate live update
+		}
+	}
+	addr_hiword = backup_hiword;
+	addr_loword = backup_loword;
+	if (live_update_enabled < 0 && blink_phase)
+		live_update_enabled = 0;
+}
+
+
+static void cmd_live ( char *p )
+{
+	live_update_enabled = (live_update_enabled <= 0) ? 1 : -1;
+	MATRIX("Live memory dump updates are turned %s\n", (live_update_enabled > 0) ? "ON" : "OFF");
+}
+
+
+static void cmd_reset ( char *p )
+{
+	reset_mega65();
 }
 
 
@@ -392,10 +534,13 @@ static const struct command_tab_st {
 	const char *shortnames;
 } command_tab[] = {
 	{ "dump",	cmd_dump,	"d"	},
+	{ "asm",	cmd_asm,	"a"	},
 	{ "exit",	cmd_off,	"x"	},
 	{ "help",	cmd_help,	"h?"	},
+	{ "live",	cmd_live,	NULL	},
 	{ "log",	cmd_log,	NULL	},
 	{ "reg",	cmd_reg,	"r"	},
+	{ "reset",	cmd_reset,	NULL	},
 	{ "show",	cmd_show,	"s"	},
 	{ "uname",	cmd_uname,	NULL	},
 	{ "ver",	cmd_ver,	NULL	},
@@ -435,29 +580,65 @@ static void execute ( char *cmd )
 static void input ( const char c )
 {
 	static int start_x;
-	static Uint8 prev_char;
+	static int history_browse_current = 0;
 	if (!current_x) {
-		matrix_write_string(prompt && *prompt ? prompt : "Xemu>");
+		matrix_write_string(PROMPT);
 		start_x = current_x;
-		prev_char = 0;
 		if (!c)
 			return;
 	}
-	if (current_x < chrscreen_xsize - 1 && (c >= 33 || (c == 32 && current_x > start_x && prev_char != 32))) {
+	if (c == 3) {		// "previous viewport" key
+		set_viewport(1);
+		return;
+	}
+	set_viewport(0);	// any keystorkes causes to go back to the current viewport
+	if (c == 4)		// "current viewport" key
+		return;
+	if (c == 1 || c == 2) {	// 1=up arrow (older entry), 2=down arrow (newer entry)
+		const int dir = (c == 1) ? 1 : -1;
+		if (
+			(dir == -1 && history_browse_current > 0                    && history[history_browse_current - 1]) ||
+			(dir ==  1 && history_browse_current < CMD_HISTORY_SIZE - 1 && history[history_browse_current + 1])
+		) {
+			cmdbuf[current_x - start_x] = 0;
+			if (!history_browse_current) {
+				free(history[0]);
+				history[0] = xemu_strdup(cmdbuf);
+			}
+			history_browse_current += dir;
+			strcpy(cmdbuf, history[history_browse_current]);
+			current_x = start_x;
+			for (int i = 0; i < chrscreen_xsize - start_x - 1; i++)
+				matrix_write_char(i < strlen(cmdbuf) ? cmdbuf[i] : ' ');
+			current_x = start_x + strlen(cmdbuf);
+		}
+		return;
+	}
+	if (current_x < chrscreen_xsize - 1 && (c >= 33 || (c == 32 && current_x > start_x && cmdbuf[current_x - start_x - 1] != 32))) {
+		cmdbuf[current_x - start_x] = c;
 		matrix_write_char(c);
-		prev_char = c;
+		cmdbuf[current_x - start_x] = 0;
+		//DEBUGMATRIX("MATRIX: input change: \"%s\"" NL, cmdbuf);
 	} else if (current_x > start_x && c == 8) {
 		static const char backspace_seq_str[] = { 8, 32, 8, 0 };
 		matrix_write_string(backspace_seq_str);
-	} else if (c == '\r' || c == '\n') {
-		const int len = current_x - start_x;
-		char cmd[len + 1];
-		for (int i = 0, j = (current_y * chrscreen_xsize + start_x) << 1; i < len; i++, j += 2)
-			cmd[i] = vmem[j];
-		cmd[len - (prev_char == 32)] = 0;
+		cmdbuf[current_x - start_x] = 0;
+		//DEBUGPRINT("MATRIX: input change: \"%s\"" NL, cmdbuf);
+	} else if (c == 13) {
 		matrix_write_char('\n');
-		if (*cmd)
-			execute(cmd);
+		if (cmdbuf[0]) {
+			if (cmdbuf[strlen(cmdbuf) - 1] == 32)
+				cmdbuf[strlen(cmdbuf) - 1] = 0;
+			free(history[CMD_HISTORY_SIZE - 1]);	// oldest entry will be dropped: if it's NULL, no problem, free() can accept NULL ptr
+			free(history[0]);
+			history[0] = xemu_strdup(cmdbuf);
+			memmove(history + 1, history, (CMD_HISTORY_SIZE - 1) * sizeof(char*));
+			history[0] = xemu_strdup("");
+			history_browse_current = 0;
+			//DEBUGMATRIX("MATRIX: executing: \"%s\"" NL, cmdbuf);
+			execute(cmdbuf);
+			cmdbuf[0] = 0;
+		}
 		if (current_x)
 			matrix_write_char('\n');
 	}
@@ -470,13 +651,15 @@ static void matrix_updater_callback ( void )
 {
 	if (!in_the_matrix)
 		return;		// should not happen, but ... (and can be a race condition with toggle function anyway!)
+	blink_phase = (matrix_counter & 8);
 	write_char_raw(current_x, current_y, ' ', current_colour);	// delete cursor
 	const int saved_x = current_x, saved_y = current_y;
 	current_x = 0;
 	current_y = 1;
 	static const char rotator[4] = { '-', '\\', '|', '/' };
-	static Uint32 counter = 0;
-	dump_regs(rotator[(counter >> 3) & 3]);
+	dump_regs(rotator[(matrix_counter >> 3) & 3]);
+	if (live_update_enabled)
+		live_dump_update();
 	current_x = saved_x;
 	current_y = saved_y;
 	if (queued_input) {
@@ -485,9 +668,9 @@ static void matrix_updater_callback ( void )
 		queued_input = 0;
 	} else if (current_x == 0)
 		input(0);	// just to have some prompt by default
-	if (counter & 8)
-		write_char_raw(current_x, current_y, CURSOR_CHAR, CURSOR_COLOUR);	// show cursor (gated with some bit of the "counter" to have blinking)
-	counter++;
+	if (blink_phase && !current_viewport)
+		write_char_raw(current_x, current_y, CURSOR_CHAR, CURSOR_COLOUR);	// show cursor
+	matrix_counter++;
 	matrix_update();
 }
 
@@ -500,13 +683,35 @@ static void matrix_updater_callback ( void )
 
 static int kbd_cb_keyevent ( SDL_KeyboardEvent *ev )
 {
-	if (ev->state == SDL_PRESSED && ev->keysym.sym > 0 && ev->keysym.sym < 32 && !queued_input) {
-		// Monitor alt-tab, as the main handler is defunct at this point, we "hijacked" it!
-		// So we must give up the matrix mode themselves here
-		if (ev->keysym.sym == 9 && (ev->keysym.mod & KMOD_RALT))
-			matrix_mode_toggle(0);
-		else
-			queued_input = ev->keysym.sym;
+	if (ev->state == SDL_PRESSED) {
+		int sym;
+		switch (ev->keysym.sym) {
+			case SDLK_UP:
+				sym = 1; break;
+			case SDLK_DOWN:
+				sym = 2; break;
+			case SDLK_PAGEUP:
+				sym = 3; break;
+			case SDLK_PAGEDOWN:
+				sym = 4; break;
+			case SDLK_RETURN:
+			case SDLK_KP_ENTER:
+				sym = 13; break;
+			case SDLK_BACKSPACE:
+			case SDLK_DELETE:
+			case SDLK_KP_BACKSPACE:
+				sym = 8; break;
+			default:
+				sym = ev->keysym.sym; break;
+		}
+		if (sym > 0 && sym < 32 && !queued_input) {
+			// Monitor ctrl-tab, as the main handler is defunct at this point, we "hijacked" it!
+			// So we must give up the matrix mode themselves here
+			if (sym == SDLK_TAB && (ev->keysym.mod & (KMOD_LCTRL | KMOD_RCTRL)))
+				matrix_mode_toggle(0);
+			else
+				queued_input = sym;
+		}
 	}
 	return 0;	// do NOT execute further handlers!
 }
@@ -541,17 +746,23 @@ void matrix_mode_toggle ( int status )
 				colour_mappings[i] = SDL_MapRGBA(sdl_pix_fmt, console_colours[i * 4], console_colours[i * 4 + 1], console_colours[i * 4 + 2], console_colours[i * 4 + 3]);
 			chrscreen_xsize = backend_xsize / 8;
 			chrscreen_ysize = backend_ysize / 8;
-			vmem = xemu_malloc(chrscreen_xsize * chrscreen_ysize * 2);
+			vmem = xemu_malloc(FULL_SCREEN_BYTE_SIZE);
+			vmem_prev = xemu_malloc(CLI_AREA_BYTE_SIZE);
+			vmem_backup = xemu_malloc(CLI_AREA_BYTE_SIZE);
+			cmdbuf = xemu_malloc(chrscreen_xsize + 1);	// we don't want commands longer than a line!
+			cmdbuf[0] = 0;
+			for (int i = 0; i < CMD_HISTORY_SIZE; i++)
+				history[i] = NULL;
 			current_colour = NORMAL_COLOUR;
 			matrix_clear();
+			memcpy(vmem_prev, vmem + CLI_AREA_BYTE_OFFSET, CLI_AREA_BYTE_SIZE);
 			current_colour = BANNER_COLOUR;
-			static const char banner_msg[] = "*** Xemu's pre-matrix ... press right-ALT + TAB to exit ***";
+			static const char banner_msg[] = "*** Xemu's pre-matrix ... press left-CTRL + TAB to exit ***";
 			current_x = (chrscreen_xsize - strlen(banner_msg)) >> 1;
 			matrix_write_string(banner_msg);
 			current_colour = NORMAL_COLOUR;
 			current_y = CLI_START_LINE;
 			current_x = 0;
-			reserve_top_lines = CLI_START_LINE;
 			matrix_write_string("INFO: Remember, there is no spoon.\nINFO: Hot-keys do not work in matrix mode!\nINFO: Matrix mode bypasses emulation keyboard mappings.\n");
 		}
 		need_update = 2;
@@ -573,6 +784,7 @@ void matrix_mode_toggle ( int status )
 		saved_allow_mouse_grab = allow_mouse_grab;
 		allow_mouse_grab = 0;
 	} else {
+		set_viewport(0);		// switch back to viewport 0, to avoid confusion after enabling matrix again and cannot see the cursor/prompt to type
 		D6XX_registers[0x72] &= ~0x40;	// be sure we're sync with the matrix bit!
 		osd_hijack(NULL, NULL, NULL, NULL);
 		DEBUGPRINT("MATRIX: OFF" NL);

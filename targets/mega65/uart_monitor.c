@@ -52,11 +52,7 @@ char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
 #define UNCONNECTED	XS_INVALID_SOCKET
 
-#ifdef XEMU_ARCH_WIN
-#	define PRINTF_SOCK	"%I64d"
-#else
-#	define PRINTF_SOCK	"%d"
-#endif
+#define PRINTF_SOCK	PRINTF_S64
 
 
 static xemusock_socket_t  sock_server = UNCONNECTED;
@@ -103,7 +99,6 @@ static char *parse_hex_arg ( char *p, int *val, int min, int max )
 	}
 	return p;
 }
-
 
 
 static int check_end_of_command ( char *p, int error_out )
@@ -217,6 +212,10 @@ static void execute_command ( char *cmd )
 			if (cmd && check_end_of_command(cmd, 1))
 				m65mon_breakpoint(par1);
 			break;
+		case 'g':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
+			m65mon_set_pc(par1);
+			break;
 #ifdef TRACE_NEXT_SUPPORT
 		case 'N':
 			m65mon_next_command();
@@ -225,9 +224,14 @@ static void execute_command ( char *cmd )
 		case 0:
 			m65mon_empty_command();	// emulator can use this, if it wants
 			break;
+		case '!':
+			reset_mega65();
+			break;
 		case '~':
 			if (!strncmp(cmd, "exit", 4)) {
 				XEMUEXIT(0);
+			} else if (!strncmp(cmd, "reset", 5)) {
+				reset_mega65();
 			} else if (!strncmp(cmd, "mount", 5)) {
 				// Quite crude syntax for now:
 				// 	~mount0		- unmounting image/disk in drive-0
@@ -407,7 +411,7 @@ void uartmon_update ( void )
 		xemusock_socket_t ret_sock = xemusock_accept(sock_server, (struct sockaddr *)&sock_st, &len, &xerr);
 		if (ret_sock != XS_INVALID_SOCKET || (ret_sock == XS_INVALID_SOCKET && !xemusock_should_repeat_from_error(xerr)))
 			DEBUG("UARTMON: accept()=" PRINTF_SOCK " error=%s" NL,
-				ret_sock,
+				(Sint64)ret_sock,
 				ret_sock != XS_INVALID_SOCKET ? "OK" : xemusock_strerror(xerr)
 			);
 		if (ret_sock != XS_INVALID_SOCKET) {
@@ -420,7 +424,7 @@ void uartmon_update ( void )
 				// Reset reading/writing information
 				umon_write_size = 0;
 				umon_read_pos = 0;
-				DEBUGPRINT("UARTMON: new connection established on socket " PRINTF_SOCK NL, sock_client);
+				DEBUGPRINT("UARTMON: new connection established on socket " PRINTF_SOCK NL, (Sint64)sock_client);
 			}
 		}
 	}
@@ -434,7 +438,7 @@ void uartmon_update ( void )
 		ret = xemusock_send(sock_client, umon_write_buffer + umon_write_pos, umon_write_size, &xerr);
 		if (ret != XS_SOCKET_ERROR || (ret == XS_SOCKET_ERROR && !xemusock_should_repeat_from_error(xerr)))
 			DEBUG("UARTMON: write(" PRINTF_SOCK ",buffer+%d,%d)=%d (%s)" NL,
-				sock_client, umon_write_pos, umon_write_size,
+				(Sint64)sock_client, umon_write_pos, umon_write_size,
 				ret, ret == XS_SOCKET_ERROR ? xemusock_strerror(xerr) : "OK"
 			);
 		if (ret == 0) { // client socket closed
@@ -458,7 +462,7 @@ void uartmon_update ( void )
 	ret = xemusock_recv(sock_client, umon_read_buffer + umon_read_pos, sizeof(umon_read_buffer) - umon_read_pos - 1, &xerr);
 	if (ret != XS_SOCKET_ERROR || (ret == XS_SOCKET_ERROR && !xemusock_should_repeat_from_error(xerr)))
 		DEBUG("UARTMON: read(" PRINTF_SOCK ",buffer+%d,%d)=%d (%s)" NL,
-			sock_client, umon_read_pos, (int)sizeof(umon_read_buffer) - umon_read_pos - 1,
+			(Sint64)sock_client, umon_read_pos, (int)sizeof(umon_read_buffer) - umon_read_pos - 1,
 			ret, ret == XS_SOCKET_ERROR ? xemusock_strerror(xerr) : "OK"
 		);
 	if (ret == 0) { // client socket closed

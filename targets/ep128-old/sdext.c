@@ -182,8 +182,8 @@ static inline off_t _assert_on_csd_size_mismatch ( off_t expected_size, int expe
 	int blocklen = 2 ** i["READ_BL_LEN"]
 	off_t size = (off_t)blocknr * (off_t)blocklen;
 	if (size != expected_size || mult != expected_mult || blocknr != excepted_blocknr || blocklen != expected_blocklen)
-		FATAL("Internal CSD size calculation failure!\nExpected=" PRINTF_LLD " Got=" PRINTF_LLD " (mult=%d blocknr=%d blocklen=%d)",
-			(long long)expected_size, (long long)size,
+		FATAL("Internal CSD size calculation failure!\nExpected=" PRINTF_S64 " Got=" PRINTF_S64 " (mult=%d blocknr=%d blocklen=%d)",
+			(Sint64)expected_size, (Sint64)size,
 			mult, blocknr, blocklen
 		);
 }
@@ -230,8 +230,8 @@ static int sdext_check_and_set_size ( void )
 	int is_vhd;
 	if (sd_card_size < MIN_CARD_SIZE) {
 		ERROR_WINDOW(
-			"SD card image file \"%s\" is too small, minimal size is " PRINTF_LLD " Mbytes, but this one is " PRINTF_LLD " bytes long (about " PRINTF_LLD " Mbytes). SD access has been disabled!",
-			sdimg_path, (long long)(MIN_CARD_SIZE >> 20), (long long)sd_card_size, (long long)(sd_card_size >> 20)
+			"SD card image file \"%s\" is too small, minimal size is " PRINTF_U64 " Mbytes, but this one is " PRINTF_U64 " bytes long (about " PRINTF_U64 " Mbytes). SD access has been disabled!",
+			sdimg_path, (Uint64)(MIN_CARD_SIZE >> 20), (Uint64)sd_card_size, (Uint64)(sd_card_size >> 20)
 		);
 		return 1;
 	}
@@ -267,9 +267,9 @@ static int sdext_check_and_set_size ( void )
 		DEBUG("SDEXT: VHD file is not detected." NL);
 	if (sd_card_size > MAX_CARD_SIZE) {	// do this check here, as VHD footer could overflow on 2G boundary at the beginning what we have support for in Xep128
 		ERROR_WINDOW(
-			"SD card image file \"%s\" is too large, maximal allowed size is " PRINTF_LLD " Mbytes, but this one is " PRINTF_LLD " bytes long (about " PRINTF_LLD " Mbytes). "
+			"SD card image file \"%s\" is too large, maximal allowed size is " PRINTF_U64 " Mbytes, but this one is " PRINTF_U64 " bytes long (about " PRINTF_U64 " Mbytes). "
 			"SD access has been disabled!",
-			sdimg_path, (long long)(MAX_CARD_SIZE >> 20), (long long)sd_card_size, (long long)(sd_card_size >> 20)
+			sdimg_path, (Uint64)(MAX_CARD_SIZE >> 20), (Uint64)sd_card_size, (Uint64)(sd_card_size >> 20)
 		);
 		return 1;
 	}
@@ -285,7 +285,7 @@ static int sdext_check_and_set_size ( void )
 		return 0;
 	if (is_vhd)
 		WARNING_WINDOW("SD-card image \"%s\" is promoted for extension but it seems to be a VHD file.\nIf you allow extension it WON'T BE USED AS VHD ANY MORE BY OTHER SOFTWARE!", sdimg_path);
-	INFO_WINDOW("SD-card image file \"%s\" is about to be extended with %d bytes (the next valid SD-card size), new size is: " PRINTF_LLD, sdimg_path, (int)(new_size - sd_card_size), (long long)new_size);
+	INFO_WINDOW("SD-card image file \"%s\" is about to be extended with %d bytes (the next valid SD-card size), new size is: " PRINTF_U64, sdimg_path, (int)(new_size - sd_card_size), (Uint64)new_size);
 	if (!QUESTION_WINDOW("Not allowed|Allowed (DANGEROUS)", "Do you allow this extension? NOTE: it's a test feature, do not allow it, if you are unsure!")) {
 		INFO_WINDOW("You didn't allow the extension. You can continue, but some EP128 software may fail (ie: fdisk)!");
 		return 0;
@@ -373,7 +373,7 @@ try_to_open_image:
 			sdf = NULL;
 			*sdimg_path = 0;
 		} else
-			DEBUG("SDEXT: SD card size is: " PRINTF_LLD " bytes" NL, (long long)sd_card_size);
+			DEBUG("SDEXT: SD card size is: " PRINTF_U64 " bytes" NL, (Uint64)sd_card_size);
 	}
 	memset(sd_rom_ext, 0xFF, 0x10000);
 	/* Copy ROM image of 16K to the second 64K of the cartridge flash. Currently only 8K is used.

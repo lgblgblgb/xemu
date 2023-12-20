@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2019-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -92,11 +92,15 @@ static const struct xemugui_descriptor_st *xemugui_descriptor_list[] = {
 
 int xemugui_init ( const char *name )
 {
-	char avail[256];	// "should be enough" (yeah, I know, the 640K ...) for some names ...
-	avail[0] = 0;
 	is_xemugui_ok = 0;
 	if (name && name[0] == '\0')	// make sure that empty string means the same as NULL pointer passed
 		name = NULL;
+	if (emu_is_headless) {
+		name = xemunullgui_descriptor.name;
+		DEBUGPRINT("GUI: forcing \"%s\" because of headless mode" NL, name);
+	}
+	char avail[256];	// "should be enough" (yeah, I know, the 640K ...) for some names ...
+	avail[0] = 0;
 	for (int a = 0 ;; a++) {
 		strcat(avail, " ");
 		strcat(avail, xemugui_descriptor_list[a]->name);

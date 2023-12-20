@@ -129,7 +129,7 @@ static void d81access_attach_fd_internal ( int which, int fd, off_t offset, int 
 			d81[which].image_size = D71_SIZE;
 		if ((mode & D81ACCESS_D65))
 			d81[which].image_size = D65_SIZE;
-		DEBUGPRINT("D81: fd %d has been attached to #%d with " PRINTF_LLD " offset, read_only = %d, autoclose = %d, size = %d" NL, fd, which, (long long)offset, IS_RO(mode), IS_AUTOCLOSE(mode), d81[which].image_size);
+		DEBUGPRINT("D81: fd %d has been attached to #%d with " PRINTF_S64 " offset, read_only = %d, autoclose = %d, size = %d" NL, fd, which, (Sint64)offset, IS_RO(mode), IS_AUTOCLOSE(mode), d81[which].image_size);
 	} else {
 		DEBUGPRINT("D81: using empty access (no disk in drive) by request" NL);
 		d81[which].mode = D81ACCESS_EMPTY;
@@ -728,12 +728,12 @@ int d81access_create_image_file ( const char *fn, const char *diskname, const in
 	}
 	Uint8 *img = d81access_create_image(NULL, diskname ? diskname : fn, !diskname);
 	const int written = xemu_safe_write(fd, img, D81_SIZE);
-	xemu_os_close(fd);
+	close(fd);
 	free(img);
 	if (written != D81_SIZE) {
 		if (cry)
 			ERROR_WINDOW("%s [D81-WRITE]\n%s\n%s", cry, fullpath, strerror(errno));
-		xemu_os_unlink(fullpath);
+		unlink(fullpath);
 		return -1;
 	}
 	DEBUGPRINT("D81ACCESS: new disk image file \"%s\" has been successfully created (overwrite policy %d)." NL, fullpath, do_overwrite);
