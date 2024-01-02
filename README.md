@@ -12,7 +12,7 @@
 Emulators running on Linux/Unix/Windows/OSX of various (mainly 8 bit) machines,
 including the Commodore LCD and Commodore 65 and MEGA65 as well.
 
-Written by (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+Written by (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 Source repository: https://github.com/lgblgblgb/xemu
 
 Xemu also contains code wasn't written by me (sources I use from others,
