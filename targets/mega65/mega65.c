@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -821,6 +821,7 @@ int main ( int argc, char **argv )
 	xemu_set_installer(configdb.installer);
 #endif
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
+	xemu_set_default_win_pos_from_string(configdb.winpos);
 	window_title_info_addon = emulator_speed_title;
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title

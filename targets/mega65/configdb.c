@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -76,6 +76,7 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "gui",	NULL, "Select GUI type for usage. Specify some insane str to get a list", &configdb.selectedgui },
 	{ "importbas",	NULL, "Import and RUN BASIC65 program from TEXT file", &configdb.importbas },
 	{ "cartbin8000",NULL, "Load binary cartridge image from $8000", &configdb.cartbin8000 },
+	{ "winpos",	NULL, "Window position: x,y (integers)", &configdb.winpos },
 	{ NULL }
 };
 
@@ -155,7 +156,7 @@ static const void *do_not_save_opts[] = {
 	&configdb.matrixstart,
 	&configdb.dumpmem, &configdb.dumpscreen, &configdb.screenshot_and_exit,
 	&configdb.testing, &configdb.hyperdebug, &configdb.hyperdebugfreezer, &configdb.usestubrom, &configdb.useinitrom, &configdb.useutilmenu,
-	&configdb.cartbin8000,
+	&configdb.cartbin8000, &configdb.winpos,
 	NULL
 };
 

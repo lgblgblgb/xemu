@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -740,6 +740,12 @@ static void ui_restore_config ( void )
 }
 #endif
 
+static void ui_save_current_window_position ( void )
+{
+	xemu_default_win_pos_file_op('w');
+	INFO_WINDOW("Current window position has been stored.");
+}
+
 
 /**** MENU SYSTEM ****/
 
@@ -834,6 +840,7 @@ static const struct menu_st menu_display[] = {
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &vic4_registered_screenshot_request },
 #endif
+	{ "Save main window placement",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_save_current_window_position },
 	{ "Screen to OS clipboard",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_screen_text_into_paste_buffer },
 	{ "Screen to ASCII file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_screen_text_into_file },
 	{ "OS clipboard typing-in",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_hwa_kbd_pasting },
