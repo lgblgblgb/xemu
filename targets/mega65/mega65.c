@@ -420,6 +420,13 @@ static void mega65_init ( void )
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	cia2.DDRA = 3; // Ugly workaround ... I think, SD-card setup "CRAM UTIL" (or better: Hyppo) should set this by its own. Maybe Xemu bug, maybe not?
+	// These are workarounds, newer ROMs seems to fail to finish initialization without these, see here:
+	// https://github.com/lgblgblgb/xemu/issues/395
+	// This workaround is surely not fully correct, but seems to solve the issue to allow newer ROMs to start at least.
+	cia1.TLAL = 1;
+	cia1.TLAH = 1;
+	cia2.TLAL = 1;
+	cia2.TLAH = 1;
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
 	dma_init();
 #ifdef HAS_UARTMON_SUPPORT
