@@ -178,6 +178,7 @@ done
 #########################################
 
 STRIP_default=strip
+PKG_CONFIG_default=pkg-config
 echo -n "Specified make ARCH to use: "
 if [ "$ARCH" = "native" ]; then
 	echo "$ARCH (intended for native target)"
@@ -202,6 +203,18 @@ elif [ "$ARCH" = "html" ]; then
 	WINDRES_default=
 	SDL2_CONFIG_default=internal
 	STRIP_default=strip-is-not-supported-for-this-arch
+elif [ "$ARCH" = "android" ]; then
+	echo "$ARCH (intended for Android/ARM cross-compilation on UNIX)"
+	ANDROID_HELPER_SCRIPT=sdl2-config-for-android
+	ANDROID_HELPER=`dirname $0`/$ANDROID_HELPER_SCRIPT
+	echo "  * If you need to customize any Android build related setting, please edit file"
+	echo "  * `$ANDROID_HELPER --paramfile` and run: 'make ARCH=android config' again."
+	$ANDROID_HELPER --summary || exit 1
+	CC_default=`$ANDROID_HELPER --compiler`
+	WINDRES_default=
+	SDL2_CONFIG_default=build/configure/$ANDROID_HELPER_SCRIPT
+	STRIP_default=strip-is-not-supported-for-this-arch
+	PKG_CONFIG_default=""
 elif [ "$ARCH" = "" ]; then
 	echo "UNSPECIFIED"
 	echo "Error, no ARCH variable passed to the $0 script. Do not forget to use the --arch=... parameter." >&2
@@ -211,7 +224,6 @@ else
 	echo "Error, unknown ARCH ($ARCH) was specified to the $0 script" >&2
 	exit 1
 fi
-PKG_CONFIG_default=pkg-config
 
 ##########################################################################
 # Work out our current directory, project root, temporary & result files #
@@ -500,6 +512,11 @@ cat > $SRC <<EOF
 #else
 #	define	IS_HAIKU	"N"
 #endif
+#ifdef	XEMU_ARCH_ANDROID
+#	define	IS_ANDROID	"Y"
+#else
+#	define	IS_ANDROID	"N"
+#endif
 
 #include <inttypes.h>
 
@@ -513,6 +530,7 @@ const char *xemu_IS_OSX	= IS_OSX;
 const char *xemu_IS_LINUX = IS_LINUX;
 const char *xemu_IS_HTML = IS_HTML;
 const char *xemu_IS_HAIKU = IS_HAIKU;
+const char *xemu_IS_ANDROID = IS_ANDROID;
 
 int main ( void ) {
 	// This is not used at all. Just for testing linkage to see if we have printf()
@@ -532,7 +550,7 @@ $CC $CFLAGS -E -I. -c $SRC > $COUT 2> $CERR || failed
 echo "OK"
 
 echo -n "Analyzing compilation target:"
-for a in SYSTEM IS_UNIX IS_WIN IS_WIN32 IS_WIN64 IS_OSX IS_LINUX IS_HTML IS_HAIKU ; do
+for a in SYSTEM IS_UNIX IS_WIN IS_WIN32 IS_WIN64 IS_OSX IS_LINUX IS_HTML IS_HAIKU IS_ANDROID ; do
 	echo -n " $a="
 	b=`sed -n "s/^const char \*xemu_$a = \"//p" $COUT | cut -f1 -d'"'`
 	echo -n $b
@@ -554,7 +572,6 @@ done
 echo
 
 echo -n "Extracting 64-bit printf numeric format strings:"
-cp $COUT /tmp/xemu
 for a in PRINTF_S64 PRINTF_U64 PRINTF_X64 ; do
 	b=$(cat $COUT  | grep -v '^#' | tr '\n\r\t' '   ' | sed 's/[," ]*//g' | sed -nE "s/^.*CONFIGURE_${a}_BEGIN([^_]*)_CONFIGURE_${a}_END.*$/\1/p")
 	if [ "$b" = "" ]; then
@@ -670,6 +687,9 @@ echo "OK"
 # PKG-CONFIG based optional stuffs #
 ####################################
 
+if [ "$PKG_CONFIG" = "" ]; then
+	echo "pkg-config support has been disabled for $ARCH"
+else
 for a in \
 	"GTK3:gtk+-3.0:#include <gtk/gtk.h>:gtk_init_check(NULL,NULL)"
 do
@@ -733,6 +753,7 @@ EOF
 		cat $CERR
 	fi
 done
+fi
 
 
 ########################################################################################################

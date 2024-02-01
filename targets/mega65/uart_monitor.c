@@ -230,11 +230,6 @@ static void execute_command ( char *cmd )
 		case '~':
 			if (!strncmp(cmd, "exit", 4)) {
 				XEMUEXIT(0);
-			} else if (!strncmp(cmd, "log", 3)) {
-				cmd += 3;
-				while (*cmd == '\t' || *cmd == ' ')
-					cmd++;
-				DEBUGPRINT("USERLOG: %s" NL, cmd ? cmd : "<EMPTY-TEXT>");
 			} else if (!strncmp(cmd, "reset", 5)) {
 				reset_mega65();
 			} else if (!strncmp(cmd, "mount", 5)) {

@@ -1,6 +1,6 @@
 /* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
    8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -147,6 +147,7 @@ extern int seconds_timer_trigger;
 extern char *sdl_pref_dir, *sdl_base_dir, *sdl_inst_dir;
 extern int sysconsole_is_open;
 extern int sdl_default_win_x_size, sdl_default_win_y_size;
+extern int sdl_default_win_x_pos,  sdl_default_win_y_pos ;
 extern int register_new_texture_creation;
 extern SDL_version sdlver_compiled, sdlver_linked;
 extern Uint32 *xemu_frame_pixel_access_p;
@@ -159,6 +160,9 @@ extern int emu_fs_is_utf8;
 
 extern void xemu_set_viewport ( unsigned int x1, unsigned int y1, unsigned int x2, unsigned int y2, unsigned int flags );
 extern void xemu_get_viewport ( unsigned int *x1, unsigned int *y1, unsigned int *x2, unsigned int *y2 );
+
+extern void xemu_set_default_win_pos_from_string ( const char *s );
+extern void xemu_default_win_pos_file_op         ( const char r_or_w );
 
 extern void xemu_window_snap_to_optimal_size ( int forced );
 

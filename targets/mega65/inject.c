@@ -53,6 +53,8 @@ static struct {
 	.cmd_p	= NULL
 };
 static Uint8 *under_ready_p;
+static char *kbd_hwa_pasting = NULL;
+static int   kbd_hwa_pasting_single_case;
 
 
 static void _cbm_screen_write_char ( Uint8 *p, const char c )
@@ -82,14 +84,15 @@ static void _cbm_screen_write ( Uint8 *p, const char *s )
 	} while (0)
 
 
-static void press_key ( const int key )
+static void press_return ( void )
 {
 	if (key2release >= 0)
 		KBD_RELEASE_KEY(key2release);
-	DEBUGPRINT("INJECT: pressing key #%d" NL, key);
-	key2release = key;
+	DEBUGPRINT("INJECT: pressing key RETURN" NL);
+	key2release = 1;
 	key2release_timeout = KEY_PRESS_TIMEOUT;
-	KBD_PRESS_KEY(key);
+	KBD_PRESS_KEY(1);
+	hwa_kbd_set_fake_key(13);
 }
 
 
@@ -128,24 +131,10 @@ static int is_ready_on_screen ( const int delete_all_ready )
 }
 
 
-// Used to enable/disable "auto-*" (auto-boot, etc) protection.
-// Like PRG loading needs a reset first, but if there is a disk mounted with autoboot file,
-// it would "hijack" our try to get to the READY. prompt right after reset. So, just for
-// an example, disallowing FDC access during the reset is something we need here.
-static void autostuff_protection_for_reset ( const int enable )
-{
-	if (enable) {
-		fdc_allow_disk_access(FDC_DENY_DISK_ACCESS);	// deny disk access for now
-	} else {
-		fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);	// disk access is OK from now on
-	}
-}
-
-
 static void prg_inject_callback ( void *unused )
 {
 	DEBUGPRINT("INJECT: hit 'READY.' trigger, about to inject %d bytes from $%04X." NL, prg.size, prg.load_addr);
-	autostuff_protection_for_reset(0);
+	fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);
 	memcpy(main_ram + prg.load_addr, prg.stream, prg.size);
 	clear_emu_events();	// clear keyboard & co state, ie for C64 mode, probably had MEGA key pressed still
 	CBM_SCREEN_PRINTF(under_ready_p - vic4_query_screen_width() + 7, "<$%04X-$%04X,%d bytes>", prg.load_addr, prg.load_addr + prg.size - 1, prg.size);
@@ -162,12 +151,7 @@ static void prg_inject_callback ( void *unused )
 		}
 		// If program was detected as BASIC (by load-addr) we want to auto-RUN it
 		CBM_SCREEN_PRINTF(under_ready_p, " RUN:");
-		press_key(1);
-		// This strange stuff is here for a kinda "funny" purpose. Many people started to use the $D610 hardware accelerated keyboard scanner
-		// feature, but they often miss to realize that the queue must be emptied by the program itself. Since Xemu is used with with feature
-		// like program injection they never face the problem, and the surprise only coccures when trying on a real MEGA65, blaming Xemu then
-		// for the problem. Thus we inject same fake stuff here just not to have empty $D610 buffer. Otherwise this statement has NO other purpose!
-		hwa_kbd_fake_string("dir\rload");	// more than enough to fill the buffer
+		press_return();
 	} else {
 		// In this case we DO NOT press RETURN for user, as maybe the SYS addr is different, or user does not want this at all!
 		CBM_SCREEN_PRINTF(under_ready_p, " SYS%d:REM **YOU CAN PRESS RETURN**", prg.load_addr);
@@ -182,17 +166,17 @@ static void import_callback2 ( void *unused )
 	CBM_SCREEN_PRINTF(under_ready_p, " SCNCLR:RUN:");
 	if (configdb.disk9)
 		sdcard_external_mount(1, configdb.disk9, NULL);
-	press_key(1);
+	press_return();
 }
 
 
 static void import_callback ( void *unused )
 {
 	DEBUGPRINT("INJECT: hit 'READY.' trigger, about to import BASIC65 text program." NL);
-	autostuff_protection_for_reset(0);
+	fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);	// re-allow disk access
 	if (!sdcard_external_mount(1, IMPORT_BAS_TEXT_TEMPFILE, "Mount failure for BASIC65 import")) {
 		CBM_SCREEN_PRINTF(under_ready_p, " IMPORT\"FILESEQ\",U9:");
-		press_key(1);
+		press_return();
 		inject_register_ready_status("BASIC65 text import2", import_callback2, NULL);
 	}
 }
@@ -204,7 +188,7 @@ static void command_callback ( void *unused )
 		return;
 	DEBUGPRINT("INJECT: hit 'READY.' trigger, injecting command at offset %d" NL, (int)(prg.cmd_p - prg.cmd));
 	if (prg.cmd_p == prg.cmd)
-		autostuff_protection_for_reset(0);
+		fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);	// re-allow disk access
 	Uint8 *p = under_ready_p;
 	*p++ = 32;
 	for (;;) {
@@ -223,20 +207,20 @@ static void command_callback ( void *unused )
 		_cbm_screen_write_char(p++, c);
 	}
 	clear_emu_events();
-	press_key(1);
+	press_return();
 }
 
 
 static void allow_disk_access_callback ( void *unused )
 {
 	DEBUGPRINT("INJECT: re-enable disk access on READY. prompt" NL);
-	autostuff_protection_for_reset(0);
+	fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);
 }
 
 
 void inject_register_allow_disk_access ( void )
 {
-	autostuff_protection_for_reset(1);
+	fdc_allow_disk_access(FDC_DENY_DISK_ACCESS);	// deny now!
 	// register event for the READY. prompt for re-enable
 	inject_register_ready_status("Disk access re-enabled", allow_disk_access_callback, NULL);
 }
@@ -246,7 +230,7 @@ void inject_register_allow_disk_access ( void )
 void inject_register_command ( const char *s )
 {
 	inject_register_ready_status("Command", command_callback, NULL);
-	autostuff_protection_for_reset(1);
+	fdc_allow_disk_access(FDC_DENY_DISK_ACCESS);	// deny disk access, to avoid problem when autoboot disk image is used otherwise
 	if (prg.cmd)
 		free(prg.cmd);
 	prg.cmd = xemu_strdup(s);
@@ -318,7 +302,7 @@ int inject_register_prg ( const char *prg_fn, int prg_mode )
 		KBD_PRESS_KEY(0x75);	// "MEGA" key is hold down for C64 mode
 	if (inject_register_ready_status("PRG memory injection", prg_inject_callback, NULL)) // prg inject does not use the userdata ...
 		goto error;
-	autostuff_protection_for_reset(1);
+	fdc_allow_disk_access(FDC_DENY_DISK_ACCESS);	// deny now, to avoid problem on PRG load while autoboot disk is mounted
 	return 0;
 error:
 	if (prg.stream) {
@@ -355,10 +339,44 @@ void inject_ready_check_do ( void )
 		} else
 			key2release_timeout--;
 	}
+	if (kbd_hwa_pasting) {
+		static const char *now = NULL;
+		static int stalling = 0;
+		if (!now) {
+			now = kbd_hwa_pasting;
+			stalling = 0;
+		}
+		osd_display_console_log = 0;
+		OSD(-1, 10, "Pasting in progress: %u", (unsigned int)strlen(now));
+		osd_status = OSD_STATIC;
+		const char *next = hwa_kbd_add_string(now, kbd_hwa_pasting_single_case);
+		if (!*next)
+			goto end_pasting;
+		if (next == now) {
+			stalling++;
+			if (stalling > 60) {
+				ERROR_WINDOW(
+					"Pasting did not work through. Some possibilities:\n"
+					"  You don't run a decent enough ROM using hardware keyboard scanning\n"
+					"  You are in GO64 BASIC mode (it won't work there)\n"
+					"  System is busy or (currently?) does not use hardware keyboard scanning"
+				);
+				goto end_pasting;
+			}
+			return;
+		}
+		now = next;
+		stalling = 0;
+		return;
+	end_pasting:
+		osd_status = 0;
+		now = NULL;
+		free(kbd_hwa_pasting);
+		kbd_hwa_pasting = NULL;
+		return;
+	}
 	if (XEMU_LIKELY(!check_status))
 		return;
-	//if (!in_hypervisor && vic_frame_counter_since_boot > 100)
-	//	DEBUGPRINT("Inject timeout: %d" NL, vic_frame_counter_since_boot);
 	if (check_status == 1) {		// we're in "waiting for READY." phase
 		if (is_ready_on_screen(0))
 			check_status = 2;
@@ -400,6 +418,23 @@ int inject_register_import_basic_text ( const char *fn )
 	free(buf);
 	if (inject_register_ready_status("BASIC65 text import", import_callback, NULL)) // prg inject does not use the userdata ...
 		return -1;
-	autostuff_protection_for_reset(1);
+	fdc_allow_disk_access(FDC_DENY_DISK_ACCESS);	// deny now, to avoid problem on PRG load while autoboot disk is mounted
+	return 0;
+}
+
+
+int inject_hwa_pasting ( char *s, const int single_case )
+{
+	if (!s || !*s) {
+		DEBUGPRINT("INJECT: cannot register empty text to be typed-in" NL);
+		return -1;
+	}
+	if (kbd_hwa_pasting) {
+		ERROR_WINDOW("Another pasting event is already in progress.");
+		return -1;
+	}
+	DEBUGPRINT("INJECT: %u bytes long text is registered to be typed-in" NL, (unsigned int)strlen(s));
+	kbd_hwa_pasting = s;
+	kbd_hwa_pasting_single_case = single_case;
 	return 0;
 }

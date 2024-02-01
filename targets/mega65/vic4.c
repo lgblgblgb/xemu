@@ -204,7 +204,7 @@ void vic_init ( void )
 static XEMU_INLINE void pixel_readback ( void )
 {
 	// FIXME: this is surely wrong, and we should not use texture coords directly. We must fix this somehow (offsets?)
-	const int pix_readback_x = (vic_registers[0x7D] | ((vic_registers[0x7F] & 0x0F) << 8)) - 8 + 2 - 3;	// FIXME: no idea about this strange offset! It's just experimental, I have no idea!!
+	const int pix_readback_x = (vic_registers[0x7D] | ((vic_registers[0x7F] & 0x0F) << 8)) - 8 + 2;
 	const int pix_readback_y = vic_registers[0x7E] | ((vic_registers[0x7F] & 0xF0) << 4);
 	if (XEMU_UNLIKELY(pix_readback_y >= 0 && pix_readback_x >= 0 && pix_readback_y < max_rasters && pix_readback_x < TEXTURE_WIDTH)) {
 		const Uint32 texpixcol = xemu_frame_pixel_access_p[TEXTURE_WIDTH * pix_readback_y + pix_readback_x];
@@ -1437,15 +1437,12 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 					char_fetch_offset = char_value >> 13;
 					if (SXA_VERTICAL_FLIP(color_data))
 						enable_bg_paint = 0;
-					if (SXA_ATTR_ALTPALETTE(color_data) && !REG_VICIII_ATTRIBS)	// FIXME: do we really need the !REG_VICIII_ATTRIBS part here?
+					if (SXA_ATTR_BOLD(color_data) && SXA_ATTR_REVERSE(color_data) && !REG_VICIII_ATTRIBS)
 						used_palette = altpalette;	// use the alternate palette from now in the scanline
 					else
 						used_palette = palette;		// we do this as well, since there can be "double GOTOX" so we want back to "original" palette ...
 					if (SXA_4BIT_PER_PIXEL(color_data)) 	// this signals for rowmask [the rowmask itself is color_data & 0xFF]
 						draw_mask = (color_data & (1 << char_row)) ? 0xFF : 0x00;	// draw_mask is $FF (not masked) _or_ $00 (masked) ~ for the current char_row!
-					else
-						draw_mask = 0xFF;		// double/multiple GOTOX, we *may* reset to default if does not apply! FIXME: is this true? check!
-					// !!! end of processing the "GOTOX" token, there is nothing to render here, back to the scanline loop
 					continue;
 				}
 			}

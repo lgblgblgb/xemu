@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -113,6 +113,9 @@ struct configdb_st {
 	int	sidmask;
 	int	audiobuffersize;
 	int	fastboot;
+	int	matrixstart;
+	int	matrixdisable;
+	char	*winpos;
 };
 
 extern struct configdb_st configdb;

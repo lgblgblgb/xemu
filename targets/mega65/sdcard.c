@@ -1039,7 +1039,11 @@ void sdcard_notify_hyppo_leave ( void )
 		const int is_mounted = get_mounted(unit);
 		const Uint32 sector = get_sector(unit);
 		const int acm = get_acm(unit);
-		const int ro = get_ro(unit);
+		int ro = get_ro(unit);
+		if (is_mounted && ro) {
+			DEBUGPRINT("SDCARD: MOUNT: D81 for unit #%d instructed for R/O mount in hypervisor mode. HYPPO/HDOS bug? Forcing R/W!" NL, unit);
+			ro = 0;
+		}
 		if (mount_info[unit].type != MOUNT_TYPE_EMPTY && !is_mounted) {
 			DEBUGPRINT("SDCARD: MOUNT: unmount scenario detected during-HDOS-trap on #%d, doing so" NL, unit);
 			sdcard_unmount(unit);

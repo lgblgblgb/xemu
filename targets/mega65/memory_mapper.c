@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2017-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2017-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -732,6 +732,25 @@ static void apply_cpu_io_port_config ( void )
 	}
 }
 
+
+unsigned int mem_get_4k_region_short_desc ( char *p, const unsigned int n, const unsigned int i )
+{
+	if (map_mask & (1 << (i >> 1)))
+		return snprintf(p, n, "%X", (i & 8 ? map_megabyte_high : map_megabyte_low) + (((i & 8 ? map_offset_high : map_offset_low) + (i << 12)) & 0xFFFFF));
+	else if ((i == 0x8 || i == 0x9) && (vic_registers[0x30] &   8))
+		return snprintf(p, n, "ROM8000");
+	else if ((i == 0xA || i == 0xB) && ((vic_registers[0x30] &  16) || memcfg_cpu_io_port_last == 3 || memcfg_cpu_io_port_last == 7))
+		return snprintf(p, n, "BASIC");
+	else if ((i == 0xC            ) && (vic_registers[0x30] &  32))
+		return snprintf(p, n, "ROMC000");
+	else if ((i == 0xD            ) && (memcfg_cpu_io_port_last == 1 || memcfg_cpu_io_port_last == 2 || memcfg_cpu_io_port_last == 3))
+		return snprintf(p, n, "CHARGEN");
+	else if ( i == 0xD              &&  memcfg_cpu_io_port_last >= 5)
+		return snprintf(p, n, "IO");
+	else if ((i == 0xE || i == 0xF) && ((vic_registers[0x30] & 128) || memcfg_cpu_io_port_last == 2 || memcfg_cpu_io_port_last == 3 || memcfg_cpu_io_port_last == 6 || memcfg_cpu_io_port_last == 7))
+		return snprintf(p, n, "KERNAL");
+	return snprintf(p, n, "unmap");
+}
 
 
 // must be called on CPU I/O port write, addr=0/1 for DDR/DATA

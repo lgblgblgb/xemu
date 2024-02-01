@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -43,6 +43,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_socketapi.h"
 #include "rom.h"
 #include "cart.h"
+#include "matrix_mode.h"
 
 // "Typical" size in default settings (video standard is PAL, default border settings).
 // See also vic4.h
@@ -419,6 +420,13 @@ static void mega65_init ( void )
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	cia2.DDRA = 3; // Ugly workaround ... I think, SD-card setup "CRAM UTIL" (or better: Hyppo) should set this by its own. Maybe Xemu bug, maybe not?
+	// These are workarounds, newer ROMs seems to fail to finish initialization without these, see here:
+	// https://github.com/lgblgblgb/xemu/issues/395
+	// This workaround is surely not fully correct, but seems to solve the issue to allow newer ROMs to start at least.
+	cia1.TLAL = 1;
+	cia1.TLAH = 1;
+	cia2.TLAL = 1;
+	cia2.TLAH = 1;
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
 	dma_init();
 #ifdef HAS_UARTMON_SUPPORT
@@ -433,7 +441,7 @@ static void mega65_init ( void )
 	speed_current = 0;
 	machine_set_speed(1);
 	if (configdb.useutilmenu)
-		hwa_kbd_fake_key(0x20);
+		hwa_kbd_set_fake_key(0x20);
 	DEBUG("INIT: end of initialization!" NL);
 #ifdef XEMU_SNAPSHOT_SUPPORT
 	xemusnap_init(m65_snapshot_definition);
@@ -563,12 +571,15 @@ void m65mon_show_regs ( void )
 {
 	Uint8 pf = cpu65_get_pf();
 	umon_printf(
+		"\r\n"
 		"PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
 		"%04X %02X %02X %02X %02X %02X %04X "		// register banned message and things from PC to SP
 		"%04X %04X %02X       %02X %02X "		// from MAPL to P
 		"%c%c%c%c%c%c%c%c ",				// P-FLAGS
 		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z, cpu65.bphi >> 8, cpu65.sphi | cpu65.s,
-		map_offset_low >> 8, map_offset_high >> 8, cpu65.op,
+		((map_mask & 0x0F) << 12) | (map_offset_low  >> 8),
+		((map_mask & 0xF0) <<  8) | (map_offset_high >> 8),
+		cpu65.op,
 		pf, 0,	// flags
 		(pf & CPU65_PF_N) ? 'N' : '-',
 		(pf & CPU65_PF_V) ? 'V' : '-',
@@ -817,6 +828,7 @@ int main ( int argc, char **argv )
 	xemu_set_installer(configdb.installer);
 #endif
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
+	xemu_set_default_win_pos_from_string(configdb.winpos);
 	window_title_info_addon = emulator_speed_title;
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title
@@ -890,6 +902,8 @@ int main ( int argc, char **argv )
 	xemu_timekeeping_start();
 	emulation_is_running = 1;
 	update_emulated_time_sources();
+	if (configdb.matrixstart)
+		matrix_mode_toggle(1);
 	// FIXME: for emscripten (anyway it does not work too much currently) there should be 50 or 60 (PAL/NTSC) instead of (fixed, and wrong!) 25!!!!!!
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;

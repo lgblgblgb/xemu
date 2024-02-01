@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "ui.h"
 #include "matrix_mode.h"
 #include "dma65.h"
+#include "configdb.h"
 
 #include <string.h>
 
@@ -38,7 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 
 /* Note: M65 has a "hardware accelerated" keyboard scanner, it can provide you the
-   last pressed character as ASCII (!) without the need to actually scan/etc the
+   last pressed character as ASCII (!) and PETSCII without the need to actually scan/etc the
    keyboard matrix */
 
 /* These values are from matrix_to_ascii.vhdl in mega65-core project */
@@ -138,126 +139,146 @@ static const Uint8 *matrix_to_petscii_table_selector[16] = {
 	matrix_cbm_to_petscii,  matrix_cbm_to_petscii,	 matrix_cbm_to_petscii,   matrix_cbm_to_petscii
 };
 
-#define HWA_QUEUE_SIZE 5
+#define HWA_KBD_QUEUE_SIZE	5
 
-struct kqueue_st {
-	Uint8	q[HWA_QUEUE_SIZE];
-	int	i;
-	Uint8	empty_marker;
-};
+#define IS_QUEUE_EMPTY()	(queue_pos == 0)
+#define IS_QUEUE_FULL()		(queue_pos == HWA_KBD_QUEUE_SIZE)
 
-static struct {
-	Uint8	modifiers;
-	int	active_selector;
-	struct kqueue_st ascii_queue, petscii_queue;
-} hwa_kbd;
-
-static int restore_is_held = 0;
+// kbd_queue is Xemu's representation of the unified ASCII/PETSCII/keymod queue
+// least significant byte is ASCII, the next is PETSCII, the next is modkey (24 bits are used)
+static Uint32 kbd_queue[HWA_KBD_QUEUE_SIZE];
+static unsigned int queue_pos;
+static int restore_is_held;
 static Uint8 virtkey_state[3] = { 0xFF, 0xFF, 0xFF };
+static Uint8 modkeys_mask;
+static Uint8 modkeys;
 
 
 void hwa_kbd_disable_selector ( int state )
 {
-	state = !state;
-	if (state != hwa_kbd.active_selector) {
-		hwa_kbd.active_selector = state;
+	state = state ? 0 : 0xFFU;
+	if (state != modkeys_mask) {
+		modkeys_mask = state;
 		DEBUGKBDHWA("KBD: hardware accelerated keyboard scanner selector is now %s" NL, state ? "ENABLED" : "DISABLED");
 	}
 }
 
 
-static inline void kqueue_empty ( struct kqueue_st *p )
+// No checks for queue length here, must be called with care!
+static void add_hwa_fake_key_unprotected ( Uint8 asc, const int single_case )
 {
-	p->i = 0;
-	p->q[0] = p->empty_marker;	// to make the more frequent 'peek into queue' (without removing) faster, so it does not need to check 'i' ...
-}
-
-
-static inline void kqueue_remove ( struct kqueue_st *p )
-{
-	if (p->i > 1)
-		memmove(p->q, p->q + 1, --p->i);
-	else
-		kqueue_empty(p);
-}
-
-
-static void kqueue_write ( struct kqueue_st *p, const Uint8 k )
-{
-	if (XEMU_UNLIKELY(k == p->empty_marker)) {
-		DEBUGPRINT("KBD: HWA: PUSH: warning, trying to write the empty marker ($%02X) into the queue! Refused." NL, p->empty_marker);
+	static Uint8 prev_asc = 0;
+	if ((prev_asc == '\n' && asc == '\r') || (prev_asc == '\r' && asc == '\n')) {
+		prev_asc = 0;
 		return;
 	}
-	if (p->i < HWA_QUEUE_SIZE)
-		p->q[p->i++] = k;
-	else
-		DEBUGKBDHWACOM("KBD: HWA: PUSH: queue is full, cannot store key" NL);
+	prev_asc = asc;
+	Uint8 pet = asc;
+	Uint8 mod = 0;
+	if (asc == 10 || asc == 13) {
+		asc = 13;
+		pet = 13;
+	} else if (asc < 32 || asc > 127) {
+		return;
+	} else if (asc >= 'A' && asc <= 'Z') {
+		if (single_case) {
+			asc += 32;
+		} else {
+			mod = MODKEY_LSHIFT;
+			pet = asc + 32;
+		}
+	} else if (asc >= 'a' && asc <= 'z') {
+		pet = asc - 32;
+	} else if (asc == '@') {
+		pet = 0;
+	} else if (strchr("!\"#$%&'()<>?[]", asc)) {
+		mod = MODKEY_LSHIFT;
+	}
+	kbd_queue[queue_pos++] = asc + (pet << 8) + (mod << 16);
 }
 
 
-void hwa_kbd_fake_key ( const Uint8 k )
+// This works by ASCII input!
+void hwa_kbd_set_fake_key ( const Uint8 asc )
 {
-	hwa_kbd.ascii_queue.q[0] = k;
-	hwa_kbd.ascii_queue.i = !!k;	// if k was zero, empty queue otherwise the queue is one element long
+	queue_pos = 0;
+	if (asc)
+		add_hwa_fake_key_unprotected(asc, 0);
 }
 
 
-void hwa_kbd_fake_string ( const char *s )
+const char *hwa_kbd_add_string ( const char *s, const int single_case )
 {
-	kqueue_empty(&hwa_kbd.ascii_queue);
-	while (*s)
-		kqueue_write(&hwa_kbd.ascii_queue, *s++);
+	while (*s && !IS_QUEUE_FULL())
+		add_hwa_fake_key_unprotected((Uint8)*s++, single_case);
+	return s;
 }
 
 
 /* used by actual I/O function to read $D610 */
-Uint8 hwa_kbd_get_last_ascii ( void )
+Uint8 hwa_kbd_get_queued_ascii ( void )
 {
-	const Uint8 k = hwa_kbd.ascii_queue.q[0];
+	if (IS_QUEUE_EMPTY())
+		return 0x00;
+	const Uint8 k = kbd_queue[0] & 0xFF;
 	DEBUGKBDHWACOM("KBD: HWA: reading ASCII key @ PC=$%04X result = $%02X" NL, cpu65.pc, k);
 	return k;
 }
 
 
 /* used by actual I/O function to read $D619 */
-Uint8 hwa_kbd_get_last_petscii ( void )
+Uint8 hwa_kbd_get_queued_petscii ( void )
 {
-	const Uint8 k = hwa_kbd.petscii_queue.q[0];
+	if (IS_QUEUE_EMPTY())
+		return 0xFF;
+	const Uint8 k = (kbd_queue[0] >> 8) & 0xFF;
 	DEBUGKBDHWACOM("KBD: HWA: reading PETSCII key @ PC=$%04X result = $%02X" NL, cpu65.pc, k);
 	return k;
 }
 
 
-/* used by actual I/O function to read $D611 */
-Uint8 hwa_kbd_get_modifiers ( void )
+/* user by actual I/O function to read $D60A */
+Uint8 hwa_kbd_get_queued_modkeys ( void )
 {
-	const Uint8 result = hwa_kbd.modifiers | (hwa_kbd.active_selector ? 0 : 0x80);
-	DEBUGKBDHWACOM("KBD: HWA: reading key modifiers @ PC=$%04X result = $%02X" NL, cpu65.pc, result);
+	if (IS_QUEUE_EMPTY())
+		return 0;
+	const Uint8 k = ((kbd_queue[0] >> 16) & 0x7F) + (IS_QUEUE_EMPTY() ? 0 : 0x80);
+	DEBUGKBDHWACOM("KBD: HWA: reading queued modkeys @ PC=$%04X result = $%02X" NL, cpu65.pc, k);
+	return k;
+}
+
+
+/* used by actual I/O function to read $D611 */
+Uint8 hwa_kbd_get_current_modkeys ( void )
+{
+	const Uint8 result = modkeys + ((~modkeys_mask) & 0x80);
+	DEBUGKBDHWACOM("KBD: HWA: reading current modkeys @ PC=$%04X result = $%02X" NL, cpu65.pc, result);
 	return result;
 }
 
 
-/* used by actual I/O function to write $D610, the written data itself is not used, only the fact of writing */
-void hwa_kbd_move_next_ascii ( void )
+/* flush the full queue, used by write bit 7 of $D60A as '0' */
+void hwa_kbd_flush_queue ( void )
 {
-	kqueue_remove(&hwa_kbd.ascii_queue);
-	DEBUGKBDHWACOM("KBD: HWA: moving to next ASCII key @ PC=$%04X keys left in queue: %d" NL, cpu65.pc, hwa_kbd.ascii_queue.i);
+	DEBUGKBDHWACOM("KBD: HWA: flushing queue @ PC=$%04X (previous value = %u)" NL, cpu65.pc, queue_pos);
+	queue_pos = 0;
 }
 
 
-/* used by actual I/O function to write $D619, the written data itself is not used, only the fact of writing */
-void hwa_kbd_move_next_petscii ( void )
+/* used by actual I/O functions to dequeue an item (if any) */
+void hwa_kbd_move_next ( void )
 {
-	kqueue_remove(&hwa_kbd.petscii_queue);
-	DEBUGKBDHWACOM("KBD: HWA: moving to next PETSCII key @ PC=$%04X keys left in queue: %d" NL, cpu65.pc, hwa_kbd.petscii_queue.i);
+	unsigned int new_queue_pos = 0;
+	if (queue_pos > 1) {
+		new_queue_pos = queue_pos - 1;
+		memmove(kbd_queue, kbd_queue + 1, new_queue_pos * sizeof(Uint32));
+	}
+	DEBUGKBDHWACOM("KBD: HWA: moving to next ASCII key @ PC=$%04X keys left in queue: %u (previous value: %u)" NL, cpu65.pc, new_queue_pos, queue_pos);
+	queue_pos = new_queue_pos;
 }
 
 
-#define CHR_EQU(i) ((i >= 32 && i < 127) ? (char)i : '?')
-
-
-/* basically the opposite as kbd_get_last() but this one used internally only
- * This is called by emu_callback_key() which is called by emutools_hid.c on key events.
+/* This is called by emu_callback_key() which is called by emutools_hid.c on key events.
  * Purpose: convert keypress into MEGA65 hardware accelerated keyboard scanner's ASCII
  * (which is basically ASCII, though with "invented" codes for the non-printable char keys (like F1 or RUN/STOP).
  * Notions of variable names:
@@ -274,21 +295,35 @@ static void hwa_kbd_convert_and_push ( const unsigned int pos )
 		DEBUGKBDHWA("KBD: HWA: PUSH: NOT storing key (outside of translation table) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, pos, scan, cpu65.pc);
 		return;
 	}
-	// Now, convert scan code to MEGA65 ASCII value, using one of the conversion tables selected by the actual used modifier key(s)
+	if (IS_QUEUE_FULL()) {
+		DEBUGKBDHWA("KBD: HWA: PUSH: NOT storing key (queue is full) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, pos, scan, cpu65.pc);
+		return;
+	}
+	// Now, convert scan code to MEGA65 ASCII and PETSCII values, using one of the conversion tables selected by the actual used modifier key(s) [if selector is enabled]
 	// Size of conversion table is 72 (64+8, C64keys+C65keys). This is already checked above, so it must be ok to do so without any further boundary checks
-	int conv = matrix_to_ascii_table_selector[hwa_kbd.active_selector ? (hwa_kbd.modifiers & 0x1F) : 0][scan];
-	if (conv) {
-		DEBUGKBDHWA("KBD: HWA: PUSH: storing ASCII key $%02X '%c' from kbd pos $%02X and table index $%02X at PC=$%04X" NL, conv, CHR_EQU(conv), pos, scan, cpu65.pc);
-		kqueue_write(&hwa_kbd.ascii_queue, conv);
-	} else
-		DEBUGKBDHWA("KBD: HWA: PUSH: NOT storing ASCII key (zero in translation table) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, pos, scan, cpu65.pc);
-	// The PETSCII decoder
-	conv = matrix_to_petscii_table_selector[hwa_kbd.modifiers & 0x0F][scan];
-	if (conv && conv != 0xFF) {
-		DEBUGKBDHWA("KBD: HWA: PUSH: storing PETSCII key $%02X from kbd pos $%02X and table index $%02X at PC=$%04X" NL, conv, pos, scan, cpu65.pc);
-		kqueue_write(&hwa_kbd.petscii_queue, conv);
-	} else
-		DEBUGKBDHWA("KBD: HWA: PUSH: NOT storing PETSCII key (translation value of %d) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, conv, pos, scan, cpu65.pc);
+	unsigned int ascii_value    = matrix_to_ascii_table_selector  [modkeys & modkeys_mask & 0x1F][scan];
+	unsigned int petscii_value  = matrix_to_petscii_table_selector[modkeys & modkeys_mask & 0x0F][scan];
+	if (ascii_value == 0x00 && petscii_value == 0xFF) {
+		DEBUGKBDHWA("KBD: HWA: PUSH: NOT storing key (no ASCII neither PETSCII representation) from kbd pos $%02X and table index $%02X at PC=$%04X" NL, pos, scan, cpu65.pc);
+		return;
+	}
+	// The odd case, when ASCII table gets zero. The problem that it's also the "empty queue" marker. So the rule - it seems -
+	// to give value of $FF instead, then. If PETSCII value is $FF (normally empty queue, but can be PI symbol) it seems we
+	// can carry on regardless of the effect, and it's up to the programmer of MEGA65 to figure out if queue is really empty.
+	if (ascii_value == 0x00)
+		ascii_value = 0xFF;
+	// FIXME: we don't need this [hopefully]. So remove it!
+#if 0
+	if (ascii_value == 0x00 || petscii_value == 0xFF) {
+		// this is what prevent strange keys to be queued like shift alone and such
+		DEBUGPRINT("KBD: HWA: PUSH: NOT storing key (would mean invalid ASCII[$%02X] or PETSCII[$%02X] value) from kbd pos $%02X and table index $%02X at PC=$%04X" NL,
+			ascii_value, petscii_value,
+			pos, scan, cpu65.pc
+		);
+		return;
+	}
+#endif
+	kbd_queue[queue_pos++] = ascii_value + (petscii_value << 8) + (modkeys << 16);
 }
 
 
@@ -319,9 +354,8 @@ void clear_emu_events ( void )
 {
 	DEBUGKBDHWA("KBD: HWA: reset" NL);
 	hid_reset_events(1);
-	hwa_kbd.modifiers = 0;
-	kqueue_empty(&hwa_kbd.ascii_queue);
-	kqueue_empty(&hwa_kbd.petscii_queue);
+	modkeys = 0;
+	queue_pos = 0;
 	for (int a = 0; a < 3; a++) {
 		if (virtkey_state[0] != 0xFF) {
 			hid_sdl_synth_key_event(virtkey_state[a], 0);
@@ -402,11 +436,11 @@ void kbd_trigger_restore_trap ( void )
 }
 
 
-static void kbd_trigger_alttab_trap ( void )
+static void kbd_trigger_matrix_trap ( void )
 {
 	KBD_RELEASE_KEY(TAB_KEY_POS);
 	//KBD_RELEASE_KEY(ALT_KEY_POS);
-	//hwa_kbd.modifiers &= ~MODKEY_ALT;
+	//modkeys &= ~MODKEY_ALT;
 	matrix_mode_toggle(!in_the_matrix);
 }
 
@@ -435,7 +469,7 @@ static int emu_callback_key_raw_sdl ( SDL_KeyboardEvent *ev )
 int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
 	// Update status of modifier keys
-	hwa_kbd.modifiers =
+	modkeys =
 		  (IS_KEY_PRESSED(LSHIFT_KEY_POS) ? MODKEY_LSHIFT : 0)
 		| (IS_KEY_PRESSED(RSHIFT_KEY_POS) ? MODKEY_RSHIFT : 0)
 		| (IS_KEY_PRESSED(CTRL_KEY_POS)   ? MODKEY_CTRL   : 0)
@@ -451,8 +485,13 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 	static int old_joystick_emu_port;	// used to remember emulated joy port, as with mouse grab, we need to switch to port-1, and we want to restore user's one on leaving grab mode
 	if (pressed) {
 		// check if we have the ALT-TAB trap triggered (TAB is pressed now, and ALT is hold)
-		if (pos == TAB_KEY_POS && (hwa_kbd.modifiers & MODKEY_ALT)) {
-			kbd_trigger_alttab_trap();
+		if (key == SDL_SCANCODE_TAB && (modkeys & MODKEY_CTRL)) {
+			if (!configdb.matrixdisable) {
+				kbd_trigger_matrix_trap();
+			} else {
+				DEBUGPRINT("MATRIX: matrix mode hotkey is disabled by config!" NL);
+				clear_emu_events();
+			}
 			return 0;
 		}
 		// RESTORE triggered trap is different as it depends on timing (how long it's pressed)
@@ -473,7 +512,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			reset_mega65_asked();
 		} else if (key == SDL_SCANCODE_KP_ENTER) {
 			input_toggle_joy_emu();
-		} else if (((hwa_kbd.modifiers & (MODKEY_LSHIFT | MODKEY_RSHIFT)) == (MODKEY_LSHIFT | MODKEY_RSHIFT)) && set_mouse_grab(SDL_FALSE, 0)) {
+		} else if (((modkeys & (MODKEY_LSHIFT | MODKEY_RSHIFT)) == (MODKEY_LSHIFT | MODKEY_RSHIFT)) && set_mouse_grab(SDL_FALSE, 0)) {
 			DEBUGPRINT("UI: mouse grab cancelled" NL);
 			joystick_emu = old_joystick_emu_port;
 		}
@@ -525,9 +564,7 @@ Uint8 get_mouse_y_via_sid ( void )
 void input_init ( void )
 {
 	hid_register_sdl_keyboard_event_callback(HID_CB_LEVEL_EMU, emu_callback_key_raw_sdl);
-	hwa_kbd.active_selector = 1;
-	hwa_kbd.ascii_queue.empty_marker = 0x00;
-	hwa_kbd.petscii_queue.empty_marker = 0xFF;
-	kqueue_empty(&hwa_kbd.ascii_queue);
-	kqueue_empty(&hwa_kbd.petscii_queue);
+	modkeys_mask = 0xFFU;
+	queue_pos = 0;
+	restore_is_held = 0;
 }

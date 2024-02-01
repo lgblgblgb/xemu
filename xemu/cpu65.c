@@ -1920,10 +1920,20 @@ int cpu65_step (
 			break;
 	case 0x89:	/* BIT+ Immediate */
 			if (IS_CPU_NMOS) { NMOS_JAM_OPCODE(); } else {
-#ifdef CPU65_DISCRETE_PF_NZ
-			CPU65.pf_z = (!(CPU65.a & readByte(_imm())));
+			// Note: For the CPU65 emulator I used (maybe old) datasheet on 65C02, which all stated
+			// that BIT #immed is special, and only the Z flag is affected, unlike other BIT
+			// addressing modes. However it seems it was just for early 65C02s. Also
+			// mega65-core (and it seems also C65 iself) uses the regular implementation for
+			// immediate addressing mode as well. Just in case, I left open the possibility
+			// to use the old impementation if CPU65_OLD_BIT_IMMEDIATE is defined.
+#ifndef CPU65_OLD_BIT_IMMEDIATE
+			_BIT(readByte(_imm()));
 #else
+#	ifdef CPU65_DISCRETE_PF_NZ
+			CPU65.pf_z = (!(CPU65.a & readByte(_imm())));
+#	else
 			if (CPU65.a & readByte(_imm())) CPU65.pf_nz &= (~CPU65_PF_Z); else CPU65.pf_nz |= CPU65_PF_Z;
+#	endif
 #endif
 			}
 			break;

@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -211,8 +211,8 @@ static void ui_format_sdcard ( void )
 	if (!is_card_writable_with_error_popup())
 		return;
 	if (ARE_YOU_SURE(
-		"Formatting your SD-card image file will cause ALL your data,\n"
-		"system files (etc!) to be lost, forever!\n"
+		"Formatting your SD-card image file will cause all MEGA65\n"
+		"system and user content to be lost on the image file.\n"
 		"Are you sure to continue this self-destruction sequence? :)"
 		,
 		0
@@ -366,7 +366,7 @@ static void reset_into_utility_menu ( void )
 	if (reset_mega65_asked()) {
 		rom_stubrom_requested = 0;
 		rom_initrom_requested = 0;
-		hwa_kbd_fake_key(0x20);
+		hwa_kbd_set_fake_key(0x20);
 		KBD_RELEASE_KEY(0x75);
 	}
 }
@@ -389,7 +389,7 @@ static void reset_generic ( void )
 {
 	if (reset_mega65_asked()) {
 		KBD_RELEASE_KEY(0x75);
-		hwa_kbd_fake_key(0);
+		hwa_kbd_set_fake_key(0);
 	}
 }
 
@@ -416,7 +416,7 @@ static void reset_into_c65_mode_noboot ( void )
 		rom_initrom_requested = 0;
 		inject_register_allow_disk_access();
 		KBD_RELEASE_KEY(0x75);
-		hwa_kbd_fake_key(0);
+		hwa_kbd_set_fake_key(0);
 	}
 }
 
@@ -547,6 +547,34 @@ static void ui_emu_info ( void )
 		td_stat_str,
 		xemu_get_uname_string(), emu_fs_is_utf8 ? "UTF8-FS" : "ASCII-FS", PRINTF_U64, PRINTF_X64, PRINTF_S64
 	);
+}
+
+static void ui_hwa_kbd_pasting ( void )
+{
+	char *buf = SDL_GetClipboardText();
+	if (!buf || !*buf) {
+		DEBUGPRINT("UI: paste buffer typing-in had no input (p=%p)" NL, buf);
+		if (buf)
+			SDL_free(buf);
+		return;
+	}
+	unsigned int multi_case = 0;
+	for (register char *p = buf, cc = 0; *p; p++) {
+		if (*p >= 'a' && *p <= 'z')
+			cc |= 1;
+		else if (*p >= 'A' && *p <= 'Z')
+			cc |= 2;
+		else
+			continue;
+		if (cc == 3) {
+			multi_case = QUESTION_WINDOW("Convert to single case|Paste as is|Cancel", "Paste contains mixed case letters. What to do now?");
+			break;
+		}
+	}
+	if (multi_case > 1)
+		SDL_free(buf);
+	else
+		inject_hwa_pasting(buf, !multi_case);	// will free the buffer as its own
 }
 
 static void ui_put_screen_text_into_paste_buffer ( void )
@@ -699,6 +727,25 @@ static void ui_start_cartridge ( void )
 	INFO_WINDOW("Copied. Type BANK0:SYS$8000 to start");
 }
 
+#ifndef XEMU_ARCH_HTML
+static void ui_restore_config ( void )
+{
+	if (!xemucfg_delete_default_config_file(
+		"This option DELETES your saved (if there was any!) default configuration.\n"
+		"So using this option will reset emulator config to the default.\n"
+		"No user data (disk images, SD-image, ...) will be lost though.\n\n"
+		"Are you sure to do this?"
+	))
+		WARNING_WINDOW("DONE.\nYou must re-start Xemu to have any effect");
+}
+#endif
+
+static void ui_save_current_window_position ( void )
+{
+	xemu_default_win_pos_file_op('w');
+	INFO_WINDOW("Current window position has been stored.");
+}
+
 
 /**** MENU SYSTEM ****/
 
@@ -793,9 +840,11 @@ static const struct menu_st menu_display[] = {
 #ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	{ "Screenshot",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_set_integer_to_one, &vic4_registered_screenshot_request },
 #endif
-	{ "Screen to OS paste buffer",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_screen_text_into_paste_buffer },
+	{ "Save main window placement",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_save_current_window_position },
+	{ "Screen to OS clipboard",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_screen_text_into_paste_buffer },
 	{ "Screen to ASCII file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_screen_text_into_file },
-	{ "OS paste buffer to screen",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_paste_buffer_into_screen_text },
+	{ "OS clipboard typing-in",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_hwa_kbd_pasting },
+	{ "OS clipboard to screen",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_put_paste_buffer_into_screen_text },
 	{ NULL }
 };
 static const struct menu_st menu_reset[] = {
@@ -853,8 +902,10 @@ static const struct menu_st menu_debug[] = {
 	{ "Display enable VIC reg",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_displayenable, NULL },
 #endif
-	{ "Matrix mode",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
+	{ "Matrix mode",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_matrix_mode, NULL },
+	{ "Matrix hotkey disable",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&configdb.matrixdisable },
 	{ "Emulation state info",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_emu_info },
 #ifdef HAVE_XEMU_EXEC_API
 	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_native_os_prefdir_browser, NULL },
@@ -987,6 +1038,7 @@ static const struct menu_st menu_audio[] = {
 	{ "Master volume",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_volume },
 	{ NULL }
 };
+#ifndef XEMU_ARCH_HTML
 static const struct menu_st menu_config[] = {
 	{ "Confirmation on exit/reset",	XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_SEPARATOR |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&i_am_sure_override },
@@ -994,8 +1046,10 @@ static const struct menu_st menu_config[] = {
 	{ "Save config as default",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_cfgfile, (void*)XEMUGUICFGFILEOP_SAVE_DEFAULT },
 	//{ "Load saved custom config",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_cfgfile, (void*)XEMUGUICFGFILEOP_LOAD_CUSTOM  },
 	{ "Save config as custom file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_cfgfile, (void*)XEMUGUICFGFILEOP_SAVE_CUSTOM  },
+	{ "Restore default config",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_restore_config },
 	{ NULL }
 };
+#endif
 static const struct menu_st menu_main[] = {
 	{ "Display",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_display	},
 	{ "Input devices",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_inputdevices	},
@@ -1003,7 +1057,9 @@ static const struct menu_st menu_main[] = {
 	{ "Disks / Cart",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_disks	},
 	{ "Reset / ROM switching",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset	},
 	{ "Debug / Advanced",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_debug	},
+#ifndef XEMU_ARCH_HTML
 	{ "Configuration",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_config	},
+#endif
 #ifdef HAVE_XEMU_EXEC_API
 	{ "Help (online)",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_help },
 #endif
