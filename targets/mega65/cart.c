@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "cart.h"
 #include "xemu/emutools_files.h"
+#include "audio65.h"
 
 static Uint8 cart_mem[0x10000];
 static int loaded = 0;
@@ -35,13 +36,25 @@ Uint8 cart_read_byte  ( unsigned int addr )
 	Uint8 data = 0xFF;
 	if (addr < sizeof(cart_mem))
 		data = cart_mem[addr];
-	DEBUGPRINT("CART: reading byte ($%02X) at $%X" NL, data, addr + 0x4000000);
+	if (loaded && addr != 0x3FFDF60)	// see the comment about OPL at cart_write_byte()
+		DEBUGPRINT("CART: reading byte ($%02X) at $%X" NL, data, addr + 0x4000000);
 	return data;
 }
 
 
 void cart_write_byte ( unsigned int addr, Uint8 data )
 {
+	if (!loaded) {
+		// a hack OPL to be able to work in the "slow device area" [if no cartridge is loaded]
+		static Uint8 opl_reg_sel = 0;
+		if (addr == 0x3FFDF40) {
+			opl_reg_sel = data;
+			return;
+		} else if (addr == 0x3FFDF50) {
+			audio65_opl3_write(opl_reg_sel, data);
+			return;
+		}
+	}
 	DEBUGPRINT("CART: writing byte ($%02X) at $%X" NL, data, addr + 0x4000000);
 }
 
