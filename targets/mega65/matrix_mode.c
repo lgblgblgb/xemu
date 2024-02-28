@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -44,7 +44,7 @@ int in_the_matrix = 0;
 // TODO: many inventions here eventlually should be moved into some common place as
 // probably other emulators ("generic OSD console API"), and OSD GUI want to use them as well!
 
-// TODO: some code here (Xemu specific matrix commands ...) should share interfade with
+// TODO: some code here (Xemu specific matrix commands ...) should share interface with
 // the uart_mon/umon, and in fact, that should be accessed from here, as on a real MEGA65!
 
 
@@ -65,7 +65,7 @@ int in_the_matrix = 0;
 #define CLI_AREA_BYTE_SIZE	((chrscreen_ysize - CLI_START_LINE) * chrscreen_xsize * 2)
 #define CLI_AREA_BYTE_OFFSET	TOP_AREA_BYTE_SIZE
 
-static const Uint8 console_colours[] = {
+static Uint8 console_colours[] = {
 	0x00, 0x00, 0x00, 0x80,		// 0: for background shade of the console
 	0x00, 0xFF, 0x00, 0xFF,		// 1: normal green colour of the console text
 	0xFF, 0xFF, 0x00, 0xFF,		// 2: alternative yellow colour of the console text
@@ -94,9 +94,17 @@ static unsigned int matrix_counter = 0;
 static int live_update_enabled = 1;
 static int blink_phase = 0;		// used with flashing the cursor, etc
 static int current_viewport = 0;
+static int write_special_chars_mode = 0;
 
 
 #define PARTIAL_OSD_TEXTURE_UPDATE
+
+
+static void init_colour_mappings ( void )
+{
+	for (unsigned int i = 0; i < sizeof(console_colours) / 4; i++)
+		colour_mappings[i] = SDL_MapRGBA(sdl_pix_fmt, console_colours[i * 4], console_colours[i * 4 + 1], console_colours[i * 4 + 2], console_colours[i * 4 + 3]);
+}
 
 
 static void matrix_update ( void )
@@ -186,6 +194,14 @@ static void matrix_write_char ( const Uint8 c )
 	} else if (c == 8) {
 		if (current_x > 0)
 			current_x--;
+	} else if (c == '{' && write_special_chars_mode) {
+		if (write_special_chars_mode == 2)
+			current_colour = BANNER_COLOUR;
+		return;
+	} else if (c == '}' && write_special_chars_mode) {
+		if (write_special_chars_mode == 2)
+			current_colour = NORMAL_COLOUR;
+		return;
 	} else {
 		write_char_raw(current_x, current_y, c, current_colour);
 		current_x++;
@@ -244,7 +260,7 @@ static inline void matrix_write_string ( const char *s )
 static void dump_regs ( const char rot_fig )
 {
 	const Uint8 pf = cpu65_get_pf();
-	MATRIX("PC:%04X A:%02X X:%02X Y:%02X Z:%02X SP:%04X B:%02X %c%c%c%c%c%c%c%c IO:%X (%c) %c %s %s     ",
+	MATRIX("{PC}:%04X {A}:%02X {X}:%02X {Y}:%02X {Z}:%02X {SP}:%04X {B}:%02X %c%c%c%c%c%c%c%c {IO}:%X (%c) %c %s %s%c",
 		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z,
 		cpu65.sphi + cpu65.s, cpu65.bphi >> 8,
 		(pf & CPU65_PF_N) ? 'N' : 'n',
@@ -259,8 +275,19 @@ static void dump_regs ( const char rot_fig )
 		in_hypervisor ? 'H' : 'U',
 		rot_fig,
 		videostd_id ? "NTSC" : "PAL ",
-		cpu_clock_speed_string
+		cpu_clock_speed_string,
+		(D6XX_registers[0x7D] & 16) ? '!' : ' '
 	);
+}
+
+
+static void dump_map ( void )
+{
+	char desc[10];
+	for (unsigned int i = 0; i < 16; i++) {
+		mem_get_4k_region_short_desc(desc, sizeof desc, i);
+		MATRIX("{%X:}%7s%c", i, desc, (i & 7) == 7 ? ' ' : '|');
+	}
 }
 
 
@@ -281,13 +308,17 @@ static void cmd_uname ( char *p )
 
 static void cmd_ver ( char *p )
 {
-	MATRIX("Xemu/%s %s %s %s %s %s\n", TARGET_DESC, XEMU_BUILDINFO_CDATE, XEMU_BUILDINFO_GIT, XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT, XEMU_BUILDINFO_CC);
-	MATRIX("SDL base dir: %s\n", sdl_base_dir);
-	MATRIX("SDL pref dir: %s\n", sdl_pref_dir);
-	matrix_write_string("Command line: ");
+	MATRIX(
+		"Xemu/%s %s %s %s %s %s\n"
+		"SDL base dir: %s\n"
+		"SDL pref dir: %s\n"
+		"Command line:",
+		TARGET_DESC, XEMU_BUILDINFO_CDATE, XEMU_BUILDINFO_GIT, XEMU_BUILDINFO_ON, XEMU_BUILDINFO_AT, XEMU_BUILDINFO_CC,
+		sdl_base_dir,
+		sdl_pref_dir
+	);
 	for (int i = 0; i < xemu_initial_argc; i++) {
-		if (i)
-			matrix_write_string(" ");
+		matrix_write_char(' ');
 		matrix_write_string(xemu_initial_argv[i]);
 	}
 }
@@ -295,7 +326,17 @@ static void cmd_ver ( char *p )
 
 static void cmd_reg ( char *p )
 {
+	write_special_chars_mode = 1;
 	dump_regs(' ');
+	write_special_chars_mode = 0;
+}
+
+
+static void cmd_map ( char *arg )
+{
+	write_special_chars_mode = 1;
+	dump_map();
+	write_special_chars_mode = 0;
 }
 
 
@@ -525,6 +566,18 @@ static void cmd_reset ( char *p )
 }
 
 
+static void cmd_shade ( char *p )
+{
+	unsigned int shade;
+	if (sscanf(p, "%u", &shade) == 1 && shade <= 100) {
+		console_colours[3] = shade * 255 / 100;
+		need_update = 1 | 2;
+		init_colour_mappings();
+	} else
+		MATRIX("?BAD VALUE");
+}
+
+
 static void cmd_help ( char *p );
 
 
@@ -545,6 +598,8 @@ static const struct command_tab_st {
 	{ "uname",	cmd_uname,	NULL	},
 	{ "ver",	cmd_ver,	NULL	},
 	{ "write",	cmd_write,	"w"	},
+	{ "map",	cmd_map,	"m"	},
+	{ "shade",	cmd_shade,	NULL	},
 	{ .cmdname = NULL			},
 };
 
@@ -656,8 +711,15 @@ static void matrix_updater_callback ( void )
 	const int saved_x = current_x, saved_y = current_y;
 	current_x = 0;
 	current_y = 1;
+	write_special_chars_mode = 2;
 	static const char rotator[4] = { '-', '\\', '|', '/' };
 	dump_regs(rotator[(matrix_counter >> 3) & 3]);
+	// make sure the rest of the line is cleared (the regs line length can vary in size!), also position for the next line for the map dump
+	while (current_x)
+		matrix_write_char(' ');
+	dump_map();
+	current_colour = NORMAL_COLOUR;
+	write_special_chars_mode = 0;
 	if (live_update_enabled)
 		live_dump_update();
 	current_x = saved_x;
@@ -742,8 +804,7 @@ void matrix_mode_toggle ( int status )
 		osd_hijack(matrix_updater_callback, &backend_xsize, &backend_ysize, &backend_pixels);
 		if (!init_done) {
 			init_done = 1;
-			for (int i = 0; i < sizeof(console_colours) / 4; i++)
-				colour_mappings[i] = SDL_MapRGBA(sdl_pix_fmt, console_colours[i * 4], console_colours[i * 4 + 1], console_colours[i * 4 + 2], console_colours[i * 4 + 3]);
+			init_colour_mappings();
 			chrscreen_xsize = backend_xsize / 8;
 			chrscreen_ysize = backend_ysize / 8;
 			vmem = xemu_malloc(FULL_SCREEN_BYTE_SIZE);
@@ -757,7 +818,7 @@ void matrix_mode_toggle ( int status )
 			matrix_clear();
 			memcpy(vmem_prev, vmem + CLI_AREA_BYTE_OFFSET, CLI_AREA_BYTE_SIZE);
 			current_colour = BANNER_COLOUR;
-			static const char banner_msg[] = "*** Xemu's pre-matrix ... press left-CTRL + TAB to exit ***";
+			static const char banner_msg[] = "*** Xemu's pre-matrix ... press left-CTRL + TAB to exit / re-enter ***";
 			current_x = (chrscreen_xsize - strlen(banner_msg)) >> 1;
 			matrix_write_string(banner_msg);
 			current_colour = NORMAL_COLOUR;

@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -420,6 +420,13 @@ static void mega65_init ( void )
 		cia2_setint_cb		// callback: SETINT ~ that would be NMI in our case
 	);
 	cia2.DDRA = 3; // Ugly workaround ... I think, SD-card setup "CRAM UTIL" (or better: Hyppo) should set this by its own. Maybe Xemu bug, maybe not?
+	// These are workarounds, newer ROMs seems to fail to finish initialization without these, see here:
+	// https://github.com/lgblgblgb/xemu/issues/395
+	// This workaround is surely not fully correct, but seems to solve the issue to allow newer ROMs to start at least.
+	cia1.TLAL = 1;
+	cia1.TLAH = 1;
+	cia2.TLAL = 1;
+	cia2.TLAH = 1;
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
 	dma_init();
 #ifdef HAS_UARTMON_SUPPORT
@@ -564,12 +571,15 @@ void m65mon_show_regs ( void )
 {
 	Uint8 pf = cpu65_get_pf();
 	umon_printf(
+		"\r\n"
 		"PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
 		"%04X %02X %02X %02X %02X %02X %04X "		// register banned message and things from PC to SP
 		"%04X %04X %02X       %02X %02X "		// from MAPL to P
 		"%c%c%c%c%c%c%c%c ",				// P-FLAGS
 		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z, cpu65.bphi >> 8, cpu65.sphi | cpu65.s,
-		map_offset_low >> 8, map_offset_high >> 8, cpu65.op,
+		((map_mask & 0x0F) << 12) | (map_offset_low  >> 8),
+		((map_mask & 0xF0) <<  8) | (map_offset_high >> 8),
+		cpu65.op,
 		pf, 0,	// flags
 		(pf & CPU65_PF_N) ? 'N' : '-',
 		(pf & CPU65_PF_V) ? 'V' : '-',
@@ -818,6 +828,7 @@ int main ( int argc, char **argv )
 	xemu_set_installer(configdb.installer);
 #endif
 	/* Initiailize SDL - note, it must be before loading ROMs, as it depends on path info from SDL! */
+	xemu_set_default_win_pos_from_string(configdb.winpos);
 	window_title_info_addon = emulator_speed_title;
 	if (xemu_post_init(
 		TARGET_DESC APP_DESC_APPEND,	// window title

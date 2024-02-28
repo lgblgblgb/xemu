@@ -1,6 +1,6 @@
 /* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
    8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -123,6 +123,9 @@ FILE *debug_fp = NULL;
 int chatty_xemu = 1;
 int sdl_default_win_x_size;
 int sdl_default_win_y_size;
+int sdl_default_win_x_pos = SDL_WINDOWPOS_UNDEFINED;
+int sdl_default_win_y_pos = SDL_WINDOWPOS_UNDEFINED;
+static SDL_Rect sdl_whole_screen;
 static SDL_Rect sdl_viewport, *sdl_viewport_ptr = NULL;
 static unsigned int sdl_texture_x_size, sdl_texture_y_size;
 
@@ -980,11 +983,13 @@ int xemu_init_sdl ( void )
 		FATAL("SDL_GetCurrentVideoDriver() == NULL");
 	sdl_on_x11 = !strcasecmp(sdl_video_driver, "x11");
 	sdl_on_wayland = !strcasecmp(sdl_video_driver, "wayland");
+	if (SDL_GetDisplayBounds(0, &sdl_whole_screen))
+		FATAL("SDL_GetDisplayBounds(0, &...) failed: %s", SDL_GetError());
 	if (chatty_xemu)
 		printf( "SDL version: (%s) compiled with %d.%d.%d, used with %d.%d.%d on platform %s" NL
 			"SDL system info: %d bits %s, %d cores, l1_line=%d, RAM=%dMbytes, max_alignment=%d%s, CPU features: "
 			"3DNow=%d AVX=%d AVX2=%d AltiVec=%d MMX=%d RDTSC=%d SSE=%d SSE2=%d SSE3=%d SSE41=%d SSE42=%d" NL
-			"SDL drivers: video = %s, audio = %s" NL,
+			"SDL drivers: video = %s (%dx%d), audio = %s" NL,
 			SDL_GetRevision(),
 			sdlver_compiled.major, sdlver_compiled.minor, sdlver_compiled.patch,
 			sdlver_linked.major, sdlver_linked.minor, sdlver_linked.patch,
@@ -996,7 +1001,7 @@ int xemu_init_sdl ( void )
 			"",
 #endif
 			SDL_Has3DNow(),SDL_HasAVX(),SDL_HasAVX2(),SDL_HasAltiVec(),SDL_HasMMX(),SDL_HasRDTSC(),SDL_HasSSE(),SDL_HasSSE2(),SDL_HasSSE3(),SDL_HasSSE41(),SDL_HasSSE42(),
-			sdl_video_driver, SDL_GetCurrentAudioDriver()
+			sdl_video_driver, sdl_whole_screen.w, sdl_whole_screen.h, SDL_GetCurrentAudioDriver()
 		);
 #if defined(XEMU_ARCH_WIN)
 #	define SDL_VER_MISMATCH_WARN_STR "Xemu was not compiled with the linked DLL for SDL.\nPlease upgrade your DLL too, not just Xemu binary."
@@ -1110,6 +1115,43 @@ static int xemu_create_main_texture ( void )
 }
 
 
+void xemu_set_default_win_pos_from_string ( const char *s )
+{
+	if (s && *s) {
+		int x, y;
+		if (sscanf(s, "%d,%d", &x, &y) == 2) {
+			sdl_default_win_x_pos = x;
+			sdl_default_win_y_pos = y;
+		}
+	}
+}
+
+
+void xemu_default_win_pos_file_op ( const char r_or_w )
+{
+	static const char relpath[] = "window-position.info";
+	static char fmode[] = "?b";
+	char fn[strlen(sdl_pref_dir) + strlen(relpath) + 1];
+	strcpy(fn, sdl_pref_dir);
+	strcat(fn, relpath);
+	fmode[0] = r_or_w;
+	FILE *f = fopen(fn, fmode);
+	if (f) {
+		int x, y;
+		if (r_or_w == 'w') {
+			SDL_GetWindowPosition(sdl_win, &x, &y);
+			fprintf(f, "%d,%d", x, y);
+		} else {
+			if (fscanf(f, "%d,%d", &x, &y) == 2) {
+				sdl_default_win_x_pos = x;
+				sdl_default_win_y_pos = y;
+			}
+		}
+		fclose(f);
+	}
+}
+
+
 /* Return value: 0 = ok, otherwise: ERROR, caller must exit, and can't use any other functionality, otherwise crash would happen.*/
 int xemu_post_init (
 	const char *window_title,		// title of our window
@@ -1212,10 +1254,21 @@ int xemu_post_init (
 	SDL_SetHint(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK, "1");			// 1 = enable CTRL + click = right click (needed for modern Mac touchpads, it seems)
 #endif
 	/* end of SDL hints section */
+	if (sdl_default_win_x_pos == SDL_WINDOWPOS_UNDEFINED && sdl_default_win_y_pos == SDL_WINDOWPOS_UNDEFINED)
+		xemu_default_win_pos_file_op('r');	// try to load window position if sdl_default_win_?_pos not yet initialised
+	if (
+		sdl_default_win_x_pos != SDL_WINDOWPOS_UNDEFINED && sdl_default_win_y_pos != SDL_WINDOWPOS_UNDEFINED &&
+		(sdl_default_win_x_pos < 0 || sdl_default_win_y_pos < 0 || sdl_default_win_x_pos > sdl_whole_screen.w - 32 || sdl_default_win_y_pos > sdl_whole_screen.h - 32)
+	) {
+		DEBUGPRINT("SDL: default win pos coords (%d,%d) are invalid for screen (%dx%d)." NL, sdl_default_win_x_pos, sdl_default_win_y_pos, sdl_whole_screen.w, sdl_whole_screen.h);
+		sdl_default_win_x_pos = SDL_WINDOWPOS_UNDEFINED;
+		sdl_default_win_y_pos = SDL_WINDOWPOS_UNDEFINED;
+	}
+	DEBUGPRINT("SDL: opening window at (%d,%d) with size of (%d,%d)" NL, sdl_default_win_x_pos, sdl_default_win_y_pos, win_x_size, win_y_size);
 	sdl_window_title = xemu_strdup(window_title);
 	sdl_win = SDL_CreateWindow(
 		window_title,
-		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
+		sdl_default_win_x_pos, sdl_default_win_y_pos,
 		win_x_size, win_y_size,
 		SDL_WINDOW_SHOWN | (is_resizable ? SDL_WINDOW_RESIZABLE : 0)
 	);
