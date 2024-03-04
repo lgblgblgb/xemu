@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -191,7 +191,13 @@ static inline void render_dma_audio ( int channel, Sint16 *buffer, int len )
 				// the final sample value, correcting with the sound setting (FIXME: I am really not sure, if volume is supposed to be linear ...)
 				sample[channel] = ((int)signed_sample * chio[9]) / 0xFF;	// volume control (max volume is $FF)
 			}
-			if (XEMU_UNLIKELY((addr & 0xFFFF) == limit)) {
+			if (XEMU_UNLIKELY(
+				((addr & 0xFFFFU) == limit)			// limit reached
+				|| (						// OR ...
+					(chio[0] & 3) == 3 &&			// ... 16 bit sample
+					((addr - 1) & 0xFFFFU) == limit		// ... and the limit was the previous byte (as with 16 bit samples we would miss the limit if not aligned!)
+				)
+			)) {
 				// if top address is reached: either stop, or loop (on looped samples only!)
 				if ((chio[0] & 0x40)) {
 					addr = chio[1] + (chio[2] << 8) + (chio[3] << 16);	// looping, set address to the begin address
