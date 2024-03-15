@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Copyright (C)2020-2022 Hernán Di Pietro <hernan.di.pietro@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -30,7 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define VIC4_IOMODE	3
 
 // bit1 of IO-mode is set: either VIC4ETH_IOMODE or VIC4_IOMODE
-#define VIC4_LIKE_IO_MODE() (vic_iomode & 2U)
+#define VIC4_LIKE_IO_MODE() (io_mode & 2U)
 
 // Horizontal sync frequencies (in Hertz) for NTSC and PAL video output of MEGA65. Must be float.
 #define PAL_LINE_FREQ	31250.0
@@ -239,7 +239,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 // Current state
 
-extern unsigned int   vic_iomode;
 //extern int   scanline;
 extern Uint8 vic_registers[];
 extern Uint8 c128_d030_reg;

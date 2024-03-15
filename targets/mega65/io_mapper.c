@@ -1,7 +1,7 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    I/O decoding part (used by memory_mapper.h and DMA mainly)
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -81,6 +81,13 @@ static XEMU_INLINE void update_hw_multiplier ( void )
 	}
 }
 
+
+// Writes the colour RAM. !!ONLY!! use this, if it's in the range of the first 2K of the colour RAM though, or you will be in big trouble!
+static XEMU_INLINE void write_colour_ram ( const Uint32 addr, const Uint8 data )
+{
+	colour_ram[addr] = data;
+	main_ram[addr + 0x1F800U] = data;
+}
 
 
 /* Internal decoder for I/O reads. Address *must* be within the 0-$3FFF (!!) range. The low 12 bits is the actual address inside the I/O area,
@@ -458,10 +465,7 @@ void io_write ( unsigned int addr, Uint8 data )
 						DEBUG("MEGA65: enhanced opcodes have been turned %s." NL, data & 2 ? "ON" : "OFF");
 						cpu_mega65_opcodes = data & 2;
 					}
-					if ((data & 4) != rom_protect) {
-						DEBUG("MEGA65: ROM protection has been turned %s." NL, data & 4 ? "ON" : "OFF");
-						rom_protect = data & 4;
-					}
+					memory_set_rom_protection(!!(data & 4));
 					return;
 				case 0x7E:
 					D6XX_registers[0x7E] = 0xFF;	// iomap.txt: "Hypervisor already-upgraded bit (sets permanently)"

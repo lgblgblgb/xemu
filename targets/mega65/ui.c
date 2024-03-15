@@ -506,7 +506,7 @@ static void ui_dump_hyperram ( void )
 		fnbuf,
 		sizeof fnbuf
 	)) {
-		xemu_save_file(fnbuf, slow_ram, SLOW_RAM_SIZE, "Cannot dump hyperRAM content into file");
+		xemu_save_file(fnbuf, attic_ram, SLOW_RAM_SIZE, "Cannot dump hyperRAM content into file");
 	}
 }
 
@@ -543,7 +543,7 @@ static void ui_emu_info ( void )
 		sdcard_get_mount_info(0, NULL), sdcard_get_mount_info(1, NULL),
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
 		cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc),
-		iomode_names[vic_iomode], videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
+		iomode_names[io_mode], videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
 		td_stat_str,
 		xemu_get_uname_string(), emu_fs_is_utf8 ? "UTF8-FS" : "ASCII-FS", PRINTF_U64, PRINTF_X64, PRINTF_S64
 	);
