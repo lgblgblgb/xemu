@@ -25,6 +25,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_MEGA65_CPU_CUSTOM_FUNCTIONS_H_INCLUDED
 #define __XEMU_MEGA65_CPU_CUSTOM_FUNCTIONS_H_INCLUDED
 
+#define MEM_USE_DATA_POINTERS
+
+#ifdef MEM_USE_DATA_POINTERS
+#define MEM_DATA_POINTER_HINTING_STRENGTH(_condition) XEMU_LIKELY(_condition)
+//#define MEM_DATA_POINTER_HINTING_STRENGTH(_condition) (_condition)
+#endif
+
 #ifdef CPU_CUSTOM_MEMORY_FUNCTIONS_H
 #	define CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR static XEMU_INLINE
 #else
@@ -34,14 +41,20 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR
 #endif
 
-#define MEM_SLOT_RD_ARGLIST	const Uint32 slot, const Uint8 ofs8
-#define MEM_SLOT_WR_ARGLIST	const Uint32 slot, const Uint8 ofs8, const Uint8 data
-typedef Uint8 (*mem_slot_rd_func_t)(MEM_SLOT_RD_ARGLIST);
-typedef void  (*mem_slot_wr_func_t)(MEM_SLOT_WR_ARGLIST);
+extern Uint32 ref_slot;
+
+typedef Uint8 (*mem_slot_rd_func_t)(const Uint32 addr32);
+typedef void  (*mem_slot_wr_func_t)(const Uint32 addr32, const Uint8 data);
 
 #define MEM_SLOTS_TOTAL_EXPORTED 0x106
 extern mem_slot_rd_func_t mem_slot_rd_func[MEM_SLOTS_TOTAL_EXPORTED];
 extern mem_slot_wr_func_t mem_slot_wr_func[MEM_SLOTS_TOTAL_EXPORTED];
+extern Uint32 mem_slot_rd_addr32[MEM_SLOTS_TOTAL_EXPORTED];
+extern Uint32 mem_slot_wr_addr32[MEM_SLOTS_TOTAL_EXPORTED];
+#ifdef MEM_USE_DATA_POINTERS
+extern Uint8 *mem_slot_rd_data[MEM_SLOTS_TOTAL_EXPORTED];
+extern Uint8 *mem_slot_wr_data[MEM_SLOTS_TOTAL_EXPORTED];
+#endif
 
 extern int cpu_rmw_old_data;
 
@@ -52,13 +65,31 @@ extern Uint32 cpu65_read_linear_long_opcode_callback  ( const Uint8 index );
 
 extern void  cpu65_illegal_opcode_callback ( void );
 
+extern Uint32 memory_cpu_addr_to_linear ( const Uint16 cpu_addr, Uint32 *wr_addr_p );
 #define memory_cpurd2linear_xlat(_cpu_addr) memory_cpu_addr_to_linear(_cpu_addr,NULL)
 
-static XEMU_INLINE Uint8 cpu65_read_callback ( const Uint16 addr ) {
-	return mem_slot_rd_func[addr >> 8](addr >> 8, addr & 0xFFU);
+CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR Uint8 cpu65_read_callback  ( const Uint16 addr16 )
+{
+#ifdef	MEM_USE_DATA_POINTERS
+	register const Uint8 *p = mem_slot_rd_data[addr16 >> 8];
+	if (MEM_DATA_POINTER_HINTING_STRENGTH(p))
+		return p[addr16 & 0xFFU];
+#endif
+	ref_slot = addr16 >> 8;
+	return mem_slot_rd_func[ref_slot](mem_slot_rd_addr32[ref_slot] + (addr16 & 0xFFU));
 }
-static XEMU_INLINE void cpu65_write_callback ( const Uint16 addr, const Uint8 data ) {
-	mem_slot_wr_func[addr >> 8](addr >> 8, addr & 0xFFU, data);
+
+CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR void  cpu65_write_callback ( const Uint16 addr16, const Uint8 data )
+{
+#ifdef	MEM_USE_DATA_POINTERS
+	register Uint8 *p = mem_slot_wr_data[addr16 >> 8];
+	if (MEM_DATA_POINTER_HINTING_STRENGTH(p)) {
+		p[addr16 & 0xFFU] = data;
+		return;
+	}
+#endif
+	ref_slot = addr16 >> 8;
+	mem_slot_wr_func[ref_slot](mem_slot_wr_addr32[ref_slot] + (addr16 & 0xFFU), data);
 }
 
 // Called in case of an RMW (read-modify-write) opcode write access.
@@ -68,11 +99,25 @@ static XEMU_INLINE void cpu65_write_callback ( const Uint16 addr, const Uint8 da
 // However this leads to incompatibilities, as some software used the RMW behavour by intent.
 // Thus MEGA65 fixed the problem to "restore" the old way of RMW behaviour.
 // I also follow this path here, even if it's *NOT* what 65CE02 would do actually!
-static XEMU_INLINE void cpu65_write_rmw_callback ( const Uint16 addr, const Uint8 old_data, const Uint8 new_data ) {
+CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR void cpu65_write_rmw_callback ( const Uint16 addr16, const Uint8 old_data, const Uint8 new_data )
+{
+// Nah! It seems, enabling this, makes some software _slower_ ... Like polymega. Probably it does lots of I/O writes, so this
+// extra optimization just takes time to check which won't be used anyway in case of I/O. Oh, well.
+#if 0
+#ifdef	MEM_USE_DATA_POINTERS
+	// if there is data pointer, it cannot be I/O anyway, so the whole RMW business shouldn't matter here
+	register Uint8 *p = mem_slot_wr_data[addr16 >> 8];
+	if (p) {
+		p[addr16 & 0xFFU] = new_data;
+		return;
+	}
+#endif
+#endif
 	cpu_rmw_old_data = old_data;
 	// It's the backend's (which realizes the op) responsibility to handle or not handle the RMW behaviour,
 	// based on the fact if cpu_rmw_old_data is non-negative (being an int type) when it holds the "old_data".
-	mem_slot_wr_func[addr >> 8](addr >> 8, addr, new_data);
+	ref_slot = addr16 >> 8;
+	mem_slot_wr_func[ref_slot](mem_slot_wr_addr32[ref_slot] + (addr16 & 0xFFU), new_data);
 	cpu_rmw_old_data = -1;
 }
 

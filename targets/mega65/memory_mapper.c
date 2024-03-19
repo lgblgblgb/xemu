@@ -44,7 +44,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #undef    ALLOW_CPU_CUSTOM_FUNCTIONS_INCLUDE
 
 //#define DEBUGMEM DEBUG
-#define MEM_USE_HINTS
+//#define MEM_USE_HINTS
 
 // 512K is the max "main" RAM. Currently only 384K is used by M65. We want to make sure, the _total_ size is power of 2, so we can protect accesses with simple bit masks as a last-resort-protection
 Uint8 main_ram[512 << 10];
@@ -70,7 +70,7 @@ int cpu_rmw_old_data;
 Uint32 map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
 Uint8  map_mask;
 int skip_unhandled_mem = 0;
-Uint32 main_ram_size = 0;	// will be set by memory_init()
+Uint32 main_ram_size = 0;	// will be set by memory_init() after parsing the memory map
 
 // First 256 slots are for the regular 16 bit CPU addresses, per 256 bytes (256*256=64K)
 // All the special ones follows that region:
@@ -93,22 +93,23 @@ Uint32 main_ram_size = 0;	// will be set by memory_init()
 
 #define VIC3_ROM_D030_MASK	(0x08U|0x10U|0x20U|0x80U)
 
-#define GET_RD_ADDR32()		(mem_slot_rd_addr32[slot] + ofs8)
-#define GET_WR_ADDR32()		(mem_slot_wr_addr32[slot] + ofs8)
-#define GET_OFS8()		ofs8
-
 // !!!!!
-// Definitions of macros MEM_SLOT_RD_ARGLIST, MEM_SLOT_WR_ARGLIST and function pointer types mem_slot_rd_func_t, mem_slot_wr_func_t are in cpu_custom_functions.h
-
-//#define MEM_SLOT_RD_ARGLIST	const Uint32 slot, const Uint8 ofs8
-//#define MEM_SLOT_WR_ARGLIST	const Uint32 slot, const Uint8 ofs8, const Uint8 data
-//typedef Uint8 (*mem_slot_rd_func_t)(MEM_SLOT_RD_ARGLIST);
-//typedef void  (*mem_slot_wr_func_t)(MEM_SLOT_WR_ARGLIST);
+// function pointer types mem_slot_rd_func_t, mem_slot_wr_func_t are in cpu_custom_functions.h
 
 Uint32 mem_slot_rd_addr32[MEM_SLOTS_TOTAL];
 Uint32 mem_slot_wr_addr32[MEM_SLOTS_TOTAL];
 mem_slot_rd_func_t mem_slot_rd_func[MEM_SLOTS_TOTAL];
 mem_slot_wr_func_t mem_slot_wr_func[MEM_SLOTS_TOTAL];
+static mem_slot_rd_func_t mem_slot_rd_func_real[MEM_SLOTS_TOTAL];
+static mem_slot_wr_func_t mem_slot_wr_func_real[MEM_SLOTS_TOTAL];
+#ifdef MEM_USE_DATA_POINTERS
+#warning "Feature MEM_USE_DATA_POINTERS is experimental!"
+Uint8 *mem_slot_rd_data[MEM_SLOTS_TOTAL];
+Uint8 *mem_slot_wr_data[MEM_SLOTS_TOTAL];
+#endif
+
+// Very important variable, every slot reader/writer may depend on this to set correctly!
+Uint32 ref_slot;
 
 typedef enum {
 	MEM_SLOT_TYPE_UNRESOLVED,	// invalidated slots
@@ -149,95 +150,85 @@ static Uint32 policy4k[0x10];		// memory policy with MAP taken account (the real
 #define BANK_POLICY_IO		0x10000003U
 
 
-static Uint8 zero_page_reader ( MEM_SLOT_RD_ARGLIST );
-static void  zero_page_writer ( MEM_SLOT_WR_ARGLIST );
+static Uint8 zero_page_reader ( const Uint32 addr32 );
+static void  zero_page_writer ( const Uint32 addr32, const Uint8 data );
 
-static Uint8 main_ram_reader ( MEM_SLOT_RD_ARGLIST ) {
-	return main_ram[GET_RD_ADDR32()];
+static Uint8 main_ram_reader ( const Uint32 addr32 ) {
+	return main_ram[addr32];
 }
-static void  main_ram_writer ( MEM_SLOT_WR_ARGLIST ) {
-	main_ram[GET_WR_ADDR32()] = data;
+static void  main_ram_writer ( const Uint32 addr32, const Uint8 data ) {
+	main_ram[addr32] = data;
 }
-static void  shared_main_ram_writer ( MEM_SLOT_WR_ARGLIST ) {
-	const Uint32 addr32 = GET_WR_ADDR32();
+static void  shared_main_ram_writer ( const Uint32 addr32, const Uint8 data ) {
 	main_ram[addr32] = data;
 	colour_ram[addr32 - 0x1F800U] = data;
 }
-static void  shared_colour_ram_writer ( MEM_SLOT_WR_ARGLIST ) {
-	const Uint32 addr32 = GET_WR_ADDR32();
+static void  shared_colour_ram_writer ( const Uint32 addr32, const Uint8 data ) {
 	main_ram[addr32 + 0x1F800U - 0xFF80000U] = data;
 	colour_ram[addr32 - 0xFF80000U] = data;
 }
-static Uint8 colour_ram_reader ( MEM_SLOT_RD_ARGLIST ) {
-	return colour_ram[GET_RD_ADDR32() - 0xFF80000U];
+static Uint8 colour_ram_reader ( const Uint32 addr32 ) {
+	return colour_ram[addr32 - 0xFF80000U];
 }
-static void  colour_ram_writer ( MEM_SLOT_WR_ARGLIST ) {
-	colour_ram[GET_WR_ADDR32() - 0xFF80000U] = data;
+static void  colour_ram_writer ( const Uint32 addr32, const Uint8 data ) {
+	colour_ram[addr32 - 0xFF80000U] = data;
 }
-static Uint8 attic_ram_reader ( MEM_SLOT_RD_ARGLIST ) {
-	return attic_ram[GET_RD_ADDR32() - 0x8000000U];
+static Uint8 attic_ram_reader ( const Uint32 addr32 ) {
+	return attic_ram[addr32 - 0x8000000U];
 }
-static void  attic_ram_writer ( MEM_SLOT_WR_ARGLIST ) {
-	attic_ram[GET_WR_ADDR32() - 0x8000000U] = data;
+static void  attic_ram_writer ( const Uint32 addr32, const Uint8 data ) {
+	attic_ram[addr32 - 0x8000000U] = data;
 }
-static Uint8 hypervisor_ram_reader ( MEM_SLOT_RD_ARGLIST ) {
-	return hypervisor_ram[GET_RD_ADDR32() - 0xFFF8000U];
+static Uint8 hypervisor_ram_reader ( const Uint32 addr32 ) {
+	return hypervisor_ram[addr32 - 0xFFF8000U];
 }
-static void  hypervisor_ram_writer ( MEM_SLOT_WR_ARGLIST ) {
-	hypervisor_ram[GET_WR_ADDR32() - 0xFFF8000U] = data;
+static void  hypervisor_ram_writer ( const Uint32 addr32, const Uint8 data ) {
+	hypervisor_ram[addr32 - 0xFFF8000U] = data;
 }
-static void  opl3_writer ( MEM_SLOT_WR_ARGLIST ) {
-	audio65_opl3_write(GET_OFS8(), data);
+static void  opl3_writer ( const Uint32 addr32, const Uint8 data ) {
+	audio65_opl3_write(addr32 & 0xFFU, data);
 }
-static Uint8 io_reader ( MEM_SLOT_RD_ARGLIST ) {
-	return io_read(GET_RD_ADDR32() - 0xFFD0000U);
+static Uint8 io_reader ( const Uint32 addr32 ) {
+	return io_read(addr32 - 0xFFD0000U);
 }
-static void  io_writer ( MEM_SLOT_WR_ARGLIST ) {
-#if 1
-	io_write(GET_WR_ADDR32() - 0xFFD0000U, data);
-#else
-	// REMOVE
-	const Uint32 addr32 = GET_WR_ADDR32();
-	const Uint32 ofs32 = addr32 - 0xFFD0000U;
-	DEBUGPRINT("I/O write at linear addr $%X (area-rel: $%X) @ PC=$%04X [mem_legacy_io_addr32=$%X] in slot $%X" NL, addr32, ofs32, cpu65.old_pc, mem_legacy_io_addr32, slot);
-	io_write(ofs32, data);
-#endif
+static void  io_writer ( const Uint32 addr32, const Uint8 data ) {
+	io_write(addr32 - 0xFFD0000U, data);
 }
-static Uint8 char_ram_reader ( MEM_SLOT_RD_ARGLIST ) {
-	return char_ram[GET_RD_ADDR32() - 0xFF7E000U];
+static Uint8 char_ram_reader ( const Uint32 addr32 ) {
+	return char_ram[addr32 - 0xFF7E000U];
 }
-static void  char_ram_writer ( MEM_SLOT_WR_ARGLIST ) {
-	char_ram[GET_WR_ADDR32() - 0xFF7E000U] = data;
+static void  char_ram_writer ( const Uint32 addr32, const Uint8 data ) {
+	char_ram[addr32 - 0xFF7E000U] = data;
 }
-static Uint8 disk_buffer_hypervisor_reader ( MEM_SLOT_RD_ARGLIST ) {
-	return disk_buffers[GET_RD_ADDR32() - 0xFFD6000U];
+static Uint8 disk_buffer_hypervisor_reader ( const Uint32 addr32 ) {
+	return disk_buffers[addr32 - 0xFFD6000U];
 }
-static void  disk_buffer_hypervisor_writer ( MEM_SLOT_WR_ARGLIST ) {
-	disk_buffers[GET_WR_ADDR32() - 0xFFD6000U] = data;
+static void  disk_buffer_hypervisor_writer ( const Uint32 addr32, const Uint8 data ) {
+	disk_buffers[addr32 - 0xFFD6000U] = data;
 }
-static Uint8 disk_buffer_user_reader ( MEM_SLOT_RD_ARGLIST ) {
-	return disk_buffer_cpu_view[(GET_RD_ADDR32() - 0xFFD6000U) & 0x1FF];
+static Uint8 disk_buffer_user_reader ( const Uint32 addr32 ) {
+	return disk_buffer_cpu_view[(addr32 - 0xFFD6000U) & 0x1FF];
 }
-static void  disk_buffer_user_writer ( MEM_SLOT_WR_ARGLIST ) {
-	disk_buffer_cpu_view[(GET_WR_ADDR32() - 0xFFD6000U) & 0x1FF] = data;
+static void  disk_buffer_user_writer ( const Uint32 addr32, const Uint8 data ) {
+	disk_buffer_cpu_view[(addr32 - 0xFFD6000U) & 0x1FF] = data;
 }
-static Uint8 eth_buffer_reader ( MEM_SLOT_RD_ARGLIST ) {
-	return eth65_read_rx_buffer(GET_RD_ADDR32() - 0xFFDE800U);
+static Uint8 eth_buffer_reader ( const Uint32 addr32 ) {
+	return eth65_read_rx_buffer(addr32 - 0xFFDE800U);
 }
-static void  eth_buffer_writer ( MEM_SLOT_WR_ARGLIST ) {
-	eth65_write_tx_buffer(GET_WR_ADDR32() - 0xFFDE800U, data);
+static void  eth_buffer_writer ( const Uint32 addr32, const Uint8 data ) {
+	eth65_write_tx_buffer(addr32 - 0xFFDE800U, data);
 }
-static Uint8 slow_devices_reader ( MEM_SLOT_RD_ARGLIST ) {
-	return cart_read_byte(GET_RD_ADDR32() - 0x4000000U);
+static Uint8 slow_devices_reader ( const Uint32 addr32 ) {
+	return cart_read_byte(addr32 - 0x4000000U);
 }
-static void  slow_devices_writer ( MEM_SLOT_WR_ARGLIST ) {
-	cart_write_byte(GET_WR_ADDR32() - 0x4000000U, data);
+static void  slow_devices_writer ( const Uint32 addr32, const Uint8 data ) {
+	cart_write_byte(addr32 - 0x4000000U, data);
 }
-static Uint8 i2c_reader ( MEM_SLOT_RD_ARGLIST ) {
-	return i2c_regs[GET_RD_ADDR32() - 0x0FFD7000U];
+static Uint8 i2c_reader ( const Uint32 addr32 ) {
+	return i2c_regs[addr32 - 0x0FFD7000U];
 }
-static void  i2c_writer ( MEM_SLOT_WR_ARGLIST ) {
-	const Uint32 rel = GET_WR_ADDR32() - 0x0FFD7000U;
+static void  i2c_writer ( const Uint32 addr32, const Uint8 data ) {
+	const Uint32 rel = addr32 - 0x0FFD7000U;
 	if (rel >= I2C_NVRAM_OFFSET && rel < (I2C_NVRAM_OFFSET + I2C_NVRAM_SIZE)) {
 		//DEBUGPRINT("I2C: NVRAM write ($%02X->$%02X) @ NVRAM+$%X" NL, i2c_regs[rel], data, rel - I2C_NVRAM_OFFSET);
 		i2c_regs[rel] = data;
@@ -248,18 +239,18 @@ static void  i2c_writer ( MEM_SLOT_WR_ARGLIST ) {
 		DEBUGPRINT("I2C: unhandled write ($%02X) @ I2C+$%X" NL, data, rel);
 	}
 }
-static Uint8 dummy_reader ( MEM_SLOT_RD_ARGLIST ) {
+static Uint8 dummy_reader ( const Uint32 addr32 ) {
 	return 0xFF;
 }
-static void  dummy_writer ( MEM_SLOT_WR_ARGLIST ) {
+static void  dummy_writer ( const Uint32 addr32, const Uint8 data ) {
 	// well, do nothing
 }
 
 
-static Uint8 undecoded_reader ( MEM_SLOT_RD_ARGLIST )
+static Uint8 undecoded_reader ( const Uint32 addr32 )
 {
 	char msg[128];
-	sprintf(msg, "Unhandled memory read operation for linear address $%X (PC=$%04X)", GET_RD_ADDR32(), cpu65.old_pc);
+	sprintf(msg, "Unhandled memory read operation for linear address $%X (PC=$%04X)", addr32, cpu65.old_pc);
 	if (skip_unhandled_mem <= 1)
 		skip_unhandled_mem = QUESTION_WINDOW("EXIT|Ignore now|Ignore all|Silent ignore all", msg);
 	switch (skip_unhandled_mem) {
@@ -277,10 +268,10 @@ static Uint8 undecoded_reader ( MEM_SLOT_RD_ARGLIST )
 	return 0xFF;
 }
 
-static void undecoded_writer ( MEM_SLOT_WR_ARGLIST )
+static void undecoded_writer ( const Uint32 addr32, const Uint8 data )
 {
 	char msg[128];
-	sprintf(msg, "Unhandled memory write operation for linear address $%X (PC=$%04X)", GET_WR_ADDR32(), cpu65.old_pc);
+	sprintf(msg, "Unhandled memory write operation for linear address $%X (PC=$%04X)", addr32, cpu65.old_pc);
 	if (skip_unhandled_mem <= 1)
 		skip_unhandled_mem = QUESTION_WINDOW("EXIT|Ignore now|Ignore all|Silent ignore all", msg);
 	switch (skip_unhandled_mem) {
@@ -345,9 +336,46 @@ static struct mem_map_st mem_map[] = {
 };
 #define MEM_MAP_SIZE (sizeof(mem_map) / sizeof(struct mem_map_st))
 
+#ifdef MEM_WATCH_SUPPORT
+static Uint8 memwatch_reader  ( const Uint32 addr32 );
+static void  memwatch_writer  ( const Uint32 addr32, const Uint8 data );
+#define MEM_SLOT_WATCHER_READ	1
+#define MEM_SLOT_WATCHER_WRITE	2
+static Uint8 mem_slot_watcher[MEM_SLOTS_TOTAL];
+#endif
+
+static XEMU_INLINE void slot_assignment_postprocessing ( const Uint32 slot )
+{
+	mem_slot_rd_func_real[slot] = mem_slot_rd_func[slot];
+	mem_slot_wr_func_real[slot] = mem_slot_wr_func[slot];
+#ifdef	MEM_WATCH_SUPPORT
+	//mem_slot_rd_data_real[slot] = mem_slot_rd_data[slot];
+	//mem_slot_wr_data_real[slot] = mem_slot_wr_data[slot];
+	register const Uint8 watcher = mem_slot_watcher[slot];
+	if (XEMU_UNLIKELY(watcher)) {
+		if ((watcher & MEM_SLOT_WATCHER_READ)) {
+			mem_slot_rd_func[slot] = memwatch_reader;
+#ifdef			MEM_USE_DATA_POINTERS
+			mem_slot_rd_data[slot] = NULL;
+#endif
+			if (mem_slot_rd_func_real[slot] == undecoded_reader)
+				mem_slot_rd_func_real[slot] = dummy_reader;
+		}
+		if ((watcher & MEM_SLOT_WATCHER_WRITE)) {
+			mem_slot_wr_func[slot] = memwatch_writer;
+#ifdef			MEM_USE_DATA_POINTERS
+			mem_slot_wr_data[slot] = NULL;
+#endif
+			if (mem_slot_wr_func_real[slot] == undecoded_writer)
+				mem_slot_wr_func_real[slot] = dummy_writer;
+		}
+	}
+#endif
+}
+
 
 // Warning: input linear address must be ranged/normalized (& 0xFFFFF00U) by the caller otherwise bad things will happen (TM)
-static void mem_resolve_linear_addr ( const Uint32 slot, const Uint32 addr )
+static void resolve_linear_slot ( const Uint32 slot, const Uint32 addr )
 {
 #ifdef	MEM_USE_HINTS
 	const Uint32 hint_slot = (slot < 0x100U) ? slot >> 7 : slot - 0x100U + 2U;
@@ -370,32 +398,57 @@ static void mem_resolve_linear_addr ( const Uint32 slot, const Uint32 addr )
 	mem_map_hints[hint_slot] = p;
 #endif
 	mem_slot_rd_addr32[slot] = mem_slot_wr_addr32[slot] = addr;
+#ifdef	MEM_USE_DATA_POINTERS
+	mem_slot_rd_data[slot] = mem_slot_wr_data[slot] = NULL;	// by default state: no data pointers, actual case handlers below can override this, of course
+#endif
 	mem_slot_type[slot] = p->type;
 	switch (p->type) {
 		case MEM_SLOT_TYPE_MAIN_RAM:
 			mem_slot_rd_func[slot] = main_ram_reader;
 			mem_slot_wr_func[slot] = main_ram_writer;
+#ifdef			MEM_USE_DATA_POINTERS
+			mem_slot_rd_data[slot] = mem_slot_wr_data[slot] = main_ram + addr;
+#endif
 			break;
 		case MEM_SLOT_TYPE_ROM:
 			mem_slot_rd_func[slot] = main_ram_reader;
 			mem_slot_wr_func[slot] = (rom_protect && slot != MEM_SLOT_SDEBUG) ? dummy_writer : main_ram_writer;
+#ifdef			MEM_USE_DATA_POINTERS
+			mem_slot_rd_data[slot] = main_ram + addr;
+			if (!rom_protect || slot == MEM_SLOT_SDEBUG)
+				mem_slot_wr_data[slot] = main_ram + addr;
+#endif
 			break;
 		case MEM_SLOT_TYPE_SHARED_RAM:
 			mem_slot_rd_func[slot] = main_ram_reader;
 			mem_slot_wr_func[slot] = shared_main_ram_writer;
+#ifdef			MEM_USE_DATA_POINTERS
+			mem_slot_rd_data[slot] = main_ram + addr;	// NOTE: writing does NOT have data pointer, as it requires special care
+#endif
 			break;
 		case MEM_SLOT_TYPE_COLOUR_RAM:
 			mem_slot_rd_func[slot] = colour_ram_reader;
 			mem_slot_wr_func[slot] = addr >= 0x0FF80800U ? colour_ram_writer : shared_colour_ram_writer;
+#ifdef			MEM_USE_DATA_POINTERS
+			mem_slot_rd_data[slot] = colour_ram + (addr - 0x0FF80000U);
+			if (addr >= 0x0FF80800U)
+				mem_slot_wr_data[slot] = colour_ram + (addr - 0x0FF80000U);
+#endif
 			break;
 		case MEM_SLOT_TYPE_ATTIC_RAM:
 			mem_slot_rd_func[slot] = attic_ram_reader;
 			mem_slot_wr_func[slot] = attic_ram_writer;
+#ifdef			MEM_USE_DATA_POINTERS
+			mem_slot_rd_data[slot] = mem_slot_wr_data[slot] = attic_ram + (addr - 0x08000000U);
+#endif
 			break;
 		case MEM_SLOT_TYPE_HYPERVISOR_RAM:
 			if (XEMU_LIKELY(in_hypervisor || slot == MEM_SLOT_SDEBUG)) {
 				mem_slot_rd_func[slot] = hypervisor_ram_reader;
 				mem_slot_wr_func[slot] = hypervisor_ram_writer;
+#ifdef				MEM_USE_DATA_POINTERS
+				mem_slot_rd_data[slot] = mem_slot_wr_data[slot] = hypervisor_ram + (addr - 0xFFF8000U);
+#endif
 			} else {
 				mem_slot_rd_func[slot] = dummy_reader;
 				mem_slot_wr_func[slot] = dummy_writer;
@@ -433,6 +486,9 @@ static void mem_resolve_linear_addr ( const Uint32 slot, const Uint32 addr )
 		case MEM_SLOT_TYPE_CHAR_RAM:
 			mem_slot_rd_func[slot] = char_ram_reader;
 			mem_slot_wr_func[slot] = char_ram_writer;
+#ifdef			MEM_USE_DATA_POINTERS
+			mem_slot_rd_data[slot] = mem_slot_wr_data[slot] = char_ram + (addr - 0xFF7E000U);
+#endif
 			break;
 		case MEM_SLOT_TYPE_1541_RAM:
 			// TODO: Not implemented yet, just here, since freezer accesses this memory area, and without **some** dummy
@@ -461,13 +517,15 @@ static void mem_resolve_linear_addr ( const Uint32 slot, const Uint32 addr )
 			FATAL("Impossible address ($%X) or bad slot type (%d) error in %s()", addr, p->type, __func__);
 			break;
 	}
+	slot_assignment_postprocessing(slot);
 }
 
 
-static void resolve_cpu_addr ( const Uint8 slot )
+static void resolve_cpu_slot ( const Uint8 slot )
 {
 	const Uint32 policy = policy4k[slot >> 4];
 	//DEBUGPRINT("CPU-ADDR: slot $%X mapping for policy $%X" NL, slot, policy);	// REMOVE
+	// !!! if MEM_USE_DATA_POINTERS is used, mem_slot_wr_data and mem_slot_rd_data must be ALWAYS set!
 	switch (policy) {
 		case BANK_POLICY_RAM:
 			mem_slot_type[slot] = MEM_SLOT_TYPE_UNMAPPED;
@@ -475,10 +533,16 @@ static void resolve_cpu_addr ( const Uint8 slot )
 				mem_slot_rd_addr32[slot] = mem_slot_wr_addr32[slot] = slot << 8;
 				mem_slot_rd_func[slot] = main_ram_reader;
 				mem_slot_wr_func[slot] = main_ram_writer;
+#ifdef				MEM_USE_DATA_POINTERS
+				mem_slot_rd_data[slot] = mem_slot_wr_data[slot] = main_ram + (slot << 8);
+#endif
 			} else {
 				mem_slot_rd_addr32[0] = mem_slot_wr_addr32[0] = 0U;
 				mem_slot_rd_func[0] = zero_page_reader;
 				mem_slot_wr_func[0] = zero_page_writer;
+#ifdef				MEM_USE_DATA_POINTERS
+				mem_slot_rd_data[0] = mem_slot_wr_data[0] = NULL;
+#endif
 			}
 			break;
 		case BANK_POLICY_ROM:
@@ -487,6 +551,10 @@ static void resolve_cpu_addr ( const Uint8 slot )
 			mem_slot_wr_addr32[slot] =             slot << 8 ;
 			mem_slot_rd_func[slot] = main_ram_reader;
 			mem_slot_wr_func[slot] = main_ram_writer;
+#ifdef			MEM_USE_DATA_POINTERS
+			mem_slot_rd_data[slot] = main_ram + 0x20000U + (slot << 8);
+			mem_slot_wr_data[slot] = main_ram +            (slot << 8);
+#endif
 			break;
 		case BANK_POLICY_IO:
 			mem_slot_type[slot] = MEM_SLOT_TYPE_LEGACY_IO;
@@ -494,40 +562,55 @@ static void resolve_cpu_addr ( const Uint8 slot )
 			//DEBUGPRINT("Legacy I/O assignment in slot $%X: $%X has been assigned (mem_legacy_io_addr32=$%X)" NL, slot, mem_slot_rd_addr32[slot], mem_legacy_io_addr32); // REMOVE
 			mem_slot_rd_func[slot] = io_reader;
 			mem_slot_wr_func[slot] = io_writer;
+#ifdef			MEM_USE_DATA_POINTERS
+			mem_slot_rd_data[slot] = mem_slot_wr_data[slot] = NULL;
+#endif
 			break;
 		default:
 			// Some mapping for other "policy" values, using that value (non-negative integer!)
 			// mem_slot_* things will be set up by resolve_linear_addr() in this case
 			if (XEMU_UNLIKELY(policy >= BANK_POLICY_INVALID))	// these must not happen, which can happen is handled in other "case" branches. FIXME: remove this later? It's a sanity check.
 				FATAL("Invalid bank_policy4k[%d >> 4] = $%X in %s()!", slot, policy, __func__);
-			mem_resolve_linear_addr(slot, (policy & 0xFF00000U) + ((policy + (slot << 8)) & 0xFFF00U));
-			break;
+			resolve_linear_slot(slot, (policy & 0xFF00000U) + ((policy + (slot << 8)) & 0xFFF00U));
+			return;	// return, not break! Unlike other cases in this "swhitch" statement. That's important!
 	}
+	slot_assignment_postprocessing(slot);	// NOT for MAP'ed slots (it has its own code path for that). That's the reason for "return" instead of "break" above
 }
 
 
-static Uint8 lazy_cpu_read_resolver ( MEM_SLOT_RD_ARGLIST )
+// NOTE: since the lazy resolver is intended to resolve the CPU address slot on-demand, this is an exception to the rule:
+// the input "addr32" parameter is not really a linear address (the whole purpose here is to GET THAT!) but some fake one.
+// Thus only the low 1 byte can be re-used here to form the offset within the "slot" after we resolved the linear start
+// address of the slot itself.
+static Uint8 lazy_cpu_read_resolver ( const Uint32 addr32 )
 {
-	resolve_cpu_addr(slot);
-	return mem_slot_rd_func[slot](slot, ofs8);
+	resolve_cpu_slot(ref_slot);
+	//DEBUGPRINT("LAZY RESOLVER reading at $%X (slot $%X) at PC = $%04X" NL, addr32, ref_slot, cpu65.old_pc);				// REMOVE
+	return mem_slot_rd_func[ref_slot](mem_slot_rd_addr32[ref_slot] + (addr32 & 0xFFU));	// re-using the low byte as the offset within the slot
 }
 
 
-static void lazy_cpu_write_resolver ( MEM_SLOT_WR_ARGLIST )
+// See the comments above with the lazy read resolver!
+static void lazy_cpu_write_resolver ( const Uint32 addr32, const Uint8 data )
 {
-	resolve_cpu_addr(slot);
-	mem_slot_wr_func[slot](slot, ofs8, data);
+	resolve_cpu_slot(ref_slot);
+	//DEBUGPRINT("LAZY RESOLVER writing at $%X (slot $%X) with data $%02X at PC = $%04X" NL, addr32, ref_slot, data, cpu65.old_pc);	// REMOVE
+	mem_slot_wr_func[ref_slot](mem_slot_wr_addr32[ref_slot] + (addr32 & 0xFFU), data);	// re-using the low byte as the offset within the slot
 }
 
 
 static inline void invalidate_slot ( const unsigned int slot )
 {
-	mem_slot_rd_addr32[slot] = 1U;	// signal impossibility: real resolver _always_ put addresses here where the least significant byte is zero
-	mem_slot_wr_addr32[slot] = 1U;	// -- "" --
+	// the value here: signal impossibility: >=28 bit address
+	// WARNING: these offsets are added by the CPU memory handling callback, so the lower bytes should be zero!
+	mem_slot_rd_addr32[slot] = mem_slot_wr_addr32[slot] = 0x20000000U;
 	mem_slot_type[slot] = MEM_SLOT_TYPE_UNRESOLVED;
+#ifdef	MEM_USE_DATA_POINTERS
+	mem_slot_rd_data[slot] = mem_slot_wr_data[slot] = NULL;
+#endif
 	if (slot < 0x100U) {
-		mem_slot_rd_func[slot] = lazy_cpu_read_resolver;
-		mem_slot_wr_func[slot] = lazy_cpu_write_resolver;
+		mem_slot_rd_func[slot] = mem_slot_rd_func_real[slot] = lazy_cpu_read_resolver;
+		mem_slot_wr_func[slot] = mem_slot_wr_func_real[slot] = lazy_cpu_write_resolver;
 	}
 }
 
@@ -703,24 +786,27 @@ void cpu65_do_nop_callback ( void )
 }
 
 
-static Uint8 zero_page_reader ( MEM_SLOT_RD_ARGLIST )
+static Uint8 zero_page_reader ( const Uint32 addr32 )
 {
-	return XEMU_LIKELY(ofs8 & 0xFEU) ? main_ram[ofs8] : cpu_io_port[ofs8];
+	// this could be called only with linear addr (addr32) being in the first 256 byte anyway, so it's OK to use addr32 directly to address cpu_io_port, etc ...
+	//DEBUGPRINT("ZERO PAGE READER: query address $%X (mem_slot_rd_addr32[$%X]=$%X) at PC=$%04X" NL, addr32, ref_slot, mem_slot_rd_addr32[ref_slot], cpu65.old_pc);	// REMOVE
+	return XEMU_LIKELY(addr32 & 0xFEU) ? main_ram[addr32] : cpu_io_port[addr32];
 }
 
 
-static void zero_page_writer ( MEM_SLOT_WR_ARGLIST )
+static void zero_page_writer ( const Uint32 addr32, const Uint8 data )
 {
-	if (XEMU_LIKELY(ofs8 & 0xFEU)) {
-		main_ram[ofs8] = data;
+	//DEBUGPRINT("ZERO PAGE READER: set address $%X (mem_slot_wr_addr32[$%X]=$%X) to $%X at PC=$%04X" NL, addr32, ref_slot, mem_slot_wr_addr32[ref_slot], data, cpu65.old_pc);	// REMOVE
+	if (XEMU_LIKELY(addr32 & 0xFEU)) {
+		main_ram[addr32] = data;
 	} else {
-		if (XEMU_UNLIKELY(!ofs8 && (data == 64 || data == 65))) {	// special "magic" values used on MEGA65 to set the speed gate
+		if (XEMU_UNLIKELY(!addr32 && (data == 64 || data == 65))) {	// special "magic" values used on MEGA65 to set the speed gate
 			if (((D6XX_registers[0x7D] >> 4) ^ data) & 1U) {
 				D6XX_registers[0x7D] ^= 16U;
 				machine_set_speed(0);
 			}
 		} else {
-			cpu_io_port[ofs8] = data;
+			cpu_io_port[addr32] = data;
 			if (set_banking_config(vic_registers[0x30]))
 				apply_cpu_memory_policy(8);	// start with 4K region 8 (@$8000): banking cannot change the lower 32K
 		}
@@ -761,7 +847,7 @@ void memory_set_rom_protection ( const bool protect )
 	if (protect == rom_protect)
 		return;
 	rom_protect = protect;
-	DEBUG("MEGA65: ROM protection has been turned %s." NL, rom_protect ? "ON" : "OFF");
+	DEBUGPRINT("MEGA65: ROM protection has been turned %s." NL, rom_protect ? "ON" : "OFF");	// FIXME: should I left this "DEBUGPRINT"?
 	for (unsigned int slot = 0; slot < MEM_SLOTS_TOTAL; slot++)
 		if (mem_slot_type[slot] == MEM_SLOT_TYPE_ROM)
 			invalidate_slot(slot);
@@ -831,6 +917,9 @@ void memory_init (void )
 		policy4k[i] = BANK_POLICY_INVALID;
 		policy4k_banking[i] = (i >= 8) ? BANK_POLICY_INVALID : BANK_POLICY_RAM;	// lower 32K cannot be banked ever, but we need the value of BANK_POLICY_RAM to simplify logic
 	}
+#ifdef	MEM_WATCH_SUPPORT
+	memset(mem_slot_watcher, 0, sizeof mem_slot_watcher);	// initially no watchers at all
+#endif
 	invalidate_slot_range(0, MEM_SLOTS_TOTAL - 1);	// make sure we have a consistent state
 	cpu_rmw_old_data = -1;
 	vic_registers[0x30] &= ~VIC3_ROM_D030_MASK;
@@ -856,15 +945,19 @@ void memory_init (void )
 }
 
 
+// Warning: this overwrites ref_slot!
 static XEMU_INLINE Uint32 cpu_get_flat_addressing_mode_address ( Uint32 index )
 {
 	// FIXME: really, BP/ZP is wrapped around in case of linear addressing and eg BP addr of $FF got?????? (I think IT SHOULD BE!)
 	Uint8 bp_addr = cpu65_read_callback(cpu65.pc++);	// fetch base page address (we plays the role of the CPU here)
-	const Uint8 bp_slot = cpu65.bphi >> 8;			// basically the page number of the base page, what BP would mean (however CPU65 emulator uses BPHI ... the offset of the base page ...)
-	index += mem_slot_rd_func[bp_slot](bp_slot, bp_addr++)      ;
-	index += mem_slot_rd_func[bp_slot](bp_slot, bp_addr++) <<  8;
-	index += mem_slot_rd_func[bp_slot](bp_slot, bp_addr++) << 16;
-	index += mem_slot_rd_func[bp_slot](bp_slot, bp_addr  ) << 24;
+	ref_slot = cpu65.bphi >> 8;				// basically the page number of the base page, what BP would mean (however CPU65 emulator uses BPHI ... the offset of the base page ...)
+	if (mem_slot_type[ref_slot] == MEM_SLOT_TYPE_UNRESOLVED)	// make sure the slot is resolved, otherwise the query of rd_base_addr below can be invalid before the first read!!!!!!!
+		resolve_cpu_slot(ref_slot);
+	const Uint32 rd_base_addr = mem_slot_rd_addr32[ref_slot];
+	index += mem_slot_rd_func[ref_slot](rd_base_addr + bp_addr++)      ;
+	index += mem_slot_rd_func[ref_slot](rd_base_addr + bp_addr++) <<  8;
+	index += mem_slot_rd_func[ref_slot](rd_base_addr + bp_addr++) << 16;
+	index += mem_slot_rd_func[ref_slot](rd_base_addr + bp_addr  ) << 24;
 	return index;
 }
 
@@ -873,7 +966,7 @@ static XEMU_INLINE void resolve_special_rd_slot_on_demand ( const Uint32 slot, U
 {
 	addr32 &= 0xFFFFF00U;
 	if (XEMU_UNLIKELY(addr32 ^ mem_slot_rd_addr32[slot]))
-		mem_resolve_linear_addr(slot, addr32);
+		resolve_linear_slot(slot, addr32);
 }
 
 
@@ -881,37 +974,43 @@ static XEMU_INLINE void resolve_special_wr_slot_on_demand ( const Uint32 slot, U
 {
 	addr32 &= 0xFFFFF00U;
 	if (XEMU_UNLIKELY(addr32 ^ mem_slot_wr_addr32[slot]))
-		mem_resolve_linear_addr(slot, addr32);
+		resolve_linear_slot(slot, addr32);
 }
 
 
 Uint8 cpu65_read_linear_opcode_callback ( void )
 {
-	register const Uint32 addr32 = cpu_get_flat_addressing_mode_address(cpu65.z);
+	//DEBUGPRINT("cpu65_read_linear_opcode_callback fires at PC=$%04X" NL, cpu65.old_pc);		// REMOVE
+	register const Uint32 addr32 = cpu_get_flat_addressing_mode_address(cpu65.z) & 0xFFFFFFFU;
+	//DEBUGPRINT("cpu65_read_linear_opcode_callback fires-2 at PC=$%04X" NL, cpu65.old_pc);		// REMOVE
+	//DEBUGPRINT("cpu65_read_linear_opcode_callback: about to call read for addr = $%02X at PC=$%04X" NL, addr32, cpu65.old_pc);	// REMOVE
 	resolve_special_rd_slot_on_demand(MEM_SLOT_CPU_LINEAR, addr32);
-	return mem_slot_rd_func[MEM_SLOT_CPU_LINEAR](MEM_SLOT_CPU_LINEAR, addr32 & 0xFFU);
+	ref_slot = MEM_SLOT_CPU_LINEAR;
+	return mem_slot_rd_func[MEM_SLOT_CPU_LINEAR](addr32);
 }
 
 
 void cpu65_write_linear_opcode_callback ( const Uint8 data )
 {
-	register const Uint32 addr32 = cpu_get_flat_addressing_mode_address(cpu65.z);
+	register const Uint32 addr32 = cpu_get_flat_addressing_mode_address(cpu65.z) & 0xFFFFFFFU;
 	resolve_special_wr_slot_on_demand(MEM_SLOT_CPU_LINEAR, addr32);
-	mem_slot_wr_func[MEM_SLOT_CPU_LINEAR](MEM_SLOT_CPU_LINEAR, addr32 & 0xFFU, data);
+	ref_slot = MEM_SLOT_CPU_LINEAR;
+	mem_slot_wr_func[MEM_SLOT_CPU_LINEAR](addr32, data);
 }
 
 
 Uint32 cpu65_read_linear_long_opcode_callback ( const Uint8 index )
 {
 	Uint32 addr32 = cpu_get_flat_addressing_mode_address(index);
+	ref_slot = MEM_SLOT_CPU_LINEAR;
 	resolve_special_rd_slot_on_demand(MEM_SLOT_CPU_LINEAR,   addr32);
-	Uint32 data =   mem_slot_rd_func[MEM_SLOT_CPU_LINEAR](MEM_SLOT_CPU_LINEAR, addr32 & 0xFFU) ;
+	Uint32 data =   mem_slot_rd_func[MEM_SLOT_CPU_LINEAR](addr32 & 0xFFFFFFFU) ;
 	resolve_special_rd_slot_on_demand(MEM_SLOT_CPU_LINEAR, ++addr32);
-	data += (Uint32)mem_slot_rd_func[MEM_SLOT_CPU_LINEAR](MEM_SLOT_CPU_LINEAR, addr32 & 0xFFU) <<  8;
+	data += (Uint32)mem_slot_rd_func[MEM_SLOT_CPU_LINEAR](addr32 & 0xFFFFFFFU) <<  8;
 	resolve_special_rd_slot_on_demand(MEM_SLOT_CPU_LINEAR, ++addr32);
-	data += (Uint32)mem_slot_rd_func[MEM_SLOT_CPU_LINEAR](MEM_SLOT_CPU_LINEAR, addr32 & 0xFFU) << 16;
+	data += (Uint32)mem_slot_rd_func[MEM_SLOT_CPU_LINEAR](addr32 & 0xFFFFFFFU) << 16;
 	resolve_special_rd_slot_on_demand(MEM_SLOT_CPU_LINEAR, ++addr32);
-	data += (Uint32)mem_slot_rd_func[MEM_SLOT_CPU_LINEAR](MEM_SLOT_CPU_LINEAR, addr32 & 0xFFU) << 24;
+	data += (Uint32)mem_slot_rd_func[MEM_SLOT_CPU_LINEAR](addr32 & 0xFFFFFFFU) << 24;
 	return data;
 
 }
@@ -920,27 +1019,30 @@ Uint32 cpu65_read_linear_long_opcode_callback ( const Uint8 index )
 void cpu65_write_linear_long_opcode_callback ( const Uint8 index, const Uint32 data )
 {
 	Uint32 addr32 = cpu_get_flat_addressing_mode_address(index);
+	ref_slot = MEM_SLOT_CPU_LINEAR;
 	resolve_special_wr_slot_on_demand(MEM_SLOT_CPU_LINEAR,   addr32);
-	mem_slot_wr_func[MEM_SLOT_CPU_LINEAR](MEM_SLOT_CPU_LINEAR, addr32 & 0xFFU,  data        & 0xFFU);
+	mem_slot_wr_func[MEM_SLOT_CPU_LINEAR](addr32 & 0xFFFFFFFU,  data        & 0xFFU);
 	resolve_special_wr_slot_on_demand(MEM_SLOT_CPU_LINEAR, ++addr32);
-	mem_slot_wr_func[MEM_SLOT_CPU_LINEAR](MEM_SLOT_CPU_LINEAR, addr32 & 0xFFU, (data >>  8) & 0xFFU);
+	mem_slot_wr_func[MEM_SLOT_CPU_LINEAR](addr32 & 0xFFFFFFFU, (data >>  8) & 0xFFU);
 	resolve_special_wr_slot_on_demand(MEM_SLOT_CPU_LINEAR, ++addr32);
-	mem_slot_wr_func[MEM_SLOT_CPU_LINEAR](MEM_SLOT_CPU_LINEAR, addr32 & 0xFFU, (data >> 16) & 0xFFU);
+	mem_slot_wr_func[MEM_SLOT_CPU_LINEAR](addr32 & 0xFFFFFFFU, (data >> 16) & 0xFFU);
 	resolve_special_wr_slot_on_demand(MEM_SLOT_CPU_LINEAR, ++addr32);
-	mem_slot_wr_func[MEM_SLOT_CPU_LINEAR](MEM_SLOT_CPU_LINEAR, addr32 & 0xFFU, (data >> 24) & 0xFFU);
+	mem_slot_wr_func[MEM_SLOT_CPU_LINEAR](addr32 & 0xFFFFFFFU, (data >> 24) & 0xFFU);
 }
 
 
 #define CREATE_LINEAR_READER(name,slot) \
 	Uint8 name ( const Uint32 addr32 ) { \
 		resolve_special_rd_slot_on_demand(slot, addr32); \
-		return mem_slot_rd_func[slot](slot, addr32 & 0xFFU); \
+		ref_slot = slot; \
+		return mem_slot_rd_func[slot](addr32 & 0xFFFFFFFU); \
 	}
 
 #define CREATE_LINEAR_WRITER(name,slot) \
 	void name ( const Uint32 addr32, const Uint8 data ) { \
 		resolve_special_wr_slot_on_demand(slot, addr32); \
-		mem_slot_wr_func[slot](slot, addr32 & 0xFFU, data); \
+		ref_slot = slot; \
+		mem_slot_wr_func[slot](addr32 & 0xFFFFFFFU, data); \
 	}
 
 CREATE_LINEAR_READER(memory_dma_list_reader,    MEM_SLOT_DMA_LIST)
@@ -952,3 +1054,57 @@ CREATE_LINEAR_READER(debug_read_linear_byte,    MEM_SLOT_DEBUG)
 CREATE_LINEAR_WRITER(debug_write_linear_byte,   MEM_SLOT_DEBUG)
 CREATE_LINEAR_READER(sdebug_read_linear_byte,   MEM_SLOT_SDEBUG)
 CREATE_LINEAR_WRITER(sdebug_write_linear_byte,  MEM_SLOT_SDEBUG)
+
+
+Uint8 debug_read_cpu_byte  ( const Uint16 addr16 )
+{
+	ref_slot = addr16 >> 8;
+	return mem_slot_rd_func_real[ref_slot](mem_slot_rd_addr32[ref_slot] + (addr16 & 0xFFU));
+}
+
+void  debug_write_cpu_byte ( const Uint16 addr16, const Uint8 data )
+{
+	ref_slot = addr16 >> 8;
+	mem_slot_wr_func_real[ref_slot](mem_slot_wr_addr32[ref_slot] + (addr16 & 0xFFU), data);
+}
+
+#ifdef MEM_WATCH_SUPPORT
+static Uint8 memwatch_reader  ( const Uint32 addr32 )
+{
+	Uint8 data = mem_slot_rd_func_real[ref_slot](addr32);
+	for (unsigned int i = 0, cpu_addr = (ref_slot << 8) + (addr32 & 0xFFU); i < mem_watchers.cpu_read_nums; i++)
+		if (cpu_addr >= w->cpu_begin && cpu_addr <= w->cpu_end && addr32 >= w->lin_begin && addr32 <= w->lin_end)
+			return watchmem_read_callback(i, addr32, cpu_addr, data);
+	return data;
+
+
+
+	if (mem_watchers.cpu_read_nums && ref_slot < 0x100U)
+		for (unsigned int i = 0, cpu_addr = (ref_slot << 8) + (addr32 & 0xFFU); i < mem_watchers.cpu_read_nums; i++)
+			if (cpu_addr >= mem_watchers.cpu_read_list[i].begin && cpu_addr <= mem_watchers.cpu_read_list[i].end)
+				return memwatch_cpu_read_callback(i, addr32, cpu_addr, data);
+	if (mem_watchers.lin_read_nums)
+		for (unsigned int i = 0; i < mem_watchers.lin_read_nums; i++)
+			if (addr32 >= mem_watchers.lin_read_list[i].begin && addr32 <= mem_watchers.lin_read_list[i].end)
+				return memwatch_linear_read_callback(i, addr32, (ref_slot << 8) + (addr32 & 0xFFU), data);
+	return data;
+}
+
+static void  memwatch_writer  ( const Uint32 addr32, const Uint8 data )
+{
+	if (mem_watchers_cpu_addr_read && ref_slot < 0x100U) {
+		const Uint16 cpu_addr = (ref_slot << 8) + (addr32 & 0xFFU);
+		for (unsigned int i = 0; i < mem_watchers_cpu_addr_read; i++)
+			if (mem_watchers_cpu_addr_read_list[i] == cpu_addr) {
+				data = debug_memwatch_cpu_read(addr32, cpu_addr, data);
+				break;
+			}
+	}
+
+
+
+	// TODO: if memwatch-on-write is enabled for the slot - mem_slot_watcher[slot] & MEM_SLOT_WATCHER_WRITE is non-zero - then we should do something here
+	// mem_slot_wr_func_real[ref_slot](addr32, debug_memwatch_wrtie_callback(addr32, ref_slot, data));
+	mem_slot_wr_func_real[ref_slot](addr32, data);
+}
+#endif

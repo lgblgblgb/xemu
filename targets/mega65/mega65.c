@@ -506,7 +506,7 @@ static void shutdown_callback ( void )
 #endif
 	hypervisor_hdos_close_descriptors();
 	if (emulation_is_running)
-		DEBUGPRINT("CPU: Execution ended at PC=$%04X (linear=%X)" NL, cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc));
+		DEBUGPRINT("CPU: Execution ended at PC=$%04X (linear=$%07X)" NL, cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc));
 }
 
 

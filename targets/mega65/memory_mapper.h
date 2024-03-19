@@ -40,9 +40,9 @@ extern Uint8 debug_read_linear_byte   ( const Uint32 addr32 );
 extern Uint8 sdebug_read_linear_byte  ( const Uint32 addr32 );
 extern void  debug_write_linear_byte  ( const Uint32 addr32, const Uint8 data );
 extern void  sdebug_write_linear_byte ( const Uint32 addr32, const Uint8 data );
-// Currently debug read/write CPU address is the same as normal ones (used by CPU/DMA emu), later this must be different. TODO
-#define debug_read_cpu_byte  cpu65_read_callback
-#define debug_write_cpu_byte cpu65_write_callback
+// debug read/write CPU address functions: other than hardware emulation, these must be used for debug purposes (monitor/debugger, etc)
+extern Uint8 debug_read_cpu_byte  ( const Uint16 addr16 );
+extern void  debug_write_cpu_byte ( const Uint16 addr16, const Uint8 data );
 
 // DMA implementation related, used by dma65.c:
 extern Uint8 memory_dma_source_mreader ( const Uint32 addr32 );
@@ -51,8 +51,10 @@ extern Uint8 memory_dma_target_mreader ( const Uint32 addr32 );
 extern void  memory_dma_target_mwriter ( const Uint32 addr32, const Uint8 data );
 extern Uint8 memory_dma_list_reader    ( const Uint32 addr32 );
 
+// MAP related variables, do not change these values directly!
 extern Uint32 map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
 extern Uint8  map_mask;
+
 extern Uint8 main_ram[512 << 10], colour_ram[0x8000], char_ram[0x2000], hypervisor_ram[0x4000];
 extern Uint32 main_ram_size;
 #define SLOW_RAM_SIZE (8 << 20)
