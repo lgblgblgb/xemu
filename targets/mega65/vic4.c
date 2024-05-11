@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Copyright (C)2020-2022 Hernán Di Pietro <hernan.di.pietro@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -1443,6 +1443,8 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 						used_palette = palette;		// we do this as well, since there can be "double GOTOX" so we want back to "original" palette ...
 					if (SXA_4BIT_PER_PIXEL(color_data)) 	// this signals for rowmask [the rowmask itself is color_data & 0xFF]
 						draw_mask = (color_data & (1 << char_row)) ? 0xFF : 0x00;	// draw_mask is $FF (not masked) _or_ $00 (masked) ~ for the current char_row!
+					else
+						draw_mask = 0xFF;
 					continue;
 				}
 			}
