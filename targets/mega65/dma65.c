@@ -1,6 +1,6 @@
 /* F018 DMA core emulation for MEGA65
    Part of the Xemu project.  https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -87,13 +87,13 @@ static struct {
 
 static inline Uint8 io_dma_reader ( const unsigned int addr )
 {
-	return io_read((addr & 0xFFFU) + (vic_iomode << 12));
+	return io_read((addr & 0xFFFU) + (io_mode << 12));
 }
 
 
 static inline void  io_dma_writer ( const unsigned int addr, Uint8 data )
 {
-	io_write((addr & 0xFFFU) + (vic_iomode << 12), data);
+	io_write((addr & 0xFFFU) + (io_mode << 12), data);
 }
 
 

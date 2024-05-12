@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "memcontent.h"
 #include "hypervisor.h"
 #include "vic4.h"
+#include "memory_mapper.h"
 #include "configdb.h"
 #include "xemu/emutools_config.h"
 #include "xemu/compressed_disk_image.h"
@@ -1240,7 +1241,7 @@ Uint8 sdcard_read_register ( const int reg )
 			// bits 2 and 3 is always zero in Xemu (no drive virtualization for drive 0 and 1)
 			return
 				(vic_registers[0x30] & 1) |		// $D68A.0 SD:CDC00 (read only) Set if colour RAM at $DC00
-				(vic_iomode & 2)  |			// $D68A.1 SD:VICIII (read only) Set if VIC-IV or ethernet IO bank visible [same bit pos as in vic_iomode for mode-4 and mode-ETH!]
+				(io_mode & 2)  |			// $D68A.1 SD:VICIII (read only) Set if VIC-IV or ethernet IO bank visible [same bit pos as in vic_iomode for mode-4 and mode-ETH!]
 				(data & (128 + 64));			// size info for disk mounting
 			break;
 		case 0xB:

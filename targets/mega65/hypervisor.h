@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -26,7 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define TRAP_FREEZER_RESTORE_PRESS	0x42
 #define TRAP_MATRIX			0x43
 
-extern int  in_hypervisor;
+extern bool in_hypervisor;
 extern int  hickup_is_overriden;
 extern int  hypervisor_is_debugged;
 extern char hyppo_version_string[64];

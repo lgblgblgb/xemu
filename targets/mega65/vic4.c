@@ -43,7 +43,6 @@ static Uint32 *current_pixel;					// current_pixel pointer to the rendering targ
 static Uint32 *pixel_start;					// points to the end and start of the buffer
 static Uint32 *pixel_raster_start;				// first pixel of current raster
 Uint8 vic_registers[0x80];					// VIC4 registers
-unsigned int vic_iomode;					// VIC2/VIC3/VIC4 mode
 static int compare_raster;					// raster compare (9 bits width) data
 static int logical_raster = 0;
 static int interrupt_status;					// Interrupt status of VIC
@@ -151,7 +150,7 @@ void vic_reset ( void )
 {
 	vic_frame_counter = 0;
 	vic_frame_counter_since_boot = 0;
-	vic_iomode = VIC2_IOMODE;
+	memory_set_io_mode(VIC2_IOMODE);
 	vic_color_register_mask = 0x0F;
 	interrupt_status = 0;
 	compare_raster = 0;
@@ -658,11 +657,11 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 					case 0x4554: vic_new_iomode = VIC4ETH_IOMODE; break;
 					case 0x4753: vic_new_iomode = VIC4_IOMODE;    break;
 				}
-				if (vic_new_iomode != vic_iomode) {
+				if (vic_new_iomode != io_mode) {
 					static const Uint8 color_register_masks[4] = { 0x0F, 0xFF, 0xFF, 0xFF };
-					DEBUG("VIC4: changing I/O mode %d(%s) -> %d(%s)" NL, vic_iomode, iomode_names[vic_iomode], vic_new_iomode, iomode_names[vic_new_iomode]);
-					vic_iomode = vic_new_iomode;
-					vic_color_register_mask = color_register_masks[vic_iomode];
+					DEBUG("VIC4: changing I/O mode %d(%s) -> %d(%s)" NL, io_mode, iomode_names[io_mode], vic_new_iomode, iomode_names[vic_new_iomode]);
+					memory_set_io_mode(vic_new_iomode);
+					vic_color_register_mask = color_register_masks[io_mode];
 				}
 			} else
 				DEBUGPRINT("VIC4: warning: I/O mode KEY $D02F register wanted to be written (with $%02X) in hypervisor mode! PC=$%04X" NL, data, cpu65.old_pc);
@@ -676,7 +675,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			return;		// it IS important to have return here, since it's not a "real" VIC4 mode register's view in another mode!!
 		/* --- NO MORE VIC2 REGS FROM HERE --- */
 		CASE_VIC_3_4(0x30):
-			memory_set_vic3_rom_mapping(data);
+			memory_write_d030(data);
 			check_if_rom_palette(!(data & 4));
 			break;
 		CASE_VIC_3_4(0x31):
@@ -1360,7 +1359,7 @@ static XEMU_INLINE Uint8 *get_charset_effective_addr ( void )
 	// However it seems even MEGA65 does not support this.
 	// FIXME: how we can be sure, there won't be any out-of-bound access for the relative small WOM then?
 	if (!REG_BMM && (addr == 0x1000 || addr == 0x9000 || addr == 0x1800 || addr == 0x9800))
-		return char_wom + (addr & 0xFFF);
+		return char_ram + (addr & 0xFFF);
 	// FIXME XXX this is a fixed constant for checking.
 	if (XEMU_UNLIKELY(addr > 0x60000))	// this is valid since we still have got some extra unused RAM left to go beyond actual RAM while bulding the frame
 		return main_ram + 0x60000;	// give some unused ram array of emulaton, thus whatever high value set by user as ADDR, won't overflow during the frame
@@ -1728,8 +1727,8 @@ int vic4_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, st
 	memcpy(vic_palette_bytes_green, buffer + 0x100 +     NO_OF_PALETTE_REGS, NO_OF_PALETTE_REGS);
 	memcpy(vic_palette_bytes_blue,  buffer + 0x100 + 2 * NO_OF_PALETTE_REGS, NO_OF_PALETTE_REGS);
 	vic4_revalidate_all_palette();
-	vic_iomode = buffer[0];
-	DEBUG("SNAP: VIC4: changing I/O mode to %d(%s)" NL, vic_iomode, iomode_names[vic_iomode]);
+	io_mode = buffer[0];
+	DEBUG("SNAP: VIC4: changing I/O mode to %d(%s)" NL, io_mode, iomode_names[io_mode]);
 	interrupt_status = (int)P_AS_BE32(buffer + 1);
 	return 0;
 }
@@ -1747,7 +1746,7 @@ int vic4_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
 	memcpy(buffer + 0x100                         , vic_palette_bytes_red,   NO_OF_PALETTE_REGS);
 	memcpy(buffer + 0x100 +     NO_OF_PALETTE_REGS, vic_palette_bytes_green, NO_OF_PALETTE_REGS);
 	memcpy(buffer + 0x100 + 2 * NO_OF_PALETTE_REGS, vic_palette_bytes_blue,  NO_OF_PALETTE_REGS);
-	buffer[0] = vic_iomode;
+	buffer[0] = io_mode;
 	U32_AS_BE(buffer + 1, interrupt_status);
 	return xemusnap_write_sub_block(buffer, sizeof buffer);
 }

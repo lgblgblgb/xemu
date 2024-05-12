@@ -323,7 +323,7 @@ static void preinit_memory_for_start ( void )
 	preinit_memory_item("extonboard",   "On-boarding utility", main_ram + 0x40000, meminitdata_onboard,   MEMINITDATA_ONBOARD_SIZE,   0x00020, 0x10000, configdb.extonboard);
 	preinit_memory_item("extflashutil", "MEGA-flash utility",  main_ram + 0x50000, megaflashutility,      sizeof megaflashutility,    0x00020, 0x07D00, configdb.extflashutil);
 	preinit_memory_item("extbanner",    "MEGA65 banner",       main_ram + 0x57D00, meminitdata_banner,    MEMINITDATA_BANNER_SIZE,    0x01000, 0x08300, configdb.extbanner);
-	preinit_memory_item("extchrwom",    "Character-WOM",       char_wom,           meminitdata_chrwom,    MEMINITDATA_CHRWOM_SIZE,    0x01000, 0x01000, configdb.extchrwom);
+	preinit_memory_item("extchrwom",    "Character-WOM",       char_ram,           meminitdata_chrwom,    MEMINITDATA_CHRWOM_SIZE,    0x01000, 0x01000, configdb.extchrwom);
 	preinit_memory_item("extcramutils", "Utils in CRAM",       colour_ram,         meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE, 0x08000, 0x08000, configdb.extcramutils);
 	hickup_is_overriden =
 	preinit_memory_item("hickup",       "Hyppo-Hickup",        hypervisor_ram,     meminitdata_hickup,    MEMINITDATA_HICKUP_SIZE,    0x04000, 0x04000, configdb.hickup);
@@ -436,7 +436,7 @@ static void mega65_init ( void )
 	DEBUGPRINT("SPEED: fast clock is set to %.2fMHz." NL, configdb.fast_mhz);
 	cpu65_init_mega_specific();
 	cpu65_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
-	rom_protect = 0;
+	memory_set_rom_protection(0);
 	hypervisor_start_machine();
 	speed_current = 0;
 	machine_set_speed(1);
@@ -456,9 +456,9 @@ static void mega65_init ( void )
 
 int dump_memory ( const char *fn )
 {
-	if (fn && *fn) {
-		DEBUGPRINT("MEM: Dumping memory into file: %s" NL, fn);
-		return xemu_save_file(fn, main_ram, (128 + 256) * 1024, "Cannot dump memory into file");
+	if (fn && *fn && main_ram_size) {
+		DEBUGPRINT("MEM: Dumping memory into file (%uK): %s" NL, main_ram_size >> 10, fn);
+		return xemu_save_file(fn, main_ram, main_ram_size, "Cannot dump memory into file");
 	} else {
 		return 0;
 	}
@@ -506,7 +506,7 @@ static void shutdown_callback ( void )
 #endif
 	hypervisor_hdos_close_descriptors();
 	if (emulation_is_running)
-		DEBUGPRINT("CPU: Execution ended at PC=$%04X (linear=%X)" NL, cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc));
+		DEBUGPRINT("CPU: Execution ended at PC=$%04X (linear=$%07X)" NL, cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc));
 }
 
 
@@ -523,12 +523,12 @@ void reset_mega65 ( void )
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0;
 	machine_set_speed(0);
-	memory_set_cpu_io_port_ddr_and_data(0xFF, 0xFF);
-	map_mask = 0;
-	in_hypervisor = 0;
-	vic_registers[0x30] = 0;	// FIXME: hack! we need this, and memory_set_vic3_rom_mapping above too :(
-	memory_set_vic3_rom_mapping(0);
-	memory_set_do_map();
+	vic_registers[0x30] = 0;
+	memory_reconfigure(
+		0, io_mode, 0xFF, 0xFF,		// D030 value, I/O mode, CPU I/O port 0, CPU I/O port 1
+		0, 0, 0, 0, 0,			// MAP MB LO, OFS LO, MB HI, OFS HI, MASK
+		false				// hypervisor
+	);
 	vic_reset();	// FIXME: we may need a RESET on VIC-IV what ROM would not initialize but could be used by some MEGA65-aware program? [and hyppo does not care to reset?]
 	cpu65_reset();
 	dma_reset();
@@ -545,12 +545,12 @@ void reset_mega65_cpu_only ( void )
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0;
 	machine_set_speed(0);
-	memory_set_cpu_io_port_ddr_and_data(0xFF, 0xFF);
-	map_mask = 0;
-	in_hypervisor = 0;
-	vic_registers[0x30] = 0;	// FIXME: hack! we need this, and memory_set_vic3_rom_mapping above too :(
-	memory_set_vic3_rom_mapping(0);
-	memory_set_do_map();
+	vic_registers[0x30] = 0;
+	memory_reconfigure(
+		0, io_mode, 0xFF, 0xFF,		// D030 value, I/O mode, CPU I/O port 0, CPU I/O port 1
+		0, 0, 0, 0, 0,			// MAP MB LO, OFS LO, MB HI, OFS HI, MASK
+		false				// hypervisor
+	);
 	dma_reset();			// We need this: even though it's CPU reset only, DMA is part of the CPU: either DMA or CPU running, resetting in the middle of a DMA session is a disaster
 	cpu65_reset();
 }
@@ -602,7 +602,7 @@ void m65mon_dumpmem16 ( Uint16 addr )
 	int n = 16;
 	umon_printf(":000%04X:", addr);
 	while (n--)
-		umon_printf("%02X", cpu65_read_callback(addr++));
+		umon_printf("%02X", debug_read_cpu_byte(addr++));
 }
 
 void m65mon_dumpmem28 ( int addr )
@@ -611,13 +611,13 @@ void m65mon_dumpmem28 ( int addr )
 	addr &= 0xFFFFFFF;
 	umon_printf(":%07X:", addr);
 	while (n--)
-		umon_printf("%02X", memory_debug_read_phys_addr(addr++));
+		umon_printf("%02X", debug_read_linear_byte(addr++));
 }
 
 void m65mon_setmem28 ( int addr, int cnt, Uint8* vals )
 {
 	while (--cnt >= 0)
-		memory_debug_write_phys_addr(addr++, *(vals++));
+		debug_write_linear_byte(addr++, *(vals++));
 }
 
 void m65mon_set_trace ( int m )

@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -37,7 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <errno.h>
 
 
-int  in_hypervisor;			// mega65 hypervisor mode
+bool in_hypervisor;			// mega65 hypervisor mode
 char hyppo_version_string[64];
 int  hickup_is_overriden = 0;
 int  hypervisor_is_debugged = 0;
@@ -108,7 +108,7 @@ void hypervisor_enter_via_write_trap ( int trapno )
 	if (do_nop_check) {
 		// FIXME: for real there should be a memory reading function independent to the one used by the CPU, since
 		// this has some side effects to just fetch a byte to check something, which is otherwise used normally to fetch CPU opcodes and such
-		Uint8 skipped_byte = cpu65_read_callback(cpu65.pc);
+		Uint8 skipped_byte = debug_read_cpu_byte(cpu65.pc);
 		if (XEMU_UNLIKELY(skipped_byte != 0xEA && skipped_byte != 0xB8)) {	// $EA = opcode for NOP, $B8 = opcode for CLV
 			char msg[256];
 			snprintf(msg, sizeof msg,
@@ -160,27 +160,26 @@ void hypervisor_enter ( int trapno )
 	D6XX_registers[0x4F] = map_megabyte_high >> 20;
 	D6XX_registers[0x50] = memory_get_cpu_io_port(0);
 	D6XX_registers[0x51] = memory_get_cpu_io_port(1);
-	D6XX_registers[0x52] = vic_iomode;
+	D6XX_registers[0x52] = io_mode;
 	//D6XX_registers[0x53] = 0;				// GS $D653 - Hypervisor DMAgic source MB      - *UNUSED*
 	//D6XX_registers[0x54] = 0;				// GS $D654 - Hypervisor DMAgic destination MB - *UNUSED*
 	dma_get_list_addr_as_bytes(D6XX_registers + 0x55);	// GS $D655-$D658 - Hypervisor DMAGic list address bits 27-0
-	// Now entering into hypervisor mode
-	in_hypervisor = 1;	// this will cause apply_memory_config to map hypervisor RAM, also for checks later to out-of-bound execution of hypervisor RAM, etc ...
-	// In hypervisor mode, VIC4 I/O mode is implied. I also disable $D02F writing to take effect while in hypervisor mode in vic4.c!
-	vic_iomode = VIC4_IOMODE;
-	memory_set_cpu_io_port_ddr_and_data(0x3F, 0x35); // sets all-RAM + I/O config up!
+	// Now entering into hypervisor mode: we use memory_reconfigure() to set all the stuff needed + setting up "in_hypervisor" value as well
+	memory_reconfigure(
+		0,					// D030 ROM banking turning off
+		VIC4_IOMODE,				// VIC4 I/O mode to be used (on MEGA65, in hypervisor mode it's always the case! the handler in vic4.c ensures, we cannot even modify this)
+		0x3F, 0x35,				// set CPU I/O port DDR+DATA: all-RAM + I/O config
+		map_megabyte_low, map_offset_low,	// low mapping is left as-is
+		0xFFU << 20, 0xF0000U,			// high mapping though is being modified
+		(map_mask & 0xFU) | 0x30U,		// mapping: 0011XXXX (it seems low region map mask is not changed by hypervisor entry)
+		true					// this will sets in_hypervisor to TRUE!!!!
+	);
 	cpu65.pf_d = 0;		// clear decimal mode ... according to Paul, punnishment will be done, if it's removed :-)
 	cpu65.pf_i = 1;		// disable IRQ in hypervisor mode
 	cpu65.pf_e = 1;		// 8 bit stack in hypervisor mode
 	cpu65.sphi = 0xBE00;	// set a nice shiny stack page
 	cpu65.bphi = 0xBF00;	// ... and base page (aka zeropage)
 	cpu65.s = 0xFF;
-	// Set mapping for the hypervisor
-	map_mask = (map_mask & 0xF) | 0x30;	// mapping: 0011XXXX (it seems low region map mask is not changed by hypervisor entry)
-	map_megabyte_high = 0xFF << 20;
-	map_offset_high = 0xF0000;
-	memory_set_vic3_rom_mapping(0);	// for VIC-III rom mapping disable in hypervisor mode
-	memory_set_do_map();	// now the memory mapping is changed
 	machine_set_speed(0);	// set machine speed (hypervisor always runs at M65 fast ... ??) FIXME: check this!
 	cpu65.pc = 0x8000 | (trapno << 2);	// load PC with the address assigned for the given trap number
 	DEBUG("HYPERVISOR: entering into hypervisor mode, trap=$%02X (A=$%02X) @ $%04X -> $%04X" NL, trapno, cpu65.a, D6XX_registers[0x48] | (D6XX_registers[0x49] << 8), cpu65.pc);
@@ -255,7 +254,15 @@ void hypervisor_start_machine ( void )
 		hyppo_version_string[0] = '\0';
 		hdos_init(configdb.hdosvirt, configdb.hdosdir);
 	}
-	in_hypervisor = 0;
+	memory_reconfigure(
+		0,
+		VIC4_IOMODE,
+		0x3F, 0x35,
+		0, 0,
+		0, 0,
+		0,
+		false			// this will set in_hypervisor to FALSE to ensure hypervisor_enter() won't fail if reset from hypervisor mode
+	);
 	hypervisor_queued_trap = -1;
 	hypervisor_is_first_call = 1;
 	execution_range_check_gate = 0;
@@ -280,7 +287,7 @@ static inline void first_leave ( void )
 		cpu65.pc = new_pc;
 		// Since we have overriden ROM, we also must take the responsibility to do what Hyppo would also do:
 		// uploading chargen from the loaded ROM into the "char WOM".
-		memcpy(char_wom, main_ram + 0x2D000, 0x1000);
+		memcpy(char_ram, main_ram + 0x2D000, 0x1000);
 	} else {
 		DEBUGPRINT("ROM: no custom force-ROM policy, PC remains at $%04X" NL, cpu65.pc);
 	}
@@ -328,21 +335,23 @@ void hypervisor_leave ( void )
 	cpu65.pc   = D6XX_registers[0x48] | (D6XX_registers[0x49] << 8);
 	if (current_hdos_func >= 0)
 		hdos_leave(current_hdos_func);
-	map_offset_low  = ((D6XX_registers[0x4A] & 0xF) << 16) | (D6XX_registers[0x4B] << 8);
-	map_offset_high = ((D6XX_registers[0x4C] & 0xF) << 16) | (D6XX_registers[0x4D] << 8);
-	map_mask = (D6XX_registers[0x4A] >> 4) | (D6XX_registers[0x4C] & 0xF0);
-	map_megabyte_low =  D6XX_registers[0x4E] << 20;
-	map_megabyte_high = D6XX_registers[0x4F] << 20;
-	memory_set_cpu_io_port_ddr_and_data(D6XX_registers[0x50], D6XX_registers[0x51]);
-	vic_iomode = D6XX_registers[0x52] & 3;
+	// Now leaving hypervisor mode: we use memory_reconfigure() to set all the stuff needed + setting up "in_hypervisor" value as well
+	memory_reconfigure(
+		vic_registers[0x30],				// restore D030 ROM banking
+		D6XX_registers[0x52] & 3,			// restore VIC4 I/O mode
+		D6XX_registers[0x50], D6XX_registers[0x51],	// restore CPU I/O port DDR+DATA
+		D6XX_registers[0x4E] << 20,						// restore MAP low megabyte
+		((D6XX_registers[0x4A] & 0xF) << 16) | (D6XX_registers[0x4B] << 8),	// restore MAP low offset
+		D6XX_registers[0x4F] << 20,						// restore MAP high megabyte
+		((D6XX_registers[0x4C] & 0xF) << 16) | (D6XX_registers[0x4D] << 8),	// restore MAP high offset
+		(D6XX_registers[0x4A] >> 4) | (D6XX_registers[0x4C] & 0xF0),		// restore MAP mask
+		false									// this will sets in_hypervisor to FALSE!!!!
+	);
 	// GS $D653 - Hypervisor DMAgic source MB - *UNUSED*
 	// GS $D654 - Hypervisor DMAgic destination MB - *UNUSED*
 	dma_set_list_addr_from_bytes(D6XX_registers + 0x55);	// GS $D655-$D658 - Hypervisor DMAGic list address bits 27-0
 	// Now leaving hypervisor mode ...
-	in_hypervisor = 0;
 	machine_set_speed(0);	// restore speed ...
-	memory_set_vic3_rom_mapping(vic_registers[0x30]);	// restore possible active VIC-III mapping
-	memory_set_do_map();	// restore mapping ...
 	if (XEMU_UNLIKELY(hypervisor_is_first_call)) {
 		if (trap_current != TRAP_RESET)
 			FATAL("First hypervisor TRAP is not RESET?!");
@@ -650,9 +659,9 @@ void hypervisor_debug ( void )
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without SPHI == $BE but $%02X" NL, cpu65.sphi >> 8);
 		if (XEMU_UNLIKELY(cpu65.bphi != 0xBF00))
 			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory without BPHI == $BF but $%02X" NL, cpu65.bphi >> 8);
-		// FIXME: remove this? Reason: this is not even possible as in hypervisor mode vic_iomode cannot be altered via the usual $D02F "KEY" register ... [if there are no bugs ...]
-		if (XEMU_UNLIKELY(vic_iomode != VIC4_IOMODE))
-			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory with VIC I/O mode of %X" NL, iomode_hexdigitids[vic_iomode]);
+		// FIXME: remove this? Reason: this is not even possible as in hypervisor mode io_mode cannot be altered via the usual $D02F "KEY" register ... [if there are no bugs ...]
+		if (XEMU_UNLIKELY(io_mode != VIC4_IOMODE))
+			DEBUG("HYPERDEBUG: warning, execution in hypervisor memory with VIC I/O mode of %X" NL, iomode_hexdigitids[io_mode]);
 	}
 	const Uint16 now_sp = cpu65.sphi | cpu65.s;
 	int sp_diff = (int)prev_sp - (int)now_sp;
@@ -710,7 +719,7 @@ void hypervisor_debug ( void )
 			(pf & CPU65_PF_I) ? 'I' : 'i',
 			(pf & CPU65_PF_Z) ? 'Z' : 'z',
 			(pf & CPU65_PF_C) ? 'C' : 'c',
-			iomode_hexdigitids[vic_iomode],
+			iomode_hexdigitids[io_mode],
 			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].src_fn   : "<NOT>",
 			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].src_ln   : 0,
 			within_hypervisor_ram ? debug_info[cpu65.pc - 0x8000].sym_name : "<NOT>",
