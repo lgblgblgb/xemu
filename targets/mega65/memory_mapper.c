@@ -103,13 +103,22 @@ mem_slot_wr_func_t mem_slot_wr_func[MEM_SLOTS_TOTAL];
 static mem_slot_rd_func_t mem_slot_rd_func_real[MEM_SLOTS_TOTAL];
 static mem_slot_wr_func_t mem_slot_wr_func_real[MEM_SLOTS_TOTAL];
 #ifdef MEM_USE_DATA_POINTERS
-#warning "Feature MEM_USE_DATA_POINTERS is experimental!"
+#warning "Usage of data pointers is an experimental feature (MEM_USE_DATA_POINTERS is defined)!"
 Uint8 *mem_slot_rd_data[MEM_SLOTS_TOTAL];
 Uint8 *mem_slot_wr_data[MEM_SLOTS_TOTAL];
 #endif
 
 // Very important variable, every slot reader/writer may depend on this to set correctly!
 Uint32 ref_slot;
+
+#ifdef MEM_WATCH_SUPPORT
+static Uint8 memwatch_reader  ( const Uint32 addr32 );
+static void  memwatch_writer  ( const Uint32 addr32, const Uint8 data );
+#define MEM_SLOT_WATCHER_READ		1U
+#define MEM_SLOT_WATCHER_WRITE		2U
+#define MEM_SLOT_WATCHER_CHANGED	0x80U
+static Uint8 mem_slot_watcher[MEM_SLOTS_TOTAL];
+#endif
 
 typedef enum {
 	MEM_SLOT_TYPE_UNRESOLVED,	// invalidated slots
@@ -332,31 +341,22 @@ static struct mem_map_st mem_map[] = {
 	{ 0x0FFDF000U, 0x0FFF7FFFU, MEM_SLOT_TYPE_UNDECODED	},
 	{ 0x0FFF8000U, 0x0FFFBFFFU, MEM_SLOT_TYPE_HYPERVISOR_RAM}, // 16KB HYPPO hickup/hypervisor ROM [do not confuse with Hyper-RAM aka Attic-RAM aka Slow-RAM!]
 	{ 0x0FFFC000U, 0x0FFFFFFFU, MEM_SLOT_TYPE_UNDECODED	},
-	{ 0x10000000U, 0xFFFFFFFFU, MEM_SLOT_TYPE_IMPOSSIBLE	}  // must be the last item! (above 28 bit address space)
+	{ 0x10000000U, 0xFFFFFFFFU, MEM_SLOT_TYPE_IMPOSSIBLE	}  // must be the last item! (above 28 bit address space to the max of 32 bits - because of using Uint32)
 };
 #define MEM_MAP_SIZE (sizeof(mem_map) / sizeof(struct mem_map_st))
 
-#ifdef MEM_WATCH_SUPPORT
-static Uint8 memwatch_reader  ( const Uint32 addr32 );
-static void  memwatch_writer  ( const Uint32 addr32, const Uint8 data );
-#define MEM_SLOT_WATCHER_READ	1
-#define MEM_SLOT_WATCHER_WRITE	2
-static Uint8 mem_slot_watcher[MEM_SLOTS_TOTAL];
-#endif
 
 static XEMU_INLINE void slot_assignment_postprocessing ( const Uint32 slot )
 {
 	mem_slot_rd_func_real[slot] = mem_slot_rd_func[slot];
 	mem_slot_wr_func_real[slot] = mem_slot_wr_func[slot];
 #ifdef	MEM_WATCH_SUPPORT
-	//mem_slot_rd_data_real[slot] = mem_slot_rd_data[slot];
-	//mem_slot_wr_data_real[slot] = mem_slot_wr_data[slot];
 	register const Uint8 watcher = mem_slot_watcher[slot];
 	if (XEMU_UNLIKELY(watcher)) {
 		if ((watcher & MEM_SLOT_WATCHER_READ)) {
 			mem_slot_rd_func[slot] = memwatch_reader;
 #ifdef			MEM_USE_DATA_POINTERS
-			mem_slot_rd_data[slot] = NULL;
+			mem_slot_rd_data[slot] = NULL;	// cannot use the memory-pointer optimization in case of mem-watch, since we need the callback
 #endif
 			if (mem_slot_rd_func_real[slot] == undecoded_reader)
 				mem_slot_rd_func_real[slot] = dummy_reader;
@@ -364,7 +364,7 @@ static XEMU_INLINE void slot_assignment_postprocessing ( const Uint32 slot )
 		if ((watcher & MEM_SLOT_WATCHER_WRITE)) {
 			mem_slot_wr_func[slot] = memwatch_writer;
 #ifdef			MEM_USE_DATA_POINTERS
-			mem_slot_wr_data[slot] = NULL;
+			mem_slot_wr_data[slot] = NULL;	// see the comment above at the reader's case
 #endif
 			if (mem_slot_wr_func_real[slot] == undecoded_writer)
 				mem_slot_wr_func_real[slot] = dummy_writer;
@@ -430,16 +430,16 @@ static void resolve_linear_slot ( const Uint32 slot, const Uint32 addr )
 			mem_slot_rd_func[slot] = colour_ram_reader;
 			mem_slot_wr_func[slot] = addr >= 0x0FF80800U ? colour_ram_writer : shared_colour_ram_writer;
 #ifdef			MEM_USE_DATA_POINTERS
-			mem_slot_rd_data[slot] = colour_ram + (addr - 0x0FF80000U);
-			if (addr >= 0x0FF80800U)
-				mem_slot_wr_data[slot] = colour_ram + (addr - 0x0FF80000U);
+			mem_slot_rd_data[slot] = colour_ram + addr - 0x0FF80000U;
+			if (addr >= 0x0FF80800U)	// the first 2K of colour RAM is "shared" thus we don't set data pointer for that: allow the write callback to do that (special case!)
+				mem_slot_wr_data[slot] = colour_ram + addr - 0x0FF80000U;
 #endif
 			break;
 		case MEM_SLOT_TYPE_ATTIC_RAM:
 			mem_slot_rd_func[slot] = attic_ram_reader;
 			mem_slot_wr_func[slot] = attic_ram_writer;
 #ifdef			MEM_USE_DATA_POINTERS
-			mem_slot_rd_data[slot] = mem_slot_wr_data[slot] = attic_ram + (addr - 0x08000000U);
+			mem_slot_rd_data[slot] = mem_slot_wr_data[slot] = attic_ram + addr - 0x08000000U;
 #endif
 			break;
 		case MEM_SLOT_TYPE_HYPERVISOR_RAM:
@@ -447,7 +447,7 @@ static void resolve_linear_slot ( const Uint32 slot, const Uint32 addr )
 				mem_slot_rd_func[slot] = hypervisor_ram_reader;
 				mem_slot_wr_func[slot] = hypervisor_ram_writer;
 #ifdef				MEM_USE_DATA_POINTERS
-				mem_slot_rd_data[slot] = mem_slot_wr_data[slot] = hypervisor_ram + (addr - 0xFFF8000U);
+				mem_slot_rd_data[slot] = mem_slot_wr_data[slot] = hypervisor_ram + addr - 0xFFF8000U;
 #endif
 			} else {
 				mem_slot_rd_func[slot] = dummy_reader;
@@ -487,7 +487,7 @@ static void resolve_linear_slot ( const Uint32 slot, const Uint32 addr )
 			mem_slot_rd_func[slot] = char_ram_reader;
 			mem_slot_wr_func[slot] = char_ram_writer;
 #ifdef			MEM_USE_DATA_POINTERS
-			mem_slot_rd_data[slot] = mem_slot_wr_data[slot] = char_ram + (addr - 0xFF7E000U);
+			mem_slot_rd_data[slot] = mem_slot_wr_data[slot] = char_ram + addr - 0xFF7E000U;
 #endif
 			break;
 		case MEM_SLOT_TYPE_1541_RAM:
@@ -946,19 +946,19 @@ void memory_init (void )
 
 
 // Warning: this overwrites ref_slot!
-static XEMU_INLINE Uint32 cpu_get_flat_addressing_mode_address ( Uint32 index )
+static XEMU_INLINE Uint32 cpu_get_flat_addressing_mode_address ( const Uint8 index )
 {
 	// FIXME: really, BP/ZP is wrapped around in case of linear addressing and eg BP addr of $FF got?????? (I think IT SHOULD BE!)
-	Uint8 bp_addr = cpu65_read_callback(cpu65.pc++);	// fetch base page address (we plays the role of the CPU here)
+	const Uint8 bp_addr = cpu65_read_callback(cpu65.pc++);	// fetch base page address (we plays the role of the CPU here)
 	ref_slot = cpu65.bphi >> 8;				// basically the page number of the base page, what BP would mean (however CPU65 emulator uses BPHI ... the offset of the base page ...)
 	if (mem_slot_type[ref_slot] == MEM_SLOT_TYPE_UNRESOLVED)	// make sure the slot is resolved, otherwise the query of rd_base_addr below can be invalid before the first read!!!!!!!
 		resolve_cpu_slot(ref_slot);
 	const Uint32 rd_base_addr = mem_slot_rd_addr32[ref_slot];
-	index += mem_slot_rd_func[ref_slot](rd_base_addr + bp_addr++)      ;
-	index += mem_slot_rd_func[ref_slot](rd_base_addr + bp_addr++) <<  8;
-	index += mem_slot_rd_func[ref_slot](rd_base_addr + bp_addr++) << 16;
-	index += mem_slot_rd_func[ref_slot](rd_base_addr + bp_addr  ) << 24;
-	return index;
+	return index +
+		(mem_slot_rd_func[ref_slot](rd_base_addr +   bp_addr              )      ) +
+		(mem_slot_rd_func[ref_slot](rd_base_addr + ((bp_addr + 1) & 0xFFU)) <<  8) +
+		(mem_slot_rd_func[ref_slot](rd_base_addr + ((bp_addr + 2) & 0xFFU)) << 16) +
+		(mem_slot_rd_func[ref_slot](rd_base_addr + ((bp_addr + 3) & 0xFFU)) << 24) ;
 }
 
 
@@ -1068,8 +1068,9 @@ void  debug_write_cpu_byte ( const Uint16 addr16, const Uint8 data )
 	mem_slot_wr_func_real[ref_slot](mem_slot_wr_addr32[ref_slot] + (addr16 & 0xFFU), data);
 }
 
+
 #ifdef MEM_WATCH_SUPPORT
-static Uint8 memwatch_reader  ( const Uint32 addr32 )
+static Uint8 memwatch_reader ( const Uint32 addr32 )
 {
 	Uint8 data = mem_slot_rd_func_real[ref_slot](addr32);
 	for (unsigned int i = 0, cpu_addr = (ref_slot << 8) + (addr32 & 0xFFU); i < mem_watchers.cpu_read_nums; i++)
@@ -1090,7 +1091,8 @@ static Uint8 memwatch_reader  ( const Uint32 addr32 )
 	return data;
 }
 
-static void  memwatch_writer  ( const Uint32 addr32, const Uint8 data )
+
+static void memwatch_writer ( const Uint32 addr32, const Uint8 data )
 {
 	if (mem_watchers_cpu_addr_read && ref_slot < 0x100U) {
 		const Uint16 cpu_addr = (ref_slot << 8) + (addr32 & 0xFFU);
@@ -1106,5 +1108,71 @@ static void  memwatch_writer  ( const Uint32 addr32, const Uint8 data )
 	// TODO: if memwatch-on-write is enabled for the slot - mem_slot_watcher[slot] & MEM_SLOT_WATCHER_WRITE is non-zero - then we should do something here
 	// mem_slot_wr_func_real[ref_slot](addr32, debug_memwatch_wrtie_callback(addr32, ref_slot, data));
 	mem_slot_wr_func_real[ref_slot](addr32, data);
+}
+
+struct mem_watch_list_st {
+	Uint32	cpu_first, cpu_last, lin_first, lin_last;
+};
+static const struct mem_watch_list_st *mem_watch_rd_list;
+static const struct mem_watch_list_st *mem_watch_wr_list;
+
+
+void memory_watch_clear_all ( void )
+{
+	for (unsigned int slot = 0; slot <= MEM_SLOT_LAST_REAL; slot++) {
+		if (mem_slot_watch[slot] & 0x7FU) {
+			mem_slot_watch[slot] = MEM_SLOT_WATCH_CHANGED;
+		}
+	}
+}
+
+
+void memory_watch_add ( void )
+{
+}
+
+
+void memory_watch_remove ( void )
+{
+}
+
+
+void memory_watch_start_transaction ( void )
+{
+	for (unsigned int slot = 0; slot <= MEM_SLOT_LAST_REAL; slot++)
+		mem_slot_watch[slot] &= ~MEM_SLOT_WATCH_CHANGED;
+}
+
+
+void memory_watch_commit ( void )
+{
+	for (unsigned int slot = 0; slot <= MEM_SLOT_LAST_REAL; slot++)
+		if (mem_slot_watch[slot] & MEM_SLOT_WATCH_CHANGED) {
+			mem_slot_watch[slot] &= ~MEM_SLOT_WATCH_CHANGED;
+			invalidate_slot(slot);
+		}
+}
+
+
+void memory_watch_notify_change ( const struct mem_watch_list_st *rd_list, const struct mem_watch_list_st *wr_list )
+{
+	bool rd_need_cpu = false;
+	bool rd_need_lin = false;
+	bool wr_need_cpu = false;
+	bool wr_need_lin = false;
+	mem_watch_rd_list = rd_list;
+	mem_watch_rd_list_size = ... ;
+	mem_watch_wr_list = wr_list;
+	mem_watch_wr_list_size = ... ;
+	if (rd_list)
+		while (rd_list->cpu_last )
+		}
+
+
+	for (unsigned int slot = 0; slot <= MEM_SLOT_LAST_REAL; slot++)
+		if (mem_slot_watcher[slot] & MEM_SLOT_WATCHER_CHANGED) {
+			mem_slot_watcher[slot] &= ~MEM_SLOT_WATCHER_CHANGED;
+			invalidate_slot(slot);
+		}
 }
 #endif

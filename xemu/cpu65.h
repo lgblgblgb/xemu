@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 | For more information about "cpu65" please also read comments in file cpu65.c |
 
@@ -72,6 +72,12 @@ struct cpu65_st {
 	int multi_step_stop_trigger;	// not used, only with multi-op mode but still here because some devices (like DMA) would use it
 	int irqLevel, nmiEdge;
 	int op_cycles;
+#ifdef CPU65_EXECUTION_CALLBACK_SUPPORT
+	bool execution_debug_callback;
+	// this must be used by the emulator target, CPU65 core will/can set this value, but never uses it:
+	// >> Must be done by the target to see if it's valid to call cpu65_step() **at all** <<
+	bool running;			// this must be used by the emulator target, CPU65 core will/can set this value, but never uses it. Must be done by the target to see if it's valid to call
+#endif
 };
 
 #ifndef CPU65
@@ -108,6 +114,7 @@ extern void  cpu65_illegal_opcode_callback ( void );
 #endif
 
 extern void cpu65_reset ( void );
+extern void cpu65_init ( void );	// optional to be called, cpu_reset() calls this as well. See cpu65.c for more info on this.
 extern void cpu65_debug_set_pc ( const Uint16 new_pc );
 extern int  cpu65_step  (
 #ifdef CPU_STEP_MULTI_OPS
@@ -116,6 +123,30 @@ extern int  cpu65_step  (
 	void
 #endif
 );
+
+#ifdef CPU65_EXECUTION_CALLBACK_SUPPORT
+// These must be provided by the target emulator:
+extern void cpu65_nmi_debug_callback ( void );
+extern void cpu65_irq_debug_callback ( void );
+extern void cpu65_execution_debug_callback ( void );
+// --
+static XEMU_INLINE void cpu65_stop ( void ) {
+	CPU65.running = false;
+}
+static XEMU_INLINE void cpu65_continue ( void ) {
+	CPU65.running = true;
+}
+static XEMU_INLINE void cpu65_enable_debug_callbacks ( void ) {
+	CPU65.execution_debug_callback = true;
+}
+static XEMU_INLINE void cpu65_disable_debug_callbacks ( void ) {
+	CPU65.running = true;
+	CPU65.execution_debug_callback = false;
+}
+#define CPU65_IS_RUNNING() CPU65.running
+#else
+#define CPU65_IS_RUNNING() 1
+#endif
 
 #ifdef CPU65_TRAP_OPCODE
 extern int  cpu65_trap_callback ( const Uint8 opcode );
