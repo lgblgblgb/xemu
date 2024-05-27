@@ -1397,7 +1397,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 		current_pixel += (CHARGEN_X_START - border_x_left);
 		xcounter += (CHARGEN_X_START - border_x_left);
 		const int xcounter_start = xcounter;
-		Uint8 char_fetch_offset = 0;
+		Sint8 char_fetch_offset = 0;
 		// Chargen starts here.
 		while (line_char_index < REG_CHRCOUNT) {
 			Uint16 color_data = colour_ram[(colour_ram_current_addr++) & 0x07FFF];
@@ -1433,7 +1433,10 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 					current_pixel = pixel_raster_start + xcounter;
 					// ---- End of the GOTOX re-positioning functionality implementation ----
 					line_char_index++;
-					char_fetch_offset = char_value >> 13;
+					char_fetch_offset = (char_value >> 13) & 7;
+					// If ScreenRAMByte1 bit 4 is set then the char_fetch_offset should be subtracted and not added
+					if (char_value & (1 << 12))
+						char_fetch_offset = -char_fetch_offset;
 					if (SXA_VERTICAL_FLIP(color_data))
 						enable_bg_paint = 0;
 					if (SXA_ATTR_BOLD(color_data) && SXA_ATTR_REVERSE(color_data) && !REG_VICIII_ATTRIBS)
