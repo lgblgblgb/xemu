@@ -1473,7 +1473,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 			} else if (CHAR_IS256_COLOR(char_id)) {	// 256-color character
 				// fgcolor in case of FCM should mean colour index $FF
 				// FIXME: check if the passed palette[color_data & 0xFF] is correct or another index should be used for that $FF colour stuff
-				const Uint32 *palette_now = SXA_ATTR_ALTPALETTE(color_data) ? altpalette : used_palette;
+				const Uint32 *palette_now = ((REG_VICIII_ATTRIBS) && SXA_ATTR_ALTPALETTE(color_data)) ? altpalette : used_palette;
 				vic4_render_fullcolor_char_row(
 					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
 					8 - glyph_trim,
