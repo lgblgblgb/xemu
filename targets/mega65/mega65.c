@@ -57,16 +57,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static int nmi_level;			// please read the comment at nmi_set() below
 static int emulation_is_running = 0;
 static int speed_current = -1;
-static int paused = 0, paused_old = 0;
-static int breakpoint_pc = -1;
+int paused = 0;
+static int paused_old = 0;
 #ifdef TRACE_NEXT_SUPPORT
 static int orig_sp = 0;
 static int trace_next_trigger = 0;
 #endif
-static int trace_step_trigger = 0;
-#ifdef HAS_UARTMON_SUPPORT
-static void (*m65mon_callback)(void) = NULL;
-#endif
+int trace_step_trigger = 0;
 static const char emulator_paused_title[] = "TRACE/PAUSE";
 static char emulator_speed_title[64] = "";
 static char fast_mhz_in_string[16] = "";
@@ -567,108 +564,7 @@ int reset_mega65_asked ( void )
 
 
 #ifdef HAS_UARTMON_SUPPORT
-void m65mon_show_regs ( void )
-{
-	Uint8 pf = cpu65_get_pf();
-	umon_printf(
-		"\r\n"
-		"PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
-		"%04X %02X %02X %02X %02X %02X %04X "		// register banned message and things from PC to SP
-		"%04X %04X %02X       %02X %02X "		// from MAPL to P
-		"%c%c%c%c%c%c%c%c ",				// P-FLAGS
-		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z, cpu65.bphi >> 8, cpu65.sphi | cpu65.s,
-		((map_mask & 0x0F) << 12) | (map_offset_low  >> 8),
-		((map_mask & 0xF0) <<  8) | (map_offset_high >> 8),
-		cpu65.op,
-		pf, 0,	// flags
-		(pf & CPU65_PF_N) ? 'N' : '-',
-		(pf & CPU65_PF_V) ? 'V' : '-',
-		(pf & CPU65_PF_E) ? 'E' : '-',
-		'-',
-		(pf & CPU65_PF_D) ? 'D' : '-',
-		(pf & CPU65_PF_I) ? 'I' : '-',
-		(pf & CPU65_PF_Z) ? 'Z' : '-',
-		(pf & CPU65_PF_C) ? 'C' : '-'
-	);
-}
-
-void m65mon_set_pc ( const Uint16 addr )
-{
-	cpu65_debug_set_pc(addr);
-}
-
-void m65mon_dumpmem16 ( Uint16 addr )
-{
-	int n = 16;
-	umon_printf(":000%04X:", addr);
-	while (n--)
-		umon_printf("%02X", debug_read_cpu_byte(addr++));
-}
-
-void m65mon_dumpmem28 ( int addr )
-{
-	int n = 16;
-	addr &= 0xFFFFFFF;
-	umon_printf(":%07X:", addr);
-	while (n--)
-		umon_printf("%02X", debug_read_linear_byte(addr++));
-}
-
-void m65mon_setmem28 ( int addr, int cnt, Uint8* vals )
-{
-	while (--cnt >= 0)
-		debug_write_linear_byte(addr++, *(vals++));
-}
-
-void m65mon_set_trace ( int m )
-{
-	paused = m;
-}
-
-#ifdef TRACE_NEXT_SUPPORT
-void m65mon_do_next ( void )
-{
-	if (paused) {
-		umon_send_ok = 0;			// delay command execution!
-		m65mon_callback = m65mon_show_regs;	// register callback
-		trace_next_trigger = 2;			// if JSR, then trigger until RTS to next_addr
-		orig_sp = cpu65.sphi | cpu65.s;
-		paused = 0;
-	} else {
-		umon_printf(UMON_SYNTAX_ERROR "trace can be used only in trace mode");
-	}
-}
-#endif
-
-void m65mon_do_trace ( void )
-{
-	if (paused) {
-		umon_send_ok = 0; // delay command execution!
-		m65mon_callback = m65mon_show_regs; // register callback
-		trace_step_trigger = 1;	// trigger one step
-	} else {
-		umon_printf(UMON_SYNTAX_ERROR "trace can be used only in trace mode");
-	}
-}
-
-void m65mon_do_trace_c ( void )
-{
-	umon_printf(UMON_SYNTAX_ERROR "command 'tc' is not implemented yet");
-}
-#ifdef TRACE_NEXT_SUPPORT
-void m65mon_next_command ( void )
-{
-	if (paused)
-		m65mon_do_next();
-}
-#endif
-void m65mon_empty_command ( void )
-{
-	if (paused)
-		m65mon_do_trace();
-}
-
-void m65mon_breakpoint ( int brk )
+void set_breakpoint ( int brk )
 {
 	breakpoint_pc = brk;
 	if (brk < 0)
@@ -769,7 +665,7 @@ static void emulation_loop ( void )
 			// XXX it's maybe a problem to call this!!! update_emulator() is called here which closes frame but no no reopen then ... FIXME: handle this somehow!
 			update_emulator();
 			if (trace_step_trigger) {
-				// if monitor trigges a step, break the pause loop, however we will get back the control on the next
+				// if monitor triggers a step, break the pause loop, however we will get back the control on the next
 				// iteration of the infinite "for" loop, as "paused" is not altered
 				trace_step_trigger = 0;
 				break;	// break the pause loop now
@@ -785,19 +681,25 @@ static void emulation_loop ( void )
 					cpu_cycles_per_step = 0;
 				} else {
 					DEBUGPRINT("TRACE: leaving trace mode @ $%04X" NL, cpu65.pc);
+#ifdef					HAS_UARTMON_SUPPORT
 					if (breakpoint_pc < 0)
 						cpu_cycles_per_step = cpu_cycles_per_scanline;
 					else
 						cpu_cycles_per_step = 0;
+#else
+					cpu_cycles_per_step = cpu_cycles_per_scanline;
+#endif
 				}
 			}
 		}
 		if (XEMU_UNLIKELY(hypervisor_is_debugged && in_hypervisor))
 			hypervisor_debug();
+#ifdef		HAS_UARTMON_SUPPORT
 		if (XEMU_UNLIKELY(breakpoint_pc == cpu65.pc)) {
 			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu65.pc);
 			paused = 1;
 		}
+#endif
 		cycles += XEMU_UNLIKELY(in_dma) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
 #ifdef CPU_STEP_MULTI_OPS
 			cpu_cycles_per_step
