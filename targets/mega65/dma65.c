@@ -33,7 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define DEBUGDMA(...)   DEBUG(__VA_ARGS__)
 #endif
 
-int in_dma;	// DMA session is in progress if non-zero. Also used by the main emu loop to tell if it needs to call DMA or CPU emu.
+Uint8 in_dma;	// DMA session is in progress if non-zero. Also used by the main emu loop to tell if it needs to call DMA or CPU emu.
 
 // Hacky stuff:
 // low byte: the transparent byte value
@@ -62,6 +62,7 @@ static Uint8 minterms[4];		// Used with MIX DMA command only
 static Uint8 filler_byte;		// byte used for FILL DMA command only
 static int   enhanced_mode;		// MEGA65 enhanced mode DMA
 static int   with_io;			// legacy MEGA65 stuff, should be removed? 0x80 or 0
+static unsigned int list_entry_pos = 0;
 
 // On C65, DMA cannot cross 64K boundaries, so the right mask is 0xFFFF
 // On MEGA65 it seems to be 1Mbyte, thus the mask should be 0xFFFFF
@@ -146,10 +147,6 @@ static XEMU_INLINE void dma_write_target ( const Uint8 data )
 }
 
 
-#ifdef DO_DEBUG_DMA
-static int list_entry_pos = 0;
-#endif
-
 static Uint8 dma_read_list_next_byte ( void )
 {
 	Uint8 data;
@@ -162,8 +159,8 @@ static Uint8 dma_read_list_next_byte ( void )
 	}
 #ifdef	DO_DEBUG_DMA
 	DEBUGPRINT("DMA: reading DMA (rev#%d) list from $%08X [%s] [#%d]: $%02X" NL, session_revision, list_addr, list_addr_policy ? "CPU-addr" : "linear-addr", list_entry_pos, data);
-	list_entry_pos++;
 #endif
+	list_entry_pos++;
 	list_addr++;
 	return data;
 }
@@ -219,9 +216,9 @@ void dma_write_reg ( int addr, Uint8 data )
 	if (XEMU_UNLIKELY(in_dma)) {
 		// this is just an emergency stuff to disallow DMA to update its own registers ... FIXME: what would be the correct policy?
 		// NOTE: without this, issuing a DMA transfer updating DMA registers would affect an on-going DMA transfer!
-		static int do_warn = 1;
+		static bool do_warn = true;
 		if (do_warn) {
-			do_warn = 0;
+			do_warn = false;
 			ERROR_WINDOW("DMA writes its own registers, ignoring!\nThere will be no more warning on this!");
 		}
 		DEBUG("DMA: WARNING: tries to write own register by DMA reg#%d with value of $%02X" NL, addr, data);
@@ -321,7 +318,7 @@ int dma_update ( void )
 {
 	int cycles = 0;
 	if (XEMU_UNLIKELY(!in_dma))
-		FATAL("dma_update() called with no in_dma set!");
+		FATAL("dma_update() called without in_dma being set!");
 	if (XEMU_UNLIKELY(command == -1)) {
 		if (XEMU_UNLIKELY(list_addr_policy == 3)) {
 			list_addr = cpu65.pc;
@@ -329,20 +326,23 @@ int dma_update ( void )
 			list_addr_policy = 2;
 		}
 		if (enhanced_mode) {
-			Uint8 opt, optval;
-			do {
-				opt = dma_read_list_next_byte();
+			list_entry_pos = 0;
+			for (;;) {
+				const Uint8 opt = dma_read_list_next_byte();
 				DEBUGDMA("DMA: enhanced option byte $%02X read" NL, opt);
 				cycles++;
+				if (!opt) {
+					DEBUGDMA("DMA: end of enhanced options" NL);
+					break;
+				}
+				Uint8 optval;
 				if ((opt & 0x80)) {	// all options >= 0x80 have an extra bytes as option parameter
 					optval = dma_read_list_next_byte();
 					DEBUGDMA("DMA: enhanced option byte parameter $%02X read" NL, optval);
 					cycles++;
 				}
 				switch (opt) {
-					case 0x00:
-						DEBUGDMA("DMA: end of enhanced options" NL);
-						break;
+					// case 0x00 (end of enhanced option list) is already handled
 					case 0x06:	// disable transparency (setting high byte of transparency, thus will never match)
 						transparency |= 0x100;
 						break;
@@ -386,14 +386,25 @@ int dma_update ( void )
 							DEBUGPRINT("DMA: *unknown* enhanced option: $%02X @ PC=$%04X" NL, opt, cpu65.pc);
 						break;
 				}
-			} while (opt);
+				if (XEMU_UNLIKELY(list_entry_pos > 255)) {
+					// FIXME: current design of DMA emulation uses a blocking loop to fetch enhanced mode options
+					// This is bad, if there is a very long list (which shouldn't be valid anyway though ...)
+					// Thus I abort the whole DMA session in case of a problem like that.
+					static bool do_warn = true;
+					if (do_warn) {
+						do_warn = false;
+						ERROR_WINDOW("DMA: Enhanced mode DMA option list is abnormally long (%u bytes).\nAborting DMA session! Buggy software running?\nNo more reports will be produced by Xemu." NL, list_entry_pos);
+					}
+					in_dma = 0;
+					command = -1;
+					return cycles;
+				}
+			}
 		}
+		list_entry_pos = 0;
 		// command == -1 signals the situation, that the (next) DMA command should be read!
 		// This part is highly incorrect, ie fetching so many bytes in one step only of dma_update()
 		// NOTE: in case of MEGA65: dma_read_list_next_byte() uses the "megabyte" part already (taken from reg#4, in case if that reg is written)
-#ifdef		DO_DEBUG_DMA
-		list_entry_pos = 0;
-#endif
 		command            = dma_read_list_next_byte();
 		dma_op             = (enum dma_op_types)(command & 3);
 		modulo.col_limit   = dma_read_list_next_byte();
