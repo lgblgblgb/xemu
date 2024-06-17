@@ -72,8 +72,14 @@ struct cpu65_st {
 	int multi_step_stop_trigger;	// not used, only with multi-op mode but still here because some devices (like DMA) would use it
 	int irqLevel, nmiEdge;
 	int op_cycles;
-#ifdef CPU65_EXECUTION_CALLBACK_SUPPORT
-	bool execution_debug_callback;
+#ifdef CPU65_DEBUG_CALLBACK_SUPPORT
+	struct {
+		Uint8 exec : 1;
+		Uint8 irq  : 1;
+		Uint8 nmi  : 1;
+		Uint8 brk  : 1;
+		Uint8 reset: 1;
+	} debug_callbacks;
 	// this must be used by the emulator target, CPU65 core will/can set this value, but never uses it:
 	// >> Must be done by the target to see if it's valid to call cpu65_step() **at all** <<
 	bool running;			// this must be used by the emulator target, CPU65 core will/can set this value, but never uses it. Must be done by the target to see if it's valid to call
@@ -124,25 +130,13 @@ extern int  cpu65_step  (
 #endif
 );
 
-#ifdef CPU65_EXECUTION_CALLBACK_SUPPORT
+#ifdef CPU65_DEBUG_CALLBACK_SUPPORT
 // These must be provided by the target emulator:
 extern void cpu65_nmi_debug_callback ( void );
 extern void cpu65_irq_debug_callback ( void );
+extern void cpu65_brk_debug_callback ( void );
+extern void cpu65_reset_debug_callback ( void );
 extern void cpu65_execution_debug_callback ( void );
-// --
-static XEMU_INLINE void cpu65_stop ( void ) {
-	CPU65.running = false;
-}
-static XEMU_INLINE void cpu65_continue ( void ) {
-	CPU65.running = true;
-}
-static XEMU_INLINE void cpu65_enable_debug_callbacks ( void ) {
-	CPU65.execution_debug_callback = true;
-}
-static XEMU_INLINE void cpu65_disable_debug_callbacks ( void ) {
-	CPU65.running = true;
-	CPU65.execution_debug_callback = false;
-}
 #define CPU65_IS_RUNNING() CPU65.running
 #else
 #define CPU65_IS_RUNNING() 1

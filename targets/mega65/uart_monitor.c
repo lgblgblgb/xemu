@@ -16,11 +16,6 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "xemu/emutools.h"
-#include "mega65.h"
-#include "uart_monitor.h"
-#include "xemu/cpu65.h"
-#include "memory_mapper.h"
 
 
 #if !defined(HAS_UARTMON_SUPPORT)
@@ -29,6 +24,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #warning "Platform does not support UMON"
 #else
 
+#include "xemu/emutools.h"
+#include "mega65.h"
+#include "uart_monitor.h"
+#include "xemu/cpu65.h"
+#include "memory_mapper.h"
 #include "sdcard.h"
 
 #include "xemu/emutools_socketapi.h"
@@ -74,7 +74,7 @@ int breakpoint_pc = -1;
 
 
 
-void m65mon_show_regs ( void )
+static void m65mon_show_regs ( void )
 {
 	Uint8 pf = cpu65_get_pf();
 	umon_printf(
@@ -99,12 +99,12 @@ void m65mon_show_regs ( void )
 	);
 }
 
-void m65mon_set_pc ( const Uint16 addr )
+static void m65mon_set_pc ( const Uint16 addr )
 {
 	cpu65_debug_set_pc(addr);
 }
 
-void m65mon_dumpmem16 ( Uint16 addr )
+static void m65mon_dumpmem16 ( Uint16 addr )
 {
 	int n = 16;
 	umon_printf(":000%04X:", addr);
@@ -112,7 +112,7 @@ void m65mon_dumpmem16 ( Uint16 addr )
 		umon_printf("%02X", debug_read_cpu_byte(addr++));
 }
 
-void m65mon_dumpmem28 ( int addr )
+static void m65mon_dumpmem28 ( int addr )
 {
 	int n = 16;
 	addr &= 0xFFFFFFF;
@@ -121,19 +121,19 @@ void m65mon_dumpmem28 ( int addr )
 		umon_printf("%02X", debug_read_linear_byte(addr++));
 }
 
-void m65mon_setmem28 ( int addr, int cnt, Uint8* vals )
+static void m65mon_setmem28 ( int addr, int cnt, Uint8* vals )
 {
 	while (--cnt >= 0)
 		debug_write_linear_byte(addr++, *(vals++));
 }
 
-void m65mon_set_trace ( int m )
+static void m65mon_set_trace ( int m )
 {
 	paused = m;
 }
 
 #ifdef TRACE_NEXT_SUPPORT
-void m65mon_do_next ( void )
+static void m65mon_do_next ( void )
 {
 	if (paused) {
 		umon_send_ok = 0;			// delay command execution!
@@ -147,7 +147,7 @@ void m65mon_do_next ( void )
 }
 #endif
 
-void m65mon_do_trace ( void )
+static void m65mon_do_trace ( void )
 {
 	if (paused) {
 		umon_send_ok = 0; // delay command execution!
@@ -158,22 +158,127 @@ void m65mon_do_trace ( void )
 	}
 }
 
-void m65mon_do_trace_c ( void )
+static void m65mon_do_trace_c ( void )
 {
 	umon_printf(UMON_SYNTAX_ERROR "command 'tc' is not implemented yet");
 }
 #ifdef TRACE_NEXT_SUPPORT
-void m65mon_next_command ( void )
+static void m65mon_next_command ( void )
 {
 	if (paused)
 		m65mon_do_next();
 }
 #endif
-void m65mon_empty_command ( void )
+static void m65mon_empty_command ( void )
 {
 	if (paused)
 		m65mon_do_trace();
 }
+
+
+#define MAX_BREAKPOINTS 10
+struct breakpoint_st {
+	Uint16	pc;
+	bool	(*callback)(const unsigned int);
+	bool	temp;
+	const void	*user_data;
+};
+static struct breakpoint_st breakpoints[MAX_BREAKPOINTS];
+static unsigned int breakpoint_no = 0;
+
+
+// REMOVE a breakpoint. Warning: there is no need to call this on breakpoints which are added as "temp" (see add_breakpoint() function) _AND_ that breakpoint was hit
+// Warning2: removing a breakpoint other than the last added one causes the indices in the breakpoint array to be changed!
+static void remove_breakpoint ( const unsigned int n )
+{
+	if (XEMU_UNLIKELY(n >= breakpoint_no)) {
+		ERROR_WINDOW("Refusing impossible breakpoint (#%u) to be removed (current number of breakpoints: %u)!", n, breakpoint_no);
+	}
+	breakpoint_no--;
+	if (!breakpoint_no)
+		cpu65.debug_callbacks.exec = 0;		// stop tracing mode if no breakpoint is left!
+	else if (n != breakpoint_no - 2)
+		memmove(breakpoints + n, breakpoints + n + 1, (breakpoint_no - n) * sizeof(struct breakpoint_st));
+}
+
+
+static bool stopper_breakpoint_callback ( const unsigned int n )
+{
+	return false;	// stop the CPU!
+}
+
+
+// Parameters:
+//	pc:		PC value to assign breakpoint for
+//	callback:	callback function pointer, will be called when breakpoint is hit, it must return with false to stop the CPU on breakpoint hit
+//			(stopper_breakpoint_callback is a simple one, it causes to stop the CPU, but you can provide your own, if needed)
+//	temp:		true = temporary breakpoint, automatically removed when hit (can be useful on step over opcodes mode for example)
+//	user_data:	FIXME
+static void add_breakpoint ( const Uint16 pc, bool (*callback)(const unsigned int), const bool temp, const void *user_data )
+{
+	if (XEMU_UNLIKELY(breakpoint_no == MAX_BREAKPOINTS - 1)) {
+		ERROR_WINDOW("Too many existing (%u) breakpoints, cannot add another one!", breakpoint_no);
+		return;
+	}
+	cpu65.debug_callbacks.exec = 1;			// activate trace mode (in case if it's the first breakpoint to be used)
+	breakpoints[breakpoint_no].pc = pc;
+	breakpoints[breakpoint_no].callback = callback;
+	breakpoints[breakpoint_no].temp = temp;
+	breakpoints[breakpoint_no].user_data = user_data;
+	breakpoint_no++;
+}
+
+
+
+void cpu65_execution_debug_callback ( void )
+{
+	for (unsigned int n = 0; n < breakpoint_no; n++) {
+		if (cpu65.pc == breakpoints[n].pc) {
+			DEBUGPRINT("DEBUGGER: hitting breakpoint #%u at PC=$%04X" NL, n, cpu65.pc);
+			cpu65.running = breakpoints[n].callback(n);
+			if (breakpoints[n].temp)
+				remove_breakpoint(n);
+			return;
+		}
+	}
+}
+
+void cpu65_nmi_debug_callback ( void )
+{
+	//if (trace_over_interrupt)
+	//	add_breakpoint(cpu65.pc, stopper_breakpoint_callback, true, NULL);
+	// Nothing here yet
+}
+
+void cpu65_irq_debug_callback ( void )
+{
+	// Nothing here yet
+}
+
+
+void cpu65_brk_debug_callback ( void )
+{
+	// Nothing here yet
+	DEBUGPRINT("DEBUGGER: BRK is executing at $%04X" NL, cpu65.pc);
+}
+
+
+void cpu65_reset_debug_callback ( void )
+{
+	// Nothing here yet
+}
+
+
+static void subsystem_init ( void )
+{
+	static bool done = false;
+	if (done)
+		return;
+	done = true;
+	cpu65.debug_callbacks.brk = 1;
+
+}
+
 
 
 static char *parse_hex_arg ( char *p, int *val, int min, int max )
@@ -382,6 +487,7 @@ int uartmon_is_active ( void )
 
 int uartmon_init ( const char *fn )
 {
+	subsystem_init();
 	static char fn_stored[PATH_MAX] = "";
 	int xerr;
 	xemusock_socket_t sock;

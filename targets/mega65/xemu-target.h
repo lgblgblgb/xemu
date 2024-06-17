@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -21,12 +21,17 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define CPU_65CE02
 #define MEGA65
 #define CPU65_65CE02_6502NMOS_TIMING_EMULATION
-//#define XEMU_SNAPSHOT_SUPPORT "MEGA65"
 #define CPU_STEP_MULTI_OPS
 //#define DEBUG_CPU
 #define CPU_CUSTOM_MEMORY_FUNCTIONS_H "cpu_custom_functions.h"
 #define CPU65 cpu65
 //#define CPU65_DISCRETE_PF_NZ
+
+
+// Forces xemu/emutools.c to have a callback on window title update: used in MEGA65 emu
+// to set the status of the emulator (ie: paused, running, ...)
+// FIXME: define this conditionally when umon/uartmon (?) is enabled
+#define WINDOW_TITLE_PRE_UPDATE_CALLBACK window_title_pre_update_callback
 
 // #define DO_NOT_FORCE_UNREACHABLE
 
@@ -37,6 +42,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define HAVE_XEMU_UMON
 #endif
 #define HAVE_XEMU_INSTALLER
+
+#ifdef HAS_UARTMON_SUPPORT
+#define CPU65_DEBUG_CALLBACK_SUPPORT
+#endif
 
 #ifndef XEMU_ARCH_HTML
 #define CONFIG_DROPFILE_CALLBACK

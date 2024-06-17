@@ -359,8 +359,13 @@ void cpu65_init ( void ) {
 	if (done)
 		return;
 	done = true;
-#ifdef CPU65_EXECUTION_CALLBACK_SUPPORT
-	cpu65_disable_debug_callbacks();
+#ifdef CPU65_DEBUG_CALLBACK_SUPPORT
+	CPU65.running = true;
+	CPU65.debug_callbacks.exec = 0;
+	CPU65.debug_callbacks.irq = 0;
+	CPU65.debug_callbacks.nmi = 0;
+	CPU65.debug_callbacks.brk = 0;
+	CPU65.debug_callbacks.reset = 0;
 #endif
 }
 
@@ -397,6 +402,10 @@ void cpu65_reset ( void ) {
 			CPU65.pc, // FIXME
 			HAS_NMOS_BUG_BCD ? "NMOS-6502" : "65C02+"
 	);
+#ifdef	CPU65_DEBUG_CALLBACK_SUPPORT
+	if (CPU65.debug_callbacks.reset)
+		cpu65_reset_debug_callback();
+#endif
 }
 
 void cpu65_debug_set_pc ( const Uint16 new_pc ) {
@@ -836,21 +845,21 @@ static XEMU_INLINE void _RORQ_Q ( void ) {
 #endif
 
 
-#ifdef CPU65_EXECUTION_CALLBACK_SUPPORT
+#ifdef CPU65_DEBUG_CALLBACK_SUPPORT
 #	ifdef CPU_STEP_MULTI_OPS
 #		define ELAPSED_CYCLES_BEFORE_CURRENT_OP all_cycles
 #	else
 		// if CPU_STEP_MULTI_OPS is not enabled there was no previous op within the current invokation of CPU65 emulation step
 #		define ELAPSED_CYCLES_BEFORE_CURRENT_OP 0
 #	endif
-#	define DO_CPU65_EXECUTION_CALLBACK(cb_func) \
-		if (XEMU_UNLIKELY(CPU65.execution_debug_callback)) { \
+#	define DO_CPU65_EXECUTION_CALLBACK(is_enabled,cb_func) \
+		if (XEMU_UNLIKELY(is_enabled)) { \
 			cb_func(); \
 			if (XEMU_UNLIKELY(!CPU65.running)) \
 				return ELAPSED_CYCLES_BEFORE_CURRENT_OP; \
 		}
 #else
-#	define DO_CPU65_EXECUTION_CALLBACK(cb_func)
+#	define DO_CPU65_EXECUTION_CALLBACK(is_enabled,cb_func)
 #endif
 
 
@@ -881,7 +890,7 @@ int cpu65_step (
 #ifdef DEBUG_CPU
 		DEBUG("CPU: serving NMI on NMI edge at PC $%04X" NL, CPU65.pc);
 #endif
-		DO_CPU65_EXECUTION_CALLBACK(cpu65_nmi_debug_callback);
+		DO_CPU65_EXECUTION_CALLBACK(CPU65.debug_callbacks.nmi, cpu65_nmi_debug_callback);
 		CPU65.nmiEdge = 0;
 		pushWord(CPU65.pc);
 		push(cpu65_get_pf());	// no CPU65_PF_B is pushed!
@@ -906,7 +915,7 @@ int cpu65_step (
 #ifdef DEBUG_CPU
 		DEBUG("CPU: serving IRQ on IRQ level at PC $%04X" NL, CPU65.pc);
 #endif
-		DO_CPU65_EXECUTION_CALLBACK(cpu65_irq_debug_callback);
+		DO_CPU65_EXECUTION_CALLBACK(CPU65.debug_callbacks.irq, cpu65_irq_debug_callback);
 		pushWord(CPU65.pc);
 		push(cpu65_get_pf());	// no CPU65_PF_B is pushed!
 		CPU65.pf_i = 1;
@@ -925,7 +934,7 @@ int cpu65_step (
 		DEBUG("CPU: WARN: PC at zero!" NL);
 #endif
 	CPU65.op = readByte(CPU65.pc);
-	DO_CPU65_EXECUTION_CALLBACK(cpu65_execution_debug_callback);
+	DO_CPU65_EXECUTION_CALLBACK(CPU65.debug_callbacks.exec, cpu65_execution_debug_callback);
 	CPU65.pc++;
 #ifdef DEBUG_CPU
 	DEBUG("CPU: at $%04X opcode = $%02X %s %s A=%02X X=%02X Y=%02X Z=%02X SP=%02X" NL, (CPU65.pc - 1) & 0xFFFF, CPU65.op, opcode_names[CPU65.op], opcode_adm_names[opcode_adms[CPU65.op]],
@@ -944,13 +953,16 @@ int cpu65_step (
 	CPU65.op_cycles = opcycles[CPU65.op];
 	switch (CPU65.op) {
 	case 0x00:	/* BRK Implied */
+			CPU65.pc--;	// special handling, we go back to the opcode exactly because of reporting and debug callbacks!!!
 #ifdef DEBUG_CPU
-			DEBUG("CPU: WARN: BRK is about executing at PC=$%04X" NL, (CPU65.pc - 1) & 0xFFFF);
+			DEBUG("CPU: WARN: BRK is about executing at PC=$%04X" NL, CPU65.pc);
 #ifdef MEGA65
-			DEBUG("CPU: BRK opcode linear address is $%X" NL, memory_cpurd2linear_xlat((CPU65.pc - 1) & 0xFFFF));
+			DEBUG("CPU: BRK opcode linear address is $%X" NL, memory_cpurd2linear_xlat(CPU65.pc));
 #endif
 #endif
-			pushWord(CPU65.pc + 1);
+			DO_CPU65_EXECUTION_CALLBACK(CPU65.debug_callbacks.brk, cpu65_brk_debug_callback);
+			CPU65.pc += 2;				// BRK opcode is special, though it's only one byte opcode, the reutrn address is actually +1 byte (and since we went back -1, now it's +2)
+			pushWord(CPU65.pc);
 			push(cpu65_get_pf() | CPU65_PF_B);	// BRK always pushes 'B' bit set (like PHP too, unlike hardware interrupts)
 			CPU65.pf_d = 0;				// actually, NMOS CPU does not do this for real, only 65C02+
 			CPU65.pf_i = 1;

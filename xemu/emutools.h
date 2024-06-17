@@ -176,6 +176,10 @@ extern void *xemu_realloc ( void *p, size_t size );
 
 extern int xemu_is_first_time_user ( void );
 
+#ifdef WINDOW_TITLE_PRE_UPDATE_CALLBACK
+extern void WINDOW_TITLE_PRE_UPDATE_CALLBACK ( void );
+#endif
+
 #if !defined(XEMU_ARCH_HTML) && !defined(XEMU_CPU_ARM)
 #define HAVE_MM_MALLOC
 #endif
