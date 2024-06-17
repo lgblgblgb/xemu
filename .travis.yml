@@ -1,4 +1,4 @@
-dist: noble
+dist: jammy
 sudo: required
 language: c
 
