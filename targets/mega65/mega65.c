@@ -66,12 +66,9 @@ static int trace_step_trigger = 0;
 #ifdef HAS_UARTMON_SUPPORT
 static void (*m65mon_callback)(void) = NULL;
 #endif
-static const char emulator_paused_title[] = "TRACE/PAUSE";
 static char emulator_speed_title[64] = "";
-static char fast_mhz_in_string[16] = "";
-static const char *cpu_clock_speed_strs[4] = { "1MHz", "2MHz", "3.5MHz", fast_mhz_in_string };
-const char *cpu_clock_speed_string = "";
-static unsigned int cpu_clock_speed_str_index = 0;
+static char fast_mhz_as_string[16] = "";
+const char *cpu_clock_speed_string_p = "";
 static unsigned int cpu_cycles_per_scanline;
 int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 static Uint8 i2c_regs_original[sizeof i2c_regs];
@@ -122,33 +119,43 @@ void machine_set_speed ( int verbose )
 			case 4:	// 100 - 1MHz
 			case 5:	// 101 - 1MHz
 				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C64_MHZ_CLOCK));
-				cpu_clock_speed_str_index = 0;
+				cpu_clock_speed_string_p = "1MHz";
 				cpu65_set_timing(0);
 				break;
 			case 0:	// 000 - 2MHz
 				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C128_MHZ_CLOCK));
-				cpu_clock_speed_str_index = 1;
+				cpu_clock_speed_string_p = "2MHz";
 				cpu65_set_timing(0);
 				break;
 			case 2:	// 010 - 3.5MHz
 			case 6:	// 110 - 3.5MHz
 				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C65_MHZ_CLOCK));
-				cpu_clock_speed_str_index = 2;
+				cpu_clock_speed_string_p = "3.5MHz";
 				cpu65_set_timing(1);
 				break;
 			case 1:	// 001 - 40MHz (or Xemu specified custom speed)
 			case 3:	// 011 -		-- "" --
 			case 7:	// 111 -		-- "" --
 				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(configdb.fast_mhz));
-				cpu_clock_speed_str_index = 3;
+				cpu_clock_speed_string_p = fast_mhz_as_string;
 				cpu65_set_timing(2);
 				break;
 		}
-		cpu_clock_speed_string = cpu_clock_speed_strs[cpu_clock_speed_str_index];
-		DEBUG("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_string, cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
+		DEBUG("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_string_p, cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
 		if (cpu_cycles_per_step > 1 && !hypervisor_is_debugged && !configdb.cpusinglestep)
 			cpu_cycles_per_step = cpu_cycles_per_scanline;	// if in trace mode (or hyper-debug ...), do not set this! So set only if non-trace and non-hyper-debug
 	}
+}
+
+
+void window_title_pre_update_callback ( void )
+{
+	static const char iomode_names[] = {'2', '3', 'E', '4'};
+	snprintf(emulator_speed_title, sizeof emulator_speed_title, "%s %s (%c)",
+		cpu_clock_speed_string_p, videostd_name,
+		in_hypervisor ? 'H' : iomode_names[io_mode]
+	);
+	window_title_custom_addon = paused ? "TRACE/PAUSE" : NULL;
 }
 
 
@@ -418,7 +425,7 @@ static void mega65_init ( void )
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_init(configdb.uartmon);
 #endif
-	sprintf(fast_mhz_in_string, "%.2fMHz", configdb.fast_mhz);
+	sprintf(fast_mhz_as_string, "%.2fMHz", configdb.fast_mhz);
 	DEBUGPRINT("SPEED: fast clock is set to %.2fMHz." NL, configdb.fast_mhz);
 	cpu65_init_mega_specific();
 	cpu65_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
@@ -685,9 +692,6 @@ static void update_emulator ( void )
 	// XXX: some things has been moved here from the main loop, however update_emulator is called from other places as well, FIXME check if it causes problems or not!
 	inject_ready_check_do();
 	audio65_sid_inc_framecount();
-	strcpy(emulator_speed_title, cpu_clock_speed_strs[cpu_clock_speed_str_index]);
-	strcat(emulator_speed_title, " ");
-	strcat(emulator_speed_title, videostd_name);
 	hid_handle_all_sdl_events();
 	xemugui_iteration();
 	nmi_set(IS_RESTORE_PRESSED(), 2);	// Custom handling of the restore key ...
@@ -747,15 +751,13 @@ static void emulation_loop ( void )
 			// XXX it's maybe a problem to call this!!! update_emulator() is called here which closes frame but no no reopen then ... FIXME: handle this somehow!
 			update_emulator();
 			if (trace_step_trigger) {
-				// if monitor trigges a step, break the pause loop, however we will get back the control on the next
+				// if monitor triggers a step, break the pause loop, however we will get back the control on the next
 				// iteration of the infinite "for" loop, as "paused" is not altered
 				trace_step_trigger = 0;
 				break;	// break the pause loop now
 			}
-			// Decorate window title about the mode.
 			// If "paused" mode is switched off ie by a monitor command (called from update_emulator() above!)
 			// then it will resets back the the original state, etc
-			window_title_custom_addon = paused ? (char*)emulator_paused_title : NULL;
 			if (paused != paused_old) {
 				paused_old = paused;
 				if (paused) {

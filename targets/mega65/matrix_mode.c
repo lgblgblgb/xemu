@@ -275,7 +275,7 @@ static void dump_regs ( const char rot_fig )
 		in_hypervisor ? 'H' : 'U',
 		rot_fig,
 		videostd_id ? "NTSC" : "PAL ",
-		cpu_clock_speed_string,
+		cpu_clock_speed_string_p,
 		(D6XX_registers[0x7D] & 16) ? '!' : ' '
 	);
 }

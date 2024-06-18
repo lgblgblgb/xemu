@@ -78,6 +78,6 @@ extern int  dump_screen       ( const char *fn );
 extern Uint8 last_dd00_bits;
 extern const char *last_reset_type;
 extern int cpu_cycles_per_step;
-extern const char *cpu_clock_speed_string;
+extern const char *cpu_clock_speed_string_p;
 
 #endif

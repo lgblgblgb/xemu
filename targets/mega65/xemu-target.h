@@ -27,6 +27,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define CPU65 cpu65
 //#define CPU65_DISCRETE_PF_NZ
 
+// Forces xemu/emutools.c to have a callback on window title update: used in MEGA65 emu
+// to set the status of the emulator (ie: paused, running, ...)
+// FIXME: define this conditionally when umon/uartmon (?) is enabled
+#define WINDOW_TITLE_PRE_UPDATE_CALLBACK window_title_pre_update_callback
+
 // #define DO_NOT_FORCE_UNREACHABLE
 
 #define HAVE_XEMU_EXEC_API
