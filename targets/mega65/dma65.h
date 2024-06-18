@@ -32,10 +32,4 @@ extern int   dma_get_revision             ( void );
 extern void  dma_get_list_addr_as_bytes   ( Uint8 *p );
 extern void  dma_set_list_addr_from_bytes ( const Uint8 *p );
 
-#ifdef XEMU_SNAPSHOT_SUPPORT
-#include "xemu/emutools_snapshot.h"
-extern int dma_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block );
-extern int dma_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
-#endif
-
 #endif

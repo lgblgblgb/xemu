@@ -275,10 +275,4 @@ extern char *vic4_textshot ( void );
 extern int   vic4_textinsert ( const char *text );
 extern void  vic4_set_emulation_colour_effect ( int val );
 
-#ifdef XEMU_SNAPSHOT_SUPPORT
-#include "xemu/emutools_snapshot.h"
-extern int vic4_snapshot_load_state ( const struct xemu_snapshot_definition_st *def , struct xemu_snapshot_block_st *block );
-extern int vic4_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
-#endif
-
 #endif

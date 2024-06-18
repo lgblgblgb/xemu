@@ -36,7 +36,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 	  would result in quite slow emulation :(
 	* FIXME: it uses thread, and it's horrible code!! there are tons of race conditions, etc ...
 	It's not so nice work to use threads, but it would be hard to do otherwise, sadly.
-	* FIXME FIXME FIXME: No support for snapshotting ...
 	* Maybe allow TUN devices to be supported. It does not handle ethernet level stuffs, no source and
 	target MAC for example :-O But TUN devices are supported by wider range of OSes (eg: OSX) and we
 	probably can emulate the missing ethernet level stuffs somehow in this source on RX (and chop

@@ -36,7 +36,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
 Uint8  D6XX_registers[0x100];		// mega65 specific D6XX range, excluding the UART part (not used here!)
-Uint8  D7XX[0x100];			// FIXME: hack for future M65 stuffs like ALU! FIXME: no snapshot on these!
+Uint8  D7XX[0x100];			// FIXME: hack for future M65 stuffs like ALU!
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 int    cpu_mega65_opcodes = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;

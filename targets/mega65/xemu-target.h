@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -21,7 +21,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define CPU_65CE02
 #define MEGA65
 #define CPU65_65CE02_6502NMOS_TIMING_EMULATION
-//#define XEMU_SNAPSHOT_SUPPORT "MEGA65"
 #define CPU_STEP_MULTI_OPS
 //#define DEBUG_CPU
 #define CPU_CUSTOM_MEMORY_FUNCTIONS_H "cpu_custom_functions.h"

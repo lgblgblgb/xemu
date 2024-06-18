@@ -30,7 +30,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/c64_kbd_mapping.h"
 #include "xemu/emutools_config.h"
 #include "xemu/emutools_umon.h"
-#include "m65_snapshot.h"
 #include "memory_mapper.h"
 #include "io_mapper.h"
 #include "ethernet65.h"
@@ -253,19 +252,6 @@ static Uint8 cia2_in_b ( void )
 }
 
 
-#ifdef XEMU_SNAPSHOT_SUPPORT
-static void m65_snapshot_saver_on_exit_callback ( void )
-{
-	if (!configdb.snapsave)
-		return;
-	if (xemusnap_save(configdb.snapsave))
-		ERROR_WINDOW("Could not save snapshot \"%s\": %s", configdb.snapsave, xemusnap_error_buffer);
-	else
-		INFO_WINDOW("Snapshot has been saved to \"%s\".", configdb.snapsave);
-}
-#endif
-
-
 static int preinit_memory_item ( const char *name, const char *desc, Uint8 *target_ptr, const Uint8 *source_ptr, const int source_size, const int min_size, const int max_size, const char *fn )
 {
 	if (source_size < min_size || source_size > max_size || min_size > max_size)
@@ -443,14 +429,6 @@ static void mega65_init ( void )
 	if (configdb.useutilmenu)
 		hwa_kbd_set_fake_key(0x20);
 	DEBUG("INIT: end of initialization!" NL);
-#ifdef XEMU_SNAPSHOT_SUPPORT
-	xemusnap_init(m65_snapshot_definition);
-	if (configdb.snapload) {
-		if (xemusnap_load(configdb.snapload))
-			FATAL("Couldn't load snapshot \"%s\": %s", configdb.snapload, xemusnap_error_buffer);
-	}
-	atexit(m65_snapshot_saver_on_exit_callback);
-#endif
 }
 
 
@@ -908,79 +886,3 @@ int main ( int argc, char **argv )
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;
 }
-
-/* --- SNAPSHOT RELATED --- */
-
-#ifdef XEMU_SNAPSHOT_SUPPORT
-
-#include <string.h>
-
-#define SNAPSHOT_M65_BLOCK_VERSION	2
-#define SNAPSHOT_M65_BLOCK_SIZE		(0x100 + sizeof(D6XX_registers) + sizeof(D7XX))
-
-
-int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
-{
-	Uint8 buffer[SNAPSHOT_M65_BLOCK_SIZE];
-	int a;
-	if (block->block_version != SNAPSHOT_M65_BLOCK_VERSION || block->sub_counter || block->sub_size != sizeof buffer)
-		RETURN_XSNAPERR_USER("Bad M65 block syntax");
-	a = xemusnap_read_file(buffer, sizeof buffer);
-	if (a) return a;
-	/* loading state ... */
-	memcpy(D6XX_registers, buffer + 0x100, sizeof D6XX_registers);
-	memcpy(D7XX, buffer + 0x200, sizeof D7XX);
-	in_hypervisor = 1;	// simulate hypervisor mode, to allow to write some regs now instead of causing a TRAP now ...
-	io_write(0x367D, D6XX_registers[0x7D]);			// write $(D)67D in VIC-IV I/O mode! (sets ROM protection, linear addressing mode enable ...)
-	// TODO FIXME: see if there is a need for other registers from D6XX_registers to write back to take effect on loading snapshot!
-	// end of spec, hypervisor-needed faked mode for loading snapshot ...
-	map_mask = (int)P_AS_BE32(buffer + 0);
-	map_offset_low = (int)P_AS_BE32(buffer + 4);
-	map_offset_high = (int)P_AS_BE32(buffer + 8);
-	cpu65.cpu_inhibit_interrupts = (int)P_AS_BE32(buffer + 12);
-	in_hypervisor = (int)P_AS_BE32(buffer + 16);	// sets hypervisor state from snapshot (hypervisor/userspace)
-	map_megabyte_low = (int)P_AS_BE32(buffer + 20);
-	map_megabyte_high = (int)P_AS_BE32(buffer + 24);
-	//force_fast_loaded = (int)P_AS_BE32(buffer + 28);	// activated in m65emu_snapshot_loading_finalize() as force_fast can be set at multiple places through loading snapshot!
-	// +32 is free for 4 bytes now ... can be used later
-	memory_set_cpu_io_port_ddr_and_data(buffer[36], buffer[37]);
-	return 0;
-}
-
-
-int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
-{
-	Uint8 buffer[SNAPSHOT_M65_BLOCK_SIZE];
-	int a = xemusnap_write_block_header(def->idstr, SNAPSHOT_M65_BLOCK_VERSION);
-	if (a) return a;
-	memset(buffer, 0xFF, sizeof buffer);
-	/* saving state ... */
-	U32_AS_BE(buffer +  0, map_mask);
-	U32_AS_BE(buffer +  4, map_offset_low);
-	U32_AS_BE(buffer +  8, map_offset_high);
-	U32_AS_BE(buffer + 12, cpu65.cpu_inhibit_interrupts);
-	U32_AS_BE(buffer + 16, in_hypervisor);
-	U32_AS_BE(buffer + 20, map_megabyte_low);
-	U32_AS_BE(buffer + 24, map_megabyte_high);
-	//U32_AS_BE(buffer + 28, force_fast);	// see notes on this at load_state and finalize stuff!
-	// +32 is free for 4 bytes now ... can be used later
-	buffer[36] = memory_get_cpu_io_port(0);
-	buffer[37] = memory_get_cpu_io_port(1);
-	memcpy(buffer + 0x100, D6XX_registers, sizeof D6XX_registers);
-	memcpy(buffer + 0x200, D7XX, sizeof D7XX);
-	return xemusnap_write_sub_block(buffer, sizeof buffer);
-}
-
-
-int m65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
-{
-	DEBUGPRINT("SNAP: loaded (finalize-callback: begin)" NL);
-	memory_set_vic3_rom_mapping(vic_registers[0x30]);
-	memory_set_do_map();
-	//force_fast = force_fast_loaded;	// force_fast is handled through different places, so we must have a "finalize" construct and saved separately to have the actual effect ...
-	machine_set_speed(1);
-	DEBUGPRINT("SNAP: loaded (finalize-callback: end)" NL);
-	OSD(-1, -1, "Snapshot has been loaded.");
-	return 0;
-}
-#endif

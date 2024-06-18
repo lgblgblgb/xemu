@@ -57,10 +57,6 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "dumpmem",	NULL, "Save memory content on exit", &configdb.dumpmem },
 	{ "dumpscreen",	NULL, "Save screen content (ASCII) on exit", &configdb.dumpscreen },
 	{ "screenshot",	NULL, "Save screenshot (PNG) on exit and vice-versa (for testing!)", &configdb.screenshot_and_exit },
-#ifdef XEMU_SNAPSHOT_SUPPORT
-	{ "snapload",	NULL, "Load a snapshot from the given file", &configdb.snapload },
-	{ "snapsave",	NULL, "Save a snapshot into the given file before Xemu would exit", &configdb.snapsave },
-#endif
 #ifdef HAS_UARTMON_SUPPORT
 	{ "uartmon",	NULL, "Sets the name for named unix-domain socket for uartmon, otherwise disabled", &configdb.uartmon },
 #endif
