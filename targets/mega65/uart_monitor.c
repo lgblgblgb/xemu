@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -16,44 +16,34 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-#include "xemu/emutools.h"
-#include "mega65.h"
-#include "uart_monitor.h"
-
-
 #if !defined(HAS_UARTMON_SUPPORT)
-// Windows is not supported currently, as it does not have POSIX-standard socket interface (?).
-// Also, it's pointless for emscripten, for sure.
 #warning "Platform does not support UMON"
 #else
 
+#include "xemu/emutools.h"
+#include "mega65.h"
+#include "uart_monitor.h"
+#include "xemu/cpu65.h"
+#include "memory_mapper.h"
 #include "sdcard.h"
-
 #include "xemu/emutools_socketapi.h"
-
-//#include <sys/types.h>
-//#include <sys/stat.h>
-//#include <fcntl.h>
-//#include <errno.h>
 #include <string.h>
-//#include <limits.h>
 
 #ifndef XEMU_ARCH_WIN
 #include <unistd.h>
 #include <sys/un.h>
-//#include <sys/socket.h>
-//#include <netinet/in.h>
-//#include <netdb.h>
 #endif
 
-int  umon_write_size;
-int  umon_send_ok;
-char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
-
-#define UNCONNECTED	XS_INVALID_SOCKET
-
-#define PRINTF_SOCK	PRINTF_S64
-
+#define UMON_WRITE_BUFFER_SIZE	0x4000
+#define umon_printf(...)	do { \
+					if (XEMU_LIKELY(umon_write_size < UMON_WRITE_BUFFER_SIZE - 1)) \
+						umon_write_size += snprintf(umon_write_buffer + umon_write_size, UMON_WRITE_BUFFER_SIZE - umon_write_size, __VA_ARGS__); \
+					else \
+						_umon_write_size_panic(); \
+				} while(0)
+#define UMON_SYNTAX_ERROR	"?SYNTAX ERROR  "
+#define UNCONNECTED		XS_INVALID_SOCKET
+#define PRINTF_SOCK		PRINTF_S64
 
 static xemusock_socket_t  sock_server = UNCONNECTED;
 static xemusock_socklen_t sock_len;
@@ -62,10 +52,120 @@ static xemusock_socket_t  sock_client = UNCONNECTED;
 static int  umon_write_pos, umon_read_pos;
 static int  umon_echo;
 static char umon_read_buffer [0x1000];
+static int  umon_write_size;
+static int  umon_send_ok;
+static char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
+
+void (*m65mon_callback)(void) = NULL;
+int breakpoint_pc = -1;
 
 
-// WARNING: This source is pretty ugly, ie not so much check of overflow of the output (write) buffer.
 
+static void _umon_write_size_panic ( void )
+{
+	DEBUGPRINT("UARTMON: warning: too long message (%d/%d), cannot fit into the output buffer!" NL, umon_write_pos, UMON_WRITE_BUFFER_SIZE);
+}
+
+static void m65mon_show_regs ( void )
+{
+	Uint8 pf = cpu65_get_pf();
+	umon_printf(
+		"\r\n"
+		"PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
+		"%04X %02X %02X %02X %02X %02X %04X "		// register banned message and things from PC to SP
+		"%04X %04X %02X       %02X %02X "		// from MAPL to P
+		"%c%c%c%c%c%c%c%c ",				// P-FLAGS
+		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z, cpu65.bphi >> 8, cpu65.sphi | cpu65.s,
+		((map_mask & 0x0F) << 12) | (map_offset_low  >> 8),
+		((map_mask & 0xF0) <<  8) | (map_offset_high >> 8),
+		cpu65.op,
+		pf, 0,	// flags
+		(pf & CPU65_PF_N) ? 'N' : '-',
+		(pf & CPU65_PF_V) ? 'V' : '-',
+		(pf & CPU65_PF_E) ? 'E' : '-',
+		'-',
+		(pf & CPU65_PF_D) ? 'D' : '-',
+		(pf & CPU65_PF_I) ? 'I' : '-',
+		(pf & CPU65_PF_Z) ? 'Z' : '-',
+		(pf & CPU65_PF_C) ? 'C' : '-'
+	);
+}
+
+static void m65mon_set_pc ( const Uint16 addr )
+{
+	cpu65_debug_set_pc(addr);
+}
+
+static void m65mon_dumpmem16 ( Uint16 addr )
+{
+	int n = 16;
+	umon_printf(":000%04X:", addr);
+	while (n--)
+		umon_printf("%02X", debug_read_cpu_byte(addr++));
+}
+
+static void m65mon_dumpmem28 ( int addr )
+{
+	int n = 16;
+	addr &= 0xFFFFFFF;
+	umon_printf(":%07X:", addr);
+	while (n--)
+		umon_printf("%02X", debug_read_linear_byte(addr++));
+}
+
+static void m65mon_setmem28 ( int addr, int cnt, Uint8* vals )
+{
+	while (--cnt >= 0)
+		debug_write_linear_byte(addr++, *(vals++));
+}
+
+static void m65mon_set_trace ( int m )
+{
+	paused = m;
+}
+
+#ifdef TRACE_NEXT_SUPPORT
+static void m65mon_do_next ( void )
+{
+	if (paused) {
+		umon_send_ok = 0;			// delay command execution!
+		m65mon_callback = m65mon_show_regs;	// register callback
+		trace_next_trigger = 2;			// if JSR, then trigger until RTS to next_addr
+		orig_sp = cpu65.sphi | cpu65.s;
+		paused = 0;
+	} else {
+		umon_printf(UMON_SYNTAX_ERROR "trace can be used only in trace mode");
+	}
+}
+#endif
+
+static void m65mon_do_trace ( void )
+{
+	if (paused) {
+		umon_send_ok = 0; // delay command execution!
+		m65mon_callback = m65mon_show_regs; // register callback
+		trace_step_trigger = 1;	// trigger one step
+	} else {
+		umon_printf(UMON_SYNTAX_ERROR "trace can be used only in trace mode");
+	}
+}
+
+static void m65mon_do_trace_c ( void )
+{
+	umon_printf(UMON_SYNTAX_ERROR "command 'tc' is not implemented yet");
+}
+#ifdef TRACE_NEXT_SUPPORT
+static void m65mon_next_command ( void )
+{
+	if (paused)
+		m65mon_do_next();
+}
+#endif
+static void m65mon_empty_command ( void )
+{
+	if (paused)
+		m65mon_do_trace();
+}
 
 static char *parse_hex_arg ( char *p, int *val, int min, int max )
 {
@@ -210,7 +310,7 @@ static void execute_command ( char *cmd )
 		case 'b':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
 			if (cmd && check_end_of_command(cmd, 1))
-				m65mon_breakpoint(par1);
+				set_breakpoint(par1);
 			break;
 		case 'g':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
