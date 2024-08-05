@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMU_MEGA65_MEMORY_MAPPER_H_INCLUDED
 
 extern void memory_init ( void );
+extern void memory_reset_unwritten_debug_stat ( void );
 extern void memory_set_rom_protection ( const bool protect );
 extern void memory_reconfigure (
 	const Uint8 d030_value, const Uint8 new_io_mode, const Uint8 new_cpu_port0, const Uint8 new_cpu_port1,

@@ -112,6 +112,7 @@ struct configdb_st {
 	int	matrixstart;
 	int	matrixdisable;
 	char	*winpos;
+	int	ramcheckread;
 };
 
 extern struct configdb_st configdb;

@@ -269,6 +269,7 @@ void hypervisor_start_machine ( void )
 	extract_version_string(hyppo_version_string, sizeof hyppo_version_string);
 	DEBUGPRINT("HYPERVISOR: HYPPO version \"%s\" (%s) starting with TRAP reset (#$%02X)" NL, hyppo_version_string, hickup_is_overriden ? "OVERRIDEN" : "built-in", TRAP_RESET);
 	hypervisor_enter(TRAP_RESET);
+	memory_reset_unwritten_debug_stat();
 }
 
 
@@ -299,6 +300,7 @@ static inline void first_leave ( void )
 	hdos_notify_system_start_end();
 	xemu_sleepless_temporary_mode(0);	// turn off temporary sleepless mode which may have been enabled before
 	vic_frame_counter_since_boot = 0;
+	//memory_reset_unwritten_debug_stat();	// FIXME/TODO: commented out since it generates a **tons** of warnings then with the "unwritten mem read" debug mode (-ramcheckread emu option)
 	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 }
 
