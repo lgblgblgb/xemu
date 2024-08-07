@@ -43,7 +43,6 @@ static Uint32 *current_pixel;					// current_pixel pointer to the rendering targ
 static Uint32 *pixel_start;					// points to the end and start of the buffer
 static Uint32 *pixel_raster_start;				// first pixel of current raster
 Uint8 vic_registers[0x80];					// VIC4 registers
-unsigned int vic_iomode;					// VIC2/VIC3/VIC4 mode
 static int compare_raster;					// raster compare (9 bits width) data
 static int logical_raster = 0;
 static int interrupt_status;					// Interrupt status of VIC
@@ -151,7 +150,7 @@ void vic_reset ( void )
 {
 	vic_frame_counter = 0;
 	vic_frame_counter_since_boot = 0;
-	vic_iomode = VIC2_IOMODE;
+	memory_set_io_mode(VIC2_IOMODE);
 	vic_color_register_mask = 0x0F;
 	interrupt_status = 0;
 	compare_raster = 0;
@@ -658,11 +657,11 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 					case 0x4554: vic_new_iomode = VIC4ETH_IOMODE; break;
 					case 0x4753: vic_new_iomode = VIC4_IOMODE;    break;
 				}
-				if (vic_new_iomode != vic_iomode) {
+				if (vic_new_iomode != io_mode) {
 					static const Uint8 color_register_masks[4] = { 0x0F, 0xFF, 0xFF, 0xFF };
-					DEBUG("VIC4: changing I/O mode %d(%s) -> %d(%s)" NL, vic_iomode, iomode_names[vic_iomode], vic_new_iomode, iomode_names[vic_new_iomode]);
-					vic_iomode = vic_new_iomode;
-					vic_color_register_mask = color_register_masks[vic_iomode];
+					DEBUG("VIC4: changing I/O mode %d(%s) -> %d(%s)" NL, io_mode, iomode_names[io_mode], vic_new_iomode, iomode_names[vic_new_iomode]);
+					memory_set_io_mode(vic_new_iomode);
+					vic_color_register_mask = color_register_masks[io_mode];
 				}
 			} else
 				DEBUGPRINT("VIC4: warning: I/O mode KEY $D02F register wanted to be written (with $%02X) in hypervisor mode! PC=$%04X" NL, data, cpu65.old_pc);
@@ -676,7 +675,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			return;		// it IS important to have return here, since it's not a "real" VIC4 mode register's view in another mode!!
 		/* --- NO MORE VIC2 REGS FROM HERE --- */
 		CASE_VIC_3_4(0x30):
-			memory_set_vic3_rom_mapping(data);
+			memory_write_d030(data);
 			check_if_rom_palette(!(data & 4));
 			break;
 		CASE_VIC_3_4(0x31):
@@ -1360,7 +1359,7 @@ static XEMU_INLINE Uint8 *get_charset_effective_addr ( void )
 	// However it seems even MEGA65 does not support this.
 	// FIXME: how we can be sure, there won't be any out-of-bound access for the relative small WOM then?
 	if (!REG_BMM && (addr == 0x1000 || addr == 0x9000 || addr == 0x1800 || addr == 0x9800))
-		return char_wom + (addr & 0xFFF);
+		return char_ram + (addr & 0xFFF);
 	// FIXME XXX this is a fixed constant for checking.
 	if (XEMU_UNLIKELY(addr > 0x60000))	// this is valid since we still have got some extra unused RAM left to go beyond actual RAM while bulding the frame
 		return main_ram + 0x60000;	// give some unused ram array of emulaton, thus whatever high value set by user as ADDR, won't overflow during the frame
@@ -1398,7 +1397,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 		current_pixel += (CHARGEN_X_START - border_x_left);
 		xcounter += (CHARGEN_X_START - border_x_left);
 		const int xcounter_start = xcounter;
-		Uint8 char_fetch_offset = 0;
+		Sint8 char_fetch_offset = 0;
 		// Chargen starts here.
 		while (line_char_index < REG_CHRCOUNT) {
 			Uint16 color_data = colour_ram[(colour_ram_current_addr++) & 0x07FFF];
@@ -1434,7 +1433,10 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 					current_pixel = pixel_raster_start + xcounter;
 					// ---- End of the GOTOX re-positioning functionality implementation ----
 					line_char_index++;
-					char_fetch_offset = char_value >> 13;
+					char_fetch_offset = (char_value >> 13) & 7;
+					// If ScreenRAMByte1 bit 4 is set then the char_fetch_offset should be subtracted and not added
+					if (char_value & (1 << 12))
+						char_fetch_offset = -char_fetch_offset;
 					if (SXA_VERTICAL_FLIP(color_data))
 						enable_bg_paint = 0;
 					if (SXA_ATTR_BOLD(color_data) && SXA_ATTR_REVERSE(color_data) && !REG_VICIII_ATTRIBS)
@@ -1471,7 +1473,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 			} else if (CHAR_IS256_COLOR(char_id)) {	// 256-color character
 				// fgcolor in case of FCM should mean colour index $FF
 				// FIXME: check if the passed palette[color_data & 0xFF] is correct or another index should be used for that $FF colour stuff
-				const Uint32 *palette_now = SXA_ATTR_ALTPALETTE(color_data) ? altpalette : used_palette;
+				const Uint32 *palette_now = ((REG_VICIII_ATTRIBS) && SXA_ATTR_ALTPALETTE(color_data)) ? altpalette : used_palette;
 				vic4_render_fullcolor_char_row(
 					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
 					8 - glyph_trim,
@@ -1700,56 +1702,3 @@ void vic4_set_emulation_colour_effect ( int val )
 		vic4_revalidate_all_palette();
 	}
 }
-
-
-/* --- SNAPSHOT RELATED --- */
-
-
-#ifdef XEMU_SNAPSHOT_SUPPORT
-
-#include <string.h>
-
-#define SNAPSHOT_VIC4_BLOCK_VERSION	2
-#define SNAPSHOT_VIC4_BLOCK_SIZE	(0x100 + ((NO_OF_PALETTE_REGS) * 3))
-
-int vic4_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
-{
-	Uint8 buffer[SNAPSHOT_VIC4_BLOCK_SIZE];
-	int a;
-	if (block->block_version != SNAPSHOT_VIC4_BLOCK_VERSION || block->sub_counter || block->sub_size != sizeof buffer)
-		RETURN_XSNAPERR_USER("Bad VIC4 block syntax");
-	a = xemusnap_read_file(buffer, sizeof buffer);
-	if (a) return a;
-	/* loading state ... */
-	for (a = 0; a < 0x80; a++)
-		vic_write_reg(a, buffer[a + 0x80]);
-	c128_d030_reg = buffer[0x7F];
-	memcpy(vic_palette_bytes_red,   buffer + 0x100                         , NO_OF_PALETTE_REGS);
-	memcpy(vic_palette_bytes_green, buffer + 0x100 +     NO_OF_PALETTE_REGS, NO_OF_PALETTE_REGS);
-	memcpy(vic_palette_bytes_blue,  buffer + 0x100 + 2 * NO_OF_PALETTE_REGS, NO_OF_PALETTE_REGS);
-	vic4_revalidate_all_palette();
-	vic_iomode = buffer[0];
-	DEBUG("SNAP: VIC4: changing I/O mode to %d(%s)" NL, vic_iomode, iomode_names[vic_iomode]);
-	interrupt_status = (int)P_AS_BE32(buffer + 1);
-	return 0;
-}
-
-
-int vic4_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
-{
-	Uint8 buffer[SNAPSHOT_VIC4_BLOCK_SIZE];
-	int a = xemusnap_write_block_header(def->idstr, SNAPSHOT_VIC4_BLOCK_VERSION);
-	if (a) return a;
-	memset(buffer, 0xFF, sizeof buffer);
-	/* saving state ... */
-	memcpy(buffer + 0x80, vic_registers, 0x80);	// $80 bytes
-	buffer[0x7F] = c128_d030_reg;
-	memcpy(buffer + 0x100                         , vic_palette_bytes_red,   NO_OF_PALETTE_REGS);
-	memcpy(buffer + 0x100 +     NO_OF_PALETTE_REGS, vic_palette_bytes_green, NO_OF_PALETTE_REGS);
-	memcpy(buffer + 0x100 + 2 * NO_OF_PALETTE_REGS, vic_palette_bytes_blue,  NO_OF_PALETTE_REGS);
-	buffer[0] = vic_iomode;
-	U32_AS_BE(buffer + 1, interrupt_status);
-	return xemusnap_write_sub_block(buffer, sizeof buffer);
-}
-
-#endif

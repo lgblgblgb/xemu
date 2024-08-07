@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -63,11 +63,5 @@ static inline int has_block_nonzero_byte ( const Uint8 *p )
 			return 1;
 	return 0;
 }
-
-#ifdef XEMU_SNAPSHOT_SUPPORT
-#include "xemu/emutools_snapshot.h"
-extern int sdcard_snapshot_load_state ( const struct xemu_snapshot_definition_st *def , struct xemu_snapshot_block_st *block );
-extern int sdcard_snapshot_save_state ( const struct xemu_snapshot_definition_st *def );
-#endif
 
 #endif

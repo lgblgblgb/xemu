@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -25,49 +25,37 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef __XEMU_MEGA65_CPU_CUSTOM_FUNCTIONS_H_INCLUDED
 #define __XEMU_MEGA65_CPU_CUSTOM_FUNCTIONS_H_INCLUDED
 
+#define MEM_USE_DATA_POINTERS
+
+#ifdef MEM_USE_DATA_POINTERS
+#define MEM_DATA_POINTER_HINTING_STRENGTH(_condition) XEMU_LIKELY(_condition)
+//#define MEM_DATA_POINTER_HINTING_STRENGTH(_condition) (_condition)
+#endif
+
 #ifdef CPU_CUSTOM_MEMORY_FUNCTIONS_H
-#define CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR static XEMU_INLINE
+#	define CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR static XEMU_INLINE
 #else
-#ifndef ALLOW_CPU_CUSTOM_FUNCTIONS_INCLUDE
-#error "cpu_custom_functions.h must not be included by anything other than the CPU emulator and memory_mapper.c"
-#endif
-#define CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR
-#endif
-
-#if 1
-#define CALL_MEMORY_READER(slot,addr)		mem_page_rd_f[slot](mem_page_rd_o[slot] + ((addr) & 0xFF))
-#define CALL_MEMORY_WRITER(slot,addr,data)	mem_page_wr_f[slot](mem_page_wr_o[slot] + ((addr) & 0xFF), data)
-#define CALL_MEMORY_READER_PAGED(slot,addr)		mem_page_rd_f[slot](mem_page_rd_o[slot] + addr)
-#define CALL_MEMORY_WRITER_PAGED(slot,addr,data)	mem_page_wr_f[slot](mem_page_wr_o[slot] + addr, data)
-#define SAVE_USED_SLOT(slot)			last_slot_ref = slot
-#define MEMORY_HANDLERS_ADDR_TYPE		int area_offset
-#define GET_READER_OFFSET()			area_offset
-#define	GET_WRITER_OFFSET()			area_offset
-#define GET_OFFSET_BYTE_ONLY()			area_offset
-#define GET_USED_SLOT()				last_slot_ref
+#	ifndef ALLOW_CPU_CUSTOM_FUNCTIONS_INCLUDE
+#		error "cpu_custom_functions.h must not be included by anything other than the CPU emulator and memory_mapper.c"
+#	endif
+#	define CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR
 #endif
 
-#if 0
-#define CALL_MEMORY_READER(slot,addr)		mem_page_rd_f[slot](slot, addr)
-#define CALL_MEMORY_WRITER(slot,addr,data)	mem_page_wr_f[slot](slot, addr, data)
-#define CALL_MEMORY_READER_PAGED(slot,addr)		mem_page_rd_f[slot](slot, addr)
-#define CALL_MEMORY_WRITER_PAGED(slot,addr,data)	mem_page_wr_f[slot](slot, addr, data)
-#define SAVE_USED_SLOT(slot)
-#define MEMORY_HANDLERS_ADDR_TYPE		int slot, Uint8 lo_addr
-#define GET_READER_OFFSET()			(mem_page_rd_o[slot] + lo_addr)
-#define	GET_WRITER_OFFSET()			(mem_page_wr_o[slot] + lo_addr)
-#define GET_OFFSET_BYTE_ONLY()			lo_addr
-#define GET_USED_SLOT()				slot
+extern Uint32 ref_slot;
+
+typedef Uint8 (*mem_slot_rd_func_t)(const Uint32 addr32);
+typedef void  (*mem_slot_wr_func_t)(const Uint32 addr32, const Uint8 data);
+
+#define MEM_SLOTS_TOTAL_EXPORTED 0x106
+extern mem_slot_rd_func_t mem_slot_rd_func[MEM_SLOTS_TOTAL_EXPORTED];
+extern mem_slot_wr_func_t mem_slot_wr_func[MEM_SLOTS_TOTAL_EXPORTED];
+extern Uint32 mem_slot_rd_addr32[MEM_SLOTS_TOTAL_EXPORTED];
+extern Uint32 mem_slot_wr_addr32[MEM_SLOTS_TOTAL_EXPORTED];
+#ifdef MEM_USE_DATA_POINTERS
+extern Uint8 *mem_slot_rd_data[MEM_SLOTS_TOTAL_EXPORTED];
+extern Uint8 *mem_slot_wr_data[MEM_SLOTS_TOTAL_EXPORTED];
 #endif
 
-
-typedef Uint8 (*mem_page_rd_f_type)(MEMORY_HANDLERS_ADDR_TYPE);
-typedef void  (*mem_page_wr_f_type)(MEMORY_HANDLERS_ADDR_TYPE, Uint8 data);
-
-extern int mem_page_rd_o[];
-extern int mem_page_wr_o[];
-extern mem_page_rd_f_type mem_page_rd_f[];
-extern mem_page_wr_f_type mem_page_wr_f[];
 extern int cpu_rmw_old_data;
 
 extern void   cpu65_write_linear_opcode_callback ( Uint8 data );
@@ -77,20 +65,33 @@ extern Uint32 cpu65_read_linear_long_opcode_callback  ( const Uint8 index );
 
 extern void  cpu65_illegal_opcode_callback ( void );
 
-extern int memory_cpurd2linear_xlat ( Uint16 cpu_addr);
+extern Uint32 memory_cpu_addr_to_linear ( const Uint16 cpu_addr, Uint32 *wr_addr_p );
+#define memory_cpurd2linear_xlat(_cpu_addr) memory_cpu_addr_to_linear(_cpu_addr,NULL)
 
-CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR Uint8 cpu65_read_callback ( Uint16 addr ) {
-	return CALL_MEMORY_READER(addr >> 8, addr);
+CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR Uint8 cpu65_read_callback  ( const Uint16 addr16 )
+{
+#ifdef	MEM_USE_DATA_POINTERS
+	register const Uint8 *p = mem_slot_rd_data[addr16 >> 8];
+	if (MEM_DATA_POINTER_HINTING_STRENGTH(p))
+		return p[addr16 & 0xFFU];
+#endif
+	ref_slot = addr16 >> 8;
+	return mem_slot_rd_func[ref_slot](mem_slot_rd_addr32[ref_slot] + (addr16 & 0xFFU));
 }
-CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR void  cpu65_write_callback ( Uint16 addr, Uint8 data ) {
-	CALL_MEMORY_WRITER(addr >> 8, addr, data);
+
+CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR void  cpu65_write_callback ( const Uint16 addr16, const Uint8 data )
+{
+#ifdef	MEM_USE_DATA_POINTERS
+	register Uint8 *p = mem_slot_wr_data[addr16 >> 8];
+	if (MEM_DATA_POINTER_HINTING_STRENGTH(p)) {
+		p[addr16 & 0xFFU] = data;
+		return;
+	}
+#endif
+	ref_slot = addr16 >> 8;
+	mem_slot_wr_func[ref_slot](mem_slot_wr_addr32[ref_slot] + (addr16 & 0xFFU), data);
 }
-CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR Uint8 cpu65_read_paged_callback ( Uint8 page, Uint8 addr8 ) {
-	return CALL_MEMORY_READER_PAGED(page, addr8);
-}
-CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR void  cpu65_write_paged_callback ( Uint8 page, Uint8 addr8, Uint8 data ) {
-	CALL_MEMORY_WRITER_PAGED(page, addr8, data);
-}
+
 // Called in case of an RMW (read-modify-write) opcode write access.
 // Original NMOS 6502 would write the old_data first, then new_data.
 // It has no inpact in case of normal RAM, but it *does* with an I/O register in some cases!
@@ -98,19 +99,26 @@ CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR void  cpu65_write_paged_callback ( Uint8 p
 // However this leads to incompatibilities, as some software used the RMW behavour by intent.
 // Thus MEGA65 fixed the problem to "restore" the old way of RMW behaviour.
 // I also follow this path here, even if it's *NOT* what 65CE02 would do actually!
-CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR void  cpu65_write_rmw_callback ( Uint16 addr, Uint8 old_data, Uint8 new_data ) {
+CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR void cpu65_write_rmw_callback ( const Uint16 addr16, const Uint8 old_data, const Uint8 new_data )
+{
+// Nah! It seems, enabling this, makes some software _slower_ ... Like polymega. Probably it does lots of I/O writes, so this
+// extra optimization just takes time to check which won't be used anyway in case of I/O. Oh, well.
+#if 0
+#ifdef	MEM_USE_DATA_POINTERS
+	// if there is data pointer, it cannot be I/O anyway, so the whole RMW business shouldn't matter here
+	register Uint8 *p = mem_slot_wr_data[addr16 >> 8];
+	if (p) {
+		p[addr16 & 0xFFU] = new_data;
+		return;
+	}
+#endif
+#endif
 	cpu_rmw_old_data = old_data;
 	// It's the backend's (which realizes the op) responsibility to handle or not handle the RMW behaviour,
 	// based on the fact if cpu_rmw_old_data is non-negative (being an int type) when it holds the "old_data".
-	CALL_MEMORY_WRITER(addr >> 8, addr, new_data);
+	ref_slot = addr16 >> 8;
+	mem_slot_wr_func[ref_slot](mem_slot_wr_addr32[ref_slot] + (addr16 & 0xFFU), new_data);
 	cpu_rmw_old_data = -1;
 }
-CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR void cpu65_write_rmw_paged_callback ( Uint8 page, Uint8 addr8, Uint8 old_data, Uint8 new_data ) {
-	cpu_rmw_old_data = old_data;
-	CALL_MEMORY_WRITER_PAGED(page, addr8, new_data);
-	cpu_rmw_old_data = -1;
-}
-
-#undef CPU_CUSTOM_FUNCTIONS_INLINE_DECORATOR
 
 #endif

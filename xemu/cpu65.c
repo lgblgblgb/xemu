@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    THIS IS AN UGLY PIECE OF SOURCE REALLY.
 
@@ -42,6 +42,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
  * Can be distributed/used/modified under the terms of GNU/GPL 2 (or later), please see file COPYING
  * or visit this page: http://www.gnu.org/licenses/gpl-2.0.html
  */
+
+#define IN_CPU65_CORE
 
 #include "xemu/emutools_basicdefs.h"
 #ifndef CPU_CUSTOM_INCLUDED
@@ -350,7 +352,28 @@ Uint8 cpu65_get_pf ( void ) {
 	(CPU65.pf_c ? CPU65_PF_C : 0);
 }
 
+
+// optional to be called, cpu_reset() calls this as well. See cpu65_reset() to learn more
+void cpu65_init ( void ) {
+	static bool done = false;
+	if (done)
+		return;
+	done = true;
+#ifdef CPU65_EXECUTION_CALLBACK_SUPPORT
+	cpu65_disable_debug_callbacks();
+#endif
+}
+
+
 void cpu65_reset ( void ) {
+	// Because of compatibility with older targets (which does not use the
+	// init func), we call cpu65_init() from here as well
+	// Note: cpu65_init() itself is secured to be executed only once, even
+	// if it's called more times from here in case of multiple resets during
+	// emulation. I don't want to do things here always, as some may want to
+	// debug the reset process itself, so some things shouldn't be reseted,
+	// and those will go into cpu65_init() - which needs to be set only once.
+	cpu65_init();
 	cpu65_set_pf(0x34);
 	CPU65.s = 0xFF;
 	CPU65.irqLevel = CPU65.nmiEdge = 0;
@@ -813,6 +836,24 @@ static XEMU_INLINE void _RORQ_Q ( void ) {
 #endif
 
 
+#ifdef CPU65_EXECUTION_CALLBACK_SUPPORT
+#	ifdef CPU_STEP_MULTI_OPS
+#		define ELAPSED_CYCLES_BEFORE_CURRENT_OP all_cycles
+#	else
+		// if CPU_STEP_MULTI_OPS is not enabled there was no previous op within the current invokation of CPU65 emulation step
+#		define ELAPSED_CYCLES_BEFORE_CURRENT_OP 0
+#	endif
+#	define DO_CPU65_EXECUTION_CALLBACK(cb_func) \
+		if (XEMU_UNLIKELY(CPU65.execution_debug_callback)) { \
+			cb_func(); \
+			if (XEMU_UNLIKELY(!CPU65.running)) \
+				return ELAPSED_CYCLES_BEFORE_CURRENT_OP; \
+		}
+#else
+#	define DO_CPU65_EXECUTION_CALLBACK(cb_func)
+#endif
+
+
 /* ------------------------------------------------------------------------ *
  *                    CPU EMULATION, OPCODE DECODING + RUN                  *
  * ------------------------------------------------------------------------ */
@@ -840,6 +881,7 @@ int cpu65_step (
 #ifdef DEBUG_CPU
 		DEBUG("CPU: serving NMI on NMI edge at PC $%04X" NL, CPU65.pc);
 #endif
+		DO_CPU65_EXECUTION_CALLBACK(cpu65_nmi_debug_callback);
 		CPU65.nmiEdge = 0;
 		pushWord(CPU65.pc);
 		push(cpu65_get_pf());	// no CPU65_PF_B is pushed!
@@ -864,6 +906,7 @@ int cpu65_step (
 #ifdef DEBUG_CPU
 		DEBUG("CPU: serving IRQ on IRQ level at PC $%04X" NL, CPU65.pc);
 #endif
+		DO_CPU65_EXECUTION_CALLBACK(cpu65_irq_debug_callback);
 		pushWord(CPU65.pc);
 		push(cpu65_get_pf());	// no CPU65_PF_B is pushed!
 		CPU65.pf_i = 1;
@@ -881,7 +924,9 @@ int cpu65_step (
 	if (CPU65.pc == 0)
 		DEBUG("CPU: WARN: PC at zero!" NL);
 #endif
-	CPU65.op = readByte(CPU65.pc++);
+	CPU65.op = readByte(CPU65.pc);
+	DO_CPU65_EXECUTION_CALLBACK(cpu65_execution_debug_callback);
+	CPU65.pc++;
 #ifdef DEBUG_CPU
 	DEBUG("CPU: at $%04X opcode = $%02X %s %s A=%02X X=%02X Y=%02X Z=%02X SP=%02X" NL, (CPU65.pc - 1) & 0xFFFF, CPU65.op, opcode_names[CPU65.op], opcode_adm_names[opcode_adms[CPU65.op]],
 		CPU65.a, CPU65.x, CPU65.y, CPU65.z, CPU65.s

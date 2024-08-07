@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "memcontent.h"
 #include "hypervisor.h"
 #include "vic4.h"
+#include "memory_mapper.h"
 #include "configdb.h"
 #include "xemu/emutools_config.h"
 #include "xemu/compressed_disk_image.h"
@@ -1240,7 +1241,7 @@ Uint8 sdcard_read_register ( const int reg )
 			// bits 2 and 3 is always zero in Xemu (no drive virtualization for drive 0 and 1)
 			return
 				(vic_registers[0x30] & 1) |		// $D68A.0 SD:CDC00 (read only) Set if colour RAM at $DC00
-				(vic_iomode & 2)  |			// $D68A.1 SD:VICIII (read only) Set if VIC-IV or ethernet IO bank visible [same bit pos as in vic_iomode for mode-4 and mode-ETH!]
+				(io_mode & 2)  |			// $D68A.1 SD:VICIII (read only) Set if VIC-IV or ethernet IO bank visible [same bit pos as in vic_iomode for mode-4 and mode-ETH!]
 				(data & (128 + 64));			// size info for disk mounting
 			break;
 		case 0xB:
@@ -1261,55 +1262,3 @@ Uint8 sdcard_read_register ( const int reg )
 	}
 	return data;
 }
-
-
-/* --- SNAPSHOT RELATED --- */
-
-
-#ifdef XEMU_SNAPSHOT_SUPPORT
-
-#include <string.h>
-
-#define SNAPSHOT_SDCARD_BLOCK_VERSION	0
-#define SNAPSHOT_SDCARD_BLOCK_SIZE	(0x100 + sizeof(disk_buffers))
-
-int sdcard_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
-{
-	Uint8 buffer[SNAPSHOT_SDCARD_BLOCK_SIZE];
-	int a;
-	if (block->block_version != SNAPSHOT_SDCARD_BLOCK_VERSION || block->sub_counter || block->sub_size != sizeof buffer)
-		RETURN_XSNAPERR_USER("Bad SD-Card block syntax");
-	a = xemusnap_read_file(buffer, sizeof buffer);
-	if (a) return a;
-	/* loading state ... */
-	memcpy(sd_sector_registers, buffer, 4);
-	memcpy(sd_d81_img1_start, buffer + 4, 4);
-	fd_mounted = (int)P_AS_BE32(buffer + 8);
-	sd_is_read_only = (int)P_AS_BE32(buffer + 16);
-	//d81_is_read_only = (int)P_AS_BE32(buffer + 20);
-	//use_d81 = (int)P_AS_BE32(buffer + 24);
-	sd_status = buffer[0xFF];
-	memcpy(disk_buffers, buffer + 0x100, sizeof disk_buffers);
-	return 0;
-}
-
-
-int sdcard_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
-{
-	Uint8 buffer[SNAPSHOT_SDCARD_BLOCK_SIZE];
-	int a = xemusnap_write_block_header(def->idstr, SNAPSHOT_SDCARD_BLOCK_VERSION);
-	if (a) return a;
-	memset(buffer, 0xFF, sizeof buffer);
-	/* saving state ... */
-	memcpy(buffer, sd_sector_registers, 4);
-	memcpy(buffer + 4,sd_d81_img1_start, 4);
-	U32_AS_BE(buffer + 8, fd_mounted);
-	U32_AS_BE(buffer + 16, sd_is_read_only);
-	//U32_AS_BE(buffer + 20, d81_is_read_only);
-	//U32_AS_BE(buffer + 24, use_d81);
-	buffer[0xFF] = sd_status;
-	memcpy(buffer + 0x100, disk_buffers, sizeof disk_buffers);
-	return xemusnap_write_sub_block(buffer, sizeof buffer);
-}
-
-#endif

@@ -30,7 +30,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/c64_kbd_mapping.h"
 #include "xemu/emutools_config.h"
 #include "xemu/emutools_umon.h"
-#include "m65_snapshot.h"
 #include "memory_mapper.h"
 #include "io_mapper.h"
 #include "ethernet65.h"
@@ -57,22 +56,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static int nmi_level;			// please read the comment at nmi_set() below
 static int emulation_is_running = 0;
 static int speed_current = -1;
-static int paused = 0, paused_old = 0;
-static int breakpoint_pc = -1;
+int paused = 0;
+static int paused_old = 0;
 #ifdef TRACE_NEXT_SUPPORT
 static int orig_sp = 0;
 static int trace_next_trigger = 0;
 #endif
-static int trace_step_trigger = 0;
-#ifdef HAS_UARTMON_SUPPORT
-static void (*m65mon_callback)(void) = NULL;
-#endif
-static const char emulator_paused_title[] = "TRACE/PAUSE";
+int trace_step_trigger = 0;
 static char emulator_speed_title[64] = "";
-static char fast_mhz_in_string[16] = "";
-static const char *cpu_clock_speed_strs[4] = { "1MHz", "2MHz", "3.5MHz", fast_mhz_in_string };
-const char *cpu_clock_speed_string = "";
-static unsigned int cpu_clock_speed_str_index = 0;
+static char fast_mhz_as_string[16] = "";
+const char *cpu_clock_speed_string_p = "";
 static unsigned int cpu_cycles_per_scanline;
 int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 static Uint8 i2c_regs_original[sizeof i2c_regs];
@@ -123,33 +116,43 @@ void machine_set_speed ( int verbose )
 			case 4:	// 100 - 1MHz
 			case 5:	// 101 - 1MHz
 				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C64_MHZ_CLOCK));
-				cpu_clock_speed_str_index = 0;
+				cpu_clock_speed_string_p = "1MHz";
 				cpu65_set_timing(0);
 				break;
 			case 0:	// 000 - 2MHz
 				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C128_MHZ_CLOCK));
-				cpu_clock_speed_str_index = 1;
+				cpu_clock_speed_string_p = "2MHz";
 				cpu65_set_timing(0);
 				break;
 			case 2:	// 010 - 3.5MHz
 			case 6:	// 110 - 3.5MHz
 				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C65_MHZ_CLOCK));
-				cpu_clock_speed_str_index = 2;
+				cpu_clock_speed_string_p = "3.5MHz";
 				cpu65_set_timing(1);
 				break;
 			case 1:	// 001 - 40MHz (or Xemu specified custom speed)
 			case 3:	// 011 -		-- "" --
 			case 7:	// 111 -		-- "" --
 				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(configdb.fast_mhz));
-				cpu_clock_speed_str_index = 3;
+				cpu_clock_speed_string_p = fast_mhz_as_string;
 				cpu65_set_timing(2);
 				break;
 		}
-		cpu_clock_speed_string = cpu_clock_speed_strs[cpu_clock_speed_str_index];
-		DEBUG("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_string, cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
+		DEBUG("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_string_p, cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
 		if (cpu_cycles_per_step > 1 && !hypervisor_is_debugged && !configdb.cpusinglestep)
 			cpu_cycles_per_step = cpu_cycles_per_scanline;	// if in trace mode (or hyper-debug ...), do not set this! So set only if non-trace and non-hyper-debug
 	}
+}
+
+
+void window_title_pre_update_callback ( void )
+{
+	static const char iomode_names[] = {'2', '3', 'E', '4'};
+	snprintf(emulator_speed_title, sizeof emulator_speed_title, "%s %s (%c)",
+		cpu_clock_speed_string_p, videostd_name,
+		in_hypervisor ? 'H' : iomode_names[io_mode]
+	);
+	window_title_custom_addon = paused ? "TRACE/PAUSE" : NULL;
 }
 
 
@@ -253,19 +256,6 @@ static Uint8 cia2_in_b ( void )
 }
 
 
-#ifdef XEMU_SNAPSHOT_SUPPORT
-static void m65_snapshot_saver_on_exit_callback ( void )
-{
-	if (!configdb.snapsave)
-		return;
-	if (xemusnap_save(configdb.snapsave))
-		ERROR_WINDOW("Could not save snapshot \"%s\": %s", configdb.snapsave, xemusnap_error_buffer);
-	else
-		INFO_WINDOW("Snapshot has been saved to \"%s\".", configdb.snapsave);
-}
-#endif
-
-
 static int preinit_memory_item ( const char *name, const char *desc, Uint8 *target_ptr, const Uint8 *source_ptr, const int source_size, const int min_size, const int max_size, const char *fn )
 {
 	if (source_size < min_size || source_size > max_size || min_size > max_size)
@@ -323,7 +313,7 @@ static void preinit_memory_for_start ( void )
 	preinit_memory_item("extonboard",   "On-boarding utility", main_ram + 0x40000, meminitdata_onboard,   MEMINITDATA_ONBOARD_SIZE,   0x00020, 0x10000, configdb.extonboard);
 	preinit_memory_item("extflashutil", "MEGA-flash utility",  main_ram + 0x50000, megaflashutility,      sizeof megaflashutility,    0x00020, 0x07D00, configdb.extflashutil);
 	preinit_memory_item("extbanner",    "MEGA65 banner",       main_ram + 0x57D00, meminitdata_banner,    MEMINITDATA_BANNER_SIZE,    0x01000, 0x08300, configdb.extbanner);
-	preinit_memory_item("extchrwom",    "Character-WOM",       char_wom,           meminitdata_chrwom,    MEMINITDATA_CHRWOM_SIZE,    0x01000, 0x01000, configdb.extchrwom);
+	preinit_memory_item("extchrwom",    "Character-WOM",       char_ram,           meminitdata_chrwom,    MEMINITDATA_CHRWOM_SIZE,    0x01000, 0x01000, configdb.extchrwom);
 	preinit_memory_item("extcramutils", "Utils in CRAM",       colour_ram,         meminitdata_cramutils, MEMINITDATA_CRAMUTILS_SIZE, 0x08000, 0x08000, configdb.extcramutils);
 	hickup_is_overriden =
 	preinit_memory_item("hickup",       "Hyppo-Hickup",        hypervisor_ram,     meminitdata_hickup,    MEMINITDATA_HICKUP_SIZE,    0x04000, 0x04000, configdb.hickup);
@@ -429,36 +419,28 @@ static void mega65_init ( void )
 	cia2.TLAH = 1;
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
 	dma_init();
-#ifdef HAS_UARTMON_SUPPORT
-	uartmon_init(configdb.uartmon);
-#endif
-	sprintf(fast_mhz_in_string, "%.2fMHz", configdb.fast_mhz);
+	sprintf(fast_mhz_as_string, "%.2fMHz", configdb.fast_mhz);
 	DEBUGPRINT("SPEED: fast clock is set to %.2fMHz." NL, configdb.fast_mhz);
 	cpu65_init_mega_specific();
 	cpu65_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
-	rom_protect = 0;
+#ifdef HAS_UARTMON_SUPPORT
+	uartmon_init(configdb.uartmon);
+#endif
+	memory_set_rom_protection(0);
 	hypervisor_start_machine();
 	speed_current = 0;
 	machine_set_speed(1);
 	if (configdb.useutilmenu)
 		hwa_kbd_set_fake_key(0x20);
 	DEBUG("INIT: end of initialization!" NL);
-#ifdef XEMU_SNAPSHOT_SUPPORT
-	xemusnap_init(m65_snapshot_definition);
-	if (configdb.snapload) {
-		if (xemusnap_load(configdb.snapload))
-			FATAL("Couldn't load snapshot \"%s\": %s", configdb.snapload, xemusnap_error_buffer);
-	}
-	atexit(m65_snapshot_saver_on_exit_callback);
-#endif
 }
 
 
 int dump_memory ( const char *fn )
 {
-	if (fn && *fn) {
-		DEBUGPRINT("MEM: Dumping memory into file: %s" NL, fn);
-		return xemu_save_file(fn, main_ram, (128 + 256) * 1024, "Cannot dump memory into file");
+	if (fn && *fn && main_ram_size) {
+		DEBUGPRINT("MEM: Dumping memory into file (%uK): %s" NL, main_ram_size >> 10, fn);
+		return xemu_save_file(fn, main_ram, main_ram_size, "Cannot dump memory into file");
 	} else {
 		return 0;
 	}
@@ -506,7 +488,7 @@ static void shutdown_callback ( void )
 #endif
 	hypervisor_hdos_close_descriptors();
 	if (emulation_is_running)
-		DEBUGPRINT("CPU: Execution ended at PC=$%04X (linear=%X)" NL, cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc));
+		DEBUGPRINT("CPU: Execution ended at PC=$%04X (linear=$%07X)" NL, cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc));
 }
 
 
@@ -523,12 +505,12 @@ void reset_mega65 ( void )
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0;
 	machine_set_speed(0);
-	memory_set_cpu_io_port_ddr_and_data(0xFF, 0xFF);
-	map_mask = 0;
-	in_hypervisor = 0;
-	vic_registers[0x30] = 0;	// FIXME: hack! we need this, and memory_set_vic3_rom_mapping above too :(
-	memory_set_vic3_rom_mapping(0);
-	memory_set_do_map();
+	vic_registers[0x30] = 0;
+	memory_reconfigure(
+		0, io_mode, 0xFF, 0xFF,		// D030 value, I/O mode, CPU I/O port 0, CPU I/O port 1
+		0, 0, 0, 0, 0,			// MAP MB LO, OFS LO, MB HI, OFS HI, MASK
+		false				// hypervisor
+	);
 	vic_reset();	// FIXME: we may need a RESET on VIC-IV what ROM would not initialize but could be used by some MEGA65-aware program? [and hyppo does not care to reset?]
 	cpu65_reset();
 	dma_reset();
@@ -545,12 +527,12 @@ void reset_mega65_cpu_only ( void )
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0;
 	machine_set_speed(0);
-	memory_set_cpu_io_port_ddr_and_data(0xFF, 0xFF);
-	map_mask = 0;
-	in_hypervisor = 0;
-	vic_registers[0x30] = 0;	// FIXME: hack! we need this, and memory_set_vic3_rom_mapping above too :(
-	memory_set_vic3_rom_mapping(0);
-	memory_set_do_map();
+	vic_registers[0x30] = 0;
+	memory_reconfigure(
+		0, io_mode, 0xFF, 0xFF,		// D030 value, I/O mode, CPU I/O port 0, CPU I/O port 1
+		0, 0, 0, 0, 0,			// MAP MB LO, OFS LO, MB HI, OFS HI, MASK
+		false				// hypervisor
+	);
 	dma_reset();			// We need this: even though it's CPU reset only, DMA is part of the CPU: either DMA or CPU running, resetting in the middle of a DMA session is a disaster
 	cpu65_reset();
 }
@@ -567,108 +549,7 @@ int reset_mega65_asked ( void )
 
 
 #ifdef HAS_UARTMON_SUPPORT
-void m65mon_show_regs ( void )
-{
-	Uint8 pf = cpu65_get_pf();
-	umon_printf(
-		"\r\n"
-		"PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
-		"%04X %02X %02X %02X %02X %02X %04X "		// register banned message and things from PC to SP
-		"%04X %04X %02X       %02X %02X "		// from MAPL to P
-		"%c%c%c%c%c%c%c%c ",				// P-FLAGS
-		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z, cpu65.bphi >> 8, cpu65.sphi | cpu65.s,
-		((map_mask & 0x0F) << 12) | (map_offset_low  >> 8),
-		((map_mask & 0xF0) <<  8) | (map_offset_high >> 8),
-		cpu65.op,
-		pf, 0,	// flags
-		(pf & CPU65_PF_N) ? 'N' : '-',
-		(pf & CPU65_PF_V) ? 'V' : '-',
-		(pf & CPU65_PF_E) ? 'E' : '-',
-		'-',
-		(pf & CPU65_PF_D) ? 'D' : '-',
-		(pf & CPU65_PF_I) ? 'I' : '-',
-		(pf & CPU65_PF_Z) ? 'Z' : '-',
-		(pf & CPU65_PF_C) ? 'C' : '-'
-	);
-}
-
-void m65mon_set_pc ( const Uint16 addr )
-{
-	cpu65_debug_set_pc(addr);
-}
-
-void m65mon_dumpmem16 ( Uint16 addr )
-{
-	int n = 16;
-	umon_printf(":000%04X:", addr);
-	while (n--)
-		umon_printf("%02X", cpu65_read_callback(addr++));
-}
-
-void m65mon_dumpmem28 ( int addr )
-{
-	int n = 16;
-	addr &= 0xFFFFFFF;
-	umon_printf(":%07X:", addr);
-	while (n--)
-		umon_printf("%02X", memory_debug_read_phys_addr(addr++));
-}
-
-void m65mon_setmem28 ( int addr, int cnt, Uint8* vals )
-{
-	while (--cnt >= 0)
-		memory_debug_write_phys_addr(addr++, *(vals++));
-}
-
-void m65mon_set_trace ( int m )
-{
-	paused = m;
-}
-
-#ifdef TRACE_NEXT_SUPPORT
-void m65mon_do_next ( void )
-{
-	if (paused) {
-		umon_send_ok = 0;			// delay command execution!
-		m65mon_callback = m65mon_show_regs;	// register callback
-		trace_next_trigger = 2;			// if JSR, then trigger until RTS to next_addr
-		orig_sp = cpu65.sphi | cpu65.s;
-		paused = 0;
-	} else {
-		umon_printf(UMON_SYNTAX_ERROR "trace can be used only in trace mode");
-	}
-}
-#endif
-
-void m65mon_do_trace ( void )
-{
-	if (paused) {
-		umon_send_ok = 0; // delay command execution!
-		m65mon_callback = m65mon_show_regs; // register callback
-		trace_step_trigger = 1;	// trigger one step
-	} else {
-		umon_printf(UMON_SYNTAX_ERROR "trace can be used only in trace mode");
-	}
-}
-
-void m65mon_do_trace_c ( void )
-{
-	umon_printf(UMON_SYNTAX_ERROR "command 'tc' is not implemented yet");
-}
-#ifdef TRACE_NEXT_SUPPORT
-void m65mon_next_command ( void )
-{
-	if (paused)
-		m65mon_do_next();
-}
-#endif
-void m65mon_empty_command ( void )
-{
-	if (paused)
-		m65mon_do_trace();
-}
-
-void m65mon_breakpoint ( int brk )
+void set_breakpoint ( int brk )
 {
 	breakpoint_pc = brk;
 	if (brk < 0)
@@ -707,9 +588,6 @@ static void update_emulator ( void )
 	// XXX: some things has been moved here from the main loop, however update_emulator is called from other places as well, FIXME check if it causes problems or not!
 	inject_ready_check_do();
 	audio65_sid_inc_framecount();
-	strcpy(emulator_speed_title, cpu_clock_speed_strs[cpu_clock_speed_str_index]);
-	strcat(emulator_speed_title, " ");
-	strcat(emulator_speed_title, videostd_name);
 	hid_handle_all_sdl_events();
 	xemugui_iteration();
 	nmi_set(IS_RESTORE_PRESSED(), 2);	// Custom handling of the restore key ...
@@ -769,15 +647,13 @@ static void emulation_loop ( void )
 			// XXX it's maybe a problem to call this!!! update_emulator() is called here which closes frame but no no reopen then ... FIXME: handle this somehow!
 			update_emulator();
 			if (trace_step_trigger) {
-				// if monitor trigges a step, break the pause loop, however we will get back the control on the next
+				// if monitor triggers a step, break the pause loop, however we will get back the control on the next
 				// iteration of the infinite "for" loop, as "paused" is not altered
 				trace_step_trigger = 0;
 				break;	// break the pause loop now
 			}
-			// Decorate window title about the mode.
 			// If "paused" mode is switched off ie by a monitor command (called from update_emulator() above!)
 			// then it will resets back the the original state, etc
-			window_title_custom_addon = paused ? (char*)emulator_paused_title : NULL;
 			if (paused != paused_old) {
 				paused_old = paused;
 				if (paused) {
@@ -785,19 +661,25 @@ static void emulation_loop ( void )
 					cpu_cycles_per_step = 0;
 				} else {
 					DEBUGPRINT("TRACE: leaving trace mode @ $%04X" NL, cpu65.pc);
+#ifdef					HAS_UARTMON_SUPPORT
 					if (breakpoint_pc < 0)
 						cpu_cycles_per_step = cpu_cycles_per_scanline;
 					else
 						cpu_cycles_per_step = 0;
+#else
+					cpu_cycles_per_step = cpu_cycles_per_scanline;
+#endif
 				}
 			}
 		}
 		if (XEMU_UNLIKELY(hypervisor_is_debugged && in_hypervisor))
 			hypervisor_debug();
+#ifdef		HAS_UARTMON_SUPPORT
 		if (XEMU_UNLIKELY(breakpoint_pc == cpu65.pc)) {
 			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu65.pc);
 			paused = 1;
 		}
+#endif
 		cycles += XEMU_UNLIKELY(in_dma) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
 #ifdef CPU_STEP_MULTI_OPS
 			cpu_cycles_per_step
@@ -908,79 +790,3 @@ int main ( int argc, char **argv )
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;
 }
-
-/* --- SNAPSHOT RELATED --- */
-
-#ifdef XEMU_SNAPSHOT_SUPPORT
-
-#include <string.h>
-
-#define SNAPSHOT_M65_BLOCK_VERSION	2
-#define SNAPSHOT_M65_BLOCK_SIZE		(0x100 + sizeof(D6XX_registers) + sizeof(D7XX))
-
-
-int m65emu_snapshot_load_state ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
-{
-	Uint8 buffer[SNAPSHOT_M65_BLOCK_SIZE];
-	int a;
-	if (block->block_version != SNAPSHOT_M65_BLOCK_VERSION || block->sub_counter || block->sub_size != sizeof buffer)
-		RETURN_XSNAPERR_USER("Bad M65 block syntax");
-	a = xemusnap_read_file(buffer, sizeof buffer);
-	if (a) return a;
-	/* loading state ... */
-	memcpy(D6XX_registers, buffer + 0x100, sizeof D6XX_registers);
-	memcpy(D7XX, buffer + 0x200, sizeof D7XX);
-	in_hypervisor = 1;	// simulate hypervisor mode, to allow to write some regs now instead of causing a TRAP now ...
-	io_write(0x367D, D6XX_registers[0x7D]);			// write $(D)67D in VIC-IV I/O mode! (sets ROM protection, linear addressing mode enable ...)
-	// TODO FIXME: see if there is a need for other registers from D6XX_registers to write back to take effect on loading snapshot!
-	// end of spec, hypervisor-needed faked mode for loading snapshot ...
-	map_mask = (int)P_AS_BE32(buffer + 0);
-	map_offset_low = (int)P_AS_BE32(buffer + 4);
-	map_offset_high = (int)P_AS_BE32(buffer + 8);
-	cpu65.cpu_inhibit_interrupts = (int)P_AS_BE32(buffer + 12);
-	in_hypervisor = (int)P_AS_BE32(buffer + 16);	// sets hypervisor state from snapshot (hypervisor/userspace)
-	map_megabyte_low = (int)P_AS_BE32(buffer + 20);
-	map_megabyte_high = (int)P_AS_BE32(buffer + 24);
-	//force_fast_loaded = (int)P_AS_BE32(buffer + 28);	// activated in m65emu_snapshot_loading_finalize() as force_fast can be set at multiple places through loading snapshot!
-	// +32 is free for 4 bytes now ... can be used later
-	memory_set_cpu_io_port_ddr_and_data(buffer[36], buffer[37]);
-	return 0;
-}
-
-
-int m65emu_snapshot_save_state ( const struct xemu_snapshot_definition_st *def )
-{
-	Uint8 buffer[SNAPSHOT_M65_BLOCK_SIZE];
-	int a = xemusnap_write_block_header(def->idstr, SNAPSHOT_M65_BLOCK_VERSION);
-	if (a) return a;
-	memset(buffer, 0xFF, sizeof buffer);
-	/* saving state ... */
-	U32_AS_BE(buffer +  0, map_mask);
-	U32_AS_BE(buffer +  4, map_offset_low);
-	U32_AS_BE(buffer +  8, map_offset_high);
-	U32_AS_BE(buffer + 12, cpu65.cpu_inhibit_interrupts);
-	U32_AS_BE(buffer + 16, in_hypervisor);
-	U32_AS_BE(buffer + 20, map_megabyte_low);
-	U32_AS_BE(buffer + 24, map_megabyte_high);
-	//U32_AS_BE(buffer + 28, force_fast);	// see notes on this at load_state and finalize stuff!
-	// +32 is free for 4 bytes now ... can be used later
-	buffer[36] = memory_get_cpu_io_port(0);
-	buffer[37] = memory_get_cpu_io_port(1);
-	memcpy(buffer + 0x100, D6XX_registers, sizeof D6XX_registers);
-	memcpy(buffer + 0x200, D7XX, sizeof D7XX);
-	return xemusnap_write_sub_block(buffer, sizeof buffer);
-}
-
-
-int m65emu_snapshot_loading_finalize ( const struct xemu_snapshot_definition_st *def, struct xemu_snapshot_block_st *block )
-{
-	DEBUGPRINT("SNAP: loaded (finalize-callback: begin)" NL);
-	memory_set_vic3_rom_mapping(vic_registers[0x30]);
-	memory_set_do_map();
-	//force_fast = force_fast_loaded;	// force_fast is handled through different places, so we must have a "finalize" construct and saved separately to have the actual effect ...
-	machine_set_speed(1);
-	DEBUGPRINT("SNAP: loaded (finalize-callback: end)" NL);
-	OSD(-1, -1, "Snapshot has been loaded.");
-	return 0;
-}
-#endif

@@ -20,31 +20,47 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMU_MEGA65_MEMORY_MAPPER_H_INCLUDED
 
 extern void memory_init ( void );
-extern void memory_set_do_map ( void );
-extern void memory_set_vic3_rom_mapping ( Uint8 value );
-extern void memory_set_cpu_io_port ( int addr, Uint8 value );
-extern void memory_set_cpu_io_port_ddr_and_data ( Uint8 p0, Uint8 p1 );
-extern Uint8 memory_get_cpu_io_port ( int addr );
+extern void memory_set_rom_protection ( const bool protect );
+extern void memory_reconfigure (
+	const Uint8 d030_value, const Uint8 new_io_mode, const Uint8 new_cpu_port0, const Uint8 new_cpu_port1,
+	const Uint32 new_map_mb_lo, const Uint32 new_map_ofs_lo,
+	const Uint32 new_map_mb_hi, const Uint32 new_map_ofs_hi,
+	const Uint8 new_map_mask,
+	const bool new_in_hypervisor
+);
+extern Uint8 memory_get_cpu_io_port ( const Uint8 addr );
+extern void memory_set_io_mode ( const Uint8 new_io_mode );
+extern void memory_write_d030 ( const Uint8 data );
 
-extern unsigned int mem_get_4k_region_short_desc ( char *p, const unsigned int n, const unsigned int i );
+extern int    memory_cpu_addr_to_desc   ( const Uint16 cpu_addr, char *p, const unsigned int n );
+extern Uint32 memory_cpu_addr_to_linear ( const Uint16 cpu_addr, Uint32 *wr_addr_p );
 
-extern Uint8 memory_debug_read_phys_addr  ( int addr );
-extern void  memory_debug_write_phys_addr ( int addr, Uint8 data );
-extern Uint8 memory_debug_read_cpu_addr   ( Uint16 addr );
-extern void  memory_debug_write_cpu_addr  ( Uint16 addr, Uint8 data );
+// Non- CPU or DMA emulator memory acceses ("debug" read/write CPU/linear memory bytes)
+extern Uint8 debug_read_linear_byte   ( const Uint32 addr32 );
+extern Uint8 sdebug_read_linear_byte  ( const Uint32 addr32 );
+extern void  debug_write_linear_byte  ( const Uint32 addr32, const Uint8 data );
+extern void  sdebug_write_linear_byte ( const Uint32 addr32, const Uint8 data );
+// debug read/write CPU address functions: other than hardware emulation, these must be used for debug purposes (monitor/debugger, etc)
+extern Uint8 debug_read_cpu_byte  ( const Uint16 addr16 );
+extern void  debug_write_cpu_byte ( const Uint16 addr16, const Uint8 data );
 
 // DMA implementation related, used by dma65.c:
-extern Uint8 memory_dma_source_mreader ( int addr );
-extern void  memory_dma_source_mwriter ( int addr, Uint8 data );
-extern Uint8 memory_dma_target_mreader ( int addr );
-extern void  memory_dma_target_mwriter ( int addr, Uint8 data );
-extern Uint8 memory_dma_list_reader    ( int addr );
+extern Uint8 memory_dma_source_mreader ( const Uint32 addr32 );
+extern void  memory_dma_source_mwriter ( const Uint32 addr32, const Uint8 data );
+extern Uint8 memory_dma_target_mreader ( const Uint32 addr32 );
+extern void  memory_dma_target_mwriter ( const Uint32 addr32, const Uint8 data );
+extern Uint8 memory_dma_list_reader    ( const Uint32 addr32 );
 
-extern int map_mask, map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
-extern int rom_protect, skip_unhandled_mem;
-extern Uint8 main_ram[512 << 10], colour_ram[0x8000], char_wom[0x2000], hypervisor_ram[0x4000];
+// MAP related variables, do not change these values directly!
+extern Uint32 map_offset_low, map_offset_high, map_megabyte_low, map_megabyte_high;
+extern Uint8  map_mask;
+
+extern Uint8 main_ram[512 << 10], colour_ram[0x8000], char_ram[0x2000], hypervisor_ram[0x4000];
+extern Uint32 main_ram_size;
 #define SLOW_RAM_SIZE (8 << 20)
-extern Uint8 slow_ram[SLOW_RAM_SIZE];
+extern Uint8 attic_ram[SLOW_RAM_SIZE];
+
+extern Uint8 io_mode;			// "VIC" I/O mode: do not change this value directly!
 
 #define I2C_UUID_OFFSET		0x100
 #define I2C_UUID_SIZE		8
@@ -54,14 +70,7 @@ extern Uint8 slow_ram[SLOW_RAM_SIZE];
 #define I2C_NVRAM_SIZE		64
 extern Uint8 i2c_regs[0x1000];
 
+extern int skip_unhandled_mem;
 extern int cpu_rmw_old_data;
-
-static XEMU_INLINE void write_colour_ram ( const int addr, const Uint8 data )
-{
-	colour_ram[addr] = data;
-	// we also need to update the corresponding part of the main RAM, if it's the first 2K of the colour RAM!
-	if (addr < 2048)
-		main_ram[addr + 0x1F800] = data;
-}
 
 #endif

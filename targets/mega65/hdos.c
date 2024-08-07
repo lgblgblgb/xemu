@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -97,7 +97,7 @@ static int copy_mem_from_user ( Uint8 *target, int max_size, const int terminato
 		// DOS calls should not have user specified data >= $8000!
 		if (source_cpu_addr >= 0x8000)
 			return -1;
-		const Uint8 byte = memory_debug_read_cpu_addr(source_cpu_addr++);
+		const Uint8 byte = debug_read_cpu_byte(source_cpu_addr++);
 		*target++ = byte;
 		len++;
 		if (len >= max_size) {
@@ -124,7 +124,7 @@ static int copy_mem_to_user ( unsigned int target_cpu_addr, const Uint8 *source,
 	while (size) {
 		if (target_cpu_addr >= 0x8000)
 			return -1;
-		memory_debug_write_cpu_addr(target_cpu_addr++, *source++);
+		debug_write_cpu_byte(target_cpu_addr++, *source++);
 		size--;
 		len++;
 	}
@@ -465,7 +465,7 @@ static void hdos_virt_loadfile ( const Uint32 addr_base )
 			break;
 		}
 		for (const Uint8 *b = buffer; ret > 0; ret--, b++, addr_ofs++)
-			memory_debug_write_phys_addr(addr_base + (addr_ofs & 0xFFFFFF), *b);
+			debug_write_linear_byte(addr_base + (addr_ofs & 0xFFFFFF), *b);
 	}
 	close(fd);
 	if (ret < 0 || loaded != st.st_size) {
