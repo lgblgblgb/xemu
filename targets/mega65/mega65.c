@@ -63,12 +63,9 @@ static int orig_sp = 0;
 static int trace_next_trigger = 0;
 #endif
 int trace_step_trigger = 0;
-static const char emulator_paused_title[] = "TRACE/PAUSE";
 static char emulator_speed_title[64] = "";
-static char fast_mhz_in_string[16] = "";
-static const char *cpu_clock_speed_strs[4] = { "1MHz", "2MHz", "3.5MHz", fast_mhz_in_string };
-const char *cpu_clock_speed_string = "";
-static unsigned int cpu_clock_speed_str_index = 0;
+static char fast_mhz_as_string[16] = "";
+const char *cpu_clock_speed_string_p = "";
 static unsigned int cpu_cycles_per_scanline;
 int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 static Uint8 i2c_regs_original[sizeof i2c_regs];
@@ -119,30 +116,29 @@ void machine_set_speed ( int verbose )
 			case 4:	// 100 - 1MHz
 			case 5:	// 101 - 1MHz
 				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C64_MHZ_CLOCK));
-				cpu_clock_speed_str_index = 0;
+				cpu_clock_speed_string_p = "1MHz";
 				cpu65_set_timing(0);
 				break;
 			case 0:	// 000 - 2MHz
 				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C128_MHZ_CLOCK));
-				cpu_clock_speed_str_index = 1;
+				cpu_clock_speed_string_p = "2MHz";
 				cpu65_set_timing(0);
 				break;
 			case 2:	// 010 - 3.5MHz
 			case 6:	// 110 - 3.5MHz
 				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(C65_MHZ_CLOCK));
-				cpu_clock_speed_str_index = 2;
+				cpu_clock_speed_string_p = "3.5MHz";
 				cpu65_set_timing(1);
 				break;
 			case 1:	// 001 - 40MHz (or Xemu specified custom speed)
 			case 3:	// 011 -		-- "" --
 			case 7:	// 111 -		-- "" --
 				cpu_cycles_per_scanline = (unsigned int)(videostd_1mhz_cycles_per_scanline * (float)(configdb.fast_mhz));
-				cpu_clock_speed_str_index = 3;
+				cpu_clock_speed_string_p = fast_mhz_as_string;
 				cpu65_set_timing(2);
 				break;
 		}
-		cpu_clock_speed_string = cpu_clock_speed_strs[cpu_clock_speed_str_index];
-		DEBUG("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_string, cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
+		DEBUG("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_string_p, cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
 		if (cpu_cycles_per_step > 1 && !hypervisor_is_debugged && !configdb.cpusinglestep)
 			cpu_cycles_per_step = cpu_cycles_per_scanline;	// if in trace mode (or hyper-debug ...), do not set this! So set only if non-trace and non-hyper-debug
 	}
@@ -151,13 +147,19 @@ void machine_set_speed ( int verbose )
 
 void window_title_pre_update_callback ( void )
 {
-	snprintf(emulator_speed_title, sizeof emulator_speed_title, "%s (%X%c) %s",
-		cpu_clock_speed_strs[cpu_clock_speed_str_index],
-		iomode_hexdigitids[io_mode],
-		in_hypervisor ? 'H' : 'U',
-		videostd_name
+	static const char iomode_names[] = {'2', '3', 'E', '4'};
+	snprintf(emulator_speed_title, sizeof emulator_speed_title, "%s %s (%c)",
+		cpu_clock_speed_string_p, videostd_name,
+		in_hypervisor ? 'H' : iomode_names[io_mode]
 	);
-	window_title_custom_addon = paused ? (char*)emulator_paused_title : NULL;
+#ifdef	CPU65_DEBUG_CALLBACK_SUPPORT
+	if (!cpu65.running)
+		window_title_custom_addon = "stopped";
+	else if (cpu65.debug_callbacks.exec)
+		window_title_custom_addon = "tracing";
+	else
+		window_title_custom_addon = NULL;	// NULL = default title ("running"), defined/handled by xemu/emutools.c if it's NULL
+#endif
 }
 
 
@@ -424,7 +426,7 @@ static void mega65_init ( void )
 	cia2.TLAH = 1;
 	// *** Initialize DMA (we rely on memory and I/O decoder provided functions here for the purpose)
 	dma_init();
-	sprintf(fast_mhz_in_string, "%.2fMHz", configdb.fast_mhz);
+	sprintf(fast_mhz_as_string, "%.2fMHz", configdb.fast_mhz);
 	DEBUGPRINT("SPEED: fast clock is set to %.2fMHz." NL, configdb.fast_mhz);
 	cpu65_init_mega_specific();
 	cpu65_reset(); // reset CPU (though it fetches its reset vector, we don't use that on M65, but the KS hypervisor trap)
@@ -790,7 +792,7 @@ int main ( int argc, char **argv )
 	emulation_is_running = 1;
 	update_emulated_time_sources();
 	if (configdb.matrixstart)
-		matrix_mode_toggle(1);
+		matrix_mode_toggle(true);
 	// FIXME: for emscripten (anyway it does not work too much currently) there should be 50 or 60 (PAL/NTSC) instead of (fixed, and wrong!) 25!!!!!!
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;

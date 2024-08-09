@@ -38,7 +38,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define DEBUGMATRIX(...)
 
 
-int in_the_matrix = 0;
+bool in_the_matrix = false;
 
 
 // TODO: many inventions here eventlually should be moved into some common place as
@@ -275,7 +275,7 @@ static void dump_regs ( const char rot_fig )
 		in_hypervisor ? 'H' : 'U',
 		rot_fig,
 		videostd_id ? "NTSC" : "PAL ",
-		cpu_clock_speed_string,
+		cpu_clock_speed_string_p,
 		(D6XX_registers[0x7D] & 16) ? '!' : ' '
 	);
 }
@@ -788,14 +788,13 @@ static int kbd_cb_textevent ( SDL_TextInputEvent *ev )
 }
 
 
-void matrix_mode_toggle ( int status )
+void matrix_mode_toggle ( const bool status )
 {
 	if (!is_osd_enabled()) {
 		ERROR_WINDOW("OSD is not enabled to be able to use Matrix mode.");
 		return;
 	}
-	status = !!status;
-	if (status == !!in_the_matrix)
+	if (status == in_the_matrix)
 		return;
 	in_the_matrix = status;
 	static int saved_allow_mouse_grab;

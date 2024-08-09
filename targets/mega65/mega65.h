@@ -66,7 +66,7 @@ extern void set_breakpoint    ( int brk );
 extern Uint8 last_dd00_bits;
 extern const char *last_reset_type;
 extern int cpu_cycles_per_step;
-extern const char *cpu_clock_speed_string;
+extern const char *cpu_clock_speed_string_p;
 extern int paused;
 extern int trace_step_trigger;
 

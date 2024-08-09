@@ -16,11 +16,7 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-
-
 #if !defined(HAS_UARTMON_SUPPORT)
-// Windows is not supported currently, as it does not have POSIX-standard socket interface (?).
-// Also, it's pointless for emscripten, for sure.
 #warning "Platform does not support UMON"
 #else
 
@@ -30,32 +26,25 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 #include "memory_mapper.h"
 #include "sdcard.h"
-
 #include "xemu/emutools_socketapi.h"
-
-//#include <sys/types.h>
-//#include <sys/stat.h>
-//#include <fcntl.h>
-//#include <errno.h>
+#include "hypervisor.h"
 #include <string.h>
-//#include <limits.h>
 
 #ifndef XEMU_ARCH_WIN
 #include <unistd.h>
 #include <sys/un.h>
-//#include <sys/socket.h>
-//#include <netinet/in.h>
-//#include <netdb.h>
 #endif
 
-int  umon_write_size;
-int  umon_send_ok;
-char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
-
-#define UNCONNECTED	XS_INVALID_SOCKET
-
-#define PRINTF_SOCK	PRINTF_S64
-
+#define UMON_WRITE_BUFFER_SIZE	0x4000
+#define umon_printf(...)	do { \
+					if (XEMU_LIKELY(umon_write_size < UMON_WRITE_BUFFER_SIZE - 1)) \
+						umon_write_size += snprintf(umon_write_buffer + umon_write_size, UMON_WRITE_BUFFER_SIZE - umon_write_size, __VA_ARGS__); \
+					else \
+						_umon_write_size_panic(); \
+				} while(0)
+#define UMON_SYNTAX_ERROR	"?SYNTAX ERROR  "
+#define UNCONNECTED		XS_INVALID_SOCKET
+#define PRINTF_SOCK		PRINTF_S64
 
 static xemusock_socket_t  sock_server = UNCONNECTED;
 static xemusock_socklen_t sock_len;
@@ -64,15 +53,19 @@ static xemusock_socket_t  sock_client = UNCONNECTED;
 static int  umon_write_pos, umon_read_pos;
 static int  umon_echo;
 static char umon_read_buffer [0x1000];
+static int  umon_write_size;
+static int  umon_send_ok;
+static char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
 void (*m65mon_callback)(void) = NULL;
 int breakpoint_pc = -1;
 
 
-// WARNING: This source is pretty ugly, ie not so much check of overflow of the output (write) buffer.
 
-
-
+static void _umon_write_size_panic ( void )
+{
+	DEBUGPRINT("UARTMON: warning: too long message (%d/%d), cannot fit into the output buffer!" NL, umon_write_pos, UMON_WRITE_BUFFER_SIZE);
+}
 
 static void m65mon_show_regs ( void )
 {
@@ -187,6 +180,31 @@ static struct breakpoint_st breakpoints[MAX_BREAKPOINTS];
 static unsigned int breakpoint_no = 0;
 
 
+// This function must be called when there is the chance that breakpoint-like functionality requires
+// change from non-trace mode (=no CPU opcode callbacks) to trace mode or vice versa. Some possibilities
+// for this (when must be called):
+// * hypervisor-usermode change (because of possible hyperdebug mode)
+// * breakpoint added or removed
+// * emulator start-up (CLI or config controlled option takes affect for some debugging related purpose)
+// The function takes care activating or de-activating trace mode (=CPU opcode callbacks) if needed by
+// checking the enviconment on key momements (which means eg the above list when the function must be
+// called).
+void umon_opcode_callback_setup ( const char *reason )
+{
+	if (breakpoint_pc >= 0 || (in_hypervisor && hypervisor_is_debugged)) {	// all possibilities which involves using trace mode
+		if (!cpu65.debug_callbacks.exec) {
+			DEBUGPRINT("UMON: enabling opcode trace mode (%s)" NL, reason);
+			cpu65.debug_callbacks.exec = true;
+		}
+	} else {
+		if (cpu65.debug_callbacks.exec) {
+			DEBUGPRINT("UMON: disabling opcode trace mode (%s)" NL, reason);
+			cpu65.debug_callbacks.exec = false;
+		}
+	}
+}
+
+
 // REMOVE a breakpoint. Warning: there is no need to call this on breakpoints which are added as "temp" (see add_breakpoint() function) _AND_ that breakpoint was hit
 // Warning2: removing a breakpoint other than the last added one causes the indices in the breakpoint array to be changed!
 static void remove_breakpoint ( const unsigned int n )
@@ -196,9 +214,10 @@ static void remove_breakpoint ( const unsigned int n )
 	}
 	breakpoint_no--;
 	if (!breakpoint_no)
-		cpu65.debug_callbacks.exec = 0;		// stop tracing mode if no breakpoint is left!
+		cpu65.debug_callbacks.exec = false;		// stop tracing mode if no breakpoint is left!
 	else if (n != breakpoint_no - 2)
 		memmove(breakpoints + n, breakpoints + n + 1, (breakpoint_no - n) * sizeof(struct breakpoint_st));
+	umon_opcode_callback_setup("removing last active breakpoint");
 }
 
 
@@ -220,12 +239,13 @@ static void add_breakpoint ( const Uint16 pc, bool (*callback)(const unsigned in
 		ERROR_WINDOW("Too many existing (%u) breakpoints, cannot add another one!", breakpoint_no);
 		return;
 	}
-	cpu65.debug_callbacks.exec = 1;			// activate trace mode (in case if it's the first breakpoint to be used)
+	cpu65.debug_callbacks.exec = true;			// activate trace mode (in case if it's the first breakpoint to be used)
 	breakpoints[breakpoint_no].pc = pc;
 	breakpoints[breakpoint_no].callback = callback;
 	breakpoints[breakpoint_no].temp = temp;
 	breakpoints[breakpoint_no].user_data = user_data;
 	breakpoint_no++;
+	umon_opcode_callback_setup("adding breakpoint");
 }
 
 

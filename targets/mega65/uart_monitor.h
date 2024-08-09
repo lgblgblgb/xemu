@@ -20,24 +20,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMU_MEGA65_UART_MONITOR_H_INCLUDED
 #ifdef HAS_UARTMON_SUPPORT
 
-#define UMON_SYNTAX_ERROR "?SYNTAX ERROR  "
-
 #define UMON_DEFAULT_PORT ":4510"
 
-#define UMON_WRITE_BUFFER_SIZE	0x4000
-#define umon_printf(...)	umon_write_size += sprintf(umon_write_buffer + umon_write_size, __VA_ARGS__)
-
-extern int  umon_write_size;
-extern int  umon_send_ok;
-extern char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 extern void (*m65mon_callback)(void);
 extern int  breakpoint_pc;
 
-extern int  uartmon_init   ( const char *fn );
-extern int  uartmon_is_active ( void );
-extern void uartmon_update ( void );
-extern void uartmon_close  ( void );
+extern int  uartmon_init           ( const char *fn );
+extern int  uartmon_is_active      ( void );
+extern void uartmon_update         ( void );
+extern void uartmon_close          ( void );
 extern void uartmon_finish_command ( void );
+
+extern void umon_opcode_callback_setup ( const char *reason );
 
 #endif
 #endif

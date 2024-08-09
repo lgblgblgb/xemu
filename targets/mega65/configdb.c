@@ -112,6 +112,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "fastboot", "Try to use sleepless emulation mode during booting", &configdb.fastboot },
 	{ "matrixstart", "Start with matrix-mode activated", &configdb.matrixstart },
 	{ "matrixdisable", "Disable the matrix hotkey", &configdb.matrixdisable },
+	{ "ramcheckread", "Enabled warnings on reading unwritten memory (first 126K only)", &configdb.ramcheckread },
 	{ NULL }
 };
 
@@ -152,7 +153,7 @@ static const void *do_not_save_opts[] = {
 	&configdb.matrixstart,
 	&configdb.dumpmem, &configdb.dumpscreen, &configdb.screenshot_and_exit,
 	&configdb.testing, &configdb.hyperdebug, &configdb.hyperdebugfreezer, &configdb.usestubrom, &configdb.useinitrom, &configdb.useutilmenu,
-	&configdb.cartbin8000, &configdb.winpos,
+	&configdb.cartbin8000, &configdb.winpos, &configdb.ramcheckread,
 	NULL
 };
 
