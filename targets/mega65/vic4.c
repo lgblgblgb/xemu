@@ -1439,6 +1439,8 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 						char_fetch_offset = -char_fetch_offset;
 					if (SXA_VERTICAL_FLIP(color_data))
 						enable_bg_paint = 0;
+					else
+						enable_bg_paint = 1;
 					if (SXA_ATTR_BOLD(color_data) && SXA_ATTR_REVERSE(color_data) && !REG_VICIII_ATTRIBS)
 						used_palette = altpalette;	// use the alternate palette from now in the scanline
 					else
