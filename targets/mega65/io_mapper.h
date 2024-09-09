@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 extern Uint8 io_read  ( unsigned int addr );
 extern void  io_write ( unsigned int addr, Uint8 data );
+extern void  io_set_vic_bugcompat_from_reg_D07A ( Uint8 b );
 
 extern Uint8  D6XX_registers[0x100];
 extern Uint8  D7XX[0x100];			// FIXME: newhack!
