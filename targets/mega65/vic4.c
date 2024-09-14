@@ -1392,7 +1392,12 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 	enable_bg_paint = 1;
 	draw_mask = 0xFF;	// initialize draw mask being $FF initially (glyph row is not masked out)
 	const Uint8 *row_data_base_addr = get_charset_effective_addr();	// FIXME: is it OK that I moved here, before the loop?
-	if (display_row <= display_row_count) {
+	// If this line is inside the vertical borders, mark all pixels as border color
+	if (ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM) {
+		for (int i = 0; i < TEXTURE_WIDTH; i++)
+			*(current_pixel++) = palette[REG_BORDER_COLOR];
+	}
+	else if (display_row <= display_row_count) {
 		Uint32 colour_ram_current_addr = COLOUR_RAM_OFFSET + (display_row * LINESTEP_BYTES);
 		Uint32 screen_ram_current_addr = SCREEN_ADDR + (display_row * LINESTEP_BYTES);
 		// Account for Chargen X-displacement
