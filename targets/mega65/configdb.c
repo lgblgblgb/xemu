@@ -73,6 +73,7 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "importbas",	NULL, "Import and RUN BASIC65 program from TEXT file", &configdb.importbas },
 	{ "cartbin8000",NULL, "Load binary cartridge image from $8000", &configdb.cartbin8000 },
 	{ "winpos",	NULL, "Window position: x,y (integers)", &configdb.winpos },
+	{ "initattic",	NULL, "Pre-fill the Attic RAM with the content of a file", &configdb.init_attic },
 	{ NULL }
 };
 
@@ -153,7 +154,7 @@ static const void *do_not_save_opts[] = {
 	&configdb.matrixstart,
 	&configdb.dumpmem, &configdb.dumpscreen, &configdb.screenshot_and_exit,
 	&configdb.testing, &configdb.hyperdebug, &configdb.hyperdebugfreezer, &configdb.usestubrom, &configdb.useinitrom, &configdb.useutilmenu,
-	&configdb.cartbin8000, &configdb.winpos, &configdb.ramcheckread,
+	&configdb.cartbin8000, &configdb.winpos, &configdb.ramcheckread, &configdb.init_attic,
 	NULL
 };
 
