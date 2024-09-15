@@ -376,6 +376,8 @@ static void mega65_init ( void )
 	}
 	// Fill memory with the needed pre-initialized regions to be able to start.
 	preinit_memory_for_start();
+	if (configdb.init_attic)
+		xemu_load_file(configdb.init_attic, attic_ram, 1, 8 << 20, "Cannot initialize Attic RAM from a file");
 	// *** Image file for SDCARD support, and other related init functions handled there as well (eg d81access, fdc init ... related registers, etc)
 	if (sdcard_init(configdb.sdimg,
 #ifndef		XEMU_ARCH_HTML
