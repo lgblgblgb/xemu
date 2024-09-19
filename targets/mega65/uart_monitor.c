@@ -114,12 +114,6 @@ static void m65mon_dumpmem28 ( int addr )
 		umon_printf("%02X", debug_read_linear_byte(addr++));
 }
 
-static void m65mon_setmem28 ( int addr, int cnt, Uint8* vals )
-{
-	while (--cnt >= 0)
-		debug_write_linear_byte(addr++, *(vals++));
-}
-
 static void m65mon_set_trace ( int m )
 {
 	paused = m;
@@ -348,7 +342,7 @@ static int check_end_of_command ( char *p, int error_out )
 }
 
 
-static void setmem28 ( char *param, int addr )
+static void m65mon_setmem ( char *param, int addr )
 {
 	char *orig_param = param;
 	int cnt = 0;
@@ -362,7 +356,10 @@ static void setmem28 ( char *param, int addr )
 	for (int idx = 0; idx < cnt; idx++) {
 		int val;
 		param = parse_hex_arg(param, &val, 0, 0xFF);
-		m65mon_setmem28(addr & 0xFFFFFFF, 1, (Uint8*)&val);
+		if ((addr >> 16) != 0x777)
+			debug_write_linear_byte(addr & 0xFFFFFFF, val);
+		else
+			debug_write_cpu_byte(addr & 0xFFFF, val);
 		addr++;
 	}
 }
@@ -427,7 +424,7 @@ static void execute_command ( char *cmd )
 			break;
 		case 's':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
-			setmem28(cmd, par1);
+			m65mon_setmem(cmd, par1);
 			break;
 		case 't':
 			if (!*cmd)
