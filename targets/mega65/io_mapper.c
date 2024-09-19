@@ -33,8 +33,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "configdb.h"
 #include "mega65.h"
 
-// Hardware errata level what Xemu supports at max. TODO: currently: *NONE*
-#define HW_ERRATA_MAX_LEVEL 0
 
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
 Uint8  D6XX_registers[0x100];		// mega65 specific D6XX range, excluding the UART part (not used here!)
@@ -93,12 +91,12 @@ static XEMU_INLINE void write_colour_ram ( const Uint32 addr, const Uint8 data )
 }
 
 
-static void write_hw_errata_register ( const Uint8 desired_level )
+void set_hw_errata_level ( const Uint8 desired_level, const char *reason )
 {
 	const Uint8 level = desired_level > HW_ERRATA_MAX_LEVEL ? HW_ERRATA_MAX_LEVEL : desired_level;
 	if (level == desired_level && level == hw_errata_level)
 		return;
-	DEBUGPRINT("HW_ERRATA: $%02X -> $%02X (wanted: $%02X)" NL, hw_errata_level, level, desired_level);
+	DEBUGPRINT("HW_ERRATA: $%02X -> $%02X (wanted: $%02X) [%s]" NL, hw_errata_level, level, desired_level, reason);
 	if (level == hw_errata_level)
 		return;
 	hw_errata_level = level;
@@ -106,15 +104,10 @@ static void write_hw_errata_register ( const Uint8 desired_level )
 }
 
 
-void io_set_vic_bugcompat_from_reg_D07A ( Uint8 b )
+void reset_hw_errata_level ( void )
 {
-	static Uint8 old_val = 0;
-	b &= 32;
-	if (b == old_val)
-		return;
-	DEBUGPRINT("HW_ERRATA: VIC NOBUGCOMPAT setting to '%c' via D07A.5" NL, b ? '1' : '0');
-	write_hw_errata_register((b & 32) ? HW_ERRATA_MAX_LEVEL : 0);
-	old_val = b;
+	hw_errata_level = 0xFF;	// to force change on calling set_hw_errata_level()
+	set_hw_errata_level(HW_ERRATA_RESET_LEVEL, "RESET");
 }
 
 
@@ -391,7 +384,7 @@ void io_write ( unsigned int addr, Uint8 data )
 				return;
 			}
 			if (addr == 0x8F) {
-				write_hw_errata_register(data);
+				set_hw_errata_level(data, "D08F change");
 				return;
 			}
 			if (XEMU_LIKELY(addr < 0xA0)) {

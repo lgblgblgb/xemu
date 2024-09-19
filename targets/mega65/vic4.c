@@ -780,7 +780,9 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			check_if_rom_palette(!(vic_registers[0x30] & 4));
 			break;
 		CASE_VIC_4(0x7A):
-			io_set_vic_bugcompat_from_reg_D07A(data);
+			// GS $D07A.5 VIC-IV:NOBUGCOMPAT Disables VIC-III / C65 Bug Compatibility Mode if set
+			if ((vic_registers[0x7A] ^ data) & 32)
+				set_hw_errata_level(data & 32 ? HW_ERRATA_MAX_LEVEL : 0, "D07A.5 change");
 			break;
 		CASE_VIC_4(0x7C):
 			if ((data & 7) <= 2) {
