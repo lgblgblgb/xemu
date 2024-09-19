@@ -1,6 +1,6 @@
 /* F018 DMA core emulation for Commodore 65.
    Part of the Xemu project. https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -440,25 +440,25 @@ void detect_rom_date ( Uint8 *p )
 void dma_init_set_rev ( unsigned int revision, Uint8 *rom_ver_signature )
 {
 	detect_rom_date(rom_ver_signature);
-	int rom_suggested_dma_revision = (rom_date < 900000 || rom_date > 910522);
-	DEBUGPRINT("ROM: version check suggests DMA revision %d" NL, rom_suggested_dma_revision);
+	const int rom_suggested_dma_revision = (rom_date < 900000 || rom_date > 910522) && (rom_date != -1);
+	DEBUGPRINT("ROM: version check suggests DMA revision '%c'" NL, rom_suggested_dma_revision + 'A');
 	revision &= 0xFF;
 	if (revision > 2) {
 		FATAL("Unknown DMA revision value tried to be set (%d)!", revision);
 	} else if (revision == 2) {
 		if (!rom_ver_signature)
 			FATAL("dma_ini_set_rev(): revision == 2 (auto-detect) but rom_ver_signature == NULL (cannot auto-detect)");
-		if (rom_date <= 0)
-			WARNING_WINDOW("ROM version cannot be detected, and DMA revision auto-detection was requested.\nDefaulting to revision %d.\nWarning, this may cause incorrect behaviour!", rom_suggested_dma_revision);
+		if (rom_date == -1)
+			DEBUGPRINT("DMA: ROM version cannot be detected, and DMA revision auto-detection was requested. Defaulting to revision '%c'. Warning, this may cause incorrect behaviour!" NL, rom_suggested_dma_revision + 'A');
 		dma_chip_revision = rom_suggested_dma_revision;
 		dma_chip_initial_revision = rom_suggested_dma_revision;
-		DEBUGPRINT("DMA: setting chip revision to #%d based on the ROM auto-detection" NL, dma_chip_initial_revision);
+		DEBUGPRINT("DMA: setting chip revision to '%c' based on the ROM auto-detection" NL, dma_chip_initial_revision + 'A');
 	} else {
 		dma_chip_revision = revision;
 		dma_chip_initial_revision = revision;
 		if (dma_chip_revision != rom_suggested_dma_revision && rom_date > 0)
-			WARNING_WINDOW("DMA revision is forced to be %d, while ROM version (%d)\nsuggested revision is %d. Using the forced revision %d.\nWarning, this may cause incorrect behaviour!", dma_chip_revision, rom_date, rom_suggested_dma_revision, dma_chip_revision);
-		DEBUGPRINT("DMA: setting chip revision to #%d based on configuration/command line request (forced). Suggested revision by ROM date: #%d" NL, dma_chip_initial_revision, rom_suggested_dma_revision);
+			WARNING_WINDOW("DMA revision is forced to be '%c', while ROM version (%d)\nsuggested revision is '%c'.\nWarning, this may cause incorrect behaviour!", revision + 'A', rom_date, rom_suggested_dma_revision + 'A');
+		DEBUGPRINT("DMA: setting chip revision to '%c' based on configuration/command line request (forced). Suggested revision by ROM date is '%c'" NL, dma_chip_initial_revision + 'A', rom_suggested_dma_revision + 'A');
 	}
 }
 
