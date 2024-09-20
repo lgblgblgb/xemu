@@ -388,6 +388,7 @@ static void mega65_init ( void )
 	) < 0)
 		FATAL("Cannot find SD-card image (which is a must for MEGA65 emulation): %s", configdb.sdimg);
 	// *** Initialize VIC4
+	reset_hw_errata_level();
 	vic_init();
 	vic4_disallow_videostd_change = configdb.lock_videostd;
 	vic4_set_videostd(configdb.videostd >= 0 ? configdb.videostd : 0, "by emulator initalization");
@@ -499,6 +500,7 @@ void reset_mega65 ( void )
 	static const char reset_debug_msg[] = "SYSTEM: RESET - ";
 	last_reset_type = "COLD";
 	DEBUGPRINT("%sBEGIN" NL, reset_debug_msg);
+	reset_hw_errata_level();
 	memset(D7XX + 0x20, 0, 0x40);	// stop audio DMA possibly going on
 	rom_clear_reports();
 	preinit_memory_for_start();

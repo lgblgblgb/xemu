@@ -266,6 +266,7 @@ extern int   vic4_render_scanline ( void );
 extern void  vic4_open_frame_access ( void );
 extern void  vic4_close_frame_access ( void );
 extern void  vic4_set_videostd ( const int mode, const char *comment );
+extern void  vic4_set_errata_level ( const Uint8 level );
 
 extern Uint8*vic4_query_screen_address ( void );
 extern Uint8*vic4_query_colour_address ( void );

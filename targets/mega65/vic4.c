@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/f011_core.h"
 #include "xemu/emutools_files.h"
 #include "xemu/basic_text.h"
+#include "io_mapper.h"
 
 
 #define SPRITE_SPRITE_COLLISION
@@ -80,6 +81,8 @@ static int EFFECTIVE_V400;
 static Uint8 sprite_is_being_rendered[8];
 #warning "Sprite coordinate latching is an experimental feature (SPRITE_COORD_LATCHING is defined)!"
 #endif
+static Uint8 bug_compat_vic_iii_d016_delta = 2;
+static bool  bug_compat_char_attr = true;
 
 // --- these things are altered by vic4_open_frame_access() ONLY at every fame ONLY based on PAL or NTSC selection
 Uint8 videostd_id = 0xFF;			// 0=PAL, 1=NTSC [give some insane value by default to force the change at the fist frame after starting Xemu]
@@ -307,7 +310,7 @@ static void vic4_update_sideborder_dimensions ( void )
 }
 
 
-static void vic4_update_vertical_borders( void )
+static void vic4_update_vertical_borders ( void )
 {
 	// FIXME: it seems we need this line here! Otherwise EFFECTIVE_V400 may not reflect what
 	// it should be, if just updated in vic4_open_frame_access(). This seems to fix the OpenROMs
@@ -318,12 +321,12 @@ static void vic4_update_vertical_borders( void )
 		if (!REG_H640)
 			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL));
 		else	// 80-col mode
-			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - 2);
+			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - bug_compat_vic_iii_d016_delta);
 	} else {	// 38-columns
 		if (!REG_H640)
 			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL));
 		else	// 78-col mode
-			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - 2);
+			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - bug_compat_vic_iii_d016_delta);
 	}
 	if (!EFFECTIVE_V400) {	// Standard mode (200-lines)
 		display_row_count = 24;
@@ -350,6 +353,21 @@ static void vic4_update_vertical_borders( void )
 	SET_CHARGEN_X_START(CHARGEN_X_START - 1);
 	DEBUG("VIC4: set border top=%d, bottom=%d, textypos=%d, display_row_count=%d vic_ii_first_raster=%d EFFECTIVE_V400=%d REG_V400=%d" NL, BORDER_Y_TOP, BORDER_Y_BOTTOM,
 		CHARGEN_Y_START, display_row_count, vicii_first_raster, EFFECTIVE_V400, REG_V400);
+}
+
+
+// Called from set_hw_errata_level() in io_mapper.c
+void  vic4_set_errata_level ( const Uint8 level )
+{
+	static Uint8 old_bug_compat_vic_iii_d016_delta = 2;
+	bug_compat_vic_iii_d016_delta = level > 0 ? 0 : 2;	// if level > 0, no delta, if level == 0 then delta = 2 (VIC-III/C65 "buggy" default)
+	bug_compat_char_attr = level > 1 ? false : true;
+	DEBUGPRINT("VIC: errata level is set %u: d016_delta=%u, char_attr_buggy=%u" NL, level, bug_compat_vic_iii_d016_delta, bug_compat_char_attr);
+	if (bug_compat_vic_iii_d016_delta != old_bug_compat_vic_iii_d016_delta) {
+		old_bug_compat_vic_iii_d016_delta = bug_compat_vic_iii_d016_delta;
+		if (REG_HOTREG)
+			vic4_update_vertical_borders();	// so "bug_compat_vic_iii_d016_delta" will have effect ... However maybe this is FIXME in case of hot-register issue (?)
+	}
 }
 
 
@@ -755,7 +773,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x64):
 		CASE_VIC_4(0x65): CASE_VIC_4(0x66): CASE_VIC_4(0x67): /*CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):*/ CASE_VIC_4(0x6B): /*CASE_VIC_4(0x6C):
 		CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):*//*CASE_VIC_4(0x70):*/ CASE_VIC_4(0x71): CASE_VIC_4(0x72): CASE_VIC_4(0x73): CASE_VIC_4(0x74):
-		CASE_VIC_4(0x75): CASE_VIC_4(0x76): CASE_VIC_4(0x77): CASE_VIC_4(0x78): CASE_VIC_4(0x79): CASE_VIC_4(0x7A): CASE_VIC_4(0x7B): /*CASE_VIC_4(0x7C):*/
+		CASE_VIC_4(0x75): CASE_VIC_4(0x76): CASE_VIC_4(0x77): CASE_VIC_4(0x78): CASE_VIC_4(0x79): /*CASE_VIC_4(0x7A):*/ CASE_VIC_4(0x7B): /*CASE_VIC_4(0x7C):*/
 		CASE_VIC_4(0x7D): CASE_VIC_4(0x7E): CASE_VIC_4(0x7F):
 			break;
 
@@ -777,6 +795,11 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			palette		= ((data & 0x30) << 4) + vic_palettes;
 			palregaccofs	= ((data & 0xC0) << 2);
 			check_if_rom_palette(!(vic_registers[0x30] & 4));
+			break;
+		CASE_VIC_4(0x7A):
+			// GS $D07A.5 VIC-IV:NOBUGCOMPAT Disables VIC-III / C65 Bug Compatibility Mode if set
+			if ((vic_registers[0x7A] ^ data) & 32)
+				set_hw_errata_level(data & 32 ? HW_ERRATA_MAX_LEVEL : 0, "D07A.5 change");
 			break;
 		CASE_VIC_4(0x7C):
 			if ((data & 7) <= 2) {

@@ -37,6 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
 Uint8  D6XX_registers[0x100];		// mega65 specific D6XX range, excluding the UART part (not used here!)
 Uint8  D7XX[0x100];			// FIXME: hack for future M65 stuffs like ALU!
+static Uint8 hw_errata_level = 0;
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 int    cpu_mega65_opcodes = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;
@@ -90,6 +91,27 @@ static XEMU_INLINE void write_colour_ram ( const Uint32 addr, const Uint8 data )
 }
 
 
+void set_hw_errata_level ( const Uint8 desired_level, const char *reason )
+{
+	const Uint8 level = desired_level > HW_ERRATA_MAX_LEVEL ? HW_ERRATA_MAX_LEVEL : desired_level;
+	if (level == desired_level && level == hw_errata_level)
+		return;
+	DEBUGPRINT("HW_ERRATA: %u -> %u (wanted: %u, xemu-max: %u) [%s]" NL, hw_errata_level, level, desired_level, HW_ERRATA_MAX_LEVEL, reason);
+	if (level == hw_errata_level)
+		return;
+	hw_errata_level = level;
+	// --- Do the actual work, set things based on the new hardware errata level:
+	vic4_set_errata_level(level);
+}
+
+
+void reset_hw_errata_level ( void )
+{
+	hw_errata_level = 0xFF;	// to force change on calling set_hw_errata_level()
+	set_hw_errata_level(HW_ERRATA_RESET_LEVEL, "RESET");
+}
+
+
 /* Internal decoder for I/O reads. Address *must* be within the 0-$3FFF (!!) range. The low 12 bits is the actual address inside the I/O area,
    while the most significant nibble shows the I/O mode the operation is meant, according to the following table:
    0 = C64 (VIC-II) I/O mode
@@ -124,6 +146,8 @@ Uint8 io_read ( unsigned int addr )
 			addr &= 0xFF;
 			if (XEMU_LIKELY(addr < 0x80))
 				return vic_read_reg(addr);		// VIC-IV read register
+			if (addr == 0x8F)
+				return hw_errata_level;
 			if (XEMU_LIKELY(addr < 0xA0))
 				return fdc_read_reg(addr & 0xF);
 			RETURN_ON_IO_READ_NOT_IMPLEMENTED("RAM expansion controller", 0xFF);
@@ -358,6 +382,10 @@ void io_write ( unsigned int addr, Uint8 data )
 			addr &= 0xFF;
 			if (XEMU_LIKELY(addr < 0x80)) {
 				vic_write_reg(addr, data);		// VIC-IV write register
+				return;
+			}
+			if (addr == 0x8F) {
+				set_hw_errata_level(data, "D08F change");
 				return;
 			}
 			if (XEMU_LIKELY(addr < 0xA0)) {
