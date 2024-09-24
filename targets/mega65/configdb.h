@@ -114,6 +114,7 @@ struct configdb_st {
 	char	*winpos;
 	int	ramcheckread;
 	char	*init_attic;
+	int	joyport;
 };
 
 extern struct configdb_st configdb;
