@@ -378,7 +378,11 @@ static void vic4_interpret_legacy_mode_registers ( void )
 	vic4_update_vertical_borders();
 
 	Uint8 width = REG_H640 ? 80 : 40;
-	REG_CHRCOUNT = width;
+
+	// Set all 10 bits of ChrCount
+	vic_registers[0x5e] = (width&255);
+	vic_registers[0x63] = (vic_registers[0x63] & 0xcf) | (((width/256)&3)<<4);
+
 	SET_LINESTEP_BYTES(width);	// * (REG_16BITCHARSET ? 2 : 1));
 
 	REG_SCRNPTR_B0 = 0;
