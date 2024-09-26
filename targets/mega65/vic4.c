@@ -380,8 +380,8 @@ static void vic4_interpret_legacy_mode_registers ( void )
 	Uint8 width = REG_H640 ? 80 : 40;
 
 	// Set all 10 bits of ChrCount
-	vic_registers[0x5e] = (width&255);
-	vic_registers[0x63] = (vic_registers[0x63] & 0xcf) | (((width/256)&3)<<4);
+	vic_registers[0x5e] = width;
+	vic_registers[0x63] &= 0xCF; // clearing bits 4 and 5, being MSB of CHRCOUNT
 
 	SET_LINESTEP_BYTES(width);	// * (REG_16BITCHARSET ? 2 : 1));
 
