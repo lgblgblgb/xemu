@@ -110,7 +110,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_LINESTEP			vic_registers[0x58]
 #define REG_LINESTEP_U8			vic_registers[0x59]
 #define REG_CHARXSCALE			vic_registers[0x5A]
-#define REG_CHRCOUNT			vic_registers[0x5E]
+#define REG_CHRCOUNT			(vic_registers[0x5E] + ((vic_registers[0x63] & 0x30) << 4))
 #define REG_SCRNPTR_B0			vic_registers[0x60]
 #define REG_SCRNPTR_B1			vic_registers[0x61]
 #define REG_SCRNPTR_B2			vic_registers[0x62]
