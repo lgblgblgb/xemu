@@ -803,6 +803,9 @@ void hdos_enter ( const Uint8 func_no )
 			case 0x3C >> 1:
 				hdos_virt_cdroot();
 				break;
+			case 0x3E >> 1:	// loadfile_attic
+				hdos_virt_loadfile(0x8000000U);
+				break;
 			case 0x40 >> 1:
 				hdos_virt_mount(0);
 				break;
