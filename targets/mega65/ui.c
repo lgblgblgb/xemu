@@ -862,8 +862,10 @@ static const struct menu_st menu_reset[] = {
 	{ NULL }
 };
 static const struct menu_st menu_inputdevices[] = {
-	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE |
+	{ "Enable mouse grab",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
+	{ "Disable mouse emulation",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&configdb.nomouseemu },
 	{ "Use OSD key debugger",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
 	{ "Cursor keys as joystick",	XEMUGUI_MENUID_CALLABLE |

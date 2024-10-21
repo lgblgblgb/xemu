@@ -114,6 +114,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "matrixstart", "Start with matrix-mode activated", &configdb.matrixstart },
 	{ "matrixdisable", "Disable the matrix hotkey", &configdb.matrixdisable },
 	{ "ramcheckread", "Enabled warnings on reading unwritten memory (first 126K only)", &configdb.ramcheckread },
+	{ "nomouseemu", "Disable mouse emulation", &configdb.nomouseemu },
 	{ NULL }
 };
 

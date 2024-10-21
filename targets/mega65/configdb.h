@@ -115,6 +115,7 @@ struct configdb_st {
 	int	ramcheckread;
 	char	*init_attic;
 	int	joyport;
+	int	nomouseemu;
 };
 
 extern struct configdb_st configdb;
