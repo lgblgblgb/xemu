@@ -186,6 +186,7 @@ matrix:
         - build/dmg-osx-creator.sh
         - build/deploy/before-deploy.sh xemu-deploy MacOS
       deploy:
+        dpl_version: 1.10.16
         provider: pages
         local_dir: xemu-deploy
         skip_cleanup: true
