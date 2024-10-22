@@ -508,7 +508,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			last_poscode_seen = pos;
 		}
 		// Also check for special, emulator-related hot-keys
-		if (key == SDL_SCANCODE_F10) {
+		if (pos == XEMU_EVENT_RESET) {	// was hard-coded to be SDL_SCANCODE_F10 before
 			reset_mega65_asked();
 		} else if (key == SDL_SCANCODE_KP_ENTER) {
 			input_toggle_joy_emu();
@@ -519,7 +519,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 		if (pos == RESTORE_KEY_POS)
 			restore_is_held = 0;
 		if (pos == -2 && key == 0) {	// special case pos = -2, key = 0, handled = mouse button (which?) and release event!
-			if ((handled == SDL_BUTTON_LEFT)) {
+			if (handled == SDL_BUTTON_LEFT) {
 				if (configdb.nomouseemu) {
 					OSD(-1, -1, "Mouse emulation is disabled.\nCannot enter mouse grab mode.");
 				} else {
