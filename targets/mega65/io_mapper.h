@@ -21,8 +21,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/cia6526.h"
 
-// Hardware errata level what Xemu supports at max. TODO: currently: *NONE*
-#define HW_ERRATA_MAX_LEVEL	0
+// Hardware errata level what Xemu supports at max.
+#define HW_ERRATA_MAX_LEVEL	2
 
 // Default HW_ERRATA_RESET_LEVEL when calling reset_hw_errata_level()
 #define HW_ERRATA_RESET_LEVEL	0

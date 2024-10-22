@@ -96,11 +96,12 @@ void set_hw_errata_level ( const Uint8 desired_level, const char *reason )
 	const Uint8 level = desired_level > HW_ERRATA_MAX_LEVEL ? HW_ERRATA_MAX_LEVEL : desired_level;
 	if (level == desired_level && level == hw_errata_level)
 		return;
-	DEBUGPRINT("HW_ERRATA: $%02X -> $%02X (wanted: $%02X) [%s]" NL, hw_errata_level, level, desired_level, reason);
+	DEBUGPRINT("HW_ERRATA: %u -> %u (wanted: %u, xemu-max: %u) [%s]" NL, hw_errata_level, level, desired_level, HW_ERRATA_MAX_LEVEL, reason);
 	if (level == hw_errata_level)
 		return;
 	hw_errata_level = level;
-	// TODO: the actual work should go here, setting various bug stuff variables based on "level"
+	// --- Do the actual work, set things based on the new hardware errata level:
+	vic4_set_errata_level(level);
 }
 
 

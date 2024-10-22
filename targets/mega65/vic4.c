@@ -81,6 +81,8 @@ static int EFFECTIVE_V400;
 static Uint8 sprite_is_being_rendered[8];
 #warning "Sprite coordinate latching is an experimental feature (SPRITE_COORD_LATCHING is defined)!"
 #endif
+static Uint8 bug_compat_vic_iii_d016_delta = 2;
+static bool  bug_compat_char_attr = true;
 
 // --- these things are altered by vic4_open_frame_access() ONLY at every fame ONLY based on PAL or NTSC selection
 Uint8 videostd_id = 0xFF;			// 0=PAL, 1=NTSC [give some insane value by default to force the change at the fist frame after starting Xemu]
@@ -308,7 +310,7 @@ static void vic4_update_sideborder_dimensions ( void )
 }
 
 
-static void vic4_update_vertical_borders( void )
+static void vic4_update_vertical_borders ( void )
 {
 	// FIXME: it seems we need this line here! Otherwise EFFECTIVE_V400 may not reflect what
 	// it should be, if just updated in vic4_open_frame_access(). This seems to fix the OpenROMs
@@ -319,12 +321,12 @@ static void vic4_update_vertical_borders( void )
 		if (!REG_H640)
 			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL));
 		else	// 80-col mode
-			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - 2);
+			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - bug_compat_vic_iii_d016_delta);
 	} else {	// 38-columns
 		if (!REG_H640)
 			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL));
 		else	// 78-col mode
-			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - 2);
+			SET_CHARGEN_X_START(FRAME_H_FRONT + SINGLE_SIDE_BORDER + (2 * REG_VIC2_XSCROLL) - bug_compat_vic_iii_d016_delta);
 	}
 	if (!EFFECTIVE_V400) {	// Standard mode (200-lines)
 		display_row_count = 24;
@@ -351,6 +353,21 @@ static void vic4_update_vertical_borders( void )
 	SET_CHARGEN_X_START(CHARGEN_X_START - 1);
 	DEBUG("VIC4: set border top=%d, bottom=%d, textypos=%d, display_row_count=%d vic_ii_first_raster=%d EFFECTIVE_V400=%d REG_V400=%d" NL, BORDER_Y_TOP, BORDER_Y_BOTTOM,
 		CHARGEN_Y_START, display_row_count, vicii_first_raster, EFFECTIVE_V400, REG_V400);
+}
+
+
+// Called from set_hw_errata_level() in io_mapper.c
+void  vic4_set_errata_level ( const Uint8 level )
+{
+	static Uint8 old_bug_compat_vic_iii_d016_delta = 2;
+	bug_compat_vic_iii_d016_delta = level > 0 ? 0 : 2;	// if level > 0, no delta, if level == 0 then delta = 2 (VIC-III/C65 "buggy" default)
+	bug_compat_char_attr = level > 1 ? false : true;
+	DEBUGPRINT("VIC: errata level is set %u: d016_delta=%u, char_attr_buggy=%u" NL, level, bug_compat_vic_iii_d016_delta, bug_compat_char_attr);
+	if (bug_compat_vic_iii_d016_delta != old_bug_compat_vic_iii_d016_delta) {
+		old_bug_compat_vic_iii_d016_delta = bug_compat_vic_iii_d016_delta;
+		if (REG_HOTREG)
+			vic4_update_vertical_borders();	// so "bug_compat_vic_iii_d016_delta" will have effect ... However maybe this is FIXME in case of hot-register issue (?)
+	}
 }
 
 
