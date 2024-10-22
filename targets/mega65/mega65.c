@@ -348,7 +348,7 @@ static void mega65_init ( void )
 #ifdef HID_KBD_MAP_CFG_SUPPORT
 	hid_keymap_from_config_file(configdb.keymap);
 #endif
-	joystick_emu = 2;	// use joystick port #2 by default
+	joystick_emu = configdb.joyport;
 	nmi_level = 0;
 	// *** FPGA switches ...
 	do {
