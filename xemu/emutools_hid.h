@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -105,9 +105,11 @@ extern void hid_handle_all_sdl_events   ( void ) ;
 #define XEMU_EVENT_FAKE_JOY_RIGHT	0x104
 #define XEMU_EVENT_FAKE_JOY_FIRE	0x105
 #define XEMU_EVENT_TOGGLE_FULLSCREEN	0x106
+#define XEMU_EVENT_RESET		0x107
 
 #define STD_XEMU_SPECIAL_KEYS	\
 	{ SDL_SCANCODE_F9,	XEMU_EVENT_EXIT,		"XEMU-EXIT" }, \
+	{ SDL_SCANCODE_F10,	XEMU_EVENT_RESET,		"XEMU-RESET" }, \
 	{ SDL_SCANCODE_F11,	XEMU_EVENT_TOGGLE_FULLSCREEN,	"XEMU-FULLSCREEN" }, \
 	{ SDL_SCANCODE_KP_5,	XEMU_EVENT_FAKE_JOY_FIRE,	"XEMU-JOY-FIRE" },	/* for joy FIRE  we map PC num keypad 5 */ \
 	{ SDL_SCANCODE_KP_0,	XEMU_EVENT_FAKE_JOY_FIRE,	"XEMU-JOY-FIRE" },	/* PC num keypad 0 is also the FIRE ... */ \
