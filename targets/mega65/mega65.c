@@ -56,18 +56,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static int nmi_level;			// please read the comment at nmi_set() below
 static int emulation_is_running = 0;
 static int speed_current = -1;
-int paused = 0;
-static int paused_old = 0;
-#ifdef TRACE_NEXT_SUPPORT
-static int orig_sp = 0;
-static int trace_next_trigger = 0;
-#endif
-int trace_step_trigger = 0;
 static char emulator_speed_title[64] = "";
 static char fast_mhz_as_string[16] = "";
 const char *cpu_clock_speed_string_p = "";
 static unsigned int cpu_cycles_per_scanline;
-int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
+#ifdef CPU_STEP_MULTI_OPS
+static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
+#endif
 static Uint8 i2c_regs_original[sizeof i2c_regs];
 Uint8 last_dd00_bits = 3;		// Bank 0
 const char *last_reset_type;
@@ -139,8 +134,9 @@ void machine_set_speed ( int verbose )
 				break;
 		}
 		DEBUG("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_string_p, cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
-		if (cpu_cycles_per_step > 1 && !hypervisor_is_debugged && !configdb.cpusinglestep)
-			cpu_cycles_per_step = cpu_cycles_per_scanline;	// if in trace mode (or hyper-debug ...), do not set this! So set only if non-trace and non-hyper-debug
+#ifdef		CPU_STEP_MULTI_OPS
+		cpu_cycles_per_step = XEMU_LIKELY(!configdb.cpusinglestep) ? cpu_cycles_per_scanline : 0;
+#endif
 	}
 }
 
@@ -337,8 +333,10 @@ static void mega65_init ( void )
 {
 	last_reset_type = "XEMU-STARTUP";
 	hypervisor_debug_init(configdb.hickuprep, configdb.hyperdebug, configdb.hyperserialascii);
-	if (hypervisor_is_debugged || configdb.cpusinglestep)
+#ifdef	CPU_STEP_MULTI_OPS
+	if (configdb.cpusinglestep)
 		cpu_cycles_per_step = 0;
+#endif
 	hid_init(
 		c64_key_map,
 		VIRTUAL_SHIFT_POS,
@@ -559,18 +557,6 @@ int reset_mega65_asked ( void )
 }
 
 
-#ifdef HAS_UARTMON_SUPPORT
-void set_breakpoint ( int brk )
-{
-	breakpoint_pc = brk;
-	if (brk < 0)
-		cpu_cycles_per_step = cpu_cycles_per_scanline;
-	else
-		cpu_cycles_per_step = 0;
-}
-#endif
-
-
 static void update_emulated_time_sources ( void )
 {
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
@@ -627,69 +613,10 @@ static void emulation_loop ( void )
 	// machine_set_speed() will react to videostd_changed flag, so it's just enough to call it from here
 	machine_set_speed(0);
 	for (;;) {
-#ifdef TRACE_NEXT_SUPPORT
-		if (trace_next_trigger == 2) {
-			if (cpu65.op == 0x20) {		// was the current opcode a JSR $nnnn ? (0x20)
-				trace_next_trigger = 1;	// if so, let's loop until the stack pointer returns back, then pause
-			} else {
-				trace_next_trigger = 0;	// if the current opcode wasn't a JSR, then lets pause immediately after
-				paused = 1;
-			}
-		} else if (trace_next_trigger == 1) {	// are we presently stepping over a JSR?
-			if ((cpu65.sphi | cpu65.s) == orig_sp ) {	// did the current sp return to its original position?
-				trace_next_trigger = 0;	// if so, lets pause the emulation, as we have successfully stepped over the JSR
-				paused = 1;
-			}
-		}
-#endif
-		while (XEMU_UNLIKELY(paused)) {	// paused special mode, ie tracing support, or something ...
-			if (XEMU_UNLIKELY(in_dma))
-				break;		// if DMA is pending, do not allow monitor/etc features
-#ifdef HAS_UARTMON_SUPPORT
-			if (m65mon_callback) {	// delayed uart monitor command should be finished ...
-				m65mon_callback();
-				m65mon_callback = NULL;
-				uartmon_finish_command();
-			}
-#endif
-			// we still need to feed our emulator with update events ... It also slows this pause-busy-loop down to every full frames (~25Hz) <--- XXX totally inaccurate now!
-			// note, that it messes timing up a bit here, as there is update_emulator() calls later in the "normal" code as well
-			// this can be a bug, but real-time emulation is not so much an issue if you eg doing trace of your code ...
-			// XXX it's maybe a problem to call this!!! update_emulator() is called here which closes frame but no no reopen then ... FIXME: handle this somehow!
-			update_emulator();
-			if (trace_step_trigger) {
-				// if monitor triggers a step, break the pause loop, however we will get back the control on the next
-				// iteration of the infinite "for" loop, as "paused" is not altered
-				trace_step_trigger = 0;
-				break;	// break the pause loop now
-			}
-			// If "paused" mode is switched off ie by a monitor command (called from update_emulator() above!)
-			// then it will resets back the the original state, etc
-			if (paused != paused_old) {
-				paused_old = paused;
-				if (paused) {
-					DEBUGPRINT("TRACE: entering into trace mode @ $%04X" NL, cpu65.pc);
-					cpu_cycles_per_step = 0;
-				} else {
-					DEBUGPRINT("TRACE: leaving trace mode @ $%04X" NL, cpu65.pc);
-#ifdef					HAS_UARTMON_SUPPORT
-					if (breakpoint_pc < 0)
-						cpu_cycles_per_step = cpu_cycles_per_scanline;
-					else
-						cpu_cycles_per_step = 0;
-#else
-					cpu_cycles_per_step = cpu_cycles_per_scanline;
-#endif
-				}
-			}
-		}
-		if (XEMU_UNLIKELY(hypervisor_is_debugged && in_hypervisor))
-			hypervisor_debug();
 #ifdef		HAS_UARTMON_SUPPORT
-		if (XEMU_UNLIKELY(breakpoint_pc == cpu65.pc)) {
-			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu65.pc);
-			paused = 1;
-		}
+		if (XEMU_UNLIKELY(!cpu65.running))
+		cycles += 1;	// fake cycles spent, though the CPU is not running!
+		else
 #endif
 		cycles += XEMU_UNLIKELY(in_dma) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
 #ifdef CPU_STEP_MULTI_OPS
@@ -699,7 +626,7 @@ static void emulation_loop ( void )
 		if (cycles >= cpu_cycles_per_scanline) {
 			cycles -= cpu_cycles_per_scanline;
 			cia_tick(&cia1, 32);	// FIXME: why 32?????? why fixed????? what should be the CIA "tick" frequency for real? Is it dependent on NTSC/PAL?
-			cia_tick(&cia2, 32);
+			cia_tick(&cia2, 32);	//	... also: do we want to tick CIAs if CPU is stopped -> making this conditional if cpu65.running is True, only??
 			if (XEMU_UNLIKELY(vic4_render_scanline()))
 				break;	// break the (main, "for") loop, if frame is over!
 		}

@@ -29,7 +29,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 struct configdb_st {
 	int	fullscreen_requested;
+#ifdef	CPU_STEP_MULTI_OPS
 	int	cpusinglestep;
+#endif
 	char	*disk8;
 	char	*disk9;
 	char	*fpga;

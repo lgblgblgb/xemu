@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "rom.h"
 #define  XEMU_MEGA65_HDOS_H_ALLOWED
 #include "hdos.h"
+#include "uart_monitor.h"
 
 #include <sys/types.h>
 #include <fcntl.h>
@@ -628,8 +629,9 @@ void hypervisor_debug_late_enable ( void )
 {
 	if (resolver_ok && !hypervisor_is_debugged) {
 		hypervisor_is_debugged = 1;
-		cpu_cycles_per_step = 0;
-		DEBUGPRINT("HYPERDEBUG: late-enable process now." NL);
+#ifdef		HAS_UARTMON_SUPPORT
+		umon_opcode_callback_setup("hyperdebug late-enable");
+#endif
 	}
 }
 

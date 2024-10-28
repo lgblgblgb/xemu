@@ -57,8 +57,16 @@ static int  umon_write_size;
 static int  umon_send_ok;
 static char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
-void (*m65mon_callback)(void) = NULL;
-int breakpoint_pc = -1;
+#define MAX_BREAKPOINTS 10
+struct breakpoint_st {
+	Uint16	pc;
+	bool	(*callback)(const unsigned int);
+	bool	temp;
+	const void	*user_data;
+};
+static struct breakpoint_st breakpoints[MAX_BREAKPOINTS];
+static unsigned int br_nums = 0;
+
 
 
 
@@ -67,7 +75,8 @@ static void _umon_write_size_panic ( void )
 	DEBUGPRINT("UARTMON: warning: too long message (%d/%d), cannot fit into the output buffer!" NL, umon_write_pos, UMON_WRITE_BUFFER_SIZE);
 }
 
-static void m65mon_show_regs ( void )
+
+static void do_show_regs ( void )
 {
 	Uint8 pf = cpu65_get_pf();
 	umon_printf(
@@ -92,12 +101,8 @@ static void m65mon_show_regs ( void )
 	);
 }
 
-static void m65mon_set_pc ( const Uint16 addr )
-{
-	cpu65_debug_set_pc(addr);
-}
 
-static void m65mon_dumpmem16 ( Uint16 addr )
+static void cmd_dumpmem16 ( Uint16 addr )
 {
 	int n = 16;
 	umon_printf(":000%04X:", addr);
@@ -105,7 +110,8 @@ static void m65mon_dumpmem16 ( Uint16 addr )
 		umon_printf("%02X", debug_read_cpu_byte(addr++));
 }
 
-static void m65mon_dumpmem28 ( int addr )
+
+static void cmd_dumpmem28 ( int addr )
 {
 	int n = 16;
 	addr &= 0xFFFFFFF;
@@ -114,17 +120,19 @@ static void m65mon_dumpmem28 ( int addr )
 		umon_printf("%02X", debug_read_linear_byte(addr++));
 }
 
+
+#if 0
 static void m65mon_set_trace ( int m )
 {
 	paused = m;
 }
 
-#ifdef TRACE_NEXT_SUPPORT
+
 static void m65mon_do_next ( void )
 {
 	if (paused) {
 		umon_send_ok = 0;			// delay command execution!
-		m65mon_callback = m65mon_show_regs;	// register callback
+		delayed_callback_fptr = do_show_regs;	// register callback
 		trace_next_trigger = 2;			// if JSR, then trigger until RTS to next_addr
 		orig_sp = cpu65.sphi | cpu65.s;
 		paused = 0;
@@ -132,46 +140,40 @@ static void m65mon_do_next ( void )
 		umon_printf(UMON_SYNTAX_ERROR "trace can be used only in trace mode");
 	}
 }
-#endif
+
 
 static void m65mon_do_trace ( void )
 {
 	if (paused) {
 		umon_send_ok = 0; // delay command execution!
-		m65mon_callback = m65mon_show_regs; // register callback
+		delayed_callback_fptr = do_show_regs; // register callback
 		trace_step_trigger = 1;	// trigger one step
 	} else {
 		umon_printf(UMON_SYNTAX_ERROR "trace can be used only in trace mode");
 	}
 }
 
+
 static void m65mon_do_trace_c ( void )
 {
 	umon_printf(UMON_SYNTAX_ERROR "command 'tc' is not implemented yet");
 }
-#ifdef TRACE_NEXT_SUPPORT
+
+
 static void m65mon_next_command ( void )
 {
 	if (paused)
 		m65mon_do_next();
 }
 #endif
+
 static void m65mon_empty_command ( void )
 {
+#if 0
 	if (paused)
 		m65mon_do_trace();
+#endif
 }
-
-
-#define MAX_BREAKPOINTS 10
-struct breakpoint_st {
-	Uint16	pc;
-	bool	(*callback)(const unsigned int);
-	bool	temp;
-	const void	*user_data;
-};
-static struct breakpoint_st breakpoints[MAX_BREAKPOINTS];
-static unsigned int breakpoint_no = 0;
 
 
 // This function must be called when there is the chance that breakpoint-like functionality requires
@@ -185,7 +187,7 @@ static unsigned int breakpoint_no = 0;
 // called).
 void umon_opcode_callback_setup ( const char *reason )
 {
-	if (breakpoint_pc >= 0 || (in_hypervisor && hypervisor_is_debugged)) {	// all possibilities which involves using trace mode
+	if (br_nums || (in_hypervisor && hypervisor_is_debugged) /*|| trace_next_active */) {	// all possibilities which involves using trace mode
 		if (!cpu65.debug_callbacks.exec) {
 			DEBUGPRINT("UMON: enabling opcode trace mode (%s)" NL, reason);
 			cpu65.debug_callbacks.exec = true;
@@ -203,21 +205,14 @@ void umon_opcode_callback_setup ( const char *reason )
 // Warning2: removing a breakpoint other than the last added one causes the indices in the breakpoint array to be changed!
 static void remove_breakpoint ( const unsigned int n )
 {
-	if (XEMU_UNLIKELY(n >= breakpoint_no)) {
-		ERROR_WINDOW("Refusing impossible breakpoint (#%u) to be removed (current number of breakpoints: %u)!", n, breakpoint_no);
+	if (XEMU_UNLIKELY(n >= br_nums)) {
+		ERROR_WINDOW("Refusing impossible breakpoint (#%u) to be removed (current number of breakpoints: %u)!", n, br_nums);
 	}
-	breakpoint_no--;
-	if (!breakpoint_no)
-		cpu65.debug_callbacks.exec = false;		// stop tracing mode if no breakpoint is left!
-	else if (n != breakpoint_no - 2)
-		memmove(breakpoints + n, breakpoints + n + 1, (breakpoint_no - n) * sizeof(struct breakpoint_st));
-	umon_opcode_callback_setup("removing last active breakpoint");
-}
-
-
-static bool stopper_breakpoint_callback ( const unsigned int n )
-{
-	return false;	// stop the CPU!
+	br_nums--;
+	if (!br_nums)
+		umon_opcode_callback_setup("removing last active breakpoint");
+	else if (n != br_nums - 2)
+		memmove(breakpoints + n, breakpoints + n + 1, (br_nums - n) * sizeof(struct breakpoint_st));
 }
 
 
@@ -229,24 +224,47 @@ static bool stopper_breakpoint_callback ( const unsigned int n )
 //	user_data:	FIXME
 static void add_breakpoint ( const Uint16 pc, bool (*callback)(const unsigned int), const bool temp, const void *user_data )
 {
-	if (XEMU_UNLIKELY(breakpoint_no == MAX_BREAKPOINTS - 1)) {
-		ERROR_WINDOW("Too many existing (%u) breakpoints, cannot add another one!", breakpoint_no);
+	if (XEMU_UNLIKELY(!callback))
+		FATAL("Adding breakpoint with callback = NULL");
+	if (XEMU_UNLIKELY(br_nums == MAX_BREAKPOINTS - 1)) {
+		ERROR_WINDOW("Too many existing (%u) breakpoints, cannot add another one!", br_nums);
 		return;
 	}
-	cpu65.debug_callbacks.exec = true;			// activate trace mode (in case if it's the first breakpoint to be used)
-	breakpoints[breakpoint_no].pc = pc;
-	breakpoints[breakpoint_no].callback = callback;
-	breakpoints[breakpoint_no].temp = temp;
-	breakpoints[breakpoint_no].user_data = user_data;
-	breakpoint_no++;
+	breakpoints[br_nums].pc = pc;
+	breakpoints[br_nums].callback = callback;
+	breakpoints[br_nums].temp = temp;
+	breakpoints[br_nums].user_data = user_data;
+	br_nums++;
 	umon_opcode_callback_setup("adding breakpoint");
 }
 
 
+static bool breakpoint_hit_callback ( const unsigned int n )
+{
+	do_show_regs();
+	uartmon_finish_command();
+	return false;	// stop the CPU!
+}
 
+
+// FIXME: This is a HACK, to allow to use the old API to set an (only) breakpoint.
+// FIXME: this function must die, and add_breakpoint() should be used instead directly in the future
+static void set_breakpoint ( const Uint16 pc )
+{
+	br_nums = 0;	// FIXME: this is a hack!! I shouldn't done this! However afaik there is no simple way yet to present multiple breakpoint management
+	add_breakpoint(pc, breakpoint_hit_callback, false, NULL);
+}
+
+
+// *** This is the function called by the CPU emulator before every opcode exection, if cpu65.debug_callbacks.exec = true
+//     This is the place where various breakpoints, hypervisor debugging and "trace next" should be handled
 void cpu65_execution_debug_callback ( void )
 {
-	for (unsigned int n = 0; n < breakpoint_no; n++) {
+	if (in_hypervisor && hypervisor_is_debugged)
+		hypervisor_debug();
+	/*if (trace_next_active) {
+	}*/
+	for (unsigned int n = 0; n < br_nums; n++) {
 		if (cpu65.pc == breakpoints[n].pc) {
 			DEBUGPRINT("DEBUGGER: hitting breakpoint #%u at PC=$%04X" NL, n, cpu65.pc);
 			cpu65.running = breakpoints[n].callback(n);
@@ -257,29 +275,33 @@ void cpu65_execution_debug_callback ( void )
 	}
 }
 
+
+// *** This is the function called by the CPU emulator before accepting NMI, if cpu65.debug_callbacks.nmi = true
+//     Currently it's not used here, but the callback must be defined.
 void cpu65_nmi_debug_callback ( void )
 {
-	//if (trace_over_interrupt)
-	//	add_breakpoint(cpu65.pc, stopper_breakpoint_callback, true, NULL);
-	// Nothing here yet
 }
 
+
+// *** This is the function called by the CPU emulator before acceptint IRQ, if cpu65.debug_callbacks.irq = true
+//     Currently it's not used here, but the callback must be defined.
 void cpu65_irq_debug_callback ( void )
 {
-	// Nothing here yet
 }
 
 
+// *** This is the function called by the CPU emulator before executing BRK, if cpu65.debug_callbacks.brk = true
+//     Currently it's not used here (other than for warning about a BRK ...), but the callback must be defined.
 void cpu65_brk_debug_callback ( void )
 {
-	// Nothing here yet
 	DEBUGPRINT("DEBUGGER: BRK is executing at $%04X" NL, cpu65.pc);
 }
 
 
+// *** This is the function called by the CPU emulator on CPU RESET, if cpu65.debug_callbacks.reset = true
+//     Currently it's not used here, but the callback must be defined.
 void cpu65_reset_debug_callback ( void )
 {
-	// Nothing here yet
 }
 
 
@@ -292,7 +314,6 @@ static void subsystem_init ( void )
 	cpu65.debug_callbacks.brk = 1;
 
 }
-
 
 
 static char *parse_hex_arg ( char *p, int *val, int min, int max )
@@ -342,7 +363,7 @@ static int check_end_of_command ( char *p, int error_out )
 }
 
 
-static void m65mon_setmem ( char *param, int addr )
+static void cmd_setmem ( char *param, int addr )
 {
 	char *orig_param = param;
 	int cnt = 0;
@@ -396,16 +417,16 @@ static void execute_command ( char *cmd )
 		case 'r':
 		case 'R':
 			if (check_end_of_command(cmd, 1))
-				m65mon_show_regs();
+				do_show_regs();
 			break;
 		case 'm':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
 			bank = par1 >> 16;
 			if (cmd && check_end_of_command(cmd, 1)) {
 				if (bank == 0x777)
-					m65mon_dumpmem16(par1);
+					cmd_dumpmem16(par1);
 				else
-					m65mon_dumpmem28(par1);
+					cmd_dumpmem28(par1);
 			}
 			break;
 		case 'M':
@@ -414,9 +435,9 @@ static void execute_command ( char *cmd )
 			if (cmd && check_end_of_command(cmd, 1)) {
 				for (int k = 0; k < 32; k++) {
 					if (bank == 0x777)
-						m65mon_dumpmem16(par1);
+						cmd_dumpmem16(par1);
 					else
-						m65mon_dumpmem28(par1);
+						cmd_dumpmem28(par1);
 					par1 += 16;
 					umon_printf("\n");
 				}
@@ -424,8 +445,9 @@ static void execute_command ( char *cmd )
 			break;
 		case 's':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
-			m65mon_setmem(cmd, par1);
+			cmd_setmem(cmd, par1);
 			break;
+#if 0
 		case 't':
 			if (!*cmd)
 				m65mon_do_trace();
@@ -438,6 +460,7 @@ static void execute_command ( char *cmd )
 					m65mon_set_trace(par1);
 			}
 			break;
+#endif
 		case 'b':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
 			if (cmd && check_end_of_command(cmd, 1))
@@ -445,9 +468,9 @@ static void execute_command ( char *cmd )
 			break;
 		case 'g':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
-			m65mon_set_pc(par1);
+			cpu65_debug_set_pc(par1);
 			break;
-#ifdef TRACE_NEXT_SUPPORT
+#if 0
 		case 'N':
 			m65mon_next_command();
 			break;

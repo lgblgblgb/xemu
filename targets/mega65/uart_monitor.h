@@ -22,9 +22,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define UMON_DEFAULT_PORT ":4510"
 
-extern void (*m65mon_callback)(void);
-extern int  breakpoint_pc;
-
 extern int  uartmon_init           ( const char *fn );
 extern int  uartmon_is_active      ( void );
 extern void uartmon_update         ( void );
