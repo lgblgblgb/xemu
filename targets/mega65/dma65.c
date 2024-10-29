@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 #include "rom.h"
 #include "vic4.h"
+#include "hypervisor.h"
 
 
 //#define DO_DEBUG_DMA
@@ -63,6 +64,8 @@ static Uint8 filler_byte;		// byte used for FILL DMA command only
 static int   enhanced_mode;		// MEGA65 enhanced mode DMA
 static int   with_io;			// legacy MEGA65 stuff, should be removed? 0x80 or 0
 static unsigned int list_entry_pos = 0;
+static bool  mb_cross_global = false;	// allow to cross megabyte boundary
+static bool  mb_cross;			// (same as above, for the current session though)
 
 // On C65, DMA cannot cross 64K boundaries, so the right mask is 0xFFFF
 // On MEGA65 it seems to be 1Mbyte, thus the mask should be 0xFFFFF
@@ -177,6 +180,16 @@ static XEMU_INLINE void address_stepping ( struct dma_channel_st *const channel 
 	if (XEMU_LIKELY(!(channel->ldm.slope_type & 0x80))) {
 		// normal, non-LDM (line drawning mode) method
 		channel->addr += channel->step;
+		if (XEMU_UNLIKELY(mb_cross && (unsigned)channel->addr > 0xFFFFFFFU)) {	// addr: 1 mbyte range + 8 bit fractional part
+			channel->addr &= 0xFFFFFFFU;
+			if (channel->step >= 0) {
+				channel->mbyte++;
+				channel->base = (channel->base + 0x100000) & 0xFFFFFFFU;	// base: pure number, no fractional part but 256 mbyte range
+			} else {
+				channel->mbyte--;
+				channel->base = (channel->base - 0x100000) & 0xFFFFFFFU;
+			}
+		}
 		return;
 	}
 	// otherwise, we must deal with LDM. The following code is based
@@ -205,8 +218,6 @@ static XEMU_INLINE void address_stepping ( struct dma_channel_st *const channel 
 static XEMU_INLINE void copy_next ( void )
 {
 	dma_write_target(dma_read_source());
-	//source.addr += source.step;
-	//target.addr += target.step;
 	address_stepping(&source);
 	address_stepping(&target);
 }
@@ -214,7 +225,6 @@ static XEMU_INLINE void copy_next ( void )
 static XEMU_INLINE void fill_next ( void )
 {
 	dma_write_target(filler_byte);
-	//target.addr += target.step;
 	address_stepping(&target);
 }
 
@@ -224,8 +234,6 @@ static XEMU_INLINE void swap_next ( void )
 	Uint8 da = dma_read_target();
 	dma_write_source(da);
 	dma_write_target(sa);
-	//source.addr += source.step;
-	//target.addr += target.step;
 	address_stepping(&source);
 	address_stepping(&target);
 }
@@ -245,8 +253,6 @@ static XEMU_INLINE void mix_next ( void )
 		((~sa) & ( da) & minterms[1]) |
 		((~sa) & (~da) & minterms[0]) ;
 	dma_write_target(da);
-	//source.addr += source.step;
-	//target.addr += target.step;
 	address_stepping(&source);
 	address_stepping(&target);
 }
@@ -283,6 +289,7 @@ void dma_write_reg ( int addr, Uint8 data )
 				DEBUGPRINT("DMA: default DMA chip revision change %d -> %d because of writing DMA register 3" NL, default_revision, data & 1);
 				default_revision = data & 1;
 			}
+			mb_cross_global = !!(data & 2);
 			return;
 		case 0x4:
 			list_addr = (list_addr & 0xFFFFF) + (data << 20);	// setting bits 27-20
@@ -337,6 +344,7 @@ void dma_write_reg ( int addr, Uint8 data )
 	length_byte3 = 0;			// length byte for >=64K DMA sessions
 	source.ldm.slope_type = 0;		// source: line drawing mode, slope type, do not enable line drawing mode by default
 	target.ldm.slope_type = 0;		// target: -- "" --
+	mb_cross = mb_cross_global;		// allow to cross megabyte boundaries
 	if (enhanced_mode)
 		DEBUGDMA("DMA: initiation of ENCHANCED MODE DMA!!!!\n");
 	else
@@ -389,6 +397,9 @@ int dma_update ( void )
 				}
 				switch (opt) {
 					// case 0x00 (end of enhanced option list) is already handled
+					case 0x01:	// enable megabyte crossing
+						mb_cross = true;
+						break;
 					case 0x06:	// disable transparency (setting high byte of transparency, thus will never match)
 						transparency |= 0x100;
 						break;
@@ -611,6 +622,8 @@ int dma_update ( void )
 		);
 		if (!length)
 			length = 0x10000;			// I *think* length of zero means 64K. Probably it's not true!!
+		if (in_hypervisor)
+			mb_cross = false;			// Megabyte-crossing is disabled in hypervisor mode!
 		return cycles;
 	}
 	// We have valid command to be executed, or continue to execute
@@ -718,6 +731,7 @@ void dma_reset ( void )
 	target.base = 0;
 	list_addr = 0;
 	with_io = 0;
+	mb_cross_global = false;
 }
 
 
