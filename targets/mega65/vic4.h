@@ -262,7 +262,7 @@ extern void  vic_init ( void );
 extern void  vic_reset ( void );
 extern void  vic_write_reg ( unsigned int addr, Uint8 data );
 extern Uint8 vic_read_reg  ( unsigned int addr );
-extern int   vic4_render_scanline ( void );
+extern bool  vic4_render_scanline ( void );
 extern void  vic4_open_frame_access ( void );
 extern void  vic4_close_frame_access ( void );
 extern void  vic4_set_videostd ( const int mode, const char *comment );

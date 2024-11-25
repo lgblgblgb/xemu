@@ -149,6 +149,16 @@ static const Uint8 reverse_byte_table[] = {
 };
 
 
+static inline void vic4_reset_display_counters ( void )
+{
+	xcounter = 0;
+	display_row = 0;
+	char_row = 0;
+	ycounter = 0;
+	logical_raster = 0;
+}
+
+
 void vic_reset ( void )
 {
 	vic_frame_counter = 0;
@@ -174,15 +184,8 @@ void vic_reset ( void )
 	// turn off possible remained sprite collision info
 	vic_registers[0x1E] = 0;
 	vic_registers[0x1F] = 0;
-}
-
-
-static inline void vic4_reset_display_counters ( void )
-{
-	xcounter = 0;
-	display_row = 0;
-	char_row = 0;
-	ycounter = 0;
+	vic4_reset_display_counters();
+	SET_PHYSICAL_RASTER(0);
 }
 
 
@@ -513,7 +516,7 @@ static inline void check_raster_interrupt ( int nraster )
 		interrupt_status |= 1;
 	else
 		interrupt_status &= 0xFE;
-	interrupt_checker();
+	// NOTE: previous versions used interrupt_checker() here. For reasons, I had to remove this, so calling check_raster_interrupt() does not do interrupt_checker() as its own anymore!!
 }
 
 
@@ -1581,21 +1584,14 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 }
 
 
-int vic4_render_scanline ( void )
+bool vic4_render_scanline ( void )
 {
 	// Work this first. DO NOT OPTIMIZE EARLY.
 
 	used_palette = palette;	// may be overriden later by GOTOX token!
-	xcounter = 0;
 	current_pixel = pixel_start + ycounter * TEXTURE_WIDTH;
 	pixel_raster_start = current_pixel;
 
-	SET_PHYSICAL_RASTER(ycounter);
-	logical_raster = ycounter >> (EFFECTIVE_V400 ? 0 : 1);
-
-	// FIXME: this is probably a bad fix ... Trying to remedy that in V400, no raster interrupts seems to work ... XXX
-	if (!(ycounter & 1) || EFFECTIVE_V400) // VIC2 raster source: shall we check FNRST?
-		check_raster_interrupt(logical_raster);
 	// "Double-scan hack"
 	// FIXME: is this really correct? ie even sprites cannot be set to Y pos finer than V200 or ...
 	// ... having resolution finer than V200 with some "VIC4 magic"?
@@ -1652,23 +1648,32 @@ int vic4_render_scanline ( void )
 			interrupt_status |= 2;
 		else
 			interrupt_status &= 255 - 2;
-		// I don't call interrupt_checker() as it will be on the next call of the current function.
-		// That check then is part of function check_raster_interrupt. Yes a bit confusing and messy ... - LGB
 	}
 
 	ycounter++;
 	// End of frame?
-	if (ycounter == max_rasters) {
-		vic4_reset_display_counters();
+	bool end_of_frame = false;
+	if (XEMU_UNLIKELY(ycounter == max_rasters)) {
+		vic4_reset_display_counters();	// this will also set logical_raster and xcounter to zero
 		static int blink_frame_counter = 0;
 		blink_frame_counter++;
 		if (blink_frame_counter == VIC4_BLINK_INTERVAL) {
 			blink_frame_counter = 0;
 			blink_phase = !blink_phase;
 		}
-		return 1;
+		end_of_frame = true;
+	} else {
+		logical_raster = ycounter >> 1;
+		xcounter = 0;
 	}
-	return 0;
+	SET_PHYSICAL_RASTER(ycounter);
+	// VIC2 raster source: shall we check FNRST?
+	// This check was at the beginning of this function. The reason of the modification, that Xemu uses
+	// scanline based emulation, thus it's better this way as eg raster bars don't seem to be lagged by one raster this way.
+	if (!(ycounter & 1))
+		check_raster_interrupt(logical_raster);
+	interrupt_checker();	// manage possible IRQs (sprite collision, raster IRQ): was part of check_raster_interrupt(), now it's a separate stuff!
+	return end_of_frame;
 }
 
 
