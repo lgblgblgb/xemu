@@ -62,6 +62,7 @@ matrix:
       before_deploy:
         - build/deploy/before-deploy.sh xemu-deploy Linux
       deploy:
+        dpl_version: 2.0.5.2.beta.1
         provider: pages
         local_dir: xemu-deploy
         skip_cleanup: true
@@ -136,6 +137,7 @@ matrix:
       before_deploy:
         - build/deploy/before-deploy.sh xemu-deploy Windows
       deploy:
+        dpl_version: 2.0.5.2.beta.1
         provider: pages
         local_dir: xemu-deploy
         skip_cleanup: true
