@@ -190,12 +190,12 @@ void umon_opcode_callback_setup ( const char *reason )
 	if (br_nums || (in_hypervisor && hypervisor_is_debugged) /*|| trace_next_active */) {	// all possibilities which involves using trace mode
 		if (!cpu65.debug_callbacks.exec) {
 			DEBUGPRINT("UMON: enabling opcode trace mode (%s)" NL, reason);
-			cpu65.debug_callbacks.exec = true;
+			cpu65.debug_callbacks.exec = 1;
 		}
 	} else {
 		if (cpu65.debug_callbacks.exec) {
 			DEBUGPRINT("UMON: disabling opcode trace mode (%s)" NL, reason);
-			cpu65.debug_callbacks.exec = false;
+			cpu65.debug_callbacks.exec = 0;
 		}
 	}
 }
@@ -256,7 +256,7 @@ static void set_breakpoint ( const Uint16 pc )
 }
 
 
-// *** This is the function called by the CPU emulator before every opcode exection, if cpu65.debug_callbacks.exec = true
+// *** This is the function called by the CPU emulator before every opcode exection, if cpu65.debug_callbacks.exec == 1
 //     This is the place where various breakpoints, hypervisor debugging and "trace next" should be handled
 void cpu65_execution_debug_callback ( void )
 {
@@ -276,21 +276,21 @@ void cpu65_execution_debug_callback ( void )
 }
 
 
-// *** This is the function called by the CPU emulator before accepting NMI, if cpu65.debug_callbacks.nmi = true
+// *** This is the function called by the CPU emulator before accepting NMI, if cpu65.debug_callbacks.nmi == 1
 //     Currently it's not used here, but the callback must be defined.
 void cpu65_nmi_debug_callback ( void )
 {
 }
 
 
-// *** This is the function called by the CPU emulator before acceptint IRQ, if cpu65.debug_callbacks.irq = true
+// *** This is the function called by the CPU emulator before acceptint IRQ, if cpu65.debug_callbacks.irq == 1
 //     Currently it's not used here, but the callback must be defined.
 void cpu65_irq_debug_callback ( void )
 {
 }
 
 
-// *** This is the function called by the CPU emulator before executing BRK, if cpu65.debug_callbacks.brk = true
+// *** This is the function called by the CPU emulator before executing BRK, if cpu65.debug_callbacks.brk == 1
 //     Currently it's not used here (other than for warning about a BRK ...), but the callback must be defined.
 void cpu65_brk_debug_callback ( void )
 {
@@ -298,7 +298,7 @@ void cpu65_brk_debug_callback ( void )
 }
 
 
-// *** This is the function called by the CPU emulator on CPU RESET, if cpu65.debug_callbacks.reset = true
+// *** This is the function called by the CPU emulator on CPU RESET, if cpu65.debug_callbacks.reset == 1
 //     Currently it's not used here, but the callback must be defined.
 void cpu65_reset_debug_callback ( void )
 {
@@ -316,7 +316,7 @@ static void subsystem_init ( void )
 }
 
 
-static char *parse_hex_arg ( char *p, int *val, int min, int max )
+static char *parse_hex_arg ( char *p, int *val, const int min, const int max )
 {
 	while (*p == 32)
 		p++;
@@ -350,7 +350,7 @@ static char *parse_hex_arg ( char *p, int *val, int min, int max )
 }
 
 
-static int check_end_of_command ( char *p, int error_out )
+static int check_end_of_command ( const char *p, const bool error_out )
 {
 	while (*p == 32)
 		p++;
@@ -368,7 +368,7 @@ static void cmd_setmem ( char *param, int addr )
 	char *orig_param = param;
 	int cnt = 0;
 	// get param count
-	while (param && !check_end_of_command(param, 0)) {
+	while (param && !check_end_of_command(param, false)) {
 		int val;
 		param = parse_hex_arg(param, &val, 0, 0xFF);
 		cnt++;
@@ -411,18 +411,18 @@ static void execute_command ( char *cmd )
 		case 'h':
 		case 'H':
 		case '?':
-			if (check_end_of_command(cmd, 1))
+			if (check_end_of_command(cmd, true))
 				umon_printf("Xemu/MEGA65 Serial Monitor\r\nWarning: not 100%% compatible with UART monitor of a *real* MEGA65 ...");
 			break;
 		case 'r':
 		case 'R':
-			if (check_end_of_command(cmd, 1))
+			if (check_end_of_command(cmd, true))
 				do_show_regs();
 			break;
 		case 'm':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
 			bank = par1 >> 16;
-			if (cmd && check_end_of_command(cmd, 1)) {
+			if (cmd && check_end_of_command(cmd, true)) {
 				if (bank == 0x777)
 					cmd_dumpmem16(par1);
 				else
@@ -432,7 +432,7 @@ static void execute_command ( char *cmd )
 		case 'M':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
 			bank = par1 >> 16;
-			if (cmd && check_end_of_command(cmd, 1)) {
+			if (cmd && check_end_of_command(cmd, true)) {
 				for (int k = 0; k < 32; k++) {
 					if (bank == 0x777)
 						cmd_dumpmem16(par1);
@@ -452,18 +452,18 @@ static void execute_command ( char *cmd )
 			if (!*cmd)
 				m65mon_do_trace();
 			else if (*cmd == 'c') {
-				if (check_end_of_command(cmd, 1))
+				if (check_end_of_command(cmd, true))
 					m65mon_do_trace_c();
 			} else {
 				cmd = parse_hex_arg(cmd, &par1, 0, 1);
-				if (cmd && check_end_of_command(cmd, 1))
+				if (cmd && check_end_of_command(cmd, true))
 					m65mon_set_trace(par1);
 			}
 			break;
 #endif
 		case 'b':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
-			if (cmd && check_end_of_command(cmd, 1))
+			if (cmd && check_end_of_command(cmd, true))
 				set_breakpoint(par1);
 			break;
 		case 'g':

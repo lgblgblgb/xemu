@@ -591,7 +591,7 @@ static void update_emulator ( void )
 	// this part is used to trigger 'RESTORE trap' with long press on RESTORE.
 	// see input_devices.c for more information
 	kbd_trigger_restore_trap();
-#ifdef HAS_UARTMON_SUPPORT
+#ifdef	HAS_UARTMON_SUPPORT
 	uartmon_update();
 #endif
 	// Screen updating, final phase
