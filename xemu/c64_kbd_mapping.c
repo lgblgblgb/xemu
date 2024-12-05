@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -126,11 +126,14 @@ const struct KeyMappingDefault c64_key_map[] = {
 	{ SDL_SCANCODE_UNKNOWN,		SCRL_KEY_POS, "NOSCROLL" },		// NO SCROLL: FIXME: where should we map this key to?
 	{ SDL_SCANCODE_TAB,		TAB_KEY_POS, "TAB" },			// TAB
 	{ SDL_SCANCODE_RALT,		ALT_KEY_POS, "ALT" },			// ALT on C65: right alt (AltGr) on PC [left ALT on PC is used as the commodore key]
-	{ SDL_SCANCODE_PAGEUP,		C65_KEYBOARD_EXTRA_POS + 3, "HELP" },	// HELP: FIXME: where should we map this key to?
-	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + 4, "F9" },	// F9/F10: FIXME: where should we map this key to?
-	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + 5, "F11" },	// F11/F12: FIXME: where should we map this key to?
-	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + 6, "F13" },	// F13/F14: FIXME: where should we map this key to?
-	{ SDL_SCANCODE_ESCAPE,		C65_KEYBOARD_EXTRA_POS + 7, "ESC" },	// ESC
+	{ SDL_SCANCODE_PAGEUP,		C65_KEYBOARD_EXTRA_POS +  3,       "HELP" },
+	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS +  4,       "F9"   },
+	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + (4 | 8),  "F10*" },
+	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS +  5,       "F11"  },
+	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + (5 | 8),  "F12*" },
+	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS +  6,       "F13"  },
+	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + (6 | 8),  "F14*" },
+	{ SDL_SCANCODE_ESCAPE,		C65_KEYBOARD_EXTRA_POS +  7,       "ESC"  },
 #endif
 	// **** Emulates joystick with keypad
 	STD_XEMU_SPECIAL_KEYS,
