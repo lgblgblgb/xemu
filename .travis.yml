@@ -61,6 +61,11 @@ matrix:
         - uptime ; pwd ; ls -l
       before_deploy:
         - build/deploy/before-deploy.sh xemu-deploy Linux
+        - yes | gem update --system --force
+        - gem install bundler
+        - gem install uri
+        - gem install logger
+        - gem install faraday -v 2.12.0
       deploy:
         dpl_version: 2.0.5.2.beta.1
         provider: pages
@@ -136,6 +141,11 @@ matrix:
         - uptime ; pwd ; ls -l
       before_deploy:
         - build/deploy/before-deploy.sh xemu-deploy Windows
+        - yes | gem update --system --force
+        - gem install bundler
+        - gem install uri
+        - gem install logger
+        - gem install faraday -v 2.12.0
       deploy:
         dpl_version: 2.0.5.2.beta.1
         provider: pages
