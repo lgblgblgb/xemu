@@ -695,7 +695,7 @@ int main ( int argc, char **argv )
 	xumon_init(configdb.umon);
 #endif
 	if (configdb.prg) {
-		inject_register_prg(configdb.prg, configdb.prgmode);
+		inject_register_prg(configdb.prg, configdb.prgmode, true);
 	} else {
 		if (configdb.go64) {
 			hid_set_autoreleased_key(0x75);

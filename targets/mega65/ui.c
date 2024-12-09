@@ -62,7 +62,7 @@ void emu_dropfile_callback ( const char *fn )
 			break;
 		case 2:
 			reset_mega65();
-			inject_register_prg(fn, 0);
+			inject_register_prg(fn, 0, false);
 			break;
 	}
 }
@@ -163,7 +163,7 @@ static void ui_run_prg_by_browsing ( void )
 		sizeof fnbuf
 	)) {
 		reset_mega65();
-		inject_register_prg(fnbuf, 0);
+		inject_register_prg(fnbuf, 0, false);
 	} else
 		DEBUGPRINT("UI: file selection for PRG injection was cancelled." NL);
 }
