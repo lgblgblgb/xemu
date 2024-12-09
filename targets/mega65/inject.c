@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -47,6 +47,7 @@ static struct {
 	int   load_addr;
 	int   c64_mode;
 	int   run_it;
+	bool  at_startup;
 } prg = {
 	.stream	= NULL,
 	.cmd	= NULL,
@@ -131,6 +132,59 @@ static int is_ready_on_screen ( const int delete_all_ready )
 }
 
 
+static void do_prg_test_inject ( const char *arg, const char *def_startup, const bool do_press_return )
+{
+// Must be one char but as a string ...
+#define PRG_TEST_DELIM_CHAR ";"
+// Must be one char and as a char ...
+#define PRG_TEST_DELIM_CHAR_ADDR '@'
+	char opt[strlen(arg) + 1];
+	char cmdbuf[strlen(arg) + 1];
+	strcpy(opt, arg);
+	cmdbuf[0] = '\0';
+	for (char *sav, *p = strtok_r(opt, PRG_TEST_DELIM_CHAR, &sav); p; p = strtok_r(NULL, PRG_TEST_DELIM_CHAR, &sav)) {
+		char *pa = strchr(p, PRG_TEST_DELIM_CHAR_ADDR);
+		if (pa) {
+			*(pa++) = '\0';
+			int base = 10;
+			if (*pa == '$') {
+				pa++;
+				base = 16;
+			}
+			char *ep;
+			const long addr = strtol(pa, &ep, base);
+			if (addr < 0 || addr >= 0x10000000L || *ep)
+				FATAL("Bad syntax in -prgtest : cannot convert \"%s\" into a valid base-%d value", pa, base);
+			DEBUGPRINT("INJECT: prgtest: loading \"%s\" from $%X" NL, p, (unsigned int)addr);
+			const int r = xemu_load_file(p, NULL, 1, 8 << 20, "Cannot inject file");
+			if (r <= 1)
+				XEMUEXIT(1);
+			for (unsigned int i = 0; i < r; i++)
+				debug_write_linear_byte((unsigned int)addr + i, ((Uint8*)xemu_load_buffer_p)[i]);
+			free(xemu_load_buffer_p);
+			xemu_load_buffer_p = NULL;
+		} else {
+			strcat(cmdbuf, p);
+			strcat(cmdbuf, ":");
+		}
+	}
+	if (cmdbuf[0])
+		DEBUGPRINT("INJECT: prgtest: overridding startup sequence to \"%s\"" NL, cmdbuf);
+	else
+		DEBUGPRINT("INJECT: prgtest: using default startup sequence \"%s\"" NL, def_startup);
+	CBM_SCREEN_PRINTF(under_ready_p, " %s", cmdbuf[0] ? cmdbuf : def_startup);
+	if (do_press_return || cmdbuf[0])
+		press_return();
+}
+
+
+static void exit_on_ready ( void *unused )
+{
+	DEBUGPRINT("INJECT: Exiting because of -prgexit and READY prompt hit." NL);
+	XEMUEXIT(0);
+}
+
+
 static void prg_inject_callback ( void *unused )
 {
 	DEBUGPRINT("INJECT: hit 'READY.' trigger, about to inject %d bytes from $%04X." NL, prg.size, prg.load_addr);
@@ -150,14 +204,26 @@ static void prg_inject_callback ( void *unused )
 			main_ram[0x83] = (prg.size + prg.load_addr) >> 8;
 		}
 		// If program was detected as BASIC (by load-addr) we want to auto-RUN it
-		CBM_SCREEN_PRINTF(under_ready_p, " RUN:");
-		press_return();
+		static const char def_cmd[] = "RUN:";
+		if (configdb.prg_test && prg.at_startup) {	// ... though if we have special '-prgtest' option, there are few other things ...
+			do_prg_test_inject(configdb.prg_test, def_cmd, true);
+		} else {
+			CBM_SCREEN_PRINTF(under_ready_p, " %s", def_cmd);
+			press_return();
+		}
 	} else {
+		char def_cmd[50];
 		// In this case we DO NOT press RETURN for user, as maybe the SYS addr is different, or user does not want this at all!
-		CBM_SCREEN_PRINTF(under_ready_p, " SYS%d:REM **YOU CAN PRESS RETURN**", prg.load_addr);
+		sprintf(def_cmd, "SYS%u:REM **YOU CAN PRESS RETURN**", (Uint16)prg.load_addr);
+		if (configdb.prg_test && prg.at_startup)
+			do_prg_test_inject(configdb.prg_test, def_cmd, false);
+		else
+			CBM_SCREEN_PRINTF(under_ready_p, " %s", def_cmd);
 	}
 	free(prg.stream);
 	prg.stream = NULL;
+	if (configdb.prg_exit && prg.at_startup)
+		inject_register_ready_status("Exit on ready", exit_on_ready, NULL);
 }
 
 
@@ -238,13 +304,14 @@ void inject_register_command ( const char *s )
 }
 
 
-int inject_register_prg ( const char *prg_fn, int prg_mode )
+int inject_register_prg ( const char *prg_fn, const int prg_mode, const bool startup )
 {
 	if (prg.stream) {
 		free(prg.stream);
 		prg.stream = NULL;
 	}
 	prg.size = xemu_load_file(prg_fn, NULL, 3, 0x1F800, "Cannot load PRG to be injected");
+	prg.at_startup = startup;
 	if (prg.size < 3)
 		goto error;
 	prg.stream = xemu_load_buffer_p;

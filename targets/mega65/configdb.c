@@ -53,6 +53,7 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "hyperserialfile", NULL, "Use a file to write serial output into (no ASCII conversion, not even with -hyperserialascii)", &configdb.hyperserialfile },
 	{ "rom",	NULL, "Override Hyppo's loaded ROM during booting.", &configdb.rom },
 	{ "prg",	NULL, "Load a PRG file directly into the memory (/w C64/65 auto-detection on load address)", &configdb.prg },
+	{ "prgtest",	NULL, "Special formatted string for tests, -prg must be used as well", &configdb.prg_test },
 	{ "sdimg",	SDCARD_NAME, "Override path of SD-image to be used (also see the -virtsd option!)", &configdb.sdimg },
 	{ "dumpmem",	NULL, "Save memory content on exit", &configdb.dumpmem },
 	{ "dumpscreen",	NULL, "Save screen content (ASCII) on exit", &configdb.dumpscreen },
@@ -115,6 +116,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "matrixdisable", "Disable the matrix hotkey", &configdb.matrixdisable },
 	{ "ramcheckread", "Enabled warnings on reading unwritten memory (first 126K only)", &configdb.ramcheckread },
 	{ "nomouseemu", "Disable mouse emulation", &configdb.nomouseemu },
+	{ "prgexit", "Exit on READY. prompt for -prg launched program", &configdb.prg_exit },
 	{ NULL }
 };
 
@@ -157,6 +159,7 @@ static const void *do_not_save_opts[] = {
 	&configdb.dumpmem, &configdb.dumpscreen, &configdb.screenshot_and_exit,
 	&configdb.testing, &configdb.hyperdebug, &configdb.hyperdebugfreezer, &configdb.usestubrom, &configdb.useinitrom, &configdb.useutilmenu,
 	&configdb.cartbin8000, &configdb.winpos, &configdb.ramcheckread, &configdb.init_attic,
+	&configdb.prg_test, &configdb.prg_exit,
 	NULL
 };
 
