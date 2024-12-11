@@ -118,6 +118,9 @@ struct configdb_st {
 	char	*init_attic;
 	int	joyport;
 	int	nomouseemu;
+#ifdef HID_KBD_NO_F_HOTKEYS
+	int	emu_f_hotkeys;
+#endif
 };
 
 extern struct configdb_st configdb;

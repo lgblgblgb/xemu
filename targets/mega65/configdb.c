@@ -117,6 +117,9 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "ramcheckread", "Enabled warnings on reading unwritten memory (first 126K only)", &configdb.ramcheckread },
 	{ "nomouseemu", "Disable mouse emulation", &configdb.nomouseemu },
 	{ "prgexit", "Exit on READY. prompt for -prg launched program", &configdb.prg_exit },
+#ifdef HID_KBD_NO_F_HOTKEYS
+	{ "emufhotkeys", "Use F9,F10,F11 as emulator hotkeys", &configdb.emu_f_hotkeys },
+#endif
 	{ NULL }
 };
 

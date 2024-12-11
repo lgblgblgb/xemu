@@ -340,6 +340,10 @@ static void mega65_init ( void )
 	input_init();
 #ifdef HID_KBD_MAP_CFG_SUPPORT
 	hid_keymap_from_config_file(configdb.keymap);
+#ifdef HID_KBD_NO_F_HOTKEYS
+	if (configdb.emu_f_hotkeys)
+		hid_set_default_emu_f_hotkeys();
+#endif
 #endif
 	joystick_emu = configdb.joyport;
 	nmi_level = 0;
