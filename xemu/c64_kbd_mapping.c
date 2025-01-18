@@ -127,12 +127,18 @@ const struct KeyMappingDefault c64_key_map[] = {
 	{ SDL_SCANCODE_TAB,		TAB_KEY_POS, "TAB" },			// TAB
 	{ SDL_SCANCODE_RALT,		ALT_KEY_POS, "ALT" },			// ALT on C65: right alt (AltGr) on PC [left ALT on PC is used as the commodore key]
 	{ SDL_SCANCODE_PAGEUP,		C65_KEYBOARD_EXTRA_POS +  3,       "HELP" },
+#ifdef	HID_KBD_NO_F_HOTKEYS
+	{ SDL_SCANCODE_F9,		C65_KEYBOARD_EXTRA_POS +  4,       "F9"   },
+	{ SDL_SCANCODE_F10,		C65_KEYBOARD_EXTRA_POS + (4 | 8),  "F10*" },
+	{ SDL_SCANCODE_F11,		C65_KEYBOARD_EXTRA_POS +  5,       "F11"  },
+#else
 	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS +  4,       "F9"   },
 	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + (4 | 8),  "F10*" },
 	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS +  5,       "F11"  },
-	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + (5 | 8),  "F12*" },
-	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS +  6,       "F13"  },
-	{ SDL_SCANCODE_UNKNOWN,		C65_KEYBOARD_EXTRA_POS + (6 | 8),  "F14*" },
+#endif
+	{ SDL_SCANCODE_F12,		C65_KEYBOARD_EXTRA_POS + (5 | 8),  "F12*" },
+	{ SDL_SCANCODE_F13,		C65_KEYBOARD_EXTRA_POS +  6,       "F13"  },
+	{ SDL_SCANCODE_F14,		C65_KEYBOARD_EXTRA_POS + (6 | 8),  "F14*" },
 	{ SDL_SCANCODE_ESCAPE,		C65_KEYBOARD_EXTRA_POS +  7,       "ESC"  },
 #endif
 	// **** Emulates joystick with keypad

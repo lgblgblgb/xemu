@@ -746,6 +746,19 @@ static void ui_save_current_window_position ( void )
 	INFO_WINDOW("Current window position has been stored.");
 }
 
+#ifdef HID_KBD_NO_F_HOTKEYS
+static void ui_cb_default_emu_f_hotkeys ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, configdb.emu_f_hotkeys);
+	configdb.emu_f_hotkeys = !configdb.emu_f_hotkeys;
+	if (configdb.emu_f_hotkeys) {
+		hid_set_default_emu_f_hotkeys();
+	} else {
+		INFO_WINDOW("You must save configuration AND restart Xemu to take effect");
+	}
+}
+#endif
+
 
 /**** MENU SYSTEM ****/
 
@@ -873,6 +886,10 @@ static const struct menu_st menu_inputdevices[] = {
 	{ "Swap emulated joystick port",XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, input_toggle_joy_emu },
 #if 0
 	{ "Devices as joy port 2 (vs 1)",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_joy_devices },
+#endif
+#ifdef HID_KBD_NO_F_HOTKEYS
+	{ "Use F9..F11 as hotkeys",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_default_emu_f_hotkeys, NULL },
 #endif
 	{ NULL }
 };
