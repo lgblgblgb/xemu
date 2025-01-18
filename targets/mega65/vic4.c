@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Copyright (C)2020-2022 Hernán Di Pietro <hernan.di.pietro@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -34,15 +34,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_SPRITE_COLLISION
 #define SPRITE_FG_COLLISION
 #define SPRITE_COORD_LATCHING
+#define IN_TEXTURE_RRB
 
 
 const char *iomode_names[4] = { "VIC2", "VIC3", "VIC4ETH", "VIC4" };
 const Uint8 iomode_hexdigitids[4] = { 2, 3, 0xE, 4 };	// identifier of IO modes uses with %X (hex digit print format), will result "E" when IO mode is VIC4-ETH, "E" meaning "Ethernet"
 
+#define INC_10BIT(_var_)	_var_=((_var_)+1)&1023U
+
 // (SDL) target texture rendering pointers
-static Uint32 *current_pixel;					// current_pixel pointer to the rendering target (one current_pixel: 32 bit)
-static Uint32 *pixel_start;					// points to the end and start of the buffer
-static Uint32 *pixel_raster_start;				// first pixel of current raster
+static Uint32 *pixel_start;					// points to the start of the texture buffer
 Uint8 vic_registers[0x80];					// VIC4 registers
 static int compare_raster;					// raster compare (9 bits width) data
 static int logical_raster = 0;
@@ -57,9 +58,12 @@ static int border_x_right= 0;			 		// Side border right
 static int xcounter = 0, ycounter = 0;				// video counters
 static int char_row = 0, display_row = 0;
 static Uint8 draw_mask;						// Normally $FF, if RRB asks for specific ROW MASK, draw_mask will be set to FF/00 for the right char_row according to the ROW MASK
-// FIXME: really, it's 2048 now, since in H320, GOTOX value is multiplied with 2 and may overflow this array even if it's not so much used this way, we want avoid crash ...
-// FIXME: should be rethought!!!!
-static Uint8 is_fg[2048];					// this cache helps in sprite rendering, zero means background state, other value: foreground
+#ifdef IN_TEXTURE_RRB
+static Uint32 *rrb;						// RRB (raster-rewrite-buffer): I use the current in-texture line for that purpose, not a real separated buffer
+#else
+static Uint32 rrb[1024];
+#endif
+static Uint8 is_fg[1024];					// this cache helps in sprite rendering, zero means background state, other value: foreground
 #ifdef SPRITE_SPRITE_COLLISION
 static Uint8 is_sprite[1024];
 #endif
@@ -418,7 +422,7 @@ static void vic4_interpret_legacy_mode_registers ( void )
 void vic4_open_frame_access ( void )
 {
 	int tail_sdl;
-	current_pixel = pixel_start = xemu_start_pixel_buffer_access(&tail_sdl);
+	pixel_start = xemu_start_pixel_buffer_access(&tail_sdl);
 	if (XEMU_UNLIKELY(tail_sdl))
 		FATAL("tail_sdl is not zero!");
 	// The V400 hack ...
@@ -1029,7 +1033,7 @@ Uint8 vic_read_reg ( int unsigned addr )
 #endif
 
 
-static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_display_pos, const Uint8* row_data_ptr, const int xscale, const int do_tiling )
+static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_display_pos, const Uint8* row_data_ptr, const int xscale, const bool do_tiling )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	//const int palindexbase = sprnum * 16 + 128 * (SPRITE_BITPLANE_ENABLE(sprnum) >> sprnum);
@@ -1049,7 +1053,7 @@ static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_d
 				if (c0 != transparency_palette_index && x_display_pos >= border_x_left && (
 					!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
 				)) {
-					*(pixel_raster_start + x_display_pos) = pal16[c0];
+					rrb[x_display_pos] = pal16[c0];
 					DO_SPRITE_SPRITE_COLLISION(x_display_pos, 1);
 					DO_SPRITE_FG_COLLISION(x_display_pos, 1);
 				}
@@ -1058,7 +1062,7 @@ static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_d
 				if (c1 != transparency_palette_index && x_display_pos >= border_x_left && (
 					!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
 				)) {
-					*(pixel_raster_start + x_display_pos) = pal16[c1];
+					rrb[x_display_pos] = pal16[c1];
 					DO_SPRITE_SPRITE_COLLISION(x_display_pos, 1);
 					DO_SPRITE_FG_COLLISION(x_display_pos, 1);
 				}
@@ -1068,7 +1072,7 @@ static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_d
 }
 
 
-static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( const int sprnum, int x_display_pos, const Uint8* row_data_ptr, const int xscale, const int do_tiling )
+static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( const int sprnum, int x_display_pos, const Uint8* row_data_ptr, const int xscale, const bool do_tiling )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const Uint8 mcm_spr_pal_indices[4] = { 0, SPRITE_MULTICOLOR_1, SPRITE_COLOR(sprnum), SPRITE_MULTICOLOR_2 };	// entry zero is not used
@@ -1086,14 +1090,14 @@ static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( const int sprnum, int 
 						if (x_display_pos >= border_x_left && (
 							!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
 						)) {
-							*(pixel_raster_start + x_display_pos) = sdl_pixel;
+							rrb[x_display_pos] = sdl_pixel;
 							DO_SPRITE_SPRITE_COLLISION(x_display_pos, mcm_pixel_value & 2);
 							DO_SPRITE_FG_COLLISION(x_display_pos, mcm_pixel_value & 2);
 						}
 						if (x_display_pos + 1 >= border_x_left && (
 							!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos + 1])
 						)) {
-							*(pixel_raster_start + x_display_pos + 1) = sdl_pixel;
+							rrb[x_display_pos + 1] = sdl_pixel;
 							DO_SPRITE_SPRITE_COLLISION(x_display_pos + 1, mcm_pixel_value & 2);
 							DO_SPRITE_FG_COLLISION(x_display_pos + 1, mcm_pixel_value & 2);
 						}
@@ -1105,7 +1109,7 @@ static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( const int sprnum, int 
 }
 
 
-static XEMU_INLINE void vic4_draw_sprite_row_mono ( const int sprnum, int x_display_pos, const Uint8 *row_data_ptr, const int xscale, const int do_tiling )
+static XEMU_INLINE void vic4_draw_sprite_row_mono ( const int sprnum, int x_display_pos, const Uint8 *row_data_ptr, const int xscale, const bool do_tiling )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const Uint32 sdl_pixel = spritepalette[SPRITE_COLOR(sprnum)];
@@ -1121,7 +1125,7 @@ static XEMU_INLINE void vic4_draw_sprite_row_mono ( const int sprnum, int x_disp
 						!SPRITE_IS_BACK(sprnum) ||
 						(SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
 					)) {
-						*(pixel_raster_start + x_display_pos) = sdl_pixel;
+						rrb[x_display_pos] = sdl_pixel;
 						DO_SPRITE_SPRITE_COLLISION(x_display_pos, 1);
 						DO_SPRITE_FG_COLLISION(x_display_pos, 1);
 					}
@@ -1187,7 +1191,7 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 				const Uint8 *sprite_data = main_ram + sprite_data_addr;
 				const Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
 				const int xscale = (REG_SPR640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
-				const int do_tiling = reg_tiling & (1 << sprnum);
+				const bool do_tiling = reg_tiling & (1 << sprnum);
 				if (SPRITE_MULTICOLOR(sprnum))
 					vic4_draw_sprite_row_multicolor(sprnum, x_display_pos, row_data, xscale, do_tiling);
 				else if (SPRITE_16COLOR(sprnum))
@@ -1229,18 +1233,19 @@ static XEMU_INLINE void vic4_render_mono_char_row ( Uint8 char_byte, const int g
 	const Uint32 sdl_fg_color = palette_now[fg_color];
 	if (XEMU_LIKELY(enable_bg_paint)) {
 		const Uint32 sdl_bg_color = palette_now[bg_color];
-		for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
+		for (float cx = 0; cx < glyph_width; cx += char_x_step) {
 			const Uint8 char_pixel = (char_byte & (0x80 >> (int)cx));
-			*(current_pixel++) = char_pixel ? sdl_fg_color : sdl_bg_color;
-			is_fg[xcounter++] = char_pixel;
+			rrb[xcounter] = char_pixel ? sdl_fg_color : sdl_bg_color;
+			is_fg[xcounter] = char_pixel;
+			INC_10BIT(xcounter);
 		}
 	} else {
-		for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
+		for (float cx = 0; cx < glyph_width; cx += char_x_step) {
 			const Uint8 char_pixel = (char_byte & (0x80 >> (int)cx));
 			if (char_pixel)
-				*current_pixel = sdl_fg_color;
-			current_pixel++;
-			is_fg[xcounter++] = char_pixel;
+				rrb[xcounter] = sdl_fg_color;
+			is_fg[xcounter] = char_pixel;
+			INC_10BIT(xcounter);
 		}
 	}
 }
@@ -1249,13 +1254,13 @@ static XEMU_INLINE void vic4_render_mono_char_row ( Uint8 char_byte, const int g
 static XEMU_INLINE void vic4_render_multicolor_char_row ( Uint8 char_byte, const int glyph_width, const Uint8 color_source[4] )
 {
 	char_byte &= draw_mask;
-	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
+	for (float cx = 0; cx < glyph_width; cx += char_x_step) {
 		const Uint8 bitsel = 2 * (int)(cx / 2);
 		const Uint8 bit_pair = (char_byte & (0x80 >> bitsel)) >> (6-bitsel) | (char_byte & (0x40 >> bitsel)) >> (6-bitsel);
 		if (XEMU_LIKELY(bit_pair || enable_bg_paint))
-			*current_pixel = used_palette[color_source[bit_pair]];
-		current_pixel++;
-		is_fg[xcounter++] = (bit_pair & 2);
+			rrb[xcounter] = used_palette[color_source[bit_pair]];
+		is_fg[xcounter] = (bit_pair & 2);
+		INC_10BIT(xcounter);
 	}
 }
 
@@ -1263,16 +1268,16 @@ static XEMU_INLINE void vic4_render_multicolor_char_row ( Uint8 char_byte, const
 // 8-bytes per row
 static XEMU_INLINE void vic4_render_fullcolor_char_row ( const Uint8* char_row, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 fg_sdl_color, const int hflip, const Uint32 *palette_now )
 {
-	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
+	for (float cx = 0; cx < glyph_width; cx += char_x_step) {
 		const Uint8 char_data = draw_mask & char_row[XEMU_LIKELY(!hflip) ? (int)cx : glyph_width - 1 - (int)cx];
 		if (char_data == 0xFF)
-			*current_pixel = fg_sdl_color;
+			rrb[xcounter] = fg_sdl_color;
 		else if (XEMU_LIKELY(char_data))
-			*current_pixel = palette_now[char_data];
+			rrb[xcounter] = palette_now[char_data];
 		else if (XEMU_LIKELY(enable_bg_paint))
-			*current_pixel = bg_sdl_color;
-		current_pixel++;
-		is_fg[xcounter++] = char_data;
+			rrb[xcounter] = bg_sdl_color;
+		is_fg[xcounter] = char_data;
+		INC_10BIT(xcounter);
 	}
 }
 
@@ -1280,7 +1285,7 @@ static XEMU_INLINE void vic4_render_fullcolor_char_row ( const Uint8* char_row, 
 // 16-color (Nybl) mode (4-bit per pixel / 16 pixel wide characters)
 static XEMU_INLINE void vic4_render_16color_char_row ( const Uint8* char_row, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 fg_sdl_color, const Uint32 *palette16, const int hflip )
 {
-	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
+	for (float cx = 0; cx < glyph_width; cx += char_x_step) {
 		Uint8 char_data;
 		if (XEMU_LIKELY(!hflip)) {
 			char_data = char_row[((int)cx) / 2];
@@ -1296,12 +1301,12 @@ static XEMU_INLINE void vic4_render_16color_char_row ( const Uint8* char_row, co
 				char_data >>= 4;
 		}
 		char_data &= draw_mask;
-		is_fg[xcounter++] = char_data;
+		is_fg[xcounter] = char_data;
 		if (char_data)
-			*current_pixel = (char_data != 15) ? palette16[char_data] : fg_sdl_color;
+			rrb[xcounter] = (char_data != 15) ? palette16[char_data] : fg_sdl_color;
 		else if (enable_bg_paint)
-			*current_pixel = bg_sdl_color;
-		current_pixel++;
+			rrb[xcounter] = bg_sdl_color;
+		INC_10BIT(xcounter);
 	}
 }
 
@@ -1338,9 +1343,9 @@ static XEMU_INLINE void set_bitplane_pointers ( void )
 static XEMU_INLINE void vic4_render_bitplane_char_row ( const Uint32 offset, const int glyph_width )
 {
 	const Uint8 bpe_mask = vic_registers[0x32] & (REG_H640 ? 15 : 255);
-	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
+	for (float cx = 0; cx < glyph_width; cx += char_x_step) {
 		const Uint8 bitsel = 0x80 >> ((int)cx);
-		*(current_pixel++) = palette[((			// Do not try this at home ...
+		rrb[xcounter] = palette[((			// Do not try this at home ...
 			((*(bitplane_p[0] + offset) & bitsel) ?   1 : 0) |
 			((*(bitplane_p[1] + offset) & bitsel) ?   2 : 0) |
 			((*(bitplane_p[2] + offset) & bitsel) ?   4 : 0) |
@@ -1351,7 +1356,8 @@ static XEMU_INLINE void vic4_render_bitplane_char_row ( const Uint32 offset, con
 			((*(bitplane_p[7] + offset) & bitsel) ? 128 : 0)
 			) & bpe_mask) ^ vic_registers[0x3B]
 		];
-		is_fg[xcounter++] = (*(bitplane_p[2] + offset) & bitsel);
+		is_fg[xcounter] = (*(bitplane_p[2] + offset) & bitsel);
+		INC_10BIT(xcounter);
 	}
 }
 
@@ -1374,8 +1380,10 @@ static XEMU_INLINE void vic4_render_bitplane_raster ( void )
 			display_row++;
 		}
 	}
-	while (xcounter++ < border_x_right)
-		*current_pixel++ = palette[REG_SCREEN_COLOR];
+	while (xcounter < border_x_right) {
+		rrb[xcounter] = palette[REG_SCREEN_COLOR];
+		INC_10BIT(xcounter);
+	}
 }
 
 
@@ -1420,17 +1428,18 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 	const Uint8 *row_data_base_addr = get_charset_effective_addr();	// FIXME: is it OK that I moved here, before the loop?
 	// If this line is inside the vertical borders, mark all pixels as border color
 	if (ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM) {
-		for (int i = 0; i < TEXTURE_WIDTH; i++)
-			*(current_pixel++) = palette[REG_BORDER_COLOR];
-	}
-	else if (display_row <= display_row_count) {
+		for (int i = 0; i < TEXTURE_WIDTH; i++) {
+			rrb[xcounter] = palette[REG_BORDER_COLOR];
+			INC_10BIT(xcounter);
+		}
+	} else if (display_row <= display_row_count) {
 		Uint32 colour_ram_current_addr = COLOUR_RAM_OFFSET + (display_row * LINESTEP_BYTES);
 		Uint32 screen_ram_current_addr = SCREEN_ADDR + (display_row * LINESTEP_BYTES);
 		// Account for Chargen X-displacement
-		for (Uint32 *p = current_pixel; p < current_pixel + (CHARGEN_X_START - border_x_left); p++)
-			*p = palette[REG_SCREEN_COLOR];
-		current_pixel += (CHARGEN_X_START - border_x_left);
-		xcounter += (CHARGEN_X_START - border_x_left);
+		for (int i = 0; i < (CHARGEN_X_START - border_x_left); i++) {
+			rrb[xcounter] = palette[REG_SCREEN_COLOR];
+			INC_10BIT(xcounter);
+		}
 		const int xcounter_start = xcounter;
 		Sint8 char_fetch_offset = 0;
 		// Chargen starts here.
@@ -1458,14 +1467,10 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 						else
 							xcounter += xcounter_start;
 					}
-					// The ugly: too large goto X values may cause out-of-bound access on eg is_fg buffer. Thus, if the result is larger than
-					// the width of the SDL texture, it won't be seen anyway, so we "clamp" it for the NEXT raster as an ugly solution, which
-					// will be overwritten anyway on rendering in the next raster. This way we don't need checking of out-of-bound access (faster
-					// code) _everywhere_ ...
-					if (xcounter > TEXTURE_WIDTH)
-						xcounter = TEXTURE_WIDTH;
-					// Align current_pixel pointer according the calculated xcounter "horror show" above
-					current_pixel = pixel_raster_start + xcounter;
+					// Note: the raster rewrite buffer on MEGA65 is 1024 pixels long. I use the target texture itself for RRB. It means, that with
+					// large enough xcounter values, the texture is not wide enough. However that's not a problem: though it may overwrite pixels in the
+					// next scanline, but that scanline will be rendered anyway next time, so no ill effect we'll see.
+					xcounter &= 1023;	// make sure that xcounter is clamped to 10-bit value [FIXME: maybe it is not needed and wouldn't happen? Won't hurt anyway]
 					// ---- End of the GOTOX re-positioning functionality implementation ----
 					line_char_index++;
 					char_fetch_offset = (char_value >> 13) & 7;
@@ -1573,14 +1578,18 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 			}
 			line_char_index++;
 		}
+		// Fill screen color after chargen phase
+		// NOTE: I moved this part here from the end of the function, since this is not needed when border is rendered for all
+		// the scanline as it's already done in the other case of the big "if" statement above
+		while (xcounter < border_x_right) {
+			rrb[xcounter] = palette[REG_SCREEN_COLOR];
+			INC_10BIT(xcounter);
+		}
 	}
 	if (++char_row > 7) {
 		char_row = 0;
 		display_row++;
 	}
-	// Fill screen color after chargen phase
-	while (xcounter++ < border_x_right)
-		*current_pixel++ = palette[REG_SCREEN_COLOR];
 }
 
 
@@ -1589,32 +1598,42 @@ bool vic4_render_scanline ( void )
 	// Work this first. DO NOT OPTIMIZE EARLY.
 
 	used_palette = palette;	// may be overriden later by GOTOX token!
-	current_pixel = pixel_start + ycounter * TEXTURE_WIDTH;
-	pixel_raster_start = current_pixel;
+#ifdef	IN_TEXTURE_RRB
+	rrb = pixel_start + ycounter * TEXTURE_WIDTH;
+#else
+	Uint32 *pixel_raster = pixel_start + ycounter * TEXTURE_WIDTH;
+#endif
 
 	// "Double-scan hack"
 	// FIXME: is this really correct? ie even sprites cannot be set to Y pos finer than V200 or ...
 	// ... having resolution finer than V200 with some "VIC4 magic"?
+	const bool lowvres = (!EFFECTIVE_V400 && (ycounter & 1));
 	if (!EFFECTIVE_V400 && (ycounter & 1)) {
 		if (XEMU_UNLIKELY(configdb.show_scanlines)) {
-			for (int i = 0; i < TEXTURE_WIDTH; i++, current_pixel++)
-				*current_pixel = ((*(current_pixel - TEXTURE_WIDTH) >> 1) & 0x7F7F7F7FU) | black_colour;	// "| black_colour" is used to correct the messed-up alpha channel to $FF
+			for (int i = 0; i < TEXTURE_WIDTH; i++)
+#ifdef				IN_TEXTURE_RRB
+				rrb[i] = ((rrb[i - TEXTURE_WIDTH] >> 1) & 0x7F7F7F7FU) | black_colour; // "| black_colour" is used to correct the messed-up alpha channel to $FF
+#else
+				pixel_raster[i] = ((rrb[i]        >> 1) & 0x7F7F7F7FU) | black_colour; // "| black_colour" is used to correct the messed-up alpha channel to $FF
+#endif
 		} else {
-			memcpy(current_pixel, current_pixel - TEXTURE_WIDTH, TEXTURE_WIDTH * 4);
-			current_pixel += TEXTURE_WIDTH;
+#ifdef			IN_TEXTURE_RRB
+			memcpy(rrb, rrb - TEXTURE_WIDTH, TEXTURE_WIDTH * 4);
+#else
+			memcpy(pixel_raster, rrb, TEXTURE_WIDTH * 4);
+#endif
 		}
 	} else {
 		// Top and bottom borders
 		if (ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM || !REG_DISPLAYENABLE) {
 			for (int i = 0; i < TEXTURE_WIDTH; i++)
-				*(current_pixel++) = palette[REG_BORDER_COLOR];
+				rrb[i] = palette[REG_BORDER_COLOR];
 		}
 		if (ycounter >= CHARGEN_Y_START && ycounter < BORDER_Y_BOTTOM) {
 			// Render chargen area and render side-borders later to cover X-displaced
 			// character generator if needed.  Chargen area maybe covered by top/bottom
 			// borders also if y-offset applies.
 			xcounter += border_x_left;
-			current_pixel += border_x_left;
 			if (XEMU_LIKELY(!(vic_registers[0x31] & 0x10)))
 				vic4_render_char_raster();
 			else
@@ -1627,13 +1646,28 @@ bool vic4_render_scanline ( void )
 		// FIXME: in case of changed palette by GOTOX, maybe this must be dependent on bg_paint to use the new palette or the old??
 		if (ycounter >= BORDER_Y_TOP) {
 			if (ycounter < CHARGEN_Y_START)
-				while (xcounter++ < border_x_right)
-					*current_pixel++ = palette[REG_SCREEN_COLOR];
+				while (xcounter < border_x_right) {
+					rrb[xcounter] = palette[REG_SCREEN_COLOR];
+					INC_10BIT(xcounter);
+				}
 		}
-		for (Uint32 *p = pixel_raster_start; p < pixel_raster_start + border_x_left; p++)
+#if 0
+		for (Uint32 *p = rrb; p < rrb + border_x_left; p++)
 			*p = palette[REG_BORDER_COLOR];
-		for (Uint32 *p = current_pixel; p < current_pixel + border_x_right; p++)
+		// ** ORIGINAL VERSION:
+		//for (Uint32 *p = current_pixel; p < current_pixel + border_x_right; p++)
+		//	*p = palette[REG_BORDER_COLOR];
+		// ** "kill current_pixel" version:
+		//for (Uint32 *p = rrb + xcounter; p < rrb + xcounter + border_x_right; p++)
+		//	*p = palette[REG_BORDER_COLOR];
+		// ** after "kill current_pixel" brokent border fix version:
+		for (Uint32 *p = rrb + border_x_right; p < rrb + TEXTURE_WIDTH; p++)
 			*p = palette[REG_BORDER_COLOR];
+#endif
+		for (int i = 0; i < border_x_left; i++)
+			rrb[i] = palette[REG_BORDER_COLOR];
+		for (int i = border_x_right; i < TEXTURE_WIDTH; i++)
+			rrb[i] = palette[REG_BORDER_COLOR];
 	}
 	// Sprites can be displayed on V200/V400 independently of char generator, so
 	// this must be outside of the main loop to avoid being affected by double-scan
@@ -1649,7 +1683,9 @@ bool vic4_render_scanline ( void )
 		else
 			interrupt_status &= 255 - 2;
 	}
-
+#ifndef	IN_TEXTURE_RRB
+	memcpy(pixel_raster, rrb, TEXTURE_WIDTH * 4);
+#endif
 	ycounter++;
 	// End of frame?
 	bool end_of_frame = false;
