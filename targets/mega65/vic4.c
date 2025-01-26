@@ -42,6 +42,9 @@ const Uint8 iomode_hexdigitids[4] = { 2, 3, 0xE, 4 };	// identifier of IO modes 
 
 #define INC_10BIT(_var_)	_var_=((_var_)+1)&1023U
 
+// crosshair stuff seems to have an unexpected X offset on real MEGA65 ...
+#define DEBUG_X_OFFSET		8
+
 // (SDL) target texture rendering pointers
 static Uint32 *pixel_start;					// points to the start of the texture buffer
 Uint8 vic_registers[0x80];					// VIC4 registers
@@ -56,11 +59,12 @@ static int vic4_sideborder_touched = 0;				// If side-border register were touch
 static int border_x_left= 0;			 		// Side border left
 static int border_x_right= 0;			 		// Side border right
 static int xcounter = 0, ycounter = 0;				// video counters
-static int char_row = 0, display_row = 0;
+static int char_row = 0, display_row = 0;			// ROW in char (0...7), display row in char lines
 static Uint8 draw_mask;						// Normally $FF, if RRB asks for specific ROW MASK, draw_mask will be set to FF/00 for the right char_row according to the ROW MASK
 #ifdef IN_TEXTURE_RRB
 static Uint32 *rrb;						// RRB (raster-rewrite-buffer): I use the current in-texture line for that purpose, not a real separated buffer
 #else
+#error "IN_TEXTURE_RRB must be defined for now, separated RRB buffer is not yet supported"
 static Uint32 rrb[1024];
 #endif
 static Uint8 is_fg[1024];					// this cache helps in sprite rendering, zero means background state, other value: foreground
@@ -76,7 +80,9 @@ static int visible_area_height = SCREEN_HEIGHT_VISIBLE_DEFAULT;
 static int vicii_first_raster = 7;				// Default for NTSC
 static Uint8 *bitplane_bank_p = main_ram;
 static Uint8 *bitplane_p[8];
-static Uint32 red_colour, black_colour;				// used by "drive LED", and cross-hair (only the red) for debug pixel read
+static Uint32 red_colour, black_colour;				// used by "drive LED", and crosshair (only the red) for debug pixel read
+static unsigned int debug_x, debug_y, debug_x_real;		// the crosshair debug coordinates
+static unsigned int debug_x_crosshair, debug_y_crosshair;
 static Uint8 vic_pixel_readback_result[4];
 static Uint8 vic_color_register_mask;
 static Uint32 *used_palette;					// normally the same value as "palette" from vic4_palette.c but GOTOX RRB token can modify this! So this should be used
@@ -182,9 +188,10 @@ void vic_reset ( void )
 	}
 	vic_registers[0x5D] |= 0x80;	// set hotregs by default (again)
 	// to deactivate the pixel readback crosshair by default, ie X/Y pos that never meet
-	vic_registers[0x7D] = 0xFF;
-	vic_registers[0x7E] = 0xFF;
-	vic_registers[0x7F] = 0xFF;
+	debug_x = 0x3FFE;	// %11111111111110 (according to VHDL)
+	debug_x_real = debug_x;
+	debug_y = 0x0FFE;	//   %111111111110 (-- "" --)
+	debug_x_crosshair = TEXTURE_WIDTH;	// signal invalid
 	// turn off possible remained sprite collision info
 	vic_registers[0x1E] = 0;
 	vic_registers[0x1F] = 0;
@@ -195,8 +202,8 @@ void vic_reset ( void )
 
 void vic_init ( void )
 {
-	vic_pixel_readback_result[0] = 0xFF;	// "hyperram access count" or what, not so much emulated
-	// Needed to render "drive LED" feature + debug pixel-read back cross-hair (only the red colour)
+	vic_pixel_readback_result[0] = 0;	// "hyperram access count" or what, not so much emulated
+	// Needed to render "drive LED" feature + debug pixel-read back crosshair (only the red colour)
 	red_colour   = SDL_MapRGBA(sdl_pix_fmt, 0xFF, 0x00, 0x00, 0xFF);
 	black_colour = SDL_MapRGBA(sdl_pix_fmt, 0x00, 0x00, 0x00, 0xFF);
 	// Init VIC4 stuffs
@@ -206,32 +213,6 @@ void vic_init ( void )
 	machine_set_speed(0);
 	vic4_reset_display_counters();
 	DEBUG("VIC4: has been initialized." NL);
-}
-
-
-// Debug pixel-read back feature of MEGA65
-static XEMU_INLINE void pixel_readback ( void )
-{
-	// FIXME: this is surely wrong, and we should not use texture coords directly. We must fix this somehow (offsets?)
-	const int pix_readback_x = (vic_registers[0x7D] | ((vic_registers[0x7F] & 0x0F) << 8)) - 8 + 2;
-	const int pix_readback_y = vic_registers[0x7E] | ((vic_registers[0x7F] & 0xF0) << 4);
-	if (XEMU_UNLIKELY(pix_readback_y >= 0 && pix_readback_x >= 0 && pix_readback_y < max_rasters && pix_readback_x < TEXTURE_WIDTH)) {
-		const Uint32 texpixcol = xemu_frame_pixel_access_p[TEXTURE_WIDTH * pix_readback_y + pix_readback_x];
-		// the array will be used on reading $D70D indexed by the top two bits of $D07C, element "0" is "hyperram access count" and not handled here
-		// FIXME Warning: this code assumes that R/G/B SDL components are exactly 8 bit
-		vic_pixel_readback_result[1] = (texpixcol >> sdl_pix_fmt->Rshift) & 0xFF;	// red channel
-		vic_pixel_readback_result[2] = (texpixcol >> sdl_pix_fmt->Gshift) & 0xFF;	// green channel
-		vic_pixel_readback_result[3] = (texpixcol >> sdl_pix_fmt->Bshift) & 0xFF;	// blue channel
-		// draw red coloured cross-hair
-		Uint32 *p = xemu_frame_pixel_access_p + TEXTURE_WIDTH * pix_readback_y;
-		for (int a = 0; a < TEXTURE_WIDTH; a++)
-			*p++ = red_colour;
-		p = xemu_frame_pixel_access_p + pix_readback_x;
-		for (int a = 0; a < max_rasters; a++) {
-			*p = red_colour;
-			p+= TEXTURE_WIDTH;
-		}
-	}
 }
 
 
@@ -245,8 +226,17 @@ void vic4_close_frame_access ( void )
 	// thus the "end" condition in active rendering is never reached: that would be remain latched for the next frame then!
 	memset(sprite_is_being_rendered, 0, sizeof sprite_is_being_rendered);
 #endif
-	// Debug pixel-read back feature of MEGA65
-	pixel_readback();
+	if (debug_x_crosshair < TEXTURE_WIDTH) {
+		Uint32 *p = xemu_frame_pixel_access_p + TEXTURE_WIDTH * debug_y_crosshair;
+		for (int a = 0; a < TEXTURE_WIDTH; a++)
+			*p++ = red_colour;
+		p = xemu_frame_pixel_access_p + debug_x_crosshair;
+		for (int a = 0; a < max_rasters; a++) {
+			*p = red_colour;
+			p+= TEXTURE_WIDTH;
+		}
+		debug_x_crosshair = TEXTURE_WIDTH;
+	}
 #ifdef	XEMU_FILES_SCREENSHOT_SUPPORT
 	// Screenshot
 	if (XEMU_UNLIKELY(vic4_registered_screenshot_request)) {
@@ -598,10 +588,6 @@ static const char vic_registers_internal_mode_names[] = {'4', '3', '2'};
 */
 void vic_write_reg ( unsigned int addr, Uint8 data )
 {
-#if 0
-	if (addr == 0x7D || addr == 0x7E || addr == 0x7F)
-		DEBUGPRINT("VIC4: crosshair reg $%02X was written with value $%03X at PC=$%04X" NL, addr, data, cpu65.old_pc);
-#endif
 	//DEBUGPRINT("VIC4: write VIC%c reg $%02X (internally $%03X) with data $%02X" NL, XEMU_LIKELY(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, data);
 	// IMPORTANT NOTE: writing of vic_registers[] happens only *AFTER* this switch/case construct! This means if you need to do this before, you must do it manually at the right "case"!!!!
 	// if you do so, you can even use "return" instead of "break" to save the then-redundant write of the register
@@ -785,9 +771,18 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x65): CASE_VIC_4(0x66): CASE_VIC_4(0x67): /*CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):*/ CASE_VIC_4(0x6B): /*CASE_VIC_4(0x6C):
 		CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):*//*CASE_VIC_4(0x70):*/ CASE_VIC_4(0x71): CASE_VIC_4(0x72): CASE_VIC_4(0x73): CASE_VIC_4(0x74):
 		CASE_VIC_4(0x75): CASE_VIC_4(0x76): CASE_VIC_4(0x77): CASE_VIC_4(0x78): CASE_VIC_4(0x79): /*CASE_VIC_4(0x7A):*/ CASE_VIC_4(0x7B): /*CASE_VIC_4(0x7C):*/
-		CASE_VIC_4(0x7D): CASE_VIC_4(0x7E): CASE_VIC_4(0x7F):
+		CASE_VIC_4(0x7D):
+			debug_x = (debug_x & 0xF00) | data;
+			debug_x_real = debug_x - DEBUG_X_OFFSET;
 			break;
-
+		CASE_VIC_4(0x7E):
+			debug_y = (debug_y & 0xF00) | data;
+			break;
+		CASE_VIC_4(0x7F):
+			debug_x = (debug_x & 0x0FF) | ((data & 0x0F) << 8);
+			debug_x_real = debug_x - DEBUG_X_OFFSET;
+			debug_y = (debug_y & 0x0FF) | ((data & 0xF0) << 4);
+			break;
 		CASE_VIC_4(0x68): CASE_VIC_4(0x69): CASE_VIC_4(0x6A):
 			break;
 		CASE_VIC_4(0x6C): CASE_VIC_4(0x6D): CASE_VIC_4(0x6E):
@@ -799,7 +794,6 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 				data = (vic_registers[0x6F] & 0x80) | (data & 0x7F);
 			// We trigger video setup at next frame automatically, no need do anything further here
 			break;
-
 		CASE_VIC_4(0x70):	// VIC4 palette selection register
 			altpalette	= ((data & 0x03) << 8) + vic_palettes;
 			spritepalette	= ((data & 0x0C) << 6) + vic_palettes;
@@ -959,9 +953,13 @@ Uint8 vic_read_reg ( int unsigned addr )
 		CASE_VIC_4(0x75): CASE_VIC_4(0x76): CASE_VIC_4(0x77): CASE_VIC_4(0x78): CASE_VIC_4(0x79): CASE_VIC_4(0x7A): CASE_VIC_4(0x7B): CASE_VIC_4(0x7C):
 			break;
 		CASE_VIC_4(0x7D):
-			result = vic_pixel_readback_result[vic_registers[0x7C] >> 6];
+			result = in_hypervisor ?   debug_x & 0xFF : vic_pixel_readback_result[vic_registers[0x7C] >> 6];
 			break;
-		CASE_VIC_4(0x7E): CASE_VIC_4(0x7F):
+		CASE_VIC_4(0x7E):
+			result = in_hypervisor ?   debug_y & 0xFF : 0;
+			break;
+		CASE_VIC_4(0x7F):
+			result = in_hypervisor ? ((debug_y >> 4) & 0xF0) | ((debug_x >> 8) & 0x0F) : 0;
 			break;
 		/* --- NON-EXISTING REGISTERS --- */
 		CASE_VIC_2(0x31): CASE_VIC_2(0x32): CASE_VIC_2(0x33): CASE_VIC_2(0x34): CASE_VIC_2(0x35): CASE_VIC_2(0x36): CASE_VIC_2(0x37): CASE_VIC_2(0x38):
@@ -1607,7 +1605,6 @@ bool vic4_render_scanline ( void )
 	// "Double-scan hack"
 	// FIXME: is this really correct? ie even sprites cannot be set to Y pos finer than V200 or ...
 	// ... having resolution finer than V200 with some "VIC4 magic"?
-	const bool lowvres = (!EFFECTIVE_V400 && (ycounter & 1));
 	if (!EFFECTIVE_V400 && (ycounter & 1)) {
 		if (XEMU_UNLIKELY(configdb.show_scanlines)) {
 			for (int i = 0; i < TEXTURE_WIDTH; i++)
@@ -1683,6 +1680,16 @@ bool vic4_render_scanline ( void )
 		else
 			interrupt_status &= 255 - 2;
 	}
+
+	if (XEMU_UNLIKELY(ycounter == debug_y && debug_x_real < TEXTURE_WIDTH)) {
+		const Uint32 pix = rrb[debug_x_real];
+		vic_pixel_readback_result[1] = (pix >> sdl_pix_fmt->Rshift) & 0xFF;	// red channel
+		vic_pixel_readback_result[2] = (pix >> sdl_pix_fmt->Gshift) & 0xFF;	// green channel
+		vic_pixel_readback_result[3] = (pix >> sdl_pix_fmt->Bshift) & 0xFF;	// blue channel
+		debug_x_crosshair = debug_x_real;
+		debug_y_crosshair = debug_y;
+	}
+
 #ifndef	IN_TEXTURE_RRB
 	memcpy(pixel_raster, rrb, TEXTURE_WIDTH * 4);
 #endif
