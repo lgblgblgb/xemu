@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Copyright (C)2020-2022 Hernán Di Pietro <hernan.di.pietro@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -1337,7 +1337,6 @@ static XEMU_INLINE void set_bitplane_pointers ( void )
 // Render a bitplane-mode character cell row
 static XEMU_INLINE void vic4_render_bitplane_char_row ( const Uint32 offset, const int glyph_width )
 {
-	const Uint8 bpe_mask = vic_registers[0x32] & (REG_H640 ? 15 : 255);
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		const Uint8 bitsel = 0x80 >> ((int)cx);
 		*(current_pixel++) = palette[((			// Do not try this at home ...
@@ -1349,7 +1348,7 @@ static XEMU_INLINE void vic4_render_bitplane_char_row ( const Uint32 offset, con
 			((*(bitplane_p[5] + offset) & bitsel) ?  32 : 0) |
 			((*(bitplane_p[6] + offset) & bitsel) ?  64 : 0) |
 			((*(bitplane_p[7] + offset) & bitsel) ? 128 : 0)
-			) & bpe_mask) ^ vic_registers[0x3B]
+			) & vic_registers[0x32]) ^ vic_registers[0x3B]
 		];
 		is_fg[xcounter++] = (*(bitplane_p[2] + offset) & bitsel);
 	}
