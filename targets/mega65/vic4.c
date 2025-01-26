@@ -1340,7 +1340,6 @@ static XEMU_INLINE void set_bitplane_pointers ( void )
 // Render a bitplane-mode character cell row
 static XEMU_INLINE void vic4_render_bitplane_char_row ( const Uint32 offset, const int glyph_width )
 {
-	const Uint8 bpe_mask = vic_registers[0x32] & (REG_H640 ? 15 : 255);
 	for (float cx = 0; cx < glyph_width; cx += char_x_step) {
 		const Uint8 bitsel = 0x80 >> ((int)cx);
 		rrb[xcounter] = palette[((			// Do not try this at home ...
@@ -1352,7 +1351,7 @@ static XEMU_INLINE void vic4_render_bitplane_char_row ( const Uint32 offset, con
 			((*(bitplane_p[5] + offset) & bitsel) ?  32 : 0) |
 			((*(bitplane_p[6] + offset) & bitsel) ?  64 : 0) |
 			((*(bitplane_p[7] + offset) & bitsel) ? 128 : 0)
-			) & bpe_mask) ^ vic_registers[0x3B]
+			) & vic_registers[0x32]) ^ vic_registers[0x3B]
 		];
 		is_fg[xcounter] = (*(bitplane_p[2] + offset) & bitsel);
 		INC_10BIT(xcounter);
