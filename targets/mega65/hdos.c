@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -857,14 +857,13 @@ void hdos_leave ( const Uint8 func_no )
 		// since the result can be used _later_ by both of virtualized and non-virtualized functions, possibly.
 		// Let's do a local copy of the successfully selected name via hyppo (we know this by knowing that C flag is set by hyppo)
 		// FIXME: in case of error, is setname buffer modified?
-		// FIXME: is only Y used for _page_ and X ignored, also is tranfer area addr is really modified as a "side effect"?
-		char setnam_current[sizeof hdos.setname_fn];
 		// FIXME: copy routine should not fail ever if hyppo already accepted!
-		if (copy_string_from_user(hdos.setname_fn, sizeof hdos.setname_fn, hdos.in_x + (hdos.in_y << 8)) >= 0)
-			// hdos.transfer_area_address = hdos.in_y << 8;	// WTF? setname has X/Y as input!
+		const Uint16 address = hdos.in_y << 8;
+		if (copy_string_from_user(hdos.setname_fn, sizeof hdos.setname_fn, address) >= 0) {
+			// hdos.transfer_area_address = address;	// FIXME: would we need this? ie: setname affects the transfer area address? [as a kind of side effect maybe?]
 			for (char *p = hdos.setname_fn; *p; p++) {
 				if (*p < 0x20 || *p >= 0x7F) {
-					// FIXME: this should not happen if hyppo already accepted!
+					// FIXME: this should not happen if hyppo already accepted! However there can be invalid name for host OS FS ...
 					DEBUGHDOS("HDOS: setnam(): invalid character in filename $%02X" NL, *p);
 					hdos.setname_fn[0] = '\0';
 					break;
@@ -872,7 +871,8 @@ void hdos_leave ( const Uint8 func_no )
 				if (*p >= 'A' && *p <= 'Z')
 					*p = *p - 'A' + 'a';
 			}
-		DEBUGHDOS("HDOS: %s: selected filename is [%s] from $%04X" NL, hdos.func_name, hdos.setname_fn, hdos.in_x + (hdos.in_y << 8));
+		}
+		DEBUGHDOS("HDOS: %s: selected filename is [%s] from $%04X" NL, hdos.func_name, hdos.setname_fn, address);
 		return;
 	}
 	if (hdos.func == 0x3A && cpu65.pf_c) {	// HDOS setup transfer area. We don't virtualize this, but maintain a copy of the value set as we need the pointer set
