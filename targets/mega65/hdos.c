@@ -837,6 +837,13 @@ void hdos_enter ( const Uint8 func_no )
 }
 
 
+static void forced_unmount_hack ( const int unit )
+{
+	DEBUGHDOS("HDOS: forced unmount hack for #%d on hdos_leave for HDOS function $%02X" NL, unit, hdos.func);
+	sdcard_unmount(unit);
+}
+
+
 // Called when DOS trap is leaving.
 // Can be used to examine the result hyppo did with a call, or even do some modifications.
 void hdos_leave ( const Uint8 func_no )
@@ -846,6 +853,20 @@ void hdos_leave ( const Uint8 func_no )
 	hdos.func = func_no;
 	hdos.func_name = hdos_get_func_name(hdos.func);
 	DEBUGHDOS("HDOS: leaving function #$%02X (%s) with carry %s (A,X,Y,Z=$%02X,$%02X,$%02X,$%02X)" NL, hdos.func, hdos.func_name, cpu65.pf_c ? "SET" : "CLEAR", cpu65.a, cpu65.x, cpu65.y, cpu65.z);
+	// BEGIN: hack of forcing umounting
+	if (hdos.func == 0x42) {	// hack to force umount, when umount request somewhere lost in the maze of sdcard.c and its siblings ...
+		forced_unmount_hack(0);
+		forced_unmount_hack(1);
+	}
+	if (hdos.func == 0x4A) {	// special to HDOS 1.3 ... does not make too much sense now but can be useful if user runs external 1.3 HDOS capable hyppo
+		if ((hdos.in_x & 0x80))	{	// it was a detach request (bit 7 is set)?
+			if ((hdos.in_x & 2) || (!(hdos.in_x & 1)))	// "both drive" (bit 1 is set) or drive 0 (bit 0 is clear) ?
+				forced_unmount_hack(0);
+			if ((hdos.in_x & 2) || (  hdos.in_x & 1 ))	// "both drive" (bit 1 is set) or drive 1 (bit 0 is set  ) ?
+				forced_unmount_hack(1);
+		}
+	}
+	// END: hack of forcing unmounting
 	// if "func_is_virtualized" flag is set, we don't want to mess things up further, as it was handled before in hdos.c somewhere
 	if (hdos.func_is_virtualized) {
 		DEBUGHDOS("HDOS: VIRT: was marked as virtualized, so end of %s in %s()" NL, hdos.func_name, __func__);
