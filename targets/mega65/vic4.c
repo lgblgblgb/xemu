@@ -83,6 +83,7 @@ static Uint8 sprite_is_being_rendered[8];
 #endif
 static Uint8 bug_compat_vic_iii_d016_delta = 2;
 static bool  bug_compat_char_attr = true;
+static bool  chary16 = false;
 
 // --- these things are altered by vic4_open_frame_access() ONLY at every fame ONLY based on PAL or NTSC selection
 Uint8 videostd_id = 0xFF;			// 0=PAL, 1=NTSC [give some insane value by default to force the change at the fist frame after starting Xemu]
@@ -186,6 +187,7 @@ void vic_reset ( void )
 	vic_registers[0x1F] = 0;
 	vic4_reset_display_counters();
 	SET_PHYSICAL_RASTER(0);
+	chary16 = false;
 }
 
 
@@ -1417,6 +1419,14 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 	enable_bg_paint = 1;
 	draw_mask = 0xFF;	// initialize draw mask being $FF initially (glyph row is not masked out)
 	const Uint8 *row_data_base_addr = get_charset_effective_addr();	// FIXME: is it OK that I moved here, before the loop?
+	// CHARY16 feature - 16 pixel tall font in character mode
+	bool increment_row = true;	// by default, every raster rendering needs to increment the character row counter
+	if (chary16) {
+		if ((ycounter & 1))
+			row_data_base_addr += 2048;
+		else
+			increment_row = false;	// not incrementing the character row counter though when CHARY16 mode is active and we're in even numbered raster
+	}
 	// If this line is inside the vertical borders, mark all pixels as border color
 	if (ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM) {
 		for (int i = 0; i < TEXTURE_WIDTH; i++)
@@ -1573,9 +1583,11 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 			line_char_index++;
 		}
 	}
-	if (++char_row > 7) {
-		char_row = 0;
-		display_row++;
+	if (increment_row) {		// in CHARY16 mode, I don't increment at every raster! See the beginning of this function
+		if (++char_row > 7) {
+			char_row = 0;
+			display_row++;
+		}
 	}
 	// Fill screen color after chargen phase
 	while (xcounter++ < border_x_right)
@@ -1591,10 +1603,13 @@ bool vic4_render_scanline ( void )
 	current_pixel = pixel_start + ycounter * TEXTURE_WIDTH;
 	pixel_raster_start = current_pixel;
 
+	// CHARY16 feature (only valid if it's SET and character mode is used at all and we're in V200 mode)
+	chary16 = (vic_registers[0x7A] & 0x10) && !(vic_registers[0x31] & 0x10) && !EFFECTIVE_V400;
+
 	// "Double-scan hack"
 	// FIXME: is this really correct? ie even sprites cannot be set to Y pos finer than V200 or ...
 	// ... having resolution finer than V200 with some "VIC4 magic"?
-	if (!EFFECTIVE_V400 && (ycounter & 1)) {
+	if (!EFFECTIVE_V400 && (ycounter & 1) && !chary16) {
 		if (XEMU_UNLIKELY(configdb.show_scanlines)) {
 			for (int i = 0; i < TEXTURE_WIDTH; i++, current_pixel++)
 				*current_pixel = ((*(current_pixel - TEXTURE_WIDTH) >> 1) & 0x7F7F7F7FU) | black_colour;	// "| black_colour" is used to correct the messed-up alpha channel to $FF
