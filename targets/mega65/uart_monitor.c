@@ -58,6 +58,8 @@ static char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
 void (*m65mon_callback)(void) = NULL;
 int breakpoint_pc = -1;
+int watchpoint_addr = -1;
+int watchpoint_val = -1;
 
 extern int cpu_cycles_per_scanline;
 
@@ -141,6 +143,14 @@ static void m65mon_dumpmem28 ( int addr )
 		else
 			umon_printf("%02X", debug_read_linear_byte(addr++));
 	}
+}
+
+void m65mon_setmem28( int addr, int cnt, Uint8* vals )
+{
+  for (int k = 0; k < cnt; k++)
+  {
+    debug_write_linear_byte(addr++ & 0xFFFFFFF, vals[k]);
+  }
 }
 
 static void m65mon_setmem16( int addr, Uint8 val )
@@ -282,7 +292,7 @@ static void fillmem28 ( char *param, int addr )
 		return;
 
 	for (int k = addr; k < endaddr; k++)
-		m65mon_setmem((Uint8*)&val, k & 0xFFFFFFF);
+		m65mon_setmem28(k & 0xFFFFFFF, 1, (Uint8*)&val);
 }
 
 

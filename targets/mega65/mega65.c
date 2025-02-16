@@ -58,8 +58,8 @@ static int emulation_is_running = 0;
 static int speed_current = -1;
 int paused = 0;
 static int paused_old = 0;
-static int watchpoint_addr = -1;
-static int watchpoint_val = -1;
+extern int watchpoint_addr;
+extern int watchpoint_val;
 #ifdef TRACE_NEXT_SUPPORT
 static int orig_sp = 0;
 static int trace_next_trigger = 0;
@@ -68,7 +68,7 @@ int trace_step_trigger = 0;
 static char emulator_speed_title[64] = "";
 static char fast_mhz_as_string[16] = "";
 const char *cpu_clock_speed_string_p = "";
-static unsigned int cpu_cycles_per_scanline;
+unsigned int cpu_cycles_per_scanline;
 int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 static Uint8 i2c_regs_original[sizeof i2c_regs];
 Uint8 last_dd00_bits = 3;		// Bank 0
