@@ -59,6 +59,7 @@ static char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 void (*m65mon_callback)(void) = NULL;
 int breakpoint_pc = -1;
 
+extern int cpu_cycles_per_scanline;
 
 
 static void _umon_write_size_panic ( void )
@@ -96,6 +97,25 @@ void m65mon_show_regs ( void )
 static void m65mon_set_pc ( const Uint16 addr )
 {
 	cpu65_debug_set_pc(addr);
+}
+
+void m65mon_breakpoint ( int brk )
+{
+	breakpoint_pc = brk;
+	if (brk < 0)
+		cpu_cycles_per_step = cpu_cycles_per_scanline;
+	else
+		cpu_cycles_per_step = 0;
+}
+
+void m65mon_watchpoint ( int addr )
+{
+  watchpoint_addr = addr;
+  watchpoint_val = debug_read_linear_byte(addr);
+	if (addr < 0)
+		cpu_cycles_per_step = cpu_cycles_per_scanline;
+	else
+		cpu_cycles_per_step = 0;
 }
 
 static void m65mon_dumpmem16 ( Uint16 addr )
@@ -340,7 +360,7 @@ static void execute_command ( char *cmd )
 		case 'b':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
 			if (cmd && check_end_of_command(cmd, 1))
-				set_breakpoint(par1);
+				m65mon_breakpoint(par1);
 			break;
 		case 'g':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);

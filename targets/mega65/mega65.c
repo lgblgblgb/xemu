@@ -558,28 +558,6 @@ int reset_mega65_asked ( void )
 }
 
 
-#ifdef HAS_UARTMON_SUPPORT
-void set_breakpoint ( int brk )
-{
-	breakpoint_pc = brk;
-	if (brk < 0)
-		cpu_cycles_per_step = cpu_cycles_per_scanline;
-	else
-		cpu_cycles_per_step = 0;
-}
-
-void m65mon_watchpoint ( int addr )
-{
-  watchpoint_addr = addr;
-  watchpoint_val = debug_read_linear_byte(addr);
-	if (addr < 0)
-		cpu_cycles_per_step = cpu_cycles_per_scanline;
-	else
-		cpu_cycles_per_step = 0;
-}
-#endif
-
-
 static void update_emulated_time_sources ( void )
 {
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
