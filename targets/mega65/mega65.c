@@ -58,6 +58,8 @@ static int emulation_is_running = 0;
 static int speed_current = -1;
 int paused = 0;
 static int paused_old = 0;
+static int watchpoint_addr = -1;
+static int watchpoint_val = -1;
 #ifdef TRACE_NEXT_SUPPORT
 static int orig_sp = 0;
 static int trace_next_trigger = 0;
@@ -565,6 +567,16 @@ void set_breakpoint ( int brk )
 	else
 		cpu_cycles_per_step = 0;
 }
+
+void m65mon_watchpoint ( int addr )
+{
+  watchpoint_addr = addr;
+  watchpoint_val = debug_read_linear_byte(addr);
+	if (addr < 0)
+		cpu_cycles_per_step = cpu_cycles_per_scanline;
+	else
+		cpu_cycles_per_step = 0;
+}
 #endif
 
 
@@ -685,7 +697,16 @@ static void emulation_loop ( void )
 #ifdef		HAS_UARTMON_SUPPORT
 		if (XEMU_UNLIKELY(breakpoint_pc == cpu65.pc)) {
 			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu65.pc);
+			m65mon_show_regs();
 			paused = 1;
+		}
+		if (watchpoint_addr != -1)
+		{
+			if (watchpoint_val != debug_read_linear_byte(watchpoint_addr))
+			{
+				watchpoint_val = debug_read_linear_byte(watchpoint_addr);
+				paused = 1;
+			}
 		}
 #endif
 		cycles += XEMU_UNLIKELY(in_dma) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(

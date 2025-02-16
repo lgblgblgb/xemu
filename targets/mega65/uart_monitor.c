@@ -66,18 +66,19 @@ static void _umon_write_size_panic ( void )
 	DEBUGPRINT("UARTMON: warning: too long message (%d/%d), cannot fit into the output buffer!" NL, umon_write_pos, UMON_WRITE_BUFFER_SIZE);
 }
 
-static void m65mon_show_regs ( void )
+void m65mon_show_regs ( void )
 {
 	Uint8 pf = cpu65_get_pf();
 	umon_printf(
 		"\r\n"
-		"PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
+		"PC   A  X  Y  Z  B  SP   MAPH MAPL LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
 		"%04X %02X %02X %02X %02X %02X %04X "		// register banned message and things from PC to SP
 		"%04X %04X %02X       %02X %02X "		// from MAPL to P
-		"%c%c%c%c%c%c%c%c ",				// P-FLAGS
+		"%c%c%c%c%c%c%c%c \r\n"				// P-FLAGS
+		",0777%04X\r\n", // TODO: single line of disassembly
 		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z, cpu65.bphi >> 8, cpu65.sphi | cpu65.s,
-		((map_mask & 0x0F) << 12) | (map_offset_low  >> 8),
-		((map_mask & 0xF0) <<  8) | (map_offset_high >> 8),
+		((map_mask & 0xf0) << 8) | (map_offset_high >> 8),
+		((map_mask & 0x0f) << 12)  | (map_offset_low >> 8),
 		cpu65.op,
 		pf, 0,	// flags
 		(pf & CPU65_PF_N) ? 'N' : '-',
@@ -87,7 +88,8 @@ static void m65mon_show_regs ( void )
 		(pf & CPU65_PF_D) ? 'D' : '-',
 		(pf & CPU65_PF_I) ? 'I' : '-',
 		(pf & CPU65_PF_Z) ? 'Z' : '-',
-		(pf & CPU65_PF_C) ? 'C' : '-'
+		(pf & CPU65_PF_C) ? 'C' : '-',
+		cpu65.pc
 	);
 }
 
@@ -108,9 +110,22 @@ static void m65mon_dumpmem28 ( int addr )
 {
 	int n = 16;
 	addr &= 0xFFFFFFF;
-	umon_printf(":%07X:", addr);
+	umon_printf(":%08X:", addr);
 	while (n--)
-		umon_printf("%02X", debug_read_linear_byte(addr++));
+	{
+		if ( (addr >> 16) == 0x777)
+		{
+			umon_printf("%02X", cpu65_read_callback(addr & 0xffff));
+			addr++;
+		}
+		else
+			umon_printf("%02X", debug_read_linear_byte(addr++));
+	}
+}
+
+static void m65mon_setmem16( int addr, Uint8 val )
+{
+  cpu65_write_callback(addr, val);
 }
 
 static void m65mon_set_trace ( int m )
@@ -230,6 +245,26 @@ static void m65mon_setmem ( char *param, int addr )
 	}
 }
 
+static void fillmem28 ( char *param, int addr )
+{
+	char *orig_param = param;
+	int endaddr;
+	int val;
+
+	if (param && !check_end_of_command(param, 0))
+		param = parse_hex_arg(param, &endaddr, 0, 0xFFFFFFF);
+	else
+		return;
+
+	if (param && !check_end_of_command(param, 0))
+		param = parse_hex_arg(param, &val, 0, 0xFF);
+	else
+		return;
+
+	for (int k = addr; k < endaddr; k++)
+		m65mon_setmem((Uint8*)&val, k & 0xFFFFFFF);
+}
+
 
 static void execute_command ( char *cmd )
 {
@@ -268,21 +303,15 @@ static void execute_command ( char *cmd )
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
 			bank = par1 >> 16;
 			if (cmd && check_end_of_command(cmd, 1)) {
-				if (bank == 0x777)
-					m65mon_dumpmem16(par1);
-				else
-					m65mon_dumpmem28(par1);
+				m65mon_dumpmem28(par1);
 			}
 			break;
 		case 'M':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
 			bank = par1 >> 16;
 			if (cmd && check_end_of_command(cmd, 1)) {
-				for (int k = 0; k < 32; k++) {
-					if (bank == 0x777)
-						m65mon_dumpmem16(par1);
-					else
-						m65mon_dumpmem28(par1);
+				for (int k = 0; k < 16; k++) {
+					m65mon_dumpmem28(par1);
 					par1 += 16;
 					umon_printf("\n");
 				}
@@ -291,6 +320,10 @@ static void execute_command ( char *cmd )
 		case 's':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
 			m65mon_setmem(cmd, par1);
+			break;
+		case 'f':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
+			fillmem28(cmd, par1);
 			break;
 		case 't':
 			if (!*cmd)
@@ -312,6 +345,11 @@ static void execute_command ( char *cmd )
 		case 'g':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
 			m65mon_set_pc(par1);
+			break;
+		case 'w':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
+			if (cmd && check_end_of_command(cmd, 1))
+				m65mon_watchpoint(par1);
 			break;
 #ifdef TRACE_NEXT_SUPPORT
 		case 'N':
@@ -481,6 +519,8 @@ void uartmon_finish_command ( void )
 	}
 	// umon_trigger_end_of_answer = 1;
 	umon_write_buffer[umon_write_size++] = '.';	// add the 'dot prompt'! (m65dbg seems to check LF + dot for end of the answer)
+	umon_write_buffer[umon_write_size++] = '\r';  // I can't seem to see the dot over tcp unless I add a CRLF...
+	umon_write_buffer[umon_write_size++] = '\n';
 	umon_read_pos = 0;
 	umon_echo = 1;
 }

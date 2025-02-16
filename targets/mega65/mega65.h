@@ -50,6 +50,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SID_CYCLES_PER_SEC	1000000
 #define AUDIO_SAMPLE_FREQ	44100
 
+extern void m65mon_show_regs ( void );
 extern void machine_set_speed ( int verbose );
 
 extern void reset_mega65      ( void );
@@ -69,5 +70,7 @@ extern int cpu_cycles_per_step;
 extern const char *cpu_clock_speed_string_p;
 extern int paused;
 extern int trace_step_trigger;
+extern int trace_next_trigger;
+extern int orig_sp;
 
 #endif
