@@ -58,6 +58,8 @@ static int emulation_is_running = 0;
 static int speed_current = -1;
 int paused = 0;
 static int paused_old = 0;
+extern int watchpoint_addr;
+extern int watchpoint_val;
 #ifdef TRACE_NEXT_SUPPORT
 static int orig_sp = 0;
 static int trace_next_trigger = 0;
@@ -66,7 +68,7 @@ int trace_step_trigger = 0;
 static char emulator_speed_title[64] = "";
 static char fast_mhz_as_string[16] = "";
 const char *cpu_clock_speed_string_p = "";
-static unsigned int cpu_cycles_per_scanline;
+unsigned int cpu_cycles_per_scanline;
 int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 static Uint8 i2c_regs_original[sizeof i2c_regs];
 Uint8 last_dd00_bits = 3;		// Bank 0
@@ -573,18 +575,6 @@ int reset_mega65 ( const unsigned int options )
 }
 
 
-#ifdef HAS_UARTMON_SUPPORT
-void set_breakpoint ( int brk )
-{
-	breakpoint_pc = brk;
-	if (brk < 0)
-		cpu_cycles_per_step = cpu_cycles_per_scanline;
-	else
-		cpu_cycles_per_step = 0;
-}
-#endif
-
-
 static void update_emulated_time_sources ( void )
 {
 	// Ugly CIA trick to maintain realtime TOD in CIAs :)
@@ -702,7 +692,16 @@ static void emulation_loop ( void )
 #ifdef		HAS_UARTMON_SUPPORT
 		if (XEMU_UNLIKELY(breakpoint_pc == cpu65.pc)) {
 			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu65.pc);
+			m65mon_show_regs();
 			paused = 1;
+		}
+		if (watchpoint_addr != -1)
+		{
+			if (watchpoint_val != debug_read_linear_byte(watchpoint_addr))
+			{
+				watchpoint_val = debug_read_linear_byte(watchpoint_addr);
+				paused = 1;
+			}
 		}
 #endif
 		cycles += XEMU_UNLIKELY(in_dma) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
