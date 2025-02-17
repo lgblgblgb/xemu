@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -499,7 +499,7 @@ static void shutdown_callback ( void )
 }
 
 
-void reset_mega65 ( void )
+static void reset_mega65_hard ( void )
 {
 	static const char reset_debug_msg[] = "SYSTEM: RESET - ";
 	last_reset_type = "COLD";
@@ -529,7 +529,7 @@ void reset_mega65 ( void )
 }
 
 
-void reset_mega65_cpu_only ( void )
+static void reset_mega65_cpu_only ( void )
 {
 	last_reset_type = "WARM";
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
@@ -546,13 +546,30 @@ void reset_mega65_cpu_only ( void )
 }
 
 
-int reset_mega65_asked ( void )
+int reset_mega65 ( const unsigned int options )
 {
-	if (ARE_YOU_SURE("Are you sure to RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
-		reset_mega65();
-		return 1;
-	} else
-		return 0;
+	if ((options & RESET_MEGA65_ASK)) {
+		if (!ARE_YOU_SURE("Are you sure to RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
+			return 0;
+	}
+	switch (options & 0xFF) {
+		case RESET_MEGA65_HARD:
+			reset_mega65_hard();
+			break;
+		case RESET_MEGA65_CPU:
+			reset_mega65_cpu_only();
+			break;
+		case RESET_MEGA65_HYPPO:
+			if (hypervisor_level_reset()) {
+				ERROR_WINDOW("Currently in hypervisor mode.\nNot possible to trigger a trap now");
+				return 0;
+			}
+			break;
+		default:
+			ERROR_WINDOW("Unknow RESET type asked: %u", options & 0xFF);
+			return 0;
+	}
+	return 1;
 }
 
 

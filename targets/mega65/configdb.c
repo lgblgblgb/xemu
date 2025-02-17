@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -140,6 +140,7 @@ static const struct xemutools_configdef_num_st num_options[] = {
 	{ "audiobuffersize", AUDIO_BUFFER_SAMPLES_DEFAULT, "Audio buffer size in BYTES", &configdb.audiobuffersize, AUDIO_BUFFER_SAMPLES_MIN, AUDIO_BUFFER_SAMPLES_MAX },
 	{ "coloureffect", 0, "Colour effect to be applied to the SDL output (0=none, 1=grayscale, 2=green-monitor, ...)", &configdb.colour_effect, 0, 255 },
 	{ "joyport", 2, "Default joystick port to emulate (1 or 2)", &configdb.joyport, 1, 2 },
+	{ "resethotkeytype", RESET_MEGA65_HARD, "Default reset type for reset hotkey, if enabled", &configdb.resethotkeytype, 1, RESET_MEGA65_LAST_ID },
 	{ NULL }
 };
 

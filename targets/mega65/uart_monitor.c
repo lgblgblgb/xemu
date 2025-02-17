@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -322,13 +322,13 @@ static void execute_command ( char *cmd )
 			m65mon_empty_command();	// emulator can use this, if it wants
 			break;
 		case '!':
-			reset_mega65();
+			reset_mega65(RESET_MEGA65_HARD);
 			break;
 		case '~':
 			if (!strncmp(cmd, "exit", 4)) {
 				XEMUEXIT(0);
 			} else if (!strncmp(cmd, "reset", 5)) {
-				reset_mega65();
+				reset_mega65(RESET_MEGA65_HARD);
 			} else if (!strncmp(cmd, "mount", 5)) {
 				// Quite crude syntax for now:
 				// 	~mount0		- unmounting image/disk in drive-0
