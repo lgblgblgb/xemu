@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/d81access.h"
 #include "xemu/emutools_files.h"
 #include "rom.h"
+#include "hypervisor.h"
 
 #include "memcontent.h"
 
@@ -371,7 +372,8 @@ static int fdisk ( Uint32 device_size )
 */
 static int update_sdcard_file ( const char *on_card_name, int options, const char *fn_or_data, int size_to_install )
 {
-	int fd = -1;
+	int fd = -1, fdw = -1;
+	char *hdos_name = NULL;
 	DEBUGPRINT("SDCONTENT: about to updating file %s ..." NL, on_card_name);
 	if (size_to_install <= 0) {
 		fd = open(fn_or_data, O_RDONLY | O_BINARY);
@@ -395,6 +397,16 @@ static int update_sdcard_file ( const char *on_card_name, int options, const cha
 	if (block == 0)
 		goto error_on_maybe_sys_file;
 	// Copy file block by block
+	if ((options & SDCONTENT_HDOS_DIR_TOO)) {
+		free(hdos_name);
+		hdos_name = hypervisor_hdos_get_sysfile_path(on_card_name);
+		fdw = open(hdos_name, O_BINARY | O_WRONLY | O_CREAT | O_TRUNC, 0600);
+		if (fdw >= 0) {
+			DEBUGPRINT("SDCONTENT: ... also updating HDOS instance %s" NL, hdos_name);
+		} else {
+			ERROR_WINDOW("Cannot upgrade %s because:\n%s", hdos_name, strerror(errno));
+		}
+	}
 	while (size_to_install) {
 		Uint8 buffer[512];
 		int need = (size_to_install < sizeof buffer) ? size_to_install : sizeof buffer;
@@ -416,10 +428,21 @@ static int update_sdcard_file ( const char *on_card_name, int options, const cha
 		}
 		// And now WRITE!!!!!
 		sdcard_write_block(block++, buffer);	// FIXME: error handling!!!
+		// Also write to the hdos/... entry, if fdw is already open!
+		if (fdw >= 0) {
+			if (write(fdw, buffer, need) != need) {
+				ERROR_WINDOW("Error \"%s\" while upating system file:\n%s\nYour HDOS/virt setup may become unstable!", strerror(errno), hdos_name);
+				close(fdw);
+				fdw = -1;
+			}
+		}
 		size_to_install -= need;
 	}
 	if (fd >= 0)
 		close(fd);
+	if (fdw >= 0)
+		close(fdw);
+	free(hdos_name);
 	return 0;
 error_on_maybe_sys_file:
 	if ((options & SDCONTENT_SYS_FILE))
@@ -432,6 +455,9 @@ error_on_maybe_sys_file:
 error:
 	if (fd >= 0)
 		close(fd);
+	if (fdw >= 0)
+		close(fdw);
+	free(hdos_name);
 	return -1;
 }
 
@@ -647,7 +673,8 @@ int sdcontent_handle ( Uint32 size_in_blocks, const char *update_dir_path, int o
 		mfat_open_rootdir(&sd_rootdirent.stream);
 	}
 	/* ---- ROUND#2: check important system files (if requested) ---- */
-	options &= SDCONTENT_ASK_FILES | SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES;	// no more rounds, so we mask output to the important remaing ones
+	const int options_h2 = options & (SDCONTENT_ASK_FILES | SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES | SDCONTENT_HDOS_DIR_TOO);	// _h2 == hdos too
+	options &=                        SDCONTENT_ASK_FILES | SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES;	// no more rounds, so we mask output to the important remaing ones
 	if (options) {
 		if (our_data_partition < 0)
 			FATAL("System file update/check requested, but format/FS was not validated!");
@@ -655,13 +682,13 @@ int sdcontent_handle ( Uint32 size_in_blocks, const char *update_dir_path, int o
 		char rom_path[PATH_MAX];
 		snprintf(rom_path, sizeof rom_path, "%s%s", sdl_pref_dir, MEGA65_ROM_NAME);
 		int r = 0;
-		r |= update_sdcard_file(MEGA65_ROM_NAME,	options | SDCONTENT_SYS_FILE,	rom_path,				-MEGA65_ROM_SIZE);
+		r |= update_sdcard_file(MEGA65_ROM_NAME,	options_h2| SDCONTENT_SYS_FILE,	rom_path,				-MEGA65_ROM_SIZE);
 		snprintf(rom_path, sizeof rom_path, "%s%s", sdl_pref_dir, CHAR_ROM_NAME);
-		r |= update_sdcard_file(CHAR_ROM_NAME,		options | SDCONTENT_SYS_FILE,	rom_path,				-CHAR_ROM_SIZE);
+		r |= update_sdcard_file(CHAR_ROM_NAME,		options_h2| SDCONTENT_SYS_FILE,	rom_path,				-CHAR_ROM_SIZE);
 
 		// Update system files based on the structure in memcontent.c and .h
 		for (int a = 0; a < MEMINITDATA_SDFILES_ITEMS; a++)
-			r |= update_sdcard_file(meminitdata_sdfiles_db[a].fn, options, (const char*)meminitdata_sdfiles_db[a].p, meminitdata_sdfiles_db[a].size);
+			r |= update_sdcard_file(meminitdata_sdfiles_db[a].fn, options_h2, (const char*)meminitdata_sdfiles_db[a].p, meminitdata_sdfiles_db[a].size);
 		//r |= update_sdcard_file("BANNER.M65",		options,			(const char*)meminitdata_banner,	MEMINITDATA_BANNER_SIZE);
 		//r |= update_sdcard_file("FREEZER.M65",	options,			(const char*)meminitdata_freezer,	MEMINITDATA_FREEZER_SIZE);
 		char *d81 = (char*)d81access_create_image(NULL, "D81 ON <SDCARD>!", 0);

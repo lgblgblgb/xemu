@@ -949,6 +949,17 @@ int hypervisor_hdos_virtualization_status ( const int set, const char **root_ptr
 }
 
 
+// implementation is here, but prototype is in hypervisor.h and not in hdos.h as you would expect!
+// caller must free the allocated memory
+char *hypervisor_hdos_get_sysfile_path ( const char *fn )
+{
+	char *p = xemu_malloc(strlen(hdos.rootdir) + strlen(fn) + 1);
+	strcpy(p, hdos.rootdir);
+	strcat(p, fn);
+	return p;
+}
+
+
 // These are called by hypervisor at the beginning and the end of the start machine state (ie, trap reset).
 // Its intent is to tell hdos.c to do things private to hdos.c but still connected to start machine functionality.
 

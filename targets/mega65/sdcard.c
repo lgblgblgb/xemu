@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -455,7 +455,7 @@ retry:
 			just_created_image_file = 0;
 			// Just created SD-card image file by Xemu itself! So it's nice if we format it for the user at this point!
 #ifdef SD_CONTENT_SUPPORT
-			if (!sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_FORCE_FDISK)) {
+			if (!sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_FORCE_FDISK | SDCONTENT_HDOS_DIR_TOO)) {
 				INFO_WINDOW("Your just created SD-card image file has\nbeen auto-fdisk/format'ed by Xemu. Great :).");
 				sdcontent_write_rom_stub();
 			}

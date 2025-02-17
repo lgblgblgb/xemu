@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -217,7 +217,7 @@ static void ui_format_sdcard ( void )
 		,
 		0
 	)) {
-		if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_FORCE_FDISK))
+		if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_FORCE_FDISK | SDCONTENT_HDOS_DIR_TOO))
 			INFO_WINDOW("Your SD-card file has been partitioned/formatted\nMEGA65 emulation is about to RESET now!");
 	}
 	reset_mega65();
@@ -310,7 +310,7 @@ static void ui_update_sdcard ( void )
 	))
 		goto ret;
 	// Call the updater :)
-	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES)) {
+	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES | SDCONTENT_HDOS_DIR_TOO)) {
 		INFO_WINDOW(
 			"System files on your SD-card image seems to be updated successfully.\n"
 			"Next time you may need this function, you can use MEGA65.ROM which is a backup copy of your selected ROM.\n\n"
