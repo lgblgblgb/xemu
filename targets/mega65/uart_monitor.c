@@ -112,14 +112,16 @@ void m65mon_breakpoint ( int brk )
 
 void m65mon_watchpoint ( int addr )
 {
-  watchpoint_addr = addr;
-  watchpoint_val = debug_read_linear_byte(addr);
+	watchpoint_addr = addr;
+	watchpoint_val = debug_read_linear_byte(addr);
 	if (addr < 0)
 		cpu_cycles_per_step = cpu_cycles_per_scanline;
 	else
 		cpu_cycles_per_step = 0;
 }
 
+// FIXME: Can we remove this? - currently unused static function
+#if 0
 static void m65mon_dumpmem16 ( Uint16 addr )
 {
 	int n = 16;
@@ -127,36 +129,36 @@ static void m65mon_dumpmem16 ( Uint16 addr )
 	while (n--)
 		umon_printf("%02X", debug_read_cpu_byte(addr++));
 }
+#endif
 
 static void m65mon_dumpmem28 ( int addr )
 {
 	int n = 16;
 	addr &= 0xFFFFFFF;
 	umon_printf(":%08X:", addr);
-	while (n--)
-	{
-		if ( (addr >> 16) == 0x777)
-		{
-			umon_printf("%02X", cpu65_read_callback(addr & 0xffff));
+	while (n--) {
+		if ((addr >> 16) == 0x777) {
+			umon_printf("%02X", cpu65_read_callback(addr & 0xFFFF));
 			addr++;
-		}
-		else
-			umon_printf("%02X", debug_read_linear_byte(addr++));
+		} else
+			umon_printf("%02X", debug_read_linear_byte(addr));
+		addr++;
 	}
 }
 
 void m65mon_setmem28( int addr, int cnt, Uint8* vals )
 {
-  for (int k = 0; k < cnt; k++)
-  {
-    debug_write_linear_byte(addr++ & 0xFFFFFFF, vals[k]);
-  }
+	for (int k = 0; k < cnt; k++)
+		debug_write_linear_byte(addr++ & 0xFFFFFFF, vals[k]);
 }
 
+// FIXME: Can we remove this? - currently unused static function
+#if 0
 static void m65mon_setmem16( int addr, Uint8 val )
 {
-  cpu65_write_callback(addr, val);
+	cpu65_write_callback(addr, val);
 }
+#endif
 
 static void m65mon_set_trace ( int m )
 {
@@ -275,9 +277,10 @@ static void m65mon_setmem ( char *param, int addr )
 	}
 }
 
+
 static void fillmem28 ( char *param, int addr )
 {
-	char *orig_param = param;
+	//char *orig_param = param;
 	int endaddr;
 	int val;
 
@@ -298,7 +301,7 @@ static void fillmem28 ( char *param, int addr )
 
 static void execute_command ( char *cmd )
 {
-	int bank;
+	//int bank;
 	int par1;
 	char *p = cmd;
 	while (*p)
@@ -331,14 +334,14 @@ static void execute_command ( char *cmd )
 			break;
 		case 'm':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
-			bank = par1 >> 16;
+			//bank = par1 >> 16;
 			if (cmd && check_end_of_command(cmd, 1)) {
 				m65mon_dumpmem28(par1);
 			}
 			break;
 		case 'M':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
-			bank = par1 >> 16;
+			//bank = par1 >> 16;
 			if (cmd && check_end_of_command(cmd, 1)) {
 				for (int k = 0; k < 16; k++) {
 					m65mon_dumpmem28(par1);
@@ -549,7 +552,7 @@ void uartmon_finish_command ( void )
 	}
 	// umon_trigger_end_of_answer = 1;
 	umon_write_buffer[umon_write_size++] = '.';	// add the 'dot prompt'! (m65dbg seems to check LF + dot for end of the answer)
-	umon_write_buffer[umon_write_size++] = '\r';  // I can't seem to see the dot over tcp unless I add a CRLF...
+	umon_write_buffer[umon_write_size++] = '\r';	// I can't seem to see the dot over tcp unless I add a CRLF...
 	umon_write_buffer[umon_write_size++] = '\n';
 	umon_read_pos = 0;
 	umon_echo = 1;
