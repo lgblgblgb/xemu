@@ -164,12 +164,18 @@ void hypervisor_enter ( int trapno )
 	//D6XX_registers[0x53] = 0;				// GS $D653 - Hypervisor DMAgic source MB      - *UNUSED*
 	//D6XX_registers[0x54] = 0;				// GS $D654 - Hypervisor DMAgic destination MB - *UNUSED*
 	dma_get_list_addr_as_bytes(D6XX_registers + 0x55);	// GS $D655-$D658 - Hypervisor DMAGic list address bits 27-0
+	if (map_megabyte_low == 0xFF00000) {	// !! map_megabyte_low uses << 20 ...
+		// According to the VHDL: Make sure that a naughty person can't trick the hypervisor into modifying
+		// itself, by having the Hypervisor address space mapped in the bottom 32KB of address space.
+		map_megabyte_low = 0;
+		DEBUGPRINT("HYPERVISOR: warning, low-MB would be mapped to $FF, countermeasure initiaited" NL);
+	}
 	// Now entering into hypervisor mode: we use memory_reconfigure() to set all the stuff needed + setting up "in_hypervisor" value as well
 	memory_reconfigure(
 		0,					// D030 ROM banking turning off
 		VIC4_IOMODE,				// VIC4 I/O mode to be used (on MEGA65, in hypervisor mode it's always the case! the handler in vic4.c ensures, we cannot even modify this)
 		0x3F, 0x35,				// set CPU I/O port DDR+DATA: all-RAM + I/O config
-		map_megabyte_low, map_offset_low,	// low mapping is left as-is
+		map_megabyte_low, map_offset_low,	// low mapping is left as-is (however for map_megabyte_low, see the "if" above)
 		0xFFU << 20, 0xF0000U,			// high mapping though is being modified
 		(map_mask & 0xFU) | 0x30U,		// mapping: 0011XXXX (it seems low region map mask is not changed by hypervisor entry)
 		true					// this will sets in_hypervisor to TRUE!!!!
