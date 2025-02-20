@@ -337,6 +337,11 @@ static void cmd_map ( char *arg )
 	write_special_chars_mode = 1;
 	dump_map();
 	write_special_chars_mode = 0;
+	MATRIX("MAP: HI-MB=$%02X LO-MB=$%02X HI-OFS=$%04X LO-OFS=$%04X MASK=$%02X",
+		map_megabyte_high >> 20, map_megabyte_low >> 20,
+		map_offset_high >> 8, map_offset_low >> 8,
+		map_mask
+	);
 }
 
 
