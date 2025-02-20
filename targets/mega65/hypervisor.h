@@ -38,7 +38,6 @@ extern void hypervisor_enter ( int trapno );
 extern void hypervisor_enter_via_write_trap ( int trapno );
 extern int  hypervisor_queued_enter ( int trapno );
 extern void hypervisor_start_machine ( void );
-extern int  hypervisor_level_reset ( void );
 extern void hypervisor_leave ( void );
 extern void hypervisor_serial_monitor_push_char ( Uint8 chr );
 extern void hypervisor_serial_monitor_open_file ( const char *fn );

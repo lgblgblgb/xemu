@@ -72,7 +72,7 @@ unsigned int cpu_cycles_per_scanline;
 int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 static Uint8 i2c_regs_original[sizeof i2c_regs];
 Uint8 last_dd00_bits = 3;		// Bank 0
-const char *last_reset_type;
+const char *last_reset_type = "XEMU-STARTUP";
 
 
 
@@ -330,7 +330,6 @@ static void preinit_memory_for_start ( void )
 
 static void mega65_init ( void )
 {
-	last_reset_type = "XEMU-STARTUP";
 	hypervisor_debug_init(configdb.hickuprep, configdb.hyperdebug, configdb.hyperserialascii);
 	if (hypervisor_is_debugged || configdb.cpusinglestep)
 		cpu_cycles_per_step = 0;
@@ -503,9 +502,6 @@ static void shutdown_callback ( void )
 
 static void reset_mega65_hard ( void )
 {
-	static const char reset_debug_msg[] = "SYSTEM: RESET - ";
-	last_reset_type = "COLD";
-	DEBUGPRINT("%sBEGIN" NL, reset_debug_msg);
 	reset_hw_errata_level();
 	memset(D7XX + 0x20, 0, 0x40);	// stop audio DMA possibly going on
 	rom_clear_reports();
@@ -527,13 +523,11 @@ static void reset_mega65_hard ( void )
 	nmi_level = 0;
 	D6XX_registers[0x7E] = configdb.hicked;
 	hypervisor_start_machine();
-	DEBUGPRINT("%sEND" NL, reset_debug_msg);
 }
 
 
 static void reset_mega65_cpu_only ( void )
 {
-	last_reset_type = "WARM";
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0;
 	machine_set_speed(0);
@@ -548,6 +542,13 @@ static void reset_mega65_cpu_only ( void )
 }
 
 
+static void reset_mega65_via_hyppo ( void )
+{
+	reset_mega65_cpu_only();	// these can be important though ...
+	hypervisor_start_machine();
+}
+
+
 int reset_mega65 ( const unsigned int options )
 {
 	if ((options & RESET_MEGA65_ASK)) {
@@ -556,21 +557,22 @@ int reset_mega65 ( const unsigned int options )
 	}
 	switch (options & 0xFF) {
 		case RESET_MEGA65_HARD:
+			last_reset_type = "HARD";
 			reset_mega65_hard();
 			break;
 		case RESET_MEGA65_CPU:
+			last_reset_type = "CPU";
 			reset_mega65_cpu_only();
 			break;
 		case RESET_MEGA65_HYPPO:
-			if (hypervisor_level_reset()) {
-				ERROR_WINDOW("Currently in hypervisor mode.\nNot possible to trigger a trap now");
-				return 0;
-			}
+			last_reset_type = "HYPPO";
+			reset_mega65_via_hyppo();
 			break;
 		default:
 			ERROR_WINDOW("Unknow RESET type asked: %u", options & 0xFF);
 			return 0;
 	}
+	DEBUGPRINT("XEMU: end of requested RESET, type \"%s\"" NL, last_reset_type);
 	return 1;
 }
 

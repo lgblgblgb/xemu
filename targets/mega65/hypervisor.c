@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -302,19 +302,6 @@ static inline void first_leave ( void )
 	vic_frame_counter_since_boot = 0;
 	//memory_reset_unwritten_debug_stat();	// FIXME/TODO: commented out since it generates a **tons** of warnings then with the "unwritten mem read" debug mode (-ramcheckread emu option)
 	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
-}
-
-
-int hypervisor_level_reset ( void )
-{
-	if (!in_hypervisor) {
-		DEBUGPRINT("HYPERVISOR: hypervisor-only reset was requested by Xemu." NL);
-		hypervisor_enter(TRAP_RESET);
-		last_reset_type = "HYPPO";
-		return 0;
-	}
-	DEBUGPRINT("HYPERVISOR: hypervisor-only reset requested by Xemu **FAILED**: already in hypervisor mode!" NL);
-	return 1;
 }
 
 
