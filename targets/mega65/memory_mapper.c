@@ -747,7 +747,7 @@ int memory_cpu_addr_to_desc ( const Uint16 cpu_addr, char *p, const unsigned int
 		default:
 			if (policy >= BANK_POLICY_INVALID)
 				goto error;
-			return snprintf(p, n, "%X", policy + cpu_addr);
+			return snprintf(p, n, "%X", (policy & 0xFF00000U) | ((policy + cpu_addr) & 0xFFFFFU));
 	}
 error:
 	FATAL("Invalid bank_policy4k[%u >> 12] = $%X in %s()!", cpu_addr, policy, __func__);
