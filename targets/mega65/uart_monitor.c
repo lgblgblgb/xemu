@@ -398,6 +398,17 @@ static void execute_command ( char *cmd )
 						OSD(-1, -1, "Unmounted (%d)", unit);
 					}
 				}
+			} else if (!strncmp(cmd, "mapping", 7)) {
+				char desc[10];
+				for (unsigned int i = 0; i < 16; i++) {
+					memory_cpu_addr_to_desc(i << 12, desc, sizeof desc);
+					umon_printf("%X:%7s%c", i, desc, (i & 7) == 7 ? ' ' : '|');
+				}
+				umon_printf("\nMAP: HI-MB=$%02X LO-MB=$%02X HI-OFS=$%04X LO-OFS=$%04X MASK=$%02X",
+					map_megabyte_high >> 20, map_megabyte_low >> 20,
+					map_offset_high >> 8, map_offset_low >> 8,
+					map_mask
+				);
 			} else
 				umon_printf(UMON_SYNTAX_ERROR "unknown (or not implemented) Xemu special command: %s", cmd - 1);
 			break;
