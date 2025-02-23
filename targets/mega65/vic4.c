@@ -354,8 +354,13 @@ static void vic4_update_vertical_borders ( void )
 		}
 		SET_CHARGEN_Y_START(RASTER_CORRECTION + SINGLE_TOP_BORDER_400 - (2 * vicii_first_raster) - 6 + (REG_VIC2_YSCROLL * 2));
 	}
+	// The following one code line has been commented out because it causes an off-by-one error
+	// Currenly it's now known, why it was needed at all, Hernan would know it. I assume this
+	// has been fixed in mega65-core (whatever it was exactly) so no need for that anymore (?)
+#if 0
 	// This offset is present in recent versions of VIC4 VHDL
 	SET_CHARGEN_X_START(CHARGEN_X_START - 1);
+#endif
 	DEBUG("VIC4: set border top=%d, bottom=%d, textypos=%d, display_row_count=%d vic_ii_first_raster=%d EFFECTIVE_V400=%d REG_V400=%d" NL, BORDER_Y_TOP, BORDER_Y_BOTTOM,
 		CHARGEN_Y_START, display_row_count, vicii_first_raster, EFFECTIVE_V400, REG_V400);
 }
