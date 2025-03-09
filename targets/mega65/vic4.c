@@ -1622,12 +1622,11 @@ bool vic4_render_scanline ( void )
 			memcpy(current_pixel, current_pixel - TEXTURE_WIDTH, TEXTURE_WIDTH * 4);
 			current_pixel += TEXTURE_WIDTH;
 		}
+	} else if (ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM || !REG_DISPLAYENABLE) {	// Top and bottom borders OR display is disabled ($D011 'DEN' bit is clear) ...
+		// ... so we render border colour for the full scanline then
+		for (int i = 0; i < TEXTURE_WIDTH; i++)
+			*(current_pixel++) = palette[REG_BORDER_COLOR];
 	} else {
-		// Top and bottom borders
-		if (ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM || !REG_DISPLAYENABLE) {
-			for (int i = 0; i < TEXTURE_WIDTH; i++)
-				*(current_pixel++) = palette[REG_BORDER_COLOR];
-		}
 		if (ycounter >= CHARGEN_Y_START && ycounter < BORDER_Y_BOTTOM) {
 			// Render chargen area and render side-borders later to cover X-displaced
 			// character generator if needed.  Chargen area maybe covered by top/bottom
