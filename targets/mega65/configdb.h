@@ -122,6 +122,7 @@ struct configdb_st {
 	int	emu_f_hotkeys;
 #endif
 	int	resethotkeytype;
+	int	realhw;
 };
 
 extern struct configdb_st configdb;

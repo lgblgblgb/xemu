@@ -120,6 +120,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 #ifdef HID_KBD_NO_F_HOTKEYS
 	{ "emufhotkeys", "Use F9,F10,F11 as emulator hotkeys", &configdb.emu_f_hotkeys },
 #endif
+	{ "realhw", "Report real hardware (be careful, use it only for testing!)", &configdb.realhw },
 	{ NULL }
 };
 

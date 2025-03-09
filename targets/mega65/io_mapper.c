@@ -225,7 +225,7 @@ Uint8 io_read ( unsigned int addr )
 					// bit 0: cursor left key is pressed
 					// bit 1: cursor up key is pressed
 					// bit 5: 1=real hardware, 0=emulation
-					return kbd_query_leftup_status();	// do bit 0/1 forming in input_devices.c, other bits should be zero, so it's ok to call only this
+					return kbd_query_leftup_status() | (!!configdb.realhw << 5);	// do bit 0/1 forming in input_devices.c, other bits should be zero, so it's ok to call only this
 				case 0x1B:
 					// D61B amiga / 1531 mouse auto-detect. FIXME XXX what value we should return at this point? :-O
 					return 0xFF;
