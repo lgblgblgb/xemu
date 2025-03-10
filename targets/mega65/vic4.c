@@ -1362,6 +1362,17 @@ static XEMU_INLINE void vic4_render_bitplane_char_row ( const Uint32 offset, con
 }
 
 
+static XEMU_INLINE void do_increment_row_counter_if ( const bool condition )
+{
+	if (condition) {
+		if (++char_row > 7) {
+			char_row = 0;
+			display_row++;
+		}
+	}
+}
+
+
 static XEMU_INLINE void vic4_render_bitplane_raster ( void )
 {
 	// FIXME: do not call this function here, but from actual register writes only
@@ -1374,12 +1385,7 @@ static XEMU_INLINE void vic4_render_bitplane_raster ( void )
 		offset += 8;
 		line_char_index++;
 	}
-	if (!EFFECTIVE_V400 || (ycounter  & 1)) {
-		if (++char_row > 7) {
-			char_row = 0;
-			display_row++;
-		}
-	}
+	do_increment_row_counter_if(!EFFECTIVE_V400 || (ycounter  & 1));
 	while (xcounter++ < border_x_right)
 		*current_pixel++ = palette[REG_SCREEN_COLOR];
 }
@@ -1440,7 +1446,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 		for (int i = 0; i < TEXTURE_WIDTH; i++)
 			*(current_pixel++) = palette[REG_BORDER_COLOR];
 	}
-	else if (display_row <= display_row_count && REG_DISPLAYENABLE) {
+	else if (display_row <= display_row_count) {
 		Uint32 colour_ram_current_addr = COLOUR_RAM_OFFSET + (display_row * LINESTEP_BYTES);
 		Uint32 screen_ram_current_addr = SCREEN_ADDR + (display_row * LINESTEP_BYTES);
 		// Account for Chargen X-displacement
@@ -1591,15 +1597,20 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 			line_char_index++;
 		}
 	}
-	if (increment_row) {		// in CHARY16 mode, I don't increment at every raster! See the beginning of this function
-		if (++char_row > 7) {
-			char_row = 0;
-			display_row++;
-		}
-	}
+	do_increment_row_counter_if(increment_row);
 	// Fill screen color after chargen phase
 	while (xcounter++ < border_x_right)
 		*current_pixel++ = palette[REG_SCREEN_COLOR];
+}
+
+
+static XEMU_INLINE void vic4_render_border_raster ( const bool do_increment_row_counter )
+{
+	// We may still need to increment the [char] row counter(s), given as input to the vic4_render_border_raster() renderer
+	do_increment_row_counter_if(do_increment_row_counter);
+	// Render the current whole raster as border colour
+	for (int i = 0; i < TEXTURE_WIDTH; i++)
+		*current_pixel++ = palette[REG_BORDER_COLOR];
 }
 
 
@@ -1610,6 +1621,7 @@ bool vic4_render_scanline ( void )
 	used_palette = palette;	// may be overriden later by GOTOX token!
 	current_pixel = pixel_start + ycounter * TEXTURE_WIDTH;
 	pixel_raster_start = current_pixel;
+	const bool in_y_rendering_context = (ycounter >= CHARGEN_Y_START && ycounter < BORDER_Y_BOTTOM);
 
 	// CHARY16 feature (only valid if it's SET and character mode is used at all and we're in V200 mode)
 	chary16 = (vic_registers[0x7A] & 0x10) && !(vic_registers[0x31] & 0x10) && !EFFECTIVE_V400;
@@ -1625,13 +1637,10 @@ bool vic4_render_scanline ( void )
 			memcpy(current_pixel, current_pixel - TEXTURE_WIDTH, TEXTURE_WIDTH * 4);
 			current_pixel += TEXTURE_WIDTH;
 		}
+	} else if (ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM || !REG_DISPLAYENABLE) {	// top / bottom borders OR display is disabled (DEN = 0)
+		vic4_render_border_raster(in_y_rendering_context);
 	} else {
-		if (ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM) {	// Top and bottom borders OR display is disabled
-			// ... so we render border colour for the full scanline then
-			for (int i = 0; i < TEXTURE_WIDTH; i++)
-				*(current_pixel++) = palette[REG_BORDER_COLOR];
-		}
-		if (ycounter >= CHARGEN_Y_START && ycounter < BORDER_Y_BOTTOM) {
+		if (in_y_rendering_context) {
 			// Render chargen area and render side-borders later to cover X-displaced
 			// character generator if needed.  Chargen area maybe covered by top/bottom
 			// borders also if y-offset applies.
