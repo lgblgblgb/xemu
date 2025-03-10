@@ -248,15 +248,27 @@ void vic4_close_frame_access ( void )
 #ifdef	XEMU_FILES_SCREENSHOT_SUPPORT
 	// Screenshot
 	if (XEMU_UNLIKELY(vic4_registered_screenshot_request)) {
-		unsigned int x1, y1, x2, y2;
-		xemu_get_viewport(&x1, &y1, &x2, &y2);
+		unsigned int x1, y1, w, h;
+		if (configdb.screenshot_and_exit) {
+			// if it's "screenshot on exit" then we want the full NTSC/PAL frame (not the cropped viewport only)
+			x1 = 0;
+			y1 = 0;
+			w  = TEXTURE_WIDTH;	// 720;
+			h  = max_rasters;
+		} else {
+			// This function returns the viewport as "bounding box" ...
+			xemu_get_viewport(&x1, &y1, &w, &h);
+			// ... let's calculate the width/height instead
+			w = w - x1 + 1;
+			h = h - y1 + 1;
+		}
 		vic4_registered_screenshot_request = 0;
 		if (!xemu_screenshot_png(
 			NULL, configdb.screenshot_and_exit,
 			1, 1,		// no ratio/zoom correction is applied
 			pixel_start + y1 * TEXTURE_WIDTH + x1,	// pixel pointer corresponding to the top left corner of the viewport
-			x2 - x1 + 1,	// width
-			y2 - y1 + 1,	// height
+			w,		// width
+			h,		// height
 			TEXTURE_WIDTH	// full width (ie, width of the texture)
 		)) {
 			const char *p = strrchr(xemu_screenshot_full_path, DIRSEP_CHR);
@@ -264,7 +276,7 @@ void vic4_close_frame_access ( void )
 				OSD(-1, -1, "%s", p + 1);
 		}
 		if (configdb.screenshot_and_exit) {
-			DEBUGPRINT("VIC4: exiting on 'exit-on-screenshot' feature." NL);
+			DEBUGPRINT("VIC4: exiting on 'exit-on-screenshot' feature (%ux%u)." NL, w, h);
 			XEMUEXIT(0);
 		}
 	}
