@@ -552,7 +552,7 @@ static void reset_mega65_via_hyppo ( void )
 int reset_mega65 ( const unsigned int options )
 {
 	if ((options & RESET_MEGA65_ASK)) {
-		if (!ARE_YOU_SURE("Are you sure to RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
+		if (!ARE_YOU_SURE("Are you sure you want to RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
 			return 0;
 	}
 	switch (options & 0xFF) {
