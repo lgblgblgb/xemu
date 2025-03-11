@@ -474,6 +474,12 @@ int dump_screen ( const char *fn )
 
 static void shutdown_callback ( void )
 {
+	DEBUGPRINT("XEMU: shutdown callback is running" NL);
+	if (configdb.screenshot_and_exit || vic4_registered_screenshot_request) {
+		DEBUGPRINT("XEMU: handling pending screenshot request" NL);
+		vic4_registered_screenshot_request = 1;
+		vic4_freerun_until_frame_close();
+	}
 	hypervisor_serial_monitor_close_file(configdb.hyperserialfile);
 	i2c_save_storage(0);
 	eth65_shutdown();

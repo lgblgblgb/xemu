@@ -508,10 +508,7 @@ void io_write ( unsigned int addr, Uint8 data )
 						if (configdb.testing) {	// in testing mode, writing $42 would mean to exit emulation!
 							if (!emu_exit_code)
 								emu_exit_code = d6cf_exit_status;
-							if (configdb.screenshot_and_exit)
-								vic4_registered_screenshot_request = 1;	// this will cause also to exit (as configdb.screenshot_and_exit is not NULL)
-							else
-								XEMUEXIT(0);
+							XEMUEXIT(0);
 							return;
 						} else if (ARE_YOU_SURE("FPGA reconfiguration request. System must be reset.\nIs it OK to do now?\nAnswering NO may crash your program requesting this task though,\nor can result in endless loop of trying.", ARE_YOU_SURE_DEFAULT_YES)) {
 							reset_mega65(RESET_MEGA65_HARD);

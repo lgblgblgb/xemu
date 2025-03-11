@@ -253,8 +253,8 @@ void vic4_close_frame_access ( void )
 			// if it's "screenshot on exit" then we want the full NTSC/PAL frame (not the cropped viewport only)
 			x1 = 0;
 			y1 = 0;
-			w  = TEXTURE_WIDTH;	// 720;
-			h  = max_rasters;
+			w  = TEXTURE_WIDTH;
+			h  = max_rasters + 1;
 		} else {
 			// This function returns the viewport as "bounding box" ...
 			xemu_get_viewport(&x1, &y1, &w, &h);
@@ -267,17 +267,13 @@ void vic4_close_frame_access ( void )
 			NULL, configdb.screenshot_and_exit,
 			1, 1,		// no ratio/zoom correction is applied
 			pixel_start + y1 * TEXTURE_WIDTH + x1,	// pixel pointer corresponding to the top left corner of the viewport
-			w,		// width
-			h,		// height
+			w,		// width of the viewport
+			h,		// height of the viewport
 			TEXTURE_WIDTH	// full width (ie, width of the texture)
 		)) {
 			const char *p = strrchr(xemu_screenshot_full_path, DIRSEP_CHR);
 			if (p)
 				OSD(-1, -1, "%s", p + 1);
-		}
-		if (configdb.screenshot_and_exit) {
-			DEBUGPRINT("VIC4: exiting on 'exit-on-screenshot' feature (%ux%u)." NL, w, h);
-			XEMUEXIT(0);
 		}
 	}
 #endif
@@ -294,6 +290,24 @@ void vic4_close_frame_access ( void )
 	vic_frame_counter++;
 	vic_frame_counter_since_boot++;
 }
+
+
+void vic4_freerun_until_frame_close ( void )
+{
+	if (!ycounter) {
+		DEBUGPRINT("VIC4: forced open frame" NL);
+		vic4_open_frame_access();
+	}
+	for (int scanlines = 0;;) {
+		scanlines++;
+		if (vic4_render_scanline()) {
+			vic4_close_frame_access();
+			DEBUGPRINT("VIC4: %d forced scanline updates to reach end of frame" NL, scanlines);
+			break;
+		}
+	}
+}
+
 
 // The hardware allows a sideborder value of 16383 as a remnant of old MEGA65 design.
 // In practical terms, any sideborder exceeding display_width / 2 will cover the entire

@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Copyright (C)2020-2022 Hernán Di Pietro <hernan.di.pietro@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -275,5 +275,6 @@ extern int   vic4_query_screen_height ( void );
 extern char *vic4_textshot ( void );
 extern int   vic4_textinsert ( const char *text );
 extern void  vic4_set_emulation_colour_effect ( int val );
+extern void  vic4_freerun_until_frame_close ( void );
 
 #endif
