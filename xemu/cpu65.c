@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    THIS IS AN UGLY PIECE OF SOURCE REALLY.
 
@@ -824,7 +824,9 @@ static XEMU_INLINE void _RORQ_Q ( void ) {
 	CPU65.pf_c = new_carry;
 	SET_NZ32(q);
 	AXYZ_SET(q);
-
+}
+static XEMU_INLINE void _NEGQ_Q ( void ) {
+	SET_NZ32(AXYZ_SET(-AXYZ_GET()));
 }
 
 // TODO / FIXME ?? What happens if NEG NEG NOP prefix is tried to be applied on an opcode only supports NEG NEG?
@@ -1436,7 +1438,10 @@ int cpu65_step (
 			/* NEG on 65CE02/4510 and MEGA65 as well, of course */
 #ifdef MEGA65
 			if (XEMU_LIKELY(cpu_mega65_opcodes)) {
-				if (CPU65.prefix == PREFIX_NEG || CPU65.prefix == PREFIX_NEG_NEG) {
+				if (CPU65.prefix == PREFIX_NEG_NEG) {
+					_NEGQ_Q();	// MEGA65-QOP: NEGQ (Q)
+					break;
+				} else if (CPU65.prefix == PREFIX_NEG) {
 					OPC_65CE02("NEG-NEG");
 					CPU65.prefix = PREFIX_NEG_NEG;
 				} else {

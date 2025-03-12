@@ -1,6 +1,6 @@
 /* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
    8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -79,7 +79,7 @@ static const char *qopcode_names[256] = {
 	NULL,  NULL, "ORQ",  NULL,  NULL,  NULL, "ASLQ", NULL,   NULL,  NULL, "INQ",  NULL,  NULL,  NULL, "ASLQ", NULL,	// 1x
 	NULL,  NULL,  NULL,  NULL, "BITQ","ANDQ","ROLQ", NULL,   NULL,  NULL, "ROLQ", NULL, "BITQ","ANDQ","ROLQ", NULL,	// 2x
 	NULL,  NULL, "ANDQ", NULL,  NULL,  NULL, "ROLQ", NULL,   NULL,  NULL, "DEQ",  NULL,  NULL,  NULL, "ROLQ", NULL,	// 3x
-	NULL,  NULL,  NULL, "ASRQ","ASRQ","EORQ","LSRQ", NULL,   NULL,  NULL, "LSRQ", NULL,  NULL, "EORQ","LSRQ", NULL,	// 4x
+	NULL,  NULL, "NEGQ","ASRQ","ASRQ","EORQ","LSRQ", NULL,   NULL,  NULL, "LSRQ", NULL,  NULL, "EORQ","LSRQ", NULL,	// 4x
 	NULL,  NULL, "EORQ", NULL, "ASRQ","LSRQ", NULL,  NULL,   NULL,  NULL,  NULL,  NULL,  NULL,  NULL, "LSRQ", NULL,	// 5x
 	NULL,  NULL,  NULL,  NULL,  NULL, "ADCQ","RORQ", NULL,   NULL,  NULL, "RORQ", NULL,  NULL, "ADCQ","RORQ", NULL,	// 6x
 	NULL,  NULL, "ADCQ", NULL,  NULL,  NULL, "RORQ", NULL,   NULL,  NULL,  NULL,  NULL,  NULL,  NULL, "RORQ", NULL,	// 7x
@@ -143,8 +143,7 @@ int cpu65_disasm ( Uint8 (*reader)(const unsigned int, const unsigned int), unsi
 	const unsigned int adm = opcode_adms[opc];
 	switch (adm) {
 		case  0:	// implied
-			arg_p[0] = '!';
-			arg_p[1] = 0;
+			arg_p[0] = 0;
 			break;
 		case  1:	// #$nn
 			sprintf(arg_p, "#$%02X",      reader(addr, ofs));
