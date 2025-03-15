@@ -55,7 +55,9 @@ struct configdb_st {
 	char	*sdimg;
 	char	*dumpmem;
 	char	*dumpscreen;
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	char	*screenshot_and_exit;
+#endif
 #ifdef HAS_UARTMON_SUPPORT
 	char	*uartmon;
 #endif

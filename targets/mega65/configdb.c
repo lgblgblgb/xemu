@@ -57,7 +57,9 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "sdimg",	SDCARD_NAME, "Override path of SD-image to be used (also see the -virtsd option!)", &configdb.sdimg },
 	{ "dumpmem",	NULL, "Save memory content on exit", &configdb.dumpmem },
 	{ "dumpscreen",	NULL, "Save screen content (ASCII) on exit", &configdb.dumpscreen },
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	{ "screenshot",	NULL, "Save screenshot (PNG) on exit and vice-versa (for testing!)", &configdb.screenshot_and_exit },
+#endif
 #ifdef HAS_UARTMON_SUPPORT
 	{ "uartmon",	NULL, "Sets the name for named unix-domain socket for uartmon, otherwise disabled", &configdb.uartmon },
 #endif
@@ -161,7 +163,10 @@ static const void *do_not_save_opts[] = {
 	&configdb.prg, &configdb.prgmode, &configdb.autoload, &configdb.go64, &configdb.hyperserialfile, &configdb.importbas,
 	&emu_is_sleepless, &emu_is_headless, &configdb.testing,
 	&configdb.matrixstart,
-	&configdb.dumpmem, &configdb.dumpscreen, &configdb.screenshot_and_exit,
+	&configdb.dumpmem, &configdb.dumpscreen,
+#ifdef	XEMU_FILES_SCREENSHOT_SUPPORT
+	&configdb.screenshot_and_exit,
+#endif
 	&configdb.testing, &configdb.hyperdebug, &configdb.hyperdebugfreezer, &configdb.usestubrom, &configdb.useinitrom, &configdb.useutilmenu,
 	&configdb.cartbin8000, &configdb.winpos, &configdb.ramcheckread, &configdb.init_attic,
 	&configdb.prg_test, &configdb.prg_exit,
