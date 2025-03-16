@@ -44,16 +44,17 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static struct {
 	Uint8 func;
 	const char *func_name;
-	int func_is_virtualized;
-	int last_func_call_was_virtualized;
+	bool func_is_virtualized;
+	bool last_func_call_was_virtualized;
 	Uint8 in_x, in_y, in_z;
 	// The following ones are ONLY used in virtualized functions originated from hdos_enter()
 	Uint8 virt_out_a, virt_out_x, virt_out_y, virt_out_z, virt_out_carry;
 	char  setname_fn[64];
+	char  file_found[64];
 	const char *rootdir;	// pointer to malloc'ed string. ALWAYS ends with directory separator of your host OS!
 	char *cwd;		// ALWAYS ends with directory separator of your host OS! HDOS cwd with _FULL_ path of your host OS!
-	int cwd_is_root;	// boolean: cwd of HDOS is in the emulated root directory (meaning: strings cwd and rootdir are the same)
-	int do_virt;
+	bool cwd_is_root;	// true: cwd of HDOS is in the emulated root directory (meaning: strings cwd and rootdir are the same)
+	bool do_virt;
 	int error_code;		// last error code
 	int transfer_area_addr;
 } hdos;
@@ -62,15 +63,17 @@ static int hdos_init_is_done = 0;
 
 #define HDOS_DESCRIPTORS	4
 
-static struct {
+static struct desc_table_st {
 	union {
 		int fd;
 		DIR *dirp;
 	};
-	enum { HDOS_DESC_CLOSED, HDOS_DESC_FILE, HDOS_DESC_DIR } status;
+	enum hdos_desc_status_t { HDOS_DESC_CLOSED, HDOS_DESC_FILE, HDOS_DESC_DIR, HDOS_DESC_NOTCLOSED } status;	// HDOS_DESC_NOTCLOSED should NOT be put into desc_table[].status ever!
 	char *basedirpath;	// pointer to malloc'ed string (when in use). ALWAYS ends with directory separator of your host OS!
 	int dir_entry_no;
 } desc_table[HDOS_DESCRIPTORS];
+
+static int current_desc = -1;
 
 #define HDOSERR_INVALID_ADDRESS	0x10
 #define HDOSERR_FILE_NOT_FOUND	0x88
@@ -313,7 +316,7 @@ static const char *hdos_get_func_name ( const int func_no )
 }
 
 
-static int find_empty_desc_tab_slot ( void )
+static int allocate_descriptor ( void )
 {
 	for (int a = 0; a < HDOS_DESCRIPTORS; a++)
 		if (desc_table[a].status == HDOS_DESC_CLOSED)
@@ -322,9 +325,28 @@ static int find_empty_desc_tab_slot ( void )
 }
 
 
-static int close_desc ( unsigned int entry )
+static bool check_descriptor ( const int desc, const enum hdos_desc_status_t need_status, const char *errmsg_class )
 {
-	if (entry >= HDOS_DESCRIPTORS)
+	if (desc < 0 || desc >= HDOS_DESCRIPTORS) {
+		if (errmsg_class)
+			DEBUGHDOS("HDOS: VIRT: file descriptor (%d) index is invalid for: %s" NL, desc, errmsg_class);
+		return false;
+	}
+	if (
+		(need_status != HDOS_DESC_NOTCLOSED && desc_table[desc].status != need_status) ||
+		(need_status == HDOS_DESC_NOTCLOSED && desc_table[desc].status == HDOS_DESC_CLOSED)
+	) {
+		if (errmsg_class)
+			DEBUGHDOS("HDOS: VIRT: file descriptor (%d) is in wrong state for: %s" NL, current_desc, errmsg_class);
+		return false;
+	}
+	return true;
+}
+
+
+static int close_descriptor ( const unsigned int entry )
+{
+	if (entry >= HDOS_DESCRIPTORS || entry < 0)
 		return -1;
 	if (desc_table[entry].basedirpath) {
 		free(desc_table[entry].basedirpath);
@@ -352,56 +374,28 @@ static int close_desc ( unsigned int entry )
 }
 
 
-// This is not an easy task, as:
-// * we must deal with FS case insensivity madness (also on Host-OS side, lame Windows thing ...)
-// * opening by "short file name"
-// So at the end we need a directory scan unfortunately to be really sure we found the thing we want ...
-static int try_open ( const char *basedirfn, const char *needfn, int open_mode, struct stat *st, char *fullpathout, void *result )
+// The actual code used by both of try_open() and do_open()
+static int _open_impl ( const char *basedirfn, const char *needfn, const int open_mode, struct stat *st, char *fullpath, void *result )
 {
-	if (strchr(needfn, '/') || strchr(needfn, '\\') || !*needfn)	// needfn could not contain directory component(s) and also cannot be empty
-		return HDOSERR_FILE_NOT_FOUND;
-	DIR *dirp = opendir(basedirfn);
-	if (!dirp)
-		return HDOSERR_FILE_NOT_FOUND;
-	char fn_found[FILENAME_MAX];
-	while (!xemu_readdir(dirp, fn_found, sizeof fn_found)) {
-		// TODO: add check for "." and ".." not done in root of emulated HDOS FS
-		if (!strcasecmp(fn_found, needfn) && strlen(fn_found) <= 63)
-			goto found;
-	}
-	// TODO: open by shortname!!!
-	// reason: first it should be tried with all the long file names.
-	// FIXME: however maybe this is NOT what real hyppo would do, but note, in case of
-	// real hyppo and sd-card it has access to _real_ short names, etc ...
-#if 0
-	xemu_rewinddir(dirp);
-	// try again with short name policy now ...
-	while ((entry = xemu_readdir(dirp, &entry_storage, sizeof fn_found))) {
-
-	}
-#endif
-	closedir(dirp);
-	return HDOSERR_FILE_NOT_FOUND;
-found:
-	strcpy(fullpathout, basedirfn);
-	if (fullpathout[strlen(fullpathout) - 1] != DIRSEP_CHR)
-		strcat(fullpathout, DIRSEP_STR);
-	strcat(fullpathout, fn_found);
-	if (stat(fullpathout, st))
+	strcpy(fullpath, basedirfn);
+	if (fullpath[strlen(fullpath) - 1] != DIRSEP_CHR)
+		strcat(fullpath, DIRSEP_STR);
+	strcat(fullpath, needfn);
+	if (stat(fullpath, st))
 		return HDOSERR_FILE_NOT_FOUND;
 	const int type = st->st_mode & S_IFMT;
 	if (open_mode == -1) {		// -1 as "open_mode" func argument means: open as a DIRECTORY
 		if (type != S_IFDIR)
 			return HDOSERR_NOT_DIRECTORY;
-		dirp = opendir(fullpathout);
+		DIR *dirp = opendir(fullpath);
 		if (!dirp)
 			return HDOSERR_FILE_NOT_FOUND;
-		strcat(fullpathout, DIRSEP_STR);
+		strcat(fullpath, DIRSEP_STR);
 		*(DIR**)result = dirp;
 	} else {			// if "open_mode" as not -1, then it means some kind of flags for open(), opening as a file
 		if (type != S_IFREG)
 			return HDOSERR_IS_DIRECTORY;
-		int fd = open(fullpathout, open_mode | O_BINARY);
+		const int fd = open(fullpath, open_mode | O_BINARY);
 		if (fd < 0)
 			return HDOSERR_FILE_NOT_FOUND;
 		*(int*)result = fd;
@@ -410,9 +404,45 @@ found:
 }
 
 
+// This is not an easy task, as:
+// * we must deal with FS case insensivity madness (also on Host-OS side, lame Windows thing ...)
+// * opening by "short file name"
+// So at the end we need a directory scan unfortunately to be really sure we found the thing we want ...
+static int try_open ( const char *basedirfn, const char *needfn, const int open_mode, struct stat *st, char *fullpathout, void *result )
+{
+	*fullpathout = '\0';	// make sure we pass something back, even before it would be "normally" filled up
+	if (strchr(needfn, '/') || strchr(needfn, '\\') || !*needfn)	// needfn could not contain directory component(s) and also cannot be empty
+		return HDOSERR_FILE_NOT_FOUND;
+	DIR *dirp = opendir(basedirfn);
+	if (!dirp)
+		return HDOSERR_FILE_NOT_FOUND;
+	char fn_found[FILENAME_MAX];
+	while (!xemu_readdir(dirp, fn_found, sizeof fn_found)) {
+		// TODO: add check for "." and ".." not done in root of emulated HDOS FS
+		// TODO: is there a hyppo policy to try by short name as well? nothing similar in Xemu yet ...
+		if (!strcasecmp(fn_found, needfn) && strlen(fn_found) <= 63) {
+			closedir(dirp);
+			return _open_impl(basedirfn, fn_found, open_mode, st, fullpathout, result);
+		}
+	}
+	closedir(dirp);
+	return HDOSERR_FILE_NOT_FOUND;
+}
+
+
+// Similar to try_open() however no walk through the directory, exact filename must be given ad needfn
+static int do_open ( const char *basedirfn, const char *needfn, const int open_mode, struct stat *st, char *fullpathout, void *result )
+{
+	*fullpathout = '\0';	// make sure we pass something back, even before it would be "normally" filled up
+	if (strchr(needfn, '/') || strchr(needfn, '\\') || !*needfn)	// needfn could not contain directory component(s) and also cannot be empty
+		return HDOSERR_FILE_NOT_FOUND;
+	return _open_impl(basedirfn, needfn, open_mode, st, fullpathout, result);
+}
+
+
 static void hdos_virt_mount ( const int unit )
 {
-	hdos.func_is_virtualized = 1;
+	hdos.func_is_virtualized = true;
 	int fd;
 	char fullpath[PATH_MAX + 1];
 	struct stat st;
@@ -422,7 +452,7 @@ static void hdos_virt_mount ( const int unit )
 		hdos.virt_out_a = ret;	// pass back the error code got from try_open()
 		return;
 	}
-	close(fd);	// we don't need it anymore
+	close(fd);	// we don't need it anymore - try_open() was merely used to test if file exists at all
 	if (sdcard_external_mount(unit, fullpath, NULL)) {
 		DEBUGHDOS("HDOS: VIRT: mount of image \"%s\" on unit %d FAILED :(" NL, fullpath, unit);
 		hdos.virt_out_a = HDOSERR_IMAGE_WRONG_LEN;	// this is probably the only reason the mount call could fail
@@ -434,9 +464,28 @@ static void hdos_virt_mount ( const int unit )
 }
 
 
+static void hdos_virt_findfile ( void )
+{
+	int fd = -1;
+	char fullpath[PATH_MAX + 1];
+	struct stat st;
+	hdos.func_is_virtualized = true;
+	int ret = try_open(hdos.cwd, hdos.setname_fn, O_RDONLY, &st, fullpath, &fd);
+	// ignore errors on IS_DIRECTORY, as findfile shouldn't care if it's a directory or a file (just as long as it's found)
+	if (ret && ret != HDOSERR_IS_DIRECTORY) {
+		DEBUGHDOS("HDOS: VIRT: findfile would fail on try_open() = %d!" NL, ret);
+		hdos.virt_out_a = ret;	// pass back the error code got from try_open()
+		return;
+	}
+	close(fd);	// we don't need it anymore - try_open() was merely used to test if file exists at all
+	strcpy(hdos.file_found, hdos.setname_fn);
+	hdos.virt_out_carry = 1;	// signal OK status
+}
+
+
 static void hdos_virt_loadfile ( const Uint32 addr_base )
 {
-	hdos.func_is_virtualized = 1;
+	hdos.func_is_virtualized = true;
 	Uint32 addr_ofs = hdos.in_x + (hdos.in_y << 8) + (hdos.in_z << 16);
 	const Uint32 addr_origin_report = addr_base + addr_ofs;
 	int fd;
@@ -480,8 +529,8 @@ static void hdos_virt_loadfile ( const Uint32 addr_base )
 
 static void hdos_virt_opendir ( void )
 {
-	hdos.func_is_virtualized = 1;
-	const int e = find_empty_desc_tab_slot();
+	hdos.func_is_virtualized = true;
+	const int e = allocate_descriptor();
 	if (e < 0) {
 		hdos.virt_out_a = HDOSERR_TOO_MANY_OPEN;
 		return;
@@ -491,29 +540,99 @@ static void hdos_virt_opendir ( void )
 		hdos.virt_out_a = HDOSERR_CANNOT_OPEN_DIR;	// some error code; directory cannot be open (this SHOULD not happen though!)
 		return;
 	}
-	desc_table[e].basedirpath = xemu_strdup(hdos.cwd);
-	desc_table[e].status = HDOS_DESC_DIR;
-	desc_table[e].dirp = dirp;
-	desc_table[e].dir_entry_no = 0;
+	desc_table[e] = (struct desc_table_st){
+		.basedirpath	= xemu_strdup(hdos.cwd),
+		.status		= HDOS_DESC_DIR,
+		.dirp		= dirp,
+		.dir_entry_no	= 0,
+	};
 	hdos.virt_out_a = e;		// return the file descriptor
 	hdos.virt_out_carry = 1;	// signal OK status
 }
 
 
+static void hdos_virt_openfile ( void )
+{
+	hdos.func_is_virtualized = true;
+	if (!hdos.file_found[0]) {
+		// there was no previous successfull file found operation what "openfile" needs
+		hdos.virt_out_a = HDOSERR_FILE_NOT_FOUND;
+		return;
+	}
+	const int e = allocate_descriptor();
+	if (e < 0) {
+		hdos.virt_out_a = HDOSERR_TOO_MANY_OPEN;
+		return;
+	}
+	int fd;
+	char fullpath[PATH_MAX + 1];
+	struct stat st;
+	// Warning-1: openfile does not use file name set by "setname" but the last file found by the directory search functions, that is "hdos.file_found" in Xemu
+	// Warning-2: also, using do_open() not try_open() - as the file already found
+	const int ret = do_open(hdos.cwd, hdos.file_found, O_RDONLY, &st, fullpath, &fd);
+	if (ret) {
+		DEBUGHDOS("HDOS: VIRT: openfile could not open file \"%s\" (\"%s\"): %d" NL, fullpath, hdos.file_found, ret);
+		hdos.virt_out_a = ret;	// pass back the error code got from try_open()
+		return;
+	}
+	desc_table[e] = (struct desc_table_st){
+		.basedirpath	= xemu_strdup(hdos.cwd),
+		.status		= HDOS_DESC_FILE,
+		.fd		= fd,
+		.dir_entry_no	= 0
+	};
+	hdos.virt_out_a = e;		// return the file descriptor
+	hdos.virt_out_carry = 1;	// signal OK status
+	current_desc = e;
+}
+
+
+static void hdos_virt_closeall ( void )
+{
+	hdos.func_is_virtualized = true;
+	hdos.virt_out_carry = 1;	// signal OK status
+	hypervisor_hdos_close_descriptors();
+}
+
+
 static void hdos_virt_close_dir_or_file ( void )
 {
-	hdos.func_is_virtualized = 1;
-	if (close_desc(hdos.in_x))
+	hdos.func_is_virtualized = true;
+	current_desc = -1;
+	if (close_descriptor(hdos.in_x))
 		hdos.virt_out_a = HDOSERR_INVALID_DESC;
 	else
 		hdos.virt_out_carry = 1;	// signal OK status
 }
 
 
+// Reads max of $200 (unless EOF is encountered, then less) bytes into the sector buffer from the last open file
+static void hdos_virt_readfile ( void )
+{
+	hdos.func_is_virtualized = true;
+	if (!check_descriptor(current_desc, HDOS_DESC_FILE, "readfile")) {	// checking "current/last descriptor" validity
+		hdos.virt_out_a = HDOSERR_INVALID_DESC;
+		return;
+	}
+	Uint8 buffer[0x200];	// must be exactly $200!
+	const int read_size = xemu_safe_read(desc_table[current_desc].fd, buffer, sizeof buffer);
+	if (read_size < 0) {
+		DEBUGHDOS("HDOS: VIRT: readfile read() error" NL);
+		hdos.virt_out_a = HDOSERR_READ_ERROR;
+		return;
+	}
+	memcpy(disk_buffers + 0xE00, buffer, read_size);	// the target address corresponds to address $FFD6E00, but accessing directly here
+	hdos.virt_out_x =  read_size       & 0xFF;
+	hdos.virt_out_y = (read_size >> 8) & 0xFF;
+	hdos.virt_out_carry = 1;	// signal OK status
+	DEBUGHDOS("HDOS: VIRT: readfile successfully read %d bytes into the sector buffer" NL, read_size);
+}
+
+
 static void hdos_virt_readdir ( void )
 {
-	hdos.func_is_virtualized = 1;
-	if (hdos.in_x >= HDOS_DESCRIPTORS || desc_table[hdos.in_x].status != HDOS_DESC_DIR) {
+	hdos.func_is_virtualized = true;
+	if (!check_descriptor(hdos.in_x, HDOS_DESC_DIR, "readdir")) {
 		hdos.virt_out_a = HDOSERR_INVALID_DESC;
 		return;
 	}
@@ -619,16 +738,17 @@ readdir_again:
 		hdos.virt_out_a = HDOSERR_INVALID_ADDRESS;
 		return;
 	}
+	strcpy(hdos.file_found, fn_found);
 	hdos.virt_out_carry = 1;	// signal OK status
 }
 
 
 static void hdos_virt_cdroot ( void )
 {
-	hdos.func_is_virtualized = 1;
+	hdos.func_is_virtualized = true;
 	if (!hdos.cwd_is_root) {
 		strcpy(hdos.cwd, hdos.rootdir);	// cwd malloced area must be enough, since this is the shortest possible data to put in
-		hdos.cwd_is_root = 1;
+		hdos.cwd_is_root = true;
 	}
 	hdos.virt_out_carry = 1;	// signal OK status
 }
@@ -636,7 +756,7 @@ static void hdos_virt_cdroot ( void )
 
 static void hdos_virt_cd ( void )
 {
-	hdos.func_is_virtualized = 1;
+	hdos.func_is_virtualized = true;
 	if (hdos.setname_fn[0] == '.') {
 		if (hdos.setname_fn[1] == '\0') {
 			// '.': in this case we don't need to do anything too much ...
@@ -670,15 +790,15 @@ static void hdos_virt_cd ( void )
 	DIR *dirp;
 	char pathout[PATH_MAX + 1];
 	//static int try_open ( const char *basedirfn, const char *needfn, int open_mode, struct stat *st, char *pathout, void *result );
-	int ret = try_open(hdos.cwd, hdos.setname_fn, -1, &st, pathout, &dirp);
+	const int ret = try_open(hdos.cwd, hdos.setname_fn, -1, &st, pathout, &dirp);
 	if (ret) {
 		hdos.virt_out_a = ret;
 		return;
 	}
 	closedir(dirp);			// not needed to much here, let's close it
-	strcat(pathout, DIRSEP_STR);
+	// strcat(pathout, DIRSEP_STR);	// not needed, as it was done inside try_open() and causing a double dir-seperator, which caused "cd .." to be done twice to go back to parent
 	xemu_restrdup(&hdos.cwd, pathout);
-	hdos.cwd_is_root = 0;		// if we managed to 'cd' into something (and it is cannot be '.' or '..' at this point!) we cannot be in the root anymore!
+	hdos.cwd_is_root = false;	// if we managed to 'cd' into something (and it is cannot be '.' or '..' at this point!) we cannot be in the root anymore!
 	hdos.virt_out_carry = 1;	// signal OK status
 }
 
@@ -686,7 +806,7 @@ static void hdos_virt_cd ( void )
 static void _hdos_func_unimplemented ( const char *by_entity )
 {
 	DEBUGPRINT("HDOS: VIRT: unimplemented by %s: %s (#$%02X)" NL, by_entity, hdos.func_name, hdos.func);
-	hdos.func_is_virtualized = 1;	// which cause we'll handle this
+	hdos.func_is_virtualized = true;// which cause we'll handle this
 	hdos.virt_out_a = 0xFF;		// no such function error code (same as "no such trap" in hyppo's source)
 	// Note: in virtualized functions (hdos.func_is_virtualized is set to non-zero), the default is to HAVE error, so we don't need to set carry
 }
@@ -714,7 +834,7 @@ void hdos_enter ( const Uint8 func_no )
 		sdcard_notify_hyppo_enter(0);
 	hdos.func = func_no;
 	hdos.func_name = hdos_get_func_name(hdos.func);
-	hdos.func_is_virtualized = 0;
+	hdos.func_is_virtualized = false;
 	// NOTE: hdos.in_ things are the *INPUT* registers of the trap, cannot be used
 	// to override the result passing back by the trap!
 	// Here we store input register values can be even examined at the hdos_leave() stage
@@ -745,12 +865,12 @@ void hdos_enter ( const Uint8 func_no )
 			case 0x04 >> 1:	// get current drive
 				// For both cases, we support only one drive and always being the default.
 				// Thus the actual answer can be the same for both.
-				hdos.func_is_virtualized = 1;
+				hdos.func_is_virtualized = true;
 				hdos.virt_out_a = 0;
 				hdos.virt_out_carry = 1;
 				break;
 			case 0x06 >> 1:	// select drive (we allow zero only in Xemu)
-				hdos.func_is_virtualized = 1;
+				hdos.func_is_virtualized = true;
 				if (hdos.in_x)
 					hdos.virt_out_a = HDOSERR_NO_SUCH_DISK;
 				else
@@ -777,14 +897,26 @@ void hdos_enter ( const Uint8 func_no )
 			case 0x14 >> 1:
 				hdos_virt_readdir();
 				break;
+			case 0x18 >> 1:
+				hdos_virt_openfile();
+				break;
 			case 0x16 >> 1:
 			case 0x20 >> 1:
 				hdos_virt_close_dir_or_file();
+				break;
+			case 0x22 >> 1:
+				hdos_virt_closeall();
+				break;
+			case 0x1A >> 1: // readfile
+				hdos_virt_readfile();
 				break;
 			case 0x2E >> 1:	// setname, do NOT virtualize this! (though we track/store result in hdos_leave) It's also great that we have hyppo's check on filename syntax, etc.
 				break;
 			case 0x36 >> 1:	// loadfile
 				hdos_virt_loadfile(0);
+				break;
+			case 0x34 >> 1: // findfile
+				hdos_virt_findfile();
 				break;
 			case 0x38 >> 1:	// get last error code
 				if (hdos.last_func_call_was_virtualized) {
@@ -793,7 +925,7 @@ void hdos_enter ( const Uint8 func_no )
 					// see above as well after this huge switch/case construct how to set hdos.last_func_call_was_virtualized
 					// FIXME: 1. this logic should be checked if really works.
 					// FIXME: 2. Is the error code reset after reading it?
-					hdos.func_is_virtualized = 1;
+					hdos.func_is_virtualized = true;
 					hdos.virt_out_a = hdos.error_code;
 					hdos.virt_out_carry = 1;
 				}
@@ -870,7 +1002,7 @@ void hdos_leave ( const Uint8 func_no )
 	// if "func_is_virtualized" flag is set, we don't want to mess things up further, as it was handled before in hdos.c somewhere
 	if (hdos.func_is_virtualized) {
 		DEBUGHDOS("HDOS: VIRT: was marked as virtualized, so end of %s in %s()" NL, hdos.func_name, __func__);
-		hdos.func_is_virtualized = 0;	// just to be sure, though it's set to zero on next hdos_enter()
+		hdos.func_is_virtualized = false;// just to be sure, though it's set to zero on next hdos_enter()
 		return;
 	}
 	if (hdos.func == 0x2E && cpu65.pf_c) {	// HDOS setnam function. Also check carry set (which means "ok" by HDOS trap)
@@ -916,10 +1048,11 @@ static void hdos_reset ( void )
 {
 	DEBUGHDOS("HDOS: reset" NL);
 	hdos.setname_fn[0] = '\0';
+	hdos.file_found[0] = '\0';
 	hdos.func = -1;
 	hdos.error_code = 0;
 	hdos.transfer_area_addr = 0;
-	hdos.last_func_call_was_virtualized = 0;
+	hdos.last_func_call_was_virtualized = false;
 	hypervisor_hdos_close_descriptors();
 }
 
@@ -927,9 +1060,10 @@ static void hdos_reset ( void )
 // implementation is here, but prototype is in hypervisor.h and not in hdos.h as you would expect!
 void hypervisor_hdos_close_descriptors ( void )
 {
+	current_desc = -1;
 	if (hdos_init_is_done)
 		for (int a = 0; a < HDOS_DESCRIPTORS; a++)
-			(void)close_desc(a);
+			(void)close_descriptor(a);
 }
 
 
@@ -937,15 +1071,15 @@ void hypervisor_hdos_close_descriptors ( void )
 int hypervisor_hdos_virtualization_status ( const int set, const char **root_ptr )
 {
 	if (set >= 0) {
-		if (!!hdos.do_virt != !!set) {
-			hdos.do_virt = set;
+		if (hdos.do_virt != (bool)set) {
+			hdos.do_virt = (bool)set;
 			DEBUGPRINT("HDOS: virtualization is now %s" NL, set ? "ENABLED" : "DISABLED");
-			hdos.last_func_call_was_virtualized = 0;	// reset this, just to be safe ...
+			hdos.last_func_call_was_virtualized = false;	// reset this, just to be safe ...
 		}
 	}
 	if (root_ptr)
 		*root_ptr = hdos.rootdir;
-	return hdos.do_virt;
+	return (int)hdos.do_virt;
 }
 
 
@@ -1014,7 +1148,7 @@ void hdos_init ( const int do_virt, const char *virtroot )
 	}
 	hdos.rootdir = xemu_strdup(hdosdir);	// populate the result of HDOS virtualization root directory
 	hdos.cwd = xemu_strdup(hdosdir);	// also for cwd (current working directory)
-	hdos.cwd_is_root = 1;
-	hdos.do_virt = do_virt;			// though, virtualization itself can be turned on/off by this, still
+	hdos.cwd_is_root = true;
+	hdos.do_virt = (bool)do_virt;		// though, virtualization itself can be turned on/off by this, still
 	DEBUGPRINT("HDOS: virtualization is %s, root = \"%s\"" NL, hdos.do_virt ? "ENABLED" : "DISABLED", hdos.rootdir);
 }
