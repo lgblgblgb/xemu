@@ -165,6 +165,57 @@ matrix:
             - dev
       after_deploy:
         - build/deploy/discord-webhook.sh success "Windows" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
+    - name: MacOS native compilation
+      os: osx
+      osx_image: xcode11
+      addons:
+        hostname: lgb
+      before_script:
+        - echo "127.126.125.124 lgb" | sudo tee -a /etc/hosts 2>/dev/null || true
+        - cat /etc/hosts || true
+        - hostname
+        - sudo /usr/bin/csrutil status || true
+        - build/install-dependencies-osx.sh
+        - set +e
+        - uname -a ; pwd ; df -h ; id -a
+        - set -e
+        - sdl2-config --version --prefix --cflags --libs --static-libs
+        - set +e
+        - ps auxwwww || true
+        - uptime
+        - build/show-git-info
+      script:
+        - set -e
+        - make -j 3 RELEASE=yes OFFICIALBUILD=yes MACMINVER=10.6
+        - set +e
+        - for a in build/bin/*.native ; do build/mangle_dylib_osx.sh $a ; strip $a ; done
+        - build/bin/xmega65.native --help || true
+        - cp README.md LICENSE AUTHORS build/bin/
+        - build/zipper.sh build/bin xemu-binaries-osx.zip build/bin/*.dylib build/bin/*.native README.md LICENSE AUTHORS
+        - cp build/bin/xemu-binaries-osx.zip .
+        - uptime ; pwd ; ls -l
+      before_deploy:
+        - build/dmg-osx-creator.sh
+        - build/deploy/before-deploy.sh xemu-deploy MacOS
+      deploy:
+        dpl_version: 1.10.16
+        provider: pages
+        local_dir: xemu-deploy
+        skip_cleanup: true
+        github_token: $GHDEPLOYKEY2
+        keep_history: false
+        repo: lgblgblgb/xemu-binaries
+        target_branch: binary-osx-$TRAVIS_BRANCH
+        email: lgblgblgb@gmail.com
+        name: Gábor Lénárt aka. LGB
+        verbose: false
+        on:
+          branch:
+            - master
+            - next
+            - dev
+      after_deploy:
+        - build/deploy/discord-webhook.sh success "MacOS(x86)" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
 
 env:
   global:
