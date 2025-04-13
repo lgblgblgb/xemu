@@ -70,7 +70,7 @@ static int atexit_callback_for_console_registered = 0;
 #endif
 
 int i_am_sure_override = 0;
-const char *str_are_you_sure_to_exit = "Are you sure to exit Xemu?";
+const char *str_are_you_sure_to_exit = "Are you sure you want to exit Xemu?";
 
 char **xemu_initial_argv = NULL;
 int    xemu_initial_argc = -1;
