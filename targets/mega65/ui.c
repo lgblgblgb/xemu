@@ -555,9 +555,8 @@ static void ui_hwa_kbd_pasting ( void )
 {
 	char *buf = SDL_GetClipboardText();
 	if (!buf || !*buf) {
-		DEBUGPRINT("UI: paste buffer typing-in had no input (p=%p)" NL, buf);
-		if (buf)
-			SDL_free(buf);
+		DEBUGPRINT("UI: paste buffer typing-in had no input" NL);
+		SDL_free(buf);
 		return;
 	}
 	unsigned int multi_case = 0;
@@ -576,7 +575,7 @@ static void ui_hwa_kbd_pasting ( void )
 	if (multi_case > 1)
 		SDL_free(buf);
 	else
-		inject_hwa_pasting(buf, !multi_case);	// will free the buffer as its own
+		inject_hwa_pasting(xemu_sdl_to_native_string_allocation(buf), !multi_case);	// will free the buffer as its own
 }
 
 static void ui_put_screen_text_into_paste_buffer ( void )
@@ -612,7 +611,7 @@ static void ui_put_screen_text_into_file ( void )
 static void ui_put_paste_buffer_into_screen_text ( void )
 {
 	char *t = SDL_GetClipboardText();
-	if (t == NULL)
+	if (!t)
 		goto no_clipboard;
 	char *t2 = t;
 	while (*t2 && (*t2 == '\t' || *t2 == '\r' || *t2 == '\n' || *t2 == ' '))
@@ -623,8 +622,7 @@ static void ui_put_paste_buffer_into_screen_text ( void )
 	SDL_free(t);
 	return;
 no_clipboard:
-	if (t)
-		SDL_free(t);
+	SDL_free(t);
 	ERROR_WINDOW("Clipboard query error, or clipboard was empty");
 }
 

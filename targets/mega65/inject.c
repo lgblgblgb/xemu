@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -437,6 +437,7 @@ void inject_ready_check_do ( void )
 		return;
 	end_pasting:
 		osd_status = 0;
+		osd_display_console_log = 1;
 		now = NULL;
 		free(kbd_hwa_pasting);
 		kbd_hwa_pasting = NULL;
