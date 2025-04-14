@@ -32,6 +32,9 @@ jobs:
             should_deploy=true
           fi
           echo "should_deploy=$should_deploy" >> $GITHUB_ENV
+          echo "should_deploy=$should_deploy"
+          ls -l $GITHUB_ENV || true
+          cat $GITHUB_ENV || true
 
       - name: Show GITHUB_ENV file
         run: |
@@ -57,15 +60,17 @@ jobs:
         run: env || true
 
       - name: Show native SDL2 status
-        run: ls -l `which sdl2-config` || true ; sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true
+        run: |
+          ls -l `which sdl2-config` || true
+          sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true
 
       - name: Configuring Xemu for Linux (native target)
-        run: make RELEASE=yes config
+        run: make RELEASE=yes OFFICIALBUILD=yes config
 
       - name: Building Xemu for Linux (native target)
-        run: make -j 4 RELEASE=yes
+        run: make -j 4 RELEASE=yes OFFICIALBUILD=yes
 
-      - name: List of result binaries
+      - name: List of result binaries for Linux (native target)
         run: ls -l build/bin/*.native
 
       - name: Installing Windows SDL2 cross-development components
@@ -75,13 +80,25 @@ jobs:
         run: echo "*** 64-bit Windows SDL2 status ***" ; ls -l `which x86_64-w64-mingw32-sdl2-config` || true ; x86_64-w64-mingw32-sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true ; echo "*** 32-bit Windows SDL2 status ***" ; ls -l `which i686-w64-mingw32-sdl2-config` || true ; i686-w64-mingw32-sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true
 
       - name: Configuring Xemu for Windows (cross compilation, 64-bit target)
-        run: make RELEASE=yes ARCH=win64 config
+        run: make RELEASE=yes OFFICIALBUILD=yes ARCH=win64 config
 
       - name: Building Xemu for Windows (cross compilation, 64-bit target)
-        run: make -j 4 RELEASE=yes ARCH=win64
+        run: make -j 4 RELEASE=yes OFFICIALBUILD=yes ARCH=win64
 
-      - name: List of result binaries
+      - name: List of result binaries for Windows (cross compilation, 64-bit target)
         run: ls -l build/bin/*.win64
+
+      - name: Configuring Xemu for Windows (cross compilation, 32-bit target)
+        if: env.should_deploy == 'true'
+        run: make RELEASE=yes OFFICIALBUILD=yes ARCH=win32 config
+
+      - name: Building Xemu for Windows (cross compilation, 32-bit target)
+        if: env.should_deploy == 'true'
+        run: make -j 4 RELEASE=yes OFFICIALBUILD=yes ARCH=win32
+
+      - name: List of result binaries for Windows (cross compilation, 32-bit target)
+        if: env.should_deploy == 'true'
+        run: ls -l build/bin/*.win32
 
       - name: Uptime so far
         run: uptime
@@ -140,13 +157,18 @@ jobs:
       - name: Install build/deployment dependencies
         run: build/install-dependencies-osx.sh
 
+      - name: Show Mac SDL2 status
+        run: |
+          ls -l `which sdl2-config` || true
+          sdl2-config --version --prefix --cflags --libs --static-libs || true
+
       - name: Configuring Xemu for Mac (native target)
-        run: make RELEASE=yes config
+        run: make RELEASE=yes OFFICIALBUILD=yes MACMINVER=10.6 config
 
       - name: Building Xemu for Mac (native target)
-        run: make -j 4 RELEASE=yes
+        run: make -j 4 RELEASE=yes OFFICIALBUILD=yes MACMINVER=10.6
 
-      - name: List of result binaries
+      - name: List of result binaries for Mac (native target)
         run: ls -l build/bin/*.native
 
       - name: Uptime so far
