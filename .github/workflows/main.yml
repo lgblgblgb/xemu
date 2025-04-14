@@ -1,0 +1,174 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      deploy:
+        description: 'Do you want DEPLOYMENT as well?'
+        required: false
+        default: 'false'
+
+
+jobs:
+  linux:
+    name: Build and (optinally) deploy on Linux and Windows
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Current GIT repo in use
+        run: bash build/show-git-info
+
+      - name: Set should-deploy flag
+        id: set_deploy
+        run: |
+          should_deploy=false
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ github.event.inputs.deploy }}" == "true" ]]; then
+            should_deploy=true
+          elif [[ "${GITHUB_EVENT_NAME}" != "pull_request" && "${{ github.event.head_commit.message }}" =~ \[DEPLOYMENT\] ]]; then
+            should_deploy=true
+          fi
+          echo "should_deploy=$should_deploy" >> $GITHUB_ENV
+
+      - name: Show GITHUB_ENV file
+        run: |
+          ls -l $GITHUB_ENV || true
+          cat $GITHUB_ENV || true
+
+      - name: Deployment request status
+        if: env.should_deploy == 'true'
+        run: echo "ENABLED (if you see this)"
+
+      - name: Install Ubuntu packages
+        run: |
+          sudo apt-get -y -yq update || true
+          sudo apt-get -y -yq --no-install-suggests --no-install-recommends install alien bash binutils-mingw-w64-i686 binutils-mingw-w64-x86-64 bison build-essential bzip2 coreutils curl deborphan dpkg fakeroot file g++ gawk gcc gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 git libc6-dev libc-bin libcurl4-openssl-dev libgtk-3-dev libreadline6-dev libsdl2-dev lsb-release make sed tar util-linux vim-common wget zip
+
+      - name: List of all installed packages
+        run: dpkg -l | cat || true
+
+      - name: Show system status
+        run: cat /etc/debian_version ; lsb_release -a ; yacc --version | head -n 1 ; gcc --version | head -n 1 ; g++ --version | head -n 1 ; make --version | head -n 1 ; git --version | head -n 1 ; gawk --version | head -n 1 ; bash --version | head -n 1 ; uname -a ; id -a ; echo "CWD is `pwd`" ; echo "PATH is $PATH" ; echo "Hostname is `hostname`" ; sudo lscpu || true ; uptime ; sudo /sbin/ip a || true ; df -h . ; ls -la .
+
+      - name: Show shell variables
+        run: env || true
+
+      - name: Show native SDL2 status
+        run: ls -l `which sdl2-config` || true ; sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true
+
+      - name: Configuring Xemu for Linux (native target)
+        run: make RELEASE=yes config
+
+      - name: Building Xemu for Linux (native target)
+        run: make -j 4 RELEASE=yes
+
+      - name: List of result binaries
+        run: ls -l build/bin/*.native
+
+      - name: Installing Windows SDL2 cross-development components
+        run: build/install-cross-win-mingw-sdl-on-linux.sh /usr/bin
+
+      - name: Show Windows SDL2 status
+        run: echo "*** 64-bit Windows SDL2 status ***" ; ls -l `which x86_64-w64-mingw32-sdl2-config` || true ; x86_64-w64-mingw32-sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true ; echo "*** 32-bit Windows SDL2 status ***" ; ls -l `which i686-w64-mingw32-sdl2-config` || true ; i686-w64-mingw32-sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true
+
+      - name: Configuring Xemu for Windows (cross compilation, 64-bit target)
+        run: make RELEASE=yes ARCH=win64 config
+
+      - name: Building Xemu for Windows (cross compilation, 64-bit target)
+        run: make -j 4 RELEASE=yes ARCH=win64
+
+      - name: List of result binaries
+        run: ls -l build/bin/*.win64
+
+      - name: Uptime so far
+        run: uptime
+
+      - name: Conditional Deploy to Shared Repo (Linux)
+        if: contains(github.event.head_commit.message, '[DEPLOYMENT]')
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+          # Clone shared deployment repo
+          rm -rf /tmp/shared-deploy-repo
+          git clone --depth 1 --branch main https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/your-username/shared-deploy-repo.git /tmp/shared-deploy-repo
+
+          # Clear and replace linux folder
+          rm -rf /tmp/shared-deploy-repo/linux
+          mkdir -p /tmp/shared-deploy-repo/linux
+          cp -r path/to/build/output/* /tmp/shared-deploy-repo/linux/
+
+          # Commit and push
+          cd /tmp/shared-deploy-repo
+          git add linux
+          git commit -m "Linux deployment from $GITHUB_REPOSITORY ($GITHUB_SHA)"
+          git push --force
+
+  macos:
+    name: Build and (optinally) deploy on MacOS
+    runs-on: macos-13
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Current GIT repo in use
+        run: bash build/show-git-info
+
+      - name: Set should-deploy flag
+        id: set_deploy
+        run: |
+          should_deploy=false
+          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ github.event.inputs.deploy }}" == "true" ]]; then
+            should_deploy=true
+          elif [[ "${GITHUB_EVENT_NAME}" != "pull_request" && "${{ github.event.head_commit.message }}" =~ \[DEPLOYMENT\] ]]; then
+            should_deploy=true
+          fi
+          echo "should_deploy=$should_deploy" >> $GITHUB_ENV
+
+      - name: Show GITHUB_ENV file
+        run: |
+          ls -l $GITHUB_ENV || true
+          cat $GITHUB_ENV || true
+
+      - name: Deployment request status
+        if: env.should_deploy == 'true'
+        run: echo "ENABLED (if you see this)"
+
+      - name: Install build/deployment dependencies
+        run: build/install-dependencies-osx.sh
+
+      - name: Configuring Xemu for Mac (native target)
+        run: make RELEASE=yes config
+
+      - name: Building Xemu for Mac (native target)
+        run: make -j 4 RELEASE=yes
+
+      - name: List of result binaries
+        run: ls -l build/bin/*.native
+
+      - name: Uptime so far
+        run: uptime
+
+      - name: Conditional Deploy to Shared Repo (macOS)
+        if: contains(github.event.head_commit.message, '[DEPLOYMENT]')
+        run: |
+          git config --global user.name "GitHub Actions"
+          git config --global user.email "actions@github.com"
+
+          # Clone shared deployment repo
+          rm -rf /tmp/shared-deploy-repo
+          git clone --depth 1 --branch main https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/your-username/shared-deploy-repo.git /tmp/shared-deploy-repo
+
+          # Clear and replace macos folder
+          rm -rf /tmp/shared-deploy-repo/macos
+          mkdir -p /tmp/shared-deploy-repo/macos
+          cp -r path/to/build/output/* /tmp/shared-deploy-repo/macos/
+
+          # Commit and push
+          cd /tmp/shared-deploy-repo
+          git add macos
+          git commit -m "macOS deployment from $GITHUB_REPOSITORY ($GITHUB_SHA)"
+          git push --force
