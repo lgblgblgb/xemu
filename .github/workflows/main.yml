@@ -2,8 +2,20 @@ name: CI
 
 on:
   push:
+    branches:
+      - master
+      - next
+      - dev
   pull_request:
+    branches:
+      - master
+      - next
+      - dev
   workflow_dispatch:
+    branches:
+      - master
+      - next
+      - dev
     inputs:
       deploy:
         description: 'Do you want DEPLOYMENT as well?'
@@ -13,31 +25,38 @@ on:
 
 jobs:
   linux:
-    name: Build and (optinally) deploy on Linux and Windows
+    name: Linux (and Windows) build
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Current GIT repo in use
-        run: bash build/show-git-info
+      - name: Current builder/repo info
+        run: |
+          echo "Running builder at `pwd` as `whoami`@`hostname` on `uname -a`"
+          echo "--- GIT INFO ---"
+          bash build/show-git-info || true
+          echo "--- CURRENT DIRECTORY ---"
+          pwd
+          ls -la
+          echo "--- PARENT DIRECTORY ---"
+          ls -la ..
 
       - name: Set should-deploy flag
         id: set_deploy
         run: |
           should_deploy=false
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ github.event.inputs.deploy }}" == "true" ]]; then
+            echo "Note: activating should_deploy because of workflow_dispatch with true input for deployment"
             should_deploy=true
           elif [[ "${GITHUB_EVENT_NAME}" != "pull_request" && "${{ github.event.head_commit.message }}" =~ \[DEPLOYMENT\] ]]; then
+            echo "Note: activating should_deploy because of non-pull request with marker in the commit message"
             should_deploy=true
+          else
+            echo "Note: not activating should_deploy"
           fi
           echo "should_deploy=$should_deploy" >> $GITHUB_ENV
           echo "should_deploy=$should_deploy"
-          ls -l $GITHUB_ENV || true
-          cat $GITHUB_ENV || true
-
-      - name: Show GITHUB_ENV file
-        run: |
           ls -l $GITHUB_ENV || true
           cat $GITHUB_ENV || true
 
@@ -77,7 +96,13 @@ jobs:
         run: build/install-cross-win-mingw-sdl-on-linux.sh /usr/bin
 
       - name: Show Windows SDL2 status
-        run: echo "*** 64-bit Windows SDL2 status ***" ; ls -l `which x86_64-w64-mingw32-sdl2-config` || true ; x86_64-w64-mingw32-sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true ; echo "*** 32-bit Windows SDL2 status ***" ; ls -l `which i686-w64-mingw32-sdl2-config` || true ; i686-w64-mingw32-sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true
+        run: |
+          echo "*** 64-bit Windows SDL2 status ***"
+          ls -l `which x86_64-w64-mingw32-sdl2-config` || true
+          x86_64-w64-mingw32-sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true
+          echo "*** 32-bit Windows SDL2 status ***"
+          ls -l `which i686-w64-mingw32-sdl2-config` || true
+          i686-w64-mingw32-sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true
 
       - name: Configuring Xemu for Windows (cross compilation, 64-bit target)
         run: make RELEASE=yes OFFICIALBUILD=yes ARCH=win64 config
@@ -100,18 +125,18 @@ jobs:
         if: env.should_deploy == 'true'
         run: ls -l build/bin/*.win32
 
-      - name: Uptime so far
+      - name: Uptime/load so far
         run: uptime
 
-      - name: Conditional Deploy to Shared Repo (Linux)
-        if: contains(github.event.head_commit.message, '[DEPLOYMENT]')
+      - name: Deployment
+        if: env.should_deploy == 'true'
         run: |
-          git config --global user.name "GitHub Actions"
+          git config --global user.name "GitHub Actions Xemu Builder"
           git config --global user.email "actions@github.com"
 
           # Clone shared deployment repo
           rm -rf /tmp/shared-deploy-repo
-          git clone --depth 1 --branch main https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/your-username/shared-deploy-repo.git /tmp/shared-deploy-repo
+          git clone --depth 1 --branch main https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/lgblgblgb/shared-deploy-repo.git /tmp/shared-deploy-repo
 
           # Clear and replace linux folder
           rm -rf /tmp/shared-deploy-repo/linux
@@ -125,28 +150,39 @@ jobs:
           git push --force
 
   macos:
-    name: Build and (optinally) deploy on MacOS
+    name: MacOS x86 build
     runs-on: macos-13
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Current GIT repo in use
-        run: bash build/show-git-info
+      - name: Current builder/repo info
+        run: |
+          echo "Running builder at `pwd` as `whoami`@`hostname` on `uname -a`"
+          echo "--- GIT INFO ---"
+          bash build/show-git-info || true
+          echo "--- CURRENT DIRECTORY ---"
+          pwd
+          ls -la
+          echo "--- PARENT DIRECTORY ---"
+          ls -la ..
 
       - name: Set should-deploy flag
         id: set_deploy
         run: |
           should_deploy=false
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ github.event.inputs.deploy }}" == "true" ]]; then
+            echo "Note: activating should_deploy because of workflow_dispatch with true input for deployment"
             should_deploy=true
           elif [[ "${GITHUB_EVENT_NAME}" != "pull_request" && "${{ github.event.head_commit.message }}" =~ \[DEPLOYMENT\] ]]; then
+            echo "Note: activating should_deploy because of non-pull request with marker in the commit message"
             should_deploy=true
+          else
+            echo "Note: not activating should_deploy"
           fi
           echo "should_deploy=$should_deploy" >> $GITHUB_ENV
-
-      - name: Show GITHUB_ENV file
-        run: |
+          echo "should_deploy=$should_deploy"
+          echo "TESTVAR=TESTTEST" >> $GITHUB_ENV
           ls -l $GITHUB_ENV || true
           cat $GITHUB_ENV || true
 
@@ -162,27 +198,30 @@ jobs:
           ls -l `which sdl2-config` || true
           sdl2-config --version --prefix --cflags --libs --static-libs || true
 
-      - name: Configuring Xemu for Mac (native target)
+      - name: Configuring Xemu for Mac (x86 native target)
         run: make RELEASE=yes OFFICIALBUILD=yes MACMINVER=10.6 config
 
-      - name: Building Xemu for Mac (native target)
+      - name: Building Xemu for Mac (x86 native target)
         run: make -j 4 RELEASE=yes OFFICIALBUILD=yes MACMINVER=10.6
 
-      - name: List of result binaries for Mac (native target)
+      - name: List of result binaries for Mac (x86 native target)
         run: ls -l build/bin/*.native
 
-      - name: Uptime so far
+      - name: Uptime/load so far
         run: uptime
 
-      - name: Conditional Deploy to Shared Repo (macOS)
-        if: contains(github.event.head_commit.message, '[DEPLOYMENT]')
+      - name: TEST ONLY REMOVE THIS
+        run: echo ${{ env.should_deploy }} ; echo ${{ env.TESTVAR }}
+
+      - name: Deployment
+        if: env.should_deploy == 'true'
         run: |
-          git config --global user.name "GitHub Actions"
+          git config --global user.name "GitHub Actions Xemu Builder"
           git config --global user.email "actions@github.com"
 
           # Clone shared deployment repo
           rm -rf /tmp/shared-deploy-repo
-          git clone --depth 1 --branch main https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/your-username/shared-deploy-repo.git /tmp/shared-deploy-repo
+          git clone --depth 1 --branch main https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/lgblgblgb/shared-deploy-repo.git /tmp/shared-deploy-repo
 
           # Clear and replace macos folder
           rm -rf /tmp/shared-deploy-repo/macos
