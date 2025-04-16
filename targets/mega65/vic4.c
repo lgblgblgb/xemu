@@ -191,6 +191,11 @@ void vic_reset ( void )
 	// turn off possible remained sprite collision info
 	vic_registers[0x1E] = 0;
 	vic_registers[0x1F] = 0;
+	vic_write_reg(0x56, 0x15);	// VHDL init value for "sprite_extended_height_size" signal
+	vic_write_reg(0x5B, 0x01);	// VHDL init value for "chargen_y_scale" signal
+	vic_write_reg(0x73, 0x11);	// VHDL init value for "vicii_ycounter_scale_minus_zero" signal (unknown for the reg_alpha_Delay part ...)
+	vic_write_reg(0x75, 0x80);	// VHDL init value for "sprite_alpha_blend_value"
+	vic_write_reg(0x7C, 0xD0);	// it seems $D07C is initialized to $D0 (and then ROM to set lower bits to '2') on real MEGA65 by unknown mechanism. Let's do it here as a workaround
 	vic4_reset_display_counters();
 	SET_PHYSICAL_RASTER(0);
 	chary16 = false;
@@ -616,6 +621,11 @@ static const char vic_registers_internal_mode_names[] = {'4', '3', '2'};
 */
 void vic_write_reg ( unsigned int addr, Uint8 data )
 {
+#if 0
+	// Used during testing
+	if (addr == 0x56)
+		DEBUGPRINT("TEST: writing $D0%02X with data $%02X at PC $%04X in hypervisor_mode=%d" NL, addr, data, cpu65.old_pc, (int)in_hypervisor);
+#endif
 	//DEBUGPRINT("VIC4: write VIC%c reg $%02X (internally $%03X) with data $%02X" NL, XEMU_LIKELY(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, data);
 	// IMPORTANT NOTE: writing of vic_registers[] happens only *AFTER* this switch/case construct! This means if you need to do this before, you must do it manually at the right "case"!!!!
 	// if you do so, you can even use "return" instead of "break" to save the then-redundant write of the register
@@ -661,7 +671,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			interrupt_checker();
 			break;
 		CASE_VIC_ALL(0x1A):
-			data &= 0xF;
+			data &= 0xF;	// technically bit 4 is missing (raster-x interrupt), but Xemu can't support that anyway (same for D019?)
 			break;
 		CASE_VIC_ALL(0x1B):	// sprite data priority
 		CASE_VIC_ALL(0x1C):	// sprite multicolour
@@ -908,10 +918,10 @@ Uint8 vic_read_reg ( int unsigned addr )
 			//DEBUGPRINT("VIC4: $D018 is read as $%02X @ PC=$%04X" NL, result, cpu65.pc);
 			break;
 		CASE_VIC_ALL(0x19):
-			result = interrupt_status | (64 + 32 + 16);
+			result = interrupt_status | (64 + 32);
 			break;
 		CASE_VIC_ALL(0x1A):
-			result |= 0xF0;
+			result |= (128 + 64 + 32);
 			break;
 		CASE_VIC_ALL(0x1B):	// sprite data priority
 		CASE_VIC_ALL(0x1C):	// sprite multicolour
