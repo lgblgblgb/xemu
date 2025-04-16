@@ -70,6 +70,9 @@ jobs:
           ls -l $GITHUB_ENV || true
           cat $GITHUB_ENV || true
 
+      - name: DELETE ME
+        run: build/delete-me.sh || true
+
       - name: Deployment request status
         if: env.should_deploy == 'true'
         run: echo "ENABLED (if you see this)"
