@@ -36,25 +36,19 @@ jobs:
           echo "Running builder at `pwd` as `whoami`@`hostname` on `uname -a`"
           echo "--- GIT INFO ---"
           bash build/show-git-info | tee /tmp/show-git-info || true
-          echo "--- Creating faked TRAVIS-compatible variables ---"
-          echo "TRAVIS=true" >> $GITHUB_ENV
-          echo "TRAVIS_BRANCH=${GITHUB_REF##*/}" >> $GITHUB_ENV
-          echo "TRAVIS_COMMIT=$GITHUB_SHA" >> $GITHUB_ENV
-          echo "TRAVIS_JOB_WEB_URL=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_ENV
-          echo "TRAVIS_OS_NAME=$(uname | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-          echo "TRAVIS_PULL_REQUEST=${{ github.event.pull_request.number || 'false' }}" >> $GITHUB_ENV
-          echo "TRAVIS_REPO_SLUG=${{ github.repository }}" >> $GITHUB_ENV
-          echo "--- Result ---"
-          cat $GITHUB_ENV
           echo "--- CURRENT DIRECTORY ---"
           pwd
           ls -la
           echo "--- PARENT DIRECTORY ---"
           ls -la ..
 
-      - name: Set should-deploy flag
-        id: set_deploy
+      - name: Set Custom Build Variables
+        uses: ./.github/actions/set-custom-build-variables
+
+      - name: Set variables and set deployment flag
+        id: set_variables
         run: |
+          echo "--- Deployment ---"
           should_deploy=false
           if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ github.event.inputs.deploy }}" == "true" ]]; then
             echo "Note: activating should_deploy because of workflow_dispatch with true input for deployment"
@@ -66,12 +60,17 @@ jobs:
             echo "Note: not activating should_deploy"
           fi
           echo "should_deploy=$should_deploy" >> $GITHUB_ENV
-          echo "should_deploy=$should_deploy"
+          echo "--- Creating faked TRAVIS-compatible variables ---"
+          echo "TRAVIS=true" >> $GITHUB_ENV
+          echo "TRAVIS_BRANCH=${GITHUB_REF##*/}" >> $GITHUB_ENV
+          echo "TRAVIS_COMMIT=$GITHUB_SHA" >> $GITHUB_ENV
+          echo "TRAVIS_JOB_WEB_URL=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_ENV
+          echo "TRAVIS_OS_NAME=$(uname | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+          echo "TRAVIS_PULL_REQUEST=${{ github.event.pull_request.number || 'false' }}" >> $GITHUB_ENV
+          echo "TRAVIS_REPO_SLUG=${{ github.repository }}" >> $GITHUB_ENV
+          echo "--- Result ---"
           ls -l $GITHUB_ENV || true
           cat $GITHUB_ENV || true
-
-      - name: DELETE ME
-        run: build/delete-me.sh || true
 
       - name: Deployment request status
         if: env.should_deploy == 'true'
@@ -183,6 +182,9 @@ jobs:
           ls -la
           echo "--- PARENT DIRECTORY ---"
           ls -la ..
+
+      - name: Set Custom Build Variables
+        uses: ./.github/actions/set-custom-build-variables
 
       - name: Set should-deploy flag
         id: set_deploy
