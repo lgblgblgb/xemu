@@ -31,6 +31,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set Custom Build Variables
+        uses: ./.github/actions/set-custom-build-variables
+
+      - name: Deployment request status
+        if: env.should_deploy == 'true'
+        run: echo "ENABLED (if you see this)"
+
       - name: Current builder/repo info
         run: |
           echo "Running builder at `pwd` as `whoami`@`hostname` on `uname -a`"
@@ -42,39 +49,8 @@ jobs:
           echo "--- PARENT DIRECTORY ---"
           ls -la ..
 
-      - name: Set Custom Build Variables
-        uses: ./.github/actions/set-custom-build-variables
-
-      - name: Set variables and set deployment flag
-        id: set_variables
-        run: |
-          echo "--- Deployment ---"
-          should_deploy=false
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ github.event.inputs.deploy }}" == "true" ]]; then
-            echo "Note: activating should_deploy because of workflow_dispatch with true input for deployment"
-            should_deploy=true
-          elif [[ "${GITHUB_EVENT_NAME}" != "pull_request" && "${{ github.event.head_commit.message }}" =~ \[DEPLOYMENT\] ]]; then
-            echo "Note: activating should_deploy because of non-pull request with marker in the commit message"
-            should_deploy=true
-          else
-            echo "Note: not activating should_deploy"
-          fi
-          echo "should_deploy=$should_deploy" >> $GITHUB_ENV
-          echo "--- Creating faked TRAVIS-compatible variables ---"
-          echo "TRAVIS=true" >> $GITHUB_ENV
-          echo "TRAVIS_BRANCH=${GITHUB_REF##*/}" >> $GITHUB_ENV
-          echo "TRAVIS_COMMIT=$GITHUB_SHA" >> $GITHUB_ENV
-          echo "TRAVIS_JOB_WEB_URL=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_ENV
-          echo "TRAVIS_OS_NAME=$(uname | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
-          echo "TRAVIS_PULL_REQUEST=${{ github.event.pull_request.number || 'false' }}" >> $GITHUB_ENV
-          echo "TRAVIS_REPO_SLUG=${{ github.repository }}" >> $GITHUB_ENV
-          echo "--- Result ---"
-          ls -l $GITHUB_ENV || true
-          cat $GITHUB_ENV || true
-
-      - name: Deployment request status
-        if: env.should_deploy == 'true'
-        run: echo "ENABLED (if you see this)"
+      - name: Show shell variables
+        run: env || true
 
       - name: Install Ubuntu packages
         run: |
@@ -85,10 +61,25 @@ jobs:
         run: dpkg -l | cat || true
 
       - name: Show system status
-        run: cat /etc/debian_version ; lsb_release -a ; yacc --version | head -n 1 ; gcc --version | head -n 1 ; g++ --version | head -n 1 ; make --version | head -n 1 ; git --version | head -n 1 ; gawk --version | head -n 1 ; bash --version | head -n 1 ; uname -a ; id -a ; echo "CWD is `pwd`" ; echo "PATH is $PATH" ; echo "Hostname is `hostname`" ; sudo lscpu || true ; uptime ; sudo /sbin/ip a || true ; df -h . ; ls -la .
-
-      - name: Show shell variables
-        run: env || true
+        run: |
+          cat /etc/debian_version
+          lsb_release -a
+          yacc --version | head -n 1
+          gcc --version | head -n 1
+          g++ --version | head -n 1
+          make --version | head -n 1
+          git --version | head -n 1
+          gawk --version | head -n 1
+          bash --version | head -n 1
+          uname -a
+          id -a
+          echo "CWD is `pwd`"
+          echo "PATH is $PATH"
+          echo "Hostname is `hostname`"
+          sudo lscpu || true
+          uptime
+          sudo /sbin/ip a || true
+          df -h .
 
       - name: Show native SDL2 status
         run: |
@@ -172,6 +163,13 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
+      - name: Set Custom Build Variables
+        uses: ./.github/actions/set-custom-build-variables
+
+      - name: Deployment request status
+        if: env.should_deploy == 'true'
+        run: echo "ENABLED (if you see this)"
+
       - name: Current builder/repo info
         run: |
           echo "Running builder at `pwd` as `whoami`@`hostname` on `uname -a`"
@@ -183,34 +181,28 @@ jobs:
           echo "--- PARENT DIRECTORY ---"
           ls -la ..
 
-      - name: Set Custom Build Variables
-        uses: ./.github/actions/set-custom-build-variables
-
-      - name: Set should-deploy flag
-        id: set_deploy
-        run: |
-          should_deploy=false
-          if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ github.event.inputs.deploy }}" == "true" ]]; then
-            echo "Note: activating should_deploy because of workflow_dispatch with true input for deployment"
-            should_deploy=true
-          elif [[ "${GITHUB_EVENT_NAME}" != "pull_request" && "${{ github.event.head_commit.message }}" =~ \[DEPLOYMENT\] ]]; then
-            echo "Note: activating should_deploy because of non-pull request with marker in the commit message"
-            should_deploy=true
-          else
-            echo "Note: not activating should_deploy"
-          fi
-          echo "should_deploy=$should_deploy" >> $GITHUB_ENV
-          echo "should_deploy=$should_deploy"
-          echo "TESTVAR=TESTTEST" >> $GITHUB_ENV
-          ls -l $GITHUB_ENV || true
-          cat $GITHUB_ENV || true
-
-      - name: Deployment request status
-        if: env.should_deploy == 'true'
-        run: echo "ENABLED (if you see this)"
+      - name: Show shell variables
+        run: env || true
 
       - name: Install build/deployment dependencies
         run: build/install-dependencies-osx.sh
+
+      - name: Show system status
+        run: |
+          sw_vers || true
+          gcc --version | head -n 1
+          g++ --version | head -n 1
+          make --version | head -n 1
+          git --version | head -n 1
+          bash --version | head -n 1
+          uname -a
+          id -a
+          echo "CWD is `pwd`"
+          echo "PATH is $PATH"
+          echo "Hostname is `hostname`"
+          uptime
+          ifconfig || true
+          df -h .
 
       - name: Show Mac SDL2 status
         run: |
@@ -228,9 +220,6 @@ jobs:
 
       - name: Uptime/load so far
         run: uptime
-
-      - name: TEST ONLY REMOVE THIS
-        run: echo ${{ env.should_deploy }} ; echo ${{ env.TESTVAR }}
 
       - name: Deployment
         if: env.should_deploy == 'true'
