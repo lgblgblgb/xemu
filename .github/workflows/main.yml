@@ -60,26 +60,8 @@ jobs:
       - name: List of all installed packages
         run: dpkg -l | cat || true
 
-      - name: Show system status
-        run: |
-          cat /etc/debian_version
-          lsb_release -a
-          yacc --version | head -n 1
-          gcc --version | head -n 1
-          g++ --version | head -n 1
-          make --version | head -n 1
-          git --version | head -n 1
-          gawk --version | head -n 1
-          bash --version | head -n 1
-          uname -a
-          id -a
-          echo "CWD is `pwd`"
-          echo "PATH is $PATH"
-          echo "Hostname is `hostname`"
-          sudo lscpu || true
-          uptime
-          sudo /sbin/ip a || true
-          df -h .
+      - name: Show build system info
+        run: bash build/show-sys-info
 
       - name: Show native SDL2 status
         run: |
@@ -131,9 +113,6 @@ jobs:
       - name: List of result binaries for Windows (cross compilation, 32-bit target)
         if: env.should_deploy == 'true'
         run: ls -l build/bin/*.win32
-
-      - name: Uptime/load so far
-        run: uptime
 
       - name: Deployment
         if: env.should_deploy == 'true'
@@ -187,22 +166,8 @@ jobs:
       - name: Install build/deployment dependencies
         run: build/install-dependencies-osx.sh
 
-      - name: Show system status
-        run: |
-          sw_vers || true
-          gcc --version | head -n 1
-          g++ --version | head -n 1
-          make --version | head -n 1
-          git --version | head -n 1
-          bash --version | head -n 1
-          uname -a
-          id -a
-          echo "CWD is `pwd`"
-          echo "PATH is $PATH"
-          echo "Hostname is `hostname`"
-          uptime
-          ifconfig || true
-          df -h .
+      - name: Show build system info
+        run: bash build/show-sys-info
 
       - name: Show Mac SDL2 status
         run: |
@@ -217,9 +182,6 @@ jobs:
 
       - name: List of result binaries for Mac (x86 native target)
         run: ls -l build/bin/*.native
-
-      - name: Uptime/load so far
-        run: uptime
 
       - name: Deployment
         if: env.should_deploy == 'true'
