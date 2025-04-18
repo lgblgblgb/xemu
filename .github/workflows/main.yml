@@ -50,7 +50,7 @@ jobs:
           ls -la ..
 
       - name: Show shell variables
-        run: env || true
+        run: env | grep -v SECRET || true
 
       - name: Install Ubuntu packages
         run: |
@@ -74,8 +74,13 @@ jobs:
       - name: Building Xemu for Linux (native target)
         run: make -j 4 RELEASE=yes OFFICIALBUILD=yes
 
-      - name: List of result binaries for Linux (native target)
-        run: ls -l build/bin/*.native
+      - name: Strip and list of result binaries for Mac (x86 native target)
+        run: for a in build/bin/*.native ; do ls -l $a ; strip $a ; ls -l $a ; done
+
+      - name: Test run of MEGA65 emulator
+        run: |
+          build/bin/xmega65.native -v || true
+          build/bin/xmega65.native -h || true
 
       - name: Creating DEB distribution
         if: env.should_deploy == 'true'
@@ -99,8 +104,8 @@ jobs:
       - name: Building Xemu for Windows (cross compilation, 64-bit target)
         run: make -j 4 RELEASE=yes OFFICIALBUILD=yes ARCH=win64
 
-      - name: List of result binaries for Windows (cross compilation, 64-bit target)
-        run: ls -l build/bin/*.win64
+      - name: Strip and list of result binaries for Windows (cross compilation, 64-bit target)
+        run: for a in build/bin/*.win64 ; do ls -l $a ; x86_64-w64-mingw32-strip $a ; ls -l $a ; done
 
       - name: Configuring Xemu for Windows (cross compilation, 32-bit target)
         if: env.should_deploy == 'true'
@@ -110,9 +115,9 @@ jobs:
         if: env.should_deploy == 'true'
         run: make -j 4 RELEASE=yes OFFICIALBUILD=yes ARCH=win32
 
-      - name: List of result binaries for Windows (cross compilation, 32-bit target)
+      - name: Strip and list of result binaries for Windows (cross compilation, 32-bit target)
         if: env.should_deploy == 'true'
-        run: ls -l build/bin/*.win32
+        run: for a in build/bin/*.win32 ; do ls -l $a ; i686-w64-mingw32-strip $a ; ls -l $a ; done
 
       - name: Deployment
         if: env.should_deploy == 'true'
@@ -161,7 +166,7 @@ jobs:
           ls -la ..
 
       - name: Show shell variables
-        run: env || true
+        run: env | grep -v SECRET || true
 
       - name: Install build/deployment dependencies
         run: build/install-dependencies-osx.sh
@@ -180,26 +185,39 @@ jobs:
       - name: Building Xemu for Mac (x86 native target)
         run: make -j 4 RELEASE=yes OFFICIALBUILD=yes MACMINVER=10.6
 
-      - name: List of result binaries for Mac (x86 native target)
-        run: ls -l build/bin/*.native
+      - name: Mangle, strip and list of result binaries for Mac (x86 native target)
+        run: for a in build/bin/*.native ; do build/mangle_dylib_osx.sh $a ; strip $a ; ls -l $a ; done
+
+      - name: Test run of MEGA65 emulator
+        run: |
+          build/bin/xmega65.native -v || true
+          build/bin/xmega65.native -h || true
+
+      - name: Pre-deployment
+        if: env.should_deploy == 'true'
+        run: |
+          cp README.md LICENSE AUTHORS build/bin/
+          build/zipper.sh build/bin xemu-binaries-osx.zip build/bin/*.dylib build/bin/*.native README.md LICENSE AUTHORS
+          cp build/bin/xemu-binaries-osx.zip .
+          ls -l
+          build/dmg-osx-creator.sh
+          build/deploy/before-deploy.sh xemu-deploy MacOS
 
       - name: Deployment
         if: env.should_deploy == 'true'
         run: |
           git config --global user.name "GitHub Actions Xemu Builder"
           git config --global user.email "actions@github.com"
-
-          # Clone shared deployment repo
-          rm -rf /tmp/shared-deploy-repo
-          git clone --depth 1 --branch main https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/lgblgblgb/shared-deploy-repo.git /tmp/shared-deploy-repo
-
-          # Clear and replace macos folder
-          rm -rf /tmp/shared-deploy-repo/macos
-          mkdir -p /tmp/shared-deploy-repo/macos
-          cp -r path/to/build/output/* /tmp/shared-deploy-repo/macos/
-
-          # Commit and push
-          cd /tmp/shared-deploy-repo
-          git add macos
-          git commit -m "macOS deployment from $GITHUB_REPOSITORY ($GITHUB_SHA)"
+          rm -rf /tmp/deploy-repo
+          git clone --depth 1 --branch binary-osx-${GITHUB_REF##*/} https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/lgblgblgb/xemu-binaries.git /tmp/deploy-repo
+          rm -fr /tmp/deploy-repo/*
+          cp xemu-deploy/* /tmp/deploy-repo/
+          cd /tmp/deploy-repo
+          ls -l
+          git add *
+          git commit -m "MacOS deployment from $GITHUB_REPOSITORY ($GITHUB_SHA)"
           git push --force
+
+      - name: Deploy announcement
+        if: env.should_deploy == 'true'
+        run: echo "TODO" ; pwd
