@@ -203,7 +203,11 @@ jobs:
         run: make -j 4 RELEASE=yes OFFICIALBUILD=yes MACMINVER=10.6
 
       - name: Mangle, strip and list of result binaries for Mac (x86 native target)
-        run: for a in build/bin/*.native ; do build/mangle_dylib_osx.sh $a ; strip $a ; ls -l $a ; done
+        run: |
+          for a in build/bin/*.native ; do build/mangle_dylib_osx.sh $a ; strip $a ; ls -l $a ; lipo -info $a ; done
+          echo "--- DYLIB INFO ---"
+          ls -l build/bin/*.dylib || true
+          lipo -info build/bin/*.dylib || true
 
       - name: Test run of MEGA65 emulator
         run: build/bin/xmega65.native -h || true
@@ -235,18 +239,16 @@ jobs:
       - name: Deployment
         if: env.should_deploy == 'true'
         run: |
-          rm -rf xemu-deploy-orig-repo
-          git clone --depth 1 --branch binary-osx-${GITHUB_REF##*/} https://x-access-token:${{ secrets.XEMU_DEPLOY_TOKEN }}@github.com/lgblgblgb/xemu-binaries.git xemu-deploy-orig-repo
-          mv xemu-deploy-orig-repo/.git* xemu-deploy/
-          rm -fr xemu-deploy-orig-repo
           cd xemu-deploy
-          pwd
           touch .nojekyll
+          pwd
           ls -l
+          git init
+          git checkout --orphan "${{ github.ref_name }}"
           git add .
+          git commit -m "Deploy from ${{ github.repository }}@${{ github.sha }}"
           git status
-          git commit -m "MacOS deployment from $GITHUB_REPOSITORY ($GITHUB_SHA)"
-          git push --force
+          git push --force --quiet "https://x-access-token:${{ secrets.XEMU_DEPLOY_TOKEN }}@github.com/lgblgblgb/xemu-binaries.git" "${{ github.ref_name }}:refs/heads/${{ github.ref_name }}"
           cd ..
 
       - name: Announce deployment
