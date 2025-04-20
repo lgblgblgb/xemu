@@ -151,7 +151,7 @@ jobs:
           mkdir -p /tmp/shared-deploy-repo/linux
           cp -r path/to/build/output/* /tmp/shared-deploy-repo/linux/
 
-          # Commit and push
+          # Commit and push!
           cd /tmp/shared-deploy-repo
           git add linux
           git commit -m "Linux deployment from $GITHUB_REPOSITORY ($GITHUB_SHA)"
