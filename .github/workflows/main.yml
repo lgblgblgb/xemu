@@ -127,7 +127,7 @@ jobs:
         run: for a in build/bin/*.win32 ; do ls -l $a ; i686-w64-mingw32-strip $a ; ls -l $a ; done
 
       - name: Create packages to be deployed
-        if: env.should_deploy == 'true'
+        if: env.should_deploy == 'truex'
         run: |
           cp README.md LICENSE AUTHORS build/bin/
           echo "--- Bulding ZIP acrhive ---"
@@ -137,7 +137,7 @@ jobs:
           echo "--- Creating DMG distribution ---"
           build/dmg-osx-creator.sh
           echo "--- Before deploy ---"
-          build/deploy/before-deploy.sh xemu-deploy MacOS
+          build/deploy/before-deploy.sh xemu-deploy Linux
 
       - name: Deployment
         if: env.should_deploy == 'truex'
@@ -218,6 +218,10 @@ jobs:
           ls -l *.zip
           echo "--- Creating DMG distribution ---"
           build/dmg-osx-creator.sh
+          echo "--- Install needed packages ---"
+          brew install coreutils
+          ln -s /opt/homebrew/bin/gmd5sum /usr/local/bin/md5sum || true
+          ls -l /opt/homebrew/bin/gmd5sum /usr/local/bin/md5sum
           echo "--- Before deploy ---"
           build/deploy/before-deploy.sh xemu-deploy MacOS
 
