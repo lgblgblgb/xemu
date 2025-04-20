@@ -243,12 +243,14 @@ jobs:
           touch .nojekyll
           pwd
           ls -l
+          SRC_BRANCH="${{ github.ref_name }}"
+          TARGET_BRANCH="binary-osx-$SRC_BRANCH"
           git init
-          git checkout --orphan "${{ github.ref_name }}"
+          git checkout --orphan "$TARGET_BRANCH"
           git add .
           git commit -m "Deploy from ${{ github.repository }}@${{ github.sha }}"
           git status
-          git push --force --quiet "https://x-access-token:${{ secrets.XEMU_DEPLOY_TOKEN }}@github.com/lgblgblgb/xemu-binaries.git" "${{ github.ref_name }}:refs/heads/${{ github.ref_name }}"
+          git push --force --quiet "https://x-access-token:${{ secrets.XEMU_DEPLOY_TOKEN }}@github.com/lgblgblgb/xemu-binaries.git" "$TARGET_BRANCH:refs/heads/$TARGET_BRANCH"
           cd ..
 
       - name: Announce deployment
