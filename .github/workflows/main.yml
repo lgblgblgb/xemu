@@ -218,10 +218,11 @@ jobs:
           ls -l *.zip
           echo "--- Creating DMG distribution ---"
           build/dmg-osx-creator.sh
-          echo "--- Install needed packages ---"
+          echo "--- Check md5sum utility ---"
+          which md5sum || true
           brew install coreutils
-          ln -s /opt/homebrew/bin/gmd5sum /usr/local/bin/md5sum || true
-          ls -l /opt/homebrew/bin/gmd5sum /usr/local/bin/md5sum
+          which md5sum
+          md5sum --version
           echo "--- Before deploy ---"
           build/deploy/before-deploy.sh xemu-deploy MacOS
 
