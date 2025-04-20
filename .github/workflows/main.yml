@@ -50,7 +50,7 @@ jobs:
           ls -la ..
 
       - name: Show shell variables
-        run: env | grep -v SECRET || true
+        run: env | grep -vE 'SECRET|TOKEN|HOOK' || true
 
       - name: Install Ubuntu packages
         run: |
@@ -78,13 +78,20 @@ jobs:
         run: for a in build/bin/*.native ; do ls -l $a ; strip $a ; ls -l $a ; done
 
       - name: Test run of MEGA65 emulator
-        run: |
-          build/bin/xmega65.native -v || true
-          build/bin/xmega65.native -h || true
+        run: build/bin/xmega65.native -h || true
 
-      - name: Creating DEB distribution
+      - name: Creating DEB package to be deployed
         if: env.should_deploy == 'true'
-        run: make RELEASE=yes OFFICIALBUILD=yes deb
+        run: |
+          make RELEASE=yes OFFICIALBUILD=yes deb
+          cp build/bin/*.deb build/bin/*.rpm .
+          ls -l *.deb *.rpm
+
+      - name: GIT configuration for deployment
+        if: env.should_deploy == 'true'
+        run: |
+          git config --global user.name "GitHub Actions Xemu Linux Builder"
+          git config --global user.email "actions@github.com"
 
       - name: Installing Windows SDL2 cross-development components
         run: build/install-cross-win-mingw-sdl-on-linux.sh /usr/bin
@@ -119,15 +126,25 @@ jobs:
         if: env.should_deploy == 'true'
         run: for a in build/bin/*.win32 ; do ls -l $a ; i686-w64-mingw32-strip $a ; ls -l $a ; done
 
-      - name: Deployment
+      - name: Create packages to be deployed
         if: env.should_deploy == 'true'
         run: |
-          git config --global user.name "GitHub Actions Xemu Builder"
-          git config --global user.email "actions@github.com"
+          cp README.md LICENSE AUTHORS build/bin/
+          echo "--- Bulding ZIP acrhive ---"
+          build/zipper.sh build/bin xemu-binaries-osx.zip build/bin/*.dylib build/bin/*.native README.md LICENSE AUTHORS
+          cp build/bin/xemu-binaries-osx.zip .
+          ls -l *.zip
+          echo "--- Creating DMG distribution ---"
+          build/dmg-osx-creator.sh
+          echo "--- Before deploy ---"
+          build/deploy/before-deploy.sh xemu-deploy MacOS
 
+      - name: Deployment
+        if: env.should_deploy == 'truex'
+        run: |
           # Clone shared deployment repo
           rm -rf /tmp/shared-deploy-repo
-          git clone --depth 1 --branch main https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/lgblgblgb/shared-deploy-repo.git /tmp/shared-deploy-repo
+          git clone --depth 1 --branch main https://x-access-token:${{ secrets.XEMU_DEPLOY_TOKEN }}@github.com/lgblgblgb/shared-deploy-repo.git /tmp/shared-deploy-repo
 
           # Clear and replace linux folder
           rm -rf /tmp/shared-deploy-repo/linux
@@ -166,7 +183,7 @@ jobs:
           ls -la ..
 
       - name: Show shell variables
-        run: env | grep -v SECRET || true
+        run: env | grep -Ev 'SECRET|TOKEN|HOOK' || true
 
       - name: Install build/deployment dependencies
         run: build/install-dependencies-osx.sh
@@ -189,35 +206,44 @@ jobs:
         run: for a in build/bin/*.native ; do build/mangle_dylib_osx.sh $a ; strip $a ; ls -l $a ; done
 
       - name: Test run of MEGA65 emulator
-        run: |
-          build/bin/xmega65.native -v || true
-          build/bin/xmega65.native -h || true
+        run: build/bin/xmega65.native -h || true
 
-      - name: Pre-deployment
+      - name: Create packages to be deployed
         if: env.should_deploy == 'true'
         run: |
           cp README.md LICENSE AUTHORS build/bin/
+          echo "--- Bulding ZIP acrhive ---"
           build/zipper.sh build/bin xemu-binaries-osx.zip build/bin/*.dylib build/bin/*.native README.md LICENSE AUTHORS
           cp build/bin/xemu-binaries-osx.zip .
-          ls -l
+          ls -l *.zip
+          echo "--- Creating DMG distribution ---"
           build/dmg-osx-creator.sh
+          echo "--- Before deploy ---"
           build/deploy/before-deploy.sh xemu-deploy MacOS
+
+      - name: GIT configuration for deployment
+        if: env.should_deploy == 'true'
+        run: |
+          git config --global user.name "GitHub Actions Xemu Mac Builder"
+          git config --global user.email "actions@github.com"
 
       - name: Deployment
         if: env.should_deploy == 'true'
         run: |
-          git config --global user.name "GitHub Actions Xemu Builder"
-          git config --global user.email "actions@github.com"
-          rm -rf /tmp/deploy-repo
-          git clone --depth 1 --branch binary-osx-${GITHUB_REF##*/} https://x-access-token:${{ secrets.DEPLOY_TOKEN }}@github.com/lgblgblgb/xemu-binaries.git /tmp/deploy-repo
-          rm -fr /tmp/deploy-repo/*
-          cp xemu-deploy/* /tmp/deploy-repo/
-          cd /tmp/deploy-repo
+          rm -rf xemu-deploy-orig-repo
+          git clone --depth 1 --branch binary-osx-${GITHUB_REF##*/} https://x-access-token:${{ secrets.XEMU_DEPLOY_TOKEN }}@github.com/lgblgblgb/xemu-binaries.git xemu-deploy-orig-repo
+          mv xemu-deploy-orig-repo/.git* xemu-deploy/
+          rm -fr xemu-deploy-orig-repo
+          cd xemu-deploy
+          pwd
+          touch .nojekyll
           ls -l
-          git add *
+          git add .
+          git status
           git commit -m "MacOS deployment from $GITHUB_REPOSITORY ($GITHUB_SHA)"
           git push --force
+          cd ..
 
-      - name: Deploy announcement
+      - name: Announce deployment
         if: env.should_deploy == 'true'
         run: echo "TODO" ; pwd
