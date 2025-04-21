@@ -108,7 +108,6 @@ jobs:
           git commit -m "Deploy from ${{ github.repository }}@${{ github.sha }}"
           git status
           git push --force --quiet "https://x-access-token:${{ secrets.XEMU_DEPLOY_TOKEN }}@github.com/lgblgblgb/xemu-binaries.git" "$TARGET_BRANCH:refs/heads/$TARGET_BRANCH"
-          git pull
           git log
           cd ..
           rm -fr xemu-deploy
@@ -206,7 +205,6 @@ jobs:
           git commit -m "Deploy from ${{ github.repository }}@${{ github.sha }}"
           git status
           git push --force --quiet "https://x-access-token:${{ secrets.XEMU_DEPLOY_TOKEN }}@github.com/lgblgblgb/xemu-binaries.git" "$TARGET_BRANCH:refs/heads/$TARGET_BRANCH"
-          git pull
           git log
           cd ..
           rm -fr xemu-deploy
@@ -309,7 +307,6 @@ jobs:
           git commit -m "Deploy from ${{ github.repository }}@${{ github.sha }}"
           git status
           git push --force --quiet "https://x-access-token:${{ secrets.XEMU_DEPLOY_TOKEN }}@github.com/lgblgblgb/xemu-binaries.git" "$TARGET_BRANCH:refs/heads/$TARGET_BRANCH"
-          git pull
           git log
           cd ..
           rm -fr xemu-deploy
