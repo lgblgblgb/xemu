@@ -23,13 +23,14 @@ on:
         default: 'false'
 
 jobs:
-  linux:
+  linux-test:
     name: Hello, world!
     runs-on: ubuntu-24.04
     steps:
       - name: Just for fun
         run: echo "Just for fun"
 
+  linux-working:
     name: Linux (and Windows) build
     runs-on: ubuntu-24.04
     steps:
