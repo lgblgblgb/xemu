@@ -33,7 +33,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set Custom Build Variables
+      - name: Set custom build variables
         uses: ./.github/actions/set-custom-build-variables
 
       - name: Deployment request status check
@@ -70,26 +70,26 @@ jobs:
           ls -l `which sdl2-config` || true
           sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true
 
-      - name: Configuring Xemu for Linux (native target)
+      - name: Configuring Xemu
         run: make RELEASE=yes OFFICIALBUILD=yes config
 
-      - name: Building Xemu for Linux (native target)
+      - name: Building Xemu
         run: make -j 4 RELEASE=yes OFFICIALBUILD=yes
 
-      - name: Strip and list of result binaries for Mac (x86 native target)
+      - name: Strip and list of result binaries
         run: for a in build/bin/*.native ; do ls -l $a ; strip $a ; ls -l $a ; done
 
       - name: Test run of MEGA65 emulator
         run: build/bin/xmega65.native -h || true
 
-      - name: Creating DEB package to be deployed (Linux)
+      - name: Create DEB package to be deployed
         if: env.should_deploy == 'true'
         run: |
           make RELEASE=yes OFFICIALBUILD=yes deb
           cp build/bin/*.deb build/bin/*.rpm .
           ls -l *.deb *.rpm
 
-      - name: Deployment (Linux)
+      - name: Deployment
         if: env.should_deploy == 'true'
         run: |
           git config --global user.name "GitHub Actions Xemu Linux Builder"
@@ -109,9 +109,12 @@ jobs:
           git log
           cd ..
 
-      - name: Announce deployment (Linux)
+      - name: Announce deployment
         if: env.should_deploy == 'true'
-        run: echo "TODO" ; pwd
+        run: |
+          export DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK="${{ secrets.DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK }}"
+          export DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK="${{ secrets.DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK }}"
+          build/deploy/discord-webhook.sh success "Ubuntu Linux DEB" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
 
 
 
@@ -123,7 +126,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set Custom Build Variables
+      - name: Set custom build variables
         uses: ./.github/actions/set-custom-build-variables
 
       - name: Deployment request status check
@@ -167,28 +170,28 @@ jobs:
           ls -l `which i686-w64-mingw32-sdl2-config` || true
           i686-w64-mingw32-sdl2-config --version --prefix --exec-prefix --cflags --libs --static-libs || true
 
-      - name: Configuring Xemu for Windows (cross compilation, 64-bit target)
+      - name: Configuring Xemu (64-bit)
         run: make RELEASE=yes OFFICIALBUILD=yes ARCH=win64 config
 
-      - name: Building Xemu for Windows (cross compilation, 64-bit target)
+      - name: Building Xemu (64-bit)
         run: make -j 4 RELEASE=yes OFFICIALBUILD=yes ARCH=win64
 
-      - name: Strip and list of result binaries for Windows (cross compilation, 64-bit target)
+      - name: Strip and list of result binaries (64-bit)
         run: for a in build/bin/*.win64 ; do ls -l $a ; x86_64-w64-mingw32-strip $a ; ls -l $a ; done
 
-      - name: Configuring Xemu for Windows (cross compilation, 32-bit target)
+      - name: Configuring Xemu (32-bit)
         if: env.should_deploy == 'true'
         run: make RELEASE=yes OFFICIALBUILD=yes ARCH=win32 config
 
-      - name: Building Xemu for Windows (cross compilation, 32-bit target)
+      - name: Building Xemu (32-bit)
         if: env.should_deploy == 'true'
         run: make -j 4 RELEASE=yes OFFICIALBUILD=yes ARCH=win32
 
-      - name: Strip and list of result binaries for Windows (cross compilation, 32-bit target)
+      - name: Strip and list of result binaries (32-bit)
         if: env.should_deploy == 'true'
         run: for a in build/bin/*.win32 ; do ls -l $a ; i686-w64-mingw32-strip $a ; ls -l $a ; done
 
-      - name: Building ZIP acrhive (64 bit)
+      - name: Building ZIP acrhive (64-bit)
         if: env.should_deploy == 'true'
         run: |
           rm -f build/bin/*.dll
@@ -196,7 +199,7 @@ jobs:
           build/zipper.sh build/bin xemu-binaries-win64.zip build/bin/*.dll build/bin/*.win64 README.md LICENSE AUTHORS
           cp build/bin/xemu-binaries-win64.zip .
 
-      - name: Building installer (64 bit)
+      - name: Building installer (64-bit)
         if: env.should_deploy == 'true'
         run: |
           rm -f build/bin/*.dll
@@ -204,7 +207,7 @@ jobs:
           build/nsi-build-native.sh win64 `build/system-config win64 sdl2 dll`
           cp build/bin/install-xemu-win64.exe .
 
-      - name: Building ZIP archive (32 bit)
+      - name: Building ZIP archive (32-bit)
         if: env.should_deploy == 'true'
         run: |
           rm -f build/bin/*.dll
@@ -212,7 +215,7 @@ jobs:
           build/zipper.sh build/bin xemu-binaries-win32.zip build/bin/*.dll build/bin/*.win32 README.md LICENSE AUTHORS
           cp build/bin/xemu-binaries-win32.zip .
 
-      - name: Building installer (32 bit)
+      - name: Building installer (32-bit)
         if: env.should_deploy == 'true'
         run: |
           rm -f build/bin/*.dll
@@ -242,8 +245,10 @@ jobs:
 
       - name: Announce deployment
         if: env.should_deploy == 'true'
-        run: echo "TODO" ; pwd
-
+        run: |
+          export DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK="${{ secrets.DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK }}"
+          export DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK="${{ secrets.DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK }}"
+          build/deploy/discord-webhook.sh success "Windows" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
 
 
 
@@ -254,7 +259,7 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Set Custom Build Variables
+      - name: Set custom build variables
         uses: ./.github/actions/set-custom-build-variables
 
       - name: Deployment request status check
@@ -340,4 +345,7 @@ jobs:
 
       - name: Announce deployment
         if: env.should_deploy == 'true'
-        run: echo "TODO" ; pwd
+        run: |
+          export DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK="${{ secrets.DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK }}"
+          export DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK="${{ secrets.DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK }}"
+          build/deploy/discord-webhook.sh success "MacOS(x86)" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
