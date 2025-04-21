@@ -54,7 +54,7 @@ jobs:
       - name: Install Ubuntu packages
         run: |
           sudo apt-get -y -yq update || true
-          sudo apt-get -y -yq --no-install-suggests --no-install-recommends install alien bash binutils-mingw-w64-i686 binutils-mingw-w64-x86-64 bison build-essential bzip2 coreutils curl deborphan dpkg fakeroot file g++ gawk gcc gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 git libc6-dev libc-bin libcurl4-openssl-dev libgtk-3-dev libreadline6-dev libsdl2-dev lsb-release make sed tar util-linux vim-common wget zip
+          sudo apt-get -y -yq --no-install-suggests --no-install-recommends install alien bash binutils-mingw-w64-i686 binutils-mingw-w64-x86-64 bison build-essential bzip2 coreutils curl deborphan dpkg fakeroot file g++ gawk gcc gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 git libc6-dev libc-bin libcurl4-openssl-dev libgtk-3-dev libreadline6-dev libsdl2-dev lsb-release make sed tar util-linux vim-common wget zip nsis
 
       - name: List of all installed packages
         run: dpkg -l | cat || true
@@ -166,8 +166,8 @@ jobs:
         run: |
           rm -f build/bin/*.dll
           cp README.md LICENSE AUTHORS `x86_64-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
-          build/nsi-build-native.sh win64 `build/system-config win64 sdl2 dll` || true
-          cp build/bin/install-xemu-win64.exe . || true
+          build/nsi-build-native.sh win64 `build/system-config win64 sdl2 dll`
+          cp build/bin/install-xemu-win64.exe .
 
       - name: Building ZIP archive (Windows, 32 bit)
         if: env.should_deploy == 'true'
@@ -182,8 +182,8 @@ jobs:
         run: |
           rm -f build/bin/*.dll
           cp README.md LICENSE AUTHORS `i686-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
-          build/nsi-build-native.sh win32 `build/system-config win32 sdl2 dll` || true
-          cp build/bin/install-xemu-win32.exe . || true
+          build/nsi-build-native.sh win32 `build/system-config win32 sdl2 dll`
+          cp build/bin/install-xemu-win32.exe .
 
       - name: Pre-deployment (Windows)
         if: env.should_deploy == 'true'
