@@ -22,16 +22,12 @@ on:
         required: false
         default: 'false'
 
-jobs:
-  linux-test:
-    name: Hello, world!
-    runs-on: ubuntu-24.04
-    steps:
-      - name: Just for fun
-        run: echo "Just for fun"
 
-  linux-working:
-    name: Linux (and Windows) build
+
+
+jobs:
+  linux-native:
+    name: Linux native build
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
@@ -61,7 +57,7 @@ jobs:
       - name: Install Ubuntu packages
         run: |
           sudo apt-get -y -yq update || true
-          sudo apt-get -y -yq --no-install-suggests --no-install-recommends install alien bash binutils-mingw-w64-i686 binutils-mingw-w64-x86-64 bison build-essential bzip2 coreutils curl deborphan dpkg fakeroot file g++ gawk gcc gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 git libc6-dev libc-bin libcurl4-openssl-dev libgtk-3-dev libreadline6-dev libsdl2-dev lsb-release make sed tar util-linux vim-common wget zip nsis
+          sudo apt-get -y -yq --no-install-suggests --no-install-recommends install alien bash bison build-essential bzip2 coreutils curl deborphan dpkg fakeroot file g++ gawk gcc git libc6-dev libc-bin libcurl4-openssl-dev libgtk-3-dev libreadline6-dev libsdl2-dev lsb-release make sed tar util-linux vim-common wget zip
 
       - name: List of all installed packages
         run: dpkg -l | cat || true
@@ -92,18 +88,13 @@ jobs:
           make RELEASE=yes OFFICIALBUILD=yes deb
           cp build/bin/*.deb build/bin/*.rpm .
           ls -l *.deb *.rpm
-          rm -fr xemu-deploy
-          build/deploy/before-deploy.sh xemu-deploy Linux
-
-      - name: GIT configuration for deployment
-        if: env.should_deploy == 'true'
-        run: |
-          git config --global user.name "GitHub Actions Xemu Linux Builder"
-          git config --global user.email "lgblgblgb@gmail.com"
 
       - name: Deployment (Linux)
         if: env.should_deploy == 'true'
         run: |
+          git config --global user.name "GitHub Actions Xemu Linux Builder"
+          git config --global user.email "lgblgblgb@gmail.com"
+          build/deploy/before-deploy.sh xemu-deploy Linux
           cd xemu-deploy
           touch .nojekyll
           pwd
@@ -117,15 +108,52 @@ jobs:
           git push --force --quiet "https://x-access-token:${{ secrets.XEMU_DEPLOY_TOKEN }}@github.com/lgblgblgb/xemu-binaries.git" "$TARGET_BRANCH:refs/heads/$TARGET_BRANCH"
           git log
           cd ..
-          rm -fr xemu-deploy
 
       - name: Announce deployment (Linux)
         if: env.should_deploy == 'true'
         run: echo "TODO" ; pwd
 
-      - name: Clean-up Linux build artifacts before Windows cross-compilation
+
+
+
+  linux-for-windows:
+    name: Linux for Windows build
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set Custom Build Variables
+        uses: ./.github/actions/set-custom-build-variables
+
+      - name: Deployment request status check
         if: env.should_deploy == 'true'
-        run: rm -f *.deb *.rpm build/bin/*.deb build/bin/*.rpm build/bin/*.native
+        run: echo "ENABLED (if you see this)"
+
+      - name: Current builder/repo info
+        run: |
+          echo "Running builder at `pwd` as `whoami`@`hostname` on `uname -a`"
+          echo "--- GIT INFO ---"
+          bash build/show-git-info | tee /tmp/show-git-info || true
+          echo "--- CURRENT DIRECTORY ---"
+          pwd
+          ls -la
+          echo "--- PARENT DIRECTORY ---"
+          ls -la ..
+
+      - name: Show shell variables
+        run: env | grep -vE 'SECRET|TOKEN|HOOK' || true
+
+      - name: Install Ubuntu packages
+        run: |
+          sudo apt-get -y -yq update || true
+          sudo apt-get -y -yq --no-install-suggests --no-install-recommends install alien bash binutils-mingw-w64-i686 binutils-mingw-w64-x86-64 bison build-essential bzip2 coreutils curl deborphan dpkg fakeroot file gawk gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 git lsb-release make sed tar util-linux vim-common wget zip nsis
+
+      - name: List of all installed packages
+        run: dpkg -l | cat || true
+
+      - name: Show build system info
+        run: bash build/show-sys-info
 
       - name: Installing Windows SDL2 cross-development components
         run: build/install-cross-win-mingw-sdl-on-linux.sh /usr/bin
@@ -160,7 +188,7 @@ jobs:
         if: env.should_deploy == 'true'
         run: for a in build/bin/*.win32 ; do ls -l $a ; i686-w64-mingw32-strip $a ; ls -l $a ; done
 
-      - name: Building ZIP acrhive (Windows, 64 bit)
+      - name: Building ZIP acrhive (64 bit)
         if: env.should_deploy == 'true'
         run: |
           rm -f build/bin/*.dll
@@ -168,7 +196,7 @@ jobs:
           build/zipper.sh build/bin xemu-binaries-win64.zip build/bin/*.dll build/bin/*.win64 README.md LICENSE AUTHORS
           cp build/bin/xemu-binaries-win64.zip .
 
-      - name: Building installer (Windows, 64 bit)
+      - name: Building installer (64 bit)
         if: env.should_deploy == 'true'
         run: |
           rm -f build/bin/*.dll
@@ -176,7 +204,7 @@ jobs:
           build/nsi-build-native.sh win64 `build/system-config win64 sdl2 dll`
           cp build/bin/install-xemu-win64.exe .
 
-      - name: Building ZIP archive (Windows, 32 bit)
+      - name: Building ZIP archive (32 bit)
         if: env.should_deploy == 'true'
         run: |
           rm -f build/bin/*.dll
@@ -184,7 +212,7 @@ jobs:
           build/zipper.sh build/bin xemu-binaries-win32.zip build/bin/*.dll build/bin/*.win32 README.md LICENSE AUTHORS
           cp build/bin/xemu-binaries-win32.zip .
 
-      - name: Building installer (Windows, 32 bit)
+      - name: Building installer (32 bit)
         if: env.should_deploy == 'true'
         run: |
           rm -f build/bin/*.dll
@@ -192,15 +220,12 @@ jobs:
           build/nsi-build-native.sh win32 `build/system-config win32 sdl2 dll`
           cp build/bin/install-xemu-win32.exe .
 
-      - name: Pre-deployment (Windows)
+      - name: Deployment
         if: env.should_deploy == 'true'
         run: |
-          rm -fr xemu-deploy
+          git config --global user.name "GitHub Actions Xemu Linux Builder"
+          git config --global user.email "lgblgblgb@gmail.com"
           build/deploy/before-deploy.sh xemu-deploy Windows
-
-      - name: Deployment (Windows)
-        if: env.should_deploy == 'true'
-        run: |
           cd xemu-deploy
           touch .nojekyll
           pwd
@@ -214,11 +239,13 @@ jobs:
           git push --force --quiet "https://x-access-token:${{ secrets.XEMU_DEPLOY_TOKEN }}@github.com/lgblgblgb/xemu-binaries.git" "$TARGET_BRANCH:refs/heads/$TARGET_BRANCH"
           git log
           cd ..
-          rm -fr xemu-deploy
 
-      - name: Announce deployment (Windows)
+      - name: Announce deployment
         if: env.should_deploy == 'true'
         run: echo "TODO" ; pwd
+
+
+
 
   macos:
     name: MacOS x86 build
@@ -259,10 +286,10 @@ jobs:
           ls -l `which sdl2-config` || true
           sdl2-config --version --prefix --cflags --libs --static-libs || true
 
-      - name: Configuring Xemu for Mac (x86 native target)
+      - name: Configuring Xemu for Mac
         run: make RELEASE=yes OFFICIALBUILD=yes MACMINVER=10.6 config
 
-      - name: Building Xemu for Mac (x86 native target)
+      - name: Building Xemu for Mac
         run: make -j 4 RELEASE=yes OFFICIALBUILD=yes MACMINVER=10.6
 
       - name: Mangle, strip and list of result binaries for Mac (x86 native target)
@@ -275,7 +302,7 @@ jobs:
       - name: Test run of MEGA65 emulator
         run: build/bin/xmega65.native -h || true
 
-      - name: Create packages to be deployed (MacOS)
+      - name: Create packages to be deployed
         if: env.should_deploy == 'true'
         run: |
           cp README.md LICENSE AUTHORS build/bin/
@@ -290,19 +317,13 @@ jobs:
           brew install coreutils
           which md5sum
           md5sum --version
-          echo "--- Before deploy ---"
-          rm -fr xemu-deploy
-          build/deploy/before-deploy.sh xemu-deploy MacOS
 
-      - name: GIT configuration for deployment
+      - name: Deployment
         if: env.should_deploy == 'true'
         run: |
           git config --global user.name "GitHub Actions Xemu Mac Builder"
           git config --global user.email "lgblgblgb@gmail.com"
-
-      - name: Deployment (MacOS)
-        if: env.should_deploy == 'true'
-        run: |
+          build/deploy/before-deploy.sh xemu-deploy MacOS
           cd xemu-deploy
           touch .nojekyll
           pwd
@@ -316,8 +337,7 @@ jobs:
           git push --force --quiet "https://x-access-token:${{ secrets.XEMU_DEPLOY_TOKEN }}@github.com/lgblgblgb/xemu-binaries.git" "$TARGET_BRANCH:refs/heads/$TARGET_BRANCH"
           git log
           cd ..
-          rm -fr xemu-deploy
 
-      - name: Announce deployment (MacOS)
+      - name: Announce deployment
         if: env.should_deploy == 'true'
         run: echo "TODO" ; pwd
