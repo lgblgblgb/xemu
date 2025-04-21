@@ -24,6 +24,13 @@ on:
 
 jobs:
   linux:
+    name: Hello, world!
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Just for fun
+        run: echo "Just for fun"
+
+  linux:
     name: Linux (and Windows) build
     runs-on: ubuntu-24.04
     steps:
