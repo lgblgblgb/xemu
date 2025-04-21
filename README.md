@@ -1,6 +1,6 @@
 # X-Emulators ~ "Xemu"
 
-[![Build Status](https://api.travis-ci.org/lgblgblgb/xemu.svg?branch=master)](https://travis-ci.org/lgblgblgb/xemu)
+[![Build Status](https://github.com/lgblgblgb/xemu/actions/workflows/main.yml/badge.svg?branch=next)](https://github.com/lgblgblgb/xemu/actions)
 [![Gitter](https://badges.gitter.im/lgblgblgb/xemu.svg)](https://gitter.im/lgblgblgb/xemu)
 [![Download](https://img.shields.io/badge/download-binaries-%236060FF)](https://github.lgb.hu/xemu)
 [![License: GPL-2.0](https://img.shields.io/github/license/lgblgblgb/xemu.svg)](./LICENSE)
