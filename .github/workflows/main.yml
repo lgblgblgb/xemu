@@ -112,6 +112,7 @@ jobs:
       - name: Announce deployment
         if: env.should_deploy == 'true'
         run: |
+          export CI_SYSTEM_OVERRIDE="Github Actions"
           export DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK="${{ secrets.DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK }}"
           export DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK="${{ secrets.DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK }}"
           build/deploy/discord-webhook.sh success "Ubuntu Linux DEB" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
@@ -246,6 +247,7 @@ jobs:
       - name: Announce deployment
         if: env.should_deploy == 'true'
         run: |
+          export CI_SYSTEM_OVERRIDE="Github Actions"
           export DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK="${{ secrets.DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK }}"
           export DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK="${{ secrets.DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK }}"
           build/deploy/discord-webhook.sh success "Windows" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
@@ -346,6 +348,7 @@ jobs:
       - name: Announce deployment
         if: env.should_deploy == 'true'
         run: |
+          export CI_SYSTEM_OVERRIDE="Github Actions"
           export DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK="${{ secrets.DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK }}"
           export DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK="${{ secrets.DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK }}"
           build/deploy/discord-webhook.sh success "MacOS(x86)" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true

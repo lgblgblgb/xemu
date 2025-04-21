@@ -153,7 +153,11 @@ MSG="$MSG :zap: See git commit [**\`${TRAVIS_COMMIT:0:7}\`**](<https://github.co
 if [ "$TRAVIS_JOB_WEB_URL" != "" ]; then
 	MSG="$MSG and the [build log](<${TRAVIS_JOB_WEB_URL}>)"
 fi
-MSG="${MSG}, built by ${BUILDER_CI}-CI"
+if [ "$CI_SYSTEM_OVERRIDE" == "" ]; then
+	MSG="${MSG}, built by ${BUILDER_CI}-CI"
+else
+	MSG="${MSG}, built by ${CI_SYSTEM_OVERRIDE}"
+fi
 MSG="${MSG}. :calendar: _${BOT_NAME_FUNNY} on behalf of <@${AUTHOR_DISCORD_ID}> at ${TIMESTAMP}_"
 
 
