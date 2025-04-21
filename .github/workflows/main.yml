@@ -22,7 +22,6 @@ on:
         required: false
         default: 'false'
 
-
 jobs:
   linux:
     name: Linux (and Windows) build
@@ -34,7 +33,7 @@ jobs:
       - name: Set Custom Build Variables
         uses: ./.github/actions/set-custom-build-variables
 
-      - name: Deployment request status
+      - name: Deployment request status check
         if: env.should_deploy == 'true'
         run: echo "ENABLED (if you see this)"
 
@@ -80,18 +79,47 @@ jobs:
       - name: Test run of MEGA65 emulator
         run: build/bin/xmega65.native -h || true
 
-      - name: Creating DEB package to be deployed
+      - name: Creating DEB package to be deployed (Linux)
         if: env.should_deploy == 'true'
         run: |
           make RELEASE=yes OFFICIALBUILD=yes deb
           cp build/bin/*.deb build/bin/*.rpm .
           ls -l *.deb *.rpm
+          rm -fr xemu-deploy
+          build/deploy/before-deploy.sh xemu-deploy Linux
 
       - name: GIT configuration for deployment
         if: env.should_deploy == 'true'
         run: |
           git config --global user.name "GitHub Actions Xemu Linux Builder"
-          git config --global user.email "actions@github.com"
+          git config --global user.email "lgblgblgb@gmail.com"
+
+      - name: Deployment (Linux)
+        if: env.should_deploy == 'true'
+        run: |
+          cd xemu-deploy
+          touch .nojekyll
+          pwd
+          ls -l
+          TARGET_BRANCH="binary-linux-${{ github.ref_name }}"
+          git init
+          git checkout --orphan "$TARGET_BRANCH"
+          git add .
+          git commit -m "Deploy from ${{ github.repository }}@${{ github.sha }}"
+          git status
+          git push --force --quiet "https://x-access-token:${{ secrets.XEMU_DEPLOY_TOKEN }}@github.com/lgblgblgb/xemu-binaries.git" "$TARGET_BRANCH:refs/heads/$TARGET_BRANCH"
+          git pull
+          git log
+          cd ..
+          rm -fr xemu-deploy
+
+      - name: Announce deployment (Linux)
+        if: env.should_deploy == 'true'
+        run: echo "TODO" ; pwd
+
+      - name: Clean-up Linux build artifacts before Windows cross-compilation
+        if: env.should_deploy == 'true'
+        run: rm -f *.deb *.rpm build/bin/*.deb build/bin/*.rpm build/bin/*.native
 
       - name: Installing Windows SDL2 cross-development components
         run: build/install-cross-win-mingw-sdl-on-linux.sh /usr/bin
@@ -126,36 +154,66 @@ jobs:
         if: env.should_deploy == 'true'
         run: for a in build/bin/*.win32 ; do ls -l $a ; i686-w64-mingw32-strip $a ; ls -l $a ; done
 
-      - name: Create packages to be deployed
-        if: env.should_deploy == 'truex'
+      - name: Building ZIP acrhive (Windows, 64 bit)
+        if: env.should_deploy == 'true'
         run: |
-          cp README.md LICENSE AUTHORS build/bin/
-          echo "--- Bulding ZIP acrhive ---"
-          build/zipper.sh build/bin xemu-binaries-osx.zip build/bin/*.dylib build/bin/*.native README.md LICENSE AUTHORS
-          cp build/bin/xemu-binaries-osx.zip .
-          ls -l *.zip
-          echo "--- Creating DMG distribution ---"
-          build/dmg-osx-creator.sh
-          echo "--- Before deploy ---"
-          build/deploy/before-deploy.sh xemu-deploy Linux
+          rm -f build/bin/*.dll
+          cp README.md LICENSE AUTHORS `x86_64-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
+          build/zipper.sh build/bin xemu-binaries-win64.zip build/bin/*.dll build/bin/*.win64 README.md LICENSE AUTHORS
+          cp build/bin/xemu-binaries-win64.zip .
 
-      - name: Deployment
-        if: env.should_deploy == 'truex'
+      - name: Building installer (Windows, 64 bit)
+        if: env.should_deploy == 'true'
         run: |
-          # Clone shared deployment repo
-          rm -rf /tmp/shared-deploy-repo
-          git clone --depth 1 --branch main https://x-access-token:${{ secrets.XEMU_DEPLOY_TOKEN }}@github.com/lgblgblgb/shared-deploy-repo.git /tmp/shared-deploy-repo
+          rm -f build/bin/*.dll
+          cp README.md LICENSE AUTHORS `x86_64-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
+          build/nsi-build-native.sh win64 `build/system-config win64 sdl2 dll` || true
+          cp build/bin/install-xemu-win64.exe . || true
 
-          # Clear and replace linux folder
-          rm -rf /tmp/shared-deploy-repo/linux
-          mkdir -p /tmp/shared-deploy-repo/linux
-          cp -r path/to/build/output/* /tmp/shared-deploy-repo/linux/
+      - name: Building ZIP archive (Windows, 32 bit)
+        if: env.should_deploy == 'true'
+        run: |
+          rm -f build/bin/*.dll
+          cp README.md LICENSE AUTHORS `i686-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
+          build/zipper.sh build/bin xemu-binaries-win32.zip build/bin/*.dll build/bin/*.win32 README.md LICENSE AUTHORS
+          cp build/bin/xemu-binaries-win32.zip .
 
-          # Commit and push!
-          cd /tmp/shared-deploy-repo
-          git add linux
-          git commit -m "Linux deployment from $GITHUB_REPOSITORY ($GITHUB_SHA)"
-          git push --force
+      - name: Building installer (Windows, 32 bit)
+        if: env.should_deploy == 'true'
+        run: |
+          rm -f build/bin/*.dll
+          cp README.md LICENSE AUTHORS `i686-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
+          build/nsi-build-native.sh win32 `build/system-config win32 sdl2 dll` || true
+          cp build/bin/install-xemu-win32.exe . || true
+
+      - name: Pre-deployment (Windows)
+        if: env.should_deploy == 'true'
+        run: |
+          rm -fr xemu-deploy
+          build/deploy/before-deploy.sh xemu-deploy Windows
+
+      - name: Deployment (Windows)
+        if: env.should_deploy == 'true'
+        run: |
+          cd xemu-deploy
+          touch .nojekyll
+          pwd
+          ls -l
+          TARGET_BRANCH="binary-windows-${{ github.ref_name }}"
+          git init
+          git checkout --orphan "$TARGET_BRANCH"
+          git add .
+          git commit -m "Deploy from ${{ github.repository }}@${{ github.sha }}"
+          git status
+          git push --force --quiet "https://x-access-token:${{ secrets.XEMU_DEPLOY_TOKEN }}@github.com/lgblgblgb/xemu-binaries.git" "$TARGET_BRANCH:refs/heads/$TARGET_BRANCH"
+          git pull
+          git log
+          cd ..
+          rm -fr xemu-deploy
+
+      - name: Announce deployment (Windows)
+        if: env.should_deploy == 'true'
+        run: echo "TODO" ; pwd
 
   macos:
     name: MacOS x86 build
@@ -167,7 +225,7 @@ jobs:
       - name: Set Custom Build Variables
         uses: ./.github/actions/set-custom-build-variables
 
-      - name: Deployment request status
+      - name: Deployment request status check
         if: env.should_deploy == 'true'
         run: echo "ENABLED (if you see this)"
 
@@ -212,7 +270,7 @@ jobs:
       - name: Test run of MEGA65 emulator
         run: build/bin/xmega65.native -h || true
 
-      - name: Create packages to be deployed
+      - name: Create packages to be deployed (MacOS)
         if: env.should_deploy == 'true'
         run: |
           cp README.md LICENSE AUTHORS build/bin/
@@ -228,31 +286,34 @@ jobs:
           which md5sum
           md5sum --version
           echo "--- Before deploy ---"
+          rm -fr xemu-deploy
           build/deploy/before-deploy.sh xemu-deploy MacOS
 
       - name: GIT configuration for deployment
         if: env.should_deploy == 'true'
         run: |
           git config --global user.name "GitHub Actions Xemu Mac Builder"
-          git config --global user.email "actions@github.com"
+          git config --global user.email "lgblgblgb@gmail.com"
 
-      - name: Deployment
+      - name: Deployment (MacOS)
         if: env.should_deploy == 'true'
         run: |
           cd xemu-deploy
           touch .nojekyll
           pwd
           ls -l
-          SRC_BRANCH="${{ github.ref_name }}"
-          TARGET_BRANCH="binary-osx-$SRC_BRANCH"
+          TARGET_BRANCH="binary-osx-${{ github.ref_name }}"
           git init
           git checkout --orphan "$TARGET_BRANCH"
           git add .
           git commit -m "Deploy from ${{ github.repository }}@${{ github.sha }}"
           git status
           git push --force --quiet "https://x-access-token:${{ secrets.XEMU_DEPLOY_TOKEN }}@github.com/lgblgblgb/xemu-binaries.git" "$TARGET_BRANCH:refs/heads/$TARGET_BRANCH"
+          git pull
+          git log
           cd ..
+          rm -fr xemu-deploy
 
-      - name: Announce deployment
+      - name: Announce deployment (MacOS)
         if: env.should_deploy == 'true'
         run: echo "TODO" ; pwd
