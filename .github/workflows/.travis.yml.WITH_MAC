@@ -1,4 +1,4 @@
-dist: focal
+dist: jammy
 sudo: required
 language: c
 
@@ -49,7 +49,7 @@ matrix:
         - build/show-git-info
       script:
         - set -e
-        - make -j 2 RELEASE=yes OFFICIALBUILD=yes
+        - make -j 3 RELEASE=yes OFFICIALBUILD=yes
         - set +e
         - for a in build/bin/*.native ; do strip $a ; ls -l $a ; done
         - set -e
@@ -61,7 +61,13 @@ matrix:
         - uptime ; pwd ; ls -l
       before_deploy:
         - build/deploy/before-deploy.sh xemu-deploy Linux
+        - yes | gem update --system --force
+        - gem install bundler
+        - gem install uri
+        - gem install logger
+        - gem install faraday -v 2.12.0
       deploy:
+        dpl_version: 2.0.5.2.beta.1
         provider: pages
         local_dir: xemu-deploy
         skip_cleanup: true
@@ -115,7 +121,7 @@ matrix:
         - build/show-git-info
       script:
         - set -e
-        - make -j 2 ARCH=win64 RELEASE=yes OFFICIALBUILD=yes
+        - make -j 3 ARCH=win64 RELEASE=yes OFFICIALBUILD=yes
         - set +e
         - for a in build/bin/*.win64 ; do x86_64-w64-mingw32-strip $a ; ls -l $a ; done
         - cp README.md LICENSE AUTHORS `x86_64-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
@@ -124,7 +130,7 @@ matrix:
         - build/nsi-build-native.sh win64 `build/system-config win64 sdl2 dll` || true
         - cp build/bin/install-xemu-win64.exe . || true
         - set -e
-        - make -j 2 ARCH=win32 RELEASE=yes OFFICIALBUILD=yes
+        - make -j 3 ARCH=win32 RELEASE=yes OFFICIALBUILD=yes
         - set +e
         - for a in build/bin/*.win32 ; do i686-w64-mingw32-strip $a ; ls -l $a ; done
         - cp README.md LICENSE AUTHORS `i686-w64-mingw32-sdl2-config --prefix`/bin/*.dll build/bin/
@@ -135,7 +141,13 @@ matrix:
         - uptime ; pwd ; ls -l
       before_deploy:
         - build/deploy/before-deploy.sh xemu-deploy Windows
+        - yes | gem update --system --force
+        - gem install bundler
+        - gem install uri
+        - gem install logger
+        - gem install faraday -v 2.12.0
       deploy:
+        dpl_version: 2.0.5.2.beta.1
         provider: pages
         local_dir: xemu-deploy
         skip_cleanup: true
@@ -174,7 +186,7 @@ matrix:
         - build/show-git-info
       script:
         - set -e
-        - make -j 2 RELEASE=yes OFFICIALBUILD=yes MACMINVER=10.6
+        - make -j 3 RELEASE=yes OFFICIALBUILD=yes MACMINVER=10.6
         - set +e
         - for a in build/bin/*.native ; do build/mangle_dylib_osx.sh $a ; strip $a ; done
         - build/bin/xmega65.native --help || true
@@ -186,6 +198,7 @@ matrix:
         - build/dmg-osx-creator.sh
         - build/deploy/before-deploy.sh xemu-deploy MacOS
       deploy:
+        dpl_version: 1.10.16
         provider: pages
         local_dir: xemu-deploy
         skip_cleanup: true
