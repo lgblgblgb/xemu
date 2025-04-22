@@ -63,7 +63,7 @@ jobs:
         run: dpkg -l | cat || true
 
       - name: Show build system info
-        run: bash build/show-sys-info
+        run: bash build/show-sys-info.sh
 
       - name: Show native SDL2 status
         run: |
@@ -91,15 +91,16 @@ jobs:
 
       - name: Deployment
         if: env.should_deploy == 'true'
+        env:
+          TARGET_BRANCH: binary-linux-${{ github.ref_name }}
         run: |
-          git config --global user.name "GitHub Actions Xemu Linux Builder"
+          git config --global user.name "Xemu Native Linux Builder"
           git config --global user.email "lgblgblgb@gmail.com"
           build/deploy/before-deploy.sh xemu-deploy Linux
           cd xemu-deploy
           touch .nojekyll
           pwd
           ls -l
-          TARGET_BRANCH="binary-linux-${{ github.ref_name }}"
           git init
           git checkout --orphan "$TARGET_BRANCH"
           git add .
@@ -111,11 +112,11 @@ jobs:
 
       - name: Announce deployment
         if: env.should_deploy == 'true'
-        run: |
-          export CI_SYSTEM_OVERRIDE="Github Actions"
-          export DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK="${{ secrets.DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK }}"
-          export DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK="${{ secrets.DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK }}"
-          build/deploy/discord-webhook.sh success "Ubuntu Linux DEB" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
+        env:
+          CI_SYSTEM_OVERRIDE: Github Actions
+          DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK: ${{ secrets.DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK }}
+          DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK: ${{ secrets.DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK }}
+        run: build/deploy/discord-webhook.sh success "Ubuntu Linux DEB" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
 
 
 
@@ -157,7 +158,7 @@ jobs:
         run: dpkg -l | cat || true
 
       - name: Show build system info
-        run: bash build/show-sys-info
+        run: bash build/show-sys-info.sh
 
       - name: Installing Windows SDL2 cross-development components
         run: build/install-cross-win-mingw-sdl-on-linux.sh /usr/bin
@@ -226,15 +227,16 @@ jobs:
 
       - name: Deployment
         if: env.should_deploy == 'true'
+        env:
+          TARGET_BRANCH: binary-windows-${{ github.ref_name }}
         run: |
-          git config --global user.name "GitHub Actions Xemu Linux Builder"
+          git config --global user.name "Xemu Linux Windows Builder"
           git config --global user.email "lgblgblgb@gmail.com"
           build/deploy/before-deploy.sh xemu-deploy Windows
           cd xemu-deploy
           touch .nojekyll
           pwd
           ls -l
-          TARGET_BRANCH="binary-windows-${{ github.ref_name }}"
           git init
           git checkout --orphan "$TARGET_BRANCH"
           git add .
@@ -246,11 +248,11 @@ jobs:
 
       - name: Announce deployment
         if: env.should_deploy == 'true'
-        run: |
-          export CI_SYSTEM_OVERRIDE="Github Actions"
-          export DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK="${{ secrets.DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK }}"
-          export DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK="${{ secrets.DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK }}"
-          build/deploy/discord-webhook.sh success "Windows" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
+        env:
+          CI_SYSTEM_OVERRIDE: Github Actions
+          DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK: ${{ secrets.DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK }}
+          DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK: ${{ secrets.DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK }}
+        run: build/deploy/discord-webhook.sh success "Windows" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
 
 
 
@@ -286,17 +288,17 @@ jobs:
         run: build/install-dependencies-osx.sh
 
       - name: Show build system info
-        run: bash build/show-sys-info
+        run: bash build/show-sys-info.sh
 
       - name: Show Mac SDL2 status
         run: |
           ls -l `which sdl2-config` || true
           sdl2-config --version --prefix --cflags --libs --static-libs || true
 
-      - name: Configuring Xemu for Mac
+      - name: Configuring Xemu
         run: make RELEASE=yes OFFICIALBUILD=yes MACMINVER=10.6 config
 
-      - name: Building Xemu for Mac
+      - name: Building Xemu
         run: make -j 4 RELEASE=yes OFFICIALBUILD=yes MACMINVER=10.6
 
       - name: Mangle, strip and list of result binaries for Mac (x86 native target)
@@ -309,17 +311,21 @@ jobs:
       - name: Test run of MEGA65 emulator
         run: build/bin/xmega65.native -h || true
 
-      - name: Create packages to be deployed
+      - name: Create ZIP archive
         if: env.should_deploy == 'true'
         run: |
           cp README.md LICENSE AUTHORS build/bin/
-          echo "--- Bulding ZIP acrhive ---"
           build/zipper.sh build/bin xemu-binaries-osx.zip build/bin/*.dylib build/bin/*.native README.md LICENSE AUTHORS
           cp build/bin/xemu-binaries-osx.zip .
           ls -l *.zip
-          echo "--- Creating DMG distribution ---"
-          build/dmg-osx-creator.sh
-          echo "--- Check md5sum utility ---"
+
+      - name: Create DMG installer
+        if: env.should_deploy == 'true'
+        run: build/dmg-osx-creator.sh
+
+      - name: Install md5sum utility
+        if: env.should_deploy == 'true'
+        run: |
           which md5sum || true
           brew install coreutils
           which md5sum
@@ -327,15 +333,16 @@ jobs:
 
       - name: Deployment
         if: env.should_deploy == 'true'
+        env:
+          TARGET_BRANCH: binary-osx-${{ github.ref_name }}
         run: |
-          git config --global user.name "GitHub Actions Xemu Mac Builder"
+          git config --global user.name "Xemu Native Mac Builder"
           git config --global user.email "lgblgblgb@gmail.com"
           build/deploy/before-deploy.sh xemu-deploy MacOS
           cd xemu-deploy
           touch .nojekyll
           pwd
           ls -l
-          TARGET_BRANCH="binary-osx-${{ github.ref_name }}"
           git init
           git checkout --orphan "$TARGET_BRANCH"
           git add .
@@ -347,8 +354,8 @@ jobs:
 
       - name: Announce deployment
         if: env.should_deploy == 'true'
-        run: |
-          export CI_SYSTEM_OVERRIDE="Github Actions"
-          export DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK="${{ secrets.DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK }}"
-          export DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK="${{ secrets.DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK }}"
-          build/deploy/discord-webhook.sh success "MacOS(x86)" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
+        env:
+          CI_SYSTEM_OVERRIDE: Github Actions
+          DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK: ${{ secrets.DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK }}
+          DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK: ${{ secrets.DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK }}
+        run: build/deploy/discord-webhook.sh success "MacOS(x86)" ANY:DISCORD_XEMU_SERVER_TEST_CHANNEL_WEBHOOK master,next:DISCORD_MEGA65_SERVER_XEMU_CHANNEL_WEBHOOK || true
