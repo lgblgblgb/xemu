@@ -94,22 +94,13 @@ jobs:
         env:
           TARGET_BRANCH: binary-linux-${{ github.ref_name }}
           XEMU_DEPLOY_TOKEN: ${{ secrets.XEMU_DEPLOY_TOKEN }}
+          COMMIT_MESSAGE: Deploy from ${{ github.repository }}@${{ github.sha }}
         run: |
-          echo "Deployment target branch is: $TARGET_BRANCH"
           git config --global user.name "Xemu Native Linux Builder"
           git config --global user.email "lgblgblgb@gmail.com"
           build/deploy/before-deploy.sh xemu-deploy Linux
           cd xemu-deploy
-          touch .nojekyll
-          pwd
-          ls -l
-          git init
-          git checkout --orphan "$TARGET_BRANCH"
-          git add .
-          git commit -m "Deploy from ${{ github.repository }}@${{ github.sha }}"
-          git status
-          git push --force --quiet "https://x-access-token:$XEMU_DEPLOY_TOKEN@github.com/lgblgblgb/xemu-binaries.git" "$TARGET_BRANCH:refs/heads/$TARGET_BRANCH"
-          git log
+          ../build/deploy/git-deploy-forced-push.sh
           cd ..
 
       - name: Announce deployment
@@ -232,22 +223,13 @@ jobs:
         env:
           TARGET_BRANCH: binary-windows-${{ github.ref_name }}
           XEMU_DEPLOY_TOKEN: ${{ secrets.XEMU_DEPLOY_TOKEN }}
+          COMMIT_MESSAGE: Deploy from ${{ github.repository }}@${{ github.sha }}
         run: |
-          echo "Deployment target branch is: $TARGET_BRANCH"
           git config --global user.name "Xemu Linux Windows Builder"
           git config --global user.email "lgblgblgb@gmail.com"
           build/deploy/before-deploy.sh xemu-deploy Windows
           cd xemu-deploy
-          touch .nojekyll
-          pwd
-          ls -l
-          git init
-          git checkout --orphan "$TARGET_BRANCH"
-          git add .
-          git commit -m "Deploy from ${{ github.repository }}@${{ github.sha }}"
-          git status
-          git push --force --quiet "https://x-access-token:$XEMU_DEPLOY_TOKEN@github.com/lgblgblgb/xemu-binaries.git" "$TARGET_BRANCH:refs/heads/$TARGET_BRANCH"
-          git log
+          ../build/deploy/git-deploy-forced-push.sh
           cd ..
 
       - name: Announce deployment
@@ -340,22 +322,13 @@ jobs:
         env:
           TARGET_BRANCH: binary-osx-${{ github.ref_name }}
           XEMU_DEPLOY_TOKEN: ${{ secrets.XEMU_DEPLOY_TOKEN }}
+          COMMIT_MESSAGE: Deploy from ${{ github.repository }}@${{ github.sha }}
         run: |
-          echo "Deployment target branch is: $TARGET_BRANCH"
           git config --global user.name "Xemu Native Mac Builder"
           git config --global user.email "lgblgblgb@gmail.com"
           build/deploy/before-deploy.sh xemu-deploy MacOS
           cd xemu-deploy
-          touch .nojekyll
-          pwd
-          ls -l
-          git init
-          git checkout --orphan "$TARGET_BRANCH"
-          git add .
-          git commit -m "Deploy from ${{ github.repository }}@${{ github.sha }}"
-          git status
-          git push --force --quiet "https://x-access-token:$XEMU_DEPLOY_TOKEN@github.com/lgblgblgb/xemu-binaries.git" "$TARGET_BRANCH:refs/heads/$TARGET_BRANCH"
-          git log
+          ../build/deploy/git-deploy-forced-push.sh
           cd ..
 
       - name: Announce deployment
