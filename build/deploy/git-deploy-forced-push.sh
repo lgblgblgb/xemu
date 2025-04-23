@@ -1,4 +1,5 @@
 #!/bin/bash
+# (C)2025 Gabor Lenart aka. LGB
 
 if [ "$TARGET_BRANCH" == "" ]; then
 	echo "TARGET_BRANCH is empty" >&2

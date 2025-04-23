@@ -52,7 +52,7 @@ jobs:
           ls -la ..
 
       - name: Show shell variables
-        run: env | grep -Evi 'SECRET|TOKEN|HOOK' || true
+        run: env | grep -Evi 'SECRET|TOKEN|HOOK|SECURE' || true
 
       - name: Install Ubuntu packages
         run: |
@@ -140,7 +140,7 @@ jobs:
           ls -la ..
 
       - name: Show shell variables
-        run: env | grep -Evi 'SECRET|TOKEN|HOOK' || true
+        run: env | grep -Evi 'SECRET|TOKEN|HOOK|SECURE' || true
 
       - name: Install Ubuntu packages
         run: |
@@ -260,7 +260,7 @@ jobs:
         run: |
           echo "Running builder at `pwd` as `whoami`@`hostname` on `uname -a`"
           echo "--- GIT INFO ---"
-          bash build/show-git-info || true
+          bash build/show-git-info | tee /tmp/show-git-info || true
           echo "--- CURRENT DIRECTORY ---"
           pwd
           ls -la
@@ -268,7 +268,7 @@ jobs:
           ls -la ..
 
       - name: Show shell variables
-        run: env | grep -Evi 'SECRET|TOKEN|HOOK' || true
+        run: env | grep -Evi 'SECRET|TOKEN|HOOK|SECURE' || true
 
       - name: Install build/deployment dependencies
         run: build/install-dependencies-osx.sh

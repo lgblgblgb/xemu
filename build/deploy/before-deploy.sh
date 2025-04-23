@@ -31,9 +31,9 @@ cat build/objs/cdate.data > $TARGET/versioninfo
 	echo "* **BUILD_OS = ($TRAVIS_OS_NAME) `uname -a`**"
 	echo "* **BUILD_TARGET = $ARCH**"
 	echo "* **BUILD_UPTIME = `uptime`**"
-	env | grep '^TRAVIS_' | grep -v '=$' | grep -vi secure | sort | sed 's/=/ = /' | sed 's/^/* /'
+	env | grep -E '^(TRAVIS|GITHUB)_' | grep -v '=$' | grep -Evi 'secure|hook|secret|token|path' | sort | sed 's/=/ = /' | sed 's/^/* /'
 	echo
-	echo "## Commit log (last 25)"
+	echo "## Commit log"
 	echo
 	git log -25
 ) > $TARGET/README.md
