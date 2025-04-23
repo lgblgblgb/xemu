@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -369,6 +369,7 @@ void clear_emu_events ( void )
 void input_toggle_joy_emu ( void )
 {
 	c64_toggle_joy_emu();
+	configdb.joyport = joystick_emu;
 	OSD(-1, -1, "Joystick emulation on port #%d", joystick_emu);
 }
 
@@ -482,7 +483,6 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 #endif
 	;
 	DEBUGKBD("KBD: HWA: pos = %d sdl_key = %d, pressed = %d, handled = %d" NL, pos, key, pressed, handled);
-	static int old_joystick_emu_port;	// used to remember emulated joy port, as with mouse grab, we need to switch to port-1, and we want to restore user's one on leaving grab mode
 	if (pressed) {
 		// check if we have the ALT-TAB trap triggered (TAB is pressed now, and ALT is hold)
 		if (key == SDL_SCANCODE_TAB && (modkeys & MODKEY_CTRL)) {
@@ -508,23 +508,32 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 			last_poscode_seen = pos;
 		}
 		// Also check for special, emulator-related hot-keys
-		if (key == SDL_SCANCODE_F10) {
-			reset_mega65_asked();
+		if (pos == XEMU_EVENT_RESET) {	// was hard-coded to be SDL_SCANCODE_F10 before
+			reset_mega65(
+				RESET_MEGA65_ASK | (
+					((modkeys & (MODKEY_LSHIFT | MODKEY_RSHIFT))) ?	// this is BAD, the common but bad hack to check emu keymap to get modkey not the native ;-P
+					RESET_MEGA65_HARD :
+					configdb.resethotkeytype
+				)
+			);
 		} else if (key == SDL_SCANCODE_KP_ENTER) {
 			input_toggle_joy_emu();
 		} else if (((modkeys & (MODKEY_LSHIFT | MODKEY_RSHIFT)) == (MODKEY_LSHIFT | MODKEY_RSHIFT)) && set_mouse_grab(SDL_FALSE, 0)) {
 			DEBUGPRINT("UI: mouse grab cancelled" NL);
-			joystick_emu = old_joystick_emu_port;
 		}
 	} else {
 		if (pos == RESTORE_KEY_POS)
 			restore_is_held = 0;
 		if (pos == -2 && key == 0) {	// special case pos = -2, key = 0, handled = mouse button (which?) and release event!
-			if ((handled == SDL_BUTTON_LEFT) && set_mouse_grab(SDL_TRUE, 0)) {
-				OSD(-1, -1, " Mouse grab activated. Press \n both SHIFTs together to cancel.");
-				DEBUGPRINT("UI: mouse grab activated" NL);
-				old_joystick_emu_port = joystick_emu;
-				joystick_emu = 1;
+			if (handled == SDL_BUTTON_LEFT) {
+				if (configdb.nomouseemu) {
+					OSD(-1, -1, "Mouse emulation is disabled.\nCannot enter mouse grab mode.");
+				} else {
+					if (set_mouse_grab(SDL_TRUE, 0)) {
+						OSD(-1, -1, "Mouse grab activated. Press\nboth SHIFTs together to cancel.");
+						DEBUGPRINT("UI: mouse grab activated" NL);
+					}
+				}
 			}
 			if (handled == SDL_BUTTON_RIGHT) {
 				ui_enter();
@@ -537,26 +546,32 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 
 Uint8 get_mouse_x_via_sid ( void )
 {
-	static Uint8 result = 0;
 	if (is_mouse_grab()) {
+		static Uint8 result = 0;
 		static int mouse_x = 0;
 		mouse_x = (mouse_x + (hid_read_mouse_rel_x(-23, 23) / 3)) & 0x3F;
 		DEBUG("MOUSE: X is %d, result byte is %d" NL, mouse_x, result);
 		result = mouse_x << 1;
+		return result;
 	}
+	const Uint8 result = configdb.nomouseemu ? 0xFF : 0x00;
+	DEBUG("MOUSE: X query without mouse-grab is $%02X" NL, result);
 	return result;
 }
 
 
 Uint8 get_mouse_y_via_sid ( void )
 {
-	static Uint8 result = 0;
 	if (is_mouse_grab()) {
+		static Uint8 result = 0;
 		static int mouse_y = 0;
 		mouse_y = (mouse_y - (hid_read_mouse_rel_y(-23, 23) / 3)) & 0x3F;
 		DEBUG("MOUSE: Y is %d, result byte is %d" NL, mouse_y, result);
 		result = mouse_y << 1;
+		return result;
 	}
+	const Uint8 result = configdb.nomouseemu ? 0xFF : 0x00;
+	DEBUG("MOUSE: Y query without mouse-grab is $%02X" NL, result);
 	return result;
 }
 

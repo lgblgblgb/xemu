@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2017-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2017-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -48,6 +48,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 // 512K is the max "main" RAM. Currently only 384K is used by M65. We want to make sure, the _total_ size is power of 2, so we can protect accesses with simple bit masks as a last-resort-protection
 Uint8 main_ram[512 << 10];
+static Uint8 main_ram_written[0x1F800U];
 // 32K of colour RAM. VIC-IV can see this as for colour information only. The first 2K can be seen at the last 2K of
 // the chip-RAM. Also, the first 1 or 2K can be seen in the C64-style I/O area too, at $D800
 Uint8 colour_ram[0x8000];
@@ -162,10 +163,36 @@ static Uint32 policy4k[0x10];		// memory policy with MAP taken account (the real
 static Uint8 zero_page_reader ( const Uint32 addr32 );
 static void  zero_page_writer ( const Uint32 addr32, const Uint8 data );
 
+
+static void checked_reader_warning ( const Uint32 addr32 )
+{
+	DEBUGPRINT("MEM: DEBUG: main RAM at linear address $%X has been read without prior write; PC=$%04X [$%X]" NL, addr32, cpu65.pc, memory_cpu_addr_to_linear(cpu65.pc, NULL));
+}
+
+
+static Uint8 zero_page_checked_reader ( const Uint32 addr32 ) {
+	if (!main_ram_written[addr32])
+		checked_reader_warning(addr32);
+	return zero_page_reader(addr32);
+}
+static void  zero_page_checked_writer ( const Uint32 addr32, const Uint8 data ) {
+	main_ram_written[addr32] = 1;
+	zero_page_writer(addr32, data);
+}
+
 static Uint8 main_ram_reader ( const Uint32 addr32 ) {
 	return main_ram[addr32];
 }
 static void  main_ram_writer ( const Uint32 addr32, const Uint8 data ) {
+	main_ram[addr32] = data;
+}
+static Uint8 main_ram_checked_reader ( const Uint32 addr32 ) {
+	if (!main_ram_written[addr32])
+		checked_reader_warning(addr32);
+	return main_ram[addr32];
+}
+static void  main_ram_checked_writer ( const Uint32 addr32, const Uint8 data ) {
+	main_ram_written[addr32] = 1;
 	main_ram[addr32] = data;
 }
 static void  shared_main_ram_writer ( const Uint32 addr32, const Uint8 data ) {
@@ -316,7 +343,7 @@ static const struct mem_map_st *mem_map_hints[MEM_HINT_SLOTS];
 // * Every areas (other than the first) must start on address which is the previous one's last one PLUS 1
 // * The first entry must start at address 0
 // * The last entry must be $10000000 - $FFFFFFFF with type MEM_SLOT_TYPE_IMPOSSIBLE as a safe-guard
-static struct mem_map_st mem_map[] = {
+static const struct mem_map_st mem_map[] = {
 	{ 0x00000000U, 0x0001F7FFU, MEM_SLOT_TYPE_MAIN_RAM	}, // OLD memory model used 0-FF as "ZP" to handle CPU I/O port. But now it's VIRTUAL and only exists in CPU's view not in mem-map!
 	{ 0x0001F800U, 0x0001FFFFU, MEM_SLOT_TYPE_SHARED_RAM	}, // "shared" area, 2K of coulour RAM [C65 legacy], b/c of performance, we must distribute between both of normal and colour RAM
 	{ 0x00020000U, 0x0003FFFFU, MEM_SLOT_TYPE_ROM		}, // though it's called ROM, it can be normal RAM, if "ROM write protection" is off
@@ -348,6 +375,30 @@ static struct mem_map_st mem_map[] = {
 
 static XEMU_INLINE void slot_assignment_postprocessing ( const Uint32 slot )
 {
+	if (XEMU_UNLIKELY(configdb.ramcheckread && mem_slot_rd_addr32[slot] < 0x1F800U)) {
+		if (mem_slot_rd_func[slot] == main_ram_reader) {
+#ifdef			MEM_USE_DATA_POINTERS
+			mem_slot_rd_data[slot] = NULL;
+#endif
+			mem_slot_rd_func[slot] = main_ram_checked_reader;
+		} else if (mem_slot_rd_func[slot] == zero_page_reader) {
+#ifdef			MEM_USE_DATA_POINTERS
+			mem_slot_rd_data[slot] = NULL;
+#endif
+			mem_slot_rd_func[slot] = zero_page_checked_reader;
+		}
+		if (mem_slot_wr_func[slot] == main_ram_writer) {
+#ifdef			MEM_USE_DATA_POINTERS
+			mem_slot_wr_data[slot] = NULL;
+#endif
+			mem_slot_wr_func[slot] = main_ram_checked_writer;
+		} else if (mem_slot_wr_func[slot] == zero_page_writer) {
+#ifdef			MEM_USE_DATA_POINTERS
+			mem_slot_wr_data[slot] = NULL;
+#endif
+			mem_slot_wr_func[slot] = zero_page_checked_writer;
+		}
+	}
 	mem_slot_rd_func_real[slot] = mem_slot_rd_func[slot];
 	mem_slot_wr_func_real[slot] = mem_slot_wr_func[slot];
 #ifdef	MEM_WATCH_SUPPORT
@@ -696,7 +747,7 @@ int memory_cpu_addr_to_desc ( const Uint16 cpu_addr, char *p, const unsigned int
 		default:
 			if (policy >= BANK_POLICY_INVALID)
 				goto error;
-			return snprintf(p, n, "%X", policy + cpu_addr);
+			return snprintf(p, n, "%X", (policy & 0xFF00000U) | ((policy + cpu_addr) & 0xFFFFFU));
 	}
 error:
 	FATAL("Invalid bank_policy4k[%u >> 12] = $%X in %s()!", cpu_addr, policy, __func__);
@@ -749,24 +800,28 @@ void cpu65_do_aug_callback ( void )
 	| MAP   | MAP   | MAP   | MAP   | UPPER | UPPER | UPPER | UPPER | Z
 	| BLK7  | BLK6  | BLK5  | BLK4  | OFF19 | OFF18 | OFF17 | OFF16 |
 	+-------+-------+-------+-------+-------+-------+-------+-------+
-	-- C65GS extension: Set the MegaByte register for low and high mobies
-	-- so that we can address all 256MB of RAM.
-	if reg_x = x"0f" then
-		reg_mb_low <= reg_a;
-	end if;
-	if reg_z = x"0f" then
-		reg_mb_high <= reg_y;
-	end if; */
+	*/
 	cpu65.cpu_inhibit_interrupts = 1;	// disable interrupts till the next "EOM" (ie: NOP) opcode
 	DEBUG("CPU: MAP opcode, input A=$%02X X=$%02X Y=$%02X Z=$%02X" NL, cpu65.a, cpu65.x, cpu65.y, cpu65.z);
-	map_offset_low	= (cpu65.a <<   8) | ((cpu65.x & 15) << 16);	// offset of lower half (blocks 0-3)
-	map_offset_high	= (cpu65.y <<   8) | ((cpu65.z & 15) << 16);	// offset of higher half (blocks 4-7)
-	map_mask	= (cpu65.z & 0xF0) | ( cpu65.x >> 4);		// "is mapped" mask for blocks (1 bit for each)
-	// M65 specific "MB" (megabyte) selector "mode":
-	if (cpu65.x == 0x0F)
+	if (cpu65.x == 0x0F) {
 		map_megabyte_low  = (int)cpu65.a << 20;
-	if (cpu65.z == 0x0F)
+	} else {
+		map_offset_low	= (cpu65.a << 8) | ((cpu65.x & 15) << 16);	// offset of lower half (blocks 0-3)
+		map_mask	= (map_mask & 0xF0) | (cpu65.x >> 4);		// "is mapped" mask for the lower half
+	}
+	if (cpu65.z == 0x0F) {
 		map_megabyte_high = (int)cpu65.y << 20;
+		if (in_hypervisor) {
+			DEBUG("MEM: warning, altering MB selection for upper 32K memory mapping in hypervisor mode at PC=$%04X" NL, cpu65.pc);
+		}
+	} else {
+		if (!in_hypervisor) {
+			map_offset_high	= (cpu65.y << 8) | ((cpu65.z & 15) << 16);	// offset of higher half (blocks 4-7)
+			map_mask	= (map_mask & 0x0F) | (cpu65.z & 0xF0);		// "is mapped" mask for the upper half
+		} else {
+			DEBUG("MEM: avoiding to alter upper 32K memory mapping in hypervisor mode at PC=$%04X" NL, cpu65.pc);
+		}
+	}
 	DEBUG("MEM: applying new memory configuration because of MAP CPU opcode" NL);
 	DEBUG("LOW -OFFSET = $%03X, MB = $%02X" NL, map_offset_low , map_megabyte_low  >> 20);
 	DEBUG("HIGH-OFFSET = $%03X, MB = $%02X" NL, map_offset_high, map_megabyte_high >> 20);
@@ -934,6 +989,7 @@ void memory_init (void )
 	// Initiailize memory content with something ...
 	// NOTE: make sure the first 2K of colour_ram is the **SAME** as the 2K part of main_ram at offset $1F800
 	memset(main_ram,   0x00, sizeof main_ram);
+	memory_reset_unwritten_debug_stat();
 	memset(colour_ram, 0x00, sizeof colour_ram);
 	memset(attic_ram,  0xFF, sizeof attic_ram);
 	DEBUGPRINT("MEM: memory decoder initialized, %uK fast, %uK attic, %uK colour, %uK font RAM" NL,
@@ -942,6 +998,12 @@ void memory_init (void )
 		SIZEOF_KILO(colour_ram),
 		SIZEOF_KILO(char_ram)
 	);
+}
+
+
+void memory_reset_unwritten_debug_stat ( void )
+{
+	memset(main_ram_written, 0x00, sizeof main_ram_written);
 }
 
 

@@ -75,6 +75,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 //#define C65_FAKE_TYPING_LOAD_SEQS
 #define C65_KEYBOARD
 #define HID_KBD_MAP_CFG_SUPPORT
+#define HID_KBD_NO_F_HOTKEYS
 
 #ifndef XEMU_ARCH_HTML
 #define XEMU_USE_LODEPNG

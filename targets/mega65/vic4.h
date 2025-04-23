@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Copyright (C)2020-2022 Hernán Di Pietro <hernan.di.pietro@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -110,7 +110,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define REG_LINESTEP			vic_registers[0x58]
 #define REG_LINESTEP_U8			vic_registers[0x59]
 #define REG_CHARXSCALE			vic_registers[0x5A]
-#define REG_CHRCOUNT			vic_registers[0x5E]
+#define REG_CHRCOUNT			(vic_registers[0x5E] + ((vic_registers[0x63] & 0x30) << 4))
 #define REG_SCRNPTR_B0			vic_registers[0x60]
 #define REG_SCRNPTR_B1			vic_registers[0x61]
 #define REG_SCRNPTR_B2			vic_registers[0x62]
@@ -262,10 +262,11 @@ extern void  vic_init ( void );
 extern void  vic_reset ( void );
 extern void  vic_write_reg ( unsigned int addr, Uint8 data );
 extern Uint8 vic_read_reg  ( unsigned int addr );
-extern int   vic4_render_scanline ( void );
+extern bool  vic4_render_scanline ( void );
 extern void  vic4_open_frame_access ( void );
 extern void  vic4_close_frame_access ( void );
 extern void  vic4_set_videostd ( const int mode, const char *comment );
+extern void  vic4_set_errata_level ( const Uint8 level );
 
 extern Uint8*vic4_query_screen_address ( void );
 extern Uint8*vic4_query_colour_address ( void );
@@ -274,5 +275,6 @@ extern int   vic4_query_screen_height ( void );
 extern char *vic4_textshot ( void );
 extern int   vic4_textinsert ( const char *text );
 extern void  vic4_set_emulation_colour_effect ( int val );
+extern void  vic4_freerun_until_frame_close ( void );
 
 #endif

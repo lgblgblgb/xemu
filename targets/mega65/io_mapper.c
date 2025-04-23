@@ -1,7 +1,7 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    I/O decoding part (used by memory_mapper.h and DMA mainly)
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -37,6 +37,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
 Uint8  D6XX_registers[0x100];		// mega65 specific D6XX range, excluding the UART part (not used here!)
 Uint8  D7XX[0x100];			// FIXME: hack for future M65 stuffs like ALU!
+static Uint8 hw_errata_level = 0;
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
 int    cpu_mega65_opcodes = 0;	// used by the CPU emu as well!
 static int bigmult_valid_result = 0;
@@ -90,6 +91,27 @@ static XEMU_INLINE void write_colour_ram ( const Uint32 addr, const Uint8 data )
 }
 
 
+void set_hw_errata_level ( const Uint8 desired_level, const char *reason )
+{
+	const Uint8 level = desired_level > HW_ERRATA_MAX_LEVEL ? HW_ERRATA_MAX_LEVEL : desired_level;
+	if (level == desired_level && level == hw_errata_level)
+		return;
+	DEBUGPRINT("HW_ERRATA: %u -> %u (wanted: %u, xemu-max: %u) [%s]" NL, hw_errata_level, level, desired_level, HW_ERRATA_MAX_LEVEL, reason);
+	if (level == hw_errata_level)
+		return;
+	hw_errata_level = level;
+	// --- Do the actual work, set things based on the new hardware errata level:
+	vic4_set_errata_level(level);
+}
+
+
+void reset_hw_errata_level ( void )
+{
+	hw_errata_level = 0xFF;	// to force change on calling set_hw_errata_level()
+	set_hw_errata_level(HW_ERRATA_RESET_LEVEL, "RESET");
+}
+
+
 /* Internal decoder for I/O reads. Address *must* be within the 0-$3FFF (!!) range. The low 12 bits is the actual address inside the I/O area,
    while the most significant nibble shows the I/O mode the operation is meant, according to the following table:
    0 = C64 (VIC-II) I/O mode
@@ -124,6 +146,8 @@ Uint8 io_read ( unsigned int addr )
 			addr &= 0xFF;
 			if (XEMU_LIKELY(addr < 0x80))
 				return vic_read_reg(addr);		// VIC-IV read register
+			if (addr == 0x8F)
+				return hw_errata_level;
 			if (XEMU_LIKELY(addr < 0xA0))
 				return fdc_read_reg(addr & 0xF);
 			RETURN_ON_IO_READ_NOT_IMPLEMENTED("RAM expansion controller", 0xFF);
@@ -201,7 +225,7 @@ Uint8 io_read ( unsigned int addr )
 					// bit 0: cursor left key is pressed
 					// bit 1: cursor up key is pressed
 					// bit 5: 1=real hardware, 0=emulation
-					return kbd_query_leftup_status();	// do bit 0/1 forming in input_devices.c, other bits should be zero, so it's ok to call only this
+					return kbd_query_leftup_status() | (!!configdb.realhw << 5);	// do bit 0/1 forming in input_devices.c, other bits should be zero, so it's ok to call only this
 				case 0x1B:
 					// D61B amiga / 1531 mouse auto-detect. FIXME XXX what value we should return at this point? :-O
 					return 0xFF;
@@ -360,6 +384,10 @@ void io_write ( unsigned int addr, Uint8 data )
 				vic_write_reg(addr, data);		// VIC-IV write register
 				return;
 			}
+			if (addr == 0x8F) {
+				set_hw_errata_level(data, "D08F change");
+				return;
+			}
 			if (XEMU_LIKELY(addr < 0xA0)) {
 				fdc_write_reg(addr & 0xF, data);
 				return;
@@ -480,13 +508,10 @@ void io_write ( unsigned int addr, Uint8 data )
 						if (configdb.testing) {	// in testing mode, writing $42 would mean to exit emulation!
 							if (!emu_exit_code)
 								emu_exit_code = d6cf_exit_status;
-							if (configdb.screenshot_and_exit)
-								vic4_registered_screenshot_request = 1;	// this will cause also to exit (as configdb.screenshot_and_exit is not NULL)
-							else
-								XEMUEXIT(0);
+							XEMUEXIT(0);
 							return;
 						} else if (ARE_YOU_SURE("FPGA reconfiguration request. System must be reset.\nIs it OK to do now?\nAnswering NO may crash your program requesting this task though,\nor can result in endless loop of trying.", ARE_YOU_SURE_DEFAULT_YES)) {
-							reset_mega65();
+							reset_mega65(RESET_MEGA65_HARD);
 						}
 					}
 					d6cf_exit_status = data;

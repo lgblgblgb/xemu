@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -164,12 +164,18 @@ void hypervisor_enter ( int trapno )
 	//D6XX_registers[0x53] = 0;				// GS $D653 - Hypervisor DMAgic source MB      - *UNUSED*
 	//D6XX_registers[0x54] = 0;				// GS $D654 - Hypervisor DMAgic destination MB - *UNUSED*
 	dma_get_list_addr_as_bytes(D6XX_registers + 0x55);	// GS $D655-$D658 - Hypervisor DMAGic list address bits 27-0
+	if (map_megabyte_low == 0xFF00000) {	// !! map_megabyte_low uses << 20 ...
+		// According to the VHDL: Make sure that a naughty person can't trick the hypervisor into modifying
+		// itself, by having the Hypervisor address space mapped in the bottom 32KB of address space.
+		map_megabyte_low = 0;
+		DEBUGPRINT("HYPERVISOR: warning, low-MB would be mapped to $FF, countermeasure initiaited" NL);
+	}
 	// Now entering into hypervisor mode: we use memory_reconfigure() to set all the stuff needed + setting up "in_hypervisor" value as well
 	memory_reconfigure(
 		0,					// D030 ROM banking turning off
 		VIC4_IOMODE,				// VIC4 I/O mode to be used (on MEGA65, in hypervisor mode it's always the case! the handler in vic4.c ensures, we cannot even modify this)
 		0x3F, 0x35,				// set CPU I/O port DDR+DATA: all-RAM + I/O config
-		map_megabyte_low, map_offset_low,	// low mapping is left as-is
+		map_megabyte_low, map_offset_low,	// low mapping is left as-is (however for map_megabyte_low, see the "if" above)
 		0xFFU << 20, 0xF0000U,			// high mapping though is being modified
 		(map_mask & 0xFU) | 0x30U,		// mapping: 0011XXXX (it seems low region map mask is not changed by hypervisor entry)
 		true					// this will sets in_hypervisor to TRUE!!!!
@@ -269,6 +275,7 @@ void hypervisor_start_machine ( void )
 	extract_version_string(hyppo_version_string, sizeof hyppo_version_string);
 	DEBUGPRINT("HYPERVISOR: HYPPO version \"%s\" (%s) starting with TRAP reset (#$%02X)" NL, hyppo_version_string, hickup_is_overriden ? "OVERRIDEN" : "built-in", TRAP_RESET);
 	hypervisor_enter(TRAP_RESET);
+	memory_reset_unwritten_debug_stat();
 }
 
 
@@ -299,20 +306,8 @@ static inline void first_leave ( void )
 	hdos_notify_system_start_end();
 	xemu_sleepless_temporary_mode(0);	// turn off temporary sleepless mode which may have been enabled before
 	vic_frame_counter_since_boot = 0;
+	//memory_reset_unwritten_debug_stat();	// FIXME/TODO: commented out since it generates a **tons** of warnings then with the "unwritten mem read" debug mode (-ramcheckread emu option)
 	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
-}
-
-
-int hypervisor_level_reset ( void )
-{
-	if (!in_hypervisor) {
-		DEBUGPRINT("HYPERVISOR: hypervisor-only reset was requested by Xemu." NL);
-		hypervisor_enter(TRAP_RESET);
-		last_reset_type = "HYPPO";
-		return 0;
-	}
-	DEBUGPRINT("HYPERVISOR: hypervisor-only reset requested by Xemu **FAILED**: already in hypervisor mode!" NL);
-	return 1;
 }
 
 

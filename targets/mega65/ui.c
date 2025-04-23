@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -61,8 +61,8 @@ void emu_dropfile_callback ( const char *fn )
 				_mountd81_configdb_change(0, fn);
 			break;
 		case 2:
-			reset_mega65();
-			inject_register_prg(fn, 0);
+			reset_mega65(RESET_MEGA65_HARD);
+			inject_register_prg(fn, 0, false);
 			break;
 	}
 }
@@ -162,8 +162,8 @@ static void ui_run_prg_by_browsing ( void )
 		fnbuf,
 		sizeof fnbuf
 	)) {
-		reset_mega65();
-		inject_register_prg(fnbuf, 0);
+		reset_mega65(RESET_MEGA65_HARD);
+		inject_register_prg(fnbuf, 0, false);
 	} else
 		DEBUGPRINT("UI: file selection for PRG injection was cancelled." NL);
 }
@@ -217,10 +217,10 @@ static void ui_format_sdcard ( void )
 		,
 		0
 	)) {
-		if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_FORCE_FDISK))
+		if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_FORCE_FDISK | SDCONTENT_HDOS_DIR_TOO))
 			INFO_WINDOW("Your SD-card file has been partitioned/formatted\nMEGA65 emulation is about to RESET now!");
 	}
-	reset_mega65();
+	reset_mega65(RESET_MEGA65_HARD);
 }
 
 static void ui_update_sdcard ( void )
@@ -310,7 +310,7 @@ static void ui_update_sdcard ( void )
 	))
 		goto ret;
 	// Call the updater :)
-	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES)) {
+	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES | SDCONTENT_HDOS_DIR_TOO)) {
 		INFO_WINDOW(
 			"System files on your SD-card image seems to be updated successfully.\n"
 			"Next time you may need this function, you can use MEGA65.ROM which is a backup copy of your selected ROM.\n\n"
@@ -318,7 +318,7 @@ static void ui_update_sdcard ( void )
 			"Your emulated MEGA65 is about to RESET now!", rom_date, rom_name
 		);
 	}
-	reset_mega65();
+	reset_mega65(RESET_MEGA65_HARD);
 	rom_unset_requests();
 ret:
 	if (xemu_load_buffer_p) {
@@ -333,10 +333,12 @@ ret:
 
 static void reset_via_hyppo ( void )
 {
-	if (ARE_YOU_SURE("Are you sure to HYPPO-RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
-		if (hypervisor_level_reset())
-			ERROR_WINDOW("Currently in hypervisor mode.\nNot possible to trigger a trap now");
-	}
+	reset_mega65(RESET_MEGA65_HYPPO | RESET_MEGA65_ASK);
+}
+
+static void reset_cpu_only ( void )
+{
+	reset_mega65(RESET_MEGA65_CPU | RESET_MEGA65_ASK);
 }
 
 static void reset_into_custom_rom ( void )
@@ -355,7 +357,7 @@ static void reset_into_custom_rom ( void )
 	))
 		return;
 	if (rom_load_custom(fnbuf)) {
-		if (!reset_mega65_asked())
+		if (!reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK))
 			WARNING_WINDOW("You refused reset, loaded ROM can be only activated at the next reset.");
 	}
 }
@@ -363,7 +365,7 @@ static void reset_into_custom_rom ( void )
 static void reset_into_utility_menu ( void )
 {
 	ERROR_WINDOW("Currently there are some problems using this function,\nIt's a known problem. You'll get empty screen after utility selection.\nOnce it's resolved this message will be removed from Xemu");
-	if (reset_mega65_asked()) {
+	if (reset_mega65(RESET_MEGA65_ASK | RESET_MEGA65_HARD)) {
 		rom_stubrom_requested = 0;
 		rom_initrom_requested = 0;
 		hwa_kbd_set_fake_key(0x20);
@@ -373,7 +375,7 @@ static void reset_into_utility_menu ( void )
 
 static void reset_into_c64_mode ( void )
 {
-	if (reset_mega65_asked()) {
+	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK)) {
 		rom_stubrom_requested = 0;
 		rom_initrom_requested = 0;
 		// we need this, because autoboot disk image would bypass the "go to C64 mode" on 'Commodore key' feature
@@ -385,9 +387,9 @@ static void reset_into_c64_mode ( void )
 
 }
 
-static void reset_generic ( void )
+static void reset_hard ( void )
 {
-	if (reset_mega65_asked()) {
+	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK)) {
 		KBD_RELEASE_KEY(0x75);
 		hwa_kbd_set_fake_key(0);
 	}
@@ -395,7 +397,7 @@ static void reset_generic ( void )
 
 static void reset_into_xemu_stubrom ( void )
 {
-	if (reset_mega65_asked()) {
+	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK)) {
 		rom_initrom_requested = 0;
 		rom_stubrom_requested = 1;
 	}
@@ -403,7 +405,7 @@ static void reset_into_xemu_stubrom ( void )
 
 static void reset_into_xemu_initrom ( void )
 {
-	if (reset_mega65_asked()) {
+	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK)) {
 		rom_stubrom_requested = 0;
 		rom_initrom_requested = 1;
 	}
@@ -411,7 +413,7 @@ static void reset_into_xemu_initrom ( void )
 
 static void reset_into_c65_mode_noboot ( void )
 {
-	if (reset_mega65_asked()) {
+	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK)) {
 		rom_stubrom_requested = 0;
 		rom_initrom_requested = 0;
 		inject_register_allow_disk_access();
@@ -428,7 +430,7 @@ static void ui_cb_use_default_rom ( const struct menu_st *m, int *query )
 		return;
 	}
 	if (rom_is_overriden) {
-		if (reset_mega65_asked()) {
+		if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK)) {
 			rom_unset_requests();
 		}
 	}
@@ -553,9 +555,8 @@ static void ui_hwa_kbd_pasting ( void )
 {
 	char *buf = SDL_GetClipboardText();
 	if (!buf || !*buf) {
-		DEBUGPRINT("UI: paste buffer typing-in had no input (p=%p)" NL, buf);
-		if (buf)
-			SDL_free(buf);
+		DEBUGPRINT("UI: paste buffer typing-in had no input" NL);
+		SDL_free(buf);
 		return;
 	}
 	unsigned int multi_case = 0;
@@ -574,7 +575,7 @@ static void ui_hwa_kbd_pasting ( void )
 	if (multi_case > 1)
 		SDL_free(buf);
 	else
-		inject_hwa_pasting(buf, !multi_case);	// will free the buffer as its own
+		inject_hwa_pasting(xemu_sdl_to_native_string_allocation(buf), !multi_case);	// will free the buffer as its own
 }
 
 static void ui_put_screen_text_into_paste_buffer ( void )
@@ -610,7 +611,7 @@ static void ui_put_screen_text_into_file ( void )
 static void ui_put_paste_buffer_into_screen_text ( void )
 {
 	char *t = SDL_GetClipboardText();
-	if (t == NULL)
+	if (!t)
 		goto no_clipboard;
 	char *t2 = t;
 	while (*t2 && (*t2 == '\t' || *t2 == '\r' || *t2 == '\n' || *t2 == ' '))
@@ -621,8 +622,7 @@ static void ui_put_paste_buffer_into_screen_text ( void )
 	SDL_free(t);
 	return;
 no_clipboard:
-	if (t)
-		SDL_free(t);
+	SDL_free(t);
 	ERROR_WINDOW("Clipboard query error, or clipboard was empty");
 }
 
@@ -746,6 +746,25 @@ static void ui_save_current_window_position ( void )
 	INFO_WINDOW("Current window position has been stored.");
 }
 
+#ifdef HID_KBD_NO_F_HOTKEYS
+static void ui_cb_default_emu_f_hotkeys ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, configdb.emu_f_hotkeys);
+	configdb.emu_f_hotkeys = !configdb.emu_f_hotkeys;
+	if (configdb.emu_f_hotkeys) {
+		hid_set_default_emu_f_hotkeys();
+	} else {
+		INFO_WINDOW("You must save configuration AND restart Xemu to take effect");
+	}
+}
+#endif
+
+static void ui_reset_type ( const struct menu_st *m, int *query )
+{
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, configdb.resethotkeytype == VOIDPTR_TO_INT(m->user_data));
+	configdb.resethotkeytype = VOIDPTR_TO_INT(m->user_data);
+}
+
 
 /**** MENU SYSTEM ****/
 
@@ -850,20 +869,31 @@ static const struct menu_st menu_display[] = {
 static const struct menu_st menu_reset[] = {
 	{ "Reset back to default ROM",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_use_default_rom, NULL				},
-	{ "Reset", 			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_generic		},
+	{ "Reset", 			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_hard			},
 	{ "Reset without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot	},
 	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu	},
 	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode		},
 	{ "Reset into Xemu stub-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_stubrom	},
 	{ "Reset into boot init-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_initrom	},
 	{ "Reset via HYPPO",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_via_hyppo		},
-	{ "Reset CPU only",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_mega65_cpu_only	},
+	{ "Reset CPU only",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_cpu_only		},
 	{ "Reset/use custom ROM file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_custom_rom	},
 	{ NULL }
 };
+static const struct menu_st menu_reset_hotkey_type[] = {
+	{ "HARD",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_reset_type, (void*)RESET_MEGA65_HARD  },
+	{ "CPU",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_reset_type, (void*)RESET_MEGA65_CPU   },
+	{ "HYPPO",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_reset_type, (void*)RESET_MEGA65_HYPPO },
+	{ NULL }
+};
 static const struct menu_st menu_inputdevices[] = {
-	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE |
+	{ "Enable mouse grab",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
+	{ "Disable mouse emulation",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&configdb.nomouseemu },
 	{ "Use OSD key debugger",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
 	{ "Cursor keys as joystick",	XEMUGUI_MENUID_CALLABLE |
@@ -872,6 +902,11 @@ static const struct menu_st menu_inputdevices[] = {
 #if 0
 	{ "Devices as joy port 2 (vs 1)",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_joy_devices },
 #endif
+#ifdef HID_KBD_NO_F_HOTKEYS
+	{ "Use F9..F11 as hotkeys",	XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_default_emu_f_hotkeys, NULL },
+#endif
+	{ "Reset hotkey type",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_reset_hotkey_type},
 	{ NULL }
 };
 static const struct menu_st menu_debug[] = {

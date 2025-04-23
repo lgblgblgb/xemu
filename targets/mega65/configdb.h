@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -49,11 +49,15 @@ struct configdb_st {
 	int	defd81fromsd;
 	int	testing;
 	char	*prg;
+	char	*prg_test;
+	int	prg_exit;
 	char	*importbas;
 	char	*sdimg;
 	char	*dumpmem;
 	char	*dumpscreen;
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	char	*screenshot_and_exit;
+#endif
 #ifdef HAS_UARTMON_SUPPORT
 	char	*uartmon;
 #endif
@@ -112,6 +116,15 @@ struct configdb_st {
 	int	matrixstart;
 	int	matrixdisable;
 	char	*winpos;
+	int	ramcheckread;
+	char	*init_attic;
+	int	joyport;
+	int	nomouseemu;
+#ifdef HID_KBD_NO_F_HOTKEYS
+	int	emu_f_hotkeys;
+#endif
+	int	resethotkeytype;
+	int	realhw;
 };
 
 extern struct configdb_st configdb;

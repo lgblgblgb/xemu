@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -224,6 +224,24 @@ const char *hid_keymap_add_mapping ( const char *emu_key_name, const char *host_
 	}
 	return NULL;
 }
+
+
+#ifdef HID_KBD_NO_F_HOTKEYS
+void hid_set_default_emu_f_hotkeys ( void )
+{
+	// Make sure to un-map the needed keys
+	hid_keymap_add_mapping("F9", "Unknown");
+	hid_keymap_add_mapping("F9*", "Unknown");
+	hid_keymap_add_mapping("F10", "Unknown");
+	hid_keymap_add_mapping("F10*", "Unknown");
+	hid_keymap_add_mapping("F11", "Unknown");
+	hid_keymap_add_mapping("F11*", "Unknown");
+	// Map keys now as emu hot-keys
+	hid_keymap_add_mapping("XEMU-EXIT", "F9");
+	hid_keymap_add_mapping("XEMU-RESET", "F10");
+	hid_keymap_add_mapping("XEMU-FULLSCREEN", "F11");
+}
+#endif
 
 
 const char *hid_keymap_add_mapping_from_config_line ( const char *p, int *num_of_items )

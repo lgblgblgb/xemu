@@ -21,8 +21,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/cia6526.h"
 
+// Hardware errata level what Xemu supports at max.
+#define HW_ERRATA_MAX_LEVEL	2
+
+// Default HW_ERRATA_RESET_LEVEL when calling reset_hw_errata_level()
+#define HW_ERRATA_RESET_LEVEL	0
+
 extern Uint8 io_read  ( unsigned int addr );
 extern void  io_write ( unsigned int addr, Uint8 data );
+extern void  set_hw_errata_level   ( const Uint8 desired_level, const char *reason );
+extern void  reset_hw_errata_level ( void );
 
 extern Uint8  D6XX_registers[0x100];
 extern Uint8  D7XX[0x100];			// FIXME: newhack!

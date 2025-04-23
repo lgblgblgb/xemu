@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -58,7 +58,10 @@ static char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
 void (*m65mon_callback)(void) = NULL;
 int breakpoint_pc = -1;
+int watchpoint_addr = -1;
+int watchpoint_val = -1;
 
+extern int cpu_cycles_per_scanline;
 
 
 static void _umon_write_size_panic ( void )
@@ -66,18 +69,19 @@ static void _umon_write_size_panic ( void )
 	DEBUGPRINT("UARTMON: warning: too long message (%d/%d), cannot fit into the output buffer!" NL, umon_write_pos, UMON_WRITE_BUFFER_SIZE);
 }
 
-static void m65mon_show_regs ( void )
+void m65mon_show_regs ( void )
 {
 	Uint8 pf = cpu65_get_pf();
 	umon_printf(
 		"\r\n"
-		"PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
+		"PC   A  X  Y  Z  B  SP   MAPH MAPL LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
 		"%04X %02X %02X %02X %02X %02X %04X "		// register banned message and things from PC to SP
 		"%04X %04X %02X       %02X %02X "		// from MAPL to P
-		"%c%c%c%c%c%c%c%c ",				// P-FLAGS
+		"%c%c%c%c%c%c%c%c \r\n"				// P-FLAGS
+		",0777%04X\r\n", // TODO: single line of disassembly
 		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z, cpu65.bphi >> 8, cpu65.sphi | cpu65.s,
-		((map_mask & 0x0F) << 12) | (map_offset_low  >> 8),
-		((map_mask & 0xF0) <<  8) | (map_offset_high >> 8),
+		((map_mask & 0xf0) << 8) | (map_offset_high >> 8),
+		((map_mask & 0x0f) << 12)  | (map_offset_low >> 8),
 		cpu65.op,
 		pf, 0,	// flags
 		(pf & CPU65_PF_N) ? 'N' : '-',
@@ -87,7 +91,8 @@ static void m65mon_show_regs ( void )
 		(pf & CPU65_PF_D) ? 'D' : '-',
 		(pf & CPU65_PF_I) ? 'I' : '-',
 		(pf & CPU65_PF_Z) ? 'Z' : '-',
-		(pf & CPU65_PF_C) ? 'C' : '-'
+		(pf & CPU65_PF_C) ? 'C' : '-',
+		cpu65.pc
 	);
 }
 
@@ -96,27 +101,47 @@ static void m65mon_set_pc ( const Uint16 addr )
 	cpu65_debug_set_pc(addr);
 }
 
-static void m65mon_dumpmem16 ( Uint16 addr )
+static void m65mon_breakpoint ( int brk )
 {
-	int n = 16;
-	umon_printf(":000%04X:", addr);
-	while (n--)
-		umon_printf("%02X", debug_read_cpu_byte(addr++));
+	breakpoint_pc = brk;
+	if (brk < 0)
+		cpu_cycles_per_step = cpu_cycles_per_scanline;
+	else
+		cpu_cycles_per_step = 0;
+}
+
+static void m65mon_watchpoint ( int addr )
+{
+	watchpoint_addr = addr;
+	watchpoint_val = debug_read_linear_byte(addr);
+	if (addr < 0)
+		cpu_cycles_per_step = cpu_cycles_per_scanline;
+	else
+		cpu_cycles_per_step = 0;
 }
 
 static void m65mon_dumpmem28 ( int addr )
 {
-	int n = 16;
 	addr &= 0xFFFFFFF;
-	umon_printf(":%07X:", addr);
-	while (n--)
-		umon_printf("%02X", debug_read_linear_byte(addr++));
+	umon_printf(":%08X:", addr);
+	for (int k = 0; k < 16; k++) {
+		if ((addr >> 16) == 0x777)
+			umon_printf("%02X", debug_read_cpu_byte(addr & 0xFFFF));
+		else
+			umon_printf("%02X", debug_read_linear_byte(addr & 0xFFFFFFF));
+		addr++;
+	}
 }
 
 static void m65mon_setmem28 ( int addr, int cnt, Uint8* vals )
 {
-	while (--cnt >= 0)
-		debug_write_linear_byte(addr++, *(vals++));
+	for (int k = 0; k < cnt; k++) {
+		if ((addr >> 16) == 0x777)
+			debug_write_cpu_byte(addr & 0xFFFF, vals[k]);
+		else
+			debug_write_linear_byte(addr & 0xFFFFFFF, vals[k]);
+		addr++;
+	}
 }
 
 static void m65mon_set_trace ( int m )
@@ -214,7 +239,7 @@ static int check_end_of_command ( char *p, int error_out )
 }
 
 
-static void setmem28 ( char *param, int addr )
+static void cmd_setmem ( char *param, int addr )
 {
 	char *orig_param = param;
 	int cnt = 0;
@@ -234,9 +259,29 @@ static void setmem28 ( char *param, int addr )
 }
 
 
+static void cmd_fillmem ( char *param, int addr )
+{
+	//char *orig_param = param;
+	int endaddr;
+	int val;
+
+	if (param && !check_end_of_command(param, 0))
+		param = parse_hex_arg(param, &endaddr, 0, 0xFFFFFFF);
+	else
+		return;
+
+	if (param && !check_end_of_command(param, 0))
+		param = parse_hex_arg(param, &val, 0, 0xFF);
+	else
+		return;
+
+	for (int k = addr; k < endaddr; k++)
+		m65mon_setmem28(k & 0xFFFFFFF, 1, (Uint8*)&val);
+}
+
+
 static void execute_command ( char *cmd )
 {
-	int bank;
 	int par1;
 	char *p = cmd;
 	while (*p)
@@ -269,23 +314,15 @@ static void execute_command ( char *cmd )
 			break;
 		case 'm':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
-			bank = par1 >> 16;
 			if (cmd && check_end_of_command(cmd, 1)) {
-				if (bank == 0x777)
-					m65mon_dumpmem16(par1);
-				else
-					m65mon_dumpmem28(par1);
+				m65mon_dumpmem28(par1);
 			}
 			break;
 		case 'M':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
-			bank = par1 >> 16;
 			if (cmd && check_end_of_command(cmd, 1)) {
-				for (int k = 0; k < 32; k++) {
-					if (bank == 0x777)
-						m65mon_dumpmem16(par1);
-					else
-						m65mon_dumpmem28(par1);
+				for (int k = 0; k < 16; k++) {
+					m65mon_dumpmem28(par1);
 					par1 += 16;
 					umon_printf("\n");
 				}
@@ -293,7 +330,11 @@ static void execute_command ( char *cmd )
 			break;
 		case 's':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
-			setmem28(cmd, par1);
+			cmd_setmem(cmd, par1);
+			break;
+		case 'f':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
+			cmd_fillmem(cmd, par1);
 			break;
 		case 't':
 			if (!*cmd)
@@ -310,11 +351,16 @@ static void execute_command ( char *cmd )
 		case 'b':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
 			if (cmd && check_end_of_command(cmd, 1))
-				set_breakpoint(par1);
+				m65mon_breakpoint(par1);
 			break;
 		case 'g':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
 			m65mon_set_pc(par1);
+			break;
+		case 'w':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
+			if (cmd && check_end_of_command(cmd, 1))
+				m65mon_watchpoint(par1);
 			break;
 #ifdef TRACE_NEXT_SUPPORT
 		case 'N':
@@ -325,13 +371,13 @@ static void execute_command ( char *cmd )
 			m65mon_empty_command();	// emulator can use this, if it wants
 			break;
 		case '!':
-			reset_mega65();
+			reset_mega65(RESET_MEGA65_HARD);
 			break;
 		case '~':
 			if (!strncmp(cmd, "exit", 4)) {
 				XEMUEXIT(0);
 			} else if (!strncmp(cmd, "reset", 5)) {
-				reset_mega65();
+				reset_mega65(RESET_MEGA65_HARD);
 			} else if (!strncmp(cmd, "mount", 5)) {
 				// Quite crude syntax for now:
 				// 	~mount0		- unmounting image/disk in drive-0
@@ -352,6 +398,17 @@ static void execute_command ( char *cmd )
 						OSD(-1, -1, "Unmounted (%d)", unit);
 					}
 				}
+			} else if (!strncmp(cmd, "mapping", 7)) {
+				char desc[10];
+				for (unsigned int i = 0; i < 16; i++) {
+					memory_cpu_addr_to_desc(i << 12, desc, sizeof desc);
+					umon_printf("%X:%7s%c", i, desc, (i & 7) == 7 ? ' ' : '|');
+				}
+				umon_printf("\nMAP: HI-MB=$%02X LO-MB=$%02X HI-OFS=$%04X LO-OFS=$%04X MASK=$%02X",
+					map_megabyte_high >> 20, map_megabyte_low >> 20,
+					map_offset_high >> 8, map_offset_low >> 8,
+					map_mask
+				);
 			} else
 				umon_printf(UMON_SYNTAX_ERROR "unknown (or not implemented) Xemu special command: %s", cmd - 1);
 			break;
@@ -484,6 +541,8 @@ void uartmon_finish_command ( void )
 	}
 	// umon_trigger_end_of_answer = 1;
 	umon_write_buffer[umon_write_size++] = '.';	// add the 'dot prompt'! (m65dbg seems to check LF + dot for end of the answer)
+	umon_write_buffer[umon_write_size++] = '\r';	// I can't seem to see the dot over tcp unless I add a CRLF...
+	umon_write_buffer[umon_write_size++] = '\n';
 	umon_read_pos = 0;
 	umon_echo = 1;
 }

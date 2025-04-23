@@ -1,6 +1,6 @@
 /* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
    8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -70,7 +70,7 @@ static int atexit_callback_for_console_registered = 0;
 #endif
 
 int i_am_sure_override = 0;
-const char *str_are_you_sure_to_exit = "Are you sure to exit Xemu?";
+const char *str_are_you_sure_to_exit = "Are you sure you want to exit Xemu?";
 
 char **xemu_initial_argv = NULL;
 int    xemu_initial_argc = -1;
@@ -251,6 +251,27 @@ Uint8 xemu_hour_to_bcd12h ( Uint8 hours, int hour_offset )
 		return 0x12 + 0x80;                         // 12:mm -> 12:mmPM for HH = 12     (0x80 is PM flag, 0x12 is BCD representation of 12)
 	else
 		return XEMU_BYTE_TO_BCD(hours - 12) + 0x80; // HH:mm -> HH:mmPM for HH > 12     (0x80 is PM flag)
+}
+
+
+// It seems, SDL functions returning an allocated memory range, must be free'd with their SDL_free by the caller.
+// However, I cannot be sure that _I know_ what was the original source of an allocation later, and how to
+// free it. So though this seems to overkill, I need to introduce a native allocation area, what I can free with
+// simple free(). This seems to be a fatal problem at least on Windows, even causing a crash!
+void *xemu_sdl_to_native_allocation ( void *sdl_allocation, const size_t length )
+{
+	if (!sdl_allocation)
+		return NULL;
+	void *buffer = xemu_malloc(length);
+	memcpy(buffer, sdl_allocation, length);
+	SDL_free(sdl_allocation);	// free the original SDL allocation now!
+	return buffer;
+}
+
+
+char *xemu_sdl_to_native_string_allocation ( char *sdl_string )
+{
+	return sdl_string ? xemu_sdl_to_native_allocation(sdl_string, strlen(sdl_string) + 1) : NULL;
 }
 
 
@@ -693,12 +714,9 @@ int xemu_is_first_time_user ( void )
 // This function is intended to be used only by xemu_pre_init() and contains workaround.
 static char *_getbasepath ( void )
 {
-	char *p = SDL_GetBasePath();
-	if (p) {
-		char *ret = xemu_strdup(p);
-		SDL_free(p);
-		return ret;
-	}
+	char *p = xemu_sdl_to_native_string_allocation(SDL_GetBasePath());
+	if (p)
+		return p;
 #ifdef XEMU_ARCH_UNIX
 	// We assume that SDL_GetBasePath only may have problem on certain UNIXes like for example on OpenBSD
 	DEBUGPRINT("SDL: WARNING: could not query SDL base directory: %s. Reverting back to Xemu's implementation." NL, SDL_GetError());
@@ -912,12 +930,11 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 		FATAL("Cannot query SDL base directory: %s", SDL_GetError());
 	p = GetHackedPrefDir(sdl_base_dir, app_name);
 	if (!p)
-		p = SDL_GetPrefPath(app_organization, app_name);
+		p = xemu_sdl_to_native_string_allocation(SDL_GetPrefPath(app_organization, app_name));
 	if (p) {
-		sdl_pref_dir = xemu_strdup(p);	// we are too careful: I can't be sure the used SQL_Quit messes up the allocated buffer, so we "clone" it
+		sdl_pref_dir = p;
 		sdl_inst_dir = xemu_malloc(strlen(p) + strlen(INSTALL_DIRECTORY_ENTRY_NAME) + strlen(DIRSEP_STR) + 1);
 		sprintf(sdl_inst_dir, "%s%s" DIRSEP_STR, p, INSTALL_DIRECTORY_ENTRY_NAME);
-		SDL_free(p);
 	} else
 		FATAL("Cannot query SDL preference directory: %s", SDL_GetError());
 #endif

@@ -1,0 +1,32 @@
+name: "Set Custom Build Variables"
+description: "Setting custom build variables shared between Linux and Mac runner"
+runs:
+  using: "composite"
+  steps:
+    - run: |
+        echo "--- Deployment ---"
+        should_deploy=false
+        if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ github.event.inputs.deploy }}" == "true" ]]; then
+          echo "Note: activating should_deploy because of workflow_dispatch with true input for deployment"
+          should_deploy=true
+        elif [[ "${GITHUB_EVENT_NAME}" != "pull_request" && "${{ github.event.head_commit.message }}" =~ \[DEPLOYMENT\] ]]; then
+          echo "Note: activating should_deploy because of non-pull request with marker in the commit message"
+          should_deploy=true
+        else
+          echo "Note: not activating should_deploy"
+        fi
+        echo "should_deploy=$should_deploy" >> $GITHUB_ENV
+        echo "--- Creating faked TRAVIS-compatible variables ---"
+        echo "TRAVIS=true" >> $GITHUB_ENV
+        echo "TRAVIS_BRANCH=${GITHUB_REF##*/}" >> $GITHUB_ENV
+        echo "TRAVIS_COMMIT=$GITHUB_SHA" >> $GITHUB_ENV
+        echo "TRAVIS_JOB_WEB_URL=https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}" >> $GITHUB_ENV
+        echo "TRAVIS_OS_NAME=$(uname | tr '[:upper:]' '[:lower:]')" >> $GITHUB_ENV
+        echo "TRAVIS_PULL_REQUEST=${{ github.event.pull_request.number || 'false' }}" >> $GITHUB_ENV
+        echo "TRAVIS_REPO_SLUG=${{ github.repository }}" >> $GITHUB_ENV
+        echo "--- Misc ---"
+        echo "LGB_CUSTOM_SCRIPT_WAS_OK=yeah" >> $GITHUB_ENV
+        echo "--- Result ---"
+        ls -l $GITHUB_ENV || true
+        cat $GITHUB_ENV || true
+      shell: bash

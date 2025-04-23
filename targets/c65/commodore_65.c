@@ -1,7 +1,7 @@
 /* Test-case for simple, work-in-progress Commodore 65 emulator.
 
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -807,7 +807,7 @@ void c65_reset ( void )
 int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 {
 	if (pressed) {
-		if (key == SDL_SCANCODE_F10) {	// reset
+		if (pos == XEMU_EVENT_RESET) {	// reset, was hard-coded to be SDL_SCANCODE_F10 before
 			c65_reset_asked();
 		} else if (key == SDL_SCANCODE_KP_ENTER) {
 			c64_toggle_joy_emu();
