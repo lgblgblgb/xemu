@@ -1,4 +1,5 @@
 #!/bin/bash
+# (C)2025 Gabor Lenart LGB lgblgblgb@gmail.com
 
 if [ "$TRAVIS_REPO_SLUG" == "" ]; then
 	echo "TRAVIS_REPO_SLUG is empty" >&2

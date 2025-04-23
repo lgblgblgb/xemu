@@ -311,14 +311,7 @@ jobs:
 
       - name: Install additional utilities
         if: env.should_deploy == 'true'
-        run: |
-          which md5sum || true
-          which jq || true
-          brew install coreutils
-          brew install jq
-          which md5sum
-          md5sum --version
-          which jq
+        run: for a in jq coreutils ; do echo "Checking if brew package $a is installed" ; brew list $a &>/dev/null || brew install $a ; ls -l `which $a` ; done
 
       - name: Deploy
         if: env.should_deploy == 'true'

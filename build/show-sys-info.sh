@@ -1,4 +1,5 @@
 #!/bin/bash
+# (C)2025 Gabor Lenart LGB lgblgblgb@gmail.com
 
 OUT1="/tmp/sysinfo-output-$$-$RANDOM.stdout"
 OUT2="/tmp/sysinfo-output-$$-$RANDOM.stderr"
