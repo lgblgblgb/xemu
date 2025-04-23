@@ -52,7 +52,7 @@ jobs:
           ls -la ..
 
       - name: Show shell variables
-        run: env | grep -Evi 'SECRET|TOKEN|HOOK|SECURE' || true
+        run: env | grep -Evi 'SECRET|TOKEN|HOOK|SECURE|_ID|_SHA' || true
 
       - name: Install Ubuntu packages
         run: |
@@ -140,7 +140,7 @@ jobs:
           ls -la ..
 
       - name: Show shell variables
-        run: env | grep -Evi 'SECRET|TOKEN|HOOK|SECURE' || true
+        run: env | grep -Evi 'SECRET|TOKEN|HOOK|SECURE|_ID|_SHA' || true
 
       - name: Install Ubuntu packages
         run: |
@@ -268,7 +268,7 @@ jobs:
           ls -la ..
 
       - name: Show shell variables
-        run: env | grep -Evi 'SECRET|TOKEN|HOOK|SECURE' || true
+        run: env | grep -Evi 'SECRET|TOKEN|HOOK|SECURE|_ID|_SHA' || true
 
       - name: Install build/deployment dependencies
         run: build/install-dependencies-osx.sh
@@ -311,7 +311,9 @@ jobs:
 
       - name: Install additional utilities
         if: env.should_deploy == 'true'
-        run: for a in jq coreutils ; do echo "Checking if brew package $a is installed" ; brew list $a &>/dev/null || brew install $a ; ls -l `which $a` ; done
+        run: |
+          for a in jq coreutils ; do echo "Checking if brew package $a is installed" ; brew list $a &>/dev/null || brew install $a ; done
+          ls -l `which jq` `which md5sum`
 
       - name: Deploy
         if: env.should_deploy == 'true'

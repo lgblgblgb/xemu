@@ -20,4 +20,6 @@ Help from other people (maybe not a full list, sorry about that), I would like t
     so I could start to emulate them (and also for creating GS65/MEGA65 at all, btw)
   * Hernán Di Pietro: other than being a direct contributor, also helped in testing Xemu, sharing his
     opinion and suggestions, and things like these
+  * Gurce Isikyildiz: debug interface expert, many-many tests (not just about debugging - but everything), discussions etc
   * Snoopy on Forum64: for many tests (C65/MEGA65), bug reports
+  * Shallan, RetroCogs: primarly MEGA65 VIC-IV ideas, fixes, patches as well
