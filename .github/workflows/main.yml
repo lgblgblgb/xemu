@@ -57,7 +57,7 @@ jobs:
       - name: Install Ubuntu packages
         run: |
           sudo apt-get -y -yq update || true
-          sudo apt-get -y -yq --no-install-suggests --no-install-recommends install alien bash bison build-essential bzip2 coreutils curl deborphan dpkg fakeroot file gawk gcc libc6-dev libc-bin libcurl4-openssl-dev libgtk-3-dev libreadline6-dev libsdl2-dev lsb-release make sed tar util-linux vim-common wget zip
+          sudo apt-get -y -yq --no-install-suggests --no-install-recommends install alien bash bison build-essential bzip2 coreutils curl deborphan dpkg fakeroot file gawk gcc libc6-dev libc-bin libcurl4-openssl-dev libgtk-3-dev libreadline6-dev libsdl2-dev lsb-release make sed tar util-linux vim-common wget zip jq
 
       - name: List of all installed packages
         run: dpkg -l | cat || true
@@ -145,7 +145,7 @@ jobs:
       - name: Install Ubuntu packages
         run: |
           sudo apt-get -y -yq update || true
-          sudo apt-get -y -yq --no-install-suggests --no-install-recommends install alien bash binutils-mingw-w64-i686 binutils-mingw-w64-x86-64 bison build-essential bzip2 coreutils curl deborphan dpkg fakeroot file gawk gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 lsb-release make sed tar util-linux vim-common wget zip nsis
+          sudo apt-get -y -yq --no-install-suggests --no-install-recommends install alien bash binutils-mingw-w64-i686 binutils-mingw-w64-x86-64 bison build-essential bzip2 coreutils curl deborphan dpkg fakeroot file gawk gcc-mingw-w64-i686 gcc-mingw-w64-x86-64 lsb-release make sed tar util-linux vim-common wget zip nsis jq
 
       - name: List of all installed packages
         run: dpkg -l | cat || true
@@ -243,7 +243,7 @@ jobs:
 
 
   macos:
-    name: MacOS build
+    name: MacOS native build
     runs-on: macos-13
     steps:
       - name: Checkout repository
@@ -309,13 +309,16 @@ jobs:
         if: env.should_deploy == 'true'
         run: build/dmg-osx-creator.sh
 
-      - name: Install md5sum utility
+      - name: Install additional utilities
         if: env.should_deploy == 'true'
         run: |
           which md5sum || true
+          which jq || true
           brew install coreutils
+          brew install jq
           which md5sum
           md5sum --version
+          which jq
 
       - name: Deploy
         if: env.should_deploy == 'true'

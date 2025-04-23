@@ -33,9 +33,9 @@ cat build/objs/cdate.data > $TARGET/versioninfo
 	echo "* **BUILD_UPTIME = `uptime`**"
 	env | grep -E '^(TRAVIS|GITHUB)_' | grep -v '=$' | grep -Evi 'secure|hook|secret|token|path' | sort | sed 's/=/ = /' | sed 's/^/* /'
 	echo
-	echo "## Commit log"
+	echo "## Commit log (last 10)"
 	echo
-	git log -25
+	build/deploy/fetch-github-log.sh 10 | sed 's/^/    /'
 ) > $TARGET/README.md
 
 cd $TARGET
