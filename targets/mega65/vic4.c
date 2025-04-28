@@ -34,6 +34,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_SPRITE_COLLISION
 #define SPRITE_FG_COLLISION
 #define SPRITE_COORD_LATCHING
+// Do not enable DAT support, MEGA65 does not implement this, I shouldn't either ... [maybe enabled in the future when/if mega65-core supports it?]
+// #define ENABLE_DAT_SUPPORT
 
 
 const char *iomode_names[4] = { "VIC2", "VIC3", "VIC4ETH", "VIC4" };
@@ -553,6 +555,7 @@ static inline void calculate_char_x_step ( void )
 }
 
 
+#ifdef ENABLE_DAT_SUPPORT
 // FIXME: preliminary DAT support. For real, these should be mostly calculated at writing
 // DAT X/Y registers, bitplane selection registers etc (also true for the actual renderer!),
 // would give much better emulator performace. Though for now, that's a naive preliminary
@@ -586,6 +589,7 @@ static XEMU_INLINE Uint8 *get_dat_addr ( unsigned int bpn )
 		(((y >> 3) * (h640 ? 640 : 320)) + (x << 3) + (y & 7))		// position within the bitplane given by the X/Y info
 	;
 }
+#endif
 
 
 /* DESIGN of vic_read_reg() and vic_write_reg() functions:
@@ -751,7 +755,11 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		// DAT read/write bitplanes port
 		CASE_VIC_3_4(0x40): CASE_VIC_3_4(0x41): CASE_VIC_3_4(0x42): CASE_VIC_3_4(0x43): CASE_VIC_3_4(0x44): CASE_VIC_3_4(0x45): CASE_VIC_3_4(0x46):
 		CASE_VIC_3_4(0x47):
+#ifdef			ENABLE_DAT_SUPPORT
 			*get_dat_addr(addr & 7) = data;	// write pixels via the DAT!
+#else
+			data = 0xFF;			// DAT is not implemented
+#endif
 			break;
 		/* --- NO MORE VIC3 REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B):
@@ -963,7 +971,11 @@ Uint8 vic_read_reg ( int unsigned addr )
 		// DAT read/write bitplanes port
 		CASE_VIC_3_4(0x40): CASE_VIC_3_4(0x41): CASE_VIC_3_4(0x42): CASE_VIC_3_4(0x43): CASE_VIC_3_4(0x44): CASE_VIC_3_4(0x45): CASE_VIC_3_4(0x46):
 		CASE_VIC_3_4(0x47):
+#ifdef			ENABLE_DAT_SUPPORT
 			result = *get_dat_addr(addr & 7);	// read pixels via the DAT!
+#else
+			result = 0xFF;				// DAT is not implemented
+#endif
 			break;
 		/* --- NO MORE VIC3 REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B): CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
