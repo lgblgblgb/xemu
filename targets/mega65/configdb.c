@@ -81,8 +81,6 @@ static const struct xemutools_configdef_str_st str_options[] = {
 };
 
 static const struct xemutools_configdef_switch_st switch_options[] = {
-	{ "headless", "Run in headless mode (for testing!)", &emu_is_headless },
-	{ "sleepless", "Use maximum emulation speed (for testing!)", &emu_is_sleepless },
 	{ "cpusinglestep", "Force CPU emulation to do single step emulation (slower!)", &configdb.cpusinglestep },
 	{ "hdosvirt", "Virtualize HDOS file access functions, but via only traps", &configdb.hdosvirt },
 	{ "driveled", "Render drive LED at the top right corner of the screen", &configdb.show_drive_led },
@@ -104,7 +102,6 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "go64", "Go into C64 mode after start (with auto-typing, can be combined with -autoload)", &configdb.go64 },
 	{ "autoload", "Load and start the first program from disk (with auto-typing, can be combined with -go64)", &configdb.autoload },
 	{ "syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon },
-	{ "besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override },
 	{ "skipunhandledmem", "Do not even ask on unhandled memory access (hides problems!!)", &configdb.skip_unhandled_mem },
 	{ "fullborders", "Show non-clipped display borders", &configdb.fullborders },
 	{ "nosound", "Disables audio output generation", &configdb.nosound },
@@ -161,7 +158,7 @@ static const struct xemutools_configdef_float_st float_options[] = {
 
 static const void *do_not_save_opts[] = {
 	&configdb.prg, &configdb.prgmode, &configdb.autoload, &configdb.go64, &configdb.hyperserialfile, &configdb.importbas,
-	&emu_is_sleepless, &emu_is_headless, &configdb.testing,
+	&configdb.testing,
 	&configdb.matrixstart,
 	&configdb.dumpmem, &configdb.dumpscreen,
 #ifdef	XEMU_FILES_SCREENSHOT_SUPPORT

@@ -150,7 +150,6 @@ int main ( int argc, char **argv )
 	xemucfg_define_str_option("load", NULL, "Load and run program from $8000 directly", &configdb.load);
 	xemucfg_define_str_option("rom", default_rom_fn, "Load ROM from $0000 (use file name '-' for built-in one)", &configdb.rom);
 	xemucfg_define_switch_option("trace", "Trace the program, VERY spammy!", &trace);
-	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override);
 	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2);
 
 	if (xemucfg_parse_all(argc, argv))

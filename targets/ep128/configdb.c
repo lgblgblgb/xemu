@@ -46,7 +46,6 @@ void configdb_define_emulator_options ( void )
 		{ "primo", "Start in Primo emulator mode", &configdb.primo },
 		{ "skiplogo", "Disables Enterprise logo on start-up via XEP ROM", &configdb.skiplogo },
 		{ "noxeprom", "Disables XEP internal ROM", &cfg_noexprom },
-		{ "besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override },
 		{ "monitor", "Start monitor on console", &configdb.monitor }
 	);
 	XEMUCFG_DEFINE_STR_OPTIONS(

@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -769,6 +769,13 @@ static void define_core_options ( void )
 	xemucfg_define_dummy_option("help", "Shows this help screen", XEMUCFG_FLAG_CLI_ONLY | XEMUCFG_FLAG_FIRST_ONLY);
 	xemucfg_define_dummy_option("version", "Dump version info only and exit", XEMUCFG_FLAG_CLI_ONLY | XEMUCFG_FLAG_FIRST_ONLY);
 	xemucfg_define_dummy_option(skipconfigfile_option_name, "Skip loading the default config file", XEMUCFG_FLAG_CLI_ONLY | XEMUCFG_FLAG_FIRST_ONLY);
+	// Target-independent common options (the not dummy ones):
+	xemucfg_define_str_option("setenv", NULL, "Colon separated list of var=val environment variables to be set", &xemu_extra_env_var_setup_str);
+	xemucfg_define_switch_option("headless", "Run in headless mode (for testing!)", &emu_is_headless);
+	xemucfg_define_switch_option("sleepless", "Use maximum emulation speed (for testing!)", &emu_is_sleepless);
+	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override);
+	static const void *do_not_save_opts[] = { &emu_is_sleepless, &emu_is_headless, NULL };
+	xemucfg_add_flags_to_options(do_not_save_opts, XEMUCFG_FLAG_NO_SAVE);
 }
 
 

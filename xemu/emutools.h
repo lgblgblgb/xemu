@@ -133,6 +133,7 @@ extern int ARE_YOU_SURE ( const char *s, int flags );
 
 extern char **xemu_initial_argv;
 extern int    xemu_initial_argc;
+extern char *xemu_extra_env_var_setup_str;
 extern Uint64 buildinfo_cdate_uts;
 extern const char *xemu_initial_cwd;
 extern char *sdl_window_title;

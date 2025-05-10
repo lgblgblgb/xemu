@@ -75,6 +75,7 @@ const char *str_are_you_sure_to_exit = "Are you sure you want to exit Xemu?";
 char **xemu_initial_argv = NULL;
 int    xemu_initial_argc = -1;
 int emu_exit_code = 0;
+char *xemu_extra_env_var_setup_str = NULL;
 Uint64 buildinfo_cdate_uts = 0;
 const char *xemu_initial_cwd = NULL;
 SDL_Window   *sdl_win = NULL;
@@ -1172,6 +1173,27 @@ void xemu_default_win_pos_file_op ( const char r_or_w )
 }
 
 
+static void setenv_from_string ( const char *templ )
+{
+	if (!templ)
+		return;
+	for (char *env = xemu_strdup(templ);; env = NULL) {
+		char *token = strtok(env, ":");
+		if (!token)
+			break;
+		const char *c = token;
+		while (*c && *c > 32 && *c < 127)
+			c++;
+		if (*c || token[0] == '=' || !strchr(token, '=') || (strncmp(token, "SDL_", 4) && strncmp(token, "GTK_", 4) && strncmp(token, "GDK_", 4) && strncmp(token, "XEMU_", 4))) {
+			ERROR_WINDOW("Bad environment variable specification: %s", token);
+		} else {
+			DEBUGPRINT("XEMU: setting up environment variable: %s" NL, token);
+			putenv(token);
+		}
+	}
+}
+
+
 /* Return value: 0 = ok, otherwise: ERROR, caller must exit, and can't use any other functionality, otherwise crash would happen.*/
 int xemu_post_init (
 	const char *window_title,		// title of our window
@@ -1192,6 +1214,7 @@ int xemu_post_init (
 		i_am_sure_override = 1;
 	}
 	srand((unsigned int)time(NULL));
+	setenv_from_string(xemu_extra_env_var_setup_str);
 	if (!debug_fp)
 		xemu_init_debug(getenv("XEMU_DEBUG_FILE"));
 	if (!debug_fp && chatty_xemu)
@@ -1203,13 +1226,8 @@ int xemu_post_init (
 		return 1;
 	}
 #ifndef	XEMU_ARCH_HTML
-	if (emu_is_headless) {
-		static char *dummies[] = { "SDL_VIDEODRIVER=dummy", "SDL_AUDIODRIVER=dummy", NULL };
-		for (char **p = dummies; *p; p++) {
-			DEBUGPRINT("SDL: headless mode env-var setup: %s" NL, *p);
-			putenv(*p);
-		}
-	}
+	if (emu_is_headless)
+		setenv_from_string("SDL_VIDEODRIVER=dummy:SDL_AUDIODRIVER=dummy");
 #endif
 #ifdef SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR
 	// Disallow disabling compositing (of KDE, for example)
