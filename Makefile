@@ -1,7 +1,7 @@
 ## Collection of *simple* emulators of some 8 bits machines using SDL2 library,
 ## including the MEGA65, Commodore LCD and Commodore 65.
 ##
-## Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -62,6 +62,10 @@ deb:
 	$(MAKE) all
 	build/deb-build-simple.sh
 
+apk:
+	for t in $(TARGETS) ; do egrep -q '^#\s*define\s+CONFIG_ANDROID_OK\s*$$' targets/$$t/xemu-target.h && make -C targets/$$t ARCH=android RELEASE=yes || true ; done
+	for a in build/bin/*.android ; do build/apk-android-build.sh $$a ; done
+
 nsi:
 	rm -f build/bin/*.[dD][lL][lL] build/bin/*.[eE][xX][eE]
 	for t in $(TARGETS) ; do for a in win32 win64 ; do $(MAKE) -C targets/$$t ARCH=$$a RELEASE=$(RELEASE) || exit 1 ; done ; done
@@ -93,4 +97,4 @@ doxypublish:
 config:
 	ARCH=$(ARCH) $(MAKE) -C build/configure
 
-.PHONY: all all-arch clean all-clean distclean dep all-dep deb nsi publish doxygen doxypublish config install emscriptenpublish
+.PHONY: all all-arch clean all-clean distclean dep all-dep deb apk nsi publish doxygen doxypublish config install emscriptenpublish

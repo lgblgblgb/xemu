@@ -83,6 +83,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 
 #define CONFIG_EMSCRIPTEN_OK
+#define CONFIG_ANDROID_OK
 
 // Needed for the stub-ROM, also matrix-mode uses it
 #define XEMU_VGA_FONT_8X8
