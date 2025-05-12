@@ -664,7 +664,7 @@ int xemu_init_debug ( const char *fn )
 }
 
 
-#ifndef XEMU_ARCH_HTML
+#if !defined(XEMU_ARCH_HTML) && !defined(XEMU_ARCH_ANDROID)
 static char *GetHackedPrefDir ( const char *base_path, const char *name )
 {
 	static const char prefdir_is_here_marker[] = "prefdir-is-here.txt";
@@ -710,7 +710,7 @@ int xemu_is_first_time_user ( void )
 }
 
 
-#ifndef XEMU_ARCH_HTML
+#if !defined(XEMU_ARCH_HTML) && !defined(XEMU_ARCH_ANDROID)
 // It seems SDL_GetBasePath() can be defunct on some architectures.
 // This function is intended to be used only by xemu_pre_init() and contains workaround.
 static char *_getbasepath ( void )
@@ -926,10 +926,14 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 	if (SDL_Init(0))
 		FATAL("Cannot pre-initialize SDL without any subsystem: %s", SDL_GetError());
 	atexit(shutdown_emulator);
+#ifndef	XEMU_ARCH_ANDROID
 	sdl_base_dir = _getbasepath();
 	if (!sdl_base_dir)
 		FATAL("Cannot query SDL base directory: %s", SDL_GetError());
 	p = GetHackedPrefDir(sdl_base_dir, app_name);
+#else
+	p = NULL;
+#endif	// XEMU_ARCH_ANDROID
 	if (!p)
 		p = xemu_sdl_to_native_string_allocation(SDL_GetPrefPath(app_organization, app_name));
 	if (p) {
@@ -938,6 +942,10 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 		sprintf(sdl_inst_dir, "%s%s" DIRSEP_STR, p, INSTALL_DIRECTORY_ENTRY_NAME);
 	} else
 		FATAL("Cannot query SDL preference directory: %s", SDL_GetError());
+	// We shouldn't end up with sdl_base_dir==NULL here.
+	// But if we do (see above like with Android), just pretend that it's the same as our pref directory.
+	if (!sdl_base_dir)
+		sdl_base_dir = sdl_pref_dir;
 #endif
 	xemu_app_org = xemu_strdup(app_organization);
 	xemu_app_name = xemu_strdup(app_name);
