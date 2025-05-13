@@ -121,7 +121,7 @@ cat > "$MANIFEST" <<EOF
     <uses-sdk android:minSdkVersion="$MIN_SDK" android:targetSdkVersion="$TARGET_SDK" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" tools:ignore="ScopedStorage" />
-    <application android:label="$APP_NAME" android:icon="@mipmap/ic_launcher" android:requestLegacyExternalStorage="true" >
+    <application android:label="$APP_NAME" android:icon="@mipmap/ic_launcher" android:requestLegacyExternalStorage="true" android:debuggable="true" >
         <activity android:name="org.libsdl.app.SDLActivity"
                   android:configChanges="keyboard|keyboardHidden|orientation|screenSize"
                   android:theme="@android:style/Theme.NoTitleBar.Fullscreen"

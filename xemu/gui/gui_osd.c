@@ -467,6 +467,12 @@ static int xemuosdgui_info ( int sdl_class, const char *msg )
 	return _osdgui_msg_window(title, msg, &_osdgui_dismiss_button, 1);
 }
 
+// Android using OSD GUI can result in quite small and hard to click options for simple dialog boxes
+// Porbably the SDL implemented original ones are better in this case.
+#if !defined(XEMU_NO_SDL_DIALOG_OVERRIDE) && defined(XEMU_ARCH_ANDROID)
+#warning "XEMU_NO_SDL_DIALOG_OVERRIDE for Android (do not override simple SDL boxes for Android in case of OSD GUI for now!)"
+#define XEMU_NO_SDL_DIALOG_OVERRIDE
+#endif
 
 // FIXME: it's questionable that in case of OSD GUI, we really want to decide on macro XEMU_NO_SDL_DIALOG_OVERRIDE ...
 #ifdef	XEMU_NO_SDL_DIALOG_OVERRIDE

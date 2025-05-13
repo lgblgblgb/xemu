@@ -38,6 +38,11 @@ static int mouse_delta_x;
 static int mouse_delta_y;
 static unsigned int hid_state;
 
+#ifdef XEMU_ARCH_ANDROID
+#define FINGERDOWN_TIMER_COUNT 2000
+static Uint32 fingerdown_timer = 0;
+#endif
+
 #define MAX_JOYSTICKS			16
 
 static SDL_Joystick *joysticks[MAX_JOYSTICKS];
@@ -618,6 +623,23 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 		case SDL_TEXTINPUT:
 			TRY_CUSTOM_CALLBACKS(sdl_textinput_event_cbs, &event->text);
 			break;
+#ifdef		XEMU_ARCH_ANDROID
+		case SDL_FINGERDOWN:
+			fingerdown_timer = SDL_GetTicks();
+			break;
+		case SDL_FINGERUP:
+			if (fingerdown_timer && SDL_GetTicks() - fingerdown_timer > FINGERDOWN_TIMER_COUNT) {
+				static bool android_keyboard_shown = false;
+				if (android_keyboard_shown) {
+					SDL_StopTextInput();
+					android_keyboard_shown = false;
+				} else {
+					SDL_StartTextInput();
+					android_keyboard_shown = true;
+				}
+			}
+			break;
+#endif
 		default:
 			handled = 0;
 			break;
