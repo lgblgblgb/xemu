@@ -9,7 +9,7 @@ runs:
         if [[ "${GITHUB_EVENT_NAME}" == "workflow_dispatch" && "${{ github.event.inputs.deploy }}" == "true" ]]; then
           echo "Note: activating should_deploy because of workflow_dispatch with true input for deployment"
           should_deploy=true
-        elif [[ "${GITHUB_EVENT_NAME}" != "pull_request" && "${{ github.event.head_commit.message }}" =~ \[DEPLOYMENT\] ]]; then
+        elif [[ "${GITHUB_EVENT_NAME}" != "pull_request" ]] && echo "$COMMIT_MESSAGE" | grep -Fq '[DEPLOYMENT]'; then
           echo "Note: activating should_deploy because of non-pull request with marker in the commit message"
           should_deploy=true
         else
@@ -30,3 +30,5 @@ runs:
         ls -l $GITHUB_ENV || true
         cat $GITHUB_ENV || true
       shell: bash
+      env:
+        COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
