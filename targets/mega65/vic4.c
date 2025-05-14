@@ -628,7 +628,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 #if 0
 	// Used during testing
 	if (addr == 0x56)
-		DEBUGPRINT("TEST: writing $D0%02X with data $%02X at PC $%04X in hypervisor_mode=%d" NL, addr, data, cpu65.old_pc, (int)in_hypervisor);
+		DEBUGPRINT("TEST: writing $D0%02X with data $%02X at PC $%04X in hypervisor_mode=%d and IO_mode=%X" NL, (addr & 0x7F), data, cpu65.old_pc, (int)in_hypervisor, iomode_hexdigitids[io_mode]);
 #endif
 	//DEBUGPRINT("VIC4: write VIC%c reg $%02X (internally $%03X) with data $%02X" NL, XEMU_LIKELY(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, data);
 	// IMPORTANT NOTE: writing of vic_registers[] happens only *AFTER* this switch/case construct! This means if you need to do this before, you must do it manually at the right "case"!!!!
@@ -1082,7 +1082,7 @@ Uint8 vic_read_reg ( int unsigned addr )
 #endif
 
 
-static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_display_pos, const Uint8* row_data_ptr, const int xscale, const int do_tiling )
+static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_display_pos, const Uint8* row_data_ptr, const int xscale, const bool do_tiling )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	//const int palindexbase = sprnum * 16 + 128 * (SPRITE_BITPLANE_ENABLE(sprnum) >> sprnum);
@@ -1094,10 +1094,11 @@ static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_d
 #	ifdef SPRITE_ANY_COLLISION
 	const Uint8 sprbmask = 1 << sprnum;
 #	endif
+	int offset = 0;
 	do {
 		for (int byte = 0; byte < totalBytes; byte++) {
-			const Uint8 c0 = (*(row_data_ptr + byte)) >> 4;
-			const Uint8 c1 = (*(row_data_ptr + byte)) & 0xF;
+			const Uint8 c0 = row_data_ptr[offset] >> 4;
+			const Uint8 c1 = row_data_ptr[offset] & 0xF;
 			for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
 				if (c0 != transparency_palette_index && x_display_pos >= border_x_left && (
 					!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
@@ -1116,21 +1117,23 @@ static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_d
 					DO_SPRITE_FG_COLLISION(x_display_pos, 1);
 				}
 			}
+			offset = (offset + 1) & 7;	// tiling is done on 64 bits chunk of sprite data (ie, 64/8 = 8 bytes)
 		}
 	} while (XEMU_UNLIKELY(do_tiling && x_display_pos < border_x_right));
 }
 
 
-static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( const int sprnum, int x_display_pos, const Uint8* row_data_ptr, const int xscale, const int do_tiling )
+static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( const int sprnum, int x_display_pos, const Uint8* row_data_ptr, const int xscale, const bool do_tiling )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const Uint8 mcm_spr_pal_indices[4] = { 0, SPRITE_MULTICOLOR_1, SPRITE_COLOR(sprnum), SPRITE_MULTICOLOR_2 };	// entry zero is not used
 #	ifdef SPRITE_ANY_COLLISION
 	const Uint8 sprbmask = 1 << sprnum;
 #	endif
+	int offset = 0;
 	do {
 		for (int byte = 0; byte < totalBytes; byte++) {
-			const Uint8 row_data = *row_data_ptr++;
+			const Uint8 row_data = row_data_ptr[offset];
 			for (int shift = 6; shift >= 0; shift -= 2) {
 				const int mcm_pixel_value = (row_data >> shift) & 3;
 				const Uint32 sdl_pixel = spritepalette[mcm_spr_pal_indices[mcm_pixel_value]];
@@ -1153,22 +1156,24 @@ static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( const int sprnum, int 
 					}
 				}
 			}
+			offset = (offset + 1) & 7;	// tiling is done on 64 bits chunk of sprite data (ie, 64/8 = 8 bytes)
 		}
 	} while (XEMU_UNLIKELY(do_tiling && x_display_pos < border_x_right));
 }
 
 
-static XEMU_INLINE void vic4_draw_sprite_row_mono ( const int sprnum, int x_display_pos, const Uint8 *row_data_ptr, const int xscale, const int do_tiling )
+static XEMU_INLINE void vic4_draw_sprite_row_mono ( const int sprnum, int x_display_pos, const Uint8 *row_data_ptr, const int xscale, const bool do_tiling )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const Uint32 sdl_pixel = spritepalette[SPRITE_COLOR(sprnum)];
 #	ifdef SPRITE_ANY_COLLISION
 	const Uint8 sprbmask = 1 << sprnum;
 #	endif
+	int offset = 0;
 	do {
 		for (int byte = 0; byte < totalBytes; byte++) {
 			for (int xbit = 0; xbit < 8; xbit++) {
-				const Uint8 sprite_bit = *row_data_ptr & (0x80 >> xbit);
+				const Uint8 sprite_bit = row_data_ptr[offset] & (0x80 >> xbit);
 				for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
 					if (x_display_pos >= border_x_left && sprite_bit && (
 						!SPRITE_IS_BACK(sprnum) ||
@@ -1180,7 +1185,7 @@ static XEMU_INLINE void vic4_draw_sprite_row_mono ( const int sprnum, int x_disp
 					}
 				}
 			}
-			row_data_ptr++;
+			offset = (offset + 1) & 7;	// tiling is done on 64 bits chunk of sprite data (ie, 64/8 = 8 bytes)
 		}
 	} while (XEMU_UNLIKELY(do_tiling && x_display_pos < border_x_right));
 }
@@ -1240,7 +1245,7 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 				const Uint8 *sprite_data = main_ram + sprite_data_addr;
 				const Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
 				const int xscale = (REG_SPR640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
-				const int do_tiling = reg_tiling & (1 << sprnum);
+				const bool do_tiling = (bool)(reg_tiling & (1 << sprnum));
 				if (SPRITE_MULTICOLOR(sprnum))
 					vic4_draw_sprite_row_multicolor(sprnum, x_display_pos, row_data, xscale, do_tiling);
 				else if (SPRITE_16COLOR(sprnum))
