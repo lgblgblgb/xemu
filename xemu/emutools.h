@@ -142,6 +142,8 @@ extern char *window_title_info_addon;
 extern SDL_Window   *sdl_win;
 extern Uint32 sdl_winid;
 extern SDL_PixelFormat *sdl_pix_fmt;
+extern SDL_Renderer *sdl_ren;
+extern Uint32 sdl_pixel_format_id;
 extern int sdl_on_x11, sdl_on_wayland;
 extern char *xemu_app_org, *xemu_app_name;
 extern int seconds_timer_trigger;

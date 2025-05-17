@@ -120,6 +120,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "emufhotkeys", "Use F9,F10,F11 as emulator hotkeys", &configdb.emu_f_hotkeys },
 #endif
 	{ "realhw", "Report real hardware (be careful, use it only for testing!)", &configdb.realhw },
+	{ "osk", "OSK by default. Only for testing, will be removed!", &configdb.osk },
 	{ NULL }
 };
 
@@ -166,7 +167,7 @@ static const void *do_not_save_opts[] = {
 #endif
 	&configdb.testing, &configdb.hyperdebug, &configdb.hyperdebugfreezer, &configdb.usestubrom, &configdb.useinitrom, &configdb.useutilmenu,
 	&configdb.cartbin8000, &configdb.winpos, &configdb.ramcheckread, &configdb.init_attic,
-	&configdb.prg_test, &configdb.prg_exit,
+	&configdb.prg_test, &configdb.prg_exit, &configdb.osk,
 	NULL
 };
 

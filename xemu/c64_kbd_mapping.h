@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -42,6 +42,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define IS_RESTORE_PRESSED()	IS_KEY_PRESSED(RESTORE_KEY_POS)
 //#define IS_RESTORE_PRESSED()	(!(kbd_matrix[RESTORE_KEY_POS >> 4] & (1 << (RESTORE_KEY_POS & 7))))
+
+
+#ifdef XEMU_OSK_SUPPORT
+#include "xemu/emutools_osk.h"
+extern const struct osk_desc_st osk_desc[];
+#endif
 
 extern const struct KeyMappingDefault c64_key_map[];
 extern int joystick_emu;

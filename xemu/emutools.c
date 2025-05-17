@@ -79,11 +79,11 @@ char *xemu_extra_env_var_setup_str = NULL;
 Uint64 buildinfo_cdate_uts = 0;
 const char *xemu_initial_cwd = NULL;
 SDL_Window   *sdl_win = NULL;
-static SDL_Renderer *sdl_ren = NULL;
+SDL_Renderer *sdl_ren = NULL;
+Uint32 sdl_pixel_format_id;
 static SDL_Texture  *sdl_tex = NULL;
 SDL_PixelFormat *sdl_pix_fmt;
 int sdl_on_x11 = 0, sdl_on_wayland = 0;
-static Uint32 sdl_pixel_format_id;
 static const char default_window_title[] = "XEMU";
 int register_new_texture_creation = 0;
 char *xemu_app_org = NULL, *xemu_app_name = NULL;
@@ -158,6 +158,8 @@ static int follow_win_size = 0;
 #ifdef	XEMU_OSD_SUPPORT
 #include "xemu/gui/osd.c"
 #endif
+#include "xemu/emutools_osk.h"
+
 
 
 int set_mouse_grab ( SDL_bool state, int force_allow )
@@ -1539,8 +1541,11 @@ void xemu_update_screen ( void )
 	//if (seconds_timer_trigger)
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
 	SDL_RenderCopy(sdl_ren, sdl_tex, sdl_viewport_ptr, NULL);
-#ifdef XEMU_OSD_SUPPORT
+#ifdef	XEMU_OSD_SUPPORT
 	_osd_render();
+#endif
+#ifdef	XEMU_OSK_SUPPORT
+	osk_render();
 #endif
 	SDL_RenderPresent(sdl_ren);
 }

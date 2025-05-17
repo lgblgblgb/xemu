@@ -43,6 +43,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "rom.h"
 #include "cart.h"
 #include "matrix_mode.h"
+#include "xemu/emutools_osk.h"
 
 // "Typical" size in default settings (video standard is PAL, default border settings).
 // See also vic4.h
@@ -763,6 +764,13 @@ int main ( int argc, char **argv )
 	))
 		return 1;
 	osd_init_with_defaults();
+#ifdef	XEMU_ARCH_ANDROID
+	configdb.osk = 1;
+#endif
+	if (configdb.osk) {
+		osk_init(osk_desc);
+		osk_in_use = true;
+	}
 	xemugui_init(configdb.selectedgui);
 	// Initialize MEGA65
 	mega65_init();

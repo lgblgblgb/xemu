@@ -125,6 +125,7 @@ struct configdb_st {
 #endif
 	int	resethotkeytype;
 	int	realhw;
+	int	osk;
 };
 
 extern struct configdb_st configdb;
