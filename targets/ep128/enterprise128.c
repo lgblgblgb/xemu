@@ -212,13 +212,13 @@ int main (int argc, char *argv[])
 		shutdown_callback		// registered shutdown function
 	))
 		return 1;
+	osd_init_with_defaults();
 	xemugui_init(configdb.gui_selection);	// allow to fail (do not exit if it fails). Some targets may not have X running
 	hid_init(
 		ep128_key_map,
 		VIRTUAL_SHIFT_POS,
 		SDL_ENABLE		// joystick events
 	);
-	osd_init_with_defaults();
 	fileio_init(
 #ifdef XEMU_ARCH_HTML
 		"/",
@@ -270,10 +270,15 @@ int main (int argc, char *argv[])
 	}
 	if (configdb.snapshot)
 		ep128snap_set_cpu_and_io();
+#ifndef	NO_CONSOLE
 	if (!configdb.syscon && !configdb.monitor)
 		sysconsole_close(NULL);
 	if (configdb.monitor)
 		monitor_start();
+#else
+	if (!configdb.syscon)
+		sysconsole_close(NULL);
+#endif
 	clear_emu_events();
 	xemu_timekeeping_start();
 	DEBUGPRINT(NL "EMU: entering into main emulation loop" NL);

@@ -69,6 +69,7 @@ static void ui_cb_cpuclock ( const struct menu_st *m, int *query )
 }
 
 
+#ifndef NO_CONSOLE
 static void ui_cb_monitor ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, monitor_check());
@@ -77,6 +78,7 @@ static void ui_cb_monitor ( const struct menu_st *m, int *query )
 	else
 		monitor_start();
 }
+#endif
 
 
 static void ui_cb_sound ( const struct menu_st *m, int *query )
@@ -124,8 +126,10 @@ static const struct menu_st menu_display[] = {
 static const struct menu_st menu_debug[] = {
 	{ "OSD key debugger",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
+#ifndef	NO_CONSOLE
 	{ "Monitor prompt",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_monitor, NULL },
+#endif
 #ifdef HAVE_XEMU_EXEC_API
 	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_native_os_prefdir_browser, NULL },
 #endif
