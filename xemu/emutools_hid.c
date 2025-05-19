@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -20,6 +20,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifdef HID_KBD_MAP_CFG_SUPPORT
 #include "xemu/emutools_files.h"
 #endif
+#include "xemu/emutools_osk.h"
 
 
 /* Note: HID stands for "Human Input Devices" or something like that :)
@@ -33,17 +34,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 Uint8 kbd_matrix[16];		// keyboard matrix state, 16 * 8 bits at max currently (not compulsory to use all positions!)
 int hid_show_osd_keys = 0;
 int hid_joy_on_cursor_keys = 0;	// working mode to have cursor keys as joystick not regular key emu
+bool hid_ignore_mouse_lbutton = false;
+bool hid_ignore_mouse_rbutton = false;
 
 static int mouse_delta_x;
 static int mouse_delta_y;
 static unsigned int hid_state;
 
-#ifdef XEMU_ARCH_ANDROID
-#define FINGERDOWN_TIMER_COUNT 2000
-static Uint32 fingerdown_timer = 0;
-#endif
-
 #define MAX_JOYSTICKS			16
+
+#define ANDROID_PINCH_THRESHOLD		0.01
 
 static SDL_Joystick *joysticks[MAX_JOYSTICKS];
 
@@ -165,6 +165,25 @@ void hid_sdl_synth_key_event ( int matrix_pos, int is_press )
 	}
 }
 
+
+void hid_sdl_synth_mouse_button_click ( const int button_id )
+{
+	SDL_Event sdlevent = {
+		.button.timestamp = SDL_GetTicks() - 100,
+		.button.windowID = sdl_winid,
+		.button.which = 1,      // hmmm
+		.button.button = button_id,
+		.button.state = SDL_PRESSED,
+		.button.clicks = 1,     // single click
+	};
+	sdlevent.type = SDL_MOUSEBUTTONDOWN;
+	SDL_PushEvent(&sdlevent);
+	// also we need to _release_ the mouse button as well
+	sdlevent.type = SDL_MOUSEBUTTONUP;
+	sdlevent.button.state = SDL_RELEASED;
+	sdlevent.button.timestamp += 100;
+	SDL_PushEvent(&sdlevent);
+}
 
 
 // Reset all HID events.
@@ -607,11 +626,25 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 				hid_joystick_motion_event(event->jaxis.axis, event->jaxis.value);
 			break;
 		case SDL_MOUSEMOTION:
+#ifdef			XEMU_OSK_SUPPORT
+			if (osk_status()) {
+				osk_mouse_movement_event(event->motion.x, event->motion.y);
+				break;
+			}
+#endif
 			if (is_mouse_grab())
 				hid_mouse_motion_event(event->motion.xrel, event->motion.yrel);
 			break;
 		case SDL_MOUSEBUTTONDOWN:
 		case SDL_MOUSEBUTTONUP:
+#ifdef			XEMU_OSK_SUPPORT
+			if (event->type == SDL_MOUSEBUTTONUP && osk_status()) {
+				if (osk_key_activation_event(event->button.x, event->button.y))
+					break;
+			}
+#endif
+			if ((hid_ignore_mouse_lbutton && event->button.button == SDL_BUTTON_LEFT) || (hid_ignore_mouse_rbutton && event->button.button == SDL_BUTTON_RIGHT))
+				break;
 			if (is_mouse_grab())
 				hid_mouse_button_event(event->button.button, event->type == SDL_MOUSEBUTTONDOWN);
 			else
@@ -624,18 +657,13 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 			TRY_CUSTOM_CALLBACKS(sdl_textinput_event_cbs, &event->text);
 			break;
 #ifdef		XEMU_ARCH_ANDROID
-		case SDL_FINGERDOWN:
-			fingerdown_timer = SDL_GetTicks();
-			break;
-		case SDL_FINGERUP:
-			if (fingerdown_timer && SDL_GetTicks() - fingerdown_timer > FINGERDOWN_TIMER_COUNT) {
-				static bool android_keyboard_shown = false;
-				if (android_keyboard_shown) {
-					SDL_StopTextInput();
-					android_keyboard_shown = false;
-				} else {
-					SDL_StartTextInput();
-					android_keyboard_shown = true;
+		case SDL_MULTIGESTURE:
+			if (event->mgesture.numFingers >= 2) {
+				if (event->mgesture.dDist < -ANDROID_PINCH_THRESHOLD) {
+					osk_show(true);
+				} else if (event->mgesture.dDist > ANDROID_PINCH_THRESHOLD) {
+					osk_show(false);
+					hid_sdl_synth_mouse_button_click(SDL_BUTTON_RIGHT);
 				}
 			}
 			break;

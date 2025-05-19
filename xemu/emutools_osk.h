@@ -24,8 +24,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define OSK_DESC_NEW_LINE	1
 #define OSK_DESC_MOD_KEY	2
-#define OSK_DESC_MODABLE	4
-#define OSK_DESC_TOGGLE		8
+#define OSK_DESC_TOGGLE		4
 
 struct osk_desc_st {
 	const Uint32 flags;
@@ -35,10 +34,11 @@ struct osk_desc_st {
 	const int key_id;
 };
 
-extern bool osk_in_use;
-
-extern bool osk_init ( const struct osk_desc_st *desc );
-extern bool osk_render ( void );
-
+extern bool osk_init ( const struct osk_desc_st *desc, const int sx, const int sy, const int kh );
+extern bool osk_show ( const bool on );
+extern bool osk_status ( void );
+extern bool osk_render ( void );	// No need to call manually, emutools.c will do it, if XEMU_OSK_SUPPORT is enabled globally
+extern bool osk_mouse_movement_event ( const int x, const int y );
+extern bool osk_key_activation_event ( const int x, const int y );
 
 #endif

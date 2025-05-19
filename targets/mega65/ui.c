@@ -41,6 +41,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 #include "xemu/emutools_config.h"
 #include "cart.h"
+#include "xemu/emutools_osk.h"
 
 
 // Used by UI CBs to maintain configDB persistence
@@ -765,6 +766,15 @@ static void ui_reset_type ( const struct menu_st *m, int *query )
 	configdb.resethotkeytype = VOIDPTR_TO_INT(m->user_data);
 }
 
+#ifdef XEMU_OSK_SUPPORT
+static void ui_cb_show_osk ( const struct menu_st *m, int *query )
+{
+	const bool status = osk_status();
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, status);
+	osk_show(!status);
+}
+#endif
+
 
 /**** MENU SYSTEM ****/
 
@@ -894,6 +904,10 @@ static const struct menu_st menu_inputdevices[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
 	{ "Disable mouse emulation",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&configdb.nomouseemu },
+#ifdef	XEMU_OSK_SUPPORT
+	{ "Show OSK",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_show_osk, NULL },
+#endif
 	{ "Use OSD key debugger",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
 	{ "Cursor keys as joystick",	XEMUGUI_MENUID_CALLABLE |

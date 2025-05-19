@@ -764,16 +764,12 @@ int main ( int argc, char **argv )
 	))
 		return 1;
 	osd_init_with_defaults();
-#ifdef	XEMU_ARCH_ANDROID
-	configdb.osk = 1;
-#endif
-	if (configdb.osk) {
-		osk_init(osk_desc);
-		osk_in_use = true;
-	}
 	xemugui_init(configdb.selectedgui);
 	// Initialize MEGA65
 	mega65_init();
+#ifdef	XEMU_OSK_SUPPORT
+	osk_init(osk_desc, 800, 600, 48);
+#endif
 	audio65_init(
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
 		AUDIO_SAMPLE_FREQ,		// sound mix freq

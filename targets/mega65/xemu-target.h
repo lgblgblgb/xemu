@@ -90,7 +90,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #define XEMU_CONFIGDB_SUPPORT
 #define XEMU_OSD_SUPPORT
+#ifndef XEMU_ARCH_HTML
 #define XEMU_OSK_SUPPORT
+#endif
 
 #define RLE_COMPRESSED_DISK_IMAGE_SUPPORT
 

@@ -20,109 +20,278 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #include "xemu/emutools.h"
 #include "xemu/emutools_osk.h"
+#include "xemu/emutools_hid.h"
 
-#define SIZE_X 800
-#define SIZE_Y 600
+#define OSK_KEY_HIDE	-100
+#define OSK_KEY_MENU	-101
+
+#define AUTO_RELEASE_MS	20
+
+#define	COLOUR_OUTLINE	0xFF, 0xFF, 0xFF, 0xFF
+#define COLOUR_TEXT	0xFF, 0xFF, 0xFF, 0xFF
+#define COLOUR_BG	0xFF, 0xFF, 0xFF, 0x80
+#define COLOUR_BGHOVER	0xFF, 0x00, 0x00, 0xFF
+#define COLOUR_BGPRESS	0x00, 0xFF, 0x00, 0xFF
+#define COLOUR_BGLOCKED	0x00, 0x00, 0xFF, 0xFF
 
 #define RETURN_IF_NO_OSK()		\
-	if (!osk_in_use || !tex)	\
+	if (!in_use || !tex)	\
 		return false;
 
 struct osk_key_st {
 	int x1,y1,x2,y2;
 	const struct osk_desc_st *p;
+	bool pressed;
 };
 
-bool osk_in_use = false;
-
+static int size_x, size_y, kheight;
+static bool in_use = false;
+static bool mod_use = false;
 static SDL_Texture *tex = NULL;
 static Uint32 *osk = NULL;
 static struct osk_key_st *keys;
+static struct {	Uint32 outline, text, bg, bghover, bgpress, bglocked; } colour;
+static int all_keys = 0;
+static int hovered = -1;
+static int last_pressed = -1;
+static Uint32 press_time;
 
 
 
-// Must be called from the event handler
-// Return value: true -> event handled by OSK, stop dealing with the event!
-// false -> event not handled by OSK
-bool osk_mouse_button_event ( void )
+static void draw_text ( const char *s, int len, int xo, int yo, bool clear_too )
 {
-	RETURN_IF_NO_OSK();
+	while (len > 0) {
+		const Uint8 *f = vga_font_8x8 + (*s) * 8;
+		for (int y = yo; y < yo + 8; y++) {
+			Uint32 *p = osk + y * size_x + xo;
+			Uint8 c = *(f++);
+			for (int x = 0; x < 8; x++, c <<= 1, p++)
+				if (c & 0x80)
+					*p = colour.text;
+				else if (clear_too)
+					*p = colour.bg;
+		}
+		s++;
+		len--;
+		xo += 8;
+	}
 }
 
 
-// Same rules as for osk_mouse_button_event
-// The purpose of this function is to provide visual feedback
-bool osk_mouse_movement_event ( void )
+static void draw_key ( const int i, const bool active )
 {
-	RETURN_IF_NO_OSK();
+	if (i < 0)
+		return;
+	Uint32 bgcolour = colour.bg;
+	if (active)
+		bgcolour = colour.bghover;
+	else if ((keys[i].p->flags & OSK_DESC_TOGGLE) && keys[i].pressed)
+		bgcolour = colour.bglocked;
+	for (int y = keys[i].y1; y <= keys[i].y2; y++)
+		for (int x = keys[i].x1; x <= keys[i].x2; x++)
+			osk[y * size_x + x] = (x == keys[i].x1 || x == keys[i].x2 || y == keys[i].y1 || y == keys[i].y2) ? colour.outline : bgcolour;
+	const char *s = keys[i].p->key_str;
+	const char *s2 = strchr(s, '\n');
+	int l;
+	if (mod_use) {
+		if (s2)
+			s = s2 + 1;
+		l = strlen(s);
+	} else {
+		l = s2 ? s2 - s : strlen(s);
+	}
+	draw_text(
+		s, l,
+		(keys[i].x2 - keys[i].x1 - l * 8) / 2 + keys[i].x1,
+		(keys[i].y2 - keys[i].y1 - 4    ) / 2 + keys[i].y1,
+		false
+	);
 }
 
 
-// Event handler should notify OSK to show a key pressed
-bool osk_press_key ( void )
+static void redraw_kbd ( void )
 {
-	RETURN_IF_NO_OSK();
+	memset(osk, 0, size_x * size_y);
+	for (int k = 0; k < all_keys; k++)
+		draw_key(k, false);
 }
 
 
-bool osk_release_key ( void )
+static int get_key_at_mouse ( int x, int y )
 {
-	RETURN_IF_NO_OSK();
+	int mouse_x, mouse_y;
+	SDL_RenderLogicalToWindow(sdl_ren, x, y, &mouse_x, &mouse_y);
+	int output_w, output_h;
+	SDL_GetRendererOutputSize(sdl_ren, &output_w, &output_h);
+	int logic_w = 0, logic_h = 0;
+	SDL_RenderGetLogicalSize(sdl_ren, &logic_w, &logic_h);
+	// If no logical size was set, fallback to output size
+	if (!logic_w || !logic_h) {
+		logic_w = output_w;
+		logic_h = output_h;
+	}
+	// Compute the SDL letterbox/pillarbox viewport
+	SDL_Rect viewport;
+	const float window_aspect = (float)output_w / output_h;
+	const float logic_aspect = (float)logic_w / logic_h;
+	if (window_aspect > logic_aspect) {
+		// Letterboxing
+		viewport.h = output_h;
+		viewport.w = (int)(output_h * logic_aspect);
+		viewport.x = (output_w - viewport.w) / 2;
+		viewport.y = 0;
+	} else {
+		// Pillarboxing
+		viewport.w = output_w;
+		viewport.h = (int)(output_w / logic_aspect);
+		viewport.x = 0;
+		viewport.y = (output_h - viewport.h) / 2;
+	}
+	// Only map coordinates within the viewport area
+	// OSK is rendered inside the same area as the main logical rendering
+	int rel_x = mouse_x - viewport.x;
+	int rel_y = mouse_y - viewport.y;
+	// Clamp to viewport in case mouse is in black bars
+	if (rel_x < 0) rel_x = 0;
+	if (rel_y < 0) rel_y = 0;
+	if (rel_x > viewport.w) rel_x = viewport.w;
+	if (rel_y > viewport.h) rel_y = viewport.h;
+	// Finally map the real window-space mouse position to the OSK texture
+	// (assuming OSK is rendered full-window)
+	x = size_x * rel_x / viewport.w;
+	y = size_y * rel_y / viewport.h;
+#if 0
+	int win_x, win_y;
+	SDL_RenderLogicalToWindow(sdl_ren, x, y, &win_x, &win_y);
+	int out_w, out_h;
+	SDL_GetRendererOutputSize(sdl_ren, &out_w, &out_h);
+	x = size_x * win_x / out_w;
+	y = size_y * win_y / out_h;
+#endif
+#if 0
+	char debug[100];
+	sprintf(debug, "Texture: %04d %04d", x, y);
+	draw_text(debug, strlen(debug), 0, 80, true);
+#endif
+	for (int i = 0; i < all_keys; i++)
+		if (x > keys[i].x1 && x < keys[i].x2 && y > keys[i].y1 && y < keys[i].y2)
+			return i;
+	return -1;
 }
 
 
-
-bool osk_render ( void )
+bool osk_mouse_movement_event ( const int x, const int y )
 {
 	RETURN_IF_NO_OSK();
-	SDL_UpdateTexture(tex, NULL, osk, SIZE_X * 4);
-	SDL_RenderCopy(sdl_ren, tex, NULL, NULL);
+#if 0
+	char debug[100];
+	sprintf(debug, "Mouse: %04d %04d", x, y);
+	draw_text(debug, strlen(debug), 0, 40, true);
+#endif
+	const int k = get_key_at_mouse(x, y);
+	if (k != hovered) {
+		draw_key(hovered, false);
+		hovered = k;
+		draw_key(hovered, true);
+	}
+	return k >= 0;
+}
+
+
+bool osk_key_activation_event ( const int x, const int y )
+{
+	RETURN_IF_NO_OSK();
+	const int k = get_key_at_mouse(x, y);
+	if (k < 0)
+		return false;
+	const int key_id = keys[k].p->key_id;
+	if (key_id >= 0) {
+		// Release previous key, OSK only supports one key at a time (other than the toggle/mod keys)
+		if (last_pressed >= 0) {
+			hid_sdl_synth_key_event(keys[last_pressed].p->key_id, 0);
+			keys[last_pressed].pressed = false;
+			draw_key(last_pressed, false);
+			last_pressed = -1;
+		}
+		if (!(keys[k].p->flags & OSK_DESC_TOGGLE)) {	// the condition is here, because we don't want toggle keys to auto-release
+			press_time = SDL_GetTicks();
+			last_pressed = k;
+		}
+		if ((keys[k].p->flags & OSK_DESC_TOGGLE) && keys[k].pressed) {
+			hid_sdl_synth_key_event(key_id, 0);
+			keys[k].pressed = false;
+		} else {
+			hid_sdl_synth_key_event(key_id, 1);
+			keys[k].pressed = true;
+		}
+		bool mod_status = false;
+		for (int i = 0; i < all_keys; i++)
+			if ((keys[i].p->flags & OSK_DESC_MOD_KEY) && keys[i].pressed) {
+				mod_status = true;
+				break;
+			}
+		if (mod_status != mod_use) {
+			mod_use = mod_status;
+			redraw_kbd();
+		}
+	} else if (key_id == OSK_KEY_HIDE) {
+		osk_show(false);
+	} else if (key_id == OSK_KEY_MENU) {
+		// Hide OSK, OSK+OSD menu at the same time would be a mess
+		osk_show(false);
+		// Synthetise fake events (mouse) to enter the menu via right click
+		hid_sdl_synth_mouse_button_click(SDL_BUTTON_RIGHT);
+	}
 	return true;
 }
 
 
-
-
-
-
-
-
-
-
-static void draw_key ( const int i )
+bool osk_status ( void )
 {
-	for (int y = keys[i].y1; y <= keys[i].y2; y++) {
-		for (int x = keys[i].x1; x <= keys[i].x2; x++) {
-			if (x == keys[i].x1 || x == keys[i].x2 || y == keys[i].y1 || y == keys[i].y2)
-				osk[y * SIZE_X + x] = 0xFFFFFFFFU;
-			else
-				osk[y * SIZE_X + x] = 0x808080FFU;
+	return in_use;
+}
 
+
+bool osk_show ( const bool on )
+{
+	if (!tex || on == in_use)
+		return in_use;
+	// Make sure to unpress previously pressed keys
+	for (int k = 0; k < all_keys; k++)
+		if (keys[k].pressed || k == last_pressed) {
+			hid_sdl_synth_key_event(keys[k].p->key_id, 0);
+			keys[k].pressed = false;
 		}
+	last_pressed = -1;
+	in_use = on;
+	hid_ignore_mouse_lbutton = on;
+	mod_use = false;
+	return in_use;
+}
+
+
+// No need to call manually, emutools.c will do it, if XEMU_OSK_SUPPORT is enabled globally
+bool osk_render ( void )
+{
+	RETURN_IF_NO_OSK();
+	// if a key was registered to be pressed, release after a while
+	if (last_pressed >= 0 && SDL_GetTicks() - press_time >= AUTO_RELEASE_MS) {
+		hid_sdl_synth_key_event(keys[last_pressed].p->key_id, 0);
+		keys[last_pressed].pressed = false;
+		//draw_key(last_pressed, false);
+		last_pressed = -1;
 	}
-	const char *s = keys[i].p->key_str;
-	const int l = strlen(s);
-	int xo = (keys[i].x2 - keys[i].x1 - l * 8) / 2 + keys[i].x1;
-	int yo = (keys[i].y2 - keys[i].y1 - 4) / 2 + keys[i].y1;
-	while (*s) {
-		const Uint8 *f = vga_font_8x8 + (*s) * 8;
-		for (int y = yo; y < yo + 8; y++) {
-			Uint32 *p = osk + y * SIZE_X + xo;
-			Uint8 c = *(f++);
-			for (int x = 0; x < 8; x++, c <<= 1, p++)
-				if (c & 0x80)
-					*p = 0xFFFFFFFFU;
-		}
-		s++;
-		xo += 8;
-	}
+	SDL_UpdateTexture(tex, NULL, osk, size_x * 4);
+	SDL_RenderCopy(sdl_ren, tex, NULL, NULL);
+	return true;
 }
 
 
 static void calc_osk ( const struct osk_desc_st *const desc )
 {
 	// Traverse the map to work out the dimensions of the virtual keyboard
-	int maxx_now = 0, maxx = 0, maxy = 0, all_keys = 0;
+	int maxx_now = 0, maxx = 0, maxy = 0;
+	all_keys = 0;
 	for (const struct osk_desc_st *p = desc; p->key_str; p++, all_keys++) {
 		if ((p->flags & OSK_DESC_NEW_LINE)) {
 			maxy++;
@@ -133,10 +302,10 @@ static void calc_osk ( const struct osk_desc_st *const desc )
 			maxx = maxx_now;
 	}
 	// We can calculate the scaling factor now
-	const float factorx = (float)SIZE_X / (float)maxx;
-	const float factory = desc[0].key_len * factorx;
-	const int starty = SIZE_Y - (maxy + 1) * factory - 0;
-	DEBUGPRINT("OSK: v-keyboard dimension: %dx%d, %d keys, unit size = %fx%fpx" NL, maxx, maxy, all_keys, factorx, factory);
+	const float factorx = (float)size_x / (float)maxx;
+	//const float factory = desc[0].key_len * factorx;
+	const int starty = size_y - (maxy + 1) * kheight - 0;
+	DEBUGPRINT("OSK: v-keyboard dimension: %dx%d, %d keys, map scaling = %f, key height = %dpx" NL, maxx, maxy, all_keys, factorx, kheight);
 	// Traverse the stuff again, now generating actual texture coordinates for buttons
 	keys = xemu_malloc(sizeof(struct osk_key_st) * (all_keys + 2));	// +2 -> reserve space for MENU and HIDE buttons
 	for (int i = 0, x = 0, y = 0; i < all_keys; i++) {
@@ -145,57 +314,61 @@ static void calc_osk ( const struct osk_desc_st *const desc )
 			x = 0;
 		}
 		x += desc[i].gap_before;
-		int x1 = x * factorx;
+		const int x1 = x * factorx;
 		x += desc[i].key_len;
-		int x2 = (x * factorx) - 1;
-		int y1 = starty + y * factory;
-		int y2 = y1 + factory - 1;
-		DEBUGPRINT("OSK: key \"%s\" at (%d;%d)-(%d;%d)" NL, desc[i].key_str, x1, y1, x2, y2);
+		const int x2 = (x * factorx) - 1;
+		const int y1 = starty + y * kheight;
+		const int y2 = y1 + kheight - 1;
+		//DEBUGPRINT("OSK: key \"%s\" at (%d;%d)-(%d;%d)" NL, desc[i].key_str, x1, y1, x2, y2);
 		keys[i].p = &desc[i];
 		keys[i].x1 = x1;
 		keys[i].x2 = x2;
 		keys[i].y1 = y1;
 		keys[i].y2 = y2;
-		draw_key(i);
+		keys[i].pressed = false;
 	}
 	static const struct osk_desc_st spec_desc[2] = {
 		{
-			.key_str = "HIDE",
-			.key_id	= -1
-		}, {
 			.key_str = "MENU",
-			.key_id	= -2
+			.key_id	= OSK_KEY_MENU
+		}, {
+			.key_str = "HIDE",
+			.key_id	= OSK_KEY_HIDE
 		}
 	};
-	static const struct osk_key_st spec_keys[2] = {
+	const struct osk_key_st spec_keys[2] = {
 		{
 			.p	= &spec_desc[0],
 			.x2	= 48,
 			.y2	= 32,
+			.pressed= false
 		}, {
 			.p	= &spec_desc[1],
-			.x1	= SIZE_X - 48,
+			.x1	= size_x - 48,
 			.y1	= 0,
-			.x2	= SIZE_X - 1,
-			.y2	= 32
+			.x2	= size_x - 1,
+			.y2	= 32,
+			.pressed= false
 		}
 	};
 	memcpy(keys + all_keys, spec_keys, sizeof(spec_keys));
-	draw_key(all_keys++);
-	draw_key(all_keys++);
+	all_keys += 2;
 }
 
 
-bool osk_init ( const struct osk_desc_st *desc )
+bool osk_init ( const struct osk_desc_st *desc, const int sx, const int sy, const int kh )
 {
 	if (tex)
 		FATAL("You cannot call %s() twice!", __func__);
-	osk = malloc(SIZE_X * SIZE_Y * 4);
+	size_x = sx;
+	size_y = sy;
+	kheight = kh;
+	osk = malloc(size_x * size_y * 4);
 	if (!osk) {
 		ERROR_WINDOW("Not enough memory for OSK");
 		goto error;
 	}
-	tex = SDL_CreateTexture(sdl_ren, sdl_pixel_format_id, SDL_TEXTUREACCESS_STREAMING, SIZE_X, SIZE_Y);
+	tex = SDL_CreateTexture(sdl_ren, sdl_pixel_format_id, SDL_TEXTUREACCESS_STREAMING, size_x, size_y);
 	if (!tex) {
 		ERROR_WINDOW("Cannot create texture for OSK: %s", SDL_GetError());
 		goto error;
@@ -204,18 +377,15 @@ bool osk_init ( const struct osk_desc_st *desc )
 		ERROR_WINDOW("Cannot set alpha blend mode for OSK: %s", SDL_GetError());
 		goto error;
 	}
-	DEBUGPRINT("OSK: ready, %dx%d pixel texture" NL, SIZE_X, SIZE_Y);
-	memset(osk, 0, SIZE_X * SIZE_Y);
+	DEBUGPRINT("OSK: ready, %dx%d pixel texture" NL, size_x, size_y);
+	colour.outline	= SDL_MapRGBA(sdl_pix_fmt, COLOUR_OUTLINE);
+	colour.text	= SDL_MapRGBA(sdl_pix_fmt, COLOUR_TEXT);
+	colour.bg	= SDL_MapRGBA(sdl_pix_fmt, COLOUR_BG);
+	colour.bghover	= SDL_MapRGBA(sdl_pix_fmt, COLOUR_BGHOVER);
+	colour.bgpress	= SDL_MapRGBA(sdl_pix_fmt, COLOUR_BGPRESS);
+	colour.bglocked	= SDL_MapRGBA(sdl_pix_fmt, COLOUR_BGLOCKED);
 	calc_osk(desc);
-	//const float factor = (float)SIZE_X / (float)osk_x;
-	//xemu_malloc(sizeof(struct osk_key_st) * all_keys);
-
-#if 0
-	for (int y = 0; y < SIZE_Y; y++)
-		for (int x = 0; x < SIZE_X; x++)
-			if (y == (int)(SIZE_Y * .25) || y == (int)(SIZE_Y * .75) || x == (int)(SIZE_X * .25) || x == (int)(SIZE_X * .75))
-				osk[y * SIZE_X + x] = 0xFFFFFFFFU;
-#endif
+	redraw_kbd();
 	return true;
 error:
 	if (tex)
