@@ -119,60 +119,10 @@ static void redraw_kbd ( void )
 
 static int get_key_at_mouse ( int x, int y )
 {
-	int mouse_x, mouse_y;
-	SDL_RenderLogicalToWindow(sdl_ren, x, y, &mouse_x, &mouse_y);
-	int output_w, output_h;
-	SDL_GetRendererOutputSize(sdl_ren, &output_w, &output_h);
-	int logic_w = 0, logic_h = 0;
-	SDL_RenderGetLogicalSize(sdl_ren, &logic_w, &logic_h);
-	// If no logical size was set, fallback to output size
-	if (!logic_w || !logic_h) {
-		logic_w = output_w;
-		logic_h = output_h;
-	}
-	// Compute the SDL letterbox/pillarbox viewport
-	SDL_Rect viewport;
-	const float window_aspect = (float)output_w / output_h;
-	const float logic_aspect = (float)logic_w / logic_h;
-	if (window_aspect > logic_aspect) {
-		// Letterboxing
-		viewport.h = output_h;
-		viewport.w = (int)(output_h * logic_aspect);
-		viewport.x = (output_w - viewport.w) / 2;
-		viewport.y = 0;
-	} else {
-		// Pillarboxing
-		viewport.w = output_w;
-		viewport.h = (int)(output_w / logic_aspect);
-		viewport.x = 0;
-		viewport.y = (output_h - viewport.h) / 2;
-	}
-	// Only map coordinates within the viewport area
-	// OSK is rendered inside the same area as the main logical rendering
-	int rel_x = mouse_x - viewport.x;
-	int rel_y = mouse_y - viewport.y;
-	// Clamp to viewport in case mouse is in black bars
-	if (rel_x < 0) rel_x = 0;
-	if (rel_y < 0) rel_y = 0;
-	if (rel_x > viewport.w) rel_x = viewport.w;
-	if (rel_y > viewport.h) rel_y = viewport.h;
-	// Finally map the real window-space mouse position to the OSK texture
-	// (assuming OSK is rendered full-window)
-	x = size_x * rel_x / viewport.w;
-	y = size_y * rel_y / viewport.h;
-#if 0
-	int win_x, win_y;
-	SDL_RenderLogicalToWindow(sdl_ren, x, y, &win_x, &win_y);
-	int out_w, out_h;
-	SDL_GetRendererOutputSize(sdl_ren, &out_w, &out_h);
-	x = size_x * win_x / out_w;
-	y = size_y * win_y / out_h;
-#endif
-#if 0
-	char debug[100];
-	sprintf(debug, "Texture: %04d %04d", x, y);
-	draw_text(debug, strlen(debug), 0, 80, true);
-#endif
+	// Convert coordinates
+	x = size_x * x / sdl_default_win_x_size;
+	y = size_y * y / sdl_default_win_y_size;
+	// Search for matching button - if any
 	for (int i = 0; i < all_keys; i++)
 		if (x > keys[i].x1 && x < keys[i].x2 && y > keys[i].y1 && y < keys[i].y2)
 			return i;
