@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2015-2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2016,2020,2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -32,6 +32,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define VIRTUAL_SHIFT_POS	0x07
 
 extern const struct KeyMappingDefault ep128_key_map[];
+#ifdef XEMU_OSK_SUPPORT
+#include "xemu/emutools_osk.h"
+extern const struct osk_desc_st osk_desc[];
+#endif
 
 extern int   mouse_grab, show_keys, mouse_mode;
 

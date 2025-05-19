@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2015-2016,2020 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2016,2020,2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -132,6 +132,97 @@ const struct KeyMappingDefault ep128_key_map[] = {
 	/* ---- end of table marker, must be the last entry ---- */
 	{ 0, -1, NULL }
 };
+
+
+#ifdef XEMU_OSK_SUPPORT
+const struct osk_desc_st osk_desc[] = {
+	{0, 5,17,"F1",   0x47},
+	{0, 0,17,"F2",   0x46},
+	{0, 0,17,"F3",   0x42},
+	{0, 0,17,"F4",   0x40},
+	{0, 0,17,"F5",   0x44},
+	{0, 0,17,"F6",   0x43},
+	{0, 0,17,"F7",   0x45},
+	{0, 0,17,"F8",   0x41},
+	{0, 4,10,"HOLD", 0x74},
+	{0, 0,17,"STOP", 0x70},
+
+
+	{OSK_DESC_NEW_LINE, 2,10,"ESC", 0x37},
+	{0, 0,10,"1\n!",   0x31},
+	{0, 0,10,"2\n\"",  0x36},
+	{0, 0,10,"3\nPnd", 0x35},
+	{0, 0,10,"4\n$",   0x33},
+	{0, 0,10,"5\n%",   0x34},
+	{0, 0,10,"6\n&",   0x32},
+	{0, 0,10,"7\n'",   0x30},
+	{0, 0,10,"8\n(",   0x50},
+	{0, 0,10,"9\n)",   0x52},
+	{0, 0,10,"0\n_",   0x54},
+	{0, 0,10,"-\n=",   0x53},
+	{0, 0,10,"^\n~",   -1  },	// TODO
+	{0, 0,15,"ERASE",  0x56},
+	{0, 0,15,"DEL",    0x81},
+	{0, 0,10,"INS",    0x87},
+
+
+	{OSK_DESC_NEW_LINE, 2,15,"TAB", 0x27},
+	{0, 0,10,"Q", 0x21},
+	{0, 0,10,"W", 0x26},
+	{0, 0,10,"E", 0x25},
+	{0, 0,10,"R", 0x23},
+	{0, 0,10,"T", 0x24},
+	{0, 0,10,"Y", 0x22},
+	{0, 0,10,"U", 0x20},
+	{0, 0,10,"I", 0x90},
+	{0, 0,10,"O", 0x92},
+	{0, 0,10,"P", 0x94},
+	{0, 0,10,"@\n`", 0x93},
+	{0, 0,10,"[\n{", 0x95},
+	{0, 0,15,"ENTER", 0x76},
+
+
+	{OSK_DESC_NEW_LINE | OSK_DESC_TOGGLE, 0,10,"CTRL", 0x17},
+	{0, 0,10,"Lck", -1},	// TODO
+	{0, 0,10,"A", 0x16},
+	{0, 0,10,"S", 0x15},
+	{0, 0,10,"D", 0x13},
+	{0, 0,10,"F", 0x14},
+	{0, 0,10,"G", 0x12},
+	{0, 0,10,"H", 0x10},
+	{0, 0,10,"J", 0x60},
+	{0, 0,10,"K", 0x62},
+	{0, 0,10,"L", 0x64},
+	{0, 0,10,";\n+", 0x63},
+	{0, 0,10,":\n*", 0x65},
+	{0, 0,10,"]\n}", 0x66},
+	{0, 17,10,"UP", 0x73},
+
+	{OSK_DESC_NEW_LINE | OSK_DESC_TOGGLE | OSK_DESC_MOD_KEY, 0,15,"Shift", 0x07},
+	{0, 0,10,"\\\n|", 0x04},
+	{0, 0,10,"Z", 0x06},
+	{0, 0,10,"X", 0x05},
+	{0, 0,10,"C", 0x03},
+	{0, 0,10,"V", 0x04},
+	{0, 0,10,"B", 0x02},
+	{0, 0,10,"N", 0x00},
+	{0, 0,10,"M", 0x80},
+	{0, 0,10,",\n<", 0x82},
+	{0, 0,10,".\n>", 0x84},
+	{0, 0,10,"/\n?", 0x83},
+	{OSK_DESC_TOGGLE | OSK_DESC_MOD_KEY, 0,15,"Shift", 0x85},
+	{0, 12,10,"LEFT", 0x75},
+	{0, 0,10,"RIGHT", 0x72},
+
+
+	{OSK_DESC_NEW_LINE, 38, 80, "SPACE", 0x86},
+	{OSK_DESC_TOGGLE, 12,10,"ALT", -1}, 	// TODO
+	{0, 17,10,"DOWN", 0x71},
+
+	{.key_str = NULL}
+};
+#endif
+
 
 /* The mouse buffer. nibble_counter shows which nibble is to read (thus "nibble_counter >> 1" is the byte pointer actually.
    mouse_protocol_nibbles limits the max nibbles to read, ie it's 4 (= 2 bytes) for boxsoft protocol for the default setting */
