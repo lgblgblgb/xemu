@@ -22,6 +22,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 #include "xemu/emutools_osk.h"
 
+#if defined(XEMU_ARCH_ANDROID) && !defined(XEMU_OSK_SUPPORT)
+#error "Android builds needs XEMU_OSK_SUPPORT to be enabled."
+#endif
+
 
 /* Note: HID stands for "Human Input Devices" or something like that :)
    That is: keyboard, joystick, mouse.
@@ -589,6 +593,12 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 			break;
 		case SDL_KEYUP:
 		case SDL_KEYDOWN:
+#ifdef XEMU_ARCH_ANDROID
+			if (event->type == SDL_KEYDOWN && event->key.keysym.sym == SDLK_AC_BACK) {	// Android "back" button
+				osk_show(!osk_status());
+				break;
+			}
+#endif
 			if (
 				event->key.keysym.scancode != SDL_SCANCODE_UNKNOWN
 #ifdef CONFIG_KBD_SELECT_FOCUS

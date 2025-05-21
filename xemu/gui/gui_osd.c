@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2022,2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -165,6 +165,11 @@ static int _osdgui_sdl_loop ( int need_rendering, SDL_Point *mousepos )
 				case SDL_KEYUP:
 					break;
 				case SDL_KEYDOWN:
+#ifdef					XEMU_ARCH_ANDROID
+					if (event.key.keysym.sym == SDLK_AC_BACK) {	// Android "BACK" button
+						return OSDGUIKEY_LEFT;	// means "back" in the menu structure
+					}
+#endif
 					for (int a = 0; scan2osdfunc[a].func >= 0; a++)
 						if (scan2osdfunc[a].scan == event.key.keysym.scancode)
 							return scan2osdfunc[a].func;
@@ -582,7 +587,8 @@ restart:
 	//space = 3;
 	for (int need_rendering = 1;;) {
 		int retev;
-		const int options = (osdgui.menudepth ? OSDGUI_ITEMBROWSER_ALLOW_LEFT : 0) | OSDGUI_ITEMBROWSER_ALLOW_RIGHT | OSDGUI_ITEMBROWSER_ALLOW_F1;
+		//const int options = (osdgui.menudepth ? OSDGUI_ITEMBROWSER_ALLOW_LEFT : 0) | OSDGUI_ITEMBROWSER_ALLOW_RIGHT | OSDGUI_ITEMBROWSER_ALLOW_F1;
+		const int options = OSDGUI_ITEMBROWSER_ALLOW_LEFT | OSDGUI_ITEMBROWSER_ALLOW_RIGHT | OSDGUI_ITEMBROWSER_ALLOW_F1;
 		int *selectedptr = &osdgui.menuselected[osdgui.menudepth];
 		//static int _osdgui_do_browse_list_loop ( const char *textbuf[], const int all_items, const int page_items, int active_item, const int y, int need_rendering, int options, int *ev )
 		*selectedptr = _osdgui_do_browse_list_loop(chooseptrs, attribs, items, space, *selectedptr, OSDGUI_MENU_Y, need_rendering, options, &retev);
@@ -604,9 +610,14 @@ restart:
 				return;
 			}
 		}
-		if (retev == OSDGUIKEY_LEFT && osdgui.menudepth) {	// previous menu
-			osdgui.menudepth--;
-			goto restart;
+		if (retev == OSDGUIKEY_LEFT) {	// previous menu
+			if (osdgui.menudepth) {
+				osdgui.menudepth--;
+				goto restart;
+			}
+#ifdef			XEMU_ARCH_ANDROID
+			retev = OSDGUIKEY_ESC;	// trying to go to previous menu while in the main menu means leaving the menu
+#endif
 		}
 		if (retev == OSDGUIKEY_F1) {	// go to main menu
 			if (osdgui.menudepth) {

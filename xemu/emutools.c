@@ -1301,6 +1301,10 @@ int xemu_post_init (
 #	warning "Activating workaround for lame newer Apple notebooks (no right click on touchpads)"
 	SDL_SetHint(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK, "1");			// 1 = enable CTRL + click = right click (needed for modern Mac touchpads, it seems)
 #endif
+#if defined(SDL_HINT_ANDROID_TRAP_BACK_BUTTON) && defined(XEMU_ARCH_ANDROID)
+#	warning "BACK button trap has been activated."
+	SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
+#endif
 	/* end of SDL hints section */
 	if (sdl_default_win_x_pos == SDL_WINDOWPOS_UNDEFINED && sdl_default_win_y_pos == SDL_WINDOWPOS_UNDEFINED)
 		xemu_default_win_pos_file_op('r');	// try to load window position if sdl_default_win_?_pos not yet initialised

@@ -22,11 +22,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_osk.h"
 #include "xemu/emutools_hid.h"
 
+// Do not change these, identifiers
 #define OSK_KEY_HIDE	-100
 #define OSK_KEY_MENU	-101
 
-#define AUTO_RELEASE_MS	20
+// Release key after this amount of milliseconds (unless it's a toogle key)
+#define AUTO_RELEASE_MS	50
+// Zoom factor (>=1 integer) of the current key shown. Set to zero, to disable this feature
+#define ZOOM_FACTOR	3
 
+// Colours (R,G,B,A) - 'A' being the alpha channel
 #define	COLOUR_OUTLINE	0xFF, 0xFF, 0xFF, 0xFF
 #define COLOUR_TEXT	0xFF, 0xFF, 0xFF, 0xFF
 #define COLOUR_BG	0xFF, 0xFF, 0xFF, 0x80
@@ -34,7 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define COLOUR_BGPRESS	0x00, 0xFF, 0x00, 0xFF
 #define COLOUR_BGLOCKED	0x00, 0x00, 0xFF, 0xFF
 
-#define RETURN_IF_NO_OSK()		\
+#define RETURN_IF_NO_OSK()	\
 	if (!in_use || !tex)	\
 		return false;
 
@@ -55,25 +60,38 @@ static int all_keys = 0;
 static int hovered = -1;
 static int last_pressed = -1;
 static Uint32 press_time;
+static struct { int x1, y1, x2, y2; } last_zoomed;
 
 
 
-static void draw_text ( const char *s, int len, int xo, int yo, bool clear_too )
+static void draw_text ( const char *s, int len, int xo, int yo, int scale, bool clear_too )
 {
 	while (len > 0) {
 		const Uint8 *f = vga_font_8x8 + (*s) * 8;
-		for (int y = yo; y < yo + 8; y++) {
-			Uint32 *p = osk + y * size_x + xo;
-			Uint8 c = *(f++);
-			for (int x = 0; x < 8; x++, c <<= 1, p++)
-				if (c & 0x80)
-					*p = colour.text;
-				else if (clear_too)
-					*p = colour.bg;
-		}
+		for (int y = 0; y < 8; y++, f++)
+			for (int ysc = 0; ysc < scale; ysc++) {
+				Uint32 *p = osk + (y * scale + ysc + yo) * size_x + xo;
+				Uint8 c = *f;
+				for (int x = 0; x < 8; x++, c <<= 1)
+					for (int xsc = 0; xsc < scale; xsc++, p++)
+						if (c & 0x80)
+							*p = colour.text;
+						else if (clear_too)
+							*p = colour.bg;
+			}
 		s++;
 		len--;
-		xo += 8;
+		xo += 8 * scale;
+	}
+}
+
+
+static void fill_rectangle ( const int x1, const int y1, const int x2, const int y2, const Uint32 sdl_colour )
+{
+	for (int y = y1; y <= y2; y++) {
+		Uint32 *p = osk + size_x * y + x1;
+		for (int x = x1; x <= x2; x++)
+			*p++ = sdl_colour;
 	}
 }
 
@@ -104,8 +122,26 @@ static void draw_key ( const int i, const bool active )
 		s, l,
 		(keys[i].x2 - keys[i].x1 - l * 8) / 2 + keys[i].x1,
 		(keys[i].y2 - keys[i].y1 - 4    ) / 2 + keys[i].y1,
-		false
+		1, false
 	);
+	// Clearing/showing a "zoomed" version of the current key
+	if (ZOOM_FACTOR > 0) {
+		if (last_zoomed.x1 >= 0) {
+			fill_rectangle(last_zoomed.x1, last_zoomed.y1, last_zoomed.x2, last_zoomed.y2, 0);
+			last_zoomed.x1 = -1;
+		}
+		if (active) {
+			// Also add 4 pix "border" (y will be 4 where text is positioned, etc)
+			last_zoomed.x1 = (size_x - l * ZOOM_FACTOR * 8 - 2*4) / 2;
+			last_zoomed.y1 = 0;
+			last_zoomed.x2 = last_zoomed.x1 + l * ZOOM_FACTOR * 8 + 4;
+			last_zoomed.y2 = ZOOM_FACTOR * 8 + 8;
+			if (last_zoomed.x1 >= 0) {
+				fill_rectangle(last_zoomed.x1, last_zoomed.y1, last_zoomed.x2, last_zoomed.y2, colour.bg);
+				draw_text(s, l, last_zoomed.x1 + 4, last_zoomed.y1 + 4, ZOOM_FACTOR, false);
+			}
+		}
+	}
 }
 
 
@@ -136,7 +172,7 @@ bool osk_mouse_movement_event ( const int x, const int y )
 #if 0
 	char debug[100];
 	sprintf(debug, "Mouse: %04d %04d", x, y);
-	draw_text(debug, strlen(debug), 0, 40, true);
+	draw_text(debug, strlen(debug), 0, 40, 2, true);
 #endif
 	const int k = get_key_at_mouse(x, y);
 	if (k != hovered) {
@@ -228,7 +264,7 @@ bool osk_render ( void )
 	if (last_pressed >= 0 && SDL_GetTicks() - press_time >= AUTO_RELEASE_MS) {
 		hid_sdl_synth_key_event(keys[last_pressed].p->key_id, 0);
 		keys[last_pressed].pressed = false;
-		//draw_key(last_pressed, false);
+		draw_key(last_pressed, false);	// so pressed key won't remain highlighted forever
 		last_pressed = -1;
 	}
 	SDL_UpdateTexture(tex, NULL, osk, size_x * 4);
@@ -335,6 +371,7 @@ bool osk_init ( const struct osk_desc_st *desc, const int sx, const int sy, cons
 	colour.bgpress	= SDL_MapRGBA(sdl_pix_fmt, COLOUR_BGPRESS);
 	colour.bglocked	= SDL_MapRGBA(sdl_pix_fmt, COLOUR_BGLOCKED);
 	calc_osk(desc);
+	last_zoomed.x1 = -1;
 	redraw_kbd();
 	return true;
 error:
