@@ -1204,6 +1204,81 @@ static void setenv_from_string ( const char *templ )
 }
 
 
+#ifdef XEMU_ARCH_ANDROID
+static bool android_populate_assets ( const char *listfn )
+{
+	SDL_RWops *lf = SDL_RWFromFile(listfn, "r");
+	if (!lf) {
+		DEBUGPRINT("ASSETS: cannot open file %s" NL, listfn);
+		return false;
+	}
+	char listbuf[4096];
+	size_t ret = SDL_RWread(lf, listbuf, 1, sizeof(listbuf));
+	if (ret <= 0 || ret >= sizeof(listbuf)) {
+		DEBUGPRINT("ASSETS: file %s has I/O error, or empty, or too large, %s" NL, listfn, SDL_GetError());
+		SDL_RWclose(lf);
+		return false;
+	}
+	SDL_RWclose(lf);
+	listbuf[ret] = '\0';
+	Uint8 copybuf[4096];
+	for (char *p = listbuf;;) {
+		char *n = strchr(p, '\n');
+		if (n)
+			*n = '\0';
+		if (*p) {
+			char targetfn[256];
+			if (strlen(sdl_pref_dir) + strlen(p) + 1 > sizeof(targetfn)) {
+				ERROR_WINDOW("Too long filename in assets");
+				return false;
+			}
+			strcpy(targetfn, sdl_pref_dir);
+			strcat(targetfn, p);
+			struct stat st;
+			if (stat(targetfn, &st) == 0)
+				goto next_file;		// target file already exists
+			lf = SDL_RWFromFile(p, "r");
+			if (!lf) {
+				ERROR_WINDOW("Cannot open asset file %s", p);
+				goto next_file;
+			}
+			int fd = open(targetfn, O_WRONLY | O_TRUNC | O_CREAT, 0666);
+			if (fd < 0) {
+				SDL_RWclose(lf);
+				ERROR_WINDOW("Cannot open asset target file %s", targetfn);
+				goto next_file;
+			}
+			size_t bytes = 0;
+			for (;;) {
+				ret = SDL_RWread(lf, copybuf, 1, sizeof(copybuf));
+				if (ret <= 0)
+					break;
+				if (write(fd, copybuf, ret) != ret) {
+					ERROR_WINDOW("File write error on target file %s", targetfn);
+					close(fd);
+					unlink(targetfn);
+					SDL_RWclose(lf);
+					goto next_file;
+				}
+				bytes += ret;
+			}
+			close(fd);
+			SDL_RWclose(lf);
+			INFO_WINDOW("Asset file %s has been populated to %s (%u bytes)", p, targetfn, (unsigned int)bytes);
+		}
+	next_file:
+		if (n)
+			p = n + 1;
+		else
+			break;
+	}
+
+
+	return true;
+}
+#endif
+
+
 /* Return value: 0 = ok, otherwise: ERROR, caller must exit, and can't use any other functionality, otherwise crash would happen.*/
 int xemu_post_init (
 	const char *window_title,		// title of our window
@@ -1392,6 +1467,10 @@ int xemu_post_init (
 		printf(NL);
 #	include "build/xemu-48x48.xpm"
 	xemu_set_icon_from_xpm(favicon_xpm);
+#ifdef	XEMU_ARCH_ANDROID
+	SDL_AndroidRequestPermission("android.permission.READ_EXTERNAL_STORAGE");
+	android_populate_assets("list");
+#endif
 	return 0;
 }
 

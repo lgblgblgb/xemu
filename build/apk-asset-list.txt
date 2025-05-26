@@ -1,0 +1,2 @@
+xep128 $HOME/.local/share/xemu-lgb/ep128/exos.rom exos.rom
+xmega65 $HOME/.local/share/xemu-lgb/mega65/MEGA65.ROM MEGA65.ROM

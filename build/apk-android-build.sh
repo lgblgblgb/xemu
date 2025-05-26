@@ -120,6 +120,7 @@ cat > "$MANIFEST" <<EOF
 >
     <uses-sdk android:minSdkVersion="$MIN_SDK" android:targetSdkVersion="$TARGET_SDK" />
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="29" tools:ignore="ScopedStorage" />
     <application android:label="$APP_NAME" android:icon="@mipmap/ic_launcher" android:requestLegacyExternalStorage="true" android:debuggable="true" >
         <activity android:name="org.libsdl.app.SDLActivity"
@@ -140,7 +141,26 @@ cat > "$MANIFEST" <<EOF
 </manifest>
 EOF
 
-touch "$ASSETS_DIR/.placeholder"
+# Asset management
+rm -f $ASSETS_DIR/list
+touch $ASSETS_DIR/list
+while IFS= read -r line || [ -n "$line" ]; do
+	[[ -z "$line" || "$line" == \#* ]] && continue
+	identifier=$(echo "$line" | awk '{print $1}')
+	src_raw=$(echo "$line" | awk '{print $2}')
+	target_file=$(echo "$line" | awk '{print $3}')
+	eval src_path="$src_raw"
+	if [ "$identifier" == "$XEMU_TARGET" ]; then
+		if [ -s "$src_path" ]; then
+			echo "Copying: [ASSET of $identifier] $src_path -> $ASSETS_DIR/$target_file"
+			cp "$src_path" "$ASSETS_DIR/$target_file"
+			echo "$target_file" >> $ASSETS_DIR/list
+		else
+			echo "ASSET: ** WARNING ** specified file $src_path [ASSET of $identifier] does not exist, or empty, skipping"
+		fi
+	fi
+done < ../apk-asset-list.txt
+
 mkdir -p "$RES_DIR/layout"
 echo '<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="fill_parent"
