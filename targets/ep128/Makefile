@@ -24,4 +24,13 @@ SRCS_COMMON_xep128	= emutools.c emutools_files.c emutools_config.c emutools_gui.
 CFLAGS_TARGET_xep128	= $(SDL2_CFLAGS) $(MATH_CFLAGS) $(SOCKET_CFLAGS) $(XEMUGUI_CFLAGS) $(READLINE_CFLAGS)
 LDFLAGS_TARGET_xep128	= $(SDL2_LIBS) $(MATH_LIBS) $(SOCKET_LIBS) $(XEMUGUI_LIBS) $(READLINE_LIBS)
 
+#LDFLAGS_TARGET_xep128_ON_html = -s STACK_SIZE=655360 --preload-file=$$HOME/.local/share/xemu-lgb/ep128/exos.rom@/files/exos.rom --preload-file=$$HOME/.local/share/xemu-lgb/ep128/sdcard.img@/files/sdcard.img
+LDFLAGS_TARGET_xep128_ON_html = -s STACK_SIZE=655360 --preload-file=$$HOME/.local/share/xemu-lgb/ep128/exos.rom@/files/exos.rom
+
 include ../../build/Makefile.common
+
+web:
+	$(MAKE) ARCH=html
+	python3 ../../build/webserver.py 8000
+	sleep .1
+	xdg-open http://localhost:8000/$(PRG_TARGET).html
