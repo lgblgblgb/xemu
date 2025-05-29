@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -45,6 +45,8 @@ static int system_sound_mix_freq;		// playback sample rate (in Hz) of the emulat
 static int system_sid_cycles_per_sec;
 static double dma_audio_mixing_value;
 
+Uint8 mixer_register = 0x00;
+static Uint8 mixer_coeffs[0x100];
 
 #if NUMBER_OF_SIDS != 4
 #	error "Currently NUMBER_OF_SIDS macro must be set to 4!"
@@ -382,6 +384,28 @@ void audio65_start ( void )
 		return;
 	DEBUGPRINT("AUDIO: start mixing." NL);
 	SDL_PauseAudioDevice(audio, 0);
+}
+
+
+Uint8 audio65_read_mixer_register ( void )
+{
+	return mixer_coeffs[mixer_register];
+}
+
+
+void audio65_write_mixer_register ( const Uint8 data )
+{
+	mixer_coeffs[mixer_register] = data;
+	if (mixer_register == 0x1E || mixer_register == 0x1F) {		// HDMI-LEFT?
+		int vol = (mixer_coeffs[0x1E] << 8) + mixer_coeffs[0x1F];
+		vol = vol * 100 / 65536;
+		audio_set_stereo_parameters(vol, AUDIO_UNCHANGED_SEPARATION);
+	}
+	if (mixer_register == 0x3E || mixer_register == 0x3F)   {	// HDMI-RIGHT?
+		int vol = (mixer_coeffs[0x3E] << 8) + mixer_coeffs[0x3F];
+		vol = vol * 100 / 65536;
+		audio_set_stereo_parameters(vol, AUDIO_UNCHANGED_SEPARATION);
+	}
 }
 
 

@@ -48,8 +48,6 @@ int    core_age_in_days;
 static const Uint8 fpga_firmware_version[] = { 'X','e','m','u' };
 static const Uint8 cpld_firmware_version[] = { 'N','o','w','!' };
 
-static Uint8 coeff_addr = 0x00;
-static Uint8 mixer_coeffs[0x100];
 
 #define RETURN_ON_IO_READ_NOT_IMPLEMENTED(func, fb) \
 	do { DEBUG("IO: NOT IMPLEMENTED read (emulator lacks feature), %s $%04X fallback to answer $%02X" NL, func, addr, fb); \
@@ -261,6 +259,10 @@ Uint8 io_read ( unsigned int addr )
 					return rand() & 0xF;
 				case 0xDF: // D6DF: FPGA die temperature, high byte: assuming to be 164 (just because I see that on a real MEGA65 currently at my room's temperature ...)
 					return 164;
+				case 0xF4:
+					return mixer_register;
+				case 0xF5:
+					return audio65_read_mixer_register();
 				default:
 					DEBUG("MEGA65: reading MEGA65 specific I/O @ $D6%02X result is $%02X" NL, addr, D6XX_registers[addr]);
 					return D6XX_registers[addr];
@@ -344,22 +346,6 @@ Uint8 io_read ( unsigned int addr )
 	}
 }
 
-void update_mixer_coeffs(Uint8 data)
-{
-	mixer_coeffs[coeff_addr] = data;
-
-	if (coeff_addr == 0x1E || coeff_addr == 0x1F) {	// HDMI-LEFT?
-		int vol = (mixer_coeffs[0x1E] << 8) + mixer_coeffs[0x1F];
-		vol = vol * 100 / 65536;
-		audio_set_stereo_parameters(vol, AUDIO_UNCHANGED_SEPARATION);
-	}
-
-	if (coeff_addr == 0x3E || coeff_addr == 0x3F)	{ // HDMI-RIGHT?
-		int vol = (mixer_coeffs[0x3E] << 8) + mixer_coeffs[0x3F];
-		vol = vol * 100 / 65536;
-		audio_set_stereo_parameters(vol, AUDIO_UNCHANGED_SEPARATION);
-	}
-}
 
 
 /* Please read comments at io_read() above, those apply here too.
@@ -481,14 +467,14 @@ void io_write ( unsigned int addr, Uint8 data )
 				eth65_write_reg(addr, data);
 				return;
 			}
-
 			if (addr == 0xF4) {		// audio mixer co-efficient address
-				coeff_addr = data;
+				mixer_register = data;
+				return;
 			}
-			if (addr == 0XF5) {		// audio mixer co-efficient value
-				update_mixer_coeffs(data);
+			if (addr == 0xF5) {		// audio mixer co-efficient value
+				audio65_write_mixer_register(data);
+				return;
 			}
-
 			static int d6cf_exit_status = 0x42;
 			switch (addr) {
 				case 0x0A:	// write bit 7 is zero -> flush the queue
