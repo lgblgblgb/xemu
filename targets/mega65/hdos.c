@@ -470,7 +470,7 @@ static void hdos_virt_findfile ( void )
 	char fullpath[PATH_MAX + 1];
 	struct stat st;
 	hdos.func_is_virtualized = true;
-	int ret = try_open(hdos.cwd, hdos.setname_fn, O_RDONLY, &st, fullpath, &fd);
+	const int ret = try_open(hdos.cwd, hdos.setname_fn, O_RDONLY, &st, fullpath, &fd);
 	// ignore errors on IS_DIRECTORY, as findfile shouldn't care if it's a directory or a file (just as long as it's found)
 	if (ret && ret != HDOSERR_IS_DIRECTORY) {
 		DEBUGHDOS("HDOS: VIRT: findfile would fail on try_open() = %d!" NL, ret);
@@ -614,14 +614,13 @@ static void hdos_virt_readfile ( void )
 		hdos.virt_out_a = HDOSERR_INVALID_DESC;
 		return;
 	}
-	Uint8 buffer[0x200];	// must be exactly $200!
-	const int read_size = xemu_safe_read(desc_table[current_desc].fd, buffer, sizeof buffer);
-	if (read_size < 0) {
+	// the target address corresponds to address $FFD6E00, but accessing directly here as disk_buffers + 0xE00
+	const int read_size = xemu_safe_read(desc_table[current_desc].fd, disk_buffers + 0xE00, 0x200);
+	if (XEMU_UNLIKELY(read_size < 0)) {
 		DEBUGHDOS("HDOS: VIRT: readfile read() error" NL);
 		hdos.virt_out_a = HDOSERR_READ_ERROR;
 		return;
 	}
-	memcpy(disk_buffers + 0xE00, buffer, read_size);	// the target address corresponds to address $FFD6E00, but accessing directly here
 	hdos.virt_out_x =  read_size       & 0xFF;
 	hdos.virt_out_y = (read_size >> 8) & 0xFF;
 	hdos.virt_out_carry = 1;	// signal OK status
