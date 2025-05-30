@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "xemu/emutools_osk.h"
 #include "xemu/emutools_hid.h"
+#include <string.h>
 
 // Do not change these, identifiers
 #define OSK_KEY_HIDE	-100
