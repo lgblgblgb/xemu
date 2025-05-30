@@ -105,7 +105,6 @@ struct configdb_st {
 	int	umon;
 #endif
 	int	sdlrenderquality;
-	int	stereoseparation;
 	int	mastervolume;
 	double	fast_mhz;
 	int	nosound;

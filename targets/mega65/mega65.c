@@ -774,7 +774,6 @@ int main ( int argc, char **argv )
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
 		AUDIO_SAMPLE_FREQ,		// sound mix freq
 		configdb.mastervolume,
-		configdb.stereoseparation,
 		configdb.audiobuffersize
 	);
 	DEBUGPRINT("MEM: UNHANDLED memory policy: %d" NL, configdb.skip_unhandled_mem);

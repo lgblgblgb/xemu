@@ -132,8 +132,7 @@ static const struct xemutools_configdef_num_st num_options[] = {
 	{ "umon", 0, "TCP-based dual mode (http / text) monitor port number [NOT YET WORKING]", &configdb.umon, 0, 0xFFFF },
 #endif
 	{ "sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2 },
-	{ "stereoseparation", AUDIO_DEFAULT_SEPARATION, "Audio stereo separation; 100(hard-stereo) ... 0(mono) ... -100(hard-reversed-stereo); default: " STRINGIFY(AUDIO_DEFAULT_SEPARATION), &configdb.stereoseparation, -100, 100 },
-	{ "mastervolume", AUDIO_DEFAULT_VOLUME, "Audio emulation mixing final volume (100=unchanged ... 0=silence); default: " STRINGIFY(AUDIO_DEFAULT_VOLUME), &configdb.mastervolume, 0, 100 },
+	{ "mastervolume", 100, "Audio emulation mixing final volume (100=default/full ... 0=silence)", &configdb.mastervolume, 0, 100 },
 	// FIXME: as a workaround, I set this to "0" PAL, as newer MEGA65's default is this. HOWEVER this should be not handled this way but using a newer Hyppo!
 	{ "videostd", 0, "Use given video standard at startup/reset (0 = PAL, 1 = NTSC, -1 = Hyppo default)", &configdb.videostd, -1, 1 },
 	{ "sidmask", 15, "Enabled SIDs of the four, in form of a bitmask", &configdb.sidmask, 0, 15 },

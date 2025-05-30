@@ -268,9 +268,8 @@ static void  i2c_writer ( const Uint32 addr32, const Uint8 data ) {
 	if (rel >= I2C_NVRAM_OFFSET && rel < (I2C_NVRAM_OFFSET + I2C_NVRAM_SIZE)) {
 		//DEBUGPRINT("I2C: NVRAM write ($%02X->$%02X) @ NVRAM+$%X" NL, i2c_regs[rel], data, rel - I2C_NVRAM_OFFSET);
 		i2c_regs[rel] = data;
-	} else if (configdb.mega65_model == 3 && rel >= 0x1D0 && rel <= 0x1EF) {	// Hyppo needs this on PCB R3 for I2C target setup (audio mixer settings)
-		// TODO: emulate the mixer stuff
-		i2c_regs[rel] = data;
+	} else if (configdb.mega65_model == 3 && rel >= 0x1D0 && rel <= 0x1EF) {	// Hyppo needs this on PCB R3 for I2C target setup (audio amp chip settings?)
+		i2c_regs[rel] = data;							// ... though the audio amp is not emulated by Xemu
 	} else {
 		DEBUGPRINT("I2C: unhandled write ($%02X) @ I2C+$%X" NL, data, rel);
 	}

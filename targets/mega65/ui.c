@@ -627,16 +627,25 @@ no_clipboard:
 	ERROR_WINDOW("Clipboard query error, or clipboard was empty");
 }
 
+
 static void ui_cb_mono_downmix ( const struct menu_st *m, int *query )
 {
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == stereo_separation);
-	audio_set_stereo_parameters(AUDIO_UNCHANGED_VOLUME, VOIDPTR_TO_INT(m->user_data));
+	const bool st = audio65_get_mono_downmix();
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, st);
+	audio65_set_mono_downmix(!st);
+}
+
+static void ui_cb_audio_output ( const struct menu_st *m, int *query )
+{
+	const int val = audio65_get_output();
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == val);
+	audio65_set_output(VOIDPTR_TO_INT(m->user_data));
 }
 
 static void ui_cb_audio_volume ( const struct menu_st *m, int *query )
 {
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == audio_volume);
-	audio_set_stereo_parameters(VOIDPTR_TO_INT(m->user_data), AUDIO_UNCHANGED_VOLUME);
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == audio65_get_volume());
+	audio65_set_volume(VOIDPTR_TO_INT(m->user_data));
 }
 
 static void ui_cb_video_standard ( const struct menu_st *m, int *query )
@@ -1017,31 +1026,6 @@ static const struct menu_st menu_disks[] = {
 	{ "Cartridge",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_cartridge },
 	{ NULL }
 };
-static const struct menu_st menu_audio_stereo[] = {
-	{ "Hard stereo separation",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) 100 },
-	{ "Stereo separation 80%",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)  80 },
-	{ "Stereo separation 60%",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)  60 },
-	{ "Stereo separation 40%",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)  40 },
-	{ "Stereo separation 20%",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)  20 },
-	{ "Full mono downmix (0%)",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)   0 },
-	{ "Stereo separation -20%",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) -20 },
-	{ "Stereo separation -40%",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) -40 },
-	{ "Stereo separation -60%",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) -60 },
-	{ "Stereo separation -80%",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) -80 },
-	{ "Hard stereo - reserved",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)-100 },
-	{ NULL }
-};
 static const struct menu_st menu_audio_volume[] = {
 	{ "100%",			XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_audio_volume, (void*) 100 },
@@ -1076,15 +1060,25 @@ static const struct menu_st menu_audio_sids[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_sids_enabled, (void*)8 },
 	{ NULL }
 };
+static const struct menu_st menu_audio_output[] = {
+	{ "HDMI / speaker",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_audio_output, (void*)AUDIO_OUTPUT_SPEAKERS },
+	{ "Headphones",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_audio_output, (void*)AUDIO_OUTPUT_HEADPHONES },
+	{ NULL }
+};
 static const struct menu_st menu_audio[] = {
-	{ "Audio output",		XEMUGUI_MENUID_CALLABLE |
+	{ "Audio enabled",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&configdb.nosound },
+	{ "Force mono downmix",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, NULL },
 	{ "OPL3 emulation",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&configdb.noopl3 },
 	{ "Clear audio registers",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, audio65_clear_regs },
+	{ "Restore mixer to default",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, audio65_reset_mixer },
 	{ "Emulated SIDs",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_sids   },
-	{ "Stereo separation",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_stereo },
-	{ "Master volume",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_volume },
+	{ "Emulator volume level",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_volume },
+	{ "Emulated audio output",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_output },
 	{ NULL }
 };
 #ifndef XEMU_ARCH_HTML
