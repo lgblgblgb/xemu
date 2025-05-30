@@ -28,9 +28,3 @@ LDFLAGS_TARGET_xep128	= $(SDL2_LIBS) $(MATH_LIBS) $(SOCKET_LIBS) $(XEMUGUI_LIBS)
 LDFLAGS_TARGET_xep128_ON_html = -s STACK_SIZE=655360 --preload-file=$$HOME/.local/share/xemu-lgb/ep128/exos.rom@/files/exos.rom
 
 include ../../build/Makefile.common
-
-web:
-	$(MAKE) ARCH=html
-	python3 ../../build/webserver.py 8000
-	sleep .1
-	xdg-open http://localhost:8000/$(PRG_TARGET).html

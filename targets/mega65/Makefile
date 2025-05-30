@@ -64,9 +64,3 @@ recreatememcontent:
 showmatrix:
 	bash $(TOPDIR)/build/m65-import-matrix2ascii.sh < $(MATRIX_TAB_VHDL)
 	bash $(TOPDIR)/build/m65-import-matrix2petscii.sh < $(MATRIX_TAB_VHDL)
-
-web:
-	$(MAKE) ARCH=html
-	python3 ../../build/webserver.py 8000
-	sleep .1
-	xdg-open http://localhost:8000/$(PRG_TARGET).html
