@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "io_mapper.h"
 #include "memory_mapper.h"
+#include "audio65.h"
 
 #include <ctype.h>
 #include <string.h>
@@ -583,6 +584,14 @@ static void cmd_shade ( char *p )
 }
 
 
+static void cmd_audio ( char * p )
+{
+	char buffer[4096];
+	audio65_get_description(buffer, sizeof buffer);
+	MATRIX("%s", buffer);
+}
+
+
 static void cmd_help ( char *p );
 
 
@@ -605,6 +614,7 @@ static const struct command_tab_st {
 	{ "write",	cmd_write,	"w"	},
 	{ "map",	cmd_map,	"m"	},
 	{ "shade",	cmd_shade,	NULL	},
+	{ "audio",	cmd_audio,	NULL	},
 	{ .cmdname = NULL			},
 };
 

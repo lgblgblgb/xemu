@@ -1072,10 +1072,10 @@ static const struct menu_st menu_audio[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&configdb.nosound },
 	{ "Force mono downmix",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, NULL },
+	{ "Restore mixer to default",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, audio65_reset_mixer },
+	{ "Clear audio registers",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, audio65_clear_regs },
 	{ "OPL3 emulation",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&configdb.noopl3 },
-	{ "Clear audio registers",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, audio65_clear_regs },
-	{ "Restore mixer to default",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, audio65_reset_mixer },
 	{ "Emulated SIDs",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_sids   },
 	{ "Emulator volume level",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_volume },
 	{ "Emulated audio output",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_output },

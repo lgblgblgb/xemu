@@ -351,7 +351,7 @@ static void recalulate_scalers ( void )
 	scalers_right[8] = scalers_right[9] = GETMIXFL(0x3C) * master_right;
 	if (XEMU_UNLIKELY(mono_downmix))
 		for (int c = 0; c < MIXED_CHANNELS; c++)
-			scalers_left[c] = scalers_right[c] = (scalers_left[c] + scalers_right[c]) / 2;
+			scalers_left[c] = scalers_right[c] = (scalers_left[c] + scalers_right[c]) / 2.0;
 }
 
 
@@ -423,9 +423,10 @@ static void default_mixer_helper ( const int basereg, const Uint16 value_l, cons
 }
 
 
-static void print_audio_info ( void )
+static void print_audio_info ( const char *msg )
 {
-	DEBUGPRINT("AUDIO: emu-volume = %d%%, mono-downmix = %s, output-reg-shift = $%02X" NL,
+	DEBUGPRINT("AUDIO: emu-setup [%s] event; emu-volume = %d%%, mono-downmix = %s, output-reg-shift = $%02X" NL,
+		msg ? msg : "-",
 		xemu_volume_int,
 		mono_downmix ? "ON" : "off",
 		output_selection
@@ -445,6 +446,7 @@ void audio65_reset_mixer ( void )
 	default_mixer_helper(0x1C, 0xBEBE, 0xBEBE);	// OPL FM! On MEGA65 OPL channel is maybe muted by default, btw ...
 	default_mixer_helper(0x1E, 0xFFFF, 0xFFFF);	// master volume
 	recalulate_scalers();
+	print_audio_info("reset-mixer");
 }
 
 
@@ -461,7 +463,7 @@ void audio65_set_volume ( int vol )
 {
 	set_volume(vol);
 	recalulate_scalers();
-	print_audio_info();
+	print_audio_info("set-volume");
 }
 
 
@@ -475,7 +477,7 @@ void audio65_set_mono_downmix ( const bool status )
 {
 	mono_downmix = status;
 	recalulate_scalers();
-	print_audio_info();
+	print_audio_info("mono-downmix");
 }
 
 
@@ -489,13 +491,45 @@ void audio65_set_output ( const int val )
 {
 	output_selection = val;
 	recalulate_scalers();
-	print_audio_info();
+	print_audio_info("set-output");
 }
 
 
 int audio65_get_output ( void )
 {
 	return output_selection;
+}
+
+
+#define GETMIXPCNT(n)  (int)(mixer_floats[((n) + output_selection) >> 1] * 100.0)
+
+
+size_t audio65_get_description ( char *buffer, const size_t buffer_size )
+{
+	const char *output_name;
+	switch (output_selection) {
+		case AUDIO_OUTPUT_SPEAKERS:
+			output_name = "HDMI/speakers";
+			break;
+		case AUDIO_OUTPUT_HEADPHONES:
+			output_name = "heaphones";
+			break;
+		default:
+			output_name = "UNKNOWN";
+			break;
+	}
+	return snprintf(
+		buffer, buffer_size,
+		"Sampling: %dHz, emulation volume: %d%%, emulated output: %s\n"
+		"SIDL   L=%03d%% R=%03d%%     SIDR   L=%03d%% R=%03d%%\n"
+		"DIGL   L=%03d%% R=%03d%%     DIGR   L=%03d%% R=%03d%%\n"
+		"OPLFM  L=%03d%% R=%03d%%     MASTER L=%03d%% R=%03d%%"
+		,
+		system_sound_mix_freq, xemu_volume_int, output_name,
+		GETMIXPCNT(0x00), GETMIXPCNT(0x20), GETMIXPCNT(0x02), GETMIXPCNT(0x22),
+		GETMIXPCNT(0x10), GETMIXPCNT(0x30), GETMIXPCNT(0x12), GETMIXPCNT(0x32),
+		GETMIXPCNT(0x1C), GETMIXPCNT(0x3C), GETMIXPCNT(0x1E), GETMIXPCNT(0x3E)
+	);
 }
 
 
@@ -512,7 +546,6 @@ void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, unsi
 	mono_downmix = false;
 	set_volume(volume);
 	audio65_reset_mixer();
-	print_audio_info();
 	for (int i = 0; i < NUMBER_OF_SIDS; i++)
 		UNLOCK_SID("INIT", i);
 	UNLOCK_OPL("INIT");

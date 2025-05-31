@@ -30,6 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "rom.h"
 #define  XEMU_MEGA65_HDOS_H_ALLOWED
 #include "hdos.h"
+#include "audio65.h"
 
 #include <sys/types.h>
 #include <fcntl.h>
@@ -306,6 +307,7 @@ static inline void first_leave ( void )
 	hdos_notify_system_start_end();
 	xemu_sleepless_temporary_mode(0);	// turn off temporary sleepless mode which may have been enabled before
 	vic_frame_counter_since_boot = 0;
+	audio65_reset_mixer();
 	//memory_reset_unwritten_debug_stat();	// FIXME/TODO: commented out since it generates a **tons** of warnings then with the "unwritten mem read" debug mode (-ramcheckread emu option)
 	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
 }
