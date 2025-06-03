@@ -104,6 +104,7 @@ int vic_readjust_sdl_viewport = 0;
 int vic4_disallow_videostd_change = 0;		// Disallows programs to change video std via register D06F, bit 7 (emulator internally writing that bit still can change video std though!)
 int vic4_registered_screenshot_request = 0;
 unsigned int vic_frame_counter, vic_frame_counter_since_boot;
+int sprite_y_adjust_xemu_bug = 0;		// Unknown reason of sprite-Y bug in Xemu in NTSC. This is a workaround. FIXME: why is it needed?!
 
 
 // VIC4 Modeline Parameters
@@ -201,6 +202,7 @@ void vic_reset ( void )
 	vic4_reset_display_counters();
 	SET_PHYSICAL_RASTER(0);
 	chary16 = false;
+	sprite_y_adjust_xemu_bug = 0;
 }
 
 
@@ -474,6 +476,7 @@ void vic4_open_frame_access ( void )
 			visible_area_height = SCREEN_HEIGHT_VISIBLE_NTSC;
 			vicii_first_raster = 7;
 			REG_SPRITE_Y_ADJUST = 24;
+			sprite_y_adjust_xemu_bug = 7;
 		} else {
 			// --- PAL ---
 			new_name = PAL_STD_NAME;
@@ -483,6 +486,7 @@ void vic4_open_frame_access ( void )
 			visible_area_height = SCREEN_HEIGHT_VISIBLE_PAL;
 			vicii_first_raster = 0;
 			REG_SPRITE_Y_ADJUST = 0;
+			sprite_y_adjust_xemu_bug = 0;
 		}
 		DEBUGPRINT("VIC4: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec, max raster is %d, visible area height is %d)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime, max_rasters, visible_area_height);
 		videostd_name = new_name;
@@ -1210,7 +1214,7 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 #ifdef				SPRITE_COORD_LATCHING
 				sprite_is_being_rendered[sprnum] ? sprite_y_latch[sprnum] :
 #endif
-				((SPRITE_V400(sprnum) ? 1 : 2) * (SPRITE_POS_Y(sprnum) - (SPRITE_V400(sprnum) ? 0 : (REG_SPRITE_Y_ADJUST - 2))));
+				((SPRITE_V400(sprnum) ? 1 : 2) * (SPRITE_POS_Y(sprnum) - (SPRITE_V400(sprnum) ? 0 : (REG_SPRITE_Y_ADJUST - 2 + sprite_y_adjust_xemu_bug))));
 			int sprite_row_in_raster = ycounter - y_display_pos;
 			if (!SPRITE_V400(sprnum))
 				sprite_row_in_raster = sprite_row_in_raster >> 1;
