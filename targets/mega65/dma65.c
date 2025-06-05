@@ -1,6 +1,6 @@
 /* F018 DMA core emulation for MEGA65
    Part of the Xemu project.  https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -195,18 +195,21 @@ static XEMU_INLINE void address_stepping ( struct dma_channel_st *const channel 
 	// otherwise, we must deal with LDM. The following code is based
 	// on ideas found in a sample C implementation written by btoschi. THANKS!!
 	// WARNING: in Xemu, I use a single variable for "addr" and lower 8 bit is the fractional part!!
+	channel->ldm.slope_accu += channel->ldm.slope;
 	if (channel->ldm.slope_type & 0x40) {
 		channel->addr += 0x800U;	// +8 -> we always step in Y
+		// Not sure it's correct at all. TODO: need some test material using this
+		if ((channel->addr & (7 << (3 + 8))) == (7 << (3 + 8)))
+			channel->addr += channel->ldm.y_col;
 		if (channel->ldm.slope_accu > 0xFFFFU) {
 			channel->ldm.slope_accu &= 0xFFFFU;
 			if (channel->ldm.slope_type & 0x20)
 				channel->addr -= ((channel->addr & 0x700) == 0) ? channel->ldm.x_col + 0x100 : 0x100;
 			else
-				channel->addr += ((channel->addr & 0x700) == 0) ? channel->ldm.x_col + 0x100 : 0x100;
+				channel->addr += ((channel->addr & 0x700) == 0x700) ? channel->ldm.x_col + 0x100 : 0x100;
 		}
 	} else {
 		channel->addr += ((channel->addr & 0x700) == 0x700) ? channel->ldm.x_col + 0x100 : 0x100;
-		channel->ldm.slope_accu += channel->ldm.slope;
 		if (channel->ldm.slope_accu > 0xFFFFU) {
 			channel->ldm.slope_accu &= 0xFFFFU;
 			channel->addr += (channel->ldm.slope_type & 0x20) ? -0x800 : 0x800;
@@ -342,8 +345,9 @@ void dma_write_reg ( int addr, Uint8 data )
 	source.mbyte = 0;			// source MB
 	target.mbyte = 0;			// target MB
 	length_byte3 = 0;			// length byte for >=64K DMA sessions
-	source.ldm.slope_type = 0;		// source: line drawing mode, slope type, do not enable line drawing mode by default
-	target.ldm.slope_type = 0;		// target: -- "" --
+	// zero out LDM-specific options by default
+	memset(&source.ldm, 0, sizeof source.ldm);
+	memset(&target.ldm, 0, sizeof target.ldm);
 	mb_cross = mb_cross_global;		// allow to cross megabyte boundaries
 	if (enhanced_mode)
 		DEBUGDMA("DMA: initiation of ENCHANCED MODE DMA!!!!\n");
@@ -439,10 +443,10 @@ int dma_update ( void )
 						target.ldm.x_col = (target.ldm.x_col & 0x00FF00U) + (optval << 16);	// Xemu integer + 8 bit fractional part arithmetic!
 						break;
 					case 0x89:	// DMA line drawing mode TARGET - Row Y col (LSB)
-						target.ldm.y_col = (target.ldm.y_col & 0xFF00U) + optval;
+						target.ldm.y_col = (target.ldm.y_col & 0xFF0000U) + (optval <<  8);	// Xemu integer + 8 bit fractional part arithmetic!
 						break;
 					case 0x8A:	// DMA line drawing mode TARGET - Row Y col (MSB)
-						target.ldm.y_col = (target.ldm.y_col & 0x00FFU) + (optval << 8);
+						target.ldm.y_col = (target.ldm.y_col & 0x00FF00U) + (optval << 16);	// Xemu integer + 8 bit fractional part arithmetic!
 						break;
 					case 0x8B:	// DMA line drawing mode TARGET - Slope (LSB)
 						target.ldm.slope = (target.ldm.slope & 0xFF00U) + optval;
@@ -469,10 +473,10 @@ int dma_update ( void )
 						source.ldm.x_col = (source.ldm.x_col & 0x00FF00U) + (optval << 16);	// Xemu integer + 8 bit fractional part arithmetic!
 						break;
 					case 0x99:	// DMA line drawing mode SOURCE - Row Y col (LSB)
-						source.ldm.y_col = (source.ldm.y_col & 0xFF00U) + optval;
+						source.ldm.y_col = (source.ldm.y_col & 0xFF0000U) + (optval <<  8);	// Xemu integer + 8 bit fractional part arithmetic!
 						break;
 					case 0x9A:	// DMA line drawing mode SOURCE - Row Y col (MSB)
-						source.ldm.y_col = (source.ldm.y_col & 0x00FFU) + (optval << 8);
+						source.ldm.y_col = (source.ldm.y_col & 0x00FF00U) + (optval << 16);	// Xemu integer + 8 bit fractional part arithmetic!
 						break;
 					case 0x9B:	// DMA line drawing mode SOURCE - Slope (LSB)
 						source.ldm.slope = (source.ldm.slope & 0xFF00U) + optval;
