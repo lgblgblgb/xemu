@@ -33,7 +33,7 @@ MEGA65_PATCH	= ../../build/mega65-core-0.97-aaf4542d02679271b5fb84ad933cc39bbe09
 MEGA65_FILES	= bin/charrom.bin bin/HICKUP.M65 bin/COLOURRAM.BIN sdcard-files/BANNER.M65 sdcard-files/ONBOARD.M65 src/open-roms/bin/mega65.rom
 MEGA65_FILES	+= sdcard-files/FREEZER.M65 sdcard-files/MAKEDISK.M65
 MEGA65_FILES	+= sdcard-files/AUDIOMIX.M65 sdcard-files/C64THUMB.M65 sdcard-files/C65THUMB.M65 sdcard-files/ROMLOAD.M65 sdcard-files/SPRITED.M65
-#MEGA65_FILES	+= sdcard-files/M65THUMB.M65 sdcard-files/MONITOR.M65 sdcard-files/ETHLOAD.M65
+MEGA65_FILES	+= sdcard-files/M65THUMB.M65 sdcard-files/MONITOR.M65 sdcard-files/ETHLOAD.M65 sdcard-files/MEGAINFO.M65
 
 MEGA65_FP_FILES	= $(addprefix $(MEGA65_CORE)/,$(MEGA65_FILES))
 MEGA65_LOCALDIR	= .sys-files-mega65-core

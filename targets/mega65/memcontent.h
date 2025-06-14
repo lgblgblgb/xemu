@@ -16,7 +16,7 @@
 
 // Special structure array for system files update on the SD-image
 struct meminitdata_sdfiles_st { const Uint8 *p; const char *fn; const int size; };
-#define MEMINITDATA_SDFILES_ITEMS 9
+#define MEMINITDATA_SDFILES_ITEMS 13
 extern const struct meminitdata_sdfiles_st meminitdata_sdfiles_db[MEMINITDATA_SDFILES_ITEMS];
 
 // Generated as "chrwom" from file ../../../mega65-core-0.97-for-xemu/bin/charrom.bin ($1000 bytes)
@@ -70,5 +70,21 @@ extern const Uint8 meminitdata_romload[MEMINITDATA_ROMLOAD_SIZE];
 // Generated as "sprited" from file ../../../mega65-core-0.97-for-xemu/sdcard-files/SPRITED.M65 ($7928 bytes)
 #define MEMINITDATA_SPRITED_SIZE 0x7928
 extern const Uint8 meminitdata_sprited[MEMINITDATA_SPRITED_SIZE];
+
+// Generated as "m65thumb" from file ../../../mega65-core-0.97-for-xemu/sdcard-files/M65THUMB.M65 ($1940 bytes)
+#define MEMINITDATA_M65THUMB_SIZE 0x1940
+extern const Uint8 meminitdata_m65thumb[MEMINITDATA_M65THUMB_SIZE];
+
+// Generated as "monitor" from file ../../../mega65-core-0.97-for-xemu/sdcard-files/MONITOR.M65 ($4732 bytes)
+#define MEMINITDATA_MONITOR_SIZE 0x4732
+extern const Uint8 meminitdata_monitor[MEMINITDATA_MONITOR_SIZE];
+
+// Generated as "ethload" from file ../../../mega65-core-0.97-for-xemu/sdcard-files/ETHLOAD.M65 ($1F5 bytes)
+#define MEMINITDATA_ETHLOAD_SIZE 0x1F5
+extern const Uint8 meminitdata_ethload[MEMINITDATA_ETHLOAD_SIZE];
+
+// Generated as "megainfo" from file ../../../mega65-core-0.97-for-xemu/sdcard-files/MEGAINFO.M65 ($55CE bytes)
+#define MEMINITDATA_MEGAINFO_SIZE 0x55CE
+extern const Uint8 meminitdata_megainfo[MEMINITDATA_MEGAINFO_SIZE];
 
 #endif
