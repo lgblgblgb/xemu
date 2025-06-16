@@ -85,6 +85,8 @@ mega65corefetch:
 
 mega65patch:
 	@echo "*** Patching mega65-core for Xemu at $(MEGA65_CORE) ***"
+	test -f "$(MEGA65_CORE)/xemu_patched" && { echo "*** Already patched ***" ; false ; }
+	patch -p1 -d "$(MEGA65_CORE)" < $(MEGA65_PATCH)
 	date > "$(MEGA65_CORE)/xemu_patched"
 
 showmatrix:
