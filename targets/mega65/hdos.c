@@ -57,6 +57,7 @@ static struct {
 	bool do_virt;
 	int error_code;		// last error code
 	int transfer_area_addr;
+	char last_mounted[2][64];
 } hdos;
 
 static int hdos_init_is_done = 0;
@@ -261,13 +262,13 @@ static const char *hdos_get_func_name ( const int func_no )
 		"closedir",					// 16
 		"openfile",					// 18
 		"readfile",					// 1A
-		"writefile [UNIMPLEMENTED]",			// 1C
-		"mkfile [WIP]",					// 1E
+		"writefile",					// 1C - introduced in 1.3
+		"mkfile [WIP]",					// 1E - ??? "implementation started" in asm source
 		"closefile",					// 20
 		"closeall",					// 22
 		"seekfile [UNIMPLEMENTED]",			// 24
-		"rmfile [UNIMPLEMENTED]",			// 26
-		"fstat [UNIMPLEMENTED]",			// 28
+		"rmfile",					// 26 - introduced in 1.3
+		"fstat",					// 28 - introduced in 1.3 - not so much documented ... "implementation started" in asm source
 		"rename [UNIMPLEMENTED]",			// 2A
 		"filedate [UNIMPLEMENTED]",			// 2C
 		"setname",					// 2E
@@ -279,12 +280,12 @@ static const char *hdos_get_func_name ( const int func_no )
 		"setup_transfer_area",				// 3A
 		"cdrootdir",					// 3C
 		"loadfile_attic",				// 3E
-		"d81attach0",					// 40
-		"d81detach",					// 42
+		"d81attach0",					// 40 - DOS 1.2 compatibility - DEPRECATED in favor of "attach"
+		"d81detach",					// 42 - DOS 1.2 compatibility - DEPRECATED in favor of "attach"
 		"d81write_en",					// 44
-		"d81attach1",					// 46
+		"d81attach1",					// 46 - DOS 1.2 compatibility - DEPRECATED in favor of "attach"
 		"get_proc_desc",				// 48
-		INVALID_SUBFUNCTION,				// 4A
+		"attach",					// 4A - introduced in 1.3
 		INVALID_SUBFUNCTION,				// 4C
 		INVALID_SUBFUNCTION,				// 4E
 		"gettasklist [UNIMPLEMENTED]",			// 50
@@ -460,6 +461,7 @@ static void hdos_virt_mount ( const int unit )
 	}
 	// it seems everything went out fine :D
 	DEBUGHDOS("HDOS: VIRT: mount of image \"%s\" on unit %d went well." NL, fullpath, unit);
+	strcpy(hdos.last_mounted[unit], hdos.setname_fn);
 	hdos.virt_out_carry = 1;	// signal OK status
 }
 
@@ -813,12 +815,41 @@ static void _hdos_func_unimplemented ( const char *by_entity )
 #define HDOS_VIRT_XEMU_UNIMPLEMENTED()	_hdos_func_unimplemented("XEMU")
 
 
+static void _update_result_of_get_proc_desc ( void )
+{
+	// I want to _modify_ the result from hyppo, with updated D81 mount stuff.
+	// It's true for HDOS virtualization, but also by default, as Xemu does
+	// not have a real three-state system (D81 mounted, not mounted, physical
+	// drive) as it makes no sense for emulator (for an emulator, D81 mounted
+	// and the internal phyisical drive is the very same: a non-SD-card source of mount)
+	if (hdos.in_y >= 0x80 || !hdos.do_virt)
+		return;
+	const Uint16 address = hdos.in_y << 8;
+	Uint8 desc[0x100];
+	copy_mem_from_user(desc, 0x100, -1, address);
+	for (int unit = 0; unit < 2; unit++) {
+		int is_internal;
+		const char *disk = sdcard_get_mount_info(unit, &is_internal);
+		if (!is_internal && disk[0] != '<') {
+			desc[0x11 + unit] = 0;	// D81 mount flags (???)
+			desc[0x13 + unit] = strlen(hdos.last_mounted[unit]);
+			Uint8 *p = desc + 0x15 + 0x20 * unit;
+			memset(p, 0x20, 0x20);
+			memcpy(p, hdos.last_mounted[unit], strlen(hdos.last_mounted[unit]));
+			DEBUGHDOS("HDOS: get_proc_desc: update for unit #%d to %s" NL, unit, hdos.last_mounted[unit]);
+		} else
+			DEBUGHDOS("HDOS: get_proc_desc: NOT updating for unit #%d" NL, unit);
+	}
+	copy_mem_to_user(address, desc, 0x100);
+}
+
+
 static inline int is_need_to_notify_sdcard ( const Uint8 func_no )
 {
 	// Notify SDCARD/F011 subsystem if:
 	// * HDOS virutalization is not enabled
 	// * And, any "mount" related HDOS function is/was called
-	return !hdos.do_virt && (func_no == 0x40 || func_no == 0x42 || func_no == 0x44 || func_no == 0x46);
+	return !hdos.do_virt && (func_no == 0x40 || func_no == 0x42 || func_no == 0x44 || func_no == 0x46 || func_no == 0x4A);
 }
 
 
@@ -943,6 +974,15 @@ void hdos_enter ( const Uint8 func_no )
 			case 0x46 >> 1:
 				hdos_virt_mount(1);
 				break;
+			case 0x48 >> 1:	// get_proc_desc, do NOT virtualize this! will be handled in hdos_leave() instead
+				break;
+			case 0x4A >> 1:	// attach
+				if ((hdos.in_x & 0x80)) {	// X.7 is 1 = detach
+					// allow to pass through (of real hyppo)
+				} else {			// X.7 is 0 = attach
+					hdos_virt_mount(hdos.in_x & 1);
+				}
+				break;
 		}
 		if (hdos.func != 0x38)	// See the comment(s) above in the switch statement, case "0x38 >> 1"
 			hdos.last_func_call_was_virtualized = hdos.func_is_virtualized;
@@ -1032,6 +1072,10 @@ void hdos_leave ( const Uint8 func_no )
 		DEBUGHDOS("HDOS: transfer area address is set to $%04X" NL, hdos.transfer_area_addr);
 		return;
 	}
+	if (hdos.func == 0x48 && cpu65.pf_c) {	// get_proc_desc [also check if the call was successfull, ie carry is set)
+		_update_result_of_get_proc_desc();	// see that function for comments/info
+		return;
+	}
 	if (hdos.func == 0x40) {	// 0x40: d81attach0 TODO: later I should check if mount was OK and name was MEGA65.D81 to have special external mount then. If HDOS virt is not enabled.
 		DEBUGPRINT("HDOS: %s(\"%s\") = %s" NL, hdos.func_name, hdos.setname_fn, cpu65.pf_c ? "OK" : "FAILED");
 		//if (!strcasecmp(hdos.setname_fn, "MEGA65.D81"))
@@ -1053,6 +1097,8 @@ static void hdos_reset ( void )
 	hdos.transfer_area_addr = 0;
 	hdos.last_func_call_was_virtualized = false;
 	hypervisor_hdos_close_descriptors();
+	hdos.last_mounted[0][0] = 0;
+	hdos.last_mounted[1][0] = 0;
 }
 
 
