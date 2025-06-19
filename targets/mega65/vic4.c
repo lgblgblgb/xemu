@@ -1268,6 +1268,23 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 }
 
 
+static XEMU_INLINE Uint32 blend32 ( const Uint32 a, const Uint32 b, const Uint8 s )
+{
+	// Used by the FCM alpha-blend renderer on SDL2 colour representation (RGBA
+	// per bytes within 32 bit unsigned integers). Technically I wouldn't need
+	// to "blend" the alpha channel, however I cannot be sure which byte is alpha
+	// (platform dependent, byte order ...). But since alpha channel is always $FF
+	// for "A" and "B" too, blending those wouldn't hurt. And btw, do not confuse
+	// the "alpha" in RGBA and the nature of alpha-blending, independent things.
+	return
+	  (( a        & 0xFF) * s + ( b        & 0xFF) * (255U - s)) / 255U         +
+	(((((a >>  8) & 0xFF) * s + ((b >>  8) & 0xFF) * (255U - s)) / 255U) <<  8) +
+	(((((a >> 16) & 0xFF) * s + ((b >> 16) & 0xFF) * (255U - s)) / 255U) << 16) +
+	(((( a >> 24        ) * s + ( b >> 24        ) * (255U - s)) / 255U) << 24);
+}
+
+
+
 // Render a monochrome character cell row
 // flip = 00 Dont flip, 01 = flip vertical, 10 = flip horizontal, 11 = flip both
 static XEMU_INLINE void vic4_render_mono_char_row ( Uint8 char_byte, const int glyph_width, const Uint8 bg_color, Uint8 fg_color, Uint8 vic3attr )
@@ -1334,6 +1351,16 @@ static XEMU_INLINE void vic4_render_fullcolor_char_row ( const Uint8* char_row, 
 		else if (XEMU_LIKELY(enable_bg_paint))
 			*current_pixel = bg_sdl_color;
 		current_pixel++;
+		is_fg[xcounter++] = char_data;
+	}
+}
+
+
+static XEMU_INLINE void vic4_render_fullcolor_char_row_with_alpha ( const Uint8* char_row_ptr, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 fg_sdl_color, const int hflip )
+{
+	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
+		const Uint8 char_data = draw_mask & char_row_ptr[XEMU_LIKELY(!hflip) ? (int)cx : glyph_width - 1 - (int)cx];
+		*current_pixel++ = blend32(fg_sdl_color, bg_sdl_color, char_data);
 		is_fg[xcounter++] = char_data;
 	}
 }
@@ -1589,14 +1616,23 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 				// fgcolor in case of FCM should mean colour index $FF
 				// FIXME: check if the passed palette[color_data & 0xFF] is correct or another index should be used for that $FF colour stuff
 				const Uint32 *palette_now = ((REG_VICIII_ATTRIBS) && SXA_ATTR_ALTPALETTE(color_data)) ? altpalette : used_palette;
-				vic4_render_fullcolor_char_row(
-					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
-					8 - glyph_trim,
-					palette_now[char_bgcolor],		// bg SDL colour
-					palette_now[color_data & 0xFF],		// fg SDL colour
-					SXA_HORIZONTAL_FLIP(color_data),	// hflip?
-					palette_now
-				);
+				if (XEMU_UNLIKELY((vic_registers[0x54] & 0x81) == 0x81 && SXA_ALPHA_BLEND(color_data)))
+					vic4_render_fullcolor_char_row_with_alpha(
+						main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
+						8 - glyph_trim,
+						palette_now[char_bgcolor],		// bg SDL colour
+						palette_now[color_data & 0xFF],		// fg SDL colour
+						SXA_HORIZONTAL_FLIP(color_data)		// hflip?
+					);
+				else
+					vic4_render_fullcolor_char_row(
+						main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
+						8 - glyph_trim,
+						palette_now[char_bgcolor],		// bg SDL colour
+						palette_now[color_data & 0xFF],		// fg SDL colour
+						SXA_HORIZONTAL_FLIP(color_data),	// hflip?
+						palette_now
+					);
 			} else if ((REG_MCM && ((color_data & 8) || (vic_registers[0x63] & 0x40))) || (REG_MCM && REG_BMM)) {	// Multicolor character
 				// using static vars: faster in a rapid loop like this, no need to re-adjust stack pointer all the time to allocate space and this way using constant memory address
 				// also, as an optimization, later, some value can be re-used and not always initialized here, when in reality VIC
