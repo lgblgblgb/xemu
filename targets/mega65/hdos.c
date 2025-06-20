@@ -57,10 +57,10 @@ static struct {
 	bool do_virt;
 	int error_code;		// last error code
 	int transfer_area_addr;
-	char last_mounted[2][64];
 } hdos;
 
 static int hdos_init_is_done = 0;
+static const char hdos_fake_external_name_str[] = "XEMUFAKEDEXTERNALMOUNTMAGIC";
 
 #define HDOS_DESCRIPTORS	4
 
@@ -461,7 +461,6 @@ static void hdos_virt_mount ( const int unit )
 	}
 	// it seems everything went out fine :D
 	DEBUGHDOS("HDOS: VIRT: mount of image \"%s\" on unit %d went well." NL, fullpath, unit);
-	strcpy(hdos.last_mounted[unit], hdos.setname_fn);
 	hdos.virt_out_carry = 1;	// signal OK status
 }
 
@@ -822,25 +821,34 @@ static void _update_result_of_get_proc_desc ( void )
 	// not have a real three-state system (D81 mounted, not mounted, physical
 	// drive) as it makes no sense for emulator (for an emulator, D81 mounted
 	// and the internal phyisical drive is the very same: a non-SD-card source of mount)
-	if (hdos.in_y >= 0x80 || !hdos.do_virt)
-		return;
-	const Uint16 address = hdos.in_y << 8;
 	Uint8 desc[0x100];
-	copy_mem_from_user(desc, 0x100, -1, address);
+	if (copy_mem_from_user(desc, 0x100, -1, hdos.in_y << 8) != 0x100)
+		return;
 	for (int unit = 0; unit < 2; unit++) {
-		int is_internal;
-		const char *disk = sdcard_get_mount_info(unit, &is_internal);
-		if (!is_internal && disk[0] != '<') {
+		const char *disk = sdcard_get_external_mount_name(unit);
+		if (disk) {
+			if (hdos.do_virt) {
+				// If HDOS virt is turned on, trust the mount fn, though we don't need the directory path
+				const char *p1 = strrchr(disk, '/'), *p2 = strrchr(disk, '\\');
+				if (p1 > p2)
+					disk = p1 + 1;
+				else if (p2 > p1)
+					disk = p2 + 1;
+			} else
+				disk = hdos_fake_external_name_str;	// ... otherwise, our "fake name" which is used later to detect a mount using this name
+			int l = strlen(disk);
+			if (l > 32)
+				l = 32;
 			desc[0x11 + unit] = 0;	// D81 mount flags (???)
-			desc[0x13 + unit] = strlen(hdos.last_mounted[unit]);
+			desc[0x13 + unit] = l;
 			Uint8 *p = desc + 0x15 + 0x20 * unit;
 			memset(p, 0x20, 0x20);
-			memcpy(p, hdos.last_mounted[unit], strlen(hdos.last_mounted[unit]));
-			DEBUGHDOS("HDOS: get_proc_desc: update for unit #%d to %s" NL, unit, hdos.last_mounted[unit]);
+			memcpy(p, disk, l);
+			DEBUGHDOS("HDOS: get_proc_desc: update for unit #%d to %s" NL, unit, disk);
 		} else
 			DEBUGHDOS("HDOS: get_proc_desc: NOT updating for unit #%d" NL, unit);
 	}
-	copy_mem_to_user(address, desc, 0x100);
+	copy_mem_to_user(hdos.in_y << 8, desc, 0x100);
 }
 
 
@@ -872,6 +880,18 @@ void hdos_enter ( const Uint8 func_no )
 	hdos.in_y = cpu65.y;
 	hdos.in_z = cpu65.z;
 	DEBUGHDOS("HDOS: entering function #$%02X (%s) A=$%02X X=$%02X Y=$%02X Z=$%02X" NL, hdos.func, hdos.func_name, cpu65.a, cpu65.x, cpu65.y, cpu65.z);
+	// BEGIN: hack needed for GEOS65 to work (it always executes even if HDOS virt is turned off!)
+	if (
+		(hdos.func == 0x40 || hdos.func == 0x46 || (hdos.func == 0x4A && !(hdos.in_x & 0x80))) &&	// some kind of mount request
+		!strcasecmp(hdos.setname_fn, hdos_fake_external_name_str)					// ... which is referring for our "fake" name
+	) {
+		DEBUGHDOS("HDOS: mount request detected against the 'fake filename'" NL);
+		// In this very case, we just ignore the request and pretend to be OK:
+		D6XX_registers[0x47] |= CPU65_PF_C;	// was OK (carry is _SET_ if OK)
+		hypervisor_leave();
+		return;
+	}
+	// END: hack needed for GEOS65 to work
 	if (hdos.do_virt) {
 		// Can be overriden by virtualized functions.
 		// these virt_out stuffs won't be used otherwise, if a virtualized function does not set hdos.func_is_virtualized
@@ -1097,8 +1117,6 @@ static void hdos_reset ( void )
 	hdos.transfer_area_addr = 0;
 	hdos.last_func_call_was_virtualized = false;
 	hypervisor_hdos_close_descriptors();
-	hdos.last_mounted[0][0] = 0;
-	hdos.last_mounted[1][0] = 0;
 }
 
 

@@ -1107,6 +1107,14 @@ const char *sdcard_get_mount_info ( const int unit, int *is_internal )
 }
 
 
+const char *sdcard_get_external_mount_name ( const int unit )
+{
+	if (mount_info[unit & 1].type != MOUNT_TYPE_EXTERNAL)
+		return NULL;
+	return mount_info[unit & 1].last_ext_fn;
+}
+
+
 int sdcard_external_mount ( const int unit, const char *filename, const char *cry )
 {
 	DEBUGPRINT("SDCARD: MOUNT: %s(%d, \"%s\", \"%s\");" NL, __func__, unit, filename, cry);
