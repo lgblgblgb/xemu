@@ -41,6 +41,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 //#define DEBUGHDOS(...) DEBUG(__VA_ARGS__)
 #define DEBUGHDOS(...) DEBUGPRINT(__VA_ARGS__)
 
+#define MAX_REAL_PATH_DB_ENTRIES 100
+
 static struct {
 	Uint8 func;
 	const char *func_name;
@@ -57,6 +59,7 @@ static struct {
 	bool do_virt;
 	int error_code;		// last error code
 	int transfer_area_addr;
+	char *ext_real_path_db[MAX_REAL_PATH_DB_ENTRIES];
 } hdos;
 
 static int hdos_init_is_done = 0;
@@ -814,6 +817,28 @@ static void _hdos_func_unimplemented ( const char *by_entity )
 #define HDOS_VIRT_XEMU_UNIMPLEMENTED()	_hdos_func_unimplemented("XEMU")
 
 
+
+static char *_fake_external_mount_namer ( const char *realpath )
+{
+	static char fakename[33];
+	int id = 0;
+	for (id = 0;; id++) {
+		if (id >= MAX_REAL_PATH_DB_ENTRIES)
+			return NULL;	// oh-oh, out of free storage
+		if (!hdos.ext_real_path_db[id])
+			break;
+		if (!strcmp(hdos.ext_real_path_db[id], realpath))
+			goto found;
+	}
+	hdos.ext_real_path_db[id] = xemu_realloc(hdos.ext_real_path_db[id], strlen(realpath) + 1);
+	strcpy(hdos.ext_real_path_db[id], realpath);
+found:
+	snprintf(fakename, sizeof(fakename), "%s%d", hdos_fake_external_name_str, id + 1);	// id = 0 is not valid
+	return fakename;
+
+}
+
+
 static void _update_result_of_get_proc_desc ( void )
 {
 	// I want to _modify_ the result from hyppo, with updated D81 mount stuff.
@@ -834,8 +859,13 @@ static void _update_result_of_get_proc_desc ( void )
 					disk = p1 + 1;
 				else if (p2 > p1)
 					disk = p2 + 1;
-			} else
-				disk = hdos_fake_external_name_str;	// ... otherwise, our "fake name" which is used later to detect a mount using this name
+			} else {
+				disk = _fake_external_mount_namer(disk);
+				if (!disk) {
+					ERROR_WINDOW("Out of free slots for fake mount info");
+					disk = hdos_fake_external_name_str;
+				}
+			}
 			int l = strlen(disk);
 			if (l > 32)
 				l = 32;
@@ -883,13 +913,26 @@ void hdos_enter ( const Uint8 func_no )
 	// BEGIN: hack needed for GEOS65 to work (it always executes even if HDOS virt is turned off!)
 	if (
 		(hdos.func == 0x40 || hdos.func == 0x46 || (hdos.func == 0x4A && !(hdos.in_x & 0x80))) &&	// some kind of mount request
-		!strcasecmp(hdos.setname_fn, hdos_fake_external_name_str)					// ... which is referring for our "fake" name
+		!strncasecmp(hdos.setname_fn, hdos_fake_external_name_str, strlen(hdos_fake_external_name_str))	// ... which is referring for our "fake" name
 	) {
-		DEBUGHDOS("HDOS: mount request detected against the 'fake filename'" NL);
-		// In this very case, we just ignore the request and pretend to be OK:
-		D6XX_registers[0x47] |= CPU65_PF_C;	// was OK (carry is _SET_ if OK)
-		hypervisor_leave();
-		return;
+		const int id = atoi(hdos.setname_fn + strlen(hdos_fake_external_name_str));
+		if (id > 0 && id <= MAX_REAL_PATH_DB_ENTRIES) {
+			const char *path = hdos.ext_real_path_db[id - 1];
+			const int unit = (hdos.func == 0x46 || (hdos.func == 0x4A && (hdos.in_x & 0x1))) ? 1 : 0;
+			if (!path)
+				FATAL("Internal error, hdos_enter() got hdos.ext_real_path_db[%d - 1] == NULL", id);
+			DEBUGHDOS("HDOS: mount request detected against the 'fake filename' = \"%s\", ID = %d, translated_to = \"%s\" for drive #%d" NL, hdos.setname_fn, id, path, unit);
+			if (sdcard_external_mount(unit, path, NULL)) {
+				DEBUGHDOS("HDOS: VIRT: mount of image \"%s\" on unit %d FAILED :(" NL, path, unit);
+				D6XX_registers[0x40] = HDOSERR_IMAGE_WRONG_LEN;	// this is probably the only reason the mount call could fail (set register A)
+				D6XX_registers[0x47] &= ~CPU65_PF_C;		// error when carry is _CLEAR_
+			} else {
+				D6XX_registers[0x40] = 0;
+				D6XX_registers[0x47] |= CPU65_PF_C;	// was OK (carry is _SET_ if OK)
+			}
+			hypervisor_leave();
+			return;
+		}
 	}
 	// END: hack needed for GEOS65 to work
 	if (hdos.do_virt) {
@@ -1117,6 +1160,11 @@ static void hdos_reset ( void )
 	hdos.transfer_area_addr = 0;
 	hdos.last_func_call_was_virtualized = false;
 	hypervisor_hdos_close_descriptors();
+	for (int i = 0; i < MAX_REAL_PATH_DB_ENTRIES; i++)
+		if (hdos.ext_real_path_db[i]) {
+			free(hdos.ext_real_path_db[i]);
+			hdos.ext_real_path_db[i] = NULL;
+		}
 }
 
 
@@ -1187,6 +1235,9 @@ void hdos_init ( const int do_virt, const char *virtroot )
 		desc_table[a].status = HDOS_DESC_CLOSED;
 		desc_table[a].basedirpath = NULL;
 	}
+	// Important: do this BEFORE calling hdos_reset() as it needs the path_db to be init'ed
+	for (int i = 0; i < MAX_REAL_PATH_DB_ENTRIES; i++)
+		hdos.ext_real_path_db[i] = NULL;
 	hdos_reset();
 	// HDOS virtualization related stuff
 	// First build the default path for HDOS root, also try to create, maybe hasn't existed yet.
