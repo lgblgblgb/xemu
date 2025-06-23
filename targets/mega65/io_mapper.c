@@ -57,6 +57,79 @@ static const Uint8 cpld_firmware_version[] = { 'N','o','w','!' };
 	return; } while(0)
 
 
+// ------------------ BEGIN: VDC specific ------------------
+
+
+static Uint8 vdc_reg_sel = 0;
+#define VDC_ENABLED() ((D7XX[0x10] & 4) && !in_hypervisor)
+static Uint8 vdc_regs[0x40];
+
+
+//#define VDC_DEBUG	DEBUGPRINT
+#define VDC_DEBUG(...)
+
+static XEMU_INLINE Uint32 vdc2vic_addr ( const Uint16 vdc_address )
+{
+	const unsigned int line = vdc_address / 80U;
+	const unsigned int col  = vdc_address % 80U;
+	const unsigned int viciv_line = line / 8U;
+	const unsigned int result = (viciv_line * 640U) + (line % 8U) + (col * 8U);
+	return result;
+}
+
+
+static inline Uint8 vdc_read_register ( const Uint8 reg )
+{
+	VDC_DEBUG("VDC: reading register $%02X" NL, reg);
+	if (reg == 0x1F) {	// reading the data register which means reading a byte through VDC
+		Uint16 vdc_mem_addr = (vdc_regs[0x12] << 8) + vdc_regs[0x13];
+		const Uint8 result = main_ram[vdc2vic_addr(vdc_mem_addr++) + 0x40000];
+		vdc_regs[0x12] = vdc_mem_addr >> 8;
+		vdc_regs[0x13] = vdc_mem_addr & 0xFF;
+		return result;
+	}
+	return vdc_regs[reg];
+}
+
+
+static inline void vdc_write_register ( const Uint8 reg, const Uint8 data )
+{
+	VDC_DEBUG("VDC: writing register $%02X with data $%02X" NL, reg, data);
+	vdc_regs[reg] = data;
+	if (reg == 0x1F) {	// writing the data register which means writing a byte through VDC
+		Uint16 vdc_mem_addr = (vdc_regs[0x12] << 8) + vdc_regs[0x13];
+		main_ram[vdc2vic_addr(vdc_mem_addr++) + 0x40000] = data;
+		vdc_regs[0x12] = vdc_mem_addr >> 8;
+		vdc_regs[0x13] = vdc_mem_addr & 0xFF;
+		return;
+	}
+	if (reg == 0x1E) {	// writing the count register triggers a block write or block copy operation
+		Uint16 vdc_mem_addr = (vdc_regs[0x12] << 8) + vdc_regs[0x13];			// VDC memory update address
+		int vdc_word_count = data;							// block copy fill/word count (the current register value: reg $1E)
+		if (vdc_regs[0x18] & 0x80) {	// ---[ BLOCK COPY OPERATION ]----------
+			Uint16 vdc_mem_addr_src = (vdc_regs[0x20] << 8) + vdc_regs[0x21];	// block copy source address
+			while (vdc_word_count > 0) {
+				main_ram[vdc2vic_addr(vdc_mem_addr++) + 0x40000] = main_ram[vdc2vic_addr(vdc_mem_addr_src++) + 0x40000];
+				vdc_word_count--;
+			}
+			vdc_regs[0x20] = vdc_mem_addr_src >> 8;
+			vdc_regs[0x21] = vdc_mem_addr_src & 0xFF;
+		} else {			// ---[ BLOCK WRITE OPERATION ]---------
+			while (vdc_word_count > 0) {
+				main_ram[vdc2vic_addr(vdc_mem_addr++) + 0x40000] = vdc_regs[0x1F];	// FIXME: $1F reg contains the data to be written?
+				vdc_word_count--;
+			}
+		}
+		vdc_regs[0x12] = vdc_mem_addr >> 8;
+		vdc_regs[0x13] = vdc_mem_addr & 0xFF;
+		return;
+	}
+}
+
+
+// ------------------ END: VDC specific ------------------
+
+
 static XEMU_INLINE void update_hw_multiplier ( void )
 {
 	register const Uint32 input_a = xemu_u8p_to_u32le(D7XX + 0x70);
@@ -189,6 +262,12 @@ Uint8 io_read ( unsigned int addr )
 		case 0x36:	// $D600-$D6FF ~ M65 I/O mode
 		case 0x26:
 			addr &= 0xFF;
+			if (VDC_ENABLED()) {
+				switch (addr) {
+					case 0: return 0x80;			// always return with "ready" as VDC status
+					case 1: return vdc_read_register(vdc_reg_sel);
+				}
+			}
 			if (addr < 9)
 				RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);	// FIXME: UART is not yet supported!
 			if (addr >= 0x80 && addr <= 0x93)	// SDcard controller etc of MEGA65
@@ -445,6 +524,14 @@ void io_write ( unsigned int addr, Uint8 data )
 		case 0x36:	// $D600-$D6FF ~ M65 I/O mode
 		case 0x26:
 			addr &= 0xFF;
+			if (VDC_ENABLED()) {
+				switch (addr) {
+					case 0:	vdc_reg_sel = data & 0x3F;	// bit7&6 are not used
+						return;
+					case 1: vdc_write_register(vdc_reg_sel, data);
+						return;
+				}
+			}
 			if (!in_hypervisor && addr >= 0x40 && addr <= 0x7F) {
 				// In user mode, writing to $D640-$D67F (in VIC4 iomode) causes to enter hypervisor mode with
 				// the trap number given by the offset in this range
