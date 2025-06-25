@@ -57,6 +57,84 @@ static const Uint8 cpld_firmware_version[] = { 'N','o','w','!' };
 	return; } while(0)
 
 
+// ------------------ BEGIN: VDC specific ------------------
+
+
+static Uint8 vdc_reg_sel = 0;
+#define VDC_ENABLED() ((D7XX[0x10] & 4) && !in_hypervisor)
+static Uint8 vdc_regs[0x40];
+
+
+//#define VDC_DEBUG	DEBUGPRINT
+#define VDC_DEBUG(...)
+
+static XEMU_INLINE Uint8 *vdc2vicptr ( const Uint16 vdc_address )
+{
+	// The logic here is from mega65-core's VHDL source
+	const unsigned int line = vdc_address / 80U;
+	const unsigned int col  = vdc_address % 80U;
+	const unsigned int viciv_line = line / 8U;
+	const unsigned int result = (viciv_line * 640U) + (line % 8U) + (col * 8U);
+	// Assuming hires bitmap screen always at address $40000
+	return main_ram + result + 0x40000U;
+}
+
+
+static inline Uint8 vdc_read_register ( const Uint8 reg )
+{
+	VDC_DEBUG("VDC: reading register $%02X" NL, reg);
+	if (reg == 0x1F) {	// reading the data register which means reading a byte through VDC
+		Uint16 vdc_mem_addr = (vdc_regs[0x12] << 8) + vdc_regs[0x13];
+		VDC_DEBUG("VDC: reading VRAM at VDC address $%04X" NL, vdc_mem_addr);
+		const Uint8 result = *vdc2vicptr(vdc_mem_addr++);
+		vdc_regs[0x12] = vdc_mem_addr >> 8;
+		vdc_regs[0x13] = vdc_mem_addr & 0xFF;
+		return result;
+	}
+	return vdc_regs[reg];
+}
+
+
+static inline void vdc_write_register ( const Uint8 reg, const Uint8 data )
+{
+	VDC_DEBUG("VDC: writing register $%02X with data $%02X" NL, reg, data);
+	vdc_regs[reg] = data;
+	if (reg == 0x1F) {	// writing the data register which means writing a byte through VDC
+		Uint16 vdc_mem_addr = (vdc_regs[0x12] << 8) + vdc_regs[0x13];
+		VDC_DEBUG("VDC: writing VRAM at VDC address $%04X with data $%02X" NL, vdc_mem_addr, data);
+		*vdc2vicptr(vdc_mem_addr++) = data;
+		vdc_regs[0x12] = vdc_mem_addr >> 8;
+		vdc_regs[0x13] = vdc_mem_addr & 0xFF;
+		return;
+	}
+	// FIXME: this block copy/write emulation is really bad. Though I am unsure if anyone ever uses/used it. If so, it must be fixed in the future.
+	if (reg == 0x1E) {	// writing the count register triggers a block write or block copy operation
+		// NOTE: block commands are totally not tested and missing many parts!!! Like the busy check
+		// And maybe block "dimensions" as well. Also these ops are done in one step, stalling emulation. VERY BAD!
+		Uint16 vdc_mem_addr = (vdc_regs[0x12] << 8) + vdc_regs[0x13];			// VDC memory update address
+		int vdc_word_count = data;							// block copy fill/word count (the current register value: reg $1E)
+		if (vdc_regs[0x18] & 0x80) {	// ---[ BLOCK COPY OPERATION ]----------
+			Uint16 vdc_mem_addr_src = (vdc_regs[0x20] << 8) + vdc_regs[0x21];	// block copy source address
+			VDC_DEBUG("VDC: block copy of VRAM at VDC addresses $%04X -> $%04X with count = $%X" NL, vdc_mem_addr_src, vdc_mem_addr, vdc_word_count);
+			while (vdc_word_count-- > 0)
+				*vdc2vicptr(vdc_mem_addr++) = *vdc2vicptr(vdc_mem_addr_src++);
+			vdc_regs[0x20] = vdc_mem_addr_src >> 8;
+			vdc_regs[0x21] = vdc_mem_addr_src & 0xFF;
+		} else {			// ---[ BLOCK WRITE OPERATION ]---------
+			VDC_DEBUG("VDC: block write of RAM at VDC address $%04X with data = $%02X and count = $%X" NL, vdc_mem_addr, vdc_regs[0x1F], vdc_word_count);
+			while (vdc_word_count-- > 0)
+				*vdc2vicptr(vdc_mem_addr++) = vdc_regs[0x2A];			// normally attrib control, but on block write, this is the data to be written
+		}
+		vdc_regs[0x12] = vdc_mem_addr >> 8;
+		vdc_regs[0x13] = vdc_mem_addr & 0xFF;
+		return;
+	}
+}
+
+
+// ------------------ END: VDC specific ------------------
+
+
 static XEMU_INLINE void update_hw_multiplier ( void )
 {
 	register const Uint32 input_a = xemu_u8p_to_u32le(D7XX + 0x70);
@@ -189,6 +267,8 @@ Uint8 io_read ( unsigned int addr )
 		case 0x36:	// $D600-$D6FF ~ M65 I/O mode
 		case 0x26:
 			addr &= 0xFF;
+			if (addr <= 1 && VDC_ENABLED())					// $D600 or $D601 if VDC is enabled
+				return addr ? vdc_read_register(vdc_reg_sel) : 0x80;	// 0x80 = always return with "READY" as VDC status if $D600 is read
 			if (addr < 9)
 				RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);	// FIXME: UART is not yet supported!
 			if (addr >= 0x80 && addr <= 0x93)	// SDcard controller etc of MEGA65
@@ -445,6 +525,13 @@ void io_write ( unsigned int addr, Uint8 data )
 		case 0x36:	// $D600-$D6FF ~ M65 I/O mode
 		case 0x26:
 			addr &= 0xFF;
+			if (addr <= 1 && VDC_ENABLED()) {			// $D600 or $D601 if VDC is enabled
+				if (addr)
+					vdc_write_register(vdc_reg_sel, data);	// register data to be written ($D601)
+				else
+					vdc_reg_sel = data & 0x3F;		// register selection (on write of $D600): bit7&6 are not used though
+				return;
+			}
 			if (!in_hypervisor && addr >= 0x40 && addr <= 0x7F) {
 				// In user mode, writing to $D640-$D67F (in VIC4 iomode) causes to enter hypervisor mode with
 				// the trap number given by the offset in this range
