@@ -2,7 +2,7 @@
 
 # A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
 # Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-# Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+# Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -25,7 +25,7 @@ PROTOTYPE = "const Uint8"
 # This must be incremented by ONE every time, when memcontent.c changes, or even
 # if sdcontent.c is changed in a way to write new files, new content, or whatever
 # to the SD-card as part of the "update system files" process.
-MEMCONTENT_VERSION_ID = 2
+MEMCONTENT_VERSION_ID = 3
 
 FILE_DB = {
     # -------------------------------------------------------------------- #
@@ -45,6 +45,11 @@ FILE_DB = {
     "SPRITED.M65":          ("sprited",     "SPRITED.M65" ),
     "charrom.bin":          ("chrwom",      None ),
     "MAKEDISK.M65":         ("makedisk",    "MAKEDISK.M65" ),
+    # Added ones at 2025/06 - as part of the issue https://github.com/lgblgblgb/xemu/issues/436
+    "M65THUMB.M65":         ("m65thumb",    "M65THUMB.M65" ),
+    "MONITOR.M65":          ("monitor",     "MONITOR.M65" ),
+    "ETHLOAD.M65":          ("ethload",     "ETHLOAD.M65" ),
+    "MEGAINFO.M65":         ("megainfo",    "MEGAINFO.M65" ),
 }
 
 HEADER = """/* !THIS IS A GENERATED FILE! DO NOT EDIT!
