@@ -1339,6 +1339,19 @@ static XEMU_INLINE void vic4_render_fullcolor_char_row ( const Uint8* char_row, 
 }
 
 
+#include "xemu/opt-code/blend32.h"
+
+
+static XEMU_INLINE void vic4_render_fullcolor_char_row_with_alpha ( const Uint8* char_row_ptr, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 fg_sdl_color, const int hflip )
+{
+	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
+		const Uint8 char_data = draw_mask & char_row_ptr[XEMU_LIKELY(!hflip) ? (int)cx : glyph_width - 1 - (int)cx];
+		*current_pixel++ = blend32(fg_sdl_color, bg_sdl_color, char_data);
+		is_fg[xcounter++] = char_data;
+	}
+}
+
+
 // 16-color (Nybl) mode (4-bit per pixel / 16 pixel wide characters)
 static XEMU_INLINE void vic4_render_16color_char_row ( const Uint8* char_row, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 fg_sdl_color, const Uint32 *palette16, const int hflip )
 {
@@ -1589,14 +1602,23 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 				// fgcolor in case of FCM should mean colour index $FF
 				// FIXME: check if the passed palette[color_data & 0xFF] is correct or another index should be used for that $FF colour stuff
 				const Uint32 *palette_now = ((REG_VICIII_ATTRIBS) && SXA_ATTR_ALTPALETTE(color_data)) ? altpalette : used_palette;
-				vic4_render_fullcolor_char_row(
-					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
-					8 - glyph_trim,
-					palette_now[char_bgcolor],		// bg SDL colour
-					palette_now[color_data & 0xFF],		// fg SDL colour
-					SXA_HORIZONTAL_FLIP(color_data),	// hflip?
-					palette_now
-				);
+				if (XEMU_UNLIKELY((vic_registers[0x54] & 0x81) == 0x81 && SXA_ALPHA_BLEND(color_data)))
+					vic4_render_fullcolor_char_row_with_alpha(
+						main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
+						8 - glyph_trim,
+						palette_now[char_bgcolor],		// bg SDL colour
+						palette_now[color_data & 0xFF],		// fg SDL colour
+						SXA_HORIZONTAL_FLIP(color_data)		// hflip?
+					);
+				else
+					vic4_render_fullcolor_char_row(
+						main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
+						8 - glyph_trim,
+						palette_now[char_bgcolor],		// bg SDL colour
+						palette_now[color_data & 0xFF],		// fg SDL colour
+						SXA_HORIZONTAL_FLIP(color_data),	// hflip?
+						palette_now
+					);
 			} else if ((REG_MCM && ((color_data & 8) || (vic_registers[0x63] & 0x40))) || (REG_MCM && REG_BMM)) {	// Multicolor character
 				// using static vars: faster in a rapid loop like this, no need to re-adjust stack pointer all the time to allocate space and this way using constant memory address
 				// also, as an optimization, later, some value can be re-used and not always initialized here, when in reality VIC

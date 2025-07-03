@@ -182,7 +182,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SXA_TRIM_RIGHT_BITS012(sw)	((sw) >> 13)
 #define SXA_VERTICAL_FLIP(cw)		((cw) & 0x8000)
 #define SXA_HORIZONTAL_FLIP(cw)		((cw) & 0x4000)
-//#define SXA_ALPHA_BLEND(cw)		((cw) & 0x2000)
+#define SXA_ALPHA_BLEND(cw)		((cw) & 0x2000)
 #define SXA_GOTO_X(cw)			((cw) & 0x1000)
 #define SXA_4BIT_PER_PIXEL(cw)		((cw) & 0x0800)
 #define SXA_TRIM_RIGHT_BIT3(cw)		((cw) & 0x0400)
