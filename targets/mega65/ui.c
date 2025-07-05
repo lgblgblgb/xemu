@@ -313,7 +313,7 @@ static void ui_update_sdcard ( void )
 	// Call the updater :)
 	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES | SDCONTENT_HDOS_DIR_TOO)) {
 		INFO_WINDOW(
-			"System files on your SD-card image seems to be updated successfully.\n"
+			"System files on your SD-card image seem to have been updated successfully.\n"
 			"Next time you may need this function, you can use MEGA65.ROM which is a backup copy of your selected ROM.\n\n"
 			"ROM: %d (%s)\n\n"
 			"Your emulated MEGA65 is about to RESET now!", rom_date, rom_name
