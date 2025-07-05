@@ -464,14 +464,14 @@ retry:
 	}
 #ifdef SD_CONTENT_SUPPORT
 	if (!virtsd_flag && sdfd >= 0) {
-		static const char msg[] = " on the SD-card image.\nPlease use UI menu: Disks -> SD-card -> Update files ...\nUI can be accessed with right mouse click into the emulator window.";
+		static const char msg[] = " on the SD-card image.\nPlease use UI menu: Disks / Cart -> SD-card -> Update files ...\nUI menu can be accessed via right mouse click in the emulator window.";
 		int r = sdcontent_check_xemu_signature();
 		if (r < 0) {
 			ERROR_WINDOW("Warning! Cannot read SD-card to get Xemu signature!");
 		} else if (r == 0) {
 			INFO_WINDOW("Cannot find Xemu's signature%s", msg);
 		} else if (r < MEMCONTENT_VERSION_ID) {
-			INFO_WINDOW("Xemu's singature is too old%s to upgrade", msg);
+			INFO_WINDOW("Xemu's signature is too old%s to upgrade", msg);
 		} else if (r > MEMCONTENT_VERSION_ID) {
 			INFO_WINDOW("Xemu's signature is too new%s to DOWNgrade", msg);
 		}
