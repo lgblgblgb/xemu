@@ -363,7 +363,7 @@ static void mega65_init ( void )
 	} while (0);
 	// *** Initializes memory subsystem of MEGA65 emulation itself
 	memory_init();
-	cart_load_bin(configdb.cartbin8000, 0x8000, "Cannot load binary cartridge image from $8000");
+	cart_attach(configdb.cart);
 	if (xemu_load_file(I2C_FILE_NAME, i2c_regs, sizeof i2c_regs, sizeof i2c_regs,
 #ifndef		XEMU_ARCH_HTML
 		"Cannot load I2C reg-space. Maybe first run or upgrade of Xemu?\nFor the next Xemu launch, it should have been already corrected automatically.\nSo no need to worry."
@@ -564,6 +564,8 @@ int reset_mega65 ( const unsigned int options )
 		if (!ARE_YOU_SURE("Are you sure you want to RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
 			return 0;
 	}
+	if ((options & RESET_MEGA65_NO_CART))
+		cart_detach();
 	switch (options & 0xFF) {
 		case RESET_MEGA65_HARD:
 			last_reset_type = "HARD";

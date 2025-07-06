@@ -62,7 +62,7 @@ void emu_dropfile_callback ( const char *fn )
 				_mountd81_configdb_change(0, fn);
 			break;
 		case 2:
-			reset_mega65(RESET_MEGA65_HARD);
+			reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_NO_CART);
 			inject_register_prg(fn, 0, false);
 			break;
 	}
@@ -163,7 +163,7 @@ static void ui_run_prg_by_browsing ( void )
 		fnbuf,
 		sizeof fnbuf
 	)) {
-		reset_mega65(RESET_MEGA65_HARD);
+		reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_NO_CART);
 		inject_register_prg(fnbuf, 0, false);
 	} else
 		DEBUGPRINT("UI: file selection for PRG injection was cancelled." NL);
@@ -376,7 +376,7 @@ static void reset_into_utility_menu ( void )
 
 static void reset_into_c64_mode ( void )
 {
-	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK)) {
+	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK | RESET_MEGA65_NO_CART)) {
 		rom_stubrom_requested = 0;
 		rom_initrom_requested = 0;
 		// we need this, because autoboot disk image would bypass the "go to C64 mode" on 'Commodore key' feature
@@ -414,7 +414,7 @@ static void reset_into_xemu_initrom ( void )
 
 static void reset_into_c65_mode_noboot ( void )
 {
-	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK)) {
+	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK | RESET_MEGA65_NO_CART)) {
 		rom_stubrom_requested = 0;
 		rom_initrom_requested = 0;
 		inject_register_allow_disk_access();
@@ -706,35 +706,36 @@ static void ui_cb_colour_effect ( const struct menu_st *m, int *query )
 	vic4_set_emulation_colour_effect(VOIDPTR_TO_INT(m->user_data));
 }
 
-static void ui_cb_load_bin_cart ( const struct menu_st *m, int *query )
+static void ui_cb_attach_cart ( const struct menu_st *m, int *query )
 {
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, cart_is_attached());
 	char fnbuf[PATH_MAX + 1];
 	static char dir[PATH_MAX + 1] = "";
 	_check_file_selection_default_override(dir);
 	if (!xemugui_file_selector(
 		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
-		"Select binary cartridge",
+		"Select cartridge",
 		dir,
 		fnbuf,
 		sizeof fnbuf
 	)) {
-		if (!cart_load_bin(fnbuf, VOIDPTR_TO_INT(m->user_data), "Cannot load binary cartridge"))
-			xemucfg_set_str(&configdb.cartbin8000, fnbuf);
+		const int ret = cart_attach(fnbuf);
+		if (ret >= 0) {
+			xemucfg_set_str(&configdb.cart, fnbuf);
+			if (ret)
+				reset_mega65(RESET_MEGA65_HARD);
+			else
+				INFO_WINDOW("No auto-start 'M65' sequence at $8007, skipping reset");
+		}
 	} else
-		DEBUGPRINT("UI: file selection for PRG injection was cancelled." NL);
+		DEBUGPRINT("UI: file selection cartridge insertion was cancelled." NL);
 }
 
-static void ui_start_cartridge ( void )
+static void ui_cart_info ( void )
 {
-	if (!cart_is_loaded()) {
-		ERROR_WINDOW("No cartridge is loaded yet.");
-		return;
-	}
-	if (cart_detect_id()) {
-		INFO_WINDOW("Cartridge signature M65 not detected. Start with your own risk.");
-	}
-	cart_copy_from(0x8000, main_ram + 0x8000, 0x2000);
-	INFO_WINDOW("Copied. Type BANK0:SYS$8000 to start");
+	char buf[4096];
+	cart_info(buf, sizeof buf);
+	INFO_WINDOW("%s", buf);
 }
 
 #ifndef XEMU_ARCH_HTML
@@ -789,8 +790,9 @@ static void ui_cb_show_osk ( const struct menu_st *m, int *query )
 
 
 static const struct menu_st menu_cartridge[] = {
-	{ "Load BIN cartridge to $8000",XEMUGUI_MENUID_CALLABLE,	ui_cb_load_bin_cart, (void*)0x8000 },
-	{ "Start cartridge",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_start_cartridge },
+	{ "Attach cartridge",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_cart, NULL },
+	{ "Deatch cartridge",		XEMUGUI_MENUID_CALLABLE,				xemugui_cb_call_user_data, cart_detach },
+	{ "Cartridge info",		XEMUGUI_MENUID_CALLABLE,				xemugui_cb_call_user_data, ui_cart_info },
 	{ NULL }
 };
 static const struct menu_st menu_colour_effects[] = {

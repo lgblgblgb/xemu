@@ -74,7 +74,7 @@ static const struct xemutools_configdef_str_st str_options[] = {
 #endif
 	{ "gui",	NULL, "Select GUI type for usage. Specify some insane str to get a list", &configdb.selectedgui },
 	{ "importbas",	NULL, "Import and RUN BASIC65 program from TEXT file", &configdb.importbas },
-	{ "cartbin8000",NULL, "Load binary cartridge image from $8000", &configdb.cartbin8000 },
+	{ "cart",	NULL, "Load cartridge file", &configdb.cart },
 	{ "winpos",	NULL, "Window position: x,y (integers)", &configdb.winpos },
 	{ "initattic",	NULL, "Pre-fill the Attic RAM with the content of a file", &configdb.init_attic },
 	{ NULL }
@@ -164,7 +164,7 @@ static const void *do_not_save_opts[] = {
 	&configdb.screenshot_and_exit,
 #endif
 	&configdb.testing, &configdb.hyperdebug, &configdb.hyperdebugfreezer, &configdb.usestubrom, &configdb.useinitrom, &configdb.useutilmenu,
-	&configdb.cartbin8000, &configdb.winpos, &configdb.ramcheckread, &configdb.init_attic,
+	&configdb.cart, &configdb.winpos, &configdb.ramcheckread, &configdb.init_attic,
 	&configdb.prg_test, &configdb.prg_exit,
 	NULL
 };
