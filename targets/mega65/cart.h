@@ -25,6 +25,7 @@ extern void  cart_write_byte  ( unsigned int addr, Uint8 data );
 extern int   cart_attach      ( const char *fn );
 extern void  cart_detach      ( void );
 extern bool  cart_is_attached ( void );
-extern void  cart_info        ( char *p, size_t size );
+extern int   cart_info        ( char *p, size_t size );
+extern const char *cart_get_fn( void );
 
 #endif

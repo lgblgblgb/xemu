@@ -337,6 +337,11 @@ static void reset_via_hyppo ( void )
 	reset_mega65(RESET_MEGA65_HYPPO | RESET_MEGA65_ASK);
 }
 
+static void reset_without_cartridge ( void )
+{
+	reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK | RESET_MEGA65_NO_CART);
+}
+
 static void reset_cpu_only ( void )
 {
 	reset_mega65(RESET_MEGA65_CPU | RESET_MEGA65_ASK);
@@ -530,6 +535,7 @@ static void ui_emu_info ( void )
 		"Hyppo version: %s (%s)\n"
 		"HDOS virtualization: %s, root = %s\n"
 		"Disk8 = %s\nDisk9 = %s\n"
+		"Cartridge = %s\n"
 		"C64 'CPU' I/O port (low 3 bits): DDR=%d OUT=%d\n"
 		"Current PC: $%04X (linear: $%07X)\n"
 		"Current VIC and I/O mode: %s %s, hot registers are %s\n"
@@ -544,6 +550,7 @@ static void ui_emu_info ( void )
 		hyppo_version_string, hickup_is_overriden ?  "OVERRIDEN" : "built-in",
 		hdos_virt ? "ON" : "OFF", hdos_root,
 		sdcard_get_mount_info(0, NULL), sdcard_get_mount_info(1, NULL),
+		cart_get_fn(),
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
 		cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc),
 		iomode_names[io_mode], videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
@@ -891,6 +898,7 @@ static const struct menu_st menu_reset[] = {
 	{ "Reset back to default ROM",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_use_default_rom, NULL				},
 	{ "Reset", 			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_hard			},
+	{ "Reset + cartridge detach",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_without_cartridge	},
 	{ "Reset without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot	},
 	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu	},
 	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode		},
