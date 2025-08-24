@@ -581,7 +581,7 @@ void io_write ( unsigned int addr, Uint8 data )
 					virtkey(addr - 0x15, data & 0x7F);
 					return;
 				case 0x72:	// "$D672.6 HCPU:MATRIXEN Enable composited Matrix Mode, and disable UART access to serial monitor."
-					matrix_mode_toggle(data & 0x40);
+					matrix_mode_toggle(!!(data & 0x40));
 					return;
 				case 0x7C:					// hypervisor serial monitor port
 					hypervisor_serial_monitor_push_char(data);

@@ -39,7 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define DEBUGMATRIX(...)
 
 
-int in_the_matrix = 0;
+bool in_the_matrix = false;
 
 
 // TODO: many inventions here eventlually should be moved into some common place as
@@ -89,7 +89,6 @@ static int chrscreen_xsize, chrscreen_ysize;
 static Uint8 *vmem = NULL, *vmem_prev = NULL, *vmem_backup = NULL;
 static int current_x = 0, current_y = 0;
 static int need_update = 0;
-static int init_done = 0;
 static Uint8 queued_input;
 static unsigned int matrix_counter = 0;
 static int live_update_enabled = 1;
@@ -297,7 +296,7 @@ static void dump_map ( void )
 
 static void cmd_off ( char *p )
 {
-	matrix_mode_toggle(0);
+	matrix_mode_toggle(false);
 }
 
 
@@ -785,7 +784,7 @@ static int kbd_cb_keyevent ( SDL_KeyboardEvent *ev )
 			// Monitor ctrl-tab, as the main handler is defunct at this point, we "hijacked" it!
 			// So we must give up the matrix mode themselves here
 			if (sym == SDLK_TAB && (ev->keysym.mod & (KMOD_LCTRL | KMOD_RCTRL)))
-				matrix_mode_toggle(0);
+				matrix_mode_toggle(false);
 			else
 				queued_input = sym;
 		}
@@ -803,22 +802,22 @@ static int kbd_cb_textevent ( SDL_TextInputEvent *ev )
 }
 
 
-void matrix_mode_toggle ( int status )
+void matrix_mode_toggle ( const bool status )
 {
 	if (!is_osd_enabled()) {
 		ERROR_WINDOW("OSD is not enabled to be able to use Matrix mode.");
 		return;
 	}
-	status = !!status;
-	if (status == !!in_the_matrix)
+	if (status == in_the_matrix)
 		return;
 	in_the_matrix = status;
 	static int saved_allow_mouse_grab;
 	if (in_the_matrix) {
+		static bool init_done = false;
 		D6XX_registers[0x72] |= 0x40;	// be sure we're sync with the matrix bit!
 		osd_hijack(matrix_updater_callback, &backend_xsize, &backend_ysize, &backend_pixels);
 		if (!init_done) {
-			init_done = 1;
+			init_done = true;
 			init_colour_mappings();
 			chrscreen_xsize = backend_xsize / 8;
 			chrscreen_ysize = backend_ysize / 8;
@@ -869,5 +868,10 @@ void matrix_mode_toggle ( int status )
 		hid_register_sdl_textinput_event_callback(HID_CB_LEVEL_CONSOLE, NULL);
 		allow_mouse_grab = saved_allow_mouse_grab;
 	}
-	clear_emu_events();	// cure problems, that triggering/switching-on/off matrix screen cause that ALT key remains latched etc ...
+	// Original intent: cure problems, that triggering/switching-on/off matrix screen cause that ALT key remains latched etc ...
+	// However it breaks the "rapid CTRL-TAB cycling" between matrix/normal mode (without releasing CTRL).
+	// Now it seems, removing this call does not have any notable side-effect besides the original intent, so I try to remove it now.
+#if 0
+	clear_emu_events();
+#endif
 }

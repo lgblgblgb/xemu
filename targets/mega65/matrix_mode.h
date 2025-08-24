@@ -19,8 +19,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_MEGA65_MATRIX_MODE_H_INCLUDED
 #define XEMU_MEGA65_MATRIX_MODE_H_INCLUDED
 
-extern int in_the_matrix;
+extern bool in_the_matrix;
 
-extern void matrix_mode_toggle ( int status );
+extern void matrix_mode_toggle ( const bool status );
 
 #endif

@@ -824,7 +824,7 @@ int main ( int argc, char **argv )
 	emulation_is_running = 1;
 	update_emulated_time_sources();
 	if (configdb.matrixstart)
-		matrix_mode_toggle(1);
+		matrix_mode_toggle(true);
 	// FIXME: for emscripten (anyway it does not work too much currently) there should be 50 or 60 (PAL/NTSC) instead of (fixed, and wrong!) 25!!!!!!
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;
