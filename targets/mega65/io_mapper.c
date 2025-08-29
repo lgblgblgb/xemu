@@ -274,7 +274,7 @@ Uint8 io_read ( unsigned int addr )
 			if (addr >= 0x80 && addr <= 0x93)	// SDcard controller etc of MEGA65
 				return sdcard_read_register(addr - 0x80);
 			if ((addr & 0xF0) == 0xE0)
-				return eth65_read_reg(addr);
+				return eth65_read_reg(addr & 0xF);
 			switch (addr) {
 				case 0x7C:
 					return 0;			// emulate the "UART is ready" situation (used by some HICKUPs around from v0.11 or so)
@@ -372,7 +372,7 @@ Uint8 io_read ( unsigned int addr )
 		/* $D800-$DFFF: in case of ethernet I/O mode only! */
 		/* ----------------------------------------------- */
 		case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
-			return eth65_read_rx_buffer(addr - 0x2800);
+			return eth65_buffer_reader(addr);
 		/* ----------------------- */
 		/* $D800-$DBFF: COLOUR RAM */
 		/* ----------------------- */
@@ -551,7 +551,7 @@ void io_write ( unsigned int addr, Uint8 data )
 				return;
 			}
 			if ((addr & 0xF0) == 0xE0) {
-				eth65_write_reg(addr, data);
+				eth65_write_reg(addr & 0xF, data);
 				return;
 			}
 			if (addr == 0xF4) {		// audio mixer co-efficient address
@@ -639,7 +639,7 @@ void io_write ( unsigned int addr, Uint8 data )
 		/* $D800-$DFFF: in case of ethernet I/O mode only! */
 		/* ----------------------------------------------- */
 		case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
-			eth65_write_tx_buffer(addr - 0x2800, data);
+			eth65_buffer_writer(addr, data);
 			return;
 		/* ----------------------- */
 		/* $D800-$DBFF: COLOUR RAM */

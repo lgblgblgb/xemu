@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2018 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2018,2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -60,9 +60,11 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SELECT_WAIT_USEC_MIN	5
 #define SELECT_WAIT_INC_VAL	5
 
-
 #define ETH_II_FRAME_ARP	0x0806
 #define ETH_II_FRAME_IPV4	0x0800
+
+#define RX_BUFFERS		4
+
 
 static int eth_debug;
 
@@ -91,10 +93,10 @@ static volatile struct {
 	int	adjust_txd_phase;
 	int	miim_register;
 	int	phy_number;
-	Uint8	rx_buffer[0x1000];	// actually, two 2048 bytes long buffers in one array
-	Uint8	tx_buffer[0x0800];	// a 2048 bytes long buffer to TX
 } eth65;
 
+static Uint8 rx_buffer[0x1000];	// actually, two 2048 bytes long buffers in one array
+static Uint8 tx_buffer[0x0800];	// a 2048 bytes long buffer to TX
 
 static Uint8 mac_address[6]	= {0x02,0x47,0x53,0x65,0x65,0x65};	// 00:80:10:... would be nicer, though a bit of cheating, it belongs to Commodore International(TM).
 #ifdef HAVE_ETHERTAP
@@ -102,6 +104,7 @@ static const Uint8 mac_bcast[6]	= {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};	// also used 
 #endif
 
 static Uint16 miimlo8[0x20], miimhi8[0x20];
+static Uint8 eth_regs[0x10];
 
 #ifndef ETH65_NO_DEBUG
 #define ETHDEBUG(...)	do { \
@@ -150,11 +153,10 @@ static const char init_error_prefix[] = "ETH: disabled: ";
 
 static SDL_Thread *thread_id = NULL;
 
-static XEMU_INLINE int ethernet_rx_processor ( void )
+static inline int ethernet_rx_processor ( void )
 {
 	Uint8 rx_temp_buffer[0x800];
-	int ethertype, ret;
-	ret = xemu_tuntap_read(rx_temp_buffer, 6 + 6 + 2, sizeof rx_temp_buffer);
+	const int ret = xemu_tuntap_read(rx_temp_buffer, 6 + 6 + 2, sizeof rx_temp_buffer);
 	if (ret == -2) {
 		eth65.select_wait_usec = 1000000;	// serious problem, do 1sec wait ...
 		ETHDEBUG("ETH-THREAD: read with EAGAIN, continue ..." NL);
@@ -185,7 +187,7 @@ static XEMU_INLINE int ethernet_rx_processor ( void )
 	}
 	// XEMU stuff, just to test TAP
 	// it only recoginizes Ethernet-II frames, for frame types IPv4 or ARP
-	ethertype = (rx_temp_buffer[12] << 8) | rx_temp_buffer[13];
+	const int ethertype = (rx_temp_buffer[12] << 8) | rx_temp_buffer[13];
 	if (ethertype < 1536) {
 		ETHDEBUG("ETH-THREAD: ... however, skipped by XEMU: not an Ethernet-II frame ($%04X)" NL, ethertype);
 		return 0;
@@ -228,11 +230,11 @@ static XEMU_INLINE int ethernet_rx_processor ( void )
 	ETHDEBUG("ETH-THREAD: ... MEGA[65]-COOL: we are ready to propogate packet" NL);
 	// M65 stores the received frame size in "6502 byte order" as the first two bytes in the RX
 	// (this makes things somewhat non-symmetric, as for TX, the size are in a pair of registers)
-	eth65.rx_buffer[eth65.rx_buffer_using] = ret & 0xFF;
-	eth65.rx_buffer[eth65.rx_buffer_using + 1] = ret >> 8;
+	rx_buffer[eth65.rx_buffer_using] = ret & 0xFF;
+	rx_buffer[eth65.rx_buffer_using + 1] = ret >> 8;
 	for (int i = 0; i < ret; i++)
-		eth65.rx_buffer[eth65.rx_buffer_using + 2 + i] = rx_temp_buffer[i];
-	//memcpy(eth65.rx_buffer + eth65.rx_buffer_using + 2, rx_temp_buffer, r);
+		rx_buffer[eth65.rx_buffer_using + 2 + i] = rx_temp_buffer[i];
+	//memcpy(rx_buffer + eth65.rx_buffer_using + 2, rx_temp_buffer, r);
 	eth65.rx_enabled = 0;		// disable RX till user not ACK'ed by swapping RX buffers
 	RX_IRQ_ON();			// signal, that we have something! we don't support IRQs yet, but it's also used for polling!
 	return 0;
@@ -241,7 +243,6 @@ static XEMU_INLINE int ethernet_rx_processor ( void )
 
 static XEMU_INLINE int ethernet_tx_processor ( void )
 {
-	int ret, size;
 	if (eth65.tx_size < 14 || eth65.tx_size > ETH_FRAME_MAX_SIZE) {
 		ETHDEBUG("ETH-THREAD: skipping TX, because invalid frame size: %d" NL, eth65.tx_size);
 		// still fake an OK answer FIXME ?
@@ -250,14 +251,15 @@ static XEMU_INLINE int ethernet_tx_processor ( void )
 		return 0;
 	}
 #if 0
+	int size;
 	// maybe this is not needed, and TAP device can handle autmatically, but anyway
 	if (eth65.tx_size < ETH_FRAME_MIN_SIZE) {
-		memset((void*)eth65.tx_buffer + eth65.tx_size, 0, ETH_FRAME_MIN_SIZE - eth65.tx_size);
+		memset((void*)tx_buffer + eth65.tx_size, 0, ETH_FRAME_MIN_SIZE - eth65.tx_size);
 		size = ETH_FRAME_MIN_SIZE;
 	} else
 #endif
-		size = eth65.tx_size;
-	ret = xemu_tuntap_write((void*)eth65.tx_buffer, size);
+	const int size = eth65.tx_size;
+	const int ret = xemu_tuntap_write((void*)tx_buffer, size);
 	if (ret == -2) {	// FIXME: with read OK, but for write????
 		eth65.select_wait_usec = 1000000;	// serious problem, do 1sec wait ...
 		ETHDEBUG("ETH-THREAD: write with EAGAIN, continue ..." NL);
@@ -284,12 +286,10 @@ static XEMU_INLINE int ethernet_tx_processor ( void )
 }
 
 
-
 static int ethernet_thread ( void *unused )
 {
 	ETHDEBUG("ETH-THREAD: hello from the thread." NL);
 	while (eth65.enabled) {
-		int ret;
 		/* ------------------- check for RX condition ------------------- */
 		if (
 			(!eth65.rx_enabled) && eth65.no_reset &&
@@ -309,7 +309,7 @@ static int ethernet_thread ( void *unused )
 				eth65.select_wait_usec += SELECT_WAIT_INC_VAL;
 		}
 		/* ------------------- The select() stuff ------------------- */
-		ret = xemu_tuntap_select(((eth65.rx_enabled && eth65.no_reset) ? XEMU_TUNTAP_SELECT_R : 0) | ((eth65.tx_trigger && eth65.no_reset) ? XEMU_TUNTAP_SELECT_W : 0), eth65.select_wait_usec);
+		const int ret = xemu_tuntap_select(((eth65.rx_enabled && eth65.no_reset) ? XEMU_TUNTAP_SELECT_R : 0) | ((eth65.tx_trigger && eth65.no_reset) ? XEMU_TUNTAP_SELECT_W : 0), eth65.select_wait_usec);
 		//ETHDEBUG("ETH-THREAD: after select with %d usecs, retval = %d, rx_enabled = %d, tx_trigger = %d" NL,
 		//	eth65.select_wait_usec, ret, eth65.rx_enabled, eth65.tx_trigger
 		//);
@@ -349,10 +349,11 @@ static int ethernet_thread ( void *unused )
    however we want to keep them, so a network-aware software won't go crazy on totally missing register-level emulation */
 
 
-Uint8 eth65_read_reg ( int addr )
+// "addr" must be between $0 and $F !!!
+Uint8 eth65_read_reg ( const unsigned int addr )
 {
-	DEBUG("ETH: reading register $%02X" NL, addr & 0xF);
-	switch (addr & 0xF) {
+	DEBUG("ETH: reading register $%02X" NL, addr);
+	switch (addr) {
 		/* **** $D6E0 register **** */
 		case 0x00:
 			return eth65.no_reset;	// FIXME: not other bits emulated yet here
@@ -380,6 +381,8 @@ Uint8 eth65_read_reg ( int addr )
 		case 0x02: return eth65.tx_size & 0xFF;
 		/* **** $D6E3 register: TX size register high (4 bits only) **** */
 		case 0x03: return (eth65.tx_size >> 8) & 0xFF;	// 4 bits, but tx_size var cannot contain more anyway
+		/* **** $D6E4 register: on _reading_ it seems to gives back the total number of RX buffers what system has *** */
+		case 0x04: return RX_BUFFERS;
 		/* **** $D6E5 register **** */
 		case 0x05:
 			return
@@ -401,24 +404,20 @@ Uint8 eth65_read_reg ( int addr )
 		/* **** $D6E8 register **** */
 		case 0x08: return miimhi8[eth65.miim_register];
 		/* **** $D6E9 - $D6EE registers: MAC address **** */
-		case 0x09: return mac_address[0];
-		case 0x0A: return mac_address[1];
-		case 0x0B: return mac_address[2];
-		case 0x0C: return mac_address[3];
-		case 0x0D: return mac_address[4];
-		case 0x0E: return mac_address[5];
+		case 0x09: case 0x0A: case 0x0B: case 0x0C: case 0x0D: case 0x0E:
+			return mac_address[addr - 9];
 		default:
 			return 0xFF;
 	}
 }
 
 
-
-
-void eth65_write_reg ( int addr, Uint8 data )
+// "addr" must be between $0 and $F !!!
+void eth65_write_reg ( const unsigned int addr, const Uint8 data )
 {
-	DEBUG("ETH: writing register $%02X with data $%02X" NL, addr & 0xF, data);
-	switch (addr & 0xF) {
+	eth_regs[addr] = data;
+	DEBUG("ETH: writing register $%02X with data $%02X" NL, addr, data);
+	switch (addr) {
 		/* **** $D6E0 register **** */
 		case 0x00:
 			eth65.no_reset = (data & 0x01);	// FIXME: it seems to be the same as $D6E1 bit0???
@@ -493,28 +492,27 @@ void eth65_write_reg ( int addr, Uint8 data )
 			miimhi8[eth65.miim_register] = data;
 			break;
 		/* **** $D6E9 - $D6EE registers: MAC address **** */
-		case 0x09: mac_address[0] = data; break;
-		case 0x0A: mac_address[1] = data; break;
-		case 0x0B: mac_address[2] = data; break;
-		case 0x0C: mac_address[3] = data; break;
-		case 0x0D: mac_address[4] = data; break;
-		case 0x0E: mac_address[5] = data; break;
+		case 0x09: case 0x0A: case 0x0B: case 0x0C: case 0x0D: case 0x0E:
+			mac_address[addr - 9] = data;
+			break;
 	}
 }
 
 
-
-Uint8 eth65_read_rx_buffer ( int offset )
+// Note: "offset" shouldn't be trusted fully *EVER*, only its lower 11 bits (0-$7FF)
+// Though, this is used by memory_mapper.c where the parameter is "addr32" (physical address),
+// here we re-use this functionality with io_mapper.c
+Uint8 eth65_buffer_reader ( const Uint32 offset )
 {
 	// FIXME what happens if M65 receives frame but user switches buffer meanwhile. Not so nice :-O
-	return eth65.rx_buffer[eth65.rx_buffer_mapped + (offset & 0x7FF)];
+	return rx_buffer[eth65.rx_buffer_mapped + (offset & 0x7FFU)];
 }
 
-void eth65_write_tx_buffer ( int offset, Uint8 data )
+// See the note before eth65_buffer_reader()
+void eth65_buffer_writer ( const Uint32 offset, const Uint8 data )
 {
-	eth65.tx_buffer[offset & 0x7FF] = data;
+	tx_buffer[offset & 0x7FFU] = data;
 }
-
 
 
 void eth65_shutdown ( void )
@@ -540,13 +538,14 @@ void eth65_shutdown ( void )
 // This is not the reset what eth65.no_reset stuff does, but reset of M65 (also called by eth65_init)
 void eth65_reset ( void )
 {
+	memset(&eth_regs, 0, sizeof eth_regs);
 	memset(&miimlo8, 0, sizeof miimlo8);
 	memset(&miimhi8, 0, sizeof miimhi8);
 	memset((void*)&eth65, 0, sizeof eth65);
 	RX_IRQ_OFF();
 	TX_IRQ_OFF();
-	memset((void*)eth65.rx_buffer, 0xFF, sizeof eth65.rx_buffer);
-	memset((void*)eth65.tx_buffer, 0xFF, sizeof eth65.tx_buffer);
+	memset((void*)rx_buffer, 0xFF, sizeof rx_buffer);
+	memset((void*)tx_buffer, 0xFF, sizeof tx_buffer);
 	eth65.select_wait_usec = SELECT_WAIT_USEC_MAX;
 	eth65.rx_buffer_using    = 0x800;	// RX buffer is used to RX @ ofs 0
 	eth65.rx_buffer_mapped   = 0x000;	// RX buffer mapped @ ofs 0

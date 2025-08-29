@@ -248,12 +248,6 @@ static Uint8 disk_buffer_user_reader ( const Uint32 addr32 ) {
 static void  disk_buffer_user_writer ( const Uint32 addr32, const Uint8 data ) {
 	disk_buffer_cpu_view[(addr32 - 0xFFD6000U) & 0x1FF] = data;
 }
-static Uint8 eth_buffer_reader ( const Uint32 addr32 ) {
-	return eth65_read_rx_buffer(addr32 - 0xFFDE800U);
-}
-static void  eth_buffer_writer ( const Uint32 addr32, const Uint8 data ) {
-	eth65_write_tx_buffer(addr32 - 0xFFDE800U, data);
-}
 static Uint8 slow_devices_reader ( const Uint32 addr32 ) {
 	return cart_read_byte(addr32 - 0x4000000U);
 }
@@ -514,8 +508,8 @@ static void resolve_linear_slot ( const Uint32 slot, const Uint32 addr )
 			}
 			break;
 		case MEM_SLOT_TYPE_ETH_BUFFER:
-			mem_slot_rd_func[slot] = eth_buffer_reader;
-			mem_slot_wr_func[slot] = eth_buffer_writer;
+			mem_slot_rd_func[slot] = eth65_buffer_reader;	// from ethernet65.h
+			mem_slot_wr_func[slot] = eth65_buffer_writer;	// -- "" --
 			break;
 		case MEM_SLOT_TYPE_OPL3:
 			mem_slot_rd_func[slot] = dummy_reader;	// TODO: what should I do here?
