@@ -124,6 +124,9 @@ struct configdb_st {
 #endif
 	int	resethotkeytype;
 	int	realhw;
+#ifdef XEMU_HAS_SOCKET_API
+	char	*serialtcp;
+#endif
 };
 
 extern struct configdb_st configdb;

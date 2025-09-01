@@ -32,6 +32,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "audio65.h"
 #include "configdb.h"
 #include "mega65.h"
+#include "serialtcp.h"
 
 
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
@@ -226,8 +227,12 @@ Uint8 io_read ( unsigned int addr )
 				return vic_read_reg(addr);		// VIC-IV read register
 			if (addr == 0x8F)
 				return hw_errata_level;
-			if (XEMU_LIKELY(addr < 0xA0))
+			if (addr < 0xA0)
 				return fdc_read_reg(addr & 0xF);
+#			ifdef XEMU_HAS_SOCKET_API
+			if (addr >= 0xE0 && addr <= 0xE6)
+				return serialtcp_read_reg(addr & 0xF);
+#			endif
 			RETURN_ON_IO_READ_NOT_IMPLEMENTED("RAM expansion controller", 0xFF);
 		case 0x11:	// $D100-$D1FF ~ C65 I/O mode
 		case 0x12:	// $D200-$D2FF ~ C65 I/O mode
@@ -472,10 +477,16 @@ void io_write ( unsigned int addr, Uint8 data )
 				set_hw_errata_level(data, "D08F change");
 				return;
 			}
-			if (XEMU_LIKELY(addr < 0xA0)) {
+			if (addr < 0xA0) {
 				fdc_write_reg(addr & 0xF, data);
 				return;
 			}
+#			ifdef XEMU_HAS_SOCKET_API
+			if (addr >= 0xE0 && addr <= 0xE6) {
+				serialtcp_write_reg(addr & 0xF, data);
+				return;
+			}
+#			endif
 			RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("RAM expansion controller");
 		case 0x11:	// $D100-$D1FF ~ C65 I/O mode
 			vic3_write_palette_reg_red(addr, data);		// function takes care using only 8 low bits of addr, no need to do here

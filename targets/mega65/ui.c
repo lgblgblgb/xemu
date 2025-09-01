@@ -42,6 +42,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_config.h"
 #include "cart.h"
 #include "xemu/emutools_osk.h"
+#include "serialtcp.h"
 
 
 // Used by UI CBs to maintain configDB persistence
@@ -792,6 +793,13 @@ static void ui_cb_show_osk ( const struct menu_st *m, int *query )
 }
 #endif
 
+#ifdef XEMU_HAS_SOCKET_API
+static void ui_serialtcp_restart ( void )
+{
+	serialtcp_restart(configdb.serialtcp);
+}
+#endif
+
 
 /**** MENU SYSTEM ****/
 
@@ -950,6 +958,9 @@ static const struct menu_st menu_debug[] = {
 	{ "Start umon on " UMON_DEFAULT_PORT,
 					XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_start_umon, NULL },
+#endif
+#ifdef XEMU_HAS_SOCKET_API
+	{ "Restart SerialTCP",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_serialtcp_restart},
 #endif
 #ifdef XEMU_ARCH_WIN
 	{ "System console",		XEMUGUI_MENUID_CALLABLE |

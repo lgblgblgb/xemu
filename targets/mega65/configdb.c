@@ -77,6 +77,9 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "cart",	NULL, "Load cartridge file", &configdb.cart },
 	{ "winpos",	NULL, "Window position: x,y (integers)", &configdb.winpos },
 	{ "initattic",	NULL, "Pre-fill the Attic RAM with the content of a file", &configdb.init_attic },
+#ifdef XEMU_HAS_SOCKET_API
+	{ "serialtcp",	NULL, "HOST:PORT for serial emulation", &configdb.serialtcp },
+#endif
 	{ NULL }
 };
 

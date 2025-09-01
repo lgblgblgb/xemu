@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016,2019-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016,2019-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -23,6 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	include <winsock2.h>
 	typedef	SOCKET			xemusock_socket_t;
 	typedef	int			xemusock_socklen_t;
+	typedef	BOOL			xemusock_sock_opt_bool_t;
 	// it seems Windows has no EAGAIN thing ...
 #	define	XSEAGAIN		WSAEWOULDBLOCK
 #	define	XSEWOULDBLOCK		WSAEWOULDBLOCK
@@ -40,6 +41,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	include <errno.h>
 	typedef	int			xemusock_socket_t;
 	typedef	socklen_t		xemusock_socklen_t;
+	typedef	int			xemusock_sock_opt_bool_t;
 #	define	XSEAGAIN		EAGAIN
 #	define	XSEWOULDBLOCK		EWOULDBLOCK
 #	define	XSEINPROGRESS		EINPROGRESS
@@ -76,8 +78,11 @@ extern int  xemusock_bind		( xemusock_socket_t sock, struct sockaddr *addr, xemu
 extern int  xemusock_listen		( xemusock_socket_t sock, int backlog, int *xerrno );
 extern int  xemusock_setsockopt		( xemusock_socket_t sock, int level, int option, const void *value, int len, int *xerrno );
 extern int  xemusock_setsockopt_reuseaddr ( xemusock_socket_t sock, int *xerrno );
+extern int  xemusock_setsockopt_keepalive ( xemusock_socket_t sock, int *xerrno );
 extern xemusock_socket_t xemusock_accept		( xemusock_socket_t sock, struct sockaddr *addr, xemusock_socklen_t *addrlen, int *xerrno );
 extern xemusock_socket_t xemusock_create_for_inet	( int is_tcp, int is_nonblock, int *xerrno );
+extern unsigned long xemusock_resolve_ipv4 ( const char *host );
+extern const char *xemusock_parse_string_connection_parameters ( const char *str, unsigned int *ip, unsigned int *port );
 
 static inline int xemusock_should_repeat_from_error ( int xerr ) {
 	return (xerr == XSEAGAIN || xerr == XSEWOULDBLOCK || xerr == XSEINPROGRESS || xerr == XSEINTR || xerr == XSEALREADY);

@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -40,6 +40,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define	SOCK_ERR()	WSAGetLastError()
 #else
 #	define	SOCK_ERR()	(errno+0)
+#	include <netdb.h>
 #endif
 
 #ifdef XEMU_ARCH_WIN
@@ -124,6 +125,7 @@ const char *xemusock_strerror ( int err )
 
 static int  _winsock_init_status = 1;	// 1 = todo, 0 = was OK, -1 = error!
 static char _winsock_errmsg[512];
+static const xemusock_sock_opt_bool_t sock_opt_on = 1;
 
 
 const char *xemusock_init ( void )
@@ -168,6 +170,63 @@ void xemusock_uninit ( void )
 		DEBUGPRINT("WINSOCK: uninitialized." NL);
 	}
 #endif
+}
+
+
+unsigned long xemusock_resolve_ipv4 ( const char *host )
+{
+	if (inet_addr(host) != INADDR_NONE)	// First try dotted-decimal string
+		return inet_addr(host);
+	struct hostent *he = gethostbyname(host);
+	if (!he || he->h_addrtype != AF_INET)	// Otherwise, do DNS lookup
+		return 0;			// ... error
+	struct in_addr addr;
+	memcpy(&addr, he->h_addr, sizeof(addr));
+	return addr.s_addr;			// netlong format!
+}
+
+
+const char *xemusock_parse_string_connection_parameters ( const char *str, unsigned int *ip, unsigned int *port )
+{
+	if (ip)
+		*ip = 0;
+	if (port)
+		*port = 0;
+	if (!str || !*str)
+		return NULL;
+	char *s = strdup(str);	// xemu_strdup() is something, I don't want to use here, as this source does not use emutools.h ...
+	if (!s)
+		return "Memory allocation error";
+	char *s_ip = NULL, *s_port = NULL;
+	if (ip && port) {
+		s_ip = s;
+		s_port = strchr(s, ':');
+		if (!s_port) {
+			free(s);
+			return "Missing ':' from HOST:PORT definition";
+		}
+		*s_port++ = '\0';
+	} else if (ip) {
+		s_ip = s;
+	} else if (port) {
+		s_port = s;
+	}
+	if (s_ip) {
+		*ip = xemusock_resolve_ipv4(s_ip);	// *ip = xemusock_ipv4_octetstring_to_netlong(s_ip);
+		if (!*ip) {
+			free(s);
+			return "Bad IP or host (cannot be resolved?)";
+		}
+	}
+	if (s_port) {
+		*port = atoi(s_port);
+		if (*port && (*port < 1 || *port > 65535)) {
+			free(s);
+			return "Bad port";
+		}
+	}
+	free(s);
+	return NULL;
 }
 
 
@@ -371,12 +430,13 @@ int xemusock_setsockopt ( xemusock_socket_t sock, int level, int option, const v
 
 int xemusock_setsockopt_reuseaddr ( xemusock_socket_t sock, int *xerrno )
 {
-#ifdef XEMU_ARCH_WIN
-	static const BOOL on = 1;
-#else
-	static const int on = 1;
-#endif
-	return xemusock_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &on, sizeof on, xerrno);
+	return xemusock_setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &sock_opt_on, sizeof sock_opt_on, xerrno);
+}
+
+
+int xemusock_setsockopt_keepalive ( xemusock_socket_t sock, int *xerrno )
+{
+	return xemusock_setsockopt(sock, SOL_SOCKET, SO_KEEPALIVE, &sock_opt_on, sizeof sock_opt_on, xerrno);
 }
 
 

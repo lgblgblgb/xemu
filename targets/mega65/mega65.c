@@ -44,6 +44,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "cart.h"
 #include "matrix_mode.h"
 #include "xemu/emutools_osk.h"
+#include "serialtcp.h"
 
 // "Typical" size in default settings (video standard is PAL, default border settings).
 // See also vic4.h
@@ -501,6 +502,7 @@ static void shutdown_callback ( void )
 	xumon_stop();
 #endif
 #ifdef XEMU_HAS_SOCKET_API
+	serialtcp_shutdown();
 	xemusock_uninit();
 #endif
 	hypervisor_hdos_close_descriptors();
@@ -820,6 +822,9 @@ int main ( int argc, char **argv )
 	if (!configdb.syscon)
 		sysconsole_close(NULL);
 	hypervisor_serial_monitor_open_file(configdb.hyperserialfile);
+#ifdef XEMU_HAS_SOCKET_API
+	serialtcp_init(configdb.serialtcp);
+#endif
 	xemu_timekeeping_start();
 	emulation_is_running = 1;
 	update_emulated_time_sources();
