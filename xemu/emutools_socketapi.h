@@ -33,7 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	define	XS_INVALID_SOCKET	INVALID_SOCKET
 #	define	XS_SOCKET_ERROR		SOCKET_ERROR
 #	define	SHUT_RDWR		SD_BOTH
-	extern	const char *xemusock_strerror ( int err );
+	extern	const char *xemusock_strerror ( const int err );
 #else
 #	include <arpa/inet.h>
 #	include <sys/socket.h>

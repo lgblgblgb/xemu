@@ -44,81 +44,30 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 
 #ifdef XEMU_ARCH_WIN
-// FIXME: maybe migrate this to Windows' FormatMessage() at some point?
-const char *xemusock_strerror ( int err )
+const char *xemusock_strerror ( const int err )
 {
-	switch (err) {
-		case 0:				return "Success (0)";
-		case WSA_INVALID_HANDLE:	return "Invalid handle (INVALID_HANDLE)";
-		case WSA_NOT_ENOUGH_MEMORY:	return "Not enough memory (NOT_ENOUGH_MEMORY)";
-		case WSA_INVALID_PARAMETER:	return "Invalid parameter (INVALID_PARAMETER)";
-		case WSA_OPERATION_ABORTED:	return "Operation aborted (OPERATION_ABORTED)";
-		case WSA_IO_INCOMPLETE:		return "IO incomplete (IO_INCOMPLETE)";
-		case WSA_IO_PENDING:		return "IO pending (IO_PENDING)";
-		case WSAEINTR:			return "Interrupted (EINTR)";
-		case WSAEBADF:			return "Invalid handle (EBADF)";
-		case WSAEACCES:			return "Permission denied (EACCES)";
-		case WSAEFAULT:			return "Bad address (EFAULT)";
-		case WSAEINVAL:			return "Invaild argument (EINVAL)";
-		case WSAEMFILE:			return "Too many files (EMFILE)";
-		case WSAEWOULDBLOCK:		return "Resource temporarily unavailable (EWOULDBLOCK)";
-		case WSAEINPROGRESS:		return "Operation now in progress (EINPROGRESS)";
-		case WSAEALREADY:		return "Operation already in progress (EALREADY)";
-		case WSAENOTSOCK:		return "Socket operation on nonsocket (ENOTSOCK)";
-		case WSAEDESTADDRREQ:		return "Destination address required (EDESTADDRREQ)";
-		case WSAEMSGSIZE:		return "Message too long (EMSGSIZE)";
-		case WSAEPROTOTYPE:		return "Protocol wrong type for socket (EPROTOTYPE)";
-		case WSAENOPROTOOPT:		return "Bad protocol option (ENOPROTOOPT)";
-		case WSAEPROTONOSUPPORT:	return "Protocol not supported (EPROTONOSUPPORT)";
-		case WSAESOCKTNOSUPPORT:	return "Socket type not supported (ESOCKTNOSUPPORT)";
-		case WSAEOPNOTSUPP:		return "Operation not supported (EOPNOTSUPP)";
-		case WSAEPFNOSUPPORT:		return "Protocol family not supported (EPFNOSUPPORT)";
-		case WSAEAFNOSUPPORT:		return "Address family not supported by protocol family (EAFNOSUPPORT)";
-		case WSAEADDRINUSE:		return "Address already in use (EADDRINUSE)";
-		case WSAEADDRNOTAVAIL:		return "Cannot assign requested address (EADDRNOTAVAIL)";
-		case WSAENETDOWN:		return "Network is down (ENETDOWN)";
-		case WSAENETUNREACH:		return "Network is unreachable (ENETUNREACH)";
-		case WSAENETRESET:		return "Network dropped connection on reset (ENETRESET)";
-		case WSAECONNABORTED:		return "Software caused connection abort (ECONNABORTED)";
-		case WSAECONNRESET:		return "Connection reset by peer (ECONNRESET)";
-		case WSAENOBUFS:		return "No buffer space available (ENOBUFS)";
-		case WSAEISCONN:		return "Socket is already connected (EISCONN)";
-		case WSAENOTCONN:		return "Socket is not connected (ENOTCONN)";
-		case WSAESHUTDOWN:		return "Cannot send after socket shutdown (ESHUTDOWN)";
-		case WSAETOOMANYREFS:		return "Too many references (ETOOMANYREFS)";
-		case WSAETIMEDOUT:		return "Connection timed out (ETIMEDOUT)";
-		case WSAECONNREFUSED:		return "Connection refused (ECONNREFUSED)";
-		case WSAELOOP:			return "Cannot translate name (ELOOP)";
-		case WSAENAMETOOLONG:		return "Name too long (ENAMETOOLONG)";
-		case WSAEHOSTDOWN:		return "Host is down (EHOSTDOWN)";
-		case WSAEHOSTUNREACH:		return "No route to host (EHOSTUNREACH)";
-		case WSAENOTEMPTY:		return "Directory not empty (ENOTEMPTY)";
-		case WSAEPROCLIM:		return "Too many processes (EPROCLIM)";
-		case WSAEUSERS:			return "User quota exceeded (EUSERS)";
-		case WSAEDQUOT:			return "Disk quota exceeded (EDQUOT)";
-		case WSAESTALE:			return "Stale file handle reference (ESTALE)";
-		case WSAEREMOTE:		return "Item is remote (EREMOTE)";
-		case WSASYSNOTREADY:		return "Network subsystem is unavailable (SYSNOTREADY)";
-		case WSAVERNOTSUPPORTED:	return "Winsock.dll version out of range (VERNOTSUPPORTED)";
-		case WSANOTINITIALISED:		return "Successful WSAStartup not yet performed (NOTINITIALISED)";
-		case WSAEDISCON:		return "Graceful shutdown in progress (EDISCON)";
-		case WSAENOMORE:		return "No more results (ENOMORE)";
-		case WSAECANCELLED:		return "Call has been canceled (WSAECANCELLED)";
-		case WSAEINVALIDPROCTABLE:	return "Procedure call table is invalid (EINVALIDPROCTABLE)";
-		case WSAEINVALIDPROVIDER:	return "Service provider is invalid (EINVALIDPROVIDER)";
-		case WSAEPROVIDERFAILEDINIT:	return "Service provider failed to initialize (EPROVIDERFAILEDINIT)";
-		case WSASYSCALLFAILURE:		return "System call failure (SYSCALLFAILURE)";
-		case WSASERVICE_NOT_FOUND:	return "Service not found (SERVICE_NOT_FOUND)";
-		case WSATYPE_NOT_FOUND:		return "Class type not found (TYPE_NOT_FOUND)";
-		case WSA_E_NO_MORE:		return "No more results (E_NO_MORE)";
-		case WSA_E_CANCELLED:		return "Call was canceled (E_CANCELLED)";
-		case WSAEREFUSED:		return "Database query was refused (EREFUSED)";
-		case WSAHOST_NOT_FOUND:		return "Host not found (HOST_NOT_FOUND)";
-		case WSATRY_AGAIN:		return "Nonauthoritative host not found (TRY_AGAIN)";
-		case WSANO_RECOVERY:		return "This is a nonrecoverable error (NO_RECOVERY)";
-		case WSANO_DATA:		return "Valid name, no data record of requested type (NO_DATA)";
-		default:			return "Unknown Winsock error";
-	}
+	wchar_t wbuf[512];
+	static char buf[512];
+	const DWORD len = FormatMessageW(
+		FORMAT_MESSAGE_FROM_SYSTEM | FORMAT_MESSAGE_IGNORE_INSERTS,
+		NULL,
+		err,
+		MAKELANGID(LANG_ENGLISH, SUBLANG_DEFAULT),	// English, if possible
+		wbuf,
+		sizeof(wbuf) / sizeof(wbuf[0]),
+		NULL
+	);
+	if (!len)
+		goto unknown;
+	const int utf8_len = WideCharToMultiByte(CP_UTF8, 0, wbuf, -1, buf, sizeof(buf), NULL, NULL);
+	if (!utf8_len)
+		goto unknown;
+	for (char *p = buf + strlen(buf); --p >= buf && (*p <= 32); )
+		*p = '\0';
+	return buf;
+unknown:
+	snprintf(buf, sizeof buf, "Unknown WSA error %d", err);
+	return buf;
 }
 #endif
 
