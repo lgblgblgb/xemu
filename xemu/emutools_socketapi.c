@@ -219,10 +219,11 @@ const char *xemusock_parse_string_connection_parameters ( const char *str, unsig
 		}
 	}
 	if (s_port) {
-		*port = atoi(s_port);
-		if (*port && (*port < 1 || *port > 65535)) {
+		char *endptr;
+		*port = strtol(s_port, &endptr, 10);
+		if (*s_port == '\0' || (*endptr != '\0') || (*port < 1 || *port > 65535)) {
 			free(s);
-			return "Bad port";
+			return "Bad port number";
 		}
 	}
 	free(s);

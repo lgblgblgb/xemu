@@ -583,12 +583,39 @@ static void cmd_shade ( char *p )
 }
 
 
-static void cmd_audio ( char * p )
+static void cmd_audio ( char* p )
 {
 	char buffer[4096];
 	audio65_get_description(buffer, sizeof buffer);
 	MATRIX("%s", buffer);
 }
+
+
+#ifdef XEMU_HAS_SOCKET_API
+#include "serialtcp.h"
+static void cmd_serialtcp ( char *p )
+{
+	char param[128], desc[128];
+	int tx, rx;
+	const bool running = serialtcp_get_connection_desc(param, sizeof param, desc, sizeof desc, &tx, &rx);
+	if (*p) {
+		if (p[0] == '-')
+			p = param;
+		if (*p) {
+			if (serialtcp_restart(p))
+				MATRIX("ERROR: Could not start/restart");
+			else {
+				(void)serialtcp_get_connection_desc(NULL, 0, desc, sizeof desc, NULL, NULL);
+				MATRIX("OK: Started/restarted to %s", desc);
+			}
+		} else {
+			MATRIX("ERROR: No previous target specification");
+		}
+	} else {
+		MATRIX("STATUS: %s %s (tx=%d,rx=%d)\nUse argument HOST:PORT, or - (previous target) to (re)start connection.", running ? "running: " : "NOT running, previous target was: ", *desc ? desc : "[NO PREVIOUS TARGET]", tx, rx);
+	}
+}
+#endif
 
 
 static void cmd_help ( char *p );
@@ -614,6 +641,9 @@ static const struct command_tab_st {
 	{ "map",	cmd_map,	"m"	},
 	{ "shade",	cmd_shade,	NULL	},
 	{ "audio",	cmd_audio,	NULL	},
+#	ifdef XEMU_HAS_SOCKET_API
+	{ "serialtcp",	cmd_serialtcp,	NULL	},
+#	endif
 	{ .cmdname = NULL			},
 };
 

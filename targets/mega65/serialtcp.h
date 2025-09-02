@@ -23,6 +23,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 extern int serialtcp_init ( const char *connection );
 extern int serialtcp_shutdown ( void );
 extern int serialtcp_restart ( const char *connection );
+extern bool serialtcp_get_connection_desc ( char *param, const unsigned int param_size, char *desc, const unsigned int desc_size, int *tx, int *rx );
+extern const char *serialtcp_get_connection_error ( const bool remove_error );
 
 extern void  serialtcp_write_reg ( const int reg, const Uint8 data );
 extern Uint8 serialtcp_read_reg  ( const int reg );

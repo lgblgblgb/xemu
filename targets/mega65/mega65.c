@@ -627,6 +627,12 @@ static void update_emulator ( void )
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_update();
 #endif
+#ifdef XEMU_HAS_SOCKET_API
+	if (XEMU_UNLIKELY(serialtcp_get_connection_error(false))) {
+		const char *err = serialtcp_get_connection_error(true);
+		ERROR_WINDOW("SerialTCP failure:\n%s", err);
+	}
+#endif
 	// Screen updating, final phase
 	//vic4_close_frame_access();
 	// Let's sleep ...
