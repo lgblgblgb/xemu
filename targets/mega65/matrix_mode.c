@@ -567,6 +567,7 @@ static void cmd_live ( char *p )
 
 static void cmd_reset ( char *p )
 {
+	clear_emu_events();	// otherwise reset will hang seeing CTRL still pressed ...
 	reset_mega65(RESET_MEGA65_HARD);
 }
 
@@ -583,11 +584,19 @@ static void cmd_shade ( char *p )
 }
 
 
-static void cmd_audio ( char* p )
+static void cmd_audio ( char *p )
 {
 	char buffer[4096];
 	audio65_get_description(buffer, sizeof buffer);
 	MATRIX("%s", buffer);
+}
+
+
+static void cmd_vic ( char *p )
+{
+	const Uint32 v_addr = (Uint32)(vic4_query_screen_address() - main_ram);
+	const Uint32 c_addr = (Uint32)(vic4_query_colour_address() - colour_ram);
+	MATRIX("V-PTR=$%X C-OFS=$%X ($%X) HOT=%d H640=%d V400=%d VIC3ATRS=%d 16BIT=%d", v_addr, c_addr, c_addr + 0x0FF80000U, !!REG_HOTREG, !!REG_H640, !!REG_V400, !!REG_VICIII_ATTRIBS, !!REG_16BITCHARSET);
 }
 
 
@@ -641,6 +650,7 @@ static const struct command_tab_st {
 	{ "map",	cmd_map,	"m"	},
 	{ "shade",	cmd_shade,	NULL	},
 	{ "audio",	cmd_audio,	NULL	},
+	{ "vic",	cmd_vic,	NULL	},
 #	ifdef XEMU_HAS_SOCKET_API
 	{ "serialtcp",	cmd_serialtcp,	NULL	},
 #	endif
