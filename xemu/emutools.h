@@ -227,6 +227,7 @@ extern void xemu_sleepless_temporary_mode ( const int enable );
 extern void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_size );
 extern Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail );
 extern void xemu_update_screen ( void );
+extern bool xemu_is_main_thread ( void );
 
 
 static XEMU_INLINE Uint16 xemu_u8p_to_u16le ( const Uint8 *const p ) {

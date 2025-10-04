@@ -129,6 +129,7 @@ int sdl_default_win_y_pos = SDL_WINDOWPOS_UNDEFINED;
 static SDL_Rect sdl_whole_screen;
 static SDL_Rect sdl_viewport, *sdl_viewport_ptr = NULL;
 static unsigned int sdl_texture_x_size, sdl_texture_y_size;
+static Uint32 main_thread_id = 0xFFFFFFFFU;
 
 static SDL_bool grabbed_mouse = SDL_FALSE, grabbed_mouse_saved = SDL_FALSE;
 int allow_mouse_grab = 1;
@@ -1471,7 +1472,16 @@ int xemu_post_init (
 	SDL_AndroidRequestPermission("android.permission.READ_EXTERNAL_STORAGE");
 	android_populate_assets("list");
 #endif
+	main_thread_id = SDL_ThreadID();
 	return 0;
+}
+
+
+bool xemu_is_main_thread ( void )
+{
+	if (XEMU_UNLIKELY(main_thread_id == 0xFFFFFFFFU))
+		FATAL("main_thread_id is not initialized");
+	return main_thread_id == SDL_ThreadID();
 }
 
 
