@@ -93,11 +93,11 @@ static struct {
 } com;
 #ifndef	ETH65_NO_DEBUG
 static bool eth_debug = false;
-static bool force_filters = false;
 #endif
 static const Uint8 default_mac[6] = {0x02,0x47,0x53,0x65,0x65,0x65};	// 00:80:10:... would be nicer, though a bit of cheating, it belongs to Commodore International(TM).
 #ifdef	HAVE_ETHERTAP
 static const Uint8 mac_bcast[6]	  = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};	// also used as IPv4 bcast detection with filters, if only the first 4 bytes are checked
+static bool force_filters = false;
 #endif
 #define miim_reg_num (eth_regs[6] & 0x1F)
 static Uint8 miimlo8[0x20], miimhi8[0x20];	// not emulated too much ... all I have, that you can read/write all MIIM registers freely, and that's all
