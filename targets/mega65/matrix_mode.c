@@ -627,6 +627,24 @@ static void cmd_serialtcp ( char *p )
 #endif
 
 
+#ifdef HAVE_ETHERTAP
+#include "ethernet65.h"
+static void cmd_eth ( char *p )
+{
+	if (*p) {
+		MATRIX("Trying to (re)start ethertap with params: \"%s\"\n", p);
+		eth65_shutdown();
+		eth65_init(p);
+	}
+	char stat[128];
+	unsigned int rxcnt, txcnt;
+	(void)eth65_get_stat(stat, sizeof stat, &rxcnt, &txcnt);
+	if (rxcnt || txcnt)
+		MATRIX("%s\nRX/TX traffic: %u/%u pckts", stat, rxcnt, txcnt);
+}
+#endif
+
+
 static void cmd_help ( char *p );
 
 
@@ -653,6 +671,9 @@ static const struct command_tab_st {
 	{ "vic",	cmd_vic,	NULL	},
 #	ifdef XEMU_HAS_SOCKET_API
 	{ "serialtcp",	cmd_serialtcp,	NULL	},
+#	endif
+#	ifdef HAVE_ETHERTAP
+	{ "eth",	cmd_eth,	NULL	},
 #	endif
 	{ .cmdname = NULL			},
 };

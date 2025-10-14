@@ -377,7 +377,7 @@ Uint8 io_read ( unsigned int addr )
 		/* $D800-$DFFF: in case of ethernet I/O mode only! */
 		/* ----------------------------------------------- */
 		case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
-			return eth65_buffer_reader(addr);
+			return eth_rx_buf[addr - 0x2800U];
 		/* ----------------------- */
 		/* $D800-$DBFF: COLOUR RAM */
 		/* ----------------------- */
@@ -650,7 +650,7 @@ void io_write ( unsigned int addr, Uint8 data )
 		/* $D800-$DFFF: in case of ethernet I/O mode only! */
 		/* ----------------------------------------------- */
 		case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
-			eth65_buffer_writer(addr, data);
+			eth_tx_buf[addr - 0x2800U] = data;
 			return;
 		/* ----------------------- */
 		/* $D800-$DBFF: COLOUR RAM */

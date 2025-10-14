@@ -19,6 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools.h"
 #include "xemu/ethertap.h"
 #include "ethernet65.h"
+#include "xemu/cpu65.h"
 
 
 /* It seems, at least on Nexys4DDR board, the used ethernet controller chip is: LAN8720A
@@ -34,77 +35,85 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 	  the problem is not as trivial to solve as it seems, since a *thread* can affect IRQs
 	  also updated by the main CPU emulator thread ... With using locking for all of these,
 	  would result in quite slow emulation :(
-	* FIXME: it uses thread, and it's horrible code!! there are tons of race conditions, etc ...
-	It's not so nice work to use threads, but it would be hard to do otherwise, sadly.
 	* Maybe allow TUN devices to be supported. It does not handle ethernet level stuffs, no source and
 	target MAC for example :-O But TUN devices are supported by wider range of OSes (eg: OSX) and we
 	probably can emulate the missing ethernet level stuffs somehow in this source on RX (and chop
 	them off, in case of TX ...).
-	* Implement a many DHCP client here, so user does not need to install a DHCP server on the PC, just
+	* Implement a mini DHCP client here, so user does not need to install a DHCP server on the PC, just
 	for testing M65 software with Xemu wants to use a DHCP. It would catch / answer for DHCP-specifc
 	requests, instead of using really the TAP device to send, and waiting for answer.
 */
 
 
-// ETH_FRAME_MAX_SIZE: now I'm a bit unsure about this with/without CRC, etc issues. However hopefully it's OK.
-#define ETH_FRAME_MAX_SIZE	1536
-// ETH_FRAME_MIN_SIZE: actually 64 "on the wire", but it included the CRC (4 octets) which we don't handle here at all
-// this is only used to pad the frame on TX if shorter. No idea, that it's really needed for the EtherTAP device as well
-// (not a real ethernet device), but still, hopefully it wouldn't hurt (?)
-#define ETH_FRAME_MIN_SIZE	60
-// SELECT_WAIT_USEC_MAX: max time to wait for RX/TX before trying it. This is because we don't want to burn the CPU time
-// in the TAP handler thread but also we want to max the wait, if an ETH op quicks in after a certain time of inactivity
-#define SELECT_WAIT_USEC_MAX	10000
-// just by guessing (ehmm), on 100mbit (what M65 has) network, about 200'000 frame/sec is far the max
-// that is, let's say about 5usec minimal wait
-#define SELECT_WAIT_USEC_MIN	5
-#define SELECT_WAIT_INC_VAL	5
+#ifdef	ETH65_NO_DEBUG
+#	warning	"Do not set ETH65_NO_DEBUG manually."
+#else
+#	if	defined(DISABLE_DEBUG) || !defined(HAVE_ETHERTAP)
+#		define	ETH65_NO_DEBUG
+#	endif
+#endif
+
+// RX_BUFFERS **must** be power of two!
+#define RX_BUFFERS		32
+#define PLUS1(n)		(((n) + 1) & ((RX_BUFFERS) - 1))
+
+#define	SHUTDOWN_TIMEOUT_MSEC	100
 
 #define ETH_II_FRAME_ARP	0x0806
 #define ETH_II_FRAME_IPV4	0x0800
 
-#define RX_BUFFERS		4
+// Must be the same as bit positions in register #5
+#define	RX_FILTER_MAC		0x01
+#define	RX_FILTER_ACCEPT_BCAST	0x10
+#define	RX_FILTER_ACCEPT_MCAST	0x20
 
+#define	THREAD_STATUS_DISABLED	0
+#define THREAD_STATUS_RUNNING	1
+#define	THREAD_STATUS_EXIT	2
+#define THREAD_STATUS_EXITED	3
 
-static int eth_debug;
+#define ETH_LOCK()		SDL_AtomicLock(&eth_lock)
+#define ETH_UNLOCK()		SDL_AtomicUnlock(&eth_lock)
 
-static volatile struct {
-	int	enabled;		// the whole M65 eth emulation status
-	int	no_reset;		//
-	int	exited;
-	int	rx_enabled;		// can the TAP handler thread receive a new packet?
-	int	_rx_irq;		// status of RX IRQ, note that it is also used for polling without enabled IRQs! (must be 0x20 or zero)
-	int	_tx_irq;		// status of TX IRQ, note that it is also used for polling without enabled IRQs! (must be 0x10 or zero)
-	int	_irq_to_cpu_routed;
-	int	tx_size;		// frame size to transmit
-	int	tx_trigger;		// trigger to TX
-	int	rx_irq_enabled;		// RX IRQ enabled, so rx_irq actually generates an IRQ
-	int	tx_irq_enabled;		// TX IRQ enabled, so tx_irq actually generates an IRQ
-	int	rx_buffer_using;	// RX buffer used by the receiver thread (must be 0 or 0x800, it also means offset in rx_buffer!)
-	int	rx_buffer_mapped;	// RX buffer which is mapped by the user (must be 0 or 0x800, it also means offset in rx_buffer!)
-	int	sense_activity;		// handler thread senses activity, helps keeping select_wait_usec low when there is no activity to avoid burning the CPU power without reason
-	int	select_wait_usec;	// uSeconds to wait at max by select(), the reason for this is the same which is expressed in the previous line
-	int	video_streaming;
-	int	accept_broadcast;
-	int	accept_multicast;
-	int	mac_filter;
-	int	xemu_always_filters;
-	int	disable_crc_chk;
-	int	adjust_txd_phase;
-	int	miim_register;
-	int	phy_number;
-} eth65;
+Uint8 eth_rx_buf[0x800];		// RX buffer as seen by the CPU, read-only for CPU, CPU can read it without lock held
+Uint8 eth_tx_buf[0x800];		// TX buffer as seen by the CPU, write-only for CPU, CPU can write it without lock held
 
-static Uint8 rx_buffer[0x1000];	// actually, two 2048 bytes long buffers in one array
-static Uint8 tx_buffer[0x0800];	// a 2048 bytes long buffer to TX
-
-static Uint8 mac_address[6]	= {0x02,0x47,0x53,0x65,0x65,0x65};	// 00:80:10:... would be nicer, though a bit of cheating, it belongs to Commodore International(TM).
-#ifdef HAVE_ETHERTAP
-static const Uint8 mac_bcast[6]	= {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};	// also used as IPv4 bcast detection with filters, if only the first 4 bytes are checked
+// This struct is only for sematic reasons: everything here to be R/W **NEEDS** "eth_lock" held!
+static struct {
+	Uint8 rx_buffers[RX_BUFFERS * 0x800];	// all RX buffers
+	int cpu_sel;				// CPU RX buffer #number in use (one buffer: 2K - 0x800 bytes - in rx_buffers)
+	int eth_sel;				// ETH RX buffer #number in use (one buffer: 2K - 0x800 bytes - in rx_buffers)
+	int tx_size;				// if non-zero: submit packet from eth_tx_buf for TX (the actual work is done by the thread!)
+	bool rx_disabled;			// frame receiving is disabled (drop received frames), eg during controller reset
+	bool thread_to_reset;			// signal thread to reset its internals
+	bool under_reset;
+	bool tx_irq;				// when triggering TX by CPU, it must be set to "false", the thread will set to "true" is it happened
+	Uint8 tx_irq_enabled;
+	Uint8 rx_irq_enabled;
+} com;
+#ifndef	ETH65_NO_DEBUG
+static bool eth_debug = false;
+static bool force_filters = false;
+#endif
+static const Uint8 default_mac[6] = {0x02,0x47,0x53,0x65,0x65,0x65};	// 00:80:10:... would be nicer, though a bit of cheating, it belongs to Commodore International(TM).
+#ifdef	HAVE_ETHERTAP
+static const Uint8 mac_bcast[6]	  = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};	// also used as IPv4 bcast detection with filters, if only the first 4 bytes are checked
+#endif
+#define miim_reg_num (eth_regs[6] & 0x1F)
+static Uint8 miimlo8[0x20], miimhi8[0x20];	// not emulated too much ... all I have, that you can read/write all MIIM registers freely, and that's all
+static Uint8 eth_regs[0x10];
+#define mac_address (eth_regs + 9)
+static SDL_SpinLock eth_lock = 0;		// the lock protecting "com" structure access: ETH_LOCK() and ETH_UNLOCK() should be used to operate it
+static SDL_atomic_t threadsafe_status_regs;	// low byte: some bits of reading reg 0, high byte: some bits of reading reg 1
+static SDL_atomic_t threadsafe_rx_filtering;	// values: RX_FILTER_* bitmask, CPU->thread
+static SDL_atomic_t threadsafe_thread_status;	// used by the main thread to monitor the status of the ethernet thread
+#ifdef	HAVE_ETHERTAP
+static SDL_atomic_t stat_rx_counter, stat_tx_counter;
+static unsigned int remote_ip;
+static Uint8 remote_mac[6];
+static char *tap_name = NULL;
 #endif
 
-static Uint16 miimlo8[0x20], miimhi8[0x20];
-static Uint8 eth_regs[0x10];
 
 #ifndef ETH65_NO_DEBUG
 #define ETHDEBUG(...)	do { \
@@ -113,457 +122,468 @@ static Uint8 eth_regs[0x10];
 				} \
 			} while (0)
 #else
-#define ETHDEBUG(...)
+#define ETHDEBUG	DEBUG
 #endif
 
-// IRQs are not yet supported, especially because it's an async event from a thread, and the main thread should aware it
-// at every opcode emulation, which would made that slow (ie thread-safe update of the CPU IRQ request ...)
-static void __eth65_manage_irq_for_cpu ( void )
+
+
+
+// Can be called by both of main and eth thread but MUST be called with "eth_lock" held
+static void calc_status_changes ( void )
 {
-	int status = ((eth65._rx_irq && eth65.rx_irq_enabled) || (eth65._tx_irq && eth65.tx_irq_enabled));
-	if (status != eth65._irq_to_cpu_routed) {
-		ETHDEBUG("ETH: IRQ change should be propogated: %d -> %d" NL, eth65._irq_to_cpu_routed, status);
-		eth65._irq_to_cpu_routed = status;
+	static bool last_irq = false;
+
+	const int free_buffers = (com.cpu_sel > com.eth_sel) ? com.cpu_sel - com.eth_sel : RX_BUFFERS + com.cpu_sel - com.eth_sel;
+	const bool rx_irq = PLUS1(com.cpu_sel) != com.eth_sel;
+
+	const bool final_irq = (rx_irq && com.rx_irq_enabled) || (com.tx_irq && com.tx_irq_enabled);
+	if (last_irq != final_irq) {
+		// The TODO place to trigger interrupt?
+		// Currently it's not implemented as it's complicated, we cannot reliable do IRQ from another thread than the main emulation one :(
+		// Probably:	I should have a TLS (thread local storage) variable to tell which thread we're in.
+		//		If it's the main thread, just do the IRQ. If the ethernet thread: set an atomic signal, and do an IRQ "routing" periodically from the main thread based on that
+		last_irq = final_irq;
 	}
-}
+	// Atomic write (even though this func needs a lock) is used to store flags which can be _read_ at least from outside of the lock too
+	SDL_AtomicSet(&threadsafe_status_regs,
+		(
+			// Register-0
+			(free_buffers == 0 ? 64 : 0) +
+			(com.tx_size ? 0 : 128)		// Only bit 6 and 7 of eth reg #0
+		) + ((
+			// Register-1
+			((free_buffers > 3 ? 3 : free_buffers) << 1) +				// bit 1,2: free buffers (max 3)
+			(com.tx_irq ? 16 : 0) +
+			(rx_irq ? 32 : 0) +
+			com.tx_irq_enabled +
+			com.rx_irq_enabled
+		) << 8)		// store reg-1 in the high byte, so we can have a single atomic varible to deal with
 
-#define RX_IRQ_ON()	do { eth65._rx_irq = 0x20; __eth65_manage_irq_for_cpu(); } while (0)
-#define RX_IRQ_OFF()	do { eth65._rx_irq = 0;    __eth65_manage_irq_for_cpu(); } while (0)
-#define TX_IRQ_ON()	do { eth65._tx_irq = 0x10; __eth65_manage_irq_for_cpu(); } while (0)
-#define TX_IRQ_OFF()	do { eth65._tx_irq = 0;    __eth65_manage_irq_for_cpu(); } while (0)
-
-
-
-
-/*	!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-	!!!!! WARNING: these things run as *THREAD* !!!!!
-	!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-	It must be very careful not use anything too much.
-	xemu_tuntap_read and write functions are used only here, so it's maybe OK
-	but exchange data with the main thread (the emulator) must be done very carefully!
-	FIXME: "surely", there are many race conditions still :(
-		however, proper locking etc would be just too painful at this stage of the emulator
-		also, using "ETHDEBUG"s (printfs after all, etc) basically not the best idea in a thread, I guess	*/
-
-#ifdef HAVE_ETHERTAP
-
-#include <errno.h>
-
-static const char init_error_prefix[] = "ETH: disabled: ";
-
-static SDL_Thread *thread_id = NULL;
-
-static inline int ethernet_rx_processor ( void )
-{
-	Uint8 rx_temp_buffer[0x800];
-	const int ret = xemu_tuntap_read(rx_temp_buffer, 6 + 6 + 2, sizeof rx_temp_buffer);
-	if (ret == -2) {
-		eth65.select_wait_usec = 1000000;	// serious problem, do 1sec wait ...
-		ETHDEBUG("ETH-THREAD: read with EAGAIN, continue ..." NL);
-		return 0;
-	}
-	if (ret < 0) {
-		ETHDEBUG("ETH-THREAD: read error: %s" NL, strerror(errno));
-		return 1;	// vote for exit thread ...
-	}
-	if (ret == 0) {
-		eth65.select_wait_usec = 1000000;	// serious problem, do 1sec wait ...
-		ETHDEBUG("ETH-THREAD: read() returned with zero! continue ..." NL);
-		return 0;
-	}
-	if (ret > 2046) {	// should not happen, but who knows ... (2046=size of buffer - 2, 2 for the length parameter to be passed)
-		// FIXME: maybe we should check the max frame size instead, but I guess TAP device does not allow crazy sizes anyway
-		eth65.select_wait_usec = 1000000;	// serious problem, do 1sec wait ...
-		ETHDEBUG("ETH-THREAD: read() had %d bytes, too long! continue ..." NL, ret);
-		return 0;
-	}
-	// something is recevied at least.
-	// Still we can filter things ("m65 magic filters", etc)
-	ETHDEBUG("ETH-THREAD: read() returned with %d bytes read, OK!" NL, ret);
-	eth65.sense_activity = 1;
-	if (ret < 14 || ret > ETH_FRAME_MAX_SIZE) {
-		ETHDEBUG("ETH-THREAD: ... however, insane sized frame, skipping" NL);
-		return 0;
-	}
-	// XEMU stuff, just to test TAP
-	// it only recoginizes Ethernet-II frames, for frame types IPv4 or ARP
-	const int ethertype = (rx_temp_buffer[12] << 8) | rx_temp_buffer[13];
-	if (ethertype < 1536) {
-		ETHDEBUG("ETH-THREAD: ... however, skipped by XEMU: not an Ethernet-II frame ($%04X)" NL, ethertype);
-		return 0;
-	}
-	if (ethertype != ETH_II_FRAME_ARP && ethertype != ETH_II_FRAME_IPV4) {
-		ETHDEBUG("ETH-THREAD: ... however, skipped by XEMU: not ARP or IPv4 Ethernet-II ethertype ($%04X)" NL, ethertype);
-		return 0;
-	}
-	// MAC filter, when ON, only packets targeting our MAC, or bcast MAC address is received
-	if (
-		(eth65.mac_filter || eth65.xemu_always_filters) &&
-		memcmp(rx_temp_buffer, mac_bcast,   6) &&
-		memcmp(rx_temp_buffer, mac_address, 6)
-	) {
-		ETHDEBUG("ETH-THREAD: ... however, MAC filter ruled it out %02X:%02X:%02X:%02X:%02X:%02X" NL,
-			rx_temp_buffer[0], rx_temp_buffer[1], rx_temp_buffer[2], rx_temp_buffer[3], rx_temp_buffer[4],rx_temp_buffer[5]
-		);
-		return 0;
-	}
-	ETHDEBUG("ETH-THREAD: ... cool, target MAC seems to survive MAC filter %02X:%02X:%02X:%02X:%02X:%02X" NL,
-		rx_temp_buffer[0], rx_temp_buffer[1], rx_temp_buffer[2], rx_temp_buffer[3], rx_temp_buffer[4],rx_temp_buffer[5]
 	);
-	// check, if frame contains an IPv4 packet, so we can check for IPv4-specific filters as well
-	if (
-		ret >= 20 + 8 + 14 &&		// we need at least ??? bytes for valid IPv4 packet
-		ethertype == ETH_II_FRAME_IPV4 &&
-		(rx_temp_buffer[15] & 0xF0) == 0x40	// IPv4? [4=version field of IP packet]
-	) {
-		if ((!eth65.accept_broadcast || eth65.xemu_always_filters) && !memcmp(rx_temp_buffer + 30, mac_bcast, 4)) {
-			ETHDEBUG("ETH-THREAD: ... however, IP filter ruled it out: broadcast (%d.%d.%d.%d)" NL, rx_temp_buffer[30], rx_temp_buffer[31], rx_temp_buffer[32], rx_temp_buffer[33]);
-			return 0;
-		}
-		// check if multicast (224.0.0.0/4)
-		if ((!eth65.accept_multicast || eth65.xemu_always_filters) && (rx_temp_buffer[30] & 0xF0) == 0xE0) {
-			ETHDEBUG("ETH-THREAD: ... however, IP filter ruled it out: multicast (%d.%d.%d.%d)" NL, rx_temp_buffer[30], rx_temp_buffer[31], rx_temp_buffer[32], rx_temp_buffer[33]);
-			return 0;
-		}
-		ETHDEBUG("ETH-THREAD: ... cool, target IP seems to survive IP filter %d.%d.%d.%d" NL, rx_temp_buffer[30], rx_temp_buffer[31], rx_temp_buffer[32], rx_temp_buffer[33]);
-	}
-	ETHDEBUG("ETH-THREAD: ... MEGA[65]-COOL: we are ready to propogate packet" NL);
-	// M65 stores the received frame size in "6502 byte order" as the first two bytes in the RX
-	// (this makes things somewhat non-symmetric, as for TX, the size are in a pair of registers)
-	rx_buffer[eth65.rx_buffer_using] = ret & 0xFF;
-	rx_buffer[eth65.rx_buffer_using + 1] = ret >> 8;
-	for (int i = 0; i < ret; i++)
-		rx_buffer[eth65.rx_buffer_using + 2 + i] = rx_temp_buffer[i];
-	//memcpy(rx_buffer + eth65.rx_buffer_using + 2, rx_temp_buffer, r);
-	eth65.rx_enabled = 0;		// disable RX till user not ACK'ed by swapping RX buffers
-	RX_IRQ_ON();			// signal, that we have something! we don't support IRQs yet, but it's also used for polling!
-	return 0;
 }
 
+#ifdef	HAVE_ETHERTAP
 
-static XEMU_INLINE int ethernet_tx_processor ( void )
+// Used by the ethernet thread only to filter incoming ethernet framed based on "filters"
+static bool do_rx_filtering ( const Uint8 *buf, const int size, const Uint8 filters )
 {
-	if (eth65.tx_size < 14 || eth65.tx_size > ETH_FRAME_MAX_SIZE) {
-		ETHDEBUG("ETH-THREAD: skipping TX, because invalid frame size: %d" NL, eth65.tx_size);
-		// still fake an OK answer FIXME ?
-		TX_IRQ_ON();
-		eth65.tx_trigger = 0;
-		return 0;
+	if (size < 14 || size >= 0x800 - 2) {
+		DEBUGPRINT("ETH: thread: skipping frame; invalid frame size (%s%d)" NL, size >= 0x800 - 2 ? ">=" : "", size);
+		return false;
 	}
-#if 0
-	int size;
-	// maybe this is not needed, and TAP device can handle autmatically, but anyway
-	if (eth65.tx_size < ETH_FRAME_MIN_SIZE) {
-		memset((void*)tx_buffer + eth65.tx_size, 0, ETH_FRAME_MIN_SIZE - eth65.tx_size);
-		size = ETH_FRAME_MIN_SIZE;
-	} else
-#endif
-	const int size = eth65.tx_size;
-	const int ret = xemu_tuntap_write((void*)tx_buffer, size);
-	if (ret == -2) {	// FIXME: with read OK, but for write????
-		eth65.select_wait_usec = 1000000;	// serious problem, do 1sec wait ...
-		ETHDEBUG("ETH-THREAD: write with EAGAIN, continue ..." NL);
-		return 0;
+	const int ethertype = (buf[12] << 8) | buf[13];
+	// FIXME/TODO: as with the ARP/IPV4 filter: do we want to drop a frame just because it's not ethernet-II?
+	// ... or allow it, just we can't apply some filters then?
+	if (ethertype < 1536) {
+		DEBUGPRINT("ETH: thread: skipping frame; not an Ethernet-II frame ($%04X)" NL, ethertype);
+		return false;
 	}
-	if (ret < 0) {
-		ETHDEBUG("ETH-THREAD: write error: %s" NL, strerror(errno));
-		return 1;
+	// TODO: this would render IPv6 not working
+	// TODO: even if I allow that, I am not sure if MEGA65-core can filter IP bcast/unicast for IPv6 (and not only IPv4)
+	if (ethertype != ETH_II_FRAME_ARP && ethertype != ETH_II_FRAME_IPV4) {
+		DEBUGPRINT("ETH: thread: skipping frame; not ARP or IPv4 Ethernet-II ethertype ($%04X)" NL, ethertype);
+		return false;
 	}
-	if (ret == 0) {
-		eth65.select_wait_usec = 1000000;	// serious problem, do 1sec wait ...
-		ETHDEBUG("ETH-THREAD: write() returned with zero! continue ..." NL);
-		return 0;
+	// Do MAC filtering
+	if (
+		((filters & RX_FILTER_MAC)) &&
+		memcmp(buf, mac_bcast,   6) &&
+		memcmp(buf, mac_address, 6)
+	) {
+		DEBUGPRINT("ETH: thread: MAC filter skipping %02X:%02X:%02X:%02X:%02X:%02X" NL,
+			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]
+		);
+		return false;
 	}
-	if (ret != size) {
-		ETHDEBUG("ETH-THREAD: partial write only?! wanted = %d, written = %d" NL, size, ret);
-		return 1;
-	}
-	ETHDEBUG("ETH-THREAD: write() returned with %d bytes read, OK!" NL, ret);
-	eth65.sense_activity = 1;
-	eth65.tx_trigger = 0;
-	TX_IRQ_ON();
-	return 0;
+	// Do IPv4 filtering
+	// finally, we accept the frame :-)
+	return true;
 }
 
 
 static int ethernet_thread ( void *unused )
 {
-	ETHDEBUG("ETH-THREAD: hello from the thread." NL);
-	while (eth65.enabled) {
-		/* ------------------- check for RX condition ------------------- */
-		if (
-			(!eth65.rx_enabled) && eth65.no_reset &&
-			(eth65.rx_buffer_mapped == eth65.rx_buffer_using)
-		) {
-			eth65.rx_enabled = 1;
-			eth65.rx_buffer_using = eth65.rx_buffer_mapped ^ 0x800;
-			eth65.sense_activity = 1;
-			ETHDEBUG("ETH-THREAD: rx enabled flipped to OK!" NL);
+	int select_wait = 10;	// MSEC. TODO: make it auto-adaptive
+	static Uint8 rx_temp[0x800], tx_temp[0x800];
+	int rx_temp_size = 0, tx_temp_size = 0;
+	bool rx_overflow_state = false, rx_overflow_warning = false;
+	bool first_run = true;		// do the initial reset
+	SDL_AtomicSet(&threadsafe_thread_status, THREAD_STATUS_RUNNING);
+	for (;;) {
+		// Locked part, in practice this is quite quick, and no syscalls made in this part.
+		// If we need copying buffer it takes a bit longer (for 2K per RX or TX) but that's
+		// rare case and "not too bad" either. The important thing: we can manage without
+		// _any_ lock at all in the select() and read()/write() part!
+		ETH_LOCK();
+		bool reset_done;
+		bool status_change = false;
+		if (com.thread_to_reset || first_run) {
+			com.thread_to_reset = false;
+			first_run = false;
+			rx_temp_size = 0;
+			tx_temp_size = 0;
+			rx_overflow_state = false;
+			rx_overflow_warning = false;
+			com.tx_size = 0;
+			com.tx_irq = false;
+			status_change = true;
+			reset_done = true;
+		} else
+			reset_done = false;
+		if (!tx_temp_size && com.tx_size) {
+			// TX signal from the main thread
+			if (com.tx_size <= 0x800) {	// should always fit into 0x800 as it is checked by the main thread before, but anyway ...
+				// we copy the full buffer (regardless of tx_size) as there can dirty tricks used by programs to rely on previous buffer content?
+				memcpy(tx_temp, eth_tx_buf, 0x800);
+				tx_temp_size = com.tx_size;
+			}
+			com.tx_size = 0;
+			com.tx_irq = true;
+			status_change = true;
 		}
-		/* ------------------- Throttling controll of thread's CPU usage ------------------- */
-		if (eth65.sense_activity) {
-			eth65.select_wait_usec = SELECT_WAIT_USEC_MIN;  // there was some real activity, lower the select wait time in the hope, there is some on-going future stuff soon
-			eth65.sense_activity = 0;
-		} else {
-			if (eth65.select_wait_usec < SELECT_WAIT_USEC_MAX)
-				eth65.select_wait_usec += SELECT_WAIT_INC_VAL;
+		if (com.rx_disabled || com.under_reset)
+			rx_temp_size = 0;	// dropping possible already received frame in the local buffer when RX is disabled
+		if (rx_temp_size) {
+			// we have filled rx_temp, we can copy it into the common ring buffer, if we have free buffer ...
+			const int eth_next = PLUS1(com.eth_sel);
+			if (eth_next != com.cpu_sel) {
+				Uint8 *p = com.rx_buffers + (com.eth_sel * 0x800);
+				p[0] = rx_temp_size & 0xFF;
+				p[1] = rx_temp_size >> 8;
+				memcpy(p + 2, rx_temp, rx_temp_size);
+				// move to next buffer
+				com.eth_sel = eth_next;
+				rx_overflow_state = false;
+			} else {
+				if (!rx_overflow_state) {
+					rx_overflow_state = true;
+					rx_overflow_warning = true;
+				}
+			}
+			rx_temp_size = 0;
+			status_change = true;
 		}
-		/* ------------------- The select() stuff ------------------- */
-		const int ret = xemu_tuntap_select(((eth65.rx_enabled && eth65.no_reset) ? XEMU_TUNTAP_SELECT_R : 0) | ((eth65.tx_trigger && eth65.no_reset) ? XEMU_TUNTAP_SELECT_W : 0), eth65.select_wait_usec);
-		//ETHDEBUG("ETH-THREAD: after select with %d usecs, retval = %d, rx_enabled = %d, tx_trigger = %d" NL,
-		//	eth65.select_wait_usec, ret, eth65.rx_enabled, eth65.tx_trigger
-		//);
-		if (ret < 0) {
-			ETHDEBUG("ETH-THREAD: EMERGENCY STOP: select error: %s" NL, strerror(errno));
+		if (status_change)
+			calc_status_changes();
+		ETH_UNLOCK();
+		if (rx_overflow_warning) {
+			rx_overflow_warning = false;
+			DEBUGPRINT("ETH: thread: RX buffer overflow, lost frame(s)!" NL);
+		}
+		if (reset_done)
+			DEBUGPRINT("ETH: thread: thread-level reset" NL);
+		const int select_flags = (rx_temp_size ? 0 : XEMU_TUNTAP_SELECT_R) | (tx_temp_size ? XEMU_TUNTAP_SELECT_W : 0);
+		//DEBUGPRINT("ETH: selflags = %d" NL, select_flags);
+		int slept = SDL_GetTicks();
+		const int selres = xemu_tuntap_select(select_flags, select_wait * 1000);
+		slept = SDL_GetTicks() - slept;
+		if (SDL_AtomicGet(&threadsafe_thread_status) != THREAD_STATUS_RUNNING)
+			break;
+		if (selres == 0) {
+			// select() timed out
+			//DEBUGPRINT("ETH: thread: timed out" NL);
+			continue;
+		}
+		if (selres < 0) {
+			DEBUGPRINT("ETH: thread: select error, aborting: %s" NL, xemu_tuntap_error());
 			break;
 		}
-		/* ------------------- TO RECEIVE (RX) ------------------- */
-		if (eth65.rx_enabled && eth65.no_reset && (ret & XEMU_TUNTAP_SELECT_R)) {
-			if (ethernet_rx_processor()) {
-				ETHDEBUG("ETH-THREAD: EMERGENCY STOP: requested by RX processor." NL);
+		//DEBUGPRINT("ETH: selres = %d" NL, selres);
+		bool activity = false;
+		if ((selres & XEMU_TUNTAP_SELECT_R) && !rx_temp_size) {
+			const int r = xemu_tuntap_read(rx_temp, 0x800 - 2);
+			if (r == -1) {
+				DEBUGPRINT("ETH: thread: read error, aborting: %s" NL, xemu_tuntap_error());
 				break;
 			}
-
+			if (r == 0) {
+				DEBUGPRINT("ETH: BUGGY!" NL);
+			}
+			if (r > 0) {
+				DEBUGPRINT("ETH: thread: activity, read %d bytes" NL, r);
+				activity = true;
+				if (do_rx_filtering(rx_temp, r, force_filters ? 0xFF : SDL_AtomicGet(&threadsafe_rx_filtering))) {
+					rx_temp_size = r;	// accept it, if filtering says to do so
+					SDL_AtomicAdd(&stat_rx_counter, 1);
+				}
+			}
 		}
-		/* ------------------- TO TRANSMIT (TX) ------------------- */
-		if (eth65.tx_trigger && eth65.no_reset && (ret & XEMU_TUNTAP_SELECT_W)) {
-			if (ethernet_tx_processor()) {
-				ETHDEBUG("ETH-THREAD: EMERGENCY STOP: requested by TX processor." NL);
+		if ((selres & XEMU_TUNTAP_SELECT_W) && tx_temp_size) {
+			const int r = xemu_tuntap_write(tx_temp, tx_temp_size);
+			if (r == -1) {
+				DEBUGPRINT("ETH: thread: write error (wanting to write %d bytes), aboring: %s" NL, tx_temp_size, xemu_tuntap_error());
 				break;
 			}
+			if (r == tx_temp_size) {
+				tx_temp_size = 0;	// TX was OK, let's free our local buffer
+				SDL_AtomicAdd(&stat_tx_counter, 1);
+			} else {
+				DEBUGPRINT("ETH: thread: partial / blocked write?!" NL);
+				// FIXME: WTF? can it happen at all?!
+				tx_temp_size = 0;	// pretend to be OK.
+			}
+			activity = true;
+		}
+		if (!activity) {
+			DEBUGPRINT("ETH: should sleep: %d, actual sleep %d" NL, select_wait, slept);
+			//SDL_Delay(select_wait);
+		} else {
+			//DEBUGPRINT("Not sleeping!" NL);
 		}
 	}
-	eth65.exited = 1;
-	ETHDEBUG("ETH-THREAD: leaving ..." NL);
-	xemu_tuntap_close();
-	ETHDEBUG("ETH-THREAD: OK now ..." NL);
+	DEBUGPRINT("ETH: thread: exiting ..." NL);
+	SDL_AtomicSet(&stat_rx_counter, 0);
+	SDL_AtomicSet(&stat_tx_counter, 0);
+	SDL_AtomicSet(&threadsafe_thread_status, THREAD_STATUS_EXITED);
 	return 0;
 }
 
+#endif	// HAVE_ETHERTAP
 
-/* End of threaded stuffs */
+// Can be called ONLY by the main ("CPU") thread
+static inline void trigger_rx_buffer_swap ( void )
+{
+	bool switched = false;
+	ETH_LOCK();
+	const int cpu_next = PLUS1(com.cpu_sel);
+	if (cpu_next != com.eth_sel) {
+		memcpy(eth_rx_buf, com.rx_buffers + (cpu_next * 0x800), 0x800);
+		com.cpu_sel = cpu_next;
+		calc_status_changes();
+		switched = true;
+	}
+	ETH_UNLOCK();
+	if (!switched) {
+		// Messages etc are not nice to be produced within the lock section as that must be minimalized in execution time!
+		DEBUGPRINT("ETH: warning, CPU wants to move over the current ethernet RX buffer! PC=$%04X" NL, cpu65.old_pc);
+	} else {
+		const int size = eth_rx_buf[0] + (eth_rx_buf[1] << 8);
+		if (size > 0x800 - 2)
+			DEBUGPRINT("ETH: warning, invalid size (%d) in the RX buffer!" NL, size);
+		else
+			DEBUGPRINT("ETH: cool, we got a new buffer (#%d) in the CPU view, %d+2 bytes of ethernet frame." NL, cpu_next, size);
+	}
+}
 
+
+// Can be called ONLY by the main ("CPU") thread
+static void trigger_tx_transmit ( int size )
+{
+	if ((size >= 0) && (size < 8 || size > 0x800)) {
+		DEBUGPRINT("ETH: invalid frame size (%d) to TX, refusing" NL, size);
+		size = -1;
+	}
+	ETH_LOCK();
+	if (size < 0) {
+		com.tx_size = 0;
+		com.tx_irq = true;
+	} else {
+		com.tx_size = size;
+		com.tx_irq = false;
+	}
+	calc_status_changes();
+	ETH_UNLOCK();
+}
+
+
+static void do_reset_begin ( void )
+{
+	bool error = false;
+	ETH_LOCK();
+	if (!com.under_reset) {
+		// FIXME: do I realy need to clear all registers on reset, ven MIIM ones?
+		memset(&eth_regs, 0, 9);	// only clear the first 9 registers
+		eth_regs[5] = 53;		// Filtering options FIXME: check this!
+		memset(&miimlo8, 0, sizeof miimlo8);
+		memset(&miimhi8, 0, sizeof miimhi8);
+		SDL_AtomicSet(&threadsafe_rx_filtering, eth_regs[5]);
+		com.cpu_sel = 0;
+		com.eth_sel = 1;
+		memcpy(eth_rx_buf, com.rx_buffers, 0x800);
+		com.thread_to_reset = true;
+		com.under_reset = true;
+		com.tx_irq_enabled = 0;
+		com.rx_irq_enabled = 0;
+		calc_status_changes();
+#ifdef		HAVE_ETHERTAP
+		SDL_AtomicSet(&stat_rx_counter, 0);
+		SDL_AtomicSet(&stat_tx_counter, 0);
 #endif
+	} else
+		error = true;
+	ETH_UNLOCK();
+	if (error)
+		DEBUGPRINT("ETH: warning: reset-begin ignored with prior reset-begin" NL);
+}
 
-/* Start of non-threaded stuffs, NOTE: they work even without ETH emulation for real, but surely it won't RX/TX too much,
-   however we want to keep them, so a network-aware software won't go crazy on totally missing register-level emulation */
+
+static void do_reset_end ( void )
+{
+	bool error = false;
+	ETH_LOCK();
+	if (com.under_reset) {
+		com.under_reset = false;
+		calc_status_changes();
+	} else
+		error = true;
+	ETH_UNLOCK();
+	if (error)
+		DEBUGPRINT("ETH: warning: reset-end ignored without prior reset-begin" NL);
+}
 
 
-// "addr" must be between $0 and $F !!!
 Uint8 eth65_read_reg ( const unsigned int addr )
 {
 	DEBUG("ETH: reading register $%02X" NL, addr);
 	switch (addr) {
-		/* **** $D6E0 register **** */
 		case 0x00:
-			return eth65.no_reset;	// FIXME: not other bits emulated yet here
-		/* **** $D6E1 register **** */
+			return (SDL_AtomicGet(&threadsafe_status_regs) & (128 + 64)) + (eth_regs[0] & 63);
 		case 0x01:
-			return
-				// Bit0: reset - should be hold '1' to use, '0' means resetting the ethernet controller chip
-				eth65.no_reset |
-				// Bit1: which RX buffer is mapped, we set the offset according to that
-				(eth65.rx_buffer_mapped ? 0x02 : 0 ) |
-				// Bit2: indicates which RX buffer was used ...
-				(eth65.rx_buffer_using  ? 0x04 : 0 ) |
-				// Bit3: Enable real-time video streaming via ethernet
-				eth65.video_streaming |
-				// Bit4: ethernet TX IRQ status, it's also used with POLLING, without IRQ enabled!!
-				eth65._tx_irq |
-				// Bit5: ethernet RX IRQ status, it's also used with POLLING, without IRQ enabled!!
-				eth65._rx_irq |
-				// Bit6: Enable ethernet TX IRQ
-				eth65.tx_irq_enabled |
-				// Bit7: Enable ethernet RX IRQ
-				eth65.rx_irq_enabled
-			;
-		/* **** $D6E2 register: TX size register low **** */
-		case 0x02: return eth65.tx_size & 0xFF;
-		/* **** $D6E3 register: TX size register high (4 bits only) **** */
-		case 0x03: return (eth65.tx_size >> 8) & 0xFF;	// 4 bits, but tx_size var cannot contain more anyway
-		/* **** $D6E4 register: on _reading_ it seems to gives back the total number of RX buffers what system has *** */
-		case 0x04: return RX_BUFFERS;
-		/* **** $D6E5 register **** */
-		case 0x05:
-			return
-				eth65.mac_filter   |
-				eth65.disable_crc_chk |
-				( eth65.adjust_txd_phase << 2) |
-				eth65.accept_broadcast |
-				eth65.accept_multicast
-			;
-			break;
-		/* **** $D6E6 register **** */
-		case 0x06:
-			return
-				eth65.miim_register |
-				(eth65.phy_number << 5)
-			;
-		/* **** $D6E7 register **** */
-		case 0x07: return miimlo8[eth65.miim_register];
-		/* **** $D6E8 register **** */
-		case 0x08: return miimhi8[eth65.miim_register];
-		/* **** $D6E9 - $D6EE registers: MAC address **** */
-		case 0x09: case 0x0A: case 0x0B: case 0x0C: case 0x0D: case 0x0E:
-			return mac_address[addr - 9];
-		default:
+			return SDL_AtomicGet(&threadsafe_status_regs) >> 8;
+		case 0x04:
+			return RX_BUFFERS;	// $D6E4 register: on _reading_ it seems to gives back the total number of RX buffers what system has
+		case 0x07:
+			return miimlo8[miim_reg_num];
+		case 0x08:
+			return miimhi8[miim_reg_num];
+		case 0x0F:			// FIXME: what is this?
 			return 0xFF;
+		default:
+			if (XEMU_UNLIKELY(addr > 0x1F))
+				FATAL("Invalid ethernet register (%d) to be read!", addr);
+			break;
 	}
+	return eth_regs[addr];
 }
 
 
-// "addr" must be between $0 and $F !!!
 void eth65_write_reg ( const unsigned int addr, const Uint8 data )
 {
-	eth_regs[addr] = data;
 	DEBUG("ETH: writing register $%02X with data $%02X" NL, addr, data);
 	switch (addr) {
-		/* **** $D6E0 register **** */
 		case 0x00:
-			eth65.no_reset = (data & 0x01);	// FIXME: it seems to be the same as $D6E1 bit0???
-			break;
-		/* **** $D6E1 register **** */
-		case 0x01:
-			// Bit0: It seems, it's an output signal of the FPGA for the ethernet controller chip, and does not do too much other ...
-			// ... however it also means, that if this bit is zero, the ethernet controller chip does not do too much, I guess.
-			// that is, for usage, you want to keep this bit '1'.
-			eth65.no_reset = (data & 0x01);
-			// Bit1: which RX buffer is mapped, we set the offset according to that
-			// it seems, RX only works, if ctrl not in reset (bit0) and the ctrl actually waits for user to swap buffer (it can only receive into the not mapped one!)
-			eth65.rx_buffer_mapped = (data & 0x02) ? 0x800 : 0;
-			// Bit2: indicates which RX buffer was used ... maybe it's a read-only bit, we don't care
-			// Bit3: Enable real-time video streaming via ethernet (well, it's not supported by Xemu, but it would be fancy stuff btw ...) -- we don't care on this one
-			eth65.video_streaming = (data & 0x08);
-			// Bit4: ethernet TX IRQ status, this will be cleared on writing $D6E1, regardless of value written!
-			// Bit5: ethernet RX IRQ status, this will be cleared on writing $D6E1, regardless of value written!
-			// Bit6: Enable ethernet TX IRQ, not yet supported in Xemu! FIXME
-			eth65.tx_irq_enabled = (data & 0x40);	// not yet used, FIXME
-			// Bit7: Enable ethernet RX IRQ, not yet supported in Xemu! FIXME
-			eth65.rx_irq_enabled = (data & 0x80);	// not yet used, FIXME
-			// see comments above with bits 4 and 5
-			TX_IRQ_OFF();
-			RX_IRQ_OFF();
-			ETHDEBUG("ETH: $D6E1 has been written with data $%02X" NL, data);
-			break;
-		/* **** $D6E2 register: TX size low **** */
-		case 0x02:
-			eth65.tx_size = (eth65.tx_size & 0xFF00) | data;
-			break;
-		/* **** $D6E3 register: TX size high (4 bits only) **** */
-		case 0x03:
-			eth65.tx_size = ((data & 0x0F) << 8) | (eth65.tx_size & 0xFF);
-			break;
-		/* **** $D6E4 register **** */
-		case 0x04:
-			// trigger TX if $01 is written?
-			// clear (pending?) TX is $00 [marked as 'DEBUG' in iomap.txt']: FIXME? not implemented
-			if (data == 0) {	// but anyway, here you are the debug stuff as well ...
-				eth65.tx_trigger = 0;
-			} else if (data == 1) {	// the only "official" command here: TX trigger!
-				if (eth65.tx_size >= 14 || eth65.tx_size <= ETH_FRAME_MAX_SIZE) {
-					eth65.sense_activity = 1;
-					// FIXME: I guess, TX IRQ must be cleared by the user ... so we don't do here
-					eth65.tx_trigger = 1;		// now ask the triggy stuff!
-				} else {
-					// leave this for the handler thread to check, but warning here
-					DEBUGPRINT("ETH: warning, invalid sized (%d) frame tried to be TX'ed" NL, eth65.tx_size);
-				}
+			if ((eth_regs[0] & 3) == 3 && (data & 3) != 3) {
+				DEBUGPRINT("ETH: reset-begin established, PC=$%04X" NL, cpu65.old_pc);
+				do_reset_begin();
+			}
+			if ((eth_regs[0] & 3) != 3 && (data & 3) == 3) {
+				DEBUGPRINT("ETH: reset-end established, PC=$%04X" NL, cpu65.old_pc);
+				do_reset_end();
 			}
 			break;
-		/* **** $D6E5 register **** */
+		case 0x01:
+			if (!(eth_regs[1] & 2) && (data & 2)) {	// "rising edge" of this bit written triggers the RX buffer swap
+				trigger_rx_buffer_swap();
+			}
+			if ((eth_regs[1] ^ data) & (0x80 + 0x40)) {
+				ETH_LOCK();
+				com.tx_irq_enabled = data & 0x40;
+				com.rx_irq_enabled = data & 0x80;
+				calc_status_changes();
+				ETH_UNLOCK();
+			}
+			break;
+		case 0x04:
+			// The only real and important ethernet controller command is 1 (transmit TX buffer),
+			// though command 0 sometimes mentioned to "cancel possible submitted TX" (or so)
+			if (data < 2)
+				trigger_tx_transmit(data ? eth_regs[2] + ((eth_regs[3] & 0xF) << 8) : -1);
+			else
+				DEBUGPRINT("ETH: invalid/unknown ethernet controller command: $%02X" NL, data);
+			break;
 		case 0x05:
-			eth65.mac_filter       = (data & 0x01);
-			eth65.disable_crc_chk  = (data & 0x02);
-			eth65.adjust_txd_phase = (data >> 2) & 3;
-			eth65.accept_broadcast = (data & 0x10);
-			eth65.accept_multicast = (data & 0x20);
+			if ((eth_regs[5] ^ data) & (RX_FILTER_MAC|RX_FILTER_ACCEPT_BCAST|RX_FILTER_ACCEPT_MCAST)) {
+				SDL_AtomicSet(&threadsafe_rx_filtering, data);
+				DEBUGPRINT("ETH: setting RX filters; mac-filter=%d, bcast-accept=%d, mcast-accept=%d" NL,
+					!!(data & RX_FILTER_MAC),
+					!!(data & RX_FILTER_ACCEPT_BCAST),
+					!!(data & RX_FILTER_ACCEPT_MCAST)
+				);
+			}
 			break;
-		/* **** $D6E6 register **** */
-		case 0x06:
-			eth65.miim_register = (data & 0x1F);
-			eth65.phy_number    = (data & 0xE0) >> 5;
-			break;
-		/* **** $D6E7 register **** */
 		case 0x07:
-			miimlo8[eth65.miim_register] = data;
+			miimlo8[miim_reg_num] = data;
 			break;
-		/* **** $D6E8 register **** */
 		case 0x08:
-			miimhi8[eth65.miim_register] = data;
+			miimhi8[miim_reg_num] = data;
 			break;
-		/* **** $D6E9 - $D6EE registers: MAC address **** */
-		case 0x09: case 0x0A: case 0x0B: case 0x0C: case 0x0D: case 0x0E:
-			mac_address[addr - 9] = data;
+		default:
+			if (XEMU_UNLIKELY(addr > 0x1F))
+				FATAL("Invalid ethernet register (%d) to be written!", addr);
 			break;
 	}
-}
-
-
-// Note: "offset" shouldn't be trusted fully *EVER*, only its lower 11 bits (0-$7FF)
-// Though, this is used by memory_mapper.c where the parameter is "addr32" (physical address),
-// here we re-use this functionality with io_mapper.c
-Uint8 eth65_buffer_reader ( const Uint32 offset )
-{
-	// FIXME what happens if M65 receives frame but user switches buffer meanwhile. Not so nice :-O
-	return rx_buffer[eth65.rx_buffer_mapped + (offset & 0x7FFU)];
-}
-
-// See the note before eth65_buffer_reader()
-void eth65_buffer_writer ( const Uint32 offset, const Uint8 data )
-{
-	tx_buffer[offset & 0x7FFU] = data;
+	eth_regs[addr] = data;
 }
 
 
 void eth65_shutdown ( void )
 {
-	if (eth65.exited)
+	const int status = SDL_AtomicGet(&threadsafe_thread_status);
+	if (status == THREAD_STATUS_EXITED)
 		DEBUGPRINT("ETH: shutting down: handler thread has already exited" NL);
-	else if (eth65.enabled) {
-		eth65.enabled = 0;
-		eth65.no_reset = 0;
-		eth65.rx_enabled = 0;
-		eth65.tx_trigger = 0;
-		eth65.sense_activity = 1;
-		eth65.select_wait_usec = 0;
-		DEBUGPRINT("ETH: shutting down: handler thread seems to be running" NL);
+	else if (status == THREAD_STATUS_RUNNING) {
+		SDL_AtomicSet(&threadsafe_thread_status, THREAD_STATUS_EXIT);
+		for (const Uint32 t = SDL_GetTicks();;) {
+			const int age = SDL_GetTicks() - t;
+			const bool timed_out = (age >= SHUTDOWN_TIMEOUT_MSEC);
+			if (timed_out || SDL_AtomicGet(&threadsafe_thread_status) == THREAD_STATUS_EXITED) {
+				DEBUGPRINT("ETH: shutting down thread: %s, after %u msec" NL, timed_out ? "TIMED OUT" : "done", age);
+				break;
+			}
+			SDL_Delay(5);
+		}
 	} else
 		DEBUGPRINT("ETH: shutting down: handler thread seems hasn't been even running (not enabled?)" NL);
-#ifdef HAVE_ETHERTAP
+#ifdef	HAVE_ETHERTAP
 	xemu_tuntap_close();
 #endif
 }
 
 
-// This is not the reset what eth65.no_reset stuff does, but reset of M65 (also called by eth65_init)
 void eth65_reset ( void )
 {
-	memset(&eth_regs, 0, sizeof eth_regs);
-	memset(&miimlo8, 0, sizeof miimlo8);
-	memset(&miimhi8, 0, sizeof miimhi8);
-	memset((void*)&eth65, 0, sizeof eth65);
-	RX_IRQ_OFF();
-	TX_IRQ_OFF();
-	memset((void*)rx_buffer, 0xFF, sizeof rx_buffer);
-	memset((void*)tx_buffer, 0xFF, sizeof tx_buffer);
-	eth65.select_wait_usec = SELECT_WAIT_USEC_MAX;
-	eth65.rx_buffer_using    = 0x800;	// RX buffer is used to RX @ ofs 0
-	eth65.rx_buffer_mapped   = 0x000;	// RX buffer mapped @ ofs 0
-	eth65.accept_broadcast = 16;
-	eth65.accept_multicast = 32;
-	eth65.mac_filter = 1;
+	ETH_LOCK();
+	com.under_reset = false;	// to be sure, we can start reset
+	ETH_UNLOCK();
+	do_reset_begin();
+	do_reset_end();
+	eth_regs[0] |= 3;		// not in reset anymore: eth65_reset() is called by the emulator not via CPU I/O writes!
 }
+
+
+#ifdef	HAVE_ETHERTAP
+unsigned int eth65_get_stat ( char *buf, const unsigned int buf_size, unsigned int *rxcnt, unsigned int *txcnt )
+{
+	if (rxcnt)
+		*rxcnt = SDL_AtomicGet(&stat_rx_counter);
+	if (txcnt)
+		*txcnt = SDL_AtomicGet(&stat_tx_counter);
+	if (SDL_AtomicGet(&threadsafe_thread_status) !=  THREAD_STATUS_RUNNING)
+		return snprintf(buf, buf_size, "Not running/configured");
+	return snprintf(buf, buf_size, "device attached: \"%s\", initial MAC: %02X:%02X:%02X:%02X:%02X:%02X, remote MAC: %02X:%02X:%02X:%02X:%02X:%02X, remote IP: %u.%u.%u.%u",
+		tap_name,
+		mac_address[0], mac_address[1], mac_address[2], mac_address[3], mac_address[4], mac_address[5],
+		remote_mac[0], remote_mac[1], remote_mac[2], remote_mac[3], remote_mac[4], remote_mac[5],
+		remote_ip >> 24, (remote_ip >> 16) & 0xFF, (remote_ip >> 8) & 0xFF, remote_ip & 0xFF
+	);
+}
+#endif
 
 
 int eth65_init ( const char *options )
 {
-	eth65.exited = 0;
-	eth65.enabled = 0;
-	eth65._irq_to_cpu_routed = 1;
+#ifdef	HAVE_ETHERTAP
+	static const char init_error_prefix[] = "ETH: disabled on error:\n";
+#endif
+	SDL_AtomicSet(&threadsafe_thread_status, THREAD_STATUS_DISABLED);
 	eth65_reset();
-	eth_debug = 0;
+	static bool init_mac = true;
+	if (init_mac) {
+		init_mac = false;
+		memcpy(eth_regs + 9, default_mac, sizeof(default_mac));
+	}
 	if (options && *options) {
-#ifdef HAVE_ETHERTAP
+#ifdef	HAVE_ETHERTAP
 		char device_name[64];
 		*device_name = 0;
 		for (;;) {
@@ -576,10 +596,12 @@ int eth65_init ( const char *options )
 			if (!*device_name) {
 				strncpy(device_name, options, len);
 				device_name[len] = 0;
+#ifndef			ETH65_NO_DEBUG
 			} else if (len ==  5 && !strncmp(options, "debug", len)) {
-				eth_debug = 1;
+				eth_debug = true;
+#endif
 			} else if (len == 13 && !strncmp(options, "alwaysfilters", len)) {
-				eth65.xemu_always_filters = 1;
+				force_filters = true;
 			} else if (!strncmp(options, "mac=", 4)) {
 				if (len != 16 || sscanf(
 					options + 4,
@@ -602,21 +624,22 @@ int eth65_init ( const char *options )
 				break;
 		}
 		if (xemu_tuntap_alloc(device_name, NULL, 0, XEMU_TUNTAP_IS_TAP | XEMU_TUNTAP_NO_PI | XEMU_TUNTAP_NONBLOCKING_IO) < 0) {
-			ERROR_WINDOW("%sTAP device \"%s\" opening error: %s", init_error_prefix, device_name, strerror(errno));
+			ERROR_WINDOW("%sTAP device \"%s\" opening error: %s", init_error_prefix, device_name, xemu_tuntap_error());
 			return 1;
 		}
-		eth65.enabled = 1;
+		tap_name = xemu_strdup(device_name);
+		remote_ip = xemu_tuntap_get_ipv4();
+		xemu_tuntap_get_mac(remote_mac);
 		// Initialize our thread for device read/write ...
-		thread_id = SDL_CreateThread(ethernet_thread, "Xemu-EtherTAP", NULL);
+		SDL_AtomicSet(&threadsafe_thread_status, THREAD_STATUS_RUNNING);
+		const SDL_Thread *thread_id = SDL_CreateThread(ethernet_thread, "Xemu-EtherTAP", NULL);
 		if (thread_id) {
-			DEBUGPRINT("ETH: enabled - thread %p started, device attached: \"%s\", initial MAC: %02X:%02X:%02X:%02X:%02X:%02X" NL,
-				thread_id, device_name,
-				mac_address[0], mac_address[1], mac_address[2],
-				mac_address[3], mac_address[4], mac_address[5]
-			);
+			char stat[128];
+			(void)eth65_get_stat(stat, sizeof stat, NULL, NULL);
+			DEBUGPRINT("ETH: enabled - thread %p started, %s" NL, thread_id, stat);
 		} else {
-			ERROR_WINDOW("%serror creating thread for Ethernet emulation: %s", init_error_prefix, SDL_GetError());
-			eth65.enabled = 0;
+			SDL_AtomicSet(&threadsafe_thread_status, THREAD_STATUS_DISABLED);
+			ERROR_WINDOW("%serror creating thread for Ethernet emulation:\n%s", init_error_prefix, SDL_GetError());
 			xemu_tuntap_close();
 			return 1;
 		}
@@ -626,7 +649,7 @@ int eth65_init ( const char *options )
 		return 1;
 #endif
 	} else {
-#ifdef HAVE_ETHERTAP
+#ifdef	HAVE_ETHERTAP
 		DEBUGPRINT("ETH: not enabled by config/command line" NL);
 #else
 		DEBUG("ETH: Ethernet emulation is not supported/was compiled into this Xemu");

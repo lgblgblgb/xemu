@@ -19,11 +19,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #ifndef XEMU_MEGA65_ETHERNET65_H_INCLUDED
 #define XEMU_MEGA65_ETHERNET65_H_INCLUDED
 
+extern Uint8 eth_rx_buf[0x800];
+extern Uint8 eth_tx_buf[0x800];
+
 extern int   eth65_init			( const char *options );
+#ifdef HAVE_ETHERTAP
+extern unsigned int eth65_get_stat ( char *buf, const unsigned int buf_size, unsigned int *rxcnt, unsigned int *txcnt );
+#endif
 extern void  eth65_shutdown		( void );
 extern void  eth65_reset		( void );
-extern Uint8 eth65_buffer_reader	( const Uint32 offset );
-extern void  eth65_buffer_writer	( const Uint32 offset, const Uint8 data );
 extern Uint8 eth65_read_reg		( const unsigned int addr );
 extern void  eth65_write_reg		( const unsigned int addr, const Uint8 data );
 
