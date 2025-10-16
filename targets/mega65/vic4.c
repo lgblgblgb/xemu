@@ -1479,14 +1479,17 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 						enable_bg_paint = 0;
 					else
 						enable_bg_paint = 1;
-					if (SXA_ATTR_BOLD(color_data) && SXA_ATTR_REVERSE(color_data) && !REG_VICIII_ATTRIBS)
-						used_palette = altpalette;	// use the alternate palette from now in the scanline
-					else
-						used_palette = palette;		// we do this as well, since there can be "double GOTOX" so we want back to "original" palette ...
-					if (SXA_4BIT_PER_PIXEL(color_data)) 	// this signals for rowmask [the rowmask itself is color_data & 0xFF]
+					if (SXA_4BIT_PER_PIXEL(color_data)) {	// this signals for rowmask [the rowmask itself is color_data & 0xFF]
 						draw_mask = (color_data & (1 << char_row)) ? 0xFF : 0x00;	// draw_mask is $FF (not masked) _or_ $00 (masked) ~ for the current char_row!
-					else
+					} else {
 						draw_mask = 0xFF;
+
+						// palette switches only allowed when rowmask=0
+						if (SXA_ATTR_BOLD(color_data) && SXA_ATTR_REVERSE(color_data) && !REG_VICIII_ATTRIBS)
+							used_palette = altpalette;	// use the alternate palette from now in the scanline
+						else
+							used_palette = palette;		// we do this as well, since there can be "double GOTOX" so we want back to "original" palette ...
+					}
 					continue;
 				}
 			}
