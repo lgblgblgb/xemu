@@ -152,6 +152,7 @@ static int restore_is_held;
 static Uint8 virtkey_state[3] = { 0xFF, 0xFF, 0xFF };
 static Uint8 modkeys_mask;
 static Uint8 modkeys;
+static Uint8 crsr_leftup_status;
 
 
 void hwa_kbd_disable_selector ( int state )
@@ -341,12 +342,7 @@ Uint8 kbd_directscan_query ( const Uint8 row )
 
 Uint8 kbd_query_leftup_status ( void )
 {
-	// Xemu does not have the concept of up/left keys for real, always simulates that as shited down/right ...
-	// Thus, to query left/up only as separate key, we do the trick to query the emulated shift press AND down/right ...
-	return
-		((KBD_IS_PRESSED(2) && KBD_IS_PRESSED(VIRTUAL_SHIFT_POS)) ? 1 : 0) +     // left
-		((KBD_IS_PRESSED(7) && KBD_IS_PRESSED(VIRTUAL_SHIFT_POS)) ? 2 : 0)       // up
-	;
+	return crsr_leftup_status;
 }
 
 
@@ -356,6 +352,7 @@ void clear_emu_events ( void )
 	hid_reset_events(1);
 	modkeys = 0;
 	queue_pos = 0;
+	crsr_leftup_status = 0;
 	for (int a = 0; a < 3; a++) {
 		if (virtkey_state[0] != 0xFF) {
 			hid_sdl_synth_key_event(virtkey_state[a], 0);
@@ -483,6 +480,20 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 #endif
 	;
 	DEBUGKBD("KBD: HWA: pos = %d sdl_key = %d, pressed = %d, handled = %d" NL, pos, key, pressed, handled);
+	if (pos == 0x02 + 8) {
+		// the "cursor left" key - would be shift+right, but on MEGA65 there is a direct method to query as well,
+		// not only as a virtual key. Thus this "hack" does that.
+		if (pressed)
+			crsr_leftup_status |= 1;
+		else
+			crsr_leftup_status &= ~1;
+	} else if (pos == 0x07 + 8) {
+		// the "cursor up" key - would be shift+down, .... [see the comment above, with 'left']
+		if (pressed)
+			crsr_leftup_status |= 2;
+		else
+			crsr_leftup_status &= ~2;
+	}
 	if (pressed) {
 		// check if we have the ALT-TAB trap triggered (TAB is pressed now, and ALT is hold)
 		if (key == SDL_SCANCODE_TAB && (modkeys & MODKEY_CTRL)) {
@@ -582,4 +593,5 @@ void input_init ( void )
 	modkeys_mask = 0xFFU;
 	queue_pos = 0;
 	restore_is_held = 0;
+	crsr_leftup_status = 0;
 }
