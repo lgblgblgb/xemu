@@ -632,15 +632,26 @@ static void cmd_serialtcp ( char *p )
 static void cmd_eth ( char *p )
 {
 	if (*p) {
-		MATRIX("Trying to (re)start ethertap with params: \"%s\"\n", p);
-		eth65_shutdown();
-		eth65_init(p);
+		if (!strcmp(p, "-")) {
+			if (eth65_options_used) {
+				p = eth65_options_used;
+			} else {
+				p = NULL;
+				MATRIX("ERROR: No previous target specification");
+			}
+		}
+		if (p) {
+			MATRIX("Trying to (re)start ethertap with params: \"%s\"\n", p);
+			eth65_shutdown();
+			eth65_init(p);
+		}
 	}
 	char stat[128];
 	unsigned int rxcnt, txcnt;
 	(void)eth65_get_stat(stat, sizeof stat, &rxcnt, &txcnt);
+	MATRIX("%s", stat);
 	if (rxcnt || txcnt)
-		MATRIX("%s\nRX/TX traffic: %u/%u pckts", stat, rxcnt, txcnt);
+		MATRIX("\nRX/TX traffic: %u/%u pckts", rxcnt, txcnt);
 }
 #endif
 

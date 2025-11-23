@@ -261,7 +261,9 @@ int xemu_tuntap_get_mac ( unsigned char mac[6] )
 unsigned int xemu_tuntap_get_ipv4 ( void )
 {
 #if 1
-	int s = socket(AF_INET, SOCK_DGRAM, 0);
+	const int s = socket(AF_INET, SOCK_DGRAM, 0);
+	if (s < 0)
+		return 0;
 	if (ioctl(s, SIOCGIFADDR, &ifr) == -1)
 		return 0;
 	close(s);

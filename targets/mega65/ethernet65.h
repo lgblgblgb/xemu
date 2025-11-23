@@ -21,6 +21,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 extern Uint8 eth_rx_buf[0x800];
 extern Uint8 eth_tx_buf[0x800];
+#ifdef HAVE_ETHERTAP
+extern char *eth65_options_used;
+#endif
 
 extern int   eth65_init			( const char *options );
 #ifdef HAVE_ETHERTAP

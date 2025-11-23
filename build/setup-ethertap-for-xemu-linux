@@ -1,0 +1,93 @@
+#!/usr/bin/env bash
+# (C)2025 LGB (Gabor Lenart) lgblgblgb@gmail.com
+
+IFNAME="xemu"
+USER="`whoami`"
+
+# /24 network is assumed in this script
+IFIPADR="10.10.10.1"			# The IP address of the interface
+NETWORK="${IFIPADR%.*}.0/24"
+BRDCAST="${IFIPADR%.*}.255"
+DHCPIPS="${IFIPADR%.*}.2,${IFIPADR%.*}.254"
+IPADDR="$IFIPADR/24"
+DNSMASQ_CONF="/tmp/xemu-dnsmasq-$IFNAME.conf"
+DNSMASQ_PID="/tmp/xemu-dnsmasq-$IFNAME.pid"
+DNSMASQ_LEASE="12h"
+
+if [ "$USER" = "root" ]; then
+	echo "Do not run this script as root, but as user." >&2
+	echo "It will use sudo though when needed, and your password may be needed for that." >&2
+	exit 1
+else
+	echo "WARNING: this script uses sudo. Your sudo password may be asked during the process"
+fi
+
+echo "INFO:    Setup for user $USER using interface $IFNAME ($IPADDR) on network $NETWORK"
+echo
+
+if ip link show "$IFNAME" > /dev/null 2>&1; then
+	echo "Interface $IFNAME already exists"
+else
+	echo "Creating TAP interface $IFNAME"
+	sudo ip tuntap add mode tap user "$USER" "$IFNAME"
+fi
+
+echo "Adding IP address $IPADDR to interface $IFNAME"
+sudo ip addr flush dev "$IFNAME"
+sudo ip addr add "$IPADDR" broadcast "$BRDCAST" dev "$IFNAME"
+
+sudo ip link set "$IFNAME" up
+
+for RULE in \
+	"INPUT -i $IFNAME -j ACCEPT" \
+	"OUTPUT -o $IFNAME -j ACCEPT" \
+	"FORWARD -i $IFNAME -j ACCEPT" \
+	"FORWARD -o $IFNAME -m state --state RELATED,ESTABLISHED -j ACCEPT" \
+	"POSTROUTING -t nat -s $NETWORK ! -o $IFNAME -j MASQUERADE"
+do
+	echo "Checking/adding netfilter (iptables) rule: $RULE"
+	sudo iptables -C $RULE &>/dev/null || sudo iptables -I $RULE
+done
+
+echo -n "Enabling IP forward via sysctl: "
+sudo sysctl -w net.ipv4.ip_forward=1
+
+if [ "$1" != "force" ]; then
+	read -p "Do you want to run dnsmasq for DHCP/DNS on $IFNAME? [y/N] " ANSWER
+	ANSWER="${ANSWER,,}"
+else
+	ANSWER="y"
+fi
+if [ "$ANSWER" = "y" -o "$ANSWER" = "yes" ]; then
+	already="$(pgrep -f "dnsmasq.*--pid-file=$DNSMASQ_PID")"
+	if [ "$already" != "" ]; then
+		echo "dnsmasq already running on $IFNAME as PID: $already"
+	else
+		echo "Starting dnsmasq on $IFNAME with config file $DNSMASQ_CONF and PID file $DNSMASQ_PID as user $USER"
+		cat > "$DNSMASQ_CONF" <<EOF
+interface=$IFNAME
+bind-interfaces
+dhcp-range=$DHCPIPS,$DNSMASQ_LEASE
+dhcp-option=3,$IFIPADR
+dhcp-option=6,$IFIPADR
+EOF
+		sleep .5
+		sudo dnsmasq --conf-file="$DNSMASQ_CONF" --pid-file="$DNSMASQ_PID" --user="$USER"
+		ret="$?"
+		if [ "$ret" != "0" ]; then
+			echo "FAILED :("
+			exit 1
+		fi
+		echo -n "Waiting for $DNSMASQ_PID showing the pid: "
+		while [ ! -s "$DNSMASQ_PID" ]; do
+			echo -n "."
+			sleep .1
+		done
+		echo "  DONE, PID: `cat $DNSMASQ_PID`"
+	fi
+else
+	echo "Skipping doing DHCP"
+fi
+
+echo "DONE."
+exit 0

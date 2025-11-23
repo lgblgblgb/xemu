@@ -88,8 +88,9 @@ static struct {
 	bool thread_to_reset;			// signal thread to reset its internals
 	bool under_reset;
 	bool tx_irq;				// when triggering TX by CPU, it must be set to "false", the thread will set to "true" is it happened
-	Uint8 tx_irq_enabled;
-	Uint8 rx_irq_enabled;
+	Uint8 tx_irq_enabled;			// $40 = enable, $00 = disable
+	Uint8 rx_irq_enabled;			// $80 = enable, $00 = disable
+	Uint8 mac[6];
 } com;
 #ifndef	ETH65_NO_DEBUG
 static bool eth_debug = false;
@@ -97,7 +98,6 @@ static bool eth_debug = false;
 static const Uint8 default_mac[6] = {0x02,0x47,0x53,0x65,0x65,0x65};	// 00:80:10:... would be nicer, though a bit of cheating, it belongs to Commodore International(TM).
 #ifdef	HAVE_ETHERTAP
 static const Uint8 mac_bcast[6]	  = {0xFF,0xFF,0xFF,0xFF,0xFF,0xFF};	// also used as IPv4 bcast detection with filters, if only the first 4 bytes are checked
-static bool force_filters = false;
 #endif
 #define miim_reg_num (eth_regs[6] & 0x1F)
 static Uint8 miimlo8[0x20], miimhi8[0x20];	// not emulated too much ... all I have, that you can read/write all MIIM registers freely, and that's all
@@ -112,6 +112,8 @@ static SDL_atomic_t stat_rx_counter, stat_tx_counter;
 static unsigned int remote_ip;
 static Uint8 remote_mac[6];
 static char *tap_name = NULL;
+static bool force_filters = false;
+char *eth65_options_used = NULL;
 #endif
 
 
@@ -165,19 +167,20 @@ static void calc_status_changes ( void )
 #ifdef	HAVE_ETHERTAP
 
 // Used by the ethernet thread only to filter incoming ethernet framed based on "filters"
-static bool do_rx_filtering ( const Uint8 *buf, const int size, const Uint8 filters )
+static bool do_rx_filtering ( const Uint8 *buf, const int size, const Uint8 filters, const Uint8 my_mac[6] )
 {
 	if (size < 14 || size >= 0x800 - 2) {
 		DEBUGPRINT("ETH: thread: skipping frame; invalid frame size (%s%d)" NL, size >= 0x800 - 2 ? ">=" : "", size);
 		return false;
 	}
-	const int ethertype = (buf[12] << 8) | buf[13];
+	const unsigned int ethertype = (buf[12] << 8) | buf[13];
 	// FIXME/TODO: as with the ARP/IPV4 filter: do we want to drop a frame just because it's not ethernet-II?
 	// ... or allow it, just we can't apply some filters then?
 	if (ethertype < 1536) {
 		DEBUGPRINT("ETH: thread: skipping frame; not an Ethernet-II frame ($%04X)" NL, ethertype);
 		return false;
 	}
+	return true;
 	// TODO: this would render IPv6 not working
 	// TODO: even if I allow that, I am not sure if MEGA65-core can filter IP bcast/unicast for IPv6 (and not only IPv4)
 	if (ethertype != ETH_II_FRAME_ARP && ethertype != ETH_II_FRAME_IPV4) {
@@ -188,10 +191,11 @@ static bool do_rx_filtering ( const Uint8 *buf, const int size, const Uint8 filt
 	if (
 		((filters & RX_FILTER_MAC)) &&
 		memcmp(buf, mac_bcast,   6) &&
-		memcmp(buf, mac_address, 6)
+		memcmp(buf, my_mac, 6)
 	) {
-		DEBUGPRINT("ETH: thread: MAC filter skipping %02X:%02X:%02X:%02X:%02X:%02X" NL,
-			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5]
+		DEBUGPRINT("ETH: thread: MAC filter skipping %02X:%02X:%02X:%02X:%02X:%02X (we are: %02X:%02X:%02X:%02X:%02X:%02X)" NL,
+			buf[0], buf[1], buf[2], buf[3], buf[4], buf[5],
+			my_mac[0], my_mac[1], my_mac[2], my_mac[3], my_mac[4], my_mac[5]
 		);
 		return false;
 	}
@@ -208,6 +212,7 @@ static int ethernet_thread ( void *unused )
 	int rx_temp_size = 0, tx_temp_size = 0;
 	bool rx_overflow_state = false, rx_overflow_warning = false;
 	bool first_run = true;		// do the initial reset
+	Uint8 mac[6];
 	SDL_AtomicSet(&threadsafe_thread_status, THREAD_STATUS_RUNNING);
 	for (;;) {
 		// Locked part, in practice this is quite quick, and no syscalls made in this part.
@@ -215,6 +220,7 @@ static int ethernet_thread ( void *unused )
 		// rare case and "not too bad" either. The important thing: we can manage without
 		// _any_ lock at all in the select() and read()/write() part!
 		ETH_LOCK();
+		memcpy(mac, com.mac, 6);
 		bool reset_done;
 		bool status_change = false;
 		if (com.thread_to_reset || first_run) {
@@ -260,24 +266,24 @@ static int ethernet_thread ( void *unused )
 					rx_overflow_warning = true;
 				}
 			}
-			rx_temp_size = 0;
+			rx_temp_size = 0;	// make temp RX buffer empty, ready to receive new frame
 			status_change = true;
 		}
 		if (status_change)
 			calc_status_changes();
 		ETH_UNLOCK();
-		if (rx_overflow_warning) {
+		if (XEMU_UNLIKELY(rx_overflow_warning)) {
 			rx_overflow_warning = false;
 			DEBUGPRINT("ETH: thread: RX buffer overflow, lost frame(s)!" NL);
 		}
-		if (reset_done)
+		if (XEMU_UNLIKELY(reset_done))
 			DEBUGPRINT("ETH: thread: thread-level reset" NL);
 		const int select_flags = (rx_temp_size ? 0 : XEMU_TUNTAP_SELECT_R) | (tx_temp_size ? XEMU_TUNTAP_SELECT_W : 0);
 		//DEBUGPRINT("ETH: selflags = %d" NL, select_flags);
 		int slept = SDL_GetTicks();
 		const int selres = xemu_tuntap_select(select_flags, select_wait * 1000);
 		slept = SDL_GetTicks() - slept;
-		if (SDL_AtomicGet(&threadsafe_thread_status) != THREAD_STATUS_RUNNING)
+		if (XEMU_UNLIKELY(SDL_AtomicGet(&threadsafe_thread_status) != THREAD_STATUS_RUNNING))
 			break;
 		if (selres == 0) {
 			// select() timed out
@@ -302,7 +308,7 @@ static int ethernet_thread ( void *unused )
 			if (r > 0) {
 				DEBUGPRINT("ETH: thread: activity, read %d bytes" NL, r);
 				activity = true;
-				if (do_rx_filtering(rx_temp, r, force_filters ? 0xFF : SDL_AtomicGet(&threadsafe_rx_filtering))) {
+				if (do_rx_filtering(rx_temp, r, force_filters ? 0xFF : SDL_AtomicGet(&threadsafe_rx_filtering), mac)) {
 					rx_temp_size = r;	// accept it, if filtering says to do so
 					SDL_AtomicAdd(&stat_rx_counter, 1);
 				}
@@ -315,6 +321,7 @@ static int ethernet_thread ( void *unused )
 				break;
 			}
 			if (r == tx_temp_size) {
+				DEBUGPRINT("ETH: thread: cool, transmitted %d bytes of data" NL, r);
 				tx_temp_size = 0;	// TX was OK, let's free our local buffer
 				SDL_AtomicAdd(&stat_tx_counter, 1);
 			} else {
@@ -363,6 +370,20 @@ static inline void trigger_rx_buffer_swap ( void )
 		else
 			DEBUGPRINT("ETH: cool, we got a new buffer (#%d) in the CPU view, %d+2 bytes of ethernet frame." NL, cpu_next, size);
 	}
+#if 1
+	if (switched) {
+		const int size = eth_rx_buf[0] + (eth_rx_buf[1] << 8);
+		for (int i = 0; i < size; i++) {
+			if (!(i & 15))
+				DEBUGPRINT("ETH: RX SWAP BUF DUMP: %04X ", i);
+			DEBUGPRINT(" %02X", eth_rx_buf[2 + i]);
+			if ((i & 15) == 15)
+				DEBUGPRINT(NL);
+		}
+		if ((size & 15))
+			DEBUGPRINT(NL);
+	}
+#endif
 }
 
 
@@ -482,6 +503,9 @@ void eth65_write_reg ( const unsigned int addr, const Uint8 data )
 				calc_status_changes();
 				ETH_UNLOCK();
 			}
+			if ((data & (0x40|0x80))) {
+				DEBUGPRINT("ETH: warning, IRQ feature is requested!!!!!! PC=$%04X" NL, cpu65.old_pc);
+			}
 			break;
 		case 0x04:
 			// The only real and important ethernet controller command is 1 (transmit TX buffer),
@@ -511,6 +535,12 @@ void eth65_write_reg ( const unsigned int addr, const Uint8 data )
 			if (XEMU_UNLIKELY(addr > 0x1F))
 				FATAL("Invalid ethernet register (%d) to be written!", addr);
 			break;
+	}
+	if (addr >= 9 && addr <= 0xE) {
+		DEBUGPRINT("ETH: MAC address modification (byte #%d) from $%02X to $%02X at PC=$%04X" NL, addr - 9, eth_regs[addr], data, cpu65.old_pc);
+		ETH_LOCK();
+		com.mac[addr - 9] = data;
+		ETH_UNLOCK();
 	}
 	eth_regs[addr] = data;
 }
@@ -560,7 +590,7 @@ unsigned int eth65_get_stat ( char *buf, const unsigned int buf_size, unsigned i
 		*txcnt = SDL_AtomicGet(&stat_tx_counter);
 	if (SDL_AtomicGet(&threadsafe_thread_status) !=  THREAD_STATUS_RUNNING)
 		return snprintf(buf, buf_size, "Not running/configured");
-	return snprintf(buf, buf_size, "device attached: \"%s\", initial MAC: %02X:%02X:%02X:%02X:%02X:%02X, remote MAC: %02X:%02X:%02X:%02X:%02X:%02X, remote IP: %u.%u.%u.%u",
+	return snprintf(buf, buf_size, "device attached: \"%s\", MAC: %02X:%02X:%02X:%02X:%02X:%02X, remote MAC: %02X:%02X:%02X:%02X:%02X:%02X, remote IP: %u.%u.%u.%u",
 		tap_name,
 		mac_address[0], mac_address[1], mac_address[2], mac_address[3], mac_address[4], mac_address[5],
 		remote_mac[0], remote_mac[1], remote_mac[2], remote_mac[3], remote_mac[4], remote_mac[5],
@@ -581,6 +611,7 @@ int eth65_init ( const char *options )
 	if (init_mac) {
 		init_mac = false;
 		memcpy(eth_regs + 9, default_mac, sizeof(default_mac));
+		memcpy(com.mac, default_mac, 6);	// no other thread YET, so it's OK to fill com.mac without lock
 	}
 	if (options && *options) {
 #ifdef	HAVE_ETHERTAP
@@ -627,6 +658,7 @@ int eth65_init ( const char *options )
 			ERROR_WINDOW("%sTAP device \"%s\" opening error: %s", init_error_prefix, device_name, xemu_tuntap_error());
 			return 1;
 		}
+		xemu_restrdup(&tap_name, device_name);
 		tap_name = xemu_strdup(device_name);
 		remote_ip = xemu_tuntap_get_ipv4();
 		xemu_tuntap_get_mac(remote_mac);
@@ -637,6 +669,7 @@ int eth65_init ( const char *options )
 			char stat[128];
 			(void)eth65_get_stat(stat, sizeof stat, NULL, NULL);
 			DEBUGPRINT("ETH: enabled - thread %p started, %s" NL, thread_id, stat);
+			xemu_restrdup(&eth65_options_used, options);
 		} else {
 			SDL_AtomicSet(&threadsafe_thread_status, THREAD_STATUS_DISABLED);
 			ERROR_WINDOW("%serror creating thread for Ethernet emulation:\n%s", init_error_prefix, SDL_GetError());
