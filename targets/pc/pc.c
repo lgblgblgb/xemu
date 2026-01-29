@@ -247,7 +247,6 @@ int main ( int argc, char **argv )
 	xemu_pre_init(APP_ORG, TARGET_NAME, "The Unwanted PC emulator from LGB", argc, argv);
 	xemucfg_define_switch_option("fullscreen", "Start in fullscreen mode", &fullscreen);
 	xemucfg_define_switch_option("syscon", "Keep system console open (Windows-specific effect only)", &leave_syscon_open);
-	xemucfg_define_switch_option("besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override);
 	xemucfg_define_str_option("gui", NULL, "Select GUI type for usage. Specify some insane str to get a list", &selected_gui);
 	if (xemucfg_parse_all())
 		return 1;

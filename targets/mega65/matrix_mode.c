@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "mega65.h"
 #include "io_mapper.h"
 #include "memory_mapper.h"
+#include "audio65.h"
 
 #include <ctype.h>
 #include <string.h>
@@ -38,7 +39,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define DEBUGMATRIX(...)
 
 
-int in_the_matrix = 0;
+bool in_the_matrix = false;
 
 
 // TODO: many inventions here eventlually should be moved into some common place as
@@ -88,7 +89,6 @@ static int chrscreen_xsize, chrscreen_ysize;
 static Uint8 *vmem = NULL, *vmem_prev = NULL, *vmem_backup = NULL;
 static int current_x = 0, current_y = 0;
 static int need_update = 0;
-static int init_done = 0;
 static Uint8 queued_input;
 static unsigned int matrix_counter = 0;
 static int live_update_enabled = 1;
@@ -296,7 +296,7 @@ static void dump_map ( void )
 
 static void cmd_off ( char *p )
 {
-	matrix_mode_toggle(0);
+	matrix_mode_toggle(false);
 }
 
 
@@ -567,6 +567,7 @@ static void cmd_live ( char *p )
 
 static void cmd_reset ( char *p )
 {
+	clear_emu_events();	// otherwise reset will hang seeing CTRL still pressed ...
 	reset_mega65(RESET_MEGA65_HARD);
 }
 
@@ -581,6 +582,78 @@ static void cmd_shade ( char *p )
 	} else
 		MATRIX("?BAD VALUE");
 }
+
+
+static void cmd_audio ( char *p )
+{
+	char buffer[4096];
+	audio65_get_description(buffer, sizeof buffer);
+	MATRIX("%s", buffer);
+}
+
+
+static void cmd_vic ( char *p )
+{
+	const Uint32 v_addr = (Uint32)(vic4_query_screen_address() - main_ram);
+	const Uint32 c_addr = (Uint32)(vic4_query_colour_address() - colour_ram);
+	MATRIX("V-PTR=$%X C-OFS=$%X ($%X) HOT=%d H640=%d V400=%d VIC3ATRS=%d 16BIT=%d", v_addr, c_addr, c_addr + 0x0FF80000U, !!REG_HOTREG, !!REG_H640, !!REG_V400, !!REG_VICIII_ATTRIBS, !!REG_16BITCHARSET);
+}
+
+
+#ifdef XEMU_HAS_SOCKET_API
+#include "serialtcp.h"
+static void cmd_serialtcp ( char *p )
+{
+	char param[128], desc[128];
+	int tx, rx;
+	const bool running = serialtcp_get_connection_desc(param, sizeof param, desc, sizeof desc, &tx, &rx);
+	if (*p) {
+		if (p[0] == '-')
+			p = param;
+		if (*p) {
+			if (serialtcp_restart(p))
+				MATRIX("ERROR: Could not start/restart");
+			else {
+				(void)serialtcp_get_connection_desc(NULL, 0, desc, sizeof desc, NULL, NULL);
+				MATRIX("OK: Started/restarted to %s", desc);
+			}
+		} else {
+			MATRIX("ERROR: No previous target specification");
+		}
+	} else {
+		MATRIX("STATUS: %s %s (tx=%d,rx=%d)\nUse argument HOST:PORT, or - (previous target) to (re)start connection.", running ? "running: " : "NOT running, previous target was: ", *desc ? desc : "[NO PREVIOUS TARGET]", tx, rx);
+	}
+}
+#endif
+
+
+#ifdef HAVE_ETHERTAP
+#include "ethernet65.h"
+static void cmd_eth ( char *p )
+{
+	if (*p) {
+		if (!strcmp(p, "-")) {
+			if (eth65_options_used) {
+				p = eth65_options_used;
+			} else {
+				p = NULL;
+				MATRIX("ERROR: No previous target specification");
+			}
+		}
+		if (p) {
+			MATRIX("Trying to (re)start ethertap with params: \"%s\"\n", p);
+			eth65_shutdown();
+			eth65_init(p);
+		}
+	}
+	char stat[128];
+	unsigned int rxcnt, txcnt;
+	(void)eth65_get_stat(stat, sizeof stat, &rxcnt, &txcnt);
+	MATRIX("%s", stat);
+	if (rxcnt || txcnt)
+		MATRIX("\nRX/TX traffic: %u/%u pckts", rxcnt, txcnt);
+}
+#endif
 
 
 static void cmd_help ( char *p );
@@ -605,6 +678,14 @@ static const struct command_tab_st {
 	{ "write",	cmd_write,	"w"	},
 	{ "map",	cmd_map,	"m"	},
 	{ "shade",	cmd_shade,	NULL	},
+	{ "audio",	cmd_audio,	NULL	},
+	{ "vic",	cmd_vic,	NULL	},
+#	ifdef XEMU_HAS_SOCKET_API
+	{ "serialtcp",	cmd_serialtcp,	NULL	},
+#	endif
+#	ifdef HAVE_ETHERTAP
+	{ "eth",	cmd_eth,	NULL	},
+#	endif
 	{ .cmdname = NULL			},
 };
 
@@ -775,7 +856,7 @@ static int kbd_cb_keyevent ( SDL_KeyboardEvent *ev )
 			// Monitor ctrl-tab, as the main handler is defunct at this point, we "hijacked" it!
 			// So we must give up the matrix mode themselves here
 			if (sym == SDLK_TAB && (ev->keysym.mod & (KMOD_LCTRL | KMOD_RCTRL)))
-				matrix_mode_toggle(0);
+				matrix_mode_toggle(false);
 			else
 				queued_input = sym;
 		}
@@ -793,22 +874,22 @@ static int kbd_cb_textevent ( SDL_TextInputEvent *ev )
 }
 
 
-void matrix_mode_toggle ( int status )
+void matrix_mode_toggle ( const bool status )
 {
 	if (!is_osd_enabled()) {
 		ERROR_WINDOW("OSD is not enabled to be able to use Matrix mode.");
 		return;
 	}
-	status = !!status;
-	if (status == !!in_the_matrix)
+	if (status == in_the_matrix)
 		return;
 	in_the_matrix = status;
 	static int saved_allow_mouse_grab;
 	if (in_the_matrix) {
+		static bool init_done = false;
 		D6XX_registers[0x72] |= 0x40;	// be sure we're sync with the matrix bit!
 		osd_hijack(matrix_updater_callback, &backend_xsize, &backend_ysize, &backend_pixels);
 		if (!init_done) {
-			init_done = 1;
+			init_done = true;
 			init_colour_mappings();
 			chrscreen_xsize = backend_xsize / 8;
 			chrscreen_ysize = backend_ysize / 8;
@@ -859,5 +940,10 @@ void matrix_mode_toggle ( int status )
 		hid_register_sdl_textinput_event_callback(HID_CB_LEVEL_CONSOLE, NULL);
 		allow_mouse_grab = saved_allow_mouse_grab;
 	}
-	clear_emu_events();	// cure problems, that triggering/switching-on/off matrix screen cause that ALT key remains latched etc ...
+	// Original intent: cure problems, that triggering/switching-on/off matrix screen cause that ALT key remains latched etc ...
+	// However it breaks the "rapid CTRL-TAB cycling" between matrix/normal mode (without releasing CTRL).
+	// Now it seems, removing this call does not have any notable side-effect besides the original intent, so I try to remove it now.
+#if 0
+	clear_emu_events();
+#endif
 }

@@ -45,9 +45,10 @@ void configdb_define_emulator_options ( void )
 		{ "fullscreen", "Start in fullscreen mode", &configdb.fullscreen_requested },
 		{ "primo", "Start in Primo emulator mode", &configdb.primo },
 		{ "skiplogo", "Disables Enterprise logo on start-up via XEP ROM", &configdb.skiplogo },
-		{ "noxeprom", "Disables XEP internal ROM", &cfg_noexprom },
-		{ "besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override },
-		{ "monitor", "Start monitor on console", &configdb.monitor }
+#ifndef		NO_CONSOLE
+		{ "monitor", "Start monitor on console", &configdb.monitor },
+#endif
+		{ "noxeprom", "Disables XEP internal ROM", &cfg_noexprom }
 	);
 	XEMUCFG_DEFINE_STR_OPTIONS(
 		{ "ddn", NULL, "Default device name (none = not to set)", &configdb.ddn },

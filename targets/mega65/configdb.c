@@ -74,15 +74,16 @@ static const struct xemutools_configdef_str_st str_options[] = {
 #endif
 	{ "gui",	NULL, "Select GUI type for usage. Specify some insane str to get a list", &configdb.selectedgui },
 	{ "importbas",	NULL, "Import and RUN BASIC65 program from TEXT file", &configdb.importbas },
-	{ "cartbin8000",NULL, "Load binary cartridge image from $8000", &configdb.cartbin8000 },
+	{ "cart",	NULL, "Load cartridge file", &configdb.cart },
 	{ "winpos",	NULL, "Window position: x,y (integers)", &configdb.winpos },
 	{ "initattic",	NULL, "Pre-fill the Attic RAM with the content of a file", &configdb.init_attic },
+#ifdef XEMU_HAS_SOCKET_API
+	{ "serialtcp",	NULL, "HOST:PORT for serial emulation", &configdb.serialtcp },
+#endif
 	{ NULL }
 };
 
 static const struct xemutools_configdef_switch_st switch_options[] = {
-	{ "headless", "Run in headless mode (for testing!)", &emu_is_headless },
-	{ "sleepless", "Use maximum emulation speed (for testing!)", &emu_is_sleepless },
 	{ "cpusinglestep", "Force CPU emulation to do single step emulation (slower!)", &configdb.cpusinglestep },
 	{ "hdosvirt", "Virtualize HDOS file access functions, but via only traps", &configdb.hdosvirt },
 	{ "driveled", "Render drive LED at the top right corner of the screen", &configdb.show_drive_led },
@@ -104,7 +105,6 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "go64", "Go into C64 mode after start (with auto-typing, can be combined with -autoload)", &configdb.go64 },
 	{ "autoload", "Load and start the first program from disk (with auto-typing, can be combined with -go64)", &configdb.autoload },
 	{ "syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon },
-	{ "besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override },
 	{ "skipunhandledmem", "Do not even ask on unhandled memory access (hides problems!!)", &configdb.skip_unhandled_mem },
 	{ "fullborders", "Show non-clipped display borders", &configdb.fullborders },
 	{ "nosound", "Disables audio output generation", &configdb.nosound },
@@ -135,8 +135,7 @@ static const struct xemutools_configdef_num_st num_options[] = {
 	{ "umon", 0, "TCP-based dual mode (http / text) monitor port number [NOT YET WORKING]", &configdb.umon, 0, 0xFFFF },
 #endif
 	{ "sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2 },
-	{ "stereoseparation", AUDIO_DEFAULT_SEPARATION, "Audio stereo separation; 100(hard-stereo) ... 0(mono) ... -100(hard-reversed-stereo); default: " STRINGIFY(AUDIO_DEFAULT_SEPARATION), &configdb.stereoseparation, -100, 100 },
-	{ "mastervolume", AUDIO_DEFAULT_VOLUME, "Audio emulation mixing final volume (100=unchanged ... 0=silence); default: " STRINGIFY(AUDIO_DEFAULT_VOLUME), &configdb.mastervolume, 0, 100 },
+	{ "mastervolume", 100, "Audio emulation mixing final volume (100=default/full ... 0=silence)", &configdb.mastervolume, 0, 100 },
 	// FIXME: as a workaround, I set this to "0" PAL, as newer MEGA65's default is this. HOWEVER this should be not handled this way but using a newer Hyppo!
 	{ "videostd", 0, "Use given video standard at startup/reset (0 = PAL, 1 = NTSC, -1 = Hyppo default)", &configdb.videostd, -1, 1 },
 	{ "sidmask", 15, "Enabled SIDs of the four, in form of a bitmask", &configdb.sidmask, 0, 15 },
@@ -161,14 +160,14 @@ static const struct xemutools_configdef_float_st float_options[] = {
 
 static const void *do_not_save_opts[] = {
 	&configdb.prg, &configdb.prgmode, &configdb.autoload, &configdb.go64, &configdb.hyperserialfile, &configdb.importbas,
-	&emu_is_sleepless, &emu_is_headless, &configdb.testing,
+	&configdb.testing,
 	&configdb.matrixstart,
 	&configdb.dumpmem, &configdb.dumpscreen,
 #ifdef	XEMU_FILES_SCREENSHOT_SUPPORT
 	&configdb.screenshot_and_exit,
 #endif
 	&configdb.testing, &configdb.hyperdebug, &configdb.hyperdebugfreezer, &configdb.usestubrom, &configdb.useinitrom, &configdb.useutilmenu,
-	&configdb.cartbin8000, &configdb.winpos, &configdb.ramcheckread, &configdb.init_attic,
+	&configdb.cart, &configdb.winpos, &configdb.ramcheckread, &configdb.init_attic,
 	&configdb.prg_test, &configdb.prg_exit,
 	NULL
 };

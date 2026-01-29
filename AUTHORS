@@ -1,4 +1,4 @@
-X-Emulators - aka "Xemu" - (C)2016-2025 LGB Gábor Lénárt lgblgblgb@gmail.com
+X-Emulators - aka "Xemu" - (C)2016-2026 LGB Gábor Lénárt lgblgblgb@gmail.com
 
 [ Xemu is licensed under the terms of GNU/GPL v2, for more information please read file LICENSE ]
 
@@ -23,3 +23,7 @@ Help from other people (maybe not a full list, sorry about that), I would like t
   * Gurce Isikyildiz: debug interface expert, many-many tests (not just about debugging - but everything), discussions etc
   * Snoopy on Forum64: for many tests (C65/MEGA65), bug reports
   * Shallan, RetroCogs: primarly MEGA65 VIC-IV ideas, fixes, patches as well
+
+Special mentions:
+
+  * G-Gem - for the - sometimes maybe too much ;) - enthusiastic chats on Xemu internals and ideas

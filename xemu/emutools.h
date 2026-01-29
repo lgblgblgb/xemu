@@ -133,6 +133,7 @@ extern int ARE_YOU_SURE ( const char *s, int flags );
 
 extern char **xemu_initial_argv;
 extern int    xemu_initial_argc;
+extern char *xemu_extra_env_var_setup_str;
 extern Uint64 buildinfo_cdate_uts;
 extern const char *xemu_initial_cwd;
 extern char *sdl_window_title;
@@ -141,6 +142,8 @@ extern char *window_title_info_addon;
 extern SDL_Window   *sdl_win;
 extern Uint32 sdl_winid;
 extern SDL_PixelFormat *sdl_pix_fmt;
+extern SDL_Renderer *sdl_ren;
+extern Uint32 sdl_pixel_format_id;
 extern int sdl_on_x11, sdl_on_wayland;
 extern char *xemu_app_org, *xemu_app_name;
 extern int seconds_timer_trigger;
@@ -224,6 +227,7 @@ extern void xemu_sleepless_temporary_mode ( const int enable );
 extern void xemu_render_dummy_frame ( Uint32 colour, int texture_x_size, int texture_y_size );
 extern Uint32 *xemu_start_pixel_buffer_access ( int *texture_tail );
 extern void xemu_update_screen ( void );
+extern bool xemu_is_main_thread ( void );
 
 
 static XEMU_INLINE Uint16 xemu_u8p_to_u16le ( const Uint8 *const p ) {

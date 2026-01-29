@@ -41,6 +41,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/cpu65.h"
 #include "xemu/emutools_config.h"
 #include "cart.h"
+#include "xemu/emutools_osk.h"
+#include "serialtcp.h"
 
 
 // Used by UI CBs to maintain configDB persistence
@@ -61,7 +63,7 @@ void emu_dropfile_callback ( const char *fn )
 				_mountd81_configdb_change(0, fn);
 			break;
 		case 2:
-			reset_mega65(RESET_MEGA65_HARD);
+			reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_NO_CART);
 			inject_register_prg(fn, 0, false);
 			break;
 	}
@@ -162,7 +164,7 @@ static void ui_run_prg_by_browsing ( void )
 		fnbuf,
 		sizeof fnbuf
 	)) {
-		reset_mega65(RESET_MEGA65_HARD);
+		reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_NO_CART);
 		inject_register_prg(fnbuf, 0, false);
 	} else
 		DEBUGPRINT("UI: file selection for PRG injection was cancelled." NL);
@@ -312,7 +314,7 @@ static void ui_update_sdcard ( void )
 	// Call the updater :)
 	if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_DO_FILES | SDCONTENT_OVERWRITE_FILES | SDCONTENT_HDOS_DIR_TOO)) {
 		INFO_WINDOW(
-			"System files on your SD-card image seems to be updated successfully.\n"
+			"System files on your SD-card image seem to have been updated successfully.\n"
 			"Next time you may need this function, you can use MEGA65.ROM which is a backup copy of your selected ROM.\n\n"
 			"ROM: %d (%s)\n\n"
 			"Your emulated MEGA65 is about to RESET now!", rom_date, rom_name
@@ -334,6 +336,11 @@ ret:
 static void reset_via_hyppo ( void )
 {
 	reset_mega65(RESET_MEGA65_HYPPO | RESET_MEGA65_ASK);
+}
+
+static void reset_without_cartridge ( void )
+{
+	reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK | RESET_MEGA65_NO_CART);
 }
 
 static void reset_cpu_only ( void )
@@ -375,7 +382,7 @@ static void reset_into_utility_menu ( void )
 
 static void reset_into_c64_mode ( void )
 {
-	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK)) {
+	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK | RESET_MEGA65_NO_CART)) {
 		rom_stubrom_requested = 0;
 		rom_initrom_requested = 0;
 		// we need this, because autoboot disk image would bypass the "go to C64 mode" on 'Commodore key' feature
@@ -413,7 +420,7 @@ static void reset_into_xemu_initrom ( void )
 
 static void reset_into_c65_mode_noboot ( void )
 {
-	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK)) {
+	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK | RESET_MEGA65_NO_CART)) {
 		rom_stubrom_requested = 0;
 		rom_initrom_requested = 0;
 		inject_register_allow_disk_access();
@@ -529,6 +536,7 @@ static void ui_emu_info ( void )
 		"Hyppo version: %s (%s)\n"
 		"HDOS virtualization: %s, root = %s\n"
 		"Disk8 = %s\nDisk9 = %s\n"
+		"Cartridge = %s\n"
 		"C64 'CPU' I/O port (low 3 bits): DDR=%d OUT=%d\n"
 		"Current PC: $%04X (linear: $%07X)\n"
 		"Current VIC and I/O mode: %s %s, hot registers are %s\n"
@@ -543,6 +551,7 @@ static void ui_emu_info ( void )
 		hyppo_version_string, hickup_is_overriden ?  "OVERRIDEN" : "built-in",
 		hdos_virt ? "ON" : "OFF", hdos_root,
 		sdcard_get_mount_info(0, NULL), sdcard_get_mount_info(1, NULL),
+		cart_get_fn(),
 		memory_get_cpu_io_port(0) & 7, memory_get_cpu_io_port(1) & 7,
 		cpu65.pc, memory_cpurd2linear_xlat(cpu65.pc),
 		iomode_names[io_mode], videostd_name, (vic_registers[0x5D] & 0x80) ? "enabled" : "disabled",
@@ -626,16 +635,25 @@ no_clipboard:
 	ERROR_WINDOW("Clipboard query error, or clipboard was empty");
 }
 
+
 static void ui_cb_mono_downmix ( const struct menu_st *m, int *query )
 {
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == stereo_separation);
-	audio_set_stereo_parameters(AUDIO_UNCHANGED_VOLUME, VOIDPTR_TO_INT(m->user_data));
+	const bool st = audio65_get_mono_downmix();
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, st);
+	audio65_set_mono_downmix(!st);
+}
+
+static void ui_cb_audio_output ( const struct menu_st *m, int *query )
+{
+	const int val = audio65_get_output();
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == val);
+	audio65_set_output(VOIDPTR_TO_INT(m->user_data));
 }
 
 static void ui_cb_audio_volume ( const struct menu_st *m, int *query )
 {
-	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == audio_volume);
-	audio_set_stereo_parameters(VOIDPTR_TO_INT(m->user_data), AUDIO_UNCHANGED_VOLUME);
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, VOIDPTR_TO_INT(m->user_data) == audio65_get_volume());
+	audio65_set_volume(VOIDPTR_TO_INT(m->user_data));
 }
 
 static void ui_cb_video_standard ( const struct menu_st *m, int *query )
@@ -696,35 +714,36 @@ static void ui_cb_colour_effect ( const struct menu_st *m, int *query )
 	vic4_set_emulation_colour_effect(VOIDPTR_TO_INT(m->user_data));
 }
 
-static void ui_cb_load_bin_cart ( const struct menu_st *m, int *query )
+static void ui_cb_attach_cart ( const struct menu_st *m, int *query )
 {
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, cart_is_attached());
 	char fnbuf[PATH_MAX + 1];
 	static char dir[PATH_MAX + 1] = "";
 	_check_file_selection_default_override(dir);
 	if (!xemugui_file_selector(
 		XEMUGUI_FSEL_OPEN | XEMUGUI_FSEL_FLAG_STORE_DIR,
-		"Select binary cartridge",
+		"Select cartridge",
 		dir,
 		fnbuf,
 		sizeof fnbuf
 	)) {
-		if (!cart_load_bin(fnbuf, VOIDPTR_TO_INT(m->user_data), "Cannot load binary cartridge"))
-			xemucfg_set_str(&configdb.cartbin8000, fnbuf);
+		const int ret = cart_attach(fnbuf);
+		if (ret >= 0) {
+			xemucfg_set_str(&configdb.cart, fnbuf);
+			if (ret)
+				reset_mega65(RESET_MEGA65_HARD);
+			else
+				INFO_WINDOW("No auto-start 'M65' sequence at $8007, skipping reset");
+		}
 	} else
-		DEBUGPRINT("UI: file selection for PRG injection was cancelled." NL);
+		DEBUGPRINT("UI: file selection cartridge insertion was cancelled." NL);
 }
 
-static void ui_start_cartridge ( void )
+static void ui_cart_info ( void )
 {
-	if (!cart_is_loaded()) {
-		ERROR_WINDOW("No cartridge is loaded yet.");
-		return;
-	}
-	if (cart_detect_id()) {
-		INFO_WINDOW("Cartridge signature M65 not detected. Start with your own risk.");
-	}
-	cart_copy_from(0x8000, main_ram + 0x8000, 0x2000);
-	INFO_WINDOW("Copied. Type BANK0:SYS$8000 to start");
+	char buf[4096];
+	cart_info(buf, sizeof buf);
+	INFO_WINDOW("%s", buf);
 }
 
 #ifndef XEMU_ARCH_HTML
@@ -765,13 +784,30 @@ static void ui_reset_type ( const struct menu_st *m, int *query )
 	configdb.resethotkeytype = VOIDPTR_TO_INT(m->user_data);
 }
 
+#ifdef XEMU_OSK_SUPPORT
+static void ui_cb_show_osk ( const struct menu_st *m, int *query )
+{
+	const bool status = osk_status();
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, status);
+	osk_show(!status);
+}
+#endif
+
+#ifdef XEMU_HAS_SOCKET_API
+static void ui_serialtcp_restart ( void )
+{
+	serialtcp_restart(configdb.serialtcp);
+}
+#endif
+
 
 /**** MENU SYSTEM ****/
 
 
 static const struct menu_st menu_cartridge[] = {
-	{ "Load BIN cartridge to $8000",XEMUGUI_MENUID_CALLABLE,	ui_cb_load_bin_cart, (void*)0x8000 },
-	{ "Start cartridge",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_start_cartridge },
+	{ "Attach cartridge",		XEMUGUI_MENUID_CALLABLE | XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_attach_cart, NULL },
+	{ "Deatch cartridge",		XEMUGUI_MENUID_CALLABLE,				xemugui_cb_call_user_data, cart_detach },
+	{ "Cartridge info",		XEMUGUI_MENUID_CALLABLE,				xemugui_cb_call_user_data, ui_cart_info },
 	{ NULL }
 };
 static const struct menu_st menu_colour_effects[] = {
@@ -870,6 +906,7 @@ static const struct menu_st menu_reset[] = {
 	{ "Reset back to default ROM",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_use_default_rom, NULL				},
 	{ "Reset", 			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_hard			},
+	{ "Reset + cartridge detach",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_without_cartridge	},
 	{ "Reset without autoboot",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c65_mode_noboot	},
 	{ "Reset into utility menu",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_utility_menu	},
 	{ "Reset into C64 mode",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_c64_mode		},
@@ -894,6 +931,10 @@ static const struct menu_st menu_inputdevices[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
 	{ "Disable mouse emulation",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&configdb.nomouseemu },
+#ifdef	XEMU_OSK_SUPPORT
+	{ "Show OSK",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_show_osk, NULL },
+#endif
 	{ "Use OSD key debugger",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
 	{ "Cursor keys as joystick",	XEMUGUI_MENUID_CALLABLE |
@@ -917,6 +958,9 @@ static const struct menu_st menu_debug[] = {
 	{ "Start umon on " UMON_DEFAULT_PORT,
 					XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_start_umon, NULL },
+#endif
+#ifdef XEMU_HAS_SOCKET_API
+	{ "Restart SerialTCP",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_serialtcp_restart},
 #endif
 #ifdef XEMU_ARCH_WIN
 	{ "System console",		XEMUGUI_MENUID_CALLABLE |
@@ -1003,31 +1047,6 @@ static const struct menu_st menu_disks[] = {
 	{ "Cartridge",			XEMUGUI_MENUID_SUBMENU,		NULL, menu_cartridge },
 	{ NULL }
 };
-static const struct menu_st menu_audio_stereo[] = {
-	{ "Hard stereo separation",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) 100 },
-	{ "Stereo separation 80%",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)  80 },
-	{ "Stereo separation 60%",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)  60 },
-	{ "Stereo separation 40%",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)  40 },
-	{ "Stereo separation 20%",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)  20 },
-	{ "Full mono downmix (0%)",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)   0 },
-	{ "Stereo separation -20%",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) -20 },
-	{ "Stereo separation -40%",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) -40 },
-	{ "Stereo separation -60%",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) -60 },
-	{ "Stereo separation -80%",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*) -80 },
-	{ "Hard stereo - reserved",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, (void*)-100 },
-	{ NULL }
-};
 static const struct menu_st menu_audio_volume[] = {
 	{ "100%",			XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_audio_volume, (void*) 100 },
@@ -1062,15 +1081,25 @@ static const struct menu_st menu_audio_sids[] = {
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_sids_enabled, (void*)8 },
 	{ NULL }
 };
+static const struct menu_st menu_audio_output[] = {
+	{ "HDMI / speaker",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_audio_output, (void*)AUDIO_OUTPUT_SPEAKERS },
+	{ "Headphones",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_audio_output, (void*)AUDIO_OUTPUT_HEADPHONES },
+	{ NULL }
+};
 static const struct menu_st menu_audio[] = {
-	{ "Audio output",		XEMUGUI_MENUID_CALLABLE |
+	{ "Audio enabled",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&configdb.nosound },
+	{ "Force mono downmix",		XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_mono_downmix, NULL },
+	{ "Restore mixer to default",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, audio65_reset_mixer },
+	{ "Clear audio registers",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, audio65_clear_regs },
 	{ "OPL3 emulation",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int_inverted, (void*)&configdb.noopl3 },
-	{ "Clear audio registers",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, audio65_clear_regs },
 	{ "Emulated SIDs",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_sids   },
-	{ "Stereo separation",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_stereo },
-	{ "Master volume",		XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_volume },
+	{ "Emulator volume level",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_volume },
+	{ "Emulated audio output",	XEMUGUI_MENUID_SUBMENU,		NULL, menu_audio_output },
 	{ NULL }
 };
 #ifndef XEMU_ARCH_HTML

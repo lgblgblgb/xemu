@@ -43,6 +43,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "rom.h"
 #include "cart.h"
 #include "matrix_mode.h"
+#include "xemu/emutools_osk.h"
+#include "serialtcp.h"
 
 // "Typical" size in default settings (video standard is PAL, default border settings).
 // See also vic4.h
@@ -362,7 +364,7 @@ static void mega65_init ( void )
 	} while (0);
 	// *** Initializes memory subsystem of MEGA65 emulation itself
 	memory_init();
-	cart_load_bin(configdb.cartbin8000, 0x8000, "Cannot load binary cartridge image from $8000");
+	cart_attach(configdb.cart);
 	if (xemu_load_file(I2C_FILE_NAME, i2c_regs, sizeof i2c_regs, sizeof i2c_regs,
 #ifndef		XEMU_ARCH_HTML
 		"Cannot load I2C reg-space. Maybe first run or upgrade of Xemu?\nFor the next Xemu launch, it should have been already corrected automatically.\nSo no need to worry."
@@ -500,6 +502,7 @@ static void shutdown_callback ( void )
 	xumon_stop();
 #endif
 #ifdef XEMU_HAS_SOCKET_API
+	serialtcp_shutdown();
 	xemusock_uninit();
 #endif
 	hypervisor_hdos_close_descriptors();
@@ -563,6 +566,8 @@ int reset_mega65 ( const unsigned int options )
 		if (!ARE_YOU_SURE("Are you sure you want to RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
 			return 0;
 	}
+	if ((options & RESET_MEGA65_NO_CART))
+		cart_detach();
 	switch (options & 0xFF) {
 		case RESET_MEGA65_HARD:
 			last_reset_type = "HARD";
@@ -621,6 +626,12 @@ static void update_emulator ( void )
 	kbd_trigger_restore_trap();
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_update();
+#endif
+#ifdef XEMU_HAS_SOCKET_API
+	if (XEMU_UNLIKELY(serialtcp_get_connection_error(false))) {
+		const char *err = serialtcp_get_connection_error(true);
+		ERROR_WINDOW("SerialTCP failure:\n%s", err);
+	}
 #endif
 	// Screen updating, final phase
 	//vic4_close_frame_access();
@@ -766,11 +777,13 @@ int main ( int argc, char **argv )
 	xemugui_init(configdb.selectedgui);
 	// Initialize MEGA65
 	mega65_init();
+#ifdef	XEMU_OSK_SUPPORT
+	osk_init(osk_desc, 800, 600, 48);
+#endif
 	audio65_init(
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
 		AUDIO_SAMPLE_FREQ,		// sound mix freq
 		configdb.mastervolume,
-		configdb.stereoseparation,
 		configdb.audiobuffersize
 	);
 	DEBUGPRINT("MEM: UNHANDLED memory policy: %d" NL, configdb.skip_unhandled_mem);
@@ -815,11 +828,14 @@ int main ( int argc, char **argv )
 	if (!configdb.syscon)
 		sysconsole_close(NULL);
 	hypervisor_serial_monitor_open_file(configdb.hyperserialfile);
+#ifdef XEMU_HAS_SOCKET_API
+	serialtcp_init(configdb.serialtcp);
+#endif
 	xemu_timekeeping_start();
 	emulation_is_running = 1;
 	update_emulated_time_sources();
 	if (configdb.matrixstart)
-		matrix_mode_toggle(1);
+		matrix_mode_toggle(true);
 	// FIXME: for emscripten (anyway it does not work too much currently) there should be 50 or 60 (PAL/NTSC) instead of (fixed, and wrong!) 25!!!!!!
 	XEMU_MAIN_LOOP(emulation_loop, 25, 1);
 	return 0;

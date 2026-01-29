@@ -32,6 +32,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "audio65.h"
 #include "configdb.h"
 #include "mega65.h"
+#include "serialtcp.h"
 
 
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
@@ -55,6 +56,84 @@ static const Uint8 cpld_firmware_version[] = { 'N','o','w','!' };
 #define RETURN_ON_IO_WRITE_NOT_IMPLEMENTED(func) \
 	do { DEBUG("IO: NOT IMPLEMENTED write (emulator lacks feature), %s $%04X with data $%02X" NL, func, addr, data); \
 	return; } while(0)
+
+
+// ------------------ BEGIN: VDC specific ------------------
+
+
+static Uint8 vdc_reg_sel = 0;
+#define VDC_ENABLED() ((D7XX[0x10] & 4) && !in_hypervisor)
+static Uint8 vdc_regs[0x40];
+
+
+//#define VDC_DEBUG	DEBUGPRINT
+#define VDC_DEBUG(...)
+
+static XEMU_INLINE Uint8 *vdc2vicptr ( const Uint16 vdc_address )
+{
+	// The logic here is from mega65-core's VHDL source
+	const unsigned int line = vdc_address / 80U;
+	const unsigned int col  = vdc_address % 80U;
+	const unsigned int viciv_line = line / 8U;
+	const unsigned int result = (viciv_line * 640U) + (line % 8U) + (col * 8U);
+	// Assuming hires bitmap screen always at address $40000
+	return main_ram + result + 0x40000U;
+}
+
+
+static inline Uint8 vdc_read_register ( const Uint8 reg )
+{
+	VDC_DEBUG("VDC: reading register $%02X" NL, reg);
+	if (reg == 0x1F) {	// reading the data register which means reading a byte through VDC
+		Uint16 vdc_mem_addr = (vdc_regs[0x12] << 8) + vdc_regs[0x13];
+		VDC_DEBUG("VDC: reading VRAM at VDC address $%04X" NL, vdc_mem_addr);
+		const Uint8 result = *vdc2vicptr(vdc_mem_addr++);
+		vdc_regs[0x12] = vdc_mem_addr >> 8;
+		vdc_regs[0x13] = vdc_mem_addr & 0xFF;
+		return result;
+	}
+	return vdc_regs[reg];
+}
+
+
+static inline void vdc_write_register ( const Uint8 reg, const Uint8 data )
+{
+	VDC_DEBUG("VDC: writing register $%02X with data $%02X" NL, reg, data);
+	vdc_regs[reg] = data;
+	if (reg == 0x1F) {	// writing the data register which means writing a byte through VDC
+		Uint16 vdc_mem_addr = (vdc_regs[0x12] << 8) + vdc_regs[0x13];
+		VDC_DEBUG("VDC: writing VRAM at VDC address $%04X with data $%02X" NL, vdc_mem_addr, data);
+		*vdc2vicptr(vdc_mem_addr++) = data;
+		vdc_regs[0x12] = vdc_mem_addr >> 8;
+		vdc_regs[0x13] = vdc_mem_addr & 0xFF;
+		return;
+	}
+	// FIXME: this block copy/write emulation is really bad. Though I am unsure if anyone ever uses/used it. If so, it must be fixed in the future.
+	if (reg == 0x1E) {	// writing the count register triggers a block write or block copy operation
+		// NOTE: block commands are totally not tested and missing many parts!!! Like the busy check
+		// And maybe block "dimensions" as well. Also these ops are done in one step, stalling emulation. VERY BAD!
+		Uint16 vdc_mem_addr = (vdc_regs[0x12] << 8) + vdc_regs[0x13];			// VDC memory update address
+		int vdc_word_count = data;							// block copy fill/word count (the current register value: reg $1E)
+		if (vdc_regs[0x18] & 0x80) {	// ---[ BLOCK COPY OPERATION ]----------
+			Uint16 vdc_mem_addr_src = (vdc_regs[0x20] << 8) + vdc_regs[0x21];	// block copy source address
+			VDC_DEBUG("VDC: block copy of VRAM at VDC addresses $%04X -> $%04X with count = $%X" NL, vdc_mem_addr_src, vdc_mem_addr, vdc_word_count);
+			while (vdc_word_count-- > 0)
+				*vdc2vicptr(vdc_mem_addr++) = *vdc2vicptr(vdc_mem_addr_src++);
+			vdc_regs[0x20] = vdc_mem_addr_src >> 8;
+			vdc_regs[0x21] = vdc_mem_addr_src & 0xFF;
+		} else {			// ---[ BLOCK WRITE OPERATION ]---------
+			VDC_DEBUG("VDC: block write of RAM at VDC address $%04X with data = $%02X and count = $%X" NL, vdc_mem_addr, vdc_regs[0x1F], vdc_word_count);
+			while (vdc_word_count-- > 0)
+				*vdc2vicptr(vdc_mem_addr++) = vdc_regs[0x2A];			// normally attrib control, but on block write, this is the data to be written
+		}
+		vdc_regs[0x12] = vdc_mem_addr >> 8;
+		vdc_regs[0x13] = vdc_mem_addr & 0xFF;
+		return;
+	}
+}
+
+
+// ------------------ END: VDC specific ------------------
 
 
 static XEMU_INLINE void update_hw_multiplier ( void )
@@ -148,8 +227,12 @@ Uint8 io_read ( unsigned int addr )
 				return vic_read_reg(addr);		// VIC-IV read register
 			if (addr == 0x8F)
 				return hw_errata_level;
-			if (XEMU_LIKELY(addr < 0xA0))
+			if (addr < 0xA0)
 				return fdc_read_reg(addr & 0xF);
+#			ifdef XEMU_HAS_SOCKET_API
+			if (addr >= 0xE0 && addr <= 0xE6)
+				return serialtcp_read_reg(addr & 0xF);
+#			endif
 			RETURN_ON_IO_READ_NOT_IMPLEMENTED("RAM expansion controller", 0xFF);
 		case 0x11:	// $D100-$D1FF ~ C65 I/O mode
 		case 0x12:	// $D200-$D2FF ~ C65 I/O mode
@@ -189,12 +272,14 @@ Uint8 io_read ( unsigned int addr )
 		case 0x36:	// $D600-$D6FF ~ M65 I/O mode
 		case 0x26:
 			addr &= 0xFF;
+			if (addr <= 1 && VDC_ENABLED())					// $D600 or $D601 if VDC is enabled
+				return addr ? vdc_read_register(vdc_reg_sel) : 0x80;	// 0x80 = always return with "READY" as VDC status if $D600 is read
 			if (addr < 9)
 				RETURN_ON_IO_READ_NOT_IMPLEMENTED("UART", 0xFF);	// FIXME: UART is not yet supported!
 			if (addr >= 0x80 && addr <= 0x93)	// SDcard controller etc of MEGA65
 				return sdcard_read_register(addr - 0x80);
 			if ((addr & 0xF0) == 0xE0)
-				return eth65_read_reg(addr);
+				return eth65_read_reg(addr & 0xF);
 			switch (addr) {
 				case 0x7C:
 					return 0;			// emulate the "UART is ready" situation (used by some HICKUPs around from v0.11 or so)
@@ -259,6 +344,10 @@ Uint8 io_read ( unsigned int addr )
 					return rand() & 0xF;
 				case 0xDF: // D6DF: FPGA die temperature, high byte: assuming to be 164 (just because I see that on a real MEGA65 currently at my room's temperature ...)
 					return 164;
+				case 0xF4:
+					return mixer_register;
+				case 0xF5:
+					return audio65_read_mixer_register();
 				default:
 					DEBUG("MEGA65: reading MEGA65 specific I/O @ $D6%02X result is $%02X" NL, addr, D6XX_registers[addr]);
 					return D6XX_registers[addr];
@@ -288,7 +377,7 @@ Uint8 io_read ( unsigned int addr )
 		/* $D800-$DFFF: in case of ethernet I/O mode only! */
 		/* ----------------------------------------------- */
 		case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
-			return eth65_read_rx_buffer(addr - 0x2800);
+			return eth_rx_buf[addr - 0x2800U];
 		/* ----------------------- */
 		/* $D800-$DBFF: COLOUR RAM */
 		/* ----------------------- */
@@ -388,10 +477,16 @@ void io_write ( unsigned int addr, Uint8 data )
 				set_hw_errata_level(data, "D08F change");
 				return;
 			}
-			if (XEMU_LIKELY(addr < 0xA0)) {
+			if (addr < 0xA0) {
 				fdc_write_reg(addr & 0xF, data);
 				return;
 			}
+#			ifdef XEMU_HAS_SOCKET_API
+			if (addr >= 0xE0 && addr <= 0xE6) {
+				serialtcp_write_reg(addr & 0xF, data);
+				return;
+			}
+#			endif
 			RETURN_ON_IO_WRITE_NOT_IMPLEMENTED("RAM expansion controller");
 		case 0x11:	// $D100-$D1FF ~ C65 I/O mode
 			vic3_write_palette_reg_red(addr, data);		// function takes care using only 8 low bits of addr, no need to do here
@@ -441,6 +536,13 @@ void io_write ( unsigned int addr, Uint8 data )
 		case 0x36:	// $D600-$D6FF ~ M65 I/O mode
 		case 0x26:
 			addr &= 0xFF;
+			if (addr <= 1 && VDC_ENABLED()) {			// $D600 or $D601 if VDC is enabled
+				if (addr)
+					vdc_write_register(vdc_reg_sel, data);	// register data to be written ($D601)
+				else
+					vdc_reg_sel = data & 0x3F;		// register selection (on write of $D600): bit7&6 are not used though
+				return;
+			}
 			if (!in_hypervisor && addr >= 0x40 && addr <= 0x7F) {
 				// In user mode, writing to $D640-$D67F (in VIC4 iomode) causes to enter hypervisor mode with
 				// the trap number given by the offset in this range
@@ -460,7 +562,15 @@ void io_write ( unsigned int addr, Uint8 data )
 				return;
 			}
 			if ((addr & 0xF0) == 0xE0) {
-				eth65_write_reg(addr, data);
+				eth65_write_reg(addr & 0xF, data);
+				return;
+			}
+			if (addr == 0xF4) {		// audio mixer co-efficient address
+				mixer_register = data;
+				return;
+			}
+			if (addr == 0xF5) {		// audio mixer co-efficient value
+				audio65_write_mixer_register(data);
 				return;
 			}
 			static int d6cf_exit_status = 0x42;
@@ -482,7 +592,7 @@ void io_write ( unsigned int addr, Uint8 data )
 					virtkey(addr - 0x15, data & 0x7F);
 					return;
 				case 0x72:	// "$D672.6 HCPU:MATRIXEN Enable composited Matrix Mode, and disable UART access to serial monitor."
-					matrix_mode_toggle(data & 0x40);
+					matrix_mode_toggle(!!(data & 0x40));
 					return;
 				case 0x7C:					// hypervisor serial monitor port
 					hypervisor_serial_monitor_push_char(data);
@@ -540,7 +650,7 @@ void io_write ( unsigned int addr, Uint8 data )
 		/* $D800-$DFFF: in case of ethernet I/O mode only! */
 		/* ----------------------------------------------- */
 		case 0x28: case 0x29: case 0x2A: case 0x2B: case 0x2C: case 0x2D: case 0x2E: case 0x2F:
-			eth65_write_tx_buffer(addr - 0x2800, data);
+			eth_tx_buf[addr - 0x2800U] = data;
 			return;
 		/* ----------------------- */
 		/* $D800-$DBFF: COLOUR RAM */

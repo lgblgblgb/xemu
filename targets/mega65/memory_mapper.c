@@ -249,10 +249,10 @@ static void  disk_buffer_user_writer ( const Uint32 addr32, const Uint8 data ) {
 	disk_buffer_cpu_view[(addr32 - 0xFFD6000U) & 0x1FF] = data;
 }
 static Uint8 eth_buffer_reader ( const Uint32 addr32 ) {
-	return eth65_read_rx_buffer(addr32 - 0xFFDE800U);
+	return eth_rx_buf[addr32 - 0xFFDE800U];
 }
 static void  eth_buffer_writer ( const Uint32 addr32, const Uint8 data ) {
-	eth65_write_tx_buffer(addr32 - 0xFFDE800U, data);
+	eth_tx_buf[addr32 - 0xFFDE800U] = data;
 }
 static Uint8 slow_devices_reader ( const Uint32 addr32 ) {
 	return cart_read_byte(addr32 - 0x4000000U);
@@ -268,9 +268,8 @@ static void  i2c_writer ( const Uint32 addr32, const Uint8 data ) {
 	if (rel >= I2C_NVRAM_OFFSET && rel < (I2C_NVRAM_OFFSET + I2C_NVRAM_SIZE)) {
 		//DEBUGPRINT("I2C: NVRAM write ($%02X->$%02X) @ NVRAM+$%X" NL, i2c_regs[rel], data, rel - I2C_NVRAM_OFFSET);
 		i2c_regs[rel] = data;
-	} else if (configdb.mega65_model == 3 && rel >= 0x1D0 && rel <= 0x1EF) {	// Hyppo needs this on PCB R3 for I2C target setup (audio mixer settings)
-		// TODO: emulate the mixer stuff
-		i2c_regs[rel] = data;
+	} else if (configdb.mega65_model == 3 && rel >= 0x1D0 && rel <= 0x1EF) {	// Hyppo needs this on PCB R3 for I2C target setup (audio amp chip settings?)
+		i2c_regs[rel] = data;							// ... though the audio amp is not emulated by Xemu
 	} else {
 		DEBUGPRINT("I2C: unhandled write ($%02X) @ I2C+$%X" NL, data, rel);
 	}
@@ -517,6 +516,10 @@ static void resolve_linear_slot ( const Uint32 slot, const Uint32 addr )
 		case MEM_SLOT_TYPE_ETH_BUFFER:
 			mem_slot_rd_func[slot] = eth_buffer_reader;
 			mem_slot_wr_func[slot] = eth_buffer_writer;
+#ifdef			MEM_USE_DATA_POINTERS
+			mem_slot_rd_data[slot] = eth_rx_buf + addr - 0xFFDE800U;
+			mem_slot_wr_data[slot] = eth_tx_buf + addr - 0xFFDE800U;
+#endif
 			break;
 		case MEM_SLOT_TYPE_OPL3:
 			mem_slot_rd_func[slot] = dummy_reader;	// TODO: what should I do here?

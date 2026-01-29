@@ -75,14 +75,15 @@ const char *str_are_you_sure_to_exit = "Are you sure you want to exit Xemu?";
 char **xemu_initial_argv = NULL;
 int    xemu_initial_argc = -1;
 int emu_exit_code = 0;
+char *xemu_extra_env_var_setup_str = NULL;
 Uint64 buildinfo_cdate_uts = 0;
 const char *xemu_initial_cwd = NULL;
 SDL_Window   *sdl_win = NULL;
-static SDL_Renderer *sdl_ren = NULL;
+SDL_Renderer *sdl_ren = NULL;
+Uint32 sdl_pixel_format_id;
 static SDL_Texture  *sdl_tex = NULL;
 SDL_PixelFormat *sdl_pix_fmt;
 int sdl_on_x11 = 0, sdl_on_wayland = 0;
-static Uint32 sdl_pixel_format_id;
 static const char default_window_title[] = "XEMU";
 int register_new_texture_creation = 0;
 char *xemu_app_org = NULL, *xemu_app_name = NULL;
@@ -128,6 +129,7 @@ int sdl_default_win_y_pos = SDL_WINDOWPOS_UNDEFINED;
 static SDL_Rect sdl_whole_screen;
 static SDL_Rect sdl_viewport, *sdl_viewport_ptr = NULL;
 static unsigned int sdl_texture_x_size, sdl_texture_y_size;
+static Uint32 main_thread_id = 0xFFFFFFFFU;
 
 static SDL_bool grabbed_mouse = SDL_FALSE, grabbed_mouse_saved = SDL_FALSE;
 int allow_mouse_grab = 1;
@@ -157,6 +159,8 @@ static int follow_win_size = 0;
 #ifdef	XEMU_OSD_SUPPORT
 #include "xemu/gui/osd.c"
 #endif
+#include "xemu/emutools_osk.h"
+
 
 
 int set_mouse_grab ( SDL_bool state, int force_allow )
@@ -663,7 +667,7 @@ int xemu_init_debug ( const char *fn )
 }
 
 
-#ifndef XEMU_ARCH_HTML
+#if !defined(XEMU_ARCH_HTML) && !defined(XEMU_ARCH_ANDROID)
 static char *GetHackedPrefDir ( const char *base_path, const char *name )
 {
 	static const char prefdir_is_here_marker[] = "prefdir-is-here.txt";
@@ -709,7 +713,7 @@ int xemu_is_first_time_user ( void )
 }
 
 
-#ifndef XEMU_ARCH_HTML
+#if !defined(XEMU_ARCH_HTML) && !defined(XEMU_ARCH_ANDROID)
 // It seems SDL_GetBasePath() can be defunct on some architectures.
 // This function is intended to be used only by xemu_pre_init() and contains workaround.
 static char *_getbasepath ( void )
@@ -925,10 +929,14 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 	if (SDL_Init(0))
 		FATAL("Cannot pre-initialize SDL without any subsystem: %s", SDL_GetError());
 	atexit(shutdown_emulator);
+#ifndef	XEMU_ARCH_ANDROID
 	sdl_base_dir = _getbasepath();
 	if (!sdl_base_dir)
 		FATAL("Cannot query SDL base directory: %s", SDL_GetError());
 	p = GetHackedPrefDir(sdl_base_dir, app_name);
+#else
+	p = NULL;
+#endif	// XEMU_ARCH_ANDROID
 	if (!p)
 		p = xemu_sdl_to_native_string_allocation(SDL_GetPrefPath(app_organization, app_name));
 	if (p) {
@@ -937,6 +945,10 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 		sprintf(sdl_inst_dir, "%s%s" DIRSEP_STR, p, INSTALL_DIRECTORY_ENTRY_NAME);
 	} else
 		FATAL("Cannot query SDL preference directory: %s", SDL_GetError());
+	// We shouldn't end up with sdl_base_dir==NULL here.
+	// But if we do (see above like with Android), just pretend that it's the same as our pref directory.
+	if (!sdl_base_dir)
+		sdl_base_dir = sdl_pref_dir;
 #endif
 	xemu_app_org = xemu_strdup(app_organization);
 	xemu_app_name = xemu_strdup(app_name);
@@ -1172,6 +1184,102 @@ void xemu_default_win_pos_file_op ( const char r_or_w )
 }
 
 
+static void setenv_from_string ( const char *templ )
+{
+	if (!templ)
+		return;
+	for (char *env = xemu_strdup(templ);; env = NULL) {
+		char *token = strtok(env, ":");
+		if (!token)
+			break;
+		const char *c = token;
+		while (*c && *c > 32 && *c < 127)
+			c++;
+		if (*c || token[0] == '=' || !strchr(token, '=') || (strncmp(token, "SDL_", 4) && strncmp(token, "GTK_", 4) && strncmp(token, "GDK_", 4) && strncmp(token, "XEMU_", 4))) {
+			ERROR_WINDOW("Bad environment variable specification: %s", token);
+		} else {
+			DEBUGPRINT("XEMU: setting up environment variable: %s" NL, token);
+			putenv(token);
+		}
+	}
+}
+
+
+#ifdef XEMU_ARCH_ANDROID
+static bool android_populate_assets ( const char *listfn )
+{
+	SDL_RWops *lf = SDL_RWFromFile(listfn, "r");
+	if (!lf) {
+		DEBUGPRINT("ASSETS: cannot open file %s" NL, listfn);
+		return false;
+	}
+	char listbuf[4096];
+	size_t ret = SDL_RWread(lf, listbuf, 1, sizeof(listbuf));
+	if (ret <= 0 || ret >= sizeof(listbuf)) {
+		DEBUGPRINT("ASSETS: file %s has I/O error, or empty, or too large, %s" NL, listfn, SDL_GetError());
+		SDL_RWclose(lf);
+		return false;
+	}
+	SDL_RWclose(lf);
+	listbuf[ret] = '\0';
+	Uint8 copybuf[4096];
+	for (char *p = listbuf;;) {
+		char *n = strchr(p, '\n');
+		if (n)
+			*n = '\0';
+		if (*p) {
+			char targetfn[256];
+			if (strlen(sdl_pref_dir) + strlen(p) + 1 > sizeof(targetfn)) {
+				ERROR_WINDOW("Too long filename in assets");
+				return false;
+			}
+			strcpy(targetfn, sdl_pref_dir);
+			strcat(targetfn, p);
+			struct stat st;
+			if (stat(targetfn, &st) == 0)
+				goto next_file;		// target file already exists
+			lf = SDL_RWFromFile(p, "r");
+			if (!lf) {
+				ERROR_WINDOW("Cannot open asset file %s", p);
+				goto next_file;
+			}
+			int fd = open(targetfn, O_WRONLY | O_TRUNC | O_CREAT, 0666);
+			if (fd < 0) {
+				SDL_RWclose(lf);
+				ERROR_WINDOW("Cannot open asset target file %s", targetfn);
+				goto next_file;
+			}
+			size_t bytes = 0;
+			for (;;) {
+				ret = SDL_RWread(lf, copybuf, 1, sizeof(copybuf));
+				if (ret <= 0)
+					break;
+				if (write(fd, copybuf, ret) != ret) {
+					ERROR_WINDOW("File write error on target file %s", targetfn);
+					close(fd);
+					unlink(targetfn);
+					SDL_RWclose(lf);
+					goto next_file;
+				}
+				bytes += ret;
+			}
+			close(fd);
+			SDL_RWclose(lf);
+			INFO_WINDOW("Asset file %s has been populated to %s (%u bytes)", p, targetfn, (unsigned int)bytes);
+		}
+	next_file:
+		if (n)
+			p = n + 1;
+		else
+			break;
+	}
+
+
+	return true;
+}
+#endif
+
+
 /* Return value: 0 = ok, otherwise: ERROR, caller must exit, and can't use any other functionality, otherwise crash would happen.*/
 int xemu_post_init (
 	const char *window_title,		// title of our window
@@ -1192,6 +1300,7 @@ int xemu_post_init (
 		i_am_sure_override = 1;
 	}
 	srand((unsigned int)time(NULL));
+	setenv_from_string(xemu_extra_env_var_setup_str);
 	if (!debug_fp)
 		xemu_init_debug(getenv("XEMU_DEBUG_FILE"));
 	if (!debug_fp && chatty_xemu)
@@ -1203,13 +1312,8 @@ int xemu_post_init (
 		return 1;
 	}
 #ifndef	XEMU_ARCH_HTML
-	if (emu_is_headless) {
-		static char *dummies[] = { "SDL_VIDEODRIVER=dummy", "SDL_AUDIODRIVER=dummy", NULL };
-		for (char **p = dummies; *p; p++) {
-			DEBUGPRINT("SDL: headless mode env-var setup: %s" NL, *p);
-			putenv(*p);
-		}
-	}
+	if (emu_is_headless)
+		setenv_from_string("SDL_VIDEODRIVER=dummy:SDL_AUDIODRIVER=dummy");
 #endif
 #ifdef SDL_HINT_VIDEO_X11_NET_WM_BYPASS_COMPOSITOR
 	// Disallow disabling compositing (of KDE, for example)
@@ -1272,6 +1376,10 @@ int xemu_post_init (
 #if defined(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK) && defined(XEMU_ARCH_MAC)
 #	warning "Activating workaround for lame newer Apple notebooks (no right click on touchpads)"
 	SDL_SetHint(SDL_HINT_MAC_CTRL_CLICK_EMULATE_RIGHT_CLICK, "1");			// 1 = enable CTRL + click = right click (needed for modern Mac touchpads, it seems)
+#endif
+#if defined(SDL_HINT_ANDROID_TRAP_BACK_BUTTON) && defined(XEMU_ARCH_ANDROID)
+#	warning "BACK button trap has been activated."
+	SDL_SetHint(SDL_HINT_ANDROID_TRAP_BACK_BUTTON, "1");
 #endif
 	/* end of SDL hints section */
 	if (sdl_default_win_x_pos == SDL_WINDOWPOS_UNDEFINED && sdl_default_win_y_pos == SDL_WINDOWPOS_UNDEFINED)
@@ -1360,7 +1468,20 @@ int xemu_post_init (
 		printf(NL);
 #	include "build/xemu-48x48.xpm"
 	xemu_set_icon_from_xpm(favicon_xpm);
+#ifdef	XEMU_ARCH_ANDROID
+	SDL_AndroidRequestPermission("android.permission.READ_EXTERNAL_STORAGE");
+	android_populate_assets("list");
+#endif
+	main_thread_id = SDL_ThreadID();
 	return 0;
+}
+
+
+bool xemu_is_main_thread ( void )
+{
+	if (XEMU_UNLIKELY(main_thread_id == 0xFFFFFFFFU))
+		FATAL("main_thread_id is not initialized");
+	return main_thread_id == SDL_ThreadID();
 }
 
 
@@ -1513,8 +1634,11 @@ void xemu_update_screen ( void )
 	//if (seconds_timer_trigger)
 		SDL_RenderClear(sdl_ren); // Note: it's not needed at any price, however eg with full screen or ratio mismatches, unused screen space will be corrupted without this!
 	SDL_RenderCopy(sdl_ren, sdl_tex, sdl_viewport_ptr, NULL);
-#ifdef XEMU_OSD_SUPPORT
+#ifdef	XEMU_OSD_SUPPORT
 	_osd_render();
+#endif
+#ifdef	XEMU_OSK_SUPPORT
+	osk_render();
 #endif
 	SDL_RenderPresent(sdl_ren);
 }

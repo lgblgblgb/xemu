@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -31,20 +31,22 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "configdb.h"
 
 
-int stereo_separation = AUDIO_DEFAULT_SEPARATION;
-int audio_volume      = AUDIO_DEFAULT_VOLUME;
-
 struct SidEmulation sid[NUMBER_OF_SIDS];
 
 static opl3_chip opl3;
 
 static SDL_AudioDeviceID audio = 0;		// SDL audio device
-static int stereo_separation_orig = 100;
-static int stereo_separation_other = 0;
 static int system_sound_mix_freq;		// playback sample rate (in Hz) of the emulator itself
 static int system_sid_cycles_per_sec;
 static double dma_audio_mixing_value;
 
+Uint8 mixer_register = 0x00;
+static Uint8 mixer_bytes[0x100];
+static float mixer_floats[0x80];
+static int output_selection;			// $00 = HDMI/speakers, $C0 = headphones
+static int xemu_volume_int;
+static float xemu_volume_float;
+static bool mono_downmix;
 
 #if NUMBER_OF_SIDS != 4
 #	error "Currently NUMBER_OF_SIDS macro must be set to 4!"
@@ -220,35 +222,6 @@ static inline void render_dma_audio ( int channel, Sint16 *buffer, int len )
 }
 
 
-void audio_set_stereo_parameters ( int vol, int sep )
-{
-	if (sep == AUDIO_UNCHANGED_SEPARATION) {
-		sep = stereo_separation;
-	} else {
-		if (sep > 100)
-			sep = 100;
-		else if (sep < -100)
-			sep = -100;
-		stereo_separation = sep;
-	}
-	if (vol == AUDIO_UNCHANGED_VOLUME) {
-		vol = audio_volume;
-	} else {
-		if (vol > 100)
-			vol = 100;
-		else if (vol < 0)
-			vol = 0;
-		audio_volume = vol;
-	}
-	//sep = ((sep + 100) * 0x100) / 200;
-	sep = (sep + 100) / 2;
-	//sep = (sep + 100) * 0x100 / 200;
-	stereo_separation_orig  = (sep * vol) / 100;
-	stereo_separation_other = ((100 - sep) * vol) / 100;
-	DEBUGPRINT("AUDIO: volume is set to %d%%, stereo separation is %d%% [component-A is %d, component-B is %d]" NL, audio_volume, stereo_separation, stereo_separation_orig, stereo_separation_other);
-}
-
-
 // 10 channels, consist of: 4 channel for audio DMA, 4 channel for SIDs (each SIDs are pre-mixed to one channel by sid.c), 2 OPL3 channel (OPL3 is pre-mixed into two channels in opl3.c)
 #define MIXED_CHANNELS			10
 
@@ -261,6 +234,9 @@ void audio_set_stereo_parameters ( int vol, int sep )
 #define	STREAMS_SIZE_ALL		(((MIXED_CHANNELS) + (EXTRA_STREAM_CHANNELS)) * (AUDIO_BUFFER_SAMPLES_MAX))
 #define STREAMS(n)			(streams + ((n) * (AUDIO_BUFFER_SAMPLES_MAX)))
 #define STREAMS_SAMPLE(n,d)		((int)(STREAMS(n)[d]))
+
+static float scalers_left[MIXED_CHANNELS];
+static float scalers_right[MIXED_CHANNELS];
 
 
 static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
@@ -308,18 +284,16 @@ static void audio_callback ( void *userdata, Uint8 *stereo_out_stream, int len )
 	}
 	// Now mix the result ...
 	for (int i = 0, j = 0; i < len; i++) {
-		// mixing streams together
-		// Currently: put the first two SIDS to the left, the second two to the right, same for DMA audio channels, and OPL3 seems to need 2 channel
-		const register int orig_left  = STREAMS_SAMPLE(0, i) + STREAMS_SAMPLE(1, i) + STREAMS_SAMPLE(4, i) + STREAMS_SAMPLE(5, i) + STREAMS_SAMPLE(8, i);
-		const register int orig_right = STREAMS_SAMPLE(2, i) + STREAMS_SAMPLE(3, i) + STREAMS_SAMPLE(6, i) + STREAMS_SAMPLE(7, i) + STREAMS_SAMPLE(9, i);
-#if 1
-		// channel stereo separation (including inversion) + volume handling
-		int left  = ((orig_left  * stereo_separation_orig) / 100) + ((orig_right * stereo_separation_other) / 100);
-		int right = ((orig_right * stereo_separation_orig) / 100) + ((orig_left  * stereo_separation_other) / 100);
-#else
-		int left = orig_left;
-		int right = orig_right;
-#endif
+		// do the mixing stuff. NOTE: it seems on modern CPUs, using float/doubles can be even faster than integer math where I also need a division ...
+		float fl_left = 0, fl_right = 0;
+		for (int c = 0; c < MIXED_CHANNELS; c++) {
+			const float sample = (float)STREAMS_SAMPLE(c, i);
+			fl_left  += sample * scalers_left[c];
+			fl_right += sample * scalers_right[c];
+		}
+		// convert to integer
+		int left  = (int)fl_left;
+		int right = (int)fl_right;
 		// do some ugly clipping ...
 		if      (left  >  0x7FFF) left  =  0x7FFF;
 		else if (left  < -0x8000) left  = -0x8000;
@@ -350,6 +324,34 @@ void audio65_clear_regs ( void )
 		audio65_sid_write(i << i, 0);
 	memset(D7XX + 0x20, 0, 0x40);	// DMA audio related registers
 	DEBUGPRINT("AUDIO: clearing audio related registers." NL);
+}
+
+
+#define GETMIXFL(n) mixer_floats[((n) + output_selection) >> 1]
+
+
+static void recalulate_scalers ( void )
+{
+	const float master_left  = GETMIXFL(0x1E) * xemu_volume_float;
+	const float master_right = GETMIXFL(0x3E) * xemu_volume_float;
+	// Digi (audio DMA) channel 1-2 volume
+	scalers_left [0] = scalers_left [1] = GETMIXFL(0x10) * master_left;
+	scalers_right[0] = scalers_right[1] = GETMIXFL(0x30) * master_right;
+	// Digi (audio DMA) channel 3-4 volume
+	scalers_left [2] = scalers_left [3] = GETMIXFL(0x12) * master_left;
+	scalers_right[2] = scalers_right[3] = GETMIXFL(0x32) * master_right;
+	// SID 1-2 volume
+	scalers_left [4] = scalers_left [5] = GETMIXFL(0x00) * master_left;
+	scalers_right[4] = scalers_right[5] = GETMIXFL(0x20) * master_right;
+	// SID 3-4 volume
+	scalers_left [6] = scalers_left [7] = GETMIXFL(0x02) * master_left;
+	scalers_right[6] = scalers_right[7] = GETMIXFL(0x22) * master_right;
+	// OPL FM volume. NOTE: Xemu uses NukedOPL which emulates OPL3 [stereo], but MEGA65's OPL2(-ish?) implementation has only mono as OPL source
+	scalers_left [8] = scalers_left [9] = GETMIXFL(0x1C) * master_left;
+	scalers_right[8] = scalers_right[9] = GETMIXFL(0x3C) * master_right;
+	if (XEMU_UNLIKELY(mono_downmix))
+		for (int c = 0; c < MIXED_CHANNELS; c++)
+			scalers_left[c] = scalers_right[c] = (scalers_left[c] + scalers_right[c]) / 2.0;
 }
 
 
@@ -385,7 +387,153 @@ void audio65_start ( void )
 }
 
 
-void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int separation, unsigned int buffer_size )
+Uint8 audio65_read_mixer_register ( void )
+{
+	return mixer_bytes[mixer_register];
+}
+
+
+static inline void write_mixer_register ( const int reg, const Uint8 data )
+{
+	mixer_bytes[reg] = data;
+	mixer_floats[reg >> 1] = (float)((mixer_bytes[reg & 0xFE] << 8) + mixer_bytes[reg | 0x01]) / (float)0xFFFFU;
+}
+
+
+void audio65_write_mixer_register ( const Uint8 data )
+{
+	if (mixer_bytes[mixer_register] != data) {
+		write_mixer_register(mixer_register, data);
+		recalulate_scalers();
+	}
+}
+
+
+static void default_mixer_helper ( const int basereg, const Uint16 value_l, const Uint16 value_r )
+{
+	write_mixer_register(basereg + 0x00, value_l >> 8);
+	write_mixer_register(basereg + 0x01, value_l & 0xFF);
+	write_mixer_register(basereg + 0x20, value_r >> 8);
+	write_mixer_register(basereg + 0x21, value_r & 0xFF);
+	// repeat the same for headphones output:
+	write_mixer_register(basereg + 0xC0, value_l >> 8);
+	write_mixer_register(basereg + 0xC1, value_l & 0xFF);
+	write_mixer_register(basereg + 0xE0, value_r >> 8);
+	write_mixer_register(basereg + 0xE1, value_r & 0xFF);
+}
+
+
+static void print_audio_info ( const char *msg )
+{
+	DEBUGPRINT("AUDIO: emu-setup [%s] event; emu-volume = %d%%, mono-downmix = %s, output-reg-shift = $%02X" NL,
+		msg ? msg : "-",
+		xemu_volume_int,
+		mono_downmix ? "ON" : "off",
+		output_selection
+	);
+}
+
+
+void audio65_reset_mixer ( void )
+{
+	mixer_register = 0;
+	for (int i = 0; i < 0x100; i++)
+		write_mixer_register(i, 0);
+	default_mixer_helper(0x00, 0xBEBE, 0x4040);	// SID-L input
+	default_mixer_helper(0x02, 0x4040, 0xBEBE);	// SID-R input
+	default_mixer_helper(0x10, 0xBEBE, 0x4040);	// DIGI-L input
+	default_mixer_helper(0x12, 0x4040, 0xBEBE);	// DIGI-R input
+	default_mixer_helper(0x1C, 0xBEBE, 0xBEBE);	// OPL FM! On MEGA65 OPL channel is maybe muted by default, btw ...
+	default_mixer_helper(0x1E, 0xFFFF, 0xFFFF);	// master volume
+	recalulate_scalers();
+	print_audio_info("reset-mixer");
+}
+
+
+static void set_volume ( int vol )
+{
+	if (vol < 0) vol = 0;
+	else if (vol > 100) vol = 100;
+	xemu_volume_int = vol;
+	xemu_volume_float = (float)vol / (float)100.0;
+}
+
+
+void audio65_set_volume ( int vol )
+{
+	set_volume(vol);
+	recalulate_scalers();
+	print_audio_info("set-volume");
+}
+
+
+int audio65_get_volume ( void )
+{
+	return xemu_volume_int;
+}
+
+
+void audio65_set_mono_downmix ( const bool status )
+{
+	mono_downmix = status;
+	recalulate_scalers();
+	print_audio_info("mono-downmix");
+}
+
+
+bool audio65_get_mono_downmix ( void )
+{
+	return mono_downmix;
+}
+
+
+void audio65_set_output ( const int val )
+{
+	output_selection = val;
+	recalulate_scalers();
+	print_audio_info("set-output");
+}
+
+
+int audio65_get_output ( void )
+{
+	return output_selection;
+}
+
+
+#define GETMIXPCNT(n)  (int)(mixer_floats[((n) + output_selection) >> 1] * 100.0)
+
+
+size_t audio65_get_description ( char *buffer, const size_t buffer_size )
+{
+	const char *output_name;
+	switch (output_selection) {
+		case AUDIO_OUTPUT_SPEAKERS:
+			output_name = "HDMI/speakers";
+			break;
+		case AUDIO_OUTPUT_HEADPHONES:
+			output_name = "heaphones";
+			break;
+		default:
+			output_name = "UNKNOWN";
+			break;
+	}
+	return snprintf(
+		buffer, buffer_size,
+		"Sampling: %dHz, emulation volume: %d%%, emulated output: %s\n"
+		"SIDL   L=%03d%% R=%03d%%     SIDR   L=%03d%% R=%03d%%\n"
+		"DIGL   L=%03d%% R=%03d%%     DIGR   L=%03d%% R=%03d%%\n"
+		"OPLFM  L=%03d%% R=%03d%%     MASTER L=%03d%% R=%03d%%"
+		,
+		system_sound_mix_freq, xemu_volume_int, output_name,
+		GETMIXPCNT(0x00), GETMIXPCNT(0x20), GETMIXPCNT(0x02), GETMIXPCNT(0x22),
+		GETMIXPCNT(0x10), GETMIXPCNT(0x30), GETMIXPCNT(0x12), GETMIXPCNT(0x32),
+		GETMIXPCNT(0x1C), GETMIXPCNT(0x3C), GETMIXPCNT(0x1E), GETMIXPCNT(0x3E)
+	);
+}
+
+
+void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, unsigned int buffer_size )
 {
 	static volatile int initialized = 0;
 	if (initialized) {
@@ -393,6 +541,11 @@ void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int 
 		return;
 	}
 	initialized = 1;
+	// Setting these parameters should be followed by calling recalulate_scalers(). However, audio65_reset_mixer() at the end will call that anyway.
+	output_selection = AUDIO_OUTPUT_SPEAKERS;
+	mono_downmix = false;
+	set_volume(volume);
+	audio65_reset_mixer();
 	for (int i = 0; i < NUMBER_OF_SIDS; i++)
 		UNLOCK_SID("INIT", i);
 	UNLOCK_OPL("INIT");
@@ -427,7 +580,6 @@ void audio65_init ( int sid_cycles_per_sec, int sound_mix_freq, int volume, int 
 		//}
 	} else
 		ERROR_WINDOW("Cannot open audio device!");
-	audio_set_stereo_parameters(volume, separation);
 #else
 	DEBUGPRINT("AUDIO: has been disabled at compilation time." NL);
 #endif

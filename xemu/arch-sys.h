@@ -85,6 +85,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #	ifdef	XEMU_CPU_ARM
 #		define	XEMU_ARCH_MAC_ARM
 #	endif
+	// Recently, Apple made stupid changes, breaking exisiting codes everywhere. It seems,
+	// with this #define, it's possible to revert back to normality from insanity :)
+#	define	_DARWIN_C_SOURCE
 #elif	defined(__unix__) || defined(__unix) || defined(__linux__) || defined(__linux)
 #	define	XEMU_ARCH_UNIX
 #	if	defined(__linux__) || defined(__linux)

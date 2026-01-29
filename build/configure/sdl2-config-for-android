@@ -1,7 +1,7 @@
 #!/bin/bash
 # A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
 # Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-# Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+# Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 # As the name of this script suggests, it's an sdl2-config replacement for
 # Android builds **BUT** it's also used by Xemu for every other aspects to
@@ -17,16 +17,15 @@ if [ ! -s $PARAM_FILE ]; then
 # This part only writes file sdl2-config-for-android.params if it's not
 # there yet, but you can customize it then, there.
 cat > $PARAM_FILE << EOF
-SDL_BASE=/home/lgb/android/SDL-release-2.28.5
-NDK_CC=/home/lgb/android/Sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang
-CFLAGS_SDL="-I\$SDL_BASE/include/ -D_REENTRANT"
-CFLAGS_ANDROID="-fPIC"
+SDL_BASE=\$HOME/android/SDL-release-2.28.5
+SYS_ARCH=arm64-v8a
+NDK_CC=\$HOME/android/Sdk/ndk/23.1.7779620/toolchains/llvm/prebuilt/linux-x86_64/bin/aarch64-linux-android31-clang
+CFLAGS_SDL="-I\$SDL_BASE/include/ -D_REENTRANT -Dmain=SDL_main"
+CFLAGS_ANDROID="-fPIC -DANDROID"
 CFLAGS_ARCH=""
-#CFLAGS_ARCH="-march=armv7-a -mfpu=vfpv3-d16 -mfloat-abi=softfp -mthumb"
 LDFLAGS_SDL="-L\$SDL_BASE/build/android/lib/arm64-v8a/ -lSDL2"
 LDFLAGS_ARCH=""
-#LDFLAGS_ARCH="-march=armv7-a -Wl,--fix-cortex-a8"
-LDFLAGS_ANDROID="--shared -fPIC"
+LDFLAGS_ANDROID="-fPIC -shared -Wl,-soname,libmain.so"
 EOF
 fi
 
@@ -43,6 +42,7 @@ if [ "$1" = "--summary" ]; then
 	echo "LDFLAGS_SDL:     $LDFLAGS_SDL"
 	echo "LDFLAGS_ARCH:    $LDFLAGS_ARCH"
 	echo "LDFLAGS_ANDROID: $LDFLAGS_ANDROID"
+	echo "SYS_ARCH:        $SYS_ARCH"
 	echo "Trying to query the compiler now ..."
 	$NDK_CC --version || exit 1
 	echo "---- ANDROID SUMMARY ENDS ----"
@@ -65,6 +65,9 @@ elif [ "$1" = "--prefix" ]; then
 elif [ "$1" = "--version" ]; then
 	# How to do this better?
 	sed -n 's/title[\ t]*sdl[\t ]*//pi' $SDL_BASE/Xcode/SDL/pkg-support/SDL.info
+	exit 0
+elif [ "$1" = "--sysarch" ]; then
+	echo $SYS_ARCH
 	exit 0
 elif [ "$1" = "" ]; then
 	echo "Missing argument for script $0" >&2

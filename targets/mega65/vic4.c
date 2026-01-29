@@ -34,6 +34,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SPRITE_SPRITE_COLLISION
 #define SPRITE_FG_COLLISION
 #define SPRITE_COORD_LATCHING
+// Do not enable DAT support, MEGA65 does not implement this, I shouldn't either ... [maybe enabled in the future when/if mega65-core supports it?]
+// #define ENABLE_DAT_SUPPORT
 
 
 const char *iomode_names[4] = { "VIC2", "VIC3", "VIC4ETH", "VIC4" };
@@ -102,6 +104,7 @@ int vic_readjust_sdl_viewport = 0;
 int vic4_disallow_videostd_change = 0;		// Disallows programs to change video std via register D06F, bit 7 (emulator internally writing that bit still can change video std though!)
 int vic4_registered_screenshot_request = 0;
 unsigned int vic_frame_counter, vic_frame_counter_since_boot;
+int sprite_y_adjust_xemu_bug = 0;		// Unknown reason of sprite-Y bug in Xemu in NTSC. This is a workaround. FIXME: why is it needed?!
 
 
 // VIC4 Modeline Parameters
@@ -199,6 +202,7 @@ void vic_reset ( void )
 	vic4_reset_display_counters();
 	SET_PHYSICAL_RASTER(0);
 	chary16 = false;
+	sprite_y_adjust_xemu_bug = 0;
 }
 
 
@@ -472,6 +476,7 @@ void vic4_open_frame_access ( void )
 			visible_area_height = SCREEN_HEIGHT_VISIBLE_NTSC;
 			vicii_first_raster = 7;
 			REG_SPRITE_Y_ADJUST = 24;
+			sprite_y_adjust_xemu_bug = 7;
 		} else {
 			// --- PAL ---
 			new_name = PAL_STD_NAME;
@@ -481,6 +486,7 @@ void vic4_open_frame_access ( void )
 			visible_area_height = SCREEN_HEIGHT_VISIBLE_PAL;
 			vicii_first_raster = 0;
 			REG_SPRITE_Y_ADJUST = 0;
+			sprite_y_adjust_xemu_bug = 0;
 		}
 		DEBUGPRINT("VIC4: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec, max raster is %d, visible area height is %d)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime, max_rasters, visible_area_height);
 		videostd_name = new_name;
@@ -553,6 +559,7 @@ static inline void calculate_char_x_step ( void )
 }
 
 
+#ifdef ENABLE_DAT_SUPPORT
 // FIXME: preliminary DAT support. For real, these should be mostly calculated at writing
 // DAT X/Y registers, bitplane selection registers etc (also true for the actual renderer!),
 // would give much better emulator performace. Though for now, that's a naive preliminary
@@ -586,6 +593,7 @@ static XEMU_INLINE Uint8 *get_dat_addr ( unsigned int bpn )
 		(((y >> 3) * (h640 ? 640 : 320)) + (x << 3) + (y & 7))		// position within the bitplane given by the X/Y info
 	;
 }
+#endif
 
 
 /* DESIGN of vic_read_reg() and vic_write_reg() functions:
@@ -624,7 +632,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 #if 0
 	// Used during testing
 	if (addr == 0x56)
-		DEBUGPRINT("TEST: writing $D0%02X with data $%02X at PC $%04X in hypervisor_mode=%d" NL, addr, data, cpu65.old_pc, (int)in_hypervisor);
+		DEBUGPRINT("TEST: writing $D0%02X with data $%02X at PC $%04X in hypervisor_mode=%d and IO_mode=%X" NL, (addr & 0x7F), data, cpu65.old_pc, (int)in_hypervisor, iomode_hexdigitids[io_mode]);
 #endif
 	//DEBUGPRINT("VIC4: write VIC%c reg $%02X (internally $%03X) with data $%02X" NL, XEMU_LIKELY(addr < 0x180) ? vic_registers_internal_mode_names[addr >> 7] : '?', addr & 0x7F, addr, data);
 	// IMPORTANT NOTE: writing of vic_registers[] happens only *AFTER* this switch/case construct! This means if you need to do this before, you must do it manually at the right "case"!!!!
@@ -751,7 +759,11 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		// DAT read/write bitplanes port
 		CASE_VIC_3_4(0x40): CASE_VIC_3_4(0x41): CASE_VIC_3_4(0x42): CASE_VIC_3_4(0x43): CASE_VIC_3_4(0x44): CASE_VIC_3_4(0x45): CASE_VIC_3_4(0x46):
 		CASE_VIC_3_4(0x47):
+#ifdef			ENABLE_DAT_SUPPORT
 			*get_dat_addr(addr & 7) = data;	// write pixels via the DAT!
+#else
+			data = 0xFF;			// DAT is not implemented
+#endif
 			break;
 		/* --- NO MORE VIC3 REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B):
@@ -963,7 +975,11 @@ Uint8 vic_read_reg ( int unsigned addr )
 		// DAT read/write bitplanes port
 		CASE_VIC_3_4(0x40): CASE_VIC_3_4(0x41): CASE_VIC_3_4(0x42): CASE_VIC_3_4(0x43): CASE_VIC_3_4(0x44): CASE_VIC_3_4(0x45): CASE_VIC_3_4(0x46):
 		CASE_VIC_3_4(0x47):
+#ifdef			ENABLE_DAT_SUPPORT
 			result = *get_dat_addr(addr & 7);	// read pixels via the DAT!
+#else
+			result = 0xFF;				// DAT is not implemented
+#endif
 			break;
 		/* --- NO MORE VIC3 REGS FROM HERE --- */
 		CASE_VIC_4(0x48): CASE_VIC_4(0x49): CASE_VIC_4(0x4A): CASE_VIC_4(0x4B): CASE_VIC_4(0x4C): CASE_VIC_4(0x4D): CASE_VIC_4(0x4E): CASE_VIC_4(0x4F):
@@ -1070,7 +1086,7 @@ Uint8 vic_read_reg ( int unsigned addr )
 #endif
 
 
-static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_display_pos, const Uint8* row_data_ptr, const int xscale, const int do_tiling )
+static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_display_pos, const Uint8* row_data_ptr, const int xscale, const bool do_tiling )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	//const int palindexbase = sprnum * 16 + 128 * (SPRITE_BITPLANE_ENABLE(sprnum) >> sprnum);
@@ -1082,10 +1098,11 @@ static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_d
 #	ifdef SPRITE_ANY_COLLISION
 	const Uint8 sprbmask = 1 << sprnum;
 #	endif
+	int offset = 0;
 	do {
 		for (int byte = 0; byte < totalBytes; byte++) {
-			const Uint8 c0 = (*(row_data_ptr + byte)) >> 4;
-			const Uint8 c1 = (*(row_data_ptr + byte)) & 0xF;
+			const Uint8 c0 = row_data_ptr[offset] >> 4;
+			const Uint8 c1 = row_data_ptr[offset] & 0xF;
 			for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
 				if (c0 != transparency_palette_index && x_display_pos >= border_x_left && (
 					!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
@@ -1104,21 +1121,23 @@ static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_d
 					DO_SPRITE_FG_COLLISION(x_display_pos, 1);
 				}
 			}
+			offset = (offset + 1) & 7;	// tiling is done on 64 bits chunk of sprite data (ie, 64/8 = 8 bytes)
 		}
 	} while (XEMU_UNLIKELY(do_tiling && x_display_pos < border_x_right));
 }
 
 
-static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( const int sprnum, int x_display_pos, const Uint8* row_data_ptr, const int xscale, const int do_tiling )
+static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( const int sprnum, int x_display_pos, const Uint8* row_data_ptr, const int xscale, const bool do_tiling )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const Uint8 mcm_spr_pal_indices[4] = { 0, SPRITE_MULTICOLOR_1, SPRITE_COLOR(sprnum), SPRITE_MULTICOLOR_2 };	// entry zero is not used
 #	ifdef SPRITE_ANY_COLLISION
 	const Uint8 sprbmask = 1 << sprnum;
 #	endif
+	int offset = 0;
 	do {
 		for (int byte = 0; byte < totalBytes; byte++) {
-			const Uint8 row_data = *row_data_ptr++;
+			const Uint8 row_data = row_data_ptr[offset];
 			for (int shift = 6; shift >= 0; shift -= 2) {
 				const int mcm_pixel_value = (row_data >> shift) & 3;
 				const Uint32 sdl_pixel = spritepalette[mcm_spr_pal_indices[mcm_pixel_value]];
@@ -1141,22 +1160,24 @@ static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( const int sprnum, int 
 					}
 				}
 			}
+			offset = (offset + 1) & 7;	// tiling is done on 64 bits chunk of sprite data (ie, 64/8 = 8 bytes)
 		}
 	} while (XEMU_UNLIKELY(do_tiling && x_display_pos < border_x_right));
 }
 
 
-static XEMU_INLINE void vic4_draw_sprite_row_mono ( const int sprnum, int x_display_pos, const Uint8 *row_data_ptr, const int xscale, const int do_tiling )
+static XEMU_INLINE void vic4_draw_sprite_row_mono ( const int sprnum, int x_display_pos, const Uint8 *row_data_ptr, const int xscale, const bool do_tiling )
 {
 	const int totalBytes = SPRITE_EXTWIDTH(sprnum) ? 8 : 3;
 	const Uint32 sdl_pixel = spritepalette[SPRITE_COLOR(sprnum)];
 #	ifdef SPRITE_ANY_COLLISION
 	const Uint8 sprbmask = 1 << sprnum;
 #	endif
+	int offset = 0;
 	do {
 		for (int byte = 0; byte < totalBytes; byte++) {
 			for (int xbit = 0; xbit < 8; xbit++) {
-				const Uint8 sprite_bit = *row_data_ptr & (0x80 >> xbit);
+				const Uint8 sprite_bit = row_data_ptr[offset] & (0x80 >> xbit);
 				for (int p = 0; p < xscale && x_display_pos < border_x_right; p++, x_display_pos++) {
 					if (x_display_pos >= border_x_left && sprite_bit && (
 						!SPRITE_IS_BACK(sprnum) ||
@@ -1168,7 +1189,7 @@ static XEMU_INLINE void vic4_draw_sprite_row_mono ( const int sprnum, int x_disp
 					}
 				}
 			}
-			row_data_ptr++;
+			offset = (offset + 1) & 7;	// tiling is done on 64 bits chunk of sprite data (ie, 64/8 = 8 bytes)
 		}
 	} while (XEMU_UNLIKELY(do_tiling && x_display_pos < border_x_right));
 }
@@ -1193,7 +1214,7 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 #ifdef				SPRITE_COORD_LATCHING
 				sprite_is_being_rendered[sprnum] ? sprite_y_latch[sprnum] :
 #endif
-				((SPRITE_V400(sprnum) ? 1 : 2) * (SPRITE_POS_Y(sprnum) - (SPRITE_V400(sprnum) ? 0 : (REG_SPRITE_Y_ADJUST - 2))));
+				((SPRITE_V400(sprnum) ? 1 : 2) * (SPRITE_POS_Y(sprnum) - (SPRITE_V400(sprnum) ? 0 : (REG_SPRITE_Y_ADJUST - 2 + sprite_y_adjust_xemu_bug))));
 			int sprite_row_in_raster = ycounter - y_display_pos;
 			if (!SPRITE_V400(sprnum))
 				sprite_row_in_raster = sprite_row_in_raster >> 1;
@@ -1228,7 +1249,7 @@ static XEMU_INLINE void vic4_do_sprites ( void )
 				const Uint8 *sprite_data = main_ram + sprite_data_addr;
 				const Uint8 *row_data = sprite_data + widthBytes * sprite_row_in_raster;
 				const int xscale = (REG_SPR640 ? 1 : 2) * (SPRITE_HORZ_2X(sprnum) ? 2 : 1);
-				const int do_tiling = reg_tiling & (1 << sprnum);
+				const bool do_tiling = (bool)(reg_tiling & (1 << sprnum));
 				if (SPRITE_MULTICOLOR(sprnum))
 					vic4_draw_sprite_row_multicolor(sprnum, x_display_pos, row_data, xscale, do_tiling);
 				else if (SPRITE_16COLOR(sprnum))
@@ -1313,6 +1334,19 @@ static XEMU_INLINE void vic4_render_fullcolor_char_row ( const Uint8* char_row, 
 		else if (XEMU_LIKELY(enable_bg_paint))
 			*current_pixel = bg_sdl_color;
 		current_pixel++;
+		is_fg[xcounter++] = char_data;
+	}
+}
+
+
+#include "xemu/opt-code/blend32.h"
+
+
+static XEMU_INLINE void vic4_render_fullcolor_char_row_with_alpha ( const Uint8* char_row_ptr, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 fg_sdl_color, const int hflip )
+{
+	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
+		const Uint8 char_data = draw_mask & char_row_ptr[XEMU_LIKELY(!hflip) ? (int)cx : glyph_width - 1 - (int)cx];
+		*current_pixel++ = blend32(fg_sdl_color, bg_sdl_color, char_data);
 		is_fg[xcounter++] = char_data;
 	}
 }
@@ -1568,14 +1602,23 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 				// fgcolor in case of FCM should mean colour index $FF
 				// FIXME: check if the passed palette[color_data & 0xFF] is correct or another index should be used for that $FF colour stuff
 				const Uint32 *palette_now = ((REG_VICIII_ATTRIBS) && SXA_ATTR_ALTPALETTE(color_data)) ? altpalette : used_palette;
-				vic4_render_fullcolor_char_row(
-					main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
-					8 - glyph_trim,
-					palette_now[char_bgcolor],		// bg SDL colour
-					palette_now[color_data & 0xFF],		// fg SDL colour
-					SXA_HORIZONTAL_FLIP(color_data),	// hflip?
-					palette_now
-				);
+				if (XEMU_UNLIKELY((vic_registers[0x54] & 0x81) == 0x81 && SXA_ALPHA_BLEND(color_data)))
+					vic4_render_fullcolor_char_row_with_alpha(
+						main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
+						8 - glyph_trim,
+						palette_now[char_bgcolor],		// bg SDL colour
+						palette_now[color_data & 0xFF],		// fg SDL colour
+						SXA_HORIZONTAL_FLIP(color_data)		// hflip?
+					);
+				else
+					vic4_render_fullcolor_char_row(
+						main_ram + (((char_id * 64) + ((sel_char_row + char_fetch_offset) * 8)) & 0x7FFFF),
+						8 - glyph_trim,
+						palette_now[char_bgcolor],		// bg SDL colour
+						palette_now[color_data & 0xFF],		// fg SDL colour
+						SXA_HORIZONTAL_FLIP(color_data),	// hflip?
+						palette_now
+					);
 			} else if ((REG_MCM && ((color_data & 8) || (vic_registers[0x63] & 0x40))) || (REG_MCM && REG_BMM)) {	// Multicolor character
 				// using static vars: faster in a rapid loop like this, no need to re-adjust stack pointer all the time to allocate space and this way using constant memory address
 				// also, as an optimization, later, some value can be re-used and not always initialized here, when in reality VIC

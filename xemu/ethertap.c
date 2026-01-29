@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2018,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2018,2020-2021,2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -76,6 +76,8 @@ able to configure the device for itself, hmmm ...)  */
 
 static volatile int tuntap_fd = -1;
 static int nonblocking = 0;
+static char tuntap_name[32];
+static struct ifreq ifr;
 
 
 static int xemu_tuntap_set_nonblocking ( int fd, int is_nonblocking )
@@ -105,62 +107,37 @@ int xemu_tuntap_close ( void )
 }
 
 
-int xemu_tuntap_read ( void *buffer, int min_size, int max_size )
+int xemu_tuntap_read ( void *buffer, const int max_size )
 {
-	int got = 0;
-	if (tuntap_fd < 0)
-		return 0;
-	while (got < min_size) {
-		int r = read(tuntap_fd, buffer, max_size);
-		printf("ETH-LOW: read ret %d %s\n", r, r >= 0 ? "NO-ERROR-CONDITION" : strerror(errno));
-		if (!r) {
-			return got;
-		} else if (r < 0) {
-			if (errno == EINTR) {
-				continue;	// try again if it's interrupted. I am not sure if it's the correct behaviour
-			} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
-				if (nonblocking)
-					return (got > 0) ? got : -2;	// -2: signal initial EAGAIN situation
-				else
-					return -1;
-			} else {
+	for (;;) {
+		const int r = read(tuntap_fd, buffer, max_size);
+		if (r >= 0) {
+			return r;
+		} else {
+			if (errno == EAGAIN || errno == EWOULDBLOCK)
+				return nonblocking ? -2 : -1;
+			else if (errno != EINTR)
 				return -1;
-			}
+			// if EINTR: try again if it's interrupted
 		}
-		max_size -= r;
-		got += r;
-		buffer += r;
 	}
-	return got;
 }
 
 
-int xemu_tuntap_write ( void *buffer, int size )
+int xemu_tuntap_write ( const void *buffer, const int size )
 {
-	int did = 0;
-	if (tuntap_fd < 0)
-		return 0;
-	while (size > 0) {
-		int w = write(tuntap_fd, buffer, size);
-		if (!w) {
-			return did;
-		} else if (w < 0) {
-			if (errno == EINTR) {
-				continue;
-			} else if (errno == EAGAIN || errno == EWOULDBLOCK) {
-				if (nonblocking)
-					return (did > 0) ? did : -2;
-				else
-					return -1;
-			} else {
+	for (;;) {
+		const int r = write(tuntap_fd, buffer, size);
+		if (r >= 0) {
+			return r;
+		} else {
+			if (errno == EAGAIN || errno == EWOULDBLOCK)
+				return nonblocking ? -2 : -1;
+			else if (errno != EINTR)
 				return -1;
-			}
+			// if EINTR: try again if it's interrupted
 		}
-		size -= w;
-		did += w;
-		buffer += w;
 	}
-	return did;
 }
 
 
@@ -211,7 +188,6 @@ int xemu_tuntap_alloc ( const char *dev_in, char *dev_out, int dev_out_size, uns
 		return tuntap_fd;
 	if (dev_in && strlen(dev_in) > IFNAMSIZ - 1)
 		return -1;
-	struct ifreq ifr;
 	int fd, err;
 	nonblocking = 0;
 	memset(&ifr, 0, sizeof(ifr));
@@ -238,6 +214,13 @@ int xemu_tuntap_alloc ( const char *dev_in, char *dev_out, int dev_out_size, uns
 		close(fd);
 		return err;
 	}
+#if 0
+	int persist = 1;
+	if ((err = ioctl(fd, TUNSETPERSIST, persist)) < 0) {
+		close(fd);
+		return err;
+	}
+#endif
 	if (dev_out) {
 		if (strlen(ifr.ifr_name) >= dev_out_size) {
 			close(fd);
@@ -245,6 +228,7 @@ int xemu_tuntap_alloc ( const char *dev_in, char *dev_out, int dev_out_size, uns
 		} else
 			strcpy(dev_out, ifr.ifr_name);
 	}
+	snprintf(tuntap_name, sizeof tuntap_name, "%s", ifr.ifr_name);
 	if (flags & XEMU_TUNTAP_NONBLOCKING_IO) {
 		// sets non blocking I/O up, if requested
 		if (xemu_tuntap_set_nonblocking(fd, 1)) {
@@ -255,5 +239,97 @@ int xemu_tuntap_alloc ( const char *dev_in, char *dev_out, int dev_out_size, uns
 	tuntap_fd = fd;	// file descriptor is available now, good
 	return fd;	// also return the FD, but note, that it should not be used too much currently outside of this source
 }
+
+
+const char *xemu_tuntap_error ( void )
+{
+	return strerror(errno);
+}
+
+
+int xemu_tuntap_get_mac ( unsigned char mac[6] )
+{
+	if (ioctl(tuntap_fd, SIOCGIFHWADDR, &ifr) == -1)
+		return -1;
+	memcpy(mac, ifr.ifr_hwaddr.sa_data, 6);
+	return 0;
+}
+
+#include <netinet/in.h>
+#include <ifaddrs.h>
+
+unsigned int xemu_tuntap_get_ipv4 ( void )
+{
+#if 1
+	const int s = socket(AF_INET, SOCK_DGRAM, 0);
+	if (s < 0)
+		return 0;
+	if (ioctl(s, SIOCGIFADDR, &ifr) == -1)
+		return 0;
+	close(s);
+	struct sockaddr_in *ipaddr = (struct sockaddr_in *)&ifr.ifr_addr;
+	return ntohl(ipaddr->sin_addr.s_addr);
+#else
+	struct ifaddrs *ifaddr;
+	if (getifaddrs(&ifaddr) == -1)
+		return 0;
+	for (struct ifaddrs *ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
+		if (ifa->ifa_addr == NULL)
+			continue;
+		if (strcmp(ifa->ifa_name, tuntap_name) == 0 && ifa->ifa_addr->sa_family == AF_INET) {
+			const unsigned int ip = ntohl(((struct sockaddr_in *)ifa->ifa_addr)->sin_addr.s_addr);
+			freeifaddrs(ifaddr);
+			return ip;
+		}
+	}
+	freeifaddrs(ifaddr);
+	return 0;
+#endif
+}
+
+
+#if 0
+
+// NOTE: this would need to link with -lresolv to be safe, as it's only 1-2 years old change
+// in glibc's to have built-in. However that needs my build system a bit!!!! TODO/FIXME
+// It seems on BSDs it's always in libreslv, and MacOS is a bit unpredictable in this regard ...
+
+#include <resolv.h>
+
+unsigned int xemu_tuntap_get_dns_server ( void )
+{
+#if 1
+	// newer style interface
+	struct __res_state res;
+	const int ret = res_ninit(&res);
+	const int num = res.nscount;
+#	define rres res
+#else
+	// older style interface
+	const int ret = res_init();
+	const int num = _res.nscount;
+#	define rres _res
+#endif
+
+	// TODO: use res_ninit
+	if (ret) {
+		// perror("res_init");
+		return 0;
+	}
+	for (int i = 0; i < num; i++) {
+		const unsigned int ip = ntohl(rres.nsaddr_list[i].sin_addr.s_addr);
+		// TODO: allow 127.x.y.z to be returned the caller may use xemu_tuntap_get_ipv4() then to use that for DNS server
+		if ((ip >> 24) != 127 || i == num - 1)
+			return ip;
+		//char buf[INET6_ADDRSTRLEN];
+		//if (inet_ntop(AF_INET, &_res.nsaddr_list[i].sin_addr, buf, sizeof(buf))) {
+		//	printf("DNS server: %s\n", buf);
+		//}
+	}
+	return 0;
+}
+
+#endif
+
 
 #endif

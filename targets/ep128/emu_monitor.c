@@ -799,25 +799,7 @@ int monitor_queue_command ( char *buffer )
 
 // EX console.c !!!!
 
-#ifdef NO_CONSOLE
-//int console_is_open = 0;
-void console_close_window ( void ) {
-}
-void console_close_window_on_exit ( void ) {
-}
-void console_open_window ( void ) {
-}
-void console_monitor_ready ( void ) {
-}
-#else
-
-
-#ifdef XEMU_ARCH_WIN
-//#	include <windows.h>
-//#	include <stdio.h>
-//#	include <io.h>
-//#	include <fcntl.h>
-#else
+#if !defined(XEMU_ARCH_WIN) && !defined(NO_CONSOLE)
 #	ifndef XEMU_HAS_READLINE
 #		error "We need libreadline for this target/platform, but XEMU_HAS_READLINE is not defined. Maybe libreadline cannot be detected?"
 #	endif
@@ -837,6 +819,7 @@ static SDL_Thread *mont = NULL;
    Honestly, I was lazy, this may be also implemented in the main
    main thread, with select() based scheme / async I/O on UNIX, but I have
    no idea about Windows ... */
+#ifndef NO_CONSOLE
 static int console_monitor_thread ( void *ptr )
 {
 	printf("Welcome to " XEP128_NAME " monitor. Use \"help\" for help" NL);
@@ -868,10 +851,14 @@ static int console_monitor_thread ( void *ptr )
 	DEBUGPRINT("MONITOR: thread is about to exit" NL);
 	return 0;
 }
+#endif	// NO_CONSOLE
 
 
 int monitor_start ( void )
 {
+#ifdef	NO_CONSOLE
+	return 0;
+#else
 	if (monitor_running || !USE_MONITOR)
 		return 0;
 	sysconsole_open();	// make sure we have system console so we can run the monitor on something ...
@@ -885,6 +872,7 @@ int monitor_start ( void )
 	if (mont == NULL)
 		monitor_running = 0;
 	return 0;
+#endif	// NO_CONSOLE
 }
 
 
@@ -911,5 +899,3 @@ int monitor_stop ( void )
 	}
 	return 1;
 }
-
-#endif

@@ -10,7 +10,7 @@
 #define Z80EX_CALLBACK_PROTOTYPE extern
 #define CONFIG_SDEXT_SUPPORT
 
-#ifdef XEMU_ARCH_HTML
+#if defined(XEMU_ARCH_HTML) || defined(XEMU_ARCH_ANDROID)
 #define NO_CONSOLE
 #endif
 
@@ -18,10 +18,11 @@
 #define XEMU_USE_LODEPNG
 #define XEMU_FILES_SCREENSHOT_SUPPORT
 #define HAVE_XEMU_EXEC_API
+#define XEMU_OSK_SUPPORT
 #endif
 
-//FIXME: let's repair ep128 with emscripten and re-allow it!
-//#define CONFIG_EMSCRIPTEN_OK
+#define CONFIG_EMSCRIPTEN_OK
+#define CONFIG_ANDROID_OK
 
 #define VARALIGN MAXALIGNED
 

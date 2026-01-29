@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2018,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2018,2020-2021,2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -19,14 +19,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMU_COMMON_ETHERTAP_H_INCLUDED
 #ifdef HAVE_ETHERTAP
 
-#include "xemu/emutools_basicdefs.h"
-
 extern int xemu_tuntap_close  ( void );
 extern int xemu_tuntap_alloc  ( const char *dev_in, char *dev_out, int dev_out_size, unsigned int flags );
-extern int xemu_tuntap_read   ( void *buffer, int min_size, int max_size );
-extern int xemu_tuntap_write  ( void *buffer, int size );
+extern int xemu_tuntap_read   ( void *buffer, const int max_size );
+extern int xemu_tuntap_write  ( const void *buffer, const int size );
 extern int xemu_tuntap_select ( int flags, int timeout_usecs );
 
+extern const char *xemu_tuntap_error ( void );
+extern int xemu_tuntap_get_mac ( unsigned char mac[6] );
+extern unsigned int xemu_tuntap_get_ipv4 ( void );
 
 // for xemu_tuntap_alloc():
 

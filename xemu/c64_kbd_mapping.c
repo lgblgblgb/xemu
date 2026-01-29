@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -146,6 +146,100 @@ const struct KeyMappingDefault c64_key_map[] = {
 	// **** this must be the last line: end of mapping table ****
 	{ 0, -1 }
 };
+
+
+#ifdef XEMU_OSK_SUPPORT
+const struct osk_desc_st osk_desc[] = {
+	{0, 0,10,"STOP\nRUN", 0x77},
+	{0,10,10,"ESC", C65_KEYBOARD_EXTRA_POS +  7},
+	{OSK_DESC_TOGGLE, 0,10,"ALT", 0x75},
+	{OSK_DESC_TOGGLE, 0,10,"CpLck", -1},	// TODO
+	{0, 0,10,"NScrl", -1},	// TODO
+	{0,10,10,"F1\nF2", 0x04},
+	{0, 0,10,"F3\nF4", 0x05},
+	{0, 0,10,"F5\nF6", 0x06},
+	{0, 0,10,"F7\nF8", 0x03},
+	{0,10,10,"F9\nF10",   C65_KEYBOARD_EXTRA_POS +  4},
+	{0, 0,10,"F11\nF12",  C65_KEYBOARD_EXTRA_POS +  5},
+	{0, 0,10,"F13\nF14",  C65_KEYBOARD_EXTRA_POS +  6},
+	{0, 0,10,"HELP",      C65_KEYBOARD_EXTRA_POS +  3},
+
+
+	{OSK_DESC_NEW_LINE, 0,10,"<-",0x71},
+	{0, 0,10,"1\n!", 0x70},
+	{0, 0,10,"2\n\"", 0x73},
+	{0, 0,10,"3\n#", 0x10},
+	{0, 0,10,"4\n$", 0x13},
+	{0, 0,10,"5\n%", 0x20},
+	{0, 0,10,"6\n&", 0x23},
+	{0, 0,10,"7\n'", 0x30},
+	{0, 0,10,"8\n(", 0x33},
+	{0, 0,10,"9\n)", 0x40},
+	{0, 0,10,"0", 0x43},
+	{0, 0,10,"+", 0x50},
+	{0, 0,10,"-", 0x53},
+	{0, 0,10,"Pnd",0x60},
+	{0, 0,10,"Home\nClr",0x63},
+	{0, 0,10,"Del\nInst",0x00},
+
+	{OSK_DESC_NEW_LINE, 0,15,"TAB", TAB_KEY_POS},
+	{0, 0,10,"Q", 0x76},
+	{0, 0,10,"W", 0x11},
+	{0, 0,10,"E", 0x16},
+	{0, 0,10,"R", 0x21},
+	{0, 0,10,"T", 0x26},
+	{0, 0,10,"Y", 0x31},
+	{0, 0,10,"U", 0x36},
+	{0, 0,10,"I", 0x41},
+	{0, 0,10,"O", 0x46},
+	{0, 0,10,"P", 0x51},
+	{0, 0,10,"@", 0x56},
+	{0, 0,10,"*", 0x61},
+	{0, 0,10,"|", 0x66},	// UP-Arrow
+	{0, 0,15,"Res", RESTORE_KEY_POS},	// Restore
+
+	{OSK_DESC_NEW_LINE | OSK_DESC_TOGGLE, 0,10,"CTRL", 0x72},
+	{0, 0,10,"Lck",-1},	// TODO
+	{0, 0,10,"A", 0x12},
+	{0, 0,10,"S", 0x15},
+	{0, 0,10,"D", 0x22},
+	{0, 0,10,"F", 0x25},
+	{0, 0,10,"G", 0x32},
+	{0, 0,10,"H", 0x35},
+	{0, 0,10,"J", 0x42},
+	{0, 0,10,"K", 0x45},
+	{0, 0,10,"L", 0x52},
+	{0, 0,10,":\n[", 0x55},
+	{0, 0,10,";\n]", 0x62},
+	{0, 0,10,"=", 0x65},
+	{0, 0,20,"RETURN", 0x01},
+
+	{OSK_DESC_NEW_LINE | OSK_DESC_TOGGLE, 0,10,"M=", 0x75},
+	{OSK_DESC_TOGGLE | OSK_DESC_MOD_KEY, 0,15,"Shift", 0x17},
+	{0, 0,10,"Z", 0x14},
+	{0, 0,10,"X", 0x27},
+	{0, 0,10,"C", 0x24},
+	{0, 0,10,"V", 0x37},
+	{0, 0,10,"B", 0x34},
+	{0, 0,10,"N", 0x47},
+	{0, 0,10,"M", 0x44},
+	{0, 0,10,",\n<", 0x57},
+	{0, 0,10,".\n>", 0x54},
+	{0, 0,10,"/\n?", 0x67},
+	{OSK_DESC_TOGGLE | OSK_DESC_MOD_KEY, 0,15,"Shift", 0x64},
+	{0, 0,10,"UP", 0x07 | 8},
+
+	{OSK_DESC_NEW_LINE, 30, 90, "SPACE", 0x74},
+	{0, 10, 10, "LEFT", 0x02 | 8},
+	{0, 0, 10, "DOWN", 0x07},
+	{0, 0, 10, "RIGHT", 0x02},
+
+	{.key_str = NULL}
+};
+#endif
+
+
+
 
 int joystick_emu = 1;
 
