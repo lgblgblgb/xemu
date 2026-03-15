@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -29,6 +29,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "io_mapper.h"
 #include "memory_mapper.h"
 #include "audio65.h"
+#include "xemu/emutools_files.h"
 
 #include <ctype.h>
 #include <string.h>
@@ -37,6 +38,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 //#define DEBUGMATRIX	DEBUGPRINT
 //#define DEBUGMATRIX	DEBUG
 #define DEBUGMATRIX(...)
+
+#define	MATRIX_COMMAND_ASSIGNMENT_TEMPLATE	"matrix-commands-template.cfg"
+#define	MATRIX_COMMAND_ASSIGNMENT_CONFIG	"matrix-commands.cfg"
+#define MATRIX_COMMAND_ASSIGNMENT_MAX_FSIZE	8192
+#define	CMDNAME_MAXSIZE				16
+#define CMDSHORT_MAXSIZE			2
+#define MATRIX_COMMAND_HISTORY_FILE		"matrix-history.cmd"
 
 
 bool in_the_matrix = false;
@@ -61,6 +69,9 @@ bool in_the_matrix = false;
 #define NORMAL_COLOUR	1
 #define BANNER_COLOUR	2
 
+#define NL_IF_NEEDED	11
+#define BYTE_MARKER_CHR	0x1A
+
 #define FULL_SCREEN_BYTE_SIZE	(chrscreen_ysize * chrscreen_xsize * 2)
 #define TOP_AREA_BYTE_SIZE	(CLI_START_LINE * chrscreen_xsize * 2)
 #define CLI_AREA_BYTE_SIZE	((chrscreen_ysize - CLI_START_LINE) * chrscreen_xsize * 2)
@@ -75,7 +86,11 @@ static Uint8 console_colours[] = {
 };
 static Uint32 colour_mappings[16];
 static Uint8 current_colour;
+static const char matrix_config_fn[] = "@" MATRIX_COMMAND_ASSIGNMENT_CONFIG;
+static const char matrix_config_template_fn[] = "@" MATRIX_COMMAND_ASSIGNMENT_TEMPLATE;
+static const char command_history_fn[] = "@" MATRIX_COMMAND_HISTORY_FILE;
 
+#define BANNER_MSG	"*** Xemu's pre-matrix ... press left-CTRL + TAB to exit / re-enter ***"
 #define PROMPT		"Xemu>"
 
 #define CMD_HISTORY_SIZE	64
@@ -188,7 +203,9 @@ static void matrix_clear ( void )
 
 static void matrix_write_char ( const Uint8 c )
 {
-	if (c == '\n' || c == '\r') {
+	if (c == NL_IF_NEEDED && !current_x)
+		return;
+	if (c == '\n' || c == '\r' || c == NL_IF_NEEDED) {
 		current_x = 0;
 		current_y++;
 	} else if (c == 8) {
@@ -294,20 +311,37 @@ static void dump_map ( void )
 /* COMMANDS */
 
 
+static bool cannot_have_cmd_arg ( char *p )
+{
+	if (*p) {
+		matrix_write_string("?CMD CANNOT HAVE ARG(S)");
+		return false;
+	}
+	return true;
+}
+
+
 static void cmd_off ( char *p )
 {
+	if (!cannot_have_cmd_arg(p))
+		return;
 	matrix_mode_toggle(false);
+	clear_emu_events();	// preventing CTRL to stuck in pressed state
 }
 
 
 static void cmd_uname ( char *p )
 {
+	if (!cannot_have_cmd_arg(p))
+		return;
 	matrix_write_string(xemu_get_uname_string());
 }
 
 
 static void cmd_ver ( char *p )
 {
+	if (!cannot_have_cmd_arg(p))
+		return;
 	MATRIX(
 		"Xemu/%s %s %s %s %s %s\n"
 		"SDL base dir: %s\n"
@@ -326,14 +360,18 @@ static void cmd_ver ( char *p )
 
 static void cmd_reg ( char *p )
 {
+	if (!cannot_have_cmd_arg(p))
+		return;
 	write_special_chars_mode = 1;
 	dump_regs(' ');
 	write_special_chars_mode = 0;
 }
 
 
-static void cmd_map ( char *arg )
+static void cmd_map ( char *p )
 {
+	if (!cannot_have_cmd_arg(p))
+		return;
 	write_special_chars_mode = 1;
 	dump_map();
 	write_special_chars_mode = 0;
@@ -346,59 +384,92 @@ static void cmd_map ( char *arg )
 
 
 static Uint16 addr_hiword = 0, addr_loword = 0; // current dump/show/write address. hiword=$FFFF indicates _CPU_ address
-static Uint8 data_byte;
+static unsigned int watch_byte_value = 0x100;	// outside of 00-FF byte range -> no effect on display (ie: turned off)
+#define LAST_ARG 0x80000000U
+static int arg_counter;
 
 
-static int mem_args ( const char *p, int need_data )
+static bool arg_error ( const char *msg, const int arg_no )
 {
-	unsigned int addr, data;
-	int ret = sscanf((*p == '!' || *p == '?' || *p == '=') ? p + 1 : p, "%x %x", &addr , &data);
-	if (ret < 1) {
-		matrix_write_string("?MISSING ARG OR HEX SYNTAX ERROR");
-		return 0;
-	}
-	if (need_data && ret == 1) {
-		matrix_write_string("?MISSING SECOND ARG OR HEX SYNTAX ERROR");
-		return 0;
-	}
-	if (!need_data && ret > 1) {
-		matrix_write_string("?EXTRA UNKNOWN ARG");
-		return 0;
-	}
-	// Address part
-	if (*p == '!') {
-		if (addr > 0xFFFF) {
-			matrix_write_string("?CPU ADDRESS MUST BE 16-BIT");
-			return 0;
+	matrix_write_char('?');
+	matrix_write_string(msg);
+	if (arg_no)
+		MATRIX(" (#%d)", arg_no);
+	return false;
+}
+
+
+static bool get_cmd_arg ( char **p_in, unsigned int *data_result, unsigned int max_value )
+{
+	static const char scanf_err_msg[] = "HEX ARG SYNTAX";
+	arg_counter++;
+	char *p = *p_in;
+	while (*p && *p <= 32)
+		p++;
+	if (!*p)
+		return arg_error("MISSING ARG(S)", 0);
+	char *e = p;
+	while (*e > 32)
+		e++;
+	*p_in = e;
+	if ((max_value & LAST_ARG) && *e)
+		return arg_error("EXTRA ARG", arg_counter + 1);
+	max_value &= 0x0FFFFFFFU;
+	if (max_value) {
+		unsigned int val;
+		if (sscanf(p, "%x", &val) != 1)
+			return arg_error(scanf_err_msg, arg_counter);
+		if (val > max_value)
+			return arg_error("ARG TOO LARGE", arg_counter);
+		*data_result = val;
+	} else {
+		const char cls = isxdigit(*p) ? 0 : *p++;
+		unsigned int addr;
+		if (sscanf(p, "%x", &addr) != 1)
+			return arg_error(scanf_err_msg, arg_counter);
+		switch (cls) {
+			case '!':
+				if (addr > 0xFFFF)
+					return arg_error("CPU ADDR MUST BE 16-BIT", arg_counter);
+				addr_loword = addr;
+				addr_hiword = 0xFFFF;
+				break;
+			case '?':
+				// technically I/O address is 12 bit only though, but for the common Dxxx scenario, we allow 16 bit, and 12 bit is used only
+				if (addr > 0xFFFF)
+					return arg_error("IO ADDR MUST BE 12-BIT", arg_counter);
+				// M65 I/O is @ $FFD'3FFF
+				addr_loword = (addr & 0xFFF) + 0x3000;
+				addr_hiword = 0xFFD;
+				break;
+			case '=':
+			case 0:
+				if (addr >= 0xFFFFFFFU)
+					return arg_error("LINEAR ADDR MUST BE 28-BIT", arg_counter);
+				addr_loword = addr & 0xFFFF;
+				const int hslen = (int)(e - p);
+				if (addr > 0xFFFF || cls == '=' || hslen > 4)
+					addr_hiword = (addr >> 16) & 0xFFF;
+				break;
+			default:
+				return arg_error("UNKNOWN ADDR MODIFIER/HEX SYNTAX", arg_counter);
 		}
-		addr_hiword = 0xFFFF;
-	} else if (addr > 0xFFFF || *p == '=') {
-		if (addr >= 0xFFFFFFFU) {
-			matrix_write_string("?LINEAR ADDRESS MUST BE 28-BIT");
-			return 0;
-		}
-		addr_hiword = (addr >> 16) & 0xFFF;
 	}
-	addr_loword = addr & 0xFFFF;
-	if (*p == '?') {
-		if (addr > 0xFFF) {
-			matrix_write_string("?IO ADDRESS MUST BE 12-BIT");
-			return 0;
-		}
-		// M65 I/O is @ $FFD'3FFF
-		addr_loword = (addr_loword & 0xFFF) + 0x3000;
-		addr_hiword = 0xFFD;
+	return true;
+}
+
+
+static void cmd_bytemark ( char *p )
+{
+	matrix_write_string("Marked byte value: ");
+	if (*p) {
+		if (!get_cmd_arg(&p, &watch_byte_value, 0xFF | LAST_ARG))
+			return;
+		MATRIX("%02X", watch_byte_value);
+	} else {
+		watch_byte_value = 0x100;	// outside of 00-FF byte range -> no effect on display (ie: turned off)
+		matrix_write_string("OFF");
 	}
-	// Data part
-	if (need_data) {
-		if (data > 0xFF) {
-			matrix_write_string("?DATA ARG MUST BE 8-BIT");
-			return 0;
-		}
-		data_byte = data & 0xFF;
-		return 2;
-	}
-	return 1;
 }
 
 
@@ -410,20 +481,28 @@ static void cmd_log ( char *p )
 
 static void cmd_write ( char *p )
 {
-	if (mem_args(p, 1) != 2)
+	if (!get_cmd_arg(&p, NULL, 0))
 		return;
-	if (addr_hiword == 0xFFFF) {
-		debug_write_cpu_byte(addr_loword, data_byte);
-		return;
+	for (;;) {
+		unsigned int data;
+		if (!get_cmd_arg(&p, &data, 0xFF))
+			return;
+		if (addr_hiword == 0xFFFF)
+			debug_write_cpu_byte(addr_loword, data);
+		else
+			debug_write_linear_byte(((Uint32)addr_hiword << 16) + (Uint32)addr_loword, data);
+		if (!*p)
+			break;
+		addr_loword++;
+		if (!addr_loword && addr_hiword != 0xFFFF)
+			addr_hiword = (addr_hiword + 1) & 0xFFF;
 	}
-	const Uint32 addr = ((Uint32)addr_hiword << 16) + (Uint32)addr_loword;
-	debug_write_linear_byte(addr, data_byte);
 }
 
 
 static void cmd_show ( char *p )
 {
-	if (mem_args(p, 0) != 1)
+	if (!get_cmd_arg(&p, NULL, 0 | LAST_ARG))
 		return;
 	if (addr_hiword == 0xFFFF) {
 		MATRIX("[cpu:%04X] = %02X", addr_loword, debug_read_cpu_byte(addr_loword));
@@ -453,8 +532,10 @@ static void dump_mem_lines ( int lines, const char sepchr )
 				data = debug_read_linear_byte(((Uint32)addr_hiword << 16) + (Uint32)addr_loword);
 				addr_loword++;
 				if (!addr_loword)
-					addr_hiword++;
+					addr_hiword = (addr_hiword + 1) & 0xFFF;
 			}
+			if (data == watch_byte_value)
+				chardump[12 + i * 3 - 1] = BYTE_MARKER_CHR;
 			sprintf(chardump + 12 + i * 3, "%02X", data);
 			chardump[61 + i] =  data >= 32 ? data : '.';
 		}
@@ -465,6 +546,33 @@ static void dump_mem_lines ( int lines, const char sepchr )
 		chardump[sizeof(chardump) - 2] = '\n';
 		matrix_write_string(chardump);
 	}
+}
+
+
+static void cmd_find ( char *p )
+{
+	unsigned int data, range;
+	if (!get_cmd_arg(&p, NULL, 0) || !get_cmd_arg(&p, &range, 0x10000) || !get_cmd_arg(&p, &data, 0xFF | LAST_ARG))
+		return;
+	const Uint16 addr_loword_backup = addr_loword;
+	const Uint16 addr_hiword_backup = addr_hiword;
+	bool found = false;
+	while (range--) {
+		const Uint8 byte = (addr_hiword == 0xFFFF) ? debug_read_cpu_byte(addr_loword) : debug_read_linear_byte(((Uint32)addr_hiword << 16) + (Uint32)addr_loword);
+		if (data == byte) {
+			found = true;
+			break;
+		}
+		addr_loword++;
+		if (addr_hiword != 0xFFFF && !addr_loword)
+			addr_hiword = (addr_hiword + 1) & 0xFFF;
+	}
+	if (found)
+		dump_mem_lines(1, ':');
+	else
+		matrix_write_string("Not found");
+	addr_loword = addr_loword_backup;
+	addr_hiword = addr_hiword_backup;
 }
 
 
@@ -489,7 +597,7 @@ static Uint8 reader_for_disasm_cpu ( const unsigned int addr, const unsigned int
 
 static void cmd_asm ( char *p )
 {
-	if (*p && mem_args(p, 0) != 1)
+	if (*p && !get_cmd_arg(&p, NULL, 0 | LAST_ARG))	// parameter is optional, so the "*p" condition first
 		return;
 	const char *opname;
 	char arg[64];
@@ -506,7 +614,7 @@ static void cmd_asm ( char *p )
 			if (a < len)
 				MATRIX("%02X ", d_bytes[a]);
 			else
-				MATRIX("   ");
+				matrix_write_string("   ");
 		MATRIX("%s%s %s\n", opname, strlen(opname) != 4 ? " " : "", arg);
 		addr_loword += len;
 	}
@@ -515,7 +623,7 @@ static void cmd_asm ( char *p )
 
 static void cmd_dump ( char *p )
 {
-	if (*p && mem_args(p, 0) != 1)
+	if (*p && !get_cmd_arg(&p, NULL, 0 | LAST_ARG))	// parameter is optional, so the "*p" condition first
 		return;
 	dump_mem_lines(16, ':');
 }
@@ -560,13 +668,18 @@ static void live_dump_update ( void )
 
 static void cmd_live ( char *p )
 {
+	if (!cannot_have_cmd_arg(p))
+		return;
 	live_update_enabled = (live_update_enabled <= 0) ? 1 : -1;
-	MATRIX("Live memory dump updates are turned %s\n", (live_update_enabled > 0) ? "ON" : "OFF");
+	matrix_write_string("Live memory dump updates are turned ");
+	matrix_write_string((live_update_enabled > 0) ? "ON" : "OFF");
 }
 
 
 static void cmd_reset ( char *p )
 {
+	if (!cannot_have_cmd_arg(p))
+		return;
 	clear_emu_events();	// otherwise reset will hang seeing CTRL still pressed ...
 	reset_mega65(RESET_MEGA65_HARD);
 }
@@ -575,25 +688,28 @@ static void cmd_reset ( char *p )
 static void cmd_shade ( char *p )
 {
 	unsigned int shade;
-	if (sscanf(p, "%u", &shade) == 1 && shade <= 100) {
-		console_colours[3] = shade * 255 / 100;
-		need_update = 1 | 2;
-		init_colour_mappings();
-	} else
-		MATRIX("?BAD VALUE");
+	if (!get_cmd_arg(&p, &shade, 0xF | LAST_ARG))
+		return;
+	console_colours[3] = shade * 17;	// 00-0F -> 00-FF (0xF*17=255)
+	need_update = 1 | 2;
+	init_colour_mappings();
 }
 
 
 static void cmd_audio ( char *p )
 {
+	if (!cannot_have_cmd_arg(p))
+		return;
 	char buffer[4096];
 	audio65_get_description(buffer, sizeof buffer);
-	MATRIX("%s", buffer);
+	matrix_write_string(buffer);
 }
 
 
 static void cmd_vic ( char *p )
 {
+	if (!cannot_have_cmd_arg(p))
+		return;
 	const Uint32 v_addr = (Uint32)(vic4_query_screen_address() - main_ram);
 	const Uint32 c_addr = (Uint32)(vic4_query_colour_address() - colour_ram);
 	MATRIX("V-PTR=$%X C-OFS=$%X ($%X) HOT=%d H640=%d V400=%d VIC3ATRS=%d 16BIT=%d", v_addr, c_addr, c_addr + 0x0FF80000U, !!REG_HOTREG, !!REG_H640, !!REG_V400, !!REG_VICIII_ATTRIBS, !!REG_16BITCHARSET);
@@ -612,13 +728,13 @@ static void cmd_serialtcp ( char *p )
 			p = param;
 		if (*p) {
 			if (serialtcp_restart(p))
-				MATRIX("ERROR: Could not start/restart");
+				matrix_write_string("ERROR: Could not start/restart");
 			else {
 				(void)serialtcp_get_connection_desc(NULL, 0, desc, sizeof desc, NULL, NULL);
 				MATRIX("OK: Started/restarted to %s", desc);
 			}
 		} else {
-			MATRIX("ERROR: No previous target specification");
+			matrix_write_string("ERROR: No previous target specification");
 		}
 	} else {
 		MATRIX("STATUS: %s %s (tx=%d,rx=%d)\nUse argument HOST:PORT, or - (previous target) to (re)start connection.", running ? "running: " : "NOT running, previous target was: ", *desc ? desc : "[NO PREVIOUS TARGET]", tx, rx);
@@ -637,7 +753,7 @@ static void cmd_eth ( char *p )
 				p = eth65_options_used;
 			} else {
 				p = NULL;
-				MATRIX("ERROR: No previous target specification");
+				matrix_write_string("ERROR: No previous target specification");
 			}
 		}
 		if (p) {
@@ -649,7 +765,7 @@ static void cmd_eth ( char *p )
 	char stat[128];
 	unsigned int rxcnt, txcnt;
 	(void)eth65_get_stat(stat, sizeof stat, &rxcnt, &txcnt);
-	MATRIX("%s", stat);
+	matrix_write_string(stat);
 	if (rxcnt || txcnt)
 		MATRIX("\nRX/TX traffic: %u/%u pckts", rxcnt, txcnt);
 }
@@ -657,64 +773,103 @@ static void cmd_eth ( char *p )
 
 
 static void cmd_help ( char *p );
+static void cmd_cfgreload ( char *p );
 
 
-static const struct command_tab_st {
-	const char *cmdname;
+static struct command_tab_st {
+	const char *symname;
+	char cmdname[CMDNAME_MAXSIZE + 1];
 	void (*cb)(char*);
-	const char *shortnames;
+	char shortnames[CMDSHORT_MAXSIZE + 1];
+	const char *help;
 } command_tab[] = {
-	{ "dump",	cmd_dump,	"d"	},
-	{ "asm",	cmd_asm,	"a"	},
-	{ "exit",	cmd_off,	"x"	},
-	{ "help",	cmd_help,	"h?"	},
-	{ "live",	cmd_live,	NULL	},
-	{ "log",	cmd_log,	NULL	},
-	{ "reg",	cmd_reg,	"r"	},
-	{ "reset",	cmd_reset,	NULL	},
-	{ "show",	cmd_show,	"s"	},
-	{ "uname",	cmd_uname,	NULL	},
-	{ "ver",	cmd_ver,	NULL	},
-	{ "write",	cmd_write,	"w"	},
-	{ "map",	cmd_map,	"m"	},
-	{ "shade",	cmd_shade,	NULL	},
-	{ "audio",	cmd_audio,	NULL	},
-	{ "vic",	cmd_vic,	NULL	},
+	{ "DUMPMEM",	"dump",		cmd_dump,	"d",	"Dump memory\nArgs: [ADDR]" },
+	{ "DISASM",	"asm",		cmd_asm,	"a",	"disAssembly\nArgs: [ADDR]" },
+	{ "EXIT",	"exit",		cmd_off,	"x",	"Exit matrix mode" },
+	{ "HELP",	"help",		cmd_help,	"h?",	"List of commands or command help\nArgs: [COMMAND-NAME]" },
+	{ "LIVEUPDATE",	"live",		cmd_live,	"",	"Toogle dump live update on/off" },
+	{ "LOG",	"log",		cmd_log,	"",	"Log a line as emulator output\n:Args: [TEXT]" },
+	{ "REGISTERS",	"reg",		cmd_reg,	"r",	"Show registers" },
+	{ "RESET",	"reset",	cmd_reset,	"",	"Reset MEGA65" },
+	{ "SHOWMEM",	"show",		cmd_show,	"s",	"Show memory byte\nArgs: ADDR" },
+	{ "OS-UNAME",	"uname",	cmd_uname,	"",	"Show OS information" },
+	{ "VERSIONINFO","ver",		cmd_ver,	"",	"Show version information" },
+	{ "WRITEMEM",	"write",	cmd_write,	"w",	"Write memory byte(s)\nArgs: ADDR BYTE [BYTE2 ...]" },
+	{ "MEMMAP",	"map",		cmd_map,	"m",	"Show memory mapping" },
+	{ "SHADELEVEL",	"shade",	cmd_shade,	"",	"Change matrix overlay alpha level\nArgs: LEVEL (level=0...F)" },
+	{ "AUDIO",	"audio",	cmd_audio,	"",	"Show audio information" },
+	{ "VIC",	"vic",		cmd_vic,	"",	"Show VIC information" },
 #	ifdef XEMU_HAS_SOCKET_API
-	{ "serialtcp",	cmd_serialtcp,	NULL	},
+	{ "SERIALTCP",	"serialtcp",	cmd_serialtcp,	"",	"Display/set/reset serialtcp parameters\nArgs: [NEWSETTING|-]" },
 #	endif
 #	ifdef HAVE_ETHERTAP
-	{ "eth",	cmd_eth,	NULL	},
+	{ "ETHERNET",	"eth",		cmd_eth,	"",	"Display/set/reset ethernet parameters\nArgs: [NEWSETTING|-]" },
 #	endif
-	{ .cmdname = NULL			},
+	{ "BYTEMARK",	"byte",		cmd_bytemark,	"",	"Set/clear byte marking on dumps\nArgs: [BYTEVAL]" },
+	{ "FINDBYTE",	"find",		cmd_find,	"f",	"Find byte\nArgs: ADDR RANGESIZE BYTE" },
+	{ "CFGRELOAD",	"cfgreload",	cmd_cfgreload,	"",	"Reload matrix command configuration" },
+	{ .symname = NULL },
 };
+static const struct command_tab_st *current_command = NULL;
+
+
+static void unknown_command_error ( const char *p )
+{
+	matrix_write_string("?UNKNOWN COMMAND: ");
+	matrix_write_string(p);
+}
 
 
 static void cmd_help ( char *p )
 {
-	matrix_write_string("Available commands:");
-	for (const struct command_tab_st *p = command_tab; p->cmdname; p++) {
-		MATRIX(" %s", p->cmdname);
-		if (p->shortnames)
-			MATRIX("(%s)", p->shortnames);
+	if (!*p) {
+		matrix_write_string("Available commands:");
+		for (const struct command_tab_st *c = command_tab; c->symname; c++) {
+			matrix_write_char(' ');
+			matrix_write_string(c->cmdname);
+			if (c->shortnames[0]) {
+				matrix_write_char('(');
+				matrix_write_string(c->shortnames);
+				matrix_write_char(')');
+			}
+		}
+		matrix_write_char(NL_IF_NEEDED);
+		MATRIX("Use `%s command_name` to get help on a specific command", current_command->cmdname);
+	} else {
+		for (const struct command_tab_st *c = command_tab; c->symname; c++)
+			if (!strcasecmp(c->cmdname, p) || (strlen(p) == 1 && strchr(c->shortnames, tolower(p[0])))) {
+			MATRIX("Command: %s (%s)\nHelp: %s",
+				c->cmdname,
+				c->shortnames[0] ? c->shortnames : "-",
+				c->help ? c->help : "N/A"
+			);
+			return;
+		}
+		unknown_command_error(p);
 	}
 }
 
 
+static int command_counter = 0;
+
+
 static void execute ( char *cmd )
 {
+	command_counter++;
 	char *sp = strchr(cmd, ' ');
 	if (sp)
 		*sp++ = '\0';
 	else
 		sp = "";
-	const int sname = !cmd[1] ? tolower(*cmd) : 1;
-	for (const struct command_tab_st *p = command_tab; p->cmdname; p++)
-		if ((p->shortnames && strchr(p->shortnames, sname)) || !strcasecmp(p->cmdname, cmd)) {
+	const char sname = !cmd[1] ? tolower(*cmd) : 1;
+	for (const struct command_tab_st *p = command_tab; p->symname; p++)
+		if (strchr(p->shortnames, sname) || !strcasecmp(p->cmdname, cmd)) {
+			arg_counter = 0;
+			current_command = p;
 			p->cb(sp);
 			return;
 		}
-	MATRIX("?SYNTAX ERROR IN \"%s\"", cmd);
+	unknown_command_error(cmd);
 }
 
 
@@ -780,8 +935,7 @@ static void input ( const char c )
 			execute(cmdbuf);
 			cmdbuf[0] = 0;
 		}
-		if (current_x)
-			matrix_write_char('\n');
+		matrix_write_char(NL_IF_NEEDED);
 	}
 }
 
@@ -874,6 +1028,166 @@ static int kbd_cb_textevent ( SDL_TextInputEvent *ev )
 }
 
 
+static inline void strlowercpy ( char *t, const char *s )
+{
+	for (;;) {
+		*t = tolower(*s);
+		if (!*s)
+			return;
+		t++, s++;
+	}
+}
+
+
+static int load_command_mapping ( const char *fn, const unsigned int max_size, const bool force_error )
+{
+	char buffer[max_size + 1];
+	const int ret = xemu_load_file(fn, buffer, 0, max_size, NULL);
+	if (ret != -1 || force_error)
+		MATRIX("CFG: processing %s\n", xemu_load_filepath);
+	if (ret <= 0) {
+		if (ret != -1)
+			matrix_write_string("CFG: too long file / reading error\n");
+		if (force_error)
+			matrix_write_string("CFG: cannot open file\n");
+		return ret;
+	}
+	buffer[ret] = '\0';
+	int redef_names = 0, redef_shorts = 0;
+	for (char *e, *s = buffer; *s; s = e + 1) {
+		e = s;
+		while (*e && *e != '\r' && *e != '\n')
+			e++;
+		*e = '\0';
+		static const char delim[] = "\t ";
+		const char *tok1 = strtok(s, delim);
+		const char *tok2 = strtok(NULL, delim);
+		const char *tok3 = strtok(NULL, delim);
+		//DEBUGPRINT("MATRIX: cfg: [%s] [%s] [%s]" NL, tok1, tok2, tok3);
+		if ((tok1 && *tok1 == '#') || (!tok1 && !tok2 && !tok3))
+			continue;
+		if (tok1 && tok2 && tok3) {
+			for (struct command_tab_st *p = command_tab;; p++)
+				if (!p->symname) {
+					MATRIX("CFG: err: unknown command ID to be redefined: \"%s\"\n", tok1);
+					break;
+				} else if (!strcasecmp(tok1, p->symname)) {
+					if (tok3[0] == '-' && tok3[1] == '\0')
+						tok3 = "";
+					if (strcasecmp(p->cmdname, tok2)) {
+						if (strlen(tok2) > CMDNAME_MAXSIZE) {
+							MATRIX("CFG: err: too long command name \"%s\" for \"%s\"\n", tok2, tok1);
+						} else {
+							strlowercpy(p->cmdname, tok2);
+							redef_names++;
+						}
+					}
+					if (strcasecmp(p->shortnames, tok3)) {
+						if (strlen(tok3) > CMDSHORT_MAXSIZE) {
+							MATRIX("CFG: err: too long short-name \"%s\" for \"%s\"\n", tok3, tok1);
+						} else {
+							strlowercpy(p->shortnames, tok3);
+							redef_shorts++;
+						}
+					}
+					break;
+				}
+		} else
+			MATRIX("CFG: err: invalid line for command ID: \"%s\"\n", tok1);
+	}
+	if (redef_names || redef_shorts)
+		MATRIX("CFG: %d full name, %d short name command redefinitions\n", redef_names, redef_shorts);
+	return 0;
+}
+
+
+static int save_command_mapping ( const char *fn, const char *head, const char *pre )
+{
+	const int fd = xemu_open_file(fn, O_CREAT | O_TRUNC | O_WRONLY, NULL, NULL);
+	if (fd < 0)
+		return -1;
+	if (head)
+		xemu_safe_write(fd, head, strlen(head));
+	for (const struct command_tab_st *p = command_tab; p->symname; p++) {
+		char buffer[128];
+		const int size = snprintf(buffer, sizeof buffer, "%s%s %s %s" NL, pre ? pre : "", p->symname, p->cmdname, p->shortnames[0] ? p->shortnames : "-");
+		xemu_safe_write(fd, buffer, size);
+	}
+	close(fd);
+	return 0;
+}
+
+
+static void cmd_cfgreload ( char *p )
+{
+	if (!cannot_have_cmd_arg(p))
+		return;
+	load_command_mapping(matrix_config_fn, MATRIX_COMMAND_ASSIGNMENT_MAX_FSIZE, true);
+}
+
+
+static int save_command_history ( const char *fn )
+{
+	const int fd = xemu_open_file(fn, O_CREAT | O_TRUNC | O_WRONLY, NULL, NULL);
+	if (fd < 0)
+		return -1;
+	for (int i = 0; i < CMD_HISTORY_SIZE; i++)
+		if (history[i] && history[i][0]) {
+			xemu_safe_write(fd, history[i], strlen(history[i]));
+			xemu_safe_write(fd, NL, strlen(NL));
+		}
+	close(fd);
+	return 0;
+}
+
+
+static void atexit_save_command_history ( void )
+{
+	if (command_counter)
+		save_command_history(command_history_fn);
+}
+
+
+static int load_command_history ( const char *fn )
+{
+	const int fd = xemu_open_file(fn, O_RDONLY, NULL, NULL);
+	if (fd < 0)
+		return -1;
+	FILE *f = fdopen(fd, "r");
+	if (!f) {
+		close(fd);
+		return -1;
+	}
+	for (int i = 1;;) {
+		char buffer[160];
+		if (!fgets(buffer, sizeof buffer, f)) {
+			for (; i < CMD_HISTORY_SIZE; i++) {
+				free(history[i]);
+				history[i] = NULL;
+			}
+			break;
+		}
+		if (i < CMD_HISTORY_SIZE) {
+			for (char *p = buffer + strlen(buffer) - 1; p >= buffer; p--)
+				if (*p > 32) {
+					p[1] = '\0';
+					break;
+				}
+			if (buffer[0] > 32 && strlen(buffer) < chrscreen_xsize - strlen(PROMPT)) {
+				free(history[i]);
+				history[i] = xemu_strdup(buffer);
+				i++;
+			}
+		}
+	}
+	const int eof = feof(f);
+	fclose(f);
+	close(fd);
+	command_counter = 0;
+	return eof ? 0 : -1;
+}
+
+
 void matrix_mode_toggle ( const bool status )
 {
 	if (!is_osd_enabled()) {
@@ -900,17 +1214,28 @@ void matrix_mode_toggle ( const bool status )
 			cmdbuf[0] = 0;
 			for (int i = 0; i < CMD_HISTORY_SIZE; i++)
 				history[i] = NULL;
+			load_command_history(command_history_fn);
+			atexit(atexit_save_command_history);
 			current_colour = NORMAL_COLOUR;
 			matrix_clear();
 			memcpy(vmem_prev, vmem + CLI_AREA_BYTE_OFFSET, CLI_AREA_BYTE_SIZE);
 			current_colour = BANNER_COLOUR;
-			static const char banner_msg[] = "*** Xemu's pre-matrix ... press left-CTRL + TAB to exit / re-enter ***";
+			static const char banner_msg[] = BANNER_MSG;
 			current_x = (chrscreen_xsize - strlen(banner_msg)) >> 1;
 			matrix_write_string(banner_msg);
 			current_colour = NORMAL_COLOUR;
 			current_y = CLI_START_LINE;
 			current_x = 0;
 			matrix_write_string("INFO: Remember, there is no spoon.\nINFO: Hot-keys do not work in matrix mode!\nINFO: Matrix mode bypasses emulation keyboard mappings.\n");
+			save_command_mapping(matrix_config_template_fn,
+				"# To change matrix command mapping, copy file " MATRIX_COMMAND_ASSIGNMENT_TEMPLATE " as " MATRIX_COMMAND_ASSIGNMENT_CONFIG NL
+				"# and modify that file. Do not edit file " MATRIX_COMMAND_ASSIGNMENT_TEMPLATE " as it will be constantly overwritten!" NL
+				"# Remove the # sign at the beginning of the line you want to modify and edit the second and/or third column (long/short command name)" NL
+				"# Re-start Xemu to re-read file, or use `cfgreload` command to re-read immediately. Use the `help` command to review current state" NL
+				NL,
+				"#"
+			);
+			load_command_mapping(matrix_config_fn, MATRIX_COMMAND_ASSIGNMENT_MAX_FSIZE, false);
 		}
 		need_update = 2;
 		matrix_update();
