@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Copyright (C)2020-2022 Hernán Di Pietro <hernan.di.pietro@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -105,6 +105,7 @@ int vic4_disallow_videostd_change = 0;		// Disallows programs to change video st
 int vic4_registered_screenshot_request = 0;
 unsigned int vic_frame_counter, vic_frame_counter_since_boot;
 int sprite_y_adjust_xemu_bug = 0;		// Unknown reason of sprite-Y bug in Xemu in NTSC. This is a workaround. FIXME: why is it needed?!
+double cia_ticks_per_scanline;
 
 
 // VIC4 Modeline Parameters
@@ -477,6 +478,7 @@ void vic4_open_frame_access ( void )
 			vicii_first_raster = 7;
 			REG_SPRITE_Y_ADJUST = 24;
 			sprite_y_adjust_xemu_bug = 7;
+			cia_ticks_per_scanline = 16568.0 / (double)(PHYSICAL_RASTERS_NTSC);
 		} else {
 			// --- PAL ---
 			new_name = PAL_STD_NAME;
@@ -487,8 +489,11 @@ void vic4_open_frame_access ( void )
 			vicii_first_raster = 0;
 			REG_SPRITE_Y_ADJUST = 0;
 			sprite_y_adjust_xemu_bug = 0;
+			cia_ticks_per_scanline = 19623.0 / (double)(PHYSICAL_RASTERS_PAL);
 		}
-		DEBUGPRINT("VIC4: switching video standard from %s to %s (1MHz line cycle count is %f, frame time is %dusec, max raster is %d, visible area height is %d)" NL, videostd_name, new_name, videostd_1mhz_cycles_per_scanline, videostd_frametime, max_rasters, visible_area_height);
+		DEBUGPRINT("VIC4: switching video standard from %s to %s (1MHz line cycle count is %f, CIA ticks per scanline is %f, frame time is %dusec, max raster is %d, visible area height is %d)" NL,
+			videostd_name, new_name, videostd_1mhz_cycles_per_scanline, cia_ticks_per_scanline, videostd_frametime, max_rasters, visible_area_height
+		);
 		videostd_name = new_name;
 		vic_readjust_sdl_viewport = 1;
 		vicii_first_raster = vic_registers[0x6F] & 0x1F;

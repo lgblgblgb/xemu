@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -732,8 +732,15 @@ static void emulation_loop ( void )
 		);	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
 		if (cycles >= cpu_cycles_per_scanline) {
 			cycles -= cpu_cycles_per_scanline;
-			cia_tick(&cia1, 32);	// FIXME: why 32?????? why fixed????? what should be the CIA "tick" frequency for real? Is it dependent on NTSC/PAL?
-			cia_tick(&cia2, 32);
+			static double cia_ticks_fp = 0.0;
+			cia_ticks_fp += cia_ticks_per_scanline;
+			const int cia_ticks_now_int = (int)cia_ticks_fp;
+			if (XEMU_LIKELY(cia_ticks_now_int >= 1)) {
+				// DEBUGPRINT("CIA tick: %d" NL, cia_ticks_now_int);
+				cia_tick(&cia1, cia_ticks_now_int);
+				cia_tick(&cia2, cia_ticks_now_int);
+				cia_ticks_fp -= (double)cia_ticks_now_int;
+			}
 			if (XEMU_UNLIKELY(vic4_render_scanline()))
 				break;	// break the (main, "for") loop, if frame is over!
 		}

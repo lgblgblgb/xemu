@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Copyright (C)2020-2022 Hernán Di Pietro <hernan.di.pietro@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -251,6 +251,7 @@ extern float videostd_1mhz_cycles_per_scanline;
 extern int   vic_readjust_sdl_viewport;
 extern int   vic4_disallow_videostd_change;
 extern unsigned int vic_frame_counter, vic_frame_counter_since_boot;
+extern double cia_ticks_per_scanline;
 
 extern int   vic4_registered_screenshot_request;
 extern int   vic_vidp_legacy, vic_chrp_legacy, vic_sprp_legacy;
