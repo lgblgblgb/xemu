@@ -745,6 +745,9 @@ static void emulation_loop ( void )
 				break;	// break the (main, "for") loop, if frame is over!
 		}
 	}
+#ifdef	XEMU_ARCH_HTML
+	xemu_emscripten_msg_gate_dispatch();
+#endif
 	update_emulator();
 }
 

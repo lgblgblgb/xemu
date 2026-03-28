@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -595,3 +595,44 @@ void input_init ( void )
 	restore_is_held = 0;
 	crsr_leftup_status = 0;
 }
+
+
+#ifdef	XEMU_ARCH_HTML
+
+#include <emscripten.h>
+static int em_msg = 0;
+
+EMSCRIPTEN_KEEPALIVE int msg_gate ( int msg )
+{
+	if (!em_msg && msg)
+		em_msg = msg;
+	return em_msg;
+}
+
+void xemu_emscripten_msg_gate_dispatch ( void )
+{
+	if (!em_msg)
+		return;
+	const int msg = em_msg;
+	em_msg = 0;
+	DEBUGPRINT("MSG: emscripten gateway message processing: %d" NL, msg);
+	switch (msg) {
+		case 1:
+			reset_mega65(RESET_MEGA65_HARD);
+			break;
+		case 2:
+			reset_mega65(RESET_MEGA65_CPU);
+			break;
+		case 3:
+			xemu_set_full_screen(1);
+			break;
+		case 4:
+			matrix_mode_toggle(!in_the_matrix);
+			break;
+		default:
+			DEBUGPRINT("MSG: unknown gateway message: %d" NL, msg);
+			break;
+	}
+}
+
+#endif

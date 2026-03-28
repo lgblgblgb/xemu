@@ -1,6 +1,6 @@
 /* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
    8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -542,6 +542,11 @@ const char *xemu_get_uname_string ( void )
 		}
 		result = xemu_strdup(buf);
 	}
+	return result;
+#elif defined(XEMU_ARCH_HTML)
+	static char *result = NULL;
+	if (!result)
+		result = xemu_strdup((char*)emscripten_run_script_string("navigator.userAgent"));
 	return result;
 #elif defined(XEMU_ARCH_WIN)
 	static const char *result = NULL;

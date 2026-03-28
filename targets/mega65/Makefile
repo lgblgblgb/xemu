@@ -1,6 +1,6 @@
 ## A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
 ## Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-## Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+## Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 #
 # This program is free software; you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -24,7 +24,7 @@ SRCS_TARGET_xmega65	= configdb.c mega65.c sdcard.c uart_monitor.c hypervisor.c m
 SRCS_COMMON_xmega65	= emutools.c cpu65.c cia6526.c emutools_hid.c sid.c f011_core.c c64_kbd_mapping.c emutools_config.c emutools_files.c emutools_umon.c emutools_socketapi.c ethertap.c d81access.c emutools_gui.c basic_text.c opl3.c lodepng.c compressed_disk_image.c cpu65_disasm.c emutools_osk.c
 CFLAGS_TARGET_xmega65	= $(SDL2_CFLAGS) $(MATH_CFLAGS) $(SOCKET_CFLAGS) $(XEMUGUI_CFLAGS)
 LDFLAGS_TARGET_xmega65	= $(SDL2_LIBS) $(MATH_LIBS) $(SOCKET_LIBS) $(XEMUGUI_LIBS)
-LDFLAGS_TARGET_xmega65_ON_html = -s STACK_SIZE=655360 --preload-file=$$HOME/.local/share/xemu-lgb/mega65/mega65.img.compressed3@/files/mega65.img --preload-file=$$HOME/mega65/megapoly.d81@/files/files/hdos/mega65.d81
+LDFLAGS_TARGET_xmega65_ON_html = -s EXPORTED_RUNTIME_METHODS=ccall,cwrap -s STACK_SIZE=655360 --preload-file=$$HOME/.local/share/xemu-lgb/mega65/mega65.img.compressed3@/files/mega65.img --preload-file=$$HOME/mega65/megapoly.d81@/files/files/hdos/mega65.d81
 
 MEGA65_CORE	= ../../../mega65-core-0.97-for-xemu
 MEGA65_REPO	= https://github.com/MEGA65/mega65-core.git

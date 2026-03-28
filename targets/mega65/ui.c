@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -45,6 +45,15 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "serialtcp.h"
 
 
+// For now, allow UI menu only for non-EMSCRIPTEN builds. OSD menu can be made to work for
+// the EMSCRIPTEN build, but currently it doesn't as it messes up the mainloop what
+// emscripten does not like at all.
+#ifndef	XEMU_ARCH_HTML
+#define	HAS_UI_MENU
+#endif
+
+
+#if defined(CONFIG_DROPFILE_CALLBACK) || defined(HAS_UI_MENU)
 // Used by UI CBs to maintain configDB persistence
 static void _mountd81_configdb_change ( const int drive, const char *fn )
 {
@@ -52,6 +61,8 @@ static void _mountd81_configdb_change ( const int drive, const char *fn )
 	DEBUGPRINT("UI: configDB change for drive #%d from <%s> to <%s>" NL, drive, *p ? *p : "NULL", fn ? fn : "NULL");
 	xemucfg_set_str(p, fn);
 }
+#endif
+
 
 #ifdef CONFIG_DROPFILE_CALLBACK
 void emu_dropfile_callback ( const char *fn )
@@ -69,6 +80,10 @@ void emu_dropfile_callback ( const char *fn )
 	}
 }
 #endif
+
+
+#ifdef HAS_UI_MENU	// A very huge #ifdef block, almost the whole rest of this file
+
 
 static void ui_cb_attach_default_d81 ( const struct menu_st *m, int *query )
 {
@@ -1137,10 +1152,18 @@ static const struct menu_st menu_main[] = {
 };
 
 
+#endif	// HAS_UI_MENU (near to the begining of this file)
+
+
 void ui_enter ( void )
 {
+#ifdef	HAS_UI_MENU
 	DEBUGGUI("UI: handler has been called." NL);
 	if (xemugui_popup(menu_main)) {
 		DEBUGPRINT("UI: oops, POPUP does not worked :(" NL);
 	}
+#else
+	DEBUGPRINT("UI: MENU is disabled in this build" NL);
+#	warning "No UI menu support."
+#endif
 }
