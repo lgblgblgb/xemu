@@ -437,7 +437,7 @@ static void mega65_init ( void )
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_init(configdb.uartmon);
 #endif
-	memory_set_rom_protection(0);
+	memory_set_rom_protection(false);
 	hypervisor_start_machine();
 	speed_current = 0;
 	machine_set_speed(1);
@@ -538,6 +538,43 @@ static void reset_mega65_hard ( void )
 }
 
 
+// Does about the same as hard reset, but instead of re-fire HYPPO from system startup
+// (SLOW, especially with EMSCRIPTEN), it tries to solve things as its own.
+static void reset_mega65_soft ( void )
+{
+	if (!hyppo_loaded_rom_content) {
+		WARNING_WINDOW("No full hyppo start-up sequence happened yet, using HARD reset instead.");
+		reset_mega65_hard();
+		return;
+	}
+	cia_reset(&cia1);
+	cia_reset(&cia2);
+	reset_hw_errata_level();
+	memset(D7XX + 0x20, 0, 0x40);	// stop audio DMA possibly going on
+	hwa_kbd_disable_selector(0);	// FIXME: do we need this?
+	eth65_reset();
+	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
+	c128_d030_reg = 0;
+	vic_reset();
+	vic4_default_rom_register_values();
+	memory_set_rom_protection(true);
+	D6XX_registers[0x7D] |= 4;
+	//vic_registers[0x30] = 0;
+	memory_reconfigure(
+		0, VIC4_IOMODE, 0xFF, 0xFF,	// D030 value, I/O mode, CPU I/O port 0, CPU I/O port 1
+		0, 0, 0, 0, 0,			// MAP MB LO, OFS LO, MB HI, OFS HI, MASK
+		false				// hypervisor
+	);
+	machine_set_speed(0);
+	dma_reset();
+	nmi_level = 0;
+	memcpy(main_ram + 0x20000, hyppo_loaded_rom_content, 0x20000);
+	memcpy(char_ram, main_ram + 0x2D000, 0x1000);
+	memset(main_ram, 0, 0x1F800);
+	cpu65_reset();
+}
+
+
 static void reset_mega65_cpu_only ( void )
 {
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
@@ -581,6 +618,10 @@ int reset_mega65 ( const unsigned int options )
 		case RESET_MEGA65_HYPPO:
 			last_reset_type = "HYPPO";
 			reset_mega65_via_hyppo();
+			break;
+		case RESET_MEGA65_SOFT:
+			last_reset_type = "SOFT";
+			reset_mega65_soft();
 			break;
 		default:
 			ERROR_WINDOW("Unknow RESET type asked: %u", options & 0xFF);

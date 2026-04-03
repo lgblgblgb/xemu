@@ -57,7 +57,8 @@ extern void machine_set_speed ( int verbose );
 #define RESET_MEGA65_HARD	0x001
 #define RESET_MEGA65_CPU	0x002
 #define RESET_MEGA65_HYPPO	0x003
-#define RESET_MEGA65_LAST_ID	RESET_MEGA65_HYPPO
+#define RESET_MEGA65_SOFT	0x004
+#define RESET_MEGA65_LAST_ID	RESET_MEGA65_SOFT
 #define RESET_MEGA65_ASK	0x100
 #define RESET_MEGA65_NO_CART	0x200
 extern int  reset_mega65 ( const unsigned int options );

@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -42,6 +42,7 @@ bool in_hypervisor;			// mega65 hypervisor mode
 char hyppo_version_string[64];
 int  hickup_is_overriden = 0;
 int  hypervisor_is_debugged = 0;
+Uint8 *hyppo_loaded_rom_content = NULL;
 
 static int   resolver_ok = 0;
 
@@ -299,6 +300,10 @@ static inline void first_leave ( void )
 	} else {
 		DEBUGPRINT("ROM: no custom force-ROM policy, PC remains at $%04X" NL, cpu65.pc);
 	}
+	// Save loaded ROM
+	if (!hyppo_loaded_rom_content)
+		hyppo_loaded_rom_content = xemu_malloc(0x20000);
+	memcpy(hyppo_loaded_rom_content, main_ram + 0x20000, 0x20000);
 	// Workaround: set DMA version based on ROM version
 	dma_init_set_rev(main_ram + 0x20000);
 	// Workaround: set our desired video standard (if configdb.videostd == -1, then vic4_set_videostd() won't do anything, so it's fine)

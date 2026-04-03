@@ -363,6 +363,11 @@ static void reset_cpu_only ( void )
 	reset_mega65(RESET_MEGA65_CPU | RESET_MEGA65_ASK);
 }
 
+static void reset_soft ( void )
+{
+	reset_mega65(RESET_MEGA65_SOFT | RESET_MEGA65_ASK);
+}
+
 static void reset_into_custom_rom ( void )
 {
 	char fnbuf[PATH_MAX + 1];
@@ -929,12 +934,15 @@ static const struct menu_st menu_reset[] = {
 	{ "Reset into boot init-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_initrom	},
 	{ "Reset via HYPPO",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_via_hyppo		},
 	{ "Reset CPU only",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_cpu_only		},
+	{ "Reset soft",			XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_soft			},
 	{ "Reset/use custom ROM file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_custom_rom	},
 	{ NULL }
 };
 static const struct menu_st menu_reset_hotkey_type[] = {
 	{ "HARD",			XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_reset_type, (void*)RESET_MEGA65_HARD  },
+	{ "SOFT",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_reset_type, (void*)RESET_MEGA65_SOFT  },
 	{ "CPU",			XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_reset_type, (void*)RESET_MEGA65_CPU   },
 	{ "HYPPO",			XEMUGUI_MENUID_CALLABLE |

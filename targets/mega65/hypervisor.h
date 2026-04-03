@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -30,6 +30,7 @@ extern bool in_hypervisor;
 extern int  hickup_is_overriden;
 extern int  hypervisor_is_debugged;
 extern char hyppo_version_string[64];
+extern Uint8 *hyppo_loaded_rom_content;
 
 extern int  hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hypervisor_serial_out_asciizer );
 extern void hypervisor_debug ( void );
