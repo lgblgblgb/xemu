@@ -10,3 +10,4 @@ for a in data html js wasm ; do
 	scp $BDIR/$NAME.$a $BDIR/$NAME.$a.gz $TARGET/
 	rm -f $BDIR/$NAME.$a.gz
 done
+scp ../../build/xemu-48x48.xpm $TARGET/favicon.ico

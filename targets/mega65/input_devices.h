@@ -47,8 +47,4 @@ extern void  kbd_trigger_restore_trap	( void );
 extern Uint8 get_mouse_x_via_sid	( void );
 extern Uint8 get_mouse_y_via_sid	( void );
 
-#ifdef XEMU_ARCH_HTML
-extern void  xemu_emscripten_msg_gate_dispatch ( void );
-#endif
-
 #endif

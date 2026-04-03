@@ -45,6 +45,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "matrix_mode.h"
 #include "xemu/emutools_osk.h"
 #include "serialtcp.h"
+#include "em_gw.h"
 
 // "Typical" size in default settings (video standard is PAL, default border settings).
 // See also vic4.h
@@ -746,7 +747,7 @@ static void emulation_loop ( void )
 		}
 	}
 #ifdef	XEMU_ARCH_HTML
-	xemu_emscripten_msg_gate_dispatch();
+	emgw_msg_gate_dispatch();
 #endif
 	update_emulator();
 }

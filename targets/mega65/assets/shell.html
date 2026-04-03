@@ -13,7 +13,12 @@
 			align-items: center;
 			height: 100vh;
 		}
-		canvas { border: 0 none; background-color: black; width: 705px; height: 576px; border: 1px black solid; }
+		canvas {
+			background-color: black;
+			width: 705px;
+			height: 576px;
+			border: 1px black solid;
+		}
 		#console-container {
 			background: #1e1e1e;
 			color: #d4d4d4;
@@ -29,7 +34,10 @@
 			white-space: pre-wrap;
 		}
 		button {
-			padding: 10px; background: #444; color: white; cursor: pointer;
+			padding: 10px;
+			background: #444;
+			color: white;
+			cursor: pointer;
 		}
 		button:hover {
 			background: blue;
@@ -43,6 +51,13 @@
 		details>summary:hover {
 			background: blue;
 		}
+		#version-info {
+			border: 1px black solid;
+			float: right;
+			background: #444;
+			color: white;
+			padding: 10px;
+		}
 	</style>
 </head>
 <body>
@@ -50,6 +65,8 @@
 	<button onclick="msg_gate(2)">CPU&nbsp;RESET</button>
 	<button onclick="msg_gate(3)">FULLSCREEN</button>
 	<button onclick="msg_gate(4)">MATRIX</button>
+	<button onclick="write_file('', 'Ez egy file')">WRITE&nbsp;FILE</button>
+	<span id="version-info">XEMU::MEGA65</span>
 	<br>
 
 	<div id="emulator-wrapper" style="max-width: 705px; margin: auto; position: relative;">
@@ -79,12 +96,15 @@
 	<script type="text/javascript">
 		var msg_gate_wrap = false;
 		function msg_gate ( id ) {
+			emulator_output("[SHELL] submitting gate message " + id);
 			return msg_gate_wrap ? msg_gate_wrap(id) : -1;
 		}
 		var con = document.getElementById("console");
 		var container = document.getElementById("console-container");
-		var overlay = document.getElementById('loading-overlay');
-		var loadingText = document.getElementById('loading-text');
+		var overlay = document.getElementById("loading-overlay");
+		var loadingText = document.getElementById("loading-text");
+		var versionInfo = document.getElementById("version-info");
+		var mount_phase = 0;
 		function emulator_output ( text ) {
 			if (text) {
 				var node = document.createTextNode(text + "\n");
@@ -92,18 +112,44 @@
 				container.scrollTop = container.scrollHeight;
 				if (con.childNodes.length > 256)
 					con.removeChild(con.firstChild);
+				if (versionInfo && text.startsWith("VERSION: ")) {
+					let s = text.split(" ");
+					emulator_output("[SHELL] Version string identified: " + s.slice(1).join(" "));
+					versionInfo.innerHTML += " <i>" + s.at(-2) + "/" + s.at(-4) + "</i>";
+					versionInfo = false;
+				}
 			}
 		}
-		emulator_output("Javascript running.");
+		function write_file ( fn, data ) {
+			if (!msg_gate_wrap)
+				return;
+			const encoder = new TextEncoder();
+			const encoded_data = encoder.encode(data);
+			fno = fn.toUpperCase();
+			let msg_id = -1;
+			if (fno == "") {
+				fno = "MOUNT" + mount_phase + ".D81";
+				msg_id = mount_phase;
+				mount_phase ^= 1;
+			}
+			fn = "/files/hdos/" + fno
+			emulator_output("[SHELL] writing file (" + encoded_data.length + " bytes) to " + fn);
+			Module.FS.writeFile(fn, encoded_data);
+			if (msg_id >= 0)
+				msg_gate(5 + msg_id);
+		}
+		emulator_output("[SHELL] Origin: " + document.URL);
+		emulator_output("[SHELL] Shell is online @ " + navigator.userAgent);
 		var Module = {
-			arguments: "-fastboot -besure -sdlrenderquality 2 -gui none".split(" "),
+			arguments: "-fastboot -besure -sdlrenderquality 2 -gui none -hdosvirt".split(" "),
 			canvas: (function () {
+				emulator_output("[SHELL] Canvas grabbing");
 				return document.getElementById("canvas");
 			})(),
 			setStatus: function ( text ) {
 				if (loadingText) {
 					loadingText.textContent = text ? text : "Loading";
-					emulator_output("[LOADING] " + loadingText.textContent);
+					emulator_output("[SHELL] Loading progress: \"" + loadingText.textContent + "\"");
 				}
 			},
 			print: function ( text ) {
@@ -113,13 +159,13 @@
 				emulator_output("STDERR: " + text);
 			},
 			onRuntimeInitialized: function () {
-				emulator_output("---[ onRuntimeInitialized ]-------------------------");
+				emulator_output("[SHELL] onRuntimeInitialized");
 				msg_gate_wrap = Module.cwrap("msg_gate", "number", ["number"]);
-				overlay.style.display = 'none';
+				overlay.style.display = "none";
 			},
 			preRun: [function () {
-				emulator_output("[PRERUN] Starting emulator with command line: " + Module.arguments.join(" "));
-			}],
+				emulator_output("[SHELL] PRERUN: Starting emulator with command line: " + Module.arguments.join(" "));
+			},],
 		};
 	</script>
 	<script async src="xmega65.js"></script>
