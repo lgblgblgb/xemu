@@ -16,7 +16,11 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
-var SAMPLE_PROGRAM = '10 FOR A=10 TO 0 STEP -1\n20 PRINT A\n30 NEXT A\n40 PRINT "LIFT OFF."';
+const EXAMPLE_PROGRAMS = [
+	'0 REM *** STUPID CONTDOWN ***\n10 FOR A=10 TO 0 STEP -1\n20 PRINT A\n30 NEXT A\n40 PRINT "LIFT OFF."',
+	'0 REM *** USELESS PRINTOUT ***\n10 PRINT "HELLO WORLD!"',
+	'0 REM *** CLASSIC SIMPLE MAZE ***\n20 PRINT CHR$(205.5+RND(1));\n30 FOR A=0 TO 10 : NEXT A : REM MEGA65 IS TOO FAST, WAIT\n40 GOTO 20',
+];
 var msg_gate_wrap = false;
 function msg_gate ( id ) {
 	emulator_output("[SHELL] Submitting emscripten gateway message " + id);
@@ -29,7 +33,9 @@ var overlay = document.getElementById("loading-overlay");
 var loadingText = document.getElementById("loading-text");
 var versionInfo = document.getElementById("version-info");
 var basicEditor = document.getElementById("basiceditor");
-basicEditor.value = SAMPLE_PROGRAM;
+var basicError = document.getElementById("editorerror");
+var exampleNumber = 0;
+basicEditor.value = EXAMPLE_PROGRAMS[exampleNumber];
 function emulator_output ( text ) {
 	if (text) {
 		let node = document.createTextNode(text + "\n");
@@ -45,10 +51,17 @@ function emulator_output ( text ) {
 		}
 	}
 }
+function next_example () {
+	if (basicEditor.value == EXAMPLE_PROGRAMS[exampleNumber])
+		emulator_output("[SHELL] OK, umodified program");
+	else
+		emulator_output("[SHELL] WOW, modified program");
+	exampleNumber = (exampleNumber + 1) % EXAMPLE_PROGRAMS.length;
+	basicEditor.value = EXAMPLE_PROGRAMS[exampleNumber];
+}
 function editor_get () {
 	function editor_error ( offset, error ) {
 		emulator_output("[BASIC EDITOR] PARSE ERROR: " + error);
-		const basicError = document.getElementById("editorerror");
 		basicError.innerText = error;
 		basicError.style.display = "block";
 		basicError.onclick = basicEditor.oninput = () => {
@@ -68,20 +81,20 @@ function editor_get () {
 	if (basicEditor.value.length > 8192)
 		return editor_error(-1, "Too long input");
 	let output = "";
-	let lastnum = -1;
+	let lastNum = -1;
 	let offset = 0;
 	for (const line of basicEditor.value.split("\n")) {
 		if (line.trim() == "") {
 			offset += line.length + 1;
 			continue;
 		}
-		const prev_line_desc = lastnum >= 0 ? lastnum : "[START]";
+		const prevLineDesc = lastNum >= 0 ? lastNum : "[START]";
 		const num = parseInt(line, 10);
-		if (isNaN(num) || num < 0 || num > 64000)
-			return editor_error(offset, "Line without line number, or invalid line number after line " + prev_line_desc);
-		if (num <= lastnum)
-			return editor_error(offset, "Non-increasing line number " + num + " after line " + prev_line_desc);
-		lastnum = num;
+		if (isNaN(num) || num < 0 || num > 65535)
+			return editor_error(offset, "Line without line number, or invalid line number after line " + prevLineDesc);
+		if (num <= lastNum)
+			return editor_error(offset, "Non-increasing line number " + num + " after line " + prevLineDesc);
+		lastNum = num;
 		let r = "";
 		for (let i = 0; i < line.length; i++) {
 			const c = line[i].toUpperCase();
@@ -144,6 +157,7 @@ var Module = {
 		ENV.XEMU_EM_BROWSER = navigator.userAgent;
 		ENV.XEMU_EM_ORIGIN = document.URL;
 		ENV.XEMU_EM_OS = navigator.platform;
+		// Solution found: https://stackoverflow.com/questions/45936800/emscripten-canvas-jquery-toggle-focus
 		ENV.SDL_EMSCRIPTEN_KEYBOARD_ELEMENT = "#canvas";
 		emulator_output("[SHELL] PRERUN: Starting emulator with command line: " + Module.arguments.join(" "));
 	},],
@@ -158,7 +172,7 @@ basicEditor.addEventListener("blur", () => { setTimeout(() => { canvas.focus(); 
 setInterval(() => {
 	const inFocus = document.activeElement;
 	if (inFocus !== basicEditor && inFocus !== canvas) {
-        	canvas.focus();
+		canvas.focus();
 		emulator_output("[SHELL] Focus to emulator on timeout");
 	}
 }, 200);
