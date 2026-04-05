@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Xemu MEGA65 emulation</title>
+	<style>
+		body {
+			margin: 10;
+			background: lightblue;
+			text: white;
+			/* display: flex; */
+			justify-content: center;
+			align-items: center;
+			height: 100vh;
+		}
+		canvas {
+			background-color: black;
+			width: 705px;
+			height: 576px;
+			border: 1px black solid;
+		}
+		#console-container {
+			background: #1e1e1e;
+			color: #d4d4d4;
+			padding: 10px;
+			height: 200px;
+			overflow-y: auto;
+			font-family: 'Courier New', monospace;
+			font-size: 12px;
+			border: 1px solid #444;
+		}
+		#console {
+			margin: 0;
+			white-space: pre-wrap;
+		}
+		button {
+			padding: 10px;
+			background: #444;
+			color: white;
+			cursor: pointer;
+		}
+		button:hover {
+			background: blue;
+		}
+		details>summary {
+			background: #444;
+			color: white;
+			padding: 10px;
+			cursor: pointer;
+		}
+		details>summary:hover {
+			background: blue;
+		}
+		#version-info {
+			border: 1px black solid;
+			float: right;
+			background: #444;
+			color: white;
+			padding: 10px;
+		}
+	</style>
+</head>
+<body>
+
+	<button onclick="msg_gate(1)">FULL&nbsp;RESET</button>
+	<button onclick="msg_gate(2)">CPU&nbsp;RESET</button>
+	<button onclick="msg_gate(3)">FULLSCREEN</button>
+	<button onclick="msg_gate(4)">MATRIX</button>
+	<button onclick="msg_gate(7)">RUN DEMO</button>
+
+	<span id="version-info">XEMU::MEGA65</span>
+	<br>
+
+	<table border=1><tr><td>
+
+	<div id="emulator-wrapper" style="max-width: 705px; margin: auto; position: relative;">
+		<div id="canvas-container" style="position: relative; width: 705px; height: 576px; background: black;">
+			<div id="loading-overlay" style="
+				position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+				background-color: rgba(0,0,0,0.9);
+				display: flex; flex-direction: column; justify-content: center; align-items: center;
+				color: #00ff00; font-family: monospace; z-index: 10;
+			">
+				<img src="shell.gif" alt="Loading in progress" style="width: 64px; height: 64px; margin-bottom: 20px;">
+				<div id="loading-text">LOADING EMULATOR</div>
+			</div>
+			<canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1" style="position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 5;"></canvas>
+		</div>
+	</div>
+
+	</td><td>
+
+	<h2>BASIC editor</h2>
+	<p><i>Editor on "RUN" only checks for line numbers and character-set, not actual BASIC syntax!</i></p>
+	<textarea tabindex="-1" id="basiceditor" cols=80 rows=25 spellcheck="false" style="background: darkblue; color: white; font-weight: bold;">10 PRINT "ezt NEZD meg most hatha jo"</textarea>
+	<div id="editorerror" style="display: none; background: red; color: white; cursor: pointer; border: 1px black; padding: 2px; font-weight: bold; font-family: monospace, monospace;"></div>
+	<br>
+	<button onclick="run_this()">RUN</button>
+	<button>SAVE (TODO)</button>
+
+	</td></tr></table>
+
+	<br>
+	<details open>
+		<summary>Emulator stdout (click to open/close)</summary>
+		<div id="console-container">
+			<pre id="console"></pre>
+		</div>
+	</details>
+
+	<script src="shell.js"></script>
+	<script async src="xmega65.js"></script>
+</body>
+</html>
