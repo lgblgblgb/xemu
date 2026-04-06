@@ -18,12 +18,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #ifdef	XEMU_ARCH_HTML
 
+// This source is only used for the EMSCRIPTEN build, for the official emulator
+// demonstration page. Only makes sense with the custom shell: assets/shell.html
+
 #include "xemu/emutools.h"
 #include "em_gw.h"
 #include <emscripten.h>
 #include "sdcard.h"
 #include "mega65.h"
 #include "matrix_mode.h"
+#include <errno.h>
+#include <unistd.h>
+#include "inject.h"
 
 
 static int em_msg = 0;
@@ -37,12 +43,58 @@ EMSCRIPTEN_KEEPALIVE int msg_gate ( int msg )
 }
 
 
-static void mount_d81 ( const int id )
+static int silly_silly_rename ( const char *oldname_o, const char *newname_o )
 {
+	static const char prefix[] = "/files/";
+	char oldname[strlen(prefix) + strlen(oldname_o) + 1];
+	char newname[strlen(prefix) + strlen(newname_o) + 1];
+	strcpy(oldname, prefix);
+	strcpy(newname, prefix);
+	strcat(oldname, oldname_o);
+	strcat(newname, newname_o);
+	const int ret = rename(oldname, newname);
+	if (ret)
+		DEBUGPRINT("MSG: Cannot rename \"%s\" to \"%s\": %s" NL, oldname, newname, strerror(errno));
+	else
+		DEBUGPRINT("MSG: Successfully renamed \"%s\" to \"%s\"" NL, oldname, newname);
+	return ret;
+}
+
+
+static void mount_d81 ( void )
+{
+	static int phase = 0;
+	static const char input_d81[] = "hdos/NEW.D81";
 	static char fn[] = "hdos/MOUNT0.D81";
-	fn[sizeof(fn) - 6] = '0' + id;
+	const int next_phase = phase ^ 1;
+	fn[sizeof(fn) - 6] = '0' + next_phase;
+	if (silly_silly_rename(input_d81, fn)) {
+		ERROR_WINDOW("Could not rename file (check emulator output)");
+		return;
+	}
 	DEBUGPRINT("MSG: trying to mount %s" NL, strrchr(fn, '/') + 1);
-	sdcard_external_mount(0, fn, NULL);
+	if (sdcard_external_mount(0, fn, NULL)) {
+		DEBUGPRINT("MSG: Unsuccessful mount :(" NL);
+	} else {
+		DEBUGPRINT("MSG: Successful mount :)" NL);
+		phase = next_phase;
+	}
+}
+
+
+static void import_basic_prg ( void )
+{
+	reset_mega65(RESET_MEGA65_SOFT);
+	inject_register_import_basic_text("hdos/PRG.BAS");
+}
+
+
+static void run_demo ( void )
+{
+	sdcard_unmount(0);
+	reset_mega65(RESET_MEGA65_SOFT);
+	sdcard_external_mount(0, "files/hdos/mega65.d81", NULL);
+	inject_register_command("RUN\"*\"");
 }
 
 
@@ -58,7 +110,7 @@ void emgw_msg_gate_dispatch ( void )
 			reset_mega65(RESET_MEGA65_HARD);
 			break;
 		case 2:
-			reset_mega65(RESET_MEGA65_CPU);
+			reset_mega65(RESET_MEGA65_SOFT);
 			break;
 		case 3:
 			xemu_set_full_screen(1);
@@ -67,8 +119,13 @@ void emgw_msg_gate_dispatch ( void )
 			matrix_mode_toggle(!in_the_matrix);
 			break;
 		case 5:
+			mount_d81();
+			break;
 		case 6:
-			mount_d81(msg - 5);
+			import_basic_prg();
+			break;
+		case 7:
+			run_demo();
 			break;
 		default:
 			DEBUGPRINT("MSG: unknown gateway message: %d" NL, msg);

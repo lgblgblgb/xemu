@@ -135,6 +135,10 @@ void hypervisor_enter_via_write_trap ( int trapno )
 
 void hypervisor_enter ( int trapno )
 {
+#ifdef	XEMU_ARCH_HTML
+	if (trapno == TRAP_RESET)
+		DEBUGPRINT("MSG: hypervisor first enter" NL);	// do not modify this, shell.html depends on this!!
+#endif
 	trap_current = trapno;
 	// Sanity checks
 	if (XEMU_UNLIKELY(trapno > 0x7F || trapno < 0))
@@ -315,6 +319,9 @@ static inline void first_leave ( void )
 	audio65_reset_mixer();
 	//memory_reset_unwritten_debug_stat();	// FIXME/TODO: commented out since it generates a **tons** of warnings then with the "unwritten mem read" debug mode (-ramcheckread emu option)
 	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
+#ifdef	XEMU_ARCH_HTML
+	DEBUGPRINT("MSG: hypervisor first leave" NL);	// do not modify this, shell.html depends on this!!
+#endif
 }
 
 
