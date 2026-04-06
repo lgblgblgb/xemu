@@ -58,6 +58,15 @@ details>summary:hover {
 	color: white;
 	padding: 10px;
 }
+#status-info {
+	border: 1px black solid;
+	float: right;
+	background: #444;
+	color: white;
+	padding: 10px;
+	font-weight: bold;
+	margin-right: 10px;
+}
 #emulator-wrapper {
 	max-width: 705px;
 	margin: auto;

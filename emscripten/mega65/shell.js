@@ -16,26 +16,59 @@ You should have received a copy of the GNU General Public License
 along with this program; if not, write to the Free Software
 Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
+
 const EXAMPLE_PROGRAMS = [
-	'0 REM *** STUPID CONTDOWN ***\n10 FOR A=10 TO 0 STEP -1\n20 PRINT A\n30 NEXT A\n40 PRINT "LIFT OFF."',
+	'0 REM *** STUPID CONTDOWN ***\n10 FOR A=10 TO 1 STEP -1\n20 PRINT A\n30 NEXT A\n40 PRINT "LIFT OFF"',
 	'0 REM *** USELESS PRINTOUT ***\n10 PRINT "HELLO WORLD!"',
 	'0 REM *** CLASSIC SIMPLE MAZE ***\n20 PRINT CHR$(205.5+RND(1));\n30 FOR A=0 TO 10 : NEXT A : REM MEGA65 IS TOO FAST, WAIT\n40 GOTO 20',
 ];
 var msg_gate_wrap = false;
-function msg_gate ( id ) {
-	emulator_output("[SHELL] Submitting emscripten gateway message " + id);
-	return msg_gate_wrap ? msg_gate_wrap(id) : -1;
-}
 var canvas = document.getElementById("canvas");
 var con = document.getElementById("console");
 var container = document.getElementById("console-container");
 var overlay = document.getElementById("loading-overlay");
 var loadingText = document.getElementById("loading-text");
 var versionInfo = document.getElementById("version-info");
+var statusInfo = document.getElementById("status-info");
 var basicEditor = document.getElementById("basiceditor");
 var basicError = document.getElementById("editorerror");
+var editorContainer = document.getElementById("editor-container");
 var exampleNumber = 0;
-basicEditor.value = EXAMPLE_PROGRAMS[exampleNumber];
+var ready = false;
+
+
+function is_ready() {
+	return ready && msg_gate_wrap;
+}
+
+
+function mark_ready ( val ) {
+	statusInfo.innerHTML = val ? "READY" : "BOOTING";
+	const valName = val ? "TRUE" : "FALSE";
+	emulator_output("[SHELL] Marking ready request detected for " + valName);
+	if (!msg_gate_wrap || ready == val)
+		return;
+	ready = val;
+	emulator_output("[SHELL] Marking ready as " + valName);
+	if (val && editorContainer && editorContainer.style.display == "none")
+		editorContainer.style.display = "block";
+}
+
+
+function msg_gate ( id ) {
+	if (!is_ready()) {
+		emulator_output("[SHELL] Cannot submit emscripten gateway message " + id + " because emulator is not in ready state yet");
+		return -1;
+	}
+	emulator_output("[SHELL] Submitting emscripten gateway message " + id);
+	if (id == 1) {
+		ready = false;
+		emulator_output("[SHELL] Setting ready state to false because of hard reset request message");
+	}
+	return msg_gate_wrap(id);
+}
+
+
 function emulator_output ( text ) {
 	if (text) {
 		let node = document.createTextNode(text + "\n");
@@ -49,8 +82,14 @@ function emulator_output ( text ) {
 			versionInfo.innerHTML += " <i>" + s.at(-2) + "/" + s.at(-4) + "</i>";
 			versionInfo = false;
 		}
+		if (text.startsWith("MSG: hypervisor first enter"))
+			mark_ready(false);
+		if (text.startsWith("MSG: hypervisor first leave"))
+			mark_ready(true);
 	}
 }
+
+
 function next_example () {
 	if (basicEditor.value == EXAMPLE_PROGRAMS[exampleNumber])
 		emulator_output("[SHELL] OK, umodified program");
@@ -59,6 +98,8 @@ function next_example () {
 	exampleNumber = (exampleNumber + 1) % EXAMPLE_PROGRAMS.length;
 	basicEditor.value = EXAMPLE_PROGRAMS[exampleNumber];
 }
+
+
 function editor_get () {
 	function editor_error ( offset, error ) {
 		emulator_output("[BASIC EDITOR] PARSE ERROR: " + error);
@@ -113,26 +154,40 @@ function editor_get () {
 	emulator_output("[BASIC EDITOR] Validated content with " + output.length + " bytes of text");
 	return output;
 }
+
+
 function write_file ( fn, data ) {
-	if (!msg_gate_wrap)
+	if (!is_ready())
 		return;
 	const encoder = new TextEncoder();
-	const encoded_data = encoder.encode(data);
+	const encodedData = encoder.encode(data);
 	fn = "/files/hdos/" + fn.toUpperCase();
-	emulator_output("[SHELL] Writing file (" + encoded_data.length + " bytes) to " + fn);
-	Module.FS.writeFile(fn, encoded_data);
+	emulator_output("[SHELL] Writing file (" + encodedData.length + " bytes) to " + fn);
+	Module.FS.writeFile(fn, encodedData);
 }
+
+
 function run_this () {
-	if (!msg_gate_wrap)
+	if (!is_ready()) {
+		emulator_output("[SHELL] Emulator is not in ready state yet");
 		return;
+	}
 	const s = editor_get();
 	if (s != "") {
 		write_file("PRG.BAS", s);
 		msg_gate(6);	// import basic program request
 	}
 }
+
+
 emulator_output("[SHELL] Shell is online @ " + navigator.userAgent);
 emulator_output("[SHELL] Origin: " + document.URL);
+basicEditor.value = EXAMPLE_PROGRAMS[exampleNumber];
+statusInfo.innerHTML = "LOADING";
+if (editorContainer)
+	editorContainer.style.display = "none";
+
+
 var Module = {
 	arguments: "-fastboot -besure -sdlrenderquality 2 -gui none -hdosvirt -lockvideostd -videostd 0".split(" "),
 	canvas: canvas,
@@ -166,6 +221,8 @@ var Module = {
 		canvas.focus();
 	},],
 };
+
+
 // A horrible mess to remedy focus problems ...
 canvas.addEventListener("mousedown", () => { canvas.focus(); emulator_output("[SHELL] Focus to emulator on canvas click"); });
 basicEditor.addEventListener("blur", () => { setTimeout(() => { canvas.focus(); emulator_output("[SHELL] Focus to emulator on editor blur"); }, 20); });
