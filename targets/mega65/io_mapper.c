@@ -152,12 +152,10 @@ static XEMU_INLINE void update_hw_multiplier ( void )
 		// input_b is non-zero, it's OK to divide
 		xemu_u64le_to_u8p(D7XX + 0x68, (Uint64)((Uint64)input_a << 32) / (Uint64)input_b);
 	} else {
-		// If we divide by zero, according to the VHDL,
-		// we set all bits to '1' in the result, that is $FF
-		// for all registers of div output. Probably it can be
-		// interpreted as some kind of "fixed point infinity"
-		// or just a measure of error with this special answer.
-		memset(D7XX + 0x68, 0xFF, 8);
+		// Previously VHDL set all bytes to $FF in case of division by zero.
+		// However it seems it has changed, and now it's set to $00.
+		// https://github.com/MEGA65/mega65-core/commit/ed1794e5f49dc09ed415d7fd4fb788ddee1c0e6c
+		memset(D7XX + 0x68, 0x00, 8);
 	}
 }
 
