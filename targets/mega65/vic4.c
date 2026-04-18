@@ -275,6 +275,24 @@ void vic4_close_frame_access ( void )
 	vic_frame_counter_since_boot++;
 }
 
+
+void vic4_freerun_until_frame_close ( void )
+{
+	if (!ycounter) {
+		DEBUGPRINT("VIC4: forced open frame" NL);
+		vic4_open_frame_access();
+	}
+	for (int scanlines = 0;;) {
+		scanlines++;
+		if (vic4_render_scanline()) {
+			vic4_close_frame_access();
+			DEBUGPRINT("VIC4: %d forced scanline updates to reach end of frame" NL, scanlines);
+			break;
+		}
+	}
+}
+
+
 // The hardware allows a sideborder value of 16383 as a remnant of old MEGA65 design.
 // In practical terms, any sideborder exceeding display_width / 2 will cover the entire
 // character generator (effective 400 since since dw is fixed to 800px wide). Since our

@@ -275,5 +275,6 @@ extern int   vic4_query_screen_height ( void );
 extern char *vic4_textshot ( void );
 extern int   vic4_textinsert ( const char *text );
 extern void  vic4_set_emulation_colour_effect ( int val );
+extern void  vic4_freerun_until_frame_close ( void );
 
 #endif

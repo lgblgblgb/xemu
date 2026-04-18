@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -57,7 +57,9 @@ static const struct xemutools_configdef_str_st str_options[] = {
 	{ "sdimg",	SDCARD_NAME, "Override path of SD-image to be used (also see the -virtsd option!)", &configdb.sdimg },
 	{ "dumpmem",	NULL, "Save memory content on exit", &configdb.dumpmem },
 	{ "dumpscreen",	NULL, "Save screen content (ASCII) on exit", &configdb.dumpscreen },
+#ifdef XEMU_FILES_SCREENSHOT_SUPPORT
 	{ "screenshot",	NULL, "Save screenshot (PNG) on exit and vice-versa (for testing!)", &configdb.screenshot_and_exit },
+#endif
 #ifdef HAS_UARTMON_SUPPORT
 	{ "uartmon",	NULL, "Sets the name for named unix-domain socket for uartmon, otherwise disabled", &configdb.uartmon },
 #endif
@@ -81,9 +83,7 @@ static const struct xemutools_configdef_str_st str_options[] = {
 static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "headless", "Run in headless mode (for testing!)", &emu_is_headless },
 	{ "sleepless", "Use maximum emulation speed (for testing!)", &emu_is_sleepless },
-#ifdef	CPU_STEP_MULTI_OPS
 	{ "cpusinglestep", "Force CPU emulation to do single step emulation (slower!)", &configdb.cpusinglestep },
-#endif
 	{ "hdosvirt", "Virtualize HDOS file access functions, but via only traps", &configdb.hdosvirt },
 	{ "driveled", "Render drive LED at the top right corner of the screen", &configdb.show_drive_led },
 	{ "allowmousegrab", "Allow auto mouse grab with left-click", &allow_mouse_grab },
@@ -122,6 +122,7 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 #ifdef HID_KBD_NO_F_HOTKEYS
 	{ "emufhotkeys", "Use F9,F10,F11 as emulator hotkeys", &configdb.emu_f_hotkeys },
 #endif
+	{ "realhw", "Report real hardware (be careful, use it only for testing!)", &configdb.realhw },
 	{ NULL }
 };
 
@@ -142,6 +143,7 @@ static const struct xemutools_configdef_num_st num_options[] = {
 	{ "audiobuffersize", AUDIO_BUFFER_SAMPLES_DEFAULT, "Audio buffer size in BYTES", &configdb.audiobuffersize, AUDIO_BUFFER_SAMPLES_MIN, AUDIO_BUFFER_SAMPLES_MAX },
 	{ "coloureffect", 0, "Colour effect to be applied to the SDL output (0=none, 1=grayscale, 2=green-monitor, ...)", &configdb.colour_effect, 0, 255 },
 	{ "joyport", 2, "Default joystick port to emulate (1 or 2)", &configdb.joyport, 1, 2 },
+	{ "resethotkeytype", RESET_MEGA65_HARD, "Default reset type for reset hotkey, if enabled", &configdb.resethotkeytype, 1, RESET_MEGA65_LAST_ID },
 	{ NULL }
 };
 
@@ -161,7 +163,10 @@ static const void *do_not_save_opts[] = {
 	&configdb.prg, &configdb.prgmode, &configdb.autoload, &configdb.go64, &configdb.hyperserialfile, &configdb.importbas,
 	&emu_is_sleepless, &emu_is_headless, &configdb.testing,
 	&configdb.matrixstart,
-	&configdb.dumpmem, &configdb.dumpscreen, &configdb.screenshot_and_exit,
+	&configdb.dumpmem, &configdb.dumpscreen,
+#ifdef	XEMU_FILES_SCREENSHOT_SUPPORT
+	&configdb.screenshot_and_exit,
+#endif
 	&configdb.testing, &configdb.hyperdebug, &configdb.hyperdebugfreezer, &configdb.usestubrom, &configdb.useinitrom, &configdb.useutilmenu,
 	&configdb.cartbin8000, &configdb.winpos, &configdb.ramcheckread, &configdb.init_attic,
 	&configdb.prg_test, &configdb.prg_exit,

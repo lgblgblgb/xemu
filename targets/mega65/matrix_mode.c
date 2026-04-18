@@ -562,7 +562,7 @@ static void cmd_live ( char *p )
 
 static void cmd_reset ( char *p )
 {
-	reset_mega65();
+	reset_mega65(RESET_MEGA65_HARD);
 }
 
 

@@ -61,7 +61,7 @@ void emu_dropfile_callback ( const char *fn )
 				_mountd81_configdb_change(0, fn);
 			break;
 		case 2:
-			reset_mega65();
+			reset_mega65(RESET_MEGA65_HARD);
 			inject_register_prg(fn, 0, false);
 			break;
 	}
@@ -162,7 +162,7 @@ static void ui_run_prg_by_browsing ( void )
 		fnbuf,
 		sizeof fnbuf
 	)) {
-		reset_mega65();
+		reset_mega65(RESET_MEGA65_HARD);
 		inject_register_prg(fnbuf, 0, false);
 	} else
 		DEBUGPRINT("UI: file selection for PRG injection was cancelled." NL);
@@ -220,7 +220,7 @@ static void ui_format_sdcard ( void )
 		if (!sdcontent_handle(sdcard_get_size(), NULL, SDCONTENT_FORCE_FDISK))
 			INFO_WINDOW("Your SD-card file has been partitioned/formatted\nMEGA65 emulation is about to RESET now!");
 	}
-	reset_mega65();
+	reset_mega65(RESET_MEGA65_HARD);
 }
 
 static void ui_update_sdcard ( void )
@@ -318,7 +318,7 @@ static void ui_update_sdcard ( void )
 			"Your emulated MEGA65 is about to RESET now!", rom_date, rom_name
 		);
 	}
-	reset_mega65();
+	reset_mega65(RESET_MEGA65_HARD);
 	rom_unset_requests();
 ret:
 	if (xemu_load_buffer_p) {
@@ -339,6 +339,11 @@ static void reset_via_hyppo ( void )
 	}
 }
 
+static void reset_cpu_only ( void )
+{
+	reset_mega65(RESET_MEGA65_CPU | RESET_MEGA65_ASK);
+}
+
 static void reset_into_custom_rom ( void )
 {
 	char fnbuf[PATH_MAX + 1];
@@ -355,7 +360,7 @@ static void reset_into_custom_rom ( void )
 	))
 		return;
 	if (rom_load_custom(fnbuf)) {
-		if (!reset_mega65_asked())
+		if (!reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK))
 			WARNING_WINDOW("You refused reset, loaded ROM can be only activated at the next reset.");
 	}
 }
@@ -363,7 +368,7 @@ static void reset_into_custom_rom ( void )
 static void reset_into_utility_menu ( void )
 {
 	ERROR_WINDOW("Currently there are some problems using this function,\nIt's a known problem. You'll get empty screen after utility selection.\nOnce it's resolved this message will be removed from Xemu");
-	if (reset_mega65_asked()) {
+	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK)) {
 		rom_stubrom_requested = 0;
 		rom_initrom_requested = 0;
 		hwa_kbd_set_fake_key(0x20);
@@ -373,7 +378,7 @@ static void reset_into_utility_menu ( void )
 
 static void reset_into_c64_mode ( void )
 {
-	if (reset_mega65_asked()) {
+	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK)) {
 		rom_stubrom_requested = 0;
 		rom_initrom_requested = 0;
 		// we need this, because autoboot disk image would bypass the "go to C64 mode" on 'Commodore key' feature
@@ -387,7 +392,7 @@ static void reset_into_c64_mode ( void )
 
 static void reset_generic ( void )
 {
-	if (reset_mega65_asked()) {
+	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK)) {
 		KBD_RELEASE_KEY(0x75);
 		hwa_kbd_set_fake_key(0);
 	}
@@ -395,7 +400,7 @@ static void reset_generic ( void )
 
 static void reset_into_xemu_stubrom ( void )
 {
-	if (reset_mega65_asked()) {
+	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK)) {
 		rom_initrom_requested = 0;
 		rom_stubrom_requested = 1;
 	}
@@ -403,7 +408,7 @@ static void reset_into_xemu_stubrom ( void )
 
 static void reset_into_xemu_initrom ( void )
 {
-	if (reset_mega65_asked()) {
+	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK)) {
 		rom_stubrom_requested = 0;
 		rom_initrom_requested = 1;
 	}
@@ -411,7 +416,7 @@ static void reset_into_xemu_initrom ( void )
 
 static void reset_into_c65_mode_noboot ( void )
 {
-	if (reset_mega65_asked()) {
+	if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK)) {
 		rom_stubrom_requested = 0;
 		rom_initrom_requested = 0;
 		inject_register_allow_disk_access();
@@ -428,7 +433,7 @@ static void ui_cb_use_default_rom ( const struct menu_st *m, int *query )
 		return;
 	}
 	if (rom_is_overriden) {
-		if (reset_mega65_asked()) {
+		if (reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK)) {
 			rom_unset_requests();
 		}
 	}
@@ -870,7 +875,7 @@ static const struct menu_st menu_reset[] = {
 	{ "Reset into Xemu stub-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_stubrom	},
 	{ "Reset into boot init-ROM",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_xemu_initrom	},
 	{ "Reset via HYPPO",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_via_hyppo		},
-	{ "Reset CPU only",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_mega65_cpu_only	},
+	{ "Reset CPU only",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_cpu_only		},
 	{ "Reset/use custom ROM file",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, reset_into_custom_rom	},
 	{ NULL }
 };

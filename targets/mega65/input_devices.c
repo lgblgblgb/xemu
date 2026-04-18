@@ -509,7 +509,7 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 		}
 		// Also check for special, emulator-related hot-keys
 		if (pos == XEMU_EVENT_RESET) {	// was hard-coded to be SDL_SCANCODE_F10 before
-			reset_mega65_asked();
+			reset_mega65(RESET_MEGA65_HARD | RESET_MEGA65_ASK);
 		} else if (key == SDL_SCANCODE_KP_ENTER) {
 			input_toggle_joy_emu();
 		} else if (((modkeys & (MODKEY_LSHIFT | MODKEY_RSHIFT)) == (MODKEY_LSHIFT | MODKEY_RSHIFT)) && set_mouse_grab(SDL_FALSE, 0)) {

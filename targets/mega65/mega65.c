@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -61,11 +61,11 @@ static char fast_mhz_as_string[16] = "";
 const char *cpu_clock_speed_string_p = "";
 static unsigned int cpu_cycles_per_scanline;
 #ifdef CPU_STEP_MULTI_OPS
-static int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
+int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
 #endif
 static Uint8 i2c_regs_original[sizeof i2c_regs];
 Uint8 last_dd00_bits = 3;		// Bank 0
-const char *last_reset_type;
+const char *last_reset_type = "XEMU-STARTUP";
 
 
 
@@ -331,7 +331,6 @@ static void preinit_memory_for_start ( void )
 
 static void mega65_init ( void )
 {
-	last_reset_type = "XEMU-STARTUP";
 	hypervisor_debug_init(configdb.hickuprep, configdb.hyperdebug, configdb.hyperserialascii);
 #ifdef	CPU_STEP_MULTI_OPS
 	if (configdb.cpusinglestep)
@@ -478,6 +477,14 @@ int dump_screen ( const char *fn )
 
 static void shutdown_callback ( void )
 {
+	DEBUGPRINT("XEMU: shutdown callback is running" NL);
+#ifdef	XEMU_FILES_SCREENSHOT_SUPPORT
+	if (configdb.screenshot_and_exit || vic4_registered_screenshot_request) {
+		DEBUGPRINT("XEMU: handling pending screenshot request" NL);
+		vic4_registered_screenshot_request = 1;
+		vic4_freerun_until_frame_close();
+	}
+#endif
 	hypervisor_serial_monitor_close_file(configdb.hyperserialfile);
 	i2c_save_storage(0);
 	eth65_shutdown();
@@ -504,11 +511,8 @@ static void shutdown_callback ( void )
 }
 
 
-void reset_mega65 ( void )
+static void reset_mega65_hard ( void )
 {
-	static const char reset_debug_msg[] = "SYSTEM: RESET - ";
-	last_reset_type = "COLD";
-	DEBUGPRINT("%sBEGIN" NL, reset_debug_msg);
 	reset_hw_errata_level();
 	memset(D7XX + 0x20, 0, 0x40);	// stop audio DMA possibly going on
 	rom_clear_reports();
@@ -530,13 +534,11 @@ void reset_mega65 ( void )
 	nmi_level = 0;
 	D6XX_registers[0x7E] = configdb.hicked;
 	hypervisor_start_machine();
-	DEBUGPRINT("%sEND" NL, reset_debug_msg);
 }
 
 
-void reset_mega65_cpu_only ( void )
+static void reset_mega65_cpu_only ( void )
 {
-	last_reset_type = "WARM";
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
 	c128_d030_reg = 0;
 	machine_set_speed(0);
@@ -551,13 +553,38 @@ void reset_mega65_cpu_only ( void )
 }
 
 
-int reset_mega65_asked ( void )
+static void reset_mega65_via_hyppo ( void )
 {
-	if (ARE_YOU_SURE("Are you sure to RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES)) {
-		reset_mega65();
-		return 1;
-	} else
-		return 0;
+	reset_mega65_cpu_only();	// these can be important though ...
+	hypervisor_start_machine();
+}
+
+
+int reset_mega65 ( const unsigned int options )
+{
+	if ((options & RESET_MEGA65_ASK)) {
+		if (!ARE_YOU_SURE("Are you sure you want to RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
+			return 0;
+	}
+	switch (options & 0xFF) {
+		case RESET_MEGA65_HARD:
+			last_reset_type = "HARD";
+			reset_mega65_hard();
+			break;
+		case RESET_MEGA65_CPU:
+			last_reset_type = "CPU";
+			reset_mega65_cpu_only();
+			break;
+		case RESET_MEGA65_HYPPO:
+			last_reset_type = "HYPPO";
+			reset_mega65_via_hyppo();
+			break;
+		default:
+			ERROR_WINDOW("Unknow RESET type asked: %u", options & 0xFF);
+			return 0;
+	}
+	DEBUGPRINT("XEMU: end of requested RESET, type \"%s\"" NL, last_reset_type);
+	return 1;
 }
 
 

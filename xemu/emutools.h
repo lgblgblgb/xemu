@@ -1,6 +1,6 @@
 /* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
    8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -173,6 +173,8 @@ extern Uint8 xemu_hour_to_bcd12h ( Uint8 hours, int hour_offset );
 extern unsigned int xemu_get_microseconds ( void );
 extern void *xemu_malloc ( size_t size );
 extern void *xemu_realloc ( void *p, size_t size );
+extern void *xemu_sdl_to_native_allocation ( void *sdl_allocation, const size_t length );
+extern char *xemu_sdl_to_native_string_allocation ( char *sdl_string );
 
 extern int xemu_is_first_time_user ( void );
 

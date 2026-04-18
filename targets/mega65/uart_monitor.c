@@ -479,13 +479,13 @@ static void execute_command ( char *cmd )
 			m65mon_empty_command();	// emulator can use this, if it wants
 			break;
 		case '!':
-			reset_mega65();
+			reset_mega65(RESET_MEGA65_HARD);
 			break;
 		case '~':
 			if (!strncmp(cmd, "exit", 4)) {
 				XEMUEXIT(0);
 			} else if (!strncmp(cmd, "reset", 5)) {
-				reset_mega65();
+				reset_mega65(RESET_MEGA65_HARD);
 			} else if (!strncmp(cmd, "mount", 5)) {
 				// Quite crude syntax for now:
 				// 	~mount0		- unmounting image/disk in drive-0
