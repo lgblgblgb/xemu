@@ -844,6 +844,9 @@ static DWORD get_registry_key_dword ( const char *name )
 
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan, const int argc, char **argv )
 {
+	if (getenv("XEMU_NO_DIALOGS")) {
+		dialogs_allowed = 0;
+	}
 #ifdef XEMU_ARCH_WIN
 	static const char reg_key_allowadminrun[] = "AllowAdministratorRun";
 	static const char reg_key_noutf8warning[] = "NoUTF8Warning";
