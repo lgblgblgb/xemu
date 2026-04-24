@@ -45,9 +45,9 @@ const Uint8 iomode_hexdigitids[4] = { 2, 3, 0xE, 4 };	// identifier of IO modes 
 #define DEBUG_X_OFFSET		8
 
 // (SDL) target texture rendering pointers
-static Uint32 *current_pixel;					// current_pixel pointer to the rendering target (one current_pixel: 32 bit)
-static Uint32 *pixel_start;					// points to the end and start of the buffer
-static Uint32 *pixel_raster_start;				// first pixel of current raster
+static Uint32 *rrb;						// once this will be the real RRB, but now points to the rendering target scanline within the texture
+static Uint32 *pixel_start_fb;					// points to the start of the texture buffer
+static Uint32 *pixel_start_sc;					// points to the start of the current scanline in texture, currently same as "rrb" but it will change when we have real RRB!
 Uint8 vic_registers[0x80];					// VIC4 registers
 static int compare_raster;					// raster compare (9 bits width) data
 static int logical_raster = 0;
@@ -55,8 +55,8 @@ static int interrupt_status;					// Interrupt status of VIC
 static int blink_phase = 0;					// blinking attribute helper, state.
 Uint8 c128_d030_reg;						// C128-like register can be only accessed in VIC2 mode but not in others, quite special!
 static Uint8 reg_d018_screen_addr = 0;				// Legacy VIC2 $D018 screen address register
-static int vic_hotreg_touched = 0;				// If any "legacy" registers were touched
-static int vic4_sideborder_touched = 0;				// If side-border register were touched
+static bool vic_hotreg_touched = false;				// If any "legacy" registers were touched
+static bool vic4_sideborder_touched = false;			// If side-border register were touched
 static int border_x_left= 0;			 		// Side border left
 static int border_x_right= 0;			 		// Side border right
 static int xcounter = 0, ycounter = 0;				// video counters
@@ -69,7 +69,7 @@ static Uint8 is_fg[2048];					// this cache helps in sprite rendering, zero mean
 static Uint8 is_sprite[1024];
 #endif
 static float char_x_step = 0.0;
-static int enable_bg_paint = 1;
+static bool enable_bg_paint = true;
 //static int display_row_count = 0;
 #define display_row_count vic_registers[0x7B]
 static int max_rasters = PHYSICAL_RASTERS_DEFAULT;
@@ -107,6 +107,14 @@ unsigned int vic_frame_counter, vic_frame_counter_since_boot;
 int sprite_y_adjust_xemu_bug = 0;		// Unknown reason of sprite-Y bug in Xemu in NTSC. This is a workaround. FIXME: why is it needed?!
 double cia_ticks_per_scanline;
 
+// NOTE: this is very wrong! RRB should work mode-pixel by buffer pixel, and it will be stretched
+// later (by custom factor OR H640/H320 setting). However Xemu always uses physical pixel. As a quick
+// workaround, we wrap RRB after 1023 or 2047 depending on H640 or H320
+// TODO: make RRB buffer a real entity (not part of the current line of the texture), render into it
+// as mega65-core does (not-stretching dependent at all, which also affects mode renders not using
+// those ugly float types!) and do the streching at the end. Then also a fixed 1023 clamping/wrapping is OK.
+static unsigned int xcounter_clamp_mask = 1023;
+#define	XCOUNTER_INC()			xcounter = (xcounter + 1) & xcounter_clamp_mask
 
 // VIC4 Modeline Parameters
 // ----------------------------------------------------
@@ -177,8 +185,8 @@ void vic_reset ( void )
 	vic_color_register_mask = 0x0F;
 	interrupt_status = 0;
 	compare_raster = 0;
-	vic_hotreg_touched = 0;
-	vic4_sideborder_touched = 0;
+	vic_hotreg_touched = false;
+	vic4_sideborder_touched = false;
 	vic_registers[0x5D] |= 0x80;	// set hotregs by default
 	// *** Just a check to try all possible regs (in VIC2,VIC3 and VIC4 modes), it should not panic ...
 	// It may also sets/initializes some internal variables sets by register writes, which would cause a crash on screen rendering without prior setup!
@@ -265,7 +273,7 @@ void vic4_close_frame_access ( void )
 		if (!xemu_screenshot_png(
 			NULL, configdb.screenshot_and_exit,
 			1, 1,		// no ratio/zoom correction is applied
-			pixel_start + y1 * TEXTURE_WIDTH + x1,	// pixel pointer corresponding to the top left corner of the viewport
+			pixel_start_fb + y1 * TEXTURE_WIDTH + x1,	// pixel pointer corresponding to the top left corner of the viewport
 			w,		// width of the viewport
 			h,		// height of the viewport
 			TEXTURE_WIDTH	// full width (ie, width of the texture)
@@ -282,7 +290,7 @@ void vic4_close_frame_access ( void )
 		xemu_get_viewport(NULL, &y_origin, &x_origin, NULL);
 		for (unsigned int y = 0; y < 8; y++)
 			for (unsigned int x = 0; x < 8; x++)
-				*(pixel_start + x_origin - 10 + x + (y + 2 + y_origin) * (TEXTURE_WIDTH)) = (x > 1 && x < 7 && y > 1 && y < 7) ? red_colour : black_colour;
+				*(pixel_start_fb + x_origin - 10 + x + (y + 2 + y_origin) * (TEXTURE_WIDTH)) = (x > 1 && x < 7 && y > 1 && y < 7) ? red_colour : black_colour;
 	}
 	// FINALLY ....
 	xemu_update_screen();
@@ -470,7 +478,7 @@ static void vic4_interpret_legacy_mode_registers ( void )
 void vic4_open_frame_access ( void )
 {
 	int tail_sdl;
-	current_pixel = pixel_start = xemu_start_pixel_buffer_access(&tail_sdl);
+	rrb = pixel_start_fb = xemu_start_pixel_buffer_access(&tail_sdl);
 	if (XEMU_UNLIKELY(tail_sdl))
 		FATAL("tail_sdl is not zero!");
 	// The V400 hack ...
@@ -669,7 +677,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;		// Sprite coordinates: simple write the VIC reg in all I/O modes.
 		CASE_VIC_ALL(0x11):
 			if (vic_registers[0x11] ^ data)
-				vic_hotreg_touched = 1;
+				vic_hotreg_touched = true;
 			compare_raster = (compare_raster & 0xFF) | ((data & 0x80) << 1);
 			DEBUG("VIC4: compare raster is now %d" NL, compare_raster);
 			break;
@@ -683,7 +691,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			break;
 		CASE_VIC_ALL(0x16):	// control-reg#2, we allow write even if non-used bits here
 			if (vic_registers[0x16] ^ data)
-				vic_hotreg_touched = 1;
+				vic_hotreg_touched = true;
 			break;
 		CASE_VIC_ALL(0x17):	// sprite-Y expansion
 			break;
@@ -696,7 +704,7 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			REG_CHARPTR_B0 = 0;
 			REG_SCRNPTR_B2 &= 0xF0;
 			reg_d018_screen_addr = (data & 0xF0) >> 4;
-			vic_hotreg_touched = 1;
+			vic_hotreg_touched = true;
 			//DEBUGPRINT("VIC4: $D018 is set to $%02X @ PC=$%04X" NL, data, cpu65.pc);
 			break;
 		CASE_VIC_ALL(0x19):
@@ -771,8 +779,8 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 			// NOTE/FIXME: it's seems this regsiter is always hotreg now! See mega65-core change 0f1a8b37186d17b6a8d6f89d8fb95d166704fcd4
 			// Also this may invalidate the first (old!) "(!) NOTE"
 			//if ((vic_registers[0x31] & 0xBF) ^ (data & 0xBF))
-			//    vic_hotreg_touched = 1;
-			vic_hotreg_touched = 1;
+			//    vic_hotreg_touched = true;
+			vic_hotreg_touched = true;
 			vic_registers[0x31] = data;	// we need this work-around, since reg-write happens _after_ this switch statement, but machine_set_speed above needs it ...
 			machine_set_speed(0);
 			calculate_char_x_step();
@@ -821,15 +829,15 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 		CASE_VIC_4(0x5B):
 			break;
 		CASE_VIC_4(0x5C):
-			vic4_sideborder_touched = 1;
+			vic4_sideborder_touched = true;
 			break;
 
 		CASE_VIC_4(0x5D):
 			DEBUG("VIC4: writing $%04X SIDEBORDER/HOTREG: $%02X" NL, addr, data);
 			if ((vic_registers[0x5D] & 0x1F) ^ (data & 0x1F))	// sideborder MSB (0..5) modified?
-				vic4_sideborder_touched = 1;
+				vic4_sideborder_touched = true;
 			if (!(data & 0x80))	// writing bit 7 as zero (hotreg disable) also clears any possible remembered "trigger"
-				vic_hotreg_touched = 0;
+				vic_hotreg_touched = false;
 			// NOTE: if bit 7 is one, hotreg=enabled feature will be set after the switch/case block, thus indeed, the
 			// hotreg event will be triggered then (also in this function, below) as "should be"
 			break;
@@ -912,13 +920,13 @@ void vic_write_reg ( unsigned int addr, Uint8 data )
 	if (vic_hotreg_touched && REG_HOTREG) {
 		//DEBUGPRINT("VIC4: vic_hotreg_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
 		vic4_interpret_legacy_mode_registers();	// this also calls vic4_update_sideborder_dimensions(), thus we reset vic4_sideborder_touched to avoid calling it again below
-		vic4_sideborder_touched = 0;
-		vic_hotreg_touched = 0;
+		vic4_sideborder_touched = false;
+		vic_hotreg_touched = false;
 	}
 	if (vic4_sideborder_touched) {
 		//DEBUGPRINT("VIC4: vic4_sideborder_touched triggered (WRITE $D0%02x, $%02x)" NL, addr & 0x7F, data );
 		vic4_update_sideborder_dimensions();
-		vic4_sideborder_touched = 0;
+		vic4_sideborder_touched = false;
 	}
 }
 
@@ -1132,7 +1140,7 @@ static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_d
 				if (c0 != transparency_palette_index && x_display_pos >= border_x_left && (
 					!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
 				)) {
-					*(pixel_raster_start + x_display_pos) = pal16[c0];
+					*(pixel_start_sc + x_display_pos) = pal16[c0];
 					DO_SPRITE_SPRITE_COLLISION(x_display_pos, 1);
 					DO_SPRITE_FG_COLLISION(x_display_pos, 1);
 				}
@@ -1141,7 +1149,7 @@ static XEMU_INLINE void vic4_draw_sprite_row_16color ( const int sprnum, int x_d
 				if (c1 != transparency_palette_index && x_display_pos >= border_x_left && (
 					!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
 				)) {
-					*(pixel_raster_start + x_display_pos) = pal16[c1];
+					*(pixel_start_sc + x_display_pos) = pal16[c1];
 					DO_SPRITE_SPRITE_COLLISION(x_display_pos, 1);
 					DO_SPRITE_FG_COLLISION(x_display_pos, 1);
 				}
@@ -1171,14 +1179,14 @@ static XEMU_INLINE void vic4_draw_sprite_row_multicolor ( const int sprnum, int 
 						if (x_display_pos >= border_x_left && (
 							!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
 						)) {
-							*(pixel_raster_start + x_display_pos) = sdl_pixel;
+							*(pixel_start_sc + x_display_pos) = sdl_pixel;
 							DO_SPRITE_SPRITE_COLLISION(x_display_pos, mcm_pixel_value & 2);
 							DO_SPRITE_FG_COLLISION(x_display_pos, mcm_pixel_value & 2);
 						}
 						if (x_display_pos + 1 >= border_x_left && (
 							!SPRITE_IS_BACK(sprnum) || (SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos + 1])
 						)) {
-							*(pixel_raster_start + x_display_pos + 1) = sdl_pixel;
+							*(pixel_start_sc + x_display_pos + 1) = sdl_pixel;
 							DO_SPRITE_SPRITE_COLLISION(x_display_pos + 1, mcm_pixel_value & 2);
 							DO_SPRITE_FG_COLLISION(x_display_pos + 1, mcm_pixel_value & 2);
 						}
@@ -1208,7 +1216,7 @@ static XEMU_INLINE void vic4_draw_sprite_row_mono ( const int sprnum, int x_disp
 						!SPRITE_IS_BACK(sprnum) ||
 						(SPRITE_IS_BACK(sprnum) && !is_fg[x_display_pos])
 					)) {
-						*(pixel_raster_start + x_display_pos) = sdl_pixel;
+						*(pixel_start_sc + x_display_pos) = sdl_pixel;
 						DO_SPRITE_SPRITE_COLLISION(x_display_pos, 1);
 						DO_SPRITE_FG_COLLISION(x_display_pos, 1);
 					}
@@ -1316,18 +1324,19 @@ static XEMU_INLINE void vic4_render_mono_char_row ( Uint8 char_byte, const int g
 	const Uint32 sdl_fg_color = palette_now[fg_color];
 	if (XEMU_LIKELY(enable_bg_paint)) {
 		const Uint32 sdl_bg_color = palette_now[bg_color];
-		for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
+		for (float cx = 0; cx < glyph_width; cx += char_x_step) {
 			const Uint8 char_pixel = (char_byte & (0x80 >> (int)cx));
-			*(current_pixel++) = char_pixel ? sdl_fg_color : sdl_bg_color;
-			is_fg[xcounter++] = char_pixel;
+			rrb[xcounter] = char_pixel ? sdl_fg_color : sdl_bg_color;
+			is_fg[xcounter] = char_pixel;
+			XCOUNTER_INC();
 		}
 	} else {
-		for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
+		for (float cx = 0; cx < glyph_width; cx += char_x_step) {
 			const Uint8 char_pixel = (char_byte & (0x80 >> (int)cx));
 			if (char_pixel)
-				*current_pixel = sdl_fg_color;
-			current_pixel++;
-			is_fg[xcounter++] = char_pixel;
+				rrb[xcounter] = sdl_fg_color;
+			is_fg[xcounter] = char_pixel;
+			XCOUNTER_INC();
 		}
 	}
 }
@@ -1336,13 +1345,13 @@ static XEMU_INLINE void vic4_render_mono_char_row ( Uint8 char_byte, const int g
 static XEMU_INLINE void vic4_render_multicolor_char_row ( Uint8 char_byte, const int glyph_width, const Uint8 color_source[4] )
 {
 	char_byte &= draw_mask;
-	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
+	for (float cx = 0; cx < glyph_width; cx += char_x_step) {
 		const Uint8 bitsel = 2 * (int)(cx / 2);
 		const Uint8 bit_pair = (char_byte & (0x80 >> bitsel)) >> (6-bitsel) | (char_byte & (0x40 >> bitsel)) >> (6-bitsel);
 		if (XEMU_LIKELY(bit_pair || enable_bg_paint))
-			*current_pixel = used_palette[color_source[bit_pair]];
-		current_pixel++;
-		is_fg[xcounter++] = (bit_pair & 2);
+			rrb[xcounter] = used_palette[color_source[bit_pair]];
+		is_fg[xcounter] = (bit_pair & 2);
+		XCOUNTER_INC();
 	}
 }
 
@@ -1350,17 +1359,33 @@ static XEMU_INLINE void vic4_render_multicolor_char_row ( Uint8 char_byte, const
 // 8-bytes per row
 static XEMU_INLINE void vic4_render_fullcolor_char_row ( const Uint8* char_row, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 fg_sdl_color, const int hflip, const Uint32 *palette_now )
 {
+#if 0
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		const Uint8 char_data = draw_mask & char_row[XEMU_LIKELY(!hflip) ? (int)cx : glyph_width - 1 - (int)cx];
 		if (char_data == 0xFF)
-			*current_pixel = fg_sdl_color;
+			rrb[xcounter] = fg_sdl_color;
 		else if (XEMU_LIKELY(char_data))
-			*current_pixel = palette_now[char_data];
+			rrb[xcounter] = palette_now[char_data];
 		else if (XEMU_LIKELY(enable_bg_paint))
-			*current_pixel = bg_sdl_color;
-		current_pixel++;
-		is_fg[xcounter++] = char_data;
+			rrb[xcounter] = bg_sdl_color;
+		is_fg[xcounter] = char_data;
+		XCOUNTER_INC();
 	}
+#else
+	for (float cx = 0; cx < glyph_width; cx += char_x_step) {
+		const Uint8 char_data = draw_mask & char_row[XEMU_LIKELY(!hflip) ? (int)cx : glyph_width - 1 - (int)cx];
+		//if (xcounter < border_x_right) {
+			if (char_data == 0xFF)
+				rrb[xcounter] = fg_sdl_color;
+			else if (XEMU_LIKELY(char_data))
+				rrb[xcounter] = palette_now[char_data];
+			else if (XEMU_LIKELY(enable_bg_paint))
+				rrb[xcounter] = bg_sdl_color;
+		//}
+		is_fg[xcounter] = char_data;
+		XCOUNTER_INC();
+	}
+#endif
 }
 
 
@@ -1369,10 +1394,11 @@ static XEMU_INLINE void vic4_render_fullcolor_char_row ( const Uint8* char_row, 
 
 static XEMU_INLINE void vic4_render_fullcolor_char_row_with_alpha ( const Uint8* char_row_ptr, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 fg_sdl_color, const int hflip )
 {
-	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
+	for (float cx = 0; cx < glyph_width; cx += char_x_step) {
 		const Uint8 char_data = draw_mask & char_row_ptr[XEMU_LIKELY(!hflip) ? (int)cx : glyph_width - 1 - (int)cx];
-		*current_pixel++ = blend32(fg_sdl_color, bg_sdl_color, char_data);
-		is_fg[xcounter++] = char_data;
+		rrb[xcounter] = blend32(fg_sdl_color, bg_sdl_color, char_data);
+		is_fg[xcounter] = char_data;
+		XCOUNTER_INC();
 	}
 }
 
@@ -1380,7 +1406,7 @@ static XEMU_INLINE void vic4_render_fullcolor_char_row_with_alpha ( const Uint8*
 // 16-color (Nybl) mode (4-bit per pixel / 16 pixel wide characters)
 static XEMU_INLINE void vic4_render_16color_char_row ( const Uint8* char_row, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 fg_sdl_color, const Uint32 *palette16, const int hflip )
 {
-	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
+	for (float cx = 0; cx < glyph_width; cx += char_x_step) {
 		Uint8 char_data;
 		if (XEMU_LIKELY(!hflip)) {
 			char_data = char_row[((int)cx) / 2];
@@ -1396,12 +1422,12 @@ static XEMU_INLINE void vic4_render_16color_char_row ( const Uint8* char_row, co
 				char_data >>= 4;
 		}
 		char_data &= draw_mask;
-		is_fg[xcounter++] = char_data;
+		is_fg[xcounter] = char_data;
 		if (char_data)
-			*current_pixel = (char_data != 15) ? palette16[char_data] : fg_sdl_color;
+			rrb[xcounter] = (char_data != 15) ? palette16[char_data] : fg_sdl_color;
 		else if (enable_bg_paint)
-			*current_pixel = bg_sdl_color;
-		current_pixel++;
+			rrb[xcounter] = bg_sdl_color;
+		XCOUNTER_INC();
 	}
 }
 
@@ -1439,7 +1465,7 @@ static XEMU_INLINE void vic4_render_bitplane_char_row ( const Uint32 offset, con
 {
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		const Uint8 bitsel = 0x80 >> ((int)cx);
-		*(current_pixel++) = palette[((			// Do not try this at home ...
+		rrb[xcounter] = palette[((			// Do not try this at home ...
 			((*(bitplane_p[0] + offset) & bitsel) ?   1 : 0) |
 			((*(bitplane_p[1] + offset) & bitsel) ?   2 : 0) |
 			((*(bitplane_p[2] + offset) & bitsel) ?   4 : 0) |
@@ -1450,7 +1476,8 @@ static XEMU_INLINE void vic4_render_bitplane_char_row ( const Uint32 offset, con
 			((*(bitplane_p[7] + offset) & bitsel) ? 128 : 0)
 			) & vic_registers[0x32]) ^ vic_registers[0x3B]
 		];
-		is_fg[xcounter++] = (*(bitplane_p[2] + offset) & bitsel);
+		is_fg[xcounter] = (*(bitplane_p[2] + offset) & bitsel);
+		XCOUNTER_INC();
 	}
 }
 
@@ -1479,8 +1506,10 @@ static XEMU_INLINE void vic4_render_bitplane_raster ( void )
 		line_char_index++;
 	}
 	do_increment_row_counter_if(!EFFECTIVE_V400 || (ycounter  & 1));
-	while (xcounter++ < border_x_right)
-		*current_pixel++ = palette[REG_SCREEN_COLOR];
+	// FIXME: xcounter is not incremented here via the clamping maco XCOUNTER_INC() but that's OK (?)
+	// as bitplane mode cannot do GOTOX anyway
+	while (xcounter < border_x_right)
+		rrb[xcounter++] = palette[REG_SCREEN_COLOR];
 }
 
 
@@ -1520,10 +1549,10 @@ static XEMU_INLINE Uint8 *get_charset_effective_addr ( void )
 static XEMU_INLINE void vic4_render_char_raster ( void )
 {
 	int line_char_index = 0;
-	enable_bg_paint = 1;
+	enable_bg_paint = true;
 	draw_mask = 0xFF;	// initialize draw mask being $FF initially (glyph row is not masked out)
 	const Uint8 *row_data_base_addr = get_charset_effective_addr();	// FIXME: is it OK that I moved here, before the loop?
-	// CHARY16 feature - 16 pixel tall font in character mode
+	// CHARY16 feature - 16 pixel tall font in character mode, FIXME: it seems mega65-core can only do this in the char-ram not everywhere like Xemu!!
 	bool increment_row = true;	// by default, every raster rendering needs to increment the character row counter
 	if (chary16) {
 		if ((ycounter & 1))
@@ -1537,25 +1566,31 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 	// Should be fixed at the upper layer though (ie, in vic4_render_scanline)
 	if (ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM) {
 		for (int i = 0; i < TEXTURE_WIDTH; i++)
-			*(current_pixel++) = palette[REG_BORDER_COLOR];
+			rrb[i] = palette[REG_BORDER_COLOR];
 	}
 	else if (display_row <= display_row_count) {
 		Uint32 colour_ram_current_addr = COLOUR_RAM_OFFSET + (display_row * LINESTEP_BYTES);
 		Uint32 screen_ram_current_addr = SCREEN_ADDR + (display_row * LINESTEP_BYTES);
 		// Account for Chargen X-displacement
-		for (Uint32 *p = current_pixel; p < current_pixel + (CHARGEN_X_START - border_x_left); p++)
-			*p = palette[REG_SCREEN_COLOR];
-		current_pixel += (CHARGEN_X_START - border_x_left);
-		xcounter += (CHARGEN_X_START - border_x_left);
+		for (int i = 0; i < (CHARGEN_X_START - border_x_left); i++) {
+			rrb[xcounter] = palette[REG_SCREEN_COLOR];
+			XCOUNTER_INC();
+		}
 		const int xcounter_start = xcounter;
 		Sint8 char_fetch_offset = 0;
 		// Chargen starts here.
 		while (line_char_index < REG_CHRCOUNT) {
 			Uint16 color_data = colour_ram[(colour_ram_current_addr++) & 0x07FFF];
-			Uint16 char_value = main_ram[(screen_ram_current_addr++) & 0x7FFFF];
+			Uint16 char_value =   main_ram[(screen_ram_current_addr++) & 0x7FFFF];
 			if (REG_16BITCHARSET) {
 				color_data = (color_data << 8) | colour_ram[(colour_ram_current_addr++) & 0x07FFF];
 				char_value = char_value | (main_ram[(screen_ram_current_addr++) & 0x7FFFF] << 8);
+#if 0
+				// TODO: $FFFF is a magic value which intructs MEGA65 to stop rendering??
+				if (char_value == 0xFFFF) {
+					DEBUGPRINT("STOP TOKEN 1!\n");
+				}
+#endif
 				if (XEMU_UNLIKELY(SXA_GOTO_X(color_data))) {
 					// ---- Start of the GOTOX re-positioning functionality implementation, tricky one ----
 					xcounter = (char_value & 0x3FF);	// first, extract the goto 'X' value as an usigned number
@@ -1574,24 +1609,18 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 						else
 							xcounter += xcounter_start;
 					}
-					// The ugly: too large goto X values may cause out-of-bound access on eg is_fg buffer. Thus, if the result is larger than
-					// the width of the SDL texture, it won't be seen anyway, so we "clamp" it for the NEXT raster as an ugly solution, which
-					// will be overwritten anyway on rendering in the next raster. This way we don't need checking of out-of-bound access (faster
-					// code) _everywhere_ ...
-					if (xcounter > TEXTURE_WIDTH)
-						xcounter = TEXTURE_WIDTH;
-					// Align current_pixel pointer according the calculated xcounter "horror show" above
-					current_pixel = pixel_raster_start + xcounter;
 					// ---- End of the GOTOX re-positioning functionality implementation ----
+					//xcounter &= 0x3FF;	// Just to be sure we're in the valid range
+					xcounter &= xcounter_clamp_mask;	// Just to be sure we're in the valid range
 					line_char_index++;
 					char_fetch_offset = (char_value >> 13) & 7;
 					// If ScreenRAMByte1 bit 4 is set then the char_fetch_offset should be subtracted and not added
 					if (char_value & (1 << 12))
 						char_fetch_offset = -char_fetch_offset;
 					if (SXA_VERTICAL_FLIP(color_data))
-						enable_bg_paint = 0;
+						enable_bg_paint = false;
 					else
-						enable_bg_paint = 1;
+						enable_bg_paint = true;
 					if (SXA_4BIT_PER_PIXEL(color_data)) {	// this signals for rowmask [the rowmask itself is color_data & 0xFF]
 						draw_mask = (color_data & (1 << char_row)) ? 0xFF : 0x00;	// draw_mask is $FF (not masked) _or_ $00 (masked) ~ for the current char_row!
 					} else {
@@ -1700,11 +1729,13 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 			}
 			line_char_index++;
 		}
+		// Fill screen color after chargen phase
+#if 0
+		while (xcounter < border_x_right)
+			rrb[xcounter++] = palette[REG_SCREEN_COLOR];
+#endif
 	}
 	do_increment_row_counter_if(increment_row);
-	// Fill screen color after chargen phase
-	while (xcounter++ < border_x_right)
-		*current_pixel++ = palette[REG_SCREEN_COLOR];
 }
 
 
@@ -1714,7 +1745,7 @@ static XEMU_INLINE void vic4_render_border_raster ( const bool do_increment_row_
 	do_increment_row_counter_if(do_increment_row_counter);
 	// Render the current whole raster as border colour
 	for (int i = 0; i < TEXTURE_WIDTH; i++)
-		*current_pixel++ = palette[REG_BORDER_COLOR];
+		rrb[i] = palette[REG_BORDER_COLOR];
 }
 
 
@@ -1722,9 +1753,10 @@ bool vic4_render_scanline ( void )
 {
 	// Work this first. DO NOT OPTIMIZE EARLY.
 
+	xcounter_clamp_mask = REG_H640 ? 1023 : 2047;
+
 	used_palette = palette;	// may be overriden later by GOTOX token!
-	current_pixel = pixel_start + ycounter * TEXTURE_WIDTH;
-	pixel_raster_start = current_pixel;
+	pixel_start_sc = rrb = pixel_start_fb + ycounter * TEXTURE_WIDTH;
 	const bool in_y_rendering_context = (ycounter >= CHARGEN_Y_START && ycounter < BORDER_Y_BOTTOM);
 
 	// CHARY16 feature (only valid if it's SET and character mode is used at all and we're in V200 mode)
@@ -1735,11 +1767,11 @@ bool vic4_render_scanline ( void )
 	// ... having resolution finer than V200 with some "VIC4 magic"?
 	if (!EFFECTIVE_V400 && (ycounter & 1) && !chary16) {
 		if (XEMU_UNLIKELY(configdb.show_scanlines)) {
-			for (int i = 0; i < TEXTURE_WIDTH; i++, current_pixel++)
-				*current_pixel = ((*(current_pixel - TEXTURE_WIDTH) >> 1) & 0x7F7F7F7FU) | black_colour;	// "| black_colour" is used to correct the messed-up alpha channel to $FF
+			for (int i = 0; i < TEXTURE_WIDTH; i++)
+				pixel_start_sc[i] = ((pixel_start_sc[i - TEXTURE_WIDTH] >> 1) & 0x7F7F7F7FU) | black_colour;	// "| black_colour" is used to correct the messed-up alpha channel to $FF
 		} else {
-			memcpy(current_pixel, current_pixel - TEXTURE_WIDTH, TEXTURE_WIDTH * 4);
-			current_pixel += TEXTURE_WIDTH;
+			memcpy(pixel_start_sc, pixel_start_sc - TEXTURE_WIDTH, TEXTURE_WIDTH * 4);
+			//current_pixel += TEXTURE_WIDTH;		// WTF????
 		}
 	} else if (ycounter < BORDER_Y_TOP || ycounter >= BORDER_Y_BOTTOM || !REG_DISPLAYENABLE) {	// top / bottom borders OR display is disabled (DEN = 0)
 		vic4_render_border_raster(in_y_rendering_context);
@@ -1749,7 +1781,6 @@ bool vic4_render_scanline ( void )
 			// character generator if needed.  Chargen area maybe covered by top/bottom
 			// borders also if y-offset applies.
 			xcounter += border_x_left;
-			current_pixel += border_x_left;
 			if (XEMU_LIKELY(!(vic_registers[0x31] & 0x10)))
 				vic4_render_char_raster();
 			else
@@ -1762,13 +1793,15 @@ bool vic4_render_scanline ( void )
 		// FIXME: in case of changed palette by GOTOX, maybe this must be dependent on bg_paint to use the new palette or the old??
 		if (ycounter >= BORDER_Y_TOP) {
 			if (ycounter < CHARGEN_Y_START)
-				while (xcounter++ < border_x_right)
-					*current_pixel++ = palette[REG_SCREEN_COLOR];
+				while (xcounter < border_x_right) {
+					rrb[xcounter] = palette[REG_SCREEN_COLOR];
+					XCOUNTER_INC();
+				}
 		}
-		for (Uint32 *p = pixel_raster_start; p < pixel_raster_start + border_x_left; p++)
-			*p = palette[REG_BORDER_COLOR];
-		for (Uint32 *p = current_pixel; p < current_pixel + border_x_right; p++)
-			*p = palette[REG_BORDER_COLOR];
+		for (int i = 0; i < border_x_left; i++)
+			rrb[i] = palette[REG_BORDER_COLOR];
+		for (int i = border_x_right; i < TEXTURE_WIDTH; i++)
+			rrb[i] = palette[REG_BORDER_COLOR];
 	}
 	// Sprites can be displayed on V200/V400 independently of char generator, so
 	// this must be outside of the main loop to avoid being affected by double-scan
@@ -1786,7 +1819,7 @@ bool vic4_render_scanline ( void )
 	}
 
 	if (XEMU_UNLIKELY(ycounter == debug_y && debug_x_real < TEXTURE_WIDTH)) {
-		const Uint32 pix = pixel_raster_start[debug_x_real];
+		const Uint32 pix = pixel_start_sc[debug_x_real];
 		vic_pixel_readback_result[1] = (pix >> sdl_pix_fmt->Rshift) & 0xFF;	// red channel
 		vic_pixel_readback_result[2] = (pix >> sdl_pix_fmt->Gshift) & 0xFF;	// green channel
 		vic_pixel_readback_result[3] = (pix >> sdl_pix_fmt->Bshift) & 0xFF;	// blue channel
