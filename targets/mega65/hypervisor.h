@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -30,6 +30,7 @@ extern bool in_hypervisor;
 extern int  hickup_is_overriden;
 extern int  hypervisor_is_debugged;
 extern char hyppo_version_string[64];
+extern Uint8 *hyppo_loaded_rom_content;
 
 extern int  hypervisor_debug_init ( const char *fn, int hypervisor_debug, int use_hypervisor_serial_out_asciizer );
 extern void hypervisor_debug ( void );
@@ -38,7 +39,6 @@ extern void hypervisor_enter ( int trapno );
 extern void hypervisor_enter_via_write_trap ( int trapno );
 extern int  hypervisor_queued_enter ( int trapno );
 extern void hypervisor_start_machine ( void );
-extern int  hypervisor_level_reset ( void );
 extern void hypervisor_leave ( void );
 extern void hypervisor_serial_monitor_push_char ( Uint8 chr );
 extern void hypervisor_serial_monitor_open_file ( const char *fn );
@@ -46,6 +46,7 @@ extern void hypervisor_serial_monitor_close_file ( const char *fn );
 extern void hypervisor_debug_invalidate ( const char *reason );
 extern void hypervisor_debug_late_enable ( void );
 extern int  hypervisor_hdos_virtualization_status ( const int set, const char **root_ptr );	// prototype is here, but it's implemented in hdos.c not in hypervisor.c
-extern void hypervisor_hdos_close_descriptors ( void );	// prototype is here, but it's implemented in hdos.c not in hypervisor.c
+extern void hypervisor_hdos_close_descriptors ( void );						// prototype is here, but it's implemented in hdos.c not in hypervisor.c
+extern char*hypervisor_hdos_get_sysfile_path ( const char *fn );				// prototype is here, but it's implemented in hdos.c not in hypervisor.c
 
 #endif

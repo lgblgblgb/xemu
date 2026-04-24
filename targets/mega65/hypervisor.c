@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -30,7 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "rom.h"
 #define  XEMU_MEGA65_HDOS_H_ALLOWED
 #include "hdos.h"
-#include "uart_monitor.h"
+#include "audio65.h"
 
 #include <sys/types.h>
 #include <fcntl.h>
@@ -42,6 +42,7 @@ bool in_hypervisor;			// mega65 hypervisor mode
 char hyppo_version_string[64];
 int  hickup_is_overriden = 0;
 int  hypervisor_is_debugged = 0;
+Uint8 *hyppo_loaded_rom_content = NULL;
 
 static int   resolver_ok = 0;
 
@@ -134,6 +135,10 @@ void hypervisor_enter_via_write_trap ( int trapno )
 
 void hypervisor_enter ( int trapno )
 {
+#ifdef	XEMU_ARCH_HTML
+	if (trapno == TRAP_RESET)
+		DEBUGPRINT("MSG: hypervisor first enter" NL);	// do not modify this, shell.html depends on this!!
+#endif
 	trap_current = trapno;
 	// Sanity checks
 	if (XEMU_UNLIKELY(trapno > 0x7F || trapno < 0))
@@ -165,12 +170,18 @@ void hypervisor_enter ( int trapno )
 	//D6XX_registers[0x53] = 0;				// GS $D653 - Hypervisor DMAgic source MB      - *UNUSED*
 	//D6XX_registers[0x54] = 0;				// GS $D654 - Hypervisor DMAgic destination MB - *UNUSED*
 	dma_get_list_addr_as_bytes(D6XX_registers + 0x55);	// GS $D655-$D658 - Hypervisor DMAGic list address bits 27-0
+	if (map_megabyte_low == 0xFF00000) {	// !! map_megabyte_low uses << 20 ...
+		// According to the VHDL: Make sure that a naughty person can't trick the hypervisor into modifying
+		// itself, by having the Hypervisor address space mapped in the bottom 32KB of address space.
+		map_megabyte_low = 0;
+		DEBUGPRINT("HYPERVISOR: warning, low-MB would be mapped to $FF, countermeasure initiaited" NL);
+	}
 	// Now entering into hypervisor mode: we use memory_reconfigure() to set all the stuff needed + setting up "in_hypervisor" value as well
 	memory_reconfigure(
 		0,					// D030 ROM banking turning off
 		VIC4_IOMODE,				// VIC4 I/O mode to be used (on MEGA65, in hypervisor mode it's always the case! the handler in vic4.c ensures, we cannot even modify this)
 		0x3F, 0x35,				// set CPU I/O port DDR+DATA: all-RAM + I/O config
-		map_megabyte_low, map_offset_low,	// low mapping is left as-is
+		map_megabyte_low, map_offset_low,	// low mapping is left as-is (however for map_megabyte_low, see the "if" above)
 		0xFFU << 20, 0xF0000U,			// high mapping though is being modified
 		(map_mask & 0xFU) | 0x30U,		// mapping: 0011XXXX (it seems low region map mask is not changed by hypervisor entry)
 		true					// this will sets in_hypervisor to TRUE!!!!
@@ -293,6 +304,10 @@ static inline void first_leave ( void )
 	} else {
 		DEBUGPRINT("ROM: no custom force-ROM policy, PC remains at $%04X" NL, cpu65.pc);
 	}
+	// Save loaded ROM
+	if (!hyppo_loaded_rom_content)
+		hyppo_loaded_rom_content = xemu_malloc(0x20000);
+	memcpy(hyppo_loaded_rom_content, main_ram + 0x20000, 0x20000);
 	// Workaround: set DMA version based on ROM version
 	dma_init_set_rev(main_ram + 0x20000);
 	// Workaround: set our desired video standard (if configdb.videostd == -1, then vic4_set_videostd() won't do anything, so it's fine)
@@ -301,21 +316,12 @@ static inline void first_leave ( void )
 	hdos_notify_system_start_end();
 	xemu_sleepless_temporary_mode(0);	// turn off temporary sleepless mode which may have been enabled before
 	vic_frame_counter_since_boot = 0;
+	audio65_reset_mixer();
 	//memory_reset_unwritten_debug_stat();	// FIXME/TODO: commented out since it generates a **tons** of warnings then with the "unwritten mem read" debug mode (-ramcheckread emu option)
 	DEBUGPRINT("HYPERVISOR: first return after RESET, end of processing workarounds." NL);
-}
-
-
-int hypervisor_level_reset ( void )
-{
-	if (!in_hypervisor) {
-		DEBUGPRINT("HYPERVISOR: hypervisor-only reset was requested by Xemu." NL);
-		hypervisor_enter(TRAP_RESET);
-		last_reset_type = "HYPPO";
-		return 0;
-	}
-	DEBUGPRINT("HYPERVISOR: hypervisor-only reset requested by Xemu **FAILED**: already in hypervisor mode!" NL);
-	return 1;
+#ifdef	XEMU_ARCH_HTML
+	DEBUGPRINT("MSG: hypervisor first leave" NL);	// do not modify this, shell.html depends on this!!
+#endif
 }
 
 
@@ -629,9 +635,8 @@ void hypervisor_debug_late_enable ( void )
 {
 	if (resolver_ok && !hypervisor_is_debugged) {
 		hypervisor_is_debugged = 1;
-#ifdef		HAS_UARTMON_SUPPORT
-		umon_opcode_callback_setup("hyperdebug late-enable");
-#endif
+		cpu_cycles_per_step = 0;
+		DEBUGPRINT("HYPERDEBUG: late-enable process now." NL);
 	}
 }
 

@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -44,6 +44,7 @@ extern void   sdcard_unmount ( const int unit );
 extern int    sdcard_default_external_d81_mount ( const int unit );
 extern int    sdcard_default_internal_d81_mount ( const int unit );
 extern const char *sdcard_get_mount_info ( const int unit, int *is_internal );
+extern const char *sdcard_get_external_mount_name ( const int unit );
 
 extern void   sdcard_notify_hyppo_enter ( const int _is_hyppo_reset );
 extern void   sdcard_notify_hyppo_leave ( void );

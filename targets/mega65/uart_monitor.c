@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -27,7 +27,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "memory_mapper.h"
 #include "sdcard.h"
 #include "xemu/emutools_socketapi.h"
-#include "hypervisor.h"
 #include <string.h>
 
 #ifndef XEMU_ARCH_WIN
@@ -57,17 +56,12 @@ static int  umon_write_size;
 static int  umon_send_ok;
 static char umon_write_buffer[UMON_WRITE_BUFFER_SIZE];
 
-#define MAX_BREAKPOINTS 10
-struct breakpoint_st {
-	Uint16	pc;
-	bool	(*callback)(const unsigned int);
-	bool	temp;
-	const void	*user_data;
-};
-static struct breakpoint_st breakpoints[MAX_BREAKPOINTS];
-static unsigned int br_nums = 0;
+void (*m65mon_callback)(void) = NULL;
+int breakpoint_pc = -1;
+int watchpoint_addr = -1;
+int watchpoint_val = -1;
 
-
+extern int cpu_cycles_per_scanline;
 
 
 static void _umon_write_size_panic ( void )
@@ -75,19 +69,19 @@ static void _umon_write_size_panic ( void )
 	DEBUGPRINT("UARTMON: warning: too long message (%d/%d), cannot fit into the output buffer!" NL, umon_write_pos, UMON_WRITE_BUFFER_SIZE);
 }
 
-
-static void do_show_regs ( void )
+void m65mon_show_regs ( void )
 {
 	Uint8 pf = cpu65_get_pf();
 	umon_printf(
 		"\r\n"
-		"PC   A  X  Y  Z  B  SP   MAPL MAPH LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
+		"PC   A  X  Y  Z  B  SP   MAPH MAPL LAST-OP     P  P-FLAGS   RGP uS IO\r\n"
 		"%04X %02X %02X %02X %02X %02X %04X "		// register banned message and things from PC to SP
 		"%04X %04X %02X       %02X %02X "		// from MAPL to P
-		"%c%c%c%c%c%c%c%c ",				// P-FLAGS
+		"%c%c%c%c%c%c%c%c \r\n"				// P-FLAGS
+		",0777%04X\r\n", // TODO: single line of disassembly
 		cpu65.pc, cpu65.a, cpu65.x, cpu65.y, cpu65.z, cpu65.bphi >> 8, cpu65.sphi | cpu65.s,
-		((map_mask & 0x0F) << 12) | (map_offset_low  >> 8),
-		((map_mask & 0xF0) <<  8) | (map_offset_high >> 8),
+		((map_mask & 0xf0) << 8) | (map_offset_high >> 8),
+		((map_mask & 0x0f) << 12)  | (map_offset_low >> 8),
 		cpu65.op,
 		pf, 0,	// flags
 		(pf & CPU65_PF_N) ? 'N' : '-',
@@ -97,42 +91,70 @@ static void do_show_regs ( void )
 		(pf & CPU65_PF_D) ? 'D' : '-',
 		(pf & CPU65_PF_I) ? 'I' : '-',
 		(pf & CPU65_PF_Z) ? 'Z' : '-',
-		(pf & CPU65_PF_C) ? 'C' : '-'
+		(pf & CPU65_PF_C) ? 'C' : '-',
+		cpu65.pc
 	);
 }
 
-
-static void cmd_dumpmem16 ( Uint16 addr )
+static void m65mon_set_pc ( const Uint16 addr )
 {
-	int n = 16;
-	umon_printf(":000%04X:", addr);
-	while (n--)
-		umon_printf("%02X", debug_read_cpu_byte(addr++));
+	cpu65_debug_set_pc(addr);
 }
 
-
-static void cmd_dumpmem28 ( int addr )
+static void m65mon_breakpoint ( int brk )
 {
-	int n = 16;
+	breakpoint_pc = brk;
+	if (brk < 0)
+		cpu_cycles_per_step = cpu_cycles_per_scanline;
+	else
+		cpu_cycles_per_step = 0;
+}
+
+static void m65mon_watchpoint ( int addr )
+{
+	watchpoint_addr = addr;
+	watchpoint_val = debug_read_linear_byte(addr);
+	if (addr < 0)
+		cpu_cycles_per_step = cpu_cycles_per_scanline;
+	else
+		cpu_cycles_per_step = 0;
+}
+
+static void m65mon_dumpmem28 ( int addr )
+{
 	addr &= 0xFFFFFFF;
-	umon_printf(":%07X:", addr);
-	while (n--)
-		umon_printf("%02X", debug_read_linear_byte(addr++));
+	umon_printf(":%08X:", addr);
+	for (int k = 0; k < 16; k++) {
+		if ((addr >> 16) == 0x777)
+			umon_printf("%02X", debug_read_cpu_byte(addr & 0xFFFF));
+		else
+			umon_printf("%02X", debug_read_linear_byte(addr & 0xFFFFFFF));
+		addr++;
+	}
 }
 
+static void m65mon_setmem28 ( int addr, int cnt, Uint8* vals )
+{
+	for (int k = 0; k < cnt; k++) {
+		if ((addr >> 16) == 0x777)
+			debug_write_cpu_byte(addr & 0xFFFF, vals[k]);
+		else
+			debug_write_linear_byte(addr & 0xFFFFFFF, vals[k]);
+		addr++;
+	}
+}
 
-#if 0
 static void m65mon_set_trace ( int m )
 {
 	paused = m;
 }
 
-
+#ifdef TRACE_NEXT_SUPPORT
 static void m65mon_do_next ( void )
 {
 	if (paused) {
 		umon_send_ok = 0;			// delay command execution!
-		delayed_callback_fptr = do_show_regs;	// register callback
+		m65mon_callback = m65mon_show_regs;	// register callback
 		trace_next_trigger = 2;			// if JSR, then trigger until RTS to next_addr
 		orig_sp = cpu65.sphi | cpu65.s;
 		paused = 0;
@@ -140,183 +162,37 @@ static void m65mon_do_next ( void )
 		umon_printf(UMON_SYNTAX_ERROR "trace can be used only in trace mode");
 	}
 }
-
+#endif
 
 static void m65mon_do_trace ( void )
 {
 	if (paused) {
 		umon_send_ok = 0; // delay command execution!
-		delayed_callback_fptr = do_show_regs; // register callback
+		m65mon_callback = m65mon_show_regs; // register callback
 		trace_step_trigger = 1;	// trigger one step
 	} else {
 		umon_printf(UMON_SYNTAX_ERROR "trace can be used only in trace mode");
 	}
 }
 
-
 static void m65mon_do_trace_c ( void )
 {
 	umon_printf(UMON_SYNTAX_ERROR "command 'tc' is not implemented yet");
 }
-
-
+#ifdef TRACE_NEXT_SUPPORT
 static void m65mon_next_command ( void )
 {
 	if (paused)
 		m65mon_do_next();
 }
 #endif
-
 static void m65mon_empty_command ( void )
 {
-#if 0
 	if (paused)
 		m65mon_do_trace();
-#endif
 }
 
-
-// This function must be called when there is the chance that breakpoint-like functionality requires
-// change from non-trace mode (=no CPU opcode callbacks) to trace mode or vice versa. Some possibilities
-// for this (when must be called):
-// * hypervisor-usermode change (because of possible hyperdebug mode)
-// * breakpoint added or removed
-// * emulator start-up (CLI or config controlled option takes affect for some debugging related purpose)
-// The function takes care activating or de-activating trace mode (=CPU opcode callbacks) if needed by
-// checking the enviconment on key momements (which means eg the above list when the function must be
-// called).
-void umon_opcode_callback_setup ( const char *reason )
-{
-	if (br_nums || (in_hypervisor && hypervisor_is_debugged) /*|| trace_next_active */) {	// all possibilities which involves using trace mode
-		if (!cpu65.debug_callbacks.exec) {
-			DEBUGPRINT("UMON: enabling opcode trace mode (%s)" NL, reason);
-			cpu65.debug_callbacks.exec = 1;
-		}
-	} else {
-		if (cpu65.debug_callbacks.exec) {
-			DEBUGPRINT("UMON: disabling opcode trace mode (%s)" NL, reason);
-			cpu65.debug_callbacks.exec = 0;
-		}
-	}
-}
-
-
-// REMOVE a breakpoint. Warning: there is no need to call this on breakpoints which are added as "temp" (see add_breakpoint() function) _AND_ that breakpoint was hit
-// Warning2: removing a breakpoint other than the last added one causes the indices in the breakpoint array to be changed!
-static void remove_breakpoint ( const unsigned int n )
-{
-	if (XEMU_UNLIKELY(n >= br_nums)) {
-		ERROR_WINDOW("Refusing impossible breakpoint (#%u) to be removed (current number of breakpoints: %u)!", n, br_nums);
-	}
-	br_nums--;
-	if (!br_nums)
-		umon_opcode_callback_setup("removing last active breakpoint");
-	else if (n != br_nums - 2)
-		memmove(breakpoints + n, breakpoints + n + 1, (br_nums - n) * sizeof(struct breakpoint_st));
-}
-
-
-// Parameters:
-//	pc:		PC value to assign breakpoint for
-//	callback:	callback function pointer, will be called when breakpoint is hit, it must return with false to stop the CPU on breakpoint hit
-//			(stopper_breakpoint_callback is a simple one, it causes to stop the CPU, but you can provide your own, if needed)
-//	temp:		true = temporary breakpoint, automatically removed when hit (can be useful on step over opcodes mode for example)
-//	user_data:	FIXME
-static void add_breakpoint ( const Uint16 pc, bool (*callback)(const unsigned int), const bool temp, const void *user_data )
-{
-	if (XEMU_UNLIKELY(!callback))
-		FATAL("Adding breakpoint with callback = NULL");
-	if (XEMU_UNLIKELY(br_nums == MAX_BREAKPOINTS - 1)) {
-		ERROR_WINDOW("Too many existing (%u) breakpoints, cannot add another one!", br_nums);
-		return;
-	}
-	breakpoints[br_nums].pc = pc;
-	breakpoints[br_nums].callback = callback;
-	breakpoints[br_nums].temp = temp;
-	breakpoints[br_nums].user_data = user_data;
-	br_nums++;
-	umon_opcode_callback_setup("adding breakpoint");
-}
-
-
-static bool breakpoint_hit_callback ( const unsigned int n )
-{
-	do_show_regs();
-	uartmon_finish_command();
-	return false;	// stop the CPU!
-}
-
-
-// FIXME: This is a HACK, to allow to use the old API to set an (only) breakpoint.
-// FIXME: this function must die, and add_breakpoint() should be used instead directly in the future
-static void set_breakpoint ( const Uint16 pc )
-{
-	br_nums = 0;	// FIXME: this is a hack!! I shouldn't done this! However afaik there is no simple way yet to present multiple breakpoint management
-	add_breakpoint(pc, breakpoint_hit_callback, false, NULL);
-}
-
-
-// *** This is the function called by the CPU emulator before every opcode exection, if cpu65.debug_callbacks.exec == 1
-//     This is the place where various breakpoints, hypervisor debugging and "trace next" should be handled
-void cpu65_execution_debug_callback ( void )
-{
-	if (in_hypervisor && hypervisor_is_debugged)
-		hypervisor_debug();
-	/*if (trace_next_active) {
-	}*/
-	for (unsigned int n = 0; n < br_nums; n++) {
-		if (cpu65.pc == breakpoints[n].pc) {
-			DEBUGPRINT("DEBUGGER: hitting breakpoint #%u at PC=$%04X" NL, n, cpu65.pc);
-			cpu65.running = breakpoints[n].callback(n);
-			if (breakpoints[n].temp)
-				remove_breakpoint(n);
-			return;
-		}
-	}
-}
-
-
-// *** This is the function called by the CPU emulator before accepting NMI, if cpu65.debug_callbacks.nmi == 1
-//     Currently it's not used here, but the callback must be defined.
-void cpu65_nmi_debug_callback ( void )
-{
-}
-
-
-// *** This is the function called by the CPU emulator before acceptint IRQ, if cpu65.debug_callbacks.irq == 1
-//     Currently it's not used here, but the callback must be defined.
-void cpu65_irq_debug_callback ( void )
-{
-}
-
-
-// *** This is the function called by the CPU emulator before executing BRK, if cpu65.debug_callbacks.brk == 1
-//     Currently it's not used here (other than for warning about a BRK ...), but the callback must be defined.
-void cpu65_brk_debug_callback ( void )
-{
-	DEBUGPRINT("DEBUGGER: BRK is executing at $%04X" NL, cpu65.pc);
-}
-
-
-// *** This is the function called by the CPU emulator on CPU RESET, if cpu65.debug_callbacks.reset == 1
-//     Currently it's not used here, but the callback must be defined.
-void cpu65_reset_debug_callback ( void )
-{
-}
-
-
-static void subsystem_init ( void )
-{
-	static bool done = false;
-	if (done)
-		return;
-	done = true;
-	cpu65.debug_callbacks.brk = 1;
-
-}
-
-
-static char *parse_hex_arg ( char *p, int *val, const int min, const int max )
+static char *parse_hex_arg ( char *p, int *val, int min, int max )
 {
 	while (*p == 32)
 		p++;
@@ -350,7 +226,7 @@ static char *parse_hex_arg ( char *p, int *val, const int min, const int max )
 }
 
 
-static int check_end_of_command ( const char *p, const bool error_out )
+static int check_end_of_command ( char *p, int error_out )
 {
 	while (*p == 32)
 		p++;
@@ -368,7 +244,7 @@ static void cmd_setmem ( char *param, int addr )
 	char *orig_param = param;
 	int cnt = 0;
 	// get param count
-	while (param && !check_end_of_command(param, false)) {
+	while (param && !check_end_of_command(param, 0)) {
 		int val;
 		param = parse_hex_arg(param, &val, 0, 0xFF);
 		cnt++;
@@ -377,18 +253,35 @@ static void cmd_setmem ( char *param, int addr )
 	for (int idx = 0; idx < cnt; idx++) {
 		int val;
 		param = parse_hex_arg(param, &val, 0, 0xFF);
-		if ((addr >> 16) != 0x777)
-			debug_write_linear_byte(addr & 0xFFFFFFF, val);
-		else
-			debug_write_cpu_byte(addr & 0xFFFF, val);
+		m65mon_setmem28(addr & 0xFFFFFFF, 1, (Uint8*)&val);
 		addr++;
 	}
 }
 
 
+static void cmd_fillmem ( char *param, int addr )
+{
+	//char *orig_param = param;
+	int endaddr;
+	int val;
+
+	if (param && !check_end_of_command(param, 0))
+		param = parse_hex_arg(param, &endaddr, 0, 0xFFFFFFF);
+	else
+		return;
+
+	if (param && !check_end_of_command(param, 0))
+		param = parse_hex_arg(param, &val, 0, 0xFF);
+	else
+		return;
+
+	for (int k = addr; k < endaddr; k++)
+		m65mon_setmem28(k & 0xFFFFFFF, 1, (Uint8*)&val);
+}
+
+
 static void execute_command ( char *cmd )
 {
-	int bank;
 	int par1;
 	char *p = cmd;
 	while (*p)
@@ -411,33 +304,25 @@ static void execute_command ( char *cmd )
 		case 'h':
 		case 'H':
 		case '?':
-			if (check_end_of_command(cmd, true))
+			if (check_end_of_command(cmd, 1))
 				umon_printf("Xemu/MEGA65 Serial Monitor\r\nWarning: not 100%% compatible with UART monitor of a *real* MEGA65 ...");
 			break;
 		case 'r':
 		case 'R':
-			if (check_end_of_command(cmd, true))
-				do_show_regs();
+			if (check_end_of_command(cmd, 1))
+				m65mon_show_regs();
 			break;
 		case 'm':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
-			bank = par1 >> 16;
-			if (cmd && check_end_of_command(cmd, true)) {
-				if (bank == 0x777)
-					cmd_dumpmem16(par1);
-				else
-					cmd_dumpmem28(par1);
+			if (cmd && check_end_of_command(cmd, 1)) {
+				m65mon_dumpmem28(par1);
 			}
 			break;
 		case 'M':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
-			bank = par1 >> 16;
-			if (cmd && check_end_of_command(cmd, true)) {
-				for (int k = 0; k < 32; k++) {
-					if (bank == 0x777)
-						cmd_dumpmem16(par1);
-					else
-						cmd_dumpmem28(par1);
+			if (cmd && check_end_of_command(cmd, 1)) {
+				for (int k = 0; k < 16; k++) {
+					m65mon_dumpmem28(par1);
 					par1 += 16;
 					umon_printf("\n");
 				}
@@ -447,30 +332,37 @@ static void execute_command ( char *cmd )
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
 			cmd_setmem(cmd, par1);
 			break;
-#if 0
+		case 'f':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
+			cmd_fillmem(cmd, par1);
+			break;
 		case 't':
 			if (!*cmd)
 				m65mon_do_trace();
 			else if (*cmd == 'c') {
-				if (check_end_of_command(cmd, true))
+				if (check_end_of_command(cmd, 1))
 					m65mon_do_trace_c();
 			} else {
 				cmd = parse_hex_arg(cmd, &par1, 0, 1);
-				if (cmd && check_end_of_command(cmd, true))
+				if (cmd && check_end_of_command(cmd, 1))
 					m65mon_set_trace(par1);
 			}
 			break;
-#endif
 		case 'b':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
-			if (cmd && check_end_of_command(cmd, true))
-				set_breakpoint(par1);
+			if (cmd && check_end_of_command(cmd, 1))
+				m65mon_breakpoint(par1);
 			break;
 		case 'g':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
-			cpu65_debug_set_pc(par1);
+			m65mon_set_pc(par1);
 			break;
-#if 0
+		case 'w':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
+			if (cmd && check_end_of_command(cmd, 1))
+				m65mon_watchpoint(par1);
+			break;
+#ifdef TRACE_NEXT_SUPPORT
 		case 'N':
 			m65mon_next_command();
 			break;
@@ -506,6 +398,17 @@ static void execute_command ( char *cmd )
 						OSD(-1, -1, "Unmounted (%d)", unit);
 					}
 				}
+			} else if (!strncmp(cmd, "mapping", 7)) {
+				char desc[10];
+				for (unsigned int i = 0; i < 16; i++) {
+					memory_cpu_addr_to_desc(i << 12, desc, sizeof desc);
+					umon_printf("%X:%7s%c", i, desc, (i & 7) == 7 ? ' ' : '|');
+				}
+				umon_printf("\nMAP: HI-MB=$%02X LO-MB=$%02X HI-OFS=$%04X LO-OFS=$%04X MASK=$%02X",
+					map_megabyte_high >> 20, map_megabyte_low >> 20,
+					map_offset_high >> 8, map_offset_low >> 8,
+					map_mask
+				);
 			} else
 				umon_printf(UMON_SYNTAX_ERROR "unknown (or not implemented) Xemu special command: %s", cmd - 1);
 			break;
@@ -527,7 +430,6 @@ int uartmon_is_active ( void )
 
 int uartmon_init ( const char *fn )
 {
-	subsystem_init();
 	static char fn_stored[PATH_MAX] = "";
 	int xerr;
 	xemusock_socket_t sock;
@@ -639,6 +541,8 @@ void uartmon_finish_command ( void )
 	}
 	// umon_trigger_end_of_answer = 1;
 	umon_write_buffer[umon_write_size++] = '.';	// add the 'dot prompt'! (m65dbg seems to check LF + dot for end of the answer)
+	umon_write_buffer[umon_write_size++] = '\r';	// I can't seem to see the dot over tcp unless I add a CRLF...
+	umon_write_buffer[umon_write_size++] = '\n';
 	umon_read_pos = 0;
 	umon_echo = 1;
 }

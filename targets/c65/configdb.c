@@ -58,8 +58,7 @@ void configdb_define_emulator_options ( void )
 		{ "go64", "Go into C64 mode after start", &configdb.go64 },
 		{ "autoload", "Load and start the first program from disk", &configdb.autoload },
 #endif
-		{ "syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon },
-		{ "besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override }
+		{ "syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon }
 	);
 	XEMUCFG_DEFINE_NUM_OPTIONS(
 		{ "sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2 },

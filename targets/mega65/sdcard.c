@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -455,7 +455,7 @@ retry:
 			just_created_image_file = 0;
 			// Just created SD-card image file by Xemu itself! So it's nice if we format it for the user at this point!
 #ifdef SD_CONTENT_SUPPORT
-			if (!sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_FORCE_FDISK)) {
+			if (!sdcontent_handle(sdcard_size_in_blocks, NULL, SDCONTENT_FORCE_FDISK | SDCONTENT_HDOS_DIR_TOO)) {
 				INFO_WINDOW("Your just created SD-card image file has\nbeen auto-fdisk/format'ed by Xemu. Great :).");
 				sdcontent_write_rom_stub();
 			}
@@ -464,14 +464,14 @@ retry:
 	}
 #ifdef SD_CONTENT_SUPPORT
 	if (!virtsd_flag && sdfd >= 0) {
-		static const char msg[] = " on the SD-card image.\nPlease use UI menu: Disks -> SD-card -> Update files ...\nUI can be accessed with right mouse click into the emulator window.";
+		static const char msg[] = " on the SD-card image.\nPlease use UI menu: Disks / Cart -> SD-card -> Update files ...\nUI menu can be accessed via right mouse click in the emulator window.";
 		int r = sdcontent_check_xemu_signature();
 		if (r < 0) {
 			ERROR_WINDOW("Warning! Cannot read SD-card to get Xemu signature!");
 		} else if (r == 0) {
 			INFO_WINDOW("Cannot find Xemu's signature%s", msg);
 		} else if (r < MEMCONTENT_VERSION_ID) {
-			INFO_WINDOW("Xemu's singature is too old%s to upgrade", msg);
+			INFO_WINDOW("Xemu's signature is too old%s to upgrade", msg);
 		} else if (r > MEMCONTENT_VERSION_ID) {
 			INFO_WINDOW("Xemu's signature is too new%s to DOWNgrade", msg);
 		}
@@ -1104,6 +1104,14 @@ const char *sdcard_get_mount_info ( const int unit, int *is_internal )
 		*is_internal = (mount_info[unit & 1].type == MOUNT_TYPE_INTERNAL);
 	static const char *str_empty = "<EMPTY>";
 	return mount_info[unit & 1].desc ? mount_info[unit & 1].desc : str_empty;
+}
+
+
+const char *sdcard_get_external_mount_name ( const int unit )
+{
+	if (mount_info[unit & 1].type != MOUNT_TYPE_EXTERNAL)
+		return NULL;
+	return mount_info[unit & 1].last_ext_fn;
 }
 
 

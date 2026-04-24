@@ -799,8 +799,7 @@ int main ( int argc, char **argv )
 	XEMUCFG_DEFINE_SWITCH_OPTIONS(
 		{ "fullscreen", "Start in fullscreen mode", &configdb.fullscreen_requested },
 		{ "keepram", "Deactivate ROM patch for clear RAM and also save/restore RAM", &configdb.keep_ram },
-		{ "syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon },
-		{ "besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override }
+		{ "syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon }
 	);
 	XEMUCFG_DEFINE_NUM_OPTIONS(
 #ifdef SDL_HINT_RENDER_SCALE_QUALITY

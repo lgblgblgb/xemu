@@ -930,8 +930,7 @@ int main ( int argc, char **argv )
 	XEMUCFG_DEFINE_SWITCH_OPTIONS(
 		{ "fullscreen", "Start in fullscreen mode", &configdb.fullscreen },
 		{ "syscon", "Keep system console open (Windows-specific effect only)", &configdb.syscon },
-		{ "disasm", "Disassemble every CPU step (uber-spammy, uber-slow!)", &configdb.disasm },
-		{ "besure", "Skip asking \"are you sure?\" on RESET or EXIT", &i_am_sure_override }
+		{ "disasm", "Disassemble every CPU step (uber-spammy, uber-slow!)", &configdb.disasm }
 	);
 	xemucfg_define_float_option("clock", (double)DEFAULT_CPU_CLOCK / 1000000.0, "Selects CPU frequency (1.00-16.00 in MHz)", &configdb.clock_mhz, 1.0, 16.0);
 	xemucfg_define_num_option("sdlrenderquality", RENDER_SCALE_QUALITY, "Setting SDL hint for scaling method/quality on rendering (0, 1, 2)", &configdb.sdlrenderquality, 0, 2);

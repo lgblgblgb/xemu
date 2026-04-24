@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2022 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -32,8 +32,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SDCONTENT_DO_FILES		8
 // Even OVERWRITE existing files without questions, all of them! [only if FS could be checked, see *_FDISK options]
 #define SDCONTENT_OVERWRITE_FILES	16
-// For INTERNAL user!!
+// For INTERNAL use!!
 #define SDCONTENT_SYS_FILE		32
+// For INTERNAL use!!
+#define SDCONTENT_HDOS_DIR_TOO		64
 
 
 extern int sdcontent_handle ( Uint32 size_in_blocks, const char *update_dir_path, int options );

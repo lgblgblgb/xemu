@@ -27,7 +27,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define CPU65 cpu65
 //#define CPU65_DISCRETE_PF_NZ
 
-
 // Forces xemu/emutools.c to have a callback on window title update: used in MEGA65 emu
 // to set the status of the emulator (ie: paused, running, ...)
 // FIXME: define this conditionally when umon/uartmon (?) is enabled
@@ -43,16 +42,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 #define HAVE_XEMU_INSTALLER
 
-#ifdef HAS_UARTMON_SUPPORT
-#define CPU65_DEBUG_CALLBACK_SUPPORT
-#endif
-
 #ifndef XEMU_ARCH_HTML
 #define CONFIG_DROPFILE_CALLBACK
 #define VIRTUAL_DISK_IMAGE_SUPPORT
 //#define CBM_BASIC_TEXT_SUPPORT
 #define SD_CONTENT_SUPPORT
 #endif
+
+//#define TRACE_NEXT_SUPPORT
 
 /* Globally: XEMU_INLINE hints gcc to always inline a function. Using this define switches that behaviour off, defaulting to standard "inline" (as it would be without using gcc as well) */
 //#define DO_NOT_FORCE_INLINE
@@ -86,12 +83,16 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 
 #define CONFIG_EMSCRIPTEN_OK
+#define CONFIG_ANDROID_OK
 
 // Needed for the stub-ROM, also matrix-mode uses it
 #define XEMU_VGA_FONT_8X8
 
 #define XEMU_CONFIGDB_SUPPORT
 #define XEMU_OSD_SUPPORT
+#ifndef XEMU_ARCH_HTML
+#define XEMU_OSK_SUPPORT
+#endif
 
 #define RLE_COMPRESSED_DISK_IMAGE_SUPPORT
 

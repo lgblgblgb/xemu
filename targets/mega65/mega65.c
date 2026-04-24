@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -43,6 +43,9 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "rom.h"
 #include "cart.h"
 #include "matrix_mode.h"
+#include "xemu/emutools_osk.h"
+#include "serialtcp.h"
+#include "em_gw.h"
 
 // "Typical" size in default settings (video standard is PAL, default border settings).
 // See also vic4.h
@@ -56,13 +59,20 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 static int nmi_level;			// please read the comment at nmi_set() below
 static int emulation_is_running = 0;
 static int speed_current = -1;
+int paused = 0;
+static int paused_old = 0;
+extern int watchpoint_addr;
+extern int watchpoint_val;
+#ifdef TRACE_NEXT_SUPPORT
+static int orig_sp = 0;
+static int trace_next_trigger = 0;
+#endif
+int trace_step_trigger = 0;
 static char emulator_speed_title[64] = "";
 static char fast_mhz_as_string[16] = "";
 const char *cpu_clock_speed_string_p = "";
-static unsigned int cpu_cycles_per_scanline;
-#ifdef CPU_STEP_MULTI_OPS
+unsigned int cpu_cycles_per_scanline;
 int cpu_cycles_per_step = 100; 	// some init value, will be overriden, but it must be greater initially than "only a few" anyway
-#endif
 static Uint8 i2c_regs_original[sizeof i2c_regs];
 Uint8 last_dd00_bits = 3;		// Bank 0
 const char *last_reset_type = "XEMU-STARTUP";
@@ -134,9 +144,8 @@ void machine_set_speed ( int verbose )
 				break;
 		}
 		DEBUG("SPEED: CPU speed is set to %s, cycles per scanline: %d in %s (1MHz cycles per scanline: %f)" NL, cpu_clock_speed_string_p, cpu_cycles_per_scanline, videostd_name, videostd_1mhz_cycles_per_scanline);
-#ifdef		CPU_STEP_MULTI_OPS
-		cpu_cycles_per_step = XEMU_LIKELY(!configdb.cpusinglestep) ? cpu_cycles_per_scanline : 0;
-#endif
+		if (cpu_cycles_per_step > 1 && !hypervisor_is_debugged && !configdb.cpusinglestep)
+			cpu_cycles_per_step = cpu_cycles_per_scanline;	// if in trace mode (or hyper-debug ...), do not set this! So set only if non-trace and non-hyper-debug
 	}
 }
 
@@ -148,14 +157,7 @@ void window_title_pre_update_callback ( void )
 		cpu_clock_speed_string_p, videostd_name,
 		in_hypervisor ? 'H' : iomode_names[io_mode]
 	);
-#ifdef	CPU65_DEBUG_CALLBACK_SUPPORT
-	if (!cpu65.running)
-		window_title_custom_addon = "stopped";
-	else if (cpu65.debug_callbacks.exec)
-		window_title_custom_addon = "tracing";
-	else
-		window_title_custom_addon = NULL;	// NULL = default title ("running"), defined/handled by xemu/emutools.c if it's NULL
-#endif
+	window_title_custom_addon = paused ? "TRACE/PAUSE" : NULL;
 }
 
 
@@ -332,10 +334,8 @@ static void preinit_memory_for_start ( void )
 static void mega65_init ( void )
 {
 	hypervisor_debug_init(configdb.hickuprep, configdb.hyperdebug, configdb.hyperserialascii);
-#ifdef	CPU_STEP_MULTI_OPS
-	if (configdb.cpusinglestep)
+	if (hypervisor_is_debugged || configdb.cpusinglestep)
 		cpu_cycles_per_step = 0;
-#endif
 	hid_init(
 		c64_key_map,
 		VIRTUAL_SHIFT_POS,
@@ -365,7 +365,7 @@ static void mega65_init ( void )
 	} while (0);
 	// *** Initializes memory subsystem of MEGA65 emulation itself
 	memory_init();
-	cart_load_bin(configdb.cartbin8000, 0x8000, "Cannot load binary cartridge image from $8000");
+	cart_attach(configdb.cart);
 	if (xemu_load_file(I2C_FILE_NAME, i2c_regs, sizeof i2c_regs, sizeof i2c_regs,
 #ifndef		XEMU_ARCH_HTML
 		"Cannot load I2C reg-space. Maybe first run or upgrade of Xemu?\nFor the next Xemu launch, it should have been already corrected automatically.\nSo no need to worry."
@@ -437,7 +437,7 @@ static void mega65_init ( void )
 #ifdef HAS_UARTMON_SUPPORT
 	uartmon_init(configdb.uartmon);
 #endif
-	memory_set_rom_protection(0);
+	memory_set_rom_protection(false);
 	hypervisor_start_machine();
 	speed_current = 0;
 	machine_set_speed(1);
@@ -503,6 +503,7 @@ static void shutdown_callback ( void )
 	xumon_stop();
 #endif
 #ifdef XEMU_HAS_SOCKET_API
+	serialtcp_shutdown();
 	xemusock_uninit();
 #endif
 	hypervisor_hdos_close_descriptors();
@@ -537,6 +538,43 @@ static void reset_mega65_hard ( void )
 }
 
 
+// Does about the same as hard reset, but instead of re-fire HYPPO from system startup
+// (SLOW, especially with EMSCRIPTEN), it tries to solve things as its own.
+static void reset_mega65_soft ( void )
+{
+	if (!hyppo_loaded_rom_content) {
+		WARNING_WINDOW("No full hyppo start-up sequence happened yet, using HARD reset instead.");
+		reset_mega65_hard();
+		return;
+	}
+	cia_reset(&cia1);
+	cia_reset(&cia2);
+	reset_hw_errata_level();
+	memset(D7XX + 0x20, 0, 0x40);	// stop audio DMA possibly going on
+	hwa_kbd_disable_selector(0);	// FIXME: do we need this?
+	eth65_reset();
+	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
+	c128_d030_reg = 0;
+	vic_reset();
+	vic4_default_rom_register_values();
+	memory_set_rom_protection(true);
+	D6XX_registers[0x7D] |= 4;
+	//vic_registers[0x30] = 0;
+	memory_reconfigure(
+		0, VIC4_IOMODE, 0xFF, 0xFF,	// D030 value, I/O mode, CPU I/O port 0, CPU I/O port 1
+		0, 0, 0, 0, 0,			// MAP MB LO, OFS LO, MB HI, OFS HI, MASK
+		false				// hypervisor
+	);
+	machine_set_speed(0);
+	dma_reset();
+	nmi_level = 0;
+	memcpy(main_ram + 0x20000, hyppo_loaded_rom_content, 0x20000);
+	memcpy(char_ram, main_ram + 0x2D000, 0x1000);
+	memset(main_ram, 0, 0x1F800);
+	cpu65_reset();
+}
+
+
 static void reset_mega65_cpu_only ( void )
 {
 	D6XX_registers[0x7D] &= ~16;	// FIXME: other default speed controls on reset?
@@ -566,6 +604,8 @@ int reset_mega65 ( const unsigned int options )
 		if (!ARE_YOU_SURE("Are you sure you want to RESET your emulated machine?", i_am_sure_override | ARE_YOU_SURE_DEFAULT_YES))
 			return 0;
 	}
+	if ((options & RESET_MEGA65_NO_CART))
+		cart_detach();
 	switch (options & 0xFF) {
 		case RESET_MEGA65_HARD:
 			last_reset_type = "HARD";
@@ -578,6 +618,10 @@ int reset_mega65 ( const unsigned int options )
 		case RESET_MEGA65_HYPPO:
 			last_reset_type = "HYPPO";
 			reset_mega65_via_hyppo();
+			break;
+		case RESET_MEGA65_SOFT:
+			last_reset_type = "SOFT";
+			reset_mega65_soft();
 			break;
 		default:
 			ERROR_WINDOW("Unknow RESET type asked: %u", options & 0xFF);
@@ -622,8 +666,14 @@ static void update_emulator ( void )
 	// this part is used to trigger 'RESTORE trap' with long press on RESTORE.
 	// see input_devices.c for more information
 	kbd_trigger_restore_trap();
-#ifdef	HAS_UARTMON_SUPPORT
+#ifdef HAS_UARTMON_SUPPORT
 	uartmon_update();
+#endif
+#ifdef XEMU_HAS_SOCKET_API
+	if (XEMU_UNLIKELY(serialtcp_get_connection_error(false))) {
+		const char *err = serialtcp_get_connection_error(true);
+		ERROR_WINDOW("SerialTCP failure:\n%s", err);
+	}
 #endif
 	// Screen updating, final phase
 	//vic4_close_frame_access();
@@ -644,10 +694,78 @@ static void emulation_loop ( void )
 	// machine_set_speed() will react to videostd_changed flag, so it's just enough to call it from here
 	machine_set_speed(0);
 	for (;;) {
+#ifdef TRACE_NEXT_SUPPORT
+		if (trace_next_trigger == 2) {
+			if (cpu65.op == 0x20) {		// was the current opcode a JSR $nnnn ? (0x20)
+				trace_next_trigger = 1;	// if so, let's loop until the stack pointer returns back, then pause
+			} else {
+				trace_next_trigger = 0;	// if the current opcode wasn't a JSR, then lets pause immediately after
+				paused = 1;
+			}
+		} else if (trace_next_trigger == 1) {	// are we presently stepping over a JSR?
+			if ((cpu65.sphi | cpu65.s) == orig_sp ) {	// did the current sp return to its original position?
+				trace_next_trigger = 0;	// if so, lets pause the emulation, as we have successfully stepped over the JSR
+				paused = 1;
+			}
+		}
+#endif
+		while (XEMU_UNLIKELY(paused)) {	// paused special mode, ie tracing support, or something ...
+			if (XEMU_UNLIKELY(in_dma))
+				break;		// if DMA is pending, do not allow monitor/etc features
+#ifdef HAS_UARTMON_SUPPORT
+			if (m65mon_callback) {	// delayed uart monitor command should be finished ...
+				m65mon_callback();
+				m65mon_callback = NULL;
+				uartmon_finish_command();
+			}
+#endif
+			// we still need to feed our emulator with update events ... It also slows this pause-busy-loop down to every full frames (~25Hz) <--- XXX totally inaccurate now!
+			// note, that it messes timing up a bit here, as there is update_emulator() calls later in the "normal" code as well
+			// this can be a bug, but real-time emulation is not so much an issue if you eg doing trace of your code ...
+			// XXX it's maybe a problem to call this!!! update_emulator() is called here which closes frame but no no reopen then ... FIXME: handle this somehow!
+			update_emulator();
+			if (trace_step_trigger) {
+				// if monitor triggers a step, break the pause loop, however we will get back the control on the next
+				// iteration of the infinite "for" loop, as "paused" is not altered
+				trace_step_trigger = 0;
+				break;	// break the pause loop now
+			}
+			// If "paused" mode is switched off ie by a monitor command (called from update_emulator() above!)
+			// then it will resets back the the original state, etc
+			if (paused != paused_old) {
+				paused_old = paused;
+				if (paused) {
+					DEBUGPRINT("TRACE: entering into trace mode @ $%04X" NL, cpu65.pc);
+					cpu_cycles_per_step = 0;
+				} else {
+					DEBUGPRINT("TRACE: leaving trace mode @ $%04X" NL, cpu65.pc);
+#ifdef					HAS_UARTMON_SUPPORT
+					if (breakpoint_pc < 0)
+						cpu_cycles_per_step = cpu_cycles_per_scanline;
+					else
+						cpu_cycles_per_step = 0;
+#else
+					cpu_cycles_per_step = cpu_cycles_per_scanline;
+#endif
+				}
+			}
+		}
+		if (XEMU_UNLIKELY(hypervisor_is_debugged && in_hypervisor))
+			hypervisor_debug();
 #ifdef		HAS_UARTMON_SUPPORT
-		if (XEMU_UNLIKELY(!cpu65.running))
-		cycles += 1;	// fake cycles spent, though the CPU is not running!
-		else
+		if (XEMU_UNLIKELY(breakpoint_pc == cpu65.pc)) {
+			DEBUGPRINT("TRACE: Breakpoint @ $%04X hit, Xemu moves to trace mode after the execution of this opcode." NL, cpu65.pc);
+			m65mon_show_regs();
+			paused = 1;
+		}
+		if (watchpoint_addr != -1)
+		{
+			if (watchpoint_val != debug_read_linear_byte(watchpoint_addr))
+			{
+				watchpoint_val = debug_read_linear_byte(watchpoint_addr);
+				paused = 1;
+			}
+		}
 #endif
 		cycles += XEMU_UNLIKELY(in_dma) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
 #ifdef CPU_STEP_MULTI_OPS
@@ -656,12 +774,22 @@ static void emulation_loop ( void )
 		);	// FIXME: this is maybe not correct, that DMA's speed depends on the fast/slow clock as well?
 		if (cycles >= cpu_cycles_per_scanline) {
 			cycles -= cpu_cycles_per_scanline;
-			cia_tick(&cia1, 32);	// FIXME: why 32?????? why fixed????? what should be the CIA "tick" frequency for real? Is it dependent on NTSC/PAL?
-			cia_tick(&cia2, 32);	//	... also: do we want to tick CIAs if CPU is stopped -> making this conditional if cpu65.running is True, only??
+			static double cia_ticks_fp = 0.0;
+			cia_ticks_fp += cia_ticks_per_scanline;
+			const int cia_ticks_now_int = (int)cia_ticks_fp;
+			if (XEMU_LIKELY(cia_ticks_now_int >= 1)) {
+				// DEBUGPRINT("CIA tick: %d" NL, cia_ticks_now_int);
+				cia_tick(&cia1, cia_ticks_now_int);
+				cia_tick(&cia2, cia_ticks_now_int);
+				cia_ticks_fp -= (double)cia_ticks_now_int;
+			}
 			if (XEMU_UNLIKELY(vic4_render_scanline()))
 				break;	// break the (main, "for") loop, if frame is over!
 		}
 	}
+#ifdef	XEMU_ARCH_HTML
+	emgw_msg_gate_dispatch();
+#endif
 	update_emulator();
 }
 
@@ -701,11 +829,13 @@ int main ( int argc, char **argv )
 	xemugui_init(configdb.selectedgui);
 	// Initialize MEGA65
 	mega65_init();
+#ifdef	XEMU_OSK_SUPPORT
+	osk_init(osk_desc, 800, 600, 48);
+#endif
 	audio65_init(
 		SID_CYCLES_PER_SEC,		// SID cycles per sec
 		AUDIO_SAMPLE_FREQ,		// sound mix freq
 		configdb.mastervolume,
-		configdb.stereoseparation,
 		configdb.audiobuffersize
 	);
 	DEBUGPRINT("MEM: UNHANDLED memory policy: %d" NL, configdb.skip_unhandled_mem);
@@ -750,6 +880,9 @@ int main ( int argc, char **argv )
 	if (!configdb.syscon)
 		sysconsole_close(NULL);
 	hypervisor_serial_monitor_open_file(configdb.hyperserialfile);
+#ifdef XEMU_HAS_SOCKET_API
+	serialtcp_init(configdb.serialtcp);
+#endif
 	xemu_timekeeping_start();
 	emulation_is_running = 1;
 	update_emulated_time_sources();

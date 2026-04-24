@@ -38,7 +38,9 @@ struct configdb_st {
 	int	syscon, audio;
 	int	mousemode;
 	int	primo;
+#ifndef	NO_CONSOLE
 	int	monitor;
+#endif
 	char	*ram_setup_str;
 	char	*gui_selection;
 	char	*snapshot;

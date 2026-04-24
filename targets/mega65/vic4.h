@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
    Copyright (C)2020-2022 Hernán Di Pietro <hernan.di.pietro@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
@@ -182,7 +182,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SXA_TRIM_RIGHT_BITS012(sw)	((sw) >> 13)
 #define SXA_VERTICAL_FLIP(cw)		((cw) & 0x8000)
 #define SXA_HORIZONTAL_FLIP(cw)		((cw) & 0x4000)
-//#define SXA_ALPHA_BLEND(cw)		((cw) & 0x2000)
+#define SXA_ALPHA_BLEND(cw)		((cw) & 0x2000)
 #define SXA_GOTO_X(cw)			((cw) & 0x1000)
 #define SXA_4BIT_PER_PIXEL(cw)		((cw) & 0x0800)
 #define SXA_TRIM_RIGHT_BIT3(cw)		((cw) & 0x0400)
@@ -251,6 +251,7 @@ extern float videostd_1mhz_cycles_per_scanline;
 extern int   vic_readjust_sdl_viewport;
 extern int   vic4_disallow_videostd_change;
 extern unsigned int vic_frame_counter, vic_frame_counter_since_boot;
+extern double cia_ticks_per_scanline;
 
 extern int   vic4_registered_screenshot_request;
 extern int   vic_vidp_legacy, vic_chrp_legacy, vic_sprp_legacy;
@@ -267,6 +268,7 @@ extern void  vic4_open_frame_access ( void );
 extern void  vic4_close_frame_access ( void );
 extern void  vic4_set_videostd ( const int mode, const char *comment );
 extern void  vic4_set_errata_level ( const Uint8 level );
+extern void  vic4_default_rom_register_values ( void );
 
 extern Uint8*vic4_query_screen_address ( void );
 extern Uint8*vic4_query_colour_address ( void );

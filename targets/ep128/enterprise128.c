@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2015-2017,2020-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2015-2017,2020-2021,2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -212,13 +212,13 @@ int main (int argc, char *argv[])
 		shutdown_callback		// registered shutdown function
 	))
 		return 1;
+	osd_init_with_defaults();
 	xemugui_init(configdb.gui_selection);	// allow to fail (do not exit if it fails). Some targets may not have X running
 	hid_init(
 		ep128_key_map,
 		VIRTUAL_SHIFT_POS,
 		SDL_ENABLE		// joystick events
 	);
-	osd_init_with_defaults();
 	fileio_init(
 #ifdef XEMU_ARCH_HTML
 		"/",
@@ -270,10 +270,18 @@ int main (int argc, char *argv[])
 	}
 	if (configdb.snapshot)
 		ep128snap_set_cpu_and_io();
+#ifndef	NO_CONSOLE
 	if (!configdb.syscon && !configdb.monitor)
 		sysconsole_close(NULL);
 	if (configdb.monitor)
 		monitor_start();
+#else
+	if (!configdb.syscon)
+		sysconsole_close(NULL);
+#endif
+#ifdef	XEMU_OSK_SUPPORT
+	osk_init(osk_desc, SCREEN_WIDTH, SCREEN_HEIGHT * 2, 40);
+#endif
 	clear_emu_events();
 	xemu_timekeeping_start();
 	DEBUGPRINT(NL "EMU: entering into main emulation loop" NL);

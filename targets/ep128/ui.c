@@ -1,6 +1,6 @@
 /* Minimalistic Enterprise-128 emulator with focus on "exotic" hardware
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2021 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2021,2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -21,6 +21,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "xemu/emutools_gui.h"
 #include "xemu/emutools_files.h"
 #include "xemu/emutools_hid.h"
+#include "xemu/emutools_osk.h"
 
 #include "ui.h"
 
@@ -69,6 +70,7 @@ static void ui_cb_cpuclock ( const struct menu_st *m, int *query )
 }
 
 
+#ifndef NO_CONSOLE
 static void ui_cb_monitor ( const struct menu_st *m, int *query )
 {
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, monitor_check());
@@ -77,6 +79,7 @@ static void ui_cb_monitor ( const struct menu_st *m, int *query )
 	else
 		monitor_start();
 }
+#endif
 
 
 static void ui_cb_sound ( const struct menu_st *m, int *query )
@@ -100,7 +103,19 @@ static void ui_cb_render_scale_quality ( const struct menu_st *m, int *query )
 	register_new_texture_creation = 1;
 }
 
+
+#ifdef XEMU_OSK_SUPPORT
+static void ui_cb_show_osk ( const struct menu_st *m, int *query )
+{
+	const bool status = osk_status();
+	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, status);
+	osk_show(!status);
+}
+#endif
+
+
 /**** MENU SYSTEM ****/
+
 
 static const struct menu_st menu_render_scale_quality[] = {
 	{ "Nearest pixel sampling",     XEMUGUI_MENUID_CALLABLE |
@@ -119,13 +134,19 @@ static const struct menu_st menu_display[] = {
 					XEMUGUI_MENUFLAG_SEPARATOR,	xemugui_cb_windowsize, (void*)2 },
 	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
+#ifdef	XEMU_OSK_SUPPORT
+	{ "Show OSK",			XEMUGUI_MENUID_CALLABLE |
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_show_osk, NULL },
+#endif
 	{ NULL }
 };
 static const struct menu_st menu_debug[] = {
 	{ "OSD key debugger",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_osd_key_debugger, NULL },
+#ifndef	NO_CONSOLE
 	{ "Monitor prompt",		XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_monitor, NULL },
+#endif
 #ifdef HAVE_XEMU_EXEC_API
 	{ "Browse system folder",	XEMUGUI_MENUID_CALLABLE,	xemugui_cb_native_os_prefdir_browser, NULL },
 #endif

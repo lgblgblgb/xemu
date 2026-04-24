@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<link rel="stylesheet" href="shell.css">
+	<title>Xemu MEGA65 emulation</title>
+	<link rel="icon" type="image/x-icon" href="favicon.ico">
+</head>
+<body>
+	<button onclick="msg_gate(1)">FULL RESET</button>
+	<button onclick="msg_gate(2)">CPU RESET</button>
+	<button onclick="msg_gate(3)">FULLSCREEN</button>
+	<button onclick="msg_gate(4)">MATRIX</button>
+	<button onclick="msg_gate(7)">RUN DEMO</button>
+
+	<span id="version-info">XEMU :: MEGA65</span>
+	<span id="status-info">???</span>
+
+	<br><br>
+
+	<table border=0><tr><td>
+
+	<div id="emulator-wrapper">
+		<div id="canvas-container">
+			<div id="loading-overlay">
+				<img src="shell.gif" alt="Loading in progress" id="spinner">
+				<div id="loading-text">LOADING EMULATOR</div>
+			</div>
+			<canvas id="canvas" oncontextmenu="event.preventDefault()" tabindex="-1"></canvas>
+		</div>
+	</div>
+
+	</td>&nbsp;&nbsp;<td>
+	</td><td id="editor-container">
+
+	<h2>BASIC editor</h2>
+	<p><i>Editor on "RUN" only checks for line numbers and character-set, not actual BASIC syntax!</i></p>
+	<textarea tabindex="-1" id="basiceditor" cols=80 rows=25 spellcheck="false"></textarea>
+	<div id="editorerror"></div>
+	<br>
+	<button onclick="run_this()">RUN</button>
+	<button onclick="next_example()">NEXT EXAMPLE</button>
+
+	</td></tr></table>
+
+	<br>
+	<details open>
+		<summary>Emulator stdout (click to open/close)</summary>
+		<div id="console-container">
+			<pre id="console"></pre>
+		</div>
+	</details>
+
+	<script src="shell.js"></script>
+	<script async src="xmega65.js"></script>
+</body>
+</html>

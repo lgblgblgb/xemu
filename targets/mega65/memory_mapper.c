@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2017-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2017-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -37,7 +37,6 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sdcard.h"
 #include "cart.h"
 #include "configdb.h"
-#include "uart_monitor.h"
 #include <string.h>
 
 #define	  ALLOW_CPU_CUSTOM_FUNCTIONS_INCLUDE
@@ -250,10 +249,10 @@ static void  disk_buffer_user_writer ( const Uint32 addr32, const Uint8 data ) {
 	disk_buffer_cpu_view[(addr32 - 0xFFD6000U) & 0x1FF] = data;
 }
 static Uint8 eth_buffer_reader ( const Uint32 addr32 ) {
-	return eth65_read_rx_buffer(addr32 - 0xFFDE800U);
+	return eth_rx_buf[addr32 - 0xFFDE800U];
 }
 static void  eth_buffer_writer ( const Uint32 addr32, const Uint8 data ) {
-	eth65_write_tx_buffer(addr32 - 0xFFDE800U, data);
+	eth_tx_buf[addr32 - 0xFFDE800U] = data;
 }
 static Uint8 slow_devices_reader ( const Uint32 addr32 ) {
 	return cart_read_byte(addr32 - 0x4000000U);
@@ -269,9 +268,8 @@ static void  i2c_writer ( const Uint32 addr32, const Uint8 data ) {
 	if (rel >= I2C_NVRAM_OFFSET && rel < (I2C_NVRAM_OFFSET + I2C_NVRAM_SIZE)) {
 		//DEBUGPRINT("I2C: NVRAM write ($%02X->$%02X) @ NVRAM+$%X" NL, i2c_regs[rel], data, rel - I2C_NVRAM_OFFSET);
 		i2c_regs[rel] = data;
-	} else if (configdb.mega65_model == 3 && rel >= 0x1D0 && rel <= 0x1EF) {	// Hyppo needs this on PCB R3 for I2C target setup (audio mixer settings)
-		// TODO: emulate the mixer stuff
-		i2c_regs[rel] = data;
+	} else if (configdb.mega65_model == 3 && rel >= 0x1D0 && rel <= 0x1EF) {	// Hyppo needs this on PCB R3 for I2C target setup (audio amp chip settings?)
+		i2c_regs[rel] = data;							// ... though the audio amp is not emulated by Xemu
 	} else {
 		DEBUGPRINT("I2C: unhandled write ($%02X) @ I2C+$%X" NL, data, rel);
 	}
@@ -344,7 +342,7 @@ static const struct mem_map_st *mem_map_hints[MEM_HINT_SLOTS];
 // * Every areas (other than the first) must start on address which is the previous one's last one PLUS 1
 // * The first entry must start at address 0
 // * The last entry must be $10000000 - $FFFFFFFF with type MEM_SLOT_TYPE_IMPOSSIBLE as a safe-guard
-static struct mem_map_st mem_map[] = {
+static const struct mem_map_st mem_map[] = {
 	{ 0x00000000U, 0x0001F7FFU, MEM_SLOT_TYPE_MAIN_RAM	}, // OLD memory model used 0-FF as "ZP" to handle CPU I/O port. But now it's VIRTUAL and only exists in CPU's view not in mem-map!
 	{ 0x0001F800U, 0x0001FFFFU, MEM_SLOT_TYPE_SHARED_RAM	}, // "shared" area, 2K of coulour RAM [C65 legacy], b/c of performance, we must distribute between both of normal and colour RAM
 	{ 0x00020000U, 0x0003FFFFU, MEM_SLOT_TYPE_ROM		}, // though it's called ROM, it can be normal RAM, if "ROM write protection" is off
@@ -518,6 +516,10 @@ static void resolve_linear_slot ( const Uint32 slot, const Uint32 addr )
 		case MEM_SLOT_TYPE_ETH_BUFFER:
 			mem_slot_rd_func[slot] = eth_buffer_reader;
 			mem_slot_wr_func[slot] = eth_buffer_writer;
+#ifdef			MEM_USE_DATA_POINTERS
+			mem_slot_rd_data[slot] = eth_rx_buf + addr - 0xFFDE800U;
+			mem_slot_wr_data[slot] = eth_tx_buf + addr - 0xFFDE800U;
+#endif
 			break;
 		case MEM_SLOT_TYPE_OPL3:
 			mem_slot_rd_func[slot] = dummy_reader;	// TODO: what should I do here?
@@ -748,7 +750,7 @@ int memory_cpu_addr_to_desc ( const Uint16 cpu_addr, char *p, const unsigned int
 		default:
 			if (policy >= BANK_POLICY_INVALID)
 				goto error;
-			return snprintf(p, n, "%X", policy + cpu_addr);
+			return snprintf(p, n, "%X", (policy & 0xFF00000U) | ((policy + cpu_addr) & 0xFFFFFU));
 	}
 error:
 	FATAL("Invalid bank_policy4k[%u >> 12] = $%X in %s()!", cpu_addr, policy, __func__);
@@ -801,24 +803,28 @@ void cpu65_do_aug_callback ( void )
 	| MAP   | MAP   | MAP   | MAP   | UPPER | UPPER | UPPER | UPPER | Z
 	| BLK7  | BLK6  | BLK5  | BLK4  | OFF19 | OFF18 | OFF17 | OFF16 |
 	+-------+-------+-------+-------+-------+-------+-------+-------+
-	-- C65GS extension: Set the MegaByte register for low and high mobies
-	-- so that we can address all 256MB of RAM.
-	if reg_x = x"0f" then
-		reg_mb_low <= reg_a;
-	end if;
-	if reg_z = x"0f" then
-		reg_mb_high <= reg_y;
-	end if; */
+	*/
 	cpu65.cpu_inhibit_interrupts = 1;	// disable interrupts till the next "EOM" (ie: NOP) opcode
 	DEBUG("CPU: MAP opcode, input A=$%02X X=$%02X Y=$%02X Z=$%02X" NL, cpu65.a, cpu65.x, cpu65.y, cpu65.z);
-	map_offset_low	= (cpu65.a <<   8) | ((cpu65.x & 15) << 16);	// offset of lower half (blocks 0-3)
-	map_offset_high	= (cpu65.y <<   8) | ((cpu65.z & 15) << 16);	// offset of higher half (blocks 4-7)
-	map_mask	= (cpu65.z & 0xF0) | ( cpu65.x >> 4);		// "is mapped" mask for blocks (1 bit for each)
-	// M65 specific "MB" (megabyte) selector "mode":
-	if (cpu65.x == 0x0F)
+	if (cpu65.x == 0x0F) {
 		map_megabyte_low  = (int)cpu65.a << 20;
-	if (cpu65.z == 0x0F)
+	} else {
+		map_offset_low	= (cpu65.a << 8) | ((cpu65.x & 15) << 16);	// offset of lower half (blocks 0-3)
+		map_mask	= (map_mask & 0xF0) | (cpu65.x >> 4);		// "is mapped" mask for the lower half
+	}
+	if (cpu65.z == 0x0F) {
 		map_megabyte_high = (int)cpu65.y << 20;
+		if (in_hypervisor) {
+			DEBUG("MEM: warning, altering MB selection for upper 32K memory mapping in hypervisor mode at PC=$%04X" NL, cpu65.pc);
+		}
+	} else {
+		if (!in_hypervisor) {
+			map_offset_high	= (cpu65.y << 8) | ((cpu65.z & 15) << 16);	// offset of higher half (blocks 4-7)
+			map_mask	= (map_mask & 0x0F) | (cpu65.z & 0xF0);		// "is mapped" mask for the upper half
+		} else {
+			DEBUG("MEM: avoiding to alter upper 32K memory mapping in hypervisor mode at PC=$%04X" NL, cpu65.pc);
+		}
+	}
 	DEBUG("MEM: applying new memory configuration because of MAP CPU opcode" NL);
 	DEBUG("LOW -OFFSET = $%03X, MB = $%02X" NL, map_offset_low , map_megabyte_low  >> 20);
 	DEBUG("HIGH-OFFSET = $%03X, MB = $%02X" NL, map_offset_high, map_megabyte_high >> 20);
@@ -915,10 +921,6 @@ void memory_reconfigure (
 ) {
 	if (new_in_hypervisor != in_hypervisor) {
 		in_hypervisor = new_in_hypervisor;
-#ifdef		HAS_UARTMON_SUPPORT
-		// Manage UMON opcode execution callbacks (maybe hyperdebug is used?)
-		umon_opcode_callback_setup("hyperdebug");
-#endif
 		// Invalidate slots, where behaviour is hypervisor/user mode dependent!
 		for (unsigned int slot = 0; slot < MEM_SLOTS_TOTAL; slot++)
 			if (mem_slot_type[slot] >= MEM_SLOT_TYPE_HYPERVISOR_RAM)	// see the mem_slot_type enum type definition for more details. This is kind of abusing enums ...

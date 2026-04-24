@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2024 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -44,6 +44,8 @@ extern void hid_set_default_emu_f_hotkeys  ( void );
 extern Uint8 kbd_matrix[16];
 extern int   hid_show_osd_keys;
 extern int   hid_joy_on_cursor_keys;
+extern bool  hid_ignore_mouse_lbutton;
+extern bool  hid_ignore_mouse_rbutton;
 
 #define KBD_IS_PRESSED(a)	(!(kbd_matrix[(a) >> 4] & (1 << ((a) & 0x7))))
 #define KBD_CLEAR_MATRIX()      memset(kbd_matrix, 0xFF, sizeof kbd_matrix)
@@ -77,6 +79,7 @@ extern void hid_register_sdl_textinput_event_callback	( const unsigned int level
 #define HID_CB_LEVEL_EMU	2
 
 extern void hid_sdl_synth_key_event	( int matrix_pos, int is_press );
+extern void hid_sdl_synth_mouse_button_click ( const int button_id );
 
 // Provided HID functions:
 extern void hid_set_autoreleased_key    ( int key );
