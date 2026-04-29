@@ -1610,7 +1610,7 @@ static XEMU_INLINE void vic4_render_char_raster ( void )
 					} else {
 						draw_mask = 0xFF;
 						// palette switches only allowed when rowmask=0
-						if (SXA_ATTR_BOLD(color_data) && SXA_ATTR_REVERSE(color_data) && !REG_VICIII_ATTRIBS)
+						if (SXA_ATTR_BOLD(color_data) && SXA_ATTR_REVERSE(color_data))
 							used_palette = altpalette;	// use the alternate palette from now in the scanline
 						else
 							used_palette = palette;		// we do this as well, since there can be "double GOTOX" so we want back to "original" palette ...
