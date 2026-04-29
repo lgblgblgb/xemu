@@ -1359,8 +1359,7 @@ static XEMU_INLINE void vic4_render_multicolor_char_row ( Uint8 char_byte, const
 // 8-bytes per row
 static XEMU_INLINE void vic4_render_fullcolor_char_row ( const Uint8* char_row, const int glyph_width, const Uint32 bg_sdl_color, const Uint32 fg_sdl_color, const int hflip, const Uint32 *palette_now )
 {
-#if 0
-	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
+	for (float cx = 0; cx < glyph_width; cx += char_x_step) {
 		const Uint8 char_data = draw_mask & char_row[XEMU_LIKELY(!hflip) ? (int)cx : glyph_width - 1 - (int)cx];
 		if (char_data == 0xFF)
 			rrb[xcounter] = fg_sdl_color;
@@ -1371,21 +1370,6 @@ static XEMU_INLINE void vic4_render_fullcolor_char_row ( const Uint8* char_row, 
 		is_fg[xcounter] = char_data;
 		XCOUNTER_INC();
 	}
-#else
-	for (float cx = 0; cx < glyph_width; cx += char_x_step) {
-		const Uint8 char_data = draw_mask & char_row[XEMU_LIKELY(!hflip) ? (int)cx : glyph_width - 1 - (int)cx];
-		//if (xcounter < border_x_right) {
-			if (char_data == 0xFF)
-				rrb[xcounter] = fg_sdl_color;
-			else if (XEMU_LIKELY(char_data))
-				rrb[xcounter] = palette_now[char_data];
-			else if (XEMU_LIKELY(enable_bg_paint))
-				rrb[xcounter] = bg_sdl_color;
-		//}
-		is_fg[xcounter] = char_data;
-		XCOUNTER_INC();
-	}
-#endif
 }
 
 
