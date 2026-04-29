@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    THIS IS AN UGLY PIECE OF SOURCE REALLY.
 
@@ -2264,6 +2264,13 @@ int cpu65_step (
 			CPU65.pf_v = 0;
 			break;
 	case 0xB9:	/* LDA Absolute,Y */
+#ifdef MEGA65
+			if (IS_NEG_NEG_OP()) {		// MEGA65-QOP: LDQ $nnnn,Y
+				CPU65.op_cycles = MEGA_FOP_NEG_NEG_B9_CYCLES;
+				SET_NZ32(AXYZ_SET(readQuad(_absy())));
+				break;
+			}
+#endif
 			SET_NZ(CPU65.a = readByte(_absy()));
 			break;
 	case 0xBA:	/* TSX Implied */

@@ -65,6 +65,7 @@
 #define MEGA_FOP_NOP_B2_CYCLES 12	// LDA  [$nn],Z (NOP prefixed)         13 cycs total (+5)
 #define MEGA_FOP_NEG_NEG_B2_CYCLES 11	// LDQ  ($nn),Z (NEG NEG prefixed)     13 cycs total (+4)
 #define MEGA_FOP_NEG_NEG_NOP_B2_CYCLES 13	// LDQ  [$nn],Z (NEG NEG NOP prefixed) 16 cycs total (+6)
+#define MEGA_FOP_NEG_NEG_B9_CYCLES 9	// LDQ  $nnnn,Y (NEG NEG prefixed)     TODO: what the situation here exactly??
 #define MEGA_FOP_NEG_NEG_C5_CYCLES 9	// CMPQ $nn (NEG NEG prefixed)     11 cycs total (+5)
 #define MEGA_FOP_NEG_NEG_C6_CYCLES 15	// DEQ  $nn (NEG NEG prefixed)     17 cycs total (+9)
 #define MEGA_FOP_NEG_NEG_CD_CYCLES 10	// CMPQ $nnnn (NEG NEG prefixed)     12 cycs total (+5)
