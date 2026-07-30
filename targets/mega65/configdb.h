@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -118,7 +118,6 @@ struct configdb_st {
 	int	ramcheckread;
 	char	*init_attic;
 	int	joyport;
-	int	nomouseemu;
 #ifdef HID_KBD_NO_F_HOTKEYS
 	int	emu_f_hotkeys;
 #endif

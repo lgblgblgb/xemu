@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -117,7 +117,6 @@ static const struct xemutools_configdef_switch_st switch_options[] = {
 	{ "matrixstart", "Start with matrix-mode activated", &configdb.matrixstart },
 	{ "matrixdisable", "Disable the matrix hotkey", &configdb.matrixdisable },
 	{ "ramcheckread", "Enabled warnings on reading unwritten memory (first 126K only)", &configdb.ramcheckread },
-	{ "nomouseemu", "Disable mouse emulation", &configdb.nomouseemu },
 	{ "prgexit", "Exit on READY. prompt for -prg launched program", &configdb.prg_exit },
 #ifdef HID_KBD_NO_F_HOTKEYS
 	{ "emufhotkeys", "Use F9,F10,F11 as emulator hotkeys", &configdb.emu_f_hotkeys },
