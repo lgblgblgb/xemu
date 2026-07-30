@@ -675,15 +675,45 @@ int xemu_init_debug ( const char *fn )
 #if !defined(XEMU_ARCH_HTML) && !defined(XEMU_ARCH_ANDROID)
 static char *GetHackedPrefDir ( const char *base_path, const char *name )
 {
+	// Format: ./{name}/prefdir-is-here.txt (at the executable level of path)
+	// File content:
+	// 	@!absolute-path (till the first CR/LF/TAB)
+	//	@>relative-path (till the first CR/LF/TAB)
+	//	anothing other (or even empty file): the directory itself
 	static const char prefdir_is_here_marker[] = "prefdir-is-here.txt";
 	char path[PATH_MAX];
 	sprintf(path, "%s%s%c", base_path, name, DIRSEP_CHR);
 	char file[PATH_MAX + sizeof(prefdir_is_here_marker)];
 	sprintf(file, "%s%s", path, prefdir_is_here_marker);
-	int fd = open(file, O_RDONLY | O_BINARY);
-	if (fd < 0)
+	const int fd = open(file, O_RDONLY | O_BINARY);
+	if (fd < 0) {
 		return NULL;
-	close(fd);
+	} else {
+		char rpath[PATH_MAX];
+		const size_t l = read(fd, rpath, sizeof(rpath) - 1);
+		close(fd);
+		if (l >= 3 && rpath[0] == '@') {
+			rpath[l] = '\0';
+			for (char *p = rpath + 2; *p; p++)
+				if (*p == '/' || *p == '\\') {
+					*p = DIRSEP_CHR;
+				} else if (*p < 32) {
+					*p = '\0';
+					break;
+				}
+			if (rpath[1] == '!' && rpath[2] > 32) {
+				DEBUGPRINT("XEMU: overriding pref-dir via information from %s to absolute path: %s" NL, file, rpath + 2);
+				return xemu_strdup(rpath + 2);
+			} else if (rpath[1] == '>' && rpath[2] > 32) {
+				char path2[PATH_MAX];
+				if (snprintf(path2, sizeof path2, "%s%s%c", path, rpath + 2, DIRSEP_CHR) < sizeof(path2) - 1) {
+					DEBUGPRINT("XEMU: overriding pref-dir via information from %s to relative path: %s" NL, file, path2);
+					return xemu_strdup(path2);
+				}
+			}
+		}
+	}
+	DEBUGPRINT("XEMU: overriding pref-dir by presence of %s to: %s" NL, file, path);
 	return xemu_strdup(path);
 }
 #endif
