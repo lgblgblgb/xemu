@@ -107,12 +107,12 @@ unsigned int vic_frame_counter, vic_frame_counter_since_boot;
 int sprite_y_adjust_xemu_bug = 0;		// Unknown reason of sprite-Y bug in Xemu in NTSC. This is a workaround. FIXME: why is it needed?!
 double cia_ticks_per_scanline;
 
-// NOTE: this is very wrong! RRB should work mode-pixel by buffer pixel, and it will be stretched
+// NOTE: this is very wrong! RRB should work mode-pixel by buffer pixel, and it will be scaled
 // later (by custom factor OR H640/H320 setting). However Xemu always uses physical pixel. As a quick
 // workaround, we wrap RRB after 1023 or 2047 depending on H640 or H320
 // TODO: make RRB buffer a real entity (not part of the current line of the texture), render into it
-// as mega65-core does (not-stretching dependent at all, which also affects mode renders not using
-// those ugly float types!) and do the streching at the end. Then also a fixed 1023 clamping/wrapping is OK.
+// as mega65-core does (not-scaling dependent at all, which also affects mode renders not using
+// those ugly float types!) and do the scaling at the end. Then also a fixed 1023 clamping/wrapping is OK.
 static unsigned int xcounter_clamp_mask = 1023;
 #define	XCOUNTER_INC()			xcounter = (xcounter + 1) & xcounter_clamp_mask
 
@@ -1447,7 +1447,7 @@ static XEMU_INLINE void set_bitplane_pointers ( void )
 // Render a bitplane-mode character cell row
 static XEMU_INLINE void vic4_render_bitplane_char_row ( const Uint32 offset, const int glyph_width )
 {
-	// TODO: check if bitplane mode can be stretched at all (char_x_step) or it's related to any RRB stuff
+	// TODO: check if bitplane mode can be scaled at all (char_x_step) or it's related to any RRB stuff
 	// TODO: must be checked against all bitplane related stuff btw in general too
 	for (float cx = 0; cx < glyph_width && xcounter < border_x_right; cx += char_x_step) {
 		const Uint8 bitsel = 0x80 >> ((int)cx);

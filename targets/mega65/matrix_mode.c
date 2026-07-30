@@ -706,13 +706,19 @@ static void cmd_audio ( char *p )
 }
 
 
+#define	BOOLVAL(n)	((n) ? 'Y' : 'n')
+
+
 static void cmd_vic ( char *p )
 {
 	if (!cannot_have_cmd_arg(p))
 		return;
-	const Uint32 v_addr = (Uint32)(vic4_query_screen_address() - main_ram);
-	const Uint32 c_addr = (Uint32)(vic4_query_colour_address() - colour_ram);
-	MATRIX("V-PTR=$%X C-OFS=$%X ($%X) HOT=%d H640=%d V400=%d VIC3ATRS=%d 16BIT=%d", v_addr, c_addr, c_addr + 0x0FF80000U, !!REG_HOTREG, !!REG_H640, !!REG_V400, !!REG_VICIII_ATTRIBS, !!REG_16BITCHARSET);
+	MATRIX(
+		"V-PTR=$%X C-OFS=$%X ($%X) HOT=%c H640=%c V400=%c VIC3ATTRS=%c 16BIT=%c\n"
+		"FNRST=%c CHRCNT=%d CHRXSCALE=%d LINESTEP_BYTES=%d SPRITE_PTRS=$%X",
+		SCREEN_ADDR, COLOUR_RAM_OFFSET, COLOUR_RAM_OFFSET + 0x0FF80000U, BOOLVAL(REG_HOTREG), BOOLVAL(REG_H640), BOOLVAL(REG_V400), BOOLVAL(REG_VICIII_ATTRIBS), BOOLVAL(REG_16BITCHARSET),
+		BOOLVAL(REG_FNRST), REG_CHRCOUNT, REG_CHARXSCALE, LINESTEP_BYTES, SPRITE_POINTER_ADDR
+	);
 }
 
 
