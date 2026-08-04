@@ -101,7 +101,9 @@ jobs:
           build/deploy/before-deploy.sh xemu-deploy Linux
           cd xemu-deploy
           ../build/deploy/git-deploy-forced-push.sh
+          ls -l
           cd ..
+          ls -l
 
       - name: Announce deployment
         if: env.should_deploy == 'true'
@@ -230,7 +232,9 @@ jobs:
           build/deploy/before-deploy.sh xemu-deploy Windows
           cd xemu-deploy
           ../build/deploy/git-deploy-forced-push.sh
+          ls -l
           cd ..
+          ls -l
 
       - name: Announce deployment
         if: env.should_deploy == 'true'
@@ -327,7 +331,23 @@ jobs:
           build/deploy/before-deploy.sh xemu-deploy MacOS
           cd xemu-deploy
           ../build/deploy/git-deploy-forced-push.sh
+          ls -l
           cd ..
+          ls -l
+
+      - name: Deploy on gitbub releases section
+        if: env.should_deploy == 'true22'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            nopefile1
+            nopefile2
+          tag_name: "Some tag_name"
+          name: "Some name"
+          body: "Some body"
+          draft: true
+          prerelease: true
+          fail_on_unmatched_files: true
 
       - name: Announce deployment
         if: env.should_deploy == 'true'
