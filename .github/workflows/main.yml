@@ -105,6 +105,20 @@ jobs:
           cd ..
           ls -l
 
+      - name: Deploy on gitbub releases section
+        if: env.should_deploy == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            *.rpm
+            *.deb
+          tag_name: "Some tag_name (Linux) DEV"
+          name: "Some name (Linux) DEV"
+          body: "Some body (Linux) DEV"
+          draft: true
+          prerelease: true
+          fail_on_unmatched_files: true
+
       - name: Announce deployment
         if: env.should_deploy == 'true'
         env:
@@ -236,6 +250,20 @@ jobs:
           cd ..
           ls -l
 
+      - name: Deploy on gitbub releases section
+        if: env.should_deploy == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            *.zip
+            *.exe
+          tag_name: "Some tag_name (Win) DEV"
+          name: "Some name (Win) DEV"
+          body: "Some body (Win) DEV"
+          draft: true
+          prerelease: true
+          fail_on_unmatched_files: true
+
       - name: Announce deployment
         if: env.should_deploy == 'true'
         env:
@@ -345,10 +373,10 @@ jobs:
         with:
           files: |
             *.zip
-            *.img
+            *.dmg
           tag_name: "Some tag_name (Mac) DEV"
           name: "Some name (Mac) DEV"
-          body: "Some body (Mac) EV"
+          body: "Some body (Mac) DEV"
           draft: true
           prerelease: true
           fail_on_unmatched_files: true
