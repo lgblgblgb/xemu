@@ -331,20 +331,24 @@ jobs:
           build/deploy/before-deploy.sh xemu-deploy MacOS
           cd xemu-deploy
           ../build/deploy/git-deploy-forced-push.sh
-          ls -l
+          echo "PRE CD"
+          pwd
+          ls -la
           cd ..
-          ls -l
+          echo "POST CD"
+          pwd
+          ls -la
 
       - name: Deploy on gitbub releases section
-        if: env.should_deploy == 'true22'
+        if: env.should_deploy == 'true'
         uses: softprops/action-gh-release@v2
         with:
           files: |
-            nopefile1
-            nopefile2
-          tag_name: "Some tag_name"
-          name: "Some name"
-          body: "Some body"
+            *.zip
+            *.img
+          tag_name: "Some tag_name (Mac) DEV"
+          name: "Some name (Mac) DEV"
+          body: "Some body (Mac) EV"
           draft: true
           prerelease: true
           fail_on_unmatched_files: true
