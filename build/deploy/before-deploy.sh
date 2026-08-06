@@ -1,5 +1,5 @@
 #!/bin/bash
-# (C)2020,2021 Gabor Lenart LGB lgblgblgb@gmail.com
+# (C)2020,2021,2026 Gabor Lenart LGB lgblgblgb@gmail.com
 
 if [ "$1" = "" -o "$2" = "" ]; then
 	echo "Bad usage."
@@ -16,6 +16,11 @@ cp * $TARGET/ || true
 rm $TARGET/Makefile
 cat README.md > $TARGET/README-XEMU.md
 cat build/objs/cdate.data > $TARGET/versioninfo
+if [ "$GITHUB_ENV" != "" ]; then
+	echo "XEMU_VERSIONINFO=`cat build/objs/cdate.data`" >> $GITHUB_ENV
+else
+	echo "Warning, environment variable GITHUB_ENV is empty" >&2
+fi
 
 (
 	if [ "$TRAVIS_BRANCH" = "master" ]; then

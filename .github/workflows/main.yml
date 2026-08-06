@@ -103,6 +103,19 @@ jobs:
           ../build/deploy/git-deploy-forced-push.sh
           cd ..
 
+      - name: Deploy on gitbub releases section
+        if: env.should_deploy == 'true' && (github.ref_name == 'master' || github.ref_name == 'next' || github.ref_name == 'dev')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            *.deb
+          tag_name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          body: "Build `${{ env.XEMU_VERSIONINFO }}` for branch **${{ github.ref_name }}**. For more options, description and explanation on branches, use the [official download page](https://github.lgb.hu/xemu/). This build is based on commit [${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})."
+          prerelease: ${{ github.ref_name == 'master' && 'false' || 'true' }}
+          draft: ${{ github.ref_name == 'dev' && 'true' || 'false' }}
+          fail_on_unmatched_files: true
+
       - name: Announce deployment
         if: env.should_deploy == 'true'
         env:
@@ -232,6 +245,20 @@ jobs:
           ../build/deploy/git-deploy-forced-push.sh
           cd ..
 
+      - name: Deploy on gitbub releases section
+        if: env.should_deploy == 'true' && (github.ref_name == 'master' || github.ref_name == 'next' || github.ref_name == 'dev')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            *.zip
+            *.exe
+          tag_name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          body: "Build `${{ env.XEMU_VERSIONINFO }}` for branch **${{ github.ref_name }}**. For more options, description and explanation on branches, use the [official download page](https://github.lgb.hu/xemu/). This build is based on commit [${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})."
+          prerelease: ${{ github.ref_name == 'master' && 'false' || 'true' }}
+          draft: ${{ github.ref_name == 'dev' && 'true' || 'false' }}
+          fail_on_unmatched_files: true
+
       - name: Announce deployment
         if: env.should_deploy == 'true'
         env:
@@ -328,6 +355,20 @@ jobs:
           cd xemu-deploy
           ../build/deploy/git-deploy-forced-push.sh
           cd ..
+
+      - name: Deploy on gitbub releases section
+        if: env.should_deploy == 'true' && (github.ref_name == 'master' || github.ref_name == 'next' || github.ref_name == 'dev')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            *.zip
+            *.dmg
+          tag_name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          body: "Build `${{ env.XEMU_VERSIONINFO }}` for branch **${{ github.ref_name }}**. For more options, description and explanation on branches, use the [official download page](https://github.lgb.hu/xemu/). This build is based on commit [${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})."
+          prerelease: ${{ github.ref_name == 'master' && 'false' || 'true' }}
+          draft: ${{ github.ref_name == 'dev' && 'true' || 'false' }}
+          fail_on_unmatched_files: true
 
       - name: Announce deployment
         if: env.should_deploy == 'true'
