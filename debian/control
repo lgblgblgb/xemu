@@ -1,0 +1,44 @@
+Source: xemu
+Section: otherosfs
+Priority: optional
+Maintainer: Gabor Lenart (LGB) <lgblgblgb@gmail.com>
+Build-Depends: debhelper-compat (= 13),
+ pkgconf,
+ libsdl2-dev,
+ libgtk-3-dev,
+ libreadline-dev,
+ zlib1g-dev
+Standards-Version: 4.7.2
+Homepage: https://github.com/lgblgblgb/xemu
+Rules-Requires-Root: no
+
+Package: xemu
+Architecture: any
+Depends: ${shlibs:Depends}, ${misc:Depends}
+Description: emulators for Commodore and Hungarian 8-bit computers
+ Xemu ("X-Emulators") is LGB's suite of emulators for a set of mostly
+ Commodore and Hungarian 8-bit machines, built on a shared SDL2 core. It
+ is the reference emulator for several machines that are otherwise poorly
+ served, including the Commodore 65 prototype and the MEGA65.
+ .
+ This package ships seven emulators:
+ .
+   * xc65      Commodore 65 / C64DX prototype (CSG 4510 CPU)
+   * xmega65   MEGA65 (45GS02 CPU)
+   * xclcd     Commodore LCD prototype
+   * xvic20    Commodore VIC-20
+   * xep128    Enterprise 64/128
+   * xprimo    Primo
+   * xtvc      Videoton TV Computer
+ .
+ No ROM images are bundled — supply your own, so the package carries no
+ redistribution concerns.
+ .
+ The C65 and MEGA65 emulators are of particular interest for 65CE02 and
+ 45GS02 toolchain work: xc65 loads any 128 KiB file as its system ROM
+ without validating it, so it doubles as a bare-metal execution
+ environment for compiler output.
+ .
+ Note that an unrelated original-Xbox emulator is also called "xemu"
+ (https://xemu.app). This package is LGB's 8-bit suite, which has shipped
+ its own .deb under the name "xemu" since 2016.
