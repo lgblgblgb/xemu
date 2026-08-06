@@ -106,17 +106,17 @@ jobs:
           ls -l
 
       - name: Deploy on gitbub releases section
-        if: env.should_deploy == 'true'
+        if: env.should_deploy == 'true' && (github.ref_name == 'master' || github.ref_name == 'next' || github.ref_name == 'dev')
         uses: softprops/action-gh-release@v2
         with:
           files: |
             *.rpm
             *.deb
           tag_name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
-          name: "Some name (Linux) DEV ${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
-          body: "Some body (Linux) DEV ${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
-          draft: true
-          prerelease: true
+          name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          body: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          prerelease: ${{ github.ref_name == 'master' && 'false' || 'true' }}
+          draft: ${{ github.ref_name == 'dev' && 'true' || 'false' }}
           fail_on_unmatched_files: true
 
       - name: Announce deployment
@@ -251,17 +251,17 @@ jobs:
           ls -l
 
       - name: Deploy on gitbub releases section
-        if: env.should_deploy == 'true'
+        if: env.should_deploy == 'true' && (github.ref_name == 'master' || github.ref_name == 'next' || github.ref_name == 'dev')
         uses: softprops/action-gh-release@v2
         with:
           files: |
             *.zip
             *.exe
           tag_name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
-          name: "Some name (Win) DEV ${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
-          body: "Some body (Win) DEV ${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
-          draft: true
-          prerelease: true
+          name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          body: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          prerelease: ${{ github.ref_name == 'master' && 'false' || 'true' }}
+          draft: ${{ github.ref_name == 'dev' && 'true' || 'false' }}
           fail_on_unmatched_files: true
 
       - name: Announce deployment
@@ -368,17 +368,17 @@ jobs:
           ls -la
 
       - name: Deploy on gitbub releases section
-        if: env.should_deploy == 'true'
+        if: env.should_deploy == 'true' && (github.ref_name == 'master' || github.ref_name == 'next' || github.ref_name == 'dev')
         uses: softprops/action-gh-release@v2
         with:
           files: |
             *.zip
             *.dmg
           tag_name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
-          name: "Some name (Mac) DEV ${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
-          body: "Some body (Mac) DEV ${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
-          draft: true
-          prerelease: true
+          name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          body: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          prerelease: ${{ github.ref_name == 'master' && 'false' || 'true' }}
+          draft: ${{ github.ref_name == 'dev' && 'true' || 'false' }}
           fail_on_unmatched_files: true
 
       - name: Announce deployment
