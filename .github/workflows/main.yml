@@ -112,9 +112,9 @@ jobs:
           files: |
             *.rpm
             *.deb
-          tag_name: "Some tag_name (Linux) DEV"
-          name: "Some name (Linux) DEV"
-          body: "Some body (Linux) DEV"
+          tag_name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          name: "Some name (Linux) DEV ${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          body: "Some body (Linux) DEV ${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
           draft: true
           prerelease: true
           fail_on_unmatched_files: true
@@ -257,9 +257,9 @@ jobs:
           files: |
             *.zip
             *.exe
-          tag_name: "Some tag_name (Win) DEV"
-          name: "Some name (Win) DEV"
-          body: "Some body (Win) DEV"
+          tag_name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          name: "Some name (Win) DEV ${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          body: "Some body (Win) DEV ${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
           draft: true
           prerelease: true
           fail_on_unmatched_files: true
@@ -374,9 +374,9 @@ jobs:
           files: |
             *.zip
             *.dmg
-          tag_name: "Some tag_name (Mac) DEV"
-          name: "Some name (Mac) DEV"
-          body: "Some body (Mac) DEV"
+          tag_name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          name: "Some name (Mac) DEV ${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          body: "Some body (Mac) DEV ${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
           draft: true
           prerelease: true
           fail_on_unmatched_files: true
