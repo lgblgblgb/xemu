@@ -1,0 +1,60 @@
+.TH XVIC20 1 "2026-08-05" "xemu" "User Commands"
+.SH NAME
+xvic20 \- Commodore VIC-20 emulator (Xemu / X-Emulators)
+.SH SYNOPSIS
+.B xvic20
+[\fIOPTIONS\fR]
+.SH DESCRIPTION
+.B xvic20
+emulates the Commodore VIC-20. It is one of the emulators in LGB's Xemu
+("X-Emulators") suite, a collection of emulators for mostly Commodore and
+Hungarian 8-bit machines sharing a common SDL2-based core.
+
+.PP
+No ROM images are shipped with this package. Supply them yourself with
+.BR \-rom ,
+or place them where the emulator's configuration expects.
+.SH OPTIONS
+Options vary per emulator and per build. Run
+.B xvic20 \-h
+for the authoritative list. Options commonly useful for scripted or
+non-interactive use include:
+.TP
+.B \-skipconfigfile
+Skip loading the default config file. Must be the \fIfirst\fR option.
+.TP
+.B \-headless
+Run without a window (intended for testing).
+.TP
+.B \-sleepless
+Run at maximum emulation speed rather than real time.
+.TP
+.B \-rom \fIFILE\fR
+Override the system ROM image to load.
+.TP
+.B \-dumpmem \fIFILE\fR
+Write memory contents to \fIFILE\fR on exit.
+.TP
+.B \-fullscreen
+Start in fullscreen mode.
+.SH FILES
+.TP
+.I ~/.local/share/xemu\-lgb/
+Per-emulator configuration and state.
+.SH SEE ALSO
+.BR xc65 (1),
+.BR xmega65 (1),
+.BR xclcd (1),
+.BR xvic20 (1),
+.BR xep128 (1),
+.BR xprimo (1),
+.BR xtvc (1)
+.PP
+Upstream documentation: https://github.com/lgblgblgb/xemu
+.SH AUTHORS
+Xemu is written by Gabor Lenart (LGB) <lgblgblgb@gmail.com>.
+.PP
+This manual page was written for the Foundry Linux package.
+.SH COPYRIGHT
+Copyright (C) 2016-2026 Gabor Lenart (LGB).
+License GPL-2.0-or-later.

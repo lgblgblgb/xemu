@@ -1,0 +1,9 @@
+xemu (0~git20260805.23934f9-1) unstable; urgency=medium
+
+  * Initial Debian source package.
+  * Build the seven emulators in upstream's default target from source.
+  * Generate desktop entries from build/xemu.desktop and target metadata.
+  * Install one manual page per shipped emulator.
+  * Enable dpkg-buildflags hardening and reproducible build timestamps.
+
+ -- Foundry Linux <packages@foundrylinux.org>  Wed, 05 Aug 2026 23:20:00 -0600

@@ -1,0 +1,74 @@
+#!/usr/bin/make -f
+
+# Debian source-package rules for Xemu.
+#
+# Upstream has no `make install` target and no configure script in the autotools
+# sense: `build/configure/configure` generates build/configure/config-native.make,
+# which build/Makefile.common includes. Upstream's Makefile assigns CFLAGS with a
+# plain `=`, so passing CFLAGS on the make command line would clobber the flags
+# the build needs. Instead we run configure ourselves and *append* dpkg's
+# hardening flags to the generated config, which is included before CONFIG_CFLAGS
+# is used — so the flags land without displacing upstream's.
+
+export DEB_BUILD_MAINT_OPTIONS = hardening=+all
+
+DPKG_EXPORT_BUILDFLAGS = 1
+include /usr/share/dpkg/buildflags.mk
+
+CONFIG = build/configure/config-native.make
+
+# The seven emulators upstream's default `all` target builds.
+BINARIES = xc65 xmega65 xclcd xvic20 xep128 xprimo xtvc
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	bash build/configure/configure --arch=native
+	printf 'CONFIG_CFLAGS += %s %s\n'      '$(CFLAGS)' '$(CPPFLAGS)' >> $(CONFIG)
+	printf 'CONFIG_CFLAGS_LINK += %s %s\n' '$(LDFLAGS)' '$(CFLAGS)'  >> $(CONFIG)
+
+override_dh_auto_build:
+	$(MAKE) ARCH=native
+
+override_dh_auto_test:
+	# Upstream ships no test suite.
+
+override_dh_auto_install:
+	set -e; for b in $(BINARIES); do \
+	    install -D -m 0755 build/bin/$$b.native \
+	        $(CURDIR)/debian/xemu/usr/bin/$$b; \
+	done
+	# Desktop entries, GENERATED from upstream's own data rather than
+	# hand-written: build/xemu.desktop is upstream's template (%machine /
+	# %binary placeholders) and each targets/*/Makefile declares PRG_TARGET
+	# and EMU_DESCRIPTION. This mirrors what upstream's own
+	# build/deb-build-simple.sh does, and is the reason to do it that way:
+	# static per-binary .desktop files silently fail to cover a target
+	# upstream adds later, and their machine names drift from upstream's.
+	# Only emit entries for targets we actually ship (BINARIES).
+	install -d $(CURDIR)/debian/xemu/usr/share/applications
+	set -e; for m in targets/*/Makefile; do \
+	    [ -s "$$m" ] || continue; \
+	    t=$$(sed -n 's/^PRG_TARGET[\t ]*=[\t ]*//p' "$$m"); \
+	    d=$$(sed -n 's/^EMU_DESCRIPTION[\t ]*=[\t ]*//p' "$$m"); \
+	    [ -n "$$t" ] && [ -n "$$d" ] || continue; \
+	    case " $(BINARIES) " in *" $$t "*) ;; *) continue ;; esac; \
+	    sed "s/%machine/$$d/g; s/%binary/$$t/g" build/xemu.desktop \
+	        > $(CURDIR)/debian/xemu/usr/share/applications/$$t.desktop; \
+	    chmod 0644 $(CURDIR)/debian/xemu/usr/share/applications/$$t.desktop; \
+	done
+	# Upstream's template points Icon= at /usr/share/pixmaps.
+	install -D -m 0644 build/xemu-48x48.xpm \
+	    $(CURDIR)/debian/xemu/usr/share/pixmaps/xemu-48x48.xpm
+
+override_dh_auto_clean:
+	$(MAKE) clean ARCH=native || true
+	rm -f build/configure/config-native.make build/configure/config-native.h
+	# `make clean` leaves the configure probe's scratch files and the embedded
+	# build-date blob behind, which makes `dpkg-source -b` fail with
+	# "unrepresentable changes to source". Upstream tracks only .gitignore and
+	# README in build/objs, and .gitignore/Makefile/README/rom in build/bin —
+	# remove everything else so the source package builds from a clean tree.
+	find build/objs -mindepth 1 ! -name .gitignore ! -name README -delete
+	rm -f build/bin/*.native

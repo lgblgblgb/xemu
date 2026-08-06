@@ -1,0 +1,3 @@
+version=4
+# Upstream publishes no tags or releases; the packaged version is a git
+# snapshot of master, so uscan has no release artifact to track yet.
