@@ -1,7 +1,7 @@
 Source: xemu
 Section: otherosfs
 Priority: optional
-Maintainer: Foundry Linux <packages@foundrylinux.org>
+Maintainer: Gabor Lenart (LGB) <lgblgblgb@gmail.com>
 Build-Depends: debhelper-compat (= 13),
  pkgconf,
  libsdl2-dev,

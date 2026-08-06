@@ -6,4 +6,4 @@ xemu (0~git20260805.23934f9-1) unstable; urgency=medium
   * Install one manual page per shipped emulator.
   * Enable dpkg-buildflags hardening and reproducible build timestamps.
 
- -- Foundry Linux <packages@foundrylinux.org>  Wed, 05 Aug 2026 23:20:00 -0600
+ -- Gabor Lenart (LGB) <lgblgblgb@gmail.com>  Wed, 05 Aug 2026 23:20:00 -0600
