@@ -16,7 +16,11 @@ cp * $TARGET/ || true
 rm $TARGET/Makefile
 cat README.md > $TARGET/README-XEMU.md
 cat build/objs/cdate.data > $TARGET/versioninfo
-echo "XEMU_VERSIONINFO=`cat build/objs/cdate.data`" >> $GITHUB_ENV
+if [ "$GITHUB_ENV" != "" ]; then
+	echo "XEMU_VERSIONINFO=`cat build/objs/cdate.data`" >> $GITHUB_ENV
+else
+	echo "Warning, environment variable GITHUB_ENV is empty" >&2
+fi
 
 (
 	if [ "$TRAVIS_BRANCH" = "master" ]; then
