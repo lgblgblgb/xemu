@@ -950,10 +950,8 @@ static const struct menu_st menu_reset_hotkey_type[] = {
 	{ NULL }
 };
 static const struct menu_st menu_inputdevices[] = {
-	{ "Enable mouse grab",		XEMUGUI_MENUID_CALLABLE |
+	{ "Enable mouse grab + emu",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_set_mouse_grab, NULL },
-	{ "Disable mouse emulation",	XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&configdb.nomouseemu },
 #ifdef	XEMU_OSK_SUPPORT
 	{ "Show OSK",			XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_show_osk, NULL },
