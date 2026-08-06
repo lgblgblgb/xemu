@@ -114,7 +114,7 @@ jobs:
             *.deb
           tag_name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
           name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
-          body: "Build ${{ env.XEMU_VERSIONINFO }} for branch ${{ github.ref_name }}. For more options, descriptions or explanations on branches, please use the official download page instead: https://github.lgb.hu/xemu/"
+          body: "Build `${{ env.XEMU_VERSIONINFO }}` for branch **${{ github.ref_name }}**. For more options, descriptions or explanations on branches, please use the official download page instead: https://github.lgb.hu/xemu/ Build is based on [commit ${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})."
           prerelease: ${{ github.ref_name == 'master' && 'false' || 'true' }}
           draft: ${{ github.ref_name == 'dev' && 'true' || 'false' }}
           fail_on_unmatched_files: true
@@ -259,7 +259,7 @@ jobs:
             *.exe
           tag_name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
           name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
-          body: "Build ${{ env.XEMU_VERSIONINFO }} for branch ${{ github.ref_name }}. For more options, descriptions or explanations on branches, please use the official download page instead: https://github.lgb.hu/xemu/"
+          body: "Build `${{ env.XEMU_VERSIONINFO }}` for branch **${{ github.ref_name }}**. For more options, descriptions or explanations on branches, please use the official download page instead: https://github.lgb.hu/xemu/ Build is based on [commit ${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})."
           prerelease: ${{ github.ref_name == 'master' && 'false' || 'true' }}
           draft: ${{ github.ref_name == 'dev' && 'true' || 'false' }}
           fail_on_unmatched_files: true
@@ -376,7 +376,7 @@ jobs:
             *.dmg
           tag_name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
           name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
-          body: "Build ${{ env.XEMU_VERSIONINFO }} for branch ${{ github.ref_name }}. For more options, descriptions or explanations on branches, please use the official download page instead: https://github.lgb.hu/xemu/"
+          body: "Build `${{ env.XEMU_VERSIONINFO }}` for branch **${{ github.ref_name }}**. For more options, descriptions or explanations on branches, please use the official download page instead: https://github.lgb.hu/xemu/ Build is based on [commit ${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})."
           prerelease: ${{ github.ref_name == 'master' && 'false' || 'true' }}
           draft: ${{ github.ref_name == 'dev' && 'true' || 'false' }}
           fail_on_unmatched_files: true
