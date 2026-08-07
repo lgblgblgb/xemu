@@ -114,7 +114,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           body: "Build `${{ env.XEMU_VERSIONINFO }}` for branch **${{ github.ref_name }}**. For more options, description and explanation on branches, use the [official download page](https://github.lgb.hu/xemu/). This build is based on commit [${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})."
           prerelease: ${{ github.ref_name == 'master' && 'false' || 'true' }}
-          draft: ${{ github.ref_name == 'dev' && 'true' || 'false' }}
+          draft: false
           fail_on_unmatched_files: true
 
       - name: Announce deployment
@@ -258,7 +258,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           body: "Build `${{ env.XEMU_VERSIONINFO }}` for branch **${{ github.ref_name }}**. For more options, description and explanation on branches, use the [official download page](https://github.lgb.hu/xemu/). This build is based on commit [${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})."
           prerelease: ${{ github.ref_name == 'master' && 'false' || 'true' }}
-          draft: ${{ github.ref_name == 'dev' && 'true' || 'false' }}
+          draft: false
           fail_on_unmatched_files: true
 
       - name: Announce deployment
@@ -370,7 +370,7 @@ jobs:
           target_commitish: ${{ github.sha }}
           body: "Build `${{ env.XEMU_VERSIONINFO }}` for branch **${{ github.ref_name }}**. For more options, description and explanation on branches, use the [official download page](https://github.lgb.hu/xemu/). This build is based on commit [${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})."
           prerelease: ${{ github.ref_name == 'master' && 'false' || 'true' }}
-          draft: ${{ github.ref_name == 'dev' && 'true' || 'false' }}
+          draft: false
           fail_on_unmatched_files: true
 
       - name: Announce deployment
