@@ -37,11 +37,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define READ_BUFFER_SIZE	8192					// note, must be large enough to hold a full command/HTTP-request/websocket frame!
 #define DOCROOT_SUBDIR		"webserver-docroot"
 #define WEBSOCKET_ENDPOINT	"XemuWebMonitorMain"
+#define WEBSERVER_REPOSITORY	"https://github.com/lgblgblgb/xemu-webmonitor/tree/master/download"
 //#define XUMON_STACK_SIZE	(8*1024*1024)
 
 #define START_ID		(unsigned int)start_unix_time		// just a 'weak' kind-of-ID, so it does not matter too much ...
-
-static xemusock_socket_t sock_server = XS_INVALID_SOCKET;
 
 static SDL_atomic_t thread_counter;
 static SDL_atomic_t thread_stop_trigger;
@@ -50,7 +49,8 @@ static SDL_atomic_t incoming_msg_counter;
 static SDL_sem *responder_sem = NULL;
 
 int xumon_running = 0;
-static char *docroot = NULL;
+static xemusock_socket_t sock_server = XS_INVALID_SOCKET;
+static char *docroot;
 static int xumon_port;
 static char default_vhost[22];
 
@@ -58,6 +58,7 @@ static const char *generic_http_headers = NULL;
 static const char html_footer[] = "<br><br><hr>From your Xemu acting as a webserver now ;)";
 static const char default_agent[] = "unknown_user_agent";
 static const char websocket_key_uuid[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";	// according to RFC-6455 (a fixed UUID)
+static const char main_html[] = "main.html";
 
 #define END_CLIENT_THREAD(n)	do { longjmp(client->jmp_finish_client_thread, n); XEMU_UNREACHABLE(); } while(0)
 #define CHECK_STOP_TRIGGER()	do { \
@@ -258,8 +259,8 @@ static void http_main_page_and_exit ( struct client_st *client )
 	);
 	char initiator[2048];
 	snprintf(initiator, sizeof initiator,
-		"<a style=\"background-color: #C0C0C0; border: 2px solid black;\" href=\"//%s/main.html?uts=%u&amp;target=%s\">START WEBMONITOR</a>",
-		client->vhost, START_ID, TARGET_DESC
+		"<a style=\"background-color: #C0C0C0; border: 2px solid black;\" href=\"//%s/%s?uts=%u&amp;target=%s\">START WEBMONITOR</a>",
+		client->vhost, main_html, START_ID, TARGET_DESC
 	);
 	http_page_and_exit(client, 0, page, initiator, NULL, NULL);
 }
@@ -280,8 +281,15 @@ static void http_serve_file_and_exit ( struct client_st *client, const char *fn 
 		*t++ = *s++;
 	}
 	client->fd = open(path, O_RDONLY | O_BINARY);
-	if (client->fd < 0)
+	if (client->fd < 0) {
+		if (!strcmp(fn, main_html))
+			http_page_and_exit(client, 404,
+				"Main page not found or other problem?",
+				"Please install/check web components of Xemu (<b><a href=\"" WEBSERVER_REPOSITORY "\" target=\"_new\">from here</a></b>) in this directory:",
+				docroot, NULL
+			);
 		http_page_and_exit(client, 404, "Cannot open specified file", path, strerror(errno), NULL);
+	}
 	// Guess mime-type from the extension of the filename (the filename part after the last '.' character)
 	const char *mime = strrchr(path, '.');
 	if (mime) {
@@ -705,7 +713,6 @@ static int client_thread_initiate ( void *user_param )
 	const int num_of_threads = SDL_AtomicAdd(&thread_counter, 1);	// increment thread counter
 	const int client_seq = SDL_AtomicAdd(&thread_client_seq, 1) + 1;	// generate a monotone sequence of ID about the connection to be identified without doubts. Avoid using zero! [thus the +1]
 	struct client_st *client = NULL;
-	int xerr;
 	DEBUGPRINT("UMON: client: new connection on socket %d, thread %d/%d, seq %d" NL, (int)CLIENT_SOCK, num_of_threads, MAX_CLIENT_SLOTS, client_seq);
 	// Trying to allocate slot multiple times (with time-out), since some HTTP client may overloaded us for a moment only.
 	for (const Uint32 start = SDL_GetTicks();;) {
@@ -733,6 +740,7 @@ static int client_thread_initiate ( void *user_param )
 	}
 slot_found:
 	// OK. We have our slot now.
+	int xerr;
 	if (XEMU_UNLIKELY(xemusock_set_nonblocking(CLIENT_SOCK, XEMUSOCK_NONBLOCKING, &xerr))) {
 		DEBUGPRINT("UMON: client: Cannot set socket %d into non-blocking mode:\n%s" NL, (int)CLIENT_SOCK, xemusock_strerror(xerr));
 	} else {
@@ -990,6 +998,30 @@ int xumon_init ( const int port )
 		ERROR_WINDOW("UMON is already running!");
 		return 1;
 	}
+	if (!docroot) {
+		docroot = xemu_mprintf("%s%s%c", sdl_pref_dir, DOCROOT_SUBDIR, DIRSEP_CHR);
+		MKDIR(docroot);
+	}
+	if (!generic_http_headers) {
+		const char *p = strstr(XEMU_BUILDINFO_GIT, "https://");
+		if (!p)
+			p = strstr(XEMU_BUILDINFO_GIT, "http://");
+		if (!p)
+			p = XEMU_BUILDINFO_GIT;
+		generic_http_headers = xemu_mprintf(
+			"Cache-Control: no-store, no-cache, must-revalidate, max-age=0\r\n"
+			"Cache-Control: post-check=0, pre-check=0\r\n"
+			"Pragma: no-cache\r\n"
+			"X-UA-Compatible: IE=edge\r\n"
+			"X-Powered-By: The Powerpuff Girls ;)\r\n"
+			"X-Content-Type-Options: nosniff\r\n"
+			"Access-Control-Allow-Origin: *\r\n"
+			"Server: Xemu;%s/%s %s\r\n"
+			"X-Xemu-Start-Id: %u\r\n",
+			TARGET_DESC, XEMU_BUILDINFO_CDATE, p,
+			START_ID
+		);
+	}
 	for (int i = 0; i < MAX_CLIENT_SLOTS; i++) {
 		clients[i].seq = 0;
 		clients[i].rhead = NULL;
@@ -1015,6 +1047,7 @@ int xumon_init ( const int port )
 		goto error;
 	}
 	xumon_port = port;
+	snprintf(default_vhost, sizeof default_vhost, "127.0.0.1:%d", port);
 	const char *sock_init_status = xemusock_init();
 	if (sock_init_status) {
 		ERROR_WINDOW("%sCannot initialize network library:\n%s", err_msg, sock_init_status);
@@ -1073,34 +1106,6 @@ int xumon_init ( const int port )
 			goto error;
 		}
 	}
-	// document root ("docroot") for the built-in webserver
-	if (!docroot) {
-		docroot = xemu_mprintf("%s%s%c", sdl_pref_dir, DOCROOT_SUBDIR, DIRSEP_CHR);
-		MKDIR(docroot);
-	}
-	// generic http headers
-	if (!generic_http_headers) {
-		const char *p = strstr(XEMU_BUILDINFO_GIT, "https://");
-		if (!p)
-			p = strstr(XEMU_BUILDINFO_GIT, "http://");
-		if (!p)
-			p = XEMU_BUILDINFO_GIT;
-		generic_http_headers = xemu_mprintf(
-			"Cache-Control: no-store, no-cache, must-revalidate, max-age=0\r\n"
-			"Cache-Control: post-check=0, pre-check=0\r\n"
-			"Pragma: no-cache\r\n"
-			"X-UA-Compatible: IE=edge\r\n"
-			"X-Powered-By: The Powerpuff Girls ;)\r\n"
-			"X-Content-Type-Options: nosniff\r\n"
-			"Access-Control-Allow-Origin: *\r\n"
-			"Server: Xemu;%s/%s %s\r\n"
-			"X-Xemu-Start-Id: %u\r\n",
-			TARGET_DESC, XEMU_BUILDINFO_CDATE, p,
-			START_ID
-		);
-	}
-	// default vhost
-	snprintf(default_vhost, sizeof default_vhost, "127.0.0.1:%d", port);
 	// Everything is OK, return with success.
 	xumon_running = 1;
 	DEBUGPRINT("UMON: has been initialized for TCP/IP port %d backlog %d start-id %u (web-docroot: %s) within %d msecs." NL, port, LISTEN_BACKLOG, START_ID, docroot, passed_time);

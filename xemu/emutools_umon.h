@@ -1,9 +1,6 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    Copyright (C)2017-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
-   The goal of emutools.c is to provide a relative simple solution
-   for relative simple emulators using SDL2.
-
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation; either version 2 of the License, or
