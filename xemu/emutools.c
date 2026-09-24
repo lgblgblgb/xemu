@@ -119,6 +119,7 @@ static Uint64 et_old;
 static int td_balancer, td_em_ALL, td_pc_ALL;
 static Uint64 td_stat_counter = 0, td_stat_sum = 0;
 static int td_stat_min = INT_MAX, td_stat_max = INT_MIN;
+time_t start_unix_time = 0;
 int sysconsole_is_open = 0;
 FILE *debug_fp = NULL;
 int chatty_xemu = 1;
@@ -672,25 +673,54 @@ int xemu_init_debug ( const char *fn )
 }
 
 
+char *xemu_mprintf ( const char *fmt, ... )
+{
+	char buffer[0x10000];
+	va_list ap;
+	va_start(ap, fmt);
+	vsnprintf(buffer, sizeof buffer, fmt, ap);
+	va_end(ap);
+	return xemu_strdup(buffer);
+}
+
+
+char *xemu_stpcpy ( char *t, const char *s )
+{
+	for (;;s++, t++) {
+		*t = *s;
+		if (!*t)
+			return t;
+	}
+}
+
+
 #if !defined(XEMU_ARCH_HTML) && !defined(XEMU_ARCH_ANDROID)
 static char *GetHackedPrefDir ( const char *base_path, const char *name )
 {
+	static const char prefdir_ovr_env_var[] = "XEMU_PREF_DIR";
+	const char *p = getenv(prefdir_ovr_env_var);
+	if (p) {
+		char *ret = xemu_mprintf("%s%c", p, DIRSEP_CHR);
+		DEBUGPRINT("XEMU: overriding pref-dir from environemnt variable %s to absolute path: %s" NL, prefdir_ovr_env_var, ret);
+		return ret;
+	}
 	// Format: ./{name}/prefdir-is-here.txt (at the executable level of path)
 	// File content:
 	// 	@!absolute-path (till the first CR/LF/TAB)
 	//	@>relative-path (till the first CR/LF/TAB)
 	//	anothing other (or even empty file): the directory itself
 	static const char prefdir_is_here_marker[] = "prefdir-is-here.txt";
-	char path[PATH_MAX];
+	char path[strlen(base_path) + strlen(name) + 2];
 	sprintf(path, "%s%s%c", base_path, name, DIRSEP_CHR);
-	char file[PATH_MAX + sizeof(prefdir_is_here_marker)];
+	char file[strlen(path) + strlen(prefdir_is_here_marker) + 1];
 	sprintf(file, "%s%s", path, prefdir_is_here_marker);
 	const int fd = open(file, O_RDONLY | O_BINARY);
 	if (fd < 0) {
+		DEBUGPRINT("XEMU: no pref-dir overriding" NL);
 		return NULL;
 	} else {
-		char rpath[PATH_MAX];
-		const size_t l = read(fd, rpath, sizeof(rpath) - 1);
+		char rpath[512];
+		const ssize_t l = read(fd, rpath, sizeof(rpath) - 1);
 		close(fd);
 		if (l >= 3 && rpath[0] == '@') {
 			rpath[l] = '\0';
@@ -701,15 +731,11 @@ static char *GetHackedPrefDir ( const char *base_path, const char *name )
 					*p = '\0';
 					break;
 				}
-			if (rpath[1] == '!' && rpath[2] > 32) {
-				DEBUGPRINT("XEMU: overriding pref-dir via information from %s to absolute path: %s" NL, file, rpath + 2);
-				return xemu_strdup(rpath + 2);
-			} else if (rpath[1] == '>' && rpath[2] > 32) {
-				char path2[PATH_MAX];
-				if (snprintf(path2, sizeof path2, "%s%s%c", path, rpath + 2, DIRSEP_CHR) < sizeof(path2) - 1) {
-					DEBUGPRINT("XEMU: overriding pref-dir via information from %s to relative path: %s" NL, file, path2);
-					return xemu_strdup(path2);
-				}
+			if ((rpath[1] == '!' || rpath[1] == '>') && rpath[2] > 32) {
+				const bool is_rel_path = rpath[1] == '>';
+				char *ret = xemu_mprintf("%s%s%c", is_rel_path ? path : "", rpath + 2, DIRSEP_CHR);
+				DEBUGPRINT("XEMU: overriding pref-dir via information from file content of %s to %s path: %s" NL, file, is_rel_path ? "relative" : "absolue", ret);
+				return ret;
 			}
 		}
 	}
@@ -874,6 +900,7 @@ static DWORD get_registry_key_dword ( const char *name )
 
 void xemu_pre_init ( const char *app_organization, const char *app_name, const char *slogan, const int argc, char **argv )
 {
+	start_unix_time = time(NULL);
 	if (getenv("XEMU_NO_DIALOGS")) {
 		dialogs_allowed = 0;
 	}
@@ -1988,6 +2015,43 @@ int xemu_readdir ( DIR *dirp, char *fn, const int fnmaxsize )
 }
 
 
+/* ---------------------------- BASE64 encode ---------------------------- */
+
+
+void base64_encode ( char *t, const Uint8 *s, int l )
+{
+	static const char b64[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+	for (;;)
+		if (l >= 3) {
+			register const Uint32 d = (s[0] << 16) + (s[1] << 8) + s[2];
+			*t++ = b64[ d >> 18      ];
+			*t++ = b64[(d >> 12) & 63];
+			*t++ = b64[(d >>  6) & 63];
+			*t++ = b64[ d        & 63];
+			l -= 3;
+			s += 3;
+		} else if (l == 2) {
+			register const Uint32 d = (s[0] << 8) + s[1];
+			*t++ = b64[ d >> 10      ];
+			*t++ = b64[(d >>  4) & 63];
+			*t++ = b64[(d <<  2) & 63];
+			*t++ = '=';
+			*t   = '\0';
+			return;
+		} else if (l == 1) {
+			*t++ = b64[ *s >> 2      ];
+			*t++ = b64[(*s << 4) & 63];
+			*t++ = '=';
+			*t++ = '=';
+			*t   = '\0';
+			return;
+		} else {
+			*t   = '\0';
+			return;
+		}
+}
+
+
 /* -------------------------- SHA1 checksumming -------------------------- */
 
 
@@ -2101,6 +2165,14 @@ void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data, Uint32
 	Uint32 hash[5];
 	sha1_checksum_as_words(hash, data, size);
 	sprintf(hash_str, "%08x%08x%08x%08x%08x", hash[0], hash[1], hash[2], hash[3], hash[4]);
+}
+
+
+void sha1_checksum_as_base64_string ( sha1_hash_base64_str hash_str, const Uint8 *data, Uint32 size )
+{
+	sha1_hash_bytes bytes;
+	sha1_checksum_as_bytes(bytes, data, size);
+	base64_encode(hash_str, bytes, 20);
 }
 
 
