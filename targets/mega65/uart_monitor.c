@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore-65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -133,15 +133,20 @@ static void m65mon_dumpmem28 ( int addr )
 	}
 }
 
-static void m65mon_setmem28 ( int addr, int cnt, Uint8* vals )
+static void m65mon_setmem28 ( int addr, const int cnt, const Uint8* vals )
 {
 	for (int k = 0; k < cnt; k++) {
-		if ((addr >> 16) == 0x777)
+		if ((addr & 0xFFF0000) == 0x7770000)
 			debug_write_cpu_byte(addr & 0xFFFF, vals[k]);
 		else
 			debug_write_linear_byte(addr & 0xFFFFFFF, vals[k]);
 		addr++;
 	}
+}
+
+static void m65mon_setmem28_byte ( const int addr, const Uint8 byte )
+{
+	m65mon_setmem28(addr, 1, &byte);
 }
 
 static void m65mon_set_trace ( int m )
@@ -253,7 +258,7 @@ static void cmd_setmem ( char *param, int addr )
 	for (int idx = 0; idx < cnt; idx++) {
 		int val;
 		param = parse_hex_arg(param, &val, 0, 0xFF);
-		m65mon_setmem28(addr & 0xFFFFFFF, 1, (Uint8*)&val);
+		m65mon_setmem28_byte(addr, val);
 		addr++;
 	}
 }
@@ -264,19 +269,16 @@ static void cmd_fillmem ( char *param, int addr )
 	//char *orig_param = param;
 	int endaddr;
 	int val;
-
 	if (param && !check_end_of_command(param, 0))
 		param = parse_hex_arg(param, &endaddr, 0, 0xFFFFFFF);
 	else
 		return;
-
 	if (param && !check_end_of_command(param, 0))
 		param = parse_hex_arg(param, &val, 0, 0xFF);
 	else
 		return;
-
 	for (int k = addr; k < endaddr; k++)
-		m65mon_setmem28(k & 0xFFFFFFF, 1, (Uint8*)&val);
+		m65mon_setmem28_byte(k, val);
 }
 
 
