@@ -48,7 +48,6 @@ static SDL_atomic_t thread_stop_trigger;
 static SDL_atomic_t thread_client_seq;
 static SDL_atomic_t incoming_msg_counter;
 static SDL_sem *responder_sem = NULL;
-static __thread jmp_buf jmp_finish_client_thread;			// must be a thread-local variable!
 
 int xumon_running = 0;
 static char *docroot = NULL;
@@ -60,7 +59,7 @@ static const char html_footer[] = "<br><br><hr>From your Xemu acting as a webser
 static const char default_agent[] = "unknown_user_agent";
 static const char websocket_key_uuid[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";	// according to RFC-6455 (a fixed UUID)
 
-#define END_CLIENT_THREAD(n)	do { longjmp(jmp_finish_client_thread, n); XEMU_UNREACHABLE(); } while(0)
+#define END_CLIENT_THREAD(n)	do { longjmp(client->jmp_finish_client_thread, n); XEMU_UNREACHABLE(); } while(0)
 #define CHECK_STOP_TRIGGER()	do { \
 					if (XEMU_UNLIKELY(SDL_AtomicGet(&thread_stop_trigger))) \
 						END_CLIENT_THREAD(1); \
@@ -91,6 +90,7 @@ struct client_st {
 	struct linked_fifo_st	*rtail;
 	struct linked_fifo_st	*whead;
 	struct linked_fifo_st	*wtail;
+	jmp_buf			jmp_finish_client_thread;
 };
 static struct client_st clients[MAX_CLIENT_SLOTS];
 
@@ -139,16 +139,16 @@ static int send_raw_unwrapped ( xemusock_socket_t sock, const void *buffer, int 
 }
 
 
-static inline void send_raw ( xemusock_socket_t sock, const void *buffer, int size )
+static inline void send_raw ( struct client_st *client, const void *buffer, int size )
 {
-	if (send_raw_unwrapped(sock, buffer, size))
+	if (send_raw_unwrapped(client->sock, buffer, size))
 		END_CLIENT_THREAD(1);
 }
 
 
-static inline void send_string ( xemusock_socket_t sock, const char *p )
+static inline void send_string ( struct client_st *client, const char *p )
 {
-	send_raw(sock, p, strlen(p));
+	send_raw(client, p, strlen(p));
 }
 
 
@@ -223,7 +223,7 @@ static void http_page_and_exit ( struct client_st *client, int err_code, const c
 #pragma GCC diagnostic pop
 	if (err_code != 200)
 		DEBUGPRINT("UMON: http-answer: %d %s %s %s %s" NL, err_code, err_text, err1, err2, err3);
-	send_string(client->sock, buffer);
+	send_string(client, buffer);
 	END_CLIENT_THREAD(1);
 }
 
@@ -312,7 +312,7 @@ static void http_serve_file_and_exit ( struct client_st *client, const char *fn 
 		"\r\n",
 		client->vhost, mime, generic_http_headers
 	);
-	send_string(client->sock, buffer);
+	send_string(client, buffer);
 	for (int total_len = 0;;) {
 		char chunk_head[16];
 		const int ret = xemu_safe_read(client->fd, buffer + 16, sizeof(buffer) - 2 - 16);
@@ -325,7 +325,7 @@ static void http_serve_file_and_exit ( struct client_st *client, const char *fn 
 		const int chunk_head_size = sprintf(chunk_head, "%X\r\n", ret);
 		char *p_to_send = buffer + 16 - chunk_head_size;
 		memcpy(p_to_send, chunk_head, chunk_head_size);
-		send_raw(client->sock, p_to_send, ret + 2 + chunk_head_size);
+		send_raw(client, p_to_send, ret + 2 + chunk_head_size);
 		if (!ret) {	// We're done :D
 			DEBUGPRINT("UMON: http-file-streaming: successfull streaming of file" NL);
 			break;
@@ -579,7 +579,7 @@ static void client_run ( struct client_st *client )
 					client->vhost,
 					generic_http_headers
 				);
-				send_string(client->sock, outbuf);
+				send_string(client, outbuf);
 				client->mode = XUMON_CONN_WEBSOCKET;
 				read_fill -= crlfcrlf - buffer + 4;
 				DEBUGPRINT("UMON: http: upgraded to websocket mode (protocol: [%s]->[%s]), data bytes left in buffer: %d" NL, header_websocket_protocol, WEBSOCKET_PROTOCOL, read_fill);
@@ -736,7 +736,7 @@ slot_found:
 	if (XEMU_UNLIKELY(xemusock_set_nonblocking(CLIENT_SOCK, XEMUSOCK_NONBLOCKING, &xerr))) {
 		DEBUGPRINT("UMON: client: Cannot set socket %d into non-blocking mode:\n%s" NL, (int)CLIENT_SOCK, xemusock_strerror(xerr));
 	} else {
-		if (!setjmp(jmp_finish_client_thread)) {
+		if (!setjmp(client->jmp_finish_client_thread)) {
 			client_run(client);
 			DEBUGPRINT("UMON: client: returned via <return>" NL);
 		} else
