@@ -767,6 +767,20 @@ static void emulation_loop ( void )
 			}
 		}
 #endif
+		/* --- UMON experiment starts --- */
+#ifdef HAVE_XEMU_UMON
+		struct xumon_com_st monres;
+		while (XEMU_UNLIKELY(xumon_get_request(&monres))) {
+			DEBUGPRINT("UMON: got request" NL);
+			free(monres.data);
+			char buffer[128];
+			snprintf(buffer, sizeof buffer, "You have just got %d bytes of data :)\n", monres.size);
+			monres.data = buffer;
+			monres.size = strlen(buffer);
+			xumon_set_answer(&monres);
+		}
+#endif
+		/* --- UMON experiment ends --- */
 		cycles += XEMU_UNLIKELY(in_dma) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
 #ifdef CPU_STEP_MULTI_OPS
 			cpu_cycles_per_step
