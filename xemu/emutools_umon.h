@@ -40,5 +40,11 @@ extern int xumon_stop ( void );
 extern bool xumon_get_request ( struct xumon_com_st *res );
 extern bool xumon_set_answer  ( struct xumon_com_st *res );
 
+static inline void xumon_end_request ( struct xumon_com_st *res )
+{
+	free(res->data);
+	res->data = NULL;
+}
+
 #endif
 #endif

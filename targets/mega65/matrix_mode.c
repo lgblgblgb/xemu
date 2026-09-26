@@ -91,7 +91,8 @@ static const char matrix_config_template_fn[] = "@" MATRIX_COMMAND_ASSIGNMENT_TE
 static const char command_history_fn[] = "@" MATRIX_COMMAND_HISTORY_FILE;
 
 #define BANNER_MSG	"*** Xemu's pre-matrix ... press left-CTRL + TAB to exit / re-enter ***"
-#define PROMPT		"Xemu>"
+#define PROMPT_XEMU	"Xemu>"
+#define PROMPT_MEGA65	"."
 
 #define CMD_HISTORY_SIZE	64
 static char *history[CMD_HISTORY_SIZE];
@@ -110,6 +111,14 @@ static int live_update_enabled = 1;
 static int blink_phase = 0;		// used with flashing the cursor, etc
 static int current_viewport = 0;
 static int write_special_chars_mode = 0;
+#ifdef HAVE_XEMU_UMON
+static bool megamatrix = false;
+static const char prompt_mega65[] = PROMPT_MEGA65;
+static const char prompt_xemu[] = PROMPT_XEMU;
+static const char *prompt = prompt_xemu;
+#else
+static const char prompt[] = PROMPT_XEMU;
+#endif
 
 
 #define PARTIAL_OSD_TEXTURE_UPDATE
@@ -778,6 +787,55 @@ static void cmd_eth ( char *p )
 #endif
 
 
+#ifdef HAVE_XEMU_UMON
+#include "umon.h"
+static void cmd_megamatrix ( char *p )
+{
+	MATRIX("Switching into MEGA65 protocol. Use command !! to return.\nNote: this mode is an experimental, limited feature.");
+	megamatrix = true;
+	prompt = prompt_mega65;
+}
+
+
+static void megamatrix_execute ( char *cmd )
+{
+	if (!strcmp(cmd, "!!")) {
+		megamatrix = false;
+		prompt = prompt_xemu;
+		MATRIX("Switching back to XEMU protocol");
+		return;
+	}
+	char output_buffer[256];
+	if (umon_execute_command(output_buffer, sizeof output_buffer, cmd, strlen(cmd))) {
+		// A very ugly game, this code should be refactored!
+		// It's meant to strip extra \r and \n from the beginning and from the end (also the '.')
+		// as Xemu has its own prompt in matrix mode, and also the CRLF sequences replaces by \n
+		// to have a presentable output in the matrix mode display.
+		char *o = output_buffer;
+		while (*o == '\r' || *o == '\n')
+			o++;
+		for (char *e = o + strlen(o) - 1; e >= o && (*e == '\r' || *e == '\n' || *e == '.'); e--)
+			*e = '\0';
+		if (*o) {
+			char output_text[sizeof output_buffer];
+			for (char *p = output_text;; p++)
+				if (o[0] == '\r' && o[1] == '\n') {
+					*p = '\n';
+					o += 2;
+				} else if (*o) {
+					*p = *o++;
+				} else {
+					*p = '\0';
+					break;
+				}
+			if (output_text[0])
+				MATRIX("%s", output_text);
+		}
+	}
+}
+#endif
+
+
 static void cmd_help ( char *p );
 static void cmd_cfgreload ( char *p );
 
@@ -814,6 +872,9 @@ static struct command_tab_st {
 	{ "BYTEMARK",	"byte",		cmd_bytemark,	"",	"Set/clear byte marking on dumps\nArgs: [BYTEVAL]" },
 	{ "FINDBYTE",	"find",		cmd_find,	"f",	"Find byte\nArgs: ADDR RANGESIZE BYTE" },
 	{ "CFGRELOAD",	"cfgreload",	cmd_cfgreload,	"",	"Reload matrix command configuration" },
+#	ifdef HAVE_XEMU_UMON
+	{ "MEGAMATRIX",	"spoon",	cmd_megamatrix,	"",	"Switch into MEGA65-style monitor mode" },
+#endif
 	{ .symname = NULL },
 };
 static const struct command_tab_st *current_command = NULL;
@@ -861,6 +922,12 @@ static int command_counter = 0;
 
 static void execute ( char *cmd )
 {
+#ifdef	HAVE_XEMU_UMON
+	if (XEMU_UNLIKELY(megamatrix)) {
+		megamatrix_execute(cmd);
+		return;
+	}
+#endif
 	command_counter++;
 	char *sp = strchr(cmd, ' ');
 	if (sp)
@@ -884,7 +951,7 @@ static void input ( const char c )
 	static int start_x;
 	static int history_browse_current = 0;
 	if (!current_x) {
-		matrix_write_string(PROMPT);
+		matrix_write_string(prompt);
 		start_x = current_x;
 		if (!c)
 			return;
@@ -1179,7 +1246,7 @@ static int load_command_history ( const char *fn )
 					p[1] = '\0';
 					break;
 				}
-			if (buffer[0] > 32 && strlen(buffer) < chrscreen_xsize - strlen(PROMPT)) {
+			if (buffer[0] > 32 && strlen(buffer) < chrscreen_xsize - strlen(prompt)) {
 				free(history[i]);
 				history[i] = xemu_strdup(buffer);
 				i++;

@@ -26,6 +26,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "vic4.h"
 #include "sdcard.h"
 #include "uart_monitor.h"
+#include "umon.h"
 #include "hypervisor.h"
 #include "xemu/c64_kbd_mapping.h"
 #include "xemu/emutools_config.h"
@@ -769,16 +770,7 @@ static void emulation_loop ( void )
 #endif
 		/* --- UMON experiment starts --- */
 #ifdef HAVE_XEMU_UMON
-		struct xumon_com_st monres;
-		while (XEMU_UNLIKELY(xumon_get_request(&monres))) {
-			DEBUGPRINT("UMON: got request" NL);
-			free(monres.data);
-			char buffer[128];
-			snprintf(buffer, sizeof buffer, "You have just got %d bytes of data :)\n", monres.size);
-			monres.data = buffer;
-			monres.size = strlen(buffer);
-			xumon_set_answer(&monres);
-		}
+		umon_main_iterate();
 #endif
 		/* --- UMON experiment ends --- */
 		cycles += XEMU_UNLIKELY(in_dma) ? dma_update_multi_steps(cpu_cycles_per_scanline) : cpu65_step(
