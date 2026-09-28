@@ -31,7 +31,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set custom build variables
         uses: ./.github/actions/set-custom-build-variables
@@ -105,12 +105,13 @@ jobs:
 
       - name: Deploy on gitbub releases section
         if: env.should_deploy == 'true' && (github.ref_name == 'master' || github.ref_name == 'next' || github.ref_name == 'dev')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             *.deb
           tag_name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
           name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          target_commitish: ${{ github.sha }}
           body: "Build `${{ env.XEMU_VERSIONINFO }}` for branch **${{ github.ref_name }}**. For more options, description and explanation on branches, use the [official download page](https://github.lgb.hu/xemu/). This build is based on commit [${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})."
           prerelease: ${{ github.ref_name == 'master' && 'false' || 'true' }}
           draft: ${{ github.ref_name == 'dev' && 'true' || 'false' }}
@@ -132,7 +133,7 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set custom build variables
         uses: ./.github/actions/set-custom-build-variables
@@ -247,13 +248,14 @@ jobs:
 
       - name: Deploy on gitbub releases section
         if: env.should_deploy == 'true' && (github.ref_name == 'master' || github.ref_name == 'next' || github.ref_name == 'dev')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             *.zip
             *.exe
           tag_name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
           name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          target_commitish: ${{ github.sha }}
           body: "Build `${{ env.XEMU_VERSIONINFO }}` for branch **${{ github.ref_name }}**. For more options, description and explanation on branches, use the [official download page](https://github.lgb.hu/xemu/). This build is based on commit [${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})."
           prerelease: ${{ github.ref_name == 'master' && 'false' || 'true' }}
           draft: ${{ github.ref_name == 'dev' && 'true' || 'false' }}
@@ -274,7 +276,7 @@ jobs:
     runs-on: macos-15-intel
     steps:
       - name: Checkout repository
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
 
       - name: Set custom build variables
         uses: ./.github/actions/set-custom-build-variables
@@ -358,13 +360,14 @@ jobs:
 
       - name: Deploy on gitbub releases section
         if: env.should_deploy == 'true' && (github.ref_name == 'master' || github.ref_name == 'next' || github.ref_name == 'dev')
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           files: |
             *.zip
             *.dmg
           tag_name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
           name: "${{ env.XEMU_VERSIONINFO }}-${{ github.ref_name }}"
+          target_commitish: ${{ github.sha }}
           body: "Build `${{ env.XEMU_VERSIONINFO }}` for branch **${{ github.ref_name }}**. For more options, description and explanation on branches, use the [official download page](https://github.lgb.hu/xemu/). This build is based on commit [${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})."
           prerelease: ${{ github.ref_name == 'master' && 'false' || 'true' }}
           draft: ${{ github.ref_name == 'dev' && 'true' || 'false' }}
