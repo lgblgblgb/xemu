@@ -1,6 +1,6 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -79,8 +79,8 @@ static void _cbm_screen_write ( Uint8 *p, const char *s )
 
 
 #define CBM_SCREEN_PRINTF(scrp, ...)	do {	\
-	char __buffer__[80];			\
-	sprintf(__buffer__, ##__VA_ARGS__);	\
+	char __buffer__[256];			\
+	snprintf(__buffer__, sizeof __buffer__, ##__VA_ARGS__);	\
 	_cbm_screen_write(scrp, __buffer__);	\
 	} while (0)
 
@@ -138,8 +138,9 @@ static void do_prg_test_inject ( const char *arg, const char *def_startup, const
 #define PRG_TEST_DELIM_CHAR ";"
 // Must be one char and as a char ...
 #define PRG_TEST_DELIM_CHAR_ADDR '@'
+	const int screen_width = vic4_query_screen_width();
 	char opt[strlen(arg) + 1];
-	char cmdbuf[strlen(arg) + 1];
+	char cmdbuf[screen_width];	// not +1, because the the actual max size is -1, but we need +1 for the end of string '\0' marker
 	strcpy(opt, arg);
 	cmdbuf[0] = '\0';
 	for (char *sav, *p = strtok_r(opt, PRG_TEST_DELIM_CHAR, &sav); p; p = strtok_r(NULL, PRG_TEST_DELIM_CHAR, &sav)) {
@@ -164,8 +165,13 @@ static void do_prg_test_inject ( const char *arg, const char *def_startup, const
 			free(xemu_load_buffer_p);
 			xemu_load_buffer_p = NULL;
 		} else {
-			strcat(cmdbuf, p);
-			strcat(cmdbuf, ":");
+			const int cmd_size = strlen(cmdbuf);
+			if (strlen(p) + 1 + cmd_size >= screen_width) {
+				ERROR_WINDOW("Too long command to inject to screen (max=%d)", screen_width - 2);
+				return;
+			} else {
+				sprintf(cmdbuf + cmd_size, "%s:", p);
+			}
 		}
 	}
 	if (cmdbuf[0])
@@ -256,13 +262,18 @@ static void command_callback ( void *unused )
 	if (prg.cmd_p == prg.cmd)
 		fdc_allow_disk_access(FDC_ALLOW_DISK_ACCESS);	// re-allow disk access
 	Uint8 *p = under_ready_p;
-	*p++ = 32;
+	const int screen_width = vic4_query_screen_width();
+	*p++ = 32;	// inject a space (screen code 32) at 0th column
 	for (;;) {
 		const char c = *(prg.cmd_p++);
-		if (!c) {
+		if (!c || (p >= under_ready_p + screen_width && c != '|')) {
 			free(prg.cmd);
 			prg.cmd_p = NULL;
 			prg.cmd = NULL;
+			if (c) {
+				ERROR_WINDOW("Too long command to inject to screen (max=%d)", screen_width - 1);
+				return;
+			}
 			break;
 		}
 		if (c == '|') {
