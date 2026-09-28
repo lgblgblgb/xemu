@@ -112,7 +112,7 @@ static int blink_phase = 0;		// used with flashing the cursor, etc
 static int current_viewport = 0;
 static int write_special_chars_mode = 0;
 #ifdef HAVE_XEMU_UMON
-static bool megamatrix = false;
+static bool megamatrix = false;		// true -> umon-mode, using umon commands instead of Xemu commands
 static const char prompt_mega65[] = PROMPT_MEGA65;
 static const char prompt_xemu[] = PROMPT_XEMU;
 static const char *prompt = prompt_xemu;
@@ -804,32 +804,12 @@ static void megamatrix_execute ( char *cmd )
 		prompt = prompt_xemu;
 		MATRIX("Switching back to XEMU protocol");
 		return;
-	}
-	char output_buffer[256];
-	if (umon_execute_command(output_buffer, sizeof output_buffer, cmd, strlen(cmd))) {
-		// A very ugly game, this code should be refactored!
-		// It's meant to strip extra \r and \n from the beginning and from the end (also the '.')
-		// as Xemu has its own prompt in matrix mode, and also the CRLF sequences replaces by \n
-		// to have a presentable output in the matrix mode display.
-		char *o = output_buffer;
-		while (*o == '\r' || *o == '\n')
-			o++;
-		for (char *e = o + strlen(o) - 1; e >= o && (*e == '\r' || *e == '\n' || *e == '.'); e--)
-			*e = '\0';
-		if (*o) {
-			char output_text[sizeof output_buffer];
-			for (char *p = output_text;; p++)
-				if (o[0] == '\r' && o[1] == '\n') {
-					*p = '\n';
-					o += 2;
-				} else if (*o) {
-					*p = *o++;
-				} else {
-					*p = '\0';
-					break;
-				}
-			if (output_text[0])
-				MATRIX("%s", output_text);
+	} else {
+		char output[256];
+		if (umon_execute_command(output, sizeof output, cmd, strlen(cmd))) {
+			umon_format_answer_text(output);
+			if (*output)
+				MATRIX("%s", output);
 		}
 	}
 }

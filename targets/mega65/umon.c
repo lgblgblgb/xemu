@@ -18,6 +18,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 #if !defined(HAVE_XEMU_UMON)
 #warning "Platform does not support UMON"
+// TODO: later, we should make umon compilable without socket support, so it can be
+// still usable via matrix mode at last!
 #else
 
 #include "xemu/emutools.h"
@@ -25,6 +27,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "umon.h"
 #include "xemu/cpu65.h"
 #include "memory_mapper.h"
+#include <string.h>
 
 #define MAX_INPUT_SIZE 128
 
@@ -110,6 +113,8 @@ bool umon_execute_command ( char *output, int output_maxsize, const void *input_
 // to execute, and then queueing back the answer.
 void umon_main_iterate ( void )
 {
+	// TODO/FIXME: the network listener may break two messages at the wrong boundary! We may need
+	// to handle the situation!
 	struct xumon_com_st monres;
 	while (XEMU_UNLIKELY(xumon_get_request(&monres))) {
 		DEBUGPRINT("UMON: got request, %d bytes" NL, monres.size);
@@ -123,6 +128,23 @@ void umon_main_iterate ( void )
 			xumon_set_answer(&monres);
 		}
 	}
+}
+
+
+// Used to format the answer for_other purposes than the in-protocol usage (like for matrix use, debugging output or whatever)
+void umon_format_answer_text ( char *output )
+{
+	char *s = output, *t = output;
+	while (*s == '\n' || *s == '\r')
+		s++;
+	while (*s)
+		if (s[0] == '\r' && s[1] == '\n')
+			*t++ = '\n', s += 2;
+		else
+			*t++ = *s++;
+	while (t > output && strchr("\n\r.,", *--t))
+		;
+	t[1] = '\0';
 }
 
 #endif

@@ -22,6 +22,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 
 void umon_main_iterate ( void );
 bool umon_execute_command ( char *output, int output_sizeof, const void *input_raw, int input_size );
+void umon_format_answer_text ( char *output );
 
 #endif
 #endif
