@@ -1,6 +1,6 @@
 /* Xemu - emulation (running on Linux/Unix/Windows/OSX, utilizing SDL2) of some
    8 bit machines, including the Commodore LCD and Commodore 65 and MEGA65 as well.
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
    The goal of emutools.c is to provide a relative simple solution
    for relative simple emulators using SDL2.
@@ -157,6 +157,7 @@ extern Uint32 *xemu_frame_pixel_access_p;
 extern int emu_is_headless;
 extern int emu_is_sleepless;
 extern int emu_fs_is_utf8;
+extern time_t start_unix_time;
 
 #define XEMU_VIEWPORT_ADJUST_LOGICAL_SIZE	1
 //#define XEMU_VIEWPORT_WIN_SIZE_FOLLOW_LOGICAL	2
@@ -176,6 +177,8 @@ extern Uint8 xemu_hour_to_bcd12h ( Uint8 hours, int hour_offset );
 extern unsigned int xemu_get_microseconds ( void );
 extern void *xemu_malloc ( size_t size );
 extern void *xemu_realloc ( void *p, size_t size );
+extern char *xemu_mprintf ( const char *fmt, ... );
+extern char *xemu_stpcpy ( char *t, const char *s );
 extern void *xemu_sdl_to_native_allocation ( void *sdl_allocation, const size_t length );
 extern char *xemu_sdl_to_native_string_allocation ( char *sdl_string );
 
@@ -260,12 +263,16 @@ static XEMU_INLINE void xemu_u64le_to_u8p ( Uint8 *const p, const Uint64 data ) 
 	p[7] = (data >> 56) & 0xFF;
 }
 
+extern void base64_encode ( char *t, const Uint8 *s, int l );
+
 typedef char  sha1_hash_str[41];
+typedef char  sha1_hash_base64_str[60];
 typedef Uint8 sha1_hash_bytes[20];
 
 extern void sha1_checksum_as_words ( Uint32 hash[5], const Uint8 *data, Uint32 size );
 extern void sha1_checksum_as_bytes ( sha1_hash_bytes hash_bytes, const Uint8 *data, Uint32 size );
 extern void sha1_checksum_as_string ( sha1_hash_str hash_str, const Uint8 *data, Uint32 size );
+extern void sha1_checksum_as_base64_string ( sha1_hash_base64_str hash_str, const Uint8 *data, Uint32 size );
 
 #if	defined(XEMU_OSD_SUPPORT)
 // OSD support requested without defined XEMU_OSD_FONT8HEIGHT: fall back to use 8 pixel height font by default in this case
