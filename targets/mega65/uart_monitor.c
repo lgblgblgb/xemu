@@ -122,10 +122,9 @@ static void m65mon_watchpoint ( int addr )
 
 static void m65mon_dumpmem28 ( int addr )
 {
-	addr &= 0xFFFFFFF;
-	umon_printf(":%08X:", addr);
+	umon_printf(":%08X:", addr & 0xFFFFFFF);
 	for (int k = 0; k < 16; k++) {
-		if ((addr >> 16) == 0x777)
+		if ((addr & 0xFFF0000) == 0x7770000)
 			umon_printf("%02X", debug_read_cpu_byte(addr & 0xFFFF));
 		else
 			umon_printf("%02X", debug_read_linear_byte(addr & 0xFFFFFFF));
@@ -197,7 +196,7 @@ static void m65mon_empty_command ( void )
 		m65mon_do_trace();
 }
 
-static char *parse_hex_arg ( char *p, int *val, int min, int max )
+static char *parse_hex_arg ( char *p, int *val, const int min, const int max )
 {
 	while (*p == 32)
 		p++;
@@ -231,7 +230,7 @@ static char *parse_hex_arg ( char *p, int *val, int min, int max )
 }
 
 
-static int check_end_of_command ( char *p, int error_out )
+static int check_end_of_command ( const char *p, const bool error_out )
 {
 	while (*p == 32)
 		p++;
@@ -249,7 +248,7 @@ static void cmd_setmem ( char *param, int addr )
 	char *orig_param = param;
 	int cnt = 0;
 	// get param count
-	while (param && !check_end_of_command(param, 0)) {
+	while (param && !check_end_of_command(param, false)) {
 		int val;
 		param = parse_hex_arg(param, &val, 0, 0xFF);
 		cnt++;
@@ -269,11 +268,11 @@ static void cmd_fillmem ( char *param, int addr )
 	//char *orig_param = param;
 	int endaddr;
 	int val;
-	if (param && !check_end_of_command(param, 0))
+	if (param && !check_end_of_command(param, false))
 		param = parse_hex_arg(param, &endaddr, 0, 0xFFFFFFF);
 	else
 		return;
-	if (param && !check_end_of_command(param, 0))
+	if (param && !check_end_of_command(param, false))
 		param = parse_hex_arg(param, &val, 0, 0xFF);
 	else
 		return;
@@ -306,23 +305,23 @@ static void execute_command ( char *cmd )
 		case 'h':
 		case 'H':
 		case '?':
-			if (check_end_of_command(cmd, 1))
+			if (check_end_of_command(cmd, true))
 				umon_printf("Xemu/MEGA65 Serial Monitor\r\nWarning: not 100%% compatible with UART monitor of a *real* MEGA65 ...");
 			break;
 		case 'r':
 		case 'R':
-			if (check_end_of_command(cmd, 1))
+			if (check_end_of_command(cmd, true))
 				m65mon_show_regs();
 			break;
 		case 'm':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
-			if (cmd && check_end_of_command(cmd, 1)) {
+			if (cmd && check_end_of_command(cmd, true)) {
 				m65mon_dumpmem28(par1);
 			}
 			break;
 		case 'M':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
-			if (cmd && check_end_of_command(cmd, 1)) {
+			if (cmd && check_end_of_command(cmd, true)) {
 				for (int k = 0; k < 16; k++) {
 					m65mon_dumpmem28(par1);
 					par1 += 16;
@@ -342,17 +341,17 @@ static void execute_command ( char *cmd )
 			if (!*cmd)
 				m65mon_do_trace();
 			else if (*cmd == 'c') {
-				if (check_end_of_command(cmd, 1))
+				if (check_end_of_command(cmd, true))
 					m65mon_do_trace_c();
 			} else {
 				cmd = parse_hex_arg(cmd, &par1, 0, 1);
-				if (cmd && check_end_of_command(cmd, 1))
+				if (cmd && check_end_of_command(cmd, true))
 					m65mon_set_trace(par1);
 			}
 			break;
 		case 'b':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
-			if (cmd && check_end_of_command(cmd, 1))
+			if (cmd && check_end_of_command(cmd, true))
 				m65mon_breakpoint(par1);
 			break;
 		case 'g':
@@ -361,7 +360,7 @@ static void execute_command ( char *cmd )
 			break;
 		case 'w':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
-			if (cmd && check_end_of_command(cmd, 1))
+			if (cmd && check_end_of_command(cmd, true))
 				m65mon_watchpoint(par1);
 			break;
 #ifdef TRACE_NEXT_SUPPORT

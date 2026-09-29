@@ -29,7 +29,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "memory_mapper.h"
 #include <string.h>
 
-#define MAX_INPUT_SIZE 128
+#define MAX_INPUT_SIZE		128
+#define UMON_SYNTAX_ERROR	"?SYNTAX ERROR  "
 
 static struct {
 	int	output_capacity;
@@ -85,10 +86,124 @@ static void m65mon_show_regs ( void )
 	);
 }
 
+static void m65mon_dumpmem28 ( int addr )
+{
+	umon_printf(":%08X:", addr & 0xFFFFFFF);
+	for (int k = 0; k < 16; k++) {
+		if ((addr & 0xFFF0000) == 0x7770000)
+			umon_printf("%02X", debug_read_cpu_byte(addr & 0xFFFF));
+		else
+			umon_printf("%02X", debug_read_linear_byte(addr & 0xFFFFFFF));
+		addr++;
+	}
+}
 
-// umon_main_interate() call this - see above
+static void m65mon_setmem28 ( int addr, const int cnt, const Uint8* vals )
+{
+	for (int k = 0; k < cnt; k++) {
+		if ((addr & 0xFFF0000) == 0x7770000)
+			debug_write_cpu_byte(addr & 0xFFFF, vals[k]);
+		else
+			debug_write_linear_byte(addr & 0xFFFFFFF, vals[k]);
+		addr++;
+	}
+}
+
+static void m65mon_setmem28_byte ( const int addr, const Uint8 byte )
+{
+	m65mon_setmem28(addr, 1, &byte);
+}
+
+
+
+static char *parse_hex_arg ( char *p, int *val, const int min, const int max )
+{
+	while (*p == 32)
+		p++;
+	*val = -1;
+	if (!*p) {
+		umon_printf(UMON_SYNTAX_ERROR "unexpected end of command (no parameter)");
+		return NULL;
+	}
+	int r = 0;
+	for (;;) {
+		if (*p >= 'a' && *p <= 'f')
+			r = (r << 4) | (*p - 'a' + 10);
+		else if (*p >= 'A' && *p <= 'F')
+			r = (r << 4) | (*p - 'A' + 10);
+		else if (*p >= '0' && *p <= '9')
+			r = (r << 4) | (*p - '0');
+		else if (*p == 32 || *p == 0)
+			break;
+		else {
+			umon_printf(UMON_SYNTAX_ERROR "invalid data as hex digit '%c'", *p);
+			return NULL;
+		}
+		p++;
+	}
+	*val = r;
+	if (r < min || r > max) {
+		umon_printf(UMON_SYNTAX_ERROR "command parameter's value is outside of the allowed range for this command %X (%X...%X)", r, min, max);
+		return NULL;
+	}
+	return p;
+}
+
+
+static int check_end_of_command ( const char *p, const bool error_out )
+{
+	while (*p == 32)
+		p++;
+	if (*p) {
+		if (error_out)
+			umon_printf(UMON_SYNTAX_ERROR "unexpected command parameter");
+		return 0;
+	}
+	return 1;
+}
+
+
+static void cmd_setmem ( char *param, int addr )
+{
+	char *orig_param = param;
+	int cnt = 0;
+	// get param count
+	while (param && !check_end_of_command(param, false)) {
+		int val;
+		param = parse_hex_arg(param, &val, 0, 0xFF);
+		cnt++;
+	}
+	param = orig_param;
+	for (int idx = 0; idx < cnt; idx++) {
+		int val;
+		param = parse_hex_arg(param, &val, 0, 0xFF);
+		m65mon_setmem28_byte(addr, val);
+		addr++;
+	}
+}
+
+
+static void cmd_fillmem ( char *param, int addr )
+{
+	//char *orig_param = param;
+	int endaddr;
+	int val;
+	if (param && !check_end_of_command(param, false))
+		param = parse_hex_arg(param, &endaddr, 0, 0xFFFFFFF);
+	else
+		return;
+	if (param && !check_end_of_command(param, false))
+		param = parse_hex_arg(param, &val, 0, 0xFF);
+	else
+		return;
+	for (int k = addr; k < endaddr; k++)
+		m65mon_setmem28_byte(k, val);
+}
+
+
+// umon_main_interate() call this - see that after this function
 // also, matrix monitor can call this, to implement mega65 compatible matrix commands through this function
-bool umon_execute_command ( char *output, int output_maxsize, const void *input_raw, int input_size )
+bool umon_execute_command ( char *output, unsigned int output_maxsize, const void *input_raw, unsigned int input_size )
 {
 	if (input_size >= MAX_INPUT_SIZE) {
 		DEBUGPRINT("UMON: too long input to execute" NL);
