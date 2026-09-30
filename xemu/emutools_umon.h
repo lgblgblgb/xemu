@@ -28,6 +28,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 struct xumon_com_st {
 	int	size;
 	Uint8	*data;
+	bool	need_prompt;
 	int	seq;		// xumon_get_request()'s data should be passed to xumon_set_answer()
 	const void *ptr;	// points to the client_st struct secretly, shouldn't altered, xumon_get_request()'s data should be passed to xumon_set_answer()
 };

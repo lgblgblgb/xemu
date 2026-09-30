@@ -65,6 +65,7 @@ static const char html_footer[] = "<br><br><hr>From your Xemu acting as a webser
 static const char default_agent[] = "unknown_user_agent";
 static const char websocket_key_uuid[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";	// according to RFC-6455 (a fixed UUID)
 static const char main_html[] = "main.html";
+static const char service_uri_head[] = "xemu-req-msg-";
 
 struct linked_fifo_st {
 	struct linked_fifo_st *next;
@@ -77,7 +78,8 @@ enum xumon_conn_mode {
 	XUMON_CONN_INIT,
 	XUMON_CONN_TEXT,
 	XUMON_CONN_HTTP,
-	XUMON_CONN_WEBSOCKET
+	XUMON_CONN_WEBSOCKET,
+	XUMON_CONN_HTTP_ANSWER
 };
 
 struct client_st {
@@ -92,6 +94,8 @@ struct client_st {
 	struct linked_fifo_st	*whead;
 	struct linked_fifo_st	*wtail;
 	jmp_buf			jmp_finish_client_thread;
+	bool			text_echo;
+	SDL_atomic_t		responder_ping_back;
 };
 static struct client_st clients[MAX_CLIENT_SLOTS];
 
@@ -266,6 +270,8 @@ static void http_main_page_and_exit ( struct client_st *client )
 }
 
 
+
+
 // Must be called with "prepared" URI as fn, ie, no initial directory separator character, GET parameters etc.
 static void http_serve_file_and_exit ( struct client_st *client, const char *fn )
 {
@@ -400,8 +406,6 @@ static void client_run ( struct client_st *client )
 	int ws_plen = 0;		// websocket unfragmented data size in the buffer so far
 	for (;;) {
 		CHECK_STOP_TRIGGER();
-		// TODO: write pending-queued data! _OR_ are we sure it's task of the responder thread alone?
-		//if (client->mode == XUMON_CONN_HTTP_GET_RESPONSE) {}
 		if (read_fill < 0) {
 			DEBUGPRINT("UMON: client: FATAL: read_fill = %d" NL, read_fill);
 			return;
@@ -492,7 +496,7 @@ static void client_run ( struct client_st *client )
 			}
 			if (client->mode == XUMON_CONN_TEXT) {
 				// So we have a text request it seems!!
-				if (text_echo) {
+				if (client->text_echo) {
 					DEBUGPRINT("UMON: echoing back %d bytes of data in text mode" NL, lsize);
 					// FIXME: probably I should protect this with a per-client send lock, and also in the responder thread!
 					send_raw(client, buffer, lsize);
@@ -599,10 +603,31 @@ static void client_run ( struct client_st *client )
 				DEBUGPRINT("UMON: http: upgraded to websocket mode (protocol: [%s]->[%s]), data bytes left in buffer: %d" NL, header_websocket_protocol, WEBSOCKET_PROTOCOL, read_fill);
 				continue;	// back to the main read loop, we need data at this point
 			}
-			// TODO: implement a GET based message receiver here. The problem: the answer should be provided here, though it's usually
+			// Implementing a GET based message receiver here. The problem: the answer should be provided here, though it's usually
 			// the task of the responder thread not the per client receiver which needs kept-open connection! I can try to exit the client thread and keeping
 			// socket open still for the responder thread?? **OR** I keep this thread alive doing nothing basically so, the responder
 			// thread normally can handle its job.
+			if (!strncmp(http_uri, service_uri_head, strlen(service_uri_head))) {
+				char *h = http_uri + strlen(service_uri_head), req[strlen(h) + 1], *r = req;
+				while (*h && *h != '?' && *h != '#') {
+					if (*h == '+') {
+						*r++ = ' ';
+						h++;
+					} else if (*h == '%' && strlen(h) >= 3) {
+						int val = '?';
+						sscanf(h + 1, "%02x", &val);
+						*r++ = val;
+						h += 3;
+					} else {
+						*r++ = *h++;
+					}
+				}
+				*r = '\0';
+				DEBUGPRINT("UMON: client: http-encapsulated request: %s" NL, req);
+				store_request(client, req, strlen(req) + 1);
+				client->mode = XUMON_CONN_HTTP_ANSWER;
+				return;
+			}
 			char id_arg[32];
 			sprintf(id_arg, "uts=%u", START_ID);
 			if (strncmp(args, id_arg, strlen(id_arg))) {
@@ -743,6 +768,8 @@ static int client_thread_initiate ( void *user_param )
 				client->whead = NULL;
 				client->rtail = NULL;
 				client->wtail = NULL;
+				client->text_echo = text_echo;
+				SDL_AtomicSet(&client->responder_ping_back, 0);
 				CLIENTS_UNLOCK();
 				goto slot_found;
 			}
@@ -762,8 +789,19 @@ slot_found:
 		if (!setjmp(client->jmp_finish_client_thread)) {
 			client_run(client);
 			DEBUGPRINT("UMON: client: returned via <return>" NL);
-		} else
+		} else {
 			DEBUGPRINT("UMON: client: returned via <longjmp>" NL);
+		}
+		if (XEMU_UNLIKELY(client->mode == XUMON_CONN_HTTP_ANSWER)) {
+			DEBUGPRINT("UMON: client: keeping open: begin" NL);
+			const Uint32 time = SDL_GetTicks();
+			while (!SDL_AtomicGet(&client->responder_ping_back)) {
+				if (XEMU_UNLIKELY(SDL_AtomicGet(&thread_stop_trigger)))
+					goto finish;
+				SDL_Delay(1);
+			}
+			DEBUGPRINT("UMON: client: keeping open: end (%d ms)" NL, SDL_GetTicks() - time);
+		}
 		xemusock_set_nonblocking(CLIENT_SOCK, XEMUSOCK_BLOCKING, NULL);
 	}
 finish:
@@ -880,9 +918,14 @@ static int responder_thread ( void *_unused )
 			client->whead = chunk->next;
 			if (!client->whead)
 				client->wtail = NULL;
+			const int seq = client->seq;
 			CLIENTS_UNLOCK();
 			// do NOT use plain "send_raw" it can crash because of longjmp() and locking usage of ANOTHER thread!!!
 			const int ret = send_raw_unwrapped(client->sock, chunk->data, chunk->size);
+			CLIENTS_LOCK();
+			if (client->seq == seq)
+				SDL_AtomicSet(&client->responder_ping_back, 1);
+			CLIENTS_UNLOCK();
 			if (ret)
 				DEBUGPRINT("UMON: responder-thread: error during transmit (ret=%d, needed=%d)?" NL, ret, chunk->size);
 			else
@@ -936,6 +979,7 @@ bool xumon_get_request ( struct xumon_com_st *res )
 				res->data = p->data;		// caller must free this!
 				res->size = p->size;
 				res->seq = c->seq;
+				res->need_prompt = c->mode == XUMON_CONN_TEXT;
 				res->ptr = (const void*)c;
 				SDL_AtomicAdd(&incoming_msg_counter, -1);
 				break;
@@ -957,6 +1001,8 @@ bool xumon_set_answer ( struct xumon_com_st *res )
 	int tlen = res->size;
 	if (c->mode == XUMON_CONN_WEBSOCKET)
 		tlen += plen < 126 ? 2 : 4;
+	else if (c->mode == XUMON_CONN_HTTP_ANSWER)
+		tlen += strlen(generic_http_headers) + 1024;
 	struct linked_fifo_st *p = malloc(sizeof(struct linked_fifo_st));
 	Uint8 *d = malloc(tlen);
 	if (!p || !d) {
@@ -974,6 +1020,18 @@ bool xumon_set_answer ( struct xumon_com_st *res )
 			d[2] = plen >> 8;
 			d[3] = plen & 0xFF;
 		}
+	} else if (c->mode == XUMON_CONN_HTTP_ANSWER) {
+		sprintf((char*)d,
+			"HTTP/1.1 200 OK\r\n"
+			"Host: %s\r\n"
+			"Content-Type: text/plain; charset=UTF-8\r\n"
+			"Connection: close\r\n"
+			"Content-Length: %d\r\n"
+			"%s"
+			"\r\n",
+			default_vhost, plen, generic_http_headers
+		);
+		tlen = plen + strlen((char*)d);
 	}
 	memcpy(d + (tlen - plen), res->data, plen);
 	p->data = d;

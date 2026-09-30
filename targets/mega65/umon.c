@@ -289,13 +289,13 @@ void umon_main_iterate ( void )
 		DEBUGPRINT("UMON: got request, %d bytes" NL, monres.size);
 		char buffer[256];
 		const bool ret = umon_execute_command(buffer, sizeof buffer, (char*)monres.data, monres.size);
-		xumon_free_request(&monres);	// this will free the request, data of the request may be invalid after this!
+		xumon_free_request(&monres);	// this will free the request, data part of the request (monres.data) may be invalid after this!
 		if (ret) {
 			// We still need to use the same xumon_com_st structure as the answer must have the same "ptr" and "seq" values got by xumon_get_request()
-			monres.data = (void*)buffer;	// set data pointer to the output data
+			monres.data = (void*)buffer;	// set data pointer to the output data (previously it means the input request, but for calling xumon_set_answer() it's the answer already)
 			monres.size = strlen(buffer);	// ... and the size
-			if (monres.size + 10 < sizeof buffer) {
-				strcpy(buffer + monres.size, "\r\n.\r\n");
+			if (monres.need_prompt && monres.size + 10 < sizeof buffer) {
+				strcpy(buffer + monres.size, monres.size > 0 && buffer[monres.size - 1] == '\n' ? ".\r\n": "\r\n.\r\n");
 				monres.size = strlen(buffer);
 			}
 			xumon_set_answer(&monres);
