@@ -20,9 +20,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMU_MEGA65_UMON_H_INCLUDED
 #ifdef  HAVE_XEMU_UMON
 
-void umon_main_iterate ( void );
-bool umon_execute_command ( char *output, unsigned int output_sizeof, const void *input_raw, unsigned int input_size );
-void umon_format_answer_text ( char *output );
+extern int  umon_init ( const int port );
+extern int  umon_stop ( void );
+extern void umon_main_iterate ( void );
+extern bool umon_execute_command ( char *output, unsigned int output_sizeof, const char *input_raw, unsigned int input_size );
+extern void umon_format_answer_text ( char *output );
+extern int  umon_get_port ( void );
 
 #endif
 #endif

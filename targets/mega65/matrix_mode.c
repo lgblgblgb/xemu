@@ -791,9 +791,13 @@ static void cmd_eth ( char *p )
 #include "umon.h"
 static void cmd_megamatrix ( char *p )
 {
-	MATRIX("Switching into MEGA65 protocol. Use command !! to return.\nNote: this mode is an experimental, limited feature.");
-	megamatrix = true;
-	prompt = prompt_mega65;
+	if (umon_get_port()) {
+		MATRIX("Switching into MEGA65 protocol. Use command !! to return.\nNote: this mode is an experimental, limited feature.");
+		megamatrix = true;
+		prompt = prompt_mega65;
+	} else {
+		MATRIX("Cannot switch into MEGA65 protocol: umon is not running!");
+	}
 }
 
 

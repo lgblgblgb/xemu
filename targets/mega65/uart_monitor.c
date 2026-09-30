@@ -123,24 +123,20 @@ static void m65mon_watchpoint ( int addr )
 static void m65mon_dumpmem28 ( int addr )
 {
 	umon_printf(":%08X:", addr & 0xFFFFFFF);
-	for (int k = 0; k < 16; k++) {
+	for (int k = 0; k < 16; k++, addr++)
 		if ((addr & 0xFFF0000) == 0x7770000)
 			umon_printf("%02X", debug_read_cpu_byte(addr & 0xFFFF));
 		else
 			umon_printf("%02X", debug_read_linear_byte(addr & 0xFFFFFFF));
-		addr++;
-	}
 }
 
-static void m65mon_setmem28 ( int addr, const int cnt, const Uint8* vals )
+static void m65mon_setmem28 ( int addr, int cnt, const Uint8 *vals )
 {
-	for (int k = 0; k < cnt; k++) {
+	for (; cnt > 0; cnt--, addr++, vals++)
 		if ((addr & 0xFFF0000) == 0x7770000)
-			debug_write_cpu_byte(addr & 0xFFFF, vals[k]);
+			debug_write_cpu_byte(addr & 0xFFFF, *vals);
 		else
-			debug_write_linear_byte(addr & 0xFFFFFFF, vals[k]);
-		addr++;
-	}
+			debug_write_linear_byte(addr & 0xFFFFFFF, *vals);
 }
 
 static void m65mon_setmem28_byte ( const int addr, const Uint8 byte )

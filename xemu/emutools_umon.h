@@ -33,14 +33,16 @@ struct xumon_com_st {
 };
 
 extern int xumon_running;
+extern int xumon_port;
 
-extern int xumon_init ( const int port );
+extern int xumon_init ( const int port, const bool use_text_echo );
 extern int xumon_stop ( void );
 
 extern bool xumon_get_request ( struct xumon_com_st *res );
 extern bool xumon_set_answer  ( struct xumon_com_st *res );
+extern void xumon_trigger_sending ( int events );
 
-static inline void xumon_end_request ( struct xumon_com_st *res )
+static inline void xumon_free_request ( struct xumon_com_st *res )
 {
 	free(res->data);
 	res->data = NULL;

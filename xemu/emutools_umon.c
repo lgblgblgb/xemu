@@ -49,14 +49,15 @@ static SDL_atomic_t thread_stop_trigger;
 static SDL_atomic_t thread_client_seq;
 static SDL_atomic_t incoming_msg_counter;
 static SDL_sem *responder_sem = NULL;
-static SDL_SpinLock clients_lock;
+static SDL_SpinLock clients_lock = 0;
 #define CLIENTS_LOCK()		SDL_AtomicLock(&clients_lock)
 #define CLIENTS_UNLOCK()	SDL_AtomicUnlock(&clients_lock)
 
 int xumon_running = 0;
+int xumon_port;
 static xemusock_socket_t sock_server = XS_INVALID_SOCKET;
+static bool text_echo = false;
 static char *docroot;
-static int xumon_port;
 
 static const char *default_vhost = NULL;
 static const char *generic_http_headers = NULL;
@@ -491,8 +492,13 @@ static void client_run ( struct client_st *client )
 			}
 			if (client->mode == XUMON_CONN_TEXT) {
 				// So we have a text request it seems!!
+				if (text_echo) {
+					DEBUGPRINT("UMON: echoing back %d bytes of data in text mode" NL, lsize);
+					// FIXME: probably I should protect this with a per-client send lock, and also in the responder thread!
+					send_raw(client, buffer, lsize);
+				}
 				*endp = '\0';
-				DEBUGPRINT("UMON: text-request: (%s)" NL, buffer);
+				DEBUGPRINT("UMON: text-request: (%s) %d bytes, lsize was: %d" NL, buffer, (int)strlen(buffer), lsize);
 				store_request(client, buffer, strlen(buffer) + 1);
 				// --- End of processing line ---
 				read_fill -= lsize;
@@ -885,9 +891,16 @@ static int responder_thread ( void *_unused )
 			free(chunk);
 		} else {
 			CLIENTS_UNLOCK();
-			DEBUGPRINT("UMON: responder-thread: falling into semwait mode" NL);
+			DEBUGPRINT("UMON: responder-thread: falling into SemWait sleep" NL);
 			SDL_SemWait(responder_sem);
-			DEBUGPRINT("UMON: responder-thread: awaking from semwait mode" NL);
+#if 1
+			int extra = 0;
+			while (!SDL_SemTryWait(responder_sem))
+				extra++;
+			DEBUGPRINT("UMON: responder-thread: awaking from SemWait sleep (%d extra semaphor posts consumed)" NL, extra);
+#else
+			DEBUGPRINT("UMON: responder-thread: awaking from SemWait sleep" NL);
+#endif
 		}
 	}
 	SDL_AtomicAdd(&thread_counter, -1);
@@ -973,7 +986,6 @@ bool xumon_set_answer ( struct xumon_com_st *res )
 		p->next = c->whead;
 		c->whead = p;
 		CLIENTS_UNLOCK();
-		SDL_SemPost(responder_sem);
 		return true;
 	} else {
 		CLIENTS_UNLOCK();
@@ -985,13 +997,19 @@ bool xumon_set_answer ( struct xumon_com_st *res )
 }
 
 
+void xumon_trigger_sending ( int events )
+{
+	SDL_SemPost(responder_sem);
+}
+
+
 /* !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! *
  * The rest of this file is about creating the thread and it's enivornment first, *
  * and it will run in the main context of the execution.                          *
  * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */
 
 
-int xumon_init ( const int port )
+int xumon_init ( const int port, const bool use_text_echo )
 {
 	if (xumon_running) {
 		ERROR_WINDOW("UMON is already running!");
@@ -1101,6 +1119,7 @@ int xumon_init ( const int port )
 		}
 	}
 	// Everything is OK, return with success.
+	text_echo = use_text_echo;
 	xumon_running = 1;
 	DEBUGPRINT("UMON: has been initialized for TCP/IP port %d backlog %d start-id %u (web-docroot: %s) within %d msecs." NL, port, LISTEN_BACKLOG, START_ID, docroot, passed_time);
 	return 0;

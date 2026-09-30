@@ -501,7 +501,7 @@ static void shutdown_callback ( void )
 	uartmon_close();
 #endif
 #ifdef HAVE_XEMU_UMON
-	xumon_stop();
+	umon_stop();
 #endif
 #ifdef XEMU_HAS_SOCKET_API
 	serialtcp_shutdown();
@@ -859,7 +859,7 @@ int main ( int argc, char **argv )
 #ifdef HAVE_XEMU_UMON
 	if (configdb.umon == 1)
 		configdb.umon = XUMON_DEFAULT_PORT;
-	xumon_init(configdb.umon);
+	umon_init(configdb.umon);
 #endif
 	if (configdb.prg) {
 		inject_register_prg(configdb.prg, configdb.prgmode, true);
