@@ -294,7 +294,7 @@ void umon_main_iterate ( void )
 			// We still need to use the same xumon_com_st structure as the answer must have the same "ptr" and "seq" values got by xumon_get_request()
 			monres.data = (void*)buffer;	// set data pointer to the output data (previously it means the input request, but for calling xumon_set_answer() it's the answer already)
 			monres.size = strlen(buffer);	// ... and the size
-			if (monres.need_prompt && monres.size + 10 < sizeof buffer) {
+			if (monres.text_request && monres.size + 10 < sizeof buffer) {
 				strcpy(buffer + monres.size, monres.size > 0 && buffer[monres.size - 1] == '\n' ? ".\r\n": "\r\n.\r\n");
 				monres.size = strlen(buffer);
 			}
