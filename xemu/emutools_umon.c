@@ -71,8 +71,8 @@ static const char str_keep_alive[] = "keep-alive";
 struct linked_fifo_st {
 	struct linked_fifo_st *next;
 	int size;
-	void *data;
 	Uint32 time;
+	Uint8 data[];
 };
 
 enum xumon_conn_mode {
@@ -365,16 +365,12 @@ static void http_serve_file_and_exit ( struct client_st *client, const char *fn 
 static void store_request ( struct client_st *client, const void *data, const int size )
 {
 	DEBUGPRINT("UMON: pushing data received (%d bytes)" NL, size);
-	struct linked_fifo_st *p = malloc(sizeof(struct linked_fifo_st));
-	void *d = malloc(size);
-	if (!p || !d) {
+	struct linked_fifo_st *p = malloc(sizeof(struct linked_fifo_st) + size);
+	if (!p) {
 		DEBUGPRINT("UMON: ERROR: cannot allocate memory for storing incoming request!" NL);
-		free(p);
-		free(d);
 		END_CLIENT_THREAD(1);
 	}
-	memcpy(d, data, size);
-	p->data = d;
+	memcpy(p->data, data, size);
 	p->size = size;
 	CLIENTS_LOCK();
 	p->next = client->rhead;
@@ -842,14 +838,12 @@ finish:
 		// free possibly still presenting memory chunks for read/write data of the client
 		while (rh) {
 			void *next = rh->next;
-			free(rh->data);
 			free(rh);
 			rc++;
 			rh = next;
 		}
 		while (wh) {
 			void *next = wh->next;
-			free(wh->data);
 			free(wh);
 			wc++;
 			wh = next;
@@ -963,7 +957,6 @@ static int responder_thread ( void *_unused )
 				DEBUGPRINT("UMON: responder-thread: error during transmit (ret=%d, needed=%d)?" NL, ret, chunk->size);
 			else
 				DEBUGPRINT("UMON: responder-thread: (hopefully) sent %d bytes of data after %d msec of submitting" NL, chunk->size, SDL_GetTicks() - chunk->time);
-			free(chunk->data);
 			free(chunk);
 			if (http_keepalive)
 				DEBUGPRINT("UMON: responder-thread: http-keepalive session detected" NL);
@@ -1022,10 +1015,7 @@ bool xumon_get_request ( struct xumon_com_st *res, void *buffer, int *buffer_siz
 		CLIENTS_UNLOCK();
 		if (error)
 			DEBUGPRINT("UMON: get_request: dispatched data chunk is too large: %d > %d" NL, p->size, *buffer_size);
-		if (p) {
-			free(p->data);
-			free(p);
-		}
+		free(p);
 	}
 	return !!p;
 }
@@ -1042,14 +1032,12 @@ bool xumon_set_answer ( struct xumon_com_st *res, void *buffer, const int buffer
 		tlen += plen < 126 ? 2 : 4;
 	else if (c->mode == XUMON_CONN_HTTP)
 		tlen += strlen(generic_http_headers) + 1024;
-	struct linked_fifo_st *p = malloc(sizeof(struct linked_fifo_st));
-	Uint8 *d = malloc(tlen);
-	if (!p || !d) {
+	struct linked_fifo_st *p = malloc(sizeof(struct linked_fifo_st) + tlen);
+	if (!p) {
 		DEBUGPRINT("UMON: ERROR: memory allocation failure" NL);
-		free(p);
-		free(d);
 		return false;
 	}
+	Uint8 *d = p->data;
 	if (c->mode == XUMON_CONN_WEBSOCKET) {
 		d[0] = 0x82;	// binary frame + FIN bit (= non-fragmented message)
 		if (plen < 126)
@@ -1073,7 +1061,6 @@ bool xumon_set_answer ( struct xumon_com_st *res, void *buffer, const int buffer
 		tlen = plen + strlen((char*)d);
 	}
 	memcpy(d + (tlen - plen), buffer, plen);
-	p->data = d;
 	p->size = tlen;
 	p->time = SDL_GetTicks();
 	CLIENTS_LOCK();
@@ -1086,7 +1073,6 @@ bool xumon_set_answer ( struct xumon_com_st *res, void *buffer, const int buffer
 		return true;
 	} else {
 		CLIENTS_UNLOCK();
-		free(d);
 		free(p);
 		DEBUGPRINT("UMON: ERROR: could not match connection to send answer!" NL);
 		return false;
