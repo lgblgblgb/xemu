@@ -66,6 +66,7 @@ static const char default_agent[] = "unknown_user_agent";
 static const char websocket_key_uuid[] = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";	// according to RFC-6455 (a fixed UUID)
 static const char main_html[] = "main.html";
 static const char service_uri_head[] = "xemu-req-msg-";
+static const char str_keep_alive[] = "keep-alive";
 
 struct linked_fifo_st {
 	struct linked_fifo_st *next;
@@ -92,13 +93,17 @@ struct client_st {
 	struct linked_fifo_st	*wtail;
 	jmp_buf			jmp_finish_client_thread;
 	bool			text_echo;
-	bool			http_keep_alive;
-	SDL_atomic_t		http_connection_stop_trigger;
 	// private struct members can be only used when the client handler thread is on scope! So not from the responder thread for example!
 	struct {
 		const char	*vhost;
 		const char	*agent;
-	}			private;
+	}	private;
+	// http stuff
+	struct {
+		SDL_atomic_t	connection_stop_trigger;
+		bool		keep_alive;
+		int		passes;
+	}	http;
 };
 static struct client_st clients[MAX_CLIENT_SLOTS];
 
@@ -381,26 +386,33 @@ static void store_request ( struct client_st *client, const void *data, const in
 }
 
 
-static void http_level_request ( struct client_st *client, const char *http_uri )
+static int get_hex_byte ( const char *s )
 {
-	const char *h = http_uri + strlen(service_uri_head);
-	char req[strlen(h) + 1], *r = req;
-	while (*h && *h != '?' && *h != '#') {
-		if (*h == '+') {
-			*r++ = ' ';
-			h++;
-		} else if (*h == '%' && strlen(h) >= 3) {
-			int val = '?';
-			sscanf(h + 1, "%02x", &val);
-			*r++ = val;
+	int n = 0;
+	for (int a = 0; a < 2; a++, s++, n *= 10) {
+		const char c = *s;
+		if (c >= '0' && c <= '9')	n += c - '0';
+		else if (c >= 'a' && c <= 'f')	n += c - 'a' + 10;
+		else if (c >= 'A' && c <= 'F')	n += c - 'A' + 10;
+		else				return -1;
+	}
+	return n;
+}
+
+
+static void http_level_request ( struct client_st *client, const char *h )
+{
+	Uint8 req[strlen(h)], *r = req;
+	while (*h)
+		if (*h == '%' && strlen(h) >= 3) {
+			*r++ = get_hex_byte(h + 1);
 			h += 3;
 		} else {
-			*r++ = *h++;
+			*r++ = (*h == '+') ? ' ' : *h;
+			h++;
 		}
-	}
-	*r = '\0';
 	const int len = (int)(r - req);
-	DEBUGPRINT("UMON: client: http-encapsulated request: %s (%d bytes per length, %d bytes per pointer)" NL, req, len, (int)strlen(req));
+	DEBUGPRINT("UMON: client: http-encapsulated request: %d bytes" NL, len);
 	store_request(client, req, len);
 }
 
@@ -433,7 +445,7 @@ static void client_run ( struct client_st *client )
 	int ws_plen = 0;		// websocket unfragmented data size in the buffer so far
 	for (;;) {
 		CHECK_STOP_TRIGGER();
-		if (SDL_AtomicGet(&client->http_connection_stop_trigger)) {
+		if (SDL_AtomicGet(&client->http.connection_stop_trigger)) {
 			DEBUGPRINT("UMON: client: exiting on http client stop trigger sent by the responder thread" NL);
 			return;
 		}
@@ -461,7 +473,7 @@ static void client_run ( struct client_st *client )
 		ret = xemusock_recv(client->sock, buffer + read_fill, to_be_read, &xerr);
 		DEBUGPRINT("UMON: client: result of recv() = %d, error = %s" NL, ret, ret == -1 ? xemusock_strerror(xerr) : "OK");
 		if (!ret) {
-			if (SDL_AtomicGet(&client->http_connection_stop_trigger))
+			if (SDL_AtomicGet(&client->http.connection_stop_trigger))
 				DEBUGPRINT("UMON: client: closing connection because zero byte read and http client stop trigger sent by the responder thread" NL);
 			else
 				DEBUGPRINT("UMON: client: closing connection because zero byte read." NL);
@@ -565,7 +577,7 @@ static void client_run ( struct client_st *client )
 			const char *header_websocket_key = EMPTY_STR;		// Sec-WebSocket-Key: x3JJHMbDL1EzLkh9GBhXDw==
 			const char *header_websocket_protocol = EMPTY_STR;	// Sec-WebSocket-Protocol: chat, superchat
 			const char *header_websocket_version = EMPTY_STR;	// Sec-WebSocket-Version: 13
-			client->http_keep_alive = false;
+			client->http.keep_alive = false;
 			for (char *p = headers_p;;) {
 				char *e = strstr(p, "\r\n");
 				if (!e)
@@ -593,9 +605,9 @@ static void client_run ( struct client_st *client )
 				else if (!strcasecmp(p, "Sec-WebSocket-Version"))
 					header_websocket_version = v;
 				else if (!strcasecmp(p, "Connection"))	// http keep-alive is memorized, but used only later in special cases!
-					client->http_keep_alive = !strncasecmp(v, "keep-alive", 10);
+					client->http.keep_alive = !strncasecmp(v, str_keep_alive, strlen(str_keep_alive));
 				p = e + 2;
-				if (client->http_keep_alive)
+				if (client->http.keep_alive)
 					DEBUGPRINT("UMON: http_header: http keep-alive request detected (may not be implemented by the answer)" NL);
 			}
 			if (*header_upgrade) {
@@ -643,9 +655,10 @@ static void client_run ( struct client_st *client )
 			// Implementing a GET based message receiver here. The problem: the answer should be provided here, though it's usually
 			// the task of the responder thread not the per client receiver which needs kept-open connection!
 			if (!strncmp(http_uri, service_uri_head, strlen(service_uri_head))) {
-				http_level_request(client, http_uri);
+				http_level_request(client, http_uri + strlen(service_uri_head));
 				DEBUGPRINT("UMON: http-comm: back to the main listener loop" NL);
-				continue;
+				client->http.passes++;
+				continue;	// continue, closing the connection can't be done because responder thread hasn't responded yet ...
 			}
 			char id_arg[32];
 			sprintf(id_arg, "uts=%u", START_ID);
@@ -788,8 +801,9 @@ static int client_thread_initiate ( void *user_param )
 				client->rtail = NULL;
 				client->wtail = NULL;
 				client->text_echo = text_echo;
-				client->http_keep_alive = false;
-				SDL_AtomicSet(&client->http_connection_stop_trigger, 0);
+				client->http.keep_alive = false;
+				client->http.passes = 0;
+				SDL_AtomicSet(&client->http.connection_stop_trigger, 0);
 				CLIENTS_UNLOCK();
 				goto slot_found;
 			}
@@ -929,8 +943,8 @@ static int responder_thread ( void *_unused )
 			if (!client->whead)
 				client->wtail = NULL;
 			const int seq = client->seq;
-			const bool to_close = (client->mode == XUMON_CONN_HTTP && !client->http_keep_alive);
-			const bool http_keepalive = (client->mode == XUMON_CONN_HTTP && client->http_keep_alive);
+			const bool to_close = (client->mode == XUMON_CONN_HTTP && !client->http.keep_alive);
+			const bool http_keepalive = (client->mode == XUMON_CONN_HTTP && client->http.keep_alive);
 			CLIENTS_UNLOCK();
 			// do NOT use plain "send_raw" it can crash because of longjmp() and locking usage of ANOTHER thread!!!
 			const int ret = send_raw_unwrapped(client->sock, chunk->data, chunk->size);
@@ -938,7 +952,7 @@ static int responder_thread ( void *_unused )
 				CLIENTS_LOCK();
 				const bool okay = (client->seq == seq);
 				if (okay)
-					SDL_AtomicSet(&client->http_connection_stop_trigger, 1);
+					SDL_AtomicSet(&client->http.connection_stop_trigger, 1);
 				CLIENTS_UNLOCK();
 				if (okay)
 					DEBUGPRINT("UMON: responder-thread: notifying listener about terminating HTTP answer" NL);
@@ -1050,7 +1064,7 @@ bool xumon_set_answer ( struct xumon_com_st *res )
 			"Content-Length: %d\r\n"
 			"%s"
 			"\r\n",
-			default_vhost, c->http_keep_alive ? "keep-alive" : "close", plen, generic_http_headers
+			default_vhost, c->http.keep_alive ? str_keep_alive : "close", plen, generic_http_headers
 		);
 		tlen = plen + strlen((char*)d);
 	}

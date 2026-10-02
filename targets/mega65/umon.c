@@ -42,7 +42,7 @@ static struct {
 static void umon_printf ( const char *fmt, ... )
 {
 	if (!umon.output_capacity) {
-		DEBUGPRINT("UMON: umon_printf() output buffer is full!" NL);
+		DEBUGPRINT("UMONC: umon_printf() output buffer is full!" NL);
 		return;
 	}
 	va_list ap;
@@ -51,7 +51,7 @@ static void umon_printf ( const char *fmt, ... )
 	va_end(ap);
 	if (size >= umon.output_capacity) {
 		umon.output_capacity = 0;
-		DEBUGPRINT("UMON: umon_printf() output buffer overflow!" NL);
+		DEBUGPRINT("UMONC: umon_printf() output buffer overflow!" NL);
 	} else {
 		umon.output_capacity -= size;
 		umon.output_ptr += size;
@@ -204,7 +204,7 @@ bool umon_execute_command ( char *output, unsigned int output_maxsize, const cha
 	while (input_size > 0 && *input_raw <= 32)
 		input_raw++, input_size--;
 	if (input_size >= MAX_INPUT_SIZE) {
-		DEBUGPRINT("UMON: too long input to execute" NL);
+		DEBUGPRINT("UMONC: too long input to execute" NL);
 		return false;
 	}
 	char cmd_buffer[input_size + 1];
@@ -213,6 +213,7 @@ bool umon_execute_command ( char *output, unsigned int output_maxsize, const cha
 	// Prepare for output
 	umon.output_capacity = output_maxsize;
 	umon.output_ptr = output;
+	output[0] = '\0';
 	// Part of old code, should be refactored at some point
 	char *p = cmd_buffer;
 	while (*p)
@@ -229,7 +230,7 @@ bool umon_execute_command ( char *output, unsigned int output_maxsize, const cha
 	while (p >= cmd_buffer && *p <= 32)
 		*(p--) = 0;
 	char *cmd = cmd_buffer;
-	DEBUG("UARTMON: command got \"%s\" (%d bytes)." NL, cmd, (int)strlen(cmd));
+	DEBUGPRINT("UMONC: command got \"%s\" (%d bytes)." NL, cmd, (int)strlen(cmd));
 	int par1;
 	switch (*(cmd++)) {
 		case 'h':
@@ -267,8 +268,10 @@ bool umon_execute_command ( char *output, unsigned int output_maxsize, const cha
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
 			cmd_fillmem(cmd, par1);
 			break;
+		case 0:
+			break;
 		default:
-			DEBUGPRINT("UMON: unknown command received: %s" NL, cmd - 1);
+			DEBUGPRINT("UMONC: unknown command received: %s" NL, cmd - 1);
 			umon_printf(UMON_SYNTAX_ERROR "unknown (or not implemented) command '%c'", cmd[-1]);
 			break;
 	}
@@ -286,7 +289,7 @@ void umon_main_iterate ( void )
 	struct xumon_com_st monres;
 	int trigger_submit = 0;
 	while (XEMU_UNLIKELY(xumon_get_request(&monres))) {
-		DEBUGPRINT("UMON: got request, %d bytes" NL, monres.size);
+		DEBUGPRINT("UMONC: got request, %d bytes" NL, monres.size);
 		char buffer[256];
 		const bool ret = umon_execute_command(buffer, sizeof buffer, (char*)monres.data, monres.size);
 		xumon_free_request(&monres);	// this will free the request, data part of the request (monres.data) may be invalid after this!
