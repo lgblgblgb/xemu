@@ -464,7 +464,7 @@ static void ui_cb_use_default_rom ( const struct menu_st *m, int *query )
 }
 
 #ifdef HAS_UARTMON_SUPPORT
-static void ui_cb_start_umon ( const struct menu_st *m, int *query )
+static void ui_cb_start_uartmon ( const struct menu_st *m, int *query )
 {
 	int is_active = uartmon_is_active();
 	XEMUGUI_RETURN_CHECKED_ON_QUERY(query, is_active);
@@ -472,8 +472,8 @@ static void ui_cb_start_umon ( const struct menu_st *m, int *query )
 		INFO_WINDOW("UART monitor is already active.\nCurrently stopping it is not supported.");
 		return;
 	}
-	if (!uartmon_init(UMON_DEFAULT_PORT))
-		INFO_WINDOW("UART monitor has been starton on " UMON_DEFAULT_PORT);
+	if (!uartmon_init(UARTMON_DEFAULT_PORT))
+		INFO_WINDOW("UART monitor has been starton on " UARTMON_DEFAULT_PORT);
 }
 #endif
 
@@ -976,9 +976,9 @@ static const struct menu_st menu_debug[] = {
 	{ "Fastboot (turbo on boot)",	XEMUGUI_MENUID_CALLABLE |
 					XEMUGUI_MENUFLAG_QUERYBACK,	xemugui_cb_toggle_int, (void*)&configdb.fastboot },
 #ifdef HAS_UARTMON_SUPPORT
-	{ "Start umon on " UMON_DEFAULT_PORT,
+	{ "Start umon on " UARTMON_DEFAULT_PORT,
 					XEMUGUI_MENUID_CALLABLE |
-					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_start_umon, NULL },
+					XEMUGUI_MENUFLAG_QUERYBACK,	ui_cb_start_uartmon, NULL },
 #endif
 #ifdef XEMU_HAS_SOCKET_API
 	{ "Restart SerialTCP",		XEMUGUI_MENUID_CALLABLE,	xemugui_cb_call_user_data, ui_serialtcp_restart},

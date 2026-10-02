@@ -20,6 +20,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define XEMU_MEGA65_UMON_H_INCLUDED
 #ifdef  HAVE_XEMU_UMON
 
+#define UMON_DEFAULT_PORT 4503
+
 extern int  umon_init ( const int port );
 extern int  umon_stop ( void );
 extern void umon_main_iterate ( void );

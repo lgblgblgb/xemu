@@ -30,7 +30,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "hypervisor.h"
 #include "xemu/c64_kbd_mapping.h"
 #include "xemu/emutools_config.h"
-#include "xemu/emutools_umon.h"
+//#include "xemu/emutools_umon.h"
 #include "memory_mapper.h"
 #include "io_mapper.h"
 #include "ethernet65.h"
@@ -858,7 +858,7 @@ int main ( int argc, char **argv )
 	);
 #ifdef HAVE_XEMU_UMON
 	if (configdb.umon == 1)
-		configdb.umon = XUMON_DEFAULT_PORT;
+		configdb.umon = UMON_DEFAULT_PORT;
 	umon_init(configdb.umon);
 #endif
 	if (configdb.prg) {

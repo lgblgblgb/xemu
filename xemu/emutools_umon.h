@@ -23,11 +23,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #error "Need HAVE_XEMU_SOCKET_API for HAVE_XEMU_UMON to be enabled at the target!"
 #endif
 
-#define XUMON_DEFAULT_PORT	9000
-
 struct xumon_com_st {
-	int	size;
-	Uint8	*data;
 	bool	text_request;
 	int	seq;		// xumon_get_request()'s data should be passed to xumon_set_answer()
 	const void *ptr;	// points to the client_st struct secretly, shouldn't altered, xumon_get_request()'s data should be passed to xumon_set_answer()
@@ -39,15 +35,9 @@ extern int xumon_port;
 extern int xumon_init ( const int port, const bool use_text_echo );
 extern int xumon_stop ( void );
 
-extern bool xumon_get_request ( struct xumon_com_st *res );
-extern bool xumon_set_answer  ( struct xumon_com_st *res );
+extern bool xumon_get_request ( struct xumon_com_st *res, void *buffer, int *buffer_size );
+extern bool xumon_set_answer  ( struct xumon_com_st *res, void *buffer, const int buffer_maxsize );
 extern void xumon_trigger_sending ( int events );
-
-static inline void xumon_free_request ( struct xumon_com_st *res )
-{
-	free(res->data);
-	res->data = NULL;
-}
 
 #endif
 #endif

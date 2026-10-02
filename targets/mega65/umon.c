@@ -19,7 +19,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #if !defined(HAVE_XEMU_UMON)
 #warning "Platform does not support UMON"
 // TODO: later, we should make umon compilable without socket support, so it can be
-// still usable via matrix mode at last!
+// still usable via matrix mode at least!
 #else
 
 #include "xemu/emutools.h"
@@ -199,6 +199,8 @@ static void cmd_fillmem ( char *param, int addr )
 
 // umon_main_interate() call this - see that after this function
 // also, matrix monitor can call this, to implement mega65 compatible matrix commands through this function
+// Return value: only false, if there is nothing to answer! Otherwise (even for unknown command!) it's true, since we
+// want to answer an error message!
 bool umon_execute_command ( char *output, unsigned int output_maxsize, const char *input_raw, unsigned int input_size )
 {
 	while (input_size > 0 && *input_raw <= 32)
@@ -288,20 +290,20 @@ void umon_main_iterate ( void )
 	// to handle the situation!
 	struct xumon_com_st monres;
 	int trigger_submit = 0;
-	while (XEMU_UNLIKELY(xumon_get_request(&monres))) {
-		DEBUGPRINT("UMONC: got request, %d bytes" NL, monres.size);
-		char buffer[256];
-		const bool ret = umon_execute_command(buffer, sizeof buffer, (char*)monres.data, monres.size);
-		xumon_free_request(&monres);	// this will free the request, data part of the request (monres.data) may be invalid after this!
-		if (ret) {
-			// We still need to use the same xumon_com_st structure as the answer must have the same "ptr" and "seq" values got by xumon_get_request()
-			monres.data = (void*)buffer;	// set data pointer to the output data (previously it means the input request, but for calling xumon_set_answer() it's the answer already)
-			monres.size = strlen(buffer);	// ... and the size
-			if (monres.text_request && monres.size + 10 < sizeof buffer) {
-				strcpy(buffer + monres.size, monres.size > 0 && buffer[monres.size - 1] == '\n' ? ".\r\n": "\r\n.\r\n");
-				monres.size = strlen(buffer);
+	static char ibuffer[256];
+	int isize = sizeof ibuffer;
+	// xumon_get_request() expects isize to be initialized with the max size of the input buffer!
+	while (XEMU_UNLIKELY(xumon_get_request(&monres, ibuffer, &isize))) {
+		DEBUGPRINT("UMONC: got request, %d bytes" NL, isize);
+		static char obuffer[256];
+		if (umon_execute_command(obuffer, sizeof obuffer, ibuffer, isize)) {
+			int osize = strlen(obuffer);
+			if (monres.text_request && osize + 10 < sizeof obuffer) {
+				strcpy(obuffer + osize, osize > 0 && obuffer[osize - 1] == '\n' ? ".\r\n": "\r\n.\r\n");
+				osize = strlen(obuffer);
 			}
-			xumon_set_answer(&monres);
+			// Important: monres pointed struct must carry the SAME value the request gave with xumon_get_request()!
+			xumon_set_answer(&monres, obuffer, osize);
 			trigger_submit++;
 		}
 	}

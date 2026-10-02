@@ -994,16 +994,11 @@ static int responder_thread ( void *_unused )
  * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */
 
 
-// Called by the emulator! Returns with the "seq" number of the client connection.
-// Proper locking should be applied to avoid ugly things happening ...
-// RETURN: non-zero: *res is filled, there is data, otherwise invalid!
-// res->data must be free()'ed up by the caller!
-// Answering a request must be issued with filling the res->ptr and res->seq with the
-// values, this function returned, to identify the connection (there can be more!)
-bool xumon_get_request ( struct xumon_com_st *res )
+bool xumon_get_request ( struct xumon_com_st *res, void *buffer, int *buffer_size )
 {
 	struct linked_fifo_st *p = NULL;
 	if (XEMU_UNLIKELY(xumon_running && SDL_AtomicGet(&incoming_msg_counter))) {
+		bool error = false;
 		CLIENTS_LOCK();
 		for (struct client_st *c = clients; c < clients + MAX_CLIENT_SLOTS; c++) {
 			if (c->rhead) {
@@ -1011,8 +1006,12 @@ bool xumon_get_request ( struct xumon_com_st *res )
 				c->rhead = p->next;
 				if (!p->next)
 					c->rtail = NULL;
-				res->data = p->data;		// caller must free this!
-				res->size = p->size;
+				if (p->size > *buffer_size) {	// on input, *buffer_size == buffer size limit
+					error = true;
+				} else {
+					memcpy(buffer, p->data, p->size);
+					*buffer_size = p->size;	// on putput, *buffer_size == received size in bytes
+				}
 				res->seq = c->seq;
 				res->text_request = (c->mode == XUMON_CONN_TEXT);
 				res->ptr = (const void*)c;
@@ -1021,19 +1020,24 @@ bool xumon_get_request ( struct xumon_com_st *res )
 			}
 		}
 		CLIENTS_UNLOCK();
-		free(p);
+		if (error)
+			DEBUGPRINT("UMON: get_request: dispatched data chunk is too large: %d > %d" NL, p->size, *buffer_size);
+		if (p) {
+			free(p->data);
+			free(p);
+		}
 	}
 	return !!p;
 }
 
 
-bool xumon_set_answer ( struct xumon_com_st *res )
+bool xumon_set_answer ( struct xumon_com_st *res, void *buffer, const int buffer_size )
 {
 	if (XEMU_LIKELY(!xumon_running))
 		return false;
 	struct client_st *c = (struct client_st*)res->ptr;
-	int plen = res->size;
-	int tlen = res->size;
+	int plen = buffer_size;
+	int tlen = buffer_size;
 	if (c->mode == XUMON_CONN_WEBSOCKET)
 		tlen += plen < 126 ? 2 : 4;
 	else if (c->mode == XUMON_CONN_HTTP)
@@ -1068,7 +1072,7 @@ bool xumon_set_answer ( struct xumon_com_st *res )
 		);
 		tlen = plen + strlen((char*)d);
 	}
-	memcpy(d + (tlen - plen), res->data, plen);
+	memcpy(d + (tlen - plen), buffer, plen);
 	p->data = d;
 	p->size = tlen;
 	p->time = SDL_GetTicks();
