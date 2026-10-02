@@ -68,12 +68,25 @@ static const char main_html[] = "main.html";
 static const char service_uri_head[] = "xemu-req-msg-";
 static const char str_keep_alive[] = "keep-alive";
 
-struct linked_fifo_st {
-	struct linked_fifo_st *next;
+struct linked_chunk_list_st {
+	struct linked_chunk_list_st *next, *prev;
 	int size;
 	Uint32 time;
 	Uint8 data[];
 };
+
+#define DL_ADD_TO_HEAD(head,tail,curr) do { \
+	(curr)->prev = NULL; \
+	(curr)->next = (head); \
+	if (head) (head)->prev = (curr); \
+	(head) = (curr); \
+	if (!(tail)) (tail) = (curr); } while(0)
+
+#define DL_DEL_FROM_TAIL(head,tail) do { \
+	if ((tail) == (head)) { (head) = NULL; (tail) = NULL; } else { \
+		(tail)->prev->next = NULL; \
+		(tail) = (tail)->prev; \
+	} } while(0)
 
 enum xumon_conn_mode {
 	XUMON_CONN_INIT,
@@ -87,10 +100,10 @@ struct client_st {
 	int			seq;
 	enum xumon_conn_mode	mode;
 	int			fd;		// auto-close, used when file access is needed (like file streaming in the built-in HTTP server)
-	struct linked_fifo_st	*rhead;
-	struct linked_fifo_st	*rtail;
-	struct linked_fifo_st	*whead;
-	struct linked_fifo_st	*wtail;
+	struct linked_chunk_list_st	*rhead;
+	struct linked_chunk_list_st	*rtail;
+	struct linked_chunk_list_st	*whead;
+	struct linked_chunk_list_st	*wtail;
 	jmp_buf			jmp_finish_client_thread;
 	bool			text_echo;
 	// private struct members can be only used when the client handler thread is on scope! So not from the responder thread for example!
@@ -365,18 +378,16 @@ static void http_serve_file_and_exit ( struct client_st *client, const char *fn 
 static void store_request ( struct client_st *client, const void *data, const int size )
 {
 	DEBUGPRINT("UMON: pushing data received (%d bytes)" NL, size);
-	struct linked_fifo_st *p = malloc(sizeof(struct linked_fifo_st) + size);
+	struct linked_chunk_list_st *p = malloc(sizeof(struct linked_chunk_list_st) + size);
 	if (!p) {
 		DEBUGPRINT("UMON: ERROR: cannot allocate memory for storing incoming request!" NL);
 		END_CLIENT_THREAD(1);
 	}
 	memcpy(p->data, data, size);
 	p->size = size;
+	p->time = SDL_GetTicks();
 	CLIENTS_LOCK();
-	p->next = client->rhead;
-	client->rhead = p;
-	if (!client->rtail)
-		client->rtail = p;
+	DL_ADD_TO_HEAD(client->rhead, client->rtail, p);
 	SDL_AtomicAdd(&incoming_msg_counter, 1);
 	CLIENTS_UNLOCK();
 }
@@ -830,7 +841,7 @@ finish:
 		if (client->fd >= 0)
 			close(client->fd);
 		CLIENTS_LOCK();
-		struct linked_fifo_st *rh = client->rhead, *wh = client->whead;
+		struct linked_chunk_list_st *rh = client->rhead, *wh = client->whead;
 		memset(client, 0, sizeof(struct client_st));	// will also set client->seq to zero
 		client = NULL;	// just to reveal (with crash) if someone still tries to use this ptr (should not!)
 		CLIENTS_UNLOCK();
@@ -927,15 +938,13 @@ static int responder_thread ( void *_unused )
 		struct client_st *client = NULL;
 		CLIENTS_LOCK();
 		for (int i = 0; i < MAX_CLIENT_SLOTS; i++)
-			if (clients[i].seq && clients[i].whead) {
+			if (clients[i].seq && clients[i].wtail) {
 				client = &clients[i];
 				break;
 			}
 		if (client) {
-			struct linked_fifo_st *chunk = client->whead;
-			client->whead = chunk->next;
-			if (!client->whead)
-				client->wtail = NULL;
+			struct linked_chunk_list_st *chunk = client->wtail;
+			DL_DEL_FROM_TAIL(client->whead, client->wtail);
 			const int seq = client->seq;
 			const bool to_close = (client->mode == XUMON_CONN_HTTP && !client->http.keep_alive);
 			const bool http_keepalive = (client->mode == XUMON_CONN_HTTP && client->http.keep_alive);
@@ -989,16 +998,14 @@ static int responder_thread ( void *_unused )
 
 bool xumon_get_request ( struct xumon_com_st *res, void *buffer, int *buffer_size )
 {
-	struct linked_fifo_st *p = NULL;
+	struct linked_chunk_list_st *p = NULL;
 	if (XEMU_UNLIKELY(xumon_running && SDL_AtomicGet(&incoming_msg_counter))) {
 		bool error = false;
 		CLIENTS_LOCK();
 		for (struct client_st *c = clients; c < clients + MAX_CLIENT_SLOTS; c++) {
-			if (c->rhead) {
-				p = c->rhead;
-				c->rhead = p->next;
-				if (!p->next)
-					c->rtail = NULL;
+			if (c->rtail) {
+				p = c->rtail;
+				DL_DEL_FROM_TAIL(c->rhead, c->rtail);
 				if (p->size > *buffer_size) {	// on input, *buffer_size == buffer size limit
 					error = true;
 				} else {
@@ -1032,7 +1039,7 @@ bool xumon_set_answer ( struct xumon_com_st *res, void *buffer, const int buffer
 		tlen += plen < 126 ? 2 : 4;
 	else if (c->mode == XUMON_CONN_HTTP)
 		tlen += strlen(generic_http_headers) + 1024;
-	struct linked_fifo_st *p = malloc(sizeof(struct linked_fifo_st) + tlen);
+	struct linked_chunk_list_st *p = malloc(sizeof(struct linked_chunk_list_st) + tlen);
 	if (!p) {
 		DEBUGPRINT("UMON: ERROR: memory allocation failure" NL);
 		return false;
@@ -1065,10 +1072,7 @@ bool xumon_set_answer ( struct xumon_com_st *res, void *buffer, const int buffer
 	p->time = SDL_GetTicks();
 	CLIENTS_LOCK();
 	if (XEMU_LIKELY(c->seq == res->seq)) {
-		if (!c->whead)
-			c->wtail = p;
-		p->next = c->whead;
-		c->whead = p;
+		DL_ADD_TO_HEAD(c->whead, c->wtail, p);
 		CLIENTS_UNLOCK();
 		return true;
 	} else {
