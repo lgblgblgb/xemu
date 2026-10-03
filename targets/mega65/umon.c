@@ -27,9 +27,12 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "umon.h"
 #include "xemu/cpu65.h"
 #include "memory_mapper.h"
+#include "mega65.h"
+#include "sdcard.h"
 #include <string.h>
 
 #define MAX_INPUT_SIZE		128
+#define MAX_OUTPUT_SIZE		1024
 #define UMON_SYNTAX_ERROR	"?SYNTAX ERROR  "
 
 static struct {
@@ -59,7 +62,9 @@ static void umon_printf ( const char *fmt, ... )
 }
 
 
-static void m65mon_show_regs ( void )
+// TODO: the "_" at the end of the name, because it would collide with uartmon's implementation, which is used
+// in mega65.c as well (so cannot be static). Ones uartmon is obsoleted, this must be FIXME
+static void m65mon_show_regs_ ( void )
 {
 	Uint8 pf = cpu65_get_pf();
 	umon_printf(
@@ -109,7 +114,6 @@ static void m65mon_setmem28_byte ( const int addr, const Uint8 byte )
 {
 	m65mon_setmem28(addr, 1, &byte);
 }
-
 
 
 static char *parse_hex_arg ( char *p, int *val, const int min, const int max )
@@ -244,7 +248,7 @@ bool umon_execute_command ( char *output, unsigned int output_maxsize, const cha
 		case 'r':
 		case 'R':
 			if (check_end_of_command(cmd, true))
-				m65mon_show_regs();
+				m65mon_show_regs_();
 			break;
 		case 'm':
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
@@ -272,6 +276,48 @@ bool umon_execute_command ( char *output, unsigned int output_maxsize, const cha
 			break;
 		case 0:
 			break;
+		case '!':
+			reset_mega65(RESET_MEGA65_HARD);
+			break;
+		case '~':
+			if (!strncmp(cmd, "exit", 4)) {
+				XEMUEXIT(0);
+			} else if (!strncmp(cmd, "reset", 5)) {
+				reset_mega65(RESET_MEGA65_HARD);
+			} else if (!strncmp(cmd, "mount", 5)) {
+				// Quite crude syntax for now:
+				// 	~mount0		- unmounting image/disk in drive-0
+				//	~mount1		- --""-- in drive-1
+				//	~mount0disk.d81	- mounting "disk81" to drive-0 (yes, no spaces, etc ....)
+				// So you got it.
+				cmd += 5;
+				if (*cmd && (*cmd == '0' || *cmd == '1')) {
+					const int unit = *cmd - '0';
+					cmd++;
+					if (*cmd) {
+						umon_printf("Mounting %d for: \"%s\"", unit, cmd);
+						if (!sdcard_external_mount(unit, cmd, "Monitor: D81 mount failure")) {
+							OSD(-1, -1, "Mounted (%d): %s", unit, cmd);
+						}
+					} else {
+						sdcard_unmount(unit);
+						OSD(-1, -1, "Unmounted (%d)", unit);
+					}
+				}
+			} else if (!strncmp(cmd, "mapping", 7)) {
+				char desc[10];
+				for (unsigned int i = 0; i < 16; i++) {
+					memory_cpu_addr_to_desc(i << 12, desc, sizeof desc);
+					umon_printf("%X:%7s%c", i, desc, (i & 7) == 7 ? ' ' : '|');
+				}
+				umon_printf("\nMAP: HI-MB=$%02X LO-MB=$%02X HI-OFS=$%04X LO-OFS=$%04X MASK=$%02X",
+					map_megabyte_high >> 20, map_megabyte_low >> 20,
+					map_offset_high >> 8, map_offset_low >> 8,
+					map_mask
+				);
+			} else
+				umon_printf(UMON_SYNTAX_ERROR "unknown (or not implemented) Xemu special command: %s", cmd - 1);
+			break;
 		default:
 			DEBUGPRINT("UMONC: unknown command received: %s" NL, cmd - 1);
 			umon_printf(UMON_SYNTAX_ERROR "unknown (or not implemented) command '%c'", cmd[-1]);
@@ -290,12 +336,13 @@ void umon_main_iterate ( void )
 	// to handle the situation!
 	struct xumon_com_st monres;
 	int trigger_submit = 0;
-	static char ibuffer[256];
+	static char ibuffer[MAX_INPUT_SIZE];
+	// xumon_get_request() expects isize to be initialized with the max size of the input buffer, and will get back the actual size there too
 	int isize = sizeof ibuffer;
-	// xumon_get_request() expects isize to be initialized with the max size of the input buffer!
+	// Process pending requests
 	while (XEMU_UNLIKELY(xumon_get_request(&monres, ibuffer, &isize))) {
 		DEBUGPRINT("UMONC: got request, %d bytes" NL, isize);
-		static char obuffer[256];
+		static char obuffer[MAX_OUTPUT_SIZE];
 		if (umon_execute_command(obuffer, sizeof obuffer, ibuffer, isize)) {
 			int osize = strlen(obuffer);
 			if (monres.text_request && osize + 10 < sizeof obuffer) {

@@ -1,0 +1,14 @@
+#!/bin/bash
+if [ "$1" = "all" ]; then
+	make clean
+	make -j8
+elif [ "$1" != "" ]; then
+	echo "Unknown parameter, either empty or 'all' is needed." >&2
+	exit 1
+fi
+echo
+echo "*** ONLY THE IMPORTANT ***"
+echo
+touch ../../xemu/emutools_umon.c  uart_monitor.c  umon.c
+make SANITIZE=yes
+

@@ -552,6 +552,8 @@ static void client_run ( struct client_st *client )
 				if (client->text_echo) {
 					DEBUGPRINT("UMON: echoing back %d bytes of data in text mode" NL, lsize);
 					// FIXME: probably I should protect this with a per-client send lock, and also in the responder thread!
+					// FIXME: OR ... move echo after the reading exactly so echo is read-based not line-buffered
+					// FIXME: (but it is problematic because of detection of connection type ...)
 					send_raw(client, buffer, lsize);
 				}
 				*endp = '\0';
@@ -822,8 +824,8 @@ static int client_thread_initiate ( void *user_param )
 		}
 		SDL_Delay(10);
 	}
-slot_found:
 	int xerr;
+slot_found:
 	if (XEMU_UNLIKELY(xemusock_set_nonblocking(CLIENT_SOCK, XEMUSOCK_NONBLOCKING, &xerr))) {
 		DEBUGPRINT("UMON: client: Cannot set socket %d into non-blocking mode:\n%s" NL, (int)CLIENT_SOCK, xemusock_strerror(xerr));
 	} else {
@@ -1000,14 +1002,14 @@ bool xumon_get_request ( struct xumon_com_st *res, void *buffer, int *buffer_siz
 {
 	struct linked_chunk_list_st *p = NULL;
 	if (XEMU_UNLIKELY(xumon_running && SDL_AtomicGet(&incoming_msg_counter))) {
-		bool error = false;
+		bool too_large = false;
 		CLIENTS_LOCK();
 		for (struct client_st *c = clients; c < clients + MAX_CLIENT_SLOTS; c++) {
 			if (c->rtail) {
 				p = c->rtail;
 				DL_DEL_FROM_TAIL(c->rhead, c->rtail);
 				if (p->size > *buffer_size) {	// on input, *buffer_size == buffer size limit
-					error = true;
+					too_large = true;	// remember it, don't output error here under a lock
 				} else {
 					memcpy(buffer, p->data, p->size);
 					*buffer_size = p->size;	// on putput, *buffer_size == received size in bytes
@@ -1020,7 +1022,7 @@ bool xumon_get_request ( struct xumon_com_st *res, void *buffer, int *buffer_siz
 			}
 		}
 		CLIENTS_UNLOCK();
-		if (error)
+		if (too_large)
 			DEBUGPRINT("UMON: get_request: dispatched data chunk is too large: %d > %d" NL, p->size, *buffer_size);
 		free(p);
 	}
@@ -1120,8 +1122,6 @@ int xumon_init ( const int port, const bool use_text_echo )
 			"Cache-Control: no-store, no-cache, must-revalidate, max-age=0\r\n"
 			"Cache-Control: post-check=0, pre-check=0\r\n"
 			"Pragma: no-cache\r\n"
-			"X-UA-Compatible: IE=edge\r\n"
-			"X-Powered-By: The Powerpuff Girls ;)\r\n"
 			"X-Content-Type-Options: nosniff\r\n"
 			"Access-Control-Allow-Origin: *\r\n"
 			"Server: Xemu;%s/%s %s\r\n"

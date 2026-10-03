@@ -1,1 +1,5 @@
-* Use variable sized struct for get response, and private fn parameters for answer!
+* [DONE] Use variable sized struct for get response, and private fn parameters for answer!
+* Compare command hebaviour between old uartmon and new umon!
+* Test m65dbg if works (for the commands umon supports)
+* Irregular line endings? mega65_ftp for example sends only \r as line ending?????
+* Re-consider adding optional text-echo mode not line-buffered but on-read basis
