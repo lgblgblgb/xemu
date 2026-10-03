@@ -562,9 +562,9 @@ static void client_run ( struct client_st *client )
 		check_next_line:
 			lsize = 0;
 			for (endp = buffer; endp < buffer + read_fill; endp++)
-				if ((endp[0] == '\r' && endp[1] == '\n') || endp[0] == '\n') {	// hmm, ugly, but some clients may send only '\n' ...
+				if (endp[0] == '\r' || endp[0] == '\n') {	// it seems some clients sends '\r' some '\n' ...
 					len = endp - buffer;
-					lsize = len + (endp[0] == '\n' ? 1 : 2);
+					lsize = len + (endp[0] == '\r' && endp[1] == '\n' ? 2 : 1);	// some clients may send '\r\n' ... (including web browsers)
 					break;
 				}
 			if (!lsize)
