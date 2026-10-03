@@ -286,9 +286,9 @@ void xumon_get_client_info_as_txt ( char *output_buffer, int output_size, const 
 				keep_alive = clients[i].http.keep_alive;
 				break;
 		}
-		char buffer[80];
+		char buffer[256];
 		snprintf(buffer, sizeof buffer, "#%d seq=%d sock=%d age=%dms mode=%s rchunks=%d wchunks=%d %s%s%s%s\n",
-			i, clients[i].seq, clients[i].sock, time - clients[i].start_time, mode,
+			i, clients[i].seq, (int)clients[i].sock, time - clients[i].start_time, mode,
 			rchunks, wchunks,
 			keep_alive ? "keep_alive " : "",
 			text_echo  ? "text_echo " : "",
