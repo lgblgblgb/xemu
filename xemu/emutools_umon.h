@@ -39,5 +39,7 @@ extern bool xumon_get_request ( struct xumon_com_st *res, void *buffer, int *buf
 extern bool xumon_set_answer  ( struct xumon_com_st *res, void *buffer, const int buffer_maxsize );
 extern void xumon_trigger_sending ( int events );
 
+extern void xumon_get_client_info_as_txt ( char *output_buffer, int output_size, const int self_seq );
+
 #endif
 #endif

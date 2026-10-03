@@ -205,7 +205,7 @@ static void cmd_fillmem ( char *param, int addr )
 // also, matrix monitor can call this, to implement mega65 compatible matrix commands through this function
 // Return value: only false, if there is nothing to answer! Otherwise (even for unknown command!) it's true, since we
 // want to answer an error message!
-bool umon_execute_command ( char *output, unsigned int output_maxsize, const char *input_raw, unsigned int input_size )
+bool umon_execute_command ( char *output, unsigned int output_maxsize, const char *input_raw, unsigned int input_size, const int self_seq )
 {
 	while (input_size > 0 && *input_raw <= 32)
 		input_raw++, input_size--;
@@ -315,6 +315,10 @@ bool umon_execute_command ( char *output, unsigned int output_maxsize, const cha
 					map_offset_high >> 8, map_offset_low >> 8,
 					map_mask
 				);
+			} else if (!strncmp(cmd, "clients", 7)) {
+				char buffer[1024];
+				xumon_get_client_info_as_txt(buffer, sizeof buffer, self_seq);
+				umon_printf("%s", buffer);
 			} else
 				umon_printf(UMON_SYNTAX_ERROR "unknown (or not implemented) Xemu special command: %s", cmd - 1);
 			break;
@@ -343,7 +347,7 @@ void umon_main_iterate ( void )
 	while (XEMU_UNLIKELY(xumon_get_request(&monres, ibuffer, &isize))) {
 		DEBUGPRINT("UMONC: got request, %d bytes" NL, isize);
 		static char obuffer[MAX_OUTPUT_SIZE];
-		if (umon_execute_command(obuffer, sizeof obuffer, ibuffer, isize)) {
+		if (umon_execute_command(obuffer, sizeof obuffer, ibuffer, isize, monres.seq)) {
 			int osize = strlen(obuffer);
 			if (monres.text_request && osize + 10 < sizeof obuffer) {
 				strcpy(obuffer + osize, osize > 0 && obuffer[osize - 1] == '\n' ? ".\r\n": "\r\n.\r\n");

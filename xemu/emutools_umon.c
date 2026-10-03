@@ -100,6 +100,7 @@ struct client_st {
 	int			seq;
 	enum xumon_conn_mode	mode;
 	int			fd;		// auto-close, used when file access is needed (like file streaming in the built-in HTTP server)
+	Uint32			start_time;
 	struct linked_chunk_list_st	*rhead;
 	struct linked_chunk_list_st	*rtail;
 	struct linked_chunk_list_st	*whead;
@@ -254,16 +255,70 @@ static void http_page_and_exit ( struct client_st *client, int err_code, const c
 }
 
 
+void xumon_get_client_info_as_txt ( char *output_buffer, int output_size, const int self_seq )
+{
+	const Uint32 time = SDL_GetTicks();
+	CLIENTS_LOCK();
+	for (int i = 0; i < MAX_CLIENT_SLOTS; i++) {
+		if (!clients[i].seq)
+			continue;
+		int rchunks = 0, wchunks = 0;
+		for (struct linked_chunk_list_st *p = clients[i].rhead; p; p = p->next)
+			rchunks++;
+		for (struct linked_chunk_list_st *p = clients[i].whead; p; p = p->next)
+			wchunks++;
+		bool keep_alive = false, text_echo = false;
+		const char *mode = "UNKNOWN";
+		switch (clients[i].mode) {
+			case XUMON_CONN_INIT:
+				mode = "detection";
+				break;
+			case XUMON_CONN_TEXT:
+				mode = "text";
+				text_echo = clients[i].text_echo;
+				break;
+			case XUMON_CONN_HTTP:
+				mode = "http";
+				keep_alive = clients[i].http.keep_alive;
+				break;
+			case XUMON_CONN_WEBSOCKET:
+				mode = "websocket";
+				keep_alive = clients[i].http.keep_alive;
+				break;
+		}
+		char buffer[80];
+		snprintf(buffer, sizeof buffer, "#%d seq=%d sock=%d age=%dms mode=%s rchunks=%d wchunks=%d %s%s%s%s\n",
+			i, clients[i].seq, clients[i].sock, time - clients[i].start_time, mode,
+			rchunks, wchunks,
+			keep_alive ? "keep_alive " : "",
+			text_echo  ? "text_echo " : "",
+			self_seq == clients[i].seq ? "ME " : "",
+			clients[i].fd > -1 ? "FILE " : ""
+		);
+		if (output_size >= strlen(buffer) + 1) {
+			strcat(output_buffer, buffer);
+			output_buffer += strlen(buffer);
+			output_size   -= strlen(buffer);
+		} else
+			break;
+	}
+	CLIENTS_UNLOCK();
+}
+
+
 static void http_main_page_and_exit ( struct client_st *client )
 {
 	char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
 	xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
 	char page[4096];
+	char client_list[80 * MAX_CLIENT_SLOTS];
+	xumon_get_client_info_as_txt(client_list, sizeof client_list, client->seq);
 	snprintf(page, sizeof page,
 		"<table style=\"background-color: coral; border: 2px solid black;\"><tr><th>Emulation:</th><td>%s</td></tr>"
 		"<tr><th>Version/date:</th><td>%s</td></tr>"
 		"<tr><th>GIT info:</th><td>%s</td></tr>"
 		"<tr><th>CPU stat:</th><td>%s</td></tr>"
+		"<tr><th>Clients:</td><td><pre>%s</td></tr>"
 		"<tr><th>Browser:</th><td>%s</td></tr>"
 		"<tr><th>OS:</th><td>%s</td></tr>"
 		"<tr><th>System:</th><td>%d x CPU/core (<i style=\"font-size: 66%%;\">%s%s%s%s%s%s%s%s%s%s%s</i>), cache-line %d, ~%dMbytes RAM</td></tr>"
@@ -272,6 +327,7 @@ static void http_main_page_and_exit ( struct client_st *client )
 		"<table>",
 		TARGET_DESC, XEMU_BUILDINFO_CDATE, XEMU_BUILDINFO_GIT,
 		td_stat_str,
+		client_list,
 		client->private.agent,
                 xemu_get_uname_string(),
 		SDL_GetCPUCount(),
@@ -802,6 +858,7 @@ static int client_thread_initiate ( void *user_param )
 				client->seq = client_seq;
 				client->sock = CLIENT_SOCK;
 				client->fd = -1;
+				client->start_time = SDL_GetTicks();
 				client->private.vhost = default_vhost;
 				client->private.agent = default_agent;
 				client->mode = XUMON_CONN_INIT;
