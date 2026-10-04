@@ -56,7 +56,7 @@ static SDL_SpinLock clients_lock = 0;
 int xumon_running = 0;
 int xumon_port;
 static xemusock_socket_t sock_server = XS_INVALID_SOCKET;
-static bool text_echo = false;
+static bool default_to_text_echo;
 static char *docroot;
 
 static const char *default_vhost = NULL;
@@ -258,42 +258,44 @@ static void http_page_and_exit ( struct client_st *client, int err_code, const c
 void xumon_get_client_info_as_txt ( char *output_buffer, int output_size, const int self_seq )
 {
 	const Uint32 time = SDL_GetTicks();
+	output_buffer[0] = '\0';
 	CLIENTS_LOCK();
-	for (int i = 0; i < MAX_CLIENT_SLOTS; i++) {
-		if (!clients[i].seq)
+	for (unsigned int slot = 0; slot < MAX_CLIENT_SLOTS; slot++) {
+		const struct client_st *c = clients + slot;
+		if (!c->seq)
 			continue;
 		int rchunks = 0, wchunks = 0;
-		for (struct linked_chunk_list_st *p = clients[i].rhead; p; p = p->next)
+		for (const struct linked_chunk_list_st *p = c->rhead; p; p = p->next)
 			rchunks++;
-		for (struct linked_chunk_list_st *p = clients[i].whead; p; p = p->next)
+		for (const struct linked_chunk_list_st *p = c->whead; p; p = p->next)
 			wchunks++;
 		bool keep_alive = false, text_echo = false;
 		const char *mode = "UNKNOWN";
-		switch (clients[i].mode) {
+		switch (c->mode) {
 			case XUMON_CONN_INIT:
-				mode = "detection";
+				mode = "DETECT";
 				break;
 			case XUMON_CONN_TEXT:
-				mode = "text";
-				text_echo = clients[i].text_echo;
+				mode = "TEXT";
+				text_echo = c->text_echo;
 				break;
 			case XUMON_CONN_HTTP:
-				mode = "http";
-				keep_alive = clients[i].http.keep_alive;
+				mode = "HTTP";
+				keep_alive = c->http.keep_alive;
 				break;
 			case XUMON_CONN_WEBSOCKET:
-				mode = "websocket";
-				keep_alive = clients[i].http.keep_alive;
+				mode = "WS";
 				break;
 		}
 		char buffer[256];
-		snprintf(buffer, sizeof buffer, "#%d seq=%d sock=%d age=%dms mode=%s rchunks=%d wchunks=%d %s%s%s%s\n",
-			i, clients[i].seq, (int)clients[i].sock, time - clients[i].start_time, mode,
+		snprintf(
+			buffer, sizeof buffer, "#%u seq=%d sock=%d age=%us mode=%s rchunks=%d wchunks=%d %s%s%s%s\n",
+			slot, c->seq, (int)c->sock, (time - c->start_time) / 1000U, mode,
 			rchunks, wchunks,
-			keep_alive ? "keep_alive " : "",
-			text_echo  ? "text_echo " : "",
-			self_seq == clients[i].seq ? "ME " : "",
-			clients[i].fd > -1 ? "FILE " : ""
+			self_seq == c->seq ? "[SELF] " : "",
+			keep_alive ? "[keep_alive] " : "",
+			text_echo  ? "[text_echo] " : "",
+			c->fd > -1 ? "[file_streaming] " : ""
 		);
 		if (output_size >= strlen(buffer) + 1) {
 			strcat(output_buffer, buffer);
@@ -311,14 +313,14 @@ static void http_main_page_and_exit ( struct client_st *client )
 	char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
 	xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
 	char page[4096];
-	char client_list[80 * MAX_CLIENT_SLOTS];
+	char client_list[100 * MAX_CLIENT_SLOTS];
 	xumon_get_client_info_as_txt(client_list, sizeof client_list, client->seq);
 	snprintf(page, sizeof page,
 		"<table style=\"background-color: coral; border: 2px solid black;\"><tr><th>Emulation:</th><td>%s</td></tr>"
 		"<tr><th>Version/date:</th><td>%s</td></tr>"
 		"<tr><th>GIT info:</th><td>%s</td></tr>"
 		"<tr><th>CPU stat:</th><td>%s</td></tr>"
-		"<tr><th>Clients:</td><td><pre>%s</td></tr>"
+		"<tr><th>Clients:</td><td><pre>%s</pre></td></tr>"
 		"<tr><th>Browser:</th><td>%s</td></tr>"
 		"<tr><th>OS:</th><td>%s</td></tr>"
 		"<tr><th>System:</th><td>%d x CPU/core (<i style=\"font-size: 66%%;\">%s%s%s%s%s%s%s%s%s%s%s</i>), cache-line %d, ~%dMbytes RAM</td></tr>"
@@ -345,8 +347,6 @@ static void http_main_page_and_exit ( struct client_st *client )
 	);
 	http_page_and_exit(client, 0, page, initiator, NULL, NULL);
 }
-
-
 
 
 // Must be called with "prepared" URI as fn, ie, no initial directory separator character, GET parameters etc.
@@ -452,8 +452,9 @@ static void store_request ( struct client_st *client, const void *data, const in
 static int get_hex_byte ( const char *s )
 {
 	int n = 0;
-	for (int a = 0; a < 2; a++, s++, n *= 10) {
-		const char c = *s;
+	for (int a = 0; a < 2; a++) {
+		const char c = *s++;
+		n <<= 4;
 		if (c >= '0' && c <= '9')	n += c - '0';
 		else if (c >= 'a' && c <= 'f')	n += c - 'a' + 10;
 		else if (c >= 'A' && c <= 'F')	n += c - 'A' + 10;
@@ -600,8 +601,11 @@ static void client_run ( struct client_st *client )
 					*res[3] = '\0';
 					client->mode = XUMON_CONN_HTTP;
 					http_start_tick = SDL_GetTicks();
-				} else
+					DEBUGPRINT("UMON: detecting HTTP request for %s" NL, http_uri);
+				} else {
 					client->mode = XUMON_CONN_TEXT;	// text request, as couldn't be identified as http
+					DEBUGPRINT("UMON: detecting TEXT request" NL);
+				}
 			}
 			if (client->mode == XUMON_CONN_TEXT) {
 				// So we have a text request it seems!!
@@ -669,11 +673,12 @@ static void client_run ( struct client_st *client )
 					header_websocket_protocol = v;
 				else if (!strcasecmp(p, "Sec-WebSocket-Version"))
 					header_websocket_version = v;
-				else if (!strcasecmp(p, "Connection"))	// http keep-alive is memorized, but used only later in special cases!
+				else if (!strcasecmp(p, "Connection")) { // http keep-alive is memorized, but used only later in special cases!
 					client->http.keep_alive = !strncasecmp(v, str_keep_alive, strlen(str_keep_alive));
+					if (client->http.keep_alive)
+						DEBUGPRINT("UMON: http_header: http keep-alive request detected (may not be implemented by the answer)" NL);
+				}
 				p = e + 2;
-				if (client->http.keep_alive)
-					DEBUGPRINT("UMON: http_header: http keep-alive request detected (may not be implemented by the answer)" NL);
 			}
 			if (*header_upgrade) {
 				if (strcasecmp(header_upgrade, "websocket"))
@@ -866,7 +871,7 @@ static int client_thread_initiate ( void *user_param )
 				client->whead = NULL;
 				client->rtail = NULL;
 				client->wtail = NULL;
-				client->text_echo = text_echo;
+				client->text_echo = default_to_text_echo;
 				client->http.keep_alive = false;
 				client->http.passes = 0;
 				SDL_AtomicSet(&client->http.connection_stop_trigger, 0);
@@ -1263,7 +1268,7 @@ int xumon_init ( const int port, const bool use_text_echo )
 		}
 	}
 	// Everything is OK, return with success.
-	text_echo = use_text_echo;
+	default_to_text_echo = use_text_echo;
 	xumon_running = 1;
 	DEBUGPRINT("UMON: has been initialized for TCP/IP port %d backlog %d start-id %u (web-docroot: %s) within %d msecs." NL, port, LISTEN_BACKLOG, START_ID, docroot, passed_time);
 	return 0;
