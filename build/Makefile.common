@@ -68,6 +68,7 @@ RELEASE			= no
 OFFICIALBUILD		= no
 SUPERPICKY		= no
 MACMINVER		= no
+MACDUALISA		= no
 
 CFLAGS_TARGET		= $(CFLAGS_TARGET_$(PRG_TARGET))
 LDFLAGS_TARGET		= $(LDFLAGS_TARGET_$(PRG_TARGET)) $(LDFLAGS_TARGET_$(PRG_TARGET)_ON_$(ARCH))
@@ -103,6 +104,10 @@ endif
 ifneq ($(MACMINVER), no)
 CONFIG_CFLAGS		+= -mmacosx-version-min=$(MACMINVER)
 CONFIG_CFLAGS_LINK	+= -mmacosx-version-min=$(MACMINVER)
+endif
+ifneq ($(MACDUALISA), no)
+CONFIG_CFLAGS		+= -arch x86_64 -arch arm64
+CONFIG_CFLAGS_LINK	+= -arch x86_64 -arch arm64
 endif
 
 CFLAGS			= $(CONFIG_CFLAGS) $(CFLAGS_OPT) $(CFLAGS_TARGET) -I. -I$(TOPDIR) -include build/configure/config-$(ARCH).h
@@ -209,7 +214,7 @@ dep:
 $(DEPFILE): $(DEPALL) $(SRCS)
 	@$(ECHO_BIN) -n "$(PROGRESS_MARKER_START)DEPENDENCY: $@$(PROGRESS_MARKER_END)" 2>/dev/null || true
 	rm -f $(DEPFILEPREFIX)-target-pre.depend $(DEPFILEPREFIX)-common-pre.depend $(DEPFILEPREFIX)-target.depend $(DEPFILEPREFIX)-common.depend
-	if [ "$(CONFIG_CC)" != "" -a -s "$(TOPDIR)/build/configure/config-$(ARCH).make" ]; then $(CONFIG_CC) -MM $(CFLAGS) $(SRCS_TARGET_PREFIXED) > $(DEPFILEPREFIX)-target-pre.depend && awk '/^[^.:\t ]+\.o:/ { print "$(TARGETOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-target-pre.depend > $(DEPFILEPREFIX)-target.depend && $(CONFIG_CC) -MM $(CFLAGS) $(SRCS_COMMON_PREFIXED) > $(DEPFILEPREFIX)-common-pre.depend && awk '/^[^.:\t ]+\.o:/ { print "$(COMMONOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-common-pre.depend > $(DEPFILEPREFIX)-common.depend && cat $(DEPFILEPREFIX)-target.depend $(DEPFILEPREFIX)-common.depend > $@ && rm -f $(DEPFILEPREFIX)-target-pre.depend $(DEPFILEPREFIX)-common-pre.depend ; else echo "*** Ignoring dependency creation, no configuration exists yet" ; fi
+	if [ "$(CONFIG_CC)" != "" -a -s "$(TOPDIR)/build/configure/config-$(ARCH).make" -a "$(MACDUALISA)" = "no" ]; then $(CONFIG_CC) -MM $(CFLAGS) $(SRCS_TARGET_PREFIXED) > $(DEPFILEPREFIX)-target-pre.depend && awk '/^[^.:\t ]+\.o:/ { print "$(TARGETOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-target-pre.depend > $(DEPFILEPREFIX)-target.depend && $(CONFIG_CC) -MM $(CFLAGS) $(SRCS_COMMON_PREFIXED) > $(DEPFILEPREFIX)-common-pre.depend && awk '/^[^.:\t ]+\.o:/ { print "$(COMMONOBJPREFIX)" $$0 ; next } { print }' < $(DEPFILEPREFIX)-common-pre.depend > $(DEPFILEPREFIX)-common.depend && cat $(DEPFILEPREFIX)-target.depend $(DEPFILEPREFIX)-common.depend > $@ && rm -f $(DEPFILEPREFIX)-target-pre.depend $(DEPFILEPREFIX)-common-pre.depend ; else echo "*** Ignoring dependency creation, no configuration exists yet" ; fi
 
 clean:
 	rm -f $(TOPDIR)/build/objs/?-$(ARCH)-$(TARGET)-* $(PRG)

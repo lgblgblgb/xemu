@@ -300,7 +300,7 @@ jobs:
         run: env | grep -Evi 'SECRET|TOKEN|HOOK|SECURE|_ID|_SHA' || true
 
       - name: Install build/deployment dependencies
-        run: build/install-dependencies-osx.sh
+        run: build/install-dependencies-osx-v2.sh
 
       - name: Show build system info
         run: bash build/show-sys-info.sh
@@ -311,10 +311,10 @@ jobs:
           sdl2-config --version --prefix --cflags --libs --static-libs || true
 
       - name: Configure Xemu
-        run: make RELEASE=yes OFFICIALBUILD=yes MACMINVER=10.6 config
+        run: make RELEASE=yes OFFICIALBUILD=yes MACMINVER=10.9 MACDUALISA=yes config
 
       - name: Build Xemu
-        run: make -j 4 RELEASE=yes OFFICIALBUILD=yes MACMINVER=10.6
+        run: make -j 4 RELEASE=yes OFFICIALBUILD=yes MACMINVER=10.9 MACDUALISA=yes
 
       - name: Mangle, strip and list of result binaries
         run: |
