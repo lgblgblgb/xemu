@@ -49,7 +49,7 @@ echo "Creating wrapper script to be able to call $SDLROOT/bin/sdl2-config as $SD
 ls -l $SDLROOT/bin/sdl2-config
 echo "#!/usr/bin/env bash" | sudo tee $SDL2CONFIG
 echo "exec $SDLROOT/bin/sdl2-config \$@" | sudo tee -a $SDL2CONFIG
-chmod +x $SDL2CONFIG || exit 1
+sudo chmod +x $SDL2CONFIG || exit 1
 ls -l $SDL2CONFIG
 echo "Testing $SDL2CONFIG:"
 $SDL2CONFIG --version --prefix --cflags --libs || exit 1
