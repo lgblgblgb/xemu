@@ -1,7 +1,7 @@
 body {
 	margin: 10;
 	background: lightblue;
-	text: white;
+	color: black;
 	/* display: flex; */
 	justify-content: center;
 	align-items: center;
@@ -103,6 +103,7 @@ details>summary:hover {
 	color: white;
 	font-weight: bold;
 	caret-shape: block;
+	caret-color: lightblue;
 }
 #editorerror {
 	display: none;
