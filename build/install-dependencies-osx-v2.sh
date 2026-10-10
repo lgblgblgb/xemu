@@ -40,8 +40,8 @@ SDLROOT="/usr/local/sdl2-xemu"
 SDL2CONFIG="/usr/local/bin/sdl2-config"
 
 cd / || exit 1
-ls -la $SDL2_ARCH
-sudo tar xfz ../$SDL2_ARCH || exit 1
+ls -la /usr/local/lgb/$SDL2_ARCH
+sudo tar xfz /usr/local/lgb/$SDL2_ARCH || exit 1
 sudo chown -R root:wheel "$SDLROOT" || exit 1
 ls -la "$SDLROOT" || exit 1
 
