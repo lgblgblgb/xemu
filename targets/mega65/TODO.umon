@@ -1,5 +1,55 @@
 * [DONE] Use variable sized struct for get response, and private fn parameters for answer!
-* Compare command hebaviour between old uartmon and new umon!
+* Comparing command hebaviour between old uartmon and new umon!
+* Comparing exact behaviour match with MEGA65 (echo, answers, line endings, "." character ...)
 * Test m65dbg if works (for the commands umon supports)
+* Making mega65_ftp working via umon as a matter of real-life example of compatibility
 * Irregular line endings? mega65_ftp for example sends only \r as line ending?????
 * Re-consider adding optional text-echo mode not line-buffered but on-read basis
+* Implementing missing commands
+* Implement temporary binary transfer over text protocol, like 'l' command uses it (later Xemu-specific commands as well maybe?)
+  PROBLEM: it needs binary transfer, so new transfer mode (not line buffered) but we can't know fact of binary transfer only
+           after parsing the command! Which is off-thread!
+	   Another problem: \r\n is also a valid line terminating but \r and \n too. How can I know if I can strip the extra \n
+	   after \r or it's part of the binary stream already?
+
+
+Monitor commands:
+
+h/H/?		help
+r/R		register values
+m		memory dump (28 bit address)
+M		16 lines of memory dump (28 bit address)
+s		?? one par, cmd_setmem
+f		?? one par, cmd_fillmem
+l		two pars -> load something?!
+t		trace? [+ par, like t0 t1]
+tc		trace?
+b		set breakpoint
+g		set CPU PC
+w		m65mon_watchpoint??? 1 par
+N		m65mon_next_command
+z		show_last_few_pcs
+Z		start_saving
+
+from mega65 book:
+
+<Enter>	STEP		Step into next instruction
+#	HYPERTRAP	Enable/disable CPU hypervisor traps
++	UARTDIVISOR	Set UART bitrate divisor
+?	HELP		help
+@	CPUMEM		(show memory from CPU context)
+B	BREAKPOINT	Set/clear CPU execution break point
+D	DISASSEMBLE	Disassemble memory
+E	FLAGWATCH	Set/clear CPU flags watch point
+F	FILL		Fill memory with a value
+G	SETPC		Set CPU program counter
+H	HELP		help
+I	INTERRUPTS	Enable/disable CPU IRQs (clear/set CPU I flag)
+J	DEBUGMON	Various debug functions for the monitor itself
+L	LOADMEMORY	Load data into memory
+M	MEMORY		Show memory contents
+R	REGISTERS	show registers
+S	SETMEMORY	Set memory contents
+T	TRACE		set CPU trace/run mode
+W	MEMORYWATCH	Set/clear memory write watch point
+Z	CPUHISTORY	CPU history

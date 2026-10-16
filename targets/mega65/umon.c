@@ -31,7 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sdcard.h"
 #include <string.h>
 
-#define MAX_INPUT_SIZE		128
+#define MAX_INPUT_SIZE		XUMON_READ_BUFFER_SIZE
 #define MAX_OUTPUT_SIZE		1024
 #define UMON_SYNTAX_ERROR	"?SYNTAX ERROR  "
 
@@ -40,6 +40,30 @@ static struct {
 	char	*output_ptr;
 } umon;
 
+
+
+// WARNING! This function runs in a THREAD by xumon! So it cannot use any "dangerous" resources as its own!
+// It just needs to confirm the of using temporary binary transfer, it cannot do the memory write!
+static void inthread_preprocessor ( const char *p, const int len, int *binary_protocol_size, int *binary_protocol_address )
+{
+	// A quick "if" to filter out anything other, since it must be _fast_ for an in-thread filter for most of the cases
+	if (len < 4 || len > 80 || *p != 'l')
+		return;
+	char buffer[len];
+	memcpy(buffer, p + 1, len - 1);
+	buffer[len - 1] = '\0';
+	int arg[2] = {-1, -1};
+	const int n = sscanf(buffer, "%x %x", &arg[0], &arg[1]);
+	const int size = arg[1] - arg[0];	// "l" command says the second arg is end_address+1, so it's OK
+	if (n != 2 || size > 1024*1024*8 || size < 1 || (unsigned int)arg[0] > 0xFFFFFFFU) {
+		DEBUGPRINT("UMONC: bad preprocessor result for command 'l': address=$%X, size=%d" NL, arg[0], size);
+		return;
+	}
+	// Giving back the result, this will cause xumon to switch to temporary binary transfer for "size" amount (later to be written to "address" at the receiver side!)
+	DEBUGPRINT("UMONC: accepting 'l' command: size=%d, start_addr=$%X" NL, size, arg[0]);
+	*binary_protocol_address = arg[0];
+	*binary_protocol_size = size;
+}
 
 
 static void umon_printf ( const char *fmt, ... )
@@ -341,13 +365,18 @@ void umon_main_iterate ( void )
 	struct xumon_com_st monres;
 	int trigger_submit = 0;
 	static char ibuffer[MAX_INPUT_SIZE];
+	static char obuffer[MAX_OUTPUT_SIZE];
 	// xumon_get_request() expects isize to be initialized with the max size of the input buffer, and will get back the actual size there too
 	int isize = sizeof ibuffer;
 	// Process pending requests
 	while (XEMU_UNLIKELY(xumon_get_request(&monres, ibuffer, &isize))) {
-		DEBUGPRINT("UMONC: got request, %d bytes" NL, isize);
-		static char obuffer[MAX_OUTPUT_SIZE];
-		if (umon_execute_command(obuffer, sizeof obuffer, ibuffer, isize, monres.seq)) {
+		const int input_size = isize;
+		isize = sizeof ibuffer;	// restore isize for the possible next message in this loop
+		DEBUGPRINT("UMONC: got request, %d bytes" NL, input_size);
+		if (monres.binary_protocol_address >= 0) {
+			DEBUGPRINT("UMONC: binary-transfer memory setting: $%X-$%X (%d bytes)" NL, monres.binary_protocol_address, monres.binary_protocol_address + input_size - 1, input_size);
+			m65mon_setmem28(monres.binary_protocol_address, input_size, (Uint8*)ibuffer);
+		} else if (umon_execute_command(obuffer, sizeof obuffer, ibuffer, input_size, monres.seq)) {
 			int osize = strlen(obuffer);
 			if (monres.text_request && osize + 10 < sizeof obuffer) {
 				strcpy(obuffer + osize, osize > 0 && obuffer[osize - 1] == '\n' ? ".\r\n": "\r\n.\r\n");
@@ -382,6 +411,7 @@ void umon_format_answer_text ( char *output )
 
 int umon_init ( const int port )
 {
+	xumon_inthread_command_preprocessor_calback = inthread_preprocessor;
 	return xumon_init(port, true);
 }
 

@@ -30,11 +30,10 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define LISTEN_BACKLOG		SOMAXCONN
 #define SELECT_TIMEOUT		100000					// in microsends (FIXME: really?)
 #define HTTP_TIMEOUT		1000					// in SDL-ticks!!! ie: miliseconds
-#define SLOT_FIND_TIMEOUT	100					// in SDL-ticks, max time to find free slot
+#define SLOT_FIND_TIMEOUT	1000					// in SDL-ticks, max time to find free slot
 #define MAX_CLIENT_SLOTS	32
 #define WEBSOCKET_VERSION	"13"					// our supported websocket protocol version (in string format!)
 #define WEBSOCKET_PROTOCOL	"xemu-umon"
-#define READ_BUFFER_SIZE	8192					// note, must be large enough to hold a full command/HTTP-request/websocket frame!
 #define DOCROOT_SUBDIR		"webserver-docroot"
 #define WEBSOCKET_ENDPOINT	"XemuWebMonitorMain"
 #define WEBMONITOR_REPOSITORY	"https://github.com/lgblgblgb/xemu-webmonitor/tree/master/download"
@@ -55,6 +54,7 @@ static SDL_SpinLock clients_lock = 0;
 
 int xumon_running = 0;
 int xumon_port;
+xumon_inthread_command_preprocessor_calback_st xumon_inthread_command_preprocessor_calback = NULL;
 static xemusock_socket_t sock_server = XS_INVALID_SOCKET;
 static bool default_to_text_echo;
 static char *docroot;
@@ -71,6 +71,7 @@ static const char str_keep_alive[] = "keep-alive";
 struct linked_chunk_list_st {
 	struct linked_chunk_list_st *next, *prev;
 	int size;
+	int binary_protocol_address;
 	Uint32 time;
 	Uint8 data[];
 };
@@ -107,6 +108,7 @@ struct client_st {
 	struct linked_chunk_list_st	*wtail;
 	jmp_buf			jmp_finish_client_thread;
 	bool			text_echo;
+	int			binary_protocol_address;	// temporary binary transfer within text connection, write address, or -1 if not
 	// private struct members can be only used when the client handler thread is on scope! So not from the responder thread for example!
 	struct {
 		const char	*vhost;
@@ -442,6 +444,7 @@ static void store_request ( struct client_st *client, const void *data, const in
 	memcpy(p->data, data, size);
 	p->size = size;
 	p->time = SDL_GetTicks();
+	p->binary_protocol_address = client->binary_protocol_address;
 	CLIENTS_LOCK();
 	DL_ADD_TO_HEAD(client->rhead, client->rtail, p);
 	SDL_AtomicAdd(&incoming_msg_counter, 1);
@@ -468,7 +471,7 @@ static void http_level_request ( struct client_st *client, const char *h )
 {
 	Uint8 req[strlen(h)], *r = req;
 	while (*h)
-		if (*h == '%' && strlen(h) >= 3) {
+		if (*h == '%' && h[1] && h[2]) {
 			*r++ = get_hex_byte(h + 1);
 			h += 3;
 		} else {
@@ -500,13 +503,14 @@ static inline void websocket_unmask_downwards ( Uint8 *dest, const Uint8 *src, c
 
 static void client_run ( struct client_st *client )
 {
-	char buffer[READ_BUFFER_SIZE];
+	char buffer[XUMON_READ_BUFFER_SIZE];
 	int read_fill = 0;
 	char *headers_p = buffer;	// make gcc happy not to throw warning ...
 	char *http_uri = NULL;		// make gcc happy ...
 	Uint32 http_start_tick = 0;	// keep it zero to deactivate http timeout checking!
 	int ws = 0;			// websocket parse next packet point in buffer
 	int ws_plen = 0;		// websocket unfragmented data size in the buffer so far
+	int binary_protocol_size = 0;	// temporary binary transfer within text mode connection (0 = we are not, otherwise: size)
 	for (;;) {
 		CHECK_STOP_TRIGGER();
 		if (SDL_AtomicGet(&client->http.connection_stop_trigger)) {
@@ -520,6 +524,24 @@ static void client_run ( struct client_st *client )
 		if (http_start_tick && (SDL_GetTicks() - http_start_tick) > HTTP_TIMEOUT)
 			http_page_and_exit(client, 408, "Request timeout while waiting for \"\\r\\n\\r\\n\"", NULL, NULL, NULL);
 		const int to_be_read = sizeof(buffer) - read_fill - 1;	// leave one byte space to terminate the string after reading (when needed)
+		if (binary_protocol_size && (read_fill >= binary_protocol_size || to_be_read < 1)) {
+			const int consume = (read_fill >= binary_protocol_size) ? binary_protocol_size : read_fill;
+			store_request(client, buffer, consume);
+			binary_protocol_size -= consume;
+			if (!binary_protocol_size) {
+				client->binary_protocol_address = -1;
+				DEBUGPRINT("UMON: client: end of temporary binary transfer" NL);
+			} else {
+				client->binary_protocol_address += consume;
+			}
+			if (read_fill > consume) {
+				memmove_downwards(buffer, buffer + consume, read_fill - consume);
+				read_fill -= consume;
+			} else {
+				read_fill = 0;
+			}
+			continue;
+		}
 		if (to_be_read < 1) {
 			DEBUGPRINT("UMON: client: overflow of the receiver buffer (read=%d)! Too long request? Aborting connection!" NL, to_be_read);
 			if (client->mode == XUMON_CONN_HTTP)
@@ -556,6 +578,8 @@ static void client_run ( struct client_st *client )
 			return;
 		}
 		read_fill += ret;
+		if (binary_protocol_size)
+			continue;
 		if (client->mode == XUMON_CONN_INIT || client->mode == XUMON_CONN_TEXT) {
 			// in this mode, we need a complete line to be processed
 			int lsize, len;
@@ -565,11 +589,30 @@ static void client_run ( struct client_st *client )
 			for (endp = buffer; endp < buffer + read_fill; endp++)
 				if (endp[0] == '\r' || endp[0] == '\n') {	// it seems some clients sends '\r' some '\n' ...
 					len = endp - buffer;
-					lsize = len + (endp[0] == '\r' && endp[1] == '\n' ? 2 : 1);	// some clients may send '\r\n' ... (including web browsers)
+					// put a pre-processor ability here by calling in-thread emulator specific logic
+					// for example, "l" commands for MEGA65 monitor protocol needs that, and it should switch to
+					// binary protocol for the data transfer (don't assume \r\n line ending then either!)
+					if (xumon_inthread_command_preprocessor_calback) {
+						xumon_inthread_command_preprocessor_calback(buffer, len, &binary_protocol_size, &client->binary_protocol_address);
+						if (binary_protocol_size > 0) {
+							DEBUGPRINT("UMON: client: initiate temporary binary transfer for %d bytes at address $%X" NL, binary_protocol_size, client->binary_protocol_address);
+							len++;	// consume exactly one character as the line ending (single char line ending, \r\n not allowed here!)
+							if (read_fill > len) {
+								memmove_downwards(buffer, buffer + len, read_fill - len);
+								read_fill -= len;
+							} else {
+								read_fill = 0;
+							}
+						}
+					}
+					if (!binary_protocol_size)
+						lsize = len + (endp[0] == '\r' && endp[1] == '\n' ? 2 : 1);	// some clients may send '\r\n' ... (including web browsers)
+					else
+						client->mode = XUMON_CONN_TEXT;	// binary transfer within text connection, make sure we transition from init phase to text
 					break;
 				}
 			if (!lsize)
-				continue;		// not a full line recieved yet, read more data
+				continue;		// not a full line recieved yet, read more data (... or, it's binary transfer within text connection)
 			// OK, we have our line
 			if (client->mode == XUMON_CONN_INIT) {	// auto-detect if http or text mode ...
 				int sep = 1, n = 0;
@@ -874,6 +917,7 @@ static int client_thread_initiate ( void *user_param )
 				client->text_echo = default_to_text_echo;
 				client->http.keep_alive = false;
 				client->http.passes = 0;
+				client->binary_protocol_address = -1;
 				SDL_AtomicSet(&client->http.connection_stop_trigger, 0);
 				CLIENTS_UNLOCK();
 				goto slot_found;
@@ -897,7 +941,6 @@ slot_found:
 		} else {
 			DEBUGPRINT("UMON: client: returned via <longjmp>" NL);
 		}
-		xemusock_set_nonblocking(CLIENT_SOCK, XEMUSOCK_BLOCKING, NULL);
 	}
 finish:
 	DEBUGPRINT("UMON: client: about closing connection on %d, seq %d" NL, (int)CLIENT_SOCK, client_seq);
@@ -929,6 +972,11 @@ finish:
 			DEBUGPRINT("UMON: client: WARNING: unused %d read and %d write chunk(s)!" NL, rc, wc);
 		}
 	}
+	// TODO: shutdown/close socket with blocking I/O mode cause stall (and things like making exiting Xemu problematic)
+	// TODO: However, without blocking I/O, there is no garantue for proper shutdown and write data flush
+	// FIXME: handle this situation better? doing socket shutdown non-blocking but waiting for to be completed and checking thread
+	// stop trigger meanwhile properly?
+	xemusock_set_nonblocking(CLIENT_SOCK, XEMUSOCK_BLOCKING, NULL);
 	xemusock_shutdown(CLIENT_SOCK, NULL);
 	xemusock_close(CLIENT_SOCK, NULL);
 	SDL_AtomicAdd(&thread_counter, -1);
@@ -1078,6 +1126,7 @@ bool xumon_get_request ( struct xumon_com_st *res, void *buffer, int *buffer_siz
 				}
 				res->seq = c->seq;
 				res->text_request = (c->mode == XUMON_CONN_TEXT);
+				res->binary_protocol_address = p->binary_protocol_address;
 				res->ptr = (const void*)c;
 				SDL_AtomicAdd(&incoming_msg_counter, -1);
 				break;

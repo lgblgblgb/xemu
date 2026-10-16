@@ -10,5 +10,5 @@ echo
 echo "*** ONLY THE IMPORTANT ***"
 echo
 touch ../../xemu/emutools_umon.c  uart_monitor.c  umon.c
-make SANITIZE=yes
+make SANITIZE=yes -j8
 

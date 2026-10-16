@@ -23,12 +23,18 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #error "Need HAVE_XEMU_SOCKET_API for HAVE_XEMU_UMON to be enabled at the target!"
 #endif
 
+#define XUMON_READ_BUFFER_SIZE	8192					// note, must be large enough to hold a full command/HTTP-request/websocket frame!
+
 struct xumon_com_st {
 	bool	text_request;
+	int	binary_protocol_address;
 	int	seq;		// xumon_get_request()'s data should be passed to xumon_set_answer()
 	const void *ptr;	// points to the client_st struct secretly, shouldn't altered, xumon_get_request()'s data should be passed to xumon_set_answer()
 };
 
+typedef void (*xumon_inthread_command_preprocessor_calback_st)(const char *buffer, const int len, int *binary_protocol_size, int *binary_protocol_address);
+
+extern xumon_inthread_command_preprocessor_calback_st xumon_inthread_command_preprocessor_calback;
 extern int xumon_running;
 extern int xumon_port;
 
@@ -40,6 +46,9 @@ extern bool xumon_set_answer  ( struct xumon_com_st *res, void *buffer, const in
 extern void xumon_trigger_sending ( int events );
 
 extern void xumon_get_client_info_as_txt ( char *output_buffer, int output_size, const int self_seq );
+
+// Must be implemented by the emulator, not in xemu/emutools_umon.c
+extern void xumon_in_thread_command_preprocessor ( const char *cmd, int *binary_protocol_size );
 
 #endif
 #endif
