@@ -93,6 +93,8 @@ static const char command_history_fn[] = "@" MATRIX_COMMAND_HISTORY_FILE;
 #define BANNER_MSG	"*** Xemu's pre-matrix ... press left-CTRL + TAB to exit / re-enter ***"
 #define PROMPT_XEMU	"Xemu>"
 #define PROMPT_MEGA65	"."
+#define TEMP_MODE_CHG	"$"
+#define PERM_MODE_CHG	"$$"
 
 #define CMD_HISTORY_SIZE	64
 static char *history[CMD_HISTORY_SIZE];
@@ -789,10 +791,27 @@ static void cmd_eth ( char *p )
 
 #ifdef HAVE_XEMU_UMON
 #include "umon.h"
+
+
+static void cmd_umon ( char *p )
+{
+	static int last_port = 0;
+	const int port = umon_get_port();
+	if (port) {
+		char buffer[4096];
+		last_port = port;
+		umon_get_client_info_as_txt(buffer, sizeof buffer, -1);
+		MATRIX("umon is running on port %d\n%s", port, buffer);
+	} else {
+		MATRIX("umon is not running");
+	}
+}
+
+
 static void cmd_megamatrix ( char *p )
 {
 	if (umon_get_port()) {
-		MATRIX("Switching into MEGA65 protocol. Use command !! to return.\nNote: this mode is an experimental, limited feature.");
+		MATRIX("Switching into MEGA65 protocol. Use command " PERM_MODE_CHG " to return.\nNote: this mode is an experimental, limited feature.");
 		megamatrix = true;
 		prompt = prompt_mega65;
 	} else {
@@ -803,13 +822,13 @@ static void cmd_megamatrix ( char *p )
 
 static void megamatrix_execute ( char *cmd )
 {
-	if (!strcmp(cmd, "!!")) {
+	if (!strcmp(cmd, PERM_MODE_CHG)) {
 		megamatrix = false;
 		prompt = prompt_xemu;
 		MATRIX("Switching back to XEMU protocol");
 		return;
 	} else {
-		char output[256];
+		char output[UMON_MAX_OUTPUT_SIZE];
 		if (umon_execute_command(output, sizeof output, cmd, strlen(cmd), -1)) {
 			umon_format_answer_text(output);
 			if (*output)
@@ -857,7 +876,8 @@ static struct command_tab_st {
 	{ "FINDBYTE",	"find",		cmd_find,	"f",	"Find byte\nArgs: ADDR RANGESIZE BYTE" },
 	{ "CFGRELOAD",	"cfgreload",	cmd_cfgreload,	"",	"Reload matrix command configuration" },
 #	ifdef HAVE_XEMU_UMON
-	{ "MEGAMATRIX",	"spoon",	cmd_megamatrix,	"",	"Switch into MEGA65-style monitor mode" },
+	{ "MEGAMATRIX",	PERM_MODE_CHG,	cmd_megamatrix,	"",	"Switch between Xemu/Umon monitor" },
+	{ "UMON",	"umon",		cmd_umon,	"",	"Umon information and start/stop" },
 #endif
 	{ .symname = NULL },
 };
@@ -906,13 +926,19 @@ static int command_counter = 0;
 
 static void execute ( char *cmd )
 {
+	command_counter++;
 #ifdef	HAVE_XEMU_UMON
-	if (XEMU_UNLIKELY(megamatrix)) {
-		megamatrix_execute(cmd);
+	const bool tmp_mod_chg = (cmd[0] == TEMP_MODE_CHG[0] && cmd[0] != cmd[1]);
+	if (tmp_mod_chg)
+		cmd++;
+	if (!megamatrix == tmp_mod_chg) {
+		if (umon_get_port())
+			megamatrix_execute(cmd);
+		else
+			MATRIX("?UMON is not running.");
 		return;
 	}
 #endif
-	command_counter++;
 	char *sp = strchr(cmd, ' ');
 	if (sp)
 		*sp++ = '\0';
@@ -1283,7 +1309,11 @@ void matrix_mode_toggle ( const bool status )
 			current_colour = NORMAL_COLOUR;
 			current_y = CLI_START_LINE;
 			current_x = 0;
-			matrix_write_string("INFO: Remember, there is no spoon.\nINFO: Hot-keys do not work in matrix mode!\nINFO: Matrix mode bypasses emulation keyboard mappings.\n");
+			matrix_write_string(
+				"INFO: Use " PERM_MODE_CHG " to switch between Xemu/Umon mode (" TEMP_MODE_CHG "cmd for a single cmd only)\n"
+				"INFO: Hot-keys do not work in matrix mode!\n"
+				"INFO: Matrix mode bypasses emulation keyboard mappings.\n"
+			);
 			save_command_mapping(matrix_config_template_fn,
 				"# To change matrix command mapping, copy file " MATRIX_COMMAND_ASSIGNMENT_TEMPLATE " as " MATRIX_COMMAND_ASSIGNMENT_CONFIG NL
 				"# and modify that file. Do not edit file " MATRIX_COMMAND_ASSIGNMENT_TEMPLATE " as it will be constantly overwritten!" NL

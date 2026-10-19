@@ -32,9 +32,9 @@ struct xumon_com_st {
 	const void *ptr;	// points to the client_st struct secretly, shouldn't altered, xumon_get_request()'s data should be passed to xumon_set_answer()
 };
 
-typedef void (*xumon_inthread_command_preprocessor_calback_st)(const char *buffer, const int len, int *binary_protocol_size, int *binary_protocol_address);
+typedef void (*xumon_inthread_command_preprocessor_callback_t)(const char *buffer, const int len, int *binary_protocol_size, int *binary_protocol_address);
 
-extern xumon_inthread_command_preprocessor_calback_st xumon_inthread_command_preprocessor_calback;
+extern xumon_inthread_command_preprocessor_callback_t xumon_inthread_command_preprocessor_callback;
 extern int xumon_running;
 extern int xumon_port;
 

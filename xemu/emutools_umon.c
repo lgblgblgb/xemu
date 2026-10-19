@@ -54,7 +54,7 @@ static SDL_SpinLock clients_lock = 0;
 
 int xumon_running = 0;
 int xumon_port;
-xumon_inthread_command_preprocessor_calback_st xumon_inthread_command_preprocessor_calback = NULL;
+xumon_inthread_command_preprocessor_callback_t xumon_inthread_command_preprocessor_callback = NULL;
 static xemusock_socket_t sock_server = XS_INVALID_SOCKET;
 static bool default_to_text_echo;
 static char *docroot;
@@ -291,13 +291,14 @@ void xumon_get_client_info_as_txt ( char *output_buffer, int output_size, const 
 		}
 		char buffer[256];
 		snprintf(
-			buffer, sizeof buffer, "#%u seq=%d sock=%d age=%us mode=%s rchunks=%d wchunks=%d %s%s%s%s\n",
+			buffer, sizeof buffer, "#%u seq=%d sock=%d age=%us mode=%s rchunks=%d wchunks=%d %s%s%s%s%s\n",
 			slot, c->seq, (int)c->sock, (time - c->start_time) / 1000U, mode,
 			rchunks, wchunks,
 			self_seq == c->seq ? "[SELF] " : "",
 			keep_alive ? "[keep_alive] " : "",
 			text_echo  ? "[text_echo] " : "",
-			c->fd > -1 ? "[file_streaming] " : ""
+			c->fd > -1 ? "[file_streaming] " : "",
+			c->binary_protocol_address > -1 ? "[temp_bin_trans] " : ""
 		);
 		if (output_size >= strlen(buffer) + 1) {
 			strcat(output_buffer, buffer);
@@ -592,8 +593,8 @@ static void client_run ( struct client_st *client )
 					// put a pre-processor ability here by calling in-thread emulator specific logic
 					// for example, "l" commands for MEGA65 monitor protocol needs that, and it should switch to
 					// binary protocol for the data transfer (don't assume \r\n line ending then either!)
-					if (xumon_inthread_command_preprocessor_calback) {
-						xumon_inthread_command_preprocessor_calback(buffer, len, &binary_protocol_size, &client->binary_protocol_address);
+					if (xumon_inthread_command_preprocessor_callback) {
+						xumon_inthread_command_preprocessor_callback(buffer, len, &binary_protocol_size, &client->binary_protocol_address);
 						if (binary_protocol_size > 0) {
 							DEBUGPRINT("UMON: client: initiate temporary binary transfer for %d bytes at address $%X" NL, binary_protocol_size, client->binary_protocol_address);
 							len++;	// consume exactly one character as the line ending (single char line ending, \r\n not allowed here!)
@@ -608,7 +609,7 @@ static void client_run ( struct client_st *client )
 					if (!binary_protocol_size)
 						lsize = len + (endp[0] == '\r' && endp[1] == '\n' ? 2 : 1);	// some clients may send '\r\n' ... (including web browsers)
 					else
-						client->mode = XUMON_CONN_TEXT;	// binary transfer within text connection, make sure we transition from init phase to text
+						client->mode = XUMON_CONN_TEXT;	// binary transfer within text connection, make sure we transition from init phase to text (ie: first command is 'l')
 					break;
 				}
 			if (!lsize)

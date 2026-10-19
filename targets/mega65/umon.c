@@ -32,7 +32,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include <string.h>
 
 #define MAX_INPUT_SIZE		XUMON_READ_BUFFER_SIZE
-#define MAX_OUTPUT_SIZE		1024
+#define MAX_OUTPUT_SIZE		UMON_MAX_OUTPUT_SIZE
 #define UMON_SYNTAX_ERROR	"?SYNTAX ERROR  "
 
 static struct {
@@ -298,6 +298,19 @@ bool umon_execute_command ( char *output, unsigned int output_maxsize, const cha
 			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFFFFF);
 			cmd_fillmem(cmd, par1);
 			break;
+		case 'l':
+			// NOTE: the 'l' command is handled as a pre-processor because its special binary-transfer nature
+			// it means, this command cannot be reached in the normal way (here). If it does, the command's arugments were incorrect
+			umon_printf(UMON_SYNTAX_ERROR " invalid parameter(s) for 'l' command");
+			break;
+		case 'g':
+			cmd = parse_hex_arg(cmd, &par1, 0, 0xFFFF);
+			cpu65_debug_set_pc(par1);
+			break;
+		case 'i':
+			cmd = parse_hex_arg(cmd, &par1, 0, 1);
+			cpu65.pf_i = par1;
+			break;
 		case 0:
 			break;
 		case '!':
@@ -307,6 +320,7 @@ bool umon_execute_command ( char *output, unsigned int output_maxsize, const cha
 			if (!strncmp(cmd, "exit", 4)) {
 				XEMUEXIT(0);
 			} else if (!strncmp(cmd, "reset", 5)) {
+				clear_emu_events();		// otherwise CTRL still sensed (which is needed for quick matrix on/off change otherwise)
 				reset_mega65(RESET_MEGA65_HARD);
 			} else if (!strncmp(cmd, "mount", 5)) {
 				// Quite crude syntax for now:
@@ -411,7 +425,7 @@ void umon_format_answer_text ( char *output )
 
 int umon_init ( const int port )
 {
-	xumon_inthread_command_preprocessor_calback = inthread_preprocessor;
+	xumon_inthread_command_preprocessor_callback = inthread_preprocessor;
 	return xumon_init(port, true);
 }
 
@@ -425,6 +439,11 @@ int umon_stop ( void )
 int umon_get_port ( void )
 {
 	return xumon_running ? xumon_port : 0;
+}
+
+void umon_get_client_info_as_txt ( char *output_buffer, int output_size, const int self_seq )
+{
+	xumon_get_client_info_as_txt(output_buffer, output_size, self_seq);
 }
 
 #endif

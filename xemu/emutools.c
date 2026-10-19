@@ -963,8 +963,8 @@ void xemu_pre_init ( const char *app_organization, const char *app_name, const c
 	if (getgid() == 0 || getegid() == 0)
 		FATAL("Xemu must not be run as group root");
 #endif
-	// ignore SIGHUP, eg closing the terminal Xemu was started from ...
 	signal(SIGHUP, SIG_IGN);	// ignore SIGHUP, eg closing the terminal Xemu was started from ...
+	signal(SIGPIPE, SIG_IGN);	// ignore SIGPIPE, so std functions would generate signal, will return with EPIPE error instead
 #endif
 #ifdef XEMU_ARCH_HTML
 	if (chatty_xemu)
