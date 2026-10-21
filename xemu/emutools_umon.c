@@ -1118,7 +1118,7 @@ static int responder_thread ( void *_unused )
  * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */
 
 
-bool xumon_get_request ( struct xumon_com_st *res, void *buffer, int *buffer_size )
+bool xumon_get_request ( struct xumon_com_st *res, void *buffer, const int buffer_maxsize )
 {
 	struct linked_chunk_list_st *p = NULL;
 	if (XEMU_UNLIKELY(xumon_running && SDL_AtomicGet(&incoming_msg_counter))) {
@@ -1129,23 +1129,23 @@ bool xumon_get_request ( struct xumon_com_st *res, void *buffer, int *buffer_siz
 			if (c->rtail) {
 				p = c->rtail;
 				DL_DEL_FROM_TAIL(c->rhead, c->rtail);
-				if (p->size > *buffer_size) {	// on input, *buffer_size == buffer size limit
+				if (p->size > buffer_maxsize) {
 					too_large = true;	// remember it, don't output error here under a lock
 				} else {
 					memcpy(buffer, p->data, p->size);
-					*buffer_size = p->size;	// on putput, *buffer_size == received size in bytes
 				}
-				res->seq = c->seq;
+				res->seq = too_large ? -1 : c->seq;
 				res->text_request = (c->mode == XUMON_CONN_TEXT);
 				res->binary_protocol_address = p->binary_protocol_address;
 				res->slot_id = i;
+				res->input_size = p->size;
 				SDL_AtomicAdd(&incoming_msg_counter, -1);
 				break;
 			}
 		}
 		CLIENTS_UNLOCK();
 		if (too_large)
-			DEBUGPRINT("UMON: get_request: dispatched data chunk is too large: %d > %d" NL, p->size, *buffer_size);
+			DEBUGPRINT("UMON: get_request: dispatched data chunk is too large: %d > %d" NL, p->size, buffer_maxsize);
 		free(p);
 	}
 	return !!p;
@@ -1154,8 +1154,16 @@ bool xumon_get_request ( struct xumon_com_st *res, void *buffer, int *buffer_siz
 
 bool xumon_set_answer ( struct xumon_com_st *res, void *buffer, const int buffer_size )
 {
-	if (XEMU_LIKELY(!xumon_running))
+	if (XEMU_UNLIKELY(!xumon_running))
 		return false;
+	if (XEMU_UNLIKELY(res->slot_id >= XUMON_MAX_CLIENTS)) {
+		DEBUGPRINT("UMON: ERROR: xumon_set_answer got invalid slot_id: %u" NL, res->slot_id);
+		return false;
+	}
+	if (XEMU_UNLIKELY(res->seq < 1)) {
+		DEBUGPRINT("UMON: ERROR: xumon_set_answer got invalid seq number: %d" NL, res->seq);
+		return false;
+	}
 	struct client_st *c = clients + res->slot_id;
 	int plen = buffer_size;
 	int tlen = buffer_size;
@@ -1164,7 +1172,7 @@ bool xumon_set_answer ( struct xumon_com_st *res, void *buffer, const int buffer
 	else if (c->mode == XUMON_CONN_HTTP)
 		tlen += strlen(generic_http_headers) + 1024;
 	struct linked_chunk_list_st *p = malloc(sizeof(struct linked_chunk_list_st) + tlen);
-	if (!p) {
+	if (XEMU_UNLIKELY(!p)) {
 		DEBUGPRINT("UMON: ERROR: memory allocation failure" NL);
 		return false;
 	}

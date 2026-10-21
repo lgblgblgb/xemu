@@ -5,12 +5,13 @@
 * Making mega65_ftp working via umon as a matter of real-life example of compatibility
 * Irregular line endings? mega65_ftp for example sends only \r as line ending?????
 * Re-consider adding optional text-echo mode not line-buffered but on-read basis
-* Implementing missing commands
+* Implementing missing commands (especially the breakpoint oriented ones -> the hard ones)
 * Implement temporary binary transfer over text protocol, like 'l' command uses it (later Xemu-specific commands as well maybe?)
   PROBLEM: it needs binary transfer, so new transfer mode (not line buffered) but we can't know fact of binary transfer only
            after parsing the command! Which is off-thread!
 	   Another problem: \r\n is also a valid line terminating but \r and \n too. How can I know if I can strip the extra \n
 	   after \r or it's part of the binary stream already?
+* At the very end: clean-up debug messages, most of them should be gone, or must be deactivated by default
 
 
 Monitor commands:

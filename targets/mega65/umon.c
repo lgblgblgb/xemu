@@ -31,6 +31,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "sdcard.h"
 #include <string.h>
 
+#define MAX_TEXT_INPUT_SIZE	128
 #define MAX_INPUT_SIZE		XUMON_READ_BUFFER_SIZE
 #define MAX_OUTPUT_SIZE		UMON_MAX_OUTPUT_SIZE
 #define UMON_SYNTAX_ERROR	"?SYNTAX ERROR  "
@@ -40,8 +41,10 @@ static struct {
 	char	*output_ptr;
 } umon;
 
-static struct {
-} client[XUMON_MAX_CLIENTS + 1];
+struct client_st {
+};
+static struct client_st clients[XUMON_MAX_CLIENTS + 1];	// +1 -> extra slot for the matrix mode
+static struct client_st *client = NULL;
 
 
 
@@ -236,9 +239,10 @@ bool umon_execute_command ( char *output, unsigned int output_maxsize, const cha
 {
 	if (slot_id < 0 || slot_id > XUMON_MAX_CLIENTS)
 		slot_id = XUMON_MAX_CLIENTS;
+	client = clients + slot_id;
 	while (input_size > 0 && *input_raw <= 32)
 		input_raw++, input_size--;
-	if (input_size >= MAX_INPUT_SIZE) {
+	if (input_size >= MAX_TEXT_INPUT_SIZE) {
 		DEBUGPRINT("UMONC: too long input to execute" NL);
 		return false;
 	}
@@ -265,7 +269,7 @@ bool umon_execute_command ( char *output, unsigned int output_maxsize, const cha
 	while (p >= cmd_buffer && *p <= 32)
 		*(p--) = 0;
 	char *cmd = cmd_buffer;
-	DEBUGPRINT("UMONC: command got \"%s\" (%d bytes)." NL, cmd, (int)strlen(cmd));
+	DEBUGPRINT("UMONC: command got \"%s\" (%d bytes) on slot-d %d with seq-id %d." NL, cmd, (int)strlen(cmd), slot_id, self_seq);
 	int par1;
 	const char command_byte = *cmd++;
 	switch (command_byte) {
@@ -380,23 +384,23 @@ bool umon_execute_command ( char *output, unsigned int output_maxsize, const cha
 // to execute, and then queueing back the answer.
 void umon_main_iterate ( void )
 {
-	// TODO/FIXME: the network listener may break two messages at the wrong boundary! We may need
-	// to handle the situation!
-	struct xumon_com_st monres;
 	int trigger_submit = 0;
+	static struct xumon_com_st monres;
 	static char ibuffer[MAX_INPUT_SIZE];
 	static char obuffer[MAX_OUTPUT_SIZE];
-	// xumon_get_request() expects isize to be initialized with the max size of the input buffer, and will get back the actual size there too
-	int isize = sizeof ibuffer;
 	// Process pending requests
-	while (XEMU_UNLIKELY(xumon_get_request(&monres, ibuffer, &isize))) {
-		const int input_size = isize;
-		isize = sizeof ibuffer;	// restore isize for the possible next message in this loop
-		DEBUGPRINT("UMONC: got request, %d bytes" NL, input_size);
-		if (monres.binary_protocol_address >= 0) {
-			DEBUGPRINT("UMONC: binary-transfer memory setting: $%X-$%X (%d bytes)" NL, monres.binary_protocol_address, monres.binary_protocol_address + input_size - 1, input_size);
-			m65mon_setmem28(monres.binary_protocol_address, input_size, (Uint8*)ibuffer);
-		} else if (umon_execute_command(obuffer, sizeof obuffer, ibuffer, input_size, monres.seq, monres.slot_id)) {
+	while (XEMU_UNLIKELY(xumon_get_request(&monres, ibuffer, sizeof ibuffer))) {
+		DEBUGPRINT("UMONC: got request, %d bytes" NL, monres.input_size);
+		if (monres.seq < 1) {
+			DEBUGPRINT("UMONC: invalid request (size problem marked?)" NL);
+		} else if (monres.binary_protocol_address >= 0) {
+			DEBUGPRINT("UMONC: binary-transfer memory setting: $%X-$%X (%d bytes)" NL,
+				monres.binary_protocol_address,
+				monres.binary_protocol_address + monres.input_size - 1,
+				monres.input_size
+			);
+			m65mon_setmem28(monres.binary_protocol_address, monres.input_size, (Uint8*)ibuffer);
+		} else if (umon_execute_command(obuffer, sizeof obuffer, ibuffer, monres.input_size, monres.seq, monres.slot_id)) {
 			int osize = strlen(obuffer);
 			if (monres.text_request && osize + 10 < sizeof obuffer) {
 				strcpy(obuffer + osize, osize > 0 && obuffer[osize - 1] == '\n' ? ".\r\n": "\r\n.\r\n");
@@ -431,6 +435,8 @@ void umon_format_answer_text ( char *output )
 
 int umon_init ( const int port )
 {
+	memset(clients, 0, sizeof clients);
+	client = clients + XUMON_MAX_CLIENTS;
 	xumon_inthread_command_preprocessor_callback = inthread_preprocessor;
 	return xumon_init(port, true);
 }
