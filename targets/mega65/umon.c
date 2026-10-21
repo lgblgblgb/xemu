@@ -40,6 +40,9 @@ static struct {
 	char	*output_ptr;
 } umon;
 
+static struct {
+} client[XUMON_MAX_CLIENTS + 1];
+
 
 
 // WARNING! This function runs in a THREAD by xumon! So it cannot use any "dangerous" resources as its own!
@@ -229,8 +232,10 @@ static void cmd_fillmem ( char *param, int addr )
 // also, matrix monitor can call this, to implement mega65 compatible matrix commands through this function
 // Return value: only false, if there is nothing to answer! Otherwise (even for unknown command!) it's true, since we
 // want to answer an error message!
-bool umon_execute_command ( char *output, unsigned int output_maxsize, const char *input_raw, unsigned int input_size, const int self_seq )
+bool umon_execute_command ( char *output, unsigned int output_maxsize, const char *input_raw, unsigned int input_size, const int self_seq, int slot_id )
 {
+	if (slot_id < 0 || slot_id > XUMON_MAX_CLIENTS)
+		slot_id = XUMON_MAX_CLIENTS;
 	while (input_size > 0 && *input_raw <= 32)
 		input_raw++, input_size--;
 	if (input_size >= MAX_INPUT_SIZE) {
@@ -262,7 +267,8 @@ bool umon_execute_command ( char *output, unsigned int output_maxsize, const cha
 	char *cmd = cmd_buffer;
 	DEBUGPRINT("UMONC: command got \"%s\" (%d bytes)." NL, cmd, (int)strlen(cmd));
 	int par1;
-	switch (*(cmd++)) {
+	const char command_byte = *cmd++;
+	switch (command_byte) {
 		case 'h':
 		case 'H':
 		case '?':
@@ -390,7 +396,7 @@ void umon_main_iterate ( void )
 		if (monres.binary_protocol_address >= 0) {
 			DEBUGPRINT("UMONC: binary-transfer memory setting: $%X-$%X (%d bytes)" NL, monres.binary_protocol_address, monres.binary_protocol_address + input_size - 1, input_size);
 			m65mon_setmem28(monres.binary_protocol_address, input_size, (Uint8*)ibuffer);
-		} else if (umon_execute_command(obuffer, sizeof obuffer, ibuffer, input_size, monres.seq)) {
+		} else if (umon_execute_command(obuffer, sizeof obuffer, ibuffer, input_size, monres.seq, monres.slot_id)) {
 			int osize = strlen(obuffer);
 			if (monres.text_request && osize + 10 < sizeof obuffer) {
 				strcpy(obuffer + osize, osize > 0 && obuffer[osize - 1] == '\n' ? ".\r\n": "\r\n.\r\n");

@@ -829,7 +829,7 @@ static void megamatrix_execute ( char *cmd )
 		return;
 	} else {
 		char output[UMON_MAX_OUTPUT_SIZE];
-		if (umon_execute_command(output, sizeof output, cmd, strlen(cmd), -1)) {
+		if (umon_execute_command(output, sizeof output, cmd, strlen(cmd), -1, -1)) {
 			umon_format_answer_text(output);
 			if (*output)
 				MATRIX("%s", output);

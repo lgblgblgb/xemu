@@ -24,12 +24,13 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #endif
 
 #define XUMON_READ_BUFFER_SIZE	8192					// note, must be large enough to hold a full command/HTTP-request/websocket frame!
+#define XUMON_MAX_CLIENTS	32
 
 struct xumon_com_st {
 	bool	text_request;
 	int	binary_protocol_address;
 	int	seq;		// xumon_get_request()'s data should be passed to xumon_set_answer()
-	const void *ptr;	// points to the client_st struct secretly, shouldn't altered, xumon_get_request()'s data should be passed to xumon_set_answer()
+	int	slot_id;	// -- "" --
 };
 
 typedef void (*xumon_inthread_command_preprocessor_callback_t)(const char *buffer, const int len, int *binary_protocol_size, int *binary_protocol_address);

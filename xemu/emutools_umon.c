@@ -31,12 +31,14 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define SELECT_TIMEOUT		100000					// in microsends (FIXME: really?)
 #define HTTP_TIMEOUT		1000					// in SDL-ticks!!! ie: miliseconds
 #define SLOT_FIND_TIMEOUT	1000					// in SDL-ticks, max time to find free slot
-#define MAX_CLIENT_SLOTS	32
 #define WEBSOCKET_VERSION	"13"					// our supported websocket protocol version (in string format!)
 #define WEBSOCKET_PROTOCOL	"xemu-umon"
 #define DOCROOT_SUBDIR		"webserver-docroot"
 #define WEBSOCKET_ENDPOINT	"XemuWebMonitorMain"
 #define WEBMONITOR_REPOSITORY	"https://github.com/lgblgblgb/xemu-webmonitor/tree/master/download"
+#define WEBMONITOR_BUTTON_STYLE	"background-color: #007000; padding: 8px; border: 2px solid lightgreen;"
+#define STATUS_PAGE_TABLE_STYLE	"background-color: #007000; padding: 2px; border: 2px solid lightgreen;"
+#define BODY_STYLE		"background-color: black; color: lightgreen;"
 // we have two system threads (not per client): the main receiver thread (which starts per-client receiver threads), and the single responder thread
 #define NO_OF_SYS_THREADS	2
 //#define XUMON_STACK_SIZE	(8*1024*1024)
@@ -106,6 +108,7 @@ struct client_st {
 	struct linked_chunk_list_st	*rtail;
 	struct linked_chunk_list_st	*whead;
 	struct linked_chunk_list_st	*wtail;
+	unsigned int		raw_loop_count;
 	jmp_buf			jmp_finish_client_thread;
 	bool			text_echo;
 	int			binary_protocol_address;	// temporary binary transfer within text connection, write address, or -1 if not
@@ -121,7 +124,7 @@ struct client_st {
 		int		passes;
 	}	http;
 };
-static struct client_st clients[MAX_CLIENT_SLOTS];
+static struct client_st clients[XUMON_MAX_CLIENTS];
 
 
 
@@ -184,11 +187,12 @@ static inline void send_string ( struct client_st *client, const char *p )
 // err_code = 0 is a special mode about the same as "200 OK" just with slightly modified text inside the <h1>...</h1>
 static void http_page_and_exit ( struct client_st *client, int err_code, const char *err1, const char *err2, const char *err3, const char *extra_headers )
 {
+	const char *page_desc = NULL;
 	const char *err_text;
 	switch (err_code) {
-		case 0:
-			err_text = "Xemu Webserver OK";
-			err_code = 200;
+		case 200:
+			err_text = "OK";
+			page_desc = "Xemu Webserver";
 			break;
 		case 302:
 			err_text = "Found";
@@ -214,6 +218,7 @@ static void http_page_and_exit ( struct client_st *client, int err_code, const c
 			err_code = 500;
 			break;
 	}
+	if (!page_desc) page_desc = err_text;
 	if (!extra_headers) extra_headers = EMPTY_STR;
 	if (!err1) err1 = EMPTY_STR;
 	if (!err2) err2 = EMPTY_STR;
@@ -221,9 +226,9 @@ static void http_page_and_exit ( struct client_st *client, int err_code, const c
 	int l = strlen(err_text) * 2 + strlen(html_footer) + strlen(err1) + strlen(err2) + strlen(err3) + 512;
 	char page[l];
 	snprintf(page, l,
-		"<!DOCTYPE html><html><head><title>%s</title></head><body style=\"background-color: white; color: darkblue;\"><h1>%d %s [%u]</h1><p>%s</p><p>%s</p><p>%s</p>%s</body></html>",
-		err_text,
-		err_code, err_text, START_ID,
+		"<!DOCTYPE html><html><head><title>%s</title></head><body style=\"" BODY_STYLE "\"><h1>%d %s [%u]</h1><p>%s</p><p>%s</p><p>%s</p>%s</body></html>",
+		page_desc,
+		err_code, page_desc, START_ID,
 		err1, err2, err3,
 		html_footer
 	);
@@ -243,7 +248,7 @@ static void http_page_and_exit ( struct client_st *client, int err_code, const c
 		"%s"
 		"\r\n%s"
 		,
-		err_code, err_code == 200 ? "OK" : err_text, client->private.vhost,
+		err_code, err_text, client->private.vhost,
 		generic_http_headers,
 		(unsigned int)strlen(page),
 		extra_headers,
@@ -262,7 +267,7 @@ void xumon_get_client_info_as_txt ( char *output_buffer, int output_size, const 
 	const Uint32 time = SDL_GetTicks();
 	output_buffer[0] = '\0';
 	CLIENTS_LOCK();
-	for (unsigned int slot = 0; slot < MAX_CLIENT_SLOTS; slot++) {
+	for (unsigned int slot = 0; slot < XUMON_MAX_CLIENTS; slot++) {
 		const struct client_st *c = clients + slot;
 		if (!c->seq)
 			continue;
@@ -291,9 +296,9 @@ void xumon_get_client_info_as_txt ( char *output_buffer, int output_size, const 
 		}
 		char buffer[256];
 		snprintf(
-			buffer, sizeof buffer, "#%u seq=%d sock=%d age=%us mode=%s rchunks=%d wchunks=%d %s%s%s%s%s\n",
+			buffer, sizeof buffer, "#%u seq=%d sock=%d age=%us mode=%s rchunks=%d wchunks=%d loopc=%u %s%s%s%s%s\n",
 			slot, c->seq, (int)c->sock, (time - c->start_time) / 1000U, mode,
-			rchunks, wchunks,
+			rchunks, wchunks, c->raw_loop_count,
 			self_seq == c->seq ? "[SELF] " : "",
 			keep_alive ? "[keep_alive] " : "",
 			text_echo  ? "[text_echo] " : "",
@@ -316,10 +321,10 @@ static void http_main_page_and_exit ( struct client_st *client )
 	char td_stat_str[XEMU_CPU_STAT_INFO_BUFFER_SIZE];
 	xemu_get_timing_stat_string(td_stat_str, sizeof td_stat_str);
 	char page[4096];
-	char client_list[100 * MAX_CLIENT_SLOTS];
+	char client_list[100 * XUMON_MAX_CLIENTS];
 	xumon_get_client_info_as_txt(client_list, sizeof client_list, client->seq);
 	snprintf(page, sizeof page,
-		"<table style=\"background-color: coral; border: 2px solid black;\"><tr><th>Emulation:</th><td>%s</td></tr>"
+		"<table style=\"" STATUS_PAGE_TABLE_STYLE "\"><tr><th>Emulation:</th><td>%s</td></tr>"
 		"<tr><th>Version/date:</th><td>%s</td></tr>"
 		"<tr><th>GIT info:</th><td>%s</td></tr>"
 		"<tr><th>CPU stat:</th><td>%s</td></tr>"
@@ -345,10 +350,10 @@ static void http_main_page_and_exit ( struct client_st *client )
 	);
 	char initiator[2048];
 	snprintf(initiator, sizeof initiator,
-		"<a style=\"background-color: #C0C0C0; border: 2px solid black;\" href=\"//%s/%s?uts=%u&amp;target=%s\">START WEBMONITOR</a>",
+		"<a style=\"" WEBMONITOR_BUTTON_STYLE "\" href=\"//%s/%s?uts=%u&amp;target=%s\">START WEBMONITOR</a>",
 		client->private.vhost, main_html, START_ID, TARGET_DESC
 	);
-	http_page_and_exit(client, 0, page, initiator, NULL, NULL);
+	http_page_and_exit(client, 200, page, initiator, NULL, NULL);
 }
 
 
@@ -513,6 +518,7 @@ static void client_run ( struct client_st *client )
 	int ws_plen = 0;		// websocket unfragmented data size in the buffer so far
 	int binary_protocol_size = 0;	// temporary binary transfer within text mode connection (0 = we are not, otherwise: size)
 	for (;;) {
+		client->raw_loop_count++;
 		CHECK_STOP_TRIGGER();
 		if (SDL_AtomicGet(&client->http.connection_stop_trigger)) {
 			DEBUGPRINT("UMON: client: exiting on http client stop trigger sent by the responder thread" NL);
@@ -549,7 +555,7 @@ static void client_run ( struct client_st *client )
 				http_page_and_exit(client, 400, "Too long request", NULL, NULL, NULL);
 			return;
 		}
-		int xerr, ret = xemusock_select_1(client->sock, SELECT_TIMEOUT, XEMUSOCK_SELECT_R | (client->whead ? XEMUSOCK_SELECT_W : 0), &xerr);
+		int xerr, ret = xemusock_select_1(client->sock, SELECT_TIMEOUT, XEMUSOCK_SELECT_R, &xerr);
 		if (!ret)
 			continue;
 		if (ret < 0) {
@@ -896,13 +902,13 @@ static int client_thread_initiate ( void *user_param )
 	const int num_of_threads = SDL_AtomicAdd(&thread_counter, 1) + 1;	// increment thread counter (the result is the old value, so add one)
 	const int client_seq = SDL_AtomicAdd(&thread_client_seq, 1) + 1;	// generate a monotone sequence of ID about the connection to be identified without doubts. Avoid using zero! [thus the +1]
 	struct client_st *client = NULL;
-	DEBUGPRINT("UMON: client: new connection on socket %d, client-thread %d/%d, seq %d" NL, (int)CLIENT_SOCK, num_of_threads - NO_OF_SYS_THREADS, MAX_CLIENT_SLOTS, client_seq);
+	DEBUGPRINT("UMON: client: new connection on socket %d, client-thread %d/%d, seq %d" NL, (int)CLIENT_SOCK, num_of_threads - NO_OF_SYS_THREADS, XUMON_MAX_CLIENTS, client_seq);
 	// Trying to allocate slot multiple times (with time-out), since some HTTP client may flooded us for a moment only.
 	for (const Uint32 start = SDL_GetTicks();;) {
 		if (XEMU_UNLIKELY(SDL_AtomicGet(&thread_stop_trigger)))
 			goto finish;
 		CLIENTS_LOCK();
-		for (client = clients; client < clients + MAX_CLIENT_SLOTS; client++)
+		for (client = clients; client < clients + XUMON_MAX_CLIENTS; client++)
 			if (!client->seq) {
 				client->seq = client_seq;
 				client->sock = CLIENT_SOCK;
@@ -919,6 +925,7 @@ static int client_thread_initiate ( void *user_param )
 				client->http.keep_alive = false;
 				client->http.passes = 0;
 				client->binary_protocol_address = -1;
+				client->raw_loop_count = 0;
 				SDL_AtomicSet(&client->http.connection_stop_trigger, 0);
 				CLIENTS_UNLOCK();
 				goto slot_found;
@@ -944,7 +951,8 @@ slot_found:
 		}
 	}
 finish:
-	DEBUGPRINT("UMON: client: about closing connection on %d, seq %d" NL, (int)CLIENT_SOCK, client_seq);
+	const int td = SDL_GetTicks() - client->start_time;
+	DEBUGPRINT("UMON: client: about closing connection on %d, seq %d, time %dms, avg-loop %f/sec" NL, (int)CLIENT_SOCK, client_seq, td, td ? client->raw_loop_count / (td/1000.0) : 0);
 	if (client) {
 		if (client->fd >= 0)
 			close(client->fd);
@@ -997,7 +1005,7 @@ static int main_thread ( void *_unused )
 		int xerr;
 		// Wait for socket event with select, with 0.1sec timeout
 		// We need timeout, to check thread_stop_trigger condition
-		const int select_result = xemusock_select_1(sock_server, SELECT_TIMEOUT, XEMUSOCK_SELECT_R | XEMUSOCK_SELECT_E, &xerr);
+		const int select_result = xemusock_select_1(sock_server, SELECT_TIMEOUT, XEMUSOCK_SELECT_R, &xerr);
 		if (!select_result)
 			continue;
 		if (select_result < 0) {
@@ -1050,7 +1058,7 @@ static int responder_thread ( void *_unused )
 	while (!SDL_AtomicGet(&thread_stop_trigger)) {
 		struct client_st *client = NULL;
 		CLIENTS_LOCK();
-		for (int i = 0; i < MAX_CLIENT_SLOTS; i++)
+		for (int i = 0; i < XUMON_MAX_CLIENTS; i++)
 			if (clients[i].seq && clients[i].wtail) {
 				client = &clients[i];
 				break;
@@ -1097,6 +1105,7 @@ static int responder_thread ( void *_unused )
 		}
 	}
 	SDL_AtomicAdd(&thread_counter, -1);
+	SDL_DestroySemaphore(responder_sem);
 	DEBUGPRINT("UMON: responder-thread: exiting" NL);
 	return 0;
 }
@@ -1115,7 +1124,8 @@ bool xumon_get_request ( struct xumon_com_st *res, void *buffer, int *buffer_siz
 	if (XEMU_UNLIKELY(xumon_running && SDL_AtomicGet(&incoming_msg_counter))) {
 		bool too_large = false;
 		CLIENTS_LOCK();
-		for (struct client_st *c = clients; c < clients + MAX_CLIENT_SLOTS; c++) {
+		for (int i = 0; i < XUMON_MAX_CLIENTS; i++) {
+			struct client_st *c = clients + i;
 			if (c->rtail) {
 				p = c->rtail;
 				DL_DEL_FROM_TAIL(c->rhead, c->rtail);
@@ -1128,7 +1138,7 @@ bool xumon_get_request ( struct xumon_com_st *res, void *buffer, int *buffer_siz
 				res->seq = c->seq;
 				res->text_request = (c->mode == XUMON_CONN_TEXT);
 				res->binary_protocol_address = p->binary_protocol_address;
-				res->ptr = (const void*)c;
+				res->slot_id = i;
 				SDL_AtomicAdd(&incoming_msg_counter, -1);
 				break;
 			}
@@ -1146,7 +1156,7 @@ bool xumon_set_answer ( struct xumon_com_st *res, void *buffer, const int buffer
 {
 	if (XEMU_LIKELY(!xumon_running))
 		return false;
-	struct client_st *c = (struct client_st*)res->ptr;
+	struct client_st *c = clients + res->slot_id;
 	int plen = buffer_size;
 	int tlen = buffer_size;
 	if (c->mode == XUMON_CONN_WEBSOCKET)
@@ -1330,12 +1340,6 @@ error:
 			DEBUGPRINT("UMON: warning, could not close server socket after error: %s" NL, xemusock_strerror(xerr));
 		sock_server = XS_INVALID_SOCKET;
 	}
-	if (responder_sem) {
-		SDL_SemPost(responder_sem);
-		SDL_Delay(5);
-		SDL_DestroySemaphore(responder_sem);
-	} else
-		SDL_Delay(5);
 	return 1;
 }
 
@@ -1364,7 +1368,6 @@ int xumon_stop ( void )
 	xemusock_set_nonblocking(sock_server, XEMUSOCK_BLOCKING, NULL);
 	xemusock_shutdown(sock_server, NULL);
 	xemusock_close(sock_server, NULL);
-	SDL_DestroySemaphore(responder_sem);
 	sock_server = XS_INVALID_SOCKET;
 	const int count2 = SDL_AtomicGet(&thread_counter);
 	// FIXME: normalize this msg, with "client" etc
