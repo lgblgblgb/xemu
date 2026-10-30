@@ -1,31 +1,41 @@
 # Contribution Guidelines
 
-"Just do it" - you (and even me!) will see what will happens. :)
+## Checklist
 
-OK, seriously, some key points though:
-
-* Clearly, any help is welcome!
-* Please read this file, and **DELETE** it from the actual PR if github
-offers when doing the PR itself at the _end_, and before that, read
-further here ...
-* Please open an issue ticket first
-* Let's discuss things first! Nothing is more irritating than spending
-long hours of your time for doing something not even needed, or it's
-needed a totally different way. That's waste of your and my time as well.
-Let's talk about first! Also about the implementation details, questions,
-etc sorted out in advance, as much as possible!
-* It's fine if you want to help on small things, like correcting a single
-spelling mistake or such, but not as helpful as other tasks. Maybe you
-want to be so kind to at least find multiple mistakes like this to target
-more of these errors then.
-* Refer to the ticket by #NUM in your contribution
+* Make sure you contribute your **own** code, not someone's other code,
+and not something's other code.
+* This also means: **no AI generated code is allowed**. If I like AI, I
+can prompt an AI myself as well to generate code, then your PR would be
+meaningless. The point here is to have code written by _you_ as a human
+effort, more than just giving a prompt, what literally everybody can do.
+* This also means that code written by another person shouldn't be submitted
+as a PR by you.
+* Open an issue ticket **first** on github, and let's discuss everything.
+I wouldn't like you to waste your time and energy to do a PR what I can't
+accept. So let's discuss it first, before you do any significant work.
+Only make significant effort, if we discussed everything, maybe also through
+the development of your contribution. I don't want to waste your time. It
+would be irritating that you spent hours of your life to make a great
+contribution which I may find improper. So, in nutshell: again, let's discuss
+first to avoid any of this in advance :)
+* Never do PR against the `master` branch, it won't be ever accepted! When
+you opened the required issue, discuss it with the project owner, which
+branch is suitable for a given PR (it's usually - _but not always_ - `next` or `dev`).
+* Refer the issue ticket number (where we had our discussion) in your PR too,
+in the standard github format, like `#num` where the `num` is the issue number.
 * Do not feel offended if your contribution is denied because it's
-not suitable for the project because of some LOGICAL reason, including
-the fact, that I don't need such a feature at all (but surely the
-reason is **never** personal because of the contributor herself/himself).
-* Do not feel offended if you are asked to modify things your
+not suitable for the project because of some reason, including the fact,
+that I don't need such a feature at all (but surely the reason is **never**
+personal because of the contributor herself/himself).
+* Do not feel offended if you are asked to modify things in your
 contribution to be accepted, even if it's the 32932937297th time on
 the very same contribution try of yours :)
+* It's fine if you want to help on small things, like correcting a single
+spelling mistake or such, but there are not as important as other tasks.
+Maybe you want to be so kind to at least find multiple mistakes like this
+to target more of these errors then. But these are usually not proper
+PR material to correct a single word which has nothing to do with software's
+features/bugs or anything. So these are classified as "cosmetic minor change".
 
 ## Source code formatting
 
