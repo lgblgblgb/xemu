@@ -41,10 +41,11 @@ static struct {
 	char	*output_ptr;
 } umon;
 
+// This will allow to have unique monitor connections with private data for each
 struct client_st {
 };
 static struct client_st clients[XUMON_MAX_CLIENTS + 1];	// +1 -> extra slot for the matrix mode
-static struct client_st *client = NULL;
+static struct client_st *client = NULL;			// umon_execute_command() will set this to point to the right element of the clients[] array
 
 
 
@@ -435,6 +436,7 @@ void umon_format_answer_text ( char *output )
 
 int umon_init ( const int port )
 {
+	xumon_default_port_number = UMON_DEFAULT_PORT;
 	memset(clients, 0, sizeof clients);
 	client = clients + XUMON_MAX_CLIENTS;
 	xumon_inthread_command_preprocessor_callback = inthread_preprocessor;

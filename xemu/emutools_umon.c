@@ -56,6 +56,7 @@ static SDL_SpinLock clients_lock = 0;
 
 int xumon_running = 0;
 int xumon_port;
+int xumon_default_port_number = -1;	// must be initialized before calling xumon_init()
 xumon_inthread_command_preprocessor_callback_t xumon_inthread_command_preprocessor_callback = NULL;
 static xemusock_socket_t sock_server = XS_INVALID_SOCKET;
 static bool default_to_text_echo;
@@ -1228,8 +1229,9 @@ void xumon_trigger_sending ( int events )
  * !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! */
 
 
-int xumon_init ( const int port, const bool use_text_echo )
+int xumon_init ( int port, const bool use_text_echo )
 {
+	static int last_port = 0;
 	if (xumon_running) {
 		ERROR_WINDOW("UMON is already running!");
 		return 1;
@@ -1238,6 +1240,8 @@ int xumon_init ( const int port, const bool use_text_echo )
 		DEBUGPRINT("UMON: not enabled" NL);
 		return 0;
 	}
+	if (port < 0)
+		port = last_port ? last_port : xumon_default_port_number;
 	if (!docroot) {
 		docroot = xemu_mprintf("%s%s%c", sdl_pref_dir, DOCROOT_SUBDIR, DIRSEP_CHR);
 		MKDIR(docroot);
@@ -1339,6 +1343,7 @@ int xumon_init ( const int port, const bool use_text_echo )
 	default_to_text_echo = use_text_echo;
 	xumon_running = 1;
 	DEBUGPRINT("UMON: has been initialized for TCP/IP port %d backlog %d start-id %u (web-docroot: %s) within %d msecs." NL, port, LISTEN_BACKLOG, START_ID, docroot, passed_time);
+	last_port = port;
 	return 0;
 error:
 	SDL_AtomicSet(&thread_stop_trigger, 1);

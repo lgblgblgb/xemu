@@ -795,11 +795,9 @@ static void cmd_eth ( char *p )
 
 static void cmd_umon ( char *p )
 {
-	static int last_port = 0;
 	const int port = umon_get_port();
 	if (port) {
 		char buffer[4096];
-		last_port = port;
 		umon_get_client_info_as_txt(buffer, sizeof buffer, -1);
 		MATRIX("umon is running on port %d\n%s", port, buffer);
 	} else {

@@ -39,8 +39,9 @@ typedef void (*xumon_inthread_command_preprocessor_callback_t)(const char *buffe
 extern xumon_inthread_command_preprocessor_callback_t xumon_inthread_command_preprocessor_callback;
 extern int xumon_running;
 extern int xumon_port;
+extern int xumon_default_port_number;
 
-extern int xumon_init ( const int port, const bool use_text_echo );
+extern int xumon_init ( int port, const bool use_text_echo );
 extern int xumon_stop ( void );
 
 extern bool xumon_get_request ( struct xumon_com_st *res, void *buffer, const int buffer_maxsize );
