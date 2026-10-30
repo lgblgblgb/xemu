@@ -21,6 +21,8 @@ or direct contributors to this project). Please read file AUTHORS
 Xemu is licensed under the terms of GNU/GPL v2, for more information please
 read file LICENSE. You can find the source on github, see above.
 
+**No genAI code is allowed / used in this project**
+
 Note: there is no serious logic about the set of emulated machines by the
 Xemu project. The only reason that I emulate these within a single project,
 that I can easily re-use some of the components needed, that's all! Also, the
