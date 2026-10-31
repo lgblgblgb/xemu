@@ -77,6 +77,8 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #define HID_KBD_MAP_CFG_SUPPORT
 #define HID_KBD_NO_F_HOTKEYS
 
+#define XEMU_CFG_END_PARSING_HOOK mega65_config_end_parsing_hook
+
 #ifndef XEMU_ARCH_HTML
 #define XEMU_USE_LODEPNG
 #define XEMU_FILES_SCREENSHOT_SUPPORT

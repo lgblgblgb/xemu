@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -907,9 +907,15 @@ int xemucfg_parse_all ( void )
 		DEBUGPRINT("CFG: Default config file is SKIPPED by user request!" NL);
 	// And now, we want to parse command line arguments, now it can override already defined values by config file
 	const int ret = parse_commandline(argc, argv);
+#ifdef	XEMU_CFG_END_PARSING_HOOK
+	XEMU_CFG_END_PARSING_HOOK(ret);
+#endif
 	if (!ret) {
 		// save the template (only is cli parsing was OK, otherwise Xemu will exit later, anyway)
-		xemu_save_file(cfg_template_fn, config_template_string, strlen(config_template_string), "Cannot save config template");
+		if (save_templates_on_startup)
+			xemu_save_file(cfg_template_fn, config_template_string, strlen(config_template_string), "Cannot save config template");
+		else
+			DEBUGPRINT("CFG: Saving default built-in configuration has been disabled" NL);
 	}
 	free(config_template_string);
 	return ret;

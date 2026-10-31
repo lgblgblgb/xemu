@@ -100,6 +100,7 @@ int emu_is_fullscreen = 0;
 int emu_is_headless = 0;
 int emu_is_sleepless = 0;
 int dialogs_allowed = 1;
+bool save_templates_on_startup = true;
 #ifdef XEMU_ARCH_WIN
 int emu_fs_is_utf8 = 0;	// assuming non-UTF-8 capable filesystem for Windows hosts, I'll test it later in xemu_pre_init() if it's really the case
 #else
@@ -1363,6 +1364,7 @@ int xemu_post_init (
 	if (emu_is_headless) {
 		dialogs_allowed = 0;
 		i_am_sure_override = 1;
+		save_templates_on_startup = false;
 	}
 	srand((unsigned int)time(NULL));
 	setenv_from_string(xemu_extra_env_var_setup_str);

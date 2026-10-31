@@ -89,6 +89,7 @@ static XEMU_INLINE int CHECK_SNPRINTF( int ret, int limit )
 }
 
 extern int dialogs_allowed;
+extern bool save_templates_on_startup;
 
 #define _REPORT_WINDOW_(sdlflag, str, ...) do { \
 	char _buf_for_win_msg_[4096]; \
