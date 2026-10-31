@@ -827,6 +827,15 @@ int xemucfg_delete_default_config_file ( const char *are_you_sure_msg )
 }
 
 
+void xemucfg_disable_writing_templates ( void )
+{
+	if (save_templates_on_startup) {
+		save_templates_on_startup = false;
+		DEBUGPRINT("CFG: disabling writing built-in templates" NL);
+	}
+}
+
+
 int xemucfg_parse_all ( void )
 {
 	int argc = xemu_initial_argc;
@@ -910,6 +919,8 @@ int xemucfg_parse_all ( void )
 #ifdef	XEMU_CFG_END_PARSING_HOOK
 	XEMU_CFG_END_PARSING_HOOK(ret);
 #endif
+	if (emu_is_headless)
+		xemucfg_disable_writing_templates();
 	if (!ret) {
 		// save the template (only is cli parsing was OK, otherwise Xemu will exit later, anyway)
 		if (save_templates_on_startup)

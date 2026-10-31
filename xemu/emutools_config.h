@@ -164,6 +164,8 @@ extern void xemucfg_add_flags_to_options   ( const void *ptrs[], const unsigned 
 extern void xemucfg_dump_db ( const char *msg );
 #endif
 
+extern void xemucfg_disable_writing_templates ( void );
+
 #ifdef XEMU_CFG_END_PARSING_HOOK
 extern void XEMU_CFG_END_PARSING_HOOK ( const int parse_result );
 #endif

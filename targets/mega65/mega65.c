@@ -89,10 +89,8 @@ void cpu65_illegal_opcode_callback ( void )
 
 void mega65_config_end_parsing_hook ( const int parse_result )
 {
-	if (configdb.testing || emu_is_headless) {
-		DEBUGPRINT("CFG: main hook: disabling writing built-in templates" NL);
-		save_templates_on_startup = false;
-	}
+	if (configdb.testing || emu_is_headless)
+		xemucfg_disable_writing_templates();
 }
 
 
