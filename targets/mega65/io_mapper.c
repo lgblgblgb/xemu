@@ -136,6 +136,85 @@ static inline void vdc_write_register ( const Uint8 reg, const Uint8 data )
 // ------------------ END: VDC specific ------------------
 
 
+// ------------------ BEGIN: hardware divider ------------------
+// Model of the MEGA65 core's divider (mega65-core src/vhdl/fast_divide.vhdl).
+// It is not an exact long division: it does Goldschmidt iterations on 68 bit
+// fixed point numbers, rounding at each step, so the 32.32 result is the
+// rounded quotient most of the time, and sometimes one more than the truncated
+// quotient even when that is not the nearest. Software relying on the real
+// hardware result (like the BASIC65 floating point code) only can be tested
+// in an emulator if we give the same answer, bit by bit.
+// Numbers are stored in three 32 bit words, least significant first.
+
+// The divider's inputs, captured at the last write which restarted it (see io_write)
+static Uint32 div_n = 0, div_d = 0;
+
+static void fdiv_mul ( const Uint32 *a, const Uint32 *b, Uint32 *p )	// p[6] = a[3] * b[3]
+{
+	memset(p, 0, 6 * sizeof(Uint32));
+	for (int i = 0; i < 3; i++) {
+		Uint64 carry = 0;
+		for (int j = 0; j < 3; j++) {
+			const Uint64 t = (Uint64)a[i] * b[j] + p[i + j] + carry;
+			p[i + j] = (Uint32)t;
+			carry = t >> 32;
+		}
+		p[i + 3] = (Uint32)carry;
+	}
+}
+
+static void fdiv_mul_round ( Uint32 *x, const Uint32 *f, const int check_ones )	// x = round(x * f / 2^68), 68 bits
+{
+	Uint32 p[6];
+	fdiv_mul(x, f, p);
+	// bits 135..68 of the product
+	for (int i = 0; i < 3; i++)
+		x[i] = (p[i + 2] >> 4) | (p[i + 3] << 28);
+	x[2] &= 0xF;
+	// round up if bit 67 is set, for dd only if the result is not all ones
+	if ((p[2] >> 3) & 1) {
+		if (check_ones && x[0] == 0xFFFFFFFFU && x[1] == 0xFFFFFFFFU && x[2] == 0xF)
+			return;
+		if (!++x[0] && !++x[1])
+			x[2]++;
+		x[2] &= 0xF;
+	}
+}
+
+static Uint64 hw_divide ( const Uint32 n, const Uint32 d )	// d must be non-zero
+{
+	Uint32 nn[3] = { 0, 0, 0 }, dd[3], f[3];
+	int lz = 0;
+	while (!(d & (0x80000000U >> lz)))
+		lz++;
+	// dd = normalised d at bits 67..36, nn = n << (4 + lz)
+	dd[0] = 0;
+	dd[1] = (d << lz) << 4;
+	dd[2] = (d << lz) >> 28;
+	const int s = 4 + lz;
+	nn[s >> 5] = n << (s & 31);
+	if (s & 31)
+		nn[(s >> 5) + 1] = n >> (32 - (s & 31));
+	for (int steps = 5;; steps--) {
+		// the VHDL checks the old dd for the end condition
+		const int done = !steps || (dd[0] == 0xFFFFFFFFU && dd[1] == 0xFFFFFFFFU && dd[2] == 0xF);
+		// f = 2 - dd (70 bits)
+		f[0] = -dd[0];
+		f[1] = -dd[1] - (dd[0] != 0);
+		f[2] = 0x20 - dd[2] - (dd[0] != 0 || dd[1] != 0);
+		fdiv_mul_round(nn, f, 0);
+		fdiv_mul_round(dd, f, 1);
+		if (done)
+			break;
+	}
+	// output: (nn + 8) >> 4, 64 bits
+	if ((nn[0] += 8) < 8 && !++nn[1])
+		nn[2]++;
+	return ((Uint64)(nn[2] & 0xF) << 60) | ((Uint64)nn[1] << 28) | (nn[0] >> 4);
+}
+// ------------------ END: hardware divider ------------------
+
+
 static XEMU_INLINE void update_hw_multiplier ( void )
 {
 	register const Uint32 input_a = xemu_u8p_to_u32le(D7XX + 0x70);
@@ -147,16 +226,11 @@ static XEMU_INLINE void update_hw_multiplier ( void )
 	// --- Do the product, multiplication ---
 	xemu_u64le_to_u8p(D7XX + 0x78, (Uint64)input_a * (Uint64)input_b);
 	// --- Do the quotient, divide ---
-	// ... but we really don't want to divide by zero, so let's test this
-	if (XEMU_LIKELY(input_b)) {
-		// input_b is non-zero, it's OK to divide
-		xemu_u64le_to_u8p(D7XX + 0x68, (Uint64)((Uint64)input_a << 32) / (Uint64)input_b);
-	} else {
-		// Previously VHDL set all bytes to $FF in case of division by zero.
-		// However it seems it has changed, and now it's set to $00.
-		// https://github.com/MEGA65/mega65-core/commit/ed1794e5f49dc09ed415d7fd4fb788ddee1c0e6c
-		memset(D7XX + 0x68, 0x00, 8);
-	}
+	// The VHDL ignores a restart with zero divisor, so the result is the one of
+	// the last inputs written with a non-zero divisor (div_d is zero only if
+	// there was none since reset: keep the register contents then)
+	if (XEMU_LIKELY(div_d))
+		xemu_u64le_to_u8p(D7XX + 0x68, hw_divide(div_n, div_d));
 }
 
 
@@ -643,6 +717,11 @@ void io_write ( unsigned int addr, Uint8 data )
 			else if (addr >= 0x68 && addr <= 0x7F)
 				bigmult_valid_result = 0;
 			D7XX[addr] = data;
+			// Every write to the inputs restarts the divider, if the divisor is non-zero
+			if (addr >= 0x70 && addr <= 0x77 && xemu_u8p_to_u32le(D7XX + 0x74)) {
+				div_n = xemu_u8p_to_u32le(D7XX + 0x70);
+				div_d = xemu_u8p_to_u32le(D7XX + 0x74);
+			}
 			return;
 		/* ----------------------------------------------- */
 		/* $D800-$DFFF: in case of ethernet I/O mode only! */
