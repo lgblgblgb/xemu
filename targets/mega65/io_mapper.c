@@ -1,7 +1,7 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    I/O decoding part (used by memory_mapper.h and DMA mainly)
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -33,6 +33,7 @@ Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA */
 #include "configdb.h"
 #include "mega65.h"
 #include "serialtcp.h"
+#include "math65.h"
 
 
 int    fpga_switches = 0;		// State of FPGA board switches (bits 0 - 15), set switch 12 (hypervisor serial output)
@@ -40,9 +41,8 @@ Uint8  D6XX_registers[0x100];		// mega65 specific D6XX range, excluding the UART
 Uint8  D7XX[0x100];			// FIXME: hack for future M65 stuffs like ALU!
 static Uint8 hw_errata_level = 0;
 struct Cia6526 cia1, cia2;		// CIA emulation structures for the two CIAs
-int    cpu_mega65_opcodes = 0;	// used by the CPU emu as well!
-static int bigmult_valid_result = 0;
-int    port_d607 = 0xFF;			// ugly hack to be able to read extra char row of C65 keyboard
+int    cpu_mega65_opcodes = 0;		// used by the CPU emu as well!
+int    port_d607 = 0xFF;		// ugly hack to be able to read extra char row of C65 keyboard
 int    core_age_in_days;
 
 
@@ -134,30 +134,6 @@ static inline void vdc_write_register ( const Uint8 reg, const Uint8 data )
 
 
 // ------------------ END: VDC specific ------------------
-
-
-static XEMU_INLINE void update_hw_multiplier ( void )
-{
-	register const Uint32 input_a = xemu_u8p_to_u32le(D7XX + 0x70);
-	register const Uint32 input_b = xemu_u8p_to_u32le(D7XX + 0x74);
-	// Set flag to valid, so we don't relculate each time
-	// (this variable is used to avoid calling this function if no change was
-	// done on input_a and input_b)
-	bigmult_valid_result = 1;
-	// --- Do the product, multiplication ---
-	xemu_u64le_to_u8p(D7XX + 0x78, (Uint64)input_a * (Uint64)input_b);
-	// --- Do the quotient, divide ---
-	// ... but we really don't want to divide by zero, so let's test this
-	if (XEMU_LIKELY(input_b)) {
-		// input_b is non-zero, it's OK to divide
-		xemu_u64le_to_u8p(D7XX + 0x68, (Uint64)((Uint64)input_a << 32) / (Uint64)input_b);
-	} else {
-		// Previously VHDL set all bytes to $FF in case of division by zero.
-		// However it seems it has changed, and now it's set to $00.
-		// https://github.com/MEGA65/mega65-core/commit/ed1794e5f49dc09ed415d7fd4fb788ddee1c0e6c
-		memset(D7XX + 0x68, 0x00, 8);
-	}
-}
 
 
 // Writes the colour RAM. !!ONLY!! use this, if it's in the range of the first 2K of the colour RAM though, or you will be in big trouble!
@@ -367,9 +343,10 @@ Uint8 io_read ( unsigned int addr )
 				return D7XX[0xFE] & 0x7F;	// $D7FE.7 CPU:HWRNG!NOTRDY Hardware Real RNG random number not ready -> but we're always ready!
 			if (addr == 0xFA)	// $D7FA CPU:FRAMECOUNT Count number of elapsed video frames
 				return vic_frame_counter & 0xFFU;
-			// ;) FIXME this is LAZY not to decode if we need to update bigmult at all ;-P
-			if (XEMU_UNLIKELY(!bigmult_valid_result))
-				update_hw_multiplier();
+			if (XEMU_UNLIKELY(!math65_div_result_is_valid && addr >= 0x68 && addr <= 0x6F))
+				math65_update_hw_div_result();
+			else if (XEMU_UNLIKELY(!math65_mul_result_is_valid && addr >= 0x78 && addr <= 0x7F))
+				math65_update_hw_mul_result();
 			return D7XX[addr];
 		/* ----------------------------------------------- */
 		/* $D800-$DFFF: in case of ethernet I/O mode only! */
@@ -635,13 +612,13 @@ void io_write ( unsigned int addr, Uint8 data )
 			return;
 		case 0x37:	// $D700-$D7FF ~ M65 I/O mode
 		case 0x27:
-			// FIXME: this is probably very bad! I guess DMA does not decode for every 16 addresses ... Proposed fix is here:
 			addr &= 0xFF;
-			if (addr < 16)
+			if (addr < 0x0F) {
 				dma_write_reg(addr & 0xF, data);
-			//else if (XEMU_UNLIKELY((addr & 0xF0) == BIGMULT_ADDR))
-			else if (addr >= 0x68 && addr <= 0x7F)
-				bigmult_valid_result = 0;
+			} else if (addr >= 0x68 && addr <= 0x7F) {
+				math65_div_result_is_valid = false;
+				math65_mul_result_is_valid = false;
+			}
 			D7XX[addr] = data;
 			return;
 		/* ----------------------------------------------- */
