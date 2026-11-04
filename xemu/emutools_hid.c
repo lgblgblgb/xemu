@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -380,11 +380,14 @@ void hid_init ( const struct KeyMappingDefault *key_map_in, Uint8 virtual_shift_
 		key_map[a].set = 0;
 		if (key_map[a].pos < 0) {
 #ifdef HID_KBD_MAP_CFG_SUPPORT
-			int fd = xemu_open_file(KEYMAP_DEFAULT_FILENAME, O_WRONLY|O_TRUNC|O_CREAT, NULL, NULL);
-			if (fd >= 0) {
-				xemu_safe_write(fd, kbdcfg, kp - kbdcfg);
-				close(fd);
-			}
+			if (save_templates_on_startup) {
+				const int fd = xemu_open_file(KEYMAP_DEFAULT_FILENAME, O_WRONLY|O_TRUNC|O_CREAT, NULL, NULL);
+				if (fd >= 0) {
+					xemu_safe_write(fd, kbdcfg, kp - kbdcfg);
+					close(fd);
+				}
+			} else
+				DEBUGPRINT("HID: saving default built-in configuration has been disabled" NL);
 #endif
 			DEBUGPRINT("HID: %d key bindings has been added as the default built-in configuration" NL, a);
 			break;

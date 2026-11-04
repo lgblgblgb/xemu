@@ -86,6 +86,13 @@ void cpu65_illegal_opcode_callback ( void )
 }
 
 
+void mega65_config_end_parsing_hook ( const int parse_result )
+{
+	if (configdb.testing || emu_is_headless)
+		xemucfg_disable_writing_templates();
+}
+
+
 // The original code may have the speed bit inverted for C128 fast mode (2MHz).
 // I can play with this to setting the workaround or not.
 #define C128_SPEED_BIT_BUG 1

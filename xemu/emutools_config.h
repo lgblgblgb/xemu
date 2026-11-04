@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2023 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -162,6 +162,12 @@ extern void xemucfg_add_flags_to_options   ( const void *ptrs[], const unsigned 
 
 #ifndef XEMU_RELEASE_BUILD
 extern void xemucfg_dump_db ( const char *msg );
+#endif
+
+extern void xemucfg_disable_writing_templates ( void );
+
+#ifdef XEMU_CFG_END_PARSING_HOOK
+extern void XEMU_CFG_END_PARSING_HOOK ( const int parse_result );
 #endif
 
 #endif
