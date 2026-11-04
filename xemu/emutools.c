@@ -698,15 +698,49 @@ char *xemu_stpcpy ( char *t, const char *s )
 #if !defined(XEMU_ARCH_HTML) && !defined(XEMU_ARCH_ANDROID)
 static char *GetHackedPrefDir ( const char *base_path, const char *name )
 {
+	static const char prefdir_ovr_env_var[] = "XEMU_PREF_DIR";
+	const char *p = getenv(prefdir_ovr_env_var);
+	if (p) {
+		char *ret = xemu_mprintf("%s%c", p, DIRSEP_CHR);
+		DEBUGPRINT("XEMU: overriding pref-dir from environemnt variable %s to absolute path: %s" NL, prefdir_ovr_env_var, ret);
+		return ret;
+	}
+	// Format: ./{name}/prefdir-is-here.txt (at the executable level of path)
+	// File content:
+	// 	@!absolute-path (till the first CR/LF/TAB)
+	//	@>relative-path (till the first CR/LF/TAB)
+	//	anothing other (or even empty file): the directory itself
 	static const char prefdir_is_here_marker[] = "prefdir-is-here.txt";
-	char path[PATH_MAX];
+	char path[strlen(base_path) + strlen(name) + 2];
 	sprintf(path, "%s%s%c", base_path, name, DIRSEP_CHR);
-	char file[PATH_MAX + sizeof(prefdir_is_here_marker)];
+	char file[strlen(path) + strlen(prefdir_is_here_marker) + 1];
 	sprintf(file, "%s%s", path, prefdir_is_here_marker);
-	int fd = open(file, O_RDONLY | O_BINARY);
-	if (fd < 0)
+	const int fd = open(file, O_RDONLY | O_BINARY);
+	if (fd < 0) {
+		DEBUGPRINT("XEMU: no pref-dir overriding" NL);
 		return NULL;
-	close(fd);
+	} else {
+		char rpath[512];
+		const ssize_t l = read(fd, rpath, sizeof(rpath) - 1);
+		close(fd);
+		if (l >= 3 && rpath[0] == '@') {
+			rpath[l] = '\0';
+			for (char *p = rpath + 2; *p; p++)
+				if (*p == '/' || *p == '\\') {
+					*p = DIRSEP_CHR;
+				} else if (*p < 32) {
+					*p = '\0';
+					break;
+				}
+			if ((rpath[1] == '!' || rpath[1] == '>') && rpath[2] > 32) {
+				const bool is_rel_path = rpath[1] == '>';
+				char *ret = xemu_mprintf("%s%s%c", is_rel_path ? path : "", rpath + 2, DIRSEP_CHR);
+				DEBUGPRINT("XEMU: overriding pref-dir via information from file content of %s to %s path: %s" NL, file, is_rel_path ? "relative" : "absolue", ret);
+				return ret;
+			}
+		}
+	}
+	DEBUGPRINT("XEMU: overriding pref-dir by presence of %s to: %s" NL, file, path);
 	return xemu_strdup(path);
 }
 #endif
