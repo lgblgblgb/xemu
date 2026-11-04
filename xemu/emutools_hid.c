@@ -51,13 +51,20 @@ static unsigned int hid_state;
 
 static SDL_Joystick *joysticks[MAX_JOYSTICKS];
 
-#define JOYSTATE_UP			 1
-#define JOYSTATE_DOWN			 2
-#define JOYSTATE_LEFT			 4
-#define JOYSTATE_RIGHT			 8
-#define JOYSTATE_BUTTON			16
-#define MOUSESTATE_BUTTON_LEFT		32
-#define MOUSESTATE_BUTTON_RIGHT		64
+#define JOYSTATE_UP			0x001
+#define JOYSTATE_DOWN			0x002
+#define JOYSTATE_LEFT			0x004
+#define JOYSTATE_RIGHT			0x008
+#define JOYSTATE_BUTTON			0x010
+#define MOUSESTATE_BUTTON_LEFT		0x020
+#define MOUSESTATE_BUTTON_RIGHT		0x040
+#define JOYSTATE_BUTTON2		0x080
+#define JOYSTATE_BUTTON3		0x100
+#define JOYSTATE_BUTTON4		0x200
+#define JOYSTATE_BUTTON5		0x400
+
+// TODO: Later, this must be done as a configurable mapping of buttons!
+static const unsigned int joystick_button_hid_state_values[] = { JOYSTATE_BUTTON, JOYSTATE_BUTTON2, JOYSTATE_BUTTON3, JOYSTATE_BUTTON4, JOYSTATE_BUTTON5 };
 
 //static const struct KeyMappingUsed *key_map = NULL;
 static Uint8 virtual_shift_pos = 0;
@@ -478,12 +485,14 @@ void hid_joystick_motion_event ( int is_vertical, int value )
 }
 
 
-void hid_joystick_button_event ( int pressed )
+void hid_joystick_button_event ( unsigned int button, int pressed )
 {
+	if (button >= 5)
+		return;
 	if (pressed)
-		hid_state |=  JOYSTATE_BUTTON;
+		hid_state |=  joystick_button_hid_state_values[button];
 	else
-		hid_state &= ~JOYSTATE_BUTTON;
+		hid_state &= ~joystick_button_hid_state_values[button];
 }
 
 
@@ -525,9 +534,18 @@ int hid_read_joystick_right ( int on, int off )
 }
 
 
+// Basically like hid_read_joystick_button_any() but with fixed value button = 0
 int hid_read_joystick_button ( int on, int off )
 {
-	return (hid_state & JOYSTATE_BUTTON) ? on : off;
+	return (hid_state & joystick_button_hid_state_values[0]) ? on : off;
+}
+
+
+int hid_read_joystick_button_any ( unsigned int button, int on, int off )
+{
+	if (button >= 5)
+		return off;
+	return (hid_state & joystick_button_hid_state_values[button]) ? on : off;
 }
 
 
@@ -629,7 +647,7 @@ int hid_handle_one_sdl_event ( SDL_Event *event )
 			break;
 		case SDL_JOYBUTTONDOWN:
 		case SDL_JOYBUTTONUP:
-			hid_joystick_button_event(event->type == SDL_JOYBUTTONDOWN);
+			hid_joystick_button_event(event->jbutton.button, event->type == SDL_JOYBUTTONDOWN);
 			break;
 		case SDL_JOYHATMOTION:
 			hid_joystick_hat_event(event->jhat.value);

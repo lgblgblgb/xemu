@@ -1,7 +1,7 @@
 /* A work-in-progess MEGA65 (Commodore 65 clone origins) emulator
    Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
    I/O decoding part (used by memory_mapper.h and DMA mainly)
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -259,8 +259,8 @@ Uint8 io_read ( unsigned int addr )
 		case 0x24:
 		case 0x25:
 			switch (addr & 0x5F) {
-				case 0x19: return get_mouse_x_via_sid();
-				case 0x1A: return get_mouse_y_via_sid();
+				case 0x19: return get_paddle_potx(0);	// 0 = let's CIA decide ...
+				case 0x1A: return get_paddle_poty(0);
 				case 0x1B: return rand();	// oscillator-3 status read/only, generate some random byte here, even if it's not correct
 				case 0x1C: return rand();	// -- "" --
 			}
@@ -315,11 +315,13 @@ Uint8 io_read ( unsigned int addr )
 				case 0x19:
 					return hwa_kbd_get_queued_petscii();
 				case 0x20: // GS $D620 UARTMISC:POTAX Read Port A paddle X, without having to fiddle with SID/CIA settings.
-				case 0x22: // GS $D622 UARTMISC:POTBX Read Port B paddle X, without having to fiddle with SID/CIA settings.
-					return get_mouse_x_via_sid();
+					return get_paddle_potx(1);
 				case 0x21: // GS $D621 UARTMISC:POTAY Read Port A paddle Y, without having to fiddle with SID/CIA settings.
+					return get_paddle_poty(1);
+				case 0x22: // GS $D622 UARTMISC:POTBX Read Port B paddle X, without having to fiddle with SID/CIA settings.
+					return get_paddle_potx(2);
 				case 0x23: // GS $D623 UARTMISC:POTBY Read Port B paddle Y, without having to fiddle with SID/CIA settings.
-					return get_mouse_y_via_sid();
+					return get_paddle_poty(2);
 				case 0x29: // GS $D629: UARTMISC:M65MODEL MEGA65 model ID.
 					return configdb.mega65_model;
 				case 0x2A: // GS $D62A KBD:FWDATEL LSB of keyboard firmware date stamp (days since 1 Jan 2020)
