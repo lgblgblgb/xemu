@@ -44,7 +44,7 @@ extern Uint8 kbd_query_leftup_status	( void );
 
 extern void  kbd_trigger_restore_trap	( void );
 
-extern Uint8 get_mouse_x_via_sid	( void );
-extern Uint8 get_mouse_y_via_sid	( void );
+extern Uint8 get_paddle_potx		( int port );
+extern Uint8 get_paddle_poty		( int port );
 
 #endif

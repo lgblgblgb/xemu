@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -90,13 +90,14 @@ extern void hid_mouse_motion_event      ( int xrel, int yrel ) ;
 extern void hid_mouse_button_event      ( int button, int pressed ) ;
 extern void hid_joystick_device_event   ( int which , int is_attach ) ;
 extern void hid_joystick_motion_event   ( int is_vertical, int value ) ;
-extern void hid_joystick_button_event   ( int pressed ) ;
+extern void hid_joystick_button_event   ( unsigned int button, int pressed ) ;
 extern void hid_joystick_hat_event      ( int value ) ;
 extern int  hid_read_joystick_up        ( int on, int off ) ;
 extern int  hid_read_joystick_down      ( int on, int off ) ;
 extern int  hid_read_joystick_left      ( int on, int off ) ;
 extern int  hid_read_joystick_right     ( int on, int off ) ;
 extern int  hid_read_joystick_button    ( int on, int off ) ;
+extern int  hid_read_joystick_button_any ( unsigned int button, int on, int off );
 extern int  hid_read_mouse_button_left  ( int on, int off ) ;
 extern int  hid_read_mouse_button_right ( int on, int off ) ;
 extern int  hid_read_mouse_rel_x        ( int min, int max ) ;

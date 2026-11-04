@@ -1,5 +1,5 @@
 /* Part of the Xemu project, please visit: https://github.com/lgblgblgb/xemu
-   Copyright (C)2016-2025 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
+   Copyright (C)2016-2026 LGB (Gábor Lénárt) <lgblgblgb@gmail.com>
 
 This program is free software; you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
@@ -258,12 +258,16 @@ void c64_toggle_joy_emu ( void )
 Uint8 c64_get_joy_state ( void )
 {
 	return
-			0xE0 |
+			0xE0 | ((
 			(hid_read_joystick_up    ( 0,  1 ) & (is_mouse_grab() ? hid_read_mouse_button_right(0,  1) :  1)) |
 			hid_read_joystick_down   ( 0,  2 ) |
 			hid_read_joystick_left   ( 0,  4 ) |
 			hid_read_joystick_right  ( 0,  8 ) |
 			(hid_read_joystick_button( 0, 16 ) & (is_mouse_grab() ? hid_read_mouse_button_left (0, 16) : 16))
+			) &
+			hid_read_joystick_button_any(4 - 1, 0xFF - (1 + 2), 0xFF) &
+			hid_read_joystick_button_any(5 - 1, 0xFF - (4 + 8), 0xFF)
+			)
 	;
 }
 

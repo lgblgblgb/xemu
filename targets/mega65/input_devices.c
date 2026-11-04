@@ -549,9 +549,20 @@ int emu_callback_key ( int pos, SDL_Scancode key, int pressed, int handled )
 }
 
 
-Uint8 get_mouse_x_via_sid ( void )
+// Valid output: 1/2 (joy port), other values means no port selection or invalid
+static XEMU_INLINE int get_paddle_selection_from_cia ( void )
+{
+	return ((cia1.PRA | (~cia1.DDRA)) >> 2) & 3;
+}
+
+
+Uint8 get_paddle_potx ( int port )
 {
 	static Uint8 result = 0;
+	if (!port)
+		port = get_paddle_selection_from_cia();
+	if (joystick_emu != port)
+		return 0xFF;
 	if (is_mouse_grab()) {
 		static int mouse_x = 0;
 		mouse_x = (mouse_x + (hid_read_mouse_rel_x(-23, 23) / 3)) & 0x3F;
@@ -559,15 +570,19 @@ Uint8 get_mouse_x_via_sid ( void )
 		result = mouse_x << 1;
 		return result;
 	} else {
-		result = 0xFF;
+		result = 0;
+		return hid_read_joystick_button_any(2 - 1, 0x00, 0xFF);
 	}
-	return result;
 }
 
 
-Uint8 get_mouse_y_via_sid ( void )
+Uint8 get_paddle_poty ( int port )
 {
 	static Uint8 result = 0;
+	if (!port)
+		port = get_paddle_selection_from_cia();
+	if (joystick_emu != port)
+		return 0xFF;
 	if (is_mouse_grab()) {
 		static int mouse_y = 0;
 		mouse_y = (mouse_y - (hid_read_mouse_rel_y(-23, 23) / 3)) & 0x3F;
@@ -575,9 +590,9 @@ Uint8 get_mouse_y_via_sid ( void )
 		result = mouse_y << 1;
 		return result;
 	} else {
-		result = 0xFF;
+		result = 0;
+		return hid_read_joystick_button_any(3 - 1, 0x00, 0xFF);
 	}
-	return result;
 }
 
 
